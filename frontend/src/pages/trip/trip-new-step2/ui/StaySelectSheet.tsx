@@ -20,7 +20,8 @@
  *  - **둘러보기**(AC-3, outline) + **이 밤 거점으로 지정**(AC-4, primary, 미선택 시 진짜 `disabled`
  *    prop — accessibilityState 만 세운 가짜는 press 가 그대로 발화한다, [[disabled prop과 accessibilityState]]).
  *  - **후보 0건**(AC-5) empty 안내 + 둘러보기만(지정 CTA 는 그릴 대상이 없어 미렌더).
- *  - **실패 인라인**(★4·INV-4) `assignFailed` 면 오류 문구를 세운다 — 실패를 침묵하지 않는다.
+ *  - **실패 인라인**(★4·INV-4) `assignFailure` 갈래로 오류 문구를 세운다 — 실패를 침묵하지 않는다.
+ *    다시 해 볼 실패와 다른 숙소를 골라야 하는 실패의 문구가 다르다(TRIP-1235).
  *
  * ⚠️ 실개폐·딤 전면 커버·중앙정렬·터치 차단은 `@gorhom/bottom-sheet` 통과형 목이라 jest 원리적
  * 사각(repo-traps 바텀시트 함정) — 6-b 실기(`_dev/preview.tsx` 의 시트 열림 키) 몫이다.
@@ -58,6 +59,9 @@ export interface StaySelectSection {
   candidates: StaySelectCandidate[];
 }
 
+/** 지정 실패 갈래(TRIP-1235) — 다시 해 볼 실패(응답 없음·5xx) / 다시 해도 같은 실패(400·404·보내기 전 확정). */
+export type AssignFailure = 'retryable' | 'permanent';
+
 export interface StaySelectSheetProps {
   /** 헤더 제목(박 라벨·지역 — 배선이 조립). 예 "2박 · 부산". */
   title: string;
@@ -77,8 +81,8 @@ export interface StaySelectSheetProps {
   onAssign: () => void;
   /** 지정 POST 진행 중(assignBase.isPending) → 지정 버튼 disable(렌더 후 재탭까지 차단, S9). */
   assignPending?: boolean;
-  /** POST 실패 → 인라인 오류(INV-4). 성공/미시도면 미렌더. */
-  assignFailed?: boolean;
+  /** 지정 실패 갈래 → 인라인 오류(INV-4). 성공/미시도면 null·생략 = 미렌더. */
+  assignFailure?: AssignFailure | null;
   /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
   onClose: () => void;
 }
@@ -91,7 +95,11 @@ function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
 }
 
 const EMPTY_MESSAGE = '저장한 숙소가 아직 없어요';
-const ASSIGN_FAILED_MESSAGE = '지정하지 못했어요 · 잠시 후 다시 시도해 주세요';
+const ASSIGN_FAILURE_MESSAGE: Record<AssignFailure, string> = {
+  retryable: '연결이 불안정해요 · 잠시 후 다시 시도해 주세요',
+  permanent:
+    '이 숙소는 지금 거점으로 지정할 수 없어요 · 다른 숙소를 골라 주세요',
+};
 
 export function StaySelectSheet({
   title,
@@ -103,7 +111,7 @@ export function StaySelectSheet({
   onBrowse,
   onAssign,
   assignPending,
-  assignFailed,
+  assignFailure,
   onClose,
 }: StaySelectSheetProps): ReactElement {
   const empty = candidates.length === 0;
@@ -193,12 +201,12 @@ export function StaySelectSheet({
         )}
 
         {/* 실패 인라인(INV-4) — 침묵하지 않는다. 성공/미시도면 미렌더. */}
-        {assignFailed ? (
+        {assignFailure ? (
           <Text
             testID="trip-base-staysheet-error"
             className="font-noto text-label text-primary-text"
           >
-            {ASSIGN_FAILED_MESSAGE}
+            {ASSIGN_FAILURE_MESSAGE[assignFailure]}
           </Text>
         ) : null}
 

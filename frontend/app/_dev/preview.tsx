@@ -4260,6 +4260,23 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1234 — 담은 장소로 넘어온 꼭 갈 곳 중 지역 밖이 있을 때 [다음] 위 안내 줄([빼기]·[그대로 두기]).
+  // Figma 프레임 없음(배너 토큰 재사용). 줄 높이·버튼 줄바꿈·[다음]과의 간격은 jest 사각이라 이 키가 6-b 자리다.
+  {
+    key: 'trip-new-step1-outside-region',
+    band: 'g',
+    label: 'g01 · 여행 만들기 지역 밖 안내',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        mustVisits={MUST_VISIT_THUMBNAILS}
+        outsideRegionCount={1}
+        onRemoveOutsideRegion={noop}
+        onKeepOutsideRegion={noop}
+      />
+    ),
+  },
   // g01 여행지 편집 시트(TRIP-666, Figma `3626:2070`) — 시트 열린 상태. `DestinationEditSheet`은
   // props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다.
   // jest 는 스테퍼 원·점선 추가 버튼·시트 딤/개폐를 못 봐(바텀시트 통과형 목) 이 키가 유일한
@@ -4274,6 +4291,31 @@ export const PREVIEW_STATES: PreviewState[] = [
         destinations={[
           { seq: 1, region: '부산', nights: 2 },
           { seq: 2, region: '경주', nights: 1 },
+        ]}
+        onChangeNights={noop}
+        onRemove={noop}
+        onAddCity={noop}
+        onApply={noop}
+        onClose={noop}
+        mustVisitCount={7}
+      />
+    ),
+  },
+  // TRIP-1210 — 1도시 게이트 해제 뒤 새로 도달하는 엣지: 도시 4곳·박수 합 30박. [+]·[도시 추가]가 함께
+  // 비활성(opacity)이고 max-note 한 줄만 뜬다. 행이 늘 때 시트가 커지는지·[적용]이 화면 밖으로 밀리는지는
+  // 바텀시트 통과형 목이라 jest 사각 — 이 키가 6-b 육안 자리다.
+  {
+    key: 'trip-new-step1-destination-sheet-max',
+    band: 'g',
+    label: 'g01 · 여행지 편집 시트 (4도시 · 30박 상한)',
+    login: null,
+    render: () => (
+      <DestinationEditSheet
+        destinations={[
+          { seq: 1, region: '서울특별시', nights: 10 },
+          { seq: 2, region: '부산광역시', nights: 10 },
+          { seq: 3, region: '경주시', nights: 5 },
+          { seq: 4, region: '제주특별자치도', nights: 5 },
         ]}
         onChangeNights={noop}
         onRemove={noop}
@@ -4592,6 +4634,50 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
       );
     },
+  },
+  // g02 지정 실패 두 갈래(TRIP-1235) — Figma 에 실패 프레임이 없어 코드가 만든 문구다. 두 줄 문구가
+  // 버튼 사이에서 넘치거나 튀지 않나를 6-b 가 보는 자리(문구 자체는 jest 가 잰다).
+  ...(['retryable', 'permanent'] as const).map((failure) => ({
+    key: `trip-new-step2-staysheet-fail-${failure}`,
+    band: 'g' as const,
+    label: `g02 · 숙소 선택 시트 지정 실패 ${failure}`,
+    login: null,
+    render: () => (
+      <StaySelectSheet
+        title="1박 · 서울특별시"
+        dateLabel="9/26(토)"
+        candidates={[
+          {
+            savedStayId: 'jw',
+            name: 'JW 메리어트 동대문',
+            coordConfirmed: true,
+            linkedTripIds: [],
+            checkIn: null,
+            checkOut: null,
+            registerRoute: 'MAP_SEARCH',
+            createdAt: '2026-08-01T00:00:00Z',
+            updatedAt: '2026-08-01T00:00:00Z',
+          },
+        ]}
+        selectedSavedStayId="jw"
+        assignFailure={failure}
+        onSelect={noop}
+        onBrowse={noop}
+        onAssign={noop}
+        onClose={noop}
+      />
+    ),
+  })),
+  // 지정 실패 뒤 거점 재조회까지 실패한 얼굴(TRIP-1235 AC-4, Figma `4506:2314`) — 이때 배선은 시트를 안
+  // 그리므로 얼굴만 남는다. 프리뷰는 props 만 받아 "시트 숨김" 판정 자체는 못 탄다(그건 jest C7·C8·E2).
+  {
+    key: 'trip-new-step2-assign-fail-error',
+    band: 'g',
+    label: 'g02 · 지정 실패 뒤 error 얼굴',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen {...TRIP_BASE_SCREEN} variant="error" />
+    ),
   },
   // h02 꼭 갈 곳 (TRIP-785) — Figma 대조용 격리 렌더. default→loading→error 순으로 삽입해
   // (안정 정렬 = 배열 위치) h02 3키 순서를 맞춘다.
@@ -5470,6 +5556,27 @@ export const PREVIEW_STATES: PreviewState[] = [
             badgeLabel: '필수',
             region: '부산 부산진구',
           }}
+          onApply={noop}
+          onCancel={noop}
+        />
+      </View>
+    ),
+  },
+  // h04 오류 상태(TRIP-1215) — QA Q-29 모양(11:00–08:00)을 그대로 심어 열자마자 문구·회색 [적용]이
+  // 보인다(종료 미설정 + 숨은 종료 오류 — readout "설정 안 됨"과 문구 동시 표시를 육안 대조). Figma 프레임 없음.
+  {
+    key: 'h04-time-adjust-sheet-error',
+    band: 'h',
+    label: 'h04 · 시각 조정 시트 · 오류',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TimeSheet
+          title="시간대 조정"
+          testIDPrefix="itinerary-edit-time"
+          labels={{ start: '시작', end: '종료' }}
+          startAt="11:00:00"
+          endAt="08:00:00"
           onApply={noop}
           onCancel={noop}
         />

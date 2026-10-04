@@ -161,6 +161,7 @@ afterAll(() => server.close());
  *  - I7·I7b 수동 재계획 진입(BR-U4-10) — TRIP-747 부터 연필 FAB 는 제자리 토글이라 이동하지 않고,
  *    열린 알약이 진입을 맡는다: [AI에게 맡기기] → `/trips/{id}/planb`, [직접 수정] → `/trips/{id}/planb/manual`
  *    (US-PLANB-12 두 방식). 746 의 "FAB → planb" 단언을 지우지 않고 알약 기준으로 교체했다.
+ *    TRIP-1233 부터 [직접 수정]은 보고 있는 날을 `?date=` 로 늘 싣는다(I7b·I7h·I7i).
  *  - I8 실앱 done 카드는 사진·후기 칸이 없다 — `GET /visits/days` 계약에 photo/memo 가 없어서
  *    page 가 photos=[]·memo=null 로 넘긴다(맹점③ · G6). 시각은 계획값 "10:00" + "방문".
  *
@@ -531,7 +532,42 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       fireEvent.press(screen.getByTestId('execution-live-edit-pill-manual'));
 
       expect(mockPush).toHaveBeenCalledTimes(1);
-      expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb/manual`);
+      // TRIP-1233 AC-2d — 보고 있는 날(오늘)을 date 쿼리로 싣는다.
+      expect(mockPush).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/planb/manual?date=${TODAY}`
+      );
+    });
+
+    // TRIP-1233 AC-2d — 편집기는 날짜가 없으면 1일차로 연다(허브처럼 '오늘'이 아니다). 그래서 [AI에게 맡기기]
+    // (I7c·I7d)와 달리 오늘을 보고 있어도 날짜를 뺄 수 없다 — 2일짜리 일정이라야 갈린다.
+    it('I7h 🔴 2일차를 보다가 [직접 수정] → /planb/manual?date=2일차', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      await renderActive();
+      fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+      fireEvent.press(screen.getByTestId('execution-live-edit-pill-manual'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/planb/manual?date=${DAY2}`
+      );
+    });
+
+    it('I7i 🔴 오늘이 2일차면 칩을 안 눌러도 [직접 수정]이 2일차 날짜를 싣는다 (편집기 기본값 1일차와 갈린다)', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={DAY2} />, { wrapper });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+      fireEvent.press(screen.getByTestId('execution-live-edit-pill-manual'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/planb/manual?date=${DAY2}`
+      );
     });
 
     it('I8 실앱 done 카드는 사진·후기 칸 없이 실제 도착 시각 "10:02"(KST) + "방문" 만 그린다 (G6 · 맹점③ · TRIP-1220)', async () => {

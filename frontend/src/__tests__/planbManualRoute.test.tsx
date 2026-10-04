@@ -10,6 +10,9 @@ import PlanbManualRoute from '@routes/trips/[tripId]/planb/manual';
  * 가르기) 축은 사라졌으므로, params 에 `variant` 가 와도 페이지 props 에 새지 않아야 한다(02a ★14 —
  * params 를 통째로 펼쳐 넘기는 구현을 잡는다). 라우트가 곧 진입 신호다 — 여행 상태로 추론하지 않는다.
  *
+ * TRIP-1233 — 허브(i01)·i13 이 보고 있던 날을 `date` 쿼리로 싣는다. 라우트는 그것을 이름으로 꺼내
+ * `initialDate` 로 넘긴다(편집기가 그 날로 열린다). `date` 라는 이름 그대로 props 에 새면 안 된다.
+ *
  * ★ `@/pages/itinerary/itinerary-edit` 을 스파이 컴포넌트로 치환 — 실 페이지 렌더(조회)를 막고 위임만 본다
  *   (liveLocationRoute 선례). 옛 `@/pages/planb-manual` 은 목으로 막지 않는다 — 구현 뒤엔 그 모듈이
  *   없어서 목 자체가 해석 실패로 죽는다(02a ★13).
@@ -30,16 +33,18 @@ jest.mock('@/pages/itinerary/itinerary-edit', () => ({
   },
 }));
 
+// 케이스마다 params 를 바꾼다 — 목은 렌더 때 이 객체를 읽는다(mock 접두라 끌어올려진 팩토리가 볼 수 있다).
+const mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({
-    tripId: 'trip-1',
-    variant: 'error',
-  }),
+  useLocalSearchParams: () => ({ ...mockParams }),
 }));
 
 beforeEach(() => {
   mockCaptured.props = undefined;
   mockCaptured.rendered = false;
+  Object.keys(mockParams).forEach((key) => delete mockParams[key]);
+  mockParams.tripId = 'trip-1';
+  mockParams.variant = 'error';
 });
 
 describe('🔴 planb/manual 라우트 — ItineraryEditPage(inTrip) 위임', () => {
@@ -50,5 +55,25 @@ describe('🔴 planb/manual 라우트 — ItineraryEditPage(inTrip) 위임', () 
     expect(mockCaptured.props?.tripId).toBe('trip-1');
     expect(mockCaptured.props?.inTrip).toBe(true);
     expect(Object.keys(mockCaptured.props ?? {})).not.toContain('variant');
+  });
+});
+
+// TRIP-1233 · AC-2d
+describe('date → initialDate', () => {
+  it('RM1 date 쿼리를 initialDate 로 넘기고, date 라는 이름은 props 에 없다', () => {
+    mockParams.date = '2026-08-21';
+
+    render(<PlanbManualRoute />);
+
+    expect(mockCaptured.props?.initialDate).toBe('2026-08-21');
+    expect(mockCaptured.props?.inTrip).toBe(true);
+    expect(Object.keys(mockCaptured.props ?? {})).not.toContain('date');
+  });
+
+  it('RM2 date 가 없으면 initialDate 도 없다', () => {
+    render(<PlanbManualRoute />);
+
+    expect(mockCaptured.rendered).toBe(true);
+    expect(mockCaptured.props?.initialDate).toBeUndefined();
   });
 });

@@ -2,10 +2,12 @@ import fc from 'fast-check';
 
 import type { TripDestination } from '@/shared/api/index.schemas';
 
-import { regionForDay } from './dayRegion';
+import { regionForDay } from './regionForDay';
 
 /**
  * TRIP-1043 · QA #041 — 같이 짜기 진행 줄 앞에 붙일 "그날 여행지"(결정 3).
+ * TRIP-1233 — 장소 추가(h13) 후보 지역도 이 규칙을 쓰므로 `pages/itinerary/itinerary-copick/model` 에서
+ * `entities/trip` 공개 API 로 내렸다(사본 금지 — 규칙 한 벌). 케이스는 옮기기만 했다.
  *
  * 무엇을 보장하나: 여행지를 **seq 순서로 박수(nights)만큼** 펼쳐 N일차의 지역을 고른다. 박수 합을
  * 넘는 날(귀국일 포함)은 seq 가 가장 큰 여행지다(TRIP-1010 D7 의 밤 단위 규칙을 날 단위로). 여행지가

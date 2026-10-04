@@ -635,11 +635,12 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
     updatedAt: '2026-08-01T00:00:00Z',
   };
 
-  /** 후보 B — 날짜 無·좌표 미확정(밤이 날짜를 공급하므로 선택 가능, D3). */
+  /** 후보 B — 날짜 無(밤이 날짜를 공급하므로 선택 가능, D3). 좌표는 확정 — TRIP-1235 부터 좌표 미확정
+   * 후보는 [지정]이 요청 없이 실패로 끝나(01b Q3) 이 숙소로 지정하는 I2·AC-S9-3 이 mutate 를 못 본다. */
   const STAY_B: SavedStay = {
     savedStayId: 'stay-b',
     name: '감천문화마을 게스트하우스',
-    coordConfirmed: false,
+    coordConfirmed: true,
     linkedTripIds: [],
     checkIn: null,
     checkOut: null,

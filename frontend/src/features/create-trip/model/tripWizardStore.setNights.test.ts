@@ -1,4 +1,6 @@
-import { MAX_TRIP_NIGHTS } from './tripDraft';
+import fc from 'fast-check';
+
+import { MAX_TRIP_NIGHTS, nightsSum } from './tripDraft';
 import { minNightsFor, useTripWizardStore } from './tripWizardStore';
 
 /**
@@ -17,6 +19,11 @@ import { minNightsFor, useTripWizardStore } from './tripWizardStore';
  */
 
 beforeEach(() => {
+  useTripWizardStore.getState().reset();
+});
+
+// 모듈 싱글턴 — 파일 최상위에서도 끝에 되돌린다(이 파일이 남긴 30박 상태가 다른 파일로 새지 않게).
+afterEach(() => {
   useTripWizardStore.getState().reset();
 });
 
@@ -135,5 +142,122 @@ describe('AC-2 · setNights — 박수만 교체', () => {
     expect(useTripWizardStore.getState().destinations).toEqual([
       { seq: 1, region: '부산', nights: 2 },
     ]);
+  });
+});
+
+/**
+ * TRIP-1210 — 도시를 여럿 담게 되면서 새로 생긴 위반: 박수 합이 이미 30박인데 도시를 더 담으면 31박이 된다.
+ * `setNights`에만 있던 합 상한(TRIP-1219 a)을 `addDestination`도 지킨다 — 넘치게 될 추가는 담기지 않는다.
+ * 지역 피커는 이 액션 하나로 도시를 담으므로(`RegionPickerPage`), 여기서 막으면 어느 길로 와도 막힌다.
+ *
+ * 3동작: 준비(reset + 선상태) → 실행(addDestination) → 단언(getState()).
+ */
+describe('TRIP-1210 · 도시를 더 담아도 박수 합은 30박을 넘지 않는다', () => {
+  function store() {
+    return useTripWizardStore.getState();
+  }
+
+  it('한 도시 30박에 도시를 더 담으면 담기지 않는다 — 목록·끝 날짜 그대로', () => {
+    // 준비 — "아직 0곳" 앵커(앞 테스트 누수가 아님) → 서울 30박, 10/1 시작(끝 10/31).
+    expect(store().destinations).toHaveLength(0);
+    store().addDestination('서울특별시', 1, '11');
+    store().setNights(1, MAX_TRIP_NIGHTS);
+    store().setStartDate('2026-10-01');
+    expect(store().endDate).toBe('2026-10-31');
+
+    // 실행
+    store().addDestination('부산광역시', 1, '26');
+
+    // 단언
+    expect(store().destinations).toEqual([
+      { seq: 1, region: '서울특별시', nights: 30, regionCode: '11' },
+    ]);
+    expect(store().endDate).toBe('2026-10-31');
+  });
+
+  it('두 도시 20+10박에 세 번째 도시를 담아도 담기지 않는다', () => {
+    expect(store().destinations).toHaveLength(0);
+    store().addDestination('부산광역시', 20);
+    store().addDestination('경주시', 10);
+
+    store().addDestination('서울특별시', 1);
+
+    expect(store().destinations.map((one) => one.region)).toEqual([
+      '부산광역시',
+      '경주시',
+    ]);
+    expect(nightsSum(store().destinations)).toBe(30);
+  });
+
+  it('29박이면 1박짜리 도시를 담을 수 있다 — 합이 딱 30박(경계 값은 허용)', () => {
+    expect(store().destinations).toHaveLength(0);
+    store().addDestination('서울특별시', 1);
+    store().setNights(1, 29);
+    store().setStartDate('2026-10-01');
+
+    store().addDestination('부산광역시', 1);
+
+    expect(store().destinations.map((one) => one.region)).toEqual([
+      '서울특별시',
+      '부산광역시',
+    ]);
+    expect(nightsSum(store().destinations)).toBe(30);
+    expect(store().endDate).toBe('2026-10-31');
+  });
+
+  /**
+   * > *(개념)* **속성 테스트(PBT)** — 무작위로 만든 액션 순서를 수백 번 돌려, 매 단계 뒤 규칙이 깨지지 않는지 본다.
+   * 담기·빼기·박수 바꾸기·시작 고르기를 어떤 순서로 섞어도 박수 합은 30박 이하다.
+   */
+  it('속성 — 어떤 순서로 담고 빼고 박수를 바꿔도 매 단계 박수 합 ≤ 30', () => {
+    type Action =
+      | { kind: 'add'; region: string; nights: number }
+      | { kind: 'remove'; seq: number }
+      | { kind: 'nights'; seq: number; nights: number }
+      | { kind: 'start'; day: number };
+
+    const actionArb: fc.Arbitrary<Action> = fc.oneof(
+      fc.record({
+        kind: fc.constant('add' as const),
+        region: fc.constantFrom('서울특별시', '부산광역시', '경주시'),
+        nights: fc.integer({ min: 0, max: 8 }),
+      }),
+      fc.record({
+        kind: fc.constant('remove' as const),
+        seq: fc.integer({ min: 1, max: 8 }),
+      }),
+      fc.record({
+        kind: fc.constant('nights' as const),
+        seq: fc.integer({ min: 1, max: 8 }),
+        nights: fc.integer({ min: -1, max: 40 }),
+      }),
+      fc.record({
+        kind: fc.constant('start' as const),
+        day: fc.integer({ min: 1, max: 28 }),
+      })
+    );
+
+    fc.assert(
+      fc.property(fc.array(actionArb, { maxLength: 20 }), (actions) => {
+        // 실행마다 빈 드래프트에서 시작한다(beforeEach 는 it 하나에 한 번뿐이다).
+        store().reset();
+        for (const action of actions) {
+          if (action.kind === 'add') {
+            store().addDestination(action.region, action.nights);
+          } else if (action.kind === 'remove') {
+            store().removeDestination(action.seq);
+          } else if (action.kind === 'nights') {
+            store().setNights(action.seq, action.nights);
+          } else {
+            const day = String(action.day).padStart(2, '0');
+            store().setStartDate(`2026-10-${day}`);
+          }
+          expect(nightsSum(store().destinations)).toBeLessThanOrEqual(
+            MAX_TRIP_NIGHTS
+          );
+        }
+      }),
+      { numRuns: 300 }
+    );
   });
 });

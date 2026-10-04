@@ -882,11 +882,31 @@ describe('확정 셸(h16) 얼굴', () => {
 
       fireEvent.press(edit);
       // 형태 완전일치(★2·D5) — 객체형 push(goEdit 관용구), pathname·params 정확히.
+      // TRIP-1233 AC-2a — 보고 있는 날(첫 화면은 1일차)의 날짜도 싣는다.
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/itinerary/edit',
-        params: { tripId: TRIP_ID },
+        params: { tripId: TRIP_ID, date: DAY1 },
       });
       expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    // TRIP-1233 AC-2a — index 가 아니라 날짜를 싣는다(h16 칩은 여행 기간, 편집기 칩은 일정 days 라 칸이
+    // 어긋날 수 있다 — 01 맹점 ②). 2일차를 보고 있으면 2일차 날짜다.
+    it('C2d · 2일차 칩을 본 뒤 일정 수정 → push params.date 가 2일차 날짜다', async () => {
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+      // 앵커 — 칩 누름이 실제로 보고 있는 날을 바꿨다.
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/edit',
+        params: { tripId: TRIP_ID, date: '2026-06-11' },
+      });
     });
 
     it('C2b · TRIP-939: 캡처 미장전(armed:false)이면 [공유하기]가 없고 [일정 수정] 1버튼이다', async () => {
@@ -1134,6 +1154,53 @@ describe('확정 셸(h16) 얼굴', () => {
       const meta = screen.getByTestId('sheet-header-meta');
       expect(meta).toHaveTextContent('확정됨 · 4곳'); // 완전 일치
       expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
+    });
+  });
+
+  // TRIP-1234 R3-03 — 헤더 곳 수는 "고정 숙소"만 뺀다(같은 파일 hasBase 의 숙소 정의, 01b 결정 4). 서버가 아무 때나
+  // 꼭 갈 곳을 isFixed=true 로 내려도 카드는 그려지므로, isFixed 하나로 빼면 "헤더 0곳 · 카드 1장"이 된다.
+  describe('🔴 C3d · 헤더 곳 수 = 카드 수 — 고정 숙소만 빼고 고정 꼭 갈 곳은 센다', () => {
+    /** 시각이 고정된 비숙소 꼭 갈 곳(서버가 물질화해 isFixed=true 로 내리는 모양). 거리 null → km 생략. */
+    function fixedMustVisit(): ItineraryDaysItemSlotsItem {
+      return {
+        ...poi('poi-namwon', '14:00:00', '14:00:00', null, '광한루원', []),
+        isFixed: true,
+        category: '명소',
+      };
+    }
+
+    it('C3d-1 · 선택일이 고정 꼭 갈 곳 하나뿐이면 meta 는 "확정됨 · 1곳"이고 카드도 1장이다 (QA r3 재현)', async () => {
+      // 준비
+      useItinerary(() => HttpResponse.json(confirmed([fixedMustVisit()])));
+
+      // 실행
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 단언 — 완전 일치. `!slot.isFixed` 식이면 "확정됨 · 0곳"으로 red.
+      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+        '확정됨 · 1곳'
+      );
+      expect(screen.queryAllByTestId(/^slot-stopcard-time-/)).toHaveLength(1);
+    });
+
+    it('C3d-2 · 비고정 4 + 고정 꼭 갈 곳 1 + 고정 숙소 1 이면 "확정됨 · 5곳"이다 (숙소만 빠진다)', async () => {
+      useItinerary(() =>
+        HttpResponse.json(
+          confirmed([
+            ...fourPois([null, null, null, null]),
+            fixedMustVisit(),
+            hotel(null),
+          ])
+        )
+      );
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+        '확정됨 · 5곳'
+      );
     });
   });
 });
@@ -1491,9 +1558,10 @@ describe('일정 수정 진입', () => {
       expect(edit).toHaveTextContent('일정 수정');
 
       fireEvent.press(edit);
+      // TRIP-1233 AC-2a — 보고 있는 날(1일차) 날짜도 싣는다.
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/itinerary/edit',
-        params: { tripId: TRIP_ID },
+        params: { tripId: TRIP_ID, date: DAY1 },
       });
       expect(mockPush).toHaveBeenCalledTimes(1);
     });
@@ -2176,9 +2244,10 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
   const TRIP_ID = '11111111-1111-1111-1111-111111111111';
   const DAY1 = '2026-06-10';
 
+  // TRIP-1233 AC-2a — 일정 수정은 보고 있는 날(첫 화면 = 1일차)의 날짜를 싣는다.
   const EDIT_ROUTE = {
     pathname: '/trips/[tripId]/itinerary/edit',
-    params: { tripId: TRIP_ID },
+    params: { tripId: TRIP_ID, date: DAY1 },
   };
 
   function trip(): Trip {
@@ -2716,6 +2785,31 @@ describe('완성 셸(h14) 얼굴', () => {
       expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
         '4곳 · 4.1km'
       );
+    });
+
+    // TRIP-1234 R3-03 — 완성(PLANNED) 헤더도 확정과 같은 식이다: 고정 숙소만 빼고 고정 꼭 갈 곳은 센다.
+    it('T4b · 비고정 1 + 시각 고정 꼭 갈 곳 1 이면 meta 는 "2곳"이다', async () => {
+      // 준비 — 거리 null 이라 km 는 접힌다(곳 수만 본다).
+      const fixedMustVisit: ItineraryDaysItemSlotsItem = {
+        ...poi('poi-namwon', '14:00:00', '14:00:00', null, '광한루원', []),
+        isFixed: true,
+        category: '명소',
+      };
+      useItinerary(() =>
+        HttpResponse.json(
+          itineraryOf('PLANNED', [
+            poi('poi-a', '10:00:00', '11:00:00', null, '광안리 해변', ['바다']),
+            fixedMustVisit,
+          ])
+        )
+      );
+
+      // 실행
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 단언 — 완전 일치. `!slot.isFixed` 식이면 "1곳"으로 red.
+      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('2곳');
     });
   });
 

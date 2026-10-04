@@ -21,6 +21,5 @@ export {
   fromEpochDay,
 } from './model/tripWizardStep1';
 export type { CompanionCode } from './model/tripWizardStep1';
-export { canAddDestination, ONE_CITY_NOTICE } from './model/oneCityGate';
 export { minNightsFor, useTripWizardStore } from './model/tripWizardStore';
 export { isWizardOrigin, wizardOriginParams } from './model/wizardOrigin';

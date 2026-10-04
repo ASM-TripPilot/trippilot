@@ -8,7 +8,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { deriveEndsNextDay } from '@/entities/itinerary-slot';
+import { deriveEndsNextDay, isValidTimeRange } from '@/entities/itinerary-slot';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { WheelPicker } from '@/shared/ui/WheelPicker';
 
@@ -23,8 +23,10 @@ import { WheelPicker } from '@/shared/ui/WheelPicker';
  *
  * 종료를 손대지 않고 [적용]하면 종료는 **현재 값(`endAt` prop) 유지**이고 `endsNextDay` 만 새 시작 기준으로
  * 다시 유도한다 — 서버 계약상 endAt 은 필수 문자열이라 null 은 밖으로 나가지 않는다.
- * 클라는 시간 타당성을 판정하지 않는다(INV-2) — [적용]은 항상 열려 있고, `endsNextDay` 는
- * `end ≤ start`(HH:mm 사전식 비교)의 **기계적 유도**다(HC4). 최종 판정은 저장 시 서버 재검증 몫이다.
+ * `endsNextDay` 는 `end ≤ start`(HH:mm 사전식 비교)의 **기계적 유도**다(HC4).
+ * TRIP-1215 — (시작, 실제로 실릴 종료) 쌍이 `isValidTimeRange` 를 어기면 오류 문구를 띄우고 [적용]을
+ * 잠근다(숨은 종료에도 같은 규칙). 매 렌더 판정이라 휠을 굴리면 바로 따라온다. UX 사본일 뿐 최종 판정은
+ * 저장 시 서버 재검증 몫이다(INV-2).
  * 휠 값·readout 의 분은 bare 숫자("30")다 — "30분" 으로 그리면 소요시간 가드가 시계 분을 오탐한다(INV-3).
  *
  * ★ 시트 실제 열림·`enableContentPanningGesture`·휠 제스처·페이드는 `@gorhom/bottom-sheet` 통과형 목이
@@ -33,6 +35,7 @@ import { WheelPicker } from '@/shared/ui/WheelPicker';
 
 const DEFAULT_TITLE = '시각 조정';
 const APPLY_LABEL = '적용';
+const RANGE_ERROR = '종료 시각은 시작보다 늦어야 해요';
 
 /** 분(00~59) 라벨 — zero-pad 2자리. */
 const MINUTES = Array.from({ length: 60 }, (_, i) =>
@@ -142,8 +145,10 @@ export function TimeSheet({
 
   // 휠은 활성 탭(시작/종료)의 시·분을 편집한다. 12시간제로 보여주되 저장은 24시간 HH 상태에 되쓴다.
   // 종료를 손대지 않았으면 현재 endAt 을 그대로 싣고 endsNextDay 만 새 시작 기준으로 다시 유도한다.
+  const nextEnd = endConfigured ? `${endHour}:${endMinute}:00` : endAt;
+  const rangeInvalid = !isValidTimeRange(nextStart, nextEnd);
+
   function handleApply(): void {
-    const nextEnd = endConfigured ? `${endHour}:${endMinute}:00` : endAt;
     onApply({
       startAt: nextStart,
       endAt: nextEnd,
@@ -342,11 +347,23 @@ export function TimeSheet({
           />
         </View>
 
+        {rangeInvalid ? (
+          <Text
+            testID={`${testIDPrefix}-error`}
+            className="font-noto text-label text-primary-text"
+          >
+            {RANGE_ERROR}
+          </Text>
+        ) : null}
+
         <Pressable
           testID={`${testIDPrefix}-apply`}
           accessibilityRole="button"
           onPress={handleApply}
-          className="w-full items-center justify-center rounded-button bg-primary py-lg"
+          disabled={rangeInvalid}
+          className={`w-full items-center justify-center rounded-button py-lg ${
+            rangeInvalid ? 'bg-hairline-strong' : 'bg-primary'
+          }`}
         >
           <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
             {APPLY_LABEL}

@@ -21,7 +21,7 @@
  * …")는 TRIP-736에서 additive `mustVisitCount?: number` prop으로 배선했다 — 페이지가
  * `mustVisits.length`를 내려주고, **0곳이면 안 그린다**(Figma 근거 없음 §F, 지어내지 않는다).
  */
-import { Fragment, useState, type ReactElement } from 'react';
+import { Fragment, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -33,11 +33,9 @@ import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 
 import { nightsOnlyLabel } from '@/entities/trip';
 import {
-  canAddDestination,
   MAX_TRIP_NIGHTS,
   minNightsFor,
   nightsSum,
-  ONE_CITY_NOTICE,
 } from '@/features/create-trip';
 import type { TripDestination } from '@/shared/api/index.schemas';
 
@@ -63,6 +61,8 @@ export interface DestinationEditSheetProps {
   onClose: () => void;
   /** 꼭 갈 곳 수(배선 `mustVisits.length`) → "꼭 갈 곳 N곳…" 안내문. 0·미지정이면 안 그린다(TRIP-736). */
   mustVisitCount?: number;
+  /** 여행지 기준 지역 밖 꼭 갈 곳 수(사실값, TRIP-1234). 1 이상이면 안내문이 그 수를 말한다. */
+  outsideRegionCount?: number;
 }
 
 /** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). 시트가 명시해야 딤이 그려진다(라이브러리
@@ -166,17 +166,9 @@ export function DestinationEditSheet({
   onApply,
   onClose,
   mustVisitCount,
+  outsideRegionCount,
 }: DestinationEditSheetProps): ReactElement {
-  // 다도시: TRIP-1210(BE+AI) 해소 전까지 — 도시가 이미 있으면 추가 대신 안내(교체는 삭제 후 추가).
-  const [blocked, setBlocked] = useState(false);
-  const canAdd = canAddDestination(destinations.length);
-  function handleAddCity(): void {
-    if (!canAdd) {
-      setBlocked(true);
-      return;
-    }
-    onAddCity();
-  }
+  // 박수 합이 상한이면 [+]도 [도시 추가]도 죽인다 — 새 도시는 최소 1박이라 담을 자리가 없다(TRIP-1210).
   const atMaxNights = nightsSum(destinations) >= MAX_TRIP_NIGHTS;
   return (
     <BottomSheet
@@ -220,23 +212,17 @@ export function DestinationEditSheet({
           <Pressable
             testID="trip-wizard-destination-add"
             accessibilityRole="button"
-            onPress={handleAddCity}
-            className="flex-row items-center justify-center gap-[6px] rounded-button border-[1.2px] border-dashed border-primary py-md"
+            disabled={atMaxNights}
+            onPress={onAddCity}
+            className={`flex-row items-center justify-center gap-[6px] rounded-button border-[1.2px] border-dashed border-primary py-md ${
+              atMaxNights ? 'opacity-40' : ''
+            }`}
           >
             <PlusGlyph size={16} />
             <Text className="font-noto-bold text-label font-bold text-primary-text">
               도시 추가
             </Text>
           </Pressable>
-
-          {!canAdd && blocked ? (
-            <Text
-              testID="trip-wizard-destination-one-city-notice"
-              className="font-noto text-label text-muted"
-            >
-              {ONE_CITY_NOTICE}
-            </Text>
-          ) : null}
 
           {atMaxNights ? (
             <Text
@@ -247,13 +233,16 @@ export function DestinationEditSheet({
             </Text>
           ) : null}
 
-          {/* 담은 곳 안내문 — 0·미지정이면 안 그린다(TRIP-736 §F, Figma 근거 없음). */}
+          {/* 담은 곳 안내문 — 0·미지정이면 안 그린다(TRIP-736 §F, Figma 근거 없음).
+              앱은 꼭 갈 곳을 여행지에 맞춰 정리하지 않는다 — 하지 않는 일을 약속하지 않는다(TRIP-1234). */}
           {mustVisitCount != null && mustVisitCount > 0 ? (
             <Text
               testID="trip-wizard-destination-note"
               className="font-noto text-label text-muted"
             >
-              {`꼭 갈 곳 ${mustVisitCount}곳이 여행지에 맞춰 정리돼요`}
+              {outsideRegionCount != null && outsideRegionCount > 0
+                ? `꼭 갈 곳 중 ${outsideRegionCount}곳은 이 여행 지역 밖이에요`
+                : `꼭 갈 곳 ${mustVisitCount}곳은 여행지를 바꿔도 그대로 남아요`}
             </Text>
           ) : null}
         </View>

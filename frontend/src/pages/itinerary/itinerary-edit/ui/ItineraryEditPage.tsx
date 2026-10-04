@@ -104,14 +104,18 @@ function EditFace({
 export function ItineraryEditPage({
   tripId,
   inTrip,
+  initialDate,
 }: {
   tripId: string;
   /** TRIP-753 · i07 라우트(`planb/manual`)가 리터럴 true 로 넘긴다 — 뷰의 i07 얼굴(카드 사이 + 숨김·안내 문구). */
   inTrip?: boolean;
+  /** TRIP-1233 · 진입 일자(YYYY-MM-DD, 라우트 `date`). 일정에 없거나 없으면 1일차로 연다. */
+  initialDate?: string;
 }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [activeDayIndex, setActiveDayIndex] = useState(0);
+  // 사용자가 칩으로 고른 칸(null = 아직 안 고름 → 진입 일자 칸).
+  const [selectedDayIndex, setActiveDayIndex] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   // 저장 시 미지정(startAt null) 슬롯이 요청에서 빠지면 그 개수를 담는 안내(INV-4). null = 안내 없음.
   const [unspecifiedNotice, setUnspecifiedNotice] = useState<string | null>(
@@ -146,6 +150,14 @@ export function ItineraryEditPage({
     if (loaded !== undefined) seed(loaded);
   }, [itinerary.data, seed]);
 
+  // 진입 칸은 매 렌더 스토어 days 에서 다시 찾는다 — 초기값에 굳히면 로딩(days=[])·옛 드래프트 순간의
+  // 칸으로 고정된다(LiveItineraryPage 선례). 못 찾으면 -1 → 0(1일차). 칩 선택이 이긴다.
+  const activeDayIndex =
+    selectedDayIndex ??
+    Math.max(
+      0,
+      days.findIndex((day) => day.date === initialDate)
+    );
   // 활성 일자 — 방문 조회 훅(아래)이 조기 반환보다 위에서 이 값을 필요로 한다(LiveItineraryPage 선례).
   // 로딩 중엔 days=[] 라 '' 가 되어 방문 조회가 꺼진다.
   const activeDate = days[activeDayIndex]?.date ?? '';
@@ -330,7 +342,8 @@ export function ItineraryEditPage({
         onPressAddPlace={() =>
           router.push({
             pathname: '/trips/[tripId]/itinerary/manual/add',
-            params: { tripId },
+            // 활성 일자 — 시트 제목·담을 날이 이 날이 된다(TRIP-1233).
+            params: { tripId, date: activeDate },
           })
         }
         onPressAddBetween={(precedingIndex) =>

@@ -6,6 +6,7 @@ import type { TripDestination } from '@/shared/api/index.schemas';
  * 여행지를 seq 순서로 박수(nights)만큼 펼쳐 그날 칸의 지역을 고르고, 박수 합을 넘는 날(귀국일 포함)은
  * seq 가 가장 큰 여행지다 — g02 `nightlyBaseCards`(features/trip, 밤 단위, TRIP-1010 D7)와 같은 규칙을
  * 날 단위로 옮긴 것이다(형제 feature 라 import 불가). 여행지가 없으면 null(화면이 접두를 생략).
+ * TRIP-1233 — h13 장소 추가의 후보 지역도 이 규칙을 쓴다(pages 슬라이스에서 entities 로 이사, 사본 금지).
  */
 export function regionForDay(
   destinations: readonly TripDestination[],

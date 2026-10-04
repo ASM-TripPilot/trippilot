@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { deriveEndsNextDay } from './endsNextDay';
+import { deriveEndsNextDay, isValidTimeRange } from './endsNextDay';
 import { suggestNextSlotTime } from './suggestNextSlotTime';
 
 /**
@@ -102,6 +102,31 @@ describe('🔴 P · 임의 시각에서 지키는 성질', () => {
           suggestNextSlotTime({ endAt: previousEnd, endsNextDay: true })
         ).toEqual(FALLBACK);
       })
+    );
+  });
+
+  // TRIP-1215 — 시트가 종료<시작을 막게 되면서, 기본 제안을 손대지 않고 [적용]하는 길이 막히면 안 된다.
+  it('P4 · 제안값은 언제나 시트 판정(isValidTimeRange)을 통과한다 — 앞 장소 없음 포함', () => {
+    expect(
+      isValidTimeRange(
+        suggestNextSlotTime().startAt,
+        suggestNextSlotTime().endAt
+      )
+    ).toBe(true);
+
+    fc.assert(
+      fc.property(previousArb, fc.boolean(), (previousEnd, endsNextDay) => {
+        const next = suggestNextSlotTime({ endAt: previousEnd, endsNextDay });
+        expect(isValidTimeRange(next.startAt, next.endAt)).toBe(true);
+      }),
+      {
+        examples: [
+          ['23:30:00', false],
+          ['23:59:59', false],
+          ['17:59:00', false],
+          ['08:00:00', false],
+        ],
+      }
     );
   });
 });

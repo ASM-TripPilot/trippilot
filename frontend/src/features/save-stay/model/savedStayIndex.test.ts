@@ -1,6 +1,10 @@
 import type { SavedStay, StayItem } from '@/shared/api/index.schemas';
 
-import { findSavedStayId, optimisticSavedStayId } from './savedStayIndex';
+import {
+  findSavedStayId,
+  isOptimisticSavedStayId,
+  optimisticSavedStayId,
+} from './savedStayIndex';
 
 /**
  * TRIP-417 AC-2·AC-3 (+ Q6) — `(externalSource, externalId) → savedStayId` 역인덱스.
@@ -133,5 +137,25 @@ describe('Q6 · 낙관 표식의 형식', () => {
     // 값 자체를 이 파일이 한 번 못 박고, 나머지 테스트는 이 헬퍼를 쓴다 — 같은 문자열을 여러
     // 곳에 손으로 적으면 한 곳만 고쳐졌을 때 조용히 어긋난다.
     expect(optimisticSavedStayId('NAVER:s1')).toBe('optimistic:NAVER:s1');
+  });
+});
+
+// TRIP-1235(01b Q3) — 2/4 시트가 "보내면 반드시 실패하는 후보"를 요청 전에 알아보는 판정. 생성
+// 규칙(`optimisticSavedStayId`)과 같은 파일에 짝으로 두어, 접두사가 바뀌면 두 쪽이 함께 바뀐다.
+describe('낙관 표식 판별 — 서버가 모르는 임시 id 인가', () => {
+  it('생성 헬퍼가 만든 id 는 낙관 표식이다 (생성 규칙과 왕복)', () => {
+    expect(isOptimisticSavedStayId(optimisticSavedStayId('NAVER:s1'))).toBe(
+      true
+    );
+  });
+
+  it('서버가 준 UUID 는 낙관 표식이 아니다', () => {
+    expect(
+      isOptimisticSavedStayId('7b0c2d4e-1f3a-4b5c-8d9e-0a1b2c3d4e5f')
+    ).toBe(false);
+  });
+
+  it('접두사가 맨 앞에 있을 때만 낙관 표식이다 (중간에 끼어 있으면 아니다)', () => {
+    expect(isOptimisticSavedStayId('stay-optimistic:NAVER:s1')).toBe(false);
   });
 });

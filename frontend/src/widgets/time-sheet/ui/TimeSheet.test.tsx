@@ -26,6 +26,8 @@ import { TimeSheet } from './TimeSheet';
  */
 
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
+/** TRIP-1215 오류 문구(01b Q5) — 완전 일치. */
+const RANGE_ERROR = '종료 시각은 시작보다 늦어야 해요';
 
 function renderedTexts(): string[] {
   const out: string[] = [];
@@ -93,6 +95,13 @@ describe.each(CONFIGS)(
       suffixes.forEach((suffix) =>
         fireEvent.press(screen.getByTestId(id(suffix)))
       );
+    // TRIP-1215 — 막힘 = 문구 + disabled + 눌러도 onApply 0회. RNTL 은 disabled 를 안 누르므로 셋 다 본다.
+    const expectBlocked = (): void => {
+      expect(screen.getByTestId(id('error'))).toHaveTextContent(RANGE_ERROR);
+      expect(screen.getByTestId(id('apply'))).toBeDisabled();
+      press('apply');
+      expect(onApply).not.toHaveBeenCalled();
+    };
 
     it('W1 · 휠 3열·세그·readout·적용이 있고, 셀 탭 열·취소 버튼은 없다', () => {
       renderSheet(config);
@@ -142,15 +151,25 @@ describe.each(CONFIGS)(
       expect(onCancel).not.toHaveBeenCalled();
     });
 
-    it('E2 · 시작만 오후 11시로 → 종료 11:45 유지 + endsNextDay 만 true 로 재유도', () => {
+    // TRIP-1215 계약 변경 — 옛 E2 는 23:15/숨은 11:45 를 익일로 적용했다. 이제 막히고, 재유도 의도는 E2b 로 옮겼다.
+    it('E2 · 시작만 오후 11시로 → 숨은 종료 11:45 가 새벽이 아니라 막힌다 (readout 은 "설정 안 됨" 그대로)', () => {
       renderSheet(config, '10:15:00', '11:45:00');
 
       // 시작 탭 활성 — 오후로 바꾼 뒤 시 11 → 23시.
+      press('wheel-ap-오후', 'wheel-h-11');
+
+      expect(screen.getByTestId(id('readout'))).toHaveTextContent(/설정 안 됨/);
+      expectBlocked();
+    });
+
+    it('E2b · 07:00–08:30 에서 시작만 오후 11시로 → 숨은 종료 08:30 유지 + endsNextDay true 로 재유도', () => {
+      renderSheet(config, '07:00:00', '08:30:00');
+
       press('wheel-ap-오후', 'wheel-h-11', 'apply');
 
       expect(appliedPatch()).toStrictEqual({
-        startAt: '23:15:00',
-        endAt: '11:45:00',
+        startAt: '23:00:00',
+        endAt: '08:30:00',
         endsNextDay: true,
       });
     });
@@ -167,17 +186,38 @@ describe.each(CONFIGS)(
       });
     });
 
-    it('E4 · start==end 면 endsNextDay=true (경계 ≤), 종료 미설정이어도 같다', () => {
+    // TRIP-1215 계약 변경 — 옛 E4 는 같은 시각을 "24시간 방문(익일)"으로 적용했다. 이제 열자마자 막힌다(01b Q3).
+    it('E4 · start==end 면 아무것도 안 눌러도 열자마자 막혀 있다', () => {
       renderSheet(config, '11:00:00', '11:00:00');
 
-      press('apply');
-
-      expect(appliedPatch()).toStrictEqual({
-        startAt: '11:00:00',
-        endAt: '11:00:00',
-        endsNextDay: true,
-      });
+      expectBlocked();
     });
+
+    // TRIP-1215 — props 로 바로 심은 (시작, 숨은 종료) 경계 표. 마운트 시점 판정과 숨은 종료 경로를 함께 본다.
+    it.each<[string, string, boolean | null, string]>([
+      ['13:00:00', '14:30:00', false, '같은 날 허용'],
+      ['18:00:00', '08:59:00', true, '밤 시작 18:00 · 새벽 종료 08:59 허용'],
+      ['17:59:00', '08:59:00', null, '시작 17:59 는 밤이 아니라 막힘'],
+      ['18:00:00', '09:00:00', null, '종료 09:00 은 새벽이 아니라 막힘'],
+      ['23:30:00', '00:30:00', true, '기본 제안 자정 넘김 허용'],
+      ['11:00:00', '08:00:00', null, 'Q-29 막힘'],
+      ['15:00:00', '14:30:00', null, '숨은 종료보다 늦은 시작 막힘'],
+      ['13:00:00', '13:00:00', null, '같은 시각 막힘'],
+    ])(
+      'E6 · 시작 %s · 종료 %s → endsNextDay %s (%s)',
+      (startAt, endAt, endsNextDay) => {
+        renderSheet(config, startAt, endAt);
+
+        if (endsNextDay === null) {
+          expectBlocked();
+          return;
+        }
+        expect(screen.queryByTestId(id('error'))).toBeNull();
+        expect(screen.getByTestId(id('apply'))).not.toBeDisabled();
+        press('apply');
+        expect(appliedPatch()).toStrictEqual({ startAt, endAt, endsNextDay });
+      }
+    );
 
     it('E5 · 종료 탭을 열기만 하면 미설정 표기("설정 안 됨")가 남고 종료 값은 유지된다', () => {
       renderSheet(config, '10:15:00', '11:45:00');

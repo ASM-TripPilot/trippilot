@@ -85,6 +85,12 @@ export interface TripWizardStep1ScreenProps {
   onCloseOverseasDialog?(): void;
   /** '국내 도시 고르기' → 여행지 편집 시트 오픈 콜백으로 재배선(D6). 옛 인라인 도시 시트는 없다. */
   onPickDomesticRegion?(): void;
+
+  /** 지역 밖 꼭 갈 곳 안내 줄(TRIP-1234) — 보여야 할 때의 지역 밖 수. 0·미지정이면 안 그린다.
+   * 누가 지역 밖인지·그대로 둔 뒤 숨길지는 페이지가 정한다. 안내 줄이 있어도 [다음]은 막지 않는다. */
+  outsideRegionCount?: number;
+  onRemoveOutsideRegion?(): void;
+  onKeepOutsideRegion?(): void;
 }
 
 /** 요약 카드 그림자 — Figma `0 2 10 rgba(0,0,0,.06)`. 그림자는 토큰 대상이 아니라 raw 가 맞다
@@ -341,6 +347,9 @@ export function TripWizardStep1Screen({
   overseasBlocked,
   onCloseOverseasDialog,
   onPickDomesticRegion,
+  outsideRegionCount,
+  onRemoveOutsideRegion,
+  onKeepOutsideRegion,
 }: TripWizardStep1ScreenProps): ReactElement {
   // loading 이면 게이트가 참이어도 [다음]을 막는다(TRIP-671 D4) — 화면이 isLoading 을 next 에 물린다.
   const nextDisabled = !canProceed || Boolean(isLoading);
@@ -550,6 +559,38 @@ export function TripWizardStep1Screen({
               >
                 <Text className="font-noto-bold font-bold text-card-title text-primary">
                   다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {/* 지역 밖 안내 줄(TRIP-1234) — 배너와 같은 토큰 모양을 재사용. [다음]을 막지 않는다. */}
+          {outsideRegionCount != null && outsideRegionCount > 0 ? (
+            <View
+              testID="trip-wizard-outside-notice"
+              className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
+            >
+              <AlertCircleGlyph size={18} />
+              <Text className="flex-1 font-noto text-label text-ink">
+                {`꼭 갈 곳 중 ${outsideRegionCount}곳은 이 여행 지역 밖이에요`}
+              </Text>
+              <Pressable
+                testID="trip-wizard-outside-notice-remove"
+                accessibilityRole="button"
+                onPress={onRemoveOutsideRegion}
+                hitSlop={6}
+              >
+                <Text className="font-noto-bold font-bold text-label text-primary">
+                  빼기
+                </Text>
+              </Pressable>
+              <Pressable
+                testID="trip-wizard-outside-notice-keep"
+                accessibilityRole="button"
+                onPress={onKeepOutsideRegion}
+                hitSlop={6}
+              >
+                <Text className="font-noto-bold font-bold text-label text-muted">
+                  그대로 두기
                 </Text>
               </Pressable>
             </View>

@@ -464,7 +464,10 @@ export function LiveItineraryPage({
                     : `/trips/${tripId}/planb`
                 )
         }
-        onPressManualEdit={() => router.push(`/trips/${tripId}/planb/manual`)}
+        // TRIP-1233 — 보고 있는 날을 오늘이어도 늘 싣는다: 편집기는 날짜가 없으면 오늘이 아니라 1일차로 연다.
+        onPressManualEdit={() =>
+          router.push(`/trips/${tripId}/planb/manual?date=${activeDate}`)
+        }
         onPressComplete={
           activeVisitCheckId !== null
             ? () => {

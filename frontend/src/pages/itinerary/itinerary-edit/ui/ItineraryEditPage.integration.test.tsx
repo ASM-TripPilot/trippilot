@@ -466,6 +466,175 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
     });
   });
 
+  // TRIP-1233 · AC-1b·2b·2c — 진입 일차(initialDate)와 말미 장소 추가의 날짜
+  describe('🔴 진입 일차·장소 추가 날짜 (TRIP-1233)', () => {
+    /**
+     * 확정 일정(h16)·허브(i01)에서 N일차를 보다가 편집에 들어오면 편집기가 그 날로 열려야 하고, 말미
+     * [장소 추가]는 지금 보고 있는 날을 싣고 가야 한다(안 실으면 h13 이 1일차에 담는다).
+     *
+     * 무엇을 보장하나:
+     *  - 1b 말미 [장소 추가] push 에 활성 일자 `date` 가 실린다(1일차·칩으로 옮긴 2일차 둘 다).
+     *  - 2b `initialDate`=2일차면 일정이 도착한 뒤 2일차 칩이 선택되고, 헤더·카드가 2일차다. 날짜로 칸을
+     *    찾는다 — 일정에 빠진 날이 있어도 index 가 아니라 날짜가 기준이다(01 맹점 ②).
+     *  - 2c 모르는 날이면 1일차. 진입 일차는 초기값일 뿐 — 칩을 누르면 그 날로 바뀐다.
+     *  - 2b 스토어에 앞 여행 드래프트가 남아 있어도 진입 일차가 그 옛 날짜 순서로 굳지 않는다(01 맹점 ③).
+     *
+     * 3동작: 준비=가짜 서버(2일 일정)·진입 일차 → 실행=렌더(·칩·장소 추가) → 단언=선택 칩·헤더·카드·push.
+     */
+
+    function renderWith(initialDate?: string) {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      function Wrapper({ children }: { children: ReactNode }) {
+        return (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        );
+      }
+      return render(
+        <ItineraryEditPage tripId={TRIP_ID} initialDate={initialDate} />,
+        { wrapper: Wrapper }
+      );
+    }
+
+    const ADD_PLACE = 'itinerary-edit-add-place';
+    const ADD_ROUTE = '/trips/[tripId]/itinerary/manual/add';
+
+    it('1b · 1일차에서 말미 장소 추가 → push params 에 1일차 date 가 실린다', async () => {
+      renderPage();
+      await screen.findByTestId(cardId('poi-a'));
+
+      fireEvent.press(screen.getByTestId(ADD_PLACE));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: ADD_ROUTE,
+        params: { tripId: TRIP_ID, date: DAY1 },
+      });
+    });
+
+    it('1b · 2일차 칩으로 옮긴 뒤 말미 장소 추가 → push params 에 2일차 date 가 실린다', async () => {
+      renderPage();
+      await screen.findByTestId(cardId('poi-a'));
+
+      fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
+      // 앵커 — 칩 누름이 실제로 날을 바꿨다.
+      await screen.findByTestId(cardIdDay2('poi-c'));
+      fireEvent.press(screen.getByTestId(ADD_PLACE));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: ADD_ROUTE,
+        params: { tripId: TRIP_ID, date: DAY2 },
+      });
+    });
+
+    it('2b · initialDate=2일차면 2일차 칩이 선택돼 열리고, 헤더·카드가 2일차이며 장소 추가도 2일차를 싣는다', async () => {
+      renderWith(DAY2);
+
+      // 일정이 도착해 2일차 카드가 뜰 때까지 기다린다(로딩 중엔 편집기가 없다).
+      await screen.findByTestId(cardIdDay2('poi-c'));
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(screen.getByTestId('itinerary-edit-day-1')).not.toBeSelected();
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+      expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+        '6월 11일(목)'
+      );
+      expect(screen.getByTestId(META)).toHaveTextContent('1곳');
+      expect(screen.queryByTestId(cardId('poi-a'))).toBeNull();
+
+      fireEvent.press(screen.getByTestId(ADD_PLACE));
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: ADD_ROUTE,
+        params: { tripId: TRIP_ID, date: DAY2 },
+      });
+    });
+
+    it('2b · 일정에 빠진 날이 있어도 날짜로 칸을 찾는다 — [6/10, 6/12] 에 initialDate=6/12 면 두 번째 칩이다', async () => {
+      const DAY3 = '2026-06-12';
+      const base = itinerary();
+      getHandler = () =>
+        HttpResponse.json({
+          ...base,
+          days: [base.days[0], { ...base.days[1], date: DAY3 }],
+        });
+
+      renderWith(DAY3);
+
+      await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY3, 'poi-c')}`);
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+        '6월 12일(금)'
+      );
+    });
+
+    it('2b · 스토어에 앞 여행 드래프트(그 날이 0번 칸)가 남아 있어도 일정 도착 뒤 2일차로 열린다', async () => {
+      // 준비 — 편집 스토어는 모듈 싱글턴이고 프로덕션은 reset 하지 않는다. 옛 드래프트에선 2일차 날짜가
+      //   0번 칸이다 — 첫 렌더의 스토어로 index 를 한 번만 계산해 굳히면 0(1일차)으로 열린다.
+      useItineraryEditStore.getState().seed([
+        {
+          date: DAY2,
+          slots: [
+            {
+              poiId: 'poi-stale',
+              startAt: '10:00:00',
+              endAt: '11:00:00',
+              isFixed: false,
+              endsNextDay: false,
+              hasViolation: false,
+              alternatives: [],
+              tags: [],
+              nameKo: '옛 여행 장소',
+            },
+          ],
+        },
+      ]);
+
+      renderWith(DAY2);
+
+      await screen.findByTestId(cardIdDay2('poi-c'));
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+      expect(screen.queryByText('옛 여행 장소')).toBeNull();
+    });
+
+    it.each([['2026-07-01'], ['내일'], ['']])(
+      '2c · 일정에 없거나 형식이 틀린 initialDate(%j)면 1일차로 연다',
+      async (bad) => {
+        renderWith(bad);
+
+        await screen.findByTestId(cardId('poi-a'));
+        expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
+        expect(screen.getByTestId('sheet-header-day')).toHaveTextContent(
+          '1일차'
+        );
+      }
+    );
+
+    it('2c · initialDate 가 없으면 1일차로 연다 (무회귀)', async () => {
+      renderWith(undefined);
+
+      await screen.findByTestId(cardId('poi-a'));
+      expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
+    });
+
+    it('2c · initialDate=2일차로 열린 뒤 1일차 칩을 누르면 1일차로 바뀐다 (칩 선택이 진입 일차를 이긴다)', async () => {
+      renderWith(DAY2);
+      await screen.findByTestId(cardIdDay2('poi-c'));
+
+      fireEvent.press(screen.getByTestId('itinerary-edit-day-1'));
+
+      await screen.findByTestId(cardId('poi-a'));
+      expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
+      fireEvent.press(screen.getByTestId(ADD_PLACE));
+      expect(mockPush).toHaveBeenLastCalledWith({
+        pathname: ADD_ROUTE,
+        params: { tripId: TRIP_ID, date: DAY1 },
+      });
+    });
+  });
+
   describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 첫 핀)', () => {
     // mapViewMock 이 center 를 map-root 텍스트 "lat,lng" 로 노출한다(toHaveTextContent 는 완전 일치).
     const SEOUL_CITY_HALL = '37.5665,126.978';
@@ -1298,6 +1467,46 @@ describe('여행 중 직접 수정(i07)', () => {
     });
   });
 
+  // TRIP-1233 · AC-2d — 허브(i01)에서 2일차를 보다가 [직접 수정]으로 오면 i07 도 2일차로 열린다.
+  describe('🔴 i07 진입 일차 (TRIP-1233)', () => {
+    it('inTrip + initialDate=2일차 → 2일차 칩 선택 · 2일차 카드 · 말미 장소 추가가 2일차 date 를 싣는다', async () => {
+      const DAY2 = '2026-06-12';
+      getHandler = () =>
+        HttpResponse.json({
+          ...itinerary(),
+          days: [
+            { date: DAY, slots: SLOTS },
+            {
+              date: DAY2,
+              slots: [slot('q1', '09:00:00', '10:00:00', '태종대')],
+            },
+          ],
+        });
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      function Wrapper({ children }: { children: ReactNode }) {
+        return (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        );
+      }
+      render(<ItineraryEditPage tripId={TRIP_ID} inTrip initialDate={DAY2} />, {
+        wrapper: Wrapper,
+      });
+
+      await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY2, 'q1')}`);
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+
+      fireEvent.press(screen.getByTestId('itinerary-edit-add-place'));
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/manual/add',
+        params: { tripId: TRIP_ID, date: DAY2 },
+      });
+    });
+  });
+
   describe('🔴 P2 · AC-5·AC-12 — 예정 행 ⌄ → h04 시트 → 적용값이 저장 PUT 에 실린다', () => {
     it('p3 를 14:00–15:30 으로 바꿔 저장하면 PUT 의 p3 시각이 바뀌고 완료 p1 은 그대로다', async () => {
       renderPage();
@@ -1339,28 +1548,35 @@ describe('여행 중 직접 수정(i07)', () => {
       expect(p1?.startAt).toBe('09:30:00');
     });
 
-    it('P2b · 시작만 15:00 으로 바꿔 적용·저장하면 p3 endAt 은 원값 14:30:00 · endsNextDay true', async () => {
+    // TRIP-1215 계약 변경 — 옛 P2b 는 카드 '15:00–14:30' + PUT endsNextDay true(QA Q-29 증상 그대로)를 잠갔다.
+    // 이제 시트가 막는다. 시트는 onApply 안에서 동기로 닫히므로 [적용] 뒤 시트 잔존 = onApply 미호출(02a ★3).
+    it('P2b · 시작만 15:00 으로 옮기면(숨은 종료 14:30) 시트가 막고 카드·저장 PUT 의 p3 는 13:00–14:30 그대로다', async () => {
       renderPage();
       await waitForLocked();
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('p3')}`));
       await screen.findByTestId(SHEET);
       fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-3'));
-      fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
-      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
+      expect(screen.getByTestId('itinerary-edit-time-error')).toHaveTextContent(
+        '종료 시각은 시작보다 늦어야 해요'
+      );
+      fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
       expect(
         screen.getByTestId(`slot-stopcard-time-${k('p3')}`)
-      ).toHaveTextContent('15:00–14:30');
+      ).toHaveTextContent('13:00–14:30');
 
+      fireEvent(screen.getByTestId(SHEET), 'close');
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
       const body = putBody as EditItineraryRequest;
       const p3 = body.days[0].slots.find((s) => s.poiId === 'p3');
-      expect(p3?.startAt).toBe('15:00:00');
+      expect(p3?.startAt).toBe('13:00:00');
       expect(p3?.endAt).toBe('14:30:00');
-      expect(p3?.endsNextDay).toBe(true);
+      expect(p3?.endsNextDay).toBe(false);
     });
   });
 
@@ -2502,32 +2718,34 @@ describe('시각 조정 시트', () => {
   });
 
   describe('🔴 IT5 · AC-10 — 종료를 안 건드리면 기존 endAt 유지 + endsNextDay 재유도', () => {
-    it('IT5a · 시작만 23:15 로 적용하면 카드가 23:15–11:45 로 바뀌고 저장은 안 나간다(로컬)', async () => {
+    // TRIP-1215 계약 변경 — 옛 IT5a·IT5b 는 시작 23:15/숨은 종료 11:45:30 을 카드 '23:15–11:45'·PUT true 로 잠갔다.
+    // 그 조합은 이제 시트가 막는다(IT5a). 초 보존 의도는 허용 조합(IT5b), 익일 true 배선은 IT5d 가 잰다.
+    it('IT5a · 시작만 23:15 로 옮기면(숨은 종료 11:45:30) 시트가 막아 카드는 10:15 그대로고 저장도 안 나간다', async () => {
       renderPage();
       await openSheetFor('poi-a');
 
       press('wheel-ap-오후', 'wheel-h-11');
-      await applyAndWaitClosed();
-
-      expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(
-        /23:15–11:45/
+      expect(screen.getByTestId(t('error'))).toHaveTextContent(
+        '종료 시각은 시작보다 늦어야 해요'
       );
-      // 로컬 편집 — 시각조정만으로 서버를 안 건드린다(INV-2).
+      press('apply');
+
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+      expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(/10:15/);
       expect(putCalls).toBe(0);
     });
 
-    it('IT5b · 저장 PUT 의 a 는 startAt 23:15:00 · endAt 원값 11:45:30(초 보존) · endsNextDay true', async () => {
+    it('IT5b · 시작만 오전 11:15 로 적용하면 저장 PUT 의 a 는 endAt 원값 11:45:30(초 보존) · endsNextDay false', async () => {
       renderPage();
       await openSheetFor('poi-a');
 
-      press('wheel-ap-오후', 'wheel-h-11');
+      press('wheel-h-11');
       await applyAndWaitClosed();
       const slotA = await saveAndGetSlot('poi-a');
 
-      expect(slotA?.startAt).toBe('23:15:00');
+      expect(slotA?.startAt).toBe('11:15:00');
       expect(slotA?.endAt).toBe('11:45:30');
-      // 원값은 false — 새 시작(23:15) 기준으로 다시 유도해야 true 다.
-      expect(slotA?.endsNextDay).toBe(true);
+      expect(slotA?.endsNextDay).toBe(false);
 
       // AC-13 — 서버 계약 endAt 은 항상 string(null 이 새지 않는다).
       const body = putBody as EditItineraryRequest;
@@ -2553,6 +2771,23 @@ describe('시각 조정 시트', () => {
       expect(slotA?.startAt).toBe('09:15:00');
       expect(slotA?.endAt).toBe('23:45:00');
       expect(slotA?.endsNextDay).toBe(false);
+    });
+  });
+
+  // TRIP-1215 — 시트가 허용한 정상 자정 넘김(밤 시작 + 새벽 종료)은 페이지를 지나 endsNextDay true 로 저장된다.
+  describe('🔴 IT5d · 정상 자정 넘김은 막히지 않고 endsNextDay true 로 저장된다', () => {
+    it('시작 오후 11:15 · 종료 오전 12:45 로 적용하면 저장 PUT 의 a 는 23:15:00–00:45:00 · endsNextDay true', async () => {
+      renderPage();
+      await openSheetFor('poi-a');
+
+      // 시작 10:15 → 오후 → 22:15 → 11 → 23:15. 종료 11:45 → 12(오전 12 = 00시) → 00:45.
+      press('wheel-ap-오후', 'wheel-h-11', 'seg-end', 'wheel-h-12');
+      await applyAndWaitClosed();
+      const slotA = await saveAndGetSlot('poi-a');
+
+      expect(slotA?.startAt).toBe('23:15:00');
+      expect(slotA?.endAt).toBe('00:45:00');
+      expect(slotA?.endsNextDay).toBe(true);
     });
   });
 

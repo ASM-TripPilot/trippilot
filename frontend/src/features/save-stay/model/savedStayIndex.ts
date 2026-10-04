@@ -36,3 +36,9 @@ export function findSavedStayId(
 export function optimisticSavedStayId(key: string): string {
   return `optimistic:${key}`;
 }
+
+/** `optimisticSavedStayId`가 만든 임시 표식인가 — 서버가 모르는 id라 보내면 반드시 400(TRIP-1235).
+ * 접두사를 생성 헬퍼에서 받아 두 쪽이 함께 바뀐다. */
+export function isOptimisticSavedStayId(savedStayId: string): boolean {
+  return savedStayId.startsWith(optimisticSavedStayId(''));
+}

@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
+import { regionCodeInTrip } from '@/features/trip';
 import { wizardOriginParams } from '@/features/create-trip';
 import {
   deleteTripsTripId,
@@ -39,6 +40,7 @@ import {
 } from '../model/budgetAmount';
 import {
   buildCreateTripRequest,
+  tripTitle,
   type CreateTripInput,
 } from '../model/createTripRequest';
 import {
@@ -258,6 +260,10 @@ export function TripNewStep1Page({
   const removeDestination = useTripWizardStore(
     (state) => state.removeDestination
   );
+  const removeMustVisit = useTripWizardStore((state) => state.removeMustVisit);
+  // 지역 밖 안내 줄에서 [그대로 두기]를 고른 poiId(TRIP-1234). 페이지 로컬 — 스토어에 두면
+  // `resetMustVisits`·`INITIAL_DRAFT`·`wizardDraftFixture` 세 곳을 손으로 맞춰야 한다.
+  const [keptOutsidePoiIds, setKeptOutsidePoiIds] = useState<string[]>([]);
   // 기간 편집 시트(TRIP-667)가 "적용"에서 쓰는 커밋 액션. 시트는 스토어를 모르고(무상태 D5),
   // 페이지가 이 액션을 콜백으로 배선한다 — 여행지 시트의 즉시반영과 달리 **적용에서만** 커밋한다(D6).
   // TRIP-1027: 시작만 커밋한다 — 끝은 스토어가 `시작 + Σnights`로 파생한다.
@@ -603,6 +609,8 @@ export function TripNewStep1Page({
       party,
       companionType,
       destinations,
+      // 두 곳 이상이면 앱이 지은 제목, 아니면 `undefined`(키 빠짐 → 서버 기본 제목). 생성·수정 공통(TRIP-1210).
+      title: tripTitle(destinations),
       // 예산은 effective(사용자 입력 우선, 미입력 시 프리필)로 나간다(TRIP-670 D3 복원). `empty`·
       // `invalid`·**0** 이면 `undefined` 라 키가 안 붙는다. `>0` 로 좁혀 요약(`summaryBudget` 은
       // `amount<=0`→null="예산 선택")과 제출을 같은 규칙에 맞춘다(S6D 표시=제출 대칭). 0 이 파싱
@@ -797,6 +805,19 @@ export function TripNewStep1Page({
     setPeriodSheetOpen(false);
   }
 
+  // 지역 밖 꼭 갈 곳(TRIP-1234, BR-U1-58 판정 재사용) — 렌더마다 지금 스토어 값으로 다시 센다
+  // (마운트 스냅샷이면 여행지를 나중에 고르는 R3-02 경로에서 영원히 0이다). 판정 불가는 안(fail-open).
+  const destinationCodes = destinations.map((d) => d.regionCode);
+  const outsidePoiIds = mustVisits
+    .filter((seed) => !regionCodeInTrip(seed.regionCode, destinationCodes))
+    .map((seed) => seed.sourcePoiId);
+  // 그대로 두지 않은 지역 밖이 하나라도 있으면 보인다. 숫자는 지역 밖 전체(사실값).
+  const outsideNoticeCount = outsidePoiIds.some(
+    (poiId) => !keptOutsidePoiIds.includes(poiId)
+  )
+    ? outsidePoiIds.length
+    : 0;
+
   // 꼭 갈 곳 고르기(d02 select) — 「더 담기」·「전체 보기」가 함께 쓴다. 위저드 출처 표식을 싣는다.
   const mustVisitSelectHref = {
     pathname: '/explore/saved-places',
@@ -843,6 +864,12 @@ export function TripNewStep1Page({
         overseasBlocked={overseasBlocked}
         onCloseOverseasDialog={() => setOverseasBlocked(false)}
         onPickDomesticRegion={() => setOverseasBlocked(false)}
+        outsideRegionCount={outsideNoticeCount}
+        // [빼기]는 스토어 시드에서 뺀다 — 등록은 응답 뒤 스토어를 다시 읽으므로 제출 중에 눌러도 반영된다.
+        onRemoveOutsideRegion={() =>
+          outsidePoiIds.forEach((poiId) => removeMustVisit(poiId))
+        }
+        onKeepOutsideRegion={() => setKeptOutsidePoiIds(outsidePoiIds)}
       />
       {/* 시트는 화면의 형제로 조건부 마운트 — 스테퍼·삭제는 스토어에 즉시 쓰고(D3), "적용"은
           닫기뿐이다(재커밋 없음). 도시 추가는 지역 카탈로그 라우트로 이탈한다. */}
@@ -855,6 +882,7 @@ export function TripNewStep1Page({
           onApply={() => setDestinationSheetOpen(false)}
           onClose={() => setDestinationSheetOpen(false)}
           mustVisitCount={mustVisits.length}
+          outsideRegionCount={outsidePoiIds.length}
         />
       ) : null}
       {/* 기간 편집 시트도 화면의 형제로 조건부 마운트 — 셀 탭은 새 시작을 고르고, "적용"에서만
