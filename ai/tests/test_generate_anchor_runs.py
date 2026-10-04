@@ -93,3 +93,72 @@ def test_앵커가_하나면_종전과_같은_응답이다() -> None:
 
     assert first.status_code == second.status_code == 200
     assert first.json()["days"] == second.json()["days"]
+
+
+# ── 리뷰 지적 회귀 (고정 블록·기간 밖·차선책) ─────────────────────────────
+
+
+def _aba_body(pois_far: float = _FAR) -> tuple[dict, date]:
+    body = _two_region_body()
+    body["anchors"][1]["lat"] = _ANCHOR.lat + pois_far
+    day3 = _DAY2 + timedelta(days=1)
+    body["anchors"].append({"date": day3.isoformat(), "lat": _ANCHOR.lat, "lng": _ANCHOR.lng})
+    body["time_windows"].append({"date": day3.isoformat(), "start": "09:00", "end": "21:00"})
+    body["trip_context"]["end_date"] = day3.isoformat()
+    return body, day3
+
+
+def test_다른_구간의_고정_장소를_앞_구간이_자유_배치하지_않는다() -> None:
+    """구간마다 자기 날짜 고정 블록만 넘기면 다른 날 고정 POI 를 자유 후보에서 빼는 장치가
+    앞 구간에서 안 돈다 — 1일차가 p1 을 자유 배치하고 3일차 고정 p1 이 또 나왔다(리뷰 재현)."""
+    body, day3 = _aba_body()
+    body["fixed_blocks"] = [{"poi_id": "p1", "date": day3.isoformat(), "start": "10:00",
+                             "dwell_min": 60}]
+
+    response = make_client(pois=_POIS + _FAR_SET).post("/ai/v1/itinerary/generate", json=body)
+
+    assert response.status_code == 200, response.text
+    ids = [s["poi_id"] for d in response.json()["days"] for s in d["slots"]]
+    assert len(ids) == len(set(ids)), ids
+    assert "p1" in _day_ids(response.json(), day3)
+
+
+def test_기간_밖_필수방문은_한_번_보고된다() -> None:
+    """기간 밖 블록은 어느 구간 날짜에도 안 속해 전부 걸러지면 OUT_OF_RANGE 판정이 사라진다."""
+    body = _two_region_body()
+    body["fixed_blocks"] = [{"poi_id": "p4", "date": (_DAY1 - timedelta(days=5)).isoformat(),
+                             "start": "10:00", "dwell_min": 60}]
+
+    response = make_client(pois=_POIS + _FAR_SET).post("/ai/v1/itinerary/generate", json=body)
+
+    assert response.status_code == 200, response.text
+    reported = [(u["poi_id"], u["reason_code"]) for u in response.json()["unplaced_must_visits"]]
+    assert reported == [("p4", "OUT_OF_RANGE")]
+
+
+def test_차선책은_다른_구간에_배치된_장소를_가리키지_않는다() -> None:
+    """차선책 계약은 "미배치 후보만" — 앞 구간은 뒤 구간이 무엇을 놓을지 모른다."""
+    near = tuple(_poi(i, 0.002 * (i - 1)) for i in range(1, 19))
+    body, _ = _aba_body()
+
+    response = make_client(pois=near + _FAR_SET).post("/ai/v1/itinerary/generate", json=body)
+
+    assert response.status_code == 200, response.text
+    days = response.json()["days"]
+    placed = {s["poi_id"] for d in days for s in d["slots"]}
+    collisions = [(s["poi_id"], a["poi_id"]) for d in days for s in d["slots"]
+                  for a in s.get("alternatives", []) if a["poi_id"] in placed]
+    assert collisions == []
+
+
+def test_시한이_바닥이면_남은_구간을_한_번에_풀고_그_사실을_남긴다() -> None:
+    """구간마다 고정 비용(풀·날씨·거리)이 붙는다 — 몫이 어셈블리 바닥보다 작은데 계속 쪼개면
+    백스톱 504 로 앞 구간 성공분까지 잃는다. 접으면 뒤 지역이 앞 앵커에 매달리므로 알린다."""
+    body = _two_region_body()
+    body["request_meta"]["deadline_ms"] = 6_000  # 이틀 → 구간당 3s < 바닥 5s
+
+    response = make_client(pois=_POIS + _FAR_SET).post("/ai/v1/itinerary/generate", json=body)
+
+    assert response.status_code == 200, response.text
+    assert "generate:anchor_runs_folded" in response.json()["degradations"]
+    assert [d["date"] for d in response.json()["days"]] == [_DAY1.isoformat(), _DAY2.isoformat()]
