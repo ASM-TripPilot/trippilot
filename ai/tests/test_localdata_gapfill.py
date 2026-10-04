@@ -6,7 +6,8 @@ TourAPI 식당이 비는 지역에만 인허가 식당을 넣는다. 여기서 �
   앵커 반경 안 TourAPI FOOD 가 기준 미만인 앵커만 공백이고, 그 앵커 반경 안 후보를 가까운 순
   (동률은 관리번호 순)으로 최대 K 개 고른 합집합이다. 무작위 점 배치로 전수 계산과 대조한다.
 - **게이트는 기존 것을 그대로 탄다.** TourAPI 와 같은 가게(같은 이름 50m 안 · 같은 주소 키 +
-  같은 상호)는 TourAPI 쪽이 남고 LOCALDATA 는 병합으로 빠진다. 산출에는 LOCALDATA 만 나가고,
+  같은 상호 · 분류가 달라도 같은 주소 키 + 같은 상호 완전 일치 — TRIP-1231)는 TourAPI 쪽이 남고
+  LOCALDATA 는 병합으로 빠진다. 산출에는 LOCALDATA 만 나가고,
   통계(병합·드롭)도 LOCALDATA 몫만 센다.
 - **제안 문서는 수신 계약 그대로다.** TourAPI 산출(`pipeline.to_output_document`)과 칸 구성이
   같고, `source` 는 백엔드가 받는 값이다(백엔드 `PoiSource` 를 직접 읽어 대조).
@@ -38,7 +39,7 @@ from trippilot.poi_curation.sourcing.localdata import (
     gap_anchors,
     gate_against_tourapi,
     pick_near,
-    shared_food_candidates,
+    shared_tourapi_candidates,
     to_output_document,
 )
 from trippilot.poi_curation.sourcing.mapping import extract_region
@@ -170,6 +171,28 @@ def test_different_store_in_same_building_passes(
     assert out.merged == 0
 
 
+def test_same_place_filed_as_cafe_on_tourapi_is_merged_away() -> None:
+    """실측 회귀(TRIP-1231) — TourAPI 카페 '엘파라이소365' 와 같은 주소·같은 상호의 인허가 식당.
+    분류가 달라도 같은 곳이다 — TourAPI 쪽(카페)이 남고 LOCALDATA 는 병합으로 빠진다."""
+    addr = "경상북도 청도군 화양읍 소라2길 36-13"
+    out = gate_against_tourapi(
+        [_tour("100", name="엘파라이소365", address=addr, category=PoiCategory.CAFE)],
+        [_ld("L-1", name="엘파라이소365", address=addr, lat=_JEJU[0] + 0.00001)],
+    )
+    assert (out.passed, out.merged) == ((), 1)
+
+
+def test_restaurant_named_after_facility_with_more_words_passes() -> None:
+    """분류가 다르면 상호 **완전 일치**만 붙인다 — 시설 이름을 품은 다른 가게는 남는다."""
+    addr = "충청남도 태안군 남면 연꽃길 70"
+    out = gate_against_tourapi(
+        [_tour("100", name="청산수목원", address=addr, category=PoiCategory.NATURE)],
+        [_ld("L-1", name="청산수목원 매점", address=addr, lat=_JEJU[0] + 0.00001)],
+    )
+    assert [p.candidate.ref for p in out.passed] == [(SOURCE, "L-1")]
+    assert out.merged == 0
+
+
 def test_only_localdata_comes_out_and_only_its_drops_are_counted() -> None:
     tours = [
         _tour("100"),
@@ -191,12 +214,6 @@ def test_only_localdata_comes_out_and_only_its_drops_are_counted() -> None:
     assert p.category is PoiCategory.FOOD
 
 
-def test_tourapi_cafe_never_absorbs_localdata_food() -> None:
-    """게이트 3단은 같은 카테고리끼리만 본다 — 같은 이름의 카페가 식당을 지우지 않는다."""
-    out = gate_against_tourapi([_tour("100", category=PoiCategory.CAFE)], [_ld("L-1")])
-    assert [p.candidate.source_ref for p in out.passed] == ["L-1"]
-
-
 # ── 공유본 → TourAPI 비교 대상 ────────────────────────────────────────
 
 
@@ -212,13 +229,18 @@ def _shared_item(cid: str, category: str, name: str = "고집돌우럭") -> dict
     }
 
 
-def test_shared_food_candidates_take_food_only_as_tourapi() -> None:
+def test_shared_tourapi_candidates_keep_every_category() -> None:
+    """전 카테고리를 넘긴다 — 게이트 ㉢ 이 카페·캠핑장으로 등록된 같은 곳을 봐야 한다(TRIP-1231).
+    공백 판정용 FOOD 거르기는 호출측(`collect_localdata`) 몫이다."""
     doc = {"proposals": [_shared_item("1", "FOOD"), _shared_item("2", "CAFE"), _shared_item("3", "SIGHT")]}
-    (c,) = shared_food_candidates(doc)
-    assert c.ref == ("tourapi", "1")
-    assert c.category is PoiCategory.FOOD
-    assert c.address == "제주특별자치도 서귀포시 중문관광로 154"
-    assert (c.lat, c.lng) == _JEJU
+    got = shared_tourapi_candidates(doc)
+    assert [(c.ref, c.category) for c in got] == [
+        (("tourapi", "1"), PoiCategory.FOOD),
+        (("tourapi", "2"), PoiCategory.CAFE),
+        (("tourapi", "3"), PoiCategory.SIGHT),
+    ]
+    assert got[0].address == "제주특별자치도 서귀포시 중문관광로 154"
+    assert (got[0].lat, got[0].lng) == _JEJU
 
 
 # ── 제안 문서 = 수신 계약 ─────────────────────────────────────────────

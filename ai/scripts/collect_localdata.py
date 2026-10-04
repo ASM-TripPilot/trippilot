@@ -39,6 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from trippilot.domain.common import GeoPoint  # noqa: E402
+from trippilot.domain.poi import PoiCategory  # noqa: E402
 from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     GAP_MIN_FOOD,
     GAP_RADIUS_KM,
@@ -48,7 +49,7 @@ from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     gap_anchors,
     gate_against_tourapi,
     pick_near,
-    shared_food_candidates,
+    shared_tourapi_candidates,
     to_candidate,
     to_output_document,
 )
@@ -157,9 +158,9 @@ def main() -> int:
     print(f"[localdata] 원본 {rows:,}행 → 후보 {len(candidates):,}곳  드롭 {dict(row_drops.most_common())}",
           file=sys.stderr)
 
-    # 2) 앵커와 공백 — TourAPI 공유본 FOOD 기준
-    tour_food = shared_food_candidates(json.loads(args.pois.read_text(encoding="utf-8")))
-    food_pts = [GeoPoint(c.lat, c.lng) for c in tour_food]
+    # 2) 앵커와 공백 — TourAPI 공유본 FOOD 기준 (게이트에는 전 카테고리를 넘긴다 — 아래 3)
+    tour = shared_tourapi_candidates(json.loads(args.pois.read_text(encoding="utf-8")))
+    food_pts = [GeoPoint(c.lat, c.lng) for c in tour if c.category is PoiCategory.FOOD]
     stays = load_stays(_MIGRATION / "R__seed_stay.sql")
     regions = load_regions(_MIGRATION / "R__seed_region_catalog.sql")
     centers = region_centers(stays, regions)
@@ -167,11 +168,11 @@ def main() -> int:
     gap_centers = gap_anchors(centers, food_pts)
     gaps = gap_stays + gap_centers
     print(f"[localdata] 앵커 숙소 {len(stays):,} + 지역 중심 {len(centers)} → 공백 "
-          f"{len(gap_stays):,} + {len(gap_centers)} (TourAPI FOOD {len(tour_food):,})", file=sys.stderr)
+          f"{len(gap_stays):,} + {len(gap_centers)} (TourAPI FOOD {len(food_pts):,})", file=sys.stderr)
 
-    # 3) 선별 → 게이트(TourAPI 와 같은 가게는 병합으로 빠진다)
+    # 3) 선별 → 게이트(TourAPI 와 같은 가게는 병합으로 빠진다 — 카페·캠핑장 등 다른 카테고리여도)
     picks = pick_near(gaps, candidates, per_anchor=args.per_anchor)
-    outcome = gate_against_tourapi(tour_food, picks)
+    outcome = gate_against_tourapi(tour, picks)
     passed = outcome.passed
     passed_pts = [p.poi.coord for p in passed]
 
