@@ -42,8 +42,11 @@ enum class PoiCategory {
 /** 수집 상태. 조회는 ACTIVE만(INV-U1-01). UNVERIFIED/LOST/CLOSED는 라이프사이클(후속). */
 enum class DataStatus { ACTIVE, UNVERIFIED, LOST, CLOSED }
 
-/** 출처. */
-enum class PoiSource { KAKAO_LOCAL, TOURAPI, MANUAL }
+/**
+ * 출처. DB CHECK(`poi_source_check`)와 같은 값 집합이다 — 하나만 늘리면 저장이나 읽기가 죽는다.
+ * `LOCALDATA` = 지방행정 인허가 일반음식점(TRIP-1224 · V2.61) — TourAPI 식당이 비는 지역 보강분.
+ */
+enum class PoiSource { KAKAO_LOCAL, TOURAPI, MANUAL, LOCALDATA }
 
 /**
  * POI 정본(C7). 다중 지도/장소 API를 단일 표준 스키마로 정규화한 결과.

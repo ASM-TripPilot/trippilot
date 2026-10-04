@@ -18,7 +18,7 @@
 | regionCode ⚠ | string? | **[개정 · 2026-09-28, TRIP-1042]** 행정구역 코드(시군구 5자리, 앞 2자리 = 시도). 여행 지역 매칭의 입력(BR-U1-58·INV-U1-21). null 허용 — 판정 불가 장소는 숨기지 않는다. API 노출은 BE 계약 소관. **[보완 · 2026-09-28, TRIP-1042 후속]** 값은 **시군구 5자리 또는 시도 2자리, 없으면 null** — 시드 POI는 시도 2자리 코드만 가진다 |
 | openingHours | string? | 미확인 시 null → 화면은 "미확인" 표기 |
 | dataStatus | enum | `ACTIVE` · `UNVERIFIED` · `LOST` · `CLOSED` |
-| source | enum ⚠ | `KAKAO_LOCAL` · `TOURAPI` · `MANUAL` — 수집 게이트 판정 입력 |
+| source | enum ⚠ | `KAKAO_LOCAL` · `TOURAPI` · `MANUAL` · `LOCALDATA` — 수집 게이트 판정 입력. **[개정 · 2026-10-04, TRIP-1224]** `LOCALDATA`(지방행정 인허가 일반음식점) 추가 — TourAPI 식당이 비는 지역 보강분(V2.61) |
 | savedCount | int ⚠ | d01·d04의 "1.2k 저장" 표시용 파생 집계 |
 
 - **INV-U1-01 (INV-1 집행)**: `dataStatus = ACTIVE`이고 수집 게이트를 통과한 POI만 후보풀에 들어간다. 외부·웹 출처는 `UNVERIFIED`로 먼저 등록되며, 게이트 통과 전에는 추천·후보에 노출되지 않는다.

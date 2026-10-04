@@ -245,6 +245,29 @@ class PoiProposalIngestServiceTest : StringSpec({
         repo.stored shouldHaveSize 2
     }
 
+    /**
+     * LOCALDATA 일반음식점(TRIP-1224) — TourAPI 식당이 비는 지역을 메우는 두 번째 수집 출처다.
+     * 인허가 관리번호가 멱등 키이고, 영업시간·사진은 원본에 없어 비어서 온다(지어내지 않는다).
+     */
+    "LOCALDATA 출처 제안도 받는다 — 관리번호로 재수집이 같은 행을 찾는다" {
+        val repo = InMemoryPoiRepository()
+        val svc = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+        val food = proposal(
+            ref = "3270000-101-2004-00123", name = "초량밀면", category = PoiCategory.맛집, region = "동구",
+            hours = null, tags = listOf("한식"), imageUrl = null, address = "부산광역시 동구 중앙대로 225, 1층 (초량동)",
+        )
+
+        svc.ingest(PoiSource.LOCALDATA, listOf(food)).registered shouldBe 1
+        svc.ingest(PoiSource.LOCALDATA, listOf(food)).updated shouldBe 1
+
+        val saved = repo.stored.single()
+        saved.source shouldBe PoiSource.LOCALDATA
+        saved.sourceRef shouldBe "3270000-101-2004-00123"
+        saved.regionCode shouldBe "26170"
+        saved.openingHours.shouldBeNull()
+        saved.imageUrl.shouldBeNull()
+    }
+
     "빈 문서는 아무것도 하지 않는다" {
         val repo = InMemoryPoiRepository()
 

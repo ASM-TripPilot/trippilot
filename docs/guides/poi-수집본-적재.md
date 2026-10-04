@@ -160,7 +160,7 @@ python3 backend/scripts/ingest_pois.py \
 |---|---|
 | 404 | 터널을 안 거쳐 게이트웨이로 갔다. port-forward 확인 |
 | 401 | `SERVICE_AUTH_TOKEN` 불일치. secret 을 다시 꺼낸다 |
-| 400 `알 수 없는 출처입니다` | 문서 `source` 가 `KAKAO_LOCAL`/`TOURAPI`/`MANUAL` 이 아니다 |
+| 400 `알 수 없는 출처입니다` | 문서 `source` 가 `KAKAO_LOCAL`/`TOURAPI`/`MANUAL`/`LOCALDATA` 가 아니다(`LOCALDATA` 는 V2.61 이후 백엔드만 받는다) |
 | 연결 실패 | port-forward 가 죽었다(세션이 끊기면 조용히 닫힌다) |
 | 타임아웃 | `--chunk-size` 를 줄인다 |
 
