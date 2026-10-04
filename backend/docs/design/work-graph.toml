@@ -3097,3 +3097,225 @@ liveness 를 옮기지 않은 이유: 모델을 못 읽는 **이미지**는 재�
 통과하고, 그러면 임베딩이 멀쩡한데 파드가 영원히 not-ready 로 남는다 — 같은 사고의 반대 방향이다.
 활성화 배포에서 새 파드가 `0/1 Running` 으로 머물다 모델 로드 후 `1/1` 이 되는 것을 실측했다.
 """
+
+[[nodes]]
+id = "STORE-LAUNCH"
+ticket = ""
+title = "앱스토어 심사 제출 — dev 스택을 실사용자용으로 끌어올려 받는다"
+status = "todo"
+migration = false
+touches = ["infra/terraform", "deploy/eks", "frontend"]
+note = """
+2026-10-04 결정. 팀원이 "심사 넣어도 될 것 같다"고 했을 때 준비 상태를 전수 점검한 결과다.
+
+**준비된 것** — 출시 빌드 설정이 테스트로 굳어 있다(`releaseBuildConfig.test.ts`: 아이콘 알파
+채널·스플래시·한국어 권한 문구·암호화 수출 면제·iPhone 전용·privacy manifest 4범주 ITMS-91053·
+Sentry 업로드 끔·사이트맵 끔). 번들 ID `com.trippilot.travel`, 애플 로그인 있음(타사 로그인이
+있으니 4.8 필수). 탈퇴 엔드포인트(`DELETE /api/v1/me/deletion`) + 2단 확인 다이얼로그.
+약관 6종 **실본문이 실제로 나간다**(DEV 실측: 1,550~2,879자, 플레이스홀더 없음 — TRIP-1004 #776).
+
+**prd 스택을 세우지 않기로 했다.** `prd.tfvars` 는 별 VPC(10.50/16) · 3 AZ ·
+`single_nat_gateway = false`(NAT 3개) · `db.t4g.medium` 100GB · `cache.t4g.small` · 자체 EKS 다.
+인프라가 한 벌 더 생긴다. **금액은 확인하지 못했다** — 이 계정은 Pricing·Cost Explorer 둘 다
+막혀 있다(`AccessDeniedException`). 대신 dev 스택을 실사용자용으로 끌어올린다:
+[[DEV-DATA-PROTECTION]] · [[DEV-HA-REPLICAS]] · [[STORE-API-HOSTNAME]].
+
+**포기한 것은 환경 격리다.** 테스트 데이터와 실데이터가 한 DB 를 쓰고, 잘못된 배포가 실사용자에게
+바로 간다. 실사용자가 생기면 **운영 작업이 개인정보 접근**이 된다(2026-10-03 에 psql Job 으로 DB 를
+읽은 그런 작업). 나중에 prd 로 가려면 **DNS 전환 + 데이터 이전**이 한 번 필요하다 — 그래서 스토어
+빌드에 `api-dev` 가 아니라 `api` 를 박는다([[STORE-API-HOSTNAME]]). 그것만이 앱 업데이트 없이
+옮길 수 있는 길이다.
+
+**심사 전 남은 선행**(사람 몫):
+- 애플 p8 3종 — `APPLE_TEAM_ID`·`APPLE_KEY_ID`·`APPLE_PRIVATE_KEY` 가 로컬·DEV 시크릿 **둘 다 없다**
+  (`APPLE_CLIENT_ID` 만 있다). 코드는 완성(`AppleOAuthClient./auth/revoke` · ES256 client_secret ·
+  파기 스위프). **거절 사유는 아니다** — 설정이 비면 revoke 를 건너뛰고 경고만 남기고 탈퇴 자체는
+  정상 동작한다(설계 주석). 다만 팀이 `App Store 5.1.1(v)` 로 태그한 요구사항 미충족이다.
+- App Store Connect 앱 등록 + 앱 개인정보(수집 데이터 유형) — `app.config.ts` 가 "사람 판단이라
+  비워 둔다"로 남겨 둔 칸이다. 약관 6종 실본문이 근거가 된다.
+- 위치기반서비스사업 신고 — [[TRIP-847]] 이 "코드로 못 푸는 선행"으로 적어 둔 항목.
+- 푸시 결정 — 앱은 알림 권한을 요청하고 Expo 토큰까지 등록하는데(`shared/push/`) 서버는
+  `PUSH_MODE=off` 에 `PUSH_EXPO_ACCESS_TOKEN` 이 **DEV 시크릿에도 없다**. 받아놓고 아무것도 안 오면
+  심사 2.1 소지가 있다 — 토큰을 넣든 권한 요청을 내리든 한쪽으로 정해야 한다.
+- 관측성 — `container_logs_enabled = false`. 실사용자 장애 때 로그가 CloudWatch 에 없고 파드
+  재시작하면 사라진다. 선행이 있다: `trippilot-dev-cloudwatch-pod` 역할이 **없고**(`NoSuchEntity`
+  실측) Terraform 이 그것을 `data` 로 읽어 없으면 plan 이 깨진다. 순서는 dev.tfvars 주석대로
+  **bootstrap 정책 재등록(콘솔) → `aws-bootstrap.yml` → true → 배포**.
+
+**실기 검증이 0 이다.** 아무도 스토어 빌드를 실기에서 돌린 적이 없다. `releaseBuildConfig.test.ts`
+자신이 *"빌드는 성공하는데 결과물이 틀린 조용한 실패라 실기·심사 전에는 아무도 못 본다"* 고
+경고해 둔 상태다. TestFlight 내부 테스터로 먼저 돌린다 — 애플 계정 소유자가 아닌 팀원도
+**ASC 내부 테스터 초대**만 받으면 된다(개발자 계정 공유가 아니다).
+"""
+
+[[nodes]]
+id = "DEV-DATA-PROTECTION"
+ticket = ""
+title = "dev 가 삭제 보호·최종 스냅숏 없이 돌던 것 — 보호를 환경 축에서 분리"
+status = "todo"
+migration = false
+touches = ["infra/terraform"]
+note = """
+2026-10-04, PR #956(머지·apply 대기). 삭제 보호·최종 스냅숏·백업 보존이 `local.production`
+하나에 묶여 있었다. dev 가 "꼬이면 날려도 되는 환경"인 동안에는 **그것이 옳은 설정**이었다 —
+[[STORE-LAUNCH]] 가 그 전제를 깬다.
+
+실측(`trippilot-dev`): `backupDays=1 · multiAZ=false · delProtect=false`. 이 상태에서 잘못된
+apply 나 정리 작업(#648 이 그 성격이다)이 돌면 최종 스냅숏도 없이 사라진다.
+
+`data_protection_enabled`(기본 **true** — 잊으면 보호가 켜지는 쪽으로 틀려야 한다)로 분리하고
+RDS 3종 + 클러스터 삭제 보호를 그쪽에 건다. `skip_final_snapshot` 을 끄면
+`final_snapshot_identifier` 가 **필수**라 그것도 같이 옮겼다 — 안 옮기면 apply 가 깨진다
+(세 줄짜리로 보여서 놓치기 쉬운 자리다).
+
+`multi_az` 는 제외다(가용성·비용 축, 끄고 가도 데이터 유실 아님). Redis 스냅숏도 제외 — 캐시이고
+영속 사실은 PostgreSQL 에 있다(세션조차 `refresh_session` 테이블이다).
+
+**dev 테스트 블록에 이 축의 단정이 하나도 없었다** — prd 만 검사하고 있었다. 보호 3종 +
+"단일 AZ 는 의도"(비용 결정이 조용히 뒤집히는 것도 막는다) 두 개를 추가했다.
+
+**적대적 리뷰가 차단 1건을 냈다**(2026-10-05): `deletion_protection` 과 `skip_final_snapshot` 이
+같은 변수에 같은 방향으로 묶여, **삭제를 허용하는 유일한 길이 최종 스냅숏까지 껐다.**
+게다가 `delete_automated_backups` 가 선언돼 있지 않아 기본값 true — PITR 백업도 함께 사라진다.
+가장 급한 사람이 가장 급할 때 복구 수단이 0 이 되는 경로였다. 처방: 최종 스냅숏·자동 백업
+보존을 **무조건**으로 두고 변수는 "지울 수 있는가"만 정하게 했다.
+같은 리뷰에서 `recovery_window_in_days`(시크릿, `SOCIAL_TOKEN_ENCRYPTION_KEY` 가 들어 있다 —
+7일 뒤 소멸하면 **스냅숏을 복원해도** provider 토큰 복호 불가)도 같은 축으로 옮겼다.
+
+**`terraform test` 는 실 tfvars 를 보지 않는다** — run 블록이 자기 `variables {}` 를 들고
+plan 한다(증거: 테스트 `container_logs_enabled=true` vs `dev.tfvars` false). 그래서 tfvars 에
+`data_protection_enabled = false` 를 적어도 전부 green 이다. `infra/tests/test_environment_tfvars.py`
+로 **배포가 실제로 읽는 파일**에 단정을 걸었다.
+
+**실 state plan 으로 확인**: `0 to add, 6 to change, 0 to destroy` · **교체 0건**
+(RDS 5속성 + 클러스터 + 시크릿 4종). 다만 plan 은 *적용 완료*의 증거가 아니다 —
+`apply_immediately = false` 이고 `BackupRetentionPeriod` 는 `PendingModifiedValues` 대상이라
+**유지보수 창(월 03:00 KST)까지 보류될 수 있다.** 그래서 apply 직후 ① plan 을 다시 돌려
+`No changes` 로 수렴하는지, ② `aws rds describe-db-instances --query
+'DBInstances[0].[BackupRetentionPeriod,DeletionProtection,PendingModifiedValues]'` 를 **반드시**
+확인한다. 수렴하지 않으면 보존 14일을 아직 **못 믿는다**.
+"""
+
+[[nodes]]
+id = "DEV-HA-REPLICAS"
+ticket = ""
+title = "노드 드레인에 유일한 파드가 빠지던 것 — dev 복제본 2 + PDB"
+status = "todo"
+migration = false
+touches = ["deploy/eks/chart"]
+note = """
+2026-10-04, PR #957(머지·배포 대기).
+
+**롤아웃 때문이 아니다 — 처음에 그렇게 진단했고 틀렸다.** backend·ai·gateway 전부
+`maxUnavailable: 0, maxSurge: 1` 이라 replicas 1 에서도 새 파드가 Ready 된 뒤 구 파드를 뺀다.
+롤아웃은 원래 무중단이었다. 실제로 막는 것은 **노드 드레인과 노드 장애**다 — EKS Auto 의
+Karpenter 가 노드를 수시로 통합한다(2026-10-04 하루 두 번 관찰, 파드 이름이 전부 바뀌었다).
+
+`ai` 는 `replicas` 를 올려도 소용없다 — `ai.yaml` 이 HPA 켜질 때 그 필드를 **아예 렌더하지
+않는다**(둘 다 실으면 helm 이 HPA 가 정한 수를 되돌리므로 옳은 설계다). 바닥은 `minReplicas` 다.
+임베딩은 1 유지(5Gi · 프로세스마다 ~4.2GiB · PDB 대상 아님 — 빠지면 AI 가 규칙 랭킹으로
+degraded 하는 계약이라 드레인을 막을 이유가 없다). 분산은 공용 podSpec 의 zone
+topologySpread 가 이미 한다(dev 2 AZ).
+
+**테스트에 불변식을 하나 더했다**: PDB 가 있으면 복제본 바닥이 `minAvailable + 1` 이상.
+복제본 1 에 `minAvailable: 1` 이면 자발적 축출이 **영구히** 거부되어 노드 통합이 멈춘다.
+HPA 가 수를 쥔 컴포넌트는 `replicas` 가 없어 종전 테스트가 그 바닥을 **아무것도 검사하지
+않았다**(`assertNotIn("replicas", …)` 로 건너뛰었다) — 역검증에서 이 단정만 ai 변이를 잡았다.
+
+요청 합이 4.5 CPU / ~8.7Gi 가 되어 노드 2대 여유가 ~1.3Gi/1.35 CPU 로 줄어든다(리뷰어 계산).
+**배포 후 롤링 중 외부 연속 요청으로 5xx 0건을 측정**할 것(아직 안 했다).
+
+적대적 리뷰 반영 3건(2026-10-05):
+- **임베딩 서지 제거**(`maxUnavailable: 1, maxSurge: 0`). helm `--timeout 20m` 과 임베딩
+  `progressDeadlineSeconds: 1200` 이 **같은 값**이라 임베딩 예산이 사문이었고, 복제본 2 로
+  서지 수요가 6.7Gi 가 되면 서지 파드 전부가 신규 노드를 기다린다 → helm 이 먼저 끊고
+  `--atomic` 이 **릴리스 전체를 롤백**한다(보호 설정도 함께 되돌아간다). helm 타임아웃도 30m 로
+  벌렸다. 전날 "비용 때문에 maxSurge 는 안 바꾼다"고 한 판단을 뒤집은 것이다 —
+  근거가 비용이 아니라 롤백 위험으로 바뀌었다.
+- **불변식 구멍**: 오버라이드 테스트가 PDB 켜진 dev 값 위에 `minReplicas=1` 을 덮어 위반
+  매니페스트를 만들면서 검사하지 않았다. `assert_pdb_floors` 헬퍼로 빼 모든 렌더 경로에 적용.
+- **주석 정정**: zone topologySpread 는 `ScheduleAnyway` 라 **보장이 아니라 선호**다. 다른 AZ 에
+  자리가 없으면 한 노드에 붙고, 장애로 그 노드가 빠지면 둘이 함께 사라진다(PDB 는 자발적
+  축출만 막는다).
+
+**미결(결정 필요)**: `limit_req_zone` 은 파드별이라 gateway 복제본 2 가 IP 당 레이트리밋 천장을
+`10r/s`→`20r/s`(버스트 30→60)로 **2배로 만든다.** prd 는 처음부터 2 였으니 새 성질은 아니지만,
+**출시를 받는 환경에서 처음 발효된다.** 캐리어 NAT 오탐을 줄이는 쪽이라 완화가 바람직할 수도
+있어 숫자를 임의로 정하지 않았다 — 정당한 버스트가 얼마인지는 제품 판단이다.
+"""
+
+[[nodes]]
+id = "STORE-API-HOSTNAME"
+ticket = ""
+title = "스토어 빌드가 쓸 주소 — api.trippilot.co.kr 개통(인증서·DNS 완료)"
+status = "done"
+migration = false
+touches = ["deploy/eks"]
+note = """
+2026-10-04 완료. **코드 변경이 없다** — AWS·GitHub 설정 작업이라 PR 이 없어서 여기 남긴다.
+
+왜 지금 하나: 스토어 빌드에 `api-dev` 를 박으면 나중에 prd 로 옮길 때 **앱 업데이트가 필요하다.**
+`api` 를 박아 두면 DNS 만 돌려 옮긴다. [[STORE-LAUNCH]] 가 싼 길을 택해도 미래를 닫지 않는
+유일한 지점이다.
+
+한 것:
+- ACM 인증서 신규 발급 — `api.trippilot.co.kr` + SAN `api-dev.trippilot.co.kr` **두 이름**.
+  종전 인증서(`64fb7381…`)는 `api-dev` 단일 이름이라 와일드카드가 아니었다. DNS 검증 CNAME 2건을
+  Route53(존 `Z06384932H16HBTOG0HEC`)에 UPSERT → 약 20초 만에 ISSUED.
+  새 ARN `b57ebd59-67fa-4cf2-9e78-0430ce378941`.
+- Route53 `api.trippilot.co.kr` CNAME → 게이트웨이 NLB(기존 `api-dev` 와 **같은 형태**: CNAME·TTL 300).
+- GitHub `dev` 환경 변수 `ACM_CERTIFICATE_ARN` 을 새 ARN 으로 교체.
+  **`API_HOSTNAME` 은 `api-dev` 로 남겼다** — 배포 요약에 찍히는 안내용이고, 팀의 기존 테스트
+  주소를 바꾸면 혼란이 생긴다.
+
+**인증서 교체를 복제본 증설과 분리했다**(2026-10-05, 적대적 리뷰 7번). 인증서 ARN 은
+`gateway` Service 의 `aws-load-balancer-ssl-cert` **주석**으로 들어가므로 복제본 증설과
+**같은 helm 리비전**이 된다. 그 배포가 타임아웃하면 `--atomic` 이 주석까지 구 ARN 으로
+되돌리고, 롤백도 타임아웃하면 릴리스가 `pending-rollback` 으로 남아 다음 upgrade 가
+"another operation is in progress" 로 거부된다(사람이 `helm rollback` 을 쳐야 풀린다).
+그래서 `ACM_CERTIFICATE_ARN` 환경변수를 **구 ARN 으로 되돌려** 두었다 —
+[[DEV-DATA-PROTECTION]]·[[DEV-HA-REPLICAS]] 배포가 성공한 뒤 **별도 배포**로 교체한다.
+**구 인증서를 그 전에 삭제하지 마라** — 롤백 경로가 그것을 쓴다(워크플로의
+`Check HTTPS certificate` 는 ISSUED 만 보고 현재 리스너에 붙은 ARN 의 생존은 안 본다).
+
+교체 배포 뒤에 두 이름 모두 TLS 가 서는지 확인할 것
+(`curl -sI https://api.trippilot.co.kr/api/v1/places` → 401 기대, `api-dev` 도 동일).
+그 뒤에 `eas.json` 의 production 프로필을 `https://api.trippilot.co.kr` 로 바꾼다 —
+**프론트 소유라 팀원 몫**이고 그 전에 바꾸면 인증서가 아직 교체 전이라 TLS 가 깨진다.
+"""
+
+[[nodes]]
+id = "INFRA-PR-GATE"
+ticket = ""
+title = "인프라·배포 변경이 PR 에서 검증되지 않는다 — 초록이 무관한 것을 증명한다"
+status = "todo"
+migration = false
+touches = [".github/workflows"]
+note = """
+2026-10-05 발견(#956·#957 검수 중). 두 가지가 겹쳐 있다.
+
+**1. `infra/terraform/**` 은 어떤 PR 트리거에도 없다.** `aws-deploy.yml` 이 `workflow_dispatch`
+전용이라, Terraform 을 바꾸는 PR 에는 **체크가 하나도 붙지 않는다**(#956 실측: `no checks`).
+사람 눈과 작성자의 로컬 실행이 유일한 그물이다.
+
+**2. `deploy/**` 은 체크가 붙지만 무관한 것을 돌린다.** `backend-ci.yml` 의 PR paths 에
+`deploy/**` 가 있어 초록이 뜨는데, 그 잡이 하는 일은 `./gradlew build` 뿐이다 — helm lint 도
+차트 파이썬 테스트도 돌지 않는다. #957(차트 values·테스트만 변경)이 `test: pass` 를 받았지만
+**그 초록은 "코틀린이 여전히 빌드된다"는 뜻**이고 변경과 무관하다. 이쪽이 1번보다 나쁘다 —
+없는 것보다 **거짓 초록**이 위험하다.
+
+**왜 지금 문제인가.** 현재 순서는 `머지 → 배포 실행 → validate 잡이 처음 검증` 이다. 즉 깨진
+차트·Terraform 이 develop 에 먼저 들어가고 **다음 사람의 배포에서 터진다.** 2026-10-03 에
+`terraform fmt` 로 정확히 그 일이 났다(#887 — 배포가 validate 에서 죽었다).
+
+**처방(미착수).** `aws-deploy.yml` 의 validate 잡은 **자격이 필요 없다**(전부 오프라인):
+`infra/tests` · `deploy/eks/tests` · `infra/bootstrap/tests` · `deploy/eks/chart/tests` 네 묶음 +
+`helm lint --strict`(dev·prd) + `terraform fmt -check -recursive ..` · `init -backend=false
+-lockfile=readonly` · `validate` · `test`. 그걸 그대로 떼어 `pull_request` 트리거
+(`paths: ['infra/**', 'deploy/**', '.github/workflows/aws-deploy.yml']`) 워크플로로 만들면 된다.
+**잡을 복제하지 말고 재사용 가능한 워크플로(`workflow_call`)로 빼는 편이 낫다** — 복제하면
+두 사본이 갈라지고, 이 리포는 그 함정을 이미 겪었다(릴리스 때 스케줄 사본 전수 대조 규약).
+
+#956·#957 은 이 노드를 기다리지 않고 머지했다 — 대신 validate 잡의 **전 항목을 로컬에서
+명령 그대로** 돌려 통과를 확인했다(두 브랜치 각각). 그 증거는 각 PR 본문에 있다.
+"""
