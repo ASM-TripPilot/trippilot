@@ -3,10 +3,26 @@ config:
   # 로컬 compose 와 달리 배포 환경은 데드라인을 켠다 — LLM 이 늘어질 때 사용자가 무한 로딩 대신
   # 부분 결과(day1)·폴백을 받는다. dev 에서 먼저 켜서 prd 와 같은 동작을 검증한다.
   scheduleDeadlineEnforced: true
+# ── 복제본 2 + PDB (2026-10-04) ──────────────────────────────────────────────
+# 스토어 출시를 이 스택으로 받기로 했다(prd 신설은 비용 보류). 그래서 dev 가 더는
+# "꼬이면 날려도 되는 환경"이 아니다.
+#
+# **롤아웃 때문이 아니다.** 배포 전략이 이미 `maxUnavailable: 0, maxSurge: 1` 이라
+# replicas 1 에서도 새 파드가 Ready 된 뒤 구 파드를 뺀다 — 롤아웃은 원래 무중단이었다.
+# 이것이 막는 것은 **노드 드레인과 노드 장애**다. EKS Auto 의 Karpenter 가 노드를
+# 수시로 통합하는데(2026-10-04 하루에 두 번 관찰) replicas 1 에 PDB 가 없으면 그 순간
+# 유일한 파드가 빠져 중단된다. PDB `minAvailable: 1` 은 replicas 2 가 전제다 —
+# replicas 1 에 걸면 드레인이 **영구히** 막혀 노드 교체·통합이 못 돈다.
+#
+# 분산은 이미 공용 podSpec 의 `topologySpreadConstraints`(zone · maxSkew 1)가 한다.
+# dev 는 2 AZ 라 복제본 2개가 서로 다른 AZ, 즉 다른 노드로 간다.
 backend:
-  replicas: 1
+  replicas: 2
 ai:
-  replicas: 1
+  # **HPA 가 켜져 있으면 차트가 이 필드를 렌더하지 않는다**(`ai.yaml` 의
+  # `if not autoscaling.enabled`) — 바닥을 정하는 것은 아래 `minReplicas` 뿐이다.
+  # 그래도 2 로 적어 두는 이유: autoscaling 을 끄는 날 조용히 1 로 떨어지지 않게.
+  replicas: 2
   # dev 에서 먼저 켠다 — prd 와 같은 이유다(위 scheduleDeadlineEnforced 와 같은 순서).
   # **부하를 받으려는 것이 아니라 동작을 보려는 것이다.** dev 는 트래픽이 없어 HPA 는
   # minReplicas 에 머물고, 확인하고 싶은 것은 "목표치를 읽는가"다 — metrics-server 가
@@ -14,11 +30,15 @@ ai:
   # 애드온은 `infra/terraform/stack/eks.tf` 의 aws_eks_addon.metrics_server.
   autoscaling:
     enabled: true
-    minReplicas: 1
+    minReplicas: 2
     maxReplicas: 3
 gateway:
-  replicas: 1
+  replicas: 2
 embedding:
+  # **1 을 유지한다.** 파드가 5Gi 를 요청하고 모델이 프로세스마다 ~4.2GiB 를 잡는다
+  # (ai/docs/임베딩-사이징-근거.md). 2 로 올리면 큰 노드가 한 대 더 상주한다.
+  # PDB 대상도 아니다(pdb.yaml 은 backend·ai·gateway 만) — 임베딩이 빠지면 AI 는
+  # 규칙 랭킹으로 degraded 하는 계약이라(INV-4) 드레인을 막을 이유가 없다.
   replicas: 1
 podDisruptionBudget:
-  enabled: false
+  enabled: true

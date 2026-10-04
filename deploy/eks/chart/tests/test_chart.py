@@ -85,7 +85,9 @@ class ChartTests(unittest.TestCase):
         self.assertIn("proxy_set_header X-Forwarded-Proto https;", config)
 
     def test_environment_replicas_secrets_and_pod_security(self):
-        for environment, expected in [("dev", 1), ("prd", 2)]:
+        # dev 도 2 다(2026-10-04) — 스토어 출시를 dev 스택으로 받기로 해서 노드 드레인·
+        # 장애를 견뎌야 한다. 롤아웃은 원래 무중단이었다(maxUnavailable 0 · maxSurge 1).
+        for environment, expected in [("dev", 2), ("prd", 2)]:
             documents = render(environment)
             deployments = [item for item in documents if item["kind"] == "Deployment"]
             self.assertEqual(len(deployments), 3)
@@ -124,7 +126,23 @@ class ChartTests(unittest.TestCase):
             self.assertEqual(env["DB_MIGRATE_PASSWORD"]["valueFrom"]["secretKeyRef"]["name"], "trippilot-database")
             self.assertEqual(env["JWT_SIGNING_KEY"]["valueFrom"]["secretKeyRef"]["name"], "trippilot-backend")
             pdbs = [item for item in documents if item["kind"] == "PodDisruptionBudget"]
-            self.assertEqual(len(pdbs), 3 if environment == "prd" else 0)
+            self.assertEqual(len(pdbs), 3)
+            # **PDB 가 있으면 그 컴포넌트의 복제본은 2 이상이어야 한다.** `minAvailable: 1` 에
+            # 복제본이 1 이면 자발적 축출이 **영구히** 거부되어 노드 통합·교체가 멈춘다
+            # (EKS Auto 의 Karpenter 가 수시로 드레인한다). HPA 가 수를 쥔 컴포넌트는
+            # `replicas` 가 없으므로 그쪽 바닥은 minReplicas 로 센다.
+            floors = {item["spec"]["scaleTargetRef"]["name"]: item["spec"]["minReplicas"]
+                      for item in documents if item["kind"] == "HorizontalPodAutoscaler"}
+            counts = {item["metadata"]["name"]: item["spec"].get("replicas")
+                      for item in documents if item["kind"] == "Deployment"}
+            for pdb in pdbs:
+                name = pdb["metadata"]["name"]
+                floor = floors.get(name, counts.get(name))
+                self.assertIsNotNone(floor, f"{name} 의 복제본 바닥을 정하는 곳이 없다")
+                self.assertGreaterEqual(
+                    floor, pdb["spec"]["minAvailable"] + 1,
+                    f"{environment}/{name}: PDB minAvailable={pdb['spec']['minAvailable']} 인데 "
+                    f"복제본 바닥이 {floor} 다 — 드레인이 영구히 막힌다")
 
     def test_embedding_and_vector_wiring_are_opt_in(self):
         for enabled in (False, True):
@@ -193,7 +211,9 @@ class ChartTests(unittest.TestCase):
         scalers = {item["metadata"]["name"]: item for item in documents
                    if item["kind"] == "HorizontalPodAutoscaler"}
         self.assertEqual(set(scalers), {"ai"})
-        self.assertEqual(scalers["ai"]["spec"]["minReplicas"], 1)
+        # 2026-10-04: 바닥을 2 로 올렸다. autoscaling 과 다른 축이다 — 부하 대응이 아니라
+        # PDB 가 성립하려면(minAvailable 1) 복제본이 2 이상이어야 하기 때문이다.
+        self.assertEqual(scalers["ai"]["spec"]["minReplicas"], 2)
         self.assertEqual(scalers["ai"]["spec"]["maxReplicas"], 3)
         target = scalers["ai"]["spec"]["scaleTargetRef"]
         self.assertEqual((target["kind"], target["name"]), ("Deployment", "ai"))
