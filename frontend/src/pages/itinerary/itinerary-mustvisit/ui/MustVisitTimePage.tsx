@@ -112,7 +112,7 @@ export function MustVisitTimePage({
   // 토글 초기값은 **저장된 유형**을 따른다(TRIP-1098 결정 1 · BR-U1-48 기본 ANYTIME) — 목록이 「아무 때나」인
   // 항목을 켜진 채 열면 두 화면이 다른 말을 한다. 진입 문(행·「시간 정해두기」 세그·연필)과 무관하다.
   // 체류도 저장값(dwellMin)을 칸으로 되돌린다 — 없거나 모르는 값이면 기본 「보통」.
-  const form: MustVisitTimeForm = edited ?? {
+  const baseForm: MustVisitTimeForm = edited ?? {
     fixed: registered?.type === 'FIXED',
     fixedDate: registered?.fixedDate ?? null,
     fixedStart: toHourMinute(registered?.fixedStart),
@@ -120,6 +120,15 @@ export function MustVisitTimePage({
       DWELL_OPTIONS.find((option) => option.dwellMin === registered?.dwellMin)
         ?.key ?? DEFAULT_DWELL_KEY,
   };
+
+  // 날짜가 하루뿐인 당일치기는 고를 것이 없다 — 비어 있으면 그 하루로 채운다(TRIP-1237 b).
+  // 안 채우면 [이 시각으로 고정]이 "방문 날짜를 골라 주세요"에 막혀 영영 안 눌린다.
+  // 파생값이라 토글 순서·진입 문(연필·세그)과 무관하게 같은 결과다.
+  const soleDate = dayChips.length === 1 ? dayChips[0].date : null;
+  const form: MustVisitTimeForm =
+    baseForm.fixedDate === null && soleDate !== null
+      ? { ...baseForm, fixedDate: soleDate }
+      : baseForm;
 
   function patchForm(next: Partial<MustVisitTimeForm>): void {
     setEdited({ ...form, ...next });

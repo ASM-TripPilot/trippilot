@@ -72,3 +72,34 @@ describe('🔴 SheetHeader · SHH2 — 빈 dateLabel 세그+구분자 생략 (D5
     );
   });
 });
+
+describe('🔴 SheetHeader · TRIP-1237 e — metaBelow 면 meta 가 제목 줄 아래로 내려온다', () => {
+  const props = {
+    title: '서울특별시 여행',
+    dayLabel: '1일차',
+    dateLabel: '10월 29일 · 목',
+    meta: '확정됨 · 7곳 · 11.2km',
+  };
+
+  it('기본은 한 줄(flex-row)이고, metaBelow 는 세로 배치(flex-row 없음) — leaf 는 둘 다 같다', () => {
+    // 준비·실행: 기본 / metaBelow 를 각각 그린다.
+    const { rerender } = render(<SheetHeader {...props} />);
+    const rowClass = String(
+      screen.getByTestId('sheet-header-root').props.className
+    );
+    rerender(<SheetHeader {...props} metaBelow />);
+    const belowClass = String(
+      screen.getByTestId('sheet-header-root').props.className
+    );
+
+    // 단언: 기본은 가로 행, metaBelow 는 가로 행이 아니다. leaf 값은 불변.
+    expect(rowClass).toContain('flex-row');
+    expect(belowClass).not.toContain('flex-row');
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '확정됨 · 7곳 · 11.2km'
+    );
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      '서울특별시 여행'
+    );
+  });
+});

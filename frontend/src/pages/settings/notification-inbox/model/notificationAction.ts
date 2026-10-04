@@ -31,7 +31,8 @@ export function notificationAction(
   if (tripId == null) return null;
   switch (actionType) {
     case 'TRIP_ITINERARY':
-      return `/trips/${tripId}/itinerary`;
+      // TRIP-1237 a: 알림에서 열린 일정은 '오늘' 일차로 열고 뒤로가기는 알림함으로 돌린다 — 일정 페이지가 이 표식을 읽는다.
+      return `/trips/${tripId}/itinerary?from=notification`;
     case 'TRIP_SUMMARY':
       return `/trips/${tripId}/records/summary`;
     case 'PLANB_REPLAN': {

@@ -55,7 +55,7 @@ describe('AC-1 · 정상 4갈래 — 필수 필드가 있으면 정해진 경로
       'TRIP_ITINERARY → 일정 화면',
       'TRIP_ITINERARY',
       { tripId: TRIP_UUID },
-      `/trips/${TRIP_UUID}/itinerary`,
+      `/trips/${TRIP_UUID}/itinerary?from=notification`,
     ],
     [
       'TRIP_SUMMARY → 여행 요약',
@@ -212,14 +212,14 @@ describe('AC-8 · 여분 키가 있어도 정상 갈래로 판정하고, 경로�
         'TRIP_ITINERARY',
         wire({ tripId: 't1', foo: 'bar', kind: 'PLAN_B' })
       )
-    ).toBe('/trips/t1/itinerary');
+    ).toBe('/trips/t1/itinerary?from=notification');
   });
 });
 
 describe('AC-9(Q4) · 경로 조각은 encodeURIComponent — 값 안의 / ? # & 가 경로 모양을 바꾸지 않는다', () => {
-  it('tripId "a/b?c#d" → /trips/a%2Fb%3Fc%23d/itinerary', () => {
+  it('tripId "a/b?c#d" → /trips/a%2Fb%3Fc%23d/itinerary?from=notification', () => {
     expect(notificationAction('TRIP_ITINERARY', { tripId: 'a/b?c#d' })).toBe(
-      '/trips/a%2Fb%3Fc%23d/itinerary'
+      '/trips/a%2Fb%3Fc%23d/itinerary?from=notification'
     );
   });
 
@@ -252,7 +252,7 @@ type Routable = (typeof ROUTABLE)[number];
 /** 갈래별 경로 형태와, 캡처 그룹 순서대로의 필수 필드. */
 const FORMS: Record<Routable, { pattern: RegExp; fields: string[] }> = {
   TRIP_ITINERARY: {
-    pattern: new RegExp(`^/trips/(${SEG})/itinerary$`),
+    pattern: new RegExp(`^/trips/(${SEG})/itinerary\\?from=notification$`),
     fields: ['tripId'],
   },
   TRIP_SUMMARY: {

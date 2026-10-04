@@ -828,7 +828,7 @@ describe('확정 셸(h16) 얼굴', () => {
     clearAccessToken();
   });
 
-  function renderPage() {
+  function renderPage(from?: string) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
@@ -837,7 +837,9 @@ describe('확정 셸(h16) 얼굴', () => {
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
       );
     }
-    return render(<ItineraryPlanPage tripId={TRIP_ID} />, { wrapper: Wrapper });
+    return render(<ItineraryPlanPage tripId={TRIP_ID} from={from} />, {
+      wrapper: Wrapper,
+    });
   }
 
   /** trip GET 은 케이스마다 안 갈리니 항상 200, itinerary GET 만 갈린다. */
@@ -1013,6 +1015,93 @@ describe('확정 셸(h16) 얼굴', () => {
       expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
       expect(mockReplace).toHaveBeenCalledTimes(1);
       expect(mockBack).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('🔴 TRIP-1237 a — 알림에서 연 확정 일정은 오늘 일차로 열리고 뒤로가기는 알림함이다', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    // 시계만 고정한다(타이머는 진짜 — MSW·findBy 가 돌아야 한다).
+    function fixToday(iso: string): void {
+      jest.useFakeTimers({
+        now: new Date(iso),
+        doNotFake: [
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval',
+          'setImmediate',
+          'clearImmediate',
+          'nextTick',
+          'queueMicrotask',
+          'performance',
+          'requestAnimationFrame',
+          'cancelAnimationFrame',
+        ],
+      });
+    }
+
+    it('from=notification · 오늘이 2일차(서울 2026-06-11)면 헤더가 2일차다 — UTC 로는 아직 06-10 인 서울 새벽 01시여도', async () => {
+      // UTC 날짜(06-10)와 서울 날짜(06-11)가 갈리는 시각 — UTC 로 읽는 구현이면 1일차가 나와 red.
+      fixToday('2026-06-10T16:00:00Z');
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage('notification');
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+    });
+
+    it('알림으로 열린 뒤 사용자가 1일차 칩을 누르면 그 선택이 유지된다(오늘로 되돌아가지 않는다)', async () => {
+      fixToday('2026-06-11T03:00:00Z');
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage('notification');
+      await screen.findByTestId('map-sheet-shell-root');
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+
+      fireEvent.press(screen.getByTestId('sheet-daychip-0'));
+
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
+    });
+
+    it('확정 얼굴은 헤더 meta 를 제목 줄 아래로 내린다(TRIP-1237 e) — 가로 행이 아니다', async () => {
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(
+        String(screen.getByTestId('sheet-header-root').props.className)
+      ).not.toContain('flex-row');
+    });
+
+    it('같은 날이어도 알림 표식이 없으면(직접 진입) 1일차로 연다', async () => {
+      fixToday('2026-06-11T03:00:00Z');
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
+    });
+
+    it('from=notification 이어도 오늘이 여행 밖이면 1일차로 연다', async () => {
+      fixToday('2026-09-01T03:00:00Z');
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage('notification');
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
+    });
+
+    it('from=notification 이면 뒤로가기는 목록 replace 가 아니라 back()(알림함)이다', async () => {
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage('notification');
+      await screen.findByTestId('map-sheet-shell-root');
+
+      fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(mockReplace).not.toHaveBeenCalled();
     });
   });
 
