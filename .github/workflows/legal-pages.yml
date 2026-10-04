@@ -1,0 +1,73 @@
+# 약관·처리방침 공개 페이지(GitHub Pages).
+#
+# ## 왜 있나
+#
+# App Store Connect 가 **공개 웹 URL 로 된 개인정보처리방침**을 필수로 요구한다. 약관 6종은
+# 앱 내 API(`GET /api/v1/terms`)로만 나가서 웹 주소가 없었다.
+#
+# ## 왜 워크플로인가 — 한 번 올리고 끝내지 않는 이유
+#
+# 손으로 복사해 올리면 본문이 개정될 때 페이지가 **조용히 갈라진다.** 사용자가 앱에서 보는
+# 본문과 공개 페이지가 다른 말을 하는 상태는 그 자체가 법적 위험이고, 아무도 눈치채지 못한다.
+# 그래서 정본(`R__seed_reference_data.sql`)이 바뀔 때마다 다시 생성해 올린다.
+#
+# PR 에서는 **올리지 않고 생성만** 해 본다 — 시드 형식이 깨지면(달러 인용·컬럼 순서) 스크립트가
+# 0 아닌 코드로 죽으므로 머지 전에 걸린다.
+name: legal-pages
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'backend/app/src/main/resources/db/migration/R__seed_reference_data.sql'
+      - 'backend/scripts/render_legal_pages.py'
+      - '.github/workflows/legal-pages.yml'
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'backend/app/src/main/resources/db/migration/R__seed_reference_data.sql'
+      - 'backend/scripts/render_legal_pages.py'
+      - '.github/workflows/legal-pages.yml'
+  workflow_dispatch:
+
+# 동시 배포가 겹치면 Pages 가 거부한다. 진행 중인 것을 취소하지 않는다 —
+# 뒤 커밋이 앞 커밋을 덮는 순서 역전을 피한다.
+concurrency:
+  group: legal-pages
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Render
+        run: python3 backend/scripts/render_legal_pages.py --out public
+      - name: Sanity — 미확정 마커가 공개되지 않는다
+        # 초안(`backend/docs/legal/`)에는 `[미확정: …]` 가 남아 있다. 시드가 정본이라
+        # 지금은 비어 있지만, 누가 미해소 본문을 시드에 넣으면 **공개 페이지에 그대로 나간다.**
+        run: |
+          if grep -rlE '\[미확정|플레이스홀더|TODO|TBD' public/; then
+            echo "::error::공개 페이지에 미확정 마커가 있다 — 시드 본문을 먼저 해소할 것"
+            exit 1
+          fi
+          test -s public/privacy.html
+          test -s public/index.html
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: public
+
+  deploy:
+    needs: render
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
