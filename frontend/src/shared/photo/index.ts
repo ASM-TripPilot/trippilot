@@ -7,7 +7,7 @@ import { getInstallId } from '@/shared/storage/installId';
  *  - 자산 메타 shape(`PhotoAssetMeta`) 를 한 곳에서 정의한다 — photoAttach(model)·피커가 함께 문다.
  *    shared 는 features 보다 아래 층이라 여기 두어야 record.model 이 위로 가져다 쓸 수 있다.
  *  - `pickPhotoAsset` 은 앨범에서 1장을 고르게 하고 서버로 보낼 **메타만** 뽑는다(파일 본문은 요청하지
- *    않는다 — INV-U5-03). 결과는 다섯 갈래이고 reject 하지 않는다(재빌드 전 앱 = 네이티브 모듈 부재도 failed).
+ *    않는다 — INV-U5-03). 결과는 여섯 갈래이고 reject 하지 않는다(재빌드 전 앱 = 네이티브 모듈 부재도 failed).
  *  - `resolvePhotoUri` 는 자산 번호로 이 기기 앨범의 파일 주소를 찾는다. 권한을 요청하지 않는다(보기만
  *    하는 화면에서 팝업 금지).
  *  - 두 모듈은 **호출 시점에 `require`** 한다 — 둘 다 로드 순간 `requireNativeModule` 로 던지므로, 정적
@@ -34,6 +34,7 @@ export type PhotoPickResult =
   | { kind: 'picked'; asset: PhotoAssetMeta }
   | { kind: 'canceled' }
   | { kind: 'denied' }
+  | { kind: 'limited' }
   | { kind: 'no-asset-id' }
   | { kind: 'failed' };
 
@@ -47,6 +48,9 @@ export async function pickPhotoAsset(): Promise<PhotoPickResult> {
       require('expo-image-picker') as typeof import('expo-image-picker');
     const permission = await MediaLibrary.requestPermissionsAsync();
     if (!permission?.granted) return { kind: 'denied' };
+    // TRIP-1216 · "선택한 사진만"(limited)은 피커가 자산 번호를 못 주거나(no-asset-id), 줘도 앱을 껐다 켠 뒤
+    // 앨범이 그 번호를 다시 못 찾을 수 있다(보이는 사진이 선택분으로 한정). 붙이고 나서 깨지느니 먼저 막는다.
+    if (permission.accessPrivileges === 'limited') return { kind: 'limited' };
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],

@@ -21,9 +21,9 @@ on:
         type: boolean
         default: true
       embedding_enabled:
-        description: 로컬 임베딩 서비스와 pgvector RAG 활성화 (추가 메모리 필요)
+        description: 로컬 임베딩 서비스와 pgvector RAG 활성화 (추가 메모리 필요) — 끄면 재계획·대안이 규칙 랭킹으로만 돈다
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -238,6 +238,12 @@ jobs:
       - name: Verify in-cluster API and AI connectivity
         if: steps.config.outputs.deploy_application == 'true'
         run: python3 deploy/eks/runtime.py smoke --namespace trippilot
+      # 멱등 — 이미 들어간 문서는 건너뛰므로 재배포마다 돌려도 새 문서만 임베딩한다.
+      # 첫 적재(KB-5 1,470건)는 임베딩 파드 CPU 로 수 분 걸린다.
+      - name: Load the Plan-B knowledge base
+        if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled
+        timeout-minutes: 30
+        run: python3 deploy/eks/runtime.py load-kb --namespace trippilot
       - name: Deployment summary
         if: success()
         env:

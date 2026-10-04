@@ -46,12 +46,15 @@ data class TripGenerationContext(
 }
 
 /**
- * 목적지 하나 — 표시 이름과 행정구역 표준코드.
+ * 목적지 하나 — 표시 이름과 행정구역 표준코드, 그리고 박수.
  *
  * [regionCode] 가 `null` 인 경우가 정상이다(이름만으로 확정 못 한 동명이지역, 또는 코드를 안 보낸
  * 옛 클라이언트). 그때는 소비처가 이름으로 떨어진다 — **지어내지 않는다.**
+ *
+ * [nights] 는 "어느 날이 어느 목적지인가"의 유일한 근거다 — 없으면 다목적지 여행의 모든 날이
+ * 첫 목적지로 접힌다("서울 1박 + 인천 1박"이 서울 2박처럼 나왔다).
  */
-data class TripDestinationRef(val name: String, val regionCode: String?)
+data class TripDestinationRef(val name: String, val regionCode: String?, val nights: Int)
 
 /** 필수 방문지(고정 블록 HC3 원천). ANYTIME이면 date/start/dwellMin null. */
 data class FixedVisit(val poiId: UUID, val date: LocalDate?, val start: LocalTime?, val dwellMin: Int?)

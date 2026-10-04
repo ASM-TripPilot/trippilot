@@ -43,6 +43,19 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('key=terraform.tfstate', init)
         self.assertIn('encrypt=true', init)
 
+    def test_plan_b_kb_is_on_by_default_and_loaded_on_every_deploy(self):
+        """기본값 false 였을 때 기본값 배포 한 번(2026-10-03 13:38)이 KB 를 조용히 껐고,
+        적재는 손으로 했다 — 재계획은 200 을 내며 규칙 랭킹으로만 돌았다."""
+        value = workflow('aws-deploy.yml')
+        self.assertEqual(value['on']['workflow_dispatch']['inputs']['embedding_enabled']['default'], 'true')
+        steps = value['jobs']['deploy']['steps']
+        names = [s.get('name', '') for s in steps]
+        load = steps[names.index('Load the Plan-B knowledge base')]
+        self.assertIn('inputs.embedding_enabled', load['if'])
+        self.assertIn('runtime.py load-kb', load['run'])
+        # 앱이 뜬 뒤여야 한다 — 적재는 ai 파드 안에서 돈다
+        self.assertGreater(names.index('Load the Plan-B knowledge base'), names.index('Deploy and wait for healthy workloads'))
+
 
 if __name__ == '__main__':
     unittest.main()

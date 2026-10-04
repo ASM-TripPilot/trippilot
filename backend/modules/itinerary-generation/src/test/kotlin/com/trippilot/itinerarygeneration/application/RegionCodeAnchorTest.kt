@@ -36,7 +36,7 @@ class RegionCodeAnchorTest : StringSpec({
     }
 
     "코드가 있으면 코드로 찾는다 — 이름으로는 서울이 나오는 상황에서 부산이 나온다" {
-        val center = anchorCenter(ambiguous, TripDestinationRef("중구", "26170"))
+        val center = anchorCenter(ambiguous, TripDestinationRef("중구", "26170", 0))
 
         center shouldBe RegionCenter(BUSAN_LAT, BUSAN_LNG)
     }
@@ -46,7 +46,7 @@ class RegionCodeAnchorTest : StringSpec({
      * 이 갈래가 없으면 코드를 안 보내는 클라이언트의 앵커가 통째로 사라진다.
      */
     "코드가 없으면 이름으로 떨어진다" {
-        val center = anchorCenter(ambiguous, TripDestinationRef("중구", null))
+        val center = anchorCenter(ambiguous, TripDestinationRef("중구", null, 0))
 
         center shouldBe RegionCenter(SEOUL_LAT, SEOUL_LNG)
     }
@@ -67,14 +67,14 @@ class RegionCodeAnchorTest : StringSpec({
             override fun centerOfCode(regionCode: String) = RegionCenter(BUSAN_LAT, BUSAN_LNG)
         }
 
-        anchorCenter(probe, TripDestinationRef("중구", "26170"))
+        anchorCenter(probe, TripDestinationRef("중구", "26170", 0))
 
         probe.nameLookups shouldBe 0
     }
 
     /** 코드가 카탈로그에 없으면(좌표 없는 지역 포함) 이름으로 떨어진다 — 앵커를 잃지 않는다. */
     "코드로 못 찾으면 이름으로 떨어진다" {
-        val center = anchorCenter(ambiguous, TripDestinationRef("중구", "99999"))
+        val center = anchorCenter(ambiguous, TripDestinationRef("중구", "99999", 0))
 
         center shouldBe RegionCenter(SEOUL_LAT, SEOUL_LNG)
     }

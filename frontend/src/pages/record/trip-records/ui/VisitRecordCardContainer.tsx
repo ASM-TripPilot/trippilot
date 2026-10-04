@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { Text } from 'react-native';
+import { Linking, Pressable, Text } from 'react-native';
 import { useQueries } from '@tanstack/react-query';
 
 import { resolvePhotoUri } from '@/shared/photo';
@@ -59,6 +59,8 @@ export function VisitRecordCardContainer({
     visitCheckId: card.visitCheckId,
   });
   const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  // TRIP-1216 — 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
+  const [photoNeedsSettings, setPhotoNeedsSettings] = useState(false);
   const [memoFailed, setMemoFailed] = useState(false);
   // 저장 시도 번호 — 늦게 끝난 옛 시도가 최신 시도의 안내 상태를 덮지 않게 한다(03b 경고 1).
   const memoAttempt = useRef(0);
@@ -93,9 +95,12 @@ export function VisitRecordCardContainer({
 
   const onPressAdd = async () => {
     setPhotoNotice(null);
+    setPhotoNeedsSettings(false);
     const picked = await pickPhotoForVisit();
-    if ('notice' in picked) setPhotoNotice(picked.notice);
-    else await attachPhoto(picked.asset, picked.gpsConsent);
+    if ('notice' in picked) {
+      setPhotoNotice(picked.notice);
+      setPhotoNeedsSettings(picked.settings === true);
+    } else await attachPhoto(picked.asset, picked.gpsConsent);
   };
 
   // TRIP-1078 · 메모 PUT 실패를 버리지 않는다(INV-4) — 카드 안 안내 한 줄, 다음 시도에 지운다.
@@ -149,6 +154,19 @@ export function VisitRecordCardContainer({
             >
               {photoNotice}
             </Text>
+          ) : null}
+          {photoNotice && photoNeedsSettings ? (
+            <Pressable
+              testID="record-trip-photo-settings"
+              accessibilityRole="button"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => void Linking.openSettings()}
+              className="self-start"
+            >
+              <Text className="font-noto-bold text-caption text-primary">
+                설정 열기
+              </Text>
+            </Pressable>
           ) : null}
         </>
       }
