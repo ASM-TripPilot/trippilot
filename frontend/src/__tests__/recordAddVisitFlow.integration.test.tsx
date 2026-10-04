@@ -627,6 +627,14 @@ describe('🔴 AC-11·AC-12 · j01 카드가 재조회 없이 늘고, 제목은 
   });
 });
 
+describe('🔴 TRIP-1204 · 방문 추가 지도는 시트가 열린 채로도 손가락으로 움직인다', () => {
+  it('P15: 셸 지도(map-root)가 viewOnly=false 로 열려 있다', async () => {
+    await renderPicker();
+
+    expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
+  });
+});
+
 describe('🔴 AC-14 · 검색칸은 바텀시트 안에 있다', () => {
   /** 요소에서 부모를 따라 올라가며 바텀시트(목) 조상을 찾는다. */
   function insideSheet(element: ReactTestInstance): boolean {

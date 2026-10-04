@@ -586,6 +586,8 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           center={center}
           pins={listedPins}
           fitPins
+          // TRIP-1204 — 시트가 열린 채로도 손가락 확대·이동(셸 기본은 열림=잠금). 6-b 실기 전용.
+          mapViewOnly={false}
           days={dayChips}
           selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
           onSelectDay={(index) => setPickedDate(chipTabs[index]?.date ?? null)}

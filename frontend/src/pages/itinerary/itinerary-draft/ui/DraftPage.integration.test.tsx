@@ -1766,6 +1766,15 @@ describe('h08 셸 기본 얼굴', () => {
     });
   });
 
+  describe('🔴 TRIP-1204 · h08 결과 지도는 시트가 열린 채로도 손가락으로 움직인다', () => {
+    it('셸 지도가 viewOnly=false 로 열려 있다', async () => {
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
+    });
+  });
+
   describe('🔴 TRIP-1076 AC-3 · h08 결과 지도는 핀 전부에 맞춰 연다', () => {
     it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
       // 준비·실행 — 기본 COMPLETE 응답으로 셸 얼굴을 연다.
