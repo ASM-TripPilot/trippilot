@@ -144,7 +144,15 @@ class AssemblyConfig:
     # 취향 점수 갭이 한 단(≥0.3) 이상이면 점수 서열이 그대로 이기고, 동률·근소 갭에서만
     # 식사 리듬이 개입한다 — 보정이 취향 점수를 압도하지 않도록.
     meal_bonus: float = 0.3             # 식사 창에 FOOD 1개 배치 시 창당 보상
-    meal_penalty: float = 0.2           # 창 밖 FOOD·FOOD 연속 배치 억제 (건당)
+    meal_penalty: float = 0.2           # 창 밖 FOOD 배치 억제 (건당)
+    # FOOD→FOOD 인접(식당 바로 다음 식당) 억제 — 건당, 점수 축 [0,1] 전체라 어떤 취향 갭으로도
+    # 식당 바로 다음 식당이 이득이 되지 않는다. 종전엔 meal_penalty(0.2)를 같이 써서 점수 차가
+    # 크면 그대로 놓였다(QA 6회차 후속 실측, 로컬 full 스택 10일: 태안 2일차 점심 12:26 식당 →
+    # 13:31 식당 — 두 번째는 끝이 점심창 밖이라 창 상쇄 대상도 아니었다). 폴백은 이미 연속 FOOD 를
+    # 후순위로 미뤄(food-first 는 직전이 FOOD 가 아닐 때만) 이 모양을 안 낸다 — OR 을 그 의미에
+    # 맞춘다. 사이에 다른 장소가 하나라도 끼면 감점 없음. 하드 제약 아님(목적함수만) — 식당만
+    # 있는 풀도 비지 않는다. 0 이면 이 항만 꺼진다(폴백의 후순위는 남는다).
+    food_adjacent_penalty: float = 1.0
     # ── 날씨 소프트 보정 (TRIP-383 — TRIP-379 식사 보정과 동형의 결정론 규칙).
     # 하드 배제 금지: 비가 와도 실외 배치는 가능하고, 실외만 남은 풀에서도 일정은
     # 나온다. problem.daily_rain_prob이 None이면 항 자체가 생기지 않아 종전과 동일.
@@ -198,7 +206,7 @@ class AssemblyConfig:
             lo, hi = getattr(self, name)
             if not (0 <= lo < hi <= 1440):
                 raise ValueError(f"{name} 은 0 ≤ 시작 < 끝 ≤ 1440 분이어야 함")
-        for name in ("meal_bonus", "meal_penalty",
+        for name in ("meal_bonus", "meal_penalty", "food_adjacent_penalty",
                      "rain_outdoor_penalty", "rain_indoor_bonus",
                      "event_bonus_scale",
                      "category_free_count", "category_excess_penalty",

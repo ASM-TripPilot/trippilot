@@ -273,11 +273,16 @@ def test_second_food_in_same_window_loses_offset() -> None:
 
 
 def test_second_food_in_same_window_is_not_forbidden() -> None:
-    """소프트 항이다 — 식당만 남으면 같은 창에 두 곳이 그대로 놓인다(HC 해 집합 불변)."""
+    """소프트 항이다 — 식당만 남으면 같은 창에 두 곳이 그대로 놓인다(HC 해 집합 불변).
+
+    FOOD 인접 억제(food_adjacent_penalty)는 끈다 — 식당만 있는 풀에선 두 곳이 반드시 인접이라
+    그 항(점수 축 전체)이 두 번째를 덜어낸다. 여기서 증명할 것은 창당 1곳 묶음(AtMostOne)이
+    방문을 막지 않는다는 것 하나다."""
     problem, index = _window_problem([s for s in _POOL_WIN if s[1] is PoiCategory.FOOD])
-    est = TravelEstimator(_CFG_ONE_WIN)
-    for sol in (OrToolsAssembler(index, est, _CFG_ONE_WIN).solve(problem, 3000),
-                RuleFallbackAssembler(index, est, _CFG_ONE_WIN).solve(problem)):
+    cfg = replace(_CFG_ONE_WIN, food_adjacent_penalty=0.0)
+    est = TravelEstimator(cfg)
+    for sol in (OrToolsAssembler(index, est, cfg).solve(problem, 3000),
+                RuleFallbackAssembler(index, est, cfg).solve(problem)):
         assert sol is not None
         assert check_all(sol, problem, index, est) == []
         assert _max_food_per_window(sol, index, _CFG_ONE_WIN) == 2, sol.solve_mode
