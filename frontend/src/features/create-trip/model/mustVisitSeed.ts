@@ -25,6 +25,9 @@ export interface MustVisitSeedItem {
   imageUrl: string | null;
   /** 담은 장소의 지역(서버 원문 무가공). 값이 없으면 `null` — `imageUrl`과 동형(발명 금지). */
   region: string | null;
+  /** 담은 장소의 행정구역 코드 — 지역 밖 판정(BR-U1-58, 판정은 page 가 `regionCodeInTrip`으로).
+   * 값이 없으면 `null`(판정 불가 → 안으로 친다). 옵셔널인 이유: 이 키 없는 시드 리터럴이 리포에 많다. */
+  regionCode?: string | null;
 }
 
 /** 썸네일 상한(게이트① 확정 — 특례 없음). 4건이면 3장 + `+1`이다. */
@@ -36,7 +39,7 @@ export function seedMustVisits(savedPlaces: SavedPlace[]): MustVisitSeedItem[] {
   const seeds: MustVisitSeedItem[] = [];
 
   for (const entry of savedPlaces) {
-    const { poiId, nameKo, imageUrl, region } = entry.place;
+    const { poiId, nameKo, imageUrl, region, regionCode } = entry.place;
     if (seen.has(poiId)) {
       continue;
     }
@@ -46,6 +49,7 @@ export function seedMustVisits(savedPlaces: SavedPlace[]): MustVisitSeedItem[] {
       name: nameKo,
       imageUrl: imageUrl ?? null,
       region: region ?? null,
+      regionCode: regionCode ?? null,
     });
   }
 

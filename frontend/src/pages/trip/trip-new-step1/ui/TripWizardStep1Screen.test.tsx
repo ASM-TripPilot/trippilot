@@ -1384,3 +1384,146 @@ describe('요약 5행 2톤', () => {
     });
   });
 });
+
+/**
+ * TRIP-1234 R3-02 — 담은 장소로 넘어온 꼭 갈 곳 중 **이 여행 지역 밖**이 있으면 [다음] 위에 안내 줄을 세운다(01b 결정 1).
+ *
+ * 무엇을 보장하나: 화면은 받은 숫자(`outsideRegionCount`)대로 문구를 그리고, [빼기]·[그대로 두기]를 각자 콜백으로
+ * 올린다. 안내 줄이 있어도 [다음]을 막지 않는다(아무것도 안 고르면 '그대로 두기'로 취급 — 01b 결정 1).
+ * 판정(누가 지역 밖인가)과 "그대로 둔 뒤 숨김"은 페이지 몫이라 여기선 숫자만 받는다.
+ *
+ * ⚠️ 안내 줄 컨테이너에 `toHaveTextContent(문자열)` 을 쓰지 않는다 — 컨테이너 글자는 본문 + "빼기" + "그대로 두기"가
+ * 이어 붙어 완전 일치가 깨진다. 본문은 `within(notice).getByText(완성 문자열)`(이것도 완전 일치)로 잡는다.
+ *
+ * 3동작 뼈대: 준비=props(숫자·콜백 스파이) → 실행=render(+press) → 단언=보이는 문구 / 불린 콜백.
+ */
+describe('지역 밖 꼭 갈 곳 안내', () => {
+  function props(
+    over: Partial<TripWizardStep1ScreenProps> = {}
+  ): TripWizardStep1ScreenProps {
+    return {
+      summaryDestinations: null,
+      summaryPeriod: null,
+      summaryCompanion: null,
+      summaryPreferences: null,
+      summaryBudget: null,
+      onPressSummaryDestination: jest.fn(),
+      onPressSummaryPeriod: jest.fn(),
+      onPressSummaryCompanion: jest.fn(),
+      onPressSummaryPreference: jest.fn(),
+      onPressSummaryBudget: jest.fn(),
+      mustVisits: [],
+      onPressMore: jest.fn(),
+      onPressSeeAll: jest.fn(),
+      canProceed: false,
+      onNext: jest.fn(),
+      onBack: jest.fn(),
+      ...over,
+    };
+  }
+
+  function classesOf(testID: string): string {
+    return String(screen.getByTestId(testID).props.className ?? '');
+  }
+
+  it('O-1 · 1곳이면 "꼭 갈 곳 중 1곳은 이 여행 지역 밖이에요"와 [빼기]·[그대로 두기]를 그린다', () => {
+    render(
+      <TripWizardStep1Screen
+        {...props({
+          outsideRegionCount: 1,
+          onRemoveOutsideRegion: jest.fn(),
+          onKeepOutsideRegion: jest.fn(),
+        })}
+      />
+    );
+
+    const notice = screen.getByTestId('trip-wizard-outside-notice');
+    expect(
+      within(notice).getByText('꼭 갈 곳 중 1곳은 이 여행 지역 밖이에요')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('trip-wizard-outside-notice-remove')).getByText(
+        '빼기'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('trip-wizard-outside-notice-keep')).getByText(
+        '그대로 두기'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('O-2 · 숫자는 받은 값 그대로다 (3곳)', () => {
+    render(<TripWizardStep1Screen {...props({ outsideRegionCount: 3 })} />);
+
+    expect(
+      within(screen.getByTestId('trip-wizard-outside-notice')).getByText(
+        '꼭 갈 곳 중 3곳은 이 여행 지역 밖이에요'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('O-3 · [빼기]·[그대로 두기]는 각자 자기 콜백만 한 번 부른다', () => {
+    // 준비
+    const onRemoveOutsideRegion = jest.fn();
+    const onKeepOutsideRegion = jest.fn();
+    render(
+      <TripWizardStep1Screen
+        {...props({
+          outsideRegionCount: 1,
+          onRemoveOutsideRegion,
+          onKeepOutsideRegion,
+        })}
+      />
+    );
+
+    // 실행 + 단언 — [빼기]
+    fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-remove'));
+    expect(onRemoveOutsideRegion).toHaveBeenCalledTimes(1);
+    expect(onKeepOutsideRegion).not.toHaveBeenCalled();
+
+    // 실행 + 단언 — [그대로 두기]
+    fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-keep'));
+    expect(onKeepOutsideRegion).toHaveBeenCalledTimes(1);
+    expect(onRemoveOutsideRegion).toHaveBeenCalledTimes(1);
+  });
+
+  it('O-4 · 안내 줄이 있어도 [다음]은 막히지 않는다 (고르지 않으면 그대로 두기)', () => {
+    const onNext = jest.fn();
+    render(
+      <TripWizardStep1Screen
+        {...props({ outsideRegionCount: 1, canProceed: true, onNext })}
+      />
+    );
+
+    expect(screen.getByTestId('trip-wizard-outside-notice')).toBeOnTheScreen();
+    const next = screen.getByTestId('trip-wizard-step1-next');
+    expect(next).toBeEnabled();
+    fireEvent.press(next);
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([0, undefined])(
+    'O-5 · 숫자가 %p 이면 안내 줄이 없다 (짝: 하단 [다음]은 있다)',
+    (count) => {
+      render(
+        <TripWizardStep1Screen {...props({ outsideRegionCount: count })} />
+      );
+
+      expect(screen.queryByTestId('trip-wizard-outside-notice')).toBeNull();
+      expect(screen.getByTestId('trip-wizard-step1-next')).toBeOnTheScreen();
+    }
+  );
+
+  it('O-6 · 안내 줄과 두 버튼은 색 토큰만 쓴다 (className 에 raw hex 없음)', () => {
+    render(<TripWizardStep1Screen {...props({ outsideRegionCount: 1 })} />);
+
+    [
+      'trip-wizard-outside-notice',
+      'trip-wizard-outside-notice-remove',
+      'trip-wizard-outside-notice-keep',
+    ].forEach((testID) => {
+      expect(classesOf(testID)).not.toMatch(/#/);
+    });
+  });
+});

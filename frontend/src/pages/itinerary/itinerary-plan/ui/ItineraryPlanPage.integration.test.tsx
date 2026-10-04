@@ -1156,6 +1156,53 @@ describe('확정 셸(h16) 얼굴', () => {
       expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
     });
   });
+
+  // TRIP-1234 R3-03 — 헤더 곳 수는 "고정 숙소"만 뺀다(같은 파일 hasBase 의 숙소 정의, 01b 결정 4). 서버가 아무 때나
+  // 꼭 갈 곳을 isFixed=true 로 내려도 카드는 그려지므로, isFixed 하나로 빼면 "헤더 0곳 · 카드 1장"이 된다.
+  describe('🔴 C3d · 헤더 곳 수 = 카드 수 — 고정 숙소만 빼고 고정 꼭 갈 곳은 센다', () => {
+    /** 시각이 고정된 비숙소 꼭 갈 곳(서버가 물질화해 isFixed=true 로 내리는 모양). 거리 null → km 생략. */
+    function fixedMustVisit(): ItineraryDaysItemSlotsItem {
+      return {
+        ...poi('poi-namwon', '14:00:00', '14:00:00', null, '광한루원', []),
+        isFixed: true,
+        category: '명소',
+      };
+    }
+
+    it('C3d-1 · 선택일이 고정 꼭 갈 곳 하나뿐이면 meta 는 "확정됨 · 1곳"이고 카드도 1장이다 (QA r3 재현)', async () => {
+      // 준비
+      useItinerary(() => HttpResponse.json(confirmed([fixedMustVisit()])));
+
+      // 실행
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 단언 — 완전 일치. `!slot.isFixed` 식이면 "확정됨 · 0곳"으로 red.
+      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+        '확정됨 · 1곳'
+      );
+      expect(screen.queryAllByTestId(/^slot-stopcard-time-/)).toHaveLength(1);
+    });
+
+    it('C3d-2 · 비고정 4 + 고정 꼭 갈 곳 1 + 고정 숙소 1 이면 "확정됨 · 5곳"이다 (숙소만 빠진다)', async () => {
+      useItinerary(() =>
+        HttpResponse.json(
+          confirmed([
+            ...fourPois([null, null, null, null]),
+            fixedMustVisit(),
+            hotel(null),
+          ])
+        )
+      );
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+        '확정됨 · 5곳'
+      );
+    });
+  });
 });
 
 // TRIP-505 · 옛 ItineraryPlanPage.confirmedBack.integration.test.tsx
@@ -2738,6 +2785,31 @@ describe('완성 셸(h14) 얼굴', () => {
       expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
         '4곳 · 4.1km'
       );
+    });
+
+    // TRIP-1234 R3-03 — 완성(PLANNED) 헤더도 확정과 같은 식이다: 고정 숙소만 빼고 고정 꼭 갈 곳은 센다.
+    it('T4b · 비고정 1 + 시각 고정 꼭 갈 곳 1 이면 meta 는 "2곳"이다', async () => {
+      // 준비 — 거리 null 이라 km 는 접힌다(곳 수만 본다).
+      const fixedMustVisit: ItineraryDaysItemSlotsItem = {
+        ...poi('poi-namwon', '14:00:00', '14:00:00', null, '광한루원', []),
+        isFixed: true,
+        category: '명소',
+      };
+      useItinerary(() =>
+        HttpResponse.json(
+          itineraryOf('PLANNED', [
+            poi('poi-a', '10:00:00', '11:00:00', null, '광안리 해변', ['바다']),
+            fixedMustVisit,
+          ])
+        )
+      );
+
+      // 실행
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 단언 — 완전 일치. `!slot.isFixed` 식이면 "1곳"으로 red.
+      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('2곳');
     });
   });
 

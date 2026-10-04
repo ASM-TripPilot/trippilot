@@ -25,7 +25,7 @@ import type {
   SavedPlace,
   MustVisit,
 } from '@/shared/api/index.schemas';
-import { useTripWizardStore } from '@/features/create-trip';
+import { seedMustVisits, useTripWizardStore } from '@/features/create-trip';
 import { regionPickerHref } from '@/features/explore';
 import type { MustVisitSeedItem } from '@/features/create-trip';
 import { useGetTrips } from '@/shared/api/index.hooks';
@@ -4971,5 +4971,520 @@ describe('TRIP-1210 · 다도시 여행 제목이 생성·수정 본문에 실�
     await waitFor(() => expect(postedBodies).toHaveLength(1));
     expect(postedBodies[0].title).toBe('서울·부산 여행');
     expect(postedBodies[0].destinations).toHaveLength(3);
+  });
+});
+
+/**
+ * TRIP-1234 R3-02 — 담은 장소로 넘어온 꼭 갈 곳 중 **이 여행 지역 밖**이 있으면 보이고, 사용자가 고른 대로 등록된다.
+ *
+ * 무엇을 보장하나(01b 결정 1~3):
+ *  - 지역 밖(BR-U1-58 접두사 판정 `regionCodeInTrip`)이 있으면 [다음] 위에 안내 줄이 뜬다. 판정 불가(장소 코드 없음 ·
+ *    목적지 코드 없음 · 목적지 0곳)는 안으로 친다(fail-open) — 안내 0.
+ *  - 조용히 빼지 않는다(INV-4): 아무것도 안 누르면 시드가 그대로 등록되고 안내도 계속 보인다.
+ *  - [빼기]는 스토어 시드에서 그 장소만 뺀다 → 스트립 카드·등록 요청(새 여행 POST · 재진입 DELETE)에서 빠진다.
+ *  - [그대로 두기]는 안내만 걷는다. 그 뒤 **새로** 지역 밖이 생기면 다시 뜨고, 숫자는 지역 밖 전체다.
+ *  - 화면이 떠 있는 동안 여행지·꼭 갈 곳이 바뀌면 안내가 따라간다(마운트 시점 스냅샷 금지 — 직전 사이클 교훈).
+ *  - 앱은 대체 후보를 만들지 않는다(INV-1): 등록 요청은 시드에 있던 poiId 만 나른다.
+ *
+ * 왜 통합 버킷인가: 판정의 재료가 스토어(시드·목적지)이고 결과가 실제로 나간 요청이다 — 훅을 목하면 둘 다 가정이 된다.
+ *
+ * ⚠️ 함정(02a §4):
+ *  - ★3 시드는 `seedMustVisits(담은 장소)` 를 거쳐 넣는다 — 시드가 지역 코드를 실어 나르는지(AC-1)까지 한 사슬로 탄다.
+ *  - ★1 상태 변경은 `act(() => store.…)` 로 감싼다. 그린 **뒤에** 바꾸는 것이 이 describe 의 핵심이다.
+ *  - ★4 시트 안내문과 하단 안내 줄이 같은 문구일 수 있다 → `within(testID)` 로만 찾는다.
+ *  - ★6 "없다" 단언마다 같은 화면의 카드·버튼 존재를 짝으로 건다(화면이 안 그려져도 부재는 참이다).
+ *  - ★7 프리필(요약 취향 행 "미식") 도착 뒤에 단언한다 — 그 전엔 스트립이 스켈레톤이다.
+ *  - ★8 게스트로 돈다(토큰 없음 → 담은 목록 조회 없음). 시드는 스토어에 직접 넣는다.
+ *
+ * 장소 코드: 경복궁 `11110`(서울 안) · 광한루원 `52190`(전북 남원) · 해운대 `26350`(부산).
+ *
+ * 3동작 뼈대: 준비=목적지·시드 주입 + MSW → 실행=화면 열기·버튼 press·스토어 변경 → 단언=안내 문구·카드·나간 요청.
+ */
+describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
+  afterEach(expectNoExitWizard);
+
+  const BASE = 'http://localhost:8080/api/v1';
+  const BASE_DATE = '2026-06-10';
+  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
+
+  const PREFERENCE: PreferenceView = {
+    pace: { value: '균형있게', isNeutralDefault: false },
+    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
+    styles: { value: ['미식'] },
+    activities: { value: ['야경'] },
+  };
+
+  /** openapi `Trip.required` 를 채운 응답(서울 1박). */
+  const TRIP: Trip = {
+    tripId: TRIP_ID,
+    title: '서울특별시 여행',
+    startDate: '2026-10-10',
+    endDate: '2026-10-11',
+    party: 1,
+    companionType: null,
+    budgetTotal: 800000,
+    preferenceSnapshot: {},
+    destinations: [
+      { seq: 1, region: '서울특별시', nights: 1, regionCode: '11' },
+    ],
+    status: 'PLANNED',
+    createdAt: '2026-08-02T00:00:00Z',
+    updatedAt: '2026-08-02T00:00:00Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
+  };
+
+  const GYEONGBOK = 'poi-gyeongbok';
+  const GWANGHALLU = 'poi-gwanghallu';
+  const HAEUNDAE = 'poi-haeundae';
+  const NOCODE = 'poi-nocode';
+
+  const MV_PATH = `/api/v1/trips/${TRIP_ID}/must-visits`;
+  const PATCH = `PATCH /api/v1/trips/${TRIP_ID}`;
+
+  /** 계약 `Place.required` 를 채운 담은 장소 — 지역 코드만 케이스마다 다르다. */
+  function saved(poiId: string, nameKo: string, regionCode: string | null) {
+    const place: Place = {
+      poiId,
+      nameKo,
+      category: '명소',
+      lat: 37.57,
+      lng: 126.97,
+      region: null,
+      regionCode,
+      openingHours: null,
+      imageUrl: null,
+      tags: [],
+      savedCount: 0,
+      dataStatus: 'ACTIVE',
+    };
+    const entry: SavedPlace = {
+      savedPlaceId: `sp-${poiId}`,
+      savedAt: '2026-08-01T10:00:00.000Z',
+      place,
+    };
+    return entry;
+  }
+
+  const PLACES = {
+    [GYEONGBOK]: saved(GYEONGBOK, '경복궁', '11110'),
+    [GWANGHALLU]: saved(GWANGHALLU, '광한루원', '52190'),
+    [HAEUNDAE]: saved(HAEUNDAE, '해운대 해수욕장', '26350'),
+    [NOCODE]: saved(NOCODE, '코드 없는 곳', null),
+  };
+
+  /** d02 CTA 와 같은 길 — 담은 장소 → `seedMustVisits` → `seedMustVisitsFromD02`(★3). */
+  function seedFromSaved(poiIds: string[]): void {
+    useTripWizardStore
+      .getState()
+      .seedMustVisitsFromD02(
+        seedMustVisits(poiIds.map((id) => PLACES[id as keyof typeof PLACES]))
+      );
+  }
+
+  /** 지역 피커와 같은 모양(이름 + 코드, 1박)으로 도시를 담는다. 코드 없이 담으면 판정 불가(fail-open). */
+  function addCity(name: string, code?: string): void {
+    useTripWizardStore.getState().addDestination(name, 1, code);
+  }
+
+  let observedHits: string[] = [];
+  let mustVisitPosts: { poiId: string; type: string }[] = [];
+  /** 재진입(P-11) 가짜 서버에 등록된 꼭 갈 곳 — POST 가 더하고 DELETE 가 뺀다(★11). */
+  let registered: MustVisit[] = [];
+  /** P-10 — 손으로 붙잡는 생성 응답. null 이면 바로 응답한다. */
+  let holdCreate: null | { release: () => void; started: boolean } = null;
+
+  const hits = (line: string) =>
+    observedHits.filter((hit) => hit === line).length;
+
+  function mustVisitRow(poiId: string): MustVisit {
+    return {
+      mustVisitId: `mv-${poiId}`,
+      poiSnapshotId: `snap-${poiId}`,
+      sourcePoiId: poiId,
+      type: 'ANYTIME',
+    };
+  }
+
+  beforeAll(() => {
+    server.events.on('request:start', ({ request }) => {
+      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
+    });
+  });
+
+  afterAll(() => server.events.removeAllListeners('request:start'));
+
+  beforeEach(() => {
+    // "아직 없다" 앵커 — 앞 테스트의 시드·목적지가 새면 여기서 red(★9).
+    const store = useTripWizardStore.getState();
+    expect(store.mustVisits).toHaveLength(0);
+    expect(store.destinations).toHaveLength(0);
+
+    observedHits = [];
+    mustVisitPosts = [];
+    registered = [];
+    holdCreate = null;
+
+    server.use(
+      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE)),
+      http.post(`${BASE}/trips`, async () => {
+        if (holdCreate !== null) {
+          const gate = holdCreate;
+          await new Promise<void>((resolve) => {
+            gate.release = resolve;
+            gate.started = true;
+          });
+        }
+        return HttpResponse.json(TRIP, { status: 201 });
+      }),
+      http.patch(`${BASE}/trips/:tripId`, () => HttpResponse.json(TRIP)),
+      http.get(`${BASE}/trips/:tripId/must-visits`, () =>
+        HttpResponse.json(registered)
+      ),
+      http.post(`${BASE}/trips/:tripId/must-visits`, async ({ request }) => {
+        const body = (await request.json()) as { poiId: string; type: string };
+        mustVisitPosts.push(body);
+        const row = mustVisitRow(body.poiId);
+        registered = [...registered, row];
+        return HttpResponse.json(row, { status: 201 });
+      }),
+      http.delete(
+        `${BASE}/trips/:tripId/must-visits/:mustVisitId`,
+        ({ params }) => {
+          registered = registered.filter(
+            (row) => row.mustVisitId !== params.mustVisitId
+          );
+          return new HttpResponse(null, { status: 204 });
+        }
+      )
+    );
+  });
+
+  afterEach(() => {
+    // 붙잡아 둔 생성 응답을 반드시 푼다 — 케이스가 중간에 red 로 끝나도 MSW 핸들러가 영원히 매달려
+    // jest 가 끝나지 않는 일을 막는다(★10).
+    holdCreate?.release();
+    holdCreate = null;
+    server.resetHandlers();
+  });
+
+  function renderPage() {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
+      wrapper: Wrapper,
+    });
+  }
+
+  /** 프리필이 도착한 눈금(★7) — 그 전엔 스트립이 스켈레톤이라 카드가 없다. */
+  async function waitForPrefill(): Promise<void> {
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('trip-wizard-summary-preference')
+      ).toHaveTextContent(/미식/)
+    );
+  }
+
+  function notice() {
+    return screen.queryByTestId('trip-wizard-outside-notice');
+  }
+
+  /** 안내 줄 본문이 정확히 "꼭 갈 곳 중 N곳은 이 여행 지역 밖이에요"인가(★5 — 본문만 완전 일치). */
+  function expectNotice(count: number): void {
+    const box = screen.getByTestId('trip-wizard-outside-notice');
+    expect(
+      within(box).getByText(`꼭 갈 곳 중 ${count}곳은 이 여행 지역 밖이에요`)
+    ).toBeOnTheScreen();
+  }
+
+  function card(poiId: string) {
+    return screen.queryByTestId(`trip-wizard-mustvisit-${poiId}`);
+  }
+
+  /** 서울(11) + 시작일 — [다음]이 열리는 최소 드래프트 + 시드 [경복궁, 광한루원]. */
+  function seedSeoulWithNamwon(): void {
+    addCity('서울특별시', '11');
+    useTripWizardStore.getState().setStartDate('2026-10-10');
+    seedFromSaved([GYEONGBOK, GWANGHALLU]);
+  }
+
+  function pressNext(): void {
+    const next = screen.getByTestId('trip-wizard-step1-next');
+    expect(next).toBeEnabled();
+    fireEvent.press(next);
+  }
+
+  // AC-2 · AC-3
+  it('P-1 · 서울 여행에 남원 장소가 시드돼 있으면 안내 줄이 "1곳"을 말하고, 두 카드는 그대로 남아 있다', async () => {
+    // 준비
+    seedSeoulWithNamwon();
+
+    // 실행
+    renderPage();
+    await waitForPrefill();
+
+    // 단언 — 지역 밖이 보인다. 조용히 빠지지도 않는다(카드 둘 다).
+    expectNotice(1);
+    expect(card(GYEONGBOK)).toBeOnTheScreen();
+    expect(card(GWANGHALLU)).toBeOnTheScreen();
+  });
+
+  // AC-2 음성 — 판정 불가는 안으로 친다(BR-U1-58 fail-open). 판정을 지운 구현이면 여기서 red(선제 green 트립와이어).
+  it.each([
+    {
+      name: '시드가 전부 서울 안',
+      setup: () => {
+        addCity('서울특별시', '11');
+        seedFromSaved([GYEONGBOK]);
+      },
+      anchor: GYEONGBOK,
+    },
+    {
+      name: '장소 코드가 없음',
+      setup: () => {
+        addCity('서울특별시', '11');
+        seedFromSaved([NOCODE]);
+      },
+      anchor: NOCODE,
+    },
+    {
+      name: '목적지에 코드가 없음',
+      setup: () => {
+        addCity('서울특별시');
+        seedFromSaved([GWANGHALLU]);
+      },
+      anchor: GWANGHALLU,
+    },
+  ])(
+    'P-2 · $name 이면 안내 줄이 없다 (짝: 카드는 있다)',
+    async ({ setup, anchor }) => {
+      setup();
+
+      renderPage();
+      await waitForPrefill();
+
+      expect(card(anchor)).toBeOnTheScreen();
+      expect(notice()).toBeNull();
+    }
+  );
+
+  // AC-3 · 01b 결정 1 — 고르지 않으면 '그대로 두기'로 취급하되 안내는 계속 보인다.
+  it('P-3 · 아무것도 안 고르고 [다음]을 누르면 막지 않고 두 곳 다 등록되며, 안내는 계속 보인다', async () => {
+    seedSeoulWithNamwon();
+    renderPage();
+    await waitForPrefill();
+
+    pressNext();
+
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
+    );
+    expect(mustVisitPosts.map((body) => body.poiId).sort()).toEqual(
+      [GWANGHALLU, GYEONGBOK].sort()
+    );
+    expectNotice(1);
+  });
+
+  // AC-4 · AC-7
+  it('P-4 · [빼기]를 누르면 남원 장소가 시드·스트립에서 빠지고, [다음] 뒤 등록 요청은 경복궁 하나뿐이다', async () => {
+    seedSeoulWithNamwon();
+    renderPage();
+    await waitForPrefill();
+    expectNotice(1);
+
+    // 실행 — [빼기]
+    fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-remove'));
+
+    // 단언 — 안내가 걷히고, 남원 카드가 사라지고, 경복궁은 남는다.
+    await waitFor(() => expect(notice()).toBeNull());
+    expect(card(GWANGHALLU)).toBeNull();
+    expect(card(GYEONGBOK)).toBeOnTheScreen();
+    expect(
+      useTripWizardStore.getState().mustVisits.map((one) => one.sourcePoiId)
+    ).toEqual([GYEONGBOK]);
+
+    // 실행 — [다음]
+    pressNext();
+
+    // 단언 — 시드에 있던 poiId 만, 경복궁 하나(앱이 대체 후보를 만들지 않는다 · INV-1).
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
+    );
+    expect(mustVisitPosts).toEqual([{ poiId: GYEONGBOK, type: 'ANYTIME' }]);
+  });
+
+  // AC-4 · 01b 결정 3
+  it('P-5 · [그대로 두기]를 누르면 안내만 걷히고 두 카드가 남으며, [다음] 뒤 두 곳 다 등록된다', async () => {
+    seedSeoulWithNamwon();
+    renderPage();
+    await waitForPrefill();
+    expectNotice(1);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-keep'));
+
+    await waitFor(() => expect(notice()).toBeNull());
+    expect(card(GWANGHALLU)).toBeOnTheScreen();
+    expect(card(GYEONGBOK)).toBeOnTheScreen();
+
+    pressNext();
+
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
+    );
+    expect(mustVisitPosts.map((body) => body.poiId).sort()).toEqual(
+      [GWANGHALLU, GYEONGBOK].sort()
+    );
+  });
+
+  // 교훈① — R3-02 의 실제 순서: d02 CTA 는 여행지 없이 오고, 여행지는 step1 이 떠 있는 동안 정해진다(★2).
+  it('P-6 · 여행지 없이 시드만 온 화면에서 서울을 고르면 안내가 뜨고, 전북을 더하면 걷히고, 전북을 빼면 다시 뜬다', async () => {
+    // 준비 — 목적지 0곳 + 남원 시드. 판정 불가라 처음엔 안내 없음.
+    seedFromSaved([GWANGHALLU]);
+    renderPage();
+    await waitForPrefill();
+    expect(card(GWANGHALLU)).toBeOnTheScreen();
+    expect(notice()).toBeNull();
+
+    // 실행 — 서울을 고른다(지역 피커가 하는 것과 같은 스토어 호출).
+    act(() => addCity('서울특별시', '11'));
+    await waitFor(() => expectNotice(1));
+
+    // 실행 — 전북을 더한다 → 남원은 이제 여행 지역 안.
+    act(() => addCity('전북특별자치도', '52'));
+    await waitFor(() => expect(notice()).toBeNull());
+    expect(card(GWANGHALLU)).toBeOnTheScreen();
+
+    // 실행 — 전북(seq 2)을 뺀다 → 다시 밖.
+    act(() => useTripWizardStore.getState().removeDestination(2));
+    await waitFor(() => expectNotice(1));
+  });
+
+  // 교훈① — 꼭 갈 곳이 바뀌어도 숫자가 따라간다.
+  it('P-7 · 지역 밖 2곳 중 하나를 빼면 "1곳", 나머지도 빼면 안내가 사라진다 (경복궁 카드는 남는다)', async () => {
+    addCity('서울특별시', '11');
+    seedFromSaved([GWANGHALLU, HAEUNDAE, GYEONGBOK]);
+    renderPage();
+    await waitForPrefill();
+    expectNotice(2);
+
+    act(() => useTripWizardStore.getState().removeMustVisit(HAEUNDAE));
+    await waitFor(() => expectNotice(1));
+
+    act(() => useTripWizardStore.getState().removeMustVisit(GWANGHALLU));
+    await waitFor(() => expect(notice()).toBeNull());
+    expect(card(GYEONGBOK)).toBeOnTheScreen();
+  });
+
+  // 01b 결정 1 — 그대로 두기는 "지금 본 것"에 대한 답이다. 새로 지역 밖이 생기면 다시 묻는다.
+  it('P-8 · [그대로 두기] 뒤 새 지역 밖 장소가 들어오면 안내가 다시 뜨고, 숫자는 지역 밖 전체("2곳")다', async () => {
+    addCity('서울특별시', '11');
+    seedFromSaved([GWANGHALLU]);
+    renderPage();
+    await waitForPrefill();
+    expectNotice(1);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-keep'));
+    await waitFor(() => expect(notice()).toBeNull());
+
+    // 실행 — 꼭 갈 곳 고르기에서 해운대가 더해진 것과 같은 스토어 문.
+    act(() =>
+      useTripWizardStore
+        .getState()
+        .addMustVisits(seedMustVisits([PLACES[HAEUNDAE]]))
+    );
+
+    await waitFor(() => expectNotice(2));
+    expect(card(HAEUNDAE)).toBeOnTheScreen();
+  });
+
+  // AC-5 · 교훈① — 시트가 열린 채 여행지를 빼도 시트 안내문이 따라간다.
+  it('P-9 · 여행지 시트에서 전북을 지우면 시트 안내문이 "그대로 남아요"에서 "1곳은 이 여행 지역 밖"으로 바뀐다', async () => {
+    // 준비 — 서울 + 전북, 시드 [남원, 경복궁] → 지역 밖 0.
+    addCity('서울특별시', '11');
+    addCity('전북특별자치도', '52');
+    seedFromSaved([GWANGHALLU, GYEONGBOK]);
+    renderPage();
+    await waitForPrefill();
+    expect(notice()).toBeNull();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-summary-destination'));
+    const sheetNote = await screen.findByTestId('trip-wizard-destination-note');
+    expect(sheetNote).toHaveTextContent(
+      '꼭 갈 곳 2곳은 여행지를 바꿔도 그대로 남아요'
+    );
+
+    // 실행 — 시트의 전북(seq 2) ×
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-2'));
+
+    // 단언 — 시트 안내문(★4: testID 로만)과 하단 안내 줄이 같이 바뀐다.
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('trip-wizard-destination-note')
+      ).toHaveTextContent('꼭 갈 곳 중 1곳은 이 여행 지역 밖이에요')
+    );
+    expectNotice(1);
+  });
+
+  // 응답 순서 gate — 여행 생성 응답을 기다리는 동안 [빼기]를 눌러도 등록은 마지막 선택을 따른다(★10).
+  it('P-10 · [다음] 뒤 생성 응답이 오기 전에 [빼기]를 누르면, 응답 뒤 등록은 경복궁 하나뿐이다', async () => {
+    seedSeoulWithNamwon();
+    holdCreate = { release: () => {}, started: false };
+    renderPage();
+    await waitForPrefill();
+
+    // 실행 — [다음], 생성 요청이 출발했지만 응답은 붙잡혀 있다.
+    pressNext();
+    await waitFor(() => expect(holdCreate?.started).toBe(true));
+    expect(mustVisitPosts).toHaveLength(0);
+
+    // 실행 — 대기 중 [빼기]. 공용 연타 가드 창이 있다면 닫아 둔다(엉뚱한 이유의 red 방지).
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-remove'));
+    await waitFor(() => expect(card(GWANGHALLU)).toBeNull());
+
+    // 실행 — 응답을 푼다.
+    await act(async () => {
+      holdCreate?.release();
+    });
+
+    // 단언
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
+    );
+    expect(mustVisitPosts).toEqual([{ poiId: GYEONGBOK, type: 'ANYTIME' }]);
+  });
+
+  // AC-4 PATCH 재진입 경로 — 이미 만든 여행의 서버 꼭 갈 곳도 [빼기]를 따른다(★11).
+  it('P-11 · 재진입에서 [빼기] 뒤 [다음]이면 남원 꼭 갈 곳만 DELETE 되고 새 등록은 없다', async () => {
+    // 준비 — 서버에 경복궁·광한루원이 이미 등록돼 있고, 시드도 같다.
+    registered = [mustVisitRow(GYEONGBOK), mustVisitRow(GWANGHALLU)];
+    seedSeoulWithNamwon();
+    useTripWizardStore.getState().setCreatedTripId(TRIP_ID);
+    renderPage();
+    await waitForPrefill();
+    expectNotice(1);
+
+    // 실행
+    fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-remove'));
+    await waitFor(() => expect(notice()).toBeNull());
+    pressNext();
+
+    // 단언
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
+    );
+    expect(hits(PATCH)).toBe(1);
+    expect(hits(`DELETE ${MV_PATH}/mv-${GWANGHALLU}`)).toBe(1);
+    expect(hits(`DELETE ${MV_PATH}/mv-${GYEONGBOK}`)).toBe(0);
+    expect(mustVisitPosts).toHaveLength(0);
   });
 });

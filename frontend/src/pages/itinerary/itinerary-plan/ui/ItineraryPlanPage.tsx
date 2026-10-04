@@ -346,12 +346,15 @@ export function ItineraryPlanPage({
       ? { lat: pins[0].lat, lng: pins[0].lng }
       : { lat: 0, lng: 0 };
 
-  // meta = "[확정됨 · ]N곳[ · X.Xkm]". N 은 **선택일 비고정 슬롯 수**(숙소 제외 · 01b D3 —
-  // totalPlaces·coPickProgress 재사용 금지). km 은 커넥터가 그리는 leg(`slots.slice(1)`)의
+  // meta = "[확정됨 · ]N곳[ · X.Xkm]". N 은 **선택일 슬롯 중 고정 숙소를 뺀 수**(01b D3 —
+  // totalPlaces·coPickProgress 재사용 금지). 숙소 판정은 아래 `hasBase` 와 같다 — 서버가 꼭 갈 곳을
+  // `isFixed` 로 내려도 카드 수와 맞는다(TRIP-1234 R3-03). km 은 커넥터가 그리는 leg(`slots.slice(1)`)의
   // `legDistance` 합에서 "이동 " 접두를 뗀 값, 그중 한 구간이라도 거리를 모르면(거리 계산 중·교체 직후)
   // 곳 수만 그린다(01b D3·D5 · h08 선례 · TRIP-1110 INV-4). 확정(h16)이면 앞에 "확정됨 · " 접두를
   // 단다(TRIP-801 AC-3).
-  const nonFixedCount = slots.filter((slot) => !slot.isFixed).length;
+  const nonFixedCount = slots.filter(
+    (slot) => !(slot.isFixed && slot.category === '숙소')
+  ).length;
   const legLabel = legDistance(
     slots.slice(1).map((slot) => slot.distanceRange)
   );

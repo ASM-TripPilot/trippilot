@@ -188,9 +188,14 @@ describe('AC-4/5 · 삭제× → onRemove(seq)', () => {
 });
 
 // TRIP-1093 결정 1 — 안내문의 N 은 꼭 갈 곳 수다(`mustVisits.length`). 옛 문구 "담은 곳"은 오표기였다(Figma 3626:2085).
+// TRIP-1234 — 옛 문구 "여행지에 맞춰 정리돼요"는 코드가 하지 않는 일을 약속했다(정리하는 코드가 없었다).
+// 이제 사실만 말한다: 지역 밖이 있으면 그 수를, 없으면 "여행지를 바꿔도 그대로 남는다"를.
 describe('AC-6 · 꼭 갈 곳 안내문 (TRIP-736 · TRIP-1093 문구)', () => {
-  // Arrange: mustVisitCount 를 명시해 다시 렌더하는 얇은 헬퍼(renderSheet 는 count 를 안 넘긴다).
-  function renderWithCount(mustVisitCount?: number) {
+  // Arrange: mustVisitCount(·outsideRegionCount)를 명시해 다시 렌더하는 얇은 헬퍼(renderSheet 는 count 를 안 넘긴다).
+  function renderWithCount(
+    mustVisitCount?: number,
+    outsideRegionCount?: number
+  ) {
     render(
       <DestinationEditSheet
         destinations={BUSAN2_GYEONGJU1}
@@ -200,19 +205,40 @@ describe('AC-6 · 꼭 갈 곳 안내문 (TRIP-736 · TRIP-1093 문구)', () => {
         onApply={jest.fn()}
         onClose={jest.fn()}
         mustVisitCount={mustVisitCount}
+        outsideRegionCount={outsideRegionCount}
       />
     );
   }
 
   // 두 값(7·3)을 각각 태워 "N 이 하드코딩이 아니라 입력을 반영한다"까지 잠근다(code-critic 참고-1).
-  it.each([7, 3])('count=%i 이면 그 수가 그대로 안내문에 박힌다', (count) => {
-    renderWithCount(count);
+  it.each([7, 3])(
+    'count=%i 이고 지역 밖이 없으면 "여행지를 바꿔도 그대로 남아요"라고 말하고, 정리를 약속하지 않는다',
+    (count) => {
+      renderWithCount(count);
 
-    const note = screen.getByTestId('trip-wizard-destination-note');
-    expect(note).toBeOnTheScreen();
-    expect(note).toHaveTextContent(
-      `꼭 갈 곳 ${count}곳이 여행지에 맞춰 정리돼요`
-    );
+      const note = screen.getByTestId('trip-wizard-destination-note');
+      // toHaveTextContent(문자열) 는 완전 일치다(02a §5).
+      expect(note).toHaveTextContent(
+        `꼭 갈 곳 ${count}곳은 여행지를 바꿔도 그대로 남아요`
+      );
+      expect(note).not.toHaveTextContent(/정리/);
+    }
+  );
+
+  it('지역 밖이 1곳이면 그 사실을 말한다 (숫자는 지역 밖 수)', () => {
+    renderWithCount(3, 1);
+
+    expect(
+      screen.getByTestId('trip-wizard-destination-note')
+    ).toHaveTextContent('꼭 갈 곳 중 1곳은 이 여행 지역 밖이에요');
+  });
+
+  it('지역 밖이 0곳이면 지역 밖 문구가 아니라 "그대로 남아요" 문구다', () => {
+    renderWithCount(3, 0);
+
+    expect(
+      screen.getByTestId('trip-wizard-destination-note')
+    ).toHaveTextContent('꼭 갈 곳 3곳은 여행지를 바꿔도 그대로 남아요');
   });
 
   it('count 가 0 이면 안내문을 안 그린다 (Figma 근거 없음 §F)', () => {

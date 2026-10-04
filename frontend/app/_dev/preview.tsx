@@ -4260,6 +4260,23 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1234 — 담은 장소로 넘어온 꼭 갈 곳 중 지역 밖이 있을 때 [다음] 위 안내 줄([빼기]·[그대로 두기]).
+  // Figma 프레임 없음(배너 토큰 재사용). 줄 높이·버튼 줄바꿈·[다음]과의 간격은 jest 사각이라 이 키가 6-b 자리다.
+  {
+    key: 'trip-new-step1-outside-region',
+    band: 'g',
+    label: 'g01 · 여행 만들기 지역 밖 안내',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        mustVisits={MUST_VISIT_THUMBNAILS}
+        outsideRegionCount={1}
+        onRemoveOutsideRegion={noop}
+        onKeepOutsideRegion={noop}
+      />
+    ),
+  },
   // g01 여행지 편집 시트(TRIP-666, Figma `3626:2070`) — 시트 열린 상태. `DestinationEditSheet`은
   // props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다.
   // jest 는 스테퍼 원·점선 추가 버튼·시트 딤/개폐를 못 봐(바텀시트 통과형 목) 이 키가 유일한

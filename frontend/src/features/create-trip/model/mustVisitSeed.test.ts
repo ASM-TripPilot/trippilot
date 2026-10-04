@@ -104,20 +104,29 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
     // 사진은 있으면 그 값 없으면 null. **기본 이미지를 지어내지 않는다**(계약 주석 명시).
     // 지역(TRIP-685)은 `place.region` 을 무가공으로 나른다 — 입력 픽스처가 이미 '수영구'라
     // 기대 객체에 region 을 안 더하면 관통 구현 후 `toEqual`(정확 일치)이 red (02a ★2 계약 플립 #1).
+    // TRIP-1234: 지역 코드도 나른다 — makePlace 에 코드가 없으니 null(키는 있어야 한다).
     expect(seeds).toEqual([
       {
         sourcePoiId: 'poi-1',
         name: '감천마을',
         imageUrl: 'https://cdn.example.com/a.jpg',
         region: '수영구',
+        regionCode: null,
       },
       {
         sourcePoiId: 'poi-2',
         name: '광안리',
         imageUrl: null,
         region: '수영구',
+        regionCode: null,
       },
-      { sourcePoiId: 'poi-3', name: '전포', imageUrl: null, region: '수영구' },
+      {
+        sourcePoiId: 'poi-3',
+        name: '전포',
+        imageUrl: null,
+        region: '수영구',
+        regionCode: null,
+      },
     ]);
   });
 
@@ -132,9 +141,38 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
 
     // 값이 없으면 지어내지 않고 null — INV-1(발명 금지) 정신을 region 에 적용(브리프 AC-1).
     expect(seeds).toEqual([
-      { sourcePoiId: 'poi-1', name: '감천마을', imageUrl: null, region: null },
-      { sourcePoiId: 'poi-2', name: '광안리', imageUrl: null, region: null },
+      {
+        sourcePoiId: 'poi-1',
+        name: '감천마을',
+        imageUrl: null,
+        region: null,
+        regionCode: null,
+      },
+      {
+        sourcePoiId: 'poi-2',
+        name: '광안리',
+        imageUrl: null,
+        region: null,
+        regionCode: null,
+      },
     ]);
+  });
+
+  // TRIP-1234 AC-1 — 지역 판정(BR-U1-58)의 재료. step1 이 여행지와 맞춰 보려면 시드가 코드를 들고 와야 한다.
+  it('N1-1c 지역 코드를 그대로 나르고, 없으면(null·undefined) 지어내지 않고 null 이다', () => {
+    // 준비 — 남원(전북 시군구 5자리) · 코드 null · 코드 키 없음.
+    const given: SavedPlace[] = [
+      savedPlace('sp-1', 'poi-1', { nameKo: '광한루원', regionCode: '52190' }),
+      savedPlace('sp-2', 'poi-2', { nameKo: '경복궁', regionCode: null }),
+      savedPlace('sp-3', 'poi-3', { nameKo: '광안리', regionCode: undefined }),
+    ];
+
+    // 실행
+    const seeds = seedMustVisits(given);
+
+    // 단언 — 순서대로 '52190', null, null. `toEqual` 은 null 과 undefined 를 가르므로 "키를 안 만드는"
+    // 구현도 여기서 red 다.
+    expect(seeds.map((seed) => seed.regionCode)).toEqual(['52190', null, null]);
   });
 
   it('N1-2 같은 장소가 두 행으로 와도 한 번만 담고 첫 등장 순서를 지킨다', () => {
