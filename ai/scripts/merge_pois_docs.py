@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     non_travel_reason,
-    parse_open_hours,
+    parse_opening_hours_raw,
 )
 
 
@@ -77,6 +77,10 @@ def reparse_open_hours(proposals: list[dict]) -> int:
     외부 호출 0. 원문(`opening_hours_raw`)이 정본이고 `open_hours` 는 그 파생이라,
     파생을 최신 규칙으로 다시 내는 것은 데이터를 바꾸는 게 아니다. 이미 값이
     있으면 건드리지 않는다 — 수집 시점 판정을 병합이 뒤집지 않는다.
+
+    원문 칸에 휴무가 함께 실려 있으면 갈라서 읽는다(TRIP-1226). 종전에는 휴무 없이
+    읽어서, 여기서 채운 6,055건(#729·#740)은 휴무가 빠진 채 굳었다 — 공유본에 휴무
+    원문이 없어 재수집 없이는 못 되살린다(`backfill_rest_days.py` 는 수집 때 파싱분만 되살린다).
     """
     n = 0
     for p in proposals:
@@ -84,7 +88,7 @@ def reparse_open_hours(proposals: list[dict]) -> int:
         raw = p.get("opening_hours_raw")
         if poi.get("open_hours") or not raw:
             continue
-        hours = parse_open_hours(raw, None)
+        hours = parse_opening_hours_raw(raw)
         if hours:
             poi["open_hours"] = [asdict(h) for h in hours]
             n += 1

@@ -178,6 +178,45 @@ def test_분리_영업은_앞_창만_쓴다() -> None:
     assert all((oh.open_min, oh.close_min) == (540, 780) for oh in poi.open_hours)
 
 
+# ── 원문 칸에 실려 오는 휴무 (TRIP-1226) ─────────────────────────────────
+
+
+def test_원문_칸의_휴무가_런타임에_반영된다() -> None:
+    """수집이 영업 원문 뒤에 휴무 원문을 붙여 보낸다 — 갈라 읽지 않으면 월요일에도 영업이다.
+
+    종전에는 이 칸을 휴무 없이(`parse_open_hours(원문, None)`) 읽어서, 수집 때 반영된
+    주간 휴무가 런타임에 사라졌다(2026-10-02 실측: 주간 휴무 FOOD 312건).
+    """
+    db, _ = _db([_row(opening_hours="09:00~18:00\n휴무: 매주 월요일")])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert [oh.day_of_week for oh in poi.open_hours] == [1, 2, 3, 4, 5, 6]
+    assert all((oh.open_min, oh.close_min) == (540, 1080) for oh in poi.open_hours)
+
+
+@pytest.mark.parametrize("rest", [
+    "매월 첫째 주 월요일",
+    "매주 월요일, 1월 1일, 설날 및 추석 당일",   # 박물관 전형 — 주간 휴무가 있어도 명절이 섞이면 포기
+    "-",                                     # 요일 없는 문구도 해석 불가다
+])
+def test_해석할_수_없는_휴무면_수집_때처럼_포기한다(rest: str) -> None:
+    """`첫째 주` 같은 휴무는 주간 스케줄로 못 쓴다 — 7일 영업으로 읽으면 닫힌 날에 일정이 들어간다.
+
+    대가: 이 POI 는 "정보 없음"이라 HC1 이 안 걸린다(종전엔 휴무가 칸에 없어 7일 창이었다).
+    그래도 수집과 같게 읽는다 — 결정·실측은 data/README 「휴무를 해석 못 하는 POI」.
+    """
+    db, _ = _db([_row(opening_hours=f"09:00~18:00\n휴무: {rest}")])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert poi.open_hours == ()
+
+
+def test_구분자_없는_옛_원문은_종전대로_읽는다() -> None:
+    """백필 전 적재분·다른 출처 원문 — 휴무 칸이 없으면 종전과 같은 7일이다(하위호환)."""
+    db, _ = _db([_row(opening_hours="10:00~22:00<br>※ 휴무일 및 운영시간은 업체 사정에 따라 변동")])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert len(poi.open_hours) == 7
+    assert all((oh.open_min, oh.close_min) == (600, 1320) for oh in poi.open_hours)
+
+
 def test_manual_source_maps_to_seed() -> None:
     db, _ = _db([_row(source="MANUAL"), _row(poi_id="x", source="KAKAO_LOCAL")])
     manual, kakao = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)

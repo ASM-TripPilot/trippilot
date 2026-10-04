@@ -36,8 +36,10 @@ from trippilot.poi_curation.sourcing.collection_gate import (
 from trippilot.poi_curation.sourcing.mapping import (
     category_tags,
     extract_region,
+    join_opening_hours_raw,
     map_category,
     parse_open_hours,
+    parse_opening_hours_raw,
 )
 from trippilot.poi_curation.sourcing.state import (
     CollectState,
@@ -51,7 +53,6 @@ SCHEMA_VERSION = 1
 # 백엔드 poi.source CHECK 허용값('KAKAO_LOCAL'|'TOURAPI'|'MANUAL'|'LOCALDATA')과 동일 어휘.
 # 실제 피드는 TourAPI 4.0 KorService2.
 SOURCE_NAME = "TOURAPI"
-_OPENING_HOURS_MAX = 200  # backend poi.opening_hours varchar(200)
 _NO_DETAIL = SourcedDetail(hours_raw=None, rest_raw=None)
 
 # TourAPI(KorService2) areaCode ↔ 광역 지자체 이름 — 17개 전부 (기본 순회 대상).
@@ -98,6 +99,13 @@ class CollectStats:
     address_missing: int = 0
     resumed_from: dict[str, int] = field(default_factory=dict)  # kind → 재개 시작 pageNo (>1만)
     completed_kinds: tuple[str, ...] = ()         # 이번 실행 종료 시점 완주 상태인 kind
+    # ── 원문 칸이 런타임에 읽히는 모양 (TRIP-1226, 통과분 기준) ──
+    # 휴무를 해석 못 해 영업시간을 포기한 수 — 영업 원문만으로는 창이 읽힌다. 휴무 문구도
+    # 원문 칸에 실리므로 런타임도 "정보 없음"(HC1 미적용)이다. 결정·실측: ai/data/README.md
+    rest_unparsed: int = 0
+    # 원문 칸을 다시 파싱한 값 ≠ 수집 판정 — 200자 절단·중복 병합(영업시간과 원문의 출처가
+    # 갈림). 런타임은 원문 칸만 읽으므로 이 건들은 수집과 다른 영업시간으로 쓰인다
+    raw_reparse_mismatch: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -114,6 +122,8 @@ class CollectStats:
             "skipped_unchanged": self.skipped_unchanged,
             "resumed_from": dict(self.resumed_from),
             "completed_kinds": list(self.completed_kinds),
+            "rest_unparsed": self.rest_unparsed,
+            "raw_reparse_mismatch": self.raw_reparse_mismatch,
         }
 
 
@@ -278,6 +288,7 @@ def collect(
             category_codes=record.category_codes,
             open_hours=parse_open_hours(hours.hours_raw, hours.rest_raw),
             hours_raw=hours.hours_raw,
+            rest_raw=hours.rest_raw,
             image_url=record.image_url,
             modified_at=record.modified_at,
             detail_raw=hours.detail_raw,
@@ -308,6 +319,16 @@ def collect(
         if (c := cursors.get((area_code, kind))) is not None and c.completed
     )
 
+    # 원문 칸이 런타임에 어떻게 읽히는지 센다 (TRIP-1226 — 침묵 금지, CollectStats 주석)
+    rest_unparsed = raw_reparse_mismatch = 0
+    for p in report.passed:
+        cand = p.candidate
+        if not p.poi.open_hours and parse_open_hours(cand.hours_raw, None):
+            rest_unparsed += 1
+        raw = join_opening_hours_raw(cand.hours_raw, cand.rest_raw)
+        if parse_opening_hours_raw(raw) != p.poi.open_hours:
+            raw_reparse_mismatch += 1
+
     stats = CollectStats(
         http_calls=budget.used,
         listed=len(listed),
@@ -322,6 +343,8 @@ def collect(
         skipped_unchanged=skipped_unchanged,
         resumed_from=resumed_from,
         completed_kinds=completed_kinds,
+        rest_unparsed=rest_unparsed,
+        raw_reparse_mismatch=raw_reparse_mismatch,
     )
     logger.info("수집 완료: %s", stats.to_dict())
     return CollectResult(
@@ -346,8 +369,10 @@ def to_output_document(
     백엔드 poi 정본 스키마(V2.0·V2.5) 실측 대조로 병행 수록하는 필드:
     - tags: cat2/cat3 분류 **명칭** 배열 (poi.tags text[] — 열린 집합)
     - region: addr1에서 추출한 시·군·구 (poi.region — 추출 실패 시 null)
-    - opening_hours_raw: usetime 원문 200자 절단 (poi.opening_hours varchar(200)
-      — 백엔드는 원문 문자열을 저장하므로 파싱본만 주면 원문이 소실된다)
+    - opening_hours_raw: usetime 원문 + 휴무(restdate) 원문을 한 칸에 200자 이내로
+      (poi.opening_hours varchar(200) — 백엔드는 원문 문자열을 저장하므로 파싱본만 주면
+      원문이 소실된다. AI 런타임은 이 칸을 다시 파싱하므로 휴무도 여기 있어야 한다 —
+      형식은 mapping.join_opening_hours_raw, TRIP-1226)
     - source: 백엔드 CHECK 허용값 어휘 "TOURAPI"
     - provenance.detail: 상세 응답의 표시용 원문(벤더 필드명 그대로, 비파싱). 하나도
       없으면 **키 자체가 없다** — 소비처는 `.get("detail") or {}` 로 읽는다.
@@ -366,7 +391,8 @@ def to_output_document(
                 "poi": p.poi.to_dict(),
                 "tags": list(category_tags(p.candidate.category_codes)),
                 "region": extract_region(p.candidate.address),
-                "opening_hours_raw": _truncate(p.candidate.hours_raw, _OPENING_HOURS_MAX),
+                "opening_hours_raw": join_opening_hours_raw(
+                    p.candidate.hours_raw, p.candidate.rest_raw),
                 "provenance": _provenance(p.candidate),
             }
             for p in result.report.passed
@@ -385,13 +411,6 @@ def _provenance(c: SourcingCandidate) -> dict:
     if c.detail_raw:
         prov["detail"] = dict(c.detail_raw)
     return prov
-
-
-def _truncate(text: str | None, limit: int) -> str | None:
-    """저장 상한에 맞춰 자른다(거부 아님) — 잘림은 말줄임표로 드러낸다 (안티패턴 로그)."""
-    if text is None or len(text) <= limit:
-        return text
-    return text[: limit - 1] + "…"
 
 
 # ── 전국 다지역 공평 순회 (TRIP-246 후속) ─────────────────────────────
@@ -507,6 +526,7 @@ def to_multi_output_document(
         "http_calls": 0, "listed": 0, "page_failures": 0, "detail_failures": 0,
         "category_unmapped": 0, "address_missing": 0,
         "merged": 0, "passed": 0, "skipped_unchanged": 0,
+        "rest_unparsed": 0, "raw_reparse_mismatch": 0,
     }
     gate_drops: dict[str, int] = {}
     budget_exhausted = False
@@ -526,6 +546,8 @@ def to_multi_output_document(
         totals["merged"] += s.merged
         totals["passed"] += s.passed
         totals["skipped_unchanged"] += s.skipped_unchanged
+        totals["rest_unparsed"] += s.rest_unparsed
+        totals["raw_reparse_mismatch"] += s.raw_reparse_mismatch
         for reason, count in s.gate_drops.items():
             gate_drops[reason] = gate_drops.get(reason, 0) + count
         budget_exhausted = budget_exhausted or s.budget_exhausted

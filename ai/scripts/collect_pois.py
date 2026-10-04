@@ -98,6 +98,9 @@ def _print_summary(json_path: str) -> int:
     print(f"| 재개 지점 | {resumed_txt} |")
     completed = stats.get("completed_kinds") or []
     print(f"| 완주 타입 | {', '.join(completed) or '—'} |")
+    # TRIP-1226 — 런타임은 원문 칸만 다시 읽는다. 과거 산출 JSON에는 없다(— 표시)
+    print(f"| 휴무 해석 불가로 영업시간 포기 | {stats.get('rest_unparsed', '—')} |")
+    print(f"| 원문 칸 재파싱 ≠ 수집 판정 | {stats.get('raw_reparse_mismatch', '—')} |")
     per_area = stats.get("per_area") or {}
     if per_area:
         print()

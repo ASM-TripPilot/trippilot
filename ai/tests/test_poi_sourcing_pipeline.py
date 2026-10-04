@@ -20,6 +20,11 @@ from trippilot.poi_curation.sourcing.collection_gate import (
     CollectionGate,
     SourcingCandidate,
 )
+from trippilot.poi_curation.sourcing.mapping import (
+    REST_SEP,
+    parse_opening_hours_raw,
+    split_opening_hours_raw,
+)
 from trippilot.poi_curation.sourcing.pipeline import collect, to_output_document
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
@@ -47,13 +52,14 @@ def _candidate(
     image_url: str | None = None,
     address: str | None = "제주특별자치도 서귀포시 성산읍",
     detail_raw: dict[str, str] | None = None,
+    rest_raw: str | None = None,
 ) -> SourcingCandidate:
     return SourcingCandidate(
         source_ref=ref, kind="12", name=name, address=address, lat=lat, lng=lng,
         category=category, category_codes=("A01", "A0101", "A01010400"),
         open_hours=open_hours, hours_raw=hours_raw,
         image_url=image_url, modified_at="20260801120000",
-        detail_raw=detail_raw or {},
+        detail_raw=detail_raw or {}, rest_raw=rest_raw,
     )
 
 
@@ -79,7 +85,8 @@ def test_gate_merges_near_duplicates_filling_missing_hours() -> None:
     hours = (OpenHour(0, 540, 1080),)
     report = CollectionGate().apply([
         _candidate("1"),
-        _candidate("2", lat=33.4621, open_hours=hours, hours_raw="09:00~18:00"),
+        _candidate("2", lat=33.4621, open_hours=hours, hours_raw="09:00~18:00",
+                   rest_raw="매주 화요일"),
         _candidate("3", name="성산 일출봉", lat=33.4622,   # 공백 정규화로도 동명
                    detail_raw={"parking": "가능"}),
     ])
@@ -88,6 +95,7 @@ def test_gate_merges_near_duplicates_filling_missing_hours() -> None:
     assert kept.poi.poi_id == "tourapi-1"           # 먼저 온 레코드 유지
     assert kept.poi.open_hours == hours             # 결측 영업시간은 병합으로 보충
     assert kept.candidate.hours_raw == "09:00~18:00"
+    assert kept.candidate.rest_raw == "매주 화요일"    # 휴무 원문은 영업 원문의 짝으로 따라온다
     assert kept.candidate.detail_raw == {"parking": "가능"}  # 상세 원문도 같은 규칙
     assert report.drops == {}                        # 병합은 드롭이 아니다
 
@@ -267,7 +275,9 @@ def test_output_document_schema_roundtrip_and_backend_fields() -> None:
     assert p100["source"] == "TOURAPI"
     assert p100["tags"] == ["자연관광지", "산"]        # cat2/cat3 코드가 아니라 명칭
     assert p100["region"] == "제주시"                 # addr1에서 시·군·구 추출
-    assert p100["opening_hours_raw"] == "07:00~20:00"  # 파싱본과 별개로 원문 병행
+    # 파싱본과 별개로 원문 병행 — 휴무 원문도 같은 칸에 (런타임은 이 칸만 다시 파싱한다, TRIP-1226)
+    assert p100["opening_hours_raw"] == "07:00~20:00\n휴무: 연중무휴"
+    assert proposals["tourapi-300"]["opening_hours_raw"] == "09:00~18:00\n휴무: 매주 일요일"
     assert p100["provenance"]["content_id"] == "100"
     # 스킴은 어댑터가 올려 둔다 — 평문 HTTP 이미지는 iOS ATS 가 조용히 차단한다
     assert p100["provenance"]["image_url"] == "https://img/100.jpg"
@@ -275,10 +285,16 @@ def test_output_document_schema_roundtrip_and_backend_fields() -> None:
     for p in restored["proposals"]:
         poi = Poi.from_dict(p["poi"])
         assert str(poi.poi_id) == p["provisional_id"]
+        # 런타임이 원문 칸에서 읽는 영업시간 == 수집이 읽은 영업시간 (휴무 포함)
+        assert parse_opening_hours_raw(p["opening_hours_raw"]) == poi.open_hours
 
 
 def test_output_document_truncates_long_opening_hours_raw() -> None:
-    """backend opening_hours varchar(200) — 거부가 아니라 절단 + 말줄임표."""
+    """backend opening_hours varchar(200) — 거부가 아니라 절단 + 말줄임표.
+
+    휴무 원문은 보존하고 영업 원문을 먼저 자른다(TRIP-1226) — 휴무가 잘려 나가면
+    런타임이 휴무일에도 영업으로 읽는다.
+    """
     long_hours = "10:00~22:00 " + "브레이크타임 안내 " * 30
     http = FakeTourApiHttp(
         pages={("39", 1): envelope([list_item(
@@ -290,7 +306,76 @@ def test_output_document_truncates_long_opening_hours_raw() -> None:
     doc = to_output_document(result, area_code="39", content_types=["39"],
                              collected_at=_NOW)
     raw = doc["proposals"][0]["opening_hours_raw"]
-    assert len(raw) == 200 and raw.endswith("…")
+    assert len(raw) == 200 and raw.endswith(REST_SEP + "연중무휴")
+    hours, rest = split_opening_hours_raw(raw)
+    assert hours.endswith("…") and rest == "연중무휴"
+
+
+_MUSEUM_REST = "매주 월요일, 1월 1일, 설날 및 추석 당일"   # 박물관 휴무의 전형 — 파서가 해석 못 한다
+
+
+def test_휴무를_해석_못_해_영업시간을_포기한_건을_센다() -> None:
+    """수집은 해석 못 하는 휴무가 섞이면 영업시간을 통째로 포기한다(`()`). 원문 칸에 휴무를
+    함께 싣는 이상 런타임도 같은 `()` 다 — HC1 미적용, 종전엔 휴무가 칸에 없어 7일 창이었다.
+
+    휴무 문구는 그래도 싣는다(결정·실측: data/README 「휴무를 해석 못 하는 POI」). 여기서는
+    그 건수가 실행마다 stats 로 드러나는지 본다. 영업 원문을 못 읽은 것·상시 개방은 휴무
+    탓이 아니라 세지 않는다.
+    """
+    http = FakeTourApiHttp(
+        pages={("14", 1): envelope([
+            list_item(cid, name, contenttypeid="14")
+            for cid, name in (("700", "박물관"), ("701", "미술관"), ("702", "기념관"), ("703", "야외전시장"))
+        ], 4)},
+        intros={
+            "700": envelope([intro_item("700", "14", "09:00~18:00", _MUSEUM_REST)], 1),
+            "701": envelope([intro_item("701", "14", "09:00~18:00", "매주 월요일")], 1),
+            "702": envelope([intro_item("702", "14", "전화 문의", "명절 당일")], 1),
+            "703": envelope([intro_item("703", "14", "상시 개방", "설날 당일")], 1),
+        },
+    )
+    result = collect(_adapter(http), area_code="39", content_types=["14"], max_calls=500)
+    assert result.stats.passed == 4
+    assert result.stats.rest_unparsed == 1
+    doc = to_output_document(result, area_code="39", content_types=["14"], collected_at=_NOW)
+    assert doc["stats"]["rest_unparsed"] == 1
+    p700 = next(p for p in doc["proposals"] if p["provisional_id"] == "tourapi-700")
+    assert p700["opening_hours_raw"] == "09:00~18:00" + REST_SEP + _MUSEUM_REST   # 문구는 화면에 나간다
+    assert p700["poi"]["open_hours"] == []
+    assert parse_opening_hours_raw(p700["opening_hours_raw"]) == ()               # 런타임 == 수집
+
+
+def test_원문_칸_재파싱이_수집_판정과_다르면_센다() -> None:
+    """런타임은 원문 칸만 다시 읽는다 — 칸이 수집 판정과 다르게 읽히는 통과분을 센다.
+
+    ① 200자 절단이 휴무의 요일 토큰을 잘라냈다(수집은 월요일 휴무, 칸은 해석 불가 → `()`)
+    ② 중복 병합이 영업시간은 뒤 레코드에서, 원문은 앞 레코드에서 가져왔다
+    """
+    long_rest = "매주 " + "※ 사정에 따라 변동될 수 있음 " * 6 + "월요일"
+    http = FakeTourApiHttp(
+        pages={("12", 1): envelope([
+            list_item("800", "긴휴무관", mapx="126.60"),
+            list_item("801", "성산일출봉"),
+            list_item("802", "성산일출봉"),          # 801 과 같은 자리·이름 → 병합
+            list_item("803", "멀쩡한곳", mapx="126.70"),
+        ], 4)},
+        intros={
+            "800": envelope([intro_item("800", "12", "09:00~18:00 " + "관람 안내 " * 20, long_rest)], 1),
+            "801": envelope([intro_item("801", "12", "전화 문의", "")], 1),
+            "802": envelope([intro_item("802", "12", "09:00~18:00", "")], 1),
+            "803": envelope([intro_item("803", "12", "09:00~18:00", "매주 월요일")], 1),
+        },
+    )
+    result = collect(_adapter(http), area_code="39", content_types=["12"], max_calls=500)
+    assert result.stats.merged == 1 and result.stats.passed == 3
+    assert result.stats.raw_reparse_mismatch == 2
+    assert result.stats.rest_unparsed == 0     # 수집 판정은 셋 다 창이 있다
+    doc = to_output_document(result, area_code="39", content_types=["12"], collected_at=_NOW)
+    mismatched = {p["provisional_id"] for p in doc["proposals"]
+                  if parse_opening_hours_raw(p["opening_hours_raw"])
+                  != Poi.from_dict(p["poi"]).open_hours}
+    assert mismatched == {"tourapi-800", "tourapi-801"}
+    assert doc["stats"]["raw_reparse_mismatch"] == 2
 
 
 def test_output_document_carries_detail_raw_only_when_present() -> None:
