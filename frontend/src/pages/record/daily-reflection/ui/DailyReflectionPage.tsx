@@ -7,6 +7,7 @@ import {
   missingParts,
   type LocationPermissionState,
 } from '../model/missingParts';
+import { fillTemplate } from '../model/fillTemplate';
 import { resolveDisplayNarrative } from '../model/reflectionFallback';
 import { statsCard } from '../model/statsCard';
 import { useDailyReflection } from '../model/useDailyReflection';
@@ -123,8 +124,34 @@ export function DailyReflectionPage({
 
   const stats = statsCard(res?.stats);
   const missing = missingParts(stats, permission);
-  const narrative = resolveDisplayNarrative(res);
-  const editableText = res?.card?.subtitle ?? '';
+  // TRIP-1212 · 서버·AI 가 미치환 템플릿(`{region} · {start_date}~{end_date}`)을 내려줘도 값을 주입하고,
+  // 값이 없어 비면 중괄호 없는 stats 문장으로 폴백한다(편집 시드는 '' — 글자로 채우지 않는다).
+  const templateCtx = {
+    region:
+      trip.data?.destinations
+        ?.map((d) => d.region)
+        .filter(Boolean)
+        .join(', ') || undefined,
+    startDate,
+    endDate,
+  };
+  const resolvedNarrative = fillTemplate(
+    resolveDisplayNarrative(res),
+    templateCtx
+  );
+  const narrative =
+    resolvedNarrative ||
+    resolveDisplayNarrative(
+      res
+        ? {
+            ...res,
+            card: undefined,
+            editedCard: undefined,
+            draftCard: undefined,
+          }
+        : undefined
+    );
+  const editableText = fillTemplate(res?.card?.subtitle ?? '', templateCtx);
   // ISO 'YYYY-MM-DD' 는 사전순 = 시간순(monthGrid.isDateInRange 선례).
   const notFuture = date <= today;
 

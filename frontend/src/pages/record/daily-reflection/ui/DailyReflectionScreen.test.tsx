@@ -1045,3 +1045,31 @@ describe('TRIP-1211 · 긴 글 편집 — 키보드가 저장·취소를 가리�
     ).toBe(true);
   });
 });
+
+describe('TRIP-1212 · 입력칸에 안내문이 글자로 채워지지 않는다', () => {
+  const GUIDE =
+    '이 날은 기록된 방문이 없어요. 다녀온 곳을 남기면 회고가 채워져요.';
+
+  it('편집 시드가 서버 안내문이면 입력칸은 비어 있고 placeholder 만 보인다', () => {
+    renderScreen({ face: 'empty', editableText: GUIDE, narrative: GUIDE });
+    fireEvent.press(screen.getByTestId('reflection-daily-compose'));
+
+    const input = screen.getByTestId('reflection-daily-edit-input');
+    expect(input.props.value).toBe('');
+    expect(input.props.placeholder).toBeTruthy();
+    expect(screen.getByTestId('reflection-daily-edit-save')).toBeDisabled();
+  });
+
+  it('안내문 글자를 그대로 두고 저장 눌러도 저장 콜백 0회', () => {
+    const { onSaveEdit } = renderScreen({ face: 'empty' });
+    fireEvent.press(screen.getByTestId('reflection-daily-compose'));
+    fireEvent.changeText(
+      screen.getByTestId('reflection-daily-edit-input'),
+      GUIDE
+    );
+
+    expect(screen.getByTestId('reflection-daily-edit-save')).toBeDisabled();
+    fireEvent.press(screen.getByTestId('reflection-daily-edit-save'));
+    expect(onSaveEdit).not.toHaveBeenCalled();
+  });
+});

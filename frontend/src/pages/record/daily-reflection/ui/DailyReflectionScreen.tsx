@@ -19,6 +19,7 @@ import type { ReflectionStats } from '@/shared/api/index.schemas';
 
 import type { MapNotice } from '../model/missingParts';
 import { ChangeSummaryRow } from './ChangeSummaryRow';
+import { isGuideText } from '../model/fillTemplate';
 import { NarrativeBlock } from './NarrativeBlock';
 import {
   BackArrowGlyph,
@@ -133,12 +134,13 @@ export function DailyReflectionScreen({
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(editableText);
   const [saveFailed, setSaveFailed] = useState(false);
-  const canSave = text.trim().length > 0;
+  // 서버 기본 안내문은 회고 글이 아니다(TRIP-1212) — 그대로 저장되면 안내문이 회고로 남는다.
+  const canSave = text.trim().length > 0 && !isGuideText(text);
   const isDataFace = face === 'default' || face === 'data-insufficient';
 
   const handleEnterEdit = () => {
     onEnterEdit();
-    setText(editableText);
+    setText(isGuideText(editableText) ? '' : editableText);
     setSaveFailed(false);
     setEditing(true);
   };
