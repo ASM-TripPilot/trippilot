@@ -144,6 +144,12 @@ uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/
   없다. ⚠️ **기수집분에는 없다** — 증분 색인이 "변경 없음"을 스킵해 상세를 다시 안 받으므로, 이 키는
   2026-09-19 이후 신규·변경분에만 붙는다. 소급은 항목당 1콜 — 전량이면 며칠치 일일 예산이고, 그건 장소 상세
   4필드 수집(TRIP-897 — `detailCommon`·`detailImage2`)과 같은 되감기 패스에서 한 번에 받는 것이 맞다
+- `opening_hours_raw` — 백엔드 `poi.opening_hours varchar(200)` 로 그대로 가는 **원문 칸**이다. 영업 원문 뒤에
+  휴무 원문을 `\n휴무: ` 로 이어 싣는다(TRIP-1226 — AI 런타임은 이 칸만 다시 파싱하므로 휴무가 여기 없으면
+  휴무일에도 영업으로 읽힌다). 200자를 넘으면 휴무를 보존하고 영업을 먼저 자른다. 형식 정본은 `mapping.py` 의
+  `join_opening_hours_raw`·`split_opening_hours_raw`. ⚠️ 기수집분의 휴무는 `scripts/backfill_rest_days.py` 가
+  `open_hours` 에서 **합성한 정형 문구**(`매주 월요일`)이지 벤더 원문이 아니다. 병합 재파싱(`merge_pois_docs`)이
+  채운 `open_hours` 는 처음부터 휴무 없이 읽힌 것이라 백필로 못 되살렸다 — 재수집으로만 고쳐진다
 
 ### 요금 값이 어디 있나 — 실측 (2026-09-19, TRIP-902)
 

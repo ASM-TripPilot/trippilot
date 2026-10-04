@@ -77,6 +77,51 @@ def test_pbt_reparse_is_idempotent_and_counts_exactly(raws) -> None:
     assert [list(p["poi"]["open_hours"]) for p in props] == snapshot
 
 
+# ── 원문 칸의 휴무 (TRIP-1226) ──────────────────────────────────────────
+
+
+def _week(days, open_min: int = 540, close_min: int = 1080) -> list[dict]:
+    return [{"day_of_week": d, "open_min": open_min, "close_min": close_min} for d in days]
+
+
+def test_reparse_reads_rest_carried_in_raw() -> None:
+    """원문 칸에 휴무가 실려 있으면 갈라 읽는다 — 통째로 읽으면 월요일에도 영업이다."""
+    p = _prop("1", "09:00~18:00\n휴무: 매주 월요일")
+    assert reparse_open_hours([p]) == 1
+    assert p["poi"]["open_hours"] == _week(range(1, 7))
+
+
+def test_reparse_does_not_fill_rest_the_collector_gave_up_on() -> None:
+    """수집이 포기한 휴무(첫째 주 등)를 병합이 7일 영업으로 채우지 않는다 — 종전엔 채웠다."""
+    p = _prop("1", "09:00~18:00\n휴무: 매월 첫째 주 월요일")
+    assert reparse_open_hours([p]) == 0
+    assert p["poi"]["open_hours"] == []
+
+
+def test_daily_merge_keeps_backfilled_rest_and_new_collection_still_wins() -> None:
+    """일일 병합(공유본 + 금일 산출물)이 백필을 되돌리지 않는다.
+
+    재제안이 없는 제안은 백필된 원문 그대로 남고, 재제안된 제안은 나중 수집분이 이긴다 —
+    그 수집분은 파이프라인이 휴무를 함께 싣는 형식이라 휴무가 다시 사라지지 않는다.
+    """
+    base = {"schema_version": 1, "source": "TOURAPI", "area_codes": ["1"], "content_types": ["39"]}
+    shared = {**base, "collected_at": "2026-10-02T00:00:00+00:00", "proposals": [
+        _prop("1", "09:00~18:00\n휴무: 매주 월요일", hours=_week(range(1, 7))),
+        _prop("2", "10:00~20:00\n휴무: 매주 화요일", hours=_week([0, 2, 3, 4, 5, 6], 600, 1200)),
+    ]}
+    today = {**base, "collected_at": "2026-10-05T00:00:00+00:00", "proposals": [
+        _prop("2", "10:00~21:00\n휴무: 매주 수요일", hours=_week([0, 1, 3, 4, 5, 6], 600, 1260)),
+        _prop("3", "09:00~18:00\n휴무: 매주 일요일"),   # 신규 — 파싱 빈칸이면 병합이 휴무까지 읽는다
+    ]}
+    out = merge([shared, today])
+    reparse_open_hours(out["proposals"])
+    by = {p["provenance"]["content_id"]: p for p in out["proposals"]}
+    assert by["1"]["opening_hours_raw"] == "09:00~18:00\n휴무: 매주 월요일"
+    assert by["1"]["poi"]["open_hours"] == _week(range(1, 7))
+    assert by["2"]["opening_hours_raw"] == "10:00~21:00\n휴무: 매주 수요일"
+    assert by["3"]["poi"]["open_hours"] == _week(range(6))
+
+
 # ── 병합 규칙 (기존 --self-check 를 pytest 로) ──────────────────────────
 
 

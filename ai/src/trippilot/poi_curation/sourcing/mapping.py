@@ -333,6 +333,62 @@ def _parse_rest_days(rest_raw: str | None) -> frozenset[int] | None:
     return frozenset(days)
 
 
+# ── 영업시간 원문 칸 (backend `poi.opening_hours varchar(200)`, TRIP-1226) ──────
+# 백엔드는 원문 한 칸만 저장하고(PoiProposalDtos.toCommand) AI 는 런타임에 그 칸을
+# 다시 파싱한다(backend_poi_db). 휴무 원문(restdate류)을 실을 칸이 따로 없어 영업 원문
+# 뒤에 붙인다 — 영업 원문만 실었을 때는 수집 때 반영한 주간 휴무가 런타임에 사라져
+# 휴무일에도 영업으로 읽혔다(2026-10-02 실측: 주간 휴무 FOOD 312건).
+#
+# 이 칸은 화면에도 그대로 나간다(FE 장소 상세가 `<br>` 만 줄바꿈으로 바꿔 그린다) —
+# 그래서 구분자를 읽히는 모양(줄바꿈 + `휴무: `)으로 정했다. 영업 원문에 같은 문자열이
+# 있으면 한 칸을 띄워 무력화하므로(파싱 결과는 그대로) **첫 등장이 곧 구분자**다.
+# 구분자는 앞머리와 꼬리가 겹치지 않는 문자열이라 경계에 걸친 가짜 등장도 없다.
+OPENING_HOURS_MAX = 200  # backend poi.opening_hours varchar(200)
+REST_SEP = "\n휴무: "
+_REST_SEP_DEFUSED = "\n휴무 : "
+
+
+def join_opening_hours_raw(
+    hours_raw: str | None, rest_raw: str | None, limit: int = OPENING_HOURS_MAX,
+) -> str | None:
+    """영업·휴무 원문 → 원문 칸 하나. 상한을 넘으면 **휴무를 보존하고 영업을 먼저 자른다**.
+
+    휴무 원문이 비었거나 영업 원문이 없으면 종전과 같다(영업 원문 절단만). 영업 원문
+    없이 휴무만 싣지 않는 이유: 백엔드가 이 칸의 유무로 "영업시간 확인됨"을 판정한다
+    (`SlotSurfaceAssembler.openingHoursKnown`).
+    """
+    if not hours_raw:
+        return hours_raw
+    hours = hours_raw.replace(REST_SEP, _REST_SEP_DEFUSED)
+    rest = (rest_raw or "").strip()
+    if not rest or not hours.strip():
+        return _truncate(hours, limit)
+    tail = REST_SEP + rest
+    # 영업을 먼저 자르되 절반 아래로는 안 내린다 — 긴 휴무 원문이 영업시간을 통째로 밀어내지 않게.
+    hours = _truncate(hours.rstrip(), max(limit - len(tail), limit // 2))
+    return hours + _truncate(tail, limit - len(hours))
+
+
+def split_opening_hours_raw(text: str | None) -> tuple[str | None, str | None]:
+    """원문 칸 → (영업 원문, 휴무 원문). 구분자가 없는 옛 원문은 (원문, None) — 종전 해석 그대로."""
+    if not text:
+        return text, None
+    hours, sep, rest = text.partition(REST_SEP)
+    return (hours, rest) if sep else (text, None)
+
+
+def parse_opening_hours_raw(text: str | None) -> tuple[OpenHour, ...]:
+    """원문 칸 → 주간 OpenHour. 수집 때와 같은 두 입력(영업·휴무)으로 같은 파서를 부른다."""
+    return parse_open_hours(*split_opening_hours_raw(text))
+
+
+def _truncate(text: str | None, limit: int) -> str | None:
+    """저장 상한에 맞춰 자른다(거부 아님) — 잘림은 말줄임표로 드러낸다 (안티패턴 로그)."""
+    if text is None or len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
 # ── 교차 출처 동일성 판정 (TRIP-682) ──────────────────────────────────────
 # 출처가 둘 이상이 되면 같은 가게가 서로 다른 source_ref 로 두 번 들어온다.
 # 좌표만으로는 부족하다 — 실측(TourAPI × LOCALDATA 동일 가게 6,886쌍): 중앙값

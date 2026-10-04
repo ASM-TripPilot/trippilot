@@ -36,6 +36,7 @@ from trippilot.poi_curation.sourcing.collection_gate import (
 from trippilot.poi_curation.sourcing.mapping import (
     category_tags,
     extract_region,
+    join_opening_hours_raw,
     map_category,
     parse_open_hours,
 )
@@ -51,7 +52,6 @@ SCHEMA_VERSION = 1
 # 백엔드 poi.source CHECK 허용값('KAKAO_LOCAL'|'TOURAPI'|'MANUAL'|'LOCALDATA')과 동일 어휘.
 # 실제 피드는 TourAPI 4.0 KorService2.
 SOURCE_NAME = "TOURAPI"
-_OPENING_HOURS_MAX = 200  # backend poi.opening_hours varchar(200)
 _NO_DETAIL = SourcedDetail(hours_raw=None, rest_raw=None)
 
 # TourAPI(KorService2) areaCode ↔ 광역 지자체 이름 — 17개 전부 (기본 순회 대상).
@@ -278,6 +278,7 @@ def collect(
             category_codes=record.category_codes,
             open_hours=parse_open_hours(hours.hours_raw, hours.rest_raw),
             hours_raw=hours.hours_raw,
+            rest_raw=hours.rest_raw,
             image_url=record.image_url,
             modified_at=record.modified_at,
             detail_raw=hours.detail_raw,
@@ -346,8 +347,10 @@ def to_output_document(
     백엔드 poi 정본 스키마(V2.0·V2.5) 실측 대조로 병행 수록하는 필드:
     - tags: cat2/cat3 분류 **명칭** 배열 (poi.tags text[] — 열린 집합)
     - region: addr1에서 추출한 시·군·구 (poi.region — 추출 실패 시 null)
-    - opening_hours_raw: usetime 원문 200자 절단 (poi.opening_hours varchar(200)
-      — 백엔드는 원문 문자열을 저장하므로 파싱본만 주면 원문이 소실된다)
+    - opening_hours_raw: usetime 원문 + 휴무(restdate) 원문을 한 칸에 200자 이내로
+      (poi.opening_hours varchar(200) — 백엔드는 원문 문자열을 저장하므로 파싱본만 주면
+      원문이 소실된다. AI 런타임은 이 칸을 다시 파싱하므로 휴무도 여기 있어야 한다 —
+      형식은 mapping.join_opening_hours_raw, TRIP-1226)
     - source: 백엔드 CHECK 허용값 어휘 "TOURAPI"
     - provenance.detail: 상세 응답의 표시용 원문(벤더 필드명 그대로, 비파싱). 하나도
       없으면 **키 자체가 없다** — 소비처는 `.get("detail") or {}` 로 읽는다.
@@ -366,7 +369,8 @@ def to_output_document(
                 "poi": p.poi.to_dict(),
                 "tags": list(category_tags(p.candidate.category_codes)),
                 "region": extract_region(p.candidate.address),
-                "opening_hours_raw": _truncate(p.candidate.hours_raw, _OPENING_HOURS_MAX),
+                "opening_hours_raw": join_opening_hours_raw(
+                    p.candidate.hours_raw, p.candidate.rest_raw),
                 "provenance": _provenance(p.candidate),
             }
             for p in result.report.passed
@@ -385,13 +389,6 @@ def _provenance(c: SourcingCandidate) -> dict:
     if c.detail_raw:
         prov["detail"] = dict(c.detail_raw)
     return prov
-
-
-def _truncate(text: str | None, limit: int) -> str | None:
-    """저장 상한에 맞춰 자른다(거부 아님) — 잘림은 말줄임표로 드러낸다 (안티패턴 로그)."""
-    if text is None or len(text) <= limit:
-        return text
-    return text[: limit - 1] + "…"
 
 
 # ── 전국 다지역 공평 순회 (TRIP-246 후속) ─────────────────────────────

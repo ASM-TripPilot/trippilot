@@ -13,6 +13,8 @@ POI 정본은 backend C7(place-data) 단일 소유(INV-1) — 본 어댑터는 S
 원문 문자열(structured 는 백엔드 후속)이라 수집 게이트와 같은 파서
 (`sourcing.mapping.parse_open_hours`)를 재사용한다 — 파싱 불가는 open_hours=()
 로 두고 지어내지 않는다(풀 빌더 ③은 정보 없음을 통과시키고 ⑤가 하위 정렬).
+원문 칸에는 휴무 원문도 함께 실려 오므로(TRIP-1226) 구분자로 갈라 수집 때와 같은
+두 입력으로 부른다(`parse_opening_hours_raw`) — 영업 원문만 넘기면 휴무일에도 영업이다.
 
 한 행이 매핑에 실패하면 스킵하되(풀 전체를 잃지 않는다) **누락을 값으로도 낸다**
 (TRIP-537, `lookup_by_ids`): 로그만 남기면 호출자는 N건을 물어 M건을 받고도 왜
@@ -37,7 +39,7 @@ from collections.abc import Mapping
 
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.poi_curation.sourcing.mapping import parse_open_hours
+from trippilot.poi_curation.sourcing.mapping import parse_opening_hours_raw
 from trippilot.ports.http_json_port import HttpJson
 from trippilot.ports.poi_db_port import PoiLookup, PoiMiss
 
@@ -247,7 +249,7 @@ class BackendPoiDb:
             name=row["name_ko"],
             category=_enum_or_raise(PoiCategory, row.get("category"), "category"),
             coord=GeoPoint(float(row["lat"]), float(row["lng"])),
-            open_hours=parse_open_hours(row.get("opening_hours"), None),
+            open_hours=parse_opening_hours_raw(row.get("opening_hours")),
             avg_cost=None,   # 백엔드 미제공 → 예산 필터 통과 (풀 빌더 ② 계약)
             rating=None,     # 별점 소스 없음 — 지어내지 않는다 (인기는 saved_count)
             saved_count=int(row.get("saved_count") or 0),

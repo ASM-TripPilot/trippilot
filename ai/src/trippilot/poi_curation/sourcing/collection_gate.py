@@ -72,6 +72,9 @@ class SourcingCandidate:
     # 상세 응답의 표시용 원문(대표메뉴·주차·입장료 등, 벤더 필드명 그대로) —
     # provenance 로만 나가고 게이트 판정에는 쓰지 않는다 (TRIP-683 2단계).
     detail_raw: Mapping[str, str] = field(default_factory=dict)
+    # 휴무일 원문 (TourAPI restdate류) — hours_raw 와 한 쌍으로 원문 칸에 함께 실린다
+    # (TRIP-1226). 런타임은 그 칸만 다시 파싱하므로 여기서 빠지면 휴무가 사라진다.
+    rest_raw: str | None = None
 
     @property
     def ref(self) -> tuple[str, str]:
@@ -159,7 +162,8 @@ class CollectionGate:
             if not base.open_hours and c.open_hours:
                 base = replace(base, open_hours=c.open_hours)
             if not base.hours_raw and c.hours_raw:
-                base = replace(base, hours_raw=c.hours_raw)
+                # 휴무 원문은 같은 상세 응답의 짝이라 함께 옮긴다 (TRIP-1226)
+                base = replace(base, hours_raw=c.hours_raw, rest_raw=c.rest_raw)
             if not base.image_url and c.image_url:
                 base = replace(base, image_url=c.image_url)
             if not base.detail_raw and c.detail_raw:
