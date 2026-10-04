@@ -30,26 +30,38 @@ resource "aws_db_parameter_group" "postgres" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier                      = local.name
-  engine                          = "postgres"
-  engine_version                  = "16"
-  instance_class                  = var.database_instance_class
-  allocated_storage               = var.database_allocated_storage
-  max_allocated_storage           = var.database_max_allocated_storage
-  storage_type                    = "gp3"
-  storage_encrypted               = true
-  db_name                         = "trippilot"
-  username                        = "trippilot_admin"
-  manage_master_user_password     = true
-  port                            = 5432
-  db_subnet_group_name            = aws_db_subnet_group.postgres.name
-  parameter_group_name            = aws_db_parameter_group.postgres.name
-  vpc_security_group_ids          = [aws_security_group.postgres.id]
-  publicly_accessible             = false
-  multi_az                        = local.production
-  deletion_protection             = var.data_protection_enabled
-  skip_final_snapshot             = !var.data_protection_enabled
-  final_snapshot_identifier       = var.data_protection_enabled ? "${local.name}-final" : null
+  identifier                  = local.name
+  engine                      = "postgres"
+  engine_version              = "16"
+  instance_class              = var.database_instance_class
+  allocated_storage           = var.database_allocated_storage
+  max_allocated_storage       = var.database_max_allocated_storage
+  storage_type                = "gp3"
+  storage_encrypted           = true
+  db_name                     = "trippilot"
+  username                    = "trippilot_admin"
+  manage_master_user_password = true
+  port                        = 5432
+  db_subnet_group_name        = aws_db_subnet_group.postgres.name
+  parameter_group_name        = aws_db_parameter_group.postgres.name
+  vpc_security_group_ids      = [aws_security_group.postgres.id]
+  publicly_accessible         = false
+  multi_az                    = local.production
+  deletion_protection         = var.data_protection_enabled
+  # **삭제 허용 스위치가 증거까지 끄면 안 된다.** `deletion_protection` 을 풀 수 있는 유일한
+  # 길이 `data_protection_enabled=false` 인데, 그 한 번의 apply 가 최종 스냅숏까지 껐다면
+  # 가장 급한 사람이 가장 급할 때 복구 수단을 0 으로 만든다(destroy 는 워크플로에서 금지돼
+  # 사람 노트북에서만 돈다 — `infra/tests/test_workflow_contracts.py`). 그래서 이 둘은
+  # **변수와 무관하게 항상** 켜 둔다. 변수는 "지울 수 있는가"만 정한다.
+  #
+  # `final_snapshot_identifier` 가 고정 이름이라 destroy→재생성→destroy 는 두 번째에
+  # `DBSnapshotAlreadyExists` 로 **실패한다.** 그건 조용한 유실보다 낫다 — 사람이 옛 스냅숏을
+  # 지우거나 이름을 바꾸고 다시 하면 된다.
+  skip_final_snapshot       = false
+  final_snapshot_identifier = "${local.name}-final"
+  # 기본값이 true 다 — 인스턴스를 지우면 PITR 자동 백업이 **함께** 사라진다.
+  # 최종 스냅숏은 한 시점뿐이라 자동 백업까지 남겨야 복구 창이 생긴다.
+  delete_automated_backups        = false
   backup_retention_period         = var.data_protection_enabled ? 14 : 1
   backup_window                   = "17:00-18:00"
   maintenance_window              = "sun:18:00-sun:19:00"
