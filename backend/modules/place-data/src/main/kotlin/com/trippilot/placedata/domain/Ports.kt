@@ -83,8 +83,9 @@ interface PoiRepository {
     fun findActiveSourceRefs(source: PoiSource): Map<String, UUID>
 
     /**
-     * 주어진 행을 CLOSED 로 내리고 `updatedAt` 을 [now] 로 둔다 — **지금 ACTIVE 인 것만**(이미 닫힌 행·미검증 행은
-     * 그대로). 실제로 바뀐 행 수를 돌려준다. 삭제가 아니다 — 담기(`saved_place` FK)와 확정 일정 스냅숏이 이 행을 가리킨다.
+     * 주어진 행을 **LOST** 로 내리고 `updatedAt` 을 [now] 로 둔다 — **지금 ACTIVE 인 것만**(이미 닫힌 행·폐업·미검증 행은
+     * 그대로). 실제로 바뀐 행 수를 돌려준다. 이름의 close 는 미포함 정리 동작이지 상태값 CLOSED(폐업 판정)가 아니다.
+     * 삭제가 아니다 — 담기(`saved_place` FK)와 확정 일정 스냅숏이 이 행을 가리킨다.
      */
     fun closeActive(poiIds: Collection<UUID>, now: Instant): Int
 }

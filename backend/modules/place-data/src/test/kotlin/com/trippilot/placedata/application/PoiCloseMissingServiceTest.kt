@@ -26,8 +26,8 @@ import java.util.UUID
  * 원본에서 빠진 수집분 닫기(TRIP-1227).
  *
  * 지키는 것은 둘이다.
- * 1. **문서가 말하는 행만 닫는다** — 같은 출처·ACTIVE·식별자 있음. 나머지(다른 출처·시드·이미 닫힌 행)는
- *    이 문서와 무관하다. 잘못 닫으면 사용자에게는 멀쩡한 가게가 후보에서 사라지고 담기 목록에 폐업 배지가 붙는다.
+ * 1. **문서가 말하는 행만 닫는다(ACTIVE → LOST)** — 같은 출처·ACTIVE·식별자 있음. 나머지(다른 출처·시드·이미 닫힌 행)는
+ *    이 문서와 무관하다. 잘못 닫으면 사용자에게는 멀쩡한 가게가 후보에서 사라지고 담기 목록에 '미확인' 배지가 붙는다.
  * 2. **부분 문서로는 닫지 않는다** — 청크 하나·다른 출처의 목록·회차 한 장을 "전부"로 받으면 출처가 통째로 닫힌다.
  */
 class PoiCloseMissingServiceTest : StringSpec({
@@ -62,13 +62,13 @@ class PoiCloseMissingServiceTest : StringSpec({
             },
         )
 
-    "문서에 없는 ACTIVE 행만 닫는다 — 삭제가 아니라 CLOSED 이고, 닫힌 시각이 남는다" {
+    "문서에 없는 ACTIVE 행만 닫는다 — 삭제도 폐업(CLOSED)도 아니라 LOST 이고, 닫힌 시각이 남는다" {
         val repo = repoWith(poi("A"), poi("B"), poi("C"))
 
         val result = PoiCloseMissingService(repo, clock).closeMissing(PoiSource.LOCALDATA, listOf("A", "B"))
 
         result shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 3, present = 2, closed = 1, closedSourceRefs = listOf("C"))
-        repo.row("C").dataStatus shouldBe DataStatus.CLOSED
+        repo.row("C").dataStatus shouldBe DataStatus.LOST
         repo.row("C").updatedAt shouldBe clock.instant()
         repo.row("A").dataStatus shouldBe DataStatus.ACTIVE
         repo.row("B").dataStatus shouldBe DataStatus.ACTIVE
@@ -82,7 +82,7 @@ class PoiCloseMissingServiceTest : StringSpec({
         val result = PoiCloseMissingService(repo, clock).closeMissing(PoiSource.LOCALDATA, listOf("A", "B"))
 
         result.activeBefore shouldBe 3   // 다른 출처는 세지도 않는다
-        repo.row("C").dataStatus shouldBe DataStatus.CLOSED
+        repo.row("C").dataStatus shouldBe DataStatus.LOST
         repo.row("C", PoiSource.TOURAPI).dataStatus shouldBe DataStatus.ACTIVE
         repo.row("Z", PoiSource.TOURAPI).dataStatus shouldBe DataStatus.ACTIVE
     }
@@ -156,15 +156,15 @@ class PoiCloseMissingServiceTest : StringSpec({
         val second = PoiCloseMissingService(repo, later).closeMissing(PoiSource.LOCALDATA, listOf("A", "B"))
 
         second shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 2, present = 2, closed = 0, closedSourceRefs = emptyList())
-        repo.row("C").dataStatus shouldBe DataStatus.CLOSED
+        repo.row("C").dataStatus shouldBe DataStatus.LOST
         repo.row("C").updatedAt shouldBe clock.instant()
     }
 
     /**
-     * 상태는 수신이 덮지 않는 값이다(`Poi.refreshed`) — 사람이 내린 판단이거나 라이프사이클의 결과라서다.
-     * 닫기도 같다: ACTIVE 만 대상이고, 이미 닫힌 행이 목록에 다시 나타나도 되살리지 않는다.
+     * 닫기는 ACTIVE 만 내린다 — 폐업 판정(CLOSED)·미검증은 문서와 무관한 사람·판정의 값이라 그대로 둔다.
+     * 되살리기도 닫기의 몫이 아니다: 문서에 다시 나타난 LOST 를 ACTIVE 로 올리는 것은 이어지는 적재(`Poi.refreshed`)다.
      */
-    "이미 닫힌 행·미검증 행은 건드리지 않는다 — 목록에 다시 나타나도 되살리지 않는다" {
+    "폐업(CLOSED)·미검증 행은 건드리지 않는다 — 목록에 있든 없든 닫기는 상태를 바꾸지 않는다" {
         val repo = repoWith(
             poi("A"), poi("B"),
             poi("X", status = DataStatus.CLOSED),
@@ -178,6 +178,26 @@ class PoiCloseMissingServiceTest : StringSpec({
         repo.row("X").updatedAt shouldBe t0
         repo.row("U").dataStatus shouldBe DataStatus.UNVERIFIED
         repo.row("U").updatedAt shouldBe t0
+    }
+
+    /**
+     * 빠지는 이유 대부분은 폐업이 아니다(공백 해소·중복 병합·공유본 `drop_non_travel` 소급) — 다음 문서에 다시 나오면
+     * 후보로 돌아와야 한다. 스크립트 순서(닫기 → 적재) 그대로 돌린다: 닫기는 LOST 를 세지도 되살리지도 않고,
+     * 이어지는 적재가 LOST 만 되살린다. 폐업 판정(CLOSED)은 문서에 다시 나와도 그대로다.
+     */
+    "닫힌(LOST) 행이 다음 문서에 다시 나오면 적재가 ACTIVE 로 되살린다 — CLOSED 행은 다시 나와도 CLOSED" {
+        val repo = repoWith(poi("A"), poi("B"), poi("C"), poi("X", status = DataStatus.CLOSED))
+        PoiCloseMissingService(repo, clock).closeMissing(PoiSource.LOCALDATA, listOf("A", "B"))
+        repo.row("C").dataStatus shouldBe DataStatus.LOST
+
+        val next = listOf("A", "B", "C", "X")
+        PoiCloseMissingService(repo, later).closeMissing(PoiSource.LOCALDATA, next) shouldBe
+            PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 2, present = 2, closed = 0, closedSourceRefs = emptyList())
+        repo.ingest(next)
+
+        repo.row("C").dataStatus shouldBe DataStatus.ACTIVE
+        repo.row("X").dataStatus shouldBe DataStatus.CLOSED
+        repo.stored shouldHaveSize 4   // 되살린 것이지 새로 만든 것이 아니다
     }
 
     // 아직 아무것도 안 부은 출처에 먼저 불러도 실패하지 않는다 — 0/0 을 "절반 미만"으로 읽지 않는다.
@@ -198,7 +218,7 @@ class PoiCloseMissingServiceTest : StringSpec({
         dry shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 4, present = 3, closed = 1, closedSourceRefs = listOf("D"))
         repo.allActive() shouldBe true
         svc.closeMissing(PoiSource.LOCALDATA, listOf("A", "B", "C")) shouldBe dry
-        repo.row("D").dataStatus shouldBe DataStatus.CLOSED
+        repo.row("D").dataStatus shouldBe DataStatus.LOST
     }
 
     "드라이런에도 비율 가드가 같다 — 실제로 거부될 호출은 드라이런도 409" {
@@ -230,8 +250,9 @@ class PoiCloseMissingServiceTest : StringSpec({
     }
 
     /**
-     * 닫기를 적재 앞으로 옮겨도 되는 근거 — 적재는 목록 안의 행만 만들고 상태를 덮지 않으므로, 닫히는 행은 어느 쪽에서
-     * 재든 "기존 ACTIVE 중 목록에 없는 것"이다. 목록은 문서 전체라 **적재가 중간에 끊겨도**(앞 일부만 들어가도) 같다.
+     * 닫기를 적재 앞으로 옮겨도 되는 근거 — 적재는 목록 안의 행만 건드리고(만들기·갱신·LOST 되살리기) ACTIVE 를 내리지
+     * 않으므로, 닫히는 행은 어느 쪽에서 재든 "기존 ACTIVE 중 목록에 없는 것"이다. 목록은 문서 전체라
+     * **적재가 중간에 끊겨도**(앞 일부만 들어가도) 같다.
      */
     "닫히는 집합은 적재 전후가 같다 — 닫은 뒤 적재가 중간에 끊겨도 같다" {
         checkAll(Arb.set(Arb.int(0..30), 0..20), Arb.set(Arb.int(0..30), 0..20), Arb.int(0..20)) { existing, listed, cut ->
@@ -241,7 +262,7 @@ class PoiCloseMissingServiceTest : StringSpec({
                 val repo = InMemoryPoiRepository().apply { ingest(existing.map { "R$it" }) }
                 val close = { PoiCloseMissingService(repo, clock).closeMissing(PoiSource.LOCALDATA, doc, allowMassClose = true) }
                 if (closeFirst) { close(); repo.ingest(ingested) } else { repo.ingest(ingested); close() }
-                return repo.stored.filter { it.dataStatus == DataStatus.CLOSED }.mapNotNull { it.sourceRef }.toSet()
+                return repo.stored.filter { it.dataStatus == DataStatus.LOST }.mapNotNull { it.sourceRef }.toSet()
             }
 
             closedRefs(closeFirst = true, ingested = doc.take(cut)) shouldBe closedRefs(closeFirst = false, ingested = doc)

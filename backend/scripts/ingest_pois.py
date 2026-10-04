@@ -26,7 +26,8 @@
 
 **upsert 는 원본에서 빠진 장소를 닫지 못한다**(TRIP-1227). `--close-missing` 을 주면 문서마다 **적재 전에**
 그 문서의 `provenance.content_id` 전부를 `POST /internal/pois/close-missing` 으로 보내, 그 출처의 ACTIVE 중
-목록에 없는 것을 CLOSED 로 내린 뒤 적재한다. 문서 한 장을 **그 출처의 전부**로 읽으므로 전부가 아닌
+목록에 없는 것을 LOST(폐업 판정 CLOSED 가 아니다)로 내린 뒤 적재한다 — LOST 행은 뒤의 적재에서 문서에 다시
+나타나면 ACTIVE 로 돌아온다. 문서 한 장을 **그 출처의 전부**로 읽으므로 전부가 아닌
 문서(회차 artifact 한 장 등)로 쓰면 나머지가 닫힌다 — 서버는 목록에 있는 것이 절반 미만이면 409 로 거부하고
 (그때는 적재도 하지 않는다), 의도한 대량 정리만 `--allow-mass-close` 로 통과한다. `--dry-run` 과 함께 주면
 서버가 닫힐 수를 계산만 해서 돌려준다(토큰·터널 필요). 닫은 행이 있으면 되돌리기 SQL 을 현재 디렉토리에 남긴다.
@@ -143,7 +144,7 @@ def request_close(args, token, source, proposals, dry_run):
         print(f"  미포함 정리 연결 실패 — port-forward 가 떠 있는지 확인. {e.reason}", file=sys.stderr)
         return None
     print("  미포함 정리{} — {source} ACTIVE {activeBefore} 중 목록에 있음 {present} · {} {closed}".format(
-        "(드라이런 — 닫지 않았다)" if dry_run else "", "닫을 것" if dry_run else "CLOSED",
+        "(드라이런 — 닫지 않았다)" if dry_run else "", "닫을 것" if dry_run else "LOST",
         **{k: result.get(k) for k in ("source", "activeBefore", "present", "closed")}))
     return result
 
@@ -153,16 +154,16 @@ def sql_text(value):
 
 
 def write_undo_sql(source, refs, now):
-    """닫은 행을 되살리는 SQL 을 현재 디렉토리에 남긴다 — **식별자로** 고른다.
+    """LOST 로 내린 행을 ACTIVE 로 되돌리는 SQL 을 현재 디렉토리에 남긴다 — 서버가 돌려준 **식별자로** 고른다.
 
-    닫힌 시각(`updated_at`)은 열쇠가 못 된다: 다음 적재가 그 행을 갱신하면 시각이 적재 시각으로 덮인다
-    (수신은 상태는 두고 시각만 바꾼다 — `Poi.refreshed`). 그래서 서버가 돌려준 닫은 식별자를 그대로 적는다.
+    문서에 다시 나타난 행은 적재가 되살리므로(`Poi.refreshed`) 대부분은 맞는 문서를 다시 붓는 것으로 돌아온다.
+    이 파일은 다시 부을 문서가 없을 때 쓴다. `data_status = 'LOST'` 조건이라 그 사이 사람이 내린 CLOSED 는 건드리지 않는다.
     """
     path = Path(f"close-missing-undo-{source}-{now:%Y%m%dT%H%M%SZ}.sql")
     path.write_text(
         f"-- {now:%Y-%m-%dT%H:%M:%SZ} {source} 미포함 정리가 닫은 {len(refs)}건 되돌리기 "
         "(docs/guides/poi-수집본-적재.md §되돌리기)\n"
-        f"UPDATE poi SET data_status = 'ACTIVE'\n WHERE source = {sql_text(source)} AND data_status = 'CLOSED'\n"
+        f"UPDATE poi SET data_status = 'ACTIVE'\n WHERE source = {sql_text(source)} AND data_status = 'LOST'\n"
         f"   AND source_ref IN ({', '.join(sql_text(r) for r in refs)});\n",
         encoding="utf-8",
     )
@@ -196,7 +197,7 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true",
                         help="적재는 보내지 않고 대상·건수만 출력 (--close-missing 과 함께면 닫힐 수를 서버에 묻는다)")
     parser.add_argument("--close-missing", action="store_true",
-                        help="문서마다 적재 전에 그 출처의 ACTIVE 중 문서에 없는 것을 CLOSED 로 (문서가 그 출처의 전부일 때만)")
+                        help="문서마다 적재 전에 그 출처의 ACTIVE 중 문서에 없는 것을 LOST 로 (문서가 그 출처의 전부일 때만)")
     parser.add_argument("--allow-mass-close", action="store_true",
                         help="--close-missing 의 비율 가드(목록에 있는 것이 ACTIVE 의 절반 미만이면 거부)를 넘는다 — 의도한 대량 정리만")
     parser.add_argument("--self-check", action="store_true", help="문서 파싱·쪼개기·합산·미포함 정리 자체 점검")
@@ -253,14 +254,15 @@ def main(argv=None):
         if args.close_missing:
             # **적재 전에** 대조한다. 적재 뒤에 부르면 방금 만든 행이 스스로를 "목록에 있음"으로 세어, 식별자 형식이
             # 바뀐 문서·출처 라벨이 틀린 문서를 비율 가드가 못 막는다. 닫히는 집합은 전후가 같다(적재는 목록 안의
-            # 행만 만든다) — 그래서 뒤의 청크가 실패해도 닫은 것은 맞고, 같은 명령을 다시 돌리면 닫기 0·적재 나머지다.
+            # 행만 건드린다) — 그래서 뒤의 청크가 실패해도 닫은 것은 맞고, 같은 명령을 다시 돌리면 닫기 0·적재 나머지다.
             result = request_close(args, token, source, proposals, dry_run=False)
             if result is None:
                 report(totals)
                 return 2
             if result.get("closed"):
                 undo = write_undo_sql(source, result.get("closedSourceRefs") or [], datetime.now(timezone.utc))
-                print(f"  되돌리기 SQL → {undo} — 잘못 닫혔을 때만 psql 로 먹인다(가이드 §되돌리기). 지우지 말고 둘 것.")
+                print(f"  되돌리기 SQL → {undo} — 잘못 닫혔는데 다시 부을 문서가 없을 때만 psql 로 먹인다(가이드 §되돌리기). "
+                      "지우지 말고 둘 것.")
         for i, chunk in enumerate(batches, 1):
             try:
                 response = post_chunk(args.base_url, token, doc, chunk, args.timeout)
@@ -411,10 +413,10 @@ def self_check_close_missing(write, item):
         assert code == 0 and paths == [CLOSE_PATH, INGEST_PATH, INGEST_PATH], (code, paths)
         assert calls[0][1] == {"source": "LOCALDATA", "present_source_refs": ["R0", "R1", "R2"],
                                "allow_mass_close": False, "dry_run": False}, calls[0]
-        # 닫은 행이 있으면 되돌리기 SQL 을 남긴다 — 닫힌 시각은 다음 적재가 덮으므로 식별자가 열쇠다.
+        # 닫은 행이 있으면 되돌리기 SQL 을 남긴다 — LOST → ACTIVE 를 서버가 돌려준 식별자로 고른다.
         [undo] = undo_files()
         sql = undo.read_text(encoding="utf-8")
-        assert "WHERE source = 'LOCALDATA' AND data_status = 'CLOSED'" in sql, sql
+        assert "WHERE source = 'LOCALDATA' AND data_status = 'LOST'" in sql, sql
         assert "source_ref IN ('O''1')" in sql, sql
 
         code, _ = run(doc, "--close-missing", "--allow-mass-close")

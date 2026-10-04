@@ -39,7 +39,11 @@ enum class PoiCategory {
     }
 }
 
-/** 수집 상태. 조회는 ACTIVE만(INV-U1-01). UNVERIFIED/LOST/CLOSED는 라이프사이클(후속). */
+/**
+ * 수집 상태. 조회는 ACTIVE만(INV-U1-01).
+ * LOST = 원본 문서에서 빠짐(미포함 정리, TRIP-1227) — 문서에 다시 나타나면 수신이 ACTIVE 로 되살린다([Poi.refreshed]).
+ * CLOSED = 폐업 판정(V2.50·사람) — 수신이 덮지 않는다. UNVERIFIED 는 라이프사이클(후속).
+ */
 enum class DataStatus { ACTIVE, UNVERIFIED, LOST, CLOSED }
 
 /**
@@ -111,7 +115,8 @@ class Poi private constructor(
         /**
          * 이미 아는 POI 를 같은 출처의 새 수집분으로 갱신한다 — **행을 새로 만들지 않는다**.
          *
-         * 유지하는 것: [poiId](참조가 붙어 있다) · [savedCount](사용자 행동) · [createdAt](처음 안 시점).
+         * 유지하는 것: [poiId](참조가 붙어 있다) · [savedCount](사용자 행동) · [createdAt](처음 안 시점) ·
+         * [dataStatus](단 LOST 만 ACTIVE 로 되살린다).
          * 갱신하는 것: 벤더가 다시 준 값들. 이름·좌표가 바뀌는 일이 실제로 있다(이전·개명).
          */
         @Suppress("LongParameterList")
@@ -128,7 +133,10 @@ class Poi private constructor(
             openingHours,
             // 상태는 **유지한다**. 폐업(CLOSED)·미검증은 사람이 내린 판단이거나 라이프사이클 결과인데,
             // 매일 도는 대량 수집이 그걸 덮으면 손으로 정리한 것이 하룻밤에 되돌아간다.
-            existing.dataStatus, existing.source, existing.savedCount, existing.createdAt, now,
+            // LOST 만 예외다 — "원본 문서에서 빠짐"(TRIP-1227)이라 다시 받은 것이 곧 반증이다. 되살리지 않으면
+            // 공백 해소·병합으로 빠졌던 장소가 다시 뽑혀도 후보에서 영구히 빠진다.
+            if (existing.dataStatus == DataStatus.LOST) DataStatus.ACTIVE else existing.dataStatus,
+            existing.source, existing.savedCount, existing.createdAt, now,
             // 새로 받은 이미지가 있으면 갱신, 없으면 기존 값을 지키다 — 벤더가 이번에 안 준 것과
             // "이미지가 없다"는 다르다. null 로 덮으면 한 번 받은 이미지가 다음 수집에 사라진다.
             imageUrl ?: existing.imageUrl,

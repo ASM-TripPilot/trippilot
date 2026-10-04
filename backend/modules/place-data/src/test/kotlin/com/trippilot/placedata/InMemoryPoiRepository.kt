@@ -81,7 +81,7 @@ class InMemoryPoiRepository : PoiRepository {
             targets.map {
                 Poi.reconstitute(
                     poiId = it.poiId, nameKo = it.nameKo, lat = it.lat, lng = it.lng, category = it.category,
-                    region = it.region, openingHours = it.openingHours, dataStatus = DataStatus.CLOSED,
+                    region = it.region, openingHours = it.openingHours, dataStatus = DataStatus.LOST,
                     source = it.source, savedCount = it.savedCount, createdAt = it.createdAt, updatedAt = now,
                     imageUrl = it.imageUrl, tags = it.tags, sourceRef = it.sourceRef, regionCode = it.regionCode,
                     address = it.address,

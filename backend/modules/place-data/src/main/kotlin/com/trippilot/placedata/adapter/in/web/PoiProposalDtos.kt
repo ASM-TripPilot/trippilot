@@ -95,7 +95,8 @@ data class CloseMissingRequest(
 
 /**
  * 미포함 정리 결과 — `present` 는 목록 크기가 아니라 "목록에 있어 ACTIVE 로 남은 수"다(`activeBefore = present + closed`).
- * `closedSourceRefs` 는 닫은(드라이런이면 닫을) 행의 식별자 — 되돌리기 열쇠다(닫힌 시각은 다음 적재가 덮는다).
+ * `closed`·`closedSourceRefs` 는 LOST 로 내린(드라이런이면 내릴) 수와 식별자다 — 키의 closed 는 동작 이름이고 상태값
+ * CLOSED 가 아니다. 식별자는 다시 부을 문서가 없을 때의 되돌리기 열쇠다.
  */
 data class PoiCloseMissingResponse(
     val source: String,

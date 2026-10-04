@@ -240,7 +240,7 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
     private val closeMissing = "/internal/pois/close-missing"
 
     /** 울릉도 한 점 — 다른 IT 의 POI 와 반경이 겹치지 않는다. */
-    private fun ingestAtUlleung(vararg refs: String, source: String = "LOCALDATA") {
+    private fun ingestAtUlleung(vararg refs: String, source: String = "LOCALDATA", registered: Int = refs.size) {
         val proposals = refs.joinToString(",") { ref ->
             """{"poi":{"name":"미포함정리-$ref","category":"FOOD","coord":{"lat":37.4844,"lng":130.9057}},
                "region":"울릉군","provenance":{"content_id":"$ref","address":"경상북도 울릉군 울릉읍 도동리 1"}}"""
@@ -250,7 +250,7 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
             """{"schema_version":1,"source":"$source","proposals":[$proposals]}""",
         )
         rc shouldBe 200
-        body["registered"].asInt() shouldBe refs.size
+        body["registered"].asInt() shouldBe registered
     }
 
     private fun activeLocaldataRefs(): Set<String> = cleanupJdbc.queryForList(
@@ -284,13 +284,14 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
 
     /**
      * 수신은 upsert 뿐이라 원본에서 빠진 수집분이 ACTIVE 로 남는다 — 그 출처의 식별자 전부를 받아(스크립트는
-     * 그 문서를 적재하기 전에 보낸다) 목록에 없는 ACTIVE 만 닫는다. 응답 숫자만 믿지 않고 DB 상태와 읽기 경계(후보풀 쪽)까지 본다.
+     * 그 문서를 적재하기 전에 보낸다) 목록에 없는 ACTIVE 만 LOST 로 닫는다. 응답 숫자만 믿지 않고 DB 상태와 읽기 경계(후보풀 쪽)까지
+     * 보고, 다음 문서에 다시 나오면 적재가 되살리는 것까지 실 DB 로 잇는다.
      */
     @Test
-    fun `미포함 정리 — 문서에 없는 수집분만 CLOSED 로 내리고 숫자로 알린다`() {
+    fun `미포함 정리 — 문서에 없는 수집분만 LOST 로 내리고 숫자로 알린다 · 다시 나오면 되살아난다`() {
         ingestAtUlleung("E2E-CM-1", "E2E-CM-2", "E2E-CM-3", "E2E-CM-9")
         ingestAtUlleung("E2E-CM-T1", source = "TOURAPI")   // 같은 반경의 다른 출처 — 이 문서와 무관하다
-        // 이미 닫힌 행 — 목록에 없어도 다시 손대지 않는다(닫힌 시각이 그대로 남는다).
+        // 폐업 판정(CLOSED) 행 — 목록에 없어도 손대지 않는다(시각이 그대로 남는다).
         cleanupJdbc.update(
             "UPDATE poi SET data_status = 'CLOSED', updated_at = '2026-01-01T00:00:00Z' " +
                 "WHERE source = 'LOCALDATA' AND source_ref = 'E2E-CM-9'",
@@ -311,9 +312,9 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         res["activeBefore"].asInt() shouldBe before.size
         res["present"].asInt() shouldBe before.size - 1
         res["closed"].asInt() shouldBe 1
-        // 되돌리기 열쇠 — 닫힌 시각은 다음 적재가 덮으므로 식별자를 응답으로 돌려준다(스크립트가 되돌리기 SQL 로 남긴다).
+        // 되돌리기 열쇠 — 다시 부을 문서가 없을 때 이 식별자로 LOST → ACTIVE 를 되돌린다(스크립트가 되돌리기 SQL 로 남긴다).
         res["closedSourceRefs"].map { it.asText() } shouldBe listOf("E2E-CM-3")
-        status("E2E-CM-3") shouldBe "CLOSED"
+        status("E2E-CM-3") shouldBe "LOST"
         status("E2E-CM-1") shouldBe "ACTIVE"
         status("E2E-CM-T1", source = "TOURAPI") shouldBe "ACTIVE"
         cleanupJdbc.queryForObject(
@@ -321,7 +322,7 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
             Boolean::class.java,
         ) shouldBe true
 
-        // 후보풀이 읽는 경계에서 사라졌는가 — CLOSED 를 세는 것과 "추천에 안 나온다"는 다른 확인이다.
+        // 후보풀이 읽는 경계에서 사라졌는가 — LOST 를 세는 것과 "추천에 안 나온다"는 다른 확인이다.
         val (_, nearby) = call(HttpMethod.GET, "/internal/pois?centerLat=37.4844&centerLng=130.9057&radiusKm=1", SERVICE_TOKEN)
         val names = nearby.map { it["name_ko"].asText() }
         names.contains("미포함정리-E2E-CM-1") shouldBe true
@@ -331,6 +332,11 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         val (_, again) = call(HttpMethod.POST, closeMissing, SERVICE_TOKEN, closeBody(before - "E2E-CM-3"))
         again["closed"].asInt() shouldBe 0
         again["activeBefore"].asInt() shouldBe before.size - 1
+
+        // 다음 문서에 다시 나오면 적재가 되살린다 — 빠지는 이유 대부분은 폐업이 아니다. 폐업 판정(CLOSED)은 그대로다.
+        ingestAtUlleung("E2E-CM-3", "E2E-CM-9", registered = 0)
+        status("E2E-CM-3") shouldBe "ACTIVE"
+        status("E2E-CM-9") shouldBe "CLOSED"
     }
 
     /**
@@ -358,7 +364,7 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         ok shouldBe 200
         res["closed"].asInt() shouldBe mine.size - 1
         status(mine.first()) shouldBe "ACTIVE"
-        mine.drop(1).forEach { status(it) shouldBe "CLOSED" }
+        mine.drop(1).forEach { status(it) shouldBe "LOST" }
     }
 
     @Test

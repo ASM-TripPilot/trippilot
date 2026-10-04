@@ -137,11 +137,11 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
     )
     fun findActiveRefsBySource(@Param("source") source: String): List<Array<Any>>
 
-    /** ACTIVE 인 것만 CLOSED 로 — 영향 행 수 반환. 서비스 트랜잭션 안에서는 참여(REQUIRED)한다. */
+    /** ACTIVE 인 것만 LOST 로(미포함 정리) — 영향 행 수 반환. 서비스 트랜잭션 안에서는 참여(REQUIRED)한다. */
     @Transactional
     @Modifying
     @Query(
-        "update PoiEntity p set p.dataStatus = 'CLOSED', p.updatedAt = :now " +
+        "update PoiEntity p set p.dataStatus = 'LOST', p.updatedAt = :now " +
             "where p.poiId in :ids and p.dataStatus = 'ACTIVE'",
     )
     fun closeActive(@Param("ids") ids: Collection<UUID>, @Param("now") now: Instant): Int

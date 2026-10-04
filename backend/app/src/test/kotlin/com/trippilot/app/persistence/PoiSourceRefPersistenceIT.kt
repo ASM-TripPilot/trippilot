@@ -139,7 +139,7 @@ class PoiSourceRefPersistenceIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 실물이 포트 계약("지금 ACTIVE 인 것만 · 바뀐 수")을 지키는가 — 서비스는 대조 결과만 넘기지만, 대조와 쓰기
+     * 실물이 포트 계약("지금 ACTIVE 인 것만 LOST 로 · 바뀐 수")을 지키는가 — 서비스는 대조 결과만 넘기지만, 대조와 쓰기
      * 사이에 상태가 바뀌어도 닫힌 행의 시각을 다시 덮지 않아야 언제 닫혔는지가 남는다.
      * 목록을 묶음(1,000) 너머까지 늘리고 진짜 대상을 **맨 뒤**에 둔다 — 묶음 하나만 보내는 실수를 잡는다.
      */
@@ -155,9 +155,9 @@ class PoiSourceRefPersistenceIT : AbstractPostgresIntegrationTest() {
 
         changed shouldBe 1
         val after = pois.findByIds(listOf(a.poiId, b.poiId, c.poiId)).associateBy { it.poiId }
-        after.getValue(a.poiId).dataStatus shouldBe DataStatus.CLOSED
+        after.getValue(a.poiId).dataStatus shouldBe DataStatus.LOST
         after.getValue(a.poiId).updatedAt shouldBe later
-        after.getValue(b.poiId).updatedAt shouldBe now   // 이미 닫힌 행은 시각도 그대로
+        after.getValue(b.poiId).updatedAt shouldBe now   // 폐업(CLOSED) 행은 시각도 그대로
         after.getValue(c.poiId).dataStatus shouldBe DataStatus.UNVERIFIED
     }
 }
