@@ -81,6 +81,8 @@ export interface MustVisitTimeScreenProps {
   errorText?: string;
   /** 409 안내 슬롯. **실패 슬롯과 다른 자리다** — 하나로 합치면 409 가 실패로 되살아난다. */
   duplicateText?: string;
+  /** TRIP-1219 d — 저장 안 한 채 [뒤로]를 눌렀을 때 배선이 내리는 안내. 값이 있으면 안내 줄이 선다. */
+  leaveWarningText?: string;
   onBack?(): void;
   onToggleFixed?(next: boolean): void;
   onPickDate?(date: string): void;
@@ -154,6 +156,7 @@ export function MustVisitTimeScreen({
   errorText,
   duplicateText,
   onBack,
+  leaveWarningText,
   onToggleFixed,
   onPickDate,
   onPickStart,
@@ -322,6 +325,18 @@ export function MustVisitTimeScreen({
                 className="flex-1 font-noto text-label text-primary-text"
               >
                 {duplicateText}
+              </Text>
+            </View>
+          )}
+
+          {leaveWarningText === undefined ? null : (
+            <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
+              <InfoCircleGlyph tone="primaryText" />
+              <Text
+                testID="itinerary-mustvisit-time-leave-warning"
+                className="flex-1 font-noto text-label text-primary-text"
+              >
+                {leaveWarningText}
               </Text>
             </View>
           )}

@@ -1,3 +1,4 @@
+import { MAX_TRIP_NIGHTS } from './tripDraft';
 import { minNightsFor, useTripWizardStore } from './tripWizardStore';
 
 /**
@@ -103,12 +104,26 @@ describe('AC-2 · setNights — 박수만 교체', () => {
     expect(minNightsFor(0)).toBe(1);
   });
 
-  it('짝 — 상한은 없다 (클램프가 위로도 접으면 red)', () => {
-    // 하한만 두면 "항상 1 을 넣는" 구현도, "상한으로 접는" 구현도 통과할 수 있다.
+  it('TRIP-1219 a · 상한 — 박수 합이 MAX_TRIP_NIGHTS(30)를 넘지 않는다, 상한 값 자체는 허용', () => {
     useTripWizardStore.getState().addDestination('부산', 2);
 
-    useTripWizardStore.getState().setNights(1, 30);
+    useTripWizardStore.getState().setNights(1, MAX_TRIP_NIGHTS);
     expect(useTripWizardStore.getState().destinations[0].nights).toBe(30);
+
+    useTripWizardStore.getState().setNights(1, 42);
+    expect(useTripWizardStore.getState().destinations[0].nights).toBe(30);
+  });
+
+  it('TRIP-1219 a · 다도시도 합으로 접는다 — 다른 도시 몫을 뺀 만큼만 올라간다', () => {
+    useTripWizardStore.getState().addDestination('부산', 20);
+    useTripWizardStore.getState().addDestination('경주', 1);
+
+    useTripWizardStore.getState().setNights(2, 99);
+
+    expect(useTripWizardStore.getState().destinations).toEqual([
+      { seq: 1, region: '부산', nights: 20 },
+      { seq: 2, region: '경주', nights: 10 },
+    ]);
   });
 
   it('못 찾는 seq 는 아무것도 안 바꾼다 (no-op)', () => {

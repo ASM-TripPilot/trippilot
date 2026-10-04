@@ -2,9 +2,13 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 
+import { nightsSum } from '@/features/create-trip';
 import { isGenerationRunning } from '@/features/itinerary';
 import { MethodPickerScreen } from './MethodPickerScreen';
-import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
+import {
+  useGetTripsTripId,
+  useGetTripsTripIdItinerary,
+} from '@/shared/api/index.hooks';
 import { retryUnlessNotFound } from '@/shared/api';
 
 /**
@@ -34,6 +38,11 @@ export function ItineraryMethodPage({
   const itinerary = useGetTripsTripIdItinerary(tripId, {
     query: { retry: retryUnlessNotFound },
   });
+  // TRIP-1219 c — 0박(당일치기)은 2/4 거점 단계를 건너뛴 여행이라 "거점 숙소 다시 고르기"로 가면 묵을 밤이 없는
+  // 빈 화면이 열린다(#895). 여행을 아직 모르면(로딩·실패) 링크는 종전대로 보인다.
+  const trip = useGetTripsTripId(tripId);
+  const isDayTrip =
+    trip.data !== undefined && nightsSum(trip.data.destinations) === 0;
   // 확인 카드는 하나인데 여는 방식이 둘이다(TRIP-1032) — [계속]이 누른 방식대로 가도록 기억한다.
   const [confirmFor, setConfirmFor] = useState<'fullAi' | 'coPick' | null>(
     null
@@ -104,8 +113,14 @@ export function ItineraryMethodPage({
       onRegenerateCancel={() => setConfirmFor(null)}
       // TRIP-1011 C — 2/4→3/4 가 replace 라 뒤로가기로는 거점에 못 돌아간다. push 로 쌓아야 거점
       // 화면의 CTA 가 back() 으로 이 화면에 돌아온다.
-      onPressRebase={() =>
-        router.push({ pathname: '/trips/[tripId]/bases', params: { tripId } })
+      onPressRebase={
+        isDayTrip
+          ? undefined
+          : () =>
+              router.push({
+                pathname: '/trips/[tripId]/bases',
+                params: { tripId },
+              })
       }
       // ponytail: 낙관적 스텁(TRIP-404). 서버 동시생성 판정면(선행 BE 칸)이 아직 없어 항상 미차단.
       // 필드 신설 시 여기서 그 판정면을 넘기고 onPressActiveGeneration 을 배선한다.
