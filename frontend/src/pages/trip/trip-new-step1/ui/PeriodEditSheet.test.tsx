@@ -316,3 +316,47 @@ describe('AC-B1 · 띠·원은 rem 유틸 없이 36/4 px 고정 (TRIP-1045)', ()
     expect(band).not.toContain('h-9');
   });
 });
+
+describe('당일치기(시작=종료) · 원만 있고 범위 띠는 없다', () => {
+  it('시작=종료면 선택 원 하나뿐이고 어떤 띠도 그리지 않는다', () => {
+    renderSheet({ range: { start: '2026-06-10', end: '2026-06-10' } });
+
+    expect(
+      screen.getByTestId('trip-wizard-period-cell-start-2026-06-10')
+    ).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^trip-wizard-period-band-/)).toHaveLength(
+      0
+    );
+    expect(
+      screen.queryAllByTestId(/^trip-wizard-period-cell-between-/)
+    ).toHaveLength(0);
+    expect(
+      screen.queryByTestId('trip-wizard-period-cell-end-2026-06-10')
+    ).toBeNull();
+  });
+
+  it('시작≠종료면 시작 칸은 오른쪽 반 띠, 끝 칸은 왼쪽 반 띠를 종전대로 그린다(무회귀)', () => {
+    renderSheet({ range: { start: '2026-06-10', end: '2026-06-11' } });
+
+    const startBand = screen.getByTestId(
+      'trip-wizard-period-band-start-2026-06-10'
+    );
+    expect(String(startBand.props.className).split(/\s+/)).toEqual(
+      expect.arrayContaining(['right-0', 'w-1/2'])
+    );
+    const endBand = screen.getByTestId(
+      'trip-wizard-period-band-end-2026-06-11'
+    );
+    expect(String(endBand.props.className).split(/\s+/)).toEqual(
+      expect.arrayContaining(['left-0', 'w-1/2'])
+    );
+  });
+
+  it('범위가 시작만 있고 끝이 없을 때도 띠는 없다', () => {
+    renderSheet({ range: { start: '2026-06-10' } });
+
+    expect(screen.queryAllByTestId(/^trip-wizard-period-band-/)).toHaveLength(
+      0
+    );
+  });
+});

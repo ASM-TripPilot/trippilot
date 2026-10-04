@@ -78,6 +78,11 @@ function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
 /** 셀 하나의 범위 상태. start·end 를 먼저 가르므로 `between`은 자연히 양 끝을 뺀 사이만이 된다. */
 type CellRole = 'start' | 'end' | 'between' | 'none';
 
+/** 띠는 시작≠종료일 때만 — 당일치기(시작=종료)·끝 미정은 원 하나다(반쪽 연장 띠가 이어질 이웃 칸이 없다). */
+function hasSpan(range: TripDateRange): boolean {
+  return range.end !== undefined && range.start !== range.end;
+}
+
 function cellRole(date: string, range: TripDateRange): CellRole {
   if (date === range.start) return 'start';
   if (range.end !== undefined && date === range.end) return 'end';
@@ -103,12 +108,14 @@ function DateCell({
   date,
   day,
   role,
+  single,
   past,
   onPickDate,
 }: {
   date: string;
   day: number;
   role: CellRole;
+  single: boolean;
   past: boolean;
   onPickDate: (date: string) => void;
 }): ReactElement {
@@ -122,11 +129,17 @@ function DateCell({
           className="absolute inset-x-0 top-xs h-[36px] bg-primary-pale"
         />
       ) : null}
-      {role === 'start' && (
-        <View className="absolute right-0 top-xs h-[36px] w-1/2 bg-primary-pale" />
+      {role === 'start' && !single && (
+        <View
+          testID={`trip-wizard-period-band-start-${date}`}
+          className="absolute right-0 top-xs h-[36px] w-1/2 bg-primary-pale"
+        />
       )}
-      {role === 'end' && (
-        <View className="absolute left-0 top-xs h-[36px] w-1/2 bg-primary-pale" />
+      {role === 'end' && !single && (
+        <View
+          testID={`trip-wizard-period-band-end-${date}`}
+          className="absolute left-0 top-xs h-[36px] w-1/2 bg-primary-pale"
+        />
       )}
       <Pressable
         testID={`trip-wizard-period-cell-${date}`}
@@ -268,6 +281,7 @@ export function PeriodEditSheet({
                   date={date}
                   day={day}
                   role={cellRole(date, range)}
+                  single={!hasSpan(range)}
                   past={date < today}
                   onPickDate={onPickDate}
                 />
