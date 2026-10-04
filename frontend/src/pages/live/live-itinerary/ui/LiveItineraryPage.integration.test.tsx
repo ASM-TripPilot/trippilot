@@ -217,8 +217,8 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
     visitCheckId: 'v1',
     poiId: 'p1',
     slotKey: `${TODAY}#p1`,
-    arrivedAt: '2026-08-20T10:02:00',
-    completedAt: '2026-08-20T10:55:00',
+    arrivedAt: '2026-08-20T01:02:00Z',
+    completedAt: '2026-08-20T01:55:00Z',
     skippedAt: null,
     source: 'MANUAL',
     spontaneous: false,
@@ -516,7 +516,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb/manual`);
     });
 
-    it('I8 실앱 done 카드는 사진·후기 칸 없이 계획 시각 "10:00" + "방문" 만 그린다 (G6 · 맹점③)', async () => {
+    it('I8 실앱 done 카드는 사진·후기 칸 없이 실제 도착 시각 "10:02"(KST) + "방문" 만 그린다 (G6 · 맹점③ · TRIP-1220)', async () => {
       server.use(
         itineraryOk(),
         tripHandler(),
@@ -529,7 +529,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await waitFor(() =>
         expect(
           screen.getByTestId(`execution-live-slot-visit-time-${key}`)
-        ).toHaveTextContent('10:00')
+        ).toHaveTextContent('10:02')
       );
       expect(
         screen.getByTestId(`execution-live-slot-visit-label-${key}`)
@@ -540,6 +540,26 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(
         screen.queryByTestId(`execution-live-slot-memo-${key}`)
       ).toBeNull();
+    });
+
+    it('I8b TRIP-1220 도착 시각이 없는 완료 방문은 계획 시각 "10:00" + "계획" 으로 표시한다 — 계획 시각을 "방문"으로 말하지 않는다', async () => {
+      server.use(
+        itineraryOk(),
+        tripHandler(),
+        visitsHandler([{ ...completedVisit(), arrivedAt: null }])
+      );
+
+      await renderActive();
+
+      const key = `${TODAY}#p1`;
+      await waitFor(() => {
+        expect(
+          screen.getByTestId(`execution-live-slot-visit-time-${key}`)
+        ).toHaveTextContent('10:00');
+        expect(
+          screen.getByTestId(`execution-live-slot-visit-label-${key}`)
+        ).toHaveTextContent('계획');
+      });
     });
 
     it('I9 슬롯 이름을 누르면 /trips/{tripId}/live/place/{poiId} 로 간다 — done·active·upcoming 모두 (TRIP-987 A-3 · US-ONTRIP-02)', async () => {
@@ -588,7 +608,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await waitFor(() =>
         expect(
           screen.getByTestId(`execution-live-slot-visit-time-${TODAY}#p1`)
-        ).toHaveTextContent('10:00')
+        ).toHaveTextContent('10:02')
       );
       expect(screen.getByTestId('execution-arrive-complete')).toBeOnTheScreen();
       expect(
@@ -2661,7 +2681,8 @@ describe('i02 트리거 표면', () => {
  */
 // TRIP-396 · TRIP-1021 · TRIP-1076 · TRIP-1079 (옛 LiveItineraryPage.visitCheck.integration.test.tsx)
 describe('방문 체크', () => {
-  const T = '2026-08-20T13:00:00';
+  // KST 13:00 — 시각 단언이 기기 시간대와 무관하도록 Z 로 못박는다(CI 는 UTC).
+  const T = '2026-08-20T04:00:00Z';
   const VISITS_PATH = `POST /api/v1/trips/${TRIP_ID}/visits`;
   const VISITS_GET_TODAY = `GET /api/v1/trips/${TRIP_ID}/visits/days/${TODAY}`;
   const arriveId = (date: string, poiId: string) =>

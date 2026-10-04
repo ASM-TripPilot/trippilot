@@ -27,11 +27,19 @@ export interface NavDest {
   distanceRange: string | null;
   /** TRIP-1189 슬롯별 [길찾기] — 바로 앞 슬롯. 첫 예정지·앞 슬롯 좌표 결측이면 키 자체가 없다(현재 위치). */
   origin?: NavOrigin | null;
+  /**
+   * TRIP-1222 (a) — 웹 폴백 전용 출발지(바로 앞 슬롯, 방문 완료 포함). 웹 길찾기엔 "현재 위치"가 없어
+   * 출발을 생략하면 입력칸이 빈다 — 그래서 첫 예정지(앱은 현재 위치)도 웹에선 앞 슬롯을 출발로 쓴다.
+   */
+  webOrigin?: NavOrigin | null;
 }
 
 const APP_NAME = 'com.trippilot.travel';
 
-type NavUrlInput = Pick<NavDest, 'lat' | 'lng' | 'nameKo' | 'origin'>;
+type NavUrlInput = Pick<
+  NavDest,
+  'lat' | 'lng' | 'nameKo' | 'origin' | 'webOrigin'
+>;
 
 export function buildAppNavUrl({
   lat,
@@ -46,16 +54,19 @@ export function buildAppNavUrl({
   return `nmap://route/public?${from}dlat=${lat}&dlng=${lng}&dname=${dname}&appname=${APP_NAME}`;
 }
 
-// 출발 지정 시 웹 형식(/directions/{출발}/{도착}/-/transit)은 네이버 공식 문서에 없다 — 실기 미검증.
+// 웹 형식(/directions/{출발}/{도착}/-/transit)은 공식 문서에 없다 — iOS 시뮬레이터에서 출발·도착이 모두 채워짐을
+// 확인했다(TRIP-1222 a, Safari 가 빠른길찾기로 넘긴다). 출발 `-` 는 입력칸이 빈다 = 웹엔 현재 위치가 없다.
 export function buildWebNavUrl({
   lat,
   lng,
   nameKo,
   origin,
+  webOrigin,
 }: NavUrlInput): string {
   const name = encodeURIComponent(nameKo ?? '장소');
-  const from = origin
-    ? `${origin.lng},${origin.lat},${encodeURIComponent(origin.nameKo ?? '장소')}`
+  const start = origin ?? webOrigin;
+  const from = start
+    ? `${start.lng},${start.lat},${encodeURIComponent(start.nameKo ?? '장소')}`
     : '-';
   return `https://map.naver.com/p/directions/${from}/${lng},${lat},${name}/-/transit`;
 }
@@ -79,13 +90,16 @@ export function resolveSlotDests(slots: ProjectedSlot[]): Map<string, NavDest> {
       nameKo: slot.nameKo ?? null,
       distanceRange: slot.distanceRange ?? null,
     };
-    const prev = i > 0 && i !== firstUpcoming ? slots[i - 1].slot : null;
+    const prev = i > 0 ? slots[i - 1].slot : null;
     if (prev && hasCoords(prev)) {
-      dest.origin = {
+      const prevOrigin: NavOrigin = {
         lat: prev.lat as number,
         lng: prev.lng as number,
         nameKo: prev.nameKo ?? null,
       };
+      // 앱 스킴은 첫 예정지에서 출발을 생략한다(현재 위치). 웹 폴백은 항상 앞 슬롯을 출발로 쓴다.
+      dest.webOrigin = prevOrigin;
+      if (i !== firstUpcoming) dest.origin = prevOrigin;
     }
     dests.set(slot.poiId, dest);
   });

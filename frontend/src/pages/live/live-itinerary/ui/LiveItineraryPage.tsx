@@ -24,6 +24,7 @@ import { riskAffectedRow } from '../model/riskAffectedRow';
 import { triggerLabel } from '@/features/planb';
 import { triggerPillCopy } from '@/features/planb';
 import { triggerWatchlist } from '../model/triggerWatchlist';
+import { visitedLabelByPoiId } from '../model/visitedLabels';
 import {
   appliedSummaryBadges,
   appliedSummaryInputFromDiff,
@@ -245,8 +246,17 @@ export function LiveItineraryPage({
     activePoiId: progress.activePoiId,
   });
   // 결정 2 — 세션 저장본을 관람 중 카드의 메모 박스로 내린다(done 카드는 범위 밖, Q5).
+  // TRIP-1220 — 완료 카드 시각은 실제 도착 시각(기록 j01 과 같은 값). 없으면 카드가 계획 시각으로 표시한다.
+  const visitedLabels = visitedLabelByPoiId(
+    visits.data ?? { visits: [] },
+    activeDate
+  );
   const hubSlots = projected.map((entry) =>
-    entry.state === 'active' ? { ...entry, memo: visitMemo.savedMemo } : entry
+    entry.state === 'active'
+      ? { ...entry, memo: visitMemo.savedMemo }
+      : entry.state === 'done'
+        ? { ...entry, visitedLabel: visitedLabels[entry.slot.poiId] ?? null }
+        : entry
   );
 
   // TRIP-1189 — 예정·진행 중 슬롯마다 [길찾기]. 도착지·출발지(바로 앞 슬롯, 첫 예정지는 현재 위치)는 resolveSlotDests 가
