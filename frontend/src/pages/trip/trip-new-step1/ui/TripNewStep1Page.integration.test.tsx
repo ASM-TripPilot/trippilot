@@ -747,7 +747,24 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
   });
 
   describe('W-3 · 도시 추가가 explore/region 라우트를 연다 (AC-3)', () => {
+    // TRIP-1210 — 도시가 있으면 추가가 막히므로(1.0 은 도시 하나) 비운 뒤 첫 도시를 추가하는 경로를 본다.
+    it('도시가 있으면 추가는 이동하지 않고 안내만 뜬다 — 요청의 destinations 도 늘지 않는다', async () => {
+      renderPage();
+      await openSheet();
+
+      fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('trip-wizard-destination-one-city-notice')
+        ).toBeOnTheScreen()
+      );
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(useTripWizardStore.getState().destinations).toHaveLength(2);
+    });
+
     it('press 가 router.push("/explore/region?purpose=trip") 를 부른다', async () => {
+      useTripWizardStore.setState({ destinations: [] });
       renderPage();
       await openSheet();
 
@@ -762,6 +779,7 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
     // 같은 출처"를 잠근다. 헬퍼 유니온에서 'trip' 이름이 바뀌면 여기 인자가 먼저 `pnpm tsc` 에서
     // 걸리고, 인자를 새 이름으로 고치는 순간 페이지 리터럴과 어긋나 jest 가 red 가 된다.
     it('도시 추가가 여는 주소는 regionPickerHref("trip") 와 같다 (TRIP-985)', async () => {
+      useTripWizardStore.setState({ destinations: [] });
       renderPage();
       await openSheet();
 
@@ -2457,6 +2475,11 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       fireEvent.press(apply);
 
       expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
+      // TRIP-1219 b — 만지기 전엔 오류 문구가 없다(열자마자 빨간 안내 금지). 비활성 적용이 막는 것은 그대로.
+      expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
+      // 입력했다 지우면(만졌다) 그때부터 보인다.
+      fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '1');
+      fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '');
       expect(screen.getByTestId('trip-wizard-error-budget')).toHaveTextContent(
         '금액을 입력해 주세요'
       );
@@ -2488,6 +2511,33 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       expect(
         screen.getByTestId('trip-wizard-summary-budget')
       ).toHaveTextContent(/50만원/);
+    });
+
+    it('TRIP-1219 b · 상한 — 10억원 초과(14자리)는 안내가 보이고 적용이 막힌다, 10억원 정각은 통과', async () => {
+      serveBudget(NO_BUDGET);
+      renderPage();
+      await waitForPreferenceRow();
+      await openSheet();
+
+      fireEvent.changeText(
+        screen.getByTestId('trip-wizard-budget-input'),
+        '99999999999999'
+      );
+      const apply = screen.getByTestId('trip-wizard-budget-apply');
+      expect(apply).toBeDisabled();
+      fireEvent.press(apply);
+      expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
+      expect(screen.getByTestId('trip-wizard-error-budget')).toHaveTextContent(
+        '10억원 이하로 입력해 주세요'
+      );
+      expect(useTripWizardStore.getState().budgetText).toBe('');
+
+      fireEvent.changeText(
+        screen.getByTestId('trip-wizard-budget-input'),
+        '1000000000'
+      );
+      expect(screen.getByTestId('trip-wizard-budget-apply')).not.toBeDisabled();
+      expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
     });
 
     it('A2 · 금액을 넣으면 활성이고, 적용하면 요약 "12만원"·제출 budgetTotal 120000 (무회귀)', async () => {

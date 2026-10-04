@@ -36,6 +36,7 @@ import {
   settle,
   type ItinScript,
 } from '@/test-support/myPageItineraries';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { MyPage } from './MyPage';
 import { ChevronRightGlyph as TripChevronGlyph } from '@/entities/trip';
 import {
@@ -1172,6 +1173,7 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
 
   beforeEach(() => {
     mockPush.mockClear();
+    resetPressGuard();
     mockUseMe.mockReturnValue(asQuery({ email: 'a@b.c' }));
     mockUseProfile.mockReturnValue(asQuery({ nickname: '테스터' }));
     mockUseTrips.mockReturnValue(asQuery([])); // 여행 0건 → 카드 목록 비어 배치 확인에 집중
@@ -1241,6 +1243,25 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
     });
   });
 
+  describe('🔴 TRIP-1222 · 등록 숙소·스타일 분석 행 연타 관통', () => {
+    it('등록 숙소 행을 연달아 두 번 눌러도 /my/stays 는 한 번만 push 된다', () => {
+      renderPage();
+      const row = screen.getByTestId('my-stays-row');
+      fireEvent.press(row);
+      fireEvent.press(row);
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith('/my/stays');
+    });
+
+    it('스타일 분석 행도 연타하면 한 번만 push 된다', () => {
+      renderPage();
+      const row = screen.getByTestId('my-style-analysis-row');
+      fireEvent.press(row);
+      fireEvent.press(row);
+      expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('🔴 TRIP-939 B-1·B-3·B-4 · 마이 탭에 눌러도 반응 없는 것이 없다 (심사 2.1)', () => {
     it('B-1(TRIP-775 Q1=A): 목적지가 선 메뉴 3행은 누르면 각자 이동하고, 커뮤니티 3행은 없다', () => {
       // 준비·실행: 실 마이페이지를 그린다(여행 0건).
@@ -1264,6 +1285,7 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
         ] as const
       ).forEach(([testID, label, href]) => {
         mockPush.mockClear();
+        resetPressGuard(); // 행마다 창 밖에서 누른다(TRIP-1222 — 가드는 모듈 전역 400ms).
         const row = screen.getByTestId(testID);
         expect(row).toHaveTextContent(label);
 

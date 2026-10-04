@@ -107,6 +107,8 @@ export interface LiveHubSlot {
   state: SlotProgressState;
   photos?: ImageSourcePropType[];
   memo?: string | null;
+  /** TRIP-1220 done 전용 — 실제 방문 시각 'HH:mm'. */
+  visitedLabel?: string | null;
 }
 
 export interface LiveHubViewProps {
@@ -369,7 +371,7 @@ export function LiveHubView({
         {/* 타임라인 — 레일 칸 28 + 카드. 세로선(2px)은 레일 칸 가운데, 첫 행 윗변 20px 아래부터 끝까지. */}
         <View className="gap-[22px] px-[20px] pb-[76px] pt-xl">
           <View className="absolute bottom-0 left-[33px] top-[40px] w-[2px] bg-hairline-strong" />
-          {slots.map(({ slot, state, photos, memo }) => {
+          {slots.map(({ slot, state, photos, memo, visitedLabel }) => {
             const slotKey = buildSlotKey(activeDate, slot.poiId);
             return (
               <View key={slotKey} className="flex-row">
@@ -383,6 +385,7 @@ export function LiveHubView({
                     state={state}
                     photos={photos}
                     memo={memo}
+                    visitedLabel={visitedLabel}
                     onPressComplete={
                       state === 'active'
                         ? () => {

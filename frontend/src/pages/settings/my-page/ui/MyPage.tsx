@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { useRouter, type Href } from 'expo-router';
 import { useQueries, type UseQueryResult } from '@tanstack/react-query';
 
@@ -146,14 +147,14 @@ export function MyPage(): ReactElement {
         styleVM ? (
           <StyleSummaryCard
             vm={styleVM}
-            onPressDetail={() => router.push('/records/style')}
+            onPressDetail={guardPress(() => router.push('/records/style'))}
           />
         ) : undefined
       }
       onPressSettings={() => router.push('/settings')}
       onPressEdit={() => router.push('/settings')}
-      onPressStays={() => router.push('/my/stays')}
-      onPressStyleAnalysis={() => router.push('/records/style')}
+      onPressStays={guardPress(() => router.push('/my/stays'))}
+      onPressStyleAnalysis={guardPress(() => router.push('/records/style'))}
       tags={tags}
       showPast={showPast}
       onPressCalendar={() => router.push('/records')}

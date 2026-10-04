@@ -49,7 +49,11 @@ let mockItineraryData: Itinerary | undefined;
 // true = 아직 로딩 중(data 미도착, isPending). 기본 false 라 기존 케이스 거동은 그대로다.
 let mockItineraryPending = false;
 
+// TRIP-1219 c — 여행 조회(박수 합으로 0박 판정). undefined = 아직 모름/실패(링크는 그대로 보인다).
+let mockTripData: { destinations: { nights: number }[] } | undefined;
+
 jest.mock('@/shared/api/generated/trips/trips', () => ({
+  useGetTripsTripId: () => ({ data: mockTripData }),
   usePostTripsTripIdItinerary: () => ({
     mutate: mockMutate,
     isPending: false,
@@ -594,6 +598,29 @@ describe('거점 숙소 다시 고르기 링크', () => {
     mockReplace.mockClear();
     mockBack.mockClear();
     mockItineraryData = undefined; // 기본 = 기존 일정 없음(404).
+    mockTripData = undefined;
+  });
+
+  describe('TRIP-1219 c · 당일치기(0박)', () => {
+    it('박수 합이 0이면 거점 숙소 다시 고르기 링크가 없다 (2/4 거점 단계를 건너뛴 여행)', () => {
+      mockTripData = { destinations: [{ nights: 0 }] };
+      render(<ItineraryMethodPage tripId={TRIP_ID} />);
+
+      expect(screen.queryByTestId('itinerary-method-rebase')).toBeNull();
+      // 짝 — 화면은 떠 있다(통째로 안 그린 게 아니다).
+      expect(screen.getByTestId('itinerary-method-fullai')).toBeOnTheScreen();
+    });
+
+    it('1박 이상이면 링크가 보인다, 여행을 아직 모를 때도 보인다', () => {
+      mockTripData = { destinations: [{ nights: 0 }, { nights: 1 }] };
+      const { unmount } = render(<ItineraryMethodPage tripId={TRIP_ID} />);
+      expect(screen.getByTestId('itinerary-method-rebase')).toBeOnTheScreen();
+      unmount();
+
+      mockTripData = undefined;
+      render(<ItineraryMethodPage tripId={TRIP_ID} />);
+      expect(screen.getByTestId('itinerary-method-rebase')).toBeOnTheScreen();
+    });
   });
 
   describe('AC-C1 · 3/4 의 "거점 숙소 다시 고르기"', () => {

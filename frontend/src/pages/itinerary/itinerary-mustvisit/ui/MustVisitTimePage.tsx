@@ -51,6 +51,9 @@ const DUPLICATE_NOTICE = '이미 추가된 곳이에요';
 const LOST_MESSAGE = '고정하지 못해 목록에서 빠졌어요. 다시 시도해 주세요';
 /** DELETE 자체가 실패했다 — 항목은 그대로다. */
 const KEPT_MESSAGE = '고정하지 못했어요. 다시 시도해 주세요';
+/** TRIP-1219 d — 고른 값이 있는데 저장 없이 [뒤로]를 누르면 첫 누름은 나가지 않고 이 안내를 낸다. */
+const LEAVE_WARNING =
+  '저장하지 않았어요. 한 번 더 뒤로 가면 고른 시각이 사라져요';
 const LOAD_FAILED_MESSAGE = '여행 정보를 불러오지 못했어요';
 
 type PromoteFailure =
@@ -82,6 +85,7 @@ export function MustVisitTimePage({
   const [edited, setEdited] = useState<MustVisitTimeForm | null>(null);
   const [failure, setFailure] = useState<PromoteFailure | null>(null);
   const [duplicate, setDuplicate] = useState(false);
+  const [leaveWarned, setLeaveWarned] = useState(false);
   // 응답이 오기 전 두 번째 누름이 두 번째 승격을 만들면 DELETE 가 두 번 나간다. 상태 갱신은
   // 다음 렌더에야 보이므로 같은 틱의 두 번째 누름을 못 막는다 — ref 는 쓰는 즉시 보인다
   // (`TripNewStep1Page.submitLockedRef` 와 같은 이유).
@@ -119,6 +123,16 @@ export function MustVisitTimePage({
 
   function patchForm(next: Partial<MustVisitTimeForm>): void {
     setEdited({ ...form, ...next });
+    setLeaveWarned(false);
+  }
+
+  // 손댄 폼(`edited`)이 있으면 첫 [뒤로]는 안내만 — 한 번 더 누르면 나간다(저장은 CTA 몫, 계약에 자동 저장 경로 없음).
+  function handleBack(): void {
+    if (edited !== null && !leaveWarned) {
+      setLeaveWarned(true);
+      return;
+    }
+    router.back();
   }
 
   async function sendPost(request: AddMustVisitRequest): Promise<void> {
@@ -212,7 +226,8 @@ export function MustVisitTimePage({
       }
       errorText={errorText}
       duplicateText={duplicate ? DUPLICATE_NOTICE : undefined}
-      onBack={() => router.back()}
+      leaveWarningText={leaveWarned ? LEAVE_WARNING : undefined}
+      onBack={handleBack}
       onToggleFixed={(next) => patchForm({ fixed: next })}
       onPickDate={(date) => patchForm({ fixedDate: date })}
       onPickStart={(start) => patchForm({ fixedStart: start })}
