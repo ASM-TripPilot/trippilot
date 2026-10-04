@@ -10,6 +10,8 @@ TourAPI 는 산과 그 전망대, 관광특구와 그 안 해수욕장, 한 공�
 **쌍 판정** (`same_family`) — 정규화 이름(괄호 접미·앞머리 시·도 토큰·공백·기호 제거) 기준:
   ① 좌표 ≤ 5m  ② 이름 포함관계 + ≤ 1.5km  ③ 한글 2자+ 공통 접두 + ≤ 700m
   맛집·카페(+ 이름이 음식 골목인 것)가 낀 쌍은 계열이 아니다 — 식당 밀집(같은 건물·먹자골목)은 정상이다.
+  단 ④ 정규화 이름이 **완전히 같고** ≤ 200m 면 카테고리와 무관하게 계열이다 — 출처·카테고리만 다른
+  한 장소다(TRIP-1228: '동문재래시장' 쇼핑 TOURAPI ↔ 맛집 MANUAL 148m 가 한 일정에 둘 다 들어갔다).
   실측(ACTIVE 1,138곳, 수작업 판정 141쌍): 계열 정밀도 85.8%, 알려진 계열 138쌍 대비 재현율 87.7%.
   시·도 이름을 지우지 않으면 '서울 우정총국'↔'서울 운현궁'·'부산시립미술관'↔'부산영화촬영스튜디오'
   같은 도시명 접두가 오탐의 대부분이었다. '국립'·'한국'·'중앙' 같은 기관·범용 접두도 같은 이유로 뗀다.
@@ -18,7 +20,8 @@ TourAPI 는 산과 그 전망대, 관광특구와 그 안 해수욕장, 한 공�
 
 **묶음은 점수순 스타** (`family_followers`) — 대표마다 **직접** 맞는 것만 그 계열원이다.
 union-find 이행 폐포는 사슬로 번져('남산' 7곳·'강화' 5곳) 과강등했다: A~B, B~C 라고
-A 와 C 가 같은 단지인 것은 아니다.
+A 와 C 가 같은 단지인 것은 아니다. 예외는 ④ 쌍둥이 하나 — 식당 대표에 붙은 비식당 쌍둥이는
+같은 대표를 가리키는 별칭 대표로 남아 제 단지 이웃을 누른다(같은 장소라 사슬이 아니다).
 """
 
 from __future__ import annotations
@@ -35,6 +38,14 @@ _SAME_COORD_KM = 0.005
 _CONTAIN_KM = 1.5
 _PREFIX_KM = 0.7
 _PREFIX_MIN_HANGUL = 2
+# ④ 이름까지 같은 같은 자리 — 맛집·카페가 껴도 계열이다. 반경 근거(2026-10-04 실측): 공유본+LOCALDATA
+# 29,786곳에서 맛집·카페가 낀 동명 쌍 중 주소 키까지 같은 15쌍이 전부 174m 안이다(최대 '청산수목원'
+# 수목원↔그 식당). 재현 쌍 '동문재래시장'(쇼핑 TOURAPI ↔ 맛집 MANUAL 시드)은 148m. 500m 로 넓히면
+# 늘어나는 쌍은 전부 주소가 다르고 대부분 길이 다른 별개 가게다('가원갈비' 308m·'호남식당' 363m).
+# 같은 가게의 교차 출처 좌표 차는 p95 52m(poi_curation/sourcing/mapping.py) — 넓은 시장·단지는
+# 대표점이 갈려 더 벌어진다. 200m 안에서 새로 묶이는 25쌍 중 별개 가게로 보이는 것은 3쌍(LOCALDATA
+# 동명 식당 57~154m)이고 체인 지점은 0 — 배제가 아니라 강등이라 감수한다.
+_SAME_NAME_KM = 0.2
 
 # 앞머리 시·도 이름. 이름 정규화(포함관계)에서는 **토큰 단위로만** 지운다 — '서울숲'·'부산역'
 # 같은 한 토큰 이름을 깎으면 포함관계가 엉뚱하게 맞는다. 접두 규칙에서는 붙여 쓴 것도 지운다
@@ -102,7 +113,10 @@ def _hangul_prefix(a: str, b: str) -> int:
 
 def _related(a: _Sig, b: _Sig) -> bool:
     if a.eatery or b.eatery:
-        return False
+        # 식당 밀집은 계열이 아니다 — 이름까지 같은 같은 자리(④)만 묶는다. 비식당 쌍의 같은
+        # 이름은 ② 포함관계가 이미 덮는다.
+        return (len(a.name) >= 2 and a.name == b.name
+                and haversine_km(a.poi.coord, b.poi.coord) <= _SAME_NAME_KM)
     km = haversine_km(a.poi.coord, b.poi.coord)
     if km <= _SAME_COORD_KM:
         return True
@@ -128,16 +142,27 @@ def family_followers(
     `ranked` 는 호출측이 (점수↓, poi_id↑) 로 줄 세운 후보 — 앞에서부터 훑어 이미 정해진
     대표 중 하나와 **직접** 맞으면 첫 대표의 계열원, 아니면 새 대표다. 계열원끼리는 비교하지
     않는다(스타 — 사슬 금지).
+
+    예외 — 식당 대표에 ④ 로 붙은 **비식당 쌍둥이**는 그 대표를 가리키는 별칭 대표로도 남는다.
+    식당 대표는 동명만 누르니, 그러지 않으면 쌍둥이가 대표일 때 누르던 단지 이웃이 풀린다
+    (TRIP-1228 리뷰 실측 — 로컬 DB 식당–비식당 쌍둥이 9쌍 중 3쌍. '자갈치시장' 맛집 > '부산
+    자갈치시장' 쇼핑 순이면 '자갈치 크루즈'·'용두산 자갈치 관광특구'가 원래 점수로 남았다).
+    식당 쌍둥이는 별칭이 되지 않는다 — 동명만 맞으니 잃는 이웃이 없고, 별칭이면 동명 식당이
+    200m 씩 사슬로 이어진다.
     """
-    leaders = [_Sig.of(p) for p in anchors]
+    leaders = [(_Sig.of(p), p.poi_id) for p in anchors]
     out: dict[PoiId, PoiId] = {}
     for p in ranked:
         me = _Sig.of(p)
-        leader = next((ld for ld in leaders if _related(ld, me)), None)
-        if leader is None:
-            leaders.append(me)
-        elif p.poi_id != leader.poi.poi_id:
-            out[p.poi_id] = leader.poi.poi_id
+        hit = next(((ld, lid) for ld, lid in leaders if _related(ld, me)), None)
+        if hit is None:
+            leaders.append((me, p.poi_id))
+            continue
+        ld, lid = hit
+        if p.poi_id != lid:
+            out[p.poi_id] = lid
+            if ld.eatery and not me.eatery:
+                leaders.append((me, lid))  # 별칭 대표
     return out
 
 
