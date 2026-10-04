@@ -281,6 +281,16 @@ class RuntimeIntegrationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runtime.main(["ensure-namespace", "--namespace", "../invalid"])
 
+    def test_load_kb_runs_the_idempotent_loader_inside_the_ai_pod(self):
+        """DB 는 비공개이고 임베딩은 클러스터 서비스라 둘을 같이 보는 자리가 ai 파드뿐이다.
+        파드의 env(벡터 DB·http 임베딩)를 그대로 써야 적재와 질의가 같은 벡터 공간을 탄다."""
+        with patch("runtime.command", return_value="총 0건") as shell, patch("builtins.print") as out:
+            runtime.main(["load-kb"])
+        argv = shell.call_args.args[0]
+        self.assertEqual(argv[:5], ["kubectl", "exec", "--namespace", "trippilot", "deploy/ai"])
+        self.assertEqual(argv[-2:], ["/app/.venv/bin/python", "scripts/load_kb.py"])
+        out.assert_any_call("총 0건")
+
     def test_smoke_checks_internal_denial_and_cleans_up_failure(self):
         import runtime_smoke
         manifest = runtime_smoke.manifest("trippilot")

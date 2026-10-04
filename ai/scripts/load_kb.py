@@ -58,7 +58,11 @@ from trippilot.agents.planb.directives import (  # noqa: E402
     load_directive_file,
 )
 
-_DEFAULT_SEEDS = ("data/planb_situation_kb.yaml", "data/replan_directives.yaml")
+# KB-5(장소 지식)도 기본이다 — 빠져 있어 DEV 에는 상황·지시어만 적재돼 있었고, 재계획
+# 프롬프트의 후보 줄에 장소 설명이 한 건도 붙지 않았다(로컬은 손으로 넣어 1,470건).
+_DEFAULT_SEEDS = (
+    "data/planb_situation_kb.yaml", "data/replan_directives.yaml", "data/place_docs.json",
+)
 # 지시 사전(KB-4)은 문서 형식이 다르다 — 루트가 `directives` 고 한 지시가 alias 만큼의
 # 문서로 펼쳐진다. 파일 이름으로 가르지 않고 **루트 키를 보고** 고른다: 이름 규칙에
 # 기대면 파일을 옮기는 순간 조용히 틀린 로더를 탄다.

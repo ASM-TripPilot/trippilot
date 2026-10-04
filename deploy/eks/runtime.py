@@ -67,7 +67,7 @@ def ensure_namespace(namespace, shell):
 def parser():
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="action", required=True)
-    for action in ("ensure-namespace", "sync-secrets", "bootstrap-db", "cleanup-db", "render-values", "smoke"):
+    for action in ("ensure-namespace", "sync-secrets", "bootstrap-db", "cleanup-db", "render-values", "smoke", "load-kb"):
         sub = commands.add_parser(action)
         sub.add_argument("--namespace", default="trippilot")
         if action in ("sync-secrets", "bootstrap-db", "render-values"):
@@ -97,6 +97,11 @@ def main(argv=None):
         runtime_db.cleanup(args.namespace, args.run_id, command)
     elif args.action == "smoke":
         runtime_smoke.run(args.namespace, command)
+    elif args.action == "load-kb":
+        # ai 파드 안에서 돈다 — 비공개 DB 와 클러스터 임베딩 서비스를 같이 보는 자리가 거기뿐이고,
+        # 파드 env 를 그대로 써야 적재와 질의가 같은 임베딩(=같은 벡터 공간)을 탄다.
+        print(command(["kubectl", "exec", "--namespace", args.namespace, "deploy/ai", "-c", "ai", "--",
+                       "/app/.venv/bin/python", "scripts/load_kb.py"]).strip())
     elif args.action == "render-values":
         values = helm_values(outputs, args.image_tag, args.certificate_arn, args.hostname, args.embedding_enabled)
         Path(args.output).write_text(json.dumps(values, indent=2) + "\n")
