@@ -1,4 +1,6 @@
 import type { ReactElement } from 'react';
+import { KeyboardAvoidingView, ScrollView } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 import {
   fireEvent,
   render,
@@ -998,5 +1000,48 @@ describe('헤더 공유 아이콘 없음', () => {
       // 긍정 짝 — 헤더 편집 진입점(공유와 다름, AC-12)은 그대로 남는다.
       expect(screen.getByTestId('reflection-daily-edit')).toBeOnTheScreen();
     });
+  });
+});
+
+describe('TRIP-1211 · 긴 글 편집 — 키보드가 저장·취소를 가리지 않는다(구조 잠금)', () => {
+  function openEdit() {
+    const props = renderScreen({ face: 'default' });
+    fireEvent.press(screen.getByTestId('reflection-daily-edit'));
+    return props;
+  }
+
+  function hasAncestor(node: ReactTestInstance, type: unknown): boolean {
+    for (let p = node.parent; p; p = p.parent) if (p.type === type) return true;
+    return false;
+  }
+
+  it('편집 중엔 키보드 회피 컨테이너가 있고 본문 스크롤은 탭을 먹지 않는다', () => {
+    openEdit();
+
+    expect(screen.UNSAFE_getByType(KeyboardAvoidingView)).toBeTruthy();
+    const scroll = screen.UNSAFE_getByType(ScrollView);
+    expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
+    // 스크롤·바깥 드래그로 키보드를 내릴 수단(iOS interactive · Android on-drag).
+    expect(['interactive', 'on-drag']).toContain(
+      scroll.props.keyboardDismissMode
+    );
+  });
+
+  it('저장·취소 버튼은 스크롤 밖 고정 푸터에 있어 키보드 위에 항상 닿는다', () => {
+    openEdit();
+
+    const save = screen.getByTestId('reflection-daily-edit-save');
+    const cancel = screen.getByTestId('reflection-daily-edit-cancel');
+    expect(hasAncestor(save, ScrollView)).toBe(false);
+    expect(hasAncestor(cancel, ScrollView)).toBe(false);
+    expect(hasAncestor(save, KeyboardAvoidingView)).toBe(true);
+    expect(hasAncestor(cancel, KeyboardAvoidingView)).toBe(true);
+  });
+
+  it('입력칸은 스크롤 안에 남는다(긴 글은 본문이 스크롤)', () => {
+    openEdit();
+    expect(
+      hasAncestor(screen.getByTestId('reflection-daily-edit-input'), ScrollView)
+    ).toBe(true);
   });
 });

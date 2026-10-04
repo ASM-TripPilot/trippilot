@@ -1,6 +1,14 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { formatDayLabel } from '@/entities/trip';
@@ -259,29 +267,169 @@ export function DailyReflectionScreen({
         </View>
       ) : null}
 
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName={`gap-md px-lg pt-[8px] ${
-          face === 'default' && !editing ? 'pb-[120px]' : 'pb-[32px]'
-        }`}
+      {/* TRIP-1211 · 편집 중엔 키보드가 올라오면 본문이 줄어들고(KeyboardAvoidingView), 저장·취소는 스크롤 밖
+          고정 푸터라 긴 글에서도 키보드 바로 위에 닿는다. 스크롤·탭이 키보드를 내리고(keyboardDismissMode),
+          키보드가 떠 있어도 첫 탭이 버튼으로 간다(keyboardShouldPersistTaps="handled"). jest 는 실제 키보드를
+          못 본다 — 구조(회피 컨테이너·푸터 위치·prop)만 잠그고 동작은 실기. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {editing ? (
-          <View className="w-full gap-md pt-[8px]">
-            <TextInput
-              testID="reflection-daily-edit-input"
-              value={text}
-              onChangeText={setText}
-              maxLength={4000}
-              multiline
-              textAlignVertical="top"
-              placeholder="직접 회고를 작성해 보세요"
-              className="min-h-[180px] rounded-card border border-hairline-strong bg-canvas p-lg font-noto text-body text-ink"
+        <ScrollView
+          className="flex-1"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={
+            Platform.OS === 'ios' ? 'interactive' : 'on-drag'
+          }
+          contentContainerClassName={`gap-md px-lg pt-[8px] ${
+            face === 'default' && !editing ? 'pb-[120px]' : 'pb-[32px]'
+          }`}
+        >
+          {editing ? (
+            <View className="w-full gap-md pt-[8px]">
+              <TextInput
+                testID="reflection-daily-edit-input"
+                value={text}
+                onChangeText={setText}
+                maxLength={4000}
+                multiline
+                textAlignVertical="top"
+                placeholder="직접 회고를 작성해 보세요"
+                className="min-h-[180px] rounded-card border border-hairline-strong bg-canvas p-lg font-noto text-body text-ink"
+              />
+              {saveFailed ? (
+                <Text className="font-noto text-label text-primary-text">
+                  저장하지 못했어요. 다시 시도해 주세요
+                </Text>
+              ) : null}
+            </View>
+          ) : face === 'pending' ? (
+            <StateNotice
+              testID="reflection-daily-pending"
+              illustration={
+                <View className="h-[72px] w-[72px] rounded-full bg-surface-soft" />
+              }
+              title="회고를 준비하고 있어요"
+              description="잠시만 기다려 주세요"
+              actions={[]}
             />
-            {saveFailed ? (
-              <Text className="font-noto text-label text-primary-text">
-                저장하지 못했어요. 다시 시도해 주세요
+          ) : face === 'empty' ? (
+            <View
+              testID="reflection-daily-empty"
+              className="w-full items-center gap-md py-[64px]"
+            >
+              <EmptyCircleGlyph size={60} />
+              <Text className="font-noto text-body text-muted">
+                {isToday
+                  ? '오늘 기록된 활동이 없습니다'
+                  : '이 날 기록된 활동이 없습니다'}
               </Text>
-            ) : null}
+            </View>
+          ) : face === 'error' ? (
+            <>
+              <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
+              <View
+                testID="reflection-daily-error"
+                className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
+              >
+                <Text className="font-noto-bold text-body font-bold text-ink">
+                  회고를 불러오지 못했어요
+                </Text>
+                <Text className="text-label text-muted">
+                  직접 회고를 작성할 수 있어요
+                </Text>
+                <Pressable
+                  testID="reflection-daily-retry"
+                  onPress={onConfirm}
+                  className="mt-sm flex-row items-center gap-[6px] rounded-button border border-hairline-strong bg-canvas px-lg py-sm"
+                >
+                  <RetryGlyph size={16} />
+                  <Text className="font-noto-bold text-label font-bold text-ink">
+                    다시 시도
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : face === 'default' ? (
+            <>
+              <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
+
+              {/* 좌표 없으면 지도 자리 자체를 그리지 않는다(TRIP-935 R7 — 늘 빈 점선 박스였다). */}
+              {hasMap ? mapArea : null}
+
+              {/* 서술 카드 — 헤드 "오늘의 기록" + "수정"(편집 진입, 죽은 링크 아님) + 본문(NarrativeBlock). */}
+              <View className="w-full gap-sm rounded-card bg-surface-soft px-lg py-md">
+                <View className="flex-row items-center">
+                  <Text className="font-noto-bold text-card-title font-bold text-ink">
+                    오늘의 기록
+                  </Text>
+                  <View className="flex-1" />
+                  <Pressable
+                    testID="reflection-daily-narrative-edit"
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    onPress={handleEnterEdit}
+                  >
+                    <Text className="font-noto-bold text-label font-bold text-primary">
+                      수정
+                    </Text>
+                  </Pressable>
+                </View>
+                <NarrativeBlock narrative={narrative} />
+              </View>
+
+              {hidePhotoGrid ? (
+                <View
+                  testID="reflection-daily-photo-empty"
+                  className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
+                >
+                  <PhotoOffGlyph size={26} />
+                  <Text className="text-label text-muted">사진 없음</Text>
+                </View>
+              ) : (
+                <ReflectionPhotoGrid photos={photos} />
+              )}
+
+              {/* changeSummary 는 default 얼굴에서 그리지 않는다(prop 은 무회귀로 유지). */}
+              {/* 하단 CTA — 저장할 입력이 없으니 "확인"(TRIP-935 R7). data-insufficient 와 같은 이름표. */}
+              <Pressable
+                testID="reflection-daily-confirm"
+                onPress={onConfirm}
+                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+              >
+                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+                  확인
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            // data-insufficient (무회귀 — 기존 표면 유지).
+            <>
+              <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
+              {mapArea}
+
+              <NarrativeBlock narrative={narrative} />
+
+              {hidePhotoGrid ? (
+                <View
+                  testID="reflection-daily-photo-empty"
+                  className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
+                >
+                  <PhotoOffGlyph size={26} />
+                  <Text className="text-label text-muted">사진 없음</Text>
+                </View>
+              ) : (
+                <ReflectionPhotoGrid photos={photos} />
+              )}
+
+              {changeSummary ? (
+                <ChangeSummaryRow changeSummary={changeSummary} />
+              ) : null}
+            </>
+          )}
+        </ScrollView>
+
+        {editing ? (
+          <View className="w-full bg-canvas px-lg pb-md pt-sm">
             <View className="flex-row gap-sm">
               <Pressable
                 testID="reflection-daily-edit-cancel"
@@ -311,130 +459,8 @@ export function DailyReflectionScreen({
               </Pressable>
             </View>
           </View>
-        ) : face === 'pending' ? (
-          <StateNotice
-            testID="reflection-daily-pending"
-            illustration={
-              <View className="h-[72px] w-[72px] rounded-full bg-surface-soft" />
-            }
-            title="회고를 준비하고 있어요"
-            description="잠시만 기다려 주세요"
-            actions={[]}
-          />
-        ) : face === 'empty' ? (
-          <View
-            testID="reflection-daily-empty"
-            className="w-full items-center gap-md py-[64px]"
-          >
-            <EmptyCircleGlyph size={60} />
-            <Text className="font-noto text-body text-muted">
-              {isToday
-                ? '오늘 기록된 활동이 없습니다'
-                : '이 날 기록된 활동이 없습니다'}
-            </Text>
-          </View>
-        ) : face === 'error' ? (
-          <>
-            <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
-            <View
-              testID="reflection-daily-error"
-              className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
-            >
-              <Text className="font-noto-bold text-body font-bold text-ink">
-                회고를 불러오지 못했어요
-              </Text>
-              <Text className="text-label text-muted">
-                직접 회고를 작성할 수 있어요
-              </Text>
-              <Pressable
-                testID="reflection-daily-retry"
-                onPress={onConfirm}
-                className="mt-sm flex-row items-center gap-[6px] rounded-button border border-hairline-strong bg-canvas px-lg py-sm"
-              >
-                <RetryGlyph size={16} />
-                <Text className="font-noto-bold text-label font-bold text-ink">
-                  다시 시도
-                </Text>
-              </Pressable>
-            </View>
-          </>
-        ) : face === 'default' ? (
-          <>
-            <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
-
-            {/* 좌표 없으면 지도 자리 자체를 그리지 않는다(TRIP-935 R7 — 늘 빈 점선 박스였다). */}
-            {hasMap ? mapArea : null}
-
-            {/* 서술 카드 — 헤드 "오늘의 기록" + "수정"(편집 진입, 죽은 링크 아님) + 본문(NarrativeBlock). */}
-            <View className="w-full gap-sm rounded-card bg-surface-soft px-lg py-md">
-              <View className="flex-row items-center">
-                <Text className="font-noto-bold text-card-title font-bold text-ink">
-                  오늘의 기록
-                </Text>
-                <View className="flex-1" />
-                <Pressable
-                  testID="reflection-daily-narrative-edit"
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  onPress={handleEnterEdit}
-                >
-                  <Text className="font-noto-bold text-label font-bold text-primary">
-                    수정
-                  </Text>
-                </Pressable>
-              </View>
-              <NarrativeBlock narrative={narrative} />
-            </View>
-
-            {hidePhotoGrid ? (
-              <View
-                testID="reflection-daily-photo-empty"
-                className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
-              >
-                <PhotoOffGlyph size={26} />
-                <Text className="text-label text-muted">사진 없음</Text>
-              </View>
-            ) : (
-              <ReflectionPhotoGrid photos={photos} />
-            )}
-
-            {/* changeSummary 는 default 얼굴에서 그리지 않는다(prop 은 무회귀로 유지). */}
-            {/* 하단 CTA — 저장할 입력이 없으니 "확인"(TRIP-935 R7). data-insufficient 와 같은 이름표. */}
-            <Pressable
-              testID="reflection-daily-confirm"
-              onPress={onConfirm}
-              className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
-            >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                확인
-              </Text>
-            </Pressable>
-          </>
-        ) : (
-          // data-insufficient (무회귀 — 기존 표면 유지).
-          <>
-            <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
-            {mapArea}
-
-            <NarrativeBlock narrative={narrative} />
-
-            {hidePhotoGrid ? (
-              <View
-                testID="reflection-daily-photo-empty"
-                className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
-              >
-                <PhotoOffGlyph size={26} />
-                <Text className="text-label text-muted">사진 없음</Text>
-              </View>
-            ) : (
-              <ReflectionPhotoGrid photos={photos} />
-            )}
-
-            {changeSummary ? (
-              <ChangeSummaryRow changeSummary={changeSummary} />
-            ) : null}
-          </>
-        )}
-      </ScrollView>
+        ) : null}
+      </KeyboardAvoidingView>
 
       {/* 하단 — 탭바(기록 활성)는 전 얼굴 공통 오버레이. default·pending 외 얼굴은 그 위에 CTA 를 함께 얹는다
           (data-insufficient: "확인" · empty/error: "직접 회고 작성"=편집 진입). CTA 는 탭바 높이(96)만큼
