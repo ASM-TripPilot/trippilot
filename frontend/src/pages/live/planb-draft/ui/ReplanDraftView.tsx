@@ -1,5 +1,5 @@
 import { Fragment, useContext, type ReactElement } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
@@ -77,6 +77,10 @@ export interface ReplanDraftViewProps {
   applyPending?: boolean;
   /** 확정 실패 — 같은 안내 자리에 실패 문구(Q6). */
   applyFailed?: boolean;
+  /** 오늘 대안 없음 + 내일이 일정에 있을 때만 페이지가 준다 — 안내 아래 [내일 일정 다시 짜기]. 없으면 안 그린다. */
+  onReplanNextDay?: () => void;
+  /** 내일 재계획 시작 요청 중 — 보조 버튼 잠금(이중 POST 차단). */
+  replanNextDayPending?: boolean;
   onBack: () => void;
   onManualEdit: () => void;
   onApply: () => void;
@@ -101,6 +105,8 @@ export function ReplanDraftView({
   applyPending,
   applyDisabled,
   applyFailed,
+  onReplanNextDay,
+  replanNextDayPending,
   onBack,
   onManualEdit,
   onApply,
@@ -123,8 +129,8 @@ export function ReplanDraftView({
     variant: 'outline',
     onPress: onManualEdit,
     // 교차 잠금(PlanbDiffPage 선례) — 확정 요청 중 편집으로 떠나면 밑에 남은 이 화면의 onSuccess 가
-    // 맨 위(편집) 화면을 허브로 갈아 끼운다.
-    disabled: applyPending,
+    // 맨 위(편집) 화면을 허브로 갈아 끼운다. 내일 재계획 시작 요청 중도 같은 이유(solving 으로 갈아 끼움).
+    disabled: applyPending || replanNextDayPending,
   };
   const primaryButton: CtaButton = isDraft
     ? {
@@ -137,6 +143,7 @@ export function ReplanDraftView({
         label: variant === 'noSolution' ? '조건 바꿔 다시 짜기' : '다시 시도',
         variant: 'primary',
         onPress: onReopenRequest,
+        disabled: replanNextDayPending,
       };
 
   return (
@@ -173,6 +180,20 @@ export function ReplanDraftView({
                 >
                   {notice.description}
                 </Text>
+              ) : null}
+              {/* CTA 바는 1~2버튼이라 보조 버튼은 안내 아래에 둔다. */}
+              {onReplanNextDay ? (
+                <Pressable
+                  testID="planb-draft-next-day"
+                  accessibilityRole="button"
+                  onPress={onReplanNextDay}
+                  disabled={replanNextDayPending}
+                  className="mt-xs self-start rounded-pill border border-hairline-strong bg-canvas px-lg py-sm"
+                >
+                  <Text className="font-noto-bold text-label font-bold text-ink">
+                    내일 일정 다시 짜기
+                  </Text>
+                </Pressable>
               ) : null}
             </View>
           ) : null}

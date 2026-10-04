@@ -8,6 +8,8 @@ import { useLiveItinerary } from '@/features/execution';
 import { formatCoPickDayHeader } from '@/features/itinerary';
 import { readFromInstant } from '../model/replanFromInstant';
 import { deriveReplanMapAnchor } from '@/features/request-replan';
+import { buildStartReplanRequest } from '@/features/request-replan';
+import { useStartReplan } from '@/features/request-replan';
 import { resolveReplanState } from '../model/replanState';
 import { useApplyReplan } from '@/features/apply-replan';
 import { useReplanDiff } from '../model/useReplanDiff';
@@ -29,6 +31,8 @@ import { ReplanDraftView, type ReplanRemovedVM } from './ReplanDraftView';
  *                    성공하면 허브로 `replace`(뒤로가기로 초안에 돌아와 409 를 맞는 길을 없앤다) +
  *                    `applied=sessionId`(i08 시트 신호, 소비는 754).
  *  - 'noSolution' → variant 'noSolution'. 서버가 사유를 주지 않으므로 부제는 뒤 절만(Seed Q4).
+ *                    오늘(KST) 세션이고 내일이 일정에 있으면 [내일 일정 다시 짜기] — 같은 조건 · targetDate=내일 ·
+ *                    FULL_DAY 로 세션을 새로 열고(`useStartReplan`) solving 으로 replace(i04 와 같은 착지).
  *  - 'failed'     → variant 'failed'(E3 — 다른 화면으로 튕기지 않고 같은 자리에 안내, INV-4).
  *  - 'solving'·'closed'·미도착 → null.
  *
@@ -46,6 +50,10 @@ import { ReplanDraftView, type ReplanRemovedVM } from './ReplanDraftView';
 
 // 라이브 대안 없음 부제 — Figma 앞 절("17시 이후 …")은 데이터별 사유라 서버가 주기 전엔 쓰지 않는다.
 const NO_SOLUTION_DESCRIPTION = '조건을 줄이거나 직접 고쳐 주세요';
+const NEXT_DAY_FAILED_DESCRIPTION =
+  '내일 일정을 다시 짜지 못했어요. 잠시 후 다시 시도해 주세요';
+// KST 는 서머타임이 없어 하루가 항상 24시간이다 — '지금 + 하루'의 KST 날짜가 내일이다(seoulDate 와 같은 기준).
+const DAY_MS = 86_400_000;
 // 서버가 이름을 못 채운 행(nameKo null) — poiId 를 이름처럼 쓰지 않는다.
 const NAME_PENDING = '이름 준비 중';
 const DIFF_LOADING_NOTICE = {
@@ -122,6 +130,7 @@ export function PlanbDraftPage({
   const router = useRouter();
   const session = useReplanSession(tripId, sessionId);
   const apply = useApplyReplan();
+  const startReplan = useStartReplan();
   // 출발 좌표 없는 세션의 지도 중심을 일정에서 고른다(TRIP-979 B). 훅이라 조기 반환 위에서 부른다.
   const itinerary = useLiveItinerary(tripId);
 
@@ -143,6 +152,14 @@ export function PlanbDraftPage({
   }
 
   const days = itinerary.data?.days ?? [];
+  // 밤에 오늘을 다시 짜면 하루 창이 남지 않아 대안 없음으로 끝난다 — 내일이 일정에 있으면 내일 하루 전체를
+  // 같은 조건으로 다시 짜는 길을 준다. 지난 날·기간 밖·일정 없는 날의 최종 판정은 서버(409)다.
+  const now = new Date();
+  const tomorrow = seoulDate(new Date(now.getTime() + DAY_MS));
+  const canReplanNextDay =
+    state.kind === 'noSolution' &&
+    data.targetDate === seoulDate(now) &&
+    days.some((day) => day.date === tomorrow);
   const draft = diff.data?.ready === true ? diff.data : undefined;
   const sheet = draft ? buildDraftSheet(draft) : undefined;
   const draftDate = draft?.date ?? undefined;
@@ -181,7 +198,40 @@ export function PlanbDraftPage({
             : DIFF_LOADING_NOTICE
       }
       applyDisabled={sheet === undefined}
-      noSolutionDescription={NO_SOLUTION_DESCRIPTION}
+      noSolutionDescription={
+        startReplan.isError
+          ? NEXT_DAY_FAILED_DESCRIPTION
+          : NO_SOLUTION_DESCRIPTION
+      }
+      replanNextDayPending={startReplan.isPending}
+      onReplanNextDay={
+        canReplanNextDay
+          ? () =>
+              startReplan.mutate(
+                {
+                  tripId,
+                  // 원 요청의 사유·방향·자유 입력 그대로, 날만 내일. 오늘 아닌 날은 FULL_DAY 만(서버 400).
+                  // 오늘 감지한 트리거는 내일을 다시 짜는 근거가 아니라 null(수동 진입). 좌표도 안 싣는다 —
+                  // 서버가 미래일엔 그 날 거점에서 출발한다(i04 미래일 요청과 같은 규칙).
+                  data: buildStartReplanRequest({
+                    scope: 'FULL_DAY',
+                    targetDate: tomorrow,
+                    reasons: data.reasons ?? [],
+                    directives: data.directives ?? [],
+                    freeText: data.freeText ?? '',
+                    triggerId: null,
+                  }),
+                },
+                {
+                  onSuccess: (next) =>
+                    router.replace({
+                      pathname: '/trips/[tripId]/planb/solving',
+                      params: { tripId, sessionId: next.sessionId },
+                    }),
+                }
+              )
+          : undefined
+      }
       applyPending={apply.isPending}
       applyFailed={apply.isError}
       onBack={() => router.back()}
