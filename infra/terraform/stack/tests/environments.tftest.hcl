@@ -57,6 +57,19 @@ run "dev_is_private_and_cost_conscious" {
     error_message = "PostgreSQL must be private, encrypted and use an AWS-managed master secret."
   }
 
+  # 환경과 무관하게 지켜야 하는 축(2026-10-04) — dev 스택으로 스토어 출시를 받기로 했으므로
+  # "꼬이면 날려도 되는 환경" 전제가 깨졌다. multi_az 는 비용 축이라 여기 넣지 않는다.
+  assert {
+    condition     = aws_db_instance.postgres.deletion_protection && !aws_db_instance.postgres.skip_final_snapshot && aws_db_instance.postgres.final_snapshot_identifier != null && aws_db_instance.postgres.backup_retention_period >= 14 && aws_eks_cluster.this.deletion_protection
+    error_message = "DEV 도 실사용자 데이터를 받는다 — 삭제 보호·최종 스냅숏 식별자·백업 14일은 환경과 무관하게 켜져 있어야 한다."
+  }
+
+  # dev 는 비용을 위해 단일 AZ 를 **의도적으로** 유지한다. 바뀌면 비용 결정이 조용히 뒤집힌 것이다.
+  assert {
+    condition     = !aws_db_instance.postgres.multi_az
+    error_message = "DEV 는 단일 AZ 유지가 의도다(비용). 바꾸려면 결정을 먼저 바꿀 것."
+  }
+
   assert {
     condition     = aws_elasticache_replication_group.redis.transit_encryption_enabled && aws_elasticache_replication_group.redis.at_rest_encryption_enabled && aws_elasticache_replication_group.redis.transit_encryption_mode == "required"
     error_message = "Cache traffic and stored data must always be encrypted."

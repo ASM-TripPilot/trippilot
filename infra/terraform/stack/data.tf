@@ -47,10 +47,10 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids          = [aws_security_group.postgres.id]
   publicly_accessible             = false
   multi_az                        = local.production
-  deletion_protection             = local.production
-  skip_final_snapshot             = !local.production
-  final_snapshot_identifier       = local.production ? "${local.name}-final" : null
-  backup_retention_period         = local.production ? 14 : 1
+  deletion_protection             = var.data_protection_enabled
+  skip_final_snapshot             = !var.data_protection_enabled
+  final_snapshot_identifier       = var.data_protection_enabled ? "${local.name}-final" : null
+  backup_retention_period         = var.data_protection_enabled ? 14 : 1
   backup_window                   = "17:00-18:00"
   maintenance_window              = "sun:18:00-sun:19:00"
   copy_tags_to_snapshot           = true
