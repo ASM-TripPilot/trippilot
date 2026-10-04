@@ -269,6 +269,42 @@ LOCALDATA_DIR=<받은 경로> uv run python scripts/match_business_status.py
 
 주소가 같아도 **이름이 안 맞으면 붙이지 않는다**(실측 12.3%). 같은 건물의 다른 가게라, 붙이면 엉뚱한 가게의 폐업 여부를 가져온다.
 
+## `collected_localdata.json` — LOCALDATA 일반음식점 (식당 공백 지역 보강, TRIP-1224)
+
+TourAPI 음식점은 전수 수집이 끝났는데도 숙소 12,936곳 중 **22.9%** 가 반경 7km(대중교통 다일 후보풀) 안
+식당이 6곳 미만이다(군 지역 49.6%, 0곳 4.0% — 2026-10-02 실측). 그 **공백 지역에만** 지방행정 인허가
+대장의 영업 중 식당을 넣는 등록 제안 문서다. 백엔드 출처 값은 `LOCALDATA`(V2.61)이고 공유본과 **따로** 적재한다.
+
+- **출처**: 공공데이터포털 「전국일반음식점표준데이터」 https://www.data.go.kr/data/15096283/standard.do —
+  **이용허락범위 제한 없음**. 위 `poi_business_status.json` 이 읽는 그 CSV 다. 숙소 시드(`R__seed_stay.sql`)도
+  같은 대장(숙박업)이고 앱에 따로 표기하지 않는다 — 앱 출처 표기(설정 화면)는 바꾸지 않았다.
+- **원본은 커밋하지 않는다** (cp949 · 약 700MB · 폐업 포함 229만 행). 로컬 예: `~/dev/trippilot/restaurant_data/식품_일반음식점.csv`
+- **고르는 법** — 규칙·수치의 근거는 `src/trippilot/poi_curation/sourcing/localdata.py` 주석:
+  1. 영업 중(`영업/정상`) · 채택 업태 16종(주점·카페·출장조리·푸드트럭·'기타' 제외) · 관광 무관 이름 제외
+     (구내·직원식당·급식 · 장례식장 · 예식장 · 골프장 시설 · 보신탕) · 좌표 EPSG:5174 → WGS84
+  2. 앵커 = 숙소 시드 + 선택 가능 지역 중심(`R__update_region_center` 를 숙소로 재현)
+  3. 공백 앵커 = 7km 안 TourAPI FOOD(이 디렉토리 공유본) **6곳 미만** — 2박3일 점심·저녁 6끼
+  4. 공백 앵커마다 **2km 안 가까운 12곳** — 합집합
+  5. 수집 게이트를 그대로 태워 TourAPI 와 같은 가게(같은 이름 50m · 주소 키 + 상호)는 병합으로 뺀다
+- **건수는 파일 `stats` 가 정본이다** — 원본 행·드롭 사유·앵커·선별·병합·업태·시도·지역 코드 예상이 다 있다.
+- 영업시간·사진은 원본에 없어 비어 있다(`quality=PARTIAL`, `opening_hours_raw=null`). `tags` 는 업태 원문 하나다.
+
+### 갱신 — 월 1회 권장
+
+원본이 월 단위로 갱신된다. 공유본(TourAPI)이 크게 늘었을 때도 다시 돌린다 — 공백 앵커가 바뀐다.
+
+```bash
+# 1) CSV 내려받기 (data.go.kr 로그인 — 자동 경로가 없다. poi_business_status.json 과 같은 파일)
+# 2) 생성 (약 30초) — pyproj 는 실행할 때만 붙인다(pyproject 의존성이 아니다)
+cd ai
+uv run --with pyproj python scripts/collect_localdata.py <받은 경로>/식품_일반음식점.csv
+# 3) 적재 — 백엔드 V2.61 이후만 받는다(이전 백엔드는 source 400)
+cd .. && python3 backend/scripts/ingest_pois.py ai/data/collected_localdata.json
+```
+
+⚠️ **재생성은 정본에서 행을 지우지 않는다.** 수신은 관리번호 멱등 upsert 라, 다음 생성에서 빠진 식당
+(폐업·공백 해소)도 정본에 ACTIVE 로 남는다 — 폐업 반영 경로는 아직 없다(V2.50 폐업 정리는 TOURAPI 한정 일회성).
+
 ## `overture/` — Overture Maps 수집 제안 (지역별)
 
 TourAPI 단일 출처의 구조적 한계를 메우는 **두 번째 POI 출처**다 (TRIP-684).
