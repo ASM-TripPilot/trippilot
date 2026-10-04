@@ -4,6 +4,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
+import { Keyboard } from 'react-native';
 import type { StayItem } from '@/shared/api/index.schemas';
 import { stayKey } from '@/features/save-stay/index.view';
 import { StaySearchScreen } from './StaySearchScreen';
@@ -229,6 +230,30 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
         'stay-card-NAVER:s2',
       ]);
     });
+  });
+
+  describe('StaySearchScreen — 칩을 누르면 키보드를 먼저 내린다 (TRIP-1217 a)', () => {
+    it.each(['price', 'region', 'more'])(
+      '%s 칩 → Keyboard.dismiss 1회 · onPressFilter 에 axis 전달',
+      (axis) => {
+        // 이름 검색칸에 키보드가 열린 채 시트가 열리면 키보드가 시트의 닫기·적용을 가린다 — 시트를 열기 전에 내린다.
+        const dismiss = jest.spyOn(Keyboard, 'dismiss');
+        const onPressFilter = jest.fn();
+        render(
+          <StaySearchScreen
+            region="부산"
+            items={ITEMS}
+            onPressFilter={onPressFilter}
+          />
+        );
+
+        fireEvent.press(screen.getByTestId(`stay-search-filter-${axis}`));
+
+        expect(dismiss).toHaveBeenCalledTimes(1);
+        expect(onPressFilter).toHaveBeenCalledWith(axis);
+        dismiss.mockRestore();
+      }
+    );
   });
 
   describe('StaySearchScreen — 스텁의 정직성 (AC-7)', () => {
