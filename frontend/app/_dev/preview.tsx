@@ -2122,7 +2122,6 @@ function renderPlanbAppliedPreview(): ReactElement {
           },
         ]}
         onConfirm={noop}
-        onRevert={noop}
       />
     </>
   );
