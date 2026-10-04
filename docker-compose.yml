@@ -162,6 +162,44 @@ services:
       retries: 12
       start_period: 40s
 
+  # ── POI 수집본 적재 (1회성 · TRIP-1223) ────────────────────────
+  # 백엔드가 healthy 가 되면 팀 공유본(ai/data/collected_pois.json)을 /internal/pois/proposals 에
+  # 한 번 붓고 끝난다. **이 한 걸음이 사람 몫이라** DB 는 누가 손으로 넣은 날에 멈춰 있었다 —
+  # QA "서울 맛집 0" 이 그것이다(공유본엔 서울 FOOD 850 이 있는데 DB 엔 없었다).
+  # 수신은 (source, source_ref) upsert 라 `up` 마다 다시 돌아도 행이 늘지 않는다 — 그래서 "이미
+  # 넣었나"를 따지지 않고 매번 붓는다. 단 upsert 만 하므로 공유본에서 **지운** 행은 DB 에 남는다.
+  # 토큰이 비면 /internal 은 닫혀 있다(fail-closed, ServiceTokenAuth.kt — REQUIRE 스위치는 기동 가드일
+  # 뿐 여는 길이 아니다). 그때는 401 을 쌓지 않고 한 줄 안내 후 성공 종료한다.
+  # 배포(EKS)는 이 파일을 안 읽는다 — 거기는 수동 런북(docs/guides/poi-수집본-적재.md)이다.
+  poi-ingest:
+    profiles: ["backend", "full"]
+    image: python:3.12-slim   # ai 이미지와 같은 베이스 — 스크립트가 표준 라이브러리만 쓴다
+    container_name: trippilot-poi-ingest
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+    volumes:
+      - ./backend/scripts/ingest_pois.py:/ingest/ingest_pois.py:ro
+      # 파일이 아니라 디렉토리를 붙인다 — LOCALDATA 문서는 아직 없을 수 있는데, 없는 파일을 붙이면
+      # Docker 가 호스트에 그 이름의 **디렉토리**를 만든다(아래 ai 의 ~/.aws 와 같은 이유).
+      - ./ai/data:/data:ro
+    # LOCALDATA 문서(collected_localdata.json)는 **있으면** 같이 넣는다 — 없으면 공유본만.
+    # `$$` 는 compose 치환을 피해 셸에 `$` 를 넘기는 표기다.
+    command:
+      - sh
+      - -c
+      - |
+        if [ -z "$$SERVICE_AUTH_TOKEN" ]; then
+          echo "SERVICE_AUTH_TOKEN 이 비어 /internal 이 닫혀 있다 — POI 적재를 건너뛴다(.env 에 넣고 다시 up)."
+          exit 0
+        fi
+        set -- /data/collected_pois.json
+        [ -f /data/collected_localdata.json ] && set -- "$$@" /data/collected_localdata.json
+        exec python3 /ingest/ingest_pois.py --base-url http://backend:8080 "$$@"
+
   # ── AI (통합 테스트 스텁 · 실제 C1/C2 는 후속) ─────────────────
   ai:
     profiles: ["full"]

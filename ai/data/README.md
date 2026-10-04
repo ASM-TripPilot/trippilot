@@ -81,19 +81,26 @@ AI 수집 파이프라인이 만든 **등록 제안 문서**를 팀이 같은 �
 
 ### 쓰는 법
 
+**로컬 compose 는 자동으로 넣는다** — `--profile backend`(또는 `full`)로 띄우면 백엔드가 healthy 가 된 뒤
+`poi-ingest` 서비스가 이 파일을 한 번 붓고 끝난다. `.env` 에 `SERVICE_AUTH_TOKEN` 이 있어야 한다(비면 `/internal` 이 닫혀 있어 건너뛴다).
+
+손으로 넣을 때(호스트 bootRun·배포 환경)는 적재 스크립트 `backend/scripts/ingest_pois.py` 를 쓴다 —
+배포 환경 절차·함정은 `docs/guides/poi-수집본-적재.md`.
+
 ```bash
 # 1) DB·앱 기동 (마이그레이션·시드는 앱이 알아서 돈다)
 docker compose up -d db
 SPRING_PROFILES_ACTIVE=local ./backend/gradlew -p backend bootRun
 
-# 2) 로그인해서 받은 액세스 토큰으로 넣는다 (몇 번 넣어도 행은 늘지 않는다)
-curl -X POST http://localhost:8080/internal/pois/proposals \
-     -H "Authorization: Bearer $TOKEN" \
-     -H 'Content-Type: application/json' \
-     --data-binary @ai/data/collected_pois.json
+# 2) 서비스 토큰으로 넣는다 — /internal 은 로그인 토큰(Authorization: Bearer)이 아니라
+#    X-Service-Token 만 받는다. 스크립트가 500건씩 쪼개 보내고 응답을 합산한다.
+export SERVICE_AUTH_TOKEN=...   # 백엔드(bootRun)가 읽는 값과 같아야 한다 — 백엔드 쪽이 비면 /internal 은 닫혀 있다
+python3 backend/scripts/ingest_pois.py --dry-run ai/data/collected_pois.json   # 건수만 확인
+python3 backend/scripts/ingest_pois.py ai/data/collected_pois.json
 ```
 
 응답은 접수·신규·갱신과 **탈락 사유별 집계**를 준다. 탈락이 있으면 그 사유가 곧 수집 쪽에 넘길 정보다.
+`(source, source_ref)` upsert 라 몇 번 넣어도 행은 늘지 않는다. 한계도 같은 이유다 — upsert 만 하므로 **공유본에서 지운 행은 DB 에 남는다**.
 
 ### 갱신
 
