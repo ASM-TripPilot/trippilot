@@ -114,6 +114,10 @@ collection 이름 규칙(TRIP-519)도 이걸 못 잡는다.
 
 ### BR-MLO-16 — `metrics-server` 없이 HPA 를 켜지 않는다
 
+> **2026-10-04: 조건을 갖췄다** — `infra/terraform/stack/eks.tf` 의
+> `aws_eks_addon.metrics_server`. 규칙은 그대로 유효하다(새 클러스터·새 환경에서
+> 같은 순서를 지켜야 한다). dev 는 켰고 prd 는 사람이 켠다.
+
 목표치가 `<unknown>` 인 채 replica 소유권만 가져가 **늘지도 줄지도 않으면서 수동 조절을
 막는다.**
 
