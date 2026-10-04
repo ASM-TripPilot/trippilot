@@ -747,7 +747,24 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
   });
 
   describe('W-3 · 도시 추가가 explore/region 라우트를 연다 (AC-3)', () => {
+    // TRIP-1210 — 도시가 있으면 추가가 막히므로(1.0 은 도시 하나) 비운 뒤 첫 도시를 추가하는 경로를 본다.
+    it('도시가 있으면 추가는 이동하지 않고 안내만 뜬다 — 요청의 destinations 도 늘지 않는다', async () => {
+      renderPage();
+      await openSheet();
+
+      fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('trip-wizard-destination-one-city-notice')
+        ).toBeOnTheScreen()
+      );
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(useTripWizardStore.getState().destinations).toHaveLength(2);
+    });
+
     it('press 가 router.push("/explore/region?purpose=trip") 를 부른다', async () => {
+      useTripWizardStore.setState({ destinations: [] });
       renderPage();
       await openSheet();
 
@@ -762,6 +779,7 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
     // 같은 출처"를 잠근다. 헬퍼 유니온에서 'trip' 이름이 바뀌면 여기 인자가 먼저 `pnpm tsc` 에서
     // 걸리고, 인자를 새 이름으로 고치는 순간 페이지 리터럴과 어긋나 jest 가 red 가 된다.
     it('도시 추가가 여는 주소는 regionPickerHref("trip") 와 같다 (TRIP-985)', async () => {
+      useTripWizardStore.setState({ destinations: [] });
       renderPage();
       await openSheet();
 

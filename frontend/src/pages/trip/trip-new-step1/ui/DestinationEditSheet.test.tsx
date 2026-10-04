@@ -146,7 +146,8 @@ describe('0박 결정 · 도시가 하나면 − 가 0박(당일치기)까지 �
 
 describe('AC-3 · 도시 추가 → onAddCity', () => {
   it('"도시 추가" press 가 onAddCity 를 한 번 부른다 (편집 콜백은 안 부른다)', () => {
-    const spies = renderSheet(BUSAN2_GYEONGJU1);
+    // TRIP-1210 — 도시가 비어 있을 때만 추가가 열린다(1개 이상이면 아래 describe 가 막는다).
+    const spies = renderSheet([]);
 
     fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
 
@@ -227,6 +228,69 @@ describe('AC-6 · 꼭 갈 곳 안내문 (TRIP-736 · TRIP-1093 문구)', () => {
     expect(
       screen.queryByTestId('trip-wizard-destination-note')
     ).not.toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-1210 — 1.0 은 도시 하나만. 다도시는 BE+AI 가 날짜별 배분을 못 해 서울 장소만 든 일정이
+ * 오류 없이 나온다(조용한 오답, INV-4). 막는 것은 '추가'뿐이고 교체(삭제 → 추가)는 열려 있다.
+ */
+describe('TRIP-1210 · 도시는 하나만', () => {
+  const ONE_CITY_NOTICE =
+    '여러 도시 여행은 준비 중이에요. 한 도시를 골라 주세요.';
+  const SEOUL1: TripDestination[] = [{ seq: 1, region: '서울', nights: 1 }];
+
+  it('도시가 1개면 "도시 추가"는 이동하지 않고 안내를 보인다', () => {
+    const spies = renderSheet(SEOUL1);
+    expect(screen.queryByText(ONE_CITY_NOTICE)).toBeNull();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    expect(spies.onAddCity).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId('trip-wizard-destination-one-city-notice')
+    ).toBeOnTheScreen();
+    expect(screen.getByText(ONE_CITY_NOTICE)).toBeOnTheScreen();
+  });
+
+  it('도시가 0개면 첫 도시 추가는 그대로 이동한다(안내 없음)', () => {
+    const spies = renderSheet([]);
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    expect(spies.onAddCity).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(ONE_CITY_NOTICE)).toBeNull();
+  });
+
+  it('교체: 삭제 × 는 그대로 되고, 비운 뒤에는 추가가 다시 열린다', () => {
+    const spies = renderSheet(SEOUL1);
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-1'));
+    expect(spies.onRemove).toHaveBeenCalledWith(1);
+  });
+
+  it('이미 2개 이상 들어온 상태도 추가는 막는다', () => {
+    const spies = renderSheet(BUSAN2_GYEONGJU1);
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    expect(spies.onAddCity).not.toHaveBeenCalled();
+    expect(screen.getByText(ONE_CITY_NOTICE)).toBeOnTheScreen();
+  });
+
+  it('도시 목록이 줄면(교체 중 삭제) 남아 있던 안내도 사라진다', () => {
+    const spies = {
+      onChangeNights: jest.fn(),
+      onRemove: jest.fn(),
+      onAddCity: jest.fn(),
+      onApply: jest.fn(),
+      onClose: jest.fn(),
+    };
+    const view = render(
+      <DestinationEditSheet destinations={SEOUL1} {...spies} />
+    );
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    expect(screen.getByText(ONE_CITY_NOTICE)).toBeOnTheScreen();
+
+    view.rerender(<DestinationEditSheet destinations={[]} {...spies} />);
+    expect(screen.queryByText(ONE_CITY_NOTICE)).toBeNull();
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    expect(spies.onAddCity).toHaveBeenCalledTimes(1);
   });
 });
 
