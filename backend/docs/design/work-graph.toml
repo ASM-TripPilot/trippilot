@@ -3174,8 +3174,26 @@ RDS 3종 + 클러스터 삭제 보호를 그쪽에 건다. `skip_final_snapshot`
 **dev 테스트 블록에 이 축의 단정이 하나도 없었다** — prd 만 검사하고 있었다. 보호 3종 +
 "단일 AZ 는 의도"(비용 결정이 조용히 뒤집히는 것도 막는다) 두 개를 추가했다.
 
-머지 후 **`mode=apply` 배포 한 번이 필요하고**, `aws rds describe-db-instances` 로 세 값을 확인한다.
-`deletion_protection`·`backup_retention_period`(1→14, 둘 다 0 아님)는 인플레이스·무재부팅이다.
+**적대적 리뷰가 차단 1건을 냈다**(2026-10-05): `deletion_protection` 과 `skip_final_snapshot` 이
+같은 변수에 같은 방향으로 묶여, **삭제를 허용하는 유일한 길이 최종 스냅숏까지 껐다.**
+게다가 `delete_automated_backups` 가 선언돼 있지 않아 기본값 true — PITR 백업도 함께 사라진다.
+가장 급한 사람이 가장 급할 때 복구 수단이 0 이 되는 경로였다. 처방: 최종 스냅숏·자동 백업
+보존을 **무조건**으로 두고 변수는 "지울 수 있는가"만 정하게 했다.
+같은 리뷰에서 `recovery_window_in_days`(시크릿, `SOCIAL_TOKEN_ENCRYPTION_KEY` 가 들어 있다 —
+7일 뒤 소멸하면 **스냅숏을 복원해도** provider 토큰 복호 불가)도 같은 축으로 옮겼다.
+
+**`terraform test` 는 실 tfvars 를 보지 않는다** — run 블록이 자기 `variables {}` 를 들고
+plan 한다(증거: 테스트 `container_logs_enabled=true` vs `dev.tfvars` false). 그래서 tfvars 에
+`data_protection_enabled = false` 를 적어도 전부 green 이다. `infra/tests/test_environment_tfvars.py`
+로 **배포가 실제로 읽는 파일**에 단정을 걸었다.
+
+**실 state plan 으로 확인**: `0 to add, 6 to change, 0 to destroy` · **교체 0건**
+(RDS 5속성 + 클러스터 + 시크릿 4종). 다만 plan 은 *적용 완료*의 증거가 아니다 —
+`apply_immediately = false` 이고 `BackupRetentionPeriod` 는 `PendingModifiedValues` 대상이라
+**유지보수 창(월 03:00 KST)까지 보류될 수 있다.** 그래서 apply 직후 ① plan 을 다시 돌려
+`No changes` 로 수렴하는지, ② `aws rds describe-db-instances --query
+'DBInstances[0].[BackupRetentionPeriod,DeletionProtection,PendingModifiedValues]'` 를 **반드시**
+확인한다. 수렴하지 않으면 보존 14일을 아직 **못 믿는다**.
 """
 
 [[nodes]]
@@ -3204,8 +3222,26 @@ topologySpread 가 이미 한다(dev 2 AZ).
 HPA 가 수를 쥔 컴포넌트는 `replicas` 가 없어 종전 테스트가 그 바닥을 **아무것도 검사하지
 않았다**(`assertNotIn("replicas", …)` 로 건너뛰었다) — 역검증에서 이 단정만 ai 변이를 잡았다.
 
-요청 합이 4.2 CPU / ~8.1Gi 가 되어 현재 두 노드로는 빡빡하다 — Karpenter 가 노드를 더 띄울
-가능성이 높다. **배포 후 롤링 중 외부 연속 요청으로 5xx 0건을 측정**할 것(아직 안 했다).
+요청 합이 4.5 CPU / ~8.7Gi 가 되어 노드 2대 여유가 ~1.3Gi/1.35 CPU 로 줄어든다(리뷰어 계산).
+**배포 후 롤링 중 외부 연속 요청으로 5xx 0건을 측정**할 것(아직 안 했다).
+
+적대적 리뷰 반영 3건(2026-10-05):
+- **임베딩 서지 제거**(`maxUnavailable: 1, maxSurge: 0`). helm `--timeout 20m` 과 임베딩
+  `progressDeadlineSeconds: 1200` 이 **같은 값**이라 임베딩 예산이 사문이었고, 복제본 2 로
+  서지 수요가 6.7Gi 가 되면 서지 파드 전부가 신규 노드를 기다린다 → helm 이 먼저 끊고
+  `--atomic` 이 **릴리스 전체를 롤백**한다(보호 설정도 함께 되돌아간다). helm 타임아웃도 30m 로
+  벌렸다. 전날 "비용 때문에 maxSurge 는 안 바꾼다"고 한 판단을 뒤집은 것이다 —
+  근거가 비용이 아니라 롤백 위험으로 바뀌었다.
+- **불변식 구멍**: 오버라이드 테스트가 PDB 켜진 dev 값 위에 `minReplicas=1` 을 덮어 위반
+  매니페스트를 만들면서 검사하지 않았다. `assert_pdb_floors` 헬퍼로 빼 모든 렌더 경로에 적용.
+- **주석 정정**: zone topologySpread 는 `ScheduleAnyway` 라 **보장이 아니라 선호**다. 다른 AZ 에
+  자리가 없으면 한 노드에 붙고, 장애로 그 노드가 빠지면 둘이 함께 사라진다(PDB 는 자발적
+  축출만 막는다).
+
+**미결(결정 필요)**: `limit_req_zone` 은 파드별이라 gateway 복제본 2 가 IP 당 레이트리밋 천장을
+`10r/s`→`20r/s`(버스트 30→60)로 **2배로 만든다.** prd 는 처음부터 2 였으니 새 성질은 아니지만,
+**출시를 받는 환경에서 처음 발효된다.** 캐리어 NAT 오탐을 줄이는 쪽이라 완화가 바람직할 수도
+있어 숫자를 임의로 정하지 않았다 — 정당한 버스트가 얼마인지는 제품 판단이다.
 """
 
 [[nodes]]
@@ -3232,7 +3268,17 @@ note = """
   **`API_HOSTNAME` 은 `api-dev` 로 남겼다** — 배포 요약에 찍히는 안내용이고, 팀의 기존 테스트
   주소를 바꾸면 혼란이 생긴다.
 
-**다음 배포에서 NLB 리스너 인증서가 교체된다.** 그때 두 이름 모두 TLS 가 서는지 확인할 것
+**인증서 교체를 복제본 증설과 분리했다**(2026-10-05, 적대적 리뷰 7번). 인증서 ARN 은
+`gateway` Service 의 `aws-load-balancer-ssl-cert` **주석**으로 들어가므로 복제본 증설과
+**같은 helm 리비전**이 된다. 그 배포가 타임아웃하면 `--atomic` 이 주석까지 구 ARN 으로
+되돌리고, 롤백도 타임아웃하면 릴리스가 `pending-rollback` 으로 남아 다음 upgrade 가
+"another operation is in progress" 로 거부된다(사람이 `helm rollback` 을 쳐야 풀린다).
+그래서 `ACM_CERTIFICATE_ARN` 환경변수를 **구 ARN 으로 되돌려** 두었다 —
+[[DEV-DATA-PROTECTION]]·[[DEV-HA-REPLICAS]] 배포가 성공한 뒤 **별도 배포**로 교체한다.
+**구 인증서를 그 전에 삭제하지 마라** — 롤백 경로가 그것을 쓴다(워크플로의
+`Check HTTPS certificate` 는 ISSUED 만 보고 현재 리스너에 붙은 ARN 의 생존은 안 본다).
+
+교체 배포 뒤에 두 이름 모두 TLS 가 서는지 확인할 것
 (`curl -sI https://api.trippilot.co.kr/api/v1/places` → 401 기대, `api-dev` 도 동일).
 그 뒤에 `eas.json` 의 production 프로필을 `https://api.trippilot.co.kr` 로 바꾼다 —
 **프론트 소유라 팀원 몫**이고 그 전에 바꾸면 인증서가 아직 교체 전이라 TLS 가 깨진다.
