@@ -394,8 +394,10 @@ export function LiveItineraryPage({
         // TRIP-1195 — 바라보는 날이 오늘이 아니면 그 날짜를 쿼리로 넘긴다(오늘이면 쿼리 없음 = 종전과 같은 경로).
         // 이미 지난 날은 서버가 409 로 막는 막다른 길이라 진입 자체를 숨긴다(결정 3). 여행 구간 밖이라 보는 날이
         // 없으면(activeDate '') 종전 그대로 — 서버가 기간 밖을 판정한다.
+        // TRIP-1214 — 여행 시작 전(오늘이 첫날보다 앞)에도 서버가 "여행 기간이 아니다"로 막으므로 처음부터 숨긴다.
         onPressAiReplan={
-          activeDate !== '' && activeDate < today
+          (activeDate !== '' && activeDate < today) ||
+          today < (itinerary.days[0]?.date ?? '')
             ? undefined
             : () =>
                 router.push(

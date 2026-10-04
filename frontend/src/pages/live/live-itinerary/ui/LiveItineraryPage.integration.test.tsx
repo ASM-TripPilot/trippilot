@@ -440,6 +440,23 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       ).toBeTruthy();
     });
 
+    it('I7g 🔴 TRIP-1214 시작 전 여행(오늘이 1일차 전)이면 [AI에게 맡기기]가 없고 [직접 수정]은 남는다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today="2026-08-10" />, {
+        wrapper,
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+
+      expect(screen.queryByTestId('execution-live-edit-pill-ai')).toBeNull();
+      expect(
+        screen.getByTestId('execution-live-edit-pill-manual')
+      ).toBeTruthy();
+    });
+
     it('I7f 오늘이 2일차일 때 2일차(오늘)를 보면 종전 AI 알약·쿼리 없는 경로다', async () => {
       server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
 
