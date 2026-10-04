@@ -712,7 +712,6 @@ describe('i08 변경 반영 시트', () => {
 
   const HUB = 'execution-live-screen';
   const SHEET = 'planb-applied-sheet';
-  const NOTICE = 'planb-applied-revert-notice';
 
   /** 준비 공통 — 성공 조회 핸들러로 페이지를 띄우고 허브가 뜰 때까지 기다린다. */
   async function renderHub(appliedSessionId?: string): Promise<void> {
@@ -761,13 +760,12 @@ describe('i08 변경 반영 시트', () => {
       expect(screen.getByTestId('planb-applied-title')).toHaveTextContent(
         '새 일정이 반영됐어요'
       );
-      expect(screen.getByTestId('planb-applied-revert')).toBeTruthy();
+      expect(screen.queryByTestId('planb-applied-revert')).toBeNull();
       expect(screen.getByTestId('planb-applied-confirm')).toBeTruthy();
 
       expect(screen.queryByTestId('planb-applied-subtitle')).toBeNull();
       expect(screen.queryByTestId('planb-applied-summary')).toBeNull();
       expect(screen.queryByTestId('planb-applied-diff')).toBeNull();
-      expect(screen.queryByTestId(NOTICE)).toBeNull();
       // 뜨는 것만으로 아무 데도 가지 않고 쿼리도 건드리지 않는다.
       expectNoNavigation();
       expect(mockSetParams).not.toHaveBeenCalled();
@@ -881,17 +879,17 @@ describe('i08 변경 반영 시트', () => {
       });
       expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
 
-      // 실행 — 캐시를 비우고(5분 gc 와 같은 상태) 허브를 다시 그리게 한다([되돌리기] → 안내 상태 변경)
+      // 실행 — 캐시를 비우고(5분 gc 와 같은 상태) 허브를 다시 그리게 한다(일차 칩 누름 → 상태 변경)
       client.removeQueries({
         queryKey: getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey(
           TRIP_ID,
           SESSION_ID
         ),
       });
-      fireEvent.press(screen.getByTestId('planb-applied-revert'));
+      fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+      await settle();
 
-      // 단언 — 리렌더가 실제로 일어났고(안내가 떴고) 배지는 그대로다
-      await waitFor(() => expect(screen.getByTestId(NOTICE)).toBeTruthy());
+      // 단언 — 리렌더 뒤에도 배지는 그대로다
       expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
     });
 
@@ -1066,35 +1064,14 @@ describe('i08 변경 반영 시트', () => {
     });
   });
 
-  describe('🔴 A7 · AC-8 — [되돌리기]는 정직 안내만, 서버 쓰기 0 (E2 · Q3)', () => {
-    it('안내가 시트 안에 뜨고 시트는 그대로 · setParams 0 · 이동 0 · POST 0 · 다시 눌러도 같다', async () => {
+  describe('🔴 A7 · TRIP-1214 — 되돌리기 계약이 없어 버튼을 두지 않는다', () => {
+    it('시트에 [되돌리기]·안내 줄이 없고 [확인]만 남는다', async () => {
       await renderHub(SESSION_ID);
-      // 짝 앵커 — 요청 관측 배선이 살아 있다.
-      expect(
-        observedHits.filter(
-          (hit) => hit === `GET /api/v1/trips/${TRIP_ID}/itinerary`
-        ).length
-      ).toBeGreaterThanOrEqual(1);
 
-      fireEvent.press(screen.getByTestId('planb-applied-revert'));
-      await settle();
-
-      const sheet = screen.getByTestId(SHEET);
-      expect(within(sheet).getByTestId(NOTICE)).toHaveTextContent(
-        '이미 반영돼 되돌릴 수 없어요'
-      );
-      expect(mockSetParams).not.toHaveBeenCalled();
-      expectNoNavigation();
-      expect(postHits()).toEqual([]);
-
-      // Q3 멱등 — 다시 눌러도 안내 한 줄, 버튼 그대로.
-      fireEvent.press(screen.getByTestId('planb-applied-revert'));
-      await settle();
-
-      expect(screen.getAllByTestId(NOTICE)).toHaveLength(1);
-      expect(screen.getByTestId('planb-applied-revert')).toBeTruthy();
+      expect(screen.getByTestId(SHEET)).toBeTruthy();
+      expect(screen.queryByTestId('planb-applied-revert')).toBeNull();
+      expect(screen.queryByTestId('planb-applied-revert-notice')).toBeNull();
       expect(screen.getByTestId('planb-applied-confirm')).toBeTruthy();
-      expect(postHits()).toEqual([]);
     });
   });
 
