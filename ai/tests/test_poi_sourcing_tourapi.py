@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
-from trippilot.poi_curation.sourcing.mapping import map_category, parse_open_hours
+from trippilot.poi_curation.sourcing.mapping import _parse_rest_days, map_category, parse_open_hours
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
 from trippilot.domain.poi import OpenHour, PoiCategory
 from trippilot.ports.poi_sourcing_port import SourcingError
@@ -102,7 +104,7 @@ def test_상시_개방은_24시간으로_읽는다() -> None:
 
 def test_상시_개방은_해석_안되는_휴무_문구에_지지_않는다() -> None:
     """원문이 이미 휴무 없음을 말한다 — 명절 안내가 붙었다고 통째로 버리지 않는다."""
-    assert len(parse_open_hours("상시 개방", "설날·추석 당일")) == 7
+    assert len(parse_open_hours("상시 개방", "점포별 상이")) == 7
 
 
 def test_상시_개방이라도_읽히는_휴무는_존중한다() -> None:
@@ -202,13 +204,90 @@ def test_parse_open_hours_past_midnight() -> None:
         (None, None),                                  # 정보 없음
         ("", ""),
         ("[3~10월] 09:00~19:00 [11~2월] 09:00~18:00", ""),  # 계절별 — 확정 불가
-        ("09:00~18:00", "매월 첫째 월요일"),             # 주차 가변 휴무 — 표현 불가
-        ("09:00~18:00", "설날·추석 당일"),               # 명절 — 표현 불가
         ("09:00~18:00", "동절기 휴장"),                  # 요일 아님 — 확신 없음
+        ("09:00~18:00", "점포별 상이"),                  # 쇼핑 표본의 56% — 어느 날 닫는지 모른다
+        ("09:00~18:00", "※ 자세한 사항은 전화문의 요망"),  # 비고뿐
+        ("09:00~18:00", "매년 3월~10월"),                # 계절 — 요일 아님
+        ("09:00~18:00", "장날이외의 날"),
+        ("09:00~18:00", "1월 1일 / 동절기 휴장"),          # 비정기 휴일에 모르는 글이 섞였다
+        ("09:00~18:00", "연중무휴 / 동절기(12~2월) 휴장"),  # 무휴라도 모르는 글이 섞이면 모른다
+        ("09:00~18:00", "11월 1일 ~ 3월 31일 휴장"),        # 날짜가 있어도 기간이면 장기 휴장이다
+        ("09:00~18:00", "당일 사정에 따라 휴무"),
+        ("09:00~18:00", "주말만 운영"),                     # 이 주말은 여는 날이다
+        # 구역이 둘 — 어느 구역의 휴무인지 모른다
+        ("09:00~18:00", "[경매] 매주 일요일 / 1월 1일 / 설·추석 연휴<br>[판매(도소매)] 연중무휴"),
     ],
 )
 def test_parse_open_hours_unparseable_is_empty_not_fabricated(hours_raw, rest_raw) -> None:
     assert parse_open_hours(hours_raw, rest_raw) == ()
+
+
+# ── 휴무 원문 — 실물 표본(TourAPI 상세 584건, 2026-10-04)으로 정한 규칙 (TRIP-1230) ──
+# 종전엔 명절·공휴일·"첫째 주"가 섞이면 통째로 포기해 표본의 38.5% 가 영업시간 창까지 잃었다.
+def _closed(rest_raw: str) -> set[int]:
+    hours = parse_open_hours("09:00~18:00", rest_raw)
+    assert all((h.open_min, h.close_min) == (540, 1080) for h in hours)   # 창은 그대로
+    return set(range(7)) - {h.day_of_week for h in hours}
+
+
+@pytest.mark.parametrize(("rest_raw", "closed"), [
+    ("매주 월요일 / 1월 1일 / 설·추석 당일", {0}),          # 박물관 전형 — 연 단위 휴일은 무시
+    ("매주 월요일, 1월 1일, 설날 및 추석 당일", {0}),
+    ("매주 금요일 / 설·추석 연휴 / 대체공휴일 / 12월 31일 / 1월 1일", {4}),
+    # 괄호 단서의 요일은 휴무가 아니다 — 읽으면 토·일까지 닫힌다
+    ("매주 월요일 / 법정공휴일 (토요일·일요일과 겹치는 경우는 휴관)", {0}),
+    ("매주 월요일 (단, 월요일이 공휴일일 경우 그 다음 평일 휴관) / 1월 1일 / 설·추석 당일", {0}),
+    ("매주 월요일~목요일 / 연휴 마지막 날", {0, 1, 2, 3}),  # 범위 — 종전엔 양끝(월·목)만 읽었다
+    ("매주 토요일~일요일 / 법정공휴일", {5, 6}),
+    ("매주 주말", {5, 6}),
+    ("매달 둘째·넷째 일요일", {6}),                          # 월 단위 요일 — 매주로 넓힌다
+    ("매주 일요일 / 매월 둘째, 넷째 월요일", {0, 6}),
+    ("- 매주 월요일, 화요일※ 매월 첫째주 수요일 단축영업", {0, 1}),   # ※ 비고는 읽지 않는다
+    ("매주 일요일 ※ 우천 시 휴장<br>매주 월요일 휴무", {0, 6}),  # 비고는 그 줄까지만 — 다음 줄은 본문
+    ("-<br>", set()),
+    # 요일이 괄호·비고에만 있으면 원문 전체에서 읽는다 — 종전 파서가 읽던 요일을 놓치지 않는다
+    ("연중무휴 (단 매주 월요일 휴무)", {0}),
+    ("휴관일(매주 월요일)", {0}),
+    ("1월 1일 ※ 매주 월요일 휴관", {0}),
+    ("월요일∼수요일", {0, 1, 2}),                            # 물결표 변형
+    ("설·추석 연휴", set()),                                # 비정기 휴일뿐 — 매주 쉬는 날 없음
+    ("1월 1일 / 부처님 오신날 / 성탄절 / 설·추석 연휴", set()),
+    ("월 1회 정기휴무 (자세한 내용은 홈페이지 참조)", set()),
+    ("연중무휴<br>※ 변동 가능성이 있으므로 전화문의 요망", set()),
+    ("연중무휴 (점포별 상이)", set()),
+    ("-", set()),                                           # 자리표시자
+])
+def test_휴무_원문은_매주_쉬는_요일만_뺀다(rest_raw: str, closed: set[int]) -> None:
+    assert _closed(rest_raw) == closed
+
+
+_DAY_NAMES = "월화수목금토일"
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    days=st.sets(st.integers(0, 6), min_size=1, max_size=6),
+    irregular=st.lists(st.sampled_from(
+        ["1월 1일", "설·추석 당일", "법정공휴일", "개관기념일 (4월 10일)", "기타 관장이 지정한 날"]),
+        max_size=3),
+    note=st.sampled_from(
+        ["", " (단, 일요일이 공휴일이면 다음 평일 휴관)", " (토요일·일요일과 겹치면 휴관)"]),
+)
+def test_pbt_매주_휴무_요일은_비정기_휴일과_괄호_단서에_흔들리지_않는다(
+    days: set[int], irregular: list[str], note: str,
+) -> None:
+    head = "매주 " + ", ".join(f"{_DAY_NAMES[d]}요일" for d in sorted(days)) + note
+    assert _closed(" / ".join([head, *irregular])) == days
+
+
+@settings(max_examples=60, deadline=None)
+@given(a=st.integers(0, 6), b=st.integers(0, 6))
+def test_pbt_요일_범위는_사이_요일까지_읽는다(a: int, b: int) -> None:
+    """`월요일~수요일` 은 월·화·수다 — 종전엔 양끝만 읽어 화요일에 일정이 들어갔다. 주를 넘는 범위도.
+
+    파서를 직접 본다 — 7일 전부인 범위는 영업시간으로 보면 `()` 라 "모름"과 구별되지 않는다."""
+    expected = {(a + k) % 7 for k in range((b - a) % 7 + 1)}
+    assert _parse_rest_days(f"매주 {_DAY_NAMES[a]}요일~{_DAY_NAMES[b]}요일") == frozenset(expected)
 
 
 # ── 시각 3회 이상 — 종전엔 통째로 포기하던 것 (2026-09-26) ──────────────
