@@ -6,6 +6,7 @@ QA 6회차: '황령산 전망대'(1일차) + '황령산'(2일차), 서울 '남�
 
 증명하는 것 (실 API 0 — 점수는 FakeLlm, 어셈블리는 규칙 그리디를 1차로 승격한 퍼사드):
   ① 쌍 판정 — 좌표 ≤5m · 포함 ≤1.5km · 한글 2자+ 접두 ≤700m, 도시명 접두 오탐 없음, 맛집·카페 제외
+     (단 이름까지 같은 ≤200m 는 카테고리와 무관하게 계열 — TRIP-1228 동문재래시장 쇼핑+맛집)
   ② 점수순 스타 — 사슬로 번지지 않는다, 고정 블록·앞 일자 배치분이 대표
   ③ 강등이 **배치를 바꾼다** — 남산 3곳 같은 날, 황령산 다른 날(excluded 경유·풀 밖 조회)
   ④ 강등이지 배제가 아니다 — 후보 집합·순서·개수 불변, 대표 점수 불변, > 0 유지 (INV-1)
@@ -156,6 +157,68 @@ def test_맛집_카페가_낀_쌍은_계열이_아니다() -> None:
     assert not same_family(cafe, _named("e", "남산공원"))
 
 
+def test_이름까지_같은_같은_자리는_카테고리가_달라도_계열이다() -> None:
+    """TRIP-1228 — 동문재래시장 쇼핑(TOURAPI) ↔ 맛집(MANUAL) 148m 가 한 일정에 둘 다 들어갔다.
+
+    출처·카테고리만 다른 한 장소다 — 점수 높은 쪽이 대표, 다른 쪽이 계열원(강등).
+    """
+    shop = _named("dm", "동문재래시장", category=PoiCategory.SHOPPING)
+    food = _named("df", "동문재래시장", north_m=148, category=PoiCategory.FOOD)
+    assert same_family(shop, food) and same_family(food, shop)
+    assert family_followers((), (shop, food)) == {PoiId("df"): PoiId("dm")}
+    assert family_followers((), (food, shop)) == {PoiId("dm"): PoiId("df")}
+    # 출처마다 다른 표기(앞머리 시·도 토큰·괄호 접미)는 정규화가 지운다 — 로컬 DB 실측 쌍
+    assert same_family(_named("j1", "자갈치시장", category=PoiCategory.FOOD),
+                       _named("j2", "부산 자갈치시장", north_m=6, category=PoiCategory.SHOPPING))
+    assert same_family(_named("c1", "소우주", category=PoiCategory.CAFE),
+                       _named("c2", "(주)소우주", north_m=27, category=PoiCategory.FOOD))
+    # 음식 골목 이름도 같다
+    assert same_family(_named("a1", "국제시장 먹자골목", category=PoiCategory.ACTIVITY),
+                       _named("a2", "국제시장 먹자골목", north_m=80, category=PoiCategory.FOOD))
+
+
+def test_동명_같은_자리는_200m_까지() -> None:
+    shop = _named("dm", "동문재래시장", category=PoiCategory.SHOPPING)
+    assert same_family(shop, _named("a", "동문재래시장", north_m=199, category=PoiCategory.FOOD))
+    assert not same_family(shop, _named("b", "동문재래시장", north_m=201, category=PoiCategory.FOOD))
+    food = _named("f", "오색식당", category=PoiCategory.FOOD)
+    assert same_family(food, _named("c", "오색식당", north_m=199, category=PoiCategory.FOOD))
+    assert not same_family(food, _named("d", "오색식당", north_m=201, category=PoiCategory.FOOD))
+
+
+def test_이름이_다른_같은_건물_식당은_여전히_계열이_아니다() -> None:
+    """식당 밀집 예외는 그대로 — 이름이 **완전히** 같을 때만 묶는다(포함관계·접두는 안 본다)."""
+    market = _named("dm", "동문재래시장", category=PoiCategory.SHOPPING)
+    noodle = _named("f1", "동문시장 올레국수", category=PoiCategory.FOOD)  # 같은 좌표
+    hall = _named("f2", "동문재래시장 회센터", category=PoiCategory.FOOD)  # 포함관계
+    assert not same_family(market, noodle)
+    assert not same_family(market, hall)
+    assert not same_family(noodle, hall)
+    # 정규화하면 비는 이름끼리는 같은 이름으로 치지 않는다
+    assert not same_family(_named("x", "(주)", category=PoiCategory.FOOD),
+                           _named("y", "(주)", category=PoiCategory.FOOD))
+
+
+# 이름과 "음식 골목 이름인가" — 기대값을 구현의 정규식이 아니라 리터럴로 둔다
+_SAME_NAMES = (("동문재래시장", False), ("국제시장 먹자골목", True))
+_EATERY_CATS = frozenset({PoiCategory.FOOD, PoiCategory.CAFE})
+
+
+# `_named` 의 1m 는 실거리 1.0018m 라 200 은 경계(200.35m)에 걸쳐 뺀다
+@given(st.sampled_from(_SAME_NAMES), st.sampled_from(PoiCategory), st.sampled_from(PoiCategory),
+       st.integers(0, 1_400).filter(lambda m: m != 200))
+@settings(max_examples=200, deadline=None)
+def test_동명_쌍은_200m_안이면_카테고리와_무관하게_계열이고_밖이면_식당_예외가_산다(
+        named, c1, c2, north_m) -> None:
+    name, alley = named
+    a, b = _named("a", name, category=c1), _named("b", name, north_m=north_m, category=c2)
+    eatery = alley or c1 in _EATERY_CATS or c2 in _EATERY_CATS
+    if north_m < 200:
+        assert same_family(a, b)
+    else:  # 밖이면 식당 예외 · 비식당은 포함관계(≤1.5km)
+        assert same_family(a, b) == (not eatery)
+
+
 # ── ② 점수순 스타 ───────────────────────────────────────────────────
 
 
@@ -281,6 +344,34 @@ def test_남산_3곳이_같은_날_하나만_남는다() -> None:
     assert fed["n1"] == 0.95  # 대표는 그대로
     assert fed["n2"] == demoted_score(0.9, factor=_F, penalty=_P)
     assert fed["n3"] == demoted_score(0.85, factor=_F, penalty=_P)
+
+
+_DONGMUN = (
+    _named("dm", "동문재래시장", category=PoiCategory.SHOPPING),
+    _named("df", "동문재래시장", north_m=148, category=PoiCategory.FOOD),
+    _named("f2", "동문시장 올레국수", north_m=148, category=PoiCategory.FOOD),  # 같은 건물 다른 식당
+    _named("o1", "경복궁", north_m=900),
+    _named("o2", "덕수궁", east_m=900),
+    _named("o3", "종묘", north_m=-900),
+)
+_DONGMUN_SCORES = {"dm": 0.95, "df": 0.9, "f2": 0.8, "o1": 0.7, "o2": 0.7, "o3": 0.7}
+
+
+def test_동문재래시장_쇼핑과_맛집이_한_일정에_하나만_남는다() -> None:
+    """TRIP-1228 재현 — 강등 없으면 같은 장소의 쇼핑·맛집 레코드가 둘 다 배치된다."""
+    pool = _pool(_DONGMUN)
+    base_agent, _, base_sink = _agent(_DONGMUN_SCORES)
+    base = base_agent.run(_task(pool, request=_gen_request(family=False, end_hour=13)))
+    assert {"dm", "df"} <= set(_placed(base))  # 전제: 둘 다 들어간다(10-04 로컬 실측 현상)
+    assert _fed(base_sink) == _DONGMUN_SCORES  # 플래그 off(replan)면 점수 그대로
+
+    agent, _, sink = _agent(_DONGMUN_SCORES)
+    outcome = agent.run(_task(pool, request=_gen_request(end_hour=13)))
+
+    assert set(_placed(outcome)) & {"dm", "df"} == {"dm"}
+    fed = _fed(sink)
+    assert fed["df"] == demoted_score(0.9, factor=_F, penalty=_P)
+    assert fed["dm"] == 0.95 and fed["f2"] == 0.8  # 대표 · 이름 다른 같은 건물 식당은 그대로
 
 
 _HWANG = (
