@@ -66,6 +66,8 @@ export interface SlotProgressCardProps {
   onPressMemo?: () => void;
   /** active 사진 안내 한 줄(권한 거부·저장 실패 등) — 상태는 부모가 가진다. 비면 안 그린다. */
   photoNotice?: string | null;
+  /** TRIP-1216 — 사진 안내 옆 [설정 열기](권한 거부). 주면 안내가 있을 때만 그린다. 설정을 여는 일은 부모 몫. */
+  onPressPhotoSettings?: () => void;
   /** TRIP-1117 — active 메모 안내 한 줄(저장 실패, Q3). 상태는 부모가 가진다. 비면 안 그린다. */
   memoNotice?: string | null;
   /** upcoming 전용(TRIP-748) — 주면 "예정" 대신 이 글자를 분홍 배지로(트리거 영향 카드). */
@@ -90,6 +92,7 @@ export function SlotProgressCard({
   onPressPhoto,
   onPressMemo,
   photoNotice,
+  onPressPhotoSettings,
   memoNotice,
   badgeLabel,
   onPressName,
@@ -288,6 +291,19 @@ export function SlotProgressCard({
           >
             {photoNotice}
           </Text>
+        ) : null}
+        {photoNotice && onPressPhotoSettings ? (
+          <Pressable
+            testID="execution-arrive-photo-settings"
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={onPressPhotoSettings}
+            className="self-start"
+          >
+            <Text className="font-noto-bold text-caption font-bold text-primary">
+              설정 열기
+            </Text>
+          </Pressable>
         ) : null}
         {/* TRIP-1117 Q3 — 시트가 닫힌 뒤 도착한 메모 저장 실패(INV-4). 순서: 버튼 줄 → 안내 → 메모 박스(Q9). */}
         {memoNotice ? (

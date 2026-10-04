@@ -134,6 +134,8 @@ export interface LiveHubViewProps {
   onPressMemo?: () => void;
   /** active 카드 사진 안내 한 줄 — 상태는 페이지가 가진다. */
   photoNotice?: string | null;
+  /** TRIP-1216 — 사진 안내 옆 [설정 열기](권한 거부일 때만 페이지가 준다). */
+  onPressPhotoSettings?: () => void;
   /** TRIP-1117 — active 카드 메모 안내 한 줄(시트가 닫힌 뒤 도착한 저장 실패, Q3). 상태는 페이지가 가진다. */
   memoNotice?: string | null;
   /** TRIP-1117 — 메모 시트가 열린 동안 수정 FAB 를 숨긴다(Figma 4741:2833). 앵커 자리(HF8)는 그대로. */
@@ -211,6 +213,7 @@ export function LiveHubView({
   onPressPhoto,
   onPressMemo,
   photoNotice,
+  onPressPhotoSettings,
   memoNotice,
   fabHidden = false,
   triggerChip,
@@ -394,6 +397,9 @@ export function LiveHubView({
                     onPressPhoto={state === 'active' ? onPressPhoto : undefined}
                     onPressMemo={state === 'active' ? onPressMemo : undefined}
                     photoNotice={state === 'active' ? photoNotice : undefined}
+                    onPressPhotoSettings={
+                      state === 'active' ? onPressPhotoSettings : undefined
+                    }
                     memoNotice={state === 'active' ? memoNotice : undefined}
                     badgeLabel={slotBadgeLabel?.(slotKey) ?? undefined}
                     onPressName={

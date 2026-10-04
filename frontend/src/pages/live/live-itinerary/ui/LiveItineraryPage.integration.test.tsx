@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
+import { Linking } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -1984,6 +1985,29 @@ describe('관람 중 카드 [사진]·[메모]', () => {
         expect(hitCount(CONSENT_GET)).toBe(0);
       }
     );
+
+    it('L6b 권한 거부 안내에는 [설정 열기] 가 있고 누르면 openSettings 1회 · 피커 실패 안내에는 없다 (TRIP-1216 d)', async () => {
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      mockPick.mockResolvedValueOnce({ kind: 'failed' });
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+      await screen.findByTestId('execution-arrive-photo-notice');
+      expect(
+        screen.queryByTestId('execution-arrive-photo-settings')
+      ).toBeNull();
+
+      mockPick.mockResolvedValueOnce({ kind: 'denied' });
+      fireEvent.press(screen.getByTestId('execution-arrive-photo'));
+      fireEvent.press(
+        await screen.findByTestId('execution-arrive-photo-settings')
+      );
+
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      openSettings.mockRestore();
+    });
 
     it('L7 사진 기록 요청이 실패하면(500) 저장 실패 안내가 뜬다', async () => {
       photoStatus = 500;

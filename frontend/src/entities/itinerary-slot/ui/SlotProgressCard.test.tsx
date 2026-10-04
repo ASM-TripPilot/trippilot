@@ -250,6 +250,45 @@ describe('SlotProgressCard · active (AC-4)', () => {
   });
 });
 
+describe('SlotProgressCard · 사진 안내의 [설정 열기] (TRIP-1216 d)', () => {
+  const base = {
+    slot: mkSlot({
+      startAt: '13:00:00',
+      endAt: '14:30:00',
+      nameKo: '부산시립미술관',
+    }),
+    date: DATE,
+    state: 'active' as const,
+    onPressPhoto: jest.fn(),
+    photoNotice: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+  };
+
+  it('안내가 있고 onPressPhotoSettings 가 오면 [설정 열기] 가 보이고 누르면 1회 호출된다', () => {
+    const onSettings = jest.fn();
+    render(<SlotProgressCard {...base} onPressPhotoSettings={onSettings} />);
+
+    fireEvent.press(screen.getByTestId('execution-arrive-photo-settings'));
+
+    expect(onSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('onPressPhotoSettings 가 없으면 버튼이 없다', () => {
+    render(<SlotProgressCard {...base} />);
+    expect(screen.queryByTestId('execution-arrive-photo-settings')).toBeNull();
+  });
+
+  it('안내가 비면 onPressPhotoSettings 가 와도 버튼이 없다', () => {
+    render(
+      <SlotProgressCard
+        {...base}
+        photoNotice={null}
+        onPressPhotoSettings={jest.fn()}
+      />
+    );
+    expect(screen.queryByTestId('execution-arrive-photo-settings')).toBeNull();
+  });
+});
+
 describe('SlotProgressCard · upcoming (AC-5)', () => {
   const upcoming = (openingHours: string | null) =>
     mkSlot({

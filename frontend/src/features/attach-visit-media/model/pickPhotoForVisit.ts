@@ -10,10 +10,13 @@ import { pickPhotoAsset, type PhotoAssetMeta } from '@/shared/photo';
  *    (좌표만 빠질 뿐 첨부는 막지 않는다).
  *  - 못 골랐으면 `{ notice }` — 취소는 null(사용자 의도라 조용히), 나머지는 사용자에게 보일 안내 한 줄
  *    (INV-4 · US-REC-02 예외). 성공 전용 Toast 가 아니라 부르는 쪽이 트리거 옆에 그린다.
+ *  - TRIP-1216 · 앱이 스스로 못 푸는 사유(권한 거부)는 `settings: true` 를 함께 준다 — 부르는 쪽이 안내 옆에
+ *    [설정 열기](`Linking.openSettings`)를 그린다. 그 밖의 사유엔 키 자체가 없다.
  */
 
 export type PhotoPickOutcome =
-  { asset: PhotoAssetMeta; gpsConsent: boolean } | { notice: string | null };
+  | { asset: PhotoAssetMeta; gpsConsent: boolean }
+  | { notice: string | null; settings?: true };
 
 const PICK_NOTICE = {
   canceled: null,
@@ -25,7 +28,10 @@ const PICK_NOTICE = {
 
 export async function pickPhotoForVisit(): Promise<PhotoPickOutcome> {
   const result = await pickPhotoAsset();
-  if (result.kind !== 'picked') return { notice: PICK_NOTICE[result.kind] };
+  if (result.kind !== 'picked') {
+    const notice = PICK_NOTICE[result.kind];
+    return result.kind === 'denied' ? { notice, settings: true } : { notice };
+  }
   const gpsConsent = await getMeLocationConsent().then(
     (consent) => consent.gpsRecordingOptIn === true,
     () => false

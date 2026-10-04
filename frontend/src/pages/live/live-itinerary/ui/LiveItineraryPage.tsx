@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { View } from 'react-native';
+import { Linking, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveLiveState } from '../model/liveState';
@@ -119,6 +119,8 @@ export function LiveItineraryPage({
   const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
   // 관람 중 카드 [사진] 안내 한 줄(TRIP-1070). 다음 [사진] 누름에 지운다.
   const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  // TRIP-1216 — 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
+  const [photoNeedsSettings, setPhotoNeedsSettings] = useState(false);
   // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(ref: 같은 틱 두 번째 press 도 본다)과
   // 앱·웹 모두 실패했을 때의 거리 안내(INV-4).
   const directionsBusy = useRef(false);
@@ -276,9 +278,11 @@ export function LiveItineraryPage({
   // 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
   const attachActivePhoto = async (visitCheckId: string) => {
     setPhotoNotice(null);
+    setPhotoNeedsSettings(false);
     const picked = await pickPhotoForVisit();
     if ('notice' in picked) {
       setPhotoNotice(picked.notice);
+      setPhotoNeedsSettings(picked.settings === true);
       return;
     }
     try {
@@ -429,6 +433,9 @@ export function LiveItineraryPage({
             : undefined
         }
         photoNotice={photoNotice}
+        onPressPhotoSettings={
+          photoNeedsSettings ? () => void Linking.openSettings() : undefined
+        }
         memoNotice={!memoSheetOpen && memoFailed ? MEMO_SAVE_FAILED : null}
         fabHidden={memoSheetOpen}
         triggerChip={triggerChip}
