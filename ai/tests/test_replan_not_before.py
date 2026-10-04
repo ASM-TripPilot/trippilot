@@ -494,6 +494,7 @@ def test_남은_시간이_없으면_잠금만_남은_일정이_아니라_빈_결
     assert body["itinerary"] is None, body
     assert body["empty_reason"] == {"code": "NO_FEASIBLE_SLOT",
                                     "params": {"from": "20:50"}}
+    assert "no_slot_after_from_instant: 20:50" in body["notes"]
 
 
 def test_잠금이_창_앞쪽이어도_재계획이_실패하지_않는다() -> None:
@@ -542,6 +543,27 @@ def test_지난_잠금끼리_이동이_안_맞아도_재계획은_된다() -> No
     assert spy.tasks[0].request.fixed_blocks == ()
     # 다녀온 곳을 새 방문으로 다시 넣지 않는다
     assert {a, b}.isdisjoint(s["poi_id"] for s in _new_slots(body))
+    assert "past_locks_echoed: 2" in body["notes"]  # 검증 밖 되싣기는 드러낸다
+
+
+def test_지난_잠금은_PlanB_에도_제외로_간다() -> None:
+    """기준점이 마지막 완료 방문이면 그 POI 가 거리 0 으로 규칙 1위다 — 제외 안 하면 숏리스트·
+    LLM 선택 한 자리를 다녀온 곳이 차지한다(ScheduleAgent 가 결국 버리므로 헛자리)."""
+    seed = demo_poi_seed()
+    a = str(seed[0].poi_id)
+    app = build_dev_app(directives=_DIRECTIVES)
+    seen = []
+    rag = app.state.orchestrator._rag
+    real = rag.run
+    rag.run = lambda req: seen.append(req) or real(req)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post("/ai/v1/planb/replan", json=_body(
+            scope="PARTIAL_SLOTS", from_instant="2026-09-21T14:00:00+09:00",
+            locked_blocks=[{"poi_id": a, "date": "2026-09-21", "start": "09:00",
+                            "dwell_min": 60}]))
+
+    assert response.status_code == 200, response.text
+    assert PoiId(a) in seen[0].excluded_poi_ids
 
 
 def test_에이전트가_하한을_어셈블리_문제로_넘긴다() -> None:

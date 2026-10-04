@@ -1249,20 +1249,38 @@ def test_LLM_에는_규칙_랭킹_상위만_실린다(n: int) -> None:
     assert worker.pool.poi_ids <= pool.poi_ids  # 좁히기만 한다 (INV-1)
 
 
-def test_장소_지식이_붙은_후보는_숏리스트_밖이어도_실린다() -> None:
-    """KB-5 문서를 찾아 놓고 그 후보를 프롬프트에서 빼면 검색이 헛일이 된다."""
+def test_장소_지식은_숏리스트_후보_것만_가져온다() -> None:
+    """풀 전체에서 유사도로 문서를 고르면 문서가 후보 입장을 정한다 — 규칙 랭킹 맨 뒤의
+    후보도 문서만 있으면 프롬프트에 들었다(리뷰 지적, 정본 KB-5 절 "랭커가 규칙을 덮는다")."""
     ids = [f"p{i:04d}" for i in range(LLM_SHORTLIST + 10)]
     pool = _pool_with_refs(*ids)
-    last = ids[-1]  # 규칙 랭킹(풀 순서) 맨 뒤 — 숏리스트 밖
+    inside, outside = ids[0], ids[-1]  # 규칙 랭킹(풀 순서) 맨 앞 · 맨 뒤
     embedding, store = FakeEmbedding(dim=_SMALL), InMemoryVectorStore()
     index_documents(
-        [make_doc("wiki", f"ref-{last}", "실내 전시실이 여럿 있는 시립 박물관으로 비 오는 날 찾기 좋다.")],
+        [make_doc("wiki", f"ref-{pid}", "실내 전시실이 여럿 있는 시립 박물관으로 비 오는 날 찾기 좋다.")
+         for pid in (inside, outside)],
         embedding, store,
     )
     worker = _CapturingWorker()
 
-    PlanBAgent(embedding, store, alternative_worker=worker).run(_request(pool, reason="none"))
+    result = PlanBAgent(embedding, store, alternative_worker=worker).run(
+        _request(pool, reason="none"))
 
-    assert PoiId(last) in worker.pool.poi_ids
-    assert f"ref-{last}" in worker.knowledge
-    assert len(worker.pool.poi_ids) == LLM_SHORTLIST + 1
+    assert set(worker.knowledge) == {f"ref-{inside}"}
+    assert PoiId(outside) not in worker.pool.poi_ids
+    assert f"llm_shortlist: {LLM_SHORTLIST}/{len(ids)}" in result.notes  # 축소는 보이게
+
+
+def test_원_일정_슬롯은_규칙_상위가_아니어도_숏리스트에_든다() -> None:
+    """원 슬롯 id 는 `[원래 추천 이유]` 줄로 프롬프트에 보인다 — 숏리스트에서 빠지면 LLM 이
+    고른 원 슬롯이 게이트에서 드롭되고, 원 자리가 근처 새 장소와 경쟁조차 못 한다."""
+    ids = [f"p{i:04d}" for i in range(LLM_SHORTLIST + 10)]
+    current, excluded = PoiId(ids[-1]), PoiId(ids[-2])
+    worker = _CapturingWorker()
+
+    PlanBAgent(FakeEmbedding(dim=_SMALL), InMemoryVectorStore(), alternative_worker=worker).run(
+        replace(_request(_pool(*ids), reason="none", excluded=frozenset({excluded})),
+                current_slot_ids=(current, excluded)))
+
+    assert current in worker.pool.poi_ids
+    assert excluded not in worker.pool.poi_ids  # 제외는 원 슬롯이어도 제외

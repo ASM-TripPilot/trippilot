@@ -1519,20 +1519,26 @@ class WiredItineraryOrchestrator:
         persona = _inline_persona(request) or self._persona_from(packets)
         daily_rain = self._rain_from(packets, dates, now)
 
+        not_before = _replan_not_before(request, self._tz)
+        blocks = _replan_fixed_blocks(request, self._tz)
+        past = _past_blocks(blocks, not_before)
+
         # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────
-        planb = self._rag.run(_replan_rag_request(
-            request, pool, persona, daily_rain, trace_id, now,
-            notes=notes, deadline_ms=_deadline_budget(meta),
+        # 다녀온 곳(지난 잠금)은 PlanB 에도 제외다 — 기준점이 "마지막 완료 방문"이면 그 POI 가
+        # 거리 0 으로 규칙 1위가 되어 숏리스트·LLM 선택 한 자리를 헛되이 차지한다.
+        planb = self._rag.run(replace(
+            _replan_rag_request(
+                request, pool, persona, daily_rain, trace_id, now,
+                notes=notes, deadline_ms=_deadline_budget(meta),
+            ),
+            excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
+            | {b.poi_id for b in past},
         ))
         notes += [f"planb: {n}" for n in planb.notes]
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
         planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
         if planb.is_fallback:
             notes.append(f"planb_rank_skipped: fallback_level={planb.fallback_level}")
-
-        not_before = _replan_not_before(request, self._tz)
-        blocks = _replan_fixed_blocks(request, self._tz)
-        past = _past_blocks(blocks, not_before)
 
         window = request.time_window
         domain_request = core.GenerateItineraryRequest(
@@ -1723,8 +1729,13 @@ class WiredItineraryOrchestrator:
                 "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
         solution = outcome.solution
         if solution is None or not any(day.slots for day in solution.days):
+            if not_before is not None:  # 지난 잠금이 솔버 밖이라 빈 해로 온다 — 사유는 같다
+                notes.append(f"no_slot_after_from_instant: {not_before:%H:%M}")
             return self._replan_empty(
                 "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
+        if past:
+            # 되실은 지난 잠금은 체인 검증 밖이다(원 시각 그대로) — 그 사실을 남긴다.
+            notes.append(f"past_locks_echoed: {len(past)}")
         solution = _with_past_blocks(solution, past, request.target_date)
         # 잠금이 빠진 일정은 내지 않는다 (TRIP-1177). 에이전트는 좌표를 못 찾은 고정 블록을
         # 빼고 푼다 — generate 는 unplaced 로 보고하지만 재계획엔 그 칸이 없어, 내보내면
