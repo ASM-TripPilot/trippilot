@@ -101,7 +101,9 @@ python3 backend/scripts/ingest_pois.py ai/data/collected_pois.json
 | `--chunk-size N` | 타임아웃이 나면 줄인다. `0` = 쪼개지 않음 |
 | `--timeout N` | 기본 300초 |
 | `--dry-run` | 보내기 전 항상 |
-| `--self-check` | 스크립트 자체 점검(파싱·쪼개기·합산) |
+| `--close-missing` | 문서가 **그 출처의 전부**일 때, 적재 뒤 문서에 없는 ACTIVE 를 CLOSED 로 — §원본에서 빠진 장소 닫기 |
+| `--allow-mass-close` | `--close-missing` 의 비율 가드를 넘는다. 의도한 대량 정리일 때만 |
+| `--self-check` | 스크립트 자체 점검(파싱·쪼개기·합산·미포함 정리의 호출 순서와 종료 코드) |
 
 `SERVICE_AUTH_TOKEN` 이 비면 스크립트가 **보내기 전에 멈춘다**. 무인증으로 나가면 401 만 쌓이고 이유가 안 보인다.
 
@@ -152,15 +154,57 @@ python3 backend/scripts/ingest_pois.py \
 
 적재는 **즉시 등록**이다. 수동 승인 단계가 없고, 응답의 `registered`/`updated` 가 곧 DB 에 반영된 수다.
 
+## 원본에서 빠진 장소 닫기 (`--close-missing`)
+
+적재는 `(source, content_id)` **upsert** 라 추가·갱신만 한다. 원본에서 빠진 장소 — 폐업, 선별에서 빠진 식당, 공유본에서 일부러 지운 행 — 는 DB 에 **ACTIVE 로 남아** 탐색·후보풀에 계속 나온다(사용자에게는 문 닫은 식당이 일정에 들어가는 것으로 보인다). 문서가 **그 출처의 전부**일 때 `--close-missing` 을 붙이면 그것까지 정리한다:
+
+```bash
+python3 backend/scripts/ingest_pois.py --dry-run --close-missing ai/data/collected_localdata.json
+python3 backend/scripts/ingest_pois.py --close-missing ai/data/collected_localdata.json
+```
+
+문서마다 청크 수신이 **전부** 성공한 뒤, 그 문서의 `provenance.content_id` 전부를 `POST /internal/pois/close-missing` 으로 한 번 보낸다. 서버는 그 출처의 ACTIVE 중 목록에 없는 것을 **CLOSED** 로 내린다 — 삭제가 아니다(담은 장소·확정 일정 스냅숏이 그 행을 가리킨다. 담기 목록에는 폐업 배지로 남는다). 출력은 문서마다 한 줄이다:
+
+```
+  미포함 정리 — LOCALDATA ACTIVE <activeBefore> 중 목록에 있음 <present> · CLOSED <closed>
+```
+
+| 값 | 뜻 |
+|---|---|
+| `activeBefore` | 호출 시점 그 출처의 ACTIVE(식별자 있는 행). 방금 적재로 새로 생긴 행도 포함된다 |
+| `present` | 그중 목록에 있어 남은 수 — **요청 목록의 크기가 아니다**(게이트에서 탈락한 제안의 식별자는 행이 없어 세지 않는다) |
+| `closed` | 이번에 CLOSED 로 내린 수. 동시 변경이 없으면 `activeBefore = present + closed` |
+
+막아 두는 것:
+
+- **목록에 있는 것이 그 출처 ACTIVE 의 절반 미만이면 409** — 아무것도 닫지 않는다. 청크 하나·회차 artifact 한 장·다른 출처의 목록을 "전부"로 보낸 사고가 이렇게 보인다. 이때 적재(upsert)는 이미 반영돼 있고 스크립트는 0 이 아닌 코드로 끝난다. 정말 절반 넘게 빠지는 정리(선별 기준을 바꿔 다시 만든 경우 등)일 때만 `--allow-mass-close` 를 붙인다.
+- **같은 출처 문서를 두 장 이상 주면 보내기 전에 거부한다**(exit 1) — 문서 한 장을 그 출처의 전부로 읽으므로 둘째 문서가 첫째 문서의 행을 닫는다.
+- **`MANUAL` 은 400** — 시드는 문서에서 온 것이 아니다. 모르는 출처도 400(적재와 같다).
+- **청크가 하나라도 실패하면 닫기를 부르지 않는다** — 일부만 들어간 상태에서 대조하면 안 들어간 행이 닫힌다.
+- 로컬 compose 자동 적재(`poi-ingest`)는 이 플래그를 쓰지 않는다 — 기본은 upsert 만이다.
+
+**TourAPI 에는 공유본으로만 쓴다.** 공유본은 매일 병합되는 누적본이고 축소되면 워크플로가 실패하므로, 공유본으로 닫히는 것은 사람이 일부러 지운 행뿐이다. 회차 artifact 는 전국이 아니라 쓰면 안 된다. 그리고 **공유본보다 앞서 artifact 로 부은 적이 있으면 공유본에 그 행이 들어올 때까지 TourAPI 에는 쓰지 않는다** — 공유본에 아직 없는 그 행들이 닫히고, 비율 가드는 이 정도 몫을 못 잡는다(아래처럼 되살아나지도 않는다).
+
+**되돌리기 — 재적재로는 안 돌아온다.** 수신은 상태를 덮지 않으므로(`Poi.refreshed` — 사람이 내린 판단을 대량 수집이 되돌리지 않게) 잘못 닫힌 행은 같은 문서를 다시 부어도, 다음 달 문서에 다시 나타나도 CLOSED 로 남는다. 한 호출이 닫은 행은 같은 `updated_at` 을 가지므로 그 시각으로 골라 되살린다(§확인의 psql Pod 로):
+
+```sql
+-- 최근 닫힌 묶음 — 응답의 closed 와 건수가 같은 줄이 그 호출이다
+SELECT updated_at, count(*) FROM poi WHERE source = 'LOCALDATA' AND data_status = 'CLOSED'
+ GROUP BY 1 ORDER BY 1 DESC LIMIT 5;
+UPDATE poi SET data_status = 'ACTIVE'
+ WHERE source = 'LOCALDATA' AND data_status = 'CLOSED' AND updated_at = '<위 시각>';
+```
+
 ## 실패하면
 
-**되돌릴 것이 없다.** 멱등 키가 `provenance.content_id` 이므로 같은 문서를 몇 번 넣어도 행이 늘지 않는다(신규 대신 갱신으로 집계된다). 원인을 고친 뒤 **같은 명령을 다시 돌린다**. 그래서 스크립트에 재시도·이어가기 장치를 두지 않았다.
+**되돌릴 것이 없다.** 멱등 키가 `provenance.content_id` 이므로 같은 문서를 몇 번 넣어도 행이 늘지 않는다(신규 대신 갱신으로 집계된다). 원인을 고친 뒤 **같은 명령을 다시 돌린다**. 그래서 스크립트에 재시도·이어가기 장치를 두지 않았다. (`--close-missing` 도 다시 돌려 안전하지만, 그것이 **닫은** 행은 재적재로 돌아오지 않는다 — §원본에서 빠진 장소 닫기의 되돌리기.)
 
 | 증상 | 원인 |
 |---|---|
 | 404 | 터널을 안 거쳐 게이트웨이로 갔다. port-forward 확인 |
 | 401 | `SERVICE_AUTH_TOKEN` 불일치. secret 을 다시 꺼낸다 |
 | 400 `알 수 없는 출처입니다` | 문서 `source` 가 `KAKAO_LOCAL`/`TOURAPI`/`MANUAL`/`LOCALDATA` 가 아니다(`LOCALDATA` 는 V2.61 이후 백엔드만 받는다) |
+| 409 `CONFLICT`(미포함 정리) | 목록에 있는 것이 그 출처 ACTIVE 의 절반 미만 — 부분 문서 의심. 적재는 반영됐고 닫힌 행은 없다. §원본에서 빠진 장소 닫기 |
 | 연결 실패 | port-forward 가 죽었다(세션이 끊기면 조용히 닫힌다) |
 | 타임아웃 | `--chunk-size` 를 줄인다 |
 

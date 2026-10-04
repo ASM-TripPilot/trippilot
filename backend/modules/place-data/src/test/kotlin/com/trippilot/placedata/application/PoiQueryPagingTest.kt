@@ -11,6 +11,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import java.time.Instant
 import java.util.Base64
 import java.util.UUID
 
@@ -46,6 +47,8 @@ class PoiQueryPagingTest : StringSpec({
         override fun findActiveByIds(poiIds: List<UUID>) = emptyList<Poi>()
         override fun findByIds(poiIds: List<UUID>) = emptyList<Poi>()
         override fun findBySourceRefs(source: PoiSource, sourceRefs: Collection<String>) = emptyMap<String, Poi>()
+        override fun findActiveSourceRefs(source: PoiSource) = emptyMap<String, UUID>()
+        override fun closeActive(poiIds: Collection<UUID>, now: Instant) = 0
     }
 
     fun svc(repo: Capturing) = PoiQueryService(repo, RegionLookupService(FakeRegionCatalog))

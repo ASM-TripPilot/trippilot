@@ -2,6 +2,7 @@ package com.trippilot.placedata.adapter.`in`.web
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.trippilot.placedata.application.PoiCloseMissingResult
 import com.trippilot.placedata.application.PoiIngestResult
 import com.trippilot.placedata.application.PoiProposal
 import com.trippilot.placedata.domain.PoiCategory
@@ -75,6 +76,30 @@ data class PoiIngestResponse(
     companion object {
         fun from(r: PoiIngestResult) =
             PoiIngestResponse(r.received, r.registered, r.updated, r.regionUnresolved, r.dropped)
+    }
+}
+
+/**
+ * 미포함 정리 요청 — `present_source_refs` 는 그 출처 문서의 `provenance.content_id` **전부**다.
+ *
+ * 목록에는 기본값을 두지 않는다 — 목록이 빠진 요청이 "빈 목록"으로 읽히면 그 출처 전량이 닫힐 수 있다.
+ * 없으면 400 이다. 반대로 `allow_mass_close` 는 빠지면 false(가드가 켜진 쪽)다.
+ */
+data class CloseMissingRequest(
+    val source: String? = null,
+    @param:JsonProperty("present_source_refs") val presentSourceRefs: List<String>,
+    @param:JsonProperty("allow_mass_close") val allowMassClose: Boolean = false,
+)
+
+/** 미포함 정리 결과 — `present` 는 목록 크기가 아니라 "목록에 있어 ACTIVE 로 남은 수"다(`activeBefore = present + closed`). */
+data class PoiCloseMissingResponse(
+    val source: String,
+    val activeBefore: Int,
+    val present: Int,
+    val closed: Int,
+) {
+    companion object {
+        fun from(r: PoiCloseMissingResult) = PoiCloseMissingResponse(r.source.name, r.activeBefore, r.present, r.closed)
     }
 }
 

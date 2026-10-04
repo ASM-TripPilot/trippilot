@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.databind.annotation.JsonNaming
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.placedata.application.PoiCloseMissingService
 import com.trippilot.placedata.application.PoiProposalIngestService
 import com.trippilot.placedata.application.PoiReadService
 import com.trippilot.placedata.application.PoiWithDistance
@@ -29,6 +30,7 @@ import java.util.UUID
 class PoiInternalController(
     private val readService: PoiReadService,
     private val ingestService: PoiProposalIngestService,
+    private val closeService: PoiCloseMissingService,
 ) {
     /** 반경(km) 내 ACTIVE 정본 — 합성 정렬키 적용. */
     @GetMapping
@@ -59,6 +61,22 @@ class PoiInternalController(
                 // 다른 벤더 수집분이 통째로 잘못된 출처로 저장되고, 멱등 키가 벤더를 넘어 충돌한다.
                 source = parseSource(document.source),
                 proposals = document.proposals.map { it.toCommand() },
+            ),
+        )
+
+    /**
+     * 미포함 정리(TRIP-1227) — 한 출처의 **완전한** 식별자 목록을 받아, 그 출처의 ACTIVE 중 목록에 없는 것을 CLOSED 로 내린다.
+     *
+     * `/proposals` 와 따로인 이유: 적재는 문서를 쪼개 보내므로 어느 수신 요청도 "이게 전부"라고 말하지 못한다.
+     * 전량 적재가 끝난 뒤 호출자가 전부를 한 번에 밝혀야 대조가 성립한다. 응답은 숫자 넷이다(INV-4).
+     */
+    @PostMapping("/close-missing")
+    fun closeMissing(@RequestBody request: CloseMissingRequest): PoiCloseMissingResponse =
+        PoiCloseMissingResponse.from(
+            closeService.closeMissing(
+                source = parseSource(request.source),
+                presentRefs = request.presentSourceRefs,
+                allowMassClose = request.allowMassClose,
             ),
         )
 

@@ -356,26 +356,31 @@ TourAPI 음식점은 전수 수집이 끝났는데도 숙소 12,936곳 중 **22.
   주점·술집·이자카야·맥주·비어 117곳, 카페(까페·cafe)·커피(coffee)·베이커리·디저트 206곳).
 - 영업시간·사진은 원본에 없어 비어 있다(`quality=PARTIAL`, `opening_hours_raw=null`). `tags` 는 업태 원문 하나다.
 
-### 갱신 — 재적재 보류 (폐업 반영 경로가 먼저다)
+### 갱신 — 월 1회 재생성 → `--close-missing` 으로 적재
 
-원본은 월 단위로 갱신되지만 **두 번째 적재는 하지 않는다** — 아래 ⚠️ 때문이다. 'LOCALDATA 중 이번 문서에
-없는 행 → CLOSED' 경로(후속 티켓)가 생기면 월 1회로 돌리고, 공유본(TourAPI)이 크게 늘었을 때도 다시 돌린다
-(공백 앵커가 바뀐다). 아래 명령은 첫 적재와 그 뒤를 위한 것이다.
+원본은 월 단위로 갱신된다. 다시 만들어 **`--close-missing` 을 붙여** 붓는다. 공유본(TourAPI)이 크게 늘었을 때도
+다시 돌린다(공백 앵커가 바뀐다). 아래 명령은 첫 적재와 그 뒤 모두에 쓴다 — 첫 적재에서는 닫을 행이 없다.
 
 ```bash
 # 1) CSV 내려받기 (data.go.kr 로그인 — 자동 경로가 없다. poi_business_status.json 과 같은 파일)
 # 2) 생성 (약 30초) — pyproj 는 실행할 때만 붙인다(pyproject 의존성이 아니다)
 cd ai
 uv run --with pyproj python scripts/collect_localdata.py <받은 경로>/식품_일반음식점.csv
-# 3) 적재 — 백엔드 V2.61 이후만 받는다(이전 백엔드는 source 400)
-cd .. && python3 backend/scripts/ingest_pois.py ai/data/collected_localdata.json
+# 3) 적재 + 빠진 행 닫기 — 백엔드 V2.61 이후만 받는다(이전 백엔드는 source 400). 드라이런 먼저
+cd .. && python3 backend/scripts/ingest_pois.py --dry-run --close-missing ai/data/collected_localdata.json
+python3 backend/scripts/ingest_pois.py --close-missing ai/data/collected_localdata.json
 ```
 
-⚠️ **재생성은 정본에서 행을 지우지 않는다.** 수신은 관리번호 멱등 upsert 라, 다음 생성에서 빠진 식당
-(폐업·공백 해소)은 문서에서만 빠지고 정본에는 ACTIVE 로 남는다 — 폐업 반영 경로는 아직 없다(V2.50 폐업 정리는
-TOURAPI 한정 일회성). 다시 부으면 새로 고른 식당만 늘고 빠진 식당은 그대로라, 월 갱신은 최신처럼 보이게만
-만들고 공백 지역 일정은 아무 신호 없이 문 닫은 식당을 끼니로 넣는다(원본 229만 행 중 162만 행이 폐업 이력일
-만큼 식당은 자주 닫는다). 제외 규칙을 고쳐 다시 만든 경우도 같다 — 이미 부은 행은 남는다.
+⚠️ **플래그 없이 부으면 정본에서 행이 빠지지 않는다.** 수신은 관리번호 멱등 upsert 라, 다음 생성에서 빠진 식당
+(폐업·공백 해소)은 문서에서만 빠지고 정본에는 ACTIVE 로 남는다 — 공백 지역 일정이 아무 신호 없이 문 닫은 식당을
+끼니로 넣는다(원본 229만 행 중 162만 행이 폐업 이력일 만큼 식당은 자주 닫는다). `--close-missing` 은 적재가 전부
+성공한 뒤 **이 문서에 없는 LOCALDATA 행을 CLOSED 로** 내린다(삭제 아님 — 절차·숫자 읽는 법·되돌리기는
+`docs/guides/poi-수집본-적재.md` §원본에서 빠진 장소 닫기).
+
+- **닫힌 행은 다시 뽑혀도 되살아나지 않는다** — 수신은 상태를 덮지 않는다(`Poi.refreshed`). 폐업이 아니라 공백이
+  해소돼 빠졌던 식당이 다음 달 다시 뽑혀도 CLOSED 로 남는다. 되살리려면 런북의 되돌리기 SQL 이다.
+- 서버는 목록에 있는 것이 LOCALDATA ACTIVE 의 **절반 미만이면 409** 로 거부한다. 선별 기준을 크게 바꿔 다시 만든
+  경우처럼 정말 절반 넘게 빠질 때만 `--allow-mass-close` 를 붙인다.
 
 ## `overture/` — Overture Maps 수집 제안 (지역별)
 

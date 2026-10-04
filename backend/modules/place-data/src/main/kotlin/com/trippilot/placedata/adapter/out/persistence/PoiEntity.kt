@@ -16,10 +16,12 @@ import org.hibernate.type.SqlTypes
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
 
@@ -128,6 +130,22 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
     /** 멱등 판정용 — 같은 출처의 원본 식별자로 이미 아는 행을 찾는다. 상태 무관(폐업분도 다시 안 만든다). */
     fun findBySourceAndSourceRefIn(source: String, sourceRefs: Collection<String>): List<PoiEntity>
 
+    /** 미포함 정리의 대조 대상 — `(sourceRef, poiId)` 만 읽는다(행 전체를 올리지 않는다). */
+    @Query(
+        "select p.sourceRef, p.poiId from PoiEntity p " +
+            "where p.source = :source and p.dataStatus = 'ACTIVE' and p.sourceRef is not null",
+    )
+    fun findActiveRefsBySource(@Param("source") source: String): List<Array<Any>>
+
+    /** ACTIVE 인 것만 CLOSED 로 — 영향 행 수 반환. 서비스 트랜잭션 안에서는 참여(REQUIRED)한다. */
+    @Transactional
+    @Modifying
+    @Query(
+        "update PoiEntity p set p.dataStatus = 'CLOSED', p.updatedAt = :now " +
+            "where p.poiId in :ids and p.dataStatus = 'ACTIVE'",
+    )
+    fun closeActive(@Param("ids") ids: Collection<UUID>, @Param("now") now: Instant): Int
+
     /**
      * 지역 커버리지 집계(TRIP-359) — ACTIVE 만 센다(INV-U1-01).
      *
@@ -212,6 +230,13 @@ class PoiRepositoryAdapter(
                 .toMap()
         }
 
+    override fun findActiveSourceRefs(source: PoiSource): Map<String, UUID> =
+        jpa.findActiveRefsBySource(source.name).associate { (ref, id) -> ref as String to id as UUID }
+
+    // PostgreSQL JDBC 는 한 문장에 바인드 변수를 32,767개까지만 싣는다 — 출처 전량 정리도 그 아래로 나눠 보낸다.
+    override fun closeActive(poiIds: Collection<UUID>, now: Instant): Int =
+        poiIds.chunked(CLOSE_CHUNK).sumOf { jpa.closeActive(it, now) }
+
     private fun Poi.toEntity() = PoiEntity(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = category.name, region = region,
         regionCode = regionCode,
@@ -233,6 +258,8 @@ class PoiRepositoryAdapter(
 
         /** 모든 UUID 보다 앞 — 커서 없음을 값으로 표현한다(분기 대신). */
         private val FIRST_ID: UUID = UUID(0L, 0L)
+
+        private const val CLOSE_CHUNK = 1_000
     }
 
 }

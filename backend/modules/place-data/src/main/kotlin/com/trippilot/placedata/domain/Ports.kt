@@ -1,5 +1,6 @@
 package com.trippilot.placedata.domain
 
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -74,6 +75,18 @@ interface PoiRepository {
      * 키는 `sourceRef`, 값은 그 POI. 못 찾은 ref 는 키 자체가 없다(빈 값으로 채우지 않는다).
      */
     fun findBySourceRefs(source: PoiSource, sourceRefs: Collection<String>): Map<String, Poi>
+
+    /**
+     * 그 출처의 **ACTIVE** 행 중 원본 식별자가 있는 것 — `sourceRef → poiId`. 미포함 정리(TRIP-1227)의 대조 대상.
+     * 식별자가 없는 행은 어떤 문서도 "있다"고 말할 수 없으므로 넣지 않는다.
+     */
+    fun findActiveSourceRefs(source: PoiSource): Map<String, UUID>
+
+    /**
+     * 주어진 행을 CLOSED 로 내리고 `updatedAt` 을 [now] 로 둔다 — **지금 ACTIVE 인 것만**(이미 닫힌 행·미검증 행은
+     * 그대로). 실제로 바뀐 행 수를 돌려준다. 삭제가 아니다 — 담기(`saved_place` FK)와 확정 일정 스냅숏이 이 행을 가리킨다.
+     */
+    fun closeActive(poiIds: Collection<UUID>, now: Instant): Int
 }
 
 /**
