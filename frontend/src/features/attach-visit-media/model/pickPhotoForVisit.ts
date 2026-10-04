@@ -21,6 +21,8 @@ export type PhotoPickOutcome =
 const PICK_NOTICE = {
   canceled: null,
   denied: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+  limited:
+    '사진 접근이 "선택한 사진만"으로 제한돼 있어요. 설정에서 모든 사진 접근을 허용해 주세요',
   'no-asset-id':
     '선택한 사진을 불러올 수 없어요. 사진 전체 접근을 허용해 주세요',
   failed: '사진을 불러올 수 없어요',
@@ -30,7 +32,12 @@ export async function pickPhotoForVisit(): Promise<PhotoPickOutcome> {
   const result = await pickPhotoAsset();
   if (result.kind !== 'picked') {
     const notice = PICK_NOTICE[result.kind];
-    return result.kind === 'denied' ? { notice, settings: true } : { notice };
+    // 권한이 원인인 사유(거부·제한·자산 번호 없음)는 설정에서만 풀린다 — 재시도 대신 설정으로 보낸다.
+    return result.kind === 'denied' ||
+      result.kind === 'limited' ||
+      result.kind === 'no-asset-id'
+      ? { notice, settings: true }
+      : { notice };
   }
   const gpsConsent = await getMeLocationConsent().then(
     (consent) => consent.gpsRecordingOptIn === true,

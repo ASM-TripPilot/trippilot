@@ -2589,6 +2589,9 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
   const COPY_NO_ASSET_ID =
     '선택한 사진을 불러올 수 없어요. 사진 전체 접근을 허용해 주세요';
 
+  const COPY_LIMITED =
+    '사진 접근이 "선택한 사진만"으로 제한돼 있어요. 설정에서 모든 사진 접근을 허용해 주세요';
+
   const COPY_FAILED = '사진을 불러올 수 없어요';
 
   const asset = (localAssetId = 'asset-new') => ({
@@ -2868,6 +2871,7 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
     it.each([
       ['사진 권한 거부', 'denied', COPY_DENIED],
       ['자산 번호 없음(선택한 사진만 허용)', 'no-asset-id', COPY_NO_ASSET_ID],
+      ['제한 접근', 'limited', COPY_LIMITED],
       ['피커 실패(재빌드 전 앱)', 'failed', COPY_FAILED],
     ])(
       'R7 %s → 카드 안 안내가 뜨고 요청은 0회, 다음 `+` 에 안내가 지워진다',
@@ -2914,6 +2918,23 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
       expect(openSettings).toHaveBeenCalledTimes(1);
       openSettings.mockRestore();
     });
+
+    it.each(['limited', 'no-asset-id'])(
+      'R7c %s 안내에도 [설정 열기] 가 있다 (TRIP-1216 a)',
+      async (kind) => {
+        mockPick.mockResolvedValueOnce({ kind });
+        const card = await renderCard();
+
+        fireEvent.press(
+          await within(card).findByTestId('record-trip-photo-add')
+        );
+
+        expect(
+          await within(card).findByTestId('record-trip-photo-settings')
+        ).toBeTruthy();
+        expect(hitCount(PHOTOS_POST)).toBe(0);
+      }
+    );
 
     it('R8 저장 요청이 실패하면(500) "업로드 실패" 칸과 카드 [다시 시도]가 뜬다', async () => {
       photoStatus = 500;

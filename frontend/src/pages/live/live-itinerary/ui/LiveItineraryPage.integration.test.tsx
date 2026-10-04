@@ -1724,6 +1724,8 @@ describe('관람 중 카드 [사진]·[메모]', () => {
   const COPY_DENIED = '사진 접근 권한이 없어 사진을 불러올 수 없어요';
   const COPY_NO_ASSET_ID =
     '선택한 사진을 불러올 수 없어요. 사진 전체 접근을 허용해 주세요';
+  const COPY_LIMITED =
+    '사진 접근이 "선택한 사진만"으로 제한돼 있어요. 설정에서 모든 사진 접근을 허용해 주세요';
   const COPY_FAILED = '사진을 불러올 수 없어요';
   const COPY_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
 
@@ -1968,6 +1970,7 @@ describe('관람 중 카드 [사진]·[메모]', () => {
     it.each([
       ['사진 권한 거부', 'denied', COPY_DENIED],
       ['자산 번호 없음(선택한 사진만 허용)', 'no-asset-id', COPY_NO_ASSET_ID],
+      ['제한 접근', 'limited', COPY_LIMITED],
       ['피커 실패(재빌드 전 앱)', 'failed', COPY_FAILED],
     ])(
       'L6 %s → 카드 아래 안내가 뜨고 요청은 0회다',
@@ -2008,6 +2011,21 @@ describe('관람 중 카드 [사진]·[메모]', () => {
       expect(openSettings).toHaveBeenCalledTimes(1);
       openSettings.mockRestore();
     });
+
+    it.each(['limited', 'no-asset-id'])(
+      'L6c %s 안내에도 [설정 열기] 가 있다 (TRIP-1216 a)',
+      async (kind) => {
+        mockPick.mockResolvedValueOnce({ kind });
+        const photo = await renderHub();
+
+        fireEvent.press(photo);
+
+        expect(
+          await screen.findByTestId('execution-arrive-photo-settings')
+        ).toBeTruthy();
+        expect(hitCount(PHOTOS_POST)).toBe(0);
+      }
+    );
 
     it('L7 사진 기록 요청이 실패하면(500) 저장 실패 안내가 뜬다', async () => {
       photoStatus = 500;
