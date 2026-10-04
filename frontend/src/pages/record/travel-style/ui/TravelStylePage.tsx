@@ -31,7 +31,7 @@ export function TravelStylePage(): ReactElement {
   // 동형·INV-4 침묵 금지).
   const handleBack = () => {
     if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/records');
+    else router.replace('/(tabs)/my');
   };
 
   if (envelope == null) {
