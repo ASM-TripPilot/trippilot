@@ -4284,6 +4284,31 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1210 — 1도시 게이트 해제 뒤 새로 도달하는 엣지: 도시 4곳·박수 합 30박. [+]·[도시 추가]가 함께
+  // 비활성(opacity)이고 max-note 한 줄만 뜬다. 행이 늘 때 시트가 커지는지·[적용]이 화면 밖으로 밀리는지는
+  // 바텀시트 통과형 목이라 jest 사각 — 이 키가 6-b 육안 자리다.
+  {
+    key: 'trip-new-step1-destination-sheet-max',
+    band: 'g',
+    label: 'g01 · 여행지 편집 시트 (4도시 · 30박 상한)',
+    login: null,
+    render: () => (
+      <DestinationEditSheet
+        destinations={[
+          { seq: 1, region: '서울특별시', nights: 10 },
+          { seq: 2, region: '부산광역시', nights: 10 },
+          { seq: 3, region: '경주시', nights: 5 },
+          { seq: 4, region: '제주특별자치도', nights: 5 },
+        ]}
+        onChangeNights={noop}
+        onRemove={noop}
+        onAddCity={noop}
+        onApply={noop}
+        onClose={noop}
+        mustVisitCount={7}
+      />
+    ),
+  },
   // g01 기간 편집 시트(TRIP-667, Figma `3627:2068`) — 완성 범위(6/10~6/13) 열린 상태. `PeriodEditSheet`은
   // props-only 순수 뷰(스토어·라우터·시계 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다. jest 는
   // 시작/종료 분홍 원·사이 연장 배경·요일 색·시트 딤/개폐를 못 봐(바텀시트 통과형 목) 이 키가 유일한

@@ -747,20 +747,21 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
   });
 
   describe('W-3 · 도시 추가가 explore/region 라우트를 연다 (AC-3)', () => {
-    // TRIP-1210 — 도시가 있으면 추가가 막히므로(1.0 은 도시 하나) 비운 뒤 첫 도시를 추가하는 경로를 본다.
-    it('도시가 있으면 추가는 이동하지 않고 안내만 뜬다 — 요청의 destinations 도 늘지 않는다', async () => {
+    // TRIP-1210 — 도시 하나 제한을 걷었다(옛 계약: 도시가 있으면 이동 대신 "준비 중" 안내). 이 describe 는
+    // 부산·경주 두 도시가 담긴 채 시작한다 — 그래도 도시 추가는 지역 피커로 간다.
+    it('도시가 두 곳 담겨 있어도 도시 추가는 지역 피커로 이동하고 준비 중 안내는 없다', async () => {
       renderPage();
       await openSheet();
+      expect(useTripWizardStore.getState().destinations).toHaveLength(2);
 
       fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
 
       await waitFor(() =>
-        expect(
-          screen.getByTestId('trip-wizard-destination-one-city-notice')
-        ).toBeOnTheScreen()
+        expect(mockPush.mock.calls).toEqual([[regionPickerHref('trip')]])
       );
-      expect(mockPush).not.toHaveBeenCalled();
-      expect(useTripWizardStore.getState().destinations).toHaveLength(2);
+      expect(
+        screen.queryByTestId('trip-wizard-destination-one-city-notice')
+      ).toBeNull();
     });
 
     it('press 가 router.push("/explore/region?purpose=trip") 를 부른다', async () => {
@@ -4773,5 +4774,202 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
       // 단언
       expect(navCalls()).toEqual({ back: 0, replace: 0, push: 0 });
     });
+  });
+});
+
+/**
+ * TRIP-1210 — 도시가 둘 이상인 여행은 앱이 제목을 지어 생성(POST)·수정(PATCH) 본문에 싣는다(실 HTTP 심판).
+ *
+ * 무엇을 보장하나:
+ *  - 서울+부산이면 `POST /trips` 본문에도, 이미 만든 여행을 고치는 `PATCH /trips/{id}` 본문에도
+ *    `title: '서울·부산 여행'`이 실린다. 서버는 제목이 없으면 생성·수정 **둘 다** 첫 도시로 다시 만들므로
+ *    (`Trip.kt` resolveTitle) 한쪽만 실으면 그 길에서 `서울특별시 여행`으로 돌아간다 — 그래서 두 길을 따로 잰다.
+ *  - 도시가 한 곳이면 지금처럼 제목 키를 싣지 않는다(서버 기본 제목 그대로, 01b 결정 1).
+ *  - 두 도시가 본문 `destinations`에 순서대로 다 실리고, 끝 날짜는 시작 + 박수 합이다(AC-2).
+ *
+ * 왜 통합 버킷인가: 심판 대상이 "실제로 나간 요청 본문"이다(msw 만 관찰). 제목 글자 규칙 자체는
+ * `model/createTripRequest.test.ts` 가 잠그고, 여기서는 "화면이 그 제목을 두 요청에 실제로 싣는가"만 본다.
+ *
+ * ⚠️ 게스트로 돈다(담은목록 조회 없음). 모든 핸들러를 beforeEach 에 건다 — `onUnhandledRequest:'error'`.
+ * 응답 순서 경합은 없다 — 제목은 [다음]을 누른 순간의 목적지로 조립되고, 응답을 기다려 다시 읽는 값이 아니다.
+ */
+describe('TRIP-1210 · 다도시 여행 제목이 생성·수정 본문에 실린다', () => {
+  afterEach(expectNoExitWizard);
+
+  const BASE = 'http://localhost:8080/api/v1';
+  const BASE_DATE = '2026-06-10';
+  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
+
+  const PREFERENCE: PreferenceView = {
+    pace: { value: '균형있게', isNeutralDefault: false },
+    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
+    styles: { value: ['미식'] },
+    activities: { value: ['야경'] },
+  };
+
+  /** openapi `Trip.required` 필드를 채운 응답. 응답 제목은 단언에 쓰지 않는다(보낸 본문만 본다). */
+  const TRIP: Trip = {
+    tripId: TRIP_ID,
+    title: '서울·부산 여행',
+    startDate: '2026-10-10',
+    endDate: '2026-10-12',
+    party: 1,
+    companionType: null,
+    budgetTotal: 800000,
+    preferenceSnapshot: {},
+    destinations: [
+      { seq: 1, region: '서울특별시', nights: 1, regionCode: '11' },
+      { seq: 2, region: '부산광역시', nights: 1, regionCode: '26' },
+    ],
+    status: 'PLANNED',
+    createdAt: '2026-08-02T00:00:00Z',
+    updatedAt: '2026-08-02T00:00:00Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
+  };
+
+  let postedBodies: Record<string, unknown>[] = [];
+  let patchedBodies: Record<string, unknown>[] = [];
+
+  beforeEach(() => {
+    postedBodies = [];
+    patchedBodies = [];
+    useTripWizardStore.getState().reset();
+
+    server.use(
+      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE)),
+      http.post(`${BASE}/trips`, async ({ request }) => {
+        postedBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(TRIP, { status: 201 });
+      }),
+      http.patch(`${BASE}/trips/:tripId`, async ({ request }) => {
+        patchedBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(TRIP);
+      }),
+      http.get(`${BASE}/trips/:tripId/must-visits`, () => HttpResponse.json([]))
+    );
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+  });
+
+  function renderPage() {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
+      wrapper: Wrapper,
+    });
+  }
+
+  /** 지역 피커가 담는 것과 같은 모양(이름 + 지역 코드, 1박)으로 도시를 담고 10/10 을 시작으로 고른다. */
+  function seedCities(cities: [string, string][]): void {
+    const store = useTripWizardStore.getState();
+    // "아직 0곳" 앵커 — 앞 테스트의 드래프트가 새면 여기서 red.
+    expect(store.destinations).toHaveLength(0);
+    cities.forEach(([name, code]) => store.addDestination(name, 1, code));
+    store.setStartDate('2026-10-10');
+  }
+
+  /** 프리필이 도착한 눈금(요약 취향 행에 칩) 뒤 [다음]. */
+  async function pressNext(): Promise<void> {
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('trip-wizard-summary-preference')
+      ).toHaveTextContent(/미식/)
+    );
+    const next = screen.getByTestId('trip-wizard-step1-next');
+    expect(next).toBeEnabled();
+    fireEvent.press(next);
+  }
+
+  it('T-1 · 서울+부산으로 처음 만들면 POST 본문에 title "서울·부산 여행"과 두 도시가 실린다', async () => {
+    // 준비
+    seedCities([
+      ['서울특별시', '11'],
+      ['부산광역시', '26'],
+    ]);
+    renderPage();
+
+    // 실행
+    await pressNext();
+
+    // 단언
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    expect(patchedBodies).toHaveLength(0);
+    const body = postedBodies[0];
+    expect(body.title).toBe('서울·부산 여행');
+    expect(body).toMatchObject({
+      startDate: '2026-10-10',
+      endDate: '2026-10-12',
+      destinations: [
+        { seq: 1, region: '서울특별시', nights: 1, regionCode: '11' },
+        { seq: 2, region: '부산광역시', nights: 1, regionCode: '26' },
+      ],
+    });
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
+    );
+  });
+
+  it('T-2 · 이미 만든 서울+부산 여행을 고칠 때도 PATCH 본문에 title "서울·부산 여행"이 실린다', async () => {
+    // 준비 — 재진입(꼭 갈 곳 고르기를 다녀온 뒤 같은) 상태.
+    seedCities([
+      ['서울특별시', '11'],
+      ['부산광역시', '26'],
+    ]);
+    useTripWizardStore.getState().setCreatedTripId(TRIP_ID);
+    renderPage();
+
+    // 실행
+    await pressNext();
+
+    // 단언 — 새로 만들지 않고 고친다. 고치는 본문에도 제목이 있다.
+    await waitFor(() => expect(patchedBodies).toHaveLength(1));
+    expect(postedBodies).toHaveLength(0);
+    expect(patchedBodies[0].title).toBe('서울·부산 여행');
+    expect(
+      (patchedBodies[0].destinations as { region: string }[]).map(
+        (one) => one.region
+      )
+    ).toEqual(['서울특별시', '부산광역시']);
+  });
+
+  it('T-3 · 서울 한 곳이면 POST 본문에 title 키가 없다 (서버 기본 제목 그대로)', async () => {
+    seedCities([['서울특별시', '11']]);
+    renderPage();
+
+    await pressNext();
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    expect(Object.keys(postedBodies[0])).not.toContain('title');
+    // 짝(긍정) — 본문 자체는 나갔고 도시가 실렸다(빈 본문이 부재 단언을 공짜로 통과하지 않게).
+    expect(postedBodies[0]).toMatchObject({
+      destinations: [{ seq: 1, region: '서울특별시', nights: 1 }],
+    });
+  });
+
+  it('T-4 · 같은 도시를 두 번 담은 서울+부산+서울이면 제목은 "서울·부산 여행"이다', async () => {
+    seedCities([
+      ['서울특별시', '11'],
+      ['부산광역시', '26'],
+      ['서울특별시', '11'],
+    ]);
+    renderPage();
+
+    await pressNext();
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    expect(postedBodies[0].title).toBe('서울·부산 여행');
+    expect(postedBodies[0].destinations).toHaveLength(3);
   });
 });

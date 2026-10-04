@@ -4,6 +4,7 @@ import type { CreateTripRequest } from '@/shared/api/index.schemas';
 
 import {
   buildCreateTripRequest,
+  tripTitle,
   type CreateTripInput,
 } from './createTripRequest';
 
@@ -201,6 +202,182 @@ describe('AC-2 · AC-3 불변식 — 임의의 입력에 대해 (PBT)', () => {
         }
       ),
       { numRuns: 500 }
+    );
+  });
+});
+
+// ── TRIP-1210 · 다도시 여행 제목 ────────────────────────────────────────────────
+//
+// 서버는 요청에 제목이 없으면 "첫 목적지 이름 + 여행"을 만든다(`Trip.kt` resolveTitle — 생성·수정 둘 다).
+// 그래서 서울+부산 여행이 `서울특별시 여행`이 된다. 앱이 도시가 둘 이상일 때만 제목을 지어 보낸다
+// (01b 결정 1·2). 도시가 한 곳이면 `undefined`(= 제목을 안 보냄 → 서버가 지금처럼 만든다).
+//
+// > *(개념)* **오라클(oracle)** — 정답을 따로 계산하는 테스트 쪽 기준표. 아래 `SHORT`는 짧은 이름을
+// > 손으로 적은 표라, 구현이 `sidoKey`를 어떻게 부르든 그와 무관하게 "나와야 할 글자"를 안다.
+
+/** 지역 카탈로그 이름 → 제목에 쓰일 짧은 이름(`sidoKey` 규칙의 손 계산 결과). 짧은 이름이 서로 다른 것만 골랐다. */
+const SHORT: Record<string, string> = {
+  서울특별시: '서울',
+  부산광역시: '부산',
+  대구광역시: '대구',
+  인천광역시: '인천',
+  광주광역시: '광주',
+  대전광역시: '대전',
+  울산광역시: '울산',
+  세종특별자치시: '세종',
+  경기도: '경기',
+  강원특별자치도: '강원',
+  충청북도: '충북',
+  충청남도: '충남',
+  전북특별자치도: '전북',
+  전라남도: '전남',
+  경상북도: '경북',
+  경상남도: '경남',
+  제주특별자치도: '제주',
+  // 시군구는 접지 않는다(`sidoKey` — "대덕구를 접으면 대구가 된다").
+  경주시: '경주시',
+  강릉시: '강릉시',
+  해운대구: '해운대구',
+};
+const REGION_NAMES = Object.keys(SHORT);
+
+/** 이름 목록 → 스토어 모양의 목적지 목록(seq 1..N, 1박). */
+function destinationsOf(names: string[]) {
+  return names.map((region, index) => ({ seq: index + 1, region, nights: 1 }));
+}
+
+/** 앞에서부터 처음 나온 순서대로 중복을 지운다(오라클). */
+function firstOccurrences(names: string[]): string[] {
+  return names.filter((name, index) => names.indexOf(name) === index);
+}
+
+describe('TRIP-1210 · 제목 조립 tripTitle — 예시', () => {
+  it('두 도시면 짧은 이름을 가운뎃점으로 잇는다: 서울·부산 여행', () => {
+    // 준비
+    const destinations = destinationsOf(['서울특별시', '부산광역시']);
+
+    // 실행
+    const title = tripTitle(destinations);
+
+    // 단언
+    expect(title).toBe('서울·부산 여행');
+  });
+
+  it('담은 순서를 그대로 따른다: 부산을 먼저 담으면 부산·서울 여행', () => {
+    expect(tripTitle(destinationsOf(['부산광역시', '서울특별시']))).toBe(
+      '부산·서울 여행'
+    );
+  });
+
+  it('세 곳 이상이면 앞의 두 곳만 쓰고 나머지는 "외 N곳"으로 접는다', () => {
+    expect(
+      tripTitle(destinationsOf(['서울특별시', '부산광역시', '경주시']))
+    ).toBe('서울·부산 외 1곳 여행');
+    expect(
+      tripTitle(
+        destinationsOf(['서울특별시', '부산광역시', '경주시', '강릉시'])
+      )
+    ).toBe('서울·부산 외 2곳 여행');
+  });
+
+  it('같은 도시를 두 번 담아도 제목에는 한 번만 나온다', () => {
+    expect(
+      tripTitle(destinationsOf(['서울특별시', '부산광역시', '서울특별시']))
+    ).toBe('서울·부산 여행');
+    // 세 곳처럼 보이지만 실제로는 두 곳이다 — "외 1곳"이 붙으면 안 된다.
+    expect(
+      tripTitle(destinationsOf(['서울특별시', '서울특별시', '부산광역시']))
+    ).toBe('서울·부산 여행');
+  });
+
+  it('도시가 한 곳이면 제목을 만들지 않는다(undefined — 서버가 지금처럼 "{지역} 여행"을 만든다)', () => {
+    expect(tripTitle(destinationsOf(['서울특별시']))).toBeUndefined();
+    // 같은 도시만 두 번이어도 한 곳이다.
+    expect(
+      tripTitle(destinationsOf(['서울특별시', '서울특별시']))
+    ).toBeUndefined();
+  });
+
+  it('도시가 없으면 제목을 만들지 않는다(undefined)', () => {
+    expect(tripTitle([])).toBeUndefined();
+  });
+
+  it('도 이름은 두 글자로 접고(충청북도 → 충북), 특별자치도도 접는다(제주특별자치도 → 제주)', () => {
+    expect(tripTitle(destinationsOf(['충청북도', '제주특별자치도']))).toBe(
+      '충북·제주 여행'
+    );
+  });
+
+  it('시군구 이름은 접지 않고 그대로 쓴다: 부산·경주시 여행', () => {
+    expect(tripTitle(destinationsOf(['부산광역시', '경주시']))).toBe(
+      '부산·경주시 여행'
+    );
+  });
+});
+
+describe('TRIP-1210 · 제목 조립 tripTitle — 속성(PBT)', () => {
+  // 지역 목록 생성기 — 카탈로그 이름에서 1~6개를 고른다. 같은 이름이 여러 번 나올 수 있다(중복 담기).
+  const namesArb = fc.array(fc.constantFrom(...REGION_NAMES), {
+    minLength: 1,
+    maxLength: 6,
+  });
+
+  it('제목 = 중복을 지운 도시 목록으로 정해진다(1곳 → 없음, 2곳 → A·B 여행, 3곳+ → A·B 외 N곳 여행)', () => {
+    fc.assert(
+      fc.property(namesArb, (names) => {
+        // 준비 — 오라클: 처음 나온 순서대로 중복을 지운 목록.
+        const unique = firstOccurrences(names);
+
+        // 실행
+        const title = tripTitle(destinationsOf(names));
+
+        // 단언
+        if (unique.length === 1) {
+          expect(title).toBeUndefined();
+          return;
+        }
+        const head = `${SHORT[unique[0]]}·${SHORT[unique[1]]}`;
+        const rest = unique.length - 2;
+        expect(title).toBe(
+          rest === 0 ? `${head} 여행` : `${head} 외 ${rest}곳 여행`
+        );
+      }),
+      { numRuns: 300 }
+    );
+  });
+
+  it('이미 담은 도시를 뒤에 몇 번 더 담아도 제목이 바뀌지 않는다', () => {
+    fc.assert(
+      fc.property(
+        namesArb,
+        fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
+        (names, picks) => {
+          // 준비 — 이미 있는 이름을 골라 뒤에 다시 붙인다.
+          const repeated = [
+            ...names,
+            ...picks.map((pick) => names[pick % names.length]),
+          ];
+
+          // 실행·단언
+          expect(tripTitle(destinationsOf(repeated))).toBe(
+            tripTitle(destinationsOf(names))
+          );
+        }
+      ),
+      { numRuns: 300 }
+    );
+  });
+
+  it('제목이 있으면 비지 않고, "undefined"·빈 토막(··)이 섞이지 않으며 " 여행"으로 끝난다', () => {
+    fc.assert(
+      fc.property(namesArb, (names) => {
+        const title = tripTitle(destinationsOf(names));
+        if (title === undefined) return;
+
+        expect(title.endsWith(' 여행')).toBe(true);
+        expect(title).not.toMatch(/undefined|null|··|^·|· /);
+      }),
+      { numRuns: 300 }
     );
   });
 });

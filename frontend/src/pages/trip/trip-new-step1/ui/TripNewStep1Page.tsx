@@ -39,6 +39,7 @@ import {
 } from '../model/budgetAmount';
 import {
   buildCreateTripRequest,
+  tripTitle,
   type CreateTripInput,
 } from '../model/createTripRequest';
 import {
@@ -603,6 +604,8 @@ export function TripNewStep1Page({
       party,
       companionType,
       destinations,
+      // 두 곳 이상이면 앱이 지은 제목, 아니면 `undefined`(키 빠짐 → 서버 기본 제목). 생성·수정 공통(TRIP-1210).
+      title: tripTitle(destinations),
       // 예산은 effective(사용자 입력 우선, 미입력 시 프리필)로 나간다(TRIP-670 D3 복원). `empty`·
       // `invalid`·**0** 이면 `undefined` 라 키가 안 붙는다. `>0` 로 좁혀 요약(`summaryBudget` 은
       // `amount<=0`→null="예산 선택")과 제출을 같은 규칙에 맞춘다(S6D 표시=제출 대칭). 0 이 파싱

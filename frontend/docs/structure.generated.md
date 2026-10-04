@@ -362,11 +362,10 @@
 - `src/features/check-visit/model/visitStatus.ts`  →  OPTIMISTIC_VISIT_ID_PREFIX · isOptimisticVisit · VisitStatus · deriveVisitStatus
 
 ## src/features/create-trip/
-- `src/features/create-trip/index.ts`  →  mustVisitFailureNotice · seedMustVisits · MAX_TRIP_NIGHTS · nightsSum · validateTripDraft · formatWizardStep · summaryBudget · summaryCompanion · summaryDestinations · summaryPeriod · summaryPreferences · COMPANION_OPTIONS · deriveEndDate · fromEpochDay · canAddDestination · ONE_CITY_NOTICE · minNightsFor · useTripWizardStore · isWizardOrigin · wizardOriginParams
+- `src/features/create-trip/index.ts`  →  mustVisitFailureNotice · seedMustVisits · MAX_TRIP_NIGHTS · nightsSum · validateTripDraft · formatWizardStep · summaryBudget · summaryCompanion · summaryDestinations · summaryPeriod · summaryPreferences · COMPANION_OPTIONS · deriveEndDate · fromEpochDay · minNightsFor · useTripWizardStore · isWizardOrigin · wizardOriginParams
 
 ## src/features/create-trip/model/
 - `src/features/create-trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
-- `src/features/create-trip/model/oneCityGate.ts`  →  MAX_DESTINATIONS · ONE_CITY_NOTICE · canAddDestination
 - `src/features/create-trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · MAX_TRIP_NIGHTS · nightsSum · validateTripDraft · toCompanionType
 - `src/features/create-trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · SummaryLine · PreferenceSummary · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
 - `src/features/create-trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · presetRange · deriveEndDate
@@ -1175,7 +1174,7 @@
 
 ## src/pages/trip/trip-new-step1/model/
 - `src/pages/trip/trip-new-step1/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · MAX_BUDGET_AMOUNT · formatBudgetAmount · BudgetTier · budgetForTier · isBudgetTier · tierForAmount
-- `src/pages/trip/trip-new-step1/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
+- `src/pages/trip/trip-new-step1/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest · tripTitle
 - `src/pages/trip/trip-new-step1/model/mustVisitSync.ts`  →  MustVisitSyncPlan · planMustVisitSync
 - `src/pages/trip/trip-new-step1/model/tripDatePicker.ts`  →  dateCell · TripDateRange
 - `src/pages/trip/trip-new-step1/model/useCreateTrip.ts`  →  useCreateTrip
@@ -1575,4 +1574,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 965개 파일
+합계 964개 파일

@@ -212,6 +212,8 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
           regionCode,
         },
       ]);
+      // 박수 합 상한(TRIP-1210) — 넘치게 될 추가는 담지 않는다. 지역 피커가 시트를 거치지 않고 여기로 바로 온다.
+      if (nightsSum(destinations) > MAX_TRIP_NIGHTS) return state;
       return {
         destinations,
         endDate: endAfter(state, destinations),

@@ -1,3 +1,4 @@
+import { sidoKey } from '@/features/trip';
 import type { CreateTripRequest } from '@/shared/api/index.schemas';
 
 /**
@@ -40,4 +41,21 @@ export function buildCreateTripRequest(
     ...(typeof budgetTotal === 'number' ? { budgetTotal } : {}),
     ...(preferenceSnapshot !== undefined ? { preferenceSnapshot } : {}),
   };
+}
+
+/**
+ * 여행 제목(TRIP-1210) — 서버는 제목이 없으면 첫 목적지만으로 `서울특별시 여행`을 만든다(생성·수정 둘 다).
+ * 도시가 둘 이상일 때만 짧은 이름(`sidoKey`)을 담은 순서대로 `·`로 이어 보낸다: 2곳 `서울·부산 여행`,
+ * 3곳 이상 `서울·부산 외 N곳 여행`. 같은 도시는 한 번만. 한 곳 이하면 `undefined` — 키가 안 실려
+ * 서버 기본 제목이 그대로다. 시군구 동명(서울 중구 + 부산 중구)은 한 곳으로 접힌다(관측만, 시도 없음).
+ */
+export function tripTitle(
+  destinations: readonly { region: string }[]
+): string | undefined {
+  const names = [...new Set(destinations.map((one) => sidoKey(one.region)))];
+  if (names.length < 2) return undefined;
+  const head = names.slice(0, 2).join('·');
+  return names.length > 2
+    ? `${head} 외 ${names.length - 2}곳 여행`
+    : `${head} 여행`;
 }

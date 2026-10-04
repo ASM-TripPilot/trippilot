@@ -146,8 +146,7 @@ describe('0박 결정 · 도시가 하나면 − 가 0박(당일치기)까지 �
 
 describe('AC-3 · 도시 추가 → onAddCity', () => {
   it('"도시 추가" press 가 onAddCity 를 한 번 부른다 (편집 콜백은 안 부른다)', () => {
-    // TRIP-1210 — 도시가 비어 있을 때만 추가가 열린다(1개 이상이면 아래 describe 가 막는다).
-    const spies = renderSheet([]);
+    const spies = renderSheet(BUSAN2_GYEONGJU1);
 
     fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
 
@@ -232,63 +231,89 @@ describe('AC-6 · 꼭 갈 곳 안내문 (TRIP-736 · TRIP-1093 문구)', () => {
 });
 
 /**
- * TRIP-1210 — 1.0 은 도시 하나만. 다도시는 BE+AI 가 날짜별 배분을 못 해 서울 장소만 든 일정이
- * 오류 없이 나온다(조용한 오답, INV-4). 막는 것은 '추가'뿐이고 교체(삭제 → 추가)는 열려 있다.
+ * TRIP-1210 — 도시 하나 제한(임시 게이트)을 걷었다. 서버가 날짜별로 도시를 나눠 주게 됐다(#932).
+ * 이제 몇 곳이 담겨 있든 "도시 추가"는 지역 피커로 가는 신호(onAddCity)를 올리고, "준비 중" 안내는 없다.
+ * (옛 계약 — 1곳 이상이면 추가를 막고 안내 — 은 이 describe 가 뒤집었다.)
  */
-describe('TRIP-1210 · 도시는 하나만', () => {
-  const ONE_CITY_NOTICE =
-    '여러 도시 여행은 준비 중이에요. 한 도시를 골라 주세요.';
-  const SEOUL1: TripDestination[] = [{ seq: 1, region: '서울', nights: 1 }];
+describe('TRIP-1210 · 도시를 여럿 담을 수 있다 (게이트 해제)', () => {
+  const OLD_NOTICE = /여러 도시 여행은 준비 중/;
 
-  it('도시가 1개면 "도시 추가"는 이동하지 않고 안내를 보인다', () => {
-    const spies = renderSheet(SEOUL1);
-    expect(screen.queryByText(ONE_CITY_NOTICE)).toBeNull();
+  it.each([
+    ['0곳', []],
+    ['1곳', [{ seq: 1, region: '서울특별시', nights: 1 }]],
+    ['2곳', BUSAN2_GYEONGJU1],
+    [
+      '3곳',
+      [
+        { seq: 1, region: '서울특별시', nights: 1 },
+        { seq: 2, region: '부산광역시', nights: 1 },
+        { seq: 3, region: '경주시', nights: 1 },
+      ],
+    ],
+  ] as [string, TripDestination[]][])(
+    '%s 담긴 상태에서 "도시 추가"를 누르면 onAddCity 가 1번 불리고 준비 중 안내는 없다',
+    (_label, destinations) => {
+      // 준비
+      const spies = renderSheet(destinations);
+      const add = screen.getByTestId('trip-wizard-destination-add');
+      expect(add).not.toBeDisabled();
 
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+      // 실행
+      fireEvent.press(add);
 
-    expect(spies.onAddCity).not.toHaveBeenCalled();
-    expect(
-      screen.getByTestId('trip-wizard-destination-one-city-notice')
-    ).toBeOnTheScreen();
-    expect(screen.getByText(ONE_CITY_NOTICE)).toBeOnTheScreen();
-  });
+      // 단언
+      expect(spies.onAddCity).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByTestId('trip-wizard-destination-one-city-notice')
+      ).toBeNull();
+      expect(screen.queryByText(OLD_NOTICE)).toBeNull();
+    }
+  );
+});
 
-  it('도시가 0개면 첫 도시 추가는 그대로 이동한다(안내 없음)', () => {
-    const spies = renderSheet([]);
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    expect(spies.onAddCity).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(ONE_CITY_NOTICE)).toBeNull();
-  });
+/**
+ * TRIP-1210 — 도시를 여럿 담게 되면서 새로 생긴 길: 박수 합이 이미 30박인데 도시를 더 담으면 31박이 된다
+ * (새 도시는 최소 1박). 그래서 30박이면 "도시 추가"도 [+]처럼 진짜로 막고, 안내는 기존 '최대 30박' 문구
+ * 하나를 그대로 쓴다(01b 결정 3 — 새 문구 금지).
+ */
+describe('TRIP-1210 · 박수 합이 30박이면 도시 추가도 막힌다 (기존 상한 안내 재사용)', () => {
+  it.each([
+    [
+      '두 도시 20+10',
+      [
+        { seq: 1, region: '부산광역시', nights: 20 },
+        { seq: 2, region: '경주시', nights: 10 },
+      ],
+    ],
+    ['한 도시 30', [{ seq: 1, region: '서울특별시', nights: 30 }]],
+  ] as [string, TripDestination[]][])(
+    '%s박이면 "도시 추가"가 진짜 disabled — press 해도 onAddCity 0회, 상한 안내는 한 줄뿐이다',
+    (_label, destinations) => {
+      // 준비
+      const spies = renderSheet(destinations);
+      const add = screen.getByTestId('trip-wizard-destination-add');
 
-  it('교체: 삭제 × 는 그대로 되고, 비운 뒤에는 추가가 다시 열린다', () => {
-    const spies = renderSheet(SEOUL1);
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-1'));
-    expect(spies.onRemove).toHaveBeenCalledWith(1);
-  });
+      // 실행 — disabled 매처 + press + 콜백 0회 3단(가짜 disabled 는 press 가 먹는다).
+      expect(add).toBeDisabled();
+      fireEvent.press(add);
 
-  it('이미 2개 이상 들어온 상태도 추가는 막는다', () => {
-    const spies = renderSheet(BUSAN2_GYEONGJU1);
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    expect(spies.onAddCity).not.toHaveBeenCalled();
-    expect(screen.getByText(ONE_CITY_NOTICE)).toBeOnTheScreen();
-  });
+      // 단언
+      expect(spies.onAddCity).not.toHaveBeenCalled();
+      expect(
+        screen.getByTestId('trip-wizard-destination-max-note')
+      ).toHaveTextContent('최대 30박까지 정할 수 있어요');
+      // 새 문구를 만들지 않았다 — 상한을 말하는 글은 기존 안내 하나뿐이다(행 라벨 "30박"은 안 걸리게 고른 낱말).
+      expect(screen.getAllByText(/최대|넘|더 담을 수/)).toHaveLength(1);
+    }
+  );
 
-  it('도시 목록이 줄면(교체 중 삭제) 남아 있던 안내도 사라진다', () => {
-    const spies = {
-      onChangeNights: jest.fn(),
-      onRemove: jest.fn(),
-      onAddCity: jest.fn(),
-      onApply: jest.fn(),
-      onClose: jest.fn(),
-    };
-    const view = render(
-      <DestinationEditSheet destinations={SEOUL1} {...spies} />
-    );
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    expect(screen.getByText(ONE_CITY_NOTICE)).toBeOnTheScreen();
+  it('29박이면 "도시 추가"가 살아 있고 상한 안내는 없다 (경계 바로 아래)', () => {
+    const spies = renderSheet([
+      { seq: 1, region: '부산광역시', nights: 20 },
+      { seq: 2, region: '경주시', nights: 9 },
+    ]);
 
-    view.rerender(<DestinationEditSheet destinations={[]} {...spies} />);
-    expect(screen.queryByText(ONE_CITY_NOTICE)).toBeNull();
+    expect(screen.queryByTestId('trip-wizard-destination-max-note')).toBeNull();
     fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
     expect(spies.onAddCity).toHaveBeenCalledTimes(1);
   });
