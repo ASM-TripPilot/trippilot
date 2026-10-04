@@ -40,6 +40,6 @@ export function resolveDisplayNarrative(res: Reflection | undefined): string {
 }
 
 /** 폴백 ③ — 근거 수치만으로 만든 최소 문장. 정확한 카피는 발명하지 않고 "비지 않음"만 계약(6-b 픽셀 소관). */
-function basicNarrative(stats: ReflectionStats): string {
+export function basicNarrative(stats: ReflectionStats): string {
   return `방문 ${stats.visitCount}곳 · 이동 ${formatKm(stats.distanceKm)} · 사진 ${stats.photoCount}장의 하루였어요.`;
 }

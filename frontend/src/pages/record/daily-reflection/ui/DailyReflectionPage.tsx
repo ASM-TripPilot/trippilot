@@ -8,7 +8,10 @@ import {
   type LocationPermissionState,
 } from '../model/missingParts';
 import { fillTemplate } from '../model/fillTemplate';
-import { resolveDisplayNarrative } from '../model/reflectionFallback';
+import {
+  basicNarrative,
+  resolveDisplayNarrative,
+} from '../model/reflectionFallback';
 import { statsCard } from '../model/statsCard';
 import { useDailyReflection } from '../model/useDailyReflection';
 import {
@@ -139,18 +142,7 @@ export function DailyReflectionPage({
     resolveDisplayNarrative(res),
     templateCtx
   );
-  const narrative =
-    resolvedNarrative ||
-    resolveDisplayNarrative(
-      res
-        ? {
-            ...res,
-            card: undefined,
-            editedCard: undefined,
-            draftCard: undefined,
-          }
-        : undefined
-    );
+  const narrative = resolvedNarrative || basicNarrative(stats);
   const editableText = fillTemplate(res?.card?.subtitle ?? '', templateCtx);
   // ISO 'YYYY-MM-DD' 는 사전순 = 시간순(monthGrid.isDateInRange 선례).
   const notFuture = date <= today;

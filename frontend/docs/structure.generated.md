@@ -930,8 +930,9 @@
 
 ## src/pages/record/daily-reflection/model/
 - `src/pages/record/daily-reflection/model/editCard.ts`  →  buildEditCard
+- `src/pages/record/daily-reflection/model/fillTemplate.ts`  →  TemplateContext · GUIDE_TEXTS · isGuideText · fillTemplate
 - `src/pages/record/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
-- `src/pages/record/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
+- `src/pages/record/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative · basicNarrative
 - `src/pages/record/daily-reflection/model/statsCard.ts`  →  statsCard
 - `src/pages/record/daily-reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
 
@@ -1571,4 +1572,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 961개 파일
+합계 962개 파일
