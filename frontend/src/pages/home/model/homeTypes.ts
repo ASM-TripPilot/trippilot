@@ -23,6 +23,8 @@ export interface HomeCollectionsLane {
   /** ready 에서 0장이면 섹션 통째 숨김(정직한 빈 상태). */
   cards: readonly HomeCollectionCard[];
   onRetry: () => void;
+  /** 카드 press → 장소 상세(TRIP-1221). poiId 가 있는 카드만 버튼이 된다. */
+  onPressCard?: (poiId: string) => void;
 }
 
 /** 섹션2 "지금 뜨는 장소" 카드 1장 — 사진 위 타이틀·해시태그. */
@@ -42,6 +44,8 @@ export interface HomeSpotsLane {
   status: 'loading' | 'error' | 'ready';
   cards: readonly HomeSpotCard[];
   onRetry: () => void;
+  /** 카드 press → 장소 상세(TRIP-1221). poiId 가 있는 카드만 버튼이 된다. */
+  onPressCard?: (poiId: string) => void;
   savedPoiIds?: readonly string[];
   pendingPoiIds?: readonly string[];
   onToggleSave?: (poiId: string) => void;

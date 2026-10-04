@@ -413,13 +413,19 @@ function PhotoPlaceholder({ testID }: { testID: string }): ReactElement {
 function CollectionCard({
   card,
   index,
+  onPressCard,
 }: {
   card: HomeCollectionCard;
   index: number;
+  onPressCard?: (poiId: string) => void;
 }): ReactElement {
+  const { poiId } = card;
+  const onPress = poiId && onPressCard ? () => onPressCard(poiId) : undefined;
   return (
-    <View
+    <Pressable
       testID={`home-collection-card-${index}`}
+      accessibilityRole={onPress ? 'button' : undefined}
+      onPress={onPress}
       style={softCardShadow}
       className="h-[300px] w-[230px] overflow-hidden rounded-[18px]"
     >
@@ -455,13 +461,13 @@ function CollectionCard({
           </Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 // ── 스팟 카드(지금 뜨는 장소, 2×2 그리드 셀) ────────────────────────────
 // 하트는 poiId(실데이터)와 save 배선이 둘 다 있을 때만 — 픽스처엔 담을 대상이 없다(AC-14).
-// 카드 자체는 버튼이 아니라(상세 이동 없음) disabled 하트 press 가 새어도 받을 곳이 없다.
+// 카드는 poiId + onPressCard 가 있을 때만 버튼(TRIP-1221 상세 이동) — 하트는 자기 Pressable 이 먼저 받는다.
 function SpotCard({
   card,
   index,
@@ -473,9 +479,12 @@ function SpotCard({
 }): ReactElement {
   const { poiId } = card;
   const onToggleSave = lane?.onToggleSave;
+  const onPressCard = lane?.onPressCard;
   return (
-    <View
+    <Pressable
       testID={`home-spot-card-${index}`}
+      accessibilityRole={poiId && onPressCard ? 'button' : undefined}
+      onPress={poiId && onPressCard ? () => onPressCard(poiId) : undefined}
       className="h-[166px] flex-1 overflow-hidden rounded-card"
     >
       <View className="absolute inset-0 bg-surface-strong" />
@@ -511,7 +520,7 @@ function SpotCard({
           className="absolute right-sm top-sm"
         />
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -560,6 +569,7 @@ function CollectionsSection({
               key={card.poiId ?? card.title}
               card={card}
               index={index}
+              onPressCard={lane?.onPressCard}
             />
           ))}
         </ScrollView>
