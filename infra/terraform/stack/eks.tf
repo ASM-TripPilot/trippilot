@@ -23,7 +23,7 @@ resource "aws_eks_cluster" "this" {
   name                          = local.name
   role_arn                      = data.aws_iam_role.cluster.arn
   version                       = var.cluster_version
-  deletion_protection           = local.production
+  deletion_protection           = var.data_protection_enabled
   bootstrap_self_managed_addons = false
   enabled_cluster_log_types     = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
