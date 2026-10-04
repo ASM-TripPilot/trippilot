@@ -18,8 +18,8 @@ data class Region(
     val selectable: Boolean,
     val poiCount: Int,
     /**
-     * 대표 좌표 — 숙소가 없는 날의 앵커(TRIP-384). 우리가 가진 숙소·POI 의 무게중심이라
-     * 데이터가 한 건도 없는 지역은 null 이다. **지어내지 않는다.**
+     * 대표 좌표 — 숙소가 없는 날의 앵커(TRIP-384). 우리가 가진 숙소·POI 로 잡은 값이라(시군구는
+     * 무게중심, 시도는 가장 빽빽한 곳) 데이터가 한 건도 없는 지역은 null 이다. **지어내지 않는다.**
      */
     val lat: Double? = null,
     val lng: Double? = null,
