@@ -160,11 +160,13 @@ python3 backend/scripts/ingest_pois.py \
 |---|---|
 | 404 | 터널을 안 거쳐 게이트웨이로 갔다. port-forward 확인 |
 | 401 | `SERVICE_AUTH_TOKEN` 불일치. secret 을 다시 꺼낸다 |
-| 400 `알 수 없는 출처입니다` | 문서 `source` 가 `KAKAO_LOCAL`/`TOURAPI`/`MANUAL` 이 아니다 |
+| 400 `알 수 없는 출처입니다` | 문서 `source` 가 `KAKAO_LOCAL`/`TOURAPI`/`MANUAL`/`LOCALDATA` 가 아니다(`LOCALDATA` 는 V2.61 이후 백엔드만 받는다) |
 | 연결 실패 | port-forward 가 죽었다(세션이 끊기면 조용히 닫힌다) |
 | 타임아웃 | `--chunk-size` 를 줄인다 |
 
 진짜로 넣은 것을 **지워야** 하는 상황이라면(스키마 사고 등) `DELETE FROM poi WHERE source_ref IS NOT NULL` 이 수집분만 고른다(수동 시드는 `source_ref IS NULL`). 다만 `saved_place.poi_id` 가 `poi` 를 FK 로 참조하고 `ON DELETE` 가 없어, 사용자가 담아 둔 장소가 있으면 삭제가 거부된다. 운영 데이터가 생긴 뒤에는 삭제가 아니라 재적재로 고친다.
+
+**`LOCALDATA` 를 부은 DB 에서 백엔드를 V2.61 이전 이미지로 되돌리지 않는다.** 그 이미지의 `PoiSource` 에는 `LOCALDATA` 가 없어 그 행을 읽는 조회마다 `PoiSource.valueOf` 가 터진다(공백 지역 반경 조회·탐색 목록이 500). 되돌려야 하면 먼저 `DELETE FROM poi WHERE source = 'LOCALDATA'` 를 한다(위 FK 제약은 같다). `data_status` 를 `CLOSED` 로 바꾸는 것만으로는 모자라다 — 상태를 보지 않는 id 조회(`PoiRepositoryAdapter.findById`·`findByIds`)가 여전히 그 행을 읽는다.
 
 ## 확인
 

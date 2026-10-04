@@ -84,6 +84,20 @@ class PoiSourceRefPersistenceIT : AbstractPostgresIntegrationTest() {
         pois.findBySourceRefs(PoiSource.KAKAO_LOCAL, listOf("SHARED-9")) shouldContainKey "SHARED-9"
     }
 
+    /**
+     * 앱 enum 과 DB CHECK(`poi_source_check`)는 **같은 값 집합**이어야 한다(V2.61 · TRIP-1224 LOCALDATA).
+     * enum 만 늘리면 저장이 CHECK 위반으로 죽고, CHECK 만 늘리면 읽기(`PoiSource.valueOf`)가 죽는다 —
+     * 인메모리 페이크로는 어느 쪽도 안 보인다. 값마다 한 행씩 실제로 넣고 다시 읽는다.
+     */
+    @Test
+    fun `모든 출처 값이 DB CHECK 를 통과하고 다시 읽힌다`() {
+        pois.saveAll(PoiSource.entries.map { poi(it, "ALL-SOURCES-${it.name}") })
+
+        PoiSource.entries.forEach {
+            pois.findBySourceRefs(it, listOf("ALL-SOURCES-${it.name}")) shouldContainKey "ALL-SOURCES-${it.name}"
+        }
+    }
+
     // 조회가 상태로 좁혀지면 폐업 처리된 장소를 재수집이 새 행으로 다시 만든다.
     @Test
     fun `상태와 무관하게 찾는다 — 폐업분도 다시 만들지 않는다`() {

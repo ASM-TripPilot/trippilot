@@ -84,7 +84,7 @@ data class PoiReadResponse(
     val region: String?,
     val openingHours: String?,   // 원문(structured 는 후속)
     val dataStatus: String,      // ACTIVE(현재 read 는 ACTIVE만)
-    val source: String,          // KAKAO_LOCAL/TOURAPI/MANUAL
+    val source: String,          // KAKAO_LOCAL/TOURAPI/MANUAL/LOCALDATA
     /**
      * 출처가 준 원본 식별자(TourAPI `content_id` 등). 수동 등록분은 null.
      *
