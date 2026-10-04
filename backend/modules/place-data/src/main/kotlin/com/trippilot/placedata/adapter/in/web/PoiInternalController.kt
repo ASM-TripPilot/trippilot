@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.databind.annotation.JsonNaming
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.placedata.application.PoiCloseMissingService
 import com.trippilot.placedata.application.PoiProposalIngestService
 import com.trippilot.placedata.application.PoiReadService
 import com.trippilot.placedata.application.PoiWithDistance
@@ -29,6 +30,7 @@ import java.util.UUID
 class PoiInternalController(
     private val readService: PoiReadService,
     private val ingestService: PoiProposalIngestService,
+    private val closeService: PoiCloseMissingService,
 ) {
     /** 반경(km) 내 ACTIVE 정본 — 합성 정렬키 적용. */
     @GetMapping
@@ -59,6 +61,26 @@ class PoiInternalController(
                 // 다른 벤더 수집분이 통째로 잘못된 출처로 저장되고, 멱등 키가 벤더를 넘어 충돌한다.
                 source = parseSource(document.source),
                 proposals = document.proposals.map { it.toCommand() },
+            ),
+        )
+
+    /**
+     * 미포함 정리(TRIP-1227) — 한 출처의 **완전한** 식별자 목록을 받아, 그 출처의 ACTIVE 중 목록에 없는 것을 LOST 로 내린다
+     * (폐업 판정 CLOSED 가 아니다 — 다음 적재에서 문서에 다시 나타나면 ACTIVE 로 돌아온다).
+     *
+     * `/proposals` 와 따로인 이유: 적재는 문서를 쪼개 보내므로 어느 수신 요청도 "이게 전부"라고 말하지 못한다.
+     * 호출자가 전부를 한 번에 밝혀야 대조가 성립하고, **그 문서를 적재하기 전에** 불러야 비율 가드가 맞는 분모를
+     * 본다(서비스 주석). `dry_run` 이면 숫자만 계산하고 쓰지 않는다 — 가드 판정(409)은 같다.
+     * 응답은 숫자 넷과 닫은 식별자(되돌리기 열쇠)다(INV-4).
+     */
+    @PostMapping("/close-missing")
+    fun closeMissing(@RequestBody request: CloseMissingRequest): PoiCloseMissingResponse =
+        PoiCloseMissingResponse.from(
+            closeService.closeMissing(
+                source = parseSource(request.source),
+                presentRefs = request.presentSourceRefs,
+                allowMassClose = request.allowMassClose,
+                dryRun = request.dryRun,
             ),
         )
 

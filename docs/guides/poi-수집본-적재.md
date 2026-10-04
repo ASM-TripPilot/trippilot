@@ -100,8 +100,10 @@ python3 backend/scripts/ingest_pois.py ai/data/collected_pois.json
 | `--base-url` | port-forward 포트를 바꿨거나 로컬 compose 에 넣을 때 |
 | `--chunk-size N` | 타임아웃이 나면 줄인다. `0` = 쪼개지 않음 |
 | `--timeout N` | 기본 300초 |
-| `--dry-run` | 보내기 전 항상 |
-| `--self-check` | 스크립트 자체 점검(파싱·쪼개기·합산) |
+| `--dry-run` | 보내기 전 항상. `--close-missing` 과 함께면 닫힐 수를 서버에 묻는다(토큰·터널 필요, 쓰지 않음) |
+| `--close-missing` | 문서가 **그 출처의 전부**일 때, 적재 전에 문서에 없는 ACTIVE 를 LOST 로 — §원본에서 빠진 장소 닫기 |
+| `--allow-mass-close` | `--close-missing` 의 비율 가드를 넘는다. 의도한 대량 정리일 때만 |
+| `--self-check` | 스크립트 자체 점검(파싱·쪼개기·합산·미포함 정리의 호출 순서와 종료 코드) |
 
 `SERVICE_AUTH_TOKEN` 이 비면 스크립트가 **보내기 전에 멈춘다**. 무인증으로 나가면 401 만 쌓이고 이유가 안 보인다.
 
@@ -152,15 +154,79 @@ python3 backend/scripts/ingest_pois.py \
 
 적재는 **즉시 등록**이다. 수동 승인 단계가 없고, 응답의 `registered`/`updated` 가 곧 DB 에 반영된 수다.
 
+## 원본에서 빠진 장소 닫기 (`--close-missing`)
+
+적재는 `(source, content_id)` **upsert** 라 추가·갱신만 한다. 원본에서 빠진 장소 — 폐업, 선별에서 빠진 식당, 공유본에서 빠진 행 — 는 DB 에 **ACTIVE 로 남아** 탐색·후보풀에 계속 나온다(사용자에게는 문 닫은 식당이 일정에 들어가는 것으로 보인다). 문서가 **그 출처의 전부**일 때 `--close-missing` 을 붙이면 그것까지 정리한다:
+
+```bash
+# 1) 드라이런 — 서버가 닫힐 수를 계산만 해서 돌려준다(쓰지 않는다 · 토큰과 터널이 필요하다)
+python3 backend/scripts/ingest_pois.py --dry-run --close-missing ai/data/collected_localdata.json
+# 2) 실제 — 문서마다 닫기 → 적재 순서로 간다
+python3 backend/scripts/ingest_pois.py --close-missing ai/data/collected_localdata.json
+```
+
+문서마다 **적재 전에** 그 문서의 `provenance.content_id` 전부를 `POST /internal/pois/close-missing` 으로 한 번 보내고, 이어서 적재한다. 서버는 그 출처의 ACTIVE 중 목록에 없는 것을 **LOST** 로 내린다 — 삭제가 아니고(담은 장소·확정 일정 스냅숏이 그 행을 가리킨다) 폐업 판정(CLOSED)도 아니다. 빠지는 이유 대부분이 폐업이 아니라서다(LOCALDATA 공백 해소·중복 병합, 공유본 `drop_non_travel` 소급 제거). LOST 행은 뒤의 적재에서 문서에 다시 나타나면 ACTIVE 로 돌아온다(§되돌리기). **순서가 거꾸로면 가드가 무너진다** — 적재 뒤에 대조하면 방금 만든 행이 스스로를 "목록에 있음"으로 세어, 식별자 형식이 통째로 바뀐 문서나 출처 라벨이 틀린 문서도 기존 행 수만큼만 크면 비율 가드를 넘고 기존 행이 전부 닫힌다(실측: 1,000건 재키잉 → 2,000 중 1,000 = 50% 로 통과). 닫히는 집합은 적재 전후가 같다 — 적재는 목록 안의 행만 건드린다(만들기·갱신·LOST 되살리기). 출력은 문서마다 이렇다:
+
+```
+  미포함 정리 — LOCALDATA ACTIVE <activeBefore> 중 목록에 있음 <present> · LOST <closed>
+  되돌리기 SQL → close-missing-undo-LOCALDATA-<시각>.sql — 잘못 닫혔는데 다시 부을 문서가 없을 때만 psql 로 먹인다(…)
+```
+
+드라이런은 같은 줄을 `미포함 정리(드라이런 — 닫지 않았다) … · 닫을 것 <closed>` 로 찍는다. 실제 실행도 적재 전에 같은 상태로 대조하므로, 그 사이 다른 적재가 끼지 않으면 **이 숫자가 그대로 닫힌다** — 첫 운영 실행 전에 이 숫자를 보고 판단한다.
+
+| 값 | 뜻 |
+|---|---|
+| `activeBefore` | 호출 시점 그 출처의 ACTIVE(식별자 있는 행). 적재 전이라 이 문서로 새로 생기거나 되살아날(지난번 LOST) 행은 들어 있지 않다 |
+| `present` | 그중 목록에 있어 남은 수 — **요청 목록의 크기가 아니다**(아직 행이 없는 신규 제안은 세지 않는다) |
+| `closed` | 이번에 LOST 로 내린 수(드라이런이면 내릴 수) — 키 이름은 동작(닫기)을 따른 것이지 상태값 CLOSED 가 아니다. 동시 변경이 없으면 `activeBefore = present + closed` |
+
+사용자에게는 이렇게 보인다: 탐색·후보풀에서 사라진다 · 담기 목록에 **'미확인' 배지**가 붙는다('폐업' 배지는 폐업 판정 CLOSED 의 몫이다) · 그 장소가 든 **확정 전 일정은 확정이 409 로 막힌다**(`일정에 포함된 장소가 더 이상 유효하지 않아 확정할 수 없습니다`) · 이미 확정된 일정은 스냅숏이라 그대로다 · 뒤의 적재에서 **문서에 다시 나타나면 ACTIVE 로 돌아와** 배지가 사라지고 후보에 다시 오른다.
+
+막아 두는 것:
+
+- **목록에 있는 것이 그 출처 ACTIVE 의 절반 미만이면 409** — 아무것도 닫지 않고 그 문서는 **적재도 하지 않는다**(스크립트는 0 이 아닌 코드로 끝난다. 식별자 형식이 바뀐 문서를 부으면 같은 장소가 새 식별자로 한 벌 더 생기기 때문이다). 청크 하나·회차 artifact 한 장·다른 출처의 목록·식별자 형식이 바뀐 문서가 이렇게 보인다. 정말 절반 넘게 빠지는 정리(선별 기준을 바꿔 다시 만든 경우 등)일 때만 `--allow-mass-close` 를 붙인다.
+- **같은 출처 문서를 두 장 이상 주면 보내기 전에 거부한다**(exit 1) — 문서 한 장을 그 출처의 전부로 읽으므로 둘째 문서가 첫째 문서의 행을 닫는다.
+- **`MANUAL` 은 400** — 시드는 문서에서 온 것이 아니다. 모르는 출처도 400(적재와 같다).
+- **닫은 뒤 적재 청크가 실패해도 닫은 것은 맞다**(닫히는 집합은 적재 전후가 같다). 원인을 고쳐 같은 명령을 다시 돌리면 닫기는 0, 적재가 나머지를 채운다.
+- 로컬 compose 자동 적재(`poi-ingest`)는 이 플래그를 쓰지 않는다 — 기본은 upsert 만이다.
+
+**TourAPI 에는 공유본으로만 쓴다.** 회차 artifact 는 전국이 아니라 쓰면 안 된다. 공유본은 매일 병합되는 누적본이고 축소되면 워크플로가 실패하지만, 빠지는 행이 **사람이 지운 행만은 아니다** — 병합이 관광 무관 규칙을 소급해 빼는 행(`ai/scripts/merge_pois_docs.py` 의 `drop_non_travel` — 편의점 지점 같은 이름 규칙)도 빠지고, 그 행은 여기서 LOST(담기 목록의 '미확인' 배지)가 된다. 그리고 **공유본보다 앞서 artifact 로 부은 적이 있으면 공유본에 그 행이 들어올 때까지 TourAPI 에는 쓰지 않는다** — 공유본에 아직 없는 그 행들이 그동안 후보에서 빠지고, 비율 가드는 이 정도 몫을 못 잡는다(공유본에 들어온 뒤 다시 부으면 돌아오기는 한다).
+
+### 되돌리기
+
+**대부분은 다시 붓기로 돌아온다.** 수신은 문서에 다시 나타난 **LOST** 행을 ACTIVE 로 되살린다(`Poi.refreshed`) — 잘못 닫힌 행이 맞는 문서에 있으면 그 문서를 다시 붓는 것이 곧 되돌리기다(`--close-missing` 을 붙여도 된다: 닫기는 ACTIVE 만 보고, 이어지는 적재가 LOST 를 되살린다). 다음 달 문서에 다시 뽑힌 식당도 따로 할 일이 없다. **CLOSED·UNVERIFIED 는 되살리지 않는다** — 폐업 판정(V2.50)·사람이 내린 값이라 대량 수집이 덮지 않는다.
+
+다시 부을 문서가 없을 때(그 행이 어느 문서에도 없다):
+
+1. **스크립트가 남긴 되돌리기 SQL**(기본) — 닫은 행이 있으면 실행한 디렉토리에 `close-missing-undo-<출처>-<시각>.sql` 이 생긴다. 서버가 돌려준 **닫은 식별자 그대로** LOST → ACTIVE 로 되돌린다(그 사이 CLOSED 로 바뀐 행은 건드리지 않는다 · 지우지 말고 둔다). §확인의 변수(`PGHOST`·`PGUSER`·`PGPASSWORD`)를 잡은 셸에서 먹인다:
+
+   ```bash
+   kubectl run poi-undo --rm -i --restart=Never -n trippilot --image=postgres:16-alpine \
+     --env=PGHOST="$PGHOST" --env=PGDATABASE=trippilot --env=PGUSER="$PGUSER" \
+     --env=PGPASSWORD="$PGPASSWORD" --env=PGSSLMODE=require --env=PGOPTIONS="-c search_path=app" \
+     -- psql --no-psqlrc -v ON_ERROR_STOP=1 < close-missing-undo-LOCALDATA-<시각>.sql
+   ```
+
+2. **파일도 없을 때** — 한 호출이 닫은 행은 같은 `updated_at` 을 가진다. LOST 를 만드는 경로는 이 정리뿐이라 다른 상태와 섞이지 않는다(TOURAPI 의 V2.50 폐업 행은 CLOSED 다):
+
+   ```sql
+   -- 최근 닫힌 묶음 — 응답의 closed 와 건수가 같은 줄이 그 호출이다
+   SELECT source, updated_at, count(*) FROM poi WHERE data_status = 'LOST'
+    GROUP BY 1, 2 ORDER BY 2 DESC LIMIT 5;
+   UPDATE poi SET data_status = 'ACTIVE'
+    WHERE data_status = 'LOST' AND source = '<위 출처>' AND updated_at = '<위 시각>';
+   ```
+
 ## 실패하면
 
-**되돌릴 것이 없다.** 멱등 키가 `provenance.content_id` 이므로 같은 문서를 몇 번 넣어도 행이 늘지 않는다(신규 대신 갱신으로 집계된다). 원인을 고친 뒤 **같은 명령을 다시 돌린다**. 그래서 스크립트에 재시도·이어가기 장치를 두지 않았다.
+**되돌릴 것이 없다.** 멱등 키가 `provenance.content_id` 이므로 같은 문서를 몇 번 넣어도 행이 늘지 않는다(신규 대신 갱신으로 집계된다). 원인을 고친 뒤 **같은 명령을 다시 돌린다**. 그래서 스크립트에 재시도·이어가기 장치를 두지 않았다. (`--close-missing` 도 다시 돌려 안전하다. 그것이 닫은(LOST) 행은 문서에 다시 나타나면 적재가 되살린다 — §되돌리기.)
 
 | 증상 | 원인 |
 |---|---|
 | 404 | 터널을 안 거쳐 게이트웨이로 갔다. port-forward 확인 |
 | 401 | `SERVICE_AUTH_TOKEN` 불일치. secret 을 다시 꺼낸다 |
 | 400 `알 수 없는 출처입니다` | 문서 `source` 가 `KAKAO_LOCAL`/`TOURAPI`/`MANUAL`/`LOCALDATA` 가 아니다(`LOCALDATA` 는 V2.61 이후 백엔드만 받는다) |
+| 409 `CONFLICT`(미포함 정리) | 목록에 있는 것이 그 출처 ACTIVE 의 절반 미만 — 부분 문서·식별자 형식 변경 의심. 닫힌 행도, 그 문서의 적재도 없다. §원본에서 빠진 장소 닫기 |
 | 연결 실패 | port-forward 가 죽었다(세션이 끊기면 조용히 닫힌다) |
 | 타임아웃 | `--chunk-size` 를 줄인다 |
 
