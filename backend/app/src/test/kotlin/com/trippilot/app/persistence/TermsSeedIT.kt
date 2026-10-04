@@ -36,6 +36,9 @@ class TermsSeedIT : AbstractPostgresIntegrationTest() {
             body.contains("플레이스홀더") shouldBe false
             // 법무 검토용 "코드 대조표"(INV-3·TRIP-249 같은 개발 용어)가 이용자 화면에 실려 나간 적이 있다(QA 2026-10-03).
             withClue(type) { body.contains("초안 검토용") shouldBe false }
+            // 개발용 메모(코드명 인용줄·"초안 vX.Y" 제목)가 설정>약관 화면에 그대로 보인 적이 있다(TRIP-1213).
+            withClue(type) { body.contains("terms_type") shouldBe false }
+            withClue(type) { body.contains("(초안 v") shouldBe false }
             // 실본문 하한 — 한 줄짜리 대체 문구로 게이트를 속이지 못하게. 가장 짧은 본문(광고성 수신 동의, 약 400자)도 이보다 길다 — 검토용 대조표를 뺀 뒤 500 에서 내렸다.
             withClue(type) { body.length shouldBeGreaterThan 300 }
         }
