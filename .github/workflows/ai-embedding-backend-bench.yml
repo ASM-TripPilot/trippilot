@@ -59,3 +59,90 @@ jobs:
             echo
             uv run python scripts/measure_triton_embedding.py
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # 위 잡은 **인프로세스**다 — 측정 코드가 ORT 세션을 직접 만들고, 그래프도 측정 중에
+  # 내보낸 것을 읽는다. 그래서 네 가지를 못 잰다: ① 이미지에 **구운** 그래프로
+  # 기동하는가 ② 앱 자신의 세션 옵션(EMBEDDING_ONNX_THREADS) ③ 파드의 **CPU 한도**
+  # 아래 지연(러너는 코어가 더 많다) ④ FastAPI·토크나이저·HTTP 왕복까지 포함한
+  # `/embed` 한 번의 값.
+  #
+  # 채택 기준이 "컨테이너 실측 후 기본값 전환"(TRIP-965)이라 그 넷이 측정 대상 자체다.
+  # 이 잡은 **이미지를 빌드해 띄우고 `/embed` 를 부른다** — 파드가 하는 일을 잰다.
+  # 겸해서 "구운 그래프로 기동해 보는 검증이 어디에도 없다"는 공백도 메운다.
+  container:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'bench-embedding'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      # 파드의 cpu limit·OMP 설정과 같은 값으로 맞춘다(values.yaml embedding.resources).
+      # 러너 코어로 재면 한도 아래 실제 지연을 모른다 — 그게 이 잡의 존재 이유다.
+      POD_CPUS: "2"
+      IMAGE: trippilot-embedding-bench
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 러너 디스크 확보 (fp32 2.27GB 그래프 + 모델 + 이미지)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 이미지 빌드 (ONNX 그래프를 굽는다 — 기본값 EMBEDDING_BAKE_ONNX=1)
+        uses: docker/build-push-action@v6
+        with:
+          context: ai/embedding
+          load: true
+          tags: ${{ env.IMAGE }}:bench
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 측정 클라이언트 의존성 (컨테이너 밖 — numpy·pyyaml 만)
+        working-directory: ai
+        run: uv sync
+
+      # 두 백엔드를 **순차로** 띄운다. 같은 CPU 한도를 각자 다 써야 비교가 되고,
+      # 동시에 띄우면 서로 코어를 빼앗아 두 숫자 다 못 쓴다.
+      - name: 현행(sentence-transformers) 측정
+        working-directory: ai
+        run: |
+          docker run -d --name bench-st --cpus="$POD_CPUS" -p 8100:8100 \
+            -e EMBEDDING_BACKEND=sentence-transformers \
+            -e OMP_NUM_THREADS="$POD_CPUS" -e MKL_NUM_THREADS="$POD_CPUS" \
+            "${IMAGE}:bench"
+          uv run python scripts/measure_embedding_container.py \
+            --base-url http://localhost:8100 \
+            --label "sentence-transformers (현행)" --out /tmp/st.json
+          docker logs bench-st 2>&1 | tail -20
+          docker rm -f bench-st
+
+      - name: 구운 ONNX 그래프 측정 (같은 CPU 한도·같은 스레드 수)
+        working-directory: ai
+        run: |
+          docker run -d --name bench-onnx --cpus="$POD_CPUS" -p 8100:8100 \
+            -e EMBEDDING_BACKEND=onnx \
+            -e EMBEDDING_ONNX_THREADS="$POD_CPUS" \
+            -e OMP_NUM_THREADS="$POD_CPUS" -e MKL_NUM_THREADS="$POD_CPUS" \
+            "${IMAGE}:bench"
+          uv run python scripts/measure_embedding_container.py \
+            --base-url http://localhost:8100 \
+            --label "ONNX Runtime (구운 그래프)" --out /tmp/onnx.json
+          docker logs bench-onnx 2>&1 | tail -20
+          docker rm -f bench-onnx
+
+      # 동등성 미달이면 종료 코드 1 — 벡터가 다르면 지연 이득은 의미가 없다.
+      - name: 비교 + 동등성 게이트
+        working-directory: ai
+        run: |
+          {
+            echo "## 컨테이너 안 실측 — amd64 (\`${{ runner.arch }}\`, cpus=$POD_CPUS)"
+            echo
+            uv run python scripts/measure_embedding_container.py \
+              --compare /tmp/st.json /tmp/onnx.json
+          } | tee -a "$GITHUB_STEP_SUMMARY"
