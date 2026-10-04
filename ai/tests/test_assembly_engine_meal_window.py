@@ -13,6 +13,8 @@
   ④ 폴백 경로 동일 규칙 (결정론 버전)
   ⑤ PBT: 임의 풀·점수·과장 가중에서도 보정이 HC1~4 위반을 만들지 않고(검증기
      무접촉) 결정론이 유지된다
+  ⑥ 같은 식사창 두 번째 FOOD 는 창 밖 억제 상쇄를 못 받는다(창당 1곳) — 다만 배제는
+     아니다(식당만 남으면 놓인다). 폴백도 같은 성질
 """
 
 from __future__ import annotations
@@ -233,3 +235,49 @@ def test_pbt_food_free_pool_is_unaffected_by_correction(setup) -> None:
     fb_on = RuleFallbackAssembler(index2, _EST, _CFG).solve(problem)
     fb_off = RuleFallbackAssembler(index2, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem)
     assert fb_on == fb_off
+
+
+# ── ⑥ 같은 식사창 두 번째 FOOD — 창 밖 억제 상쇄는 창당 1곳만 ──────
+# QA 6회차 실측: 점심·저녁 창에 식당 두 곳이 연달아(사이에 한 곳 끼고) 놓였다. 창 보상 ①은
+# 창당 1회인데 창 밖 억제 ②의 상쇄를 창 안 FOOD 전부가 받아, 같은 창 두 번째 식당의 비용이
+# 연속 억제 ③뿐이었다(비인접이면 0). 픽스처: 점심 창 = 하루 창(11:00~15:30)이라 창 밖 자리가
+# 없고, 4슬롯이 들어간다 — f·c·f·c(식당 2) 대 f·c·c·c(식당 1)의 점수차 0.15 가 억제 0.2 보다 작다.
+
+_CFG_ONE_WIN = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
+                              lunch_window_min=(11 * 60, 15 * 60 + 30))
+_POOL_WIN = [("f1", PoiCategory.FOOD, .70), ("f2", PoiCategory.FOOD, .70),
+             ("c1", PoiCategory.CAFE, .55), ("c2", PoiCategory.CAFE, .55),
+             ("c3", PoiCategory.CAFE, .55)]
+
+
+def _window_problem(specs):
+    problem, index = _problem(specs)
+    window = TimeWindow(datetime(2026, 8, 5, 11, 0, tzinfo=_KST),
+                        datetime(2026, 8, 5, 15, 30, tzinfo=_KST))
+    return replace(problem, day_window=window), index
+
+
+def _max_food_per_window(solution, index, cfg: AssemblyConfig) -> int:
+    return max((sum(1 for s in _food_slots(solution, index) if _fully_in(s, w))
+                for w in (cfg.lunch_window_min, cfg.dinner_window_min)), default=0)
+
+
+def test_second_food_in_same_window_loses_offset() -> None:
+    problem, index = _window_problem(_POOL_WIN)
+    est = TravelEstimator(_CFG_ONE_WIN)
+    for sol in (OrToolsAssembler(index, est, _CFG_ONE_WIN).solve(problem, 3000),
+                RuleFallbackAssembler(index, est, _CFG_ONE_WIN).solve(problem)):
+        assert sol is not None
+        assert check_all(sol, problem, index, est) == []
+        assert _max_food_per_window(sol, index, _CFG_ONE_WIN) == 1, sol.solve_mode
+
+
+def test_second_food_in_same_window_is_not_forbidden() -> None:
+    """소프트 항이다 — 식당만 남으면 같은 창에 두 곳이 그대로 놓인다(HC 해 집합 불변)."""
+    problem, index = _window_problem([s for s in _POOL_WIN if s[1] is PoiCategory.FOOD])
+    est = TravelEstimator(_CFG_ONE_WIN)
+    for sol in (OrToolsAssembler(index, est, _CFG_ONE_WIN).solve(problem, 3000),
+                RuleFallbackAssembler(index, est, _CFG_ONE_WIN).solve(problem)):
+        assert sol is not None
+        assert check_all(sol, problem, index, est) == []
+        assert _max_food_per_window(sol, index, _CFG_ONE_WIN) == 2, sol.solve_mode
