@@ -48,7 +48,7 @@ from trippilot.poi_curation.sourcing.state import (
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
-# 백엔드 poi.source CHECK 허용값('KAKAO_LOCAL'|'TOURAPI'|'MANUAL')과 동일 어휘.
+# 백엔드 poi.source CHECK 허용값('KAKAO_LOCAL'|'TOURAPI'|'MANUAL'|'LOCALDATA')과 동일 어휘.
 # 실제 피드는 TourAPI 4.0 KorService2.
 SOURCE_NAME = "TOURAPI"
 _OPENING_HOURS_MAX = 200  # backend poi.opening_hours varchar(200)

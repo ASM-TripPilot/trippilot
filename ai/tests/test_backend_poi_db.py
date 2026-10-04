@@ -365,3 +365,21 @@ def test_backend_data_quality_values_are_known_to_ai() -> None:
     line = next(ln for ln in controller.splitlines() if "dataQuality =" in ln)
     emitted = set(re.findall(r'"([A-Z_]+)"', line))
     assert emitted and emitted <= {q.value for q in DataQuality}
+
+
+def test_every_backend_source_has_an_ai_meaning() -> None:
+    """백엔드 `PoiSource` 값마다 AI 쪽 뜻이 정해져 있다 — MANUAL 만 SEED, 나머지는 벤더 수집분.
+
+    어댑터는 모르는 출처를 PLACES_API 로 흘린다 — 행을 버리면 그 출처의 POI 가 후보에서
+    통째로 사라지기 때문이다(LOCALDATA 일반음식점을 들이며 확인, TRIP-1224). 흘려도 되는 것은
+    지금 값이 전부 정형 출처라서이고, 새 출처가 WEB 처럼 confidence 를 요구하는 성격이면
+    그 판단은 사람이 해야 한다. 그래서 값 집합을 여기 적어 두고 백엔드가 늘리면 깨지게 한다.
+    """
+    m = re.search(r"enum class PoiSource \{([^}]*)\}", _backend_source(_POI_KT))
+    assert m is not None
+    backend = {v.strip() for v in m.group(1).split(",") if v.strip()}
+    assert backend == {"KAKAO_LOCAL", "TOURAPI", "MANUAL", "LOCALDATA"}
+
+    db, _ = _db([_row(poi_id=s, source=s) for s in sorted(backend)])
+    got = {str(p.poi_id): p.source for p in db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)}
+    assert got == {s: PoiSource.SEED if s == "MANUAL" else PoiSource.PLACES_API for s in backend}

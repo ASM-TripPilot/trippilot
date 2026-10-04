@@ -49,7 +49,7 @@ _BATCH_PATH = "/internal/pois/batch-get"
 # 도달 가능해졌다(70 슬롯 + 차선책 140). 부가 정보가 본체를 깨면 안 되므로(INV-4) 여기서 나눈다.
 _BATCH_MAX = 200
 _TOKEN_HEADER = "X-Service-Token"
-# 백엔드 PoiSource(KAKAO_LOCAL/TOURAPI/MANUAL) → AI PoiSource.
+# 백엔드 PoiSource(KAKAO_LOCAL/TOURAPI/MANUAL/LOCALDATA) → AI PoiSource.
 # MANUAL=시드 입력분, 나머지 벤더 수집분은 PLACES_API. WEB 은 confidence 필수라
 # (백엔드가 안 보내는 값) 매핑 대상이 아니다 — 지어내지 않는다.
 # HttpJson 은 ports 로 올라갔다(소비자 둘) — 이 이름으로도 계속 쓰인다.
