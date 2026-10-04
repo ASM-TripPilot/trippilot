@@ -68,6 +68,29 @@ _RETRY_DET_FACTOR = 5
 _REORDER_DET_LIMIT = 0.5
 
 
+def drop_food_runs(order: list[int], nodes) -> list[int]:
+    """웜스타트 힌트 순서에서 FOOD→FOOD 연속을 뺀다 — 고정 블록(pin) 노드는 절대 빼지 않는다.
+
+    그리디(규칙 폴백)는 하루 끝에 FOOD 만 남으면 식당 뒤에 식당을 그대로 놓고, 그 순서가 완전
+    힌트(TRIP-1176)로 들어가면 결정론 한도 안의 탐색이 거기서 못 벗어난다(2026-10-04 홍천 실측
+    18:36 치킨 → 19:52 쭈꾸미 — 최적해라면 둘째를 빼는 게 늘 이득인데 남았다). 힌트는 출발점일
+    뿐이라 방문 하나를 빼도 정확성과 무관하다(경로에서 노드를 빼면 이동만 준다). 연속 판정은
+    ③ 인접 억제(`_meal_soft_terms`)와 같은 기준 — `PoiCategory.FOOD`. 둘 다 고정이면 둔다.
+    """
+    kept: list[int] = []
+    for i in order:
+        is_food = nodes[i]["poi"].category is PoiCategory.FOOD
+        prev = kept[-1] if kept else None
+        if (is_food and prev is not None
+                and nodes[prev]["poi"].category is PoiCategory.FOOD):
+            if nodes[i]["pin"] is None:
+                continue                  # 뒤의 자유 FOOD 를 뺀다
+            if nodes[prev]["pin"] is None:
+                kept.pop()                # 뒤가 고정이면 앞의 자유 FOOD 를 뺀다
+        kept.append(i)
+    return kept
+
+
 def prefilter_cut(
     before: list[ScoredPoi], kept: list[ScoredPoi], pois: Mapping[PoiId, Poi]
 ) -> tuple[Counter, tuple[PoiCategory, ...]]:
@@ -379,9 +402,8 @@ class OrToolsAssembler:
         # 웜스타트 = 그리디 해의 방문 **순서**를 완전 힌트로 (TRIP-1176)
         hint = self._greedy_hint(problem, day, used)
         id_to_idx = {n["poi"].poi_id: i for i, n in enumerate(nodes)}
-        order = [id_to_idx[pid] for pid, _ in sorted(hint.items(),
-                                                       key=lambda kv: (kv[1], str(kv[0])))
-                 if pid in id_to_idx]
+        order = drop_food_runs([id_to_idx[pid] for pid, _ in sorted(
+            hint.items(), key=lambda kv: (kv[1], str(kv[0]))) if pid in id_to_idx], nodes)
         self._hint_path(m, order, visit, arcs, cp_solver)
         status = cp_solver.Solve(m)
         resp = cp_solver.ResponseProto()
