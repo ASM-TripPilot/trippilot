@@ -73,3 +73,27 @@ def test_food_only_pool_still_places_food() -> None:
 def test_config_rejects_negative_food_adjacent_penalty() -> None:
     with pytest.raises(ValueError):
         AssemblyConfig(food_adjacent_penalty=-0.1)
+
+
+# ── 웜스타트 힌트에서 식당 연속 제거 ──────────────────────────────────────
+# 실측(2026-10-04, 홍천 1일차 OR_TOOLS 해): 18:36 처갓집양념치킨 → 19:52 팔봉산용궁불쭈꾸미.
+# 최적해라면 둘째 식당을 빼는 게 늘 이득(점수 ≤ 1.0 < 인접 1.0 + 창 밖 0.2)이라, 결정론 한도 안에서
+# 그리디 힌트(하루 끝 FOOD 만 남으면 연속 배치)를 못 벗어난 해다. 힌트에서 연속 FOOD 를 뺀다.
+
+from trippilot.assembly_engine.ortools_assembler import drop_food_runs  # noqa: E402
+
+
+def _node(cat, pin=None):
+    return {"poi": Poi(PoiId("x"), "x", cat, GeoPoint(37.5, 127.0), (), None, None,
+                       DataQuality.FULL, PoiSource.SEED, None), "pin": pin}
+
+
+def test_drop_food_runs_removes_food_right_after_food() -> None:
+    nodes = [_node(_S), _node(_F), _node(_F), _node(_S), _node(_F), _node(_F), _node(_F)]
+    assert drop_food_runs([0, 1, 2, 3, 4, 5, 6], nodes) == [0, 1, 3, 4]
+
+
+def test_drop_food_runs_never_drops_pinned_nodes() -> None:
+    nodes = [_node(_F), _node(_F, pin=720), _node(_F)]
+    # 고정 블록(필수 방문)은 visit=1 강제라 힌트에서 빼면 가정이 모순 — 앞의 자유 FOOD 를 대신 뺀다
+    assert drop_food_runs([0, 1, 2], nodes) == [1]
