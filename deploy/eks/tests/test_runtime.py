@@ -291,6 +291,19 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual(argv[-2:], ["/app/.venv/bin/python", "scripts/load_kb.py"])
         out.assert_any_call("총 0건")
 
+    def test_load_kb_failure_shows_the_cause_without_credentials(self):
+        """실패가 'kubectl command failed' 한 줄뿐이라 원인을 몰랐다(2026-10-04 첫 적재). 적재
+        스크립트의 stderr 끝 몇 줄은 원인이고, DSN 같은 자격은 가린다."""
+        detail = ("Traceback (most recent call last):\n"
+                  "psycopg.OperationalError: connection to postgresql://ai_kb:s3cret@db:5432/ai_kb failed\n"
+                  "TimeoutError: timed out after 5.0s\n")
+        with patch("runtime.command", side_effect=runtime.CommandError("kubectl", detail)), \
+                patch("builtins.print") as out, self.assertRaises(runtime.CommandError):
+            runtime.main(["load-kb"])
+        shown = "\n".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("TimeoutError: timed out after 5.0s", shown)
+        self.assertNotIn("s3cret", shown)
+
     def test_smoke_checks_internal_denial_and_cleans_up_failure(self):
         import runtime_smoke
         manifest = runtime_smoke.manifest("trippilot")
