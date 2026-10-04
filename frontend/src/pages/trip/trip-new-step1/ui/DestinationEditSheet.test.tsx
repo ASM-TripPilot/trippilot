@@ -293,3 +293,31 @@ describe('TRIP-1210 · 도시는 하나만', () => {
     expect(spies.onAddCity).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('TRIP-1219 a · 박수 상한', () => {
+  it('박수 합이 30이면 모든 [+]가 진짜 disabled — press 해도 콜백 0회, 안내가 보인다', () => {
+    const spies = renderSheet([
+      { seq: 1, region: '부산', nights: 20 },
+      { seq: 2, region: '경주', nights: 10 },
+    ]);
+
+    const inc1 = screen.getByTestId('trip-wizard-destination-nights-inc-1');
+    expect(inc1).toBeDisabled();
+    fireEvent.press(inc1);
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc-2'));
+    expect(spies.onChangeNights).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId('trip-wizard-destination-max-note')
+    ).toHaveTextContent('최대 30박까지 정할 수 있어요');
+  });
+
+  it('상한 미만이면 [+]가 살아 있고 안내는 없다 (29박)', () => {
+    const spies = renderSheet([{ seq: 1, region: '부산', nights: 29 }]);
+
+    expect(
+      screen.queryByTestId('trip-wizard-destination-max-note')
+    ).not.toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc-1'));
+    expect(spies.onChangeNights).toHaveBeenCalledWith(1, 30);
+  });
+});

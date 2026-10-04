@@ -666,3 +666,54 @@ describe('🔴 TRIP-1098 · 스위치 초기값 = 저장된 유형', () => {
     }
   });
 });
+
+describe('TRIP-1219 d · 저장 안 한 채 [뒤로] — 안내 없이 버려지지 않는다', () => {
+  it('손대지 않았으면 [뒤로]는 바로 나간다', async () => {
+    renderPage();
+    await ready();
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByTestId('itinerary-mustvisit-time-leave-warning')
+    ).toBeNull();
+  });
+
+  it('고른 뒤 첫 [뒤로]는 나가지 않고 버려진다는 안내를 보이며, 한 번 더 누르면 나간다 — 쓰기 요청은 0건', async () => {
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    pickDateAndStart();
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-back'));
+
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-leave-warning')
+    ).toHaveTextContent(/저장하지 않았어요/);
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mustVisitWrites()).toEqual([]);
+  });
+
+  it('안내가 뜬 뒤 값을 다시 고르면 안내가 사라진다(다시 한 번 물어본다)', async () => {
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    pickDateAndStart();
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-back'));
+
+    fireEvent.press(
+      screen.getByTestId('itinerary-mustvisit-time-date-2026-06-12')
+    );
+
+    expect(
+      screen.queryByTestId('itinerary-mustvisit-time-leave-warning')
+    ).toBeNull();
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-back'));
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+});

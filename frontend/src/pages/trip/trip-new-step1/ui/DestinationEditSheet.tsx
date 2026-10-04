@@ -34,7 +34,9 @@ import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 import { nightsOnlyLabel } from '@/entities/trip';
 import {
   canAddDestination,
+  MAX_TRIP_NIGHTS,
   minNightsFor,
+  nightsSum,
   ONE_CITY_NOTICE,
 } from '@/features/create-trip';
 import type { TripDestination } from '@/shared/api/index.schemas';
@@ -101,10 +103,13 @@ function StepperButton({
 function DestinationRow({
   destination,
   minNights,
+  atMaxNights,
   onChangeNights,
   onRemove,
 }: {
   destination: TripDestination;
+  /** 박수 합이 상한(`MAX_TRIP_NIGHTS`)이면 [+]를 죽인다(TRIP-1219 a). */
+  atMaxNights: boolean;
   /** 박수 하한 — 도시 하나면 0(당일치기), 여럿이면 1. */
   minNights: number;
   onChangeNights: (seq: number, nights: number) => void;
@@ -133,6 +138,7 @@ function DestinationRow({
           </Text>
           <StepperButton
             testID={`trip-wizard-destination-nights-inc-${seq}`}
+            disabled={atMaxNights}
             onPress={() => onChangeNights(seq, nights + 1)}
           >
             <StepperPlusGlyph size={20} />
@@ -171,6 +177,7 @@ export function DestinationEditSheet({
     }
     onAddCity();
   }
+  const atMaxNights = nightsSum(destinations) >= MAX_TRIP_NIGHTS;
   return (
     <BottomSheet
       index={0}
@@ -202,6 +209,7 @@ export function DestinationEditSheet({
                 <DestinationRow
                   destination={destination}
                   minNights={minNightsFor(destinations.length)}
+                  atMaxNights={atMaxNights}
                   onChangeNights={onChangeNights}
                   onRemove={onRemove}
                 />
@@ -227,6 +235,15 @@ export function DestinationEditSheet({
               className="font-noto text-label text-muted"
             >
               {ONE_CITY_NOTICE}
+            </Text>
+          ) : null}
+
+          {atMaxNights ? (
+            <Text
+              testID="trip-wizard-destination-max-note"
+              className="font-noto text-label text-muted"
+            >
+              {`최대 ${MAX_TRIP_NIGHTS}박까지 정할 수 있어요`}
             </Text>
           ) : null}
 
