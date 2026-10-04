@@ -19,7 +19,9 @@ TourAPI 음식점만으로는 숙소 22.9% 가 반경 7km 안 식당 6곳 미만
       내려받기는 사람 몫이다(data.go.kr 로그인) — `match_business_status.py` 와 같은 파일이다.
 입력: 공유본 `ai/data/collected_pois.json`(TourAPI — 공백 판정·중복 병합 기준) ·
       `R__seed_stay.sql`(숙소 앵커) · `R__seed_region_catalog.sql`(지역 중심 앵커·지역 코드 점검).
-갱신: 월 1회 권장 — 원본이 월 단위로 갱신되고, 폐업한 식당은 다음 생성에서 빠진다.
+갱신: **재적재 보류.** 수신이 관리번호 멱등 upsert 라 다음 생성에서 빠진 식당(폐업·공백 해소)은 문서에서만
+      빠지고 정본에는 ACTIVE 로 남는다 — 'LOCALDATA 중 이번 문서에 없는 행 → CLOSED' 경로가 생기기 전까지
+      두 번째 적재를 하지 않는다(`ai/data/README.md` §갱신).
 적재: 백엔드 V2.61(출처 LOCALDATA) 이후 `python3 backend/scripts/ingest_pois.py ai/data/collected_localdata.json`.
 """
 
@@ -140,7 +142,7 @@ def main() -> int:
         print(f"[localdata] 원본을 찾지 못했습니다: {args.csv}", file=sys.stderr)
         return 2
 
-    # 1) 원본 — 영업 중·채택 업태·관광 무관 이름 제외·좌표 변환(EPSG:5174 중부원점 TM → WGS84)
+    # 1) 원본 — 영업 중·채택 업태·관광 무관 이름·고속도로 휴게소 제외·좌표 변환(EPSG:5174 중부원점 TM → WGS84)
     to_wgs84 = Transformer.from_crs("EPSG:5174", "EPSG:4326", always_xy=True).transform
     rows, row_drops, candidates, updated_max = 0, Counter(), [], ""
     with args.csv.open(encoding="cp949", errors="replace", newline="") as f:
