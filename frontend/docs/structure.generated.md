@@ -1549,7 +1549,7 @@
 - `src/test-support/wizardDraftFixture.ts`  →  WizardDraftData · wizardDraftData · freshWizardDraft · withoutSeedFields · leavePreviousTripDraft · captureDraftAtNextCall · resetWizardDraft
 
 ## src/widgets/map-sheet-shell/
-- `src/widgets/map-sheet-shell/index.ts`  →  DayChipOverlay · DistanceConnector · EditorView · GenerationProgressCard · BackChevronGlyph · FullAiGlyph · MapSheetShell · SheetHeader
+- `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipOverlay · DistanceConnector · EditorView · GenerationProgressCard · BackChevronGlyph · FullAiGlyph · MapSheetShell · SheetHeader
 
 ## src/widgets/map-sheet-shell/ui/
 - `src/widgets/map-sheet-shell/ui/CtaBar.tsx`  →  CtaButton · CtaBarProps · CTA_BAR_HEIGHT · CtaBar
