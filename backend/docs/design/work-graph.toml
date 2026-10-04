@@ -3237,3 +3237,39 @@ note = """
 그 뒤에 `eas.json` 의 production 프로필을 `https://api.trippilot.co.kr` 로 바꾼다 —
 **프론트 소유라 팀원 몫**이고 그 전에 바꾸면 인증서가 아직 교체 전이라 TLS 가 깨진다.
 """
+
+[[nodes]]
+id = "INFRA-PR-GATE"
+ticket = ""
+title = "인프라·배포 변경이 PR 에서 검증되지 않는다 — 초록이 무관한 것을 증명한다"
+status = "todo"
+migration = false
+touches = [".github/workflows"]
+note = """
+2026-10-05 발견(#956·#957 검수 중). 두 가지가 겹쳐 있다.
+
+**1. `infra/terraform/**` 은 어떤 PR 트리거에도 없다.** `aws-deploy.yml` 이 `workflow_dispatch`
+전용이라, Terraform 을 바꾸는 PR 에는 **체크가 하나도 붙지 않는다**(#956 실측: `no checks`).
+사람 눈과 작성자의 로컬 실행이 유일한 그물이다.
+
+**2. `deploy/**` 은 체크가 붙지만 무관한 것을 돌린다.** `backend-ci.yml` 의 PR paths 에
+`deploy/**` 가 있어 초록이 뜨는데, 그 잡이 하는 일은 `./gradlew build` 뿐이다 — helm lint 도
+차트 파이썬 테스트도 돌지 않는다. #957(차트 values·테스트만 변경)이 `test: pass` 를 받았지만
+**그 초록은 "코틀린이 여전히 빌드된다"는 뜻**이고 변경과 무관하다. 이쪽이 1번보다 나쁘다 —
+없는 것보다 **거짓 초록**이 위험하다.
+
+**왜 지금 문제인가.** 현재 순서는 `머지 → 배포 실행 → validate 잡이 처음 검증` 이다. 즉 깨진
+차트·Terraform 이 develop 에 먼저 들어가고 **다음 사람의 배포에서 터진다.** 2026-10-03 에
+`terraform fmt` 로 정확히 그 일이 났다(#887 — 배포가 validate 에서 죽었다).
+
+**처방(미착수).** `aws-deploy.yml` 의 validate 잡은 **자격이 필요 없다**(전부 오프라인):
+`infra/tests` · `deploy/eks/tests` · `infra/bootstrap/tests` · `deploy/eks/chart/tests` 네 묶음 +
+`helm lint --strict`(dev·prd) + `terraform fmt -check -recursive ..` · `init -backend=false
+-lockfile=readonly` · `validate` · `test`. 그걸 그대로 떼어 `pull_request` 트리거
+(`paths: ['infra/**', 'deploy/**', '.github/workflows/aws-deploy.yml']`) 워크플로로 만들면 된다.
+**잡을 복제하지 말고 재사용 가능한 워크플로(`workflow_call`)로 빼는 편이 낫다** — 복제하면
+두 사본이 갈라지고, 이 리포는 그 함정을 이미 겪었다(릴리스 때 스케줄 사본 전수 대조 규약).
+
+#956·#957 은 이 노드를 기다리지 않고 머지했다 — 대신 validate 잡의 **전 항목을 로컬에서
+명령 그대로** 돌려 통과를 확인했다(두 브랜치 각각). 그 증거는 각 PR 본문에 있다.
+"""
