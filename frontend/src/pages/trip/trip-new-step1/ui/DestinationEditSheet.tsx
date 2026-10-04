@@ -32,7 +32,11 @@ import BottomSheet, {
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 
 import { nightsOnlyLabel } from '@/entities/trip';
-import { minNightsFor } from '@/features/create-trip';
+import {
+  MAX_TRIP_NIGHTS,
+  minNightsFor,
+  nightsSum,
+} from '@/features/create-trip';
 import type { TripDestination } from '@/shared/api/index.schemas';
 
 import {
@@ -97,10 +101,13 @@ function StepperButton({
 function DestinationRow({
   destination,
   minNights,
+  atMaxNights,
   onChangeNights,
   onRemove,
 }: {
   destination: TripDestination;
+  /** 박수 합이 상한(`MAX_TRIP_NIGHTS`)이면 [+]를 죽인다(TRIP-1219 a). */
+  atMaxNights: boolean;
   /** 박수 하한 — 도시 하나면 0(당일치기), 여럿이면 1. */
   minNights: number;
   onChangeNights: (seq: number, nights: number) => void;
@@ -129,6 +136,7 @@ function DestinationRow({
           </Text>
           <StepperButton
             testID={`trip-wizard-destination-nights-inc-${seq}`}
+            disabled={atMaxNights}
             onPress={() => onChangeNights(seq, nights + 1)}
           >
             <StepperPlusGlyph size={20} />
@@ -157,6 +165,7 @@ export function DestinationEditSheet({
   onClose,
   mustVisitCount,
 }: DestinationEditSheetProps): ReactElement {
+  const atMaxNights = nightsSum(destinations) >= MAX_TRIP_NIGHTS;
   return (
     <BottomSheet
       index={0}
@@ -188,6 +197,7 @@ export function DestinationEditSheet({
                 <DestinationRow
                   destination={destination}
                   minNights={minNightsFor(destinations.length)}
+                  atMaxNights={atMaxNights}
                   onChangeNights={onChangeNights}
                   onRemove={onRemove}
                 />
@@ -206,6 +216,15 @@ export function DestinationEditSheet({
               도시 추가
             </Text>
           </Pressable>
+
+          {atMaxNights ? (
+            <Text
+              testID="trip-wizard-destination-max-note"
+              className="font-noto text-label text-muted"
+            >
+              {`최대 ${MAX_TRIP_NIGHTS}박까지 정할 수 있어요`}
+            </Text>
+          ) : null}
 
           {/* 담은 곳 안내문 — 0·미지정이면 안 그린다(TRIP-736 §F, Figma 근거 없음). */}
           {mustVisitCount != null && mustVisitCount > 0 ? (
