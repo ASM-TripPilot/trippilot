@@ -625,6 +625,93 @@ def _envelope(
     )
 
 
+def _anchor_runs(request: schemas.GenerateItineraryRequest) -> list[tuple[date, ...]]:
+    """창 날짜를 **같은 앵커가 이어지는 구간**으로 나눈다. 앵커 없는 날은 이웃 구간에 붙는다
+    (종전처럼 매달 점이 없을 뿐 새 지역이 아니다) — 그래서 모든 구간에 앵커가 하나 이상 있다."""
+    at = {a.date: (a.lat, a.lng) for a in request.anchors}
+    runs: list[list[date]] = []
+    keys: list[tuple[float, float] | None] = []
+    for day in sorted({w.date for w in request.time_windows}):
+        key = at.get(day)
+        if runs and (key is None or keys[-1] is None or key == keys[-1]):
+            runs[-1].append(day)
+            keys[-1] = keys[-1] or key
+        else:
+            runs.append([day])
+            keys.append(key)
+    return [tuple(r) for r in runs]
+
+
+def _run_request(
+    request: schemas.GenerateItineraryRequest, dates: tuple[date, ...],
+    placed: Sequence[str], meta: schemas.RequestMetaSchema,
+) -> schemas.GenerateItineraryRequest:
+    """한 구간의 요청 — 창·앵커만 그 구간으로 좁히고, 앞 구간 배치분을 제외에 더한다.
+
+    고정 블록은 **좁히지 않는다.** 다른 날 블록이 있어야 도메인이 그 POI 를 이 구간의 자유
+    후보에서 빼고(안 그러면 앞 구간이 자유 배치해 고정 날에 또 나온다), 판정은 기간 안 다른
+    날을 유예·기간 밖을 OUT_OF_RANGE 로 낸다(안 그러면 기간 밖 블록이 어느 구간에도 안 실려
+    보고 없이 사라진다). 호출측은 고정 POI 를 `placed` 에서 빼서 넘긴다.
+    """
+    keep = set(dates)
+    return request.model_copy(update={
+        "time_windows": [w for w in request.time_windows if w.date in keep],
+        "anchors": [a for a in request.anchors if a.date in keep],
+        "excluded_poi_ids": [*request.excluded_poi_ids, *placed],
+        "request_meta": meta,
+    })
+
+
+# 구간 하나에 줄 시한 바닥 — 어셈블리 바닥(`c2_cap_ms` 5s, OR-Tools 실측 3.0~3.1s)이다.
+_MIN_RUN_MS = 5_000
+
+
+_REPORT_SEVERITY = {"NO_CANDIDATES": 0, "LOW": 1}
+
+
+def _merged_outcomes(outs: Sequence[WiredOutcome]) -> WiredOutcome:
+    """구간별 봉투 → 한 응답. 키가 `"{date}#{poi_id}"` 라 구간끼리 겹치지 않는다.
+
+    - 후보 보고는 **가장 빠듯한 구간** 것을 그대로 싣는다 — 풀이 구간마다 달라 합산하면
+      어느 풀의 크기도 아닌 수가 된다(지어낸 값).
+    - 해의 폴백 여부는 한 구간이라도 폴백이면 폴백이고, solve_mode 는 **가장 낮은 계층**
+      (MINIMAL > RULE_FALLBACK) — 구간 순서와 무관하게, 낮춰 보고하지 않는다. 품질 점수는
+      구간별이라 None.
+    - 점수 출처가 구간마다 다르면 MIXED.
+    - 차선책은 합친 해에 배치된 장소를 뺀다 — 앞 구간은 뒤 구간이 무엇을 놓을지 모른다
+      ("미배치 후보만" 계약). 필수방문 보고는 모든 구간이 같은 블록을 보므로 중복을 접는다.
+    """
+    solutions = [o.solution for o in outs]
+    modes = {s.solve_mode for s in solutions}
+    worst = next((m for m in (SolveMode.MINIMAL, SolveMode.RULE_FALLBACK) if m in modes),
+                 solutions[0].solve_mode)
+    solution = replace(
+        solutions[0],
+        days=tuple(d for s in solutions for d in s.days),
+        is_fallback=any(s.is_fallback for s in solutions),
+        solve_mode=worst,
+        score=None,
+    )
+    placed = {str(slot.poi_id) for day in solution.days for slot in day.slots}
+    reports = [o.candidates_summary for o in outs if o.candidates_summary is not None]
+    scoring = {o.scoring_mode for o in outs}
+    return WiredOutcome(
+        solution=solution,
+        explanations={k: v for o in outs for k, v in o.explanations.items()},
+        distance_ranges={k: v for o in outs for k, v in o.distance_ranges.items()},
+        freshness=None,
+        candidates_summary=min(
+            reports, key=lambda r: (_REPORT_SEVERITY.get(r.level, 2), r.pool_size or 0),
+            default=None),
+        day1_ready_at=next((o.day1_ready_at for o in outs if o.day1_ready_at), None),
+        unplaced_must_visits=tuple(dict.fromkeys(u for o in outs for u in o.unplaced_must_visits)),
+        slot_alternatives={k: tuple(a for a in v if a.poi_id not in placed)
+                           for o in outs for k, v in o.slot_alternatives.items()},
+        scoring_mode=scoring.pop() if len(scoring) == 1 else "MIXED",
+        degradations=tuple(dict.fromkeys(d for o in outs for d in o.degradations)),
+    )
+
+
 def _scoring_signal(outcome: core.GenerationOutcome) -> tuple[str, tuple[str, ...]]:
     """내부 결과 → 와이어 LLM 신호 (새 상태 없음 — 이미 있는 값의 사영).
 
@@ -1143,6 +1230,44 @@ class WiredItineraryOrchestrator:
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
+        """날짜별 앵커가 바뀌면(다지역 여행) 같은 앵커가 이어지는 구간마다 따로 푼다.
+
+        도메인 요청은 앵커 하나를 받는다(풀 반경·출발·귀착이 전부 그 점). 종전에는 가장 이른
+        날 앵커로 접어 "서울 2박 + 인천 1박" 2차 생성의 인천 이틀이 서울 장소로 채워졌다.
+        구간을 순서대로 풀고 앞에서 배치된 장소(고정 POI 제외)를 뒤 구간의 제외로 넘긴다 —
+        고정 블록은 모든 구간에 통째로 간다(`_run_request`). 어셈블리·풀 조립은 그대로다.
+        시한은 남은 시간을 남은 날 수로 나누고, 몫이 바닥 아래면 남은 구간을 한 번에 푼다.
+        """
+        runs = _anchor_runs(request)
+        if len(runs) == 1:
+            return self._generate_run(request)
+        meta = request.request_meta
+        entered_ms = self._clock.monotonic_ms()
+        fixed = {b.poi_id for b in request.fixed_blocks}
+        outs: list[WiredOutcome] = []
+        placed: list[str] = []
+        degradations: list[str] = []
+        while runs:
+            dates = runs.pop(0)
+            run_meta = meta
+            if meta.deadline_ms is not None:
+                left = meta.deadline_ms - (self._clock.monotonic_ms() - entered_ms)
+                share = left * len(dates) // (len(dates) + sum(len(r) for r in runs))
+                if runs and share < _MIN_RUN_MS:
+                    # 시한이 바닥나면 남은 구간을 한 번에 푼다 — 뒤 지역이 앞 앵커에 매달리지만
+                    # 구간마다 고정 비용을 더 내다 백스톱(504)에 걸리면 앞 구간 성공분까지 잃는다.
+                    dates = dates + tuple(d for r in runs for d in r)
+                    runs = []
+                    share = left
+                    degradations.append("generate:anchor_runs_folded")
+                run_meta = meta.model_copy(update={"deadline_ms": max(1, share)})
+            outs.append(self._generate_run(
+                _run_request(request, dates, [p for p in placed if p not in fixed], run_meta)))
+            placed += [str(s.poi_id) for d in outs[-1].solution.days for s in d.slots]
+        merged = _merged_outcomes(outs)
+        return replace(merged, degradations=(*merged.degradations, *degradations))
+
+    def _generate_run(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
         meta = request.request_meta
         entered_ms = self._clock.monotonic_ms()  # 조립 뒤 거리 시한의 원점 (TRIP-1179)
         outcome = self._orchestrator.generate(
