@@ -21,7 +21,7 @@
  * …")는 TRIP-736에서 additive `mustVisitCount?: number` prop으로 배선했다 — 페이지가
  * `mustVisits.length`를 내려주고, **0곳이면 안 그린다**(Figma 근거 없음 §F, 지어내지 않는다).
  */
-import { Fragment, type ReactElement } from 'react';
+import { Fragment, useState, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -32,7 +32,11 @@ import BottomSheet, {
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 
 import { nightsOnlyLabel } from '@/entities/trip';
-import { minNightsFor } from '@/features/create-trip';
+import {
+  canAddDestination,
+  minNightsFor,
+  ONE_CITY_NOTICE,
+} from '@/features/create-trip';
 import type { TripDestination } from '@/shared/api/index.schemas';
 
 import {
@@ -157,6 +161,16 @@ export function DestinationEditSheet({
   onClose,
   mustVisitCount,
 }: DestinationEditSheetProps): ReactElement {
+  // 다도시: TRIP-1210(BE+AI) 해소 전까지 — 도시가 이미 있으면 추가 대신 안내(교체는 삭제 후 추가).
+  const [blocked, setBlocked] = useState(false);
+  const canAdd = canAddDestination(destinations.length);
+  function handleAddCity(): void {
+    if (!canAdd) {
+      setBlocked(true);
+      return;
+    }
+    onAddCity();
+  }
   return (
     <BottomSheet
       index={0}
@@ -198,7 +212,7 @@ export function DestinationEditSheet({
           <Pressable
             testID="trip-wizard-destination-add"
             accessibilityRole="button"
-            onPress={onAddCity}
+            onPress={handleAddCity}
             className="flex-row items-center justify-center gap-[6px] rounded-button border-[1.2px] border-dashed border-primary py-md"
           >
             <PlusGlyph size={16} />
@@ -206,6 +220,15 @@ export function DestinationEditSheet({
               도시 추가
             </Text>
           </Pressable>
+
+          {!canAdd && blocked ? (
+            <Text
+              testID="trip-wizard-destination-one-city-notice"
+              className="font-noto text-label text-muted"
+            >
+              {ONE_CITY_NOTICE}
+            </Text>
+          ) : null}
 
           {/* 담은 곳 안내문 — 0·미지정이면 안 그린다(TRIP-736 §F, Figma 근거 없음). */}
           {mustVisitCount != null && mustVisitCount > 0 ? (
