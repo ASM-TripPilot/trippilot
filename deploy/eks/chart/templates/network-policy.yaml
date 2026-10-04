@@ -39,6 +39,10 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "trippilot.selector" (dict "root" $ "component" "ai") | nindent 14 }}
+        # The deployment workflow loads the Plan-B KB from a short-lived Job (deploy/eks/runtime_kb.py).
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trippilot-kb-load
         {{- end }}
       {{- end }}
 {{- end }}
