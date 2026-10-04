@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -213,8 +213,20 @@ function CategoryChips({
   selected: PoiCategory | null;
   onSelect: (category: PoiCategory | null) => void;
 }): ReactElement {
+  // 시트로 고른 칩이 화면 밖이면 어떤 칩도 선택돼 보이지 않는다(TRIP-1221) — 칩 x 를 onLayout 으로
+  // 모아 두고 선택이 바뀔 때 그 칩이 보이게 스크롤한다(왼쪽 여백 16 남김).
+  const scrollRef = useRef<ScrollView>(null);
+  const chipX = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const code = CATEGORY_CHIPS.find((c) => c.value === selected)?.code;
+    const x = code ? chipX.current[code] : undefined;
+    if (x !== undefined) {
+      scrollRef.current?.scrollTo({ x: Math.max(0, x - 16), animated: true });
+    }
+  }, [selected]);
   return (
     <ScrollView
+      ref={scrollRef}
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{ gap: 8 }}
@@ -227,6 +239,9 @@ function CategoryChips({
             testID={`explore-places-category-${code}`}
             accessibilityRole="button"
             accessibilityState={{ selected: isSelected }}
+            onLayout={(e) => {
+              chipX.current[code] = e.nativeEvent.layout.x;
+            }}
             onPress={() => onSelect(value)}
             className={
               isSelected
@@ -359,7 +374,11 @@ function ListEmptyBlock({
           testID="explore-places-filterzero"
           icon={<FilterSlidersGlyph size={32} />}
           title={`‘${blameLabel}’ 때문에 0건이에요`}
-          description="조건을 해제하면 더 많은 장소를 볼 수 있어요"
+          description={
+            searchText.trim() !== '' && selectedCategory !== null
+              ? `‘${selectedCategory}’ 필터도 함께 걸려 있어요 · 조건을 해제하면 더 많은 장소를 볼 수 있어요`
+              : '조건을 해제하면 더 많은 장소를 볼 수 있어요'
+          }
           actions={[
             {
               testID: 'explore-places-filterzero-clear',

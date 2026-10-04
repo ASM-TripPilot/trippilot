@@ -120,6 +120,20 @@ describe('🔴 AC-2 · 미니맵 실 MapView (단일 핀 · viewOnly · center/p
     expect(within(map).queryByText('지도 준비 중')).toBeNull();
   });
 
+  // TRIP-1221(c) — 둥근 모서리 클립 래퍼가 지도를 직접 감싸고 토큰 반경을 쓴다(raw 14px 아님).
+  it('지도는 rounded-card overflow-hidden 래퍼 안에 있다', () => {
+    render(<PlaceDetailScreen place={makePlace()} saved={false} />);
+    const clip = screen.getByTestId('explore-place-map-clip');
+    const cls = String(clip.props.className).split(/\s+/);
+    expect(cls).toEqual(
+      expect.arrayContaining(['overflow-hidden', 'rounded-card', 'h-full'])
+    );
+    expect(within(clip).getByTestId('map-native')).toBeTruthy();
+    expect(
+      String(screen.getByTestId('explore-place-map').props.className)
+    ).not.toContain('rounded-[14px]');
+  });
+
   it('viewOnly 가 전달돼 제스처 4토글이 개별로 전부 false 다', () => {
     // Arrange + Act
     render(<PlaceDetailScreen place={makePlace()} saved={false} />);

@@ -439,6 +439,16 @@ describe('진입점 — 누르면 어디로 가나', () => {
     expect(mockPush.mock.calls).toEqual([['/explore/places']]);
   });
 
+  // TRIP-1221(d) — 스팟 카드는 장소 상세(d06)로 간다. 같은 장소 줄 세우기라 컬렉션도 같은 경로.
+  it('뜨는 장소 카드를 누르면 그 장소 상세로 간다', () => {
+    render(<HomePage />);
+
+    fireEvent.press(screen.getByTestId('home-spot-card-0'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush.mock.calls[0][0]).toMatch(/^\/explore\/places\/.+/);
+  });
+
   // 결과가 탐색 탭 d01(진짜 탭바)로 가므로 진입 탭 되싣기(tab=home)는 폐기됐다(TRIP-1105).
   it('검색바를 누르면 탐색용 지역 선택으로 가고, 진입 탭(tab=)은 싣지 않는다', () => {
     render(<HomePage />);

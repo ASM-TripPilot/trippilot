@@ -160,6 +160,7 @@ export function HomePage() {
     places: trending,
     onRequireLogin: () => {},
   });
+  const openPlace = (poiId: string) => router.push(`/explore/places/${poiId}`);
   const spotsLane: HomeSpotsLane = {
     status: places.isPending ? 'loading' : places.isError ? 'error' : 'ready',
     cards: trending.map((place) => ({
@@ -169,6 +170,7 @@ export function HomePage() {
       imageUrl: place.imageUrl,
     })),
     onRetry: () => void places.refetch(),
+    onPressCard: openPlace,
     savedPoiIds,
     ...placeSave,
   };
@@ -186,6 +188,7 @@ export function HomePage() {
           }))
         : [],
     onRetry: () => void places.refetch(),
+    onPressCard: openPlace,
   };
 
   const nav: HomeNav = {
