@@ -53,6 +53,12 @@ jobs:
           fi
           test -s public/privacy.html
           test -s public/index.html
+          # 색인 차단이 빠지면 대표자명·사업자번호·개인 휴대폰이 검색에 수집된다.
+          # ASC 는 열리는 URL 만 요구하므로 색인은 포기해도 잃는 것이 없다.
+          test -s public/robots.txt
+          for f in public/*.html; do
+            grep -q 'name="robots" content="noindex' "$f" || { echo "::error::$f 에 noindex 가 없다"; exit 1; }
+          done
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:

@@ -150,6 +150,12 @@ def page(title: str, body: str, back: bool) -> str:
     return f"""<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- 검색 색인은 막는다. ASC 는 **열리는 URL** 만 요구하고 색인을 요구하지 않는다.
+     이 문서에는 법정 고지 항목으로 대표자명·사업자등록번호·연락처(개인 휴대폰 포함)가
+     들어가는데, 색인되면 스크레이퍼가 전화번호·이메일을 수집한다. 접근은 그대로 공개다 —
+     링크를 아는 사람은 누구나 볼 수 있고, 앱 안에서도 같은 본문이 보인다.
+     색인을 원하면 이 줄과 robots.txt 를 지우면 된다. -->
+<meta name="robots" content="noindex,nofollow">
 <title>{html.escape(title)} · TripPilot</title>
 <style>{STYLE}</style></head><body>
 {nav}
@@ -160,6 +166,8 @@ def page(title: str, body: str, back: bool) -> str:
 
 
 def render(entries: list[dict]) -> dict[str, str]:
+    """파일명 → 내용. `.nojekyll`(Jekyll 이 `_` 경로를 삼키지 않게)과 `robots.txt`(색인 차단)도
+    여기 포함한다 — `--check` 가 같은 집합을 봐야 한다."""
     files: dict[str, str] = {}
     order = [t for t in KINDS if any(e["type"] == t for e in entries)]
     links = []
@@ -177,6 +185,10 @@ def render(entries: list[dict]) -> dict[str, str]:
         f"<nav><strong>문서</strong><ul>{''.join(links)}</ul></nav>"
     ).replace("**같은 정본**", "<strong>같은 정본</strong>")
     files["index.html"] = page("약관 및 방침", index, back=False)
+    # 부수 파일도 **같은 집합**에 넣는다 — 따로 쓰면 `--check` 가 보지 못해
+    # robots.txt 가 지워져도 "최신"이라고 답한다(실측으로 걸렸다).
+    files[".nojekyll"] = ""
+    files["robots.txt"] = "User-agent: *\nDisallow: /\n"
     return files
 
 
@@ -203,8 +215,6 @@ def main(argv=None) -> int:
         return 0
 
     out.mkdir(parents=True, exist_ok=True)
-    # Jekyll 이 `_` 로 시작하는 경로를 삼키지 않게 — 지금은 없지만 선례를 막아 둔다.
-    (out / ".nojekyll").write_text("", encoding="utf-8")
     for name, content in files.items():
         (out / name).write_text(content, encoding="utf-8")
     print(f"{out} 에 {len(files)}개 생성 — " + ", ".join(sorted(files)))
