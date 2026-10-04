@@ -181,6 +181,9 @@ services:
     restart: "no"
     environment:
       SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      # 컨테이너 stdout 은 TTY 가 아니라 블록 버퍼라, 안 끄면 실패 때 `logs` 에 오류(stderr)가
+      # 맥락 줄("source=… 제안=…건")보다 먼저 찍힌다.
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ./backend/scripts/ingest_pois.py:/ingest/ingest_pois.py:ro
       # 파일이 아니라 디렉토리를 붙인다 — LOCALDATA 문서는 아직 없을 수 있는데, 없는 파일을 붙이면
