@@ -45,6 +45,10 @@ KINDS = {
     "PERSONALIZATION": ("기록 기반 개인화 동의", "personalization"),
 }
 
+# 지원 페이지의 문의 주소. **시드 본문에 같은 값이 있는지 아래에서 검사한다** —
+# 두 곳에 박으면 한쪽만 바뀌어 갈라진다(약관에는 책임자 연락처로 들어가 있다).
+SUPPORT_EMAIL = "trippilot.asm17@gmail.com"
+
 # `('TYPE', '1.0', $body$…$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false)` —
 # 달러 인용이라 본문 안의
 # 따옴표·개행을 신경 쓰지 않아도 된다. 이 형식이 깨지면 아래 건수 검사가 잡는다.
@@ -60,7 +64,13 @@ def parse_seed(text: str) -> list[dict]:
     missing = set(KINDS) - {item["type"] for item in found}
     if missing:
         raise SystemExit(f"시드에서 못 찾은 약관: {sorted(missing)} — 형식이 바뀌었는지 확인하라")
-    return [item for item in found if item["type"] in KINDS]
+    entries = [item for item in found if item["type"] in KINDS]
+    # 지원 페이지가 안내하는 주소가 약관이 고지한 주소와 달라지면 사용자가 엉뚱한 곳으로 쓴다.
+    if not any(SUPPORT_EMAIL in item["body"] for item in entries):
+        raise SystemExit(
+            f"SUPPORT_EMAIL({SUPPORT_EMAIL}) 이 약관 본문에 없다 — "
+            "연락처가 바뀌었으면 상수도 같이 고쳐라")
+    return entries
 
 
 def md_to_html(source: str) -> str:
@@ -165,6 +175,37 @@ def page(title: str, body: str, back: bool) -> str:
 """
 
 
+SUPPORT_BODY = f"""<h1>고객 지원</h1>
+<p>TripPilot 사용 중 문제가 있거나 문의할 내용이 있으면 아래로 연락해 주세요.</p>
+<nav><strong>문의</strong><ul>
+<li>이메일 <a href="mailto:{SUPPORT_EMAIL}">{SUPPORT_EMAIL}</a></li>
+</ul></nav>
+
+<h2>자주 묻는 것</h2>
+
+<h3>계정을 삭제하고 싶어요</h3>
+<p>앱 하단 탭 <strong>마이</strong> &rarr; <strong>설정</strong> &rarr; 목록 맨 아래
+<strong>계정 삭제</strong> 에서 요청할 수 있습니다. 2단계 확인을 거칩니다.
+Apple 로 로그인했다면 Apple 토큰도 함께 철회됩니다.</p>
+
+<h3>위치 권한을 꼭 줘야 하나요</h3>
+<p>아닙니다. 위치는 여행 중 일정을 다시 짤 때 <strong>출발 기준점</strong>을 추정하는 데만
+씁니다. 거부해도 앱은 정상 동작하며, 등록한 숙소나 목적지 중심을 기준점으로 대신 씁니다.</p>
+
+<h3>사진을 첨부하면 서버에 올라가나요</h3>
+<p>사진 원본은 <strong>기기에만</strong> 있습니다. 서버는 촬영 시각 같은 메타정보만 받고,
+사진에 담긴 위치 좌표는 <strong>별도 동의가 있을 때만</strong> 저장합니다.</p>
+
+<h3>알림을 끄고 싶어요</h3>
+<p><strong>마이</strong> &rarr; <strong>설정</strong> &rarr; 알림 설정에서 종류별로 끌 수
+있습니다. 기기 설정에서 앱 알림을 통째로 끄는 방법도 있습니다.</p>
+
+<h2>약관 및 방침</h2>
+<p><a href="./">전체 목록</a> 에서 이용약관&middot;개인정보 처리방침&middot;위치기반서비스
+약관을 볼 수 있습니다.</p>
+"""
+
+
 def render(entries: list[dict]) -> dict[str, str]:
     """파일명 → 내용. `.nojekyll`(Jekyll 이 `_` 경로를 삼키지 않게)과 `robots.txt`(색인 차단)도
     여기 포함한다 — `--check` 가 같은 집합을 봐야 한다."""
@@ -183,7 +224,9 @@ def render(entries: list[dict]) -> dict[str, str]:
         "<h1>TripPilot 약관 및 방침</h1>"
         "<p>아래 문서는 앱 안에서 보여 주는 본문과 **같은 정본**에서 생성됩니다.</p>"
         f"<nav><strong>문서</strong><ul>{''.join(links)}</ul></nav>"
+        + '<p><a href="support.html">고객 지원 · 문의</a></p>'
     ).replace("**같은 정본**", "<strong>같은 정본</strong>")
+    files["support.html"] = page("고객 지원", SUPPORT_BODY, back=True)
     files["index.html"] = page("약관 및 방침", index, back=False)
     # 부수 파일도 **같은 집합**에 넣는다 — 따로 쓰면 `--check` 가 보지 못해
     # robots.txt 가 지워져도 "최신"이라고 답한다(실측으로 걸렸다).
