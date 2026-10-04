@@ -143,8 +143,10 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(resources["limits"]["memory"], "6Gi")
                 policy = next(item for item in documents if item["kind"] == "NetworkPolicy" and item["metadata"]["name"] == "embedding")
                 sources = policy["spec"]["ingress"][0]["from"]
-                self.assertEqual(len(sources), 1)
+                # ai 파드 + 배포 워크플로의 KB 적재 Job(runtime_kb.py) — 그 밖은 막는다
+                self.assertEqual(len(sources), 2)
                 self.assertEqual(sources[0]["podSelector"]["matchLabels"]["app.kubernetes.io/component"], "ai")
+                self.assertEqual(sources[1]["podSelector"]["matchLabels"], {"app.kubernetes.io/name": "trippilot-kb-load"})
 
     def test_autoscaling_replaces_static_replicas_and_skips_embedding(self):
         documents = render(embedding=True, overrides=[

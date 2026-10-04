@@ -281,28 +281,54 @@ class RuntimeIntegrationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runtime.main(["ensure-namespace", "--namespace", "../invalid"])
 
-    def test_load_kb_runs_the_idempotent_loader_inside_the_ai_pod(self):
-        """DB 는 비공개이고 임베딩은 클러스터 서비스라 둘을 같이 보는 자리가 ai 파드뿐이다.
-        파드의 env(벡터 DB·http 임베딩)를 그대로 써야 적재와 질의가 같은 벡터 공간을 탄다."""
-        with patch("runtime.command", return_value="총 0건") as shell, patch("builtins.print") as out:
+    def test_load_kb_runs_as_its_own_job_with_the_serving_image_and_env(self):
+        """서빙 ai 컨테이너에 exec 하면 그 컨테이너 메모리(2Gi, uvicorn 워커 2개)를 나눠 써서
+        적재가 137(OOM)로 죽었다 — 최악엔 서빙 워커가 죽는다. 같은 이미지·같은 벡터 env 로
+        따로 돈다(다른 이미지나 모델이면 적재와 질의가 다른 벡터 공간을 탄다)."""
+        import runtime_kb
+        job = runtime_kb.manifest("trippilot", "123.dkr.ecr/ai:sha-1")
+        pod = job["spec"]["template"]["spec"]
+        container = pod["containers"][0]
+        self.assertEqual(container["image"], "123.dkr.ecr/ai:sha-1")
+        self.assertEqual(container["command"], ["/app/.venv/bin/python", "scripts/load_kb.py"])
+        env = {e["name"]: e for e in container["env"]}
+        self.assertEqual(env["TRIPPILOT_EMBEDDING_PROVIDER"]["value"], "http")
+        self.assertEqual(env["TRIPPILOT_EMBEDDING_BASE_URL"]["value"], "http://embedding:8100")
+        self.assertEqual(env["TRIPPILOT_VECTOR_DB_URL"]["valueFrom"]["secretKeyRef"],
+                         {"name": "trippilot-ai", "key": "TRIPPILOT_VECTOR_DB_URL", "optional": False})
+        self.assertTrue(env["TRIPPILOT_EMBEDDING_MODEL"]["valueFrom"]["secretKeyRef"]["optional"])
+        self.assertEqual(pod["securityContext"]["runAsUser"], 10001)
+        self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
+        self.assertIn("memory", container["resources"]["limits"])
+        self.assertEqual(job["spec"]["template"]["metadata"]["labels"]["app.kubernetes.io/name"],
+                         "trippilot-kb-load")
+
+    def test_load_kb_reads_the_serving_image_prints_logs_and_cleans_up(self):
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "총 1470건", ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-kb"])
-        argv = shell.call_args.args[0]
-        self.assertEqual(argv[:5], ["kubectl", "exec", "--namespace", "trippilot", "deploy/ai"])
-        self.assertEqual(argv[-2:], ["/app/.venv/bin/python", "scripts/load_kb.py"])
-        out.assert_any_call("총 0건")
+        calls = [c.args[0] for c in shell.call_args_list]
+        self.assertIn("deployment/ai", calls[1])
+        applied = json.loads(shell.call_args_list[2].args[1])
+        self.assertEqual(applied["spec"]["template"]["spec"]["containers"][0]["image"], "123.dkr.ecr/ai:sha-1")
+        self.assertIn("job/trippilot-kb-load", calls[3])
+        out.assert_any_call("총 1470건")
+        self.assertIn("delete", calls[-1])
 
     def test_load_kb_failure_shows_the_cause_without_credentials(self):
         """실패가 'kubectl command failed' 한 줄뿐이라 원인을 몰랐다(2026-10-04 첫 적재). 적재
-        스크립트의 stderr 끝 몇 줄은 원인이고, DSN 같은 자격은 가린다."""
-        detail = ("Traceback (most recent call last):\n"
-                  "psycopg.OperationalError: connection to postgresql://ai_kb:s3cret@db:5432/ai_kb failed\n"
-                  "TimeoutError: timed out after 5.0s\n")
-        with patch("runtime.command", side_effect=runtime.CommandError("kubectl", detail)), \
-                patch("builtins.print") as out, self.assertRaises(runtime.CommandError):
+        로그의 끝 몇 줄은 원인이고, DSN 같은 자격은 가린다."""
+        logs = ("Traceback (most recent call last):\n"
+                "psycopg.OperationalError: connection to postgresql://ai_kb:s3cret@db:5432/ai_kb failed\n"
+                "TimeoutError: timed out after 5.0s\n")
+        shell = Mock(side_effect=["", "img", "", runtime.CommandError("kubectl", "timed out"), logs, ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out, \
+                self.assertRaises(runtime.CommandError):
             runtime.main(["load-kb"])
         shown = "\n".join(str(c.args[0]) for c in out.call_args_list)
         self.assertIn("TimeoutError: timed out after 5.0s", shown)
         self.assertNotIn("s3cret", shown)
+        self.assertIn("delete", shell.call_args_list[-1].args[0])
 
     def test_smoke_checks_internal_denial_and_cleans_up_failure(self):
         import runtime_smoke

@@ -10,6 +10,7 @@ import sys
 from runtime_io import CommandError, command
 import runtime_db
 import runtime_secrets
+import runtime_kb
 import runtime_smoke
 
 HOST_PATTERN = r"(?=.{1,253}$)[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?"
@@ -64,10 +65,6 @@ def ensure_namespace(namespace, shell):
     shell(["kubectl", "apply", "--server-side", "--field-manager=trippilot-runtime", "-f", "-"], json.dumps(manifest))
 
 
-# `scheme://user:pass@` 와 `KEY=value` 꼴의 비밀을 가린다(load-kb 실패 출력용).
-_CREDENTIAL = re.compile(r"(://)[^\s/@]+@|((?:KEY|TOKEN|SECRET|PASSWORD)[A-Z_]*=)\S+", re.IGNORECASE)
-
-
 def parser():
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="action", required=True)
@@ -102,17 +99,7 @@ def main(argv=None):
     elif args.action == "smoke":
         runtime_smoke.run(args.namespace, command)
     elif args.action == "load-kb":
-        # ai 파드 안에서 돈다 — 비공개 DB 와 클러스터 임베딩 서비스를 같이 보는 자리가 거기뿐이고,
-        # 파드 env 를 그대로 써야 적재와 질의가 같은 임베딩(=같은 벡터 공간)을 탄다.
-        try:
-            print(command(["kubectl", "exec", "--namespace", args.namespace, "deploy/ai", "-c", "ai", "--",
-                           "/app/.venv/bin/python", "scripts/load_kb.py"]).strip())
-        except CommandError as error:
-            # 공용 헬퍼는 stderr 를 통째로 숨긴다. 적재 스크립트의 마지막 줄들이 원인이라
-            # 자격만 가리고 보인다 — 첫 적재가 원인 없이 "kubectl command failed" 로 끝났다.
-            for line in (error.detail or "").strip().splitlines()[-5:]:
-                print(_CREDENTIAL.sub(lambda m: (m.group(1) or m.group(2)) + "***", line))
-            raise
+        runtime_kb.run(args.namespace, command)
     elif args.action == "render-values":
         values = helm_values(outputs, args.image_tag, args.certificate_arn, args.hostname, args.embedding_enabled)
         Path(args.output).write_text(json.dumps(values, indent=2) + "\n")

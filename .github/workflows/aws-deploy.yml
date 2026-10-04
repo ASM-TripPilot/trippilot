@@ -242,7 +242,7 @@ jobs:
       # 첫 적재(KB-5 1,470건)는 임베딩 파드 CPU 로 수 분 걸린다.
       - name: Load the Plan-B knowledge base
         if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled
-        timeout-minutes: 30
+        timeout-minutes: 35  # Job 대기 1800s + 정리
         run: python3 deploy/eks/runtime.py load-kb --namespace trippilot
       - name: Deployment summary
         if: success()
