@@ -802,6 +802,7 @@
 - `src/pages/live/live-itinerary/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
 - `src/pages/live/live-itinerary/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
 - `src/pages/live/live-itinerary/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
+- `src/pages/live/live-itinerary/model/visitedLabels.ts`  →  visitedLabelByPoiId
 
 ## src/pages/live/live-itinerary/ui/
 - `src/pages/live/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView

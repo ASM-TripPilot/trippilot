@@ -19,5 +19,4 @@ export const DELETION_SCOPE: readonly string[] = [
   '여행 요약',
   '취향 스타일 분석',
   '받은 알림함',
-  '커뮤니티 공개 콘텐츠와 좋아요·댓글',
 ];

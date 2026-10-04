@@ -126,12 +126,14 @@ describe('AC-6 · resolveNextDest 도출 (첫 upcoming + 유한 좌표)', () => 
       }),
     ]);
 
-    expect(result).toEqual({
+    // webOrigin(TRIP-1222 a — 웹 폴백 전용 앞 슬롯)은 별도 describe 가 잠근다. 앱 출발(origin)은 없다.
+    expect(result).toMatchObject({
       lat: 35.1,
       lng: 129.1,
       nameKo: '광안리',
       distanceRange: '약 1.2km · 도보 추정',
     });
+    expect(result?.origin ?? null).toBeNull();
   });
 
   it('첫 upcoming 의 lat 이 null 이면 null 을 반환한다 (좌표 결측)', () => {
@@ -166,12 +168,14 @@ describe('AC-6 · resolveNextDest 도출 (첫 upcoming + 유한 좌표)', () => 
       }),
     ]);
 
-    expect(result).toEqual({
+    // webOrigin(TRIP-1222 a — 웹 폴백 전용 앞 슬롯)은 별도 describe 가 잠근다. 앱 출발(origin)은 없다.
+    expect(result).toMatchObject({
       lat: 35.1,
       lng: 129.1,
       nameKo: '첫 예정',
       distanceRange: '약 1.2km · 도보 추정',
     });
+    expect(result?.origin ?? null).toBeNull();
   });
 });
 
@@ -214,6 +218,53 @@ describe('슬롯 단위 · 출발지(origin) 지정 URL (TRIP-1189)', () => {
       buildWebNavUrl({ ...to, origin }),
     ];
     urls.forEach((u) => expect(u).not.toMatch(/duration|time|분/i));
+  });
+});
+
+describe('웹 폴백 출발지 webOrigin (TRIP-1222 a)', () => {
+  const to = { lat: 35.1, lng: 129.1, nameKo: '광안리' };
+  const webOrigin = { lat: 35.0, lng: 129.0, nameKo: '해운대' };
+
+  it('buildWebNavUrl 은 origin 이 없고 webOrigin 이 있으면 webOrigin 을 출발지로 싣는다 (웹엔 현재 위치가 없다 — 시뮬레이터 실측)', () => {
+    expect(buildWebNavUrl({ ...to, origin: null, webOrigin })).toBe(
+      `https://map.naver.com/p/directions/129,35,${encodeURIComponent('해운대')}/129.1,35.1,${encodeURIComponent('광안리')}/-/transit`
+    );
+  });
+
+  it('origin 이 있으면 origin 이 이긴다 · 앱 스킴은 webOrigin 을 읽지 않는다 (앱은 현재 위치)', () => {
+    const origin = { lat: 36, lng: 130, nameKo: '앞' };
+
+    expect(buildWebNavUrl({ ...to, origin, webOrigin })).toContain(
+      `130,36,${encodeURIComponent('앞')}/`
+    );
+    expect(buildAppNavUrl({ ...to, origin: null, webOrigin })).not.toContain(
+      'slat'
+    );
+  });
+
+  it('resolveSlotDests: 첫 upcoming 은 origin 이 없어도 바로 앞(방문 완료) 슬롯이 webOrigin 이다', () => {
+    const dests = resolveSlotDests([
+      projected('done', { poiId: 'a', nameKo: '앞', lat: 35.0, lng: 129.0 }),
+      projected('upcoming', { poiId: 'b', nameKo: '서울도서관' }),
+    ]);
+
+    expect(dests.get('b')?.origin ?? null).toBeNull();
+    expect(dests.get('b')?.webOrigin).toEqual({
+      lat: 35.0,
+      lng: 129.0,
+      nameKo: '앞',
+    });
+  });
+
+  it('resolveSlotDests: 맨 앞 슬롯·앞 슬롯 좌표 결측이면 webOrigin 도 없다', () => {
+    const dests = resolveSlotDests([
+      projected('upcoming', { poiId: 'a', nameKo: 'a' }),
+      projected('upcoming', { poiId: 'b', nameKo: 'b', lat: null, lng: null }),
+      projected('upcoming', { poiId: 'c', nameKo: 'c' }),
+    ]);
+
+    expect(dests.get('a')?.webOrigin ?? null).toBeNull();
+    expect(dests.get('c')?.webOrigin ?? null).toBeNull();
   });
 });
 
