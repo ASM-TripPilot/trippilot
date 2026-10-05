@@ -156,7 +156,7 @@ export function ItineraryPlanPage({
     // (TRIP-505 AC-1). `/(tabs)/itinerary` 는 `GeneratingPage.tsx` 가 이미 쓰는 typedRoutes 통과
     // 목적지다. 그 외 얼굴은 기존 딥링크 폴백(`canGoBack()?back():replace(HOME_FALLBACK)`) 그대로.
     if (itinerary.data?.status === 'CONFIRMED' && !fromNotification) {
-      router.replace('/(tabs)/itinerary');
+      router.dismissTo('/(tabs)/itinerary'); // TRIP-1243 — replace 면 생성·확정 화면이 스택에 남는다
       return;
     }
     if (router.canGoBack()) {

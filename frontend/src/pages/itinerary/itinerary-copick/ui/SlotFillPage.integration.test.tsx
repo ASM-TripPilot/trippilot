@@ -63,8 +63,14 @@ jest.mock('@/shared/storage', () => ({
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    dismissTo: mockDismissTo,
+  }),
 }));
 
 // 지도는 관찰 목으로 바꾼다 — center 는 텍스트로, 나머지 prop 은 host 로 그대로 노출된다(옛 `.context` 02a ★6).
@@ -77,6 +83,7 @@ beforeEach(() => {
   mockBack.mockClear();
   mockPush.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
 });
 
 afterAll(() => server.close());
@@ -182,6 +189,7 @@ describe('컨셉·후보·확정 순회 배선', () => {
     mockBack.mockClear();
     mockPush.mockClear();
     mockReplace.mockClear();
+    mockDismissTo.mockClear();
     candidatesResponse = {
       candidates: [
         {
@@ -1569,6 +1577,7 @@ describe('후보 기본 선택', () => {
     mockBack.mockClear();
     mockPush.mockClear();
     mockReplace.mockClear();
+    mockDismissTo.mockClear();
     candidatesScript = () => ok([cand('X'), cand('Y'), cand('Z')]);
     setAccessToken('valid-access');
 
@@ -2029,7 +2038,7 @@ describe('‹ 떠나기 확인', () => {
    *  - 🔴 B2 1곳 이상 골랐으면 ‹ 는 이탈 확인을 먼저 띄운다. 문구는 고른 수를 **일자를 건너** 세고,
    *    "저장돼 있다"는 사실대로 말한다(사라진다고 겁주지 않는다, Q2). 확인 전엔 이동·요청 0.
    *  - 🔴 B3 [머무르기] → 확인만 닫히고 같은 슬롯의 컨셉 얼굴 그대로. 이동·요청 0.
-   *  - 🔴 B4 [나가기] → 홈으로 replace 1회. h02(must-visits)·뒤로가기 아님.
+   *  - 🔴 B4 [나가기] → 홈으로 dismissTo 1회. h02(must-visits)·뒤로가기 아님.
    *  - 🟢 B1 후보 얼굴의 ‹ 는 같은 슬롯의 컨셉 얼굴로 돌아간다(이미 되는 동작을 잠근다, 02a ★10).
    *
    * "고른 곳 수" = 지금 슬롯 **앞에 있는 비고정 슬롯 수**(고정 숙소 제외, 일자 횡단). 같이 짜기는 비고정
@@ -2129,6 +2138,7 @@ describe('‹ 떠나기 확인', () => {
     mockBack.mockClear();
     mockPush.mockClear();
     mockReplace.mockClear();
+    mockDismissTo.mockClear();
     setAccessToken('valid-access');
 
     server.use(
@@ -2204,7 +2214,7 @@ describe('‹ 떠나기 확인', () => {
   }
 
   describe('🔴 B5 · 고른 곳이 0곳이면 ‹ 는 확인 없이 홈으로 (D3 · Q2)', () => {
-    it('첫 비고정 슬롯(앞엔 고정 숙소뿐)에서 ‹ → 확인 창 없이 홈으로 replace 1회, 뒤로가기·push 0', async () => {
+    it('첫 비고정 슬롯(앞엔 고정 숙소뿐)에서 ‹ → 확인 창 없이 홈으로 dismissTo 1회, 뒤로가기·push 0', async () => {
       // 준비
       await openConceptFace(KEY_A);
 
@@ -2212,8 +2222,10 @@ describe('‹ 떠나기 확인', () => {
       pressBack();
 
       // 단언 ① 홈으로 나갔다(긍정 사건 — 아래 부재 단언의 짝).
-      expect(mockReplace).toHaveBeenCalledTimes(1);
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      // TRIP-1243 — replace 가 아니라 dismissTo(위저드 화면을 스택에서 걷어낸다).
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).not.toHaveBeenCalled();
       // 단언 ② h02 로 돌아가는 뒤로가기가 아니고, 확인 창도 없었다(고른 게 없으니 잃을 것도 없다).
       expect(mockBack).not.toHaveBeenCalled();
       expect(mockPush).not.toHaveBeenCalled();
@@ -2277,7 +2289,7 @@ describe('‹ 떠나기 확인', () => {
   });
 
   describe('🔴 B4 · [나가기] → 홈으로, 필수 방문지(h02)로는 가지 않는다', () => {
-    it('홈으로 replace 1회, 뒤로가기 0, 어느 목적지에도 must-visits 없음, 생성 POST 0', async () => {
+    it('홈으로 dismissTo 1회, 뒤로가기 0, 어느 목적지에도 must-visits 없음, 생성 POST 0', async () => {
       await openConceptFace(KEY_C);
       pressBack();
 
@@ -2285,13 +2297,16 @@ describe('‹ 떠나기 확인', () => {
       fireEvent.press(screen.getByTestId(`${LEAVE}-leave`));
 
       // 단언 ① 홈으로 나간다(BR-U3-05 개정의 백그라운드 이탈과 같은 결).
-      expect(mockReplace).toHaveBeenCalledTimes(1);
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      // TRIP-1243 — replace 가 아니라 dismissTo(위저드 화면을 스택에서 걷어낸다).
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).not.toHaveBeenCalled();
       // 단언 ② h02 로 새지 않는다 — 뒤로가기도, must-visits 로의 전진도 없다.
       expect(mockBack).not.toHaveBeenCalled();
       const destinations = [
         ...mockPush.mock.calls,
         ...mockReplace.mock.calls,
+        ...mockDismissTo.mock.calls,
       ].map((call) => JSON.stringify(call[0]));
       expect(destinations.some((d) => d.includes('must-visits'))).toBe(false);
       // 단언 ③ 나가기가 재생성을 부르지 않는다.
@@ -2866,6 +2881,7 @@ describe('PARTIAL 폴링·확정 잠금·조회 실패', () => {
     mockBack.mockClear();
     mockPush.mockClear();
     mockReplace.mockClear();
+    mockDismissTo.mockClear();
     itineraryScript = () => itinerary('COMPLETE');
     candidatesScript = () => HttpResponse.json(CANDIDATES);
     setAccessToken('valid-access');

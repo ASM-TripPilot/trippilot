@@ -97,6 +97,7 @@ const mockCancelMutate = jest.fn();
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 const mockBack = jest.fn();
 const mockNavigate = jest.fn();
 
@@ -247,12 +248,14 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     back: mockBack,
     navigate: mockNavigate,
   }),
   router: {
     push: mockPush,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     back: mockBack,
     navigate: mockNavigate,
   },
@@ -270,6 +273,7 @@ beforeEach(() => {
   mockCancelMutate.mockClear();
   mockPush.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockBack.mockClear();
   mockNavigate.mockClear();
 });
@@ -287,7 +291,7 @@ function renderPage() {
 /** 모든 forward nav(push/replace/navigate)의 목적지를 직렬화해 모은다 — 형태(문자열/객체)를
  * 강요하지 않고 "어디로 갔나"만 본다(02a ★4). */
 function forwardDestinations(): string[] {
-  return [mockPush, mockReplace, mockNavigate]
+  return [mockPush, mockReplace, mockNavigate, mockDismissTo]
     .flatMap((fn) => fn.mock.calls)
     .map((call) =>
       typeof call[0] === 'string' ? call[0] : JSON.stringify(call[0])
@@ -672,8 +676,10 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
       fireEvent.press(screen.getByTestId('itinerary-generating-back'));
-      expect(mockReplace).toHaveBeenCalledTimes(1);
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      // TRIP-1243 — replace 가 아니라 dismissTo(위저드 중간 화면을 스택에서 걷어낸다).
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).not.toHaveBeenCalled();
 
       page.leave();
 
@@ -779,7 +785,8 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       ).toBeOnTheScreen();
 
       fireEvent.press(screen.getByTestId('itinerary-generating-back'));
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).not.toHaveBeenCalled();
       page.leave();
 
       expectNoToast();
@@ -807,7 +814,8 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       expect(screen.getByTestId('itinerary-generation-busy')).toBeOnTheScreen();
 
       fireEvent.press(screen.getByTestId('itinerary-generation-busy-wait'));
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).not.toHaveBeenCalled();
       page.leave();
 
       expectNoToast();
@@ -823,7 +831,8 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
       fireEvent.press(screen.getByTestId('itinerary-generating-back'));
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).not.toHaveBeenCalled();
       page.leave();
 
       expectNoToast();
