@@ -351,22 +351,56 @@ class RuntimeIntegrationTests(unittest.TestCase):
         """
         import runtime_smoke
         table = "NAME   TARGETS   CURRENT   MIN   MAX   REPLICAS\nai     70        <none>    1     3     1\n"
-        shell = Mock(side_effect=["", "", "", "", table])
+        shell = Mock(side_effect=["", "", "", "", table, ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
         self.assertIn("ai", printed)
         self.assertIn("metrics-server", printed)  # 비어 있으면 어디를 볼지 알려준다
-        get = shell.call_args.args[0]
+        get = next(call.args[0] for call in shell.call_args_list if call.args[0][:2] == ["kubectl", "get"])
         self.assertEqual(get[:3], ["kubectl", "get", "hpa"])
         self.assertIn("--ignore-not-found", get)  # HPA 를 안 켠 환경에서 깨지지 않는다
 
     def test_smoke_says_nothing_when_no_autoscaler_is_enabled(self):
         import runtime_smoke
-        shell = Mock(side_effect=["", "", "", "", ""])
+        shell = Mock(side_effect=["", "", "", "", "", ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         output.assert_not_called()
+
+    def test_smoke_reports_ai_wiring_lines_without_gating_the_deploy(self):
+        """AI 기동 배선 한 줄들을 배포 로그에 남기되, 공백이어도 배포를 깨지 않는다.
+
+        키가 빠지면 AI 는 기동에 성공하고 품질만 조용히 떨어진다 — 그 경고는 파드
+        로그에만 남아 클러스터 자격 없이는 안 보였다(2026-10-05 실제로 막힌 자리).
+        단언하지 않는 이유는 `WEATHER_API` 가 선택값이어서, 없이 도는 환경을 배포할 수
+        있어야 하기 때문이다.
+        """
+        import runtime_smoke
+        logs = ("INFO trippilot.poi_curation.adapters.kma_weather 기상청 단기예보 = "
+                "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0 (키 파라미터 serviceKey)\n"
+                "INFO trippilot.api.middleware GET /health 200\n"
+                "WARNING trippilot.main 임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — 규칙 랭킹으로 강등된다\n")
+        shell = Mock(side_effect=["", "", "", "", "", logs])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", shell)
+        printed = " ".join(str(call.args[0]) for call in output.call_args_list)
+        self.assertIn("apis.data.go.kr", printed)  # 날씨가 붙은 증거
+        self.assertIn("serviceKey", printed)  # 주소와 키 파라미터의 짝까지
+        self.assertIn("임베딩 미배선", printed)
+        self.assertNotIn("/health 200", printed)  # 요청 로그는 끌어오지 않는다
+        logs_call = shell.call_args.args[0]
+        self.assertEqual(logs_call[:2], ["kubectl", "logs"])
+        self.assertIn("deployment/ai", logs_call)
+
+    def test_smoke_survives_unreadable_ai_logs(self):
+        """로그를 못 읽어도 배포는 성공한다 — 기록 수단이 게이트가 되면 안 된다."""
+        import runtime_smoke
+        shell = Mock(side_effect=["", "", "", "", "", runtime.CommandError("kubectl", "failed")])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", shell)
+        printed = " ".join(str(call.args[0]) for call in output.call_args_list)
+        self.assertIn("못 읽었다", printed)
 
     @patch("runtime.subprocess.run")
     def test_command_returns_success_without_echo(self, run):
