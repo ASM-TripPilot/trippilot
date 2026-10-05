@@ -1457,3 +1457,58 @@ describe('LiveHubView · HD 방문 완료 카드 [사진]·[메모] (TRIP-1203)'
     expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
   });
 });
+
+describe('LiveHubView · 닫힘 스냅이 홈 인디케이터 위에 온다', () => {
+  // 닫힘 28px 핸들이 하단 안전 영역(≈34px) 안에 묻혀 위로 쓸면 iOS 홈 제스처가 우선했다 —
+  // 닫힘 칸을 `28 + 하단 안전 영역`으로 키운다. 실제 제스처 충돌 해소는 jest 사각(실기 TestFlight).
+  function renderWithBottom(bottom: number | null) {
+    const view = (
+      <LiveHubView
+        tripTitle="부산 여행"
+        days={DAYS}
+        activeDayIndex={1}
+        slots={SLOTS}
+        initialSnapIndex={1}
+        onBack={jest.fn()}
+        onSelectDay={jest.fn()}
+        onPressAiReplan={jest.fn()}
+        onPressManualEdit={jest.fn()}
+      />
+    );
+    render(
+      bottom === null ? (
+        view
+      ) : (
+        <SafeAreaInsetsContext.Provider
+          value={{ top: 47, bottom, left: 0, right: 0 }}
+        >
+          {view}
+        </SafeAreaInsetsContext.Provider>
+      )
+    );
+  }
+
+  it('LC1 하단 안전 영역 34 → 닫힘 칸 62, 중간 55%', () => {
+    renderWithBottom(34);
+    const all = sheetProps();
+    expect(all.length).toBeGreaterThan(0);
+    all.forEach(({ snapPoints }) => {
+      expect(snapPoints[0]).toBe(62);
+      expect(snapPoints[1]).toBe('55%');
+    });
+  });
+
+  it('LC3 하단 안전 영역 120 → 닫힘 칸 148 — 34 로 외운 고정값 구현을 막는 짝(0·34·120)', () => {
+    renderWithBottom(120);
+    sheetProps().forEach(({ snapPoints }) => {
+      expect(snapPoints[0]).toBe(148);
+    });
+  });
+
+  it('LC2 Provider 없음 → 닫힘 칸 28 그대로', () => {
+    renderWithBottom(null);
+    sheetProps().forEach(({ snapPoints }) => {
+      expect(snapPoints[0]).toBe(28);
+    });
+  });
+});

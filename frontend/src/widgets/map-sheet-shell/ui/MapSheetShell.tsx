@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { useContext, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import {
@@ -41,8 +41,9 @@ export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot';
 
 // 기본 3스냅(닫힘 28 / peek ≈ 45% / expanded ≈ 88%) — 라이브러리 규칙상 낮은 높이부터 오름차순.
 // 닫힘 28 = 핸들만 보이는 높이(i01 닫힘 Figma 4251:2448 과 같은 출처, `LiveHubView.CLOSED_SNAP` 과 값 일치).
-// 기본 진입은 peek(1) — 실 전환은 6-b 실기 몫.
-const SNAP_POINTS = [28, '45%', '88%'];
+// 실기에선 거기에 하단 안전 영역을 더한다 — 핸들이 홈 인디케이터 영역에 묻히면 위로 쓸 때 iOS 홈 제스처가 우선해
+// 시트를 다시 올릴 수 없다(`closedSnap` 테스트). 기본 진입은 peek(1) — 실 전환은 6-b 실기 몫.
+const CLOSED_HANDLE_HEIGHT = 28;
 const DEFAULT_INDEX = 1;
 
 /**
@@ -101,7 +102,8 @@ export interface MapSheetShellProps<T = unknown> {
    *  (6 소비처 무변경). 타입 선언만 — 렌더 배선은 [구현] 몫(SH8b 가 red 로 강제). h13 이 첫 소비처. */
   list?: MapSheetListSlot<T>;
   /** 바텀시트 스냅 포인트(TRIP-746 가산) — i01 허브가 3스냅(닫힘·중간·펼침)을 준다. 미전달이면
-   *  기본 3스냅 `SNAP_POINTS`. 직접 주면 "0번 = 닫힘" 규칙(지도 풀림·CTA 숨김)이 적용되지 않는다. */
+   *  기본 3스냅(`defaultSnapPoints`). 직접 주면 "0번 = 닫힘" 규칙(지도 풀림·CTA 숨김)이 적용되지 않고,
+   *  기본 배열이 닫힘 칸에 더하는 하단 안전 영역도 더해지지 않는다 — 닫힘 칸을 주려면 소비처가 직접 더한다. */
   snapPoints?: (string | number)[];
   /** 지도 잠금 여부(TRIP-746 가산) — 미전달이면 기본 잠금, 기본 배열의 닫힘 칸에서만 풀림(TRIP-920). i01 허브만
    *  `false` 로 열어 여행 중 자유 탐색을 유지한다(TRIP-397 결정 계승). */
@@ -186,6 +188,10 @@ export function MapSheetShell<T = unknown>({
   // 본문 아래를 비워 마지막 카드까지 바 위로 올라오게 한다. 같은 이유로 Provider 없으면 0.
   const hasCta = cta !== undefined && cta.length > 0;
   const bottomInset = insets?.bottom ?? 0;
+  const defaultSnapPoints = useMemo(
+    () => [CLOSED_HANDLE_HEIGHT + bottomInset, '45%', '88%'],
+    [bottomInset]
+  );
 
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -236,7 +242,7 @@ export function MapSheetShell<T = unknown>({
           ListHeaderComponent 한 자리에 얹힌다(TRIP-798 묶음 C). 미전달이면 현행 스크롤 경로(6 소비처 무변경). */}
       <BottomSheet
         index={startIndex}
-        snapPoints={snapPoints ?? SNAP_POINTS}
+        snapPoints={snapPoints ?? defaultSnapPoints}
         // v5 기본 true 는 콘텐츠 높이 칸을 배열에 몰래 끼워 index·onChange 번호가 어긋난다(03b 경고-1).
         enableDynamicSizing={false}
         // 라이브러리 기본값과 같지만 명시한다 — 시트 안 입력(h13 검색)의 키보드 회피 계약(TRIP-990 D9).

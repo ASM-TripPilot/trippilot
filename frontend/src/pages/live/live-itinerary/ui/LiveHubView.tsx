@@ -54,7 +54,8 @@ import { SlotProgressCard } from '@/entities/itinerary-slot';
  * 마운트 첫 프레임 FAB 자리는 jest 가 못 본다.
  */
 
-// 닫힘(핸들만 28px) · 중간 55%(Figma 4702:2688 · 4702:2833). 펼침은 기기마다 계산한다(아래).
+// 닫힘(핸들만 28px + 하단 안전 영역) · 중간 55%(Figma 4702:2688 · 4702:2833). 펼침은 기기마다 계산한다(아래).
+// 안전 영역을 더하는 이유: 핸들이 홈 인디케이터 영역에 묻히면 위로 쓸 때 iOS 홈 제스처가 우선해 시트를 못 올린다.
 const CLOSED_SNAP = 28;
 const HALF_SNAP = '55%';
 // 펼침 시트 윗변 = 지도 오버레이 줄 윗변 + 104(Figma 4702:2982 — 오버레이 줄 y≈18 → 시트 y=122).
@@ -231,14 +232,16 @@ export function LiveHubView({
   directionsNotice,
 }: LiveHubViewProps): ReactElement {
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
-  const safeTop = useContext(SafeAreaInsetsContext)?.top ?? 0;
+  const insets = useContext(SafeAreaInsetsContext);
+  const safeTop = insets?.top ?? 0;
+  const safeBottom = insets?.bottom ?? 0;
   const { height: windowHeight } = useWindowDimensions();
   const expandedSnap =
     windowHeight -
     (safeTop + OVERLAY_ROW_TOP_PAD + EXPANDED_GAP_BELOW_OVERLAY_ROW);
   const snapPoints = useMemo(
-    () => [CLOSED_SNAP, HALF_SNAP, expandedSnap],
-    [expandedSnap]
+    () => [CLOSED_SNAP + safeBottom, HALF_SNAP, expandedSnap],
+    [safeBottom, expandedSnap]
   );
   const expandedSnapIndex = snapPoints.length - 1;
   const [editMenuOpen, setEditMenuOpen] = useState(initialEditMenuOpen);
