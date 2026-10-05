@@ -1602,6 +1602,26 @@ describe('취향 편집 시트 (PI·PA)', () => {
     });
   });
 
+  describe('PI-8 · 프리필 조회 실패 — 오버라이드 없는 축은 스냅숏 키를 뺀다', () => {
+    // BE 는 키가 있으면 빈 배열도 최종으로 쓴다(#995) — `[]` 를 실으면 온보딩 취향이 사라진다.
+    it('조회 실패면 오버라이드 없는 축(activities)은 키가 없고, 오버라이드 있는 축(styles)은 실린다', async () => {
+      server.use(
+        http.get(`${BASE}/me/preferences`, () =>
+          HttpResponse.json({}, { status: 500 })
+        )
+      );
+      seedValidDraft();
+      useTripWizardStore.getState().setPrefStyleOverride(['휴양']);
+      renderPage();
+
+      await waitFor(() => expect(next()).toBeEnabled());
+      fireEvent.press(next());
+
+      await waitFor(() => expect(createHits()).toBe(1));
+      expect(postedBodies[0].preferenceSnapshot).toEqual({ styles: ['휴양'] });
+    });
+  });
+
   describe('PI-7 · ★ D4 hasOverride → 요약 "+ 온보딩" 제거', () => {
     it('오버라이드 없으면 요약 취향 행에 "+ 온보딩"이 붙는다 (선제green 회귀 앵커)', async () => {
       renderPage();
