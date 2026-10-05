@@ -223,6 +223,11 @@ class PlanBRagRequest:
     # 합치지 않고 persona_context 에 **먼저** 놓는다(확정값이 검색 발췌보다 앞).
     # None = 무보정 (미수집·비가용) — 종전처럼 KB 발췌만 쓴다.
     persona: "PersonaSummary | None" = None
+    # 사용자가 직접 쓴 말 (`/replan` 의 `free_text`). 지시 사전(KB-4)은 닫힌 20종이라
+    # "아이랑 갈 만한 곳"·"카페는 그만" 같은 말은 키로 못 담는다 — 선택 LLM 이 원문을
+    # 읽고 고르게 한다(후보 자격과 무관, INV-1 은 closed_set_filter 소유). 빈 문자열 =
+    # 없음(`/alternatives` 등 기존 호출 무영향).
+    user_request: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -566,6 +571,7 @@ class PlanBAgent:
                     max_alternatives=self._cfg.max_alternatives,
                     excluded_poi_ids=request.excluded_poi_ids,
                     place_knowledge=context.place_knowledge,
+                    user_request=request.user_request,
                 ),
                 request.trace_id,
                 request.now,
@@ -631,7 +637,9 @@ _REASON_KO: Mapping[str, str] = MappingProxyType(
 
 def _situation_query(request: PlanBRagRequest) -> str:
     reason = _REASON_KO.get(request.reason, request.reason)
-    return f"{request.trigger.kind.value} {reason} 상황"
+    # 사용자 원문이 있으면 질의에 붙인다 — "비 와서 실내로"면 KB-3·KB-5 가 그 말에 붙는다.
+    said = f" {request.user_request.strip()}" if request.user_request.strip() else ""
+    return f"{request.trigger.kind.value} {reason} 상황{said}"
 
 
 def _persona_query(request: PlanBRagRequest) -> str:

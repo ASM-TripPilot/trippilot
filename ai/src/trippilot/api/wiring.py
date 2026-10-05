@@ -52,6 +52,7 @@ import json
 import logging
 import pathlib
 import os
+import re
 import time
 import zlib
 from dataclasses import dataclass, field, replace
@@ -145,13 +146,20 @@ from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent
 from trippilot.agents.planb.directives import (
     DirectiveSpec,
+    index_of,
     load_directive_file,
     match_free_text,
     resolve_chips,
 )
 from trippilot.domain.edit import EditCommand, EditOp
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
+from trippilot.llm_gateway.gates.replan_directive_translation import ReplanDirectiveTranslationGate
 from trippilot.llm_gateway.workers.edit_translation import EditTranslationWorker
+from trippilot.llm_gateway.workers.replan_directive_translation import (
+    DirectiveTranslationInput,
+    ReplanDirectiveTranslationWorker,
+    options_from,
+)
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
@@ -973,6 +981,21 @@ _REASON_TO_TRIGGER: Mapping[str, TriggerKind] = {
     # fatigue·none → MANUAL (사용자 사정)
 }
 
+# 부정 표현 — 있으면 임베딩 매칭을 건너뛴다. 임베딩은 부정을 못 읽어 "카페는 이제 그만"이
+# ADD_CAFE 로 잡혀 카페가 **늘었고**, 부정 뒤만 떼어 매칭하면 "가고 싶어" 같은 빈 술어가
+# 엉뚱한 지시(ACTIVITY_FOCUS)에 붙었다(2026-10-05 실측). 부정문은 번역 LLM 과 PlanB 선택
+# 프롬프트가 원문 그대로 읽는다.
+_NEGATION = re.compile(r"말고|그만|빼고|빼\s*줘|싫|없이|제외|가지\s*마|안\s*가")
+
+# RANKING 지시 중 "가까운 데로" 로 집행하는 것. END_NEAR_STAY(숙소 근처 마무리)는 마지막
+# 슬롯만 당겨야 해서 거리 감점으로 못 푼다 — 무효로 밝힌다.
+_NEAR_KEYS = frozenset({"NEARBY", "LESS_MOVE"})
+
+# 자유 입력 번역(A-3, 경량 티어) 마감 — 요청 예산의 15% 와 이 값 중 작은 쪽. PlanB·점수 몫을
+# 덜 깎으려고 짧게 둔다. 넘기면 지시 없이 진행하고 원문은 PlanB 가 읽는다(INV-4).
+_TRANSLATE_TIMEOUT_SEC = 4.0
+
+
 # 요청 예산 중 PlanB(RAG + LLM 선택)에 줄 몫. 나머지가 페르소나 점수 + 어셈블리 몫이다.
 #
 # 0.5 인 이유: 25초 예산에서 12.5초다. PlanB 안에서 다시 `llm_budget_share=0.5` ·
@@ -1051,6 +1074,8 @@ def _replan_rag_request(
         deadline_ms=int(deadline_ms * _REPLAN_PLANB_BUDGET_SHARE),
         rain_prob_by_date=daily_rain,
         persona=persona,
+        # 사전(20종)이 못 담는 말 — "아이랑 갈 만한 곳"·"카페는 그만" — 을 선택 LLM 이 읽는다.
+        user_request=request.free_text or "",
     )
 
 
@@ -1203,6 +1228,7 @@ class WiredItineraryOrchestrator:
         embedding: EmbeddingPort | None = None,
         vector_store: VectorStorePort | None = None,
         diversity_jitter: float = 0.0,
+        directive_translator: ReplanDirectiveTranslationWorker | None = None,
     ) -> None:
         self._orchestrator = orchestrator
         # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
@@ -1234,6 +1260,8 @@ class WiredItineraryOrchestrator:
         self._directives = directives
         self._embedding = embedding
         self._vector_store = vector_store
+        # 임베딩이 못 잡은 자유 입력(부정문 포함)을 받는 2차 번역(A-3). 미주입 = 1차만.
+        self._directive_translator = directive_translator
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
@@ -1623,7 +1651,8 @@ class WiredItineraryOrchestrator:
         # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.
         t0 = self._clock.monotonic_ms()
 
-        resolved, unknown, prefer, avoid = self._replan_directives(request, notes)
+        resolved, unknown, prefer, avoid, near = self._replan_directives(
+            request, notes, trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
 
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
@@ -1700,6 +1729,7 @@ class WiredItineraryOrchestrator:
             include_explanations=False,  # 재계획 화면(i06)은 설명을 안 쓴다
             prefer_categories=prefer,
             avoid_categories=avoid,
+            prefer_near=near,
             not_before=not_before,
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
@@ -1725,8 +1755,9 @@ class WiredItineraryOrchestrator:
         )
 
     def _replan_directives(
-        self, request: schemas.ReplanRequest, notes: list[str]
-    ) -> tuple[list[str], list[str], frozenset[PoiCategory], frozenset[PoiCategory]]:
+        self, request: schemas.ReplanRequest, notes: list[str], *,
+        trace_id: TraceId, now: datetime, deadline_ms: int,
+    ) -> tuple[list[str], list[str], frozenset[PoiCategory], frozenset[PoiCategory], bool]:
         """칩 + 자유입력 → (해석분, 미지분, 선호 카테고리, 회피 카테고리).
 
         **`prefer`/`avoid` 를 실제로 쓰는 첫 자리다** — 2026-09-24 실측으로 사전 20종의
@@ -1740,29 +1771,48 @@ class WiredItineraryOrchestrator:
         if not self._directives:
             if request.directives or request.free_text:
                 notes.append("directive_dictionary_absent")
-            return [], list(request.directives), frozenset(), frozenset()
+            return [], list(request.directives), frozenset(), frozenset(), False
 
         known, unknown = resolve_chips(request.directives, self._directives)
         specs = list(known)
-        if request.free_text and self._embedding is not None and self._vector_store is not None:
-            try:
-                matched = match_free_text(
-                    request.free_text, self._directives,
-                    self._embedding, self._vector_store)
-            except Exception as e:  # 검색 장애 — 칩만으로 진행한다
-                notes.append(f"free_text_match_degraded: {type(e).__name__}")
-                matched = ()
+        if request.free_text:
+            matched: tuple[DirectiveSpec, ...] = ()
+            if _NEGATION.search(request.free_text):
+                notes.append("free_text_negation: 임베딩 매칭 생략")
+            elif self._embedding is not None and self._vector_store is not None:
+                try:
+                    matched = match_free_text(
+                        request.free_text, self._directives,
+                        self._embedding, self._vector_store)
+                except Exception as e:  # 검색 장애 — 번역·칩으로 진행한다
+                    notes.append(f"free_text_match_degraded: {type(e).__name__}")
+            else:
+                notes.append("free_text_match_unavailable")  # 벡터 미주입
+            if not matched:
+                matched = self._translate_free_text(
+                    request.free_text, notes, trace_id=trace_id, now=now,
+                    deadline_ms=deadline_ms)
+            if not matched:
+                # 사전 밖의 말이다 — 버려진 게 아니라 원문이 PlanB 선택 프롬프트로 간다.
+                # 그래도 지시로는 못 바꿨다는 사실은 남긴다(종전엔 흔적 없이 사라졌다).
+                notes.append("free_text_unresolved")
             seen = {s.key for s in specs}
             specs += [s for s in matched if s.key not in seen]
-        elif request.free_text:
-            notes.append("free_text_match_unavailable")  # 벡터 미주입
 
         prefer: set[PoiCategory] = set()
         avoid: set[PoiCategory] = set()
+        near = False
         ineffective: list[str] = []
         for spec in specs:
             if spec.unwired:
                 ineffective.append(spec.key)
+                continue
+            if spec.enforced_by == "RANKING":
+                # 종전엔 RANKING 셋이 인식만 되고 효과도 노트도 없었다(2026-10-05 실측).
+                if spec.key in _NEAR_KEYS:
+                    near = True
+                else:
+                    ineffective.append(spec.key)
                 continue
             prefer |= _categories_of(spec.prefer_categories)
             avoid |= _categories_of(spec.avoid_categories)
@@ -1772,7 +1822,32 @@ class WiredItineraryOrchestrator:
         if both:  # 반대인 칩을 같이 눌렀다 — 상쇄되고 그 사실을 남긴다
             notes.append(
                 f"directives_conflict: {','.join(sorted(c.value for c in both))}")
-        return [s.key for s in specs], list(unknown), frozenset(prefer), frozenset(avoid)
+        return [s.key for s in specs], list(unknown), frozenset(prefer), frozenset(avoid), near
+
+    def _translate_free_text(
+        self, text: str, notes: list[str], *, trace_id: TraceId, now: datetime,
+        deadline_ms: int,
+    ) -> tuple[DirectiveSpec, ...]:
+        """임베딩이 못 잡은 말(부정문 포함)을 경량 LLM 이 닫힌 지시 목록에서 고른다 (A-3).
+
+        워커·게이트·프롬프트는 #502 로 만들어 두고 배선이 없어 "다리 아파"·"카페는 그만"
+        같은 말이 그대로 버려졌다. 출력은 사전 키뿐이고 게이트가 사전 밖 키를 드롭한다.
+        실패·시간 초과면 지시 없이 진행한다(원문은 PlanB 가 읽는다) — 사유를 남긴다.
+        """
+        if self._directive_translator is None or not self._directives:
+            return ()
+        result = self._directive_translator.translate(
+            DirectiveTranslationInput(utterance=text, options=options_from(self._directives)),
+            trace_id, now,
+            timeout_sec=min(_TRANSLATE_TIMEOUT_SEC, deadline_ms / 1000 * 0.15),
+        )
+        if result.is_fallback:
+            notes.append(f"free_text_translation_fallback: {result.error}")
+            return ()
+        if result.value.dropped:
+            notes.append(f"free_text_translation_dropped: {','.join(result.value.dropped)}")
+        table = index_of(self._directives)
+        return tuple(table[k] for k in result.value.keys if k in table)
 
     def _with_current_slots(
         self,
@@ -2460,6 +2535,10 @@ def build_orchestrator(
     alt_explainer = AlternativeExplanationWorker(
         GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace)
     )
+    # 재계획 자유 입력 2차 번역(A-3) — 임베딩이 못 잡은 말만 받는다(경량 티어).
+    directive_translator = ReplanDirectiveTranslationWorker(
+        GatewayFacade(llm, renderer, ReplanDirectiveTranslationGate(), c1_config, trace)
+    )
     # EditAgent — 번역 워커를 감싼다. 어셈블리 검증까지 에이전트가 소유(INV-2).
     edit_agent = EditAgent(
         EditTranslationWorker(
@@ -2537,6 +2616,7 @@ def build_orchestrator(
         info=info,
         pool_builder=pool_builder, rag=rag,
         explainer=explainer, alternative_explainer=alt_explainer, clock=clock,
+        directive_translator=directive_translator,
         context_resolver=resolver,
         edit_agent=edit_agent,
         reflect_agent=reflect_agent,

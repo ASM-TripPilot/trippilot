@@ -43,6 +43,9 @@ class AlternativeSelectionInput:
     # **후보 자격과 무관하다**(INV-1 은 closed_set_filter 소유) — 후보 줄에 설명을
     # 한 칸 더 붙일 뿐이고, 문서가 없는 후보는 칸 자체가 안 생긴다.
     place_knowledge: Mapping[str, str] = field(default_factory=dict)
+    # 사용자가 직접 쓴 말(재계획 자유 입력). 빈 문자열 = 없음. 한 줄로 눌러 렌더한다 —
+    # 줄바꿈을 살리면 프롬프트 골격([출력 JSON 스키마] 등)을 흉내 낼 수 있다.
+    user_request: str = ""
 
     def __post_init__(self) -> None:
         if self.max_alternatives < 1:
@@ -99,6 +102,7 @@ def build_alternative_selection_vars(
         "situation_context": inp.situation_context.strip() or "(검색 결과 없음)",
         "persona_context": inp.persona_context.strip() or "(검색 결과 없음)",
         "candidates": candidates or "(후보 없음)",
+        "user_request": inline(inp.user_request).strip() or "(없음)",
         "max_alternatives": str(inp.max_alternatives),
     }
 
