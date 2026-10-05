@@ -417,7 +417,7 @@ def _domain_generate_request(
         excluded_poi_ids=frozenset(PoiId(x) for x in request.excluded_poi_ids),
         rejections=_domain_rejections(request.rejections),
         include_explanations=request.include_explanations,
-        persona=_inline_persona(request),
+        persona=_inline_persona(request.preference_profile, request.trip_context.companion_type),
         family_demote=True,  # 같은 장소 계열 강등은 generate 에만 (TRIP-1181)
         diversity_jitter=diversity_jitter,  # 결정론 지터도 generate 에만 (TRIP-1180)
     )
@@ -1199,19 +1199,24 @@ def _with_past_blocks(
 
 
 def _inline_persona(
-    request: schemas.GenerateItineraryRequest | schemas.ReplanRequest,
+    profile: schemas.PreferenceProfileSchema | None,
+    companion_type: str | None,
 ) -> PersonaSummary | None:
-    """요청에 실려 온 취향 → 페르소나 (AI-D09). 전 축 미설정이면 **None**(종전 경로).
+    """요청에 실려 온 취향 → 페르소나 (AI-D09). 프로필이 없거나 전 축 미설정이면 **None**(종전 경로).
+
+    generate·replan(`trip_context.companion_type`)과 explanations·alternatives(최상위
+    `companion_type`, 선택 필드)가 같은 함수를 쓴다 — 그 여행의 취향이 네 경로에서 한 모양이다.
 
     변환은 페르소나 재조회 어댑터와 **같은 함수**다 — 와이어 필드명이 백엔드 persona
     응답과 같고(`styles`·`activities`·`food_tastes`·`companion_types`·`budget_tier`),
     두 벌이면 한쪽만 고쳐져 조용히 갈라진다. 이번 여행의 동행(`trip_context.companion_type`)이
     있으면 계정의 평소 동행보다 우선한다(백엔드 `PersonaInternalController` KDoc).
     """
-    profile = request.preference_profile
+    if profile is None:
+        return None
     body = profile.model_dump()
-    if request.trip_context.companion_type:
-        body["companion_types"] = [request.trip_context.companion_type]
+    if companion_type:
+        body["companion_types"] = [companion_type]
     persona = _persona_to_summary(body)
     if (not persona.taste_tags and persona.companion is None and not persona.activities
             and not persona.cuisines and not profile.budget_tier):
@@ -1622,7 +1627,9 @@ class WiredItineraryOrchestrator:
                 # 문구다("비 예보로 일정 변경 제안"). 우리가 재서 낮게 나왔다고
                 # 야외를 안 내리면 화면과 모순된다. 실값은 정도를 더하는 데만 쓴다.
                 rain_prob_by_date=self._rain_from(packets, dates, now),
-                persona=self._persona_from(packets),
+                # 그 여행의 취향이 실려 오면 그것이 이 요청의 페르소나다 — 없으면 종전 재조회(하위호환).
+                persona=(_inline_persona(request.preference_profile, request.companion_type)
+                         or self._persona_from(packets)),
                 saved_places=tuple(
                     SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
                 ),
@@ -1717,7 +1724,8 @@ class WiredItineraryOrchestrator:
         if not pool.pois:
             return self._replan_empty("NO_CANDIDATE", notes, resolved, unknown)
 
-        persona = _inline_persona(request) or self._persona_from(packets)
+        persona = (_inline_persona(request.preference_profile, request.trip_context.companion_type)
+                   or self._persona_from(packets))
         daily_rain = self._rain_from(packets, dates, now)
         # 해석은 했는데 풀에 그 종류가 0곳이면 지시는 일정에 닿을 수 없다 — "쇼핑하고 싶어"를
         # 알아듣고 쇼핑이 안 오는 이유가 풀인지 점수인지 가르는 노트(침묵 금지).
@@ -2195,7 +2203,8 @@ class WiredItineraryOrchestrator:
         pool = CandidatePool(
             poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=now)
         owner = f"trip:{request.trip_id}"
-        persona = self._resolver.resolve(
+        # 그 여행의 취향이 실려 오면 그것으로 설명한다 — 없으면 종전 재조회(하위호환).
+        persona = _inline_persona(request.preference_profile, request.companion_type) or self._resolver.resolve(
             Principal(user_id=owner),
             ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         )

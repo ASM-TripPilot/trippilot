@@ -109,11 +109,16 @@ class HttpScheduleAgentAdapter(
      * **실패를 삼킨다.** 근거가 없다고 일정을 죽이면 사용자가 잃는 것이 더 크다. 대신 조용히
      * 지나가지 않게 로그로 남긴다(INV-4) — 근거가 통째로 비는 화면은 눈에 띄지만 원인은 안 보인다.
      */
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations =
+    override fun explanations(
+        tripId: UUID,
+        solution: ScheduleAgentOutput,
+        preference: PreferenceProfile?,
+        companionType: String?,
+    ): SlotExplanations =
         runCatching {
             post(
                 EXPLANATIONS_PATH,
-                AiExplanationsRequest(tripId.toString(), solution.toWire(), requestMeta(null)),
+                AiExplanationsRequest(tripId.toString(), solution.toWire(), requestMeta(null), preference, companionType),
                 AiExplanationsResponse::class.java,
                 scheduleAgentBoundedRestClient,
             )

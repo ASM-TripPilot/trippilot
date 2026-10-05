@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
@@ -71,6 +72,9 @@ class SecondPhaseGenerator(
         sessionId: UUID? = null,
         /** 시각을 우리가 고른(물질화) 블록 — 폴백의 isFixed 판정용(TRIP-1001). 와이어 직결 타입엔 못 싣는다. */
         materializedPoiIds: Set<UUID> = emptySet(),
+        /** 그 여행의 취향·동행(BR-U1-38) — 근거 문장도 생성과 같은 취향으로 쓰이게. 하루 여행은 [secondInput] 이 없어 따로 받는다. */
+        preference: PreferenceProfile? = null,
+        companionType: String? = null,
     ) {
         // INV-4: 2차 실패도 1차와 **대칭**으로 결정론 최소 폴백(must_visit 고정블록)으로 채운다.
         // 실패를 이유로 나머지 일자를 비워두지 않되, solveMode=MINIMAL·isFallback 으로 저하를 드러낸다.
@@ -90,7 +94,7 @@ class SecondPhaseGenerator(
         }
 
         try {
-            val applied = applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced, sessionId)
+            val applied = applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced, sessionId, preference, companionType)
             sessionId?.let { sessions.completed(it, applied?.isFallback ?: false, applied?.candidatesSummary?.level) }
         } catch (e: Exception) {
             // 폴백조차 반영하지 못한 경우 — 상태로 드러낸다(침묵 금지).
@@ -114,6 +118,8 @@ class SecondPhaseGenerator(
         isRegeneration: Boolean,
         assemblyUnplaced: List<UnplacedMustVisit>,
         sessionId: UUID?,
+        preference: PreferenceProfile?,
+        companionType: String?,
     ): Itinerary? {
         // 1) 현재 상태를 읽어 최종 일자 목록을 만든다(아직 쓰지 않는다).
         val current = itineraries.findByTrip(tripId).firstOrNull()
@@ -127,7 +133,7 @@ class SecondPhaseGenerator(
         val allDays = current.days + remaining
 
         // 2) 근거를 받아 온다. 실패는 어댑터가 빈 맵으로 접는다 — 근거가 없다고 일정을 죽이지 않는다.
-        val reasons = scheduleAgent.explanations(tripId, allDays.toOutput(current, clock.instant()))
+        val reasons = scheduleAgent.explanations(tripId, allDays.toOutput(current, clock.instant()), preference, companionType)
         val withReasons = allDays.map { d ->
             ItineraryDay.of(
                 d.date, d.dayOrder,

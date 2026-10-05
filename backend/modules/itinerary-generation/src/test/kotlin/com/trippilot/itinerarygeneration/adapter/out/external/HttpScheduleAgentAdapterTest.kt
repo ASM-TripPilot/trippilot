@@ -490,6 +490,21 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         result.alternatives shouldBe mapOf("2026-08-01#$altPoiId" to "비 오면 여기가 나아요")
     }
 
+    "explanations — 그 여행의 취향·동행을 실어 묻는다(BR-U1-38)" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/explanations"))
+            .andExpect(jsonPath("$.preference_profile.styles[0]").value("미식"))
+            .andExpect(jsonPath("$.companion_type").value("혼자"))
+            .andRespond(withSuccess("""{"explanations":{}}""", MediaType.APPLICATION_JSON))
+
+        adapter.explanations(
+            UUID.randomUUID(), dummyOutput(),
+            PreferenceProfile(listOf("미식"), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null), "혼자",
+        )
+
+        server.verify()
+    }
+
     /**
      * **옛 응답도 깨지지 않는다** — 두 필드가 없던 시절의 AI 가 돌아와도 슬롯 근거는 살아야 한다.
      * 기본값이 빈 맵이라 성립하는데, 그 기본값이 사라지면 역직렬화가 통째로 실패해 근거가 다 없어진다.
@@ -659,6 +674,21 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andRespond(withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON))
 
         adapter.proposeSlotCandidates(candidatesInput())
+
+        server.verify()
+    }
+
+    "슬롯 후보 요청에 그 여행의 취향·동행이 실린다 — ALTERNATIVE_SELECTION 페르소나(BR-U1-38)" {
+        val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
+            .andExpect(jsonPath("$.preference_profile.styles[0]").value("미식"))
+            .andExpect(jsonPath("$.companion_type").value("친구"))
+            .andRespond(withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON))
+
+        adapter.proposeSlotCandidates(candidatesInput().copy(
+            preferenceProfile = PreferenceProfile(listOf("미식"), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
+            companionType = "친구",
+        ))
 
         server.verify()
     }

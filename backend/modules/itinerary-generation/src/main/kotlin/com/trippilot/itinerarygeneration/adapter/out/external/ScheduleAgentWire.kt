@@ -247,6 +247,10 @@ internal data class AiExplanationsRequest(
     val tripId: String,
     val itinerary: AiSchedulePayload,
     val requestMeta: AiRequestMeta,
+    /** 그 여행의 취향(BR-U1-38) — 오면 상대가 이것으로 근거를 쓴다. null 이면 종전 재조회(계정 취향). */
+    val preferenceProfile: PreferenceProfile? = null,
+    /** 그 여행의 동행 — 계정의 평소 동행보다 우선. */
+    val companionType: String? = null,
 )
 
 internal data class AiExplanationsResponse(
@@ -470,6 +474,10 @@ internal data class AiAlternativesRequest(
      */
     val categories: List<String> = emptyList(),
     val requestMeta: AiRequestMeta,
+    /** 그 여행의 취향(BR-U1-38) — ALTERNATIVE_SELECTION 의 페르소나. null 이면 종전 재조회(계정 취향). */
+    val preferenceProfile: PreferenceProfile? = null,
+    /** 그 여행의 동행 — 계정의 평소 동행보다 우선. */
+    val companionType: String? = null,
 )
 
 /**
@@ -518,6 +526,8 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         // 미매핑·null 이면 빈 목록(필터 없음). BE 후처리 필터(SlotCandidateService)는 그대로 둔다(이중 방어).
         categories = ConceptCategories.of(concept).orEmpty().mapNotNull(::categoryBoundaryCodeOf).sorted(),
         requestMeta = AiRequestMeta(requestMeta.requestId, requestMeta.requestedAt, requestMeta.deadlineMs),
+        preferenceProfile = preferenceProfile,
+        companionType = companionType,
     )
 }
 

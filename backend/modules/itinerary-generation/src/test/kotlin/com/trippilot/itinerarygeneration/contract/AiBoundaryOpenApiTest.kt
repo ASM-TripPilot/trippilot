@@ -357,6 +357,8 @@ private val sampleAlternativesRequest = AiAlternativesRequest(
     categories = listOf("FOOD"),
     requestMeta = AiRequestMeta(UUID.randomUUID().toString(), Instant.parse("2026-09-01T00:00:00Z"), 25_000L),
     tripId = UUID.randomUUID().toString(),
+    preferenceProfile = sampleInput.preferenceProfile,
+    companionType = "친구",
 )
 
 private val sampleAlternativesResponse = AiAlternativesResponse(
@@ -374,7 +376,7 @@ private val sampleRequestMeta =
     AiRequestMeta(UUID.randomUUID().toString(), Instant.parse("2026-08-01T00:00:00Z"), 20_000L)
 
 private val sampleExplanationsRequest =
-    AiExplanationsRequest(UUID.randomUUID().toString(), samplePayload, sampleRequestMeta)
+    AiExplanationsRequest(UUID.randomUUID().toString(), samplePayload, sampleRequestMeta, sampleInput.preferenceProfile, "친구")
 
 /** 모든 필드를 채운다 — 비우면 그 키가 직렬화에서 빠져 비교가 헐거워진다. */
 private val sampleExplanationsResponse =

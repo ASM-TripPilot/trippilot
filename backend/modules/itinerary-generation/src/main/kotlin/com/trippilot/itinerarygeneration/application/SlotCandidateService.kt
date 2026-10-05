@@ -24,6 +24,8 @@ import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.profile.api.PreferenceFacade
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.util.Locale
@@ -52,6 +54,9 @@ class SlotCandidateService(
     /** 생성 시점 점수 후보 풀(TRIP-969) — 즉답의 재료. 없으면(미생성·http 미개통) 종전 경로 그대로다. */
     private val scoredPools: ScoredCandidatePoolStore,
     private val clock: Clock,
+    /** 그 여행의 취향(BR-U1-38) — 생성과 같은 척도로 후보를 고르게. 계정 취향은 안 실린 축만. */
+    private val preferences: PreferenceFacade,
+    private val personalization: PersonalizationPort,
 ) {
     fun propose(accountId: UUID, tripId: UUID, request: RequestSlotCandidates): SlotCandidatesOutput {
         // 형식 검사를 먼저 — 일정이 없더라도 잘못된 요청은 400 이어야 한다(404 로 덮으면 원인을 오인한다).
@@ -130,7 +135,7 @@ class SlotCandidateService(
                     excludePoiIds = inItinerary,
                     placementReason = matches.single().value.placementReason,
                     requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), CANDIDATES_DEADLINE_MS),
-                ),
+                ).withTripPreference(accountId, tripId),
             )
         } catch (e: ScheduleAgentCallFailed) {
             log.warn("슬롯 후보 제안 실패 — 503 으로 표면화합니다(폴백 없음). tripId={} errorCode={}", tripId, e.errorCode, e)
@@ -286,6 +291,18 @@ class SlotCandidateService(
 
     private val log = org.slf4j.LoggerFactory.getLogger(SlotCandidateService::class.java)
 
+
+    /**
+     * 느린 경로(AI 왕복)에만 취향을 싣는다 — 즉답은 생성 때 이미 그 취향으로 매긴 점수라 다시 물을 게 없다.
+     * 매핑은 생성과 **같은 함수**(`overriddenBy` → `toProfile`)다 — 후보가 생성과 다른 취향으로 고르면
+     * "일정은 미식인데 다른 후보는 액티비티"가 된다.
+     */
+    private fun SlotCandidatesInput.withTripPreference(accountId: UUID, tripId: UUID): SlotCandidatesInput {
+        val ctx = trips.findGenerationContext(accountId, tripId) ?: return this
+        val profile = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
+            .toProfile(personalization.hintsFor(accountId))
+        return copy(preferenceProfile = profile, companionType = ctx.companionType)
+    }
     companion object {
         /**
          * 3s → 15s (2026-09-08, 팀 결정). 사용자가 화면에서 기다리는 동작이라 처음엔 생성(20s)보다
