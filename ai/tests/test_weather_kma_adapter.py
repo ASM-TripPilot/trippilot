@@ -66,7 +66,7 @@ def _item(fcst_date: str, category: str, value: str) -> dict:
 
 
 def _adapter(http: _FakeHttp, now: datetime = _NOW) -> KmaWeatherAdapter:
-    return KmaWeatherAdapter(http, "test-key", now_fn=lambda: now)
+    return KmaWeatherAdapter(http, "test-key+/=", now_fn=lambda: now)
 
 
 # ── ① 격자 변환 — 알려진 검증값 (기상청 LCC 공식) ─────────────────────
@@ -146,7 +146,7 @@ def test_request_params_carry_grid_base_and_key() -> None:
     # 공공데이터포털 엔드포인트·serviceKey (팀 결정 2026-10-02 — 백엔드와 같은 포털 키 하나).
     assert url == ("https://apis.data.go.kr/1360000/"
                    "VilageFcstInfoService_2.0/getVilageFcst")
-    assert params["serviceKey"] == "test-key"
+    assert params["serviceKey"] == "test-key+/="
     assert "authKey" not in params
     assert (int(params["nx"]), int(params["ny"])) \
         == latlon_to_grid(_COORD.lat, _COORD.lng)
@@ -193,6 +193,57 @@ def test_one_call_per_forecast_and_zero_for_empty_days() -> None:
     assert len(http.calls) == 1  # 빈 요청은 호출 없음
 
 
+def test_endpoint_follows_the_key_shape() -> None:
+    """주소와 키 파라미터를 **키 모양에서** 고른다 — 짝을 틀리게 만들 수 없게.
+
+    이 짝이 어긋나 날씨 보정이 두 번 조용히 꺼졌다. 포털 디코딩 키는 base64 라
+    `+ / =` 를 담고(실측 88자), API 허브 키는 짧은 영숫자다(실측 22자).
+    """
+    from trippilot.poi_curation.adapters.kma_weather import endpoint_for
+
+    portal_base, portal_param = endpoint_for("abc+def/ghi=")
+    assert "apis.data.go.kr" in portal_base
+    assert portal_param == "serviceKey"
+
+    hub_base, hub_param = endpoint_for("dfJ3o3pTRqiyd6N6Uyao5A")
+    assert "apihub.kma.go.kr" in hub_base
+    assert hub_param == "authKey"
+
+
+def test_hub_key_sends_authkey_to_the_hub() -> None:
+    """허브 키를 주면 허브 주소로 `authKey` 가 나간다 (실측: 200 NORMAL_SERVICE)."""
+    http = _FakeHttp(_body({"item": []}))
+    KmaWeatherAdapter(http, "huBkey1234567890abcdef").daily_forecast(_COORD, (_D1,))
+    url, params = http.calls[0]
+    assert "apihub.kma.go.kr" in url
+    assert params["authKey"] == "huBkey1234567890abcdef"
+    assert "serviceKey" not in params  # 포털 이름을 같이 보내지 않는다
+
+
+def test_portal_key_sends_servicekey_to_the_portal() -> None:
+    """포털 키를 주면 종전 그대로다 — 이 변경으로 기존 배포가 바뀌지 않는다."""
+    http = _FakeHttp(_body({"item": []}))
+    KmaWeatherAdapter(http, "AbC+dEf/123=").daily_forecast(_COORD, (_D1,))
+    url, params = http.calls[0]
+    assert "apis.data.go.kr" in url
+    assert params["serviceKey"] == "AbC+dEf/123="
+    assert "authKey" not in params
+
+
+def test_explicit_base_url_derives_its_own_key_param() -> None:
+    """주소를 직접 주면 **키 파라미터가 주소에서 따라온다.**
+
+    주소만 바꾸고 파라미터를 안 바꾸는 조합이 바로 두 번의 사고였다 — 만들 수 없게 한다.
+    """
+    http = _FakeHttp(_body({"item": []}))
+    hub = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0"
+    # 포털 모양 키인데 주소는 허브 → 파라미터는 주소를 따라 authKey 가 된다
+    KmaWeatherAdapter(http, "AbC+dEf/123=", base_url=hub).daily_forecast(_COORD, (_D1,))
+    url, params = http.calls[0]
+    assert url.startswith(hub)
+    assert "authKey" in params and "serviceKey" not in params
+
+
 def test_daily_and_hourly_together_stay_one_call() -> None:
     """`WeatherProvider.fetch` 가 부르는 방식 그대로 — 둘을 합쳐도 HTTP 1건이다.
 
@@ -217,7 +268,7 @@ def test_a_new_publication_slot_refetches() -> None:
     """
     http = _FakeHttp(_body({"item": []}))
     now = _NOW
-    adapter = KmaWeatherAdapter(http, "test-key", now_fn=lambda: now)
+    adapter = KmaWeatherAdapter(http, "test-key+/=", now_fn=lambda: now)
     adapter.daily_forecast(_COORD, (_D1,))
     assert len(http.calls) == 1
     now = _NOW.replace(hour=8, minute=15)  # 0800 발표분이 열렸다
@@ -255,7 +306,7 @@ def test_auth_error_warns_once_per_process(monkeypatch, caplog) -> None:
     warns = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warns) == 1
     assert "403" in warns[0].getMessage() and "활용신청" in warns[0].getMessage()
-    assert "test-key" not in caplog.text  # 키 값 출력 금지
+    assert "test-key+/=" not in caplog.text  # 키 값 출력 금지
 
 
 def test_non_auth_failure_does_not_warn(monkeypatch, caplog) -> None:

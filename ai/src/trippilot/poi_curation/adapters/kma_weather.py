@@ -40,8 +40,34 @@ from trippilot.poi_curation.sourcing.tourapi import HttpGetJson
 from trippilot.ports.weather_port import WeatherError
 
 _KST = timezone(timedelta(hours=9))
-_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
+# 같은 「단기예보 조회서비스 2.0」을 두 곳이 서비스한다. 경로와 응답 JSON 계층은 같고
+# **키 파라미터 이름과 키 종류만 다르다**(2026-10-02·10-05 실호출 대조).
+_PORTAL_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
+_APIHUB_BASE = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0"
+_APIHUB_HOST = "apihub.kma.go.kr"
+_BASE = _PORTAL_BASE  # 과거 이름 — 밖에서 참조하던 자리를 깨지 않는다
 _OK_CODE = "00"  # NORMAL_SERVICE
+
+
+def endpoint_for(service_key: str) -> tuple[str, str]:
+    """키 모양에서 (주소, 키 파라미터 이름)을 고른다 — 틀린 짝을 못 만들게.
+
+    **왜 자동으로 고르나**: 이 짝이 어긋나 날씨 보정이 두 번 조용히 꺼졌다. 주소와 키를
+    사람이 따로 맞춰야 하는 구조였기 때문이다. 키는 어차피 한 곳(`WEATHER_API`)에서
+    오므로 짝을 **키에서 파생**시키면 맞춰야 할 값이 하나로 줄어든다.
+
+    구분은 키 형식이다. 공공데이터포털 **디코딩 키**는 base64 라 ``+ / =`` 를 담는다
+    (실측 88자). 기상청 API 허브 키는 짧은 영숫자다(실측 22자).
+
+    짐작이 아니라 실측 네 조합이 근거다:
+        허브 키 + 허브 → 200 NORMAL_SERVICE      허브 키 + 포털 → 403 SERVICE_KEY_IS_NOT_REGISTERED
+        포털 키 + 허브 → 401 유효한 인증키 아님   포털 키 + 포털 → 서비스 등록 상태에 달림
+
+    형식이 또 늘면 주소를 직접 줄 수 있다(`base_url`, env `WEATHER_API_BASE`).
+    """
+    if any(c in service_key for c in "+/="):
+        return _PORTAL_BASE, "serviceKey"
+    return _APIHUB_BASE, "authKey"
 # 발표시각(base_time) 8회 고정 + API 제공은 발표 후 ~10분 (활용가이드)
 _BASE_HOURS = (2, 5, 8, 11, 14, 17, 20, 23)
 _PROVIDE_LAG_MIN = 10
@@ -132,9 +158,18 @@ class KmaWeatherAdapter:
         service_key: str,
         *,
         now_fn: Callable[[], datetime] | None = None,
+        base_url: str | None = None,
     ) -> None:
         self._http = http
         self._key = service_key
+        # 주소를 직접 주면 그것을 쓰고, **키 파라미터 이름은 주소에서 따라온다** —
+        # 주소만 바꾸고 파라미터를 안 바꾸는 실수를 만들 수 없게 한다.
+        derived_base, derived_param = endpoint_for(service_key)
+        self._base = (base_url or derived_base).rstrip("/")
+        self._key_param = "authKey" if _APIHUB_HOST in self._base else "serviceKey"
+        if not base_url:
+            self._key_param = derived_param
+        _log.info("기상청 단기예보 = %s (키 파라미터 %s)", self._base, self._key_param)
         self._now = now_fn if now_fn is not None else lambda: datetime.now(_KST)
         # 같은 (좌표, 발표분) 응답을 기억한다 — 아래 `_fetch_body` 참고.
         self._last: tuple[tuple[float, float, str, str], object] | None = None
@@ -178,9 +213,9 @@ class KmaWeatherAdapter:
             return self._last[1]
         try:
             body = self._http.get_json(
-                f"{_BASE}/getVilageFcst",
+                f"{self._base}/getVilageFcst",
                 {
-                    "serviceKey": self._key,
+                    self._key_param: self._key,
                     "dataType": "JSON",
                     "pageNo": "1",
                     "numOfRows": str(_NUM_OF_ROWS),
