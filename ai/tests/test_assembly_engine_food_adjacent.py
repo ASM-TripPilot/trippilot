@@ -97,3 +97,38 @@ def test_drop_food_runs_never_drops_pinned_nodes() -> None:
     nodes = [_node(_F), _node(_F, pin=720), _node(_F)]
     # 고정 블록(필수 방문)은 visit=1 강제라 힌트에서 빼면 가정이 모순 — 앞의 자유 FOOD 를 대신 뺀다
     assert drop_food_runs([0, 1, 2], nodes) == [1]
+
+
+# ── 뺀 FOOD 자리를 비FOOD 로 보충 ─────────────────────────────────────────
+# 빼기만 하면 힌트가 한 곳 짧아져 결정론 한도 안에 다시 못 채우는 날이 생겼다(로컬 실스택
+# A/B 하루 장소 5.25 → 5.05). 그 자리 시각창에 들어가는 비FOOD 하나를 끼운다.
+
+def _tnode(cat, lo, hi, score=0.5, stay=60, pin=None):
+    return {**_node(cat, pin), "lo": lo, "hi": hi, "stay": stay, "score": score}
+
+
+def _travel(i, j):
+    return 10
+
+
+def test_refill_puts_non_food_where_food_was_dropped() -> None:
+    # 0 S 09:00 → 1 F 12:00 → 2 F 13:10(뺌). 후보: 3 FOOD(제외)·4 S 저점·5 S 고점·6 S 창 밖
+    nodes = [_tnode(_S, 540, 600), _tnode(_F, 700, 780), _tnode(_F, 700, 800),
+             _tnode(_F, 700, 1000, score=0.9), _tnode(_S, 600, 1000, score=0.3),
+             _tnode(_S, 600, 1000, score=0.8), _tnode(_S, 600, 700, score=0.95)]
+    starts = {0: 540, 1: 720, 2: 790}
+    assert drop_food_runs([0, 1, 2], nodes, _travel, starts) == [0, 1, 5]
+
+
+def test_refill_without_fitting_candidate_only_drops() -> None:
+    nodes = [_tnode(_S, 540, 600), _tnode(_F, 700, 780), _tnode(_F, 700, 800),
+             _tnode(_S, 600, 700, score=0.9)]  # 12:00+60+10 = 13:10 > 창 끝 11:40
+    assert drop_food_runs([0, 1, 2], nodes, _travel, {0: 540, 1: 720, 2: 790}) == [0, 1]
+
+
+def test_refill_respects_next_node_window_and_never_uses_pinned() -> None:
+    # 다음 노드(3, 고정 14:00)에 못 닿는 후보·고정 후보는 끼우지 않는다
+    nodes = [_tnode(_F, 700, 780), _tnode(_F, 700, 800), _tnode(_S, 600, 1000, stay=120),
+             _tnode(_S, 840, 840, pin=840), _tnode(_S, 790, 790, stay=20, pin=790)]
+    starts = {0: 720, 1: 790, 3: 840}
+    assert drop_food_runs([0, 1, 3], nodes, _travel, starts) == [0, 3]

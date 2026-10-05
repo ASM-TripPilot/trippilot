@@ -68,7 +68,8 @@ _RETRY_DET_FACTOR = 5
 _REORDER_DET_LIMIT = 0.5
 
 
-def drop_food_runs(order: list[int], nodes) -> list[int]:
+def drop_food_runs(order: list[int], nodes, travel=None,
+                   starts: dict[int, int] | None = None) -> list[int]:
     """웜스타트 힌트 순서에서 FOOD→FOOD 연속을 뺀다 — 고정 블록(pin) 노드는 절대 빼지 않는다.
 
     그리디(규칙 폴백)는 하루 끝에 FOOD 만 남으면 식당 뒤에 식당을 그대로 놓고, 그 순서가 완전
@@ -76,19 +77,54 @@ def drop_food_runs(order: list[int], nodes) -> list[int]:
     18:36 치킨 → 19:52 쭈꾸미 — 최적해라면 둘째를 빼는 게 늘 이득인데 남았다). 힌트는 출발점일
     뿐이라 방문 하나를 빼도 정확성과 무관하다(경로에서 노드를 빼면 이동만 준다). 연속 판정은
     ③ 인접 억제(`_meal_soft_terms`)와 같은 기준 — `PoiCategory.FOOD`. 둘 다 고정이면 둔다.
+
+    `travel`·`starts`(노드 → 그리디 시작 분)를 주면 뺀 뒤 FOOD 자리를 비FOOD 하나로 채운다 —
+    빼기만 하면 힌트가 한 곳 짧아져 한도 안에 다시 못 채우는 날이 생겼다(실스택 A/B 하루 장소
+    5.25 → 5.05). 후보는 순서에 없는 자유 비FOOD 중 앞 노드 끝 + 이동으로 자기 창(`hi`)에
+    들고, 끝 + 이동으로 다음 노드 창에도 드는 것 — 점수 높은 순, 같으면 앞 노드와 가까운 순.
+    없으면 빼기만. 그 뒤 시각이 밀려 경로 완성이 안 되면 `_hint_path` 가 보충 없는 순서로
+    다시 한다.
     """
+    taken = set(order)
     kept: list[int] = []
-    for i in order:
+    for pos, i in enumerate(order):
         is_food = nodes[i]["poi"].category is PoiCategory.FOOD
         prev = kept[-1] if kept else None
         if (is_food and prev is not None
                 and nodes[prev]["poi"].category is PoiCategory.FOOD):
-            if nodes[i]["pin"] is None:
-                continue                  # 뒤의 자유 FOOD 를 뺀다
+            if nodes[i]["pin"] is None:   # 뒤의 자유 FOOD 를 뺀다
+                if starts is not None:
+                    nxt = order[pos + 1] if pos + 1 < len(order) else None
+                    c = _refill(prev, nxt, nodes, travel, starts, taken)
+                    if c is not None:
+                        taken.add(c)
+                        kept.append(c)
+                continue
             if nodes[prev]["pin"] is None:
                 kept.pop()                # 뒤가 고정이면 앞의 자유 FOOD 를 뺀다
         kept.append(i)
     return kept
+
+
+def _refill(prev: int, nxt: int | None, nodes, travel, starts: dict[int, int],
+            taken: set[int]) -> int | None:
+    """`drop_food_runs` 의 보충 후보 하나 — 고르면 `starts` 에 그 시작 분을 적는다."""
+    end = starts[prev] + nodes[prev]["stay"]
+    best = None
+    for c, n in enumerate(nodes):
+        if c in taken or n["pin"] is not None or n["poi"].category is PoiCategory.FOOD:
+            continue
+        s = max(n["lo"], end + travel(prev, c))
+        if s > n["hi"] or (nxt is not None
+                           and s + n["stay"] + travel(c, nxt) > nodes[nxt]["hi"]):
+            continue
+        key = (-n["score"], travel(prev, c), c)
+        if best is None or key < best[0]:
+            best = (key, c, s)
+    if best is None:
+        return None
+    starts[best[1]] = best[2]
+    return best[1]
 
 
 def prefilter_cut(
@@ -408,9 +444,11 @@ class OrToolsAssembler:
         # 같은 POI 고정 둘이면 노드도 둘이다 — 핀 시각이 맞는 노드를 먼저 찾는다
         by_poi = {n["poi"].poi_id: i for i, n in enumerate(nodes)}
         by_pin = {(n["poi"].poi_id, n["pin"]): i for i, n in enumerate(nodes)}
-        order = drop_food_runs([by_pin.get((pid, s), by_poi[pid]) for pid, s in sorted(
-            hint, key=lambda h: (h[1], str(h[0]))) if pid in by_poi], nodes)
-        self._hint_path(m, order, visit, arcs, cp_solver)
+        greedy = [(by_pin.get((pid, s), by_poi[pid]), s) for pid, s in sorted(
+            hint, key=lambda h: (h[1], str(h[0]))) if pid in by_poi]
+        plain = drop_food_runs([i for i, _ in greedy], nodes)
+        order = drop_food_runs([i for i, _ in greedy], nodes, travel, dict(greedy))
+        self._hint_path(m, order, visit, arcs, cp_solver, plain)
         status = cp_solver.Solve(m)
         resp = cp_solver.ResponseProto()
         if (status in (cp_model.FEASIBLE, cp_model.UNKNOWN)
@@ -508,7 +546,7 @@ class OrToolsAssembler:
 
     @staticmethod
     def _hint_path(m: cp_model.CpModel, order: list[int], visit, arcs,
-                   solver: cp_model.CpSolver) -> None:
+                   solver: cp_model.CpSolver, plain: list[int] | None = None) -> None:
         """노드 방문 순서 → **완전** 힌트 (TRIP-1176).
 
         종전엔 그리디 해의 visit=1·start 만 힌트했다(실 덤프 3,658 변수 중 10개). CP-SAT 은
@@ -531,6 +569,9 @@ class OrToolsAssembler:
         버린다) 모델은 가해인데 그리디는 빈 날이 생긴다. 그 경로 완성은 반드시 INFEASIBLE 이고
         (AddCircuit 은 깊이0 자기루프가 없어 빈 회로 불가), 부분 힌트는 '전부 0' — 모델과
         모순이고 불완전하다. 힌트가 없는 편이 낫다(실 덤프는 용량 컷만으로도 풀린다).
+
+        `plain` 은 FOOD 자리 보충(`drop_food_runs`) 없는 순서 — 보충한 순서의 완성이
+        INFEASIBLE 이면 부분 힌트로 내려가기 전에 이것으로 한 번 더 완성한다.
         """
         if not order:
             return
@@ -548,6 +589,9 @@ class OrToolsAssembler:
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             for idx, value in enumerate(solver.ResponseProto().solution):
                 m.AddHint(m.GetIntVarFromProtoIndex(idx), value)
+            return
+        if plain is not None and plain != order:
+            OrToolsAssembler._hint_path(m, plain, visit, arcs, solver)
             return
         for i in range(k):
             m.AddHint(visit[i], i in on)
