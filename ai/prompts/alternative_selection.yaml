@@ -1,4 +1,4 @@
-# AlternativeSelection 프롬프트 v0.1.0 — 정본: planb-rag-design.md §6(Augmented Prompt 구조)·
+# AlternativeSelection 프롬프트 v0.3.0 (0.3.0: 사용자 원문 칸 · 0.2.0: KB-5 장소 설명) — 정본: planb-rag-design.md §6(Augmented Prompt 구조)·
 # u4 FD domain-entities §1(상위 티어). semver는 반드시 따옴표. few-shot 예시는 K-2에서 보강.
 feature: ALTERNATIVE_SELECTION
 version: "0.3.0"

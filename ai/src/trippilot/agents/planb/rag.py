@@ -638,7 +638,8 @@ _REASON_KO: Mapping[str, str] = MappingProxyType(
 def _situation_query(request: PlanBRagRequest) -> str:
     reason = _REASON_KO.get(request.reason, request.reason)
     # 사용자 원문이 있으면 질의에 붙인다 — "비 와서 실내로"면 KB-3·KB-5 가 그 말에 붙는다.
-    said = f" {request.user_request.strip()}" if request.user_request.strip() else ""
+    # 앞 100자만 — 긴 글이 트리거·사유 몫을 덮어 비 예보 같은 상황 지식이 밀리지 않게.
+    said = f" {request.user_request.strip()[:100]}" if request.user_request.strip() else ""
     return f"{request.trigger.kind.value} {reason} 상황{said}"
 
 

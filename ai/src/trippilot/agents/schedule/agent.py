@@ -319,14 +319,17 @@ class ScheduleAgent:
         #    (2026-10-05 실측). ②″ 앞이어야 PlanB 가산·거절 강등과 같은 판에서 합성된다.
         if request.prefer_categories or request.avoid_categories or request.prefer_near:
             index = {p.poi_id: p for p in pool.pois}
+            before = candidates
             candidates = apply_directives(
                 candidates, index, prefer=request.prefer_categories,
                 avoid=request.avoid_categories,
                 near_anchor=request.anchor if request.prefer_near else None,
             )
+            # 실제로 점수가 바뀐 건수 — 0 이면 지시가 일정에 아무 효과가 없었다(침묵 금지).
+            changed = sum(1 for a, b in zip(before, candidates) if a.score != b.score)
             self._observe(
                 trace_id, now, "directives", "directives", "directives",
-                f"directives_applied:{len(candidates)}"
+                f"directives_applied:{changed}/{len(candidates)}"
                 f"{' near' if request.prefer_near else ''}",
             )
 

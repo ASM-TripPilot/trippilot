@@ -1,4 +1,4 @@
-# ReplanDirectiveTranslation 프롬프트 v0.1.0 — 정본: ai-backend-replan-연동-설계.md §3.
+# ReplanDirectiveTranslation 프롬프트 v0.2.0 (0.2.0: 부정·몸 상태 규칙) — 정본: ai-backend-replan-연동-설계.md §3.
 # 지시 목록은 서버가 주입($directives) — 프롬프트에 박지 않는다. 사전(KB-4)이 20→30종이
 # 되어도 이 파일은 안 바뀐다(edit_translation 의 $edit_ops 와 같은 규약).
 # semver는 반드시 따옴표.

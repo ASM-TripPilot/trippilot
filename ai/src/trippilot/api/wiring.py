@@ -156,6 +156,7 @@ from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
 from trippilot.llm_gateway.gates.replan_directive_translation import ReplanDirectiveTranslationGate
 from trippilot.llm_gateway.workers.edit_translation import EditTranslationWorker
 from trippilot.llm_gateway.workers.replan_directive_translation import (
+    MAX_DIRECTIVES,
     DirectiveTranslationInput,
     ReplanDirectiveTranslationWorker,
     options_from,
@@ -985,7 +986,17 @@ _REASON_TO_TRIGGER: Mapping[str, TriggerKind] = {
 # ADD_CAFE 로 잡혀 카페가 **늘었고**, 부정 뒤만 떼어 매칭하면 "가고 싶어" 같은 빈 술어가
 # 엉뚱한 지시(ACTIVITY_FOCUS)에 붙었다(2026-10-05 실측). 부정문은 번역 LLM 과 PlanB 선택
 # 프롬프트가 원문 그대로 읽는다.
-_NEGATION = re.compile(r"말고|그만|빼고|빼\s*줘|싫|없이|제외|가지\s*마|안\s*가")
+# 어간으로 넓게 잡는다("안 갈래"·"가지 말자"·"카페 빼") — 놓치면 반대 지시가 붙고, 잘못 걸리면
+# (예: "안 가본 곳") 번역 LLM 이 한 번 더 도는 비용뿐이다. 그래서 노트도 "의심"이다.
+_NEGATION = re.compile(
+    r"말고|말자|그만(?!큼)|빼고|빼\s*줘|빼(?=\s|$)|싫|없이|제외|가지\s*[마말]|안\s*[가갈갔]|별로")
+
+def _exact_alias(text: str, specs: Sequence[DirectiveSpec]) -> tuple[DirectiveSpec, ...]:
+    """공백을 눌러 사전 표현과 **정확히** 같은 지시. 부정문에서만 쓰는 결정론 경로."""
+    said = " ".join(text.split())
+    return tuple(s for s in specs
+                 if any(" ".join(a.split()) == said for a in (s.label, *s.aliases)))[:1]
+
 
 # RANKING 지시 중 "가까운 데로" 로 집행하는 것. END_NEAR_STAY(숙소 근처 마무리)는 마지막
 # 슬롯만 당겨야 해서 거리 감점으로 못 푼다 — 무효로 밝힌다.
@@ -1002,6 +1013,8 @@ _TRANSLATE_TIMEOUT_SEC = 4.0
 # `llm_retry_share=0.35` 로 갈리므로 1차 6.2초 · 재시도 4.4초 — 실측 중앙값
 # (gpt-5.6-sol 5.0초)에 1차가 들어가고 꼬리는 재시도가 받는다. 남는 12.5초에서
 # 어셈블리 바닥 5초를 떼면 점수 상한이 7.5초로, 실호출 바닥 ~3초에 여유가 있다.
+# 몫은 **PlanB 진입 시점의 잔여**에 곱한다 — 앞에서 자유 입력 번역(최대 4초)이 돌면 그만큼
+# 둘이 나눠 줄인다(전체 예산에 곱하면 번역분이 전부 점수·어셈블리 몫에서 빠진다).
 # PlanB 가 예산을 다 태우면 `c1_min_ms` 진입 임계가 점수를 규칙으로 내린다 —
 # 일정은 나오고 강등만 기록된다 (INV-4).
 _REPLAN_PLANB_BUDGET_SHARE = 0.5
@@ -1679,6 +1692,11 @@ class WiredItineraryOrchestrator:
 
         persona = _inline_persona(request) or self._persona_from(packets)
         daily_rain = self._rain_from(packets, dates, now)
+        # 해석은 했는데 풀에 그 종류가 0곳이면 지시는 일정에 닿을 수 없다 — "쇼핑하고 싶어"를
+        # 알아듣고 쇼핑이 안 오는 이유가 풀인지 점수인지 가르는 노트(침묵 금지).
+        absent = sorted(c.value for c in prefer - {p.category for p in pool.pois})
+        if absent:
+            notes.append(f"directive_no_candidates: {','.join(absent)}")
 
         not_before = _replan_not_before(request, self._tz)
         blocks = _replan_fixed_blocks(request, self._tz)
@@ -1689,8 +1707,8 @@ class WiredItineraryOrchestrator:
         # 거리 0 으로 규칙 1위가 되어 숏리스트·LLM 선택 한 자리를 헛되이 차지한다.
         planb = self._rag.run(replace(
             _replan_rag_request(
-                request, pool, persona, daily_rain, trace_id, now,
-                notes=notes, deadline_ms=_deadline_budget(meta),
+                request, pool, persona, daily_rain, trace_id, now, notes=notes,
+                deadline_ms=max(1, _deadline_budget(meta) - (self._clock.monotonic_ms() - t0)),
             ),
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
             | {b.poi_id for b in past},
@@ -1758,7 +1776,10 @@ class WiredItineraryOrchestrator:
         self, request: schemas.ReplanRequest, notes: list[str], *,
         trace_id: TraceId, now: datetime, deadline_ms: int,
     ) -> tuple[list[str], list[str], frozenset[PoiCategory], frozenset[PoiCategory], bool]:
-        """칩 + 자유입력 → (해석분, 미지분, 선호 카테고리, 회피 카테고리).
+        """칩 + 자유입력 → (해석분, 미지분, 선호 카테고리, 회피 카테고리, 가까운 데로).
+
+        자유입력은 ① 임베딩 매칭(부정문이면 사전 표현 정확일치만) ② 못 잡으면 번역 LLM(A-3)
+        ③ 그래도 없으면 `free_text_unresolved` — 원문은 어느 경우든 PlanB 선택 프롬프트로 간다.
 
         **`prefer`/`avoid` 를 실제로 쓰는 첫 자리다** — 2026-09-24 실측으로 사전 20종의
         `enforced_by`·`prefer_categories`·`avoid_categories` 를 읽는 코드가 `src/`
@@ -1775,10 +1796,14 @@ class WiredItineraryOrchestrator:
 
         known, unknown = resolve_chips(request.directives, self._directives)
         specs = list(known)
-        if request.free_text:
+        if request.free_text and request.free_text.strip():
             matched: tuple[DirectiveSpec, ...] = ()
             if _NEGATION.search(request.free_text):
-                notes.append("free_text_negation: 임베딩 매칭 생략")
+                # 사전 표현 자체에 부정어가 든 것("야외 말고"→INDOOR·"힘든 건 빼고")은 정확히
+                # 일치할 때만 그대로 받는다 — 그 밖의 부정문은 임베딩이 반대로 잡는다.
+                matched = _exact_alias(request.free_text, self._directives)
+                if not matched:
+                    notes.append("free_text_negation: 부정 의심 — 임베딩 매칭 생략")
             elif self._embedding is not None and self._vector_store is not None:
                 try:
                     matched = match_free_text(
@@ -1836,18 +1861,24 @@ class WiredItineraryOrchestrator:
         """
         if self._directive_translator is None or not self._directives:
             return ()
-        result = self._directive_translator.translate(
-            DirectiveTranslationInput(utterance=text, options=options_from(self._directives)),
-            trace_id, now,
-            timeout_sec=min(_TRANSLATE_TIMEOUT_SEC, deadline_ms / 1000 * 0.15),
-        )
+        try:
+            result = self._directive_translator.translate(
+                DirectiveTranslationInput(utterance=text, options=options_from(self._directives)),
+                trace_id, now,
+                timeout_sec=min(_TRANSLATE_TIMEOUT_SEC, deadline_ms / 1000 * 0.15),
+            )
+        except Exception as e:  # 설정 버그(라우트·렌더)도 재계획을 죽이지 않는다 — 칩으로 진행
+            notes.append(f"free_text_translation_error: {type(e).__name__}")
+            return ()
         if result.is_fallback:
             notes.append(f"free_text_translation_fallback: {result.error}")
             return ()
         if result.value.dropped:
-            notes.append(f"free_text_translation_dropped: {','.join(result.value.dropped)}")
+            # 키 문자열은 LLM 이 쓴 것이라 싣지 않는다 — 건수만(노트는 백엔드 로그로 간다).
+            notes.append(f"free_text_translation_dropped: {len(result.value.dropped)}")
         table = index_of(self._directives)
-        return tuple(table[k] for k in result.value.keys if k in table)
+        # 상한은 임베딩 경로와 같다 — "전부 골라" 같은 말로 상한을 우회하지 못하게.
+        return tuple(table[k] for k in result.value.keys if k in table)[:MAX_DIRECTIVES]
 
     def _with_current_slots(
         self,

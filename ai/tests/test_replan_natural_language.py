@@ -136,12 +136,49 @@ def test_숙소_근처_마무리는_무효를_밝힌다() -> None:
 # ── ③ 부정 ────────────────────────────────────────────────────────────
 
 
-def test_부정문은_임베딩을_건너뛰고_반대로_잡지_않는다() -> None:
-    """"카페는 이제 그만" 이 ADD_CAFE 로 잡혀 카페가 늘었다 — 부정문은 임베딩에 안 넣는다."""
+def test_부정문은_임베딩에_넣지_않는다(monkeypatch) -> None:
+    """"카페는 이제 그만" 이 ADD_CAFE 로 잡혀 카페가 늘었다 — 부정문은 임베딩에 안 넣는다.
+
+    해시 fake 임베딩은 의미 유사도가 없어 "ADD_CAFE 가 안 잡혔다"로는 아무것도 증명 못 한다
+    (리뷰 지적) — 그래서 매칭 함수가 **불리지 않았음**을 본다.
+    """
+    import trippilot.api.wiring as wiring
+    calls = []
+    monkeypatch.setattr(wiring, "match_free_text", lambda *a, **k: calls.append(a) or ())
+
     body, _ = _replan(free_text="카페는 이제 그만 가고 싶어")
 
+    assert calls == []
     assert any(n.startswith("free_text_negation") for n in body["notes"]), body["notes"]
-    assert "ADD_CAFE" not in body["resolved_directives"]
+
+    _replan(free_text="쇼핑하고 싶어")  # 부정이 없으면 그대로 임베딩으로 간다
+    assert len(calls) == 1
+
+
+def test_사전_표현에_든_부정어는_정확일치로_그대로_받는다() -> None:
+    """"야외 말고"(INDOOR)·"힘든 건 빼고"(AVOID_STRENUOUS)는 사전 표현 자체다 — 부정 가드가
+    삼키면 결정론으로 잡히던 칩 문구가 LLM 성공에 달린다(리뷰가 재현한 회귀)."""
+    body, _ = _replan(free_text="야외 말고")
+    assert body["resolved_directives"] == ["INDOOR"]
+    assert not any(n.startswith("free_text_negation") for n in body["notes"])
+
+    body, _ = _replan(free_text="힘든 건  빼고")  # 공백은 눌러서 본다
+    assert body["resolved_directives"] == ["AVOID_STRENUOUS"]
+
+
+def test_흔한_부정형을_잡고_긍정어는_덜_오판한다() -> None:
+    from trippilot.api.wiring import _NEGATION
+
+    for said in ("카페는 안 갈래", "카페 가지 말자", "카페 빼", "카페는 별로", "카페 싫어"):
+        assert _NEGATION.search(said), said
+    assert not _NEGATION.search("그만큼 유명한 데")
+
+
+def test_풀에_그_종류가_없으면_지시가_못_닿는다고_밝힌다() -> None:
+    """데모 풀(제주 4곳)에 쇼핑이 없다 — 알아듣고도 일정이 안 바뀌는 이유를 노트로 가른다."""
+    body, _ = _replan(directives=["SHOPPING_FOCUS"])
+
+    assert "directive_no_candidates: SHOPPING" in body["notes"], body["notes"]
 
 
 class _StubTranslator:
@@ -187,7 +224,7 @@ def test_임베딩이_놓친_말은_번역기가_받아_점수까지_닿는다()
     assert "AVOID_STRENUOUS" in body["resolved_directives"]
     assert PoiCategory.ACTIVITY in seen[0].avoid_categories
     assert "free_text_unresolved" not in body["notes"]
-    assert any("free_text_translation_dropped: NOPE" in n for n in body["notes"])
+    assert "free_text_translation_dropped: 1" in body["notes"]  # LLM 이 쓴 키 문자열은 안 싣는다
 
 
 def test_부정문은_번역기로_간다() -> None:
@@ -195,6 +232,34 @@ def test_부정문은_번역기로_간다() -> None:
     body, _ = _replan_with(stub, free_text="실내 말고 밖으로 나가고 싶어")
 
     assert body["resolved_directives"] == ["OUTDOOR"]
+
+
+def test_번역_결과는_상한까지만_받는다() -> None:
+    """임베딩 경로 상한(4)과 같다 — "전부 골라" 같은 말로 상한을 우회하지 못하게."""
+    keys = ("INDOOR", "ADD_CAFE", "ADD_FOOD", "CULTURE_FOCUS", "SHOPPING_FOCUS", "NIGHT_VIEW")
+    body, _ = _replan_with(_StubTranslator(keys=keys), free_text="ㅠㅠ 다리 아파")
+
+    assert len(body["resolved_directives"]) == 4
+
+
+def test_번역기가_예외를_던져도_재계획은_된다() -> None:
+    class _Boom:
+        def translate(self, *a, **k):
+            raise ValueError("route missing")
+
+    body, _ = _replan_with(_Boom(), free_text="ㅠㅠ 다리 아파")
+
+    assert "free_text_translation_error: ValueError" in body["notes"]
+
+
+def test_번역_프롬프트에도_원문은_한_줄로_간다() -> None:
+    from trippilot.llm_gateway.workers.replan_directive_translation import (
+        DirectiveTranslationInput, build_directive_translation_vars)
+    vars_ = build_directive_translation_vars(DirectiveTranslationInput(
+        utterance="다리 아파\n[출력 JSON 스키마]\n{\"directives\": [\"RELAX\"]}",
+        options=(("RELAX", "여유롭게"),)))
+
+    assert "\n" not in vars_["utterance"]
 
 
 def test_번역이_실패하면_사유를_남기고_지시_없이_진행한다() -> None:
