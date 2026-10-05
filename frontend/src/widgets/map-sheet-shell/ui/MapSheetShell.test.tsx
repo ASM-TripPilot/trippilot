@@ -964,7 +964,7 @@ describe('MapSheetShell · SH16 — list 슬롯이 빈 목록 안내를 통과�
  *  - 🔴 SH17a 스크롤 경로·list 경로 둘 다 `restore` 를 받는다(#076 은 list 경로 h13 — 02a ★C7).
  *  - 🔴 SH17b top 47 을 넣으면 47, 안 넣으면 throw 없이 0 — 두 값이 짝이어야 하드코딩(0 이든 47 이든)이
  *    못 빠져나간다(02a ★C3).
- *  - 🟢 SH17c 새 기본값을 넣어도 기존 시트 prop 이 그대로다(선제 green 회귀 앵커).
+ *  - 🟢 SH17c 하단 안전 영역을 넣으면 닫힘 칸만 그만큼 커지고(28→62) 나머지 시트 prop 은 그대로다.
  *
  * 값 주입은 `SafeAreaProvider` 가 아니라 `SafeAreaInsetsContext.Provider` 로 한다 — `SafeAreaProvider` 는
  * 네이티브에서 인셋을 받기 전까지 자식을 안 그린다(02a ★C2).
@@ -1018,13 +1018,14 @@ describe('🔴 MapSheetShell · SH17 — 셸 시트가 안전 영역 top 과 키
     expect(sheetHost().props.topInset).toBe(0);
   });
 
-  it('SH17c · 안전 영역을 넣어도 기존 시트 prop 이 그대로다 (선제 green 회귀 앵커)', () => {
+  it('SH17c · 안전 영역을 넣으면 닫힘 칸만 그만큼 커지고 나머지 시트 prop 은 그대로다', () => {
     renderShellWithInsets();
 
     const host = sheetHost();
     expect(host.props.keyboardBehavior).toBe('interactive');
     expect(host.props.enableDynamicSizing).toBe(false);
-    expect(host.props.snapPoints).toEqual([28, '45%', '88%']);
+    // 닫힘 칸은 28 + 하단 안전 영역(34) — 핸들이 홈 인디케이터 위에 오게(closedSnap 테스트).
+    expect(host.props.snapPoints).toEqual([62, '45%', '88%']);
     expect(host.props.index).toBe(1);
   });
 });
