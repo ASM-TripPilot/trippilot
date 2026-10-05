@@ -134,10 +134,10 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
   },
-  owner: 'trippiloy',
+  owner: 'trippilottravel',
   extra: {
     eas: {
-      projectId: 'b1612969-b805-4d0d-98d0-6ea468720314',
+      projectId: '9d33458c-a731-4278-8e0a-45ccdae5b66b',
     },
   },
 };
