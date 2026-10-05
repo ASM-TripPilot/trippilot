@@ -2231,17 +2231,18 @@ describe('예산 편집 시트 (B·S6·D)', () => {
   });
 
   describe('B-tier0 · ★ D9 tier 전송 0 — 칩이 채운 대표 금액만 budgetTotal 로 나간다 (TRIP-1045)', () => {
-    it('고급 칩으로 채워 적용하면 바디에 budgetTier/tier 가 없고 budgetTotal 은 고급 대표 금액 2000000 이다', async () => {
-      // 준비 — 부산 3박, 프리필 중간·800,000.
+    it('럭셔리 칩으로 채워 적용하면 바디에 budgetTier/tier 가 없고 budgetTotal 은 럭셔리 대표 금액 1600000 이다', async () => {
+      // 준비 — 부산 3박(4일), 프리필 중간·800,000.
+      // TRIP-1256: 4일 고급(200,000 × 4)은 800,000 이라 프리필과 같아 "프리필이 남으면 red"를 못 가른다 → 럭셔리.
       seedValidDraft();
       renderPage();
       await waitForPrefill();
       await openSheet();
 
-      // 실행 — 고급 칩(200만, 박수 무관) → 적용 → 제출.
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-high'));
+      // 실행 — 럭셔리 칩(하루 400,000 × 4일) → 적용 → 제출.
+      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '2,000,000'
+        '1,600,000'
       );
       fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
       await waitFor(() =>
@@ -2256,7 +2257,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       expect(Object.keys(body)).not.toContain('budgetTier');
       expect(Object.keys(body)).not.toContain('tier');
       // 칩이 채운 금액이 곧 사용자 금액이다 — 프리필(800000)이 남으면 red.
-      expect(body).toMatchObject({ budgetTotal: 2000000 });
+      expect(body).toMatchObject({ budgetTotal: 1600000 });
     });
   });
 
@@ -2618,15 +2619,15 @@ describe('예산 편집 시트 (B·S6·D)', () => {
   });
 
   /**
-   * TRIP-1067 AC-1·AC-3·AC-4 · 칩을 누르면 대표 금액(온보딩 범위 가운데값, 1인 총액)이 금액 칸에 채워진다
-   * (frontend-components `BudgetInputField` 2026-09-28 개정). 저가 300,000 · 중간 1,000,000 · 고급
-   * 2,000,000 · 럭셔리 4,000,000 — **박수·인원과 무관**(TRIP-1045 의 "단가 × 박수"는 폐기).
-   * 칩 press 마다 덮어쓰고(이미 켜진 칩 포함), 인원·기간이 바뀌어도 재계산하지 않는다. 채운 금액은
-   * 사람이 고칠 수 있다. 입력칸 단언은 콤마 포함 완전 일치(`toHaveDisplayValue`) — `formatBudgetAmount`
-   * 로 채워야 한다.
+   * TRIP-1256 AC-6·AC-7 · 칩을 누르면 대표 금액 = **1인 하루 단가 × 그 순간의 여행 일수**가 금액 칸에
+   * 채워진다. 하루 단가 저가 50,000 · 중간 100,000 · 고급 200,000 · 럭셔리 400,000, 일수 = 박수 합 + 1
+   * (여행지 0곳·당일치기 1일, 시작일 유무와 무관 — 01b Q2). 인원은 곱하지 않는다(1인 총액).
+   * 칩 press 마다 덮어쓰고(이미 켜진 칩 포함), 인원·기간이 바뀌어도 이미 채운 금액은 재계산하지 않는다.
+   * 채운 금액은 사람이 고칠 수 있다. 입력칸 단언은 콤마 포함 완전 일치(`toHaveDisplayValue`) —
+   * `formatBudgetAmount` 로 채워야 한다. (이력: TRIP-1045 1박 단가 × 박수 → TRIP-1067 고정 가운데값 → 이번)
    */
-  describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020 → TRIP-1067 가운데값)', () => {
-    it('D2 · 3박·2명에서 중간을 누르면 1,000,000 이 채워지고 적용이 열린다', async () => {
+  describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020 → TRIP-1256 하루 단가 × 일수)', () => {
+    it('D2 · 3박 4일·2명에서 중간을 누르면 400,000 이 채워지고 적용이 열린다', async () => {
       // 준비 — 부산 3박 + 친구 2명, 온보딩 예산 없음(빈칸으로 열린다).
       seedValidDraft();
       useTripWizardStore.getState().selectCompanion('친구');
@@ -2640,10 +2641,10 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       // 실행
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
 
-      // 단언 — 고정 100만. 박수를 곱하면 3,000,000, 인원을 곱하면 2,000,000, 옛 1박 단가(10만 × 3박)면
-      // 300,000 으로 red.
+      // 단언 — 100,000 × 4일. 일수 대신 박수(3)를 곱하면 300,000, 인원(2)까지 곱하면 800,000, 옛 고정
+      // 가운데값이면 1,000,000 으로 red.
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,000,000'
+        '400,000'
       );
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-mid')
@@ -2652,7 +2653,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
     });
 
-    it('D3a · 여행지가 없어도(박수 0) 저가는 300,000', async () => {
+    it('D3a · 여행지가 없으면(기간 미정) 1일 기준 — 저가는 50,000', async () => {
       serveBudget(NO_BUDGET);
       renderPage();
       // 짝(전제) — 여행지 0곳(beforeEach reset).
@@ -2662,12 +2663,13 @@ describe('예산 편집 시트 (B·S6·D)', () => {
 
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
 
+      // 일수 0 을 곱하면 0, 옛 고정값이면 300,000 으로 red.
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '300,000'
+        '50,000'
       );
     });
 
-    it('D3b · 여행지 3박이어도 저가는 같은 300,000 — 박수로 곱하지 않는다', async () => {
+    it('D3b · 여행지 3박이면 시작일을 안 골라도 4일 기준 — 저가는 200,000 (01b Q2)', async () => {
       // 준비 — 여행지만 담고 기간(시작일)은 안 골랐다.
       useTripWizardStore.getState().addDestination('부산', 3);
       serveBudget(NO_BUDGET);
@@ -2678,11 +2680,40 @@ describe('예산 편집 시트 (B·S6·D)', () => {
 
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
 
-      // D3a 와 같은 값. 박수 합을 곱하면 900,000, 옛 1박 단가(5만 × 3박)면 150,000 으로 red.
+      // 시작일이 없다고 1일로 보면 50,000, 박수(3)만 곱하면 150,000, 옛 고정값이면 300,000 으로 red.
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '300,000'
+        '200,000'
       );
     });
+
+    it.each([
+      ['당일치기(서울 0박)', '저가', '50,000', '서울', 0, 'low'],
+      ['2박 3일(부산 2박)', '중간', '300,000', '부산', 2, 'mid'],
+    ] as const)(
+      'D8 · 티켓 예제 — %s 에서 %s 칩을 누르면 %s',
+      async (_label, _tierName, expected, region, nights, code) => {
+        // 준비 — "아직 없다" 앵커 뒤 여행지와 시작일을 고른다(기간이 정해진 상태).
+        expect(useTripWizardStore.getState().destinations).toHaveLength(0);
+        const store = useTripWizardStore.getState();
+        store.addDestination(region, nights);
+        store.setStartDate('2026-06-10');
+        expect(useTripWizardStore.getState().destinations[0]?.nights).toBe(
+          nights
+        );
+        serveBudget(NO_BUDGET);
+        renderPage();
+        await waitForPreferenceRow();
+        await openSheet();
+
+        // 실행
+        fireEvent.press(screen.getByTestId(`trip-wizard-budget-tier-${code}`));
+
+        // 단언 — 하루 단가 × (박수 + 1).
+        expect(
+          screen.getByTestId('trip-wizard-budget-input')
+        ).toHaveDisplayValue(expected);
+      }
+    );
 
     it('D4 · 채운 금액을 250,000 으로 고쳐 적용하면 고친 값이 store 와 제출 budgetTotal 로 간다', async () => {
       seedValidDraft();
@@ -2695,8 +2726,9 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       );
 
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
+      // 중간 하루 100,000 × 4일.
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,000,000'
+        '400,000'
       );
       fireEvent.changeText(
         screen.getByTestId('trip-wizard-budget-input'),
@@ -2725,8 +2757,9 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-mid')
       ).toBeOnTheScreen();
+      // 3박 4일 — 중간 하루 100,000 × 4일.
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,000,000'
+        '400,000'
       );
 
       // 실행 ① — 금액을 비운 뒤 이미 켜진 중간을 누른다(tier 값이 안 바뀌어도 채워야 한다 — QA #020 원형).
@@ -2734,29 +2767,29 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '');
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,000,000'
+        '400,000'
       );
 
-      // 실행 ② — 손으로 고친 뒤 럭셔리 → 럭셔리 대표 금액으로 덮어쓴다.
+      // 실행 ② — 손으로 고친 뒤 럭셔리 → 럭셔리 대표 금액(400,000 × 4일)으로 덮어쓴다.
       fireEvent.changeText(
         screen.getByTestId('trip-wizard-budget-input'),
         '999'
       );
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '4,000,000'
+        '1,600,000'
       );
 
       // 실행 ③ — 다시 중간.
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,000,000'
+        '400,000'
       );
     });
 
-    it('D6 · 고쳐 적용한 금액은 인원·여행지를 바꾸고 다시 열어도 그대로고, 그 뒤 칩은 5박이어도 같은 대표 금액이다', async () => {
+    it('D6 · 고쳐 적용한 금액은 인원·여행지를 바꾸고 다시 열어도 그대로고, 그 뒤 칩은 새 일수(5박 6일)로 계산한다', async () => {
       // 준비 — 3박에서 중간으로 채운 뒤 칩 값과 다른 1,100,000 으로 고쳐 적용한다. 칩 값 그대로 두면
-      // "다시 계산" 뮤턴트도 같은 1,000,000 을 내서 구분이 안 된다(대표 금액이 tier 만의 함수라서).
+      // "다시 계산" 뮤턴트와 구분이 안 된다.
       seedValidDraft();
       serveBudget(NO_BUDGET);
       renderPage();
@@ -2785,21 +2818,22 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       expect(
         screen.getByTestId('trip-wizard-summary-budget')
       ).toHaveTextContent(/110만원/);
-      // 다시 열어도 칩 금액으로 되돌리지 않는다 — 여는 순간 재계산하는 뮤턴트면 1,000,000 으로 red.
+      // 다시 열어도 칩 금액으로 되돌리지 않는다 — 여는 순간 재계산하는 뮤턴트면 600,000 으로 red.
       await openSheet();
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
         '1,100,000'
       );
-      // AC-3 — 5박이 된 **뒤에** 칩을 눌러도 박수 무관. 저가를 먼저 눌러 press 가 실제로 먹는 것을
-      // 확인한 뒤 중간으로 돌아온다. 박수를 곱하면 1,500,000 / 5,000,000, 옛 1박 단가면 250,000 / 500,000
-      // 으로 red.
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
+      // TRIP-1256 AC-7 — 5박 6일이 된 **뒤에** 누른 칩은 새 일수로 계산한다. 럭셔리를 먼저 눌러 press 가
+      // 실제로 먹는 것을 확인한 뒤 중간으로 돌아온다. 적용 때의 4일을 쓰면 1,600,000 / 400,000, 박수(5)만
+      // 곱하면 2,000,000 / 500,000, 옛 고정값이면 4,000,000 / 1,000,000 으로 red.
+      // (저가는 6일이면 300,000 = 옛 고정 저가라 옛 코드도 통과해 쓰지 않는다)
+      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '300,000'
+        '2,400,000'
       );
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,000,000'
+        '600,000'
       );
     });
   });
@@ -2811,11 +2845,12 @@ describe('예산 편집 시트 (B·S6·D)', () => {
  *
  * 무엇을 보장하나(QA 5회차 #9 — 저가 칩은 켜졌는데 금액이 비어 「적용」이 비활성):
  *  ① 등급만 있으면 첫 열림 금액 = 칩 대표 금액이고 「적용」이 열린다(AC-1·2), 적용하면 그 금액이 커밋된다(AC-3).
+ *     TRIP-1256 부터 대표 금액은 하루 단가 × **여는 순간의** 일수다 — 여행지가 없으면 1일(AC-1b 는 4일).
  *  ② 온보딩 금액·이미 적용한 금액이 있으면 그 금액이 이긴다(AC-4·5).
  *  ③ 등급이 4값 밖이거나 없으면 지금처럼 빈칸이다(AC-6).
  *  ④ 채움은 시트 드래프트뿐이다 — 적용 전엔 요약 행·제출 바디·계정 취향이 안 바뀐다(AC-7·8, 결정 1=A).
  *
- * 판별력: 등급 대표 금액과 비교 금액을 **다르게** 둔다(고급 2,000,000 vs 1,200,000·1,800,000) — 같으면
+ * 판별력: 등급 대표 금액과 비교 금액을 **다르게** 둔다(1일 고급 200,000 vs 1,200,000·1,800,000) — 같으면
  * "등급 금액이 덮는다" 뮤턴트도 통과한다. AC-7·8 은 열자마자 금액이 차 있음을 먼저 확인해야
  * "새어 나갈 값이 실제로 있는 상태에서 안 샜다"가 된다.
  *
@@ -2971,8 +3006,8 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
     store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
   }
 
-  describe('AC-1 · 등급만 있는 저가 계정 — 첫 열림에 300,000 이 채워지고 적용이 열린다', () => {
-    it('저가·금액 없음으로 시트를 열면 300,000 · 저가 칩 · 적용 활성 · 빈칸 안내 없음', async () => {
+  describe('AC-1 · 등급만 있는 저가 계정 — 첫 열림에 50,000(1일)이 채워지고 적용이 열린다', () => {
+    it('저가·금액 없음으로 시트를 열면 50,000 · 저가 칩 · 적용 활성 · 빈칸 안내 없음', async () => {
       // 준비
       serveTierOnly('저가');
       renderPage();
@@ -2981,8 +3016,8 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
       // 실행
       await openSheet();
 
-      // 단언
-      expect(input()).toHaveDisplayValue('300,000');
+      // 단언 — 여행지가 없으니 1일 × 저가 하루 50,000.
+      expect(input()).toHaveDisplayValue('50,000');
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-low')
       ).toBeOnTheScreen();
@@ -2992,11 +3027,39 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
     });
   });
 
+  describe('AC-1b · TRIP-1256 AC-8 — 첫 열림 금액은 여는 순간의 일수로 그 칩을 누른 값이다', () => {
+    it('부산 3박(4일)·등급만 고급으로 열면 800,000 이고, 저가→고급을 눌러 돌아와도 같은 800,000 이다', async () => {
+      // 준비 — 부산 3박 + 기간 3박 4일(일수는 박수 + 1 = 4일).
+      seedValidDraft();
+      serveTierOnly('고급');
+      renderPage();
+      await waitForPreferenceRow();
+
+      // 실행
+      await openSheet();
+
+      // 단언 — 200,000 × 4일. 1일로 계산하면 200,000, 박수(3)만 곱하면 600,000, 옛 고정값이면
+      // 2,000,000 으로 red.
+      expect(input()).toHaveDisplayValue('800,000');
+      expect(
+        screen.getByTestId('trip-wizard-budget-tier-active-high')
+      ).toBeOnTheScreen();
+      expect(apply()).not.toBeDisabled();
+
+      // 칩 경로와 같은 값인지 — 다른 칩으로 값을 바꾼 뒤 고급으로 돌아와 비교한다(같은 칩 재누름은 값이
+      // 이미 차 있어 판별력이 없다).
+      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
+      expect(input()).toHaveDisplayValue('200,000');
+      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-high'));
+      expect(input()).toHaveDisplayValue('800,000');
+    });
+  });
+
   describe('AC-2 · 중간·고급·럭셔리 — 첫 열림 금액 = 그 칩을 눌렀을 때의 금액', () => {
     it.each([
-      ['중간', 'mid', '1,000,000'],
-      ['고급', 'high', '2,000,000'],
-      ['럭셔리', 'luxury', '4,000,000'],
+      ['중간', 'mid', '100,000'],
+      ['고급', 'high', '200,000'],
+      ['럭셔리', 'luxury', '400,000'],
     ] as const)(
       '%s 로 열면 %s 칩이 켜지고 %s 이며, 같은 칩을 눌러도 값이 같다',
       async (tier, code, expected) => {
@@ -3020,7 +3083,7 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
   });
 
   describe('AC-3 · 프리필로 연 시트를 그대로 적용하면 커밋되고 행이 역산 등급을 보인다', () => {
-    it('저가 프리필 300,000 을 적용하면 store 에 커밋되고 행은 "30만원 · 1인 총액 · 저가"', async () => {
+    it('저가 프리필 50,000 을 적용하면 store 에 커밋되고 행은 "5만원 · 1인 총액 · 저가"', async () => {
       serveTierOnly('저가');
       renderPage();
       await waitForPreferenceRow();
@@ -3031,14 +3094,15 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
       await waitFor(() =>
         expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull()
       );
-      expect(useTripWizardStore.getState().budgetText).toBe('300,000');
-      expect(row()).toHaveTextContent(/30만원/);
+      expect(useTripWizardStore.getState().budgetText).toBe('50,000');
+      // 앞에 숫자가 붙은 "15만원"·"25만원"에 걸리지 않게 lookbehind 로 막는다.
+      expect(row()).toHaveTextContent(/(?<!\d)5만원/);
       expect(rowSub()).toHaveTextContent('1인 총액 · 저가');
     });
   });
 
   describe('AC-4 · 무회귀 — 온보딩 금액이 있으면 등급 대표 금액으로 덮지 않는다', () => {
-    it('고급 + 1,200,000 으로 열면 1,200,000 이다 (고급 대표 2,000,000 아님)', async () => {
+    it('고급 + 1,200,000 으로 열면 1,200,000 이다 (고급 대표 200,000 아님)', async () => {
       serveBudget({
         tier: '고급',
         rawAmount: 1200000,
@@ -3057,7 +3121,7 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
   });
 
   describe('AC-5 · 무회귀 — 이미 적용한 금액은 다시 열어도 그 금액', () => {
-    it('고급(금액 없음)에서 1,800,000 을 적용한 뒤 다시 열면 1,800,000 이다 (2,000,000 으로 되돌리지 않는다)', async () => {
+    it('고급(금액 없음)에서 1,800,000 을 적용한 뒤 다시 열면 1,800,000 이다 (200,000 으로 되돌리지 않는다)', async () => {
       serveTierOnly('고급');
       renderPage();
       await waitForPreferenceRow();
@@ -3103,9 +3167,9 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
       await waitForPreferenceRow();
       expect(useTripWizardStore.getState().budgetText).toBe('');
 
-      // 실행 — 열어서 프리필을 확인(새어 나갈 값이 실제로 있다)하고 적용 없이 닫은 뒤 [다음].
+      // 실행 — 열어서 프리필(중간 100,000 × 4일)을 확인(새어 나갈 값이 실제로 있다)하고 적용 없이 닫은 뒤 [다음].
       await openSheet();
-      expect(input()).toHaveDisplayValue('1,000,000');
+      expect(input()).toHaveDisplayValue('400,000');
       closeSheetWithoutApply();
 
       // 단언 — 요약 행은 tier-only 얼굴, 스토어는 비어 있다.
@@ -3128,7 +3192,7 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
       expect(useTripWizardStore.getState().budgetText).toBe('');
 
       await openSheet();
-      expect(input()).toHaveDisplayValue('300,000');
+      expect(input()).toHaveDisplayValue('50,000');
       closeSheetWithoutApply();
       await openSheet();
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
@@ -3149,8 +3213,10 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
  * TRIP-1091 g01 1/4 예산 행 — **적용한 금액에서 역산한 등급**이 요약 행과 시트 재오픈 칩에 붙는다.
  *
  * 무엇을 보장하나(QA A12 — 저가 30만원을 적용했는데 행이 "30만원 · 1인 총액 · 고급"):
- *  ① 스토어에 커밋된 금액이 0보다 크면 행 sub 의 등급은 `tierForAmount(금액)` 이다(온보딩 등급 아님).
- *  ② 시트를 다시 열면 같은 역산 등급 칩이 켜진다(행과 칩이 다른 말을 안 한다).
+ *  ① 스토어에 커밋된 금액이 0보다 크면 행 sub 의 등급은 `tierForAmount(금액, 일수)` 이다(온보딩 등급 아님).
+ *     TRIP-1256 부터 하루 금액(금액 ÷ 일수) 기준 — 75,000 · 150,000 · 300,000 경계, 일수 = 박수 + 1.
+ *     여행지 시드가 없는 케이스는 1일이라 하루 금액 = 총액이다.
+ *  ② 시트를 다시 열면 **같은 일수로** 역산한 같은 등급 칩이 켜진다(행과 칩이 다른 말을 안 한다, AC-9a).
  *  ③ 한 번도 적용하지 않았거나 0 을 적용했으면 지금처럼 온보딩 등급이다(01b Q1·맹점② (a)).
  *  ④ 역산 등급은 요청 어디에도 안 싣고, 계정 취향(`/me/preferences`)을 쓰지 않는다(BR-U1-38).
  *
@@ -3295,7 +3361,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
   }
 
   describe('AC4 · A12 — 저가 칩을 적용하면 행 등급도 저가다', () => {
-    it('온보딩 고급 계정에서 저가(30만원)를 적용하면 행은 "30만원 · 1인 총액 · 저가"이고 고급은 없다', async () => {
+    it('온보딩 고급 계정에서 저가(5만원)를 적용하면 행은 "5만원 · 1인 총액 · 저가"이고 고급은 없다', async () => {
       // 준비 — 운영 모양: 온보딩 등급만 있고 금액은 없다(행은 tier-only 얼굴).
       serveBudget({ tier: '고급', rawAmount: null, isNeutralDefault: false });
       renderPage();
@@ -3308,48 +3374,49 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
       await applyAndClose();
 
-      // 단언
-      expect(row()).toHaveTextContent(/30만원/);
+      // 단언 — 1일 저가 50,000. "15만원"·"25만원"에 걸리지 않게 앞 숫자를 막는다.
+      expect(row()).toHaveTextContent(/(?<!\d)5만원/);
       expect(rowSub()).toHaveTextContent('1인 총액 · 저가');
       expect(row()).not.toHaveTextContent(/고급/);
     });
   });
 
   describe('AC5 · 칩 없이 손으로 넣은 금액도 역산한다', () => {
-    it('온보딩 중간에서 1,800,000 을 적용하면 행 등급은 고급이다', async () => {
+    it('온보딩 중간에서 180,000(1일)을 적용하면 행 등급은 고급이다', async () => {
       serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
       renderPage();
       await waitForPreferenceRow();
 
-      await applyTyped('1,800,000');
+      // 하루 180,000 — 150,000 ≤ 180,000 < 300,000 이라 고급. 옛 총액 경계면 저가로 red.
+      await applyTyped('180,000');
 
-      expect(row()).toHaveTextContent(/180만원/);
+      expect(row()).toHaveTextContent(/(?<!\d)18만원/);
       expect(rowSub()).toHaveTextContent('1인 총액 · 고급');
     });
   });
 
-  describe('AC6 · 경계 배선 — 하한은 자기 구간', () => {
-    it('온보딩 저가에서 500,000 · 1,500,000 · 3,000,000 을 차례로 적용하면 중간 · 고급 · 럭셔리다', async () => {
+  describe('AC6 · 경계 배선 — 하한은 자기 구간 (1일 = 하루 금액이 곧 총액)', () => {
+    it('온보딩 저가에서 75,000 · 150,000 · 300,000 을 차례로 적용하면 중간 · 고급 · 럭셔리다', async () => {
       serveBudget({ tier: '저가', rawAmount: null, isNeutralDefault: false });
       renderPage();
       await waitForPreferenceRow();
 
-      await applyTyped('500000');
+      await applyTyped('75000');
       expect(rowSub()).toHaveTextContent('1인 총액 · 중간');
 
-      await applyTyped('1500000');
+      await applyTyped('150000');
       expect(rowSub()).toHaveTextContent('1인 총액 · 고급');
 
-      await applyTyped('3000000');
+      await applyTyped('300000');
       expect(rowSub()).toHaveTextContent('1인 총액 · 럭셔리');
     });
 
-    it('온보딩 럭셔리에서 499,999 를 적용하면 저가다', async () => {
+    it('온보딩 럭셔리에서 74,999 를 적용하면 저가다', async () => {
       serveBudget({ tier: '럭셔리', rawAmount: null, isNeutralDefault: false });
       renderPage();
       await waitForPreferenceRow();
 
-      await applyTyped('499999');
+      await applyTyped('74999');
 
       expect(rowSub()).toHaveTextContent('1인 총액 · 저가');
     });
@@ -3357,7 +3424,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
 
   describe('AC7 · 한 번도 적용하지 않으면 지금처럼 온보딩 등급 (무회귀)', () => {
     it('프리필 고급 + 1,200,000 이면 행은 "120만원 · 1인 총액 · 고급" 이다 — 프리필 금액은 역산하지 않는다', async () => {
-      // 1,200,000 을 역산하면 중간이다 — 프리필 금액까지 역산하면 여기서 갈린다(01b 맹점② (a)).
+      // 1,200,000 을 1일로 역산하면 럭셔리다 — 프리필 금액까지 역산하면 여기서 갈린다(01b 맹점② (a)).
       serveBudget({
         tier: '고급',
         rawAmount: 1200000,
@@ -3368,13 +3435,13 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
 
       expect(rowSub()).toHaveTextContent('1인 총액 · 고급');
 
-      // 시트 쪽도 같은 출처여야 한다(결정 2) — 적용 없이 열면 역산 중간이 아니라 프리필 고급 칩(5-b 경고 1).
+      // 시트 쪽도 같은 출처여야 한다(결정 2) — 적용 없이 열면 역산 럭셔리가 아니라 프리필 고급 칩(5-b 경고 1).
       await openSheet();
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-high')
       ).toBeTruthy();
       expect(
-        screen.queryByTestId('trip-wizard-budget-tier-active-mid')
+        screen.queryByTestId('trip-wizard-budget-tier-active-luxury')
       ).toBeNull();
     });
 
@@ -3441,12 +3508,12 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
   });
 
   describe('AC10 · 결정 2 — 손으로 넣은 금액도 재오픈 칩은 역산 등급', () => {
-    it('온보딩 중간에서 1,800,000 을 적용한 뒤 다시 열면 고급 칩이 켜지고 중간은 꺼져 있다', async () => {
+    it('온보딩 중간에서 180,000(1일)을 적용한 뒤 다시 열면 고급 칩이 켜지고 중간은 꺼져 있다', async () => {
       serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
       renderPage();
       await waitForPreferenceRow();
 
-      await applyTyped('1,800,000');
+      await applyTyped('180,000');
       await openSheet();
 
       expect(
@@ -3455,6 +3522,59 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       expect(
         screen.queryByTestId('trip-wizard-budget-tier-active-mid')
       ).toBeNull();
+    });
+  });
+
+  describe('AC-9 · TRIP-1256 — 요약 행과 재오픈 칩은 같은 일수(박수 + 1)로 역산한다', () => {
+    /** 부산 2박 = 3일. 1일로 나누는 뮤턴트와 갈리려면 일수가 1보다 커야 한다. */
+    function seedThreeDays(): void {
+      useTripWizardStore.getState().addDestination('부산', 2);
+    }
+
+    it('AC-9a · 3일에서 중간 칩을 적용하면 행은 "30만원 · 1인 총액 · 중간"이고, 다시 열면 중간 칩 하나만 켜진다', async () => {
+      // 준비 — "아직 없다" 앵커 뒤 3일. 온보딩 등급(럭셔리)을 기대 등급(중간)과 다르게 둔다 — 같으면
+      // "항상 온보딩 등급" 옛 코드도 통과한다.
+      expect(useTripWizardStore.getState().destinations).toHaveLength(0);
+      seedThreeDays();
+      serveBudget({ tier: '럭셔리', rawAmount: null, isNeutralDefault: false });
+      renderPage();
+      await waitForPreferenceRow();
+
+      // 실행 — 중간 칩(100,000 × 3일) → 적용.
+      await openSheet();
+      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
+      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
+        '300,000'
+      );
+      await applyAndClose();
+
+      // 단언 ① — 행: 300,000 ÷ 3일 = 하루 100,000 → 중간. 일수 없이 총액으로 역산하면 럭셔리로 red.
+      expect(row()).toHaveTextContent(/(?<!\d)30만원/);
+      expect(rowSub()).toHaveTextContent('1인 총액 · 중간');
+
+      // 단언 ② — 재오픈 칩도 같은 일수로 역산한 중간 하나뿐. 칩 쪽만 1일로 나누면 럭셔리가 켜져 red.
+      await openSheet();
+      expect(
+        screen.getByTestId('trip-wizard-budget-tier-active-mid')
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryAllByTestId(/^trip-wizard-budget-tier-active-/)
+      ).toHaveLength(1);
+    });
+
+    it('AC-9b · 3일 경계 — 손으로 넣은 224,999 는 저가, 225,000 은 중간이다 (반올림하지 않는다)', async () => {
+      expect(useTripWizardStore.getState().destinations).toHaveLength(0);
+      seedThreeDays();
+      serveBudget({ tier: '럭셔리', rawAmount: null, isNeutralDefault: false });
+      renderPage();
+      await waitForPreferenceRow();
+
+      // 224,999 ÷ 3 = 74,999.67 — 반올림하면 75,000 이라 중간으로 red, 1일로 나누면 럭셔리로 red.
+      await applyTyped('224999');
+      expect(rowSub()).toHaveTextContent('1인 총액 · 저가');
+
+      await applyTyped('225000');
+      expect(rowSub()).toHaveTextContent('1인 총액 · 중간');
     });
   });
 
