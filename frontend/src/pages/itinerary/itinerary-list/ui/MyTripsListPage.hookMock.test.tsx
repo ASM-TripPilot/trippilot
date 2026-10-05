@@ -323,6 +323,35 @@ describe('🔴 AC-4 · 처음 표시될 때 seen 기록 → 같은 화면 동안
   });
 });
 
+describe('🔴 TRIP-1241 · 닫기를 누르면 배너가 사라지고 같은 화면에서 다시 안 뜬다', () => {
+  it('닫기 → 배너 없음(목록·seen 기록은 그대로, 쓰기 추가 없음) · 다른 일이 일어나도 재표시 없음', async () => {
+    scriptTrips([A], { 'trip-a': DONE });
+
+    renderPage();
+    await settle();
+    expect(screen.getByTestId('generation-done-bar')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('generation-done-bar-close'));
+    await settle();
+
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+    expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('닫지 않고 보기를 누르면 그 여행으로 간다', async () => {
+    scriptTrips([A, C, B], { 'trip-a': DONE, 'trip-b': DONE, 'trip-c': DRAFT });
+
+    renderPage();
+    await settle();
+    fireEvent.press(screen.getByTestId('generation-done-bar-view'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-b/live');
+  });
+});
+
 describe('🔴 AC-3 · 이미 알린 여행은 다시 띄우지 않는다', () => {
   it('완성 여행 A 가 seen 에 있으면 배너가 없다 (seen 읽기 끝난 뒤, 카드는 뜸)', async () => {
     mockSeen = ['trip-a'];

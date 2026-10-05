@@ -52,3 +52,32 @@ describe('🔴 AC-7 · GenerationDoneBar — 체크 + 완성 문구 + 보기', (
     );
   });
 });
+
+describe('🔴 TRIP-1241 · 닫기(✕) 컨트롤', () => {
+  it('onPressClose 를 주면 "닫기" 버튼이 있고 누르면 1회 호출되며, 보기는 그대로 onPressView 만 부른다', () => {
+    const onPressView = jest.fn();
+    const onPressClose = jest.fn();
+    render(
+      <GenerationDoneBar
+        tripName="제주 여행"
+        onPressView={onPressView}
+        onPressClose={onPressClose}
+      />
+    );
+    const close = screen.getByTestId('generation-done-bar-close');
+    expect(close.props.accessibilityRole).toBe('button');
+    expect(close.props.accessibilityLabel).toBe('닫기');
+    fireEvent.press(close);
+    expect(onPressClose).toHaveBeenCalledTimes(1);
+    expect(onPressView).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('generation-done-bar-view'));
+    expect(onPressView).toHaveBeenCalledTimes(1);
+    expect(onPressClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('onPressClose 가 없으면 닫기 컨트롤이 없다(기존 모양 불변)', () => {
+    render(<GenerationDoneBar tripName="제주 여행" onPressView={noop} />);
+    expect(screen.queryByTestId('generation-done-bar-close')).toBeNull();
+  });
+});

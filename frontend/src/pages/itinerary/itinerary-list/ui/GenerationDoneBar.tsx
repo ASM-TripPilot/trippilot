@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { CloseGlyph } from '@/features/itinerary/index.view';
 import { DoneCheckGlyph } from './GenerationDoneBarGlyphs';
 
 /**
@@ -16,6 +17,8 @@ import { DoneCheckGlyph } from './GenerationDoneBarGlyphs';
 export interface GenerationDoneBarProps {
   tripName: string;
   onPressView: () => void;
+  /** TRIP-1241 — 주면 오른쪽 끝에 ✕ 닫기를 그린다(Figma 미반영 — 디자인 확인 필요). 없으면 기존 모양. */
+  onPressClose?: () => void;
 }
 
 const DONE_SUFFIX = ' 일정이 완성됐어요';
@@ -24,6 +27,7 @@ const VIEW_LABEL = '보기';
 export function GenerationDoneBar({
   tripName,
   onPressView,
+  onPressClose,
 }: GenerationDoneBarProps): ReactElement {
   return (
     <View
@@ -46,6 +50,18 @@ export function GenerationDoneBar({
           {VIEW_LABEL}
         </Text>
       </Pressable>
+      {onPressClose ? (
+        <Pressable
+          testID="generation-done-bar-close"
+          accessibilityRole="button"
+          accessibilityLabel="닫기"
+          hitSlop={12}
+          onPress={onPressClose}
+          className="-my-[12px] -mr-[12px] h-[44px] w-[44px] items-center justify-center"
+        >
+          <CloseGlyph size={20} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
