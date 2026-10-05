@@ -56,6 +56,17 @@ class WorkflowContractTests(unittest.TestCase):
         # 앱이 뜬 뒤여야 한다 — 적재는 ai 파드 안에서 돈다
         self.assertGreater(names.index('Load the Plan-B knowledge base'), names.index('Deploy and wait for healthy workloads'))
 
+    def test_push_mode_is_kept_unless_the_deployer_chooses(self):
+        """푸시 모드는 시크릿에 보존된다 — 입력 기본값은 '유지'여야 기본 배포가 켜고 끄지 않는다."""
+        value = workflow('aws-deploy.yml')
+        push = value['on']['workflow_dispatch']['inputs']['push_mode']
+        self.assertEqual(push['default'], 'keep')
+        self.assertEqual(push['options'], ['keep', 'off', 'expo'])
+        steps = value['jobs']['deploy']['steps']
+        sync = next(s for s in steps if s.get('name') == 'Synchronize runtime secrets and render nonsecret Helm values')
+        self.assertIn('--push-mode', sync['run'])
+        self.assertIn('PUSH_MODE_INPUT', sync['run'])
+
 
 if __name__ == '__main__':
     unittest.main()

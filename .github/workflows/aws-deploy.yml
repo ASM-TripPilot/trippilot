@@ -24,6 +24,11 @@ on:
         description: 로컬 임베딩 서비스와 pgvector RAG 활성화 (추가 메모리 필요) — 끄면 재계획·대안이 규칙 랭킹으로만 돈다
         type: boolean
         default: true
+      push_mode:
+        description: 푸시 발송 모드 — keep 은 시크릿에 저장된 값 유지, expo 는 Expo 푸시로 실제 발송, off 는 끔
+        type: choice
+        options: [keep, off, expo]
+        default: keep
 
 permissions:
   contents: read
@@ -100,6 +105,7 @@ jobs:
       DEPLOY_MODE: ${{ inputs.mode }}
       DEPLOY_APPLICATION: ${{ inputs.deploy_application }}
       EMBEDDING_ENABLED: ${{ inputs.embedding_enabled }}
+      PUSH_MODE_INPUT: ${{ inputs.push_mode }}
       DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
@@ -216,8 +222,10 @@ jobs:
         run: |
           embedding_args=()
           if [ "$EMBEDDING_ENABLED" = true ]; then embedding_args+=(--embedding-enabled); fi
+          push_args=()
+          if [ "$PUSH_MODE_INPUT" != keep ]; then push_args+=(--push-mode "$PUSH_MODE_INPUT"); fi
           python3 deploy/eks/runtime.py sync-secrets \
-            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --namespace trippilot "${embedding_args[@]}"
+            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --namespace trippilot "${embedding_args[@]}" "${push_args[@]}"
           python3 deploy/eks/runtime.py render-values \
             --outputs "$RUNNER_TEMP/trippilot-outputs.json" --image-tag "$IMAGE_TAG" \
             --certificate-arn "$ACM_CERTIFICATE_ARN" --hostname "$API_HOSTNAME" \
