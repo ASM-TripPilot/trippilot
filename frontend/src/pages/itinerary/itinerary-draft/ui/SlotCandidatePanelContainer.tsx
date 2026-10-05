@@ -22,7 +22,9 @@ import {
  * TRIP-793 · h08 슬롯 교체 배선(초안 아래·h08 셸 둘 다 마운트하는 컨테이너, 이름 유지). 세 조각을
  * 잇는다 — 프레젠테이션이 인라인 패널→바텀시트로, 확정이 즉시확정 1단계→라디오 2단계로 바뀌었어도
  * 배선 로직은 재사용이다(조회·치환·PUT·firedRef·콜드캐시):
- *  1. **조회** — 마운트 시 `slot-candidates` POST 1회(`slotKey` 만, 제외목록 없음 · BR-U3-24).
+ *  1. **조회** — 열 때 경로를 한 번 정한다(TRIP-1258). 생성 때 받은 차선책(GET 슬롯 `alternatives`)
+ *     에서 일정(전 일자)에 이미 있는 poiId 를 거르고 1건 이상 남으면 그 목록이 최종이다(POST 없음).
+ *     0건·GET 미도착·PLANNED 아님이면 마운트 시 `slot-candidates` POST 1회(`slotKey` 만 · BR-U3-24).
  *  2. **선택** — 후보 행 press → `selectedPoiId` controlled 상태만 바꾼다(PUT 안 나감).
  *  3. **확정** — "교체하기" press → GET 캐시의 현 `days` 에서 `swapSlotPoi` 로 대상 슬롯 poiId 만 갈고
  *     `buildEditItineraryRequest` 로 조립해 전체 교체 PUT. 성공 → 조회 무효화 재조회 + `onClose`.
@@ -33,7 +35,8 @@ import {
  *   TRIP-467/483 잔여). 콜드캐시(GET 미도착)·PARTIAL·중복발사(firedRef) 셋을 handleConfirm 이 진다.
  *
  * 조회 상태(TRIP-1109)도 여기가 정한다 — 응답 전(idle 포함)=loading, 10초 넘으면 slow, 실패=error,
- * 도착=ready. 시트는 시간을 모르므로 10초 판정(`useElapsedFlag`)·[다시 시도] 잠금은 이 컨테이너가 진다. 요청은 끊지
+ * 도착=ready. 차선책 경로는 처음부터 ready 고 지연 판정을 켜지 않는다(POST 가 없어 응답도 없다).
+ * 시트는 시간을 모르므로 10초 판정(`useElapsedFlag`)·[다시 시도] 잠금은 이 컨테이너가 진다. 요청은 끊지
  * 않는다(abort·시한 없음) — slow 뒤에 응답이 오면 그대로 후보로 바뀐다.
  *
  * 헤더 시각범위·컨셉(현 슬롯 startAt/endAt/category)도 여기서 관통시킨다 — 시트는 문자열만 받는다
@@ -79,22 +82,47 @@ export function SlotCandidatePanelContainer({
   // attempt 는 [다시 시도]마다 바뀌어 10초를 새 요청 기준으로 다시 재게 한다.
   const [attempt, setAttempt] = useState(0);
 
-  // 마운트(=시트 열림)에 후보 조회 POST 를 딱 1회. `mutate` 는 referentially stable 이라 deps 가
-  // 안정적이면 한 번만 돈다. 요청 바디는 `slotKey` 하나뿐이다(radiusM·concept·제외목록 없음).
+  const parsed = parseSlotKey(slotKey);
+
+  // TRIP-1258 차선책 경로 — 첫 렌더에 한 번만 계산해 고정한다(지연 초기화). 시트를 열면 GET 이 배경
+  // 재조회(staleTime 0)되는데, 그 응답이 차선책을 바꾸거나 비워도 열린 목록·경로는 안 흔들린다.
+  // 일정(전 일자)에 이미 있는 poiId 는 뺀다 — 현재 슬롯 자신도 그 안에 있다(BR-U3-24 의 화면 사본).
+  // PLANNED 만 — 확정 일정은 서버 POST 가 409 로 막던 지금 동작을 그대로 둔다.
+  const [alternativeRows] = useState<SlotCandidateSheetRow[]>(() => {
+    const data = itinerary.data;
+    if (data === undefined || data.status !== 'PLANNED' || parsed.kind !== 'ok')
+      return [];
+    const inItinerary = new Set(
+      data.days.flatMap((day) => day.slots.map((slot) => slot.poiId))
+    );
+    const alternatives =
+      data.days
+        .find((day) => day.date === parsed.date)
+        ?.slots.find((slot) => slot.poiId === parsed.poiId)?.alternatives ?? [];
+    return alternatives.filter((alt) => !inItinerary.has(alt.poiId));
+  });
+  const fromAlternatives = alternativeRows.length > 0;
+
+  // 마운트(=시트 열림)에 후보 조회 POST 를 딱 1회 — 차선책 경로면 보내지 않는다. `mutate` 는
+  // referentially stable 이고 fromAlternatives 는 고정값이라 한 번만 돈다. 바디는 `slotKey` 하나뿐.
   useEffect(() => {
+    if (fromAlternatives) return;
     fetchCandidates({ tripId, data: { slotKey } });
-  }, [fetchCandidates, tripId, slotKey]);
+  }, [fromAlternatives, fetchCandidates, tripId, slotKey]);
 
   // idle(마운트 직후 mutate 전 한 렌더)도 "아직 응답 없음"이다 — 여기서 0건 얼굴이 새지 않게 한다.
-  const waiting = !candidatesArrived && !candidatesFailed;
+  // 차선책 경로는 기다리는 응답이 없다 — 참으로 두면 10초 뒤 slow 줄이 목록 위에 뜬다.
+  const waiting = !fromAlternatives && !candidatesArrived && !candidatesFailed;
   const isSlow = useElapsedFlag(waiting, SLOW_AFTER_MS, attempt);
-  const fetchState = candidatesFailed
-    ? 'error'
-    : candidatesArrived
-      ? 'ready'
-      : isSlow
-        ? 'slow'
-        : 'loading';
+  const fetchState = fromAlternatives
+    ? 'ready'
+    : candidatesFailed
+      ? 'error'
+      : candidatesArrived
+        ? 'ready'
+        : isSlow
+          ? 'slow'
+          : 'loading';
 
   useEffect(() => {
     if (fetchState === 'error' || fetchState === 'slow')
@@ -108,8 +136,6 @@ export function SlotCandidatePanelContainer({
     fetchCandidates({ tripId, data: { slotKey } });
   }
 
-  const parsed = parseSlotKey(slotKey);
-
   // 현 슬롯 실이름·시각·컨셉은 후보와 달리 이미 손에 있다 — GET 캐시 슬롯의 nameKo·startAt·endAt·
   // category·imageUrl 을 내려 헤더 제목·부제·현재 행 사진을 세운다.
   const currentSlot =
@@ -119,17 +145,15 @@ export function SlotCandidatePanelContainer({
           ?.slots.find((slot) => slot.poiId === parsed.poiId)
       : undefined;
 
-  // TRIP-1245 선표시 — 응답 전(loading·slow)엔 생성 때 받은 차선책(GET 슬롯 `alternatives`)을 같은 행
-  // 모양으로 먼저 보이고, 응답이 오면 그 목록으로 통째로 바꾼다(합치지 않는다). 실패 얼굴엔 행을 두지
-  // 않는다 — 선표시로 조회 실패를 덮지 않는다(INV-4). GET 미도착·차선책 0건이면 지금처럼 스켈레톤.
-  const rows: SlotCandidateSheetRow[] =
-    fetchState === 'ready'
+  // 행은 경로 하나에서만 온다(TRIP-1258 — 두 목록을 잇달아 보이지 않는다). 차선책 경로는 고정본,
+  // POST 경로는 응답 행이고 응답 전·실패엔 행이 없다(스켈레톤·실패 얼굴, INV-4).
+  const rows: SlotCandidateSheetRow[] = fromAlternatives
+    ? alternativeRows
+    : fetchState === 'ready'
       ? (candidatesData?.candidates ?? [])
-      : fetchState === 'error'
-        ? []
-        : (currentSlot?.alternatives ?? []);
-  // 선택은 "누른 기록"(selectedPoiId)과 "지금 보이는 행"에서 매 렌더 도출한다 — 선표시 중 고른 행이
-  // 응답 목록에 없으면 해제(null)된다. effect 로 지우지 않아 목록이 바뀌는 순간에도 어긋남이 없다.
+      : [];
+  // 선택은 "누른 기록"(selectedPoiId)과 "지금 보이는 행"에서 매 렌더 도출한다 — 보이지 않는 행의
+  // 선택은 null 이다. effect 로 지우지 않아 목록이 바뀌는 순간에도 어긋남이 없다.
   const selected = rows.some((row) => row.poiId === selectedPoiId)
     ? selectedPoiId
     : null;
@@ -139,7 +163,8 @@ export function SlotCandidatePanelContainer({
     // 이 나가 일정이 소실되는 것을 막는다(candidates POST 와 GET 은 순서 보장이 없다).
     // generationState==='PARTIAL'(2단계 생성 중)이면 확정을 잠근다 — day1-only 전체교체 PUT 이 뒷날을
     // 덮어쓰기 전에 막는다(서버 409 의 클라 사본 · handleConfirm 으로 이전된 가드).
-    // 응답 전(선표시 행)엔 확정하지 않는다 — 일정 겹침은 서버가 POST 때만 다시 거른다(TRIP-1245).
+    // POST 경로의 응답 전·실패엔 rows 가 비어 selected === null 이 먼저 막는다 — fetchState 검사는
+    // rows 갈래가 바뀔 때를 위한 방어 겹이다. 차선책 경로는 처음부터 ready 라 그냥 지난다.
     if (
       firedRef.current ||
       fetchState !== 'ready' ||
@@ -184,7 +209,7 @@ export function SlotCandidatePanelContainer({
         imageUrl: currentSlot?.imageUrl,
         distanceRange: currentSlot?.distanceRange,
       }}
-      // 후보(또는 선표시)의 이름·태그·사진을 그대로 내린다(TRIP-1024, QA #053 "이름 준비 중"·회색 사진).
+      // 후보(또는 차선책)의 이름·태그·사진을 그대로 내린다(TRIP-1024, QA #053 "이름 준비 중"·회색 사진).
       candidates={rows}
       startAt={currentSlot?.startAt}
       endAt={currentSlot?.endAt}

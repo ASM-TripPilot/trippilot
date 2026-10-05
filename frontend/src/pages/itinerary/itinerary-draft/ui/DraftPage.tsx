@@ -536,6 +536,8 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const candidateSheet =
     editingSlotKey !== null ? (
       <SlotCandidatePanelContainer
+        // 열린 채 다른 슬롯으로 바뀌면 새로 마운트한다 — 차선책 고정본이 첫 렌더에 한 번만 잡혀서다.
+        key={editingSlotKey}
         tripId={tripId}
         slotKey={editingSlotKey}
         onClose={() => setEditingSlotKey(null)}
