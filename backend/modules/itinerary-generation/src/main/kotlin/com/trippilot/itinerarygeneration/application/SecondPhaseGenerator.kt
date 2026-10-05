@@ -70,8 +70,6 @@ class SecondPhaseGenerator(
         assemblyUnplaced: List<UnplacedMustVisit> = emptyList(),
         /** 진행 상태 세션(h09·h10). 사용자가 취소했으면 결과를 버린다(BR-U3-05). */
         sessionId: UUID? = null,
-        /** 시각을 우리가 고른(물질화) 블록 — 폴백의 isFixed 판정용(TRIP-1001). 와이어 직결 타입엔 못 싣는다. */
-        materializedPoiIds: Set<UUID> = emptySet(),
         /** 그 여행의 취향·동행(BR-U1-38) — 근거 문장도 생성과 같은 취향으로 쓰이게. 하루 여행은 [secondInput] 이 없어 따로 받는다. */
         preference: PreferenceProfile? = null,
         companionType: String? = null,
@@ -83,7 +81,7 @@ class SecondPhaseGenerator(
                 scheduleAgent.generate(input)
             } catch (e: Exception) {
                 log.warn("2차 생성 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-                MinimalItineraryFallback.of(input, clock.instant(), materializedPoiIds)
+                MinimalItineraryFallback.of(input, clock.instant())
             }
         }
 
@@ -184,8 +182,11 @@ class SecondPhaseGenerator(
                 output?.solveMode ?: latest.solveMode,
                 output?.isFallback ?: latest.isFallback,
                 output?.candidatesSummary ?: latest.candidatesSummary,
-                // 2차는 전 일자를 보고 판정하므로 그 결과가 최종이다 — 1차(day1만) 판정으로 되돌리지 않는다.
-                assemblyUnplaced + (output?.unplacedMustVisits ?: emptyList()),
+                // 2차가 있으면 전 일자를 보고 판정한 그 결과가 최종이다 — 1차(day1만) 판정으로 되돌리지 않는다.
+                // 2차가 없으면(하루 여행) 1차가 곧 전체라 그 보고가 최종이다 — 빈 목록을 넘기면 "전부 배치됨"으로
+                // 덮여 조립·폴백이 보고한 미배치가 COMPLETE 에서 사라졌다(TRIP-1249 리뷰 실측 · 하루 여행은 ANYTIME 이
+                // 1차에 실리므로 이 보고가 유일한 M2 채널이다).
+                if (output == null) latest.unplacedMustVisits else assemblyUnplaced + output.unplacedMustVisits,
             )
             // 조건부 쓰기 — 위 가드를 읽은 뒤 재생성이 끼어들었으면 여기서 0행이 되어 아무것도 덮어쓰지 않는다.
             if (!itineraries.replaceIfCurrent(tripId, itineraryId, updated)) {

@@ -231,7 +231,11 @@ data class DayAnchor(val date: LocalDate, val lat: Double, val lng: Double)
 
 data class TimeWindow(val date: LocalDate, val start: LocalTime, val end: LocalTime)
 
-/** 고정 블록(HC3). ANYTIME이면 date/start/dwellMin 은 null. **와이어에 직결**이라 필드를 더하지 않는다(계약 게이트가 잡는다 — TRIP-1001 실측). */
+/**
+ * 고정 블록(HC3). `start = null` 은 "그 날 반드시 가되 시각은 조립이 고른다"(TRIP-1249 — 물질화된 ANYTIME 의 모양이고,
+ * `start` 를 필수로 아는 구형 AI 는 422 로 거부한다). `date` 까지 null 인 블록은 경계로 나가지 않는다(물질화가 날짜를 채운다).
+ * **와이어에 직결**이라 필드를 더하지 않는다(계약 게이트가 잡는다 — TRIP-1001 실측).
+ */
 data class FixedBlock(val poiId: UUID, val date: LocalDate?, val start: LocalTime?, val dwellMin: Int?)
 
 /** 취향 7축(preference_snapshot). AI가 선호 점수·소프트 가중치에 사용. */

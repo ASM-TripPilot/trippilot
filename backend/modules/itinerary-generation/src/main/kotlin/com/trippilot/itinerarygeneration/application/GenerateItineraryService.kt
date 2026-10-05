@@ -159,7 +159,7 @@ class GenerateItineraryService(
                 scheduleAgent.generate(firstInput)
             } catch (e: Exception) {
                 log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-                MinimalItineraryFallback.of(firstInput, clock.instant(), firstAssembly.materializedPoiIds)
+                MinimalItineraryFallback.of(firstInput, clock.instant())
             }
             // **하루 여행도 PARTIAL 이다**(TRIP-511). 추천 근거가 생성에서 떨어져 나와 뒤따라오므로,
             // 여기서 COMPLETE 로 닫으면 화면이 폴링을 멈춰 근거를 영영 못 본다.
@@ -218,7 +218,6 @@ class GenerateItineraryService(
                 isRegeneration = previous != null,
                 assemblyUnplaced = secondAssembly.unplaced,
                 sessionId = session.sessionId,
-                materializedPoiIds = secondAssembly.materializedPoiIds,
                 preference = secondInput.preferenceProfile,
                 companionType = ctx.companionType,
             )
@@ -260,7 +259,7 @@ class GenerateItineraryService(
      * 조립 결과 — 요청과 **넣을 자리가 없어 보내지 못한 필수 방문지**를 함께 돌려준다.
      * 로그로만 남기면 사용자는 자기가 넣은 곳이 왜 없는지 끝내 알 수 없다(M2 채널로 이어붙인다).
      */
-    private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>, val materializedPoiIds: Set<UUID>)
+    private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>)
 
     /**
      * 그 날의 일과 창 — 고정 블록이 기본 창(09:00~21:00)을 넘으면 **그 블록을 포함하도록** 넓힌다
@@ -326,8 +325,9 @@ class GenerateItineraryService(
         // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
         includeExplanations: Boolean = true,
     ): Assembled {
-        // ANYTIME(날짜·시각 미지정)을 여기서 **물질화**한다(계약 M1) — AI 고정 블록은 시간창이 필수라
-        // null 을 담을 자리가 없고, 솔버가 날짜를 다시 고르지도 못한다. 넣을 자리가 없으면 보내지 않고
+        // ANYTIME(날짜·시각 미지정)은 여기서 **날짜만 물질화**한다(계약 M1 · TRIP-1249 개정) — 솔버가 날짜를
+        // 다시 고르지 못해 날짜는 우리 몫이고, 시각은 `start = null` 로 비워 조립이 영업시간·식사창 안에서 고른다
+        // (09:00 에 못 박으면 닫힌 식당이 409 가 되어 그 날이 통째로 폴백됐다). 넣을 날이 없으면 보내지 않고
         // 미배치로 보고한다(M2 채널) — AI 가 거부할 모양을 보내 요청 전체를 죽이느니 낫다.
         val candidates = ctx.fixedVisits
             .filter { it.date in dates || (it.date !in planDates(ctx.startDate, ctx.endDate) && carriesUndatedFixed) }
@@ -348,7 +348,6 @@ class GenerateItineraryService(
             )
         }
         return Assembled(
-            materializedPoiIds = materialized.materializedPoiIds,
             input = ScheduleAgentInput(
             tripId = tripId,
             generationMode = mode,
@@ -358,7 +357,7 @@ class GenerateItineraryService(
             // 창 밖 사용자 고정 블록이 있는 날은 **그 날만** 일과 창을 블록에 맞춰 넓힌다(TRIP-1001
             // 결정 (c), 2026-09-27). 안 넓히면 21:00 고정 하나가 HC4(day window)를 깨 그 날 전체가
             // "해 없음" → 409 → 2차 통째 최소 폴백이 된다(QA #045 실측). 물질화된 ANYTIME 은
-            // 기본 창 안에만 놓이므로 이 계산에 영향이 없다.
+            // 시각이 없어(start=null, TRIP-1249) 이 계산에 들어가지 않는다.
             timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks, ctx) },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —

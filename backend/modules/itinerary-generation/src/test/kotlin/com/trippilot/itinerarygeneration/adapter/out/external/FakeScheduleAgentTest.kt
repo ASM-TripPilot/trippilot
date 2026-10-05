@@ -79,6 +79,16 @@ class FakeScheduleAgentTest : StringSpec({
         out.days.single().slots.all { it.isFixed } shouldBe true
     }
 
+    "시각 없는 고정 블록(날짜만, TRIP-1249)은 창 시작에 놓이고 고정으로 표시된다 — 실 AI 의 is_fixed=true 를 비춘다" {
+        val agent = agentOf(pool("제주", emptyList()), clock)
+        val out = agent.generate(input(listOf("제주"), listOf(FixedBlock(fixedPoi, d1, null, 90))))
+        val slot = out.days.single().slots.single()
+        slot.poiId shouldBe fixedPoi
+        slot.startAt shouldBe LocalTime.of(9, 0)
+        slot.endAt shouldBe LocalTime.of(10, 30)
+        slot.isFixed shouldBe true
+    }
+
     /**
      * 늦은 시각 재계획 — 기계적으로 3시간씩 더하면 **자정을 넘어** `endAt < startAt` 인 슬롯이 나오고,
      * 도메인 검증(HC4 플래그 없이 되감김)에 걸려 사용자에게 500 이 된다.
