@@ -307,13 +307,17 @@ class GenerateItineraryService(
                 materialized.unplaced.size, tripId,
             )
         }
+        // 한 번 만들어 **두 필드가 같은 값을 보게** 한다 — 예산 등급이 `trip_context.budget_level` 과
+        // `preference_profile.budget_tier` 로 두 번 나가는데, 한쪽만 여행 취향을 반영하면 한 요청
+        // 안에서 예산이 갈리고 상대가 어느 쪽을 믿을지는 계약에 없다.
+        val profile = prefs.toProfile(hints, ctx.preferences)   // 여행별 취향 > 계정 7축 > 기록 기반 개인화(TRIP-556)
         return Assembled(
             materializedPoiIds = materialized.materializedPoiIds,
             input = ScheduleAgentInput(
             tripId = tripId,
             generationMode = mode,
-            // budgetLevel(등급) = preference_set.budget_tier (경계 계약; trip.budget_total 아님)
-            tripContext = TripContext(ctx.destinations, ctx.startDate, ctx.endDate, ctx.companionType, prefs.budgetTier),
+            // budgetLevel(등급) = 합성된 취향의 budget_tier (경계 계약; trip.budget_total 아님)
+            tripContext = TripContext(ctx.destinations, ctx.startDate, ctx.endDate, ctx.companionType, profile.budgetTier),
             anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors, ctx.destinationRefs).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
             // 창 밖 사용자 고정 블록이 있는 날은 **그 날만** 일과 창을 블록에 맞춰 넓힌다(TRIP-1001
             // 결정 (c), 2026-09-27). 안 넓히면 21:00 고정 하나가 HC4(day window)를 깨 그 날 전체가
@@ -329,7 +333,7 @@ class GenerateItineraryService(
             // 회신 필드(`unplaced_must_visits`)가 계약에 생겨야 성립한다(경계 계약 확정 문서 M2). 그때까지는
             // 침묵 드롭 위치가 백엔드에서 AI 로 옮겨간 상태일 뿐이다.
             fixedBlocks = materialized.fixedBlocks,
-            preferenceProfile = prefs.toProfile(hints, ctx.preferences),       // 여행별 취향 > 계정 7축 > 기록 기반 개인화(TRIP-556)
+            preferenceProfile = profile,
             recommendationStrength = null,
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs),
                 excludedPoiIds = excluded,

@@ -56,16 +56,19 @@ data class TripGenerationContext(
 /**
  * 여행별 취향 스냅숏(api-safe) — `trip.preference_snapshot jsonb` 를 아는 축만 정제한 것.
  *
- * **미설정과 빈 선택을 구분하지 않는다**: 둘 다 빈 목록/`null` 이고, 소비처는 그때 계정 취향으로
- * 보충한다. 클라이언트가 보낸 모르는 키·타입이 틀린 값은 **조용히 버린다** — 자유 맵이라
- * 무엇이 올지 보증할 수 없고, 여기서 던지면 취향 하나 때문에 일정 생성 전체가 죽는다.
+ * **`null`(미설정)과 빈 목록(전부 해제)은 다른 값이다.** 클라이언트가 그 둘을 구분해 보낸다 —
+ * 취향 시트에서 칩을 모두 끄면 `[]` 를 **명시적으로** 싣는다(FE `togglePrefStyle` 의 `?? []`).
+ * 둘을 같게 접으면 사용자가 이 여행에서 **뺀** 취향이 계정 값으로 되살아난다.
+ *
+ * 모르는 키·타입이 틀린 값은 **조용히 버린다**(= 미설정). 자유 맵이라 무엇이 올지 보증할 수 없고,
+ * 여기서 던지면 취향 하나 때문에 일정 생성 전체가 죽는다.
  */
 data class TripPreferenceSnapshot(
-    val styles: List<String> = emptyList(),
-    val activities: List<String> = emptyList(),
-    val foodTastes: List<String> = emptyList(),
-    val transportModes: List<String> = emptyList(),
-    val companionTypes: List<String> = emptyList(),
+    val styles: List<String>? = null,
+    val activities: List<String>? = null,
+    val foodTastes: List<String>? = null,
+    val transportModes: List<String>? = null,
+    val companionTypes: List<String>? = null,
     val pace: String? = null,
     val budgetTier: String? = null,
     val petFriendly: Boolean? = null,

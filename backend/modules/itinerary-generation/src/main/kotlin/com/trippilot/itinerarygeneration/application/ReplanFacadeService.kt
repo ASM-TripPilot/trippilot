@@ -95,7 +95,8 @@ class ReplanFacadeService(
                 freeText = command.freeText,
                 excludedPoiIds = command.excludedPoiIds,
                 companionType = ctx.companionType,
-                budgetLevel = prefs.budgetTier,
+                // 합성된 취향에서 집는다 — 생성 경로와 같은 이유로, 한 요청 안에서 예산이 갈리면 안 된다.
+                budgetLevel = profile.budgetTier,
                 preferenceProfile = profile,
                 // 원 일정 슬롯 — KB-1 컨텍스트이자 후보 풀 합류 대상(§4). 대상 일자만.
                 currentSlots = current.days.firstOrNull { it.date == command.targetDate }?.slots.orEmpty().map {

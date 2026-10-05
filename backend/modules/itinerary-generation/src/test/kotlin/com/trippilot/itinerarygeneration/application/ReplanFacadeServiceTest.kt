@@ -28,6 +28,7 @@ import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripGenerationContext
+import com.trippilot.trip.api.TripPreferenceSnapshot
 import com.trippilot.trip.api.TripPeriod
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.itinerarygeneration.domain.ReplanInput
@@ -686,6 +687,25 @@ class ReplanFacadeServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { f.svc.apply(acc, trip, strayDate, REASON) }
         f.repo.byTrip.getValue(trip).days[0].slots.map { it.sourcePoiId } shouldContainExactly
             listOf(morning, fixedNoon, evening) // 원본 그대로
+    }
+
+    "재계획도 여행에서 고른 취향을 싣는다 — 생성과 같은 척도여야 비교가 성립한다" {
+        val chosen = TripPreferenceSnapshot(styles = listOf("액티비티"), budgetTier = "HIGH")
+        val tripsWithPrefs = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(today, today.plusDays(1))
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) =
+                TripGenerationContext(today, today.plusDays(1), refs("제주"), "친구", 500_000, emptyList(), chosen)
+        }
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent, trips = tripsWithPrefs).svc.propose(command())
+
+        val sent = agent.inputs.single()
+        sent.preferenceProfile.styles shouldContainExactly listOf("액티비티")
+        sent.preferenceProfile.activities shouldContainExactly listOf("야경")  // 안 고른 축은 계정 값
+        // 예산은 두 필드로 나간다 — 한 요청 안에서 갈리면 상대가 어느 쪽을 믿을지 계약에 없다.
+        sent.preferenceProfile.budgetTier shouldBe "HIGH"
+        sent.budgetLevel shouldBe "HIGH"
     }
 })
 

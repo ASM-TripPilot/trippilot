@@ -25,13 +25,38 @@ class PreferenceProfilesTest : StringSpec({
         budgetTier = "MID",
     )
 
-    "여행에서 고른 취향이 계정 취향을 이긴다" {
-        val trip = TripPreferenceSnapshot(styles = listOf("액티비티"), activities = listOf("등산"))
+    "여행에서 고른 취향이 계정 취향을 이긴다 — 여덟 축 전부" {
+        val trip = TripPreferenceSnapshot(
+            styles = listOf("액티비티"),
+            activities = listOf("등산"),
+            foodTastes = listOf("고기"),
+            transportModes = listOf("렌터카"),
+            companionTypes = listOf("연인"),
+            pace = "PACKED",
+            budgetTier = "HIGH",
+            petFriendly = true,
+        )
 
         val profile = account.toProfile(PersonalizationHints.NONE, trip)
 
         profile.styles shouldBe listOf("액티비티")
         profile.activities shouldBe listOf("등산")
+        profile.foodTastes shouldBe listOf("고기")
+        profile.transportModes shouldBe listOf("렌터카")
+        profile.companionTypes shouldBe listOf("연인")
+        profile.pace shouldBe "PACKED"
+        profile.budgetTier shouldBe "HIGH"
+        profile.petFriendly shouldBe true
+    }
+
+    "축을 전부 해제한 것은 선택이다 — 뺀 취향이 계정 값으로 되살아나지 않는다" {
+        // 취향 시트에서 칩을 모두 끄면 클라이언트가 `[]` 를 명시적으로 싣는다(FE togglePrefStyle).
+        val trip = TripPreferenceSnapshot(styles = emptyList())
+
+        val profile = account.toProfile(PersonalizationHints.NONE, trip)
+
+        profile.styles shouldBe emptyList()
+        profile.activities shouldBe listOf("산책")   // 건드리지 않은 축은 계정 값 그대로
     }
 
     "여행이 고르지 않은 축은 계정 취향으로 채운다 — 한 축을 골랐다고 평소 취향 전부가 사라지지 않는다" {
