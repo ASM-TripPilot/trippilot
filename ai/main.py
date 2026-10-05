@@ -155,10 +155,16 @@ def _anthropic_llm_and_model() -> tuple[object, str]:
 
 
 def _kma_weather():
-    """`WEATHER_API`(기상청 공공데이터포털 디코딩 키, TRIP-383) 설정 시 실 어댑터 조립.
+    """`WEATHER_API`(기상청 단기예보 키, TRIP-383) 설정 시 실 어댑터 조립.
 
     미설정(빈 문자열 포함) = 미배선(None) — 날씨 보정 없이 기존 경로 그대로.
     실 응답 드리프트는 실키 실행에서 검증한다 (테스트·CI 실 호출 0, D37).
+
+    **키 두 종류를 다 받는다.** 공공데이터포털 디코딩 키(88자, `+/=`)와 기상청 API 허브
+    키(짧은 영숫자)는 서비스하는 주소가 다른데, 어댑터가 **키 모양에서 주소를 고른다**
+    (`kma_weather.endpoint_for`). 짝이 어긋나 날씨가 두 번 조용히 꺼졌기 때문에, 맞춰야
+    하는 값을 키 하나로 줄였다. `WEATHER_API_BASE` 로 주소를 직접 줄 수도 있다 —
+    새 형식의 키가 생겼을 때의 비상구이고, 평소에는 비워 둔다.
     """
     key = _env("WEATHER_API")
     if key is None:
@@ -166,7 +172,7 @@ def _kma_weather():
     from trippilot.poi_curation.adapters.kma_weather import KmaWeatherAdapter
     from trippilot.poi_curation.sourcing.tourapi import UrllibHttpClient
 
-    return KmaWeatherAdapter(UrllibHttpClient(), key)
+    return KmaWeatherAdapter(UrllibHttpClient(), key, base_url=_env("WEATHER_API_BASE"))
 
 
 def _place_existence():

@@ -40,8 +40,31 @@ from trippilot.poi_curation.sourcing.tourapi import HttpGetJson
 from trippilot.ports.weather_port import WeatherError
 
 _KST = timezone(timedelta(hours=9))
-_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
+# 같은 「단기예보 조회서비스 2.0」을 두 곳이 서비스한다. 경로와 응답 JSON 계층은 같고
+# **키 파라미터 이름과 키 종류만 다르다**(2026-10-02·10-05 실호출 대조).
+_PORTAL_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
+_APIHUB_BASE = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0"
+_APIHUB_HOST = "apihub.kma.go.kr"
+_BASE = _PORTAL_BASE  # 과거 이름 — 밖에서 참조하던 자리를 깨지 않는다
 _OK_CODE = "00"  # NORMAL_SERVICE
+
+
+def key_param_for(base_url: str) -> str:
+    """주소에서 키 파라미터 이름을 고른다 — 이 둘은 **항상** 같이 간다.
+
+    실제로 어긋나 날씨 보정이 두 번 조용히 꺼진 짝이다:
+        포털(`apis.data.go.kr`) 은 ``serviceKey`` · 허브(`apihub.kma.go.kr`) 는 ``authKey``
+        틀리면 403 SERVICE_KEY_IS_NOT_REGISTERED 또는 401 유효한 인증키가 아닙니다
+
+    그래서 파라미터 이름을 설정값으로 두지 않는다 — 주소 하나만 맞으면 따라온다.
+
+    **주소는 키 모양으로 맞히지 않는다.** 한 번 그렇게 만들었다가 틀렸다: 포털 키가
+    base64 라 ``+ / =`` 를 담는다고 보고 "특수문자 없으면 허브"로 갈랐는데,
+    2026-10-05 에 **64자 영숫자 포털 키**가 들어와 허브로 가서 401 이 났다(실측).
+    키 형식은 발급처가 언제든 바꿀 수 있는 것이라 판별 근거가 못 된다 — 주소는
+    `WEATHER_API_BASE` 로 **명시**하고, 기본값은 포털이다.
+    """
+    return "authKey" if _APIHUB_HOST in base_url else "serviceKey"
 # 발표시각(base_time) 8회 고정 + API 제공은 발표 후 ~10분 (활용가이드)
 _BASE_HOURS = (2, 5, 8, 11, 14, 17, 20, 23)
 _PROVIDE_LAG_MIN = 10
@@ -132,9 +155,15 @@ class KmaWeatherAdapter:
         service_key: str,
         *,
         now_fn: Callable[[], datetime] | None = None,
+        base_url: str | None = None,
     ) -> None:
         self._http = http
         self._key = service_key
+        # 주소는 명시로 고르고(기본 포털), **키 파라미터 이름은 주소에서 따라온다** —
+        # 주소만 바꾸고 파라미터를 안 바꾸는 실수를 만들 수 없게 한다.
+        self._base = (base_url or _PORTAL_BASE).rstrip("/")
+        self._key_param = key_param_for(self._base)
+        _log.info("기상청 단기예보 = %s (키 파라미터 %s)", self._base, self._key_param)
         self._now = now_fn if now_fn is not None else lambda: datetime.now(_KST)
         # 같은 (좌표, 발표분) 응답을 기억한다 — 아래 `_fetch_body` 참고.
         self._last: tuple[tuple[float, float, str, str], object] | None = None
@@ -178,9 +207,9 @@ class KmaWeatherAdapter:
             return self._last[1]
         try:
             body = self._http.get_json(
-                f"{_BASE}/getVilageFcst",
+                f"{self._base}/getVilageFcst",
                 {
-                    "serviceKey": self._key,
+                    self._key_param: self._key,
                     "dataType": "JSON",
                     "pageNo": "1",
                     "numOfRows": str(_NUM_OF_ROWS),
