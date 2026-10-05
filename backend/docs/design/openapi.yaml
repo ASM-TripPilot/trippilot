@@ -2098,7 +2098,7 @@ components:
         party: { type: integer }
         companionType: { allOf: [{ $ref: '#/components/schemas/CompanionType' }], nullable: true }
         budgetTotal: { type: integer, format: int64, nullable: true }
-        preferenceSnapshot: { type: object, additionalProperties: true, description: 생성 시점 취향 동결(jsonb) }
+        preferenceSnapshot: { allOf: [{ $ref: '#/components/schemas/TripPreferenceSnapshot' }], description: 생성 시점 취향 동결(jsonb) }
         destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
         status: { $ref: '#/components/schemas/TripStatus' }
         createdAt: { type: string, format: date-time }
@@ -2141,8 +2141,27 @@ components:
         party: { type: integer, default: 1 }
         companionType: { allOf: [{ $ref: '#/components/schemas/CompanionType' }], nullable: true }
         budgetTotal: { type: integer, format: int64, nullable: true }
-        preferenceSnapshot: { type: object, additionalProperties: true }
+        preferenceSnapshot: { $ref: '#/components/schemas/TripPreferenceSnapshot' }
         destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
+
+    # 여행 생성 때 고른 취향(BR-U1-38). 서버가 **의미 있게 읽는 축**을 적는다 —
+    # 해석은 `PreferenceProfiles.overriddenBy` 한 곳이고, 키 어휘는 계정 취향 필드명(camelCase)과 같다.
+    #
+    # **키가 있으면 그 값이 최종이다(빈 배열 포함), 없는 축만 계정 취향으로 보충한다.**
+    # 자유 맵으로 두면 클라이언트가 키를 바꿔도 타입체크·테스트가 전부 통과하면서 취향만 조용히
+    # 사라진다 — 2026-10-05 에 실제로 그 증상으로 올라왔다(#995 로 수정). 서버는 모르는 키·모양이
+    # 틀린 값을 빈 값으로 읽으므로 additionalProperties 를 막지는 않는다.
+    TripPreferenceSnapshot:
+      type: object
+      properties:
+        styles: { type: array, items: { type: string } }
+        activities: { type: array, items: { type: string } }
+        foodTastes: { type: array, items: { type: string } }
+        transportModes: { type: array, items: { type: string } }
+        companionTypes: { type: array, items: { type: string } }
+        pace: { type: string }
+        budgetTier: { type: string }
+        petFriendly: { type: boolean }
 
     EditTripRequest:
       type: object
