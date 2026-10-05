@@ -191,9 +191,11 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: collected-pois
+          # seen_refs.json — 목록에서 본 id 전부(스킵 포함). 벤더 삭제 측정용 (TRIP-1248)
           path: |
             ai/collected_pois.json
             ai/collect_state.json
+            ai/seen_refs.json
           retention-days: 30
       - name: 신규율 진단 (50% 미만이면 원인·처방까지 — 제자리걸음이면 실패)
         if: steps.collect.outputs.skipped != 'true'
@@ -266,14 +268,14 @@ jobs:
           uv run python scripts/merge_pois_docs.py -o data/collected_pois.json \
             data/collected_pois.json collected_pois.json rewind_pois.json
           AFTER=$(uv run python -c "import json;print(len(json.load(open('data/collected_pois.json'))['proposals']))")
-          # 관광 무관 소급 제거(병합 단)는 **의도한 감소**다 — 그 몫을 빼고 비교하지
+          # 관광 무관·폐업 소급 제거(병합 단)는 **의도한 감소**다 — 그 몫을 빼고 비교하지
           # 않으면 정상 동작이 축소 사고로 오인돼 배치가 빨개진다.
-          DROPPED=$(uv run python -c "import json;print(json.load(open('data/collected_pois.json'))['stats'].get('non_travel_dropped',0))")
+          DROPPED=$(uv run python -c "import json;s=json.load(open('data/collected_pois.json'))['stats'];print(s.get('non_travel_dropped',0)+s.get('closed_dropped',0))")
           if [ "$((AFTER + DROPPED))" -lt "$BEFORE" ]; then
             echo "::error::합본(${AFTER}건 + 의도 제거 ${DROPPED}건)이 공유본(${BEFORE}건)보다 작다 — 축소 덮어쓰기 차단"
             exit 1
           fi
-          [ "$DROPPED" -gt 0 ] && echo "관광 무관 소급 제거 ${DROPPED}건 (축소 가드에서 제외)"
+          [ "$DROPPED" -gt 0 ] && echo "소급 제거(관광 무관·폐업) ${DROPPED}건 (축소 가드에서 제외)"
           if git diff --quiet -- data/collected_pois.json; then
             echo "공유본 변화 없음 — PR 생략"
             exit 0
