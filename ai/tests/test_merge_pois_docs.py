@@ -92,8 +92,8 @@ def test_reparse_reads_rest_carried_in_raw() -> None:
 
 
 def test_reparse_does_not_fill_rest_the_collector_gave_up_on() -> None:
-    """수집이 포기한 휴무(점포별 상이 등)를 병합이 7일 영업으로 채우지 않는다 — 종전엔 채웠다."""
-    p = _prop("1", "09:00~18:00\n휴무: 점포별 상이")
+    """수집이 포기한 휴무(동절기 휴장 등)를 병합이 7일 영업으로 채우지 않는다 — 종전엔 채웠다."""
+    p = _prop("1", "09:00~18:00\n휴무: 동절기 휴장")
     assert reparse_open_hours([p]) == 0
     assert p["poi"]["open_hours"] == []
 

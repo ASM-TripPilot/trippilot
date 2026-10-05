@@ -66,7 +66,7 @@ def test_해석_못_하는_휴무도_싣는다() -> None:
     실으면 런타임도 수집처럼 `()`(정보 없음)다. 파서가 이 문구를 읽게 되면 재수집 없이 소급된다
     (결정·실측: data/README 「휴무를 해석 못 하는 POI」).
     """
-    rest = "점포별 상이"
+    rest = "동절기 휴장"
     joined = join_opening_hours_raw("09:00~18:00", rest)
     assert joined == "09:00~18:00" + REST_SEP + rest
     assert parse_opening_hours_raw(joined) == parse_open_hours("09:00~18:00", rest) == ()
