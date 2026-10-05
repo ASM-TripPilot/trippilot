@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { ConceptProgress } from './ConceptPickerScreen';
 import {
@@ -32,7 +33,7 @@ import { SlotCandidateCard } from './SlotCandidateCard';
  *  - AC-6: 셋째 반경 세그 라벨 = `maxRadiusLabel ?? step.label`(서버 파생값 포맷, 지어내지 않음).
  *    캡션(`radiusUsedLabel`)과는 분리 — 무엇을 어디에 채울지는 페이지가 정한다(TRIP-978).
  *  - TRIP-978: `confirmLocked` 면 확정 버튼 비활성 + 잠금 사유(INV-4 — 활성으로 보이는 무반응 금지).
- *    `candidatesErrorMessage` 면 0건 얼굴 대신 조회 실패 사유, `candidatesPending` 이면 0건 얼굴 보류.
+ *    `candidatesErrorMessage` 면 0건 얼굴 대신 조회 실패 사유, `candidatesPending` 이면 0건 얼굴 대신 스켈레톤(TRIP-1251).
  *  - INV-1: 렌더된 후보 카드 = 배선이 준 후보 poiId 집합(임의 POI 0).
  *  - 배지 **A부터**: 빈 슬롯 채우기엔 "현재"가 없어 후보가 A/B/C/D 다.
  *  - AC-8: 조회/저장 실패는 `errorMessage` 인라인(빈 문자열 0).
@@ -56,6 +57,52 @@ const CONFIRM_LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
  */
 function coPickBadge(index: number): string {
   return String.fromCharCode('A'.charCodeAt(0) + index);
+}
+
+/**
+ * TRIP-1251 · 후보를 기다리는 동안의 자리표시 — Figma h02 loading(4294:8234) skelCard 3장 골격(배지 원·
+ * 사진·글줄 2). h10 엔 로딩 변형이 없어 같은 밴드 h02 를 따른다(블록 `bg-hairline`, 카드 테두리·그림자 없음).
+ * 글자는 넣지 않는다(곧 도착할 후보에게 "없어요"를 미리 말하지 않는다). 펄스는 `Skeleton` 하나가 세 장을
+ * 통째로(루프 1개). 목록 간격은 실제 후보 목록과 같은 `gap-sm` — 도착할 때 레이아웃이 튀지 않게.
+ */
+function CandidatesSkeleton(): ReactElement {
+  return (
+    <View
+      testID="itinerary-copick-slotfill-skeleton"
+      accessible
+      accessibilityLabel="목록을 불러오는 중"
+      className="w-full"
+    >
+      <Skeleton className="w-full gap-sm">
+        {[0, 1, 2].map((slot) => (
+          <View
+            key={slot}
+            testID="itinerary-copick-slotfill-skeleton-card"
+            className="w-full flex-row items-center gap-md rounded-card bg-canvas py-md pl-md pr-[14px]"
+          >
+            <View
+              testID="itinerary-copick-slotfill-skeleton-badge"
+              className="h-[26px] w-[26px] rounded-pill bg-hairline"
+            />
+            <View
+              testID="itinerary-copick-slotfill-skeleton-photo"
+              className="h-[78px] w-[78px] rounded-thumb bg-hairline"
+            />
+            <View className="flex-1 gap-sm">
+              <View
+                testID="itinerary-copick-slotfill-skeleton-line"
+                className="h-[16px] w-[120px] rounded-[4px] bg-hairline"
+              />
+              <View
+                testID="itinerary-copick-slotfill-skeleton-line"
+                className="h-[12px] w-[76px] rounded-[4px] bg-hairline"
+              />
+            </View>
+          </View>
+        ))}
+      </Skeleton>
+    </View>
+  );
 }
 
 export interface SlotFillScreenProps {
@@ -330,7 +377,9 @@ export function SlotFillScreen({
                 {candidatesErrorMessage}
               </Text>
             </View>
-          ) : isEmpty && candidatesPending ? null : isEmpty ? (
+          ) : isEmpty && candidatesPending ? (
+            <CandidatesSkeleton />
+          ) : isEmpty ? (
             <View
               testID="itinerary-copick-zero"
               className="w-full items-center gap-md rounded-card border-[1.5px] border-dashed border-hairline-strong px-lg py-xl"

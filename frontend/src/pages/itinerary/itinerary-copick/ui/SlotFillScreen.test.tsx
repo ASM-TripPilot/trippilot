@@ -7,6 +7,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import { SlotFillScreen } from './SlotFillScreen';
 
@@ -665,5 +666,160 @@ describe('🔴 SlotFillScreen — 0건 사유 얼굴(TRIP-948)', () => {
     });
 
     expect(screen.queryByTestId('itinerary-copick-zero')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1251 · 후보를 기다리는 동안 빈칸 대신 스켈레톤 카드 3장(Figma h02 loading 4294:8234 골격).
+ *
+ * 무엇을 보장하나:
+ *  - AC-1: 0건 + 조회 중이면 스켈레톤 하나가 뜨고, 0건·실패 얼굴·라디오·확정 버튼은 없다.
+ *  - AC-2·결정 2: 카드 3장, 장마다 배지 원 1·사진 1·글줄 2, 글자 0(곧 올 후보에게 거짓말 금지).
+ *  - 결정 3: 블록은 bg-hairline, 카드는 테두리·그림자 없음(h02 코드 선례 bg-surface-soft·border 복사 차단).
+ *  - 결정 5: 스크린리더 라벨은 h02 선례 문구 재사용.
+ *  - AC-3: 후보가 도착하면 스켈레톤이 사라지고 후보 카드가 보인다.
+ *  - AC-4·AC-5(INV-4): 진짜 0건이면 0건 얼굴, 조회 실패면 실패 얼굴 — 어느 쪽도 스켈레톤이 아니다.
+ */
+describe('🔴 SlotFillScreen (h10) — 후보를 기다리는 얼굴(스켈레톤)', () => {
+  const SKEL = 'itinerary-copick-slotfill-skeleton';
+  const CARD = 'itinerary-copick-slotfill-skeleton-card';
+  const BADGE = 'itinerary-copick-slotfill-skeleton-badge';
+  const PHOTO = 'itinerary-copick-slotfill-skeleton-photo';
+  const LINE = 'itinerary-copick-slotfill-skeleton-line';
+  const LOADING = { candidates: [], candidatesPending: true };
+  const FETCH_ERROR = '후보를 불러오지 못했어요';
+
+  /** renderScreen 과 같은 기본 props — rerender 에 전체 props 가 다시 필요해서 둔다. */
+  function props(overrides: Record<string, unknown> = {}) {
+    return {
+      candidates: CANDIDATES,
+      radiusSteps: RADIUS_STEPS,
+      selectedRadiusKey: 'mid',
+      radiusUsedLabel: null,
+      candidateCountLabel: '후보 2곳',
+      selectedPoiId: null,
+      canExpandRadius: true,
+      isPending: false,
+      errorMessage: null,
+      onSelectRadius: jest.fn(),
+      onSelectRadio: jest.fn(),
+      onConfirm: jest.fn(),
+      onExpandRadius: jest.fn(),
+      onShrinkRadius: jest.fn(),
+      onChangeConcept: jest.fn(),
+      onBack: jest.fn(),
+      ...overrides,
+    };
+  }
+
+  const tokens = (node: { props: { className?: unknown } }): string[] =>
+    String(node.props.className ?? '').split(/\s+/);
+
+  it('K1 · 0건+조회 중이면 스켈레톤 하나가 뜨고, 0건·실패 얼굴·라디오·확정 버튼은 없다', () => {
+    renderScreen(LOADING);
+
+    expect(screen.queryAllByTestId(SKEL)).toHaveLength(1);
+    // 펄스는 jest 사각이라 공용 펄스 부품을 썼는지만 본다(회색 정지 View 차단).
+    expect(
+      screen.UNSAFE_queryAllByType(Skeleton).length
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByTestId('itinerary-copick-zero')).toBeNull();
+    expect(
+      screen.queryByTestId('itinerary-copick-candidates-error')
+    ).toBeNull();
+    expect(screen.queryAllByTestId(/^itinerary-candidate-radio-/)).toHaveLength(
+      0
+    );
+    expect(
+      screen.queryByTestId('itinerary-copick-slotfill-confirm')
+    ).toBeNull();
+  });
+
+  it('K2 · 스켈레톤은 카드 3장이고 장마다 배지 원 1·사진 1·글줄 2, 보이는 글자는 0이다', () => {
+    renderScreen(LOADING);
+
+    const skel = screen.getByTestId(SKEL);
+    const cards = within(skel).getAllByTestId(CARD);
+    expect(cards).toHaveLength(3);
+    expect(screen.queryAllByTestId(BADGE)).toHaveLength(3);
+    expect(screen.queryAllByTestId(PHOTO)).toHaveLength(3);
+    expect(screen.queryAllByTestId(LINE)).toHaveLength(6);
+
+    // 전역 개수만으로는 "한 카드에 몰림"이 통과한다 — 첫 카드 골격을 따로 못박는다.
+    expect(within(cards[0]).queryAllByTestId(BADGE)).toHaveLength(1);
+    expect(within(cards[0]).queryAllByTestId(PHOTO)).toHaveLength(1);
+    expect(within(cards[0]).queryAllByTestId(LINE)).toHaveLength(2);
+
+    expect(within(skel).queryAllByText(/\S/)).toHaveLength(0);
+  });
+
+  it('K3 · 블록은 bg-hairline 이고 카드에는 테두리·그림자가 없다(Figma h02 loading)', () => {
+    renderScreen(LOADING);
+
+    const cards = screen.queryAllByTestId(CARD);
+    const blocks = [
+      ...screen.queryAllByTestId(BADGE),
+      ...screen.queryAllByTestId(PHOTO),
+      ...screen.queryAllByTestId(LINE),
+    ];
+    expect(cards).toHaveLength(3);
+    expect(blocks).toHaveLength(12);
+
+    for (const block of blocks) {
+      expect(tokens(block)).toContain('bg-hairline');
+      expect(tokens(block)).not.toContain('bg-surface-soft');
+    }
+    for (const card of cards) {
+      expect(tokens(card).filter((t) => /^(border|shadow)/.test(t))).toEqual(
+        []
+      );
+    }
+  });
+
+  it('K4 · 스크린리더는 스켈레톤을 "목록을 불러오는 중"으로 읽는다', () => {
+    renderScreen(LOADING);
+
+    expect(screen.getByTestId(SKEL)).toHaveProp(
+      'accessibilityLabel',
+      '목록을 불러오는 중'
+    );
+  });
+
+  it('K5 · 후보가 도착하면 스켈레톤이 사라지고 후보 카드와 확정 버튼이 보인다', () => {
+    render(<SlotFillScreen {...props(LOADING)} />);
+    expect(screen.getByTestId(SKEL)).toBeOnTheScreen(); // 앵커 — 도착 전엔 있었다
+
+    screen.rerender(
+      <SlotFillScreen
+        {...props({ candidates: CANDIDATES, candidatesPending: false })}
+      />
+    );
+
+    expect(screen.queryByTestId(SKEL)).toBeNull();
+    expect(screen.UNSAFE_queryAllByType(Skeleton)).toHaveLength(0);
+    expect(
+      screen.getByTestId('itinerary-candidate-radio-A1')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-copick-slotfill-confirm')
+    ).toBeOnTheScreen();
+  });
+
+  it('K6 · 조회가 끝난 진짜 0건이면 0건 얼굴이고 스켈레톤은 없다', () => {
+    renderScreen({ candidates: [], candidatesPending: false });
+
+    expect(screen.getByTestId('itinerary-copick-zero')).toBeOnTheScreen();
+    expect(screen.queryByTestId(SKEL)).toBeNull();
+    expect(screen.UNSAFE_queryAllByType(Skeleton)).toHaveLength(0);
+  });
+
+  it('K7 · 조회 실패 문구가 있으면 조회 중이어도 실패 얼굴이고 스켈레톤은 없다(INV-4)', () => {
+    renderScreen({ ...LOADING, candidatesErrorMessage: FETCH_ERROR });
+
+    expect(
+      screen.getByTestId('itinerary-copick-candidates-error')
+    ).toHaveTextContent(FETCH_ERROR);
+    expect(screen.queryByTestId(SKEL)).toBeNull();
+    expect(screen.UNSAFE_queryAllByType(Skeleton)).toHaveLength(0);
   });
 });
