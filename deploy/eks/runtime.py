@@ -75,6 +75,9 @@ def parser():
             sub.add_argument("--outputs", type=Path, required=True)
         if action in ("sync-secrets", "render-values"):
             sub.add_argument("--embedding-enabled", action="store_true")
+        if action == "sync-secrets":
+            # 미지정 = 시크릿에 저장된 푸시 모드 유지. 값은 백엔드가 아는 두 가지뿐이다.
+            sub.add_argument("--push-mode", choices=("off", "expo"))
         if action in ("bootstrap-db", "cleanup-db"):
             sub.add_argument("--run-id", required=True)
         if action == "render-values":
@@ -91,7 +94,8 @@ def main(argv=None):
     if args.action == "ensure-namespace":
         ensure_namespace(args.namespace, command)
     elif args.action == "sync-secrets":
-        runtime_secrets.sync(outputs, args.namespace, args.embedding_enabled, command)
+        runtime_secrets.sync(outputs, args.namespace, args.embedding_enabled, command,
+                             push_mode=args.push_mode)
     elif args.action == "bootstrap-db":
         runtime_db.bootstrap(outputs, args.namespace, args.run_id, command)
     elif args.action == "cleanup-db":

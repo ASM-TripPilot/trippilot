@@ -256,6 +256,46 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual(len(applied), 8)
         self.assertEqual(keygen.call_count, 1)
 
+    def test_sync_overrides_push_mode_only_when_asked(self, keygen=None, keycheck=None):
+        """푸시를 켜는 길이 시크릿 손편집뿐이면 로컬 자격이 만료된 날엔 못 켠다 — 배포 입력이 직접 쓴다.
+        지정하지 않으면(유지) 저장된 값을 건드리지 않는다(종전 보존 규칙 그대로)."""
+        saved = {arn: {} for arn in outputs()["app_secret_arns"].values()}
+        backend_arn = outputs()["app_secret_arns"]["backend"]
+        saved[backend_arn] = {"PUSH_MODE": "off"}
+
+        def execute(argv, payload=None):
+            if "get-secret-value" in argv:
+                arn = argv[argv.index("--secret-id") + 1]
+                return json.dumps({"SecretString": json.dumps(saved[arn])})
+            if "put-secret-value" in argv:
+                path = next(a for a in argv if a.startswith("file://"))[len("file://"):]
+                with open(path, encoding="utf-8") as stream:
+                    request = json.load(stream)
+                saved[request["SecretId"]] = json.loads(request["SecretString"])
+                return "{}"
+            return "{}"
+
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"):
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)
+            self.assertEqual(saved[backend_arn]["PUSH_MODE"], "off")
+            runtime_secrets.sync(outputs(), "trippilot", False, execute, push_mode="expo")
+            self.assertEqual(saved[backend_arn]["PUSH_MODE"], "expo")
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)
+            self.assertEqual(saved[backend_arn]["PUSH_MODE"], "expo")  # 유지는 덮지 않는다
+
+    def test_sync_secrets_cli_passes_push_mode_and_rejects_unknown(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "outputs.json"
+            source.write_text(json.dumps({key: {"value": value} for key, value in outputs().items()}))
+            with patch("runtime.runtime_secrets.sync") as sync, patch("builtins.print"):
+                runtime.main(["sync-secrets", "--outputs", str(source), "--push-mode", "expo"])
+                self.assertEqual(sync.call_args.kwargs["push_mode"], "expo")
+                runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertIsNone(sync.call_args.kwargs["push_mode"])
+            with self.assertRaises(SystemExit), patch("sys.stderr"):
+                runtime.main(["sync-secrets", "--outputs", str(source), "--push-mode", "fcm"])
+
     def test_ensure_namespace_and_cli_commands_dispatch_with_validated_arguments(self):
         import tempfile
         with tempfile.TemporaryDirectory() as folder:

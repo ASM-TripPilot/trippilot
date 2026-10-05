@@ -176,11 +176,16 @@ def runtime_manifests(groups, outputs, namespace, embedding_enabled):
              "stringData": values[name]} for name in GROUP_KEYS]
 
 
-def sync(outputs, namespace, embedding_enabled, shell):
+def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None):
     region = outputs["aws_region"]
     groups = {name: get_secret(shell, region, arn) for name, arn in outputs["app_secret_arns"].items()}
     validate_groups(groups)
     seeded = seed_groups(groups)
+    if push_mode is not None:
+        # 배포 입력이 고른 값으로 덮는다 — 시크릿 손편집만이 켜는 길이면 로컬 자격이 만료된 날엔 못 켠다.
+        # None(유지)이면 저장된 값을 건드리지 않는다(보존 규칙 그대로).
+        seeded["backend"] = {**seeded["backend"], "PUSH_MODE": push_mode}
+        validate_groups(seeded)
     validate_rsa_key(seeded["backend"]["JWT_SIGNING_KEY"])
     for name, values in seeded.items():
         if values != groups[name]:
