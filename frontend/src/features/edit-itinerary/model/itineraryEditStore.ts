@@ -11,9 +11,10 @@ import type {
  * `tripWizardStore`·`preferenceStore`와 같은 배치이고 `persist`는 없다(로컬 자동임시저장은 후속
  * 슬라이스 — 지금은 앱 생존 중만 유지되는 모듈 싱글턴이면 충분하다).
  *
- * 삭제·재정렬 수학은 **순수 헬퍼**로 뺐다 — 드래그 제스처는 jest로 못 태우니(reanimated 네이티브)
- * 재정렬 규칙(특히 고정 슬롯 잠금)을 렌더 없이 직접 태워 잠근다(02a ★1·★2). 스토어 액션은 그
- * 헬퍼를 "해당 날에만" 얹는 얇은 래퍼다.
+ * 삭제·추가 수학은 **순수 헬퍼**로 뺐다 — 드래그 제스처는 jest로 못 태우니(reanimated 네이티브)
+ * 규칙을 렌더 없이 직접 태워 잠근다(02a ★1·★2). 스토어 액션은 그 헬퍼를 "해당 날에만" 얹는 얇은
+ * 래퍼다. 재정렬은 끌기 결과 순서를 그대로 쓴다 — 시각 고정(`isFixed`)은 순서 자리가 아니라 시각만
+ * 지킨다(INV-U3-03, 서버가 저장 때 지킴 · TRIP-1250).
  *
  * `create(` 리터럴 표기는 `tripWizardStore` 선례대로 — 타입을 `StateCreator` 변수로 먼저 확정하고
  * `create(그변수)`로 부른다(구조 가드 정규식이 `create<T>(...)` 제네릭을 오탐하지 않게).
@@ -62,38 +63,13 @@ export function insertSlotAt(slots: Slot[], slot: Slot, index: number): Slot[] {
   return [...slots.slice(0, at), slot, ...slots.slice(at)];
 }
 
-/**
- * 재정렬 결과를 다시 쌓되 **고정 슬롯은 원래 절대 인덱스에 재고정**한다(엣지1 · INV-U3-02).
- * lib(`onDragEnd.data`)이 준 배열이 고정을 밀어냈어도, 고정은 `original`의 자리를 지키고
- * 비고정만 `reordered` 순서로 빈 자리를 채운다. 핸들을 숨겨 드래그를 막아도 비고정을 고정
- * 너머로 드롭하면 lib이 고정을 밀 수 있어(배열 순서 = 슬롯 순서라 고정이 자리를 잃는다), 이
- * 수학이 최종 방어선이다.
- */
-export function reorderKeepingFixed(
-  original: Slot[],
-  reordered: Slot[]
-): Slot[] {
-  const nonFixedInOrder = reordered.filter((s) => !s.isFixed);
-  const result: Slot[] = new Array(original.length);
-  let cursor = 0;
-  for (let i = 0; i < original.length; i += 1) {
-    if (original[i].isFixed) {
-      result[i] = original[i];
-    } else {
-      result[i] = nonFixedInOrder[cursor];
-      cursor += 1;
-    }
-  }
-  return result;
-}
-
 export interface ItineraryEditState {
   days: ItineraryDaysItem[];
   /** GET 결과로 1회 시드 — 원본 배열과 독립하도록 얕게 복사해 담는다(비파괴). */
   seed(days: ItineraryDaysItem[]): void;
   /** 해당 날에서 첫 일치 슬롯 제거. */
   deleteSlot(date: string, poiId: string): void;
-  /** `onDragEnd.data`를 받아 해당 날 슬롯을 고정 재고정 후 반영. */
+  /** `onDragEnd.data`를 받아 해당 날 슬롯을 그 순서 그대로 반영(고정 슬롯도 재고정하지 않는다). */
   reorderSlots(date: string, reordered: Slot[]): void;
   /**
    * 대상 슬롯의 시각 3필드(startAt·endAt·endsNextDay)만 갱신 — 슬롯을 이동시키지 않고
@@ -129,9 +105,7 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (set) => ({
   reorderSlots: (date, reordered) =>
     set((state) => ({
       days: state.days.map((day) =>
-        day.date === date
-          ? { ...day, slots: reorderKeepingFixed(day.slots, reordered) }
-          : day
+        day.date === date ? { ...day, slots: [...reordered] } : day
       ),
     })),
   adjustSlotTime: (date, poiId, patch) =>

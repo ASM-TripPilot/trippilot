@@ -75,7 +75,7 @@ export interface EditorViewProps {
   onSave: () => void;
   /** CTA 라벨(TRIP-1038 — 직접 짜기만 「저장하고 확정하기」를 넘긴다). 생략하면 「일정 저장하기」. */
   saveLabel?: string;
-  /** 끌어 바꾼 새 순서(센티널 제외). 고정·완료 재고정은 페이지 사슬 몫. */
+  /** 끌어 바꾼 새 순서(센티널 제외). 완료 행 재고정은 페이지 사슬 몫(고정 행은 재고정 없음, TRIP-1250). */
   onReorder?: (slots: EditorViewSlot[]) => void;
   /** 드롭존(센티널 뒤)에 놓인 카드. 고정·완료 카드는 부르지 않는다. */
   onDeleteViaDrag?: (poiId: string) => void;
