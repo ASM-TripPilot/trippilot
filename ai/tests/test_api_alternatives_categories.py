@@ -74,3 +74,33 @@ def test_restrict_is_closed_set_subset(pool, codes) -> None:
 
 
 _BOUNDARY = {c.value for c in PoiCategory} - {PoiCategory.STAY.value}
+
+
+# ── ⑤ 컨셉이 LLM 에 닿는가 — 거른 풀만 주면 "해수욕장의 대안으로 식당"이라 비운다 ──
+# 2026-10-05 실측: 식사·카페 컨셉이 `llm_empty_result` → 규칙 폴백. 선택 LLM 이
+# 사용자가 이 자리의 종류를 바꾸려 한다는 사실을 몰랐다.
+
+_WANT = "바꾸길 원합니다"
+
+
+def _prompt_for(**over: object) -> str:
+    from tests.test_api_alternatives_place_knowledge import _PromptSpy
+
+    spy = _PromptSpy()
+    with TestClient(build_dev_app(llm=spy, model_id="test-model"),
+                    raise_server_exceptions=False) as client:
+        assert _post(client, **over).status_code == 200
+    assert spy.prompts, "LLM 이 불리지 않았다"
+    return spy.prompts[0]
+
+
+def test_known_categories_reach_selection_prompt_in_korean() -> None:
+    prompt = _prompt_for(categories=["FOOD", "CAFE", "식사"])
+    line = next(l for l in prompt.splitlines() if _WANT in l)
+    assert "맛집" in line and "카페" in line
+    assert "FOOD" not in line and "식사" not in line  # 한글 정본 어휘 · 모르는 코드는 안 싣는다
+
+
+def test_no_known_category_adds_no_concept_line() -> None:
+    assert _WANT not in _prompt_for()
+    assert _WANT not in _prompt_for(categories=["식사", "STAY"])

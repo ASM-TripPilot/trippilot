@@ -23,6 +23,7 @@ from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.domain.poi import Poi
+from trippilot.llm_gateway.workers.reminder_copy import _CATEGORY_LABELS
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +47,10 @@ class AlternativeSelectionInput:
     # 사용자가 직접 쓴 말(재계획 자유 입력). 빈 문자열 = 없음. 한 줄로 눌러 렌더한다 —
     # 줄바꿈을 살리면 프롬프트 골격([출력 JSON 스키마] 등)을 흉내 낼 수 있다.
     user_request: str = ""
+    # 풀을 거른 경계 카테고리 코드(같이 짜기 컨셉, `restrict_pool_to_categories`). 빈 튜플 =
+    # 지정 없음. 사용자 원문이 아니라 시스템이 만든 조건이라 `user_request` 칸과 섞지 않는다 —
+    # 그 칸은 "사용자가 직접 쓴 말"이고 KB 질의에도 들어간다.
+    wanted_categories: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.max_alternatives < 1:
@@ -103,8 +108,19 @@ def build_alternative_selection_vars(
         "persona_context": inp.persona_context.strip() or "(검색 결과 없음)",
         "candidates": candidates or "(후보 없음)",
         "user_request": inline(inp.user_request).strip() or "(없음)",
+        "wanted_categories": _wanted_line(inp.wanted_categories),
         "max_alternatives": str(inp.max_alternatives),
     }
+
+
+def _wanted_line(codes: tuple[str, ...]) -> str:
+    """컨셉 → 한 줄. 이게 없으면 원래 슬롯(해수욕장)의 대안으로 식당만 받은 모델이
+    "적합한 후보 없음"으로 비운다(2026-10-05 실측 `llm_empty_result`)."""
+    names = "·".join(dict.fromkeys(_CATEGORY_LABELS[c] for c in codes if c in _CATEGORY_LABELS))
+    if not names:
+        return "(지정 없음)"
+    return (f"사용자가 이 자리를 {names} 장소로 바꾸길 원합니다 — "
+            "원래 장소와 종류가 달라도 이 종류 안에서 고르세요")
 
 
 class AlternativeSelectionWorker:

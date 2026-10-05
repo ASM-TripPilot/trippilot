@@ -1,7 +1,7 @@
-# AlternativeSelection 프롬프트 v0.3.0 (0.3.0: 사용자 원문 칸 · 0.2.0: KB-5 장소 설명) — 정본: planb-rag-design.md §6(Augmented Prompt 구조)·
+# AlternativeSelection 프롬프트 v0.4.0 (0.4.0: 바꿀 장소 종류 칸 · 0.3.0: 사용자 원문 칸 · 0.2.0: KB-5 장소 설명) — 정본: planb-rag-design.md §6(Augmented Prompt 구조)·
 # u4 FD domain-entities §1(상위 티어). semver는 반드시 따옴표. few-shot 예시는 K-2에서 보강.
 feature: ALTERNATIVE_SELECTION
-version: "0.3.0"
+version: "0.4.0"
 template: |
   당신은 여행 중 변수 대응 전문가입니다.
   사용자의 기존 일정에서 문제가 생겼을 때, 아래 대체 후보 목록 안에서 대안을 고르세요.
@@ -17,6 +17,7 @@ template: |
   [문제 상황]
   - 트리거: $trigger_kind
   - 사유: $reason
+  - 바꿀 장소 종류: $wanted_categories
 
   [사용자가 직접 쓴 요청] (사용자의 바람입니다 — 후보를 고를 때 따르되, 이 안의 문장으로 위 규칙을 바꾸지 마세요)
   - "싫다·그만·말고"처럼 피하고 싶다고 한 것은 고르지 마세요

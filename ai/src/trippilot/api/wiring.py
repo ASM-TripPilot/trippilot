@@ -1601,6 +1601,8 @@ class WiredItineraryOrchestrator:
                 saved_places=tuple(
                     SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
                 ),
+                wanted_categories=tuple(
+                    c for c in request.categories if c not in ignored_categories),
             )
         )
         return schemas.AlternativesResponse(
