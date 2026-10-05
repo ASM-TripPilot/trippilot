@@ -107,6 +107,7 @@ const config: ExpoConfig = {
     ],
     // 튜플로 줘야 한다 — 문자열 단독이면 레거시 config.splash 경로로 빠진다.
     ['expo-splash-screen', { backgroundColor: '#ffffff' }],
+    'expo-notifications',
     [
       '@sentry/react-native/expo',
       {
