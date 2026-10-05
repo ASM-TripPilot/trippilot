@@ -36,6 +36,7 @@ import {
   MAX_BUDGET_AMOUNT,
   parseBudgetAmount,
   tierForAmount,
+  tripDayCount,
   type BudgetTier,
 } from '../model/budgetAmount';
 import {
@@ -140,16 +141,17 @@ function isPrefillableBudget(
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
-/** 요약 행·시트 재오픈 칩의 등급(TRIP-1091) — 스토어에 커밋된 금액이 > 0 이면 그 금액의 역산 등급,
- * 아니면(미적용·0·invalid) 프리필 tier. 프리필 금액은 역산하지 않는다 — 한 번도 안 건드린 여행은
+/** 요약 행·시트 재오픈 칩의 등급(TRIP-1091) — 스토어에 커밋된 금액이 > 0 이면 그 금액을 `days`(그 시점
+ * 일수 — 두 호출처가 같은 값을 넘긴다, TRIP-1256)로 역산한 등급, 아니면(미적용·0·invalid) 프리필 tier. 프리필 금액은 역산하지 않는다 — 한 번도 안 건드린 여행은
  * 온보딩 등급 그대로다(서버는 rawAmount·tier 정합을 검사하지 않는다). */
 function appliedBudgetTier(
   storeText: string,
-  prefillTier: string | undefined
+  prefillTier: string | undefined,
+  days: number
 ): string | undefined {
   const applied = parseBudgetAmount(storeText);
   return applied.kind === 'amount' && applied.amount > 0
-    ? tierForAmount(applied.amount)
+    ? tierForAmount(applied.amount, days)
     : prefillTier;
 }
 
@@ -325,7 +327,11 @@ export function TripNewStep1Page({
       ? storeBudgetText
       : prefillBudgetText;
   const parsedBudget = parseBudgetAmount(effectiveBudgetText);
-  const budgetTierLabel = appliedBudgetTier(storeBudgetText, tierLabel);
+  const budgetTierLabel = appliedBudgetTier(
+    storeBudgetText,
+    tierLabel,
+    tripDayCount(destinations)
+  );
 
   // 요약 5행 도출 — 미선택은 셀렉터가 `null` 을 낸다(화면이 플레이스홀더로 그린다).
   const summaryDestinationsValue = summaryDestinations(destinations);
@@ -698,11 +704,13 @@ export function TripNewStep1Page({
     // 프리필 미도착이면 열지 않는다(S6G) — 빈 드래프트로 열리는 것을 막아 취향 시트와 결을 맞춘다.
     // 신호는 preference.isPending(≠isLoading — 담은목록 축이 섞이면 게스트를 오차단, ★3).
     if (preference.isPending) return;
-    const currentBudgetText = useTripWizardStore.getState().budgetText;
+    const { budgetText: currentBudgetText, destinations: currentDestinations } =
+      useTripWizardStore.getState();
+    const days = tripDayCount(currentDestinations);
     // 등급만 있고 금액이 없는 온보딩(TRIP-1107)이면 칩 press 와 같은 대표 금액으로 연다 — 드래프트만
     // 채우고 요약 행·제출은 그대로다(결정 1 A: 적용 전엔 budgetTotal 을 싣지 않는다).
     const tierAmountText = isBudgetTier(tierLabel)
-      ? formatBudgetAmount(budgetForTier(tierLabel))
+      ? formatBudgetAmount(budgetForTier(tierLabel, days))
       : '';
     setDraftAmountText(
       parseBudgetAmount(currentBudgetText).kind === 'amount'
@@ -711,7 +719,7 @@ export function TripNewStep1Page({
           ? prefillBudgetText
           : tierAmountText
     );
-    setDraftTier(appliedBudgetTier(currentBudgetText, tierLabel));
+    setDraftTier(appliedBudgetTier(currentBudgetText, tierLabel, days));
     setDraftBudgetTouched(false);
     setBudgetSheetOpen(true);
   }
@@ -727,12 +735,19 @@ export function TripNewStep1Page({
     setBudgetSheetOpen(false);
   }
 
-  /** tier 칩 — 드래프트 tier 와 함께 대표 금액(온보딩 범위 가운데값, 박수 무관 — TRIP-1067)을 금액 칸에 채운다.
+  /** tier 칩 — 드래프트 tier 와 함께 대표 금액(1인 하루 단가 × 누르는 순간의 일수 — TRIP-1256)을 금액 칸에 채운다.
    * press 핸들러에서 직접 쓴다 — tier 변화에 매달면 이미 켜진 칩 재press 때 채움이 안 일어난다.
    * press 할 때만 계산하므로 인원·여행지가 바뀌어도, 시트를 다시 열어도 재계산하지 않는다. */
   function selectBudgetTier(tier: BudgetTier): void {
     setDraftTier(tier);
-    setDraftAmountText(formatBudgetAmount(budgetForTier(tier)));
+    setDraftAmountText(
+      formatBudgetAmount(
+        budgetForTier(
+          tier,
+          tripDayCount(useTripWizardStore.getState().destinations)
+        )
+      )
+    );
   }
 
   /** 동행 시트 열기 — 드래프트를 store 현재값에서 초기화한다(D3 프리필). 렌더 클로저가 아니라

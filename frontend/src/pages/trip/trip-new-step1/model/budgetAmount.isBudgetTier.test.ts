@@ -67,11 +67,11 @@ describe('U4 · PBT — 참인 값은 정확히 4값뿐', () => {
 });
 
 describe('U5 · PBT — 가드가 참이면 금액표에 금액이 있다', () => {
-  it('isBudgetTier(s) 가 참인 s 는 budgetForTier(s) 가 양의 정수다', () => {
+  it('isBudgetTier(s) 가 참인 s 는 budgetForTier(s, 1) 이 양의 정수다', () => {
     fc.assert(
       fc.property(candidateArb, (value) => {
         if (!isBudgetTier(value)) return;
-        const amount = budgetForTier(value);
+        const amount = budgetForTier(value, 1);
         expect(Number.isInteger(amount)).toBe(true);
         expect(amount).toBeGreaterThan(0);
       })
@@ -85,7 +85,8 @@ describe('U6 · 타입 가드 — 참인 갈래에서 BudgetTier 로 좁혀진�
 
     if (isBudgetTier(raw)) {
       const tier: BudgetTier = raw;
-      expect(budgetForTier(tier)).toBe(2000000);
+      // TRIP-1256 — 고급 하루 단가 200,000 × 1일.
+      expect(budgetForTier(tier, 1)).toBe(200000);
     } else {
       throw new Error('고급은 등급이어야 한다');
     }

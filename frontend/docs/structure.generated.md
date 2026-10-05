@@ -1173,7 +1173,7 @@
 - `src/pages/trip/trip-new-step1/index.ts`  →  TripNewStep1Page
 
 ## src/pages/trip/trip-new-step1/model/
-- `src/pages/trip/trip-new-step1/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · MAX_BUDGET_AMOUNT · formatBudgetAmount · BudgetTier · budgetForTier · isBudgetTier · tierForAmount
+- `src/pages/trip/trip-new-step1/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · MAX_BUDGET_AMOUNT · formatBudgetAmount · BudgetTier · budgetForTier · tripDayCount · isBudgetTier · tierForAmount
 - `src/pages/trip/trip-new-step1/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest · tripTitle
 - `src/pages/trip/trip-new-step1/model/mustVisitSync.ts`  →  MustVisitSyncPlan · planMustVisitSync
 - `src/pages/trip/trip-new-step1/model/tripDatePicker.ts`  →  dateCell · TripDateRange

@@ -14,11 +14,15 @@
  * 서식이 갈릴 수 있고, 그 갈림을 동작 테스트가 원리적으로 못 본다
  * (기계 강제 없음 — 소스 스캔은 TRIP-1145 에서 지웠다).
  *
- * `budgetForTier`는 예산 tier 칩의 대표 금액이다(TRIP-1067, frontend-components `BudgetInputField`).
- * 온보딩 예산 범위(~50만·50~150만·150~300만·300만+)의 가운데값 — 1인 여행 전체 금액이라
- * 박수·인원과 무관하다(TRIP-1045의 1박 단가 × 박수는 폐기).
+ * `budgetForTier`는 예산 tier 칩의 대표 금액이다(TRIP-1256, frontend-components `BudgetInputField`) —
+ * 1인 하루 단가 × 여행 일수(`tripDayCount` = 박수 + 1). 인원은 곱하지 않는다(1인 총액).
+ * TRIP-1067의 일수 무관 고정 금액은 폐기.
  */
-import type { PreferenceInputBudgetTier } from '@/shared/api/index.schemas';
+import { nightsSum } from '@/features/create-trip';
+import type {
+  PreferenceInputBudgetTier,
+  TripDestination,
+} from '@/shared/api/index.schemas';
 
 export type BudgetAmount =
   { kind: 'empty' } | { kind: 'amount'; amount: number } | { kind: 'invalid' };
@@ -39,7 +43,7 @@ export function parseBudgetAmount(raw: string): BudgetAmount {
 
 /**
  * TRIP-1219 b · 1인 총액 상한 — 10억원. 서버(`budget_total bigint`)는 상한이 없고 정본에도 결정이 없어 UX 사본으로
- * 둔다(14자리 99조원이 들어가던 QA 실측). 럭셔리 대표값(400만원)의 250배라 실제 여행 예산은 다 담는다.
+ * 둔다(14자리 99조원이 들어가던 QA 실측). 럭셔리 31일 대표값(1,240만원)의 약 80배라 실제 여행 예산은 다 담는다.
  */
 export const MAX_BUDGET_AMOUNT = 1_000_000_000;
 
@@ -49,15 +53,21 @@ export function formatBudgetAmount(amount: number): string {
 
 export type BudgetTier = NonNullable<PreferenceInputBudgetTier>;
 
-const BUDGET_TIER_AMOUNT: Record<BudgetTier, number> = {
-  저가: 300000,
-  중간: 1000000,
-  고급: 2000000,
-  럭셔리: 4000000,
+/** 1인 하루 단가(TRIP-1256). */
+const BUDGET_TIER_DAILY_AMOUNT: Record<BudgetTier, number> = {
+  저가: 50000,
+  중간: 100000,
+  고급: 200000,
+  럭셔리: 400000,
 };
 
-export function budgetForTier(tier: BudgetTier): number {
-  return BUDGET_TIER_AMOUNT[tier];
+export function budgetForTier(tier: BudgetTier, days: number): number {
+  return BUDGET_TIER_DAILY_AMOUNT[tier] * days;
+}
+
+/** 여행 일수 = 박수 합 + 1 — 당일치기·여행지 0곳은 1일. 시작일 유무와 무관하다(TRIP-1256 Q2). */
+export function tripDayCount(destinations: TripDestination[]): number {
+  return nightsSum(destinations) + 1;
 }
 
 /** 서버 응답 tier(`GET /me/preferences` budget.tier — enum 이 아니라 string)가 칩 4값 중 하나인지
@@ -66,16 +76,16 @@ export function budgetForTier(tier: BudgetTier): number {
 export function isBudgetTier(value: string | undefined): value is BudgetTier {
   return (
     value !== undefined &&
-    Object.prototype.hasOwnProperty.call(BUDGET_TIER_AMOUNT, value)
+    Object.prototype.hasOwnProperty.call(BUDGET_TIER_DAILY_AMOUNT, value)
   );
 }
 
-/** 금액 → 등급 역산(TRIP-1091 결정 1) — 하한 포함·상한 제외. 경계는 온보딩 `BUDGET_OPTIONS` 라벨
- * (~50만·50~150만·150~300만·300만+)의 사본이다 — 형제 feature 라 import 할 수 없어, 라벨이 바뀌어도
- * 이 숫자는 안 따라간다. */
-export function tierForAmount(amount: number): BudgetTier {
-  if (amount < 500000) return '저가';
-  if (amount < 1500000) return '중간';
-  if (amount < 3000000) return '고급';
+/** 금액 → 등급 역산(TRIP-1091 결정 1) — 하루 금액 기준, 하한 포함·상한 제외. 하루 경계 75,000·150,000·
+ * 300,000은 이웃 단가의 중간점이다(TRIP-1256 Q1). 나눗셈 대신 `경계 × 일수`와 정수 비교한다 —
+ * 하루 금액을 반올림하면 3일 224,999원(하루 74,999.67원)이 중간으로 넘어간다. */
+export function tierForAmount(amount: number, days: number): BudgetTier {
+  if (amount < 75000 * days) return '저가';
+  if (amount < 150000 * days) return '중간';
+  if (amount < 300000 * days) return '고급';
   return '럭셔리';
 }
