@@ -147,7 +147,7 @@ class HttpScheduleAgentAdapter(
             AiRepairResponse::class.java,
             scheduleAgentBoundedRestClient,
         )
-        val repaired = response.repaired ?: return RepairResult(solution, emptyList())
+        val repaired = response.repaired ?: return RepairResult(solution, emptyList(), unrepairable = true)
         return try {
             RepairResult(repaired.toDomain(clock.instant()), response.changes)
         } catch (e: IllegalArgumentException) {
