@@ -17,6 +17,9 @@ import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.facade import HybridAssemblyFacade
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
@@ -33,6 +36,7 @@ from trippilot.domain.common import (
 )
 from trippilot.domain.itinerary import (
     DaySolution,
+    FixedBlock,
     ItineraryProblem,
     ItinerarySolution,
     QualityScore,
@@ -348,3 +352,43 @@ def test_llm_internal_repair_path_unchanged() -> None:
     assert _placed(result) == [PoiId("a"), PoiId("b")]  # 수리 후 채택
     # 내부 경로는 퍼사드 관측을 발행하지 않는다 (기존 이벤트 구성 유지)
     assert trace.of_type(AssemblyRunRecord) == []
+
+
+# ── ⑦ 첫 슬롯 앵커 하한 (편집 교체 후속, 2026-10-05) ───────────────
+
+@settings(max_examples=60, deadline=None)
+@given(
+    start_min=st.integers(min_value=8 * 60, max_value=12 * 60),
+    dlat=st.floats(min_value=-0.05, max_value=0.05),
+    pinned=st.booleans(),
+)
+def test_repair_first_slot_floor_from_anchor(start_min: int, dlat: float, pinned: bool) -> None:
+    """속성: 앵커 출발이 주어지면 첫 비고정 슬롯 시작 = max(원래, 출발 + 앵커 이동) — 전방만.
+    고정 슬롯은 generate 와 같이 앵커 하한에서 면제된다(시각 불변)."""
+    problem, index = _setup()
+    h, m = divmod(start_min, 60)
+    first = _slot("a", h, m, h + 1, m)
+    if pinned:
+        problem = replace(problem, fixed_blocks=(FixedBlock(
+            PoiId("a"), TimeWindow(first.start_at, first.end_at), "wire_fixed"),))
+    anchor = GeoPoint(37.75 + dlat, 128.87)
+    depart = datetime(2026, 8, 5, 9, 0, tzinfo=_KST)
+
+    result = repair_engine(_sol(first), problem, index, _EST,
+                           departures={_DAY: (anchor, depart)})
+
+    assert result.repaired is not None
+    got = result.repaired.days[0].slots[0].start_at
+    if pinned:
+        assert got == first.start_at
+    else:
+        travel = _EST.estimate(anchor, index[PoiId("a")].coord, TransportMode.PUBLIC)
+        assert got == max(first.start_at, depart + timedelta(minutes=travel.internal_minutes))
+
+
+def test_repair_without_departures_leaves_first_slot() -> None:
+    """departures 미지정 = 종전 — 첫 슬롯은 어디서 오는지 모르니 밀지 않는다."""
+    problem, index = _setup()
+    first = _slot("a", 9, 0, 10, 0)
+    result = repair_engine(_sol(first), problem, index, _EST)
+    assert result.repaired.days[0].slots[0].start_at == first.start_at

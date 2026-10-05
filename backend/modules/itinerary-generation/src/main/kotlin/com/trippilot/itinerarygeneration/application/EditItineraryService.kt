@@ -15,6 +15,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.RejectionStore
+import com.trippilot.itinerarygeneration.domain.RepairContext
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
@@ -66,6 +67,8 @@ class EditItineraryService(
     transactionManager: PlatformTransactionManager,
     private val rejections: RejectionStore,
     private val clock: Clock,
+    /** 수리 요청의 앵커·수단(2026-10-05) — generate 와 같은 출처. */
+    private val repairContexts: RepairContexts,
 ) {
     private val tx = TransactionTemplate(transactionManager)
 
@@ -96,7 +99,7 @@ class EditItineraryService(
         // 장소 구성이 바뀐 편집(교체·추가·삭제·순서)은 repair 로 시각·거리를 다시 받는다(2026-10-05 제보 — 교체 뒤
         // 이동 거리·시각이 옛 장소 기준에 머물렀다). BR-U3-13·14 의 [AI 자동 보정]을 이 경우 자동으로 적용한 것 —
         // 정본 개정 주석 참조. 시각만 바꾼 편집은 쌍이 그대로라 부르지 않는다(사용자 시각 존중).
-        val repair = if (legsOf(current) != legsOf(edit)) attemptRepair(output, edit, tripId) else RepairAttempt.Skipped
+        val repair = if (legsOf(current) != legsOf(edit)) attemptRepair(output, edit, accountId, tripId, current) else RepairAttempt.Skipped
         val verdict = when (repair) {
             is RepairAttempt.Used -> Revalidation.Judged(emptyList()) // 상대가 재검증을 통과시킨 값만 온다(INV-2)
             RepairAttempt.Failed -> Revalidation.Withheld // AI 불통 — 같은 상대를 validate 로 한 번 더 기다리지 않는다
@@ -163,8 +166,17 @@ class EditItineraryService(
      * 수리 결과를 쓸 수 있는가 — **장소·순서·고정 슬롯 시각이 편집 그대로일 때만**. 상대 repair 는 TIME_SHIFT_ONLY
      * (POI·순서 불변)라 정상이면 늘 통과하지만, 사용자의 선택을 바꿔치기한 결과가 오면 종전 validate 로 떨어진다.
      */
-    private fun attemptRepair(output: ScheduleAgentOutput, edit: EditItinerary, tripId: UUID): RepairAttempt {
-        val result = runCatching { scheduleAgent.repair(output, emptyList()) }.getOrElse { e ->
+    private fun attemptRepair(output: ScheduleAgentOutput, edit: EditItinerary, accountId: UUID, tripId: UUID, current: Itinerary): RepairAttempt {
+        // 앵커는 **첫 구간(숙소→첫 장소)이 바뀐 날만** 싣는다 — 그 날만 상대가 첫 구간 거리를 채우고 첫 슬롯을
+        // 앵커 이동만큼 민다. 나머지 날의 첫 구간 거리는 저장값을 잇는다(reshape).
+        val firstBefore = current.days.associate { it.date to it.slots.firstOrNull()?.sourcePoiId }
+        val firstLegChanged = edit.days.filter { it.slots.isNotEmpty() && it.slots.first().poiId != firstBefore[it.date] }.map { it.date }.toSet()
+        // 컨텍스트는 보탬이다 — 조회가 깨지면 종전 수리(첫 구간 null·대중교통)로 내려간다. AI 불통과 섞지 않는다.
+        val context = runCatching { repairContexts.of(accountId, tripId, firstLegChanged) }.getOrElse { e ->
+            log.warn("편집 보정 컨텍스트(앵커·수단) 조회 실패 — 컨텍스트 없이 수리합니다. tripId={}", tripId, e)
+            RepairContext.NONE
+        }
+        val result = runCatching { scheduleAgent.repair(output, emptyList(), context) }.getOrElse { e ->
             log.warn("편집 보정(repair) 실패 — 판정 보류로 저장합니다. tripId={}", tripId, e)
             return RepairAttempt.Failed
         }
@@ -219,7 +231,7 @@ class EditItineraryService(
                         hasViolation = if (prior != null) prior.flagOf(d.date, s.poiId) else hit.isNotEmpty(),
                         endsNextDay = s.endsNextDay,
                         // 안 바뀐 쌍은 저장된 값(생성 때의 수단 표기·첫 구간 앵커 거리)을 잇고, 비었거나 바뀐 쌍만 수리 응답 값이다.
-                        // 수리 응답엔 앵커가 없어 그날 첫 구간이 바뀌면 여전히 null 이다(상대 와이어 한계).
+                        // 그날 첫 구간이 바뀌면 수리 요청에 실은 앵커로 상대가 채운다 — 앵커가 없는 날만 null 이다.
                         distanceRange = distanceByLeg[leg] ?: fixedUp?.distanceRange,
                         placementReason = reasonBySlot[d.date to s.poiId],
                         // 저장 후에도 "무엇이 왜 문제인지"가 남아야 한다(BR-U3-13 지속 가시화).

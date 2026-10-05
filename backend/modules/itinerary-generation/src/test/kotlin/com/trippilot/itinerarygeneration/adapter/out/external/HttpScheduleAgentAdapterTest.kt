@@ -32,6 +32,8 @@ import org.springframework.http.MediaType
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter
 import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath
+import com.trippilot.itinerarygeneration.domain.DayAnchor
+import com.trippilot.itinerarygeneration.domain.RepairContext
 import org.springframework.test.web.client.match.MockRestRequestMatchers.method
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
 import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
@@ -576,6 +578,36 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         result.repaired.days.single().slots.single().startAt.toString() shouldBe "11:00"
         result.changes.single() shouldBe "2번째 슬롯을 30분 뒤로"
         result.unrepairable shouldBe false
+        server.verify()
+    }
+
+    "repair — 컨텍스트의 앵커·수단을 싣고, 앵커가 있는 날만 기본 일과 창을 함께 보낸다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andExpect(jsonPath("$.anchors.length()").value(1))
+            .andExpect(jsonPath("$.anchors[0].date").value("2026-08-02"))
+            .andExpect(jsonPath("$.anchors[0].lat").value(33.5))
+            .andExpect(jsonPath("$.time_windows[0].date").value("2026-08-02"))
+            .andExpect(jsonPath("$.time_windows[0].start").value("09:00:00"))
+            .andExpect(jsonPath("$.transport_modes[0]").value("렌터카"))
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.repair(
+            dummyOutput(), emptyList(),
+            RepairContext(listOf(DayAnchor(java.time.LocalDate.parse("2026-08-02"), 33.5, 126.5)), listOf("렌터카")),
+        )
+        server.verify()
+    }
+
+    "repair — 컨텍스트가 없으면 세 필드는 빈 목록(상대 종전 동작)" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andExpect(jsonPath("$.anchors").isEmpty)
+            .andExpect(jsonPath("$.time_windows").isEmpty)
+            .andExpect(jsonPath("$.transport_modes").isEmpty)
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.repair(dummyOutput(), emptyList())
         server.verify()
     }
 

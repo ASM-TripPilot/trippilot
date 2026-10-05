@@ -1302,11 +1302,32 @@
         "additionalProperties": false,
         "description": "`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1.",
         "properties": {
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/DayAnchorSchema"
+            },
+            "title": "Anchors",
+            "type": "array"
+          },
           "itinerary": {
             "$ref": "#/components/schemas/ItineraryPayload"
           },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "time_windows": {
+            "items": {
+              "$ref": "#/components/schemas/TimeWindowSchema"
+            },
+            "title": "Time Windows",
+            "type": "array"
+          },
+          "transport_modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transport Modes",
+            "type": "array"
           },
           "violations": {
             "items": {

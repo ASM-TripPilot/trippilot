@@ -16,11 +16,11 @@ TRIP-292에서 `HybridAssemblyFacade.repair()`가 공개 경계로 승격되면�
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Mapping
 
-from trippilot.domain.common import PoiId
+from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
     ItineraryProblem,
@@ -67,7 +67,10 @@ def _fits_open_hours(poi: Poi, start: datetime, end: datetime) -> bool:
 def repair(solution: ItinerarySolution, problem: ItineraryProblem,
            poi_index: Mapping[PoiId, Poi], estimator,
            policy: MinimalChangePolicy = MinimalChangePolicy.TIME_SHIFT_ONLY,
+           departures: Mapping[date, tuple[GeoPoint, datetime]] | None = None,
            ) -> RepairResult:
+    """`departures` = 날짜별 (앵커, 출발 시각). 없는 날의 첫 슬롯은 종전대로 하한 없음."""
+    departures = departures or {}
     if policy is not MinimalChangePolicy.TIME_SHIFT_ONLY:
         return RepairResult(repaired=None, changes=())
 
@@ -96,13 +99,18 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
                 start = slot.start_at
                 if prev is not None:
                     p1 = poi_index.get(prev.poi_id)
-                    p2 = poi_index.get(slot.poi_id)
-                    if p1 is not None and p2 is not None:
-                        travel = estimator.estimate(
-                            p1.coord, p2.coord, problem.transport).internal_minutes
-                        earliest = prev.end_at + timedelta(minutes=travel)
-                        if start < earliest:
-                            start = earliest  # 전방 이동 (HC2 해소)
+                    origin = (p1.coord, prev.end_at) if p1 is not None else None
+                else:
+                    # 그날 첫 슬롯 — 앵커에서 창 시작에 출발(generate 의 `ws + 앵커 이동` 과 같은 규칙).
+                    # 고정 슬롯은 위 갈래라 면제된다(TRIP-1175 와 같은 규칙).
+                    origin = departures.get(day.date)
+                p2 = poi_index.get(slot.poi_id)
+                if origin is not None and p2 is not None:
+                    travel = estimator.estimate(
+                        origin[0], p2.coord, problem.transport).internal_minutes
+                    earliest = origin[1] + timedelta(minutes=travel)
+                    if start < earliest:
+                        start = earliest  # 전방 이동 (HC2 해소)
                 end = start + timedelta(minutes=stay)
 
             # 이동 결과가 다른 제약을 깨면 수리 불가

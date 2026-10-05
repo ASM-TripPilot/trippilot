@@ -12,6 +12,7 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanEmptyReaso
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanSlot
+import com.trippilot.itinerarygeneration.adapter.out.external.AiRepairRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta
 import com.trippilot.itinerarygeneration.adapter.out.external.AiTimeWindow
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSavedPlace
@@ -165,6 +166,18 @@ class AiBoundaryOpenApiTest : StringSpec({
     "alternatives 응답 키가 계약과 정확히 일치한다" {
         wireKeys(sampleAlternativesResponse) shouldContainExactly props("AlternativesResponse")
         wireKeys(sampleAlternativesResponse.alternatives.single()) shouldContainExactly props("AlternativeSchema")
+    }
+
+    /**
+     * repair 요청(편집 교체 후속, 2026-10-05) — 앵커·창·수단이 선택 필드로 붙었다. 셋은 generate 와 **같은
+     * 스키마**라 중첩도 같은 이름으로 잰다. 비우면 직렬화에서 빠지므로 표본은 전부 채운다.
+     */
+    "repair 요청 키가 계약과 정확히 일치한다" {
+        wireKeys(sampleRepairRequest) shouldContainExactly props("RepairItineraryRequest")
+        wireKeys(sampleRepairRequest.anchors.single()) shouldContainExactly props("DayAnchorSchema")
+        wireKeys(sampleRepairRequest.timeWindows.single()) shouldContainExactly props("TimeWindowSchema")
+        mismatches(sampleRepairRequest, "RepairItineraryRequest") shouldContainExactly emptyList()
+        required("RepairItineraryRequest").forEach { wireKeys(sampleRepairRequest) shouldContain it }
     }
 
     "explanations 요청 키가 계약과 정확히 일치한다" {
@@ -370,6 +383,15 @@ private val sampleExplanationsResponse =
         alternativeExplanations = mapOf("2026-08-01#alt" to "대신 골라도 좋은 이유"),
         alternativesReason = "alternative_explanation_fallback",
     )
+
+private val sampleRepairRequest = AiRepairRequest(
+    samplePayload,
+    listOf(AiViolation("HC2", slotRef = "2026-08-01#poi", detail = "이동 부족", dayIndex = 0, slotIndex = 1)),
+    sampleRequestMeta,
+    anchors = listOf(DayAnchor(LocalDate.parse("2026-08-01"), 33.45, 126.56)),
+    timeWindows = listOf(TimeWindow(LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), LocalTime.parse("21:00"))),
+    transportModes = listOf("렌터카"),
+)
 
 private val sampleViolation = AiViolation("HC1", slotRef = "2026-08-01#poi", detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)
 

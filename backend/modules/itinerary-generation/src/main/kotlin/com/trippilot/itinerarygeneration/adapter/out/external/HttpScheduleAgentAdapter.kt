@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
+import com.trippilot.itinerarygeneration.domain.RepairContext
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.DayAnchor
@@ -135,7 +136,11 @@ class HttpScheduleAgentAdapter(
      * 최소 조정 수리 — 시각·순서만 바꾸고 POI 는 불변이다(BR-U3-14).
      * **수리 불가는 오류가 아니라 `repaired=null`** 이므로(IO-7) 원본을 그대로 돌려주고 변경 없음으로 표시한다.
      */
-    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult {
+    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult =
+        repair(solution, violations, RepairContext.NONE)
+
+    /** 앵커가 있는 날의 창은 재계획과 같은 기본 일과 창이다 — 상대는 그 시작을 앵커 출발 시각으로만 쓴다. */
+    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>, context: RepairContext): RepairResult {
         val response = post(
             REPAIR_PATH,
             AiRepairRequest(
@@ -143,6 +148,9 @@ class HttpScheduleAgentAdapter(
                 // slotRef 를 되돌려 보낸다 — 인덱스만 보내면 검증 시점과 수리 대상이 어긋났을 때 상대가 복구할 수단이 없다.
                 violations.map { AiViolation(it.type, it.slotRef, it.detail.orEmpty(), it.dayIndex, it.slotIndex) },
                 requestMeta(REPAIR_DEADLINE_MS),
+                anchors = context.anchors,
+                timeWindows = context.anchors.map { TimeWindow(it.date, DAY_START, DAY_END) },
+                transportModes = context.transportModes,
             ),
             AiRepairResponse::class.java,
             scheduleAgentBoundedRestClient,

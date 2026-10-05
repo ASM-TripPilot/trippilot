@@ -1,7 +1,9 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
+import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripDestinationRef
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -40,5 +42,33 @@ internal object RegionAnchors {
             remaining -= ref.nights
         }
         return refs.lastOrNull()
+    }
+
+    /**
+     * 계획일별 공간 앵커 — 우선순위: 숙소 좌표(체크아웃일은 전날 거점) → 그 날의 목적지 중심 → 첫 목적지 중심.
+     * 근거는 `GenerateItineraryService.dayAnchors` KDoc. 생성과 편집 수리(repair)가 **같은 앵커**를 AI 에
+     * 보내야 해서 여기로 올렸다(2026-10-05) — 두 벌이면 한쪽만 고쳐 첫 구간 거리가 생성과 어긋난다.
+     */
+    fun dayAnchors(
+        regions: RegionLookupFacade,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        stayAnchors: List<DayAnchorView>,
+        destinations: List<TripDestinationRef>,
+    ): List<DayAnchor> {
+        val byDate = stayAnchors.associateBy { it.date }
+        // 목적지 중심은 목적지마다 한 번만 조회한다 — 날짜마다 부르면 같은 값을 계획일 수만큼 다시 읽는다.
+        val centers = destinations.associateWith { centerOf(regions, it) }
+        val first = destinations.firstNotNullOfOrNull { centers[it] }
+        return generateSequence(startDate) { it.plusDays(1) }.takeWhile { !it.isAfter(endDate) }.mapNotNull { d ->
+            val stay = byDate[d] ?: if (d == endDate) byDate[d.minusDays(1)] else null // 체크아웃일만 전날 거점
+            val center = destinationOn(destinations, startDate, d)?.let { centers[it] } ?: first
+            when {
+                stay != null -> DayAnchor(d, stay.lat, stay.lng)
+                // 목적지 좌표조차 없으면 그 날은 앵커 없이 둔다 — 지어낸 좌표를 보내지 않는다.
+                center != null -> DayAnchor(d, center.lat, center.lng)
+                else -> null
+            }
+        }.toList()
     }
 }

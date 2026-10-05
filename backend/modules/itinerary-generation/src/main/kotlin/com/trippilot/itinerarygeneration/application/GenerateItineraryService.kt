@@ -367,22 +367,7 @@ class GenerateItineraryService(
         endDate: LocalDate,
         stayAnchors: List<DayAnchorView>,
         destinations: List<TripDestinationRef>,
-    ): List<DayAnchor> {
-        val byDate = stayAnchors.associateBy { it.date }
-        // 목적지 중심은 목적지마다 한 번만 조회한다 — 날짜마다 부르면 같은 값을 계획일 수만큼 다시 읽는다.
-        val centers = destinations.associateWith { RegionAnchors.centerOf(regions, it) }
-        val first = destinations.firstNotNullOfOrNull { centers[it] }
-        return planDates(startDate, endDate).mapNotNull { d ->
-            val stay = byDate[d] ?: if (d == endDate) byDate[d.minusDays(1)] else null // 체크아웃일만 전날 거점
-            val center = RegionAnchors.destinationOn(destinations, startDate, d)?.let { centers[it] } ?: first
-            when {
-                stay != null -> DayAnchor(d, stay.lat, stay.lng)
-                // 목적지 좌표조차 없으면 그 날은 앵커 없이 둔다 — 지어낸 좌표를 보내지 않는다.
-                center != null -> DayAnchor(d, center.lat, center.lng)
-                else -> null
-            }
-        }
-    }
+    ): List<DayAnchor> = RegionAnchors.dayAnchors(regions, startDate, endDate, stayAnchors, destinations) // 편집 수리도 같은 것을 부른다
 
     /**
      * **재생성**이 허용되는 시점인가 — 기존 일정이 있을 때만 부른다(첫 생성은 대상이 아니다).

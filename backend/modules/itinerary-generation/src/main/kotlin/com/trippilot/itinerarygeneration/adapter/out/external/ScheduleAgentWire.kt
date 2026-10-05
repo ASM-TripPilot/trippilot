@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.adapter.out.external
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import tools.jackson.databind.JsonNode
+import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.application.SlotKey
 import com.trippilot.itinerarygeneration.application.ConceptCategories
@@ -19,6 +20,7 @@ import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
+import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
@@ -265,6 +267,11 @@ internal data class AiRepairRequest(
     val itinerary: AiSchedulePayload,
     val violations: List<AiViolation> = emptyList(),
     val requestMeta: AiRequestMeta,
+    // 편집 교체 후속(2026-10-05) — 상대 선택 필드, generate 와 같은 스키마(DayAnchorSchema·TimeWindowSchema·
+    // transport_modes 어휘). 창은 앵커가 있는 날의 **출발 시각**으로만 쓰인다. 비면 종전 동작.
+    val anchors: List<DayAnchor> = emptyList(),
+    val timeWindows: List<TimeWindow> = emptyList(),
+    val transportModes: List<String> = emptyList(),
 )
 
 internal data class AiRepairResponse(
