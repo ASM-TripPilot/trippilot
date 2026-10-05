@@ -219,6 +219,9 @@ _REST_BREAK = re.compile(r"<br\s*/?>", re.I)
 _REST_CLAUSE_SEP = re.compile(r"[/,\n]")
 _REST_PLACEHOLDER = re.compile(r"[-–—]+|없음|해당\s*없음")
 _NO_REST_RE = re.compile(r"무휴|휴무\s*일?\s*없음")
+# 가게마다 다르다 — 시장·쇼핑몰은 열고 휴무는 개별 점포 몫이라 시설에는 매주 쉬는 날이 없다(2026-10-05 결정,
+# 쇼핑 표본의 52%). 공연·전시·행사·체험별 상이는 그 프로그램이 있어야 여는 곳이라 여전히 모른다.
+_STORE_VARIES = re.compile(r"(?:점포|매장|상점)\s*(?:별로?|마다)\s*상이")
 # 주간 스케줄로 못 쓰는 비정기 휴일 — 연 단위(명절·공휴일·날짜·기념일·기관장 지정일)와
 # 요일 없는 월 단위("월 1회"). 실물 표본에 나온 표기만 넣었다(감으로 늘리지 말 것 — 영업 쪽
 # _NOT_OPEN_SEGMENT 의 교훈). 넓은 낱말은 넣지 않는다 — '설' 단독은 "시설별 상이" 에,
@@ -301,7 +304,7 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
       (계절별 시간 등 3회 이상은 어느 창이 맞는지 확정 불가 → 포기).
     - 폐점 ≤ 개점이면 자정 초과 영업으로 보고 +24h (OpenHour 계약).
     - rest_raw 해석은 `_parse_rest_days` — 요일을 못 읽고 무휴·비정기 휴일도 아닌
-      글("점포별 상이"·"동절기 휴장")이면 어느 날 닫는지 모른다 → 전체 포기.
+      글("동절기 휴장"·"공연 별로 상이함")이면 어느 날 닫는지 모른다 → 전체 포기.
     """
     if not hours_raw:
         return ()
@@ -326,7 +329,7 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
     closed_days = _parse_rest_days(rest_raw)
     if closed_days is None:
         # 휴무를 확신 못 하면 포기 — 단 "상시 개방"은 원문이 이미 휴무 없음을
-        # 말하고 있으므로 읽히지 않는 휴무 문구(점포별 상이 등)에 통째로 지지 않는다.
+        # 말하고 있으므로 읽히지 않는 휴무 문구(동절기 휴장 등)에 통째로 지지 않는다.
         if not always_open:
             return ()
         closed_days = frozenset()
@@ -351,8 +354,9 @@ def _parse_rest_days(rest_raw: str | None) -> frozenset[int] | None:
     - **괄호 단서와 ※ 비고는 먼저 빼고 읽는다** — `(단, 월요일이 공휴일이면 다음 평일)`·`(토요일·일요일과
       겹치면 휴관)` 의 요일이 휴무로 잡힌다. 그 밖에 요일이 없을 때만 원문 전체에서 읽는다
       (`연중무휴 (단 매주 월요일 휴무)`). 구역 머리(`[경매] … [판매] …`)가 둘이면 포기.
-    - 요일 없는 글은 무휴·비정기 휴일**뿐**이어야 휴무 없음이다. 모르는 글(`점포별 상이`·`동절기 휴장`·
-      비고뿐)이나 기간(`11월 1일 ~ 3월 31일 휴장`)이 섞이면 여전히 모른다.
+    - 요일 없는 글은 무휴·비정기 휴일·`점포별 상이`**뿐**이어야 휴무 없음이다(비고뿐이면 비고를 읽는다 —
+      `※ 점포 별로 상이함`). 모르는 글(`동절기 휴장`·`공연 별로 상이함`·전화 문의 안내)이나 기간
+      (`11월 1일 ~ 3월 31일 휴장`)이 섞이면 여전히 모른다.
     """
     if rest_raw is None:
         return frozenset()
@@ -368,11 +372,15 @@ def _parse_rest_days(rest_raw: str | None) -> frozenset[int] | None:
     days = _rest_weekdays(body) or _rest_weekdays(text)
     if days:
         return frozenset(days)
-    clauses = [c for c in (c.strip(" -") for c in _REST_CLAUSE_SEP.split(body)) if c]
-    if clauses and all((_NO_REST_RE.search(c) or _IRREGULAR_REST.search(c))
+    clauses = _rest_clauses(body) or _rest_clauses(_REST_PAREN.sub(" ", text).replace("※", " "))
+    if clauses and all((_NO_REST_RE.search(c) or _IRREGULAR_REST.search(c) or _STORE_VARIES.search(c))
                        and not _REST_PERIOD.search(c) for c in clauses):
-        return frozenset()  # 무휴·비정기 휴일뿐 — 매주 쉬는 요일은 없다
-    return None  # 모르는 글이 섞였다(`동절기 휴장`·`점포별 상이`·비고뿐) — 확신 없음
+        return frozenset()  # 무휴·비정기 휴일·점포별 상이뿐 — 매주 쉬는 요일은 없다
+    return None  # 모르는 글이 섞였다(`동절기 휴장`·`공연 별로 상이함`·전화 문의 안내) — 확신 없음
+
+
+def _rest_clauses(text: str) -> list[str]:
+    return [c for c in (c.strip(" -") for c in _REST_CLAUSE_SEP.split(text)) if c]
 
 
 def _rest_weekdays(text: str) -> set[int]:
@@ -410,7 +418,7 @@ def join_opening_hours_raw(
     없이 휴무만 싣지 않는 이유: 백엔드가 이 칸의 유무로 "영업시간 확인됨"을 판정한다
     (`SlotSurfaceAssembler.openingHoursKnown`).
 
-    파서가 해석 못 하는 휴무(`점포별 상이`·`동절기 휴장` …)도 싣는다. 빼면 런타임이 7일
+    파서가 해석 못 하는 휴무(`동절기 휴장`·`공연 별로 상이함` …)도 싣는다. 빼면 런타임이 7일
     영업으로 읽어 이 칸이 수집 파싱의 입력을 잃는 원래 결함이 되살아나고, 벤더 문구가
     남지 않아 파서를 고쳐도 다시 받아야 한다. 대가로 그런 POI 는 런타임에도 "정보 없음"
     (HC1 미적용)이다 — 건수는 수집 stats `rest_unparsed`, 결정·실측은 ai/data/README.md.
