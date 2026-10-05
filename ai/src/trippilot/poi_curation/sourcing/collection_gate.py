@@ -77,6 +77,9 @@ class SourcingCandidate:
     # 휴무일 원문 (TourAPI restdate류) — hours_raw 와 한 쌍으로 원문 칸에 함께 실린다
     # (TRIP-1226). 런타임은 그 칸만 다시 파싱하므로 여기서 빠지면 휴무가 사라진다.
     rest_raw: str | None = None
+    # 이번 수집이 이 레코드의 상세를 실제로 받았는가(빈 응답 포함 — 실패·예산 소진은 아님).
+    # 산출 문서의 조회일 표지(`provenance.detail_fetched_on`)가 되고, 판정·병합에는 쓰지 않는다.
+    detail_fetched: bool = False
 
     @property
     def ref(self) -> tuple[str, str]:
