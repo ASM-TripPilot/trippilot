@@ -9,6 +9,7 @@ import { parseSlotKey } from '@/entities/itinerary-slot';
 import { resolveSlotSwapError } from '@/features/edit-itinerary';
 import { swapSlotPoi } from '@/features/edit-itinerary';
 import { SlotCandidateSheet } from './SlotCandidateSheet';
+import type { SlotCandidateSheetRow } from './SlotCandidateSheet';
 import { useElapsedFlag } from '@/shared/lib/useElapsedFlag';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -109,14 +110,40 @@ export function SlotCandidatePanelContainer({
 
   const parsed = parseSlotKey(slotKey);
 
+  // 현 슬롯 실이름·시각·컨셉은 후보와 달리 이미 손에 있다 — GET 캐시 슬롯의 nameKo·startAt·endAt·
+  // category·imageUrl 을 내려 헤더 제목·부제·현재 행 사진을 세운다.
+  const currentSlot =
+    parsed.kind === 'ok'
+      ? itinerary.data?.days
+          .find((day) => day.date === parsed.date)
+          ?.slots.find((slot) => slot.poiId === parsed.poiId)
+      : undefined;
+
+  // TRIP-1245 선표시 — 응답 전(loading·slow)엔 생성 때 받은 차선책(GET 슬롯 `alternatives`)을 같은 행
+  // 모양으로 먼저 보이고, 응답이 오면 그 목록으로 통째로 바꾼다(합치지 않는다). 실패 얼굴엔 행을 두지
+  // 않는다 — 선표시로 조회 실패를 덮지 않는다(INV-4). GET 미도착·차선책 0건이면 지금처럼 스켈레톤.
+  const rows: SlotCandidateSheetRow[] =
+    fetchState === 'ready'
+      ? (candidatesData?.candidates ?? [])
+      : fetchState === 'error'
+        ? []
+        : (currentSlot?.alternatives ?? []);
+  // 선택은 "누른 기록"(selectedPoiId)과 "지금 보이는 행"에서 매 렌더 도출한다 — 선표시 중 고른 행이
+  // 응답 목록에 없으면 해제(null)된다. effect 로 지우지 않아 목록이 바뀌는 순간에도 어긋남이 없다.
+  const selected = rows.some((row) => row.poiId === selectedPoiId)
+    ? selectedPoiId
+    : null;
+
   function handleConfirm(): void {
     // itinerary GET 미도착(data undefined)이면 조기 반환 — swapSlotPoi([]) 로 빈 days 전체교체 PUT
     // 이 나가 일정이 소실되는 것을 막는다(candidates POST 와 GET 은 순서 보장이 없다).
     // generationState==='PARTIAL'(2단계 생성 중)이면 확정을 잠근다 — day1-only 전체교체 PUT 이 뒷날을
     // 덮어쓰기 전에 막는다(서버 409 의 클라 사본 · handleConfirm 으로 이전된 가드).
+    // 응답 전(선표시 행)엔 확정하지 않는다 — 일정 겹침은 서버가 POST 때만 다시 거른다(TRIP-1245).
     if (
       firedRef.current ||
-      selectedPoiId === null ||
+      fetchState !== 'ready' ||
+      selected === null ||
       parsed.kind !== 'ok' ||
       itinerary.data === undefined ||
       isConfirmLocked(itinerary.data.generationState)
@@ -127,7 +154,7 @@ export function SlotCandidatePanelContainer({
     const nextDays = swapSlotPoi(
       itinerary.data.days,
       { date: parsed.date, poiId: parsed.poiId },
-      selectedPoiId
+      selected
     );
     putItinerary(
       { tripId, data: buildEditItineraryRequest(nextDays) },
@@ -148,15 +175,6 @@ export function SlotCandidatePanelContainer({
     );
   }
 
-  // 현 슬롯 실이름·시각·컨셉은 후보와 달리 이미 손에 있다 — GET 캐시 슬롯의 nameKo·startAt·endAt·
-  // category·imageUrl 을 내려 헤더 제목·부제·현재 행 사진을 세운다.
-  const currentSlot =
-    parsed.kind === 'ok'
-      ? itinerary.data?.days
-          .find((day) => day.date === parsed.date)
-          ?.slots.find((slot) => slot.poiId === parsed.poiId)
-      : undefined;
-
   return (
     <SlotCandidateSheet
       current={{
@@ -166,18 +184,12 @@ export function SlotCandidatePanelContainer({
         imageUrl: currentSlot?.imageUrl,
         distanceRange: currentSlot?.distanceRange,
       }}
-      // 후보 응답의 이름·태그·사진을 그대로 내린다(TRIP-1024, QA #053 "이름 준비 중"·회색 사진).
-      candidates={(candidatesData?.candidates ?? []).map((candidate) => ({
-        poiId: candidate.poiId,
-        distanceRange: candidate.distanceRange,
-        nameKo: candidate.nameKo,
-        tags: candidate.tags,
-        imageUrl: candidate.imageUrl,
-      }))}
+      // 후보(또는 선표시)의 이름·태그·사진을 그대로 내린다(TRIP-1024, QA #053 "이름 준비 중"·회색 사진).
+      candidates={rows}
       startAt={currentSlot?.startAt}
       endAt={currentSlot?.endAt}
       category={currentSlot?.category ?? undefined}
-      selectedPoiId={selectedPoiId}
+      selectedPoiId={selected}
       onSelectRadio={setSelectedPoiId}
       onConfirm={handleConfirm}
       isPending={isPending}
