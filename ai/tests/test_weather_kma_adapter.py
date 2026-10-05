@@ -193,55 +193,45 @@ def test_one_call_per_forecast_and_zero_for_empty_days() -> None:
     assert len(http.calls) == 1  # 빈 요청은 호출 없음
 
 
-def test_endpoint_follows_the_key_shape() -> None:
-    """주소와 키 파라미터를 **키 모양에서** 고른다 — 짝을 틀리게 만들 수 없게.
+def test_key_param_follows_the_host() -> None:
+    """키 파라미터 이름은 **주소에서** 따라온다 — 이 둘은 항상 같이 간다.
 
-    이 짝이 어긋나 날씨 보정이 두 번 조용히 꺼졌다. 포털 디코딩 키는 base64 라
-    `+ / =` 를 담고(실측 88자), API 허브 키는 짧은 영숫자다(실측 22자).
+    틀리면 403(포털) 또는 401(허브)이고, 둘 다 조용히 날씨만 꺼진다.
     """
-    from trippilot.poi_curation.adapters.kma_weather import endpoint_for
+    from trippilot.poi_curation.adapters.kma_weather import key_param_for
 
-    portal_base, portal_param = endpoint_for("abc+def/ghi=")
-    assert "apis.data.go.kr" in portal_base
-    assert portal_param == "serviceKey"
-
-    hub_base, hub_param = endpoint_for("dfJ3o3pTRqiyd6N6Uyao5A")
-    assert "apihub.kma.go.kr" in hub_base
-    assert hub_param == "authKey"
+    assert key_param_for("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0") == "serviceKey"
+    assert key_param_for("https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0") == "authKey"
 
 
-def test_hub_key_sends_authkey_to_the_hub() -> None:
-    """허브 키를 주면 허브 주소로 `authKey` 가 나간다 (실측: 200 NORMAL_SERVICE)."""
-    http = _FakeHttp(_body({"item": []}))
-    KmaWeatherAdapter(http, "huBkey1234567890abcdef").daily_forecast(_COORD, (_D1,))
-    url, params = http.calls[0]
-    assert "apihub.kma.go.kr" in url
-    assert params["authKey"] == "huBkey1234567890abcdef"
-    assert "serviceKey" not in params  # 포털 이름을 같이 보내지 않는다
+def test_default_is_the_portal_whatever_the_key_looks_like() -> None:
+    """**키 모양으로 주소를 맞히지 않는다.** 한 번 그렇게 했다가 틀렸다.
+
+    포털 키가 base64 라 `+ / =` 를 담는다고 보고 "특수문자 없으면 허브"로 갈랐는데,
+    2026-10-05 에 **64자 영숫자 포털 키**가 들어와 허브로 가서 401 이 났다(실측).
+    키 형식은 발급처가 바꿀 수 있는 것이라 판별 근거가 못 된다.
+    """
+    for key in ("AbC+dEf/123=", "a" * 64, "dfJ3o3pTRqiyd6N6Uyao5A"):
+        http = _FakeHttp(_body({"item": []}))
+        KmaWeatherAdapter(http, key).daily_forecast(_COORD, (_D1,))
+        url, params = http.calls[0]
+        assert "apis.data.go.kr" in url, f"{key[:4]}…: 기본은 포털이어야 한다"
+        assert params["serviceKey"] == key
+        assert "authKey" not in params
 
 
-def test_portal_key_sends_servicekey_to_the_portal() -> None:
-    """포털 키를 주면 종전 그대로다 — 이 변경으로 기존 배포가 바뀌지 않는다."""
-    http = _FakeHttp(_body({"item": []}))
-    KmaWeatherAdapter(http, "AbC+dEf/123=").daily_forecast(_COORD, (_D1,))
-    url, params = http.calls[0]
-    assert "apis.data.go.kr" in url
-    assert params["serviceKey"] == "AbC+dEf/123="
-    assert "authKey" not in params
+def test_explicit_hub_base_switches_both_host_and_param() -> None:
+    """허브로 보내려면 주소를 **명시**한다 — 그러면 파라미터도 함께 바뀐다.
 
-
-def test_explicit_base_url_derives_its_own_key_param() -> None:
-    """주소를 직접 주면 **키 파라미터가 주소에서 따라온다.**
-
-    주소만 바꾸고 파라미터를 안 바꾸는 조합이 바로 두 번의 사고였다 — 만들 수 없게 한다.
+    주소만 바꾸고 파라미터를 안 바꾸는 조합이 두 번의 사고였다 — 만들 수 없게 한다.
     """
     http = _FakeHttp(_body({"item": []}))
     hub = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0"
-    # 포털 모양 키인데 주소는 허브 → 파라미터는 주소를 따라 authKey 가 된다
-    KmaWeatherAdapter(http, "AbC+dEf/123=", base_url=hub).daily_forecast(_COORD, (_D1,))
+    KmaWeatherAdapter(http, "huBkey1234567890abcdef", base_url=hub).daily_forecast(_COORD, (_D1,))
     url, params = http.calls[0]
     assert url.startswith(hub)
-    assert "authKey" in params and "serviceKey" not in params
+    assert params["authKey"] == "huBkey1234567890abcdef"
+    assert "serviceKey" not in params
 
 
 def test_daily_and_hourly_together_stay_one_call() -> None:

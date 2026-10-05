@@ -49,25 +49,22 @@ _BASE = _PORTAL_BASE  # 과거 이름 — 밖에서 참조하던 자리를 깨�
 _OK_CODE = "00"  # NORMAL_SERVICE
 
 
-def endpoint_for(service_key: str) -> tuple[str, str]:
-    """키 모양에서 (주소, 키 파라미터 이름)을 고른다 — 틀린 짝을 못 만들게.
+def key_param_for(base_url: str) -> str:
+    """주소에서 키 파라미터 이름을 고른다 — 이 둘은 **항상** 같이 간다.
 
-    **왜 자동으로 고르나**: 이 짝이 어긋나 날씨 보정이 두 번 조용히 꺼졌다. 주소와 키를
-    사람이 따로 맞춰야 하는 구조였기 때문이다. 키는 어차피 한 곳(`WEATHER_API`)에서
-    오므로 짝을 **키에서 파생**시키면 맞춰야 할 값이 하나로 줄어든다.
+    실제로 어긋나 날씨 보정이 두 번 조용히 꺼진 짝이다:
+        포털(`apis.data.go.kr`) 은 ``serviceKey`` · 허브(`apihub.kma.go.kr`) 는 ``authKey``
+        틀리면 403 SERVICE_KEY_IS_NOT_REGISTERED 또는 401 유효한 인증키가 아닙니다
 
-    구분은 키 형식이다. 공공데이터포털 **디코딩 키**는 base64 라 ``+ / =`` 를 담는다
-    (실측 88자). 기상청 API 허브 키는 짧은 영숫자다(실측 22자).
+    그래서 파라미터 이름을 설정값으로 두지 않는다 — 주소 하나만 맞으면 따라온다.
 
-    짐작이 아니라 실측 네 조합이 근거다:
-        허브 키 + 허브 → 200 NORMAL_SERVICE      허브 키 + 포털 → 403 SERVICE_KEY_IS_NOT_REGISTERED
-        포털 키 + 허브 → 401 유효한 인증키 아님   포털 키 + 포털 → 서비스 등록 상태에 달림
-
-    형식이 또 늘면 주소를 직접 줄 수 있다(`base_url`, env `WEATHER_API_BASE`).
+    **주소는 키 모양으로 맞히지 않는다.** 한 번 그렇게 만들었다가 틀렸다: 포털 키가
+    base64 라 ``+ / =`` 를 담는다고 보고 "특수문자 없으면 허브"로 갈랐는데,
+    2026-10-05 에 **64자 영숫자 포털 키**가 들어와 허브로 가서 401 이 났다(실측).
+    키 형식은 발급처가 언제든 바꿀 수 있는 것이라 판별 근거가 못 된다 — 주소는
+    `WEATHER_API_BASE` 로 **명시**하고, 기본값은 포털이다.
     """
-    if any(c in service_key for c in "+/="):
-        return _PORTAL_BASE, "serviceKey"
-    return _APIHUB_BASE, "authKey"
+    return "authKey" if _APIHUB_HOST in base_url else "serviceKey"
 # 발표시각(base_time) 8회 고정 + API 제공은 발표 후 ~10분 (활용가이드)
 _BASE_HOURS = (2, 5, 8, 11, 14, 17, 20, 23)
 _PROVIDE_LAG_MIN = 10
@@ -162,13 +159,10 @@ class KmaWeatherAdapter:
     ) -> None:
         self._http = http
         self._key = service_key
-        # 주소를 직접 주면 그것을 쓰고, **키 파라미터 이름은 주소에서 따라온다** —
+        # 주소는 명시로 고르고(기본 포털), **키 파라미터 이름은 주소에서 따라온다** —
         # 주소만 바꾸고 파라미터를 안 바꾸는 실수를 만들 수 없게 한다.
-        derived_base, derived_param = endpoint_for(service_key)
-        self._base = (base_url or derived_base).rstrip("/")
-        self._key_param = "authKey" if _APIHUB_HOST in self._base else "serviceKey"
-        if not base_url:
-            self._key_param = derived_param
+        self._base = (base_url or _PORTAL_BASE).rstrip("/")
+        self._key_param = key_param_for(self._base)
         _log.info("기상청 단기예보 = %s (키 파라미터 %s)", self._base, self._key_param)
         self._now = now_fn if now_fn is not None else lambda: datetime.now(_KST)
         # 같은 (좌표, 발표분) 응답을 기억한다 — 아래 `_fetch_body` 참고.
