@@ -389,7 +389,9 @@ export function SlotFillPage({
       slotKey
     );
     const leave = (): void => {
-      router.replace('/(tabs)');
+      // TRIP-1243 — replace 는 현재 화면 하나만 바꿔 끼워 아래 위저드 화면(3/4 등)이 스택에 남는다.
+      // dismissTo 는 스택의 그 경로까지 사이 화면을 걷어낸다(없으면 현재 화면을 그 경로로 replace).
+      router.dismissTo('/(tabs)');
     };
     return (
       <View className="flex-1">

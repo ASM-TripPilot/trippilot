@@ -70,9 +70,20 @@ jest.mock('@/shared/push', () => ({
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
-  router: { push: mockPush, back: mockBack, replace: mockReplace },
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    dismissTo: mockDismissTo,
+  }),
+  router: {
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    dismissTo: mockDismissTo,
+  },
 }));
 
 // 지도(네이버 네이티브)는 jest 에서 못 뜬다 — 관찰 목으로 map-root 를 노출한다.
@@ -82,7 +93,9 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
-  [mockPush, mockBack, mockReplace].forEach((fn) => fn.mockClear());
+  [mockPush, mockBack, mockReplace, mockDismissTo].forEach((fn) =>
+    fn.mockClear()
+  );
 });
 
 // 토스트 스토어는 모듈 싱글턴이다 — 토스트 호스트가 없는 describe 가 띄운 토스트가 뒤 describe 로 새지 않게
@@ -180,7 +193,9 @@ describe('저장하고 확정하기', () => {
     itineraryGets = 0;
     putCalls = 0;
     confirmCalls = 0;
-    [mockPush, mockBack, mockReplace].forEach((fn) => fn.mockClear());
+    [mockPush, mockBack, mockReplace, mockDismissTo].forEach((fn) =>
+      fn.mockClear()
+    );
     setAccessToken('valid-access');
     // 모듈 싱글턴 두 개 — 편집 스토어(시드)와 위저드 스토어(B2 가 비워졌는지 본다).
     useItineraryEditStore.getState().reset();
@@ -557,7 +572,9 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
     putCalls = 0;
     putBody = null;
     daySlots = PLAIN;
-    [mockPush, mockBack, mockReplace].forEach((fn) => fn.mockClear());
+    [mockPush, mockBack, mockReplace, mockDismissTo].forEach((fn) =>
+      fn.mockClear()
+    );
     setAccessToken('valid-access');
     useItineraryEditStore.getState().reset();
     putHandler = () => HttpResponse.json(manualDraft(daySlots));
@@ -855,7 +872,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
   describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다', () => {
     // TRIP-1009 C(01b Q3) — ‹ 는 이전 화면(방식 선택)이 아니라 일정 탭으로 바꿔 간다. 편집기에 들어온 순간
     // MANUAL 일정이 이미 있으므로 방식 선택으로 돌아가면 "일정이 없다"는 거짓 신호가 된다.
-    it('장소 추가는 h13 말미, 카드 사이 + 는 선행 index, 뒤로는 일정 탭으로 replace 한다 (back 0회)', async () => {
+    it('장소 추가는 h13 말미, 카드 사이 + 는 선행 index, 뒤로는 일정 탭으로 dismissTo 한다 (back 0회)', async () => {
       renderPage();
       await ready();
 
@@ -873,11 +890,13 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
         params: { tripId: TRIP_ID, insertAfter: '0', date: DAY },
       });
 
-      // 앵커 — ‹ 전엔 replace 0회(앞 동작이 부른 호출이 셈에 섞이지 않게).
-      expect(mockReplace).not.toHaveBeenCalled();
+      // 앵커 — ‹ 전엔 dismissTo 0회(앞 동작이 부른 호출이 셈에 섞이지 않게).
+      expect(mockDismissTo).not.toHaveBeenCalled();
       fireEvent.press(screen.getByTestId('itinerary-edit-back'));
-      expect(mockReplace).toHaveBeenCalledTimes(1);
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
+      // TRIP-1243 — replace 면 방식 선택(3/4)이 스택에 남는다. dismissTo 로 걷어낸다.
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
+      expect(mockReplace).not.toHaveBeenCalled();
       expect(mockBack).not.toHaveBeenCalled();
     });
 
@@ -1388,7 +1407,9 @@ describe('새로 짜기(startFresh) — 옛 일정 비우기', () => {
     getAfterPostFails = false;
     postFailure = null;
     confirmCalls = 0;
-    [mockPush, mockReplace, mockBack].forEach((fn) => fn.mockClear());
+    [mockPush, mockReplace, mockBack, mockDismissTo].forEach((fn) =>
+      fn.mockClear()
+    );
     postDoor = Promise.resolve();
     getAfterPostDoor = Promise.resolve();
     getScript = () => (posted ? freshManual() : oldDraft());
@@ -1781,7 +1802,9 @@ describe('저장 뒤 위반 요약 게이트', () => {
     requestLog = [];
     putCalls = 0;
     confirmCalls = 0;
-    [mockPush, mockBack, mockReplace].forEach((fn) => fn.mockClear());
+    [mockPush, mockBack, mockReplace, mockDismissTo].forEach((fn) =>
+      fn.mockClear()
+    );
     setAccessToken('valid-access');
     useItineraryEditStore.getState().reset();
     useTripWizardStore.getState().reset();

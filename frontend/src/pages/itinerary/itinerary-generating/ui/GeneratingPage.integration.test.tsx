@@ -68,11 +68,13 @@ jest.mock('@/shared/push', () => ({
 // jest.mock 팩토리는 파일 맨 위로 끌어올려져 바깥 변수를 못 본다 — `mock` 접두 변수만 예외(02a ★11).
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     back: mockBack,
     navigate: jest.fn(),
   }),
@@ -111,6 +113,7 @@ beforeEach(() => {
   mockMutate.mockClear();
   mockPush.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockBack.mockClear();
 });
 
@@ -558,7 +561,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
   });
 
   describe('🔴 G8 · AC-5·Q5 — [기다리기]는 홈으로 가고 아무것도 취소하지 않는다', () => {
-    it('replace("/(tabs)") 1회 · push 0 · 조회·cancel 0 · 생성 POST 는 처음 1번뿐', async () => {
+    it('dismissTo("/(tabs)") 1회 · replace 0 · push 0 · 조회·cancel 0 · 생성 POST 는 처음 1번뿐', async () => {
       postQueue = [busy];
 
       renderPage();
@@ -567,7 +570,10 @@ describe('다른 여행 생성 중(409) 안내', () => {
       );
 
       // 생성 화면 앱바 뒤로와 같은 목적지(TRIP-1006 홈 히어로가 T2 의 "만드는 중"을 보여 준다).
-      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(tabs)'));
+      await waitFor(() =>
+        expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)')
+      );
+      expect(mockReplace).not.toHaveBeenCalled();
       expect(mockPush).not.toHaveBeenCalled();
 
       await settle();

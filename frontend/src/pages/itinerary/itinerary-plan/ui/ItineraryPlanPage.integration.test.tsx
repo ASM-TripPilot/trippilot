@@ -75,12 +75,14 @@ jest.mock('@/shared/storage', () => ({
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 const mockCanGoBack = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     back: mockBack,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     canGoBack: mockCanGoBack,
   }),
 }));
@@ -103,8 +105,8 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   // 모듈 전역 연타 가드 창 — 앞 describe 의 확정 성공이 연 창이 뒤 describe 의 누름을 삼키지 않게 닫는다.
   resetPressGuard();
-  [mockPush, mockBack, mockReplace, mockCanGoBack].forEach((fn) =>
-    fn.mockClear()
+  [mockPush, mockBack, mockReplace, mockDismissTo, mockCanGoBack].forEach(
+    (fn) => fn.mockClear()
   );
   mockCanGoBack.mockReturnValue(true);
   mockShareArmed.value = null;
@@ -1024,16 +1026,18 @@ describe('확정 셸(h16) 얼굴', () => {
     });
   });
 
-  describe('🔴 C6 · AC-6 — 뒤로가기는 내 여행 목록으로 replace 한다', () => {
-    it('sheet-daychip-back press → replace("/(tabs)/itinerary") 1회, back() 미호출', async () => {
+  describe('🔴 C6 · AC-6 — 뒤로가기는 내 여행 목록으로 dismissTo 한다', () => {
+    it('sheet-daychip-back press → dismissTo("/(tabs)/itinerary") 1회, back() 미호출', async () => {
       useItinerary(() => HttpResponse.json(confirmedDefault()));
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
 
       fireEvent.press(screen.getByTestId('sheet-daychip-back'));
 
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
-      expect(mockReplace).toHaveBeenCalledTimes(1);
+      // TRIP-1243 — replace 가 아니라 dismissTo(생성·확정 위저드 화면을 스택에서 걷어낸다).
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockReplace).not.toHaveBeenCalled();
       expect(mockBack).not.toHaveBeenCalled();
     });
   });
@@ -1350,8 +1354,8 @@ describe('확정 일정 뒤로가기', () => {
     );
   }
 
-  describe('🔴 CB1 · AC-1 — 확정(CONFIRMED) 뒤로가기는 내 여행 목록으로 replace 한다', () => {
-    it('CONFIRMED 셸에서 sheet-daychip-back press → replace("/(tabs)/itinerary") 1회, back() 미호출', async () => {
+  describe('🔴 CB1 · AC-1 — 확정(CONFIRMED) 뒤로가기는 내 여행 목록으로 dismissTo 한다', () => {
+    it('CONFIRMED 셸에서 sheet-daychip-back press → dismissTo("/(tabs)/itinerary") 1회, back() 미호출', async () => {
       // 준비(TRIP-801 플립) — CONFIRMED 가 이제 지도+시트 셸이라(01b D1) 착지 앵커는
       // `map-sheet-shell-root`(옛 TimelineScreen 앱바 제목 '확정 일정'은 셸엔 없음 · 02a ★2)이고,
       // 뒤로가기 대상은 셸의 `sheet-daychip-back`(옛 `itinerary-view-back` 아님 · ★1). canGoBack=true.
@@ -1362,10 +1366,12 @@ describe('확정 일정 뒤로가기', () => {
       // 실행 — 셸 back.
       fireEvent.press(screen.getByTestId('sheet-daychip-back'));
 
-      // 단언 — 확정 분기는 canGoBack 경로를 타지 않고 곧장 내 여행 목록으로 replace 한다(무변경 계약).
+      // 단언 — 확정 분기는 canGoBack 경로를 타지 않고 곧장 내 여행 목록으로 dismissTo 한다(무변경 계약).
       //   `/(tabs)/itinerary`(목록)는 딥링크 폴백 `/(tabs)`(홈)과 다른 리터럴이다.
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
-      expect(mockReplace).toHaveBeenCalledTimes(1);
+      // TRIP-1243 — replace 가 아니라 dismissTo(생성·확정 위저드 화면을 스택에서 걷어낸다).
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockReplace).not.toHaveBeenCalled();
       expect(mockBack).not.toHaveBeenCalled();
     });
   });
