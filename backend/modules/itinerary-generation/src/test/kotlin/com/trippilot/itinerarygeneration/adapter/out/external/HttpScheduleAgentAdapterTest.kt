@@ -554,6 +554,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         val result = adapter.repair(dummyOutput(), emptyList())
         result.repaired shouldBe dummyOutput()  // 원본 그대로
         result.changes shouldBe emptyList()
+        result.unrepairable shouldBe true // "고칠 것 없이 통과"와 구별된다 — 편집이 수리값을 쓸지 이걸로 가른다
         server.verify()
     }
 
@@ -574,6 +575,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         val result = adapter.repair(dummyOutput(), emptyList())
         result.repaired.days.single().slots.single().startAt.toString() shouldBe "11:00"
         result.changes.single() shouldBe "2번째 슬롯을 30분 뒤로"
+        result.unrepairable shouldBe false
         server.verify()
     }
 

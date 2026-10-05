@@ -68,14 +68,27 @@ private val NOOP_TX = object : PlatformTransactionManager {
     override fun rollback(status: TransactionStatus) {}
 }
 
-/** validate 는 주입된 위반을 반환(Fake). generate/repair 는 편집에서 미사용. */
+/**
+ * validate 는 주입된 위반을 반환(Fake). repair 는 기본 **수리 불가** — 장소 구성이 바뀐 편집이 종전
+ * validate 경로를 그대로 타게 해 기존 단언을 지킨다. 수리 경로는 [repairWith] 로 주입한다.
+ */
 private class EditFakeAgent(
     private val violations: List<Violation> = emptyList(),
     private val failure: RuntimeException? = null, // AI 장애 재현
+    private val repairWith: (ScheduleAgentOutput) -> RepairResult = { RepairResult(it, emptyList(), unrepairable = true) },
 ) : StubScheduleAgent() {
+    var validateCalls = 0
+    var repairCalls = 0
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = throw NotImplementedError()
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> = failure?.let { throw it } ?: violations
-    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+    override fun validate(solution: ScheduleAgentOutput): List<Violation> {
+        validateCalls++
+        return failure?.let { throw it } ?: violations
+    }
+    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult {
+        repairCalls++
+        failure?.let { throw it }
+        return repairWith(solution)
+    }
     override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
 }
 
@@ -553,5 +566,138 @@ class EditItineraryServiceTest : StringSpec({
 
         // 슬롯 표시로는 나타나지 않는다(붙일 자리가 없다) — 사용자 표면 노출은 별도 계약이 필요하다.
         result.days.single().slots.all { !it.hasViolation } shouldBe true
+    }
+
+    // ───── 장소 교체 편집 → repair 로 시각·거리 재산출 (2026-10-05 제보) ─────────────────────
+
+    /** 수리 결과를 흉내낸다 — 각 슬롯을 [shiftMin] 분 뒤로 밀고 거리 문자열을 채운다(상대 조립 대역). */
+    fun shiftingRepair(shiftMin: Long = 30): (ScheduleAgentOutput) -> RepairResult = { sol ->
+        RepairResult(
+            sol.copy(days = sol.days.map { d ->
+                d.copy(slots = d.slots.mapIndexed { i, s ->
+                    if (s.isFixed) s.copy(distanceRange = if (i == 0) null else "r$i")
+                    else s.copy(startAt = s.startAt.plusMinutes(shiftMin), endAt = s.endAt.plusMinutes(shiftMin),
+                        distanceRange = if (i == 0) null else "r$i")
+                })
+            }),
+            listOf("shifted"),
+        )
+    }
+
+    fun fourStops(poiC: UUID, poiD: UUID) = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+        listOf(ItineraryDay.of(day, 0, listOf(
+            distSlot(poiA, 0, "09:00", "dA"), distSlot(poiB, 1, "11:00", "dB"),
+            distSlot(poiC, 2, "13:00", "dC"), distSlot(poiD, 3, "15:00", "dD"),
+        ))), clock.instant(),
+    )
+
+    "장소를 교체하면 repair 의 시각·거리로 저장한다 — 안 바뀐 구간 거리는 그대로, 위반 표시 없음" {
+        val poiC = UUID.randomUUID(); val poiD = UUID.randomUUID(); val poiX = UUID.randomUUID()
+        val repo = repoWith(fourStops(poiC, poiD))
+        val agent = EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null)), repairWith = shiftingRepair())
+        val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, editOf(poiA, poiX, poiC, poiD))
+
+        agent.repairCalls shouldBe 1
+        agent.validateCalls shouldBe 0 // 수리값은 상대가 재검증을 마친 값이다(INV-2)
+        val slots = saved.days.single().slots
+        slots.map { it.sourcePoiId } shouldBe listOf(poiA, poiX, poiC, poiD)
+        slots.map { it.startAt } shouldBe listOf(9, 10, 11, 12).map { LocalTime.of(it, 30) }
+        slots.map { it.distanceRange } shouldBe listOf("dA", "r1", "r2", "dD")
+        slots.all { !it.hasViolation } shouldBe true
+    }
+
+    "시각만 바꾼 편집은 repair 를 부르지 않는다 — 사용자 시각 그대로" {
+        val poiC = UUID.randomUUID(); val poiD = UUID.randomUUID()
+        val repo = repoWith(fourStops(poiC, poiD))
+        val agent = EditFakeAgent(repairWith = shiftingRepair())
+        val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, editOf(poiA, poiB, poiC, poiD))
+
+        agent.repairCalls shouldBe 0
+        agent.validateCalls shouldBe 1
+        saved.days.single().slots.map { it.startAt } shouldBe listOf(9, 10, 11, 12).map { LocalTime.of(it, 0) }
+        saved.days.single().slots.map { it.distanceRange } shouldBe listOf("dA", "dB", "dC", "dD")
+    }
+
+    "repair 가 장소 순서를 바꾸면 쓰지 않는다 — 종전 validate 표시로 떨어진다" {
+        val poiC = UUID.randomUUID(); val poiD = UUID.randomUUID(); val poiX = UUID.randomUUID()
+        val repo = repoWith(fourStops(poiC, poiD))
+        val reordering: (ScheduleAgentOutput) -> RepairResult = { sol ->
+            RepairResult(sol.copy(days = sol.days.map { d -> d.copy(slots = d.slots.reversed()) }), emptyList())
+        }
+        val agent = EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null)), repairWith = reordering)
+        val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, editOf(poiA, poiX, poiC, poiD))
+
+        agent.validateCalls shouldBe 1
+        val slots = saved.days.single().slots
+        slots.map { it.sourcePoiId } shouldBe listOf(poiA, poiX, poiC, poiD) // 사용자 선택 존중
+        slots.map { it.startAt } shouldBe listOf(9, 10, 11, 12).map { LocalTime.of(it, 0) }
+        slots[1].hasViolation shouldBe true
+        slots.map { it.distanceRange } shouldBe listOf("dA", null, null, "dD")
+    }
+
+    "repair 가 고정 슬롯 시각을 옮기면 쓰지 않는다 — 고정은 보정도 못 건드린다(BR-U3-14)" {
+        val poiX = UUID.randomUUID()
+        val repo = repoWith(current())
+        val movesAll: (ScheduleAgentOutput) -> RepairResult = { sol ->
+            RepairResult(sol.copy(days = sol.days.map { d -> d.copy(slots = d.slots.map { it.copy(startAt = it.startAt.plusHours(1), endAt = it.endAt.plusHours(1)) }) }), emptyList())
+        }
+        val agent = EditFakeAgent(repairWith = movesAll)
+        val pinned = EditItinerary(listOf(EditDay(day, listOf(
+            EditSlot(poiA, LocalTime.of(9, 0), LocalTime.of(10, 0), isFixed = true, endsNextDay = false),
+            EditSlot(poiX, LocalTime.of(10, 0), LocalTime.of(11, 0), isFixed = false, endsNextDay = false),
+        ))))
+        val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, pinned)
+
+        agent.validateCalls shouldBe 1
+        saved.days.single().slots.first().startAt shouldBe LocalTime.of(9, 0)
+        saved.days.single().slots.first().isFixed shouldBe true
+    }
+
+    "repair 가 수리 불가면 종전 동작 — validate 위반 표시·바뀐 구간 거리 null" {
+        val poiC = UUID.randomUUID(); val poiD = UUID.randomUUID(); val poiX = UUID.randomUUID()
+        val repo = repoWith(fourStops(poiC, poiD))
+        val agent = EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null)))
+        val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, editOf(poiA, poiX, poiC, poiD))
+
+        agent.repairCalls shouldBe 1
+        agent.validateCalls shouldBe 1
+        saved.days.single().slots[1].hasViolation shouldBe true
+        saved.days.single().slots.map { it.distanceRange } shouldBe listOf("dA", null, null, "dD")
+    }
+
+    "repair 호출이 실패하면 편집은 저장되고 판정 보류 — AI 를 두 번 기다리지 않는다" {
+        val poiC = UUID.randomUUID(); val poiD = UUID.randomUUID(); val poiX = UUID.randomUUID()
+        val repo = repoWith(fourStops(poiC, poiD))
+        val agent = EditFakeAgent(failure = RuntimeException("AI 다운"))
+        val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, editOf(poiA, poiX, poiC, poiD))
+
+        agent.validateCalls shouldBe 0
+        saved.days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiA, poiX, poiC, poiD)
+        saved.days.single().slots.map { it.startAt } shouldBe listOf(9, 10, 11, 12).map { LocalTime.of(it, 0) }
+    }
+
+    "속성: repair 호출 ⇔ 인접 쌍 집합이 바뀜, 저장 순서는 언제나 사용자 편집 순서" {
+        val pois = List(5) { UUID.randomUUID() }
+        checkAll(Arb.shuffle(pois)) { order ->
+            val base = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+                listOf(ItineraryDay.of(day, 0, pois.mapIndexed { i, p -> distSlot(p, i, "0${i + 1}:00", "d$i") })),
+                clock.instant(),
+            )
+            val repo = repoWith(base)
+            val agent = EditFakeAgent(repairWith = shiftingRepair())
+            val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+                .edit(acc, tripId, editOf(*order.toTypedArray()))
+
+            val legsChanged = order != pois
+            agent.repairCalls shouldBe (if (legsChanged) 1 else 0)
+            saved.days.single().slots.map { it.sourcePoiId } shouldBe order
+            saved.days.single().slots.all { it.distanceRange != null || it.orderIndex == 0 } shouldBe true
+        }
     }
 })

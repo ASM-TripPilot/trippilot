@@ -406,8 +406,12 @@ data class Violation(
     val slotRef: String? = null,
 )
 
-/** 최소 조정 수리 결과 — 시각·순서만(POI 불변). */
-data class RepairResult(val repaired: ScheduleAgentOutput, val changes: List<String>)
+/**
+ * 최소 조정 수리 결과 — 시각·순서만(POI 불변).
+ * [unrepairable] = 상대가 `repaired=null`(수리 불가, IO-7)을 답했다. 이때 [repaired] 는 보낸 원본이라
+ * "고칠 것 없이 통과"와 구별할 수단이 이 플래그뿐이다 — 편집이 수리값을 검증된 시각으로 쓰기 때문에 필요하다.
+ */
+data class RepairResult(val repaired: ScheduleAgentOutput, val changes: List<String>, val unrepairable: Boolean = false)
 
 /**
  * 슬롯 후보 요청. [excludePoiIds] 는 **백엔드가 현재 일정에서 유도**한다 — 클라이언트가 보내는 값을 믿으면
