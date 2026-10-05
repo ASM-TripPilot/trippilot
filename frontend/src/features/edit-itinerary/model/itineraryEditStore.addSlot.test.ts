@@ -10,7 +10,7 @@ import type {
  *
  * 무엇을 보장하나:
  *  - 🔴 **M1** `addSlot` 은 새 슬롯을 **배열 끝에 붙이고**(넣은 순서 = 슬롯 순서) 원본 배열을
- *    건드리지 않는다(비파괴 — `removeSlot`·`reorderKeepingFixed` 와 같은 패턴).
+ *    건드리지 않는다(비파괴 — `removeSlot` 과 같은 패턴).
  *  - 🔴 **M2 (★)** 그렇게 늘린 `days` 를 **기존** `buildEditItineraryRequest` 로 조립하면 PUT 봉투의
  *    슬롯이 **정확히 5키**(`poiId·startAt·endAt·isFixed·endsNextDay`)만 담고(읽기전용 필드 제거),
  *    배열 순서가 곧 슬롯 순서다. 조립기를 **재사용**한다 — 새로 만들지 않는다.

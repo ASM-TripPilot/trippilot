@@ -1006,8 +1006,9 @@ describe('드래그 실배선', () => {
    *  - 🟢 E0 헤더 날짜 괄호형 `6월 10일(수)` — 뷰가 widgets 로 가며 포맷을 못 하게 돼(features 금지)
    *    페이지가 문자열을 만든다. 뷰 V1 이 재던 포맷 판정의 이관처(02a ★8, 현재 green 이 유지돼야 한다).
    *  - 🔴 E1 AC-6 끌어 바꾼 순서가 PUT `days[0].slots` 순서가 된다(INV-U3-02).
-   *  - 🔴 E2·E3 AC-7 고정 슬롯은 끌기 결과가 어떻든 원래 절대 index 에 남는다(TRIP-302 엣지1 —
-   *    `reorderKeepingLocked` → 스토어 `reorderKeepingFixed` 사슬).
+   *  - 🔴 E2 TRIP-1250 다른 카드를 고정 슬롯 앞으로 끌면 끌기 결과 자리 그대로 저장된다(고정은 시각만 —
+   *    INV-U3-03, 서버가 지킴. 옛 AC-7 '원래 절대 index 고수'는 뒤집혔다).
+   *  - 🔴 E3 고정 카드 자신을 끈 결과는 뷰 판정(`decideDragEnd` isPinned)이 걸러 순서가 안 바뀐다(결정1).
    *  - 🔴 E4 AC-8 드롭존(리스트 끝 센티널 뒤)에 놓은 곳은 곳수에서 빠지고 PUT 에 없다.
    *  - 🔴 E5 AC-3 ② 고정 카드는 드롭존에 억지로 놓여도 안 지워진다(뷰 심층 방어 → 저장까지).
    *
@@ -1162,8 +1163,8 @@ describe('드래그 실배선', () => {
     });
   });
 
-  describe('🔴 E2·E3 · AC-7 — 고정 슬롯은 원래 절대 index 에 남는다 (TRIP-302 엣지1)', () => {
-    it('c 를 맨 앞으로(3→0) 끌면 [c,a,F,b] 가 오지만 저장은 F 를 index 1 로 되돌린 [c,F,a,b] 다', async () => {
+  describe('🔴 E2·E3 · TRIP-1250 — 고정 슬롯도 끌기 결과 자리 그대로 저장된다', () => {
+    it('c 를 맨 앞으로(3→0) 끌면 고정 F 앞에 들어가 저장 순서가 [c,a,F,b] 다', async () => {
       daySlots = WITH_FIXED;
       renderPage();
       await ready();
@@ -1171,11 +1172,11 @@ describe('드래그 실배선', () => {
       fireEditDragEnd(3, 0);
 
       const order = await saveAndReadOrder();
-      expect(order).toEqual(['c', 'F', 'a', 'b']);
-      expect(order.indexOf('F')).toBe(1);
+      expect(order).toEqual(['c', 'a', 'F', 'b']);
+      expect(order.indexOf('F')).toBe(2);
     });
 
-    it('고정 F 를 억지로 맨 앞(1→0)에 놓아도 저장 순서는 원래 [a,F,b,c] 다', async () => {
+    it('고정 F 자신을 맨 앞(1→0)으로 끌면 뷰가 판정에서 걸러 저장 순서는 [a,F,b,c] 그대로다 (결정1 — 고정 카드 자신은 못 끈다)', async () => {
       daySlots = WITH_FIXED;
       renderPage();
       await ready();

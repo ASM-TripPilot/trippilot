@@ -3,19 +3,16 @@ import type {
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/index.schemas';
 
-import {
-  removeSlot,
-  reorderKeepingFixed,
-  useItineraryEditStore,
-} from './itineraryEditStore';
+import { removeSlot, useItineraryEditStore } from './itineraryEditStore';
 
 /**
- * TRIP-302 · h24 편집 스토어 (슬라이스1 · AC3 삭제 · AC4 재정렬 · AC5 · 엣지1 고정잠금 · 엣지5).
+ * TRIP-302 · h24 편집 스토어 (슬라이스1 · AC3 삭제 · AC4 재정렬 · AC5 · 엣지5).
  *
  * 무엇을 보장하나: 편집 화면 밖에 사는 **편집 드래프트 상자**가
  *  ① 삭제·재정렬을 **입력 배열 → 새 배열** 순수 변환으로 처리하고(AC5),
- *  ② **고정 슬롯은 재정렬에서 원래 자리를 지키며**(엣지1 — 드래그 제스처는 jest 로 못 태우니
- *     재정렬 수학을 여기서 잠근다, 02a ★1·★2),
+ *  ② **재정렬은 끌기 결과 순서를 그대로 쓴다 — 시각 고정 슬롯도 재고정하지 않는다**(TRIP-1250.
+ *     고정은 시각만 지킨다 INV-U3-03, 서버가 저장 때 지킴. 옛 엣지1 '고정은 원래 자리 고수'는 정본에
+ *     없는 확장 해석이라 뒤집혔다),
  *  ③ 편집이 **시드한 GET 원본 배열을 건드리지 않는다**(엣지5 모델 근거 — 서버 캐시 비파괴).
  *
  * > *(개념)* **Zustand 스토어** — 화면 밖에 사는 작은 상태 상자. `getState()`는 지금 값을 렌더
@@ -74,35 +71,31 @@ describe('S1 · removeSlot 순수 — 첫 일치만 제거, 원본 비파괴 (AC
   });
 });
 
-describe('S2 · reorderKeepingFixed 순수 — 고정은 원래 자리 고수 (AC4 · 엣지1)', () => {
-  it('고정이 없으면 reordered 그대로, 있으면 고정을 절대 인덱스에 재고정한다', () => {
-    // 고정 없음 → reordered 그대로(배열 순서 = 슬롯 순서, INV-U3-02).
-    const plain = [slot('a'), slot('b'), slot('c')];
-    expect(
-      poiIds(reorderKeepingFixed(plain, [plain[2], plain[0], plain[1]]))
-    ).toEqual(['c', 'a', 'b']);
+describe('S2 · reorderSlots — 고정 슬롯도 끌기 결과 자리로 간다 (TRIP-1250 · INV-U3-03)', () => {
+  it.each([
+    // 고정 F 가 맨 앞 — b 를 F 앞으로 끌면 F 는 2번째로 밀린다(옛 규칙은 F 를 index 0 으로 되돌렸다).
+    {
+      name: '맨 앞 고정 F 앞으로 끼우기',
+      seeded: ['F', 'a', 'b'],
+      dragged: ['b', 'F', 'a'],
+    },
+    // 고정 F 가 맨 끝 — 끌기 결과가 F 를 앞으로 올리면 그 자리 그대로.
+    {
+      name: '맨 끝 고정 F 가 앞으로',
+      seeded: ['a', 'b', 'F'],
+      dragged: ['F', 'b', 'a'],
+    },
+  ])('$name — 저장 드래프트 순서 = 끌기 결과', ({ seeded, dragged }) => {
+    const pool = seeded.map((id) => slot(id, { isFixed: id === 'F' }));
+    const byId = (id: string): Slot => pool.find((s) => s.poiId === id) as Slot;
+    useItineraryEditStore.getState().seed([{ date: DAY1, slots: pool }]);
 
-    // 고정 F 가 index 0 — lib 이 F 를 뒤로 민 reordered 를 줘도 F 는 index 0 유지.
-    const withHead = [slot('F', { isFixed: true }), slot('a'), slot('b')];
-    expect(
-      poiIds(
-        reorderKeepingFixed(withHead, [withHead[1], withHead[2], withHead[0]])
-      )
-    ).toEqual(['F', 'a', 'b']);
-    // 비고정 순서는 reordered 를 따른다([b, a]).
-    expect(
-      poiIds(
-        reorderKeepingFixed(withHead, [withHead[2], withHead[0], withHead[1]])
-      )
-    ).toEqual(['F', 'b', 'a']);
+    useItineraryEditStore.getState().reorderSlots(DAY1, dragged.map(byId));
 
-    // 고정 F 가 index 2(맨 끝 앵커) — 어떤 reordered 에도 index 2 유지, 비고정만 [b, a].
-    const withTail = [slot('a'), slot('b'), slot('F', { isFixed: true })];
-    expect(
-      poiIds(
-        reorderKeepingFixed(withTail, [withTail[2], withTail[1], withTail[0]])
-      )
-    ).toEqual(['b', 'a', 'F']);
+    const stored = useItineraryEditStore.getState().days[0].slots;
+    expect(poiIds(stored)).toEqual(dragged);
+    // 고정은 시각 플래그로 남는다 — 자리만 바뀌었다.
+    expect(stored.find((s) => s.poiId === 'F')?.isFixed).toBe(true);
   });
 });
 
@@ -137,8 +130,8 @@ describe('S4 · deleteSlot — 해당 날에서만 제거, 카운트 갱신 (AC3
   });
 });
 
-describe('S5 · reorderSlots — 활성 날 순서 반영, 고정 재고정 (AC4 · 엣지1)', () => {
-  it('lib 이 준 재정렬 data 를 받아 고정은 자리를 지키고 비고정만 다시 쌓는다', () => {
+describe('S5 · reorderSlots — 활성 날에만 순서 반영 (AC4 · TRIP-1250)', () => {
+  it('lib 이 준 재정렬 data 를 그 순서 그대로 활성 날에만 넣는다', () => {
     const F = slot('F', { isFixed: true });
     const a = slot('a');
     const b = slot('b');
@@ -147,11 +140,11 @@ describe('S5 · reorderSlots — 활성 날 순서 반영, 고정 재고정 (AC4
       { date: DAY2, slots: [slot('c')] },
     ]);
 
-    // 사용자가 b 를 위로 끌어 lib 이 [b, F, a] 를 넘겼다 — 고정 F 는 index 0 을 지켜야 한다.
+    // 사용자가 b 를 고정 F 앞으로 끌어 lib 이 [b, F, a] 를 넘겼다 — 그대로 반영된다.
     useItineraryEditStore.getState().reorderSlots(DAY1, [b, F, a]);
 
     const days = useItineraryEditStore.getState().days;
-    expect(poiIds(days[0].slots)).toEqual(['F', 'b', 'a']); // 고정 재고정 + 비고정 [b,a]
+    expect(poiIds(days[0].slots)).toEqual(['b', 'F', 'a']); // 끌기 결과 그대로
     expect(poiIds(days[1].slots)).toEqual(['c']); // day2 불변
   });
 });

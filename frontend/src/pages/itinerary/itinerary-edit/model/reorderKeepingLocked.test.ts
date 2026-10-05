@@ -5,11 +5,12 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { reorderKeepingLocked } from './reorderKeepingLocked';
 
 /**
- * TRIP-753 · AC-8 — 여행 중 편집(i07)의 재정렬 규칙. 끌어서 순서를 바꿔도 **방문 완료 행과 고정 행은
- * 원래 자리(절대 index)에 남고**, 나머지 칸만 끌기 결과의 순서로 채운다(INV-U3-02 배열 순서 = 슬롯 순서).
+ * TRIP-753 · AC-8 — 여행 중 편집(i07)의 재정렬 규칙. 끌어서 순서를 바꿔도 **방문 완료 행은 원래
+ * 자리(절대 index)에 남고**, 나머지 칸은 끌기 결과의 순서로 채운다 — 완료 행을 끌어 옮기면 이미 다녀온
+ * 곳이 아직 안 간 곳 뒤로 밀린 채 저장되기 때문이다.
  *
- * 옛 `reorderKeepingFixed` 는 `isFixed` 만 봤다(layer-widgets.md 가 적은 맹점) — 완료 행을 끌어 옮기면
- * 이미 다녀온 곳이 아직 안 간 곳 뒤로 밀린 채 저장됐다. 이 규칙은 잠금 목록을 함께 받는다.
+ * TRIP-1250 · 시각 고정(`isFixed`) 행은 잠그지 않는다 — 고정은 시각만 지키고(INV-U3-03, 서버가 저장 때
+ * 지킴) 순서 자리는 끌기 결과를 따른다. 옛 규칙은 고정 행도 제자리에 묶었다(정본에 없는 확장 해석).
  *
  * 3동작: 준비(원래 순서 + 끌기 결과 + 잠금 목록) → 실행(규칙 적용) → 단언(결과 poiId 순서·성질).
  */
@@ -37,7 +38,7 @@ function pick(pool: Slot[], order: string[]): Slot[] {
   return order.map((id) => pool.find((s) => s.poiId === id) as Slot);
 }
 
-describe('🔴 K1 · 예시 — 잠긴 행(완료·고정)은 제자리, 나머지는 끌기 순서', () => {
+describe('🔴 K1 · 예시 — 완료 행은 제자리, 나머지(고정 포함)는 끌기 순서', () => {
   const A = slot('A');
   const B = slot('B');
   const C = slot('C');
@@ -61,11 +62,11 @@ describe('🔴 K1 · 예시 — 잠긴 행(완료·고정)은 제자리, 나머�
       expected: ['E', 'D', 'C', 'B', 'A'],
     },
     {
-      name: '고정(isFixed) 행도 잠긴 행처럼 제자리다 — 잠금 목록에 없어도',
+      name: '고정(isFixed) 행은 잠금 목록에 없으면 끌기 순서를 따른다 (TRIP-1250)',
       original: [A, B, C, D, Efix],
       dragged: ['E', 'D', 'A', 'C', 'B'],
       locked: ['A'],
-      expected: ['A', 'D', 'C', 'B', 'E'],
+      expected: ['A', 'E', 'D', 'C', 'B'],
     },
     {
       name: '완료 행을 맨 뒤로 끌어도 원래 index 로 돌아온다',
@@ -116,14 +117,14 @@ describe('🔴 K3 · PBT — 임의 순열에서도 세 성질이 늘 성립한�
       });
     });
 
-  it('잠긴 행 index 불변 · 결과는 원본의 순열 · 안 잠긴 행은 끌기 순서를 따른다', () => {
+  it('완료 행 index 불변 · 결과는 원본의 순열 · 나머지(고정 포함)는 끌기 순서를 따른다', () => {
     fc.assert(
       fc.property(scenario, ({ flags, original, dragged }) => {
         const lockedIds = original
           .filter((_, i) => flags[i].locked)
           .map((s) => s.poiId);
-        const isPinned = (s: Slot): boolean =>
-          s.isFixed || lockedIds.includes(s.poiId);
+        // 고정 플래그는 무작위로 섞여 있지만 잠금 판정엔 안 들어간다(TRIP-1250).
+        const isPinned = (s: Slot): boolean => lockedIds.includes(s.poiId);
 
         const result: Slot[] = reorderKeepingLocked(
           original,
@@ -131,7 +132,7 @@ describe('🔴 K3 · PBT — 임의 순열에서도 세 성질이 늘 성립한�
           lockedIds
         );
 
-        // ① 잠긴 행(완료·고정)은 원래 index 에 그대로 있다.
+        // ① 완료 행은 원래 index 에 그대로 있다.
         original.forEach((s, i) => {
           if (isPinned(s)) expect(result[i].poiId).toBe(s.poiId);
         });

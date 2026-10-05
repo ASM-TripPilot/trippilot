@@ -358,7 +358,7 @@ export function ItineraryEditPage({
           })
         }
         onSave={handleSave}
-        // 끌기 결과에서 완료·고정 행을 원래 자리로 되돌린 뒤 스토어에 넣는다(TRIP-753 AC-8). 규칙은 startAt 을
+        // 끌기 결과에서 방문 완료 행을 원래 자리로 되돌린 뒤 스토어에 넣는다(TRIP-753 AC-8 · 고정 행은 끌기 결과 그대로 TRIP-1250). 규칙은 startAt 을
         // 읽지 않고 순서만 바꾼다 — EditorSlot[](미지정 null 허용)을 서버 슬롯 타입으로 좁혀도 런타임 안전하다.
         onReorder={(data) =>
           reorderSlots(
