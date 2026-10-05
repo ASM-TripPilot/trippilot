@@ -36,8 +36,10 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
 어댑터로 메우지 **않은** 간극(지어내지 않는다 — null/빈 값이 정직한 값):
 - `freshness`: 도메인 `Poi`에 수집 시각 메타가 없다 → 집계 불가, null 유지
   (풀 생성 시각을 수집 시각인 척 싣지 않는다).
-- repair 봉투의 `distance_ranges`·`candidates_summary`·`day1_ready_at`: repair 와이어에는
-  원 요청 컨텍스트(앵커·이동수단·풀)가 없다 → 기존대로 빈 값/null.
+- repair 봉투의 `candidates_summary`·`day1_ready_at`: repair 와이어에는 원 요청
+  컨텍스트(앵커·이동수단·풀)가 없다 → 기존대로 null. `distance_ranges` 는 POI→POI 구간만
+  generate 와 같은 렌더로 채운다(편집 교체 뒤 거리 재산출 — 2026-10-05). 앵커가 없어 각 날
+  첫 슬롯은 null, 수단은 수리의 시각 계산과 같은 기본값(PUBLIC).
 - 와이어 `preference_profile`(+ `trip_context.companion_type`)은 generate·replan 에서
   그 요청의 페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
   주입된 `ContextStore`가 공급한다. 와이어에 사용자 식별자가 없어 principal은 trip_id 파생
@@ -1490,6 +1492,7 @@ class WiredItineraryOrchestrator:
         )
 
     def repair(self, request: schemas.RepairItineraryRequest) -> WiredRepairOutcome:
+        entered_ms = self._clock.monotonic_ms()  # 조립 뒤 거리 시한의 원점 (generate 와 같다)
         solution, problem, poi_index, unverified = self._reconstruct(
             request.itinerary, request.request_meta,
             untimed="reject",  # 수리 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
@@ -1499,8 +1502,18 @@ class WiredItineraryOrchestrator:
             solution, problem, _deadline_budget(request.request_meta),
             TraceId(request.request_meta.request_id),
         )
+        repaired = result.repaired
+        if repaired is not None:
+            # 편집(장소 교체) 뒤 바뀐 구간의 거리 — generate 와 같은 렌더·시한 회계다. 앵커가
+            # 와이어에 없어 첫 슬롯은 null, 수단은 수리가 시각 계산에 쓴 것(problem.transport).
+            coords = {pid: poi.coord for pid, poi in poi_index.items()}
+            (distance_ranges,), _ = self._render_distances(
+                lambda port: (_distance_ranges(repaired, {}, coords, port, problem.transport),),
+                request.request_meta, entered_ms,
+            )
         return WiredRepairOutcome(
-            repaired=_envelope(result.repaired) if result.repaired is not None else None,
+            repaired=(_envelope(repaired, distance_ranges=distance_ranges)
+                      if repaired is not None else None),
             changes=tuple(_render_change(c) for c in result.changes),
             unverified=unverified,
         )

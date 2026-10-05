@@ -10,7 +10,7 @@
      거리만, 소요시간류 토큰 0 (INV-3 — 이번 작업 최대 위험 지점)
   ④ freshness: 도메인 Poi에 수집 시각 메타가 없다 → **계속 null** (풀 생성 시각을
      수집 시각인 척 싣지 않는다)
-  ⑤ repair 봉투: 원 요청 컨텍스트가 없다 → 부가 필드는 기존대로 null/빈 값
+  ⑤ repair 봉투: 원 요청 컨텍스트가 없다 → 부가 필드는 null. 거리는 POI→POI 구간만 채운다
 
 스타일·조립은 test_e2e_boundary.py와 동일(실 조립 + fake 어댑터, 실 호출 0 — D37).
 """
@@ -164,6 +164,35 @@ def test_repair_envelope_keeps_extras_null() -> None:
     assert repaired["day1_ready_at"] is None
     assert repaired["candidates_summary"] is None
     assert repaired["freshness"] is None
+
+
+def test_repair_fills_poi_to_poi_distance_like_generate() -> None:
+    """편집(장소 교체) 뒤 repair 가 시각을 고치면 거리도 같이 와야 한다 — 백엔드가 바뀐
+    구간을 null 로 비운 채 "이동 거리 계산 중"에 영구 고착됐다(2026-10-05 실측).
+
+    generate 와 같은 렌더(`_distance_ranges`·"약 N.Nkm · 대중교통 추정"). repair 와이어엔
+    앵커가 없어 첫 슬롯은 null(지어내지 않는다). 수단은 repair 가 시각 계산에 쓴 것(PUBLIC).
+    """
+    itinerary = {
+        "days": [{"date": _DAY1.isoformat(), "slots": [
+            {"poi_id": "p1", "start_at": "10:00:00", "end_at": "11:00:00"},
+            {"poi_id": "p2", "start_at": "11:05:00", "end_at": "12:00:00"},
+        ]}],
+        "solve_mode": "OR_TOOLS",
+    }
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/repair",
+            json={"itinerary": itinerary, "violations": [], "request_meta": _meta()},
+        )
+
+    assert response.status_code == 200, response.text
+    slots = response.json()["repaired"]["days"][0]["slots"]
+    assert slots[0]["distance_range"] is None  # 앵커 없음 — 지어내지 않는다
+    assert _DISTANCE_PATTERN.fullmatch(slots[1]["distance_range"] or ""), slots[1]
+    for banned in _BANNED_TOKENS:
+        assert banned not in response.text
+    assert "분" not in slots[1]["distance_range"]
 
 
 # ── 화이트박스: 좌표 미상 구간은 산출하지 않고 다음 구간까지 전파 ────
