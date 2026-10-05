@@ -23,6 +23,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.gates.base import has_contact_like
 from trippilot.llm_gateway.gates.reflection_nudge import (
     _FORBIDDEN_TOKENS,
     _MAX_LENGTH,
@@ -136,10 +137,13 @@ def test_pbt_gate_never_raises_and_survivors_inside_constraints(raw: str) -> Non
         assert out.drop_event is not None  # 무결과는 반드시 드롭 계측
 
 
+# 게이트 ④(연락처·링크 꼴 차단 — `has_contact_like`)도 거른다. 빠뜨리면 'HTTP://' 같은 값이
+# "안전"으로 생성돼 게이트가 정당하게 막은 것을 실패로 본다(2026-10-05 저장 반례).
 _safe_messages = st.text(max_size=_MAX_LENGTH).filter(
     lambda s: s.strip()
     and len(s.strip()) <= _MAX_LENGTH
     and not any(t in s.lower() for t in _FORBIDDEN_TOKENS)
+    and not has_contact_like(s.strip())
 )
 
 
