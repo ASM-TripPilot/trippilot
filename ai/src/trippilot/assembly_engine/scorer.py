@@ -143,6 +143,17 @@ def directive_fit(
     return 0.0
 
 
+# "가까운 데로"·"이동 줄여줘"(RANKING 지시 NEARBY·LESS_MOVE) — km 당 감점, 한 단에서 멈춘다.
+# 규칙 점수의 기본 거리 감점(0.02/km)과 별개로 **사용자가 말했을 때만** 더 민다. 0.05 면
+# 6km 에서 한 단(0.3)에 닿는다 — 대중교통 다일 반경(7km) 안에서 가까운 쪽이 이긴다.
+NEAR_STEP_PER_KM = 0.05
+
+
+def near_fit(distance_km: float) -> float:
+    """가까울수록 덜 깎는다 — 0 에서 시작해 `-DIRECTIVE_STEP` 에서 멈춘다."""
+    return -min(distance_km * NEAR_STEP_PER_KM, DIRECTIVE_STEP)
+
+
 # 인기 포화점 — 저장 수가 이만큼이면 인기 항이 만점. 별점(0~5)이 차지하던 0~0.5 폭을
 # 그대로 쓰므로 다른 항(카테고리·예산·거리)과의 상대 비중은 변하지 않는다.
 _POPULARITY_FULL = 1000

@@ -56,7 +56,7 @@ from trippilot.agents.schedule.outcome import (
     failed_outcome,
 )
 from trippilot.assembly_engine.facade import AssemblyConflictError
-from trippilot.assembly_engine.scorer import build_rule_score
+from trippilot.assembly_engine.scorer import build_rule_score, directive_fit, near_fit
 from trippilot.poi_curation.place_fees import EMPTY as FEES_EMPTY, FeeTable
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
@@ -167,6 +167,8 @@ class GenerateItineraryRequest:
     # 봉투가 아니라 여기 있다. generate 경로는 기본값(빈 집합)이라 무영향이다.
     prefer_categories: frozenset[PoiCategory] = frozenset()
     avoid_categories: frozenset[PoiCategory] = frozenset()
+    # "가까운 데로"·"이동 줄여줘"(RANKING 지시) — 앵커에서 먼 후보를 거리만큼 내린다.
+    prefer_near: bool = False
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -310,6 +312,26 @@ class ScheduleAgent:
         # LLM 모드인데 규칙 점수가 섞인 수(rule_backfill) — 가산·강등 전에 센다.
         backfilled = (sum(1 for c in candidates if not c.is_llm_score)
                       if mode is ScoringMode.LLM else 0)
+
+        # ②⁗ 재계획 지시 (KB-4) — 점수 원점이 LLM 이어도 닿게 한다. 규칙 점수는
+        #    `build_rule_score` 안에서 카테고리 지시를 이미 더했으므로 LLM 점수에만 더한다.
+        #    종전에는 LLM 경로에 0 이라 "쇼핑하고 싶어"를 알아듣고도 일정이 안 바뀌었다
+        #    (2026-10-05 실측). ②″ 앞이어야 PlanB 가산·거절 강등과 같은 판에서 합성된다.
+        if request.prefer_categories or request.avoid_categories or request.prefer_near:
+            index = {p.poi_id: p for p in pool.pois}
+            before = candidates
+            candidates = apply_directives(
+                candidates, index, prefer=request.prefer_categories,
+                avoid=request.avoid_categories,
+                near_anchor=request.anchor if request.prefer_near else None,
+            )
+            # 실제로 점수가 바뀐 건수 — 0 이면 지시가 일정에 아무 효과가 없었다(침묵 금지).
+            changed = sum(1 for a, b in zip(before, candidates) if a.score != b.score)
+            self._observe(
+                trace_id, now, "directives", "directives", "directives",
+                f"directives_applied:{changed}/{len(candidates)}"
+                f"{' near' if request.prefer_near else ''}",
+            )
 
         # ②″ PlanB 상황 랭킹 가산 (/replan) — 점수 원점이 LLM 이든 규칙이든 같게 더한다.
         #    **②′ 보다 먼저**여야 한다: ②′ 는 상위 N 건만 지도에서 확인하므로, 가산을
@@ -1216,6 +1238,33 @@ def planb_lifted_score(score: float, rank: int, ranked: int, *, lift: float) -> 
     if ranked <= 0 or not 0 <= rank < ranked:
         return score
     return score + lift * (1.0 - rank / ranked)
+
+
+def apply_directives(
+    candidates: tuple[ScoredPoi, ...],
+    pois: Mapping[PoiId, Poi],
+    *,
+    prefer: frozenset[PoiCategory] = frozenset(),
+    avoid: frozenset[PoiCategory] = frozenset(),
+    near_anchor: GeoPoint | None = None,
+) -> tuple[ScoredPoi, ...]:
+    """재계획 지시를 점수에 더한다 — 순서·개수·후보 집합은 그대로 (INV-1).
+
+    - 카테고리(`directive_fit`)는 **LLM 점수에만** — 규칙 점수는 이미 더했다(두 배 방지).
+    - 거리(`near_fit`)는 `near_anchor` 가 있을 때 **양쪽 다** — 규칙 점수의 기본 거리
+      감점과 별개로 "가까운 데로"라고 말한 만큼만 더 민다.
+    풀 밖 후보(인덱스에 없음)는 그대로 둔다 — 카테고리·좌표를 모르면 지어내지 않는다.
+    """
+    def adjusted(c: ScoredPoi) -> ScoredPoi:
+        poi = pois.get(c.poi_id)
+        if poi is None:
+            return c
+        delta = directive_fit(poi.category, prefer, avoid) if c.is_llm_score else 0.0
+        if near_anchor is not None:
+            delta += near_fit(haversine_km(near_anchor, poi.coord))
+        return replace(c, score=c.score + delta) if delta else c
+
+    return tuple(adjusted(c) for c in candidates)
 
 
 def lift_planb_ranked(

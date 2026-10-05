@@ -1,6 +1,6 @@
 """ReplanDirectiveTranslationWorker — 재계획 자유 입력 → 지시 키 (경량 티어).
 
-PlanBAgent 전속 도구. **임베딩 매칭이 놓친 발화만** 받는다 —
+재계획 경계(`api/wiring._translate_free_text`)가 부른다. **임베딩 매칭이 놓친 발화만** 받는다 —
 `agents/planb/directives.match_free_text`(임계 0.74, 실측 정확일치 18/23)가 1차를
 처리하고, 임계 미달이거나 빈 결과일 때 이 워커가 2차로 온다. 그래서 호출 빈도가 낮고
 경량 티어로 충분하다.
@@ -22,6 +22,7 @@ from datetime import datetime
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.replan_directive_translation import DirectiveContext
 
 # 한 발화에서 뽑을 지시 수 상한 — 임베딩 경로(`directives.MAX_RESOLVED`)와 같은 값이다.
@@ -49,7 +50,8 @@ def build_directive_translation_vars(inp: DirectiveTranslationInput) -> dict[str
     """값 전부 str·결정론(키 정렬). 사전 순서가 프롬프트 순서를 흔들지 않게 정렬한다."""
     lines = "\n".join(f"- {key} | {label}" for key, label in sorted(inp.options))
     return {
-        "utterance": inp.utterance.strip() or "(발화 없음)",
+        # 사용자가 쓴 말이라 한 줄로 누른다 — 줄바꿈이 남으면 프롬프트 골격을 흉내 낸다.
+        "utterance": inline(inp.utterance).strip() or "(발화 없음)",
         "directives": lines,
         "max_directives": str(inp.max_directives),
     }
