@@ -267,6 +267,9 @@ class HttpScheduleAgentAdapter(
         // 진단값은 로그로만 — 사용자 문구가 아니다(설계 §3). dropped 는 우리 ground() 탈락과 나란히
         // 봐야 INV-1 경로 전체가 보이므로 WARN 으로 올린다.
         if (res.notes.isNotEmpty()) log.info("alternatives notes: {}", res.notes)
+        // 우리가 보낸 categories 를 상대가 모른다 — 매핑(ConceptCategories·경계 코드) 오류 신호라 WARN.
+        res.notes.filter { it.startsWith("categories_ignored:") }
+            .forEach { log.warn("AI 가 모르는 카테고리를 무시했습니다 — {} concept={}", it, input.concept) }
         if (res.droppedOutOfPool.isNotEmpty()) log.warn("AI 가 자기 풀 기준으로 버린 참조: {}", res.droppedOutOfPool)
         if (res.emptyReason != null && res.emptyReason != "no_candidates" && res.emptyReason != "all_excluded") {
             log.warn("모르는 empty_reason '{}' — NO_NEARBY 로 떨어뜨립니다.", res.emptyReason)

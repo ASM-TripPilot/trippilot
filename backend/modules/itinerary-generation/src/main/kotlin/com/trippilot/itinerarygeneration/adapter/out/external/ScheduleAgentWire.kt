@@ -5,6 +5,7 @@ import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import tools.jackson.databind.JsonNode
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.application.SlotKey
+import com.trippilot.itinerarygeneration.application.ConceptCategories
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
@@ -23,6 +24,7 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.placedata.api.GroundedPlace
+import com.trippilot.placedata.api.categoryBoundaryCodeOf
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -457,9 +459,7 @@ internal data class AiAlternativesRequest(
     val savedPlaces: List<AiSavedPlace>,
     /**
      * 후보 카테고리 제한(경계 코드 FOOD·CAFE·SIGHT·NIGHT_VIEW·NATURE·CULTURE·ACTIVITY·SHOPPING).
-     * AI 가 후보 풀 단계에서 거른다 — 비면 필터 없음. 지금은 항상 빈 목록이다: 같이 짜기 컨셉을
-     * 코드로 바꾸는 매핑·전송은 TRIP-1099 몫이고, 여기 필드는 계약 게이트(키 정확 일치) 때문에
-     * AI 계약 추가와 함께 먼저 실린다(#549 선례).
+     * AI 가 후보 풀 단계에서 거른다 — 비면 필터 없음. 같이 짜기 컨셉에서 채운다([toAlternativesRequest]).
      */
     val categories: List<String> = emptyList(),
     val requestMeta: AiRequestMeta,
@@ -507,6 +507,9 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         excludedPoiIds = excludePoiIds.map { it.toString() },
         affectedReasons = placementReason?.let { mapOf(targetPoiId.toString() to it) } ?: emptyMap(),
         savedPlaces = emptyList(), // place-data 에 api 파사드가 없다 — 신설은 별건(설계 §2)
+        // 컨셉 → 경계 코드. 표는 ConceptCategories 한 곳, 코드 변환은 place-data 소유 — 둘 다 다시 만들지 않는다.
+        // 미매핑·null 이면 빈 목록(필터 없음). BE 후처리 필터(SlotCandidateService)는 그대로 둔다(이중 방어).
+        categories = ConceptCategories.of(concept).orEmpty().mapNotNull(::categoryBoundaryCodeOf).sorted(),
         requestMeta = AiRequestMeta(requestMeta.requestId, requestMeta.requestedAt, requestMeta.deadlineMs),
     )
 }
