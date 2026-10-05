@@ -1,6 +1,6 @@
 import type { ExpoConfig } from 'expo/config';
 
-// 실 EAS projectId·소셜/지도 SDK 키는 사용자 프로비저닝 시 주입한다(스캐폴드는 placeholder).
+// 소셜/지도 SDK 키는 사용자 프로비저닝 시 주입한다(스캐폴드는 placeholder).
 // 소셜(카카오/네이버)·지도 SDK config plugin 은 실 네이티브 키가 필요하므로 auth·map 유닛에서 배선한다.
 
 // TRIP-210 — 카카오 네이티브 앱 키·네이버 urlScheme. 값은 env 에서만 읽는다(리터럴 커밋 금지 ·
@@ -134,9 +134,10 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
   },
+  owner: 'trippiloy',
   extra: {
     eas: {
-      projectId: '00000000-0000-0000-0000-000000000000',
+      projectId: 'b1612969-b805-4d0d-98d0-6ea468720314',
     },
   },
 };
