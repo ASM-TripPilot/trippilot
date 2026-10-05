@@ -22,6 +22,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
+from trippilot.domain.poi import PoiCategory
 from trippilot.ports.poi_sourcing_port import (
     PoiSourcingPort,
     SourcedDetail,
@@ -40,12 +41,14 @@ from trippilot.poi_curation.sourcing.mapping import (
     map_category,
     parse_open_hours,
     parse_opening_hours_raw,
+    split_opening_hours_raw,
 )
 from trippilot.poi_curation.sourcing.state import (
     CollectState,
     KindCursor,
     empty_state,
 )
+from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -292,6 +295,7 @@ def collect(
             image_url=record.image_url,
             modified_at=record.modified_at,
             detail_raw=hours.detail_raw,
+            detail_fetched=record.source_ref in hours_by_ref,
         ))
 
     report = (gate or CollectionGate()).apply(candidates)
@@ -376,6 +380,9 @@ def to_output_document(
     - source: 백엔드 CHECK 허용값 어휘 "TOURAPI"
     - provenance.detail: 상세 응답의 표시용 원문(벤더 필드명 그대로, 비파싱). 하나도
       없으면 **키 자체가 없다** — 소비처는 `.get("detail") or {}` 로 읽는다.
+    - provenance.detail_fetched_on: 상세를 실제로 받은 날(수집 시각의 날짜, 빈 응답 포함).
+      못 받았으면(실패·예산 소진) 키가 없다 — 상세 되감기(`refresh_proposal`)가 그런 제안만 다시
+      묻는다. 백엔드는 모르는 provenance 칸을 버린다(ignoreUnknown).
     """
     return {
         "schema_version": SCHEMA_VERSION,
@@ -393,14 +400,67 @@ def to_output_document(
                 "region": extract_region(p.candidate.address),
                 "opening_hours_raw": join_opening_hours_raw(
                     p.candidate.hours_raw, p.candidate.rest_raw),
-                "provenance": _provenance(p.candidate),
+                "provenance": _provenance(p.candidate, collected_at.date().isoformat()),
             }
             for p in result.report.passed
         ],
     }
 
 
-def _provenance(c: SourcingCandidate) -> dict:
+def refresh_proposal(
+    stored: Mapping, detail: SourcedDetail, *, fetched_on: str,
+) -> dict | None:
+    """공유본 제안 1건 + 새로 받은 상세 → 정상 수집이 냈을 제안 (상세 되감기 — scripts/refetch_intro.py).
+
+    목록 유래 칸(이름·좌표·분류·주소·사진·수정시각)은 저장본에서, 상세 유래 칸(영업·휴무 원문·표시용
+    원문)은 새 응답에서 와서 **같은 게이트**를 지나고 같은 함수로 나간다 — 같은 목록 레코드 + 같은 상세면
+    collect()+to_output_document 와 같은 제안이다(속성 테스트가 문다). provisional_id·source·tags·region
+    은 저장본 그대로다(목록 유래 — tags 를 만드는 벤더 분류 코드는 저장본에 없다). 게이트에서 떨어지면
+    None — 정상 수집도 내지 않는다.
+
+    **아는 영업시간을 지우지 않는다.** 새 응답으로는 원문 칸이 비는데(영업 원문 없음 — 빈 응답이거나
+    휴무만 옴) 저장본 칸이 있으면 그 칸을 글자 그대로 지키고 영업시간도 그 칸에서 읽는다(영업·휴무는
+    한 응답의 짝 — 게이트 병합과 같은 규칙). 백엔드는 재적재 때 원문 칸을 null 로도 덮어써서, 정상
+    수집처럼 비우면 알던 영업시간이 사라진다(레포츠 상세는 실측 86.7% 가 빈 응답). 표시용 원문
+    (`provenance.detail`)도 새 응답에 하나도 없으면 저장본 것을 지킨다.
+    """
+    poi, prov = stored["poi"], stored["provenance"]
+    hours_raw, rest_raw = detail.hours_raw, detail.rest_raw
+    raw = join_opening_hours_raw(hours_raw, rest_raw)
+    if not raw and stored.get("opening_hours_raw"):
+        raw = stored["opening_hours_raw"]
+        hours_raw, rest_raw = split_opening_hours_raw(raw)
+    candidate = SourcingCandidate(
+        source_ref=prov["content_id"],
+        kind=prov["content_type_id"],
+        name=poi["name"],
+        address=prov.get("address"),
+        lat=poi["coord"]["lat"],
+        lng=poi["coord"]["lng"],
+        category=PoiCategory(poi["category"]),
+        category_codes=(),   # 태그 파생용 — 태그는 저장본 것을 쓴다
+        open_hours=parse_open_hours(hours_raw, rest_raw),
+        hours_raw=hours_raw,
+        rest_raw=rest_raw,
+        # 어댑터가 목록 레코드에 하는 정규화 그대로 — #890 이전 수집분은 http 로 남아 있다
+        image_url=TourApiAdapter._https(prov.get("image_url")),  # noqa: SLF001
+        modified_at=prov.get("modified_time"),
+        detail_raw=detail.detail_raw or prov.get("detail") or {},
+        detail_fetched=True,
+    )
+    report = CollectionGate().apply([candidate])
+    if not report.passed:
+        return None
+    (passed,) = report.passed
+    return {
+        **stored,
+        "poi": passed.poi.to_dict(),
+        "opening_hours_raw": raw,
+        "provenance": _provenance(passed.candidate, fetched_on),
+    }
+
+
+def _provenance(c: SourcingCandidate, fetched_on: str) -> dict:
     prov: dict = {
         "content_id": c.source_ref,
         "content_type_id": c.kind,
@@ -410,6 +470,8 @@ def _provenance(c: SourcingCandidate) -> dict:
     }
     if c.detail_raw:
         prov["detail"] = dict(c.detail_raw)
+    if c.detail_fetched:
+        prov["detail_fetched_on"] = fetched_on
     return prov
 
 

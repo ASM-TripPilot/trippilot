@@ -144,6 +144,11 @@ class TourApiAdapter:
         self.intro_seen: dict[str, int] = {}
         self.intro_filled: dict[str, dict[str, int]] = {}
 
+    @property
+    def alive(self) -> bool:
+        """살아있는 키가 남았는가 — 전부 퇴출되면 이후 호출은 HTTP 없이 실패한다(`_call`)."""
+        return len(self._dead) < len(self._keys)
+
     def _take_key(self) -> str:
         """이번 HTTP 호출에 쓸 키 1건 소모. 키당 상한 도달 또는 퇴출 시 다음 키로.
 
