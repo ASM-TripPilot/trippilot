@@ -1,5 +1,6 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
+import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
@@ -14,6 +15,13 @@ function routeNameToTabKey(name: string): ShellTabKey {
 function renderTabBar(props: BottomTabBarProps) {
   const activeRoute = props.state.routes[props.state.index];
   const activeKey = routeNameToTabKey(activeRoute.name);
+
+  // 화면이 `navigation.setOptions({ tabBarStyle: { display: 'none' } })` 로 숨김을 요청하면 안 그린다(TRIP-1240 —
+  // 씬 안의 바텀시트가 이 absolute 오버레이 뒤로 들어가 아래쪽이 가려졌다). 커스텀 `tabBar` 는 react-navigation 이
+  // `display` 를 대신 적용해 주지 않아 여기서 직접 읽는다. 스타일이 배열일 수 있어 flatten 으로 펼친다.
+  const requested = props.descriptors[activeRoute.key]?.options.tabBarStyle;
+  if (StyleSheet.flatten(requested as StyleProp<ViewStyle>)?.display === 'none')
+    return null;
 
   function handlePressTab(key: ShellTabKey) {
     const targetRouteName = key === 'home' ? 'index' : key;

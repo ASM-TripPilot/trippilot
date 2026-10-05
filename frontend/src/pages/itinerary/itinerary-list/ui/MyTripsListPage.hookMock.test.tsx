@@ -41,6 +41,8 @@ import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
  */
 
 const mockPush = jest.fn();
+// TRIP-1240 — 정렬 시트가 열려 있는 동안 탭바를 숨기려고 페이지가 탭 화면 옵션을 바꾼다(`setOptions`).
+const mockSetOptions = jest.fn();
 jest.mock('expo-router', () => ({
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   ...require('@/test-support/expoRouterRedirectMock'),
@@ -51,6 +53,7 @@ jest.mock('expo-router', () => ({
     require('react').useRef(null);
     return { push: mockPush, replace: jest.fn(), navigate: jest.fn() };
   },
+  useNavigation: () => ({ setOptions: mockSetOptions }),
 }));
 
 // TRIP-1055 준비부 확장(단언 무변경) — 페이지가 여행 삭제 mutation 을 물게 되어 삭제 훅 무해 스텁을 더한다.
@@ -1231,6 +1234,70 @@ describe('정렬 시트와 저장된 기준', () => {
       // 단언 — 쓴 키 = 읽는 키라 기준이 살아 있다
       expect(cardOrder()).toEqual(TITLE);
       expect(triggerLabel()).toHaveTextContent('이름순');
+    });
+  });
+
+  describe('🔴 TB · 시트가 열려 있는 동안 하단 탭바를 숨긴다 (TRIP-1240)', () => {
+    // 탭바는 탭 레이아웃이 그리는 absolute 오버레이라 씬 안의 시트가 그 뒤로 들어가 '이름순'이 가려졌다 —
+    // 시트가 열린 동안 탭 화면 옵션 `tabBarStyle.display = 'none'` 을 걸고(레이아웃이 그걸 읽어 탭바를 안 그린다),
+    // 닫히면 `tabBarStyle` 을 undefined 로 되돌린다(레이아웃은 display 가 'none' 일 때만 숨기므로 이 값이면 보인다).
+    // ⚠️ 실제로 탭바가 사라지고 옵션이 다 보이는지는 jest 사각(6-b 실기) — 여기선 옵션 호출만 잰다.
+    const HIDE = { tabBarStyle: { display: 'none' } };
+    const SHOW = { tabBarStyle: undefined };
+
+    beforeEach(() => {
+      mockSetOptions.mockClear();
+      scriptStoredSort(() => Promise.resolve(null));
+    });
+
+    it('TB1 시트를 열기 전엔 숨기지 않고, 열면 숨긴다', async () => {
+      // 준비·실행 ① — 렌더만(시트 닫힘)
+      renderPage();
+      await settle();
+
+      // 단언 ① — 숨김 호출 없음
+      expect(mockSetOptions).not.toHaveBeenCalledWith(HIDE);
+
+      // 실행 ② — 시트 열기
+      openSheet();
+
+      // 단언 ② — 마지막 호출이 숨김
+      expect(mockSetOptions).toHaveBeenLastCalledWith(HIDE);
+    });
+
+    it('TB2 옵션을 골라 시트가 닫히면 탭바를 되돌린다', async () => {
+      renderPage();
+      await settle();
+      openSheet();
+
+      fireEvent.press(screen.getByTestId('my-trips-sort-option-title'));
+      await settle();
+
+      expect(screen.queryByTestId('my-trips-sort-sheet')).toBeNull();
+      expect(mockSetOptions).toHaveBeenLastCalledWith(SHOW);
+    });
+
+    it('TB3 스크림을 눌러 닫아도 탭바를 되돌린다', async () => {
+      renderPage();
+      await settle();
+      openSheet();
+
+      fireEvent.press(screen.getByTestId('my-trips-sort-scrim'));
+      await settle();
+
+      expect(screen.queryByTestId('my-trips-sort-sheet')).toBeNull();
+      expect(mockSetOptions).toHaveBeenLastCalledWith(SHOW);
+    });
+
+    it('TB4 시트가 열린 채 화면이 사라져도 탭바를 되돌린다', async () => {
+      const view = renderPage();
+      await settle();
+      openSheet();
+      expect(mockSetOptions).toHaveBeenLastCalledWith(HIDE);
+
+      view.unmount();
+
+      expect(mockSetOptions).toHaveBeenLastCalledWith(SHOW);
     });
   });
 });

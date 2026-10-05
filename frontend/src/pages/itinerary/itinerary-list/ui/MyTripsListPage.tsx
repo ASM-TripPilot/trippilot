@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/index.schemas';
@@ -86,6 +86,15 @@ export function MyTripsListPage(): ReactElement {
   // TRIP-1122 · 정렬 — 사용자가 한 번 고르면 뒤늦게 도착한 저장값이 그 선택을 덮지 않게 ref 로 표시한다.
   const [sortKey, setSortKey] = useState<MyTripsSortKey>('recent');
   const [sortOpen, setSortOpen] = useState(false);
+  // 정렬 시트가 열려 있는 동안 하단 탭바를 숨긴다(TRIP-1240) — 탭바는 탭 레이아웃이 그리는 absolute 오버레이라
+  // 씬 안의 시트 아래쪽('이름순')을 가렸다. 탭 레이아웃 어댑터가 이 옵션을 읽어 탭바를 안 그린다. 닫히거나
+  // 화면이 사라지면 되돌린다(`tabBarStyle: undefined` — 탭 레이아웃은 display 가 'none' 일 때만 숨기므로 이 값이면 보인다).
+  const { setOptions } = useNavigation();
+  useEffect(() => {
+    if (!sortOpen) return undefined;
+    setOptions({ tabBarStyle: { display: 'none' } });
+    return () => setOptions({ tabBarStyle: undefined });
+  }, [sortOpen, setOptions]);
   const sortPickedRef = useRef(false);
 
   useEffect(() => {

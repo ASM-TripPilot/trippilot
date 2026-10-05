@@ -217,3 +217,66 @@ describe('(tabs)/records — 기록 탭 허브 (AC-1 · 셸 교체)', () => {
     expect(screen.getByTestId('record-calendar-empty')).toBeOnTheScreen();
   });
 });
+
+describe('(tabs)/_layout — 화면이 탭바를 숨기면 안 그린다 (TRIP-1240)', () => {
+  // 커스텀 tabBar 렌더프롭은 `tabBarStyle` 을 react-navigation 이 적용해 주지 않아, 화면이
+  // `navigation.setOptions({ tabBarStyle: { display: 'none' } })` 로 숨김을 요청해도 아무 일도 안 일어났다.
+  // 어댑터가 **활성 라우트**의 그 옵션만 읽어 숨김이면 null 을 돌려준다(숨김 요청 = 시트가 탭바를 가릴 때).
+  // ⚠️ 실제로 탭바가 사라지는지는 jest 사각(6-b 실기).
+  function propsWithOptions(options: Record<string, unknown> | undefined) {
+    const { props } = makeTabBarProps(2);
+    const descriptors =
+      options === undefined ? {} : { 'itinerary-key': { options } };
+    return { ...props, descriptors } as unknown as BottomTabBarProps;
+  }
+
+  /** 활성 탭은 itinerary(2), 숨김 요청은 **다른** 탭 descriptor 에만 둔다. */
+  function propsWithOtherTabHidden() {
+    const { props } = makeTabBarProps(2);
+    const descriptors = {
+      'index-key': { options: { tabBarStyle: { display: 'none' } } },
+      'itinerary-key': { options: {} },
+    };
+    return { ...props, descriptors } as unknown as BottomTabBarProps;
+  }
+
+  function renderTabBarFor(options: Record<string, unknown> | undefined) {
+    render(<TabsLayout />);
+    const tabBar = capturedTabsProps.current?.tabBar as (
+      props: BottomTabBarProps
+    ) => ReactElement | null;
+    return tabBar(propsWithOptions(options));
+  }
+
+  it('TB-L1 활성 화면의 tabBarStyle.display 가 none 이면 탭바를 그리지 않는다', () => {
+    expect(renderTabBarFor({ tabBarStyle: { display: 'none' } })).toBeNull();
+  });
+
+  it('TB-L2 스타일이 배열로 와도(펼친 뒤 display none) 그리지 않는다', () => {
+    expect(
+      renderTabBarFor({
+        tabBarStyle: [{ position: 'absolute' }, { display: 'none' }],
+      })
+    ).toBeNull();
+  });
+
+  it('TB-L4 숨김을 요청한 건 다른 탭이고 지금 보는 탭은 아니면 탭바를 그린다 (탭 화면은 다른 탭으로 가도 남는다)', () => {
+    // 준비 — 정렬 시트를 연 채 다른 탭으로 가면 일정 화면의 숨김 요청이 남는다. 지금 보는 탭만 읽어야
+    // 홈 같은 곳에서 탭바가 사라져 못 빠져나가는 일이 없다.
+    render(<TabsLayout />);
+    const tabBar = capturedTabsProps.current?.tabBar as (
+      props: BottomTabBarProps
+    ) => ReactElement | null;
+
+    // 실행·단언
+    expect(tabBar(propsWithOtherTabHidden())).not.toBeNull();
+  });
+
+  it('TB-L3 숨김 요청이 없거나 display 가 none 이 아니면 탭바를 그린다', () => {
+    expect(renderTabBarFor(undefined)).not.toBeNull();
+    expect(renderTabBarFor({ tabBarStyle: undefined })).not.toBeNull();
+    expect(
+      renderTabBarFor({ tabBarStyle: { display: 'flex' } })
+    ).not.toBeNull();
+  });
+});
