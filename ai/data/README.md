@@ -127,6 +127,19 @@ uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/
 같은 `content_id` 는 나중 수집분이 이긴다(재제안 = 변경 감지분). 실행별 stats 원문은
 합본의 `merged_from` 에 그대로 남는다 — 합본 `stats` 는 합본에 대해 참인 것만 담는다.
 
+병합은 **소급 제거**도 한다 — 관광 무관 이름(#728)과 **폐업**(`poi_business_status.json` 의 CLOSED, TRIP-1248).
+수집 게이트는 수집 시점에만 걸러서 근거 파일(2026-09-08) 이전 수집분에는 미치지 않았고, 2026-10-05 공유본
+18,605건에 폐업 210건(FOOD 134·CAFE 76)이 남아 있어 그날 한 번 손으로 뺐다(→ 18,395). 그 뒤로는 매일 병합이
+`stats.closed_dropped` 로 빼고(축소 가드가 그 몫을 제외한다), 색인(`collect_state.json`)에는 그대로 둔다 —
+색인에서 빼면 매일 다시 받아 게이트에서 버리는 낭비만 생긴다. 공유본에서 지운 행이 DB 에 남는 것은 위 upsert 한계 그대로다.
+
+**`seen_refs.json`** (artifact `collected-pois` 동봉, 30일) — 그 실행이 목록에서 **본** content_id 전부(변경 없음으로
+스킵한 것 포함). 산출 문서·색인은 통과분만 담아서 "벤더가 더는 싣지 않는 항목"을 가려낼 기록이 없었다(공유본 기준 약
+1,400~2,100건 추정). 용도는 연속 3회 실행의 목록에 한 번도 안 나타난 항목을 벤더 삭제로 확정한 뒤 퇴출하는 것(TRIP-1248) —
+**퇴출 규칙은 미결**이고 이 파일로 공유본·색인을 바꾸는 코드는 아직 없다. 3회에 세는 실행은 목록을 **다 훑은** 실행만이다 —
+같은 artifact 의 `collected_pois.json` stats 에서 `page_failures == 0`·`budget_exhausted == false` 이고 `collect_state.json`
+커서가 전부 completed 인 날. 페이지 실패나 예산 소진으로 못 본 항목을 '벤더가 뺐다'로 읽으면 안 된다.
+
 `collect_state.json`(수집 커서)은 **여기 두지 않는다** — 워크플로가 전용 브랜치에 이미 영속한다.
 
 ### 이 파일의 출처
@@ -381,7 +394,11 @@ git show origin/collect-state:collected_events.json > ai/data/collected_events.j
 # 2) 매칭 (약 10초 — 294만 행을 스트리밍하되 우리 주소키에 걸리는 행만 담는다)
 cd ai
 LOCALDATA_DIR=<받은 경로> uv run python scripts/match_business_status.py
-# 3) 갱신된 poi_business_status.json 만 PR
+# 3) 공유본에 병합을 한 번 돌린다 — 새로 CLOSED 가 된 항목을 소급 제거한다(drop_closed; 영업시간 재파싱도 같이 돈다).
+#    건너뛰면 이 PR 의 ai-ci 가 빨개진다 — 공유본에 CLOSED 가 남아 있지 않은지 보는 테스트(test_merge_pois_docs)가
+#    있고, 매일 병합(봇)은 이 근거 파일이 develop 에 들어간 뒤에야 그 항목을 뺄 수 있다.
+uv run python scripts/merge_pois_docs.py -o data/collected_pois.json data/collected_pois.json
+# 4) poi_business_status.json 과 collected_pois.json 을 같은 PR 로
 ```
 
 ⚠️ **원본 CSV 는 커밋하지 않는다** (862MB). 산출물만 470KB 다.

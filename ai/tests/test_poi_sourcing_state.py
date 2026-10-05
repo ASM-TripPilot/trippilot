@@ -98,6 +98,25 @@ def test_skip_unchanged_no_proposal_and_no_detail_call() -> None:
     assert result.stats.listed == 2                   # 스킵은 목록 확보분에서도 제외
 
 
+def test_seen_refs_는_스킵한_것까지_목록에서_본_전부다() -> None:
+    """산출·색인은 통과분만이라 "벤더 목록에서 사라진 것"을 가려낼 기록이 없었다 (TRIP-1248)."""
+    http = _two_page_http()
+    state = CollectState(proposed={"100": _MTIME, "103": _MTIME})
+    result = collect(_adapter(http), area_code="39", content_types=["12"],
+                     max_calls=500, rows_per_page=2, state=state)
+    assert result.stats.skipped_unchanged == 2 and result.stats.listed == 2
+    assert result.seen_refs == frozenset({"100", "101", "102", "103"})
+
+
+def test_seen_refs_는_전부_스킵돼도_남고_식별자_없는_레코드는_없다() -> None:
+    http = FakeTourApiHttp(pages={("12", 1): envelope(
+        [list_item("", "번호 없는 곳"), list_item("200", "있는 곳")], 2)})
+    result = collect(_adapter(http), area_code="39", content_types=["12"],
+                     max_calls=500, state=CollectState(proposed={"200": _MTIME}))
+    assert result.stats.passed == 0 and result.stats.skipped_unchanged == 1
+    assert result.seen_refs == frozenset({"200"})
+
+
 # ── ③ modifiedtime 변경 항목은 재수록 (갱신 제안) ─────────────────
 def test_changed_modifiedtime_is_reproposed_and_index_updated() -> None:
     http = _two_page_http()
