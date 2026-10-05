@@ -649,9 +649,15 @@ export function TripNewStep1Page({
       // 취향 스냅숏(정책 A) — 실효 취향(오버라이드 ?? 프리필)을 평평한 한국어 배열로 싣는다
       // (BE 는 받은 것만 저장하고 스스로 동결하지 않는다). 요약 취향 행과 같은 출처라 화면=서버가
       // 맞는다(두 축 모두, TRIP-1092).
+      // 조회 실패(data 없음)이고 그 축 오버라이드도 없으면 키를 뺀다 — BE 는 키가 **있으면** 빈 배열도
+      // 최종으로 쓰고, 없는 축만 계정 취향으로 보충한다(#995). `[]` 를 실으면 온보딩 취향이 사라진다.
       preferenceSnapshot: {
-        styles: effectiveStyles,
-        activities: effectiveActivities,
+        ...(prefStyleOverride !== undefined || preference.data !== undefined
+          ? { styles: effectiveStyles }
+          : {}),
+        ...(prefActivityOverride !== undefined || preference.data !== undefined
+          ? { activities: effectiveActivities }
+          : {}),
       },
     };
 
