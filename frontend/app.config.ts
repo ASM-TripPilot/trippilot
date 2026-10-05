@@ -1,6 +1,7 @@
 import type { ExpoConfig } from 'expo/config';
+import { withEntitlementsPlist } from 'expo/config-plugins';
 
-// 실 EAS projectId·소셜/지도 SDK 키는 사용자 프로비저닝 시 주입한다(스캐폴드는 placeholder).
+// 소셜/지도 SDK 키는 사용자 프로비저닝 시 주입한다(스캐폴드는 placeholder).
 // 소셜(카카오/네이버)·지도 SDK config plugin 은 실 네이티브 키가 필요하므로 auth·map 유닛에서 배선한다.
 
 // TRIP-210 — 카카오 네이티브 앱 키·네이버 urlScheme. 값은 env 에서만 읽는다(리터럴 커밋 금지 ·
@@ -24,7 +25,7 @@ const config: ExpoConfig = {
   slug: 'trippilot',
   version: '1.0.0',
   orientation: 'portrait',
-  // TRIP-936 임시 아이콘(1024 불투명 RGB — App Store 는 알파 채널을 거부한다). 사람이 교체.
+  // Figma AppIcon/Final 기준 최종 아이콘(1024 불투명 RGB — App Store 는 알파 채널을 거부한다).
   icon: './assets/icon.png',
   scheme: 'trippilot',
   userInterfaceStyle: 'automatic',
@@ -134,11 +135,19 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
   },
+  owner: 'trippilottravel',
   extra: {
     eas: {
-      projectId: '00000000-0000-0000-0000-000000000000',
+      projectId: '9d33458c-a731-4278-8e0a-45ccdae5b66b',
     },
   },
 };
 
-export default config;
+// 푸시 entitlement(aps-environment)를 뺀다 — 서버 푸시가 꺼져 있고 번들 ID 에 Push 권한이 아직 없어
+// 프로비저닝 프로파일이 Xcode 서명에서 거부된다(TRIP-935 심사 빌드). expo-notifications 는 prebuild 가
+// 설치만 돼 있어도 자동으로 붙여서 plugins 에서 빼도 소용없다 — 결과에서 지운다.
+// 푸시를 켤 때는 ASC 에서 번들 ID 의 Push 권한을 먼저 켜고 이 래핑을 걷는다.
+export default withEntitlementsPlist(config, (mod) => {
+  delete mod.modResults['aps-environment'];
+  return mod;
+});
