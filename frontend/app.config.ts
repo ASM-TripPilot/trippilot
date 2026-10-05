@@ -25,7 +25,7 @@ const config: ExpoConfig = {
   slug: 'trippilot',
   version: '1.0.0',
   orientation: 'portrait',
-  // TRIP-936 임시 아이콘(1024 불투명 RGB — App Store 는 알파 채널을 거부한다). 사람이 교체.
+  // Figma AppIcon/Final 기준 최종 아이콘(1024 불투명 RGB — App Store 는 알파 채널을 거부한다).
   icon: './assets/icon.png',
   scheme: 'trippilot',
   userInterfaceStyle: 'automatic',
