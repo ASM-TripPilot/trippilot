@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Mapping, Protocol, Sequence
 
 from trippilot.assembly_engine.constraints import (
@@ -29,7 +29,7 @@ from trippilot.assembly_engine.constraints import (
 from trippilot.assembly_engine.quality import compute_quality
 from trippilot.assembly_engine.repair import MinimalChangePolicy, RepairResult
 from trippilot.assembly_engine.repair import repair as _repair_engine
-from trippilot.domain.common import PoiId, TraceId
+from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.itinerary import (
     FixedBlock,
     ItineraryProblem,
@@ -93,6 +93,7 @@ class HybridAssemblyFacade:
     def repair(self, solution: ItinerarySolution, problem: ItineraryProblem,
                deadline_ms: int, trace_id: TraceId | None = None,
                policy: MinimalChangePolicy = MinimalChangePolicy.TIME_SHIFT_ONLY,
+               departures: Mapping[date, tuple[GeoPoint, datetime]] | None = None,
                ) -> RepairResult:
         """HC 위반 해를 최소 변경으로 수리한다. 수리 불가면 `repaired=None`.
 
@@ -113,7 +114,7 @@ class HybridAssemblyFacade:
             self._emit_fallback(tid, "repair", "(unrepaired)", "deadline")
             return RepairResult(repaired=None, changes=())
 
-        result = _repair_engine(solution, problem, self._pois, self._est, policy)
+        result = _repair_engine(solution, problem, self._pois, self._est, policy, departures)
         if result.repaired is None:
             self._finish_repair(tid, solution, problem, t0, deadline_ms,
                                 repaired=False, reason="unrepairable")

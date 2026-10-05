@@ -19,6 +19,14 @@ interface ScheduleAgentPort {
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
 
     /**
+     * [context] 를 함께 싣는 수리(편집 교체 후속, 2026-10-05) — 앵커가 있는 날은 상대가 첫 구간 거리를
+     * 앵커→첫 장소로 채우고 첫 슬롯 시작을 앵커 이동만큼 민다. 수단은 시각·거리 표기 모두에 쓰인다.
+     * 기본 구현은 컨텍스트를 버린다 — 대역(Fake·테스트)이 2인자만 구현해도 되게. 실 어댑터는 재정의한다.
+     */
+    fun repair(solution: ScheduleAgentOutput, violations: List<Violation>, context: RepairContext): RepairResult =
+        repair(solution, violations)
+
+    /**
      * 추천 근거 조회(TRIP-511) — 생성에서 **떼어낸** 단계다.
      *
      * 설명은 LLM 이 만들고 ~10초를 쓴다. 생성에 붙여 두면 사용자가 첫 화면을 그만큼 늦게 본다.
@@ -405,6 +413,16 @@ data class Violation(
      */
     val slotRef: String? = null,
 )
+
+/**
+ * 수리 요청에 싣는 여행 컨텍스트 — generate 와 **같은 출처**의 일자별 앵커와 취향 이동수단(`transport_modes`).
+ * 빈 값이면 상대는 종전 동작(첫 구간 null·대중교통)이다.
+ */
+data class RepairContext(val anchors: List<DayAnchor>, val transportModes: List<String>) {
+    companion object {
+        val NONE = RepairContext(emptyList(), emptyList())
+    }
+}
 
 /**
  * 최소 조정 수리 결과 — 시각·순서만(POI 불변).

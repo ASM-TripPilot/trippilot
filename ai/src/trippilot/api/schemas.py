@@ -337,6 +337,15 @@ class RepairItineraryRequest(BoundaryModel):
     itinerary: ItineraryPayload
     violations: list[ViolationSchema] = Field(default_factory=list)
     request_meta: RequestMetaSchema
+    # 편집 교체 후속(2026-10-05) — additive optional, generate 와 **같은 스키마·의미·어휘**다.
+    # 앵커가 있는 날은 첫 구간 거리를 앵커→첫 장소로 채우고, 그 날의 창도 있으면 첫 슬롯 시작을
+    # generate 규칙(창 시작 + 앵커 이동) 이상으로 민다. 창은 **출발 시각으로만** 쓴다 — HC4 판정
+    # 창은 종전(당일 전체) 그대로라 사용자가 창 밖에 둔 슬롯을 수리 불가로 만들지 않는다.
+    # 수단은 generate 의 preference_profile.transport_modes 와 같은 목록·번역표(첫 인식 토큰).
+    # 셋 다 없으면 종전 동작(첫 구간 null·PUBLIC).
+    anchors: list[DayAnchorSchema] = Field(default_factory=list)
+    time_windows: list[TimeWindowSchema] = Field(default_factory=list)
+    transport_modes: list[str] = Field(default_factory=list)
 
 
 class RepairItineraryResponse(BoundaryModel):

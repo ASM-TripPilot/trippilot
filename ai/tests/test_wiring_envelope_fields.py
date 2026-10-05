@@ -195,6 +195,78 @@ def test_repair_fills_poi_to_poi_distance_like_generate() -> None:
     assert "분" not in slots[1]["distance_range"]
 
 
+def _repair_first_slot(extra: dict) -> list[dict]:
+    """그날 첫 슬롯을 앵커에서 먼(p6 ≈ 2.8km) 곳으로 바꾼 편집 — 시각은 옛 첫 슬롯(09:00) 그대로 온다."""
+    itinerary = {
+        "days": [{"date": _DAY1.isoformat(), "slots": [
+            {"poi_id": "p6", "start_at": "09:00:00", "end_at": "10:00:00"},
+            {"poi_id": "p1", "start_at": "10:00:00", "end_at": "11:00:00"},
+        ]}],
+        "solve_mode": "OR_TOOLS",
+    }
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/repair",
+            json={"itinerary": itinerary, "violations": [], "request_meta": _meta(), **extra},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["repaired"] is not None, response.text
+    for banned in _BANNED_TOKENS:
+        assert banned not in response.text
+    return response.json()["repaired"]["days"][0]["slots"]
+
+
+def _minutes(a: GeoPoint, b: GeoPoint, mode: TransportMode) -> int:
+    return TravelEstimator(AssemblyConfig()).estimate(a, b, mode).internal_minutes
+
+
+_ANCHORED = {
+    "anchors": [{"date": _DAY1.isoformat(), "lat": _ANCHOR.lat, "lng": _ANCHOR.lng}],
+    "time_windows": [{"date": _DAY1.isoformat(), "start": "09:00", "end": "21:00"}],
+}
+_P6 = GeoPoint(_ANCHOR.lat + 0.025, _ANCHOR.lng + 0.025)
+
+
+def test_repair_with_anchor_fills_first_leg_and_floors_first_slot_like_generate() -> None:
+    """첫 슬롯 교체 후속(2026-10-05) — 앵커가 오면 첫 구간 거리가 앵커→첫 장소로 채워지고,
+    첫 슬롯 시작은 generate 와 같은 규칙(창 시작 + 앵커 이동) 이상으로 밀린다."""
+    slots = _repair_first_slot(_ANCHORED)
+
+    assert _DISTANCE_PATTERN.fullmatch(slots[0]["distance_range"] or ""), slots[0]
+    assert "분" not in slots[0]["distance_range"]  # INV-3
+    floor = datetime(2026, 8, 5, 9, 0) + timedelta(
+        minutes=_minutes(_ANCHOR, _P6, TransportMode.PUBLIC))
+    assert slots[0]["start_at"] == floor.time().isoformat()
+
+
+def test_repair_with_car_transport_uses_car_for_label_and_times() -> None:
+    """이동수단이 오면 시각 계산·거리 문자열 모두 그 수단 — generate 의 transport_modes 어휘."""
+    slots = _repair_first_slot({**_ANCHORED, "transport_modes": ["택시", "자가용"]})
+
+    assert re.fullmatch(r"^약 \d+\.\dkm · 자가용 추정$", slots[0]["distance_range"] or ""), slots
+    assert slots[1]["distance_range"].endswith("자가용 추정")
+    floor = datetime(2026, 8, 5, 9, 0) + timedelta(
+        minutes=_minutes(_ANCHOR, _P6, TransportMode.CAR))
+    assert slots[0]["start_at"] == floor.time().isoformat()
+
+
+def test_repair_without_new_fields_keeps_previous_behavior() -> None:
+    """하위호환 — 앵커·수단이 없으면 첫 구간 null·PUBLIC, 첫 슬롯 시각 그대로."""
+    slots = _repair_first_slot({})
+
+    assert slots[0]["distance_range"] is None
+    assert slots[0]["start_at"] == "09:00:00"
+    assert _DISTANCE_PATTERN.fullmatch(slots[1]["distance_range"] or ""), slots[1]
+
+
+def test_repair_anchor_without_window_fills_distance_but_keeps_time() -> None:
+    """창이 없으면 출발 시각을 모른다 — 거리만 채우고 시각은 지어내지 않는다."""
+    slots = _repair_first_slot({"anchors": _ANCHORED["anchors"]})
+
+    assert _DISTANCE_PATTERN.fullmatch(slots[0]["distance_range"] or ""), slots[0]
+    assert slots[0]["start_at"] == "09:00:00"
+
+
 # ── 화이트박스: 좌표 미상 구간은 산출하지 않고 다음 구간까지 전파 ────
 
 

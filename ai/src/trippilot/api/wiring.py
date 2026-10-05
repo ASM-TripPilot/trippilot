@@ -328,7 +328,12 @@ def _pace_from(request: schemas.GenerateItineraryRequest) -> Pace | None:
 
 
 def _transport_from(request: schemas.GenerateItineraryRequest) -> TransportMode:
-    for text in request.preference_profile.transport_modes:
+    return _transport_of(request.preference_profile.transport_modes)
+
+
+def _transport_of(tokens: list[str]) -> TransportMode:
+    """첫 인식 토큰 → 수단, 없으면 PUBLIC. generate·repair 가 같은 규칙을 쓴다."""
+    for text in tokens:
         mode = _TRANSPORT_TOKENS.get(text.strip().upper())
         if mode is not None:
             return mode
@@ -872,7 +877,7 @@ def _problem_for(solution: ItinerarySolution, tz: timezone) -> ItineraryProblem:
     """검증·수리용 문제 재구성. 와이어에 없는 원 컨텍스트는 **기본값**으로 채운다.
 
     - transport=PUBLIC · day_window=당일 00:00~23:59: 와이어에 원값이 없다(간극 —
-      HC2·HC4 판정이 원 요청과 다를 수 있음). 자정 초과 슬롯은 HC4로 표시될 수 있다
+      HC2·HC4 판정이 원 요청과 다를 수 있음 — repair 는 `transport_modes` 가 오면 덮어쓴다). 자정 초과 슬롯은 HC4로 표시될 수 있다
       (HC4 정본도 "시작일 창 귀속"이라 방향은 같다).
     - candidates=(): validate/repair는 POI를 재선택하지 않는다 — HC 판정에 미사용.
     - fixed_blocks: 와이어 `is_fixed` 슬롯을 그대로 승격 — repair가 이를 고정(HC3)한다.
@@ -1497,18 +1502,25 @@ class WiredItineraryOrchestrator:
             request.itinerary, request.request_meta,
             untimed="reject",  # 수리 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
         )
+        # 앵커·창·수단은 선택 필드(2026-10-05) — 없으면 종전(첫 구간 null·첫 슬롯 하한 없음·PUBLIC).
+        problem = replace(problem, transport=_transport_of(request.transport_modes))
+        anchors = {a.date: GeoPoint(a.lat, a.lng) for a in request.anchors}
+        departures = {
+            w.date: (anchors[w.date], datetime.combine(w.date, w.start, tzinfo=self._tz))
+            for w in request.time_windows if w.date in anchors
+        }
         facade = self._assembly_provider.for_pool(poi_index)
         result = facade.repair(
             solution, problem, _deadline_budget(request.request_meta),
-            TraceId(request.request_meta.request_id),
+            TraceId(request.request_meta.request_id), departures=departures,
         )
         repaired = result.repaired
         if repaired is not None:
             # 편집(장소 교체) 뒤 바뀐 구간의 거리 — generate 와 같은 렌더·시한 회계다. 앵커가
-            # 와이어에 없어 첫 슬롯은 null, 수단은 수리가 시각 계산에 쓴 것(problem.transport).
+            # 없는 날의 첫 슬롯은 null, 수단은 수리가 시각 계산에 쓴 것(problem.transport).
             coords = {pid: poi.coord for pid, poi in poi_index.items()}
             (distance_ranges,), _ = self._render_distances(
-                lambda port: (_distance_ranges(repaired, {}, coords, port, problem.transport),),
+                lambda port: (_distance_ranges(repaired, anchors, coords, port, problem.transport),),
                 request.request_meta, entered_ms,
             )
         return WiredRepairOutcome(
