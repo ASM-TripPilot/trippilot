@@ -1532,7 +1532,7 @@
 - `src/shared/ui/pref/index.ts`  →  PrefChip · PrefTile
 
 ## src/test-support/
-- `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · fireEditDropOnZone · fireEditDragBegin
+- `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
 - `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
 - `src/test-support/expoAuthSessionMock.ts`  →  promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
@@ -1567,6 +1567,8 @@
 - `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetListSlot · MapSheetShellProps · MapSheetShell
 - `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
 - `src/widgets/map-sheet-shell/ui/SlotDropZone.tsx`  →  SlotDropZoneProps · SlotDropZone
+- `src/widgets/map-sheet-shell/ui/dragDelete.ts`  →  DELETE_ZONE_BAR_HEIGHT · HoverGeometry · isOverDeleteZone · DragDecision · decideDragEnd
+- `src/widgets/map-sheet-shell/ui/useDeleteZoneHover.ts`  →  HoverAnimVals · useDeleteZoneHover
 
 ## src/widgets/time-sheet/
 - `src/widgets/time-sheet/index.ts`  →  TimeSheet
@@ -1574,4 +1576,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 964개 파일
+합계 966개 파일

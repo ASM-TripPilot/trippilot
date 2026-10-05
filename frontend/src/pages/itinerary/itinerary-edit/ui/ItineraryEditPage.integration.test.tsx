@@ -1192,7 +1192,7 @@ describe('드래그 실배선', () => {
       await ready();
       expect(screen.getByTestId(META)).toHaveTextContent('3곳');
 
-      fireEditDropOnZone(1);
+      await fireEditDropOnZone(1);
 
       expect(screen.getByTestId(META)).toHaveTextContent('2곳');
       expect(await saveAndReadOrder()).toEqual(['a', 'c']);
@@ -1205,7 +1205,7 @@ describe('드래그 실배선', () => {
       renderPage();
       await ready();
 
-      fireEditDropOnZone(1);
+      await fireEditDropOnZone(1);
 
       expect(screen.getByTestId(META)).toHaveTextContent('4곳');
       expect(await saveAndReadOrder()).toEqual(['a', 'F', 'b', 'c']);

@@ -648,7 +648,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       renderPage();
       await ready();
 
-      fireEditDropOnZone(1);
+      await fireEditDropOnZone(1);
 
       expect(screen.getByTestId(META)).toHaveTextContent('2곳');
       expect(ids(await save())).toEqual(['a', 'c']);
