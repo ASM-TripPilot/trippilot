@@ -140,6 +140,8 @@ export function SlotCandidateSheet({
   emptyReason,
 }: SlotCandidateSheetProps): ReactElement {
   const isLoading = fetchState === 'loading' || fetchState === 'slow';
+  // 응답 전이라도 그릴 행(선표시)이 있으면 스켈레톤 대신 그 행을 보인다(TRIP-1245). slow 안내 줄은 유지.
+  const showSkeleton = isLoading && candidates.length === 0;
   const isFetchError = fetchState === 'error';
   const isEmpty = fetchState === 'ready' && candidates.length === 0;
   const emptyFace = resolveSlotEmptyFace(emptyReason);
@@ -284,8 +286,9 @@ export function SlotCandidateSheet({
               }
             />
 
-            {/* 응답 전 — 후보 행 크기의 정적 스켈레톤 3줄(글자 없음). slow 면 그 위에 안내 줄 + [다시 시도]. */}
-            {isLoading ? (
+            {/* 응답 전 — 후보 행 크기의 정적 스켈레톤 3줄(글자 없음). slow 면 그 위에 안내 줄 + [다시 시도].
+                선표시 행이 있으면 스켈레톤은 빼고 slow 안내 줄만 남는다(TRIP-1245). */}
+            {showSkeleton || fetchState === 'slow' ? (
               <View
                 testID="itinerary-candidate-loading"
                 className="w-full gap-md"
@@ -311,7 +314,7 @@ export function SlotCandidateSheet({
                     </Pressable>
                   </View>
                 ) : null}
-                {[0, 1, 2].map((row) => (
+                {(showSkeleton ? [0, 1, 2] : []).map((row) => (
                   <View
                     key={row}
                     testID="itinerary-candidate-skeleton-row"

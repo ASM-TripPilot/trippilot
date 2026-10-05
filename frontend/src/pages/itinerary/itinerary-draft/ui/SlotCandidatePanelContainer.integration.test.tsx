@@ -17,8 +17,10 @@ import type {
   EditItineraryRequest,
   Itinerary,
   ItineraryDaysItem,
+  ItineraryDaysItemSlotsItemAlternativesItem,
   SlotCandidates,
 } from '@/shared/api/index.schemas';
+import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
@@ -1076,6 +1078,556 @@ describe('후보 이름·태그·사진', () => {
       expect(screen.getByTestId('itinerary-candidate-X')).toHaveTextContent(
         /남부산교회/
       );
+    });
+  });
+});
+
+// TRIP-1245
+describe('선표시 — 생성 때 받은 차선책', () => {
+  /**
+   * 시트를 열면 POST 응답을 기다리는 동안 그 슬롯의 `alternatives`(GET 응답, 최대 2건)를 기존 후보
+   * 행 모양으로 먼저 그리고, POST 가 오면 그 목록으로 **교체**한다.
+   *
+   * 무엇을 보장하나:
+   *  - 첫 렌더(요청 전)부터 선표시 행이 보이고 스켈레톤·0건 얼굴은 없다.
+   *  - POST 가 오면 행 집합 = 응답(선표시 중 응답 밖의 것은 사라진다 — 병합 금지).
+   *  - 선표시 중 고른 행이 응답에 있으면 선택 유지, 없으면 해제.
+   *  - 응답 전(loading·slow)엔 교체하기 비활성·PUT 0. 확정은 POST 행으로만.
+   *  - POST 실패·0건은 현행 실패 얼굴·0건 얼굴 그대로(선표시로 덮지 않는다 · INV-4).
+   *  - 선표시 행도 이름 null → 플레이스홀더, 거리 null → 빈 칸, 소요시간 없음(INV-1·3).
+   *
+   * 실제 앱은 초안 화면이 GET 을 받아 둔 뒤 시트를 연다 — 그래서 GET 캐시를 렌더 전에 채운다.
+   *
+   * 3동작 뼈대: 준비=GET 캐시·POST 응답 계획 → 실행=시트 열기·행 탭·응답 풀기 → 단언=보이는 행·나간 요청.
+   */
+
+  const BASE = 'http://localhost:8080/api/v1';
+  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
+  const DAY1 = '2026-06-10';
+  const SLOT_KEY = buildSlotKey(DAY1, 'a');
+
+  const FALLBACK = '지금은 바꿀 수 없어요. 잠시 후 다시 시도해 주세요';
+  const EMPTY_TITLE = '이 슬롯에 맞는 다른 후보가 없어요';
+  const P_IMG = 'https://img.example/p.jpg';
+  /** 정본에 이름이 없는 선표시 항목 — poiId 원문이 새면 바로 보이도록 튀는 id. */
+  const RAW_ALT = 'poi-raw-alt-5566';
+  /** 소요시간 단위(INV-3). '도보 추정'은 단위가 아니다. */
+  const DURATION = /분|시간|\bmin\b|소요/;
+  const RADIO_ROWS = /^itinerary-candidate-radio-/;
+  const SKELETON_ROW = 'itinerary-candidate-skeleton-row';
+
+  const ID = {
+    empty: 'itinerary-candidate-empty',
+    emptySearch: 'itinerary-candidate-empty-search',
+    fetchError: 'itinerary-candidate-fetch-error',
+    retry: 'itinerary-candidate-fetch-retry',
+    confirm: 'itinerary-candidate-confirm',
+    putError: 'itinerary-candidate-error',
+  } as const;
+
+  /** 생성 때 AI 가 준 차선책 2건(서버 거리 문구 모양 그대로). */
+  const ALTS: ItineraryDaysItemSlotsItemAlternativesItem[] = [
+    {
+      poiId: 'P',
+      rationale: '야경이 좋은 전망대',
+      distanceRange: '약 1.2km · 도보 추정',
+      nameKo: '남산서울타워',
+      category: '문화',
+      tags: ['전망대', '야경'],
+      imageUrl: P_IMG,
+    },
+    {
+      poiId: 'Q',
+      rationale: '조용한 한옥 골목',
+      distanceRange: '약 2.4km · 도보 추정',
+      nameKo: '북촌한옥마을',
+      category: '문화',
+      tags: ['한옥'],
+      imageUrl: null,
+    },
+  ];
+
+  /** POST 교체 목록 — P 가 없고 Q 의 거리 문구가 다르다. */
+  const SWAP: SlotCandidates = {
+    candidates: [
+      {
+        poiId: 'Q',
+        distanceRange: '약 0.9km',
+        rationale: '주변 문화',
+        nameKo: '북촌한옥마을',
+        tags: ['한옥'],
+        imageUrl: null,
+      },
+      {
+        poiId: 'Z',
+        distanceRange: '약 1.5km',
+        rationale: '주변 문화',
+        nameKo: '국립현대미술관',
+        tags: ['미술관'],
+        imageUrl: null,
+      },
+      {
+        poiId: 'W',
+        distanceRange: '약 2.0km',
+        rationale: '주변 문화',
+        nameKo: '덕수궁',
+        tags: ['궁궐'],
+        imageUrl: null,
+      },
+    ],
+    radiusMUsed: 2000,
+    degraded: false,
+  };
+
+  let alternatives: ItineraryDaysItemSlotsItemAlternativesItem[] = ALTS;
+
+  function itinerary(): Itinerary {
+    return {
+      itineraryId: 'itin-1',
+      tripId: TRIP_ID,
+      status: 'PLANNED',
+      solveMode: 'FULL_AI',
+      generationMode: 'FULLY_AI',
+      generationState: 'COMPLETE',
+      isFallback: false,
+      days: [
+        {
+          date: DAY1,
+          slots: [
+            {
+              poiId: 'a',
+              nameKo: '경복궁',
+              startAt: '09:30:00',
+              endAt: '11:00:00',
+              category: '문화',
+              isFixed: false,
+              endsNextDay: false,
+              hasViolation: false,
+              alternatives,
+              tags: [],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  /**
+   * POST 호출 순번별 응답 계획. `hang` = 영원히 응답 안 함, `gate` = `releaseGate()` 까지 기다렸다가
+   * SWAP, `swap` = 곧장 SWAP, `empty` = 0건(NO_NEARBY), 숫자 = 그 상태코드.
+   */
+  type PostStep = 'hang' | 'gate' | 'swap' | 'empty' | 500;
+
+  let postPlan: PostStep[] = [];
+  let postBodies: unknown[] = [];
+  let releaseGate: () => void = () => undefined;
+  let getCalls = 0;
+  let putCalls = 0;
+  let putBody: unknown = null;
+  const mockClose = jest.fn();
+
+  async function respond(step: PostStep): Promise<Response> {
+    switch (step) {
+      case 'hang':
+        await delay('infinite');
+        return HttpResponse.json(SWAP);
+      case 'gate':
+        await new Promise<void>((resolve) => {
+          releaseGate = resolve;
+        });
+        return HttpResponse.json(SWAP);
+      case 'swap':
+        return HttpResponse.json(SWAP);
+      case 'empty':
+        return HttpResponse.json({
+          candidates: [],
+          radiusMUsed: 3000,
+          degraded: false,
+          emptyReason: 'NO_NEARBY',
+        });
+      default:
+        return new HttpResponse(null, { status: step });
+    }
+  }
+
+  beforeEach(() => {
+    alternatives = ALTS;
+    postPlan = [];
+    postBodies = [];
+    releaseGate = () => undefined;
+    getCalls = 0;
+    putCalls = 0;
+    putBody = null;
+    mockClose.mockClear();
+    setAccessToken('valid-access');
+
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+        getCalls += 1;
+        return HttpResponse.json(itinerary());
+      }),
+      http.post(
+        `${BASE}/trips/:tripId/itinerary/slot-candidates`,
+        async ({ request }) => {
+          const step = postPlan[postBodies.length] ?? 'hang';
+          postBodies.push(await request.json());
+          return respond(step);
+        }
+      ),
+      http.put(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
+        putCalls += 1;
+        putBody = await request.json();
+        return HttpResponse.json(itinerary());
+      })
+    );
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  /** GET 캐시를 채운 뒤(초안 화면이 이미 받아 둔 상태) 시트를 연다. */
+  function renderWithItinerary() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    client.setQueryData(
+      getGetTripsTripIdItineraryQueryKey(TRIP_ID),
+      itinerary()
+    );
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    return render(
+      <SlotCandidatePanelContainer
+        tripId={TRIP_ID}
+        slotKey={SLOT_KEY}
+        onClose={mockClose}
+      />,
+      { wrapper: Wrapper }
+    );
+  }
+
+  /** 지금 보이는 후보 행의 poiId(정렬). */
+  function rowIds(): string[] {
+    return screen
+      .queryAllByTestId(RADIO_ROWS)
+      .map((node) =>
+        String(node.props.testID).replace('itinerary-candidate-radio-', '')
+      )
+      .sort();
+  }
+
+  function isSelected(poiId: string): boolean {
+    return (
+      screen.getByTestId(`itinerary-candidate-radio-${poiId}`).props
+        .accessibilityState?.selected === true
+    );
+  }
+
+  function isConfirmDisabled(): boolean {
+    return screen.getByTestId(ID.confirm).props.accessibilityState.disabled;
+  }
+
+  async function release(): Promise<void> {
+    await act(async () => {
+      releaseGate();
+    });
+  }
+
+  async function settleRealTime(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+    });
+  }
+
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  describe('응답 전·도착', () => {
+    it('P1 · AC-1 — 시트를 연 바로 그 렌더에 선표시 2행, 스켈레톤·0건 얼굴은 없다', async () => {
+      postPlan = ['hang'];
+
+      renderWithItinerary();
+
+      // await 없이 곧장 본다 — 요청이 나가기 전 첫 프레임이다.
+      expect(postBodies).toHaveLength(0);
+      expect(rowIds()).toEqual(['P', 'Q']);
+      expect(
+        screen.getByTestId('itinerary-candidate-name-P')
+      ).toHaveTextContent('남산서울타워');
+      expect(
+        screen.getByTestId('itinerary-candidate-tags-P')
+      ).toHaveTextContent('#전망대 · 야경');
+      expect(
+        screen.getByTestId('itinerary-candidate-image-P').props.source
+      ).toEqual({ uri: P_IMG });
+      expect(
+        screen.getByTestId('itinerary-candidate-distance-P')
+      ).toHaveTextContent('약 1.2km · 도보 추정');
+      // 추천 이유는 선표시에서도 숨긴다(h08 행 모양 그대로).
+      expect(
+        screen.queryByTestId('itinerary-candidate-rationale-P')
+      ).toBeNull();
+      expect(screen.queryByText('야경이 좋은 전망대')).toBeNull();
+
+      expect(screen.queryAllByTestId(SKELETON_ROW)).toHaveLength(0);
+      expect(screen.queryByTestId(ID.empty)).toBeNull();
+      expect(screen.queryByTestId(ID.emptySearch)).toBeNull();
+      expect(screen.queryByText(EMPTY_TITLE)).toBeNull();
+
+      // 선표시가 있어도 후보 조회는 그대로 1회 나간다.
+      await waitFor(() => expect(postBodies).toHaveLength(1));
+      expect(Object.keys(postBodies[0] as object)).toEqual(['slotKey']);
+    });
+
+    it('P2 · AC-2 — POST 가 오면 행 집합은 정확히 응답이다(응답 밖 선표시 행은 사라진다)', async () => {
+      postPlan = ['gate'];
+      renderWithItinerary();
+      expect(rowIds()).toEqual(['P', 'Q']);
+      await waitFor(() => expect(postBodies).toHaveLength(1));
+
+      await release();
+      await screen.findByTestId('itinerary-candidate-radio-Z');
+
+      expect(rowIds()).toEqual(['Q', 'W', 'Z']);
+      expect(screen.queryByTestId('itinerary-candidate-radio-P')).toBeNull();
+      expect(screen.queryByText('남산서울타워')).toBeNull();
+      // 같은 Q 라도 값은 POST 것이다(합치지 않고 바꾼다).
+      expect(
+        screen.getByTestId('itinerary-candidate-distance-Q')
+      ).toHaveTextContent('약 0.9km');
+      expect(screen.queryAllByTestId(SKELETON_ROW)).toHaveLength(0);
+    });
+  });
+
+  describe('선표시 중 선택', () => {
+    it('P3 · AC-3 — 선표시 중 고른 Q 가 응답에 있으면 선택이 남고 교체하기가 켜진다', async () => {
+      postPlan = ['gate'];
+      renderWithItinerary();
+      await waitFor(() => expect(postBodies).toHaveLength(1));
+
+      fireEvent.press(screen.getByTestId('itinerary-candidate-radio-Q'));
+      // 응답 전에도 라디오는 고를 수 있다 — 다만 교체하기는 아직 꺼져 있다.
+      expect(isSelected('Q')).toBe(true);
+      expect(isConfirmDisabled()).toBe(true);
+
+      await release();
+      await screen.findByTestId('itinerary-candidate-radio-Z');
+
+      expect(isSelected('Q')).toBe(true);
+      expect(
+        screen.getByTestId('itinerary-candidate-check-Q')
+      ).toBeOnTheScreen();
+      expect(isConfirmDisabled()).toBe(false);
+    });
+
+    it('P4 · AC-3 — 선표시 중 고른 P 가 응답에 없으면 선택이 풀리고 교체하기는 꺼진 채 PUT 0', async () => {
+      postPlan = ['gate'];
+      renderWithItinerary();
+      await waitFor(() => expect(postBodies).toHaveLength(1));
+
+      fireEvent.press(screen.getByTestId('itinerary-candidate-radio-P'));
+      expect(isSelected('P')).toBe(true);
+
+      await release();
+      await screen.findByTestId('itinerary-candidate-radio-Z');
+
+      expect(screen.queryByTestId('itinerary-candidate-radio-P')).toBeNull();
+      for (const id of rowIds()) {
+        expect(isSelected(id)).toBe(false);
+      }
+      expect(
+        screen.queryAllByTestId(/^itinerary-candidate-check-/)
+      ).toHaveLength(0);
+      expect(isConfirmDisabled()).toBe(true);
+
+      fireEvent.press(screen.getByTestId(ID.confirm));
+      await settleRealTime();
+      expect(putCalls).toBe(0);
+    });
+  });
+
+  describe('조회 실패·0건', () => {
+    it('P5 · AC-4 — POST 실패면 현행 실패 얼굴, 0건으로 접지 않는다. [다시 시도]는 같은 바디로 1회, 다시 응답 전이면 선표시', async () => {
+      postPlan = [500, 'hang'];
+      renderWithItinerary();
+      expect(rowIds()).toEqual(['P', 'Q']);
+
+      const card = await screen.findByTestId(ID.fetchError);
+      expect(within(card).getByText(FALLBACK)).toBeOnTheScreen();
+      expect(screen.getByTestId(ID.retry)).toBeOnTheScreen();
+      expect(screen.queryByTestId(ID.empty)).toBeNull();
+      expect(screen.queryByTestId(ID.emptySearch)).toBeNull();
+      expect(screen.queryByText(EMPTY_TITLE)).toBeNull();
+      expect(screen.queryByTestId(ID.confirm)).toBeNull();
+      expect(screen.queryByTestId(ID.putError)).toBeNull();
+      // 선표시는 응답 전에만 쓴다 — 실패 얼굴엔 행이 없다.
+      expect(rowIds()).toEqual([]);
+
+      fireEvent.press(screen.getByTestId(ID.retry));
+
+      await waitFor(() => expect(postBodies).toHaveLength(2));
+      expect(Object.keys(postBodies[1] as object)).toEqual(['slotKey']);
+      expect((postBodies[1] as { slotKey: string }).slotKey).toBe(SLOT_KEY);
+      await waitFor(() => expect(rowIds()).toEqual(['P', 'Q']));
+      expect(screen.queryByTestId(ID.fetchError)).toBeNull();
+      expect(screen.queryAllByTestId(SKELETON_ROW)).toHaveLength(0);
+    });
+
+    it('P6 · AC-6 — 선표시가 있어도 POST 가 0건이면 0건 얼굴, 선표시 행은 지운다', async () => {
+      postPlan = ['empty'];
+      renderWithItinerary();
+      expect(rowIds()).toEqual(['P', 'Q']);
+
+      await screen.findByTestId(ID.empty);
+
+      expect(screen.getByTestId(ID.emptySearch)).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-candidate-empty-no-nearby')
+      ).toBeOnTheScreen();
+      expect(rowIds()).toEqual([]);
+      expect(screen.queryAllByTestId(SKELETON_ROW)).toHaveLength(0);
+      expect(screen.queryByTestId(ID.fetchError)).toBeNull();
+    });
+  });
+
+  describe('응답 전 확정 금지·확정 경로', () => {
+    it('P7 · AC-7 — 응답 전(loading)엔 선표시 행을 골라도 교체하기 비활성, PUT 0', async () => {
+      postPlan = ['hang'];
+      renderWithItinerary();
+      await waitFor(() => expect(postBodies).toHaveLength(1));
+
+      fireEvent.press(screen.getByTestId('itinerary-candidate-radio-P'));
+      expect(isSelected('P')).toBe(true);
+      expect(isConfirmDisabled()).toBe(true);
+
+      fireEvent.press(screen.getByTestId(ID.confirm));
+      await settleRealTime();
+
+      expect(putCalls).toBe(0);
+      expect(mockClose).toHaveBeenCalledTimes(0);
+    });
+
+    it('P8 · AC-7 — 10초가 넘어도(slow) 선표시 행은 남고, 교체하기 비활성·PUT 0', async () => {
+      postPlan = ['hang'];
+      jest.useFakeTimers();
+      renderWithItinerary();
+
+      await advance(10_100);
+      expect(rowIds()).toEqual(['P', 'Q']);
+
+      fireEvent.press(screen.getByTestId('itinerary-candidate-radio-P'));
+      await advance(0);
+      expect(isSelected('P')).toBe(true);
+      expect(isConfirmDisabled()).toBe(true);
+
+      fireEvent.press(screen.getByTestId(ID.confirm));
+      await advance(50);
+
+      expect(putCalls).toBe(0);
+      expect(postBodies).toHaveLength(1);
+    });
+
+    it('P11 · 5-b 경고-1 — 10초가 넘으면(slow) 선표시 행 아래에 지연 안내와 [다시 시도]가 남는다(응답이 안 올 때 유일한 출구)', async () => {
+      // 준비 — 선표시 있음 + POST 는 영영 안 옴 + 가짜 시계
+      postPlan = ['hang'];
+      jest.useFakeTimers();
+      renderWithItinerary();
+
+      // 실행 — 10초를 넘긴다(slow). C8 처럼 9.9초 뒤 0.2초로 나눠 흘린다(한 번에 넘기면 안 뜬다).
+      await advance(9_900);
+      expect(screen.queryByTestId('itinerary-candidate-slow')).toBeNull();
+      await advance(200);
+
+      // 단언 — 행은 남고, 새 얼굴 없이 기존 slow 줄과 [다시 시도]가 같이 보인다(스켈레톤만 빠짐)
+      expect(rowIds()).toEqual(['P', 'Q']);
+      expect(screen.getByTestId('itinerary-candidate-slow')).toBeOnTheScreen();
+      expect(screen.getByText(/시간이 걸리고 있어요/)).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-candidate-fetch-retry')
+      ).toBeOnTheScreen();
+    });
+
+    it('P9 · AC-8 — 선표시가 있던 시트에서도 POST 행 확정은 치환 PUT 1건 + 닫힘 + 재조회', async () => {
+      postPlan = ['swap'];
+      renderWithItinerary();
+      await screen.findByTestId('itinerary-candidate-radio-Z');
+      await waitFor(() => expect(getCalls).toBe(1));
+
+      fireEvent.press(screen.getByTestId('itinerary-candidate-radio-Z'));
+      fireEvent.press(screen.getByTestId(ID.confirm));
+
+      await waitFor(() => expect(putCalls).toBe(1));
+      const body = putBody as EditItineraryRequest;
+      expect(body.days[0].slots[0].poiId).toBe('Z');
+      expect(Object.keys(body.days[0].slots[0]).sort()).toEqual(
+        ['poiId', 'startAt', 'endAt', 'isFixed', 'endsNextDay'].sort()
+      );
+      await waitFor(() => expect(mockClose).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(getCalls).toBe(2));
+    });
+  });
+
+  describe('선표시 행의 INV-1·INV-3', () => {
+    it('P10 · AC-9 — 이름 null 은 플레이스홀더(poiId 원문 없음), 거리 null 은 빈 칸, 소요시간 단위 없음', async () => {
+      alternatives = [
+        {
+          poiId: RAW_ALT,
+          rationale: '정본 이름 미확보',
+          distanceRange: '약 2.0km · 도보 추정',
+          nameKo: null,
+          tags: [],
+          imageUrl: null,
+        },
+        {
+          poiId: 'N',
+          rationale: '조용한 한옥 골목',
+          distanceRange: null,
+          nameKo: '북촌한옥마을',
+          tags: ['한옥'],
+          imageUrl: null,
+        },
+      ];
+      postPlan = ['hang'];
+
+      renderWithItinerary();
+
+      expect(
+        screen.getByTestId(`itinerary-candidate-name-${RAW_ALT}`)
+      ).toHaveTextContent('이름 준비 중');
+      expect(screen.queryByText(new RegExp(RAW_ALT))).toBeNull();
+      expect(
+        screen.getByTestId('itinerary-candidate-name-N')
+      ).toHaveTextContent('북촌한옥마을');
+
+      // 문자열 인자는 완전 일치 — '' 는 정말 빈 칸일 때만 통과한다.
+      expect(
+        screen.getByTestId('itinerary-candidate-distance-N')
+      ).toHaveTextContent('');
+      expect(
+        screen.getByTestId(`itinerary-candidate-distance-${RAW_ALT}`)
+      ).toHaveTextContent('약 2.0km · 도보 추정');
+
+      for (const id of [RAW_ALT, 'N']) {
+        expect(
+          screen.getByTestId(`itinerary-candidate-${id}`)
+        ).not.toHaveTextContent(DURATION);
+      }
+      expect(screen.getByTestId('itinerary-candidate-N')).toHaveTextContent(
+        /북촌한옥마을/
+      );
+
+      await waitFor(() => expect(postBodies).toHaveLength(1));
     });
   });
 });
