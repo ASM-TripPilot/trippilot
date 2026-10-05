@@ -73,6 +73,8 @@ export function MyTripsListPage(): ReactElement {
   });
   const [seen, setSeen] = useState<readonly string[] | null>(null);
   const [shown, setShown] = useState<Trip | null>(null);
+  // TRIP-1241 — 닫음. shown 을 비우면 seen state 가 옛 값이라 pick 이 다시 계산돼 재표시되므로 별도 플래그로 든다.
+  const [barDismissed, setBarDismissed] = useState(false);
 
   // TRIP-1055 · 삭제 — 대상·실패 표시·요청을 페이지가 쥔다(다이얼로그는 카드·스크롤 밖 형제).
   const queryClient = useQueryClient();
@@ -237,10 +239,11 @@ export function MyTripsListPage(): ReactElement {
           />
         ))}
       />
-      {doneTrip ? (
+      {doneTrip && !barDismissed ? (
         <GenerationDoneBar
           tripName={doneTrip.title}
           onPressView={onPressView}
+          onPressClose={() => setBarDismissed(true)}
         />
       ) : null}
       {deleteTargetId !== null ? (
