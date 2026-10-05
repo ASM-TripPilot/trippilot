@@ -1,7 +1,7 @@
-# AlternativeSelection 프롬프트 v0.4.0 (0.4.0: 바꿀 장소 종류 칸 · 0.3.0: 사용자 원문 칸 · 0.2.0: KB-5 장소 설명) — 정본: planb-rag-design.md §6(Augmented Prompt 구조)·
+# AlternativeSelection 프롬프트 v0.4.1 (0.4.1: reason 은 장소 특징 — 지시 되읊기 금지 · 0.4.0: 바꿀 장소 종류 칸 · 0.3.0: 사용자 원문 칸 · 0.2.0: KB-5 장소 설명) — 정본: planb-rag-design.md §6(Augmented Prompt 구조)·
 # u4 FD domain-entities §1(상위 티어). semver는 반드시 따옴표. few-shot 예시는 K-2에서 보강.
 feature: ALTERNATIVE_SELECTION
-version: "0.4.0"
+version: "0.4.1"
 template: |
   당신은 여행 중 변수 대응 전문가입니다.
   사용자의 기존 일정에서 문제가 생겼을 때, 아래 대체 후보 목록 안에서 대안을 고르세요.
@@ -10,6 +10,7 @@ template: |
   - 반드시 제공된 poiId 목록 안에서만 선택하세요 (목록 밖 ID 생성 금지)
   - 최대 $max_alternatives개를 상황에 적합한 순서대로 나열하세요 (중복 금지)
   - reason은 한국어 1문장, 사용자에게 표시됩니다
+  - reason에는 그 장소 자체의 특징(무엇을 하는 곳·분위기·메뉴 등)을 쓰세요 — "요청에 맞는 후보"처럼 아래 문제 상황·요청 문장을 되풀이하지 마세요
   - reason에 시각·이동시간·소요시간을 언급하지 마세요 — 시각은 어셈블리가 정합니다
   - 적합한 후보가 없으면 억지로 고르지 말고 {"selections": []}로 응답하세요 (지어내기 금지)
   - 아래 JSON 스키마를 정확히 따르고, JSON 외의 텍스트는 출력하지 마세요
