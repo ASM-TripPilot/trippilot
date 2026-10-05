@@ -228,6 +228,8 @@ class PlanBRagRequest:
     # 읽고 고르게 한다(후보 자격과 무관, INV-1 은 closed_set_filter 소유). 빈 문자열 =
     # 없음(`/alternatives` 등 기존 호출 무영향).
     user_request: str = ""
+    # 풀을 거른 경계 카테고리 코드 — 선택 LLM 에 "이 종류로 바꾸려 한다"를 알린다.
+    wanted_categories: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -572,6 +574,7 @@ class PlanBAgent:
                     excluded_poi_ids=request.excluded_poi_ids,
                     place_knowledge=context.place_knowledge,
                     user_request=request.user_request,
+                    wanted_categories=request.wanted_categories,
                 ),
                 request.trace_id,
                 request.now,
