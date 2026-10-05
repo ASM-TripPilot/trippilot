@@ -1974,6 +1974,63 @@ describe('후보 기본 선택', () => {
     });
   });
 
+  // TRIP-1251 · 후보를 기다리는 동안 빈칸 대신 스켈레톤. 첫 조회(테마 고르기)와 재요청(반경 탭)
+  // 둘 다 같은 얼굴이다 — mutate 가 다시 불리면 옛 후보(data)가 비워져 같은 분기로 간다(결정 1).
+  describe('🔴 후보를 기다리는 동안 스켈레톤', () => {
+    const SKEL = 'itinerary-copick-slotfill-skeleton';
+
+    it('I1 · 테마를 고른 뒤 응답 전엔 스켈레톤이 보이고, 후보가 도착하면 사라진다', async () => {
+      // 준비 — 응답을 "문" 뒤에 묶어 둔다. release() 를 부르기 전엔 오지 않는다.
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      candidatesScript = async () => {
+        await gate;
+        return ok([cand('X'), cand('Y'), cand('Z')]);
+      };
+      renderPage();
+
+      // 실행 — 테마 고르기(첫 조회)
+      await pickConcept();
+      await waitFor(() => expect(postCalls).toBe(1));
+
+      // 단언 ① 기다리는 동안 — 스켈레톤이 있고 0건 얼굴은 없다.
+      expect(await screen.findByTestId(SKEL)).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-copick-zero')).toBeNull();
+
+      // 단언 ② 도착 뒤 — 후보가 보이고 스켈레톤은 사라진다.
+      release();
+      expect(
+        await screen.findByTestId('itinerary-candidate-radio-X')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(SKEL)).toBeNull();
+    });
+
+    it('I2 · 반경을 바꿔 다시 조회하는 동안에도 같은 스켈레톤이고, 라디오·확정 버튼·PUT 은 없다', async () => {
+      // 준비 — near 반경 응답은 영원히 안 온다.
+      candidatesScript = byRadius([cand('X'), cand('Y'), cand('Z')], 'never');
+      renderPage();
+      await pickConcept();
+      await screen.findByTestId('itinerary-candidate-radio-X');
+      expect(screen.queryByTestId(SKEL)).toBeNull(); // 앵커 — 도착 뒤엔 없었다
+
+      // 실행 — 반경 세그먼트 탭(재요청)
+      fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-near'));
+      await waitFor(() => expect(postCalls).toBe(2));
+
+      // 단언
+      expect(await screen.findByTestId(SKEL)).toBeOnTheScreen();
+      expect(
+        screen.queryAllByTestId(/^itinerary-candidate-radio-/)
+      ).toHaveLength(0);
+      expect(
+        screen.queryByTestId('itinerary-copick-slotfill-confirm')
+      ).toBeNull();
+      expect(putCalls).toBe(0);
+    });
+  });
+
   describe('🔴 TRIP-1073 B7 · 생성 중(PARTIAL)이면 A 는 선택되지만 확정은 잠긴다 (TRIP-978 무회귀)', () => {
     it('X 가 선택이어도 확정은 비활성이고 잠금 사유가 보이며 눌러도 PUT 0 이다', async () => {
       // 준비 — 일정이 생성 중이고 후보는 X 하나.

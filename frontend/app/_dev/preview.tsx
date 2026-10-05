@@ -6044,6 +6044,41 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1251 — 후보 응답 전(0건 + 조회 중) 스켈레톤 카드 3장. Figma h10 엔 로딩 변형이 없어 같은 밴드
+  // h02 loading(4294:8234) skelCard 와 대조한다. 펄스·동작 줄이기 정지는 jest 사각이라 이 키가 육안 그물.
+  {
+    key: 'h10-copick-candidates-loading',
+    band: 'h',
+    label: 'h10 · 후보 선택 불러오는 중',
+    login: null,
+    render: () => (
+      <SlotFillScreen
+        concept="전시"
+        progress={H10_PROGRESS}
+        stepperSlot={H10_STEPPER}
+        mapView={{
+          center: H10_CENTER,
+          radiusCircle: { center: H10_CENTER, radiusM: 1100 },
+          pins: H10_BASE_PINS,
+        }}
+        candidates={[]}
+        candidatesPending
+        radiusSteps={H10_RADIUS_STEPS}
+        selectedRadiusKey="mid"
+        selectedPoiId={null}
+        canExpandRadius
+        isPending={false}
+        errorMessage={null}
+        onSelectRadius={noop}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        onExpandRadius={noop}
+        onShrinkRadius={noop}
+        onChangeConcept={noop}
+        onBack={noop}
+      />
+    ),
+  },
   // h12 편집기 통일(TRIP-797) — 지도+3스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
   // 직접 태운다(컨테이너 api 사슬 없음, TRIP-610 회피). 빈/채움/드래그 세 정적 얼굴을 대조한다.
   // 실제 드래그·시트 개폐·딤은 통과형 목이 못 봄(6-b 실기 전용).
