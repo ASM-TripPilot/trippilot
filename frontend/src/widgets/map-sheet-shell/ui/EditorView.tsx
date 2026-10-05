@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useContext, useState } from 'react';
+import { useContext, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import {
   NestableDraggableFlatList,
@@ -7,6 +7,11 @@ import {
   type DragEndParams,
   type RenderItemParams,
 } from 'react-native-draggable-flatlist';
+import Animated, {
+  useAnimatedRef,
+  useScrollViewOffset,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
@@ -17,10 +22,12 @@ import { SlotStopCard } from '@/entities/itinerary-slot';
 
 import { CTA_BAR_HEIGHT, type CtaButton } from './CtaBar';
 import { InfoCircleGlyph, PlusGlyph } from './EditorGlyphs';
+import { decideDragEnd, DELETE_ZONE_BAR_HEIGHT } from './dragDelete';
 import { BackChevronGlyph } from './MapSheetGlyphs';
 import { MapSheetShell } from './MapSheetShell';
 import { SheetHeader } from './SheetHeader';
 import { SlotDropZone } from './SlotDropZone';
+import { useDeleteZoneHover } from './useDeleteZoneHover';
 
 /**
  * TRIP-797 · h12 통일 편집기 뷰 — TRIP-921 로 pages 에서 widgets 로 승격돼 h12 편집(`ItineraryEditPage`)·
@@ -28,8 +35,12 @@ import { SlotDropZone } from './SlotDropZone';
  * 개폐·미지정 안내는 페이지 몫이고, 이 뷰는 셸 조립·드래그 판정만 진다. 위젯은 features 를 못 물어 헤더
  * 날짜는 페이지가 포맷한 `dateLabel` 문자열로 받는다.
  *
- * 드래그(TRIP-921, 3-a 결정): 리스트 data = 활성 일자 슬롯 n개 + **맨 끝 센티널**(드롭존 칸, 끌 수 없음).
- * 놓은 카드가 새 data 에서 센티널 **뒤**면 삭제(`onDeleteViaDrag`), 아니면 재정렬(`onReorder`, 센티널 제외).
+ * 드래그(TRIP-1246, 센티널 폐기): 리스트 data = 활성 일자 슬롯뿐이다. 삭제 영역은 **리스트 밖 시트 하단에
+ * 고정**(Figma `4195:2468` — CTA 자리)돼 끌기 중에만 뜨고, 놓을 때 끌던 카드가 그 영역 위에 있었으면
+ * 삭제(`onDeleteViaDrag`), 아니면 재정렬(`onReorder`). 위 판정은 `dragDelete.ts` 순수 함수, 영역 위 여부
+ * 추적은 `useDeleteZoneHover`. 센티널을 리스트에 두면 라이브러리가 삭제 칸도 슬롯처럼 밀어냈다.
+ * 놓은 뒤엔 `dragEpoch` 로 칸 키를 바꿔 다시 그린다 — 라이브러리는 놓은 뒤에도 마지막 밀림값을 칸에 붙들고
+ * 있다가 그 칸 `onLayout` 이 다시 불릴 때만 풀어, 고정 카드 위로 끌었다 되돌리면 밀린 채 남아 가려졌다.
  * 고정·방문 완료 카드는 롱프레스가 끌기로 안 이어지고, 판정 단계에서도 한 번 더 거른다(심층 방어 —
  * 스토어 삭제는 고정 여부를 안 본다).
  *
@@ -82,10 +93,6 @@ const GUIDE_H12 = '길게 눌러 순서를 바꾸거나, 아래로 끌어 삭제
 const GUIDE_IN_TRIP =
   '방문한 곳은 그대로 두고, 길게 눌러 순서를 바꾸거나 아래로 끌어 삭제해요';
 
-// 리스트 끝 센티널(드롭존 칸). poiId 가 아니라 이 문자열이라 슬롯과 키가 겹치지 않는다.
-const DROP_SENTINEL = 'itinerary-edit-drop-sentinel';
-type ListItem = EditorViewSlot | typeof DROP_SENTINEL;
-
 export function EditorView({
   center,
   pins,
@@ -110,6 +117,13 @@ export function EditorView({
   // 끌기 진행 중(onDragBegin ~ onDragEnd) — 뷰 국소 일시 상태.
   const [dragging, setDragging] = useState(false);
   const dragFace = isDragging === true || dragging;
+  // 놓을 때마다 +1 — 칸 키에 섞어 라이브러리가 붙든 밀림값(`heldTranslate`)을 버리게 새로 그린다(끌기 중엔 불변).
+  const [dragEpoch, setDragEpoch] = useState(0);
+  // 끌던 카드가 하단 삭제 영역 위에 있는지(터치 중 마지막 값). 렌더에 안 쓰므로 ref.
+  const overZoneRef = useRef(false);
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const scrollOffset = useScrollViewOffset(scrollRef);
+  const viewportHeight = useSharedValue(0);
   // CTA 바가 하단 안전 영역 위에 얹히므로 여백에 그 높이를 더한다. Provider 없으면(jest) 0 — 셸과 같은 읽기.
   const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
 
@@ -119,18 +133,24 @@ export function EditorView({
   const isPinned = (slot: EditorViewSlot): boolean =>
     slot.isFixed === true || isLocked(slot);
 
-  function handleDragEnd({ data, to }: DragEndParams<ListItem>): void {
+  const { onAnimValInit } = useDeleteZoneHover({
+    scrollOffset,
+    viewportHeight,
+    bottomInset,
+    onChange: (over) => {
+      overZoneRef.current = over;
+    },
+  });
+
+  function handleDragEnd({ data, to }: DragEndParams<EditorViewSlot>): void {
     setDragging(false);
-    const moved = data[to];
-    // 센티널 자체는 못 끈다. 고정·완료 카드는 제스처가 막혀도 판정에서 한 번 더 거른다(심층 방어).
-    if (moved === DROP_SENTINEL || isPinned(moved)) return;
-    if (to > data.indexOf(DROP_SENTINEL)) {
-      onDeleteViaDrag?.(moved.poiId);
-      return;
-    }
-    onReorder?.(
-      data.filter((item): item is EditorViewSlot => item !== DROP_SENTINEL)
-    );
+    setDragEpoch((e) => e + 1);
+    const overZone = overZoneRef.current;
+    overZoneRef.current = false;
+    // 고정·완료 카드는 제스처가 막혀도 판정에서 한 번 더 거른다(심층 방어).
+    const decision = decideDragEnd({ data, to, overZone, isPinned });
+    if (decision.kind === 'delete') onDeleteViaDrag?.(decision.moved.poiId);
+    else if (decision.kind === 'reorder') onReorder?.(decision.slots);
   }
 
   function renderItem({
@@ -138,15 +158,7 @@ export function EditorView({
     getIndex,
     drag,
     isActive,
-  }: RenderItemParams<ListItem>): ReactElement | null {
-    if (item === DROP_SENTINEL) {
-      // 드롭존은 끌기 중에만 그린다(평소엔 빈 칸 — Figma 채움 얼굴에 드롭존이 없다).
-      return dragFace ? (
-        <View className="pb-md">
-          <SlotDropZone isActive />
-        </View>
-      ) : null;
-    }
+  }: RenderItemParams<EditorViewSlot>): ReactElement | null {
     const index = getIndex() ?? 0;
     const slotKey = buildSlotKey(activeDate, item.poiId);
     const locked = isLocked(item);
@@ -260,8 +272,6 @@ export function EditorView({
         },
       ];
 
-  const data: ListItem[] = [...slots, DROP_SENTINEL];
-
   return (
     <MapSheetShell
       center={center}
@@ -276,54 +286,81 @@ export function EditorView({
       bodyScroll={false}
       contentPanning={false}
     >
-      <NestableScrollContainer
-        contentContainerStyle={{ paddingBottom: CTA_BAR_HEIGHT + bottomInset }}
+      <View
+        testID="itinerary-edit-viewport"
+        className="flex-1"
+        onLayout={(e) => {
+          viewportHeight.value = e.nativeEvent.layout.height;
+        }}
       >
-        {header}
-        <View className="px-lg pb-2xl pt-xs">
-          {/* activationDistance·scrollEnabled 는 넘기지 않는다 — 라이브러리 기본(20·false)을 {...props} 가
+        <NestableScrollContainer
+          ref={scrollRef as never}
+          contentContainerStyle={{
+            paddingBottom: CTA_BAR_HEIGHT + bottomInset,
+          }}
+        >
+          {header}
+          <View className="px-lg pb-2xl pt-xs">
+            {/* activationDistance·scrollEnabled 는 넘기지 않는다 — 라이브러리 기본(20·false)을 {...props} 가
               덮으면(undefined 라도) 활성 거리 0 이 돼 스와이프를 드래그가 다시 뺏는다. */}
-          <NestableDraggableFlatList
-            testID="itinerary-edit-list"
-            data={data}
-            keyExtractor={(item) =>
-              item === DROP_SENTINEL ? DROP_SENTINEL : `card-${item.poiId}`
-            }
-            renderItem={renderItem}
-            onDragBegin={() => setDragging(true)}
-            onDragEnd={handleDragEnd}
-            // 원래 자리 점선 칸(Figma `4196:2468`) — 번호 원(24 + gap 10) 자리는 비운다.
-            renderPlaceholder={() => (
-              <View className="mb-md ml-[34px] flex-1 rounded-card border border-dashed border-hairline-strong" />
-            )}
-          />
+            <NestableDraggableFlatList
+              testID="itinerary-edit-list"
+              data={slots}
+              keyExtractor={(item) => `card-${item.poiId}-${dragEpoch}`}
+              renderItem={renderItem}
+              // 끌던 카드가 목록 밖(하단 삭제 영역)까지 손가락을 따라가게 한다 — 기본은 목록 경계에 묶여 영역에 못 닿는다.
+              dragItemOverflow
+              onAnimValInit={onAnimValInit}
+              onDragBegin={() => {
+                overZoneRef.current = false;
+                setDragging(true);
+              }}
+              onDragEnd={handleDragEnd}
+              // 원래 자리 점선 칸(Figma `4196:2468`) — 번호 원(24 + gap 10) 자리는 비운다.
+              renderPlaceholder={() => (
+                <View className="mb-md ml-[34px] flex-1 rounded-card border border-dashed border-hairline-strong" />
+              )}
+            />
 
-          <View className="gap-md">
-            {/* 점선 "+ 장소 추가"(index 미지정 = 말미, AC-8). */}
-            <Pressable
-              testID="itinerary-edit-add-place"
-              onPress={onPressAddPlace}
-              className="flex-row items-center justify-center gap-xs rounded-card border border-dashed border-hairline-strong bg-canvas py-md"
-            >
-              <PlusGlyph size={24} />
-              <Text className="font-noto-bold text-body font-bold text-muted">
-                장소 추가
-              </Text>
-            </Pressable>
+            <View className="gap-md">
+              {/* 점선 "+ 장소 추가"(index 미지정 = 말미, AC-8). */}
+              <Pressable
+                testID="itinerary-edit-add-place"
+                onPress={onPressAddPlace}
+                className="flex-row items-center justify-center gap-xs rounded-card border border-dashed border-hairline-strong bg-canvas py-md"
+              >
+                <PlusGlyph size={24} />
+                <Text className="font-noto-bold text-body font-bold text-muted">
+                  장소 추가
+                </Text>
+              </Pressable>
 
-            {/* 안내줄(AC-12) — Figma 는 "장소 추가" 아래(h12·i07 공통), 문구만 모드별. */}
-            <View
-              testID="itinerary-edit-guide"
-              className="flex-row items-center gap-[6px]"
-            >
-              <InfoCircleGlyph size={16} />
-              <Text className="font-noto text-caption text-muted">
-                {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
-              </Text>
+              {/* 안내줄(AC-12) — Figma 는 "장소 추가" 아래(h12·i07 공통), 문구만 모드별. */}
+              <View
+                testID="itinerary-edit-guide"
+                className="flex-row items-center gap-[6px]"
+              >
+                <InfoCircleGlyph size={16} />
+                <Text className="font-noto text-caption text-muted">
+                  {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
-      </NestableScrollContainer>
+        </NestableScrollContainer>
+        {/* 하단 고정 삭제 영역 — 리스트 밖(끌기 중에만, Figma `4195:2468`: CTA 자리 84 = 12 + 56 + 16). 터치는
+          통과(pointerEvents none) — 판정은 위치 추적이라 이 View 가 눌릴 일이 없다. */}
+        {dragFace ? (
+          <View
+            testID="itinerary-edit-dropzone-bar"
+            pointerEvents="none"
+            style={{ height: DELETE_ZONE_BAR_HEIGHT + bottomInset }}
+            className="absolute bottom-0 left-0 right-0 border-t border-hairline bg-canvas px-lg pt-md"
+          >
+            <SlotDropZone isActive />
+          </View>
+        ) : null}
+      </View>
     </MapSheetShell>
   );
 }

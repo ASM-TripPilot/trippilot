@@ -22,6 +22,8 @@ import {
   editListData,
   fireEditDragBegin,
   fireEditDragEnd,
+  fireEditDropOnZone,
+  hoverOverDeleteZone,
 } from '@/test-support/editDragList';
 
 import { EditorView } from './EditorView';
@@ -787,34 +789,30 @@ function reorderedIds(mock: jest.Mock): string[] {
   return (mock.mock.calls[0][0] as EditorSlot[]).map((s) => s.poiId);
 }
 
-describe('🔴 EditorView · D1 — 드래그 리스트 계약: 슬롯 n개 + 끝 센티널 1개 (TRIP-921 AC-1·AC-2 전제)', () => {
-  it('itinerary-edit-list 의 data 는 [a,b,c] 뒤에 슬롯 아닌 항목 하나, 키는 모두 다르다', () => {
+describe('🔴 EditorView · D1 — 드래그 리스트 계약: 슬롯 n개뿐, 삭제 칸(센티널)은 리스트에 없다 (TRIP-1246 · 옛 TRIP-921 AC-1·AC-2 전제 개정)', () => {
+  it('itinerary-edit-list 의 data 는 [a,b,c] 슬롯만이고 키는 모두 다르다', () => {
     renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
     expect(screen.getByTestId(EDIT_LIST)).toBeOnTheScreen();
 
     const data = editListData();
-    expect(data).toHaveLength(4);
-    expect(data.slice(0, 3).map((item) => (item as EditorSlot).poiId)).toEqual([
+    expect(data.map((item) => (item as EditorSlot).poiId)).toEqual([
       'a',
       'b',
       'c',
     ]);
-    // 센티널 — 모양은 계약하지 않고 "슬롯이 아니다"만 본다(02a ★1).
-    const last = data[3] as { poiId?: unknown } | null;
-    expect(['a', 'b', 'c']).not.toContain(last?.poiId);
 
     const keyExtractor = (
       screen.UNSAFE_getByType(DraggableFlatList).props as {
         keyExtractor: (item: unknown, index: number) => string;
       }
     ).keyExtractor;
-    expect(new Set(data.map((item, i) => keyExtractor(item, i))).size).toBe(4);
+    expect(new Set(data.map((item, i) => keyExtractor(item, i))).size).toBe(3);
   });
 });
 
-describe('🔴 EditorView · D2 — 센티널 앞에 놓으면 재정렬 (TRIP-921 AC-1)', () => {
-  it('b 를 맨 앞(1→0)에 놓으면 onReorder 가 센티널 뺀 [b,a,c] 로 1회, 삭제는 0회', () => {
+describe('🔴 EditorView · D2 — 삭제 영역 밖에 놓으면 재정렬 (TRIP-921 AC-1 · TRIP-1246 판정 교체)', () => {
+  it('b 를 맨 앞(1→0)에 놓으면 onReorder 가 [b,a,c] 로 1회, 삭제는 0회', () => {
     const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
     fireEditDragEnd(1, 0);
@@ -824,7 +822,7 @@ describe('🔴 EditorView · D2 — 센티널 앞에 놓으면 재정렬 (TRIP-9
     expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
   });
 
-  it('★경계 — 센티널 바로 앞(0→2, [b,c,a,S])은 맨 끝으로 재정렬이지 삭제가 아니다', () => {
+  it('★경계 — 맨 끝(0→2)으로 옮겨도 영역 위가 아니면 재정렬이지 삭제가 아니다', () => {
     const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
     fireEditDragEnd(0, 2);
@@ -835,53 +833,74 @@ describe('🔴 EditorView · D2 — 센티널 앞에 놓으면 재정렬 (TRIP-9
   });
 });
 
-describe('🔴 EditorView · D3 — 센티널 뒤에 놓으면 삭제 (TRIP-921 AC-2)', () => {
-  it('b 를 센티널 뒤(1→3, [a,c,S,b])에 놓으면 onDeleteViaDrag("b") 1회, 재정렬 0회', () => {
+describe('🔴 EditorView · D3 — 삭제 영역 위에서 놓으면 삭제 (TRIP-921 AC-2 · TRIP-1246 판정 교체)', () => {
+  it('b 를 영역 위에서 놓으면 onDeleteViaDrag("b") 1회, 재정렬 0회', async () => {
     const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
-    fireEditDragEnd(1, 3);
+    await fireEditDropOnZone(1);
 
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b');
     expect(cb.onReorder).not.toHaveBeenCalled();
   });
 
-  it('★경계 — 마지막 카드 c 를 한 칸만 내려도(2→3, [a,b,S,c]) 센티널을 넘었으니 삭제다', () => {
+  it('★마지막 카드 c 도 영역 위에서 놓으면 삭제다(칸 index 와 무관)', async () => {
     const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
-    fireEditDragEnd(2, 3);
+    await fireEditDropOnZone(2);
 
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('c');
     expect(cb.onReorder).not.toHaveBeenCalled();
   });
+
+  it('★영역 위에 갔다가 나와서 놓으면 삭제가 아니다(마지막 터치 중 위치가 기준)', async () => {
+    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    await hoverOverDeleteZone(true);
+    await hoverOverDeleteZone(false);
+    fireEditDragEnd(1, 1);
+
+    expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
+    expect(cb.onReorder).toHaveBeenCalledTimes(1);
+  });
+
+  it('★삭제 한 번 뒤 다음 끌기는 영역 위 기록이 지워진 채 시작한다(다음 제자리 놓기는 삭제 아님)', async () => {
+    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    await fireEditDropOnZone(1);
+    fireEditDragBegin(0);
+    fireEditDragEnd(0, 0);
+
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
+  });
 });
 
-describe('🔴 EditorView · D4 — 고정·완료 카드는 드롭존에 놓여도 안 지워진다 (TRIP-921 AC-3 ② 심층 방어)', () => {
-  it('고정 카드를 센티널 뒤로 강제 발화하면 두 콜백 0회 — 짝: 같은 화면의 예정 카드는 지워진다', () => {
+describe('🔴 EditorView · D4 — 고정·완료 카드는 삭제 영역에 놓여도 안 지워진다 (TRIP-921 AC-3 ② 심층 방어)', () => {
+  it('고정 카드를 영역 위에서 강제 발화하면 두 콜백 0회 — 짝: 같은 화면의 예정 카드는 지워진다', async () => {
     const cb = renderView({
       slots: [slot('a'), slot('fix', { isFixed: true }), slot('b')],
     });
 
     // 제스처로는 못 끄는 카드지만, 판정 단계에서 한 번 더 거른다(스토어 deleteSlot 은 고정을 안 본다).
-    fireEditDragEnd(1, 3);
+    await fireEditDropOnZone(1);
     expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
     expect(cb.onReorder).not.toHaveBeenCalled();
 
     // 짝(공허 통과 방지) — 콜백 배선 자체는 살아 있다.
-    fireEditDragEnd(2, 3);
+    await fireEditDropOnZone(2);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b');
   });
 
-  it('방문 완료 카드(p1)를 센티널 뒤로 강제 발화하면 두 콜백 0회 — 짝: 예정 p3 는 지워진다', () => {
+  it('방문 완료 카드(p1)를 영역 위에서 강제 발화하면 두 콜백 0회 — 짝: 예정 p3 는 지워진다', async () => {
     const cb = renderI07();
 
-    fireEditDragEnd(0, 5);
+    await fireEditDropOnZone(0);
     expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
     expect(cb.onReorder).not.toHaveBeenCalled();
 
-    fireEditDragEnd(2, 5);
+    await fireEditDropOnZone(2);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('p3');
   });
@@ -956,13 +975,13 @@ describe('🔴 EditorView · D6 — 드래그 중 얼굴과 놓은 뒤 복귀 (T
     expect(cb.onPressAddBetween).toHaveBeenCalledTimes(1);
   });
 
-  it('드롭존에 놓아 삭제로 끝나도 원래 얼굴로 돌아온다', () => {
+  it('드롭존에 놓아 삭제로 끝나도 원래 얼굴로 돌아온다', async () => {
     renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
     fireEditDragBegin(1);
     expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
 
-    fireEditDragEnd(1, 3);
+    await fireEditDropOnZone(1);
     expect(screen.queryByTestId(ACTIVE)).toBeNull();
     expect(screen.getByTestId(CTA)).toBeOnTheScreen();
   });
@@ -1190,5 +1209,65 @@ describe('🔴 EditorView · N5 — 스크롤 끝의 장소 추가·안내줄이
     ) as { paddingBottom?: unknown } | undefined;
     expect(typeof style?.paddingBottom).toBe('number');
     expect(style?.paddingBottom as number).toBeGreaterThanOrEqual(min);
+  });
+});
+
+describe('🔴 EditorView · Z1 — 삭제 영역은 리스트 밖에서 끌기 중에만 뜬다 (TRIP-1246 A)', () => {
+  it('평소엔 없고, 끌기 시작하면 목록 바깥 형제로 뜨고, 놓으면 사라진다 — 어느 때도 목록 안엔 없다', () => {
+    renderView({ slots: [slot('a'), slot('b')] });
+    expect(screen.queryByTestId('itinerary-edit-dropzone')).toBeNull();
+
+    fireEditDragBegin(0);
+    const zone = screen.getByTestId('itinerary-edit-dropzone');
+    expect(zone).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId(EDIT_LIST)).queryByTestId(
+        'itinerary-edit-dropzone'
+      )
+    ).toBeNull();
+    // 짝 — 영역은 시트 본문 래퍼 안(스크롤 컨테이너와 형제)이라 목록 밖이지만 화면 안이다.
+    expect(
+      within(screen.getByTestId('itinerary-edit-viewport')).getByTestId(
+        'itinerary-edit-dropzone'
+      )
+    ).toBe(zone);
+
+    fireEditDragEnd(0, 0);
+    expect(screen.queryByTestId('itinerary-edit-dropzone')).toBeNull();
+  });
+});
+
+describe('🔴 EditorView · Z2 — 놓은 뒤 칸을 새로 그린다: 칸 키가 끌기 종료 뒤에만 바뀐다 (TRIP-1246 B)', () => {
+  function keysNow(): string[] {
+    const { keyExtractor } = screen.UNSAFE_getByType(DraggableFlatList)
+      .props as { keyExtractor: (item: unknown, index: number) => string };
+    return editListData().map((item, i) => keyExtractor(item, i));
+  }
+
+  it('끌기 중엔 키가 그대로, 놓으면(제자리·재정렬 모두) 전 칸 키가 바뀌고 서로 다르다', () => {
+    renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+    const before = keysNow();
+
+    fireEditDragBegin(1);
+    expect(keysNow()).toEqual(before);
+
+    fireEditDragEnd(1, 1);
+    const after = keysNow();
+    expect(new Set(after).size).toBe(3);
+    after.forEach((key, i) => expect(key).not.toBe(before[i]));
+
+    // 두 번째 끌기도 놓을 때마다 또 바뀐다(한 번만 올리는 구현 차단).
+    fireEditDragBegin(0);
+    expect(keysNow()).toEqual(after);
+    fireEditDragEnd(0, 2);
+    keysNow().forEach((key, i) => expect(key).not.toBe(after[i]));
+  });
+});
+
+describe('🔴 EditorView · Z3 — 끌던 카드가 목록 밖 삭제 영역까지 따라간다: dragItemOverflow (TRIP-1246 A)', () => {
+  it('리스트에 dragItemOverflow 가 켜져 있다(없으면 카드가 목록 경계에 묶여 하단 영역에 못 닿는다 — 실제 효과는 6-b)', () => {
+    renderView({ slots: [slot('a'), slot('b')] });
+
+    expect(screen.getByTestId(EDIT_LIST).props.dragItemOverflow).toBe(true);
   });
 });

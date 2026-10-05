@@ -100,10 +100,16 @@ export const ShadowDecorator = ({
 export function NestableDraggableFlatList<T>(props: MockDraggableProps<T>) {
   return <MockDraggableFlatList {...props} />;
 }
-export const NestableScrollContainer = ({
-  children,
-  ...rest
-}: {
-  children?: React.ReactNode;
-  [key: string]: unknown;
-}) => <View {...rest}>{children}</View>;
+// ref 를 받아도 경고 없게 forwardRef(TRIP-1246 — 뷰가 useAnimatedRef 를 넘긴다). 목은 ref 를 못 채운다.
+export const NestableScrollContainer = React.forwardRef(function MockScroll(
+  {
+    children,
+    ...rest
+  }: {
+    children?: React.ReactNode;
+    [key: string]: unknown;
+  },
+  _ref: React.ForwardedRef<unknown>
+) {
+  return <View {...rest}>{children}</View>;
+});
