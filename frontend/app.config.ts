@@ -106,7 +106,9 @@ const config: ExpoConfig = {
     ],
     // 튜플로 줘야 한다 — 문자열 단독이면 레거시 config.splash 경로로 빠진다.
     ['expo-splash-screen', { backgroundColor: '#ffffff' }],
-    'expo-notifications',
+    // 푸시 entitlement(aps-environment)를 빼 둔다 — 서버 푸시가 꺼져 있고, 번들 ID 에 Push 권한이 아직 없어
+    // 프로비저닝 프로파일이 거부된다(TRIP-935 심사 빌드). 켤 때는 이 줄을 되살리고 ASC 의 Push 권한을 먼저 켠다.
+    // 'expo-notifications',
     [
       '@sentry/react-native/expo',
       {
