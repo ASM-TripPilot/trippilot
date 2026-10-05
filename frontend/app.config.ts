@@ -1,4 +1,5 @@
 import type { ExpoConfig } from 'expo/config';
+import { withEntitlementsPlist } from 'expo/config-plugins';
 
 // 소셜/지도 SDK 키는 사용자 프로비저닝 시 주입한다(스캐폴드는 placeholder).
 // 소셜(카카오/네이버)·지도 SDK config plugin 은 실 네이티브 키가 필요하므로 auth·map 유닛에서 배선한다.
@@ -106,9 +107,6 @@ const config: ExpoConfig = {
     ],
     // 튜플로 줘야 한다 — 문자열 단독이면 레거시 config.splash 경로로 빠진다.
     ['expo-splash-screen', { backgroundColor: '#ffffff' }],
-    // 푸시 entitlement(aps-environment)를 빼 둔다 — 서버 푸시가 꺼져 있고, 번들 ID 에 Push 권한이 아직 없어
-    // 프로비저닝 프로파일이 거부된다(TRIP-935 심사 빌드). 켤 때는 이 줄을 되살리고 ASC 의 Push 권한을 먼저 켠다.
-    // 'expo-notifications',
     [
       '@sentry/react-native/expo',
       {
@@ -144,4 +142,11 @@ const config: ExpoConfig = {
   },
 };
 
-export default config;
+// 푸시 entitlement(aps-environment)를 뺀다 — 서버 푸시가 꺼져 있고 번들 ID 에 Push 권한이 아직 없어
+// 프로비저닝 프로파일이 Xcode 서명에서 거부된다(TRIP-935 심사 빌드). expo-notifications 는 prebuild 가
+// 설치만 돼 있어도 자동으로 붙여서 plugins 에서 빼도 소용없다 — 결과에서 지운다.
+// 푸시를 켤 때는 ASC 에서 번들 ID 의 Push 권한을 먼저 켜고 이 래핑을 걷는다.
+export default withEntitlementsPlist(config, (mod) => {
+  delete mod.modResults['aps-environment'];
+  return mod;
+});
