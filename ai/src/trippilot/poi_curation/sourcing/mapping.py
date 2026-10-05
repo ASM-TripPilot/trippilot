@@ -231,7 +231,10 @@ _STORE_VARIES = re.compile(r"(?:각\s*|입점\s*)?(?:점포|매장|상점)\s*(?:
 # 없음으로 확정된다.
 _IRREGULAR_REST = re.compile(
     r"설날|설\s*당일|추석|명절|공휴일|국경일|성탄|부처님|석가|연휴|\d{1,2}\s*월\s*\d{1,2}\s*일|"
-    r"임시\s*휴|(?:지정|정)(?:한|하는)\s*날|기념일|월\s*\d\s*회")
+    r"임시\s*휴|(?:지정|정)(?:한|하는)\s*날|기념일|월\s*\d\s*회|근로자의\s*날")
+# 앞 절의 명절에 붙은 꼬리 — `설·추석 전날, 당일` 의 `당일` 처럼 홀로 떨어진 절. **절 전체일 때만**
+# (`당일 사정에 따라 휴무` 는 모르는 글이다)
+_HOLIDAY_TAIL = re.compile(r"(?:전날|당일|다음날|연휴)")
 # 기간 표지 — `11월 1일 ~ 3월 31일 휴장`·`3월 1일부터 휴관` 은 날짜가 있어도 비정기 휴일이 아니라 장기 휴장이다
 _REST_PERIOD = re.compile(r"[~∼～〜]|부터|까지")
 
@@ -280,8 +283,11 @@ def _multi_range_window(text: str) -> tuple[int, int] | None:
         return None
     # 괄호도 경계다 — `(준비시간 12:00~13:00)` 이 앞 범위와 한 덩어리로 남으면
     # 라벨 검사가 줄 전체를 버려 정상 범위까지 함께 사라진다.
+    # 줄바꿈 없는 글머리표(`- 09:00~21:00- 마지막 주문 20:30`)·※ 비고·`/` 도 경계다 — 벤더가 `<br>` 을
+    # 빼고 한 줄로 고쳐 쓴 원문이 늘었다(2026-10-05 되감기 첫 배치 1,691건 중 27건이 이 모양으로 창을 잃었다).
+    # 숫자 앞의 `-` 는 시각 범위(`09:00-18:00`)라 끊지 않는다.
     spans: list[tuple[int, int]] = []
-    for seg in re.split(r"[\n<>()（）\[\]]|·", text):
+    for seg in re.split(r"[\n<>()（）\[\]※/]|·|-(?!\s*\d)", text):
         if _NOT_OPEN_SEGMENT.search(seg):
             continue
         for h1, m1, h2, m2 in _RANGE_RE.findall(seg):
@@ -379,7 +385,8 @@ def _parse_rest_days(rest_raw: str | None) -> frozenset[int] | None:
         # 비고뿐 — `점포별 상이` 만 받는다(2026-10-05 결정의 범위). ※ 마다 끊어 한 줄의 두 비고가 섞이지 않게.
         remarks = _rest_clauses(_REST_PAREN.sub(" ", text).replace("※", "\n"))
         return frozenset() if remarks and all(_STORE_VARIES.fullmatch(c) for c in remarks) else None
-    if all((_NO_REST_RE.search(c) or _IRREGULAR_REST.search(c) or _STORE_VARIES.fullmatch(c))
+    if all((_NO_REST_RE.search(c) or _IRREGULAR_REST.search(c) or _STORE_VARIES.fullmatch(c)
+            or _HOLIDAY_TAIL.fullmatch(c))
            and not _REST_PERIOD.search(c) for c in clauses):
         return frozenset()  # 무휴·비정기 휴일·점포별 상이뿐 — 매주 쉬는 요일은 없다
     return None  # 모르는 글이 섞였다(`동절기 휴장`·`공연 별로 상이함`·전화 문의 안내) — 확신 없음
