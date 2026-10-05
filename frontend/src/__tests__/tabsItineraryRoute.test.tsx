@@ -61,6 +61,7 @@ jest.mock('expo-router', () => ({
     replace: mockReplace,
     navigate: mockNavigate,
   }),
+  useNavigation: () => ({ setOptions: jest.fn() }),
 }));
 
 // TRIP-928 준비부 확장(단언 무변경) — 페이지가 완료 배너 판정을 위해 여행별 일정을 `useQueries` +

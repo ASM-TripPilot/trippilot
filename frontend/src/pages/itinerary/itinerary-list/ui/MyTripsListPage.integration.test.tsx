@@ -46,6 +46,7 @@ jest.mock('expo-router', () => ({
     replace: jest.fn(),
     navigate: jest.fn(),
   }),
+  useNavigation: () => ({ setOptions: jest.fn() }),
 }));
 
 // 생성 클라이언트의 인증 계층이 @/shared/storage 를 정적으로 문다(expo-secure-store 실물 로드 회피,
