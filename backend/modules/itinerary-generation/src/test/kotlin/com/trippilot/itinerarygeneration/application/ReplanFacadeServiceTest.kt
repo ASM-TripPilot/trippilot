@@ -209,6 +209,24 @@ class ReplanFacadeServiceTest : StringSpec({
         agent.inputs.single().rejections shouldBe listOf(RejectedPoi(rejected, RejectedPoi.Kind.SWAPPED_OUT, 2))
     }
 
+    "재계획도 여행에서 고른 취향으로 짠다 — 생성과 같은 척도(BR-U1-38)" {
+        val withSnapshot = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(today, today.plusDays(1))
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+                today, today.plusDays(1), refs("제주"), "친구", 500_000, emptyList(),
+                preferenceSnapshot = mapOf("styles" to listOf("힐링"), "activities" to emptyList<String>()),
+            )
+        }
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent, trips = withSnapshot).svc.propose(command())
+
+        val sent = agent.inputs.single().preferenceProfile
+        sent.styles shouldBe listOf("힐링")         // 계정(미식) 아님
+        sent.activities shouldBe emptyList()        // 비운 축은 비운 채로
+        sent.transportModes shouldBe listOf("렌터카") // 여행이 안 정한 축은 계정
+    }
+
     // ───── 기준점 사다리 (TRIP-963) ─────────────────────────────────────────
 
     /**

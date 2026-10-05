@@ -17,7 +17,7 @@ interface TripFacade {
 
     /**
      * 일정 생성 컨텍스트 — 소유 여행의 날짜·목적지·동행·예산 + 필수 방문지(고정 블록 원천).
-     * 없거나 삭제·타 계정이면 null. 앵커(거점 좌표)·취향(preference_snapshot)은 후속 확장.
+     * 없거나 삭제·타 계정이면 null. 앵커(거점 좌표)는 후속 확장.
      */
     fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext?
 }
@@ -40,6 +40,12 @@ data class TripGenerationContext(
     val companionType: String?,           // 혼자/친구/연인/가족
     val budgetTotal: Long?,               // 1인 총예산(원)
     val fixedVisits: List<FixedVisit>,
+    /**
+     * 여행 생성 때 고른 취향(`trip.preference_snapshot`, BR-U1-38) — 클라이언트가 보낸 jsonb 를 **그대로** 넘긴다.
+     * 해석(키 어휘·계정 취향 보충)은 소비처 한 곳(itinerary-generation `PreferenceProfiles`)이 맡는다 —
+     * 여기서 타입을 정하면 trip 이 profile 의 축 어휘를 알아야 한다.
+     */
+    val preferenceSnapshot: Map<String, Any?> = emptyMap(),
 ) {
     /** 이름만 필요한 소비처를 위한 **파생**. 저장하지 않으므로 코드와 어긋날 수 없다. */
     val destinations: List<String> get() = destinationRefs.map { it.name }

@@ -29,7 +29,7 @@ AI의 `agent-io-contracts.md 1.2` 초안을 채택하고 백엔드 소스를 매
 | `anchors` | `anchors: [{ date, lat, lng }]` | base coverage(trip_base_day 해석 = day별 거점) |
 | `time_windows` | `[{ date, start, end }]` | 기본 09:00–21:00 |
 | `fixed_blocks` | `[{ poiId, date?, start?, dwellMin?, type }]` | must_visit (ANYTIME/FIXED) |
-| `preference_profile` | preference_snapshot **7축** | profile.preference_set(styles·activities·foodTastes·transportModes·pace·companion·budget) |
+| `preference_profile` | preference_snapshot **7축** | profile.preference_set(styles·activities·foodTastes·transportModes·pace·companion·budget) — **[개정 · 2026-10-05]** 위에 `trip.preference_snapshot` 을 얹는다: 키가 있는 축은 여행 값(빈 값 포함), 없는 축만 계정 값(BR-U1-38) |
 | `recommendation_strength` | `recommendationStrength` | d11 |
 | `request_meta` | `{ requestId, requestedAt, deadlineMs }` | 지연예산 전파(day1 5s / 전체 20s) — IO-1 |
 

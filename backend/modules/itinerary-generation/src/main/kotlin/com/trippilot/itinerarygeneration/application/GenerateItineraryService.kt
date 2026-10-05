@@ -87,7 +87,8 @@ class GenerateItineraryService(
         if (existing != null && existing.generationState != GenerationState.FAILED) {
             guardTripPeriod(ctx.startDate, ctx.endDate)
         }
-        val prefs = preferences.findPreferences(accountId)                                    // 취향 7축·예산등급(계정 스코프)
+        // 취향 7축·예산등급 — 여행에서 고른 값이 최종, 안 실린 축만 계정 값(BR-U1-38 · PreferenceProfiles.overriddenBy).
+        val prefs = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
         // 소유·기간은 위에서 선검증 — 거점 앵커는 기간을 넘겨 조립(중복 trip 조회 없음).
         val stayAnchors = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
         val planDates = planDates(ctx.startDate, ctx.endDate)
@@ -312,7 +313,7 @@ class GenerateItineraryService(
             input = ScheduleAgentInput(
             tripId = tripId,
             generationMode = mode,
-            // budgetLevel(등급) = preference_set.budget_tier (경계 계약; trip.budget_total 아님)
+            // budgetLevel(등급) = 취향의 budget_tier (경계 계약; trip.budget_total 아님)
             tripContext = TripContext(ctx.destinations, ctx.startDate, ctx.endDate, ctx.companionType, prefs.budgetTier),
             anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors, ctx.destinationRefs).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
             // 창 밖 사용자 고정 블록이 있는 날은 **그 날만** 일과 창을 블록에 맞춰 넓힌다(TRIP-1001
