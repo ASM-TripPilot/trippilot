@@ -86,7 +86,12 @@ jobs:
              cd ai
              LOCALDATA_DIR=<CSV 받은 경로> uv run python scripts/match_business_status.py
              ```
-          3. 갱신된 `ai/data/poi_business_status.json` 만 커밋해 PR 로 올린다 (base: `develop`).
+          3. 공유본에 병합을 한 번 돌려 새로 폐업이 된 항목을 소급 제거한다 — 건너뛰면 PR 의 ai-ci 가 빨개진다
+             (공유본에 폐업 확인분이 남아 있지 않은지 보는 테스트가 있고, 매일 병합은 이 파일이 `develop` 에 들어간 뒤에야 돈다):
+             ```bash
+             uv run python scripts/merge_pois_docs.py -o data/collected_pois.json data/collected_pois.json
+             ```
+          4. 갱신된 `ai/data/poi_business_status.json` 과 `ai/data/collected_pois.json` 을 함께 커밋해 PR 로 올린다 (base: `develop`).
 
           ## 주의
 

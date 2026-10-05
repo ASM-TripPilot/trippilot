@@ -46,6 +46,7 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -153,6 +154,26 @@ def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
     return closed
 
 
+def write_seen_refs(
+    path: Path, seen: frozenset[str], *, run_at: datetime,
+    area_codes: Sequence[str], content_types: Sequence[str],
+) -> int:
+    """이번 실행이 목록에서 **본** content_id 전부를 산출 문서 옆에 남긴다 (TRIP-1248).
+
+    변경 없음으로 스킵한 것도 들어간다 — 산출 문서·색인은 통과분만 담아서, 공유본에
+    있는데 벤더가 더는 싣지 않는 항목을 가려낼 기록이 없었다. 연속 실행의 목록을
+    겹쳐 보려는 **측정용**이다(퇴출 규칙은 미결) — 공유본·색인은 이 파일로 바꾸지 않는다.
+    """
+    doc = {
+        "run_at": run_at.isoformat(),
+        "area_codes": list(area_codes),
+        "content_types": list(content_types),
+        "seen": sorted(seen),
+    }
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    return len(doc["seen"])
+
+
 def main() -> int:
     if len(sys.argv) >= 3 and sys.argv[1] == "--summary":
         return _print_summary(sys.argv[2])
@@ -198,6 +219,10 @@ def main() -> int:
     )
     Path(output).write_text(
         json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    seen_path = Path(output).with_name("seen_refs.json")   # 산출 문서 옆 — 워크플로가 함께 보존
+    n_seen = write_seen_refs(seen_path, result.seen_refs, run_at=collected_at,
+                             area_codes=area_codes, content_types=content_types)
+    print(f"[collect] 목록에서 본 content_id {n_seen:,}건 (스킵 포함) → {seen_path}")
     stats = doc["stats"]                # 합산 통계 + per_area (산출 문서와 단일 근원)
     # 갱신 상태 기록 — 파일 I/O는 여기(스크립트), 브랜치 전송은 워크플로 소관 (TRIP-348)
     state_doc = state_to_dict(result.next_state, last_run={

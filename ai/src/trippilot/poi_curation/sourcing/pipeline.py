@@ -136,6 +136,10 @@ class CollectResult:
     stats: CollectStats
     # 이번 실행을 반영한 다음 상태 (커서 + 기제안 색인) — 저장은 스크립트 소관
     next_state: CollectState = field(default_factory=empty_state)
+    # 목록에서 **본** content_id 전부 — 변경 없음으로 스킵한 것도 포함 (TRIP-1248).
+    # 산출 문서는 통과분만, 색인은 통과분만 누적해서 "벤더 목록에서 사라진 것"을 가려낼
+    # 기록이 어디에도 없었다. stats 에는 넣지 않는다(1.8만 개 id 는 통계가 아니다).
+    seen_refs: frozenset[str] = frozenset()
 
 
 class _CallBudget:
@@ -196,6 +200,7 @@ def collect(
     page_failures = 0
     detail_failures = 0
     skipped_unchanged = 0
+    seen_refs: set[str] = set()
     resumed_from: dict[str, int] = {}
     cursors: dict[tuple[str, str], KindCursor] = dict(prior.cursors)
 
@@ -239,6 +244,7 @@ def collect(
             for record in page.records:
                 if not record.source_ref:
                     continue  # 식별자 없는 레코드는 상세 조회·병합 불가 — 목록에서 제외
+                seen_refs.add(record.source_ref)   # 스킵 판정 전 — 본 것은 전부
                 known = prior.proposed.get(record.source_ref)
                 if known is not None and known == record.modified_at:
                     skipped_unchanged += 1
@@ -358,6 +364,7 @@ def collect(
         # (회전은 collect_areas 소관)
         next_state=CollectState(cursors=cursors, proposed=proposed,
                                 next_area=prior.next_area),
+        seen_refs=frozenset(seen_refs),
     )
 
 
@@ -484,6 +491,7 @@ class MultiCollectResult:
 
     area_results: tuple[tuple[str, CollectResult], ...]  # (area_code, 결과)
     next_state: CollectState  # 전 지역 커서·색인 + 회전된 라운드로빈 포인터
+    seen_refs: frozenset[str] = frozenset()  # 전 지역 합집합 (CollectResult.seen_refs 참조)
 
 
 def collect_areas(
@@ -569,6 +577,7 @@ def collect_areas(
     return MultiCollectResult(
         area_results=tuple(area_results),
         next_state=replace(current, next_area=next_pointer),
+        seen_refs=frozenset().union(*(r.seen_refs for _, r in area_results)),
     )
 
 
