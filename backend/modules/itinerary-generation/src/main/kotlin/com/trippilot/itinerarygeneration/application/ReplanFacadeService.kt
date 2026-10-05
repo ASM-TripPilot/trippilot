@@ -112,10 +112,11 @@ class ReplanFacadeService(
         // 잠긴 슬롯은 재해결 대상이 아니다 — 원본의 위반 표시(BR-U3-13)가 현실에 그대로 남으므로
         // 이어받는다(TRIP-839). 판정은 상대 에코(isFixed)가 아니라 **우리 잠금 집합**으로 한다 —
         // 잠금 규칙의 주인이 이쪽이다. 재배치된 슬롯은 어셈블리를 새로 통과했으니 위반 없음이 정당하다.
-        // 같은 장소가 하루에 두 번 잠기면 첫 슬롯 값을 쓴다(slotKey 규약상 어차피 구분 불가).
-        val lockedByPoi = lockedSlots(current, command).groupBy { it.sourcePoiId }.mapValues { (_, v) -> v.first() }
+        // 짝은 (장소, 시작 시각)으로 짓는다 — 잠금은 원 시각 그대로 돌아온다(HC3). 장소만으로 지으면 같은 곳을
+        // 하루 두 번 잠갔을 때(아침에 다녀옴 + 점심 예약) 둘째가 첫 슬롯의 위반 표시로 덮인다.
+        val lockedByStart = lockedSlots(current, command).associateBy { it.sourcePoiId to it.startAt }
         val slots = day?.slots.orEmpty().map {
-            val locked = lockedByPoi[it.poiId]
+            val locked = lockedByStart[it.poiId to it.startAt]
             ReplanSlot(
                 poiId = it.poiId, startAt = it.startAt, endAt = it.endAt, isFixed = it.isFixed,
                 endsNextDay = it.endsNextDay, distanceRange = it.distanceRange,

@@ -693,7 +693,10 @@ def test_pbt_foreign_persona_always_403_regardless_of_deadline(
 
 
 def test_contradictory_fixed_blocks_return_explicit_failure() -> None:
-    """모순 입력(같은 POI 고정 블록 2개) → 침묵이 아니라 명시적 실패."""
+    """모순 입력(겹치는 고정 블록 2개) → 침묵이 아니라 명시적 실패.
+
+    같은 POI 를 **겹치지 않게** 두 번 고정하는 것은 모순이 아니다(재계획 리뷰 실측) —
+    한 곳에 동시에 두 번 있을 수 없는 겹침만 모순이다."""
     orchestrator, trace, _ = _build()
     conflicting = (
         FixedBlock(
@@ -706,9 +709,9 @@ def test_contradictory_fixed_blocks_return_explicit_failure() -> None:
         ),
         FixedBlock(
             poi_id=PoiId("p1"),
-            window=TimeWindow(
-                datetime(2026, 8, 5, 13, 0, tzinfo=_KST),
-                datetime(2026, 8, 5, 14, 0, tzinfo=_KST),
+            window=TimeWindow(  # 10:00-11:00 과 겹친다
+                datetime(2026, 8, 5, 10, 30, tzinfo=_KST),
+                datetime(2026, 8, 5, 11, 30, tzinfo=_KST),
             ),
             reason="user_fixed",
         ),
@@ -882,9 +885,9 @@ def test_assembly_conflict_failure_keeps_pool_facts_but_no_solved_at() -> None:
         ),
         FixedBlock(
             poi_id=PoiId("p1"),
-            window=TimeWindow(
-                datetime(2026, 8, 5, 13, 0, tzinfo=_KST),
-                datetime(2026, 8, 5, 14, 0, tzinfo=_KST),
+            window=TimeWindow(  # 10:00-11:00 과 겹친다
+                datetime(2026, 8, 5, 10, 30, tzinfo=_KST),
+                datetime(2026, 8, 5, 11, 30, tzinfo=_KST),
             ),
             reason="user_fixed",
         ),

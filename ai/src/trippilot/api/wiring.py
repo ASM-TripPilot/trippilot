@@ -1061,34 +1061,41 @@ def _replan_fixed_blocks(
 
     둘을 합치는 이유: 백엔드는 예약 있는 곳을 `locked_blocks` 로도 보내고 원 일정
     슬롯의 `is_fixed` 로도 표시한다. 한쪽만 읽으면 **고정한 곳이 움직인다**.
-    같은 POI 가 양쪽에 있으면 한 번만 넣는다(HC3 는 POI당 한 창을 기대한다).
+    같은 블록이 양쪽에 있으면 한 번만 넣는다 — 키는 (POI, 시작 시각)이다. POI 만으로 거르면
+    같은 곳을 하루에 두 번 잠근 것(09:00 다녀옴 + 13:30 예약)의 둘째가 노트 없이 사라지고,
+    BE 는 응답 하루로 원 하루를 바꾸므로 잠금 방문이 지워진다(INV-4). FD BR-U2-04 의 "같은 날
+    같은 POI 두 슬롯 금지"(slotKey 충돌 방지)보다 INV-4 가 우선이다 — 새로 만들지 않고 되싣기만 한다.
     """
     date = request.target_date
     blocks: list[FixedBlock] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, datetime]] = set()
     for block in request.locked_blocks:
-        if block.poi_id in seen:
+        fixed = _fixed_block(block, tz)
+        if (block.poi_id, fixed.window.start) in seen:
             continue
-        seen.add(block.poi_id)
+        seen.add((block.poi_id, fixed.window.start))
         # generate 와 같은 변환기를 쓴다. `FixedBlockSchema` 는 start·dwell_min 이지
         # start_at·end_at 이 아니다 — 손으로 다시 쓰면 그 차이를 밟는다. 실제로
         # #744 가 여기서 `block.start_at` 을 읽어 **잠금 슬롯이 한 건이라도 실리면
         # AttributeError 500** 이었다(백엔드 실왕복 실측, 2026-09-28). 스텁 계약
         # 테스트가 locked_blocks: [] 만 보내 못 잡았다.
-        blocks.append(_fixed_block(block, tz))
+        blocks.append(fixed)
     for slot in request.current_slots:
-        if not slot.is_fixed or slot.poi_id in seen:
+        if not slot.is_fixed:
             continue
         if slot.start_at is None or slot.end_at is None:
             # 시각 없는 고정은 HC3 로 표현 불가 — ANYTIME 백스톱과 같은 규칙(422).
             # 조용히 비고정 취급하면 사용자가 고정한 곳이 움직인다(INV-4).
             raise ValueError(
                 f"시각 없는 고정 슬롯: {slot.poi_id} — 시간 미정은 고정으로 표현 불가")
-        seen.add(slot.poi_id)
+        start = datetime.combine(date, slot.start_at, tzinfo=tz)
+        if (slot.poi_id, start) in seen:
+            continue
+        seen.add((slot.poi_id, start))
         blocks.append(FixedBlock(
             poi_id=PoiId(slot.poi_id),
             window=TimeWindow(
-                start=datetime.combine(date, slot.start_at, tzinfo=tz),
+                start=start,
                 end=datetime.combine(date, slot.end_at, tzinfo=tz),
             ),
             reason="current_slot_fixed",
