@@ -162,7 +162,7 @@ def test_inconsistent_greedy_order_falls_back_without_double_hint() -> None:
                               datetime(2026, 8, 5, h + 1, 0, tzinfo=_KST)), "user_fixed")
         for i, h in ((0, 10), (1, 15)))
     problem = _problem(pois, days=(day,), fixed=fixed)
-    swapped = {pois[0].poi_id: 15 * 60, pois[1].poi_id: 10 * 60}
+    swapped = [(pois[0].poi_id, 15 * 60), (pois[1].poi_id, 10 * 60)]
 
     with patch.object(OrToolsAssembler, "_greedy_hint", lambda *a, **k: swapped), \
             _solves() as log:

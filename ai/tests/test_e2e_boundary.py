@@ -497,10 +497,10 @@ def test_repair_also_reports_unverified_slots() -> None:
 
 
 def test_contradictory_fixed_blocks_return_409() -> None:
-    """같은 POI를 다른 시각에 이중 고정 → 모든 어셈블리 단계 실패 → 409 (d08, 500 아님)."""
+    """같은 POI를 겹치는 시각에 이중 고정 → 모든 어셈블리 단계 실패 → 409 (d08, 500 아님)."""
     conflicting = (
         {"poi_id": "p1", "date": _DAY1.isoformat(), "start": "10:00", "dwell_min": 60},
-        {"poi_id": "p1", "date": _DAY1.isoformat(), "start": "13:00", "dwell_min": 60},
+        {"poi_id": "p1", "date": _DAY1.isoformat(), "start": "10:30", "dwell_min": 60},
     )
     with make_client() as client:
         response = client.post(

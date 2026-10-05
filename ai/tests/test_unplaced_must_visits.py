@@ -240,10 +240,10 @@ def test_report_serialization_has_no_duration_tokens_inv3() -> None:
 
 
 def test_contradictory_fixed_blocks_still_409_not_partial_success() -> None:
-    """해소 불가 모순(같은 POI 이중 고정)은 여전히 409 — unplaced 200으로 위장 금지."""
+    """해소 불가 모순(같은 POI 를 겹치는 시각에 이중 고정)은 여전히 409 — unplaced 200으로 위장 금지."""
     conflicting = (
         _block("p1", _DAY1, "10:00"),
-        _block("p1", _DAY1, "13:00"),
+        _block("p1", _DAY1, "10:30"),
     )
     with make_client() as client:
         response = client.post(

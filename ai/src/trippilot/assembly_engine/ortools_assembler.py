@@ -313,7 +313,11 @@ class OrToolsAssembler:
                 return None
             pin = _mod(fb.window.start)
             stay = int((fb.window.end - fb.window.start).total_seconds() // 60)
-            existing = next((n for n in nodes if n["poi"].poi_id == fb.poi_id), None)
+            # 합치는 것은 **아직 고정 안 된 후보 노드**(또는 같은 블록의 중복)뿐이다 — 같은 POI 를
+            # 하루 두 번 고정하면(09:00 다녀옴 + 13:30 예약) 둘째는 새 핀 노드다. POI 로만 찾으면
+            # 둘째가 첫 노드의 핀을 덮어써 HC3 위반 → 체인 폴백(재계획 리뷰 실측).
+            existing = next((n for n in nodes if n["poi"].poi_id == fb.poi_id
+                             and n["pin"] in (None, pin)), None)
             if existing:
                 # lo·hi 도 함께 고정한다 — 아래 else 가지가 새 노드를 만들 때 쓰는 값과
                 # 같아야 한다. 안 맞추면 후보로 계산된 창(`hi = 닫힘 − 기본체류`)이 남고,
@@ -401,9 +405,11 @@ class OrToolsAssembler:
 
         # 웜스타트 = 그리디 해의 방문 **순서**를 완전 힌트로 (TRIP-1176)
         hint = self._greedy_hint(problem, day, used)
-        id_to_idx = {n["poi"].poi_id: i for i, n in enumerate(nodes)}
-        order = drop_food_runs([id_to_idx[pid] for pid, _ in sorted(
-            hint.items(), key=lambda kv: (kv[1], str(kv[0]))) if pid in id_to_idx], nodes)
+        # 같은 POI 고정 둘이면 노드도 둘이다 — 핀 시각이 맞는 노드를 먼저 찾는다
+        by_poi = {n["poi"].poi_id: i for i, n in enumerate(nodes)}
+        by_pin = {(n["poi"].poi_id, n["pin"]): i for i, n in enumerate(nodes)}
+        order = drop_food_runs([by_pin.get((pid, s), by_poi[pid]) for pid, s in sorted(
+            hint, key=lambda h: (h[1], str(h[0]))) if pid in by_poi], nodes)
         self._hint_path(m, order, visit, arcs, cp_solver)
         status = cp_solver.Solve(m)
         resp = cp_solver.ResponseProto()
@@ -805,7 +811,7 @@ class OrToolsAssembler:
         best = max(todays, key=lambda oh: oh.close_min - oh.open_min)
         return (best.open_min, best.close_min)
 
-    def _greedy_hint(self, problem, day, used: set[PoiId]) -> dict[PoiId, int]:
+    def _greedy_hint(self, problem, day, used: set[PoiId]) -> list[tuple[PoiId, int]]:
         # replace()로 재구성한다(TRIP-314): 필드를 일일이 나열하면 ItineraryProblem에
         # 나중에 추가되는 필드를 조용히 떨어뜨려 이 힌트 경로에서만 반영이 사라진다
         # (regenerate가 excluded_poi_ids를 잃은 TRIP-292와 같은 자리). 여기서 바꾸는
@@ -818,4 +824,4 @@ class OrToolsAssembler:
                                if fb.window.start.date() == day),
         )
         greedy = RuleFallbackAssembler(self._pois, self._est, self._cfg).solve(sub)
-        return {s.poi_id: _mod(s.start_at) for d in greedy.days for s in d.slots}
+        return [(s.poi_id, _mod(s.start_at)) for d in greedy.days for s in d.slots]

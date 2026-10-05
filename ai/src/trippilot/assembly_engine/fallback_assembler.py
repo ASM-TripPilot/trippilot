@@ -116,8 +116,12 @@ class RuleFallbackAssembler:
             food_count = 0  # FOOD 하루 상한 — 고정 블록 포함 (OR 항의 핀 노드와 같은 기준)
             # ① 고정 블록 — 시각 그대로 (HC3)
             for fb in sorted(fixed_by_day.get(day, []), key=lambda f: f.window.start):
-                if fb.poi_id in used:
-                    continue  # 중복 고정(예: regenerate가 잠근 슬롯 = 기존 fb) 방어
+                if any(s.poi_id == fb.poi_id and s.start_at == fb.window.start
+                       for s in slots):
+                    # 중복 고정(예: regenerate가 잠근 슬롯 = 기존 fb) 방어. (POI, 시작)으로
+                    # 본다 — POI 만 보면 같은 곳 하루 두 번 고정(·다른 날 같은 곳 예약)의
+                    # 둘째를 건너뛰어 HC3 가 깨진다(재계획 리뷰 실측).
+                    continue
                 stay = int((fb.window.end - fb.window.start).total_seconds() // 60)
                 sp = score_of.get(fb.poi_id)
                 slots.append(VisitSlot(

@@ -553,7 +553,17 @@ class ReplanFacadeServiceTest : StringSpec({
     }
 
     "잠근 채 이어받은 슬롯만 원본의 위반 표시를 상속한다 — 재배치 슬롯은 새로 푼 것이다" {
-        val agent = Agent(proposal(fixedNoon, evening, replacement))
+        // 잠금은 원 시각 그대로 돌아온다(HC3) — 상속은 (장소, 시작 시각)으로 짝짓는다.
+        val agent = Agent(
+            listOf(
+                DaySchedule(
+                    today,
+                    listOf(
+                        VisitSlotDisplay(fixedNoon, LocalTime.parse("12:00"), LocalTime.parse("13:30"), false, null, true),
+                    ) + proposal(evening, replacement).single().slots,
+                ),
+            ),
+        )
         val f = fixture(agent)
         // 시각 고정(잠김)과 저녁(잠기지 않음) 둘 다 위반을 단 원본으로 바꿔 둔다.
         f.repo.byTrip[trip] = Itinerary.create(
@@ -580,6 +590,45 @@ class ReplanFacadeServiceTest : StringSpec({
         byPoi.getValue(evening).hasViolation shouldBe false
         byPoi.getValue(evening).violationReason.shouldBeNull()
         byPoi.getValue(replacement).hasViolation shouldBe false
+    }
+
+    "같은 장소가 하루 두 번 잠기면 각 잠금이 자기 위반 표시를 잇는다 — 첫 슬롯 값으로 덮지 않는다" {
+        val cafe = UUID.randomUUID()
+        val agent = Agent(
+            listOf(
+                DaySchedule(
+                    today,
+                    listOf(
+                        VisitSlotDisplay(cafe, LocalTime.parse("09:00"), LocalTime.parse("10:00"), false, null, true),
+                        VisitSlotDisplay(cafe, LocalTime.parse("12:00"), LocalTime.parse("13:30"), false, null, true),
+                    ) + proposal(replacement).single().slots,
+                ),
+            ),
+        )
+        val f = fixture(agent)
+        // 아침에 다녀온 카페(지나감·위반 없음)와 점심 예약(시각 고정·위반 있음) — 같은 장소다.
+        f.repo.byTrip[trip] = Itinerary.create(
+            trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(
+                ItineraryDay.of(
+                    today, 0,
+                    listOf(
+                        slot(cafe, "09:00", "10:00", order = 0),
+                        slot(cafe, "12:00", "13:30", isFixed = true, order = 1, hasViolation = true, violationReason = "영업시간 밖"),
+                    ),
+                ),
+            ),
+            now, GenerationState.COMPLETE,
+        )
+
+        val out = f.svc.propose(command())!!
+
+        agent.inputs.single().lockedBlocks.map { it.poiId to it.start } shouldContainExactly
+            listOf(cafe to LocalTime.parse("09:00"), cafe to LocalTime.parse("12:00"))
+        val byStart = out.slots.filter { it.poiId == cafe }.associateBy { it.startAt }
+        byStart.getValue(LocalTime.parse("09:00")).hasViolation shouldBe false
+        byStart.getValue(LocalTime.parse("12:00")).hasViolation shouldBe true
+        byStart.getValue(LocalTime.parse("12:00")).violationReason shouldBe "영업시간 밖"
     }
 
     "반영이 위반 표시를 일정까지 나른다 — 이 관통이 없으면 반영 순간 배지가 사라진다" {

@@ -71,10 +71,10 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
     if policy is not MinimalChangePolicy.TIME_SHIFT_ONLY:
         return RepairResult(repaired=None, changes=())
 
-    pinned: dict[tuple, tuple[datetime, datetime]] = {
-        (fb.window.start.date(), fb.poi_id): (fb.window.start, fb.window.end)
-        for fb in problem.fixed_blocks
-    }
+    pinned: dict[tuple, list[tuple[datetime, datetime]]] = {}
+    for fb in problem.fixed_blocks:
+        pinned.setdefault((fb.window.start.date(), fb.poi_id), []).append(
+            (fb.window.start, fb.window.end))
     we_min = _mod(problem.day_window.end)
     changes: list[RepairChange] = []
     new_days: list[DaySolution] = []
@@ -84,7 +84,12 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
         new_slots: list[VisitSlot] = []
         for slot in day.slots:
             stay = int((slot.end_at - slot.start_at).total_seconds() // 60)
-            pin = pinned.get((day.date, slot.poi_id))
+            # 같은 POI 를 하루 두 번 고정할 수 있다 — 시각이 맞는 창이 그 슬롯의 창이다. (날, POI)
+            # 하나로 접으면 09:00 슬롯이 15:00 창으로 끌려가 수리 불가가 된다. 어긋난 슬롯은 창이
+            # 하나일 때만 끌어온다 — 둘 이상이면 어느 창인지 모른다(지어내지 않는다 → HC3 가 거부).
+            pins = pinned.get((day.date, slot.poi_id), [])
+            pin = next((p for p in pins if p[0] == slot.start_at),
+                       pins[0] if len(pins) == 1 else None)
             if pin is not None:
                 start, end = pin  # 고정 블록 — 이동 금지 (HC3)
             else:
