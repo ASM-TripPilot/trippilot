@@ -71,12 +71,14 @@ class ReplanFacadeService(
         val ctx = trips.findGenerationContext(command.accountId, command.tripId) ?: throw ResourceNotFound()
         // 기준점이 없으면 상대가 후보 풀을 매달 곳이 없다 — 숙소 앵커로 채운다(BR-U4-19 사다리의 마지막 단).
         val origin = groundingPoint(command, ctx)
-        // 취향은 생성 경로와 **같은 척도**로 만든다(PreferenceProfiles KDoc) — §2 이탈 2건은 의도다:
-        // 원천을 trip.preference_snapshot(클라이언트 자유 맵, 타입 보증 없음) 대신 계정 스냅숏+개인화로,
+        // 취향은 생성 경로와 **같은 척도**로 만든다(PreferenceProfiles KDoc). §2 이탈 1건만 남는다:
         // 예산 등급을 trip.budget_total 변환 대신 preference_set.budget_tier(경계 계약 어휘)로.
+        // 종전에는 원천도 이탈해 있었다 — trip.preference_snapshot 이 "클라이언트 자유 맵이라 타입
+        // 보증이 없다"는 이유로 통째로 버려졌고, 그래서 **사용자가 여행에서 고른 취향이 양쪽 경로
+        // 모두에서 반영되지 않았다**. 정제는 trip 모듈이 지고(TripPreferenceSnapshot) 여기서는 읽는다.
         // 두 경로가 다른 취향으로 돌면 "원래 자리보다 나은 것만 바꾼다"(§4) 비교가 성립하지 않는다.
         val prefs = preferences.findPreferences(command.accountId)
-        val profile = prefs.toProfile(personalization.hintsFor(command.accountId))
+        val profile = prefs.toProfile(personalization.hintsFor(command.accountId), ctx.preferences)
         val output = scheduleAgent.replan(
             ReplanInput(
                 tripId = command.tripId,

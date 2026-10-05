@@ -50,6 +50,7 @@ import com.trippilot.trip.api.FixedVisit
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripGenerationContext
+import com.trippilot.trip.api.TripPreferenceSnapshot
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -254,6 +255,7 @@ class GenerateItineraryServiceTest : StringSpec({
         // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
         personalization: PersonalizationPort = NoPersonalization,
         scoredPools: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(),
+        tripPreferences: TripPreferenceSnapshot = TripPreferenceSnapshot.EMPTY,
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -261,7 +263,7 @@ class GenerateItineraryServiceTest : StringSpec({
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
                 if (accountId == acc) {
                     TripGenerationContext(
-                        start, end, destinations, "친구", 500_000, fixedVisits,
+                        start, end, destinations, "친구", 500_000, fixedVisits, tripPreferences,
                     )
                 } else {
                     null
@@ -313,6 +315,19 @@ class GenerateItineraryServiceTest : StringSpec({
         // 스칼라라 합칠 수 없다 → **명시 선택이 이긴다.** 과거 행동이 고른 값을 뒤집으면
         // "왜 내가 고른 게 무시되지"가 된다.
         profile.pace shouldBe "알차게"
+    }
+
+    "여행에서 고른 취향이 AI 요청까지 간다 — 저장만 되고 안 실리던 것(2026-10-05)" {
+        val agent = CapturingAgent(now)
+        val chosen = TripPreferenceSnapshot(styles = listOf("액티비티"), activities = listOf("등산"))
+
+        service(agent, fullPrefs, emptyList(), tripPreferences = chosen).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val profile = agent.captured!!.preferenceProfile
+        profile.styles shouldContainExactly listOf("액티비티")
+        profile.activities shouldContainExactly listOf("등산")
+        // 여행이 고르지 않은 축은 계정 값 그대로 — 한 축을 골랐다고 평소 취향이 사라지지 않는다.
+        profile.pace shouldBe fullPrefs.pace
     }
 
     "고르지 않은 축은 개인화가 채운다" {

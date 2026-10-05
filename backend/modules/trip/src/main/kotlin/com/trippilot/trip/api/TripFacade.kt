@@ -40,9 +40,39 @@ data class TripGenerationContext(
     val companionType: String?,           // 혼자/친구/연인/가족
     val budgetTotal: Long?,               // 1인 총예산(원)
     val fixedVisits: List<FixedVisit>,
+    /**
+     * 여행 생성 때 고른 취향 — **계정 취향(preference_set)과 다른 값**이다.
+     *
+     * 원본은 클라이언트가 보낸 자유 jsonb 라 여기서 **정제해서** 넘긴다. 날것을 넘기면 소비처가
+     * 캐스팅을 떠안고, 그 부담이 종전에 "타입 보증이 없다"는 이유로 이 값을 **안 읽는 선택**을
+     * 낳았다(재계획 설계 §2 이탈) — 그 결과 사용자가 고른 취향이 일정에 반영되지 않았다.
+     */
+    val preferences: TripPreferenceSnapshot = TripPreferenceSnapshot.EMPTY,
 ) {
     /** 이름만 필요한 소비처를 위한 **파생**. 저장하지 않으므로 코드와 어긋날 수 없다. */
     val destinations: List<String> get() = destinationRefs.map { it.name }
+}
+
+/**
+ * 여행별 취향 스냅숏(api-safe) — `trip.preference_snapshot jsonb` 를 아는 축만 정제한 것.
+ *
+ * **미설정과 빈 선택을 구분하지 않는다**: 둘 다 빈 목록/`null` 이고, 소비처는 그때 계정 취향으로
+ * 보충한다. 클라이언트가 보낸 모르는 키·타입이 틀린 값은 **조용히 버린다** — 자유 맵이라
+ * 무엇이 올지 보증할 수 없고, 여기서 던지면 취향 하나 때문에 일정 생성 전체가 죽는다.
+ */
+data class TripPreferenceSnapshot(
+    val styles: List<String> = emptyList(),
+    val activities: List<String> = emptyList(),
+    val foodTastes: List<String> = emptyList(),
+    val transportModes: List<String> = emptyList(),
+    val companionTypes: List<String> = emptyList(),
+    val pace: String? = null,
+    val budgetTier: String? = null,
+    val petFriendly: Boolean? = null,
+) {
+    companion object {
+        val EMPTY = TripPreferenceSnapshot()
+    }
 }
 
 /**

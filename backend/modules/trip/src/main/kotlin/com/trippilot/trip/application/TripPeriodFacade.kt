@@ -83,6 +83,7 @@ class TripPeriodFacade(
             companionType = trip.companionType?.name,
             budgetTotal = trip.budgetTotal,
             fixedVisits = fixed,
+            preferences = trip.preferenceSnapshot.toTripPreferences(),
         )
     }
 }
