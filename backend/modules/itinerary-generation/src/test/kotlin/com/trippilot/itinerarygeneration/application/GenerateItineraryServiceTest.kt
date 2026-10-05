@@ -254,6 +254,8 @@ class GenerateItineraryServiceTest : StringSpec({
         // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
         personalization: PersonalizationPort = NoPersonalization,
         scoredPools: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(),
+        tripSnapshot: Map<String, Any?> = emptyMap(),
+        accountPrefs: () -> PreferenceSnapshot = { prefs },
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -261,14 +263,14 @@ class GenerateItineraryServiceTest : StringSpec({
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
                 if (accountId == acc) {
                     TripGenerationContext(
-                        start, end, destinations, "친구", 500_000, fixedVisits,
+                        start, end, destinations, "친구", 500_000, fixedVisits, tripSnapshot,
                     )
                 } else {
                     null
                 }
         }
         val preferences = object : PreferenceFacade {
-            override fun findPreferences(accountId: UUID) = prefs
+            override fun findPreferences(accountId: UUID) = accountPrefs()
         }
         val baseAnchors = object : BaseAnchorFacade {
             override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = anchors
@@ -344,6 +346,54 @@ class GenerateItineraryServiceTest : StringSpec({
         asked shouldBe 1
         agent.captures.size shouldBe 2
         agent.captures.forEach { it.preferenceProfile.activities shouldContainExactly listOf("야경", "카페") }
+    }
+
+    // ── 여행에서 고른 취향이 최종(BR-U1-38) ────────────────────────────
+    "여행 생성 때 고른 취향이 계정 취향을 이긴다 — 1차·2차 모두" {
+        val agent = CapturingAgent(now)
+        val account = fullPrefs.copy(styles = listOf("액티비티"))
+
+        service(agent, account, emptyList(), tripSnapshot = mapOf("styles" to listOf("미식"), "activities" to emptyList<String>()))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.size shouldBe 2
+        agent.captures.forEach {
+            it.preferenceProfile.styles shouldContainExactly listOf("미식")
+            // 비운 축도 선택이다 — 계정 값(야경)으로 되살리지 않는다.
+            it.preferenceProfile.activities shouldBe emptyList()
+            // 여행이 안 정한 축은 계정 값.
+            it.preferenceProfile.transportModes shouldContainExactly listOf("렌터카")
+            it.tripContext.budgetLevel shouldBe "고급"
+        }
+    }
+
+    "스냅숏이 비었으면({}) 계정 취향 — 구버전 여행" {
+        val agent = CapturingAgent(now)
+
+        service(agent, fullPrefs, emptyList(), tripSnapshot = emptyMap()).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captured!!.preferenceProfile.styles shouldContainExactly listOf("미식")
+        agent.captured!!.preferenceProfile.activities shouldContainExactly listOf("야경")
+    }
+
+    "계정 취향을 바꾼 뒤 재생성해도 여행에서 고른 취향은 그대로다" {
+        val agent = CapturingAgent(now)
+        var account = fullPrefs.copy(styles = listOf("액티비티"))
+        val svc = service(
+            agent, account, emptyList(),
+            tripSnapshot = mapOf("styles" to listOf("미식")),
+            accountPrefs = { account },
+        )
+        svc.generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        account = account.copy(styles = listOf("힐링"), transportModes = listOf("대중교통"))
+        agent.captures.clear()
+        svc.generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.forEach {
+            it.preferenceProfile.styles shouldContainExactly listOf("미식")
+            it.preferenceProfile.transportModes shouldContainExactly listOf("대중교통") // 여행이 안 정한 축은 계정 현재값
+        }
     }
 
     "취향 7축·budgetLevel(=budget_tier)·must_visit 고정블록 조립" {
@@ -779,6 +829,8 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
         deadlines: ScheduleDeadlineProperties = defaultDeadlines,
         scoredPools: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(),
+        tripSnapshot: Map<String, Any?> = emptyMap(),
+        accountPrefs: () -> PreferenceSnapshot = { prefs },
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -786,7 +838,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
                 TripGenerationContext(start, end, refs("제주"), "친구", 500_000, emptyList())
         }
         val preferences = object : PreferenceFacade {
-            override fun findPreferences(accountId: UUID) = prefs
+            override fun findPreferences(accountId: UUID) = accountPrefs()
         }
         val baseAnchors = object : BaseAnchorFacade {
             override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
