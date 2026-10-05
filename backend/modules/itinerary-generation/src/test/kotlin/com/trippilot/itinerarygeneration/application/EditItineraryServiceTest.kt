@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.GenerationMode
@@ -104,7 +105,7 @@ private class EditFakeAgent(
         lastContext = context
         return repair(solution, violations)
     }
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
 }
 
 /** 수리 컨텍스트 원천 대역 — [ctx] 가 null 이면 여행 정보를 못 찾은 것(컨텍스트 없음). */

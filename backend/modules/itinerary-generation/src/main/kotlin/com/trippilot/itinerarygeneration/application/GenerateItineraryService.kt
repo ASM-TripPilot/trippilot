@@ -191,6 +191,8 @@ class GenerateItineraryService(
                 isRegeneration = previous != null,
                 assemblyUnplaced = emptyList(),
                 sessionId = session.sessionId,
+                preference = prefs.toProfile(hints),
+                companionType = ctx.companionType,
             )
         } else {
             // 1차에서 배정된 POI 는 2차 후보에서 제외(TRIP-293) — 같은 장소가 두 번 들어가지 않게.
@@ -210,6 +212,8 @@ class GenerateItineraryService(
                 assemblyUnplaced = secondAssembly.unplaced,
                 sessionId = session.sessionId,
                 materializedPoiIds = secondAssembly.materializedPoiIds,
+                preference = secondInput.preferenceProfile,
+                companionType = ctx.companionType,
             )
         }
         return saved

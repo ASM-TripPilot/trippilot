@@ -1,5 +1,10 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.trip.api.TripGenerationContext
+import com.trippilot.itinerarygeneration.domain.PersonalizationHints
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.profile.api.PreferenceSnapshot
+import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
@@ -93,6 +98,16 @@ class SlotCandidateServiceTest : StringSpec({
         override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
     }
 
+    // 계정 취향 = 액티비티. 여행 스냅숏이 있으면 그쪽이 이겨야 한다(BR-U1-38).
+    val accountPrefs = object : PreferenceFacade {
+        override fun findPreferences(accountId: UUID) = PreferenceSnapshot(
+            listOf("액티비티"), emptyList(), emptyList(), listOf("대중교통"), null, listOf("혼자"), false, "저가",
+        )
+    }
+    val NoHints = object : PersonalizationPort {
+        override fun hintsFor(accountId: UUID) = PersonalizationHints.NONE
+    }
+
     class CapturingAgent(
         private val failure: ScheduleAgentCallFailed? = null,
         /** true 면 0건 응답 — 즉답 구제(TRIP-969 "전개가 저장분보다 나쁘면") 검증용. */
@@ -126,7 +141,8 @@ class SlotCandidateServiceTest : StringSpec({
         stored: Itinerary? = itinerary,
         scored: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(), // 기본 빈 풀 — 종전 경로 그대로
         candidates: CandidatePoolPort = pool,
-    ) = SlotCandidateService(trips, Repo(stored), agent, surfaces, candidates, scored, clock)
+        tripFacade: TripFacade = trips,
+    ) = SlotCandidateService(tripFacade, Repo(stored), agent, surfaces, candidates, scored, clock, accountPrefs, NoHints)
 
     "경계가 실패하면 503 으로 표면화한다 — 500(우리가 터졌다)이 아니다" {
         // 감싸지 않으면 RuntimeException 이라 전역 핸들러가 500 으로 떨구는데, 사실은 "지금은 못 준다"다.
@@ -141,6 +157,24 @@ class SlotCandidateServiceTest : StringSpec({
         e.source shouldBe "schedule-agent"
         // 후보는 지어낼 수 없다(INV-1) — 빈 목록으로 접으면 "주변에 없음"과 구분되지 않는다.
         e.fallbackApplied shouldBe false
+    }
+
+    "AI 에 묻는 후보는 그 여행에서 고른 취향으로 고른다 — 생성과 같은 척도(BR-U1-38)" {
+        val withSnapshot = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(d1, d1)
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+                d1, d1, emptyList(), "친구", null, emptyList(),
+                preferenceSnapshot = mapOf("styles" to listOf("미식"), "activities" to emptyList<String>()),
+            )
+        }
+        val agent = CapturingAgent()
+
+        service(agent, tripFacade = withSnapshot).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        val sent = agent.captured!!
+        sent.preferenceProfile!!.styles shouldContainExactly listOf("미식")
+        sent.preferenceProfile!!.transportModes shouldContainExactly listOf("대중교통") // 여행이 안 정한 축은 계정
+        sent.companionType shouldBe "친구"
     }
 
     "이미 일정에 있는 장소를 서버가 제외 목록으로 만든다(BR-U3-24)" {
@@ -376,7 +410,7 @@ class SlotCandidateServiceTest : StringSpec({
         }
 
     fun conceptSvc(agent: StubScheduleAgent, pool: CandidatePoolPort) =
-        SlotCandidateService(trips, Repo(itinerary), agent, surfaces, pool, FakeScoredCandidatePoolStore(), clock)
+        SlotCandidateService(trips, Repo(itinerary), agent, surfaces, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
 
     fun req(concept: String?) = RequestSlotCandidates(SlotKey.of(d1, target), null, concept, null)
 

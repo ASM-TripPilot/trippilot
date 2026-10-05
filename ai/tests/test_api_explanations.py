@@ -186,6 +186,31 @@ def test_explanations_returns_slot_keyed_map(spy: SpyExplainer) -> None:
     assert all("추천 이유" in v for v in body["explanations"].values())
 
 
+def test_explanations_use_inline_preference_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    """그 여행의 취향이 오면 EXPLANATION 프롬프트의 페르소나가 그것이다 — 없으면 종전 재조회."""
+    from trippilot.domain.persona import CompanionType, TasteTag
+
+    personas: list = []
+
+    class Recording(SpyExplainer):
+        def explain(self, pool, ordered_poi_ids, persona, trace_id, now, *, timeout_sec=None):
+            personas.append(persona)
+            return super().explain(pool, ordered_poi_ids, persona, trace_id, now, timeout_sec=timeout_sec)
+
+    instance = Recording()
+    monkeypatch.setattr(wiring, "ExplanationWorker", lambda gateway: instance)
+    ids = [str(p.poi_id) for p in _SEED[:2]]
+    body = _explanations_body(*ids)
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        assert client.post("/ai/v1/itinerary/explanations", json={
+            **body, "preference_profile": {"styles": ["미식"]}, "companion_type": "혼자"}).status_code == 200
+        assert client.post("/ai/v1/itinerary/explanations", json=body).status_code == 200
+
+    inline, legacy = personas
+    assert inline.taste_tags == (TasteTag.FOOD,) and inline.companion is CompanionType.SOLO
+    assert legacy != inline
+
+
 # ── ⑦ 차선책 문장 (TRIP-887) — 두 번째 호출, 배치 슬롯 설명과 독립 ──────
 
 

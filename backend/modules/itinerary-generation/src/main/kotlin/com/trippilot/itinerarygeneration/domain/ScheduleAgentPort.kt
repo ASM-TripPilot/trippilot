@@ -35,7 +35,16 @@ interface ScheduleAgentPort {
      * **실패는 빈 결과다.** 근거는 부가 정보라 없다고 일정을 죽이지 않는다 — 다만 조용히 지나가지
      * 않게 어댑터가 로그로 드러낸다(INV-4).
      */
-    fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations
+    fun explanations(
+        tripId: UUID,
+        solution: ScheduleAgentOutput,
+        /**
+         * 그 여행의 취향·동행(BR-U1-38) — 근거 문장이 생성과 같은 취향으로 쓰이게. null 이면 상대가 종전대로
+         * 재조회(계정 취향)한다. 오버로드로 나누지 않았다 — 2-인자만 덮은 위임 대역이 조용히 우회됐다(실측).
+         */
+        preference: PreferenceProfile? = null,
+        companionType: String? = null,
+    ): SlotExplanations
 
     /**
      * 슬롯 후보 제안(DEC-U3-5) — **완전 AI·같이 고르기 공통 경계**다. 경로별로 다른 API 를 두지 않는다(BR-U3-23).
@@ -463,6 +472,10 @@ data class SlotCandidatesInput(
      */
     val placementReason: String?,
     val requestMeta: RequestMeta,
+    /** 그 여행의 취향(BR-U1-38) — 생성과 같은 척도. null 이면 상대가 종전대로 재조회(계정 취향). */
+    val preferenceProfile: PreferenceProfile? = null,
+    /** 그 여행의 동행 — 계정의 평소 동행보다 우선. */
+    val companionType: String? = null,
 )
 
 /**
