@@ -22,7 +22,7 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  * 바뀐다. **CONFIRMED 얼굴은 TimelineScreen 유지**라 CB1 은 무변경(back testID·replace 목적지 그대로).
  *
  * 무엇을 보장하나: 확정(CONFIRMED) 얼굴에서 뒤로가기를 누르면, 생성/확정 흐름 스택으로
- * 되돌아가는 대신 **내 여행 목록**(`/(tabs)/itinerary`)으로 `router.replace` 한다(AC-1). 그리고
+ * 되돌아가는 대신 **내 여행 목록**(`/(tabs)/itinerary`)으로 `router.dismissTo` 한다(AC-1, TRIP-1243). 그리고
  * 그 확정 분기가 **미확정(PLANNED) 경로를 바꾸지 않는다** — PLANNED 뒤로가기는 기존
  * `canGoBack()?back():replace(HOME_FALLBACK)` 그대로다(AC-2, 회귀 방지).
  *
@@ -59,12 +59,14 @@ jest.mock('@/shared/storage', () => ({
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 const mockCanGoBack = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     back: mockBack,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     canGoBack: mockCanGoBack,
   }),
 }));
@@ -154,6 +156,7 @@ beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockCanGoBack.mockClear();
   // 히스토리가 있다고 가정 — 이래야 CONFIRMED 확정 분기가 canGoBack 경로(back())와 갈린다(★T5).
   mockCanGoBack.mockReturnValue(true);
@@ -192,7 +195,7 @@ function useItinerary(status: ItineraryStatus) {
 }
 
 describe('🔴 CB1 · AC-1 — 확정(CONFIRMED) 뒤로가기는 내 여행 목록으로 replace 한다', () => {
-  it('CONFIRMED 셸에서 sheet-daychip-back press → replace("/(tabs)/itinerary") 1회, back() 미호출', async () => {
+  it('CONFIRMED 셸에서 sheet-daychip-back press → dismissTo("/(tabs)/itinerary") 1회 · replace 0, back() 미호출', async () => {
     // 준비(TRIP-801 플립) — CONFIRMED 가 이제 지도+시트 셸이라(01b D1) 착지 앵커는
     // `map-sheet-shell-root`(옛 TimelineScreen 앱바 제목 '확정 일정'은 셸엔 없음 · 02a ★2)이고,
     // 뒤로가기 대상은 셸의 `sheet-daychip-back`(옛 `itinerary-view-back` 아님 · ★1). canGoBack=true.
@@ -205,8 +208,9 @@ describe('🔴 CB1 · AC-1 — 확정(CONFIRMED) 뒤로가기는 내 여행 목�
 
     // 단언 — 확정 분기는 canGoBack 경로를 타지 않고 곧장 내 여행 목록으로 replace 한다(무변경 계약).
     //   `/(tabs)/itinerary`(목록)는 딥링크 폴백 `/(tabs)`(홈)과 다른 리터럴이다.
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
-    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
   });
 });

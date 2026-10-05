@@ -389,7 +389,8 @@ export function SlotFillPage({
       slotKey
     );
     const leave = (): void => {
-      router.replace('/(tabs)');
+      // TRIP-1243 — replace 는 아래 위저드 화면을 스택에 남긴다. dismissTo 로 탭까지 걷어낸다.
+      router.dismissTo('/(tabs)');
     };
     return (
       <View className="flex-1">

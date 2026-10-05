@@ -114,18 +114,21 @@ jest.mock('@/shared/push', () => ({
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 const mockBack = jest.fn();
 const mockNavigate = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     back: mockBack,
     navigate: mockNavigate,
   }),
   router: {
     push: mockPush,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     back: mockBack,
     navigate: mockNavigate,
   },
@@ -142,9 +145,14 @@ beforeEach(() => {
   mockPhase = 'pending';
   mockHookOptions = undefined;
   mockLastCall = undefined;
-  [mockMutate, mockPush, mockReplace, mockBack, mockNavigate].forEach((fn) =>
-    fn.mockClear()
-  );
+  [
+    mockMutate,
+    mockPush,
+    mockReplace,
+    mockDismissTo,
+    mockBack,
+    mockNavigate,
+  ].forEach((fn) => fn.mockClear());
   showToastSpy = jest.spyOn(ToastModule, 'showToast');
 });
 
@@ -234,14 +242,15 @@ function expectToastOnce(): void {
 }
 
 describe('🔴 T-7 · AC-7 — 진행 중 앱바 ‹ 로 떠나면 토스트 1회', () => {
-  it('‹ press → 홈으로 replace, 화면이 빠지면 토스트가 한 번 뜬다', () => {
+  it('‹ press → 홈으로 dismissTo, 화면이 빠지면 토스트가 한 번 뜬다', () => {
     const page = mount(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
     // 앵커 — 진입만으로는 토스트가 없다.
     expect(screen.queryByTestId(TOAST)).toBeNull();
 
     fireEvent.press(screen.getByTestId('itinerary-generating-back'));
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
 
     page.leave();
 
@@ -343,7 +352,9 @@ describe('T-F · AC-10 — 실패(409 포함)에서 떠날 때는 토스트가 �
     expect(screen.getByTestId('itinerary-generating-failed')).toBeOnTheScreen();
 
     fireEvent.press(screen.getByTestId('itinerary-generating-back'));
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
     page.leave();
 
     expectNoToast();
@@ -369,7 +380,9 @@ describe('T-F · AC-10 — 실패(409 포함)에서 떠날 때는 토스트가 �
     expect(screen.getByTestId('itinerary-generation-busy')).toBeOnTheScreen();
 
     fireEvent.press(screen.getByTestId('itinerary-generation-busy-wait'));
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
     page.leave();
 
     expectNoToast();
@@ -385,7 +398,9 @@ describe('T-11 · AC-11 — 관찰 모드(mode 없음)에서 떠날 때는 토�
     expect(screen.queryByTestId(TOAST)).toBeNull();
 
     fireEvent.press(screen.getByTestId('itinerary-generating-back'));
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
     page.leave();
 
     expectNoToast();

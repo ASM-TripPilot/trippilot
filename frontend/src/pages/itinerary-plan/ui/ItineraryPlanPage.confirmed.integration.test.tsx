@@ -61,12 +61,14 @@ jest.mock('@/shared/storage', () => ({
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 const mockCanGoBack = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     back: mockBack,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     canGoBack: mockCanGoBack,
   }),
 }));
@@ -225,6 +227,7 @@ beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockCanGoBack.mockClear();
   mockCanGoBack.mockReturnValue(true);
   setAccessToken('valid-access');
@@ -410,15 +413,16 @@ describe('🔴 C5 · AC-5 — 읽기전용: 다른 후보(alt) 링크가 없다'
 });
 
 describe('🔴 C6 · AC-6 — 뒤로가기는 내 여행 목록으로 replace 한다', () => {
-  it('sheet-daychip-back press → replace("/(tabs)/itinerary") 1회, back() 미호출', async () => {
+  it('sheet-daychip-back press → dismissTo("/(tabs)/itinerary") 1회 · replace 0, back() 미호출', async () => {
     useItinerary(() => HttpResponse.json(confirmedDefault()));
     renderPage();
     await screen.findByTestId('map-sheet-shell-root');
 
     fireEvent.press(screen.getByTestId('sheet-daychip-back'));
 
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
-    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
   });
 });

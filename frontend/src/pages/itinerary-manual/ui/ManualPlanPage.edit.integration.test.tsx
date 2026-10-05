@@ -63,9 +63,20 @@ jest.mock('@/shared/storage', () => ({
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
-  router: { push: mockPush, back: mockBack, replace: mockReplace },
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    dismissTo: mockDismissTo,
+  }),
+  router: {
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    dismissTo: mockDismissTo,
+  },
 }));
 
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
@@ -151,7 +162,9 @@ beforeEach(() => {
   putCalls = 0;
   putBody = null;
   daySlots = PLAIN;
-  [mockPush, mockBack, mockReplace].forEach((fn) => fn.mockClear());
+  [mockPush, mockBack, mockReplace, mockDismissTo].forEach((fn) =>
+    fn.mockClear()
+  );
   setAccessToken('valid-access');
   useItineraryEditStore.getState().reset();
   putHandler = () => HttpResponse.json(manualDraft(daySlots));
@@ -408,8 +421,9 @@ describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우�
     // 앵커 — ‹ 전엔 replace 0회(앞 동작이 부른 호출이 셈에 섞이지 않게).
     expect(mockReplace).not.toHaveBeenCalled();
     fireEvent.press(screen.getByTestId('itinerary-edit-back'));
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
   });
 

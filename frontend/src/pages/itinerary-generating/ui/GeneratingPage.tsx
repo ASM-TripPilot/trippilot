@@ -154,7 +154,8 @@ export function GeneratingPage({
     : undefined;
   // 앱바 뒤로 = 백그라운드 이탈(화면만 홈으로). 관찰 모드도 같은 결이다.
   const goHome = (): void => {
-    router.replace('/(tabs)');
+    // TRIP-1243 — replace 는 아래 위저드 화면(3/4 등)을 스택에 남긴다. dismissTo 로 탭까지 걷어낸다.
+    router.dismissTo('/(tabs)');
   };
 
   if (mode === undefined) {

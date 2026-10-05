@@ -58,6 +58,7 @@ const mockCancelMutate = jest.fn();
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 const mockBack = jest.fn();
 const mockNavigate = jest.fn();
 
@@ -95,12 +96,14 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     back: mockBack,
     navigate: mockNavigate,
   }),
   router: {
     push: mockPush,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     back: mockBack,
     navigate: mockNavigate,
   },
@@ -114,6 +117,7 @@ beforeEach(() => {
   mockCancelMutate.mockClear();
   mockPush.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockBack.mockClear();
   mockNavigate.mockClear();
 });
@@ -125,7 +129,7 @@ function renderPage() {
 /** 모든 forward nav(push/replace/navigate)의 목적지를 직렬화해 모은다 — 형태(문자열/객체)를
  * 강요하지 않고 "어디로 갔나"만 본다(02a ★4). */
 function forwardDestinations(): string[] {
-  return [mockPush, mockReplace, mockNavigate]
+  return [mockPush, mockReplace, mockDismissTo, mockNavigate]
     .flatMap((fn) => fn.mock.calls)
     .map((call) =>
       typeof call[0] === 'string' ? call[0] : JSON.stringify(call[0])
