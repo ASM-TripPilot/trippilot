@@ -61,10 +61,12 @@ jest.mock('@/features/share-trip-card/model/shareCapture', () => ({
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
   router: {
     push: (...args: unknown[]) => mockPush(...args),
     replace: (...args: unknown[]) => mockReplace(...args),
+    dismissTo: (...args: unknown[]) => mockDismissTo(...args),
     back: jest.fn(),
     canGoBack: () => true,
   },
@@ -159,6 +161,7 @@ afterEach(() => {
   clearAccessToken();
   mockPush.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
 });
 afterAll(() => server.close());
 
@@ -311,5 +314,29 @@ describe('🟢 TRIP-987 B-6·B-9 · 되살리지 않는 것(회귀 앵커)', () 
     const card = screen.getByTestId('reflection-summary-day-card');
     expect(isTouchable(card)).toBe(false);
     expect(within(card).queryByText('›')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)', () => {
+  /**
+   * 무엇을 보장하나: 요약 화면(스택 화면)의 탭바로 탭을 누르면 `router.dismissTo(탭 경로)` 1회 —
+   * replace 면 이 화면만 (tabs) 로 바뀌고 아래 스택이 남아 탭 루트에서 스와이프가 되살린다.
+   * 준비: 요약·여행 응답 → 실행: 홈·일정 탭 press → 단언: dismissTo 인자 순서, replace·push 0회.
+   */
+  it('홈·일정 탭 press → dismissTo(/(tabs)) · dismissTo(/itinerary), replace 0회', async () => {
+    server.use(
+      summaryHandler({ ready: true, summary: summary(true, ['코엑스']) }),
+      tripOk()
+    );
+
+    renderPage();
+    await waitSummary();
+
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-itinerary'));
+
+    expect(mockDismissTo.mock.calls).toEqual([['/(tabs)'], ['/itinerary']]);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

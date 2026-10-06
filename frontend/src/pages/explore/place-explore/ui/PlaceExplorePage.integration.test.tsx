@@ -42,7 +42,7 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *  - **P-9 (TRIP-687)** 라우트 `region` 이 2곳 이상이면 지역별로 `getPlaces` 를 각 1회 부르고
  *    (fan-out) 병합 결과를 한 목록에 함께 그린다 — 단일지역 경로(P-2)의 무한 스크롤은 안 탄다.
  *  - **P-12 (AC-1)** ♥ FAB 는 담은 장소(d02, `/explore/saved-places`)로 push.
- *  - **P-13 (AC-1)** 복제 BottomTabBar 는 push 가 아니라 replace 로 항법한다.
+ *  - **P-13 (AC-1)** 복제 BottomTabBar 는 push·replace 가 아니라 dismissTo 로 항법한다(TRIP-1262).
  *  - **P-14 (AC-2·AC-6)** 필터 버튼이 카테고리 시트를 마운트한다(실개폐·딤은 6-b).
  *  - **S-1~S-12 (상태·예외)** 첫 조회 스켈레톤 · 0건 안내 · 검색어 지목과 해제 · 조회 실패의 실제
  *    재조회(INV-4) · 미로그인 담기 무요청 · 404 롤백 · 409 수렴 · 네트워크 실패 재시도 · 연타 1회 ·
@@ -79,9 +79,10 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 const mockPush = jest.fn();
-// TRIP-708: 복제 BottomTabBar 는 push 가 아니라 replace 로 항법한다(StaySearchPage TRIP-413
-// 선례) — replace 도 같은 지연-참조 목으로 준다(P-13 이 관찰).
+// TRIP-708: replace 도 같은 지연-참조 목으로 준다 — 탭바가 replace 를 쓰지 않음을 P-13 이 관찰한다.
 const mockReplace = jest.fn();
+// TRIP-1262: 복제 탭바는 replace 가 아니라 dismissTo 로 항법한다 — 같은 지연-참조 목(P-13 이 관찰).
+const mockDismissTo = jest.fn();
 const mockBack = jest.fn();
 // region 은 '더 담기'가 여행지 여러 곳을 같은 키로 반복해 실으면 배열이 된다(expo-router 규약) —
 // P-9(다지역)를 위해 배열도 허용한다(단일지역 케이스 P-2 는 string 그대로 유효).
@@ -99,11 +100,17 @@ jest.mock('expo-router', () => ({
   router: {
     push: (href: string) => mockPush(href),
     replace: (href: string) => mockReplace(href),
+    dismissTo: (href: string) => mockDismissTo(href),
     // TRIP-1026 AC-4 가 뒤로 버튼까지 누른다 — 없으면 `router.back is not a function` 으로 죽는다.
     back: () => mockBack(),
   },
   // TRIP-1093: 위저드 출처 ♥ 가 뒤로 간다 — 구현이 훅 쪽 back 을 골라도 같은 mockBack 에 모인다.
-  useRouter: () => ({ push: mockPush, replace: mockReplace, back: mockBack }),
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    dismissTo: mockDismissTo,
+    back: mockBack,
+  }),
   useLocalSearchParams: () => ({ ...mockParams }),
 }));
 
@@ -194,6 +201,7 @@ beforeEach(() => {
   mockParams = {};
   mockPush.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockBack.mockClear();
   clearAccessToken();
   // 기본 gate 는 열려 있다 — "즉시 반영"을 재는 케이스만 닫힌 문으로 갈아 끼운다.
@@ -449,8 +457,8 @@ describe('P-12 · ♥ FAB 는 담은 장소(d02)로 보낸다 (AC-1 · 3-a)', ()
   });
 });
 
-describe('P-13 · 복제 BottomTabBar 는 replace 로 항법한다 (AC-1 · DestinationDetail 선례)', () => {
-  it('탭을 누르면 router.replace 로 그 탭 라우트로 간다 (home→/(tabs), 나머지→/{key})', async () => {
+describe('P-13 · 복제 BottomTabBar 는 dismissTo 로 항법한다 (AC-1 · TRIP-1262)', () => {
+  it('탭을 누르면 router.dismissTo 로 그 탭 라우트로 간다 (home→/(tabs), 나머지→/{key})', async () => {
     setAccessToken('valid-access');
 
     await renderPage();
@@ -458,10 +466,11 @@ describe('P-13 · 복제 BottomTabBar 는 replace 로 항법한다 (AC-1 · Dest
     fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
     fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
 
-    // push 가 아니라 replace 다(뒤로가기 스택을 안 쌓는다, StaySearchPage TRIP-413 선례).
-    // TRIP-1076 AC-1 반전: 홈은 '/' 가 아니라 '/(tabs)' — '/' 는 온보딩 그룹의 index 와 겹쳐
-    // 가드에 막히면 무반응이 된다(QA #059). 경로는 공용 shellTabHref 가 정한다.
-    expect(mockReplace.mock.calls).toEqual([['/(tabs)'], ['/records']]);
+    // TRIP-1262 반전: replace 는 이 화면 하나만 (tabs) 로 바꿔 아래 스택(위저드 등)을 남겼다(QA F4).
+    // dismissTo 는 스택 밑의 (tabs) 까지 걷어낸다 — 없으면(콜드 오픈) 지금 화면을 교체한다.
+    // TRIP-1076: 홈은 '/' 가 아니라 '/(tabs)' — 경로는 공용 shellTabHref 가 정한다.
+    expect(mockDismissTo.mock.calls).toEqual([['/(tabs)'], ['/records']]);
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
   });
 });

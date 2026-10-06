@@ -308,10 +308,12 @@ export function PlaceExplorePage(): ReactElement {
       />
 
       {/* (tabs) 밖 라우트라 진짜 탭바가 없다 — 옛 목적지 상세(TRIP-1105 로 삭제) 선례처럼 복제해 그리고,
-          onPressTab은 push가 아니라 replace로 항법한다(뒤로가기 스택을 안 쌓는다). */}
+          onPressTab은 dismissTo로 항법한다 — 스택 밑의 (tabs)까지 사이 화면(위저드 등)을 걷어낸다.
+          replace는 이 화면만 (tabs)로 바꿔 아래 스택이 남았다(TRIP-1262 · QA F4). 스택에 (tabs)가
+          없으면(콜드 오픈) dismissTo가 지금 화면을 그 탭으로 교체한다. */}
       <BottomTabBar
         activeKey="explore"
-        onPressTab={(key) => router.replace(shellTabHref(key))}
+        onPressTab={(key) => router.dismissTo(shellTabHref(key))}
       />
 
       {/* 카테고리 시트 — 필터 버튼이 열고, 닫힘=트리 부재(조건부 마운트). */}

@@ -55,6 +55,7 @@ let mockSearchParams: {
 } = {};
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 const mockBack = jest.fn();
 const mockSetParams = jest.fn();
 
@@ -63,6 +64,7 @@ jest.mock('expo-router', () => ({
   router: {
     push: (...args: unknown[]) => mockPush(...args),
     replace: (...args: unknown[]) => mockReplace(...args),
+    dismissTo: (...args: unknown[]) => mockDismissTo(...args),
     back: (...args: unknown[]) => mockBack(...args),
     setParams: (...args: unknown[]) => mockSetParams(...args),
   },
@@ -72,6 +74,7 @@ jest.mock('expo-router', () => ({
 function expectNoRouterCall(): void {
   expect(mockPush).not.toHaveBeenCalled();
   expect(mockReplace).not.toHaveBeenCalled();
+  expect(mockDismissTo).not.toHaveBeenCalled();
   expect(mockBack).not.toHaveBeenCalled();
   expect(mockSetParams).not.toHaveBeenCalled();
 }
@@ -81,6 +84,7 @@ beforeEach(() => {
   mockSearchParams = {};
   mockPush.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockBack.mockClear();
   mockSetParams.mockClear();
   // 모듈 싱글턴 — 연타 가드 창·메모리 토큰은 앱 전체에 하나라 describe 사이로 샌다.
@@ -1639,5 +1643,39 @@ describe('이름검색 0건 탈출구 (TRIP-935)', () => {
       screen.getByTestId('stay-search-name-empty-clear')
     ).toBeOnTheScreen();
     expect(screen.queryByTestId('stay-search-name-empty-reset')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)', () => {
+  /**
+   * 무엇을 보장하나: 숙소 목록(스택 화면)의 탭바로 탭을 누르면 `router.dismissTo(탭 경로)` 1회 —
+   * replace 면 이 화면만 (tabs) 로 바뀌어 [(tabs)탐색, (tabs)기록] 두 겹이 남는다(QA F3).
+   * 준비: 빈 검색 응답 → 실행: 기록·탐색 탭 press → 단언: dismissTo 인자 순서, replace·push 0회.
+   */
+  const BASE = 'http://localhost:8080/api/v1';
+
+  it('기록·탐색 탭 press → dismissTo(/records) · dismissTo(/explore), replace 0회', async () => {
+    server.use(
+      http.get(`${BASE}/stays/search`, () =>
+        HttpResponse.json({ items: [], degraded: false, filterZeroReasons: [] })
+      ),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+
+    render(
+      <QueryClientProvider client={client}>
+        <StaySearchPage />
+      </QueryClientProvider>
+    );
+
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-explore'));
+
+    expect(mockDismissTo.mock.calls).toEqual([['/records'], ['/explore']]);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
