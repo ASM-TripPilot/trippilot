@@ -168,7 +168,8 @@ afterEach(() => {
  *  - **empty 배선(신)** 저장 숙소 0 → empty 얼굴. 보조 CTA "숙소 둘러보기"→`/stays`(첫 여행지 region 동봉, TRIP-1011),
  *    주 CTA "숙소 없이 계속"→goToMethod(default nostay 와 같은 동작).
  *  - **제거(D2)** 후보 하트·연박 묶음·coverage/blocked·fixSheet·fallback 경고가 렌더에서 사라진다.
- *  - **CTA 목적지** default·loading 의 두 CTA 다 게이트 없이 활성이고 h04 method 로 replace 이동한다(AC-5).
+ *  - **CTA 목적지** default·loading 의 두 CTA 다 게이트 없이 활성이고, 2/4 를 걷은(back) 뒤 h04 method 를
+ *    push 한다(TRIP-1265 — 옛 replace 는 위저드째 바꿔 끼워 3/4 뒤로가 홈으로 샜다).
  *
  * 카드 탭(→S9 오픈 신호)은 여기서 재지 않는다 — 배선의 onPressCard 는 S9 미착수 no-op stub 이라
  * 관측 대상이 없다. 그 계약은 화면 층(`TripWizardStep2Screen.test.tsx`)이 nightNumber 로 잠근다.
@@ -188,11 +189,26 @@ describe('배선 — 변형 판정·박별 카드·CTA', () => {
   const TRIP_START = '2026-06-10';
   const TRIP_END = '2026-06-13';
 
-  /** h04 방식 선택 목적지 — 두 CTA 의 공통 replace 대상(브리프 AC-5). */
+  /** h04 방식 선택 목적지 — 두 CTA 의 공통 push 대상. 당일치기 step1 push 와 같은 객체 형태. */
   const METHOD_ROUTE = {
     pathname: '/trips/[tripId]/itinerary/method',
     params: { tripId: TRIP_ID },
   };
+
+  /**
+   * TRIP-1265 — 출구 한 번 = back 1회 **다음에** method push 1회, replace 0회. jest 는 결과 스택을 못
+   * 보므로(실기 몫) 호출 형태와 순서까지만 잠근다. 개수를 순서보다 먼저 재야 push 0회일 때 순번 비교가
+   * undefined 로 엉뚱하게 죽지 않는다.
+   */
+  function expectExitedToMethod(): void {
+    expect(routerMock.back).toHaveBeenCalledTimes(1);
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
+    expect(routerMock.push).toHaveBeenCalledWith(METHOD_ROUTE);
+    expect(routerMock.back.mock.invocationCallOrder[0]).toBeLessThan(
+      routerMock.push.mock.invocationCallOrder[0]
+    );
+    expect(routerMock.replace).not.toHaveBeenCalled();
+  }
 
   function stay(over: Partial<SavedStay> = {}): SavedStay {
     return {
@@ -486,13 +502,12 @@ describe('배선 — 변형 판정·박별 카드·CTA', () => {
       expect(staysRegionOf(routerMock.push.mock.calls[0])).toBe('부산광역시');
     });
 
-    it('주 CTA "숙소 없이 계속"은 default nostay 와 같은 동작 — h04 method 로 replace 한다', () => {
+    it('주 CTA "숙소 없이 계속"은 default nostay 와 같은 출구 — 2/4 를 걷고(back) h04 method 를 push 한다', () => {
       render(<TripNewStep2Page />);
 
       fireEvent.press(screen.getByTestId('trip-base-nostay-start'));
 
-      expect(routerMock.replace).toHaveBeenCalledWith(METHOD_ROUTE);
-      expect(routerMock.push).not.toHaveBeenCalled();
+      expectExitedToMethod();
     });
   });
 
@@ -533,8 +548,9 @@ describe('배선 — 변형 판정·박별 카드·CTA', () => {
     });
   });
 
-  describe('CTA 목적지 — 게이트 없이 둘 다 h04 로 replace', () => {
-    it('주 CTA 는 활성이고 누르면 방식 선택(h04)으로 replace 이동한다 (push 아님)', () => {
+  // TRIP-1265 — 1박+ 출구를 당일치기와 같은 스택 모양으로 맞춘다(3/4 뒤로 = 1/4).
+  describe('CTA 목적지 — 게이트 없이 둘 다 2/4 를 걷고 h04 로 push', () => {
+    it('주 CTA 는 활성이고 누르면 back 다음 방식 선택(h04)을 push 한다 (replace 아님)', () => {
       render(<TripNewStep2Page />);
 
       const generate = screen.getByTestId('trip-base-generate');
@@ -542,18 +558,15 @@ describe('배선 — 변형 판정·박별 카드·CTA', () => {
       expect(generate).toBeEnabled();
       fireEvent.press(generate);
 
-      // 1회로만 재면 "아무 데나 1회 가는" 배선이 통과 — 목적지까지 잰다.
-      expect(routerMock.replace).toHaveBeenCalledTimes(1);
-      expect(routerMock.replace).toHaveBeenCalledWith(METHOD_ROUTE);
-      expect(routerMock.push).not.toHaveBeenCalled();
+      expectExitedToMethod();
     });
 
-    it('보조 CTA("숙소 없이 시작하기")도 h04 로 replace 이동한다', () => {
+    it('보조 CTA("숙소 없이 시작하기")도 back 다음 h04 를 push 한다', () => {
       render(<TripNewStep2Page />);
 
       fireEvent.press(screen.getByTestId('trip-base-nostay-start'));
 
-      expect(routerMock.replace).toHaveBeenLastCalledWith(METHOD_ROUTE);
+      expectExitedToMethod();
     });
   });
 
@@ -944,13 +957,21 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
     });
     afterEach(() => clock.mockRestore());
 
-    /** 방식 선택(h04)으로 가는 replace 만 센다. */
-    function methodReplaces(): unknown[] {
-      return routerMock.replace.mock.calls.filter(
+    /** 방식 선택(h04)으로 가는 push 만 센다. 출구가 back→push 라(TRIP-1265) replace 를 세면 "0회"가
+     * 가드가 깨져도 green 이 된다. */
+    function methodPushes(): unknown[] {
+      return routerMock.push.mock.calls.filter(
         (call: unknown[]) =>
           (call[0] as { pathname?: string } | undefined)?.pathname ===
           '/trips/[tripId]/itinerary/method'
       );
+    }
+
+    /** 창 안 누름은 출구 동작을 하나도 내지 않는다 — push 만 세면 가드 밖에서 먼저 부른 back(2/4 만
+     * 걷혀 1/4 로 떨어짐)을 못 본다. */
+    function expectNoExit(): void {
+      expect(methodPushes()).toHaveLength(0);
+      expect(routerMock.back).not.toHaveBeenCalled();
     }
 
     /** 밤2 시트를 열고 후보를 고른 뒤 '지정'을 누른다(첫 탭). */
@@ -961,17 +982,19 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
     }
 
-    /** 창이 닫힌 뒤(=사람이 다시 누름) 뒤 CTA 가 방식 선택으로 정확히 1회 replace 한다 — 앞의
+    /** 창이 닫힌 뒤(=사람이 다시 누름) 뒤 CTA 가 back 1회·방식 선택 push 1회로 나간다 — 앞의
      * "0회"가 공짜 통과가 아니라는 긍정 앵커를 겸한다. */
     function expectGenerateWorksAfterWindow(): void {
       resetPressGuard();
       fireEvent.press(screen.getByTestId('trip-base-generate'));
 
-      expect(methodReplaces()).toHaveLength(1);
-      expect(routerMock.replace).toHaveBeenCalledWith({
+      expect(methodPushes()).toHaveLength(1);
+      expect(routerMock.back).toHaveBeenCalledTimes(1);
+      expect(routerMock.push).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/itinerary/method',
         params: { tripId: TRIP_ID },
       });
+      expect(routerMock.replace).not.toHaveBeenCalled();
     }
 
     it('창 안의 "이 거점으로 일정 만들기"는 방식 선택 이동이 0회이고, 창이 지난 뒤 한 번 누르면 정확히 1회다', () => {
@@ -985,7 +1008,7 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       fireEvent.press(screen.getByTestId('trip-base-generate'));
 
       // 단언 — 무시된다.
-      expect(methodReplaces()).toHaveLength(0);
+      expectNoExit();
       // 무회귀 — 창이 지난 뒤의 한 번은 정상 동작한다.
       expectGenerateWorksAfterWindow();
     });
@@ -1003,7 +1026,7 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
 
       fireEvent.press(screen.getByTestId('trip-base-generate'));
 
-      expect(methodReplaces()).toHaveLength(0);
+      expectNoExit();
       expectGenerateWorksAfterWindow();
     });
   });

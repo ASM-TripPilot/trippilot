@@ -37,9 +37,9 @@ import {
  *     `enabled: tripId !== undefined`로 그때 요청을 아예 안 보낸다.
  *
  * 옛 후보 하트 배정 모델(coverage 차단 게이트·연박 묶음·fixSheet)은 통째로 걷혔다(D2). 두 CTA는
- * 게이트 없이 h04(방식 선택)로 `replace`한다(브리프 AC-5, 현 `goToMethod` 계승 — 여행은 이미
- * 서버에 만들어져 위저드로 되돌아갈 이유가 없으므로 `push`가 아니라 `replace`로 파괴된 위저드
- * 화면을 스택에서 걷는다).
+ * 게이트 없이 h04(방식 선택)로 간다 — 2/4를 `back()`으로 걷고 h04를 `push`한다(TRIP-1265). 그래야
+ * 스택이 당일치기(step1 → h04 push)와 같은 모양이 되어 h04의 뒤로가기(‹·스와이프)가 박수와
+ * 상관없이 1/4로 간다. `replace`는 루트 스택에서 위저드 중첩 스택째 바꿔 끼워 뒤로가 홈으로 갔다.
  *
  * S9(TRIP-673) 재연결 — S8이 no-op stub으로 둔 카드 탭을 숙소 선택 시트 오픈으로 잇는다:
  *  1. **카드 탭 → 시트 오픈** — `onPressCard(nightNumber)`가 `openNight`을 세우고, 그 밤 카드가
@@ -61,11 +61,13 @@ export function TripNewStep2Page(): ReactElement {
     destinations,
   } = useTripWizardStore();
 
-  /** 두 출구 CTA의 공통 목적지 — 방식 선택(h04)으로 `replace`. `tripId`는 CTA가 보이는 얼굴에선
-   * `notrip`이 먼저 이겨 항상 정의되지만, 그 사실을 컴파일러에 알리는 가드를 둔다. */
+  /** 두 출구 CTA의 공통 목적지 — 2/4를 걷고(`back`) 방식 선택(h04)을 `push`. 순서가 계약이다:
+   * 거꾸로면 back이 방금 얹은 h04를 치운다. `tripId`는 CTA가 보이는 얼굴에선 `notrip`이 먼저 이겨
+   * 항상 정의되지만, 그 사실을 컴파일러에 알리는 가드를 둔다. */
   function goToMethod(): void {
     if (tripId === undefined) return;
-    router.replace({
+    router.back();
+    router.push({
       pathname: '/trips/[tripId]/itinerary/method',
       params: { tripId },
     });

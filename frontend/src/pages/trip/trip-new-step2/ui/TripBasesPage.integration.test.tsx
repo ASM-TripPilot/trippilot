@@ -1008,8 +1008,14 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
         // [숙소 없이 시작하기]는 위저드에서 연타 가드를 탄다 — 지정 탭이 연 창을 닫고 누른다.
         resetPressGuard();
         fireEvent.press(screen.getByTestId('trip-base-error-nostay'));
-        expect(mockReplace).toHaveBeenCalledTimes(1);
-        expect(mockReplace).toHaveBeenCalledWith(METHOD_ROUTE);
+        // TRIP-1265 — 위저드 출구는 2/4 를 걷고(back) 방식 선택을 push 한다(replace 면 3/4 뒤로가 홈).
+        expect(mockBack).toHaveBeenCalledTimes(1);
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockPush).toHaveBeenCalledWith(METHOD_ROUTE);
+        expect(mockBack.mock.invocationCallOrder[0]).toBeLessThan(
+          mockPush.mock.invocationCallOrder[0]
+        );
+        expect(mockReplace).not.toHaveBeenCalled();
       });
     });
   });

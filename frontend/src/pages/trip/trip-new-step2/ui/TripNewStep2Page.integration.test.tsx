@@ -283,8 +283,10 @@ describe('TRIP-1028 P1 · 2/4 에 들어오기만 하면 주소 요청 0건 (AC-
     render(page());
 
     fireEvent.press(screen.getByTestId('trip-base-nostay-start'));
-    // 앵커 — 출구 CTA 가 실제로 눌려 h04 로 replace 됐다.
-    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+    // 앵커 — 출구 CTA 가 실제로 눌려 2/4 를 걷고(back) h04 로 push 됐다(TRIP-1265).
+    expect(routerMock.back).toHaveBeenCalledTimes(1);
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).not.toHaveBeenCalled();
 
     await settle();
     expect(requested).toEqual([]);
