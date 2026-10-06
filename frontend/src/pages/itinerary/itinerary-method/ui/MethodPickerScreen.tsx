@@ -2,26 +2,23 @@ import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { METHOD_SUBTITLE, METHOD_SWITCH_NOTE } from '../config/methodPicker';
+import { formatWizardStep } from '@/features/create-trip';
 import {
-  METHOD_PROGRESS,
-  METHOD_SUBTITLE,
-  METHOD_SWITCH_NOTE,
-} from '../config/methodPicker';
-import {
-  BackChevronGlyph,
   ChevronRightGlyph,
   CoPickGlyph,
   FullAiGlyph,
   ManualGlyph,
 } from '@/features/itinerary/index.view';
+import { TripWizardHeader } from '@/widgets/trip-wizard-header';
 
 /**
  * h01 시작 방법 — Figma `3824:2128`. 세 방식(완전 AI · AI와 같이 · 직접) 중 하나를 고른다.
  *
  * 화면은 **완성된 콜백만** 받는다 — 조회도 게이트 판정도 하지 않는다. 세 방식 콜백
  * (`onPressFullAi`·`onPressManual`·`onPressCoPick`)은 전부 필수라 착지 화면은 배선이 소유한다
- * (생성 POST·진행/실패 표면은 h09·h19 각자 소유, TRIP-305·AC-7). 앱바 우측 진행 표시(3 / 4)와
- * 두 안내 문구는 `config/methodPicker` 가 든다. 생성 선행조건(거점 커버리지·겹침) 게이트도 이
+ * (생성 POST·진행/실패 표면은 h09·h19 각자 소유, TRIP-305·AC-7). 앱바는 위저드 공용
+ * `TripWizardHeader`(3 / 4, TRIP-1266)이고, 두 안내 문구는 `config/methodPicker` 가 든다. 생성 선행조건(거점 커버리지·겹침) 게이트도 이
  * 칸에 없다 — g02(여행 생성 2/2)가 소유한다.
  */
 
@@ -155,46 +152,12 @@ export function MethodPickerScreen({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View className="flex-1 bg-canvas">
-        <View className="w-full flex-row items-center gap-[6px] bg-canvas py-[14px] pl-md pr-lg">
-          <Pressable
-            testID="itinerary-method-back"
-            accessibilityRole="button"
-            accessibilityLabel="뒤로"
-            onPress={onBack}
-            hitSlop={8}
-          >
-            <BackChevronGlyph />
-          </Pressable>
-          <Text className="font-noto-bold text-[18px] font-bold text-ink">
-            {SCREEN_TITLE}
-          </Text>
-          <View className="flex-1" />
-          {/* 진행 표시 — 앱바 우측. 채움/빈 점을 서로 다른 testID 로 세어 SVG 한 장 fill 색만
-              바꾼 거짓 통과를 막는다(repo-traps 글리프 fill 사각). 색은 토큰(채움 primary·빈 hairline). */}
-          <View className="flex-row items-center gap-sm">
-            <View className="flex-row items-center gap-[4px]">
-              {Array.from({ length: METHOD_PROGRESS.total }, (_, index) => {
-                const filled = index < METHOD_PROGRESS.current;
-                return (
-                  <View
-                    key={index}
-                    testID={
-                      filled
-                        ? 'itinerary-method-progress-dot-filled'
-                        : 'itinerary-method-progress-dot-empty'
-                    }
-                    className={`h-[6px] w-[6px] rounded-pill ${
-                      filled ? 'bg-primary' : 'bg-hairline'
-                    }`}
-                  />
-                );
-              })}
-            </View>
-            <Text className="font-noto text-label text-muted">
-              {`${METHOD_PROGRESS.current} / ${METHOD_PROGRESS.total}`}
-            </Text>
-          </View>
-        </View>
+        <TripWizardHeader
+          title={SCREEN_TITLE}
+          onBack={onBack}
+          backTestID="itinerary-method-back"
+          progress={{ filled: 3, label: formatWizardStep(3) }}
+        />
 
         <ScrollView contentContainerClassName="gap-[14px] px-lg pb-2xl pt-[10px]">
           <View className="w-full gap-[6px] pb-[6px]">

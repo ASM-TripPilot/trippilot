@@ -3,13 +3,13 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { TripWizardHeader } from '@/widgets/trip-wizard-header';
 
 import type { MustVisitSeedItem } from '@/features/create-trip';
 import { formatWizardStep } from '@/features/create-trip';
 import type { PreferenceSummary, SummaryLine } from '@/features/create-trip';
 import {
   AlertCircleGlyph,
-  BackChevronGlyph,
   ChevronRightGlyph,
   GlobeGlyph,
   PlusGlyph,
@@ -367,37 +367,12 @@ export function TripWizardStep1Screen({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="trip-wizard-step1-root" className="flex-1 bg-canvas">
-        {/* 앱바 — back + 제목 + 세그먼트 진행바 4칸 + "1 / 4" */}
-        <View className="flex-row items-center gap-sm px-lg pb-sm pt-md">
-          <Pressable
-            testID="trip-wizard-step1-back"
-            accessibilityRole="button"
-            onPress={onBack}
-            hitSlop={8}
-          >
-            <BackChevronGlyph />
-          </Pressable>
-          <Text className="text-section font-noto-bold font-bold text-ink">
-            여행 만들기
-          </Text>
-          <View className="flex-1" />
-          <View className="flex-row items-center gap-xs">
-            {[1, 2, 3, 4].map((n) => (
-              <View
-                key={n}
-                testID={`trip-wizard-progress-seg-${n}`}
-                className={`h-1 rounded-[2px] ${
-                  n === 1
-                    ? 'w-[20px] bg-primary'
-                    : 'w-[14px] bg-hairline-strong'
-                }`}
-              />
-            ))}
-            <Text className="ml-[2px] font-inter-bold text-caption text-muted">
-              {formatWizardStep(1)}
-            </Text>
-          </View>
-        </View>
+        <TripWizardHeader
+          title="여행 만들기"
+          onBack={onBack}
+          backTestID="trip-wizard-step1-back"
+          progress={{ filled: 1, label: formatWizardStep(1) }}
+        />
 
         <ScrollView className="flex-1">
           <View className="gap-xl px-lg pb-[20px] pt-md">

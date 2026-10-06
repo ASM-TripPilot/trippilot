@@ -1,4 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
+
+import { TripWizardHeader } from '@/widgets/trip-wizard-header';
 
 import { MethodPickerScreen } from './MethodPickerScreen';
 
@@ -11,9 +18,12 @@ import { MethodPickerScreen } from './MethodPickerScreen';
  * 필수 prop 이 되어(showSoon 폴백 소멸) 모든 render 가 두 콜백을 넘긴다.
  *
  * ── TRIP-784 · h01 Figma 재정합 ──
- * 진행 표시(점 4개·3채움 + "3 / 4") 추가 · 서브카피/하단안내 Figma 문구 교체 · 추천 배지 제거 ·
- * soon 폴백 소멸(콜백 필수화). 채움/빈 점은 **서로 다른 testID** 로 세어, SVG 한 장 fill 색만 바꾼
- * 거짓 통과를 막는다(repo-traps 글리프 fill 사각).
+ * 서브카피/하단안내 Figma 문구 교체 · 추천 배지 제거 · soon 폴백 소멸(콜백 필수화).
+ *
+ * ── TRIP-1266 · 위저드 공용 헤더 ──
+ * 3/4 헤더가 1/4·2/4와 같은 `widgets/trip-wizard-header` 를 쓴다. 옛 점 4개(TRIP-784 AC-1)는 막대 4칸
+ * `trip-wizard-progress-seg-*` 로 바뀌었고, 채움/빈은 칸 className 토큰으로 본다(막대는 SVG 가 아니라
+ * View 라 className 이 곧 색이다).
  *
  * 3동작 뼈대: 준비=콜백 목·prop → 실행=렌더/카드 press → 단언=콜백 호출·보이는 것.
  */
@@ -124,8 +134,14 @@ describe('TRIP-404 · 동시 생성 차단 스텁 (AC-6 무회귀)', () => {
   });
 });
 
-describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
-  it('AC-1 · 진행 표시 — "3 / 4" 텍스트 + 채움 점 3개·빈 점 1개', () => {
+// TRIP-1266 (QA F7) — 옛 TRIP-784 AC-1(점 4개) 을 대체한다.
+describe('위저드 공용 헤더 (3/4)', () => {
+  function tokens(node: { props?: { className?: unknown } }): string[] {
+    const cn = node.props?.className;
+    return typeof cn === 'string' ? cn.split(/\s+/).filter(Boolean) : [];
+  }
+
+  function renderPicker() {
     render(
       <MethodPickerScreen
         onBack={noop}
@@ -134,20 +150,43 @@ describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
         onPressCoPick={noop}
       />
     );
+  }
 
-    // "3 / 4" 진행 텍스트 — getByText(문자열) 은 노드 텍스트 완전 일치.
+  it('진행 표시는 막대 4칸 중 앞 3칸이 primary 이고 "3 / 4" 다 — 옛 점은 없다', () => {
+    renderPicker();
+
+    [1, 2, 3].forEach((n) =>
+      expect(
+        tokens(screen.getByTestId(`trip-wizard-progress-seg-${n}`))
+      ).toContain('bg-primary')
+    );
+    expect(tokens(screen.getByTestId('trip-wizard-progress-seg-4'))).toContain(
+      'bg-hairline-strong'
+    );
+    // getByText(문자열) 은 노드 텍스트 완전 일치.
     expect(screen.getByText('3 / 4')).toBeOnTheScreen();
-
-    // 채움/빈을 **서로 다른 testID** 로 세어 SVG 한 장 fill 색만 바꾼 거짓 통과를 막는다(repo-traps).
-    // getAllByTestId(문자열) = testID 완전 일치 전량(0건이면 throw → 현행 red).
     expect(
-      screen.getAllByTestId('itinerary-method-progress-dot-filled')
-    ).toHaveLength(3);
-    expect(
-      screen.getAllByTestId('itinerary-method-progress-dot-empty')
-    ).toHaveLength(1);
+      screen.queryAllByTestId(/^itinerary-method-progress-dot/)
+    ).toHaveLength(0);
   });
 
+  it('헤더는 공용 TripWizardHeader 하나이고, 제목은 17(text-section)·‹ 는 기존 testID + "뒤로" 라벨이다', () => {
+    renderPicker();
+
+    // 같은 컴포넌트 함수를 그렸는가 — testID·className 복사로는 못 속인다(0개·2개면 throw).
+    expect(screen.UNSAFE_getByType(TripWizardHeader)).toBeTruthy();
+
+    const header = screen.getByTestId('trip-wizard-header');
+    const title = within(header).getByText('일정 만들기');
+    expect(tokens(title)).toContain('text-section');
+    expect(tokens(title)).not.toContain('text-[18px]');
+
+    const back = within(header).getByTestId('itinerary-method-back');
+    expect(back.props.accessibilityLabel).toBe('뒤로');
+  });
+});
+
+describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
   it('AC-2 · 서브카피가 Figma 문구다(옛 문구 부재)', () => {
     render(
       <MethodPickerScreen
