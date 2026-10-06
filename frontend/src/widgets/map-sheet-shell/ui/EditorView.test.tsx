@@ -25,6 +25,12 @@ import {
   fireEditDropOnZone,
   hoverOverDeleteZone,
 } from '@/test-support/editDragList';
+import {
+  closestAncestor,
+  closestScrollView,
+  fireChipLayout,
+  stubScrollTo,
+} from '@/test-support/sheetTree';
 
 import { EditorView } from './EditorView';
 
@@ -1269,5 +1275,77 @@ describe('🔴 EditorView · Z3 — 끌던 카드가 목록 밖 삭제 영역까
     renderView({ slots: [slot('a'), slot('b')] });
 
     expect(screen.getByTestId(EDIT_LIST).props.dragItemOverflow).toBe(true);
+  });
+});
+
+// TRIP-1260 · 직접 짜기(QA 재현 경로)·h12·i07 편집기의 일차 칩 줄. 7일 여행이면 7일차 칩이 화면 밖이라
+// 편집할 수 없었다 — 칩만 가로 스크롤 안에 두고 back 은 고정한다. 칩 testID 는 dayIndex(1부터)다.
+// ⚠️ 칩이 실제로 잘리는지·밀리는지는 6-b.
+describe('🔴 EditorView · 일차 칩 줄 가로 스크롤', () => {
+  const SEVEN_DATES = Array.from(
+    { length: 7 },
+    (_, index) => `2026-06-${String(10 + index).padStart(2, '0')}`
+  );
+
+  function editor(activeDayIndex: number): ReactElement {
+    return (
+      <EditorView
+        center={CENTER}
+        days={buildPlanDayTabs(daysOf(...SEVEN_DATES))}
+        slots={[]}
+        activeDayIndex={activeDayIndex}
+        activeDate={SEVEN_DATES[activeDayIndex]}
+        dateLabel="6월 10일(수)"
+        onBack={jest.fn()}
+        onSelectDay={jest.fn()}
+        onPressTimeChip={jest.fn()}
+        onPressAddPlace={jest.fn()}
+        onPressAddBetween={jest.fn()}
+        onSave={jest.fn()}
+      />
+    );
+  }
+
+  it('칩 7개(itinerary-edit-day-1~7)는 한 가로 ScrollView 안에 있고 back 은 그 밖이다 (AC-1·AC-2)', () => {
+    render(editor(0));
+
+    const scroll = closestScrollView(
+      screen.getByTestId('itinerary-edit-day-1')
+    );
+    expect(scroll?.props.horizontal).toBe(true);
+    for (let dayIndex = 1; dayIndex <= 7; dayIndex += 1) {
+      expect(
+        closestScrollView(screen.getByTestId(`itinerary-edit-day-${dayIndex}`))
+      ).toBe(scroll);
+    }
+    const back = screen.getByTestId('itinerary-edit-back');
+    expect(closestAncestor(back, (node) => node === scroll)).toBeNull();
+  });
+
+  it('선택을 6일차로 바꾸면 그 칩(x=400)이 보이게 0 < x ≤ 400 으로 scrollTo 한다 (AC-3)', () => {
+    // 준비
+    const view = render(editor(0));
+    const chip = screen.getByTestId('itinerary-edit-day-6');
+    const scroll = closestScrollView(chip);
+    expect(scroll).not.toBeNull();
+    const scrollTo = stubScrollTo(scroll!);
+    fireChipLayout(chip, 400);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // 실행 — 활성 일자 index 5(= 6일차)
+    view.rerender(editor(5));
+
+    // 단언
+    expect(scrollTo).toHaveBeenCalled();
+    const target = scrollTo.mock.lastCall?.[0] as { x: number };
+    expect(target.x).toBeGreaterThan(0);
+    expect(target.x).toBeLessThanOrEqual(400);
+  });
+
+  it('하루짜리 일정은 칩을 그리지 않고 back 만 남는다 (AC-4 · 선제 green 회귀 앵커)', () => {
+    renderView({ days: buildPlanDayTabs(daysOf(DATE)) });
+
+    expect(screen.getByTestId('itinerary-edit-back')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^itinerary-edit-day-/)).toHaveLength(0);
   });
 });

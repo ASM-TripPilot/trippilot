@@ -742,6 +742,8 @@ function renderH08DraftNoticeShell(options: {
   shortfall?: string | null;
   slots?: ItineraryDaysItemSlotsItem[];
   initialIndex?: number;
+  dayCount?: number;
+  selectedDayIndex?: number;
 }): ReactElement {
   const { fallback, staleFailed, unplaced, shortfall, initialIndex } = options;
   const slots = options.slots ?? H08_PREVIEW_SLOTS;
@@ -750,13 +752,10 @@ function renderH08DraftNoticeShell(options: {
       center={{ lat: 35.1532, lng: 129.1188 }}
       pins={buildDraftPins(slots)}
       initialIndex={initialIndex}
-      days={[
-        { label: '1일차' },
-        { label: '2일차' },
-        { label: '3일차' },
-        { label: '4일차' },
-      ]}
-      selectedDayIndex={0}
+      days={Array.from({ length: options.dayCount ?? 4 }, (_, index) => ({
+        label: `${index + 1}일차`,
+      }))}
+      selectedDayIndex={options.selectedDayIndex ?? 0}
       onSelectDay={noop}
       onBack={noop}
       header={
@@ -1326,6 +1325,15 @@ const TIMELINE_PREVIEW_DAYS: PlanDayTab[] = [
   { dayIndex: 1, date: '2026-06-10', count: 4 },
   { dayIndex: 2, date: '2026-06-11', count: 1 },
 ];
+// TRIP-1260 — 7일 칩 줄 스크롤 확인용(6/5~6/11). 6일차가 위 슬롯의 날짜(6/10)다.
+const TIMELINE_PREVIEW_DAYS_7: PlanDayTab[] = Array.from(
+  { length: 7 },
+  (_, index) => ({
+    dayIndex: index + 1,
+    date: `2026-06-${String(5 + index).padStart(2, '0')}`,
+    count: index === 5 ? 4 : 0,
+  })
+);
 const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   {
     poiId: 'poi-a',
@@ -4937,6 +4945,21 @@ export const PREVIEW_STATES: PreviewState[] = [
         initialIndex: 2,
       }),
   },
+  // TRIP-1260 — 7일 여행 칩 줄 가로 스크롤. 6일차 선택으로 열어 화면 밖 선택 칩이 자동으로 보이는지(AC-3b)·
+  // 칩 줄을 밀어 7일차에 닿는지(AC-6)를 본다. 셸 기본 오버레이라 h14·h16·h11·j01 도 같은 칩 줄이다.
+  {
+    key: 'h08-draft-7days',
+    band: 'h',
+    label: 'h08 · 7일 칩 줄 스크롤(6일차 선택)',
+    login: null,
+    render: () =>
+      renderH08DraftNoticeShell({
+        fallback: false,
+        staleFailed: false,
+        dayCount: 7,
+        selectedDayIndex: 5,
+      }),
+  },
   {
     key: 'h08-draft-fallback',
     band: 'h',
@@ -6067,6 +6090,29 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1260 — 7일 편집기 칩 줄 가로 스크롤(QA F8 재현 화면). 6일차 선택으로 열어 자동 노출을 본다.
+  {
+    key: 'h12-editor-7days',
+    band: 'h',
+    label: 'h12 · 편집기 7일 칩 줄 스크롤',
+    login: null,
+    render: () => (
+      <EditorView
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        days={TIMELINE_PREVIEW_DAYS_7}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={5}
+        activeDate={TIMELINE_PREVIEW_DAYS_7[5].date}
+        dateLabel={formatCoPickDayHeader(TIMELINE_PREVIEW_DAYS_7[5].date)}
+        onSelectDay={noop}
+        onBack={noop}
+        onPressTimeChip={noop}
+        onPressAddPlace={noop}
+        onPressAddBetween={noop}
+        onSave={noop}
+      />
+    ),
+  },
   // h13 장소 추가(TRIP-798, 구 h20) — 묶음 C 시트화. 전면 지도 위 peek 시트(MapSheetShell)의 list 슬롯에
   // 후보(PlaceAddRow)를 얹고, 검색바+칩(PlaceAddHeader)은 리스트 헤더(children)로, "장소 추가 · N일차"는
   // header 로 조립한다(페이지 PlaceAddPage 와 같은 형태, 단 조회 훅 대신 픽스처 — 프리뷰는 api import 0).
@@ -6163,6 +6209,21 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i01 · 여행중 허브 수정 알약 열림',
     login: null,
     render: () => renderLiveHubPreview(2, { initialEditMenuOpen: true }),
+  },
+  // TRIP-1260 — 7일 여행 허브, 오늘=6일차로 연다. 화면 밖 선택 칩이 열자마자 보이는지(AC-3b)·FAB 하한이
+  // 3일 키와 같은지(AC-5) 본다.
+  {
+    key: 'live-hub-7days',
+    band: 'i',
+    label: 'i01 · 여행중 허브 7일 칩 줄(6일차 오늘)',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        days: Array.from({ length: 7 }, (_, index) => ({
+          date: `2026-06-${String(6 + index).padStart(2, '0')}`,
+        })),
+        activeDayIndex: 5,
+      }),
   },
   // i01 기록 없음(TRIP-747, Figma 4076:2452) — done 카드가 이름 + "09:30 방문"만.
   {

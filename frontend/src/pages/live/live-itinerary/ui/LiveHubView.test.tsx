@@ -21,6 +21,13 @@ import {
   RailUpcomingGlyph,
 } from '@/features/execution/index.view';
 
+import {
+  closestAncestor,
+  closestScrollView,
+  fireChipLayout,
+  stubScrollTo,
+} from '@/test-support/sheetTree';
+
 import { LiveHubView, type LiveHubSlot } from './LiveHubView';
 
 /**
@@ -1510,5 +1517,90 @@ describe('LiveHubView · 닫힘 스냅이 홈 인디케이터 위에 온다', ()
     sheetProps().forEach(({ snapPoints }) => {
       expect(snapPoints[0]).toBe(28);
     });
+  });
+});
+
+// TRIP-1260 · i01 허브 일자 칩 줄. 허브는 오늘 일차로 열리므로 6일차 이후가 오늘이면 열자마자 선택 칩이
+// 화면 밖이다 — 칩만 가로 스크롤 안에 두고, back 은 고정, 선택 칩은 위치가 오면 보이게 민다.
+// FAB 하한은 overlay-row 의 onLayout(y + height)로 재므로 back·칩 줄이 계속 그 행 안이어야 한다.
+// ⚠️ 칩이 실제로 잘리는지·밀리는지·행 높이가 그대로인지는 6-b.
+describe('🔴 LiveHubView · 일자 칩 줄 가로 스크롤 (TRIP-1260)', () => {
+  const SEVEN_DAYS = Array.from({ length: 7 }, (_, index) => ({
+    date: `2026-06-${String(10 + index).padStart(2, '0')}`,
+  }));
+
+  function hub(activeDayIndex: number) {
+    return (
+      <LiveHubView
+        tripTitle="부산 여행"
+        days={SEVEN_DAYS}
+        activeDayIndex={activeDayIndex}
+        slots={SLOTS}
+        initialSnapIndex={2}
+        onBack={jest.fn()}
+        onSelectDay={jest.fn()}
+        onPressManualEdit={jest.fn()}
+      />
+    );
+  }
+
+  it('칩 7개는 한 가로 ScrollView 안에 있고 back 은 그 밖이며, 둘 다 overlay-row 안이다 (AC-1·AC-2·AC-4)', () => {
+    render(hub(0));
+
+    const scroll = closestScrollView(
+      screen.getByTestId('execution-live-daychip-0')
+    );
+    expect(scroll?.props.horizontal).toBe(true);
+    for (let index = 0; index < 7; index += 1) {
+      expect(
+        closestScrollView(screen.getByTestId(`execution-live-daychip-${index}`))
+      ).toBe(scroll);
+    }
+    const back = screen.getByTestId('execution-live-back');
+    expect(closestAncestor(back, (node) => node === scroll)).toBeNull();
+    // 짝 — FAB 하한을 재는 행이 back 과 칩 줄을 계속 품는다.
+    const row = screen.getByTestId('execution-live-overlay-row');
+    expect(within(row).getByTestId('execution-live-back')).toBe(back);
+    expect(
+      within(row).getByTestId('execution-live-daychip-6')
+    ).toBeOnTheScreen();
+  });
+
+  it('선택을 6일차로 바꾸면 그 칩(x=400)이 보이게 0 < x ≤ 400 으로 scrollTo 한다 (AC-3)', () => {
+    // 준비
+    const view = render(hub(0));
+    const chip = screen.getByTestId('execution-live-daychip-5');
+    const scroll = closestScrollView(chip);
+    expect(scroll).not.toBeNull();
+    const scrollTo = stubScrollTo(scroll!);
+    fireChipLayout(chip, 400);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // 실행
+    view.rerender(hub(5));
+
+    // 단언
+    expect(scrollTo).toHaveBeenCalled();
+    const target = scrollTo.mock.lastCall?.[0] as { x: number };
+    expect(target.x).toBeGreaterThan(0);
+    expect(target.x).toBeLessThanOrEqual(400);
+  });
+
+  it('6일차가 오늘이라 6일차 선택으로 열리면, 그 칩 위치(x=400)가 올 때 0 < x ≤ 400 으로 scrollTo 한다 (AC-3b)', () => {
+    // 준비 — 열 때부터 6일차 선택
+    render(hub(5));
+    const chip = screen.getByTestId('execution-live-daychip-5');
+    const scroll = closestScrollView(chip);
+    expect(scroll).not.toBeNull();
+    const scrollTo = stubScrollTo(scroll!);
+
+    // 실행 — 선택 칩의 위치가 도착한다
+    fireChipLayout(chip, 400);
+
+    // 단언
+    expect(scrollTo).toHaveBeenCalled();
+    const target = scrollTo.mock.lastCall?.[0] as { x: number };
+    expect(target.x).toBeGreaterThan(0);
+    expect(target.x).toBeLessThanOrEqual(400);
   });
 });

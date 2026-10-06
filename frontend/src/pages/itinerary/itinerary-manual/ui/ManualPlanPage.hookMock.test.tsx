@@ -83,6 +83,22 @@ const mockPut = jest.fn();
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
+// TRIP-1264 — ‹ 와 뒤로 가로채기 콜백이 부르는 일정 탭 이동(이 파일은 그 전엔 ‹ 를 누르지 않아 없었다).
+const mockDismissTo = jest.fn();
+
+// TRIP-1264 — 뒤로 가로채기(`usePreventRemove`)를 목으로 바꿔 페이지가 넘긴 인자(켜짐 여부·콜백)를 잡는다.
+// 콜백에 액션을 직접 넣어 "스와이프·하드웨어 뒤로가 오면 무엇을 하나"를 잰다. 실물 스택은
+// `model/useItineraryTabBack.integration.test.tsx` 가 잰다.
+type BlockedAction = { type: string; payload?: object };
+type PreventRemoveCallback = (options: {
+  data: { action: BlockedAction };
+}) => void;
+const mockUsePreventRemove = jest.fn<void, [boolean, PreventRemoveCallback]>();
+const mockDispatch = jest.fn();
+const mockNavigation = {
+  dispatch: mockDispatch,
+  addListener: jest.fn(() => () => {}),
+};
 
 // 생성 POST 결과 — 'pending' 은 어떤 콜백도 안 태운다(옛 본 파일 모양), success·error 는 훅 옵션 → 호출별
 // 콜백 순으로 태운다(옛 `.push` 모양). 최상위 beforeEach 가 'pending' 으로 되돌린다.
@@ -164,8 +180,24 @@ jest.mock('expo-router', () => ({
     push: mockPush,
     replace: mockReplace,
     back: mockBack,
+    dismissTo: mockDismissTo,
   }),
-  router: { push: mockPush, replace: mockReplace, back: mockBack },
+  router: {
+    push: mockPush,
+    replace: mockReplace,
+    back: mockBack,
+    dismissTo: mockDismissTo,
+  },
+  // TRIP-1264 — useNavigation 을 어느 쪽에서 가져오든 같은 가짜 navigation 이다(02a ★8).
+  useNavigation: () => mockNavigation,
+}));
+
+// TRIP-1264 — 실물은 ESM 이라 이 버킷에서 require 하면 로드부터 죽는다 → 팩토리로만 바꾼다(02a ★7).
+// 팩토리는 import 보다 먼저 돈다 — mock 변수는 화살표 안에서 늦게 읽는다(02a ★6).
+jest.mock('@react-navigation/native', () => ({
+  usePreventRemove: (preventRemove: boolean, callback: PreventRemoveCallback) =>
+    mockUsePreventRemove(preventRemove, callback),
+  useNavigation: () => mockNavigation,
 }));
 
 // EditorView 가 조립하는 MapSheetShell → MapView 는 jest 에서 못 뜬다 — 관찰 목으로 대체(재조립 후 필요).
@@ -241,6 +273,9 @@ beforeEach(() => {
   mockPush.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
+  mockDismissTo.mockClear();
+  mockUsePreventRemove.mockClear();
+  mockDispatch.mockClear();
   // 편집 스토어는 모듈 싱글턴 — 앞 케이스의 시드가 새지 않게 비운다(02a ★10).
   useItineraryEditStore.getState().reset();
 });
@@ -701,6 +736,139 @@ describe('빈 일정이 처음 생겨도 알림 권한을 묻지 않는다', () 
 
       expect(mockPostMutate).not.toHaveBeenCalled();
       expect(mockPrompt).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// TRIP-1264 · QA F2 — 직접 짜기 편집기의 ‹ 와 iOS 스와이프·Android 하드웨어 뒤로가 같은 곳(일정 탭)에 닿는다.
+describe('뒤로 제스처·하드웨어 뒤로도 일정 탭으로', () => {
+  /**
+   * 스와이프·하드웨어 뒤로는 ‹(onBack)를 거치지 않고 네비게이터가 바로 한 칸 뒤(방식 선택)로 보낸다. 그래서
+   * 페이지가 "이 화면이 빠지려는 이동"을 가로채(`usePreventRemove`), 뒤로 계열이면 ‹ 와 같은 곳으로 보내고
+   * 그 밖의 이동(확정 뒤 h16 replace·로그아웃 dismissAll·‹ 자신의 dismissTo)은 받은 그대로 다시 보낸다.
+   *
+   * 무엇을 보장하나:
+   *  - 🔴 N1 페이지가 가로채기를 **실제로 등록**하고, 어떤 상태에서도 켜 둔다(AC-7). 실물 라우터 테스트는 탐침
+   *    화면으로 훅만 재므로 "페이지가 훅을 부르는가"는 여기만 본다(02a ★1).
+   *  - 🔴 N2·N3 뒤로 계열(GO_BACK·POP)이면 ‹ 와 같은 `dismissTo('/(tabs)/itinerary')` 1회(AC-1).
+   *  - 🔴 N4 그 밖의 액션은 받은 **그 객체** 그대로 다시 보낸다(AC-4·5·6) — 다시 만든 객체는 또 막혀 끝없이 돈다.
+   *
+   * 3동작 뼈대: 준비 = 정착한 빈 MANUAL 일정으로 페이지 렌더 → 실행 = 가로챈 콜백에 액션 넣기 → 단언 = 라우터·dispatch.
+   */
+
+  /** 페이지가 마지막 렌더에 넘긴 가로채기 콜백에 액션을 넣는다(스와이프·하드웨어 뒤로가 막힌 순간). */
+  function blockRemove(action: BlockedAction): void {
+    const callback = mockUsePreventRemove.mock.lastCall?.[1];
+    // 앵커 — 페이지가 가로채기를 등록했다(없으면 이 아래 단언이 공허해진다).
+    expect(callback).toBeDefined();
+    callback?.({ data: { action } });
+  }
+
+  function renderSettled(): void {
+    mockGet = { data: MANUAL_EMPTY, isPending: false, isError: false };
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+  }
+
+  describe('🔴 N1 · AC-7 — 가로채기는 항상 켜져 있다', () => {
+    it.each<[string, () => void]>([
+      [
+        '조회 로딩 중',
+        () => {
+          mockGet = { data: undefined, isPending: true, isError: false };
+          render(<ManualPlanPage tripId={TRIP_ID} />);
+        },
+      ],
+      ['조회 정착(빈 MANUAL)', renderSettled],
+      [
+        '새로 짜기로 비우는 중(startFresh)',
+        () => {
+          mockGet = { data: MANUAL_EMPTY, isPending: false, isError: false };
+          render(<ManualPlanPage tripId={TRIP_ID} startFresh />);
+        },
+      ],
+    ])(
+      '%s — 페이지가 usePreventRemove 를 부르고 첫 인자는 모두 true',
+      (_label, arrange) => {
+        // 준비 · 실행
+        arrange();
+
+        // 단언 — 호출 0회면 "모두 true"가 공허하게 참이다(02a ★12).
+        const flags = mockUsePreventRemove.mock.calls.map(
+          ([prevent]) => prevent
+        );
+        expect(flags.length).toBeGreaterThan(0);
+        expect(flags).toEqual(flags.map(() => true));
+      }
+    );
+  });
+
+  describe('🔴 N2 · AC-1 — 뒤로 계열은 ‹ 와 같은 일정 탭으로 간다', () => {
+    it.each<[string, BlockedAction]>([
+      ['하드웨어 뒤로(GO_BACK)', { type: 'GO_BACK' }],
+      ['iOS 스와이프(POP)', { type: 'POP', payload: { count: 1 } }],
+    ])('%s → dismissTo(일정 탭) 1회, 다른 이동 0회', (_label, action) => {
+      // 준비
+      renderSettled();
+      // 앵커 — 실행 전엔 이동 0회.
+      expect(mockDismissTo).not.toHaveBeenCalled();
+
+      // 실행
+      blockRemove(action);
+
+      // 단언
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
+      expect(mockDispatch).not.toHaveBeenCalled();
+      expect(mockBack).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('🔴 N3 · AC-1 — ‹ 와 스와이프는 같은 인자로 같은 곳에 간다', () => {
+    it('‹ 를 누른 이동과 가로챈 뒤로의 이동이 똑같다', () => {
+      // 준비
+      renderSettled();
+
+      // 실행 — ‹ 한 번, 하드웨어 뒤로 한 번.
+      fireEvent.press(screen.getByTestId('itinerary-edit-back'));
+      blockRemove({ type: 'GO_BACK' });
+
+      // 단언
+      expect(mockDismissTo.mock.calls).toEqual([
+        ['/(tabs)/itinerary'],
+        ['/(tabs)/itinerary'],
+      ]);
+    });
+  });
+
+  describe('🔴 N4 · AC-4·5·6 — 뒤로가 아닌 이동은 받은 그대로 통과시킨다', () => {
+    it.each<[string, BlockedAction]>([
+      [
+        '확정 뒤 h16 으로 교체(REPLACE)',
+        {
+          type: 'REPLACE',
+          payload: { name: 'trips/[tripId]/itinerary/index' },
+        },
+      ],
+      ['계정 경계 dismissAll(POP_TO_TOP)', { type: 'POP_TO_TOP' }],
+      [
+        '‹ 자신이 보낸 dismissTo(POP_TO)',
+        { type: 'POP_TO', payload: { name: '(tabs)' } },
+      ],
+    ])('%s → 그 액션 객체로 dispatch 1회, dismissTo 0회', (_label, action) => {
+      // 준비
+      renderSettled();
+
+      // 실행
+      blockRemove(action);
+
+      // 단언 — 같은 내용이 아니라 같은 객체(02a ★4). dismissTo 를 또 부르면 ‹ 가 끝없이 돈다.
+      expect(mockDispatch).toHaveBeenCalledTimes(1);
+      expect(mockDispatch.mock.calls[0][0]).toBe(action);
+      expect(mockDismissTo).not.toHaveBeenCalled();
+      expect(mockBack).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
     });
   });
 });

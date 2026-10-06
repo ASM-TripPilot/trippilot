@@ -71,6 +71,13 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockDismissTo = jest.fn();
+// TRIP-1264 — 뒤로 가로채기(`usePreventRemove`)는 네비게이터 안에서만 돈다(실물은 컨테이너 밖에서 throw).
+// 이 파일은 라우터를 통째로 목으로 바꾸므로 가로채기도 목으로 바꾸고, 넘긴 켜짐 여부만 잡는다(02a ★7).
+const mockUsePreventRemove = jest.fn();
+const mockNavigation = {
+  dispatch: jest.fn(),
+  addListener: jest.fn(() => () => {}),
+};
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
@@ -84,6 +91,11 @@ jest.mock('expo-router', () => ({
     replace: mockReplace,
     dismissTo: mockDismissTo,
   },
+  useNavigation: () => mockNavigation,
+}));
+jest.mock('@react-navigation/native', () => ({
+  usePreventRemove: (...args: unknown[]) => mockUsePreventRemove(...args),
+  useNavigation: () => mockNavigation,
 }));
 
 // 지도(네이버 네이티브)는 jest 에서 못 뜬다 — 관찰 목으로 map-root 를 노출한다.
@@ -93,9 +105,13 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
-  [mockPush, mockBack, mockReplace, mockDismissTo].forEach((fn) =>
-    fn.mockClear()
-  );
+  [
+    mockPush,
+    mockBack,
+    mockReplace,
+    mockDismissTo,
+    mockUsePreventRemove,
+  ].forEach((fn) => fn.mockClear());
 });
 
 // 토스트 스토어는 모듈 싱글턴이다 — 토스트 호스트가 없는 describe 가 띄운 토스트가 뒤 describe 로 새지 않게
@@ -1877,6 +1893,35 @@ describe('저장 뒤 위반 요약 게이트', () => {
     fireEvent.press(screen.getByTestId(CTA));
     return screen.findByTestId(GATE, {}, WAIT);
   }
+
+  // TRIP-1264 AC-7 — 뒤로 가로채기는 저장 실패·게이트 열림에도 켜져 있다(TRIP-1009 Q3 "항상 일정 탭").
+  // 이 두 상태를 만드는 MSW 픽스처가 이 describe 에만 있어 여기 붙인다. 나머지 상태·콜백 분기는 hookMock N1~N4.
+  describe('🔴 P1·P2 · AC-7 — 저장이 실패해도, 위반 게이트가 떠 있어도 뒤로 가로채기는 켜져 있다', () => {
+    /** 지금까지 페이지가 usePreventRemove 에 넘긴 첫 인자 전부(호출 0회면 공허 통과라 길이 앵커를 같이 본다). */
+    function expectPreventRemoveAlwaysOn(): void {
+      const flags = mockUsePreventRemove.mock.calls.map((call) => call[0]);
+      expect(flags.length).toBeGreaterThan(0);
+      expect(flags).toEqual(flags.map(() => true));
+      expect(mockUsePreventRemove.mock.lastCall?.[0]).toBe(true);
+    }
+
+    it('P1 · PUT 500 으로 저장 실패 배너가 뜬 뒤에도 켜져 있다', async () => {
+      putHandler = () => new HttpResponse(null, { status: 500 });
+      renderPage();
+      await ready();
+
+      fireEvent.press(screen.getByTestId(CTA));
+
+      expect(await screen.findByTestId(SAVE_ERROR, {}, WAIT)).toBeOnTheScreen();
+      expectPreventRemoveAlwaysOn();
+    });
+
+    it('P2 · 위반 요약 게이트가 떠 있는 동안에도 켜져 있다', async () => {
+      await saveUntilGate();
+
+      expectPreventRemoveAlwaysOn();
+    });
+  });
 
   describe('🔴 M1 · AC-1·6·8 — 위반 있는 저장은 확정 전에 멈추고 요약을 띄운다 (BR-U3-13 · INV-4)', () => {
     it('PUT 응답 b 위반 → 게이트 「1곳에서 시간이 안 맞아요」 · 긍정 「그대로 확정」 · 확정 POST 0 · 이동 0', async () => {

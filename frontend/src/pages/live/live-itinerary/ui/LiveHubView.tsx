@@ -20,7 +20,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import type { MapCenter } from '@/shared/map';
-import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { DayChipScroller, MapSheetShell } from '@/widgets/map-sheet-shell';
 import { BackChevronGlyph, FullAiGlyph } from '@/widgets/map-sheet-shell';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
 import { PencilGlyph } from '@/features/itinerary/index.view';
@@ -312,36 +312,38 @@ export function LiveHubView({
       >
         <BackChevronGlyph size={20} />
       </Pressable>
-      {days.map((_day, index) => {
-        const selected = index === activeDayIndex;
-        return (
-          <Pressable
-            key={index}
-            testID={`execution-live-daychip-${index}`}
-            onPress={() => {
-              hidePill();
-              onSelectDay(index);
-            }}
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
-            className={`rounded-pill px-[14px] py-sm ${
-              selected
-                ? 'bg-primary'
-                : 'border border-hairline-strong bg-canvas'
-            }`}
-          >
-            <Text
-              className={
+      <DayChipScroller selectedIndex={activeDayIndex}>
+        {days.map((_day, index) => {
+          const selected = index === activeDayIndex;
+          return (
+            <Pressable
+              key={index}
+              testID={`execution-live-daychip-${index}`}
+              onPress={() => {
+                hidePill();
+                onSelectDay(index);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              className={`rounded-pill px-[14px] py-sm ${
                 selected
-                  ? 'font-noto-bold text-body font-bold text-on-primary'
-                  : 'font-noto text-body text-body'
-              }
+                  ? 'bg-primary'
+                  : 'border border-hairline-strong bg-canvas'
+              }`}
             >
-              {`${index + 1}일차`}
-            </Text>
-          </Pressable>
-        );
-      })}
+              <Text
+                className={
+                  selected
+                    ? 'font-noto-bold text-body font-bold text-on-primary'
+                    : 'font-noto text-body text-body'
+                }
+              >
+                {`${index + 1}일차`}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </DayChipScroller>
     </View>
   );
 
