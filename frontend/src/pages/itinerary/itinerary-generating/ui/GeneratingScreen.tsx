@@ -58,6 +58,12 @@ const BUSY_UNCANCELABLE_NOTE =
   '지금은 첫날을 만드는 중이라 취소할 수 없어요. 조금 뒤에 다시 시도해 주세요.';
 const BUSY_CANCEL_RETRY_LABEL = '취소하고 새로 만들기';
 const BUSY_WAIT_LABEL = '기다리기';
+// TRIP-1268 — AI 일정 생성 일일 한도(클라 임시 장치). Figma 프레임 없음(busy 와 같은 발명 선례). 시각으로만 말한다(INV-3).
+const AI_LIMIT_TITLE = '오늘 AI 일정 만들기 5번을 모두 썼어요';
+const AI_LIMIT_NOTE =
+  '내일 0시에 다시 쓸 수 있어요.\n직접 짜기는 계속 쓸 수 있어요.';
+const AI_LIMIT_MANUAL_LABEL = '직접 짜기 이어가기';
+const AI_LIMIT_CLOSE_LABEL = '닫기';
 
 // 카드 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다. `#000000` 은 raw-hex 가드의 브랜드 팔레트에 없어 그림자 색으로 정당하다
@@ -175,6 +181,11 @@ export interface GeneratingScreenProps {
     onCancelAndRetry: () => void;
     onWait: () => void;
   } | null;
+  /** TRIP-1268 — 오늘 AI 생성 한도에 닿았으면 다른 얼굴보다 먼저 한도 안내([다시 시도] 없음). */
+  aiLimit?: {
+    onContinueManual: () => void;
+    onClose: () => void;
+  } | null;
 }
 
 export function GeneratingScreen({
@@ -184,6 +195,7 @@ export function GeneratingScreen({
   pins,
   center,
   busy,
+  aiLimit,
 }: GeneratingScreenProps): ReactElement {
   const pulse = useStepPulse(STEPS.length);
   return (
@@ -209,7 +221,28 @@ export function GeneratingScreen({
         </View>
 
         <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-sm">
-          {busy ? (
+          {aiLimit ? (
+            <StateNotice
+              testID="ai-limit-notice"
+              icon={<AlertCircleGlyph />}
+              title={AI_LIMIT_TITLE}
+              description={AI_LIMIT_NOTE}
+              actions={[
+                {
+                  testID: 'ai-limit-manual-cta',
+                  label: AI_LIMIT_MANUAL_LABEL,
+                  variant: 'filled',
+                  onPress: aiLimit.onContinueManual,
+                },
+                {
+                  testID: 'ai-limit-close',
+                  label: AI_LIMIT_CLOSE_LABEL,
+                  variant: 'outline',
+                  onPress: aiLimit.onClose,
+                },
+              ]}
+            />
+          ) : busy ? (
             <StateNotice
               testID="itinerary-generation-busy"
               icon={<AlertCircleGlyph />}

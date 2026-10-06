@@ -7,8 +7,10 @@ import {
   screen,
   waitFor,
   act,
+  within,
 } from '@testing-library/react-native';
 import { Text } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 
 import { server } from '@/mocks/server';
 import type * as TripsModule from '@/shared/api/generated/trips/trips';
@@ -25,6 +27,9 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resolveItineraryDestination } from '@/features/itinerary';
 import { isNotFound } from '@/shared/api';
+import { seoulDate } from '@/shared/lib/seoulDate';
+import * as ToastModule from '@/shared/ui/Toast';
+import { resetToast } from '@/test-support/toastHarness';
 
 import { GeneratingPage } from './GeneratingPage';
 
@@ -48,15 +53,55 @@ import { GeneratingPage } from './GeneratingPage';
  */
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// TRIP-1268: 이 배럴은 한도 카운터 저장소(`readStringValue`·`writeStringValue`)도 내보낸다. 토큰 4함수만
+// 돌려주면 두 함수가 undefined 로 지워진다(호출이 reject 로 삼켜져 fail-open 으로 공허 통과) → 실물을 펼친 뒤
+// 덮고, 두 함수는 메모리 Map(`mockVault`)에 읽고 쓴다(02a ★7).
+// 재호출 1(03b 차단-1): `mockRealStringStore` 를 켠 케이스만 두 함수가 **실물 래퍼**로 가고, 그 아래
+// `expo-secure-store` 는 아래 키 규칙 대역에 닿는다(Map 은 키를 안 봐서 운영 키 거부를 원리적으로 못 본다).
+const mockVault = new Map<string, string>();
+const mockReadStringValue = jest.fn();
+const mockWriteStringValue = jest.fn();
+let mockRealStringStore = false;
+jest.mock('@/shared/storage', () => {
+  const actual = jest.requireActual('@/shared/storage');
+  return {
+    ...actual,
+    saveTokens: jest.fn().mockResolvedValue(undefined),
+    getTokens: jest.fn().mockResolvedValue({
+      accessToken: 'old-access',
+      refreshToken: 'old-refresh',
+    }),
+    clearTokens: jest.fn().mockResolvedValue(undefined),
+    hasStoredToken: jest.fn().mockResolvedValue(true),
+    readStringValue: (key: string) =>
+      mockRealStringStore
+        ? actual.readStringValue(key)
+        : mockReadStringValue(key),
+    writeStringValue: (key: string, value: string) =>
+      mockRealStringStore
+        ? actual.writeStringValue(key, value)
+        : mockWriteStringValue(key, value),
+  };
+});
+
+// 키 규칙 대역(TRIP-1268 재호출 1) — 키 검사는 **라이브러리 실물**(`getItemAsync`·`setItemAsync` 첫 줄의
+// `ensureValidKey`, 규칙 밖이면 reject)에 맡기고, 통과한 값만 메모리(`mockSecureVault`)에 남긴다. 규칙을
+// 손으로 옮겨 적지 않아 라이브러리가 바뀌면 같이 따라간다. jest 의 네이티브 폴백은 값을 기억하지 않는다(02a §5).
+const mockSecureVault = new Map<string, string>();
+jest.mock('expo-secure-store', () => {
+  const actual = jest.requireActual('expo-secure-store');
+  return {
+    ...actual,
+    getItemAsync: async (key: string) => {
+      await actual.getItemAsync(key);
+      return mockSecureVault.get(key) ?? null;
+    },
+    setItemAsync: async (key: string, value: string) => {
+      await actual.setItemAsync(key, value);
+      mockSecureVault.set(key, value);
+    },
+  };
+});
 
 // 생성 성공 순간 알림 권한을 묻는다(TRIP-835) — 이 파일의 관심사가 아니다.
 jest.mock('@/shared/push', () => ({
@@ -108,6 +153,11 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
+/** TRIP-1268 — 파일 공용 API 주소(각 describe 의 `BASE` 와 같은 값, 이름 겹침을 피해 따로 둔다). */
+const API_BASE = 'http://localhost:8080/api/v1';
+/** 생성 화면이 계정 id 를 묻는 `GET /me` 가 서버에 닿은 횟수(TRIP-1268). */
+let meHits = 0;
+
 beforeEach(() => {
   mockStubPost = false;
   mockMutate.mockClear();
@@ -115,6 +165,34 @@ beforeEach(() => {
   mockReplace.mockClear();
   mockDismissTo.mockClear();
   mockBack.mockClear();
+  // TRIP-1268: 한도 카운터 저장소는 매 케이스 빈 Map 에서 시작한다(실물 래퍼 스위치는 끈 채로).
+  mockRealStringStore = false;
+  mockSecureVault.clear();
+  mockVault.clear();
+  mockReadStringValue
+    .mockReset()
+    .mockImplementation(async (key: string) => mockVault.get(key) ?? null);
+  mockWriteStringValue
+    .mockReset()
+    .mockImplementation(async (key: string, value: string) => {
+      mockVault.set(key, value);
+    });
+  // TRIP-1268: 생성 POST 전에 `GET /me` 로 계정 id 를 읽는다. 이 파일은 `onUnhandledRequest: 'error'` 이고 기본
+  // 핸들러에 /me 가 없어, 모든 describe 가 쓰도록 여기서 건다. 각 describe 의 afterEach 가 resetHandlers 로
+  // 지우므로 매 케이스 다시 건다(02a ★8). 케이스가 server.use 로 덮으면 그쪽이 이긴다.
+  meHits = 0;
+  server.use(
+    http.get(`${API_BASE}/me`, () => {
+      meHits += 1;
+      return HttpResponse.json({ accountId: 'acc-a', status: 'ACTIVE' });
+    })
+  );
+});
+
+// 토스트는 모듈 싱글턴이다 — 진행 중에 화면이 빠지는 케이스(홈 캐시 H1 · 한도 A15+)가 띄운 토스트·타이머가
+// 다음 케이스로 새지 않게 최상위에서 비운다(TRIP-1268, 02a ★12).
+afterEach(() => {
+  resetToast();
 });
 
 afterAll(() => server.close());
@@ -1066,6 +1144,12 @@ describe('꼭 갈 곳 지도', () => {
 
       // 지도가 있다 = 조회 결과가 도착해 페이지가 최소 한 번 다시 그려졌다(재렌더의 증거).
       expect(screen.getByTestId('itinerary-generating-map')).toBeOnTheScreen();
+      // TRIP-1268: POST 는 계정 조회(순수 fetcher — `client.isFetching()` 이 모른다) 뒤에 나간다. 1회가 될 때까지
+      // 기다리고, 시간을 더 줘도 1회 그대로인지 본다(02a ★9).
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      });
       expect(mockMutate).toHaveBeenCalledTimes(1);
       // 좌표 조회가 붙어도 POST body 에 새 키가 붙지 않는다(BR-U3-03, 정확 일치).
       const vars = mockMutate.mock.calls[0][0] as { data?: unknown };
@@ -1331,5 +1415,901 @@ describe('관찰 모드(mode 없음)', () => {
       await settle();
       expect(postCalls).toBe(0);
     });
+  });
+});
+
+// TRIP-1268 · AI 일정 생성 일일 한도 — 클라이언트 임시 장치(BE 일일 한도 + 429 처리 FE 칸이 배포되면 지운다).
+describe('AI 일일 한도 — 생성 화면 배선', () => {
+  /**
+   * 계정당 하루(KST) AI 생성(FULLY_AI·CO_PLAN) **성공 5번**까지만 POST 를 보낸다. 6번째는 POST 를 아예 쏘지 않고
+   * 한도 얼굴(`ai-limit-notice`)을 띄운다. 계정 id 는 `GET /me`, 횟수는 SecureStore 문자열(`aiGenUsage.{계정}`).
+   *
+   * 무엇을 보장하나:
+   *  - 🔴 A1·A2 4회면 POST 가 나가고 성공 뒤 5회, 5회면 POST 0·한도 얼굴(두 AI 모드 모두 — AC-7·8).
+   *  - 🔴 A3·A4 [직접 짜기 이어가기] = 편집기로 replace(`fresh` 없음), [닫기] = 홈(AC-9).
+   *  - 🔴 A5·A6 실패(409·500·네트워크)는 세지 않고, 409 뒤 재전송이 성공하면 정확히 1번만 센다(AC-10·11).
+   *  - 🔴 A7 생성 중 화면을 떠난 뒤 성공해도 센다 — 증가는 훅 옵션 onSuccess 자리여야 한다(AC-12).
+   *  - 🟢 A8·A9 직접 짜기(MANUAL)·관찰 모드는 막지도 세지도 않는다(AC-13①·14).
+   *  - 🔴 A10~A13 계정끼리 안 섞이고, 계정을 모르거나 저장소가 고장 나도 생성은 막히지 않는다(AC-15·16·6).
+   *  - 🔴 A14 이전 POST 실패가 남아 있어도 한도 얼굴이 이긴다(AC-17). A15 한도 얼굴에서 떠나면 토스트 0(AC-18).
+   *  - 🔴 A16·A17 `/me` 응답 전엔 POST 를 보류하고 진행 얼굴을 유지하며, 도착 뒤 한 번만 판정한다(AC-20·21).
+   *  - 🔴 A18 실물 저장 래퍼 + 키 규칙 SecureStore 로도 5번 성공 뒤 6번째가 막힌다(AC-22, 재호출 1).
+   *  - 🔴 A19·A20 계정 조회 중 [다시 시도]·[취소하고 새로 만들기]를 또 눌러도 POST 는 1번, 기록도 +1(AC-23).
+   *
+   * 왜 MSW 인가: "POST 0건"을 가짜 서버가 직접 센다 — 훅을 목하면 구현이 다른 경로로 쏘는 순간 0회가 공허해진다.
+   * 저장소는 메모리 Map(`mockVault`, 파일 머리 목)이고 "오늘"은 페이지와 같은 `seoulDate(new Date())` 로 만든다.
+   *
+   * *(개념)* "안 나갔다"는 나갈 시간을 준 뒤에야 의미가 있다 — `settle()` 이 실제 시간 300ms 를 흘린 뒤 센다.
+   * 반대로 "언젠가 된다"는 `waitFor` 로 기다린다.
+   *
+   * 3동작: 준비 = 저장소에 오늘 횟수 심기·가짜 서버 응답 차례 → 실행 = 화면 열기·버튼 누르기·떠나기 →
+   * 단언 = 나간 POST 수·보이는 얼굴·이동·저장된 횟수.
+   */
+  const BASE = API_BASE;
+  const TRIP_ID = '66666666-6666-6666-6666-666666666666';
+  const ACTIVE_TRIP_ID = '77777777-7777-7777-7777-777777777777';
+  const SESSION_ID = '88888888-8888-8888-8888-888888888888';
+  const KEY_A = 'aiGenUsage.acc-a';
+  const KEY_B = 'aiGenUsage.acc-b';
+  const TITLE = '오늘 AI 일정 만들기 5번을 모두 썼어요';
+  const COPICK_SLOT_ROUTE =
+    '/trips/[tripId]/itinerary/copick/[slotKey]' as const;
+  const MODES = [
+    { mode: 'FULLY_AI' as const, successRoute: undefined },
+    { mode: 'CO_PLAN' as const, successRoute: COPICK_SLOT_ROUTE },
+  ];
+
+  function itinerary(
+    tripId: string,
+    generationSessionId: string | null = null
+  ): Itinerary {
+    return {
+      itineraryId: `itin-${tripId}`,
+      tripId,
+      status: 'PLANNED',
+      solveMode: 'FULL_AI',
+      generationMode: 'FULLY_AI',
+      generationState: 'PARTIAL',
+      generationSessionId,
+      isFallback: false,
+      days: [
+        {
+          date: '2026-06-10',
+          slots: [
+            {
+              poiId: 'poi-a',
+              startAt: '09:30:00',
+              endAt: '11:00:00',
+              isFixed: false,
+              endsNextDay: false,
+              hasViolation: false,
+              alternatives: [],
+              tags: [],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  const created = (): Response =>
+    HttpResponse.json(itinerary(TRIP_ID), { status: 201 });
+  /** 409 GENERATION_IN_PROGRESS — openapi ErrorResponse 봉투(activeTripId 는 이 code 에만 실린다). */
+  const busy = (): Response =>
+    HttpResponse.json(
+      {
+        error: {
+          code: 'GENERATION_IN_PROGRESS',
+          message: '다른 여행의 일정을 만들고 있어요',
+          activeTripId: ACTIVE_TRIP_ID,
+        },
+      },
+      { status: 409 }
+    );
+  const serverError = (): Response =>
+    HttpResponse.json(
+      { error: { code: 'INTERNAL', message: 'boom' } },
+      { status: 500 }
+    );
+  const networkError = (): Response => HttpResponse.error();
+
+  /** 생성 POST 가 서버에 닿은 횟수 · 응답 차례(비면 201) · 손으로 풀기 전까지 매달아 둘지. */
+  let postCalls = 0;
+  let postQueue: (() => Response)[] = [];
+  let holdPost = false;
+  let releasePost: () => void = () => {};
+  let releaseMe: () => void = () => {};
+
+  beforeEach(() => {
+    postCalls = 0;
+    postQueue = [];
+    holdPost = false;
+    releasePost = () => {};
+    releaseMe = () => {};
+    setAccessToken('valid-access');
+    server.use(
+      http.post(`${BASE}/trips/:tripId/itinerary`, async () => {
+        postCalls += 1;
+        if (holdPost) {
+          await new Promise<void>((resolve) => {
+            releasePost = resolve;
+          });
+        }
+        return (postQueue.shift() ?? created)();
+      }),
+      // 생성 화면 자기 여행은 404(관찰 모드면 method 로 간다), 409 취소 대상(다른 여행)은 세션이 도는 일정.
+      http.get(`${BASE}/trips/:tripId/itinerary`, ({ params }) =>
+        params.tripId === ACTIVE_TRIP_ID
+          ? HttpResponse.json(itinerary(ACTIVE_TRIP_ID, SESSION_ID))
+          : HttpResponse.json({}, { status: 404 })
+      ),
+      http.post(
+        `${BASE}/trips/:tripId/generation-sessions/:sessionId/cancel`,
+        () =>
+          HttpResponse.json({
+            sessionId: SESSION_ID,
+            status: 'CANCELED',
+            mode: 'FULLY_AI',
+            isFallback: false,
+            startedAt: '2026-10-07T01:00:00.000Z',
+            finishedAt: '2026-10-07T01:03:00.000Z',
+          } satisfies GenerationSession)
+      ),
+      http.get(`${BASE}/trips/:tripId/must-visits`, () =>
+        HttpResponse.json([])
+      ),
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([]))
+    );
+  });
+
+  afterEach(() => {
+    // 매달린 요청을 풀어 다음 케이스로 새지 않게 한다.
+    releasePost();
+    releaseMe();
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  /** 페이지와 같은 기준의 "오늘"(KST). */
+  const today = (): string => seoulDate(new Date());
+
+  /** 저장소에 오늘 n회를 심고, 심은 원문을 돌려준다("그대로다" 비교용). */
+  function seed(key: string, n: number): string {
+    const raw = JSON.stringify({ d: today(), n });
+    mockVault.set(key, raw);
+    return raw;
+  }
+
+  /** 저장된 값을 객체로 편다 — 키 순서를 강요하지 않으려고. */
+  function stored(key: string): unknown {
+    const raw = mockVault.get(key);
+    return raw === undefined ? undefined : JSON.parse(raw);
+  }
+
+  /** `/me` 를 손으로 풀기 전까지 매달아 둔다("계정 조회 중" 재현). */
+  function holdMe(): void {
+    server.use(
+      http.get(`${BASE}/me`, async () => {
+        meHits += 1;
+        await new Promise<void>((resolve) => {
+          releaseMe = resolve;
+        });
+        return HttpResponse.json({ accountId: 'acc-a', status: 'ACTIVE' });
+      })
+    );
+  }
+
+  function answerMe(respond: () => Response): void {
+    server.use(
+      http.get(`${BASE}/me`, () => {
+        meHits += 1;
+        return respond();
+      })
+    );
+  }
+
+  function newClient(): QueryClient {
+    return new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+  }
+
+  /** `mode: null` = 관찰 모드(mode 없이 연다). 생략하면 완전 AI. */
+  function renderPage(
+    options: {
+      mode?: GenerateItineraryRequestGenerationMode | null;
+      successRoute?: typeof COPICK_SLOT_ROUTE;
+    } = {}
+  ) {
+    const client = newClient();
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    const mode =
+      options.mode === null ? undefined : (options.mode ?? 'FULLY_AI');
+    return render(
+      <GeneratingPage
+        tripId={TRIP_ID}
+        mode={mode}
+        successRoute={options.successRoute}
+      />,
+      { wrapper: Wrapper }
+    );
+  }
+
+  /** "안 나갔다"는 나갈 시간을 준 뒤에야 의미가 있다. */
+  async function settle(ms = 300): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+  }
+
+  function expectNoLeave(): void {
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
+  }
+
+  describe('🔴 A1·A2 · AC-7·AC-8 — 4회면 나가고 5회째가 기록되며, 5회면 POST 0 + 한도 얼굴', () => {
+    it.each(MODES)(
+      'A1 $mode — 오늘 4회면 POST 가 1번 나가고, 성공 뒤 오늘 5회가 된다',
+      async ({ mode, successRoute }) => {
+        // 준비
+        seed(KEY_A, 4);
+
+        // 실행
+        renderPage({ mode, successRoute });
+
+        // 단언 — 성공해서 넘어갔고, 그 성공이 정확히 1번 세졌다.
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+        await waitFor(() =>
+          expect(stored(KEY_A)).toEqual({ d: today(), n: 5 })
+        );
+        expect(postCalls).toBe(1);
+        expect(screen.queryByTestId('ai-limit-notice')).toBeNull();
+      }
+    );
+
+    it.each(MODES)(
+      'A2 $mode — 오늘 5회면 POST 를 쏘지 않고 한도 얼굴을 띄운다',
+      async ({ mode, successRoute }) => {
+        // 준비
+        const raw = seed(KEY_A, 5);
+
+        // 실행
+        renderPage({ mode, successRoute });
+
+        // 단언 ① 한도 얼굴 — 제목은 완전 일치, 본문 두 문장은 부분 일치(한 줄로 합쳐 그려도 된다).
+        const notice = await screen.findByTestId('ai-limit-notice');
+        expect(within(notice).getByText(TITLE)).toBeOnTheScreen();
+        expect(
+          within(notice).getByText(/내일 0시에 다시 쓸 수 있어요/)
+        ).toBeOnTheScreen();
+        expect(
+          within(notice).getByText(/직접 짜기는 계속 쓸 수 있어요/)
+        ).toBeOnTheScreen();
+        // 단언 ② 나갈 시간을 줘도 POST 0 · 이동 0 · [다시 시도]·진행 얼굴 없음 · 횟수 그대로.
+        await settle();
+        expect(postCalls).toBe(0);
+        expectNoLeave();
+        expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
+        expect(
+          screen.queryByTestId('itinerary-generating-progress')
+        ).toBeNull();
+        expect(mockVault.get(KEY_A)).toBe(raw);
+      }
+    );
+  });
+
+  describe('🔴 A3·A4 · AC-9 — 한도 얼굴의 두 버튼', () => {
+    it('A3 [직접 짜기 이어가기] → 직접 짜기 편집기로 replace 1회(fresh 없음 — 기존 일정 보존)', async () => {
+      seed(KEY_A, 5);
+      renderPage();
+
+      fireEvent.press(await screen.findByTestId('ai-limit-manual-cta'));
+
+      // toHaveBeenCalledWith(객체) = 재귀 완전 일치 — params 에 fresh 키가 붙으면 red(BR-U3-06).
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/manual',
+        params: { tripId: TRIP_ID },
+      });
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockDismissTo).not.toHaveBeenCalled();
+    });
+
+    it('A4 [닫기] → 홈으로 dismissTo 1회', async () => {
+      seed(KEY_A, 5);
+      renderPage();
+
+      fireEvent.press(await screen.findByTestId('ai-limit-close'));
+
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('🔴 A5·A6 · AC-10·AC-11 — 실패는 세지 않고, 재전송 성공은 1번만 센다', () => {
+    it.each([
+      {
+        label: '409 다른 여행 생성 중',
+        respond: busy,
+        face: 'itinerary-generation-busy',
+      },
+      {
+        label: '500',
+        respond: serverError,
+        face: 'itinerary-generating-failed',
+      },
+      {
+        label: '네트워크 오류',
+        respond: networkError,
+        face: 'itinerary-generating-failed',
+      },
+    ])(
+      'A5 POST 가 $label 이면 그 얼굴이 뜨고 오늘 횟수는 그대로다',
+      async ({ respond, face }) => {
+        // 준비
+        const raw = seed(KEY_A, 2);
+        postQueue = [respond];
+
+        // 실행
+        renderPage();
+
+        // 단언 — 기존 얼굴 그대로 · 쓰기 0 · 값 그대로.
+        await screen.findByTestId(face);
+        await settle();
+        // 짝 — 판정은 실제로 거쳤다(안 읽고 안 쓰면 공허 통과).
+        expect(mockReadStringValue).toHaveBeenCalledWith(KEY_A);
+        expect(postCalls).toBe(1);
+        expect(mockWriteStringValue).not.toHaveBeenCalled();
+        expect(mockVault.get(KEY_A)).toBe(raw);
+      }
+    );
+
+    it('A6 409 뒤 [취소하고 새로 만들기]로 성공하면 오늘 횟수가 정확히 1 오른다', async () => {
+      seed(KEY_A, 2);
+      postQueue = [busy, created];
+      renderPage();
+
+      fireEvent.press(
+        await screen.findByTestId('itinerary-generation-busy-cancel-retry')
+      );
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(stored(KEY_A)).toEqual({ d: today(), n: 3 }));
+      // 시간을 더 줘도 3 그대로 — 409 와 성공을 둘 다 세면 4 가 된다.
+      await settle();
+      expect(stored(KEY_A)).toEqual({ d: today(), n: 3 });
+      expect(postCalls).toBe(2);
+    });
+  });
+
+  describe('🔴 A7 · AC-12 — 생성 중 화면을 떠난 뒤 성공해도 센다', () => {
+    /** 생성 화면을 켰다 껐다 하는 호스트 — `showGenerating=false` = 화면을 떠남(뮤테이션은 살아 있다). */
+    function Host({
+      showGenerating,
+    }: {
+      showGenerating: boolean;
+    }): ReactElement {
+      return (
+        <>
+          {showGenerating ? (
+            <GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />
+          ) : null}
+        </>
+      );
+    }
+
+    it('A7 POST 가 매달린 채 떠나고 그 뒤 성공하면 오늘 횟수가 1 오르고, 이동은 0회다', async () => {
+      // 준비
+      seed(KEY_A, 1);
+      holdPost = true;
+      const client = newClient();
+      function Wrapper({ children }: { children: ReactNode }) {
+        return (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        );
+      }
+      const view = render(<Host showGenerating />, { wrapper: Wrapper });
+      await waitFor(() => expect(postCalls).toBe(1));
+
+      // 실행 ① 떠난다(호출별 onSuccess 는 이제 안 불린다) ② 서버가 생성을 끝낸다.
+      view.rerender(<Host showGenerating={false} />);
+      expect(screen.queryByTestId('itinerary-generating-progress')).toBeNull();
+      releasePost();
+
+      // 단언 — 훅 옵션 onSuccess 가 센다. 떠난 화면은 이동을 일으키지 않는다(이탈을 정말 재현한 앵커).
+      await waitFor(() => expect(stored(KEY_A)).toEqual({ d: today(), n: 2 }));
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('🟢 A8·A9 · AC-13①·AC-14 — 직접 짜기·관찰 모드는 막지도 세지도 않는다', () => {
+    it('A8 mode=MANUAL 이면 오늘 5회여도 POST 가 나가고, 성공해도 횟수를 쓰지 않는다', async () => {
+      const raw = seed(KEY_A, 5);
+
+      renderPage({ mode: 'MANUAL' });
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      await settle();
+      expect(postCalls).toBe(1);
+      expect(screen.queryByTestId('ai-limit-notice')).toBeNull();
+      expect(mockWriteStringValue).not.toHaveBeenCalled();
+      expect(mockVault.get(KEY_A)).toBe(raw);
+    });
+
+    it('A9 mode 없이(관찰 모드) 열면 계정·횟수를 묻지 않고 POST 도 없다', async () => {
+      seed(KEY_A, 5);
+
+      renderPage({ mode: null });
+
+      // 앵커 — 관찰 모드가 실제로 돌았다(일정 404 → 생성 방식 화면으로).
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(JSON.stringify(mockReplace.mock.calls[0][0])).toContain(
+        '/itinerary/method'
+      );
+      await settle();
+      expect(meHits).toBe(0);
+      expect(mockReadStringValue).not.toHaveBeenCalled();
+      expect(mockWriteStringValue).not.toHaveBeenCalled();
+      expect(postCalls).toBe(0);
+      expect(screen.queryByTestId('ai-limit-notice')).toBeNull();
+    });
+  });
+
+  describe('🔴 A10~A13 · AC-15·AC-16·AC-6 — 계정 분리 · 모르면 허용 · 저장소 오류는 삼킨다', () => {
+    it('A10 /me 가 계정 B 면 A 의 5회와 무관하게 나가고, B 만 1회가 된다', async () => {
+      answerMe(() =>
+        HttpResponse.json({ accountId: 'acc-b', status: 'ACTIVE' })
+      );
+      const rawA = seed(KEY_A, 5);
+
+      renderPage();
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(stored(KEY_B)).toEqual({ d: today(), n: 1 }));
+      expect(postCalls).toBe(1);
+      expect(mockVault.get(KEY_A)).toBe(rawA);
+      expect(screen.queryByTestId('ai-limit-notice')).toBeNull();
+    });
+
+    it.each([
+      {
+        label: '/me 500',
+        respond: (): Response =>
+          HttpResponse.json(
+            { error: { code: 'INTERNAL', message: 'boom' } },
+            { status: 500 }
+          ),
+      },
+      {
+        label: 'accountId 없는 /me',
+        respond: (): Response => HttpResponse.json({ status: 'ACTIVE' }),
+      },
+      { label: '/me 네트워크 오류', respond: networkError },
+    ])(
+      'A11 $label 이면 막지 않고 POST 1번 · 성공해도 기록하지 않는다',
+      async ({ respond }) => {
+        // 준비 — 알 수만 있었다면 막혔을 5회를 심는다. 계정을 모르면 키도 모른다.
+        answerMe(respond);
+        seed(KEY_A, 5);
+
+        // 실행
+        renderPage();
+
+        // 단언
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+        await settle();
+        // 짝 — 계정 조회를 실제로 시도했다(조회도 안 하고 통과하면 공허).
+        expect(meHits).toBe(1);
+        expect(postCalls).toBe(1);
+        expect(screen.queryByTestId('ai-limit-notice')).toBeNull();
+        expect(mockWriteStringValue).not.toHaveBeenCalled();
+      }
+    );
+
+    it('A12 저장소 읽기가 실패하면 막지 않고 POST 1번 · 기록은 시도하지 않는다', async () => {
+      mockReadStringValue.mockReset().mockRejectedValue(new Error('keychain'));
+
+      renderPage();
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      await settle();
+      // 짝 — 횟수 읽기를 실제로 시도했다.
+      expect(mockReadStringValue).toHaveBeenCalledWith(KEY_A);
+      expect(postCalls).toBe(1);
+      expect(screen.queryByTestId('ai-limit-notice')).toBeNull();
+      expect(mockWriteStringValue).not.toHaveBeenCalled();
+    });
+
+    it('A13 저장소 쓰기가 실패해도 생성 성공 흐름(초안으로 이동)은 그대로다', async () => {
+      seed(KEY_A, 1);
+      mockWriteStringValue.mockReset().mockRejectedValue(new Error('disk'));
+
+      renderPage();
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(JSON.stringify(mockReplace.mock.calls[0][0])).toContain(
+        '/itinerary/draft'
+      );
+      // 짝 — 기록을 실제로 시도했다(실패는 삼켰다).
+      await waitFor(() =>
+        expect(mockWriteStringValue).toHaveBeenCalledWith(
+          KEY_A,
+          expect.any(String)
+        )
+      );
+      expect(postCalls).toBe(1);
+    });
+  });
+
+  describe('🔴 A14 · AC-17 — 이전 실패가 남아 있어도 한도 얼굴이 이긴다', () => {
+    it('실패 얼굴에서 [다시 시도]를 눌렀는데 그새 5회가 됐으면 POST 0 · 한도 얼굴 · 실패 얼굴 없음', async () => {
+      // 준비 — 첫 POST 는 500 으로 실패한다.
+      seed(KEY_A, 3);
+      postQueue = [serverError];
+      renderPage();
+      await screen.findByTestId('itinerary-generating-failed');
+      // 다른 경로(다른 화면·기기)에서 그새 5회가 됐다.
+      seed(KEY_A, 5);
+
+      // 실행
+      fireEvent.press(screen.getByTestId('itinerary-generating-retry'));
+
+      // 단언 — 진짜 react-query 는 새 mutate 전까지 isError 를 들고 있다. 그래도 한도가 이긴다.
+      expect(await screen.findByTestId('ai-limit-notice')).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
+      await settle();
+      expect(postCalls).toBe(1);
+    });
+  });
+
+  describe('AC-18 — 한도 얼굴에서 떠나면 "백그라운드에서 만드는 중" 토스트가 없다', () => {
+    let showToastSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      showToastSpy = jest.spyOn(ToastModule, 'showToast');
+    });
+
+    afterEach(() => {
+      showToastSpy.mockRestore();
+    });
+
+    it.each([
+      { label: '앱바 ‹', testID: 'itinerary-generating-back' },
+      { label: '[닫기]', testID: 'ai-limit-close' },
+    ])(
+      '🔴 A15 $label 로 떠나면 토스트 0회(POST 를 안 쐈으니 "만드는 중"은 거짓이다)',
+      async ({ testID }) => {
+        seed(KEY_A, 5);
+        const view = renderPage();
+        await screen.findByTestId('ai-limit-notice');
+
+        fireEvent.press(screen.getByTestId(testID));
+        expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+        view.unmount();
+
+        expect(showToastSpy).not.toHaveBeenCalled();
+      }
+    );
+
+    it('🟢 A15+ 짝 — POST 가 진행 중일 때 떠나면 토스트가 1회 뜬다(그물이 살아 있다는 앵커)', async () => {
+      holdPost = true;
+      const view = renderPage();
+      await waitFor(() => expect(postCalls).toBe(1));
+
+      view.unmount();
+
+      expect(showToastSpy).toHaveBeenCalledTimes(1);
+      // 매달린 POST 를 이 케이스 안에서 끝낸다(늦은 기록이 다음 케이스 저장소로 새지 않게).
+      releasePost();
+      await settle();
+    });
+  });
+
+  describe('🔴 A16·A17 · AC-20·AC-21 — 계정 조회 중엔 POST 를 보류하고, 도착 뒤 한 번만 판정한다', () => {
+    it('A16 /me 응답 전엔 POST 0 · 진행 얼굴 유지, 응답이 오면(한도 미만) POST 1번', async () => {
+      // 준비
+      holdMe();
+
+      // 실행
+      renderPage();
+
+      // 단언 ① 첫 렌더부터 진행 얼굴 — 비거나 깜빡이지 않는다.
+      expect(
+        screen.getByTestId('itinerary-generating-progress')
+      ).toBeOnTheScreen();
+      await waitFor(() => expect(meHits).toBe(1));
+      await settle();
+      expect(postCalls).toBe(0);
+      expect(
+        screen.getByTestId('itinerary-generating-progress')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('ai-limit-notice')).toBeNull();
+      expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
+
+      // 단언 ② 응답이 오면 그제야 나간다.
+      releaseMe();
+      await waitFor(() => expect(postCalls).toBe(1));
+    });
+
+    it('A17 /me 가 늦게 와도 오늘 5회면 POST 0 · 한도 얼굴, 계정 조회는 1번뿐', async () => {
+      seed(KEY_A, 5);
+      holdMe();
+
+      renderPage();
+
+      await waitFor(() => expect(meHits).toBe(1));
+      await settle();
+      expect(postCalls).toBe(0);
+      expect(screen.queryByTestId('ai-limit-notice')).toBeNull();
+      expect(
+        screen.getByTestId('itinerary-generating-progress')
+      ).toBeOnTheScreen();
+
+      releaseMe();
+
+      expect(await screen.findByTestId('ai-limit-notice')).toBeOnTheScreen();
+      await settle();
+      expect(postCalls).toBe(0);
+      // 판정은 한 번 — 재렌더(꼭 갈 곳 조회 도착 등)마다 다시 묻지 않는다.
+      expect(meHits).toBe(1);
+    });
+  });
+
+  // 재호출 1 · 03b 차단-1 — 위 케이스는 전부 Map 저장소라 "운영 저장소가 이 키를 받아 주나"를 묻지 않았다.
+  describe('🔴 A18 · AC-22 — 실제 저장 래퍼와 SecureStore 키 규칙을 거쳐도 한도가 걸린다', () => {
+    beforeEach(() => {
+      mockRealStringStore = true;
+    });
+
+    /** SecureStore 에 남은 값을 편다 — 키는 보지 않는다(카운터가 고른 키를 그대로 믿고 결과만 본다). */
+    function secureCounts(): unknown[] {
+      return [...mockSecureVault.values()].map((raw) => JSON.parse(raw));
+    }
+
+    it('앵커 — 키 규칙 대역은 `:` 키를 거부하고 `.` 키는 받는다(대역이 다 받아 주면 A18 이 공허해진다)', async () => {
+      await expect(
+        SecureStore.getItemAsync('aiGenUsage:acc-a')
+      ).rejects.toThrow(/Invalid key/);
+      await expect(
+        SecureStore.getItemAsync('aiGenUsage.acc-a')
+      ).resolves.toBeNull();
+    });
+
+    it('A18 생성 화면을 5번 성공시키면 저장소에 오늘 5회가 남고, 6번째 진입은 POST 0 · 한도 얼굴', async () => {
+      // 준비·실행 ① — 화면을 열어 성공시키고, 기록이 저장소에 닿을 때까지 기다린 뒤 닫기를 5번.
+      for (let round = 1; round <= 5; round += 1) {
+        const view = renderPage();
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(round));
+        await waitFor(() =>
+          expect(secureCounts()).toEqual([{ d: today(), n: round }])
+        );
+        view.unmount();
+      }
+
+      // 실행 ② — 6번째 진입
+      renderPage();
+
+      // 단언 — 한도 얼굴 · 나갈 시간을 줘도 POST 는 5 그대로
+      expect(await screen.findByTestId('ai-limit-notice')).toBeOnTheScreen();
+      await settle();
+      expect(postCalls).toBe(5);
+    });
+  });
+
+  // 재호출 1 · 03b 차단-2 — 계정 조회(`/me`)·저장소 읽기를 기다리는 동안 버튼이 살아 있어 두 번째 탭이
+  // 두 번째 검사를 시작한다. 둘 다 "한도 미만"을 읽고 둘 다 POST 를 쏘면 6번째 생성이 성공하고 기록은 5다.
+  describe('🔴 A19·A20 · AC-23 — 계정 조회 중 재시도 연타는 POST 1번 · 기록 +1', () => {
+    /** 매달린 `/me` 응답을 **전부** 기억한다 — 하나만 기억하면 앞선 조회가 영영 안 풀려 POST 가 덜 나간다. */
+    let meWaiters: (() => void)[] = [];
+
+    /** 지금부터 오는 `/me` 를 손으로 풀기 전까지 전부 매달아 둔다. */
+    function holdEveryMe(): void {
+      server.use(
+        http.get(`${BASE}/me`, async () => {
+          meHits += 1;
+          await new Promise<void>((resolve) => {
+            meWaiters.push(resolve);
+          });
+          return HttpResponse.json({ accountId: 'acc-a', status: 'ACTIVE' });
+        })
+      );
+    }
+
+    function releaseEveryMe(): void {
+      const waiters = meWaiters;
+      meWaiters = [];
+      waiters.forEach((resolve) => resolve());
+    }
+
+    /** 매달린 취소 왕복(다른 여행 일정 조회)·생성 POST 도 전부 기억한다 — A21 이 순서를 손으로 정한다. */
+    let roundTripWaiters: (() => void)[] = [];
+    let postWaiters: (() => void)[] = [];
+
+    /** 취소 대상 일정 조회 중 첫 번째(첫 탭 왕복)는 바로 답하고, 두 번째부터(뒤 탭 왕복)는 매단다. */
+    function holdLaterRoundTrips(): void {
+      let hits = 0;
+      server.use(
+        http.get(`${BASE}/trips/${ACTIVE_TRIP_ID}/itinerary`, async () => {
+          hits += 1;
+          if (hits >= 2) {
+            await new Promise<void>((resolve) => {
+              roundTripWaiters.push(resolve);
+            });
+          }
+          return HttpResponse.json(itinerary(ACTIVE_TRIP_ID, SESSION_ID));
+        })
+      );
+    }
+
+    /** 지금부터 오는 생성 POST 를 손으로 풀기 전까지 전부 매달아 둔다(세는 것은 도착 순간). */
+    function holdEveryPost(): void {
+      server.use(
+        http.post(`${BASE}/trips/:tripId/itinerary`, async () => {
+          postCalls += 1;
+          await new Promise<void>((resolve) => {
+            postWaiters.push(resolve);
+          });
+          return (postQueue.shift() ?? created)();
+        })
+      );
+    }
+
+    function releaseAll(waiters: (() => void)[]): void {
+      waiters.splice(0).forEach((resolve) => resolve());
+    }
+
+    afterEach(() => {
+      releaseEveryMe();
+      releaseAll(roundTripWaiters);
+      releaseAll(postWaiters);
+    });
+
+    it('A19 실패 얼굴에서 [다시 시도]를 같은 순간 두 번 눌러도 POST 는 1번 더, 오늘 5회 · 6번째는 한도 얼굴', async () => {
+      // 준비 — 오늘 4회, 첫 POST 는 500 으로 실패해 실패 얼굴이 뜬다. 그다음 계정 조회는 매달린다.
+      seed(KEY_A, 4);
+      postQueue = [serverError];
+      const first = renderPage();
+      const retry = await screen.findByTestId('itinerary-generating-retry');
+      expect(postCalls).toBe(1);
+      expect(meHits).toBe(1);
+      holdEveryMe();
+
+      // 실행 ① — 한 act 안에서 두 번 누른다(다음 렌더 전에 들어온 두 번째 탭). 상태 갱신은 act 가 끝나야
+      // 화면에 반영되므로, "다음 렌더에 버튼을 숨긴다"로는 못 막고 즉시 잠그는 장치가 있어야 1번이 된다.
+      act(() => {
+        fireEvent.press(retry);
+        fireEvent.press(retry);
+      });
+      // 나갈 시간을 줘도 조회 응답 전엔 POST 가 없다(보류 계약 AC-20).
+      await settle();
+      expect(postCalls).toBe(1);
+
+      // 실행 ② — 매달린 조회를 전부 푼다.
+      releaseEveryMe();
+
+      // 단언 ① — 성공해서 넘어갔고, 오늘 5회가 됐다.
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(stored(KEY_A)).toEqual({ d: today(), n: 5 }));
+      // 단언 ② — 시간을 더 줘도 POST 는 실패 1 + 성공 1, 계정 조회는 마운트 1 + 재시도 1.
+      await settle();
+      expect(postCalls).toBe(2);
+      expect(meHits).toBe(2);
+      expect(stored(KEY_A)).toEqual({ d: today(), n: 5 });
+
+      // 단언 ③ — 6번째 시도는 막힌다(이번 계정 조회는 매달지 않고 바로 답한다).
+      first.unmount();
+      answerMe(() =>
+        HttpResponse.json({ accountId: 'acc-a', status: 'ACTIVE' })
+      );
+      renderPage();
+      expect(await screen.findByTestId('ai-limit-notice')).toBeOnTheScreen();
+      await settle();
+      expect(postCalls).toBe(2);
+    });
+
+    it('A20 409 안내에서 [취소하고 새로 만들기]를 조회 중 또 눌러도 POST 는 1번 더, 오늘 3회', async () => {
+      // 준비 — 오늘 2회, 첫 POST 는 409(다른 여행 생성 중). 그다음 계정 조회는 매달린다.
+      seed(KEY_A, 2);
+      postQueue = [busy];
+      renderPage();
+      fireEvent.press(
+        await screen.findByTestId('itinerary-generation-busy-cancel-retry')
+      );
+      // 첫 탭 직전에 조회를 매달면 마운트 조회와 섞이므로, 마운트 조회가 끝난 뒤(안내가 뜬 뒤) 건다.
+      expect(meHits).toBe(1);
+      holdEveryMe();
+
+      // 실행 ① — 취소 왕복이 끝나고 계정 조회가 매달린 순간까지 기다린다.
+      await waitFor(() => expect(meHits).toBe(2));
+      // 실행 ② — 그 사이 안내가 아직 떠 있으면 한 번 더 누른다. (안내를 걷어 버튼을 없애는 구현이면
+      // 사용자가 두 번째로 누를 곳이 없으므로 그것도 맞는 답이다 — 지켜야 할 것은 아래 POST 수다.)
+      const again = screen.queryByTestId(
+        'itinerary-generation-busy-cancel-retry'
+      );
+      if (again !== null) fireEvent.press(again);
+      await settle();
+      expect(postCalls).toBe(1);
+
+      // 실행 ③ — 매달린 조회를 전부 푼다.
+      releaseEveryMe();
+
+      // 단언 — 성공 이동 1번, POST 는 409 1 + 성공 1, 오늘 3회(정확히 +1).
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(stored(KEY_A)).toEqual({ d: today(), n: 3 }));
+      await settle();
+      expect(postCalls).toBe(2);
+      expect(stored(KEY_A)).toEqual({ d: today(), n: 3 });
+    });
+
+    // 재호출 2 · 03b-2 차단-1 — A20 의 반대 순서. 두 번째 탭의 취소 왕복이 첫 검사보다 **늦게** 끝나면,
+    // 그 왕복 끝의 재전송은 이미 풀린 검사 잠금을 지나 검사·POST 를 한 번 더 한다(실측 POST 3 · 기록 2→4).
+    // 두 갈래: 왕복 2 가 끝날 때 재시도 POST 가 ① 아직 진행 중 ② 이미 성공으로 끝남. 둘 다 사용자는
+    // "검사가 도는 동안 한 번 더 누른" 것이므로 POST 는 재시도분 1번이어야 한다(AC-23).
+    it.each([
+      { when: '재시도 POST 가 아직 진행 중', holdRetryPost: true },
+      { when: '재시도 POST 가 이미 성공', holdRetryPost: false },
+    ])(
+      'A21 409 안내 두 번째 탭의 취소 왕복이 첫 검사보다 늦게 끝나도($when) POST 는 1번 더, 오늘 3회',
+      async ({ holdRetryPost }) => {
+        // 준비 — 오늘 2회, 첫 POST 는 409. 안내가 뜬 뒤부터 계정 조회는 매달고, 취소 왕복은 두 번째부터 매단다.
+        seed(KEY_A, 2);
+        postQueue = [busy];
+        renderPage();
+        const button = await screen.findByTestId(
+          'itinerary-generation-busy-cancel-retry'
+        );
+        expect(meHits).toBe(1);
+        holdEveryMe();
+        holdLaterRoundTrips();
+
+        // 실행 ① — 첫 탭: 왕복 1 은 바로 끝나고, 검사 1 의 계정 조회가 매달린 순간까지 기다린다.
+        fireEvent.press(button);
+        await waitFor(() => expect(meHits).toBe(2));
+        // 실행 ② — 검사 1 이 도는 동안 안내가 남아 있으면 한 번 더 누른다(이 탭의 왕복은 매달린다).
+        const again = screen.queryByTestId(
+          'itinerary-generation-busy-cancel-retry'
+        );
+        if (again !== null) fireEvent.press(again);
+        await settle();
+        expect(postCalls).toBe(1);
+
+        // 실행 ③ — 검사 1 을 **먼저** 끝낸다. 이 뒤의 계정 조회는 바로 답한다.
+        if (holdRetryPost) holdEveryPost();
+        answerMe(() =>
+          HttpResponse.json({ accountId: 'acc-a', status: 'ACTIVE' })
+        );
+        releaseEveryMe();
+        await waitFor(() => expect(postCalls).toBe(2));
+        if (!holdRetryPost) {
+          await waitFor(() =>
+            expect(stored(KEY_A)).toEqual({ d: today(), n: 3 })
+          );
+        }
+
+        // 실행 ④ — 그다음에야 매달린 왕복 2 를 끝내고, 시간을 준 뒤 매달린 POST 를 푼다.
+        releaseAll(roundTripWaiters);
+        await settle();
+        releaseAll(postWaiters);
+
+        // 단언 — POST 는 409 1 + 성공 1, 성공 이동 1번, 오늘 3회(정확히 +1).
+        await settle();
+        expect(postCalls).toBe(2);
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+        await waitFor(() =>
+          expect(stored(KEY_A)).toEqual({ d: today(), n: 3 })
+        );
+        expect(mockReplace).toHaveBeenCalledTimes(1);
+      }
+    );
   });
 });

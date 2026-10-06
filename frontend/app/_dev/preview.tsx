@@ -5228,6 +5228,21 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1268 — AI 일정 생성 일일 한도(클라 임시 장치). Figma 프레임 없는 발명 얼굴이라 육안 대조 자리는
+  // 이 키뿐이다. 서버 한도가 배포돼 카운터를 지울 때 이 키도 지운다.
+  {
+    key: 'h07-generating-ai-limit',
+    band: 'h',
+    label: 'h07 · AI 일일 한도',
+    login: null,
+    render: () => (
+      <GeneratingScreen
+        onBackground={noop}
+        onRetry={noop}
+        aiLimit={{ onContinueManual: noop, onClose: noop }}
+      />
+    ),
+  },
   // h07 생성 실패 프리뷰 키(itinerary-generating-failed)는 TRIP-789로 삭제 — 실패 표면·핸들링
   // 코드(GeneratingScreen failed/onRetry·GeneratingPage isError→failed)는 그대로 유지되고,
   // 폴백 전용 화면(TRIP-791)이 이 얼굴을 흡수한다(부모 결정 G: 코드 유지·키만 삭제).

@@ -1,18 +1,24 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useSavedPlaces } from '@/features/save-place';
 import { firstCoPickSlotKey } from '@/features/itinerary';
 import { buildMustVisitPins } from '@/features/itinerary';
 import { useGenerationBusy } from '@/features/itinerary';
 import { GeneratingScreen } from './GeneratingScreen';
+import {
+  isAiDailyLimitReached,
+  recordAiGeneration,
+  type AiUsageStore,
+} from '../model/aiDailyLimit';
 import type {
   GenerateItineraryRequestGenerationMode,
   Itinerary,
 } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
+  getMe,
   useGetTripsTripIdItinerary,
   useGetTripsTripIdMustVisits,
   usePostTripsTripIdItinerary,
@@ -20,9 +26,14 @@ import {
 import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
 import type { MapCenter, MapPin } from '@/shared/map';
+import { readStringValue, writeStringValue } from '@/shared/storage';
 import { showToast } from '@/shared/ui/Toast';
 
 const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
+const aiUsageStore: AiUsageStore = {
+  read: readStringValue,
+  write: writeStringValue,
+};
 
 /**
  * h09 배선(TRIP-305) — 생성 POST 를 소유·발화하고 진행/성공/실패/이탈을 화면에 잇는다.
@@ -54,6 +65,11 @@ const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
  *     언마운트) 마지막 렌더가 진행 중이고 성공 콜백 전이면 한 번 알린다. 발화는 언마운트 한 곳뿐 —
  *     `goHome` 은 409 [기다리기]·관찰 모드와 공유라 거기 넣으면 거짓 토스트가 샌다. 성공 표지는
  *     호출별 onSuccess 첫 줄: replace 가 결과 재렌더보다 먼저 화면을 내릴 수 있어서다.
+ *  7. **AI 일일 한도(TRIP-1268, 클라 임시 장치).** AI 모드(FULLY_AI·CO_PLAN)의 `start()` 는 `GET /me` 로
+ *     계정을 알아낸 뒤 오늘 횟수를 보고 한도면 POST 대신 한도 얼굴을 띄운다. 조회 중엔 POST 를 보류한다.
+ *     조회 실패·accountId 없음·저장소 읽기 실패는 허용(fail-open). 성공 계수는 훅 옵션 onSuccess 자리 —
+ *     화면을 떠난 뒤 끝난 성공도 센다(1번과 같은 이유). 계정 조회는 순수 fetcher(`getMe`)로 한다 —
+ *     react-query 훅은 QueryClient 없이 렌더하는 형제 테스트를 깬다.
  */
 export function GeneratingPage({
   tripId,
@@ -72,6 +88,9 @@ export function GeneratingPage({
     | '/trips/[tripId]/itinerary/copick/[slotKey]';
 }): ReactElement {
   const router = useRouter();
+  /** AI 모드 start 가 알아낸 계정 — 훅 옵션 onSuccess 가 이 계정으로 센다(undefined = 세지 않음). */
+  const aiAccountIdRef = useRef<string | undefined>(undefined);
+  const [aiLimited, setAiLimited] = useState(false);
   // 캐시 반영은 훅 옵션 자리에 둔다 — `mutate(…, { onSuccess })` 콜백은 화면이 떠나면 불리지 않아,
   // 생성 중 홈으로 이탈하면 홈이 들고 있던 404 가 남는다(TRIP-1015 A · QA #046).
   const generate = usePostTripsTripIdItinerary({
@@ -81,6 +100,14 @@ export function GeneratingPage({
           getGetTripsTripIdItineraryQueryKey(vars.tripId),
           data
         );
+        // AI 모드 start 만 계정을 채운다 — MANUAL 이나 계정을 모르는 성공은 세지 않는다.
+        const accountId = aiAccountIdRef.current;
+        if (accountId !== undefined) {
+          void recordAiGeneration(accountId, {
+            store: aiUsageStore,
+            now: new Date(),
+          });
+        }
       },
     },
   });
@@ -108,7 +135,7 @@ export function GeneratingPage({
   });
   const firstPin = pins[0];
 
-  const start = useCallback(() => {
+  const fire = useCallback(() => {
     if (mode === undefined) return;
     generate.mutate(
       { tripId, data: { generationMode: mode } },
@@ -139,6 +166,35 @@ export function GeneratingPage({
       }
     );
   }, [generate, router, tripId, mode, successRoute]);
+
+  // 검사 잠금(AC-23) — 조회·판정이 도는 동안 [다시 시도]·[취소하고 새로 만들기] 재진입을 즉시 막는다.
+  // 상태가 아니라 ref 인 이유: 같은 프레임의 두 번째 탭은 다음 렌더 전이라 상태로는 못 막는다.
+  const checkingRef = useRef(false);
+  const start = useCallback(() => {
+    if (mode !== 'FULLY_AI' && mode !== 'CO_PLAN') {
+      fire();
+      return;
+    }
+    if (checkingRef.current) return;
+    checkingRef.current = true;
+    void getMe()
+      .then(
+        (me) => me.accountId,
+        () => undefined
+      )
+      .then(async (accountId) => {
+        aiAccountIdRef.current = accountId;
+        const reached = await isAiDailyLimitReached(accountId, {
+          store: aiUsageStore,
+          now: new Date(),
+        });
+        if (reached) setAiLimited(true);
+        else fire();
+      })
+      .finally(() => {
+        checkingRef.current = false;
+      });
+  }, [fire, mode]);
 
   const busy = useGenerationBusy(generate.error, start);
 
@@ -172,6 +228,18 @@ export function GeneratingPage({
 
   return (
     <GeneratingScreen
+      aiLimit={
+        aiLimited
+          ? {
+              onContinueManual: () =>
+                router.replace({
+                  pathname: '/trips/[tripId]/itinerary/manual',
+                  params: { tripId },
+                }),
+              onClose: goHome,
+            }
+          : null
+      }
       failed={generate.isError}
       busy={busy && { ...busy, onWait: goHome }}
       pins={mapPins}

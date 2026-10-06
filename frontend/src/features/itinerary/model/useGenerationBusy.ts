@@ -41,22 +41,21 @@ export function useGenerationBusy(
   resend: () => void
 ): GenerationBusy | null {
   const [cancelable, setCancelable] = useState(true);
-  // 연타 가드 — 조회·cancel 왕복 동안 안내가 그대로 떠 있어 두 번째 press 가 cancel 을 한 번 더 쏜다.
-  const workingRef = useRef(false);
+  // 연타 가드 — 409 오류 하나당 취소·재전송 1회. 시간 잠금은 늦게 끝난 두 번째 왕복의 POST 를 못 막는다(AC-23); 새 409 는 새 오류라 다시 눌린다(G6).
+  const handledErrorRef = useRef<unknown>(null);
   const hit = resolveGenerationInProgress(error);
   if (hit === null) return null;
 
   return {
     cancelable,
     onCancelAndRetry: () => {
-      if (workingRef.current) return;
-      workingRef.current = true;
+      if (handledErrorRef.current === error) return;
+      handledErrorRef.current = error;
       void cancelActiveGeneration(hit.activeTripId)
         // 조회·cancel 이 500·네트워크로 실패하면 "모른다" — 취소 불가로 단정하지 않고 재시도한다.
         // 또 409 면 안내가 다시 뜨고, 네트워크면 일반 실패 얼굴이 말한다(INV-4).
         .catch(() => true)
         .then((found) => {
-          workingRef.current = false;
           setCancelable(found);
           resend();
         });
