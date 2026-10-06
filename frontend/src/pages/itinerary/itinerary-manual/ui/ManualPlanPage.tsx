@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { resolveEditorMapCenter } from '../model/editorMapCenter';
+import { useItineraryTabBack } from '../model/useItineraryTabBack';
 import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
 import {
   useItineraryEditStore,
@@ -78,6 +79,7 @@ export function ManualPlanPage({
   startFresh?: boolean;
 }): ReactElement {
   const router = useRouter();
+  const goItineraryTab = useItineraryTabBack();
   const queryClient = useQueryClient();
   const generate = usePostTripsTripIdItinerary();
   const itinerary = useGetTripsTripIdItinerary(tripId);
@@ -314,7 +316,8 @@ export function ManualPlanPage({
         dateLabel={formatCoPickDayHeader(activeDate)}
         onSelectDay={setActiveDayIndex}
         // ‹ 는 저장 여부와 무관하게 일정 탭으로(TRIP-1009 · 01b Q3) — 방식 선택 화면으로 되돌아가지 않는다.
-        onBack={() => router.dismissTo('/(tabs)/itinerary')}
+        // 스와이프·하드웨어 뒤로도 같은 함수로 간다(TRIP-1264).
+        onBack={goItineraryTab}
         onPressTimeChip={setEditingSlotKey}
         // 비우는 중·비우기 실패엔 장소 추가로 보내지 않는다 — h13 은 캐시(옛 일정)로 PUT 을 만들어 옛 장소가
         // 전부 되살아난다(03b 경고-2). 뷰에 비활성 prop 이 없어 무반응으로 막고, 실패면 위 안내가 이유를 말한다.

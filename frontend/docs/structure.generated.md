@@ -750,6 +750,7 @@
 
 ## src/pages/itinerary/itinerary-manual/model/
 - `src/pages/itinerary/itinerary-manual/model/editorMapCenter.ts`  →  resolveEditorMapCenter
+- `src/pages/itinerary/itinerary-manual/model/useItineraryTabBack.ts`  →  useItineraryTabBack
 
 ## src/pages/itinerary/itinerary-manual/ui/
 - `src/pages/itinerary/itinerary-manual/ui/ManualPlanPage.tsx`  →  ManualPlanPage
@@ -1578,4 +1579,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 967개 파일
+합계 968개 파일
