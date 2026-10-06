@@ -63,7 +63,8 @@ describe('🔴 TRIP-1262 · 탭바 이동은 아래 스택을 걷어낸다 (진�
     // 준비 — 홈 탭 → 위저드 → 탭바 가진 스택 화면 순으로 쌓는다.
     const app = renderRouter(ROUTES, { initialUrl: '/' });
     act(() => router.push('/trips/new/step1'));
-    act(() => router.push('/my-style'));
+    // 'my-style' 는 이 테스트의 메모리 라우터에만 있는 가짜 경로라 typedRoutes 가 모른다 — 타입만 눌러 둔다.
+    act(() => router.push('/my-style' as never));
     expect(rootStackNames(app.getRouterState())).toEqual([
       '(tabs)',
       'trips/new/step1',

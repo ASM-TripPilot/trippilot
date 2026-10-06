@@ -234,6 +234,27 @@ jest.mock('@/shared/push', () => ({
   requestPushPermission: jest.fn(() => Promise.resolve('UNDETERMINED')),
 }));
 
+// TRIP-1268: 생성 POST 전에 계정 id(`GET /me`)를 순수 fetcher `getMe` 로 읽는다 — 이 파일은 QueryClient 가
+// 없어서 react-query 훅(`useGetMe`)으로는 못 읽는다(01b 제약 1). 목이 없으면 실제 axios 가 나간다.
+// 실물을 펼친 뒤 `getMe` 만 덮는다 — `index.hooks` 가 이 모듈을 재수출하므로 어느 배럴로 불러도 같은 목이다.
+const mockGetMe = jest.fn();
+jest.mock('@/shared/api/generated/account/account', () => ({
+  ...jest.requireActual('@/shared/api/generated/account/account'),
+  getMe: (...args: unknown[]) => mockGetMe(...args),
+}));
+
+// TRIP-1268: 한도 카운터 저장소(SecureStore 문자열) — 메모리 Map 으로 바꾼다. jest-expo 의 실물 폴백은
+// 늘 null 을 돌려줘 "0회"가 우연히만 결정된다(02a ★2). 실물을 펼친 뒤 두 함수만 덮는다.
+const mockVault = new Map<string, string>();
+const mockReadStringValue = jest.fn();
+const mockWriteStringValue = jest.fn();
+jest.mock('@/shared/storage', () => ({
+  ...jest.requireActual('@/shared/storage'),
+  readStringValue: (key: string) => mockReadStringValue(key),
+  writeStringValue: (key: string, value: string) =>
+    mockWriteStringValue(key, value),
+}));
+
 // TRIP-929: 좌표는 담은 장소에서 온다 — 빈 목록으로 둔다. 팩토리 목이라 실물(QueryClient 필요 ·
 // 생성 클라이언트·인증 계층)을 로드하지 않는다.
 jest.mock('@/features/save-place/model/savedPlaces', () => ({
@@ -276,12 +297,31 @@ beforeEach(() => {
   mockDismissTo.mockClear();
   mockBack.mockClear();
   mockNavigate.mockClear();
+  // TRIP-1268: 계정 조회는 바로 성공, 오늘 쓴 횟수는 0 — 한도에 안 걸려 기존 케이스의 POST 가 그대로 나간다.
+  mockGetMe.mockReset().mockResolvedValue({
+    accountId: 'acc-hm',
+    status: 'ACTIVE',
+  });
+  mockVault.clear();
+  mockReadStringValue
+    .mockReset()
+    .mockImplementation(async (key: string) => mockVault.get(key) ?? null);
+  mockWriteStringValue
+    .mockReset()
+    .mockImplementation(async (key: string, value: string) => {
+      mockVault.set(key, value);
+    });
 });
 
 // 토스트는 모듈 싱글턴이다 — 진행 중(pending)으로 끝나는 케이스는 언마운트 때 이탈 토스트를 띄운다. 옛 본 파일엔
 // 토스트 호스트가 없어 상관없었지만, 합친 뒤엔 그 토스트가 뒤 「화면을 떠날 때」 describe 로 샌다 → 최상위에서 비운다.
-afterEach(() => {
+// TRIP-1268: 사전 검사(계정 조회·횟수 읽기)는 Promise 라 렌더만 하고 끝나는 케이스에선 테스트 뒤에도 매달려 있다가
+// 다음 케이스의 mockClear 뒤에 mutate 를 부를 수 있다 — 매크로태스크 한 번을 흘려 그 케이스 안에서 끝낸다(02a ★6).
+afterEach(async () => {
   resetToast();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 });
 
 function renderPage() {
@@ -299,7 +339,7 @@ function forwardDestinations(): string[] {
 }
 
 describe('🔴 I1 · AC-1 — pending 이면 진행 표면 + 마운트 POST 1회', () => {
-  it('진행 표면이 뜨고 POST 가 generationMode 하나로 1회 나가며 draft 로 안 간다', () => {
+  it('진행 표면이 뜨고 POST 가 generationMode 하나로 1회 나가며 draft 로 안 간다', async () => {
     mockPhase = 'pending';
     renderPage();
 
@@ -309,7 +349,8 @@ describe('🔴 I1 · AC-1 — pending 이면 진행 표면 + 마운트 POST 1회
     ).toBeOnTheScreen();
 
     // POST 는 마운트 시 정확히 1회, tripId 와 mode 하나만 담아 나간다.
-    expect(mockMutate).toHaveBeenCalledTimes(1);
+    // TRIP-1268: 계정 조회·횟수 읽기(Promise) 뒤에 나가므로 렌더 직후가 아니라 기다려서 잰다(02a ★3).
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
     const vars = mockMutate.mock.calls[0][0] as {
       tripId: string;
       data?: unknown;
@@ -345,19 +386,22 @@ describe('🔴 I2 · AC-5 — 201 성공이면 draft 로 replace 가 1회', () =
 });
 
 describe('🔴 I3 · AC-6 — 오류면 실패 표면 + 재시도가 POST 를 다시 쏜다 (INV-4)', () => {
-  it('실패 표면이 뜨고 draft 로 안 가며, [다시 시도]가 POST 를 재발화한다', () => {
+  it('실패 표면이 뜨고 draft 로 안 가며, [다시 시도]가 POST 를 재발화한다', async () => {
     mockPhase = 'error';
     renderPage();
 
     // 침묵하지 않는다 — 실패 표면이 실제로 그려진다.
     expect(screen.getByTestId('itinerary-generating-failed')).toBeOnTheScreen();
+    // TRIP-1268: 마운트 POST 가 사전 검사 뒤에 나간다 — 그것을 기다린 뒤에 재시도를 누른다(검사 두 개가
+    // 겹치지 않게, 02a ★4).
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
     // 실패했으니 draft 로 안 갔다.
     expect(mockReplace).not.toHaveBeenCalled();
 
     // 재시도 — 존재 확인이 아니라 실제 press 로 POST 재발화를 증명한다(02a ★5).
     const before = mockMutate.mock.calls.length;
     fireEvent.press(screen.getByTestId('itinerary-generating-retry'));
-    expect(mockMutate.mock.calls.length).toBe(before + 1);
+    await waitFor(() => expect(mockMutate.mock.calls.length).toBe(before + 1));
   });
 });
 
@@ -483,7 +527,7 @@ describe('CO_PLAN 씨앗 — 첫 비고정 슬롯 착지', () => {
   });
 
   describe('GC-1 · CO_PLAN 씨앗 — 마운트 시 CO_PLAN POST 1회 (선제green·무회귀)', () => {
-    it('POST 가 { generationMode: "CO_PLAN" } 하나로 정확히 1회 나가고 아직 이동하지 않는다', () => {
+    it('POST 가 { generationMode: "CO_PLAN" } 하나로 정확히 1회 나가고 아직 이동하지 않는다', async () => {
       mockPhase = 'pending';
       render(
         <GeneratingPage
@@ -499,7 +543,8 @@ describe('CO_PLAN 씨앗 — 첫 비고정 슬롯 착지', () => {
       ).toBeOnTheScreen();
 
       // POST 는 마운트 시 정확히 1회, tripId 와 CO_PLAN 하나만 담아 나간다.
-      expect(mockMutate).toHaveBeenCalledTimes(1);
+      // TRIP-1268: 사전 검사 뒤에 나가므로 기다려서 잰다(02a ★3).
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
       const vars = mockMutate.mock.calls[0][0] as {
         tripId: string;
         data?: unknown;
@@ -686,18 +731,20 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       expectToastOnce();
     });
 
-    it('실패 후 [다시 시도]로 다시 진행 중이 된 뒤 떠나도 토스트가 한 번 뜬다', () => {
+    it('실패 후 [다시 시도]로 다시 진행 중이 된 뒤 떠나도 토스트가 한 번 뜬다', async () => {
       mockPhase = 'error';
       const page = mount(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
       expect(
         screen.getByTestId('itinerary-generating-failed')
       ).toBeOnTheScreen();
+      // TRIP-1268: 마운트 POST(사전 검사 뒤)를 기다린 뒤에 재시도를 누른다(02a ★4).
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
 
       fireEvent.press(screen.getByTestId('itinerary-generating-retry'));
       mockPhase = 'pending';
       page.rerender();
       // 짝 — 재시도가 실제로 POST 를 다시 쐈고, 실패 얼굴은 내려갔다.
-      expect(mockMutate).toHaveBeenCalledTimes(2);
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(2));
       expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
@@ -720,10 +767,12 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
   });
 
   describe('T-9 · AC-9 — 성공해서 넘어갈 때는 토스트가 없다 (세 갈래)', () => {
-    it('draft 로 넘어가면 떠나도 토스트가 없다', () => {
+    it('draft 로 넘어가면 떠나도 토스트가 없다', async () => {
       const page = mount(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
+      // TRIP-1268: 성공 흉내는 mutate(사전 검사 뒤)가 실제로 나간 뒤에야 의미가 있다(02a ★5).
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
       succeed(itinerary('FULLY_AI', [slot('a', false)]));
       // 짝 — 성공 갈래가 실제로 돌았다.
       expect(replaceTargets().some((t) => t.includes('/itinerary/draft'))).toBe(
@@ -735,7 +784,7 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       expectNoToast();
     });
 
-    it('copick 첫 슬롯으로 넘어가면 떠나도 토스트가 없다', () => {
+    it('copick 첫 슬롯으로 넘어가면 떠나도 토스트가 없다', async () => {
       const page = mount(
         <GeneratingPage
           tripId={TRIP_ID}
@@ -745,6 +794,8 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       );
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
+      // TRIP-1268: 성공 흉내는 mutate(사전 검사 뒤)가 실제로 나간 뒤에야 의미가 있다(02a ★5).
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
       succeed(itinerary('CO_PLAN', [slot('hotel', true), slot('a', false)]));
       const targets = replaceTargets();
       expect(targets.some((t) => t.includes('copick/[slotKey]'))).toBe(true);
@@ -755,7 +806,7 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       expectNoToast();
     });
 
-    it('copick 슬롯이 전부 고정이라 완성 확인으로 넘어가면 떠나도 토스트가 없다', () => {
+    it('copick 슬롯이 전부 고정이라 완성 확인으로 넘어가면 떠나도 토스트가 없다', async () => {
       const page = mount(
         <GeneratingPage
           tripId={TRIP_ID}
@@ -765,6 +816,8 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       );
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
+      // TRIP-1268: 성공 흉내는 mutate(사전 검사 뒤)가 실제로 나간 뒤에야 의미가 있다(02a ★5).
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
       succeed(itinerary('CO_PLAN', [slot('hotel', true)]));
       expect(replaceTargets().some((t) => t.includes('copick/complete'))).toBe(
         true
@@ -851,10 +904,12 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       expectToastOnce();
     });
 
-    it('떠난 뒤 서버가 완성해도(훅 레벨 onSuccess 만 불림) 토스트 호출은 1회 그대로다', () => {
+    it('떠난 뒤 서버가 완성해도(훅 레벨 onSuccess 만 불림) 토스트 호출은 1회 그대로다', async () => {
       const page = mount(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
+      // TRIP-1268: 마운트 POST(사전 검사 뒤)가 나가 `mockLastCall` 이 생긴 뒤에 떠난다(02a ★5).
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
       page.leave();
       // 화면이 빠진 뒤엔 호출별 onSuccess 가 안 불린다 — 훅 레벨만(02a ★14).
       act(() => {
@@ -869,7 +924,7 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       expectToastOnce();
     });
 
-    it('StrictMode 로 마운트해도(이중 effect) 진입만으로는 토스트가 없다', () => {
+    it('StrictMode 로 마운트해도(이중 effect) 진입만으로는 토스트가 없다', async () => {
       // 실제 react-query 는 첫 렌더가 idle 이다 — mutate 는 effect 에서 나간다(02a ★18).
       mockPhase = 'idle';
       // StrictMode 는 **루트 바깥**에 둔다 — 안쪽(호스트 래퍼 아래)에 두면 이 렌더러에선 이중 effect 가
@@ -882,8 +937,8 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
         </StrictMode>
       );
 
-      // 짝 — 마운트 POST 가 실제로 나갔다.
-      expect(mockMutate).toHaveBeenCalled();
+      // 짝 — 마운트 POST 가 실제로 나갔다(TRIP-1268: 사전 검사 뒤라 기다려서 잰다).
+      await waitFor(() => expect(mockMutate).toHaveBeenCalled());
       expectNoToast();
     });
   });
@@ -921,7 +976,7 @@ describe('생성 중 알림 권한을 묻지 않는다', () => {
   });
 
   describe('🔴 TRIP-1108 AC-6 · 생성 성공 착지에서 권한을 묻지 않는다', () => {
-    it('G1 완전 AI 생성이 성공해도 루틴 0회이고, draft 로의 replace 는 그대로 1회다', () => {
+    it('G1 완전 AI 생성이 성공해도 루틴 0회이고, draft 로의 replace 는 그대로 1회다', async () => {
       // 준비
       mockPhase = 'success';
 
@@ -929,15 +984,16 @@ describe('생성 중 알림 권한을 묻지 않는다', () => {
       render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
 
       // 단언 — 앵커(replace = 성공 콜백이 돌았다) + 부정(루틴 0회)
+      // TRIP-1268: POST 가 사전 검사 뒤에 나가 성공 착지도 그 뒤다 — 기다려서 잰다.
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       expect(mockPrompt).toHaveBeenCalledTimes(0);
-      expect(mockReplace).toHaveBeenCalledTimes(1);
       expect(mockReplace).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/itinerary/draft',
         params: { tripId: TRIP_ID },
       });
     });
 
-    it('G2 같이 짜기(CO_PLAN) 생성이 성공해도 루틴 0회', () => {
+    it('G2 같이 짜기(CO_PLAN) 생성이 성공해도 루틴 0회', async () => {
       mockPhase = 'success';
 
       render(
@@ -948,8 +1004,9 @@ describe('생성 중 알림 권한을 묻지 않는다', () => {
         />
       );
 
+      // TRIP-1268: 성공 착지는 사전 검사 뒤 — 기다려서 잰다.
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       expect(mockPrompt).toHaveBeenCalledTimes(0);
-      expect(mockReplace).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -978,6 +1035,9 @@ describe('생성 중 알림 권한을 묻지 않는다', () => {
 
       // 실행 — 렌더 후 대기 중인 then/queueMicrotask 를 모두 흘린다
       render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
+      // TRIP-1268: 성공 착지가 사전 검사(Promise 여러 단) 뒤라 act 한 번으로는 다 안 흐를 수 있다 —
+      // 착지를 기다린 뒤 한 번 더 흘린다.
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       await act(async () => {});
 
       // 단언 — 동기든 미뤄서든 부르지 않았다
@@ -989,13 +1049,13 @@ describe('생성 중 알림 권한을 묻지 않는다', () => {
       });
     });
 
-    it('G6 생성 화면은 푸시 함수(묻고 등록·조회 등록·요청)를 하나도 부르지 않는다', () => {
+    it('G6 생성 화면은 푸시 함수(묻고 등록·조회 등록·요청)를 하나도 부르지 않는다', async () => {
       mockPhase = 'success';
 
       render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
 
-      // 앵커 — 성공 콜백이 돌았다
-      expect(mockReplace).toHaveBeenCalledTimes(1);
+      // 앵커 — 성공 콜백이 돌았다(TRIP-1268: 사전 검사 뒤라 기다려서 잰다)
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       expect(mockPrompt).not.toHaveBeenCalled();
       expect(registerPushIfGranted).not.toHaveBeenCalled();
       expect(requestPushPermission).not.toHaveBeenCalled();

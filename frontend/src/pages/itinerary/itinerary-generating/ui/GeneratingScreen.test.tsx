@@ -193,6 +193,109 @@ describe('🔴 S6 · AC-5 — 지도 카드는 pins 있을 때만 뜬다 (INV-2 
   });
 });
 
+// TRIP-1268 · AI 일정 생성 일일 한도(클라이언트 임시 장치) — 한도 얼굴의 렌더 계약.
+describe('AI 일일 한도 얼굴', () => {
+  /**
+   * 무엇을 보장하나:
+   *  - `aiLimit` 이 오면 한도 얼굴(`ai-limit-notice`)만 그린다 — 제목·본문(시각으로만 말함, INV-3)·
+   *    [직접 짜기 이어가기]·[닫기]. **[다시 시도]는 없다**(눌러도 또 막히는 버튼은 거짓말이다).
+   *  - 얼굴 우선순위는 **한도 > 409 안내(busy) > 실패 > 진행**. 이전 POST 실패가 남아 있어도 한도가 이긴다.
+   *  - 두 버튼은 각자 자기 콜백만 1회 부른다.
+   *
+   * *(개념)* `getByText('문자열')` 은 Text 하나의 글자 전체와 **완전 일치**, `getByText(/정규식/)` 은
+   * **부분 일치**다. 본문은 두 문장을 한 줄로 합쳐 그릴 수도 있어 정규식으로, 제목·버튼 글자는 완전 일치로 잰다.
+   *
+   * 3동작 뼈대: 준비 = 콜백 spy 로 `aiLimit` 을 넘겨 렌더 → 실행 = 렌더만/버튼 press → 단언 = 보이는 얼굴·불린 콜백.
+   */
+  const TITLE = '오늘 AI 일정 만들기 5번을 모두 썼어요';
+
+  function limitProps() {
+    return { onContinueManual: jest.fn(), onClose: jest.fn() };
+  }
+
+  describe('🔴 L1 · AC-7·AC-9 — 한도 얼굴의 글자와 버튼', () => {
+    it('제목·본문 두 문장·두 버튼이 있고, [다시 시도]·진행 표면은 없다', () => {
+      render(
+        <GeneratingScreen
+          onBackground={noop}
+          onRetry={noop}
+          aiLimit={limitProps()}
+        />
+      );
+
+      const notice = screen.getByTestId('ai-limit-notice');
+      expect(within(notice).getByText(TITLE)).toBeOnTheScreen();
+      expect(
+        within(notice).getByText(/내일 0시에 다시 쓸 수 있어요/)
+      ).toBeOnTheScreen();
+      expect(
+        within(notice).getByText(/직접 짜기는 계속 쓸 수 있어요/)
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('ai-limit-manual-cta')).getByText(
+          '직접 짜기 이어가기'
+        )
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('ai-limit-close')).getByText('닫기')
+      ).toBeOnTheScreen();
+
+      // 부정 — 다시 시도·진행 표면(진행 바·단계 펄스)이 한 조각도 없다.
+      expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
+      expect(screen.queryByTestId('itinerary-generating-progress')).toBeNull();
+      expect(screen.queryByTestId('itinerary-generating-pulse-1')).toBeNull();
+    });
+  });
+
+  describe('🔴 L2 · AC-17 — 한도 > 409 안내 > 실패 (판정 순서)', () => {
+    it('한도·409·실패가 한꺼번에 와도 한도 얼굴만 그린다', () => {
+      render(
+        <GeneratingScreen
+          onBackground={noop}
+          onRetry={noop}
+          failed
+          busy={{
+            cancelable: true,
+            onCancelAndRetry: noop,
+            onWait: noop,
+          }}
+          aiLimit={limitProps()}
+        />
+      );
+
+      expect(screen.getByTestId('ai-limit-notice')).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-generation-busy')).toBeNull();
+      expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
+    });
+  });
+
+  describe('🔴 L3 · AC-9 — 두 버튼은 자기 콜백만 부른다', () => {
+    it('[직접 짜기 이어가기] → onContinueManual 1회, onClose 0회', () => {
+      const props = limitProps();
+      render(
+        <GeneratingScreen onBackground={noop} onRetry={noop} aiLimit={props} />
+      );
+
+      fireEvent.press(screen.getByTestId('ai-limit-manual-cta'));
+
+      expect(props.onContinueManual).toHaveBeenCalledTimes(1);
+      expect(props.onClose).not.toHaveBeenCalled();
+    });
+
+    it('[닫기] → onClose 1회, onContinueManual 0회', () => {
+      const props = limitProps();
+      render(
+        <GeneratingScreen onBackground={noop} onRetry={noop} aiLimit={props} />
+      );
+
+      fireEvent.press(screen.getByTestId('ai-limit-close'));
+
+      expect(props.onClose).toHaveBeenCalledTimes(1);
+      expect(props.onContinueManual).not.toHaveBeenCalled();
+    });
+  });
+});
+
 // TRIP-1069 · 옛 GeneratingScreen.bar.test.tsx — 가짜 타이머·Animated 스파이는 이 describe 안에서만 켠다.
 describe('진행 바 반복·동작 줄이기', () => {
   /**
