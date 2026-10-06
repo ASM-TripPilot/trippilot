@@ -111,8 +111,8 @@ export function ItineraryMethodPage({
         else goToCoPickMustVisits();
       }}
       onRegenerateCancel={() => setConfirmFor(null)}
-      // TRIP-1011 C — 2/4→3/4 가 replace 라 뒤로가기로는 거점에 못 돌아간다. push 로 쌓아야 거점
-      // 화면의 CTA 가 back() 으로 이 화면에 돌아온다.
+      // TRIP-1011 C — 2/4→3/4 는 2/4 를 걷고 오므로(TRIP-1265, 뒤로 = 1/4) 뒤로가기로는 거점에 못
+      // 돌아간다. push 로 쌓아야 거점 화면의 CTA 가 back() 으로 이 화면에 돌아온다.
       onPressRebase={
         isDayTrip
           ? undefined

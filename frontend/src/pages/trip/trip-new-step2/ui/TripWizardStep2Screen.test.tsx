@@ -5,6 +5,8 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import { TripWizardHeader } from '@/widgets/trip-wizard-header';
+
 import {
   TripWizardStep2Screen,
   type NightlyBaseCardVM,
@@ -127,6 +129,36 @@ describe('앱바·진행바 크롬 (AC-1 · AC-7)', () => {
     fireEvent.press(screen.getByTestId('trip-base-back'));
 
     expect(props.onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1266 (QA F7) — 1/4·2/4·3/4 가 같은 헤더 컴포넌트를 쓴다. 치수 계약은 위젯 테스트 소관.
+describe('위저드 공용 헤더 (2/4 · 편집 얼굴)', () => {
+  it('위저드 얼굴 — 헤더는 공용 TripWizardHeader 하나이고, 그 안에 제목·기존 ‹ testID("뒤로" 라벨)·진행 막대가 있다', () => {
+    renderScreen();
+
+    // 같은 컴포넌트 함수를 그렸는가 — testID·className 복사로는 못 속인다(0개·2개면 throw).
+    expect(screen.UNSAFE_getByType(TripWizardHeader)).toBeTruthy();
+
+    const header = screen.getByTestId('trip-wizard-header');
+    expect(within(header).getByText('거점 숙소')).toBeOnTheScreen();
+    const back = within(header).getByTestId('trip-base-back');
+    expect(back.props.accessibilityLabel).toBe('뒤로');
+    expect(
+      within(header).getByTestId('trip-wizard-progress-seg-1')
+    ).toBeOnTheScreen();
+  });
+
+  it('편집 얼굴(onDone) — 같은 공용 헤더에서 진행 표시만 없다', () => {
+    renderScreen({ onDone: jest.fn() });
+
+    expect(screen.UNSAFE_getByType(TripWizardHeader)).toBeTruthy();
+    // 긍정 짝 — 헤더가 안 그려져서 아래 부정 단언이 공짜로 통과하는 것을 막는다.
+    const header = screen.getByTestId('trip-wizard-header');
+    expect(within(header).getByText('거점 숙소')).toBeOnTheScreen();
+    expect(within(header).getByTestId('trip-base-back')).toBeOnTheScreen();
+
+    expect(screen.queryByTestId('trip-wizard-progress')).toBeNull();
   });
 });
 

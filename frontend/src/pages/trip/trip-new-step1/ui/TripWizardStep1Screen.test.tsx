@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { MustVisitSeedItem } from '@/features/create-trip';
+import { TripWizardHeader } from '@/widgets/trip-wizard-header';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
 
@@ -147,6 +148,24 @@ describe('default 프레젠테이션', () => {
 
       fireEvent.press(screen.getByTestId('trip-wizard-step1-back'));
       expect(onBack).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // TRIP-1266 (QA F7) — 1/4·2/4·3/4 가 같은 헤더 컴포넌트를 쓴다. 치수 계약은 위젯 테스트 소관.
+  describe('위저드 공용 헤더 (1/4)', () => {
+    it('헤더는 공용 TripWizardHeader 하나이고, 그 안에 제목·기존 ‹ testID("뒤로" 라벨)·진행 막대가 있다', () => {
+      render(<TripWizardStep1Screen {...props()} />);
+
+      // 같은 컴포넌트 함수를 그렸는가 — testID·className 복사로는 못 속인다(0개·2개면 throw).
+      expect(screen.UNSAFE_getByType(TripWizardHeader)).toBeTruthy();
+
+      const header = screen.getByTestId('trip-wizard-header');
+      expect(within(header).getByText('여행 만들기')).toBeOnTheScreen();
+      const back = within(header).getByTestId('trip-wizard-step1-back');
+      expect(back.props.accessibilityLabel).toBe('뒤로');
+      expect(
+        within(header).getByTestId('trip-wizard-progress-seg-1')
+      ).toBeOnTheScreen();
     });
   });
 

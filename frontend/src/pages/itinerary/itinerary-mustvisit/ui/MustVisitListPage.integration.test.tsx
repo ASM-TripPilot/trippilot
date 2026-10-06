@@ -62,9 +62,17 @@ jest.mock('@/shared/storage', () => ({
 // 시작하는 변수만 예외다(리포 확립 규칙).
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+const mockReplace = jest.fn();
+// TRIP-1263 — 생성 화면 진입이 스택을 먼저 걷는다. 목에 없으면 "dismissTo is not a function" 거짓 red.
+const mockDismissTo = jest.fn();
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    dismissTo: mockDismissTo,
+  }),
 }));
 
 // 지도를 관찰 마커로 바꾼다 — 이 파일의 관심사는 **좌표가 조회에서 지도까지 흐르는가**이지
@@ -143,6 +151,8 @@ beforeEach(() => {
   releaseHeldResponse = null;
   mockPush.mockClear();
   mockBack.mockClear();
+  mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mustVisitStore = [
     mustVisit({
       sourcePoiId: 'poi-a',
@@ -716,5 +726,78 @@ describe('🔴 TRIP-1093 L4 · AC-4 — h02 추가 버튼 → d02 select tripId 
     expect(mockPush.mock.calls).toEqual([[SELECT_FOR_TRIP]]);
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+});
+
+// TRIP-1263 (QA F5) — 생성 화면 아래에 이 화면이 남지 않게, 올리기 전에 스택을 홈까지 걷는다.
+/**
+ * 무엇을 보장하나: 다음 CTA·건너뛰기(둘 다 `goToGenerating`)가 생성 화면을 올리기 **전에**
+ * `dismissTo('/(tabs)')` 로 스택을 홈 탭 묶음까지 걷는다 — 생성 화면 앱바 ‹ 와 **같은 표현**이다
+ * (`GeneratingPage` ‹). 그래야 생성 화면 아래가 `(tabs)` 뿐이라 스와이프·하드웨어 뒤로가 ‹ 와 같은
+ * 곳에 닿고, 필수 방문지로 돌아가 CTA 를 다시 눌러 생성이 겹치는 통로가 사라진다.
+ *
+ * *(개념)* `mock.invocationCallOrder` — jest 목이 불린 **전역 순번**. 두 목의 순번을 비교하면 어느
+ *   쪽이 먼저 불렸는지 안다. 순서가 바뀌면(올린 뒤 걷기) 방금 올린 생성 화면까지 걷혀 버린다.
+ *
+ * 걷기 다음 동작은 replace 가 아니라 **push** 다 — 걷은 직후 맨 위는 `(tabs)` 라 replace 하면 홈
+ * 묶음이 생성 화면으로 바뀌어 뒤로 갈 곳이 없어진다. 실제 스택 모양은
+ * `src/__tests__/generatingEntryStack.integration.test.tsx` 가 실물 라우터로 잰다.
+ */
+describe('🔴 TRIP-1263 · 생성 화면을 올리기 전에 스택을 홈까지 걷는다 (QA F5)', () => {
+  const FULLY_AI_ROUTE = {
+    pathname: '/trips/[tripId]/itinerary/generating',
+    params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+  };
+  const CO_PLAN_ROUTE = {
+    pathname: '/trips/[tripId]/itinerary/generating',
+    params: {
+      tripId: TRIP_ID,
+      mode: 'CO_PLAN',
+      successRoute: '/trips/[tripId]/itinerary/copick/[slotKey]',
+    },
+  };
+
+  /** 걷기 1회('/(tabs)') → 생성 화면 push 1회, 이 순서. replace·back 은 0. */
+  function expectSweptThenPushed(route: object): void {
+    expect(mockDismissTo.mock.calls).toEqual([['/(tabs)']]);
+    expect(mockPush.mock.calls).toEqual([[route]]);
+    expect(mockDismissTo.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPush.mock.invocationCallOrder[0]
+    );
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+  }
+
+  it.each([
+    ['완전 AI', undefined, FULLY_AI_ROUTE],
+    ['같이 짜기', 'CO_PLAN', CO_PLAN_ROUTE],
+  ] as const)(
+    '%s — 다음 CTA 를 누르면 홈까지 걷은 뒤 생성 화면을 올린다 (params 그대로)',
+    async (_label, mode, route) => {
+      // 준비 — 목록 얼굴. 아직 아무 데도 안 갔다(앵커).
+      await openList(mode);
+      expect(mockDismissTo).not.toHaveBeenCalled();
+
+      // 실행
+      fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-proceed'));
+
+      // 단언
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      expectSweptThenPushed(route);
+    }
+  );
+
+  it('failed 얼굴의 건너뛰기도 같은 길 — 홈까지 걷은 뒤 생성 화면을 올린다', async () => {
+    // 준비 — 첫 조회 실패로 error 얼굴(건너뛰기는 여기서만 뜬다).
+    listStatus = 500;
+    renderPage();
+    await screen.findByTestId('itinerary-mustvisit-screen-failed');
+
+    // 실행
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-skip'));
+
+    // 단언
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expectSweptThenPushed(FULLY_AI_ROUTE);
   });
 });

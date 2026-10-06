@@ -4,13 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StateNotice } from '@/shared/ui/StateNotice';
 import {
-  BackChevronGlyph,
   BedGlyph,
   ChevronRightGlyph,
   WarningTriangleGlyph,
 } from '@/features/trip/index.view';
 import { formatWizardStep } from '@/features/create-trip';
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { TripWizardHeader } from '@/widgets/trip-wizard-header';
 
 /**
  * g02 거점 숙소 2/4 — **props만 받는 프레젠테이션 화면**(TRIP-672, Figma `3657:2068` 재작성).
@@ -89,48 +89,6 @@ export interface TripWizardStep2ScreenProps {
   /** TRIP-1082 — 있으면 **거점 편집 얼굴**(Figma `4700:2688`, l04 '출발점 변경' 입구): 진행바·위저드
    *  문구·생성/숙소 없이 CTA 를 숨기고 하단 [완료] 하나. 누르면 일정이 안 만들어지는 라벨이라(INV-4). */
   onDone?: () => void;
-}
-
-function Header({
-  onBack,
-  editing,
-}: {
-  onBack: () => void;
-  editing: boolean;
-}): ReactElement {
-  return (
-    <View className="w-full flex-row items-center gap-sm bg-canvas px-lg pb-[14px] pt-xl">
-      <Pressable
-        testID="trip-base-back"
-        accessibilityRole="button"
-        onPress={onBack}
-        hitSlop={8}
-      >
-        <BackChevronGlyph />
-      </Pressable>
-      <Text className="font-noto-bold text-section font-bold text-ink">
-        거점 숙소
-      </Text>
-      <View className="flex-1" />
-      {/* 진행바 4칸 — Figma가 네 칸 모두 같은 너비라 활성은 색으로만 갈린다(앞 2칸 primary). */}
-      {editing ? null : (
-        <View className="flex-row items-center gap-xs">
-          {[1, 2, 3, 4].map((n) => (
-            <View
-              key={n}
-              testID={`trip-wizard-progress-seg-${n}`}
-              className={`h-1 w-[14px] rounded-[2px] ${
-                n <= 2 ? 'bg-primary' : 'bg-hairline-strong'
-              }`}
-            />
-          ))}
-          <Text className="ml-[2px] font-inter-bold text-caption text-muted">
-            {formatWizardStep(2)}
-          </Text>
-        </View>
-      )}
-    </View>
-  );
 }
 
 /** 박별 거점 카드 한 행 — 탭하면 그 밤 번호로 오픈 신호를 낸다. 메타 한 줄(박·날짜·지역)과
@@ -262,7 +220,14 @@ export function TripWizardStep2Screen({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="trip-base-step2-root" className="flex-1 bg-canvas">
-        <Header onBack={onBack} editing={editing} />
+        <TripWizardHeader
+          title="거점 숙소"
+          onBack={onBack}
+          backTestID="trip-base-back"
+          progress={
+            editing ? undefined : { filled: 2, label: formatWizardStep(2) }
+          }
+        />
 
         {variant === 'error' ? (
           <View className="flex-1 items-center justify-center px-lg">
