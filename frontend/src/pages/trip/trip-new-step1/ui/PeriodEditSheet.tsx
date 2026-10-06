@@ -290,6 +290,14 @@ export function PeriodEditSheet({
           </View>
         </View>
 
+        {/* 안내문 — 고정 문구(TRIP-1267). 끝은 박수로 파생되므로 첫 탭 전에 읽도록 항상 띄운다 */}
+        <Text
+          testID="trip-wizard-period-note"
+          className="font-noto text-caption text-muted"
+        >
+          종료일은 여행지에서 정한 박수로 정해져요
+        </Text>
+
         {/* 적용 — 범위 완성 시에만 활성(진짜 disabled prop) */}
         <Pressable
           testID="trip-wizard-period-apply"

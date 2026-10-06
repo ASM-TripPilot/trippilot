@@ -360,3 +360,74 @@ describe('당일치기(시작=종료) · 원만 있고 범위 띠는 없다', ()
     );
   });
 });
+
+/**
+ * TRIP-1267(QA F10) — 셀을 누르면 늘 새 시작일이 되고 끝은 시작 + 여행지 박수 합으로 파생된다(TRIP-1027).
+ * 사용자는 끝날짜를 직접 못 고르므로, 처음 셀을 누르기 **전에** 그 규칙을 읽게 안내 한 줄을 항상 띄운다.
+ * 기대 문구는 리터럴로 적는다 — 구현 상수를 import 해 비교하면 자기 자신과 비교하는 동어반복이다.
+ * 실제 크기·색·간격과 시트 높이 증가로 적용 버튼이 밀리는지는 픽셀이라 6-b 프리뷰 몫이다.
+ */
+describe('기간 규칙 안내 한 줄 (종료일은 박수로 정해진다)', () => {
+  const NOTE = 'trip-wizard-period-note';
+  const NOTE_TEXT = '종료일은 여행지에서 정한 박수로 정해져요';
+
+  type JsonNode = {
+    props?: { testID?: unknown };
+    children?: (JsonNode | string)[] | null;
+  };
+
+  /** 렌더 트리의 testID 를 화면 위→아래(문서 순서)로 모은다. */
+  function testIdOrder(): string[] {
+    const acc: string[] = [];
+    const walk = (n: JsonNode | string | null | undefined): void => {
+      if (!n || typeof n === 'string') return;
+      const tid = n.props?.testID;
+      if (typeof tid === 'string') acc.push(tid);
+      (n.children ?? []).forEach(walk);
+    };
+    const root = screen.toJSON() as unknown as JsonNode | JsonNode[] | null;
+    if (Array.isArray(root)) root.forEach(walk);
+    else walk(root);
+    return acc;
+  }
+
+  it.each<[string, TripDateRange]>([
+    ['빈 범위', {}],
+    ['시작만', { start: '2026-06-10' }],
+    ['완성 범위', { start: '2026-06-10', end: '2026-06-13' }],
+    ['당일(시작=끝)', { start: '2026-06-10', end: '2026-06-10' }],
+  ])('%s 에서도 안내 문구가 정확히 그 글자로 보인다', (_label, range) => {
+    renderSheet({ range });
+
+    // toHaveTextContent(문자열) = 완전 일치(앞뒤 공백만 정리) — 글자가 하나라도 다르면 red.
+    expect(screen.getByTestId(NOTE)).toHaveTextContent(NOTE_TEXT);
+  });
+
+  it('안내는 달력 다음, 적용 버튼 바로 위에 놓인다', () => {
+    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
+
+    const order = testIdOrder();
+    // 달력의 마지막 칸(6/30) < 안내 < 적용 — 안내가 적용 버튼 안이나 달력 위로 가면 red.
+    const lastCell = order.indexOf('trip-wizard-period-cell-2026-06-30');
+    const note = order.indexOf(NOTE);
+    const apply = order.indexOf('trip-wizard-period-apply');
+    expect(lastCell).toBeGreaterThan(-1);
+    expect(note).toBeGreaterThan(lastCell);
+    expect(apply).toBeGreaterThan(note);
+  });
+
+  it('안내는 정적 안내문 토큰(font-noto · text-caption · text-muted)을 쓰고 raw 값이 없다', () => {
+    renderSheet();
+
+    const tokens = String(screen.getByTestId(NOTE).props.className ?? '').split(
+      /\s+/
+    );
+    expect(tokens).toEqual(
+      expect.arrayContaining(['font-noto', 'text-caption', 'text-muted'])
+    );
+    // 임의값(`text-[12px]`·`text-[#6a6a6a]`)이 섞이면 토큰 대신 하드코딩이 들어간 것이다.
+    expect(tokens.filter((t) => t.includes('[') || t.includes('#'))).toEqual(
+      []
+    );
+  });
+});
