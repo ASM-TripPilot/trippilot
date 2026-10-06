@@ -22,7 +22,7 @@ import { BaseNightsFlow } from './TripNewStep2Page';
  *    밤 단위로 비교한다(`basesChanged`). 들어오기 전 캐시(l04 가 채운 값)는 기준이 아니다.
  *  - 바뀌었고 다시 만들 일정이 있는 여행(PLANNED/CONFIRMED · 일정 > 0)이면 묻는다(BR-U6-21). 그 밖엔
  *    떠난다 — ACTIVE·ENDED 는 서버가 재생성을 거절하므로 묻지 않는다.
- *  - [일정 다시 만들기]는 생성 화면(h09)으로 replace 만 한다 — POST 는 h09 가 소유한다.
+ *  - [일정 다시 만들기]는 홈까지 걷고 생성 화면(h09)을 push 만 한다(TRIP-1263) — POST 는 h09 가 소유한다.
  */
 export function TripBasesPage({
   tripId,
@@ -84,7 +84,9 @@ export function TripBasesPage({
   }
 
   function regenerate(): void {
-    router.replace({
+    // TRIP-1263 — 홈까지 걷고 push(MustVisitListPage.goToGenerating 과 같은 진입 정리).
+    router.dismissTo('/(tabs)');
+    router.push({
       pathname: '/trips/[tripId]/itinerary/generating',
       params: { tripId, mode: 'FULLY_AI' },
     });

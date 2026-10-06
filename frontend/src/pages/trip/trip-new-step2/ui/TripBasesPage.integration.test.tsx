@@ -47,18 +47,22 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockCanGoBack = jest.fn();
+// TRIP-1263 — 재생성 진입이 스택을 먼저 걷는다. 없으면 "dismissTo is not a function" 거짓 red.
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     back: mockBack,
     replace: mockReplace,
     canGoBack: mockCanGoBack,
+    dismissTo: mockDismissTo,
   }),
   router: {
     push: mockPush,
     back: mockBack,
     replace: mockReplace,
     canGoBack: mockCanGoBack,
+    dismissTo: mockDismissTo,
   },
 }));
 
@@ -331,6 +335,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     mockPush.mockClear();
     mockBack.mockClear();
     mockReplace.mockClear();
+    mockDismissTo.mockClear();
     mockCanGoBack.mockReset();
     mockCanGoBack.mockReturnValue(true);
     // 모듈 싱글턴 스토어 — 파일 최상위에서 매번 다른 여행 값으로 되돌린다(앞 테스트 누수 차단).
@@ -1206,6 +1211,7 @@ describe('편집 모드 (TRIP-1082)', () => {
     mockPush.mockClear();
     mockBack.mockClear();
     mockReplace.mockClear();
+    mockDismissTo.mockClear();
     mockCanGoBack.mockReset();
     mockCanGoBack.mockReturnValue(true);
     setAccessToken('valid-access');
@@ -1294,7 +1300,8 @@ describe('편집 모드 (TRIP-1082)', () => {
     return (
       mockPush.mock.calls.length +
       mockBack.mock.calls.length +
-      mockReplace.mock.calls.length
+      mockReplace.mock.calls.length +
+      mockDismissTo.mock.calls.length
     );
   }
 
@@ -1452,8 +1459,12 @@ describe('편집 모드 (TRIP-1082)', () => {
 
   // ── AC-9 ─────────────────────────────────────────────────────────────────────
 
+  // TRIP-1263 (QA F5) 개정 — 옛 계약은 "generating 으로 replace 1회"였다. replace 는 맨 위 한 장만 바꿔
+  // 끼우므로 생성 화면 아래에 내 숙소(l04)가 남아, 스와이프 뒤로가 ‹(홈)와 다른 곳에 닿았다. 이제는 홈까지
+  // 걷고(`dismissTo('/(tabs)')`, 생성 화면 ‹ 와 같은 표현) 그 위에 push 한다 — 걷은 직후 맨 위는 `(tabs)` 라
+  // 여기서 replace 하면 홈 묶음이 생성 화면으로 바뀌어 뒤로 갈 곳이 사라진다.
   describe('AC-9 · [일정 다시 만들기]는 생성 화면(h09)으로 넘긴다 — 이 화면은 POST 를 쏘지 않는다', () => {
-    it('generating 으로 { tripId, mode: FULLY_AI } replace 1회 · back·push 없음 · 일정 POST 0', async () => {
+    it('홈까지 걷은 뒤 generating 으로 { tripId, mode: FULLY_AI } push 1회 · back·replace 없음 · 일정 POST 0', async () => {
       await renderEdit();
       await changeNight1ToB();
       pressDone();
@@ -1462,9 +1473,14 @@ describe('편집 모드 (TRIP-1082)', () => {
       fireEvent.press(screen.getByTestId('trip-base-regen-confirm'));
       await settle();
 
-      expect(mockReplace.mock.calls).toEqual([[GENERATING_ROUTE]]);
+      expect(mockDismissTo.mock.calls).toEqual([['/(tabs)']]);
+      expect(mockPush.mock.calls).toEqual([[GENERATING_ROUTE]]);
+      // 순서 — 올린 뒤 걷으면 방금 올린 생성 화면까지 걷힌다.
+      expect(mockDismissTo.mock.invocationCallOrder[0]).toBeLessThan(
+        mockPush.mock.invocationCallOrder[0]
+      );
+      expect(mockReplace).not.toHaveBeenCalled();
       expect(mockBack).not.toHaveBeenCalled();
-      expect(mockPush).not.toHaveBeenCalled();
       expect(hitCount(ITINERARY_POST_HIT)).toBe(0);
     });
   });

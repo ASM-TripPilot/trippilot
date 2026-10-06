@@ -93,7 +93,10 @@ export function MustVisitListPage({
   // slotKey 를 아직 모르므로 `[slotKey]` 세그먼트가 든 템플릿이고, h09 가 생성 후 실 slotKey 를
   // 채운다(GeneratingPage). 완전AI 갈래(h04 에서 mode 없음)는 FULLY_AI 를 **명시해** 싣는다 — h09 는
   // mode 가 없으면 생성을 쏘지 않는 관찰 모드로 뜬다(TRIP-1006 A4·A5).
+  // TRIP-1263 — 올리기 전에 홈까지 걷는다(h09 ‹ 와 같은 표현). 스와이프 뒤로가 필수 방문지로 돌아가
+  // 생성이 겹치지 않게. 걷은 뒤엔 push 다 — 맨 위가 `(tabs)` 라 replace 면 탭 묶음이 사라진다.
   function goToGenerating(): void {
+    router.dismissTo('/(tabs)');
     if (mode === 'CO_PLAN') {
       router.push({
         pathname: '/trips/[tripId]/itinerary/generating',
