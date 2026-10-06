@@ -18,6 +18,11 @@ import type {
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import { CheckCircleGlyph } from '@/features/itinerary/index.view';
+import {
+  closestScrollView,
+  fireChipLayout,
+  stubScrollTo,
+} from '@/test-support/sheetTree';
 
 import { DraftScreen } from './DraftScreen';
 
@@ -971,5 +976,68 @@ describe('남는 얼굴 헤더·안내 아이콘', () => {
         expect(screen.UNSAFE_queryAllByType(CheckCircleGlyph)).toHaveLength(0);
       }
     );
+  });
+});
+
+// TRIP-1260 · 로딩·실패·빈 얼굴의 일차 탭 줄(01b D6). 탭은 여행 기간 전체 수만큼 그려지므로 7일 여행이면
+// 7개다 — 지금은 화면 세로 스크롤 안의 가로 줄이라 6일차부터 잘린다. 탭만 가로 스크롤 안에 둔다.
+// ⚠️ 탭이 실제로 잘리는지·밀리는지·세로 간격이 그대로인지는 6-b.
+describe('🔴 일차 탭 줄 가로 스크롤 (TRIP-1260)', () => {
+  const SEVEN_TABS: DraftDayTab[] = Array.from({ length: 7 }, (_, index) => ({
+    date: `2026-06-${String(10 + index).padStart(2, '0')}`,
+    dayNumber: index + 1,
+    hasData: true,
+  }));
+
+  function draft(over: { view?: DraftView; selectedDate?: string } = {}) {
+    return (
+      <DraftScreen
+        view={listed()}
+        tabs={SEVEN_TABS}
+        selectedDate={DAY1}
+        pins={[]}
+        dayHeader="6월 10일 · 수"
+        canRetry
+        onSelectDay={onSelectDay}
+        onRetry={onRetry}
+        onBack={onBack}
+        {...over}
+      />
+    );
+  }
+
+  it('로딩 얼굴에서 탭 7개(itinerary-draft-day-1~7)의 가장 가까운 ScrollView 는 한 가로 ScrollView 다 (AC-1 · D6)', () => {
+    render(draft({ view: { kind: 'loading' } as DraftView }));
+
+    const scroll = closestScrollView(
+      screen.getByTestId('itinerary-draft-day-1')
+    );
+    // 지금은 화면 세로 스크롤(itinerary-draft-scroll)이 가장 가깝다 — 그래서 horizontal 이 아니다.
+    expect(scroll?.props.horizontal).toBe(true);
+    for (let day = 1; day <= 7; day += 1) {
+      expect(
+        closestScrollView(screen.getByTestId(`itinerary-draft-day-${day}`))
+      ).toBe(scroll);
+    }
+  });
+
+  it('선택 날짜를 6일차로 바꾸면 그 탭(x=400)이 보이게 0 < x ≤ 400 으로 scrollTo 한다 (AC-3)', () => {
+    // 준비
+    const view = render(draft());
+    const tab = screen.getByTestId('itinerary-draft-day-6');
+    const scroll = closestScrollView(tab);
+    expect(scroll?.props.horizontal).toBe(true);
+    const scrollTo = stubScrollTo(scroll!);
+    fireChipLayout(tab, 400);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // 실행 — 선택은 날짜로 내려온다(6일차 = 2026-06-15)
+    view.rerender(draft({ selectedDate: SEVEN_TABS[5].date }));
+
+    // 단언
+    expect(scrollTo).toHaveBeenCalled();
+    const target = scrollTo.mock.lastCall?.[0] as { x: number };
+    expect(target.x).toBeGreaterThan(0);
+    expect(target.x).toBeLessThanOrEqual(400);
   });
 });

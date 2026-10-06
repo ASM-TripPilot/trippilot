@@ -14,6 +14,7 @@ import type {
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { DayChipScroller } from '@/widgets/map-sheet-shell';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import {
   AlertCircleGlyph,
@@ -448,7 +449,9 @@ export function DraftScreen({
           )}
 
           {tabs.length === 0 ? null : (
-            <View className="flex-row gap-sm">
+            <DayChipScroller
+              selectedIndex={tabs.findIndex((tab) => tab.date === selectedDate)}
+            >
               {tabs.map((tab) => (
                 <DayTab
                   key={tab.date}
@@ -457,7 +460,7 @@ export function DraftScreen({
                   onSelectDay={onSelectDay}
                 />
               ))}
-            </View>
+            </DayChipScroller>
           )}
 
           {view.kind === 'loading' ? <LoadingFace /> : null}

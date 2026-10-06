@@ -1546,18 +1546,19 @@
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
-- `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText
+- `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
 - `src/test-support/tripRecordsTrip.ts`  →  tripRecordsTrip
 - `src/test-support/wizardDraftFixture.ts`  →  WizardDraftData · wizardDraftData · freshWizardDraft · withoutSeedFields · leavePreviousTripDraft · captureDraftAtNextCall · resetWizardDraft
 
 ## src/widgets/map-sheet-shell/
-- `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipOverlay · DistanceConnector · EditorView · GenerationProgressCard · BackChevronGlyph · FullAiGlyph · MapSheetShell · SheetHeader
+- `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipOverlay · DayChipScroller · DistanceConnector · EditorView · GenerationProgressCard · BackChevronGlyph · FullAiGlyph · MapSheetShell · SheetHeader
 
 ## src/widgets/map-sheet-shell/ui/
 - `src/widgets/map-sheet-shell/ui/CtaBar.tsx`  →  CtaButton · CtaBarProps · CTA_BAR_HEIGHT · CtaBar
 - `src/widgets/map-sheet-shell/ui/DayChipOverlay.tsx`  →  DayChip · DayChipOverlayProps · DayChipOverlay
+- `src/widgets/map-sheet-shell/ui/DayChipScroller.tsx`  →  DayChipScrollerProps · DayChipScroller
 - `src/widgets/map-sheet-shell/ui/DistanceConnector.tsx`  →  isZeroDistance · DistanceConnectorProps · DistanceConnector
 - `src/widgets/map-sheet-shell/ui/EditorGlyphs.tsx`  →  TrashGlyph · PlusGlyph · InfoCircleGlyph
 - `src/widgets/map-sheet-shell/ui/EditorView.tsx`  →  EditorViewSlot · EditorViewProps · EditorView

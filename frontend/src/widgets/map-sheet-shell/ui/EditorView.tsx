@@ -22,6 +22,7 @@ import { SlotStopCard } from '@/entities/itinerary-slot';
 
 import { CTA_BAR_HEIGHT, type CtaButton } from './CtaBar';
 import { InfoCircleGlyph, PlusGlyph } from './EditorGlyphs';
+import { DayChipScroller } from './DayChipScroller';
 import { decideDragEnd, DELETE_ZONE_BAR_HEIGHT } from './dragDelete';
 import { BackChevronGlyph } from './MapSheetGlyphs';
 import { MapSheetShell } from './MapSheetShell';
@@ -228,8 +229,9 @@ export function EditorView({
       >
         <BackChevronGlyph size={20} />
       </Pressable>
-      {days.length > 1
-        ? days.map((tab, index) => {
+      {days.length > 1 ? (
+        <DayChipScroller selectedIndex={activeDayIndex}>
+          {days.map((tab, index) => {
             const selected = index === activeDayIndex;
             return (
               <Pressable
@@ -246,8 +248,9 @@ export function EditorView({
                 </Text>
               </Pressable>
             );
-          })
-        : null}
+          })}
+        </DayChipScroller>
+      ) : null}
     </View>
   );
 
