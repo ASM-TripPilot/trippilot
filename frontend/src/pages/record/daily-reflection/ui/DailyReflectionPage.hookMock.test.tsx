@@ -48,6 +48,7 @@ jest.mock('expo-router', () => ({
   router: {
     push: jest.fn(),
     replace: jest.fn(),
+    dismissTo: jest.fn(),
     canGoBack: jest.fn(() => true),
     back: jest.fn(),
   },
@@ -1387,5 +1388,54 @@ describe('공유 배선 없음', () => {
       // 긍정 짝 — 화면은 완성 VM 으로 배선된다(페이지가 안 깨졌다).
       expect(props.narrative).toBeDefined();
     });
+  });
+});
+
+describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)', () => {
+  /**
+   * 무엇을 보장하나: 회고 화면(스택 화면)의 탭바로 탭을 누르면 `router.dismissTo(탭 경로)` 1회 —
+   * replace 면 이 화면만 (tabs) 로 바뀌고 아래 스택이 남는다.
+   * 준비: data 얼굴 훅 응답 → 실행: 홈·탐색 탭 press → 단언: dismissTo 인자 순서, replace·push 0회.
+   */
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('홈·탐색 탭 press → dismissTo(/(tabs)) · dismissTo(/explore), replace 0회', () => {
+    (useGetTripsTripId as jest.Mock).mockReturnValue({
+      data: {
+        tripId: 'trip-1262',
+        startDate: '2026-09-24',
+        endDate: '2026-09-25',
+      },
+      isPending: false,
+      isError: false,
+    });
+    (useDailyReflection as jest.Mock).mockReturnValue({
+      reflection: undefined,
+      isPending: true,
+      isError: false,
+      refetch: jest.fn(),
+      create: jest.fn(),
+      saveEdit: jest.fn(),
+    });
+
+    render(
+      <DailyReflectionPage
+        tripId="trip-1262"
+        date="2026-09-24"
+        today={PAST_TODAY}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-explore'));
+
+    expect((router.dismissTo as jest.Mock).mock.calls).toEqual([
+      ['/(tabs)'],
+      ['/explore'],
+    ]);
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
   });
 });

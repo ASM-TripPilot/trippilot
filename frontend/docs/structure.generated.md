@@ -183,6 +183,7 @@
 - `src/__tests__/rootLayoutSafeArea.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutToastHost.test.tsx`  →  (export 없음)
 - `src/__tests__/shareCardStructure.test.ts`  →  (export 없음)
+- `src/__tests__/shellTabDismiss.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
 - `src/__tests__/tabsItineraryRoute.test.tsx`  →  (export 없음)
@@ -1576,4 +1577,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 966개 파일
+합계 967개 파일

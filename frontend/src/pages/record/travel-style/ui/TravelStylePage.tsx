@@ -57,7 +57,7 @@ export function TravelStylePage(): ReactElement {
       analysis={envelope.analysis ?? null}
       preview={envelope.preview ?? null}
       onBack={handleBack}
-      onPressTab={(key: ShellTabKey) => router.replace(shellTabHref(key))}
+      onPressTab={(key: ShellTabKey) => router.dismissTo(shellTabHref(key))}
     />
   );
 }
