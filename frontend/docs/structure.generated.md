@@ -150,6 +150,7 @@
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
+- `src/__tests__/generatingEntryStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/importBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/importBoundaryLayers.test.ts`  →  (export 없음)
@@ -757,7 +758,7 @@
 - `src/pages/itinerary/itinerary-manual/ui/PlaceAddPage.tsx`  →  PlaceAddPage
 
 ## src/pages/itinerary/itinerary-method/config/
-- `src/pages/itinerary/itinerary-method/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
+- `src/pages/itinerary/itinerary-method/config/methodPicker.ts`  →  METHOD_SUBTITLE · METHOD_SWITCH_NOTE
 
 ## src/pages/itinerary/itinerary-method/
 - `src/pages/itinerary/itinerary-method/index.ts`  →  ItineraryMethodPage
@@ -1579,4 +1580,11 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 969개 파일
+## src/widgets/trip-wizard-header/
+- `src/widgets/trip-wizard-header/index.ts`  →  TripWizardHeader
+
+## src/widgets/trip-wizard-header/ui/
+- `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
+- `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
+
+합계 973개 파일
