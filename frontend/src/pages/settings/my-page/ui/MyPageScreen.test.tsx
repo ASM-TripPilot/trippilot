@@ -126,3 +126,27 @@ describe('🔴 AC-6 · 지난 여행 "캘린더" 링크', () => {
     expect(screen.getByText('지난 여행')).toBeOnTheScreen();
   });
 });
+
+// TRIP-1270 — 최대 글자 크기에서 긴 제목이 톱니를 화면 밖으로 밀어내지 않게(실제 배치는 6-b).
+describe('큰 글자 대응 — 헤더 제목은 줄어들고 톱니는 크기를 지킨다 (AC-3)', () => {
+  const tokens = (el: { props: { className?: unknown } }): string[] =>
+    String(el.props.className ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+
+  it('제목은 shrink 이고 말줄임 없이 꺾이며(numberOfLines 없음), 톱니는 shrink-0 이다', () => {
+    // 준비: 톱니는 설정 콜백이 있을 때만 그린다.
+    render(<MyPageScreen {...base({ onPressSettings: noop })} />);
+
+    // 실행
+    const title = screen.getByText('마이페이지');
+    const gear = screen.getByTestId('my-header-settings');
+
+    // 단언 — 'text-hero' 는 헤더 제목을 집었다는 앵커, 'shrink' 와 'shrink-0' 은 토큰 완전 일치로 구분된다.
+    expect(tokens(title)).toEqual(
+      expect.arrayContaining(['text-hero', 'shrink'])
+    );
+    expect(title.props.numberOfLines).toBeUndefined();
+    expect(tokens(gear)).toContain('shrink-0');
+  });
+});

@@ -200,3 +200,43 @@ describe('BottomTabBar.tsx 주석 — 확정값 표기 (TRIP-1104 AC-4 · 소스
     });
   });
 });
+
+// TRIP-1270 — 최대 글자 크기에서 탭바가 잘리지 않게. 실제 잘림은 jest 가 못 본다(레이아웃 엔진 없음) — 6-b 몫.
+describe('BottomTabBar — 큰 글자 대응 (AC-1)', () => {
+  const tokens = (el: { props: { className?: unknown } }): string[] =>
+    String(el.props.className ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+
+  it('루트는 고정 높이 h-[96px] 대신 최소 높이 min-h-[96px] 이고, 나머지 위치 토큰은 그대로다', () => {
+    render(<BottomTabBar activeKey="home" onPressTab={jest.fn()} />);
+
+    const root = tokens(screen.getByTestId('shell-tabbar-root'));
+    expect(root).toContain('min-h-[96px]');
+    // 토큰 배열 toContain 은 원소 완전 일치라 'min-h-[96px]' 가 여기 걸리지 않는다.
+    expect(root).not.toContain('h-[96px]');
+    expect(root).toEqual(
+      expect.arrayContaining([
+        'absolute',
+        'inset-x-0',
+        'bottom-0',
+        'px-[30px]',
+        'pt-[26px]',
+      ])
+    );
+  });
+
+  it('활성·비활성 다섯 라벨 모두 한 줄(numberOfLines 1)이고 폭이 모자랄 때만 줄여 맞춘다(adjustsFontSizeToFit)', () => {
+    // activeKey=home 하나로 활성 라벨 1 + 비활성 라벨 4 — className 삼항의 두 분기를 다 본다.
+    render(<BottomTabBar activeKey="home" onPressTab={jest.fn()} />);
+
+    TAB_KEYS.forEach((key) => {
+      const label = screen.getByText(TAB_LABELS[key]);
+      expect({
+        key,
+        numberOfLines: label.props.numberOfLines,
+        adjustsFontSizeToFit: label.props.adjustsFontSizeToFit,
+      }).toEqual({ key, numberOfLines: 1, adjustsFontSizeToFit: true });
+    });
+  });
+});

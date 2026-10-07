@@ -713,6 +713,40 @@ describe('진행 중 여행 카드 + legend 줄 ›', () => {
     });
   });
 
+  // TRIP-1270 — 최대 글자 크기에서 버튼 글자가 위아래로 잘리지 않게(실제 잘림은 6-b).
+  describe('큰 글자 대응 — 카드 두 버튼은 최소 높이 (AC-2)', () => {
+    const tokens = (el: { props: { className?: unknown } }): string[] =>
+      String(el.props.className ?? '')
+        .split(/\s+/)
+        .filter(Boolean);
+
+    it.each([
+      [RECORDS_BTN, '오늘 기록 보기'],
+      [HUB_BTN, '일정 허브로'],
+    ])(
+      '%s 는 h-[44px] 대신 min-h-[44px] 이고, 라벨 "%s" 는 여러 줄이어도 가운데 정렬(text-center)이다',
+      (testID, label) => {
+        // 준비 / 실행
+        render(
+          <RecordsCalendarScreen {...baseProps({ ongoingTrip: ONGOING })} />
+        );
+        const button = screen.getByTestId(testID);
+
+        // 단언 ① 버튼 높이 — 토큰 배열 비교라 'min-h-[44px]' 가 'h-[44px]' 부재 단언에 걸리지 않는다.
+        expect(tokens(button)).toContain('min-h-[44px]');
+        expect(tokens(button)).not.toContain('h-[44px]');
+        expect(tokens(button)).toEqual(
+          expect.arrayContaining(['flex-1', 'items-center', 'justify-center'])
+        );
+
+        // 단언 ② 라벨 — items-center 는 상자만 가운데 두므로 꺾인 줄 정렬은 text-center 가 맡는다.
+        expect(tokens(within(button).getByText(label))).toContain(
+          'text-center'
+        );
+      }
+    );
+  });
+
   describe('🔴 TRIP-1120 · legend `›` — 누르면 이동하는 줄에만 (AC-9 · INV-4)', () => {
     it('지난·진행 줄과 지난 묶음에는 그 줄 안에 `›`, 미래 줄·미래 묶음에는 없다. 줄 목록은 그대로다', () => {
       // 준비 / 실행
