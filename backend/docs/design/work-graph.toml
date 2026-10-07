@@ -433,11 +433,18 @@ TRIP-481 과 무관하다(그쪽은 로컬 위임 경로 버그).
 id = "TRIP-475"
 ticket = "TRIP-475"
 title = "[예약] 일정 생성 시간제약 재도입 — 플래그 on + deadline 재전송"
-status = "deferred"
+status = "done"
 owner = "일정"
 migration = false
 touches = ["backend/modules/itinerary-generation"]
-note = "2026-10 이후로 잡혀 있다. 일정 제약이지 기술 선행이 아니다."
+note = """
+2026-10 이후로 잡혀 있었다. 일정 제약이지 기술 선행이 아니었다.
+
+**닫힘(2026-10-07 재조사).** 앞당겨 이미 켜져 있다 — `ScheduleDeadlineProperties.kt:7,10` 이
+"2026-09-28 다시 켰다(TRIP-1000, TRIP-475 를 앞당김)" 라고 적고 `enforced = true`,
+day1 15s / total 60s 로 돌고 있다. deferred 로 남겨 둔 동안 「우리가 못 푸는 것」 집계를
+한 줄 부풀리고 있었다.
+"""
 
 # ── 누락 보정(2026-09-16) — 열린 BE 티켓인데 그래프에 없던 넷 ────────────────────
 #
@@ -557,7 +564,7 @@ note = """
 id = "AI-INBOUND-AUTH"
 ticket = "TRIP-878"
 title = "[AI] 인바운드 서비스 토큰 검증 — 백엔드는 보내는데 받는 쪽이 없다"
-status = "external"
+status = "done"
 owner = "ai"
 migration = false
 touches = []
@@ -574,6 +581,12 @@ note = """
 
 **상대가 켜기 전에 `SERVICE_AUTH_TOKEN` 실값이 양쪽 환경에 있어야 한다** — 지금 `.env.example` 은
 빈 값이다. 스위치만으로는 값이 생기지 않는다.
+
+**닫힘(2026-10-07 재조사) — 위 "받는 쪽 검사는 없다"는 이제 거짓이다.** 상대가 구현했다:
+`ai/src/trippilot/api/middleware.py:321` `ServiceAuthMiddleware`(x-service-token 불일치 401,
+상수시간 비교), 등록은 `:538`(토큰이 설정된 경우에만). `EXEMPT_PATHS = {"/health", "/"}` 라
+걱정했던 헬스핑은 안 깨진다. DEV 실측으로도 확인했다 — 토큰 없이 `/openapi.json` 을 부르면 401 이다
+(2026-10-05). 남은 것은 코드가 아니라 **시크릿 실값**(사람)이고 그건 스위치 문서가 추적한다.
 """
 
 [[nodes]]
@@ -626,7 +639,7 @@ note = """
 id = "AI-CONTAINER-BOOT"
 ticket = "TRIP-882"
 title = "[AI] 소스 빌드 컨테이너가 기동 불가 — EXISTENCE_MAX_CALLS 빈 값에 int('') 폭발"
-status = "external"
+status = "done"
 owner = "ai"
 migration = false
 touches = []
@@ -637,6 +650,11 @@ note = """
 
 기존 GHCR 이미지로는 안 나고 **빌드해야만** 드러나서 여태 아무도 몰랐다. 로컬은 `.env` 에
 `EXISTENCE_MAX_CALLS=60` 을 넣어 우회했다(2026-09-16).
+
+**닫힘(2026-10-07 재조사).** 상대가 고쳤다 — `ai/main.py:211` 이
+`int(_env("EXISTENCE_MAX_CALLS") or "60")` 로 바뀌었고 주석이 TRIP-882 를 명시한다.
+같은 함정이 남은 자리를 역검증했다: `ai/src`·`main.py` 전체에서 `os.environ.get(key, default)`
+패턴 잔존 0건.
 """
 
 [[nodes]]
@@ -2181,13 +2199,19 @@ note = """
 id = "REPLAN-AI-WIRED"
 ticket = ""
 title = "상대 배선 후 한시 폴백 제거 — 재계획이 전용 경로만 쓴다"
-status = "blocked"
+status = "todo"
 migration = false
 touches = [
   "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
   "backend/app/src/test/kotlin/com/trippilot/app/LiveAiRoundTripIT.kt",
 ]
 note = """
+**blocked 해제(2026-10-07 재조사) — 선행이 풀렸다.** 아래가 기다리던 두 조건이 모두 찼다:
+상대 오케스트레이터 `replan` 은 `ai/src/trippilot/api/wiring.py:1661` 에 실재하고,
+500 을 내던 필드명 버그도 고쳐졌다 — `wiring.py:1122` 가 `FixedBlockSchema` 는 `start`/`dwell_min`
+임을 주석으로 못 박고 공용 변환기(`_fixed_block`)를 쓴다. 남은 것은 **우리 판정 한 번**
+(`LIVE_AI=1` 실왕복 replan 200)과 **지우는 일**뿐이다.
+
 **갱신(2026-09-27) — 상대 배선이 끝났다**(AI #744 PlanBAgent 복원 · #749 /planb 별칭). 우리 몫
 TRIP-960 ②(상수 교체)는 이 커밋으로 끝. **폴백 제거는 아직이다** — 실왕복에서 상대 500 이 나와
 "배선 완료 + 실왕복 200" 조건의 절반만 찼다: `_replan_fixed_blocks`(wiring.py:910)가
