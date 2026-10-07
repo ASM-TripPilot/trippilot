@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
@@ -14,12 +14,14 @@ import { readFromInstant } from '../model/replanFromInstant';
 import { deriveReplanMapAnchor } from '@/features/request-replan';
 import { resolveReplanState } from '../model/replanState';
 import { useReplanSession } from '../model/useReplanSession';
+import { useElapsedFlag } from '@/shared/lib/useElapsedFlag';
 import {
   useGetTripsTripIdVisitsDaysDay,
   usePostTripsTripIdReplanSessionsSessionIdCancel,
 } from '@/shared/api/index.hooks';
 
 import { ReplanLeaveDialog } from './ReplanLeaveDialog';
+import { ReplanNoticeFace } from './ReplanNoticeFace';
 import { ReplanSolvingView } from './ReplanSolvingView';
 
 /**
@@ -39,8 +41,19 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *  - DRAFT·NO_SOLUTION·FAILED → i06(`planb/draft`)으로 **replace** 1회. push 면 i06 에서 뒤로 갔을 때 이
  *    화면이 다시 떠 곧장 i06 로 되돌려 보내는 루프가 생긴다. 의존성을 kind 문자열로 둬 폴링 재렌더에
  *    다시 발화하지 않는다.
- *  - closed·미도착 → null.
+ *  - TRIP-1277 — 어떤 상태에서도 빈 화면이 아니다(INV-4):
+ *    · 미도착(첫 응답 전) → 진행 기본 얼굴(캡션 `일정 다시 짜는 중`, 행 0). ‹·[취소]는 tripId·sessionId 만으로 동작.
+ *    · data 없는 조회 실패 → 오류 얼굴. [다시 시도]=세션 재조회(`refetch`)만, [취소]=**서버 호출 없이** 나가기
+ *      (조회가 실패한 판에 cancel 도 실패할 공산이 크다 — 세션은 다음 요청이 닫는다, INV-U4-06).
+ *    · closed → 종료 얼굴 + [나가기](서버 호출 없음).
+ *    · 화면에 들어온 지 90초(미도착 구간 포함)가 지나면 시트 맨 위 느림 안내 — 요청·폴링은 그대로 둔다.
+ *      시계는 마운트부터다 — 폴링 응답마다 리셋하지 않는다(restartKey 없음).
+ *    · [취소] 요청이 실패하면(`cancel.isError`) 한 줄로 알린다.
+ *  - 오류·종료 얼굴의 나가기 연타는 ref 로 막는다(같은 틱 두 번째 누름은 옛 state 를 본다). ‹ 확인의 [나가기]
+ *    연타·스와이프 이탈은 이번 범위 밖(새 티켓 후보).
  */
+
+const SLOW_MS = 90_000;
 
 export interface PlanbSolvingPageProps {
   tripId: string;
@@ -56,6 +69,7 @@ export function PlanbSolvingPage({
   const cancel = usePostTripsTripIdReplanSessionsSessionIdCancel();
   const itinerary = useLiveItinerary(tripId);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const leavingRef = useRef(false);
 
   const data = session.data;
   const kind =
@@ -78,6 +92,12 @@ export function PlanbSolvingPage({
     query: { enabled: day !== undefined },
   });
 
+  // 훅이라 조기 반환 위에서 — 미도착(실패 전)·짜는 중 동안 이어서 잰다.
+  const slow = useElapsedFlag(
+    data === undefined ? !session.isError : kind === 'solving',
+    SLOW_MS
+  );
+
   useEffect(() => {
     if (kind === 'draft' || kind === 'noSolution' || kind === 'failed') {
       router.replace({
@@ -87,9 +107,30 @@ export function PlanbSolvingPage({
     }
   }, [kind, tripId, sessionId, router]);
 
-  if (kind !== 'solving' || data === undefined || from === undefined) {
-    return null;
+  // 서버 호출 없이 나간다 — 뒤로 갈 곳이 없으면(딥링크 착지) 허브로.
+  const leaveWithoutServer = () => {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+    if (router.canGoBack()) router.back();
+    else router.replace(`/trips/${tripId}/live`);
+  };
+
+  if (data === undefined && session.isError) {
+    return (
+      <ReplanNoticeFace
+        kind="solving-error"
+        onRetry={() => session.refetch()}
+        onLeave={leaveWithoutServer}
+      />
+    );
   }
+  if (kind === 'closed') {
+    return (
+      <ReplanNoticeFace kind="solving-closed" onLeave={leaveWithoutServer} />
+    );
+  }
+  // 결과가 나왔다 — 위 effect 가 i06 로 갈아 끼우는 중.
+  if (kind !== undefined && kind !== 'solving') return null;
 
   // 방문 기록을 모르면(조회 중·실패) 곳 수·행을 비운다 — "방문한 0곳"은 거짓이다.
   const visitsKnown = visits.data !== undefined;
@@ -145,7 +186,7 @@ export function PlanbSolvingPage({
           deriveReplanMapAnchor({
             days,
             preferredDate: targetDate,
-            origin: { lat: data.originLat, lng: data.originLng },
+            origin: { lat: data?.originLat, lng: data?.originLng },
           }).center
         }
         pins={buildStatePins(
@@ -156,13 +197,15 @@ export function PlanbSolvingPage({
           }))
         )}
         solvingLabel={
-          data.scope === 'FULL_DAY'
-            ? !otherDay
-              ? '오늘 일정 다시 짜는 중'
-              : day
-                ? `${dayIndex + 1}일차 일정 다시 짜는 중`
-                : '일정 다시 짜는 중'
-            : `${from.hour}시 이후 다시 짜는 중`
+          from === undefined
+            ? '일정 다시 짜는 중'
+            : data?.scope === 'FULL_DAY'
+              ? !otherDay
+                ? '오늘 일정 다시 짜는 중'
+                : day
+                  ? `${dayIndex + 1}일차 일정 다시 짜는 중`
+                  : '일정 다시 짜는 중'
+              : `${from.hour}시 이후 다시 짜는 중`
         }
         dayLabel={day ? `${dayIndex + 1}일차` : ''}
         dateLabel={day ? formatCoPickDayHeader(day.date) : ''}
@@ -170,6 +213,8 @@ export function PlanbSolvingPage({
         slots={slots}
         unlinkedSlotKeys={unlinkedSlotKeys}
         cancelPending={cancel.isPending}
+        slow={slow}
+        cancelFailed={cancel.isError}
         onBack={() => setLeaveOpen(true)}
         onCancel={() =>
           cancel.mutate(

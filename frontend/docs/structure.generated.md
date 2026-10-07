@@ -859,7 +859,8 @@
 - `src/pages/live/planb-draft/ui/PlanbDraftPage.tsx`  →  PlanbDraftPageProps · PlanbDraftPage
 - `src/pages/live/planb-draft/ui/PlanbSolvingPage.tsx`  →  PlanbSolvingPageProps · PlanbSolvingPage
 - `src/pages/live/planb-draft/ui/ReplanDraftView.tsx`  →  ReplanRemovedVM · ReplanDraftViewProps · ReplanDraftView
-- `src/pages/live/planb-draft/ui/ReplanLeaveDialog.tsx`  →  ReplanLeaveDialog
+- `src/pages/live/planb-draft/ui/ReplanLeaveDialog.tsx`  →  ReplanLeaveDialogProps · DRAFT_LEAVE_COPY · ReplanLeaveDialog
+- `src/pages/live/planb-draft/ui/ReplanNoticeFace.tsx`  →  ReplanNoticeFaceProps · ReplanNoticeFace
 - `src/pages/live/planb-draft/ui/ReplanSkeletonCards.tsx`  →  ReplanSkeletonCards
 - `src/pages/live/planb-draft/ui/ReplanSolvingView.tsx`  →  ReplanSolvingViewProps · ReplanSolvingView
 
@@ -1592,4 +1593,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 976개 파일
+합계 977개 파일

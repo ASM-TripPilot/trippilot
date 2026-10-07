@@ -140,6 +140,11 @@ import { ReplanDraftView } from '@/pages/live/planb-draft/ui/ReplanDraftView';
 import { StayRecommendView } from '@/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendView';
 import { TripRecordsView } from '@/pages/record/trip-records/ui/TripRecordsView';
 import { ReplanSolvingView } from '@/pages/live/planb-draft/ui/ReplanSolvingView';
+import { ReplanNoticeFace } from '@/pages/live/planb-draft/ui/ReplanNoticeFace';
+import {
+  DRAFT_LEAVE_COPY,
+  ReplanLeaveDialog,
+} from '@/pages/live/planb-draft/ui/ReplanLeaveDialog';
 import { RiskDetailSheet } from '@/pages/live/live-itinerary/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/pages/onboarding/onboarding-nickname/ui/NicknameScreen';
 import {
@@ -6419,6 +6424,62 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // ── i05 엣지 얼굴(TRIP-1277) — Figma 프레임 없음(토큰 재사용). 미도착 기본 얼굴 · 90초 느림 안내 ·
+  //    취소 실패 한 줄 · 조회 실패 · 끝난 세션. 실시간 90초는 jest 가짜 타이머 몫이라 여기선 정적 prop ──
+  {
+    key: 'planb-solving-pending',
+    band: 'i',
+    label: 'i05 · 다시 짜는 중 · 첫 응답 전',
+    login: null,
+    render: () => (
+      <ReplanSolvingView
+        center={LIVE_HUB_PREVIEW_LOCATION}
+        solvingLabel="일정 다시 짜는 중"
+        dayLabel=""
+        dateLabel=""
+        meta=""
+        slots={[]}
+        onBack={noop}
+        onCancel={noop}
+      />
+    ),
+  },
+  {
+    key: 'planb-solving-slow',
+    band: 'i',
+    label: 'i05 · 다시 짜는 중 · 느림 안내 + 취소 실패',
+    login: null,
+    render: () => (
+      <ReplanSolvingView
+        center={LIVE_HUB_PREVIEW_LOCATION}
+        solvingLabel="17시 이후 다시 짜는 중"
+        dayLabel="2일차"
+        dateLabel="6월 11일(목)"
+        meta="방문한 3곳 그대로"
+        slots={REPLAN_DRAFT_PREVIEW_SLOTS.slice(0, 2)}
+        slow
+        cancelFailed
+        onBack={noop}
+        onCancel={noop}
+      />
+    ),
+  },
+  {
+    key: 'planb-solving-error',
+    band: 'i',
+    label: 'i05 · 다시 짜는 중 · 조회 실패',
+    login: null,
+    render: () => (
+      <ReplanNoticeFace kind="solving-error" onRetry={noop} onLeave={noop} />
+    ),
+  },
+  {
+    key: 'planb-solving-closed',
+    band: 'i',
+    label: 'i05 · 다시 짜는 중 · 끝난 세션',
+    login: null,
+    render: () => <ReplanNoticeFace kind="solving-closed" onLeave={noop} />,
+  },
   // ── i06 재계획안(TRIP-751) — 한 뷰의 두 얼굴(펼침 · 대안 없음), 시트는 펼침(index 2). 같은 5곳
   //    픽스처로 Figma 4314:1923 · 4335:1923 과 대조한다(88% 스냅·CTA 가림·흐림 정도는 육안 몫).
   //    실패(failed)·확정 실패 얼굴은 같은 안내 자리라 여기 따로 두지 않는다 ──
@@ -6447,6 +6508,32 @@ export const PREVIEW_STATES: PreviewState[] = [
         noSolutionDescription="17시 이후 실내 후보가 근처에 없어요 · 조건을 줄이거나 직접 고쳐 주세요"
         {...REPLAN_PREVIEW_BASE}
       />
+    ),
+  },
+  // i06 엣지 얼굴(TRIP-1277) — 이탈 확인(페이지처럼 뷰의 형제로 다이얼로그) · 조회 실패. 딤 덮임·z-order 는 육안 몫.
+  {
+    key: 'planb-draft-leave',
+    band: 'i',
+    label: 'i06 · 재계획안 · 이탈 확인',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <ReplanDraftView
+          variant="draft"
+          slots={REPLAN_DRAFT_PREVIEW_SLOTS}
+          {...REPLAN_PREVIEW_BASE}
+        />
+        <ReplanLeaveDialog {...DRAFT_LEAVE_COPY} onStay={noop} onLeave={noop} />
+      </View>
+    ),
+  },
+  {
+    key: 'planb-draft-error',
+    band: 'i',
+    label: 'i06 · 재계획안 · 조회 실패',
+    login: null,
+    render: () => (
+      <ReplanNoticeFace kind="draft-error" onRetry={noop} onLeave={noop} />
     ),
   },
   // i08 변경 반영 시트(TRIP-754) — 펼침 허브 + 딤 + 시트. 딤 전면 커버·시트 높이는 jest 사각이라 육안 자리.

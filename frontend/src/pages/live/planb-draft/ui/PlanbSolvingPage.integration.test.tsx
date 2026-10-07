@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type { Itinerary, VisitCheckList } from '@/shared/api/index.schemas';
 
@@ -22,6 +28,9 @@ import { PlanbSolvingPage } from './PlanbSolvingPage';
  *    지운 뒤 남는 그물). ⚠ 그물은 그것뿐이다 — raw 함수 `putTripsTripIdItinerary` 를 테스트가 안 타는 분기
  *    (예: cancel `onError`)에서 부르면 green 이다(옛 P8 은 잡던 자리, 5-b 경고-1 실측).
  *
+ *  - (TRIP-1277) 어떤 상태에서도 빈 화면이 아니다 — 첫 응답 전은 진행 기본 얼굴, data 없는 실패는 오류 얼굴
+ *    ([다시 시도]=재조회만 · [취소]=서버 호출 없이 나가기), 끝난 세션은 종료 얼굴. 90초가 지나면 느림 안내.
+ *    취소 요청 실패는 한 줄로 알린다.
  *  - (5-b 후속) 취소 요청 중엔 [취소]가 잠긴다 · 원 일정에서 이웃하지 않는 두 완료 행 사이엔 커넥터가 없다 ·
  *    방문 기록을 모르면(로딩·실패) 곳 수를 비운다 · 지도 핀은 그날 슬롯 전부를 진행 상태별로 넘긴다.
  *
@@ -47,13 +56,29 @@ let mockOrigin: { lat: number | null; lng: number | null } = {
 // TRIP-1195 — 세션이 다시 짜는 날(`ReplanSession.targetDate`). null 이면 종전처럼 fromInstant 의 KST 날짜(= 오늘 세션).
 let mockTargetDate: string | null = null;
 const mockSessionCache = new Map<string, unknown>();
+// TRIP-1277 — 세션 조회가 data 없이 실패(mockStatus=null 과 함께 true)·[다시 시도]가 부를 재조회 seam.
+let mockSessionError = false;
+const mockSessionRefetch = jest.fn();
 
 jest.mock('../model/useReplanSession', () => ({
   useReplanSession: () => {
     if (mockStatus === null) {
-      return { data: undefined, isPending: true, isError: false };
+      return mockSessionError
+        ? {
+            data: undefined,
+            isPending: false,
+            isError: true,
+            refetch: mockSessionRefetch,
+          }
+        : {
+            data: undefined,
+            isPending: true,
+            isError: false,
+            refetch: mockSessionRefetch,
+          };
     }
-    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}|${mockTargetDate}`;
+    // 5-b 경고-1 — data 가 있어도 재조회가 실패하면 isError=true(TanStack v5 는 data 를 남긴다).
+    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}|${mockTargetDate}|${mockSessionError}`;
     if (!mockSessionCache.has(key)) {
       mockSessionCache.set(key, {
         data: {
@@ -75,7 +100,8 @@ jest.mock('../model/useReplanSession', () => ({
           createdAt: mockFromInstant,
         },
         isPending: false,
-        isError: false,
+        isError: mockSessionError,
+        refetch: mockSessionRefetch,
       });
     }
     return mockSessionCache.get(key);
@@ -84,6 +110,8 @@ jest.mock('../model/useReplanSession', () => ({
 
 const mockCancel = jest.fn();
 let mockCancelPending = false;
+// TRIP-1277 AC13 — 취소 요청이 실패한 뒤(훅 isError). 실패 알림의 판정 근거는 훅 상태다(02a ★6).
+let mockCancelError = false;
 let mockVisitsByDay: Record<string, VisitCheckList> = {};
 let mockVisitsState: 'ok' | 'pending' | 'error' = 'ok';
 const mockVisitsEmpty = { data: { visits: [] }, isPending: false };
@@ -95,7 +123,7 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   usePostTripsTripIdReplanSessionsSessionIdCancel: () => ({
     mutate: mockCancel,
     isPending: mockCancelPending,
-    isError: false,
+    isError: mockCancelError,
   }),
   // 방문 기록은 날짜를 가린다 — 6/11 만 기록이 있다(02a ★5).
   useGetTripsTripIdVisitsDaysDay: (_tripId: string, day: string) => {
@@ -253,6 +281,9 @@ const DRAFT_HREF = {
 
 beforeEach(() => {
   mockCancelPending = false;
+  mockCancelError = false;
+  mockSessionError = false;
+  mockSessionRefetch.mockClear();
   mockVisitsState = 'ok';
   mockStatus = 'SOLVING';
   mockFromInstant = '2026-06-11T04:00:00Z';
@@ -269,6 +300,11 @@ beforeEach(() => {
   mockPush.mockClear();
   mockReplace.mockClear();
   mockNavigate.mockClear();
+});
+
+// TRIP-1277 — 90초 안내 케이스가 가짜 타이머를 켠다. describe 안에만 걸면 뒤 케이스로 새므로 파일 최상위에서 끈다.
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 function renderPage() {
@@ -788,5 +824,337 @@ describe('🔴 B4 · AC-B4 · Q5 — 출발 좌표 없는 세션의 지도 중�
     expect(screen.getByTestId('map-root')).toHaveTextContent(
       '37.4979,127.0276'
     );
+  });
+});
+
+// ── TRIP-1277 · INV-4 — 어떤 상태에서도 빈 화면·끝없는 대기로 가두지 않는다 ─────────────────────────
+// 근거: 01 브리프 AC1·2·5·6·7·8·13, 01b Q1~Q6·Q13. 문구는 브리프·Seed 가 적은 값만 잠근다(02a §3).
+
+const ERROR_FACE = 'planb-solving-error';
+const RETRY = 'planb-solving-retry';
+const ERROR_CANCEL = 'planb-solving-error-cancel';
+const CLOSED_FACE = 'planb-solving-closed';
+const CLOSED_LEAVE = 'planb-solving-closed-leave';
+const SLOW = 'planb-solving-slow';
+const CANCEL_ERROR = 'planb-solving-cancel-error';
+const SLOW_MS = 90_000;
+/** INV-3 표기 탐지기(PlanbDraftPage D4 와 같은 정규식) — "시간이 걸리고"처럼 숫자 없는 "시간"은 안 걸린다. */
+const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
+
+/** 세션 조회가 data 없이 실패한 상태(404 포함 — 목은 둘을 가리지 않는다). */
+function renderSessionError() {
+  mockStatus = null;
+  mockSessionError = true;
+  return renderPage();
+}
+
+/**
+ * 같은 틱 연타 — 두 번의 누름을 한 act 안에 넣어 그 사이에 다시 그리기가 없게 한다. 그래서 state 잠금은
+ * 옛 클로저로 두 번 통과하고(2회), ref 잠금만 1회로 막는다(02a §5 실측).
+ */
+function pressTwiceSameTick(testID: string): void {
+  const target = screen.getByTestId(testID);
+  act(() => {
+    fireEvent.press(target);
+    fireEvent.press(target);
+  });
+}
+
+function advance(ms: number): void {
+  act(() => {
+    jest.advanceTimersByTime(ms);
+  });
+}
+
+describe('TRIP-1277 앵커 — 짜는 중 기본 화면엔 새 얼굴이 하나도 없다', () => {
+  it('SOLVING 이면 오류·종료·느림·취소 실패 표면이 0이고 진행 카드는 있다', () => {
+    renderPage();
+
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+    for (const id of [ERROR_FACE, CLOSED_FACE, SLOW, CANCEL_ERROR]) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+  });
+});
+
+describe('🔴 TRIP-1277 AC7 · Q3 — 첫 응답 전에도 빈 화면이 아니라 진행 기본 얼굴이다', () => {
+  it('W1 세션 미도착이면 진행 카드·캡션 "일정 다시 짜는 중"·스켈레톤·[취소]가 있고, 행·일차는 없다', () => {
+    mockStatus = null;
+    renderPage();
+
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).toHaveTextContent('일정 다시 짜는 중');
+    expect(screen.getByTestId('planb-skeleton')).toBeOnTheScreen();
+    expect(screen.getByTestId('generation-progress-cancel')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 재계획안'
+    );
+    expect(screen.queryByTestId('sheet-header-day')).toBeNull();
+    expect(screen.queryAllByTestId(/^planb-draft-slot-name-/)).toHaveLength(0);
+    expect(screen.queryByTestId(ERROR_FACE)).toBeNull();
+  });
+
+  it('W2 미도착이어도 [취소]는 이 세션의 cancel 을 1회 보낸다(tripId·sessionId 만 필요)', () => {
+    mockStatus = null;
+    renderPage();
+
+    fireEvent.press(screen.getByTestId('generation-progress-cancel'));
+
+    expect(mockCancel).toHaveBeenCalledTimes(1);
+    expect(mockCancel.mock.calls[0][0]).toEqual({
+      tripId: TRIP_ID,
+      sessionId: SESSION_ID,
+    });
+  });
+
+  it('W3 미도착이어도 ‹ → 이탈 확인 → [나가기]로 나갈 수 있다(back 1 · cancel 0)', () => {
+    mockStatus = null;
+    renderPage();
+
+    fireEvent.press(screen.getByTestId('generation-progress-back'));
+    fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-leave`));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1277 AC1 · Q1·Q2 — data 없이 조회가 실패하면 오류 얼굴', () => {
+  it('E1 빈 화면 대신 오류 얼굴과 [다시 시도]·[취소]가 보이고, 그리기만으로는 아무 요청·이동도 없다', () => {
+    renderSessionError();
+
+    expect(screen.getByTestId(ERROR_FACE)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toHaveTextContent('다시 시도');
+    expect(screen.getByTestId(ERROR_CANCEL)).toHaveTextContent('취소');
+    expect(mockSessionRefetch).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
+  });
+
+  it('E2 [다시 시도]는 세션 GET 재조회(refetch) 1회뿐 — cancel·이동 0', () => {
+    renderSessionError();
+
+    fireEvent.press(screen.getByTestId(RETRY));
+
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(1);
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
+  });
+
+  it('E3 [취소]는 서버 호출 없이 뒤로 1회(cancel 0)', () => {
+    renderSessionError();
+
+    fireEvent.press(screen.getByTestId(ERROR_CANCEL));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
+  });
+
+  it('E4 뒤로 갈 곳이 없으면(딥링크 착지) [취소]는 허브로 replace 1회(cancel 0)', () => {
+    mockCanGoBack = false;
+    renderSessionError();
+
+    fireEvent.press(screen.getByTestId(ERROR_CANCEL));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP_ID}/live`);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1277 AC8 · Q4 — 끝난 세션(APPLIED·CANCELED)은 종료 얼굴', () => {
+  it.each([['APPLIED'], ['CANCELED']])(
+    'K1 %s 면 "이미 끝난 재계획이에요"와 [나가기]가 보이고, 그리기만으로는 replace·push 0',
+    (status) => {
+      mockStatus = status;
+      renderPage();
+
+      const face = screen.getByTestId(CLOSED_FACE);
+      expect(
+        within(face).getByText('이미 끝난 재계획이에요')
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId(CLOSED_LEAVE)).toHaveTextContent('나가기');
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
+    }
+  );
+
+  it('K2 [나가기]는 뒤로 1회(cancel 0)', () => {
+    mockStatus = 'CANCELED';
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(CLOSED_LEAVE));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
+  });
+
+  it('K3 뒤로 갈 곳이 없으면 [나가기]는 허브로 replace 1회', () => {
+    mockStatus = 'APPLIED';
+    mockCanGoBack = false;
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(CLOSED_LEAVE));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP_ID}/live`);
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1277 AC2 · 결정1 · Q5·Q6 — 화면에 들어온 지 90초가 지나면 느림 안내', () => {
+  it('T1 89,999ms 엔 없고 90,000ms 에 "시간이 걸리고 있어요"·"나가도 원래 일정은 그대로예요"가 뜬다 — 요청·이동은 0', () => {
+    jest.useFakeTimers();
+    renderPage();
+
+    advance(SLOW_MS - 1);
+    expect(screen.queryByTestId(SLOW)).toBeNull();
+
+    advance(1);
+    const slow = screen.getByTestId(SLOW);
+    expect(within(slow).getByText('시간이 걸리고 있어요')).toBeOnTheScreen();
+    expect(
+      within(slow).getByText('나가도 원래 일정은 그대로예요')
+    ).toBeOnTheScreen();
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
+  });
+
+  it('T2 안내가 떠도 [취소]는 그 자리에 있고 누르면 cancel 1회다', () => {
+    jest.useFakeTimers();
+    renderPage();
+    advance(SLOW_MS);
+    expect(screen.getByTestId(SLOW)).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('generation-progress-cancel'));
+
+    expect(mockCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('T3 첫 응답을 기다리는 동안도 센다 — 30초 미도착 → SOLVING 도착 → 진입 90초에 뜬다(도착이 시계를 되돌리지 않는다)', () => {
+    jest.useFakeTimers();
+    mockStatus = null;
+    const { rerender } = renderPage();
+
+    advance(30_000);
+    mockStatus = 'SOLVING';
+    rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+    advance(59_999);
+    expect(screen.queryByTestId(SLOW)).toBeNull();
+
+    advance(1);
+    expect(screen.getByTestId(SLOW)).toBeOnTheScreen();
+  });
+
+  it('T4 폴링이 새 응답 객체를 가져와도 시계는 진입부터다 — 45초에 새 응답, 90초에 뜬다', () => {
+    jest.useFakeTimers();
+    const { rerender } = renderPage();
+
+    advance(45_000);
+    // 같은 SOLVING 이지만 새 객체 — 폴링 한 번(캐시를 비워 참조를 바꾼다, 02a ★4).
+    mockSessionCache.clear();
+    rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+    advance(44_999);
+    expect(screen.queryByTestId(SLOW)).toBeNull();
+
+    advance(1);
+    expect(screen.getByTestId(SLOW)).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 TRIP-1277 AC13 · Q6 — [취소] 요청이 실패하면 무음으로 두지 않는다', () => {
+  it('C1 취소 실패면 알림 한 줄이 보이고, ‹ → [나가기] 탈출구는 그대로다(back 1)', () => {
+    mockCancelError = true;
+    renderPage();
+
+    expect(screen.getByTestId(CANCEL_ERROR)).toHaveTextContent(/\S/);
+
+    fireEvent.press(screen.getByTestId('generation-progress-back'));
+    fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-leave`));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 TRIP-1277 AC6 · Q13 — 이번에 만든 버튼은 연타해도 한 번만', () => {
+  it('R1 오류 얼굴 [다시 시도] 같은 틱 2연타 — cancel(POST) 0', () => {
+    renderSessionError();
+
+    pressTwiceSameTick(RETRY);
+
+    expect(mockSessionRefetch).toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it('R2 오류 얼굴 [취소] 같은 틱 2연타 — 이동 정확히 1회', () => {
+    renderSessionError();
+
+    pressTwiceSameTick(ERROR_CANCEL);
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('R3 종료 얼굴 [나가기] 같은 틱 2연타 — 이동 정확히 1회', () => {
+    mockStatus = 'CANCELED';
+    renderPage();
+
+    pressTwiceSameTick(CLOSED_LEAVE);
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1277 AC5 · INV-3 — 새 얼굴 어디에도 소요시간이 없고, 느림 안내엔 숫자가 없다', () => {
+  it('I1 오류 얼굴 — N분·N시간·소요 0(+ 탐지기가 실제 글자를 본다는 앵커)', () => {
+    renderSessionError();
+
+    expect(screen.queryAllByText(/다시 시도/)).toHaveLength(1);
+    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
+  });
+
+  it('I2 종료 얼굴 — N분·N시간·소요 0(+ 앵커)', () => {
+    mockStatus = 'APPLIED';
+    renderPage();
+
+    expect(screen.queryAllByText(/이미 끝난 재계획/)).toHaveLength(1);
+    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
+  });
+
+  it('I3 느림 안내 — 경과·남은 시간 숫자 0("90초째" 같은 카운터 금지), 화면 전체 N분·N시간·소요 0', () => {
+    jest.useFakeTimers();
+    renderPage();
+    advance(SLOW_MS);
+
+    const slow = screen.getByTestId(SLOW);
+    expect(slow).toHaveTextContent(/시간이 걸리고/);
+    expect(slow).not.toHaveTextContent(/\d/);
+    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
+  });
+});
+
+// ── TRIP-1277 5-b 차단 수정 루프 — 03b W-1: "data 는 있는데 재조회 실패" 경계 ──────────────────────
+// 근거: 01 브리프 AC1(오류 얼굴은 data 없이 실패할 때만) · INV-4(02a ★15).
+
+describe('🔴 TRIP-1277 5-b 경고-1 · AC1 — 짜는 중을 이미 받았으면 폴링이 실패해도 오류 얼굴로 덮지 않는다', () => {
+  it('E5 SOLVING data + isError 면 오류 얼굴 0 · 진행 카드·[취소] 그대로 — 재조회·cancel·이동 0', () => {
+    mockSessionError = true;
+    renderPage();
+
+    expect(screen.queryByTestId(ERROR_FACE)).toBeNull();
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+    expect(screen.getByTestId('generation-progress-cancel')).toBeOnTheScreen();
+    expect(mockSessionRefetch).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
   });
 });

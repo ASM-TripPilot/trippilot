@@ -1,5 +1,5 @@
 import { Fragment, type ReactElement } from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 import { ReplanSlotRow } from '@/entities/itinerary-slot';
@@ -24,6 +24,10 @@ const CARD_TITLE = 'AI가 일정을 다시 짜고 있어요';
 const KEPT_LABEL = '방문한 곳 그대로';
 const TITLE = 'AI 재계획안';
 const SNAP_POINTS = ['40%', '88%'];
+// TRIP-1277 — 경과·남은 시간 숫자를 넣지 않는다(INV-3, 세션 계약에 진행률이 없다).
+const SLOW_TEXT = '시간이 걸리고 있어요';
+const SLOW_SUBTEXT = '나가도 원래 일정은 그대로예요';
+const CANCEL_FAILED_TEXT = '취소하지 못했어요. ‹ 로 나갈 수 있어요';
 
 export interface ReplanSolvingViewProps {
   center: MapCenter;
@@ -41,6 +45,10 @@ export interface ReplanSolvingViewProps {
   unlinkedSlotKeys?: readonly string[];
   /** 취소 요청 대기 중 — [취소] 잠금. */
   cancelPending?: boolean;
+  /** TRIP-1277 — 화면에 들어온 지 오래됐다(페이지가 잰다). 시트 맨 위 안내 줄 — 요청은 그대로 둔다. */
+  slow?: boolean;
+  /** TRIP-1277 — [취소] 요청이 실패했다. 무음으로 두지 않고 한 줄로 알린다(INV-4). */
+  cancelFailed?: boolean;
   onBack: () => void;
   onCancel: () => void;
 }
@@ -56,6 +64,8 @@ export function ReplanSolvingView({
   slots,
   unlinkedSlotKeys = [],
   cancelPending,
+  slow = false,
+  cancelFailed = false,
   onBack,
   onCancel,
 }: ReplanSolvingViewProps): ReactElement {
@@ -87,6 +97,24 @@ export function ReplanSolvingView({
       }
     >
       <View className="gap-sm px-lg pb-2xl">
+        {cancelFailed ? (
+          <Text
+            testID="planb-solving-cancel-error"
+            className="font-noto text-label text-primary-text"
+          >
+            {CANCEL_FAILED_TEXT}
+          </Text>
+        ) : null}
+        {slow ? (
+          <View testID="planb-solving-slow" className="gap-xs">
+            <Text className="font-noto-bold text-label font-bold text-ink">
+              {SLOW_TEXT}
+            </Text>
+            <Text className="font-noto text-label text-muted">
+              {SLOW_SUBTEXT}
+            </Text>
+          </View>
+        ) : null}
         {slots.map((slot, index) => {
           const next = slots[index + 1];
           return (
