@@ -188,7 +188,9 @@ export function SettingsPage(): ReactElement {
 
   const exportQuery = useGetMeExport(undefined, { query: { enabled: false } });
 
-  const submitNickname = (draft: string): void => {
+  /** `true` = 행을 접어라. 앞뒤 공백을 걷은 값으로 검증·전송한다(U0 FE §5 "공백 트림"). */
+  const submitNickname = (raw: string): boolean => {
+    const draft = raw.trim();
     const check = validateNicknameFormat(draft);
     if (!check.valid) {
       setNicknameError(
@@ -196,10 +198,14 @@ export function SettingsPage(): ReactElement {
           ? '닉네임은 2자 이상이어야 해요'
           : '닉네임은 20자 이하여야 해요'
       );
-      return;
+      return false;
     }
     setNicknameError(null);
+    // 같은 값은 서버가 본인 행을 중복으로 봐 409 를 낸다 — 보내지 않고 닫는다. 길이 검증 뒤여야
+    // 프로필 로딩 전(현재값 '')에 빈 입력이 "같다"로 빠지지 않는다. 대소문자는 구분한다(변경이 버려지지 않게).
+    if (draft === currentNickname) return true;
     patchNickname.mutate({ data: { nickname: draft } });
+    return false;
   };
 
   const runExport = async (): Promise<void> => {
@@ -263,6 +269,7 @@ export function SettingsPage(): ReactElement {
       exportError={exportError}
       onPressBack={() => loadRouter()?.back()}
       onSubmitNickname={submitNickname}
+      onNicknameDraftChange={() => setNicknameError(null)}
       onPressExport={() => void runExport()}
       onPressDeleteAccount={() => postDeletion.mutate()}
       onPressCancelDeletion={() => cancelDeletion.mutate()}
