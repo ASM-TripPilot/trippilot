@@ -174,6 +174,7 @@ import {
 } from '@/pages/trip/trip-new-step2/ui/StaySelectSheet';
 import { LiveLocationView } from '@/pages/live/live-location/ui/LiveLocationView';
 import { NoBaseNoticeCard } from '@/pages/itinerary/itinerary-plan/ui/NoBaseNoticeCard';
+import { resolvePlanMapCenter } from '@/pages/itinerary/itinerary-plan/model/planMapCenter';
 import { DraftFallbackBanner } from '@/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner';
 import { EditorView } from '@/widgets/map-sheet-shell';
 import {
@@ -1164,11 +1165,12 @@ function renderH14PlanSheet(options: {
   mapFallback?: ReactElement;
   noBase?: boolean;
   unplaced?: UnplacedMustVisitRow[];
+  center?: { lat: number; lng: number };
 }): ReactElement {
-  const { slots, meta, mapFallback, noBase, unplaced } = options;
+  const { slots, meta, mapFallback, noBase, unplaced, center } = options;
   return (
     <MapSheetShell
-      center={{ lat: 35.1532, lng: 129.1188 }}
+      center={center ?? { lat: 35.1532, lng: 129.1188 }}
       pins={buildDraftPins(slots)}
       days={[
         { label: '1일차' },
@@ -5459,6 +5461,29 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots: H11_COPICK_PREVIEW_SLOTS,
         meta: '4곳 · 4.1km',
         unplaced: PREVIEW_UNPLACED_ROWS,
+      }),
+  },
+  // TRIP-1275 — 장소 0곳인 날. 중심은 페이지와 같은 순수 함수로 고른다(1일차 비고 2일차에 장소 →
+  // 2일차 첫 장소). 바다(0,0)가 아니라 여행 지역 타일이 보이는지는 6-b 실기 육안.
+  {
+    key: 'h14-plan-empty-day',
+    band: 'h',
+    label: 'h14 · 완성 일정 장소 0곳인 날',
+    login: null,
+    render: () =>
+      renderH14PlanSheet({
+        slots: [],
+        meta: '0곳',
+        noBase: true,
+        center: resolvePlanMapCenter({
+          days: [
+            { date: H14_PLAN_PREVIEW_DATE, slots: [] },
+            { date: '2026-06-11', slots: H11_COPICK_PREVIEW_SLOTS },
+          ],
+          selectedDate: H14_PLAN_PREVIEW_DATE,
+          bases: undefined,
+          stays: undefined,
+        }),
       }),
   },
   // h15 동선 기준 숙소 추천(TRIP-800) — 순수 뷰 + 픽스처(페이지·요청 모듈 미로드). 선택은 첫 카드 고정.
