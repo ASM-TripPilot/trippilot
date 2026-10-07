@@ -915,3 +915,118 @@ describe('담은 장소 행 — 하트·행 접근성 라벨', () => {
     ).toHaveLength(4);
   });
 });
+
+// TRIP-1287 — 해제한 행은 남되(TRIP-394) 하트 밖에 "해제됨" 글자가 붙고, 순번·사진·글만 흐려진다(01b Q1·Q2·Q3).
+// 흐림은 자식에 곱해지므로 노드 자신이 아니라 행까지의 조상 길에 `opacity-40` 이 있는지로 잰다 — 행 전체를
+// 흐리면 하트도 흐려진다(하트는 다시 담기 버튼이라 또렷해야 한다). 실제로 흐려 보이는지는 실기 몫이다.
+function isDimmedInRow(node: ReactTestInstance, savedPlaceId: string): boolean {
+  const rowId = `explore-saved-item-${savedPlaceId}`;
+  let cur: ReactTestInstance | null = node;
+  while (cur) {
+    if (cls(cur).includes('opacity-40')) return true;
+    if (cur.props.testID === rowId) return false;
+    cur = cur.parent;
+  }
+  throw new Error(`${rowId} 행 밖의 노드다`);
+}
+
+function releasedTestIds(): string[] {
+  return screen
+    .queryAllByTestId(/^explore-saved-released-/)
+    .map((node) => String(node.props.testID));
+}
+
+describe('담은 장소 행 — 해제됨 글자·흐림', () => {
+  it('일부만 해제하면 그 행에만 "해제됨" 이 붙고, 순번·행 수·부제 개수는 그대로다', () => {
+    renderScreen({ releasedPoiIds: ['p2'] });
+
+    expect(releasedTestIds()).toEqual(['explore-saved-released-sp-2']);
+    expect(screen.getByTestId('explore-saved-released-sp-2')).toHaveTextContent(
+      '해제됨'
+    );
+    // 순번은 숨기지 않는다 — 해제·재담기마다 다른 행 번호가 바뀌지 않게(Q3).
+    expect(
+      within(screen.getByTestId('explore-saved-rank-sp-2')).getByText('2')
+    ).toBeOnTheScreen();
+    expect(itemTestIds()).toHaveLength(4);
+    expect(
+      within(screen.getByTestId('explore-saved-subtitle')).getByText(
+        '3곳 · 마음에 든 순서대로'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('"해제됨" 은 하트 버튼 밖·같은 행 안의 caption·muted 글자이고, 하트 라벨은 그대로다', () => {
+    renderScreen({ releasedPoiIds: ['p2'] });
+
+    const heart = screen.getByTestId('explore-saved-remove-sp-2');
+    const row = screen.getByTestId('explore-saved-item-sp-2');
+    const released = screen.getByTestId('explore-saved-released-sp-2');
+
+    // 하트 안에 두면 TRIP-1281 의 하트 라벨이 글자를 덮는다(Q2).
+    expect(heart).not.toContainElement(released);
+    expect(row).toContainElement(released);
+    expect(cls(within(row).getByText('해제됨'))).toEqual(
+      expect.arrayContaining(['text-caption', 'text-muted'])
+    );
+    expect(heart).toHaveAccessibleName('광안리 해변 저장');
+    expect(heart).not.toBeSelected();
+  });
+
+  it('해제한 행은 순번·사진·배지·글만 흐리고 하트·"해제됨" 은 또렷하다 — 담긴 행은 아무것도 안 흐리다', () => {
+    renderScreen({ releasedPoiIds: ['p2'] });
+
+    // 해제 행(sp-2) — 내용은 흐림. 사진 칸은 배지까지 한 상자다.
+    [
+      screen.getByTestId('explore-saved-rank-sp-2'),
+      screen.getByTestId('explore-saved-photo-sp-2'),
+      screen.getByTestId('explore-saved-badge-sp-2'),
+      screen.getByText('광안리 해변'),
+      screen.getByTestId('explore-saved-region-sp-2'),
+      screen.getByTestId('explore-saved-tag-sp-2'),
+    ].forEach((node) => expect(isDimmedInRow(node, 'sp-2')).toBe(true));
+    // 해제 행(sp-2) — 하트와 글자는 흐리지 않는다(Q1).
+    expect(
+      isDimmedInRow(screen.getByTestId('explore-saved-remove-sp-2'), 'sp-2')
+    ).toBe(false);
+    expect(
+      isDimmedInRow(screen.getByTestId('explore-saved-released-sp-2'), 'sp-2')
+    ).toBe(false);
+
+    // 담긴 행(sp-1) — 부정 짝. "늘 흐림" 구현을 막는다.
+    [
+      screen.getByTestId('explore-saved-rank-sp-1'),
+      screen.getByText('감천문화마을'),
+      screen.getByTestId('explore-saved-region-sp-1'),
+      screen.getByTestId('explore-saved-tag-sp-1'),
+      screen.getByTestId('explore-saved-remove-sp-1'),
+    ].forEach((node) => expect(isDimmedInRow(node, 'sp-1')).toBe(false));
+    // 5-b W1 — sp-1 은 사진·배지가 없어 사진 상자를 못 잰다. 담긴 행 sp-3·sp-4 의 배지(사진 상자 안)로
+    // "사진 상자만 늘 흐림" 구현을 막는다.
+    expect(
+      isDimmedInRow(screen.getByTestId('explore-saved-badge-sp-3'), 'sp-3')
+    ).toBe(false);
+    expect(
+      isDimmedInRow(screen.getByTestId('explore-saved-badge-sp-4'), 'sp-4')
+    ).toBe(false);
+  });
+
+  it('전부 해제하면 네 행 모두 "해제됨" 과 흐림이 붙고, 부제·CTA 는 없다(Q5 현행)', () => {
+    renderScreen({ releasedPoiIds: ['p1', 'p2', 'p3', 'p4'] });
+
+    const ids = ['sp-1', 'sp-2', 'sp-3', 'sp-4'];
+    expect(releasedTestIds()).toEqual(
+      ids.map((id) => `explore-saved-released-${id}`)
+    );
+    ids.forEach((id) => {
+      expect(
+        isDimmedInRow(screen.getByTestId(`explore-saved-rank-${id}`), id)
+      ).toBe(true);
+      expect(
+        isDimmedInRow(screen.getByTestId(`explore-saved-remove-${id}`), id)
+      ).toBe(false);
+    });
+    expect(screen.queryByTestId('explore-saved-subtitle')).toBeNull();
+    expect(screen.queryByTestId('explore-saved-createtrip')).toBeNull();
+  });
+});

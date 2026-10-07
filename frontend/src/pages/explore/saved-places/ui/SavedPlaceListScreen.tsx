@@ -119,6 +119,8 @@ function SavedPlaceRow({
   const { place } = saved;
   const badge = SAVED_PLACE_BADGE[place.dataStatus];
   const tag = place.tags[0];
+  // 해제 행은 내용(순번·사진·글)만 흐린다 — 하트는 다시 담기 버튼이라 또렷해야 한다(TRIP-1287).
+  const dim = released ? ' opacity-40' : '';
 
   return (
     // bare Pressable(accessibilityRole 없음) — d04 카드와 같은 규율(role 을 붙이면 개수 심판이
@@ -135,14 +137,16 @@ function SavedPlaceRow({
     >
       <View
         testID={`explore-saved-rank-${saved.savedPlaceId}`}
-        className="h-[26px] w-[26px] items-center justify-center rounded-pill bg-primary"
+        className={`h-[26px] w-[26px] items-center justify-center rounded-pill bg-primary${dim}`}
       >
         <Text className="font-inter-bold text-label font-bold text-on-primary">
           {rank}
         </Text>
       </View>
 
-      <View className="h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong">
+      <View
+        className={`h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong${dim}`}
+      >
         {place.imageUrl ? (
           <Image
             testID={`explore-saved-photo-${saved.savedPlaceId}`}
@@ -163,7 +167,7 @@ function SavedPlaceRow({
         ) : null}
       </View>
 
-      <View className="flex-1 gap-xs">
+      <View className={`flex-1 gap-xs${dim}`}>
         <Text className="font-noto-bold text-card-title font-bold text-ink">
           {place.nameKo}
         </Text>
@@ -188,30 +192,41 @@ function SavedPlaceRow({
         ) : null}
       </View>
 
-      <Pressable
-        testID={`explore-saved-remove-${saved.savedPlaceId}`}
-        accessibilityRole="button"
-        accessibilityLabel={heartSaveLabel(place.nameKo)}
-        // 담김=선택됨. 빈/찬을 색이 아니라 이 접근성 상태 + 글리프 컴포넌트 정체성으로 잰다
-        // (repo-trap: SVG fill 은 렌더 트리에 안 남는다, 02a ★1 · d04 카드 하트와 같은 신호).
-        accessibilityState={{ selected: !released }}
-        onPress={() =>
-          released ? onPressRestore?.(saved) : onPressRemove(saved)
-        }
-        className="h-[38px] w-[38px] items-center justify-center"
-      >
+      {/* "해제됨" 은 하트 버튼 밖 형제 — 안에 두면 하트 라벨(TRIP-1281)이 글자를 덮는다. */}
+      <View className="items-center">
+        <Pressable
+          testID={`explore-saved-remove-${saved.savedPlaceId}`}
+          accessibilityRole="button"
+          accessibilityLabel={heartSaveLabel(place.nameKo)}
+          // 담김=선택됨. 빈/찬을 색이 아니라 이 접근성 상태 + 글리프 컴포넌트 정체성으로 잰다
+          // (repo-trap: SVG fill 은 렌더 트리에 안 남는다, 02a ★1 · d04 카드 하트와 같은 신호).
+          accessibilityState={{ selected: !released }}
+          onPress={() =>
+            released ? onPressRestore?.(saved) : onPressRemove(saved)
+          }
+          className="h-[38px] w-[38px] items-center justify-center"
+        >
+          {released ? (
+            <HeartOutlineGlyph
+              size={24}
+              testID={`explore-saved-heart-outline-${saved.savedPlaceId}`}
+            />
+          ) : (
+            <HeartFilledGlyph
+              size={24}
+              testID={`explore-saved-heart-filled-${saved.savedPlaceId}`}
+            />
+          )}
+        </Pressable>
         {released ? (
-          <HeartOutlineGlyph
-            size={24}
-            testID={`explore-saved-heart-outline-${saved.savedPlaceId}`}
-          />
-        ) : (
-          <HeartFilledGlyph
-            size={24}
-            testID={`explore-saved-heart-filled-${saved.savedPlaceId}`}
-          />
-        )}
-      </Pressable>
+          <Text
+            testID={`explore-saved-released-${saved.savedPlaceId}`}
+            className="font-noto text-caption text-muted"
+          >
+            해제됨
+          </Text>
+        ) : null}
+      </View>
     </Pressable>
   );
 }
