@@ -431,3 +431,121 @@ describe('기간 규칙 안내 한 줄 (종료일은 박수로 정해진다)', (
     );
   });
 });
+
+/**
+ * TRIP-1285(QA B-03 · 결정 1) — 다음 달 chevron 상한. 마지막으로 볼 수 있는 달 = 오늘의 달 + 24(01b Q1).
+ * 그 달에서 next 는 prev 하한과 같은 얼굴로 죽는다: 진짜 `disabled` + `opacity-40`.
+ *
+ * 왜 상한 달과 그 직전 달을 짝으로 보나: 상한 달 비활성만 보면 한 달 일찍(+23) 막는 구현도 통과한다
+ * (+24 도 비활성이니까). 직전 달 활성까지 봐야 경계가 정확히 한 칸으로 고정된다(02a ★9).
+ * 오늘이 12월·1월인 행은 해를 넘기는 월 산술을 시험한다(02a ★10).
+ *
+ * 실제 흐림 픽셀·시트 개폐는 통과형 목이라 6-b 몫이다 — 여기선 disabled 상태·토큰·콜백까지만 본다.
+ */
+describe('다음 달 상한 = 오늘의 달 + 24 (TRIP-1285 결정 1)', () => {
+  /** [오늘, 상한 달(next 비활성), 직전 달(next 활성)]. */
+  const LIMITS: readonly [string, string, string][] = [
+    ['2026-10-08', '2028-10', '2028-09'],
+    ['2026-12-31', '2028-12', '2028-11'],
+    ['2027-01-01', '2029-01', '2028-12'],
+    ['2026-01-15', '2028-01', '2027-12'],
+  ];
+
+  /** className 을 공백으로 쪼갠 토큰 — 부분 문자열 비교면 다른 토큰에 걸린다. */
+  function nextTokens(): string[] {
+    return String(
+      screen.getByTestId('trip-wizard-period-next').props.className ?? ''
+    ).split(/\s+/);
+  }
+
+  it.each(LIMITS)(
+    '오늘 %s · 상한 달 %s 을 보면 next 는 disabled · opacity-40 이고 눌러도 onNextMonth 0회',
+    (today, limitMonth) => {
+      // 준비
+      const spies = renderSheet({ today, month: limitMonth });
+      const next = screen.getByTestId('trip-wizard-period-next');
+
+      // 단언 ① — 보이는 얼굴과 접근성 상태
+      expect(next).toBeDisabled();
+      expect(nextTokens()).toContain('opacity-40');
+
+      // 실행 — 진짜 disabled 면 press 가 안 먹는다
+      fireEvent.press(next);
+
+      // 단언 ② — 콜백이 안 올라간다
+      expect(spies.onNextMonth).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(LIMITS)(
+    '오늘 %s · 상한 %s 의 직전 달 %s 을 보면 next 는 활성이고(opacity-40 없음) 눌러서 onNextMonth 1회 (짝)',
+    (today, _limitMonth, beforeLimit) => {
+      const spies = renderSheet({ today, month: beforeLimit });
+      const next = screen.getByTestId('trip-wizard-period-next');
+
+      expect(next).toBeEnabled();
+      expect(nextTokens()).not.toContain('opacity-40');
+
+      fireEvent.press(next);
+
+      expect(spies.onNextMonth).toHaveBeenCalledTimes(1);
+    }
+  );
+});
+
+/**
+ * TRIP-1285(결정 2 · 01b Q4) — 시트 상단 요약줄도 행과 같은 규칙으로 연도를 붙인다(같은 셀렉터 출력).
+ *
+ * 왜 오늘을 두 개로 짝짓나: 시트가 `today` prop 대신 실시계를 읽어도, 실시계 해와 같은 해의 오늘만 쓰면
+ * 결과가 같아 통과한다. 해가 다른 오늘(2026 / 2029)을 같이 보면 실시계 배선은 언제 돌려도 하나가 red(02a ★4).
+ * `toHaveTextContent(문자열)` 은 완전 일치다(앞뒤 공백 정리·공백 접기 — 바이트는 셀렉터 테스트가 잠근다).
+ */
+describe('요약줄 — 올해가 아니면 연도를 붙인다 (TRIP-1285 결정 2)', () => {
+  it('오늘 2026-10-08 · 2027-05-15~17 → "2027년 5월 15일(토) – 17일(월)"', () => {
+    renderSheet({
+      today: '2026-10-08',
+      month: '2027-05',
+      range: { start: '2027-05-15', end: '2027-05-17' },
+    });
+
+    expect(screen.getByTestId('trip-wizard-period-summary')).toHaveTextContent(
+      '2027년 5월 15일(토) – 17일(월)'
+    );
+  });
+
+  it('오늘 2026-10-08 · 2029-05-15~17(QA 재현) → "2029년 5월 15일(화) – 17일(목)"', () => {
+    renderSheet({
+      today: '2026-10-08',
+      month: '2029-05',
+      range: { start: '2029-05-15', end: '2029-05-17' },
+    });
+
+    expect(screen.getByTestId('trip-wizard-period-summary')).toHaveTextContent(
+      '2029년 5월 15일(화) – 17일(목)'
+    );
+  });
+
+  it('짝 — 오늘이 같은 해(2029-01-10)면 같은 범위에 연도가 없다', () => {
+    renderSheet({
+      today: '2029-01-10',
+      month: '2029-05',
+      range: { start: '2029-05-15', end: '2029-05-17' },
+    });
+
+    expect(screen.getByTestId('trip-wizard-period-summary')).toHaveTextContent(
+      '5월 15일(화) – 17일(목)'
+    );
+  });
+
+  it('INV-3 · 연도가 붙은 요약에도 소요시간 문자열(시간·분·duration)이 없다', () => {
+    renderSheet({
+      today: '2026-10-08',
+      month: '2029-05',
+      range: { start: '2029-05-15', end: '2029-05-17' },
+    });
+
+    expect(
+      screen.getByTestId('trip-wizard-period-summary')
+    ).not.toHaveTextContent(/시간|분|duration/i);
+  });
+});

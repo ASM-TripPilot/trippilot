@@ -1,3 +1,5 @@
+import fc from 'fast-check';
+
 import type {
   CompanionType,
   TripDestination,
@@ -45,6 +47,10 @@ const EN_DASH = '–';
 
 /** 조인 구분자 ` · ` — **U+00B7 미들닷** 앞뒤 공백(실측: 리포 `(tabs)/index.tsx:129` 관례). */
 const DOT = ` ${'·'} `;
+
+/** 기존 기간 케이스의 '오늘'(TRIP-1285 — summaryPeriod 셋째 필수 인자). 기대값이 전부 2026 날짜라
+ *  "올해" 분기를 탄다 — 그래서 아래 기대 문자열은 한 글자도 안 바뀐다(바이트 보존). */
+const TODAY_2026 = '2026-06-01';
 
 // ── 헬퍼 ──────────────────────────────────────────────────────────────────────
 
@@ -116,14 +122,14 @@ describe('summaryDestinations — 여행지 요약 행 (AC-1·2, 2톤 분리)', 
 
 describe('summaryPeriod — 0박(같은 날)은 당일치기', () => {
   it('같은 날이면 main 은 날짜 하나, sub 는 "당일치기"다', () => {
-    expect(summaryPeriod('2026-06-10', '2026-06-10')).toEqual({
+    expect(summaryPeriod('2026-06-10', '2026-06-10', TODAY_2026)).toEqual({
       main: '6월 10일(수)',
       sub: '당일치기',
     });
   });
 
   it('하루 이상이면 기존대로 범위와 "N박 M일"이다(분기가 과하게 넓지 않다)', () => {
-    expect(summaryPeriod('2026-06-10', '2026-06-11')).toEqual({
+    expect(summaryPeriod('2026-06-10', '2026-06-11', TODAY_2026)).toEqual({
       main: '6월 10일(수) – 11일(목)',
       sub: '1박 2일',
     });
@@ -151,7 +157,7 @@ describe('summaryPeriod — 기간 요약 행 (AC-2, 요일 삽입)', () => {
     '%s ~ %s → {main:"%s", sub:"%s"} (요일은 실제 달력)',
     (startDate, endDate, expectedMain, expectedSub) => {
       // main = 요일삽입 날짜범위, sub = 박수 라벨(2톤 분리, AC-1).
-      expect(summaryPeriod(startDate, endDate)).toEqual({
+      expect(summaryPeriod(startDate, endDate, TODAY_2026)).toEqual({
         main: expectedMain,
         sub: expectedSub,
       });
@@ -159,15 +165,255 @@ describe('summaryPeriod — 기간 요약 행 (AC-2, 요일 삽입)', () => {
   );
 
   it('시작일만 있으면 null이다', () => {
-    expect(summaryPeriod('2026-06-10', undefined)).toBeNull();
+    expect(summaryPeriod('2026-06-10', undefined, TODAY_2026)).toBeNull();
   });
 
   it('종료일만 있으면 null이다', () => {
-    expect(summaryPeriod(undefined, '2026-06-13')).toBeNull();
+    expect(summaryPeriod(undefined, '2026-06-13', TODAY_2026)).toBeNull();
   });
 
   it('둘 다 없으면 null이다', () => {
-    expect(summaryPeriod(undefined, undefined)).toBeNull();
+    expect(summaryPeriod(undefined, undefined, TODAY_2026)).toBeNull();
+  });
+});
+
+// ── TRIP-1285 · 기간 연도 표기 (결정 2 · Seed Q3·Q5) ─────────────────────────────────────
+
+/**
+ * TRIP-1285 — 올해가 아닌 날짜는 기간 main 에 연도를 붙인다.
+ *
+ * 규칙(01b Q3): ① 시작 날짜의 해 ≠ 오늘의 해 → 시작 앞에 `YYYY년 `. ② 끝의 해 ≠ 시작의 해(해 넘김) →
+ * 끝 앞에 `YYYY년 `. 같은 해 안이면 끝은 지금처럼 접는다("17일(월)"). 올해 안 범위는 지금 출력과 바이트가 같다.
+ *
+ * 오늘은 셋째 **필수** 인자다(Q5) — 셀렉터가 시계를 안 읽으니 테스트가 오늘을 고정해 결정론이 된다.
+ * 바이트(공백·en dash·괄호)는 여기서 `toEqual` 로 잠근다 — 화면 텍스트 매처는 공백을 접어 못 잰다(02a ★5).
+ *
+ * 3동작 뼈대: 준비(날짜 쌍 + 오늘) → 실행(summaryPeriod 1회) → 단언(main·sub 완전 일치 / 속성).
+ */
+describe('summaryPeriod — 올해가 아니면 연도를 붙인다 (TRIP-1285 결정 2)', () => {
+  // [오늘, 시작, 끝, 기대 main, 기대 sub]. 요일은 독립 오라클(getUTCDay)로 실측했다(02a §5-1).
+  const CASES: readonly [string, string, string, string, string][] = [
+    // 올해 — 지금 출력 그대로(무회귀)
+    [
+      '2026-10-08',
+      '2026-11-20',
+      '2026-11-21',
+      `11월 20일(금) ${EN_DASH} 21일(토)`,
+      '1박 2일',
+    ],
+    // 내년 — 시작에 연도, 같은 해라 끝은 접는다
+    [
+      '2026-10-08',
+      '2027-05-15',
+      '2027-05-17',
+      `2027년 5월 15일(토) ${EN_DASH} 17일(월)`,
+      '2박 3일',
+    ],
+    // QA 재현값(B-03)
+    [
+      '2026-10-08',
+      '2029-05-15',
+      '2029-05-17',
+      `2029년 5월 15일(화) ${EN_DASH} 17일(목)`,
+      '2박 3일',
+    ],
+    // 올해 시작 + 해 넘김 — 끝에만 연도
+    [
+      '2026-10-08',
+      '2026-12-30',
+      '2027-01-02',
+      `12월 30일(수) ${EN_DASH} 2027년 1월 2일(토)`,
+      '3박 4일',
+    ],
+    // 내년 시작 + 해 넘김 — 양쪽 연도
+    [
+      '2026-10-08',
+      '2027-12-30',
+      '2028-01-02',
+      `2027년 12월 30일(목) ${EN_DASH} 2028년 1월 2일(일)`,
+      '3박 4일',
+    ],
+    // 0박(같은 날) — 날짜 하나에 연도
+    [
+      '2026-10-08',
+      '2027-05-15',
+      '2027-05-15',
+      '2027년 5월 15일(토)',
+      '당일치기',
+    ],
+    // 12/31 경계 — 오늘이 12/31 이면 다음 날(1/1)은 이미 내년
+    [
+      '2026-12-31',
+      '2027-01-01',
+      '2027-01-02',
+      `2027년 1월 1일(금) ${EN_DASH} 2일(토)`,
+      '1박 2일',
+    ],
+    // 1/1 경계 짝 — 오늘이 1/1 이면 같은 날짜가 올해(연도 없음)
+    [
+      '2027-01-01',
+      '2027-01-01',
+      '2027-01-02',
+      `1월 1일(금) ${EN_DASH} 2일(토)`,
+      '1박 2일',
+    ],
+  ];
+
+  it.each(CASES)(
+    '오늘 %s · %s ~ %s → main "%s" · sub "%s"',
+    (today, startDate, endDate, expectedMain, expectedSub) => {
+      // 실행
+      const line = summaryPeriod(startDate, endDate, today);
+
+      // 단언 — 공백 하나·en dash 하나까지 완전 일치(normalizer 없는 toEqual).
+      expect(line).toEqual({ main: expectedMain, sub: expectedSub });
+    }
+  );
+
+  it('한쪽 날짜라도 없으면 오늘과 무관하게 null 이다 (미선택 계약 유지)', () => {
+    expect(summaryPeriod('2029-05-15', undefined, '2026-10-08')).toBeNull();
+    expect(summaryPeriod(undefined, '2029-05-17', '2026-10-08')).toBeNull();
+  });
+
+  it('오늘을 빼고 부르면 타입 오류다 — 호출처가 빠뜨리면 tsc 가 잡는다 (Q5, tsc 심판)', () => {
+    // 심판은 jest 가 아니라 `pnpm tsc` 다: 오늘이 필수가 아니면 아래 directive 가 안 쓰여 TS2578 로 실패한다.
+    const call = () =>
+      // @ts-expect-error 오늘(셋째 인자)은 필수다 — 빠뜨리면 올해 아닌 날짜에 연도가 조용히 안 붙는다
+      summaryPeriod('2029-05-15', '2029-05-17');
+
+    expect(typeof call).toBe('function');
+  });
+
+  // ── 속성(PBT) — 어떤 날짜·오늘이어도 성립해야 하는 규칙 ──────────────────────────────────
+
+  const MS_PER_DAY = 86_400_000;
+
+  /** 'YYYY-MM-DD' → 에포크 일수(UTC). */
+  function epochDayOf(iso: string): number {
+    const [y, m, d] = iso.split('-').map(Number);
+    return Math.round(Date.UTC(y, m - 1, d) / MS_PER_DAY);
+  }
+
+  /** 에포크 일수 → 'YYYY-MM-DD'. UTC 한 경로만 쓴다(실행 기계 시간대 무관). */
+  function isoFromEpochDay(day: number): string {
+    return new Date(day * MS_PER_DAY).toISOString().slice(0, 10);
+  }
+
+  /** 'YYYY-MM-DD' → [연, 월, 일] 숫자(0 패딩 제거). */
+  function ymd(iso: string): [number, number, number] {
+    const [y, m, d] = iso.split('-').map(Number);
+    return [y, m, d];
+  }
+
+  /** 요일 한 글자 — 구현(dayOfWeek)을 부르지 않는 독립 오라클(02a ★8). */
+  function dow(iso: string): string {
+    return '일월화수목금토'[new Date(`${iso}T00:00:00Z`).getUTCDay()];
+  }
+
+  /** 'YYYY년 ' 접두를 전부 지운다 — 연도를 뺀 나머지 바이트를 비교하려고. */
+  function stripYears(main: string): string {
+    return main.replace(/\d{4}년 /g, '');
+  }
+
+  /** 해 경계 날짜 — 균등 범위만으로는 해 넘김이 드물어 섞는다(02a ★7). */
+  const BOUNDARY_DAYS = [2025, 2026, 2027, 2028, 2029].flatMap((year) => [
+    epochDayOf(`${year}-12-30`),
+    epochDayOf(`${year}-12-31`),
+    epochDayOf(`${year + 1}-01-01`),
+  ]);
+
+  const startArb = fc.oneof(
+    fc.integer({
+      min: epochDayOf('2025-12-01'),
+      max: epochDayOf('2030-01-31'),
+    }),
+    fc.constantFrom(...BOUNDARY_DAYS)
+  );
+  const nightsArb = fc.integer({ min: 0, max: 40 });
+
+  /** 오늘 — 시작의 해 기준 −1·0·+1 해의 임의 날. 올해/올해 아님/지난해 세 분기를 고르게 밟는다. */
+  function todayArb(startYear: number) {
+    return fc
+      .tuple(
+        fc.integer({ min: -1, max: 1 }),
+        fc.integer({ min: 1, max: 12 }),
+        fc.integer({ min: 1, max: 28 })
+      )
+      .map(
+        ([delta, month, day]) =>
+          `${startYear + delta}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      );
+  }
+
+  /** (시작, 끝, 오늘 두 개) 표본. */
+  const sampleArb = fc
+    .tuple(startArb, nightsArb)
+    .chain(([startDay, nights]) => {
+      const start = isoFromEpochDay(startDay);
+      const end = isoFromEpochDay(startDay + nights);
+      const [startYear] = ymd(start);
+      return fc
+        .tuple(todayArb(startYear), todayArb(startYear))
+        .map(([today, otherToday]) => ({ start, end, today, otherToday }));
+    });
+
+  it('PBT — 시작이 올해면 "M월 D일(" 로, 올해가 아니면 "YYYY년 M월 D일(" 로 시작한다', () => {
+    fc.assert(
+      fc.property(sampleArb, ({ start, end, today }) => {
+        // 준비 — 기대 머리를 날짜 문자열에서 직접 만든다(구현 미사용).
+        const [sy, sm, sd] = ymd(start);
+        const [ty] = ymd(today);
+        const head = `${sm}월 ${sd}일(${dow(start)})`;
+
+        // 실행
+        const main = summaryPeriod(start, end, today)?.main ?? '';
+
+        // 단언
+        if (sy === ty) expect(main.startsWith(head)).toBe(true);
+        else expect(main.startsWith(`${sy}년 ${head}`)).toBe(true);
+      }),
+      { numRuns: 300 }
+    );
+  });
+
+  it('PBT — 해를 넘기면 끝 앞에 연도가 붙고, 같은 해 안이면 끝에 연도가 없다', () => {
+    fc.assert(
+      fc.property(sampleArb, ({ start, end, today }) => {
+        const [sy] = ymd(start);
+        const [ey, em, ed] = ymd(end);
+
+        const main = summaryPeriod(start, end, today)?.main ?? '';
+
+        if (start === end) {
+          // 0박은 날짜 하나 — 구분자가 없다.
+          expect(main.includes(` ${EN_DASH} `)).toBe(false);
+          return;
+        }
+        const tail = main.split(` ${EN_DASH} `)[1] ?? '';
+        if (ey !== sy) {
+          expect(tail).toBe(`${ey}년 ${em}월 ${ed}일(${dow(end)})`);
+        } else {
+          expect(tail.includes('년')).toBe(false);
+        }
+      }),
+      { numRuns: 300 }
+    );
+  });
+
+  it('PBT — 연도 접두를 지우면 나머지 글자는 오늘과 무관하고, sub 도 오늘과 무관하다 (바이트 보존)', () => {
+    fc.assert(
+      fc.property(sampleArb, ({ start, end, today, otherToday }) => {
+        // 실행 — 같은 범위를 서로 다른 오늘로 두 번.
+        const a = summaryPeriod(start, end, today);
+        const b = summaryPeriod(start, end, otherToday);
+
+        // 단언 — 오늘이 바꾸는 것은 'YYYY년 ' 접두뿐이다.
+        expect(a).not.toBeNull();
+        expect(stripYears(a?.main ?? '')).toBe(stripYears(b?.main ?? ''));
+        expect(a?.sub).toBe(b?.sub);
+      }),
+      { numRuns: 300 }
+    );
   });
 });
 

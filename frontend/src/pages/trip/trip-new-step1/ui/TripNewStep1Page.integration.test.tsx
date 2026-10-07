@@ -74,7 +74,16 @@ jest.mock('@/shared/storage', () => ({
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   router: mockRouter,
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  useNavigation: require('@/test-support/preventRemoveMock').useNavigation,
 }));
+
+// TRIP-1272 — 페이지가 뒤로 가로채기(`usePreventRemove`)를 건다. 실물은 네비게이터 밖에서 throw 하므로 그려지기만 하게
+// 대역으로 바꾼다(가로채기 동작은 `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx` 몫).
+jest.mock('@react-navigation/native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/preventRemoveMock')
+);
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
@@ -2443,6 +2452,69 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
       expect(useTripWizardStore.getState().budgetText).toBe('');
     });
+  });
+
+  /**
+   * TRIP-1285(QA B-01) — 음수·소수·문자(invalid)도 10억 초과와 같은 얼굴로 적용을 죽인다: 진짜 `disabled` +
+   * `opacity-40`. 오류 문구는 뜨는데 버튼이 진한 분홍(활성처럼)으로 남던 것이 결함이다.
+   *
+   * ⚠️ 동작은 이미 막혀 있다 — applyBudget 이 invalid 를 거르므로 "눌러도 커밋 안 됨·시트 유지"는 수정 전에도
+   * green 이다(위 AC-S6E-2). red 는 `toBeDisabled()` 에서만 난다(02a ★1). 동작 단언은 "비활성처럼 보이는데
+   * 사실 눌리는" 가짜를 막는 짝으로 남긴다. 끝에서 올바른 금액으로 고치면 다시 열리는지도 본다(★2 — 시트 전체를
+   * 죽이는 엉뚱한 구현 차단).
+   */
+  describe('B-01 · ★ invalid(음수·소수·문자)도 적용 비활성 — 10억 초과와 같은 얼굴 (TRIP-1285)', () => {
+    /** 적용 버튼 className 토큰 — 부분 문자열 비교면 다른 토큰에 걸린다. */
+    function applyTokens(): string[] {
+      return String(
+        screen.getByTestId('trip-wizard-budget-apply').props.className ?? ''
+      ).split(/\s+/);
+    }
+
+    it.each(['-5000', '1.5', 'abc가😀'])(
+      '"%s" 를 넣으면 "숫자만 입력해 주세요" + 적용 disabled·opacity-40, 눌러도 그대로이고 고치면 다시 열린다',
+      async (badInput) => {
+        // 준비 — 프리필(80만원) 도착 후 시트를 연다.
+        renderPage();
+        await waitForPrefill();
+        await openSheet();
+
+        // 실행 ① — 잘못된 금액 입력.
+        fireEvent.changeText(
+          screen.getByTestId('trip-wizard-budget-input'),
+          badInput
+        );
+
+        // 단언 ① — 문구와 비활성 얼굴.
+        expect(
+          screen.getByTestId('trip-wizard-error-budget')
+        ).toHaveTextContent('숫자만 입력해 주세요');
+        const apply = screen.getByTestId('trip-wizard-budget-apply');
+        expect(apply).toBeDisabled();
+        expect(applyTokens()).toContain('opacity-40');
+
+        // 실행 ② — 그래도 눌러 본다.
+        fireEvent.press(apply);
+
+        // 단언 ② — 커밋도 닫힘도 없다.
+        expect(
+          screen.getByTestId('trip-wizard-budget-sheet')
+        ).toBeOnTheScreen();
+        expect(useTripWizardStore.getState().budgetText).toBe('');
+        expect(
+          screen.getByTestId('trip-wizard-summary-budget')
+        ).toHaveTextContent(/80만원/);
+
+        // 실행 ③ · 단언 ③(짝) — 올바른 금액으로 고치면 오류가 사라지고 적용이 다시 열린다.
+        fireEvent.changeText(
+          screen.getByTestId('trip-wizard-budget-input'),
+          '120000'
+        );
+        expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
+        expect(screen.getByTestId('trip-wizard-budget-apply')).toBeEnabled();
+        expect(applyTokens()).not.toContain('opacity-40');
+      }
+    );
   });
 
   /** TRIP-984 · `/me/preferences` 를 주어진 예산 축으로 덮어쓴다(취향 styles 는 미식 — 도착 눈금). */

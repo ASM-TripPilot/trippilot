@@ -80,15 +80,18 @@ export function summaryDestinations(
 
 /** 기간 요약 — main="6월 10일(수) – 13일(토)"(요일삽입 날짜범위), sub="3박 4일"(박수 라벨).
  *  요일삽입·박수 라벨은 entities/trip/lib 위임. 한쪽 날짜라도 없으면 null(빈 문자열 아님 —
- *  "미선택"과 "빈 값"은 다른 뜻). TRIP-732: 문자열 하나 → 2톤 객체(main/sub) 분리. */
+ *  "미선택"과 "빈 값"은 다른 뜻). TRIP-732: 문자열 하나 → 2톤 객체(main/sub) 분리.
+ *  TRIP-1285: `today`('YYYY-MM-DD')는 필수 — 올해가 아닌 날짜에 연도를 붙이는 기준이다. 선택 인자면
+ *  호출처가 빠뜨려도 연도가 조용히 안 붙는다. */
 export function summaryPeriod(
-  startDate?: string,
-  endDate?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  today: string
 ): SummaryLine | null {
   if (startDate === undefined || endDate === undefined) return null;
   const nights = toEpochDay(endDate) - toEpochDay(startDate);
   return {
-    main: formatDateRangeWithDow(startDate, endDate),
+    main: formatDateRangeWithDow(startDate, endDate, today),
     sub: nightsCountLabel(nights),
   };
 }

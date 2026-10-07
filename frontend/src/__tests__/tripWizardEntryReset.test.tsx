@@ -47,8 +47,17 @@ jest.mock('expo-router', () => {
     ...stackMock,
     useRouter: () => ({ push, back, replace }),
     router: { push, back, replace },
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    useNavigation: require('@/test-support/preventRemoveMock').useNavigation,
   };
 });
+
+// TRIP-1272 — 페이지가 뒤로 가로채기(`usePreventRemove`)를 건다. 실물은 네비게이터 밖에서 throw 하므로 그려지기만 하게
+// 대역으로 바꾼다(가로채기 동작은 `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx` 몫).
+jest.mock('@react-navigation/native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/preventRemoveMock')
+);
 
 jest.mock('@/pages/trip/trip-new-step1/model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({ data: undefined }),

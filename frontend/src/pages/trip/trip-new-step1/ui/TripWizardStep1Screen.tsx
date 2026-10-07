@@ -383,14 +383,20 @@ export function TripWizardStep1Screen({
               </Text>
               {/* 부제 3분기(TRIP-732 AC-6, 우선순위 loading > empty > default): 로딩 중이면 로딩
                   문구, 아니면 empty 얼굴이면 empty 문구, 그 외 default. default 의 "온보딩에서" 절은
-                  취향이 온보딩 상속일 때만(TRIP-984 D10). */}
-              <Text className="font-noto text-label text-muted">
+                  취향이 온보딩 상속일 때만(TRIP-984 D10).
+                  TRIP-1284: 두 줄로 넘는 문구는 iOS 가 한글을 글자 단위로 끊어 "요" 한 글자 줄이 생겼다 —
+                  어절 단위 줄바꿈(hangul-word, 리포 다이얼로그 관례) + 마지막 두 어절을 NBSP(\u00A0)로 묶는다. */}
+              <Text
+                testID="trip-wizard-step1-subtitle"
+                lineBreakStrategyIOS="hangul-word"
+                className="font-noto text-label text-muted"
+              >
                 {isLoading
                   ? '여행 정보를 불러오는 중이에요'
                   : isEmptyFace
-                    ? '여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수 있어요'
+                    ? '여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수\u00A0있어요'
                     : summaryPreferences?.onboarding === true
-                      ? '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'
+                      ? '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수\u00A0있어요'
                       : '행을 누르면 바꿀 수 있어요'}
               </Text>
             </View>

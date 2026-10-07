@@ -145,22 +145,33 @@ export function formatLegendDateRange(
 }
 
 /** '6월 10일(수) – 13일(토)'(요일 삽입·공백 en dash·같은 달 생략). 요일은 dayOfWeek(에포크 산술)로
- *  구해 시계를 안 읽는다. summaryPeriod 가 여기에 ' · N박 M일'을 이어 붙인다. */
+ *  구해 시계를 안 읽는다. summaryPeriod 가 여기에 ' · N박 M일'을 이어 붙인다.
+ *  `today`('YYYY-MM-DD')를 주면 연도를 붙인다(TRIP-1285): 시작의 해 ≠ 오늘의 해 → 시작 앞 `YYYY년 `,
+ *  해 넘김 → 끝 앞 `YYYY년 M월`. 안 주면 연도 없는 옛 출력 그대로다. */
 export function formatDateRangeWithDow(
   startDate: string,
-  endDate: string
+  endDate: string,
+  today?: string
 ): string {
   const [startMonth, startDay] = monthDayNums(startDate);
   const [endMonth, endDay] = monthDayNums(endDate);
   const startDow = WEEKDAY_LABELS[dayOfWeek(toEpochDay(startDate))];
   const endDow = WEEKDAY_LABELS[dayOfWeek(toEpochDay(endDate))];
+  const startYear = startDate.slice(0, 4);
+  const endYear = endDate.slice(0, 4);
+  const startPrefix =
+    today !== undefined && startYear !== today.slice(0, 4)
+      ? `${startYear}년 `
+      : '';
 
-  const head = `${startMonth}월 ${startDay}일(${startDow})`;
+  const head = `${startPrefix}${startMonth}월 ${startDay}일(${startDow})`;
   if (startDate === endDate) return head; // 0박(같은 날)은 날짜 하나
   const tail =
-    startMonth === endMonth
-      ? `${endDay}일(${endDow})`
-      : `${endMonth}월 ${endDay}일(${endDow})`;
+    today !== undefined && startYear !== endYear
+      ? `${endYear}년 ${endMonth}월 ${endDay}일(${endDow})`
+      : startMonth === endMonth
+        ? `${endDay}일(${endDow})`
+        : `${endMonth}월 ${endDay}일(${endDow})`;
   return `${head} ${EN_DASH} ${tail}`;
 }
 

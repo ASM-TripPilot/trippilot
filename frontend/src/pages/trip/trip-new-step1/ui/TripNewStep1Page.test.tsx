@@ -45,8 +45,17 @@ jest.mock('expo-router', () => {
     __esModule: true,
     useRouter: () => ({ push, back, replace }),
     router: { push, back, replace },
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    useNavigation: require('@/test-support/preventRemoveMock').useNavigation,
   };
 });
+
+// TRIP-1272 — 페이지가 뒤로 가로채기(`usePreventRemove`)를 건다. 실물은 네비게이터 밖에서 throw 하므로 그려지기만 하게
+// 대역으로 바꾼다(가로채기 동작은 `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx` 몫).
+jest.mock('@react-navigation/native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/preventRemoveMock')
+);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const routerMock = require('expo-router').router as {
@@ -452,6 +461,125 @@ describe('스토어 → 요약 행 도출 배선', () => {
       expect(root()).toBeOnTheScreen();
       expect(screen.queryByTestId(NOTE)).toBeNull();
       expect(next()).toBeDisabled();
+    });
+  });
+
+  // ── TRIP-1285 · 기간 행 연도 표기 · 달력 다음 달 상한 ──────────────────────────────────
+  //
+  // 결정 1: 달력은 오늘의 달 + 24 까지만 간다. 결정 2: 올해가 아닌 날짜면 기간 행·시트 요약에 연도를 붙인다.
+  // 페이지가 '오늘'(baseDate → resolvedToday)을 셀렉터와 시트에 제대로 넘기는지(배선)를 본다. 문자열 바이트는
+  // tripSummary.test.ts 가 잠그고, 여기선 "연도가 붙었나/안 붙었나"만 본다(02a ★5).
+  //
+  // 기간 행은 라벨·main·sub 가 한 문자열로 이어져(구분자 없음) 행 전체 완전 일치는 못 쓴다 — main Text 노드만
+  // `within(row).getByText(정확한 문자열)` 로 잡는다(02a ★6).
+
+  describe('TRIP-1285 · 기간 행 연도 · 달력 상한', () => {
+    /** 부산 2박 + 2029-05-15~17 선상태(QA B-03 재현값). */
+    function seedFarPeriod(): void {
+      const store = useTripWizardStore.getState();
+      store.addDestination('부산광역시', 2);
+      store.setPeriod(undefined, '2029-05-15', '2029-05-17');
+    }
+
+    function monthHeader() {
+      return screen.getByTestId('trip-wizard-period-month');
+    }
+
+    function nextMonthButton() {
+      return screen.getByTestId('trip-wizard-period-next');
+    }
+
+    it('오늘이 2026-10-08 이면 2029-05-15~17 행은 "2029년 5월 15일(화) – 17일(목)" 이다 (AC-7)', () => {
+      // 준비
+      seedFarPeriod();
+
+      // 실행
+      render(<TripNewStep1Page baseDate="2026-10-08" />);
+
+      // 단언 — main 노드에 연도가 붙었고, sub 는 그대로다.
+      expect(
+        within(periodRow()).getByText('2029년 5월 15일(화) – 17일(목)')
+      ).toBeOnTheScreen();
+      expect(within(periodRow()).getByText('2박 3일')).toBeOnTheScreen();
+    });
+
+    it('짝 — 오늘이 같은 해(2029-01-10)면 같은 범위에 연도가 없다 (baseDate 배선, 02a ★3)', () => {
+      seedFarPeriod();
+
+      render(<TripNewStep1Page baseDate="2029-01-10" />);
+
+      expect(
+        within(periodRow()).getByText('5월 15일(화) – 17일(목)')
+      ).toBeOnTheScreen();
+    });
+
+    it('시트에서 7달 넘겨 2027-05-15 를 고르면 시트 요약·행 모두 "2027년 5월 15일(토) – 17일(월)" (AC-7·AC-8)', () => {
+      // 준비 — 부산 2박이라 끝은 시작 + 2.
+      useTripWizardStore.getState().addDestination('부산광역시', 2);
+      render(<TripNewStep1Page baseDate="2026-10-08" />);
+      expect(within(periodRow()).getByText('기간 선택')).toBeOnTheScreen();
+
+      // 실행 ① — 시트를 열고 2026-10 → 2027-05 로 7번 넘긴다.
+      fireEvent.press(periodRow());
+      expect(monthHeader()).toHaveTextContent('2026년 10월');
+      for (let i = 0; i < 7; i += 1) fireEvent.press(nextMonthButton());
+      expect(monthHeader()).toHaveTextContent('2027년 5월');
+
+      // 실행 ② — 5/15 를 시작으로 고른다.
+      fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2027-05-15'));
+
+      // 단언 ① — 시트 요약에 연도.
+      expect(
+        screen.getByTestId('trip-wizard-period-summary')
+      ).toHaveTextContent('2027년 5월 15일(토) – 17일(월)');
+
+      // 실행 ③ — 적용.
+      fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
+
+      // 단언 ② — 스토어와 행.
+      expect(storeDates()).toEqual(['2027-05-15', '2027-05-17']);
+      expect(
+        within(periodRow()).getByText('2027년 5월 15일(토) – 17일(월)')
+      ).toBeOnTheScreen();
+      expect(within(periodRow()).getByText('2박 3일')).toBeOnTheScreen();
+    });
+
+    it('다음 달을 24번 누르면 2028년 10월에서 멈추고, 25번째는 눌리지 않는다 (AC-5)', () => {
+      // 준비 — 오늘 2026-10-08, 시트를 연다.
+      render(<TripNewStep1Page baseDate="2026-10-08" />);
+      fireEvent.press(periodRow());
+      // 앵커 — 오늘의 달에서 시작하고 next 는 아직 열려 있다.
+      expect(monthHeader()).toHaveTextContent('2026년 10월');
+      expect(nextMonthButton()).toBeEnabled();
+
+      // 실행 ① — 24번.
+      for (let i = 0; i < 24; i += 1) fireEvent.press(nextMonthButton());
+
+      // 단언 ① — 상한 달에 닿아 next 가 죽었다.
+      expect(monthHeader()).toHaveTextContent('2028년 10월');
+      expect(nextMonthButton()).toBeDisabled();
+
+      // 실행 ② — 25번째.
+      fireEvent.press(nextMonthButton());
+
+      // 단언 ② — 그대로다(옛 코드는 2028년 11월로 넘어간다).
+      expect(monthHeader()).toHaveTextContent('2028년 10월');
+    });
+
+    it('INV-3 · 연도가 붙은 기간 행과 예산 행에 소요시간 문자열(시간·분·duration)이 없다 (AC-10)', () => {
+      seedFarPeriod();
+
+      render(<TripNewStep1Page baseDate="2026-10-08" />);
+
+      // 앵커(짝) — 행이 실제로 값을 그렸다(빈 행에서 "없다"는 공허하다).
+      expect(periodRow()).toHaveTextContent(/2박 3일/);
+      expect(
+        screen.getByTestId('trip-wizard-summary-budget')
+      ).toHaveTextContent(/120만원/);
+      expect(periodRow()).not.toHaveTextContent(/시간|분|duration/i);
+      expect(
+        screen.getByTestId('trip-wizard-summary-budget')
+      ).not.toHaveTextContent(/시간|분|duration/i);
     });
   });
 });

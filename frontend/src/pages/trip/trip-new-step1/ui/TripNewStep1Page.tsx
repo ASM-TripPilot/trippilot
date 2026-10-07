@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
+import { usePreventRemove } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useSavedPlaces } from '@/features/save-place';
@@ -167,7 +168,7 @@ const HOME_FALLBACK = '/(tabs)';
  *   이 잠금이 막는다.
  * - 204·404(이미 없음)면 `createdTripId` 만 비우고(드래프트 유지, BR-U1-33) 목록 캐시를 무효화한다.
  *   500·네트워크면 잠금을 풀고 실패 문구를 띄운다 — 다시 누르면 다시 보낸다(INV-4).
- * - 화면이 먼저 사라졌으면(스와이프 이탈) 응답이 와도 이동하지 않는다(`mountedRef`). 지워진 것은
+ * - 화면이 먼저 사라졌으면(삭제 응답 전 이탈) 응답이 와도 이동하지 않는다(`mountedRef`). 지워진 것은
  *   사실이라 id 비우기·무효화는 그래도 한다.
  */
 function LeaveDialogContainer({
@@ -335,7 +336,7 @@ export function TripNewStep1Page({
 
   // 요약 5행 도출 — 미선택은 셀렉터가 `null` 을 낸다(화면이 플레이스홀더로 그린다).
   const summaryDestinationsValue = summaryDestinations(destinations);
-  const summaryPeriodValue = summaryPeriod(startDate, endDate);
+  const summaryPeriodValue = summaryPeriod(startDate, endDate, resolvedToday);
   const summaryCompanionValue = summaryCompanion(companionType, party);
   // 오버라이드가 있으면 "+ 온보딩" 접미를 뗀다(D4 — 바꿨는데 "온보딩" 표식이 남으면 거짓).
   const summaryPreferencesValue = summaryPreferences(
@@ -408,10 +409,36 @@ export function TripNewStep1Page({
 
   // 이탈 확인(TRIP-1114) — 이 세션에서 이미 여행을 만들었을 때만 ‹ 가 다이얼로그를 연다.
   const [leaveOpen, setLeaveOpen] = useState(false);
+  // 다이얼로그에서 [저장]·[삭제]로 나가기를 고른 뒤의 이동은 다시 가로채지 않는다(무한 다이얼로그 방지).
+  const leaveChosenRef = useRef(false);
   const exitWizard = (): void => {
+    leaveChosenRef.current = true;
     if (router.canGoBack()) router.back();
     else router.replace(HOME_FALLBACK);
   };
+
+  // TRIP-1272 · iOS 가장자리 스와이프·Android 하드웨어 뒤로는 ‹(onBack)를 거치지 않는다 — 초안이 있으면
+  // 그 둘도 이탈 다이얼로그로 보낸다(선례 `useItineraryTabBack`: gestureEnabled:false·raw beforeRemove 기각).
+  // 초안이 없으면 가로채지 않는다(결정 1=B, 권고안 채택). 뒤로 계열(GO_BACK·POP)만 막고, 나머지
+  // (생성 진입의 dismissTo=POP_TO·로그아웃 POP_TO_TOP·REPLACE)는 받은 액션 객체를 그대로 다시 보낸다.
+  // ⚠️ 재전송은 **부모** navigation 으로 — 1/4 는 위저드 스택(trips/new) 안이라, 루트 스택을 target 으로
+  // 단 POP_TO 를 이 화면 navigation 으로 보내면 에러 없이 조용히 사라진다(02a ★5 실측).
+  const navigation = useNavigation();
+  usePreventRemove(createdTripId !== undefined, ({ data }) => {
+    const { action } = data;
+    const isBack = action.type === 'GO_BACK' || action.type === 'POP';
+    if (isBack) {
+      if (!leaveChosenRef.current) {
+        setLeaveOpen(true);
+        return;
+      }
+      // 나가기를 고른 뒤의 뒤로는 이 화면 navigation 으로 — 1/4 가 위저드 안에 두 장일 때(2/4 onRestart)
+      // 부모로 보내면 "한 장 빼기"가 "위저드 통째 빼기"가 돼 아래 1/4 가 또 막는다(5-b 경고-1).
+      navigation.dispatch(action);
+      return;
+    }
+    (navigation.getParent() ?? navigation).dispatch(action);
+  });
 
   const createTrip = useCreateTrip();
 
@@ -873,7 +900,7 @@ export function TripNewStep1Page({
         onPressSeeAll={() => router.push(mustVisitSelectHref)}
         canProceed={canProceed}
         onNext={submit}
-        // 여행을 안 만들었으면 지금처럼 바로 나간다(01b Q5). 스와이프·하드웨어 뒤로는 가로채지 않는다(결정 1).
+        // 여행을 안 만들었으면 지금처럼 바로 나간다(01b Q5). 스와이프·하드웨어 뒤로는 위 usePreventRemove 가 같은 다이얼로그로 보낸다(TRIP-1272).
         onBack={() =>
           createdTripId === undefined ? router.back() : setLeaveOpen(true)
         }
@@ -981,7 +1008,11 @@ export function TripNewStep1Page({
           onSelectTier={selectBudgetTier}
           onApply={applyBudget}
           onClose={() => setBudgetSheetOpen(false)}
-          applyDisabled={draftBudgetKind === 'empty' || draftBudgetOverCap}
+          applyDisabled={
+            draftBudgetKind === 'empty' ||
+            draftBudgetKind === 'invalid' ||
+            draftBudgetOverCap
+          }
         />
       ) : null}
       {/* 이탈 확인은 맨 위에 겹친다. 삭제가 성공해 id 가 비면 저절로 내려간다. */}

@@ -195,6 +195,7 @@
 - `src/__tests__/tripBasesRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tripNightsPeriodOrder.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardEntryReset.test.tsx`  →  (export 없음)
+- `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardReentryPreserve.test.tsx`  →  (export 없음)
 
 ## src/app/entrypoint/
@@ -1549,6 +1550,7 @@
 - `src/test-support/myPageItineraries.tsx`  →  DURING · PAST · FUTURE · itin · CONFIRMED · PLANNED · AXIOS_404 · AXIOS_500 · ItinScript · scriptItineraryOptions · deferred · newTestQueryClient · renderWithQueryClient · settle · myPageTrip
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
+- `src/test-support/preventRemoveMock.ts`  →  mockNavigation · useNavigation · usePreventRemove
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
@@ -1590,4 +1592,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 974개 파일
+합계 976개 파일
