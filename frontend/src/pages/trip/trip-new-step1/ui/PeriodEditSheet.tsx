@@ -36,6 +36,7 @@ import {
   daysInMonth,
   firstWeekdayOfMonth,
   isDateInRange,
+  shiftMonth,
 } from '@/shared/lib/monthGrid';
 
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
@@ -183,12 +184,14 @@ export function PeriodEditSheet({
 
   // today 의 달보다 앞으로는 못 간다 — 그 달은 전 칸이 과거라 고를 게 없다.
   const canGoPrev = month > today.slice(0, 7);
+  // TRIP-1285 — 오늘의 달 + 24 까지만 본다(UX 사본: 서버엔 기간 상한이 없다).
+  const canGoNext = month < shiftMonth(today.slice(0, 7), 24);
   const rangeComplete = range.start !== undefined && range.end !== undefined;
   // 완성 범위일 때만 요약을 그린다(미완성이면 null → 안 그림). 시트 요약은 **범위만**(Figma
   // `3627:2068`) — `summaryPeriod`의 `main`(요일삽입 날짜범위)만 쓰고 `sub`("3박 4일")는 버린다.
   // TRIP-737: 옛날엔 main·sub 를 미들닷으로 합쳐 "· 3박 4일" 접미가 붙었으나 Figma엔 없다. 요약 카드
   // (화면)는 여전히 2톤(main+sub)이라 셀렉터는 그대로 공유 — 접미 차이는 소비처가 정한다.
-  const summaryLine = summaryPeriod(range.start, range.end);
+  const summaryLine = summaryPeriod(range.start, range.end, today);
   const summary = summaryLine === null ? null : summaryLine.main;
 
   return (
@@ -247,8 +250,11 @@ export function PeriodEditSheet({
               testID="trip-wizard-period-next"
               accessibilityRole="button"
               accessibilityLabel="다음 달"
+              disabled={!canGoNext}
               onPress={onNextMonth}
-              className="h-10 w-10 items-center justify-center"
+              className={`h-10 w-10 items-center justify-center ${
+                canGoNext ? '' : 'opacity-40'
+              }`}
             >
               <ChevronRightGlyph size={18} tone="muted" />
             </Pressable>

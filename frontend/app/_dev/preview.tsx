@@ -4356,6 +4356,26 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // g01 기간 시트 — 다음 달 상한(TRIP-1285). today=2026-10-08 이면 상한 달은 2028-10 이라 next 가 흐리게
+  // 죽고, 범위가 올해가 아니라 요약줄에 "2028년 " 이 붙는다. jest 는 실제 흐림을 못 봐 6-b 육안 자리다.
+  {
+    key: 'trip-new-step1-period-sheet-limit',
+    band: 'g',
+    label: 'g01 · 기간 시트 · 다음 달 상한 · 연도',
+    login: null,
+    render: () => (
+      <PeriodEditSheet
+        today="2026-10-08"
+        month="2028-10"
+        range={{ start: '2028-10-29', end: '2028-10-31' }}
+        onPickDate={noop}
+        onPrevMonth={noop}
+        onNextMonth={noop}
+        onApply={noop}
+        onClose={noop}
+      />
+    ),
+  },
   // g01 동행 편집 시트(TRIP-668, Figma `3642:2068`) — 친구 선택·인원 2명 열린 상태.
   // `CompanionEditSheet`은 props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정
   // 없이 그대로 태운다. jest 는 칩 활성 분홍 배경·글리프 흰색·스테퍼 원·시트 딤/개폐를 못 봐

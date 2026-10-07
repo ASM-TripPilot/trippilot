@@ -336,7 +336,7 @@ export function TripNewStep1Page({
 
   // 요약 5행 도출 — 미선택은 셀렉터가 `null` 을 낸다(화면이 플레이스홀더로 그린다).
   const summaryDestinationsValue = summaryDestinations(destinations);
-  const summaryPeriodValue = summaryPeriod(startDate, endDate);
+  const summaryPeriodValue = summaryPeriod(startDate, endDate, resolvedToday);
   const summaryCompanionValue = summaryCompanion(companionType, party);
   // 오버라이드가 있으면 "+ 온보딩" 접미를 뗀다(D4 — 바꿨는데 "온보딩" 표식이 남으면 거짓).
   const summaryPreferencesValue = summaryPreferences(
@@ -1008,7 +1008,11 @@ export function TripNewStep1Page({
           onSelectTier={selectBudgetTier}
           onApply={applyBudget}
           onClose={() => setBudgetSheetOpen(false)}
-          applyDisabled={draftBudgetKind === 'empty' || draftBudgetOverCap}
+          applyDisabled={
+            draftBudgetKind === 'empty' ||
+            draftBudgetKind === 'invalid' ||
+            draftBudgetOverCap
+          }
         />
       ) : null}
       {/* 이탈 확인은 맨 위에 겹친다. 삭제가 성공해 id 가 비면 저절로 내려간다. */}
