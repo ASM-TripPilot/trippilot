@@ -31,6 +31,7 @@ import BottomSheet, {
 import type { Place } from '@/shared/api/index.schemas';
 import { PoiCategory } from '@/shared/api/index.schemas';
 import { getAccessToken } from '@/shared/api';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { BottomTabBar, shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { resolvePlaceListState } from '@/features/explore';
@@ -278,7 +279,10 @@ export function PlaceExplorePage(): ReactElement {
         onSelectCategory={handleSelectCategory}
         onChangeSearchText={handleChangeSearchText}
         onToggleSave={handleToggleSave}
-        onPressCard={(place) => router.push(`/explore/places/${place.poiId}`)}
+        // TRIP-1282 — 홈 "더 보기"의 창 안이면 무시(연타 관통 표적).
+        onPressCard={guardPress((place: Place) =>
+          router.push(`/explore/places/${place.poiId}`)
+        )}
         onPressCreateTrip={() => {
           // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
           useTripWizardStore.getState().reset();

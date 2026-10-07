@@ -140,9 +140,10 @@ export function MyPage(): ReactElement {
       nickname={profile.data?.nickname ?? null}
       email={me.data?.email ?? null}
       counts={counts}
-      onPressCount={(bucket) =>
+      // TRIP-1282 — 창을 연다: 둘째 탭이 바뀐 탭의 여행 카드에 떨어져도 무시된다(연타 관통).
+      onPressCount={guardPress((bucket: TripBucket) =>
         router.replace(shellTabHref(BUCKET_TAB[bucket]))
-      }
+      )}
       styleCard={
         styleVM ? (
           <StyleSummaryCard

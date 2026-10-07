@@ -11,6 +11,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { regionPickerHref } from '@/features/explore';
 import { wizardOriginParams } from '@/features/create-trip';
@@ -243,6 +244,8 @@ beforeEach(() => {
 
 afterEach(() => {
   server.resetHandlers();
+  // 연타 가드 창은 모듈 싱글턴 — 앞 테스트가 연 창이 다음 테스트로 새지 않게 닫는다(TRIP-1282).
+  resetPressGuard();
 });
 
 afterAll(() => server.close());
@@ -1500,12 +1503,43 @@ describe('카드 → 상세 push', () => {
       fireEvent.press(screen.getByTestId('explore-places-card-p2'));
       expect(mockPush.mock.calls).toEqual([['/explore/places/p2']]);
 
-      // 첫 카드 — poiId를 하드코딩하면 여기서 갈린다.
+      // 첫 카드 — poiId를 하드코딩하면 여기서 갈린다. 사람이 따로 누른 탭이라 연타 가드 창(400ms)이
+      // 지난 것으로 둔다(TRIP-1282 — 카드가 가드로 감싸져 둘째 누름이 창 안이면 무시된다).
+      resetPressGuard();
       fireEvent.press(screen.getByTestId('explore-places-card-p1'));
       expect(mockPush.mock.calls).toEqual([
         ['/explore/places/p2'],
         ['/explore/places/p1'],
       ]);
+    });
+  });
+
+  // TRIP-1282 ① — 홈 "더 보기" 연타의 둘째 탭이 이 화면 카드에 떨어진다(QA A-02). 트리거 반쪽("더 보기"가
+  // 창을 연다)은 HomePage.test.tsx 에 있다 — 두 화면을 잇는 것은 모듈 전역 창 하나뿐이다.
+  describe('연타 관통 표적 — 창 안의 카드 누름은 무시된다', () => {
+    const FROZEN_NOW = 1_790_000_000_000;
+    let clock: jest.SpyInstance | undefined;
+    afterEach(() => clock?.mockRestore());
+
+    it('창이 열려 있으면 카드를 눌러도 장소 상세로 안 가고, 창이 닫힌 뒤 한 번 누르면 그 카드 상세로 정확히 1회 간다', async () => {
+      render(<PlaceExplorePage />, { wrapper: createWrapper() });
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-card-p2')).toBeOnTheScreen()
+      );
+      // 시계는 목록이 도착한 뒤에 멈춘다 — 그다음부터 누름 판정만 고정한다.
+      clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+      // 준비 — 홈 "더 보기"가 방금 눌렸다(창이 열려 있다).
+      openPressGuardWindow();
+
+      fireEvent.press(screen.getByTestId('explore-places-card-p2'));
+
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // 무회귀 — 창이 닫힌 뒤의 한 번.
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('explore-places-card-p2'));
+
+      expect(mockPush.mock.calls).toEqual([['/explore/places/p2']]);
     });
   });
 });

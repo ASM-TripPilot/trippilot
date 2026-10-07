@@ -100,7 +100,7 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/shared/lib/pressGuard.ts` | `guardPress(fn)`(모듈 전역 400ms 창이 열려 있으면 무시) · `openPressGuardWindow()`(서버 응답으로 표면이 바뀌는 순간 창만 연다) · `resetPressGuard()`(테스트 전용). 훅이 아니고 `setTimeout` 대신 `Date.now()` 비교(pages 층 타이머 금지 + 테스트가 `Date.now`를 멈춰 판정 고정). **음수 경과(시계 역행)는 창 밖**으로 처리 — 없으면 가드 걸린 버튼이 전부 먹통이 된다. 전역 창이라 스택 아래 화면의 재오픈이 앞 화면 버튼을 1회 먹일 수 있다 |
+| `src/shared/lib/pressGuard.ts` | `guardPress(fn)`(모듈 전역 400ms 창이 열려 있으면 무시) · `openPressGuardWindow()`(서버 응답으로 표면이 바뀌는 순간 창만 연다) · `resetPressGuard()`(테스트 전용). 훅이 아니고 `setTimeout` 대신 `Date.now()` 비교(pages 층 타이머 금지 + 테스트가 `Date.now`를 멈춰 판정 고정). **음수 경과(시계 역행)는 창 밖**으로 처리 — 없으면 가드 걸린 버튼이 전부 먹통이 된다. 전역 창이라 스택 아래 화면의 재오픈이 앞 화면 버튼을 1회 먹일 수 있다. **감싼 핸들러만 무시한다** — 연타 관통은 트리거(창을 여는 쪽)와 둘째 탭이 떨어지는 표적(창을 확인하는 쪽) **둘 다** 감싸야 막힌다(TRIP-1282: 트리거만 감싸면 안 막힌다). 응답 뒤에 화면이 바뀌는 경로(삭제 등)는 이동 직전 `openPressGuardWindow()`. 테스트는 `Date.now`를 한 값으로 고정하고(가짜 타이머는 창이 저절로 닫힌다) 파일마다 `afterEach(resetPressGuard)`를 둔다 |
 | `src/shared/lib/pressGuard.test.ts` | 경계 399/400ms·무시된 누름 비연장·인자 전달·리셋·시계 역행 |
 
 **소비처** 명부 검사는 없다(TRIP-1145에서 스캔 삭제).

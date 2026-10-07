@@ -12,6 +12,11 @@ import {
   ItineraryStatus,
 } from '@/shared/api/index.schemas';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import {
+  guardPress,
+  openPressGuardWindow,
+  resetPressGuard,
+} from '@/shared/lib/pressGuard';
 import { SAVE_FAILURE_NOTICE } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { useTripWizardStore } from '@/features/create-trip';
@@ -252,6 +257,8 @@ beforeEach(() => {
 
 // 위저드 드래프트는 모듈 싱글턴이라 describe 밖에서 비운다 — 안에 걸면 앞 테스트 상태가 샌다.
 afterEach(resetWizardDraft);
+// 연타 가드 창도 모듈 싱글턴이다 — 앞 테스트가 연 창이 다음 테스트의 첫 누름을 먹지 않게 닫는다(TRIP-1282).
+afterEach(() => resetPressGuard());
 
 // TRIP-371 실데이터 판정 · TRIP-699 로딩 히어로 · TRIP-935 AC-5
 describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 가른다', () => {
@@ -1173,4 +1180,66 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
       expect(mockPush).not.toHaveBeenCalled();
     });
   });
+});
+
+// TRIP-1282 — 연타 관통(QA A-02 ①·B-15 ⑤). 홈은 ① "더 보기"의 트리거이고 ⑤ 위저드 이탈의 표적이다.
+// 두 화면을 잇는 것은 모듈 전역 400ms 창 하나뿐이라, 이 파일은 홈 쪽 반쪽만 잰다(트리거면 "창을 연다",
+// 표적이면 "열린 창에서 무시된다"). 다른 반쪽은 장소 탐색·위저드 1/4 테스트 파일에 있다.
+describe('연타 관통 — 홈 쪽 반쪽', () => {
+  /** 가드 판정용 멈춘 시각(값 자체는 의미 없다 — 흐르지 않는 것이 요점). */
+  const FROZEN_NOW = 1_790_000_000_000;
+  let clock: jest.SpyInstance;
+  beforeEach(() => {
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+  });
+  afterEach(() => clock.mockRestore());
+
+  /** 다음 화면의 "가드로 감싼 버튼" 대역 — 창이 열려 있으면 안 불린다. 부르는 순간 창을 연다(닫혀 있었다면). */
+  function tapGuardedElsewhere(): jest.Mock {
+    const handler = jest.fn();
+    guardPress(handler)();
+    return handler;
+  }
+
+  it('① "더 보기"를 누르면 장소 탐색으로 1회 가고, 창이 열려 다음 화면의 가드 버튼은 무시된다', () => {
+    render(<HomePage />);
+    // 앵커 — 아직 창이 닫혀 있다(대역이 불린다). 대역이 연 창은 바로 닫는다.
+    expect(tapGuardedElsewhere()).toHaveBeenCalledTimes(1);
+    resetPressGuard();
+
+    fireEvent.press(screen.getByTestId('home-spots-more'));
+
+    // 앵커 — 첫 탭은 제 할 일을 했다.
+    expect(mockPush.mock.calls).toEqual([['/explore/places']]);
+    // 단언 — 창이 열려 있다.
+    expect(tapGuardedElsewhere()).not.toHaveBeenCalled();
+  });
+
+  it.each(['home-trip-hero', 'home-trip-hero-cta'])(
+    '⑤ 창 안의 여행 카드(%s) 누름은 라이브로 가지 않고, 창이 닫힌 뒤 한 번 누르면 라이브로 정확히 1회 간다',
+    (testID) => {
+      mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
+      mockUseItinerary.mockReturnValue(
+        itineraryOk(
+          ItineraryGenerationState.COMPLETE,
+          ItineraryStatus.CONFIRMED
+        )
+      );
+      render(<HomePage />);
+      expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+      // 준비 — 위저드 이탈 다이얼로그 버튼이 방금 눌렸다(창이 열려 있다).
+      openPressGuardWindow();
+
+      fireEvent.press(screen.getByTestId(testID));
+
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // 무회귀 — 창이 닫힌 뒤의 한 번은 같은 카드의 목적지로 간다.
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId(testID));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/live`);
+    }
+  );
 });

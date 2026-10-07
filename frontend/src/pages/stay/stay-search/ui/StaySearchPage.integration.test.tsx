@@ -1710,6 +1710,8 @@ describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)
     );
 
     fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
+    // 사람이 따로 누른 두 탭이다 — 연타 가드 창(400ms)이 지난 것으로 둔다(TRIP-1282 — 탭이 가드로 감싸졌다).
+    resetPressGuard();
     fireEvent.press(screen.getByTestId('shell-tabbar-tab-explore'));
 
     expect(mockDismissTo.mock.calls).toEqual([['/records'], ['/explore']]);
@@ -1817,5 +1819,139 @@ describe('동명 구 · URL 의 시도로 다른 시도 숙소를 거른다 (F3 
     expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
       '부산광역시 · 날짜 미정 · 3곳'
     );
+  });
+});
+
+/**
+ * TRIP-1282 ②·③ — 연타 관통(QA A-02). 첫 탭이 같은 화면의 모습을 바꾸고(카드 재등장·시트 닫힘), 같은 자리에
+ * 떨어진 둘째 탭이 새로 드러난 요소(숙소 카드·복제 탭바 '기록')를 누른다. 트리거·표적이 같은 페이지라 한 테스트에서
+ * 이어 누른다.
+ *
+ * 준비→실행→단언: 시계를 멈춘다 → 트리거 누름 → 앵커(제 할 일) → 표적 누름 → 이동 0회 → 창 닫기 → 표적 누름 →
+ * 정확한 인자로 1회(무회귀). 시계는 응답이 도착한 뒤에 멈춘다(그다음엔 기다릴 것이 없다).
+ */
+describe('연타 관통 — 한 페이지 안에서 드러난 요소', () => {
+  const BASE = 'http://localhost:8080/api/v1';
+  const FROZEN_NOW = 1_790_000_000_000;
+
+  const CHEAP: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 'cheap',
+    name: '게스트하우스 알뜰',
+    lat: 35.1,
+    lng: 129.1,
+    region: '부산',
+    amenities: [],
+    stayType: 'GUESTHOUSE',
+    price: { amount: 50000, currency: 'KRW' },
+  };
+  const LUX: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 'lux',
+    name: '오션 스위트',
+    lat: 35.2,
+    lng: 129.2,
+    region: '부산',
+    amenities: ['ocean'],
+    stayType: 'HOTEL',
+    price: { amount: 250000, currency: 'KRW' },
+  };
+  const KEY_LUX = `${LUX.externalSource}:${LUX.externalId}`;
+
+  let clock: jest.SpyInstance | undefined;
+  afterEach(() => clock?.mockRestore());
+
+  beforeEach(() => {
+    mockSearchParams = { region: '부산' };
+    server.use(
+      http.get(`${BASE}/stays/search`, () =>
+        HttpResponse.json({
+          items: [CHEAP, LUX],
+          degraded: false,
+          filterZeroReasons: [],
+        })
+      ),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+
+  async function renderSettled(): Promise<void> {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <StaySearchPage />
+      </QueryClientProvider>
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+    );
+  }
+
+  /** push 중 숙소 상세로 가는 객체형 push 만 골라낸다. */
+  function detailPushes(): unknown[] {
+    return mockPush.mock.calls
+      .map((call) => call[0])
+      .filter(
+        (arg) =>
+          typeof arg === 'object' &&
+          arg !== null &&
+          (arg as { pathname?: string }).pathname === '/stays/[stayId]'
+      );
+  }
+
+  it('② "필터 완화" 직후 창 안에서 다시 드러난 숙소 카드를 눌러도 상세로 안 가고, 창이 닫힌 뒤 한 번 누르면 그 숙소 상세로 정확히 1회 간다', async () => {
+    await renderSettled();
+    // 준비 — 가격대로 0곳을 만든다(가격 칩·옵션은 가드가 없어 창을 열지 않는다).
+    fireEvent.press(screen.getByTestId('stay-search-filter-price'));
+    fireEvent.press(screen.getByTestId('stay-price-option-100k-200k'));
+    expect(screen.getByTestId('stay-search-empty')).toBeOnTheScreen();
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+    // 실행 ① — 첫 탭: 필터 완화.
+    fireEvent.press(screen.getByTestId('stay-search-empty-filter'));
+    // 앵커 — 첫 탭은 제 할 일을 했다(카드가 다시 보인다).
+    expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen();
+
+    // 실행 ② — 같은 자리에 떨어진 둘째 탭이 드러난 카드를 누른다.
+    fireEvent.press(screen.getByTestId(`stay-card-${KEY_LUX}`));
+
+    expect(detailPushes()).toHaveLength(0);
+
+    // 무회귀 — 창이 닫힌 뒤의 한 번은 그 카드의 상세로 간다.
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId(`stay-card-${KEY_LUX}`));
+
+    expect(detailPushes()).toHaveLength(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/stays/[stayId]',
+      params: { stayId: KEY_LUX },
+    });
+  });
+
+  it('③ 필터 시트 "적용" 직후 창 안에서 복제 탭바 "기록"을 눌러도 탭으로 안 가고, 창이 닫힌 뒤 한 번 누르면 기록 탭으로 정확히 1회 간다', async () => {
+    await renderSettled();
+    fireEvent.press(screen.getByTestId('stay-search-filter-more'));
+    // 앵커 — 시트가 열렸다(처음부터 없어서 통과하는 부재 단언 방지).
+    expect(screen.getByTestId('stay-filter-sheet')).toBeOnTheScreen();
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+    // 실행 ① — 첫 탭: 적용.
+    fireEvent.press(screen.getByTestId('stay-filter-apply'));
+    // 앵커 — 첫 탭은 제 할 일을 했다(조건을 싣고 시트를 내렸다).
+    expect(mockSetParams).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('stay-filter-sheet')).toBeNull();
+
+    // 실행 ② — 시트가 내려간 자리 아래의 복제 탭바 '기록'.
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
+
+    expect(mockDismissTo).not.toHaveBeenCalled();
+
+    // 무회귀 — 창이 닫힌 뒤의 한 번.
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
+
+    expect(mockDismissTo.mock.calls).toEqual([['/records']]);
   });
 });
