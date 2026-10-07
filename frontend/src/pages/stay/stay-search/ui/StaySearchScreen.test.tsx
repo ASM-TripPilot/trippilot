@@ -10,6 +10,12 @@ import { stayKey } from '@/features/save-stay/index.view';
 import { StaySearchScreen } from './StaySearchScreen';
 import type { StaySearchState } from '../model/staySearchState';
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
+import { closestAncestor } from '@/test-support/sheetTree';
+import type { ReactTestInstance } from 'react-test-renderer';
+
+/** 호스트 스크롤 노드(RN ScrollView/FlatList 의 호스트는 `RCTScrollView`) — 합성 요소는 세지 않는다. */
+const isHostScroll = (node: ReactTestInstance): boolean =>
+  String(node.type) === 'RCTScrollView';
 
 /**
  * e02 숙소 검색 — StaySearchScreen(props 만 받는 뷰) 단위 테스트.
@@ -1066,6 +1072,41 @@ describe('이름·지역 검색 (옛 .nameSearch — 통합 심판 0, 단위 전
       expect(screen.queryByTestId('stay-search-name-empty')).toBeNull();
       expect(screen.getByTestId(`stay-card-${KEY_A}`)).toBeOnTheScreen();
       expect(screen.getByTestId(`stay-card-${KEY_B}`)).toBeOnTheScreen();
+    });
+  });
+
+  // TRIP-1280 AC-1 — 키보드가 이름 0건 카드의 버튼을 가린다. 실제 키보드·스크롤은 jest 사각(6-b iOS)이라
+  // 그 동작을 정하는 스크롤 prop 과 "버튼·입력칸이 그 스크롤 안" 을 함께 잠근다.
+  describe('키보드가 떠 있어도 이름 0건 버튼에 닿는다', () => {
+    it('검색어 지우기·필터 초기화·검색창이 한 목록 스크롤 안에 있고, 그 스크롤은 키보드만큼 여백을 더하며 첫 탭을 버튼에 준다', () => {
+      render(
+        <StaySearchScreen
+          region="부산"
+          items={ITEMS}
+          nameQuery="없는숙소"
+          onChangeNameQuery={() => {}}
+          priceBucket="over-200k"
+          onRelaxFilters={() => {}}
+        />
+      );
+
+      const scrollIds = [
+        'stay-search-name-empty-clear',
+        'stay-search-name-empty-reset',
+        'stay-search-name-input',
+      ].map(
+        (id) =>
+          closestAncestor(screen.getByTestId(id), isHostScroll)?.props.testID
+      );
+      expect(scrollIds).toEqual([
+        'stay-search-list',
+        'stay-search-list',
+        'stay-search-list',
+      ]);
+
+      const list = screen.getByTestId('stay-search-list');
+      expect(list.props.automaticallyAdjustKeyboardInsets).toBe(true);
+      expect(list.props.keyboardShouldPersistTaps).toBe('handled');
     });
   });
 });

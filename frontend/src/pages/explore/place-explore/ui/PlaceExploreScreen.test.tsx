@@ -11,6 +11,7 @@ import type { Place } from '@/shared/api/index.schemas';
 
 import type { PlaceListState } from '@/features/explore/index.view';
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
+import { closestAncestor } from '@/test-support/sheetTree';
 import {
   PlaceExploreScreen,
   type PlaceExploreScreenProps,
@@ -1334,5 +1335,41 @@ describe('카드 press 버블링', () => {
       expect(onToggleSave).not.toHaveBeenCalled();
       expect(onPressCard).not.toHaveBeenCalled();
     });
+  });
+});
+
+// TRIP-1280 AC-2 — 검색어 탓 filter-zero 에서 키보드가 해제 버튼을 가린다. 실제 키보드·스크롤은 jest
+// 사각(6-b iOS)이라 그 동작을 정하는 스크롤 prop 과 "버튼·입력칸이 그 스크롤 안" 을 함께 잠근다.
+describe('키보드가 떠 있어도 filter-zero 해제 버튼에 닿는다', () => {
+  const isHostScroll = (node: ReactTestInstance): boolean =>
+    String(node.type) === 'RCTScrollView';
+
+  it('검색어 지우기·조건 모두 해제·검색창이 그리드 스크롤 안에 있고, 그 스크롤은 키보드만큼 여백을 더하며 첫 탭을 버튼에 준다', () => {
+    renderScreen({
+      places: [],
+      state: { kind: 'filter-zero', blame: 'search' },
+      searchText: '경복궁',
+      selectedCategory: '카페',
+      onClearFilter: jest.fn(),
+      onClearAllFilters: jest.fn(),
+    });
+
+    const scrollIds = [
+      'explore-places-filterzero-clear',
+      'explore-places-filterzero-clear-all',
+      'explore-places-search',
+    ].map(
+      (id) =>
+        closestAncestor(screen.getByTestId(id), isHostScroll)?.props.testID
+    );
+    expect(scrollIds).toEqual([
+      'explore-places-grid',
+      'explore-places-grid',
+      'explore-places-grid',
+    ]);
+
+    const grid = screen.getByTestId('explore-places-grid');
+    expect(grid.props.automaticallyAdjustKeyboardInsets).toBe(true);
+    expect(grid.props.keyboardShouldPersistTaps).toBe('handled');
   });
 });

@@ -18,6 +18,8 @@ import { HeartFilledGlyph, HeartOutlineGlyph } from './HeartGlyphs';
  * 튐 자격 1개를 만들고, 누른 뒤 첫 `saved` 변화가 그 자격을 쓴다(담김이면 튀고, 취소면 소비만). 누르지
  * 않은 변화(저장 목록 늦은 도착·로그인 뒤 도착)·처음부터 담김·동작 줄이기는 안 튄다. 튐은 루트가 아니라 글리프 감싸개에 건다 — 루트는 소비처 위치 className 과 판정
  * 속성(testID·selected·disabled)을 그대로 가진다. 튐 크기·박자는 발명값(6-b 육안 조정).
+ *
+ * TRIP-1281 — 라벨은 담김과 무관하게 `{name} 저장` 하나다(담김은 selected 로만). 이름은 소비처가 준다.
  */
 export interface HeartButtonProps {
   saved: boolean;
@@ -27,6 +29,13 @@ export interface HeartButtonProps {
   filledTestID: string;
   outlineTestID: string;
   className?: string;
+  /** 저장 대상 이름 — 라벨 `{name} 저장`. 비었거나 공백뿐이면 `담기`. */
+  name?: string;
+}
+
+/** 저장 하트 라벨(TRIP-1281) — 하트를 따로 그리는 카드·행도 이걸 쓴다. */
+export function heartSaveLabel(name?: string): string {
+  return name?.trim() ? `${name} 저장` : '담기';
 }
 
 export function HeartButton({
@@ -37,6 +46,7 @@ export function HeartButton({
   filledTestID,
   outlineTestID,
   className = '',
+  name,
 }: HeartButtonProps): ReactElement {
   const scale = useRef(new Animated.Value(1)).current;
   const wasSaved = useRef(saved);
@@ -73,7 +83,7 @@ export function HeartButton({
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel="담기"
+      accessibilityLabel={heartSaveLabel(name)}
       accessibilityState={{ selected: saved }}
       disabled={pending}
       onPress={() => {

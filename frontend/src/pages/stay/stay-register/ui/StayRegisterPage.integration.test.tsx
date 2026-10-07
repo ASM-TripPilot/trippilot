@@ -970,6 +970,188 @@ describe('핀으로 등록 — 훅 목 (옛 .pin)', () => {
       ).toBeOnTheScreen();
     });
   });
+
+  // TRIP-1283 — 숙소명 오류는 [등록하기]를 누른 뒤에만(01b Q1=A·Q2·Q3). 빈 이름이면 버튼은 눌리지만
+  // 제출 경로가 POST 를 막는다(AC-4 — 버튼 disabled 로 막는 것은 증명이 아니다).
+  const NAME_MISSING = '등록하려면 숙소명을 입력해 주세요';
+
+  /** 실기 네이버 지도는 처음 그려질 때 제자리에서 한 번 멈추며 그 중심을 올린다(첫 onCameraIdle).
+   * 목은 스스로 onPick 을 안 쏘므로, 목이 받은 center 를 그대로 되돌려 그 사건을 흉내낸다. */
+  function simulateFirstIdle(): void {
+    const picker = within(
+      screen.getByTestId('stay-register-pin-map')
+    ).getByTestId('center-pin-picker');
+    const { center, onPick } = picker.props as {
+      center: MapCenter;
+      onPick: (c: MapCenter) => void;
+    };
+    act(() => {
+      onPick(center);
+    });
+  }
+
+  async function waitPinAddressOk(): Promise<void> {
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId('stay-register-pin-address')).getByText(
+          PIN_ADDRESS
+        )
+      ).toBeOnTheScreen()
+    );
+  }
+
+  describe('IP-5 · 진입 직후에는 숙소명 오류가 없다 (AC-1 · A-06)', () => {
+    it('핀 탭에 들어와 지도가 첫 중심을 올리고 주소까지 떠도 문구가 없다', async () => {
+      mockReverse.mockReturnValue(REVERSE_SUCCESS);
+      render(<StayRegisterPage />);
+
+      goToPinTab();
+      simulateFirstIdle();
+      // 도달 앵커 — 좌표가 담기고 주소 ok 까지 왔다(옛 구현이 문구를 띄우던 바로 그 상태).
+      await waitPinAddressOk();
+
+      expect(
+        screen.queryAllByTestId('stay-register-name-missing')
+      ).toHaveLength(0);
+      expect(screen.queryAllByText(NAME_MISSING)).toHaveLength(0);
+    });
+  });
+
+  describe('IP-6 · 좌표 확정 + 빈 이름으로 누르면 버튼 위에 문구가 뜬다 (AC-2)', () => {
+    it('확정까지는 문구가 없고, [등록하기]를 누른 뒤에야 정확한 문구가 뜬다', async () => {
+      mockReverse.mockReturnValue(REVERSE_SUCCESS);
+      render(<StayRegisterPage />);
+      goToPinTab();
+      simulateFirstIdle();
+      await waitPinAddressOk();
+      confirmCoord();
+
+      // 좌표 확정은 "시도"가 아니다(01b — D안 탈락).
+      expect(
+        screen.queryAllByTestId('stay-register-name-missing')
+      ).toHaveLength(0);
+      expect(screen.queryAllByText(NAME_MISSING)).toHaveLength(0);
+
+      const submit = screen.getByTestId('stay-register-submit');
+      expect(submit).not.toBeDisabled();
+      fireEvent.press(submit);
+
+      expect(
+        await screen.findByTestId('stay-register-name-missing')
+      ).toHaveTextContent(NAME_MISSING);
+    });
+  });
+
+  describe('IP-7 · 빈 이름이면 여러 번 눌러도 POST 가 없다 (AC-4)', () => {
+    it('눌리는 버튼을 3번 눌러도 등록 요청이 0회이고 화면을 떠나지 않는다', async () => {
+      mockReverse.mockReturnValue(REVERSE_SUCCESS);
+      render(<StayRegisterPage />);
+      goToPinTab();
+      simulateFirstIdle();
+      await waitPinAddressOk();
+      confirmCoord();
+
+      // 버튼이 잠겨서 0회인 것은 증명이 아니다 — 눌리는 버튼을 제출 경로가 막아야 한다.
+      const submit = screen.getByTestId('stay-register-submit');
+      expect(submit).not.toBeDisabled();
+      fireEvent.press(submit);
+      fireEvent.press(submit);
+      fireEvent.press(submit);
+
+      // 누름이 처리됐음을 확인한 뒤에 횟수를 읽는다("아직 안 불렸을 뿐" 배제).
+      await screen.findByTestId('stay-register-name-missing');
+      expect(mockMutateAsync).toHaveBeenCalledTimes(0);
+      expect(mockBack).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('IP-8 · 이름을 치면 문구가 사라지고, 다시 비우면 다시 뜬다 (AC-3 · 01b Q3)', () => {
+    it('시도 뒤 이름 입력으로 문구가 사라지고, 시도 표시는 남아 다시 비우면 곧바로 보인다', async () => {
+      mockReverse.mockReturnValue(REVERSE_SUCCESS);
+      render(<StayRegisterPage />);
+      goToPinTab();
+      simulateFirstIdle();
+      await waitPinAddressOk();
+      confirmCoord();
+      fireEvent.press(screen.getByTestId('stay-register-submit'));
+      expect(
+        await screen.findByTestId('stay-register-name-missing')
+      ).toBeOnTheScreen();
+
+      typeName('해운대 아르떼 빌딩');
+      expect(
+        screen.queryAllByTestId('stay-register-name-missing')
+      ).toHaveLength(0);
+
+      typeName('');
+      expect(
+        screen.getByTestId('stay-register-name-missing')
+      ).toHaveTextContent(NAME_MISSING);
+    });
+
+    // 5-b W-1 보강 — 위 케이스는 같은 탭 안에서만 본다. 탭을 옮길 때 시도 표시를 지우는 회귀
+    // (01b Q3 반전)를 잡으려면 탭 전환 자체를 밟아야 한다. 탭 전환은 후보를 풀지 않으므로
+    // 공통 영역의 문구가 그대로 남아야 한다.
+    it('시도 뒤 지도 검색 탭으로 옮겨도 시도 표시는 남아 문구가 그대로 보인다 (01b Q3)', async () => {
+      mockReverse.mockReturnValue(REVERSE_SUCCESS);
+      render(<StayRegisterPage />);
+      goToPinTab();
+      simulateFirstIdle();
+      await waitPinAddressOk();
+      confirmCoord();
+      fireEvent.press(screen.getByTestId('stay-register-submit'));
+      expect(
+        await screen.findByTestId('stay-register-name-missing')
+      ).toBeOnTheScreen();
+
+      fireEvent.press(screen.getByTestId('stay-register-tab-mapsearch'));
+
+      expect(
+        screen.getByTestId('stay-register-name-missing')
+      ).toHaveTextContent(NAME_MISSING);
+    });
+  });
+
+  describe('IP-9 · 주소 장애(503)여도 빈 이름으로 누르면 침묵하지 않는다 (AC-2 · AC-4 · 01b Q2 · INV-4)', () => {
+    it('503 얼굴에서 확정 뒤 빈 이름으로 누르면 문구가 뜨고 POST 는 0회다', async () => {
+      mockReverse.mockReturnValue(REVERSE_503);
+      render(<StayRegisterPage />);
+      goToPinTab();
+      simulateFirstIdle();
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('stay-register-pin-addressfail')
+        ).toBeOnTheScreen()
+      );
+      confirmCoord();
+
+      fireEvent.press(screen.getByTestId('stay-register-submit'));
+
+      expect(
+        await screen.findByTestId('stay-register-name-missing')
+      ).toHaveTextContent(NAME_MISSING);
+      expect(mockMutateAsync).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('IP-10 · 좌표 미확정이면 이름과 무관하게 잠긴다 (AC-5 · BR-U1-22)', () => {
+    it.each(['', '해운대 아르떼 빌딩'])(
+      '첫 중심이 담겼지만 확정 전·이름="%s"이면 disabled 이고 눌러도 POST 0회',
+      async (name) => {
+        mockReverse.mockReturnValue(REVERSE_SUCCESS);
+        render(<StayRegisterPage />);
+        goToPinTab();
+        simulateFirstIdle();
+        await waitPinAddressOk();
+        typeName(name);
+
+        const submit = screen.getByTestId('stay-register-submit');
+        expect(submit).toBeDisabled();
+        fireEvent.press(submit);
+        expect(mockMutateAsync).toHaveBeenCalledTimes(0);
+      }
+    );
+  });
 });
 
 // 옛 StayRegisterPage.back — SB-1 (이 배선을 누르는 유일한 통합)

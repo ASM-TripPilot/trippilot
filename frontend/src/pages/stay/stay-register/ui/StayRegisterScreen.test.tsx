@@ -8,6 +8,8 @@ import type { GeocodeCandidate } from '@/shared/api/index.schemas';
 import type { StayRegisterFlow } from '../model/stayRegisterForm';
 import { StayRegisterScreen } from './StayRegisterScreen';
 import type { MapCenter } from '@/shared/map';
+import { closestAncestor } from '@/test-support/sheetTree';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 /**
  * e05 숙소 등록 — StayRegisterScreen(props 만 받는 뷰) 단위 테스트.
@@ -71,6 +73,7 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
     coordConfirmed: false,
     mapSheetState: 'closed',
     submitStatus: 'idle',
+    submitAttempted: false,
   };
 
   /** 좌표까지 확정된 "등록 직전" 상태 — 케이스마다 한 축만 무너뜨린다. */
@@ -676,6 +679,7 @@ describe('핀 지정 탭 (옛 .pin)', () => {
     coordConfirmed: false,
     mapSheetState: 'closed',
     submitStatus: 'idle',
+    submitAttempted: false,
   };
 
   /** 핀 탭에서 좌표를 이미 찍고 확정까지 된 상태 — 케이스마다 한 축(pinAddressStatus·address 등)만
@@ -876,6 +880,85 @@ describe('핀 지정 탭 (옛 .pin)', () => {
       expect(handlers.onSelectTab).toHaveBeenCalledWith('pin');
     });
   });
+
+  // TRIP-1283 — 숙소명 오류는 [등록하기]를 누른 뒤에만(01b Q1=A·Q2). 이름은 버튼을 잠그지 않고,
+  // 문구는 flow.submitAttempted 가 켜진 뒤 이름이 비었을 때만 버튼 위에 뜬다.
+  const NAME_MISSING = '등록하려면 숙소명을 입력해 주세요';
+
+  describe('P-9 · 누르기 전에는 숙소명 오류가 없다 (AC-1 · A-06)', () => {
+    it.each([false, true])(
+      '주소 ok·이름 빈·coordConfirmed=%s 이어도 시도 전이면 문구가 없다',
+      (coordConfirmed) => {
+        renderScreen(
+          pinFlow({ name: '', coordConfirmed, submitAttempted: false })
+        );
+
+        // 도달 앵커 — 핀 좌표가 있고 주소가 ok 인 얼굴이다(부재 단언이 공허하지 않게).
+        expect(
+          screen.getByTestId('stay-register-pin-address')
+        ).toBeOnTheScreen();
+
+        expect(
+          screen.queryAllByTestId('stay-register-name-missing')
+        ).toHaveLength(0);
+        // testID 가 없던 옛 문구까지 잡으려고 글자로도 본다.
+        expect(screen.queryAllByText(NAME_MISSING)).toHaveLength(0);
+      }
+    );
+  });
+
+  describe('P-10 · 누른 뒤 이름이 비었으면 버튼 위에 문구가 뜬다 (AC-2 · 01b Q2)', () => {
+    it.each(['ok', 'loading', 'error'] as const)(
+      'submitAttempted + 이름 빈이면 pinAddressStatus=%s 여도 문구가 정확히 뜬다',
+      (pinAddressStatus) => {
+        renderScreen(
+          pinFlow({ name: '', submitAttempted: true, pinAddressStatus })
+        );
+
+        expect(
+          screen.getByTestId('stay-register-name-missing')
+        ).toHaveTextContent(NAME_MISSING);
+      }
+    );
+  });
+
+  describe('P-11 · 좌표가 확정됐으면 이름이 비어도 버튼은 눌린다 (AC-2)', () => {
+    it('이름 빈 + 좌표 확정이면 submit 이 활성이고, 누르면 onSubmit 이 정확히 1회 불린다', () => {
+      const handlers = renderScreen(
+        pinFlow({ name: '', submitAttempted: false })
+      );
+
+      const submit = screen.getByTestId('stay-register-submit');
+      expect(submit).not.toBeDisabled();
+      fireEvent.press(submit);
+      expect(handlers.onSubmit).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('P-12 · 이름이 있으면 시도 뒤에도 문구가 없다 (AC-3 · P-10 의 짝)', () => {
+    it('submitAttempted 여도 이름이 있으면 name-missing 이 없다', () => {
+      renderScreen(pinFlow({ submitAttempted: true }));
+
+      expect(screen.getByTestId('stay-register-submit')).toBeOnTheScreen();
+      expect(
+        screen.queryAllByTestId('stay-register-name-missing')
+      ).toHaveLength(0);
+    });
+  });
+
+  describe('P-13 · 좌표 미확정이면 이름과 무관하게 잠긴다 (AC-5 · BR-U1-22)', () => {
+    it.each(['', '내가 예약한 숙소'])(
+      '핀 좌표는 있으나 미확정·이름="%s"이면 disabled 이고 눌러도 onSubmit 0회',
+      (name) => {
+        const handlers = renderScreen(pinFlow({ coordConfirmed: false, name }));
+
+        const submit = screen.getByTestId('stay-register-submit');
+        expect(submit).toBeDisabled();
+        fireEvent.press(submit);
+        expect(handlers.onSubmit).toHaveBeenCalledTimes(0);
+      }
+    );
+  });
 });
 
 // 옛 StayRegisterScreen.surface — SR-*
@@ -925,6 +1008,7 @@ describe('표면 정합 (옛 .surface)', () => {
     coordConfirmed: false,
     mapSheetState: 'closed',
     submitStatus: 'idle',
+    submitAttempted: false,
   };
 
   /** 핀 탭에 막 들어와 아직 아무 좌표도 없는 상태(핀 찍기 전). */
@@ -1040,4 +1124,115 @@ describe('표면 정합 (옛 .surface)', () => {
       expect(screen.getByTestId('stay-register-mapconfirm')).toBeOnTheScreen();
     });
   });
+});
+
+// TRIP-1280 AC-3 — 입력칸에 포커스해 키보드가 뜨면 [등록하기]·[지도에서 위치 확인]이 가려진다(실기
+// smoke/1280_before_register_kb.png). 실제 키보드·스크롤은 jest 사각(6-b iOS)이라 그 동작을 정하는 스크롤
+// prop 과 "입력칸·버튼이 같은 스크롤 안" 을 얼굴마다 잠근다.
+describe('키보드가 떠 있어도 등록 버튼에 닿는다', () => {
+  const CANDIDATE_A: GeocodeCandidate = {
+    name: '해운대 그랜드 호텔',
+    address: '부산 해운대구 우동 1407',
+    lat: 35.1587,
+    lng: 129.1604,
+  };
+
+  const CANDIDATE_B: GeocodeCandidate = {
+    name: '해운대 그랜드 레지던스',
+    address: '부산 해운대구 중동 1124',
+    lat: 35.1601,
+    lng: 129.1652,
+  };
+
+  const IDLE_FLOW: StayRegisterFlow = {
+    activeTab: 'mapsearch',
+    query: '',
+    name: '',
+    searchStatus: 'idle',
+    candidates: [],
+    selectedCandidate: null,
+    coordSource: 'MAP_SEARCH',
+    pinAddressStatus: 'idle',
+    coordConfirmed: false,
+    mapSheetState: 'closed',
+    submitStatus: 'idle',
+    submitAttempted: false,
+  };
+
+  function makeHandlers() {
+    return {
+      onSelectTab: jest.fn(),
+      onChangeQuery: jest.fn(),
+      onChangeName: jest.fn(),
+      onSubmitQuery: jest.fn(),
+      onRetrySearch: jest.fn(),
+      onSelectCandidate: jest.fn(),
+      onPickCoord: jest.fn(),
+      onOpenMapSheet: jest.fn(),
+      onConfirmCoord: jest.fn(),
+      onCloseMapSheet: jest.fn(),
+      onSubmit: jest.fn(),
+    };
+  }
+
+  const isHostScroll = (node: ReactTestInstance): boolean =>
+    String(node.type) === 'RCTScrollView';
+
+  // 입력칸이 있는 세 얼굴 — 키보드를 띄울 수 있는 곳이 이 셋이다.
+  it.each([
+    {
+      face: '지도 검색 · 후보를 골랐고 좌표 미확인',
+      flow: {
+        ...IDLE_FLOW,
+        query: '해운대',
+        searchStatus: 'success',
+        candidates: [CANDIDATE_A, CANDIDATE_B],
+        selectedCandidate: CANDIDATE_A,
+      },
+      inputId: 'stay-register-search-input',
+      buttonIds: ['stay-register-mapconfirm', 'stay-register-submit'],
+    },
+    {
+      face: '지도 검색 실패 · 숙소명 직접 입력',
+      flow: { ...IDLE_FLOW, query: '해운대', searchStatus: 'error' },
+      inputId: 'stay-register-name-input',
+      buttonIds: ['stay-register-submit'],
+    },
+    {
+      face: '핀 지정 · 핀을 찍었고 좌표 미확인',
+      flow: {
+        ...IDLE_FLOW,
+        activeTab: 'pin',
+        coordSource: 'PIN',
+        selectedCandidate: CANDIDATE_A,
+        pinAddressStatus: 'ok',
+      },
+      inputId: 'stay-register-name-input',
+      buttonIds: ['stay-register-mapconfirm', 'stay-register-submit'],
+    },
+  ] satisfies {
+    face: string;
+    flow: StayRegisterFlow;
+    inputId: string;
+    buttonIds: string[];
+  }[])(
+    '$face — 입력칸과 버튼이 한 스크롤 안에 있고, 그 스크롤은 키보드만큼 여백을 더하며 첫 탭을 버튼에 준다',
+    ({ flow, inputId, buttonIds }) => {
+      render(<StayRegisterScreen flow={flow} {...makeHandlers()} />);
+
+      const scroll = closestAncestor(
+        screen.getByTestId('stay-register-submit'),
+        isHostScroll
+      );
+      expect(scroll).not.toBeNull();
+      for (const id of [inputId, ...buttonIds]) {
+        expect(closestAncestor(screen.getByTestId(id), isHostScroll)).toBe(
+          scroll
+        );
+      }
+
+      expect(scroll?.props.automaticallyAdjustKeyboardInsets).toBe(true);
+      expect(scroll?.props.keyboardShouldPersistTaps).toBe('handled');
+    }
+  );
 });

@@ -33,6 +33,10 @@ export interface StayRegisterFlow {
   coordConfirmed: boolean;
   mapSheetState: 'closed' | 'open' | 'open-map-failed';
   submitStatus: 'idle' | 'submitting' | 'error';
+  /** 이 화면에서 [등록하기]를 한 번이라도 눌렀는가(TRIP-1283). 숙소명 오류는 누른 뒤에만
+   * 보인다 — 핀 탭은 지도 첫 멈춤으로 좌표가 진입 즉시 들어와, 이 표시 없이는 아직 시도하지
+   * 않은 빈 이름을 오류로 단정한다. 화면 수명 동안 유지(탭 전환으로 지우지 않는다). */
+  submitAttempted: boolean;
 }
 
 /** 서버로 나갈 이름 — 사용자가 친 값이 있으면 그것, 비었으면 후보/건물명으로 떨어진다
@@ -67,10 +71,19 @@ export function resolveName(name: string, candidateName: string): string {
  * 경로는 이걸로 닫힌다 — 게이트가 조립보다 엄격해지는 방향이라 "게이트는 열렸는데
  * 조립하면 빈 이름"(W-2) 역방향은 생기지 않는다. */
 export function canSubmitStayRegister(flow: StayRegisterFlow): boolean {
+  if (!canPressStayRegister(flow) || flow.selectedCandidate === null) {
+    return false;
+  }
+  return resolveName(flow.name, flow.selectedCandidate.name).trim() !== '';
+}
+
+/** [등록하기]를 누를 수 있는가(TRIP-1283) — `canSubmitStayRegister`에서 이름 검사만 뺀 것.
+ * 이름이 빈 채로도 눌려야 "누르면 숙소명 오류"가 성립한다(눌리지 않는 버튼엔 시도가 없다).
+ * 이름 게이트는 제출 경로(`StayRegisterPage.handleSubmit`)가 `canSubmitStayRegister`로 진다. */
+export function canPressStayRegister(flow: StayRegisterFlow): boolean {
   if (flow.selectedCandidate === null) return false;
   if (!flow.coordConfirmed) return false;
-  if (flow.submitStatus === 'submitting') return false;
-  return resolveName(flow.name, flow.selectedCandidate.name).trim() !== '';
+  return flow.submitStatus !== 'submitting';
 }
 
 /** 서버로 보낼 본문 조립. 후보가 없으면 null(보낼 것이 없다). checkIn·checkOut 키는 싣지

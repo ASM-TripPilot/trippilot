@@ -851,6 +851,195 @@ describe('save', () => {
       expect(useTripWizardStore.getState().destinations).toEqual([]);
     });
   });
+
+  // TRIP-1287 — 해제 행의 "해제됨" 글자·흐림이 실제 해제·재담기·실패 원복·재방문을 따라 붙고 떨어진다.
+  // 흐림은 순번 칸 하나를 대리 신호로 잰다(어느 칸까지 흐리고 무엇을 또렷이 두는지는 화면 단위 테스트 몫).
+  describe('해제됨 글자·흐림 왕복', () => {
+    let gate = createGate();
+    // 문 뒤에 세운 요청이 단언 실패로 매달린 채 남지 않게 항상 연다(케이스 지역 상태라 여기서 건다).
+    afterEach(() => gate.release());
+
+    function released(savedPlaceId: string) {
+      return screen.queryByTestId(`explore-saved-released-${savedPlaceId}`);
+    }
+    function expectReleasedText(savedPlaceId: string) {
+      expect(
+        screen.getByTestId(`explore-saved-released-${savedPlaceId}`)
+      ).toHaveTextContent('해제됨');
+    }
+    /** 순번 칸에서 행까지 올라가며 `opacity-40` 이 있는지 — 흐림은 자식에 곱해진다. */
+    function rankDimmed(savedPlaceId: string): boolean {
+      const rowId = `explore-saved-item-${savedPlaceId}`;
+      let cur: ReturnType<typeof screen.getByTestId> | null =
+        screen.getByTestId(`explore-saved-rank-${savedPlaceId}`);
+      while (cur) {
+        if (
+          String(cur.props.className ?? '')
+            .split(/\s+/)
+            .includes('opacity-40')
+        )
+          return true;
+        if (cur.props.testID === rowId) return false;
+        cur = cur.parent;
+      }
+      throw new Error(`${rowId} 행 밖의 노드다`);
+    }
+    function subtitle(text: string) {
+      return within(screen.getByTestId('explore-saved-subtitle')).getByText(
+        text
+      );
+    }
+
+    it('해제하면 글자·흐림이 붙고, 같은 하트를 다시 누르면 같은 자리에서 둘 다 사라진다', async () => {
+      await renderLoaded();
+      await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+      expect(screen.queryAllByTestId(/^explore-saved-released-/)).toHaveLength(
+        0
+      );
+
+      fireEvent.press(heart('sp-b'));
+      await waitFor(() => expect(deletedIds()).toEqual(['sp-b']));
+      await waitFor(() => expectReleasedText('sp-b'));
+      expect(rankDimmed('sp-b')).toBe(true);
+      expect(subtitle('3곳 · 마음에 든 순서대로')).toBeOnTheScreen();
+
+      fireEvent.press(heart('sp-b'));
+
+      await waitFor(() =>
+        expect(hitsOf('POST', '/api/v1/saved-places').length).toBeGreaterThan(0)
+      );
+      await waitFor(() => expect(heart('sp-b')).toBeSelected());
+      expect(released('sp-b')).toBeNull();
+      expect(rankDimmed('sp-b')).toBe(false);
+      await waitFor(() => expectOrder(SORTED));
+      await waitFor(() =>
+        expect(subtitle('4곳 · 마음에 든 순서대로')).toBeOnTheScreen()
+      );
+    });
+
+    it('해제 뒤 재마운트하면 그 행도 "해제됨" 글자도 없다', async () => {
+      const first = await renderLoaded();
+      await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+
+      fireEvent.press(heart('sp-b'));
+      await waitFor(() =>
+        expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(2)
+      );
+      // 앵커 — 떠나기 전엔 글자가 있다(없으면 "재마운트 뒤 0개"가 공허하다).
+      expectReleasedText('sp-b');
+
+      first.unmount();
+      renderPage();
+
+      await waitFor(() =>
+        expect(itemTestIds()).toEqual([
+          'explore-saved-item-sp-a',
+          'explore-saved-item-sp-c',
+          'explore-saved-item-sp-d',
+        ])
+      );
+      expect(screen.queryAllByTestId(/^explore-saved-released-/)).toHaveLength(
+        0
+      );
+    });
+
+    it('해제가 실패하면 낙관으로 떴던 글자·흐림이 찬 하트 원복과 함께 사라진다 (INV-4)', async () => {
+      gate = createGate();
+      server.use(
+        http.delete(`${BASE}/saved-places/:savedPlaceId`, async () => {
+          await gate.opened;
+          return new HttpResponse(null, { status: 404 });
+        })
+      );
+      await renderLoaded();
+      await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+
+      fireEvent.press(heart('sp-b'));
+      // 문이 닫힌 동안 — 서버 답 전에 해제 표시가 먼저 선다.
+      await waitFor(() => expectReleasedText('sp-b'));
+      expect(rankDimmed('sp-b')).toBe(true);
+
+      gate.release();
+
+      await waitFor(() =>
+        expect(
+          within(screen.getByTestId('explore-saved-removeerror')).getByText(
+            '지금은 해제할 수 없는 장소예요'
+          )
+        ).toBeOnTheScreen()
+      );
+      await waitFor(() => expect(heart('sp-b')).toBeSelected());
+      expect(released('sp-b')).toBeNull();
+      expect(rankDimmed('sp-b')).toBe(false);
+    });
+
+    it('재담기가 실패하면 빠졌던 글자·흐림이 빈 하트 원복과 함께 다시 붙는다 (INV-4 대칭)', async () => {
+      await renderLoaded();
+      await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+      fireEvent.press(heart('sp-b'));
+      await waitFor(() => expect(deletedIds()).toEqual(['sp-b']));
+      await waitFor(() => expectReleasedText('sp-b'));
+
+      gate = createGate();
+      server.use(
+        http.post(`${BASE}/saved-places`, async () => {
+          await gate.opened;
+          return new HttpResponse(null, { status: 404 });
+        })
+      );
+
+      fireEvent.press(heart('sp-b'));
+      // 문이 닫힌 동안 — 서버 답 전에 담김으로 바뀌어 글자가 빠진다.
+      await waitFor(() => expect(heart('sp-b')).toBeSelected());
+      expect(released('sp-b')).toBeNull();
+
+      gate.release();
+
+      await waitFor(() =>
+        expect(
+          within(screen.getByTestId('explore-saved-removeerror')).getByText(
+            '지금은 담을 수 없는 장소예요'
+          )
+        ).toBeOnTheScreen()
+      );
+      await waitFor(() => expect(heart('sp-b')).not.toBeSelected());
+      expectReleasedText('sp-b');
+      expect(rankDimmed('sp-b')).toBe(true);
+    });
+
+    it('네트워크 실패 뒤 [다시 시도]가 성공하면 그 행에 "해제됨" 이 붙는다', async () => {
+      let attempts = 0;
+      server.use(
+        http.delete(`${BASE}/saved-places/:savedPlaceId`, ({ params }) => {
+          attempts += 1;
+          if (attempts === 1) return HttpResponse.error();
+          savedRows = savedRows.filter(
+            (row) => row.savedPlaceId !== params.savedPlaceId
+          );
+          return new HttpResponse(null, { status: 204 });
+        })
+      );
+      await renderLoaded();
+      await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+
+      fireEvent.press(heart('sp-b'));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('explore-saved-removeerror-retry')
+        ).toBeOnTheScreen()
+      );
+      // 앵커 — 실패 원복으로 글자가 없다.
+      await waitFor(() => expect(heart('sp-b')).toBeSelected());
+      expect(released('sp-b')).toBeNull();
+
+      fireEvent.press(screen.getByTestId('explore-saved-removeerror-retry'));
+
+      await waitFor(() => expect(deletedIds()).toEqual(['sp-b', 'sp-b']));
+      await waitFor(() => expectReleasedText('sp-b'));
+      expect(rankDimmed('sp-b')).toBe(true);
+      expect(screen.queryByTestId('explore-saved-removeerror')).toBeNull();
+    });
+  });
 });
 
 /**

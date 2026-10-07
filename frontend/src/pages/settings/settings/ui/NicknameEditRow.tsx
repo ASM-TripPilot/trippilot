@@ -14,15 +14,19 @@ import { RowBody } from './SettingsRow';
  *
  * 검증(길이)·서버 오류 판정은 페이지 몫이다 — 저장 press 는 현재 초안을 `onSubmit` 으로 올릴 뿐이고,
  * 오류 문구는 `error` prop 으로 내려와 인라인 표시된다(비면 미표시 — 침묵 금지의 반대 짝).
+ * `onSubmit` 이 `true` 를 돌려주면 행을 접는다(같은 값 저장 — 페이지 판단). 입력이 바뀌면
+ * `onDraftChange` 로 알려 페이지가 낡은 오류를 지운다.
  */
 export function NicknameEditRow({
   value,
   error,
   onSubmit,
+  onDraftChange,
 }: {
   value: string;
   error?: string | null;
-  onSubmit: (draft: string) => void;
+  onSubmit: (draft: string) => boolean | void;
+  onDraftChange?: () => void;
 }): ReactElement {
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -54,7 +58,10 @@ export function NicknameEditRow({
             <TextInput
               testID="settings-nickname-input"
               value={draft}
-              onChangeText={setDraft}
+              onChangeText={(text) => {
+                setDraft(text);
+                onDraftChange?.();
+              }}
               autoCapitalize="none"
               placeholder="새 닉네임"
               placeholderTextColor="#9AA1AB"
@@ -63,7 +70,9 @@ export function NicknameEditRow({
             <Pressable
               testID="settings-nickname-save"
               accessibilityRole="button"
-              onPress={() => onSubmit(draft)}
+              onPress={() => {
+                if (onSubmit(draft) === true) setExpanded(false);
+              }}
               className="h-11 items-center justify-center rounded-button bg-ink px-lg"
             >
               <Text className="font-noto-bold text-body text-canvas">저장</Text>

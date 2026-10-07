@@ -695,6 +695,228 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
       expect(dismiss).not.toHaveBeenCalled();
     });
   });
+
+  // TRIP-1276
+  /**
+   * 무엇을 보장하나: 앞뒤 공백은 걷어낸 값으로 검증·전송하고, 현재 닉네임과 같은 값이면 요청 없이 행을 닫고,
+   * 떠 있는 오류는 입력을 바꾸면 사라진다. 클라 검증 실패에 "잠시 후 다시 시도"(일시 실패 안내)를 쓰지 않는다.
+   *
+   * 보낸 값의 공백은 화면 텍스트로 재지 않는다 — RNTL 기본 normalizer 가 비교 전에 trim 해서 공백째 보내도
+   * green 이 된다. 본문은 patchSpy 의 toHaveBeenCalledWith(정규화 없는 깊은 같음)로만 본다.
+   * 행을 닫는 판단이 페이지에 있든 행에 있든 결과(요청 횟수·오류·입력칸 유무)만 본다.
+   */
+  describe('설정 닉네임 편집 — 앞뒤 공백·같은 값·입력 변경', () => {
+    const TOO_SHORT = '닉네임은 2자 이상이어야 해요';
+    const TOO_LONG = '닉네임은 20자 이하여야 해요';
+
+    function renderPageWithToast() {
+      return render(
+        <QueryClientProvider client={new QueryClient()}>
+          <WithToastHost>
+            <SettingsPage />
+          </WithToastHost>
+        </QueryClientProvider>
+      );
+    }
+
+    // 트리거는 토글이다 — 한 번만 누른다.
+    function openEditor(): void {
+      fireEvent.press(screen.getByTestId('settings-nickname-edit'));
+    }
+
+    function typeAndSave(value: string): void {
+      fireEvent.changeText(
+        screen.getByTestId('settings-nickname-input'),
+        value
+      );
+      fireEvent.press(screen.getByTestId('settings-nickname-save'));
+    }
+
+    it.each([
+      ['공백만', '     ', TOO_SHORT],
+      ['공백을 걷으면 1자', ' 가 ', TOO_SHORT],
+      ['1자', '가', TOO_SHORT],
+      ['21자', '가'.repeat(21), TOO_LONG],
+    ])(
+      '클라 검증 실패(%s)면 서버로 안 보내고 길이 안내만 띄운다 — "잠시 후 다시 시도"가 아니다',
+      (_title, input, message) => {
+        // 준비: 요청이 새면 서버가 400(@NotBlank·길이)을 돌려준다 — 새면 일시 실패 문구가 떠서 들킨다.
+        const patchSpy = jest.fn();
+        primeMutation(mockUsePatchNickname, {
+          spy: patchSpy,
+          error: httpError(400),
+        });
+        renderPageWithToast();
+
+        openEditor();
+        typeAndSave(input);
+
+        expect(patchSpy).not.toHaveBeenCalled();
+        expect(screen.getByTestId('settings-nickname-error')).toHaveTextContent(
+          message
+        );
+        expect(screen.queryByText(/잠시 후 다시 시도/)).toBeNull();
+      }
+    );
+
+    it.each([
+      ['앞뒤 공백', '  새이름  ', '새이름'],
+      ['탭·줄바꿈(가운데 공백은 남긴다)', '\t새 이름\n', '새 이름'],
+    ])('%s을 걷어낸 값으로 PATCH 를 보낸다', (_title, input, sent) => {
+      const patchSpy = jest.fn();
+      primeMutation(mockUsePatchNickname, {
+        spy: patchSpy,
+        onSuccessData: { nickname: sent, nicknameUpdatedAt: 'x' },
+      });
+      renderPageWithToast();
+
+      openEditor();
+      typeAndSave(input);
+
+      expect(patchSpy).toHaveBeenCalledTimes(1);
+      expect(patchSpy).toHaveBeenCalledWith({ data: { nickname: sent } });
+      expect(screen.queryByTestId('settings-nickname-error')).toBeNull();
+    });
+
+    it('길이는 공백을 걷은 뒤에 센다 — 앞 공백 1 + 20자는 20자로 통과한다', () => {
+      const twenty = '가'.repeat(20);
+      const patchSpy = jest.fn();
+      primeMutation(mockUsePatchNickname, {
+        spy: patchSpy,
+        onSuccessData: { nickname: twenty, nicknameUpdatedAt: 'x' },
+      });
+      renderPageWithToast();
+
+      openEditor();
+      typeAndSave(` ${twenty}`);
+
+      expect(patchSpy).toHaveBeenCalledTimes(1);
+      expect(patchSpy).toHaveBeenCalledWith({ data: { nickname: twenty } });
+      expect(screen.queryByTestId('settings-nickname-error')).toBeNull();
+    });
+
+    it('클라 검증 오류가 떠 있어도 입력을 바꾸면 오류가 사라진다(입력칸은 그대로)', () => {
+      primeMutation(mockUsePatchNickname, { spy: jest.fn() });
+      renderPageWithToast();
+      openEditor();
+      typeAndSave('가');
+      // 앵커: 오류가 실제로 떠 있다 — 없으면 아래 "사라졌다"가 아무것도 안 잰다.
+      expect(screen.getByTestId('settings-nickname-error')).toBeOnTheScreen();
+
+      fireEvent.changeText(
+        screen.getByTestId('settings-nickname-input'),
+        '가나'
+      );
+
+      expect(screen.queryByTestId('settings-nickname-error')).toBeNull();
+      // 행을 접어서 오류를 감춘 게 아니다 — 고쳐 쓰는 중인 입력칸이 남아 있다.
+      expect(screen.getByTestId('settings-nickname-input')).toHaveDisplayValue(
+        '가나'
+      );
+    });
+
+    it('서버 409 오류가 떠 있어도 입력을 바꾸면 오류가 사라진다(입력칸은 그대로)', () => {
+      primeMutation(mockUsePatchNickname, {
+        spy: jest.fn(),
+        error: httpError(409),
+      });
+      renderPageWithToast();
+      openEditor();
+      typeAndSave('중복이름');
+      expect(screen.getByTestId('settings-nickname-error')).toHaveTextContent(
+        /이미 사용 중/
+      );
+
+      fireEvent.changeText(
+        screen.getByTestId('settings-nickname-input'),
+        '중복이름2'
+      );
+
+      expect(screen.queryByTestId('settings-nickname-error')).toBeNull();
+      expect(screen.getByTestId('settings-nickname-input')).toHaveDisplayValue(
+        '중복이름2'
+      );
+    });
+
+    it.each([
+      ['손대지 않고', null],
+      ['앞뒤 공백만 붙여서', ' 여행자123 '],
+    ])(
+      '현재 닉네임과 같은 값을 %s 저장하면 요청 없이 편집 행이 조용히 닫힌다',
+      (_title, input) => {
+        // 준비: 요청이 새면 성공 토스트가 떠서 들킨다.
+        const patchSpy = jest.fn();
+        primeMutation(mockUsePatchNickname, {
+          spy: patchSpy,
+          onSuccessData: { nickname: '여행자123', nicknameUpdatedAt: 'x' },
+        });
+        renderPageWithToast();
+        openEditor();
+        // 앵커: 행이 펼쳐져 있다 — 뒤의 "입력칸 없음"이 저장의 결과임을 가른다.
+        expect(screen.getByTestId('settings-nickname-input')).toBeOnTheScreen();
+
+        if (input === null) {
+          fireEvent.press(screen.getByTestId('settings-nickname-save'));
+        } else {
+          typeAndSave(input);
+        }
+
+        expect(patchSpy).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('settings-nickname-error')).toBeNull();
+        expect(screen.queryByTestId('settings-nickname-saved')).toBeNull();
+        expect(screen.queryByTestId('settings-nickname-input')).toBeNull();
+        expect(screen.getByText('여행자123')).toBeOnTheScreen();
+      }
+    );
+
+    it.each([
+      ['손대지 않은 빈 입력', null],
+      ['공백만', '     '],
+    ])(
+      '프로필이 아직 안 왔을 때(현재 닉네임 빈 값) %s 저장은 "같다"로 닫히지 않고 길이 안내를 띄운다',
+      (_title, input) => {
+        // 준비: 비교를 길이 검증보다 먼저 하면 '' === '' 로 조용히 닫혀 오류가 사라진다.
+        mockUseGetMeProfile.mockReturnValue({ data: undefined });
+        const patchSpy = jest.fn();
+        primeMutation(mockUsePatchNickname, {
+          spy: patchSpy,
+          error: httpError(400),
+        });
+        renderPageWithToast();
+        openEditor();
+
+        if (input === null) {
+          fireEvent.press(screen.getByTestId('settings-nickname-save'));
+        } else {
+          typeAndSave(input);
+        }
+
+        expect(patchSpy).not.toHaveBeenCalled();
+        expect(screen.getByTestId('settings-nickname-error')).toHaveTextContent(
+          TOO_SHORT
+        );
+        expect(screen.getByTestId('settings-nickname-input')).toBeOnTheScreen();
+      }
+    );
+
+    it('대소문자만 다른 값은 "같다"가 아니다 — 닫지 않고 PATCH 를 보낸다', () => {
+      mockUseGetMeProfile.mockReturnValue({
+        data: { nickname: 'Trip', nicknameUpdatedAt: '2026-01-01T00:00:00Z' },
+      });
+      const patchSpy = jest.fn();
+      primeMutation(mockUsePatchNickname, {
+        spy: patchSpy,
+        onSuccessData: { nickname: 'trip', nicknameUpdatedAt: 'x' },
+      });
+      renderPageWithToast();
+
+      openEditor();
+      typeAndSave('trip');
+
+      expect(patchSpy).toHaveBeenCalledTimes(1);
+      expect(patchSpy).toHaveBeenCalledWith({ data: { nickname: 'trip' } });
+    });
+  });
 });
 
 // TRIP-886

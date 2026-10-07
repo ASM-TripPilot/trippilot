@@ -298,3 +298,117 @@ describe('🔴 SC10 · rail variant 폭 160 · 사진 높이 120 (TRIP-1105)', (
     expect(photo).not.toContain('h-[130px]');
   });
 });
+
+// TRIP-1281 — 하트는 "{숙소 이름} 저장" 으로 읽히고(지금은 라벨이 없어 testID 가 노출된다), 카드는 보이는
+// 글자 그대로의 명시 라벨을 가져 iOS 가 하트 라벨을 카드 라벨에 섞지 않게 한다(병합 자체는 실기 몫).
+// 라벨은 카드가 이미 받는 name·region·priceText 로 만든다 — save 에 새 필드를 넘기지 않는다.
+describe('저장 하트·카드 접근성 라벨 (e02 full · d01 rail)', () => {
+  it.each([false, true])(
+    'e02 하트는 담김=%s 여도 "해운대 오션뷰 저장" 으로 읽히고 selected 는 담김을 따른다',
+    (saved) => {
+      render(
+        <StaySearchCard
+          testID="stay-card-NAVER:s1"
+          name="해운대 오션뷰"
+          region="부산 해운대구"
+          priceText="120,000원~"
+          variant="full"
+          save={{ ...E02_SAVE, saved }}
+        />
+      );
+
+      const heart = screen.getByTestId('stay-card-save-NAVER:s1');
+      expect(heart).toHaveAccessibleName('해운대 오션뷰 저장');
+      expect(screen.getByLabelText('해운대 오션뷰 저장').props.testID).toBe(
+        'stay-card-save-NAVER:s1'
+      );
+      if (saved) expect(heart).toBeSelected();
+      else expect(heart).not.toBeSelected();
+    }
+  );
+
+  it('d01 레인 하트도 "{이름} 저장" 으로 읽힌다', () => {
+    render(
+      <StaySearchCard
+        testID="explore-stay-card-NAVER:s1"
+        name="(주) 엘담"
+        region="밀양시"
+        priceText="가격 미확인"
+        variant="rail"
+        save={{
+          saved: true,
+          pending: false,
+          onToggle: jest.fn(),
+          testID: 'explore-stay-save-NAVER:s1',
+          filledTestID: 'explore-stay-heart-filled-NAVER:s1',
+          outlineTestID: 'explore-stay-heart-outline-NAVER:s1',
+        }}
+      />
+    );
+
+    const heart = screen.getByTestId('explore-stay-save-NAVER:s1');
+    expect(heart).toHaveAccessibleName('(주) 엘담 저장');
+    expect(heart).toBeSelected();
+  });
+
+  it('e02 카드는 담겨 있어도 보이는 글자 그대로 "이름, 지역, 가격" 으로 읽힌다(저장·담음 없음)', () => {
+    render(
+      <StaySearchCard
+        testID="stay-card-NAVER:s1"
+        name="해운대 오션뷰"
+        region="부산 해운대구"
+        priceText="120,000원~"
+        variant="full"
+        save={{ ...E02_SAVE, saved: true }}
+      />
+    );
+
+    expect(screen.getByTestId('stay-card-NAVER:s1')).toHaveAccessibleName(
+      '해운대 오션뷰, 부산 해운대구, 120,000원~'
+    );
+  });
+
+  it('d01 레인 카드도 "이름, 지역, 가격" 으로 읽힌다', () => {
+    render(
+      <StaySearchCard
+        testID="explore-stay-card-NAVER:s1"
+        name="(주) 엘담"
+        region="밀양시"
+        priceText="가격 미확인"
+        variant="rail"
+        save={{
+          saved: false,
+          pending: false,
+          onToggle: jest.fn(),
+          testID: 'explore-stay-save-NAVER:s1',
+          filledTestID: 'explore-stay-heart-filled-NAVER:s1',
+          outlineTestID: 'explore-stay-heart-outline-NAVER:s1',
+        }}
+      />
+    );
+
+    expect(
+      screen.getByTestId('explore-stay-card-NAVER:s1')
+    ).toHaveAccessibleName('(주) 엘담, 밀양시, 가격 미확인');
+  });
+
+  it('이름이 비면 하트는 "담기" 로 읽히고 카드 라벨은 빈 이름을 건너뛴다', () => {
+    render(
+      <StaySearchCard
+        testID="stay-card-NAVER:s1"
+        name=""
+        region="부산 해운대구"
+        priceText="120,000원~"
+        variant="full"
+        save={E02_SAVE}
+      />
+    );
+
+    expect(screen.getByTestId('stay-card-save-NAVER:s1')).toHaveAccessibleName(
+      '담기'
+    );
+    expect(screen.getByTestId('stay-card-NAVER:s1')).toHaveAccessibleName(
+      '부산 해운대구, 120,000원~'
+    );
+  });
+});

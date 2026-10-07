@@ -1672,6 +1672,7 @@ const STAY_REGISTER_BASE_FLOW: StayRegisterScreenProps['flow'] = {
   coordConfirmed: false,
   mapSheetState: 'closed',
   submitStatus: 'idle',
+  submitAttempted: false,
 };
 
 /** multi-candidate(Figma 1354) — 후보 2건, 첫 건 선택, 좌표 미확정. 라디오 리스트 + "등록하기". */
@@ -1728,6 +1729,21 @@ const STAY_REGISTER_PIN_FLOW: StayRegisterScreenProps['flow'] = {
   selectedCandidate: null,
   coordSource: 'PIN',
   coordConfirmed: false,
+};
+
+/** e05 핀 지정 · 숙소명 오류(TRIP-1283) — 좌표 확정·주소 ok·이름 빈 채로 [등록하기]를 누른 뒤.
+ * 버튼 위 빨간 문구와 이름이 비어도 활성인 CTA 색을 대조하는 자리(Figma 프레임 없음, 6-b 육안). */
+const STAY_REGISTER_PIN_NAME_MISSING_FLOW: StayRegisterScreenProps['flow'] = {
+  ...STAY_REGISTER_PIN_FLOW,
+  selectedCandidate: {
+    name: '',
+    address: '부산 해운대구 중동 1394-65',
+    lat: 35.1587,
+    lng: 129.1604,
+  },
+  pinAddressStatus: 'ok',
+  coordConfirmed: true,
+  submitAttempted: true,
 };
 
 // i06 재계획안(TRIP-751) — Figma `4314:1923` 펼침 5곳. 사진은 Figma 목업 사진(`assets/execution/CREDITS.md`,
@@ -2681,6 +2697,19 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_PIN_FLOW}
+        {...STAY_REGISTER_HANDLERS}
+      />
+    ),
+  },
+  // e05 핀 지정 · 숙소명 오류(TRIP-1283) — 이름 빈 채 [등록하기]를 누른 뒤의 얼굴.
+  {
+    key: 'stay-register-pin-name-missing',
+    band: 'e',
+    label: 'e05 · 등록 핀 숙소명 오류',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={STAY_REGISTER_PIN_NAME_MISSING_FLOW}
         {...STAY_REGISTER_HANDLERS}
       />
     ),

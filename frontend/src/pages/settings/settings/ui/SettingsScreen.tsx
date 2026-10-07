@@ -38,7 +38,10 @@ export interface SettingsScreenProps {
   /** 삭제 요청(POST) 실패 — 삭제 행 아래 인라인 오류로 표면화(TRIP-935 R5, INV-4). preview 무파손 위해 optional. */
   deleteRequestError?: boolean;
   onPressBack: () => void;
-  onSubmitNickname: (value: string) => void;
+  /** `true` 를 돌려주면 편집 행을 접는다(같은 값 저장). */
+  onSubmitNickname: (value: string) => boolean | void;
+  /** 닉네임 입력이 바뀜 — 페이지가 낡은 오류를 지운다. preview 무파손 위해 optional. */
+  onNicknameDraftChange?: () => void;
   onPressExport: () => void;
   onPressDeleteAccount: () => void;
   onPressCancelDeletion: () => void;
@@ -80,6 +83,7 @@ export function SettingsScreen({
   deleteRequestError,
   onPressBack,
   onSubmitNickname,
+  onNicknameDraftChange,
   onPressExport,
   onPressDeleteAccount,
   onPressCancelDeletion,
@@ -177,6 +181,7 @@ export function SettingsScreen({
             value={currentNickname}
             error={nicknameError}
             onSubmit={onSubmitNickname}
+            onDraftChange={onNicknameDraftChange}
           />
         );
       case 'export':

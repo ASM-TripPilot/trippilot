@@ -1146,7 +1146,7 @@
 - `src/pages/stay/stay-register/index.ts`  →  StayRegisterPage
 
 ## src/pages/stay/stay-register/model/
-- `src/pages/stay/stay-register/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · buildStayRegisterRequest
+- `src/pages/stay/stay-register/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · canPressStayRegister · buildStayRegisterRequest
 
 ## src/pages/stay/stay-register/ui/
 - `src/pages/stay/stay-register/ui/StayRegisterPage.tsx`  →  StayRegisterPage
@@ -1521,7 +1521,7 @@
 ## src/shared/ui/
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
-- `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · HeartButton
+- `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
 - `src/shared/ui/Skeleton.tsx`  →  SkeletonProps · Skeleton

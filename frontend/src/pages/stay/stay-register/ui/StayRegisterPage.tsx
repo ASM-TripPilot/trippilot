@@ -56,6 +56,7 @@ export function StayRegisterPage(): ReactElement {
     useState<StayRegisterFlow['mapSheetState']>('closed');
   const [submitStatus, setSubmitStatus] =
     useState<StayRegisterFlow['submitStatus']>('idle');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   // 빈 검색어로는 부르지 않는다(5-b W-2). `!== null`만으로는 빈 입력창에서 검색 키를
   // 누른 경로가 열려 `?q=`가 나가고, 서버 400이 "지도 검색을 사용할 수 없어요"로 표시돼
@@ -143,6 +144,7 @@ export function StayRegisterPage(): ReactElement {
     coordConfirmed,
     mapSheetState,
     submitStatus,
+    submitAttempted,
   };
 
   function handleSubmitQuery(): void {
@@ -196,6 +198,9 @@ export function StayRegisterPage(): ReactElement {
   }
 
   async function handleSubmit(): Promise<void> {
+    // TRIP-1283 — 게이트보다 먼저 시도를 기록한다. 메인 버튼은 이름이 비어도 눌리므로, 빈 이름은
+    // 아래 게이트에서 요청 없이 돌아가고 화면이 숙소명 오류를 띄운다.
+    setSubmitAttempted(true);
     // 좌표 게이트는 호출자에 둔다 — 버튼의 disabled에만 두면 그것을 안 건 버튼이
     // 통째로 우회한다. 실제로 제출 실패 배너의 "다시 시도"가 그 구멍이었다(5-b B-1):
     // 실패 후 후보를 다시 탭하면 coordConfirmed가 false로 풀리는데, 그 버튼은

@@ -47,6 +47,7 @@ import {
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
+  canPressStayRegister,
   canSubmitStayRegister,
   resolveName,
   type StayRegisterFlow,
@@ -214,7 +215,7 @@ function SearchFailBlock({
  * (Figma error-mapapi `1359:1546` 실측: 라벨 "숙소명" + placeholder "숙소명 직접 입력"). 한
  * 컴포넌트로 두면 두 표면이 각자 그리다 testID가 중복될 위험이 구조적으로 없어진다(P-13).
  *
- * 5-c(W-9) — "이름이 비어 등록이 잠겼다"는 안내는 여기 없다. 예전엔 이 칸 바로 아래 그렸는데,
+ * 5-c(W-9) — "이름이 비어 등록이 안 된다"는 안내는 여기 없다. 예전엔 이 칸 바로 아래 그렸는데,
  * 그러면 안내의 생명주기가 이 칸을 그리는 탭(핀 탭)에 묶여 탭을 옮기면 사라졌다 — 반면
  * 「등록하기」는 탭과 무관한 공통 영역에 있다. 안내는 그 버튼과 같은 자리(공통 영역)로
  * 옮겼다(아래 `StayRegisterScreen`의 `nameMissing`). */
@@ -509,6 +510,10 @@ export function StayRegisterScreen({
   onBack,
 }: StayRegisterScreenProps): ReactElement {
   const canSubmit = canSubmitStayRegister(flow);
+  // TRIP-1283 — 메인 버튼은 이름이 비어도 눌린다(누르면 페이지가 시도를 기록하고 숙소명 오류를
+  // 띄운다). 이름 게이트는 제출 경로가 canSubmitStayRegister 로 진다. 「다시 시도」는 범위 밖이라
+  // 여전히 canSubmit 으로 잠긴다.
+  const canPress = canPressStayRegister(flow);
   // AC-3 문구는 coordConfirmed 하나에만 걸린다(후보 유무를 조건에 넣지 않는다) — 재검색으로
   // 이전 후보가 풀려도(§3-2 초기화) 안내는 그대로 남아야 한다(I-5). 핀 탭 좌표 미확정(P-6,
   // selectedCandidate null)에서도 떠야 하므로 selectedCandidate 를 조건에 넣지 않는다.
@@ -540,13 +545,15 @@ export function StayRegisterScreen({
     flow.activeTab === 'mapsearch' &&
     flow.coordConfirmed &&
     flow.selectedCandidate !== null;
-  // 5-c(W-9) — 이름이 비어 「등록하기」가 잠긴 이유. 예전엔 PinPanel 지역 변수였는데, 그 칸이
+  // 5-c(W-9) — 이름이 비어 등록이 안 되는 이유. 예전엔 PinPanel 지역 변수였는데, 그 칸이
   // 핀 탭에서만 렌더돼(activeTab === 'pin') 탭을 옮기면 안내가 버튼보다 먼저 사라졌다.
-  // canSubmitStayRegister와 같은 식(resolveName + `.trim() === ''`, 5-c W-7)으로 판정해 버튼이
-  // 잠긴 이유와 안내가 다른 답을 내는 일이 없게 한다(W-2와 같은 이유).
+  // canSubmitStayRegister와 같은 식(resolveName + `.trim() === ''`, 5-c W-7)으로 판정해 제출이
+  // 막힌 이유와 안내가 다른 답을 내는 일이 없게 한다(W-2와 같은 이유).
+  // TRIP-1283 — [등록하기]를 누른 뒤에만 띄운다(진입 즉시 지도 첫 멈춤이 좌표를 채워도 아직
+  // 시도 전이다). 주소 상태는 보지 않는다 — 주소 장애·조회 중에 눌러도 침묵하지 않는다(INV-4).
   const nameMissing =
+    flow.submitAttempted &&
     flow.selectedCandidate !== null &&
-    flow.pinAddressStatus === 'ok' &&
     resolveName(flow.name, flow.selectedCandidate.name).trim() === '';
 
   return (
@@ -556,6 +563,10 @@ export function StayRegisterScreen({
 
         <ScrollView
           className="flex-1"
+          // TRIP-1280 — 내용이 화면보다 짧으면 스크롤 거리가 없어 키보드가 [등록하기]를 덮는다: 키보드 높이만큼
+          // 스크롤 여백(iOS 전용)을 더하고, 키보드가 떠 있어도 첫 탭이 버튼으로 가게 한다.
+          automaticallyAdjustKeyboardInsets
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 32 }}
         >
           <View className="w-full px-lg pt-md">
@@ -715,7 +726,10 @@ export function StayRegisterScreen({
                   벗어나도) 이름이 비어 있으면 여기 뜬다. 핀 패널 안에는 더 이상 같은 문구가
                   없다(중복 금지) — 이 한 곳이 유일한 출처다. */}
                 {nameMissing ? (
-                  <Text className="font-noto text-caption text-primary-text">
+                  <Text
+                    testID="stay-register-name-missing"
+                    className="font-noto text-caption text-primary-text"
+                  >
                     등록하려면 숙소명을 입력해 주세요
                   </Text>
                 ) : null}
@@ -725,10 +739,10 @@ export function StayRegisterScreen({
             <Pressable
               testID="stay-register-submit"
               accessibilityRole="button"
-              disabled={!canSubmit}
+              disabled={!canPress}
               onPress={onSubmit}
               className={`mx-lg h-12 flex-row items-center justify-center gap-xs rounded-button ${
-                canSubmit ? 'bg-primary' : 'bg-surface-strong'
+                canPress ? 'bg-primary' : 'bg-surface-strong'
               }`}
             >
               {/* TRIP-730 CTA 텍스트 — submitting 우선(R-14 동결), 그다음 확정(✓ 이 숙소 등록), else
@@ -742,7 +756,7 @@ export function StayRegisterScreen({
                   <CheckGlyph size={20} />
                   <Text
                     className={`font-noto-bold text-card-title font-bold ${
-                      canSubmit ? 'text-on-primary' : 'text-muted-soft'
+                      canPress ? 'text-on-primary' : 'text-muted-soft'
                     }`}
                   >
                     이 숙소 등록
@@ -751,7 +765,7 @@ export function StayRegisterScreen({
               ) : (
                 <Text
                   className={`font-noto-bold text-card-title font-bold ${
-                    canSubmit ? 'text-on-primary' : 'text-muted-soft'
+                    canPress ? 'text-on-primary' : 'text-muted-soft'
                   }`}
                 >
                   등록하기

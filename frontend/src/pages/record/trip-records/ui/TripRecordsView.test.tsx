@@ -5,7 +5,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Dimensions, View } from 'react-native';
+import { DeviceEventEmitter, Dimensions, Keyboard, View } from 'react-native';
 import {
   getAnimatedStyle,
   isSharedValue,
@@ -33,6 +33,39 @@ import { TripRecordsView, type TripRecordsViewProps } from './TripRecordsView';
 // 시트는 `__mocks__/@gorhom/bottom-sheet` 통과형 목이 자동으로 쓰인다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
+
+// TRIP-1280 — 키보드 이벤트는 RN `Keyboard` 가 구독하는 기기 이벤트 통로(DeviceEventEmitter)로 쏜다.
+type KeyboardEventName =
+  | 'keyboardWillShow'
+  | 'keyboardDidShow'
+  | 'keyboardWillHide'
+  | 'keyboardDidHide';
+
+const KEYBOARD_EVENTS: KeyboardEventName[] = [
+  'keyboardWillShow',
+  'keyboardDidShow',
+  'keyboardWillHide',
+  'keyboardDidHide',
+];
+
+function emitKeyboard(name: KeyboardEventName): void {
+  const frame = { screenX: 0, screenY: 508, width: 390, height: 336 };
+  act(() => {
+    DeviceEventEmitter.emit(name, {
+      startCoordinates: frame,
+      endCoordinates: frame,
+      duration: 250,
+      easing: 'keyboard',
+      isEventFromThisApp: true,
+    });
+  });
+}
+
+// `Keyboard` 는 "지금 떠 있나" 를 모듈 싱글턴에 기억한다(keyboardDidShow 로 켜지고 keyboardDidHide 로만
+// 꺼짐). 한 케이스가 떠 있는 채로 끝나면 다음 케이스로 새므로 파일 최상위에서 매번 내린다.
+afterEach(() => {
+  emitKeyboard('keyboardDidHide');
+});
 
 /**
  * TRIP-1085 · j01 방문 기록 **순수 뷰**(pages · 셸 조립) — 전면 지도 + 바텀시트(MapSheetShell).
@@ -1113,6 +1146,75 @@ describe('「오늘의 회고」 FAB', () => {
       const text = renderedText(screen.UNSAFE_root);
       expect(text).toContain('오늘의 회고');
       expect(/(\d+\s*분|\d+\s*시간|소요|체류)/.test(text)).toBe(false);
+    });
+  });
+
+  // TRIP-1280 AC-4·AC-5 — 메모를 쓰느라 키보드가 뜨면 시트가 키보드 위로 올라와 FAB 이 시트 헤더·안내문을
+  // 덮는다. 키보드가 떠 있는 동안만 FAB 을 그리지 않는다(01b Q4). 시트 위치로 숨기지 않는다.
+  // 실제 시트 밀림·가림 해소는 jest 사각(6-b).
+  describe('키보드가 떠 있는 동안만 FAB 이 빠진다', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('K1 키보드 없이 시트를 펼쳐 FAB 이 칩 줄 아래에 멈춰도 FAB 은 그대로 있고 눌린다 (위치로 숨기지 않는다)', () => {
+      const { onPressReflection } = renderViewWithStatusBar();
+      layoutOverlay(55, 36);
+
+      moveSheet(122);
+
+      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+      // 5-b W1 — 트리에 남긴 채 애니메이션 스타일(opacity)로 위치 기준 숨김을 하는 구현도 막는다.
+      expect(anchorStyle().opacity ?? 1).toBe(1);
+      fireEvent.press(screen.getByTestId(FAB));
+      expect(onPressReflection).toHaveBeenCalledTimes(1);
+    });
+
+    it('K2 (iOS 순서) 키보드가 뜨면 FAB 이 사라지고, 내려가면 다시 나타나 눌린다', () => {
+      const { onPressReflection } = renderView();
+      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+
+      emitKeyboard('keyboardWillShow');
+      emitKeyboard('keyboardDidShow');
+
+      expect(screen.queryByTestId(FAB)).toBeNull();
+      expect(screen.queryByText('오늘의 회고')).toBeNull();
+
+      emitKeyboard('keyboardWillHide');
+      emitKeyboard('keyboardDidHide');
+
+      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId(FAB));
+      expect(onPressReflection).toHaveBeenCalledTimes(1);
+    });
+
+    it('K3 (Android 순서 — Will 이벤트가 없다) Did 이벤트만으로도 사라졌다 다시 나타난다', () => {
+      renderView();
+      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+
+      emitKeyboard('keyboardDidShow');
+      expect(screen.queryByTestId(FAB)).toBeNull();
+
+      emitKeyboard('keyboardDidHide');
+      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+    });
+
+    it('K4 화면이 사라지면 키보드 구독도 함께 푼다', () => {
+      // `Keyboard` 는 처음 쓰일 때 자기 몫 리스너를 단다 — 그 뒤에 기준선을 재야 한다.
+      Keyboard.isVisible();
+      const listenerCounts = () =>
+        KEYBOARD_EVENTS.map((name) => DeviceEventEmitter.listenerCount(name));
+      const sum = (counts: number[]) => counts.reduce((a, b) => a + b, 0);
+      const before = listenerCounts();
+
+      const { unmount } = render(<TripRecordsView {...baseProps()} />);
+      expect(sum(listenerCounts())).toBeGreaterThan(sum(before));
+
+      unmount();
+      expect(listenerCounts()).toEqual(before);
     });
   });
 });

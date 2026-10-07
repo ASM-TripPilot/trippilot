@@ -3,6 +3,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 
 import type { Place } from '../model';
 
+import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import {
   HeartBadgeGlyph,
   HeartFilledGlyph,
@@ -72,6 +73,7 @@ export function PlaceGridCard({
         <Pressable
           testID={`explore-places-save-${place.poiId}`}
           accessibilityRole="button"
+          accessibilityLabel={heartSaveLabel(place.nameKo)}
           accessibilityState={{ selected: saved }}
           disabled={pending}
           onPress={() => onToggleSave(place)}
