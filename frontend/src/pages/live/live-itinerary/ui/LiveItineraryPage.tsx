@@ -235,7 +235,11 @@ export function LiveItineraryPage({
   // 같은 문구 · [홈으로]는 dismissTo — 404 를 스택에 남기지 않는다.
   if (isNotFound(trip.error)) {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={{ flex: 1 }}
+        className="bg-canvas"
+      >
         <View className="flex-1 items-center justify-center bg-canvas px-lg">
           <StateNotice
             testID="execution-live-trip-notfound"
@@ -263,7 +267,11 @@ export function LiveItineraryPage({
     (state.kind === 'notFound' && trip.isPending && trip.failureCount === 0)
   ) {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={{ flex: 1 }}
+        className="bg-canvas-alt"
+      >
         <View
           testID="execution-live-loading"
           className="flex-1 bg-canvas-alt"
@@ -274,7 +282,11 @@ export function LiveItineraryPage({
 
   if (state.kind === 'notFound') {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={{ flex: 1 }}
+        className="bg-canvas"
+      >
         <View className="flex-1 items-center justify-center bg-canvas px-lg">
           <StateNotice
             testID="execution-live-notfound"
@@ -308,7 +320,11 @@ export function LiveItineraryPage({
 
   if (state.kind === 'error') {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={{ flex: 1 }}
+        className="bg-canvas"
+      >
         <View className="flex-1 items-center justify-center bg-canvas px-lg">
           <StateNotice
             testID="execution-live-error"

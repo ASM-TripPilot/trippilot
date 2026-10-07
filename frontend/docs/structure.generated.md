@@ -1554,6 +1554,7 @@
 - `src/test-support/preventRemoveMock.ts`  →  mockNavigation · useNavigation · usePreventRemove
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
+- `src/test-support/safeAreaFace.ts`  →  CanvasToken · safeAreaAround · safeAreaEdges · safeAreaPaints · centeredInSafeArea
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
@@ -1593,4 +1594,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 977개 파일
+합계 978개 파일

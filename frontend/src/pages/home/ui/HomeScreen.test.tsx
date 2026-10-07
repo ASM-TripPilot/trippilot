@@ -1,4 +1,4 @@
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import {
   fireEvent,
   render,
@@ -1283,5 +1283,62 @@ describe('🔴 TRIP-935 AC-5 · 홈 카드에 하트가 없다(모든 얼굴)', 
         0
       );
     }
+  });
+});
+
+// TRIP-1286 · A-11 · Seed Q5 — 끝까지 내렸을 때 마지막 카드가 오른쪽 아래 FAB 뒤에 숨지 않는다.
+// 탭바는 화면을 줄이지 않는 오버레이라 하단 여유는 화면이 스스로 진다(traps-shell). FAB 스택은 바닥에서 84~208
+// (+ FAB 84~140, 하트 152~208)이므로 콘텐츠 하단 여유는 208 보다 커야 한다 — 권고 220(=208 + FAB 사이 간격 12).
+// 하한으로 잠근다: 220 은 Figma 근거 없는 권고값이라 6-b 에서 올려도 이 테스트는 안 바뀐다(02a §3-1).
+// 실제로 안 가리는지는 탭바가 있는 실앱 경로 6-b(홈 프리뷰 키엔 탭바가 없다).
+describe('🔴 HomeScreen — 세로 스크롤 하단 여유가 FAB 스택 윗변보다 크다 (A-11 · AC-A1)', () => {
+  const FAB_STACK_TOP = 152 + 56;
+  const BOTTOM_ROOM = FAB_STACK_TOP + 12;
+
+  /** `home-dashboard-root` 안의 세로 ScrollView — 가로 캐러셀·레인은 전부 `horizontal` 이다(02a ★11). */
+  function dashboardScrolls() {
+    return within(screen.getByTestId('home-dashboard-root'))
+      .UNSAFE_queryAllByType(ScrollView)
+      .filter((node) => !node.props.horizontal);
+  }
+
+  it.each([
+    ['discovery', undefined],
+    ['planning', PLANNING_PHASE],
+    ['postTrip', POST_TRIP_PHASE],
+    ['traveling', TRAVELING_PHASE],
+  ] as const)(
+    '%s: 대시보드 세로 ScrollView 의 paddingBottom 이 220 이상이다',
+    (_face, phase) => {
+      render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={phase} />);
+
+      // 앵커 — 세로 스크롤은 하나뿐이다(엉뚱한 ScrollView 의 여백을 재지 않았다는 증명).
+      const scrolls = dashboardScrolls();
+      expect(scrolls).toHaveLength(1);
+
+      const padding = StyleSheet.flatten(
+        scrolls[0].props.contentContainerStyle
+      )?.paddingBottom;
+      expect(typeof padding).toBe('number');
+      expect(padding).toBeGreaterThanOrEqual(BOTTOM_ROOM);
+    }
+  );
+
+  // AC-A2 무회귀 — 220 은 "FAB 윗변 위"라는 뜻이라 FAB 위치와 같이 잠가야 관계가 잠긴다(선제 green).
+  it('FAB 위치는 그대로다 — + FAB 바닥 84 · 하트 FAB 묶음 바닥 152', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    const tokensOf = (node: { props: { className?: unknown } }) =>
+      String(node.props.className ?? '').split(/\s+/);
+    expect(tokensOf(screen.getByTestId('home-create-trip-fab'))).toContain(
+      'bottom-[84px]'
+    );
+    // 하트 토글을 띄우는 것은 토글 자신이 아니라 감싼 absolute 묶음(SavedMenuFab 루트)이다.
+    let heartStack = screen.getByTestId('home-saved-menu-toggle').parent;
+    while (heartStack && !tokensOf(heartStack).includes('absolute')) {
+      heartStack = heartStack.parent;
+    }
+    expect(heartStack).not.toBeNull();
+    expect(tokensOf(heartStack!)).toContain('bottom-[152px]');
   });
 });

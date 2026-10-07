@@ -88,7 +88,11 @@ export function ReplanNoticeFace({
         };
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+    <SafeAreaView
+      edges={['top', 'bottom']}
+      style={{ flex: 1 }}
+      className="bg-canvas"
+    >
       <View className="flex-1 items-center justify-center bg-canvas px-lg">
         <StateNotice illustration={NEUTRAL_BADGE} {...notice} />
       </View>

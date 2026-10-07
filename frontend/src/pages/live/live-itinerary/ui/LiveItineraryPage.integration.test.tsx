@@ -31,6 +31,8 @@ import {
 } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
+import { safeAreaPaints } from '@/test-support/safeAreaFace';
+
 import { LiveItineraryPage } from './LiveItineraryPage';
 
 /**
@@ -579,6 +581,57 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
         expect(screen.queryByTestId('execution-live-trip-notfound')).toBeNull();
         expect(screen.queryByTestId('execution-live-error')).toBeNull();
         expect(screen.queryByTestId('execution-live-loading')).toBeNull();
+      });
+
+      // TRIP-1286 · C-15 · Seed Q3 — 비활성 얼굴 4종의 SafeAreaView 에 배경이 없어 위(상태바)·아래(홈 인디케이터) 띠에
+      // 내비게이션 기본 회색(#F2F2F2)이 비쳤다. 판정은 "SafeAreaView 자신 또는 그 바깥이 본문과 같은 색을 칠한다"까지
+      // (className·style 어느 쪽이든, 02a §3-5). 로딩 얼굴의 본문 색은 canvas-alt 다. 실제 띠 색은 6-b.
+      describe('🔴 C-15 · 비활성 얼굴의 SafeArea 가 인셋 영역까지 본문 색이다 (AC-S2)', () => {
+        it('S2a 여행 없음(trip 404) — bg-canvas', async () => {
+          const face = await renderTripGone();
+
+          expect(safeAreaPaints(face, 'bg-canvas')).toBe(true);
+        });
+
+        it('S2b 일정 없음(일정 404) — bg-canvas', async () => {
+          const face = await renderNoItinerary();
+
+          expect(safeAreaPaints(face, 'bg-canvas')).toBe(true);
+        });
+
+        it('S2c 조회 실패(5xx) — bg-canvas', async () => {
+          server.use(itineraryStatus(500), tripHandler());
+          render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+            wrapper,
+          });
+
+          const face = await waitFor(() =>
+            screen.getByTestId('execution-live-error')
+          );
+
+          expect(safeAreaPaints(face, 'bg-canvas')).toBe(true);
+        });
+
+        it('S2d 로딩(일정 응답 대기) — 본문과 같은 bg-canvas-alt', async () => {
+          // 일정 GET 을 손으로 푸는 Promise 에 묶어 로딩에 세운다 — afterEach 의 releaseTrip 이 풀어 다음 테스트로 안 샌다.
+          const gate = new Promise<void>((resolve) => {
+            releaseTrip = resolve;
+          });
+          server.use(
+            tripHandler(),
+            http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+              await gate;
+              return new HttpResponse(null, { status: 404 });
+            })
+          );
+          render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+            wrapper,
+          });
+
+          const face = screen.getByTestId('execution-live-loading');
+
+          expect(safeAreaPaints(face, 'bg-canvas-alt')).toBe(true);
+        });
       });
     });
 

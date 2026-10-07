@@ -19,7 +19,7 @@ import { TOAST_VISIBLE_MS, ToastHost, hideToast, showToast } from './Toast';
  *  - `hideToast` 는 즉시 지우고 자동 숨김 타이머까지 없앤다(테스트 사이 리셋 장치).
  *  - 형상: Figma NoticeBar tone=success 토큰(`bg-canvas`·`border-hairline`·`rounded-button`) + success 체크.
  *
- * 커버하지 않는 것: 화면 하단 위치·픽셀·네비게이션 뒤 실제 표시는 6-b 실기.
+ * TRIP-1286 — 하단 위치는 className 토큰(`bottom-[220px]`)까지만 잰다. 실제 겹침 없음·픽셀·네비게이션 뒤 실제 표시는 6-b 실기.
  *
  * 3동작 뼈대: 준비=가짜 타이머 + 호스트 렌더 → 실행=showToast / 시간 흘리기 → 단언=보임·사라짐.
  */
@@ -151,5 +151,22 @@ describe('🔴 비주얼 · NoticeBar tone=success 토큰 (구조 가드)', () =
       .findAll((node) => node.type === Path)
       .map((node) => String(node.props.stroke ?? '').toUpperCase());
     expect(strokes).toContain(SUCCESS_STROKE);
+  });
+});
+
+// TRIP-1286 · B-19 결정2 · Seed Q1 C — 토스트를 FAB 스택 윗변(바닥에서 152+56=208) 위로 올린다.
+// 홈·탐색 랜딩·장소 탐색·숙소 검색 네 화면의 FAB 윗변이 모두 208 이라 전역 상수 하나(208 + 간격 12)로 푼다.
+describe('🔴 위치 · FAB 스택 위 (AC-T1·T2)', () => {
+  it('토스트 루트는 바닥에서 220px(bottom-[220px])에 뜨고, 옛 108px 자리는 아니다', () => {
+    renderHost();
+    // 앵커: 띄우기 전엔 없다 — 아래 토큰 단언이 앞 테스트에서 샌 토스트를 잡은 게 아니다.
+    expect(screen.queryByTestId('toast-a')).toBeNull();
+
+    show('A 문구', 'toast-a');
+
+    const tokens = classTokens(screen.getByTestId('toast-a'));
+    expect(tokens).toContain('absolute');
+    expect(tokens).toContain('bottom-[220px]');
+    expect(tokens).not.toContain('bottom-[108px]');
   });
 });

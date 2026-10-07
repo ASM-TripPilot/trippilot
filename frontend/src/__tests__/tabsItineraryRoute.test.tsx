@@ -62,6 +62,12 @@ jest.mock('expo-router', () => ({
     navigate: mockNavigate,
   }),
   useNavigation: () => ({ setOptions: jest.fn() }),
+  // TRIP-1286 준비부 확장(단언 무변경) — 페이지가 완료 배너 판정을 포커스 중에만 한다(useFocusEffect). 없으면
+  // `useFocusEffect is not a function` 으로 이 파일 전체가 죽는다. 늘 보이는 화면 흉내(마운트하면 바로 콜백).
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('react').useEffect(() => effect(), [effect]);
+  },
 }));
 
 // TRIP-928 준비부 확장(단언 무변경) — 페이지가 완료 배너 판정을 위해 여행별 일정을 `useQueries` +

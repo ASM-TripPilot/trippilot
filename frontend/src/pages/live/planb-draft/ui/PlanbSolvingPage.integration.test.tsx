@@ -8,6 +8,8 @@ import {
 
 import type { Itinerary, VisitCheckList } from '@/shared/api/index.schemas';
 
+import { safeAreaPaints } from '@/test-support/safeAreaFace';
+
 import { PlanbSolvingPage } from './PlanbSolvingPage';
 
 /**
@@ -1156,5 +1158,27 @@ describe('🔴 TRIP-1277 5-b 경고-1 · AC1 — 짜는 중을 이미 받았으�
     expect(mockCancel).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
     expect(forwardDestinations()).toEqual([]);
+  });
+});
+
+// TRIP-1286 · C-15 · Seed Q3 B안 — 재계획 오류·종료 얼굴(공용 ReplanNoticeFace)도 SafeAreaView 에 배경이 없어 위·아래
+// 띠에 회색이 비쳤다. 세 종류(진행 오류·종료·재계획안 오류)가 같은 한 줄 SafeAreaView 를 쓰므로 여기 두 얼굴로 그 줄을
+// 잠근다(02a §3-5). 판정은 "SafeAreaView 자신 또는 그 바깥이 bg-canvas" 까지 — 실제 띠 색은 6-b.
+describe('🔴 C-15 · 재계획 안내 얼굴의 SafeArea 가 인셋 영역까지 흰 바탕이다 (AC-S3)', () => {
+  it('S3a 오류 얼굴 — bg-canvas', () => {
+    renderSessionError();
+
+    expect(safeAreaPaints(screen.getByTestId(ERROR_FACE), 'bg-canvas')).toBe(
+      true
+    );
+  });
+
+  it('S3b 종료 얼굴 — bg-canvas', () => {
+    mockStatus = 'APPLIED';
+    renderPage();
+
+    expect(safeAreaPaints(screen.getByTestId(CLOSED_FACE), 'bg-canvas')).toBe(
+      true
+    );
   });
 });
