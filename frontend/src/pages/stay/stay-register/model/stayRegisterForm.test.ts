@@ -51,6 +51,7 @@ describe('검색 후보 경로 (옛 본 파일)', () => {
     coordConfirmed: true,
     mapSheetState: 'closed',
     submitStatus: 'idle',
+    submitAttempted: false,
   };
 
   describe('canSubmitStayRegister — 등록 가능 판정 (F-7)', () => {
@@ -122,6 +123,7 @@ describe('검색 후보 경로 (옛 본 파일)', () => {
               coordConfirmed: false,
               mapSheetState: input.mapSheetState,
               submitStatus: input.submitStatus,
+              submitAttempted: false,
             };
             expect(canSubmitStayRegister(flow)).toBe(false);
           }
@@ -255,6 +257,7 @@ describe('핀 경로 (옛 .pin)', () => {
     coordConfirmed: true,
     mapSheetState: 'closed',
     submitStatus: 'idle',
+    submitAttempted: false,
   };
 
   describe('FP-1 · 좌표의 출처가 registerRoute를 정한다 (AC-7 · S-4)', () => {

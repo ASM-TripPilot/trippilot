@@ -1146,7 +1146,7 @@
 - `src/pages/stay/stay-register/index.ts`  →  StayRegisterPage
 
 ## src/pages/stay/stay-register/model/
-- `src/pages/stay/stay-register/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · buildStayRegisterRequest
+- `src/pages/stay/stay-register/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · canPressStayRegister · buildStayRegisterRequest
 
 ## src/pages/stay/stay-register/ui/
 - `src/pages/stay/stay-register/ui/StayRegisterPage.tsx`  →  StayRegisterPage
