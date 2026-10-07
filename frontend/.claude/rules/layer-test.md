@@ -15,6 +15,7 @@ paths:
 - **모듈 목은 인라인 `jest.mock(팩토리)` 대신 모듈 스코프 파일로** — NativeWind babel이 주입하는 `_ReactNativeCSSInterop` 참조가 팩토리 스코프 밖으로 걸린다. 팩토리가 필요하면 `require('@/test-support/…')`로 끌어온다.
 - **page를 통째 렌더하는 형제 테스트는 목을 공유하지 않는다** — page가 새 훅을 물면 그 page를 렌더하는 파일 전수(`git grep 'render(<.*Page'`)에 무해 스텁을 추가해야 한다(홈 page: `HomePage.test`·`tabsShell` 홈 래퍼 / 탐색 page: `ExploreLandingPage.test`·`.integration.test`·`tabsShell` 탐색 래퍼). 라우트 파일 자체는 얇은 래퍼라 `tabsShell`만 렌더한다(TRIP-1142).
 - **모듈 싱글턴(zustand 스토어·토스트)을 쓰는 테스트는 리셋을 파일 최상위 `afterEach`에 건다** — describe 안에만 걸면 앞 테스트 상태가 새어 거짓 green이 된다.
+- **jest RN 목의 기본 `fontScale`은 1이 아니라 2다**(`node_modules/react-native/jest/mocks/NativeModules.js:41`) — `isLargeText` 같은 배율 분기가 들어간 컴포넌트를 배율 미지정으로 렌더하면 큰 글자 가지가 나온다. 배율 분기 컴포넌트의 테스트는 파일 최상위 `beforeEach`에서 `Dimensions.set({window:{…,fontScale:1}, screen:…})`로 1을 고정하고 `afterEach`에서 복원한다(`SlotProgressCard.test.tsx` 선례). 고정 안 한 형제(`LiveHubView.test`·`LiveItineraryPage` 통합 둘)는 지금 큰 가지를 렌더한다(단언은 testID·글자 보존이라 무해).
 - **`@gorhom/bottom-sheet` 목은 통과형**이라 실개폐·스냅·딤·핸들 실렌더는 jest 사각이다(6-b 실기 전용).
 
 | 파일 | 역할 |
