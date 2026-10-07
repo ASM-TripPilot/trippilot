@@ -484,6 +484,8 @@ function SpotCard({
     <Pressable
       testID={`home-spot-card-${index}`}
       accessibilityRole={poiId && onPressCard ? 'button' : undefined}
+      // 보이는 글자 그대로(TRIP-1281) — 없으면 iOS 가 자식 하트 라벨을 카드에 끌어다 붙인다.
+      accessibilityLabel={[card.title, card.tag].filter(Boolean).join(', ')}
       onPress={poiId && onPressCard ? () => onPressCard(poiId) : undefined}
       className="h-[166px] flex-1 overflow-hidden rounded-card"
     >
@@ -517,6 +519,7 @@ function SpotCard({
           testID={`home-spot-save-${poiId}`}
           filledTestID={`home-spot-heart-filled-${poiId}`}
           outlineTestID={`home-spot-heart-outline-${poiId}`}
+          name={card.title}
           className="absolute right-sm top-sm"
         />
       ) : null}

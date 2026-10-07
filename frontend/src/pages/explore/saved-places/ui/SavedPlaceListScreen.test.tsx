@@ -852,3 +852,66 @@ describe('행 탭', () => {
     expect(onPressRow).not.toHaveBeenCalled();
   });
 });
+
+// TRIP-1281 — d02 하트는 "해제" 버튼이지만 라벨은 다른 하트와 같은 "{이름} 저장" 이고, 담김/해제는 selected
+// 로만 갈린다. 행은 보이는 글자 그대로(순번·배지·이름·지역·첫 태그, 빈 것은 건너뜀)의 명시 라벨을 가져
+// iOS 가 하트 라벨을 행 라벨에 섞지 않게 한다(병합 자체는 실기 몫). 행은 버튼 역할을 새로 받지 않는다.
+describe('담은 장소 행 — 하트·행 접근성 라벨', () => {
+  const ROW_LABELS: [string, string][] = [
+    ['sp-1', '1, 감천문화마을, 사하구, 골목'],
+    ['sp-2', '2, 미확인, 광안리 해변, 수영구, 야경'],
+    ['sp-3', '3, 폐업, 전포 카페거리'],
+    ['sp-4', '4, 미확인, 해동용궁사, 기장군, 사찰'],
+  ];
+  const HEART_NAMES: [string, string][] = [
+    ['sp-1', '감천문화마을'],
+    ['sp-2', '광안리 해변'],
+    ['sp-3', '전포 카페거리'],
+    ['sp-4', '해동용궁사'],
+  ];
+
+  it('하트는 행마다 "{이름} 저장" 으로 읽히고 담김이면 selected 다', () => {
+    renderScreen();
+
+    HEART_NAMES.forEach(([id, name]) => {
+      const heart = screen.getByTestId(`explore-saved-remove-${id}`);
+      expect(heart).toHaveAccessibleName(`${name} 저장`);
+      expect(heart).toBeSelected();
+    });
+  });
+
+  it('해제한 행의 하트는 라벨이 그대로고 selected 만 꺼진다 — 행 라벨도 그대로다', () => {
+    renderScreen({ releasedPoiIds: ['p1'] });
+
+    const heart = screen.getByTestId('explore-saved-remove-sp-1');
+    expect(heart).toHaveAccessibleName('감천문화마을 저장');
+    expect(heart).not.toBeSelected();
+    expect(screen.getByTestId('explore-saved-item-sp-1')).toHaveAccessibleName(
+      '1, 감천문화마을, 사하구, 골목'
+    );
+  });
+
+  it('행은 보이는 글자 그대로 "순번, 배지, 이름, 지역, 태그" 로 읽힌다(없는 조각은 건너뜀)', () => {
+    renderScreen();
+
+    ROW_LABELS.forEach(([id, label]) => {
+      expect(
+        screen.getByTestId(`explore-saved-item-${id}`)
+      ).toHaveAccessibleName(label);
+    });
+  });
+
+  it('행은 여전히 버튼 역할이 아니다 — 버튼은 하트 4개다', () => {
+    renderScreen();
+
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => String(node.props.testID));
+    expect(
+      buttonIds.filter((id) => id.startsWith('explore-saved-item-'))
+    ).toEqual([]);
+    expect(
+      buttonIds.filter((id) => id.startsWith('explore-saved-remove-'))
+    ).toHaveLength(4);
+  });
+});

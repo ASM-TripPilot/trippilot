@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { SavedPlace } from '@/shared/api/index.schemas';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
+import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -125,6 +126,10 @@ function SavedPlaceRow({
     // 항상 활성이라 하트 press 는 부모로 안 샌다(RNTL Probe A, ★2) — `!pending` 가드 불필요.
     <Pressable
       testID={`explore-saved-item-${saved.savedPlaceId}`}
+      // 보이는 글자 그대로(TRIP-1281) — 없으면 iOS 가 자식 하트 라벨을 행에 끌어다 붙인다.
+      accessibilityLabel={[rank, badge, place.nameKo, place.region, tag]
+        .filter(Boolean)
+        .join(', ')}
       onPress={() => onPressRow?.(saved)}
       className="w-full flex-row items-center gap-md border-b border-hairline py-md"
     >
@@ -186,6 +191,7 @@ function SavedPlaceRow({
       <Pressable
         testID={`explore-saved-remove-${saved.savedPlaceId}`}
         accessibilityRole="button"
+        accessibilityLabel={heartSaveLabel(place.nameKo)}
         // 담김=선택됨. 빈/찬을 색이 아니라 이 접근성 상태 + 글리프 컴포넌트 정체성으로 잰다
         // (repo-trap: SVG fill 은 렌더 트리에 안 남는다, 02a ★1 · d04 카드 하트와 같은 신호).
         accessibilityState={{ selected: !released }}

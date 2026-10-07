@@ -7,7 +7,11 @@ import {
 } from '@testing-library/react-native';
 
 import { HOME_DEFAULT_PROPS, HOME_LOADING_PROPS } from '../model/homeFixtures';
-import type { HomePhase } from '../model/homeTypes';
+import type {
+  HomePhase,
+  HomeSpotCard,
+  HomeSpotsLane,
+} from '../model/homeTypes';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/features/home';
 import { HomeScreen } from './HomeScreen';
 
@@ -1340,5 +1344,67 @@ describe('🔴 HomeScreen — 세로 스크롤 하단 여유가 FAB 스택 윗�
     }
     expect(heartStack).not.toBeNull();
     expect(tokensOf(heartStack!)).toContain('bottom-[152px]');
+  });
+});
+
+// TRIP-1281 — 스팟 하트는 "{제목} 저장", 카드는 보이는 글자 그대로("제목, 태그")의 명시 라벨. 카드가 버튼이
+// 되는 조건(poiId + onPressCard)은 그대로다 — 라벨만 붙고 역할은 안 바뀐다. 병합 자체는 실기 몫.
+describe('지금 뜨는 장소 — 저장 하트·카드 접근성 라벨', () => {
+  const SPOT_A: HomeSpotCard = {
+    poiId: 'poi-a',
+    title: '해운대 해수욕장',
+    tag: '#해변',
+    imageUrl: null,
+  };
+  const SPOT_B: HomeSpotCard = {
+    poiId: 'poi-b',
+    title: '감천문화마을',
+    tag: '#명소',
+    imageUrl: null,
+  };
+  const SPOTS_LANE: HomeSpotsLane = {
+    status: 'ready',
+    cards: [SPOT_A, SPOT_B],
+    onRetry: jest.fn(),
+    savedPoiIds: ['poi-b'],
+    pendingPoiIds: [],
+    onToggleSave: jest.fn(),
+    saveErrorMessage: null,
+    onDismissSaveError: jest.fn(),
+  };
+
+  it('하트는 "{제목} 저장" 으로 읽히고, 담김은 selected 로만 갈린다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} spotsLane={SPOTS_LANE} />);
+
+    const heartA = screen.getByTestId('home-spot-save-poi-a');
+    const heartB = screen.getByTestId('home-spot-save-poi-b');
+    expect(heartA).toHaveAccessibleName('해운대 해수욕장 저장');
+    expect(heartA).not.toBeSelected();
+    expect(heartB).toHaveAccessibleName('감천문화마을 저장');
+    expect(heartB).toBeSelected();
+  });
+
+  it('카드는 담겨 있어도 "제목, 태그" 로 읽힌다(담기·저장 없음)', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} spotsLane={SPOTS_LANE} />);
+
+    expect(screen.getByTestId('home-spot-card-0')).toHaveAccessibleName(
+      '해운대 해수욕장, #해변'
+    );
+    expect(screen.getByTestId('home-spot-card-1')).toHaveAccessibleName(
+      '감천문화마을, #명소'
+    );
+  });
+
+  it('onPressCard 가 없으면 카드는 여전히 버튼이 아니고, 하트만 버튼이다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} spotsLane={SPOTS_LANE} />);
+
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => String(node.props.testID));
+    expect(buttonIds).toEqual(
+      expect.arrayContaining(['home-spot-save-poi-a', 'home-spot-save-poi-b'])
+    );
+    expect(buttonIds).not.toContain('home-spot-card-0');
+    expect(buttonIds).not.toContain('home-spot-card-1');
   });
 });

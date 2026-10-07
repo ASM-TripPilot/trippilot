@@ -385,3 +385,52 @@ describe('🔴 H-10·H-11 (5-b W7) — 담기·취소를 한 번 더 반복해�
     expectAtRest(faces[0]);
   });
 });
+
+// TRIP-1281 — 하트의 스크린리더 이름은 "{대상 이름} 저장" 한 가지다. 이름은 소비처가 `name` 으로 넣고
+// (shared 는 도메인을 모른다), 비었거나 공백뿐이면 "담기" 로 물러선다. 담김은 라벨이 아니라 selected 로만.
+describe('하트 접근성 라벨 — 이름 주입·폴백', () => {
+  const A11Y_ROOT = 'heart-a11y';
+
+  function namedHeart(saved: boolean, name?: string) {
+    return (
+      <HeartButton
+        saved={saved}
+        name={name}
+        onPress={() => {}}
+        testID={A11Y_ROOT}
+        filledTestID={`${A11Y_ROOT}-filled`}
+        outlineTestID={`${A11Y_ROOT}-outline`}
+      />
+    );
+  }
+
+  it.each([false, true])(
+    '이름을 주면 담김=%s 여도 라벨은 "감천문화마을 저장" 하나다',
+    (saved) => {
+      render(namedHeart(saved, '감천문화마을'));
+
+      const root = screen.getByTestId(A11Y_ROOT);
+      expect(root).toHaveAccessibleName('감천문화마을 저장');
+      expect(screen.getByLabelText('감천문화마을 저장').props.testID).toBe(
+        A11Y_ROOT
+      );
+      if (saved) expect(root).toBeSelected();
+      else expect(root).not.toBeSelected();
+    }
+  );
+
+  it('이름을 안 주면 "담기" 로 읽힌다', () => {
+    render(namedHeart(false));
+
+    expect(screen.getByTestId(A11Y_ROOT)).toHaveAccessibleName('담기');
+  });
+
+  it.each([[''], ['   ']])(
+    '이름이 비었거나 공백뿐이면(%j) " 저장" 이 아니라 "담기" 로 읽힌다',
+    (name) => {
+      render(namedHeart(true, name));
+
+      expect(screen.getByTestId(A11Y_ROOT)).toHaveAccessibleName('담기');
+    }
+  );
+});
