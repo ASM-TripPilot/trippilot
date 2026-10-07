@@ -563,6 +563,10 @@ export function StayRegisterScreen({
 
         <ScrollView
           className="flex-1"
+          // TRIP-1280 — 내용이 화면보다 짧으면 스크롤 거리가 없어 키보드가 [등록하기]를 덮는다: 키보드 높이만큼
+          // 스크롤 여백(iOS 전용)을 더하고, 키보드가 떠 있어도 첫 탭이 버튼으로 가게 한다.
+          automaticallyAdjustKeyboardInsets
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 32 }}
         >
           <View className="w-full px-lg pt-md">

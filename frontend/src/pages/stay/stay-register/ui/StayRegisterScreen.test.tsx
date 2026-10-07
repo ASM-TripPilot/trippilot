@@ -8,6 +8,8 @@ import type { GeocodeCandidate } from '@/shared/api/index.schemas';
 import type { StayRegisterFlow } from '../model/stayRegisterForm';
 import { StayRegisterScreen } from './StayRegisterScreen';
 import type { MapCenter } from '@/shared/map';
+import { closestAncestor } from '@/test-support/sheetTree';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 /**
  * e05 숙소 등록 — StayRegisterScreen(props 만 받는 뷰) 단위 테스트.
@@ -1122,4 +1124,115 @@ describe('표면 정합 (옛 .surface)', () => {
       expect(screen.getByTestId('stay-register-mapconfirm')).toBeOnTheScreen();
     });
   });
+});
+
+// TRIP-1280 AC-3 — 입력칸에 포커스해 키보드가 뜨면 [등록하기]·[지도에서 위치 확인]이 가려진다(실기
+// smoke/1280_before_register_kb.png). 실제 키보드·스크롤은 jest 사각(6-b iOS)이라 그 동작을 정하는 스크롤
+// prop 과 "입력칸·버튼이 같은 스크롤 안" 을 얼굴마다 잠근다.
+describe('키보드가 떠 있어도 등록 버튼에 닿는다', () => {
+  const CANDIDATE_A: GeocodeCandidate = {
+    name: '해운대 그랜드 호텔',
+    address: '부산 해운대구 우동 1407',
+    lat: 35.1587,
+    lng: 129.1604,
+  };
+
+  const CANDIDATE_B: GeocodeCandidate = {
+    name: '해운대 그랜드 레지던스',
+    address: '부산 해운대구 중동 1124',
+    lat: 35.1601,
+    lng: 129.1652,
+  };
+
+  const IDLE_FLOW: StayRegisterFlow = {
+    activeTab: 'mapsearch',
+    query: '',
+    name: '',
+    searchStatus: 'idle',
+    candidates: [],
+    selectedCandidate: null,
+    coordSource: 'MAP_SEARCH',
+    pinAddressStatus: 'idle',
+    coordConfirmed: false,
+    mapSheetState: 'closed',
+    submitStatus: 'idle',
+    submitAttempted: false,
+  };
+
+  function makeHandlers() {
+    return {
+      onSelectTab: jest.fn(),
+      onChangeQuery: jest.fn(),
+      onChangeName: jest.fn(),
+      onSubmitQuery: jest.fn(),
+      onRetrySearch: jest.fn(),
+      onSelectCandidate: jest.fn(),
+      onPickCoord: jest.fn(),
+      onOpenMapSheet: jest.fn(),
+      onConfirmCoord: jest.fn(),
+      onCloseMapSheet: jest.fn(),
+      onSubmit: jest.fn(),
+    };
+  }
+
+  const isHostScroll = (node: ReactTestInstance): boolean =>
+    String(node.type) === 'RCTScrollView';
+
+  // 입력칸이 있는 세 얼굴 — 키보드를 띄울 수 있는 곳이 이 셋이다.
+  it.each([
+    {
+      face: '지도 검색 · 후보를 골랐고 좌표 미확인',
+      flow: {
+        ...IDLE_FLOW,
+        query: '해운대',
+        searchStatus: 'success',
+        candidates: [CANDIDATE_A, CANDIDATE_B],
+        selectedCandidate: CANDIDATE_A,
+      },
+      inputId: 'stay-register-search-input',
+      buttonIds: ['stay-register-mapconfirm', 'stay-register-submit'],
+    },
+    {
+      face: '지도 검색 실패 · 숙소명 직접 입력',
+      flow: { ...IDLE_FLOW, query: '해운대', searchStatus: 'error' },
+      inputId: 'stay-register-name-input',
+      buttonIds: ['stay-register-submit'],
+    },
+    {
+      face: '핀 지정 · 핀을 찍었고 좌표 미확인',
+      flow: {
+        ...IDLE_FLOW,
+        activeTab: 'pin',
+        coordSource: 'PIN',
+        selectedCandidate: CANDIDATE_A,
+        pinAddressStatus: 'ok',
+      },
+      inputId: 'stay-register-name-input',
+      buttonIds: ['stay-register-mapconfirm', 'stay-register-submit'],
+    },
+  ] satisfies {
+    face: string;
+    flow: StayRegisterFlow;
+    inputId: string;
+    buttonIds: string[];
+  }[])(
+    '$face — 입력칸과 버튼이 한 스크롤 안에 있고, 그 스크롤은 키보드만큼 여백을 더하며 첫 탭을 버튼에 준다',
+    ({ flow, inputId, buttonIds }) => {
+      render(<StayRegisterScreen flow={flow} {...makeHandlers()} />);
+
+      const scroll = closestAncestor(
+        screen.getByTestId('stay-register-submit'),
+        isHostScroll
+      );
+      expect(scroll).not.toBeNull();
+      for (const id of [inputId, ...buttonIds]) {
+        expect(closestAncestor(screen.getByTestId(id), isHostScroll)).toBe(
+          scroll
+        );
+      }
+
+      expect(scroll?.props.automaticallyAdjustKeyboardInsets).toBe(true);
+      expect(scroll?.props.keyboardShouldPersistTaps).toBe('handled');
+    }
+  );
 });

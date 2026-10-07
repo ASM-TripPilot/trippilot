@@ -580,6 +580,9 @@ export function StaySearchScreen({
           // 이름 0건 카드는 검색어를 치는 도중(키보드가 떠 있을 때) 나타난다 — 기본값 never 면 첫 탭이
           // 키보드 닫기에만 쓰여 [검색어 지우기]·[필터 초기화]가 안 눌린다(TRIP-935, RegionPicker 선례).
           keyboardShouldPersistTaps="handled"
+          // TRIP-1280 — 내용 상자가 화면 높이(flexGrow)라 스크롤 거리가 없어 가운데 놓인 0건 카드 버튼이
+          // 키보드에 덮인다. 키보드 높이만큼 스크롤 여백을 더해 닿게 한다(iOS 전용 prop, 키보드 없으면 0).
+          automaticallyAdjustKeyboardInsets
           contentContainerStyle={listContentStyle}
           data={visibleItems}
           keyExtractor={(item) => stayKey(item)}

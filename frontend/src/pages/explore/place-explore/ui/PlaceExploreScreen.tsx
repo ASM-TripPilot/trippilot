@@ -522,6 +522,10 @@ export function PlaceExploreScreen({
           data={places}
           keyExtractor={(place) => place.poiId}
           numColumns={2}
+          // TRIP-1280 — 검색 중(키보드 표시) filter-zero 의 [검색어 지우기]가 키보드에 걸린다: 키보드 높이만큼
+          // 스크롤 여백(iOS 전용)을 더하고, 첫 탭이 키보드 닫기에만 쓰이지 않게 한다(e02 TRIP-935 선례).
+          automaticallyAdjustKeyboardInsets
+          keyboardShouldPersistTaps="handled"
           columnWrapperStyle={{ justifyContent: 'space-between' }}
           contentContainerStyle={{
             paddingHorizontal: 16,

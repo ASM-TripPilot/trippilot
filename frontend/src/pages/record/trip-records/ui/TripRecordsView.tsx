@@ -1,5 +1,11 @@
-import { useState, type ReactElement, type ReactNode } from 'react';
-import { Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import {
+  Keyboard,
+  Pressable,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -156,6 +162,21 @@ export function TripRecordsView({
       sheetTop.value - FAB_GAP - FAB_HEIGHT
     ),
   }));
+  // TRIP-1280 — 메모 입력으로 키보드가 뜨면 gorhom 이 시트를 밀어 올려 칩 줄 아래 멈춘 FAB 이 시트 헤더를
+  // 덮는다. 키보드가 떠 있는 동안만 FAB 을 뺀다(시트 위치로 판정하면 펼침 스냅에서도 숨는다). Android 는
+  // Will* 이벤트가 오지 않아 Did* 도 함께 받는다.
+  const [keyboardShown, setKeyboardShown] = useState(false);
+  useEffect(() => {
+    const show = (): void => setKeyboardShown(true);
+    const hide = (): void => setKeyboardShown(false);
+    const subs = [
+      Keyboard.addListener('keyboardWillShow', show),
+      Keyboard.addListener('keyboardDidShow', show),
+      Keyboard.addListener('keyboardWillHide', hide),
+      Keyboard.addListener('keyboardDidHide', hide),
+    ];
+    return () => subs.forEach((sub) => sub.remove());
+  }, []);
 
   // i01 헤더와 같은 조립(LiveHubView) — 'N곳' 은 시트에 보이는 곳 수(카드 + 계획 행, 01b Q2).
   const header = [
@@ -330,8 +351,9 @@ export function TripRecordsView({
 
       {/* TRIP-1088 「오늘의 회고」 FAB — 시트 윗변 8 위 오른쪽 16 에 붙어 시트를 따라가고, 펼침에선 칩 줄
           아래에서 멈춘다(Figma 4716:2946). 셸 뒤 형제라 셸 안(원점 어긋남)·mapCard(iOS 부모 밖 터치 막힘)가
-          아니다(TRIP-1083). 배치 className 은 안쪽 Pressable 에만 둔다(앵커는 reanimated 컴포넌트). */}
-      {onPressReflection ? (
+          아니다(TRIP-1083). 배치 className 은 안쪽 Pressable 에만 둔다(앵커는 reanimated 컴포넌트).
+          키보드 표시 중엔 트리에서 뺀다(TRIP-1280) — 투명 처리면 보이지 않는 FAB 이 헤더 터치를 가로챈다. */}
+      {onPressReflection && !keyboardShown ? (
         <Animated.View
           testID="record-trip-reflection-fab-anchor"
           pointerEvents="box-none"
