@@ -205,9 +205,11 @@ describe('default 프레젠테이션', () => {
     it('D2 · 취향이 온보딩 상속이면 기존 default 부제 그대로다', () => {
       render(<TripWizardStep1Screen {...filledProps()} />);
 
+      // TRIP-1284: "수 있어요" 사이는 줄바꿈 방지 공백(U+00A0). getByText 는 이 공백을 일반 공백으로 접어
+      // 비교하므로 여기선 구분하지 못한다 — 구분은 「부제 줄바꿈」 describe 가 원문으로 한다.
       expect(
         screen.getByText(
-          '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'
+          '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'
         )
       ).toBeOnTheScreen();
     });
@@ -1347,6 +1349,58 @@ describe('요약 5행 2톤', () => {
 
       expect(root()).toHaveTextContent(/여행 정보를 불러오는 중/);
       expect(root()).not.toHaveTextContent(/여행지와 기간만 정하면/);
+    });
+  });
+
+  // TRIP-1284 — 부제 끝 "요" 한 글자가 홀로 다음 줄로 떨어지던 문제(iOS 실기). 줄바꿈 자체는 jest 가
+  // 못 본다 — 여기서는 줄바꿈을 막는 두 재료(어절 단위 줄바꿈 prop · 마지막 어절 묶음 공백)만 굳힌다.
+  describe('부제 줄바꿈 — 어절 단위 줄바꿈 + 마지막 어절 묶음', () => {
+    const NBSP = ' '; // 줄바꿈 방지 공백 — 보기엔 띄어쓰기, 이 자리에선 줄이 안 갈린다.
+    const EMPTY_FACE = {
+      summaryDestinations: null,
+      summaryPeriod: null,
+    } as const;
+
+    function subtitle() {
+      return screen.getByTestId('trip-wizard-step1-subtitle');
+    }
+
+    it.each([
+      ['빈 얼굴', EMPTY_FACE],
+      ['온보딩 상속 얼굴', {}],
+      ['기본 얼굴', { summaryPreferences: PREF_OFF }],
+    ] as const)(
+      '%s 부제는 한글을 어절 단위로 줄바꿈한다 (lineBreakStrategyIOS="hangul-word")',
+      (_face, over) => {
+        render(<TripWizardStep1Screen {...props(over)} />);
+
+        expect(subtitle().props.lineBreakStrategyIOS).toBe('hangul-word');
+      }
+    );
+
+    // 원문(children)을 === 로 본다 — getByText·toHaveTextContent 는 U+00A0 을 일반 공백으로 접는다(02a §5).
+    it('빈 얼굴 부제는 마지막 두 어절 "수 있어요" 를 줄바꿈 방지 공백으로 잇는다', () => {
+      render(<TripWizardStep1Screen {...props(EMPTY_FACE)} />);
+
+      expect(subtitle().props.children).toBe(
+        `여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수${NBSP}있어요`
+      );
+    });
+
+    it('온보딩 상속 부제는 마지막 두 어절 "수 있어요" 를 줄바꿈 방지 공백으로 잇는다', () => {
+      render(<TripWizardStep1Screen {...props()} />);
+
+      expect(subtitle().props.children).toBe(
+        `온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수${NBSP}있어요`
+      );
+    });
+
+    it('기본 부제는 지금 문구 그대로다 — 일반 공백만, 묶음 공백 없음 (무회귀)', () => {
+      render(
+        <TripWizardStep1Screen {...props({ summaryPreferences: PREF_OFF })} />
+      );
+
+      expect(subtitle().props.children).toBe('행을 누르면 바꿀 수 있어요');
     });
   });
 
