@@ -1429,8 +1429,16 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
 ];
 
 // h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음) 순서, Figma 4682:2573.
-function renderH06DeleteList({ menuOpen }: { menuOpen: boolean }) {
-  const [done, , draft] = MY_TRIPS_PREVIEW_VMS;
+// TRIP-1271 · `generating` — 생성 중 '제주 여행'에도 ⋯ 를 연다(결정 1=A, 세션이 돌아도 작성중이면 삭제 가능).
+function renderH06DeleteList({
+  menuOpen,
+  generating = false,
+}: {
+  menuOpen: boolean;
+  generating?: boolean;
+}) {
+  const [done, generatingVm, draftVm] = MY_TRIPS_PREVIEW_VMS;
+  const draft = generating ? generatingVm : draftVm;
   return (
     <MyTripsListScreen
       mode="list"
@@ -5482,6 +5490,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'h06 · 내 여행 삭제 메뉴',
     login: null,
     render: () => renderH06DeleteList({ menuOpen: true }),
+  },
+  {
+    key: 'h06-my-trips-generating-menu',
+    band: 'h',
+    label: 'h06 · 내 여행 생성 중 카드 삭제 메뉴',
+    login: null,
+    render: () => renderH06DeleteList({ menuOpen: true, generating: true }),
   },
   {
     key: 'h06-my-trips-delete-confirm',

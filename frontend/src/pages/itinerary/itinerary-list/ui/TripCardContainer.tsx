@@ -18,7 +18,6 @@ import {
   resolveItineraryDestination,
 } from '@/features/itinerary';
 import { deriveTripCardFace } from '../model/tripCardFace';
-import { isGenerationRunning } from '@/features/itinerary';
 import { MyTripCard, type MyTripBadge, type MyTripCardVM } from './MyTripCard';
 
 /**
@@ -126,12 +125,9 @@ export function TripCardContainer({
   });
 
   // TRIP-1055 · 삭제 진입점(UX 사본 — 판정 정본은 서버 BR-U1-57, 상태 가드 TRIP-1061 전까진 이게 유일한
-  // 방어). 보이는 배지가 '작성중'이고(Q3 — 날짜 지난 초안 포함) 진행 중 생성 세션이 없을 때만(Q1·Q2).
+  // 방어). 보이는 배지가 '작성중'이면(Q3 — 날짜 지난 초안 포함) 생성 세션이 돌아도 연다(TRIP-1271 결정 1=A).
   // 배지가 null 인 "모른다"(조회 중·404 아닌 실패)는 draft 가 아니라 닫힌 쪽으로 빠진다.
-  const deletable =
-    onPressDelete !== undefined &&
-    badge === 'draft' &&
-    !isGenerationRunning(itinerary.data);
+  const deletable = onPressDelete !== undefined && badge === 'draft';
 
   return (
     <MyTripCard
