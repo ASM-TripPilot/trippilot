@@ -23,6 +23,8 @@ import type {
   VisitCheckList,
 } from '@/shared/api/index.schemas';
 import {
+  getGetTripsTripIdItineraryQueryKey,
+  getGetTripsTripIdQueryKey,
   getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey,
   getGetTripsTripIdTriggersQueryKey,
   getGetTripsTripIdVisitsDaysDayQueryKey,
@@ -37,7 +39,7 @@ import { LiveItineraryPage } from './LiveItineraryPage';
  *
  * 공용 장치(파일 맨 위 한 벌):
  *  - `jest.mock` 은 파일 전체에 걸린다 — 목은 하나만 두고 관점마다 다른 값은 가변 목(`mockCanGoBack` 등)으로 바꾼다.
- *  - expo-router 목은 넓은 모양(push·replace·navigate·back·setParams·canGoBack)이다. 관점마다 옛 목이 좁았던
+ *  - expo-router 목은 넓은 모양(push·replace·navigate·back·setParams·canGoBack·dismissTo)이다. 관점마다 옛 목이 좁았던
  *    곳은 그 describe 의 `afterEach` 가 **옛 목에 없던 메서드가 불리지 않았다**를 단언한다 — 옛 좁은 목은 그런
  *    호출을 TypeError 로 red 냈다(넓힌 목이 그 그물을 조용히 지우지 않게).
  *  - `canGoBack`·`back` 이 없으면 허브 뒤로가기 press 가 `canGoBack is not a function` 으로 거짓 red 다.
@@ -68,6 +70,7 @@ const mockNavigate = jest.fn();
 const mockBack = jest.fn();
 const mockSetParams = jest.fn();
 const mockCanGoBack = jest.fn(() => true);
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
   router: {
     push: (...args: unknown[]) => mockPush(...args),
@@ -76,6 +79,7 @@ jest.mock('expo-router', () => ({
     back: (...args: unknown[]) => mockBack(...args),
     setParams: (...args: unknown[]) => mockSetParams(...args),
     canGoBack: () => mockCanGoBack(),
+    dismissTo: (...args: unknown[]) => mockDismissTo(...args),
   },
 }));
 
@@ -140,6 +144,7 @@ afterEach(() => {
     mockBack,
     mockSetParams,
     mockCanGoBack,
+    mockDismissTo,
     mockPick,
     mockResolveUri,
     mockGetForeground,
@@ -362,6 +367,219 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       );
       // 404 는 네트워크 오류 얼굴로 새지 않는다(가드 대상).
       expect(screen.queryByTestId('execution-live-error')).toBeNull();
+    });
+
+    // TRIP-1278 — 없는 여행(trip 404)과 일정 없는 여행(일정 404)을 가르고, 두 얼굴 모두 탈출 버튼을 둔다.
+    describe('여행 없음 vs 일정 없음 — 막다른 얼굴 탈출', () => {
+      const tripStatus = (status: number) =>
+        http.get(
+          `${BASE}/trips/:tripId`,
+          () => new HttpResponse(null, { status })
+        );
+      const itineraryStatus = (status: number) =>
+        http.get(
+          `${BASE}/trips/:tripId/itinerary`,
+          () => new HttpResponse(null, { status })
+        );
+
+      /** push 인자(문자열 또는 `{ pathname, params }`)를 실제 목적지 경로로 편다 — 표기법은 보지 않는다. */
+      function hrefToPath(href: unknown): string {
+        if (typeof href === 'string') return href;
+        const { pathname, params = {} } = href as {
+          pathname: string;
+          params?: Record<string, string>;
+        };
+        return pathname.replace(
+          /\[(\w+)\]/g,
+          (_whole, key: string) => params[key] ?? `[${key}]`
+        );
+      }
+
+      let releaseTrip: (() => void) | undefined;
+      afterEach(() => {
+        releaseTrip?.();
+        releaseTrip = undefined;
+      });
+
+      async function renderTripGone(): Promise<ReactTestInstance> {
+        server.use(tripStatus(404), itineraryStatus(404));
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        return waitFor(() =>
+          screen.getByTestId('execution-live-trip-notfound')
+        );
+      }
+
+      async function renderNoItinerary(): Promise<ReactTestInstance> {
+        server.use(tripHandler(), itineraryStatus(404));
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        return waitFor(() => screen.getByTestId('execution-live-notfound'));
+      }
+
+      it('I4a 여행이 없으면(trip 404) "페이지를 찾을 수 없어요" + [홈으로]를 주고, 일정 없음·오류로 말하지 않는다 (AC-1·AC-4 · INV-4)', async () => {
+        const face = await renderTripGone();
+
+        expect(within(face).getByText('페이지를 찾을 수 없어요')).toBeTruthy();
+        expect(
+          within(face).getByTestId('execution-live-notfound-home')
+        ).toHaveTextContent('홈으로');
+        expect(
+          within(face).getAllByRole('button').length
+        ).toBeGreaterThanOrEqual(1);
+        expect(screen.queryByTestId('execution-live-notfound')).toBeNull();
+        expect(screen.queryByText('아직 일정이 없어요')).toBeNull();
+        expect(screen.queryByTestId('execution-live-error')).toBeNull();
+      });
+
+      it('I4b [홈으로]는 router.dismissTo("/(tabs)") 정확히 1회 — push·replace·back 은 0회 (AC-2)', async () => {
+        await renderTripGone();
+
+        fireEvent.press(screen.getByTestId('execution-live-notfound-home'));
+
+        expect(mockDismissTo).toHaveBeenCalledTimes(1);
+        expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+        expectNotCalled(mockPush, mockReplace, mockBack);
+      });
+
+      it('I4c 여행은 있고 일정만 없으면 "아직 일정이 없어요" + [일정 만들기](filled)·[뒤로](outline) 두 버튼 (AC-3·AC-4)', async () => {
+        const face = await renderNoItinerary();
+
+        expect(within(face).getByText('아직 일정이 없어요')).toBeTruthy();
+        const create = within(face).getByTestId(
+          'execution-live-notfound-create'
+        );
+        const back = within(face).getByTestId('execution-live-notfound-back');
+        expect(create).toHaveTextContent('일정 만들기');
+        expect(back).toHaveTextContent('뒤로');
+        expect(String(create.props.className).split(/\s+/)).toContain(
+          'bg-primary'
+        );
+        const backTokens = String(back.props.className).split(/\s+/);
+        expect(backTokens).toContain('border');
+        expect(backTokens).not.toContain('bg-primary');
+        expect(screen.queryByTestId('execution-live-trip-notfound')).toBeNull();
+      });
+
+      it('I4d [일정 만들기]는 방식 선택 /trips/{tripId}/itinerary/method 로 push 1회 (AC-3 · ItineraryPlanPage goCreate 와 같은 목적지)', async () => {
+        await renderNoItinerary();
+
+        fireEvent.press(screen.getByTestId('execution-live-notfound-create'));
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(hrefToPath(mockPush.mock.calls[0][0])).toBe(
+          `/trips/${TRIP_ID}/itinerary/method`
+        );
+        expectNotCalled(mockReplace, mockBack, mockDismissTo);
+      });
+
+      it.each([
+        ['히스토리가 있으면 router.back() 1회', true],
+        ['히스토리가 없으면(딥링크 직행) /(tabs) 로 replace 1회', false],
+      ])(
+        'I4e [뒤로]는 허브 헤더 ‹ 와 같은 사다리 — %s (AC-3)',
+        async (_label, canGoBack) => {
+          mockCanGoBack.mockReturnValue(canGoBack);
+          await renderNoItinerary();
+
+          fireEvent.press(screen.getByTestId('execution-live-notfound-back'));
+
+          if (canGoBack) {
+            expect(mockBack).toHaveBeenCalledTimes(1);
+            expect(mockReplace).not.toHaveBeenCalled();
+          } else {
+            expect(mockReplace).toHaveBeenCalledTimes(1);
+            expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+            expect(mockBack).not.toHaveBeenCalled();
+          }
+          expectNotCalled(mockPush, mockDismissTo);
+        }
+      );
+
+      it.each([
+        ['여행이 있으면 일정 없음 얼굴', 200, 'execution-live-notfound'],
+        ['여행도 없으면 404 얼굴', 404, 'execution-live-trip-notfound'],
+      ])(
+        'I4f 일정 404 가 먼저 와도 여행 조회를 기다리는 동안은 로딩 얼굴이고, 응답 뒤 %s (AC-5)',
+        async (_label, tripResponse, face) => {
+          const tripGate = new Promise<void>((resolve) => {
+            releaseTrip = resolve;
+          });
+          server.use(
+            itineraryStatus(404),
+            http.get(`${BASE}/trips/:tripId`, async () => {
+              await tripGate;
+              return tripResponse === 200
+                ? HttpResponse.json(trip())
+                : new HttpResponse(null, { status: tripResponse });
+            })
+          );
+          const client = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          });
+          render(
+            <QueryClientProvider client={client}>
+              <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
+            </QueryClientProvider>
+          );
+
+          // 앵커: 일정 404 는 이미 도착했고 trip 은 아직 대기다 — 아래 부재 단언이 공허하지 않게.
+          await waitFor(() =>
+            expect(
+              client.getQueryState(getGetTripsTripIdItineraryQueryKey(TRIP_ID))
+                ?.status
+            ).toBe('error')
+          );
+          await settle();
+          expect(
+            client.getQueryState(getGetTripsTripIdQueryKey(TRIP_ID))?.status
+          ).toBe('pending');
+          expect(screen.getByTestId('execution-live-loading')).toBeTruthy();
+          expect(screen.queryByTestId('execution-live-notfound')).toBeNull();
+          expect(
+            screen.queryByTestId('execution-live-notfound-create')
+          ).toBeNull();
+          expect(
+            screen.queryByTestId('execution-live-trip-notfound')
+          ).toBeNull();
+
+          await act(async () => {
+            releaseTrip?.();
+          });
+
+          await waitFor(() => expect(screen.getByTestId(face)).toBeTruthy());
+          expect(screen.queryByTestId('execution-live-loading')).toBeNull();
+        }
+      );
+
+      it('I4g 여행 조회가 5xx 이고 일정이 있으면 허브를 그대로 연다 — trip 실패는 판정에 넣지 않는다 (AC-6)', async () => {
+        server.use(itineraryOk(), tripStatus(500), visitsHandler());
+
+        await renderActive();
+
+        expect(screen.queryByTestId('execution-live-trip-notfound')).toBeNull();
+        expect(screen.queryByTestId('execution-live-error')).toBeNull();
+      });
+
+      it('I4h 여행 조회가 5xx 이고 일정이 404 면 일정 없음 얼굴(버튼 ≥1) — 로딩에 갇히거나 여행 없음·오류로 바뀌지 않는다 (AC-6·AC-4)', async () => {
+        server.use(itineraryStatus(404), tripStatus(500));
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+
+        const face = await waitFor(() =>
+          screen.getByTestId('execution-live-notfound')
+        );
+
+        expect(
+          within(face).getAllByRole('button').length
+        ).toBeGreaterThanOrEqual(1);
+        expect(screen.queryByTestId('execution-live-trip-notfound')).toBeNull();
+        expect(screen.queryByTestId('execution-live-error')).toBeNull();
+        expect(screen.queryByTestId('execution-live-loading')).toBeNull();
+      });
     });
 
     it('I5 뒤로가기 — 히스토리가 있으면 router.back() 한 번, replace 는 없다', async () => {
