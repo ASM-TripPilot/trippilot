@@ -216,7 +216,7 @@ describe('🔴 V3 · AC-4 — 커넥터는 행 N-1 개, 다음 행의 거리를 
     ]);
   });
 
-  it('다음 행 거리가 null 이면 그 커넥터는 줄만 남고 문구 칸이 없다(TRIP-1054)', () => {
+  it('다음 행 거리가 null 이면 그 커넥터는 거리 칸 대신 "거리 정보 없음"이다(TRIP-1274 — 옛 TRIP-1054 "줄만")', () => {
     renderView({
       slots: SLOTS.map((slot) =>
         slot.slotKey === 's5' ? { ...slot, distanceRange: null } : slot
@@ -229,12 +229,16 @@ describe('🔴 V3 · AC-4 — 커넥터는 행 N-1 개, 다음 행의 거리를 
       '3.2km',
       '600m',
     ]);
-    // 줄 자체는 행 N-1 = 4개 그대로 — s5 줄도 남는다.
+    // 줄 자체는 행 N-1 = 4개 그대로 — s5 줄도 남는다. 뿌리만 세려면 거리·모름 칸 둘 다 뺀다(02a ★1).
     expect(
-      screen.queryAllByTestId(/^sheet-connector-(?!distance-)/)
+      screen.queryAllByTestId(/^sheet-connector-(?!distance-|unknown-)/)
     ).toHaveLength(4);
     expect(screen.getByTestId('sheet-connector-s5')).toBeOnTheScreen();
     expect(screen.queryByTestId('sheet-connector-distance-s5')).toBeNull();
+    // 위젯 전체 적용(Seed Q2) — Plan-B 화면도 모른다고 말한다.
+    expect(screen.getByTestId('sheet-connector-unknown-s5')).toHaveTextContent(
+      '거리 정보 없음'
+    );
     // 옛 거짓 신호 "계산 중" 0(QA #038).
     expect(screen.queryByText(/이동 거리 계산 중/)).toBeNull();
   });

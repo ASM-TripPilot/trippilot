@@ -699,9 +699,9 @@ describe('🔴 P14 · 5-b 경고-2 — 원 일정에서 이웃하지 않는 두 
       '광안리 해변',
       '전포 카페거리',
     ]);
-    // 커넥터 뿌리(거리 leaf 제외)가 하나 — 광안리→전포 사이엔 아이콘도 글자도 없다.
+    // 커넥터 뿌리(거리·모름 leaf 제외 — TRIP-1274)가 하나 — 광안리→전포 사이엔 아이콘도 글자도 없다.
     expect(
-      screen.queryAllByTestId(/^sheet-connector-(?!distance-)/)
+      screen.queryAllByTestId(/^sheet-connector-(?!distance-|unknown-)/)
     ).toHaveLength(1);
     expect(textsOf(/^sheet-connector-distance-/)).toEqual(['1.4km']);
     expect(screen.queryByText('600m')).toBeNull();

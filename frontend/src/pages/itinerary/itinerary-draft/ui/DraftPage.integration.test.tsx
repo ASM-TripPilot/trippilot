@@ -1789,7 +1789,7 @@ describe('h08 셸 기본 얼굴', () => {
   });
 
   describe('🔴 A5b · TRIP-1110 AC-5·AC-6 — h08 헤더 meta 는 커넥터 구간(slice(1))만 보고, 하나라도 비면 km 를 접는다', () => {
-    it('A5b-1 · 커넥터 구간에 null 이 섞이면 meta 는 정확히 "3곳"이고 null 커넥터는 글리프 줄만 남는다', async () => {
+    it('A5b-1 · 커넥터 구간에 null 이 섞이면 meta 는 정확히 "3곳"이고 null 커넥터는 거리 칸 대신 "거리 정보 없음"이다', async () => {
       // 준비 — a→b 구간 2.1km, b→c 구간 null(교체 뒤 재산출 전). 옛 스킵 규약이면 "3곳 · 2.1km"(부분합).
       itineraryHandler = () =>
         HttpResponse.json(completeWithRanges([null, '2.1km', null]));
@@ -1800,7 +1800,7 @@ describe('h08 셸 기본 얼굴', () => {
       const meta = screen.getByTestId('sheet-header-meta');
       expect(meta).toHaveTextContent('3곳'); // 문자열 인자 = 완전 일치(02a §5)
       expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
-      // 커넥터는 무변경(결정 2=A) — 값 있는 구간은 서버 문자열 그대로, null 구간은 줄만 있고 문구 칸이 없다.
+      // 값 있는 구간은 서버 문자열 그대로, null 구간은 거리 칸이 없고 모름 칸이 있다(TRIP-1274 — 옛 "줄만").
       expect(
         screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
       ).toHaveTextContent('2.1km');
@@ -1810,6 +1810,9 @@ describe('h08 셸 기본 얼굴', () => {
       expect(
         screen.queryByTestId(`sheet-connector-distance-${DAY1}#poi-b`)
       ).toBeNull();
+      expect(
+        screen.getByTestId(`sheet-connector-unknown-${DAY1}#poi-b`)
+      ).toHaveTextContent('거리 정보 없음');
     });
 
     it('A5b-2 · 첫 슬롯(거점→첫 방문지) 거리는 커넥터가 없으니 헤더 합에도 안 들어간다 — "3곳 · 3.5km"', async () => {
@@ -2098,6 +2101,8 @@ describe('폴백·위반 라벨', () => {
     ): Itinerary {
       const it = itinerary(input);
       it.days[0].slots[0].violationReason = QUALITATIVE;
+      // TRIP-1274 — 거리를 아는 슬롯이어야 이동 문구가 "근거 있음"으로 남는다(거리 null 이면 뺀다).
+      it.days[0].slots[0].distanceRange = '약 2.1km · 도보 추정';
       return it;
     }
 
@@ -2123,6 +2128,95 @@ describe('폴백·위반 라벨', () => {
       expect(
         screen.getByTestId(`slot-stopcard-violation-${k('poi-a')}`)
       ).toHaveTextContent(QUALITATIVE);
+    });
+  });
+
+  // TRIP-1274 · AC-8 — "다른 후보"로 먼 곳을 고른 뒤 서버가 바뀐 두 구간 거리를 못 채운(null) GET 모양.
+  describe('🔴 TRIP-1274 · h08 셸 — 교체 뒤 거리 null 구간은 "거리 정보 없음", 그 구간의 이동 빠듯 단정은 숨긴다', () => {
+    const HC2 = '앞 장소에서 이동할 시간이 빠듯해요';
+    const OPENING = '영업시간과 맞지 않아요';
+
+    /**
+     * poi-b 를 교체했다 — 거리는 "직전 → 이 슬롯" 값이라 b·c 가 null(02a ★5). 위반은 도착 슬롯에 붙는다.
+     *  - b: 이동 문구뿐 + 거리 null → 고정 라벨 / c: 이동 + 영업시간 + 거리 null → 영업시간만
+     *  - d: 이동 문구 + 거리 있음 → 그대로(근거 있는 경고는 남는다 — 짝)
+     */
+    function swappedItinerary(): Itinerary {
+      const it = itinerary({ solveMode: 'FULL_AI', isFallback: false });
+      it.days[0].slots = [
+        slot('poi-a', {
+          startAt: '09:30:00',
+          endAt: '10:30:00',
+          distanceRange: '약 0.8km · 도보 추정',
+        }),
+        slot('poi-b', {
+          startAt: '11:00:00',
+          endAt: '12:00:00',
+          distanceRange: null,
+          hasViolation: true,
+          violationReason: HC2,
+        }),
+        slot('poi-c', {
+          startAt: '13:00:00',
+          endAt: '14:00:00',
+          distanceRange: null,
+          hasViolation: true,
+          violationReason: `${HC2} · ${OPENING}`,
+        }),
+        slot('poi-d', {
+          startAt: '15:00:00',
+          endAt: '16:00:00',
+          distanceRange: '약 2.1km · 도보 추정',
+          hasViolation: true,
+          violationReason: HC2,
+        }),
+      ];
+      return it;
+    }
+
+    it('null 커넥터 2개는 "거리 정보 없음", 값 있는 커넥터는 원문, 근거 없는 카드엔 빠듯 0건, 헤더 km 없음', async () => {
+      itineraryScript = swappedItinerary;
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 커넥터 — 윗 카드 slotKey 에 붙고 값은 아래 슬롯 것(a→b null, b→c null, c→d 값).
+      for (const poiId of ['poi-a', 'poi-b']) {
+        expect(
+          screen.getByTestId(`sheet-connector-unknown-${k(poiId)}`)
+        ).toHaveTextContent('거리 정보 없음');
+        expect(
+          screen.queryByTestId(`sheet-connector-distance-${k(poiId)}`)
+        ).toBeNull();
+      }
+      expect(
+        screen.getByTestId(`sheet-connector-distance-${k('poi-c')}`)
+      ).toHaveTextContent('약 2.1km · 도보 추정');
+      expect(
+        screen.queryByTestId(`sheet-connector-unknown-${k('poi-c')}`)
+      ).toBeNull();
+
+      // 카드 알약 — 문구 완전 일치가 먼저, 그 뒤 카드 안 빠듯 0건(02a ★8).
+      const cardB = screen.getByTestId(`slot-stopcard-${k('poi-b')}`);
+      expect(
+        within(cardB).getByTestId(`slot-stopcard-violation-${k('poi-b')}`)
+      ).toHaveTextContent(VIOLATION_LABEL);
+      expect(within(cardB).queryAllByText(/빠듯/).length).toBe(0);
+      const cardC = screen.getByTestId(`slot-stopcard-${k('poi-c')}`);
+      expect(
+        within(cardC).getByTestId(`slot-stopcard-violation-${k('poi-c')}`)
+      ).toHaveTextContent(OPENING);
+      expect(within(cardC).queryAllByText(/빠듯/).length).toBe(0);
+      // 짝 — 거리를 아는 d 는 서버 문구 그대로라 화면 전체 빠듯은 정확히 1.
+      expect(
+        screen.getByTestId(`slot-stopcard-violation-${k('poi-d')}`)
+      ).toHaveTextContent(HC2);
+      expect(screen.queryAllByText(/빠듯/).length).toBe(1);
+
+      // 헤더 — 거리 모르는 구간이 있으니 km 합을 접는다(TRIP-1110 무회귀 · 완전 일치).
+      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('4곳');
+      // INV-3 — 소요시간 표기 0.
+      expect(screen.queryAllByText(DURATION_TEXT).length).toBe(0);
     });
   });
 

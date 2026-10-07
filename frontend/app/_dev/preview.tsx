@@ -88,6 +88,7 @@ import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 import { SlotStopCard } from '@/entities/itinerary-slot';
+import { violationNotice } from '@/entities/itinerary-slot';
 import { PastTripRow } from '@/entities/trip';
 import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip';
 import type { PastTripCardVM } from '@/entities/trip';
@@ -749,9 +750,12 @@ function renderH08DraftNoticeShell(options: {
   initialIndex?: number;
   dayCount?: number;
   selectedDayIndex?: number;
+  connectors?: readonly (string | null)[];
+  meta?: string;
 }): ReactElement {
   const { fallback, staleFailed, unplaced, shortfall, initialIndex } = options;
   const slots = options.slots ?? H08_PREVIEW_SLOTS;
+  const connectors = options.connectors ?? H08_PREVIEW_CONNECTORS;
   return (
     <MapSheetShell
       center={{ lat: 35.1532, lng: 129.1188 }}
@@ -768,7 +772,7 @@ function renderH08DraftNoticeShell(options: {
           title={fallback ? '기본 일정' : 'AI 추천안'}
           dayLabel="1일차"
           dateLabel="6월 10일(수)"
-          meta={`${slots.length}곳 · 3.5km`}
+          meta={options.meta ?? `${slots.length}곳 · 3.5km`}
         />
       }
       cta={[
@@ -792,6 +796,7 @@ function renderH08DraftNoticeShell(options: {
               date={H08_PREVIEW_DATE}
               index={index}
               timeLabel={H08_PREVIEW_TIME_LABELS[index % 4]}
+              violation={violationNotice(slot)}
               onPressAlt={noop}
             />,
           ];
@@ -800,7 +805,7 @@ function renderH08DraftNoticeShell(options: {
               <DistanceConnector
                 key={`conn-${slot.poiId}`}
                 slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
-                distanceRange={H08_PREVIEW_CONNECTORS[index % 3]}
+                distanceRange={connectors[index % connectors.length]}
               />
             );
           }
@@ -810,6 +815,32 @@ function renderH08DraftNoticeShell(options: {
     </MapSheetShell>
   );
 }
+
+// TRIP-1274 · 다른 후보로 바꾼 뒤 서버가 바뀐 두 구간 거리를 못 채운(null) GET 모양. 커넥터 i 는
+// slots[i+1] 거리라 [null, null, 값] — 연결선 두 개가 "거리 정보 없음", 이동 문구는 거리를 아는 마지막
+// 카드에만 남는다. 헤더는 실화면처럼 null 이 있으면 km 를 접는다(TRIP-1110).
+const H08_SWAP_UNKNOWN_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  { ...H08_PREVIEW_SLOTS[0], distanceRange: null },
+  {
+    ...H08_PREVIEW_SLOTS[1],
+    distanceRange: null,
+    hasViolation: true,
+    violationReason: '앞 장소에서 이동할 시간이 빠듯해요',
+  },
+  {
+    ...H08_PREVIEW_SLOTS[2],
+    distanceRange: null,
+    hasViolation: true,
+    violationReason:
+      '앞 장소에서 이동할 시간이 빠듯해요 · 영업시간과 맞지 않아요',
+  },
+  {
+    ...H08_PREVIEW_SLOTS[3],
+    distanceRange: '약 2.1km · 도보 추정',
+    hasViolation: true,
+    violationReason: '앞 장소에서 이동할 시간이 빠듯해요',
+  },
+];
 
 // h07 부분 결과 셸 얼굴(TRIP-790) — 진행 카드 칸만 바꿔 3일(기본)·5일·7일 접기(TRIP-1040) 키가 공유한다.
 function renderH07PartialShell(cells: GenerationProgressCell[]): ReactElement {
@@ -5091,6 +5122,23 @@ export const PREVIEW_STATES: PreviewState[] = [
             shortfallCategories: ['SHOPPING', 'NIGHT_VIEW'],
           },
         }),
+      }),
+  },
+  {
+    // TRIP-1274 — 교체 뒤 거리 모름. 연결선 문구와 알약 강등(빠듯 → 일정 확인/다른 사유)을 6-b 로 본다.
+    key: 'h08-draft-swap-unknown-distance',
+    band: 'h',
+    label: 'h08 · 교체 뒤 거리 정보 없음',
+    login: null,
+    render: () =>
+      renderH08DraftNoticeShell({
+        fallback: false,
+        staleFailed: false,
+        slots: H08_SWAP_UNKNOWN_SLOTS,
+        connectors: H08_SWAP_UNKNOWN_SLOTS.slice(1).map(
+          (slot) => slot.distanceRange ?? null
+        ),
+        meta: '4곳',
       }),
   },
   {
