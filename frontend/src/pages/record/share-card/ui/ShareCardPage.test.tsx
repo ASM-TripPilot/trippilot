@@ -9,6 +9,12 @@ import { router } from 'expo-router';
 import type { Trip, TripSummary } from '@/shared/api/index.schemas';
 
 import { useTripSummary } from '@/features/reflection';
+import {
+  centeredInSafeArea,
+  safeAreaAround,
+  safeAreaEdges,
+  safeAreaPaints,
+} from '@/test-support/safeAreaFace';
 import { ShareCardScreen } from './ShareCardScreen';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { ShareCardPage } from './ShareCardPage';
@@ -195,4 +201,67 @@ describe('🔴 TRIP-1071 5-b 경고-1 · 요약 조회 오류는 "미준비"로 
     expect(screen.queryByTestId('reflection-share-save')).toBeNull();
     expect(screen.queryByTestId('reflection-share-export')).toBeNull();
   });
+});
+
+// TRIP-1286 · C-10 · Seed Q4 — 세 얼굴(조회 중·오류·공유 불가)이 StateNotice 를 맨몸으로 반환해 화면 맨 위(상태바 밑)부터
+// 그려졌다: 72px 원이 다이내믹 아일랜드 밑에 반쯤 깔리고 바탕은 내비게이션 기본 회색. 같은 모양 선례(StayRecommendPage·
+// LiveItineraryPage)처럼 SafeArea 안 · 화면을 채우는 가운데 정렬 컨테이너 · 흰 바탕에 선다. 판정은 렌더 트리까지 —
+// 아이콘이 실제로 안 잘리는지·인셋 색은 6-b(진행 중 여행으로 records/share 진입).
+describe('🔴 C-10 · 안내 얼굴은 SafeArea 안 흰 바탕 가운데에 선다 (AC-C1·C2)', () => {
+  function givenPending() {
+    (useGetTripsTripId as jest.Mock).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+    });
+    (useTripSummary as jest.Mock).mockReturnValue({
+      envelope: undefined,
+      summary: undefined,
+      source: undefined,
+      isPending: true,
+      isError: false,
+      refetch: jest.fn(),
+    });
+  }
+
+  function givenError() {
+    givenTrip();
+    (useTripSummary as jest.Mock).mockReturnValue({
+      envelope: undefined,
+      summary: undefined,
+      source: undefined,
+      isPending: false,
+      isError: true,
+      refetch: jest.fn(),
+    });
+  }
+
+  it.each([
+    ['조회 중', 'reflection-share-pending', givenPending],
+    ['오류', 'reflection-share-error', givenError],
+    [
+      '공유 불가',
+      'reflection-share-not-ready',
+      () => {
+        givenTrip();
+        givenSummary(false);
+      },
+    ],
+  ] as const)(
+    '%s 얼굴: SafeArea(위·아래) 안, 가운데 정렬 컨테이너, 인셋까지 bg-canvas',
+    (_face, testID, given) => {
+      given();
+
+      render(<ShareCardPage tripId="trip-1" />);
+
+      const face = screen.getByTestId(testID);
+      const safeArea = safeAreaAround(face);
+      expect(safeArea).not.toBeNull();
+      expect(safeAreaEdges(safeArea!)).toEqual(
+        expect.arrayContaining(['top', 'bottom'])
+      );
+      expect(centeredInSafeArea(face)).toBe(true);
+      expect(safeAreaPaints(face, 'bg-canvas')).toBe(true);
+    }
+  );
 });

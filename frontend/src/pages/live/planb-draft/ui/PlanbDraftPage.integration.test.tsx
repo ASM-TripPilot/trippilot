@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 
@@ -18,7 +24,10 @@ import { PlanbDraftPage } from './PlanbDraftPage';
  *  - 확정 요청 중이면 [적용하기] 잠금, 실패면 같은 안내 자리에 "변경을 반영하지 못했어요"(Q6).
  *  - NO_SOLUTION·FAILED → 같은 뷰의 안내 상태. FAILED 에서 옛 manual?variant=error push 는 없다(E3).
  *    [조건 바꿔 다시 짜기]/[다시 시도] → i04(`/trips/{id}/planb`), [직접 수정] → planb/manual.
- *  - SOLVING·closed·미도착 → 아무것도 안 그린다.
+ *  - SOLVING·closed·미도착 → 아무것도 안 그린다. data 없는 조회 실패만 오류 얼굴(TRIP-1277 AC12).
+ *  - (TRIP-1277) 초안 얼굴의 ‹·스와이프·하드웨어 뒤로는 이탈 확인부터 — [나가기]여야 나가고(확정·취소 0),
+ *    replace·push 같은 앞으로 가는 이동은 가로채지 않는다. 대안 없음·실패 얼굴은 확인 없이 바로 뒤로,
+ *    요청 대기 중엔 뒤로 자체가 잠긴다.
  *
  * ★ 뷰를 스텁하지 않고 실제로 그린다(02a ★6) — 잠금·실패 안내를 렌더 결과로 본다. 시트·지도는
  *   루트 `__mocks__` 통과형 목이 받는다.
@@ -34,14 +43,21 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 const TRIP_ID = 't1';
 const SESSION_ID = 's9';
 
-const mockSession: { data: Record<string, unknown> | undefined } = {
+// TRIP-1277 — `error` 는 data 없는 조회 실패(AC12), `refetch` 는 [다시 시도]가 부를 재조회 seam.
+const mockSession: {
+  data: Record<string, unknown> | undefined;
+  error: boolean;
+} = {
   data: undefined,
+  error: false,
 };
+const mockSessionRefetch = jest.fn();
 jest.mock('../model/useReplanSession', () => ({
   useReplanSession: () => ({
     data: mockSession.data,
-    isPending: mockSession.data === undefined,
-    isError: false,
+    isPending: mockSession.data === undefined && !mockSession.error,
+    isError: mockSession.error,
+    refetch: mockSessionRefetch,
   }),
 }));
 
@@ -104,11 +120,56 @@ jest.mock('../model/useReplanDiff', () => ({
   },
 }));
 
+// TRIP-1277 AC9 — 뒤로 가로채기(`usePreventRemove`)는 네비게이터 안에서만 돈다(실물은 밖에서 throw —
+// ManualPlanPage.integration 선례). 여기선 실물의 판정만 흉내내는 **가짜 네비게이터**를 둔다(02a ★1):
+//  - 화면을 빼려는 액션(‹ 의 back, 스와이프·하드웨어 뒤로, 네비게이터 dispatch)이 오면, 마지막 렌더가 넘긴
+//    가로채기가 켜져 있고 이 액션을 아직 안 물어봤으면 콜백에 `{ data: { action } }` 을 넘기고 멈춘다.
+//  - 꺼져 있거나 이미 물어본 **같은 객체**를 다시 보내면 통과 — `mockExits` 에 한 줄 남는다(= 화면을 나감).
+//    새 객체로 다시 만들어 보내면 또 물어본다(실물의 무한 반복을 그대로 재현).
+type MockNavAction = { type: string; payload?: unknown };
+type MockPreventCallback = (event: { data: { action: MockNavAction } }) => void;
+let mockPrevent:
+  { enabled: boolean; callback: MockPreventCallback } | undefined;
+let mockAsked = new WeakSet<MockNavAction>();
+const mockExits: string[] = [];
+function mockRemove(action: MockNavAction, via: string): void {
+  if (mockPrevent?.enabled === true && !mockAsked.has(action)) {
+    mockAsked.add(action);
+    mockPrevent.callback({ data: { action } });
+    return;
+  }
+  mockExits.push(via);
+}
+const mockUsePreventRemove = jest.fn(
+  (enabled: boolean, callback: MockPreventCallback) => {
+    mockPrevent = { enabled, callback };
+  }
+);
+const mockNavigation = {
+  dispatch: jest.fn((action: MockNavAction) => mockRemove(action, 'dispatch')),
+  addListener: jest.fn(() => () => {}),
+};
+
 const mockPush = jest.fn();
-const mockBack = jest.fn();
+// ‹ 의 `router.back()` 도 실물처럼 가로채기를 거친다 — 켜진 채 부르면 콜백으로 되돌아온다.
+const mockBack = jest.fn(() => mockRemove({ type: 'GO_BACK' }, 'back'));
 const mockReplace = jest.fn();
+// 5-b 차단-1 — 뒤로 갈 화면이 있는가(false = 딥링크 착지). 가짜 back 은 이 값을 보지 않으므로
+// false 케이스는 나감(mockExits)이 아니라 back·replace 호출 수로 판정한다(02a ★14).
+let mockCanGoBack = true;
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    canGoBack: () => mockCanGoBack,
+  }),
+  useNavigation: () => mockNavigation,
+}));
+jest.mock('@react-navigation/native', () => ({
+  usePreventRemove: (enabled: boolean, callback: MockPreventCallback) =>
+    mockUsePreventRemove(enabled, callback),
+  useNavigation: () => mockNavigation,
 }));
 
 function session(
@@ -296,9 +357,17 @@ const MANUAL_HREF = {
 const REQUEST_HREF = `/trips/${TRIP_ID}/planb`;
 
 beforeEach(() => {
+  mockPrevent = undefined;
+  mockAsked = new WeakSet();
+  mockExits.length = 0;
+  mockUsePreventRemove.mockClear();
+  mockNavigation.dispatch.mockClear();
+  mockSession.error = false;
+  mockSessionRefetch.mockClear();
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockCanGoBack = true;
   mockMutate.mockClear();
   mockApply.isPending = false;
   mockApply.isError = false;
@@ -1140,14 +1209,25 @@ describe('🔴 P8 · AC-10 — SOLVING·closed·미도착은 아무것도 그리
   });
 });
 
-describe('🔴 P9 · Q8 — 뒤로가기', () => {
-  it('지도 위 뒤로가기는 router.back 을 1회 부른다', () => {
-    mockSession.data = session('DRAFT');
-    renderPage();
+// TRIP-1277 — 옛 P9("지도 위 ‹ 는 router.back 1회")는 확인 없이 바로 나가는 동작을 굳혀 두었다(결정2 와 충돌).
+// 지우지 않고 "확인 → [나가기] 뒤에 나감 1회"로 바꿨다. 나감은 `mockExits` 로 센다 — ‹ 가 back 을 부르든
+// 가로채기를 거쳐 받은 액션을 다시 보내든 실제로 화면을 빠져나간 횟수만 본다(02a ★1).
+const DRAFT_LEAVE = 'planb-draft-leave-confirm';
+
+describe('🔴 P9 · Q8 · TRIP-1277 AC3·AC4 — 지도 위 뒤로가기는 확인 → [나가기] 뒤에만 나간다', () => {
+  it('‹ 를 눌러도 바로 나가지 않고, [나가기]를 눌러야 1회 나간다 — 확정·세션 시작·push·replace 0', () => {
+    renderDraft();
 
     fireEvent.press(screen.getByTestId('sheet-daychip-back'));
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockExits).toEqual([]);
+
+    fireEvent.press(screen.getByTestId(`${DRAFT_LEAVE}-leave`));
+
+    expect(mockExits).toHaveLength(1);
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });
 
@@ -1247,5 +1327,324 @@ describe('🔴 B4 · AC-B4 · Q5 — 출발 좌표 없는 세션의 지도 중�
     expect(screen.getByTestId('map-root')).toHaveTextContent(
       '37.4979,127.0276'
     );
+  });
+});
+
+// ── TRIP-1277 · 결정2 — 초안 얼굴에서 나갈 땐 "적용 안 하고 나간다"를 한 번 확인받는다 ──────────────────
+// 근거: 01 브리프 AC3·4·5·6·9·10·11·12, 01b Q7~Q13. 다이얼로그 문구는 Seed Q8 확정값(02a §3).
+
+const DRAFT_ERROR = 'planb-draft-error';
+const DRAFT_RETRY = 'planb-draft-retry';
+const LEAVE_TITLE = '재계획안을 적용하지 않고 나갈까요?';
+const LEAVE_BODY =
+  '나가면 이 재계획안은 다시 볼 수 없어요. 원래 일정은 그대로예요';
+
+/** 스와이프·Android 하드웨어 뒤로처럼 네비게이터 쪽에서 "이 화면을 빼려는" 액션을 보낸다(가짜 네비게이터). */
+function attemptRemove(action: MockNavAction): void {
+  act(() => mockRemove(action, 'gesture'));
+}
+
+/** 같은 틱 연타 — 두 누름 사이에 다시 그리기가 없다(state 잠금은 2회, ref 잠금만 1회 — 02a §5 실측). */
+function pressTwiceSameTick(testID: string): void {
+  const target = screen.getByTestId(testID);
+  act(() => {
+    fireEvent.press(target);
+    fireEvent.press(target);
+  });
+}
+
+describe('🔴 TRIP-1277 AC3 · Q7·Q8 — ‹ 는 이탈 확인을 띄우고 아무 데도 가지 않는다', () => {
+  it('L1 누르기 전엔 없고, 누르면 확인(제목·본문·[계속 보기]·[나가기])이 뜬다 — 나감·확정 0, i05 문구 아님', () => {
+    renderDraft();
+    expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+
+    const dialog = screen.getByTestId(DRAFT_LEAVE);
+    expect(within(dialog).getByText(LEAVE_TITLE)).toBeOnTheScreen();
+    expect(within(dialog).getByText(LEAVE_BODY)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${DRAFT_LEAVE}-stay`)).toHaveTextContent(
+      '계속 보기'
+    );
+    expect(screen.getByTestId(`${DRAFT_LEAVE}-leave`)).toHaveTextContent(
+      '나가기'
+    );
+    // 기본값(i05 짜는 중 문구·testID)이 새지 않았다.
+    expect(screen.queryByTestId('planb-solving-leave-confirm')).toBeNull();
+    expect(screen.queryByText('계속 기다리기')).toBeNull();
+    expect(mockExits).toEqual([]);
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+
+  it('L2 [계속 보기]는 확인만 닫는다 — 초안 행은 그대로, 나감·확정·이동 0', () => {
+    renderDraft();
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+
+    fireEvent.press(screen.getByTestId(`${DRAFT_LEAVE}-stay`));
+
+    expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+    expect(screen.queryAllByTestId(SLOT_NAMES)).toHaveLength(4);
+    expect(mockExits).toEqual([]);
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1277 AC9 · Q9 — 스와이프·하드웨어 뒤로도 같은 확인을 거친다', () => {
+  it.each([['GO_BACK'], ['POP']])(
+    'L3 %s 액션이 오면 확인이 뜨고 화면은 그대로다 — [나가기]를 눌러야 1회 나간다',
+    (type) => {
+      renderDraft();
+
+      attemptRemove({ type });
+
+      expect(screen.getByTestId(DRAFT_LEAVE)).toBeOnTheScreen();
+      expect(mockExits).toEqual([]);
+
+      fireEvent.press(screen.getByTestId(`${DRAFT_LEAVE}-leave`));
+
+      expect(mockExits).toHaveLength(1);
+      expect(mockMutate).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([['REPLACE'], ['NAVIGATE'], ['PUSH']])(
+    'L4 %s 액션(적용 성공의 허브 replace·내일 재계획의 solving replace·직접 수정 push)은 확인 없이 받은 그 객체로 통과한다',
+    (type) => {
+      renderDraft();
+      // 앵커 — 이 얼굴은 가로채기가 켜져 있다(뒤로는 확인으로 붙잡힌다). 이게 없으면 아래 통과가 공허하다.
+      attemptRemove({ type: 'GO_BACK' });
+      expect(screen.getByTestId(DRAFT_LEAVE)).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId(`${DRAFT_LEAVE}-stay`));
+      const action = { type, payload: { name: 'next' } };
+
+      attemptRemove(action);
+
+      expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+      expect(mockExits).toHaveLength(1);
+      // 다시 보낼 땐 새로 만들지 않고 받은 객체 그대로(새 객체면 가짜가 다시 물어 무한 반복 — 실물과 같다).
+      for (const [sent] of mockNavigation.dispatch.mock.calls) {
+        expect(sent).toBe(action);
+      }
+    }
+  );
+});
+
+describe('🔴 TRIP-1277 AC10 · Q11 — 잃을 초안이 없는 얼굴은 확인 없이 바로 뒤로', () => {
+  it.each([['NO_SOLUTION'], ['FAILED']])(
+    'L5 %s 에서 ‹ 는 확인 없이 1회 나간다',
+    (status) => {
+      mockSession.data = session(status);
+      renderPage();
+
+      fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+
+      expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+      expect(mockExits).toHaveLength(1);
+    }
+  );
+
+  it.each([['NO_SOLUTION'], ['FAILED']])(
+    'L6 %s 에서 스와이프 뒤로도 확인 없이 1회 나간다',
+    (status) => {
+      mockSession.data = session(status);
+      renderPage();
+
+      attemptRemove({ type: 'GO_BACK' });
+
+      expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+      expect(mockExits).toHaveLength(1);
+    }
+  );
+});
+
+describe('🔴 TRIP-1277 AC11 — 요청 대기 중엔 확인도 이동도 없다(교차 잠금 · 대기 중 언마운트 차단)', () => {
+  it('L7 [적용하기] 대기 중 ‹ — 확인 0 · 나감 0', () => {
+    mockApply.isPending = true;
+    renderDraft();
+
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+
+    expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+    expect(mockExits).toEqual([]);
+  });
+
+  it('L8 [적용하기] 대기 중 스와이프 뒤로 — 가로채서 삼킨다(확인 0 · 나감 0)', () => {
+    mockApply.isPending = true;
+    renderDraft();
+
+    attemptRemove({ type: 'GO_BACK' });
+
+    expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+    expect(mockExits).toEqual([]);
+  });
+
+  it('L9 [적용하기] 대기 중에도 REPLACE(적용 성공의 허브 이동)는 막지 않는다 — 받은 객체로 1회 통과', () => {
+    mockApply.isPending = true;
+    renderDraft();
+    // 앵커 — 같은 상태에서 뒤로는 삼켜진다(L8). 가로채기를 아예 끈 구현이면 여기서 나감 1 이 먼저 생긴다.
+    attemptRemove({ type: 'GO_BACK' });
+    expect(mockExits).toEqual([]);
+    const action = { type: 'REPLACE', payload: { name: 'live' } };
+
+    attemptRemove(action);
+
+    expect(mockExits).toHaveLength(1);
+    for (const [sent] of mockNavigation.dispatch.mock.calls) {
+      expect(sent).toBe(action);
+    }
+  });
+
+  it('L10 [내일 일정 다시 짜기] 대기 중(대안 없음) ‹·스와이프 뒤로 — 나감 0', () => {
+    mockStart.isPending = true;
+    mockSession.data = session('NO_SOLUTION');
+    renderPage();
+
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+    attemptRemove({ type: 'POP' });
+
+    expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+    expect(mockExits).toEqual([]);
+  });
+});
+
+describe('🔴 TRIP-1277 AC12 · Q12 — data 없이 세션 조회가 실패하면 오류 얼굴(재시도 = 재조회)', () => {
+  it('L11 오류 얼굴과 [다시 시도]가 보이고, 누르면 refetch 1회 — 확정·세션 시작·이동 0', () => {
+    mockSession.error = true;
+    renderPage();
+
+    expect(screen.getByTestId(DRAFT_ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(DRAFT_RETRY)).toHaveTextContent('다시 시도');
+    expect(mockSessionRefetch).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId(DRAFT_RETRY));
+
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(1);
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockExits).toEqual([]);
+  });
+});
+
+describe('🔴 TRIP-1277 AC6 · Q13 — 이번에 만든 버튼은 연타해도 한 번만', () => {
+  it('L12 확인의 [나가기] 같은 틱 2연타 — 나감 정확히 1회', () => {
+    renderDraft();
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+
+    pressTwiceSameTick(`${DRAFT_LEAVE}-leave`);
+
+    expect(mockExits).toHaveLength(1);
+  });
+
+  it('L13 오류 얼굴 [다시 시도] 같은 틱 2연타 — 확정·세션 시작(POST) 0', () => {
+    mockSession.error = true;
+    renderPage();
+
+    pressTwiceSameTick(DRAFT_RETRY);
+
+    expect(mockSessionRefetch).toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1277 AC5 · INV-3 — 이탈 확인·오류 얼굴에 소요시간이 없다', () => {
+  it('L14 이탈 확인 — N분·N시간·소요 0(+ 탐지기가 실제 글자를 본다는 앵커)', () => {
+    renderDraft();
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+
+    expect(screen.queryAllByText(/적용하지 않고 나갈까요/)).toHaveLength(1);
+    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
+  });
+
+  it('L15 오류 얼굴 — N분·N시간·소요 0(+ 앵커)', () => {
+    mockSession.error = true;
+    renderPage();
+
+    expect(screen.queryAllByText(/다시 시도/)).toHaveLength(1);
+    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
+  });
+});
+
+// ── TRIP-1277 5-b 차단 수정 루프 — 03b B-1·W-1·W-2 의 심판 공백을 메운다 ─────────────────────────
+// 근거: 01 브리프 AC4·AC6·AC12 · INV-4. 모양은 solving 의 E3·E4·R2 를 옮겼다(02a ★14~16).
+
+const DRAFT_ERROR_LEAVE = 'planb-draft-error-leave';
+const HUB_HREF = `/trips/${TRIP_ID}/live`;
+
+describe('🔴 TRIP-1277 5-b 차단-1 · AC6·AC12 — 초안 오류 얼굴 [나가기]는 서버 호출 없이 한 번 나간다', () => {
+  it('L16 [나가기]가 보이고, 누르면 뒤로 1회 — replace·push·확정·세션 시작·재조회 0', () => {
+    mockSession.error = true;
+    renderPage();
+    expect(screen.getByTestId(DRAFT_ERROR_LEAVE)).toHaveTextContent('나가기');
+
+    fireEvent.press(screen.getByTestId(DRAFT_ERROR_LEAVE));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockExits).toEqual(['back']);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockSessionRefetch).not.toHaveBeenCalled();
+  });
+
+  it('L17 뒤로 갈 곳이 없으면(딥링크 착지) 허브로 replace 1회 — back·확정·세션 시작 0', () => {
+    mockCanGoBack = false;
+    mockSession.error = true;
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(DRAFT_ERROR_LEAVE));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(HUB_HREF);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+
+  it('L18 같은 틱 2연타 — 이동 정확히 1회(back 1 · replace 0)', () => {
+    mockSession.error = true;
+    renderPage();
+
+    pressTwiceSameTick(DRAFT_ERROR_LEAVE);
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1277 5-b 경고-1 · AC12 — 초안을 이미 받았으면 재조회가 실패해도 오류 얼굴로 덮지 않는다', () => {
+  it('L19 DRAFT data + isError 면 오류 얼굴 0 · 초안 행 4 · [적용하기] 그대로 — 재조회·이동 0', () => {
+    mockSession.error = true;
+    renderDraft();
+
+    expect(screen.queryByTestId(DRAFT_ERROR)).toBeNull();
+    expect(screen.queryAllByTestId(SLOT_NAMES)).toHaveLength(4);
+    expect(screen.getByText('적용하기')).toBeOnTheScreen();
+    expect(mockSessionRefetch).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockExits).toEqual([]);
+  });
+});
+
+describe('🔴 TRIP-1277 5-b 경고-2 · AC4 · INV-4 — 이탈 확인 [나가기]도 뒤로 갈 곳이 없으면 허브로', () => {
+  it('L20 딥링크 착지(canGoBack false)에서 ‹ → [나가기] — 허브로 replace 1회 · back·확정·세션 시작 0', () => {
+    mockCanGoBack = false;
+    renderDraft();
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+    expect(screen.getByTestId(DRAFT_LEAVE)).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId(`${DRAFT_LEAVE}-leave`));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(HUB_HREF);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
   });
 });

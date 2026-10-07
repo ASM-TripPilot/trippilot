@@ -21,6 +21,7 @@ import type {
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
+import { safeAreaPaints } from '@/test-support/safeAreaFace';
 import { StayRecommendPage } from './StayRecommendPage';
 
 /**
@@ -539,5 +540,19 @@ describe('🔴 E3 · AC-10 — 안내 얼굴의 탈출구가 실제로 동작한
 
     expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary`);
     expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-1286 · C-15 · Seed Q3 — SafeAreaView 는 인셋만큼 자기 패딩을 두는데 배경이 없어, 안쪽 View 만 흰색이고 위(상태바)·
+// 아래(홈 인디케이터) 띠에 내비게이션 기본 회색(#F2F2F2)이 비쳤다. 판정은 "SafeAreaView 자신 또는 그 바깥이 본문 색을
+// 칠한다"까지(className·style 어느 쪽이든, 02a §3-5). 실제 띠 색은 jest 가 못 본다 — 6-b.
+describe('🔴 C-15 · 빈 얼굴의 SafeArea 가 인셋 영역까지 흰 바탕이다 (AC-S1)', () => {
+  it('stay-recommend-empty 를 감싼 SafeAreaView 가 bg-canvas 를 칠한다', async () => {
+    useServer();
+    renderPage();
+
+    const face = await screen.findByTestId('stay-recommend-empty');
+
+    expect(safeAreaPaints(face, 'bg-canvas')).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SHARE_FORMATS, buildShareCard } from '@/features/reflection';
 import { shareEnabled } from '@/features/reflection';
@@ -31,6 +32,24 @@ const PENDING_ILLUSTRATION = (
   <View className="h-[72px] w-[72px] rounded-full bg-surface-soft" />
 );
 
+/**
+ * 안내 얼굴(조회 중·오류·미준비) 틀 — TRIP-1286 C-10. 맨몸 StateNotice 는 상태바 밑부터 그려져 일러스트가 잘리고
+ * 인셋 띠에 내비게이션 기본 회색이 비쳤다. StayRecommendPage 와 같은 모양으로 SafeArea 안 가운데, 인셋까지 흰 바탕.
+ */
+function NoticeFrame({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <SafeAreaView
+      edges={['top', 'bottom']}
+      style={{ flex: 1 }}
+      className="bg-canvas"
+    >
+      <View className="flex-1 items-center justify-center px-lg">
+        {children}
+      </View>
+    </SafeAreaView>
+  );
+}
+
 export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
   const summary = useTripSummary(tripId);
   const trip = useGetTripsTripId(tripId);
@@ -41,51 +60,57 @@ export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
 
   if (summary.isPending || trip.isPending) {
     return (
-      <StateNotice
-        testID="reflection-share-pending"
-        illustration={PENDING_ILLUSTRATION}
-        title="공유 카드를 준비하고 있어요"
-        description="잠시만 기다려 주세요"
-        actions={[]}
-      />
+      <NoticeFrame>
+        <StateNotice
+          testID="reflection-share-pending"
+          illustration={PENDING_ILLUSTRATION}
+          title="공유 카드를 준비하고 있어요"
+          description="잠시만 기다려 주세요"
+          actions={[]}
+        />
+      </NoticeFrame>
     );
   }
 
   if (summary.isError) {
     return (
-      <StateNotice
-        testID="reflection-share-error"
-        illustration={PENDING_ILLUSTRATION}
-        title="요약을 불러오지 못했어요"
-        description="잠시 후 다시 시도해 주세요"
-        actions={[
-          {
-            testID: 'reflection-share-retry',
-            label: '다시 시도',
-            variant: 'filled',
-            onPress: summary.refetch,
-          },
-        ]}
-      />
+      <NoticeFrame>
+        <StateNotice
+          testID="reflection-share-error"
+          illustration={PENDING_ILLUSTRATION}
+          title="요약을 불러오지 못했어요"
+          description="잠시 후 다시 시도해 주세요"
+          actions={[
+            {
+              testID: 'reflection-share-retry',
+              label: '다시 시도',
+              variant: 'filled',
+              onPress: summary.refetch,
+            },
+          ]}
+        />
+      </NoticeFrame>
     );
   }
 
   if (!summary.envelope || !shareEnabled(summary.envelope)) {
     return (
-      <StateNotice
-        testID="reflection-share-not-ready"
-        illustration={PENDING_ILLUSTRATION}
-        title="여행이 끝나면 만들 수 있어요"
-        description="아직 공유할 여행 기록이 모이지 않았어요"
-        actions={[
-          {
-            testID: 'reflection-share-not-ready-back',
-            label: '돌아가기',
-            variant: 'outline',
-            onPress: handleBack,
-          },
-        ]}
-      />
+      <NoticeFrame>
+        <StateNotice
+          testID="reflection-share-not-ready"
+          illustration={PENDING_ILLUSTRATION}
+          title="여행이 끝나면 만들 수 있어요"
+          description="아직 공유할 여행 기록이 모이지 않았어요"
+          actions={[
+            {
+              testID: 'reflection-share-not-ready-back',
+              label: '돌아가기',
+              variant: 'outline',
+              onPress: handleBack,
+            },
+          ]}
+        />
+      </NoticeFrame>
     );
   }
 

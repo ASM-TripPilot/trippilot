@@ -5,7 +5,8 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 import {
   CAPTION_MAX_LENGTH,
@@ -550,6 +551,36 @@ describe('🔴 TRIP-1071 AC-11 · 편집 한도 — 넘치면 확정되지 않�
     const error = screen.getByTestId('reflection-share-caption-error');
     expect(within(error).getByText(LENGTH_LIMIT_NOTICE)).toBeOnTheScreen();
     expect(screen.queryByText(long)).toBeNull();
+  });
+});
+
+// TRIP-1279 — 캡션 편집 중 키보드가 입력칸을 가리지 않는다(구조 잠금). 실제 밀어올림은 jest 원리적 사각 → 6-b iOS 실기.
+// 바깥 아무 ScrollView 가 아니라 입력칸을 직접 품은 가장 가까운 ScrollView 여야 효과가 난다(02a ★1).
+function nearestScrollView(node: ReactTestInstance): ReactTestInstance | null {
+  for (let p = node.parent; p; p = p.parent)
+    if (p.type === ScrollView) return p;
+  return null;
+}
+
+describe('🔴 캡션 편집 키보드 — 입력칸을 품은 ScrollView 가 키보드 인셋을 맞춘다', () => {
+  it('[편집] 후 입력칸의 가장 가까운 조상 ScrollView 가 automaticallyAdjustKeyboardInsets=true', () => {
+    renderScreen();
+
+    const input = openEditor();
+
+    const scroll = nearestScrollView(input);
+    expect(scroll).not.toBeNull();
+    expect(scroll?.props.automaticallyAdjustKeyboardInsets).toBe(true);
+  });
+
+  it("같은 ScrollView 가 keyboardShouldPersistTaps='handled' — 키보드가 떠 있어도 첫 탭이 [완료]로 간다", () => {
+    renderScreen();
+
+    const input = openEditor();
+
+    expect(nearestScrollView(input)?.props.keyboardShouldPersistTaps).toBe(
+      'handled'
+    );
   });
 });
 

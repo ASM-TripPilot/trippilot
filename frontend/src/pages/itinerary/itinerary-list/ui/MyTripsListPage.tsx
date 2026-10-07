@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
 import { View } from 'react-native';
-import { useNavigation, useRouter } from 'expo-router';
+import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/index.schemas';
@@ -51,7 +57,10 @@ import { TripCardContainer } from './TripCardContainer';
  *
  * TRIP-928 · 완료 도킹 배너 — 여행별 일정(카드 훅과 같은 캐시 키)과 기기에 저장한 "배너로 알린 여행
  * id"(seen)를 모두 읽은 뒤에만 `pickDoneBar` 로 판정한다. 처음 띄울 때 seen 을 한 번 쓰고, 그
- * 마운트 동안은 띄운 여행을 붙잡아 둔다(저장 뒤 사라지지 않게). seen 읽기 실패 = 배너 없음.
+ * 포커스 동안은 띄운 여행을 붙잡아 둔다(저장 뒤 사라지지 않게). seen 읽기 실패 = 배너 없음.
+ * TRIP-1286 · 탭 화면은 탭을 옮겨도 언마운트되지 않으므로 판정·쓰기는 목록이 보일 때(포커스)만 한다 —
+ * 안 보이는 동안 판정하면 본 적 없는 배너가 seen 에 들어간다. 떠나면(blur) 배너와 닫음을 함께 비우고,
+ * 돌아오면 그 사이 쓴 seen 기준으로 새로 완성된 여행만 띄운다.
  * 배너는 list 분기에서 화면의 형제로 붙는다 — 위젯의 `absolute bottom-[108px]` 가 탭 씬 바닥
  * 기준이 되어 BottomTab 위 12px 에 앉는다(Figma 3911:2327).
  */
@@ -75,6 +84,18 @@ export function MyTripsListPage(): ReactElement {
   const [shown, setShown] = useState<Trip | null>(null);
   // TRIP-1241 — 닫음. shown 을 비우면 seen state 가 옛 값이라 pick 이 다시 계산돼 재표시되므로 별도 플래그로 든다.
   const [barDismissed, setBarDismissed] = useState(false);
+  // TRIP-1286 — 목록이 보이는 동안만 판정. 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
+  const [focused, setFocused] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => {
+        setFocused(false);
+        setShown(null);
+        setBarDismissed(false);
+      };
+    }, [])
+  );
 
   // TRIP-1055 · 삭제 — 대상·실패 표시·요청을 페이지가 쥔다(다이얼로그는 카드·스크롤 밖 형제).
   const queryClient = useQueryClient();
@@ -124,13 +145,15 @@ export function MyTripsListPage(): ReactElement {
   const today = seoulDate(new Date());
 
   const pick =
-    shown || seen === null || trips.isPending
+    shown || !focused || seen === null || trips.isPending
       ? null
       : pickDoneBar(entries, seen);
 
   useEffect(() => {
     if (!pick) return;
     setShown(pick.target);
+    // 쓴 값을 상태에도 둔다 — 재포커스 때 옛 seen 으로 판정하면 같은 여행을 또 띄운다.
+    setSeen(pick.seenNext);
     writeIdSet(DONE_BAR_SEEN_KEY, pick.seenNext).catch(() => {});
   }, [pick]);
 

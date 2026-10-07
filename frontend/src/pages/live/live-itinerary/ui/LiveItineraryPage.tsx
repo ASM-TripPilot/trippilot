@@ -224,9 +224,54 @@ export function LiveItineraryPage({
   // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
   const memoAttempt = useRef(0);
 
-  if (state.kind === 'loading') {
+  // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
+  const goBackOrHome = (): void => {
+    if (router.canGoBack()) router.back();
+    else router.replace(HOME_FALLBACK);
+  };
+
+  // TRIP-1278 — 여행 자체가 없으면(trip 404) 일정 판정보다 먼저 가른다. 없는 여행은 일정도 404 라 notFound 가
+  // 이기면 "아직 일정이 없어요"라는 거짓 안내가 뜬다(ItineraryPlanPage 선례). 얼굴은 없는 경로 화면(+not-found)과
+  // 같은 문구 · [홈으로]는 dismissTo — 404 를 스택에 남기지 않는다.
+  if (isNotFound(trip.error)) {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={{ flex: 1 }}
+        className="bg-canvas"
+      >
+        <View className="flex-1 items-center justify-center bg-canvas px-lg">
+          <StateNotice
+            testID="execution-live-trip-notfound"
+            illustration={NEUTRAL_BADGE}
+            title="페이지를 찾을 수 없어요"
+            description="주소가 바뀌었거나 없는 화면이에요"
+            actions={[
+              {
+                testID: 'execution-live-notfound-home',
+                label: '홈으로',
+                variant: 'filled',
+                onPress: () => router.dismissTo(HOME_FALLBACK),
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 일정 404 가 먼저 와도 여행 조회가 아직이면 "일정 없음"으로 단정하지 않는다 — 여행이 없을 수도 있다(AC-5).
+  // 404 는 재시도하지 않아 바로 판정되므로, 한 번이라도 실패한 뒤(5xx 재시도 중)엔 기다리지 않는다(03b 경고 1).
+  if (
+    state.kind === 'loading' ||
+    (state.kind === 'notFound' && trip.isPending && trip.failureCount === 0)
+  ) {
+    return (
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={{ flex: 1 }}
+        className="bg-canvas-alt"
+      >
         <View
           testID="execution-live-loading"
           className="flex-1 bg-canvas-alt"
@@ -237,14 +282,36 @@ export function LiveItineraryPage({
 
   if (state.kind === 'notFound') {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={{ flex: 1 }}
+        className="bg-canvas"
+      >
         <View className="flex-1 items-center justify-center bg-canvas px-lg">
           <StateNotice
             testID="execution-live-notfound"
             illustration={NEUTRAL_BADGE}
             title="아직 일정이 없어요"
             description="이 여행은 아직 일정을 만들지 않았어요"
-            actions={[]}
+            actions={[
+              {
+                testID: 'execution-live-notfound-create',
+                label: '일정 만들기',
+                variant: 'filled',
+                // ItineraryPlanPage goCreate 와 같은 목적지(일정 짜는 방식 고르기).
+                onPress: () =>
+                  router.push({
+                    pathname: '/trips/[tripId]/itinerary/method',
+                    params: { tripId },
+                  }),
+              },
+              {
+                testID: 'execution-live-notfound-back',
+                label: '뒤로',
+                variant: 'outline',
+                onPress: goBackOrHome,
+              },
+            ]}
           />
         </View>
       </SafeAreaView>
@@ -253,7 +320,11 @@ export function LiveItineraryPage({
 
   if (state.kind === 'error') {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={{ flex: 1 }}
+        className="bg-canvas"
+      >
         <View className="flex-1 items-center justify-center bg-canvas px-lg">
           <StateNotice
             testID="execution-live-error"
@@ -444,10 +515,7 @@ export function LiveItineraryPage({
         activeDayIndex={activeDayIndex}
         slots={hubSlots}
         onSelectDay={setSelectedDay}
-        onBack={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace(HOME_FALLBACK);
-        }}
+        onBack={goBackOrHome}
         // 수동 재계획 세션 진입(BR-U4-10) — 라우팅으로만(execution→planb 직접 import 없이).
         // TRIP-1195 — 바라보는 날이 오늘이 아니면 그 날짜를 쿼리로 넘긴다(오늘이면 쿼리 없음 = 종전과 같은 경로).
         // 이미 지난 날은 서버가 409 로 막는 막다른 길이라 진입 자체를 숨긴다(결정 3). 여행 구간 밖이라 보는 날이

@@ -47,6 +47,13 @@ jest.mock('expo-router', () => ({
     navigate: jest.fn(),
   }),
   useNavigation: () => ({ setOptions: jest.fn() }),
+  // TRIP-1286 준비부 확장(단언 무변경) — 완료 배너가 목록이 보일 때만 판정한다(useFocusEffect). 이 파일의 목록은 늘
+  // 보이는 화면이라 마운트하면 바로 포커스 콜백을 돌리는 흉내다. 진짜 훅(useEffect)이라 effect 가 바뀌면 정리→재실행도
+  // 실물과 같다. 포커스를 켜고 끄는 케이스는 MyTripsListPage.hookMock 소관.
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('react').useEffect(() => effect(), [effect]);
+  },
 }));
 
 // 생성 클라이언트의 인증 계층이 @/shared/storage 를 정적으로 문다(expo-secure-store 실물 로드 회피,

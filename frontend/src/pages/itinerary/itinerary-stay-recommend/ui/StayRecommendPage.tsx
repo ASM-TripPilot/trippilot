@@ -64,7 +64,11 @@ export function StayRecommendPage({
 
   if (recommendations === undefined || !hasCandidates) {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={{ flex: 1 }}
+        className="bg-canvas"
+      >
         <View className="flex-1 items-center justify-center bg-canvas px-lg">
           <StateNotice
             testID="stay-recommend-empty"

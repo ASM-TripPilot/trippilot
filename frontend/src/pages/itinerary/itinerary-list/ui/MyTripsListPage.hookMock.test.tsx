@@ -43,6 +43,14 @@ import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 const mockPush = jest.fn();
 // TRIP-1240 — 정렬 시트가 열려 있는 동안 탭바를 숨기려고 페이지가 탭 화면 옵션을 바꾼다(`setOptions`).
 const mockSetOptions = jest.fn();
+/**
+ * TRIP-1286 — 화면 포커스 흉내의 조종판. `setFocus` 가 바꾸고, 파일 최상위 beforeEach 가 "보임"으로 되돌린다(02a ★3).
+ * 리스너는 렌더된 흉내 훅마다 하나(그 컴포넌트의 포커스 상태를 바꾸는 함수).
+ */
+const mockFocus = {
+  focused: true,
+  listeners: new Set<(focused: boolean) => void>(),
+};
 jest.mock('expo-router', () => ({
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   ...require('@/test-support/expoRouterRedirectMock'),
@@ -54,6 +62,21 @@ jest.mock('expo-router', () => ({
     return { push: mockPush, replace: jest.fn(), navigate: jest.fn() };
   },
   useNavigation: () => ({ setOptions: mockSetOptions }),
+  // TRIP-1286 — 실물(`expo-router/build/useFocusEffect.js`)과 같은 뜻의 흉내: 보이면 effect, 안 보이게 되면 effect 가
+  // 돌려준 정리 함수, 다시 보이면 effect 재실행, effect 가 바뀌면 정리→재실행. 포커스를 컴포넌트 상태로 들어서
+  // `setFocus` 가 다시 그리기를 일으킨다. 훅을 부르므로 일찍 return 아래에 두는 실수도 실물처럼 드러난다(02a ★2).
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const React = require('react');
+    const [focused, setFocused] = React.useState(mockFocus.focused);
+    React.useEffect(() => {
+      mockFocus.listeners.add(setFocused);
+      return () => {
+        mockFocus.listeners.delete(setFocused);
+      };
+    }, []);
+    React.useEffect(() => (focused ? effect() : undefined), [focused, effect]);
+  },
 }));
 
 // TRIP-1055 준비부 확장(단언 무변경) — 페이지가 여행 삭제 mutation 을 물게 되어 삭제 훅 무해 스텁을 더한다.
@@ -235,6 +258,9 @@ const B = trip('trip-b', '부산 여행', '2026-08-20T00:00:00.000Z');
 const C = trip('trip-c', '강릉 여행', '2026-08-30T00:00:00.000Z');
 
 beforeEach(() => {
+  // TRIP-1286 — 포커스는 모듈 상태라 앞 테스트가 끈 채로 남기면 다음 테스트로 샌다(파일 최상위 리셋, 02a ★3).
+  mockFocus.focused = true;
+  mockFocus.listeners.clear();
   mockPush.mockClear();
   mockUseGetTrips.mockReset();
   mockUseItinerary.mockReset();
@@ -352,6 +378,135 @@ describe('🔴 TRIP-1241 · 닫기를 누르면 배너가 사라지고 같은 �
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-b/live');
+  });
+});
+
+// ── 포커스 — 목록이 보일 때만 판정·기록, 떠나면 사라짐 ────────────────────
+//
+// TRIP-1286 · B-19 결정1 · Seed Q2 B안 — 탭 화면은 한 번 그려지면 언마운트되지 않아(탭을 옮겨도 살아 있다) 배너가
+// 닫기 전까지 세션 내내 남았다. 이제 "목록을 열어 본 뒤" 사라진다: 목록이 보이는 동안에만 판정하고 seen 을 쓰며,
+// 안 보이게 되면(blur) 숨기고, 다시 보이면 그 사이 새로 완성된 것만 뜬다. 안 보이는 동안 판정하면 본 적 없는 배너가
+// seen 에 들어가 영영 안 뜨므로(Q2 A안의 유실 구멍) 판정 자체를 미룬다. 실제 탭 전환에서 사라지는지는 6-b.
+
+/** 화면 포커스를 바꾸고 비동기를 흘려보낸다. */
+async function setFocus(focused: boolean): Promise<void> {
+  mockFocus.focused = focused;
+  await act(async () => {
+    mockFocus.listeners.forEach((listener) => listener(focused));
+  });
+  await settle();
+}
+
+describe('🔴 포커스 · 목록을 떠나면 배너가 사라지고, 돌아와도 같은 여행은 다시 안 뜬다 (AC-B1·B2)', () => {
+  it('F1 보임(배너 A·쓰기 1) → 떠남(배너 없음) → 돌아옴(배너 없음 · 추가 쓰기 없음)', async () => {
+    scriptTrips([A], { 'trip-a': DONE });
+
+    renderPage();
+    await settle();
+    // 앵커 — 보이는 동안엔 종전처럼 뜨고 한 번 쓴다.
+    expect(screen.getByTestId('generation-done-bar')).toBeOnTheScreen();
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
+
+    await setFocus(false);
+    expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+
+    await setFocus(true);
+    expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+    // ★5 — 메모리 seen 이 옛 값이면 여기서 A 를 또 띄우고 또 쓴다.
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 포커스 · 안 보이는 동안엔 판정도 기록도 하지 않는다 (AC-B4)', () => {
+  it('F2 안 보이는 채로 그려지면 배너·쓰기 0 → 보이게 되면 그때 A 를 띄우고 1번 쓴다', async () => {
+    mockFocus.focused = false;
+    scriptTrips([A], { 'trip-a': DONE });
+
+    renderPage();
+    await settle();
+    expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen(); // 긍정 앵커
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+    expect(mockWriteIdSet).not.toHaveBeenCalled();
+
+    await setFocus(true);
+    expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+      '제주 여행 일정이 완성됐어요'
+    );
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
+    expect(writtenIds()).toContain('trip-a');
+  });
+
+  it('F3 보일 때 일정이 안 왔고, 떠나 있는 사이 도착하면 그때는 판정하지 않는다 → 돌아오면 뜬다', async () => {
+    const d = deferred();
+    scriptTrips([A], { 'trip-a': { kind: 'deferred', d } });
+
+    renderPage();
+    await settle();
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull(); // 재료 부족(보류)
+
+    await setFocus(false);
+    await act(async () => {
+      d.resolve(DONE);
+    });
+    await settle();
+    expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+    expect(mockWriteIdSet).not.toHaveBeenCalled();
+
+    await setFocus(true);
+    expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+      '제주 여행 일정이 완성됐어요'
+    );
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 포커스 · 떠나 있는 사이 새로 완성된 여행은 돌아오면 뜬다 (AC-B3)', () => {
+  it('F4 A 를 본 뒤 떠남 → B 완성(안 보이는 동안 배너·쓰기 없음) → 돌아오면 B 배너 · 둘째 쓰기 = A·B', async () => {
+    scriptTrips([A], { 'trip-a': DONE });
+
+    const view = renderPage();
+    await settle();
+    expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+      '제주 여행 일정이 완성됐어요'
+    );
+
+    await setFocus(false);
+    scriptTrips([A, B], { 'trip-a': DONE, 'trip-b': DONE });
+    view.rerender(<MyTripsListPage />);
+    await settle();
+    expect(screen.getByTestId('my-trip-card-trip-b')).toBeOnTheScreen(); // 긍정 앵커
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
+
+    await setFocus(true);
+    expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+      '부산 여행 일정이 완성됐어요'
+    );
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(2);
+    expect(writtenIds(1)).toEqual(['trip-a', 'trip-b']);
+  });
+
+  it('F5 A 를 닫기(✕)로 닫았어도, 떠났다 돌아왔을 때 새로 완성된 B 는 뜬다 (닫음은 그 포커스 동안만)', async () => {
+    scriptTrips([A], { 'trip-a': DONE });
+
+    const view = renderPage();
+    await settle();
+    fireEvent.press(screen.getByTestId('generation-done-bar-close'));
+    await settle();
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+
+    await setFocus(false);
+    scriptTrips([A, B], { 'trip-a': DONE, 'trip-b': DONE });
+    view.rerender(<MyTripsListPage />);
+    await setFocus(true);
+
+    // 문구 완전 일치 — A 가 다시 뜬 것이 아니라 B 다.
+    expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+      '부산 여행 일정이 완성됐어요'
+    );
   });
 });
 

@@ -1286,7 +1286,7 @@ export function HomeScreen({
         <ScrollView
           className="flex-1"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 140 }}
+          contentContainerStyle={{ paddingBottom: 220 }}
         >
           <PhaseBody
             hero={hero}

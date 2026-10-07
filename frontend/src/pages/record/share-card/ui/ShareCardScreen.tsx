@@ -129,8 +129,13 @@ export function ShareCardScreen({
         <Text className="font-noto-bold text-section text-ink">공유 카드</Text>
       </View>
 
+      {/* TRIP-1279 — 캡션 입력칸이 스크롤 맨 아래라 키보드에 가렸다. iOS 는 키보드와 겹친 만큼 아래 여백을 늘리고
+          포커스된 입력칸을 키보드 위로 끌어올린다(automaticallyAdjustKeyboardInsets). 키보드가 떠 있어도 첫 탭이
+          [완료]로 간다(keyboardShouldPersistTaps). jest 는 실제 키보드를 못 본다 — 구조만 잠그고 동작은 실기. */}
       <ScrollView
         className="flex-1"
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
         contentContainerClassName="gap-md px-lg pb-[24px] pt-[8px]"
       >
         <FormatSegment
