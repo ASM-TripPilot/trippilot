@@ -386,3 +386,83 @@ describe('🔴 S13 · 동네 라벨이 서브라인 앞에 붙는다 — 평면�
     }
   );
 });
+
+/**
+ * TRIP-1273(B-14 · 결정 1 · 01b Q2) — 그 밤 지역 숙소가 0곳이면 배선이 안내 문구를 `regionNotice` 로 내리고,
+ * 시트는 그 문구를 섹션들 **위**에 그린다. 문구를 만드는 판정은 시트 밖(`staySheetRegionNotice`)이라
+ * 여기선 문자열을 직접 준다(props-only 유지). 토큰은 같은 시트의 빈 상태 문구와 같다(새 토큰 0).
+ */
+describe('S14 · 그 밤 지역 0곳 안내 문구 슬롯 (AC-B1·B2)', () => {
+  const NOTICE = '부산광역시에 저장한 숙소가 없어요';
+  const OTHER_ONLY = [
+    {
+      key: 'other' as const,
+      title: '다른 지역',
+      candidates: [GWANGALLI, HAEUNDAE, GAMCHEON],
+    },
+  ];
+
+  function classTokens(testID: string): string[] {
+    return String(screen.getByTestId(testID).props.className ?? '').split(
+      /\s+/
+    );
+  }
+
+  it('regionNotice 를 주면 그 문구를 "다른 지역" 섹션보다 위에 빈 상태와 같은 토큰으로 그린다', () => {
+    renderSheet({ sections: OTHER_ONLY, regionNotice: NOTICE });
+
+    // 문자열 인자 = 완전 일치(★6) — 다른 문구가 덧붙으면 red.
+    expect(
+      screen.getByTestId('trip-base-staysheet-region-empty')
+    ).toHaveTextContent(NOTICE);
+    expect(classTokens('trip-base-staysheet-region-empty')).toEqual(
+      expect.arrayContaining(['font-noto', 'text-body', 'text-muted'])
+    );
+    // 트리 순서 = queryAll 결과 순서(02a §5-2 실측) — 안내가 섹션 위.
+    expect(
+      screen
+        .queryAllByTestId(/^trip-base-staysheet-(region-empty|section-other)$/)
+        .map((node) => node.props.testID)
+    ).toEqual([
+      'trip-base-staysheet-region-empty',
+      'trip-base-staysheet-section-other',
+    ]);
+    // 숨기지 않는다 — 다른 지역 카드는 그대로 3장.
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(3);
+  });
+
+  it.each<[string, string | null | undefined]>([
+    ['안 주면', undefined],
+    ['null 이면', null],
+  ])(
+    '짝 · regionNotice 를 %s 안내가 없다 (섹션·카드는 그대로)',
+    (_, notice) => {
+      renderSheet({ sections: OTHER_ONLY, regionNotice: notice });
+
+      // 앵커 — 시트는 그려졌다(통째로 안 그려진 공짜 통과 차단).
+      expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(3);
+      expect(
+        screen.queryByTestId('trip-base-staysheet-region-empty')
+      ).toBeNull();
+    }
+  );
+
+  it('AC-B2 · 안내가 있어도 다른 지역 카드는 고르고 지정할 수 있다 (막지 않음 · 확인 단계 없음)', () => {
+    const props = renderSheet({
+      sections: OTHER_ONLY,
+      regionNotice: NOTICE,
+      selectedSavedStayId: 'stay-gamcheon',
+    });
+    expect(
+      screen.getByTestId('trip-base-staysheet-region-empty')
+    ).toBeOnTheScreen();
+
+    fireEvent.press(
+      screen.getByTestId('trip-base-staysheet-cand-stay-gwangalli')
+    );
+    expect(props.onSelect).toHaveBeenCalledWith('stay-gwangalli');
+    expect(screen.getByTestId('trip-base-staysheet-assign')).toBeEnabled();
+    fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+    expect(props.onAssign).toHaveBeenCalledTimes(1);
+  });
+});

@@ -1264,6 +1264,180 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
   });
 
   /**
+   * TRIP-1273(B-14 · 결정 1) — 다도시 여행의 부산 밤 시트에서 부산 숙소가 0곳일 때. QA 재현: 시트 제목은
+   * "2박 · 부산광역시" 인데 서울 종로 숙소가 구분 없이 나열되고 그대로 지정됐다.
+   *
+   * 준비: 서울 1박 + 부산 1박(9/26–9/28) 여행, 저장 숙소는 서울 두 곳(종로인·JW). 주소 상태만 케이스마다 바꾼다.
+   * 실행: 2번째 밤(부산) 카드를 눌러 시트를 연다. 단언: 섹션 구성·제목·안내 문구(완전 일치)·지정 요청.
+   */
+  describe('그 밤 지역 숙소가 0곳이면 "다른 지역" 섹션 + 안내 문구 (결정 1 · AC-B1~B6)', () => {
+    const NOTICE = '부산광역시에 저장한 숙소가 없어요';
+    const JONGNO: SavedStay = {
+      ...STAY_A,
+      savedStayId: 'jongno',
+      name: '1996 종로인',
+      lat: 37.571,
+      lng: 126.99,
+    };
+    const JW_DDM: SavedStay = {
+      ...STAY_A,
+      savedStayId: 'jw-ddm',
+      name: 'JW 메리어트 동대문',
+      lat: 37.57,
+      lng: 127.009,
+    };
+    const HAEUNDAE: SavedStay = {
+      ...STAY_A,
+      savedStayId: 'haeundae',
+      name: '해운대 오션 호텔',
+      lat: 35.16,
+      lng: 129.16,
+    };
+    const SEOUL_JONGNO: StayAddressState = {
+      status: 'known',
+      address: '서울특별시 종로구 종로 1',
+    };
+    const SEOUL_DDM: StayAddressState = {
+      status: 'known',
+      address: '서울 중구 을지로 279',
+    };
+    const BUSAN_HAEUNDAE: StayAddressState = {
+      status: 'known',
+      address: '부산광역시 해운대구 해운대해변로 296',
+    };
+
+    function openBusanNight(): void {
+      seedDraft('2026-09-26', '2026-09-28', [
+        ['서울특별시', 1],
+        ['부산광역시', 1],
+      ]);
+      render(<TripNewStep2Page />);
+      fireEvent.press(screen.getByTestId('trip-base-night-card-2'));
+    }
+
+    beforeEach(() => {
+      mockSavedStaysResult = loaded([JONGNO, JW_DDM]);
+    });
+
+    it('AC-B1 · 서울 숙소만(주소 확인) → "다른 지역" 섹션에 2장, "부산광역시 숙소" 섹션 없음, 안내 문구', () => {
+      mockAddressById = { jongno: SEOUL_JONGNO, 'jw-ddm': SEOUL_DDM };
+      openBusanNight();
+
+      const other = screen.getByTestId('trip-base-staysheet-section-other');
+      expect(
+        screen.getByTestId('trip-base-staysheet-section-other-title')
+      ).toHaveTextContent('다른 지역');
+      expect(within(other).queryAllByTestId(CARD_ROOT)).toHaveLength(2);
+      expect(
+        screen.queryByTestId('trip-base-staysheet-section-here')
+      ).toBeNull();
+      expect(
+        screen.getByTestId('trip-base-staysheet-region-empty')
+      ).toHaveTextContent(NOTICE);
+    });
+
+    it('AC-B2 · 다른 지역 숙소를 골라 지정하면 평소처럼 지정 요청이 1회 나간다 (막지 않음)', () => {
+      mockAddressById = { jongno: SEOUL_JONGNO, 'jw-ddm': SEOUL_DDM };
+      openBusanNight();
+      // 앵커 — 안내가 떠 있는 상태에서 고른다(안내가 지정을 막는지 보는 것이 요점).
+      expect(
+        screen.getByTestId('trip-base-staysheet-region-empty')
+      ).toBeOnTheScreen();
+
+      const other = screen.getByTestId('trip-base-staysheet-section-other');
+      fireEvent.press(
+        within(other).getByTestId('trip-base-staysheet-cand-jongno')
+      );
+      fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+
+      expect(mockAssignMutate).toHaveBeenCalledTimes(1);
+      expect(
+        (mockAssignMutate.mock.calls[0][0] as { data: { savedStayId: string } })
+          .data.savedStayId
+      ).toBe('jongno');
+    });
+
+    it('AC-B3 · 부산 숙소가 1곳 있으면 "부산광역시 숙소"가 먼저, "다른 지역"이 뒤이고 안내는 없다', () => {
+      mockSavedStaysResult = loaded([JONGNO, HAEUNDAE, JW_DDM]);
+      mockAddressById = {
+        jongno: SEOUL_JONGNO,
+        haeundae: BUSAN_HAEUNDAE,
+        'jw-ddm': SEOUL_DDM,
+      };
+      openBusanNight();
+
+      // 섹션 컨테이너만(제목 testID 제외 — `$` 로 닫는다, ★15) 트리 순서대로.
+      expect(
+        screen
+          .queryAllByTestId(/^trip-base-staysheet-section-(here|other)$/)
+          .map((node) => node.props.testID)
+      ).toEqual([
+        'trip-base-staysheet-section-here',
+        'trip-base-staysheet-section-other',
+      ]);
+      expect(
+        screen.getByTestId('trip-base-staysheet-section-here-title')
+      ).toHaveTextContent('부산광역시 숙소');
+      expect(
+        screen.queryByTestId('trip-base-staysheet-region-empty')
+      ).toBeNull();
+    });
+
+    it('AC-B4 · 전부 부산 숙소면 섹션 없는 한 줄 목록이고 안내는 없다', () => {
+      mockSavedStaysResult = loaded([
+        HAEUNDAE,
+        { ...HAEUNDAE, savedStayId: 'haeundae-2' },
+      ]);
+      mockAddressById = {
+        haeundae: BUSAN_HAEUNDAE,
+        'haeundae-2': BUSAN_HAEUNDAE,
+      };
+      openBusanNight();
+
+      expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(2);
+      expect(
+        screen.queryAllByTestId(/^trip-base-staysheet-section-/)
+      ).toHaveLength(0);
+      expect(
+        screen.queryByTestId('trip-base-staysheet-region-empty')
+      ).toBeNull();
+    });
+
+    it('AC-B5 · 주소 조회가 아직 끝나지 않은 숙소가 있으면 한 줄 목록이고 안내는 없다', () => {
+      mockAddressById = {
+        jongno: SEOUL_JONGNO,
+        'jw-ddm': { status: 'loading' },
+      };
+      openBusanNight();
+
+      expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(2);
+      expect(
+        screen.queryAllByTestId(/^trip-base-staysheet-section-/)
+      ).toHaveLength(0);
+      expect(
+        screen.queryByTestId('trip-base-staysheet-region-empty')
+      ).toBeNull();
+    });
+
+    it('AC-B6 · 조회는 끝났고 주소 모름이 섞이면 "다른 지역 · 위치 확인 안 됨" 섹션만, 안내는 없다', () => {
+      mockAddressById = {
+        jongno: SEOUL_JONGNO,
+        'jw-ddm': { status: 'unknown' },
+      };
+      openBusanNight();
+
+      const other = screen.getByTestId('trip-base-staysheet-section-other');
+      expect(
+        screen.getByTestId('trip-base-staysheet-section-other-title')
+      ).toHaveTextContent('다른 지역 · 위치 확인 안 됨');
+      expect(within(other).queryAllByTestId(CARD_ROOT)).toHaveLength(2);
+      expect(
+        screen.queryByTestId('trip-base-staysheet-region-empty')
+      ).toBeNull();
+    });
+  });
+
+  /**
    * TRIP-1074 — 카드 서브라인 앞에 동네 라벨(주소의 시군구 토큰)을 붙인다. 재료는 페이지가 섹션 판정용으로
    * 이미 받은 주소(`useStayAddresses` — 이 파일에선 `mockAddressById` 목)라 새 요청이 없다(요청 수는 형제
    * geocodeLazy P5 가 실물 훅으로 잰다).

@@ -1166,6 +1166,7 @@
 - `src/pages/stay/stay-search/model/filterReasonLabel.ts`  →  filterReasonLabel
 - `src/pages/stay/stay-search/model/priceRangeFilter.ts`  →  PriceBucketId · PRICE_BUCKETS · filterByPriceRange
 - `src/pages/stay/stay-search/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
+- `src/pages/stay/stay-search/model/sidoFilter.ts`  →  filterBySido
 - `src/pages/stay/stay-search/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
 - `src/pages/stay/stay-search/model/staySearchState.ts`  →  StaySearchState · resolveStaySearchState
 
@@ -1204,7 +1205,7 @@
 ## src/pages/trip/trip-new-step2/model/
 - `src/pages/trip/trip-new-step2/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
 - `src/pages/trip/trip-new-step2/model/basesChanged.ts`  →  basesChanged
-- `src/pages/trip/trip-new-step2/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections
+- `src/pages/trip/trip-new-step2/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections · staySheetRegionNotice
 - `src/pages/trip/trip-new-step2/model/useStayAddresses.ts`  →  useStayAddresses
 
 ## src/pages/trip/trip-new-step2/ui/
@@ -1594,4 +1595,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 978개 파일
+합계 979개 파일

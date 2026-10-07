@@ -19,6 +19,7 @@ import {
   filterByPriceRange,
   type PriceBucketId,
 } from '../model/priceRangeFilter';
+import { filterBySido } from '../model/sidoFilter';
 import { relaxCulpritFilter } from '../model/relaxCulpritFilter';
 import { useSavedStays } from '@/features/save-stay';
 import {
@@ -42,13 +43,18 @@ function toParamList(value?: string | string[]): string[] {
 }
 
 export function StaySearchPage(): ReactElement {
-  const { region, amenity, stayType } = useLocalSearchParams<{
+  const { region, regionCode, sido, amenity, stayType } = useLocalSearchParams<{
     region?: string;
+    // TRIP-1273(F3) — 지역 피커가 함께 싣는다. 서버엔 안 보낸다(계약에 없음) — 응답 후처리·지역 바뀜 판정 전용.
+    regionCode?: string;
+    sido?: string;
     amenity?: string | string[];
     stayType?: string | string[];
   }>();
   const rawRegion = Array.isArray(region) ? region[0] : region;
   const resolvedRegion = rawRegion || '부산';
+  // 같은 키가 중복되면 배열로 온다(신뢰 경계) — region 과 같이 첫 값만 쓴다.
+  const rawSido = Array.isArray(sido) ? sido[0] : sido;
   const amenityList = toParamList(amenity);
   const stayTypeList = toParamList(stayType);
 
@@ -84,9 +90,11 @@ export function StaySearchPage(): ReactElement {
   // 지역 선택은 `dismissTo`로 이 인스턴스에 돌아온다(TRIP-989 F) — URL 필터는 교체돼 사라지지만
   // 로컬 필터(가격대·검색어)는 남는다. "새 지역 = 새 검색"을 지키려고 지역이 바뀐 렌더에서만 비운다(01b Q4).
   // 이펙트가 아니라 렌더 중 조정이라 옛 필터로 한 번 그려지는 프레임이 없다.
-  const [seenRegion, setSeenRegion] = useState(resolvedRegion);
-  if (seenRegion !== resolvedRegion) {
-    setSeenRegion(resolvedRegion);
+  // TRIP-1273(AC-F7) — 동명 구(서울→부산 강서구)는 이름이 같아 코드까지 함께 본다.
+  const regionKey = `${resolvedRegion}|${regionCode ?? ''}`;
+  const [seenRegion, setSeenRegion] = useState(regionKey);
+  if (seenRegion !== regionKey) {
+    setSeenRegion(regionKey);
     setPriceBucket('all');
     setNameQuery('');
   }
@@ -105,7 +113,10 @@ export function StaySearchPage(): ReactElement {
 
   // 가격대 파생 필터(TRIP-457) — 기본 `all`은 순서보존 전량이라 동결 통합테스트가 무회귀다
   // (★F-6). 화면에 내리는 목록·개수(헤더 "N곳") 둘 다 이 파생 결과에서 나와 갈라지지 않는다.
-  const visibleItems = filterByPriceRange(data?.items ?? [], priceBucket);
+  // TRIP-1273(F3) — 그 앞에 시도 후처리 필터(동명 구의 다른 시도 숙소 제외)를 거친다.
+  // 필터 시트 칩도 이 결과에서 만든다 — 다른 시도에만 있는 유형 칩은 고르면 0곳이다(03b 경고-1).
+  const sidoItems = filterBySido(data?.items ?? [], rawSido);
+  const visibleItems = filterByPriceRange(sidoItems, priceBucket);
 
   const state = resolveStaySearchState({
     isPending,
@@ -140,7 +151,7 @@ export function StaySearchPage(): ReactElement {
   }
 
   const filterOptions = buildStayFilterOptions(
-    data?.items ?? [],
+    sidoItems,
     draftAmenity,
     draftStayType
   );
