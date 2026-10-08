@@ -917,6 +917,31 @@ describe('save', () => {
       );
     });
 
+    // TRIP-1303 — 행 라벨도 같은 왕복을 따른다. 다시 담은 뒤는 해제 전 앵커와 같은 리터럴로 잰다.
+    it('해제하면 행 라벨 끝에 "해제됨" 이 붙고, 다시 담으면 처음 라벨과 글자까지 같아진다', async () => {
+      await renderLoaded();
+      await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+      const row = () => screen.getByTestId('explore-saved-item-sp-b');
+      expect(row()).toHaveAccessibleName('2, 광안리 해변, 수영구, 골목');
+
+      fireEvent.press(heart('sp-b'));
+      await waitFor(() => expect(deletedIds()).toEqual(['sp-b']));
+      await waitFor(() =>
+        expect(row()).toHaveAccessibleName(
+          '2, 광안리 해변, 수영구, 골목, 해제됨'
+        )
+      );
+
+      fireEvent.press(heart('sp-b'));
+      await waitFor(() =>
+        expect(hitsOf('POST', '/api/v1/saved-places').length).toBeGreaterThan(0)
+      );
+      await waitFor(() => expect(heart('sp-b')).toBeSelected());
+      await waitFor(() =>
+        expect(row()).toHaveAccessibleName('2, 광안리 해변, 수영구, 골목')
+      );
+    });
+
     it('해제 뒤 재마운트하면 그 행도 "해제됨" 글자도 없다', async () => {
       const first = await renderLoaded();
       await waitFor(() => expect(itemTestIds()).toHaveLength(4));

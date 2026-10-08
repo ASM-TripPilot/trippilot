@@ -880,14 +880,15 @@ describe('담은 장소 행 — 하트·행 접근성 라벨', () => {
     });
   });
 
-  it('해제한 행의 하트는 라벨이 그대로고 selected 만 꺼진다 — 행 라벨도 그대로다', () => {
+  // TRIP-1303 — 행 라벨은 TRIP-1281 에선 해제와 무관했으나, 보이는 "해제됨" 글자를 따라 끝에 붙인다(결정 A).
+  it('해제한 행의 하트는 라벨이 그대로고 selected 만 꺼진다 — 행 라벨은 끝에 "해제됨" 이 붙는다', () => {
     renderScreen({ releasedPoiIds: ['p1'] });
 
     const heart = screen.getByTestId('explore-saved-remove-sp-1');
     expect(heart).toHaveAccessibleName('감천문화마을 저장');
     expect(heart).not.toBeSelected();
     expect(screen.getByTestId('explore-saved-item-sp-1')).toHaveAccessibleName(
-      '1, 감천문화마을, 사하구, 골목'
+      '1, 감천문화마을, 사하구, 골목, 해제됨'
     );
   });
 
@@ -895,6 +896,23 @@ describe('담은 장소 행 — 하트·행 접근성 라벨', () => {
     renderScreen();
 
     ROW_LABELS.forEach(([id, label]) => {
+      expect(
+        screen.getByTestId(`explore-saved-item-${id}`)
+      ).toHaveAccessibleName(label);
+    });
+  });
+
+  // TRIP-1303 — 해제 행과 담긴 행을 한 화면에 섞어 "늘 붙임"·"안 붙임" 둘 다 잡는다.
+  it('해제한 행만 라벨 끝에 "해제됨" 이 붙고, 담긴 행은 글자까지 그대로다(빈 조각은 여전히 건너뜀)', () => {
+    const labels: [string, string][] = [
+      ['sp-1', '1, 감천문화마을, 사하구, 골목'],
+      ['sp-2', '2, 미확인, 광안리 해변, 수영구, 야경, 해제됨'],
+      ['sp-3', '3, 폐업, 전포 카페거리, 해제됨'],
+      ['sp-4', '4, 미확인, 해동용궁사, 기장군, 사찰'],
+    ];
+    renderScreen({ releasedPoiIds: ['p2', 'p3'] });
+
+    labels.forEach(([id, label]) => {
       expect(
         screen.getByTestId(`explore-saved-item-${id}`)
       ).toHaveAccessibleName(label);
