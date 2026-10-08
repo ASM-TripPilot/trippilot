@@ -373,6 +373,50 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
     });
   });
 
+  // TRIP-1298 — 편집기 알약도 h08 규칙(violationNotice). 순수 뷰 테스트만으로는 GET → 스토어 시드 → 뷰 경로에서
+  // distanceRange 가 살아남는지 못 본다 — 거리 아는 poi-a 짝이 그 배선을 잰다.
+  describe('🔴 R9 · 거리를 모르는 슬롯의 "빠듯" 사유는 편집기에서 고정 문구로 보인다', () => {
+    const HC2 = '앞 장소에서 이동할 시간이 빠듯해요';
+    const badgeId = (poiId: string) =>
+      `slot-stopcard-violation-${buildSlotKey(DAY1, poiId)}`;
+
+    it('GET 의 poi-b(거리 null)는 "일정 확인이 필요해요", poi-a(거리 있음)는 서버 문구 그대로', async () => {
+      const base = itinerary();
+      const [a, b] = base.days[0].slots;
+      getHandler = () =>
+        HttpResponse.json({
+          ...base,
+          days: [
+            {
+              ...base.days[0],
+              slots: [
+                {
+                  ...a,
+                  hasViolation: true,
+                  violationReason: HC2,
+                  distanceRange: '약 2.1km · 도보 추정',
+                },
+                {
+                  ...b,
+                  hasViolation: true,
+                  violationReason: HC2,
+                  distanceRange: null,
+                },
+              ],
+            },
+            base.days[1],
+          ],
+        });
+
+      renderPage();
+
+      const unknown = await screen.findByTestId(badgeId('poi-b'));
+      expect(unknown).toHaveTextContent('일정 확인이 필요해요');
+      expect(unknown).not.toHaveTextContent(/빠듯/);
+      expect(screen.getByTestId(badgeId('poi-a'))).toHaveTextContent(HC2);
+    });
+  });
+
   describe('🔴 R4 · AC6 — 409·확정된 일정: 신호 B 재조회로 "확정" 문구', () => {
     it('저장이 409 이고 재조회가 CONFIRMED 면, save-error 가 "확정" 계열이고 "만드는 중"이 아니다', async () => {
       renderPage();

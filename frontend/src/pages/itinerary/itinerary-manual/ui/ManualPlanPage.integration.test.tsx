@@ -885,6 +885,39 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
     });
   });
 
+  // TRIP-1298 — 직접 짜기 편집기도 h08 규칙(violationNotice). 거리 아는 c 짝이 GET → 스토어 시드 → 뷰 경로에서
+  // distanceRange 가 살아남는지를 잰다(뷰 단위 테스트로는 못 보는 배선).
+  describe('🔴 V4 · 거리를 모르는 슬롯의 "빠듯" 사유는 직접 짜기 편집기에서도 고정 문구로 보인다', () => {
+    it('b(거리 null)는 "일정 확인이 필요해요", c(거리 있음)는 서버 문구 그대로', async () => {
+      const HC2 = '앞 장소에서 이동할 시간이 빠듯해요';
+      daySlots = [
+        PLAIN[0],
+        {
+          ...PLAIN[1],
+          hasViolation: true,
+          violationReason: HC2,
+          distanceRange: null,
+        },
+        {
+          ...PLAIN[2],
+          hasViolation: true,
+          violationReason: HC2,
+          distanceRange: '약 2.1km · 도보 추정',
+        },
+      ];
+
+      renderPage();
+      await ready();
+
+      const unknown = screen.getByTestId(`slot-stopcard-violation-${k('b')}`);
+      expect(unknown).toHaveTextContent('일정 확인이 필요해요');
+      expect(unknown).not.toHaveTextContent(/빠듯/);
+      expect(
+        screen.getByTestId(`slot-stopcard-violation-${k('c')}`)
+      ).toHaveTextContent(HC2);
+    });
+  });
+
   describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다', () => {
     // TRIP-1009 C(01b Q3) — ‹ 는 이전 화면(방식 선택)이 아니라 일정 탭으로 바꿔 간다. 편집기에 들어온 순간
     // MANUAL 일정이 이미 있으므로 방식 선택으로 돌아가면 "일정이 없다"는 거짓 신호가 된다.
