@@ -30,3 +30,4 @@
 
 | 주(끝) | 창(일) | 전송로 | Bedrock 호출/일 | 활성 창/일 | Bedrock p95 ms | Bedrock $/일 | EKS $/일 | Bedrock $/건 | EKS $/건 | 판정 | 조치 | 비고 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-06 | 14 | bedrock | 25.6 | 3.1 | 1610 | 1.23 | 0.00 | 0.0482 | 0.0000 | HOLD | none | CostExplorer: AccessDeniedException; Bedrock $ 는 청구 규칙 계산(활성 창×CMU×단가); gpu_quota=no; zero_billing_verified=no; eks_p95_ms 미측정; EKS 비용 실측 없음 |
