@@ -22,11 +22,14 @@ export function NicknameEditRow({
   error,
   onSubmit,
   onDraftChange,
+  saving = false,
 }: {
   value: string;
   error?: string | null;
   onSubmit: (draft: string) => boolean | void;
   onDraftChange?: () => void;
+  /** 저장 요청 진행 중 — [저장] 비활성·입력칸 잠금(TRIP-1305). */
+  saving?: boolean;
 }): ReactElement {
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -36,6 +39,8 @@ export function NicknameEditRow({
       <Pressable
         testID="settings-nickname-edit"
         onPress={() => {
+          // TRIP-1305 5-b W1 — 저장 중 접었다 펼치면 입력이 현재 닉네임으로 돌아가 늦은 409 가 다른 값 아래 붙는다.
+          if (saving) return;
           if (!expanded) setDraft(value);
           setExpanded((prev) => !prev);
         }}
@@ -62,6 +67,8 @@ export function NicknameEditRow({
                 setDraft(text);
                 onDraftChange?.();
               }}
+              // TRIP-1305(결정 C) — 요청 중엔 입력을 잠가, 늦게 온 옛 요청의 오류가 고친 값에 붙지 않게 한다.
+              editable={!saving}
               autoCapitalize="none"
               placeholder="새 닉네임"
               placeholderTextColor="#9AA1AB"
@@ -70,10 +77,13 @@ export function NicknameEditRow({
             <Pressable
               testID="settings-nickname-save"
               accessibilityRole="button"
+              // 진행 중엔 흐리게 + 눌림 막음(선례 NotificationInboxScreen 의 markAll.pending).
+              disabled={saving}
+              accessibilityState={{ disabled: saving }}
               onPress={() => {
                 if (onSubmit(draft) === true) setExpanded(false);
               }}
-              className="h-11 items-center justify-center rounded-button bg-ink px-lg"
+              className={`h-11 items-center justify-center rounded-button bg-ink px-lg${saving ? ' opacity-40' : ''}`}
             >
               <Text className="font-noto-bold text-body text-canvas">저장</Text>
             </Pressable>

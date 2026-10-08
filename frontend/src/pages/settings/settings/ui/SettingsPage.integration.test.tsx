@@ -28,6 +28,7 @@ import { useGetMePreferences } from '@/shared/api/index.hooks';
 import {
   useGetMeProfile,
   useGetMeSettings,
+  usePatchMeProfileNickname,
   usePatchMeSettings,
 } from '@/shared/api/index.hooks';
 import { useGetMePersonalization } from '@/shared/api/index.hooks';
@@ -831,6 +832,11 @@ describe('로그아웃 순서 · 게이트 대기 (옛 .logout)', () => {
       mutate: jest.fn(),
       isPending: false,
     });
+    // 닉네임 저장 진행 중 여부도 렌더 중에 읽힌다(TRIP-1305) — "요청 없음" 모양.
+    (usePatchMeProfileNickname as jest.Mock).mockReturnValue({
+      mutate: jest.fn(),
+      isPending: false,
+    });
   }
 
   beforeEach(async () => {
@@ -1152,6 +1158,11 @@ describe('로그아웃 → 이 기기 푸시 토큰 해제 (옛 .pushLogout)', (
     (useGetMePersonalization as jest.Mock).mockReturnValue({ data: undefined });
     (useGetMeSettings as jest.Mock).mockReturnValue({ data: undefined });
     (usePatchMeSettings as jest.Mock).mockReturnValue({
+      mutate: jest.fn(),
+      isPending: false,
+    });
+    // 닉네임 저장 진행 중 여부도 렌더 중에 읽힌다(TRIP-1305) — "요청 없음" 모양.
+    (usePatchMeProfileNickname as jest.Mock).mockReturnValue({
       mutate: jest.fn(),
       isPending: false,
     });

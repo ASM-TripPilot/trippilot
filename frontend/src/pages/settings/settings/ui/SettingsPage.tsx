@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useRef, useState } from 'react';
 import { Keyboard, Share } from 'react-native';
 
 import { waitForGateDestination } from '@/features/auth';
@@ -131,8 +131,14 @@ export function SettingsPage(): ReactElement {
     },
   });
 
+  // TRIP-1305 — 저장 요청 잠금. isPending 은 다음 렌더에야 true 라 같은 렌더 안 연타(실기 더블탭)를 못 막는다 —
+  // ref 는 누르는 즉시 바뀐다. 응답이 끝나면(성공·실패 모두 onSettled) 푼다 — 실패 뒤 먹통 금지.
+  const nicknameInFlightRef = useRef(false);
   const patchNickname = usePatchMeProfileNickname({
     mutation: {
+      onSettled: () => {
+        nicknameInFlightRef.current = false;
+      },
       onSuccess: (data, variables) => {
         // 서버 응답 닉네임을 우선하되, 없으면 방금 보낸 값으로 요약을 갱신한다.
         setNicknameOverride(data?.nickname ?? variables.data.nickname);
@@ -190,6 +196,7 @@ export function SettingsPage(): ReactElement {
 
   /** `true` = 행을 접어라. 앞뒤 공백을 걷은 값으로 검증·전송한다(U0 FE §5 "공백 트림"). */
   const submitNickname = (raw: string): boolean => {
+    if (nicknameInFlightRef.current) return false;
     const draft = raw.trim();
     const check = validateNicknameFormat(draft);
     if (!check.valid) {
@@ -204,6 +211,7 @@ export function SettingsPage(): ReactElement {
     // 같은 값은 서버가 본인 행을 중복으로 봐 409 를 낸다 — 보내지 않고 닫는다. 길이 검증 뒤여야
     // 프로필 로딩 전(현재값 '')에 빈 입력이 "같다"로 빠지지 않는다. 대소문자는 구분한다(변경이 버려지지 않게).
     if (draft === currentNickname) return true;
+    nicknameInFlightRef.current = true;
     patchNickname.mutate({ data: { nickname: draft } });
     return false;
   };
@@ -270,6 +278,7 @@ export function SettingsPage(): ReactElement {
       onPressBack={() => loadRouter()?.back()}
       onSubmitNickname={submitNickname}
       onNicknameDraftChange={() => setNicknameError(null)}
+      nicknameSaving={patchNickname.isPending}
       onPressExport={() => void runExport()}
       onPressDeleteAccount={() => postDeletion.mutate()}
       onPressCancelDeletion={() => cancelDeletion.mutate()}
