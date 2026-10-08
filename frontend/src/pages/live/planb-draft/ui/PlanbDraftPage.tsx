@@ -39,7 +39,9 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  *                    오늘(KST) 세션이고 내일이 일정에 있으면 [내일 일정 다시 짜기] — 같은 조건 · targetDate=내일 ·
  *                    FULL_DAY 로 세션을 새로 열고(`useStartReplan`) solving 으로 replace(i04 와 같은 착지).
  *  - 'failed'     → variant 'failed'(E3 — 다른 화면으로 튕기지 않고 같은 자리에 안내, INV-4).
- *  - 'solving'·'closed'·미도착 → null. data 없는 조회 실패만 오류 얼굴([다시 시도]=재조회, [나가기]) — TRIP-1277 AC12.
+ *  - 'solving'·미도착 → null. data 없는 조회 실패만 오류 얼굴([다시 시도]=재조회, [나가기]) — TRIP-1277 AC12.
+ *  - 'closed'(APPLIED·CANCELED) → 종료 얼굴 + [나가기](TRIP-1289 — 새 요청이 옛 세션을 닫으면 정상 흐름에서도
+ *    온다, INV-U4-06. 빈 화면은 침묵 실패다, INV-4). 이탈 가로채기는 꺼져 있다(잃을 초안이 없다).
  *
  * TRIP-1007 — 초안 얼굴의 행은 서버 초안(`useReplanDiff` → `GET …/diff`)에서 온다. 세션 계약에 슬롯이
  * 없던 게 아니라 이 조회를 안 하고 있었다(QA #061 빈 시트). 조립 규칙:
@@ -190,6 +192,9 @@ export function PlanbDraftPage({
     );
   }
   if (data === undefined || state === undefined) return null;
+  if (state.kind === 'closed') {
+    return <ReplanNoticeFace kind="draft-closed" onLeave={leave} />;
+  }
   if (
     state.kind !== 'draft' &&
     state.kind !== 'noSolution' &&

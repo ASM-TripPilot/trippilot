@@ -6695,6 +6695,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       <ReplanNoticeFace kind="draft-error" onRetry={noop} onLeave={noop} />
     ),
   },
+  {
+    key: 'planb-draft-closed',
+    band: 'i',
+    label: 'i06 · 재계획안 · 끝난 세션',
+    login: null,
+    render: () => <ReplanNoticeFace kind="draft-closed" onLeave={noop} />,
+  },
   // i08 변경 반영 시트(TRIP-754) — 펼침 허브 + 딤 + 시트. 딤 전면 커버·시트 높이는 jest 사각이라 육안 자리.
   {
     key: 'planb-applied',

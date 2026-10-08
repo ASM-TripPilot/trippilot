@@ -24,7 +24,8 @@ import { PlanbDraftPage } from './PlanbDraftPage';
  *  - 확정 요청 중이면 [적용하기] 잠금, 실패면 같은 안내 자리에 "변경을 반영하지 못했어요"(Q6).
  *  - NO_SOLUTION·FAILED → 같은 뷰의 안내 상태. FAILED 에서 옛 manual?variant=error push 는 없다(E3).
  *    [조건 바꿔 다시 짜기]/[다시 시도] → i04(`/trips/{id}/planb`), [직접 수정] → planb/manual.
- *  - SOLVING·closed·미도착 → 아무것도 안 그린다. data 없는 조회 실패만 오류 얼굴(TRIP-1277 AC12).
+ *  - SOLVING·미도착 → 아무것도 안 그린다. data 없는 조회 실패만 오류 얼굴(TRIP-1277 AC12).
+ *  - (TRIP-1289) 끝난 세션(APPLIED·CANCELED)은 종료 얼굴 + [나가기] — 빈 화면이면 침묵 실패다(INV-4).
  *  - (TRIP-1277) 초안 얼굴의 ‹·스와이프·하드웨어 뒤로는 이탈 확인부터 — [나가기]여야 나가고(확정·취소 0),
  *    replace·push 같은 앞으로 가는 이동은 가로채지 않는다. 대안 없음·실패 얼굴은 확인 없이 바로 뒤로,
  *    요청 대기 중엔 뒤로 자체가 잠긴다.
@@ -1184,20 +1185,19 @@ describe('🔴 P7 · AC-10 · E3 — FAILED 도 같은 뷰에 착지한다(옛 v
   });
 });
 
-describe('🔴 P8 · AC-10 — SOLVING·closed·미도착은 아무것도 그리지 않는다', () => {
-  it.each([['SOLVING'], ['APPLIED'], ['CANCELED']])(
-    '%s 이면 렌더 없음 + 라우터·확정 호출 0',
-    (status) => {
-      mockSession.data = session(status);
-      renderPage();
+// TRIP-1289 — 옛 P8 은 APPLIED·CANCELED 도 "렌더 없음"으로 굳혀 두었다(실기 빈 화면의 원인, 01b). 두 행을 빼고
+// 종료 얼굴 케이스(맨 아래 TRIP-1289 블록)로 옮겼다. SOLVING·미도착 null 은 이 칸 범위 밖이라 그대로 둔다.
+describe('🔴 P8 · AC-10 — SOLVING·미도착은 아무것도 그리지 않는다', () => {
+  it.each([['SOLVING']])('%s 이면 렌더 없음 + 라우터·확정 호출 0', (status) => {
+    mockSession.data = session(status);
+    renderPage();
 
-      expect(screen.toJSON()).toBeNull();
-      expect(mockPush).not.toHaveBeenCalled();
-      expect(mockReplace).not.toHaveBeenCalled();
-      expect(mockMutate).not.toHaveBeenCalled();
-      expectDiffNeverEnabled();
-    }
-  );
+    expect(screen.toJSON()).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expectDiffNeverEnabled();
+  });
 
   it('세션 미도착(data undefined)이면 렌더 없음 + 라우터 호출 0', () => {
     renderPage();
@@ -1647,4 +1647,106 @@ describe('🔴 TRIP-1277 5-b 경고-2 · AC4 · INV-4 — 이탈 확인 [나가�
     expect(mockMutate).not.toHaveBeenCalled();
     expect(mockStartMutate).not.toHaveBeenCalled();
   });
+});
+
+// ── TRIP-1289 · INV-4 — 끝난 세션(APPLIED·CANCELED)은 빈 화면 대신 종료 얼굴 ─────────────────────────
+// 근거: 01 브리프 AC1~AC5 · 01b(INV-U4-05·06). 문구는 진행 화면 종료 얼굴(solving K1)과 같은 값, testID 만
+// 이 화면 것(결정 A). 기존 케이스는 P8 만 바꿨다 — AC6 무회귀는 이 파일 나머지가 맡는다.
+
+const CLOSED_FACE = 'planb-draft-closed';
+const CLOSED_LEAVE = 'planb-draft-closed-leave';
+
+describe('🔴 TRIP-1289 AC1·AC2 — 끝난 세션은 "이미 끝난 재계획이에요" 얼굴과 [나가기]', () => {
+  it.each([['CANCELED'], ['APPLIED']])(
+    'C1 %s 면 종료 얼굴(제목·부제·채운 [나가기])이 보이고 "원래 일정은 그대로"는 없다 — 그리기만으로 이동·확정·세션 시작·초안 조회 0',
+    (status) => {
+      mockSession.data = session(status);
+      renderPage();
+
+      const face = screen.getByTestId(CLOSED_FACE);
+      expect(
+        within(face).getByText('이미 끝난 재계획이에요')
+      ).toBeOnTheScreen();
+      expect(
+        within(face).getByText('나가서 지금 일정을 확인해 주세요')
+      ).toBeOnTheScreen();
+      const leave = screen.getByTestId(CLOSED_LEAVE);
+      expect(leave).toHaveTextContent('나가기');
+      expect(String(leave.props.className).split(/\s+/)).toContain(
+        'bg-primary'
+      );
+      // 적용된 세션일 수 있어 "원래 일정은 그대로"라고 말하지 않는다(오류 얼굴 문구가 새지 않았다).
+      expect(screen.queryByText(/원래 일정은 그대로/)).toBeNull();
+      // 진행 화면의 testID·초안 오류 얼굴이 아니다(결정 A — 어느 화면인지 testID 로 가른다).
+      expect(screen.queryByTestId('planb-solving-closed')).toBeNull();
+      expect(screen.queryByTestId(DRAFT_ERROR)).toBeNull();
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockBack).not.toHaveBeenCalled();
+      expect(mockMutate).not.toHaveBeenCalled();
+      expect(mockStartMutate).not.toHaveBeenCalled();
+      expectDiffNeverEnabled();
+    }
+  );
+});
+
+describe('🔴 TRIP-1289 AC3 · INV-U4-05 — 종료 얼굴 [나가기]는 서버 호출 없이 나간다', () => {
+  it('C2 뒤로 갈 곳이 있으면 뒤로 1회 — replace·push·확정·세션 시작·재조회 0', () => {
+    mockSession.data = session('CANCELED');
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(CLOSED_LEAVE));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockExits).toEqual(['back']);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockSessionRefetch).not.toHaveBeenCalled();
+  });
+
+  it('C3 뒤로 갈 곳이 없으면(딥링크 착지) 허브로 replace 1회 — back·확정·세션 시작 0', () => {
+    mockCanGoBack = false;
+    mockSession.data = session('APPLIED');
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(CLOSED_LEAVE));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(HUB_HREF);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1289 AC4 — 종료 얼굴 [나가기]를 같은 틱에 두 번 눌러도 한 번만', () => {
+  it('C4 같은 틱 2연타 — 이동 정확히 1회(back 1 · replace 0)', () => {
+    mockSession.data = session('CANCELED');
+    renderPage();
+
+    pressTwiceSameTick(CLOSED_LEAVE);
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1289 AC5 — 종료 얼굴은 잃을 초안이 없어 뒤로가 확인 없이 나간다', () => {
+  it.each([['GO_BACK'], ['POP']])(
+    'C5 종료 얼굴에서 %s 액션이 오면 이탈 확인 없이 1회 나간다',
+    (type) => {
+      mockSession.data = session('CANCELED');
+      renderPage();
+      // 앵커 — 종료 얼굴이 실제로 떠 있다(빈 화면에서의 "확인 없음"은 공허하다).
+      expect(screen.getByTestId(CLOSED_FACE)).toBeOnTheScreen();
+
+      attemptRemove({ type });
+
+      expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+      expect(mockExits).toEqual(['gesture']);
+      expect(mockMutate).not.toHaveBeenCalled();
+    }
+  );
 });
