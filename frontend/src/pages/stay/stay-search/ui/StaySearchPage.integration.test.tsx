@@ -50,6 +50,9 @@ jest.mock('@/shared/storage', () => ({
 // 시작해야 호이스팅 예외를 받는다. 라우터 메서드는 화살표로 감싸 **불릴 때** 목을 읽는다(지연 참조).
 let mockSearchParams: {
   region?: string;
+  // TRIP-1273 — 지역 피커가 함께 싣는 코드·시도(★9). 리셋은 파일 최상위 beforeEach 가 `{}` 로 한다.
+  regionCode?: string;
+  sido?: string;
   amenity?: string | string[];
   stayType?: string | string[];
 } = {};
@@ -962,6 +965,41 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
         '오션'
       );
     });
+
+    // TRIP-1273(AC-F7 · 브리프 §9 ①) — 동명 구는 이름이 같아 이름 비교로는 "지역 바뀜"이 안 보인다.
+    // 서울 강서구 → 부산 강서구로 바꾸면 코드가 달라지므로 가격대·검색어가 비워져야 한다. 표본 응답(CHEAP·LUX)엔
+    // 주소가 없어 시도 필터가 카드를 지우지 않는다(fail-open, ★10).
+    it('동명 구 · 이름은 같고 코드가 바뀌면(서울 강서구 → 부산 강서구) 가격대·검색어를 비운다', async () => {
+      mockSearchParams = {
+        region: '강서구',
+        regionCode: '11500',
+        sido: '서울특별시',
+      };
+      const { rerender } = render(<StaySearchPage />, {
+        wrapper: createWrapper(),
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+      );
+      applyPrice('over-200k');
+      fireEvent.changeText(
+        screen.getByTestId('stay-search-name-input'),
+        '오션'
+      );
+      expect(priceChip()).toBeSelected();
+
+      mockSearchParams = {
+        region: '강서구',
+        regionCode: '26440',
+        sido: '부산광역시',
+      };
+      rerender(<StaySearchPage />);
+
+      expectPriceCleared();
+      expect(screen.getByTestId('stay-search-name-input')).toHaveDisplayValue(
+        ''
+      );
+    });
   });
 });
 
@@ -1672,10 +1710,248 @@ describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)
     );
 
     fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
+    // 사람이 따로 누른 두 탭이다 — 연타 가드 창(400ms)이 지난 것으로 둔다(TRIP-1282 — 탭이 가드로 감싸졌다).
+    resetPressGuard();
     fireEvent.press(screen.getByTestId('shell-tabbar-tab-explore'));
 
     expect(mockDismissTo.mock.calls).toEqual([['/records'], ['/explore']]);
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TRIP-1273(F3 · AC-F1·F2·F4) — 동명 구 후처리 필터 배선.
+ *
+ * QA 실측: 지역 > 서울특별시 > 강서구를 고르면 요청은 `region=강서구` 하나만 나가고, 서버는 서울 강서구(11500)와
+ * 부산 강서구(26440)를 합쳐 돌려준다(의도된 서버 동작 — 계약에 코드 파라미터가 없다). 그래서 페이지는
+ * 서버에 이름을 그대로 보내고(시도를 붙이면 0건), 지역 피커가 URL 에 실어 준 `sido` 로 응답을 거른다.
+ *
+ * 준비: URL params + 서울·부산 강서구와 주소 모름이 섞인 응답 → 실행: 렌더 → 단언: 화면 카드·헤더 개수·나간 요청.
+ */
+describe('동명 구 · URL 의 시도로 다른 시도 숙소를 거른다 (F3 · AC-F1·F2·F4)', () => {
+  const BASE = 'http://localhost:8080/api/v1';
+
+  function stay(externalId: string, address: string | null): StayItem {
+    return {
+      externalSource: 'LOCALDATA',
+      externalId,
+      name: `강서 숙소 ${externalId}`,
+      lat: 37.55,
+      lng: 126.85,
+      region: '강서구',
+      amenities: [],
+      stayType: 'MOTEL',
+      price: { amount: 60000, currency: 'KRW' },
+      address,
+    };
+  }
+
+  const SEOUL = stay('3150000-1', '서울특별시 강서구 공항대로 247');
+  const BUSAN = stay('3360000-1', '부산광역시 강서구 녹산산단321로 24');
+  const NO_ADDR = stay('unknown-1', null);
+  const cardId = (one: StayItem) =>
+    `stay-card-${one.externalSource}:${one.externalId}`;
+
+  /** 나간 `/stays/search` 요청의 최종 URL(직렬화가 끝난 값 — msw 만 볼 수 있다). */
+  let searchUrls: string[] = [];
+
+  beforeEach(() => {
+    searchUrls = [];
+    // ★8 — onUnhandledRequest 'error' 라 두 경로 모두 건다(게스트라 saved-stays 는 안 나가도 안전망).
+    server.use(
+      http.get(`${BASE}/stays/search`, ({ request }) => {
+        searchUrls.push(request.url);
+        return HttpResponse.json({
+          items: [SEOUL, BUSAN, NO_ADDR],
+          degraded: false,
+          filterZeroReasons: [],
+        });
+      }),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+
+  function renderPage(): void {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <StaySearchPage />
+      </QueryClientProvider>
+    );
+  }
+
+  it('AC-F1·F2 · 서울 강서구(sido 서울특별시)면 부산 강서구가 빠지고 주소 모름은 남으며, 서버엔 이름만 간다', async () => {
+    mockSearchParams = {
+      region: '강서구',
+      regionCode: '11500',
+      sido: '서울특별시',
+    };
+
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId(cardId(SEOUL))).toBeOnTheScreen()
+    );
+
+    expect(screen.queryByTestId(cardId(BUSAN))).toBeNull();
+    expect(screen.getByTestId(cardId(NO_ADDR))).toBeOnTheScreen(); // fail-open(AC-F3)
+    // 헤더 개수도 거른 뒤 개수다 — 문자열 = 완전 일치(★6), '12곳'·'3곳'이면 red.
+    expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
+      '강서구 · 날짜 미정 · 2곳'
+    );
+    // 서버로 가는 region 은 이름 그대로(시도를 붙이면 서버가 0건을 준다 — 브리프 §4-3).
+    expect(searchUrls).toHaveLength(1);
+    expect(new URL(searchUrls[0]).searchParams.get('region')).toBe('강서구');
+  });
+
+  it('AC-F4 · 코드·시도 없이 들어오면(위저드 둘러보기 등) 거르지 않아 현행과 같다', async () => {
+    mockSearchParams = { region: '부산광역시' };
+
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId(cardId(SEOUL))).toBeOnTheScreen()
+    );
+
+    expect(screen.getByTestId(cardId(BUSAN))).toBeOnTheScreen();
+    expect(screen.getByTestId(cardId(NO_ADDR))).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
+      '부산광역시 · 날짜 미정 · 3곳'
+    );
+  });
+});
+
+/**
+ * TRIP-1282 ②·③ — 연타 관통(QA A-02). 첫 탭이 같은 화면의 모습을 바꾸고(카드 재등장·시트 닫힘), 같은 자리에
+ * 떨어진 둘째 탭이 새로 드러난 요소(숙소 카드·복제 탭바 '기록')를 누른다. 트리거·표적이 같은 페이지라 한 테스트에서
+ * 이어 누른다.
+ *
+ * 준비→실행→단언: 시계를 멈춘다 → 트리거 누름 → 앵커(제 할 일) → 표적 누름 → 이동 0회 → 창 닫기 → 표적 누름 →
+ * 정확한 인자로 1회(무회귀). 시계는 응답이 도착한 뒤에 멈춘다(그다음엔 기다릴 것이 없다).
+ */
+describe('연타 관통 — 한 페이지 안에서 드러난 요소', () => {
+  const BASE = 'http://localhost:8080/api/v1';
+  const FROZEN_NOW = 1_790_000_000_000;
+
+  const CHEAP: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 'cheap',
+    name: '게스트하우스 알뜰',
+    lat: 35.1,
+    lng: 129.1,
+    region: '부산',
+    amenities: [],
+    stayType: 'GUESTHOUSE',
+    price: { amount: 50000, currency: 'KRW' },
+  };
+  const LUX: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 'lux',
+    name: '오션 스위트',
+    lat: 35.2,
+    lng: 129.2,
+    region: '부산',
+    amenities: ['ocean'],
+    stayType: 'HOTEL',
+    price: { amount: 250000, currency: 'KRW' },
+  };
+  const KEY_LUX = `${LUX.externalSource}:${LUX.externalId}`;
+
+  let clock: jest.SpyInstance | undefined;
+  afterEach(() => clock?.mockRestore());
+
+  beforeEach(() => {
+    mockSearchParams = { region: '부산' };
+    server.use(
+      http.get(`${BASE}/stays/search`, () =>
+        HttpResponse.json({
+          items: [CHEAP, LUX],
+          degraded: false,
+          filterZeroReasons: [],
+        })
+      ),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+
+  async function renderSettled(): Promise<void> {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <StaySearchPage />
+      </QueryClientProvider>
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+    );
+  }
+
+  /** push 중 숙소 상세로 가는 객체형 push 만 골라낸다. */
+  function detailPushes(): unknown[] {
+    return mockPush.mock.calls
+      .map((call) => call[0])
+      .filter(
+        (arg) =>
+          typeof arg === 'object' &&
+          arg !== null &&
+          (arg as { pathname?: string }).pathname === '/stays/[stayId]'
+      );
+  }
+
+  it('② "필터 완화" 직후 창 안에서 다시 드러난 숙소 카드를 눌러도 상세로 안 가고, 창이 닫힌 뒤 한 번 누르면 그 숙소 상세로 정확히 1회 간다', async () => {
+    await renderSettled();
+    // 준비 — 가격대로 0곳을 만든다(가격 칩·옵션은 가드가 없어 창을 열지 않는다).
+    fireEvent.press(screen.getByTestId('stay-search-filter-price'));
+    fireEvent.press(screen.getByTestId('stay-price-option-100k-200k'));
+    expect(screen.getByTestId('stay-search-empty')).toBeOnTheScreen();
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+    // 실행 ① — 첫 탭: 필터 완화.
+    fireEvent.press(screen.getByTestId('stay-search-empty-filter'));
+    // 앵커 — 첫 탭은 제 할 일을 했다(카드가 다시 보인다).
+    expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen();
+
+    // 실행 ② — 같은 자리에 떨어진 둘째 탭이 드러난 카드를 누른다.
+    fireEvent.press(screen.getByTestId(`stay-card-${KEY_LUX}`));
+
+    expect(detailPushes()).toHaveLength(0);
+
+    // 무회귀 — 창이 닫힌 뒤의 한 번은 그 카드의 상세로 간다.
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId(`stay-card-${KEY_LUX}`));
+
+    expect(detailPushes()).toHaveLength(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/stays/[stayId]',
+      params: { stayId: KEY_LUX },
+    });
+  });
+
+  it('③ 필터 시트 "적용" 직후 창 안에서 복제 탭바 "기록"을 눌러도 탭으로 안 가고, 창이 닫힌 뒤 한 번 누르면 기록 탭으로 정확히 1회 간다', async () => {
+    await renderSettled();
+    fireEvent.press(screen.getByTestId('stay-search-filter-more'));
+    // 앵커 — 시트가 열렸다(처음부터 없어서 통과하는 부재 단언 방지).
+    expect(screen.getByTestId('stay-filter-sheet')).toBeOnTheScreen();
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+    // 실행 ① — 첫 탭: 적용.
+    fireEvent.press(screen.getByTestId('stay-filter-apply'));
+    // 앵커 — 첫 탭은 제 할 일을 했다(조건을 싣고 시트를 내렸다).
+    expect(mockSetParams).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('stay-filter-sheet')).toBeNull();
+
+    // 실행 ② — 시트가 내려간 자리 아래의 복제 탭바 '기록'.
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
+
+    expect(mockDismissTo).not.toHaveBeenCalled();
+
+    // 무회귀 — 창이 닫힌 뒤의 한 번.
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
+
+    expect(mockDismissTo.mock.calls).toEqual([['/records']]);
   });
 });

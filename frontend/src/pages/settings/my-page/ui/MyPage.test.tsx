@@ -36,7 +36,7 @@ import {
   settle,
   type ItinScript,
 } from '@/test-support/myPageItineraries';
-import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { MyPage } from './MyPage';
 import { ChevronRightGlyph as TripChevronGlyph } from '@/entities/trip';
 import {
@@ -103,6 +103,8 @@ beforeEach(() => {
     }
   }
 });
+// 연타 가드 창은 모듈 싱글턴 — 칸마다 한 번씩 누르는 테스트가 앞 테스트의 창에 먹히지 않게 닫는다(TRIP-1282).
+afterEach(() => resetPressGuard());
 
 // TRIP-1123
 describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
@@ -472,6 +474,39 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
         expect(mockPush).not.toHaveBeenCalled();
       }
     );
+  });
+
+  // TRIP-1282 ④ — 마이 "예정" 연타의 둘째 탭이 일정 탭 여행 카드에 떨어진다(QA A-02). 표적 반쪽(카드가 열린 창에서
+  // 무시된다)은 TripCardContainer.test.tsx 에 있다 — 두 화면을 잇는 것은 모듈 전역 창 하나뿐이다.
+  describe('연타 관통 트리거 — 숫자 칸은 창을 연다', () => {
+    const FROZEN_NOW = 1_790_000_000_000;
+    let clock: jest.SpyInstance | undefined;
+    afterEach(() => clock?.mockRestore());
+
+    /** 다음 화면의 "가드로 감싼 버튼" 대역 — 창이 열려 있으면 안 불린다. 부르는 순간 창을 연다(닫혀 있었다면). */
+    function tapGuardedElsewhere(): jest.Mock {
+      const handler = jest.fn();
+      guardPress(handler)();
+      return handler;
+    }
+
+    it('"예정" 칸을 누르면 일정 탭으로 1회 replace 하고, 창이 열려 다음 화면의 가드 버튼은 무시된다', async () => {
+      script([myPageTrip('u1', FUTURE)], { u1: CONFIRMED });
+      renderPage();
+      await settle();
+      clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+      // 앵커 — 아직 창이 닫혀 있다(대역이 불린다). 대역이 연 창은 바로 닫는다.
+      expect(tapGuardedElsewhere()).toHaveBeenCalledTimes(1);
+      resetPressGuard();
+
+      fireEvent.press(screen.getByTestId('my-profile-count-upcoming'));
+
+      // 앵커 — 첫 탭은 제 할 일을 했다.
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith('/itinerary');
+      // 단언 — 창이 열려 있다.
+      expect(tapGuardedElsewhere()).not.toHaveBeenCalled();
+    });
   });
 
   // ── AC-8 지난 여행 ─────────────────────────────────────────────────────

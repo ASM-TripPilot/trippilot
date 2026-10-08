@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import type { Trip } from '@/shared/api/index.schemas';
 import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
+import { guardPress } from '@/shared/lib/pressGuard';
 import {
   classifyTripPhase,
   formatNightsLabel,
@@ -108,7 +109,8 @@ export function TripCardContainer({
     coverTone: coverTone(trip, itinerary.data?.status, today),
   };
 
-  const onPress = (): void => {
+  // TRIP-1282 — 마이 숫자 칸의 창 안이면 무시(연타 관통 표적, resume CTA 도 이 함수로 폴백).
+  const onPress = guardPress((): void => {
     router.push(
       itineraryDestinationHref(
         trip.tripId,
@@ -121,7 +123,7 @@ export function TripCardContainer({
         itinerary.data?.days
       )
     );
-  };
+  });
 
   // TRIP-1055 · 삭제 진입점(UX 사본 — 판정 정본은 서버 BR-U1-57, 상태 가드 TRIP-1061 전까진 이게 유일한
   // 방어). 보이는 배지가 '작성중'이고(Q3 — 날짜 지난 초안 포함) 진행 중 생성 세션이 없을 때만(Q1·Q2).

@@ -4,7 +4,10 @@ import { isAxiosError } from 'axios';
 
 import { nightlyBaseCards, toBaseSections } from '../model/baseSections';
 import { sigunguLabel } from '@/features/trip';
-import { staySheetSections } from '../model/staySheetSections';
+import {
+  staySheetRegionNotice,
+  staySheetSections,
+} from '../model/staySheetSections';
 import { deriveEndDate } from '@/features/create-trip';
 import { useTripWizardStore } from '@/features/create-trip';
 import { useSavedStays } from '@/features/trip';
@@ -304,6 +307,11 @@ export function BaseNightsFlow({
             staySheetSections(candidates, stayAddresses, openCard.region) ??
             undefined
           }
+          regionNotice={staySheetRegionNotice(
+            candidates,
+            stayAddresses,
+            openCard.region
+          )}
           selectedSavedStayId={selectedSavedStayId}
           onSelect={(savedStayId) => setSelectedSavedStayId(savedStayId)}
           onBrowse={() => browseStays(openCard.region)}

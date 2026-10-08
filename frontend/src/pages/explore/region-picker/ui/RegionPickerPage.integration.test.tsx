@@ -238,9 +238,13 @@ describe('AC-6 · 검색 경로 → 원본 카탈로그 이름으로 라우팅 (
 
     // 서버 `region`은 자유 문자열 계약이라 원본 카탈로그의 한글 이름을 그대로 보낸다(코드 아님).
     // TRIP-989 F(D16) — push 가 아니라 dismissTo: 스택 아래 결과 화면으로 되감아 지역만 바꾼다(화면이 안 쌓인다).
-    expect(mockDismissTo.mock.calls).toEqual([
-      [`/stays?region=${encodeURIComponent('춘천시')}`],
-    ]);
+    // TRIP-1273(AC-F2) — 동명 구를 결과 화면이 가를 수 있게 코드·시도를 함께 싣는다(이름은 그대로).
+    // 주소 모양(문자열/객체)은 구현 몫이라 `targetOf` 로 펴서 본다(옛 정확 문자열 단언을 사양 변경으로 재작성).
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
+      path: '/stays',
+      params: { region: '춘천시', regionCode: '51110', sido: '강원특별자치도' },
+    });
     expect(mockPush).not.toHaveBeenCalled();
     // 좁혀졌는지도 함께 본다 — 필터가 안 걸리면 이 단언이 무의미해진다.
     expect(screen.queryByTestId('explore-region-28177')).toBeNull();
@@ -277,9 +281,12 @@ describe('AC-4 · stay 분기 (드릴다운 → /stays 되감기, TRIP-989 F-1 �
     fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 인천 드릴인
     fireEvent.press(screen.getByTestId('explore-region-28177')); // 미추홀구
 
-    expect(mockDismissTo.mock.calls).toEqual([
-      [`/stays?region=${encodeURIComponent('미추홀구')}`],
-    ]);
+    // TRIP-1273(AC-F2) — 이름 + 코드 + 시도(옛 정확 문자열 단언을 사양 변경으로 재작성).
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
+      path: '/stays',
+      params: { region: '미추홀구', regionCode: '28177', sido: '인천광역시' },
+    });
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
     expect(mockAddDestination).not.toHaveBeenCalled();
@@ -592,6 +599,67 @@ describe('실제 스토어에 담긴 결과', () => {
       const [seoul] = store().destinations;
       expect(seoul.region).toBe('서울특별시');
       expect(seoul.regionCode).toBe('11');
+    });
+  });
+});
+
+/**
+ * TRIP-1273(F3 · AC-F2·F5) — 같은 이름의 구(서울 강서구 11500 · 부산 강서구 26440)를 골라도 결과 화면이 어느
+ * 쪽인지 알 수 있게, stay 분기는 이름과 함께 **코드·시도**를 싣는다. 서버로 가는 이름(`region`)은 그대로다 —
+ * 서버는 시도 접두 이름을 모르고(0건) 코드 파라미터도 없다(브리프 §4-3).
+ *
+ * 카탈로그는 이 describe 의 it 안에서만 넓힌다(★11) — 공유 `CATALOG` 의 크기·순서 계약(파일 위 ⚠️)을 흔들지 않는다.
+ */
+describe('stay 분기 · 동명 구도 어느 시도인지 실어 보낸다 (F3 · AC-F2·F5)', () => {
+  const SEOUL_GANGSEO = region({
+    regionCode: '11500',
+    name: '강서구',
+    level: RegionLevel.SIGUNGU,
+    sidoName: '서울특별시',
+  });
+  const BUSAN_GANGSEO = region({
+    regionCode: '26440',
+    name: '강서구',
+    level: RegionLevel.SIGUNGU,
+    sidoName: '부산광역시',
+  });
+
+  it('검색 "강서"에서 서울 강서구·부산 강서구를 차례로 고르면 이름은 같고 코드·시도가 각자 실린다', () => {
+    mockParams = { purpose: purposeParamOf(regionPickerHref('stay')) };
+    mockRegionsResult = {
+      ...mockRegionsResult,
+      data: [...CATALOG, SEOUL_GANGSEO, BUSAN_GANGSEO],
+    };
+    render(<RegionPickerPage />);
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '강서');
+
+    fireEvent.press(screen.getByTestId('explore-region-11500'));
+    fireEvent.press(screen.getByTestId('explore-region-26440'));
+
+    expect(mockDismissTo).toHaveBeenCalledTimes(2);
+    expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
+      path: '/stays',
+      params: { region: '강서구', regionCode: '11500', sido: '서울특별시' },
+    });
+    expect(targetOf(mockDismissTo.mock.calls[1][0])).toEqual({
+      path: '/stays',
+      params: { region: '강서구', regionCode: '26440', sido: '부산광역시' },
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockAddDestination).not.toHaveBeenCalled();
+  });
+
+  it('AC-F5 · 시도 행(부산광역시)을 골라도 같은 모양 — 이름·코드 26·시도 부산광역시', () => {
+    mockParams = { purpose: purposeParamOf(regionPickerHref('stay')) };
+    render(<RegionPickerPage />);
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
+
+    fireEvent.press(screen.getByTestId('explore-region-26'));
+
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
+      path: '/stays',
+      params: { region: '부산광역시', regionCode: '26', sido: '부산광역시' },
     });
   });
 });

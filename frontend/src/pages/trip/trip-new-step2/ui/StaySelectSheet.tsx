@@ -71,6 +71,8 @@ export interface StaySelectSheetProps {
   candidates: StaySelectCandidate[];
   /** TRIP-1011 — 있으면 섹션(헤더+카드)으로 그린다. 없으면 `candidates` 평면 목록(현행). */
   sections?: StaySelectSection[];
+  /** TRIP-1273 — 그 밤 지역 숙소 0곳 안내(배선이 `staySheetRegionNotice` 로 만든다). 있으면 섹션 위에 그린다. */
+  regionNotice?: string | null;
   /** 드래프트 선택 — 배선이 소유. null 이면 미선택(지정 disabled). */
   selectedSavedStayId: string | null;
   /** 후보 press → 배선 드래프트 갱신. */
@@ -106,6 +108,7 @@ export function StaySelectSheet({
   dateLabel,
   candidates,
   sections,
+  regionNotice,
   selectedSavedStayId,
   onSelect,
   onBrowse,
@@ -169,6 +172,15 @@ export function StaySelectSheet({
             {`${dateLabel} 밤 · 어디서 묵을까요?`}
           </Text>
         </View>
+
+        {regionNotice ? (
+          <Text
+            testID="trip-base-staysheet-region-empty"
+            className="font-noto text-body text-muted"
+          >
+            {regionNotice}
+          </Text>
+        ) : null}
 
         {/* body — 후보 목록 또는 0건 안내(둘은 상호배타) */}
         {empty ? (

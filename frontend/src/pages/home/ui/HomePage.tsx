@@ -7,6 +7,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { useGetPlaces } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange } from '@/entities/trip';
@@ -77,7 +78,8 @@ function PlanningHome({
       })
     : null;
 
-  const onPressTripHeroCta = () => {
+  // TRIP-1282 — 위저드 이탈 다이얼로그 버튼의 창 안이면 무시(연타 관통 표적, 카드 본문·알약 공용).
+  const onPressTripHeroCta = guardPress(() => {
     if (destination === null) return;
     router.push(
       itineraryDestinationHref(
@@ -86,7 +88,7 @@ function PlanningHome({
         itinerary.data?.days
       )
     );
-  };
+  });
 
   return (
     <HomeScreen
@@ -205,7 +207,8 @@ export function HomePage() {
       setSavedMenuOpen(false);
       router.push('/stays/saved');
     },
-    onPressSpotsMore: () => router.push('/explore/places'),
+    // TRIP-1282 — 창을 연다: 둘째 탭이 장소 탐색 카드에 떨어져도 상세가 안 열린다(연타 관통).
+    onPressSpotsMore: guardPress(() => router.push('/explore/places')),
     onPressSearch: () => router.push(regionPickerHref('explore')),
     // TRIP-935 R1 — 매거진(a02) 진입을 막는다: onPressMagazine 을 넘기지 않아 page0 은 버튼이 아니다.
     // 매거진 화면은 고정 샘플에 무반응 요소뿐이라(심사 2.1) 실데이터가 생기면 여기서 다시 잇는다.

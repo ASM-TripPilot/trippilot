@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
+import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { TripCardContainer } from './TripCardContainer';
 
@@ -99,6 +100,8 @@ beforeEach(() => {
   mockUseItinerary.mockReset();
   mockPush.mockClear();
 });
+// 연타 가드 창은 모듈 싱글턴 — 앞 테스트가 연 창이 다음 테스트의 카드 누름을 먹지 않게 닫는다(TRIP-1282).
+afterEach(() => resetPressGuard());
 
 describe('🔴 AC-1 · 생성중(PARTIAL) — resume 누출 seam', () => {
   it('상태문 "AI가 일정을 짜는 중" · 배지 "작성중" · resume 부재(배지=작성중이어도 resume 안 샌다)', () => {
@@ -792,4 +795,52 @@ describe('⋯ 삭제 진입점', () => {
       expect(mockPush).not.toHaveBeenCalled();
     });
   });
+});
+
+// TRIP-1282 ④ — 마이 "예정" 연타의 둘째 탭이 이 카드에 떨어져 라이브로 갔다(QA A-02). 트리거 반쪽(숫자 칸이 창을
+// 연다)은 MyPage.test.tsx 에 있다 — 두 화면을 잇는 것은 모듈 전역 창 하나뿐이다.
+// resume CTA 는 카드와 같은 함수로 폴백한다(TripCard `onResume ?? onPress`) — 둘 다 막혀야 한다.
+describe('연타 관통 표적 — 창 안의 카드·resume 누름은 무시된다', () => {
+  const FROZEN_NOW = 1_790_000_000_000;
+  let clock: jest.SpyInstance;
+  beforeEach(() => {
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+  });
+  afterEach(() => clock.mockRestore());
+
+  it.each([
+    [
+      '카드 본문(여행 중 확정)',
+      'my-trip-card-t1',
+      itin('COMPLETE', 'CONFIRMED'),
+      DURING,
+      '/trips/t1/live',
+    ],
+    [
+      '"일정 이어서 짜기"(초안)',
+      'my-trip-resume-t1',
+      itin('COMPLETE', 'PLANNED'),
+      {},
+      '/trips/t1/itinerary/draft',
+    ],
+  ] as const)(
+    '%s — 창이 열려 있으면 눌러도 이동하지 않고, 창이 닫힌 뒤 한 번 누르면 그 목적지로 정확히 1회 간다',
+    (_, testID, data, period, href) => {
+      mockUseItinerary.mockReturnValue(itinOk(data));
+      render(<TripCardContainer trip={trip(period)} />);
+      // 준비 — 마이 숫자 칸이 방금 눌렸다(창이 열려 있다).
+      openPressGuardWindow();
+
+      fireEvent.press(screen.getByTestId(testID));
+
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // 무회귀 — 창이 닫힌 뒤의 한 번.
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId(testID));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(String(mockPush.mock.calls[0][0])).toBe(href);
+    }
+  );
 });

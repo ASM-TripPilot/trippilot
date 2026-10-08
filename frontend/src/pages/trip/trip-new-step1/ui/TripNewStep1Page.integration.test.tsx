@@ -15,7 +15,7 @@ import {
   getAccessToken,
   setAccessToken,
 } from '@/shared/api/tokenManager';
-import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { server } from '@/mocks/server';
 import type {
@@ -4739,20 +4739,29 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
       expect(useTripWizardStore.getState().createdTripId).toBe(TRIP_ID);
     });
 
-    it('같은 틱에 두 번 눌러도 back 은 1회다 (01b Q7 — 위저드 진입 전 화면까지 빠지지 않는다)', async () => {
-      // 준비
-      seedCreated();
-      await openLeaveDialog();
+    // TRIP-1282 — [저장]도 누름 가드로 감싸져, 같은 틱 둘째 누름은 가드가 먼저 막는다. 사람 간격(가드 창 닫힘)
+    // 줄을 더해 잠금(lockedRef)이 따로 막는지도 본다(AC-8 의 spaced 줄과 같은 짝).
+    it.each<[string, boolean]>([
+      ['같은 틱에 두 번', false],
+      ['사람 간격으로 두 번(누름 가드 창 닫힘)', true],
+    ])(
+      '%s 눌러도 back 은 1회다 (01b Q7 — 위저드 진입 전 화면까지 빠지지 않는다)',
+      async (_label, spaced) => {
+        // 준비
+        seedCreated();
+        await openLeaveDialog();
 
-      // 실행 — 가드 창을 닫지 않고 연달아 누른다.
-      const save = screen.getByTestId('trip-wizard-leave-save');
-      fireEvent.press(save);
-      fireEvent.press(save);
-      await settle();
+        // 실행 — 연달아 누른다(spaced 면 그 사이 가드 창을 닫는다).
+        const save = screen.getByTestId('trip-wizard-leave-save');
+        fireEvent.press(save);
+        if (spaced) resetPressGuard();
+        fireEvent.press(save);
+        await settle();
 
-      // 단언
-      expect(navCalls()).toEqual({ back: 1, replace: 0, push: 0 });
-    });
+        // 단언
+        expect(navCalls()).toEqual({ back: 1, replace: 0, push: 0 });
+      }
+    );
   });
 
   describe('🔴 AC-4b · 뒤로 갈 곳이 없으면 홈으로 replace 한다 (결정 2 · HOME_FALLBACK 선례)', () => {
@@ -4963,6 +4972,82 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
         await waitFor(() => expect(hits(LIST_TRIPS)).toBe(2));
       }
     );
+  });
+
+  // TRIP-1282 ⑤ — [삭제하고 나가기] 연타의 둘째 탭이 다이얼로그가 닫힌 뒤 홈 여행 카드에 떨어져 라이브로 갔다(QA B-15).
+  // 표적 반쪽(홈 카드가 열린 창에서 무시된다)은 HomePage.test.tsx 에 있다 — 두 화면을 잇는 것은 모듈 전역 창 하나뿐이다.
+  // 시계는 다이얼로그가 뜬 뒤에 멈춘다(그 전의 프리필·목록 응답은 waitFor 로 기다린다). settle 은 실제 setTimeout 이라
+  // 멈춘 Date.now 와 무관하다.
+  describe('🔴 연타 관통 트리거 — 나가기 버튼은 창을 연다', () => {
+    const FROZEN_NOW = 1_790_000_000_000;
+    let clock: jest.SpyInstance | undefined;
+    afterEach(() => clock?.mockRestore());
+
+    /** 다음 화면의 "가드로 감싼 버튼" 대역 — 창이 열려 있으면 안 불린다. 부르는 순간 창을 연다(닫혀 있었다면). */
+    function tapGuardedElsewhere(): jest.Mock {
+      const handler = jest.fn();
+      guardPress(handler)();
+      return handler;
+    }
+
+    /** 다이얼로그를 띄우고 시계를 멈춘 뒤, 창이 닫혀 있음을 확인하고 다시 닫아 둔다. */
+    async function openDialogFrozen(): Promise<void> {
+      seedCreated();
+      await openLeaveDialog();
+      clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+      // 앵커 — 아직 창이 닫혀 있다(대역이 불린다). 대역이 연 창은 바로 닫는다.
+      expect(tapGuardedElsewhere()).toHaveBeenCalledTimes(1);
+      resetPressGuard();
+    }
+
+    it('[삭제하고 나가기] 204 → 위저드를 나가고, 창이 열려 다음 화면의 가드 버튼은 무시된다', async () => {
+      await openDialogFrozen();
+
+      fireEvent.press(screen.getByTestId('trip-wizard-leave-delete'));
+      await settle();
+
+      // 앵커 — 첫 탭은 제 할 일을 했다(지우고 나갔다).
+      expect(hits(DELETE_TRIP)).toBe(1);
+      expect(navCalls()).toEqual({ back: 1, replace: 0, push: 0 });
+      // 단언 — 창이 열려 있다.
+      expect(tapGuardedElsewhere()).not.toHaveBeenCalled();
+    });
+
+    it('[삭제하고 나가기] 응답이 누른 뒤 400ms 를 넘겨 와도, 나가는 순간 창을 다시 열어 다음 화면의 가드 버튼은 무시된다', async () => {
+      deleteMode = 'gate';
+      await openDialogFrozen();
+
+      // 실행 ① — 누른다(시각 T). 요청은 문 앞에서 기다린다.
+      fireEvent.press(screen.getByTestId('trip-wizard-leave-delete'));
+      await settle();
+      expect(hits(DELETE_TRIP)).toBe(1);
+      expect(navCalls()).toEqual({ back: 0, replace: 0, push: 0 });
+
+      // 실행 ② — 응답 전에 시계를 T+500 으로 옮긴다(누름이 연 창은 이미 닫혔다). 그다음 응답을 보낸다.
+      clock?.mockReturnValue(FROZEN_NOW + 500);
+      await act(async () => {
+        openGates();
+      });
+      await settle();
+
+      // 앵커 — 응답 뒤 나갔다.
+      expect(navCalls()).toEqual({ back: 1, replace: 0, push: 0 });
+      // 단언 — 나가는 그 순간 열린 창 안이다.
+      expect(tapGuardedElsewhere()).not.toHaveBeenCalled();
+    });
+
+    it('[저장하고 나가기] → 위저드를 나가고, 창이 열려 다음 화면의 가드 버튼은 무시된다', async () => {
+      await openDialogFrozen();
+
+      fireEvent.press(screen.getByTestId('trip-wizard-leave-save'));
+      await settle();
+
+      // 앵커 — 첫 탭은 제 할 일을 했다(요청 없이 나갔다).
+      expect(hits(DELETE_TRIP)).toBe(0);
+      expect(navCalls()).toEqual({ back: 1, replace: 0, push: 0 });
+      // 단언 — 창이 열려 있다.
+      expect(tapGuardedElsewhere()).not.toHaveBeenCalled();
+    });
   });
 
   describe('🔴 AC-12 · 화면이 사라진 뒤 도착한 삭제 응답은 이동을 일으키지 않는다 (01b Q3)', () => {

@@ -25,6 +25,7 @@ import type {
 import { isAlreadyRegistered } from '@/shared/api';
 import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
+import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { shiftMonth } from '@/shared/lib/monthGrid';
 import { toggleMulti } from '@/features/edit-preferences';
@@ -206,7 +207,12 @@ function LeaveDialogContainer({
     // 내리므로 지금 순서를 뒤집어도 이동은 일어난다(5-b 실측) — 순서는 읽기 쉬움을 위한 것이고
     // 이 순서를 잠그는 테스트는 없다.
     const done = (): void => {
-      if (mountedRef.current) onExit();
+      // 응답이 누른 뒤 400ms 를 넘겨 와도 이동하는 순간 창을 다시 연다 — 바뀐 화면(홈 히어로)에
+      // 떨어지는 둘째 탭을 막는다(TRIP-1282 · 01b Q2).
+      if (mountedRef.current) {
+        openPressGuardWindow();
+        onExit();
+      }
       useTripWizardStore.setState({ createdTripId: undefined });
       queryClient.invalidateQueries({ queryKey: getGetTripsQueryKey() });
     };
@@ -223,8 +229,9 @@ function LeaveDialogContainer({
   return (
     <TripWizardLeaveDialog
       failed={failed}
-      onSave={save}
-      onDelete={remove}
+      // TRIP-1282 — 창을 연다(lockedRef 와 별개 — 그쪽은 요청 중 재누름 방지).
+      onSave={guardPress(save)}
+      onDelete={guardPress(remove)}
       onStay={() => {
         if (!lockedRef.current) onStay();
       }}

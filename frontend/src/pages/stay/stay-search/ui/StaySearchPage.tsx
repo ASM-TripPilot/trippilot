@@ -12,13 +12,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { StayItem } from '@/shared/api/index.schemas';
 import { getAccessToken } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
-import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import { shellTabHref, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import { regionPickerHref } from '@/features/explore';
 import {
   filterByPriceRange,
   type PriceBucketId,
 } from '../model/priceRangeFilter';
+import { filterBySido } from '../model/sidoFilter';
 import { relaxCulpritFilter } from '../model/relaxCulpritFilter';
 import { useSavedStays } from '@/features/save-stay';
 import {
@@ -42,13 +43,18 @@ function toParamList(value?: string | string[]): string[] {
 }
 
 export function StaySearchPage(): ReactElement {
-  const { region, amenity, stayType } = useLocalSearchParams<{
+  const { region, regionCode, sido, amenity, stayType } = useLocalSearchParams<{
     region?: string;
+    // TRIP-1273(F3) — 지역 피커가 함께 싣는다. 서버엔 안 보낸다(계약에 없음) — 응답 후처리·지역 바뀜 판정 전용.
+    regionCode?: string;
+    sido?: string;
     amenity?: string | string[];
     stayType?: string | string[];
   }>();
   const rawRegion = Array.isArray(region) ? region[0] : region;
   const resolvedRegion = rawRegion || '부산';
+  // 같은 키가 중복되면 배열로 온다(신뢰 경계) — region 과 같이 첫 값만 쓴다.
+  const rawSido = Array.isArray(sido) ? sido[0] : sido;
   const amenityList = toParamList(amenity);
   const stayTypeList = toParamList(stayType);
 
@@ -84,9 +90,11 @@ export function StaySearchPage(): ReactElement {
   // 지역 선택은 `dismissTo`로 이 인스턴스에 돌아온다(TRIP-989 F) — URL 필터는 교체돼 사라지지만
   // 로컬 필터(가격대·검색어)는 남는다. "새 지역 = 새 검색"을 지키려고 지역이 바뀐 렌더에서만 비운다(01b Q4).
   // 이펙트가 아니라 렌더 중 조정이라 옛 필터로 한 번 그려지는 프레임이 없다.
-  const [seenRegion, setSeenRegion] = useState(resolvedRegion);
-  if (seenRegion !== resolvedRegion) {
-    setSeenRegion(resolvedRegion);
+  // TRIP-1273(AC-F7) — 동명 구(서울→부산 강서구)는 이름이 같아 코드까지 함께 본다.
+  const regionKey = `${resolvedRegion}|${regionCode ?? ''}`;
+  const [seenRegion, setSeenRegion] = useState(regionKey);
+  if (seenRegion !== regionKey) {
+    setSeenRegion(regionKey);
     setPriceBucket('all');
     setNameQuery('');
   }
@@ -105,7 +113,10 @@ export function StaySearchPage(): ReactElement {
 
   // 가격대 파생 필터(TRIP-457) — 기본 `all`은 순서보존 전량이라 동결 통합테스트가 무회귀다
   // (★F-6). 화면에 내리는 목록·개수(헤더 "N곳") 둘 다 이 파생 결과에서 나와 갈라지지 않는다.
-  const visibleItems = filterByPriceRange(data?.items ?? [], priceBucket);
+  // TRIP-1273(F3) — 그 앞에 시도 후처리 필터(동명 구의 다른 시도 숙소 제외)를 거친다.
+  // 필터 시트 칩도 이 결과에서 만든다 — 다른 시도에만 있는 유형 칩은 고르면 0곳이다(03b 경고-1).
+  const sidoItems = filterBySido(data?.items ?? [], rawSido);
+  const visibleItems = filterByPriceRange(sidoItems, priceBucket);
 
   const state = resolveStaySearchState({
     isPending,
@@ -140,7 +151,7 @@ export function StaySearchPage(): ReactElement {
   }
 
   const filterOptions = buildStayFilterOptions(
-    data?.items ?? [],
+    sidoItems,
     draftAmenity,
     draftStayType
   );
@@ -165,7 +176,10 @@ export function StaySearchPage(): ReactElement {
         // 하단 탭바(TRIP-413) — /stays 는 (tabs) 밖 라우트라 진짜 탭바가 없어 화면이 복제본을
         // 그린다. 그 복제 탭바를 실 라우팅에 잇는다: 탭 key → 해당 탭 URL 로 dismissTo(스택 밑의
         // (tabs)까지 걷어낸다 — replace 면 이 화면만 바뀌어 (tabs) 가 두 겹이 됐다, TRIP-1262 · QA F3).
-        onPressTab={(key) => router.dismissTo(shellTabHref(key))}
+        // TRIP-1282 — 필터 시트 "적용"의 창 안이면 무시(연타 관통 표적). 공용 탭바는 그대로 둔다(01b Q3).
+        onPressTab={guardPress((key: ShellTabKey) =>
+          router.dismissTo(shellTabHref(key))
+        )}
         // 흰 원 하트 FAB(TRIP-725) — 담은 숙소 목록(e04)으로. 화면은 라우터를 모른다(구조 가드).
         // + FAB 는 아래 onPressRegister 를 재사용한다(같은 목적지 /stays/register).
         onPressSaved={() => router.push('/stays/saved')}
@@ -182,10 +196,11 @@ export function StaySearchPage(): ReactElement {
         // 유지되므로 넣지 않는다, ★4). setParams 갱신 → useLocalSearchParams 갱신 → 재조회.
         // 가격대(로컬 상태)도 푼다 — 가격 때문에 0곳이면 서버 원인이 비어 empty 얼굴이 되고,
         // 이 버튼이 유일한 탈출구다(TRIP-989 E-3).
-        onRelaxFilters={() => {
+        // TRIP-1282 — 창을 연다: 0곳 → 결과로 바뀐 자리의 숙소 카드에 둘째 탭이 떨어져도 무시된다.
+        onRelaxFilters={guardPress(() => {
           router.setParams({ amenity: [], stayType: [] });
           setPriceBucket('all');
-        }}
+        })}
         // 원인 필터만 해제(AC-5) — relaxCulpritFilter 가 reason(=reasons[0])을 지금 적용된 두
         // 배열에 매핑해 그 원인만 뺀 {amenity, stayType}를 낸다(정확히 두 키라 그대로 넘긴다).
         onClearCulpritFilter={(reason) =>
@@ -223,7 +238,8 @@ export function StaySearchPage(): ReactElement {
           onToggleStayType={(v) =>
             setDraftStayType((prev) => toggleFilterValue(prev, v))
           }
-          onApply={handleApplyFilter}
+          // TRIP-1282 — 창을 연다: 시트가 닫히며 드러난 탭바에 둘째 탭이 떨어져도 무시된다.
+          onApply={guardPress(handleApplyFilter)}
           onClose={() => setSheetOpen(false)}
         />
       ) : null}

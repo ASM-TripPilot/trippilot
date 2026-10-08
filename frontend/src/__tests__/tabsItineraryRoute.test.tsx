@@ -12,6 +12,7 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import ItineraryTab from '@routes/(tabs)/itinerary';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { useTripWizardStore } from '@/features/create-trip';
 import {
   captureDraftAtNextCall,
@@ -220,6 +221,8 @@ beforeEach(() => {
   mockUseGetTrips.mockReset();
   mockUseItinerary.mockReset();
 });
+// 연타 가드 창은 모듈 싱글턴 — 카드 탭이 가드로 감싸져(TRIP-1282) 앞 테스트의 창이 다음 테스트 카드 탭을 먹지 않게 닫는다.
+afterEach(() => resetPressGuard());
 
 describe('🔴 AC-1 · 여행 2건+ → 모두 카드 렌더 (리다이렉트 없음, 핵심 결함 수정)', () => {
   it('두 여행이 각각 카드로 뜨고, 아무 데로도 리다이렉트하지 않는다', () => {

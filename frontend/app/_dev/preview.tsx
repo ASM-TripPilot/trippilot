@@ -4697,6 +4697,48 @@ export const PREVIEW_STATES: PreviewState[] = [
       );
     },
   },
+  // g02 숙소 선택 시트 그 밤 지역 0곳(TRIP-1273 B-14) — QA 재현: 부산 밤에 서울 숙소만 2곳. 안내 문구는
+  // Figma 노드가 없는 발명 문구(01b Q2)라 6-b 육안이 "섹션 위에서 튀지 않나·시트 안에 보이나"를 보는 자리.
+  {
+    key: 'trip-new-step2-staysheet-region-empty',
+    band: 'g',
+    label: 'g02 · 숙소 선택 시트 region-empty',
+    login: null,
+    render: () => {
+      const stay = (
+        savedStayId: string,
+        name: string
+      ): StaySelectCandidate => ({
+        savedStayId,
+        name,
+        coordConfirmed: true,
+        linkedTripIds: [],
+        checkIn: null,
+        checkOut: null,
+        registerRoute: 'MAP_SEARCH',
+        createdAt: '2026-08-01T00:00:00Z',
+        updatedAt: '2026-08-01T00:00:00Z',
+      });
+      const seoul = [
+        stay('jongno', '종로 인 호텔'),
+        stay('jw', 'JW 메리어트 동대문'),
+      ];
+      return (
+        <StaySelectSheet
+          title="2박 · 부산광역시"
+          dateLabel="9/27(일)"
+          candidates={seoul}
+          sections={[{ key: 'other', title: '다른 지역', candidates: seoul }]}
+          regionNotice="부산광역시에 저장한 숙소가 없어요"
+          selectedSavedStayId={null}
+          onSelect={noop}
+          onBrowse={noop}
+          onAssign={noop}
+          onClose={noop}
+        />
+      );
+    },
+  },
   // g02 지정 실패 두 갈래(TRIP-1235) — Figma 에 실패 프레임이 없어 코드가 만든 문구다. 두 줄 문구가
   // 버튼 사이에서 넘치거나 튀지 않나를 6-b 가 보는 자리(문구 자체는 jest 가 잰다).
   ...(['retryable', 'permanent'] as const).map((failure) => ({

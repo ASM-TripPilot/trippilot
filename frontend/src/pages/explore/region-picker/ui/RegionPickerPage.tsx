@@ -70,7 +70,15 @@ export function RegionPickerPage(): ReactElement {
     }
     // 서버 `region`은 자유 문자열 계약이라 코드가 아니라 한글 이름을 보낸다. dismissTo 로 결과
     // 화면에 돌아가 지역만 교체한다 — push 면 "결과→피커→결과"가 쌓였다(TRIP-989 D16).
-    router.dismissTo(`/stays?region=${encodeURIComponent(region.name)}`);
+    // TRIP-1273(F3) — 서버는 동명 구(서울·부산 강서구)를 합쳐 주므로 결과 화면이 거를 수 있게 코드·시도를 함께 싣는다.
+    router.dismissTo({
+      pathname: '/stays',
+      params: {
+        region: region.name,
+        regionCode: region.regionCode,
+        sido: region.sidoName,
+      },
+    });
   }
 
   return (
