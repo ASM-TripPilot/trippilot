@@ -123,20 +123,20 @@ function OngoingTripCard({
           <Pressable
             testID="record-calendar-ongoing-records"
             accessibilityRole="button"
-            className="h-[44px] flex-1 items-center justify-center rounded-button bg-primary"
+            className="min-h-[44px] flex-1 items-center justify-center rounded-button bg-primary px-sm py-sm"
             onPress={onPressRecords && (() => onPressRecords(trip.tripId))}
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+            <Text className="text-center font-noto-bold text-[16px] font-bold text-on-primary">
               오늘 기록 보기
             </Text>
           </Pressable>
           <Pressable
             testID="record-calendar-ongoing-hub"
             accessibilityRole="button"
-            className="h-[44px] flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
+            className="min-h-[44px] flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas px-sm py-sm"
             onPress={onPressHub && (() => onPressHub(trip.tripId))}
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-ink">
+            <Text className="text-center font-noto-bold text-[16px] font-bold text-ink">
               일정 허브로
             </Text>
           </Pressable>

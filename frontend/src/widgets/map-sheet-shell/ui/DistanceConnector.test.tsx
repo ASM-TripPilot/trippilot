@@ -7,8 +7,10 @@ import { CarGlyph, WalkGlyph } from './MapSheetGlyphs';
 /**
  * TRIP-783 · AC-3·AC-4·E3 — 카드 사이 거리 커넥터(widgets). 서버 `distanceRange` 문자열을
  * 가공 없이 그대로 나른다(BR-U3-08, INV-3 — 소요시간 필드 없음).
- * TRIP-1054 — 값이 없으면(null·undefined·'') 글리프 줄만 남기고 문구 칸을 그리지 않는다(QA #038,
- * 결정 1b). `약 0.0km` 로 시작하는 문자열은 `바로 옆`으로 바꾼다(QA #035, 결정 2b).
+ * TRIP-1274 — 값이 없으면(null·undefined·'') 글리프 옆에 `거리 정보 없음`을 적는다(INV-4 · 사용자 결정
+ * 2026-10-08). TRIP-1054 결정 1b("글리프만, 대체 문구 금지")를 뒤집었다 — 그때 근거("편집 일정은 값이
+ * 영원히 없다")가 서버 repair 도입으로 "바뀐 구간인데 수리 못 한 때"로 좁혀졌다.
+ * `약 0.0km` 로 시작하는 문자열은 `바로 옆`으로 바꾼다(QA #035, 결정 2b).
  * 이동수단 아이콘은 `자가용` 포함 여부로 고른다(TRIP-1076, 옛 키 `차량` 폐기) — 어느 글리프 컴포넌트인지까지만 보고, 색·모양은
  * SVG 라 jest 원리적 사각(6-b 육안). 점선·[길찾기]는 신 설계에서 제거 — 그 부재를 잠근다.
  *
@@ -62,9 +64,13 @@ describe('🔴 DistanceConnector · C1 — 거리 통과 렌더(AC-3 완전일�
   });
 });
 
-describe('🔴 DistanceConnector · C2 — 거리 없음 → 글리프 줄만, 문구 칸 없음(TRIP-1054 AC-1·AC-2)', () => {
+// 숫자 거리 탐지기 — "1.2km"·"600m" 같은 거리 값. 모름 문구에 값을 지어 붙이면 걸린다(INV-2).
+const NUMERIC_DISTANCE = /\d+(\.\d+)?\s*(km|m)\b/;
+
+// TRIP-1274 — 옛 C2(TRIP-1054 "글자 0줄, '거리 정보 없음'도 금지")를 사용자 결정 2026-10-08로 뒤집었다.
+describe('🔴 DistanceConnector · C2 — 거리 없음 → 글리프 옆에 "거리 정보 없음"(INV-4)', () => {
   it.each([null, undefined, ''])(
-    'distanceRange=%p 이면 줄과 글리프 1개만 남고 문구 칸·"이동 거리 계산 중"이 없다',
+    'distanceRange=%p 이면 모름 칸이 정확히 "거리 정보 없음"이고 거리 칸은 없다',
     (distanceRange) => {
       render(
         <DistanceConnector slotKey={SLOT_KEY} distanceRange={distanceRange} />
@@ -74,17 +80,37 @@ describe('🔴 DistanceConnector · C2 — 거리 없음 → 글리프 줄만, �
       expect(
         screen.getByTestId(`sheet-connector-${SLOT_KEY}`)
       ).toBeOnTheScreen();
-      // 문구 칸 자체가 없다(02a D2 — 빈 Text 가 아니라 부재).
+      // 모름은 거리 칸과 다른 testID 다(Seed Q3) — 거리 값 목록 단언과 섞이지 않게.
+      expect(
+        screen.getByTestId(`sheet-connector-unknown-${SLOT_KEY}`)
+      ).toHaveTextContent('거리 정보 없음');
       expect(
         screen.queryByTestId(`sheet-connector-distance-${SLOT_KEY}`)
       ).toBeNull();
-      // 옛 거짓 신호 "계산 중" 0.
+      // 화면 글자는 그 한 줄뿐(02a ★9) — 옛 "이동 거리 계산 중"도 이것으로 0.
+      expect(renderedTexts()).toEqual(['거리 정보 없음']);
       expect(screen.queryByText(/이동 거리 계산 중/)).toBeNull();
-      // 대체 문구('거리 정보 없음' 등)도 없다 — 글자는 한 줄도 안 그린다(02a ★3).
-      expect(renderedTexts()).toEqual([]);
-      // 글리프는 정확히 1개 남는다(결정 1b "글리프만").
-      const { car, walk } = glyphCount();
-      expect(car + walk).toBe(1);
+      // 수단을 몰라도 도보 글리프 1개 그대로(Seed Q5).
+      expect(glyphCount()).toEqual({ car: 0, walk: 1 });
+    }
+  );
+});
+
+describe('🔴 DistanceConnector · C2b — 거리 없음이면 숫자 거리를 지어내지 않는다(INV-2)', () => {
+  it.each([null, undefined, ''])(
+    'distanceRange=%p 이면 렌더된 글자에 "N km"·"N m" 이 없다',
+    (distanceRange) => {
+      render(
+        <DistanceConnector slotKey={SLOT_KEY} distanceRange={distanceRange} />
+      );
+
+      // 긍정 앵커 먼저(02a ★8) — 모름 칸이 실제로 있어야 아래 0건이 공짜 통과가 아니다.
+      expect(
+        screen.getByTestId(`sheet-connector-unknown-${SLOT_KEY}`)
+      ).toBeOnTheScreen();
+      expect(renderedTexts().filter((t) => NUMERIC_DISTANCE.test(t))).toEqual(
+        []
+      );
     }
   );
 });
@@ -106,7 +132,7 @@ describe('🔴 DistanceConnector · C3 — INV-3 렌더 스캔(소요시간 0)',
         <DistanceConnector slotKey={SLOT_KEY} distanceRange={distanceRange} />
       );
 
-      // 긍정 앵커 — 커넥터 줄이 실제로 있다(값 없음이면 글자가 0개라 "문자열 개수" 앵커는 못 쓴다).
+      // 긍정 앵커 — 커넥터 줄이 실제로 있다(값 유무에 따라 글자 칸 testID 가 달라 줄 뿌리로 잰다).
       expect(
         screen.getByTestId(`sheet-connector-${SLOT_KEY}`)
       ).toBeOnTheScreen();

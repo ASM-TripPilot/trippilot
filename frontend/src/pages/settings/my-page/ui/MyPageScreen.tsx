@@ -179,7 +179,7 @@ export function MyPageScreen({
       <View testID="my-page-root" className="flex-1 bg-canvas">
         {/* 헤더 — 스크롤 밖 고정. 제목 + 톱니(→ 설정, 미주입이면 그리지 않는다 — INV-4). */}
         <View className="flex-row items-center justify-between px-lg pb-[14px] pt-sm">
-          <Text className="font-noto-bold text-hero font-bold text-ink">
+          <Text className="shrink font-noto-bold text-hero font-bold text-ink">
             마이페이지
           </Text>
           {onPressSettings ? (
@@ -189,6 +189,7 @@ export function MyPageScreen({
               accessibilityLabel="설정"
               onPress={onPressSettings}
               hitSlop={10}
+              className="shrink-0"
             >
               <GearGlyph size={24} />
             </Pressable>

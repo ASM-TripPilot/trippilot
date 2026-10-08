@@ -3,11 +3,13 @@ import {
   Image,
   Pressable,
   Text,
+  useWindowDimensions,
   View,
   type ImageSourcePropType,
 } from 'react-native';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
+import { isLargeText } from '@/shared/lib/fontScale';
 
 import { formatOpeningHoursLabel } from '../lib/openingHoursLabel';
 import { buildSlotKey } from '../lib/slotKey';
@@ -108,11 +110,13 @@ export function SlotProgressCard({
   const fieldId = (role: string): string =>
     `execution-live-slot-${role}-${slotKey}`;
   const hhmm = slot.startAt.slice(0, 5);
+  // TRIP-1270 — 큰 글자에선 머리 줄을 세로로 쌓고 이름을 꺾어 다 보인다(가로면 시각·배지에 밀려 "경…"만 남는다).
+  const largeText = isLargeText(useWindowDimensions().fontScale);
 
   const nameText = (testID?: string): ReactElement => (
     <Text
       testID={testID}
-      numberOfLines={1}
+      numberOfLines={largeText ? undefined : 1}
       className={`shrink font-noto-bold text-card-title font-bold ${
         state === 'upcoming' ? 'text-body' : 'text-ink'
       }`}
@@ -122,7 +126,13 @@ export function SlotProgressCard({
   );
 
   const head = (
-    <View className="flex-row items-center justify-between gap-sm">
+    <View
+      className={
+        largeText
+          ? 'items-start gap-xs'
+          : 'flex-row items-center justify-between gap-sm'
+      }
+    >
       {/* 이름 진입 목적지가 없으면 누를 수 없는 글자로, '›' 도 뺀다(TRIP-939 — 자매 SlotStopCard 선례). */}
       {onPressName ? (
         <Pressable
@@ -376,7 +386,7 @@ export function SlotProgressCard({
           : `${hhmm} 도착 예정 · ${hoursLabel}`}
       </Text>
       {/* 예정 카드의 아이콘은 모양만 있고 누를 수 없다. 도착은 옆의 [도착](주입 시)으로만. */}
-      <View className="flex-row items-center justify-between">
+      <View className="flex-row flex-wrap items-center justify-between gap-sm">
         <View className="flex-row gap-[6px]">
           {disabledIcons.map(({ role, icon }) => (
             <Pressable

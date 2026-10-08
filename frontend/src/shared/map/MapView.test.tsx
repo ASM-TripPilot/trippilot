@@ -567,3 +567,164 @@ describe('🔴 TRIP-795 AC-3(b) — MapPin.label: letter 를 번호 대신 SVG �
     ).toBeGreaterThan(0);
   });
 });
+
+// ── TRIP-1275 수정 루프 1 · 맞춤(region) ↔ 카메라(camera) 모드 전환 시 네이티브 지도 다시 마운트 ──
+// 6-b 실측: region 을 받던 네이티브 지도가 camera 로 넘어가면 라이브러리가 region=undefined 를
+// 보내고, iOS 네이티브는 camera 를 먼저 적용한 뒤 기본값(0,0) region 을 덮어써 지도가 바다로 간다.
+// jest 는 네이티브 적용 순서를 못 보므로, 렌더러가 볼 수 있는 "지도 인스턴스가 새로 생겼나"로 잰다.
+// getByTestId 가 돌려주는 노드는 같은 컴포넌트가 다시 그려지면 같은 객체(toBe), 새로 마운트되면
+// 다른 객체다(02a 수정 루프 1 §실검증).
+describe('맞춤·카메라 모드가 바뀌면 네이티브 지도를 새로 마운트한다', () => {
+  // 빈 일차 — 핀 0개, 중심은 여행 지역 후보(서울).
+  const EMPTY_DAY_CENTER: MapCenter = { lat: 37.5467, lng: 126.8808 };
+
+  it('🔴 맞춤(region) → 카메라(camera): 핀 2개 날에서 빈 날로 가면 지도 인스턴스가 바뀐다', () => {
+    // 준비 — 핀 2개 + fitPins 라 region 모드로 연다.
+    const { rerender } = render(
+      <MapView center={CENTER} pins={PINS} fitPins />
+    );
+    const before = screen.getByTestId('map-native');
+    expect(before.props.region).toBeDefined();
+
+    // 실행 — 빈 날로 넘어간다(핀 0개 → camera 모드).
+    rerender(<MapView center={EMPTY_DAY_CENTER} pins={[]} fitPins />);
+
+    // 단언 — 다른 인스턴스이고, 새 지도는 region 없이 빈 날 중심 camera 만 받는다.
+    const after = screen.getByTestId('map-native');
+    expect(after).not.toBe(before);
+    expect(after.props.region).toBeUndefined();
+    expect(after.props.camera).toMatchObject({
+      latitude: EMPTY_DAY_CENTER.lat,
+      longitude: EMPTY_DAY_CENTER.lng,
+    });
+  });
+
+  it('🔴 카메라(camera) → 맞춤(region): 빈 날에서 핀 2개 날로 가도 지도 인스턴스가 바뀐다', () => {
+    // 준비 — 빈 날(camera 모드)로 연다.
+    const { rerender } = render(
+      <MapView center={EMPTY_DAY_CENTER} pins={[]} fitPins />
+    );
+    const before = screen.getByTestId('map-native');
+    expect(before.props.region).toBeUndefined();
+
+    // 실행 — 핀 2개 날로 넘어간다(region 모드).
+    rerender(<MapView center={CENTER} pins={PINS} fitPins />);
+
+    // 단언 — 다른 인스턴스이고, 새 지도는 camera 없이 region 만 받는다.
+    const after = screen.getByTestId('map-native');
+    expect(after).not.toBe(before);
+    expect(after.props.region).toBeDefined();
+    expect(after.props.camera).toBeUndefined();
+  });
+
+  it('맞춤 모드 안에서 핀만 바뀌면 같은 지도 인스턴스다(깜빡임 방지 · 선제 green)', () => {
+    // 준비
+    const { rerender } = render(
+      <MapView center={CENTER} pins={PINS} fitPins />
+    );
+    const before = screen.getByTestId('map-native');
+    const regionBefore = before.props.region as unknown;
+
+    // 실행 — 핀 하나를 멀리 옮긴다(여전히 핀 2개 → region 모드).
+    rerender(
+      <MapView
+        center={CENTER}
+        pins={[PINS[0], { number: 2, lat: 35.1587, lng: 129.1604 }]}
+        fitPins
+      />
+    );
+
+    // 단언 — 영역은 새로 계산됐는데(실제로 바뀐 렌더) 지도는 그대로다.
+    const after = screen.getByTestId('map-native');
+    expect(after.props.region).not.toBe(regionBefore);
+    expect(after).toBe(before);
+  });
+
+  it('카메라 모드 안에서 중심만 바뀌면 같은 지도 인스턴스다(깜빡임 방지 · 선제 green)', () => {
+    // 준비
+    const { rerender } = render(
+      <MapView center={EMPTY_DAY_CENTER} pins={[]} fitPins />
+    );
+    const before = screen.getByTestId('map-native');
+
+    // 실행 — 다른 빈 날(중심이 다른 곳).
+    rerender(<MapView center={CENTER} pins={[]} fitPins />);
+
+    // 단언 — camera 는 새 중심을 받았는데(실제로 바뀐 렌더) 지도는 그대로다.
+    const after = screen.getByTestId('map-native');
+    expect(after.props.camera).toMatchObject({
+      latitude: CENTER.lat,
+      longitude: CENTER.lng,
+    });
+    expect(after).toBe(before);
+  });
+
+  // ── 심판 보강(03b 수정 루프 1 리뷰 경고-1·2) ── key 를 모드 대신 핀 개수·pinRegion 으로
+  // 계산하는 구현을 가른다.
+  it('맞춤 모드 안에서 핀이 2개 → 3개로 늘어도 같은 지도 인스턴스다(깜빡임 방지)', () => {
+    // 준비 — 핀 2개 + fitPins(region 모드).
+    const { rerender } = render(
+      <MapView center={CENTER} pins={PINS} fitPins />
+    );
+    const before = screen.getByTestId('map-native');
+    const regionBefore = before.props.region as unknown;
+    expect(regionBefore).toBeDefined();
+
+    // 실행 — 3곳 날(여전히 region 모드, 핀 개수만 바뀜).
+    rerender(
+      <MapView
+        center={CENTER}
+        pins={[...PINS, { number: 3, lat: 33.52, lng: 126.54 }]}
+        fitPins
+      />
+    );
+
+    // 단언 — region 은 새로 계산됐는데(앵커) 지도는 그대로다.
+    const after = screen.getByTestId('map-native');
+    expect(after.props.region).toBeDefined();
+    expect(after.props.region).not.toBe(regionBefore);
+    expect(after).toBe(before);
+  });
+
+  it('카메라 모드(fitPins 없음)에서 핀이 0개 → 1개로 늘어도 같은 지도 인스턴스다(사용자 위치 보존)', () => {
+    // 준비 — fitPins 없이 핀 0개(camera 모드).
+    const { rerender } = render(<MapView center={CENTER} pins={[]} />);
+    const before = screen.getByTestId('map-native');
+    expect(screen.queryAllByTestId('map-marker')).toHaveLength(0);
+
+    // 실행 — 같은 중심에 핀 하나가 생긴다.
+    rerender(<MapView center={CENTER} pins={[PINS[0]]} />);
+
+    // 단언 — 마커는 생겼고(앵커) 여전히 camera 모드이며 지도는 그대로다.
+    expect(screen.queryAllByTestId('map-marker')).toHaveLength(1);
+    const after = screen.getByTestId('map-native');
+    expect(after.props.region).toBeUndefined();
+    expect(after).toBe(before);
+  });
+
+  it('🔴 반경 원 켜짐(region) → 꺼짐(camera): 원이 사라지면 지도 인스턴스가 바뀐다(h10 "최대" 조회 중)', () => {
+    // 준비 — 핀 없이 반경 원만(원 영역으로 region 모드).
+    const { rerender } = render(
+      <MapView
+        center={CENTER}
+        pins={[]}
+        fitPins
+        radiusCircle={{ center: CENTER, radiusM: 3000 }}
+      />
+    );
+    const before = screen.getByTestId('map-native');
+    expect(before.props.region).toBeDefined();
+
+    // 실행 — 원이 사라진다(핀도 0개 → camera 모드).
+    rerender(<MapView center={CENTER} pins={[]} fitPins />);
+
+    // 단언 — 다른 인스턴스이고, 새 지도는 region 없이 camera 만 받는다.
+    const after = screen.getByTestId('map-native');
+    expect(after).not.toBe(before);
+    expect(after.props.region).toBeUndefined();
+    expect(after.props.camera).toMatchObject({
+      latitude: CENTER.lat,
+      longitude: CENTER.lng,
+    });
+  });
+});

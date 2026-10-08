@@ -23,6 +23,8 @@ import type {
   ItineraryGenerationState,
   ItineraryUnplacedMustVisitsItem,
   SavedPlace,
+  SavedStay,
+  BaseAssignment,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { showToast } from '@/shared/ui/Toast';
@@ -102,7 +104,13 @@ jest.mock('@/features/share-trip-card/model/shareCapture', () => {
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
+/** TRIP-1275 — 페이지가 거점을 조회한다(지도 중심 사다리 ③). 기본 핸들러가 없는 경로라 파일 전체에
+ * 빈 목록을 깐다(`/saved-stays` 는 전역 기본 `[]` 가 있다). describe 들이 afterEach 에서 핸들러를
+ * 비우므로 매 테스트 다시 건다. 거점이 필요한 케이스는 그 위에 `server.use` 로 덮는다. */
+const BASES_DEFAULT_URL = 'http://localhost:8080/api/v1/trips/:tripId/bases';
+
 beforeEach(() => {
+  server.use(http.get(BASES_DEFAULT_URL, () => HttpResponse.json([])));
   // 모듈 전역 연타 가드 창 — 앞 describe 의 확정 성공이 연 창이 뒤 describe 의 누름을 삼키지 않게 닫는다.
   resetPressGuard();
   [mockPush, mockBack, mockReplace, mockDismissTo, mockCanGoBack].forEach(
@@ -3756,8 +3764,12 @@ describe('위반 슬롯 경고 표식', () => {
 
   describe('🔴 TRIP-1031 · h14 — 서버 정성 문구(숫자 없음)는 그대로 보인다', () => {
     it('violationReason="앞 장소에서 이동할 시간이 빠듯해요" → 카드 표식에 그 문구', async () => {
-      itineraryScript = () =>
-        itinerary('PLANNED', '앞 장소에서 이동할 시간이 빠듯해요');
+      // TRIP-1274 — 거리를 아는 슬롯이어야 이동 문구가 "근거 있음"으로 남는다(거리 null 이면 뺀다).
+      itineraryScript = () => {
+        const it = itinerary('PLANNED', '앞 장소에서 이동할 시간이 빠듯해요');
+        it.days[0].slots[0].distanceRange = '약 2.1km · 도보 추정';
+        return it;
+      };
 
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
@@ -3779,6 +3791,457 @@ describe('위반 슬롯 경고 표식', () => {
       expect(
         screen.getByTestId(`slot-stopcard-violation-${k('poi-a')}`)
       ).toHaveTextContent(VIOLATION_LABEL);
+    });
+  });
+  // TRIP-1274 · AC-8 — "다른 후보" 교체 뒤 서버가 바뀐 두 구간 거리를 못 채운(null) GET 모양(h08 과 같은 픽스처).
+  describe('🔴 TRIP-1274 · h14/h16 — 교체 뒤 거리 null 구간은 "거리 정보 없음", 그 구간의 이동 빠듯 단정은 숨긴다', () => {
+    const HC2 = '앞 장소에서 이동할 시간이 빠듯해요';
+    const OPENING = '영업시간과 맞지 않아요';
+
+    /** poi-b 교체 — b·c 거리 null(직전→이 슬롯), b 는 이동 문구뿐, c 는 이동+영업시간, d 는 거리 있는 이동 문구. */
+    function swapped(status: ItineraryStatus): Itinerary {
+      const it = itinerary(status, null);
+      it.days[0].slots = [
+        slot('poi-a', {
+          startAt: '09:30:00',
+          endAt: '10:30:00',
+          distanceRange: '약 0.8km · 도보 추정',
+        }),
+        slot('poi-b', {
+          startAt: '11:00:00',
+          endAt: '12:00:00',
+          distanceRange: null,
+          hasViolation: true,
+          violationReason: HC2,
+        }),
+        slot('poi-c', {
+          startAt: '13:00:00',
+          endAt: '14:00:00',
+          distanceRange: null,
+          hasViolation: true,
+          violationReason: `${HC2} · ${OPENING}`,
+        }),
+        slot('poi-d', {
+          startAt: '15:00:00',
+          endAt: '16:00:00',
+          distanceRange: '약 2.1km · 도보 추정',
+          hasViolation: true,
+          violationReason: HC2,
+        }),
+      ];
+      return it;
+    }
+
+    it.each<[string, ItineraryStatus, string]>([
+      ['h14 완성(PLANNED)', 'PLANNED', '4곳'],
+      ['h16 확정(CONFIRMED)', 'CONFIRMED', '확정됨 · 4곳'],
+    ])(
+      '%s — null 커넥터 2개는 "거리 정보 없음", 근거 없는 카드엔 빠듯 0건, 거리 있는 카드는 그대로, 헤더 km 없음',
+      async (_label, status, expectedMeta) => {
+        itineraryScript = () => swapped(status);
+
+        renderPage();
+        await screen.findByTestId('map-sheet-shell-root');
+
+        // 커넥터 — 윗 카드 slotKey 에 붙고 값은 아래 슬롯 것(a→b null, b→c null, c→d 값).
+        for (const poiId of ['poi-a', 'poi-b']) {
+          expect(
+            screen.getByTestId(`sheet-connector-unknown-${k(poiId)}`)
+          ).toHaveTextContent('거리 정보 없음');
+          expect(
+            screen.queryByTestId(`sheet-connector-distance-${k(poiId)}`)
+          ).toBeNull();
+        }
+        expect(
+          screen.getByTestId(`sheet-connector-distance-${k('poi-c')}`)
+        ).toHaveTextContent('약 2.1km · 도보 추정');
+        expect(
+          screen.queryByTestId(`sheet-connector-unknown-${k('poi-c')}`)
+        ).toBeNull();
+
+        // 카드 알약 — 문구 완전 일치가 먼저, 그 뒤 카드 안 빠듯 0건(02a ★8).
+        const cardB = screen.getByTestId(`slot-stopcard-${k('poi-b')}`);
+        expect(
+          within(cardB).getByTestId(`slot-stopcard-violation-${k('poi-b')}`)
+        ).toHaveTextContent(VIOLATION_LABEL);
+        expect(within(cardB).queryAllByText(/빠듯/).length).toBe(0);
+        const cardC = screen.getByTestId(`slot-stopcard-${k('poi-c')}`);
+        expect(
+          within(cardC).getByTestId(`slot-stopcard-violation-${k('poi-c')}`)
+        ).toHaveTextContent(OPENING);
+        expect(within(cardC).queryAllByText(/빠듯/).length).toBe(0);
+        // 짝 — 거리를 아는 d 는 서버 문구 그대로라 화면 전체 빠듯은 정확히 1.
+        expect(
+          screen.getByTestId(`slot-stopcard-violation-${k('poi-d')}`)
+        ).toHaveTextContent(HC2);
+        expect(screen.queryAllByText(/빠듯/).length).toBe(1);
+
+        // 헤더 — 거리 모르는 구간이 있으니 km 합을 접는다(TRIP-1110 무회귀 · 완전 일치, h16 은 "확정됨 · " 접두).
+        expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+          expectedMeta
+        );
+        // INV-3 — 소요시간 표기 0.
+        expect(screen.queryAllByText(DURATION_TEXT).length).toBe(0);
+      }
+    );
+  });
+});
+
+// TRIP-1275 — 장소 0곳인 날의 지도 중심(01b Q1~Q4). 거점 조회 기본 `[]` 는 파일 최상위 beforeEach 에 있다.
+describe('빈 일차 지도 중심', () => {
+  /**
+   * h14·h16 에서 장소가 0곳인 날로 바꿔도 지도가 `0,0`(기니만 바다)이 아니라 여행 지역을 비춘다.
+   *
+   * 무엇을 보장하나 — 사다리 첫 칸이 이긴다:
+   *  ① 선택한 날의 첫 좌표 장소(무회귀 — 핀·fitPins 그대로)
+   *  ② 다른 날 중 날짜 순 첫 좌표 장소
+   *  ③ 거점 숙소 좌표(`GET /trips/{id}/bases` + `GET /saved-stays`) — 대기·실패면 건너뛰고, 화면을 막지 않는다
+   *  ④ 서울시청
+   *
+   * 관찰 자리: 지도 목(`mapViewMock`)이 `map-root` 텍스트로 `"{lat},{lng}"` 를 낸다.
+   * `toHaveTextContent(문자열)` 은 **완전 일치**다(02a ★1).
+   * 실제 타일·카메라 이동은 jest 사각 — 6-b 실기.
+   *
+   * 3동작 뼈대: 준비 = 일정·거점·숙소 응답 → 실행 = 화면 열기·일차 칩 press → 단언 = map-root 중심·핀.
+   */
+
+  const BASE = 'http://localhost:8080/api/v1';
+  const TRIP_ID = '12750000-0000-0000-0000-000000001275';
+  const D1 = '2026-06-10';
+  const D2 = '2026-06-11';
+  const D3 = '2026-06-12';
+
+  type Coord = { lat: number | null; lng: number | null };
+  const A = { lat: 35.1587, lng: 129.1604 };
+  const B = { lat: 35.1532, lng: 129.1187 };
+  const C = { lat: 35.8347, lng: 129.219 };
+  const STAY = { lat: 35.16, lng: 129.16 };
+  const NO_COORD: Coord = { lat: null, lng: null };
+  const text = (c: { lat: number; lng: number }) => `${c.lat},${c.lng}`;
+  const SEOUL_TEXT = '37.5665,126.978';
+
+  /** 3일 여행 → 일차 칩 sheet-daychip-0..2. */
+  function trip(): Trip {
+    return {
+      tripId: TRIP_ID,
+      title: '부산 여행',
+      startDate: D1,
+      endDate: D3,
+      party: 2,
+      preferenceSnapshot: {},
+      destinations: [{ seq: 1, region: '부산', nights: 2 }],
+      status: 'PLANNED',
+      createdAt: '2026-08-01T10:00:00.000Z',
+      updatedAt: '2026-08-01T10:00:00.000Z',
+      baseCount: 0,
+      itineraryDayCount: 3,
+    };
+  }
+
+  function slot(
+    poiId: string,
+    hour: number,
+    coord: Coord
+  ): ItineraryDaysItemSlotsItem {
+    const hh = String(hour).padStart(2, '0');
+    return {
+      poiId,
+      startAt: `${hh}:00:00`,
+      endAt: `${hh}:30:00`,
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: [],
+      nameKo: poiId,
+      category: '자연',
+      imageUrl: null,
+      distanceRange: null,
+      lat: coord.lat,
+      lng: coord.lng,
+    };
+  }
+
+  function planned(days: ItineraryDaysItem[]): Itinerary {
+    return {
+      itineraryId: 'itin-1275',
+      tripId: TRIP_ID,
+      status: 'PLANNED',
+      solveMode: 'FULL_AI',
+      generationMode: 'FULLY_AI',
+      generationState: 'COMPLETE',
+      isFallback: false,
+      days,
+    };
+  }
+
+  /** 1일차 좌표 3곳 · 2·3일차 0곳. */
+  function day1FullRestEmpty(): Itinerary {
+    return planned([
+      {
+        date: D1,
+        slots: [slot('p-a', 10, A), slot('p-b', 12, B), slot('p-c', 14, C)],
+      },
+      { date: D2, slots: [] },
+      { date: D3, slots: [] },
+    ]);
+  }
+
+  /** 모든 날에 좌표 있는 장소가 없다(좌표 null 슬롯만). */
+  function noCoordAnywhere(): Itinerary {
+    return planned([
+      { date: D1, slots: [slot('p-x', 10, NO_COORD)] },
+      { date: D2, slots: [slot('p-y', 10, NO_COORD)] },
+      { date: D3, slots: [] },
+    ]);
+  }
+
+  let activeClient: QueryClient | null = null;
+  let basesCalls = 0;
+  let releaseBases: (() => void) | null = null;
+
+  function serve(itinerary: Itinerary) {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(itinerary)
+      )
+    );
+  }
+
+  beforeEach(() => {
+    basesCalls = 0;
+    setAccessToken('valid-access');
+  });
+
+  afterEach(async () => {
+    // 늦은 응답이 다음 테스트로 새지 않게 — 조회를 끊고 캐시를 비운 뒤, 붙잡아 둔 거점 응답을 푼다(02a ★5).
+    await activeClient?.cancelQueries();
+    activeClient?.clear();
+    activeClient = null;
+    releaseBases?.();
+    releaseBases = null;
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  /** `retry:false`·`gcTime:0` — 실패 즉시, 잔존 타이머 방지. */
+  async function openShell() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    activeClient = client;
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    render(<ItineraryPlanPage tripId={TRIP_ID} />, { wrapper: Wrapper });
+    await screen.findByTestId('map-sheet-shell-root');
+  }
+
+  function pressDay(index: number) {
+    fireEvent.press(screen.getByTestId(`sheet-daychip-${index}`));
+    // 정말 그 날로 왔는지 먼저 확인한다 — 기대 중심이 이전 날과 같을 수 있다(02a ★2).
+    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent(
+      `${index + 1}일차`
+    );
+  }
+
+  const pinCount = () =>
+    (screen.getByTestId('map-root').props.pins as unknown[]).length;
+
+  describe('🔴 M1 · AC-1 — 장소 0곳인 날은 다른 날 첫 장소를 비춘다', () => {
+    it('2일차(0곳) 칩 → 핀 0개 · 지도 중심 = 1일차 첫 장소(0,0 아님)', async () => {
+      serve(day1FullRestEmpty());
+      await openShell();
+
+      pressDay(1);
+
+      expect(pinCount()).toBe(0);
+      expect(screen.getByTestId('map-root')).toHaveTextContent(text(A));
+    });
+  });
+
+  describe('🔴 M2 · AC-1 · Q3 — 앞날이 비면 날짜 순으로 처음 나오는 장소다', () => {
+    it('1일차 0곳 · 2일차 B · 3일차 C → 처음 열린 1일차 지도 중심 = B', async () => {
+      serve(
+        planned([
+          { date: D1, slots: [] },
+          { date: D2, slots: [slot('p-b', 10, B)] },
+          { date: D3, slots: [slot('p-c', 10, C)] },
+        ])
+      );
+
+      await openShell();
+
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
+      expect(screen.getByTestId('map-root')).toHaveTextContent(text(B));
+    });
+  });
+
+  describe('🔴 M3 · AC-2 — 어느 날에도 좌표 장소가 없으면 거점 숙소를 비춘다', () => {
+    it('이 여행 거점 1건 + 그 등록 숙소 좌표 → 조회가 도착하면 지도 중심 = 숙소', async () => {
+      // 준비 — 거점은 **이 여행 id 경로**에서만 준다(다른 id 로 물으면 최상위 기본 [] · 02a ★4).
+      const assignment: BaseAssignment = {
+        baseAssignmentId: 'ba-1',
+        savedStayId: 's-1',
+        dateFrom: D1,
+        dateTo: D3,
+      };
+      const savedStay: SavedStay = {
+        savedStayId: 's-1',
+        name: '해운대 스테이',
+        lat: STAY.lat,
+        lng: STAY.lng,
+        coordConfirmed: true,
+        linkedTripIds: [TRIP_ID],
+        registerRoute: 'MAP_SEARCH',
+        createdAt: '2026-08-01T10:00:00.000Z',
+        updatedAt: '2026-08-01T10:00:00.000Z',
+      };
+      serve(noCoordAnywhere());
+      server.use(
+        http.get(`${BASE}/trips/${TRIP_ID}/bases`, () =>
+          HttpResponse.json([assignment])
+        ),
+        http.get(`${BASE}/saved-stays`, () => HttpResponse.json([savedStay]))
+      );
+
+      await openShell();
+
+      // 단언 — 일정이 먼저 오고 거점·숙소는 뒤에 온다(02a ★3).
+      await waitFor(() =>
+        expect(screen.getByTestId('map-root')).toHaveTextContent(text(STAY))
+      );
+    });
+  });
+
+  describe('🔴 M4 · AC-3 · Q1 — 거점 조회가 실패해도 화면은 그대로, 지도는 서울시청', () => {
+    it('bases 500 → 요청 1회 뒤에도 셸 유지 · 실패 얼굴 없음 · 지도 중심 = 서울시청', async () => {
+      serve(noCoordAnywhere());
+      server.use(
+        http.get(`${BASE}/trips/:tripId/bases`, () => {
+          basesCalls += 1;
+          return new HttpResponse(null, { status: 500 });
+        })
+      );
+
+      await openShell();
+      await waitFor(() => expect(basesCalls).toBe(1));
+      // 실패 응답이 화면에 반영될 틈을 준다.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+      expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-view-failed')).toBeNull();
+      expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
+    });
+  });
+
+  describe('🔴 M5 · AC-3 · Q1 — 거점 조회가 끝나지 않아도 화면을 막지 않는다', () => {
+    it('bases 응답 대기 중 → 셸·CTA 가 보이고 지도 중심 = 서울시청', async () => {
+      serve(noCoordAnywhere());
+      server.use(
+        http.get(`${BASE}/trips/:tripId/bases`, async () => {
+          basesCalls += 1;
+          // 응답을 붙잡아 둔다 — afterEach 가 푼다(02a ★5).
+          await new Promise<void>((resolve) => {
+            releaseBases = resolve;
+          });
+          return HttpResponse.json([]);
+        })
+      );
+
+      // 실행 — 거점 대기를 로딩 판정에 섞으면 여기서 셸이 안 떠 시간 초과로 red(02a ★6).
+      await openShell();
+      await waitFor(() => expect(basesCalls).toBe(1));
+
+      expect(screen.getByTestId('sheet-cta-button-0')).toBeOnTheScreen();
+      expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
+    });
+  });
+
+  describe('🔴 M6 · AC-3 — 아무 재료도 없으면 어느 날이든 서울시청이다', () => {
+    it('좌표 장소 0 · 거점 0 · 숙소 0 → 1·2·3일차 모두 지도 중심 = 서울시청', async () => {
+      serve(noCoordAnywhere());
+      await openShell();
+
+      for (const index of [0, 1, 2]) {
+        pressDay(index);
+        expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
+      }
+    });
+  });
+
+  describe('🟢 M7 · AC-4 무회귀 — 장소 있는 날은 그날 첫 장소 · 핀 전부 · fitPins', () => {
+    it('1일차 좌표 3곳 → 중심 = 첫 장소 · 핀 3개 · fitPins true', async () => {
+      serve(day1FullRestEmpty());
+
+      await openShell();
+
+      const map = screen.getByTestId('map-root');
+      expect(map).toHaveTextContent(text(A));
+      expect(pinCount()).toBe(3);
+      expect(map.props.fitPins).toBe(true);
+    });
+  });
+
+  describe('🟢 M8 · AC-5 무회귀 — 빈 날에서 장소 있는 날로 돌아오면 핀이 돌아온다', () => {
+    it('1일차 → 2일차(0곳) → 1일차 → 핀 3개 · fitPins true · 중심 = 첫 장소', async () => {
+      serve(day1FullRestEmpty());
+      await openShell();
+
+      pressDay(1);
+      expect(pinCount()).toBe(0);
+      pressDay(0);
+
+      const map = screen.getByTestId('map-root');
+      expect(pinCount()).toBe(3);
+      expect(map.props.fitPins).toBe(true);
+      expect(map).toHaveTextContent(text(A));
+    });
+  });
+
+  // 5-b 경고-1 — 페이지가 "선택한 날"을 중심 함수에 넘기는지. 다른 날 M 케이스는 ①과 ②가 같은 답을 내서 못 본다.
+  describe('M10 · AC-4 배선 — 장소 1곳인 날을 고르면 그날 장소가 중심이다 (1일차 첫 장소 아님)', () => {
+    it('1일차 A·B · 2일차 C 한 곳 → 2일차 칩 → 핀 1개 · 지도 중심 = C', async () => {
+      serve(
+        planned([
+          { date: D1, slots: [slot('p-a', 10, A), slot('p-b', 12, B)] },
+          { date: D2, slots: [slot('p-c', 10, C)] },
+          { date: D3, slots: [] },
+        ])
+      );
+      await openShell();
+
+      pressDay(1);
+
+      // 핀이 1개면 지도가 핀 맞춤 대신 중심 좌표로 카메라를 연다 — 중심이 1일차로 가면 C 가 화면 밖일 수 있다.
+      expect(pinCount()).toBe(1);
+      expect(screen.getByTestId('map-root')).toHaveTextContent(text(C));
+    });
+  });
+
+  describe('🔴 M9 · AC-6 — 어떤 날도 0,0 을 지도에 넘기지 않는다 (좌표 없는 장소만 있는 날 포함)', () => {
+    it('1일차 좌표 null 2곳 · 2일차 0곳 · 3일차 C → 세 날 모두 지도 중심 = C', async () => {
+      serve(
+        planned([
+          {
+            date: D1,
+            slots: [slot('p-x', 10, NO_COORD), slot('p-y', 12, NO_COORD)],
+          },
+          { date: D2, slots: [] },
+          { date: D3, slots: [slot('p-c', 10, C)] },
+        ])
+      );
+      await openShell();
+
+      for (const index of [0, 1, 2]) {
+        pressDay(index);
+        const map = screen.getByTestId('map-root');
+        expect(map).not.toHaveTextContent('0,0');
+        expect(map).toHaveTextContent(text(C));
+      }
     });
   });
 });

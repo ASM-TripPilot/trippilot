@@ -21,6 +21,7 @@ paths:
 | `src/shared/storage/idSet.ts` | 도메인 무관 문자열 id 집합 저장(`readIdSet`·`writeIdSet`, JSON 파싱 실패는 throw). 공개 API `@/shared/storage`로 import(TRIP-1157 — 옛 "배럴 재수출 금지·딥 경로 전용" 계약은 폐기). 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual('@/shared/storage')`로 실물을 펼친 뒤 덮는다. 웹 폴백 없음 |
 | `src/shared/storage/stringValue.ts` | **(TRIP-1122 신규)** 키 하나에 문자열 하나(`readStringValue`→`string\|null`·`writeStringValue`) — JSON으로 감싸지 않고 그대로 저장하며 jest-expo 자동 목의 `undefined`도 `null`로 접는다. 실패(reject)는 호출부 몫(삼킬지 정한다). 공개 API `@/shared/storage`로 import(TRIP-1157 — 딥 경로 전용 계약 폐기, `stringValue.test`가 배럴 재수출을 참조 동일성으로 단언). 웹 폴백 없음. 첫 소비처 `MyTripsListPage`(키 `itinerary.myTrips.sort`). |
 | `src/shared/lib/compareVersion.ts` | 버전 비교(강제 업데이트 판정) |
+| `src/shared/lib/fontScale.ts` | `isLargeText(fontScale)` = `fontScale >= 1.5`(경계 포함) — 글자 배율 분기가 필요한 화면이 각자 숫자를 박지 않는 단일 경계(TRIP-1270). 읽는 쪽은 `useWindowDimensions().fontScale`(설정 변경 때 재렌더). 기본 크기에서 className이 바뀌지 않는 분기만 허용한다. ⚠️ jest RN 목의 기본 fontScale은 **2**라 배율을 안 정한 테스트는 큰 글자 가지를 렌더한다(`layer-test.md`) |
 | `src/shared/lib/formatKoreanDate.ts` | `formatKoreanDate(isoDate): "M월 D일 요일"`. `features/execution/**`의 `new Date`류 금지(BR-U4-34)를 피해 날짜 파싱을 execution 밖에 둔 자리. 에포크 일수(UTC 정수) 산술만 써 TZ-safe. 외부 소비처 0 — `shared/lib` 직속 파일이라 `@/shared/lib/formatKoreanDate`로 바로 import한다(바렐 없음, TRIP-1162) |
 | `src/shared/location/LocationPreprompt.tsx` | 위치 권한 프리프롬프트 — 전체화면(레이더 히어로) `default` / 카드형 `permission-denied` 2상태. `expo-location`을 import하지 않는다(구조적으로 OS 다이얼로그를 못 부름) |
 | `src/shared/location/LocationGlyphs.tsx` | 위치 화면 인라인 SVG 글리프. 색은 `locationColors.ts` 상수 경유(`shared/location/**`은 raw-hex 가드 대상) |
@@ -50,7 +51,7 @@ paths:
 | `src/shared/ui/Toast.tsx` | 성공 피드백 토스트(`showToast`·`hideToast`·`ToastHost`·`TOAST_VISIBLE_MS`), `useSyncExternalStore` 모듈 싱글턴. **한 테스트 파일 안에서 앞 테스트의 토스트가 다음 테스트로 샌다** — 소비 테스트는 최상위(describe 밖) `afterEach` 리셋 + "저장 전 토스트 없음" 앵커를 짝지어야 한다. 네이티브 모달 위에서는 가려질 수 있다(미실측) |
 | `src/shared/ui/ToastGlyphs.tsx` | 토스트 체크 글리프 — `pages/itinerary/itinerary-list/ui/GenerationDoneBarGlyphs.tsx`의 `DoneCheckGlyph`와 path가 같은 사본(shared는 pages를 import 못 한다) |
 | `src/shared/ui/SegmentedControl.tsx` | 연결형 세그먼트 컨트롤(단일 컨테이너 + 선택 셀만 흰 알약). testID `option.testID ?? segmented-${key}`, `disabled` 셀은 press 무발화. feature-local 유사 세그먼트 사본은 통합하지 않았다 |
-| `src/shared/ui/BottomTabBar.tsx` | 순수 뷰 탭바 — 네비게이션을 모른다(`activeKey`·`onPressTab`), testID `shell-tabbar-*`. `expo-blur` BlurView 프로스티드 알약(네이티브 모듈 — prebuild+재빌드 필요). **오버레이는 루트 `absolute bottom-0`이 스스로 진다**(`(tabs)/_layout.tsx`의 `tabBarStyle`은 커스텀 렌더프롭에 무효) — 씬은 안 줄고 탭바가 바닥을 덮는다. 루트 `pointerEvents="box-none"`(투명 밴드가 하단 터치를 흡수하지 않게). 오버레이 회귀는 6-b 실기 전용 |
+| `src/shared/ui/BottomTabBar.tsx` | 순수 뷰 탭바 — 네비게이션을 모른다(`activeKey`·`onPressTab`), testID `shell-tabbar-*`. `expo-blur` BlurView 프로스티드 알약(네이티브 모듈 — prebuild+재빌드 필요). **오버레이는 루트 `absolute bottom-0`이 스스로 진다**(`(tabs)/_layout.tsx`의 `tabBarStyle`은 커스텀 렌더프롭에 무효) — 씬은 안 줄고 탭바가 바닥을 덮는다. 루트 `pointerEvents="box-none"`(투명 밴드가 하단 터치를 흡수하지 않게). 오버레이 회귀는 6-b 실기 전용. **루트는 `min-h-[96px]`(TRIP-1270)** — 큰 글자에서 높이가 96을 넘어 자란다. 라벨은 `numberOfLines={1}`+`adjustsFontSizeToFit`. 탭바 96px 고정을 가정한 곳(`Toast`·`GenerationDoneBar` `bottom-[108px]`, 화면 `pb-[110px]`·`pb-[120px]`)은 큰 글자에서 겹칠 수 있다(미검증) |
 
 ### `src/shared/map/` — 네이버 네이티브 지도 래퍼
 

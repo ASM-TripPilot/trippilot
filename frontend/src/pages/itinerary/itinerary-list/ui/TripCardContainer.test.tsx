@@ -591,11 +591,12 @@ describe('⋯ 삭제 진입점', () => {
    * TRIP-1055 · AC-1 — 어떤 카드에 ⋯(삭제 진입점)를 두는가. 판정은 컨테이너가 한다(UX 사본 — 정본 판정은
    * 서버 BR-U1-57. 단 서버 상태 가드 TRIP-1061 이 아직 없어 **지금은 이 판정이 유일한 방어**다).
    *
-   * 규칙(01b Seed Q1·Q2·Q3): 삭제 가능 = 조회가 끝났고 · 카드 배지가 '작성중'(draft)이고 · 진행 중 생성
-   * 세션(`generationSessionId`)이 없다.
+   * 규칙(01b Seed Q2·Q3 · TRIP-1271 결정 1=A): 삭제 가능 = 조회가 끝났고 · 카드 배지가 '작성중'(draft)이다.
    *  - 날짜가 지나 여행 상태가 ACTIVE/ENDED 여도 배지가 '작성중'이면 지울 수 있다(Q3 — 보이는 배지와 맞춘다).
    *  - 생성을 취소해 PARTIAL 로 남은 여행(세션 없음)은 지울 수 있다(Q2).
-   *  - 확정(여행 중·끝남 포함)·생성 중·아직 모름(로딩·404 아닌 실패)은 ⋯ 자체가 없다(Q1).
+   *  - 생성 중·재생성 직후(진행 중 세션 있음)도 지울 수 있다 — TRIP-1271 결정 1=A 가 TRIP-1055 Q1("생성 중 ⋯
+   *    숨김")을 뒤집었다. 서버 DELETE 에는 상태 가드가 없다(BR-U1-57 개정).
+   *  - 확정(여행 중·끝남 포함)·아직 모름(로딩·404 아닌 실패)은 ⋯ 자체가 없다.
    *
    * 그리고 메뉴 열림을 컨테이너가 쥔다 — ⋯ 로 토글, '삭제' 항목을 누르면 닫고 `onPressDelete` 를 올린다.
    *
@@ -688,6 +689,22 @@ describe('⋯ 삭제 진입점', () => {
         {},
         ok(itin('PARTIAL', 'PLANNED', null)),
       ],
+      // TRIP-1271 결정 1=A — 아래 세 행은 「⋯ 없음」 표에서 옮겨 왔다(진행 중 세션이 있어도 지울 수 있다).
+      [
+        '생성 중(PARTIAL · 진행 중 세션 있음)',
+        {},
+        ok(itin('PARTIAL', 'PLANNED', 'sess-1')),
+      ],
+      [
+        '재생성 직후(COMPLETE + PLANNED · 세션 있음)',
+        {},
+        ok(itin('COMPLETE', 'PLANNED', 'sess-2')),
+      ],
+      [
+        '재생성 직후(FAILED + PLANNED · 세션 있음)',
+        {},
+        ok(itin('FAILED', 'PLANNED', 'sess-3')),
+      ],
       [
         '날짜가 되어 ACTIVE 인 미확정 초안(Q3)',
         { status: 'ACTIVE' },
@@ -724,23 +741,6 @@ describe('⋯ 삭제 진입점', () => {
         '끝난 여행(ENDED + CONFIRMED)',
         { status: 'ENDED' },
         ok(itin('COMPLETE', 'CONFIRMED')),
-      ],
-      [
-        '생성 중(PARTIAL · 진행 중 세션 있음, Q1·Q2)',
-        {},
-        ok(itin('PARTIAL', 'PLANNED', 'sess-1')),
-      ],
-      // 재생성 1차 구간 — 일정 행은 옛 값(COMPLETE·FAILED)으로 보이는데 세션이 돈다. 판정 축은 세션뿐이다
-      // (공용 `isGenerationRunning`, TRIP-1032 5-b 경고-3 · 이번 5-b 경고-2).
-      [
-        '재생성 직후(COMPLETE + PLANNED · 세션 있음)',
-        {},
-        ok(itin('COMPLETE', 'PLANNED', 'sess-2')),
-      ],
-      [
-        '재생성 직후(FAILED + PLANNED · 세션 있음)',
-        {},
-        ok(itin('FAILED', 'PLANNED', 'sess-3')),
       ],
       ['아직 모름(조회 중)', {}, pending],
       ['아직 모름(404 아닌 조회 실패)', {}, serverError],

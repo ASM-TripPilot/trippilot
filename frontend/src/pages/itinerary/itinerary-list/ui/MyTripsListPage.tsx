@@ -12,6 +12,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { Trip } from '@/shared/api/index.schemas';
 import {
   getGetTripsQueryKey,
+  getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
   useDeleteTripsTripId,
   useGetTrips,
@@ -30,6 +31,8 @@ import {
   type MyTripsSortKey,
 } from '../model/myTripsOrder';
 import {
+  DRAFT_POLL_INTERVAL_MS,
+  isGenerationRunning,
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
@@ -75,9 +78,23 @@ export function MyTripsListPage(): ReactElement {
   const list = trips.data ?? [];
 
   // 새 훅은 전부 아래 일찍 return 들보다 위(훅 호출 순서 규칙).
+  // TRIP-1271 · 생성이 도는 여행(PARTIAL 이거나 세션 있음)만 2초마다 다시 묻는다 — 탭 화면은 내려가지 않아
+  // 다시 물을 계기가 없었다. 조회 실패면 멈춘다(재조회 실패에도 직전 data 가 남으므로 error 를 먼저 본다 —
+  // 조용한 무한 재시도 금지, INV-4). 상한은 두지 않는다(openapi — 멈춘 생성은 서버가 FAILED 로 닫는다).
+  // 카드 컨테이너는 같은 캐시 키를 구독만 하므로 거기엔 걸지 않는다(폴링 결정을 한 곳에 모은다 — 같은 키의
+  // 관찰자 타이머는 쿼리 상태가 바뀔 때마다 함께 다시 맞춰져 요청 수가 겹치지는 않는다).
   const itineraries = useQueries({
     queries: list.map((trip) =>
-      getGetTripsTripIdItineraryQueryOptions(trip.tripId)
+      getGetTripsTripIdItineraryQueryOptions(trip.tripId, {
+        query: {
+          refetchInterval: (query) =>
+            query.state.status !== 'error' &&
+            (query.state.data?.generationState === 'PARTIAL' ||
+              isGenerationRunning(query.state.data))
+              ? DRAFT_POLL_INTERVAL_MS
+              : false,
+        },
+      })
     ),
   });
   const [seen, setSeen] = useState<readonly string[] | null>(null);
@@ -99,6 +116,25 @@ export function MyTripsListPage(): ReactElement {
 
   // TRIP-1055 · 삭제 — 대상·실패 표시·요청을 페이지가 쥔다(다이얼로그는 카드·스크롤 밖 형제).
   const queryClient = useQueryClient();
+
+  // TRIP-1271 · 탭 복귀 재조회 — 폴링하지 않는 여행이 다른 화면에서 바뀐 것을 따라잡는다(일정 키만). 첫
+  // 포커스(=첫 마운트)는 첫 조회가 이미 나가 있으므로 건너뛴다. 콜백 정체가 바뀌면 다시 불리므로 고정한다.
+  const focusedRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusedRef.current) {
+        focusedRef.current = true;
+        return;
+      }
+      const cached =
+        queryClient.getQueryData<Trip[]>(getGetTripsQueryKey()) ?? [];
+      cached.forEach((trip) =>
+        queryClient.invalidateQueries({
+          queryKey: getGetTripsTripIdItineraryQueryKey(trip.tripId),
+        })
+      );
+    }, [queryClient])
+  );
   const deleteTrip = useDeleteTripsTripId();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   // 실패한 요청의 tripId — 대기 중 취소 뒤 다른 카드를 열면 앞 결과가 새 다이얼로그에 안 떨어지게 id 로 든다.

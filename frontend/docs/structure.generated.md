@@ -783,6 +783,9 @@
 ## src/pages/itinerary/itinerary-plan/
 - `src/pages/itinerary/itinerary-plan/index.ts`  →  ItineraryPlanPage
 
+## src/pages/itinerary/itinerary-plan/model/
+- `src/pages/itinerary/itinerary-plan/model/planMapCenter.ts`  →  resolvePlanMapCenter
+
 ## src/pages/itinerary/itinerary-plan/ui/
 - `src/pages/itinerary/itinerary-plan/ui/ItineraryPlanPage.tsx`  →  ItineraryPlanPage
 - `src/pages/itinerary/itinerary-plan/ui/NoBaseNoticeCard.tsx`  →  NoBaseNoticeCard
@@ -1473,6 +1476,7 @@
 ## src/shared/lib/
 - `src/shared/lib/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
 - `src/shared/lib/compareVersion.ts`  →  compareVersion
+- `src/shared/lib/fontScale.ts`  →  isLargeText
 - `src/shared/lib/formatKoreanDate.ts`  →  formatKoreanDate
 - `src/shared/lib/formatRelativeTime.ts`  →  formatRelativeTime
 - `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
@@ -1595,4 +1599,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 979개 파일
+합계 981개 파일

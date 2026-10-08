@@ -9,6 +9,8 @@ import { buildSlotKey } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import { useSavedPlaces } from '@/features/save-place';
+import { useTripBases } from '@/features/assign-trip-base';
+import { useSavedStays } from '@/features/trip';
 import {
   buildDraftDayTabs,
   buildDraftPins,
@@ -43,6 +45,7 @@ import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 
+import { resolvePlanMapCenter } from '../model/planMapCenter';
 import { NoBaseNoticeCard } from './NoBaseNoticeCard';
 
 /**
@@ -259,6 +262,11 @@ export function ItineraryPlanPage({
   });
   const unplacedRows = resolveUnplacedNames({ unplaced, savedPlaces });
 
+  // TRIP-1275 — 좌표 장소가 하나도 없는 여행의 지도 중심 재료(거점엔 좌표가 없어 등록 숙소와 잇는다).
+  // 지도 중심 폴백일 뿐이라 resolvePlanState 에 섞지 않는다 — 대기·실패해도 화면은 막히지 않는다.
+  const bases = useTripBases(tripId);
+  const savedStays = useSavedStays();
+
   // 여행 404(삭제)는 일정 조회와 무관하게 먼저 가른다 — 삭제된 여행은 일정도 404 라 notFound 가
   // 이기면 '일정 만들기'라는 거짓 다음 행동이 뜬다(INV-4). 캐시에 옛 trip.data 가 남아 있어도 오류로 판정.
   if (isNotFound(trip.error)) {
@@ -341,10 +349,12 @@ export function ItineraryPlanPage({
   const slots =
     state.days.find((day) => day.date === selectedDate)?.slots ?? [];
   const pins = buildDraftPins(slots);
-  const center =
-    pins.length > 0
-      ? { lat: pins[0].lat, lng: pins[0].lng }
-      : { lat: 0, lng: 0 };
+  const center = resolvePlanMapCenter({
+    days: state.days,
+    selectedDate,
+    bases: bases.data,
+    stays: savedStays.data,
+  });
 
   // meta = "[확정됨 · ]N곳[ · X.Xkm]". N 은 **선택일 슬롯 중 고정 숙소를 뺀 수**(01b D3 —
   // totalPlaces·coPickProgress 재사용 금지). 숙소 판정은 아래 `hasBase` 와 같다 — 서버가 꼭 갈 곳을
