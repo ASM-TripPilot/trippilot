@@ -5,6 +5,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
+import type { ReactElement } from 'react';
 
 import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 
@@ -24,7 +25,8 @@ import { PlanbDraftPage } from './PlanbDraftPage';
  *  - 확정 요청 중이면 [적용하기] 잠금, 실패면 같은 안내 자리에 "변경을 반영하지 못했어요"(Q6).
  *  - NO_SOLUTION·FAILED → 같은 뷰의 안내 상태. FAILED 에서 옛 manual?variant=error push 는 없다(E3).
  *    [조건 바꿔 다시 짜기]/[다시 시도] → i04(`/trips/{id}/planb`), [직접 수정] → planb/manual.
- *  - SOLVING·closed·미도착 → 아무것도 안 그린다. data 없는 조회 실패만 오류 얼굴(TRIP-1277 AC12).
+ *  - SOLVING·미도착 → 아무것도 안 그린다. data 없는 조회 실패만 오류 얼굴(TRIP-1277 AC12).
+ *  - (TRIP-1289) 끝난 세션(APPLIED·CANCELED)은 종료 얼굴 + [나가기] — 빈 화면이면 침묵 실패다(INV-4).
  *  - (TRIP-1277) 초안 얼굴의 ‹·스와이프·하드웨어 뒤로는 이탈 확인부터 — [나가기]여야 나가고(확정·취소 0),
  *    replace·push 같은 앞으로 가는 이동은 가로채지 않는다. 대안 없음·실패 얼굴은 확인 없이 바로 뒤로,
  *    요청 대기 중엔 뒤로 자체가 잠긴다.
@@ -44,21 +46,41 @@ const TRIP_ID = 't1';
 const SESSION_ID = 's9';
 
 // TRIP-1277 — `error` 는 data 없는 조회 실패(AC12), `refetch` 는 [다시 시도]가 부를 재조회 seam.
+// TRIP-1293 — `failures` 는 지금까지 실패로 끝난 조회 수(TanStack `errorUpdateCount`). data 가 없을 때 첫 로딩(0)과
+// "실패 뒤 재조회 중"(1↑)을 가르는 유일한 결과 필드다 — 둘 다 status=pending·isError=false·isFetching=true(02a ★1).
+// 결과 필드 값은 TanStack v5.101 실물을 옮겼다(02a §5 실측 1·2) — 실패 뒤 재조회는 isError 를 유지하지 않는다.
 const mockSession: {
   data: Record<string, unknown> | undefined;
   error: boolean;
+  failures: number;
 } = {
   data: undefined,
   error: false,
+  failures: 0,
 };
 const mockSessionRefetch = jest.fn();
+const mockSessionFailure = new Error('세션 조회 실패');
 jest.mock('../model/useReplanSession', () => ({
-  useReplanSession: () => ({
-    data: mockSession.data,
-    isPending: mockSession.data === undefined && !mockSession.error,
-    isError: mockSession.error,
-    refetch: mockSessionRefetch,
-  }),
+  useReplanSession: () => {
+    const loading = mockSession.data === undefined && !mockSession.error;
+    return {
+      data: mockSession.data,
+      status: mockSession.error ? 'error' : loading ? 'pending' : 'success',
+      fetchStatus: loading ? 'fetching' : 'idle',
+      isPending: loading,
+      isLoading: loading,
+      isFetching: loading,
+      isError: mockSession.error,
+      isLoadingError: mockSession.error && mockSession.data === undefined,
+      isRefetchError: mockSession.error && mockSession.data !== undefined,
+      error: mockSession.error ? mockSessionFailure : null,
+      errorUpdateCount: mockSession.error
+        ? Math.max(1, mockSession.failures)
+        : mockSession.failures,
+      failureCount: mockSession.error ? 1 : 0,
+      refetch: mockSessionRefetch,
+    };
+  },
 }));
 
 const mockMutate = jest.fn();
@@ -363,6 +385,7 @@ beforeEach(() => {
   mockUsePreventRemove.mockClear();
   mockNavigation.dispatch.mockClear();
   mockSession.error = false;
+  mockSession.failures = 0;
   mockSessionRefetch.mockClear();
   mockPush.mockClear();
   mockBack.mockClear();
@@ -1184,20 +1207,19 @@ describe('🔴 P7 · AC-10 · E3 — FAILED 도 같은 뷰에 착지한다(옛 v
   });
 });
 
-describe('🔴 P8 · AC-10 — SOLVING·closed·미도착은 아무것도 그리지 않는다', () => {
-  it.each([['SOLVING'], ['APPLIED'], ['CANCELED']])(
-    '%s 이면 렌더 없음 + 라우터·확정 호출 0',
-    (status) => {
-      mockSession.data = session(status);
-      renderPage();
+// TRIP-1289 — 옛 P8 은 APPLIED·CANCELED 도 "렌더 없음"으로 굳혀 두었다(실기 빈 화면의 원인, 01b). 두 행을 빼고
+// 종료 얼굴 케이스(맨 아래 TRIP-1289 블록)로 옮겼다. SOLVING·미도착 null 은 이 칸 범위 밖이라 그대로 둔다.
+describe('🔴 P8 · AC-10 — SOLVING·미도착은 아무것도 그리지 않는다', () => {
+  it.each([['SOLVING']])('%s 이면 렌더 없음 + 라우터·확정 호출 0', (status) => {
+    mockSession.data = session(status);
+    renderPage();
 
-      expect(screen.toJSON()).toBeNull();
-      expect(mockPush).not.toHaveBeenCalled();
-      expect(mockReplace).not.toHaveBeenCalled();
-      expect(mockMutate).not.toHaveBeenCalled();
-      expectDiffNeverEnabled();
-    }
-  );
+    expect(screen.toJSON()).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expectDiffNeverEnabled();
+  });
 
   it('세션 미도착(data undefined)이면 렌더 없음 + 라우터 호출 0', () => {
     renderPage();
@@ -1646,5 +1668,180 @@ describe('🔴 TRIP-1277 5-b 경고-2 · AC4 · INV-4 — 이탈 확인 [나가�
     expect(mockBack).not.toHaveBeenCalled();
     expect(mockMutate).not.toHaveBeenCalled();
     expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+});
+
+// ── TRIP-1289 · INV-4 — 끝난 세션(APPLIED·CANCELED)은 빈 화면 대신 종료 얼굴 ─────────────────────────
+// 근거: 01 브리프 AC1~AC5 · 01b(INV-U4-05·06). 문구는 진행 화면 종료 얼굴(solving K1)과 같은 값, testID 만
+// 이 화면 것(결정 A). 기존 케이스는 P8 만 바꿨다 — AC6 무회귀는 이 파일 나머지가 맡는다.
+
+const CLOSED_FACE = 'planb-draft-closed';
+const CLOSED_LEAVE = 'planb-draft-closed-leave';
+
+describe('🔴 TRIP-1289 AC1·AC2 — 끝난 세션은 "이미 끝난 재계획이에요" 얼굴과 [나가기]', () => {
+  it.each([['CANCELED'], ['APPLIED']])(
+    'C1 %s 면 종료 얼굴(제목·부제·채운 [나가기])이 보이고 "원래 일정은 그대로"는 없다 — 그리기만으로 이동·확정·세션 시작·초안 조회 0',
+    (status) => {
+      mockSession.data = session(status);
+      renderPage();
+
+      const face = screen.getByTestId(CLOSED_FACE);
+      expect(
+        within(face).getByText('이미 끝난 재계획이에요')
+      ).toBeOnTheScreen();
+      expect(
+        within(face).getByText('나가서 지금 일정을 확인해 주세요')
+      ).toBeOnTheScreen();
+      const leave = screen.getByTestId(CLOSED_LEAVE);
+      expect(leave).toHaveTextContent('나가기');
+      expect(String(leave.props.className).split(/\s+/)).toContain(
+        'bg-primary'
+      );
+      // 적용된 세션일 수 있어 "원래 일정은 그대로"라고 말하지 않는다(오류 얼굴 문구가 새지 않았다).
+      expect(screen.queryByText(/원래 일정은 그대로/)).toBeNull();
+      // 진행 화면의 testID·초안 오류 얼굴이 아니다(결정 A — 어느 화면인지 testID 로 가른다).
+      expect(screen.queryByTestId('planb-solving-closed')).toBeNull();
+      expect(screen.queryByTestId(DRAFT_ERROR)).toBeNull();
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockBack).not.toHaveBeenCalled();
+      expect(mockMutate).not.toHaveBeenCalled();
+      expect(mockStartMutate).not.toHaveBeenCalled();
+      expectDiffNeverEnabled();
+    }
+  );
+});
+
+describe('🔴 TRIP-1289 AC3 · INV-U4-05 — 종료 얼굴 [나가기]는 서버 호출 없이 나간다', () => {
+  it('C2 뒤로 갈 곳이 있으면 뒤로 1회 — replace·push·확정·세션 시작·재조회 0', () => {
+    mockSession.data = session('CANCELED');
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(CLOSED_LEAVE));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockExits).toEqual(['back']);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockSessionRefetch).not.toHaveBeenCalled();
+  });
+
+  it('C3 뒤로 갈 곳이 없으면(딥링크 착지) 허브로 replace 1회 — back·확정·세션 시작 0', () => {
+    mockCanGoBack = false;
+    mockSession.data = session('APPLIED');
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(CLOSED_LEAVE));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(HUB_HREF);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1289 AC4 — 종료 얼굴 [나가기]를 같은 틱에 두 번 눌러도 한 번만', () => {
+  it('C4 같은 틱 2연타 — 이동 정확히 1회(back 1 · replace 0)', () => {
+    mockSession.data = session('CANCELED');
+    renderPage();
+
+    pressTwiceSameTick(CLOSED_LEAVE);
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1289 AC5 — 종료 얼굴은 잃을 초안이 없어 뒤로가 확인 없이 나간다', () => {
+  it.each([['GO_BACK'], ['POP']])(
+    'C5 종료 얼굴에서 %s 액션이 오면 이탈 확인 없이 1회 나간다',
+    (type) => {
+      mockSession.data = session('CANCELED');
+      renderPage();
+      // 앵커 — 종료 얼굴이 실제로 떠 있다(빈 화면에서의 "확인 없음"은 공허하다).
+      expect(screen.getByTestId(CLOSED_FACE)).toBeOnTheScreen();
+
+      attemptRemove({ type });
+
+      expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+      expect(mockExits).toEqual(['gesture']);
+      expect(mockMutate).not.toHaveBeenCalled();
+    }
+  );
+});
+
+// ── TRIP-1293 · INV-4 — 초안 화면 오류 얼굴 [다시 시도]도 재조회 중 잠기고, 실패로 끝나면 풀린다 ─────────────
+// 근거: 01 브리프 AC2·AC3·AC5·AC6. 재조회 중 모양은 TanStack 실물(데이터 없으면 isError 가 풀리고 pending 복귀)이다
+// — 지금 페이지는 그 순간 아무것도 안 그린다(P8 의 "미도착 = 렌더 없음" 갈래로 빠진다, 02a ★1).
+
+function renderDraftError() {
+  mockSession.error = true;
+  mockSession.failures = 1;
+  return render(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+}
+
+/** [다시 시도]를 누르고, TanStack 이 내놓는 "실패 뒤 재조회 중"(pending · isFetching · 실패 이력 1↑)으로 다시 그린다. */
+function pressDraftRetryThenRefetching(
+  rerender: (ui: ReactElement) => void
+): void {
+  fireEvent.press(screen.getByTestId(DRAFT_RETRY));
+  mockSession.error = false;
+  rerender(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+}
+
+describe('🔴 TRIP-1293 AC2·AC3·AC6 — 초안 오류 얼굴 [다시 시도]는 재조회 중 잠기고, 실패로 끝나면 풀린다', () => {
+  it('Z1 누르면 재조회 동안에도 오류 얼굴이 남고 [다시 시도]만 잠긴다 — [나가기]는 그대로 눌린다 (AC2)', () => {
+    const { rerender } = renderDraftError();
+    expect(screen.getByTestId(DRAFT_RETRY)).toBeEnabled();
+
+    pressDraftRetryThenRefetching(rerender);
+
+    expect(screen.getByTestId(DRAFT_ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(DRAFT_RETRY)).toBeDisabled();
+    expect(screen.getByTestId(DRAFT_ERROR_LEAVE)).toBeEnabled();
+  });
+
+  it('Z2 재조회가 또 실패로 끝나면 [다시 시도]가 다시 눌리고, 누르면 재조회가 한 번 더 나간다 (AC3)', () => {
+    const { rerender } = renderDraftError();
+    pressDraftRetryThenRefetching(rerender);
+    expect(screen.getByTestId(DRAFT_RETRY)).toBeDisabled();
+
+    mockSession.failures = 2;
+    mockSession.error = true;
+    rerender(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+
+    expect(screen.getByTestId(DRAFT_ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(DRAFT_RETRY)).toBeEnabled();
+    fireEvent.press(screen.getByTestId(DRAFT_RETRY));
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('Z3 재조회 중 [다시 시도]를 세 번 더 눌러도 재조회는 처음 1회뿐 — 확정·세션 시작(POST)·이동 0 (AC6)', () => {
+    const { rerender } = renderDraftError();
+    pressDraftRetryThenRefetching(rerender);
+
+    for (let i = 0; i < 3; i += 1) {
+      fireEvent.press(screen.getByTestId(DRAFT_RETRY));
+    }
+
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(1);
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockExits).toEqual([]);
+  });
+
+  it('Z4 재조회 중 오류 얼굴에도 경과 초·소요 시간 숫자가 없다(+ 앵커) (AC5 · INV-3)', () => {
+    const { rerender } = renderDraftError();
+    pressDraftRetryThenRefetching(rerender);
+
+    const face = screen.getByTestId(DRAFT_ERROR);
+    expect(face).toHaveTextContent(/다시 시도/);
+    expect(face).not.toHaveTextContent(/\d/);
+    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
   });
 });

@@ -9,13 +9,17 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  *  - `solving-error` — 진행 화면에서 세션 조회가 data 없이 실패. [다시 시도]=재조회 · [취소]=서버 호출 없이 나가기.
  *  - `solving-closed` — 진행 화면인데 세션이 이미 끝났다(APPLIED·CANCELED). [나가기].
  *  - `draft-error` — 재계획안 화면에서 세션 조회가 data 없이 실패. [다시 시도] · [나가기].
+ *    두 오류 얼굴 모두 `retrying` 이면 [다시 시도]만 잠근다(TRIP-1293 — 재조회 중 연타 피드백).
+ *  - `draft-closed` — TRIP-1289 · 재계획안 화면인데 세션이 이미 끝났다. `solving-closed` 와 문구·버튼이 같고
+ *    testID 만 다르다(어느 화면의 얼굴인지 실기·테스트에서 갈라 읽는다).
  *
  * Figma 프레임이 없어 문구는 이 사이클이 정한 값이다(h07 error 의 문구·버튼 위계만 참고). 모양은
  * `LiveItineraryPage` 의 StateNotice 얼굴과 같다. 부제엔 "다시 시도"를 넣지 않는다 — 버튼과 겹쳐 읽힌다.
  * 소요시간·경과 숫자는 어디에도 없다(INV-3).
  */
 
-type ReplanNoticeKind = 'solving-error' | 'solving-closed' | 'draft-error';
+type ReplanNoticeKind =
+  'solving-error' | 'solving-closed' | 'draft-error' | 'draft-closed';
 
 const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
@@ -30,6 +34,8 @@ export interface ReplanNoticeFaceProps {
   kind: ReplanNoticeKind;
   /** 세션 재조회 — `solving-error`·`draft-error` 만 쓴다. */
   onRetry?: () => void;
+  /** TRIP-1293 · 재조회 중 — [다시 시도]만 잠근다([취소]·[나가기]는 그대로). */
+  retrying?: boolean;
   /** 서버 호출 없이 나가기. */
   onLeave: () => void;
 }
@@ -37,18 +43,25 @@ export interface ReplanNoticeFaceProps {
 export function ReplanNoticeFace({
   kind,
   onRetry,
+  retrying = false,
   onLeave,
 }: ReplanNoticeFaceProps): ReactElement {
   const notice =
-    kind === 'solving-closed'
+    kind === 'solving-closed' || kind === 'draft-closed'
       ? {
-          testID: 'planb-solving-closed',
+          testID:
+            kind === 'solving-closed'
+              ? 'planb-solving-closed'
+              : 'planb-draft-closed',
           title: '이미 끝난 재계획이에요',
           // 적용된 세션일 수도 있어 "원래 일정은 그대로"라고 말하지 않는다.
           description: '나가서 지금 일정을 확인해 주세요',
           actions: [
             {
-              testID: 'planb-solving-closed-leave',
+              testID:
+                kind === 'solving-closed'
+                  ? 'planb-solving-closed-leave'
+                  : 'planb-draft-closed-leave',
               label: '나가기',
               variant: 'filled' as const,
               onPress: onLeave,
@@ -70,6 +83,7 @@ export function ReplanNoticeFace({
               label: '다시 시도',
               variant: 'filled' as const,
               onPress: onRetry,
+              disabled: retrying,
             },
             kind === 'solving-error'
               ? {

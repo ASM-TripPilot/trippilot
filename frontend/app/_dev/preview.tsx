@@ -6632,6 +6632,21 @@ export const PREVIEW_STATES: PreviewState[] = [
       <ReplanNoticeFace kind="solving-error" onRetry={noop} onLeave={noop} />
     ),
   },
+  // TRIP-1293 — 재조회 중엔 [다시 시도]만 흐리게 잠긴다(i06 draft-error 도 같은 분기). 흐림 정도는 육안 몫.
+  {
+    key: 'planb-solving-error-retrying',
+    band: 'i',
+    label: 'i05 · 다시 짜는 중 · 조회 실패 · 재시도 중',
+    login: null,
+    render: () => (
+      <ReplanNoticeFace
+        kind="solving-error"
+        onRetry={noop}
+        retrying
+        onLeave={noop}
+      />
+    ),
+  },
   {
     key: 'planb-solving-closed',
     band: 'i',
@@ -6694,6 +6709,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <ReplanNoticeFace kind="draft-error" onRetry={noop} onLeave={noop} />
     ),
+  },
+  {
+    key: 'planb-draft-closed',
+    band: 'i',
+    label: 'i06 · 재계획안 · 끝난 세션',
+    login: null,
+    render: () => <ReplanNoticeFace kind="draft-closed" onLeave={noop} />,
   },
   // i08 변경 반영 시트(TRIP-754) — 펼침 허브 + 딤 + 시트. 딤 전면 커버·시트 높이는 jest 사각이라 육안 자리.
   {
