@@ -1152,6 +1152,186 @@ describe('핀으로 등록 — 훅 목 (옛 .pin)', () => {
       }
     );
   });
+
+  // TRIP-1299 — 탭을 오가면 핀 지도가 새로 그려지고, 실기 지도는 그 자리 첫 멈춤을 다시 올린다.
+  // 목은 그 멈춤을 스스로 안 쏘므로 탭 왕복 뒤 panTo 로 직접 쏜다. SDK 를 거친 좌표는 끝자리가
+  // 살짝 달라진다(실측 37.5665 → 37.566500000000005) — 같은 값 그대로 쏘면 정확 비교도 통과한다.
+  const SEOUL_DEFAULT: MapCenter = { lat: 37.5665, lng: 126.978 };
+
+  function roundTripTabs(): void {
+    fireEvent.press(screen.getByTestId('stay-register-tab-mapsearch'));
+    fireEvent.press(screen.getByTestId('stay-register-tab-pin'));
+  }
+
+  function pickerCenter(): MapCenter {
+    const picker = within(
+      screen.getByTestId('stay-register-pin-map')
+    ).getByTestId('center-pin-picker');
+    return (picker.props as { center: MapCenter }).center;
+  }
+
+  async function confirmPinAtDefault(name: string): Promise<void> {
+    mockReverse.mockReturnValue(REVERSE_SUCCESS);
+    render(<StayRegisterPage />);
+    goToPinTab();
+    simulateFirstIdle();
+    await waitPinAddressOk();
+    typeName(name);
+    confirmCoord();
+    expect(screen.queryAllByTestId('stay-register-coordnotice')).toHaveLength(
+      0
+    );
+    expect(screen.getByTestId('stay-register-submit')).not.toBeDisabled();
+  }
+
+  describe('IP-11 · 핀 확정 뒤 탭을 오가도 같은 좌표 멈춤이면 확정이 그대로다 (AC-1 · AC-6)', () => {
+    it.each<[string, MapCenter]>([
+      ['SDK 끝자리 오차', { lat: 37.566500000000005, lng: 126.978 }],
+      ['1e-6 미만 차이', { lat: 37.5665005, lng: 126.978 }],
+    ])(
+      '%s로 다시 멈춰도 안내가 없고 원래 좌표로 등록된다',
+      async (_label, reidle) => {
+        await confirmPinAtDefault('명동 게스트하우스');
+
+        roundTripTabs();
+        expect(pickerCenter()).toEqual(SEOUL_DEFAULT);
+        panTo(reidle);
+
+        expect(
+          screen.queryAllByTestId('stay-register-coordnotice')
+        ).toHaveLength(0);
+        const submit = screen.getByTestId('stay-register-submit');
+        expect(submit).not.toBeDisabled();
+        fireEvent.press(submit);
+
+        await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+        expect(mockMutateAsync).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            name: '명동 게스트하우스',
+            registerRoute: 'PIN',
+            lat: SEOUL_DEFAULT.lat,
+            lng: SEOUL_DEFAULT.lng,
+            coordConfirmed: true,
+          }),
+        });
+      }
+    );
+  });
+
+  describe('IP-12 · 검색 후보로 확정한 뒤 핀 탭의 같은 좌표 멈춤은 후보를 지우지 않는다 (AC-2 · AC-6)', () => {
+    const HOTEL = {
+      name: '롯데시티호텔 명동',
+      address: '서울 중구 을지로 30',
+      lat: 37.5652,
+      lng: 126.988033472394,
+    };
+
+    it('핀 탭에 다녀와도 확정·이름·주소가 남고 지도 검색 경로로 등록된다', async () => {
+      mockGeocode.mockReturnValue({
+        data: [HOTEL],
+        isPending: false,
+        isError: false,
+      });
+      render(<StayRegisterPage />);
+      const input = screen.getByTestId('stay-register-search-input');
+      fireEvent.changeText(input, '롯데시티호텔');
+      fireEvent(input, 'submitEditing', {
+        nativeEvent: { text: '롯데시티호텔' },
+      });
+      fireEvent.press(screen.getByTestId('stay-register-candidate-0'));
+      expect(screen.queryAllByTestId('stay-register-coordnotice')).toHaveLength(
+        0
+      );
+      expect(
+        within(screen.getByTestId('stay-register-selected-card')).getByText(
+          HOTEL.name
+        )
+      ).toBeOnTheScreen();
+
+      goToPinTab();
+      expect(pickerCenter()).toEqual({ lat: HOTEL.lat, lng: HOTEL.lng });
+      panTo({ lat: 37.5652, lng: 126.98803347239401 });
+
+      expect(screen.queryAllByTestId('stay-register-coordnotice')).toHaveLength(
+        0
+      );
+      expect(screen.getByTestId('stay-register-submit')).not.toBeDisabled();
+
+      fireEvent.press(screen.getByTestId('stay-register-tab-mapsearch'));
+      const card = screen.getByTestId('stay-register-selected-card');
+      expect(within(card).getByText(HOTEL.name)).toBeOnTheScreen();
+      expect(within(card).getByText(HOTEL.address)).toBeOnTheScreen();
+
+      fireEvent.press(screen.getByTestId('stay-register-submit'));
+      await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: HOTEL.name,
+          registerRoute: 'MAP_SEARCH',
+          lat: HOTEL.lat,
+          lng: HOTEL.lng,
+          coordConfirmed: true,
+        }),
+      });
+    });
+
+    // 5-b W-1 — "검색 후보가 담겨 있으면 핀 멈춤을 전부 무시"하는 과잉 수정을 가른다. 사용자가 핀
+    // 탭에서 지도를 밀어 다른 곳에 맞추면 호텔 좌표가 "확인됨"으로 남아선 안 된다(INV-U1-08).
+    it('핀 탭에서 지도를 옮겨 다른 좌표로 멈추면 확정이 풀리고 눌러도 요청이 없다', () => {
+      mockGeocode.mockReturnValue({
+        data: [HOTEL],
+        isPending: false,
+        isError: false,
+      });
+      render(<StayRegisterPage />);
+      const input = screen.getByTestId('stay-register-search-input');
+      fireEvent.changeText(input, '롯데시티호텔');
+      fireEvent(input, 'submitEditing', {
+        nativeEvent: { text: '롯데시티호텔' },
+      });
+      fireEvent.press(screen.getByTestId('stay-register-candidate-0'));
+      expect(screen.queryAllByTestId('stay-register-coordnotice')).toHaveLength(
+        0
+      );
+
+      goToPinTab();
+      panTo({ lat: HOTEL.lat + 1e-4, lng: HOTEL.lng });
+
+      expect(
+        within(screen.getByTestId('stay-register-coordnotice')).getByText(
+          '지도에서 위치를 확인해 주세요'
+        )
+      ).toBeOnTheScreen();
+      const submit = screen.getByTestId('stay-register-submit');
+      expect(submit).toBeDisabled();
+      fireEvent.press(submit);
+      expect(mockMutateAsync).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('IP-13 · 확정 뒤 다른 좌표로 멈추면 확정이 풀리고 POST 가 없다 (AC-3 · AC-4 · AC-6)', () => {
+    it.each<[string, MapCenter]>([
+      ['위도만 1e-4', { lat: 37.5666, lng: 126.978 }],
+      ['경도만 1e-4', { lat: 37.5665, lng: 126.9781 }],
+    ])(
+      '%s 옮기면 안내가 뜨고 등록이 잠기며 눌러도 요청이 없다',
+      async (_label, moved) => {
+        await confirmPinAtDefault('명동 게스트하우스');
+
+        panTo(moved);
+
+        expect(
+          within(screen.getByTestId('stay-register-coordnotice')).getByText(
+            '지도에서 위치를 확인해 주세요'
+          )
+        ).toBeOnTheScreen();
+        const submit = screen.getByTestId('stay-register-submit');
+        expect(submit).toBeDisabled();
+        fireEvent.press(submit);
+        expect(mockMutateAsync).toHaveBeenCalledTimes(0);
+      }
+    );
+  });
 });
 
 // 옛 StayRegisterPage.back — SB-1 (이 배선을 누르는 유일한 통합)
