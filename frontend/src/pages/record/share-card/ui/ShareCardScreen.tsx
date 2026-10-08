@@ -166,6 +166,8 @@ export function ShareCardScreen({
           <View className="flex-row items-center">
             <Text className="font-noto-bold text-caption text-muted">캡션</Text>
             <View className="flex-1" />
+            {/* TRIP-1304 — 편집 중엔 같은 자리에 [완료]. 입력칸보다 위라, iOS 가 입력칸을 키보드 위로
+                끌어올리면 [완료]도 늘 그 위에 있다(아래 큰 버튼은 커서+15pt 기준 밖이라 키보드 뒤에 남았다). */}
             {draft === null ? (
               <Pressable
                 testID="reflection-share-caption-edit"
@@ -176,7 +178,17 @@ export function ShareCardScreen({
                   편집
                 </Text>
               </Pressable>
-            ) : null}
+            ) : (
+              <Pressable
+                testID="reflection-share-caption-save"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={commitDraft}
+              >
+                <Text className="font-noto-bold text-label text-primary">
+                  완료
+                </Text>
+              </Pressable>
+            )}
           </View>
           <Text className="font-noto text-body text-ink">{caption}</Text>
           {draft === null ? (
@@ -197,15 +209,6 @@ export function ShareCardScreen({
                   </Text>
                 </View>
               ) : null}
-              <Pressable
-                testID="reflection-share-caption-save"
-                onPress={commitDraft}
-                className="h-12 items-center justify-center rounded-button bg-primary"
-              >
-                <Text className="font-noto-bold text-card-title text-on-primary">
-                  완료
-                </Text>
-              </Pressable>
             </View>
           )}
         </View>
