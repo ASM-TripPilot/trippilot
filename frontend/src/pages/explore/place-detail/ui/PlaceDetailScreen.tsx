@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { MapView } from '@/shared/map';
 import { PlaceSubtitle } from '@/entities/place';
@@ -161,6 +162,7 @@ export function PlaceDetailScreen({
             <Pressable
               testID="explore-place-back"
               accessibilityRole="button"
+              accessibilityLabel="뒤로"
               onPress={onPressBack}
               className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
             >
@@ -170,6 +172,7 @@ export function PlaceDetailScreen({
             <Pressable
               testID="explore-place-share"
               accessibilityRole="button"
+              accessibilityLabel="공유"
               onPress={onPressShare}
               className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
             >
@@ -178,6 +181,8 @@ export function PlaceDetailScreen({
             <Pressable
               testID="explore-place-save"
               accessibilityRole="button"
+              // 라벨은 담김과 무관하게 고정, 담김은 selected 로만(TRIP-1281 결정 · TRIP-1302).
+              accessibilityLabel={heartSaveLabel(place.nameKo)}
               // 담김=선택됨. 빈/찬은 색이 아니라 이 상태 + 글리프 컴포넌트 정체성으로 잰다
               // (repo-trap 글리프 함정, d04·d02 하트와 같은 신호).
               accessibilityState={{ selected: saved }}

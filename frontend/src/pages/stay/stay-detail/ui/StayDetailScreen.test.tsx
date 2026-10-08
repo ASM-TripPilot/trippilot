@@ -624,6 +624,95 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
       expect(screen.queryByTestId('stay-detail-share')).toBeNull();
     });
   });
+
+  // TRIP-1302 — 라벨이 없으면 iOS 가 testID 를 그대로 읽는다. 뒤로·하트에 사람 말 이름을 단다.
+  // 하트 이름은 담김과 무관하게 하나고, 담김은 selected 로만 갈린다(TRIP-1281 결정).
+  // 라벨이 없을 때 계산 이름은 '' 이라 "testID 미포함"만으로는 공허하게 통과한다 — 비어 있지 않음과 짝으로 잰다.
+  describe('S20 · 히어로 원 버튼 접근성 라벨 (AC-1·2·5·6·7)', () => {
+    const SAVE_NAME = '해운대 오션 호텔 저장';
+
+    it('ready 얼굴의 뒤로는 "뒤로", 하트는 "{숙소명} 저장", 공유는 "공유"로 읽힌다', () => {
+      render(<StayDetailScreen {...baseProps()} />);
+
+      expect(screen.getByTestId('stay-detail-back')).toHaveAccessibleName(
+        '뒤로'
+      );
+      expect(screen.getByTestId('stay-detail-save')).toHaveAccessibleName(
+        SAVE_NAME
+      );
+      expect(screen.getByTestId('stay-detail-share')).toHaveAccessibleName(
+        '공유'
+      );
+    });
+
+    it.each(NON_READY)(
+      '$kind 얼굴의 뒤로도 "뒤로"로 읽힌다',
+      ({ kind, face }) => {
+        render(<StayDetailScreen {...baseProps()} state={{ kind }} />);
+
+        expect(
+          within(screen.getByTestId(face)).getByTestId('stay-detail-back')
+        ).toHaveAccessibleName('뒤로');
+      }
+    );
+
+    it('하트 이름은 담김/안 담김이 같고, selected 만 바뀐다', () => {
+      const { rerender } = render(
+        <StayDetailScreen {...baseProps()} saved={false} />
+      );
+      const before = screen.getByTestId('stay-detail-save');
+      expect(before).toHaveAccessibleName(SAVE_NAME);
+      expect(before).not.toBeSelected();
+
+      rerender(<StayDetailScreen {...baseProps()} saved={true} />);
+
+      const after = screen.getByTestId('stay-detail-save');
+      expect(after).toHaveAccessibleName(SAVE_NAME);
+      expect(after).toBeSelected();
+    });
+
+    it.each([
+      { face: 'ready', kind: 'ready', testID: 'stay-detail-back' },
+      { face: 'ready', kind: 'ready', testID: 'stay-detail-save' },
+      { face: 'ready', kind: 'ready', testID: 'stay-detail-share' },
+      { face: 'error', kind: 'error', testID: 'stay-detail-back' },
+    ] as const)(
+      '$face 얼굴 $testID 이름은 비어 있지 않고 testID 문자열이 섞이지 않는다',
+      ({ kind, testID }) => {
+        render(
+          <StayDetailScreen
+            {...baseProps()}
+            state={kind === 'ready' ? ready() : { kind }}
+          />
+        );
+
+        const button = screen.getByTestId(testID);
+        expect(button).toHaveAccessibleName();
+        expect(button).not.toHaveAccessibleName(new RegExp(testID));
+        expect(button).not.toHaveAccessibleName(/[a-z]+-[a-z]+/);
+      }
+    );
+
+    it('ready 얼굴 뒤로를 누르면 onPressBack 만 한 번 불린다(무회귀)', () => {
+      const onPressBack = jest.fn();
+      const onToggleSave = jest.fn();
+      const onPressShare = jest.fn();
+      render(
+        <StayDetailScreen
+          {...baseProps()}
+          onPressBack={onPressBack}
+          onToggleSave={onToggleSave}
+          onPressShare={onPressShare}
+        />
+      );
+
+      fireEvent.press(screen.getByTestId('stay-detail-back'));
+
+      expect(onPressBack).toHaveBeenCalledTimes(1);
+      expect(onToggleSave).not.toHaveBeenCalled();
+      expect(onPressShare).not.toHaveBeenCalled();
+    });
+  });
 });
 
 // 옛 StayDetailScreen.amenityOverflow — 편의시설 4/5 경계

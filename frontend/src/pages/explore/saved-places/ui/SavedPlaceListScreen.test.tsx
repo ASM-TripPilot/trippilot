@@ -1030,3 +1030,36 @@ describe('담은 장소 행 — 해제됨 글자·흐림', () => {
     expect(screen.queryByTestId('explore-saved-createtrip')).toBeNull();
   });
 });
+
+// TRIP-1302 — d02 앱바 뒤로는 라벨이 없어 iOS 가 testID 를 그대로 읽었다. 얼굴과 무관하게 "뒤로"로 읽힌다.
+// 라벨이 없을 때 계산 이름은 '' 이라 "testID 미포함"만으로는 공허하게 통과한다 — 비어 있지 않음과 짝으로 잰다.
+// (press 무회귀는 위 `앱바 › AC-11` 이 잠근다.)
+describe('d02 앱바 뒤로 접근성 라벨 (AC-4·5)', () => {
+  const FACES: [string, Partial<SavedPlaceListScreenProps>][] = [
+    ['empty', { savedPlaces: [], state: { kind: 'empty' } }],
+    ['results', {}],
+    ['loading', { savedPlaces: [], state: { kind: 'loading' } }],
+    ['error', { savedPlaces: [], state: { kind: 'error' } }],
+    ['guest', { savedPlaces: [], isGuest: true }],
+  ];
+
+  it.each(FACES)('%s 얼굴의 뒤로는 "뒤로"로 읽힌다', (_face, overrides) => {
+    renderScreen(overrides);
+
+    expect(screen.getByTestId('explore-saved-back')).toHaveAccessibleName(
+      '뒤로'
+    );
+  });
+
+  it.each(FACES)(
+    '%s 얼굴의 뒤로 이름은 비어 있지 않고 testID 문자열이 섞이지 않는다',
+    (_face, overrides) => {
+      renderScreen(overrides);
+
+      const back = screen.getByTestId('explore-saved-back');
+      expect(back).toHaveAccessibleName();
+      expect(back).not.toHaveAccessibleName(/explore-saved-back/);
+      expect(back).not.toHaveAccessibleName(/[a-z]+-[a-z]+/);
+    }
+  );
+});

@@ -79,6 +79,7 @@ function AppBar({
       <Pressable
         testID="explore-saved-back"
         accessibilityRole="button"
+        accessibilityLabel="뒤로"
         onPress={onBack}
         className="h-10 w-10 items-center justify-center"
       >
