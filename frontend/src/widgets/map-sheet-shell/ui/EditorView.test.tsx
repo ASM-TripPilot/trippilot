@@ -16,7 +16,7 @@ import type {
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/index.schemas';
 import { buildPlanDayTabs } from '@/features/itinerary/index.view';
-import { buildSlotKey } from '@/entities/itinerary-slot';
+import { buildSlotKey, violationNotice } from '@/entities/itinerary-slot';
 import {
   EDIT_LIST,
   editListData,
@@ -472,7 +472,8 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
     );
   });
 
-  it('사유가 null 이면 지어내지 않고 "일정 충돌" 로 그린다', () => {
+  // TRIP-1298 — 편집기도 h08 과 같은 고정 라벨(옛 `일정 충돌` 폐기).
+  it('사유가 null 이면 지어내지 않고 고정 문구 "일정 확인이 필요해요" 로 그린다', () => {
     renderI07({
       slots: I07_SLOTS.map((s) =>
         s.poiId === 'p3' ? { ...s, violationReason: null } : s
@@ -481,7 +482,7 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
 
     expect(
       screen.getByTestId(`slot-stopcard-violation-${k('p3')}`)
-    ).toHaveTextContent('일정 충돌');
+    ).toHaveTextContent('일정 확인이 필요해요');
   });
 
   it('hasViolation 이 false 면 사유 문자열이 있어도 배지가 없다', () => {
@@ -501,37 +502,113 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
   });
 });
 
-describe('🔴 EditorView · V5-D — 위반 사유의 분 범위는 HH:mm 로 보인다 (TRIP-1008 D1·D3)', () => {
-  it('사유 "영업시간 밖: 543~618" 은 배지에 "영업시간 밖: 09:03~10:18" 로 뜬다', () => {
-    renderI07({
-      slots: I07_SLOTS.map((s) =>
-        s.poiId === 'p3' ? { ...s, violationReason: '영업시간 밖: 543~618' } : s
-      ),
+// ── TRIP-1298 · 편집기 위반 알약 = h08 과 같은 규칙(violationNotice) ─────────────────────────────────
+//
+// 슬롯 자기 distanceRange 가 비면 "앞 장소에서 이동할 시간이 빠듯해요" 조각을 빼고(TRIP-1274 사용자 결정 —
+// 근거 없는 단정), 숫자가 섞이거나 비면 고정 문구로 막는다(INV-3). 알약 자체는 남긴다(BR-U3-13).
+// 문구는 서버 ViolationText.phraseOf 와 글자 단위로 같아야 해서 리터럴로 든다 — 구분자 점은 U+00B7(02a ★6).
+const HC2 = '앞 장소에서 이동할 시간이 빠듯해요';
+const OPENING = '영업시간과 맞지 않아요';
+const NOTICE = '일정 확인이 필요해요';
+const KNOWN = '약 2.1km · 도보 추정';
+
+const p3Badge = (): ReturnType<typeof screen.getByTestId> =>
+  screen.getByTestId(`slot-stopcard-violation-${k('p3')}`);
+
+function renderWithP3(over: Partial<EditorSlot>): void {
+  renderI07({
+    slots: I07_SLOTS.map((s) => (s.poiId === 'p3' ? { ...s, ...over } : s)),
+  });
+}
+
+describe('🔴 EditorView · V8 — 위반 알약은 h08 과 같은 규칙: 거리를 모르면 "빠듯"을 빼고, 숫자는 고정 문구', () => {
+  it('V8-1 · 사유가 이동 문구뿐 · 거리 null → 알약은 남고 "일정 확인이 필요해요"', () => {
+    renderWithP3({
+      hasViolation: true,
+      violationReason: HC2,
+      distanceRange: null,
     });
 
-    expect(
-      screen.getByTestId(`slot-stopcard-violation-${k('p3')}`)
-    ).toHaveTextContent('영업시간 밖: 09:03~10:18');
-    expect(screen.queryAllByText(/\d{3,4}~\d{3,4}/).length).toBe(0);
+    expect(screen.getAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(1);
+    expect(p3Badge()).toHaveTextContent(NOTICE);
+    // 문자열을 not 에 쓰면 완전 일치 부정이라 늘 통과한다 — 포함 여부는 정규식으로(02a ★1).
+    expect(p3Badge()).not.toHaveTextContent(/빠듯/);
   });
 
-  it('" · " 로 이어진 사유는 분 범위만 바뀌고 "이동 N분 필요" 는 글자 그대로다 (D5 경계)', () => {
-    renderI07({
-      slots: I07_SLOTS.map((s) =>
-        s.poiId === 'p3'
-          ? {
-              ...s,
-              violationReason:
-                '영업시간 밖: 543~618 · 이동 54분 필요, 간격 -60분',
-            }
-          : s
-      ),
+  it('V8-2 · 같은 사유라도 거리를 알면 서버 문구 그대로(짝)', () => {
+    renderWithP3({
+      hasViolation: true,
+      violationReason: HC2,
+      distanceRange: KNOWN,
     });
 
-    expect(
-      screen.getByTestId(`slot-stopcard-violation-${k('p3')}`)
-    ).toHaveTextContent(
-      '영업시간 밖: 09:03~10:18 · 이동 54분 필요, 간격 -60분'
+    expect(p3Badge()).toHaveTextContent(HC2);
+  });
+
+  it('V8-3 · 이동 문구 · 영업시간 · 거리 null → 영업시간 문구만', () => {
+    renderWithP3({
+      hasViolation: true,
+      violationReason: `${HC2} · ${OPENING}`,
+      distanceRange: null,
+    });
+
+    expect(p3Badge()).toHaveTextContent(OPENING);
+  });
+
+  // 기대값을 h08 이 쓰는 함수로 계산한다 — 문구가 아니라 "두 화면이 같은 규칙"이라는 관계를 잰다(02a ★4).
+  it.each<[string, Partial<EditorSlot>]>([
+    ['이동 문구 · 거리 null', { violationReason: HC2, distanceRange: null }],
+    ['이동 문구 · 거리 있음', { violationReason: HC2, distanceRange: KNOWN }],
+    [
+      '이동 문구 · 영업시간 · 거리 null',
+      { violationReason: `${HC2} · ${OPENING}`, distanceRange: null },
+    ],
+    ['사유 null', { violationReason: null, distanceRange: KNOWN }],
+    [
+      '옛 원시 분 범위',
+      { violationReason: '영업시간 밖: 543~618', distanceRange: KNOWN },
+    ],
+    [
+      '숫자 없는 기타 사유',
+      { violationReason: '숙소 고정 충돌', distanceRange: null },
+    ],
+  ])('V8-4 · %s → h08(violationNotice)과 같은 문구', (_label, over) => {
+    const data = { ...I07_SLOTS[2], hasViolation: true, ...over };
+    renderWithP3(data);
+
+    expect(p3Badge()).toHaveTextContent(violationNotice(data) as string);
+  });
+
+  it.each([
+    '영업시간 밖: 543~618',
+    '영업시간 밖: 543~618 · 이동 54분 필요, 간격 -60분',
+    '이동 25분 필요',
+    '이동 1시간 필요',
+  ])('V8-5 · 숫자가 섞인 사유 %p → 고정 문구, N분·N시간 없음', (reason) => {
+    renderWithP3({
+      hasViolation: true,
+      violationReason: reason,
+      distanceRange: KNOWN,
+    });
+
+    // 긍정 앵커 먼저 — "분 없음"만으로는 HH:mm 로 바꾼 옛 문구도 통과한다(02a ★2).
+    expect(p3Badge()).toHaveTextContent(NOTICE);
+    expect(p3Badge()).not.toHaveTextContent(/\d+\s*분/);
+    expect(p3Badge()).not.toHaveTextContent(/\d+\s*시간/);
+  });
+
+  it('V8-6 · hasViolation 이 false 면 거리 없는 이동 문구여도 알약이 없다', () => {
+    renderWithP3({
+      hasViolation: false,
+      violationReason: HC2,
+      distanceRange: null,
+    });
+
+    I07_KEYS.forEach((key) =>
+      expect(screen.getByTestId(`slot-stopcard-${key}`)).toBeOnTheScreen()
+    );
+    expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
+      0
     );
   });
 });

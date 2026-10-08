@@ -215,7 +215,7 @@
 - `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
 
 ## src/entities/itinerary-slot/
-- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · buildSlotKey · parseSlotKey · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · VIOLATION_NOTICE · violationLabel · violationNotice · deriveVisitProgress · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · SlotProgressCard · SlotStopCard
+- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · buildSlotKey · parseSlotKey · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · VIOLATION_NOTICE · violationNotice · deriveVisitProgress · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · SlotProgressCard · SlotStopCard
 
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
@@ -227,7 +227,7 @@
 - `src/entities/itinerary-slot/lib/slotProgress.ts`  →  SlotState · ProjectedSlot · SlotProgressInput · projectSlotProgress
 - `src/entities/itinerary-slot/lib/suggestNextSlotTime.ts`  →  suggestNextSlotTime
 - `src/entities/itinerary-slot/lib/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
-- `src/entities/itinerary-slot/lib/violationLabel.ts`  →  VIOLATION_NOTICE · formatViolationMinutes · violationLabel · violationNotice
+- `src/entities/itinerary-slot/lib/violationLabel.ts`  →  VIOLATION_NOTICE · violationNotice
 - `src/entities/itinerary-slot/lib/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/entities/itinerary-slot/model/
@@ -433,13 +433,14 @@
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
 
 ## src/features/itinerary/
-- `src/features/itinerary/index.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · resolveUnplacedNames · isGenerationRunning · useGenerationBusy · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
-- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolveUnplacedNames · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
+- `src/features/itinerary/index.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · resolvePlanMapCenter · resolveUnplacedNames · isGenerationRunning · useGenerationBusy · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
+- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · resolveUnplacedNames · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · GenerationGaugeFold · FoldedGenerationGaugeCell · foldGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveShortfallNotice · resolveDraftView
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · fixedTimeLabel · buildMustVisitPins · resolveMustVisitListView
+- `src/features/itinerary/model/planMapCenter.ts`  →  resolvePlanMapCenter
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
 - `src/features/itinerary/model/slotEmptyFace.ts`  →  SlotEmptyFace · ALL_IN_ITINERARY_TITLE · ALL_IN_ITINERARY_HINT · resolveSlotEmptyFace
 - `src/features/itinerary/model/unplacedMustVisits.ts`  →  UnplacedMustVisitRow · resolveUnplacedNames
@@ -783,9 +784,6 @@
 
 ## src/pages/itinerary/itinerary-plan/
 - `src/pages/itinerary/itinerary-plan/index.ts`  →  ItineraryPlanPage
-
-## src/pages/itinerary/itinerary-plan/model/
-- `src/pages/itinerary/itinerary-plan/model/planMapCenter.ts`  →  resolvePlanMapCenter
 
 ## src/pages/itinerary/itinerary-plan/ui/
 - `src/pages/itinerary/itinerary-plan/ui/ItineraryPlanPage.tsx`  →  ItineraryPlanPage
@@ -1553,6 +1551,7 @@
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
+- `src/test-support/keyWarnings.ts`  →  KeyWarnings · guardKeyWarnings
 - `src/test-support/mapViewMock.tsx`  →  MapCenter · MapPin · MapView · CenterPinPicker
 - `src/test-support/myPageItineraries.tsx`  →  DURING · PAST · FUTURE · itin · CONFIRMED · PLANNED · AXIOS_404 · AXIOS_500 · ItinScript · scriptItineraryOptions · deferred · newTestQueryClient · renderWithQueryClient · settle · myPageTrip
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
@@ -1600,4 +1599,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 982개 파일
+합계 983개 파일

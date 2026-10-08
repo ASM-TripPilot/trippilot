@@ -49,6 +49,7 @@ export {
   resolveItineraryDestination,
   resolvePlanState,
 } from './model/planState';
+export { resolvePlanMapCenter } from './model/planMapCenter';
 export { resolveUnplacedNames } from './model/unplacedMustVisits';
 export {
   AlertCircleGlyph,

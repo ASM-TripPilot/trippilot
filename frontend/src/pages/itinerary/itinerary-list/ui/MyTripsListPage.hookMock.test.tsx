@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import * as SecureStore from 'expo-secure-store';
+import { Dimensions, ScrollView } from 'react-native';
 
 import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 import {
@@ -16,6 +17,7 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { readIdSet, writeIdSet } from '@/shared/storage';
+import * as fontScaleModule from '@/shared/lib/fontScale';
 import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 
 /**
@@ -277,6 +279,26 @@ beforeEach(() => {
   (SecureStore.setItemAsync as jest.Mock)
     .mockReset()
     .mockResolvedValue(undefined);
+});
+
+// TRIP-1297 — 글자 배율. jest 의 RN 목은 기본 배율이 1 이 아니라 2(= 큰 글자)라, 운영 기본값 1 로 파일 전체를
+// 고정한다. Dimensions·isLargeText 스파이는 모듈 상태라 고정·복원을 describe 밖 최상위에 둔다(02a ★1·★5).
+const BASE_WINDOW = Dimensions.get('window');
+
+/** 렌더 **전에** 부른다 — useWindowDimensions·PixelRatio.getFontScale 둘 다 이 값을 읽는다. */
+function setFontScale(fontScale: number): void {
+  const window = { ...BASE_WINDOW, fontScale };
+  Dimensions.set({ window, screen: window });
+}
+
+let isLargeTextSpy: jest.SpyInstance | null = null;
+
+beforeEach(() => setFontScale(1));
+
+afterEach(() => {
+  Dimensions.set({ window: BASE_WINDOW, screen: BASE_WINDOW });
+  isLargeTextSpy?.mockRestore();
+  isLargeTextSpy = null;
 });
 
 // ── 표시 ───────────────────────────────────────────────────────────────
@@ -742,14 +764,138 @@ describe('🔴 AC-8 · 저장소가 실패해도 목록은 멀쩡하다', () => 
 
 // ── 배치 · 키 ──────────────────────────────────────────────────────────
 
-describe('🔴 AC-9 · 배너는 목록 화면 안이 아니라 형제로 붙는다', () => {
-  it('배너가 있고, itinerary-tab-root 안에서는 찾아지지 않는다', async () => {
+// TRIP-1297 — 옛 AC-9("배너는 목록 화면 안이 아니라 형제")는 배율을 안 정해 jest 기본 2(큰 글자)에서 돌았다.
+// 결정 1=B 로 큰 글자에선 배너가 목록 맨 위로 들어가므로, 배율별 짝으로 다시 쓴다(02a §6).
+
+/** 기본(도킹) 모양의 배너 루트 className — 기본 글자 크기에서는 한 글자도 바뀌면 안 된다(02a ★3). */
+const DOCKED_CLASS =
+  'absolute bottom-[108px] left-[16px] min-h-[52px] w-[358px] flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas px-lg py-[12px]';
+
+/** 목록 스크롤 안의 배너·카드 testID 를 트리 순서대로(카드 하위 testID 는 `$` 로 뺀다, 02a ★6). */
+function bannerAndCardsInScroll(): string[] {
+  return within(screen.UNSAFE_getByType(ScrollView))
+    .queryAllByTestId(/^(generation-done-bar|my-trip-card-trip-[abc])$/)
+    .map((n) => n.props.testID as string);
+}
+
+function bannerTokens(): string[] {
+  const cn: unknown = screen.getByTestId('generation-done-bar').props.className;
+  return typeof cn === 'string' ? cn.split(/\s+/).filter(Boolean) : [];
+}
+
+describe('🔴 배치 · 기본 글자는 목록 화면 밖에 떠 있고, 큰 글자는 목록 맨 위 카드로 들어간다', () => {
+  it.each([1, 1.49])(
+    '배율 %s(기본 글자) — 배너는 지금 도킹 모양 그대로이고 itinerary-tab-root 밖 형제다',
+    async (fontScale) => {
+      // 준비 — 배율은 렌더 전에.
+      setFontScale(fontScale);
+      scriptTrips([A], { 'trip-a': DONE });
+
+      // 실행
+      renderPage();
+      await settle();
+
+      // 단언 — 앵커(배너는 있다) 뒤에 "root 안엔 없다"(02a ★11).
+      const banner = screen.getByTestId('generation-done-bar');
+      expect(banner.props.className).toBe(DOCKED_CLASS);
+      const root = screen.getByTestId('itinerary-tab-root');
+      expect(within(root).queryByTestId('generation-done-bar')).toBeNull();
+    }
+  );
+
+  it.each([1.5, 3.571])(
+    '배율 %s(큰 글자) — 배너는 목록 스크롤 안 첫 카드 앞에 놓이고, 떠 있지 않다',
+    async (fontScale) => {
+      // 준비 — 카드 최신순 C·B·A, 배너 대상은 가장 최근 완성 B(AC-2 와 같은 픽스처).
+      setFontScale(fontScale);
+      scriptTrips([A, C, B], {
+        'trip-a': DONE,
+        'trip-b': DONE,
+        'trip-c': DRAFT,
+      });
+
+      // 실행
+      renderPage();
+      await settle();
+
+      // 단언 ① 목록 화면 안, 스크롤 안, 첫 카드 앞(트리 순서).
+      const root = screen.getByTestId('itinerary-tab-root');
+      expect(within(root).getByTestId('generation-done-bar')).toBeOnTheScreen();
+      expect(bannerAndCardsInScroll()).toEqual([
+        'generation-done-bar',
+        'my-trip-card-trip-c',
+        'my-trip-card-trip-b',
+        'my-trip-card-trip-a',
+      ]);
+      // 단언 ② 떠 있지 않다 — 위치 토큰이 의미를 잃으므로 남기지 않는다(AC-4).
+      // 토큰마다 따로 본다 — not.arrayContaining([...]) 은 "셋을 다 갖진 않다"라 하나만 남아도 통과한다.
+      for (const token of ['absolute', 'bottom-[108px]', 'left-[16px]']) {
+        expect(bannerTokens()).not.toContain(token);
+      }
+      // 단언 ③ 문구 그대로(AC-6).
+      expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+        '부산 여행 일정이 완성됐어요'
+      );
+    }
+  );
+
+  it('배율 3.571 — 목록 맨 위 배너의 보기는 대상 여행으로 가고, ✕ 를 누르면 배너가 사라진다', async () => {
+    setFontScale(3.571);
+    scriptTrips([A, C, B], { 'trip-a': DONE, 'trip-b': DONE, 'trip-c': DRAFT });
+
+    renderPage();
+    await settle();
+    // 앵커 — 큰 글자 모양(스크롤 안)에서 누른다는 것을 먼저 굳힌다(02a ★10).
+    expect(bannerAndCardsInScroll()[0]).toBe('generation-done-bar');
+
+    // 실행 ① 보기
+    fireEvent.press(screen.getByTestId('generation-done-bar-view'));
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-b/live');
+
+    // 실행 ② ✕
+    fireEvent.press(screen.getByTestId('generation-done-bar-close'));
+    await settle();
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+    expect(screen.getByTestId('my-trip-card-trip-b')).toBeOnTheScreen();
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 배치 판정은 isLargeText 하나로만 한다 (경계 숫자를 다시 박지 않는다)', () => {
+  // isLargeText 의 답을 배율과 반대로 뒤집는다 — 페이지가 이 함수를 거치면 배치가 뒤집히고,
+  // `fontScale >= 1.5` 를 직접 비교하면 배율대로 그려져 red 다(02a ★5).
+  it('배율 1 이어도 isLargeText 가 true 라고 하면 배너는 목록 스크롤 안에 들어간다', async () => {
+    setFontScale(1);
+    isLargeTextSpy = jest
+      .spyOn(fontScaleModule, 'isLargeText')
+      .mockReturnValue(true);
     scriptTrips([A], { 'trip-a': DONE });
 
     renderPage();
     await settle();
 
-    expect(screen.getByTestId('generation-done-bar')).toBeOnTheScreen();
+    expect(isLargeTextSpy).toHaveBeenCalledWith(1);
+    expect(bannerAndCardsInScroll()).toEqual([
+      'generation-done-bar',
+      'my-trip-card-trip-a',
+    ]);
+  });
+
+  it('배율 3.571 이어도 isLargeText 가 false 라고 하면 배너는 도킹 모양으로 목록 화면 밖에 뜬다', async () => {
+    setFontScale(3.571);
+    isLargeTextSpy = jest
+      .spyOn(fontScaleModule, 'isLargeText')
+      .mockReturnValue(false);
+    scriptTrips([A], { 'trip-a': DONE });
+
+    renderPage();
+    await settle();
+
+    expect(isLargeTextSpy).toHaveBeenCalledWith(3.571);
+    expect(screen.getByTestId('generation-done-bar').props.className).toBe(
+      DOCKED_CLASS
+    );
     const root = screen.getByTestId('itinerary-tab-root');
     expect(within(root).queryByTestId('generation-done-bar')).toBeNull();
   });

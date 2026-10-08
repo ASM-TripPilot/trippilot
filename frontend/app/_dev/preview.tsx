@@ -174,7 +174,7 @@ import {
 } from '@/pages/trip/trip-new-step2/ui/StaySelectSheet';
 import { LiveLocationView } from '@/pages/live/live-location/ui/LiveLocationView';
 import { NoBaseNoticeCard } from '@/pages/itinerary/itinerary-plan/ui/NoBaseNoticeCard';
-import { resolvePlanMapCenter } from '@/pages/itinerary/itinerary-plan/model/planMapCenter';
+import { resolvePlanMapCenter } from '@/features/itinerary/index.view';
 import { DraftFallbackBanner } from '@/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner';
 import { EditorView } from '@/widgets/map-sheet-shell';
 import {
@@ -5539,6 +5539,31 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
         <GenerationDoneBar tripName="서귀포시 여행" onPressView={noop} />
       </View>
+    ),
+  },
+  // TRIP-1297 · 큰 글자 가지 — 페이지가 isLargeText 일 때 고르는 배치(목록 스크롤 맨 위 · inline)를 손 조립한다.
+  // inline 은 prop 이라 OS 배율과 무관하게 이 모양을 그린다. 꺾임·높이는 content_size 를 키우고 냉시작해 본다.
+  {
+    key: 'h05-my-trips-done-bar-large-text',
+    band: 'h',
+    label: 'h05 · 완료 배너 큰 글자(목록 맨 위)',
+    login: null,
+    render: () => (
+      <MyTripsListScreen
+        mode="list"
+        onPressCreateTrip={noop}
+        listHeader={
+          <GenerationDoneBar
+            tripName="서귀포시 여행"
+            onPressView={noop}
+            onPressClose={noop}
+            inline
+          />
+        }
+        cards={MY_TRIPS_PREVIEW_VMS.map((vm) => (
+          <MyTripCard key={vm.tripId} vm={vm} onPress={noop} />
+        ))}
+      />
     ),
   },
   {

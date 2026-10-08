@@ -8,6 +8,7 @@ import {
   buildDraftDayTabs,
   buildDraftPins,
   formatDraftDayHeader,
+  resolvePlanMapCenter,
 } from '@/features/itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import { WarningTriangleGlyph } from '@/features/itinerary';
@@ -105,10 +106,13 @@ export function CoPickCompletePage({
 
   const slots = days.find((day) => day.date === selectedDate)?.slots ?? [];
   const pins = buildDraftPins(slots);
-  const center =
-    pins.length > 0
-      ? { lat: pins[0].lat, lng: pins[0].lng }
-      : { lat: 0, lng: 0 };
+  // 그날 첫 핀, 없으면 사다리(TRIP-1295). 거점·숙소는 조회하지 않는다(③ 건너뜀).
+  const center = resolvePlanMapCenter({
+    days,
+    selectedDate,
+    bases: undefined,
+    stays: undefined,
+  });
 
   // meta 는 **비고정만** 센다 — 고정(숙소)은 "고른" 대상이 아니다(D2 · coPickProgress 재사용 금지).
   const pickedCount = slots.filter((slot) => !slot.isFixed).length;
@@ -150,7 +154,8 @@ export function CoPickCompletePage({
             : `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`;
           const items: ReactElement[] = [
             <SlotStopCard
-              key={`card-${slot.poiId}`}
+              // 순번을 섞는다 — 같은 날 같은 장소 2회(BR-U2-04 위반 데이터, TRIP-1296)면 poiId 만으론 겹친다. 끌어 옮기지 않는 목록이라 순번 key 가 안전하다.
+              key={`card-${index}-${slot.poiId}`}
               slot={slot}
               date={selectedDate}
               index={index}
@@ -165,7 +170,7 @@ export function CoPickCompletePage({
             const nextSlot = slots[index + 1];
             items.push(
               <DistanceConnector
-                key={`conn-${slot.poiId}`}
+                key={`conn-${index}-${slot.poiId}`}
                 slotKey={buildSlotKey(selectedDate, slot.poiId)}
                 distanceRange={nextSlot.distanceRange}
               />
