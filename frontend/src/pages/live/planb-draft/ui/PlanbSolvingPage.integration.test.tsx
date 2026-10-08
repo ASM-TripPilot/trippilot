@@ -22,7 +22,8 @@ import { PlanbSolvingPage } from './PlanbSolvingPage';
  *    그날 방문 완료 행(일정 순서)을 그린다. 그날은 fromInstant 의 **KST 날짜**다(Q5).
  *  - [취소] → cancel 1회. **성공한 뒤에만** 뒤로(또는 허브로 replace) 간다.
  *  - ‹ → 이탈 확인부터(TRIP-1007 — 나간 뒤 다시 요청하면 이 결과가 버려진다, INV-U4-06). [나가기]여야
- *    back 만(세션은 살린다, cancel 0), [계속 기다리기]면 아무 데도 안 간다.
+ *    나간다(세션은 살린다, cancel 0 — 뒤가 없으면 허브로 replace, 같은 틱 연타는 1회, TRIP-1291),
+ *    [계속 기다리기]면 아무 데도 안 간다.
  *  - 범위가 FULL_DAY 면 캡션이 `{H}시 이후` 가 아니라 오늘 전체 문구다(TRIP-1007).
  *  - DRAFT·NO_SOLUTION·FAILED 면 `planb/draft` 로 replace 정확히 1회(push 아님 — 뒤로가기 무한 루프 방지).
  *  - itinerary 쓰기 훅은 0(INV-U4-05) — 아래 trips 목 팩토리가 cancel·visits 두 훅만 내주므로 페이지가 렌더 중
@@ -1112,6 +1113,61 @@ describe('🔴 TRIP-1277 AC6 · Q13 — 이번에 만든 버튼은 연타해도 
 
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-1291 · INV-4 · INV-U4-05 — ‹ 확인의 [나가기]도 오류·종료 얼굴의 나가기와 같은 길(뒤가 없으면 허브, 연타 1회).
+// 뒤가 있을 때 back 1 · cancel 0 은 S2 가 맡는다. 목 back 은 canGoBack 을 안 보므로 back 0 · replace 1 로 판정한다.
+describe('🔴 ‹ 확인 [나가기] — 뒤가 없어도 나가고, 연타해도 한 번만', () => {
+  function openLeaveConfirm(): void {
+    fireEvent.press(screen.getByTestId('generation-progress-back'));
+    expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+  }
+
+  it('L1 뒤로 갈 곳이 없으면(딥링크 착지) 허브로 replace 1회 — back·cancel 0', () => {
+    mockCanGoBack = false;
+    renderPage();
+    openLeaveConfirm();
+
+    fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-leave`));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP_ID}/live`);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['뒤가 있으면', true, 1, 0],
+    ['뒤가 없으면', false, 0, 1],
+  ])(
+    'L2 %s(canGoBack=%s) 같은 틱 2연타 — back %i · replace %i(이동 정확히 1회) · cancel 0',
+    (_label, canGoBack, backTimes, replaceTimes) => {
+      mockCanGoBack = canGoBack;
+      renderPage();
+      openLeaveConfirm();
+
+      pressTwiceSameTick(`${LEAVE_CONFIRM}-leave`);
+
+      expect(mockBack).toHaveBeenCalledTimes(backTimes);
+      expect(mockReplace).toHaveBeenCalledTimes(replaceTimes);
+      expect(mockCancel).not.toHaveBeenCalled();
+    }
+  );
+
+  it('L3 [계속 기다리기]로 닫았다가 다시 ‹ → [나가기]를 누르면 그때 나간다(닫기가 나가기를 잠그지 않는다)', () => {
+    renderPage();
+    openLeaveConfirm();
+    fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-stay`));
+    expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+
+    openLeaveConfirm();
+    fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-leave`));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
   });
 });
 

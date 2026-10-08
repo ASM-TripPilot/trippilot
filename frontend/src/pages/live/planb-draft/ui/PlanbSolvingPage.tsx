@@ -34,8 +34,9 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *    그날을 모르면(일정 미도착·그날 없음) 제목만 남기고 화면은 그대로 그린다.
  *  - [취소] → cancel 요청만(itinerary PUT 없음 — INV-U4-05). **성공한 뒤에만** 뒤로(없으면 허브로 replace).
  *  - ‹ → 이탈 확인부터(TRIP-1007 · QA #062 — 나간 뒤 다시 요청하면 새 POST 가 이 세션을 닫아 결과가
- *    버려진다, INV-U4-06). [나가기]면 `router.back()` — 세션을 살린 채 나간다(cancel 0). [계속 기다리기]는
- *    확인만 닫는다. 스와이프·Android 하드웨어 뒤로는 막지 않는다(범위 밖).
+ *    버려진다, INV-U4-06). [나가기]면 `leaveWithoutServer` — 세션을 살린 채 나간다(cancel 0). 뒤가 없으면
+ *    (딥링크·푸시 착지) 허브로 replace, 같은 틱 연타는 ref 로 1회(TRIP-1291). [계속 기다리기]는 확인만 닫는다.
+ *    스와이프·Android 하드웨어 뒤로는 막지 않는다(범위 밖).
  *  - 캡션: PARTIAL_SLOTS 는 `{H}시 이후 다시 짜는 중`, FULL_DAY 는 시각 없이 — 오늘이면 `오늘 일정`, 오늘이 아닌 날이면
  *    `{N}일차 일정`(BR-U4-11). 오늘이 아닌 날엔 방문 기록이 없어 `방문한 N곳` 줄을 비운다.
  *  - DRAFT·NO_SOLUTION·FAILED → i06(`planb/draft`)으로 **replace** 1회. push 면 i06 에서 뒤로 갔을 때 이
@@ -49,8 +50,8 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *    · 화면에 들어온 지 90초(미도착 구간 포함)가 지나면 시트 맨 위 느림 안내 — 요청·폴링은 그대로 둔다.
  *      시계는 마운트부터다 — 폴링 응답마다 리셋하지 않는다(restartKey 없음).
  *    · [취소] 요청이 실패하면(`cancel.isError`) 한 줄로 알린다.
- *  - 오류·종료 얼굴의 나가기 연타는 ref 로 막는다(같은 틱 두 번째 누름은 옛 state 를 본다). ‹ 확인의 [나가기]
- *    연타·스와이프 이탈은 이번 범위 밖(새 티켓 후보).
+ *  - 오류·종료 얼굴과 ‹ 확인의 나가기 연타는 ref 로 막는다(같은 틱 두 번째 누름은 옛 state 를 본다).
+ *    스와이프 이탈은 이번 범위 밖(새 티켓 후보).
  */
 
 const SLOW_MS = 90_000;
@@ -231,7 +232,7 @@ export function PlanbSolvingPage({
       {leaveOpen ? (
         <ReplanLeaveDialog
           onStay={() => setLeaveOpen(false)}
-          onLeave={() => router.back()}
+          onLeave={leaveWithoutServer}
         />
       ) : null}
     </View>
