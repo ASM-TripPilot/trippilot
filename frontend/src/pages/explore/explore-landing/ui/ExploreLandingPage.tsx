@@ -14,6 +14,7 @@ import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { useGetPlaces } from '@/shared/api/index.hooks';
 import { useTripWizardStore } from '@/features/create-trip';
+import { filterBySido } from '../model/sidoFilter';
 import {
   ExploreLandingScreen,
   type ExploreLandingScreenProps,
@@ -79,6 +80,9 @@ interface LaneQuery<T> {
 interface RegionFilter {
   label: string;
   regionName: string | undefined;
+  regionCode: string;
+  /** 카탈로그 행의 시도 — '모두 보기'가 e02 시도 거르기에 넘긴다(TRIP-1300). */
+  sido: string | undefined;
 }
 
 export function ExploreLandingPage(): ReactElement {
@@ -119,9 +123,9 @@ function NationwideExplore(): ReactElement {
 /** 지역 필터 d01(TRIP-1105) — 코드 → 이름 역인덱스 후 이름으로 두 조회를 켠다. */
 function RegionExplore({ regionCode }: { regionCode: string }): ReactElement {
   const regions = useRegions();
-  const regionName = regions.data?.find(
-    (r) => r.regionCode === regionCode
-  )?.name;
+  // 행은 코드로 찾는다 — 이름(`강서구`)은 서울·부산에 둘이라 시도를 잘못 집는다(TRIP-1300).
+  const row = regions.data?.find((r) => r.regionCode === regionCode);
+  const regionName = row?.name;
   const enabled = regionName !== undefined;
   const stay = useStaySearch({ region: regionName }, { enabled });
   const places = useGetPlaces(
@@ -140,11 +144,17 @@ function RegionExplore({ regionCode }: { regionCode: string }): ReactElement {
 
   return (
     <ExploreLanding
-      filter={{ label: regionName ?? regionCode, regionName }}
+      filter={{
+        label: regionName ?? regionCode,
+        regionName,
+        regionCode,
+        sido: row?.sidoName,
+      }}
       stay={
         enabled
           ? {
-              items: stay.data?.items ?? [],
+              // 서버는 이름으로 동명 구를 합쳐 준다 — 요청은 이름 그대로 두고 응답을 시도로 거른다(TRIP-1300).
+              items: filterBySido(stay.data?.items ?? [], row?.sidoName),
               isPending: stay.isPending,
               isError: stay.isError,
               refetch: () => void stay.refetch(),
@@ -259,11 +269,21 @@ function ExploreLanding({
       onRetry: stay.refetch,
       // TRIP-1013 #012 — 연타의 두 번째 탭이 숙소 검색의 첫 카드를 관통하지 않게 창을 연다
       // (옛 목적지 상세에서 이관, TRIP-1105).
+      // 필터 중이면 피커(숙소 목적)와 같은 모양으로 코드·시도를 실어 e02 도 동명 구를 거르게 한다(TRIP-1300).
       onSeeAll: guardPress(() =>
         router.push(
-          laneRegion
-            ? `/stays?region=${encodeURIComponent(laneRegion)}`
-            : '/stays'
+          filter?.regionName
+            ? {
+                pathname: '/stays',
+                params: {
+                  region: filter.regionName,
+                  regionCode: filter.regionCode,
+                  sido: filter.sido,
+                },
+              }
+            : laneRegion
+              ? `/stays?region=${encodeURIComponent(laneRegion)}`
+              : '/stays'
         )
       ),
       // 카드 탭(TRIP-457 AC-6) — 화면은 card VM 만 올린다(순수 뷰, `@/features/stay` import 금지).

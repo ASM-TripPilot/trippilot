@@ -20,7 +20,7 @@ import ExploreRoute from '@routes/(tabs)/explore';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
-let mockParams: { region?: string } = {};
+let mockParams: Record<string, string> = {};
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -47,13 +47,16 @@ const mockItemA: StayItem = {
   amenities: ['ocean'],
   stayType: 'HOTEL',
   price: { amount: 145000, currency: 'KRW' },
+  // 라이브 모양 — 주소가 있어야 e02 의 시도 거르기를 실제로 통과한 카드다(TRIP-1300).
+  address: '부산광역시 해운대구 해운대해변로 296',
 };
 const KEY_A = `${mockItemA.externalSource}:${mockItemA.externalId}`;
 
 const mockBusan: Region = {
   regionCode: '26',
   name: '부산광역시',
-  sidoName: '',
+  // 시도 행은 라이브 시드처럼 sidoName 이 자기 이름이다(빈 값이면 시도 거르기가 공짜로 통과한다).
+  sidoName: '부산광역시',
   level: RegionLevel.SIDO,
   selectable: true,
   poiCount: 5,
@@ -118,7 +121,7 @@ function detailPushes(): unknown[] {
 }
 
 /** 탐색 탭(params)을 그리고 숙소 '모두 보기'를 누른 뒤 치운다(=숙소 검색으로 넘어간 순간). */
-function pressStaySeeAll(params: { region?: string }): void {
+function pressStaySeeAll(params: Record<string, string>): void {
   mockParams = params;
   const landing = render(<ExploreRoute />);
   fireEvent.press(screen.getByTestId('explore-lane-stay-seeall'));
@@ -137,23 +140,36 @@ describe('AC-012 · 숙소 모두 보기 → 창 안의 첫 카드는 무시된�
   });
   afterEach(() => clock.mockRestore());
 
+  // 필터 상태 — 옛 목적지 상세 자리. 모두 보기는 피커처럼 지역 이름·코드·시도를 싣는다(TRIP-1300).
+  const FILTER_PARAMS = {
+    region: '부산광역시',
+    regionCode: '26',
+    sido: '부산광역시',
+  };
   it.each([
-    // 필터 상태 — 옛 목적지 상세 자리. 모두 보기는 필터 지역 이름을 싣는다.
-    ['필터(부산)', { region: '26' }, '부산광역시'],
+    [
+      '필터(부산)',
+      { region: '26' },
+      { pathname: '/stays', params: FILTER_PARAMS },
+      FILTER_PARAMS,
+    ],
     // 전국 상태 — 모두 보기는 레인 첫 카드 지역을 싣는다(TRIP-412).
-    ['전국', {}, '해운대'],
+    [
+      '전국',
+      {},
+      `/stays?region=${encodeURIComponent('해운대')}`,
+      { region: '해운대' },
+    ],
   ] as const)(
     '%s — 창 안의 첫 카드는 숙소 상세 push 가 0회이고, 창이 지난 뒤 한 번 누르면 그 카드 상세로 정확히 1회다',
-    (_, params, laneRegion) => {
+    (_, params, seeAllTarget, stayParams) => {
       // 실행 ① — 첫 탭.
       pressStaySeeAll({ ...params });
       // 앵커 — 첫 탭은 제 할 일을 했다(숙소 검색으로 push).
-      expect(mockPush).toHaveBeenCalledWith(
-        `/stays?region=${encodeURIComponent(laneRegion)}`
-      );
+      expect(mockPush).toHaveBeenCalledWith(seeAllTarget);
 
-      // 실행 ② — 두 번째 탭이 검색 결과 첫 카드에 떨어진다.
-      mockParams = { region: laneRegion };
+      // 실행 ② — 두 번째 탭이 검색 결과 첫 카드에 떨어진다(모두 보기가 실은 파라미터 그대로).
+      mockParams = { ...stayParams };
       render(<StaySearchPage />);
       fireEvent.press(screen.getByTestId(`stay-card-${KEY_A}`));
 
