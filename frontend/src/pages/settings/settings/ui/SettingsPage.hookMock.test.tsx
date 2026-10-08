@@ -9,6 +9,7 @@ import {
   act,
 } from '@testing-library/react-native';
 import { AxiosError } from 'axios';
+import { useState } from 'react';
 import { Keyboard, Share } from 'react-native';
 import { DELETION_SCOPE } from '../model/deletionScope';
 import {
@@ -103,12 +104,48 @@ beforeEach(() => {
   ]) {
     (hook as jest.Mock).mockReset();
   }
+  // 예외 하나: 페이지는 렌더 중에 닉네임 저장이 진행 중인지 읽는다(TRIP-1305) — 닉네임을 안 보는 관점도
+  // undefined 면 렌더가 죽으므로 "요청 없음" 모양을 기본으로 준다. 닉네임 관점은 자기 목으로 덮는다.
+  (usePatchMeProfileNickname as jest.Mock).mockReturnValue({
+    mutate: jest.fn(),
+    isPending: false,
+  });
 });
 
 // 토스트 스토어는 모듈 싱글턴이라 관점 사이로 샌다 — 모든 테스트 뒤에 비운다(짝 앵커: S3 "제출 전엔 토스트가 없다").
 afterEach(() => {
   resetToast();
 });
+
+/** 뮤테이션 목이 부르는 콜백 모양(react-query 의 훅 옵션 `mutation` 과 `mutate` 호출별 옵션이 같다). */
+type MutationCallbacks = {
+  onSuccess?: (data: unknown, vars: unknown, ctx: unknown) => void;
+  onError?: (error: unknown, vars: unknown, ctx: unknown) => void;
+  onSettled?: (
+    data: unknown,
+    error: unknown,
+    vars: unknown,
+    ctx: unknown
+  ) => void;
+};
+type MutationOutcome = { data: unknown } | { error: unknown };
+
+/** 응답 하나를 콜백들에 흘린다 — 성공이면 onSuccess, 실패면 onError, 어느 쪽이든 끝에 onSettled. */
+function settleCallbacks(
+  callbacks: (MutationCallbacks | undefined)[],
+  outcome: MutationOutcome,
+  vars: unknown
+): void {
+  for (const cb of callbacks) {
+    if ('error' in outcome) {
+      cb?.onError?.(outcome.error, vars, undefined);
+      cb?.onSettled?.(undefined, outcome.error, vars, undefined);
+    } else {
+      cb?.onSuccess?.(outcome.data, vars, undefined);
+      cb?.onSettled?.(outcome.data, null, vars, undefined);
+    }
+  }
+}
 
 // TRIP-608 · TRIP-935 · TRIP-990
 describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () => {
@@ -187,30 +224,24 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
 
   /**
    * 옵션 캡처형 뮤테이션 목 — mutate 호출 시 spy 를 찍고, error 면 onError, 아니면 onSuccess 를
-   * 페이지가 넘긴 콜백으로 동기 발화한다.
+   * 페이지가 넘긴 콜백으로 동기 발화한다. 이어서 onSettled 도 부른다(react-query 순서) — 훅 옵션과
+   * `mutate(vars, 옵션)` 호출별 옵션 둘 다.
    */
   function primeMutation(
     hook: jest.Mock,
     opts: { spy?: jest.Mock; onSuccessData?: unknown; error?: unknown }
   ) {
-    hook.mockImplementation(
-      (options?: {
-        mutation?: {
-          onSuccess?: (data: unknown, vars: unknown, ctx: unknown) => void;
-          onError?: (error: unknown, vars: unknown, ctx: unknown) => void;
-        };
-      }) => ({
-        isPending: false,
-        mutate: (vars?: unknown) => {
-          opts.spy?.(vars);
-          if (opts.error) {
-            options?.mutation?.onError?.(opts.error, vars, undefined);
-          } else {
-            options?.mutation?.onSuccess?.(opts.onSuccessData, vars, undefined);
-          }
-        },
-      })
-    );
+    hook.mockImplementation((options?: { mutation?: MutationCallbacks }) => ({
+      isPending: false,
+      mutate: (vars?: unknown, callOptions?: MutationCallbacks) => {
+        opts.spy?.(vars);
+        settleCallbacks(
+          [options?.mutation, callOptions],
+          opts.error ? { error: opts.error } : { data: opts.onSuccessData },
+          vars
+        );
+      },
+    }));
   }
 
   function primeAccount(
@@ -915,6 +946,290 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
 
       expect(patchSpy).toHaveBeenCalledTimes(1);
       expect(patchSpy).toHaveBeenCalledWith({ data: { nickname: 'trip' } });
+    });
+  });
+
+  // TRIP-1305
+  /**
+   * 무엇을 보장하나: 닉네임 저장 요청이 진행 중인 동안 [저장]을 다시 눌러도 요청이 한 번만 나가고,
+   * [저장]은 비활성·입력칸은 잠겨 있어 늦게 온 오류가 다른 값 아래 붙지 않는다. 응답이 오면(성공·실패
+   * 모두) 잠금이 풀려 다시 저장할 수 있다.
+   *
+   * 위 `primeMutation` 은 mutate 안에서 응답을 바로 돌려 "기다리는 동안"이 없다. 여기서는 응답을
+   * 붙잡아 두는 목을 쓴다 — mutate 는 요청을 쌓기만 하고, 테스트가 `respond` 를 부를 때 응답이 온다.
+   * 진행 중 여부(isPending)는 목 안의 useState 로 쥔다 — 실제 react-query 처럼 요청 시작·응답 때 화면이
+   * 다시 그려진다(목 구현은 페이지 렌더 중에 훅으로 불리므로 useState 를 쓸 수 있다).
+   *
+   * "같은 순간 두 번 누름"은 `act` 하나 안에서 press 를 두 번 부른다 — 바깥 act 가 끝나야 다시 그리므로
+   * 두 번째 press 는 [저장]이 아직 활성인 같은 화면을 누른다(02a §5 실측). 그때 isPending 은 아직 false 라,
+   * 화면 비활성만으로는 못 막고 페이지가 즉시 바뀌는 잠금을 쥐어야 막힌다.
+   */
+  describe('설정 닉네임 저장 진행 중 — 연타·입력 잠금·응답 뒤 다시 저장', () => {
+    type HeldRequest = { respond: (outcome: MutationOutcome) => void };
+
+    function primeHeldNickname(spy: jest.Mock): HeldRequest[] {
+      const held: HeldRequest[] = [];
+      function useHeldNicknameMutation(options?: {
+        mutation?: MutationCallbacks;
+      }) {
+        const [inFlight, setInFlight] = useState(0);
+        return {
+          isPending: inFlight > 0,
+          mutate: (vars: unknown, callOptions?: MutationCallbacks) => {
+            spy(vars);
+            setInFlight((n) => n + 1);
+            held.push({
+              respond: (outcome) => {
+                setInFlight((n) => n - 1);
+                settleCallbacks(
+                  [options?.mutation, callOptions],
+                  outcome,
+                  vars
+                );
+              },
+            });
+          },
+        };
+      }
+      mockUsePatchNickname.mockImplementation(useHeldNicknameMutation);
+      return held;
+    }
+
+    const saved = (nickname: string): MutationOutcome => ({
+      data: { nickname, nicknameUpdatedAt: 'x' },
+    });
+
+    function renderPageWithToast() {
+      return render(
+        <QueryClientProvider client={new QueryClient()}>
+          <WithToastHost>
+            <SettingsPage />
+          </WithToastHost>
+        </QueryClientProvider>
+      );
+    }
+
+    function openEditor(): void {
+      fireEvent.press(screen.getByTestId('settings-nickname-edit'));
+    }
+
+    function typeInput(value: string): void {
+      fireEvent.changeText(
+        screen.getByTestId('settings-nickname-input'),
+        value
+      );
+    }
+
+    function save(): void {
+      fireEvent.press(screen.getByTestId('settings-nickname-save'));
+    }
+
+    function tokens(el: { props: { className?: unknown } }): string[] {
+      return String(el.props.className ?? '')
+        .split(/\s+/)
+        .filter(Boolean);
+    }
+
+    it('같은 순간 [저장]을 두 번 눌러도 PATCH 는 한 번만 나간다', () => {
+      const patchSpy = jest.fn();
+      primeHeldNickname(patchSpy);
+      renderPageWithToast();
+      openEditor();
+      typeInput('새이름');
+
+      act(() => {
+        save();
+        save();
+      });
+
+      expect(patchSpy).toHaveBeenCalledTimes(1);
+      expect(patchSpy).toHaveBeenCalledWith({ data: { nickname: '새이름' } });
+    });
+
+    it('응답을 기다리는 동안 [저장]은 비활성이고, 다시 눌러도 PATCH 가 더 나가지 않는다', () => {
+      const patchSpy = jest.fn();
+      primeHeldNickname(patchSpy);
+      renderPageWithToast();
+      openEditor();
+      typeInput('새이름');
+      // 앵커: 요청 전엔 [저장]이 활성이다 — 아래 "비활성"이 요청 때문에 생긴 것임을 가른다.
+      expect(screen.getByTestId('settings-nickname-save')).not.toBeDisabled();
+
+      save();
+
+      expect(screen.getByTestId('settings-nickname-save')).toBeDisabled();
+      save();
+      expect(patchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('연타 뒤 첫 요청이 성공하면 성공 토스트만 뜨고 "이미 사용 중" 오류는 없다', () => {
+      const patchSpy = jest.fn();
+      const held = primeHeldNickname(patchSpy);
+      renderPageWithToast();
+      openEditor();
+      typeInput('새이름');
+      expect(screen.queryByTestId('settings-nickname-saved')).toBeNull();
+
+      act(() => {
+        save();
+        save();
+      });
+      // 첫 요청 성공. 두 번째 요청이 새어 나갔다면 서버는 이미 내 것이 된 이름이라 409 로 거절한다.
+      act(() => held[0].respond(saved('새이름')));
+      act(() =>
+        held.slice(1).forEach((r) => r.respond({ error: httpError(409) }))
+      );
+
+      expect(screen.getByTestId('settings-nickname-saved')).toBeOnTheScreen();
+      expect(screen.queryByTestId('settings-nickname-error')).toBeNull();
+      expect(screen.queryByText(/이미 사용 중/)).toBeNull();
+      expect(patchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('응답을 기다리는 동안 입력칸은 잠겨, 늦게 온 409 는 보낸 값 아래에만 붙는다', () => {
+      const held = primeHeldNickname(jest.fn());
+      renderPageWithToast();
+      openEditor();
+      typeInput('중복이름');
+      save();
+
+      // 응답 전에 고쳐 쓰려 한다 — 입력칸이 잠겨 값이 그대로다.
+      typeInput('중복이름2');
+      expect(screen.getByTestId('settings-nickname-input')).toHaveDisplayValue(
+        '중복이름'
+      );
+
+      act(() => held[0].respond({ error: httpError(409) }));
+
+      expect(screen.getByTestId('settings-nickname-error')).toHaveTextContent(
+        /이미 사용 중/
+      );
+      expect(screen.getByTestId('settings-nickname-input')).toHaveDisplayValue(
+        '중복이름'
+      );
+    });
+
+    it('성공 응답이 오면 잠금이 풀려 다른 값을 다시 저장할 수 있다', () => {
+      const patchSpy = jest.fn();
+      const held = primeHeldNickname(patchSpy);
+      renderPageWithToast();
+      openEditor();
+      typeInput('새이름');
+      save();
+
+      act(() => held[0].respond(saved('새이름')));
+
+      const saveButton = screen.getByTestId('settings-nickname-save');
+      expect(saveButton).not.toBeDisabled();
+      expect(tokens(saveButton)).not.toContain('opacity-40');
+      typeInput('새이름2');
+      expect(screen.getByTestId('settings-nickname-input')).toHaveDisplayValue(
+        '새이름2'
+      );
+      save();
+      expect(patchSpy).toHaveBeenCalledTimes(2);
+      expect(patchSpy).toHaveBeenLastCalledWith({
+        data: { nickname: '새이름2' },
+      });
+    });
+
+    it('409 로 실패해도 잠금이 풀려 고친 값을 다시 저장할 수 있다', () => {
+      const patchSpy = jest.fn();
+      const held = primeHeldNickname(patchSpy);
+      renderPageWithToast();
+      openEditor();
+      typeInput('중복이름');
+      save();
+
+      act(() => held[0].respond({ error: httpError(409) }));
+      expect(screen.getByTestId('settings-nickname-error')).toHaveTextContent(
+        /이미 사용 중/
+      );
+
+      typeInput('새이름');
+      // TRIP-1276 동작 유지 — 입력을 바꾸면 낡은 오류가 지워진다.
+      expect(screen.queryByTestId('settings-nickname-error')).toBeNull();
+      expect(screen.getByTestId('settings-nickname-save')).not.toBeDisabled();
+      save();
+      expect(patchSpy).toHaveBeenCalledTimes(2);
+      expect(patchSpy).toHaveBeenLastCalledWith({
+        data: { nickname: '새이름' },
+      });
+    });
+
+    it('길이 안내로 막힌 저장은 잠그지 않는다 — 고친 값은 바로 저장된다', () => {
+      const patchSpy = jest.fn();
+      primeHeldNickname(patchSpy);
+      renderPageWithToast();
+      openEditor();
+      typeInput('가');
+      save();
+      expect(screen.getByTestId('settings-nickname-error')).toHaveTextContent(
+        '닉네임은 2자 이상이어야 해요'
+      );
+
+      typeInput('새이름');
+      save();
+
+      expect(patchSpy).toHaveBeenCalledTimes(1);
+      expect(patchSpy).toHaveBeenCalledWith({ data: { nickname: '새이름' } });
+    });
+
+    it('같은 값이라 요청 없이 닫힌 저장은 잠그지 않는다 — 다시 열어 새 값을 저장할 수 있다', () => {
+      const patchSpy = jest.fn();
+      primeHeldNickname(patchSpy);
+      renderPageWithToast();
+      openEditor();
+      save();
+      // 앵커: 같은 값이라 요청 없이 행이 닫혔다(TRIP-1276).
+      expect(screen.queryByTestId('settings-nickname-input')).toBeNull();
+
+      openEditor();
+      typeInput('새이름');
+      save();
+
+      expect(patchSpy).toHaveBeenCalledTimes(1);
+      expect(patchSpy).toHaveBeenCalledWith({ data: { nickname: '새이름' } });
+    });
+
+    // 03b W1 — 행 머리를 접었다 펴면 입력이 현재 닉네임으로 리셋돼 입력칸 잠금을 우회했다.
+    it('응답을 기다리는 동안 행 머리를 눌러도 행이 안 접히고 입력도 그대로라, 늦은 409 는 보낸 값 아래에만 붙는다', () => {
+      const held = primeHeldNickname(jest.fn());
+      renderPageWithToast();
+      openEditor();
+      typeInput('중복이름');
+      save();
+
+      // 접으려 한다 — 행이 그대로다.
+      openEditor();
+      expect(screen.getByTestId('settings-nickname-input')).toBeOnTheScreen();
+      // 한 번 더(접혔다면 다시 펴는 누름) — 입력이 현재 닉네임으로 리셋되지 않는다.
+      openEditor();
+      expect(screen.getByTestId('settings-nickname-input')).toHaveDisplayValue(
+        '중복이름'
+      );
+
+      act(() => held[0].respond({ error: httpError(409) }));
+
+      expect(screen.getByTestId('settings-nickname-error')).toHaveTextContent(
+        /이미 사용 중/
+      );
+      expect(screen.getByTestId('settings-nickname-input')).toHaveDisplayValue(
+        '중복이름'
+      );
+    });
+
+    it('응답이 끝나면 행 머리를 다시 눌러 접을 수 있다', () => {
+      const held = primeHeldNickname(jest.fn());
+      renderPageWithToast();
+      openEditor();
+      typeInput('중복이름');
+      save();
+
+      act(() => held[0].respond({ error: httpError(409) }));
+      openEditor();
+
+      expect(screen.queryByTestId('settings-nickname-input')).toBeNull();
     });
   });
 });

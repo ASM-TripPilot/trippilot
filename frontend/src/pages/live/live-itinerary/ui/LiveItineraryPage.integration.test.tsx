@@ -583,6 +583,278 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
         expect(screen.queryByTestId('execution-live-loading')).toBeNull();
       });
 
+      // TRIP-1290 — 일정 조회 실패(5xx) 얼굴이 버튼 0개 막다른 화면이었다. [다시 시도]·[뒤로] 두 버튼을 단다.
+      // 이 QueryClient 는 retry:false 라 운영의 자동 재시도(3회 백오프) 구간은 여기서 안 보인다 — 6-b 몫.
+      describe('조회 실패(5xx) 얼굴 — [다시 시도]·[뒤로]', () => {
+        const ITINERARY_GET = `GET /api/v1/trips/${TRIP_ID}/itinerary`;
+        const tokens = (el: ReactTestInstance) =>
+          String(el.props.className).split(/\s+/);
+
+        /**
+         * 일정 GET 을 n번째 요청마다 `statuses[n-1]` 로 답한다(넘치면 마지막 값 반복, 200 = 일정 본문).
+         * `gate` 가 있으면 그 번째 요청은 손으로 풀 때까지 붙잡는다 — 재조회 "도중"을 화면에 세우는 장치.
+         */
+        function itineraryResponses(
+          statuses: (200 | 404 | 500)[],
+          gate?: { nth: number; until: Promise<void> }
+        ) {
+          let calls = 0;
+          return http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+            calls += 1;
+            const nth = calls;
+            if (gate && nth === gate.nth) await gate.until;
+            const status = statuses[Math.min(nth, statuses.length) - 1];
+            return status === 200
+              ? HttpResponse.json(itinerary())
+              : new HttpResponse(null, { status });
+          });
+        }
+
+        /** 손으로 푸는 문 — 풀개는 describe afterEach 의 releaseTrip 이 테스트가 중간에 깨져도 연다. */
+        function holdGate(): Promise<void> {
+          return new Promise<void>((resolve) => {
+            releaseTrip = resolve;
+          });
+        }
+
+        async function renderErrorFace(): Promise<ReactTestInstance> {
+          render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+            wrapper,
+          });
+          const face = await waitFor(() =>
+            screen.getByTestId('execution-live-error')
+          );
+          // 앵커: 누르기 전 일정 GET 은 1회뿐 — 아래 "한 번 더"가 누름에서 왔음을 가른다.
+          await settle();
+          expect(hitCount(ITINERARY_GET)).toBe(1);
+          return face;
+        }
+
+        it('E1 일정 5xx 면 "일정을 불러오지 못했어요" + [다시 시도](filled)·[뒤로](outline) 정확히 두 버튼, 쉬는 동안 둘 다 활성 (AC-1·AC-5 · INV-4)', async () => {
+          server.use(itineraryStatus(500), tripHandler());
+          const face = await renderErrorFace();
+
+          expect(
+            within(face).getByText('일정을 불러오지 못했어요')
+          ).toBeTruthy();
+          const retry = within(face).getByTestId('execution-live-error-retry');
+          const back = within(face).getByTestId('execution-live-error-back');
+          expect(retry).toHaveTextContent('다시 시도');
+          expect(back).toHaveTextContent('뒤로');
+          expect(within(face).getAllByRole('button')).toHaveLength(2);
+          expect(tokens(retry)).toContain('bg-primary');
+          expect(tokens(back)).toContain('border');
+          expect(tokens(back)).not.toContain('bg-primary');
+          expect(retry).toBeEnabled();
+          expect(back).toBeEnabled();
+          expect(tokens(retry)).not.toContain('opacity-40');
+        });
+
+        it('E2 [다시 시도]는 일정 GET 을 정확히 한 번 더 보내고(POST 0·이동 0), 성공하면 허브 본문이 그려진다 (AC-2)', async () => {
+          server.use(
+            itineraryResponses([500, 200]),
+            tripHandler(),
+            visitsHandler()
+          );
+          await renderErrorFace();
+
+          fireEvent.press(screen.getByTestId('execution-live-error-retry'));
+
+          await waitFor(() =>
+            expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+          );
+          expect(screen.queryByTestId('execution-live-error')).toBeNull();
+          await settle();
+          expect(hitCount(ITINERARY_GET)).toBe(2);
+          expect(observedHits.filter((hit) => hit.startsWith('POST '))).toEqual(
+            []
+          );
+          expectNotCalled(mockPush, mockReplace, mockBack, mockDismissTo);
+        });
+
+        it('E3a 첫 조회부터 실패(받은 일정 없음)면 [다시 시도] 누름 즉시 로딩 얼굴로 바뀐다 — 눌러도 그대로인 버튼이 남지 않고, 또 실패하면 활성 버튼으로 돌아온다 (AC-3)', async () => {
+          server.use(
+            itineraryResponses([500, 500], { nth: 2, until: holdGate() }),
+            tripHandler()
+          );
+          await renderErrorFace();
+
+          fireEvent.press(screen.getByTestId('execution-live-error-retry'));
+
+          // 받은 일정이 없으면 v5 는 재조회 동안 status 를 'pending' 으로 되돌린다 → 페이지 판정은 로딩.
+          await waitFor(() =>
+            expect(screen.getByTestId('execution-live-loading')).toBeTruthy()
+          );
+          // 앵커: 두 번째 GET 이 나가 응답 대기 중이다 — 로딩 얼굴이 "재조회 중"인 것임을 가른다.
+          expect(hitCount(ITINERARY_GET)).toBe(2);
+          expect(screen.queryByTestId('execution-live-error')).toBeNull();
+          expect(screen.queryByTestId('execution-live-error-retry')).toBeNull();
+
+          await act(async () => {
+            releaseTrip?.();
+          });
+
+          await waitFor(() =>
+            expect(
+              screen.getByTestId('execution-live-error-retry')
+            ).toBeEnabled()
+          );
+          expect(hitCount(ITINERARY_GET)).toBe(2);
+        });
+
+        it('E3b 받은 일정이 있다가 재조회가 실패해 오류 얼굴이 된 뒤 [다시 시도]를 누르면, 응답 대기 동안 오류 얼굴은 남고 [다시 시도]만 비활성·흐림 — 또 눌러도 GET 이 더 안 나가고, 끝나면(또 실패) 다시 활성 (AC-3)', async () => {
+          server.use(
+            itineraryResponses([200, 500, 500], { nth: 3, until: holdGate() }),
+            tripHandler(),
+            visitsHandler()
+          );
+          const client = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          });
+          render(
+            <QueryClientProvider client={client}>
+              <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
+            </QueryClientProvider>
+          );
+          await waitFor(() =>
+            expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+          );
+          // 허브가 뜬 뒤 일정 재조회(무효화·포그라운드 복귀 등)가 500 → v5 는 data 를 쥔 채 status=error.
+          await act(async () => {
+            await client.refetchQueries({
+              queryKey: getGetTripsTripIdItineraryQueryKey(TRIP_ID),
+            });
+          });
+          await waitFor(() =>
+            expect(screen.getByTestId('execution-live-error')).toBeTruthy()
+          );
+          // 앵커: 지금까지 일정 GET 2회(성공 1 · 재조회 실패 1), 버튼은 활성 — 아래 비활성이 누름 뒤에 생긴 것임을 가른다.
+          expect(hitCount(ITINERARY_GET)).toBe(2);
+          expect(
+            screen.getByTestId('execution-live-error-retry')
+          ).toBeEnabled();
+
+          fireEvent.press(screen.getByTestId('execution-live-error-retry'));
+
+          await waitFor(() =>
+            expect(
+              screen.getByTestId('execution-live-error-retry')
+            ).toBeDisabled()
+          );
+          expect(hitCount(ITINERARY_GET)).toBe(3);
+          expect(screen.getByTestId('execution-live-error')).toBeTruthy();
+          expect(
+            tokens(screen.getByTestId('execution-live-error-retry'))
+          ).toContain('opacity-40');
+          expect(screen.getByTestId('execution-live-error-back')).toBeEnabled();
+
+          fireEvent.press(screen.getByTestId('execution-live-error-retry'));
+          await settle();
+          expect(hitCount(ITINERARY_GET)).toBe(3);
+
+          await act(async () => {
+            releaseTrip?.();
+          });
+
+          await waitFor(() =>
+            expect(
+              screen.getByTestId('execution-live-error-retry')
+            ).toBeEnabled()
+          );
+          expect(
+            tokens(screen.getByTestId('execution-live-error-retry'))
+          ).not.toContain('opacity-40');
+          expect(screen.getByTestId('execution-live-error')).toBeTruthy();
+          expect(hitCount(ITINERARY_GET)).toBe(3);
+        });
+
+        it.each([
+          ['히스토리가 있으면 router.back() 1회', true],
+          ['히스토리가 없으면(딥링크 직행) /(tabs) 로 replace 1회', false],
+        ])(
+          'E4 [뒤로]는 허브 헤더 ‹ 와 같은 사다리 — %s, 일정 재요청은 없다 (AC-4)',
+          async (_label, canGoBack) => {
+            mockCanGoBack.mockReturnValue(canGoBack);
+            server.use(itineraryStatus(500), tripHandler());
+            await renderErrorFace();
+
+            fireEvent.press(screen.getByTestId('execution-live-error-back'));
+
+            if (canGoBack) {
+              expect(mockBack).toHaveBeenCalledTimes(1);
+              expect(mockReplace).not.toHaveBeenCalled();
+            } else {
+              expect(mockReplace).toHaveBeenCalledTimes(1);
+              expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+              expect(mockBack).not.toHaveBeenCalled();
+            }
+            expectNotCalled(mockPush, mockDismissTo);
+            await settle();
+            expect(hitCount(ITINERARY_GET)).toBe(1);
+          }
+        );
+
+        // 5-b W1 — 여행 조회도 같이 실패한 채 [다시 시도]를 누르면 여행도 다시 물어야 한다.
+        // 대표 경우: 비행기 모드로 허브 진입 → 두 조회가 함께 실패 → 네트워크 복구 후 [다시 시도].
+        describe('여행 조회도 실패했을 때 — [다시 시도]는 여행도 다시 묻는다', () => {
+          const TRIP_GET = `GET /api/v1/trips/${TRIP_ID}`;
+
+          /** 여행 GET 을 n번째 요청마다 `statuses[n-1]` 로 답한다(넘치면 마지막 값, 200 = 여행 본문). */
+          function tripResponses(statuses: (200 | 404 | 500)[]) {
+            let calls = 0;
+            return http.get(`${BASE}/trips/:tripId`, () => {
+              calls += 1;
+              const status = statuses[Math.min(calls, statuses.length) - 1];
+              return status === 200
+                ? HttpResponse.json(trip())
+                : new HttpResponse(null, { status });
+            });
+          }
+
+          it('E5a 여행·일정 둘 다 5xx 뒤 [다시 시도] → 여행 GET 이 다시 나가고, 여행이 사라졌으면(404) "아직 일정이 없어요"가 아니라 여행 없음 얼굴이다 (INV-4 · TRIP-1278)', async () => {
+            server.use(
+              tripResponses([500, 404]),
+              itineraryResponses([500, 404])
+            );
+            await renderErrorFace();
+            // 앵커: 누르기 전 여행 GET 도 1회 — 아래 2회가 누름에서 왔음을 가른다.
+            expect(hitCount(TRIP_GET)).toBe(1);
+
+            fireEvent.press(screen.getByTestId('execution-live-error-retry'));
+
+            await waitFor(() =>
+              expect(
+                screen.getByTestId('execution-live-trip-notfound')
+              ).toBeTruthy()
+            );
+            expect(hitCount(TRIP_GET)).toBe(2);
+            expect(hitCount(ITINERARY_GET)).toBe(2);
+            expect(screen.queryByTestId('execution-live-notfound')).toBeNull();
+            expect(screen.queryByText('아직 일정이 없어요')).toBeNull();
+          });
+
+          it('E5b 여행·일정 둘 다 5xx 뒤 [다시 시도] → 둘 다 성공하면 허브 헤더에 여행명이 들어간다', async () => {
+            server.use(
+              tripResponses([500, 200]),
+              itineraryResponses([500, 200]),
+              visitsHandler()
+            );
+            await renderErrorFace();
+            expect(hitCount(TRIP_GET)).toBe(1);
+
+            fireEvent.press(screen.getByTestId('execution-live-error-retry'));
+
+            // 완전 일치 — 여행명이 빠진 "1일차 · …" 로는 통과하지 않는다.
+            await waitFor(() =>
+              expect(
+                screen.getByTestId('execution-live-sheet-header')
+              ).toHaveTextContent('부산 여행 · 1일차 · 8월 20일(목) · 1곳')
+            );
+            expect(hitCount(TRIP_GET)).toBe(2);
+          });
+        });
+      });
+
       // TRIP-1286 · C-15 · Seed Q3 — 비활성 얼굴 4종의 SafeAreaView 에 배경이 없어 위(상태바)·아래(홈 인디케이터) 띠에
       // 내비게이션 기본 회색(#F2F2F2)이 비쳤다. 판정은 "SafeAreaView 자신 또는 그 바깥이 본문과 같은 색을 칠한다"까지
       // (className·style 어느 쪽이든, 02a §3-5). 로딩 얼굴의 본문 색은 canvas-alt 다. 실제 띠 색은 6-b.

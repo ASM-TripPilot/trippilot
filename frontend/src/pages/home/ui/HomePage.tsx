@@ -79,16 +79,19 @@ function PlanningHome({
     : null;
 
   // TRIP-1282 — 위저드 이탈 다이얼로그 버튼의 창 안이면 무시(연타 관통 표적, 카드 본문·알약 공용).
-  const onPressTripHeroCta = guardPress(() => {
+  // TRIP-1306 — 목적지 모름(조회 중)은 가드 *바깥*에서 거른다. 안쪽에 두면 아무것도 안 한 누름이 창을 열어
+  // 응답 직후 누름·"더 보기"까지 400ms 동안 먹힌다(창은 모듈 전역 하나).
+  const pushDestination = guardPress(
+    (target: NonNullable<typeof destination>) => {
+      router.push(
+        itineraryDestinationHref(dominantTripId, target, itinerary.data?.days)
+      );
+    }
+  );
+  const onPressTripHeroCta = () => {
     if (destination === null) return;
-    router.push(
-      itineraryDestinationHref(
-        dominantTripId,
-        destination,
-        itinerary.data?.days
-      )
-    );
-  });
+    pushDestination(destination);
+  };
 
   return (
     <HomeScreen

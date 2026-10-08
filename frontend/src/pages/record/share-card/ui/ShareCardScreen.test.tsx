@@ -688,3 +688,142 @@ describe('🔴 TRIP-1016 AC-5 · 방문 순서 박스(reflection-share-visit-ord
     expect(greyBoxHostsInFrame()).toBe(1);
   });
 });
+
+// TRIP-1304(결정 B) — 편집 중 [완료]는 입력칸 아래가 아니라 캡션 머리줄([편집] 자리)에 있다.
+// 입력칸이 키보드 위로 올라오면 그보다 위인 머리줄도 보인다 — 실제 가림은 jest 원리적 사각 → 6-b iOS 실기.
+// "머리줄" = "캡션" 라벨과의 가장 가까운 공통 조상이 입력칸을 품지 않는 것(래퍼 깊이는 묶지 않는다, 02a ★3).
+function ancestorsOf(node: ReactTestInstance): ReactTestInstance[] {
+  const list: ReactTestInstance[] = [];
+  for (let p = node.parent; p; p = p.parent) list.push(p);
+  return list;
+}
+
+function lowestCommonAncestor(
+  a: ReactTestInstance,
+  b: ReactTestInstance
+): ReactTestInstance | null {
+  const ofB = new Set(ancestorsOf(b));
+  return ancestorsOf(a).find((p) => ofB.has(p)) ?? null;
+}
+
+function isInside(ancestor: ReactTestInstance, node: ReactTestInstance) {
+  return ancestorsOf(node).includes(ancestor);
+}
+
+function treeIndex(node: ReactTestInstance): number {
+  return screen.UNSAFE_root.findAll(() => true).indexOf(node);
+}
+
+/** [완료]가 "캡션" 라벨과 같은 줄(입력칸을 품지 않는 상자)에 있는가. */
+function saveSitsInCaptionHeader(): boolean {
+  const row = lowestCommonAncestor(
+    screen.getByText('캡션'),
+    screen.getByTestId('reflection-share-caption-save')
+  );
+  return (
+    row !== null &&
+    !isInside(row, screen.getByTestId('reflection-share-caption-input'))
+  );
+}
+
+describe('🔴 캡션 편집 중 [완료]는 머리줄 [편집] 자리에 있다 — 입력칸이 보이면 [완료]도 보인다', () => {
+  it('[편집] 후 [완료]는 "캡션" 라벨과 같은 머리줄에 있고, 그 줄은 입력칸을 품지 않는다', () => {
+    renderScreen();
+
+    const input = openEditor();
+
+    const row = lowestCommonAncestor(
+      screen.getByText('캡션'),
+      screen.getByTestId('reflection-share-caption-save')
+    );
+    expect(row).not.toBeNull();
+    expect(isInside(row as ReactTestInstance, input)).toBe(false);
+  });
+
+  it('[완료]는 화면 트리에서 입력칸보다 앞(위)에 있다', () => {
+    renderScreen();
+
+    const input = openEditor();
+
+    const saveAt = treeIndex(
+      screen.getByTestId('reflection-share-caption-save')
+    );
+    const inputAt = treeIndex(input);
+    expect(saveAt).toBeGreaterThanOrEqual(0);
+    expect(inputAt).toBeGreaterThanOrEqual(0);
+    expect(saveAt).toBeLessThan(inputAt);
+  });
+
+  it('편집 중엔 [편집]이 사라지고 [완료]는 testID·"완료" 글자 모두 정확히 하나다', () => {
+    renderScreen();
+
+    openEditor();
+
+    expect(screen.queryByTestId('reflection-share-caption-edit')).toBeNull();
+    expect(screen.getAllByTestId('reflection-share-caption-save')).toHaveLength(
+      1
+    );
+    expect(screen.getAllByText('완료')).toHaveLength(1);
+  });
+
+  it('머리줄 [완료]는 입력칸과 같은 ScrollView(handled) 안이고, 한 번 누르면 저장되고 입력칸이 닫힌다', () => {
+    const props = renderScreen();
+    const input = openEditor();
+    fireEvent.changeText(input, '#부산여행 #해운대');
+
+    // 누르기 전 — 자리는 머리줄, 키보드가 떠 있어도 첫 탭이 버튼으로 가는 같은 스크롤 상자.
+    const save = screen.getByTestId('reflection-share-caption-save');
+    expect(saveSitsInCaptionHeader()).toBe(true);
+    const scroll = nearestScrollView(input);
+    expect(scroll).not.toBeNull();
+    expect(nearestScrollView(save)).toBe(scroll);
+    expect(scroll?.props.keyboardShouldPersistTaps).toBe('handled');
+
+    fireEvent.press(save);
+
+    expect(screen.queryByTestId('reflection-share-caption-input')).toBeNull();
+    expect(screen.getByText('#부산여행 #해운대')).toBeOnTheScreen();
+    expect(screen.queryByText(props.hashtagText)).toBeNull();
+    expect(
+      screen.getByTestId('reflection-share-caption-edit')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('완료')).toBeNull();
+  });
+
+  it(`해시태그 ${HASHTAG_MAX_COUNT + 1}개로 [완료] → 안내가 뜨고 편집이 유지되며, [완료]는 여전히 머리줄에 있다`, () => {
+    renderScreen();
+    const over = Array.from(
+      { length: HASHTAG_MAX_COUNT + 1 },
+      (_, index) => `#태그${index + 1}`
+    ).join(' ');
+
+    openEditor();
+    commit(over);
+
+    const error = screen.getByTestId('reflection-share-caption-error');
+    expect(within(error).getByText(HASHTAG_LIMIT_NOTICE)).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('reflection-share-caption-input')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-share-caption-edit')).toBeNull();
+    expect(saveSitsInCaptionHeader()).toBe(true);
+  });
+
+  it('편집 중이 아니면 머리줄에 [편집]만 있고 [완료]는 없으며, 하단 [이미지 저장]·[공유하기] 줄은 그대로다', () => {
+    mockShareArmed.value = true;
+    const props = renderScreen();
+
+    const row = lowestCommonAncestor(
+      screen.getByText('캡션'),
+      screen.getByTestId('reflection-share-caption-edit')
+    );
+    expect(row).not.toBeNull();
+    expect(
+      isInside(row as ReactTestInstance, screen.getByText(props.hashtagText))
+    ).toBe(false);
+    expect(screen.queryByTestId('reflection-share-caption-save')).toBeNull();
+    expect(screen.queryByText('완료')).toBeNull();
+    expect(screen.getByTestId('reflection-share-save')).toBeOnTheScreen();
+    expect(screen.getByTestId('reflection-share-export')).toBeOnTheScreen();
+  });
+});

@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { useState } from 'react';
 
 import { useReplanFormStore } from '@/features/request-replan';
 import type { ReplanOrigin } from '@/features/request-replan';
@@ -49,15 +50,44 @@ const mockNetworkError = { isAxiosError: true, message: 'Network Error' };
 type MockMutateOptions = {
   onSuccess?: (session: typeof mockSession) => void;
   onError?: (error: unknown) => void;
+  onSettled?: (
+    session: typeof mockSession | undefined,
+    error: unknown,
+    variables: unknown
+  ) => void;
 };
 const mockMutate = jest.fn(
-  (_variables: unknown, options?: MockMutateOptions) => {
-    if (mockPhase === 'success') options?.onSuccess?.(mockSession);
-    if (mockPhase === 'conflict') options?.onError?.(mockHttpError(409));
-    if (mockPhase === 'serverError') options?.onError?.(mockHttpError(500));
-    if (mockPhase === 'network') options?.onError?.(mockNetworkError);
+  (variables: unknown, options?: MockMutateOptions) => {
+    if (mockPhase === 'idle') return;
+    // TRIP-1294 — react-query 순서대로 성공·실패 뒤 onSettled 도 부른다(실제 계약 재현 — 페이지는 지금 쓰지 않는다).
+    if (mockPhase === 'success') {
+      options?.onSuccess?.(mockSession);
+      options?.onSettled?.(mockSession, null, variables);
+      return;
+    }
+    const error =
+      mockPhase === 'network'
+        ? mockNetworkError
+        : mockHttpError(mockPhase === 'conflict' ? 409 : 500);
+    options?.onError?.(error);
+    options?.onSettled?.(undefined, error, variables);
   }
 );
+
+type StartReplanMock = {
+  mutate: (variables: unknown, options?: MockMutateOptions) => void;
+  isPending: boolean;
+  isError: boolean;
+  isSuccess: boolean;
+};
+// 기본 = 위 mockPhase 목(진행 중 표시 없음). TRIP-1294 P-W 는 응답을 붙잡아 두는 구현으로 갈아 끼운다.
+const mockPhasedStartReplan = (): StartReplanMock => ({
+  mutate: mockMutate,
+  isPending: false,
+  isError: false,
+  isSuccess: false,
+});
+const mockUseStartReplan = jest.fn(mockPhasedStartReplan);
 
 let mockTriggerData: TriggerList | undefined;
 let mockItineraryData: Itinerary | undefined;
@@ -69,11 +99,7 @@ const mockNavigate = jest.fn();
 const mockBack = jest.fn();
 
 jest.mock('@/features/request-replan/model/useStartReplan', () => ({
-  useStartReplan: () => ({
-    mutate: mockMutate,
-    isPending: false,
-    isError: false,
-  }),
+  useStartReplan: () => mockUseStartReplan(),
 }));
 
 // TRIP-979 seam — 동의·권한·측위는 이 훅 뒤에 숨는다(그 판정은 useReplanGpsOrigin.test 가 잠근다).
@@ -183,6 +209,7 @@ const triggerList = (...triggers: Trigger[]): TriggerList => ({ triggers });
 beforeEach(() => {
   mockPhase = 'idle';
   mockMutate.mockClear();
+  mockUseStartReplan.mockImplementation(mockPhasedStartReplan);
   mockPush.mockClear();
   mockReplace.mockClear();
   mockNavigate.mockClear();
@@ -943,5 +970,160 @@ describe('🔴 TRIP-1195 · targetDate — 허브에서 바라보는 일차로 �
 
     expect(mockMutate).not.toHaveBeenCalled();
     expect(screen.getByTestId(ERROR)).toHaveTextContent(/날짜/);
+  });
+});
+
+// TRIP-1294 — 응답을 기다리는 동안의 재누름. 서버는 새 세션이 열리면 앞 세션을 CANCELED 로 닫는다.
+describe('🔴 P-W · POST 응답을 기다리는 동안 다시 눌러도 재계획 세션은 하나다 (INV-U4-06)', () => {
+  const SUBMIT = 'planb-request-submit';
+  const ERROR = 'planb-request-error';
+  type HeldPost = {
+    succeed: () => void;
+    fail: (error: unknown) => void;
+  };
+
+  /**
+   * 응답을 붙잡아 두는 POST — mutate 는 요청을 쌓기만 하고, 테스트가 succeed/fail 을 부를 때 응답이
+   * 온다. 진행 중 여부는 목 안의 useState 로 쥔다(실제 react-query 처럼 시작·응답 때 다시 그려진다).
+   */
+  function holdPosts(): HeldPost[] {
+    const held: HeldPost[] = [];
+    function useHeldStartReplan(): StartReplanMock {
+      const [inFlight, setInFlight] = useState(0);
+      // react-query 처럼 마지막 요청이 성공했는지 — 새 요청을 보내면 지워진다.
+      const [succeeded, setSucceeded] = useState(false);
+      return {
+        isPending: inFlight > 0,
+        isError: false,
+        isSuccess: succeeded,
+        mutate: (variables, options) => {
+          mockMutate(variables);
+          setInFlight((n) => n + 1);
+          setSucceeded(false);
+          held.push({
+            succeed: () => {
+              setInFlight((n) => n - 1);
+              setSucceeded(true);
+              options?.onSuccess?.(mockSession);
+              options?.onSettled?.(mockSession, null, variables);
+            },
+            fail: (error) => {
+              setInFlight((n) => n - 1);
+              options?.onError?.(error);
+              options?.onSettled?.(undefined, error, variables);
+            },
+          });
+        },
+      };
+    }
+    mockUseStartReplan.mockImplementation(useHeldStartReplan);
+    return held;
+  }
+
+  /** 타이머 한 바퀴 — GPS 읽기를 기다린 뒤의 POST 까지 흘려보낸다. */
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  async function pressAndSettle(): Promise<void> {
+    await act(async () => {
+      fireEvent.press(screen.getByTestId(SUBMIT));
+      await tick();
+    });
+  }
+
+  it('W1 POST 가 나가면 버튼이 비활성으로 바뀌고, 그동안 다시 눌러도 POST 는 1회이며, 응답 뒤 solving 이동도 1회다', async () => {
+    const held = holdPosts();
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    await pressAndSettle();
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(SUBMIT)).toBeDisabled();
+
+    await pressAndSettle();
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockReadOrigin).toHaveBeenCalledTimes(1);
+
+    act(() => held[0].succeed());
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(SOLVING_HREF);
+  });
+
+  it('W2 다시 그려지기 전 같은 화면에서 연달아 눌러도(실기 더블탭) 첫 POST 가 나간 뒤의 누름은 POST 를 더 보내지 않는다', async () => {
+    const held = holdPosts();
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+    const submitButton = screen.getByTestId(SUBMIT);
+
+    await act(async () => {
+      fireEvent.press(submitButton);
+      await tick();
+      // 앵커 — 첫 POST 는 이미 나갔다(두 번째 누름은 GPS 대기가 아니라 POST 대기 중이다).
+      expect(mockMutate).toHaveBeenCalledTimes(1);
+      fireEvent.press(submitButton);
+      await tick();
+    });
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockReadOrigin).toHaveBeenCalledTimes(1);
+    expect(held).toHaveLength(1);
+  });
+
+  it('W3 POST 가 실패하면 버튼이 다시 살아나고, 다시 누르면 POST 가 한 번 더 나간다(재시도는 막지 않는다)', async () => {
+    const held = holdPosts();
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    await pressAndSettle();
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(SUBMIT)).toBeDisabled();
+
+    act(() => held[0].fail(mockHttpError(500)));
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(
+      '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+    );
+    expect(screen.getByTestId(SUBMIT)).toBeEnabled();
+
+    await pressAndSettle();
+    expect(mockMutate).toHaveBeenCalledTimes(2);
+    expect(mockReadOrigin).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.getByTestId(SUBMIT)).toBeDisabled();
+    expect(forwardDestinations()).toEqual([]);
+  });
+
+  // 5-b 경고-1 — router.replace 는 요청 화면을 그 자리에서 없애지 않는다. 진행 화면으로 넘어가는 동안 다시
+  // 누르면 두 번째 POST 가 방금 연 세션을 CANCELED 로 닫는다(INV-U4-06). jest 에선 replace 가 목이라 화면이
+  // 계속 남아 있어, 그 "넘어가는 중" 을 그대로 재현한다.
+  it('W4 POST 가 성공해 진행 화면으로 넘어가는 동안에도 버튼은 비활성으로 남고, 다시 눌러도 POST 는 1회다', async () => {
+    const held = holdPosts();
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    await pressAndSettle();
+    act(() => held[0].succeed());
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(SUBMIT)).toBeDisabled();
+
+    await pressAndSettle();
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(SUBMIT)).toBeDisabled();
+  });
+
+  it('W5 성공 응답 직후 다시 그려지기 전에 눌러도(전환 중 더블탭) POST 는 1회다', async () => {
+    const held = holdPosts();
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+    const submitButton = screen.getByTestId(SUBMIT);
+
+    await act(async () => {
+      fireEvent.press(submitButton);
+      await tick();
+      // 앵커 — 첫 POST 가 나갔고 성공 응답까지 왔다(두 번째 누름은 POST 대기가 아니라 성공 뒤다).
+      expect(mockMutate).toHaveBeenCalledTimes(1);
+      held[0].succeed();
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      fireEvent.press(submitButton);
+      await tick();
+    });
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockReadOrigin).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledTimes(1);
   });
 });

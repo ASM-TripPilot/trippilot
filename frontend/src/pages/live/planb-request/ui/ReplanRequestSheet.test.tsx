@@ -527,3 +527,39 @@ describe('🔴 TRIP-1195 · 오늘이 아닌 날 — 범위 칩은 "{N}일차 �
     expect(screen.queryByTestId('planb-request-error-close')).toBeNull();
   });
 });
+
+// TRIP-1294 — 페이지가 POST 응답을 기다리는 동안(isPending) 내려 주는 표시.
+describe('🔴 S-W · 제출 대기 중 [AI가 다시 짜기]는 눌리지 않고 흐리게 그린다 (INV-U4-06)', () => {
+  it('S-W1 submitting 이면 버튼이 비활성(접근성 상태 포함)·opacity-40 이고, 눌러도 onSubmit 이 불리지 않는다', () => {
+    const props = baseProps();
+    render(<ReplanRequestSheet {...props} submitting />);
+
+    const cta = screen.getByTestId('planb-request-submit');
+    expect(cta).toBeDisabled();
+    expect(cta.props.accessibilityState).toEqual(
+      expect.objectContaining({ disabled: true })
+    );
+    expect(classTokens(cta)).toContain('opacity-40');
+
+    fireEvent.press(cta);
+    expect(props.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['false', false],
+    ['미지정', undefined],
+  ])(
+    'S-W2 submitting 이 %s 면 종전대로 활성·흐림 없음이고 누르면 onSubmit 1회',
+    (_label, submitting) => {
+      const props = baseProps();
+      render(<ReplanRequestSheet {...props} submitting={submitting} />);
+
+      const cta = screen.getByTestId('planb-request-submit');
+      expect(cta).toBeEnabled();
+      expect(classTokens(cta)).not.toContain('opacity-40');
+
+      fireEvent.press(cta);
+      expect(props.onSubmit).toHaveBeenCalledTimes(1);
+    }
+  );
+});

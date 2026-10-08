@@ -42,6 +42,8 @@ export interface SettingsScreenProps {
   onSubmitNickname: (value: string) => boolean | void;
   /** 닉네임 입력이 바뀜 — 페이지가 낡은 오류를 지운다. preview 무파손 위해 optional. */
   onNicknameDraftChange?: () => void;
+  /** 닉네임 저장 요청 진행 중 — 행이 [저장]을 비활성·입력칸을 잠근다(TRIP-1305). preview 무파손 위해 optional. */
+  nicknameSaving?: boolean;
   onPressExport: () => void;
   onPressDeleteAccount: () => void;
   onPressCancelDeletion: () => void;
@@ -84,6 +86,7 @@ export function SettingsScreen({
   onPressBack,
   onSubmitNickname,
   onNicknameDraftChange,
+  nicknameSaving,
   onPressExport,
   onPressDeleteAccount,
   onPressCancelDeletion,
@@ -182,6 +185,7 @@ export function SettingsScreen({
             error={nicknameError}
             onSubmit={onSubmitNickname}
             onDraftChange={onNicknameDraftChange}
+            saving={nicknameSaving}
           />
         );
       case 'export':

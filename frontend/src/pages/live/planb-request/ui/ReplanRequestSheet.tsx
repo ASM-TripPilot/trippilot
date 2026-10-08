@@ -72,6 +72,8 @@ export interface ReplanRequestSheetProps {
   errorText?: string | null;
   /** 안내 아래 [닫기] — 다시 눌러 봐야 소용없는 실패(막다른 길)에만 준다(TRIP-1195). 없으면 버튼 없음. */
   onCloseError?: () => void;
+  /** 재계획 시작 POST 응답을 기다리는 중(TRIP-1294) — 켜지면 [AI가 다시 짜기]를 비활성·흐리게 그린다. */
+  submitting?: boolean;
 }
 
 /**
@@ -178,6 +180,7 @@ export function ReplanRequestSheet({
   onClose,
   errorText,
   onCloseError,
+  submitting = false,
 }: ReplanRequestSheetProps): ReactElement {
   // 감지 칩이 있으면 그와 겹치는 정적 칩(날씨 · 감지 칩이 대신하는 사유)을 숨긴다(브리프 Q2).
   const staticReasons = detected
@@ -316,8 +319,11 @@ export function ReplanRequestSheet({
         <Pressable
           testID="planb-request-submit"
           accessibilityRole="button"
+          // TRIP-1294 — POST 대기 중엔 흐리게 + 눌림 막음(StateNotice disabled 관례). 막기의 진짜 그물은 페이지 ref 잠금.
+          disabled={submitting}
+          accessibilityState={{ disabled: submitting }}
           onPress={onSubmit}
-          className="items-center justify-center rounded-button bg-primary py-[17px]"
+          className={`items-center justify-center rounded-button bg-primary py-[17px]${submitting ? ' opacity-40' : ''}`}
         >
           <Text className="font-noto-bold text-card-title font-bold text-on-primary">
             {SUBMIT_LABEL}

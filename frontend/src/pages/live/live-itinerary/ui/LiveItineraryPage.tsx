@@ -331,7 +331,29 @@ export function LiveItineraryPage({
             illustration={NEUTRAL_BADGE}
             title="일정을 불러오지 못했어요"
             description="네트워크를 확인하고 다시 시도해주세요"
-            actions={[]}
+            // TRIP-1290(INV-4) — 버튼 0개 막다른 화면 금지. [다시 시도]는 일정 GET 재요청만(POST 없음),
+            // 재조회 중엔 흐리게(옛 일정이 있던 허브가 갱신 실패한 경우에만 이 얼굴이 남는다 — 첫 조회 실패는 로딩 얼굴로 바뀜).
+            // [뒤로]는 허브 ‹ · notFound 얼굴과 같은 goBackOrHome(결정 1=A).
+            actions={[
+              {
+                testID: 'execution-live-error-retry',
+                label: '다시 시도',
+                variant: 'filled',
+                // 5-b W1 — 여행 조회도 같이 실패했으면 함께 다시 묻는다. 안 그러면 일정만 404 로 돌아올 때
+                // 실패한 여행 값으로 "아직 일정이 없어요" 거짓 안내가 뜬다(TRIP-1278 이 막은 것).
+                onPress: () => {
+                  if (trip.isError) void trip.refetch();
+                  void query.refetch();
+                },
+                disabled: query.isFetching,
+              },
+              {
+                testID: 'execution-live-error-back',
+                label: '뒤로',
+                variant: 'outline',
+                onPress: goBackOrHome,
+              },
+            ]}
           />
         </View>
       </SafeAreaView>
