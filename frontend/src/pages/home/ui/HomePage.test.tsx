@@ -1242,4 +1242,85 @@ describe('연타 관통 — 홈 쪽 반쪽', () => {
       expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/live`);
     }
   );
+
+  // TRIP-1306 — 목적지를 모르는(일정 조회 중) 누름은 아무것도 안 하므로 창도 열지 않는다.
+  // 시계는 위 beforeEach 가 렌더 전에 멈춰 둔다 — 실제 시계로 연 창은 과거 FROZEN_NOW 기준 음수 경과로 닫힌 것으로 판정된다.
+  describe('일정 조회 중 누름은 창을 열지 않는다', () => {
+    const LIVE = `/trips/${TRIP_ID}/live`;
+
+    it.each(['home-trip-hero', 'home-trip-hero-cta'])(
+      '조회 중 카드(%s) 누름은 이동이 없고, 응답 직후(300ms) 다시 누르면 일정 화면으로 정확히 1회 간다',
+      (testID) => {
+        mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
+        mockUseItinerary.mockReturnValue(ITIN_PENDING);
+        const { rerender } = render(<HomePage />);
+        expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+          '일정 이어서 짜기'
+        );
+
+        fireEvent.press(screen.getByTestId(testID));
+
+        expect(mockPush).not.toHaveBeenCalled();
+
+        // 응답이 와서 목적지가 정해진다 — 조회 중 누름을 기억했다가 지금 이동하지 않는다.
+        mockUseItinerary.mockReturnValue(
+          itineraryOk(
+            ItineraryGenerationState.COMPLETE,
+            ItineraryStatus.CONFIRMED
+          )
+        );
+        rerender(<HomePage />);
+        clock.mockReturnValue(FROZEN_NOW + 300);
+        expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+          '확정 일정 보기'
+        );
+        expect(mockPush).not.toHaveBeenCalled();
+
+        fireEvent.press(screen.getByTestId(testID));
+
+        expect(mockPush.mock.calls).toEqual([[LIVE]]);
+      }
+    );
+
+    // 500 줄: 404 아닌 오류로 끝나도 목적지는 null 이다 — 바깥 검사를 "조회 중"으로만 좁히면 여기서 창이 다시 열린다.
+    it.each([
+      ['조회 중', ITIN_PENDING],
+      ['500 오류로 끝난 뒤', ITIN_SERVER_ERROR],
+    ])(
+      '%s 카드를 누른 직후(100ms) "더 보기"를 누르면 장소 탐색으로 간다',
+      (_label, itinerary) => {
+        // "더 보기"는 여행 중 얼굴에만 있다.
+        mockUseGetTrips.mockReturnValue(tripsOk([duringTrip()]));
+        mockUseItinerary.mockReturnValue(itinerary);
+        render(<HomePage />);
+        expect(screen.getByTestId('home-spots-more')).toBeOnTheScreen();
+
+        fireEvent.press(screen.getByTestId('home-trip-hero'));
+        clock.mockReturnValue(FROZEN_NOW + 100);
+        fireEvent.press(screen.getByTestId('home-spots-more'));
+
+        expect(mockPush.mock.calls).toEqual([['/explore/places']]);
+      }
+    );
+
+    it.each(['home-trip-hero', 'home-trip-hero-cta'])(
+      '목적지가 정해진 카드(%s)를 60ms 간격으로 2연타하면 이동은 1회다',
+      (testID) => {
+        mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
+        mockUseItinerary.mockReturnValue(
+          itineraryOk(
+            ItineraryGenerationState.COMPLETE,
+            ItineraryStatus.CONFIRMED
+          )
+        );
+        render(<HomePage />);
+
+        fireEvent.press(screen.getByTestId(testID));
+        clock.mockReturnValue(FROZEN_NOW + 60);
+        fireEvent.press(screen.getByTestId(testID));
+
+        expect(mockPush.mock.calls).toEqual([[LIVE]]);
+      }
+    );
+  });
 });
