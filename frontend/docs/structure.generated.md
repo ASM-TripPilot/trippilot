@@ -1599,4 +1599,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 982개 파일
+합계 983개 파일
