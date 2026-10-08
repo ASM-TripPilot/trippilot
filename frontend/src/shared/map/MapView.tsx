@@ -529,6 +529,9 @@ export function MapView({
   return (
     <View testID="map-root" className="flex-1">
       <NaverMapView
+        // 맞춤(region)↔카메라 모드가 바뀌면 다시 마운트한다 — 라이브러리가 region=undefined 를 보내면 iOS 가
+        // 기본 0 region 을 camera 뒤에 적용해 0,0 으로 간다(RNCNaverMapView.mm 206–212). 좌표는 넣지 않는다(깜빡임).
+        key={region !== null ? 'region' : 'camera'}
         ref={mapRef}
         style={{ flex: 1 }}
         onLayout={refitRegion}
