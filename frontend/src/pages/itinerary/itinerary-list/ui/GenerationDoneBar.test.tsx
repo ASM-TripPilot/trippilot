@@ -1,4 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 import { GenerationDoneBar } from './GenerationDoneBar';
 
@@ -79,5 +81,135 @@ describe('🔴 TRIP-1241 · 닫기(✕) 컨트롤', () => {
   it('onPressClose 가 없으면 닫기 컨트롤이 없다(기존 모양 불변)', () => {
     render(<GenerationDoneBar tripName="제주 여행" onPressView={noop} />);
     expect(screen.queryByTestId('generation-done-bar-close')).toBeNull();
+  });
+});
+
+// TRIP-1297 — 큰 글자에서 페이지가 배너를 목록 맨 위에 카드처럼 놓을 때 쓰는 `inline` 모양.
+// 배너는 배율을 모른다(배율 판정은 페이지 한 곳) — 그래서 이 파일은 Dimensions 를 고정하지 않는다.
+
+/** 기본(도킹) 모양의 루트 className — 기본 글자 크기에서는 한 글자도 바뀌면 안 된다(02a ★3). */
+const DOCKED_CLASS =
+  'absolute bottom-[108px] left-[16px] min-h-[52px] w-[358px] flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas px-lg py-[12px]';
+
+const ALL_IDS = [
+  'generation-done-bar-check',
+  'generation-done-bar-text',
+  'generation-done-bar-view',
+  'generation-done-bar-close',
+];
+
+function classTokens(node: ReactTestInstance): string[] {
+  const cn: unknown = node.props.className;
+  return typeof cn === 'string' ? cn.split(/\s+/).filter(Boolean) : [];
+}
+
+/** 루트 안 자식 testID 를 트리 순서대로. */
+function childIds(): string[] {
+  return screen
+    .queryAllByTestId(/^generation-done-bar-/)
+    .map((n) => n.props.testID as string);
+}
+
+describe('🔴 inline · 떠 있지 않은 모양 (기본은 지금 도킹 그대로)', () => {
+  it.each([undefined, false])(
+    'inline=%s 이면 루트 className 이 지금 도킹 문자열과 완전히 같고 자식 순서는 체크→문구→보기→✕',
+    (inline) => {
+      // 준비·실행 — ✕ 까지 순서에 넣으려고 onPressClose 도 준다.
+      render(
+        <GenerationDoneBar
+          tripName="제주 여행"
+          onPressView={noop}
+          onPressClose={noop}
+          inline={inline}
+        />
+      );
+
+      // 단언
+      expect(screen.getByTestId('generation-done-bar').props.className).toBe(
+        DOCKED_CLASS
+      );
+      expect(childIds()).toEqual(ALL_IDS);
+    }
+  );
+
+  it('inline 이면 absolute·위치 토큰이 없고, 안쪽 가로 줄·카드 겉모양은 그대로다', () => {
+    render(
+      <GenerationDoneBar
+        tripName="제주 여행"
+        onPressView={noop}
+        onPressClose={noop}
+        inline
+      />
+    );
+    const root = screen.getByTestId('generation-done-bar');
+    const tokens = classTokens(root);
+
+    // 단언 ① 떠 있지 않다 — 토큰으로도, style 로도(02a ★8).
+    expect(tokens).not.toContain('absolute');
+    expect(
+      tokens.filter((t) =>
+        /^-?(inset|top|bottom|left|right|start|end)-/.test(t)
+      )
+    ).toEqual([]);
+    expect(StyleSheet.flatten(root.props.style)?.position).not.toBe('absolute');
+    // 단언 ② 안쪽은 가로 한 줄, 겉모양은 흰 카드 그대로(Seed "B 만" — 02a ★9).
+    expect(tokens).toEqual(
+      expect.arrayContaining([
+        'flex-row',
+        'items-center',
+        'rounded-card',
+        'border',
+        'border-hairline',
+        'bg-canvas',
+      ])
+    );
+  });
+
+  it.each([false, true])(
+    'inline=%s 에서도 문구·testID 가 그대로이고, 말줄임·글자 상한이 없다',
+    (inline) => {
+      render(
+        <GenerationDoneBar
+          tripName="제주 여행"
+          onPressView={noop}
+          onPressClose={noop}
+          inline={inline}
+        />
+      );
+      const root = screen.getByTestId('generation-done-bar');
+
+      expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+        '제주 여행 일정이 완성됐어요'
+      );
+      expect(childIds()).toEqual(ALL_IDS);
+      // 호스트 Text 만 모은다 — 문구·보기 2개 이상이 앵커(빈 배열이면 "전부 없음"이 공짜로 참, 02a ★12).
+      const texts = root.findAll((n) => String(n.type) === 'Text');
+      expect(texts.length).toBeGreaterThanOrEqual(2);
+      for (const t of texts) {
+        expect(Boolean(t.props.numberOfLines)).toBe(false);
+        expect(t.props.maxFontSizeMultiplier).toBeUndefined();
+      }
+    }
+  );
+
+  it('inline 이어도 보기·✕ 는 기본 모양과 똑같이 제 콜백을 한 번씩 부른다', () => {
+    const onPressView = jest.fn();
+    const onPressClose = jest.fn();
+    render(
+      <GenerationDoneBar
+        tripName="제주 여행"
+        onPressView={onPressView}
+        onPressClose={onPressClose}
+        inline
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('generation-done-bar-view'));
+    expect(onPressView).toHaveBeenCalledTimes(1);
+    expect(onPressClose).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('generation-done-bar-close'));
+    expect(onPressView).toHaveBeenCalledTimes(1);
+    expect(onPressClose).toHaveBeenCalledTimes(1);
   });
 });

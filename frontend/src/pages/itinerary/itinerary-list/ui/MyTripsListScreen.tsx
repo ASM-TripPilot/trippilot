@@ -46,6 +46,8 @@ export interface MyTripsListScreenProps {
   /** 현재 정렬 기준(라벨). 기본 최신순. */
   sortKey?: MyTripsSortKey;
   onPressSort?: () => void;
+  /** TRIP-1297 — list 모드 목록 스크롤의 첫 자식(카드 앞)에 그릴 것. 없으면 현행과 같다. */
+  listHeader?: ReactNode;
 }
 
 /** 정렬 줄(우측 정렬) — 누르면 정렬 시트(TRIP-1122 가 TRIP-468 01b Q1 "옵션 1개라 표시 라벨만"을 뒤집음). */
@@ -95,6 +97,7 @@ export function MyTripsListScreen({
   onPressCreateTrip,
   sortKey = 'recent',
   onPressSort,
+  listHeader,
 }: MyTripsListScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -141,6 +144,7 @@ export function MyTripsListScreen({
           <>
             <SortRow sortKey={sortKey} onPress={onPressSort} />
             <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-sm">
+              {listHeader}
               {cards}
             </ScrollView>
           </>

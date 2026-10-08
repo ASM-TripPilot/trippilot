@@ -5,7 +5,7 @@ import {
   useState,
   type ReactElement,
 } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 
@@ -18,6 +18,7 @@ import {
   useGetTrips,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
+import { isLargeText } from '@/shared/lib/fontScale';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { readIdSet, writeIdSet } from '@/shared/storage';
 import { readStringValue, writeStringValue } from '@/shared/storage';
@@ -65,7 +66,8 @@ import { TripCardContainer } from './TripCardContainer';
  * 안 보이는 동안 판정하면 본 적 없는 배너가 seen 에 들어간다. 떠나면(blur) 배너와 닫음을 함께 비우고,
  * 돌아오면 그 사이 쓴 seen 기준으로 새로 완성된 여행만 띄운다.
  * 배너는 list 분기에서 화면의 형제로 붙는다 — 위젯의 `absolute bottom-[108px]` 가 탭 씬 바닥
- * 기준이 되어 BottomTab 위 12px 에 앉는다(Figma 3911:2327).
+ * 기준이 되어 BottomTab 위 12px 에 앉는다(Figma 3911:2327). TRIP-1297 · 큰 글자(`isLargeText`)에선 떠 있으면
+ * 꺾인 문장만큼 목록을 덮으므로, 목록 스크롤 맨 위(`listHeader`)에 일반 흐름 카드로 놓는다(Figma 근거 없음).
  */
 
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`) · 토큰 키와 다른 이름. */
@@ -103,6 +105,7 @@ export function MyTripsListPage(): ReactElement {
   const [barDismissed, setBarDismissed] = useState(false);
   // TRIP-1286 — 목록이 보이는 동안만 판정. 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
   const [focused, setFocused] = useState(false);
+  const largeText = isLargeText(useWindowDimensions().fontScale);
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
@@ -279,6 +282,16 @@ export function MyTripsListPage(): ReactElement {
     );
   };
 
+  const doneBar =
+    doneTrip && !barDismissed ? (
+      <GenerationDoneBar
+        tripName={doneTrip.title}
+        onPressView={onPressView}
+        onPressClose={() => setBarDismissed(true)}
+        inline={largeText}
+      />
+    ) : null;
+
   return (
     <View className="flex-1">
       <MyTripsListScreen
@@ -286,6 +299,7 @@ export function MyTripsListPage(): ReactElement {
         onPressCreateTrip={onPressCreateTrip}
         sortKey={sortKey}
         onPressSort={() => setSortOpen(true)}
+        listHeader={largeText ? doneBar : undefined}
         cards={sorted.map((trip) => (
           <TripCardContainer
             key={trip.tripId}
@@ -298,13 +312,7 @@ export function MyTripsListPage(): ReactElement {
           />
         ))}
       />
-      {doneTrip && !barDismissed ? (
-        <GenerationDoneBar
-          tripName={doneTrip.title}
-          onPressView={onPressView}
-          onPressClose={() => setBarDismissed(true)}
-        />
-      ) : null}
+      {largeText ? null : doneBar}
       {deleteTargetId !== null ? (
         <TripDeleteDialog
           failed={deleteFailedId === deleteTargetId}

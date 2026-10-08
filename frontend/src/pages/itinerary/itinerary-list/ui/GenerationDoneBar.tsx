@@ -19,6 +19,8 @@ export interface GenerationDoneBarProps {
   onPressView: () => void;
   /** TRIP-1241 — 주면 오른쪽 끝에 ✕ 닫기를 그린다(Figma 미반영 — 디자인 확인 필요). 없으면 기존 모양. */
   onPressClose?: () => void;
+  /** TRIP-1297 — true 면 떠 있지 않은(일반 흐름) 모양. 기본은 현행 도킹 모양. */
+  inline?: boolean;
 }
 
 const DONE_SUFFIX = ' 일정이 완성됐어요';
@@ -28,11 +30,17 @@ export function GenerationDoneBar({
   tripName,
   onPressView,
   onPressClose,
+  inline = false,
 }: GenerationDoneBarProps): ReactElement {
   return (
     <View
       testID="generation-done-bar"
-      className="absolute bottom-[108px] left-[16px] min-h-[52px] w-[358px] flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas px-lg py-[12px]"
+      className={
+        inline
+          ? // 폭은 목록 스크롤 칸(px-lg)에 늘어나 카드 열과 맞는다 — 고정 358 을 두면 좁은 기기에서 넘친다.
+            'min-h-[52px] flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas px-lg py-[12px]'
+          : 'absolute bottom-[108px] left-[16px] min-h-[52px] w-[358px] flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas px-lg py-[12px]'
+      }
     >
       <DoneCheckGlyph size={20} testID="generation-done-bar-check" />
       <Text

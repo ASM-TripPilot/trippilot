@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
+import { ScrollView, View } from 'react-native';
 
 import { MyTripsListScreen } from './MyTripsListScreen';
 
@@ -100,5 +106,62 @@ describe('🟢 AC-1 · loading·empty 에는 정렬 줄이 없다 (선제 green 
 
     expect(screen.getByTestId('itinerary-tab-empty')).toBeOnTheScreen();
     expect(screen.queryByTestId('my-trips-sort')).toBeNull();
+  });
+});
+
+// TRIP-1297 — 목록 머리 통로. 큰 글자에서 페이지가 완료 배너를 여기 넣는다(정렬 줄 아래, 첫 카드 위, 스크롤과 함께 올라감).
+describe('🔴 listHeader · 목록 스크롤의 첫 자식', () => {
+  const CARDS = [
+    <View key="1" testID="probe-card-1" />,
+    <View key="2" testID="probe-card-2" />,
+  ];
+
+  /** 목록 스크롤 안의 probe testID 를 트리 순서대로. */
+  function idsInScroll(): string[] {
+    return within(screen.UNSAFE_getByType(ScrollView))
+      .queryAllByTestId(/^probe-/)
+      .map((n) => n.props.testID as string);
+  }
+
+  it('listHeader 를 주면 스크롤 안 카드들보다 앞에 오고, 정렬 줄은 스크롤 밖 그 위에 남는다', () => {
+    // 준비·실행
+    render(
+      <MyTripsListScreen
+        mode="list"
+        cards={CARDS}
+        listHeader={<View testID="probe-list-header" />}
+        onPressSort={noop}
+        onPressCreateTrip={noop}
+      />
+    );
+
+    // 단언 ① 스크롤 안, 첫 카드 앞
+    expect(idsInScroll()).toEqual([
+      'probe-list-header',
+      'probe-card-1',
+      'probe-card-2',
+    ]);
+    // 단언 ② 정렬 줄은 스크롤 밖이고, 트리 순서상 머리보다 앞(= 화면에서 위)
+    expect(
+      within(screen.UNSAFE_getByType(ScrollView)).queryByTestId('my-trips-sort')
+    ).toBeNull();
+    expect(
+      screen
+        .queryAllByTestId(/^(my-trips-sort|probe-list-header)$/)
+        .map((n) => n.props.testID as string)
+    ).toEqual(['my-trips-sort', 'probe-list-header']);
+  });
+
+  it('listHeader 를 안 주면 스크롤 첫 자식은 지금처럼 첫 카드다 (선제 green)', () => {
+    render(
+      <MyTripsListScreen
+        mode="list"
+        cards={CARDS}
+        onPressSort={noop}
+        onPressCreateTrip={noop}
+      />
+    );
+
+    expect(idsInScroll()).toEqual(['probe-card-1', 'probe-card-2']);
   });
 });
