@@ -97,12 +97,19 @@ function stayItem(
 }
 
 // 두 카드 지역을 일부러 다르게 둔다 — "모두 보기"가 레인 **첫 카드**의 지역을 싣는지 가르려면
-// 둘이 달라야 한다(같으면 하드코딩·items[1] 오답도 통과).
-const CARD_A = stayItem('yanolja', '1', '서울', '명동 시티 호텔', {
-  amount: 145000,
-  currency: 'KRW',
-});
-const CARD_B = stayItem('agoda', '2', '제주', '성산 게스트하우스', null);
+// 둘이 달라야 한다(같으면 하드코딩·items[1] 오답도 통과). 주소도 서로 다른 시도라 전국 d01 이
+// 무언가로 거르면 한 장이 사라진다(TRIP-1300).
+const CARD_A: StayItem = {
+  ...stayItem('yanolja', '1', '서울', '명동 시티 호텔', {
+    amount: 145000,
+    currency: 'KRW',
+  }),
+  address: '서울특별시 중구 명동길 14',
+};
+const CARD_B: StayItem = {
+  ...stayItem('agoda', '2', '제주', '성산 게스트하우스', null),
+  address: '제주특별자치도 서귀포시 성산읍 일출로 284',
+};
 const KEY_A = stayKey(CARD_A);
 
 const mockStayRefetch = jest.fn();
@@ -402,20 +409,22 @@ describe('숙소 카드 press → 숙소 상세', () => {
 // TRIP-1105 — 지역 선택(purpose=explore)이 region(지역 **코드**)을 싣고 이 탭으로 돌아온다. 두 조회는
 // **이름** 기반이라 코드는 카탈로그(useRegions)에서 이름으로 바꿔 싣고, 이름이 풀리기 전엔 조회를 끈다.
 describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
+  // sidoName 은 기본값 없이 필수 — 빈 시도 픽스처는 시도 거르기를 공짜로 통과시킨다(TRIP-1300).
   function region(
-    over: Partial<Region> & Pick<Region, 'regionCode' | 'name'>
+    over: Partial<Region> & Pick<Region, 'regionCode' | 'name' | 'sidoName'>
   ): Region {
     return {
-      sidoName: '',
       level: RegionLevel.SIGUNGU,
       selectable: true,
       poiCount: 5,
       ...over,
     };
   }
+  // 시도 행은 라이브 시드처럼 sidoName 이 자기 이름이다.
   const BUSAN = region({
     regionCode: '26',
     name: '부산광역시',
+    sidoName: '부산광역시',
     level: RegionLevel.SIDO,
   });
   const MICHUHOL = region({
@@ -429,6 +438,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
     ...stayItem('NAVER', 's1', '해운대', '해운대 그랜드 호텔', null),
     lat: 35.1587,
     lng: 129.1604,
+    address: '부산광역시 해운대구 해운대해변로 296',
   };
   const STAY_KEY = stayKey(STAY);
   const PLACE: Place = {
@@ -719,17 +729,35 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
   });
 
   describe('모두 보기는 필터 지역 이름을 싣는다', () => {
-    it.each([
-      ['숙소 모두 보기', '/stays', 'explore-lane-stay-seeall'],
-      ['장소 모두 보기', '/explore/places', 'explore-lane-place-cta'],
-    ])('%s 를 누르면 %s?region=부산광역시 로 간다', (_name, path, testID) => {
+    // TRIP-1300 — 숙소는 피커(숙소 목적)와 같은 객체형으로 코드·시도까지 싣는다. targetOf 는 문자열
+    // push 를 같은 모양으로 펴 주므로 쓰지 않고 push 원본을 본다(값은 손 인코딩 없는 원문).
+    it('숙소 모두 보기를 누르면 /stays 로 지역 이름·코드·시도를 실어 1회 간다', () => {
       render(<ExploreLandingPage />);
 
-      fireEvent.press(screen.getByTestId(testID));
+      fireEvent.press(screen.getByTestId('explore-lane-stay-seeall'));
+
+      expect(mockPush.mock.calls).toEqual([
+        [
+          {
+            pathname: '/stays',
+            params: {
+              region: '부산광역시',
+              regionCode: '26',
+              sido: '부산광역시',
+            },
+          },
+        ],
+      ]);
+    });
+
+    it('장소 모두 보기를 누르면 /explore/places?region=부산광역시 로 간다', () => {
+      render(<ExploreLandingPage />);
+
+      fireEvent.press(screen.getByTestId('explore-lane-place-cta'));
 
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
-        path,
+        path: '/explore/places',
         params: { region: '부산광역시' },
       });
     });
@@ -745,6 +773,162 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
         path: '/explore/places',
         params: { region: '부산광역시' },
       });
+    });
+  });
+
+  // TRIP-1300 — 서버는 이름으로 지역을 풀어 서울·부산 강서구를 합쳐 준다(조회 목이 인자를 무시하고
+  // 같은 응답을 주는 것이 그 흉내다). 카탈로그에서 **코드로** 찾은 행의 시도로 레인을 한 번 더 거른다.
+  describe('동명 구 — 카탈로그 시도로 숙소 레인을 거른다', () => {
+    // 부산 행을 서울 행보다 앞에 둔다 — 이름(강서구)으로 행을 찾으면 부산이 잡혀 서울 케이스가 깨진다.
+    const BUSAN_GANGSEO = region({
+      regionCode: '26440',
+      name: '강서구',
+      sidoName: '부산광역시',
+    });
+    const SEOUL_GANGSEO = region({
+      regionCode: '11500',
+      name: '강서구',
+      sidoName: '서울특별시',
+    });
+
+    function gangseoStay(
+      externalId: string,
+      address?: string | null
+    ): StayItem {
+      const base = stayItem(
+        'LOCALDATA',
+        externalId,
+        '강서구',
+        `숙소-${externalId}`,
+        null
+      );
+      // undefined 면 address 키 자체를 안 만든다(응답에 키가 없는 경우).
+      return address === undefined ? base : { ...base, address };
+    }
+    // 부산 카드를 맨 앞에 — 실기 응답도 앞 4건이 부산이었다. 약칭 주소(서울 …)도 같은 시도다.
+    const GS_BUSAN = gangseoStay(
+      '3360000-b1',
+      '부산광역시 강서구 녹산산단321로 24'
+    );
+    const GS_SEOUL = gangseoStay(
+      '3150000-s1',
+      '서울특별시 강서구 공항대로 247'
+    );
+    const GS_SEOUL_ABBR = gangseoStay('3150000-s2', '서울 강서구 화곡로 1');
+    const NULL_ADDR = gangseoStay('unknown-null', null);
+    const NO_ADDR = gangseoStay('unknown-missing');
+
+    const cardId = (item: StayItem): string =>
+      `explore-stay-card-${stayKey(item)}`;
+    /** 숙소 레인에 그려진 카드 testID — 그린 순서대로. */
+    function cardIds(): string[] {
+      return screen
+        .queryAllByTestId(/^explore-stay-card-/)
+        .map((el) => el.props.testID as string);
+    }
+
+    beforeEach(() => {
+      mockRegionsResult = {
+        ...mockRegionsResult,
+        data: [BUSAN, MICHUHOL, BUSAN_GANGSEO, SEOUL_GANGSEO],
+      };
+      stayResult = stayOk([GS_BUSAN, GS_SEOUL, GS_SEOUL_ABBR]);
+    });
+
+    it.each([
+      ['서울 강서구(11500)', '11500', [GS_SEOUL, GS_SEOUL_ABBR]],
+      ['부산 강서구(26440)', '26440', [GS_BUSAN]],
+    ])(
+      '%s 를 고르면 그 시도 주소의 숙소만 서버 순서대로 레인에 남는다',
+      (_name, code, expected) => {
+        mockParams = { region: code };
+
+        render(<ExploreLandingPage />);
+        // 앵커 — 이름이 풀린 필터 상태다(안 풀리면 레인이 재시도라 카드 0장).
+        expect(screen.getByText('강서구 숙소')).toBeOnTheScreen();
+
+        expect(cardIds()).toEqual(expected.map(cardId));
+      }
+    );
+
+    it('주소를 모르는 숙소(null·키 없음)는 남기고, 다른 시도 주소만 뺀다(fail-open)', () => {
+      mockParams = { region: SEOUL_GANGSEO.regionCode };
+      stayResult = stayOk([GS_BUSAN, NULL_ADDR, NO_ADDR, GS_SEOUL]);
+
+      render(<ExploreLandingPage />);
+      expect(screen.getByText('강서구 숙소')).toBeOnTheScreen();
+
+      expect(cardIds()).toEqual([NULL_ADDR, NO_ADDR, GS_SEOUL].map(cardId));
+    });
+
+    it('카탈로그 행의 시도가 빈 문자열이면 거르지 않고 서버 응답 전부를 그린다', () => {
+      mockParams = { region: '11500' };
+      mockRegionsResult = {
+        ...mockRegionsResult,
+        data: [region({ regionCode: '11500', name: '강서구', sidoName: '' })],
+      };
+
+      render(<ExploreLandingPage />);
+      expect(screen.getByText('강서구 숙소')).toBeOnTheScreen();
+
+      expect(cardIds()).toEqual(
+        [GS_BUSAN, GS_SEOUL, GS_SEOUL_ABBR].map(cardId)
+      );
+    });
+
+    it.each([
+      ['서울 강서구', '11500', '서울특별시'],
+      ['부산 강서구', '26440', '부산광역시'],
+    ])(
+      '%s 숙소 모두 보기는 /stays 로 이름·코드·시도를 실어 1회 간다',
+      (_name, code, sido) => {
+        mockParams = { region: code };
+        render(<ExploreLandingPage />);
+
+        fireEvent.press(screen.getByTestId('explore-lane-stay-seeall'));
+
+        expect(mockPush.mock.calls).toEqual([
+          [
+            {
+              pathname: '/stays',
+              params: { region: '강서구', regionCode: code, sido },
+            },
+          ],
+        ]);
+      }
+    );
+
+    it('숙소 조회에는 시도·코드 없이 지역 이름만 싣는다', () => {
+      mockParams = { region: SEOUL_GANGSEO.regionCode };
+
+      render(<ExploreLandingPage />);
+
+      expect(mockUseStaySearch).toHaveBeenLastCalledWith(
+        { region: '강서구' },
+        { enabled: true }
+      );
+    });
+
+    it('장소 모두 보기는 지금처럼 이름만 싣는다(/explore/places?region=강서구)', () => {
+      mockParams = { region: SEOUL_GANGSEO.regionCode };
+      render(<ExploreLandingPage />);
+
+      fireEvent.press(screen.getByTestId('explore-lane-place-cta'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
+        path: '/explore/places',
+        params: { region: '강서구' },
+      });
+    });
+
+    it('카탈로그에 그 코드가 없으면 숙소 모두 보기는 지역 없이 /stays 로만 간다(코드만 싣지 않는다)', () => {
+      mockParams = { region: '99' };
+      render(<ExploreLandingPage />);
+
+      fireEvent.press(screen.getByTestId('explore-lane-stay-seeall'));
+
+      expect(mockPush.mock.calls).toEqual([['/stays']]);
     });
   });
 

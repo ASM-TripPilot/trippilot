@@ -79,6 +79,7 @@ function AppBar({
       <Pressable
         testID="explore-saved-back"
         accessibilityRole="button"
+        accessibilityLabel="뒤로"
         onPress={onBack}
         className="h-10 w-10 items-center justify-center"
       >
@@ -129,7 +130,16 @@ function SavedPlaceRow({
     <Pressable
       testID={`explore-saved-item-${saved.savedPlaceId}`}
       // 보이는 글자 그대로(TRIP-1281) — 없으면 iOS 가 자식 하트 라벨을 행에 끌어다 붙인다.
-      accessibilityLabel={[rank, badge, place.nameKo, place.region, tag]
+      // 해제 행은 하트 아래 "해제됨" 글자도 보이므로 끝에 붙인다(TRIP-1303 결정 A) — 행 라벨이
+      // 자식 글자를 대신 읽혀 스크린리더에서 해제 상태가 빠지지 않게.
+      accessibilityLabel={[
+        rank,
+        badge,
+        place.nameKo,
+        place.region,
+        tag,
+        released ? '해제됨' : null,
+      ]
         .filter(Boolean)
         .join(', ')}
       onPress={() => onPressRow?.(saved)}

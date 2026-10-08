@@ -1,4 +1,9 @@
-import { render, screen, within } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type { Place } from '@/shared/api/index.schemas';
 
@@ -211,5 +216,83 @@ describe('🔴 TRIP-988 A-1 · 영업시간 `<br>` → 줄바꿈 (d06)', () => {
       screen.getByTestId('explore-place-unknown-openhours')
     ).toHaveTextContent('미확인');
     expect(screen.queryByTestId('explore-place-openhours')).toBeNull();
+  });
+});
+
+// TRIP-1302 — 라벨이 없으면 iOS 가 testID 를 그대로 읽는다. 히어로 원 버튼 셋에 사람 말 이름을 단다.
+// 하트 이름은 담김과 무관하게 "{장소명} 저장" 하나고, 담김은 selected 로만 갈린다(TRIP-1281 결정).
+// 라벨이 없을 때 계산 이름은 '' 이라 "testID 미포함"만으로는 공허하게 통과한다 — 비어 있지 않음과 짝으로 잰다.
+describe('상세 히어로 원 버튼 접근성 라벨 (AC-3·5·6·7)', () => {
+  const SAVE_NAME = '부산시립미술관 저장';
+
+  it('뒤로는 "뒤로", 공유는 "공유", 하트는 "{장소명} 저장"으로 읽힌다', () => {
+    render(<PlaceDetailScreen place={makePlace()} saved={false} />);
+
+    expect(screen.getByTestId('explore-place-back')).toHaveAccessibleName(
+      '뒤로'
+    );
+    expect(screen.getByTestId('explore-place-share')).toHaveAccessibleName(
+      '공유'
+    );
+    expect(screen.getByTestId('explore-place-save')).toHaveAccessibleName(
+      SAVE_NAME
+    );
+  });
+
+  it('하트 이름은 담김/안 담김이 같고, selected 만 바뀐다', () => {
+    const { rerender } = render(
+      <PlaceDetailScreen place={makePlace()} saved={false} />
+    );
+    const before = screen.getByTestId('explore-place-save');
+    expect(before).toHaveAccessibleName(SAVE_NAME);
+    expect(before).not.toBeSelected();
+
+    rerender(<PlaceDetailScreen place={makePlace()} saved={true} />);
+
+    const after = screen.getByTestId('explore-place-save');
+    expect(after).toHaveAccessibleName(SAVE_NAME);
+    expect(after).toBeSelected();
+  });
+
+  it.each(['explore-place-back', 'explore-place-share', 'explore-place-save'])(
+    '%s 이름은 비어 있지 않고 testID 문자열이 섞이지 않는다',
+    (testID) => {
+      render(<PlaceDetailScreen place={makePlace()} saved={false} />);
+
+      const button = screen.getByTestId(testID);
+      expect(button).toHaveAccessibleName();
+      expect(button).not.toHaveAccessibleName(new RegExp(testID));
+      expect(button).not.toHaveAccessibleName(/[a-z]+-[a-z]+/);
+    }
+  );
+
+  it('세 버튼을 누르면 각자 자기 콜백만 한 번씩 불린다(무회귀)', () => {
+    const onPressBack = jest.fn();
+    const onPressShare = jest.fn();
+    const onToggleSave = jest.fn();
+    render(
+      <PlaceDetailScreen
+        place={makePlace()}
+        saved={false}
+        onPressBack={onPressBack}
+        onPressShare={onPressShare}
+        onToggleSave={onToggleSave}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('explore-place-back'));
+    expect(onPressBack).toHaveBeenCalledTimes(1);
+    expect(onPressShare).not.toHaveBeenCalled();
+    expect(onToggleSave).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('explore-place-share'));
+    expect(onPressShare).toHaveBeenCalledTimes(1);
+    expect(onToggleSave).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('explore-place-save'));
+    expect(onToggleSave).toHaveBeenCalledTimes(1);
+    expect(onPressBack).toHaveBeenCalledTimes(1);
+    // 5-b W-1 — 하트가 공유까지 부르는 배선을 가른다(누른 뒤에도 공유는 1회 그대로).
+    expect(onPressShare).toHaveBeenCalledTimes(1);
   });
 });

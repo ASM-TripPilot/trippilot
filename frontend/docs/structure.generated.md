@@ -621,6 +621,7 @@
 
 ## src/pages/explore/explore-landing/model/
 - `src/pages/explore/explore-landing/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
+- `src/pages/explore/explore-landing/model/sidoFilter.ts`  →  filterBySido
 
 ## src/pages/explore/explore-landing/ui/
 - `src/pages/explore/explore-landing/ui/ExploreLandingPage.tsx`  →  ExploreLandingPage
@@ -1599,4 +1600,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 981개 파일
+합계 982개 파일

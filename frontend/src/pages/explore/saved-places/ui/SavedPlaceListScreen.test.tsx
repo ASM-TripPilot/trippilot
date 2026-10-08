@@ -880,14 +880,15 @@ describe('담은 장소 행 — 하트·행 접근성 라벨', () => {
     });
   });
 
-  it('해제한 행의 하트는 라벨이 그대로고 selected 만 꺼진다 — 행 라벨도 그대로다', () => {
+  // TRIP-1303 — 행 라벨은 TRIP-1281 에선 해제와 무관했으나, 보이는 "해제됨" 글자를 따라 끝에 붙인다(결정 A).
+  it('해제한 행의 하트는 라벨이 그대로고 selected 만 꺼진다 — 행 라벨은 끝에 "해제됨" 이 붙는다', () => {
     renderScreen({ releasedPoiIds: ['p1'] });
 
     const heart = screen.getByTestId('explore-saved-remove-sp-1');
     expect(heart).toHaveAccessibleName('감천문화마을 저장');
     expect(heart).not.toBeSelected();
     expect(screen.getByTestId('explore-saved-item-sp-1')).toHaveAccessibleName(
-      '1, 감천문화마을, 사하구, 골목'
+      '1, 감천문화마을, 사하구, 골목, 해제됨'
     );
   });
 
@@ -895,6 +896,23 @@ describe('담은 장소 행 — 하트·행 접근성 라벨', () => {
     renderScreen();
 
     ROW_LABELS.forEach(([id, label]) => {
+      expect(
+        screen.getByTestId(`explore-saved-item-${id}`)
+      ).toHaveAccessibleName(label);
+    });
+  });
+
+  // TRIP-1303 — 해제 행과 담긴 행을 한 화면에 섞어 "늘 붙임"·"안 붙임" 둘 다 잡는다.
+  it('해제한 행만 라벨 끝에 "해제됨" 이 붙고, 담긴 행은 글자까지 그대로다(빈 조각은 여전히 건너뜀)', () => {
+    const labels: [string, string][] = [
+      ['sp-1', '1, 감천문화마을, 사하구, 골목'],
+      ['sp-2', '2, 미확인, 광안리 해변, 수영구, 야경, 해제됨'],
+      ['sp-3', '3, 폐업, 전포 카페거리, 해제됨'],
+      ['sp-4', '4, 미확인, 해동용궁사, 기장군, 사찰'],
+    ];
+    renderScreen({ releasedPoiIds: ['p2', 'p3'] });
+
+    labels.forEach(([id, label]) => {
       expect(
         screen.getByTestId(`explore-saved-item-${id}`)
       ).toHaveAccessibleName(label);
@@ -1029,4 +1047,37 @@ describe('담은 장소 행 — 해제됨 글자·흐림', () => {
     expect(screen.queryByTestId('explore-saved-subtitle')).toBeNull();
     expect(screen.queryByTestId('explore-saved-createtrip')).toBeNull();
   });
+});
+
+// TRIP-1302 — d02 앱바 뒤로는 라벨이 없어 iOS 가 testID 를 그대로 읽었다. 얼굴과 무관하게 "뒤로"로 읽힌다.
+// 라벨이 없을 때 계산 이름은 '' 이라 "testID 미포함"만으로는 공허하게 통과한다 — 비어 있지 않음과 짝으로 잰다.
+// (press 무회귀는 위 `앱바 › AC-11` 이 잠근다.)
+describe('d02 앱바 뒤로 접근성 라벨 (AC-4·5)', () => {
+  const FACES: [string, Partial<SavedPlaceListScreenProps>][] = [
+    ['empty', { savedPlaces: [], state: { kind: 'empty' } }],
+    ['results', {}],
+    ['loading', { savedPlaces: [], state: { kind: 'loading' } }],
+    ['error', { savedPlaces: [], state: { kind: 'error' } }],
+    ['guest', { savedPlaces: [], isGuest: true }],
+  ];
+
+  it.each(FACES)('%s 얼굴의 뒤로는 "뒤로"로 읽힌다', (_face, overrides) => {
+    renderScreen(overrides);
+
+    expect(screen.getByTestId('explore-saved-back')).toHaveAccessibleName(
+      '뒤로'
+    );
+  });
+
+  it.each(FACES)(
+    '%s 얼굴의 뒤로 이름은 비어 있지 않고 testID 문자열이 섞이지 않는다',
+    (_face, overrides) => {
+      renderScreen(overrides);
+
+      const back = screen.getByTestId('explore-saved-back');
+      expect(back).toHaveAccessibleName();
+      expect(back).not.toHaveAccessibleName(/explore-saved-back/);
+      expect(back).not.toHaveAccessibleName(/[a-z]+-[a-z]+/);
+    }
+  );
 });

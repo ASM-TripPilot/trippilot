@@ -40,6 +40,10 @@ import { showToast } from '@/shared/ui/Toast';
 
 const STAY_SAVED_TOAST = '숙소를 등록했어요';
 
+/** 같은 좌표 판정 허용 오차(도). 1e-6도 ≈ 위도 0.1m — SDK 부동소수 오차(실측 ~1e-14)는 흡수하고
+ * 사용자가 지도를 민 이동(수 m 이상)과는 갈린다(TRIP-1299). */
+const SAME_COORD_EPSILON = 1e-6;
+
 export function StayRegisterPage(): ReactElement {
   const router = useRouter();
 
@@ -177,6 +181,17 @@ export function StayRegisterPage(): ReactElement {
    * 단일 경로가 진다). 주소는 위 useGetStaysReverseGeocode 가 이 좌표로 따로 얻는다(단일 경로).
    * 이름(name)은 자동으로 안 채운다(TRIP-199 W-1 계승 — 검색 탭으로 이름이 새는 것 방지). */
   function handlePickCoord(center: MapCenter): void {
+    // TRIP-1299 — 탭을 오가면 핀 패널이 새로 그려지고, 새 지도의 첫 멈춤이 담긴 좌표를 그대로
+    // 다시 보고한다. 같은 좌표면 아무것도 바꾸지 않는다(확정·검색 후보 이름·주소·출처 유지 —
+    // BR-U1-22 는 좌표가 *바뀌면* 다시 확인을 요구할 뿐이다). SDK 를 거친 좌표는 끝자리가 달라져
+    // (실측 37.5665 → 37.566500000000005) `===` 로는 못 가른다.
+    if (
+      selectedCandidate !== null &&
+      Math.abs(selectedCandidate.lat - center.lat) < SAME_COORD_EPSILON &&
+      Math.abs(selectedCandidate.lng - center.lng) < SAME_COORD_EPSILON
+    ) {
+      return;
+    }
     setSelectedCandidate({
       name: '',
       address: '',

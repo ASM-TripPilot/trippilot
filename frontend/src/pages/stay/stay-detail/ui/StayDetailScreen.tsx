@@ -27,6 +27,7 @@ import type { StayDetail } from '@/shared/api/index.schemas';
 
 import { formatPrice } from '@/entities/stay';
 import { MapView } from '@/shared/map';
+import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import { resolveAmenityIcon } from '../config/amenityIcons';
 import {
   BackChevronGlyph,
@@ -172,7 +173,11 @@ export function StayDetailScreen({
         className="flex-1 items-center justify-center gap-md bg-canvas px-lg"
       >
         <View className="absolute left-lg top-12">
-          <HeroCircle testID="stay-detail-back" onPress={onPressBack}>
+          <HeroCircle
+            testID="stay-detail-back"
+            accessibilityLabel="뒤로"
+            onPress={onPressBack}
+          >
             <BackChevronGlyph size={24} />
           </HeroCircle>
         </View>
@@ -218,7 +223,11 @@ export function StayDetailScreen({
           className="h-[300px] w-full bg-surface-strong"
         >
           <View className="absolute left-lg top-12">
-            <HeroCircle testID="stay-detail-back" onPress={onPressBack}>
+            <HeroCircle
+              testID="stay-detail-back"
+              accessibilityLabel="뒤로"
+              onPress={onPressBack}
+            >
               <BackChevronGlyph size={24} />
             </HeroCircle>
           </View>
@@ -234,6 +243,8 @@ export function StayDetailScreen({
           <View className="absolute right-lg top-12">
             <HeroCircle
               testID="stay-detail-save"
+              // 라벨은 담김과 무관하게 고정, 담김은 selected 로만(TRIP-1281 결정 · TRIP-1302).
+              accessibilityLabel={heartSaveLabel(detail.name)}
               onPress={onToggleSave}
               disabled={pending}
               selected={saved}
