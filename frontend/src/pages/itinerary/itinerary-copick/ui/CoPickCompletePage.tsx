@@ -8,6 +8,7 @@ import {
   buildDraftDayTabs,
   buildDraftPins,
   formatDraftDayHeader,
+  resolvePlanMapCenter,
 } from '@/features/itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import { WarningTriangleGlyph } from '@/features/itinerary';
@@ -105,10 +106,13 @@ export function CoPickCompletePage({
 
   const slots = days.find((day) => day.date === selectedDate)?.slots ?? [];
   const pins = buildDraftPins(slots);
-  const center =
-    pins.length > 0
-      ? { lat: pins[0].lat, lng: pins[0].lng }
-      : { lat: 0, lng: 0 };
+  // 그날 첫 핀, 없으면 사다리(TRIP-1295). 거점·숙소는 조회하지 않는다(③ 건너뜀).
+  const center = resolvePlanMapCenter({
+    days,
+    selectedDate,
+    bases: undefined,
+    stays: undefined,
+  });
 
   // meta 는 **비고정만** 센다 — 고정(숙소)은 "고른" 대상이 아니다(D2 · coPickProgress 재사용 금지).
   const pickedCount = slots.filter((slot) => !slot.isFixed).length;

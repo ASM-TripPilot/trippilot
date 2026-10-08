@@ -174,7 +174,7 @@ import {
 } from '@/pages/trip/trip-new-step2/ui/StaySelectSheet';
 import { LiveLocationView } from '@/pages/live/live-location/ui/LiveLocationView';
 import { NoBaseNoticeCard } from '@/pages/itinerary/itinerary-plan/ui/NoBaseNoticeCard';
-import { resolvePlanMapCenter } from '@/pages/itinerary/itinerary-plan/model/planMapCenter';
+import { resolvePlanMapCenter } from '@/features/itinerary/index.view';
 import { DraftFallbackBanner } from '@/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner';
 import { EditorView } from '@/widgets/map-sheet-shell';
 import {

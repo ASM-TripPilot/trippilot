@@ -1828,6 +1828,175 @@ describe('h08 셸 기본 얼굴', () => {
       );
     });
   });
+
+  // TRIP-1295 — 핀 0개인 날에도 지도 중심이 0,0(기니만 바다)으로 가지 않는다(INV-4).
+  describe('🔴 h08 지도 중심 — 빈 날·좌표 없는 일정에도 0,0 바다로 가지 않는다', () => {
+    const SEOUL_TEXT = '37.5665,126.978';
+    const DAY1_FIRST_TEXT = '33.458,126.942';
+
+    /** 첫 슬롯 좌표만 바꾼 하루 — 날마다 첫 장소가 달라야 "어느 날을 골랐나"가 갈린다. */
+    function firstAt(
+      date: string,
+      lat: number,
+      lng: number
+    ): ItineraryDaysItemSlotsItem[] {
+      return daySlots(date).map((slot, index) =>
+        index === 0 ? { ...slot, lat, lng } : slot
+      );
+    }
+
+    function completeWith(
+      days: ItineraryDaysItem[],
+      generationMode: ItineraryGenerationMode = 'FULLY_AI'
+    ): Itinerary {
+      return {
+        ...itinerary({ dayCount: 3, generationState: 'COMPLETE' }),
+        generationMode,
+        days,
+      };
+    }
+
+    /** 나간 요청 경로 — 거점·담은 숙소 조회가 붙지 않았는지 센다(결정 2=A). */
+    let hits: string[] = [];
+    const record = ({ request }: { request: Request }) => {
+      hits.push(new URL(request.url).pathname);
+    };
+
+    beforeEach(() => {
+      hits = [];
+      server.events.on('request:start', record);
+    });
+
+    afterEach(() => {
+      server.events.removeListener('request:start', record);
+    });
+
+    it.each([
+      ['FULLY_AI', 'AI 추천안'],
+      ['MANUAL', '내 일정'],
+    ] as const)(
+      'H1 · AC-1 — %s 일정에서 빈 2일차 칩을 누르면 중심은 날짜 순으로 처음 나오는 좌표 장소(1일차 첫 장소)다',
+      async (generationMode, title) => {
+        // 준비 — 2일차는 날짜는 있고 장소가 0곳이다. 3일차 첫 장소는 1일차와 다르게 둔다.
+        itineraryHandler = () =>
+          HttpResponse.json(
+            completeWith(
+              [
+                { date: DAY1, slots: daySlots(DAY1) },
+                { date: DAY2, slots: [] },
+                { date: DAY3, slots: firstAt(DAY3, 33.499, 126.531) },
+              ],
+              generationMode
+            )
+          );
+        renderPage();
+        await screen.findByTestId('map-sheet-shell-root');
+        expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+          title
+        );
+
+        // 실행 — 빈 2일차 칩.
+        fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+        // 단언 — 먼저 정말 빈 날에 와 있는지(1일차 중심과 기대값이 같아서), 그다음 중심.
+        expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+          '2일차'
+        );
+        const map = screen.getByTestId('map-root');
+        expect(map.props.pins as unknown[]).toHaveLength(0);
+        expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
+      }
+    );
+
+    it('H2 · AC-2 — 일정 어디에도 좌표가 없으면 서울시청이고, 거점·숙소 조회는 붙지 않는다', async () => {
+      // 준비 — 슬롯은 있으나 좌표가 전부 null.
+      itineraryHandler = () =>
+        HttpResponse.json(
+          completeWith(
+            [DAY1, DAY2, DAY3].map((date) => ({
+              date,
+              slots: daySlots(date).map((slot) => ({
+                ...slot,
+                lat: null,
+                lng: null,
+              })),
+            }))
+          )
+        );
+
+      // 실행
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 단언
+      expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
+      expect(hits).toContain(`/api/v1/trips/${TRIP_ID}/itinerary`);
+      expect(
+        hits.filter((path) => /\/(bases|saved-stays)$/.test(path))
+      ).toEqual([]);
+    });
+
+    it('H3 · AC-3 — 그날 좌표 장소가 있으면 지금처럼 그날 첫 핀이 중심이고 핀·fitPins 도 그대로다', async () => {
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      const map = screen.getByTestId('map-root');
+      expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
+      expect(map.props.pins as unknown[]).toHaveLength(3);
+      expect(map.props.fitPins).toBe(true);
+    });
+
+    it('H5 · AC-3 — 3일차 칩을 누르면 중심은 1일차가 아니라 3일차 첫 핀이다 (고른 날짜가 함수까지 간다)', async () => {
+      // 준비 — 날마다 첫 장소가 다르다.
+      itineraryHandler = () =>
+        HttpResponse.json(
+          completeWith([
+            { date: DAY1, slots: daySlots(DAY1) },
+            { date: DAY2, slots: [] },
+            { date: DAY3, slots: firstAt(DAY3, 33.499, 126.531) },
+          ])
+        );
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 실행
+      fireEvent.press(screen.getByTestId('sheet-daychip-2'));
+
+      // 단언
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '3일차'
+      );
+      expect(screen.getByTestId('map-root')).toHaveTextContent(
+        '33.499,126.531'
+      );
+    });
+
+    it('H4 · AC-4 — 고른 날 좌표가 반쪽(위도만)뿐이면 0,0 이 아니라 다른 날 첫 좌표 장소로 간다', async () => {
+      // 준비 — 1일차는 경도가 전부 null, 2일차 첫 장소만 온전한 좌표.
+      itineraryHandler = () =>
+        HttpResponse.json(
+          completeWith([
+            {
+              date: DAY1,
+              slots: daySlots(DAY1).map((slot) => ({ ...slot, lng: null })),
+            },
+            { date: DAY2, slots: firstAt(DAY2, 33.499, 126.531) },
+            { date: DAY3, slots: daySlots(DAY3) },
+          ])
+        );
+
+      // 실행 — 첫 화면은 1일차가 선택된다.
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 단언
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
+      const map = screen.getByTestId('map-root');
+      expect(map.props.pins as unknown[]).toHaveLength(0);
+      expect(map).toHaveTextContent('33.499,126.531');
+      expect(map).not.toHaveTextContent('0,0');
+    });
+  });
 });
 
 // TRIP-1008 · 옛 DraftPage.fallbackLabels.integration.test.tsx
@@ -4205,6 +4374,64 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
 
       expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
         '3곳 · 3.5km'
+      );
+    });
+  });
+
+  // TRIP-1295 — 부분 결과(1일차만)의 좌표가 전무해도 지도 중심이 0,0 으로 가지 않는다(INV-4).
+  describe('🔴 h07 지도 중심 — 좌표 없는 부분 결과에도 0,0 바다로 가지 않는다', () => {
+    /** 나간 요청 경로 — 거점·담은 숙소 조회가 붙지 않았는지 센다(결정 2=A). */
+    let hits: string[] = [];
+    const record = ({ request }: { request: Request }) => {
+      hits.push(new URL(request.url).pathname);
+    };
+
+    beforeEach(() => {
+      hits = [];
+      server.events.on('request:start', record);
+    });
+
+    afterEach(() => {
+      server.events.removeListener('request:start', record);
+    });
+
+    it('P1 · AC-2 — 1일차 슬롯 좌표가 전부 없으면 서울시청이고, 거점·숙소 조회는 붙지 않는다', async () => {
+      // 준비 — PARTIAL(1일차만), 좌표 전부 null.
+      const partial = itinerary({ dayCount: 1, generationState: 'PARTIAL' });
+      itineraryHandler = () =>
+        HttpResponse.json({
+          ...partial,
+          days: partial.days.map((day) => ({
+            ...day,
+            slots: day.slots.map((slot) => ({ ...slot, lat: null, lng: null })),
+          })),
+        });
+
+      // 실행
+      renderPage();
+      await screen.findByTestId('generation-progress-card');
+
+      // 단언
+      expect(screen.getByTestId('map-root')).toHaveTextContent(
+        '37.5665,126.978'
+      );
+      expect(hits).toContain(`/api/v1/trips/${TRIP_ID}/itinerary`);
+      expect(
+        hits.filter((path) => /\/(bases|saved-stays)$/.test(path))
+      ).toEqual([]);
+    });
+
+    it('P2 · AC-3 — 1일차에 좌표 장소가 있으면 지금처럼 첫 핀이 중심이다', async () => {
+      itineraryHandler = () =>
+        HttpResponse.json(
+          itinerary({ dayCount: 1, generationState: 'PARTIAL' })
+        );
+
+      renderPage();
+      await screen.findByTestId('generation-progress-card');
+
+      expect(screen.getByTestId('map-root')).toHaveTextContent(
+        '33.458,126.942'
       );
     });
   });

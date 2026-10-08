@@ -1,11 +1,13 @@
 /**
- * h14·h16 일정 지도 중심(TRIP-1275). 사다리 첫 칸이 이긴다:
+ * 일정 지도 중심(TRIP-1275 · TRIP-1295). h14·h16(`ItineraryPlanPage`)·h07·h08(`DraftPage`)·
+ * h11(`CoPickCompletePage`) 공용. 사다리 첫 칸이 이긴다:
  *  ① 선택한 날의 첫 좌표 장소
  *  ② 다른 날 중 날짜 순으로 처음 나오는 좌표 장소
  *  ③ 거점 숙소 좌표(거점엔 좌표가 없어 등록 숙소와 잇는다 · 대기·실패면 건너뜀)
  *  ④ 서울시청 — {0,0} 은 기니만 바다다.
- * ③의 거점 고르기는 편집기 `resolveEditorMapCenter`(itinerary-manual)와 같은 규칙이다 — 형제 page
- * 슬라이스라 import 할 수 없어 같은 모양을 여기 둔다.
+ * Draft·CoPick 은 거점·숙소를 조회하지 않아 `bases`·`stays` 를 `undefined` 로 넘긴다(③ 건너뜀).
+ * ③의 거점 고르기는 편집기 `resolveEditorMapCenter`(pages/itinerary-manual)와 같은 규칙이다 — features
+ * 는 pages 를 import 할 수 없어 같은 모양을 여기 둔다.
  */
 
 type Coord = { lat: number; lng: number };

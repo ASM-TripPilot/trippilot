@@ -17,7 +17,11 @@ import {
   formatDraftDayHeader,
 } from '@/features/itinerary';
 import { legDistance } from '@/entities/place';
-import { isConfirmLocked, resolvePlanState } from '@/features/itinerary';
+import {
+  isConfirmLocked,
+  resolvePlanMapCenter,
+  resolvePlanState,
+} from '@/features/itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import { resolveUnplacedNames } from '@/features/itinerary';
 import {
@@ -45,7 +49,6 @@ import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 
-import { resolvePlanMapCenter } from '../model/planMapCenter';
 import { NoBaseNoticeCard } from './NoBaseNoticeCard';
 
 /**

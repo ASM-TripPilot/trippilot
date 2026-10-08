@@ -46,6 +46,7 @@ export {
   resolveSlotEmptyFace,
 } from './model/slotEmptyFace';
 export type { SlotEmptyFace } from './model/slotEmptyFace';
+export { resolvePlanMapCenter } from './model/planMapCenter';
 export { resolveUnplacedNames } from './model/unplacedMustVisits';
 export {
   isGenerationRunning,

@@ -15,6 +15,7 @@ import {
   formatDraftDayHeader,
   resolveDraftView,
   resolveFallbackNotice,
+  resolvePlanMapCenter,
   resolveShortfallNotice,
   shouldKeepPollingDraft,
 } from '@/features/itinerary';
@@ -442,11 +443,13 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       kmPart === null
         ? `${partialSlots.length}곳`
         : `${partialSlots.length}곳 · ${kmPart}`;
-    // 지도 center — 첫 핀(좌표 없으면 안전 폴백; 실서비스 PARTIAL day1 은 좌표 있는 POI 라 도달 X).
-    const center =
-      partialPins.length > 0
-        ? { lat: partialPins[0].lat, lng: partialPins[0].lng }
-        : { lat: 0, lng: 0 };
+    // 지도 center — 그날 첫 핀, 없으면 사다리(TRIP-1295). 거점·숙소는 조회하지 않는다(③ 건너뜀).
+    const center = resolvePlanMapCenter({
+      days,
+      selectedDate,
+      bases: undefined,
+      stays: undefined,
+    });
 
     return (
       <MapSheetShell
@@ -577,10 +580,12 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       kmPart === null
         ? `${listedSlots.length}곳`
         : `${listedSlots.length}곳 · ${kmPart}`;
-    const center =
-      listedPins.length > 0
-        ? { lat: listedPins[0].lat, lng: listedPins[0].lng }
-        : { lat: 0, lng: 0 };
+    const center = resolvePlanMapCenter({
+      days,
+      selectedDate,
+      bases: undefined,
+      stays: undefined,
+    });
 
     return (
       <>
