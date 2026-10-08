@@ -9,6 +9,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { View } from 'react-native';
 
 import type * as ShareCaptureModule from '@/features/share-trip-card/model/shareCapture';
 import { server } from '@/mocks/server';
@@ -34,6 +35,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { buildSlotKey } from '@/entities/itinerary-slot';
+import { guardKeyWarnings } from '@/test-support/keyWarnings';
 
 import { ItineraryPlanPage } from './ItineraryPlanPage';
 
@@ -101,6 +103,10 @@ jest.mock('@/features/share-trip-card/model/shareCapture', () => {
       mockShareArmed.value ?? actual.isShareCaptureArmed(),
   };
 });
+
+// TRIP-1296 — 이 파일의 모든 테스트에서 React key 경고(겹침·누락) 0. 누락 경고는 React 가 파일당 한 번만 내서
+// describe 하나로는 못 본다 — 그래서 최상위에 건다(02a 5-b 보강).
+const keyWarnings = guardKeyWarnings();
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
@@ -4244,4 +4250,202 @@ describe('빈 일차 지도 중심', () => {
       }
     });
   });
+});
+
+// TRIP-1296 — 같은 날 같은 장소가 두 번 든 일정(서버가 BR-U2-04 를 어긴 응답). 중복 key 경고 탐지는 02a ★1·★2.
+describe('같은 날 같은 장소 두 번', () => {
+  /**
+   * h14(PLANNED)·h16(CONFIRMED) 시트가 같은 poiId 슬롯 두 개를 받아도
+   *  - React 중복 key 경고(`console.error`)가 0회다(카드·연결선 둘 다),
+   *  - 카드를 숨기지 않는다 — 카드 수 = 슬롯 수, 번호·시각·거리 순서 그대로(INV-4).
+   *
+   * 픽스처 [A, B, A, C] — A 가 1번·3번이고 둘 다 마지막이 아니라 연결선 key 도 겹친다(02a ★8).
+   * testID 는 slotKey 규약대로 A 두 장이 같다 → getAllBy 로 센다(02a ★6).
+   *
+   * 3동작 뼈대: 준비 = 일정 응답·콘솔 스파이 → 실행 = 화면 열기 → 단언 = 경고 key 목록·카드·번호·거리.
+   */
+
+  const BASE = 'http://localhost:8080/api/v1';
+  const TRIP_ID = '12960000-0000-0000-0000-000000001296';
+  const D1 = '2026-06-10';
+  const CARD_ROOT = /^slot-stopcard-\d{4}-\d{2}-\d{2}#/;
+  const D1_KM = '약 1.1km · 도보 추정';
+  const D2_KM = '약 2.2km · 도보 추정';
+  const D3_KM = '약 3.3km · 도보 추정';
+
+  /** 1일 여행. 여행 상태는 h16 선례(확정 셸 describe)대로 PLANNED — 확정 여부는 일정 status 가 가른다. */
+  function trip(): Trip {
+    return {
+      tripId: TRIP_ID,
+      title: '부산 여행',
+      startDate: D1,
+      endDate: D1,
+      party: 2,
+      preferenceSnapshot: {},
+      destinations: [{ seq: 1, region: '부산', nights: 0 }],
+      status: 'PLANNED',
+      createdAt: '2026-08-01T10:00:00.000Z',
+      updatedAt: '2026-08-01T10:00:00.000Z',
+      baseCount: 0,
+      itineraryDayCount: 1,
+    };
+  }
+
+  function slot(
+    poiId: string,
+    hour: number,
+    distanceRange: string | null
+  ): ItineraryDaysItemSlotsItem {
+    const hh = String(hour).padStart(2, '0');
+    return {
+      poiId,
+      startAt: `${hh}:00:00`,
+      endAt: `${hh}:30:00`,
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: [],
+      nameKo: poiId,
+      category: '자연',
+      imageUrl: null,
+      distanceRange,
+      lat: 35.15 + hour / 1000,
+      lng: 129.11,
+    };
+  }
+
+  /** [A, B, A, C] — 같은 장소 p-a 가 1번·3번. */
+  const duplicateSlots = () => [
+    slot('p-a', 10, null),
+    slot('p-b', 11, D1_KM),
+    slot('p-a', 13, D2_KM),
+    slot('p-c', 15, D3_KM),
+  ];
+  /** [A, B, C] — 보통 응답(무회귀). */
+  const normalSlots = () => [
+    slot('p-a', 10, null),
+    slot('p-b', 11, D1_KM),
+    slot('p-c', 15, D2_KM),
+  ];
+
+  function itinerary(
+    status: 'PLANNED' | 'CONFIRMED',
+    slots: ItineraryDaysItemSlotsItem[]
+  ): Itinerary {
+    return {
+      itineraryId: 'itin-1296',
+      tripId: TRIP_ID,
+      status,
+      solveMode: 'FULL_AI',
+      generationMode: 'FULLY_AI',
+      generationState: 'COMPLETE',
+      isFallback: false,
+      days: [{ date: D1, slots }],
+    };
+  }
+
+  let activeClient: QueryClient | null = null;
+
+  beforeEach(() => {
+    setAccessToken('valid-access');
+  });
+
+  afterEach(async () => {
+    await activeClient?.cancelQueries();
+    activeClient?.clear();
+    activeClient = null;
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  async function openShell(
+    status: 'PLANNED' | 'CONFIRMED',
+    slots: ItineraryDaysItemSlotsItem[]
+  ) {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(itinerary(status, slots))
+      )
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    activeClient = client;
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    render(<ItineraryPlanPage tripId={TRIP_ID} />, { wrapper: Wrapper });
+    // 앵커 — 목록이 정말 그려졌다(로딩·다른 얼굴이면 경고 0 이 공짜로 통과한다 · 02a ★3).
+    return screen.findAllByTestId(CARD_ROOT);
+  }
+
+  const texts = (nodes: { props: { children?: unknown } }[]) =>
+    nodes.map((node) => node.props.children);
+
+  it('K0 · 탐지기 자가검사 — 겹친 key 와 빠진 key 를 둘 다 잡는다', () => {
+    function NoKeyList() {
+      // eslint-disable-next-line react/jsx-key -- 일부러 key 를 뺀다(누락 경고 자가검사)
+      return [<View />, <View />];
+    }
+
+    render(<View>{[<View key="dup" />, <View key="dup" />]}</View>);
+    render(<NoKeyList />);
+
+    expect(keyWarnings.keys()).toEqual(['dup']);
+    expect(keyWarnings.missing()).toBe(1);
+    keyWarnings.clear(); // 일부러 낸 경고 — 파일 감시가 이 테스트를 실패시키지 않게 비운다.
+  });
+
+  it.each(['PLANNED', 'CONFIRMED'] as const)(
+    '🔴 K1 · AC-1 — %s 일정에 같은 장소가 두 번 있어도 중복 key 경고가 없다',
+    async (status) => {
+      const cards = await openShell(status, duplicateSlots());
+
+      expect(cards).toHaveLength(4);
+      expect(keyWarnings.keys()).toEqual([]);
+    }
+  );
+
+  it.each(['PLANNED', 'CONFIRMED'] as const)(
+    'K2 · AC-4 — %s 일정의 같은 장소 두 슬롯을 숨기지 않는다 (카드 4·번호·시각·거리 순서)',
+    async (status) => {
+      const cards = await openShell(status, duplicateSlots());
+
+      expect(cards).toHaveLength(4);
+      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
+        '1',
+        '2',
+        '3',
+        '4',
+      ]);
+      expect(
+        texts(screen.getAllByTestId(`slot-stopcard-time-${D1}#p-a`))
+      ).toEqual(['10:00–10:30', '13:00–13:30']);
+      expect(
+        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
+      ).toEqual([D1_KM, D2_KM, D3_KM]);
+    }
+  );
+
+  it.each(['PLANNED', 'CONFIRMED'] as const)(
+    'K3 · AC-3 — %s 보통 일정(장소 중복 없음)은 카드·번호·거리가 그대로다',
+    async (status) => {
+      const cards = await openShell(status, normalSlots());
+
+      expect(cards).toHaveLength(3);
+      expect(keyWarnings.keys()).toEqual([]);
+      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
+        '1',
+        '2',
+        '3',
+      ]);
+      expect(
+        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
+      ).toEqual([D1_KM, D2_KM]);
+    }
+  );
 });

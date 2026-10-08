@@ -30,6 +30,7 @@ paths:
 | `src/test-support/expoRouterTabsMock.tsx` | expo-router `Tabs`/`Tabs.Screen` 관찰 목 — `capturedTabsProps` 홀더 + `tabs-route-*` 마커 + no-op `useRouter()`(홈 라우트 크래시 방지 스텁). 소비자는 `tabsShell.test.tsx` 하나 |
 | `src/test-support/splashGateMock.tsx` | `SplashGate` 목 |
 | `src/test-support/queryClientProbe.tsx` | `SplashGate` 자리의 관찰용 가짜 — 렌더 시 `useQueryClient()`를 담아(`getObservedQueryClient`) `query-client-probe` 마커를 그린다. `resetObservedQueryClient`로 파일 간 상태를 비운다 |
+| `src/test-support/keyWarnings.ts` | `guardKeyWarnings()` — 파일 맨 위(describe 밖)에서 한 번 부르면 그 파일 모든 테스트 앞뒤로 React 목록 key 경고(같은 key 2개·key 누락)를 엿봐 0 을 단언한다(TRIP-1296). **React 는 key 누락 경고를 파일당 한 번만 낸다** — describe 안에서만 걸면 앞 테스트가 그 한 번을 써 버려 못 잡는다. 그 밖의 `console.error` 는 그대로 통과 |
 | `src/test-support/nativeSocialSdkMock.ts` | 카카오·네이버 로그인 SDK `{virtual:true}` 가짜 모듈 + 스파이(default·named 네임스페이스·named 함수 세 import 형태가 같은 스파이에 닿는다). `naverInitializeSpy`는 **일부러 리셋하지 않는다**(모듈 스코프 메모이즈 구현도 관측되게) |
 | `src/test-support/flushNotifications.ts` | react-query `notifyManager`에 이미 예약된 알림 **뒤에** 자기 차례를 끼워 FIFO로 기다리는 헬퍼(시간이 아니라 순서로 기다림). **스케줄러 잠금(`setScheduler(cb => setTimeout(cb, 5))`)은 여기 두지 않고 소비 파일 `beforeAll`에 인라인으로만 건다** — 공용 setup으로 옮기면 지연이 전 파일로 샌다 |
 | `src/test-support/toastHarness.tsx` | `Toast.tsx` 모듈 싱글턴용 `resetToast`(타이머까지 정리) + `WithToastHost` 렌더 래퍼. 리셋은 파일 최상위 `afterEach`에 건다 |

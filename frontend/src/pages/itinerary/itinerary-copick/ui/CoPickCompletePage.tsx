@@ -154,7 +154,8 @@ export function CoPickCompletePage({
             : `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`;
           const items: ReactElement[] = [
             <SlotStopCard
-              key={`card-${slot.poiId}`}
+              // 순번을 섞는다 — 같은 날 같은 장소 2회(BR-U2-04 위반 데이터, TRIP-1296)면 poiId 만으론 겹친다. 끌어 옮기지 않는 목록이라 순번 key 가 안전하다.
+              key={`card-${index}-${slot.poiId}`}
               slot={slot}
               date={selectedDate}
               index={index}
@@ -169,7 +170,7 @@ export function CoPickCompletePage({
             const nextSlot = slots[index + 1];
             items.push(
               <DistanceConnector
-                key={`conn-${slot.poiId}`}
+                key={`conn-${index}-${slot.poiId}`}
                 slotKey={buildSlotKey(selectedDate, slot.poiId)}
                 distanceRange={nextSlot.distanceRange}
               />
