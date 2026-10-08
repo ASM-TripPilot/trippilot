@@ -469,6 +469,10 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
         a["category"].isNull shouldBe false
         a.has("tags") shouldBe true
         a.has("duration") shouldBe false           // INV-3
+        // 좌표 — 화면이 차선책 핀을 찍는 값. 온디맨드 후보(SlotCandidate)는 TRIP-1063 으로 이미
+        // 싣는데 차선책만 빠져 있었다(같은 카드·같은 지도를 쓰는데 응답 모양이 갈렸다).
+        a["lat"].isNull shouldBe false
+        a["lng"].isNull shouldBe false
     }
 
     /** 대부분의 슬롯이 이 경로다 — 여기가 깨지면 일정 조회 전체가 죽는데, 값 있는 표본만 보면 초록이다. */
