@@ -1,4 +1,5 @@
-import { useRouter } from 'expo-router';
+import { usePreventRemove } from '@react-navigation/native';
+import { useNavigation, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -36,7 +37,9 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *  - ‹ → 이탈 확인부터(TRIP-1007 · QA #062 — 나간 뒤 다시 요청하면 새 POST 가 이 세션을 닫아 결과가
  *    버려진다, INV-U4-06). [나가기]면 `leaveWithoutServer` — 세션을 살린 채 나간다(cancel 0). 뒤가 없으면
  *    (딥링크·푸시 착지) 허브로 replace, 같은 틱 연타는 ref 로 1회(TRIP-1291). [계속 기다리기]는 확인만 닫는다.
- *    스와이프·Android 하드웨어 뒤로는 막지 않는다(범위 밖).
+ *    스와이프·Android 하드웨어 뒤로도 진행 얼굴(미도착 포함)에선 같은 확인을 띄운다(TRIP-1292 — `usePreventRemove`).
+ *    오류·종료 얼굴은 잃을 결과가 없어 그대로 나간다. 화면이 스스로 하는 이동(i06 replace·[취소] 성공 뒤
+ *    나가기·[나가기])은 막지 않는다.
  *  - 캡션: PARTIAL_SLOTS 는 `{H}시 이후 다시 짜는 중`, FULL_DAY 는 시각 없이 — 오늘이면 `오늘 일정`, 오늘이 아닌 날이면
  *    `{N}일차 일정`(BR-U4-11). 오늘이 아닌 날엔 방문 기록이 없어 `방문한 N곳` 줄을 비운다.
  *  - DRAFT·NO_SOLUTION·FAILED → i06(`planb/draft`)으로 **replace** 1회. push 면 i06 에서 뒤로 갔을 때 이
@@ -51,7 +54,7 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *      시계는 마운트부터다 — 폴링 응답마다 리셋하지 않는다(restartKey 없음).
  *    · [취소] 요청이 실패하면(`cancel.isError`) 한 줄로 알린다.
  *  - 오류·종료 얼굴과 ‹ 확인의 나가기 연타는 ref 로 막는다(같은 틱 두 번째 누름은 옛 state 를 본다).
- *    스와이프 이탈은 이번 범위 밖(새 티켓 후보).
+ *    그 ref 가 "나가는 중" 신호라, 선 뒤의 뒤로는 확인 없이 통과한다.
  */
 
 const SLOW_MS = 90_000;
@@ -66,6 +69,7 @@ export function PlanbSolvingPage({
   sessionId,
 }: PlanbSolvingPageProps): ReactElement | null {
   const router = useRouter();
+  const navigation = useNavigation();
   const session = useReplanSession(tripId, sessionId);
   const cancel = usePostTripsTripIdReplanSessionsSessionIdCancel();
   const itinerary = useLiveItinerary(tripId);
@@ -98,6 +102,18 @@ export function PlanbSolvingPage({
     data === undefined ? !session.isError : kind === 'solving',
     SLOW_MS
   );
+
+  // 진행 얼굴(미도착 포함)에서만 스와이프·하드웨어 뒤로를 ‹ 와 같은 확인으로 붙잡는다.
+  const solvingFace =
+    data === undefined ? !session.isError : kind === 'solving';
+  usePreventRemove(solvingFace, ({ data: { action } }) => {
+    const isBack = action.type === 'GO_BACK' || action.type === 'POP';
+    if (!isBack || leavingRef.current) {
+      navigation.dispatch(action);
+      return;
+    }
+    setLeaveOpen(true);
+  });
 
   useEffect(() => {
     if (kind === 'draft' || kind === 'noSolution' || kind === 'failed') {
@@ -220,12 +236,8 @@ export function PlanbSolvingPage({
         onCancel={() =>
           cancel.mutate(
             { tripId, sessionId },
-            {
-              onSuccess: () => {
-                if (router.canGoBack()) router.back();
-                else router.replace(`/trips/${tripId}/live`);
-              },
-            }
+            // 여전히 진행 얼굴이라 나가는 중 신호를 세우고 나가야 붙잡히지 않는다.
+            { onSuccess: leaveWithoutServer }
           )
         }
       />

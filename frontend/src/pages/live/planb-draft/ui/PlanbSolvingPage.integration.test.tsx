@@ -153,19 +153,61 @@ const mockReplace = jest.fn();
 const mockNavigate = jest.fn();
 let mockCanGoBack = true;
 
+// TRIP-1292 — 뒤로 가로채기(`usePreventRemove`)의 판정만 흉내내는 가짜 네비게이터(PlanbDraftPage.integration 선례).
+// 실물은 네비게이터 밖에서 throw 하므로 `@react-navigation/native` 를 이 둘로 대체한다.
+//  - 화면을 빼려는 액션(back·replace·dispatch·스와이프)이 오면, 마지막 렌더가 켠 가로채기가 이 액션을 아직 안
+//    물어봤을 때만 콜백에 넘기고 멈춘다. 그 밖엔 `mockExits` 에 한 줄(= 화면을 나감).
+//  - 같은 객체를 다시 보내면 통과, 새로 만든 객체는 또 묻는다. push·navigate 는 빼는 화면이 없어 꽂지 않는다.
+type MockNavAction = { type: string; payload?: unknown };
+type MockPreventCallback = (event: { data: { action: MockNavAction } }) => void;
+let mockPrevent:
+  { enabled: boolean; callback: MockPreventCallback } | undefined;
+let mockAsked = new WeakSet<MockNavAction>();
+const mockExits: string[] = [];
+function mockRemove(action: MockNavAction, via: string): void {
+  if (mockPrevent?.enabled === true && !mockAsked.has(action)) {
+    mockAsked.add(action);
+    mockPrevent.callback({ data: { action } });
+    return;
+  }
+  mockExits.push(via);
+}
+const mockNavigation = {
+  dispatch: jest.fn((action: MockNavAction) => mockRemove(action, 'dispatch')),
+  addListener: jest.fn(() => () => {}),
+};
+
+jest.mock('@react-navigation/native', () => ({
+  usePreventRemove: (enabled: boolean, callback: MockPreventCallback) => {
+    mockPrevent = { enabled, callback };
+  },
+  useNavigation: () => mockNavigation,
+}));
+
 // 지도 관찰 목 — 핀·중심을 host prop 으로 노출한다(리포 관례, MustVisitListPage 선례 · 02a ★20).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 jest.mock('expo-router', () => {
   const routerMock = {
-    back: (...args: unknown[]) => mockBack(...args),
+    // back·replace 는 호출을 적은 뒤 가로채기를 거친다 — 나갔는지는 `mockExits` 로 센다.
+    back: (...args: unknown[]) => {
+      mockBack(...args);
+      mockRemove({ type: 'GO_BACK' }, 'back');
+    },
     push: (...args: unknown[]) => mockPush(...args),
-    replace: (...args: unknown[]) => mockReplace(...args),
+    replace: (...args: unknown[]) => {
+      mockReplace(...args);
+      mockRemove({ type: 'REPLACE', payload: args[0] }, 'replace');
+    },
     navigate: (...args: unknown[]) => mockNavigate(...args),
     canGoBack: () => mockCanGoBack,
   };
-  return { useRouter: () => routerMock, router: routerMock };
+  return {
+    useRouter: () => routerMock,
+    router: routerMock,
+    useNavigation: () => mockNavigation,
+  };
 });
 
 const baseSlot = {
@@ -283,6 +325,10 @@ const DRAFT_HREF = {
 };
 
 beforeEach(() => {
+  mockPrevent = undefined;
+  mockAsked = new WeakSet();
+  mockExits.length = 0;
+  mockNavigation.dispatch.mockClear();
   mockCancelPending = false;
   mockCancelError = false;
   mockSessionError = false;
@@ -1237,4 +1283,247 @@ describe('🔴 C-15 · 재계획 안내 얼굴의 SafeArea 가 인셋 영역까�
       true
     );
   });
+});
+
+// ── TRIP-1292 · INV-U4-06 — 스와이프·하드웨어 뒤로도 ‹ 와 같은 이탈 확인(진행 얼굴만) ─────────────────────
+// 근거: 01 브리프 AC1~AC9 · 결정 2=A. 나감은 `mockExits`(가짜 네비게이터)로 센다 — back·replace 호출 수가 아니다.
+// "확인 없이 통과"를 단언하는 케이스는 먼저 뒤로가 붙잡히는지(가로채기가 켜졌는지) 앵커를 둔다(02a ★2).
+
+/** 스와이프(POP)·Android 하드웨어 뒤로(GO_BACK)처럼 네비게이터 쪽에서 "이 화면을 빼려는" 액션을 보낸다. */
+function attemptRemove(action: MockNavAction): void {
+  act(() => mockRemove(action, 'gesture'));
+}
+
+/** 앵커 — 뒤로가 확인으로 붙잡히는 것(가로채기 켜짐)을 확인한 뒤 [계속 기다리기]로 닫는다. */
+function anchorPreventOn(): void {
+  attemptRemove({ type: 'GO_BACK' });
+  expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+  fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-stay`));
+  expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+  expect(mockExits).toEqual([]);
+}
+
+describe('🔴 TRIP-1292 — 진행 화면은 스와이프·하드웨어 뒤로도 이탈 확인을 거친다', () => {
+  it.each([
+    ['SOLVING', 'GO_BACK'],
+    ['SOLVING', 'POP'],
+    ['COLLECTING', 'GO_BACK'],
+    ['COLLECTING', 'POP'],
+  ])(
+    'G1 %s 에서 %s 액션이 오면 화면은 남고 이탈 확인이 뜬다 — 나감·cancel 0 (AC1)',
+    (status, type) => {
+      mockStatus = status;
+      renderPage();
+      expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+
+      attemptRemove({ type });
+
+      expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+      expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+      expect(mockExits).toEqual([]);
+      expect(mockCancel).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([['GO_BACK'], ['POP']])(
+    'G2 첫 응답 전(미도착) 진행 기본 얼굴에서도 %s 는 이탈 확인을 띄운다 — 나감·cancel 0 (AC2)',
+    (type) => {
+      mockStatus = null;
+      renderPage();
+      expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+
+      attemptRemove({ type });
+
+      expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+      expect(mockExits).toEqual([]);
+      expect(mockCancel).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([['GO_BACK'], ['POP']])(
+    'G3 %s 로 뜬 확인에서 [나가기]를 누르면 정확히 1회 나가고 다시 붙잡히지 않는다 — cancel 0 (AC3)',
+    (type) => {
+      renderPage();
+      attemptRemove({ type });
+      expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+
+      fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-leave`));
+
+      expect(mockExits).toHaveLength(1);
+      expect(mockCancel).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['뒤가 있으면 back', true, 1, 0],
+    ['뒤가 없으면 허브 replace', false, 0, 1],
+  ])(
+    'G4 ‹ 로 연 확인의 [나가기]도 가로채기를 지나 1회 나간다 — %s(canGoBack=%s · back %i · replace %i) · cancel 0 (AC3)',
+    (_label, canGoBack, backTimes, replaceTimes) => {
+      mockCanGoBack = canGoBack as boolean;
+      renderPage();
+      fireEvent.press(screen.getByTestId('generation-progress-back'));
+      expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+
+      fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-leave`));
+
+      expect(mockExits).toHaveLength(1);
+      expect(mockBack).toHaveBeenCalledTimes(backTimes as number);
+      expect(mockReplace).toHaveBeenCalledTimes(replaceTimes as number);
+      expect(mockCancel).not.toHaveBeenCalled();
+    }
+  );
+
+  it('G5 스와이프로 뜬 확인의 [나가기] 같은 틱 2연타 — 나감 정확히 1회 · cancel 0 (AC3)', () => {
+    renderPage();
+    attemptRemove({ type: 'GO_BACK' });
+    expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+
+    pressTwiceSameTick(`${LEAVE_CONFIRM}-leave`);
+
+    expect(mockExits).toHaveLength(1);
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it.each([['‹ 로'], ['스와이프로']])(
+    'G6 %s 연 확인을 [계속 기다리기]로 닫아도 가로채기는 켜져 있다 — 다음 뒤로에 다시 확인, 나감 0 (AC4)',
+    (opener) => {
+      renderPage();
+      if (opener === '‹ 로') {
+        fireEvent.press(screen.getByTestId('generation-progress-back'));
+      } else {
+        attemptRemove({ type: 'GO_BACK' });
+      }
+      fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-stay`));
+      expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+      expect(mockExits).toEqual([]);
+
+      attemptRemove({ type: 'GO_BACK' });
+
+      expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+      expect(mockExits).toEqual([]);
+    }
+  );
+
+  // 03b 경고-1 — "확인이 떠 있으면 네이티브 뒤로에 맡긴다"(켜짐 조건에 !leaveOpen)는 그럴듯한 회귀라 따로 잠근다.
+  it.each([
+    ['‹ 로', 'GO_BACK'],
+    ['‹ 로', 'POP'],
+    ['스와이프로', 'GO_BACK'],
+    ['스와이프로', 'POP'],
+  ])(
+    'G12 %s 연 확인이 떠 있는 채 %s 가 또 오면 화면은 남고 확인도 그대로다 — 나감·cancel 0 (AC1)',
+    (opener, type) => {
+      renderPage();
+      if (opener === '‹ 로') {
+        fireEvent.press(screen.getByTestId('generation-progress-back'));
+      } else {
+        attemptRemove({ type: 'GO_BACK' });
+      }
+      expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+
+      attemptRemove({ type });
+
+      expect(mockExits).toEqual([]);
+      expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+      expect(mockCancel).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([['DRAFT'], ['NO_SOLUTION'], ['FAILED']])(
+    'G7 가로채기가 켜진 진행 화면에 %s 가 오면 i06 replace 가 확인 없이 1회 나간다 (AC5)',
+    (status) => {
+      const { rerender } = renderPage();
+      anchorPreventOn();
+
+      mockStatus = status;
+      rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith(DRAFT_HREF);
+      expect(mockExits).toHaveLength(1);
+      expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+    }
+  );
+
+  it.each([
+    ['뒤가 있으면 back', true, 1, 0],
+    ['뒤가 없으면 허브 replace', false, 0, 1],
+  ])(
+    'G8 [취소] 성공 뒤 이동은 여전히 진행 얼굴이어도 확인 없이 1회 나간다 — %s(canGoBack=%s · back %i · replace %i) (AC6)',
+    (_label, canGoBack, backTimes, replaceTimes) => {
+      mockCanGoBack = canGoBack as boolean;
+      renderPage();
+      anchorPreventOn();
+      const onSuccess = pressCancelAndCaptureSuccess();
+
+      // cancel 은 세션 조회를 무효화하지 않는다 — 이 순간에도 화면은 SOLVING(진행 얼굴)이다(02a ★7).
+      act(() => onSuccess());
+
+      expect(mockExits).toHaveLength(1);
+      expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+      expect(mockBack).toHaveBeenCalledTimes(backTimes as number);
+      expect(mockReplace).toHaveBeenCalledTimes(replaceTimes as number);
+    }
+  );
+
+  it.each([
+    ['[취소] 요청이 실패한 뒤', 'error'],
+    ['[취소] 요청을 기다리는 중', 'pending'],
+  ])(
+    'G9 %s에도 진행 얼굴이므로 뒤로는 이탈 확인을 띄운다 — 나감 0 (AC7)',
+    (_label, cancelState) => {
+      mockCancelError = cancelState === 'error';
+      mockCancelPending = cancelState === 'pending';
+      renderPage();
+      expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+
+      attemptRemove({ type: 'GO_BACK' });
+
+      expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+      expect(mockExits).toEqual([]);
+    }
+  );
+
+  it.each([
+    ['error', 'GO_BACK'],
+    ['error', 'POP'],
+    ['APPLIED', 'GO_BACK'],
+    ['APPLIED', 'POP'],
+    ['CANCELED', 'GO_BACK'],
+    ['CANCELED', 'POP'],
+  ])(
+    'G10 오류·종료 얼굴(%s)은 잃을 결과가 없어 %s 가 확인 없이 바로 1회 나간다 (AC8 · 결정 2=A)',
+    (face, type) => {
+      if (face === 'error') {
+        renderSessionError();
+      } else {
+        mockStatus = face;
+        renderPage();
+      }
+
+      attemptRemove({ type });
+
+      expect(mockExits).toEqual(['gesture']);
+      expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+    }
+  );
+
+  it.each([['REPLACE'], ['NAVIGATE']])(
+    'G11 %s 처럼 뒤로 계열이 아닌 액션은 확인 없이 받은 그 객체로 1회 통과한다 (AC9)',
+    (type) => {
+      renderPage();
+      anchorPreventOn();
+      const action = { type, payload: { name: 'next' } };
+
+      attemptRemove(action);
+
+      expect(mockExits).toHaveLength(1);
+      expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+      // 새로 만들지 않고 받은 객체 그대로 다시 보낸다(새 객체면 실물도 다시 붙잡아 무한 반복 — 02a ★4).
+      expect(mockNavigation.dispatch).toHaveBeenCalledTimes(1);
+      expect(mockNavigation.dispatch.mock.calls[0][0]).toBe(action);
+    }
+  );
 });
