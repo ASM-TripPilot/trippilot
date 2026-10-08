@@ -5,6 +5,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
+import type { ReactElement } from 'react';
 
 import type { Itinerary, VisitCheckList } from '@/shared/api/index.schemas';
 
@@ -62,26 +63,50 @@ const mockSessionCache = new Map<string, unknown>();
 // TRIP-1277 — 세션 조회가 data 없이 실패(mockStatus=null 과 함께 true)·[다시 시도]가 부를 재조회 seam.
 let mockSessionError = false;
 const mockSessionRefetch = jest.fn();
+// TRIP-1293 — 지금까지 실패로 끝난 세션 조회 수(TanStack `errorUpdateCount`). data 가 없을 때 첫 로딩(0)과
+// "실패 뒤 재조회 중"(1↑)을 가르는 유일한 결과 필드다 — 둘 다 status=pending·isError=false·isFetching=true(02a ★1).
+let mockSessionFailures = 0;
+const mockSessionFailure = new Error('세션 조회 실패');
 
 jest.mock('../model/useReplanSession', () => ({
   useReplanSession: () => {
+    // TRIP-1293 — data 없는 두 모양은 TanStack v5.101 이 실제로 내놓는 필드 값을 옮겼다(02a §5 실측 1·2).
+    // 실패 뒤 재조회는 isError 를 유지하지 않는다 — data 가 없으면 status 가 pending 으로 돌아간다.
     if (mockStatus === null) {
       return mockSessionError
         ? {
             data: undefined,
+            status: 'error',
+            fetchStatus: 'idle',
             isPending: false,
+            isLoading: false,
+            isFetching: false,
             isError: true,
+            isLoadingError: true,
+            isRefetchError: false,
+            error: mockSessionFailure,
+            errorUpdateCount: Math.max(1, mockSessionFailures),
+            failureCount: 1,
             refetch: mockSessionRefetch,
           }
         : {
             data: undefined,
+            status: 'pending',
+            fetchStatus: 'fetching',
             isPending: true,
+            isLoading: true,
+            isFetching: true,
             isError: false,
+            isLoadingError: false,
+            isRefetchError: false,
+            error: null,
+            errorUpdateCount: mockSessionFailures,
+            failureCount: 0,
             refetch: mockSessionRefetch,
           };
     }
     // 5-b 경고-1 — data 가 있어도 재조회가 실패하면 isError=true(TanStack v5 는 data 를 남긴다).
-    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}|${mockTargetDate}|${mockSessionError}`;
+    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}|${mockTargetDate}|${mockSessionError}|${mockSessionFailures}`;
     if (!mockSessionCache.has(key)) {
       mockSessionCache.set(key, {
         data: {
@@ -102,8 +127,19 @@ jest.mock('../model/useReplanSession', () => ({
           status: mockStatus,
           createdAt: mockFromInstant,
         },
+        status: mockSessionError ? 'error' : 'success',
+        fetchStatus: 'idle',
         isPending: false,
+        isLoading: false,
+        isFetching: false,
         isError: mockSessionError,
+        isLoadingError: false,
+        isRefetchError: mockSessionError,
+        error: mockSessionError ? mockSessionFailure : null,
+        errorUpdateCount: mockSessionError
+          ? Math.max(1, mockSessionFailures)
+          : mockSessionFailures,
+        failureCount: 0,
         refetch: mockSessionRefetch,
       });
     }
@@ -332,6 +368,7 @@ beforeEach(() => {
   mockCancelPending = false;
   mockCancelError = false;
   mockSessionError = false;
+  mockSessionFailures = 0;
   mockSessionRefetch.mockClear();
   mockVisitsState = 'ok';
   mockStatus = 'SOLVING';
@@ -1526,4 +1563,136 @@ describe('🔴 TRIP-1292 — 진행 화면은 스와이프·하드웨어 뒤로�
       expect(mockNavigation.dispatch.mock.calls[0][0]).toBe(action);
     }
   );
+});
+
+// ── TRIP-1293 · INV-4 — 오류 얼굴 [다시 시도]는 재조회 중 잠기고, 90초 시계는 오류 구간도 이어 센다 ─────────
+// 근거: 01 브리프 AC1·AC3~AC7 · 결정 A. 재조회 중 모양은 TanStack 실물을 옮긴 목이다 — data 가 없으면
+// 재조회 동안 isError 가 풀리고 status 가 pending 으로 돌아간다(02a ★1 · §5 실측). "isError 유지"를 가정한
+// 목으로 짜면 실물에서 오류 얼굴이 사라지는 결함을 못 잡는다.
+
+/** [다시 시도]를 누르고, TanStack 이 내놓는 "실패 뒤 재조회 중"(pending · isFetching · 실패 이력 1↑)으로 다시 그린다. */
+function pressRetryThenRefetching(rerender: (ui: ReactElement) => void): void {
+  fireEvent.press(screen.getByTestId(RETRY));
+  mockSessionFailures = Math.max(1, mockSessionFailures);
+  mockSessionError = false;
+  rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+}
+
+/** 재조회가 또 실패로 끝난다 — 실패 이력이 하나 늘고 isError 로 돌아온다. */
+function refetchFailsAgain(rerender: (ui: ReactElement) => void): void {
+  mockSessionFailures += 1;
+  mockSessionError = true;
+  rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+}
+
+describe('🔴 TRIP-1293 AC1·AC3·AC6 — 오류 얼굴 [다시 시도]는 재조회 중 잠기고, 실패로 끝나면 풀린다', () => {
+  it('Y1 누르면 재조회 동안에도 오류 얼굴이 남고 [다시 시도]만 잠긴다 — [취소]는 그대로 눌린다 (AC1)', () => {
+    const { rerender } = renderSessionError();
+    expect(screen.getByTestId(RETRY)).toBeEnabled();
+
+    pressRetryThenRefetching(rerender);
+
+    expect(screen.getByTestId(ERROR_FACE)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeDisabled();
+    expect(screen.getByTestId(ERROR_CANCEL)).toBeEnabled();
+    expect(screen.queryByTestId('generation-progress-card')).toBeNull();
+  });
+
+  it('Y2 재조회가 또 실패로 끝나면 [다시 시도]가 다시 눌리고, 누르면 재조회가 한 번 더 나간다 (AC3)', () => {
+    const { rerender } = renderSessionError();
+    pressRetryThenRefetching(rerender);
+    expect(screen.getByTestId(RETRY)).toBeDisabled();
+
+    refetchFailsAgain(rerender);
+
+    expect(screen.getByTestId(ERROR_FACE)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeEnabled();
+    fireEvent.press(screen.getByTestId(RETRY));
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('Y3 재조회 중 [다시 시도]를 세 번 더 눌러도 재조회는 처음 1회뿐 — cancel(POST)·이동 0 (AC6)', () => {
+    const { rerender } = renderSessionError();
+    pressRetryThenRefetching(rerender);
+
+    for (let i = 0; i < 3; i += 1) {
+      fireEvent.press(screen.getByTestId(RETRY));
+    }
+
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(1);
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
+  });
+
+  it.each([['GO_BACK'], ['POP']])(
+    'Y4 재조회 중 오류 얼굴도 잃을 결과가 없어 %s 가 확인 없이 바로 1회 나간다 (AC1 · TRIP-1292 G10 형제 계약)',
+    (type) => {
+      const { rerender } = renderSessionError();
+      pressRetryThenRefetching(rerender);
+      // 앵커 — 지금 떠 있는 것이 재조회 중 오류 얼굴이다.
+      expect(screen.getByTestId(RETRY)).toBeDisabled();
+
+      attemptRemove({ type });
+
+      expect(mockExits).toEqual(['gesture']);
+      expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+      expect(mockCancel).not.toHaveBeenCalled();
+    }
+  );
+});
+
+describe('🔴 TRIP-1293 AC4·AC5 · 결정 A — 느림 안내 시계는 화면 진입부터, 오류 구간도 이어 센다', () => {
+  it('Y5 미도착 60초 → 실패 → 다시 시도 → SOLVING 도착: 진입 89,999ms 엔 없고 90,000ms 에 뜬다 — 숫자 없음 (AC4·AC5)', () => {
+    jest.useFakeTimers();
+    mockStatus = null;
+    const { rerender } = renderPage();
+
+    advance(60_000);
+    refetchFailsAgain(rerender);
+    expect(screen.getByTestId(ERROR_FACE)).toBeOnTheScreen();
+
+    advance(5_000);
+    pressRetryThenRefetching(rerender);
+    advance(5_000);
+    mockStatus = 'SOLVING';
+    mockSessionError = false;
+    rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+
+    advance(19_999);
+    expect(screen.queryByTestId(SLOW)).toBeNull();
+
+    advance(1);
+    const slow = screen.getByTestId(SLOW);
+    expect(slow).toHaveTextContent(/시간이 걸리고/);
+    expect(slow).not.toHaveTextContent(/\d/);
+  });
+
+  it('Y6 회복이 진입 90초를 넘겨서 오면 SOLVING 도착과 함께 느림 안내가 바로 보인다(0부터 다시 세지 않는다) (AC4)', () => {
+    jest.useFakeTimers();
+    mockStatus = null;
+    const { rerender } = renderPage();
+
+    advance(60_000);
+    refetchFailsAgain(rerender);
+    advance(40_000);
+    pressRetryThenRefetching(rerender);
+    mockStatus = 'SOLVING';
+    mockSessionError = false;
+    rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+    expect(screen.getByTestId(SLOW)).toBeOnTheScreen();
+  });
+
+  it('Y7 재조회 중 오류 얼굴에도 경과 초·소요 시간 숫자가 없다(+ 앵커) (AC5 · INV-3)', () => {
+    const { rerender } = renderSessionError();
+    pressRetryThenRefetching(rerender);
+
+    const face = screen.getByTestId(ERROR_FACE);
+    expect(face).toHaveTextContent(/다시 시도/);
+    expect(face).not.toHaveTextContent(/\d/);
+    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
+  });
 });

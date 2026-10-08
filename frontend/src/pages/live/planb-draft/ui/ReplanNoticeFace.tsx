@@ -9,6 +9,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  *  - `solving-error` — 진행 화면에서 세션 조회가 data 없이 실패. [다시 시도]=재조회 · [취소]=서버 호출 없이 나가기.
  *  - `solving-closed` — 진행 화면인데 세션이 이미 끝났다(APPLIED·CANCELED). [나가기].
  *  - `draft-error` — 재계획안 화면에서 세션 조회가 data 없이 실패. [다시 시도] · [나가기].
+ *    두 오류 얼굴 모두 `retrying` 이면 [다시 시도]만 잠근다(TRIP-1293 — 재조회 중 연타 피드백).
  *  - `draft-closed` — TRIP-1289 · 재계획안 화면인데 세션이 이미 끝났다. `solving-closed` 와 문구·버튼이 같고
  *    testID 만 다르다(어느 화면의 얼굴인지 실기·테스트에서 갈라 읽는다).
  *
@@ -33,6 +34,8 @@ export interface ReplanNoticeFaceProps {
   kind: ReplanNoticeKind;
   /** 세션 재조회 — `solving-error`·`draft-error` 만 쓴다. */
   onRetry?: () => void;
+  /** TRIP-1293 · 재조회 중 — [다시 시도]만 잠근다([취소]·[나가기]는 그대로). */
+  retrying?: boolean;
   /** 서버 호출 없이 나가기. */
   onLeave: () => void;
 }
@@ -40,6 +43,7 @@ export interface ReplanNoticeFaceProps {
 export function ReplanNoticeFace({
   kind,
   onRetry,
+  retrying = false,
   onLeave,
 }: ReplanNoticeFaceProps): ReactElement {
   const notice =
@@ -79,6 +83,7 @@ export function ReplanNoticeFace({
               label: '다시 시도',
               variant: 'filled' as const,
               onPress: onRetry,
+              disabled: retrying,
             },
             kind === 'solving-error'
               ? {

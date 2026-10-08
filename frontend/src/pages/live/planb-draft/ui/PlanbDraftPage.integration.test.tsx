@@ -5,6 +5,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
+import type { ReactElement } from 'react';
 
 import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 
@@ -45,21 +46,41 @@ const TRIP_ID = 't1';
 const SESSION_ID = 's9';
 
 // TRIP-1277 — `error` 는 data 없는 조회 실패(AC12), `refetch` 는 [다시 시도]가 부를 재조회 seam.
+// TRIP-1293 — `failures` 는 지금까지 실패로 끝난 조회 수(TanStack `errorUpdateCount`). data 가 없을 때 첫 로딩(0)과
+// "실패 뒤 재조회 중"(1↑)을 가르는 유일한 결과 필드다 — 둘 다 status=pending·isError=false·isFetching=true(02a ★1).
+// 결과 필드 값은 TanStack v5.101 실물을 옮겼다(02a §5 실측 1·2) — 실패 뒤 재조회는 isError 를 유지하지 않는다.
 const mockSession: {
   data: Record<string, unknown> | undefined;
   error: boolean;
+  failures: number;
 } = {
   data: undefined,
   error: false,
+  failures: 0,
 };
 const mockSessionRefetch = jest.fn();
+const mockSessionFailure = new Error('세션 조회 실패');
 jest.mock('../model/useReplanSession', () => ({
-  useReplanSession: () => ({
-    data: mockSession.data,
-    isPending: mockSession.data === undefined && !mockSession.error,
-    isError: mockSession.error,
-    refetch: mockSessionRefetch,
-  }),
+  useReplanSession: () => {
+    const loading = mockSession.data === undefined && !mockSession.error;
+    return {
+      data: mockSession.data,
+      status: mockSession.error ? 'error' : loading ? 'pending' : 'success',
+      fetchStatus: loading ? 'fetching' : 'idle',
+      isPending: loading,
+      isLoading: loading,
+      isFetching: loading,
+      isError: mockSession.error,
+      isLoadingError: mockSession.error && mockSession.data === undefined,
+      isRefetchError: mockSession.error && mockSession.data !== undefined,
+      error: mockSession.error ? mockSessionFailure : null,
+      errorUpdateCount: mockSession.error
+        ? Math.max(1, mockSession.failures)
+        : mockSession.failures,
+      failureCount: mockSession.error ? 1 : 0,
+      refetch: mockSessionRefetch,
+    };
+  },
 }));
 
 const mockMutate = jest.fn();
@@ -364,6 +385,7 @@ beforeEach(() => {
   mockUsePreventRemove.mockClear();
   mockNavigation.dispatch.mockClear();
   mockSession.error = false;
+  mockSession.failures = 0;
   mockSessionRefetch.mockClear();
   mockPush.mockClear();
   mockBack.mockClear();
@@ -1749,4 +1771,77 @@ describe('🔴 TRIP-1289 AC5 — 종료 얼굴은 잃을 초안이 없어 뒤로
       expect(mockMutate).not.toHaveBeenCalled();
     }
   );
+});
+
+// ── TRIP-1293 · INV-4 — 초안 화면 오류 얼굴 [다시 시도]도 재조회 중 잠기고, 실패로 끝나면 풀린다 ─────────────
+// 근거: 01 브리프 AC2·AC3·AC5·AC6. 재조회 중 모양은 TanStack 실물(데이터 없으면 isError 가 풀리고 pending 복귀)이다
+// — 지금 페이지는 그 순간 아무것도 안 그린다(P8 의 "미도착 = 렌더 없음" 갈래로 빠진다, 02a ★1).
+
+function renderDraftError() {
+  mockSession.error = true;
+  mockSession.failures = 1;
+  return render(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+}
+
+/** [다시 시도]를 누르고, TanStack 이 내놓는 "실패 뒤 재조회 중"(pending · isFetching · 실패 이력 1↑)으로 다시 그린다. */
+function pressDraftRetryThenRefetching(
+  rerender: (ui: ReactElement) => void
+): void {
+  fireEvent.press(screen.getByTestId(DRAFT_RETRY));
+  mockSession.error = false;
+  rerender(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+}
+
+describe('🔴 TRIP-1293 AC2·AC3·AC6 — 초안 오류 얼굴 [다시 시도]는 재조회 중 잠기고, 실패로 끝나면 풀린다', () => {
+  it('Z1 누르면 재조회 동안에도 오류 얼굴이 남고 [다시 시도]만 잠긴다 — [나가기]는 그대로 눌린다 (AC2)', () => {
+    const { rerender } = renderDraftError();
+    expect(screen.getByTestId(DRAFT_RETRY)).toBeEnabled();
+
+    pressDraftRetryThenRefetching(rerender);
+
+    expect(screen.getByTestId(DRAFT_ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(DRAFT_RETRY)).toBeDisabled();
+    expect(screen.getByTestId(DRAFT_ERROR_LEAVE)).toBeEnabled();
+  });
+
+  it('Z2 재조회가 또 실패로 끝나면 [다시 시도]가 다시 눌리고, 누르면 재조회가 한 번 더 나간다 (AC3)', () => {
+    const { rerender } = renderDraftError();
+    pressDraftRetryThenRefetching(rerender);
+    expect(screen.getByTestId(DRAFT_RETRY)).toBeDisabled();
+
+    mockSession.failures = 2;
+    mockSession.error = true;
+    rerender(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+
+    expect(screen.getByTestId(DRAFT_ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(DRAFT_RETRY)).toBeEnabled();
+    fireEvent.press(screen.getByTestId(DRAFT_RETRY));
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('Z3 재조회 중 [다시 시도]를 세 번 더 눌러도 재조회는 처음 1회뿐 — 확정·세션 시작(POST)·이동 0 (AC6)', () => {
+    const { rerender } = renderDraftError();
+    pressDraftRetryThenRefetching(rerender);
+
+    for (let i = 0; i < 3; i += 1) {
+      fireEvent.press(screen.getByTestId(DRAFT_RETRY));
+    }
+
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(1);
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockExits).toEqual([]);
+  });
+
+  it('Z4 재조회 중 오류 얼굴에도 경과 초·소요 시간 숫자가 없다(+ 앵커) (AC5 · INV-3)', () => {
+    const { rerender } = renderDraftError();
+    pressDraftRetryThenRefetching(rerender);
+
+    const face = screen.getByTestId(DRAFT_ERROR);
+    expect(face).toHaveTextContent(/다시 시도/);
+    expect(face).not.toHaveTextContent(/\d/);
+    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
+  });
 });

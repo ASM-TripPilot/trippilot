@@ -49,9 +49,12 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *    · 미도착(첫 응답 전) → 진행 기본 얼굴(캡션 `일정 다시 짜는 중`, 행 0). ‹·[취소]는 tripId·sessionId 만으로 동작.
  *    · data 없는 조회 실패 → 오류 얼굴. [다시 시도]=세션 재조회(`refetch`)만, [취소]=**서버 호출 없이** 나가기
  *      (조회가 실패한 판에 cancel 도 실패할 공산이 크다 — 세션은 다음 요청이 닫는다, INV-U4-06).
+ *      TRIP-1293 — 재조회가 끝날 때까지 오류 얼굴을 지키고 [다시 시도]만 잠근다(`retrying=isFetching`).
+ *      TanStack v5 는 data 없는 재조회가 시작되면 status 를 pending 으로 되돌려 isError 가 풀리므로, 판정은
+ *      "data 없음 && 실패 이력(errorUpdateCount>0)"이다(첫 로딩은 0 이라 진행 기본 얼굴).
  *    · closed → 종료 얼굴 + [나가기](서버 호출 없음).
- *    · 화면에 들어온 지 90초(미도착 구간 포함)가 지나면 시트 맨 위 느림 안내 — 요청·폴링은 그대로 둔다.
- *      시계는 마운트부터다 — 폴링 응답마다 리셋하지 않는다(restartKey 없음).
+ *    · 화면에 들어온 지 90초가 지나면 시트 맨 위 느림 안내 — 요청·폴링은 그대로 둔다. 미도착·오류 구간도
+ *      끊지 않고 마운트부터 잰다(TRIP-1293) — 폴링 응답마다 리셋하지 않는다(restartKey 없음).
  *    · [취소] 요청이 실패하면(`cancel.isError`) 한 줄로 알린다.
  *  - 오류·종료 얼굴과 ‹ 확인의 나가기 연타는 ref 로 막는다(같은 틱 두 번째 누름은 옛 state 를 본다).
  *    그 ref 가 "나가는 중" 신호라, 선 뒤의 뒤로는 확인 없이 통과한다.
@@ -97,15 +100,18 @@ export function PlanbSolvingPage({
     query: { enabled: day !== undefined },
   });
 
-  // 훅이라 조기 반환 위에서 — 미도착(실패 전)·짜는 중 동안 이어서 잰다.
+  // data 없이 한 번이라도 실패했으면 재조회 중에도 오류 얼굴이다 — data 없는 재조회는 status 가 pending 으로
+  // 돌아가 isError 가 풀리므로(TanStack v5) 실패 이력(errorUpdateCount)으로 판정한다. 첫 로딩은 0 이라 진행 얼굴.
+  const errorFace = data === undefined && session.errorUpdateCount > 0;
+
+  // 훅이라 조기 반환 위에서 — 진입부터 미도착·오류 구간을 끊지 않고 짜는 중까지 이어서 잰다.
   const slow = useElapsedFlag(
-    data === undefined ? !session.isError : kind === 'solving',
+    data === undefined || kind === 'solving',
     SLOW_MS
   );
 
   // 진행 얼굴(미도착 포함)에서만 스와이프·하드웨어 뒤로를 ‹ 와 같은 확인으로 붙잡는다.
-  const solvingFace =
-    data === undefined ? !session.isError : kind === 'solving';
+  const solvingFace = data === undefined ? !errorFace : kind === 'solving';
   usePreventRemove(solvingFace, ({ data: { action } }) => {
     const isBack = action.type === 'GO_BACK' || action.type === 'POP';
     if (!isBack || leavingRef.current) {
@@ -132,11 +138,12 @@ export function PlanbSolvingPage({
     else router.replace(`/trips/${tripId}/live`);
   };
 
-  if (data === undefined && session.isError) {
+  if (errorFace) {
     return (
       <ReplanNoticeFace
         kind="solving-error"
         onRetry={() => session.refetch()}
+        retrying={session.isFetching}
         onLeave={leaveWithoutServer}
       />
     );

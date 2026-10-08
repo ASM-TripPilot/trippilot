@@ -40,6 +40,7 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  *                    FULL_DAY 로 세션을 새로 열고(`useStartReplan`) solving 으로 replace(i04 와 같은 착지).
  *  - 'failed'     → variant 'failed'(E3 — 다른 화면으로 튕기지 않고 같은 자리에 안내, INV-4).
  *  - 'solving'·미도착 → null. data 없는 조회 실패만 오류 얼굴([다시 시도]=재조회, [나가기]) — TRIP-1277 AC12.
+ *    재조회 중에도 오류 얼굴을 지키고 [다시 시도]만 잠근다(TRIP-1293 — 판정은 실패 이력 `errorUpdateCount`).
  *  - 'closed'(APPLIED·CANCELED) → 종료 얼굴 + [나가기](TRIP-1289 — 새 요청이 옛 세션을 닫으면 정상 흐름에서도
  *    온다, INV-U4-06. 빈 화면은 침묵 실패다, INV-4). 이탈 가로채기는 꺼져 있다(잃을 초안이 없다).
  *
@@ -182,11 +183,14 @@ export function PlanbDraftPage({
     else router.replace(`/trips/${tripId}/live`);
   };
 
-  if (data === undefined && session.isError) {
+  // data 없이 한 번이라도 실패했으면 재조회 중에도 오류 얼굴 — data 없는 재조회는 pending 으로 돌아가 isError 가
+  // 풀린다(TanStack v5). 첫 로딩(errorUpdateCount 0)은 그대로 렌더 없음.
+  if (data === undefined && session.errorUpdateCount > 0) {
     return (
       <ReplanNoticeFace
         kind="draft-error"
         onRetry={() => session.refetch()}
+        retrying={session.isFetching}
         onLeave={leave}
       />
     );
