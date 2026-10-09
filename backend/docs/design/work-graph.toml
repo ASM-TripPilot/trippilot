@@ -1174,6 +1174,44 @@ C5 는 U1 **1차 컴포넌트인데 그때는 유일하게 안 만들어져 있�
 # 간선 — 티켓 원문으로 확인한 것만
 # ─────────────────────────────────────────────────────────────────────────────
 
+[[nodes]]
+id = "AI-UNVERIFIED-SLOTS"
+ticket = "TRIP-537"
+title = "재검증이 판정 못 한 슬롯을 통과로 읽던 것 — unverified_slots 수신"
+status = "done"
+migration = false
+touches = ["backend/modules/itinerary-generation", "docs/conventions"]
+note = """
+2026-10-09, PR 대기(브랜치 `fix/TRIP-537-unverified-slots`). **상대는 열어 뒀고 우리만 안 읽었다.**
+
+AI 는 `unverified_slots`(POI 정본을 못 찾아 HC1·HC2 를 **아예 못 본** 슬롯)를 `validate`·`repair`
+응답에 채운다. `reason_code` 는 "백엔드가 분기·화면 문구에 쓰라"고 적어 둔 닫힌 집합이다
+(`NOT_REGISTERED`·`UNMAPPABLE`). 그런데 우리 와이어 DTO 에 자리가 없어 **Jackson 이 조용히
+버렸고**, `violations: []` 를 "전부 통과"로 읽었다 — 상대 계약은 **위반 0 + 그 목록 비어 있음**이
+통과다. 증상은 예외도 로그도 없는 INV-2 위반이다: 검증조차 못 한 슬롯의 시각이 검증값처럼 나간다.
+
+**왜 안 잡혔나 — 계약 게이트가 응답 *봉투*를 안 재고 있었다.** 안쪽(`ViolationSchema`)은 정확히
+일치로 재면서 겉(`ValidateItineraryResponse`·`RepairItineraryResponse`)은 아예 안 쟀다. 그 자리를
+메웠고, 역검증은 **계약 파일에 가짜 필드를 더해** 게이트가 깨지는지로 했다(우리 DTO 에서 필드를
+빼는 변이는 어댑터 참조 때문에 컴파일이 깨져 실험 자체가 무효다 — md5 로 원복 확인).
+
+판단:
+- `ValidationOutcome` 으로 위반과 "판정 못 함"을 **한 타입에 묶었다**. 따로 돌려주면 호출측이
+  한쪽만 보고 통과라 적는 길이 다시 열린다.
+- `poiId` 는 문자열로 들고 간다 — UUID 파싱 실패를 드롭으로 처리하면 그 순간 침묵 통과가 돌아온다.
+- 상대가 poiId 로만 지시하므로 같은 장소가 여러 날 있으면 **양쪽에 붙는다**. 덜 붙여 거짓 통과를
+  내는 것보다 낫다(INV-4).
+- 실 위반이 있는 슬롯은 위반 문구가 이긴다 — "못 봤다"와 "틀렸다"가 겹치면 후자가 쓸모 있다.
+- 수리 불가(`repaired=null`) 응답에서도 버리지 않는다. 거기서 버리면 종전 validate 로 내려간 뒤에도
+  사실이 사라져 다시 조용히 통과한다.
+
+**백엔드 티켓이 없다** — TRIP-537 은 AI 쪽 티켓이고 백엔드·문서·정본 어디에도 흔적이 없었다.
+채번이 필요하다.
+
+검증: `build --no-build-cache --rerun-tasks` 통과(284 suites · 1,912 tests · 0 실패).
+역검증 3건(가드 제거·문구 null·어댑터 드롭) 각각 해당 신규 테스트만 실패.
+"""
+
 [[edges]]
 from = "STAY-CONTENT-MEASURE"
 to = "STAY-CONTENT-TOURAPI"
