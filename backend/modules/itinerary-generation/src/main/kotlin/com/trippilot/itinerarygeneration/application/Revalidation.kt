@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
+import com.trippilot.itinerarygeneration.domain.UnverifiedSlot
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import org.slf4j.LoggerFactory
@@ -22,8 +23,15 @@ import java.util.UUID
  */
 internal sealed interface Revalidation {
 
-    /** AI 가 판정했다. 목록이 비었으면 진짜로 위반이 없는 것이다. */
-    data class Judged(val violations: List<Violation>) : Revalidation
+    /**
+     * AI 가 판정했다. **[violations] 가 비었다고 통과는 아니다** — 상대 계약은 "위반 0 + [unverified] 비어
+     * 있음"을 통과로 정한다(TRIP-537). HC1·HC2 는 POI 정본을 못 찾은 슬롯을 건너뛰는데, 그 스킵을
+     * 안 보면 "검증했더니 깨끗하다"는 위 문단의 거짓말을 **AI 가 살아 있을 때도** 하게 된다.
+     */
+    data class Judged(
+        val violations: List<Violation>,
+        val unverified: List<UnverifiedSlot> = emptyList(),
+    ) : Revalidation
 
     /** AI 를 못 불렀다(장애·시한). 아무것도 주장하지 않는다. */
     data object Withheld : Revalidation
@@ -36,7 +44,17 @@ internal sealed interface Revalidation {
          * 외부 호출이라 **트랜잭션 밖**에서 부른다(DB 커넥션을 물지 않게, generate 와 동일).
          */
         fun attempt(agent: ScheduleAgentPort, output: ScheduleAgentOutput, tripId: UUID): Revalidation =
-            runCatching { Judged(agent.validate(output)) }
+            runCatching {
+                val outcome = agent.validate(output)
+                // 침묵 금지(INV-4) — 판정 못 한 슬롯은 로그로도 드러낸다. 화면 표시는 reshape 가 한다.
+                if (outcome.unverified.isNotEmpty()) {
+                    log.warn(
+                        "재검증이 일부 슬롯을 판정하지 못했습니다 — 통과로 읽지 않습니다. tripId={} 미판정={}",
+                        tripId, outcome.unverified.map { "${it.poiId}:${it.reasonCode}" },
+                    )
+                }
+                Judged(outcome.violations, outcome.unverified)
+            }
                 .getOrElse { e ->
                     log.warn(
                         "일정 재검증 실패 — 직전 위반 표시를 유지한 채 진행합니다(판정 보류). tripId={}",
@@ -49,6 +67,15 @@ internal sealed interface Revalidation {
         fun Revalidation.violations(): List<Violation> = when (this) {
             is Judged -> violations
             Withheld -> emptyList()
+        }
+
+        /**
+         * 판정 못 한 슬롯의 poiId. **보류([Withheld])는 빈 집합**이다 — 그쪽은 이미 직전 표시를
+         * 잇는 경로라, 여기서 또 "미판정"을 얹으면 같은 사실에 표시가 두 벌 붙는다.
+         */
+        fun Revalidation.unverifiedPoiIds(): Set<String> = when (this) {
+            is Judged -> unverified.map { it.poiId }.toSet()
+            Withheld -> emptySet()
         }
     }
 }

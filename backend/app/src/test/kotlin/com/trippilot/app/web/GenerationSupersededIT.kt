@@ -18,6 +18,7 @@ import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.ValidationOutcome
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.security.AccessTokenIssuer
@@ -98,7 +99,7 @@ class GenerationSupersededIT : AbstractPostgresIntegrationTest() {
                     )
                 }
 
-                override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+                override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
                 override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult =
                     RepairResult(solution, emptyList())
                 override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()

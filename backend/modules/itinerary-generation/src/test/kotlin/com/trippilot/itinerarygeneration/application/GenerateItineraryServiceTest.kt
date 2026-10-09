@@ -37,6 +37,7 @@ import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
+import com.trippilot.itinerarygeneration.domain.ValidationOutcome
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.core.event.DomainEvent
@@ -93,7 +94,7 @@ private class RejectAnytimeAgent(private val now: Instant, private val emitPoi: 
             freshness = FreshnessMeta(now, degraded = false),
         )
     }
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
     override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
 }
@@ -107,7 +108,7 @@ private class ReportingAgent(private val now: Instant, private val unplaced: Lis
         freshness = FreshnessMeta(now, degraded = false),
         unplacedMustVisits = unplaced,
     )
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
     override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
 }
@@ -129,7 +130,7 @@ private class TwoPhaseReportingAgent(
             unplacedMustVisits = unplaced,
         )
     }
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
     override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
 }
@@ -153,7 +154,7 @@ private class CapturingAgent(
             scoredCandidates = scored(input),
         )
     }
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
     /** 근거 조회에 실린 취향·동행 — 생성과 같은 취향이어야 한다(BR-U1-38). */
     val explainedWith = mutableListOf<Pair<PreferenceProfile?, String?>>()
@@ -168,7 +169,7 @@ private class CapturingAgent(
 /** ScheduleAgent(AI) 실패 재현 — INV-4 폴백 경로 검증용. */
 private class ThrowingAgent : StubScheduleAgent() {
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = throw RuntimeException("agent down")
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
     override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
 }
@@ -884,7 +885,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
                 freshness = FreshnessMeta(now, degraded = false),
                 candidatesSummary = com.trippilot.itinerarygeneration.domain.CandidatesSummary("LOW", 7, listOf("CAFE")),
             )
-            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
             override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
         }
@@ -1013,7 +1014,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
 
             override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?) =
                 SlotExplanations(slots = poiByDate.entries.associate { (d, p) -> "$d#$p" to "$d 근거" })
-            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
         }
         val repo = FakeItineraries()
@@ -1093,7 +1094,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?) = SlotExplanations(
                 slots = solution.days.flatMap { d -> d.slots.map { "${d.date}#${it.poiId}" to "${d.date} 근거" } }.toMap(),
             )
-            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
         }
         val repo = FakeItineraries()
@@ -1154,7 +1155,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
                 )
             }
 
-            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
         }
         val repo = FakeItineraries()
@@ -1243,7 +1244,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
                     freshness = FreshnessMeta(now, degraded = false),
                 )
             }
-            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
             override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
         }
@@ -1441,7 +1442,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
                         freshness = FreshnessMeta(now, degraded = false),
                     )
                 }
-                override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+                override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
                 override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
                 override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
             }
@@ -1536,7 +1537,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
                     freshness = FreshnessMeta(now, degraded = false),
                 )
             }
-            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
             override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
         }

@@ -15,6 +15,7 @@ import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.ValidationOutcome
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.placedata.api.Area
@@ -93,7 +94,8 @@ class FakeScheduleAgent(
         )
     }
 
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList() // 실 검증은 229
+    // 실 검증은 229. fake 는 **에이전트 전체가 대역**이라 "판정 못 함"도 없다 — 빈 결과가 거짓말이 아니다.
+    override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = ValidationOutcome()
 
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult =
         RepairResult(solution, emptyList())

@@ -27,6 +27,8 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.VisitSlot
+import com.trippilot.itinerarygeneration.domain.ValidationOutcome
+import com.trippilot.itinerarygeneration.domain.UnverifiedSlot
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.RepairContext
@@ -87,13 +89,15 @@ private class EditFakeAgent(
     private val violations: List<Violation> = emptyList(),
     private val failure: RuntimeException? = null, // AI 장애 재현
     private val repairWith: (ScheduleAgentOutput) -> RepairResult = { RepairResult(it, emptyList(), unrepairable = true) },
+    /** 판정 못 한 슬롯(TRIP-537) — 위반 0 인데 이것이 있으면 통과가 아니다. */
+    private val unverified: List<UnverifiedSlot> = emptyList(),
 ) : StubScheduleAgent() {
     var validateCalls = 0
     var repairCalls = 0
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = throw NotImplementedError()
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> {
+    override fun validate(solution: ScheduleAgentOutput): ValidationOutcome {
         validateCalls++
-        return failure?.let { throw it } ?: violations
+        return failure?.let { throw it } ?: ValidationOutcome(violations, unverified)
     }
     var lastContext: RepairContext? = null
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult {
@@ -305,6 +309,37 @@ class EditItineraryServiceTest : StringSpec({
         val slots = result.days.single().slots
         slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA) // 편집 순서
         slots.all { !it.hasViolation } shouldBe true
+    }
+
+    // TRIP-537 — 상대 계약은 "위반 0 + unverified_slots 비어 있음"을 통과로 정한다. 둘째 조건을 안 보던 동안
+    // POI 정본을 못 찾아 HC1·HC2 를 **아예 못 본** 슬롯의 시각이 검증값처럼 나갔다(INV-2).
+    "위반이 0 이어도 판정 못 한 슬롯은 통과로 적지 않는다" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(unverified = listOf(UnverifiedSlot(poiB.toString(), "NOT_REGISTERED")))
+        val svc = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        val slots = svc.edit(acc, tripId, editReq).days.single().slots
+        val unverified = slots.first { it.sourcePoiId == poiB }
+        unverified.hasViolation shouldBe true
+        unverified.violationReason shouldBe "이 장소는 시간을 확인하지 못했어요"
+        // 지목되지 않은 슬롯은 그대로 통과다 — 미판정 하나가 일정 전체를 물들이면 표시가 쓸모를 잃는다.
+        val verified = slots.first { it.sourcePoiId == poiA }
+        verified.hasViolation shouldBe false
+        verified.violationReason shouldBe null
+    }
+
+    // "못 봤다"와 "틀렸다"가 겹치면 후자가 쓸모 있다 — 사용자가 고칠 것이 더 구체적이다.
+    "실 위반이 있는 슬롯은 미판정 문구가 아니라 위반 문구를 쓴다" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(
+            violations = listOf(Violation("OPENING_HOURS", 0, 0, null)), // day0/slot0 = poiB(편집 순서)
+            unverified = listOf(UnverifiedSlot(poiB.toString(), "UNMAPPABLE", "lat")),
+        )
+        val svc = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        val slot = svc.edit(acc, tripId, editReq).days.single().slots[0]
+        slot.hasViolation shouldBe true
+        slot.violationReason shouldNotBe "이 장소는 시간을 확인하지 못했어요"
     }
 
     "validate 위반을 해당 슬롯 hasViolation 으로 표시(비차단 저장)" {

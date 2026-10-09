@@ -34,6 +34,7 @@ import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.RepairContext
+import com.trippilot.itinerarygeneration.domain.ValidationOutcome
 import org.springframework.test.web.client.match.MockRestRequestMatchers.method
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
 import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
@@ -536,7 +537,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
                 ),
             )
 
-        val v = adapter.validate(dummyOutput()).single()
+        val v = adapter.validate(dummyOutput()).violations.single()
         v.type shouldBe "TRAVEL_TIME"
         v.dayIndex shouldBe 0
         v.slotIndex shouldBe 1
@@ -549,18 +550,55 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
             .andRespond(withSuccess("""{"violations":[{"code":"OPENING_HOURS","detail":""}]}""", MediaType.APPLICATION_JSON))
 
-        val v = adapter.validate(dummyOutput()).single()
+        val v = adapter.validate(dummyOutput()).violations.single()
         v.type shouldBe "OPENING_HOURS"
         v.dayIndex shouldBe null // 슬롯엔 못 붙지만 "위반 없음"으로 위장하지 않는다(INV-4)
         v.detail shouldBe null   // 빈 문자열은 사유 없음으로 본다
         server.verify()
     }
 
-    "validate — 위반 없으면 빈 목록" {
+    "validate — 위반 없고 미판정도 없으면 진짜 통과다" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
             .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
-        adapter.validate(dummyOutput()) shouldBe emptyList()
+        adapter.validate(dummyOutput()) shouldBe ValidationOutcome()
+    }
+
+    // 이 필드를 선언하지 않던 동안 Jackson 이 조용히 버려 `violations: []` 가 "전부 통과"로 읽혔다(TRIP-537).
+    "validate — 위반 0 이어도 판정 못 한 슬롯은 올라온다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andRespond(
+                withSuccess(
+                    """{"violations":[],"unverified_slots":[""" +
+                        """{"poi_id":"11111111-1111-1111-1111-111111111111","reason_code":"NOT_REGISTERED","detail":""},""" +
+                        """{"poi_id":"22222222-2222-2222-2222-222222222222","reason_code":"UNMAPPABLE","detail":"lat"}]}""",
+                    MediaType.APPLICATION_JSON,
+                ),
+            )
+
+        val outcome = adapter.validate(dummyOutput())
+        outcome.violations shouldBe emptyList()
+        outcome.unverified.map { it.poiId } shouldBe listOf(
+            "11111111-1111-1111-1111-111111111111",
+            "22222222-2222-2222-2222-222222222222",
+        )
+        outcome.unverified.map { it.reasonCode } shouldBe listOf("NOT_REGISTERED", "UNMAPPABLE")
+        outcome.unverified[1].detail shouldBe "lat"
+        server.verify()
+    }
+
+    // 모르는 어휘를 삼키면 경계 드리프트가 조용히 통과로 바뀐다 — 그래서 그대로 올린다.
+    "validate — 모르는 reason_code 도 버리지 않는다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andRespond(
+                withSuccess(
+                    """{"violations":[],"unverified_slots":[{"poi_id":"p1","reason_code":"FUTURE_CODE"}]}""",
+                    MediaType.APPLICATION_JSON,
+                ),
+            )
+        adapter.validate(dummyOutput()).unverified.single().reasonCode shouldBe "FUTURE_CODE"
     }
 
     "repair — 수리 불가(repaired=null)는 오류가 아니라 원본 유지" {

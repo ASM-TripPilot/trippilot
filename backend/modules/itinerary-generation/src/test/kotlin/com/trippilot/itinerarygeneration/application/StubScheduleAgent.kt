@@ -9,6 +9,7 @@ import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
+import com.trippilot.itinerarygeneration.domain.ValidationOutcome
 import com.trippilot.itinerarygeneration.domain.Violation
 import java.util.UUID
 
@@ -22,7 +23,7 @@ import java.util.UUID
 internal abstract class StubScheduleAgent : ScheduleAgentPort {
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = error("이 테스트는 generate 를 쓰지 않는다")
     // 빈 목록을 돌려주면 "위반 없음"이라는 거짓 음성이라, 안 쓰는 테스트에서도 조용히 통과하면 안 된다.
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> = error("이 테스트는 validate 를 쓰지 않는다")
+    override fun validate(solution: ScheduleAgentOutput): ValidationOutcome = error("이 테스트는 validate 를 쓰지 않는다")
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult =
         error("이 테스트는 repair 를 쓰지 않는다")
     override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =

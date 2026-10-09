@@ -23,6 +23,7 @@ import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.UnverifiedSlot
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.placedata.api.GroundedPlace
@@ -237,7 +238,15 @@ private fun JsonNode?.toCandidatesSummary(): CandidatesSummary? {
  */
 internal data class AiValidateRequest(val itinerary: AiSchedulePayload, val requestMeta: AiRequestMeta)
 
-internal data class AiValidateResponse(val violations: List<AiViolation> = emptyList())
+internal data class AiValidateResponse(
+    val violations: List<AiViolation> = emptyList(),
+    /**
+     * HC 판정에서 제외된 슬롯(상대 TRIP-537) — **위반이 아니다**. 이 필드를 선언하지 않던 동안
+     * Jackson 이 조용히 버려 `violations: []` 를 "전부 통과"로 읽었다(상대가 "INV-4 침묵 실패의
+     * 완곡한 형태"라 적어 둔 그것). 기본 빈 목록 = 옛 응답 호환.
+     */
+    val unverifiedSlots: List<AiUnverifiedSlot> = emptyList(),
+)
 
 /**
  * `POST /ai/v1/itinerary/explanations` — 일정 본문을 그대로 되돌려 보내고 근거만 받는다.
@@ -281,6 +290,18 @@ internal data class AiRepairRequest(
 internal data class AiRepairResponse(
     val repaired: AiScheduleResponse? = null,
     val changes: List<String> = emptyList(),
+    /** validate 와 **같은 의미**다(상대 계약) — 수리했다고 판정 못 한 슬롯이 검증된 것은 아니다. */
+    val unverifiedSlots: List<AiUnverifiedSlot> = emptyList(),
+)
+
+/**
+ * 상대의 "판정 못 함" 표현. [poiId] 는 그쪽 계약이 문자열이고, 우리도 문자열로 들고 간다 —
+ * UUID 파싱을 끼우면 실패분이 드롭돼 침묵 통과가 되돌아온다([UnverifiedSlot] 주석).
+ */
+internal data class AiUnverifiedSlot(
+    val poiId: String,
+    val reasonCode: String,
+    val detail: String = "",
 )
 
 /**
@@ -303,6 +324,10 @@ internal data class AiRequestMeta(val requestId: String, val requestedAt: Instan
 
 internal fun AiViolation.toDomain(): Violation =
     Violation(code, dayIndex, slotIndex, detail.takeIf { it.isNotBlank() }, slotRef)
+
+/** 빈 `poiId` 는 붙일 슬롯이 없어 버린다 — 그 외에는 모르는 `reasonCode` 라도 통과시킨다(어휘 드리프트를 삼키지 않는다). */
+internal fun AiUnverifiedSlot.toDomain(): UnverifiedSlot? =
+    poiId.takeIf { it.isNotBlank() }?.let { UnverifiedSlot(it, reasonCode, detail) }
 
 /** 도메인 산출물 → 상대 본문. 왕복 형태가 같아(생성 응답 = 검증 요청) 그대로 되돌려 보낸다. */
 internal fun ScheduleAgentOutput.toWire(): AiSchedulePayload = AiSchedulePayload(

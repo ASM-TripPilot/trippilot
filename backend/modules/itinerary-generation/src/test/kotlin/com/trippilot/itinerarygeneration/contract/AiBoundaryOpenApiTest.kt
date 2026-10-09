@@ -8,6 +8,7 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiDay
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiFreshness
+import com.trippilot.itinerarygeneration.adapter.out.external.AiRepairResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanEmptyReason
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanResponse
@@ -21,6 +22,8 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiSlot
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSlotAlternative
 import com.trippilot.itinerarygeneration.adapter.out.external.AiTrigger
 import com.trippilot.itinerarygeneration.adapter.out.external.AiUnplacedMustVisit
+import com.trippilot.itinerarygeneration.adapter.out.external.AiUnverifiedSlot
+import com.trippilot.itinerarygeneration.adapter.out.external.AiValidateResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiViolation
 import com.trippilot.itinerarygeneration.adapter.out.external.HttpScheduleAgentAdapter
 import com.trippilot.testsupport.ContractShape
@@ -217,6 +220,21 @@ class AiBoundaryOpenApiTest : StringSpec({
     }
 
     /**
+     * **응답 봉투를 안 재던 구멍**(TRIP-537 실측). 안쪽(`ViolationSchema`)만 재고 겉을 비워 두는 동안
+     * 상대가 `unverified_slots` 를 열었는데 우리 DTO 에 자리가 없어 Jackson 이 조용히 버렸고,
+     * 그래서 `violations: []` 를 "전부 통과"로 읽었다 — 상대 계약은 **위반 0 + 이 목록 비어 있음**을
+     * 통과로 정한다. 겉을 정확히 일치로 재면 그 종류의 누락이 다시 생기지 않는다.
+     */
+    "validate 응답 봉투 키가 계약과 정확히 일치한다 — 겉을 안 재면 새 필드를 조용히 버린다" {
+        wireKeys(sampleValidateResponse) shouldContainExactly props("ValidateItineraryResponse")
+        wireKeys(sampleValidateResponse.unverifiedSlots.single()) shouldContainExactly props("UnverifiedSlotSchema")
+    }
+
+    "repair 응답 봉투 키가 계약과 정확히 일치한다 — 미판정은 수리해도 남는다" {
+        wireKeys(sampleRepairResponse) shouldContainExactly props("RepairItineraryResponse")
+    }
+
+    /**
      * 응답도 본다. 상대가 필드를 개명하면 우리 기본값(빈 맵·false)이 조용히 이긴다 —
      * 예외도 로그도 없이 "근거가 없는 일정"이 된다.
      */
@@ -396,6 +414,18 @@ private val sampleRepairRequest = AiRepairRequest(
 )
 
 private val sampleViolation = AiViolation("HC1", slotRef = "2026-08-01#poi", detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)
+
+/** 표본은 **전부 채운다** — 비면 직렬화에서 빠져 "겉을 정확히 일치로 재는" 단언이 거짓 통과한다. */
+private val sampleValidateResponse = AiValidateResponse(
+    violations = listOf(sampleViolation),
+    unverifiedSlots = listOf(AiUnverifiedSlot(UUID.randomUUID().toString(), "NOT_REGISTERED", "정본 미등록")),
+)
+
+private val sampleRepairResponse = AiRepairResponse(
+    repaired = samplePayload,
+    changes = listOf("shift"),
+    unverifiedSlots = listOf(AiUnverifiedSlot(UUID.randomUUID().toString(), "UNMAPPABLE", "lat")),
+)
 
 private val sampleReplanRequest = AiReplanRequest(
     tripId = UUID.randomUUID().toString(),

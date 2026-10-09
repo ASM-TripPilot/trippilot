@@ -20,7 +20,9 @@ import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.application.Revalidation.Companion.unverifiedPoiIds
 import com.trippilot.itinerarygeneration.application.Revalidation.Companion.violations
+import com.trippilot.itinerarygeneration.domain.UnverifiedSlot
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
@@ -101,7 +103,8 @@ class EditItineraryService(
         // 정본 개정 주석 참조. 시각만 바꾼 편집은 쌍이 그대로라 부르지 않는다(사용자 시각 존중).
         val repair = if (legsOf(current) != legsOf(edit)) attemptRepair(output, edit, accountId, tripId, current) else RepairAttempt.Skipped
         val verdict = when (repair) {
-            is RepairAttempt.Used -> Revalidation.Judged(emptyList()) // 상대가 재검증을 통과시킨 값만 온다(INV-2)
+            // 상대가 재검증을 통과시킨 값만 온다(INV-2) — 단 **판정 못 한 슬롯은 통과가 아니다**(TRIP-537).
+            is RepairAttempt.Used -> Revalidation.Judged(emptyList(), repair.unverified)
             RepairAttempt.Failed -> Revalidation.Withheld // AI 불통 — 같은 상대를 validate 로 한 번 더 기다리지 않는다
             RepairAttempt.Skipped, RepairAttempt.Rejected -> Revalidation.attempt(scheduleAgent, output, tripId)
         }
@@ -150,6 +153,13 @@ class EditItineraryService(
     private fun today(): LocalDate = LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE)
 
     private companion object {
+        /**
+         * 판정 못 한 슬롯의 문구(TRIP-537). **"위반"이라 말하지 않는다** — 틀렸다고 단정할 근거가 없고,
+         * 원인은 그 장소가 POI 정본에 없는 것이라 사용자가 고칠 수 있는 축은 "다른 장소로 바꾸기"다.
+         * [PriorViolations.STALE_REASON] 과 같은 결(플래그는 켜고 문구는 중립).
+         */
+        private const val UNVERIFIED_REASON = "이 장소는 시간을 확인하지 못했어요"
+
         /** 국내 전용이라 고정(GenerateItineraryService 와 같은 값). */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
         private val log = LoggerFactory.getLogger(EditItineraryService::class.java)
@@ -159,7 +169,8 @@ class EditItineraryService(
         data object Skipped : RepairAttempt
         data object Failed : RepairAttempt
         data object Rejected : RepairAttempt
-        data class Used(val days: List<DaySchedule>) : RepairAttempt
+        /** [unverified] — 수리를 썼어도 **판정 못 한 슬롯은 그대로**다(상대 계약). 통과로 접지 않는다. */
+        data class Used(val days: List<DaySchedule>, val unverified: List<UnverifiedSlot>) : RepairAttempt
     }
 
     /**
@@ -191,7 +202,7 @@ class EditItineraryService(
             log.warn("편집 보정 결과가 장소·순서·고정을 바꿨습니다 — 쓰지 않고 재검증으로 갑니다. tripId={}", tripId)
             return RepairAttempt.Rejected
         }
-        return RepairAttempt.Used(days)
+        return RepairAttempt.Used(days, result.unverified)
     }
 
     private fun legsOf(it: Itinerary) = it.days.flatMap { d -> d.slots.mapIndexed { i, s -> Triple(d.date, d.slots.getOrNull(i - 1)?.sourcePoiId, s.sourcePoiId) } }.toSet()
@@ -205,6 +216,9 @@ class EditItineraryService(
         val violations = verdict.violations()
         // 판정 보류면 직전 표시를 잇는다 — 못 물어봤다고 해서 깨끗해진 것은 아니다.
         val prior = if (verdict is Revalidation.Withheld) PriorViolations(current) else null
+        // 판정 못 한 슬롯(TRIP-537) — 위반은 아니지만 **통과도 아니다**. 상대가 poiId 로만 지시하므로
+        // 같은 장소가 여러 날 있으면 양쪽에 붙는다: 덜 붙여 거짓 통과를 내는 것보다 낫다(INV-4).
+        val unverifiedPoiIds = verdict.unverifiedPoiIds()
         // 편집은 전체 교체라 클라이언트가 안 보내는 파생값(추천 근거)은 여기서 이어받지 않으면 사라진다.
         // 장소를 30분 옮겼다고 "왜 이 장소를 골랐는지"가 달라지지는 않으므로 (날짜, poiId) 로 맞춰 옮긴다.
         val reasonBySlot = current.days.flatMap { d -> d.slots.map { (d.date to it.sourcePoiId) to it.placementReason } }.toMap()
@@ -226,16 +240,23 @@ class EditItineraryService(
                     val hit = violations.filter { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
                     val fixedUp = repaired?.get(dayIdx)?.slots?.get(slotIdx) // 순서 동일은 attemptRepair 가 보장
                     val leg = Triple(d.date, d.slots.getOrNull(slotIdx - 1)?.poiId, s.poiId)
+                    val unverified = s.poiId.toString() in unverifiedPoiIds
                     VisitSlot.of(
                         s.poiId, null, slotIdx, fixedUp?.startAt ?: s.startAt, fixedUp?.endAt ?: s.endAt, s.isFixed,
-                        hasViolation = if (prior != null) prior.flagOf(d.date, s.poiId) else hit.isNotEmpty(),
+                        // 실 위반이 있으면 그 문구가 이긴다 — 미판정은 "못 봤다"이고 위반은 "틀렸다"라, 둘이 겹치면 후자가 쓸모 있다.
+                        hasViolation = if (prior != null) prior.flagOf(d.date, s.poiId) else hit.isNotEmpty() || unverified,
                         endsNextDay = s.endsNextDay,
                         // 안 바뀐 쌍은 저장된 값(생성 때의 수단 표기·첫 구간 앵커 거리)을 잇고, 비었거나 바뀐 쌍만 수리 응답 값이다.
                         // 그날 첫 구간이 바뀌면 수리 요청에 실은 앵커로 상대가 채운다 — 앵커가 없는 날만 null 이다.
                         distanceRange = distanceByLeg[leg] ?: fixedUp?.distanceRange,
                         placementReason = reasonBySlot[d.date to s.poiId],
                         // 저장 후에도 "무엇이 왜 문제인지"가 남아야 한다(BR-U3-13 지속 가시화).
-                        violationReason = if (prior != null) prior.reasonOf(d.date, s.poiId, s.startAt, s.endAt) else ViolationText.reasonOf(hit),
+                        violationReason = when {
+                            prior != null -> prior.reasonOf(d.date, s.poiId, s.startAt, s.endAt)
+                            hit.isNotEmpty() -> ViolationText.reasonOf(hit)
+                            unverified -> UNVERIFIED_REASON
+                            else -> null
+                        },
                     )
                 },
             )

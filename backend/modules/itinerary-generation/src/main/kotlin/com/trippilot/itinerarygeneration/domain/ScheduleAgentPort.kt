@@ -9,13 +9,13 @@ import java.util.UUID
  * 일정 생성 지능(AI 서비스) 경계 포트 — 포워드 계약(BE-1). 어댑터(BE-2)가 HTTP로 구현하고
  * camelCase↔snake_case 매핑을 소유한다. 이 포트·DTO는 프레임워크-free(R2 순수).
  * - generate: 굵은 경계 — 한 호출로 검증된 일정(솔버 검증 시각·순서, INV-2)
- * - validate: 편집 재검증 — HC1-4 위반 목록(변경 차단 아님)
+ * - validate: 편집 재검증 — HC1-4 위반 + **판정 못 한 슬롯**(변경 차단 아님, [ValidationOutcome])
  * - repair:   Plan-B 재정렬 — 시각·순서만 최소 조정(POI 불변)
  * 정본: backend/docs/design/ai-backend-경계-계약-초안.md · ai agent-io-contracts.md(1.2).
  */
 interface ScheduleAgentPort {
     fun generate(input: ScheduleAgentInput): ScheduleAgentOutput
-    fun validate(solution: ScheduleAgentOutput): List<Violation>
+    fun validate(solution: ScheduleAgentOutput): ValidationOutcome
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
 
     /**
@@ -424,6 +424,32 @@ data class Violation(
 )
 
 /**
+ * HC 판정에서 **제외된** 슬롯 1건(상대 TRIP-537) — 위반이 아니라 **"판정 못 함"** 이다.
+ *
+ * HC1(영업시간)·HC2(이동)는 POI 정본을 못 찾으면 그 슬롯을 건너뛴다("정보 없음은 막지 않는다").
+ * 그 스킵이 응답에 흔적을 남기지 않던 동안 `violations: []` 가 "전부 통과"로 읽혔고, 그래서 상대가
+ * 이 목록을 열었다. **위반과 섞지 않는다** — 섞으면 "무엇이 틀렸나"와 "무엇을 못 봤나"가 한 칸이 된다.
+ *
+ * [poiId] 를 문자열로 받는 이유: 상대 계약이 `poi_id: str` 이고, 파싱 실패를 드롭으로 처리하면
+ * 그 순간 **침묵 통과가 되돌아온다**(이 타입이 막으려는 바로 그것). 비교는 `sourcePoiId.toString()` 으로 한다.
+ */
+data class UnverifiedSlot(
+    val poiId: String,
+    /** 닫힌 집합 — `NOT_REGISTERED`(정본 미등록·비ACTIVE) · `UNMAPPABLE`([detail] 이 원인 필드명). */
+    val reasonCode: String,
+    val detail: String = "",
+)
+
+/**
+ * 재검증 결과 — **위반 목록만으로는 통과를 말할 수 없다**(상대 계약: 위반 0 + [unverified] 비어 있음 = 진짜 통과).
+ * 둘을 한 타입에 묶는 이유가 그것이다 — 따로 돌려주면 호출측이 한쪽만 보고 통과라 적는 길이 다시 열린다.
+ */
+data class ValidationOutcome(
+    val violations: List<Violation> = emptyList(),
+    val unverified: List<UnverifiedSlot> = emptyList(),
+)
+
+/**
  * 수리 요청에 싣는 여행 컨텍스트 — generate 와 **같은 출처**의 일자별 앵커와 취향 이동수단(`transport_modes`).
  * 빈 값이면 상대는 종전 동작(첫 구간 null·대중교통)이다.
  */
@@ -438,7 +464,16 @@ data class RepairContext(val anchors: List<DayAnchor>, val transportModes: List<
  * [unrepairable] = 상대가 `repaired=null`(수리 불가, IO-7)을 답했다. 이때 [repaired] 는 보낸 원본이라
  * "고칠 것 없이 통과"와 구별할 수단이 이 플래그뿐이다 — 편집이 수리값을 검증된 시각으로 쓰기 때문에 필요하다.
  */
-data class RepairResult(val repaired: ScheduleAgentOutput, val changes: List<String>, val unrepairable: Boolean = false)
+data class RepairResult(
+    val repaired: ScheduleAgentOutput,
+    val changes: List<String>,
+    val unrepairable: Boolean = false,
+    /**
+     * 수리 결과에서도 **판정 못 한 슬롯**은 그대로다(상대 계약: validate 와 같은 의미). 수리를 썼다고
+     * 해서 그 슬롯이 검증된 것은 아니라, 편집이 수리값을 "검증된 시각"으로 쓰는 경로가 이 목록을 봐야 한다.
+     */
+    val unverified: List<UnverifiedSlot> = emptyList(),
+)
 
 /**
  * 슬롯 후보 요청. [excludePoiIds] 는 **백엔드가 현재 일정에서 유도**한다 — 클라이언트가 보내는 값을 믿으면

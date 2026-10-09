@@ -190,11 +190,16 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
     fun `검증 왕복 — 생성 결과를 그대로 되돌려 보낸다`() {
         val generated = agent.generate(input(listOf(today)))
 
-        val violations = agent.validate(generated)
+        val outcome = agent.validate(generated)
 
         // 위반이 있든 없든 **200 으로 목록**이 와야 한다(IO-7) — 예외면 경계가 깨진 것이다.
-        println("[LIVE-AI] validate → violations=${violations.size} ${violations.take(3).map { it.type }}")
-        assertThat(violations).isNotNull()
+        // 미판정 슬롯(TRIP-537)도 함께 찍는다 — 위반 0 을 통과로 읽지 않는 근거가 실물에서 보여야 한다.
+        println(
+            "[LIVE-AI] validate → violations=${outcome.violations.size} ${outcome.violations.take(3).map { it.type }}" +
+                " 미판정=${outcome.unverified.size} ${outcome.unverified.take(3).map { it.reasonCode }}",
+        )
+        assertThat(outcome.violations).isNotNull()
+        assertThat(outcome.unverified).isNotNull()
     }
 
     /**
@@ -286,7 +291,7 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `수리 왕복 — 수리 불가는 오류가 아니라 원본 반환이다`() {
         val generated = agent.generate(input(listOf(today)))
-        val violations = agent.validate(generated)
+        val violations = agent.validate(generated).violations
 
         val repaired = agent.repair(generated, violations)
 

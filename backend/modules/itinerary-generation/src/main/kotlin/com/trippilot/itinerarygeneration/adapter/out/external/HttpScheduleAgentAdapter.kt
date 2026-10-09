@@ -19,6 +19,7 @@ import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.placedata.api.CandidatePoolPort
+import com.trippilot.itinerarygeneration.domain.ValidationOutcome
 import com.trippilot.itinerarygeneration.domain.Violation
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Primary
@@ -91,16 +92,17 @@ class HttpScheduleAgentAdapter(
         AiRequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs)
 
     /**
-     * 편집 재검증(HC1-4). 위반은 **정상 응답 200**이고 빈 목록 = 위반 없음이다(IO-7).
+     * 편집 재검증(HC1-4). 위반은 **정상 응답 200**이다(IO-7). 다만 **빈 목록 = 위반 없음이 아니다** —
+     * 상대 계약은 "위반 0 + `unverified_slots` 비어 있음"을 통과로 정한다. 그래서 둘을 함께 올린다.
      * 산출물 전체를 되돌려 보낸다 — 슬롯만 보내면 상대가 날짜 맥락을 잃어 위치 인덱스를 계산할 수 없다.
      */
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> =
+    override fun validate(solution: ScheduleAgentOutput): ValidationOutcome =
         post(
             VALIDATE_PATH,
             AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS)),
             AiValidateResponse::class.java,
             scheduleAgentBoundedRestClient,
-        ).violations.map { it.toDomain() }
+        ).let { res -> ValidationOutcome(res.violations.map { it.toDomain() }, res.unverifiedSlots.mapNotNull { it.toDomain() }) }
 
     /**
      * 추천 근거 조회(TRIP-511). 편집 경로와 같은 **짧게 끊는 클라이언트**를 쓴다 —
@@ -160,9 +162,12 @@ class HttpScheduleAgentAdapter(
             AiRepairResponse::class.java,
             scheduleAgentBoundedRestClient,
         )
-        val repaired = response.repaired ?: return RepairResult(solution, emptyList(), unrepairable = true)
+        // 수리 불가에도 "무엇을 못 봤나"는 실어 올린다 — 여기서 버리면 종전 validate 로 내려간 뒤에도
+        // 그 사실이 사라져, 판정 못 한 슬롯이 다시 조용히 통과한다.
+        val unverified = response.unverifiedSlots.mapNotNull { it.toDomain() }
+        val repaired = response.repaired ?: return RepairResult(solution, emptyList(), unrepairable = true, unverified = unverified)
         return try {
-            RepairResult(repaired.toDomain(clock.instant()), response.changes)
+            RepairResult(repaired.toDomain(clock.instant()), response.changes, unverified = unverified)
         } catch (e: IllegalArgumentException) {
             throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 수리 응답 스키마 불일치: ${e.message}", cause = e)
         }
