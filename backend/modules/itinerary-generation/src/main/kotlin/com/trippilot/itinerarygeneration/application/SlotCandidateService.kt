@@ -38,6 +38,16 @@ data class RequestSlotCandidates(
     val concept: String?,
     /** 교체 사유(FE 카탈로그 코드). 사유 없는 흐름은 null — 번역·검증은 경계 어댑터 몫이다. */
     val reason: String?,
+    /**
+     * 같이 고르기(순차 채우기)인가 — **탐색 중심을 어디로 둘지만 가른다**(TRIP-1252).
+     *
+     * 두 경로가 같은 경계를 쓰지만(BR-U3-23) 맥락이 다르다. 완전 AI '다른 후보'는 "이 자리 대체"라
+     * 교체 대상이 중심이고, 같이 고르기는 **방금 고른 곳에서 다음 발걸음**이라 직전 슬롯이 중심이다.
+     *
+     * **직전 POI 를 클라가 보내지 않는다** — 경로만 선언받고 좌표 원천은 서버가 일정에서 유도한다
+     * (제외 목록을 서버가 만드는 것과 같은 이유: 클라가 준 식별자를 믿으면 그쪽 누락이 그대로 샌다).
+     */
+    val coPick: Boolean = false,
 )
 
 /**
@@ -95,9 +105,23 @@ class SlotCandidateService(
         }
         val index = matches.single().index
 
-        // 탐색 중심 = 교체 대상 장소의 좌표. 정본에 없으면(하드 삭제) 좌표를 지어내지 않고 실패시킨다.
-        val center = poiSurfaces.findSurfaces(listOf(targetPoiId))[targetPoiId]
-            ?: throw ResourceNotFound("장소 좌표를 찾을 수 없습니다.")
+        // 탐색 중심 — 기본은 교체 대상 장소다. 같이 고르기만 **직전 슬롯**으로 옮긴다(TRIP-1252).
+        //
+        // 같이 고르기는 선택할 때마다 일정에 저장하고 다음 칸으로 전진하므로, 이 시점의
+        // `slots[index - 1]` 은 **사용자가 방금 고른 그 장소**다(AI 원배치가 아니다). 그걸 중심으로
+        // 쓰지 않으면 칸을 고를수록 동선이 도시 전체로 튄다 — 경산 당일치기 6칸에서 남서↔북동을
+        // 오가는 것으로 재현됐다(2026-10-05). 후보 거리 문구도 같은 중심에서 나오므로 함께 고쳐진다.
+        //
+        // 시간대·카테고리 다양성은 여기서 보정하지 않는다 — 상대 랭킹의 몫이다(결정 1 단서).
+        val previousPoiId = if (request.coPick) day.slots.getOrNull(index - 1)?.sourcePoiId else null
+        val surfaces = poiSurfaces.findSurfaces(listOfNotNull(previousPoiId, targetPoiId))
+        // 정본에 없으면(하드 삭제) 좌표를 지어내지 않는다. 다만 **직전** 슬롯이 사라진 것은 이 요청의
+        // 잘못이 아니라, 교체 대상으로 물러서고 그 사실을 로그로 남긴다(조용히 틀리지 않게).
+        val center = previousPoiId?.let { prev ->
+            surfaces[prev] ?: null.also {
+                log.warn("직전 슬롯 장소가 정본에 없어 교체 대상을 중심으로 씁니다. tripId={} previousPoiId={}", tripId, prev)
+            }
+        } ?: surfaces[targetPoiId] ?: throw ResourceNotFound("장소 좌표를 찾을 수 없습니다.")
 
         // 이미 일정에 있는 장소는 제외한다(BR-U3-24). **클라이언트가 아니라 서버가 유도한다** —
         // 클라가 보내는 목록을 믿으면 누락분이 그대로 재추천된다.
