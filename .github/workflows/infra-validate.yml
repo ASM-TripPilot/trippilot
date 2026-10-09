@@ -1,0 +1,100 @@
+name: Infra / validate (offline)
+
+# 인프라·배포 변경의 **PR 게이트**. 자격(AWS)이 하나도 필요 없는 검증만 모았다 —
+# 그래서 PR 에서 돌 수 있고, PR 에서 돌아야 한다.
+#
+# ## 왜 생겼나 (2026-10-05 발견, #956·#957 검수 중)
+#
+# 종전 순서는 `머지 → 배포 실행 → validate 잡이 처음 검증` 이었다. 깨진 차트·Terraform 이
+# develop 에 먼저 들어가고 **다음 사람의 배포에서 터진다** — 2026-10-03 에 `terraform fmt`
+# 로 정확히 그 일이 났다(#887, 배포가 validate 에서 죽었다).
+#
+# 그리고 `deploy/**` 만 바꾼 PR 의 초록은 **불완전**했다. `backend-ci.yml` 이 그 경로를 트리거에
+# 두지만 거기서 도는 것은 `./gradlew build` 라, helm lint 도 차트 테스트도 돌지 않았다.
+#
+# ⚠️ **그래도 `backend-ci.yml` 에서 `deploy/**` 를 빼지 않는다.** 그 경로가 거기 있는 것은
+# 이유가 있다 — `AppleClientIdWiringTest` 가 **env 가 앱까지 도달하는 통로**를 compose·
+# `.env.example`·`deploy/**` 에서 읽어 검사한다(TRIP-858). 실측으로 `APPLE_CLIENT_ID` 가
+# 그 통로 어디에도 없어 애플 로그인이 501 이던 상태가 전 CI 초록으로 통과한 적이 있다.
+# 즉 저쪽 초록은 **무관한 것이 아니라 일부만 덮는 것**이고, 이 워크플로가 나머지를 덮는다.
+#
+# ## 잡을 복제하지 않는다
+#
+# `aws-deploy.yml` 이 이 파일을 `workflow_call` 로 **재사용**한다. 복제하면 두 사본이
+# 갈라지고, 이 리포는 그 함정을 이미 겪었다(릴리스 때 스케줄 사본 전수 대조 규약).
+# 따라서 검증 내용을 고칠 곳은 **여기 한 곳뿐**이다.
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - 'deploy/**'
+      - '.github/workflows/aws-deploy.yml'
+      - '.github/workflows/infra-validate.yml'
+  workflow_call:
+    inputs:
+      verify_shutdown:
+        description: 백엔드 graceful shutdown 설정 테스트까지 돌린다(실 배포 전에만 의미가 있다)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+  # `aws-deploy.yml` 과 **같은 값이어야 한다** — 다르면 PR 초록이 배포에서 쓰는 버전을
+  # 검증하지 않은 것이 된다. 올릴 때 두 파일을 함께 고친다(이 줄이 그 알림이다).
+  TF_VERSION: '1.13.5'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: azure/setup-helm@v4.3.1
+        with:
+          version: v3.19.0
+      - name: Validate deployment contracts and Helm manifests
+        run: |
+          python -m pip install -r infra/requirements-test.txt
+          python -m coverage run --rcfile=infra/.coveragerc -m unittest discover -s infra/tests -v
+          python -m coverage run --rcfile=infra/.coveragerc --append -m unittest discover -s deploy/eks/tests -v
+          python -m coverage report --rcfile=infra/.coveragerc
+          python -m unittest discover -s infra/bootstrap/tests -v
+          python -m unittest discover -s deploy/eks/chart/tests -v
+          for environment in dev prd; do
+            helm lint --strict deploy/eks/chart -f "deploy/eks/chart/values-$environment.yaml" \
+              --set images.backend.repository=example/backend,images.backend.tag=sha123 \
+              --set images.ai.repository=example/ai,images.ai.tag=sha123 \
+              --set config.databaseHost=database.example.internal,config.redisHost=redis.example.internal \
+              --set gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc \
+              --set gateway.hostname=api.example.com
+          done
+      # PR 에서는 돌리지 않는다 — 코틀린 테스트이고 `backend-ci.yml` 이 백엔드 변경에서 이미 본다.
+      # 실 배포 직전에만 켠다(`aws-deploy.yml` 이 apply + 앱 배포일 때 true 를 넘긴다).
+      - uses: actions/setup-java@v4
+        if: inputs.verify_shutdown
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Verify backend shutdown configuration
+        if: inputs.verify_shutdown
+        working-directory: backend
+        run: ./gradlew :app:test --tests 'com.trippilot.app.config.AsyncConfigTest' --no-daemon
+      - name: Validate Terraform offline
+        working-directory: infra/terraform/stack
+        run: |
+          terraform fmt -check -recursive ..
+          terraform init -backend=false -lockfile=readonly
+          terraform validate
+          terraform test

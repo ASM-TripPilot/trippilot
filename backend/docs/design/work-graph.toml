@@ -3152,11 +3152,12 @@ Sentry 업로드 끔·사이트맵 끔). 번들 ID `com.trippilot.travel`, 애�
 id = "DEV-DATA-PROTECTION"
 ticket = ""
 title = "dev 가 삭제 보호·최종 스냅숏 없이 돌던 것 — 보호를 환경 축에서 분리"
-status = "todo"
+status = "done"
 migration = false
 touches = ["infra/terraform"]
 note = """
-2026-10-04, PR #956(머지·apply 대기). 삭제 보호·최종 스냅숏·백업 보존이 `local.production`
+2026-10-04, PR #956 머지 · **2026-10-09 적용 확인**(실 RDS: `삭제보호 True · 백업 14일 ·
+보류 변경 없음`, 클러스터 삭제보호 True). 삭제 보호·최종 스냅숏·백업 보존이 `local.production`
 하나에 묶여 있었다. dev 가 "꼬이면 날려도 되는 환경"인 동안에는 **그것이 옳은 설정**이었다 —
 [[STORE-LAUNCH]] 가 그 전제를 깬다.
 
@@ -3200,11 +3201,12 @@ plan 한다(증거: 테스트 `container_logs_enabled=true` vs `dev.tfvars` fals
 id = "DEV-HA-REPLICAS"
 ticket = ""
 title = "노드 드레인에 유일한 파드가 빠지던 것 — dev 복제본 2 + PDB"
-status = "todo"
+status = "done"
 migration = false
 touches = ["deploy/eks/chart"]
 note = """
-2026-10-04, PR #957(머지·배포 대기).
+2026-10-04, PR #957 머지 · **2026-10-09 배포 확인**(파드 backend 2 · ai 2 · gateway 2 ·
+embedding 1, PDB 3개 `minAvailable=1` 허용축출 1 — 차트 테스트에 넣은 불변식이 운영에서 성립).
 
 **롤아웃 때문이 아니다 — 처음에 그렇게 진단했고 틀렸다.** backend·ai·gateway 전부
 `maxUnavailable: 0, maxSurge: 1` 이라 replicas 1 에서도 새 파드가 Ready 된 뒤 구 파드를 뺀다.
@@ -3310,7 +3312,7 @@ note = """
 id = "INFRA-PR-GATE"
 ticket = ""
 title = "인프라·배포 변경이 PR 에서 검증되지 않는다 — 초록이 무관한 것을 증명한다"
-status = "todo"
+status = "done"
 migration = false
 touches = [".github/workflows"]
 note = """
@@ -3330,7 +3332,7 @@ note = """
 차트·Terraform 이 develop 에 먼저 들어가고 **다음 사람의 배포에서 터진다.** 2026-10-03 에
 `terraform fmt` 로 정확히 그 일이 났다(#887 — 배포가 validate 에서 죽었다).
 
-**처방(미착수).** `aws-deploy.yml` 의 validate 잡은 **자격이 필요 없다**(전부 오프라인):
+**처방 — 2026-10-09 착수 완료.** `aws-deploy.yml` 의 validate 잡은 **자격이 필요 없다**(전부 오프라인):
 `infra/tests` · `deploy/eks/tests` · `infra/bootstrap/tests` · `deploy/eks/chart/tests` 네 묶음 +
 `helm lint --strict`(dev·prd) + `terraform fmt -check -recursive ..` · `init -backend=false
 -lockfile=readonly` · `validate` · `test`. 그걸 그대로 떼어 `pull_request` 트리거
@@ -3340,6 +3342,24 @@ note = """
 
 #956·#957 은 이 노드를 기다리지 않고 머지했다 — 대신 validate 잡의 **전 항목을 로컬에서
 명령 그대로** 돌려 통과를 확인했다(두 브랜치 각각). 그 증거는 각 PR 본문에 있다.
+
+**한 것(2026-10-09).** 처방 그대로 — validate 잡을 `infra-validate.yml` 로 **떼어내고**
+`workflow_call` + `pull_request`(paths: `infra/**`·`deploy/**`·두 워크플로) 두 트리거를 달았다.
+`aws-deploy.yml` 의 validate 는 48줄에서 **재사용 호출 5줄**로 줄었다 — 복제본이 없으니 갈라질
+자리도 없다. 배포 전에만 의미가 있는 코틀린 셧다운 테스트는 `verify_shutdown` 입력으로 분리해
+PR 에서는 안 돈다(`backend-ci` 가 백엔드 변경에서 이미 본다).
+
+**`backend-ci.yml` 에서 `deploy/**` 를 빼지 않았다 — 처음에 빼려다 멈췄다.** 그 경로가 거기
+있는 것은 이유가 있다: `AppleClientIdWiringTest` 가 **env 가 앱까지 도달하는 통로**를
+compose·`.env.example`·`deploy/**` 에서 읽어 검사한다(TRIP-858). 실측으로 `APPLE_CLIENT_ID` 가
+그 통로 어디에도 없어 애플 로그인이 501 이던 상태가 전 CI 초록으로 통과한 적이 있다. 즉 저쪽
+초록은 이 노드가 적어 둔 "**무관한 것**"이 아니라 "**일부만 덮는 것**"이었다 — 위 1·2 중 2번의
+진단을 그만큼 정정한다. 뺐으면 그 사고 종류를 되살렸다.
+
+검증: CI 명령 그대로 로컬 실행 — 파이썬 네 묶음 79건(20·35·11·13) 전부 OK · `helm lint
+--strict` dev·prd 통과 · `terraform fmt -check` · `init -backend=false -lockfile=readonly` ·
+`validate` · `test`(4 passed). 두 워크플로 YAML 파싱 확인. 떼어낸 명령 줄은 원본과 **전수 동일**
+(diff 공집합) — 복제 과정에서 어긋난 것이 없다.
 """
 
 [[nodes]]
