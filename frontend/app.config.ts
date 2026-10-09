@@ -58,9 +58,9 @@ const config: ExpoConfig = {
         })),
         ...['CrashData', 'PerformanceData', 'OtherDiagnosticData'].map(
           (type) => ({
-            // Sentry(sendDefaultPii: false) — 계정에 연결하지 않는다.
+            // Sentry. sendDefaultPii 는 꺼 뒀지만 ASC App Privacy 설문이 진단을 "사용자에게 연결됨"으로 답해 둬서 같게 둔다.
             NSPrivacyCollectedDataType: `NSPrivacyCollectedDataType${type}`,
-            NSPrivacyCollectedDataTypeLinked: false,
+            NSPrivacyCollectedDataTypeLinked: true,
             NSPrivacyCollectedDataTypeTracking: false,
             NSPrivacyCollectedDataTypePurposes: [
               'NSPrivacyCollectedDataTypePurposeAnalytics',
