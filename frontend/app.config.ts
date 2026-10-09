@@ -36,9 +36,38 @@ const config: ExpoConfig = {
     config: {
       usesNonExemptEncryption: false,
     },
-    // TRIP-936 — required-reason API 선언(ITMS-91053). 수집 데이터 유형은 사람 판단이라 비워 둔다.
+    // TRIP-936 — required-reason API 선언(ITMS-91053). 수집 데이터 유형(NSPrivacyCollectedDataTypes)은 코드에서
+    // 추정한 값이다 — App Store Connect 의 App Privacy 답변과 항목이 같아야 하므로 둘 중 하나를 바꾸면 다른 쪽도 맞춘다.
     privacyManifests: {
       NSPrivacyTracking: false,
+      NSPrivacyCollectedDataTypes: [
+        ...[
+          'EmailAddress', // 소셜 로그인 계정 이메일
+          'Name', // 닉네임
+          'UserID', // 계정 식별자
+          'DeviceID', // 설치 ID · 푸시 토큰
+          'PreciseLocation', // 주변 추천 · 방문 기록(동의 시) 좌표
+          'OtherUserContent', // 일정 · 메모 · 저장한 장소
+        ].map((type) => ({
+          NSPrivacyCollectedDataType: `NSPrivacyCollectedDataType${type}`,
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: [
+            'NSPrivacyCollectedDataTypePurposeAppFunctionality',
+          ],
+        })),
+        ...['CrashData', 'PerformanceData', 'OtherDiagnosticData'].map(
+          (type) => ({
+            // Sentry(sendDefaultPii: false) — 계정에 연결하지 않는다.
+            NSPrivacyCollectedDataType: `NSPrivacyCollectedDataType${type}`,
+            NSPrivacyCollectedDataTypeLinked: false,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: [
+              'NSPrivacyCollectedDataTypePurposeAnalytics',
+            ],
+          })
+        ),
+      ],
       NSPrivacyAccessedAPITypes: [
         {
           NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryUserDefaults',
