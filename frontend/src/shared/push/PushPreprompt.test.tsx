@@ -8,7 +8,7 @@ import { PushPreprompt } from './PushPreprompt';
  * TRIP-1108 · c08-push 푸시 알림 사전 안내 카드(Figma 4774:2960) — **화면(순수 뷰)**.
  *
  * 무엇을 보장하나:
- *  - 벨 히어로 · 제목 · 목적 · 보조 문구와 `계속`/`나중에 하기` 두 버튼을 그린다(문구는 Figma 원문, 2줄 개행 포함).
+ *  - 벨 히어로 · 제목 · 목적 · 보조 문구와 `계속` 버튼 하나를 그린다(건너뛰기 없음 — 5.1.1(iv))(문구는 Figma 원문, 2줄 개행 포함).
  *  - 권한 창 앞 안내라 어디에도 "허용"을 쓰지 않는다(TRIP-935 R8 · 심사 5.1.1(iv)).
  *  - 버튼은 콜백만 올려보낸다 — OS 권한 창·토큰 등록은 호출자(페이지) 몫이다.
  *  - 바로 앞 화면인 위치 카드와 하단 바·버튼·히어로 틀이 같다(R5 선례 복제).
@@ -81,9 +81,9 @@ function classOf(testID: string): string {
   return String(screen.getByTestId(testID).props.className ?? '');
 }
 
-function renderCard(onProceed = jest.fn(), onDefer = jest.fn()) {
-  render(<PushPreprompt onProceed={onProceed} onDefer={onDefer} />);
-  return { onProceed, onDefer };
+function renderCard(onProceed = jest.fn()) {
+  render(<PushPreprompt onProceed={onProceed} />);
+  return { onProceed };
 }
 
 describe('🔴 TRIP-1108 AC-2 · 카드 표면 — 히어로·제목·목적·보조 문구', () => {
@@ -106,38 +106,27 @@ describe('🔴 TRIP-1108 AC-2 · 카드 표면 — 히어로·제목·목적·�
 });
 
 describe('🔴 TRIP-1108 AC-10 · 버튼 문구 — "허용"을 쓰지 않는다(R8)', () => {
-  it('P2 주 버튼은 정확히 "계속", 보류 버튼은 "나중에 하기"이고, 카드 어디에도 "허용"이 없다', () => {
+  it('P2 주 버튼은 정확히 "계속"이고 보류 버튼은 없으며, 카드 어디에도 "허용"이 없다', () => {
     renderCard();
 
     // toHaveTextContent(문자열) = 완전 일치(공백 정규화 후)
     expect(screen.getByTestId('onboarding-push-allow')).toHaveTextContent(
       '계속'
     );
-    expect(screen.getByTestId('onboarding-push-later')).toHaveTextContent(
-      '나중에 하기'
-    );
+    expect(screen.queryByTestId('onboarding-push-later')).toBeNull();
+    expect(screen.queryByText(/나중에/)).toBeNull();
     // 긍정 앵커(위) + 부정 — 카드가 그려진 상태에서 "허용" 글자 0건.
     expect(screen.queryAllByText(/허용/)).toHaveLength(0);
   });
 });
 
 describe('🔴 TRIP-1108 · 콜백만 올려보낸다', () => {
-  it('P3 "계속"을 누르면 onProceed 1회, onDefer 0회', () => {
-    const { onProceed, onDefer } = renderCard();
+  it('P3 "계속"을 누르면 onProceed 1회', () => {
+    const { onProceed } = renderCard();
 
     fireEvent.press(screen.getByTestId('onboarding-push-allow'));
 
     expect(onProceed).toHaveBeenCalledTimes(1);
-    expect(onDefer).toHaveBeenCalledTimes(0);
-  });
-
-  it('P4 "나중에 하기"를 누르면 onDefer 1회, onProceed 0회', () => {
-    const { onProceed, onDefer } = renderCard();
-
-    fireEvent.press(screen.getByTestId('onboarding-push-later'));
-
-    expect(onDefer).toHaveBeenCalledTimes(1);
-    expect(onProceed).toHaveBeenCalledTimes(0);
   });
 
   it('P6 카드 모듈은 OS 알림 API·권한 루틴을 싣지 않는다(파일 머리 지뢰 목 아래에서 그려진다)', () => {
@@ -148,18 +137,13 @@ describe('🔴 TRIP-1108 · 콜백만 올려보낸다', () => {
 });
 
 describe('🔴 TRIP-1108 R5 · 바로 앞 위치 카드와 틀이 같다', () => {
-  it('P5 하단 바·두 버튼·히어로 틀의 className 이 위치 카드 default 와 글자까지 같다', () => {
+  it('P5 하단 바·주 버튼·히어로 틀의 className 이 위치 카드 default 와 글자까지 같다', () => {
     // 준비 — 기준(위치 카드)을 먼저 그려 문자열로 떠 둔다.
     const location = render(
-      <LocationPreprompt
-        purposeContext="x"
-        onProceed={jest.fn()}
-        onDefer={jest.fn()}
-      />
+      <LocationPreprompt purposeContext="x" onProceed={jest.fn()} />
     );
     const expected = {
       allow: classOf('onboarding-location-allow'),
-      later: classOf('onboarding-location-later'),
       footer: parentClassOf('onboarding-location-allow'),
       hero: classOf('onboarding-location-hero'),
     };
@@ -173,7 +157,6 @@ describe('🔴 TRIP-1108 R5 · 바로 앞 위치 카드와 틀이 같다', () =>
 
     // 단언 — 문자열끼리 비교(노드 객체를 expect 에 넣지 않는다)
     expect(classOf('onboarding-push-allow')).toBe(expected.allow);
-    expect(classOf('onboarding-push-later')).toBe(expected.later);
     expect(parentClassOf('onboarding-push-allow')).toBe(expected.footer);
     expect(classOf('onboarding-push-hero')).toBe(expected.hero);
   });

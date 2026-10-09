@@ -34,13 +34,9 @@ beforeEach(() => {
 });
 
 describe('LocationPreprompt — 기본 프레임 (AC D1)', () => {
-  it('purposeContext 로 받은 목적 설명과 계속·나중에 두 액션을 렌더한다', () => {
+  it('purposeContext 로 받은 목적 설명과 계속 액션을 렌더한다', () => {
     render(
-      <LocationPreprompt
-        purposeContext={PURPOSE}
-        onProceed={jest.fn()}
-        onDefer={jest.fn()}
-      />
+      <LocationPreprompt purposeContext={PURPOSE} onProceed={jest.fn()} />
     );
 
     // 목적은 하드코딩이 아니라 **주입받은 문구**여야 발화 맥락마다 다른 설명을 쓸 수 있다.
@@ -48,7 +44,6 @@ describe('LocationPreprompt — 기본 프레임 (AC D1)', () => {
       PURPOSE
     );
     expect(screen.getByTestId('onboarding-location-allow')).toBeOnTheScreen();
-    expect(screen.getByTestId('onboarding-location-later')).toBeOnTheScreen();
   });
 });
 
@@ -56,11 +51,7 @@ describe('LocationPreprompt — 콜백만 올려보낸다 (AC D2)', () => {
   it('계속을 탭하면 onProceed 가 호출되고, 컴포넌트가 OS 권한 다이얼로그를 직접 부르지 않는다', () => {
     const onProceed = jest.fn();
     render(
-      <LocationPreprompt
-        purposeContext={PURPOSE}
-        onProceed={onProceed}
-        onDefer={jest.fn()}
-      />
+      <LocationPreprompt purposeContext={PURPOSE} onProceed={onProceed} />
     );
 
     fireEvent.press(screen.getByTestId('onboarding-location-allow'));
@@ -70,20 +61,14 @@ describe('LocationPreprompt — 콜백만 올려보낸다 (AC D2)', () => {
     expect(mockRequestForegroundPermissions).not.toHaveBeenCalled();
   });
 
-  it('나중에를 탭하면 onDefer 가 호출되고 OS 다이얼로그를 부르지 않는다', () => {
-    const onDefer = jest.fn();
+  // 5.1.1(iv): 안내 화면에는 건너뛰기가 없다 — OS 창을 피할 출구 자체를 잠근다.
+  it('default 에는 건너뛰기("나중에") 버튼이 없다', () => {
     render(
-      <LocationPreprompt
-        purposeContext={PURPOSE}
-        onProceed={jest.fn()}
-        onDefer={onDefer}
-      />
+      <LocationPreprompt purposeContext={PURPOSE} onProceed={jest.fn()} />
     );
 
-    fireEvent.press(screen.getByTestId('onboarding-location-later'));
-
-    expect(onDefer).toHaveBeenCalled();
-    expect(mockRequestForegroundPermissions).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('onboarding-location-later')).toBeNull();
+    expect(screen.queryByText(/나중에/)).toBeNull();
   });
 });
 
@@ -94,7 +79,6 @@ describe('LocationPreprompt — 권한 거부 상태 (AC D3)', () => {
         purposeContext={PURPOSE}
         state="permission-denied"
         onProceed={jest.fn()}
-        onDefer={jest.fn()}
         onOpenSettings={jest.fn()}
       />
     );
@@ -114,7 +98,6 @@ describe('LocationPreprompt — 권한 거부 상태 (AC D3)', () => {
         purposeContext={PURPOSE}
         state="permission-denied"
         onProceed={onProceed}
-        onDefer={jest.fn()}
         onOpenSettings={jest.fn()}
       />
     );
@@ -152,7 +135,6 @@ describe('🔴 TRIP-1023 #005 — 위치 프리프롬프트 머리에 뒤로 글
           purposeContext={PURPOSE}
           state={state}
           onProceed={jest.fn()}
-          onDefer={jest.fn()}
           onOpenSettings={jest.fn()}
         />
       );
@@ -231,25 +213,19 @@ describe('비주얼 구조', () => {
 
   function renderDefault() {
     render(
-      <LocationPreprompt
-        purposeContext={PURPOSE}
-        onProceed={jest.fn()}
-        onDefer={jest.fn()}
-      />
+      <LocationPreprompt purposeContext={PURPOSE} onProceed={jest.fn()} />
     );
   }
 
   describe('LocationPreprompt — 버튼 문구 (default · TRIP-935 AC-7)', () => {
-    it('주 버튼은 "계속", 보류 버튼은 "나중에 하기" 라벨을 쓴다(BR-U0-30)', () => {
+    it('주 버튼은 "계속" 라벨을 쓰고 보류 버튼은 없다(5.1.1(iv))', () => {
       renderDefault();
 
       // 완전일치 — 버튼 안 글자 전체가 정확히 "계속"(부분 포함 아님).
       expect(screen.getByTestId('onboarding-location-allow')).toHaveTextContent(
         '계속'
       );
-      expect(screen.getByTestId('onboarding-location-later')).toHaveTextContent(
-        '나중에 하기'
-      );
+      expect(screen.queryByTestId('onboarding-location-later')).toBeNull();
     });
   });
 
@@ -281,7 +257,6 @@ describe('비주얼 구조', () => {
           purposeContext={PURPOSE}
           state="permission-denied"
           onProceed={jest.fn()}
-          onDefer={jest.fn()}
           onOpenSettings={jest.fn()}
         />
       );
@@ -352,7 +327,6 @@ describe('비주얼 구조', () => {
           purposeContext={PURPOSE}
           state="default"
           onProceed={jest.fn()}
-          onDefer={jest.fn()}
           onOpenSettings={jest.fn()}
         />
       );
@@ -372,7 +346,6 @@ describe('비주얼 구조', () => {
           purposeContext={PURPOSE}
           state="default"
           onProceed={jest.fn()}
-          onDefer={jest.fn()}
           onOpenSettings={jest.fn()}
         />
       );

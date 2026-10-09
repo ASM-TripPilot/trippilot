@@ -27,7 +27,7 @@ export function LocationPage(): ReactElement {
   const [state, setState] = useState<LocationPrepromptState>('default');
 
   const goToPush = () => router.replace('/(onboarding)/push');
-  // 즉시 넘어가는 두 버튼(나중에·거부 계속)은 다음 푸시 카드의 같은 자리 버튼과 겹친다 — 연타 두 번째 탭이
+  // 즉시 넘어가는 버튼(거부 프레임 계속)은 다음 푸시 카드의 같은 자리 버튼과 겹친다 — 연타 두 번째 탭이
   // 카드를 못 본 채 건너뛰지 않게 가드로 감싼다(TRIP-1108 R6). granted 이동은 가드 창을 직접 연다 — 이미 허용된
   // 기기에선 OS 창 없이 곧장 넘어가 연타 두 번째 탭이 푸시 카드 `계속`에 떨어진다(5-b 재현).
   const goToPushGuarded = guardPress(goToPush);
@@ -70,7 +70,6 @@ export function LocationPage(): ReactElement {
       state={state}
       // 컴포넌트 계약상 default 의 "허용" 과 denied 의 "계속" 이 둘 다 onProceed 에 걸린다.
       onProceed={state === 'permission-denied' ? goToPushGuarded : handleAllow}
-      onDefer={goToPushGuarded}
       onOpenSettings={() => {
         void Linking.openSettings();
       }}

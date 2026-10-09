@@ -27,7 +27,6 @@ export interface LocationPrepromptProps {
   purposeContext: string;
   state?: LocationPrepromptState;
   onProceed: () => void;
-  onDefer: () => void;
   onOpenSettings?: () => void;
 }
 
@@ -35,7 +34,6 @@ export function LocationPreprompt({
   purposeContext,
   state = 'default',
   onProceed,
-  onDefer,
   onOpenSettings,
 }: LocationPrepromptProps): ReactElement {
   const denied = state === 'permission-denied';
@@ -124,18 +122,9 @@ export function LocationPreprompt({
                 onPress={onProceed}
                 className="h-[52px] items-center justify-center rounded-button bg-primary"
               >
-                {/* TRIP-935 R8 — BR-U0-30 문구("계속/나중에"). 권한 창 앞 안내에 "허용"을 쓰지 않는다(5.1.1(iv)). */}
+                {/* 5.1.1(iv): 권한 창 앞 안내는 건너뛸 수 없다 — "계속" 하나뿐이고 항상 OS 창으로 간다. "허용" 문구도 쓰지 않는다(TRIP-935 R8). */}
                 <Text className="font-noto-bold text-card-title font-bold text-on-primary">
                   계속
-                </Text>
-              </Pressable>
-              <Pressable
-                testID="onboarding-location-later"
-                onPress={onDefer}
-                className="h-[46px] items-center justify-center"
-              >
-                <Text className="font-noto-bold text-card-title font-bold text-ink">
-                  나중에 하기
                 </Text>
               </Pressable>
             </>
