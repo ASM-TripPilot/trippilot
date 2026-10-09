@@ -2510,7 +2510,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         state="default"
         onProceed={noop}
-        onDefer={noop}
         onOpenSettings={noop}
       />
     ),
@@ -2527,7 +2526,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         purposeContext="내 주변 숙소 탐색"
         state="permission-denied"
         onProceed={noop}
-        onDefer={noop}
         onOpenSettings={noop}
       />
     ),
@@ -2538,7 +2536,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'c',
     label: 'c08-push · 기본',
     login: null,
-    render: () => <PushPreprompt onProceed={noop} onDefer={noop} />,
+    render: () => <PushPreprompt onProceed={noop} />,
   },
   // ── e00·d1b 지역 선택 4키(TRIP-183) — 컨테이너 없이 화면에 props를 직접 넣는다 ──
   // ⚠️ 프리뷰는 정적이라 **실제 OS 권한 다이얼로그는 뜨지 않는다.** 여기서 보는 것은

@@ -16,7 +16,7 @@ import { PushPage } from './PushPage';
  * 무엇을 보장하나:
  *  - 카드에 도착한 것만으로는 권한을 조회하지도 묻지도 않는다(카드가 먼저, OS 창은 누른 뒤).
  *  - `계속` → 권한 루틴(`promptAndRegisterPush`)을 1회 부르고 **결과를 기다리지 않고** 취향 1/2 로 replace.
- *  - `나중에 하기` → 묻지 않고 취향 1/2 로 replace.
+ *  - 건너뛰기 버튼은 없다(5.1.1(iv)).
  *  - 연타해도 루틴·이동은 1회다(guardPress).
  *
  * 왜 목인가: 여기서 보는 것은 "누른 뒤 루틴을 불렀나 / 어디로 갔나"뿐이다. 루틴 안(요청 게이트·토큰 등록)은
@@ -115,16 +115,12 @@ describe('🔴 TRIP-1108 AC-3 · 계속 → 루틴 1회 + 취향 1/2', () => {
   });
 });
 
-describe('🔴 TRIP-1108 AC-4 · 나중에 하기 → 묻지 않고 취향 1/2', () => {
-  it('W4 "나중에 하기"를 누르면 루틴·요청 0회, pref1 로 replace 1회', () => {
+describe('🔴 5.1.1(iv) · 건너뛰기 출구가 없다', () => {
+  it('W4 카드에 "나중에 하기" 버튼이 없다 — 안내 뒤엔 항상 루틴(OS 창)으로 간다', () => {
     render(<PushPage />);
 
-    fireEvent.press(screen.getByTestId('onboarding-push-later'));
-
-    expect(mockPrompt).toHaveBeenCalledTimes(0);
-    expect(requestPushPermission).toHaveBeenCalledTimes(0);
-    expect(routerMock.replace).toHaveBeenCalledTimes(1);
-    expect(routerMock.replace).toHaveBeenCalledWith(PREF1_ROUTE);
+    expect(screen.getByTestId('onboarding-push-allow')).toBeOnTheScreen();
+    expect(screen.queryByTestId('onboarding-push-later')).toBeNull();
   });
 });
 
@@ -144,15 +140,5 @@ describe('🔴 TRIP-1108 AC-5 · 연타는 1회로', () => {
 
     expect(mockPrompt).toHaveBeenCalledTimes(1);
     expect(routerMock.replace).toHaveBeenCalledTimes(1);
-  });
-
-  it('W6 "나중에 하기"를 빠르게 두 번 눌러도 replace 1회(R6)', () => {
-    render(<PushPage />);
-
-    fireEvent.press(screen.getByTestId('onboarding-push-later'));
-    fireEvent.press(screen.getByTestId('onboarding-push-later'));
-
-    expect(routerMock.replace).toHaveBeenCalledTimes(1);
-    expect(mockPrompt).toHaveBeenCalledTimes(0);
   });
 });

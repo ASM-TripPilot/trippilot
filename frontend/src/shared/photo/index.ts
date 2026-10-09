@@ -48,9 +48,8 @@ export async function pickPhotoAsset(): Promise<PhotoPickResult> {
       require('expo-image-picker') as typeof import('expo-image-picker');
     const permission = await MediaLibrary.requestPermissionsAsync();
     if (!permission?.granted) return { kind: 'denied' };
-    // TRIP-1216 · "선택한 사진만"(limited)은 피커가 자산 번호를 못 주거나(no-asset-id), 줘도 앱을 껐다 켠 뒤
-    // 앨범이 그 번호를 다시 못 찾을 수 있다(보이는 사진이 선택분으로 한정). 붙이고 나서 깨지느니 먼저 막는다.
-    if (permission.accessPrivileges === 'limited') return { kind: 'limited' };
+    // 5.1.1(iii): 사진 한 장 고르는 기능에 전체 접근을 요구하지 않는다 — "선택한 사진만"(limited)이어도 피커를 연다.
+    // 자산 번호를 못 받으면 아래 no-asset-id 로 떨어진다.
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],

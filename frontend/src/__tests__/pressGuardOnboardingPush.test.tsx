@@ -19,8 +19,8 @@ import { promptAndRegisterPush } from '@/shared/push';
  * 같은 모양 — `pressGuardOnboardingPref.test.tsx`). jest 는 전환 애니메이션을 못 보므로 **두 페이지를
  * 차례로 그리고 이어 누른다** — 두 화면을 잇는 것은 모듈 하나에 든 400ms 창뿐이다.
  *
- * 같은 자리끼리 잇는다: 위치 `나중에 하기`(아래) → 푸시 `나중에 하기`(아래),
- * 위치 거부 프레임 `계속`(위) → 푸시 `계속`(위).
+ * 같은 자리끼리 잇는다: 위치 거부 프레임 `계속`(위) → 푸시 `계속`(위).
+ * (5.1.1(iv)로 두 카드의 `나중에 하기`를 없앴다 — 그 쌍은 더 이상 없다.)
  *
  * "창 밖"은 `resetPressGuard()` 로 만든다(= 400ms 이상 흐른 것과 같다).
  */
@@ -82,39 +82,6 @@ beforeEach(() => {
   });
 });
 afterEach(() => resetPressGuard());
-
-describe('🔴 TRIP-1108 AC-5b · 위치 "나중에 하기" → 창 안의 푸시 "나중에 하기"는 무시된다', () => {
-  let clock: jest.SpyInstance;
-  beforeEach(() => {
-    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
-  });
-  afterEach(() => clock.mockRestore());
-
-  it('X1 두 번째 탭은 푸시 카드를 넘기지 못하고, 창이 지난 뒤 한 번 누르면 정상으로 넘어간다', () => {
-    // 실행 ① — 위치 카드 "나중에 하기"(첫 탭)
-    const location = render(<LocationPage />);
-    fireEvent.press(screen.getByTestId('onboarding-location-later'));
-    // 앵커 — 첫 탭은 제 할 일을 했다(푸시 카드로 replace)
-    expect(routerMock.replace).toHaveBeenCalledTimes(1);
-    expect(routerMock.replace).toHaveBeenLastCalledWith(PUSH_ROUTE);
-    location.unmount();
-
-    // 실행 ② — 같은 자리에 떨어진 두 번째 탭(푸시 카드 "나중에 하기")
-    render(<PushPage />);
-    fireEvent.press(screen.getByTestId('onboarding-push-later'));
-
-    // 단언 — 사용자가 누르지 않은 넘김은 아무 일도 하지 않는다
-    expect(routerMock.replace).toHaveBeenCalledTimes(1);
-    expect(routerMock.replace).not.toHaveBeenCalledWith(PREF1_ROUTE);
-    expect(mockPrompt).toHaveBeenCalledTimes(0);
-
-    // 무회귀 — 창이 닫힌 뒤 사람이 다시 누르면 넘어간다(= 위 누름이 살아 있는 버튼에 전달됐었다)
-    resetPressGuard();
-    fireEvent.press(screen.getByTestId('onboarding-push-later'));
-    expect(routerMock.replace).toHaveBeenCalledTimes(2);
-    expect(routerMock.replace).toHaveBeenLastCalledWith(PREF1_ROUTE);
-  });
-});
 
 describe('🔴 TRIP-1108 AC-5b · 위치 거부 프레임 "계속" → 창 안의 푸시 "계속"은 무시된다', () => {
   it('X2 두 번째 탭은 푸시 권한 루틴을 부르지 못하고, 창이 지난 뒤 한 번 누르면 루틴 1회 + 취향 1/2', async () => {
