@@ -5,11 +5,13 @@ import com.trippilot.trip.application.EditTripCommand
 import com.trippilot.trip.domain.CompanionType
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripCounts
+import com.trippilot.trip.domain.TripDayWindow
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripStatus
 import jakarta.validation.constraints.NotNull
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -40,10 +42,20 @@ data class CreateTripRequest(
     val budgetTotal: Long? = null,
     val preferenceSnapshot: Map<String, Any?> = emptyMap(),
     val destinations: List<DestinationDto> = emptyList(),
+    /**
+     * 일과 창 — 하루 몇 시부터 움직이는가. 전부 생략하면 종전대로 기본 창(09:00~21:00)이다.
+     *
+     * `dayStartAt` 은 전 일자 공통이고, `firstDayStartAt`·`lastDayEndAt` 은 **그 날에만** 걸린다
+     * (비행기·KTX 도착·출발). 첫날 값이 없으면 첫날도 `dayStartAt` 을 따른다.
+     */
+    val dayStartAt: LocalTime? = null,
+    val firstDayStartAt: LocalTime? = null,
+    val lastDayEndAt: LocalTime? = null,
 ) {
     fun toCommand() = CreateTripCommand(
         title, startDate!!, endDate!!, party, companionType, budgetTotal,
         preferenceSnapshot, destinations.map { it.toDomain() },
+        TripDayWindow(dayStartAt, firstDayStartAt, lastDayEndAt),
     )
 }
 
@@ -56,9 +68,19 @@ data class EditTripRequest(
     val companionType: CompanionType? = null,
     val budgetTotal: Long? = null,
     val destinations: List<DestinationDto> = emptyList(),
+    /**
+     * 일과 창 — 하루 몇 시부터 움직이는가. 전부 생략하면 종전대로 기본 창(09:00~21:00)이다.
+     *
+     * `dayStartAt` 은 전 일자 공통이고, `firstDayStartAt`·`lastDayEndAt` 은 **그 날에만** 걸린다
+     * (비행기·KTX 도착·출발). 첫날 값이 없으면 첫날도 `dayStartAt` 을 따른다.
+     */
+    val dayStartAt: LocalTime? = null,
+    val firstDayStartAt: LocalTime? = null,
+    val lastDayEndAt: LocalTime? = null,
 ) {
     fun toCommand() = EditTripCommand(
         title, startDate!!, endDate!!, party, companionType, budgetTotal, destinations.map { it.toDomain() },
+        TripDayWindow(dayStartAt, firstDayStartAt, lastDayEndAt),
     )
 }
 

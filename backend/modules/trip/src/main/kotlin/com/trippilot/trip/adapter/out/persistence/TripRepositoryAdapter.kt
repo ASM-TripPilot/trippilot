@@ -2,6 +2,7 @@ package com.trippilot.trip.adapter.out.persistence
 
 import com.trippilot.trip.domain.CompanionType
 import com.trippilot.trip.domain.Trip
+import com.trippilot.trip.domain.TripDayWindow
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import com.trippilot.trip.domain.TripStatus
@@ -56,6 +57,8 @@ class TripRepositoryAdapter(
         party = party, companionType = companionType?.name, budgetTotal = budgetTotal,
         preferenceSnapshot = preferenceSnapshot.toMutableMap(), status = status.name,
         deletedAt = deletedAt, createdAt = createdAt, updatedAt = updatedAt, endedAt = endedAt,
+        dayStartAt = dayWindow.dayStartAt, firstDayStartAt = dayWindow.firstDayStartAt,
+        lastDayEndAt = dayWindow.lastDayEndAt,
     )
 
     private fun TripEntity.toDomain(): Trip {
@@ -65,6 +68,7 @@ class TripRepositoryAdapter(
             party = party, companionType = companionType?.let { CompanionType.valueOf(it) }, budgetTotal = budgetTotal,
             preferenceSnapshot = preferenceSnapshot, destinations = dests, status = TripStatus.valueOf(status),
             deletedAt = deletedAt, createdAt = createdAt, updatedAt = updatedAt, endedAt = endedAt,
+            dayWindow = TripDayWindow(dayStartAt, firstDayStartAt, lastDayEndAt),
         )
     }
 }

@@ -84,6 +84,9 @@ class TripPeriodFacade(
             budgetTotal = trip.budgetTotal,
             fixedVisits = fixed,
             preferenceSnapshot = trip.preferenceSnapshot,
+            dayStartAt = trip.dayWindow.dayStartAt,
+            firstDayStartAt = trip.dayWindow.firstDayStartAt,
+            lastDayEndAt = trip.dayWindow.lastDayEndAt,
         )
     }
 }

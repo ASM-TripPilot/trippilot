@@ -2143,6 +2143,27 @@ components:
         budgetTotal: { type: integer, format: int64, nullable: true }
         preferenceSnapshot: { $ref: '#/components/schemas/TripPreferenceSnapshot' }
         destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
+        dayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            하루 일과 시작 시각(전 일자 공통). 생략하면 서버 기본 09:00.
+            "9시는 이르다"는 **취향** 축이다 — 날짜별로 받지 않는다(대부분 기본값을 쓴다).
+        firstDayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            **첫날만** 다른 시작 시각(비행기·KTX 도착 후). 생략하면 첫날도 `dayStartAt` 을 따른다.
+            이게 없으면 도착 전 시간에 일정이 깔리는데 화면상으로는 정상으로 보인다 — 취향이 아니라 **사실 오류**다.
+        lastDayEndAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            **마지막날만** 다른 종료 시각(출발·귀가 전). 생략하면 기본 21:00.
+            당일치기는 첫날이자 마지막날이라 둘 다 걸리고, 그때는 시작 < 종료여야 한다(아니면 400).
 
     # 여행 생성 때 고른 취향(BR-U1-38). 서버가 **의미 있게 읽는 축**을 적는다 —
     # 해석은 `PreferenceProfiles.overriddenBy` 한 곳이고, 키 어휘는 계정 취향 필드명(camelCase)과 같다.
@@ -2174,6 +2195,28 @@ components:
         companionType: { allOf: [{ $ref: '#/components/schemas/CompanionType' }], nullable: true }
         budgetTotal: { type: integer, format: int64, nullable: true }
         destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
+        dayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            하루 일과 시작 시각(전 일자 공통). 생략하면 서버 기본 09:00.
+            "9시는 이르다"는 **취향** 축이다 — 날짜별로 받지 않는다(대부분 기본값을 쓴다).
+        firstDayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            **첫날만** 다른 시작 시각(비행기·KTX 도착 후). 생략하면 첫날도 `dayStartAt` 을 따른다.
+            이게 없으면 도착 전 시간에 일정이 깔리는데 화면상으로는 정상으로 보인다 — 취향이 아니라 **사실 오류**다.
+        lastDayEndAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            **마지막날만** 다른 종료 시각(출발·귀가 전). 생략하면 기본 21:00.
+            당일치기는 첫날이자 마지막날이라 둘 다 걸리고, 그때는 시작 < 종료여야 한다(아니면 400).
+
 
     AssignBaseRequest:
       type: object

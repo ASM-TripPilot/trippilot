@@ -1,6 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.FieldError
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
@@ -263,16 +265,42 @@ class GenerateItineraryService(
      * 블록이 자정을 넘으면(23:30+60분) 창 끝은 23:59 에 멈춘다 — TimeWindow 는 하루 안 표현이라
      * 감긴 시각(00:30)을 끝으로 적으면 end < start 가 되어 그 자체가 모순 입력이 된다.
      */
-    private fun expandedWindow(date: LocalDate, blocks: List<FixedBlock>): TimeWindow {
+    private fun expandedWindow(date: LocalDate, blocks: List<FixedBlock>, ctx: TripGenerationContext): TimeWindow {
+        val (base, baseEnd) = dayWindowOf(date, ctx)
         val onDay = blocks.filter { it.date == date && it.start != null }
-        val start = (onDay.map { it.start!! } + DEFAULT_START).min()
+        val start = (onDay.map { it.start!! } + base).min()
         val end = (
             onDay.map { b ->
                 val e = b.start!!.plusMinutes((b.dwellMin ?: 60).toLong())
                 if (e <= b.start) LocalTime.of(23, 59) else e // 자정 감김 — 하루 끝에서 멈춘다
-            } + DEFAULT_END
+            } + baseEnd
             ).max()
         return TimeWindow(date, start, end)
+    }
+
+    /**
+     * 그 날의 **기본** 창 — 사용자가 여행에 적어 둔 값이 있으면 그것, 없으면 상수(09:00~21:00).
+     *
+     * 지금까지 창이 전 일자 09:00~21:00 상수였고 말할 표면이 없었다. 두 증상이 섞여 있었다 —
+     * "매일 9시는 이르다"(취향)와 **"첫날은 비행기 도착 뒤에야 시작할 수 있다"(사실 오류)**.
+     * 뒤쪽이 더 나쁘다: 도착 전 시간에 일정이 깔려도 화면에는 정상으로 보인다.
+     *
+     * 첫날·마지막날 값은 **그 날에만** 걸린다. 없으면 그 날도 전 일자 공통값을 따른다.
+     * 당일치기는 첫날이자 마지막날이라 둘 다 걸린다(도메인이 first < last 를 검증한다).
+     */
+    private fun dayWindowOf(date: LocalDate, ctx: TripGenerationContext): Pair<LocalTime, LocalTime> {
+        val start = (if (date == ctx.startDate) ctx.firstDayStartAt else null)
+            ?: ctx.dayStartAt
+            ?: DEFAULT_START
+        val end = (if (date == ctx.endDate) ctx.lastDayEndAt else null) ?: DEFAULT_END
+        // 사용자가 적은 값끼리 모순이면(예: 하루 시작 23:00) 창이 뒤집힌다. 그대로 보내면 조립기가
+        // 그 날을 "해 없음"으로 접고 증상은 "AI 가 일정을 못 만든다"로만 보인다 — 여기서 드러낸다.
+        if (!start.isBefore(end)) {
+            throw ValidationFailed(
+                listOf(FieldError("dayStartAt", "여행 설정의 하루 시작 시각($start)이 종료($end) 이후입니다.")),
+            )
+        }
+        return start to end
     }
 
     /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
@@ -303,8 +331,10 @@ class GenerateItineraryService(
             dated = candidates.filter { it.date != null && it.start != null },
             anytime = candidates.filter { it.date == null || it.start == null },
             dates = dates,
-            dayStart = DEFAULT_START,
-            dayEnd = DEFAULT_END,
+            // 물질화도 **그 날 창**을 따른다 — 전 일자 상수를 쓰면 첫날 도착이 11시인데도
+            // ANYTIME 필수방문이 09:00 에 박힌다(창만 고치고 여기를 두면 둘이 어긋난다).
+            dayStart = dates.minOrNull()?.let { dayWindowOf(it, ctx).first } ?: DEFAULT_START,
+            dayEnd = dates.maxOrNull()?.let { dayWindowOf(it, ctx).second } ?: DEFAULT_END,
         )
         if (materialized.unplaced.isNotEmpty()) {
             log.info(
@@ -324,7 +354,7 @@ class GenerateItineraryService(
             // 결정 (c), 2026-09-27). 안 넓히면 21:00 고정 하나가 HC4(day window)를 깨 그 날 전체가
             // "해 없음" → 409 → 2차 통째 최소 폴백이 된다(QA #045 실측). 물질화된 ANYTIME 은
             // 기본 창 안에만 놓이므로 이 계산에 영향이 없다.
-            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks) },
+            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks, ctx) },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
             // 하루짜리 1차에 전부 몰면 배치 공간이 없어 HC3 가 깨질 수 있고, 양쪽에 실으면 중복 배치된다.

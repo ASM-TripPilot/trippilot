@@ -8,6 +8,7 @@ import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 
 /** trip(V2.3). preference_snapshot 은 jsonb ↔ Map(도메인 타입 매핑, 수동 직렬화 금지). */
@@ -28,6 +29,10 @@ class TripEntity(
     @Column(name = "ended_at") var endedAt: Instant? = null,
     @Column(name = "created_at") var createdAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
+    // 일과 창(V2.62) — 전부 null 이면 미설정이고 생성이 기본 창을 쓴다.
+    @Column(name = "day_start_at") var dayStartAt: LocalTime? = null,
+    @Column(name = "first_day_start_at") var firstDayStartAt: LocalTime? = null,
+    @Column(name = "last_day_end_at") var lastDayEndAt: LocalTime? = null,
 )
 
 /** trip_destination(V2.3). 다도시 목적지·박수. */

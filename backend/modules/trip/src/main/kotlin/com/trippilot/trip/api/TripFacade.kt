@@ -46,6 +46,13 @@ data class TripGenerationContext(
      * 여기서 타입을 정하면 trip 이 profile 의 축 어휘를 알아야 한다.
      */
     val preferenceSnapshot: Map<String, Any?> = emptyMap(),
+    /**
+     * 여행의 일과 창(api-safe) — 하루 몇 시부터 움직이는가. 전부 null 이면 미설정이고
+     * 생성이 기본 창(09:00~21:00)을 쓴다. `firstDayStartAt`·`lastDayEndAt` 은 **그 날에만** 걸린다.
+     */
+    val dayStartAt: LocalTime? = null,
+    val firstDayStartAt: LocalTime? = null,
+    val lastDayEndAt: LocalTime? = null,
 ) {
     /** 이름만 필요한 소비처를 위한 **파생**. 저장하지 않으므로 코드와 어긋날 수 없다. */
     val destinations: List<String> get() = destinationRefs.map { it.name }

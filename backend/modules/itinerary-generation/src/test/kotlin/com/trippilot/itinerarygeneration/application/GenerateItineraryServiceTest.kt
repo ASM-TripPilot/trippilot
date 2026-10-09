@@ -51,6 +51,7 @@ import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
+import com.trippilot.core.error.ValidationFailed
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.property.Arb
@@ -263,6 +264,9 @@ class GenerateItineraryServiceTest : StringSpec({
         scoredPools: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(),
         tripSnapshot: Map<String, Any?> = emptyMap(),
         accountPrefs: () -> PreferenceSnapshot = { prefs },
+        dayStartAt: LocalTime? = null,
+        firstDayStartAt: LocalTime? = null,
+        lastDayEndAt: LocalTime? = null,
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -271,6 +275,7 @@ class GenerateItineraryServiceTest : StringSpec({
                 if (accountId == acc) {
                     TripGenerationContext(
                         start, end, destinations, "친구", 500_000, fixedVisits, tripSnapshot,
+                        dayStartAt, firstDayStartAt, lastDayEndAt,
                     )
                 } else {
                     null
@@ -443,6 +448,54 @@ class GenerateItineraryServiceTest : StringSpec({
 
         agent.captures[0].fixedBlocks.map { it.poiId } shouldContainExactly listOf(poi)
         agent.captures[1].fixedBlocks.map { it.poiId } shouldContainExactly listOf(anytime)
+    }
+
+    // ── 여행이 정한 일과 창(실사용 피드백 2026-10-07 "일정을 무조건 9시부터 짜준다") ──────
+    // 필수 방문지를 **비운다** — 고정 블록이 있으면 창이 그쪽으로 넓어져(expandedWindow) 기본 창이
+    // 무엇이었는지 가려진다. 여기서 재는 것은 "사용자가 적은 값이 그 날의 기본 창이 되는가"다.
+
+    "하루 시작 시각을 적으면 전 일자가 그 시각에 시작한다 — 상수 09:00 이 아니라" {
+        val agent = CapturingAgent(now)
+
+        service(agent, fullPrefs, emptyList(), fixedVisits = emptyList(), dayStartAt = LocalTime.parse("11:00"))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.flatMap { it.timeWindows }.forEach { it.start shouldBe LocalTime.parse("11:00") }
+    }
+
+    "첫날 시작 시각은 그 날에만 걸린다 — 도착 전 시간에 일정이 깔리던 것" {
+        val agent = CapturingAgent(now)
+
+        service(
+            agent, fullPrefs, emptyList(), fixedVisits = emptyList(),
+            dayStartAt = LocalTime.parse("10:00"), firstDayStartAt = LocalTime.parse("14:00"),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val windows = agent.captures.flatMap { it.timeWindows }
+        windows.first { it.date == start }.start shouldBe LocalTime.parse("14:00")
+        // 첫날 값이 나머지 날로 새면 안 된다 — 그러면 "도착이 늦었으니 여행 내내 늦게 시작"이 된다.
+        windows.filter { it.date != start }.forEach { it.start shouldBe LocalTime.parse("10:00") }
+    }
+
+    "아무것도 안 적으면 종전 그대로다 — 기존 여행의 일정이 달라지지 않는다" {
+        val agent = CapturingAgent(now)
+
+        service(agent, fullPrefs, emptyList(), fixedVisits = emptyList())
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.flatMap { it.timeWindows }.forEach {
+            it.start shouldBe LocalTime.parse("09:00")
+            it.end shouldBe LocalTime.parse("21:00")
+        }
+    }
+
+    "창이 뒤집히는 값은 막는다 — 조용히 '해 없음'이 되지 않게" {
+        val agent = CapturingAgent(now)
+
+        shouldThrow<ValidationFailed> {
+            service(agent, fullPrefs, emptyList(), fixedVisits = emptyList(), dayStartAt = LocalTime.parse("23:00"))
+                .generate(acc, tripId, GenerationMode.FULLY_AI)
+        }
     }
 
     "창 밖 고정 블록이 있는 날만 일과 창이 넓어진다 — 21:00+60분이면 그 날 끝이 22:00 (TRIP-1001 결정 (c))" {
