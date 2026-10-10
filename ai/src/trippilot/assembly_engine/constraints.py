@@ -23,24 +23,36 @@ def _min_of_day(dt) -> int:
     return dt.hour * 60 + dt.minute
 
 
+def open_hours_ok(poi: Poi, start_at: datetime, end_at: datetime) -> bool:
+    """HC1 판정 1건 — 정보 없음은 통과, 있으면 그 요일 영업창 **하나에 완전 포함**이어야 한다.
+
+    `check_hc1` 의 규칙 그 자체다. 조립 밖에서 "이 핀이 영업시간에 걸리나"를 미리 물을 때도
+    (ScheduleAgent — 걸리면 409 대신 빼고 보고, TRIP-1249) 이 함수를 쓴다 — 규칙이 둘이 되면
+    에이전트가 둔 핀을 검증기가 거부하는 모순이 생긴다.
+    """
+    if not poi.open_hours:
+        return True  # 정보 없음 → 미적용
+    todays = [oh for oh in poi.open_hours if oh.day_of_week == start_at.weekday()]
+    start_m = _min_of_day(start_at)
+    end_m = start_m + int((end_at - start_at).total_seconds() // 60)
+    return any(oh.open_min <= start_m and end_m <= oh.close_min for oh in todays)
+
+
 def check_hc1(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi]) -> list[Violation]:
     """영업시간: start ≥ open ∧ end ≤ close."""
     out: list[Violation] = []
     for day in solution.days:
         for slot in day.slots:
             poi = poi_index.get(slot.poi_id)
-            if poi is None or not poi.open_hours:
-                continue  # 정보 없음 → 미적용
+            if poi is None or open_hours_ok(poi, slot.start_at, slot.end_at):
+                continue
             dow = slot.start_at.weekday()
-            todays = [oh for oh in poi.open_hours if oh.day_of_week == dow]
-            if not todays:
+            if not any(oh.day_of_week == dow for oh in poi.open_hours):
                 out.append(Violation("HC1", slot.poi_id, f"{dow}요일 휴무"))
                 continue
             start_m = _min_of_day(slot.start_at)
             end_m = start_m + int((slot.end_at - slot.start_at).total_seconds() // 60)
-            if not any(oh.open_min <= start_m and end_m <= oh.close_min for oh in todays):
-                out.append(Violation("HC1", slot.poi_id,
-                                     f"영업시간 밖: {start_m}~{end_m}"))
+            out.append(Violation("HC1", slot.poi_id, f"영업시간 밖: {start_m}~{end_m}"))
     return out
 
 

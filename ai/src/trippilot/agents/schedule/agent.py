@@ -55,6 +55,7 @@ from trippilot.agents.schedule.outcome import (
     SlotAlternative,
     failed_outcome,
 )
+from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.scorer import build_rule_score, directive_fit, near_fit
 from trippilot.poi_curation.place_fees import EMPTY as FEES_EMPTY, FeeTable
@@ -75,6 +76,7 @@ from trippilot.domain.itinerary import (
     FixedBlock,
     ItineraryProblem,
     ItinerarySolution,
+    RequiredVisit,
     TimeWindow,
 )
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
@@ -155,6 +157,8 @@ class GenerateItineraryRequest:
     principal: Principal
     seed: int
     fixed_blocks: tuple[FixedBlock, ...] = ()
+    # 시각 없는 필수 방문 (TRIP-1249) — 고정 블록과 같은 길(요청에 실려 오는 값), 시각만 없다.
+    required_visits: tuple[RequiredVisit, ...] = ()
     excluded_poi_ids: frozenset[PoiId] = frozenset()
     # 설명 생략 요청 (TRIP-479) — 백엔드가 설명을 별도 경계로 병렬 조회할 때 false.
     include_explanations: bool = True
@@ -298,9 +302,9 @@ class ScheduleAgent:
         t0, trace_id, now = task.started_ms, task.trace_id, task.now
         steps: list[Degradation] = list(task.prior_degradations)
 
-        # ⓪ 풀 밖 고정 블록 POI — 점수 **앞**에서 묻는다. 어셈블리 직전이면 점수 단계가
-        #    상한을 다 쓴 날 시한이 바닥나 필수방문이 시한 탓에 빠진다. 합류는 ④ 의 인덱스.
-        fixed_blocks, fixed_pois = self._resolve_fixed_pois(
+        # ⓪ 풀 밖 고정 블록·필수 방문 POI — 점수 **앞**에서 묻는다. 어셈블리 직전이면 점수
+        #    단계가 상한을 다 쓴 날 시한이 바닥나 필수방문이 시한 탓에 빠진다. 합류는 ④ 의 인덱스.
+        fixed_blocks, required_visits, fixed_pois = self._resolve_fixed_pois(
             request, pool, budget, t0, steps, trace_id, now)
 
         # ② 게이트웨이 선호 점수 (전 일자 공용 1회) — 실패·스킵이면 규칙 점수 (INV-4)
@@ -376,8 +380,8 @@ class ScheduleAgent:
         if request.family_demote:
             try:
                 candidates, family_anchors = self._demote_family(
-                    request, pool, candidates, fixed_blocks, fixed_pois, budget, t0,
-                    trace_id, now)
+                    request, pool, candidates, fixed_blocks, required_visits, fixed_pois,
+                    budget, t0, trace_id, now)
             except Exception as e:  # noqa: BLE001
                 # 순수 계산이라 도달하지 않아야 하지만, 부가 단계가 생성을 깨면 안 된다(INV-4
                 # — ⑥ 차선책과 같은 규약). 강등 없이 종전 점수로 진행하고 관측한다.
@@ -397,6 +401,25 @@ class ScheduleAgent:
         #    아래면 조립은 옛 POI 를 본다 — 이 리포가 같은 모양으로 네 번 당했다.
         pool = self._enrich_hours(pool, candidates, budget, t0, steps, trace_id, now)
 
+        # ⓪′ 영업시간 밖에 핀된 고정 블록은 **빼고 보고한다** (TRIP-1249). 종전엔 HC1 이 OR·그리디
+        #    둘 다에서 걸려 409 → BE 가 그 단계를 통째로 최소 일정으로 바꿨다 — 핀 하나로 하루가
+        #    비는 것보다 그 핀만 빠지고 generate 는 `unplaced_must_visits`(NO_FEASIBLE_SLOT), replan 은
+        #    `locked_block_unplaced` 로 보고되는 편이 낫다(침묵 드롭 아님). 영업시간이 **증명**할 때만
+        #    이다 — 정보 없음은 둔다(HC1 과 같은 판정 함수). ②⁗ 뒤라 보강된 시간도 본다. 인덱스는
+        #    ④ 가 쓰는 것과 같다 — 고정 블록 POI 는 **인덱스에만** 합류, 후보·풀 보고는 그대로 (INV-1).
+        index = {**fixed_pois, **{p.poi_id: p for p in pool.pois}}
+        excluded = request.excluded_poi_ids  # 2단계 생성 그대로 통과
+        closed = [fb for fb in fixed_blocks if fb.poi_id in index
+                  and not open_hours_ok(index[fb.poi_id], fb.window.start, fb.window.end)]
+        if closed:
+            fixed_blocks = tuple(fb for fb in fixed_blocks if fb not in closed)
+            # 핀이던 POI 는 자유 후보로도 안 놓는다(핀 POI 는 원래 어느 날에도 자유 후보가 아니다 —
+            # 어셈블러 `reserved`). 풀 안 POI 가 자유로 놓이면 "배치됐는데 미배치 보고"가 된다.
+            excluded = excluded | {fb.poi_id for fb in closed}
+            self._degrade(steps, trace_id, now, "fixed_poi", "pin", "(dropped)",
+                          f"fixed_block_closed:{len(closed)} " + ",".join(
+                              f"{fb.poi_id}@{fb.window.start:%a %H:%M}" for fb in closed))
+
         # ③ ItineraryProblem 조립 — 후보는 풀에서 나온 것만 (INV-1).
         #    날씨(TRIP-383)·행사 보너스(TRIP-421)는 오케스트레이터가 패킷을 소화해
         #    넘긴 값 — 어셈블리 소프트 항으로만 들어간다 (None = 무보정).
@@ -411,12 +434,13 @@ class ScheduleAgent:
                 candidates, seed=request.seed, rejections=request.rejections,
                 epsilon=request.diversity_jitter),
             fixed_blocks=fixed_blocks,
+            required_visits=required_visits,
             budget=request.budget,
             transport=request.transport,
             day_window=request.day_window,
             seed=request.seed,
             anchor=request.anchor,
-            excluded_poi_ids=request.excluded_poi_ids,  # 2단계 생성 그대로 통과
+            excluded_poi_ids=excluded,
             daily_rain_prob=task.daily_rain,
             event_bonus=task.event_bonus,
             pace=request.pace,
@@ -432,9 +456,7 @@ class ScheduleAgent:
         c2_ms = max(
             budget.c2_reserved_ms, budget.total_ms - (self._clock.monotonic_ms() - t0)
         )
-        # 고정 블록 POI 는 **인덱스에만** 합류 — 후보·풀 보고는 그대로다 (INV-1).
-        assembly = self._assembly_provider.for_pool(
-            {**fixed_pois, **{p.poi_id: p for p in pool.pois}})
+        assembly = self._assembly_provider.for_pool(index)
         try:
             solution = assembly.solve(problem, c2_ms, trace_id)
         except AssemblyConflictError as e:
@@ -718,6 +740,7 @@ class ScheduleAgent:
         pool: CandidatePool,
         candidates: tuple[ScoredPoi, ...],
         fixed_blocks: tuple[FixedBlock, ...],
+        required_visits: tuple[RequiredVisit, ...],
         fixed_pois: Mapping[PoiId, Poi],
         budget: DeadlineBudget,
         t0: int,
@@ -726,7 +749,7 @@ class ScheduleAgent:
     ) -> tuple[tuple[ScoredPoi, ...], tuple[Poi, ...]]:
         """(강등된 후보, 계열 앵커) — 대표가 아닌 계열원만 `demoted_score`. 배제가 아니다.
 
-        대표 우선순위: 고정 블록(필수방문) > 앞 일자 배치분(`excluded_poi_ids` — BE 2단계
+        대표 우선순위: 고정 블록·필수 방문(사용자 지정) > 앞 일자 배치분(`excluded_poi_ids` — BE 2단계
         생성이 1일차 배치를 id 로만 보낸다) > 점수 최고(동점 poi_id). 앞 일자 배치분이 풀
         밖이면(그 요일 휴무 등) `poi_db` 로 좌표·이름을 얻는다 — 못 얻으면 **그 축만** 빼고
         관측한다(강등 기록 아님 — 일정은 그대로 나가고 계열 억제만 약해진다).
@@ -750,7 +773,9 @@ class ScheduleAgent:
                 self._observe(trace_id, now, "family", "anchor_lookup", "(skipped)",
                               f"family_anchor_unresolved:{unresolved}")
         anchor_ids = dict.fromkeys(
-            pid for pid in (*(b.poi_id for b in fixed_blocks), *excluded) if pid in index)
+            pid for pid in (*(b.poi_id for b in fixed_blocks),
+                            *(r.poi_id for r in required_visits), *excluded)
+            if pid in index)
         anchors = tuple(index[pid] for pid in anchor_ids)
         ranked = tuple(
             index[c.poi_id]
@@ -836,7 +861,9 @@ class ScheduleAgent:
         if self._existence is None or not candidates:
             return candidates  # 미주입 = 기능 부재 (강등 아님)
         index = {p.poi_id: p for p in pool.pois}
-        skip = request.excluded_poi_ids | {b.poi_id for b in request.fixed_blocks}
+        # 사용자가 지정한 곳(고정·필수 방문)은 실재를 묻지 않는다 — 깎아도 어차피 간다
+        skip = (request.excluded_poi_ids | {b.poi_id for b in request.fixed_blocks}
+                | {r.poi_id for r in request.required_visits})
         targets = tuple(
             c.poi_id for c in sorted(candidates, key=lambda c: (-c.score, str(c.poi_id)))
             if c.poi_id not in skip and c.poi_id in index
@@ -966,21 +993,23 @@ class ScheduleAgent:
         steps: list[Degradation],
         trace_id: TraceId,
         now: datetime,
-    ) -> tuple[tuple[FixedBlock, ...], dict[PoiId, Poi]]:
-        """(남길 고정 블록, 인덱스에 합류할 POI). 못 찾은 블록은 **빼고 강등을 남긴다.**
+    ) -> tuple[tuple[FixedBlock, ...], tuple[RequiredVisit, ...], dict[PoiId, Poi]]:
+        """(남길 고정 블록, 남길 필수 방문, 인덱스에 합류할 POI). 못 찾은 것은 **빼고 강등을 남긴다.**
 
         좌표를 모르는 블록을 남기면 OR 은 해 없음, 그리디는 그 뒤 이동을 모르고, 체인은
         그 인접 쌍을 위반으로 본다 — 결국 409 거나 블록만 덩그러니 남는다. 빼면 나머지
         일정이 나가고 generate 는 `unplaced_must_visits`(NO_FEASIBLE_SLOT), replan 은
-        notes 로 그 블록을 보고한다(침묵 드롭 아님).
+        notes 로 그 블록을 보고한다(침묵 드롭 아님). 시각 없는 필수 방문(TRIP-1249)도 같은
+        길이다 — 풀 밖이면 같이 묻고, 못 찾으면 같은 강등·같은 보고.
 
         포트는 시한을 받지 않는다 — 진입 전에 어셈블리 바닥을 침범하지 않는지 보고, 호출이
         남은 시한을 넘겼으면 `overrun` 으로 남긴다(찾은 값은 정본이라 쓴다 — 버리면
         필수방문이 빠진다). 호출 자체의 상한은 어댑터의 HTTP 타임아웃이다.
         """
-        want = frozenset(b.poi_id for b in request.fixed_blocks) - pool.poi_ids
+        want = (frozenset(b.poi_id for b in request.fixed_blocks)
+                | frozenset(r.poi_id for r in request.required_visits)) - pool.poi_ids
         if self._poi_db is None or not want:
-            return request.fixed_blocks, {}
+            return request.fixed_blocks, request.required_visits, {}
         found: dict[PoiId, Poi] = {}
         available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
                      - budget.c2_reserved_ms)
@@ -1010,7 +1039,9 @@ class ScheduleAgent:
                               f"overrun:spent={spent}ms>available={available}ms")
         kept = tuple(b for b in request.fixed_blocks
                      if b.poi_id not in want or b.poi_id in found)
-        return kept, found
+        kept_required = tuple(r for r in request.required_visits
+                              if r.poi_id not in want or r.poi_id in found)
+        return kept, kept_required, found
 
     # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────
 

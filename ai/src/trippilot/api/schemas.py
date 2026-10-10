@@ -94,14 +94,21 @@ class TimeWindowSchema(BoundaryModel):
 
 
 class FixedBlockSchema(BoundaryModel):
-    """날짜·시각이 확정된 필수방문지(HC3). ANYTIME(시각 미지정) 필수방문의
-    물질화는 백엔드 소유(MustVisitMaterializer, 경계 계약 M1) — AI는 확정된 블록만 받는다."""
+    """필수방문지 1건. `start` 가 있으면 날짜·시각 확정(HC3 핀 — 종전 그대로).
+
+    **`start` 가 null 이면 그 날 꼭 가되 시각은 조립이 정한다(필수 방문, TRIP-1249)** —
+    영업시간 안, 식당이면 식사창 안. 종전엔 ANYTIME 을 백엔드(MustVisitMaterializer)가
+    창 시작(09:00)에 핀해 보냈는데 늦게 여는 곳이 HC1 에 걸려 하루가 통째로 409 였다.
+    `date` 는 여전히 필수 — 날짜까지 미정인 필수방문의 날짜 배정은 백엔드 소유다.
+    재계획 `locked_blocks` 는 이 완화를 받지 않는다 — 스키마는 같지만 `start: null` 인 잠금은
+    `ReplanRequest` 검증이 422 로 거절한다(잠금은 시각이 정체성)."""
 
     poi_id: str = Field(min_length=1)
     date: dt.date
-    start: dt.time
+    start: dt.time | None = None
     # dwell_min 만 선택 유지 — 백엔드 MustVisitMaterializer 가 null 을 그대로 싣는다
-    # (MustVisitMaterializer.kt:70 → GenerateItineraryService.kt:226). 미지정은 wiring 이 60분 적용.
+    # (MustVisitMaterializer.kt:70 → GenerateItineraryService.kt:226). 미지정은 핀(start 있음)이면
+    # wiring 이 60분, 필수 방문(start null)이면 조립이 카테고리 기본 체류를 적용(0 도 미지정으로 본다).
     dwell_min: int | None = Field(default=None, ge=0)
 
 
@@ -534,6 +541,17 @@ class ReplanRequest(BoundaryModel):
     saved_places: list[SavedPlaceSchema] = Field(default_factory=list)
     excluded_poi_ids: list[str] = Field(default_factory=list)
     request_meta: RequestMetaSchema
+
+    @model_validator(mode="after")
+    def _locks_have_times(self) -> "ReplanRequest":
+        # 잠금은 "못 건드리는 것"이라 시각이 정체성이다 — 시각 없는 잠금은 HC3 로 표현 불가
+        # (`current_slots` 의 시각 없는 `is_fixed` 와 같은 규칙, 422). generate 의 시각 없는
+        # 필수 방문(조립이 시각을 정함)은 이 경계의 것이 아니다.
+        untimed = [b.poi_id for b in self.locked_blocks if b.start is None]
+        if untimed:
+            raise ValueError(
+                f"locked_blocks 에 시각 없는 잠금: {', '.join(untimed)} — 잠금은 start 필수")
+        return self
 
 
 class ReplanEmptyReasonSchema(BoundaryModel):

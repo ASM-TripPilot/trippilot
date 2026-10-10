@@ -133,6 +133,7 @@ from trippilot.domain.itinerary import (
     FixedBlock,
     ItineraryProblem,
     ItinerarySolution,
+    RequiredVisit,
     SolveMode,
     TimeWindow,
     Violation,
@@ -356,12 +357,11 @@ def _seed_from(trip_id: str) -> int:
 
 def _fixed_block(block: schemas.FixedBlockSchema, tz: timezone) -> FixedBlock:
     if block.date is None or block.start is None:
-        # ANYTIME 물질화는 백엔드 소유(경계 계약 M1) — 스키마(FixedBlockSchema
-        # date/start 필수)가 1차 차단하고, 여기는 우회 조립 대비 백스톱이다.
-        # 조용히 떨어뜨리면 사용자 지정이 침묵 소실된다(INV-4) → 명시 실패(422).
+        # 시각 없는 블록은 고정(HC3)이 아니라 필수 방문이다 — generate 는 `_required_visit`
+        # 로 가른다(TRIP-1249). 잠금(replan)은 스키마가 먼저 막고, 여기는 우회 조립 대비
+        # 백스톱이다. 조용히 떨어뜨리면 사용자 지정이 침묵 소실된다(INV-4) → 명시 실패(422).
         raise ValueError(
-            f"ANYTIME 고정 블록 미지원: {block.poi_id} — "
-            "시각 미지정 필수방문은 현 도메인(HC3)으로 표현 불가"
+            f"시각 없는 고정 블록: {block.poi_id} — 시각 미지정은 고정(HC3)으로 표현 불가"
         )
     dwell = block.dwell_min if block.dwell_min is not None else _DEFAULT_DWELL_MIN
     start = datetime.combine(block.date, block.start, tzinfo=tz)
@@ -369,6 +369,18 @@ def _fixed_block(block: schemas.FixedBlockSchema, tz: timezone) -> FixedBlock:
         poi_id=PoiId(block.poi_id),
         window=TimeWindow(start=start, end=start + timedelta(minutes=dwell)),
         reason="user_fixed",
+    )
+
+
+def _required_visit(block: schemas.FixedBlockSchema) -> RequiredVisit:
+    """`start` 없는 블록 → 그 날 필수 방문(시각은 조립이 정한다, TRIP-1249). `_fixed_block` 의 짝."""
+    return RequiredVisit(
+        poi_id=PoiId(block.poi_id),
+        day=block.date,
+        # null·0 → None = 조립이 카테고리 기본 체류(`stay_for`)를 쓴다 — 핀의 60분 고정과 달리
+        # 시각이 자유라 자유 후보와 같은 체류가 맞다. 0분 체류는 방문이 아니라 null 과 같이 본다.
+        dwell_min=block.dwell_min or None,
+        reason="must_visit_anytime",
     )
 
 
@@ -413,7 +425,11 @@ def _domain_generate_request(
         persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         principal=Principal(user_id=owner),
         seed=_seed_from(request.trip_id),
-        fixed_blocks=tuple(_fixed_block(b, tz) for b in request.fixed_blocks),
+        # `start` 유무로 가른다 — 시각 있음 = 고정(HC3 핀), 없음 = 필수 방문(조립이 시각 결정)
+        fixed_blocks=tuple(_fixed_block(b, tz) for b in request.fixed_blocks
+                           if b.start is not None),
+        required_visits=tuple(_required_visit(b) for b in request.fixed_blocks
+                              if b.start is None),
         excluded_poi_ids=frozenset(PoiId(x) for x in request.excluded_poi_ids),
         rejections=_domain_rejections(request.rejections),
         include_explanations=request.include_explanations,
@@ -456,13 +472,13 @@ def judge_unplaced_must_visits(
       겹침이 증명될 때만**
     - `NO_FEASIBLE_SLOT`: 그 외 미배치(기간 안·겹침 없음인데 해에 없음)
 
-    ANYTIME 블록(date/start 없음)은 이 함수에 도달하지 않는다 — 스키마
-    (FixedBlockSchema date/start 필수, M1)가 1차 차단하고, `_fixed_block`
-    백스톱이 요청 조립 단계에서 422로 명시 실패시킨다(INV-4).
+    시각 없는 블록(필수 방문, TRIP-1249)은 같은 규칙에서 창 겹침만 뺀다 — 창이 없다.
+    배치됨 = 그 날 슬롯에 그 POI 가 있다(시각은 조립이 정했으므로 대조하지 않는다).
     """
     if not request.fixed_blocks:
         return ()
-    blocks = [_fixed_block(b, tz) for b in request.fixed_blocks]
+    blocks = [_fixed_block(b, tz) for b in request.fixed_blocks if b.start is not None]
+    required = [_required_visit(b) for b in request.fixed_blocks if b.start is None]
     slots_by_day = {day.date: day.slots for day in solution.days}
     requested_days = {w.date for w in request.time_windows}
     trip_start = request.trip_context.start_date
@@ -486,6 +502,13 @@ def judge_unplaced_must_visits(
 
     reported: list[UnplacedMustVisit] = []
     seen: set[tuple[str, str]] = set()
+
+    def report(poi_id: PoiId, reason: str) -> None:
+        key = (str(poi_id), reason)
+        if key not in seen:  # 동일 (poi, 사유) 중복 보고 방지 — 요청 순서 보존
+            seen.add(key)
+            reported.append(UnplacedMustVisit(poi_id=str(poi_id), reason_code=reason))
+
     for fb in blocks:
         if satisfied(fb):
             continue
@@ -498,10 +521,14 @@ def judge_unplaced_must_visits(
             reason = REASON_WINDOW_CONFLICT
         else:
             reason = REASON_NO_FEASIBLE_SLOT
-        key = (str(fb.poi_id), reason)
-        if key not in seen:  # 동일 (poi, 사유) 중복 보고 방지 — 요청 순서 보존
-            seen.add(key)
-            reported.append(UnplacedMustVisit(poi_id=str(fb.poi_id), reason_code=reason))
+        report(fb.poi_id, reason)
+    for rv in required:
+        if any(s.poi_id == rv.poi_id for s in slots_by_day.get(rv.day, ())):
+            continue
+        if not (trip_start <= rv.day <= trip_end):
+            report(rv.poi_id, REASON_OUT_OF_RANGE)
+        elif rv.day in requested_days:  # 기간 안·요청 밖은 위와 같은 유예
+            report(rv.poi_id, REASON_NO_FEASIBLE_SLOT)
     return tuple(reported)
 
 

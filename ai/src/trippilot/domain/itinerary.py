@@ -113,6 +113,45 @@ class FixedBlock:
 
 
 @dataclass(frozen=True, slots=True)
+class RequiredVisit:
+    """그 날 꼭 가되 **시각은 조립이 정하는** 필수 방문 (TRIP-1249).
+
+    고정 블록(HC3)과 다른 점은 시각이 없다는 것 하나다. 시각 미지정 필수방문을 BE 가 창
+    시작(09:00)에 핀해 보내면 늦게 여는 곳(식당 대부분)이 HC1 에 걸려 OR·그리디가 다 무효
+    → 409 → 하루가 통째로 최소 일정이 됐다. 시각을 지어내지 않고 조립이 영업시간 안(식당은
+    식사창 안)에서 고른다. 하드 검증은 없다 — 못 놓으면 `unplaced_must_visits` 로 **보고**한다.
+    `dwell_min` 은 사용자가 준 체류(분) — 있으면 그대로(pace 배율 없음, 고정 블록과 같다),
+    None 이면 조립이 카테고리 기본 체류(`stay_for`, pace 적용 — 자유 후보와 같다)를 쓴다.
+    """
+
+    poi_id: PoiId
+    day: date
+    dwell_min: int | None
+    reason: str
+
+    def __post_init__(self) -> None:
+        if self.dwell_min is not None and self.dwell_min <= 0:
+            raise ValueError(f"dwell_min 양수 필요: {self.dwell_min}")
+
+    def to_dict(self) -> dict:
+        return {
+            "poi_id": str(self.poi_id),
+            "day": self.day.isoformat(),
+            "dwell_min": self.dwell_min,
+            "reason": self.reason,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RequiredVisit":
+        return cls(
+            poi_id=PoiId(d["poi_id"]),
+            day=date.fromisoformat(d["day"]),
+            dwell_min=d["dwell_min"],
+            reason=d["reason"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class VisitSlot:
     """방문 슬롯 (HC1/HC4 대상). tz-aware, start_at < end_at."""
 
@@ -211,6 +250,11 @@ class ItineraryProblem:
     비교라 그보다 앞 날짜는 자유 방문 0, 뒤 날짜는 무제한이다. 앵커가 있으면 하한에
     앵커(=사용자의 지금 위치)에서의 이동을 더한다 — 지난 잠금 뒤 방문도 그 잠금 장소가
     아니라 지금 위치에서 출발한다(`constraints.anchor_minutes`).
+
+    required_visits: 시각 없는 필수 방문 (TRIP-1249) — 그 날 반드시 넣되 시각은 조립이
+    정한다. 기본 빈 튜플 = 기존 생성자 호출 전부 무영향. 고정 블록처럼 다른 날의 자유
+    후보에서는 빠지고 제외(`excluded_poi_ids`)보다 우선하지만, HC3 대상은 아니다 — 못 놓으면
+    해에 없을 뿐이고(409 아님) 그 사실은 배선이 보고한다.
     """
 
     schedule_id: ScheduleId
@@ -227,6 +271,7 @@ class ItineraryProblem:
     event_bonus: Mapping[PoiId, float] | None = None  # 행사 근접 보너스 [0,1] (TRIP-421)
     pace: Pace | None = None  # 여행 속도 — 체류시간 배율 (TRIP-906)
     not_before: datetime | None = None  # 비고정 방문 시작 하한 (TRIP-1182)
+    required_visits: tuple[RequiredVisit, ...] = ()  # 시각 없는 필수 방문 (TRIP-1249)
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -255,6 +300,7 @@ class ItineraryProblem:
             "excluded_poi_ids": sorted(str(p) for p in self.excluded_poi_ids),
             "pace": self.pace.value if self.pace else None,
             "not_before": to_iso(self.not_before) if self.not_before else None,
+            "required_visits": [r.to_dict() for r in self.required_visits],
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -302,6 +348,9 @@ class ItineraryProblem:
             # `d.get` — 키가 없는 기존 직렬화본을 그대로 읽는다(하위호환)
             pace=Pace(d["pace"]) if d.get("pace") else None,
             not_before=from_iso(d["not_before"]) if d.get("not_before") else None,
+            required_visits=tuple(
+                RequiredVisit.from_dict(x) for x in d.get("required_visits", ())
+            ),
         )
 
 
