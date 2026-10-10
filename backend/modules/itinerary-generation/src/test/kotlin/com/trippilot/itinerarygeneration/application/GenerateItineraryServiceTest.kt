@@ -77,13 +77,14 @@ import java.util.UUID
 
 /** 호출마다 입력을 기록 — day1 2단계라 1차/2차 두 번 불린다([captures] 순서 = 호출 순서). */
 /**
- * 실 AI 의 거부를 흉내낸다 — 미물질화(날짜·시각 없는) 고정 블록이 **하나라도** 있으면 요청 전체를 거부한다
- * (그쪽 `api/wiring.py::_fixed_block` 이 변환 중 ValueError 를 던져 422 가 된다). 그 외 요청은 정상 응답.
+ * **구형 AI(TRIP-1249 이전 계약)** 의 거부를 흉내낸다 — `start` 가 null 인 고정 블록이 **하나라도** 있으면 요청 전체를
+ * 거부한다(그쪽 `FixedBlockSchema.start` 가 필수라 422). 배포 순서가 역전되면(BE 먼저) 실제로 이 모양이 된다.
+ * 그 외 요청은 정상 응답.
  */
 private class RejectAnytimeAgent(private val now: Instant, private val emitPoi: UUID) : StubScheduleAgent() {
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
-        if (input.fixedBlocks.any { it.date == null || it.start == null }) {
-            throw ScheduleAgentCallFailed("DOMAIN_INVARIANT", retryable = false, message = "ANYTIME 고정 블록 미지원")
+        if (input.fixedBlocks.any { it.start == null }) {
+            throw ScheduleAgentCallFailed("VALIDATION_ERROR", retryable = false, message = "start 필수 — 구형 계약의 422")
         }
         return ScheduleAgentOutput(
             days = input.timeWindows.map {
@@ -563,21 +564,19 @@ class GenerateItineraryServiceTest : StringSpec({
         agent.captures[0].timeWindows.first { it.date == start }.end shouldBe LocalTime.parse("23:59")
     }
 
-    "ANYTIME 은 물질화돼 경계로 나간다 (M1) — null 이 하나라도 나가면 요청 전체가 422 다" {
+    "ANYTIME 은 날짜만 채워 경계로 나간다 (M1 · TRIP-1249) — 시각은 비워 조립이 영업시간 안에서 고른다" {
         val anytime = UUID.randomUUID()
         val agent = CapturingAgent(now)
         service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(anytime, null, null, null)))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         val block = agent.captures[1].fixedBlocks.single { it.poiId == anytime }
-        block.date shouldBe null.let { _ -> block.date } // 아래 두 줄이 본질
-        (block.date != null) shouldBe true
-        (block.start != null) shouldBe true
+        block.date shouldBe start.plusDays(1) // 2차 몫 가운데 가장 이른 한산한 날
+        block.start shouldBe null             // 09:00 에 못 박으면 그 시각에 닫힌 식당이 조립을 409 로 죽였다
     }
 
-    "!(M1 물질화로 전제 소멸) 다일 여행에서 ANYTIME 때문에 2차가 거부돼도 day1 은 살아남는다" {
-        // 통합테스트에서 무엇을 보게 되는지 못 박는다 — '여행 전체가 폴백'이 아니라
-        // **day1 은 실 AI 결과, 나머지 일자만 MINIMAL** 이고 상태는 COMPLETE(isFallback=true) 다.
+    "구형 AI 가 start=null 을 422 로 거부하면(배포 순서 역전) 2차만 MINIMAL 폴백이 되고 day1 과 필수 방문지는 남는다" {
+        // '여행 전체가 폴백'이 아니라 **day1 은 실 AI 결과, 나머지 일자만 MINIMAL** 이고 상태는 COMPLETE(isFallback=true) 다.
         // 단일일 여행은 ANYTIME 이 1차에 실려 전체가 MINIMAL 이 된다(carriesUndatedFixed).
         val anytime = UUID.randomUUID()
         val emitted = UUID.randomUUID()
@@ -591,6 +590,45 @@ class GenerateItineraryServiceTest : StringSpec({
         saved.isFallback shouldBe true
         saved.solveMode shouldBe SolveMode.MINIMAL
         saved.days.first().slots.map { it.sourcePoiId } shouldContainExactly listOf(emitted) // day1 = 실 AI 결과 보존
+        // 폴백에도 필수 방문지는 **그 날**에 남는다 — 날짜만 있는 블록을 폴백이 몰라 조용히 버리던 구멍(TRIP-1249).
+        val fallbackSlot = saved.days.drop(1).flatMap { it.slots }.single { it.sourcePoiId == anytime }
+        fallbackSlot.isFixed shouldBe false // 시각은 사용자가 정하지 않았다
+    }
+
+    "하루 여행에서 저녁 고정 뒤에 안 들어가는 ANYTIME 은 AI 가 실패해도 사라지지 않는다 — 폴백이 보고하고 COMPLETE 에 남는다" {
+        // 19:00/90 저녁 뒤 60분은 21:00 창 밖이고 넘길 다음 날도 없다. 종전엔 폴백이 버리고, 하루 여행 마무리가 1차 보고를
+        // 빈 목록으로 덮어 일정에도 보고에도 없이 사라졌다(INV-4 침묵 실패 — TRIP-1249 리뷰 실측).
+        val dinner = UUID.randomUUID()
+        val anytime = UUID.randomUUID()
+        val repo = FakeItineraries()
+        service(
+            ThrowingAgent(), fullPrefs, emptyList(), repo = repo, end = start,
+            fixedVisits = listOf(FixedVisit(dinner, start, LocalTime.parse("19:00"), 90), FixedVisit(anytime, null, null, 60)),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val saved = repo.findByTrip(tripId).single()
+        saved.generationState shouldBe GenerationState.COMPLETE
+        saved.days.single().slots.map { it.sourcePoiId } shouldBe listOf(dinner)
+        saved.unplacedMustVisits shouldBe listOf(UnplacedMustVisit(anytime, UnplacedReason.NO_FEASIBLE_SLOT))
+    }
+
+    "하루 여행의 조립 단계 미배치 보고는 COMPLETE 까지 남는다 — 2차가 없다고 빈 목록으로 덮으면 사라진다" {
+        // 09:00/660 고정이 12시간 창의 11시간을 차지해 2시간 ANYTIME 은 넣을 날이 없다(물질화 NO_FEASIBLE_SLOT).
+        // 하루 여행은 ANYTIME 이 1차에 실리므로(carriesUndatedFixed) 이 보고가 유일한 M2 채널이다.
+        val full = UUID.randomUUID()
+        val anytime = UUID.randomUUID()
+        val agent = CapturingAgent(now)
+        val repo = FakeItineraries()
+        val returned = service(
+            agent, fullPrefs, emptyList(), repo = repo, end = start,
+            fixedVisits = listOf(FixedVisit(full, start, LocalTime.parse("09:00"), 660), FixedVisit(anytime, null, null, 120)),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.single().fixedBlocks.map { it.poiId } shouldBe listOf(full) // ANYTIME 은 보내지 않았다
+        returned.unplacedMustVisits.map { it.poiId } shouldBe listOf(anytime)     // 201 본문(PARTIAL)에는 있었다
+        val saved = repo.findByTrip(tripId).single()
+        saved.generationState shouldBe GenerationState.COMPLETE
+        saved.unplacedMustVisits shouldBe listOf(UnplacedMustVisit(anytime, UnplacedReason.NO_FEASIBLE_SLOT))
     }
 
     "AI 가 보고한 미배치 필수 방문지가 일정에 실린다 — 안 실으면 재조회에서 사라진다(계약 M2)" {
@@ -1468,7 +1506,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         finished.days.first { it.date == end }.slots.single().sourcePoiId shouldBe poiByDate.getValue(end) // 2차 몫
     }
 
-    "2차 폴백의 물질화 슬롯은 '변경 불가'가 아니다 — 시각은 우리가 골랐다(TRIP-1001 · QA #049)" {
+    "2차 폴백의 물질화 슬롯은 '변경 불가'가 아니다 — 시각이 없는 블록은 사용자 고정이 아니다(TRIP-1001 · QA #049)" {
         val end = start.plusDays(1)
         val materializedPoi = UUID.randomUUID()
         val agent = object : StubScheduleAgent() {
@@ -1482,11 +1520,12 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         )
         repo.byTrip[tripId] = partial
         val input = agentInputFor(end).copy(
-            fixedBlocks = listOf(FixedBlock(materializedPoi, end, LocalTime.parse("09:00"), 60)),
+            // 물질화된 ANYTIME 의 실제 모양 — 날짜만 있고 시각은 비어 있다(TRIP-1249).
+            fixedBlocks = listOf(FixedBlock(materializedPoi, end, null, 60)),
         )
 
         SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
-            .completeRemaining(tripId, partial.itineraryId, input, isRegeneration = false, materializedPoiIds = setOf(materializedPoi))
+            .completeRemaining(tripId, partial.itineraryId, input, isRegeneration = false)
 
         val slot = repo.byTrip.getValue(tripId).days.first { it.date == end }.slots.single()
         slot.sourcePoiId shouldBe materializedPoi
