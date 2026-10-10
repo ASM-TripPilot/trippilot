@@ -45,6 +45,7 @@ class VisitRecordPersistenceIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var locationConsents: LocationConsentService
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var accounts: AccountRepository
+    @Autowired private lateinit var memos: com.trippilot.archive.domain.VisitMemoRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
 
     private val now = Instant.parse("2026-08-11T01:00:00Z")
@@ -199,6 +200,26 @@ class VisitRecordPersistenceIT : AbstractPostgresIntegrationTest() {
         jdbc.queryForObject(
             "SELECT created_at FROM visit_memo WHERE visit_check_id = ?", Instant::class.java, visit,
         ) shouldBe createdAt
+    }
+
+    /**
+     * 기록 화면이 메모를 그리는 **실 경로**다 — 여러 방문을 한 번에 묻고 본문을 돌려받는다.
+     * 단위 테스트의 fake 로는 `= ANY (?)` 배열 바인딩도 `getObject(.., UUID::class.java)` 도 못 잰다.
+     */
+    @Test
+    fun `여러 방문의 메모 본문을 한 번에 읽는다 — 없는 방문은 키가 없다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val withMemo = newVisit(tripId)
+        val withoutMemo = newVisit(tripId)
+        records.putMemo(accountId, tripId, withMemo, "바다가 좋았다")
+
+        val found = memos.findMemosOf(listOf(withMemo, withoutMemo))
+
+        found[withMemo] shouldBe "바다가 좋았다"
+        // 유무가 아니라 **키 존재**로 가른다 — 없는 방문에 빈 문자열을 지어내지 않는다.
+        found.containsKey(withoutMemo) shouldBe false
+        memos.findMemosOf(emptyList()) shouldBe emptyMap()
     }
 
     @Test

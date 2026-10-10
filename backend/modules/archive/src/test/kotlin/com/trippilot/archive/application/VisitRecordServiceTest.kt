@@ -79,7 +79,8 @@ class VisitRecordServiceTest : StringSpec({
         val stored = mutableMapOf<UUID, VisitMemo>()
         override fun upsert(memo: VisitMemo) = memo.also { stored[it.visitCheckId] = it }
         override fun find(visitCheckId: UUID) = stored[visitCheckId]
-        override fun findVisitsWithMemo(visitCheckIds: Collection<UUID>) = stored.keys.intersect(visitCheckIds.toSet())
+        override fun findMemosOf(visitCheckIds: Collection<UUID>) =
+            stored.filterKeys { it in visitCheckIds }.mapValues { it.value.text }
         override fun delete(visitCheckId: UUID) = stored.remove(visitCheckId) != null
     }
 

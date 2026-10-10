@@ -48,7 +48,7 @@ class TripRecordService(
         val actual = checks.findByTrip(tripId)
         val visitIds = actual.map { it.visitCheckId }
         val photoCounts = photos.countByVisits(visitIds)
-        val withMemo = memos.findVisitsWithMemo(visitIds)
+        val memoTexts = memos.findMemosOf(visitIds)
         // 그날 어디에 묵었나 — 없는 날은 목록에 없다. 그 날은 날짜만으로 묶인다(BR-U5-27).
         val baseByDate = baseStays.findBaseStays(tripId, period.startDate, period.endDate).associateBy { it.date }
 
@@ -66,7 +66,7 @@ class TripRecordService(
                     baseStayName = baseByDate[date]?.name,
                     planned = planned.filter { it.date == date }.sortedBy { it.orderIndex },
                     actual = actual.filter { it.dayOf() == date }.sortedBy { it.arrivedAt ?: it.createdAt }
-                        .map { it.toRecord(photoCounts[it.visitCheckId] ?: 0, it.visitCheckId in withMemo) },
+                        .map { it.toRecord(photoCounts[it.visitCheckId] ?: 0, memoTexts[it.visitCheckId]) },
                     unvisitedSlotKeys = unvisited.filter { it.date == date }.map { it.slotKey },
                 )
             }
@@ -88,7 +88,7 @@ class TripRecordService(
         val all = checks.findByTrip(tripId)
         val visitIds = all.map { it.visitCheckId }
         val photoCounts = photos.countByVisits(visitIds)
-        val withMemo = memos.findVisitsWithMemo(visitIds)
+        val memoTexts = memos.findMemosOf(visitIds)
         return all.groupBy { it.dayOf() }.toSortedMap().map { (date, visits) ->
             ArchiveDayView(
                 date = date,
@@ -100,7 +100,7 @@ class TripRecordService(
                         completedAt = it.completedAt,
                         skipped = it.skippedAt != null,
                         photoCount = photoCounts[it.visitCheckId] ?: 0,
-                        hasMemo = it.visitCheckId in withMemo,
+                        hasMemo = it.visitCheckId in memoTexts,
                     )
                 },
             )
@@ -117,7 +117,7 @@ class TripRecordService(
      * **체류 시간을 싣지 않는다**(BR-U5-08). 산출은 되지만 개별 방문의 체류로 화면에 보이지 않는다 —
      * 누적 평균(US-REC-09)은 별개 소관이다(BR-U5-08a).
      */
-    private fun VisitCheck.toRecord(photoCount: Int, hasMemo: Boolean) = ActualVisitRecord(
+    private fun VisitCheck.toRecord(photoCount: Int, memo: String?) = ActualVisitRecord(
         visitCheckId = visitCheckId,
         slotKey = slotKey,
         poiId = poiId,
@@ -126,7 +126,7 @@ class TripRecordService(
         skippedAt = skippedAt,
         spontaneous = isSpontaneous,
         photoCount = photoCount,
-        hasMemo = hasMemo,
+        memo = memo,
         updatedAt = updatedAt,
     )
 
@@ -171,6 +171,15 @@ data class ActualVisitRecord(
     val skippedAt: java.time.Instant?,
     val spontaneous: Boolean,
     val photoCount: Int,
-    val hasMemo: Boolean,
+    /**
+     * 메모 **본문**(BR-U5-13 — 한 방문에 한 개). 없으면 null.
+     *
+     * [hasMemo] 는 이 값에서 파생한다 — 두 값을 따로 채우면 "있다는데 본문이 없다"가 생긴다.
+     * 종전에는 본문 없이 [hasMemo] 만 나가서, 앱을 껐다 켜면 그 세션에 쓴 메모만 남고 나머지는
+     * 사라진 것처럼 보였다(TRIP-1236). 저장은 처음부터 되고 있었다(visit_memo, V2.34).
+     */
+    val memo: String?,
     val updatedAt: java.time.Instant,
-)
+) {
+    val hasMemo: Boolean get() = memo != null
+}
