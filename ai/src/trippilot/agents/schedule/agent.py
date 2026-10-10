@@ -41,7 +41,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
-from typing import Mapping, Protocol, Sequence
+from typing import Iterable, Mapping, Protocol, Sequence
 
 from trippilot.agents.schedule.budget import DeadlineBudget, OrchestratorConfig
 from trippilot.agents.schedule.family import family_followers, related_to_any
@@ -56,7 +56,12 @@ from trippilot.agents.schedule.outcome import (
     failed_outcome,
 )
 from trippilot.assembly_engine.facade import AssemblyConflictError
-from trippilot.assembly_engine.scorer import build_rule_score, directive_fit, near_fit
+from trippilot.assembly_engine.scorer import (
+    DIRECTIVE_STEP,
+    build_rule_score,
+    directive_fit,
+    near_fit,
+)
 from trippilot.poi_curation.place_fees import EMPTY as FEES_EMPTY, FeeTable
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
@@ -167,6 +172,9 @@ class GenerateItineraryRequest:
     # 봉투가 아니라 여기 있다. generate 경로는 기본값(빈 집합)이라 무영향이다.
     prefer_categories: frozenset[PoiCategory] = frozenset()
     avoid_categories: frozenset[PoiCategory] = frozenset()
+    # "한 곳 추가"(KB-4 `cardinality: ONE`, ADD_FOOD·ADD_CAFE) — 그 카테고리 **최고점 1곳**에만
+    # 가산한다. prefer 처럼 전원에 더하면 남은 하루가 그 카테고리로 덮인다(2026-10-10 실측).
+    add_one_categories: frozenset[PoiCategory] = frozenset()
     # "가까운 데로"·"이동 줄여줘"(RANKING 지시) — 앵커에서 먼 후보를 거리만큼 내린다.
     prefer_near: bool = False
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
@@ -367,6 +375,24 @@ class ScheduleAgent:
                 trace_id, now, "rejection", "rejections", "rejections",
                 f"rejection_demoted:{sum(1 for c in candidates if c.poi_id in penalties)}"
                 f"/{len(penalties)}",
+            )
+
+        # ②⁗′ 한 곳 추가 (KB-4 `cardinality: ONE` — "카페 넣어줘") — ②″·②‴ **뒤**, ②′ **앞**.
+        #    뒤여야 PlanB 가 올린 카페와 거절로 깎인 카페를 **보고** 고른다 — 앞에서 고르면
+        #    거절한 카페를 다시 고르고(강등 상한 0.25 < 가산 0.3), PlanB 1위와 다른 카페를
+        #    골라 두 곳이 가산된다(리뷰 재현 2026-10-10). 앞이어야 고른 1곳이 지도 검증
+        #    대상에 든다(②″ 와 같은 이유). 제외·고정 POI 는 고르지 않는다 — 다녀온 카페를
+        #    골라 가산이 헛돌면 관측은 1/1 인데 일정엔 카페가 없다.
+        if request.add_one_categories:
+            index = {p.poi_id: p for p in pool.pois}
+            candidates, picked = boost_add_one(
+                candidates, index, request.add_one_categories,
+                skip=request.excluded_poi_ids | {b.poi_id for b in fixed_blocks},
+            )
+            self._observe(
+                trace_id, now, "directives", "add_one", "add_one",
+                f"add_one_boosted:{len(picked)}/{len(request.add_one_categories)}"
+                + (f" {','.join(str(p) for p in picked)}" if picked else ""),
             )
 
         # ②‴′ 같은 장소 계열 강등 (TRIP-1181) — generate 에만. **②′ 앞**이라야 지도 검증
@@ -1254,6 +1280,8 @@ def apply_directives(
     - 거리(`near_fit`)는 `near_anchor` 가 있을 때 **양쪽 다** — 규칙 점수의 기본 거리
       감점과 별개로 "가까운 데로"라고 말한 만큼만 더 민다.
     풀 밖 후보(인덱스에 없음)는 그대로 둔다 — 카테고리·좌표를 모르면 지어내지 않는다.
+    "한 곳 추가"(`cardinality: ONE`)는 여기가 아니라 `boost_add_one` 이다 — 거절·PlanB
+    가산을 **본 뒤** 골라야 해서 단계가 다르다.
     """
     def adjusted(c: ScoredPoi) -> ScoredPoi:
         poi = pois.get(c.poi_id)
@@ -1265,6 +1293,70 @@ def apply_directives(
         return replace(c, score=c.score + delta) if delta else c
 
     return tuple(adjusted(c) for c in candidates)
+
+
+def boost_add_one(
+    candidates: tuple[ScoredPoi, ...],
+    pois: Mapping[PoiId, Poi],
+    add_one: frozenset[PoiCategory],
+    *,
+    skip: frozenset[PoiId] = frozenset(),
+) -> tuple[tuple[ScoredPoi, ...], tuple[PoiId, ...]]:
+    """"한 곳 추가"(KB-4 `cardinality: ONE`) — 카테고리마다 **현재 최고점 1곳**에만 `DIRECTIVE_STEP`.
+
+    순서·개수·후보 집합은 그대로(INV-1). 동률은 poi_id 사전순, 카테고리는 값 사전순으로
+    돌아 실행마다 같다(INV-4 결정론). 어느 자리에 끼울지는 어셈블리가 정한다(INV-2).
+    규칙·LLM 점수 **양쪽** 1회 — 규칙 점수(`build_rule_score`)는 add_one 을 모르므로 두
+    배가 아니다. `skip`(제외·고정 POI)은 고르지 않는다. 풀 밖 후보는 카테고리를 모르니
+    고르지 않는다. LLM 모드에 규칙 점수가 섞인 판(rule_backfill)에서는 척도가 다른 둘을
+    그대로 비교한다 — `lift_planb_ranked` 와 같은 받아들임이고, 어느 쪽이든 그 카테고리
+    1곳만 오른다는 성질은 변하지 않는다.
+
+    왜 전원이 아니라 1곳인가 — 2026-10-10 멘토 실측: "카페 가고 싶다"가 풀의 카페 전원
+    가산으로 돌아 남은 하루가 카페로 덮였다. 추가형 지시가 하루 전환과 같은 기구였다.
+
+    둘째 값은 고른 poi_id — 관측용. "1/1" 이 효과를 뜻하지 않을 수 있어(고른 곳이 조립에서
+    빠질 수 있다) 무엇을 골랐는지 남긴다.
+    """
+    chosen: list[PoiId] = []
+    for category in sorted(add_one, key=lambda c: c.value):
+        in_category = [
+            c for c in candidates
+            if c.poi_id not in skip and c.poi_id in pois and pois[c.poi_id].category is category
+        ]
+        if in_category:
+            chosen.append(min(in_category, key=lambda c: (-c.score, str(c.poi_id))).poi_id)
+    picked = frozenset(chosen)
+    return (
+        tuple(replace(c, score=c.score + DIRECTIVE_STEP) if c.poi_id in picked else c
+              for c in candidates),
+        tuple(chosen),
+    )
+
+
+def trim_planb_rank_for_add_one(
+    ranked: Sequence[PoiId],
+    pois: Iterable[Poi],
+    add_one: frozenset[PoiCategory],
+) -> tuple[tuple[PoiId, ...], int]:
+    """"한 곳 추가"가 말한 카테고리는 PlanB 순위에서 **첫 1건만** 남긴다 — (남긴 순위, 버린 수).
+
+    PlanB 는 같은 원문("카페 가고 싶다")을 읽어 그 카테고리를 2·3위까지 올릴 수 있고
+    (`lift_planb_ranked` +0.2·+0.1), 그러면 `boost_add_one` 을 뒤로 옮겨도 그 카테고리가
+    2~3곳 들어온다. 1위는 남겨 PlanB 의 선택을 존중하고(한 곳 가산이 그 위에 얹힌다),
+    다른 카테고리의 상황 추천과 풀 밖 참조는 건드리지 않는다. 순서는 그대로다.
+    """
+    category_of = {p.poi_id: p.category for p in pois}
+    seen: set[PoiCategory] = set()
+    kept: list[PoiId] = []
+    for poi_id in ranked:
+        category = category_of.get(poi_id)
+        if category in add_one:
+            if category in seen:
+                continue
+            seen.add(category)
+        kept.append(poi_id)
+    return tuple(kept), len(ranked) - len(kept)
 
 
 def lift_planb_ranked(

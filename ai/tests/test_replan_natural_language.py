@@ -22,10 +22,14 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from trippilot.agents.planb.rag import PlanBRagRequest
-from trippilot.agents.schedule.agent import apply_directives
+from trippilot.agents.schedule.agent import (
+    apply_directives,
+    boost_add_one,
+    trim_planb_rank_for_add_one,
+)
 from trippilot.api.wiring import build_dev_app
 from trippilot.assembly_engine.scorer import DIRECTIVE_STEP, near_fit
-from trippilot.domain.common import GeoPoint, PoiId
+from trippilot.domain.common import GeoPoint, PoiId, Rejection, RejectionKind
 from trippilot.domain.llm import ScoredPoi
 from trippilot.domain.poi import PoiCategory
 from trippilot.llm_gateway.gates.replan_directive_translation import DirectiveTranslation
@@ -75,6 +79,123 @@ def test_규칙_점수에는_두_번_더하지_않는다() -> None:
 
     assert r.score == 1.0
     assert l.score == 1.0 + DIRECTIVE_STEP
+
+
+# ── ①′ 한 곳 추가(ADD_*)는 전원이 아니라 최고점 1곳 ───────────────────────
+
+
+def test_한_곳_추가는_그_카테고리_최고점_1곳에만_더한다() -> None:
+    """`boost_add_one` 은 카테고리별 최고점 1곳(동률은 poi_id 사전순) — 규칙·LLM 양쪽 1회씩,
+    `skip`(제외·고정)은 고르지 않는다.
+
+    2026-10-10 멘토 실측: "카페 가고 싶다"가 풀의 카페 전원 가산으로 돌아 남은 하루가
+    카페로 덮였다. 규칙 점수는 add_one 을 모르므로 여기서 더해도 두 배가 아니다.
+    """
+    pois = _case()[0].pois
+    cafe_a, cafe_b, sight = (replace(pois[0], category=PoiCategory.CAFE),
+                             replace(pois[1], category=PoiCategory.CAFE), pois[2])
+    index = {p.poi_id: p for p in (cafe_a, cafe_b, sight)}
+    cafe = frozenset({PoiCategory.CAFE})
+    for is_llm in (False, True):
+        # cafe_b(p2) 를 **앞에** 둔다 — 목록 순서 ≠ 사전순이어야 "동률은 poi_id 사전순"이
+        # 테스트로 고정된다(첫 등장을 고르는 구현도 통과하면 결정론 근거가 없다).
+        scored = (ScoredPoi(poi_id=cafe_b.poi_id, score=0.9, is_llm_score=is_llm),
+                  ScoredPoi(poi_id=cafe_a.poi_id, score=0.9, is_llm_score=is_llm),
+                  ScoredPoi(poi_id=sight.poi_id, score=1.0, is_llm_score=is_llm))
+        (b, a, s), picked = boost_add_one(scored, index, cafe)
+        assert picked == (cafe_a.poi_id,)
+        assert a.score == 0.9 + DIRECTIVE_STEP, f"llm={is_llm}: 사전순 첫 카페(p1)가 올라야 한다"
+        assert b.score == 0.9, f"llm={is_llm}: 다른 카페는 그대로"
+        assert s.score == 1.0
+        # 다녀온 곳(제외)을 고르면 가산이 헛돈다 — 건너뛰고 다음 카페를 고른다
+        (b2, a2, _), picked2 = boost_add_one(scored, index, cafe, skip=frozenset({cafe_a.poi_id}))
+        assert picked2 == (cafe_b.poi_id,) and a2.score == 0.9 and b2.score == 0.9 + DIRECTIVE_STEP
+    # 풀에 그 카테고리가 없으면 아무것도 고르지 않고 점수도 그대로
+    none_scored = (ScoredPoi(poi_id=sight.poi_id, score=1.0, is_llm_score=True),)
+    assert boost_add_one(none_scored, index, cafe) == (none_scored, ())
+
+
+def test_카페_넣어줘는_카페_한_곳만_들어오고_하루를_덮지_않는다() -> None:
+    """p3~p6 가 전부 카페(LLM 동률)인 판 — prefer 면 여럿, add_one 이면 정확히 하나."""
+    pool, req = _case()
+    cafes = {"p3", "p4", "p5", "p6"}
+    pool = replace(pool, pois=tuple(
+        replace(p, category=PoiCategory.CAFE) if str(p.poi_id) in cafes else p
+        for p in pool.pois))
+    agent, _ = _agent()
+
+    day_wide = _placed(agent.run(_task(pool, request=replace(
+        req, prefer_categories=frozenset({PoiCategory.CAFE})))))
+    one_place = _placed(agent.run(_task(pool, request=replace(
+        req, add_one_categories=frozenset({PoiCategory.CAFE})))))
+
+    assert len(cafes & set(day_wide)) >= 2, f"전제: 하루 전환이면 카페가 여럿 온다 {day_wide}"
+    assert len(cafes & set(one_place)) == 1, f"한 곳 추가인데 카페가 {one_place}"
+    assert {"p1", "p2"} & set(one_place), f"원래 가던 곳이 다 밀렸다 {one_place}"
+
+
+def _cafes_pool():
+    pool, req = _case()
+    cafes = {"p3", "p4", "p5", "p6"}
+    return replace(pool, pois=tuple(
+        replace(p, category=PoiCategory.CAFE) if str(p.poi_id) in cafes else p
+        for p in pool.pois)), req, cafes
+
+
+def test_한_곳_추가는_거절한_카페를_다시_고르지_않는다() -> None:
+    """선정이 거절 강등 **뒤**라야 한다 — 앞이면 거절 상한(0.25) < 가산(0.3) 이라 그 카페가 또 온다."""
+    pool, req, cafes = _cafes_pool()
+    agent, _ = _agent()
+    rejected = PoiId("p3")  # 동률이면 사전순 첫 카페 — 거절이 없을 때 고르는 바로 그 곳
+    placed = _placed(agent.run(_task(pool, request=replace(
+        req, add_one_categories=frozenset({PoiCategory.CAFE}),
+        rejections=(Rejection(poi_id=rejected, kind=RejectionKind.SWAPPED_OUT, count=3),)))))
+    assert "p3" not in placed, f"거절한 카페가 다시 왔다 {placed}"
+    assert len(cafes & set(placed)) == 1, placed
+
+
+def test_한_곳_추가는_다녀온_카페를_고르지_않는다() -> None:
+    """제외 POI(다녀온 곳)를 고르면 가산이 헛돌아 카페가 0곳이 된다 — 건너뛴다."""
+    pool, req, cafes = _cafes_pool()
+    agent, _ = _agent()
+    placed = _placed(agent.run(_task(pool, request=replace(
+        req, add_one_categories=frozenset({PoiCategory.CAFE}),
+        excluded_poi_ids=frozenset({PoiId("p3")})))))
+    assert "p3" not in placed
+    assert len(cafes & set(placed)) == 1, f"제외를 고르고 헛돌았다 {placed}"
+
+
+def test_PlanB_가_다른_카페를_올려도_카페는_한_곳이다() -> None:
+    """선정이 PlanB 가산 **뒤**라야 한다 — 앞이면 PlanB 1위 카페와 다른 카페를 골라 두 곳이 가산된다."""
+    pool, req, cafes = _cafes_pool()
+    agent, _ = _agent()
+    task = replace(_task(pool, request=replace(
+        req, add_one_categories=frozenset({PoiCategory.CAFE}))),
+        planb_rank=(PoiId("p4"),))  # 사전순 첫 카페(p3)가 아닌 곳을 PlanB 가 올린다
+    placed = _placed(agent.run(task))
+    assert len(cafes & set(placed)) == 1, f"카페가 둘이다 {placed}"
+    assert "p4" in placed, f"PlanB 의 선택을 존중해야 한다 {placed}"
+
+
+def test_풀에_카페가_없으면_한_곳_추가도_못_닿는다고_밝힌다() -> None:
+    """ONE 지시는 prefer 가 아니라 add_one 으로 가므로 노트가 빠지면 침묵 실패다(리뷰 재현)."""
+    body, _ = _replan(directives=["ADD_CAFE"])
+
+    assert "directive_no_candidates: CAFE" in body["notes"], body["notes"]
+
+
+def test_PlanB_순위에서_한_곳_추가_카테고리는_첫_1건만_남긴다() -> None:
+    """PlanB 가 같은 원문으로 카페를 2·3위까지 올리면(+0.2·+0.1) 한 곳 가산을 뒤로 옮겨도
+    카페가 2~3곳 들어온다 — 그 카테고리는 첫 1건만, 다른 카테고리·풀 밖 참조는 그대로."""
+    pool, _, _ = _cafes_pool()  # p3~p6 카페, p1·p2 는 아님
+    ranked = tuple(PoiId(p) for p in ("p4", "p5", "p1", "p6", "ghost"))
+
+    kept, dropped = trim_planb_rank_for_add_one(ranked, pool.pois, frozenset({PoiCategory.CAFE}))
+
+    assert [str(p) for p in kept] == ["p4", "p1", "ghost"], kept  # 첫 카페 p4 만, 순서 유지
+    assert dropped == 2
+    # 말한 카테고리가 없으면 아무것도 안 버린다
+    assert trim_planb_rank_for_add_one(ranked, pool.pois, frozenset({PoiCategory.FOOD})) == (ranked, 0)
 
 
 # ── ② 가까운 데로 ─────────────────────────────────────────────────────
