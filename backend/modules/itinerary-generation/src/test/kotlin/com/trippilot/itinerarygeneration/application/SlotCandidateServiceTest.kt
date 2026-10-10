@@ -193,6 +193,75 @@ class SlotCandidateServiceTest : StringSpec({
             listOf(SlotKey.of(d1, neighborBefore), SlotKey.of(d1, neighborAfter))
     }
 
+    // ── 탐색 중심(TRIP-1252) ────────────────────────────────────────────────────
+    // POI 마다 좌표가 **달라야** 중심이 어디인지 가려진다. 공용 `surfaces` 는 전 POI 가 같은
+    // 좌표라 이 축을 재지 못한다 — 그걸 쓰면 이 스펙은 늘 통과하는 공허한 단언이 된다.
+    val distinctSurfaces = object : PoiSurfaceFacade {
+        val coords = mapOf(
+            neighborBefore to (33.10 to 126.10), // 직전 — 사용자가 방금 고른 자리
+            target to (33.90 to 126.90),         // 교체 대상 — AI 원배치
+            neighborAfter to (33.50 to 126.50),
+        )
+        override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
+            coords[id]?.let { (lat, lng) -> id to PoiSurfaceView(id, "장소", lat, lng, "명소", "SIGHT", null, null, emptyList()) }
+        }.toMap()
+        override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+    }
+
+    fun serviceWithDistinctCoords(agent: CapturingAgent) =
+        SlotCandidateService(trips, Repo(itinerary), agent, distinctSurfaces, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
+
+    "같이 고르기는 직전 슬롯을 탐색 중심으로 쓴다 — 방금 고른 곳에서 다음 발걸음이다(TRIP-1252)" {
+        val agent = CapturingAgent()
+
+        serviceWithDistinctCoords(agent)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null, coPick = true))
+
+        // AI 원배치(33.90)가 아니라 직전 선택(33.10)이 중심이다. 이게 뒤집히면 칸을 고를수록
+        // 동선이 도시 전체로 튄다 — 경산 6칸 재현(2026-10-05).
+        agent.captured!!.centerLat shouldBe 33.10
+        agent.captured!!.centerLng shouldBe 126.10
+    }
+
+    "완전 AI '다른 후보'는 교체 대상이 중심이다 — '이 자리 대체'라 그 자리가 맥락이다(BR-U3-23 유지)" {
+        val agent = CapturingAgent()
+
+        serviceWithDistinctCoords(agent)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.captured!!.centerLat shouldBe 33.90
+        agent.captured!!.centerLng shouldBe 126.90
+    }
+
+    "직전 슬롯이 정본에서 사라졌으면 교체 대상으로 물러선다 — 그 요청까지 죽이지 않는다" {
+        // 적대적 리뷰가 잡은 미검증 분기: 공용 fake 는 전 POI 에 좌표를 줘서 이 경로를 아무도 안 지난다.
+        // 직전 장소가 하드 삭제된 것은 **이 요청의 잘못이 아니라서** 404 로 죽이지 않고 물러선다.
+        val agent = CapturingAgent()
+        val missingPrev = object : PoiSurfaceFacade {
+            override fun findSurfaces(poiIds: Collection<UUID>) = poiIds
+                .filterNot { it == neighborBefore }   // 직전 슬롯만 정본에서 사라진 상태
+                .associateWith { PoiSurfaceView(it, "장소", 33.90, 126.90, "명소", "SIGHT", null, null, emptyList()) }
+            override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+        }
+
+        SlotCandidateService(trips, Repo(itinerary), agent, missingPrev, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null, coPick = true))
+
+        // 교체 대상 좌표로 물러섰다(요청은 성사된다).
+        agent.captured!!.centerLat shouldBe 33.90
+    }
+
+    "같이 고르기라도 첫 칸이면 교체 대상이 중심이다 — 직전이 없으면 옮길 데가 없다" {
+        val agent = CapturingAgent()
+
+        // neighborBefore 가 그 날의 첫 슬롯이다(index 0).
+        serviceWithDistinctCoords(agent)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, neighborBefore), null, null, null, coPick = true))
+
+        agent.captured!!.centerLat shouldBe 33.10
+        agent.captured!!.centerLng shouldBe 126.10
+    }
+
     "첫 슬롯이면 이웃이 하나뿐이다" {
         val agent = CapturingAgent()
         service(agent).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, neighborBefore), null, null, null))
