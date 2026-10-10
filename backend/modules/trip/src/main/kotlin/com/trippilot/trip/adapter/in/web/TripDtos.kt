@@ -113,6 +113,16 @@ data class TripResponse(
      * 끝났는지는 [status], 언제 끝났는지(상대 표기·정렬)는 이 값이다.
      */
     val endedAt: Instant?,
+    /**
+     * 일과 창(V2.62) — 미설정이면 null 이고 서버가 기본 창(09:00~21:00)을 쓴다.
+     *
+     * **응답에 반드시 실어야 한다.** 편집 요청은 가변 필드를 **대체**하므로(budgetTotal 과 같은 규칙)
+     * 클라이언트가 현재 값을 못 읽으면 다른 칸만 고치려다 이 값을 지운다 — "여행 편집했더니
+     * 9시로 돌아갔다"가 된다. 적대적 리뷰가 잡은 자리다.
+     */
+    val dayStartAt: LocalTime?,
+    val firstDayStartAt: LocalTime?,
+    val lastDayEndAt: LocalTime?,
 ) {
     companion object {
         /**
@@ -127,6 +137,9 @@ data class TripResponse(
             status = t.statusAt(today), createdAt = t.createdAt, updatedAt = t.updatedAt,
             baseCount = counts.baseCount, itineraryDayCount = counts.itineraryDayCount,
             endedAt = t.endedAt,
+            dayStartAt = t.dayWindow.dayStartAt,
+            firstDayStartAt = t.dayWindow.firstDayStartAt,
+            lastDayEndAt = t.dayWindow.lastDayEndAt,
         )
     }
 }

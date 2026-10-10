@@ -2130,6 +2130,17 @@ components:
 
             이 값의 null 로 "안 끝났다"를 판정하면 **그 창에서 끝난 여행을 진행 중으로 본다.**
             끝났는지는 `status`, 언제 끝났는지(상대 표기·정렬)는 이 값이다.
+        dayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            일과 창(V2.62) — 미설정이면 null 이고 서버가 기본 창(09:00~21:00)을 쓴다.
+
+            **편집 전에 반드시 읽어라.** 편집 요청은 가변 필드를 **대체**하므로(`budgetTotal` 과 같은
+            규칙) 생략하면 지워진다 — 다른 칸만 고치려면 이 값을 그대로 돌려보내야 한다.
+        firstDayStartAt: { type: string, format: time, nullable: true, description: 첫날만 다른 시작(도착 후) }
+        lastDayEndAt: { type: string, format: time, nullable: true, description: 마지막날만 다른 종료(출발 전) }
 
     CreateTripRequest:
       type: object

@@ -489,6 +489,39 @@ class GenerateItineraryServiceTest : StringSpec({
         }
     }
 
+    "마지막날 종료 시각은 그 날에만 걸린다 — 2차의 다른 날까지 좁히지 않는다" {
+        // 적대적 리뷰가 잡은 자리: 창을 min/max 로 접으면 마지막날 10시 귀가가 2차 전 일자에 걸려
+        // 비어 있는 날에도 "넣을 자리가 없습니다"가 나간다. ANYTIME 은 일자 많은 쪽(2차)이 맡으므로
+        // 필수 방문지를 날짜 미지정으로 두어 그 경로를 실제로 지난다.
+        val agent = CapturingAgent(now)
+        val anytime = UUID.randomUUID()
+
+        service(
+            agent, fullPrefs, emptyList(),
+            fixedVisits = listOf(FixedVisit(anytime, null, null, 120)),
+            lastDayEndAt = LocalTime.parse("10:00"),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val windows = agent.captures.flatMap { it.timeWindows }
+        windows.first { it.date == defaultEnd }.end shouldBe LocalTime.parse("10:00")
+        windows.filter { it.date != defaultEnd }.forEach { it.end shouldBe LocalTime.parse("21:00") }
+        // 2시간짜리 ANYTIME 은 09:00~21:00 인 날에 들어간다 — 마지막날 창에 막혀 미배치가 되면 안 된다.
+        (anytime in agent.captures.flatMap { it.fixedBlocks }.map { it.poiId }) shouldBe true
+    }
+
+    "뒤집힌 창은 **아무것도 쓰기 전에** 막는다 — 2차에서 터지면 생성 중에 고착된다" {
+        // 다일 여행 + lastDayEndAt 뒤집힘. 종전 구현은 1차를 커밋하고 세션을 day1Ready 로 연 뒤
+        // 2차 조립(try 밖)에서 던져, 400 을 받고도 화면이 영원히 폴링했다(복구 경로 없음).
+        val agent = CapturingAgent(now)
+
+        shouldThrow<ValidationFailed> {
+            service(agent, fullPrefs, emptyList(), fixedVisits = emptyList(), lastDayEndAt = LocalTime.parse("08:00"))
+                .generate(acc, tripId, GenerationMode.FULLY_AI)
+        }
+        // 경계를 **한 번도 안 불렀다** = 쓰기 전에 막혔다.
+        agent.captures.size shouldBe 0
+    }
+
     "창이 뒤집히는 값은 막는다 — 조용히 '해 없음'이 되지 않게" {
         val agent = CapturingAgent(now)
 

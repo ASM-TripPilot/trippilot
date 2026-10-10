@@ -94,6 +94,11 @@ class GenerateItineraryService(
         // 소유·기간은 위에서 선검증 — 거점 앵커는 기간을 넘겨 조립(중복 trip 조회 없음).
         val stayAnchors = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
         val planDates = planDates(ctx.startDate, ctx.endDate)
+        // 창은 **아무것도 쓰기 전에 전부 검증한다.** 2차 조립은 day1 커밋 뒤에 돌고 그 호출은
+        // 세션을 닫는 try 밖이라, 거기서 던지면 PARTIAL 일정과 열린 세션이 남아 화면이
+        // "생성 중"에 고착된다 — 재시도해도 같은 지점에서 또 터져 사용자가 빠져나올 길이 없다.
+        // 여기서 한 번 돌면 아래의 `dayWindowOf` 는 더 못 던진다.
+        planDates.forEach { dayWindowOf(it, ctx) }
 
         // 직접 만들기는 AI 를 아예 부르지 않는다 — 빈 일자만 깔고 사용자가 편집으로 채운다(US-SCHED-09).
         // 상대 enum 에 MANUAL 이 없어 경계로 나가면 422 이므로, 여기서 갈라 아예 호출 경로에 들어가지 않게 한다.
@@ -331,10 +336,10 @@ class GenerateItineraryService(
             dated = candidates.filter { it.date != null && it.start != null },
             anytime = candidates.filter { it.date == null || it.start == null },
             dates = dates,
-            // 물질화도 **그 날 창**을 따른다 — 전 일자 상수를 쓰면 첫날 도착이 11시인데도
-            // ANYTIME 필수방문이 09:00 에 박힌다(창만 고치고 여기를 두면 둘이 어긋난다).
-            dayStart = dates.minOrNull()?.let { dayWindowOf(it, ctx).first } ?: DEFAULT_START,
-            dayEnd = dates.maxOrNull()?.let { dayWindowOf(it, ctx).second } ?: DEFAULT_END,
+            // 물질화도 **그 날 창**을 따른다 — 날짜마다 창이 다를 수 있으므로 하나로 접지 않는다.
+            // 접으면(min/max) 마지막날 10시 귀가가 2차의 전 일자에 걸려, 비어 있는 날에도
+            // "넣을 자리가 없습니다"가 나간다.
+            window = { d -> dayWindowOf(d, ctx) },
         )
         if (materialized.unplaced.isNotEmpty()) {
             log.info(
