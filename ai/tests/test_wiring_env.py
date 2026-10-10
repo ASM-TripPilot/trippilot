@@ -563,6 +563,33 @@ def test_shipped_events_store_is_not_empty() -> None:
     assert _json.loads(shipped.read_text(encoding="utf-8"))["events"], "행사 0건"
 
 
+def test_deploy_restores_events_snapshot_from_collect_state() -> None:
+    """배포가 **행사 정본을 복원한 뒤** 이미지를 굽는지 — 구조로 고정한다.
+
+    위 테스트는 "파일이 있고 비어 있지 않다"만 보므로 **전부 만료된 사본도 통과한다**.
+    실제로 그 상태였다(2026-10-10 실측: 커밋 사본 76건 중 그날 유효 10건, 정본 443건 중 346건).
+    수집 배치는 `collect-state` 브랜치에 매일 쌓는데 배포가 그걸 읽지 않았다.
+
+    **날짜 단정을 여기 두지 않는 것은 의도다.** "동봉본이 N일 이내"로 재면 커밋이 늙기만 해도
+    빨개지는 시한폭탄이 되고, 그러면 사람이 단정을 느슨하게 고쳐 가드가 사라진다. 신선함은
+    배포 스텝이 보장하고(복원 + 유효 건수 하한), 이 테스트는 **그 스텝의 존재**를 지킨다.
+    """
+    from pathlib import Path as _Path
+
+    workflow = (
+        _Path(__file__).resolve().parents[2]
+        / ".github" / "workflows" / "aws-deploy.yml"
+    ).read_text(encoding="utf-8")
+
+    restore = workflow.index("Restore events snapshot from collect-state")
+    build = workflow.index("name: Build and publish AI")
+    assert restore < build, "행사 정본 복원이 AI 이미지 빌드보다 뒤에 있다 — 빌드는 낡은 사본을 굽는다"
+    assert "git show FETCH_HEAD:collected_events.json" in workflow, "정본에서 꺼내는 명령이 없다"
+    # 두 가드가 **각각** 있는지. 하나로 합치면 비례가 깨진다(아래 두 단정의 문구가 그 이유다).
+    assert "sys.exit" in workflow, "복원이 깨진 경우(빈 파일·스키마 변경)에 배포를 세우지 않는다"
+    assert "::warning::" in workflow, "유효 행사가 적을 때 경고가 없다 — 조용히 지나간다"
+
+
 # ── 빈 문자열 env 는 미설정이다 (TRIP-882 회귀) ────────────────────────
 # compose 는 통로를 열어 둔 변수를 **빈 문자열**로 넘긴다(`${X:-}`). `os.environ
 # .get(k, default)` 는 변수가 없을 때만 기본을 쓰므로 `int("")` 로 죽는다 — 이
