@@ -233,6 +233,24 @@ class SlotCandidateServiceTest : StringSpec({
         agent.captured!!.centerLng shouldBe 126.90
     }
 
+    "직전 슬롯이 정본에서 사라졌으면 교체 대상으로 물러선다 — 그 요청까지 죽이지 않는다" {
+        // 적대적 리뷰가 잡은 미검증 분기: 공용 fake 는 전 POI 에 좌표를 줘서 이 경로를 아무도 안 지난다.
+        // 직전 장소가 하드 삭제된 것은 **이 요청의 잘못이 아니라서** 404 로 죽이지 않고 물러선다.
+        val agent = CapturingAgent()
+        val missingPrev = object : PoiSurfaceFacade {
+            override fun findSurfaces(poiIds: Collection<UUID>) = poiIds
+                .filterNot { it == neighborBefore }   // 직전 슬롯만 정본에서 사라진 상태
+                .associateWith { PoiSurfaceView(it, "장소", 33.90, 126.90, "명소", "SIGHT", null, null, emptyList()) }
+            override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+        }
+
+        SlotCandidateService(trips, Repo(itinerary), agent, missingPrev, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null, coPick = true))
+
+        // 교체 대상 좌표로 물러섰다(요청은 성사된다).
+        agent.captured!!.centerLat shouldBe 33.90
+    }
+
     "같이 고르기라도 첫 칸이면 교체 대상이 중심이다 — 직전이 없으면 옮길 데가 없다" {
         val agent = CapturingAgent()
 
