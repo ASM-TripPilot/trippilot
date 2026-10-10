@@ -2889,6 +2889,11 @@ components:
                           category: { type: string, nullable: true }
                           tags: { type: array, items: { type: string } }
                           imageUrl: { type: string, nullable: true }
+                          # 후보 핀 좌표 — SlotCandidate.lat/lng 와 같은 뜻이다. TRIP-1063 이 온디맨드
+                          # 후보에만 더해 두 응답의 모양이 갈려 있었다(같은 카드를 재사용하는데).
+                          # 표면이 없으면 null — 반경 중심 등으로 지어내지 않는다(BR-U1-06).
+                          lat: { type: number, format: double, nullable: true }
+                          lng: { type: number, format: double, nullable: true }
                     # INV-3: 소요시간(duration) 필드 없음 — 거리만(후속)
 
     TermsType:
