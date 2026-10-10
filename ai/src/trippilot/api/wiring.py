@@ -145,7 +145,7 @@ from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
 from trippilot.agents.edit.commands import EditStatus
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
-from trippilot.agents.schedule.agent import ScheduleAgent
+from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
 from trippilot.agents.planb.directives import (
     DirectiveSpec,
     index_of,
@@ -1698,7 +1698,7 @@ class WiredItineraryOrchestrator:
         # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.
         t0 = self._clock.monotonic_ms()
 
-        resolved, unknown, prefer, avoid, near = self._replan_directives(
+        resolved, unknown, prefer, avoid, near, add_one = self._replan_directives(
             request, notes, trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
 
         transport = _token_or(
@@ -1729,7 +1729,7 @@ class WiredItineraryOrchestrator:
         daily_rain = self._rain_from(packets, dates, now)
         # 해석은 했는데 풀에 그 종류가 0곳이면 지시는 일정에 닿을 수 없다 — "쇼핑하고 싶어"를
         # 알아듣고 쇼핑이 안 오는 이유가 풀인지 점수인지 가르는 노트(침묵 금지).
-        absent = sorted(c.value for c in prefer - {p.category for p in pool.pois})
+        absent = sorted(c.value for c in (prefer | add_one) - {p.category for p in pool.pois})
         if absent:
             notes.append(f"directive_no_candidates: {','.join(absent)}")
 
@@ -1753,6 +1753,14 @@ class WiredItineraryOrchestrator:
         planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
         if planb.is_fallback:
             notes.append(f"planb_rank_skipped: fallback_level={planb.fallback_level}")
+        # "한 곳 추가"가 말한 카테고리는 PlanB 순위에서도 **첫 1건만** 남긴다 — PlanB 는 같은
+        # 원문(free_text)을 읽어 그 카테고리를 2·3위까지 올릴 수 있고(+0.2·+0.1), 그러면 한 곳
+        # 가산을 뒤로 옮겨도 그 카테고리가 2~3곳 들어온다. 1위는 남겨 PlanB 의 선택을 존중하고
+        # (에이전트의 한 곳 가산이 그 위에 얹힌다), 다른 카테고리의 상황 추천은 건드리지 않는다.
+        if add_one and planb_rank:
+            planb_rank, dropped = trim_planb_rank_for_add_one(planb_rank, pool.pois, add_one)
+            if dropped:
+                notes.append(f"planb_rank_trimmed: add_one dropped={dropped}")
 
         window = request.time_window
         domain_request = core.GenerateItineraryRequest(
@@ -1782,6 +1790,7 @@ class WiredItineraryOrchestrator:
             include_explanations=False,  # 재계획 화면(i06)은 설명을 안 쓴다
             prefer_categories=prefer,
             avoid_categories=avoid,
+            add_one_categories=add_one,
             prefer_near=near,
             not_before=not_before,
         )
@@ -1810,8 +1819,13 @@ class WiredItineraryOrchestrator:
     def _replan_directives(
         self, request: schemas.ReplanRequest, notes: list[str], *,
         trace_id: TraceId, now: datetime, deadline_ms: int,
-    ) -> tuple[list[str], list[str], frozenset[PoiCategory], frozenset[PoiCategory], bool]:
-        """칩 + 자유입력 → (해석분, 미지분, 선호 카테고리, 회피 카테고리, 가까운 데로).
+    ) -> tuple[list[str], list[str], frozenset[PoiCategory], frozenset[PoiCategory], bool,
+               frozenset[PoiCategory]]:
+        """칩 + 자유입력 → (해석분, 미지분, 선호, 회피, 가까운 데로, 한 곳 추가).
+
+        `cardinality: ONE` 지시(ADD_FOOD·ADD_CAFE)는 `prefer` 에 접지 않고 `add_one` 으로
+        따로 간다 — 접으면 "카페 넣어줘"가 "하루를 카페로"와 같은 기구를 타서 남은 하루가
+        카페로 덮인다(2026-10-10 멘토 실측).
 
         자유입력은 ① 임베딩 매칭(부정문이면 사전 표현 정확일치만) ② 못 잡으면 번역 LLM(A-3)
         ③ 그래도 없으면 `free_text_unresolved` — 원문은 어느 경우든 PlanB 선택 프롬프트로 간다.
@@ -1827,7 +1841,7 @@ class WiredItineraryOrchestrator:
         if not self._directives:
             if request.directives or request.free_text:
                 notes.append("directive_dictionary_absent")
-            return [], list(request.directives), frozenset(), frozenset(), False
+            return [], list(request.directives), frozenset(), frozenset(), False, frozenset()
 
         known, unknown = resolve_chips(request.directives, self._directives)
         specs = list(known)
@@ -1861,6 +1875,7 @@ class WiredItineraryOrchestrator:
 
         prefer: set[PoiCategory] = set()
         avoid: set[PoiCategory] = set()
+        add_one: set[PoiCategory] = set()
         near = False
         ineffective: list[str] = []
         for spec in specs:
@@ -1874,15 +1889,26 @@ class WiredItineraryOrchestrator:
                 else:
                     ineffective.append(spec.key)
                 continue
+            if spec.cardinality == "ONE":
+                add_one |= _categories_of(spec.prefer_categories)
+                continue
             prefer |= _categories_of(spec.prefer_categories)
             avoid |= _categories_of(spec.avoid_categories)
         if ineffective:
             notes.append(f"directives_unwired: {','.join(sorted(ineffective))}")
-        both = prefer & avoid
+        both = (prefer | add_one) & avoid
         if both:  # 반대인 칩을 같이 눌렀다 — 상쇄되고 그 사실을 남긴다
             notes.append(
                 f"directives_conflict: {','.join(sorted(c.value for c in both))}")
-        return [s.key for s in specs], list(unknown), frozenset(prefer), frozenset(avoid), near
+            # prefer∧avoid 는 `directive_fit` 이 점수에서 상쇄한다. add_one∧avoid 는 여기서
+            # **둘 다** 뺀다 — add_one 만 빼면 avoid 가 살아 전원 감점이 되어, 같은 충돌에
+            # 규약이 둘이 된다. prefer 에도 든 카테고리는 directive_fit 몫으로 남긴다.
+            cancelled = (add_one & avoid) - prefer
+            add_one -= cancelled
+            avoid -= cancelled
+        add_one -= prefer  # 하루 전환이 이미 전원 가산하면 한 곳 추가는 할 일이 없다
+        return ([s.key for s in specs], list(unknown), frozenset(prefer), frozenset(avoid),
+                near, frozenset(add_one))
 
     def _translate_free_text(
         self, text: str, notes: list[str], *, trace_id: TraceId, now: datetime,

@@ -282,7 +282,39 @@ def test_해석한_지시가_에이전트_요청까지_실린다() -> None:
     request = seen[0]
     assert PoiCategory.ACTIVITY in request.avoid_categories  # AVOID_STRENUOUS
     assert PoiCategory.NATURE in request.avoid_categories
-    assert PoiCategory.CAFE in request.prefer_categories     # ADD_CAFE
+    # ADD_CAFE 는 `cardinality: ONE` — 하루 전환(prefer)이 아니라 한 곳 추가(add_one)로 간다.
+    # prefer 에 실리면 풀의 카페 전원이 가산돼 남은 하루가 카페로 덮인다(2026-10-10 실측).
+    assert PoiCategory.CAFE in request.add_one_categories
+    assert PoiCategory.CAFE not in request.prefer_categories
+
+
+def test_하루_전환이_같은_카테고리를_이미_올리면_한_곳_추가는_접힌다() -> None:
+    """INDOOR(prefer 에 CAFE 포함) + ADD_CAFE — 전원 가산이 이미 있으니 add_one 은 비운다.
+
+    둘 다 살리면 그 카테고리 최고점 1곳이 +0.6 으로 튄다. 리뷰 뮤테이션(M6)에서
+    `add_one -= prefer` 를 꺼도 초록이었다 — 이 테스트가 그 줄을 고정한다.
+    """
+    app = build_dev_app(directives=_DIRECTIVES)
+    orchestrator = app.state.orchestrator
+    real = orchestrator._schedule_agent
+    seen: list[object] = []
+
+    class _Spy:
+        def run(self, task):
+            seen.append(task.request)
+            return real.run(task)
+
+    object.__setattr__(orchestrator, "_schedule_agent", _Spy())
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(
+            "/ai/v1/planb/replan",
+            json=_body(directives=["INDOOR", "ADD_CAFE"]),
+        )
+
+    assert response.status_code == 200, response.text
+    request = seen[0]
+    assert PoiCategory.CAFE in request.prefer_categories
+    assert request.add_one_categories == frozenset()
 
 
 def test_지시가_없으면_요청에도_빈_집합이_실린다() -> None:

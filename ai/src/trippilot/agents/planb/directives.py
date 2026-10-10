@@ -62,6 +62,11 @@ DEFAULT_MATCH_TOP_K = 6
 MAX_RESOLVED = 4
 
 ENFORCED_BY = ("PROMPT", "RANKING", "SOLVER")
+# 지시의 **범위**. DAY = 하루 방향 전환(그 카테고리 전원 가산 — INDOOR·CULTURE_FOCUS…),
+# ONE = 한 곳 추가(그 카테고리 최고점 1곳에만 가산 — ADD_FOOD·ADD_CAFE). 2026-10-10 멘토
+# 실측: "카페 가고 싶다"가 DAY 기구로 돌아 남은 하루가 카페로 덮였다 — 추가형 지시에
+# 범위 축이 없어 하루 전환과 같은 기구를 탔기 때문이다.
+CARDINALITY = ("DAY", "ONE")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,10 +80,21 @@ class DirectiveSpec:
     prefer_categories: tuple[str, ...] = ()
     avoid_categories: tuple[str, ...] = ()
     unwired: bool = False
+    cardinality: str = "DAY"
 
     def __post_init__(self) -> None:
         if not self.key:
             raise ValueError("DirectiveSpec.key 는 비어있을 수 없음")
+        if self.cardinality not in CARDINALITY:
+            raise ValueError(f"{self.key}: cardinality 는 {CARDINALITY} 중 하나")
+        # ONE 은 "이 카테고리 한 곳"이다 — 선호가 둘이면 어느 한 곳인지 정의가 없고,
+        # 회피에는 개수 개념이 없다.
+        if self.cardinality == "ONE" and not (
+            self.enforced_by == "PROMPT"
+            and len(self.prefer_categories) == 1
+            and not self.avoid_categories
+        ):
+            raise ValueError(f"{self.key}: ONE 은 PROMPT + prefer_categories 정확히 1종")
         if not self.label.strip():
             raise ValueError(f"{self.key}: label 이 비어있음")
         if self.enforced_by not in ENFORCED_BY:
@@ -151,6 +167,7 @@ def load_directives(data: object) -> tuple[DirectiveSpec, ...]:
                     prefer_categories=tuple(entry.get("prefer_categories") or ()),
                     avoid_categories=tuple(entry.get("avoid_categories") or ()),
                     unwired=bool(entry.get("unwired", False)),
+                    cardinality=str(entry.get("cardinality", "DAY")),
                 )
             )
         except ValueError as e:
