@@ -35,7 +35,7 @@ class MustVisitMaterializerTest : StringSpec({
         FixedBlock(UUID.randomUUID(), date, LocalTime.parse(start), dwell)
 
     "ANYTIME 은 날짜·시각이 채워져 나간다 — null 이 하나라도 나가면 요청 전체가 422 다" {
-        val result = MustVisitMaterializer.materialize(emptyList(), listOf(anytime()), listOf(d1), open, close)
+        val result = MustVisitMaterializer.materialize(emptyList(), listOf(anytime()), listOf(d1)) { open to close }
 
         result.fixedBlocks.single().date shouldBe d1
         result.fixedBlocks.single().start shouldBe open // 이른 쪽부터 채운다
@@ -47,7 +47,7 @@ class MustVisitMaterializerTest : StringSpec({
             dated = emptyList(),
             anytime = listOf(anytime(), anytime(), anytime()),
             dates = listOf(d1, d2, d3),
-            dayStart = open, dayEnd = close,
+            window = { open to close },
         )
         result.fixedBlocks.map { it.date } shouldContainExactly listOf(d1, d2, d3)
     }
@@ -57,7 +57,7 @@ class MustVisitMaterializerTest : StringSpec({
             dated = listOf(dated(d1, "10:00"), dated(d1, "14:00")), // d1 은 2건
             anytime = listOf(anytime()),
             dates = listOf(d1, d2),
-            dayStart = open, dayEnd = close,
+            window = { open to close },
         )
         result.fixedBlocks.single { it.date == d2 }.date shouldBe d2 // 한산한 d2 로 간다
     }
@@ -67,14 +67,14 @@ class MustVisitMaterializerTest : StringSpec({
             dated = listOf(dated(d1, "09:00", dwell = 90)), // 09:00~10:30 점유
             anytime = listOf(anytime(dwell = 60)),
             dates = listOf(d1),
-            dayStart = open, dayEnd = close,
+            window = { open to close },
         )
         result.fixedBlocks.single { it.date != null && it.dwellMin == 60 }.start shouldBe LocalTime.parse("10:30")
     }
 
     "사용자가 고정한 블록은 그대로 통과한다" {
         val fixed = dated(d1, "12:00", dwell = 90)
-        val result = MustVisitMaterializer.materialize(listOf(fixed), emptyList(), listOf(d1), open, close)
+        val result = MustVisitMaterializer.materialize(listOf(fixed), emptyList(), listOf(d1)) { open to close }
         result.fixedBlocks shouldContainExactly listOf(fixed) // 손대지 않는다
     }
 
@@ -83,14 +83,14 @@ class MustVisitMaterializerTest : StringSpec({
             dated = listOf(dated(d1, "09:00", dwell = 60 * 11)), // 09:00~20:00 점유
             anytime = listOf(anytime(dwell = 120)),              // 20:00+2h = 22:00 > 21:00
             dates = listOf(d1),
-            dayStart = open, dayEnd = close,
+            window = { open to close },
         )
         result.fixedBlocks.none { it.date == null } shouldBe true
         result.unplaced.single().reasonCode shouldBe UnplacedReason.NO_FEASIBLE_SLOT
     }
 
     "맡은 일자가 없으면 전부 보고한다" {
-        val result = MustVisitMaterializer.materialize(emptyList(), listOf(anytime(), anytime()), emptyList(), open, close)
+        val result = MustVisitMaterializer.materialize(emptyList(), listOf(anytime(), anytime()), emptyList()) { open to close }
         result.fixedBlocks shouldBe emptyList()
         result.unplaced.size shouldBe 2
     }
@@ -99,8 +99,8 @@ class MustVisitMaterializerTest : StringSpec({
         val poi = UUID.randomUUID()
         fun run() = MustVisitMaterializer.materialize(
             emptyList(), listOf(FixedBlock(poi, null, null, null), FixedBlock(poi, null, null, null)),
-            listOf(d1, d2), open, close,
-        ).fixedBlocks.map { it.date to it.start }
+            listOf(d1, d2),
+        ) { open to close }.fixedBlocks.map { it.date to it.start }
 
         run() shouldBe run()
     }
@@ -113,7 +113,7 @@ class MustVisitMaterializerTest : StringSpec({
                 dated = emptyList(),
                 anytime = dwells.map { anytime(it) },
                 dates = dates,
-                dayStart = open, dayEnd = close,
+                window = { open to close },
             )
             result.fixedBlocks.all { it.date != null && it.start != null } shouldBe true
             // 넣은 것 + 보고한 것 = 받은 것. 조용히 사라지는 건이 없다.
@@ -124,8 +124,8 @@ class MustVisitMaterializerTest : StringSpec({
     "배치된 블록끼리 겹치지 않는다" {
         checkAll(Arb.list(Arb.int(30..120), 0..6)) { dwells ->
             val result = MustVisitMaterializer.materialize(
-                emptyList(), dwells.map { anytime(it) }, listOf(d1, d2), open, close,
-            )
+                emptyList(), dwells.map { anytime(it) }, listOf(d1, d2),
+            ) { open to close }
             result.fixedBlocks.groupBy { it.date }.forEach { (_, sameDay) ->
                 val sorted = sameDay.sortedBy { it.start }
                 sorted.zipWithNext().forEach { (a, b) ->
@@ -138,7 +138,7 @@ class MustVisitMaterializerTest : StringSpec({
 
     "일과 창 밖으로 나가지 않는다" {
         checkAll(Arb.list(Arb.int(30..180), 0..6)) { dwells ->
-            MustVisitMaterializer.materialize(emptyList(), dwells.map { anytime(it) }, listOf(d1), open, close)
+            MustVisitMaterializer.materialize(emptyList(), dwells.map { anytime(it) }, listOf(d1)) { open to close }
                 .fixedBlocks.forEach {
                     (it.start!! >= open) shouldBe true
                     (it.start!!.plusMinutes((it.dwellMin ?: 60).toLong()) <= close) shouldBe true

@@ -2130,6 +2130,17 @@ components:
 
             이 값의 null 로 "안 끝났다"를 판정하면 **그 창에서 끝난 여행을 진행 중으로 본다.**
             끝났는지는 `status`, 언제 끝났는지(상대 표기·정렬)는 이 값이다.
+        dayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            일과 창(V2.62) — 미설정이면 null 이고 서버가 기본 창(09:00~21:00)을 쓴다.
+
+            **편집 전에 반드시 읽어라.** 편집 요청은 가변 필드를 **대체**하므로(`budgetTotal` 과 같은
+            규칙) 생략하면 지워진다 — 다른 칸만 고치려면 이 값을 그대로 돌려보내야 한다.
+        firstDayStartAt: { type: string, format: time, nullable: true, description: 첫날만 다른 시작(도착 후) }
+        lastDayEndAt: { type: string, format: time, nullable: true, description: 마지막날만 다른 종료(출발 전) }
 
     CreateTripRequest:
       type: object
@@ -2143,6 +2154,27 @@ components:
         budgetTotal: { type: integer, format: int64, nullable: true }
         preferenceSnapshot: { $ref: '#/components/schemas/TripPreferenceSnapshot' }
         destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
+        dayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            하루 일과 시작 시각(전 일자 공통). 생략하면 서버 기본 09:00.
+            "9시는 이르다"는 **취향** 축이다 — 날짜별로 받지 않는다(대부분 기본값을 쓴다).
+        firstDayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            **첫날만** 다른 시작 시각(비행기·KTX 도착 후). 생략하면 첫날도 `dayStartAt` 을 따른다.
+            이게 없으면 도착 전 시간에 일정이 깔리는데 화면상으로는 정상으로 보인다 — 취향이 아니라 **사실 오류**다.
+        lastDayEndAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            **마지막날만** 다른 종료 시각(출발·귀가 전). 생략하면 기본 21:00.
+            당일치기는 첫날이자 마지막날이라 둘 다 걸리고, 그때는 시작 < 종료여야 한다(아니면 400).
 
     # 여행 생성 때 고른 취향(BR-U1-38). 서버가 **의미 있게 읽는 축**을 적는다 —
     # 해석은 `PreferenceProfiles.overriddenBy` 한 곳이고, 키 어휘는 계정 취향 필드명(camelCase)과 같다.
@@ -2174,6 +2206,28 @@ components:
         companionType: { allOf: [{ $ref: '#/components/schemas/CompanionType' }], nullable: true }
         budgetTotal: { type: integer, format: int64, nullable: true }
         destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
+        dayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            하루 일과 시작 시각(전 일자 공통). 생략하면 서버 기본 09:00.
+            "9시는 이르다"는 **취향** 축이다 — 날짜별로 받지 않는다(대부분 기본값을 쓴다).
+        firstDayStartAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            **첫날만** 다른 시작 시각(비행기·KTX 도착 후). 생략하면 첫날도 `dayStartAt` 을 따른다.
+            이게 없으면 도착 전 시간에 일정이 깔리는데 화면상으로는 정상으로 보인다 — 취향이 아니라 **사실 오류**다.
+        lastDayEndAt:
+          type: string
+          format: time
+          nullable: true
+          description: >
+            **마지막날만** 다른 종료 시각(출발·귀가 전). 생략하면 기본 21:00.
+            당일치기는 첫날이자 마지막날이라 둘 다 걸리고, 그때는 시작 < 종료여야 한다(아니면 400).
+
 
     AssignBaseRequest:
       type: object

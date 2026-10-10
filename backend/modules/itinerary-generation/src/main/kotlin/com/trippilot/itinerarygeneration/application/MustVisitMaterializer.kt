@@ -41,14 +41,15 @@ internal object MustVisitMaterializer {
      * @param dated 이미 날짜·시각이 정해진 블록(사용자가 고정한 것) — **건드리지 않는다**.
      * @param anytime 날짜·시각이 없는 블록(POI id 와 체류 시간만).
      * @param dates 이 호출이 맡은 일자.
-     * @param dayStart·dayEnd 일과 창(기본 09:00~21:00) — 이 밖에는 넣지 않는다.
+     * @param window 그 날의 일과 창(시작, 끝) — 이 밖에는 넣지 않는다. **날짜마다 다를 수 있다**
+     *   (여행이 첫날 도착·마지막날 출발 시각을 정할 수 있다, V2.62). 하나로 접으면 한 날의 제약이
+     *   다른 날까지 좁혀 빈 날에도 "넣을 자리가 없습니다"가 나간다.
      */
     fun materialize(
         dated: List<FixedBlock>,
         anytime: List<FixedBlock>,
         dates: List<LocalDate>,
-        dayStart: LocalTime,
-        dayEnd: LocalTime,
+        window: (LocalDate) -> Pair<LocalTime, LocalTime>,
     ): Result {
         if (anytime.isEmpty()) return Result(dated, emptyList())
         if (dates.isEmpty()) {
@@ -69,12 +70,12 @@ internal object MustVisitMaterializer {
         // 입력 순서대로 처리한다 — 같은 입력이면 같은 결과여야 "왜 이 날짜인가"를 되짚을 수 있다.
         anytime.forEach { block ->
             val dwell = dwellOf(block)
-            val day = pickDay(dates, occupied, dwell, dayStart, dayEnd)
+            val day = pickDay(dates, occupied, dwell, window)
             if (day == null) {
                 unplaced += UnplacedMustVisit(block.poiId, UnplacedReason.NO_FEASIBLE_SLOT)
                 return@forEach
             }
-            val start = pickStart(occupied.getValue(day), dwell, dayStart, dayEnd)!!
+            val start = pickStart(occupied.getValue(day), dwell, window(day))!!
             occupied.getValue(day).add(Slot(start, start.plusMinutes(dwell.toLong())))
             placed += FixedBlock(block.poiId, day, start, block.dwellMin)
         }
@@ -91,10 +92,9 @@ internal object MustVisitMaterializer {
         dates: List<LocalDate>,
         occupied: Map<LocalDate, List<Slot>>,
         dwell: Int,
-        dayStart: LocalTime,
-        dayEnd: LocalTime,
+        window: (LocalDate) -> Pair<LocalTime, LocalTime>,
     ): LocalDate? = dates
-        .filter { pickStart(occupied.getValue(it), dwell, dayStart, dayEnd) != null }
+        .filter { pickStart(occupied.getValue(it), dwell, window(it)) != null }
         .minWithOrNull(compareBy({ occupied.getValue(it).size }, { it }))
 
     /**
@@ -103,7 +103,8 @@ internal object MustVisitMaterializer {
      * 이른 쪽부터 채우는 이유: 일과 창 끝에 몰면 마지막 방문이 창을 넘길 위험이 커지고,
      * 사용자가 보기에도 앞에서부터 차는 편이 자연스럽다.
      */
-    private fun pickStart(taken: List<Slot>, dwell: Int, dayStart: LocalTime, dayEnd: LocalTime): LocalTime? {
+    private fun pickStart(taken: List<Slot>, dwell: Int, window: Pair<LocalTime, LocalTime>): LocalTime? {
+        val (dayStart, dayEnd) = window
         var candidate = dayStart
         // 시작 시각 순으로 훑으며 겹치면 그 블록 뒤로 민다.
         taken.sortedBy { it.start }.forEach { slot ->

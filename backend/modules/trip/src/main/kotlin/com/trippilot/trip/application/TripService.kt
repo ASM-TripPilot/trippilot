@@ -11,6 +11,7 @@ import com.trippilot.placedata.api.DestinationFacade
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.trip.domain.CompanionType
 import com.trippilot.trip.domain.Trip
+import com.trippilot.trip.domain.TripDayWindow
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import org.springframework.stereotype.Service
@@ -27,6 +28,8 @@ data class CreateTripCommand(
     val budgetTotal: Long?,
     val preferenceSnapshot: Map<String, Any?>,
     val destinations: List<TripDestination>,
+    /** 일과 창 — 미설정이면 [TripDayWindow.UNSET]. 생성이 하루 창을 정할 때 읽는다. */
+    val dayWindow: TripDayWindow = TripDayWindow.UNSET,
 )
 
 data class EditTripCommand(
@@ -37,6 +40,7 @@ data class EditTripCommand(
     val companionType: CompanionType?,
     val budgetTotal: Long?,
     val destinations: List<TripDestination>,
+    val dayWindow: TripDayWindow = TripDayWindow.UNSET,
 )
 
 /**
@@ -56,6 +60,7 @@ class TripService(
             Trip.create(
                 accountId, cmd.title, cmd.startDate, cmd.endDate, cmd.party, cmd.companionType,
                 cmd.budgetTotal, cmd.preferenceSnapshot, withRegionCodes(cmd.destinations), clock.instant(),
+                cmd.dayWindow,
             ),
         )
     }
@@ -120,7 +125,7 @@ class TripService(
         return repo.save(
             trip.edit(
                 cmd.title, cmd.startDate, cmd.endDate, cmd.party, cmd.companionType,
-                cmd.budgetTotal, withRegionCodes(cmd.destinations), clock.instant(),
+                cmd.budgetTotal, withRegionCodes(cmd.destinations), clock.instant(), cmd.dayWindow,
             ),
         )
     }

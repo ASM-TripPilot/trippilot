@@ -31,7 +31,7 @@ class MustVisitMaterializerPropertyTest : StringSpec({
         checkAll(Arb.list(anytimeArb, 0..12), Arb.int(1..3)) { anytime, dayCount ->
             val dates = (0 until dayCount).map { d1.plusDays(it.toLong()) }
             val result = MustVisitMaterializer.materialize(
-                dated = emptyList(), anytime = anytime, dates = dates, dayStart = dayStart, dayEnd = dayEnd,
+                dated = emptyList(), anytime = anytime, dates = dates, window = { dayStart to dayEnd },
             )
             result.fixedBlocks.forEach { b ->
                 val end = b.start!!.plusMinutes((b.dwellMin ?: 60).toLong())
