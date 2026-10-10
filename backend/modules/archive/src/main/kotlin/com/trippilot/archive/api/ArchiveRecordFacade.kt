@@ -40,5 +40,14 @@ data class ArchiveVisitView(
     val completedAt: Instant?,
     val skipped: Boolean,
     val photoCount: Int,
-    val hasMemo: Boolean,
-)
+    /**
+     * 메모 **본문**(BR-U5-13 — 한 방문에 한 개). 없으면 null.
+     *
+     * [hasMemo] 는 이 값에서 파생한다 — 두 값을 따로 채우면 "있다는데 본문이 없다"가 생긴다.
+     * 종전에는 본문 없이 [hasMemo] 만 나가서, 앱을 껐다 켜면 그 세션에 쓴 메모만 남고 나머지는
+     * 사라진 것처럼 보였다(TRIP-1236). 저장은 처음부터 되고 있었다(visit_memo, V2.34).
+     */
+    val memo: String?,
+) {
+    val hasMemo: Boolean get() = memo != null
+}

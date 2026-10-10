@@ -124,10 +124,13 @@ interface VisitMemoRepository {
     fun find(visitCheckId: UUID): VisitMemo?
 
     /**
-     * 메모가 **있는** 방문들. 기록 화면은 본문이 아니라 유무만 쓰므로 한 번에 묻는다 —
-     * 방문마다 따로 조회하면 하루치를 그리는 데 N번 왕복한다.
+     * 방문별 메모 **본문**. 한 번에 묻는다 — 방문마다 따로 조회하면 하루치에 N번 왕복한다.
+     *
+     * 종전에는 `Set<UUID>`(유무만)였고 주석이 *"화면은 본문이 아니라 유무만 쓴다"* 고 적었는데
+     * **그 전제가 틀렸다.** 화면은 메모를 그린다 — 유무만 주니 앱을 껐다 켜면 그 세션에 쓴 메모만
+     * 남고 나머지는 사라진 것처럼 보였다(TRIP-1236). 메모는 500자 상한이라 목록에 실어도 된다.
      */
-    fun findVisitsWithMemo(visitCheckIds: Collection<UUID>): Set<UUID>
+    fun findMemosOf(visitCheckIds: Collection<UUID>): Map<UUID, String>
 
     fun delete(visitCheckId: UUID): Boolean
 }

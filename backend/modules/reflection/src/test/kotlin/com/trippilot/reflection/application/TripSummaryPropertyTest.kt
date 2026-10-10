@@ -87,7 +87,7 @@ class TripSummaryPropertyTest : StringSpec({
     fun visit(poi: UUID, skipped: Boolean = false, photos: Int = 0) = ArchiveVisitView(
         visitCheckId = UUID.randomUUID(), poiId = poi,
         arrivedAt = Instant.parse("2026-08-11T03:00:00Z"), completedAt = Instant.parse("2026-08-11T04:00:00Z"),
-        skipped = skipped, photoCount = photos, hasMemo = false,
+        skipped = skipped, photoCount = photos, memo = null,
     )
 
     /** 하루치 — 방문 수·건너뜀·사진·좌표 유무를 전부 흔든다. */

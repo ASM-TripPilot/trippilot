@@ -70,11 +70,13 @@ class TripRecordServiceTest : StringSpec({
         override fun countByVisits(visitCheckIds: Collection<UUID>) = counts.filterKeys { it in visitCheckIds }
     }
 
-    class Memos(val stored: MutableSet<UUID> = mutableSetOf()) : VisitMemoRepository {
-        override fun upsert(memo: VisitMemo) = memo.also { stored += it.visitCheckId }
+    /** 본문까지 들고 있는다 — 유무만 두면 "본문이 실리는가"를 원리적으로 못 잰다. */
+    class Memos(val stored: MutableMap<UUID, String> = mutableMapOf()) : VisitMemoRepository {
+        constructor(vararg ids: UUID) : this(ids.associateWith { "감상" }.toMutableMap())
+        override fun upsert(memo: VisitMemo) = memo.also { stored[it.visitCheckId] = it.text }
         override fun find(visitCheckId: UUID): VisitMemo? = null
-        override fun findVisitsWithMemo(visitCheckIds: Collection<UUID>) = stored.intersect(visitCheckIds.toSet())
-        override fun delete(visitCheckId: UUID) = stored.remove(visitCheckId)
+        override fun findMemosOf(visitCheckIds: Collection<UUID>) = stored.filterKeys { it in visitCheckIds }
+        override fun delete(visitCheckId: UUID) = stored.remove(visitCheckId) != null
     }
 
     /** 변경 이력은 읽기만 한다 — 쓰기를 부르면 그 자리에서 드러나야 한다(BR-U5-29). */
@@ -221,13 +223,15 @@ class TripRecordServiceTest : StringSpec({
         val v = arrived(checks, day1, poi)
         val svc = TripRecordService(
             trips, plans(slot(day1, poi, 0)), checks,
-            Photos(mapOf(v.visitCheckId to 3)), Memos(mutableSetOf(v.visitCheckId)), bases(), ReadOnlyChangeLog(),
+            Photos(mapOf(v.visitCheckId to 3)), Memos(mutableMapOf(v.visitCheckId to "바다가 좋았다")), bases(), ReadOnlyChangeLog(),
         )
 
         val visit = svc.compare(acc, tripId).days.single().actual.single()
 
         visit.photoCount shouldBe 3
-        visit.hasMemo shouldBe true
+        // **본문**이 실려야 한다 — 유무만 주면 앱 재시작 뒤 메모가 사라진 것처럼 보인다(TRIP-1236).
+        visit.memo shouldBe "바다가 좋았다"
+        visit.hasMemo shouldBe true   // 파생이라 본문과 어긋날 수 없다
     }
 
     "변경 이력은 읽기만 하고 상한을 그대로 넘긴다(BR-U5-29)" {

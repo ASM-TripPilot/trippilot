@@ -86,7 +86,7 @@ class StyleAnalysisPropertyTest : StringSpec({
         visitCheckId = UUID.randomUUID(), poiId = poi,
         arrivedAt = Instant.parse("2026-08-11T03:00:00Z"),
         completedAt = dwellMinutes?.let { Instant.parse("2026-08-11T03:00:00Z").plusSeconds(it * 60) },
-        skipped = false, photoCount = 0, hasMemo = false,
+        skipped = false, photoCount = 0, memo = null,
     )
 
     /** 방문 n건을 카테고리·좌표와 함께 만든다. 하루에 몰아넣지 않고 3일에 나눈다(반경·밀도가 살아야 한다). */
