@@ -373,25 +373,34 @@ def test_replan_잠금_블록을_못_찾으면_잠금_빠진_일정을_내지_�
                for n in body["notes"]), body["notes"]
 
 
-# ── ④′ 풀 밖 고정 POI 에도 HC1 이 걸린다 — 풀 안과 같은 규칙 ─────────────
+# ── ④′ 영업시간 밖에 핀된 고정 블록 — 풀 안팎 모두 빼고 보고한다 (TRIP-1249) ──────
 
 
 @pytest.mark.parametrize("pid", ["far-lotte", "n1"])
-def test_영업시간_밖에_핀된_고정_블록은_풀_안팎_모두_409(pid) -> None:
-    """합류로 인덱스에 들어오면 HC1 도 본다. 풀 안 고정 블록(S6 남산케이블카)은 이미
-    409 였다 — 풀 밖만 영업시간을 지우면 반경에 따라 규칙이 갈린다. 핀 시각을 개장
-    이후로 미는 것은 BE 핀 수정 몫이다(mv_probe 'S')."""
+@pytest.mark.parametrize("closed_how", ["opens_later", "closed_that_weekday"])
+def test_영업시간_밖에_핀된_고정_블록은_풀_안팎_모두_빠지고_미배치로_보고된다(pid, closed_how) -> None:
+    """합류로 인덱스에 들어오면 HC1 도 본다 — 풀 밖만 영업시간을 지우면 반경에 따라 규칙이 갈린다.
+    종전엔 핀이 HC1 에 걸려 두 단계 다 실패 → 409 → BE 가 그 단계를 통째로 최소 일정으로 바꿨다.
+    이제 영업시간이 **증명**하는 핀만 빼고(정보 없음은 둔다 — ① 의 핀이 그대로 놓이는 것이 그 증거)
+    나머지 하루는 그대로 나가며, 빠진 핀은 `unplaced_must_visits` 와 강등으로 보인다."""
     from trippilot.domain.poi import OpenHour
 
-    hours = tuple(OpenHour(d, 10 * 60, 22 * 60) for d in range(7))
+    hours = (tuple(OpenHour(d, 10 * 60, 22 * 60) for d in range(7)) if closed_how == "opens_later"
+             else tuple(OpenHour(d, 9 * 60, 22 * 60) for d in range(7) if d != _D1.weekday()))
     pois = tuple(replace(p, open_hours=hours) if str(p.poi_id) == pid else p
                  for p in _ALL)
     with _client(InMemoryPoi(pois)) as client:
         response = client.post("/ai/v1/itinerary/generate",
                                json=_request((_D1,), [_block(pid, _D1, "09:00")]))
 
-    assert response.status_code == 409, response.text
-    assert response.json()["error_code"] == "ASSEMBLY_CONFLICT"
+    assert response.status_code == 200, response.text
+    body = response.json()
+    placed = [s["poi_id"] for d in body["days"] for s in d["slots"]]
+    assert pid not in placed
+    assert placed  # 나머지 하루는 그대로 나간다
+    assert body["unplaced_must_visits"] == [{"poi_id": pid, "reason_code": "NO_FEASIBLE_SLOT"}]
+    assert "fixed_poi:fixed_block_closed" in body["degradations"]
+    assert _travel_gaps_ok(body["days"]) == []
 
 
 # ── ⑤ 체인 내부 검증 — 좌표 미상 인접 쌍은 위반 ───────────────────────

@@ -32,6 +32,7 @@ from trippilot.domain.itinerary import (
     ItineraryProblem,
     ItinerarySolution,
     SolveMode,
+    TimeWindow,
     VisitSlot,
 )
 from trippilot.domain.poi import Poi, PoiCategory, counts_as_food
@@ -52,8 +53,13 @@ def placed_fixed_blocks(
     비워 두면 응답 is_fixed가 상시 false가 되어 백엔드 왕복 후 validate/repair의
     HC3 검증 집합이 비어 버린다. 배치 사실은 지어내지 않고, HC3 판정과 동일 기준
     (poi·시각 정확 일치 슬롯 존재)으로 해에서 읽는다.
+
+    시각 없는 필수 방문(TRIP-1249)도 **배치됐으면** 실린다 — 창은 해의 슬롯, reason 은
+    `required_visit`. 그래야 응답이 is_fixed=true 로 나간다(BE 가 핀해 보내던 종전과 같은
+    모양 — 같이 짜기에서 필수방문이 교체 가능한 슬롯으로 바뀌는 회귀 방지). HC3 는
+    `problem.fixed_blocks` 만 보므로 하드 제약은 늘지 않는다.
     """
-    return tuple(
+    pinned = tuple(
         fb for fb in problem.fixed_blocks
         if fb.window.start.date() == day
         and any(
@@ -63,6 +69,16 @@ def placed_fixed_blocks(
             for s in slots
         )
     )
+    required: list[FixedBlock] = []
+    for rv in problem.required_visits:
+        if rv.day != day:
+            continue
+        slot = next((s for s in slots if s.poi_id == rv.poi_id), None)
+        if slot is not None:
+            required.append(FixedBlock(
+                poi_id=rv.poi_id, window=TimeWindow(slot.start_at, slot.end_at),
+                reason="required_visit"))
+    return pinned + tuple(required)
 
 
 def _open_ok(poi: Poi, start: datetime, end: datetime) -> bool:
@@ -95,7 +111,9 @@ class RuleFallbackAssembler:
         # 기배정 POI(TRIP-293)는 후보 풀에서만 뺀다 — 고정 블록(HC3)은 그대로 배치.
         # 고정 예약 POI 전체도 자유 경로에서 뺀다: 앞날 자유 배치가 선점하면
         # 제 날의 고정 배치를 used 방어가 건너뛰어 HC3가 깨진다 (2026-08-21 실측).
-        reserved = {fb.poi_id for fb in problem.fixed_blocks}
+        # 필수 방문(TRIP-1249)도 같다 — 제 날의 ①′ 만 놓는다.
+        reserved = ({fb.poi_id for fb in problem.fixed_blocks}
+                    | {rv.poi_id for rv in problem.required_visits})
         ranked_src = [c for c in problem.candidates
                       if c.poi_id not in problem.excluded_poi_ids
                       and c.poi_id not in reserved]
@@ -104,6 +122,9 @@ class RuleFallbackAssembler:
         fixed_by_day: dict = {}
         for fb in problem.fixed_blocks:
             fixed_by_day.setdefault(fb.window.start.date(), []).append(fb)
+        required_by_day: dict = {}
+        for rv in problem.required_visits:
+            required_by_day.setdefault(rv.day, []).append(rv)
 
         used: set[PoiId] = set()
         days: list[DaySolution] = []
@@ -135,16 +156,50 @@ class RuleFallbackAssembler:
                 if fb_poi is not None:
                     cat_count[fb_poi.category] += 1
                     food_count += counts_as_food(fb_poi)
+            day_end = _at(day, problem.day_window.end)
+            windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
+            meal_done = [False] * len(windows)
+            # ①′ 시각 없는 필수 방문 (TRIP-1249) — 고정 블록 사이 틈에서 가장 이른 가능 시각.
+            #    식당은 식사창(점심 → 저녁) 안을 먼저, 안 되면 영업시간 안. 못 놓으면 건너뛴다
+            #    (예외 없음 — 미배치는 배선이 보고한다). 체류는 사용자 값이면 그대로(pace 없음,
+            #    고정과 같다), 없으면 카테고리 기본(`stay_for`, pace 적용 — 자유 후보와 같다).
+            for rv in required_by_day.get(day, []):
+                poi = self._pois.get(rv.poi_id)
+                if poi is None or any(s.poi_id == rv.poi_id for s in slots):
+                    continue  # 좌표 미상은 못 놓고, 같은 날 핀이면 이미 간다 (OR 과 같은 규칙)
+                stay = (rv.dwell_min if rv.dwell_min is not None
+                        else stay_for(poi.category, problem.pace))
+                start = self._required_start(problem, day, poi, stay, slots, not_before, windows)
+                if start is None:
+                    continue
+                sp = score_of.get(rv.poi_id)
+                slots.append(VisitSlot(
+                    poi_id=rv.poi_id, start_at=start,
+                    end_at=start + timedelta(minutes=stay), stay_min=stay,
+                    score=sp.score if sp else 0.0,
+                    is_llm_score=sp.is_llm_score if sp else False,
+                ))
+                slots.sort(key=lambda s: s.start_at)
+                used.add(rv.poi_id)
+                cat_count[poi.category] += 1
+                food_count += counts_as_food(poi)
+                if poi.category is PoiCategory.FOOD:  # ② 와 같은 창 점유 판정
+                    s_mod = start.hour * 60 + start.minute
+                    for w, (lo, hi) in enumerate(windows):
+                        if s_mod < hi and s_mod + stay > lo:
+                            meal_done[w] = True
             # ② 점수순 말단 삽입 + 식사 시간대 보정 (TRIP-379 — OR-Tools 소프트 항의
             #    결정론 버전, HC 위반 후보는 스킵, 삽입 불가 시 비워둠).
             #    규칙: 현재 말단 시각이 아직 식사가 없는 식사 창 안이고 직전 슬롯이
             #    FOOD가 아니면 FOOD를 우선 시도(창당 1개·연속 금지의 그리디판),
             #    그 외에는 FOOD 후순위. 배제가 아니라 시도 순서만 바꾼다 —
             #    FOOD만 남으면 창 밖이어도 배치된다("정보 없음 ≠ 배제"와 같은 정신).
-            day_end = _at(day, problem.day_window.end)
-            windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
-            meal_done = [False] * len(windows)
+            #    틈 채우기(TRIP-1249)는 **필수 방문이 있는 날만** — ①′ 가 점심창에 놓은 식당
+            #    앞의 오전이 비지 않게 첫 슬롯 앞·슬롯 사이 틈에도 넣는다. 없는 날은 종전과
+            #    바이트 동일(말단 삽입만)이라 기존 요청의 웜스타트 힌트가 변하지 않는다.
             remaining = self._day_ranked(problem, day, ranked, used)
+            gap_fill = bool(required_by_day.get(day))
+            k = -1  # 커서: slots[k] 뒤 틈에 넣는다 (−1 = 첫 슬롯 앞). 틈 채우기가 아니면 늘 말단
             # 일별 카테고리 허용치 (TRIP-531) — OR-Tools 항과 동일 공식:
             # max(설정값, ⌈남은 후보 수 ÷ 남은 일수⌉) = 공정 몫 바닥.
             # 고정 허용치만 쓰면 앞날 회피분이 마지막 날에 몰린다(청주 실측).
@@ -161,7 +216,10 @@ class RuleFallbackAssembler:
             quota = {c: max(self._cfg.category_free_count, -(-n // remaining_days))
                      for c, n in day_cat_total.items()}
             while remaining:
-                last = slots[-1] if slots else None
+                if not gap_fill:
+                    k = len(slots) - 1
+                last = slots[k] if k >= 0 else None
+                nxt = slots[k + 1] if k + 1 < len(slots) else None
                 ref = last.end_at if last is not None \
                     else _at(day, problem.day_window.start)
                 if not_before is not None and ref < not_before:
@@ -170,6 +228,7 @@ class RuleFallbackAssembler:
                 last_poi = self._pois.get(last.poi_id) if last is not None else None
                 if last is not None and last_poi is None:
                     break  # 좌표 미상 뒤 이동을 모른다 — 0분으로 놓지 않는다 (TRIP-1177)
+                nxt_poi = self._pois.get(nxt.poi_id) if nxt is not None else None
                 last_is_food = (last_poi is not None
                                 and last_poi.category is PoiCategory.FOOD)
                 food_first = not last_is_food and any(
@@ -203,7 +262,8 @@ class RuleFallbackAssembler:
                     _food_over(c), _over_quota(c), _is_food(c) != food_first))
                 placed = False
                 for cand in order:
-                    remaining.remove(cand)  # 실패든 성공이든 그 일자 재시도 없음
+                    if not gap_fill:
+                        remaining.remove(cand)  # 실패든 성공이든 그 일자 재시도 없음
                     poi = self._pois.get(cand.poi_id)
                     if poi is None:
                         continue
@@ -235,6 +295,15 @@ class RuleFallbackAssembler:
                                    for s in slots)
                     if conflict:
                         continue
+                    if nxt is not None:  # 틈 채우기 — 뒤 슬롯까지 이동도 들어가야 한다 (HC2)
+                        if nxt_poi is None:
+                            continue  # 좌표 미상 앞에도 놓지 않는다 (위 break 와 같은 이유)
+                        to_next = self._est.estimate(
+                            poi.coord, nxt_poi.coord, problem.transport).internal_minutes
+                        if end + timedelta(minutes=to_next) > nxt.start_at:
+                            continue
+                    if gap_fill:
+                        remaining.remove(cand)  # 틈에 못 들어간 후보는 다음 틈에서 다시 본다
                     slots.append(VisitSlot(
                         poi_id=cand.poi_id, start_at=start, end_at=end,
                         stay_min=stay, score=cand.score,
@@ -244,6 +313,8 @@ class RuleFallbackAssembler:
                     cat_count[poi.category] += 1  # TRIP-531
                     food_count += counts_as_food(poi)
                     slots.sort(key=lambda s: s.start_at)
+                    if gap_fill:
+                        k += 1  # 방금 놓은 슬롯 뒤로 — 같은 틈의 남은 자리를 이어서 본다
                     if poi.category is PoiCategory.FOOD:
                         s_mod = start.hour * 60 + start.minute
                         for w, (lo, hi) in enumerate(windows):
@@ -252,6 +323,9 @@ class RuleFallbackAssembler:
                     placed = True
                     break  # 말단이 바뀌었으니 선호 재평가
                 if not placed:
+                    if gap_fill and nxt is not None:
+                        k += 1  # 이 틈엔 아무것도 안 들어간다 — 다음 틈으로
+                        continue
                     break  # 남은 후보 전부 배치 불가 — 일자 종료
             days.append(DaySolution(
                 date=day, slots=tuple(slots),
@@ -266,6 +340,68 @@ class RuleFallbackAssembler:
             solve_mode=SolveMode.RULE_FALLBACK if placed_any else SolveMode.MINIMAL,
             assembly_run=None,
         )
+
+    def _required_start(self, problem: ItineraryProblem, day, poi: Poi, stay: int,
+                        slots: list[VisitSlot], not_before: datetime | None,
+                        windows: tuple[tuple[int, int], ...]) -> datetime | None:
+        """①′ 필수 방문이 놓일 가장 이른 시각 (TRIP-1249) — 없으면 None.
+
+        슬롯 사이 틈마다 본다: 앞 슬롯 끝 + 이동(없으면 창 시작 + 앵커 이동, 하한이 있으면
+        하한 + 앵커 이동 — ② 와 같은 규칙) 이후, 뒤 슬롯 시작 − 이동 이전(HC2), 하루 창 안
+        (HC4), 영업창 안(HC1). 식당(`counts_as_food`)은 점심창 → 저녁창 → 아무 때 순으로
+        **창을 먼저** 돈다 — 같은 창 안에서는 이른 틈이 이긴다. 이웃 좌표를 모르면 그 틈은
+        건너뛴다(0분 이동 금지, TRIP-1177).
+        """
+        base = _at(day, problem.day_window.start).replace(hour=0, minute=0)
+
+        def mins(dt: datetime) -> int:
+            return int((dt - base).total_seconds() // 60)
+
+        ws = mins(_at(day, problem.day_window.start))
+        we = mins(_at(day, problem.day_window.end))
+        floor = (mins(not_before) + anchor_minutes(problem, poi, self._est)
+                 if not_before is not None else None)
+
+        def travel(a: Poi, b: Poi) -> int:
+            return self._est.estimate(a.coord, b.coord, problem.transport).internal_minutes
+
+        gaps: list[tuple[int, int]] = []
+        prev: VisitSlot | None = None
+        for nxt in (*sorted(slots, key=lambda s: s.start_at), None):
+            prev_poi = self._pois.get(prev.poi_id) if prev is not None else None
+            nxt_poi = self._pois.get(nxt.poi_id) if nxt is not None else None
+            if (prev is None or prev_poi is not None) and (nxt is None or nxt_poi is not None):
+                lb = (ws + anchor_minutes(problem, poi, self._est) if prev_poi is None
+                      else mins(prev.end_at) + travel(prev_poi, poi))
+                ub = we if nxt_poi is None else mins(nxt.start_at) - travel(poi, nxt_poi)
+                gaps.append((max(lb, floor) if floor is not None else lb, ub))
+            prev = nxt
+
+        ranges = (*windows, (ws, we)) if counts_as_food(poi) else ((ws, we),)
+        for lo_r, hi_r in ranges:
+            for lb, ub in gaps:
+                t = self._earliest_open(poi, max(lb, lo_r), min(ub, hi_r) - stay, stay,
+                                        day.weekday())
+                if t is not None:
+                    return base + timedelta(minutes=t)
+        return None
+
+    @staticmethod
+    def _earliest_open(poi: Poi, a: int, b: int, stay: int, dow: int) -> int | None:
+        """[a, b] 안에서 체류가 영업창에 들어가는 가장 이른 시작(분). 정보 없음 = a (HC1 미적용).
+
+        후보 시각은 a 와 그 뒤의 영업 시작들뿐이다 — 가능 구간은 영업창들의 합집합과 [a, b] 의
+        교집합이라 가장 이른 점은 둘 중 하나다. 판정은 `_open_ok` 와 같은 식(한 창 안에 완전 포함).
+        """
+        if a > b:
+            return None
+        if not poi.open_hours:
+            return a
+        todays = [oh for oh in poi.open_hours if oh.day_of_week == dow]
+        for t in sorted({a, *(oh.open_min for oh in todays if a < oh.open_min <= b)}):
+            if any(oh.open_min <= t and t + stay <= oh.close_min for oh in todays):
+                return t
+        return None
 
     def _day_ranked(self, problem: ItineraryProblem, day,
                     ranked: list, used: set[PoiId]) -> list:

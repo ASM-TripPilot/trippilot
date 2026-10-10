@@ -62,7 +62,7 @@
 | a03~a09 온보딩 취향 + d02 목적·취향 | 목적 카드·취향 태그 다중 선택 | `preference_set(styles[], activities[], food_tastes[], budget_tier, companion_types[], pace)` | `preference_profile` (7축, NULL=미설정) |
 | d03 출발·위치·페이스 | 출발 시각, 출발 위치, 페이스 | `trip_base_day(saved_stay_id, resolution)` + 세션 파라미터 | `time_windows[{date, start, end}]`, `pace` |
 | (숙소 등록) | 등록 숙소 = 거점 | `saved_stay(coord, check_in/out)` | `anchor{lat, lng}` (day별 — trip_base_day 해석 결과) |
-| d05~d07 필수 방문지 | POI 선택, ANYTIME/FIXED, 시각·체류 | `must_visit(poi_snapshot_id, type, fixed_date, fixed_start, dwell_min)` | `fixed_blocks[{poi_id, date, start, dwell_min?}]` — date·start 필수(M1), dwell_min 미지정은 AI가 60분 적용 |
+| d05~d07 필수 방문지 | POI 선택, ANYTIME/FIXED, 시각·체류 | `must_visit(poi_snapshot_id, type, fixed_date, fixed_start, dwell_min)` | `fixed_blocks[{poi_id, date, start?, dwell_min?}]` — date 필수(M1), **start null = 그 날 꼭 가되 시각은 조립이 정함**(TRIP-1249 — 영업시간 안, 식당은 식사창 안; 못 놓으면 `unplaced_must_visits` 로 보고). start 있는 핀의 dwell_min 미지정은 AI가 60분, start 없는 필수 방문은 카테고리 기본 체류 적용 |
 | b04 찜 | 저장 장소 | `saved_place(poi_id)` | (직접 입력 아님 — PersonaAgent 경유로 선호 컨텍스트에 반영) |
 | d11 추천 강도 | 추천 강도 선택 | 생성 요청 파라미터 | `generation_mode(fully_ai/co_plan)`, `recommendation_strength` |
 
@@ -73,7 +73,9 @@
 > 1차 `time_windows=[day1]` → 즉시 사용자 노출 · 2차 `time_windows=[나머지 일자]`·
 > `excluded_poi_ids=[1차 배정 POI]` → 백그라운드 완료. 시한은 2026-08-21 이후 싣지 않는다(TRIP-473/474) — 백엔드가 `ScheduleDeadlineProperties.enforced=true` 로 복원하면 각각 `deadline_ms=5000`·`20000` 이 실린다.
 > 각 호출은 **자기가 맡은 일자의** `anchors`·`fixed_blocks` 만 받는다. ANYTIME(날짜·시각 미지정) 필수방문은
-> AI 로 오지 않는다 — 백엔드 `MustVisitMaterializer` 가 날짜·시각을 물질화해 확정 블록으로 보낸다(경계 계약 M1).
+> 백엔드 `MustVisitMaterializer` 가 **날짜만** 물질화해 `start: null` 블록으로 보내고, 시각은 AI 조립이 정한다
+> (경계 계약 M1, TRIP-1249 개정 — 종전엔 시각까지 창 시작에 물질화해 늦게 여는 곳이 HC1 에 걸렸다).
+> 재계획 `locked_blocks` 는 예외 — 잠금은 시각이 정체성이라 `start: null` 을 422 로 거부한다.
 > 2차가 실패하면 백엔드가 결정론 폴백으로 채운다(INV-4).
 
 ```python

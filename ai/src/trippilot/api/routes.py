@@ -122,7 +122,8 @@ def to_payload(outcome: ItineraryOutcome) -> ItineraryPayload:
 
     - 시각: `VisitSlot.start_at/end_at`(어셈블리 검증값)의 시각 성분만 사영(INV-2)
     - `ends_next_day`: 종료가 그 날짜를 넘겼는가 — 어셈블리 값에서 파생(HC4 표현)
-    - `is_fixed`: 그 날의 고정 블록(HC3)에 POI가 있는가 — 지어내지 않고 해에서 읽는다
+    - `is_fixed`: 그 날의 고정 블록(HC3 핀 + 배치된 시각 없는 필수 방문, `placed_fixed_blocks`)에
+      POI가 있는가 — 지어내지 않고 해에서 읽는다
     - `stay_min`·`score`는 **사영하지 않는다**(INV-3 / IO-3)
     - `alternatives`: 슬롯별 차선책(TRIP-871) — 봉투가 슬롯 키로 준 것만(없으면 빈 목록)
     """

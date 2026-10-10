@@ -67,9 +67,27 @@ _RETRY_DET_FACTOR = 5
 # 실측 det ≤ 0.003 에 OPTIMAL 이다(부산·서울 234회) — 0.5 는 넉넉한 상한이다.
 _REORDER_DET_LIMIT = 0.5
 
+# 필수 방문(TRIP-1249)의 **소프트 지배** 가중 — 하드 `visit == 1` 이 아니다(`_required_terms`).
+# 보통 항은 전부 ×1000 축이다: 노드당 양의 항 ≤ 1,250(점수 1,000 + 우천 100 + 행사 150) ×
+# 노드 ≤ 60(프리필터) + 핀·필수 몇 곳 ≈ 80k, 식사창 보상 +600, 감점 항은 0 이하. 그래서
+#   100k — 식사창 하나는 다른 어떤 점수 이득과도 바꾸지 않는다(식당 한 곳을 창 밖으로 옮겨
+#          생기는 보통 항의 차는 수천이다),
+#   1M   — 방문 하나는 식사창 + 보통 항 전부를 더해도 이긴다(1M − 100k − 80k > 80k).
+# 즉 "방문 > 식사창 > 그 외"가 가중만으로 선다. 하드 제약이었을 때는 핀과의 모순이 INFEASIBLE 로
+# 증명돼야 완화됐고(그러면 그날 필수 방문 **전부**를 풀었다) 결정론 한도에 걸린 UNKNOWN 은 OR 단계를
+# 통째로 잃었다. 소프트면 놓을 수 있는 것만 놓이고 못 놓는 것만 빠진다 — 재풀이 없음, 그 사실은 배선이
+# 미배치로 보고한다. 그리디 힌트가 필수 방문을 품으므로 한도에 걸린 FEASIBLE 해도 그것을 잃지 않는다.
+_W_REQUIRED = 1_000_000
+_W_REQUIRED_MEAL = 100_000
+
+
+def _locked(node) -> bool:
+    """힌트에서 뺄 수 없는 노드 — 핀(visit=1 강제) 또는 필수 방문(지배 항 — 출발점에서 빠지면 안 된다)."""
+    return node["pin"] is not None or node.get("required", False)
+
 
 def drop_food_runs(order: list[int], nodes) -> list[int]:
-    """웜스타트 힌트 순서에서 FOOD→FOOD 연속을 뺀다 — 고정 블록(pin) 노드는 절대 빼지 않는다.
+    """웜스타트 힌트 순서에서 FOOD→FOOD 연속을 뺀다 — 고정 블록(pin)·필수 방문 노드는 절대 빼지 않는다.
 
     그리디(규칙 폴백)는 하루 끝에 FOOD 만 남으면 식당 뒤에 식당을 그대로 놓고, 그 순서가 완전
     힌트(TRIP-1176)로 들어가면 결정론 한도 안의 탐색이 거기서 못 벗어난다(2026-10-04 홍천 실측
@@ -83,9 +101,9 @@ def drop_food_runs(order: list[int], nodes) -> list[int]:
         prev = kept[-1] if kept else None
         if (is_food and prev is not None
                 and nodes[prev]["poi"].category is PoiCategory.FOOD):
-            if nodes[i]["pin"] is None:
+            if not _locked(nodes[i]):
                 continue                  # 뒤의 자유 FOOD 를 뺀다
-            if nodes[prev]["pin"] is None:
+            if not _locked(nodes[prev]):
                 kept.pop()                # 뒤가 고정이면 앞의 자유 FOOD 를 뺀다
         kept.append(i)
     return kept
@@ -268,9 +286,13 @@ class OrToolsAssembler:
         ws, we = _mod(problem.day_window.start), _mod(problem.day_window.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
         fixed_ids = {fb.poi_id for fb in fixed}
-        # 다른 날 고정 예약분은 오늘의 자유 후보에서 뺀다 — 안 빼면 같은 POI가
+        # 시각 없는 필수 방문 (TRIP-1249) — 시각은 자유, 방문은 목적함수의 지배 항(`_required_terms`)
+        required = [rv for rv in problem.required_visits if rv.day == day]
+        required_ids = {rv.poi_id for rv in required}
+        # 다른 날 고정 예약분·필수 방문은 오늘의 자유 후보에서 뺀다 — 안 빼면 같은 POI가
         # 자유(오늘)+고정(그날)으로 두 번 배치된다 (2026-08-21 제주 프로브 실측).
-        reserved = {fb.poi_id for fb in problem.fixed_blocks} - fixed_ids
+        reserved = ({fb.poi_id for fb in problem.fixed_blocks}
+                    | {rv.poi_id for rv in problem.required_visits}) - fixed_ids - required_ids
 
         # 후보 수집 (사용된 것·타일 고정 예약 제외) + 프리필터
         cands = [c for c in problem.candidates
@@ -279,7 +301,7 @@ class OrToolsAssembler:
         floor = _not_before_min(problem, day)
         if len(cands) > _PREFILTER_TOP_K:
             food_stay = stay_for(PoiCategory.FOOD, problem.pace)
-            kept = self._prefilter(cands, fixed_ids, day,
+            kept = self._prefilter(cands, fixed_ids | required_ids, day,
                                    self._meal_slots(ws, we, floor, food_stay), food_stay)
             if log_cut:
                 _log_prefilter_cut(day, cands, kept, self._pois)
@@ -306,7 +328,8 @@ class OrToolsAssembler:
             if lo > hi:
                 continue  # 시간창 불가 — 제외
             nodes.append({"poi": poi, "stay": stay, "lo": lo, "hi": hi,
-                          "score": c.score, "is_llm": c.is_llm_score, "pin": None})
+                          "score": c.score, "is_llm": c.is_llm_score, "pin": None,
+                          "required": False})
         for fb in fixed:  # 고정 블록 — 후보에 없어도 노드로 추가, 시각 고정 (HC3)
             poi = self._pois.get(fb.poi_id)
             if poi is None:
@@ -329,7 +352,34 @@ class OrToolsAssembler:
                 existing.update({"pin": pin, "stay": stay, "lo": pin, "hi": pin})
             else:
                 nodes.append({"poi": poi, "stay": stay, "lo": pin, "hi": pin,
-                              "score": 0.0, "is_llm": False, "pin": pin})
+                              "score": 0.0, "is_llm": False, "pin": pin,
+                              "required": False})
+        for rv in required:  # 필수 방문 — 후보면 그 노드를, 아니면 점수 0 노드를 (방문은 지배 항)
+            poi = self._pois.get(rv.poi_id)
+            existing = next((n for n in nodes if n["poi"].poi_id == rv.poi_id), None)
+            if poi is None or (existing is not None and existing["pin"] is not None):
+                continue  # 좌표 미상은 놓을 수 없고, 같은 날 핀이면 이미 간다 → 미배치 판정 몫
+            win = self._day_open_window(poi, day)
+            if win is None:
+                continue  # 휴무 — 그날은 못 간다. 해는 그대로 나가고 배선이 미배치로 보고한다
+            # 핀과 달리 하한·앵커 출발을 면제받지 않는다 — 시각이 자유라 면제할 이유가 없다.
+            # 후보 노드가 있어도 창을 다시 계산한다(사용자 체류면 hi 가 달라진다 — #630 과 같은
+            # "두 경로가 같은 값" 규칙). 체류는 사용자 값이면 그대로(pace 없음, 고정 블록과 같다),
+            # 없으면 카테고리 기본(`stay_for`, pace 적용 — 자유 후보와 같다).
+            stay = (rv.dwell_min if rv.dwell_min is not None
+                    else stay_for(poi.category, problem.pace))
+            lo = max(win[0], ws)
+            if floor is not None:
+                lo = max(lo, floor + anchor_minutes(problem, poi, self._est))
+            hi = min(win[1], we) - stay
+            if lo > hi:
+                continue  # 체류가 영업창·하루 창에 안 들어간다 → 미배치
+            if existing is not None:
+                existing.update({"stay": stay, "lo": lo, "hi": hi, "required": True})
+            else:
+                nodes.append({"poi": poi, "stay": stay, "lo": lo, "hi": hi,
+                              "score": 0.0, "is_llm": False, "pin": None,
+                              "required": True})
 
         if not nodes:
             return []  # 배치할 것 없음 — 빈 일자 (해 없음 아님)
@@ -382,7 +432,9 @@ class OrToolsAssembler:
         self._capacity_cut(m, nodes, visit, inc, ws, we)
         obj_terms: list = [int(n["score"] * 1000) * visit[i]
                            for i, n in enumerate(nodes)]
-        obj_terms += self._meal_soft_terms(m, nodes, visit, start, arcs)
+        meal_terms, in_window = self._meal_soft_terms(m, nodes, visit, start, arcs)
+        obj_terms += meal_terms
+        obj_terms += self._required_terms(m, nodes, visit, start, in_window)
         obj_terms += self._rain_soft_terms(problem, day, nodes, visit)
         obj_terms += self._event_soft_terms(problem, nodes, visit)
         obj_terms += self._category_soft_terms(problem, day, m, nodes, visit)
@@ -554,6 +606,38 @@ class OrToolsAssembler:
         for a, b, lit in arcs[k:]:
             m.AddHint(lit, (a, b) in succ)
 
+    def _required_terms(self, m: cp_model.CpModel, nodes, visit, start,
+                        in_window: dict[int, list]) -> list:
+        """필수 방문 지배 항 (TRIP-1249 — 하드 제약 아님, 목적함수만. 가중 근거는 `_W_REQUIRED`).
+
+        노드마다 `_W_REQUIRED · visit`. 식당(`counts_as_food` — 그리디 ①′ 와 같은 기준)이면 창마다
+        `_W_REQUIRED_MEAL · b`(b ⇒ 방문 ∧ 슬롯이 창 안) 를 더한다 — FOOD 노드의 b 는 식사 항이 이미
+        만들었으니 그것을 쓰고(창당 1곳 묶음도 그대로 — 100k 가 300 을 이기므로 자격은 필수 방문이
+        가져간다), 음식 골목처럼 식사 항이 변수를 안 만든 노드만 같은 꼴로 새로 만든다. 창 안 배치가
+        시간창상 불가능한 노드는 변수가 없다 = 영업시간 안 아무 때.
+        """
+        windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
+        terms: list = []
+        for i, n in enumerate(nodes):
+            if not n["required"]:
+                continue
+            terms.append(_W_REQUIRED * visit[i])
+            if not counts_as_food(n["poi"]):
+                continue
+            bools = in_window.get(i)
+            if bools is None:
+                bools = []
+                for w_idx, (lo, hi) in enumerate(windows):
+                    if n["lo"] > hi - n["stay"] or n["hi"] < lo:
+                        continue
+                    b = m.NewBoolVar(f"reqmeal{w_idx}_{i}")
+                    m.AddImplication(b, visit[i])
+                    m.Add(start[i] >= lo).OnlyEnforceIf(b)
+                    m.Add(start[i] + n["stay"] <= hi).OnlyEnforceIf(b)
+                    bools.append(b)
+            terms += [_W_REQUIRED_MEAL * b for b in bools]
+        return terms
+
     @staticmethod
     def _capacity_cut(m: cp_model.CpModel, nodes, visit, inc: list[int],
                       ws: int, we: int) -> None:
@@ -628,8 +712,11 @@ class OrToolsAssembler:
         return [-penalty * excess]
 
     def _meal_soft_terms(self, m: cp_model.CpModel, nodes, visit, start,
-                         arcs) -> list:
+                         arcs) -> tuple[list, dict[int, list]]:
         """식사 시간대 소프트 보정 항 (TRIP-379 — 하드 제약 아님, 목적함수만).
+
+        반환은 (항, FOOD 노드별 창 안 불리언 b) — 뒤의 것은 필수 방문 항(`_required_terms`)이 같은
+        변수를 다시 만들지 않고 쓰기 위한 것이다.
 
         규칙(폴백 어셈블리와 동일 의미):
           ① 각 식사 창(점심·저녁)에 FOOD 슬롯이 1개 배치되면 창당 +meal_bonus
@@ -650,7 +737,7 @@ class OrToolsAssembler:
         food = [i for i, n in enumerate(nodes)
                 if n["poi"].category is PoiCategory.FOOD]
         if not food or (bonus == 0 and penalty == 0 and adjacent == 0):
-            return []
+            return [], {}
         terms: list = []
         in_window: dict[int, list] = {i: [] for i in food}
         windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
@@ -688,7 +775,7 @@ class OrToolsAssembler:
             if (i != j and i >= 1 and j >= 1
                     and i - 1 in food_set and j - 1 in food_set):
                 terms.append(-adjacent * lit)
-        return terms
+        return terms, in_window
 
     def _rain_soft_terms(self, problem, day, nodes, visit) -> list:
         """날씨 소프트 보정 항 (TRIP-383 — 식사 보정(_meal_soft_terms)과 동형).

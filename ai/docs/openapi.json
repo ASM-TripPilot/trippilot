@@ -629,7 +629,7 @@
       },
       "FixedBlockSchema": {
         "additionalProperties": false,
-        "description": "날짜·시각이 확정된 필수방문지(HC3). ANYTIME(시각 미지정) 필수방문의\n물질화는 백엔드 소유(MustVisitMaterializer, 경계 계약 M1) — AI는 확정된 블록만 받는다.",
+        "description": "필수방문지 1건. `start` 가 있으면 날짜·시각 확정(HC3 핀 — 종전 그대로).\n\n**`start` 가 null 이면 그 날 꼭 가되 시각은 조립이 정한다(필수 방문, TRIP-1249)** —\n영업시간 안, 식당이면 식사창 안. 종전엔 ANYTIME 을 백엔드(MustVisitMaterializer)가\n창 시작(09:00)에 핀해 보냈는데 늦게 여는 곳이 HC1 에 걸려 하루가 통째로 409 였다.\n`date` 는 여전히 필수 — 날짜까지 미정인 필수방문의 날짜 배정은 백엔드 소유다.\n재계획 `locked_blocks` 는 이 완화를 받지 않는다 — 스키마는 같지만 `start: null` 인 잠금은\n`ReplanRequest` 검증이 422 로 거절한다(잠금은 시각이 정체성).",
         "properties": {
           "date": {
             "format": "date",
@@ -654,15 +654,21 @@
             "type": "string"
           },
           "start": {
-            "format": "time",
-            "title": "Start",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
           }
         },
         "required": [
           "poi_id",
-          "date",
-          "start"
+          "date"
         ],
         "title": "FixedBlockSchema",
         "type": "object"
