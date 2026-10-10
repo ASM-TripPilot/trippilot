@@ -94,7 +94,7 @@ class ReflectionPropertyTest : StringSpec({
             completedAt = if (Arb.boolean().bind()) Instant.parse("2026-08-11T04:00:00Z") else null,
             skipped = Arb.boolean().bind(),
             photoCount = Arb.int(0, 5).bind(),
-            memo = Arb.boolean().bind().takeIf { it }?.let { "감상" },
+            hasMemo = Arb.boolean().bind(),
         ) to if (hasCoord) (33.0 + Arb.int(0, 100).bind() / 100.0) to (126.0 + Arb.int(0, 100).bind() / 100.0) else null
     }
 
@@ -287,7 +287,7 @@ class ReflectionPropertyTest : StringSpec({
     "다시 만들어도 하루 한 장이다 — 덮어쓴다(BR-U5-35)" {
         val poi = UUID.randomUUID()
         val visits = listOf(
-            ArchiveVisitView(UUID.randomUUID(), poi, Instant.parse("2026-08-11T03:00:00Z"), null, false, 1, null),
+            ArchiveVisitView(UUID.randomUUID(), poi, Instant.parse("2026-08-11T03:00:00Z"), null, false, 1, false),
         )
         val repo = Reflections()
         val svc = ReflectionService(trips, archiveOf(visits), surfacesOf(mapOf(poi to (33.4 to 126.5))), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock)
@@ -374,7 +374,7 @@ class ReflectionPropertyTest : StringSpec({
     }
 
     fun visitOf(poi: UUID, skipped: Boolean) = ArchiveVisitView(
-        UUID.randomUUID(), poi, Instant.parse("2026-08-11T03:00:00Z"), null, skipped, 0, null,
+        UUID.randomUUID(), poi, Instant.parse("2026-08-11T03:00:00Z"), null, skipped, 0, false,
     )
 
     "안 간 장소가 카드에 있으면 규칙 카드로 강등한다" {

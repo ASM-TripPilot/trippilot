@@ -3635,7 +3635,7 @@ components:
         memo:
           type: string
           nullable: true
-          maxLength: 500
+          maxLength: 2000
           description: >
             메모 **본문**(BR-U5-13 — 한 방문에 한 개). 없으면 null.
 

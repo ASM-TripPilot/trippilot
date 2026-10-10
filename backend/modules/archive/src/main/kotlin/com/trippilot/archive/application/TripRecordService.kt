@@ -100,7 +100,7 @@ class TripRecordService(
                         completedAt = it.completedAt,
                         skipped = it.skippedAt != null,
                         photoCount = photoCounts[it.visitCheckId] ?: 0,
-                        memo = memoTexts[it.visitCheckId],
+                        hasMemo = it.visitCheckId in memoTexts,
                     )
                 },
             )
