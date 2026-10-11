@@ -13,3 +13,10 @@ export { readDevicePosition } from './readDevicePosition';
 export { revokeImpact } from './revokeImpact';
 export type { RevokeImpact } from './revokeImpact';
 export { useLocationConsent } from './useLocationConsent';
+export { useLocationAutomation } from './automation/useLocationAutomation';
+export type {
+  LocationAutomationInput,
+  LocationAutomationResult,
+} from './automation/useLocationAutomation';
+export type { EngineStatus } from './automation/engine';
+export type { AutomationSlotRef, AutomationVisitRef } from './automation/store';

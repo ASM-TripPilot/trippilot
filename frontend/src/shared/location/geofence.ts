@@ -31,8 +31,10 @@ export interface GeofenceRegion {
 // TRIP-1333 — 반경은 U10 FD 임계(BR-U10-13, 150m). 옛 120m 자리값을 대체한다.
 const DEFAULT_RADIUS_M = AUTOMATION_CONFIG.geofenceRadiusM;
 
+type SlotCoord = Pick<ItineraryDaysItemSlotsItem, 'poiId' | 'lat' | 'lng'>;
+
 export function buildGeofenceRegions(
-  slots: readonly ItineraryDaysItemSlotsItem[],
+  slots: readonly SlotCoord[],
   date: string
 ): GeofenceRegion[] {
   const regions: GeofenceRegion[] = [];
@@ -56,13 +58,16 @@ export function buildGeofenceRegions(
  * 3) 합계 `limit` 에서 자른다. 좌표 결측 슬롯은 리전이 될 수 없다(수동 전용).
  */
 export function selectRegions(
-  slots: readonly ItineraryDaysItemSlotsItem[],
-  visits: readonly VisitCheck[],
+  slots: readonly SlotCoord[],
+  visits: readonly Pick<
+    VisitCheck,
+    'slotKey' | 'arrivedAt' | 'completedAt' | 'skippedAt'
+  >[],
   suppressedSlotKeys: readonly string[],
   date: string,
   limit: number = AUTOMATION_CONFIG.maxRegions
 ): GeofenceRegion[] {
-  const bySlot = new Map<string, VisitCheck>();
+  const bySlot = new Map<string, (typeof visits)[number]>();
   for (const v of visits) if (v.slotKey) bySlot.set(v.slotKey, v);
   const suppressed = new Set(suppressedSlotKeys);
 
