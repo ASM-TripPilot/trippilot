@@ -1574,3 +1574,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U10 NFR Design·Infra 증분 승인 대기.
 
 ---
+## NFR Design · Infrastructure Design 승인 — U10 (U10 설계 종료)
+**Timestamp**: 2026-10-11T21:30:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "그거 이미 스쿼시 머지 된거 아님?" / "승인 ㄱㄱ"
+**AI Response**: 문서는 PR #1045 로 develop 에 머지됐으나 승인 게이트가 머지 뒤에 제시됐음을 설명. 사용자 승인으로 U10 NFR Design·Infra 증분 승인 기록 → **U10 설계 단계 종료**. 이로써 2026-10-12 범위 개정의 설계 대상(U8·U10·공통 인프라) 전부 종료.
+**Context**: CONSTRUCTION — U10 종료. 남은 AI-DLC 대상 없음(Code Generation·Build and Test는 SCOPE 밖).
+
+---
