@@ -11,7 +11,10 @@ import {
   LocationWarningGlyph,
 } from '@/shared/location/index.view';
 import { LOCATION_ICON_COLORS } from '@/shared/location/index.view';
-import type { RevokeImpact } from '@/shared/location/index.view';
+import type {
+  AutomationStatusView,
+  RevokeImpact,
+} from '@/shared/location/index.view';
 import { Toggle } from '@/shared/ui/Toggle';
 
 import { RevokeConfirmDialog } from './RevokeConfirmDialog';
@@ -42,6 +45,14 @@ export interface LocationConsentScreenProps {
   onRetry?: () => void;
   /** 마지막 저장 실패 — 토글 카드 아래 안내(INV-4). */
   saveFailed?: boolean;
+  /**
+   * TRIP-1341 · U10 자동 기록 상태 행(Figma u10d 4860:3767). 플래그 OFF 면 페이지가 null 을 줘 행·사용처 추가가 없다.
+   */
+  automation?: AutomationStatusView | null;
+  /** [켜기] — 승격 설명을 띄운다(페이지 몫). */
+  onPressAutomationEnable?: () => void;
+  /** `설정 열기` — OS 설정 앱. */
+  onPressAutomationSettings?: () => void;
 }
 
 /** 용도 3항목(US-NOTIF-11 정상) — 화면 고정 문안. */
@@ -62,6 +73,13 @@ const USAGE_ITEMS = [
     desc: '지금 위치 기준으로 추천해요',
   },
 ] as const;
+
+/** TRIP-1341 — 플래그 ON 빌드에서만 붙는 4번째 사용처(G-U10-8). */
+const AUTOMATION_USAGE = {
+  Glyph: LocationPinGlyph,
+  title: '자동 방문 기록 · 이동 경로',
+  desc: '여행 날짜 동안 앱을 닫아도 방문과 다닌 길을 기록해요',
+} as const;
 
 /** 토글 카드 제목 — 스위치 이름(accessibilityLabel)도 이 값을 쓴다(카피 수정 시 둘이 어긋나지 않게). */
 const TOGGLE_TITLE = '위치정보 수집';
@@ -86,6 +104,9 @@ export function LocationConsentScreen({
   loadState = 'ready',
   onRetry,
   saveFailed = false,
+  automation = null,
+  onPressAutomationEnable,
+  onPressAutomationSettings,
 }: LocationConsentScreenProps): ReactElement {
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -229,6 +250,63 @@ export function LocationConsentScreen({
           </Text>
         ) : null}
 
+        {automation ? (
+          <View
+            testID="settings-location-automation-row"
+            style={CARD_SHADOW}
+            className="flex-row items-center gap-md rounded-[12px] border border-hairline bg-canvas p-lg"
+          >
+            <View className="flex-1">
+              <Text className="font-noto-bold text-card-title text-ink">
+                자동 기록
+              </Text>
+              <Text className="mt-[3px] text-[12.5px] font-noto text-muted">
+                {automation.reason}
+              </Text>
+              {automation.action === 'enable' ? (
+                <Pressable
+                  testID="settings-location-automation-enable"
+                  accessibilityRole="button"
+                  onPress={onPressAutomationEnable}
+                  className="mt-sm self-start"
+                >
+                  <Text className="font-noto-bold text-[13px] text-primary-text">
+                    켜기
+                  </Text>
+                </Pressable>
+              ) : null}
+              {automation.action === 'settings' ? (
+                <Pressable
+                  testID="settings-location-automation-open-settings"
+                  accessibilityRole="link"
+                  onPress={onPressAutomationSettings}
+                  className="mt-sm self-start"
+                >
+                  <Text className="font-noto-bold text-[13px] text-primary-text">
+                    설정 열기
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <View
+              className={`rounded-pill px-md py-xs ${
+                automation.status === 'on'
+                  ? 'bg-success-bg'
+                  : 'bg-surface-strong'
+              }`}
+            >
+              <Text
+                testID="settings-location-automation-status"
+                className={`font-noto-bold text-[12px] ${
+                  automation.status === 'on' ? 'text-success' : 'text-muted'
+                }`}
+              >
+                {automation.status === 'on' ? '켜짐' : '꺼짐'}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         {/* 이렇게 사용해요 — 카드 한 장 안에 3행, 행 사이에만 구분선 */}
         <View testID="settings-location-usage-section" className="gap-[10px]">
           <Text className={`font-noto-bold text-label ${tone.label}`}>
@@ -271,6 +349,33 @@ export function LocationConsentScreen({
                 </View>
               </Fragment>
             ))}
+            {automation ? (
+              <>
+                <View className="h-px bg-hairline" />
+                <View
+                  testID="settings-location-usage-row-automation"
+                  className="flex-row items-center gap-md px-lg py-[14px]"
+                >
+                  <View
+                    className={`h-10 w-[22px] items-center justify-center rounded-[10px] ${tone.tile}`}
+                  >
+                    <AUTOMATION_USAGE.Glyph size={22} color={tone.glyph} />
+                  </View>
+                  <View className="flex-1">
+                    <Text
+                      className={`text-[14.5px] font-noto-bold ${tone.title}`}
+                    >
+                      {AUTOMATION_USAGE.title}
+                    </Text>
+                    <Text
+                      className={`mt-[3px] text-[12.5px] font-noto ${tone.desc}`}
+                    >
+                      {AUTOMATION_USAGE.desc}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            ) : null}
           </View>
         </View>
 

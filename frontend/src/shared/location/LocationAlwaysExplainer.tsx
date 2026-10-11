@@ -16,8 +16,8 @@ import { LOCATION_ICON_COLORS } from './locationColors';
  * ⚠️ 라이브러리 없는 오버레이 — 실제 덮임·터치 차단·열림은 jest 사각(repo-traps 바텀시트 절), 6-b.
  */
 export interface LocationAlwaysExplainerProps {
-  /** 여행 날짜 라벨 — 예 `10월 14일~16일`. */
-  dateRangeLabel: string;
+  /** 여행 날짜 라벨 — 예 `10월 14일~16일`. 모르면(l06 진입) 생략 — "여행 날짜 동안만"으로. */
+  dateRangeLabel?: string;
   onEnable: () => void;
   onLater: () => void;
   /** [켜기] 처리 중(연타 잠금). */
@@ -87,7 +87,7 @@ export function LocationAlwaysExplainer({
           <Row
             icon={<LocationClockGlyph color={ink} />}
             title="언제만"
-            body={`여행 날짜(${dateRangeLabel}) 동안만 기록하고, 여행이 끝나면 멈춰요.`}
+            body={`여행 날짜${dateRangeLabel ? `(${dateRangeLabel})` : ''} 동안만 기록하고, 여행이 끝나면 멈춰요.`}
           />
           <Row
             icon={<LocationInfoGlyph size={20} color={ink} />}

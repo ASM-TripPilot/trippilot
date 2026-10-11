@@ -22,3 +22,4 @@ export {
   tripDateRangeLabel,
 } from './automation/noticeCopy';
 export type { AutomationNoticeCopy } from './automation/noticeCopy';
+export type { AutomationStatusView } from './automation/statusView';

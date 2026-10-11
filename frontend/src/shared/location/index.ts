@@ -36,3 +36,5 @@ export {
   setAutomationSink,
 } from './automation/sink';
 export type { AutomationSinkPort } from './automation/sink';
+export { useAutomationStatus } from './automation/useAutomationStatus';
+export type { AutomationStatusView } from './automation/statusView';
