@@ -577,6 +577,20 @@
 - `src/mocks/scenarios.ts`  →  AuthOutcome · SocialServerBehavior · BootstrapBehavior · MockScenario · SCENARIOS · ScenarioKey · setScenario · getScenario · resetScenario
 - `src/mocks/server.ts`  →  server
 
+## src/pages/assistant/assistant-sheet/api/
+- `src/pages/assistant/assistant-sheet/api/assistantClient.ts`  →  assistantPort · setAssistantPort
+- `src/pages/assistant/assistant-sheet/api/assistantContract.ts`  →  AssistantSurface · ASSISTANT_SURFACES · MessageRole · MessageKind · NEXT_ACTION_TYPES · NextActionType · NextAction · QuickReplyAction · QuickReply · ProposalStatus · ProposalChange · ProposalSlotFace · ProposalDiffItem · Proposal · LabeledValue · ReviewProblem · ReviewPayload · CandidateItem · CandidatesPayload · InfoKind · InfoPayload · ScopePayload · RefusalPayload · FallbackCause · FallbackPayload · ActionLogTag · ActionLogPayload · ClarifyPayload · MessagePayload · AssistantMessage · AssistantSession · OpenSessionResponse · AssistantSessionSummary · MessagesPage · TurnInput · SendTurnRequest · SendTurnResponse · ApplyProposalResponse · DismissProposalResponse
+- `src/pages/assistant/assistant-sheet/api/assistantPort.ts`  →  AssistantPort · AssistantErrorCode · AssistantApiError · isAssistantApiError
+- `src/pages/assistant/assistant-sheet/api/assistantSamples.ts`  →  AssistantScenario · SAMPLE_TRIP_ID · SAMPLE_TRIP_CHIP · SAMPLE_CREATED_AT · startQuickReplies · sampleSession · userMessage · assistantSample · SCENARIO_UTTERANCE · sampleTranscript · sampleActionLogs
+- `src/pages/assistant/assistant-sheet/api/fakeAssistantAdapter.ts`  →  FakeAssistantOptions · routeUtterance · FakeAssistantAdapter · fakeWithHistory
+
+## src/pages/assistant/assistant-sheet/
+- `src/pages/assistant/assistant-sheet/index.ts`  →  AssistantApiError · isAssistantApiError · type AssistantErrorCode · type AssistantPort · assistantPort · setAssistantPort · FakeAssistantAdapter · fakeWithHistory · type FakeAssistantOptions · assistantKeys · useApplyProposal · useAssistantMessages · useAssistantSession · useAssistantSessions · useClearSession · useDismissProposal · useSendTurn
+- `src/pages/assistant/assistant-sheet/index.view.ts`  →  sampleActionLogs · sampleTranscript · type AssistantScenario
+
+## src/pages/assistant/assistant-sheet/model/
+- `src/pages/assistant/assistant-sheet/model/assistantQueries.ts`  →  assistantKeys · appendMessages · useAssistantSession · useAssistantMessages · useAssistantSessions · SendTurnVariables · useSendTurn · useApplyProposal · useDismissProposal · useMarkProposal · useClearSession
+
 ## src/pages/auth/login/config/
 - `src/pages/auth/login/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
 
@@ -1595,4 +1609,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 979개 파일
+합계 987개 파일
