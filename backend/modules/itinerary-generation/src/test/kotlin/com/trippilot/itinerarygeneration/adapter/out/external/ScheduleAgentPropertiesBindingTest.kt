@@ -1,12 +1,15 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
+import com.trippilot.itinerarygeneration.application.GenerationLimitProperties
 import com.trippilot.itinerarygeneration.application.ScheduleDeadlineProperties
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.comparables.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import org.springframework.boot.context.properties.bind.Binder
+import org.springframework.core.env.MapPropertySource
 import org.springframework.core.env.StandardEnvironment
 import org.springframework.core.env.SystemEnvironmentPropertySource
+import java.util.UUID
 
 /**
  * compose 가 넘기는 **환경변수 이름**이 실제로 프로퍼티에 붙는지.
@@ -40,6 +43,26 @@ class ScheduleAgentPropertiesBindingTest : StringSpec({
     "미설정이면 기본값 — 평소 기동은 fake 로 남는다" {
         val p = bind()
         p.mode shouldBe "fake"
+    }
+
+    // application.yml 이 `${ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS:}` 로 넘기는 **문자열 한 줄**이
+    // 계정 집합이 되는지(TRIP-1314). 안 붙으면 등록한 개발자 계정이 조용히 상한에 걸린다.
+    fun bindLimits(exempt: String): GenerationLimitProperties {
+        val environment = StandardEnvironment()
+        environment.propertySources.addFirst(
+            MapPropertySource("test", mapOf("trippilot.itinerary.generation-limit.exempt-account-ids" to exempt)),
+        )
+        return Binder.get(environment)
+            .bind("trippilot.itinerary.generation-limit", GenerationLimitProperties::class.java)
+            .get() // 기본값으로 숨지 않는다 — 안 붙으면 여기서 터져야 한다
+    }
+
+    "상한 예외 계정은 쉼표로 이어 적는다 — 비워 두면 예외가 없다" {
+        val a = UUID.randomUUID()
+        val b = UUID.randomUUID()
+        bindLimits("$a, $b").exemptAccountIds shouldBe setOf(a, b)
+        bindLimits("").exemptAccountIds shouldBe emptySet()
+        bindLimits("").daily shouldBe 10
     }
 
     fun bindDeadlines(vararg env: Pair<String, String>): ScheduleDeadlineProperties {

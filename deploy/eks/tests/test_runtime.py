@@ -54,12 +54,27 @@ class SecretTests(unittest.TestCase):
             {"backend": {"AFFILIATE_MODE": "tripcom"}},
             {"backend": {"AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s"}},
             {"backend": {"AFFILIATE_MODE": "typo"}},
+            # 생성 상한(TRIP-1314) — 있는데 틀리면 백엔드가 기동에서 죽는 값들.
+            {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": ""}},
+            {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "0"}},
+            {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "abc"}},
+            {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "2147483648"}},
+            {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "not-a-uuid"}},
+            # 파이썬 uuid 는 받지만 백엔드는 못 읽는 모양 — DB 도구에서 대시 없이 복사해 오는 것이 흔하다.
+            {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "0d7f17ab5c4b4d6da7f7484ba11dda46"}},
+            {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "{0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46}"}},
+            {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,"}},
         ]
         for changed in cases:
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, **changed})
         runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
             "AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s", "TRIPCOM_AD_ID": "D1"}})
+        runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+            "ITINERARY_GENERATION_DAILY_LIMIT": "50", "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS":
+            "0D7F17AB-5c4b-4d6d-a7f7-484ba11dda46, 11111111-2222-4333-8444-555555555555"}})
+        runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+            "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": ""}})
 
     def test_google_client_secret_must_stay_empty(self):
         """공개(iOS) 클라이언트에 시크릿을 보내면 Google 이 invalid_client 로 거절한다(2026-09-23 실측).
