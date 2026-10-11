@@ -46,6 +46,8 @@ export interface DayCardVM {
   dayLabel: string;
   visitCountLabel: string;
   subtitle: string;
+  /** TRIP-1343 · 그날 거리 출처 라벨(경로/근사). 미전달이면 없음. */
+  distanceSourceLabel?: string;
 }
 
 export interface TripSummaryScreenProps {
@@ -210,6 +212,8 @@ export function TripSummaryScreen({
                 dayLabel={card.dayLabel}
                 visitCountLabel={card.visitCountLabel}
                 subtitle={card.subtitle}
+                distanceSourceLabel={card.distanceSourceLabel}
+                date={card.key}
               />
             ))}
           </>

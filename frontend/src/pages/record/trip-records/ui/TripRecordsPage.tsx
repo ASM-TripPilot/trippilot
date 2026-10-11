@@ -25,7 +25,14 @@ import {
   type AutoRevertError,
   type AutoRevertPart,
 } from '@/features/check-visit';
-import { isLocationAutomationEnabled } from '@/shared/location';
+import {
+  isLocationAutomationEnabled,
+  routeDayForDate,
+  routeDayToSegments,
+  useTripRoutes,
+} from '@/shared/location';
+import { actualDistanceLabel } from '@/shared/map';
+import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
 import { SkipVisitDialog } from './SkipVisitDialog';
 import type { VisitRecordCardVM } from './VisitRecordCard';
 import { VisitRecordCardContainer } from './VisitRecordCardContainer';
@@ -196,6 +203,30 @@ export function TripRecordsPage({
     });
   };
 
+  // TRIP-1343 · 풀 지도 실제 경로 — 그날 경로가 있고 위치 동의가 있을 때만(BR-U10-41). 플래그 OFF 면 조회 0.
+  const locationConsent = useGetMeLocationConsent({
+    query: { enabled: automationOn },
+  });
+  const routes = useTripRoutes(automationOn ? tripId : null);
+  const [routeMode, setRouteMode] = useState<'plan' | 'actual'>('plan');
+  const dayRoute = routeDayForDate(routes.routes, activeDay);
+  const routeSegments = dayRoute ? routeDayToSegments(dayRoute) : [];
+  const consentOn = locationConsent.data?.legalConsent === true;
+  const actualAvailable = consentOn && routeSegments.length > 0;
+  const routeToggle = automationOn
+    ? {
+        mode: actualAvailable ? routeMode : ('plan' as const),
+        actualAvailable,
+        disabledReason: !consentOn
+          ? '위치 동의가 없어요'
+          : '이 날 기록된 경로가 없어요',
+        distanceLabel: dayRoute
+          ? actualDistanceLabel(dayRoute.distanceM)
+          : undefined,
+        onChange: setRouteMode,
+      }
+    : undefined;
+
   const cards: VisitRecordCardVM[] = orderByArrival(
     records.data?.visits ?? []
   ).map((visit) => ({
@@ -291,6 +322,12 @@ export function TripRecordsPage({
   return (
     <View className="flex-1">
       <TripRecordsView
+        routeToggle={routeToggle}
+        actualRoute={
+          routeToggle?.mode === 'actual' && actualAvailable
+            ? routeSegments
+            : undefined
+        }
         tripTitle={trip.data?.title}
         dayTabs={dayTabs}
         activeDay={activeDay}

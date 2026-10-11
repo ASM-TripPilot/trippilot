@@ -32,7 +32,12 @@ import {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { safeAreaPaints } from '@/test-support/safeAreaFace';
-import { getAutomationSink } from '@/shared/location';
+import {
+  createFakeAutomationSink,
+  getAutomationSink,
+  setAutomationSink,
+} from '@/shared/location';
+import { encodePolyline } from '@/shared/location/automation/polyline';
 
 import { LiveItineraryPage } from './LiveItineraryPage';
 
@@ -114,6 +119,10 @@ let mockAutomation: MockAutomation | null = null;
 const mockAutomationLater = jest.fn(async () => undefined);
 const mockAutomationEnable = jest.fn(async () => undefined);
 const mockAutomationDismiss = jest.fn(async () => undefined);
+// 내부 소비처(useTripRoutes 등)가 같은 판독을 보게 플래그 모듈도 같은 값으로 묶는다.
+jest.mock('@/shared/location/automation/flag', () => ({
+  isLocationAutomationEnabled: () => mockAutomation !== null,
+}));
 jest.mock('@/shared/location', () => {
   const actual = jest.requireActual('@/shared/location');
   return {
@@ -453,6 +462,70 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(
         screen.queryByTestId(`execution-live-slot-auto-badge-${TODAY}#p1`)
       ).toBeNull();
+    });
+
+    it('U8 그날 경로 있음 → 계획｜실제 토글, 실제 선택 시 점선 세그먼트·거리만(TRIP-1343)', async () => {
+      mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
+      // 지도 키가 없으면 MapView 가 실패 표면만 그려 오버레이를 관측할 수 없다.
+      const originalKey = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
+      process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID = 'test-naver-client-id';
+      const original = getAutomationSink();
+      setAutomationSink(
+        createFakeAutomationSink({
+          routes: {
+            [TRIP_ID]: [
+              {
+                date: TODAY,
+                segments: [
+                  encodePolyline([
+                    { lat: 35.1, lng: 129.0 },
+                    { lat: 35.101, lng: 129.001 },
+                  ]),
+                  encodePolyline([
+                    { lat: 35.11, lng: 129.01 },
+                    { lat: 35.111, lng: 129.011 },
+                  ]),
+                ],
+                distanceM: 3249,
+                distanceClamped: false,
+                updatedAt: '2026-08-20T12:00:00Z',
+              },
+            ],
+          },
+        })
+      );
+      server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
+      await renderActive();
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('execution-live-route-toggle-actual')
+        ).toBeEnabled()
+      );
+      expect(screen.queryAllByTestId('map-route-segment')).toHaveLength(0);
+      fireEvent.press(screen.getByTestId('execution-live-route-toggle-actual'));
+      expect(screen.getAllByTestId('map-route-segment')).toHaveLength(2);
+      expect(
+        screen.getByTestId('execution-live-route-distance')
+      ).toHaveTextContent('실제 3.2km');
+      setAutomationSink(original);
+      if (originalKey === undefined)
+        delete process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
+      else process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID = originalKey;
+    });
+
+    it('U9 그날 경로 없음 → 실제 칸 비활성 + 사유, 계획 동선만', async () => {
+      mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
+      server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
+      await renderActive();
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('execution-live-route-disabled-reason')
+        ).toHaveTextContent('이 날 기록된 경로가 없어요')
+      );
+      expect(
+        screen.getByTestId('execution-live-route-toggle-actual')
+      ).toBeDisabled();
+      expect(screen.queryAllByTestId('map-route-segment')).toHaveLength(0);
     });
 
     it('U5 날짜 넘김 폐기 건수 → "보내지 못한 자동 기록 N건" 1줄(설정 링크 없음)', async () => {

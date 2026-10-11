@@ -24,6 +24,10 @@ export interface DayHighlightCardProps {
   /** '광안리 해변→전포 카페거리' — daySubtitle(places). 빈 문자열이면 부제 줄 생략. */
   subtitle: string;
   onPress?: () => void;
+  /** TRIP-1343 · 그날 거리 출처 라벨('경로'|'근사', BR-U10-39). 미전달이면 없음(플래그 OFF 무회귀). */
+  distanceSourceLabel?: string;
+  /** 출처 라벨 testID 용 날짜. */
+  date?: string;
 }
 
 export function DayHighlightCard({
@@ -31,6 +35,8 @@ export function DayHighlightCard({
   visitCountLabel,
   subtitle,
   onPress,
+  distanceSourceLabel,
+  date,
 }: DayHighlightCardProps): ReactElement {
   const content = (
     <>
@@ -46,6 +52,14 @@ export function DayHighlightCard({
           <Text className="font-noto text-label text-muted">
             {`· ${visitCountLabel}`}
           </Text>
+          {distanceSourceLabel ? (
+            <Text
+              testID={`summary-day-distance-source-${date ?? ''}`}
+              className="font-noto text-caption text-muted-soft"
+            >
+              {`· 거리 ${distanceSourceLabel}`}
+            </Text>
+          ) : null}
         </View>
         {subtitle ? (
           <Text className="text-label text-muted" numberOfLines={1}>

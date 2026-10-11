@@ -17,6 +17,11 @@ import { tripDayChips } from '@/features/add-must-visit';
 import { formatDayLabel } from '@/entities/trip';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import {
+  distanceSourceByDate,
+  isLocationAutomationEnabled,
+  useTripRoutes,
+} from '@/shared/location';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
@@ -54,6 +59,8 @@ export function TripSummaryPage({
   // TRIP-987 — 요약 계약엔 여행 이름·기간이 없어 여행을 따로 조회한다. 보조 조회라 로딩·실패면
   // 이름·일차 회고만 빠지고 요약은 그대로 그린다(Seed Q3).
   const trip = useGetTripsTripId(tripId);
+  const automationOn = isLocationAutomationEnabled();
+  const routes = useTripRoutes(automationOn ? tripId : null);
   const tripDays = trip.data ? tripDayChips(trip.data) : [];
 
   const handleBack = () => {
@@ -112,17 +119,30 @@ export function TripSummaryPage({
   }
 
   const stats = summaryStats(data.stats);
+  // TRIP-1343 · BR-U10-39 — 거리 출처는 날짜 단위(경로 있는 날=경로, 없는 날=근사), 전체는 모든 날이 경로일 때만.
+  // 서버 DayHighlight.distanceSource(§12.5) 개통 전이라 경로 목록으로 파생한다. 플래그 OFF 면 현행 그대로.
+  const sources = automationOn
+    ? distanceSourceByDate(
+        data.highlights.map((h) => h.date),
+        routes.routes
+      )
+    : null;
   const dayCards: DayCardVM[] = data.highlights.map((highlight) => ({
     key: highlight.date,
     dayLabel: formatDayLabel(highlight.dayOrder),
     visitCountLabel: `${highlight.visitCount}곳`,
     subtitle: daySubtitle(highlight.places),
+    distanceSourceLabel: sources
+      ? distanceSourceLabel(sources.byDate[highlight.date])
+      : undefined,
   }));
 
   return (
     <TripSummaryScreen
       stats={stats}
-      distanceSourceLabel={distanceSourceLabel(data.stats.distanceSource)}
+      distanceSourceLabel={distanceSourceLabel(
+        sources ? sources.overall : data.stats.distanceSource
+      )}
       view={resolveSummaryView(data.stats)}
       dayCards={dayCards}
       orderedVisits={toOrderedVisitList(data.highlights)}

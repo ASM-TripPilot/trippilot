@@ -38,3 +38,5 @@ export {
 export type { AutomationSinkPort } from './automation/sink';
 export { useAutomationStatus } from './automation/useAutomationStatus';
 export type { AutomationStatusView } from './automation/statusView';
+export { distanceSourceByDate } from './automation/distanceSource';
+export type { DistanceSource } from './automation/distanceSource';
