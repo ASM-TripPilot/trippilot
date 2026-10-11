@@ -15,4 +15,5 @@ export * from './generated/trips/trips';
 export {
   cancelActiveGeneration,
   resolveGenerationInProgress,
+  resolveGenerationRefused,
 } from './generationInProgress';
