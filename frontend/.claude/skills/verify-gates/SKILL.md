@@ -140,7 +140,7 @@ agent-device fill 'id="<입력 testID>"' "한글 입력"                    # �
 **발동**: 자율 세션 + 화면 표면(픽셀·레이아웃)을 만진 사이클. 대상 키는 이번 사이클이 만진 프리뷰 키(`layer-app.md` `_dev/preview.tsx` 행에서 확정).
 
 **절차**:
-1. `scripts/dev-preview-capture.sh <키>…` — 키마다 fresh 재기동→진입→7s→캡처→상단 오버레이 크롭. 출력 `<리포 루트>/_workspace/preview-capture/<키>.png`. 사전 점검(시뮬·앱·Metro) 실패 시 exit 3 = 실행 불가(FAIL 아님, §0 정신).
+1. 프리뷰 캡처 — 키마다 `xcrun simctl terminate booted com.trippilot.travel` → `xcrun simctl openurl booted "trippilot://_dev/preview?state=<키>"` → 7초 대기 → `xcrun simctl io booted screenshot <리포 루트>/_workspace/preview-capture/<키>.png`. **키마다 재기동이 필수다** — 프리뷰는 진입 시 딥링크 상태를 1회만 읽는다(traps-shell). 상단 dev 오버레이(~156pt, @3x ≈ 470px)는 대조 시 무시하거나 잘라 본다. 시뮬 부팅·앱 설치·Metro(8081) 중 하나라도 없으면 실행 불가(FAIL 아님, §0 정신).
 2. 대응 Figma 프레임 id 를 `get_screenshot(nodeId, fileKey=1MTF3dtptIrbg8gld5IdO2, maxDimension 1600)` 로 내려 `<리포 루트>/_workspace/figma-cache/<id>.png` 에 캐시(curl). 프레임 id 는 티켓 본문 "■ Figma 프레임".
 3. **비전 가능 서브에이전트**에 두 이미지 + 티켓 완료 조건을 주고 PASS/FAIL·차이 목록(요소·카피·색·간격)을 리포트로 쓰게 한다. 산출 `04b_smoke_{n}_{PASS|FAIL}.md`(실기 스모크와 같은 채번·자리).
 4. **FAIL → implementer 수정 루프 최대 2회.** 그래도 FAIL 이면 판단성 이상으로 새 티켓(전진 전용, 되돌리지 않음).
