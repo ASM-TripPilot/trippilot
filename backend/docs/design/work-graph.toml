@@ -47,6 +47,7 @@
 # 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
 # `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
 #
+# 갱신: 2026-10-12 · 루프 다섯 노드 머지 완료(#1040~#1044) → done
 # 갱신: 2026-10-12 · `SOCIAL-TOKEN-APP`(TRIP-1317) 추가 — TRIP-1316 잔여(이메일 선점)를 노드로 뗌
 # 갱신: 2026-10-11 · 루프 착수 전 정리 — 새 노드 셋(SOCIAL-TOKEN-AUD·TRIP-1315·TRIP-1314)과 외부 짝 하나
 # (TRIP-1312), 그리고 **지금 할 수 있는 조각을 떼어 낸 것 둘**(828 → REFLECTION-MOOD · 824 →
@@ -3465,14 +3466,14 @@ note = """
 id = "SOCIAL-TOKEN-AUD"
 ticket = "TRIP-1316"
 title = "토큰 로그인 경로가 구글 토큰의 발급 대상을 확인하지 않는다 — 쓰는 곳 없는 문을 닫는다"
-status = "todo"
+status = "done"
 owner = "인증"
 migration = false
 touches = ["backend/modules/auth", "backend/docs/design/openapi.yaml"]
 note = """
-**PR #1040 (머지 대기 · 2026-10-11).** 유스케이스가 토큰 경로에서 구글을 501 로 거절한다.
+**PR #1040 (머지됨 · 2026-10-12).** 유스케이스가 토큰 경로에서 구글을 501 로 거절한다.
 적대적 리뷰가 잔여 셋을 냈다 — 카카오·네이버 토큰 경로의 이메일 선점은 **`SOCIAL-TOKEN-APP` 노드
-(TRIP-1317)로 떼었고**, PKCE 없는 네이버 code 경로는 앱이 쓰지 않아 티켓 없이 보류(코드 주석), 그리고
+(TRIP-1317)로 떼었고**, PKCE 없는 네이버 code 경로도 같은 노드로 넘겼고(앱이 SDK 키 없는 빌드에서 그 경로로 폴백한다), 그리고
 "네이버 id 가 앱 단위 값"이라는 전제는 **2026-10-12 공식 명세로 확인됐다**(앱이 다르면 id 가 다르다).
 
 **인수인계가 가리킨 곳(`AbstractOAuth2Client.kt:20` 의 state·nonce TODO)은 실제 위험이 아니었다.**
@@ -3504,19 +3505,24 @@ note = """
 **네이버**는 토큰의 발급 대상을 확인할 수단이 있는지 조사부터다(미확인). 없으면 code 경로 전환이
 대안인데 네이버는 PKCE 가 없어 따로 따져야 한다.
 
-`SOCIAL-TOKEN-AUD`(#1040)와 같은 파일을 만진다 — 그쪽 머지 뒤에 착수한다.
+**PKCE 없는 네이버 code 경로도 이 노드 몫이다**(2026-10-12 머지 전 검수에서 정정). 앱은
+`EXPO_PUBLIC_NAVER_URL_SCHEME` 이 있는 빌드에서만 네이버를 SDK 토큰 경로로 보내고, 없으면 PKCE 없는
+code 경로로 폴백한다 — "앱이 쓰지 않는 경로"라는 처음 판단이 틀렸다. 출시 빌드에 그 값이 들어가는지,
+안 쓰는 경로면 서버에서 닫을 수 있는지를 프론트 폴백과 같이 정한다.
+
+`SOCIAL-TOKEN-AUD`(#1040)는 머지됐다 — 착수 가능.
 """
 
 [[nodes]]
 id = "TRIP-1315"
 ticket = "TRIP-1315"
 title = "회고·기록 카드 방문 순번 — BE 몫인지부터 가린다"
-status = "todo"
+status = "done"
 owner = "기록"
 migration = false
 touches = ["backend/modules/archive", "backend/docs/design/openapi.yaml"]
 note = """
-**PR #1041 (머지 대기 · 2026-10-11). 아래 "BE 변경이 0 일 수 있다"는 틀렸다** — 기록(`/records`)은
+**PR #1041 (머지됨 · 2026-10-12). 아래 "BE 변경이 0 일 수 있다"는 틀렸다** — 기록(`/records`)은
 오름차순인데 허브(`/visits/days/{day}`)는 저장소 순서(최신 먼저)였다. 순서를 정하는 자리를
 `VisitCheck.inVisitOrder()` 하나로 모으고 계약에 "배열 순서 = 방문 순서"를 적었다. 순번 필드는 없다.
 **번호를 그리는 것은 프론트 몫으로 남는다** — 기록 화면의 자체 정렬(`orderByArrival`)이 서버와 달라
@@ -3532,13 +3538,15 @@ note = """
 id = "REFLECTION-MOOD"
 ticket = "TRIP-828"
 title = "회고 mood·shortMemo 영속 — FE 가 '비영속'이라 적고 기다린다 (828 에서 뗌)"
-status = "todo"
+status = "done"
 owner = "회고"
 migration = true
 touches = ["backend/modules/reflection", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
 note = """
-**PR #1042 (머지 대기 · 2026-10-11 · V2.63).** 기존 PUT 을 넓혔다 — `card`·`mood`·`shortMemo` 모두
+**PR #1042 (머지됨 · 2026-10-12 · V2.63).** 기존 PUT 을 넓혔다 — `card`·`mood`·`shortMemo` 모두
 선택, 하나는 있어야 한다. null 은 그대로·빈 문자열은 지움. `mood` 는 코드 모양만 검사한다.
+쓰기 경로는 행을 잠그고 읽는다(겹친 수정이 서로를 되돌리던 것 — 머지 전 검수에서 발견).
+**남은 것(종전부터 있던 것): 행이 아직 없을 때 겹친 첫 쓰기는 진 쪽이 500 이다**(UNIQUE 위반이 catch-all 로 간다).
 
 `DailyReflectionPage.tsx` 가 *"mood/memo 비영속 … 통합 저장은 계약 확장 티켓 TRIP-823"* 이라고
 적어 둔 자리다. 컬럼 둘 + `EditReflectionRequest.card` 를 선택으로 완화(부분 갱신).
@@ -3552,15 +3560,19 @@ note = """
 id = "TRIP-1314"
 ticket = "TRIP-1314"
 title = "같은 여행 재생성이 무제한 — 계정당 일일 상한 (FE 임시가드 TRIP-1268 대체)"
-status = "todo"
+status = "done"
 owner = "일정"
 migration = false
 touches = ["backend/modules/itinerary-generation", "backend/docs/design/openapi.yaml"]
 note = """
-**PR #1043 (머지 대기 · 2026-10-11).** 세지 않는 것이 `FAILED` 하나가 아니라 셋이 됐다 — 실패, **폴백으로
+**PR #1043 (머지됨 · 2026-10-12).** 세지 않는 것이 `FAILED` 하나가 아니라 셋이 됐다 — 실패, **폴백으로
 끝난 생성**(AI 가 죽으면 FAILED 가 아니라 폴백으로 완료된다), **멈춘 세션**(세기 전에 실패로 닫는다).
 남는 것: 프론트가 `GENERATION_DAILY_LIMIT` 를 잇고 TRIP-1268 로컬 카운터를 걷어 내기 · 슬롯 후보
-연타는 이 상한 밖 · DEV/QA 도 5회(env 로 조정).
+연타는 이 상한 밖.
+
+**상한은 10회, 개발자 계정은 예외다**(2026-10-12 사용자 결정). 예외 등록은 시크릿 `backend` 그룹의
+`ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS`(쉼표 구분 계정 UUID, 환경마다 다르다) → 재배포.
+갈아치운(취소·대체된) 생성은 **센다** — AI 가 실패 없이 늘어지는 동안의 연타는 횟수를 쓴다.
 
 `generation_session` 에 `account_id`·`started_at`·`status` 가 이미 있어 **마이그레이션이 없다**.
 선례는 `notification/application/PushRateLimits.kt`.
@@ -3586,12 +3598,12 @@ note = "[[TRIP-1314]] 의 **값**을 정하는 입력이다. 선행이 아니라
 id = "PLACE-DETAIL-API"
 ticket = "TRIP-824"
 title = "장소 상세 단건 GET /places/{poiId} — 값이 이미 있는 것만 싣는다 (824 에서 뗌)"
-status = "todo"
+status = "done"
 owner = "장소"
 migration = false
 touches = ["backend/modules/place-data", "backend/docs/design/openapi.yaml"]
 note = """
-**PR #1044 (머지 대기 · 2026-10-11).** `Place` 를 건드리지 않아 프론트 계약 가드와 무관하다.
+**PR #1044 (머지됨 · 2026-10-12).** `Place` 를 건드리지 않아 프론트 계약 가드와 무관하다.
 ACTIVE 만으로 거르지 않되(담아 둔 폐업 장소가 열려야 한다) `UNVERIFIED` 는 404 다(INV-1).
 
 상세 화면(d06·i10)이 목록에서 받은 값으로 그리고 있어 **목록 밖에서 상세를 열 길이 없다.**
