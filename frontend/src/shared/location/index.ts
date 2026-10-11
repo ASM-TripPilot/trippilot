@@ -30,3 +30,9 @@ export {
 } from './automation/noticeCopy';
 export type { AutomationNoticeCopy } from './automation/noticeCopy';
 export { isLocationAutomationEnabled } from './automation/flag';
+export {
+  createFakeAutomationSink,
+  getAutomationSink,
+  setAutomationSink,
+} from './automation/sink';
+export type { AutomationSinkPort } from './automation/sink';

@@ -60,6 +60,13 @@ import {
   useLocationAutomation,
 } from '@/shared/location';
 import { automationVisitRefs } from '../model/automationInput';
+import {
+  AutoRevertDialog,
+  autoRecordPart,
+  useRevertAutoVisit,
+  type AutoRevertError,
+  type AutoRevertPart,
+} from '@/features/check-visit';
 
 import { LiveHubView } from './LiveHubView';
 
@@ -266,6 +273,29 @@ export function LiveItineraryPage({
     automation.notice,
     automation.droppedCount
   );
+
+  // TRIP-1340 · '자동 기록' 칩·되돌리기 — 서버 출처에서 파생(플래그 ON 일 때만). 확정 전 호출 0회.
+  const autoRecords = new Map<
+    string,
+    { visitCheckId: string; part: AutoRevertPart }
+  >();
+  if (automationOn) {
+    for (const visit of visits.data?.visits ?? []) {
+      const part = autoRecordPart(visit);
+      if (part && visit.slotKey)
+        autoRecords.set(visit.poiId, {
+          visitCheckId: visit.visitCheckId,
+          part,
+        });
+    }
+  }
+  const revertAuto = useRevertAutoVisit(tripId);
+  const [revertTarget, setRevertTarget] = useState<{
+    poiId: string;
+    visitCheckId: string;
+    part: AutoRevertPart;
+    error: AutoRevertError;
+  } | null>(null);
 
   // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
   const goBackOrHome = (): void => {
@@ -661,6 +691,11 @@ export function LiveItineraryPage({
         onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
+        autoRecordedPoiIds={new Set(autoRecords.keys())}
+        onPressRevertAuto={(poiId) => {
+          const target = autoRecords.get(poiId);
+          if (target) setRevertTarget({ poiId, ...target, error: null });
+        }}
         automationNotice={
           automationCopy
             ? {
@@ -676,6 +711,35 @@ export function LiveItineraryPage({
             : null
         }
       />
+      {revertTarget ? (
+        <AutoRevertDialog
+          testIDPrefix="execution-live-slot-auto-revert"
+          placeName={
+            activeSlots.find((slot) => slot.poiId === revertTarget.poiId)
+              ?.nameKo ?? '이 장소'
+          }
+          part={revertTarget.part}
+          pending={revertAuto.pending}
+          error={revertTarget.error}
+          onCancel={() => setRevertTarget(null)}
+          onConfirm={() => {
+            void revertAuto
+              .revert(revertTarget.visitCheckId)
+              .then((outcome) => {
+                if (outcome === 'ok') setRevertTarget(null);
+                else
+                  setRevertTarget((t) =>
+                    t
+                      ? {
+                          ...t,
+                          error: outcome === 'media' ? 'media' : 'failed',
+                        }
+                      : t
+                  );
+              });
+          }}
+        />
+      ) : null}
       {automation.state === 'EXPLAINER' && !explainerClosed ? (
         <LocationAlwaysExplainer
           dateRangeLabel={tripDateRangeLabel(

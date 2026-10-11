@@ -32,6 +32,7 @@ import {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { safeAreaPaints } from '@/test-support/safeAreaFace';
+import { getAutomationSink } from '@/shared/location';
 
 import { LiveItineraryPage } from './LiveItineraryPage';
 
@@ -393,6 +394,65 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(openSettings).toHaveBeenCalledTimes(1);
       expect(mockAutomationDismiss).toHaveBeenCalledTimes(1);
       openSettings.mockRestore();
+    });
+
+    it('U6 자동 출처 방문 → 칩 + ⋯ → 확인 다이얼로그, [취소]면 되돌리기 호출 0회 · [되돌리기]면 1회(TRIP-1340)', async () => {
+      mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
+      const revertSpy = jest.spyOn(getAutomationSink(), 'revertAuto');
+      server.use(
+        itineraryOk(),
+        tripHandler(),
+        visitsHandler([{ ...completedVisit(), source: 'AUTO_GEOFENCE' }]),
+        consentOk()
+      );
+      await renderActive();
+      await waitFor(() =>
+        expect(
+          screen.getByTestId(`execution-live-slot-auto-badge-${TODAY}#p1`)
+        ).toBeTruthy()
+      );
+      fireEvent.press(
+        screen.getByTestId(`execution-live-slot-auto-revert-${TODAY}#p1`)
+      );
+      fireEvent.press(
+        screen.getByTestId('execution-live-slot-auto-revert-cancel')
+      );
+      expect(revertSpy).not.toHaveBeenCalled();
+      expect(
+        screen.queryByTestId('execution-live-slot-auto-revert-dialog')
+      ).toBeNull();
+
+      fireEvent.press(
+        screen.getByTestId(`execution-live-slot-auto-revert-${TODAY}#p1`)
+      );
+      await act(async () => {
+        fireEvent.press(
+          screen.getByTestId('execution-live-slot-auto-revert-confirm')
+        );
+      });
+      expect(revertSpy).toHaveBeenCalledTimes(1);
+      expect(revertSpy).toHaveBeenCalledWith(TRIP_ID, 'v1');
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId('execution-live-slot-auto-revert-dialog')
+        ).toBeNull()
+      );
+      revertSpy.mockRestore();
+    });
+
+    it('U7 수동 기록 방문 → 칩·되돌리기 없음', async () => {
+      mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
+      server.use(
+        itineraryOk(),
+        tripHandler(),
+        visitsHandler([completedVisit()]),
+        consentOk()
+      );
+      await renderActive();
+      await settle();
+      expect(
+        screen.queryByTestId(`execution-live-slot-auto-badge-${TODAY}#p1`)
+      ).toBeNull();
     });
 
     it('U5 날짜 넘김 폐기 건수 → "보내지 못한 자동 기록 N건" 1줄(설정 링크 없음)', async () => {
