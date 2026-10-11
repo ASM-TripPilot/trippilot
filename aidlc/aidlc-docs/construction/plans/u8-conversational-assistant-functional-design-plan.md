@@ -139,14 +139,14 @@
 - [x] 1c. 라이브 Figma 밴드 `b` 구조 매핑(08-31 관측 승계, §3)
 - [x] 1d. ai/ 문서 대조 — A-1~A-12 · 드리프트 D-U8-1~7(§2). ai `assistant-dialogue` FD 초안 통독 포함
 - [x] 1e. **보존본 이관·갱신**(7f1fddba → 이 브랜치) — 질문 재편(§0 표)
-- [ ] 2. **질문 Q1~Q15 답변 수집**(§5) → 모호한 답이 있으면 후속 질문 파일
-- [ ] 3. (Q1=A 시) **US-ASSIST-01~08 전개** — PRD 02 기반으로 코드를 붙이고 `stories.md` 개정을 올린다. U7 폐기로 사라진 참조(스토리 6 커뮤니티 조항)를 정리한다
-- [ ] 4. 밴드 `b` 시각 확인 — `b01`·`b02`·`b05` 우선, 진입점 배치(Q12) 재판정. 라이브 이름으로 다시 찾는다
-- [ ] 5. `business-logic-model.md` — DEC-U8-\* · 대화 파이프라인(진입 → 컨텍스트 스냅샷·권한 필터 → 금칙어·rate-limit → ai 해석 → 디스패치/되묻기/폴백 → 제안 → [적용] → 기존 경로 재검증·반영 → change log) · backend↔ai 경계 계약 제안(Q6) · 갭 G-U8-\*
-- [ ] 6. `domain-entities.md` — 대화 세션·메시지(Q3·Q4) + `DialogueContext` 영속 형태(ai FD 타입과 정합) + 재사용(`ChangeSource.ASSISTANT`·account·trip·itinerary) + INV-U8-\*
-- [ ] 7. `business-rules.md` — BR-U8-\*(단독 확정 금지·검증값 우선·dead-end 금지·rate-limit·서버측 컨텍스트 필터·되묻기 상한 승계) · PBT-U8-\*(closed-set 인텐트·봉투/`DialogueContext` 직렬화 왕복·rate-limit 창 불변식 후보) · 미결 O-U8-\*(O3 보존 기간 등)
-- [ ] 8. `frontend-components.md` — 밴드 `b` 7코드 라우트·pages 슬라이스·`features/assistant`·진입점 배선(Q12)·바텀시트 탭바 숨김(앱 셸 규칙)·대화 ↔ 화면 상태 일관(스토리 2)
-- [ ] 9. 정합 검증 — INV-1~4 · `ScheduleAgentPort`·`CALLED_PATHS` · ai FD BR-DLG 규칙 · U0 rate-limit·세션 자산 · change log · **U7/U9 무의존·U10 무의존** 확인
+- [x] 2. **질문 Q1~Q15 답변 수집**(§5) → 모호한 답이 있으면 후속 질문 파일
+- [x] 3. (Q1=A 시) **US-ASSIST-01~08 전개** — PRD 02 기반으로 코드를 붙이고 `stories.md` 개정을 올린다. U7 폐기로 사라진 참조(스토리 6 커뮤니티 조항)를 정리한다
+- [x] 4. 밴드 `b` 시각 확인 — `b01`·`b02`·`b05` 우선, 진입점 배치(Q12) 재판정. 라이브 이름으로 다시 찾는다 *(2026-10-12 완료: 10프레임 전부 스크린샷 확인, 행 y=3599, id `1266:1209`·`1267:1208`~`1277:1208`. ✦ FAB는 밴드 `b`에 없음 → G-U8-9. `b01 default`·`zero-result`의 대화 안 숙소 결과는 Q8=A와 충돌 → G-U8-8)*
+- [x] 5. `business-logic-model.md` — DEC-U8-\* · 대화 파이프라인(진입 → 컨텍스트 스냅샷·권한 필터 → 금칙어·rate-limit → ai 해석 → 디스패치/되묻기/폴백 → 제안 → [적용] → 기존 경로 재검증·반영 → change log) · backend↔ai 경계 계약 제안(Q6) · 갭 G-U8-\*
+- [x] 6. `domain-entities.md` — 대화 세션·메시지(Q3·Q4) + `DialogueContext` 영속 형태(ai FD 타입과 정합) + 재사용(`ChangeSource.ASSISTANT`·account·trip·itinerary) + INV-U8-\*
+- [x] 7. `business-rules.md` — BR-U8-\*(단독 확정 금지·검증값 우선·dead-end 금지·rate-limit·서버측 컨텍스트 필터·되묻기 상한 승계) · PBT-U8-\*(closed-set 인텐트·봉투/`DialogueContext` 직렬화 왕복·rate-limit 창 불변식 후보) · 미결 O-U8-\*(O3 보존 기간 등)
+- [x] 8. `frontend-components.md` — 밴드 `b` 7코드 라우트·pages 슬라이스·`features/assistant`·진입점 배선(Q12)·바텀시트 탭바 숨김(앱 셸 규칙)·대화 ↔ 화면 상태 일관(스토리 2)
+- [x] 9. 정합 검증 — INV-1~4 · `ScheduleAgentPort`·`CALLED_PATHS` · ai FD BR-DLG 규칙 · U0 rate-limit·세션 자산 · change log · **U7/U9 무의존·U10 무의존** 확인
 - [ ] 10. 완료 메시지 → 승인 게이트 → `audit.md`·`aidlc-state.md`(오케스트레이터 소관)
 
 ---
