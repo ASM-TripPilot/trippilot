@@ -2,7 +2,10 @@ import { ArriveRequestSource } from '@/shared/api/generated/schemas';
 import type {
   ArriveRequest,
   ItineraryDaysItemSlotsItem,
+  VisitCheck,
 } from '@/shared/api/generated/schemas';
+
+import { AUTOMATION_CONFIG } from './automation/config';
 
 /**
  * TRIP-396 · AC-7 (BR-U4-36) — 지오펜스(예정 좌표 "울타리") 계약 + 순수 매핑.
@@ -25,9 +28,8 @@ export interface GeofenceRegion {
   radiusM: number;
 }
 
-// 정본에 반경 값이 없다 — 발명하지 않고 "양수" 계약만 세운다(categoryPlaceholder 선례).
-// 승격 시 정확도·POI 밀도에 맞춰 조정할 자리.
-const DEFAULT_RADIUS_M = 120;
+// TRIP-1333 — 반경은 U10 FD 임계(BR-U10-13, 150m). 옛 120m 자리값을 대체한다.
+const DEFAULT_RADIUS_M = AUTOMATION_CONFIG.geofenceRadiusM;
 
 export function buildGeofenceRegions(
   slots: readonly ItineraryDaysItemSlotsItem[],
@@ -45,6 +47,37 @@ export function buildGeofenceRegions(
     });
   }
   return regions;
+}
+
+/**
+ * TRIP-1333 · BR-U10-09·11 — OS 에 등록할 리전 고르기.
+ * 1) 진행 중 슬롯(도착 · 미완료 · 미건너뜀) — 이탈 감지에 필요해 먼저 넣는다
+ * 2) 당일 남은 슬롯(실적 없음 · 좌표 있음 · 그날 되돌린 슬롯 제외) 계획 순번대로
+ * 3) 합계 `limit` 에서 자른다. 좌표 결측 슬롯은 리전이 될 수 없다(수동 전용).
+ */
+export function selectRegions(
+  slots: readonly ItineraryDaysItemSlotsItem[],
+  visits: readonly VisitCheck[],
+  suppressedSlotKeys: readonly string[],
+  date: string,
+  limit: number = AUTOMATION_CONFIG.maxRegions
+): GeofenceRegion[] {
+  const bySlot = new Map<string, VisitCheck>();
+  for (const v of visits) if (v.slotKey) bySlot.set(v.slotKey, v);
+  const suppressed = new Set(suppressedSlotKeys);
+
+  const inProgress: GeofenceRegion[] = [];
+  const remaining: GeofenceRegion[] = [];
+  const seen = new Set<string>();
+  for (const region of buildGeofenceRegions(slots, date)) {
+    if (seen.has(region.slotKey)) continue; // 같은 장소 2회 — 키가 같아 리전 하나
+    seen.add(region.slotKey);
+    const v = bySlot.get(region.slotKey);
+    if (v?.skippedAt != null || v?.completedAt != null) continue;
+    if (v?.arrivedAt != null) inProgress.push(region);
+    else if (!suppressed.has(region.slotKey)) remaining.push(region);
+  }
+  return [...inProgress, ...remaining].slice(0, Math.max(0, limit));
 }
 
 export function geofenceArriveRequest(region: GeofenceRegion): ArriveRequest {
