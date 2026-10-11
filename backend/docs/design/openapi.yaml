@@ -3481,17 +3481,36 @@ components:
 
     EditReflectionRequest:
       type: object
-      required: [card]
       description: >
         수정 단위는 **카드 통째**다(BR-U5-35). 장면·캡션 단위 편집은 화면이 정해진 뒤에 정한다.
+
+
+        **세 필드 모두 선택이고 하나는 있어야 한다**(셋 다 없으면 400 · TRIP-828). `mood`·`shortMemo` 는
+        카드와 별개의 입력이라, 그것만 보내는 요청은 카드를 건드리지 않는다.
       properties:
         card:
           type: string
+          nullable: true
           minLength: 1
           maxLength: 20000
           description: >
             카드 원문(JSON 문자열). `cover.title` 이 비면 400 이다(PBT-U5-F1) — 통과시키면 목록에
-            빈 줄이 그려지고 어디서 비었는지 추적할 근거가 사라진다.
+            빈 줄이 그려지고 어디서 비었는지 추적할 근거가 사라진다. 보내지 않으면 카드는 그대로다.
+        mood:
+          type: string
+          nullable: true
+          maxLength: 20
+          pattern: '^[A-Za-z0-9_-]*$'
+          description: >
+            그날의 기분 **코드**. 값 집합은 화면이 정한다 — 서버는 코드 모양(영문·숫자·밑줄·하이픈)만
+            검사하고 문장은 받지 않는다. 보내지 않거나 null 이면 그대로, **빈 문자열이면 지운다.**
+        shortMemo:
+          type: string
+          nullable: true
+          maxLength: 60
+          description: >
+            한 줄 메모. 앞뒤 공백을 뗀 뒤 60자(문자 수)를 넘거나 줄바꿈·제어 문자가 있으면 400.
+            보내지 않거나 null 이면 그대로, **빈 문자열(공백뿐 포함)이면 지운다.**
 
     ReflectionCard:
       type: object
@@ -3533,6 +3552,15 @@ components:
         stats: { $ref: '#/components/schemas/ReflectionStats' }
         generatedAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        mood:
+          type: string
+          nullable: true
+          description: 그날의 기분 코드. 남기지 않았으면 null. **재생성해도 남는다** — 사용자가 쓴 값이다(TRIP-828).
+        shortMemo:
+          type: string
+          nullable: true
+          maxLength: 60
+          description: 한 줄 메모. 남기지 않았으면 null. 재생성해도 남는다.
 
     ReflectionStats:
       type: object
