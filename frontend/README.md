@@ -13,13 +13,13 @@ React Native + Expo (TypeScript strict) 클라이언트.
 | 프레임워크 | Expo SDK 54 (RN 0.81, development build + prebuild) · TypeScript strict · New Architecture | 국내 지도 SDK 등 네이티브 모듈을 config plugin으로 수용하면서 관리형 워크플로 유지 |
 | 내비게이션 | Expo Router (파일 기반) — 탭별 독립 스택, 딥링크 `trippilot://` + universal/app links | 라우트 = 파일 경로 = 딥링크 URL이 한 번에 정리됨. React Navigation을 래핑하므로 저수준 API도 접근 가능 |
 | 상태 관리 | TanStack Query v5(서버 상태) + Zustand(클라이언트 상태) | 서버 데이터의 캐싱·재검증·낙관적 업데이트는 Query가 전담, UI 상태만 경량 스토어로 |
-| 폼·스키마 | React Hook Form + Zod | 다단계 폼 리렌더 최소화, Zod 스키마는 API 응답 런타임 검증에 재사용 |
+| 폼·스키마 | React Hook Form + Zod — **현재 미사용·의존성 제거(2026-10-12)** | 다단계 폼 리렌더 최소화, Zod 스키마는 API 응답 런타임 검증에 재사용. 폼은 zustand 로 구현됐고 Zod 배선(아래 §API 계층)이 붙을 때 의존성을 다시 넣는다 |
 | HTTP | axios(REST 전반) + 토큰 회전 인터셉터(401 시 리프레시 갱신 single-flight 직렬화) · **AI 실시간 응답은 `expo/fetch` 스트리밍 경로** | 동시 401에서 회전이 1회만 일어나야 재사용 오탐이 없음. axios는 XHR 기반이라 SSE/청크 스트리밍 불가 — 일정 생성 진행 표시 등은 expo/fetch(ReadableStream 지원)로. 두 경로가 토큰 첨부·오류 정규화 계층을 공유 |
 | 토큰 저장 | expo-secure-store (iOS Keychain / Android Keystore) | AsyncStorage·MMKV는 평문이라 토큰 저장 부적합 |
 | 소셜 로그인 | 어댑터 인터페이스 1개 뒤 프로바이더별 구현 — **카카오·네이버는 네이티브 SDK**(@react-native-seoul/kakao-login·naver-login — 카카오톡·네이버앱 간편 로그인, 미설치 시 웹 폴백) · Apple은 expo-apple-authentication · Google은 expo-auth-session | 검증·세션 발급은 전부 서버, 앱에 클라이언트 시크릿은 **원칙적으로** 없음(예외는 아래 참고). 어댑터가 서버 전달 자격 증명(인가 코드 또는 SDK 발급 토큰)을 표준화 — 백엔드 `/auth/social/{provider}` code 경로와 `/auth/social/{provider}/token` 토큰 경로(TRIP-210)를 provider 별로 나눠 탄다 |
 | 애니메이션·제스처 | react-native-reanimated + react-native-gesture-handler + @gorhom/bottom-sheet | 바텀시트(제휴 고지·외부 지도 선택·필터)가 전역 UI 패턴. 네이티브 모듈이라 최초 스캐폴드에 포함 — 나중에 추가하면 EAS 재빌드 유발 |
 | 크래시 리포팅 | Sentry (@sentry/react-native + Expo config plugin) | 크래시·JS 오류·성능 수집. `beforeSend` 스크러빙으로 토큰·PII 차단 — "크래시 리포트에 토큰 미포함" 불변식의 집행 지점 |
-| 기기 능력 | expo-notifications(푸시, FCM/APNs) · expo-location(위치, 포그라운드 한정) · @react-native-community/netinfo(네트워크 상태) | `features/notification`·`shared/location`의 구현 스택. netinfo는 오프라인 큐 복구 감지 트리거 |
+| 기기 능력 | expo-notifications(푸시, FCM/APNs) · expo-location(위치, 포그라운드 한정) · @react-native-community/netinfo(네트워크 상태) | `features/notification`·`shared/location`의 구현 스택. netinfo는 부트스트랩 게이트의 네트워크 상태 감지(`useBootstrapGate`) |
 | 스타일링 | NativeWind 4 — **tailwindcss는 3.4.x 고정(4.x 비호환)** | 디자인 토큰을 tailwind.config로 일원화, 화면 양산 속도. 공용 컴포넌트는 `shared/ui` 경유 |
 | API 클라이언트 | orval 코드젠 — `backend/docs/design/openapi.yaml` → axios 클라이언트 + TanStack Query 훅 + Zod 스키마 | 클라이언트 타입 ↔ 스펙 문서의 drift 차단. §API 계층 참고 |
 | 패키지 매니저 | pnpm | 속도·엄격한 의존성 해석 |
@@ -52,7 +52,7 @@ frontend/
       photo/      # 사진 선택·저장 네이티브 모듈의 유일한 입구
       lib/        # 업무 규칙 없는 유틸 — 폴더 없이 도메인 이름 파일(monthGrid·seoulDate·pressGuard…), 바렐 없음
                   # 경량 제약 검증기(닉네임 형식)도 여기, 위반은 경고 배지(차단 아님)
-      storage/    # 로컬 영속 단일 소유 — 오프라인 입력 큐·사진 업로드 대기 큐
+      storage/    # 로컬 영속 단일 소유 — 토큰·설치 id·본 적 있는 id 집합·문자열 값(오프라인 입력 큐는 보류로 없음)
   package.json / app.json / eas.json / tailwind.config.js / tsconfig.json
   Dockerfile / nginx.conf / web/   # 통합 테스트 스텁 (앱 코드 아님)
   docs/                            # 개발로그·구조 지도
@@ -116,7 +116,7 @@ frontend/
 - **토큰**: OS 보안 저장소에만 저장, 로그아웃·401 확정 시 즉시 삭제, 로그·크래시 리포트에 미포함(Sentry `beforeSend` 스크러빙으로 집행).
 - **스플래시 게이트**: 부트스트랩 1왕복 후 목적지 분기(강제 업데이트 → 세션 → 온보딩 잔여 → 홈)는 부수효과 없는 순수 함수로 구현(PBT 대상). 타임아웃 시 로컬 폴백 — 무한 스플래시 금지.
 - **딥링크 인증 가드**: 비로그인 딥링크 진입은 초대·공유 화면에 한정. 그 외는 레이아웃 레벨 인증 가드가 로그인 리다이렉트 후 원 목적지로 복귀. 클라이언트 가드는 1차일 뿐, 리소스 접근 권한 검증은 서버가 한다.
-- **오프라인**: 일정 조회 오프라인 캐시는 제공하지 않는다. 기록 입력(방문 체크·사진·메모)만 로컬 큐에 쌓고 복구 시 배치 동기화, 충돌은 사용자 선택.
+- **오프라인**: 지원하지 않는다. 일정 조회 오프라인 캐시도, 기록 입력(방문 체크·사진·메모)의 로컬 큐도 없다 — 오프라인 기록은 2026-09-11 보류(US-REC-12). 낙관 갱신 뒤 실패는 롤백 + 안내(INV-4).
 
 ## 환경 구성
 
@@ -140,12 +140,10 @@ frontend/
 | 출시·보안 계약(ESLint로 표현 못 하는 것) | `src/__tests__` | 아래 판정 3의 남은 목록 | 소스 스캔 |
 | 출시·보안 금지(ESLint로 표현되는 것) | `eslint.config.js` | 규칙 발동 탐침은 `importBoundaryLayers.test.ts` | ESLint `lintText` |
 | 개발 도구(`_dev` 프리뷰) | `src/__tests__`(라우트 폴더 `app/` 안은 라우트로 등록돼 못 둔다) | 스모크 1파일 `devPreviewReleaseGate.test.tsx` | RNTL |
-| UI E2E | 핵심 해피패스 **1~2개만** | `.maestro/flows/M-*.yaml` | Maestro(로컬 전용·CI 미편입, 아래 불릿). 시나리오 검증 본체는 백엔드 API E2E |
 
 - 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다).
 - **버킷 예외 — node 버킷이어야 하는 page 배선 테스트는 `XxxPage.test.tsx`**(TRIP-1146): `await import`로만 닿는 모듈(integration 버킷에선 그 자리에서 동기 throw)이나 생성 훅·스토어 목으로 page 배선을 보는 테스트는 integration 버킷으로 못 가므로 `.integration` 없이 둔다(예: `PrefStep1Page.test.tsx`·`ReconsentPage.test.tsx`). 같은 page에 통합 파일이 따로 있으면 버킷 사유를 접미사로 남긴다(`LoginPage.apple.test.tsx` — 애플 SDK lazy import).
 - testID 규약 `{feature}-{screen}-{role}`(예: `execution-hub-timeline`) — testID 부여는 스펙의 일부다.
-- **UI E2E(Maestro, TRIP-1168)**: `frontend/.maestro/`, 실행은 `.maestro/run-each.sh [플로우 파일…]`로 **한 플로우씩**(폴더째 실행 금지 — iOS 드라이버가 두 번째 플로우부터 죽는다, Maestro #3318). 선택자는 `id:`(testID) 우선, `launchApp`에 `clearState` 금지(시뮬레이터 로그인 세션이 지워진다). 로그인 세션·실 백엔드가 필요해 **로컬 전용·CI 미편입**. 준비·`known-bug/`·`opt-in/` 은 `.maestro/README.md`.
 - CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): ESLint · `tsc` · Steiger(`pnpm fsd`) · 구조 지도 드리프트(`structure-index.cjs --write`·`--check`) · Jest(두 버킷)+fast-check — 머지 게이트.
 
 ### 남김·합침·지움 판정
@@ -157,7 +155,7 @@ frontend/
 3. **소스 스캔**(파일을 텍스트로 읽고 렌더하지 않는 테스트) — 기능이 구현·QA된 뒤의 회귀 감시는 스캔이 아니라 QA가 맡는다(TRIP-1145).
    - **출시·보안 계약**(키·시크릿이 git에 안 들어감, 출시 빌드 설정, API 명세, 운영 빌드의 프리뷰 차단, 법정 동의·고지, 사진·공유 카드 서버 업로드 금지) → ESLint로 표현되면 **ESLint 규칙으로 옮기고** 규칙 발동을 `importBoundaryLayers.test.ts`의 `lintText` 탐침으로 지킨다. 표현 못 하면 **남긴다**. 지금 남은 스캔: `socialSdkSecrets`·`mapBridgeStructure`·`releaseBuildConfig`·`openapiContract`·`devPreviewReleaseGate`·`recordPhotoBinaryGuard`·`shareCardStructure`·`locationConsentPutBodyOwnership`·`deletionScopeStructure`·`importBoundaryLayers`(모두 `src/__tests__`).
    - **구조 규칙**(층·슬라이스·세그먼트·props-only 시트 등) → 스캔을 두지 않는다. 층 방향은 ESLint zone, 나머지는 Steiger(TRIP-1158).
-   - **기능 회귀**(이미 지운 것의 재등장, 화면 금칙어·소요시간 글자, 바텀시트 prop 결합 등) → 스캔을 두지 않는다. QA가 보고, 자동화는 후속 Maestro 티켓.
+   - **기능 회귀**(이미 지운 것의 재등장, 화면 금칙어·소요시간 글자, 바텀시트 prop 결합 등) → 스캔을 두지 않는다. QA가 본다(실화면 QA는 `trippilot-sim-qa` 스킬 — Maestro 묶음은 2026-10-12 삭제).
    - 새 스캔을 더하기 전에 같은 금지를 ESLint `no-restricted-imports`·`no-restricted-syntax`로 표현할 수 있는지 먼저 본다.
 4. **같은 화면을 여러 파일이 테스트**(`.select.`·`.errors.`·`.apple.` 같은 티켓·관점 접미사) → 화면 단위 1 + 통합 1로 **합친다**. 관점은 `describe` 블록으로 보존하고, 티켓 번호(`TRIP-####`)는 테스트 이름이 아니라 주석으로 옮긴다(합치며 새로 붙이는 바깥 `describe` 기준 — 옮겨 온 안쪽 `describe`·`it` 이름의 번호까지 고쳐 쓰지는 않는다). 같은 동작을 보는 `it`은 하나만 남긴다.
    - **"같은 동작"은 겉보기 포함이 아니라 뮤테이션으로 판정한다** — 지울 `it`이 잡는 뮤테이션을 남는 `it`에 심어 red일 때만 지운다. 입력·단언이 포함돼 보여도 실제로 잡는 결함이 다를 수 있다.
@@ -173,12 +171,7 @@ frontend/
 - **착수 전 잡히던 뮤테이션을 전부 유지** — 정리하는 칸마다 착수 전에 심판이 잡는 뮤테이션을 심어 두고, 정리 뒤에도 전부 red인지 확인한다. **칸 단위의 주 심판은 이것이다.**
 - **합산 근사 줄 커버리지 하락 2%p 이내** — 기준선 91.64%(2026-09-30 develop `5feef8b0`) → 89.64% 이상. 화면 한 칸의 대상 소스는 전체의 몇 %라 칸 하나로는 이 수치가 거의 움직이지 않는다(합산 근사 줄 커버리지 = 파일마다 두 버킷 중 더 많이 덮은 쪽을 골라 합친 전역 비율). 그래서 전역 수치는 배치 누적 감시용이고, 칸마다 **대상 소스 파일별 covered 전후**를 함께 적는다.
 
-측정은 누구나 같은 명령으로 한다(결과는 gitignore된 `_workspace/test-measure/`).
-
-```bash
-scripts/test-measure.sh <라벨>      # 두 버킷 + 커버리지 → 합산 근사 줄 커버리지·시간·케이스 수
-python3 scripts/test-classify.py    # 테스트 파일 칸 분류(행동·소스 스캔·PBT·단위·개발 도구) → classification.csv
-```
+측정 도구(`scripts/test-measure.sh`·`test-classify.py`)는 TRIP-1138 정리가 끝나 2026-10-12에 지웠다 — 다시 재야 하면 git 이력에서 되살린다.
 
 ### PBT 작성 규칙
 

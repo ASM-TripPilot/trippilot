@@ -135,8 +135,8 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
    * 왜 통합 버킷인가: axios는 params를 어댑터 **안에서** 직렬화하므로 최종 URL은 msw만
    * 관찰할 수 있고, 요청 본문도 마찬가지다(선례 `StaySearchPage.integration.test.tsx:12-15`).
    *
-   * env 규율(`KakaoMapView.test.tsx:36-49` 선례): 지도 시트가 성공 얼굴을 쓸지 실패 얼굴을
-   * 쓸지는 카카오 JS 키의 유무로 갈린다(02a ★6 — `KakaoMapView`에 바깥으로 나가는 이벤트
+   * env 규율(옛 `KakaoMapView.test.tsx` 선례 — 지도는 이제 네이버 `MapView`): 지도 시트가 성공 얼굴을 쓸지 실패 얼굴을
+   * 쓸지는 지도 Client ID 의 유무로 갈린다(02a ★6 — `MapView`에 바깥으로 나가는 이벤트
    * 채널이 없어서, 키 유무가 지도 성공 여부와 정확히 같은 값이다). 기계마다 셸 env가 다를 수
    * 있으므로 각 테스트가 원하는 상태를 명시적으로 만들고 afterEach에서 되돌린다.
    */

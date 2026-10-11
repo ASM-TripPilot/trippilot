@@ -20,9 +20,7 @@ paths:
 | `src/shared/storage/index.ts` | expo-secure-store 토큰 저장소. `hasStoredToken`은 **accessToken 존재만** 판정한다(refreshToken만 없는 부분 저장도 true) — "두 토큰 다"로 좁히면 콜드스타트 폴백이 HOME→LOGIN으로 뒤집히는데, 이 함수를 실제로 도는 테스트가 없어 회귀해도 green이다. |
 | `src/shared/storage/idSet.ts` | 도메인 무관 문자열 id 집합 저장(`readIdSet`·`writeIdSet`, JSON 파싱 실패는 throw). 공개 API `@/shared/storage`로 import(TRIP-1157 — 옛 "배럴 재수출 금지·딥 경로 전용" 계약은 폐기). 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual('@/shared/storage')`로 실물을 펼친 뒤 덮는다. 웹 폴백 없음 |
 | `src/shared/storage/stringValue.ts` | **(TRIP-1122 신규)** 키 하나에 문자열 하나(`readStringValue`→`string\|null`·`writeStringValue`) — JSON으로 감싸지 않고 그대로 저장하며 jest-expo 자동 목의 `undefined`도 `null`로 접는다. 실패(reject)는 호출부 몫(삼킬지 정한다). 공개 API `@/shared/storage`로 import(TRIP-1157 — 딥 경로 전용 계약 폐기, `stringValue.test`가 배럴 재수출을 참조 동일성으로 단언). 웹 폴백 없음. 첫 소비처 `MyTripsListPage`(키 `itinerary.myTrips.sort`). |
-| `src/shared/lib/compareVersion.ts` | 버전 비교(강제 업데이트 판정) |
 | `src/shared/lib/fontScale.ts` | `isLargeText(fontScale)` = `fontScale >= 1.5`(경계 포함) — 글자 배율 분기가 필요한 화면이 각자 숫자를 박지 않는 단일 경계(TRIP-1270). 읽는 쪽은 `useWindowDimensions().fontScale`(설정 변경 때 재렌더). 기본 크기에서 className이 바뀌지 않는 분기만 허용한다. ⚠️ jest RN 목의 기본 fontScale은 **2**라 배율을 안 정한 테스트는 큰 글자 가지를 렌더한다(`layer-test.md`) |
-| `src/shared/lib/formatKoreanDate.ts` | `formatKoreanDate(isoDate): "M월 D일 요일"`. `features/execution/**`의 `new Date`류 금지(BR-U4-34)를 피해 날짜 파싱을 execution 밖에 둔 자리. 에포크 일수(UTC 정수) 산술만 써 TZ-safe. 외부 소비처 0 — `shared/lib` 직속 파일이라 `@/shared/lib/formatKoreanDate`로 바로 import한다(바렐 없음, TRIP-1162) |
 | `src/shared/location/LocationPreprompt.tsx` | 위치 권한 프리프롬프트 — 전체화면(레이더 히어로) `default` / 카드형 `permission-denied` 2상태. `expo-location`을 import하지 않는다(구조적으로 OS 다이얼로그를 못 부름) |
 | `src/shared/location/LocationGlyphs.tsx` | 위치 화면 인라인 SVG 글리프. 색은 `locationColors.ts` 상수 경유(`shared/location/**`은 raw-hex 가드 대상) |
 | `src/shared/location/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리) — 토큰 색과 **수동 동기화** 필요 |

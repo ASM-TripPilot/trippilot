@@ -20,7 +20,7 @@ import {
  *  - `buildGeofenceRegions(slots, date)` = 좌표가 있는 슬롯만 리전으로(결측 좌표는 제외).
  *  - `registerGeofences`/`clearGeofences` = 등록/해제 계약. 이번 빌드는 네이티브(expo-task-manager·
  *    background 권한·리빌드) 미배선이라 **정직한 degrade 스텁**(armed:false, 무throw) — 거짓
- *    발화를 만들지 않는다(`useActualRoute` 선례).
+ *    발화를 만들지 않는다(옛 `useActualRoute` 선례 — 삭제됨).
  *
  * 3동작 뼈대: 준비=리전/슬롯 → 실행=매핑·도출·등록 → 단언=source/좌표/armed.
  */

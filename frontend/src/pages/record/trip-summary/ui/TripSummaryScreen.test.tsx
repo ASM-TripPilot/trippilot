@@ -10,7 +10,7 @@ import {
   type TripSummaryScreenProps,
 } from './TripSummaryScreen';
 
-// 실물 KakaoMapView 는 JS 키가 없는 jest 에서 map-failure 로 떨어져 center/pins 가 안 흐른다 —
+// 실물 MapView 는 지도 Client ID 가 없는 jest 에서 map-failure 로 떨어져 center/pins 가 안 흐른다 —
 // 배럴 경유 관찰 목으로 갈아끼운다(LiveMapScreen·TripRecordsScreen 선례, ★10). 목은
 // `<Text testID="map-root">${lat},${lng}</Text>` 로 center 를 노출한다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
