@@ -152,8 +152,8 @@
   - **U10 GPS·위치 자동화 (신설)** — 지오펜스 자동 도착·이탈, 백그라운드 위치, 실제 경로·토글, GPS 방문 기록, 위치 법정 로그. 기준선 = 포그라운드 위치·수동 체크인
     - [x] Functional Design — **승인 완료 (2026-10-12 "그럼 권고로 ㄱㄱ")** · 계획 Q1~Q22 답변 확정(Q1=B·Q3=B·나머지 추천) · 산출물 4종 `u10-gps-location-automation/functional-design/`(DEC-U10-1~22·BR-U10-01~48·INV-U10-1~11·G-U10-1~15·O-U10-1~11) + U4·U5·U6 개정 블록
     - [x] NFR Requirements — **승인 완료 (2026-10-12 "ㄱㄱ")** · 산출물 2종 `u10-gps-location-automation/nfr-requirements/`(MOBILE·PERF·STORE·LEGAL·SEC·REL·OBS-U10, 권고 Q1~Q14)
-    - [ ] NFR Design — 얇게 3주제(백그라운드 실행·다운샘플·로컬 큐) · 진행 중
-    - [ ] Infrastructure Design(shared-infrastructure 증분 — 킬 스위치 env·DELAY 스케줄러)
+    - [~] NFR Design — 산출물 2종 `u10-gps-location-automation/nfr-design/`(백그라운드 전용 전송·A/B 교대 쓰기 큐·RDP+정지점 150m 은닉, O-U10-8 해소) · **승인 대기**
+    - [~] Infrastructure Design — `shared-infrastructure.md` `## U10 증분` (신규 AWS 자원 0) · **승인 대기**
     - [~] Code Generation — 범위 제외
 - **[개정 · 2026-10-12] 공통 Infrastructure Design (as-built 소급)**
   - [x] `construction/shared-infrastructure.md` — **권고안 확정 (2026-10-12 "그럼 권고로 ㄱㄱ")** · Q1=A·Q2=A(가용성 99.5%)·Q3=A·Q4=A(RTO 4h/RPO 15m)·Q5=A(Redis 제거)·Q6=B(버전 핀 롤백) · 후속 인프라 작업 5건은 팀 핸드오프(§12)

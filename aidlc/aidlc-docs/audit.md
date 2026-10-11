@@ -1567,3 +1567,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8 종료, U10 NFR Design 진행.
 
 ---
+## NFR Design · Infra 증분 생성 — U10 / PR 머지 지시
+**Timestamp**: 2026-10-11T21:00:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "푸시하고 PR 올려" / "머지 되면 develop에서 pull 해서 최신화 해봐" / "스쿼시 머지 잊지말고" / "지금 돌아가는 에이전트는 뭐하는거야?"
+**AI Response**: PR #1045 생성(develop 대상). U10 NFR Design 2종 + shared-infrastructure U10 증분 생성(계획 Q1~Q3 권고 적용). 승인 게이트 대기 상태로 PR 에 포함해 squash merge 후 develop 최신화.
+**Context**: CONSTRUCTION — U10 NFR Design·Infra 증분 승인 대기.
+
+---
