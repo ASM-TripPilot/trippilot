@@ -15,6 +15,8 @@
 | `poi` / `poi_snapshot` | V2.0·V2.5·V2.6 | 후보·영업시간 정본(C7, U1 소유) |
 | `itinerary_revision` | **U3 설계 신설 — 마이그레이션 미작성** | Plan-B 확정도 리비전을 남긴다(`h36` 되돌리기 대상). U3 산출물과 **같은 테이블을 쓴다** |
 
+> **[개정 · 2026-10-12] 표 갱신.** `itinerary_revision`은 **V2.14**(`V2.14__itinerary_revision.sql`)로 마이그레이션됐다 — "마이그레이션 미작성"은 낡은 서술이다.
+
 > **slotKey 규약**: `"{date}#{poiId}"` (BR-U2-04). U4의 모든 신규 엔티티는 `visit_slot_id`(물리 키)가 아니라 **`slotKey`(경계 키)** 로 슬롯을 가리킨다 — 재계획으로 슬롯 행이 갈려도 참조가 끊기지 않게.
 
 ---
@@ -56,6 +58,8 @@
 
 > 민감도는 계정 단위 설정이라 물리적으로는 `profile` 쪽에 붙는 게 자연스럽다. 소유 결정은 U6(설정) 설계와 함께 — **G-U4-6**.
 
+> **[개정 · 2026-10-12] 민감도 물리 소유 — 별도 테이블로 실재.** `plan_b_sensitivity(account_id PK, sensitivity LOW|NORMAL|HIGH, updated_at)`가 **V2.18**(`V2.18__plan_b_detection.sql`)에 있고 행이 없으면 `NORMAL`로 본다. API는 `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/adapter/in/web/SensitivityController.kt`. `profile`·U6 `account_setting`(V2.42)으로 옮기지 않았다.
+
 ---
 
 ## 3. C10 Itinerary Recalculation
@@ -81,6 +85,8 @@
 >
 > **[U5 설계 결정 · 2026-08-22] 이관 확정 — 단, `actual_route_point`와 갈렸다.** `visit_check`는 예고대로 **U5로 이관**한다(U5 DEC-U5-2 · Q1=A): 테이블·openapi 경로·스키마는 그대로 두고 코드 4파일 + 테스트 3만 `itinerary-recalculation` → 신설 `archive` 모듈로 옮긴다. 이관 후 U4의 잠금 판정(INV-U4-04)은 **`ArchiveFacade.getCompletedSlots(tripId)`** 로 읽는다(U5 DEC-U5-3). `VisitChecked` **발행 주체도 U4→U5로 바뀐다**(페이로드·구독자 불변). 반면 **`actual_route_point`는 U4 소유로 남는다** — §3.3 참조. 위 문장의 "GPS 기록이 붙는 확장은 U5가 승계한다"는 이 결정으로 **`visit_check`에만 해당**한다.
 
+> **[이연 · 2026-10-12 → U10] `source = AUTO_GEOFENCE`.** 컬럼 값은 V2.21 CHECK에 남아 있으나 지오펜스 자동 도착을 만드는 클라 경로는 없다(`frontend/src/shared/location/geofence.ts` degrade 스텁). 자동 도착·이탈은 U10 소관이고, 현행 방문 체크는 `MANUAL`뿐이다.
+
 ### 3.2 `replan_session` — 재계획 세션
 
 `i10` 제출 ~ `i18` 확정/취소까지의 수명.
@@ -101,6 +107,8 @@
 | `draft` | json? — 산출된 단일 재계획안(확정 전 원 일정에 반영 금지) |
 | `createdAt` · `closedAt` | |
 
+> **[개정 · 2026-10-12] `replan_session` 실장 차이.** ① `originKind`에 **`PURGED`**가 추가됐다 — 위치 동의 철회 시 기준점 좌표를 지우고 "파기됨"을 값으로 남긴다(TRIP-992, `V2.56__replan_origin_purged.sql`). ② **`target_date`**(재계획 대상 일자, NOT NULL 백필)가 추가돼 오늘 외의 날도 다시 짤 수 있다(TRIP-1182, `V2.60__replan_session_target_date.sql`). 본 테이블은 `V2.17__replan_session.sql`.
+
 **INV-U4-05**: `status`가 `APPLIED`가 되기 전에는 `itinerary`·`visit_slot`에 **어떤 쓰기도 발생하지 않는다**. `i18` [취소]는 세션만 `CANCELED`로 닫는다.
 
 **INV-U4-06**: 한 여행에 `COLLECTING`/`SOLVING`/`DRAFT` 세션은 **최대 1개**. 새 재계획 진입은 기존 열린 세션을 `CANCELED`로 닫고 시작한다.
@@ -118,6 +126,8 @@
 >
 > **[U5 설계 결정 · 2026-08-22] 이관 철회 — `actual_route_point`는 U4 소유로 남는다**(U5 DEC-U5-6 · Q5=B). §3.1의 `visit_check`와 **갈렸다**: 실적 체크는 U5로 가고, 실제 경로 점열은 Plan-B 기준점 계산의 1차 소비자가 U4라 여기 남는다. U5는 **읽기만** 한다.
 > ⚠ **이 테이블은 아직 실장되지 않았다**(2026-08-22 실측 — V2.14~V2.27에 없다). 그 결과 U5의 회고·요약 stats가 **실제 이동 거리를 서버에서 산출할 수 없어**, 1차는 방문점 연결선 근사(`distanceSource: VISIT_LINE`)로 운용하고 이 테이블이 실장되면 `ROUTE`로 승격한다(U5 DEC-U5-12 · G-U5-5). **U4 실장 시 U5 stats 계약을 함께 확인할 것.**
+
+> **[이연 · 2026-10-12 → U10] §3.3 `actual_route_point` 전체.** 2026-10-12 현재도 마이그레이션에 없다(최신 V2.62까지). 실제 경로 기록·레이어·토글(US-PLANB-13)은 신설 유닛 **U10 "GPS·위치 자동화"**(미구현, 사용자 결정 2026-10-12)로 넘긴다. U5 stats의 `VISIT_LINE` 근사는 U10 실장 전까지 유지된다.
 
 ---
 
@@ -161,3 +171,5 @@
 | 변경 이력 열람·되돌리기 화면 | **U3(`h36`)** | U4는 화면을 만들지 않는다 |
 | 날씨 수집 | **U4 C11** | 신규 |
 | POI 영업시간·휴무 정본 | **U1 C7** | 조회만 |
+
+> **[개정 · 2026-10-12] 소유 표 갱신.** "재계획 산출(warm-start) = ai `regenerate`" 행 — 실제 산출은 AI `POST /ai/v1/planb/replan`(RAG(KB-3)+지시어 번역+`ScheduleAgent`, `ai/src/trippilot/api/wiring.py` `replan`)이다. "방문 실적·실제 경로" 행 — 방문 실적은 U5 `archive`로 이관 완료, 실제 경로는 **[이연 · 2026-10-12 → U10]**. "변경 이력 열람·되돌리기 화면 = U3 h36" — h36은 FE 미구현이다(U3 `frontend-components.md` §1 개정).

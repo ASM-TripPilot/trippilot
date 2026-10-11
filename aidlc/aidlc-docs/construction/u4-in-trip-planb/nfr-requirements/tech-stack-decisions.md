@@ -20,6 +20,11 @@
 | 위치 동의·법정 로그 | `location_consent_state` **3층**(L1·L2·**L3 `gps_recording_opt_in`**) + append-only `location_legal_log` | `V1.3__auth_location.sql` — **U4가 새 동의 축을 만들지 않는 근거** |
 | 변경 이력 | `change_log_entry`(V2.11, append-only, `source_type` 에 `PLAN_B` 포함) | 실장 — **신설 없음** |
 
+> **[개정 · 2026-10-12] §1 상속 표 — 실장 갱신(원문 보존).**
+> - **AI 행**: `ai/src/trippilot/c2/facade.py`는 없다. 조립 파사드는 `ai/src/trippilot/assembly_engine/facade.py` `HybridAssemblyFacade`(`solve`·`validate`·`repair`·`regenerate`)다. 단, 백엔드가 부르는 재계획 경로는 `regenerate` 직결이 아니다(델타 6 개정 참조).
+> - **지도 행**: 카카오 WebView → **네이버 네이티브 SDK** `@mj-studio/react-native-naver-map`(TRIP-861). 공용 컴포넌트 `frontend/src/shared/map/MapView.tsx`(`MapView`·`CenterPinPicker`), `react-native-webview` 의존 없음.
+> - **위치 행**: 여전히 포그라운드 권한만이다 — `frontend/app.config.ts` `expo-location` 플러그인이 `locationAlwaysPermission: false`·`locationAlwaysAndWhenInUsePermission: false`로 **'항상 허용'을 명시적으로 끈다**(TRIP-936 앱 심사 대응). 델타 1은 실행되지 않았다.
+
 ## 2. U4 델타
 
 ### 델타 1 — `expo-task-manager` 추가 + 위치 플러그인 확장 (필수) ★
@@ -42,6 +47,8 @@
 
 > **정정 기록**: FD 단계 Q3·Q4 논의에서 "`expo-location`이 이미 있으니 신규 의존성 0"이라 했으나, 지오펜스에는 `expo-task-manager`가 함께 필요하다. **신규 의존성은 1개**이고 EAS 재빌드가 붙는다.
 
+> **[이연 · 2026-10-12 → U10] 델타 1 전체.** `expo-task-manager`는 추가되지 않았고(`frontend/package.json`), '항상 허용'·Android 백그라운드 위치는 TRIP-936으로 오히려 꺼져 있다(`frontend/app.config.ts`). 지오펜스는 순수 매핑만 있는 **degrade 스텁**이다 — `frontend/src/shared/location/geofence.ts`("실제 네이티브 발화(startGeofencingAsync)는 이번 범위 밖 — degrade 스텁"). 지오펜스 자동 도착·이탈과 백그라운드 '항상' 위치는 신설 유닛 **U10 "GPS·위치 자동화"**(미구현, 사용자 결정 2026-10-12)로 넘긴다. U4의 현행 동작은 강등 사슬의 끝(포그라운드·수동 체크인)이다.
+
 ### 델타 2 — `WeatherPort` + 기상청 어댑터 (신규 외부 의존)
 
 **실장 현황**: `ai/src/trippilot/ports/` 9종에 **날씨 포트 없음**. backend에도 weather 모듈 없음.
@@ -50,6 +57,8 @@
 - 캐시는 **DB 테이블 `weather_snapshot`**(COST-U4-02) — 새 캐시 미들웨어를 도입하지 않는다.
 - 실패 시 **행을 만들지 않는다**(INV-U4-09) → 만료분으로 발화하지 않는다.
 - API 키 발급·콘솔 등록은 U0 소셜 IdP·U1 카카오 콘솔과 같이 **개발 중 처리**로 이연.
+
+> **[개정 · 2026-10-12] 델타 2 — 실장 반영.** ai 포트는 현재 **16종**이고 날씨 포트가 있다(`ai/src/trippilot/ports/weather_port.py`). backend는 `weather-context` 모듈에 `KmaWeatherAdapter`·`FakeWeatherAdapter`·`WeatherModeAnnouncer`를 두고(`backend/modules/weather-context/src/main/kotlin/com/trippilot/weathercontext/adapter/out/external/`), 캐시는 `weather_snapshot`(**V2.19**)이다.
 
 ### 델타 3 — `KakaoMapView` 추가 확장 (U3 델타 1에 얹음)
 
@@ -60,6 +69,8 @@ U3가 이미 `markers[]`·`polyline[]`·`center` 갱신·`MARKER_TAP`을 요구�
 ```
 - 새 지도 라이브러리를 도입하지 **않는다**. WebView 1장 유지(PERF-U4-02).
 - 소유는 `shared/map` — itinerary(U3)·execution·planb 3곳이 쓴다.
+
+> **[개정 · 2026-10-12] 델타 3 — 확장이 아니라 교체.** `KakaoMapView`는 없어졌고 `frontend/src/shared/map/MapView.tsx`(네이버 네이티브)가 다중 핀·폴리라인(`NaverMapPathOverlay`)·반경 원을 제공한다. 점선은 `strokeDasharray`로 그린다. "WebView 1장" 제약은 근거가 사라졌다. **[이연 · 2026-10-12 → U10]** 점선 레이어 중 **i03 실제 경로(GPS)** 용도는 U10 소관이다(US-PLANB-13). i18 변경 전 동선 점선은 U4에 남는다.
 
 ### 델타 4 — Redis 미도입 유지 (U1 결정의 실행 보류)
 
@@ -83,6 +94,11 @@ U3가 이미 `markers[]`·`polyline[]`·`center` 갱신·`MARKER_TAP`을 요구�
 | 마이그레이션 | `plan_b_trigger` · `plan_b_suppression` · `visit_check` · `replan_session` · `actual_route_point` · `weather_snapshot` (V2.14~ 대역) |
 | openapi | `planb`·`execution` 태그 신설 → orval 코드젠 대상 추가(`orval.config.ts` `filters.tags`) |
 
+> **[개정 · 2026-10-12] 델타 6 — 실장 반영(원문 보존).**
+> - 모듈 층 이름은 `infra`가 아니라 **`adapter`**다(`api/application/domain/adapter` — 예 `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/adapter/`).
+> - `ScheduleAgentPort.replan(ReplanInput)`은 실재하지만(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/domain/ScheduleAgentPort.kt`), 어댑터는 ai `regenerate(problem, locked_slots)`가 아니라 **HTTP `POST /ai/v1/planb/replan`**을 부른다(`HttpScheduleAgentAdapter.kt` `REPLAN_PATH`). AI 쪽은 **RAG(KB-3) + 방향 지시어 번역 + `ScheduleAgent`** 조합이다(`ai/src/trippilot/api/wiring.py` `replan`, 1688행 부근).
+> - 마이그레이션 실번호: `replan_session` **V2.17**(+`target_date` V2.60, `origin_kind` `PURGED` V2.56) · `plan_b_trigger`·`plan_b_suppression`·`plan_b_sensitivity` **V2.18** · `weather_snapshot` **V2.19** · `visit_check` **V2.21**(U5 `archive`로 이관). **`actual_route_point`는 만들어지지 않았다** — **[이연 · 2026-10-12 → U10]**.
+
 ## 3. 미도입 결정 (지금 넣지 않는 것)
 
 | 후보 | 결정 | 재평가 조건 |
@@ -96,8 +112,12 @@ U3가 이미 `markers[]`·`polyline[]`·`center` 갱신·`MARKER_TAP`을 요구�
 | 새 지도 라이브러리 | **미도입** — `KakaoMapView` 확장이 교체보다 싸다 | U1 숙소 등록까지 흔들 만한 요구가 생길 때 |
 | 영속 캐시 저장소 | **U3 델타 2에 위임** — U4가 따로 만들지 않는다 | U3 `OFFLINE-U3-01` 구현 시점 |
 
+> **[개정 · 2026-10-12] §3 미도입 표 갱신.** ① **백그라운드 연속 위치 추적**·지오펜스 wake는 U4 범위에서 빠져 **[이연 · 2026-10-12 → U10]**. ② **새 지도 라이브러리 '미도입'은 뒤집혔다** — 네이버 네이티브 SDK로 교체(TRIP-861, `frontend/src/shared/map/MapView.tsx`). ③ **서버 푸시**는 U6에서 FCM 직접이 아니라 **Expo push**(`ExpoPushAdapter`)로 구현됐다(U6 개정 참조).
+
 ## 4. 개발 중 처리 (설계 문서 밖)
 
 - **기상청 공공데이터포털 API 키 발급·서비스 신청** — U0 소셜 IdP·U1 카카오 콘솔과 동류의 선결 블로커
 - **EAS 재빌드 1회** — 델타 1의 네이티브 설정 반영
 - **위치기반서비스사업 신고**(위치정보법 제9조) — 출시 선결과제로 이미 기록됨. 지오펜스 채택이 이 항목의 필요성을 바꾸지 않는다(수집 자체가 이미 대상)
+
+> **[개정 · 2026-10-12] §4 — EAS 재빌드 항목은 U10으로.** 델타 1이 이연됐으므로 위치 플러그인 재빌드 항목도 **[이연 · 2026-10-12 → U10]**이다. 기상청 키(`WEATHER_API`)는 EKS 런타임 시크릿의 **선택값**으로 주입되고 `WEATHER_MODE`(`fake`|`kma`)가 어댑터를 고른다(`deploy/eks/runtime_secrets.py`·`deploy/eks/chart/templates/backend.yaml`). 배포·시크릿 구성은 `aidlc/aidlc-docs/construction/shared-infrastructure.md`를 본다.

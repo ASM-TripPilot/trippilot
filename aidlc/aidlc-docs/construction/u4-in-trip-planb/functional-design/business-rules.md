@@ -20,6 +20,8 @@
 | **BR-U4-08** | 전역 빈도 상한과 민감도(`LOW`·`NORMAL`·`HIGH`)를 **감지 단계에서** 적용한다. 화면 단계에서 거르지 않는다(INV-U4-02) |
 | **BR-U4-09** | 트리거는 **제안까지만** 한다. 어떤 트리거도 일정을 자동으로 바꾸지 않는다 — 사용자가 [대안 보기]를 눌러야 재계획이 시작된다 |
 
+> **[이연 · 2026-10-12 → U10] BR-U4-04.** "앱이 꺼져 있을 때 지오펜스 wake 1회 판정"은 U10 "GPS·위치 자동화"(미구현) 소관이다. 현행은 앱 켜짐 경로뿐이고 지오펜스는 `frontend/src/shared/location/geofence.ts` degrade 스텁이다. 나머지 BR-U4-01~09(서버 판정·무발화·억제)는 `backend/modules/planb-detection/`에 실재한다.
+
 ## 2. 재계획 진입·지시 입력 (US-PLANB-01·12 · `i10`)
 
 | ID | 규칙 |
@@ -73,6 +75,9 @@
 | **BR-U4-41** | 실제 경로는 **앱을 켜 둔 구간만** 기록되며, 그 한계를 화면에 명시한다. **걸음 수는 기록·표시하지 않는다** |
 | **BR-U4-42** | 위치 동의가 없으면 실제 경로 레이어를 **비활성 + 사유 표기**하고 계획 동선만 보인다 |
 
+> **[이연 · 2026-10-12 → U10] BR-U4-36·41·42.** 지오펜스 자동 도착(BR-U4-36의 자동 부분)과 실제 경로 기록·레이어(BR-U4-41·42, US-PLANB-13)는 U10 소관이다. BR-U4-36의 "권한이 없으면 수동 체크인으로 대체"는 현재 **상시 동작**이다(`frontend/app.config.ts` '항상 허용' off — TRIP-936). BR-U4-41의 "걸음 수 기록·표시 금지"는 U4에 그대로 유효하다.
+> **[개정 · 2026-10-12] BR-U4-38 — 사진·메모는 동작한다.** U5 구현과 TRIP-939(숨김 기능 복원 결정)로 방문 사진·메모가 기능화됐다 — `frontend/src/features/attach-visit-media/`(`pickPhotoForVisit.ts`·`useVisitMemo.ts`·`MemoInline.tsx`). "버튼만, 동작 없음"은 낡은 서술이다.
+
 ## 6. 폴백 (US-PLANB-10·11 · INV-4)
 
 | ID | 규칙 |
@@ -96,6 +101,8 @@
 
 > **PBT-U4-1**은 ai `regenerate`가 locked를 `FixedBlock`으로 승격하고 `validate`가 강제하므로 **AI 쪽에서 이미 성립**한다 — 백엔드 게이트는 **매핑이 빠짐없이 이뤄지는가**(완료·고정·앵커가 전부 `lockedSlotKeys`에 들어가는가)를 본다.
 
+> **[개정 · 2026-10-12] PBT-U4-1 주석 — 경로 변경.** 재계획은 ai `regenerate` 직결이 아니라 `POST /ai/v1/planb/replan`(와이어 `locked_blocks`·`current_slots`)이다. "AI 쪽에서 이미 성립"의 근거는 이제 replan 경로의 조립 결과로 확인해야 한다 — 이 개정에서 재검증하지 않았다.
+
 ---
 
 ## 8. 미결 (O-U4-*)
@@ -107,3 +114,10 @@
 | **O-U4-3** | `DELAY` 체류 초과 임계 — 계획 종료 시각 대비 몇 분 초과부터 발화할 것인가 | 인셉션에 값이 없다. 이동 지연 15분과 별도 값이 필요한지 포함 |
 | **O-U4-4** | 재계획 응답 지연 예산(`deadlineMs`) — U3 생성은 day1 5s/전체 20s인데 재계획은 범위가 작다 | 별도 값 부여 여부. NFR 단계 후보 |
 | **O-U4-5** | `i10` 방향 지시어 7종의 ai 쪽 해석 규약(고정 어휘 vs 자유 문자열) | ai `regenerate`에 지시어를 싣는 형태 확정 — G-U4-3 HTTP 표면 티켓과 함께 |
+
+> **[개정 · 2026-10-12] 미결 상태 갱신.**
+> - **O-U4-2 종결** — 민감도는 **계정 단위** `plan_b_sensitivity`(V2.18, `SensitivityController`)로 실장됐다.
+> - **O-U4-4 종결** — 재계획 예산 **25,000ms**(`ReplanFacadeService.kt` `REPLAN_DEADLINE_MS`).
+> - **O-U4-5 종결** — 방향 지시어는 **닫힌 사전 + 자유 입력 임베딩 매칭 + LLM 번역**으로 해석된다: 사전 `ai/data/replan_directives.yaml`(KB-4, 키마다 집행 주체 `PROMPT`/`RANKING`/`SOLVER`, `SOLVER`는 `unwired: true`), 해석 `ai/src/trippilot/agents/planb/directives.py`(`resolve_chips` 등), 번역 `REPLAN_DIRECTIVE_TRANSLATION` 워커. 모르는 키는 응답 `unknown_directives`로 되돌리고 해석된 키는 `resolved_directives`로 싣는다(`ai/docs/openapi.json` `ReplanResponse`).
+> - **O-U4-1** — 지오펜스 리전 정책은 nfr-design에서 "창 2"로 닫혔으나 지오펜스 자체가 **[이연 · 2026-10-12 → U10]**.
+> - **O-U4-3**(체류 초과 임계)은 이 개정에서 확인하지 않았다.

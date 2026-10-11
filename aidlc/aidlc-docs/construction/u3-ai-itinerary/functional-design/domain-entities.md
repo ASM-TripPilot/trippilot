@@ -68,6 +68,8 @@
 - **1차 미포함**: `planbTriggerId`(U4 소관) · `companionUserId`(U9, DEC-U3-8로 제외). **컬럼도 만들지 않는다** — 유닛이 오면 그때 추가.
 - **보존 정책**: 여행 종료 시 U5 아카이브 change-log로 이관/참조되는지는 **U5 설계에서 결정**(여기서 정하지 않음).
 
+> **[개정 · 2026-10-12] U9 폐기.** `companionUserId`의 "유닛이 오면 그때 추가" 전제는 사라졌다 — 사용자 결정(2026-10-12)으로 **U9 공동편집·U7 커뮤니티가 폐기**됐다. 동행자 편집 표시(DEC-U3-8·BR-U3-34)는 "1차 제외"가 아니라 **계획 없음**으로 읽는다. 테이블은 `V2.14__itinerary_revision.sql`로 실재한다.
+
 ### 2.2 `GenerationSession` — 생성 진행 상태 (h09·h10)
 
 첫 1일 조기 노출 + 백그라운드 채움을 표현한다(US-SCHED-09).
@@ -83,6 +85,8 @@
 | `startedAt` · `day1ReadyAt` · `finishedAt` | 진행률·단계 텍스트의 원천 |
 
 - **취소**(h09 [취소]): `CANCELED`로 두고 부분 결과는 버린다. 백그라운드 전환은 세션을 살린 채 화면만 이탈.
+
+> **[개정 · 2026-10-12] 취소 동작 — BR-U3-05 개정(TRIP-789) 반영.** 생성 화면의 [취소]·[백그라운드로]는 제거됐고 앱바 뒤로 = 백그라운드 이탈로 단일화됐다(`business-rules.md` BR-U3-05). `CANCELED`는 UI 트리거가 없다. 세션 테이블은 `V2.22__generation_session.sql`(+`V2.27__generation_session_account.sql`)로 실재한다.
 
 ---
 

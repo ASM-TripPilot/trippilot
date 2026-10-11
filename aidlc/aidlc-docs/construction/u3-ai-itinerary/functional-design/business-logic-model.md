@@ -63,6 +63,8 @@ generate 호출 (U2 경계 · deadlineMs = day1 5,000ms)
        · candidatesSummary.level=LOW → "일부 추천이 빠졌어요" (h35 후보 0건은 별도 화면)
 ```
 
+> **[개정 · 2026-10-12] F-U3-2 — `deadlineMs` day1 5,000ms → 15,000ms(전체 60,000ms).** BR-U3-03 개정과 같은 건. 근거: `ScheduleDeadlineProperties.kt`(`day1Ms=15_000`·`totalMs=60_000`, 강제 기본 on) · `deploy/eks/chart/values.yaml`.
+
 ### F-U3-3 · 같이 고르기 (h13~h18 · US-SCHED-10)
 
 ```
@@ -158,6 +160,8 @@ data class SlotCandidate(
 - **INV-2 유지**: 교체 후 시각은 **교체 결과를 `validate`(또는 재생성)로 확정**하기 전에는 노출하지 않는다. 초안 단계라 시간대 라벨만 보이므로(DEC-U3-3) 자연히 지켜진다.
 - **U2 문서 소급 필요**: `business-logic-model.md` §7(미개통 2건)에서 `proposeSlotCandidates` 행 제거 + `business-rules.md` O-U2-3 종결. `recalculate`는 **미개통 유지**(DEC-U3-2).
 
+> **[개정 · 2026-10-12] §3.1 — 포트와 와이어가 갈렸다.** 위 Kotlin 계약은 **backend 포트**로서 대체로 실재한다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/domain/ScheduleAgentPort.kt` `SlotCandidatesInput` — `slotKey`·`neighborSlotKeys`·`radiusM`·`concept`·`excludePoiIds`·`requestMeta`에 `centerLat/Lng`·`reason`·`placementReason`·`preferenceProfile`·`companionType` 추가, `SlotCandidatesOutput` — `radiusMUsed`·`freshness`에 `emptyReason` 추가). 그러나 **AI 와이어는 이 모양이 아니다** — 어댑터가 `toAlternativesRequest()`로 번역해 **`POST /ai/v1/planb/alternatives`**를 부른다(`HttpScheduleAgentAdapter.kt` `ALTERNATIVES_PATH`). 와이어 정본은 `ai/docs/openapi.json`의 `AlternativesRequest`(필수 `trigger`·`anchor`·`dates`·`request_meta`, 그 외 `excluded_poi_ids`·`categories`·`reason` 등 — `slotKey`·`radiusM`·`concept` 필드 없음)/`AlternativesResponse`(`alternatives`·`is_fallback`·`fallback_level`·`pool_size`·`dropped_out_of_pool`·`empty_reason` 등 — `radiusMUsed`·`freshness` 없음)다. 즉 Plan-B 대안과 같은 AI 경로를 공유한다. AI 미도달일 때만 로컬 후보풀 폴백(`degraded=true`, `SlotCandidateService`).
+
 ---
 
 ## 4. 폴백·실패 표시 (US-SCHED-09 · INV-4)
@@ -187,3 +191,5 @@ data class SlotCandidate(
 | **G-U3-5** | 결번 `h01·h02·h03·h06·h08·h22` — 원래 있었는지 미확인. `h22map`이 밴드 d `d06-장소 상세` 자식에 잔존 | 화면 누락 아님으로 판단(있는 것만 센다). `h22map` 이름 오탈은 디자인 정리 사안 |
 | **G-U3-6** | 확정(CONFIRMED) 후 재편집 시 상태 전이가 도메인에 없음 — `ItineraryStatus`는 PLANNED→CONFIRMED **단방향** | BR-U3-09에서 결정 |
 | **G-U3-7** | `explanations` 영속 경로 부재(U2 O-U2-2) — h11 "AI 추천" 배지·추천 이유가 저장 안 되면 재진입 시 사라짐 | backend 마이그레이션 필요(U2 미결 승계) |
+
+> **[개정 · 2026-10-12] 갭 상태 갱신.** **G-U3-7 해소** — `visit_slot.placement_reason`·`itinerary.candidates_summary`가 **V2.13**(`backend/app/src/main/resources/db/migration/V2.13__explanations_candidates_summary.sql`, TRIP-306)으로 영속된다. 이 문서의 h 코드(h04~h36)는 옛 Figma 체계다 — 라이브 h 밴드는 **h01~h17**로 재번호됐다(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`). 매핑은 `frontend-components.md` §1 개정 블록 참조.

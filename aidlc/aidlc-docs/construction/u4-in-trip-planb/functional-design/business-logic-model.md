@@ -24,6 +24,10 @@
 | **DEC-U4-10** | **방문 체크·실제 체류 = U4 / 사진·메모 = 버튼만(동작 없음, U5)** | Q7=A. `VisitChecked`가 `DELAY` 트리거 입력이라 U4가 소유할 수밖에 없다 |
 | **DEC-U4-11** | **변경 이력은 기존 `change_log_entry`(V2.11)를 그대로 쓴다** — 새 이력 테이블 없음 | 실측: `ChangeSource.PLAN_B`·`reason`·append-only가 이미 있다 |
 
+> **[개정 · 2026-10-12] DEC-U4-5·6·7 — 실장·범위 갱신(원문 보존).**
+> - **DEC-U4-5**: "`recalculate` 신설 안 함"은 유지되지만, 재계획 산출은 ai `regenerate(problem, locked_slots)` 직결이 아니다. 백엔드는 **`POST /ai/v1/planb/replan`**(`HttpScheduleAgentAdapter.kt` `REPLAN_PATH`)을 부르고, AI는 **RAG(KB-3 상황·KB-5 장소 지식) + 방향 지시어 번역 + `ScheduleAgent`(페르소나 점수 → 어셈블리 배치)**로 답한다(`ai/src/trippilot/api/wiring.py` `replan`, 1688행 부근).
+> - **DEC-U4-6**의 "앱 꺼짐 = 지오펜스 wake 1회 판정"과 **DEC-U4-7**의 실제 경로 기록은 **[이연 · 2026-10-12 → U10]**(신설 유닛 "GPS·위치 자동화", 미구현). 현행은 앱 켜짐 경로(포그라운드 평가)와 수동 경로뿐이다 — 지오펜스는 `frontend/src/shared/location/geofence.ts` degrade 스텁.
+
 ---
 
 ## 2. 트리거 판정 파이프라인 (C9 · US-PLANB-02)
@@ -42,6 +46,8 @@
                                                                           ├ 앱 켜짐 → i01 배너 · i08 칩
                                                                           └ 앱 꺼짐 → 로컬 알림(i07)
 ```
+
+> **[이연 · 2026-10-12 → U10]** 위 파이프라인의 `앱 꺼짐: 지오펜스 wake` 입력과 `앱 꺼짐 → 로컬 알림(i07)` 분기는 U10 소관이다. 판정 서버 소유(C9 `TriggerEvaluator`, `backend/modules/planb-detection/`)는 실재한다.
 
 **외부 API 실패 = 무발화.** 날씨·영업시간 조회가 실패하면 트리거를 만들지 않는다(US-PLANB-02 예외 — 허위 알림 금지). 실패 사실은 관측에만 남기고 사용자에게는 **수동 경로만** 유지한다.
 
@@ -115,6 +121,8 @@ data class ReplanInput(
 )
 ```
 
+> **[개정 · 2026-10-12] §3.1 포트 vs 와이어.** 위 `ReplanInput`은 **backend 포트**로 실재한다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/domain/ScheduleAgentPort.kt` `fun replan(input: ReplanInput): ScheduleAgentOutput`). AI 와이어는 이 모양이 아니고 `ai/docs/openapi.json`의 **`ReplanRequest`**(필수 `trip_id`·`trip_context`·`target_date`·`time_window`·`anchor`·`scope`·`from_instant`·`preference_profile`·`request_meta`, 그 외 `current_slots`·`locked_blocks`·`directives`·`free_text`·`reasons`·`rejections`·`excluded_poi_ids`·`trigger` 등) / **`ReplanResponse`**(`itinerary`·`is_fallback`·`fallback_level`·`resolved_directives`·`unknown_directives`·`retrieved`·`total_distance_km`·`empty_reason`·`notes`)다. "ScheduleAgentOutput"은 포트 반환형 이름이지 와이어가 아니다. `ScheduleAgentPort`에 "4번째 메서드"로 적었으나 현재 포트는 `generate`·`validate`·`repair`·`explanations`·`proposeSlotCandidates`·`replan` 6개를 가진다.
+
 **어댑터 매핑** (`{Vendor}Adapter`가 소유):
 
 | `ReplanInput` | → ai |
@@ -126,11 +134,15 @@ data class ReplanInput(
 | `reasons`·`directives`·`freeText` | **선호 점수 가중치 입력** — 후보 풀 자체는 U1 closed-set 그대로(INV-1) |
 | `trigger` | `TriggerParams{kind, schedule_id, affected_date, payload}` 그대로 직렬화 |
 
+> **[개정 · 2026-10-12] 어댑터 매핑 표 — 대체.** `lockedSlotKeys → regenerate(locked_slots)` 매핑은 실행되지 않았다. 잠금은 와이어 `locked_blocks`(+`current_slots`)로, 범위는 `scope`·`from_instant`·`target_date`(V2.60 `replan_session.target_date`, TRIP-1182 — 오늘 고정 해제)로, 사유·지시어·자유 텍스트는 `reasons`·`directives`·`free_text`로 그대로 실린다. 지시어는 AI가 닫힌 사전(`ai/data/replan_directives.yaml`)으로 해석해 `resolved_directives`/`unknown_directives`로 돌려준다(O-U4-5 종결 — `business-rules.md` §8 개정). INV-1·2·4 서술은 유효하다.
+
 - **INV-1**: 자유 텍스트는 *가중치*만 움직인다. 텍스트에서 뽑은 장소명을 후보로 승격하지 않는다 — 승격하려면 C7 수집 게이트를 통과해 place-data에 등록된 뒤라야 한다.
 - **INV-2**: `replan` 반환 시각·순서는 솔버 검증값. 백엔드·클라가 재계산하지 않는다.
 - **INV-4**: 호출 실패 시 `ScheduleAgentCallFailed` → 결정론 폴백 = **`i15` 수동 편집으로 전환**(US-PLANB-11). 침묵 실패 없음.
 
 > **G-U4-3**: `ai/main.py`는 **`/health`만 응답하는 스텁**이고 `POST /ai/*` HTTP 표면이 아직 없다(develop 실측). `replan`은 계약만 정의되고 실호출은 어댑터 구현 시점에 열린다 — U3 `generate`와 같은 처지다. 이 유닛의 설계가 막히는 지점은 아니지만, **개발 착수 전에 AI 서비스 HTTP 표면 티켓이 선행**해야 한다.
+
+> **[개정 · 2026-10-12] G-U4-3 해소.** AI HTTP 표면은 열렸다 — `ai/docs/openapi.json` 기준 POST 경로 **11개**(`/ai/v1/itinerary/{generate,validate,repair,explanations,edit}` · `/ai/v1/planb/{alternatives,replan}` · `/ai/v1/notification/copies` · `/ai/v1/reflection/{generate,nudge,share-card}`)와 `/health`가 응답한다. 백엔드는 그중 `/ai/v1/planb/replan`을 실호출한다(`HttpScheduleAgentAdapter.kt` `CALLED_PATHS`). 재계획 시한은 25,000ms(`ReplanFacadeService.kt` `REPLAN_DEADLINE_MS`).
 
 ### 3.2 슬롯 후보 교체 — U3 계약 재사용 (DEC-U4-1)
 
@@ -174,6 +186,8 @@ i01 여행 중 일정 (일정 | 지도 세그먼트)
 - **`i05`의 '다음 일정까지'** = `여유 있음 · 다음 부산시립미술관` — 여유 시간과 같은 계산(§3.2 주석).
 - **`i03` 실제 경로**는 앱을 켜 둔 구간만(DEC-U4-7). 화면에 한계를 명시한다.
 - **외부 지도앱이 없으면** 웹 지도 → 그것도 불가면 앱 산출 거리 요약(US-ONTRIP-03 예외).
+
+> **[이연 · 2026-10-12 → U10] §4 위치 자동화 부분.** "지오펜스 진입 → i04"의 자동 경로와 `i03 실제 경로 토글`(US-PLANB-13)은 U10으로 넘어간다. **[개정 · 2026-10-12]** 현행 i01은 수동 [도착]/[방문 완료]가 i01 카드로 흡수된 형태(TRIP-396)이고, 여행 중 허브는 `frontend/src/pages/live/live-itinerary/`(`LiveItineraryPage`·`LiveHubView`)가 그린다. i 코드는 옛 체계다 — 라이브 Figma i 밴드는 **i01~i10**으로 재번호됐다(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`).
 
 ---
 
@@ -239,3 +253,5 @@ i01 여행 중 일정 (일정 | 지도 세그먼트)
 | **G-U4-7** | `i01 · 기록 없음`에서 **완료 슬롯에 사진·메모 진입점이 없다** | 디자인 확인 — 완료 후 기록을 남길 경로가 사라짐. U5 설계 전 해소 |
 | **G-U4-8** | `i13`·`i14`에 `1일차` 칩이 남아 있음 | 범위가 오늘 단위(DEC-U4-3)라 불필요 — 디자인 확인 |
 | **G-U4-9** | §5 기준점 사다리에 **i20·i21 진입 트리거·순서**가 정의돼 있지 않음(어느 화면에서 언제 이 두 화면으로 넘어오는가) | TRIP-442가 딥링크·프리뷰 전용 잠정으로 구현(위 §5 관측 참고). 라이브 진입 배선 설계 시 확정 필요 |
+
+> **[개정 · 2026-10-12] 갭 상태 갱신.** **G-U4-3 해소**(§3.1 개정 블록). **G-U4-4** — 이름 문제는 의미를 잃었다(백엔드는 `regenerate`가 아니라 `/ai/v1/planb/replan`을 부른다). **G-U4-5** — `visit_check`는 U5 `archive`로 이관됐고(V2.21), `actual_route_point`는 미실장인 채 **[이연 · 2026-10-12 → U10]**. **G-U4-6** — 민감도는 계정 단위 `plan_b_sensitivity`(V2.18, `SensitivityController`)로 실재한다(U6 `account_setting`과 별개 테이블).

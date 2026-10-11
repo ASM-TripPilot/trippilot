@@ -17,6 +17,8 @@
 | `src/shared/**` | 두 feature 이상이 쓰는 것 | `shared/map/KakaoMapView.tsx` · `shared/location/` |
 | `src/__tests__/*Structure.test.ts` | 기계 강제 없는 계약을 부정 단언으로 잠금 | `tripBaseGateStructure.test.ts` |
 
+> **[개정 · 2026-10-12] §0 층 배치 — FSD 정합 이후 실재 배치(원문 보존).** 라우트는 `src/app/**`가 아니라 리포 루트 **`frontend/app/`**에 있다(`frontend/src/app/`은 FSD app 층). pages는 그룹 폴더 아래다 — U4 화면은 **`frontend/src/pages/live/{live-itinerary,live-place,live-location,planb-request,planb-draft,planb-diff}/`**. 지도 선례는 `shared/map/KakaoMapView.tsx`가 아니라 **`frontend/src/shared/map/MapView.tsx`**(네이버 네이티브, `@mj-studio/react-native-naver-map`). `*Structure.test.ts` 소스 스캔 가드는 TRIP-1145 정리 원칙으로 대부분 지워졌다(§6 개정).
+
 ### 0.1 feature 2개로 가른다
 
 | feature | 담당 | 화면 |
@@ -26,6 +28,8 @@
 
 - **features 간 직접 import 금지.** `i01`(execution)에서 `i10`(planb)으로 가는 것은 **라우팅**이다. 두 feature가 함께 쓰는 지도·위치·거리 표기는 **`shared/`로 승격**한다(§5).
 - U3(`features/itinerary`)와도 직접 import하지 않는다 — 일정 데이터는 `shared/api` 훅으로 공유한다.
+
+> **[개정 · 2026-10-12] §0.1 — feature 분할 실재.** 화면 컴포넌트는 feature가 아니라 page 슬라이스 `ui/`에 산다. feature에는 모델·훅만 남았다: `features/execution`(`model/nextNav.ts`·`useLiveItinerary.ts`, `ui/ExecutionGlyphs.tsx`) · `features/planb`(`model/triggerLabel.ts`·`triggerPillCopy.ts`·`appliedSummary.ts`·`useActiveTriggers.ts`, `config/watchLabels.ts`) · 동작 단위로 갈라진 `features/request-replan`(`replanScope.ts`·`replanRequest.ts`·`replanOrigin.ts`·`replanFormStore.ts`·`useStartReplan.ts`) · `features/apply-replan`(`useApplyReplan.ts`) · `features/check-visit`(`useVisitCheck.ts`·`visitStatus.ts`) · `features/attach-visit-media`(사진·메모).
 
 ---
 
@@ -50,6 +54,14 @@
 - **`i14`는 바텀시트**라 라우트가 아니다 — `planb/draft` 안의 시트(`@gorhom/bottom-sheet`).
 - ⚠️ `trips/**`는 `(tabs)` 밖이라 `Stack.Protected` guard에 안 걸린다 — **미인증 딥링크로 열린다**(structure.md 경고). 데이터 노출은 서버 401이 막는다. **알림 딥링크가 이 경로로 들어오므로 U4에서 특히 주의**한다.
 
+> **[개정 · 2026-10-12] §1 라우트 — 실재 목록(원문 보존).**
+> - **탭 `app/(tabs)/itinerary.tsx`는 live redirect가 아니다** — TRIP-468로 **내 여행 목록**(`MyTripsListPage`, `src/pages/itinerary/itinerary-list/`)을 그린다.
+> - `frontend/app/trips/[tripId]/live/`: `index.tsx`(`LiveItineraryPage` → `LiveHubView`, TRIP-746) · `place/[poiId].tsx`(`LivePlacePage`) · `location.tsx`(`LiveLocationPage`).
+> - `frontend/app/trips/[tripId]/planb/`: **`index.tsx`**(`PlanbRequestPage`) · **`solving.tsx`**(`PlanbSolvingPage`) · **`draft.tsx`**(`PlanbDraftPage`) · **`manual.tsx`**(U3 `ItineraryEditPage`를 `inTrip`으로 재사용 — 별도 `planb-manual` 슬라이스 없음) · **`diff.tsx`**(`PlanbDiffPage`) 5개뿐이다.
+> - **없는 것**: `planb/triggers.tsx`(i09 — 감지 항목은 `live-itinerary`의 `RiskDetailSheet`·`model/triggerWatchlist.ts`로 흡수), `planb/rest.tsx`(i17 휴식 모드 미구현), `live/arrive/*`(TRIP-396으로 i01 흡수).
+> - **i 코드는 옛 체계다** — 라이브 Figma i 밴드는 **i01~i10**으로 재번호됐다(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`; 매핑은 볼트 `사이클/20260908-figma-hnew/figma-build.md`).
+> - **[이연 · 2026-10-12 → U10]** "i07 푸시 = 지오펜스가 깨웠을 때의 로컬 알림"은 U10 소관이다.
+
 ## 2. `src/pages/` 슬라이스 (10)
 
 | 슬라이스 | `ui/<Name>Page.tsx` | 배선 책임 |
@@ -69,6 +81,8 @@
 > **[소급 기록 — TRIP-443 (기록) 반영, 2026-08-27]** 위 `planb-manual` 행이 이름 붙인 `useValidateItinerary()`는 리포에 실존하지 않는다(`grep -rn useValidateItinerary src` = 0건, develop `openapi.yaml`에도 `validate` 전용 엔드포인트가 없다). TRIP-443 구현이 확인한 실계약은 **`PUT /trips/{tripId}/itinerary`**(`EditItineraryRequest{days:[{date,slots:[{poiId,startAt,endAt,isFixed,endsNextDay}]}]}` → `Itinerary`, 슬롯별 `hasViolation`/`violationReason` **비차단** 응답) — 편집 전체교체와 재검증이 한 호출에 묶여 있다. `PlanbManualPage`는 GET으로 받은 `days`를 로컬 draft에 1회만 시드하고, `[저장]`이 그 draft를 이 PUT으로 조립해 쏜다(별도 `validate` 훅 없음). 이름과 실계약이 갈렸을 뿐 "편집 스토어 ↔ 서버 재검증"이라는 설계 의도 자체는 유지된다. 근거: `_workspace/20260826-trip443-planb-manual/03_implementer_notes.md`(§데이터·화면 흐름) · `frontend/src/pages/planb-manual/ui/PlanbManualPage.tsx` · `backend/docs/design/openapi.yaml`(`/trips/{tripId}/itinerary` PUT).
 
 > **[소급 기록 — TRIP-396 (기록) 반영, 2026-08-27]** 팀 결정(2026-08-19)으로 **i04 전용 도착 화면(`ArriveScreen`)은 제거되고 그 두 실동작(기능하는 [방문 완료]·[다음 장소 길찾기])이 i01(`LiveSlotCard.tsx`)로 흡수됐다.** 위 §1 라우트 표의 `app/trips/[tripId]/live/arrive/[slotKey].tsx`·§2의 `live-arrive` 슬라이스(`LiveArrivePage`)·§3의 `ArriveScreen.tsx` 행은 이 정정으로 삭제했다 — 라이브 Figma 밴드 i에도 i04 프레임이 없음을 확인(`get_metadata` 실측, 2026-08-27). `useVisitCheck()` 뮤테이션(낙관, 슬롯키 단위 롤백)·방문 진행 도출(`deriveVisitProgress`)은 `live-itinerary` 슬라이스가 흡수했다. **`-next-nav`(TRIP-399 "다음 예정지" CTA, §8 testID)는 이 정정 대상이 아니다** — 117-A 소관이라 손대지 않는다. 근거: `_workspace/20260827-trip396-visit-check/01_spec-analyst_brief.md`(§목표·§맹점 후보④) · Figma `get_metadata`(밴드 i, i04 프레임 부재) · `frontend/src/features/execution/ui/LiveSlotCard.tsx`.
+
+> **[개정 · 2026-10-12] §2 슬라이스 표 갱신.** 실재 슬라이스는 `src/pages/live/` 아래 6개(`live-itinerary`·`live-place`·`live-location`·`planb-request`·`planb-draft`·`planb-diff`)다. `planb-triggers`·`planb-manual`·`planb-rest`는 없다(§1 개정). `live-itinerary/ui/`의 실제 구성은 `LiveItineraryPage`·`LiveHubView`·`TriggerChip`·`RiskDetailSheet`·`ReplanAppliedSheet`·`MemoSheet`이다. `planb-diff`는 "확정의 유일한 호출 지점"이 아니다 — TRIP-751로 `planb-draft`의 [적용하기]도 `useApplyReplan`(`features/apply-replan`)으로 바로 확정한다(`src/pages/live/planb-draft/ui/PlanbDraftPage.tsx`).
 
 ## 3. `src/features/execution/`
 
@@ -100,6 +114,8 @@
 | `LiveMapScreen.tsx` | i02·i03 | `shared/map` 소비. `실제 1.4km` + **"앱을 켜 둔 구간만 기록돼요"** 각주. 동의 없으면 실제 레이어 비활성 + 사유(BR-U4-42) |
 | `PlaceDetailScreen.tsx` | i05 | 영업시간·위치·다음 일정까지 여유 · `지금 여기` |
 | `UndoToast.tsx` | i01 | 확정 직후 되돌리기 토스트 |
+
+> **[개정 · 2026-10-12] §3 `features/execution` — 대부분 미실재·이사.** 표의 `liveState.ts`·`slotProgress.ts`·`dwellMinutes.ts`·`placeDetailView.ts`·`actualDistance.ts`·`useVisitCheck.ts`·`usePlaceDetail.ts`·`liveViewStore.ts`와 `LiveItineraryScreen.tsx`·`LiveSlotCard.tsx`·`TriggerBanner.tsx`·`ReplanFab.tsx`·`LiveMapScreen.tsx`·`UndoToast.tsx`는 `features/execution`에 없다. 현재 `features/execution`은 `model/nextNav.ts`·`model/useLiveItinerary.ts`·`ui/ExecutionGlyphs.tsx`뿐이고, 화면은 `src/pages/live/live-itinerary/ui/`(`LiveHubView` 등)·`src/pages/live/live-place/ui/PlaceDetailScreen.tsx`가, 방문 체크는 `features/check-visit`이 맡는다. **[이연 · 2026-10-12 → U10]** `useActualRoute.ts`·`actualDistance.ts`와 `LiveMapScreen`의 `계획｜실제` 토글·실제 경로 레이어(i03, US-PLANB-13)는 U10 소관이다(`useActualRoute`는 리포에 없다).
 
 ## 4. `src/features/planb/`
 
@@ -140,6 +156,8 @@
 | `ReplanAppliedScreen.tsx` | i19 | 반영 완료 |
 | `ManualEditScreen.tsx` | i15·i22 | 순서·삭제·시각 직접 입력. 숙소 고정 위반 불가(BR-U4-44). error 변형은 **누락 외부 데이터 표기** |
 
+> **[개정 · 2026-10-12] §4 `features/planb` — 실재와 다름.** 화면은 page 슬라이스로 갔다: i10 `ReplanRequestSheet`(`src/pages/live/planb-request/ui/`) · i12·i13·i16 `ReplanSolvingView`·`ReplanDraftView`·`ReplanNoticeFace`(`src/pages/live/planb-draft/ui/`) · i18 `PlanbDiffPage`(`src/pages/live/planb-diff/ui/`) · i19 `ReplanAppliedSheet`(`src/pages/live/live-itinerary/ui/`) · i15 수동 편집은 U3 `ItineraryEditPage`(`inTrip`). **없는 것**: `TriggerWatchlistScreen.tsx`(i09 — `RiskDetailSheet`로 흡수), `RestModeScreen.tsx`(i17 휴식 모드 미구현), `ManualEditScreen.tsx`(U3 편집 재사용). 모델은 `features/request-replan`·`features/apply-replan`·`features/planb`로 갈렸다(§0.1 개정).
+
 ## 5. `src/shared/` 변경 (승격)
 
 | 대상 | 변경 | 이유 |
@@ -150,6 +168,11 @@
 | `shared/api/` | `distanceLabel.ts` 승격 후보 — `도보 600m` 표기 조립 | U3 `legDistance.ts`와 같은 규칙. **두 번째 소비자가 생기는 시점에 승격**(README 승격 규칙) |
 | `shared/api/generated/` | `planb`·`execution` 태그 코드젠 추가(`orval.config.ts`) | |
 | `shared/storage/` | 방문 체크 오프라인 큐(기록 입력만 — README 오프라인 정책) | |
+
+> **[개정 · 2026-10-12] §5 shared 변경 — 실장 대조.**
+> - `shared/map/KakaoMapView.tsx` 확장 → **교체**: `frontend/src/shared/map/MapView.tsx`(네이버 네이티브)가 다중 핀·폴리라인(`NaverMapPathOverlay`)·반경 원·점선(`strokeDasharray`)을 제공한다. 실제 경로 점선 용도는 **[이연 · 2026-10-12 → U10]**, 변경 전 동선 점선은 U4에 남는다.
+> - **[이연 · 2026-10-12 → U10]** `shared/location/` 지오펜스 등록·해제와 "항상 허용" 승격 경로: `geofence.ts`는 순수 매핑만 있는 degrade 스텁이고, `expo-task-manager`는 없으며, `frontend/app.config.ts`는 '항상 허용'을 끈다(TRIP-936). `LocationPreprompt.tsx`·`useLocationConsent.ts`·`readDevicePosition.ts`(포그라운드 조회)는 실재한다.
+> - `shared/storage/` 방문 체크 오프라인 큐 — **보류**(사용자 결정 2026-09-11, 미구현. nfr-requirements OFFLINE-U4-02 개정).
 
 ## 6. 구조 가드 (`src/__tests__/`)
 
@@ -162,6 +185,8 @@
 | `planbApplyStructure.test.ts` | `useApplyReplan` 호출처가 **`planb-diff` 슬라이스 1곳뿐** — BR-U4-28 |
 | `executionDurationStructure.test.ts` | `features/{execution,planb}/ui/**`에 소요시간 단위 표기 0건 — INV-3·PBT-U4-F2 |
 | `pagesLayerStructure.test.ts` ✅ | 새 `live-*`·`planb-*` 슬라이스를 재귀 스캔이 자동 편입 |
+
+> **[개정 · 2026-10-12] §6 구조 가드 — 현재 없음.** 위 7개 `*Structure.test.ts`는 `frontend/src/` 어디에도 없다. TRIP-1145 스캔 정리 원칙("기능·QA가 끝나면 회귀 감시 소스 스캔은 두지 않는다 — 층 방향은 eslint, 회귀는 QA")에 따라 만들지 않거나 지웠다. 남은 라우트 단위 테스트는 `src/__tests__/{liveHubRoute,liveLocationRoute,planbRequestRoute,planbManualRoute,planbDiffRoute}.test.tsx`.
 
 ## 7. 폼 검증 (UX 사본 — 권위는 서버)
 

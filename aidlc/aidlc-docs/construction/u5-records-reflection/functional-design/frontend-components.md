@@ -4,6 +4,8 @@
 > **화면**: 라이브 Figma 밴드 `j` — 코드 7(j01~j07·결번 없음) · 상태 변형 포함 17프레임.
 > **현재 상태**: `src/app/(tabs)/records.tsx` = **28줄 "기록 준비 중" 셸**(TRIP-290 · `StateNotice`). 밴드 `j` 라우트 **0** → **프런트가 이 유닛의 본체다.**
 
+> **[개정 · 2026-10-12] 현재 상태 갱신.** `app/(tabs)/records.tsx`는 셸이 아니다 — **j07 여행 캘린더 허브 `RecordsCalendarPage`**를 그린다(TRIP-575, `frontend/src/pages/record/records-calendar/`). 라우트는 리포 루트 `frontend/app/`에 있고(`src/app/`은 FSD app 층), `src/features/reflection`은 실재한다. 밴드 j 라우트는 아래 §1 개정 블록대로 실재한다.
+
 ---
 
 ## 0. 층 배치 — 실재 선례에서 유도
@@ -15,6 +17,8 @@
 | `src/features/<domain>/{model,ui}/` | `model/`=순수 로직·훅, `ui/`=화면·카드 | **`record` · `reflection` 2개로 가른다** |
 | `src/shared/` | `api`·`ui`·`map`·`location`·`date`·`storage`·`version`·`bootstrap` | `map` 확장 · **`photo` 신설** |
 | `src/__tests__/` | `*Structure.test.ts` 구조 가드 (실측 60+) | 가드 5 신설 |
+
+> **[개정 · 2026-10-12] §0 층 배치 실재.** 라우트 = 루트 `frontend/app/` · pages = `frontend/src/pages/record/<slice>/` · 화면 컴포넌트는 feature가 아니라 **page 슬라이스 `ui/`**에 있다(예 `src/pages/record/trip-records/ui/VisitRecordCard.tsx`). feature는 동작 단위로 갈렸다 — `features/check-visit`(`visitStatus.ts`·`useVisitCheck.ts`), `features/attach-visit-media`(`photoAttach.ts`·`pickPhotoForVisit.ts`·`useVisitMemo.ts`·`MemoInline.tsx`), `features/reflection`(`formatKm`·`shareCard`·`summaryStats`·`summaryView`·`useTripSummary`), `features/record`(`ui/RecordGlyphs.tsx`만). `*Structure.test.ts` 가드 60+는 TRIP-1145 스캔 정리로 대부분 지워졌다(§6 개정).
 
 ### 0.1 feature를 2개로 가르는 이유
 
@@ -38,6 +42,10 @@
 
 > ⚠️ `j01~j05`·`j07`은 디자인상 **BottomTab을 그린다**(기록 탭 활성). 탭 그룹 밖 라우트에서 탭바를 어떻게 유지할지는 U3·U4 선례를 따른다 — 새 관례를 만들지 않는다.
 
+> **[개정 · 2026-10-12] §1 라우트 — 실재 목록(원문 보존).** `app/(tabs)/records.tsx`(j07 `RecordsCalendarPage`) · `app/trips/[tripId]/records/index.tsx`(j01) · `records/add-visit.tsx`(즉석 방문 추가 `RecordAddVisitPage` — 표에 없던 라우트) · `records/reflection/[date].tsx`(j03) · `records/summary.tsx`(j04) · `records/share.tsx`(j06) · `app/records/style.tsx`(j05).
+> - **`records/compare.tsx`(j02 기록 비교)는 없다** — 사용자 결정(2026-09-11 "이것도 빼자")으로 **삭제**됐다(TRIP-769, Figma j02 프레임 삭제). 슬라이스 `records-compare`도 없다.
+> - j01의 `offline`·`sync-conflict` 상태는 **보류**(2026-09-11, Figma 프레임 삭제) — 실재 상태는 `manual-checkin` 등.
+
 ---
 
 ## 2. `src/pages/` 슬라이스 (7)
@@ -51,6 +59,8 @@
 | `trip-summary/` | `records/summary` | 총계 stats + 지도 히어로 + 날짜 카드 + 공유 진입 |
 | `share-card/` | `records/share` | 포맷 세그 3 + 카드 프리뷰 + 캡션/해시태그 + 저장·공유 |
 | `travel-style/` | `records/style` | 반경 지도 + 카테고리 막대 + stat 2 + 근거 링크 |
+
+> **[개정 · 2026-10-12] §2 슬라이스 실재.** `src/pages/record/` 아래 **7개**: `records-calendar` · `trip-records` · `record-add-visit` · `daily-reflection` · `trip-summary` · `share-card` · `travel-style`. 표의 `records-compare`는 없고(j02 삭제) 대신 `record-add-visit`이 있다.
 
 ---
 
@@ -74,6 +84,8 @@
 
 `TripRecordsScreen` · `VisitRecordCard`(체크·시각·썸네일·메모 인라인) · `PhotoThumbStrip`(+ 타일) · `MemoInline` · `SpontaneousVisitButton` · `SyncBadge` · `ConflictSheet`(내 기기/서버 선택) · `RecordsCompareScreen` · `CompareSegment` · `CompareRow`(라벨 배지·미방문 칩·전후 장소) · `RecordsCalendarScreen` · `TripCalendarMonth` · `PastTripList` · `RecordGlyphs`
 
+> **[개정 · 2026-10-12] §3 `features/record` — 실재와 다름.** `features/record`에는 `ui/RecordGlyphs.tsx`만 있다. 모델·화면은 이렇게 흩어졌다: `visitStatus.ts`·`useVisitCheck.ts` → `features/check-visit/model/` · `photoAttach.ts`·`MemoInline` → `features/attach-visit-media/` · `photoAvailability.ts`·`adjustTimesDraft.ts`·`VisitRecordCard`·`PhotoThumbStrip`·`SpontaneousVisitButton`·`SkipVisitDialog`·`VisitTimeSheet` → `src/pages/record/trip-records/`. **없는 것**: `syncQueue.ts`·`conflict.ts`·`SyncBadge`·`ConflictSheet`(오프라인 기록 **보류**, 2026-09-11) · `compareRows.ts`·`RecordsCompareScreen`·`CompareSegment`·`CompareRow`(j02 **삭제**, TRIP-769).
+
 ---
 
 ## 4. `src/features/reflection/`
@@ -94,6 +106,8 @@
 
 `DailyReflectionScreen` · `LiveProgressChip`(`여행 2일차 진행 중 · 지금까지 4곳`) · `ReflectionStatsRow` · `NarrativeBlock`(편집 진입) · `ReflectionPhotoGrid` · `ChangeSummaryRow` · `TripSummaryScreen` · `DayHighlightCard` · `TravelStyleScreen` · `CategoryBarList` · `StatTile` · `EvidenceLink`(`근거가 된 방문 데이터`) · `ShareCardScreen` · `ShareCardPreview` · `FormatSegment`
 
+> **[개정 · 2026-10-12] §4 `features/reflection` — 실재 배치.** `features/reflection/model/`에는 `formatKm.ts`·`shareCard.ts`·`summaryStats.ts`·`summaryView.ts`·`useTripSummary.ts`가 있고, 회고 표시본 결정(`reflectionFallback.ts`)·`statsCard.ts`·`missingParts.ts`·`useDailyReflection.ts`·`editCard.ts`·`fillTemplate.ts`는 `src/pages/record/daily-reflection/model/`, `styleThreshold.ts`·`useStyleAnalysis.ts`는 `src/pages/record/travel-style/model/`에 있다. 화면(`DailyReflectionScreen`·`NarrativeBlock`·`ReflectionStatsRow`·`ReflectionPhotoGrid`·`ChangeSummaryRow`·`TravelStyleScreen`·`CategoryBarList`·`ShareCardScreen` 등)은 각 page 슬라이스 `ui/`에 있다.
+
 ---
 
 ## 5. `src/shared/` 변경
@@ -105,6 +119,12 @@
 | `shared/location` | 재사용(U4 신설분) — EXIF 저장 동의 게이트 | 신규 없음 |
 | `shared/storage` | 재사용 — 오프라인 큐 영속화 | 신규 없음 |
 | ~~`features/execution/model/actualDistance.ts` 재사용~~ → **`shared/geo/`로 승격** | ⚠️ **2차 셀프 검수 정정** — `features/record`가 `features/execution`을 import하는 것은 **ESLint `import/no-restricted-paths`로 금지**돼 있고 `src/__tests__/importBoundary.test.ts`가 그 규칙이 살아 있는지까지 잠근다("features/\* may not import another feature"). 따라서 "이동 대상 아님"은 **틀렸다** — `accumulateDistanceKm`·`GeoPoint`를 `shared/geo/`로 옮겨야 두 feature가 함께 쓴다 | U4 자산을 건드리므로 **U4 프런트 티켓과 조율 필요**(G-U5-14). `useActualRoute()`는 아직 `points: []` 고정이라 실제 경로 표시는 degrade 상태 유지(BR-U5-43 `VISIT_LINE`) |
+
+> **[개정 · 2026-10-12] §5 shared 변경 — 실장 대조.**
+> - **`shared/map/KakaoMapView` 레이어 확장 → 교체**: 지도는 네이버 네이티브 SDK(`@mj-studio/react-native-naver-map`)의 `frontend/src/shared/map/MapView.tsx`다 — 다중 번호 핀·기록 마커(`RecordMarker`)·폴리라인(`NaverMapPathOverlay`)·점선(`strokeDasharray`)·**반경 원**(`NaverMapCircleOverlay`, `radiusCircle`)을 지원한다. `react-native-webview` 의존 없음.
+> - `shared/photo/`는 실재한다(`frontend/src/shared/photo/index.ts`).
+> - `shared/storage` 오프라인 큐 영속화 — **보류**(미구현).
+> - **[이연 · 2026-10-12 → U10]** 실제 동선 실선 레이어와 `actualDistance.ts` 승격(`shared/geo/`)은 U10 소관이다 — 원본 `features/execution/model/actualDistance.ts`는 리포에 없다.
 
 ---
 
@@ -119,6 +139,8 @@
 | `syncQueueIdempotency.test.ts` | 큐 재생 경로가 `syncQueue.ts` 밖에 없다 |
 
 > 기존 `noStepCountStructure.test.ts`(걸음 수 금지 · BR-U4-41)는 **그대로 유효**하다 — 선재 dbml `gps_track.steps`가 이 가드와 충돌한다(G-U5-3).
+
+> **[개정 · 2026-10-12] §6 구조 가드 — 현재 없음.** 위 5종과 `noStepCountStructure`·`executionDurationStructure`·`liveTimeStructure`는 `frontend/src/`에 없다. TRIP-1145 스캔 정리 원칙("회귀 감시 소스 스캔 대신 eslint·QA, 남김은 출시·보안만")에 따른다. `syncQueueIdempotency`는 대상(오프라인 큐)이 보류돼 의미가 없다.
 
 ---
 
@@ -141,6 +163,8 @@
 > business-logic-model §5.3) `reflection-daily-narrative` 는 장면 단위(`cover`/`scenes[]`)로 갈릴 자리다.
 > **여기서 새 이름을 짓지 않는다** — `j03` 화면이 아직 없어(실측: 프런트에 `features/reflection` 부재)
 > 지금 지으면 근거 없이 계약을 좁힌다. 화면 설계와 함께 정한다.
+
+> **[개정 · 2026-10-12]** "프런트에 `features/reflection` 부재"는 낡았다 — `frontend/src/features/reflection/`과 j03 화면(`src/pages/record/daily-reflection/`)이 실재한다. 회고 testID의 확정값은 그 슬라이스 테스트가 정본이다(이 개정에서 목록을 옮기지 않았다).
 
 ---
 

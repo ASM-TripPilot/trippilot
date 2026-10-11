@@ -34,6 +34,8 @@
 | **BR-U6-18** | 토글 기본값: `SLOT_PRE`·`PLAN_B`는 **푸시 OFF·인앱 ON**, 나머지 5종은 **둘 다 ON**(실물 `l02` 기준) |
 | **BR-U6-19** | `COMMUNITY` 토글은 **레코드는 만들되 U7 개통까지 UI에서 숨긴다**(INV-U6-05). 켤 수 없는 것을 켜게 두지 않는다 |
 
+> **[개정 · 2026-10-12] BR-U6-19 — U7 폐기.** U7 커뮤니티가 사용자 결정(2026-10-12)으로 폐기돼 "U7 개통까지 숨김"은 **영구 숨김**과 같다. `COMMUNITY` 레코드를 계속 만들지는 사용자 결정 항목이다.
+
 ## 3. 전달·억제
 
 | ID | 규칙 |
@@ -72,6 +74,11 @@
 | **BR-U6-31** | OS 위치 권한이 거부면 앱 내 토글을 **비활성**하고 설정 이동을 안내한다(`l06 permission-denied`) |
 | **BR-U6-32** | 제휴 고지 시트 자체는 **U1 소유**다(`BR-U1-30`). U6는 건드리지 않는다 |
 | **BR-U6-33** | "다시 보지 않기"는 **계정 단위 서버 저장**이고 `l05`의 `외부 이동 시 제휴 안내 다시 보기` 토글로 **재활성화**할 수 있다(DEC-U6-7a). 기기 로컬로 두지 않는다 — 설정에 있는 값이 기기마다 다르면 사용자 모델이 깨진다 |
+
+> **[개정 · 2026-10-12] §5 실장 대조.**
+> - **BR-U6-25**: 고지 목록의 "(U7 개통 시) 커뮤니티"는 U7 폐기로 해당 없음.
+> - **BR-U6-27**: "내보내기 엔드포인트가 없다(G-U6-3)"는 해소됐다 — **`GET /api/v1/me/export`**(`backend/app/src/main/kotlin/com/trippilot/app/export/AccountExportController.kt`).
+> - **BR-U6-33**: 계정 단위 서버 저장은 `account_setting`(V2.42) + `GET/PATCH /api/v1/me/settings`(`backend/modules/profile/src/main/kotlin/com/trippilot/profile/adapter/in/web/AccountSettingController.kt`)로 구현됐다.
 
 ---
 
