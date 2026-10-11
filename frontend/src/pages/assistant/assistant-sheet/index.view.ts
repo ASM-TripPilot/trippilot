@@ -11,3 +11,8 @@ export {
   type AssistantSheetViewProps,
 } from './ui/AssistantSheetView';
 export type { SheetState } from './model/resolveSheetState';
+export { MessageCard } from './ui/AssistantCards';
+export { TurnStatusRow } from './ui/AssistantSheetChrome';
+export { HistoryView } from './ui/HistoryView';
+export { displayMessage } from './model/displayActions';
+export { currentQuickReplies, needsCapabilitiesChip } from './model/sheetModel';
