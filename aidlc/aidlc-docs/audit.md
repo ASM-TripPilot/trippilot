@@ -1560,3 +1560,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — shared-infrastructure 완료, U8·U10 NFR Requirements 승인 대기.
 
 ---
+## NFR Requirements 승인 — U8 · U10
+**Timestamp**: 2026-10-11T20:20:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "ㄱㄱ"
+**AI Response**: U8·U10 NFR Requirements 승인 기록. U8 = NFR Design SKIP(권고대로) · Infra 증분 없음 → **U8 설계 단계 종료**. U10 = NFR Design(얇게 3주제) 착수.
+**Context**: CONSTRUCTION — U8 종료, U10 NFR Design 진행.
+
+---

@@ -144,11 +144,16 @@
   - **U7 Community · U9 Collaborative Editing — 폐기** (사용자 결정). 착수 없음.
   - **U8 Conversational Assistant** — 개발 범위 편입. 08-31 착수분(`u8-fd-preserve` 7f1fddba)의 계획서를 이관해 현행 `ai/` 구현 기준으로 갱신
     - [x] Functional Design — **승인 완료 (2026-10-12 "그럼 권고로 ㄱㄱ")** · 계획 Q1~Q15 답변 확정(Q12=B·나머지 추천) · 산출물 4종 `u8-conversational-assistant/functional-design/`(DEC-U8-1~15·BR-U8-01~53·INV-U8-01~09·G-U8-1~14·O-U8-1~9) + US-ASSIST-01~08 전개
-    - [~] NFR Requirements — 산출물 2종 `u8-conversational-assistant/nfr-requirements/`(COST·PERF·SEC·DATA·REL·OBS-U8, 권고 Q1~Q11) · **승인 대기** · NFR Design 권고 = SKIP · Infra 증분 = 변경 없음(권고)
+    - [x] NFR Requirements — **승인 완료 (2026-10-12 "ㄱㄱ")** · 산출물 2종 `u8-conversational-assistant/nfr-requirements/`(COST·PERF·SEC·DATA·REL·OBS-U8, 권고 Q1~Q11)
+    - [~] NFR Design — **SKIPPED** (2026-10-12 승인) · 사유 = 신규 인프라·외부 의존 0, 패턴 5종(advisory 락 리미터·트랜잭션 3구간·남은 예산 전달·버튼 모드 강등·삭제 이벤트 구독)이 nfr-requirements에 적용 위치까지 기술(U3·U5·U6 선례). 재개 조건 = SSE·Redis 도입, 다중 의도 착수, OTel 수집기 개통
+    - [~] Infrastructure Design — **변경 없음** (shared-infrastructure 증분 0 — 게이트웨이 timeout 620s·ingress `/api` 그대로)
+    - ✅ **U8 설계 단계 종료 (2026-10-12)** — 산출물 = functional-design 4 + nfr-requirements 2 = **6종** + US-ASSIST-01~08. 다음 = 팀 개발(선행: G-U8-1 편집 퍼사드·G-U8-4 ai 대화 경계·openapi 초안·Figma ✦ FAB/b01)
     - [~] Code Generation — 범위 제외
   - **U10 GPS·위치 자동화 (신설)** — 지오펜스 자동 도착·이탈, 백그라운드 위치, 실제 경로·토글, GPS 방문 기록, 위치 법정 로그. 기준선 = 포그라운드 위치·수동 체크인
     - [x] Functional Design — **승인 완료 (2026-10-12 "그럼 권고로 ㄱㄱ")** · 계획 Q1~Q22 답변 확정(Q1=B·Q3=B·나머지 추천) · 산출물 4종 `u10-gps-location-automation/functional-design/`(DEC-U10-1~22·BR-U10-01~48·INV-U10-1~11·G-U10-1~15·O-U10-1~11) + U4·U5·U6 개정 블록
-    - [~] NFR Requirements — 산출물 2종 `u10-gps-location-automation/nfr-requirements/`(MOBILE·PERF·STORE·LEGAL·SEC·REL·OBS-U10, 권고 Q1~Q14) · **승인 대기** · NFR Design 권고 = 얇게 진행(백그라운드 실행·다운샘플·로컬 큐)
+    - [x] NFR Requirements — **승인 완료 (2026-10-12 "ㄱㄱ")** · 산출물 2종 `u10-gps-location-automation/nfr-requirements/`(MOBILE·PERF·STORE·LEGAL·SEC·REL·OBS-U10, 권고 Q1~Q14)
+    - [ ] NFR Design — 얇게 3주제(백그라운드 실행·다운샘플·로컬 큐) · 진행 중
+    - [ ] Infrastructure Design(shared-infrastructure 증분 — 킬 스위치 env·DELAY 스케줄러)
     - [~] Code Generation — 범위 제외
 - **[개정 · 2026-10-12] 공통 Infrastructure Design (as-built 소급)**
   - [x] `construction/shared-infrastructure.md` — **권고안 확정 (2026-10-12 "그럼 권고로 ㄱㄱ")** · Q1=A·Q2=A(가용성 99.5%)·Q3=A·Q4=A(RTO 4h/RPO 15m)·Q5=A(Redis 제거)·Q6=B(버전 핀 롤백) · 후속 인프라 작업 5건은 팀 핸드오프(§12)
