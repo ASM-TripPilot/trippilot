@@ -67,6 +67,12 @@ export function SplashGate() {
         name="trips/[tripId]/planb/index"
         options={{ presentation: 'transparentModal' }}
       />
+      {/* ✦ AI 도우미 시트(TRIP-1322 · DEC-U8-13) — 진입 화면 위 투명 모달. (tabs) 밖이라 탭바가 가려진다.
+          미인증 딥링크는 가드에 안 걸리지만 세션 생성 401 이면 시트가 스스로 닫힌다. */}
+      <Stack.Screen
+        name="assistant/index"
+        options={{ presentation: 'transparentModal' }}
+      />
     </Stack>
   );
 }

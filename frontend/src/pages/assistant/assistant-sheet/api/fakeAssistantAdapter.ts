@@ -45,6 +45,7 @@ export interface FakeAssistantOptions {
 }
 
 const KEYWORDS: readonly (readonly [RegExp, AssistantScenario])[] = [
+  [/할 수 있는/, 'capabilities'],
   [/프롬프트|지침|막말|욕/, 'refusal'],
   [/예약|결제/, 'scope'],
   [/실패/, 'fallback-error'],
@@ -64,7 +65,13 @@ export function routeUtterance(
   hasTrip: boolean
 ): AssistantScenario {
   const hit = KEYWORDS.find(([pattern]) => pattern.test(text))?.[1];
-  if (!hasTrip && hit !== 'refusal' && hit !== 'scope' && hit !== 'stay') {
+  const generalOk: (AssistantScenario | undefined)[] = [
+    'refusal',
+    'scope',
+    'stay',
+    'capabilities',
+  ];
+  if (!hasTrip && !generalOk.includes(hit)) {
     return 'no-context';
   }
   return hit ?? 'unknown';

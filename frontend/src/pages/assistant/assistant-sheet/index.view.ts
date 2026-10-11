@@ -6,3 +6,8 @@ export {
   sampleTranscript,
   type AssistantScenario,
 } from './api/assistantSamples';
+export {
+  AssistantSheetView,
+  type AssistantSheetViewProps,
+} from './ui/AssistantSheetView';
+export type { SheetState } from './model/resolveSheetState';
