@@ -177,3 +177,22 @@ settings-location-usage-row-automation
 - U4 `frontend-components.md` §3의 `useActualRoute.ts`·`actualDistance.ts`(이미 리포에서 삭제, TRIP-746)는 **되살리지 않는다** — 위치 계층 `automation/route*.ts`가 대체한다. 실제 경로 레이어는 `features/execution`이 아니라 페이지(`live-itinerary`·`trip-records`)가 `GET /trips/{tripId}/routes` 훅을 소비해 그린다.
 - U4 §1 "i07 푸시 = 지오펜스가 깨웠을 때의 로컬 알림"은 **만들지 않는다** — wake 판정을 서버로 보내지 않으므로(DEC-U10-9) 지연 알림은 서버 `PlanBTriggered` → U6 푸시 경로 하나다. 라이브 Figma의 `i09-[알림] 푸시 알림`이 그 표면이다.
 - U5 `frontend-components.md` G-U5-14(`shared/geo` 승격)는 거리 함수의 두 번째 소비자가 생길 때 다시 연다.
+
+---
+
+> **[개정 · 2026-10-12 · U10 FE 구현] (TRIP-1330 서브 1331~1345, 브랜치 `feat/U10-FE-gps`)** — 원문은 그대로 두고, FE 구현이 이 문서와 다르게 간 곳만 코드 근거와 함께 적는다(FE 구현 우선 — 사용자 결정 2026-10-12). 서버(§12 초안 엔드포인트)는 미구현이라 `shared/location/automation/sink.ts`의 `FakeAutomationSink`가 답하고, BE 개통 시 `setAutomationSink` 한 곳에서 교체한다.
+>
+> 1. **§2.1 파일 배치** — 제안대로 `shared/location/automation/`에 `arming`·`config`·`visitJudge`·`autoEventQueue`·`routeDistance`·`routeDownsample`을 두고, 추가로 `polyline.ts`(인코딩/디코딩) · `routeLayer.ts`(RouteDay→지도 세그먼트) · `distanceSource.ts`(날짜별 출처) · `noticeCopy.ts` · `statusView.ts` · `engine.ts`(훅·태스크 공용 오케스트레이션)를 더했다. `selectRegions`는 `geofence.ts`에 두었다.
+> 2. **무장 입력(§2.1 arming)** — NFR 델타 4 킬 스위치를 `serverEnabled` 입력으로 넣었다(무장 조건 6개). 설명(EXPLAINER)은 `onHub`·`backgroundCanAskAgain` 입력으로 BR-U10-05를 판정한다. 무장에 성공한 여행은 '설명 이력 있음'으로 기록한다(설정에서 직접 always 를 준 뒤 철회한 사용자에게 설명을 다시 띄우지 않는다). 코드: `automation/arming.ts`·`engine.ts arm()`.
+> 3. **정밀/대략 위치(iOS)** — expo-location 19 는 iOS accuracy authorization 을 노출하지 않는다. iOS 는 `precise=true`로 두고 대략 위치의 거친 표본(수 km)은 `visitJudge`의 정확도 게이트(≤100m)가 보류시킨다. Android 는 `android.accuracy === 'fine'`. 코드: `automation/permission.ts`.
+> 4. **판정 리듀서(§2.1 visitJudge)** — 슬롯 단위가 아니라 **하루 단위 다중 슬롯 상태**(계획 순번 보유)다 — 보조 규칙(BR-U10-18)·겹침(BR-U10-19)이 슬롯을 가로지르기 때문. 정확도 게이트는 "진입 이후 ≤100m 표본 1개 이상"이고 없으면 `HELD`(기록 없음). 보조 규칙은 이탈을 이미 잡은 슬롯(`LEFT`·`EXIT_PENDING`)에는 적용하지 않는다. 서버 실적은 `external` 이벤트로 반영(서버 우선).
+> 5. **다운샘플(§2.1 · NFR P-PRIV-U10-1)** — RDP 가 지그재그에서 O(n²)(20,000점 2분 실측)이라 512점 조각 단위로 단순화한다(ε 보장 유지). 거리 정수화는 올림. 코드: `automation/routeDownsample.ts`.
+> 6. **로컬 저장소(G-U10-5)** — NFR 델타 2(expo-file-system, 캐시 U10 폴더) 그대로. A/B 세대 슬롯·잠금 wake 쓰기 금지는 구현, NFR `wakeBudget`(F8)·`BackgroundTransport`·킬 스위치 탐침·소유자 확인(P-STORE-U10-4)은 **미구현**(서버 부재 — BE 개통 칸). 구간 보고 실패는 재시도 없이 버린다(서버 스위퍼 의존).
+> 7. **빌드 플래그(§1)** — 원천 `TRIPPILOT_LOCATION_AUTOMATION=1`, `eas.json` `production-automation` 프로필. **expo-task-manager 는 설치만으로 prebuild 레거시 자동 플러그인이 붙어 플래그 OFF 에도 `UIBackgroundModes=[fetch]`를 넣는다** — `app.config.ts`가 결과에서 지운다(OFF=키 없음, ON=`[location]`). 앱 엔트리는 NFR LC-U10-1 대로 리포 루트 `index.ts`(`package.json main`)에서 `src/app/entrypoint/registerBackgroundTasks` → `expo-router/entry`.
+> 8. **점선(§3 i01)** — "NaverMapPathOverlay — 점선은 이미 지원"은 사실과 다르다. PathOverlay 는 `patternImage`(이미지 반복)만, **`NaverMapPolylineOverlay`가 `pattern`(대시 배열)** 을 지원한다 — 실제 경로는 PolylineOverlay `[6,5]`·빨강·외곽선 없음, 켜졌을 때 계획 연결선은 muted-soft 1.5. 코드: `shared/map/MapView.tsx` `actualRoute`.
+> 9. **두 `useVisitCheck`(G-U10-15)** — 합치지 않았다(범위 밖 리팩터). 되돌리기만 `features/check-visit/model/useRevertAutoVisit.ts` 한 곳에 두고 i01·j01이 같이 쓴다. '자동 기록' 판정은 현재 계약에 `completion_source`가 없어 도착 출처(`source=AUTO_GEOFENCE`)만 본다 — 완료가 있으면 되돌릴 부분=완료로 추정, 최종 판정은 서버 409.
+> 10. **설명·다이얼로그 표면** — gorhom 시트가 아니라 라이브러리 없는 오버레이(딤+카드). 강등 안내 띠는 Figma 작도에서 한 줄이 아니라 2줄(제목+`설정 열기` / 사유). `⋯` 버튼이 길게 누르기 메뉴를 대신한다.
+> 11. **testID(§5)** — 토글은 공용 `RouteToggle` 접두로 `execution-live-route-*`·`record-map-route-*`(-toggle-plan/-toggle-actual/-disabled-reason/-distance), 레이어는 `map-route-segment`. `execution-live-automation-dropped-count` 대신 같은 띠 `execution-live-automation-notice`에 건수를 싣는다. 되돌리기 다이얼로그는 `{접두}-dialog/-confirm/-cancel/-media-notice`.
+> 12. **요약(§3 j 요약)** — `summaryView.ts`는 `features/reflection/model/summaryView.ts`로 이사해 있다. 날짜별 출처는 서버 `DayHighlight.distanceSource`(§12.5) 미개통이라 `GET routes` 목록으로 FE 파생(`distanceSourceByDate`) — 플래그 ON 에서만. 요약 지도 히어로 경로는 G-U10-7 그대로 미구현.
+> 13. **경로 조회 훅** — `useTripRoutes`는 Query 캐시 대신 effect(플래그 OFF 화면·QueryClient 없는 기존 목 테스트에 새 의존을 만들지 않으려고). BE 개통 때 orval 훅으로 교체.
+> 14. **Figma** — DEC-U10-19 ①~⑤를 캔버스 1228:1045 **U10 검토 밴드**(라벨 4854:2795, y=19950)에 9프레임으로 작도(정본 in-place 수정 없음, figma-qa 9/9 PASS). 정본 이식은 사람 검토 뒤.
