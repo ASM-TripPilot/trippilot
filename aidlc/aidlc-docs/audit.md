@@ -1539,3 +1539,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8·U10 Functional Design Step 5 완료 → Step 6 산출물 생성 착수.
 
 ---
+## Functional Design — U8 · U10 산출물 생성, 승인 게이트 제시
+**Timestamp**: 2026-10-11T19:00:00Z (작업 시점, 초 단위 미측정)
+**User Input**: (없음 — 생성 완료 후 승인 요청)
+**AI Response**: U8 FD 4종(`construction/u8-conversational-assistant/functional-design/`) + `stories.md` US-ASSIST-01~08 전개 · U10 FD 4종(`construction/u10-gps-location-automation/functional-design/`) + U4·U5·U6 `[개정 · 2026-10-12 · U10 FD]` 블록. 표준 2-option 완료 메시지로 승인 요청(유닛별).
+**Context**: CONSTRUCTION — U8·U10 Functional Design Step 7~8(승인 대기).
+
+---

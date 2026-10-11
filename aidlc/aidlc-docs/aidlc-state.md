@@ -143,11 +143,11 @@
 - **[개정 · 2026-10-12] 후속 유닛 재편**
   - **U7 Community · U9 Collaborative Editing — 폐기** (사용자 결정). 착수 없음.
   - **U8 Conversational Assistant** — 개발 범위 편입. 08-31 착수분(`u8-fd-preserve` 7f1fddba)의 계획서를 이관해 현행 `ai/` 구현 기준으로 갱신
-    - [ ] Functional Design — 계획 `plans/u8-conversational-assistant-functional-design-plan.md` · **질문 게이트 대기**
+    - [~] Functional Design — 계획 Q1~Q15 답변 확정(2026-10-12, Q12=B·나머지 추천) · 산출물 4종 `u8-conversational-assistant/functional-design/`(DEC-U8-1~15·BR-U8-01~53·INV-U8-01~09·G-U8-1~14·O-U8-1~9) + US-ASSIST-01~08 전개 · **승인 대기**
     - [ ] NFR Requirements · [ ] NFR Design · [ ] Infrastructure Design(shared-infrastructure 증분)
     - [~] Code Generation — 범위 제외
   - **U10 GPS·위치 자동화 (신설)** — 지오펜스 자동 도착·이탈, 백그라운드 위치, 실제 경로·토글, GPS 방문 기록, 위치 법정 로그. 기준선 = 포그라운드 위치·수동 체크인
-    - [ ] Functional Design — 계획 `plans/u10-gps-location-automation-functional-design-plan.md` · **질문 게이트 대기**
+    - [~] Functional Design — 계획 Q1~Q22 답변 확정(2026-10-12, Q1=B·Q3=B·나머지 추천) · 산출물 4종 `u10-gps-location-automation/functional-design/`(DEC-U10-1~22·BR-U10-01~48·INV-U10-1~11·G-U10-1~15·O-U10-1~11) + U4·U5·U6 개정 블록 · **승인 대기**
     - [ ] NFR Requirements · [ ] NFR Design · [ ] Infrastructure Design(shared-infrastructure 증분)
     - [~] Code Generation — 범위 제외
 - **[개정 · 2026-10-12] 공통 Infrastructure Design (as-built 소급)**
