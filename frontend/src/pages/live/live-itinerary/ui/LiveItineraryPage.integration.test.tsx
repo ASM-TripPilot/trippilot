@@ -103,6 +103,36 @@ jest.mock('expo-location', () => ({
     mockRequestForeground(...args),
 }));
 
+// TRIP-1339 — U10 자동 기록 훅을 테스트마다 갈아 끼운다. 기본(null)이면 실물 그대로(플래그 OFF → 효과 0) — 기존 관점 무변경.
+type MockAutomation = {
+  state: 'ARMED' | 'MANUAL' | 'EXPLAINER';
+  notice: { kind: 'degraded' | 'route-expired'; reason: string } | null;
+  droppedCount: number;
+};
+let mockAutomation: MockAutomation | null = null;
+const mockAutomationLater = jest.fn(async () => undefined);
+const mockAutomationEnable = jest.fn(async () => undefined);
+const mockAutomationDismiss = jest.fn(async () => undefined);
+jest.mock('@/shared/location', () => {
+  const actual = jest.requireActual('@/shared/location');
+  return {
+    ...actual,
+    isLocationAutomationEnabled: () =>
+      mockAutomation !== null || actual.isLocationAutomationEnabled(),
+    useLocationAutomation: (input: unknown) =>
+      mockAutomation
+        ? {
+            ...mockAutomation,
+            reason: 'explainer',
+            enabled: true,
+            enable: mockAutomationEnable,
+            later: mockAutomationLater,
+            dismissNotice: mockAutomationDismiss,
+          }
+        : actual.useLocationAutomation(input),
+  };
+});
+
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 'trip-1';
 const TODAY = '2026-08-20';
@@ -293,6 +323,88 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
         pathname: '/assistant',
         params: { surface: 'LIVE', tripId: TRIP_ID },
       });
+    });
+  });
+
+  describe('U10 자동 기록 (TRIP-1339)', () => {
+    const consentOk = () =>
+      http.get(`${BASE}/me/location-consent`, () =>
+        HttpResponse.json({ legalConsent: true })
+      );
+    afterEach(() => {
+      mockAutomation = null;
+      mockAutomationLater.mockClear();
+      mockAutomationEnable.mockClear();
+      mockAutomationDismiss.mockClear();
+    });
+
+    it('U1 플래그 OFF(기본) → 설명·안내 없음, 위치 동의 조회 0회(BR-U10-07)', async () => {
+      server.use(itineraryOk(), tripHandler(), visitsHandler());
+      await renderActive();
+      await settle();
+      expect(screen.queryByTestId('location-explainer-root')).toBeNull();
+      expect(
+        screen.queryByTestId('execution-live-automation-notice')
+      ).toBeNull();
+      expect(hitCount('GET /api/v1/me/location-consent')).toBe(0);
+    });
+
+    it('U2 EXPLAINER → 설명이 허브 위에 1회 뜨고, [나중에]면 닫히며 later 1회', async () => {
+      mockAutomation = { state: 'EXPLAINER', notice: null, droppedCount: 0 };
+      server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
+      await renderActive();
+      expect(screen.getByTestId('location-explainer-root')).toBeTruthy();
+      expect(screen.getByText(/여행 날짜\(8월 20일\) 동안만/)).toBeTruthy();
+      fireEvent.press(screen.getByTestId('location-explainer-later'));
+      expect(mockAutomationLater).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('location-explainer-root')).toBeNull();
+    });
+
+    it('U3 [자동 기록 켜기] → enable 1회(OS 요청은 훅 몫) 후 닫힘', async () => {
+      mockAutomation = { state: 'EXPLAINER', notice: null, droppedCount: 0 };
+      server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
+      await renderActive();
+      await act(async () => {
+        fireEvent.press(screen.getByTestId('location-explainer-enable'));
+      });
+      expect(mockAutomationEnable).toHaveBeenCalledTimes(1);
+      await waitFor(() =>
+        expect(screen.queryByTestId('location-explainer-root')).toBeNull()
+      );
+    });
+
+    it('U4 강등 → 시트 헤더 위 안내 1줄 + [설정 열기](설정 앱·안내 지움), 푸시 아님', async () => {
+      mockAutomation = {
+        state: 'MANUAL',
+        notice: { kind: 'degraded', reason: 'when-in-use' },
+        droppedCount: 0,
+      };
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
+      await renderActive();
+      expect(
+        screen.getByTestId('execution-live-automation-notice-detail')
+      ).toHaveTextContent("위치 권한이 '사용하는 동안'으로 바뀌었어요");
+      fireEvent.press(
+        screen.getByTestId('execution-live-automation-notice-settings')
+      );
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      expect(mockAutomationDismiss).toHaveBeenCalledTimes(1);
+      openSettings.mockRestore();
+    });
+
+    it('U5 날짜 넘김 폐기 건수 → "보내지 못한 자동 기록 N건" 1줄(설정 링크 없음)', async () => {
+      mockAutomation = { state: 'MANUAL', notice: null, droppedCount: 3 };
+      server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
+      await renderActive();
+      expect(
+        screen.getByTestId('execution-live-automation-notice')
+      ).toHaveTextContent(/보내지 못한 자동 기록 3건/);
+      expect(
+        screen.queryByTestId('execution-live-automation-notice-settings')
+      ).toBeNull();
     });
   });
 

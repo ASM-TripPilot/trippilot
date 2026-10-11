@@ -51,6 +51,15 @@ import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
+import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
+import {
+  LocationAlwaysExplainer,
+  automationNoticeCopy,
+  isLocationAutomationEnabled,
+  tripDateRangeLabel,
+  useLocationAutomation,
+} from '@/shared/location';
+import { automationVisitRefs } from '../model/automationInput';
 
 import { LiveHubView } from './LiveHubView';
 
@@ -225,6 +234,38 @@ export function LiveItineraryPage({
   });
   // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
   const memoAttempt = useRef(0);
+
+  // TRIP-1339 · U10 위치 자동화 — 오늘(KST) 일정·실적으로 문맥을 만들고 판정은 훅이 한다(페이지 1회).
+  // 플래그 OFF 면 동의 조회도 하지 않고 훅은 효과가 없다(BR-U10-07). 훅 규칙상 조기 반환 위에 둔다.
+  const automationOn = isLocationAutomationEnabled();
+  const locationConsent = useGetMeLocationConsent({
+    query: { enabled: automationOn },
+  });
+  const tripDays = state.kind === 'active' ? state.itinerary.days : [];
+  const todaySlots = tripDays.find((day) => day.date === today)?.slots ?? [];
+  const automation = useLocationAutomation({
+    tripId: automationOn && state.kind === 'active' ? tripId : null,
+    startDate: tripDays[0]?.date ?? '',
+    endDate: tripDays[tripDays.length - 1]?.date ?? '',
+    date: today,
+    slots: todaySlots.map((slot) => ({
+      slotKey: buildSlotKey(today, slot.poiId),
+      poiId: slot.poiId,
+      lat: slot.lat ?? null,
+      lng: slot.lng ?? null,
+    })),
+    visits:
+      liveDate === today ? automationVisitRefs(visits.data?.visits ?? []) : [],
+    consentOn: locationConsent.data?.legalConsent === true,
+    onHub: true,
+  });
+  // [켜기]·[나중에] 처리 중 연타 잠금 + 이 화면에서 한 번 닫은 설명은 판정이 늦게 따라와도 다시 그리지 않는다.
+  const [explainerClosed, setExplainerClosed] = useState(false);
+  const [explainerBusy, setExplainerBusy] = useState(false);
+  const automationCopy = automationNoticeCopy(
+    automation.notice,
+    automation.droppedCount
+  );
 
   // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
   const goBackOrHome = (): void => {
@@ -620,7 +661,41 @@ export function LiveItineraryPage({
         onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
+        automationNotice={
+          automationCopy
+            ? {
+                title: automationCopy.title,
+                detail: automationCopy.detail,
+                onPressSettings: automationCopy.settings
+                  ? () => {
+                      void automation.dismissNotice();
+                      void Linking.openSettings();
+                    }
+                  : undefined,
+              }
+            : null
+        }
       />
+      {automation.state === 'EXPLAINER' && !explainerClosed ? (
+        <LocationAlwaysExplainer
+          dateRangeLabel={tripDateRangeLabel(
+            itinerary.days[0]?.date ?? today,
+            itinerary.days[itinerary.days.length - 1]?.date ?? today
+          )}
+          busy={explainerBusy}
+          onEnable={() => {
+            setExplainerBusy(true);
+            void automation.enable().finally(() => {
+              setExplainerBusy(false);
+              setExplainerClosed(true);
+            });
+          }}
+          onLater={() => {
+            setExplainerClosed(true);
+            void automation.later();
+          }}
+        />
+      ) : null}
       {riskSheet}
       {memoSheet}
       {appliedSessionId ? (

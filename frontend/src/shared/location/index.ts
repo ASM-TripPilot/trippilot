@@ -23,3 +23,10 @@ export type { AutomationSlotRef, AutomationVisitRef } from './automation/store';
 export { useTripRoutes } from './automation/useTripRoutes';
 export { routeDayForDate, routeDayToSegments } from './automation/routeLayer';
 export type { RouteDay } from './automation/sink';
+export { LocationAlwaysExplainer } from './LocationAlwaysExplainer';
+export {
+  automationNoticeCopy,
+  tripDateRangeLabel,
+} from './automation/noticeCopy';
+export type { AutomationNoticeCopy } from './automation/noticeCopy';
+export { isLocationAutomationEnabled } from './automation/flag';
