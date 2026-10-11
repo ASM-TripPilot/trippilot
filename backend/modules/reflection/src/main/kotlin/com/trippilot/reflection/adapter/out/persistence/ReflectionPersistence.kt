@@ -10,10 +10,13 @@ import com.trippilot.reflection.domain.ReflectionStats
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.LocalDate
@@ -60,6 +63,10 @@ class ReflectionEntity(
 interface ReflectionJpaRepository : JpaRepository<ReflectionEntity, UUID> {
     fun findByTripIdAndDayDate(tripId: UUID, dayDate: LocalDate): ReflectionEntity?
     fun findByTripIdOrderByDayDate(tripId: UUID): List<ReflectionEntity>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from ReflectionEntity r where r.tripId = :tripId and r.dayDate = :dayDate")
+    fun lockByTripIdAndDayDate(tripId: UUID, dayDate: LocalDate): ReflectionEntity?
 }
 
 @Component
@@ -90,6 +97,9 @@ class ReflectionRepositoryAdapter(
 
     override fun find(tripId: UUID, dayDate: LocalDate): Reflection? =
         jpa.findByTripIdAndDayDate(tripId, dayDate)?.toDomain()
+
+    override fun findForUpdate(tripId: UUID, dayDate: LocalDate): Reflection? =
+        jpa.lockByTripIdAndDayDate(tripId, dayDate)?.toDomain()
 
     override fun findByTrip(tripId: UUID): List<Reflection> =
         jpa.findByTripIdOrderByDayDate(tripId).map { it.toDomain() }

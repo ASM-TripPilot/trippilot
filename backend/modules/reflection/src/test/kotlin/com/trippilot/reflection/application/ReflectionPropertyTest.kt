@@ -58,6 +58,7 @@ class ReflectionPropertyTest : StringSpec({
         val stored = mutableMapOf<Pair<UUID, LocalDate>, Reflection>()
         override fun upsert(reflection: Reflection) = reflection.also { stored[it.tripId to it.dayDate] = it }
         override fun find(tripId: UUID, dayDate: LocalDate) = stored[tripId to dayDate]
+        override fun findForUpdate(tripId: UUID, dayDate: LocalDate) = find(tripId, dayDate)
         override fun findByTrip(tripId: UUID) = stored.values.filter { it.tripId == tripId }.sortedBy { it.dayDate }
     }
 
@@ -393,6 +394,10 @@ class ReflectionPropertyTest : StringSpec({
 
         shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "첫 줄\n둘째 줄") }
         shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "널\u0000문자") }
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "줄\u2028구분자") }
+        // 짝 없는 서로게이트 — 글자 수 검사는 통과하지만 UTF-8 로 옮길 수 없어 저장에서 500 이 된다.
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "깨진\ud83d") }
+        svc.edit(acc, tripId, day, null, null, "이모지🙂").shortMemo shouldBe "이모지🙂"
         svc.edit(acc, tripId, day, null, null, "  " + "가".repeat(60) + "  ").shortMemo shouldBe "가".repeat(60)
     }
 

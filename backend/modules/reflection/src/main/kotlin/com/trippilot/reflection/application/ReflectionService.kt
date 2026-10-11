@@ -112,7 +112,7 @@ class ReflectionService(
         }
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         requireWithinTrip(period, dayDate)
-        val current = reflections.find(tripId, dayDate) ?: draftFor(accountId, tripId, dayDate)
+        val current = reflections.findForUpdate(tripId, dayDate) ?: draftFor(accountId, tripId, dayDate)
         val now = clock.instant()
         // 카드는 **보냈을 때만** 갈아끼운다(TRIP-828) — 기분만 고치는 요청이 카드를 건드리면 안 된다.
         val carded = cardPayload?.let { current.edit(cards.read(it), now) } ?: current
@@ -137,7 +137,8 @@ class ReflectionService(
         val draft = aiCard ?: ReflectionNarrator.dailyCard(placeNames, stats)
         val source = if (aiCard != null) ReflectionSource.AI else ReflectionNarrator.sourceFor(stats)
         val now = clock.instant()
-        return reflections.find(tripId, dayDate)?.regenerate(draft, source, stats, now)
+        // AI 호출이 끝난 **뒤에** 잠그고 읽는다 — 먼저 읽어 두면 생성 중에 들어온 기분·수정본을 옛 값으로 덮는다.
+        return reflections.findForUpdate(tripId, dayDate)?.regenerate(draft, source, stats, now)
             ?: Reflection.of(tripId, dayDate, draft, source, stats, now)
     }
 

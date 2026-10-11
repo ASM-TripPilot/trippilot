@@ -13,15 +13,20 @@ import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /**
  * 회고 실 DB 검증(TRIP-552 · V2.36).
@@ -40,6 +45,7 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var tx: TransactionTemplate
 
     private val now = Instant.parse("2026-08-11T01:00:00Z")
     private val day = LocalDate.parse("2026-08-11")
@@ -206,6 +212,35 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
         jdbc.queryForMap("SELECT mood, short_memo FROM reflection WHERE trip_id = ?", tripId) shouldBe
             mapOf("mood" to "GOOD", "short_memo" to memo)
         rows(tripId) shouldBe 1
+    }
+
+    /**
+     * 겹친 수정이 서로를 되돌리지 않는다(TRIP-828).
+     *
+     * 쓰기가 행 전체를 덮으므로, 잠그지 않고 읽으면 "기분만" 요청이 그사이 바뀐 카드를 옛 값으로 되돌린다.
+     * 앞 요청이 행을 쥔 동안 뒤 요청이 **기다리는지**를 본다 — 안 기다리면 옛 값을 읽은 것이다.
+     */
+    @Test
+    fun `겹친 수정은 서로를 되돌리지 않는다 — 기분만 고치는 요청이 그사이 바뀐 카드를 덮지 않는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        reflections.generateDaily(accountId, tripId, day)
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            val moodEdit = tx.execute {
+                reflections.edit(accountId, tripId, day, card("먼저 고친 제목"))
+                val pending = pool.submit<Unit> { reflections.edit(accountId, tripId, day, cardPayload = null, mood = "GOOD") }
+                shouldThrow<TimeoutException> { pending.get(500, TimeUnit.MILLISECONDS) }
+                pending
+            }!!
+            moodEdit.get(10, TimeUnit.SECONDS)
+        } finally {
+            pool.shutdownNow()
+        }
+
+        val saved = reflections.find(accountId, tripId, day)!!
+        saved.mood shouldBe "GOOD"
+        saved.editedCard?.title shouldBe "먼저 고친 제목"
     }
 
     @Test

@@ -3482,6 +3482,7 @@ components:
       properties:
         card:
           type: string
+          nullable: true
           minLength: 1
           maxLength: 20000
           description: >

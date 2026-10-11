@@ -81,7 +81,8 @@ data class Reflection(
             }
             // **한 줄**이다 — 줄바꿈·탭을 받으면 화면의 한 줄 자리가 깨진다. NUL 은 더 나쁘다:
             // PostgreSQL 이 text 에 거부해 400 이어야 할 입력이 500 으로 나간다.
-            if (memo != null && memo.any { it.isISOControl() }) {
+            // 줄·문단 구분자(U+2028·2029)도 줄바꿈이고, 짝 없는 서로게이트는 UTF-8 로 못 옮겨 저장에서 터진다.
+            if (memo != null && memo.codePoints().anyMatch { Character.getType(it).toByte() in ONE_LINE_FORBIDDEN }) {
                 add(FieldError("shortMemo", "줄바꿈·제어 문자는 쓸 수 없습니다"))
             }
         }
@@ -123,6 +124,9 @@ data class Reflection(
 
         const val MOOD_MAX = 20
         const val SHORT_MEMO_MAX = 60
+        private val ONE_LINE_FORBIDDEN = setOf(
+            Character.CONTROL, Character.LINE_SEPARATOR, Character.PARAGRAPH_SEPARATOR, Character.SURROGATE,
+        )
         private val MOOD_CODE = Regex("[A-Za-z0-9_-]{1,$MOOD_MAX}")
     }
 }
@@ -171,6 +175,12 @@ interface ReflectionRepository {
     fun upsert(reflection: Reflection): Reflection
 
     fun find(tripId: UUID, dayDate: LocalDate): Reflection?
+
+    /**
+     * **고치려고** 읽는다 — 행을 잠근다. 쓰기는 행 전체를 덮으므로(카드·기분·한 줄), 잠그지 않고 읽으면
+     * 겹친 두 요청이 같은 옛 값을 읽고 나중 쪽이 먼저 쪽의 필드를 되돌린다(TRIP-828).
+     */
+    fun findForUpdate(tripId: UUID, dayDate: LocalDate): Reflection?
 
     fun findByTrip(tripId: UUID): List<Reflection>
 }
