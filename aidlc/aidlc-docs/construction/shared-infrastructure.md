@@ -425,3 +425,124 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 5. **운영 환경 정리(Q1)** — prd 미적용 라이브 확인, `dev` Environment 보호 규칙, 가이드 정정(G-04·G-16).
 
 이번 결정 범위 밖으로 남는 간극: G-05(앱 메트릭·트레이스), G-06(NLB access log), G-08(backend HPA), G-09(VPC 엔드포인트), G-10(JWT 알고리즘), G-11(푸시 기본 off), G-12(NetworkPolicy 강제), G-13(공급망), G-14(CI 이미지 ≠ 배포 이미지).
+
+---
+
+## U10 증분 (2026-10-12)
+
+> **성격**: 이 절은 위 as-built 본문과 달리 **설계 증분**이다 — U10(GPS·위치 자동화)이 인프라에 요구하는 것을 적고, 아직 코드에 없다. 구현은 팀이 각 디렉토리에서 한다(SCOPE). 근거 설계: `u10-gps-location-automation/nfr-requirements/`(REL-U10-03·06 · PERF-U10-05·06 · OBS-U10-\*) · `u10-gps-location-automation/nfr-design/`(P-\*-U10) · 계획서 `plans/u10-gps-location-automation-nfr-design-plan.md`(Q2=A).
+> **결론 먼저**: **신규 AWS 자원 0.** 늘어나는 것은 백엔드 런타임 키 1개 · 파드 안 스케줄러 2개 · 마이그레이션 3건 · EAS 프로필 1개 · 로그 기반 관측 쿼리다.
+
+### U10.1 신규 AWS 자원이 없는 이유 (검증)
+
+| 범주 | U10이 쓰는 것 | 기존 자원 | 판정 |
+|---|---|---|---|
+| Compute | 자동 결과 배치·경로 PUT/GET·구간 보고 API, 스케줄러 2개 | Deployment `backend`(같은 이미지·같은 파드) | 신규 0 |
+| Storage | `actual_route_day`(하루 ≤ 2,000점 인코딩 ≈ 수십 KB 이하/여행·일) · `location_automation_interval`(무장 하루 ≈ 4행) · `visit_check` 컬럼 2 | RDS PostgreSQL 16(`aws_db_instance.postgres`, dev 20→100GiB 자동 확장) | 신규 0. **원시 좌표는 서버에 오지 않는다**(INV-U10-2) — S3 등 오브젝트 저장소 불필요 |
+| Messaging | 이벤트 3종(`VisitChecked` 확장 · `VisitAutoReverted` · `ActualRouteStored`) | PostgreSQL 아웃박스 + `OutboxRelay`(§4.4) | 신규 0 |
+| Networking | 공개 REST 4종(`/api` 아래) | NLB → gateway `/api` 프록시 · 본문 상한 20m · IP당 10r/s | 신규 0. 앱 본문 상한(자동 결과 64KB · 경로 256KB, PERF-U10-05)은 **앱이 413으로 집행**한다 — gateway 20m은 그대로. 기기 wake당 요청 ≤ 2라 레이트리밋과 충돌 없음 |
+| Secrets | 킬 스위치 키 1개(비밀 아님 — U10.2) | `trippilot/<env>/backend` 그릇 | 신규 그릇 0 |
+| IAM | 없음(기기는 AWS를 직접 쓰지 않는다 — §8) | — | 신규 0 |
+| Monitoring | 구조화 로그 1줄/사건 · DB 질의(U10.6) | §12 Q3=A로 켜질 CloudWatch 컨테이너 로그 | 신규 0(Q3 후속 작업에 얹힌다) |
+
+`infra/terraform/stack/*.tf`·`deploy/eks/chart/templates/*`에 U10 때문에 추가할 리소스 주소가 없다. 바뀌는 인프라 파일은 **런타임 도구·차트 env 배선·배포 입력·EAS 설정**뿐이다(아래).
+
+### U10.2 서버 킬 스위치 (REL-U10-06 · Q2=A)
+
+`PUSH_MODE`와 같은 통로를 쓴다 — **커밋 없이 끌 수 있어야** 해서다.
+
+```
+Secrets Manager trippilot/<env>/backend
+  LOCATION_AUTOMATION_ENABLED = "true" | "false"        (없으면 BACKEND_DEFAULTS 의 "true")
+    |  runtime.py sync-secrets  (허용 키 목록 BACKEND_KEYS 에 추가)
+    v
+K8s Secret trippilot-backend
+    |  trippilot.secretEnv (optional)  -- templates/backend.yaml
+    v
+env TRIPPILOT_LOCATION_AUTOMATION_ENABLED
+    |  application.yml  trippilot.location-automation.enabled: ${TRIPPILOT_LOCATION_AUTOMATION_ENABLED:true}
+    v
+구간 START -> 꺼짐이면 409 AUTOMATION_DISABLED / 자동 결과 배치 응답 automationEnabled
+```
+
+| 변경 지점 | 내용 | 계약 테스트 |
+|---|---|---|
+| `deploy/eks/runtime_secrets.py` | `BACKEND_KEYS`에 `LOCATION_AUTOMATION_ENABLED` · `BACKEND_DEFAULTS`에 `"true"` · 값 검증(`true`/`false`만) | `deploy/eks/tests/test_runtime.py`(`PUSH_MODE` 케이스 꼴) |
+| `.github/workflows/aws-deploy.yml` | 입력 `location_automation: keep \| on \| off`(기본 `keep`) — `push_mode`와 같은 덮어쓰기 경로 | `infra/tests/test_workflow_contracts.py`(`PUSH_MODE_INPUT` 단언 꼴) |
+| `deploy/eks/chart/templates/backend.yaml` | `trippilot.secretEnv`(optional) 1줄 | 차트 렌더 |
+| `backend/app/src/main/resources/application.yml` | 위 키 · 기본 `true` | 백엔드 테스트 |
+
+- **반영 지연 = 배포 워크플로 1회.** 배포마다 `rolloutNonce`로 파드가 재시작돼 새 env를 읽는다. §12 Q6=B(이미지 태그 핀)가 구현되면 재빌드가 빠져 더 짧아진다 — 킬 스위치가 Q6 후속 작업의 수혜자다.
+- **값은 비밀이 아니다.** 시크릿 그룹에 두는 이유는 "커밋·리뷰 없이 바꾼다"는 성질 하나다(`PLACE_GEOCODE_MODE`·`WEATHER_MODE`와 같은 이유).
+- 기기는 응답을 못 받으면 직전 값을 유지하고, 꺼진 뒤 다시 켜짐은 포그라운드 복귀 시 빈 배치 탐침으로 안다(P-STORE-U10-3). 서버 쪽 추가 장치는 없다.
+- 끄는 판단·실행 담당은 §12 Q3의 알람 담당자와 같은 사람으로 둔다(권고).
+
+### U10.3 스케줄러 2개 (파드 안 · 신규 인프라 0)
+
+| 스케줄러 | 주기 | 다중 복제본 처리 | 선례 | 설정 키(제안) |
+|---|---|---|---|---|
+| `DELAY` 진행 중 판정(PERF-U10-06) | `fixedDelay` **5분** | **`@SchedulerLock(name="planb-delay-scan")`** — 기존 `shedlock` 테이블(V1.0) · `ShedLockConfig`(DB 시각). 최후 방어선 = `ux_plan_b_trigger_active`(V2.18) | `OutboxRelay`(현재 유일한 ShedLock 사용처) | `trippilot.planb.delay-scan-ms: 300000` · `…-initial-delay-ms` |
+| 열린 구간 `SERVER_TIMEOUT`(REL-U10-03) | `fixedDelay` 1시간 | **ShedLock 없음** — `ended_at IS NULL` 조건부 UPDATE가 멱등의 전부, 찍힌 행에만 END 법정 로그 | `TripEndSweeper` | `trippilot.archive.interval-timeout-sweep-ms: 3600000` |
+
+- dev·prd 모두 backend 복제본 2(§4.2)라 `DELAY` 스캐너에 락이 필요하다. `lockAtMostFor`는 한 회차 최대 실행 시간보다 길고 주기(5분)보다 짧게(예: `PT4M`), `lockAtLeastFor = PT0S`(`OutboxRelay` 주석의 이유 그대로).
+- 질의 대상은 열린 `GEOFENCE_ARMED` 구간이 있는 여행뿐이라(인덱스 `(trip_id, kind, started_at)`) 부하는 "여행 중 + 자동 기록 켠" 사용자 수에만 비례한다. backend HPA 부재(G-08)와 무관하다.
+- 두 스케줄러 모두 **처리 건수가 0이 아니면 INFO 1줄**을 남긴다(침묵 금지 — `TripEndSweeper` 관례).
+- **§3 매핑표 보정**: "그 밖의 스케줄러 … ShedLock 없이 조건부 UPDATE" 행은 그대로 맞다. U10 tech-stack §1이 `TripEndSweeper`·`LocationLegalLogRetentionSweeper`를 ShedLock 선례로 적은 것은 드리프트다(U10 `nfr-design-patterns.md` §7).
+
+### U10.4 마이그레이션 3건
+
+| 제안 | 내용 | 배포 주의 |
+|---|---|---|
+| M-U10-a | `visit_check` + `completion_source` · `auto_suppressed_at` · 백필 `MANUAL` · CHECK `(completed_at IS NULL) = (completion_source IS NULL)` | ★ **롤링 배포 창 위험** — 새 파드가 기동하며 Flyway를 돌린 뒤에도 옛 파드가 잠시 요청을 받는다(`maxUnavailable: 0, maxSurge: 1`). 옛 코드는 완료를 쓸 때 `completion_source`를 채우지 않으므로 **CHECK가 그 쓰기를 거절한다**(그 창의 수동 [방문 완료]가 500). → **확장/수축 2단계**: 이번 배포 = 컬럼 추가 + 백필(CHECK 없음), **옛 파드가 사라진 다음 배포** = CHECK 추가(그 직전 재백필 포함). `NOT VALID`는 기존 행 검사만 건너뛸 뿐 **새 쓰기는 검사하므로** 이 창을 막지 못한다 |
+| M-U10-b | `actual_route_day` 신설 | 옛 파드 무관 |
+| M-U10-c | `location_automation_interval` 신설 + 인덱스 `(trip_id, kind, started_at)` | 옛 파드 무관 |
+
+- 번호는 머지 시점 최신(현재 `V2.62__trip_day_window.sql`) 다음으로 배정한다 — 열린 PR·untracked 초안까지 보고 정한다(FD §9).
+- 실행 경로는 기존 그대로 — 백엔드 기동 시 Flyway(롤 `app_migrate`, `application.yml` `spring.flyway.user`).
+- **권한 마이그레이션 불필요**: `V1.7__grants.sql`의 `ALTER DEFAULT PRIVILEGES … GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user`가 새 테이블에 파기용 DELETE를 준다. `location_legal_log`의 append-only 권한은 건드리지 않는다.
+- 용량: 하루치 경로 1행이 수십 KB 이하라 RDS 스토리지 자동 확장 상한(dev 100GiB) 대비 무시할 수준이다. 보존은 여행 기록 수명(여행 삭제 CASCADE · L3 철회 파기)이다.
+
+### U10.5 클라이언트 배포 — EAS 프로필 (tech-stack 델타 3)
+
+```
+frontend/eas.json  build
+  production              (현행 그대로 = 플래그 OFF)
+  production-automation   { "extends": "production",
+                            "env": { "TRIPPILOT_LOCATION_AUTOMATION": "1" } }
+frontend/eas.json  submit
+  production-automation   (production 과 같은 ascAppId 6819041997)
+```
+
+- 부모 env(`EXPO_PUBLIC_API_BASE_URL`·`SENTRY_DISABLE_AUTO_UPLOAD`)를 상속하는지 **구현 시 해석 결과로 확인한다**(`eas config --profile production-automation`). 상속되지 않으면 두 키를 명시한다 — API 주소가 비면 운영 빌드는 로드 시점에 실패한다(`frontend/src/shared/api/index.ts`).
+- 플래그는 비밀이 아니므로 EAS 환경 시크릿이 아니라 `eas.json` env에 둔다. 서버 API 주소는 두 프로필이 같다(같은 dev 운영 스택 — §12 Q1).
+- **신규 네이티브 의존(`expo-task-manager`) + 권한 표면 변경이라 두 프로필 모두 새 빌드**가 필요하다. OTA가 없으므로 롤백 = OFF 빌드 재제출(STORE-U10-06) + 서버 킬 스위치(U10.2).
+- 개발 빌드(dev client)는 EAS 프로필을 더하지 않고 로컬 `TRIPPILOT_LOCATION_AUTOMATION=1 pnpm expo prebuild` → `pnpm expo run:ios`로 만든다(U10 tech-stack §4).
+- `appVersionSource: remote` + `autoIncrement`라 빌드 번호는 두 프로필이 한 줄로 이어 쓴다. STORE-U10-06의 "ON 빌드 버전 번호 분리"를 무엇으로 할지(마케팅 버전 분리 방식)는 출시 티켓 몫으로 남긴다.
+
+### U10.6 관측 — §12 Q3 결정과의 관계
+
+NFR Req Q11=A는 원천을 둘로 갈랐다 — ① DB 질의(OBS-U10-01~05) ② Micrometer 카운터 + **같은 내용의 구조화 INFO 로그 1줄**(OBS-U10-06~10). §12 Q3=A는 **CloudWatch 컨테이너 로그 + 최소 알람**을 고르고 앱 메트릭·트레이스(OTel, G-05)는 범위 밖에 두었다. 그래서:
+
+| 원천 | 운영에서 실제로 보는 곳 | 전제 |
+|---|---|---|
+| ② 카운터 | **보이지 않는다**(EKS에서 OTLP 꺼짐 — §4.6) | G-05가 풀리면 그때부터 |
+| ② 구조화 로그 | **운영 원천.** CloudWatch Logs Insights 질의로 센다 | §12.1 후속 #1(컨테이너 로그 켜기 · 보존 90일) |
+| ① DB 질의 | 수동 질의 | 질의 실행 경로(아래 미결) |
+
+- **로그 형식 규약**: 사건마다 INFO 1줄, 고정 접두 `u10.` + `key=value`(예: `u10.auto_event kind=ARRIVE completionSource=- outcome=APPLIED`). **좌표·계정 id 없음**(LEGAL-U10-04 · SEC-U10-05) — `intervalId`·건수·사유까지만. 이 규약 덕에 보존 90일 로그 그룹이 위치정보를 담지 않는다.
+- **새 알람은 두지 않는다.** U10 품질 목표(되돌리기율 · 당일 전달률 — NFR Req §7)는 주기 검토 지표이지 호출(page) 대상이 아니다. 킬 스위치 상태 변경은 배포 기록이 곧 감사 흔적이다.
+- ★ **출시 순서 권고**: 플래그 ON 외부 배포는 §12.1 후속 #1(컨테이너 로그) **뒤**에 둔다 — 그 전에는 OBS-U10-06~10과 당일 전달률(REL-U10-04)을 운영에서 셀 수단이 없어, NFR Req §9 재평가 트리거가 발동할 수 없다. STORE·LEGAL-U10 게이트 체크리스트에 한 줄로 더한다.
+- 클라이언트(Sentry)는 변경 없음 — 백그라운드 태스크 오류는 사유 코드만 보낸다(P-BG-U10 · SEC-U10-05).
+
+### U10.7 확장 기준선 · 간극 표에 미치는 영향
+
+- §9 판정은 **바꾸지 않는다** — U10은 새 자원을 만들지 않고, 위치 데이터 보호는 앱·DB 층(INV-U10-2 · 법정 로그 · 파기)에서 진다.
+- §10 간극 중 U10이 **의존**하는 것: G-04(로그 수집 — U10.6 운영 원천) · G-05(카운터) · G-07(롤백 핀 — 킬 스위치 반영 지연). 새 간극은 없다.
+
+### U10.8 미결
+
+| ID | 미결 | 처리 |
+|---|---|---|
+| I-U10-1 | OBS-U10-01~05 **DB 질의를 운영에서 어디서 돌리나** — RDS는 격리 서브넷이고 bastion이 없다 | 후보: `runtime.py` 꼴의 일회성 읽기 Job · 읽기 전용 롤. 출시 체크리스트 전에 팀 결정 |
+| I-U10-2 | M-U10-a 2단계 사이에 옛 코드 경로가 남지 않는지(수동 완료 쓰기가 전부 `completion_source`를 채우는 코드가 먼저 배포됐는지) | 구현 PR 리뷰 — CHECK 마이그레이션은 그 확인 뒤 |
+| I-U10-3 | ON 빌드 마케팅 버전 분리 방식(STORE-U10-06) | 출시 티켓 |
