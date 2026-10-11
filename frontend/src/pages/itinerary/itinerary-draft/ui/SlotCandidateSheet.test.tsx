@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import {
   fireEvent,
   render,
@@ -299,32 +297,6 @@ describe('🔴 SlotCandidateSheet — scrim·바텀시트 복귀(AC-1·D3)', () 
     // scrim 존재는 심판(구조), 실제 화면 덮음·터치 차단은 6-b 실기 몫.
     fireEvent.press(screen.getByTestId('itinerary-candidate-scrim'));
     expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('S15 · git mv 부재 확정 + 시트가 바텀시트로 복귀했다(소스 스캔)', () => {
-    const resolve = (rel: string) => path.resolve(rel);
-
-    // 부재 — 개명·삭제된 옛 파일들(green 단계에서 implementer 가 git rm/mv).
-    expect(
-      fs.existsSync(resolve('src/features/itinerary/ui/SlotCandidatePanel.tsx'))
-    ).toBe(false);
-    expect(
-      fs.existsSync(resolve('src/features/itinerary/ui/OptionSwapScreen.tsx'))
-    ).toBe(false);
-    expect(
-      fs.existsSync(
-        resolve('src/pages/itinerary-option-swap/ui/OptionSwapPage.tsx')
-      )
-    ).toBe(false);
-
-    // 반전 앵커 — 이 시트는 바텀시트를 **다시** 문다(옛 인라인 패널의 "import 0" 단언을 뒤집는다).
-    const source = fs.readFileSync(
-      resolve('src/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet.tsx'),
-      'utf8'
-    );
-    expect(source).toContain('@gorhom/bottom-sheet');
-    // 긍정 짝 — 파일을 실제로 읽었고 시트 루트를 그린다(공허 통과 방지).
-    expect(source).toContain('itinerary-candidate-sheet');
   });
 });
 

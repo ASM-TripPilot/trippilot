@@ -321,8 +321,7 @@ const DEAD_HANDLER = [
 module.exports = defineConfig([
   expoConfig,
   {
-    // .claude/** = 에이전트·스킬·Workflow 스크립트(dictate.js 등). 워크플로 JS는 최상위 await/return을
-    // 쓰는 런타임 스크립트라 일반 ESM 린트 대상이 아니다(파싱 에러). 앱 소스 아님 → 린트 제외.
+    // .claude/** = 에이전트·스킬 문서와 스크립트. 앱 소스 아님 → 린트 제외.
     ignores: ['dist/*', '.expo/*', 'ios/*', 'android/*', 'web/*', '.claude/**'],
   },
   {

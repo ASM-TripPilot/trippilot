@@ -7,7 +7,6 @@ import { PLACEHOLDER_PHOTOS } from '@/shared/ui/placeholders';
 
 import type {
   HomeCollectionCard,
-  HomeItineraryCard,
   HomeMagazineHero,
   HomePhase,
   HomeScreenProps,
@@ -113,20 +112,13 @@ const SPOTS: readonly HomeSpotCard[] = [
   { title: '황령산 전망대', tag: '#야경명소', imageUrl: SPOT_IMAGES[3] },
 ];
 
-const ITINERARIES: readonly HomeItineraryCard[] = [
-  { title: '부산 미식 3일 코스', nights: '2박 3일' },
-  { title: '해운대 오션뷰 힐링', nights: '2박 3일' },
-  { title: '로컬 시장 & 카페', nights: '1박 2일' },
-];
-
 const READY_SECTIONS: HomeSections = {
   kind: 'ready',
   collections: COLLECTIONS,
   spots: SPOTS,
-  itineraries: ITINERARIES,
 };
 
-/** AC-1 · 정상(ready) — 인사·검색·영감 hero·섹션 3종·온램프 전부. */
+/** AC-1 · 정상(ready) — 인사·검색·영감 hero·섹션 2종·온램프 전부. */
 export const HOME_DEFAULT_PROPS: HomeScreenProps = {
   hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,

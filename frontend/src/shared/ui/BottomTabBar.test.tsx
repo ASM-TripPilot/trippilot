@@ -1,6 +1,3 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { BlurView } from 'expo-blur';
 import type { ReactTestInstance } from 'react-test-renderer';
@@ -160,43 +157,6 @@ describe('BottomTabBar — 활성 무회귀 (TRIP-1104 AC-3)', () => {
         screen.getByText(TAB_LABELS[key]).props.className
       ).split(/\s+/);
       expect(classes).toContain('text-primary');
-    });
-  });
-});
-
-describe('BottomTabBar.tsx 주석 — 확정값 표기 (TRIP-1104 AC-4 · 소스 스캔)', () => {
-  const SOURCE = readFileSync(join(__dirname, 'BottomTabBar.tsx'), 'utf8');
-
-  // `<BlurView` 줄과 `intensity=` 줄 사이의 `//` 주석 줄만 꺼낸다(없으면 null).
-  function blurComment(source: string): string | null {
-    const lines = source.split('\n');
-    const start = lines.findIndex((l) => l.trim().startsWith('<BlurView'));
-    const end = lines.findIndex(
-      (l, i) => i > start && /^\s*intensity=/.test(l)
-    );
-    if (start < 0 || end < 0) return null;
-    return lines
-      .slice(start + 1, end)
-      .filter((l) => l.trim().startsWith('//'))
-      .join('\n');
-  }
-
-  it('"캘리브레이션 노브" 표기가 사라지고, intensity 바로 위 주석이 확정값과 근거(60~80 범위·기기)를 적는다', () => {
-    const comment = blurComment(SOURCE);
-
-    expect(comment).not.toBeNull();
-    expect({
-      calibrationKnob: SOURCE.includes('캘리브레이션 노브'),
-      confirmed: comment?.includes('확정'),
-      range: comment?.includes('60~80'),
-      device: comment?.includes('기기'),
-      ponytailMarker: comment?.includes('ponytail:'),
-    }).toEqual({
-      calibrationKnob: false,
-      confirmed: true,
-      range: true,
-      device: true,
-      ponytailMarker: false,
     });
   });
 });

@@ -79,27 +79,6 @@ export function LockGlyph({
   );
 }
 
-// h24 편집 카드 드래그 핸들 ⋮⋮(18) — Figma `1896:1083`. 6점(2열×3행) 회색. 롱프레스로 드래그를
-// 잡는 손잡이라 어포던스가 은은한 muted-soft 다(비고정 슬롯에만 붙는다).
-export function DragHandleGlyph({ size = 18, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 18 18"
-      fill="none"
-    >
-      <Circle cx={6.5} cy={4.5} r={1.4} fill={MUTED_SOFT} />
-      <Circle cx={11.5} cy={4.5} r={1.4} fill={MUTED_SOFT} />
-      <Circle cx={6.5} cy={9} r={1.4} fill={MUTED_SOFT} />
-      <Circle cx={11.5} cy={9} r={1.4} fill={MUTED_SOFT} />
-      <Circle cx={6.5} cy={13.5} r={1.4} fill={MUTED_SOFT} />
-      <Circle cx={11.5} cy={13.5} r={1.4} fill={MUTED_SOFT} />
-    </Svg>
-  );
-}
-
 // h24 [장소 추가] 버튼 플러스(18) — Figma `1896:1083`. h24 버튼 글자와 같은 ink 가 기본이고,
 // h19 빈 밴드 원(primary-pale)엔 primary, primary 버튼(장소 검색 CTA·h20 추가)엔 white 로 스냅
 // 한다(같은 도형, 색만 — LockGlyph·FullAiGlyph 의 tone 패턴 계승, 기본값이 기존 h24 렌더 불변).
@@ -745,49 +724,6 @@ export function CarGlyph({ size = 16, testID }: GlyphProps) {
       />
       <Circle cx={5} cy={12.5} r={1} fill={MUTED} />
       <Circle cx={11} cy={12.5} r={1} fill={MUTED} />
-    </Svg>
-  );
-}
-
-// "지도 크게 보기" 확대 아이콘(14) — TRIP-354 Q5. Figma `2246:1989` pill. 네 귀 화살표(maximize)
-// 를 손으로 재구성. pill 글자와 같은 ink.
-export function ExpandGlyph({ size = 14, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-    >
-      <Path
-        d="M6 3H3V6"
-        stroke={INK}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 3H13V6"
-        stroke={INK}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M6 13H3V10"
-        stroke={INK}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 13H13V10"
-        stroke={INK}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
     </Svg>
   );
 }

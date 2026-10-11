@@ -49,10 +49,10 @@ import { DraftScreen } from './DraftScreen';
  * 바깥 describe 로 붙였다. 지도 목은 셋 다 같은 관찰 마커라 최상위 하나다.
  */
 
-// 지도를 관찰 마커로 바꾼다. 실물 `KakaoMapView` 는 JS 키가 없는 jest 환경에서 무조건
+// 지도를 관찰 마커로 바꾼다. 실물 `MapView` 는 지도 Client ID 가 없는 jest 환경에서 무조건
 // `map-failure` 로 떨어져 `pins` 가 어디로도 흐르지 않는다(그 컴포넌트 머리말). 목은 남는 props 를
 // 그대로 통과시키므로 `map-root` 의 props 에서 읽는다.
-// ⚠️ 구현이 `@/shared/map/KakaoMapView` 로 딥 임포트하면 이 목이 안 붙는다 —
+// ⚠️ 구현이 `@/shared/map/MapView` 로 딥 임포트하면 이 목이 안 붙는다 —
 //    배럴 경유를 잠그던 `itineraryDraftStructure` G5 는 TRIP-1145 로 지웠다(02a ★9).
 // 인라인 팩토리로 두면 NativeWind babel 의 `_ReactNativeCSSInterop` 참조가 jest 호이스트 규칙을
 // 위반한다 — 그래서 모듈 스코프 파일을 require 한다(리포 선례와 동형).

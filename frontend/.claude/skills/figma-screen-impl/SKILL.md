@@ -105,7 +105,7 @@ testID가 green이어도 화면은 와이어프레임일 수 있다(jest가 못 
 **성격 — 반자동이다.** 렌더·캡처·Figma대조는 명령으로 자동, **비교·수정은 구현자**가 한다. 대조는 *"어디가 다르다"*만 주고 *"어떻게 고칠지"*는 코드 추론이다. 픽셀 동일까지 자동 수렴하는 옵티마이저가 아니다 — RN 네이티브 렌더 ≠ Figma 벡터 렌더라 픽셀 0은 원천적으로 불가(그래서 목표가 90~98%). 수렴하는 이유는 매 패스 구현자가 근거 있는 수정을 넣기 때문이다.
 
 1. **대상 화면 조준** — 프리뷰 하네스(`src/app/_dev/preview.tsx`)가 딥링크 `trippilot://_dev/preview?state=<키>`로 화면을 격리 렌더한다(알 수 없는 키는 splash로 폴백).
-2. **앱 스크린샷** — `scripts/dev-preview-capture.sh <키>`(cwd `frontend/`, 부팅된 시뮬레이터·설치된 앱·Metro 필요)가 키마다 재기동→진입→캡처→상단 dev 오버레이 크롭까지 한다. 출력 `_workspace/preview-capture/<키>.png`. 오버레이가 상단 ~156pt를 덮으므로 헤더대는 이 경로로 대조하지 못한다(`verify-gates` 자동 육안 게이트의 한계와 같다).
+2. **앱 스크린샷** — 키마다 `xcrun simctl terminate booted com.trippilot.travel` → `xcrun simctl openurl booted "trippilot://_dev/preview?state=<키>"` → 7초 대기 → `xcrun simctl io booted screenshot <리포 루트>/_workspace/preview-capture/<키>.png`. **키마다 재기동이 필수다** — 프리뷰는 진입 시 딥링크 상태를 1회만 읽는다(traps-shell). 상단 dev 오버레이(~156pt, @3x ≈ 470px)는 대조 시 무시하거나 잘라 본다. 시뮬 부팅·앱 설치·Metro(8081) 중 하나라도 없으면 실행 불가(FAIL 아님, §0 정신). 오버레이가 상단 ~156pt를 덮으므로 헤더대는 이 경로로 대조하지 못한다(`verify-gates` 자동 육안 게이트의 한계와 같다).
 3. **Figma 기준** — `get_screenshot(node, contentsOnly:true, maxDimension:1600)` → 반환된 URL을 **즉시** `curl -sL -o "<스크래치패드>/fig-<키>.png" "<url>"`. ⚠️ 이 URL은 **단시간 만료**다(에셋 URL의 7일과 다르다 — 훨씬 짧으니 바로 받는다).
 4. **나란히 대조** — 두 PNG를 Read로 나란히 놓고 **어긋남을 목록화**(누락 요소·간격·색·크기·정렬·폰트·모양). **행위 테스트가 신경 안 쓰는 요소가 먼저 빠진다** — 상단 내비바·보조 링크(`보기>`)·배지 pill·부제·필드 라벨·긍정 상태 메시지·아이콘 vs 텍스트를 특히 확인.
 5. **코드 수정 → 2로 복귀** → 어긋남 목록 빌 때까지 반복. 목표 **90~98%**(한눈에 구별 불가) — 문자 그대로 100% 픽셀은 RN 렌더 한계로 보장 못 함.

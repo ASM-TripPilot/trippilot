@@ -14,7 +14,7 @@ import type {
  *  - `buildGeofenceRegions(slots, date)` = 좌표가 있는 슬롯만 리전으로(결측 좌표는 울타리 못 침).
  *
  * ⚠️ 실제 네이티브 발화(startGeofencingAsync)는 이번 범위 밖 — degrade 스텁으로 정직하게 남긴다.
- * `useActualRoute.ts`(TRIP-397)가 네이티브 미배선 자리를 armed:false 로 남긴 선례와 동형.
+ * 옛 `useActualRoute.ts`(TRIP-397, TRIP-746로 삭제)가 네이티브 미배선 자리를 armed:false 로 남긴 선례와 동형.
  */
 
 export interface GeofenceRegion {

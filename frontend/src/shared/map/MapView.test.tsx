@@ -20,7 +20,7 @@ import type { MapCenter, MapPin } from '@/shared/map';
  */
 
 // no-dynamic-env-var(eslint-plugin-expo) 회피 — 선언과 대입을 분리한다(computed 접근이
-// 선언과 한 문장이면 룰에 걸린다, KakaoMapView.viewOnly.test.tsx 선례).
+// 선언과 한 문장이면 룰에 걸린다, 옛 KakaoMapView.viewOnly.test.tsx 선례).
 const CLIENT_ID_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
 let ORIGINAL_CLIENT_ID: string | undefined;
 ORIGINAL_CLIENT_ID = process.env[CLIENT_ID_KEY];

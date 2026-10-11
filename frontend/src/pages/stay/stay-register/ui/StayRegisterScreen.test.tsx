@@ -37,7 +37,7 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
    * 렌더로 못 보는 소스 층(FSD 경계·raw hex·testID 존재)을 보던 `stayRegisterStructure`는
    * TRIP-1145 로 지웠다 — 이 파일은 렌더 결과만 본다(선례 `StaySearchScreen.states.test.tsx` 계승).
    *
-   * 지도는 목으로 바꾼다(02a ★5·★6): 실제 `KakaoMapView`는 jest 환경에 카카오 JS 키가 없어
+   * 지도는 목으로 바꾼다(02a ★5·★6): 실제 `MapView`는 jest 환경에 지도 Client ID 가 없어
    * 항상 실패 표면으로 떨어지므로 `center`가 어디로도 흐르지 않는다. 목이 좌표를 텍스트로
    * 노출해 "고른 후보의 좌표가 지도로 갔다"를 관찰 가능하게 만든다.
    * 인라인 팩토리로 두면 NativeWind babel의 `_ReactNativeCSSInterop` 참조가 호이스트 규칙을

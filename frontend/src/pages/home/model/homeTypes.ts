@@ -53,14 +53,6 @@ export interface HomeSpotsLane {
   onDismissSaveError?: () => void;
 }
 
-/** 섹션3 "여행자 일정" 카드 1장 — 사진 + 타이틀·박수 라벨. */
-export interface HomeItineraryCard {
-  /** '부산 미식 3일 코스' */
-  title: string;
-  /** '2박 3일' — 'N박 M일' 표기(소요시간 아님, INV-3) */
-  nights: string;
-}
-
 /** 상단 영감 카드(magazineHero) — 상태와 무관한 고정 블록(3상태 모두 렌더). */
 export interface HomeMagazineHero {
   /** '오늘의 여행 영감' — eyebrow pill 라벨 */
@@ -77,7 +69,7 @@ export interface HomeMagazineHero {
 
 /**
  * 판별 유니온(discriminated union) — kind 값에 따라 나머지 필드 구성이 달라진다.
- * 3섹션(컬렉션·스팟·일정)을 한 덩어리로 묶어 "부분 실패 시 전 섹션 동시 loading"을
+ * 2섹션(컬렉션·스팟)을 한 덩어리로 묶어 "부분 실패 시 전 섹션 동시 loading"을
  * 표현한다. 섹션별 독립 실패는 이 union으로는 표현 불가 — 상태 5종 티켓에서 필요 시 확장.
  */
 export type HomeSections =
@@ -85,7 +77,6 @@ export type HomeSections =
       kind: 'ready';
       collections: readonly HomeCollectionCard[];
       spots: readonly HomeSpotCard[];
-      itineraries: readonly HomeItineraryCard[];
     }
   | { kind: 'loading' };
 
