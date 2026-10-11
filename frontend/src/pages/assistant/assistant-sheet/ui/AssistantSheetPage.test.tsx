@@ -169,3 +169,69 @@ describe('AssistantSheetPage (TRIP-1322)', () => {
     expect(mockReplace).toHaveBeenCalledWith('/trips/t1/itinerary');
   });
 });
+
+describe('AssistantSheetPage · 카드 배선 (TRIP-1323)', () => {
+  it('검토 quick reply → 진행 검토 카드 + 문제 행, 해결 행동을 누르면 그 화면으로 간다', async () => {
+    renderPage();
+    await act(async () => {
+      fireEvent.press(
+        await screen.findByTestId('assistant-quick-reply-qr-review')
+      );
+    });
+    expect(
+      await screen.findByTestId('assistant-review-card')
+    ).toBeOnTheScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-review-fix-0'));
+    });
+    expect(mockReplace).toHaveBeenCalledWith('/trips/t1/itinerary/edit');
+  });
+
+  it('후보 카드를 누르면 서버가 발급한 PICK_CANDIDATE quick reply 로 보낸다', async () => {
+    renderPage();
+    const input = await screen.findByTestId('assistant-input');
+    fireEvent.changeText(input, '카페 다른 곳 추천해줘');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-send'));
+    });
+    const candidate = await screen.findByTestId(
+      'assistant-candidate-poi-bookcafe'
+    );
+    await act(async () => {
+      fireEvent.press(candidate);
+    });
+    await waitFor(() => expect(fake.calls.sendTurn).toBe(2));
+    expect(await screen.findByText(/조용한 카페로 바꾸면/)).toBeOnTheScreen();
+  });
+
+  it('예약 요청 → 외부 위임 카드, OTA 행동은 카드에만 한 번 있다(BR-U8-27)', async () => {
+    renderPage();
+    const input = await screen.findByTestId('assistant-input');
+    fireEvent.changeText(input, '이 숙소 지금 예약해줘');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-send'));
+    });
+    expect(await screen.findByTestId('assistant-scope-card')).toBeOnTheScreen();
+    expect(
+      screen.getByText(/예약·결제는 앱에서 못 하고 외부 사이트에서 진행돼요/)
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('assistant-next-action-OPEN_OTA')).toBeNull();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-scope-ota'));
+    });
+    expect(mockReplace).toHaveBeenCalledWith('/stays/stay-songjeong');
+  });
+
+  it('폴백 [도우미 없이 계속]은 시트를 닫는다(BR-U8-41)', async () => {
+    renderPage();
+    const input = await screen.findByTestId('assistant-input');
+    fireEvent.changeText(input, '조용한 동네 (응답 실패)');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-send'));
+    });
+    await act(async () => {
+      fireEvent.press(await screen.findByTestId('assistant-fallback-continue'));
+    });
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});

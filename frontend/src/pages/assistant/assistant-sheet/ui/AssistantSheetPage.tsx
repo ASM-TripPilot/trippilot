@@ -14,7 +14,7 @@ import {
   useSendTurn,
 } from '../model/assistantQueries';
 import { newClientTurnId } from '../model/clientTurnId';
-import { CAPABILITIES_LABEL, displayActions } from '../model/displayActions';
+import { CAPABILITIES_LABEL, displayMessage } from '../model/displayActions';
 import { nextActionRoute } from '../model/nextActionRoute';
 import { resolveSheetState } from '../model/resolveSheetState';
 import {
@@ -22,6 +22,7 @@ import {
   isSendableText,
   needsCapabilitiesChip,
 } from '../model/sheetModel';
+import { MessageCard } from './AssistantCards';
 import { AssistantSheetView } from './AssistantSheetView';
 
 /**
@@ -76,11 +77,7 @@ export function AssistantSheetPage({
   const ctx = { tripId: tripKey, surface };
   const rawMessages: readonly AssistantMessage[] =
     messagesQuery.data?.messages ?? session.data?.messages ?? [];
-  const messages = rawMessages.map((message) =>
-    message.role === 'ASSISTANT'
-      ? { ...message, nextActions: displayActions(message.nextActions, ctx) }
-      : message
-  );
+  const messages = rawMessages.map((message) => displayMessage(message, ctx));
   const quickReplies = currentQuickReplies(
     rawMessages,
     session.data?.quickReplies ?? []
@@ -112,6 +109,17 @@ export function AssistantSheetPage({
         ? { type: 'ACTION', quickReplyId: issued.id }
         : { type: 'TEXT', text: CAPABILITIES_LABEL }
     );
+  }
+
+  // 후보 카드 — 서버가 그 후보에 발급한 PICK_CANDIDATE quick reply 로만 보낸다(id 를 지어내지 않는다).
+  function handlePickCandidate(poiId: string): void {
+    const picked = rawMessages
+      .flatMap((message) => message.quickReplies ?? [])
+      .find(
+        (reply) =>
+          reply.action === 'PICK_CANDIDATE' && reply.params.poiId === poiId
+      );
+    if (picked) send({ type: 'ACTION', quickReplyId: picked.id });
   }
 
   function lastUserText(): string | null {
@@ -163,6 +171,13 @@ export function AssistantSheetPage({
       onClose={handleClose}
       onRetryOpen={() => void session.refetch()}
       repliesDisabled={sendTurn.isPending}
+      renderCard={(message) => (
+        <MessageCard
+          message={message}
+          onPressAction={handleAction}
+          onPickCandidate={handlePickCandidate}
+        />
+      )}
     />
   );
 }

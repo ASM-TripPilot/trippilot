@@ -607,12 +607,13 @@
 - `src/pages/assistant/assistant-sheet/model/cardModel.ts`  →  slotFaceLine
 - `src/pages/assistant/assistant-sheet/model/clientTurnId.ts`  →  newClientTurnId
 - `src/pages/assistant/assistant-sheet/model/composerLimit.ts`  →  COMPOSER_LIMIT
-- `src/pages/assistant/assistant-sheet/model/displayActions.ts`  →  CAPABILITIES_LABEL · CAPABILITIES_ACTION · displayActions
+- `src/pages/assistant/assistant-sheet/model/displayActions.ts`  →  CAPABILITIES_LABEL · CAPABILITIES_ACTION · displayActions · displayMessage
 - `src/pages/assistant/assistant-sheet/model/nextActionRoute.ts`  →  InternalAction · NextActionTarget · NextActionContext · nextActionRoute
 - `src/pages/assistant/assistant-sheet/model/resolveSheetState.ts`  →  SheetState · SheetSessionQuery · resolveSheetState
 - `src/pages/assistant/assistant-sheet/model/sheetModel.ts`  →  currentQuickReplies · needsCapabilitiesChip · isSendableText
 
 ## src/pages/assistant/assistant-sheet/ui/
+- `src/pages/assistant/assistant-sheet/ui/AssistantCards.tsx`  →  MessageCardHandlers · ReviewCard · CandidateCard · InfoCard · ScopeCard · RefusalNotice · FallbackNotice · ActionLogRow · cardConsumes · MessageCard
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetChrome.tsx`  →  AssistantSheetHeader · ContextChip · QuickReplyBar · Composer
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetGlyphs.tsx`  →  CloseGlyph · SendArrowGlyph · ChevronRightGlyph · WarningGlyph · InfoGlyph · RetryGlyph · CheckGlyph
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.tsx`  →  AssistantSheetPageProps · AssistantSheetPage
@@ -1637,4 +1638,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1005개 파일
+합계 1006개 파일

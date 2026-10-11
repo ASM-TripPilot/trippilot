@@ -1,7 +1,11 @@
 import fc from 'fast-check';
 
 import { NEXT_ACTION_TYPES, type NextAction } from '../api/assistantContract';
-import { CAPABILITIES_ACTION, displayActions } from './displayActions';
+import {
+  CAPABILITIES_ACTION,
+  displayActions,
+  displayMessage,
+} from './displayActions';
 import type { NextActionContext } from './nextActionRoute';
 
 /**
@@ -58,5 +62,35 @@ describe('displayActions (TRIP-1322)', () => {
       ),
       { examples: [[[]], [[{ type: 'OPEN_OTA', label: 'x', params: {} }]]] }
     );
+  });
+});
+
+describe('displayMessage (TRIP-1323)', () => {
+  it('진행 검토 문제 행의 해결 행동도 갈 수 없으면 "내가 할 수 있는 것"으로 바뀐다', () => {
+    const shown = displayMessage(
+      {
+        id: 'r',
+        role: 'ASSISTANT',
+        kind: 'REVIEW',
+        payload: {
+          title: 't',
+          summary: [],
+          problems: [
+            { reason: 'a', fixAction: act('OPEN_ITINERARY') },
+            { reason: 'b', fixAction: act('RESTORE_REVISION') },
+          ],
+        },
+        nextActions: [act('OPEN_ITINERARY')],
+        createdAt: '',
+      },
+      ctx
+    );
+    const problems = (
+      shown.payload as { problems: { fixAction: NextAction }[] }
+    ).problems;
+    expect(problems.map((p) => p.fixAction.type)).toEqual([
+      'OPEN_ITINERARY',
+      'SHOW_CAPABILITIES',
+    ]);
   });
 });

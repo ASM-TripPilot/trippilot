@@ -3,6 +3,7 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 
 import { SparkleGlyph } from '@/features/open-assistant';
 import type { AssistantMessage, NextAction } from '../api/assistantContract';
+import { cardConsumes } from './AssistantCards';
 import { ChevronRightGlyph } from './AssistantSheetGlyphs';
 
 /**
@@ -81,13 +82,18 @@ function AssistantMessageBlock({
   onPressAction: (action: NextAction) => void;
   renderCard?: (message: AssistantMessage) => ReactNode;
 }): ReactElement {
+  // 카드가 스스로 그린 행동(외부 위임 링크·폴백 다시 시도/계속)은 버튼 줄에서 뺀다.
+  const consumed = cardConsumes(message);
+  const buttons = message.nextActions.filter(
+    (action) => !consumed.includes(action.type)
+  );
   return (
     <View testID={`assistant-message-${message.id}`} className="gap-sm">
       {message.text ? <AssistantBubble text={message.text} /> : null}
       {renderCard?.(message)}
-      {message.nextActions.length > 0 ? (
+      {buttons.length > 0 ? (
         <View className="gap-sm">
-          {message.nextActions.map((action, index) => (
+          {buttons.map((action, index) => (
             <NextActionButton
               key={`${action.type}-${index}`}
               action={action}
