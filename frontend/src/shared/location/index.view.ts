@@ -14,3 +14,5 @@ export type { LocationPrepromptState } from './LocationPreprompt';
 export { LOCATION_ICON_COLORS } from './locationColors';
 export { revokeImpact } from './revokeImpact';
 export type { RevokeImpact } from './revokeImpact';
+export { routeDayForDate, routeDayToSegments } from './automation/routeLayer';
+export type { RouteDay } from './automation/sink';

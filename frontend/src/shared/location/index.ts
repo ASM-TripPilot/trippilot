@@ -20,3 +20,6 @@ export type {
 } from './automation/useLocationAutomation';
 export type { EngineStatus } from './automation/engine';
 export type { AutomationSlotRef, AutomationVisitRef } from './automation/store';
+export { useTripRoutes } from './automation/useTripRoutes';
+export { routeDayForDate, routeDayToSegments } from './automation/routeLayer';
+export type { RouteDay } from './automation/sink';
