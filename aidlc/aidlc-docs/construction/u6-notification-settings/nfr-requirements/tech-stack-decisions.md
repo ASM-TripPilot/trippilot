@@ -64,6 +64,8 @@
 | **야간 조용시간 스케줄러** | Q1=B — **그냥 발송**(LEGAL-U6-01) | **광고성 알림 종류 추가 시 즉시**(LEGAL-U6-03) · 이탈/CS 관측 시 |
 | **Redis** | U1 결정의 보류 상태 유지. 토글·상한 카운터는 DB로 충분 | 발송량 상한 카운팅이 DB 부하가 될 때 |
 
+> **[개정 · 2026-10-12 · Infra 결정]** "U1 결정의 보류 상태"(위 표와 §1 캐시 행)는 이제 **철회**다(Infra Q5=A — ElastiCache 제거). U6 결론(DB 로 충분)과 재평가 조건은 그대로다. 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
+
 > **[개정 · 2026-10-12] dead-letter 행 보강.** 백오프는 `attempts` 계산이 아니라 `next_attempt_at` 컬럼(V2.45)으로 조회한다(nfr-requirements REL-U6-01 개정분, TRIP-845).
 
 ---

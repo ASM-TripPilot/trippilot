@@ -94,6 +94,8 @@ U1 (backend modules)
 | 위치 동의·법정 로그 | U0/V1.3 | '내 주변' 이용 사실 append-only 기록(LEGAL-U1-02) — 신규 테이블 없음 |
 | **Redis** | **신규(Q8=B)** | U0에 없던 유일한 인프라 추가 — 로컬 docker-compose에 컨테이너 추가 전제 |
 
+> **[개정 · 2026-10-12 · Infra 결정]** Redis 행은 **철회**됐다(Infra Q5=A — 앱 미사용 ElastiCache 를 제거하기로 결정). §1 횡단의 "Redis 캐시(신규)", 상태 "캐시는 Redis", 배치 완료 시 "Redis 키 무효화"도 함께 무효다. 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
+
 ## 4. 프론트엔드 논리 요소 (`frontend/README.md` 정본 하위)
 
 | 요소 | 책임 | NFR/PBT |

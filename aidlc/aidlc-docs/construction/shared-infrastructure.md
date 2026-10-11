@@ -136,6 +136,9 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 
 - **데이터 보호 축은 환경과 분리돼 있다**: `data_protection_enabled`(기본 `true`)가 RDS 삭제 보호, 백업 보존 14일(꺼지면 1일), EKS 삭제 보호, Secrets 복구 창 30일(꺼지면 7일)을 함께 정한다. 두 tfvars 모두 이 값을 덮어쓰지 않으므로 **dev 에서도 보호가 켜져 있다**(`variables.tf` · `data.tf` · `eks.tf` · `registry-secrets.tf`).
 - **dev 가 사실상 운영 환경이다**: §1 의 근거 세 곳(`variables.tf` 설명, `values-dev.yaml` 주석, `eas.json`)이 같은 사실을 가리킨다. prd 스택이 실제로 apply 됐는지는 코드로 알 수 없다 **[라이브 미확인]** → 계획서 Q1.
+
+> **[개정 · 2026-10-12 · Infra 결정]** Q1=A — **dev 스택이 운영을 겸한다**. prd 는 당분간 만들지 않고, 재평가 트리거(유료 매출 발생 · DAU 가 SCALE-01 가정의 30% 도달 · 월 가용성 99.5% 미달)에 걸리면 다시 묻는다. prd 미적용 여부의 라이브 확인은 후속 작업이다(§12).
+
 - **계정**: `vars.AWS_ACCOUNT_ID`(GitHub Environment 변수)로 주입된다. provider 의 `allowed_account_ids` 가 다른 계정 자격 증명을 거절한다(`versions.tf`). dev 와 prd 가 같은 계정인지 다른 계정인지는 리포에 없다 **[라이브 미확인]**(`docs/guides/aws-eks-deployment.md` 는 둘 다 가능하다고 적는다).
 - **부트스트랩**: CloudFormation 스택 `trippilot-<env>-bootstrap` 이 state 버킷, 클러스터·노드·AI 파드·CloudWatch 파드 역할, GitHub OIDC 배포 역할을 소유한다. 종료 보호가 켜져 있다(`.github/workflows/aws-bootstrap.yml` · `infra/bootstrap/template.json`).
 
@@ -171,6 +174,8 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 | Terraform state | S3 버전 관리, SSE AES256, 퍼블릭 차단, `aws:SecureTransport=false` 거부, native lockfile | `infra/bootstrap/template.json` `TerraformStateBucket`·`TerraformStateBucketPolicy` · `versions.tf` |
 | 오브젝트 스토리지(앱용) | **없음** — 사진 바이너리를 서버에 두지 않는 설계 | BR-U5-11(§3 근거) |
 | 데이터 수명 | 컨테이너 로그 그룹 보존 7·30일(켤 때), EKS 컨트롤플레인 로그 14·90일 | `eks.tf` `aws_cloudwatch_log_group.*` |
+
+> **[개정 · 2026-10-12 · Infra 결정]** ElastiCache Redis 는 Q5=A 로 **제거하기로 했다**(앱 미사용, U1 Q8=B 는 "보류 → 철회"). 운영 환경(dev)의 컨테이너 로그 보존은 Q3=A 로 **90일**로 올린다. 위 표는 결정 시점의 as-built 그대로이고, 코드 반영은 후속 작업이다(§12).
 
 - **법정 append-only 테이블**: DB 권한 수준(앱 롤 DELETE 없음)은 Flyway 마이그레이션이 소유하고, 인프라는 롤을 나누는 데까지만 맡는다(`bootstrap.sql` 의 `app_user`/`app_migrate` 분리, `application.yml` flyway user 분리).
 
@@ -209,6 +214,8 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 | 클라이언트 | Sentry React Native(`@sentry/react-native ~7.2.0`). DSN 은 `EXPO_PUBLIC_SENTRY_DSN` 이 있을 때만 초기화하고 `sendDefaultPii: false`. EAS 빌드는 소스맵 자동 업로드를 끈다 | `frontend/src/app/entrypoint/initSentry.ts` · `frontend/app.config.ts` · `frontend/eas.json` |
 | 합성·외부 감시 | 배포 직후 클러스터 내부 스모크 Job(gateway `/healthz`, backend readiness, ai `/health`) 1회. 매일 LLM 연결 스모크가 GitHub Actions 에서 돈다(배포된 API 를 감시하는 것은 아니다) | `deploy/eks/runtime_smoke.py` · `.github/workflows/ai-llm-smoke.yml` |
 | **알람·대시보드** | **없음** — Terraform·Helm 어디에도 `aws_cloudwatch_metric_alarm`·SNS·대시보드 정의가 없다 | `infra/terraform/stack/*.tf` 전수 · `deploy/eks/chart/templates/*` 전수 |
+
+> **[개정 · 2026-10-12 · Infra 결정]** Q3=A — CloudWatch 로 간다. `container_logs_enabled=true`(운영 dev 보존 90일), 최소 알람(5xx 비율 · RDS CPU·여유 스토리지·연결 수 · 파드 재시작/NotReady · OBS-02 리프레시 재사용 감지 로그 메트릭 필터)을 SNS → Slack 으로 보낸다. 담당자는 팀이 지정한다. 앱 메트릭·트레이스(G-05)는 범위 밖으로 남긴다. 위 표는 구현 전 as-built 이다(§12).
 
 ### 4.7 Shared Infrastructure
 
@@ -280,6 +287,8 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 | DB 마이그레이션 | 되돌리지 않는다(Flyway forward-only). expand-and-contract 규약이 롤백 가능성을 보장한다 | `u0-foundation/nfr-design/nfr-design-patterns.md` P-DEP-3 |
 | 인프라 변경 | Helm 롤백 대상이 아니다. Terraform 을 다시 apply 한다 | `docs/guides/aws-eks-deployment.md` |
 | 데이터 유실 | RDS PITR(보존 14일)·최종 스냅숏·자동 백업 보존 | `data.tf` |
+
+> **[개정 · 2026-10-12 · Infra 결정]** Q6=B — **버전 핀 재배포를 구현한다**. `aws-deploy.yml` 에 기존 ECR 태그를 받는 입력을 추가해, 지정하면 빌드 없이 그 태그로 Helm 을 돌린다(ECR `IMMUTABLE` 이라 이전 이미지가 보존된다). `--atomic` 은 롤아웃 실패의 1차 안전망으로 유지한다. 구현 전까지는 위 표의 "revert 커밋 → 재배포"가 잠정 절차다. 목표 RTO 4시간 · RPO 15분(Q4=A)은 위 "데이터 유실" 행의 PITR 로 달성하며, 복원 리허설 1회로 근거를 만든다(§12).
 
 ---
 
@@ -356,6 +365,8 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 | RESILIENCY-14 복원력 테스트 | **확인 불가** | RT-8·9·10(`nfr-design-patterns.md` §6) 실행 기록이 리포에 없다 |
 | RESILIENCY-15 장애 대응 | **범위 밖** | 경량 대응 + COE(Q6=B). 인프라 산출물은 없다 |
 
+> **[개정 · 2026-10-12 · Infra 결정]** 위 두 표의 판정은 **바꾸지 않는다** — 결정만으로 기준선이 충족되지는 않고, 판정은 후속 구현이 끝난 뒤 다시 매긴다. 결정으로 바뀐 것은 미결 상태다. SECURITY-14 · RESILIENCY-05·07(Q3), RESILIENCY-02·12(Q4), RESILIENCY-04(Q6), RESILIENCY-08(Q1·Q2 — 단일 AZ 데이터 계층을 수용하고 AVAIL-01 을 99.5% 로 낮췄다)가 "결정됨 — 구현 대기"로 넘어갔다. 결정 내용은 §12 에 있다.
+
 ---
 
 ## 10. 관측된 간극 (Gap)
@@ -364,13 +375,13 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 
 | ID | 간극 | 증거 | 영향 |
 |---|---|---|---|
-| **G-01** | **Redis 를 프로비저닝했지만 쓰지 않는다** | 인프라: `data.tf` `aws_elasticache_replication_group.redis`, `backend.yaml` 이 `REDIS_HOST`·`SPRING_DATA_REDIS_*` 주입. 앱: `backend/gradle/libs.versions.toml` 에 Redis 클라이언트 없음, `modules/accommodation-search/build.gradle.kts:2` "Redis 캐시는 실 벤더 어댑터 단계", `docs/guides/aws-eks-deployment.md` "backend 에는 Redis adapter 구현이 없어", `backend/docs/design/work-graph.toml:2509` "Redis 유휴(TRIP-895)". 설계 3개가 서로 다르다: U0 미도입(`u0-foundation/nfr-design/nfr-design-patterns.md` §9) → U1 도입(`u1-.../tech-stack-decisions.md` U1-TS-4) → U6 "보류 상태 유지"(`u6-.../tech-stack-decisions.md`) | 비용만 나간다(prd 이면 노드 3개). TLS·SG 를 갖춘 공격면이 놀고 있다. 문서와 실제가 어긋난다 → 계획서 Q5 |
-| **G-02** | **실사용 트래픽이 dev 스택에 있고, dev 데이터 계층은 단일 AZ 다** | `variables.tf` 설명 "스토어 출시를 dev 스택으로 받기로(2026-10-04)", `values-dev.yaml` "prd 신설은 비용 보류", `eas.json` production → `api-dev`. dev: `multi_az = local.production`(false), Redis `num_cache_clusters` 1, `single_nat_gateway=true` | AVAIL-01(99.9%, 다중 AZ 전제)과 SCALE-03 을 데이터 계층이 충족하지 못한다. AZ 장애 때 RDS 를 복구하는 동안 서비스가 중단되고, NAT 가 하나라 이그레스도 단일 장애점이다 → 계획서 Q1·Q2 |
-| **G-03** | **알람·알림 라우팅이 0건이다** | `infra/terraform/stack/*.tf` 에 `aws_cloudwatch_metric_alarm`·`aws_sns_topic` 없음, 차트에도 없음 | U0 OBS-02(보안 이벤트 5분류 — "수집·라우팅은 Infra Design 이연")가 미해소다. SECURITY-14 와 RESILIENCY-05·07 도 간극으로 남는다 → 계획서 Q3 |
-| **G-04** | **컨테이너 로그 중앙 수집이 꺼져 있다** | `environments/dev.tfvars`·`prd.tfvars` `container_logs_enabled = false`(주석: 2026-10-03 기준 cloudwatch-pod 역할 부재). `eks.tf` 주석 "Container stdout is otherwise reachable only through kubectl". 그런데 `docs/guides/aws-eks-deployment.md` 는 "Pod 로그는 … CloudWatch Logs 에서 본다"고 적는다(**문서 드리프트**). 켜도 보존은 7·30일이다 | 사고 뒤 로그를 추적하기 어렵다(파드가 교체되면 로그도 사라진다). SECURITY-03·14(90일) 간극. 라이브에서 켰는지는 **[라이브 미확인]** → 계획서 Q3 |
+| **G-01** | **Redis 를 프로비저닝했지만 쓰지 않는다** | 인프라: `data.tf` `aws_elasticache_replication_group.redis`, `backend.yaml` 이 `REDIS_HOST`·`SPRING_DATA_REDIS_*` 주입. 앱: `backend/gradle/libs.versions.toml` 에 Redis 클라이언트 없음, `modules/accommodation-search/build.gradle.kts:2` "Redis 캐시는 실 벤더 어댑터 단계", `docs/guides/aws-eks-deployment.md` "backend 에는 Redis adapter 구현이 없어", `backend/docs/design/work-graph.toml:2509` "Redis 유휴(TRIP-895)". 설계 3개가 서로 다르다: U0 미도입(`u0-foundation/nfr-design/nfr-design-patterns.md` §9) → U1 도입(`u1-.../tech-stack-decisions.md` U1-TS-4) → U6 "보류 상태 유지"(`u6-.../tech-stack-decisions.md`) | 비용만 나간다(prd 이면 노드 3개). TLS·SG 를 갖춘 공격면이 놀고 있다. 문서와 실제가 어긋난다 → 계획서 Q5 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q5=A 제거. Terraform `aws_elasticache_*`·Redis SG·`redis_node_type`·`redis_host/port` 출력 삭제, Helm `config.redisHost/Port`·backend Redis env 삭제, `deploy/eks/runtime.py` 필수 출력에서 `redis_host` 삭제, 관련 tftest·python 테스트 갱신. |
+| **G-02** | **실사용 트래픽이 dev 스택에 있고, dev 데이터 계층은 단일 AZ 다** | `variables.tf` 설명 "스토어 출시를 dev 스택으로 받기로(2026-10-04)", `values-dev.yaml` "prd 신설은 비용 보류", `eas.json` production → `api-dev`. dev: `multi_az = local.production`(false), Redis `num_cache_clusters` 1, `single_nat_gateway=true` | AVAIL-01(99.9%, 다중 AZ 전제)과 SCALE-03 을 데이터 계층이 충족하지 못한다. AZ 장애 때 RDS 를 복구하는 동안 서비스가 중단되고, NAT 가 하나라 이그레스도 단일 장애점이다 → 계획서 Q1·Q2 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q1=A·Q2=A. 단일 AZ 데이터 계층을 수용하고 AVAIL-01 을 월 99.5% 로 낮췄다(U0 `nfr-requirements.md` 개정 블록). 인프라 변경은 없다. 남은 일: prd 미적용 라이브 확인, GitHub Environment `dev` 보호 규칙 확인·설정. |
+| **G-03** | **알람·알림 라우팅이 0건이다** | `infra/terraform/stack/*.tf` 에 `aws_cloudwatch_metric_alarm`·`aws_sns_topic` 없음, 차트에도 없음 | U0 OBS-02(보안 이벤트 5분류 — "수집·라우팅은 Infra Design 이연")가 미해소다. SECURITY-14 와 RESILIENCY-05·07 도 간극으로 남는다 → 계획서 Q3 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q3=A. 알람·SNS 토픽·Slack 연결을 Terraform 에 추가한다(5xx 비율, RDS CPU·여유 스토리지·연결 수, 파드 재시작/NotReady, OBS-02 리프레시 재사용 감지 로그 메트릭 필터). 담당자를 지정한다. |
+| **G-04** | **컨테이너 로그 중앙 수집이 꺼져 있다** | `environments/dev.tfvars`·`prd.tfvars` `container_logs_enabled = false`(주석: 2026-10-03 기준 cloudwatch-pod 역할 부재). `eks.tf` 주석 "Container stdout is otherwise reachable only through kubectl". 그런데 `docs/guides/aws-eks-deployment.md` 는 "Pod 로그는 … CloudWatch Logs 에서 본다"고 적는다(**문서 드리프트**). 켜도 보존은 7·30일이다 | 사고 뒤 로그를 추적하기 어렵다(파드가 교체되면 로그도 사라진다). SECURITY-03·14(90일) 간극. 라이브에서 켰는지는 **[라이브 미확인]** → 계획서 Q3 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q3=A. bootstrap 재실행(`cloudwatch-pod` 역할 생성) → `dev.tfvars` `container_logs_enabled=true`·보존 90일 → deploy. 가이드의 로그 서술을 실제와 맞춘다. |
 | **G-05** | **앱 메트릭·트레이스가 없다** | `backend.yaml` `OTEL_SDK_DISABLED=true`, exporter `none`, `OTEL_METRICS_ENABLED=false`. OTLP 수집기 없음(`eks.tf` 주석). 로컬 SigNoz 에만 있다(`deploy/README.md`) | p95(PERF-01)와 오류율을 운영에서 측정할 수단이 없다. RESILIENCY-05 간극 |
 | **G-06** | **NLB access log 가 없다** | `services.yaml` 주석·속성에 access log 설정 없음 | SECURITY-02 간극 |
-| **G-07** | **롤백 메커니즘이 NFR 선택과 다르다** | NFR: "이전 아티팩트 버전 재배포(버전 핀)"와 RT-9 롤백 리허설을 "최초 프로덕션 배포 전 1회 필수"로 정했다(`u0-.../nfr-design-patterns.md` P-DEP-3·§6). 실제: Helm `--atomic`(실패 시 자동) + "revert 커밋 후 재배포"(`docs/guides/aws-eks-deployment.md`). 워크플로에 이미지 태그 입력이 없다(`aws-deploy.yml`). RT-9 실행 기록이 리포에 없다 | 배포가 성공했는데 결함이 있을 때 복구하려면 다시 빌드해야 한다(빌드 시간만큼 RTO 가 늘어난다). RESILIENCY-04 는 롤백 방식을 사용자가 명시적으로 고르도록 요구한다 → 계획서 Q6 |
+| **G-07** | **롤백 메커니즘이 NFR 선택과 다르다** | NFR: "이전 아티팩트 버전 재배포(버전 핀)"와 RT-9 롤백 리허설을 "최초 프로덕션 배포 전 1회 필수"로 정했다(`u0-.../nfr-design-patterns.md` P-DEP-3·§6). 실제: Helm `--atomic`(실패 시 자동) + "revert 커밋 후 재배포"(`docs/guides/aws-eks-deployment.md`). 워크플로에 이미지 태그 입력이 없다(`aws-deploy.yml`). RT-9 실행 기록이 리포에 없다 | 배포가 성공했는데 결함이 있을 때 복구하려면 다시 빌드해야 한다(빌드 시간만큼 RTO 가 늘어난다). RESILIENCY-04 는 롤백 방식을 사용자가 명시적으로 고르도록 요구한다 → 계획서 Q6 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q6=B. `aws-deploy.yml` 에 이미지 태그 입력(존재·형식 검증, 지정 시 build-push 생략) 추가, `infra/tests/test_workflow_contracts.py` 계약 갱신, RT-9 롤백 리허설 1회와 기록. |
 | **G-08** | **backend 오토스케일이 없다** | `templates/hpa.yaml` 은 ai·gateway 만 다룬다. backend 는 `replicas` 고정(dev·prd 2). gateway HPA 는 꺼져 있고 prd ai HPA 도 꺼져 있다(`values-prd.yaml`) | NFR P-SCALE-1 "수평 오토스케일"과 SCALE-02 "10x 스파이크"를 고정 복제본 2개가 받아 내야 한다. 노드 확장(Auto Mode)은 HPA 없이는 파드 수를 늘리지 않는다 |
 | **G-09** | **VPC 엔드포인트가 없다** | `network.tf` 에 `aws_vpc_endpoint` 없음 | ECR pull·Secrets·Bedrock 트래픽이 NAT 를 지나 비용이 들고, dev 에서는 NAT 단일 장애점에 묶인다. SECURITY-07 "private endpoints" 권고 미충족 |
 | **G-10** | **JWT 알고리즘이 NFR 과 다르다** | NFR: ES256 + JWK 셋(`u0-.../nfr-requirements.md` SEC-01 · `tech-stack-decisions.md` §3). 실제: RS256, 배포 도구가 RSA 2048 PKCS#8 을 시드한다(`application.yml` `trippilot.jwt` 주석 · `runtime_secrets.py` `rsa_key`) | 인프라 결함은 아니다. 다만 시크릿 형식(키 종류)이 문서와 달라 키 롤오버 절차(P-SEC-2)를 다시 확인해야 한다 |
@@ -378,7 +389,7 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 | **G-12** | **NetworkPolicy 강제 여부가 확인되지 않는다** | 차트는 NetworkPolicy 를 정의한다(`network-policy.yaml`). 그러나 EKS Auto Mode 에서 네트워크 정책 강제를 켜는 구성(NodeClass·VPC CNI 설정)은 리포에서 찾지 못했다(`infra/`·`deploy/eks/` 검색 0건) | 강제가 꺼져 있으면 파드 간 격리가 서비스 토큰 하나에만 의존한다. 라이브에서 확인해야 한다 **[라이브 미확인]** |
 | **G-13** | **공급망 보강 항목이 빠져 있다** | 베이스 이미지 태그 고정(`backend/Dockerfile`·`ai/Dockerfile`·`ai/embedding/Dockerfile`), SBOM 단계 없음(`aws-deploy.yml`), GitHub Actions 는 메이저 태그 고정(`@v4` 등) | SECURITY-10 부분 충족 |
 | **G-14** | **테스트한 이미지와 배포 이미지가 다르다** | CI 는 GHCR 에 발행하고(`backend-ci.yml` 등), AWS 배포는 같은 커밋을 다시 빌드한다(`aws-deploy.yml` build-push) | 머지 게이트를 통과한 바이너리와 운영 바이너리가 같은 산출물이라는 보장이 없다(같은 소스, 다른 빌드) |
-| **G-15** | **RTO/RPO 와 복원 검증이 정의돼 있지 않다** | NFR 은 AVAIL-01(99.9%)만 정했다(`u0-.../nfr-requirements.md`). 백업은 있으나(`data.tf`) 복원 리허설 절차·기록이 없다 | RESILIENCY-02·12·13 간극 → 계획서 Q4 |
+| **G-15** | **RTO/RPO 와 복원 검증이 정의돼 있지 않다** | NFR 은 AVAIL-01(99.9%)만 정했다(`u0-.../nfr-requirements.md`). 백업은 있으나(`data.tf`) 복원 리허설 절차·기록이 없다 | RESILIENCY-02·12·13 간극 → 계획서 Q4 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q4=A. RTO 4시간 · RPO 15분으로 확정(U0 `nfr-requirements.md` 개정 블록). PITR 복원 리허설 1회(별도 인스턴스 복원 → 앱 연결 → 소요 시간 기록). 결과가 4시간을 넘으면 수치를 다시 묻는다. |
 | **G-16** | **배포 가이드 문서가 코드와 어긋난다** | `docs/guides/aws-eks-deployment.md` 표의 "DEV backend + AI 각 1 replica"는 `values-dev.yaml`(backend 2, ai HPA 2~3, gateway 2)과 다르다. 로그 서술도 다르다(G-04) | 운영자가 가이드를 믿으면 잘못 판단할 수 있다. 정본은 차트와 tfvars 다 |
 
 ---
@@ -386,3 +397,31 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 ## 11. 미결 항목
 
 코드로 답할 수 없는 항목은 `plans/shared-infrastructure-design-plan.md` 의 질문 Q1~Q6 으로 넘겼다(운영 환경 정체·dev 데이터 계층 AZ·관측/알림 소유·RTO/RPO·Redis 처분·롤백 방식). 답이 오면 이 문서의 해당 절과 §10 판정을 고친다.
+
+> **[개정 · 2026-10-12 · Infra 결정]** Q1~Q6 이 모두 정해졌다(2026-10-12, 사용자 일괄 지시 "그럼 권고로 ㄱㄱ" → AI 권고 적용). 결정과 후속 작업은 §12 에 있다. 이 절에 남은 미결은 없다. 다만 **[라이브 미확인]** 항목(prd apply 여부 · 계정 구성 · GitHub Environment 보호 · 라이브 시크릿 값 · NetworkPolicy 강제 G-12)은 결정이 아니라 확인 대상이라 그대로 남는다.
+
+---
+
+## 12. 확정 결정 (2026-10-12)
+
+> **결정 경위**: 계획서 `plans/shared-infrastructure-design-plan.md` Q1~Q6 에 권고 표시가 없는 상태에서, 사용자가 "그럼 권고로 ㄱㄱ"라고 일괄 지시했다. 그래서 AI 가 근거를 붙여 권고안을 골랐다. 근거 전문은 계획서 각 `[Answer]:` 에 있다. 선택 기준은 두 가지다. as-built 와 비용 기조(prd 신설 비용 보류, 2026-10-04)에 맞출 것, 그리고 라이브 스토어 앱에 안전하지 않은 간극은 받아들이지 않을 것.
+> **범위**: 아래 "후속 작업"은 팀이 각 패키지·인프라 디렉토리에서 직접 한다. AI-DLC 범위 밖이다(SCOPE: CONSTRUCTION 설계 문서만). 사용자 승인과 `audit.md`·`aidlc-state.md` 기록은 아직 하지 않았다.
+
+| Q | 결정 | 한 줄 근거 | 후속 작업 (팀) | 개정한 NFR 문서 |
+|---|---|---|---|---|
+| Q1 운영 환경 | **A** — dev 스택이 운영을 겸한다. prd 는 당분간 만들지 않는다 | 코드 세 곳이 같은 사실을 가리키고, 이전 시점 기록이 없다. 재평가 트리거: 유료 매출 · DAU 가 SCALE-01 의 30% · 99.5% 미달 | prd 미적용 라이브 확인 · GitHub Environment `dev` required reviewers · 가이드 "DEV" 서술 정정(G-16) | — |
+| Q2 dev 단일 AZ 데이터 계층 | **A** — 수용하고 AVAIL-01 을 월 **99.5%** 로 낮춘다 | 데이터 보호(PITR·삭제 보호·스냅숏)는 켜져 있어, AZ 장애 때 잃는 것은 데이터가 아니라 시간이다. RDS Multi-AZ 는 요금이 약 두 배 | 인프라 변경 없음. 트리거에 걸리면 `multi_az` 를 별도 변수로 분리(B) | U0 `nfr-requirements.md` AVAIL-01 · SCALE-03 |
+| Q3 관측·알림 | **A** — CloudWatch 로그 수집 + 최소 알람 → SNS → Slack, 담당자 지정 | SECURITY-14·RESILIENCY-05 는 blocking 이고, 라이브 앱에 알람 0건은 안전하지 않다. 애드온 분기·역할 정의가 이미 있어 비용이 작다 | bootstrap 재실행 → `container_logs_enabled=true`·보존 90일 → 알람·SNS Terraform → 담당자 지정 → 가이드 로그 서술 정정(G-04). OTel(G-05)은 범위 밖 | U0 `nfr-requirements.md` OBS-02 |
+| Q4 RTO/RPO | **A** — RTO 4시간 · RPO 15분, 복원 리허설 1회 | 현재 인프라(PITR 14일 + 수동 배포)로 낼 수 있는 값이다. B 는 Q2=A 와 충돌한다 | PITR → 별도 인스턴스 복원 리허설 1회와 소요 시간 기록. 4시간 초과면 다시 묻는다 | U0 `nfr-requirements.md` §4 (RTO/RPO 추가) |
+| Q5 Redis | **A** — 제거한다. U1 Q8=B "Redis 도입"은 "보류 → 철회" | 앱 클라이언트 0건, 구현 티켓 없음(TRIP-895 는 유휴 지적), U1 설계가 이미 PG 폴백 전제, 인증 없는 유휴 공격면 | Terraform `aws_elasticache_*`·SG·변수·출력 삭제, Helm `config.redis*`·backend env 삭제, `deploy/eks/runtime.py` `redis_host` 필수 제거, 테스트 갱신, compose redis 정리(선택) | U1 `tech-stack-decisions.md` U1-TS-4 · `nfr-requirements.md` · `nfr-design-patterns.md` P-PERF-U1-2 · `logical-components.md` |
+| Q6 롤백 방식 | **B** — 버전 핀 재배포를 구현한다. `--atomic` 은 1차 안전망으로 유지 | NFR(P-DEP-3·RT-9)이 이미 골랐고, ECR `IMMUTABLE` 로 이전 이미지가 보존된다. A 는 롤백마다 재빌드라 RTO 가 늘고 미검증 바이너리가 나간다 | `aws-deploy.yml` 이미지 태그 입력(검증·build-push 생략) · 워크플로 계약 테스트 갱신 · RT-9 리허설 1회. 구현 전에는 revert 재배포가 잠정 절차 | U0 `nfr-design-patterns.md` P-DEP-3 (구현 상태만 덧붙임) |
+
+### 12.1 후속 작업 목록 (팀, 우선순위 순)
+
+1. **관측 기준선(Q3)** — bootstrap 재실행 → 컨테이너 로그 켜기(보존 90일) → 최소 알람 + SNS → Slack → 담당자 지정. 라이브 앱의 안전 간극이라 가장 먼저 한다.
+2. **롤백 핀(Q6)** — `aws-deploy.yml` 이미지 태그 입력과 계약 테스트, 그리고 RT-9 리허설.
+3. **복원 리허설(Q4)** — PITR 복원 1회, 소요 시간 기록.
+4. **Redis 제거(Q5)** — Terraform·Helm·runtime·테스트. 제거 apply 는 dev 운영 스택에 대한 변경이므로 plan 을 먼저 검토한다.
+5. **운영 환경 정리(Q1)** — prd 미적용 라이브 확인, `dev` Environment 보호 규칙, 가이드 정정(G-04·G-16).
+
+이번 결정 범위 밖으로 남는 간극: G-05(앱 메트릭·트레이스), G-06(NLB access log), G-08(backend HPA), G-09(VPC 엔드포인트), G-10(JWT 알고리즘), G-11(푸시 기본 off), G-12(NetworkPolicy 강제), G-13(공급망), G-14(CI 이미지 ≠ 배포 이미지).

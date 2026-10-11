@@ -4,6 +4,8 @@
 > **상속(U0 확정 — 재정의 안 함)**: SCALE DAU 1만·피크 500세션·50RPS·10x / AVAIL 99.9% 단일리전·다중AZ / SEC JWT ES256·객체 인가 / OBS 구조화 JSON·상관ID·PII 마스킹·프론트 Sentry / 익스텐션 3종.
 > ⚠ **기준선 변경 1건**: Q8=B로 **Redis 도입** — U0의 "Redis 미도입(과설계 회피)"을 U1에서 뒤집는다. 파급은 `tech-stack-decisions.md` §3·§5.
 
+> **[개정 · 2026-10-12 · Infra 결정]** 두 줄이 바뀐다. ① 상속 AVAIL 은 **월 99.5%**(U0 AVAIL-01 개정, Infra Q2=A)다. 운영 dev 스택의 데이터 계층이 단일 AZ 라서 낮췄다. ② "기준선 변경 1건"(Redis 도입)과 §11 의 "Redis 도입(Q8=B)" 행은 **철회**됐다(Infra Q5=A). U1 은 U0 기준선("Redis 미도입")으로 돌아간다. §11 이 걸어 둔 역방향 재평가가 실현된 것이다. 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
+
 > **[개정 · 2026-10-12]** 상속 SEC 의 액세스 토큰 알고리즘은 **RS256** 이다(`backend/common/security/src/main/kotlin/com/trippilot/security/AccessTokenIssuer.kt`·`JwtSigningKeys.kt`). ES256 은 Apple `client_secret` 서명 전용(`backend/modules/auth/.../external/AppleClientSecret.kt`). U0 nfr-requirements SEC-01 개정 블록 참조.
 
 ## 1. 규모 (NFR-U1-SCALE)

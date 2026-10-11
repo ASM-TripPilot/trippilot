@@ -43,6 +43,8 @@ backend/modules/
 | U1-TS-5 | POI·스냅숏·집계는 **PostgreSQL 영속 테이블**(캐시가 아니라 데이터) | Q8 논지 | Redis는 그 위의 조회 캐시 계층 |
 | U1-TS-6 | 지도 쿼터 **상한 없이 모니터링**, 검색어 5분 캐시 | Q5=B | 상한 로직 미구현, 소진율 지표만(OBS-U1-02) |
 
+> **[개정 · 2026-10-12 · Infra 결정]** **U1-TS-4 "Redis 도입"(Q8=B)은 보류에서 철회로 바뀐다.** ElastiCache Redis 를 인프라에서 제거하기로 했다(Infra Q5=A). 근거는 다음과 같다. 백엔드 Redis 클라이언트 0건, 구현 티켓 없음(TRIP-895 는 유휴 지적만), U6 "보류 유지". 또 P-PERF-U1-2 가 이미 "Redis 장애 시 PG 직읽기" 폴백을 전제하므로 기능·정합성 손실이 없다. U1-TS-5(PG 영속 테이블)는 그대로다. 다시 들일 경로는 U0 재평가 트리거("병목 실측 시 Redis 재평가")다. 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
+
 > **[개정 · 2026-10-12]** 벤더가 **둘로 갈렸다**(원문 보존 — 개정 전: "지도·장소 검색 = 카카오 한 벤더"). ① **장소·주소 검색·좌표 해석 = 카카오 로컬, 서버 프록시 유지** — `backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/adapter/out/external/{KakaoPlaceLookupAdapter,KakaoRegionGeocodeAdapter,KakaoLocalClientConfiguration}.kt`, 진입점 `GET /stays/geocode`·`/stays/reverse-geocode`(`backend/modules/saved-accommodation/.../adapter/in/web/GeocodeController.kt`). ② **지도 렌더 = 네이버 지도 네이티브 SDK**(`@mj-studio/react-native-naver-map` 2.9.0, `frontend/package.json`) — 공급자 중립 래퍼 `frontend/src/shared/map/MapView.tsx`·`CenterPinPicker.tsx`(TRIP-861, 2026-09-14 전환). 키는 `EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`(NCP Maps, 사용처 제한 = iOS Bundle ID·Android 패키지명), 네이티브 모듈이라 dev build 재빌드 필요. 백엔드에 `MapRenderPort` 는 없다 — 지도 렌더는 클라이언트 전용이다.
 
 ## 4. Q8=B 파급 정리 (기준선 변경)
