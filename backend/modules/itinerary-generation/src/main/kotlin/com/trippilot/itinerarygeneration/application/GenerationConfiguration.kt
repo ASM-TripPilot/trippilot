@@ -11,5 +11,5 @@ import org.springframework.context.annotation.Configuration
  * 조건부 설정에 매달아 두면 기본 모드의 컨텍스트가 통째로 뜨지 않는다.
  */
 @Configuration
-@EnableConfigurationProperties(ScheduleDeadlineProperties::class)
+@EnableConfigurationProperties(ScheduleDeadlineProperties::class, GenerationLimitProperties::class)
 class GenerationConfiguration

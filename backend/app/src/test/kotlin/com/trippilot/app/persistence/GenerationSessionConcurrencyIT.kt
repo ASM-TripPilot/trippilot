@@ -5,8 +5,11 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.RateLimited
+import com.trippilot.itinerarygeneration.application.GenerationLimitProperties
 import com.trippilot.itinerarygeneration.application.GenerationSessionService
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationSessionRepository
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
@@ -16,6 +19,8 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -38,6 +43,9 @@ import java.util.concurrent.TimeUnit
 class GenerationSessionConcurrencyIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var service: GenerationSessionService
+    @Autowired private lateinit var limits: GenerationLimitProperties
+    @Autowired private lateinit var sessions: GenerationSessionRepository
+    @Autowired private lateinit var txManager: PlatformTransactionManager
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
@@ -119,5 +127,51 @@ class GenerationSessionConcurrencyIT : AbstractPostgresIntegrationTest() {
         }
 
         outcomes.count { it.isSuccess } shouldBe 2
+    }
+
+    /**
+     * 하루 상한(TRIP-1314)이 **연타에도 정확히 지켜진다** — 그리고 실패·폴백 생성이 실 DB 에서도 빠진다.
+     *
+     * 같은 여행의 재생성은 동시 생성 제한이 통과시키는 갈래라, 상한 판정이 계정 잠금 **밖**에 있으면
+     * 동시 요청들이 같은 수를 읽고 함께 통과한다. 인메모리 대역은 단일 스레드라 이 틈을 못 본다.
+     *
+     * **계정 잠금을 테스트가 먼저 쥔 채 요청들을 보낸다.** 판정이 잠금 안에 있으면 요청들은 세기도 전에
+     * 줄을 서고, 잠금이 풀린 뒤 하나씩 세므로 하나만 통과한다. 판정이 잠금 밖에 있으면 전부가 줄 서기 전에
+     * "한 자리 남음"을 읽어 두고 함께 통과한다. 타이밍 운에 맡기지 않으려는 장치다 — 그냥 동시에 쏘면
+     * 요청 하나가 다른 요청이 세기 전에 커밋을 끝내느냐에 결과가 달린다.
+     *
+     * 역검증: 판정을 잠금 앞으로 **옮기면**(안쪽 호출을 남기지 않고) 이 테스트가 2회 중 2회 깨진다.
+     */
+    @Test
+    fun `남은 한 자리를 동시에 연타해도 하나만 시작된다 — 실패·폴백 생성은 세지 않는다`() {
+        val account = newAccount()
+        val trip = newTrip(account, "제주")
+        // 실패한 생성 둘 — 세어지면 아래에서 한 자리가 남지 않아 성공이 0 이 된다.
+        repeat(2) { service.failed(service.start(account, trip, GenerationMode.FULLY_AI).sessionId) }
+        // 폴백으로 끝난 생성 둘 — 상태는 COMPLETED 라 상태만 거르는 쿼리로는 세어진다.
+        repeat(2) { service.completed(service.start(account, trip, GenerationMode.FULLY_AI).sessionId, true, null) }
+        // 한 자리만 남긴다.
+        repeat(limits.daily - 1) { service.start(account, trip, GenerationMode.FULLY_AI) }
+        // 풀이 4 라 테스트가 연결 하나를 쥐면 요청은 셋까지다.
+        val attempts = 3
+        val pool = Executors.newFixedThreadPool(attempts)
+
+        val outcomes = try {
+            TransactionTemplate(txManager).execute {
+                sessions.lockAccount(account)
+                val futures = List(attempts) {
+                    pool.submit(Callable { runCatching { service.start(account, trip, GenerationMode.FULLY_AI) } })
+                }
+                Thread.sleep(1_000) // 요청들이 잠금 앞(판정이 밖에 있다면 그 너머)까지 가도록
+                futures
+            }!!.map { it.get(30, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
+        }
+
+        outcomes.count { it.isSuccess } shouldBe 1
+        outcomes.filter { it.isFailure }.forEach {
+            (it.exceptionOrNull() as RateLimited).errorCode shouldBe ErrorCode.GENERATION_DAILY_LIMIT
+        }
     }
 }

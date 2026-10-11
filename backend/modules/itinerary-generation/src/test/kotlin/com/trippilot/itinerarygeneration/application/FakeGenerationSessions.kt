@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.GenerationSession
 import com.trippilot.itinerarygeneration.domain.GenerationSessionRepository
+import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.trip.api.TripFacade
 import java.time.Clock
 import java.time.Instant
@@ -33,7 +34,13 @@ internal class FakeGenerationSessions : GenerationSessionRepository {
     /** 실물과 같이 **가장 최근** 것을 준다 — 여러 건이면 어느 것을 보여줄지가 판정에 걸린다. */
     override fun findRunningByAccount(accountId: UUID): GenerationSession? =
         rows.values.filter { it.accountId == accountId && it.isRunning }.maxByOrNull { it.startedAt }
+
+    override fun countStartedSince(accountId: UUID, since: Instant): Int = rows.values.count {
+        it.accountId == accountId && !it.startedAt.isBefore(since) && it.status != GenerationStatus.FAILED && !it.isFallback
+    }
 }
+
+internal val defaultLimits = GenerationLimitProperties()
 
 /** 기본값은 **배포 기본과 같다**(시한 미전송) — 대역이 실제와 다른 모드로 돌면 검증이 헛돈다. */
 internal val defaultDeadlines = ScheduleDeadlineProperties()
@@ -43,4 +50,5 @@ internal fun genSessions(
     repo: GenerationSessionRepository = FakeGenerationSessions(),
     clock: Clock = Clock.fixed(Instant.parse("2026-08-06T00:00:00Z"), ZoneOffset.UTC),
     deadlines: ScheduleDeadlineProperties = defaultDeadlines,
-) = GenerationSessionService(trips, repo, clock, deadlines)
+    limits: GenerationLimitProperties = defaultLimits,
+) = GenerationSessionService(trips, repo, clock, deadlines, limits)

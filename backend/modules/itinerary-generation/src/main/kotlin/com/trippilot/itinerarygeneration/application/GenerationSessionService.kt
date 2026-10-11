@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.RateLimited
 import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.GenerationMode
@@ -13,7 +14,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -31,6 +34,7 @@ class GenerationSessionService(
     private val sessions: GenerationSessionRepository,
     private val clock: Clock,
     private val deadlines: ScheduleDeadlineProperties,
+    private val limits: GenerationLimitProperties,
 ) {
 
     /**
@@ -47,7 +51,21 @@ class GenerationSessionService(
     fun start(accountId: UUID, tripId: UUID, mode: GenerationMode): GenerationSession {
         val now = clock.instant()
         guardSingleActive(accountId, tripId, now)
-        sessions.findRunningByTrip(tripId)?.let {
+        // **멈춘 세션은 세기 전에 실패로 닫는다**(TRIP-1314). 백그라운드가 day1 전에 죽으면 세션이 RUNNING 인 채
+        // 남는데, 그것이 마지막 한 자리를 쥐고 있으면 사용자는 죽은 생성 때문에 자정까지 막힌다 —
+        // 탈출구가 닫히는 것이다. 취소로 닫으면 횟수에 들어가므로 실패로 닫는다.
+        val previous = sessions.findRunningByTrip(tripId)?.let {
+            if (it.isStale(now, deadlines.staleAfter)) {
+                log.warn("멈춘 생성 세션을 실패로 닫습니다 — sessionId={} tripId={} startedAt={}", it.sessionId, tripId, it.startedAt)
+                sessions.save(it.failed(now))
+                null
+            } else {
+                it
+            }
+        }
+        // 살아 있는 세션을 닫기 **전에** 본다 — 상한에 걸린 요청이 돌고 있던 생성을 취소하고 떠나면 안 된다.
+        guardDailyLimit(accountId, now)
+        previous?.let {
             log.info("이전 생성 세션을 닫고 새로 시작합니다 — tripId={} previous={}", tripId, it.sessionId)
             sessions.save(it.canceled(now))
         }
@@ -86,6 +104,34 @@ class GenerationSessionService(
             current = active.tripId,
             errorCode = ErrorCode.GENERATION_IN_PROGRESS,
             message = "다른 여행의 일정을 만들고 있어요. 끝나면 다시 시도해 주세요.",
+        )
+    }
+
+    /**
+     * 계정당 하루 생성 횟수(TRIP-1314). **같은 여행의 재생성도 여기서는 센다** — 위 탈출구가 곧 비용 구멍이었다.
+     *
+     * 탈출구가 막히지 않는 이유는 `FAILED` 와 폴백 결과를 세지 않기 때문이다: 생성이 깨진 사용자는 횟수를
+     * 잃지 않는다(무엇을 세는지는 `countStartedSince`).
+     * 하루의 경계는 **여행지 기준(KST) 자정**이다 — 서버 시각(UTC)으로 자르면 오전 9시에 풀려 사용자가
+     * 아는 "내일"과 어긋난다.
+     *
+     * [guardSingleActive] 가 계정 잠금을 문 뒤에 불려 **세고→여는 사이가 닫혀 있다.** 동시 요청 둘이
+     * 같은 수를 보고 함께 통과하지 못한다.
+     *
+     * 직접 만들기(MANUAL)는 AI 를 부르지 않아 세션을 열지 않으므로 여기 오지 않는다.
+     */
+    private fun guardDailyLimit(accountId: UUID, now: Instant) {
+        val today = now.atZone(TRAVEL_ZONE).toLocalDate()
+        val used = sessions.countStartedSince(accountId, today.atStartOfDay(TRAVEL_ZONE).toInstant())
+        if (used < limits.daily) return
+
+        val nextDay = today.plusDays(1).atStartOfDay(TRAVEL_ZONE).toInstant()
+        throw RateLimited(
+            // 자정 직전 1초 미만에 0 이 나가면 클라가 즉시 재시도한다 — 올림해 최소 1초.
+            retryAfterSeconds = Duration.between(now, nextDay).seconds.coerceAtLeast(1),
+            // 시각으로 말한다 — "N시간 뒤"는 소요시간 표기다(INV-3 취지).
+            message = "오늘 AI 일정 만들기 ${limits.daily}번을 모두 썼어요. 내일 0시부터 다시 만들 수 있어요.",
+            errorCode = ErrorCode.GENERATION_DAILY_LIMIT,
         )
     }
 
@@ -159,6 +205,9 @@ class GenerationSessionService(
 
     private companion object {
         private val log = LoggerFactory.getLogger(GenerationSessionService::class.java)
+
+        /** 하루의 경계를 자르는 존 — 여행지 기준(국내 한정이라 KST 고정, 같은 모듈의 다른 서비스와 같다). */
+        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
     }
 }
 

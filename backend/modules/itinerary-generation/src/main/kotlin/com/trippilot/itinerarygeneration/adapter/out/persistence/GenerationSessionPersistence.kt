@@ -46,6 +46,13 @@ interface GenerationSessionJpaRepository : JpaRepository<GenerationSessionEntity
         statuses: Collection<String>,
     ): GenerationSessionEntity?
 
+    /** 일일 상한용(TRIP-1314) — 실패도 폴백도 아닌 것만 센다. */
+    fun countByAccountIdAndStartedAtGreaterThanEqualAndStatusNotAndIsFallbackFalse(
+        accountId: UUID,
+        since: Instant,
+        status: String,
+    ): Long
+
     /**
      * 트랜잭션 범위 권고 잠금 — 커밋·롤백 어느 쪽으로 끝나도 풀린다(해제를 잊을 수 없다).
      *
@@ -92,6 +99,11 @@ class GenerationSessionPersistence(
 
     override fun findRunningByAccount(accountId: UUID): GenerationSession? =
         jpa.findFirstByAccountIdAndStatusInOrderByStartedAtDesc(accountId, RUNNING_STATUSES)?.toDomain()
+
+    override fun countStartedSince(accountId: UUID, since: Instant): Int =
+        jpa.countByAccountIdAndStartedAtGreaterThanEqualAndStatusNotAndIsFallbackFalse(
+            accountId, since, GenerationStatus.FAILED.name,
+        ).toInt()
 
     private fun GenerationSessionEntity.toDomain() = GenerationSession.reconstitute(
         sessionId, tripId, accountId, itineraryId, GenerationStatus.valueOf(status), GenerationMode.valueOf(mode),

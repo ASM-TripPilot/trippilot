@@ -79,4 +79,6 @@ class UpstreamUnavailable(
 class RateLimited(
     val retryAfterSeconds: Long,
     message: String = "요청이 너무 많습니다. 잠시 후 다시 시도하세요.",
-) : DomainException(ErrorCode.RATE_LIMITED, message)
+    /** "잠시 후"가 아닌 한도(예: 하루 횟수 소진)는 전용 코드로 — 화면이 [다시 시도]를 보일지가 갈린다. */
+    errorCode: ErrorCode = ErrorCode.RATE_LIMITED,
+) : DomainException(errorCode, message)
