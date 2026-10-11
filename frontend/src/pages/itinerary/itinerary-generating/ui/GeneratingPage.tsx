@@ -34,6 +34,7 @@ import { readStringValue, writeStringValue } from '@/shared/storage';
 import { showToast } from '@/shared/ui/Toast';
 
 const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
+const PLANB_HANDOFF_TOAST_MESSAGE = '여행 중이라 재계획으로 다시 짜요';
 const aiUsageStore: AiUsageStore = {
   read: readStringValue,
   write: writeStringValue,
@@ -201,8 +202,9 @@ export function GeneratingPage({
   }, [fire, mode]);
 
   const busy = useGenerationBusy(generate.error, start);
-  // 서버 규칙 거절(여행 중·끝난 여행 재생성 409) — 다시 보내도 같은 답이다. [재계획하기]는 오늘이 여행 기간
-  // 안일 때만 준다(끝난 여행은 재계획도 409). 기간은 거절됐을 때만 묻고, 모르면 버튼을 빼고 [닫기]만(INV-4).
+  // 서버 규칙 거절(여행 중·끝난 여행 재생성 409) — 다시 보내도 같은 답이다. 여행 중이면 다시 짜기는 Plan-B 의
+  // 몫이라(서버 규칙의 근거, 다녀온 슬롯을 잠근다) 막다른 얼굴 대신 허브 위에 재계획 요청(i04)을 연다.
+  // 기간은 거절됐을 때만 묻고, 끝난 여행(재계획도 409)·기간 모름이면 서버 사유 + [닫기]만(INV-4).
   const refusal = resolveGenerationRefused(generate.error);
   const trip = useGetTripsTripId(tripId, {
     query: { enabled: refusal !== null, retry: false },
@@ -214,6 +216,19 @@ export function GeneratingPage({
       trip.data.startDate,
       trip.data.endDate
     );
+  const handOffToPlanB = refusal !== null && (trip.isPending || inTrip);
+  const handedOffRef = useRef(false);
+  useEffect(() => {
+    if (refusal === null || !inTrip || handedOffRef.current) return;
+    handedOffRef.current = true;
+    showToast({
+      message: PLANB_HANDOFF_TOAST_MESSAGE,
+      testID: 'itinerary-generating-planb-handoff-toast',
+    });
+    // 재계획 요청은 허브 위에 겹치는 모달이라(SplashGate transparentModal) 허브를 먼저 깐다 — 허브의 진입과 같은 모양.
+    router.replace({ pathname: '/trips/[tripId]/live', params: { tripId } });
+    router.push({ pathname: '/trips/[tripId]/planb', params: { tripId } });
+  }, [refusal, inTrip, router, tripId]);
 
   useEffect(() => {
     if (firedRef.current) return;
@@ -258,19 +273,12 @@ export function GeneratingPage({
           : null
       }
       refused={
-        refusal && {
-          message: refusal.message,
-          onReplan: inTrip
-            ? () =>
-                router.replace({
-                  pathname: '/trips/[tripId]/live',
-                  params: { tripId },
-                })
-            : null,
-          onClose: goHome,
-        }
+        refusal && !handOffToPlanB
+          ? { message: refusal.message, onClose: goHome }
+          : null
       }
-      failed={generate.isError}
+      // Plan-B 로 넘기는 중(기간 조회·이동)엔 실패 얼굴을 비추지 않는다 — 진행 표면 그대로 넘어간다.
+      failed={generate.isError && !handOffToPlanB}
       busy={busy && { ...busy, onWait: goHome }}
       pins={mapPins}
       center={mapCenter}

@@ -452,7 +452,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
     });
   });
 
-  // 사유 문구가 있는 다른 code 의 409 는 이제 거절 얼굴이다(아래 R1~R3) — 여기는 문구 없는 409·500 만 남는다.
+  // 사유 문구가 있는 다른 code 의 409 는 이제 규칙 거절이다(아래 R1~R3) — 여기는 문구 없는 409·500 만 남는다.
   describe('🟢 G2 · AC-1 무회귀 — 문구 없는 409·500 은 지금처럼 일반 실패 얼굴이다 (선제 green)', () => {
     it.each<[string, () => Response]>([
       ['오류 봉투 없는 409', () => HttpResponse.json({}, { status: 409 })],
@@ -479,9 +479,10 @@ describe('다른 여행 생성 중(409) 안내', () => {
   /**
    * 서버 규칙 거절 — 여행 중·끝난 여행의 재생성은 409 `CONFLICT`(+ 사유 문구)다(BE `guardTripPeriod`).
    * 다시 보내도 같은 답이라 "네트워크를 확인하고 다시 시도" 실패 얼굴은 거짓말이다(DEV 실측: 여행 중 재생성
-   * 49개 여행 0회 성공). 서버 사유를 그대로 보이고, 여행 기간 안이면 [재계획하기]로 여행 중 허브로 보낸다.
+   * 49개 여행 0회 성공). 여행 중이면 다시 짜기는 Plan-B 의 몫이라 허브를 깔고 재계획 요청(i04)을 연다.
+   * 끝난 여행·기간 모름이면 서버 사유 + [닫기]만.
    */
-  describe('🔴 R1~R3 — 규칙 거절(409 CONFLICT)은 서버 사유를 보이고 [다시 시도]를 주지 않는다', () => {
+  describe('🔴 R1~R3 — 규칙 거절(409 CONFLICT): 여행 중이면 Plan-B 로 넘기고, 아니면 서버 사유를 보인다', () => {
     const IN_TRIP_REASON =
       '여행 중에는 일정을 다시 만들 수 없어요. 재계획으로 오늘 일정을 바꿔 주세요.';
     const refused = (message: string) => (): Response =>
@@ -508,49 +509,55 @@ describe('다른 여행 생성 중(409) 안내', () => {
       );
     }
 
-    it('R1 여행 중: 사유 문구 · [재계획하기] → 여행 중 허브로 replace · 재시도·실패 얼굴 없음', async () => {
+    it('R1 여행 중: 허브 replace → 재계획 요청 push 를 한 번씩 이 순서로 · 실패·거절 얼굴 없음 · POST 1회', async () => {
       const today = seoulDate(new Date());
       server.use(tripHandler(today, '2099-12-31'));
       postQueue = [refused(IN_TRIP_REASON)];
 
       renderPage();
 
-      expect(
-        await screen.findByTestId('itinerary-generating-refused')
-      ).toBeOnTheScreen();
-      expect(screen.getByText(IN_TRIP_REASON)).toBeOnTheScreen();
-      expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
-      expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
-
-      fireEvent.press(
-        await screen.findByTestId('itinerary-generating-refused-replan')
-      );
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
       expect(mockReplace).toHaveBeenCalledTimes(1);
       expect(mockReplace).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/live',
         params: { tripId: TRIP_ID },
       });
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/planb',
+        params: { tripId: TRIP_ID },
+      });
+      expect(mockReplace.mock.invocationCallOrder[0]).toBeLessThan(
+        mockPush.mock.invocationCallOrder[0]
+      );
+      await settle();
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
+      expect(screen.queryByTestId('itinerary-generating-refused')).toBeNull();
       expect(count('POST')).toBe(1);
     });
 
-    it('R2 끝난 여행: [재계획하기] 없이 [닫기]만 · 닫기 = 홈', async () => {
+    it('R2 끝난 여행: 서버 사유 + [닫기]만 · 다시 시도 없음 · 닫기 = 홈 · Plan-B 로 안 간다', async () => {
+      const ENDED_REASON = '이미 끝난 여행은 일정을 다시 만들 수 없어요.';
       server.use(tripHandler('2020-01-01', '2020-01-02'));
-      postQueue = [refused('이미 끝난 여행은 일정을 다시 만들 수 없어요.')];
+      postQueue = [refused(ENDED_REASON)];
 
       renderPage();
 
-      fireEvent.press(
-        await screen.findByTestId('itinerary-generating-refused-close')
-      );
-      await settle();
       expect(
-        screen.queryByTestId('itinerary-generating-refused-replan')
-      ).toBeNull();
+        await screen.findByTestId('itinerary-generating-refused')
+      ).toBeOnTheScreen();
+      expect(screen.getByText(ENDED_REASON)).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
+      expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
+
+      fireEvent.press(screen.getByTestId('itinerary-generating-refused-close'));
+      await settle();
       expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
       expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
     });
 
-    it('R3 여행 기간을 모르면(조회 실패) [재계획하기]를 지어내지 않는다', async () => {
+    it('R3 여행 기간을 모르면(조회 실패) Plan-B 로 넘기지 않고 서버 사유 + [닫기]', async () => {
       server.use(
         http.get(`${BASE}/trips/:tripId`, () =>
           HttpResponse.json({}, { status: 500 })
@@ -563,10 +570,10 @@ describe('다른 여행 생성 중(409) 안내', () => {
       expect(
         await screen.findByTestId('itinerary-generating-refused-close')
       ).toBeOnTheScreen();
+      expect(screen.getByText(IN_TRIP_REASON)).toBeOnTheScreen();
       await settle();
-      expect(
-        screen.queryByTestId('itinerary-generating-refused-replan')
-      ).toBeNull();
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
     });
   });
 
