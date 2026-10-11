@@ -315,3 +315,45 @@ describe('AssistantSheetPage · 제안 적용 (TRIP-1324)', () => {
     await waitFor(() => expect(fake.calls.sendTurn).toBe(2));
   });
 });
+
+describe('AssistantSheetPage · 이력 (TRIP-1325)', () => {
+  it('이력 보기로 전환하면 적용 기록 행이 보이고, [대화 이어서]로 돌아온다', async () => {
+    renderPage();
+    await openAndApplyProposal();
+    fireEvent.press(screen.getByTestId('assistant-history-toggle'));
+    expect(await screen.findByTestId('assistant-history')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/assistant-history-row-/)).toHaveLength(1);
+    fireEvent.press(screen.getByTestId('assistant-history-continue'));
+    expect(screen.queryByTestId('assistant-history')).toBeNull();
+    expect(screen.getByTestId('assistant-input')).toBeOnTheScreen();
+  });
+
+  it('[이력 지우기] → 확인 전 clear 0회, 확인 → 1회 후 일반 시작 상태로', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-context-chip');
+    fireEvent.press(screen.getByTestId('assistant-history-toggle'));
+    fireEvent.press(await screen.findByTestId('assistant-history-clear'));
+    expect(
+      screen.getByTestId('assistant-history-clear-dialog')
+    ).toBeOnTheScreen();
+    expect(fake.calls.clearSession).toBe(0);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-history-clear-confirm'));
+    });
+    await waitFor(() => expect(fake.calls.clearSession).toBe(1));
+    expect(await screen.findByTestId('assistant-input')).toBeOnTheScreen();
+    await waitFor(() => expect(fake.calls.openSession).toBe(2));
+  });
+});
+
+async function openAndApplyProposal(): Promise<void> {
+  const input = await screen.findByTestId('assistant-input');
+  fireEvent.changeText(input, '둘째 날 카페를 조용한 곳으로 바꿔줘');
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('assistant-send'));
+  });
+  await act(async () => {
+    fireEvent.press(await screen.findByTestId('assistant-proposal-apply'));
+  });
+  await screen.findByText('일정에 반영했어요.');
+}

@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { Pressable, Text } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 
-import type { AssistantSurface } from '@/features/open-assistant';
+import {
+  assistantHref,
+  type AssistantSurface,
+} from '@/features/open-assistant';
 import type {
   AssistantMessage,
   NextAction,
@@ -13,6 +17,8 @@ import {
   useApplyProposal,
   useAssistantMessages,
   useAssistantSession,
+  useAssistantSessions,
+  useClearSession,
   useDismissProposal,
   useMarkProposal,
   useSendTurn,
@@ -28,6 +34,7 @@ import {
 } from '../model/sheetModel';
 import { MessageCard } from './AssistantCards';
 import { AssistantSheetView } from './AssistantSheetView';
+import { HistoryView } from './HistoryView';
 
 /**
  * b01~b07 도우미 시트 배선판(TRIP-1322). 세션 열기 → 판정 1회(`resolveSheetState`) → 순수 뷰.
@@ -58,7 +65,12 @@ export function AssistantSheetPage({
   const applyProposal = useApplyProposal(sessionId, tripKey);
   const dismissProposal = useDismissProposal(sessionId);
   const markProposal = useMarkProposal(sessionId);
+  const clearSession = useClearSession(tripKey);
   const [draft, setDraft] = useState('');
+  // 이력 보기(b06) — 별도 라우트가 아니라 시트 안 보기 전환(깜빡임 없이, frontend-components §1).
+  const [view, setView] = useState<'CHAT' | 'HISTORY'>('CHAT');
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const sessions = useAssistantSessions();
   // 적용 중인 제안 id — 화면 비활성과 ref 잠금 둘 다. 이중 적용의 최종 차단은 서버 상태기계(INV-U8-08).
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const applyingRef = useRef(false);
@@ -181,6 +193,16 @@ export function AssistantSheetPage({
     }
   }
 
+  function handleConfirmClear(): void {
+    if (!sessionId || clearSession.isPending) return;
+    clearSession.mutate(sessionId, {
+      onSuccess: () => {
+        setConfirmingClear(false);
+        setView('CHAT');
+      },
+    });
+  }
+
   function lastUserText(): string | null {
     for (let i = rawMessages.length - 1; i >= 0; i -= 1) {
       const message = rawMessages[i];
@@ -230,6 +252,42 @@ export function AssistantSheetPage({
       onClose={handleClose}
       onRetryOpen={() => void session.refetch()}
       repliesDisabled={sendTurn.isPending}
+      headerTrailing={
+        <Pressable
+          testID="assistant-history-toggle"
+          accessibilityRole="button"
+          accessibilityState={{ selected: view === 'HISTORY' }}
+          onPress={() =>
+            setView((prev) => (prev === 'CHAT' ? 'HISTORY' : 'CHAT'))
+          }
+          hitSlop={8}
+        >
+          <Text className="font-noto text-label text-muted">
+            {view === 'HISTORY' ? '대화' : '이력'}
+          </Text>
+        </Pressable>
+      }
+      body={
+        view === 'HISTORY' ? (
+          <HistoryView
+            logs={rawMessages.filter(
+              (message) => message.kind === 'ACTION_LOG'
+            )}
+            otherSessions={(sessions.data ?? []).filter(
+              (item) => item.id !== sessionId
+            )}
+            confirmingClear={confirmingClear}
+            clearing={clearSession.isPending}
+            onContinue={() => setView('CHAT')}
+            onRequestClear={() => setConfirmingClear(true)}
+            onCancelClear={() => setConfirmingClear(false)}
+            onConfirmClear={handleConfirmClear}
+            onOpenSession={(item) =>
+              router.replace(assistantHref(surface, item.tripId) as Href)
+            }
+          />
+        ) : undefined
+      }
       renderCard={(message) => (
         <MessageCard
           message={message}
