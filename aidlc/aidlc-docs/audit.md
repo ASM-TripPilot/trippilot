@@ -1521,3 +1521,14 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: INCEPTION·CONSTRUCTION 기존 승인 상태 유지(국소 개정). U8·U10 FD는 질문 게이트에서 정지.
 
 ---
+## Change Request — 범위 개정 산출물 2차 (shared-infrastructure as-built · construction U0~U6 정정)
+**Timestamp**: 2026-10-11T17:40:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "그럼 8 10 이렇게 U 문서 생성 하는건가?"
+**AI Response**: 그렇다 — U8·U10은 `construction/u8-*`·`u10-*` 아래 FD→NFR→NFR Design 산출물을 만들고 인프라는 shared-infrastructure 증분. 현재 FD 질문 게이트(U8 Q1~Q15 · U10 Q1~Q22)에서 정지.
+**Action Taken**:
+- `construction/shared-infrastructure.md` + `plans/shared-infrastructure-design-plan.md` — as-built(서울 단일 리전, dev·prd 정의/실운영=dev, EKS Auto Mode, RDS PG16, Secrets Manager→K8s Secret, Actions OIDC+Helm --atomic), 간극 G-01~16, 질문 6 (**승인 대기**).
+- `construction/u0~u2/**` — 개정 블록(RS256·outbox_event+릴레이·BR-U0-30 온보딩 권한·라우트 골격·네이버 지도/카카오 로컬·C5 클릭기록·Trip 일과 창·조립 2단·ScheduleAgentPort 6·시한 15s/60s·Plan-B 25s).
+- `construction/u3~u6/**` — 개정·이연 블록(지도 MapView·LLM 설정·AssemblyRunRecord·replan 와이어·G-U4-3/O-U4-2/4/5 종결·U10 이연·회고 rule|http·findTimeline/VisitChecked·마이그레이션 실번호·오프라인/j02 보류·OutboxRelay·/me/export·account_setting·푸시 재빌드 필요).
+**Context**: 기존 승인 상태 유지(국소 개정). 원문 삭제 0.
+
+---
