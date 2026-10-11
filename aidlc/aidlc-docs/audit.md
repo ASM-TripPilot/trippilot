@@ -1489,3 +1489,35 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: INCEPTION·CONSTRUCTION 승인 상태 **유지**(국소 개정). TRIP-1061 은 이 개정으로 종결 — 서버 가드 신설 없이 현행 동작이 정본이 된다.
 
 ---
+## Change Request — 개발 범위 수정 및 문서 생성 착수 (전수 조사)
+**Timestamp**: 2026-10-11T16:02:41Z
+**User Input**: "지금부터 aidlc 문서 업데이트 할거임 그전에 브랜치 최신화 aidlc 문서 작업은 해당 폴더 클로드 문서를 따른다" / "일단 브랜치 파봐 할거는 개발 범위 수정 및 문서 생성 일단 ai backend app 전수 조사해서 낡은 부분 찾고 브랜치 먼저 만들고"
+**AI Response**: develop 최신화(fb0d51e2) 후 브랜치 `docs/aidlc-scope-refresh` 생성. `ai/`·`backend/`·`frontend/`(app) 실코드와 `aidlc-docs/` 산출물(SCOPE·state·inception·construction U0~U6) 대조 전수 조사 착수 — 낡은 서술 목록을 먼저 보고한 뒤 수정 범위를 사용자와 확정한다.
+**Context**: CONSTRUCTION 설계 문서 단계(SCOPE.md 2026-07-17). 조사 단계 — 문서 변경 없음.
+
+---
+## Change Request — 범위 개정(U8 유지·U7/U9 폐기·U10 GPS 신설) · 낡은 서술 일괄 개정 · 인프라 as-built 반영
+**Timestamp**: 2026-10-11T16:20:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "7~9가 뭐지?" / "여기서 어시스턴트만 만들고 + gps 기능 관련 기능 아직 구현안해서 새 문서에서 계획 최신화는 ai fe be 현재 구현을 기준으로 하고 낡은거는 업데이트 + infra 배포까지 완료" / 확인 질문 답변: "infra 배포까지 완료"="이미 완료 — 문서에 반영" · GPS 기능 위치="새 유닛 U10 신설 (Recommended)" · U7·U9="폐기" · U8 시작점="보존 브랜치 계획서를 가져와 갱신 (Recommended)"
+**Current State**: CONSTRUCTION 설계 문서 단계, U0~U6 설계 종료(2026-08-24). U8 FD는 `u8-fd-preserve`(7f1fddba)에 계획서·Q1~Q7 대기로 보존. 전수 조사(ai·backend·frontend 대조)로 낡은 서술 약 100곳 확인.
+**Impact Assessment**: `workflow-changes.md` §8 Adding/Removing Units — U7(C15)·U9(C17) 제거(폐기, 기능 재분배 없음 — 1차와 인터페이스만 있었음), U10(GPS·위치 자동화) 추가 → unit-of-work 3종 개정 + U10 전체 설계 필요. U8 유지(후속 게이트 → 개발 범위). 기존 U0~U6 산출물은 §4 Low impact modify(원문 보존 + 개정 블록) — 재실행 아님. Infrastructure Design은 "배포 계획 부재" SKIP 사유가 해소(EKS·Terraform·aws-deploy 구축 완료)되어 as-built 통합 문서 1건으로 소급 작성.
+**User Confirmation**: 위 질문 4건 답변으로 명시 확정.
+**Action Taken**: (진행 중) SCOPE.md·aidlc-state.md·unit-of-work 3종 개정 → inception·construction 낡은 서술 개정 → `construction/shared-infrastructure.md` as-built → U8 FD 계획서 이관·갱신 → U10 FD 계획서 신설(질문 게이트).
+**Artifacts Affected**: 진행하며 이 항목 아래 후속 항목으로 기록.
+
+---
+## Change Request — 범위 개정 산출물 1차 (SCOPE·state·unit-of-work·인셉션 정정·U8/U10 계획서)
+**Timestamp**: 2026-10-11T17:10:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "작업 단위 별로 해서 커밋하는 것도 잊지말고"
+**AI Response**: 완료분을 작업 단위별로 커밋한다.
+**Action Taken**:
+- `docs/SCOPE.md` — 현행 범위 2026-10-12 절 신설(U8 편입·U10 신설·U7/U9 폐기·인프라 as-built), 2026-07-17 절은 이력으로 보존.
+- `aidlc-state.md` — 개정 블록 8(현재 단계·Workspace State·AI 솔버 지시·Infra SKIP 해소·U7~U9 재편+U8/U10/shared-infra 체크박스·Reverse Engineering·현황 스냅숏).
+- `unit-of-work.md`·`unit-of-work-dependency.md`·`unit-of-work-story-map.md` — §8 유닛 추가·제거 반영(U10 정의, 유효 스토리 106, U10 부분 이관 표, 실제 코드 조직). U10 컴포넌트는 C1(위치 동의 = auth 모듈 소유)로 정정.
+- `requirements.md`·`stories.md`·`docs/design/wireframes.md` — 개정·이연·폐기 블록(소셜 전용, 여행 삭제 전 상태, AI 엔진 실제, 지연 예산 15s/60s, 지도 네이버·검색 카카오 로컬, 에픽 K·L 폐기, U10 이연, j02·오프라인 보류, 화면 정본=라이브 Figma). NFR-PERF-02 시한 강제 서술은 오케스트레이터가 values-dev/prd `true` 로 정정.
+- `application-design/{components,component-methods,services,component-dependency,application-design}.md` — 개정 블록 58(ScheduleAgentPort 6메서드, replan 단일안, C5 302+클릭기록, Expo 푸시·폴링, 이벤트 카탈로그 현행, adapter 계층 등).
+- `construction/plans/u8-conversational-assistant-functional-design-plan.md` — `u8-fd-preserve`(7f1fddba) 이관 + 현재 구현 기준선 + Q1~Q15 (**답변 대기**).
+- `construction/plans/u10-gps-location-automation-functional-design-plan.md` — 신설, 기준선 + Q1~Q22 (**답변 대기**).
+**Context**: INCEPTION·CONSTRUCTION 기존 승인 상태 유지(국소 개정). U8·U10 FD는 질문 게이트에서 정지.
+
+---
