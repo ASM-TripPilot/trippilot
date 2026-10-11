@@ -3469,6 +3469,10 @@ owner = "인증"
 migration = false
 touches = ["backend/modules/auth", "backend/docs/design/openapi.yaml"]
 note = """
+**PR #1040 (머지 대기 · 2026-10-11).** 유스케이스가 토큰 경로에서 구글을 501 로 거절한다.
+적대적 리뷰가 잔여 셋을 냈고 TRIP-1316 댓글에 남겼다 — 카카오·네이버 토큰 경로의 이메일 선점(카카오
+앱 ID 주입이 선행), PKCE 없는 네이버 code 경로, 그리고 **"네이버 id 가 앱 단위 값"이라는 미확인 전제**.
+
 **인수인계가 가리킨 곳(`AbstractOAuth2Client.kt:20` 의 state·nonce TODO)은 실제 위험이 아니었다.**
 서버는 `state` 를 받지 않고(앱 몫), code 경로는 PKCE 가 있고, 3사는 id_token 을 쓰지 않아 nonce 가
 해당 없다. 코드를 따라가 보니 구멍은 그 옆이다 — `fetchProfileByAccessToken` 이 userinfo 만 부르고
@@ -3487,8 +3491,14 @@ title = "회고·기록 카드 방문 순번 — BE 몫인지부터 가린다"
 status = "todo"
 owner = "기록"
 migration = false
-touches = []
+touches = ["backend/modules/archive", "backend/docs/design/openapi.yaml"]
 note = """
+**PR #1041 (머지 대기 · 2026-10-11). 아래 "BE 변경이 0 일 수 있다"는 틀렸다** — 기록(`/records`)은
+오름차순인데 허브(`/visits/days/{day}`)는 저장소 순서(최신 먼저)였다. 순서를 정하는 자리를
+`VisitCheck.inVisitOrder()` 하나로 모으고 계약에 "배열 순서 = 방문 순서"를 적었다. 순번 필드는 없다.
+**번호를 그리는 것은 프론트 몫으로 남는다** — 기록 화면의 자체 정렬(`orderByArrival`)이 서버와 달라
+그대로 두면 두 화면 번호가 어긋난다(티켓 댓글 4건).
+
 **BE 변경이 0 일 수 있다.** `TripRecordService` 가 이미 도착 시각(없으면 생성 시각) 순으로 정렬해
 주고, 건너뛴 방문·즉석 방문도 같은 배열에 있다 — 배열 순서가 곧 방문 순서다. 허브(i01)와 기록(j01)이
 **같은 순서의 배열을 받는지**만 확인하고, 맞으면 FE 로 넘기고 닫는다. 어긋나면 그때 순번 필드를
@@ -3504,6 +3514,9 @@ owner = "회고"
 migration = true
 touches = ["backend/modules/reflection", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
 note = """
+**PR #1042 (머지 대기 · 2026-10-11 · V2.63).** 기존 PUT 을 넓혔다 — `card`·`mood`·`shortMemo` 모두
+선택, 하나는 있어야 한다. null 은 그대로·빈 문자열은 지움. `mood` 는 코드 모양만 검사한다.
+
 `DailyReflectionPage.tsx` 가 *"mood/memo 비영속 … 통합 저장은 계약 확장 티켓 TRIP-823"* 이라고
 적어 둔 자리다. 컬럼 둘 + `EditReflectionRequest.card` 를 선택으로 완화(부분 갱신).
 
@@ -3521,6 +3534,11 @@ owner = "일정"
 migration = false
 touches = ["backend/modules/itinerary-generation", "backend/docs/design/openapi.yaml"]
 note = """
+**PR #1043 (머지 대기 · 2026-10-11).** 세지 않는 것이 `FAILED` 하나가 아니라 셋이 됐다 — 실패, **폴백으로
+끝난 생성**(AI 가 죽으면 FAILED 가 아니라 폴백으로 완료된다), **멈춘 세션**(세기 전에 실패로 닫는다).
+남는 것: 프론트가 `GENERATION_DAILY_LIMIT` 를 잇고 TRIP-1268 로컬 카운터를 걷어 내기 · 슬롯 후보
+연타는 이 상한 밖 · DEV/QA 도 5회(env 로 조정).
+
 `generation_session` 에 `account_id`·`started_at`·`status` 가 이미 있어 **마이그레이션이 없다**.
 선례는 `notification/application/PushRateLimits.kt`.
 
@@ -3550,6 +3568,9 @@ owner = "장소"
 migration = false
 touches = ["backend/modules/place-data", "backend/docs/design/openapi.yaml"]
 note = """
+**PR #1044 (머지 대기 · 2026-10-11).** `Place` 를 건드리지 않아 프론트 계약 가드와 무관하다.
+ACTIVE 만으로 거르지 않되(담아 둔 폐업 장소가 열려야 한다) `UNVERIFIED` 는 404 다(INV-1).
+
 상세 화면(d06·i10)이 목록에서 받은 값으로 그리고 있어 **목록 밖에서 상세를 열 길이 없다.**
 단건 경로를 열고 `address`(V2.58 로 이미 있다)를 싣는다. 값이 없는 세 필드는 [[TRIP-824]] 잔여다 —
 컬럼만 만들면 전부 null 이라 화면이 그대로다(움브렐라 규약 3번).
