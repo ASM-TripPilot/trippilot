@@ -1553,3 +1553,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8·U10 FD 완료 → NFR Requirements 착수, shared-infrastructure 승인 처리.
 
 ---
+## Infrastructure Design(공통) 확정 · NFR Requirements 생성 — U8 · U10
+**Timestamp**: 2026-10-11T20:10:00Z (작업 시점, 초 단위 미측정)
+**User Input**: (2026-10-11T19:20Z "그럼 권고로 ㄱㄱ" 지시의 적용분)
+**AI Response**: ① shared-infrastructure 계획 Q1~Q6 — 추천 표기가 없어 AI가 근거를 붙여 선택(Q1=A dev 운영 겸용 · Q2=A 가용성 99.5% · Q3=A CloudWatch+알람 · Q4=A RTO 4h/RPO 15m · Q5=A Redis 제거 · Q6=B 버전 핀 롤백), `shared-infrastructure.md` §12 확정 결정 + U0·U1·U6 NFR 개정 블록. ② U8 NFR Requirements 2종(권고 Q1~Q11, NFR Design SKIP 권고). ③ U10 NFR Requirements 2종(권고 Q1~Q14, NFR Design 얇게 진행 권고). U8·U10 NFR은 표준 승인 게이트 제시.
+**Context**: CONSTRUCTION — shared-infrastructure 완료, U8·U10 NFR Requirements 승인 대기.
+
+---
