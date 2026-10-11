@@ -10,7 +10,8 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 /**
- * 장소(POI) 탐색 — 탐색 랜딩(US-EXPL-01). ACTIVE만(INV-U1-01), 지역·카테고리 필터.
+ * 장소(POI) 탐색 — 탐색 랜딩(US-EXPL-01). 목록은 ACTIVE만(INV-U1-01), 지역·카테고리 필터.
+ * 단건은 폐업·유실도 상태와 함께 준다(미검증만 404 · TRIP-824).
  * POI는 전역 자원(계정 스코프 아님). 반경/취향 후보풀은 CandidatePoolPort(TRIP-213).
  */
 @RestController
