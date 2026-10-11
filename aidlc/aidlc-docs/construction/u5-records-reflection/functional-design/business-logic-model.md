@@ -61,6 +61,10 @@ U3·U4는 백엔드가 통째 신규였다. U5는 아니다.
 > - **DEC-U5-9**: "U7 게이트까지 미개통"의 U7은 **폐기**됐다(사용자 결정 2026-10-12). `uploadForCommunity`·`ObjectStoragePort`는 열릴 계기가 없다 — 사진은 로컬 참조 + 서버 메타만으로 확정이다.
 > - **DEC-U5-10**: 오프라인 전부 설계(로컬 큐·`syncState`·충돌 선택)는 FE에 구현되지 않았고 **보류**됐다(사용자 결정 2026-09-11 "오프라인 방문 기록 일단 빼자", Figma `j01 offline`·`sync-conflict` 프레임 삭제). 백엔드에는 충돌 응답 상태(`backend/modules/archive/src/main/kotlin/com/trippilot/archive/api/VisitConflictState.kt`, `updatedAt` 기준)가 남아 있다.
 
+> **[개정 · 2026-10-12 · U10 FD] DEC-U5-6·DEC-U5-12.**
+> - **DEC-U5-6 개정** — 실제 경로는 **U4가 아니라 `archive`(C12) 소유**다(U10 Q5=A). 소유 근거였던 "Plan-B 기준점 계산의 1차 소비자"는 TRIP-992에서 단발 좌표(`replan_session.origin_*`, V2.56)로 해결됐고 LEGAL-U4-05가 그 좌표의 경로 적재를 금한다 — 남은 소비자는 기록·요약(U5)뿐이다. 엔티티도 점열 `actual_route_point`가 아니라 **일 단위 `actual_route_day`**다(Q4=C). U5는 `ArchiveRecordFacade.findRouteDays`로 거리만 읽는다.
+> - **DEC-U5-12 부분 개정** — §6의 (a) "클라 산출 → 서버 전송"은 검증 불가라 거절됐지만, U10은 원시 좌표를 서버에 두지 않기로 했으므로(Q4=C) 서버가 더 나은 값을 만들 수 없다. 그래서 **기기가 원시 표본으로 잰 거리**를 받되 서버가 **폴리라인 길이(하한) · 물리 상한으로 클램프**하고 `distance_clamped`를 남긴다. 경로가 있는 날은 `ROUTE`, 없는 날은 `VISIT_LINE`, 여행 요약은 모든 날이 `ROUTE`일 때만 `ROUTE`. 근거 `construction/u10-gps-location-automation/functional-design/business-logic-model.md` §2.1·§7.2.
+
 ---
 
 ## 3. 이관 집행 (DEC-U5-2)
@@ -237,6 +241,8 @@ POST /ai/v1/reflection/nudge     { request_meta, destination, trip_days, highlig
 근거: (a)는 검증 불가값을 서버 통계로 굳히고, (c)는 그려진 화면을 비운다. (b)는 둘 다 피하면서 승격 경로가 열려 있다. **이 결정은 U4 실장에 의존하므로 갭으로 올린다(G-U5-5).**
 
 > **[이연 · 2026-10-12 → U10] §6 실제 이동 거리.** 위 실측 표의 FE 자산은 지금 없다 — `features/execution/model/actualDistance.ts`와 `useActualRoute()`는 리포에서 사라졌다(`frontend/src/features/execution/`에는 `nextNav.ts`·`useLiveItinerary.ts`뿐). `actual_route_point`도 여전히 없다. 따라서 DEC-U5-12의 `VISIT_LINE` 근사가 현행이며, `ROUTE` 승격은 U10 실장 뒤다(O-U5-2도 U10으로 넘어간다).
+
+> **[개정 · 2026-10-12 · U10 FD] §6 — 승격 경로 확정.** U10이 `archive.actual_route_day`(하루치 다운샘플 폴리라인 + 클램프된 거리)를 만들면 그날 거리 출처가 `ROUTE`로 승격된다. 요약 생성 뒤 경로가 오면 **stats만 재계산**한다(`archive.ActualRouteStored` 구독 — 카드 본문 재생성은 U10 O-U10-5). `TripSummaryStats`·`ReflectionStats`의 enum은 늘리지 않고, `DayHighlight`에 날짜별 `distanceKm`·`distanceSource`를 더한다(U10 `business-logic-model.md` §12.5).
 
 ---
 

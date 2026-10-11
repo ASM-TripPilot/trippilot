@@ -82,6 +82,8 @@
 
 > **[소급 기록 — TRIP-396 (기록) 반영, 2026-08-27]** 팀 결정(2026-08-19)으로 **i04 전용 도착 화면(`ArriveScreen`)은 제거되고 그 두 실동작(기능하는 [방문 완료]·[다음 장소 길찾기])이 i01(`LiveSlotCard.tsx`)로 흡수됐다.** 위 §1 라우트 표의 `app/trips/[tripId]/live/arrive/[slotKey].tsx`·§2의 `live-arrive` 슬라이스(`LiveArrivePage`)·§3의 `ArriveScreen.tsx` 행은 이 정정으로 삭제했다 — 라이브 Figma 밴드 i에도 i04 프레임이 없음을 확인(`get_metadata` 실측, 2026-08-27). `useVisitCheck()` 뮤테이션(낙관, 슬롯키 단위 롤백)·방문 진행 도출(`deriveVisitProgress`)은 `live-itinerary` 슬라이스가 흡수했다. **`-next-nav`(TRIP-399 "다음 예정지" CTA, §8 testID)는 이 정정 대상이 아니다** — 117-A 소관이라 손대지 않는다. 근거: `_workspace/20260827-trip396-visit-check/01_spec-analyst_brief.md`(§목표·§맹점 후보④) · Figma `get_metadata`(밴드 i, i04 프레임 부재) · `frontend/src/features/execution/ui/LiveSlotCard.tsx`.
 
+> **[개정 · 2026-10-12 · U10 FD] TRIP-396 [방문 완료] — 수동은 폴백으로 유지.** U10이 이탈 자동 완료를 더한다(Q2=A). i01 카드의 `[방문 완료]`(`execution-arrive-complete`)는 지우지 않는다 — 자동이 꺼진 사용자(권한 거부·플래그 OFF·대략 위치)와 최소 체류 미달 이탈의 바닥이다. 자동으로 기록된 도착/완료에는 "자동 기록" 표식과 [자동 기록 되돌리기]가 붙는다(Q17=A). "i07 = 지오펜스가 깨웠을 때의 로컬 알림"은 만들지 않는다 — 지연 알림은 서버 `PlanBTriggered` → U6 푸시 하나다. 상세 `construction/u10-gps-location-automation/functional-design/frontend-components.md` §3·§9.
+
 > **[개정 · 2026-10-12] §2 슬라이스 표 갱신.** 실재 슬라이스는 `src/pages/live/` 아래 6개(`live-itinerary`·`live-place`·`live-location`·`planb-request`·`planb-draft`·`planb-diff`)다. `planb-triggers`·`planb-manual`·`planb-rest`는 없다(§1 개정). `live-itinerary/ui/`의 실제 구성은 `LiveItineraryPage`·`LiveHubView`·`TriggerChip`·`RiskDetailSheet`·`ReplanAppliedSheet`·`MemoSheet`이다. `planb-diff`는 "확정의 유일한 호출 지점"이 아니다 — TRIP-751로 `planb-draft`의 [적용하기]도 `useApplyReplan`(`features/apply-replan`)으로 바로 확정한다(`src/pages/live/planb-draft/ui/PlanbDraftPage.tsx`).
 
 ## 3. `src/features/execution/`

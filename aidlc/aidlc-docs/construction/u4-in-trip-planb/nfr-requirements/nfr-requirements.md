@@ -28,6 +28,12 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 
 > **[이연 · 2026-10-12 → U10] MOBILE-U4-01·02·04·05·07 (지오펜스·백그라운드 위치).** 원문은 보존한다. 현재 실장: `expo-task-manager` 미추가(`frontend/package.json`), `frontend/app.config.ts` `expo-location` 플러그인은 `locationAlwaysPermission: false`·`locationAlwaysAndWhenInUsePermission: false`(**TRIP-936** — 앱 심사 대응으로 '항상 허용'을 명시적으로 끔), 지오펜스는 `frontend/src/shared/location/geofence.ts`의 **degrade 스텁**(순수 매핑만, 네이티브 `startGeofencingAsync` 미배선). 이 축은 신설 유닛 **U10 "GPS·위치 자동화"**(미구현, 사용자 결정 2026-10-12)로 넘어간다. **MOBILE-U4-03**(거부 = 정상 경로, 수동 체크인 강등)과 **MOBILE-U4-06**(모션 센서 미요청)은 U4에 그대로 유효하다 — 지금은 강등 사슬의 끝(포그라운드·수동)이 상시 동작이다.
 
+> **[개정 · 2026-10-12 · U10 FD] MOBILE-U4-01·02·04·05·07 — U10 FD가 다시 정했다(NFR 값은 U10 NFR Requirements).**
+> - **MOBILE-U4-01·02 유효** — `expo-task-manager` 추가 · always 설정 · Android 백그라운드 위치. 단 **빌드 플래그 뒤**에 둔다: 플래그 OFF 빌드는 TRIP-936 이후 권한 표면과 같다(Q14=A · DEC-U10-12).
+> - **MOBILE-U4-04** — 리전 = 진행 중 슬롯 + 남은 슬롯 순번, 합계 최대 10(Q9=A).
+> - **MOBILE-U4-05 "연속 위치 추적을 켜지 않는다"는 철회**한다(Q3=B 사용자 선택). 무장(always + 정확 + 동의 + 여행 구간 + 플래그) 동안 **저전력 연속 기록**(낮은 정확도 등급 · 거리 필터 · 지연 일괄 전달)을 한다. 배터리 예산의 근거가 바뀌므로 U10 NFR Requirements에서 예산을 다시 세운다. iOS 상태바 위치 표시는 여행 내내 뜬다.
+> - **MOBILE-U4-07** — wake에서 하는 일은 "평가 요청 1회"가 아니라 **판정 + 자동 결과 배치 1회 + 필요 시 리전 재선택**이다. 로컬 알림은 만들지 않는다(지연 알림은 서버 경로).
+
 ## 2. 성능 (NFR-U4-PERF)
 
 | ID | 요구 | 실장 / 근거 |
@@ -74,6 +80,8 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 | **DATA-U4-05** | 만료된 `replan_session` 정리는 **기존 `StalePartialSweeper` 패턴을 재사용**한다 | **실장**: `AsyncConfig.kt`에 `@EnableScheduling` 실재 — 신규 스케줄링 인프라 0 |
 
 > **[이연 · 2026-10-12 → U10] LEGAL-U4-01~04 · DATA-U4-01·02 (실제 경로 수집·보존).** `actual_route_point` 테이블은 만들어지지 않았고(`backend/app/src/main/resources/db/migration/`에 없음) FE의 `useActualRoute`도 없다 — 실제 경로(US-PLANB-13)는 U10 소관이다. 원문은 U10 설계 입력으로 보존한다. **U4에 남는 위치 법적 처리**: 위치 동의(L2) 철회 시 재계획 기준점 좌표를 파기하고 `origin_kind='PURGED'`로 남긴다(TRIP-992 — `V2.56__replan_origin_purged.sql`, `backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/adapter/in/event/LocationLegalConsentRevokedSubscriber.kt`). LEGAL-U4-05(일회성 현재 위치 미적재)는 유효하다.
+
+> **[개정 · 2026-10-12 · U10 FD] LEGAL-U4-02·04 · DATA-U4-01·02.** LEGAL-U4-02(수집 구간 시작·종료에 `COLLECTION` 1건씩)는 유지하고, **서버가 하루치 경로를 저장한 순간 `COLLECTION` 1건**과 **지오펜스 무장 구간 시작·종료 `USE` 1건씩**을 더한다(Q12=A — 법무 확인 대상 O-U10-1). LEGAL-U4-04의 "기존 점열 파기"는 `actual_route_day` 전량 파기 + `PURGE(ACTUAL_ROUTE)`로 읽는다. **DATA-U4-01**(50m 샘플링)은 기기 쪽 저전력 기록 + 다운샘플로 대체되고 값은 U10 NFR이 정한다. **DATA-U4-02**("여행 종료 후 N일 파기, 초기값 90일")는 **폐기** — 보존 = 여행 기록 수명, L3 철회 시 즉시 파기(Q7=A · DEC-U10-7).
 
 ## 5. 관측 (NFR-U4-OBS)
 

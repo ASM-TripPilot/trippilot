@@ -87,6 +87,8 @@
 
 > **[이연 · 2026-10-12 → U10] `source = AUTO_GEOFENCE`.** 컬럼 값은 V2.21 CHECK에 남아 있으나 지오펜스 자동 도착을 만드는 클라 경로는 없다(`frontend/src/shared/location/geofence.ts` degrade 스텁). 자동 도착·이탈은 U10 소관이고, 현행 방문 체크는 `MANUAL`뿐이다.
 
+> **[개정 · 2026-10-12 · U10 FD] §3.1 `visit_check` 확장(소유는 U5 archive).** `source`는 **도착 출처**로 의미를 좁혀 읽고, **`completion_source`**(`AUTO_GEOFENCE_EXIT`·`AUTO_NEXT_ARRIVAL`·`MANUAL`, 완료가 있을 때만 필수)와 자동 되돌림 표식 **`auto_suppressed_at`**을 더한다. 기존 완료 행은 `MANUAL`로 백필한다(지금까지 자동 경로가 0이었다). `dwellMinutes`는 여전히 파생·비표시(INV-U4-03)이고, `AUTO_NEXT_ARRIVAL` 완료의 체류는 `DELAY` 입력에서 빠진다. 상세 `construction/u10-gps-location-automation/functional-design/domain-entities.md` §2.
+
 ### 3.2 `replan_session` — 재계획 세션
 
 `i10` 제출 ~ `i18` 확정/취소까지의 수명.
@@ -128,6 +130,8 @@
 > ⚠ **이 테이블은 아직 실장되지 않았다**(2026-08-22 실측 — V2.14~V2.27에 없다). 그 결과 U5의 회고·요약 stats가 **실제 이동 거리를 서버에서 산출할 수 없어**, 1차는 방문점 연결선 근사(`distanceSource: VISIT_LINE`)로 운용하고 이 테이블이 실장되면 `ROUTE`로 승격한다(U5 DEC-U5-12 · G-U5-5). **U4 실장 시 U5 stats 계약을 함께 확인할 것.**
 
 > **[이연 · 2026-10-12 → U10] §3.3 `actual_route_point` 전체.** 2026-10-12 현재도 마이그레이션에 없다(최신 V2.62까지). 실제 경로 기록·레이어·토글(US-PLANB-13)은 신설 유닛 **U10 "GPS·위치 자동화"**(미구현, 사용자 결정 2026-10-12)로 넘긴다. U5 stats의 `VISIT_LINE` 근사는 U10 실장 전까지 유지된다.
+
+> **[개정 · 2026-10-12 · U10 FD] §3.3 — 점열 모델 폐기, 소유 이동.** `actual_route_point`(서버 원시 점열)는 **만들지 않는다**(Q4=C — 원시 좌표는 기기 밖으로 나가지 않는다). 대신 **`archive` 모듈 소유 `actual_route_day`**(여행·날짜당 1행 — 다운샘플 인코딩 폴리라인 세그먼트 · 거리 · 점 수)를 신설한다(Q5=A — U5 DEC-U5-6 개정). INV-U4-07(동의 없으면 행 없음 · 철회 시 비활성)은 "**철회 시 전량 파기 + `PURGE(ACTUAL_ROUTE)`**"로 강화되고(Q7=A), INV-U4-08(걸음 수 없음)은 그대로다. 근거 `construction/u10-gps-location-automation/functional-design/domain-entities.md` §3·§8.
 
 ---
 

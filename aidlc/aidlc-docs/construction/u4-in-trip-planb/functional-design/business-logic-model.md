@@ -28,6 +28,10 @@
 > - **DEC-U4-5**: "`recalculate` 신설 안 함"은 유지되지만, 재계획 산출은 ai `regenerate(problem, locked_slots)` 직결이 아니다. 백엔드는 **`POST /ai/v1/planb/replan`**(`HttpScheduleAgentAdapter.kt` `REPLAN_PATH`)을 부르고, AI는 **RAG(KB-3 상황·KB-5 장소 지식) + 방향 지시어 번역 + `ScheduleAgent`(페르소나 점수 → 어셈블리 배치)**로 답한다(`ai/src/trippilot/api/wiring.py` `replan`, 1688행 부근).
 > - **DEC-U4-6**의 "앱 꺼짐 = 지오펜스 wake 1회 판정"과 **DEC-U4-7**의 실제 경로 기록은 **[이연 · 2026-10-12 → U10]**(신설 유닛 "GPS·위치 자동화", 미구현). 현행은 앱 켜짐 경로(포그라운드 평가)와 수동 경로뿐이다 — 지오펜스는 `frontend/src/shared/location/geofence.ts` degrade 스텁.
 
+> **[개정 · 2026-10-12 · U10 FD] DEC-U4-6·DEC-U4-7 — U10이 이연분을 다시 정했다(원문 보존).**
+> - **DEC-U4-6** "앱 꺼짐 = 지오펜스 wake 1회 판정 · 서버 스케줄러 없음"은 **폐기**한다. wake 판정은 기기 좌표를 서버로 보내야 성립하는데 U10 DEC-U10-8(지오펜스 판정은 기기에서, 서버엔 결과만 — Q11=A)이 그것을 막는다. 대신 `DELAY`는 **서버가 방문 체크 시각만으로 파생**하고, 진행 중 체류 초과·이동 지연은 **서버 스케줄러**가 판정한다 — 단 자동 기록이 무장된 여행에만(U10 DEC-U10-9 · BR-U10-23~28). "클라 신호 수집 + 서버 판정" 중 **서버 판정 소유(C9)는 그대로**다.
+> - **DEC-U4-7** "연속 위치 추적 없음 · 앱을 켜 둔 구간만"은 **개정**한다(Q3=B 사용자 선택): OS '항상 허용' + 정확한 위치 + 앱 위치 동의(L2·L3) + 여행 날짜 구간 안 + 기능 플래그 ON일 때 **백그라운드 저전력 연속 기록**을 한다. 원시 좌표는 **기기 밖으로 나가지 않고** 하루치 다운샘플 폴리라인 + 거리만 서버(`archive` `actual_route_day`)에 올린다(DEC-U10-3·4). when-in-use 사용자의 포그라운드 구간 경로는 **기록하지 않는다**(Q3=B 문면). 근거: `construction/u10-gps-location-automation/functional-design/business-logic-model.md` §1·§2.
+
 ---
 
 ## 2. 트리거 판정 파이프라인 (C9 · US-PLANB-02)
@@ -188,6 +192,8 @@ i01 여행 중 일정 (일정 | 지도 세그먼트)
 - **외부 지도앱이 없으면** 웹 지도 → 그것도 불가면 앱 산출 거리 요약(US-ONTRIP-03 예외).
 
 > **[이연 · 2026-10-12 → U10] §4 위치 자동화 부분.** "지오펜스 진입 → i04"의 자동 경로와 `i03 실제 경로 토글`(US-PLANB-13)은 U10으로 넘어간다. **[개정 · 2026-10-12]** 현행 i01은 수동 [도착]/[방문 완료]가 i01 카드로 흡수된 형태(TRIP-396)이고, 여행 중 허브는 `frontend/src/pages/live/live-itinerary/`(`LiveItineraryPage`·`LiveHubView`)가 그린다. i 코드는 옛 체계다 — 라이브 Figma i 밴드는 **i01~i10**으로 재번호됐다(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`).
+
+> **[개정 · 2026-10-12 · U10 FD] §4 방문 완료 — 자동 완료 추가.** i01 `[방문 완료]` 수동 버튼은 **폴백으로 남고**, 도착이 확정된 슬롯에서 최소 체류 10분 뒤 리전을 벗어나면(3분 재진입 없음) **이탈 시각으로 자동 완료**한다(`completion_source = AUTO_GEOFENCE_EXIT`, Q2=A). 다음 슬롯 자동 도착 시 직전 미완료 슬롯 자동 완료(`AUTO_NEXT_ARRIVAL`)를 보조 규칙으로 둔다. "앱 켜 둔 구간만"이던 `i03` 한계 각주는 U10 경로 기록 조건(무장 + L3)으로 바뀐다. 상세 `construction/u10-gps-location-automation/functional-design/business-logic-model.md` §5 · `business-rules.md` BR-U10-14~19.
 
 ---
 
