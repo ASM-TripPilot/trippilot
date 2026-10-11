@@ -719,6 +719,29 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PlaceList' }
 
+  /places/{poiId}:
+    get:
+      tags: [places]
+      summary: 장소(POI) 단건 — 상세 화면이 목록을 거치지 않고 여는 길
+      description: >
+        목록(`/places`)과 **같은 `Place` 모양**이다. 상세 화면이 앞 화면의 캐시에서 장소를 골라 쓰던 것을
+        대신한다 — 캐시가 없으면(딥링크·콜드 스타트) 열 길이 없었다(TRIP-824).
+
+
+        **ACTIVE 만으로 거르지 않는다.** 목록은 ACTIVE 만 내지만, 상세는 이미 알고 있는 장소를 다시 여는
+        화면이다 — 담아 둔 곳이 폐업(`CLOSED`)하거나 원본에서 빠져도(`LOST`) 404 가 아니라 그 상태를 실어
+        돌려준다. 화면이 상태를 말한다. 수집 게이트를 통과한 적 없는 `UNVERIFIED` 는 **404** 다(INV-1).
+
+
+        갤러리(`imageUrls`)·입장료·소개는 아직 없다 — 값이 수집돼야 붙일 수 있다(컬럼만 만들면 전부 null).
+      parameters:
+        - { name: poiId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/Place' } } } }
+        '400': { description: poiId 가 UUID 형식이 아님 }
+        '401': { description: 인증 필요 }
+        '404': { description: 그런 장소 없음(게이트 미통과 `UNVERIFIED` 포함) }
+
   /saved-places:
     post:
       tags: [places]
@@ -1901,7 +1924,7 @@ components:
         dataStatus:
           type: string
           enum: [ACTIVE, UNVERIFIED, LOST, CLOSED]
-          description: 탐색은 항상 ACTIVE, 담기 목록은 폐업(CLOSED)·미검증(UNVERIFIED)도 포함 — 클라 뱃지
+          description: 탐색 목록은 항상 ACTIVE. 단건은 폐업(CLOSED)·유실(LOST)도, 담기 목록은 미검증(UNVERIFIED)까지 포함 — 클라 뱃지
 
     SavePlaceRequest:
       type: object
