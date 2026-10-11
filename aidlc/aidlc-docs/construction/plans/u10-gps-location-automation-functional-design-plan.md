@@ -121,13 +121,16 @@
 - [x] 1. 유닛 컨텍스트 — `unit-of-work.md`·`unit-of-work-story-map.md`·`unit-of-work-dependency.md` 2026-10-12 개정 블록 · `stories.md` 에픽 F·G·H(US-ONTRIP-01 · US-PLANB-02/03/10/13 · US-REC-01/03/08) · `requirements.md` LEGAL-01·FR-ONBOARD-02·FR-NOTIF-01·NFR-DATA-03 · `components.md` C1·C2·C9·C12
 - [x] 1b. **기존 자산 실측** — §2 기준선(프런트 위치 계층·권한·app.config · 백엔드 archive·auth·planb-detection · 마이그레이션 V1.3/V2.21/V2.33/V2.49/V2.56 · ai openapi)
 - [x] 1c. **상속 설계 대조** — U4 FD(BR-U4-36~42 · INV-U4-07/08 · DEC-U4-7/8 · O-U4-1) · U4 NFR(MOBILE-U4-01~07 · LEGAL-U4-01~05) · U5 FD(DEC-U5-6/12 · BR-U5-12/43/53/55 · O-U5-8) · U6 FD(BR-U6-11/29~31) → 드리프트 **D-U10-1~12**
-- [ ] 1d. **라이브 Figma 대조** — i 밴드(i01 허브 지도·방문 카드, 재번호 i01~i10 — 옛 코드로 찾지 말 것), j01 `manual-checkin`, l06 위치 동의(permission-denied 포함). 권한 승격 프리프롬프트·강등 배너·자동 기록 출처 표시의 **프레임 유무**만 확인(새 프레임 작도는 Q21 답 이후 `figma-build` 소관)
-- [ ] 2. **질문 Q1~Q22 답변 수집**(아래 §5) — 모호한 답이 있으면 `u10-gps-location-automation-functional-design-clarification-questions.md` 생성 후 재확인
-- [ ] 3. `business-logic-model.md` — **DEC-U10-\*** · 자동화 단계 상태기계(권한 없음 → 포그라운드 → 백그라운드, 강등 전이 포함) · 지오펜스 생애주기(무장·리전 선택·해제) · 도착/완료 판정 흐름(진입·체류·이탈) · 경로 샘플링→다운샘플→업로드 흐름 · DELAY 신호 판정 흐름 · 동의 철회 파기 흐름 · 갭 **G-U10-\***
-- [ ] 4. `domain-entities.md` — `visit_check` 확장(완료 출처) · 실제 경로 엔티티(Q4 결과: 점열 or 일 단위 폴리라인) · 보존·파기 규칙 · `LocationCollectionSource`/`LocationPurgeScope` 확장 · 이벤트(`GeofenceArrived`? 신설 여부 포함) · **INV-U10-\*** · 소유 경계표(U4↔U5↔U10↔U0)
-- [ ] 5. `business-rules.md` — **BR-U10-\***(반경·정확도·체류·이탈·리전 상한·강등·오탐 정정·법정 로그) + **PBT-U10-\***(예: 동의 없으면 경로 행 0 · 자동 완료 시각 ≥ 도착 시각 · 리전 수 ≤ 상한 · 강등 후 무장 0) + 미결 **O-U10-\***
-- [ ] 6. `frontend-components.md` — 위치 계층 모듈(`shared/location`) 확장 · 백그라운드 태스크 등록 위치(FSD 층 — 태스크는 모듈 최상위 `defineTask` 필요) · 권한 승격 프리프롬프트 · i01·j 화면 변경점 · testID · 6-b 실기 전용 항목(지오펜스 발화는 jest 원리적 사각)
-- [ ] 7. 정합 검증 — U4 사후 정정(BR-U4-36/37/41 · DEC-U4-7 · MOBILE-U4-01/02/05 · O-U4-1) · U5 사후 정정(DEC-U5-6 · BR-U5-55) · U6(BR-U6-11) · `unit-of-work.md` C2→C1 · 인셉션 정정 상신 목록
+- [x] 1d. **라이브 Figma 대조** — i 밴드(i01 허브 지도·방문 카드, 재번호 i01~i10 — 옛 코드로 찾지 말 것), j01 `manual-checkin`, l06 위치 동의(permission-denied 포함). 권한 승격 프리프롬프트·강등 배너·자동 기록 출처 표시의 **프레임 유무**만 확인(새 프레임 작도는 Q21 답 이후 `figma-build` 소관)
+- [x] 2. **질문 Q1~Q22 답변 수집**(아래 §5) — 모호한 답이 있으면 `u10-gps-location-automation-functional-design-clarification-questions.md` 생성 후 재확인
+- [x] 3. `business-logic-model.md` — **DEC-U10-\*** · 자동화 단계 상태기계(권한 없음 → 포그라운드 → 백그라운드, 강등 전이 포함) · 지오펜스 생애주기(무장·리전 선택·해제) · 도착/완료 판정 흐름(진입·체류·이탈) · 경로 샘플링→다운샘플→업로드 흐름 · DELAY 신호 판정 흐름 · 동의 철회 파기 흐름 · 갭 **G-U10-\***
+- [x] 4. `domain-entities.md` — `visit_check` 확장(완료 출처) · 실제 경로 엔티티(Q4 결과: 점열 or 일 단위 폴리라인) · 보존·파기 규칙 · `LocationCollectionSource`/`LocationPurgeScope` 확장 · 이벤트(`GeofenceArrived`? 신설 여부 포함) · **INV-U10-\*** · 소유 경계표(U4↔U5↔U10↔U0)
+- [x] 5. `business-rules.md` — **BR-U10-\***(반경·정확도·체류·이탈·리전 상한·강등·오탐 정정·법정 로그) + **PBT-U10-\***(예: 동의 없으면 경로 행 0 · 자동 완료 시각 ≥ 도착 시각 · 리전 수 ≤ 상한 · 강등 후 무장 0) + 미결 **O-U10-\***
+- [x] 6. `frontend-components.md` — 위치 계층 모듈(`shared/location`) 확장 · 백그라운드 태스크 등록 위치(FSD 층 — 태스크는 모듈 최상위 `defineTask` 필요) · 권한 승격 프리프롬프트 · i01·j 화면 변경점 · testID · 6-b 실기 전용 항목(지오펜스 발화는 jest 원리적 사각)
+- [x] 7. 정합 검증 — U4 사후 정정(BR-U4-36/37/41 · DEC-U4-7 · MOBILE-U4-01/02/05 · O-U4-1) · U5 사후 정정(DEC-U5-6 · BR-U5-55) · U6(BR-U6-11) · `unit-of-work.md` C2→C1 · 인셉션 정정 상신 목록
+  - 1d 결과(2026-10-12, `get_metadata` 읽기 전용): 승격 설명·"자동 기록" 표시·강등 1줄·실제 경로 레이어/토글 **프레임 0**, j01 `manual-checkin` 문구는 U10 MANUAL과 일치, l06 사용처에 자동 기록·경로 없음 → FD `business-logic-model.md` §14
+  - 2: 명확화 파일 불필요 — Q1=B·Q3=B 직접 선택, 나머지 추천안. Q8의 "Q2=C 보조 규칙 병행" 부분 질문은 미답 → 설계자 판단으로 채택(DEC-U10-2 · O-U10-3)
+  - 7: U4(FD 4종·NFR 2종)·U5(FD 2종)·U6(FD 1종)에 `[개정 · 2026-10-12 · U10 FD]` 블록 추가(append-only). `unit-of-work.md` C2→C1은 이미 반영돼 있었다(D-U10-3 해소). 인셉션 정정 상신 목록 = FD `business-logic-model.md` §15
 - [ ] 8. 완료 메시지 → **승인 게이트** → `audit.md`·`aidlc-state.md`
 - [ ] 9. (후속 단계) NFR Requirements — 배터리·심사(2.5.4·5.1.1·5.1.5)·Android Play 백그라운드 위치 신고·privacy manifest/App Privacy · NFR Design · Infra 증분(`shared-infrastructure.md` — 신규 인프라가 없으면 "변경 없음" 기록)
 
