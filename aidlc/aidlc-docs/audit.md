@@ -1546,3 +1546,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8·U10 Functional Design Step 7~8(승인 대기).
 
 ---
+## Functional Design 승인 — U8 · U10 / 후속 게이트 권고안 일괄 지시
+**Timestamp**: 2026-10-11T19:20:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "뭐 확인해야해? 더 작성해야하는 문서가 있나?" / "그럼 권고로 ㄱㄱ"
+**AI Response**: U8·U10 Functional Design을 승인으로 기록(검토 포인트 제시 후 "권고로 ㄱㄱ"). 같은 지시를 남은 게이트의 권고안 일괄 적용으로 해석: ① 공통 Infra 계획 Q1~Q6 — 추천 표기가 없어 AI가 근거를 붙여 권고안을 선택·적용(선택값과 근거를 계획서에 명기) ② U10 NFR Requirements(필수 — 배터리·심사·Play 신고·privacy manifest) ③ U8 NFR Requirements(얇게 — 신규 축만, O-U8-9 판정 = 필요). NFR 질문은 계획서에 권고안을 표시하고 같은 지시로 적용하되, 산출물 완료 시 표준 승인 게이트는 다시 제시한다.
+**Context**: CONSTRUCTION — U8·U10 FD 완료 → NFR Requirements 착수, shared-infrastructure 승인 처리.
+
+---
