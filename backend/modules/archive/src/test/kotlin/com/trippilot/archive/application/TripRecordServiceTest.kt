@@ -217,6 +217,18 @@ class TripRecordServiceTest : StringSpec({
         d.unvisitedSlotKeys shouldContainExactly emptyList()
     }
 
+    // TRIP-1315 — 화면이 이 배열의 `index + 1` 로 "몇 번째 방문"을 매긴다. 허브(`listByDay`)와 같은 함수로 줄 세운다.
+    "그 날 실적은 지나온 순서로 나온다 — 화면이 이 순서로 방문 번호를 매긴다" {
+        val (first, last) = List(2) { UUID.randomUUID() }
+        val checks = Checks()
+        arrived(checks, day1, last, at = "05:00") // 일부러 늦은 방문을 먼저 넣는다
+        arrived(checks, day1, first, at = "01:00")
+        val svc = TripRecordService(trips, plans(), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog())
+
+        svc.compare(acc, tripId).days.single { it.date == day1 }.actual.map { it.poiId } shouldContainExactly listOf(first, last)
+        svc.findDailyVisits(tripId).single { it.date == day1 }.visits.map { it.poiId } shouldContainExactly listOf(first, last)
+    }
+
     "사진 개수·메모 유무가 실적에 함께 온다" {
         val poi = UUID.randomUUID()
         val checks = Checks()

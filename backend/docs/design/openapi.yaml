@@ -1077,7 +1077,13 @@ paths:
     get:
       tags: [trips]
       summary: 그 날의 방문 기록
-      description: 즉석 방문은 슬롯 키가 없어 **도착 시각(여행지 기준 날짜)** 으로 묶인다.
+      description: >
+        즉석 방문은 슬롯 키가 없어 **도착 시각(여행지 기준 날짜)** 으로 묶인다.
+
+
+        **배열 순서가 곧 방문 순서다** — 도착 시각 오름차순이고, 도착한 적 없는 건너뛰기는 기록된 시각으로
+        끼어든다. 기록(`/trips/{tripId}/records` 의 `actual`)과 **같은 순서**라 화면은 `index + 1` 로
+        "몇 번째 방문"을 매기면 된다(TRIP-1315). 종전에는 최신이 먼저 나와 두 화면의 번호가 어긋났다.
       responses:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheckList' } } } }
         '404': { description: 여행 없음/타 계정 }
@@ -3602,6 +3608,9 @@ components:
           items: { $ref: '#/components/schemas/PlannedSlot' }
         actual:
           type: array
+          description: >
+            그 날의 실적. **배열 순서가 곧 방문 순서다**(도착 시각 오름차순, 도착한 적 없는 건너뛰기는 기록된
+            시각) — 건너뛴 곳·즉석 방문도 번호를 받는다. `/trips/{tripId}/visits/days/{day}` 와 같은 순서다(TRIP-1315).
           items: { $ref: '#/components/schemas/ActualVisit' }
         unvisitedSlotKeys:
           type: array
