@@ -153,13 +153,15 @@ def validate_groups(groups):
     # 생성 상한 2종(TRIP-1314)은 없으면 백엔드 기본(10·예외 없음)이다. **있는데 틀리면** 백엔드가 기동에서
     # 죽는다(빈 상한·0·UUID 오타) — 파드가 뜨다 죽기 전에 여기서 막는다.
     limit = backend.get("ITINERARY_GENERATION_DAILY_LIMIT")
-    if limit is not None and not (limit.isascii() and limit.isdigit() and int(limit) >= 1):
+    if limit is not None and not (limit.isascii() and limit.isdigit() and 1 <= int(limit) <= 2**31 - 1):
         raise ValueError("ITINERARY_GENERATION_DAILY_LIMIT must be a positive integer; remove the key to use the default")
     exempt = backend.get("ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS", "")
     if exempt.strip():
         try:
-            for item in exempt.split(","):
-                uuid.UUID(item.strip())
+            for item in (part.strip() for part in exempt.split(",")):
+                # uuid.UUID 는 대시 없는 32자·중괄호·urn 접두도 받는데 백엔드(UUID.fromString)는 거기서 죽는다.
+                if str(uuid.UUID(item)) != item.lower():
+                    raise ValueError(item)
         except ValueError:
             raise ValueError("ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS must be comma-separated UUIDs") from None
     if backend.get("PLACE_GEOCODE_MODE") == "kakao":
