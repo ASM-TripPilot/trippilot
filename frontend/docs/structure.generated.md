@@ -590,6 +590,9 @@
 
 ## src/pages/assistant/assistant-sheet/model/
 - `src/pages/assistant/assistant-sheet/model/assistantQueries.ts`  →  assistantKeys · appendMessages · useAssistantSession · useAssistantMessages · useAssistantSessions · SendTurnVariables · useSendTurn · useApplyProposal · useDismissProposal · useMarkProposal · useClearSession
+- `src/pages/assistant/assistant-sheet/model/cardModel.ts`  →  slotFaceLine
+- `src/pages/assistant/assistant-sheet/model/nextActionRoute.ts`  →  InternalAction · NextActionTarget · NextActionContext · nextActionRoute
+- `src/pages/assistant/assistant-sheet/model/resolveSheetState.ts`  →  SheetState · SheetSessionQuery · resolveSheetState
 
 ## src/pages/auth/login/config/
 - `src/pages/auth/login/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
@@ -1609,4 +1612,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 987개 파일
+합계 990개 파일
