@@ -64,6 +64,10 @@ const AI_LIMIT_NOTE =
   '내일 0시에 다시 쓸 수 있어요.\n직접 짜기는 계속 쓸 수 있어요.';
 const AI_LIMIT_MANUAL_LABEL = '직접 짜기 이어가기';
 const AI_LIMIT_CLOSE_LABEL = '닫기';
+// 서버 규칙 거절(409 · 여행 중·끝난 여행 재생성). 본문은 서버 사유를 그대로 싣는다 — 규칙의 주인은 서버다.
+const REFUSED_TITLE = '일정을 다시 만들 수 없어요';
+const REFUSED_REPLAN_LABEL = '재계획하기';
+const REFUSED_CLOSE_LABEL = '닫기';
 
 // 카드 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다. `#000000` 은 raw-hex 가드의 브랜드 팔레트에 없어 그림자 색으로 정당하다
@@ -186,6 +190,13 @@ export interface GeneratingScreenProps {
     onContinueManual: () => void;
     onClose: () => void;
   } | null;
+  /** 서버가 이 재생성을 규칙으로 거절했다(409) — 실패 표면 대신 서버 사유. 다시 보내도 같아 [다시 시도] 없음.
+   * `onReplan` 은 여행 기간 안일 때만(배선이 판정) — 끝난 여행은 재계획도 409 다. */
+  refused?: {
+    message: string;
+    onReplan: (() => void) | null;
+    onClose: () => void;
+  } | null;
 }
 
 export function GeneratingScreen({
@@ -196,6 +207,7 @@ export function GeneratingScreen({
   center,
   busy,
   aiLimit,
+  refused,
 }: GeneratingScreenProps): ReactElement {
   const pulse = useStepPulse(STEPS.length);
   return (
@@ -264,6 +276,31 @@ export function GeneratingScreen({
                   label: BUSY_WAIT_LABEL,
                   variant: busy.cancelable ? 'outline' : 'filled',
                   onPress: busy.onWait,
+                },
+              ]}
+            />
+          ) : refused ? (
+            <StateNotice
+              testID="itinerary-generating-refused"
+              icon={<AlertCircleGlyph />}
+              title={REFUSED_TITLE}
+              description={refused.message}
+              actions={[
+                ...(refused.onReplan
+                  ? [
+                      {
+                        testID: 'itinerary-generating-refused-replan',
+                        label: REFUSED_REPLAN_LABEL,
+                        variant: 'filled' as const,
+                        onPress: refused.onReplan,
+                      },
+                    ]
+                  : []),
+                {
+                  testID: 'itinerary-generating-refused-close',
+                  label: REFUSED_CLOSE_LABEL,
+                  variant: refused.onReplan ? 'outline' : 'filled',
+                  onPress: refused.onClose,
                 },
               ]}
             />

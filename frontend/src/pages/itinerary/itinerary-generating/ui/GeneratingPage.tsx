@@ -19,10 +19,14 @@ import type {
 import {
   getGetTripsTripIdItineraryQueryKey,
   getMe,
+  resolveGenerationRefused,
+  useGetTripsTripId,
   useGetTripsTripIdItinerary,
   useGetTripsTripIdMustVisits,
   usePostTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
+import { isDateInRange } from '@/shared/lib/monthGrid';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
 import type { MapCenter, MapPin } from '@/shared/map';
@@ -197,6 +201,19 @@ export function GeneratingPage({
   }, [fire, mode]);
 
   const busy = useGenerationBusy(generate.error, start);
+  // 서버 규칙 거절(여행 중·끝난 여행 재생성 409) — 다시 보내도 같은 답이다. [재계획하기]는 오늘이 여행 기간
+  // 안일 때만 준다(끝난 여행은 재계획도 409). 기간은 거절됐을 때만 묻고, 모르면 버튼을 빼고 [닫기]만(INV-4).
+  const refusal = resolveGenerationRefused(generate.error);
+  const trip = useGetTripsTripId(tripId, {
+    query: { enabled: refusal !== null, retry: false },
+  });
+  const inTrip =
+    trip.data !== undefined &&
+    isDateInRange(
+      seoulDate(new Date()),
+      trip.data.startDate,
+      trip.data.endDate
+    );
 
   useEffect(() => {
     if (firedRef.current) return;
@@ -239,6 +256,19 @@ export function GeneratingPage({
               onClose: goHome,
             }
           : null
+      }
+      refused={
+        refusal && {
+          message: refusal.message,
+          onReplan: inTrip
+            ? () =>
+                router.replace({
+                  pathname: '/trips/[tripId]/live',
+                  params: { tripId },
+                })
+            : null,
+          onClose: goHome,
+        }
       }
       failed={generate.isError}
       busy={busy && { ...busy, onWait: goHome }}

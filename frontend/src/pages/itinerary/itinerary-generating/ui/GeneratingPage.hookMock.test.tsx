@@ -210,6 +210,12 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
     isPending: false,
     isError: false,
   }),
+  // 규칙 거절(409) 때만 켜지는 여행 기간 조회 — 이 파일의 오류는 axios 409 가 아니라 늘 꺼져 있다.
+  useGetTripsTripId: () => ({
+    data: undefined,
+    isPending: false,
+    isError: false,
+  }),
   // 관찰 모드(mode 없음) 스텁 — 옛 `.leaveToast` 목에만 있었다. 다른 두 모양에선 옛 목처럼 부르면 throw 한다
   // (합치며 목이 넓어져 "생성 모드에서 GET 을 부르는 회귀"가 조용히 통과하지 않게 — 02a ★ 넓어지는 목).
   useGetTripsTripIdItinerary: () => {
