@@ -40,7 +40,7 @@ from trippilot.llm_gateway.workers.preference import (
     plan_chunks,
     score_chunk_cap,
 )
-from trippilot.ports.llm_port import LlmRequest, LlmResponse
+from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.in_memory_trace import InMemoryTrace
@@ -104,6 +104,8 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.ALTERNATIVE_EXPLANATION: 4096,
         # 실측 출력 950~1016 토큰 — 1024 에 붙어 잘림 1회가 재시도 → 504 로 번졌다
         LlmFeature.REFLECTION_TEMPLATE: 2048,
+        # fable(사고 토큰도 상한 안) 실측 출력 1000~1024 — 1024 에서 잘림
+        LlmFeature.SHARE_CARD_COPY: 2048,
     }.get(feature, 1024)
     assert [r.max_tokens for r in llm.requests] == [expected]
 
@@ -114,6 +116,50 @@ def test_explicit_shared_cap_still_applies_to_unmapped_features() -> None:
     assert cfg.max_tokens_for(LlmFeature.EVENT_EXTRACTION) == 4096
     assert cfg.max_tokens_for(LlmFeature.EXPLANATION) == 4096
     assert _CFG.max_tokens_for(LlmFeature.PREFERENCE_SCORING) == 1024
+
+
+@pytest.mark.parametrize("feature", list(LlmFeature))
+def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
+    """출력 상한과 같은 길 — 기능별 effort 가 벤더 요청까지 닿는다(미지정은 None)."""
+    llm = _RecordingLlm()
+    gw = GatewayFacade(llm, _Renderer(), ClosedSetGate(), _CFG, InMemoryTrace())
+
+    try:
+        gw.call(feature, {}, _pool(1), _TRACE, _NOW)
+    except ValueError:
+        pytest.skip(f"{feature.value} 라우팅 미설정 — effort 와 무관")
+
+    expected = {
+        # fable 실측(2026-10-11): 백엔드 시한(회고 15s·리마인드 8s·replan 25s) 안에 들려면 low
+        LlmFeature.REFLECTION_TEMPLATE: "low",
+        LlmFeature.REMINDER_COPY: "low",
+        LlmFeature.ALTERNATIVE_SELECTION: "low",
+    }.get(feature)
+    assert [r.effort for r in llm.requests] == [expected]
+
+
+def test_effort_survives_timeout_retry() -> None:
+    """2단 폴백(재시도 모델)도 같은 effort 로 부른다 — 재시도만 느려지면 예산을 못 지킨다."""
+
+    class _TimeoutOnce(_RecordingLlm):
+        def invoke(self, request: LlmRequest) -> LlmResponse:
+            if not self.requests:
+                self.requests.append(request)
+                raise LlmTimeoutError("first")
+            return super().invoke(request)
+
+    cfg = C1Config(
+        model_ids=_CFG.model_ids,
+        retry_models={LlmFeature.ALTERNATIVE_SELECTION: "m-retry"},
+        feature_effort={LlmFeature.ALTERNATIVE_SELECTION: "low"},
+    )
+    llm = _TimeoutOnce()
+    gw = GatewayFacade(llm, _Renderer(), ClosedSetGate(), cfg, InMemoryTrace())
+
+    gw.call(LlmFeature.ALTERNATIVE_SELECTION, {}, _pool(1), _TRACE, _NOW,
+            retry_timeout_sec=1.0)
+
+    assert [(r.model_id, r.effort) for r in llm.requests] == [("m-h", "low"), ("m-retry", "low")]
 
 
 # ── (b) 청크 상한 ───────────────────────────────────────────────────

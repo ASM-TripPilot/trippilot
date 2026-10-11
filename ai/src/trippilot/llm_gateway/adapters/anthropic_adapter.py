@@ -61,6 +61,8 @@ class AnthropicAdapter:
         self._client = client
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
+        # effort 는 지정됐을 때만 — haiku-4-5 처럼 파라미터째 거부하는 모델이 있다.
+        extra = {"output_config": {"effort": request.effort}} if request.effort else {}
         started = time.monotonic()
         try:
             resp = self._client.messages.create(
@@ -69,6 +71,7 @@ class AnthropicAdapter:
                 # temperature 미전달 — Claude 5 계열이 파라미터째 거부(400). 모듈 docstring.
                 timeout=request.timeout_sec,
                 messages=[{"role": "user", "content": _content(request)}],
+                **extra,
             )
         except anthropic.APITimeoutError as e:
             raise LlmTimeoutError(f"timeout > {request.timeout_sec}s: {e}") from e

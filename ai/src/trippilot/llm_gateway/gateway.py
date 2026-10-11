@@ -137,7 +137,7 @@ class GatewayFacade:
         response, reason, spent_ms = self._invoke(
             model_id, prompt, prompt_ref,
             self._cfg.timeout_sec if timeout_sec is None else timeout_sec, images,
-            self._cfg.max_tokens_for(feature),
+            self._cfg.max_tokens_for(feature), self._cfg.effort_for(feature),
         )
         retry_model = self._cfg.retry_models.get(feature)
         if (
@@ -157,7 +157,7 @@ class GatewayFacade:
             model_id = retry_model
             response, reason, spent_ms = self._invoke(
                 model_id, prompt, prompt_ref, retry_timeout_sec, images,
-                self._cfg.max_tokens_for(feature),
+                self._cfg.max_tokens_for(feature), self._cfg.effort_for(feature),
             )
         if response is None:
             return self._fallback(
@@ -203,6 +203,7 @@ class GatewayFacade:
         timeout_sec: float,
         images: tuple[LlmImagePart, ...],
         max_tokens: int,
+        effort: str | None,
     ) -> tuple[LlmResponse | None, str | None, int]:
         """벤더 호출 1회 → (응답, 폴백 사유, 경과 ms). 예외를 위로 던지지 않는다.
 
@@ -226,6 +227,7 @@ class GatewayFacade:
                     max_tokens=max_tokens,
                     timeout_sec=timeout_sec,
                     images=images,
+                    effort=effort,
                 )
             )
         except LlmTimeoutError as e:

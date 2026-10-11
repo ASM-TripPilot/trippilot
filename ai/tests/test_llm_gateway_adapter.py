@@ -6,6 +6,7 @@ record-and-return fake client로 (요청 매핑, 응답 매핑, 타임아웃 변
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import anthropic
@@ -61,6 +62,21 @@ def test_request_mapping_is_faithful() -> None:
     assert "temperature" not in client.kwargs
     assert client.kwargs["timeout"] == 2.5  # BR-U4-04 타임아웃 전달
     assert client.kwargs["messages"] == [{"role": "user", "content": "점수를 매겨라"}]
+
+
+def test_effort_unset_keeps_wire_shape() -> None:
+    """effort 를 안 받는 모델(haiku-4-5)이 있다 — 미지정이면 파라미터째 안 보낸다."""
+    client = RecordingClient()
+    AnthropicAdapter(client).invoke(_REQUEST)
+
+    assert "output_config" not in client.kwargs
+
+
+def test_effort_goes_out_as_output_config() -> None:
+    client = RecordingClient()
+    AnthropicAdapter(client).invoke(replace(_REQUEST, effort="low"))
+
+    assert client.kwargs["output_config"] == {"effort": "low"}
 
 
 def test_response_mapping_and_multi_block_join() -> None:

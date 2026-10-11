@@ -74,6 +74,9 @@ class LlmRequest:
     # 멀티모달 입력 (TRIP-595) — 후미 기본값이라 기존 호출 전부 무영향.
     # 비어있지 않은데 어댑터가 이미지를 못 받으면 LlmUnsupportedError.
     images: tuple[LlmImagePart, ...] = ()
+    # 사고 깊이 (`C1Config.effort_for`) — None 이면 벤더에 안 싣는다(모델 기본값).
+    # 받는 어댑터만 쓴다(Anthropic `output_config.effort`), 나머지는 무시.
+    effort: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
