@@ -47,7 +47,14 @@
 # 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
 # `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
 #
-# 갱신: 2026-09-22 · **릴리스 선행이 풀렸다.** PR #598 은 닫혔고 #601 이 2026-09-18 에 승격을
+# 갱신: 2026-10-12 · 루프 다섯 노드 머지 완료(#1040~#1044) → done
+# 갱신: 2026-10-12 · `SOCIAL-TOKEN-APP`(TRIP-1317) 추가 — TRIP-1316 잔여(이메일 선점)를 노드로 뗌
+# 갱신: 2026-10-11 · 루프 착수 전 정리 — 새 노드 셋(SOCIAL-TOKEN-AUD·TRIP-1315·TRIP-1314)과 외부 짝 하나
+# (TRIP-1312), 그리고 **지금 할 수 있는 조각을 떼어 낸 것 둘**(828 → REFLECTION-MOOD · 824 →
+# PLACE-DETAIL-API). 새 간선은 0 이다 — 1312→1314 는 티켓 원문이 "손잡이만 먼저 만들고 값은 나중에
+# 돌려도 된다"고 적어 선행이 아니다. 상세는 파일 말미 §2026-10-11 루프.
+#
+# 이전 갱신: 2026-09-22 · **릴리스 선행이 풀렸다.** PR #598 은 닫혔고 #601 이 2026-09-18 에 승격을
 # 끝내, `aws-bootstrap.yml`·`aws-deploy.yml` 이 **이미 main 에 있다**(실측). 따라서 EKS-DEV-LIVE
 # 의 크리티컬 패스는 이제 **AWS-CONSOLE-BOOTSTRAP · DOMAIN-ACM 둘**이다 — 둘 다 사람·결제다.
 #
@@ -702,12 +709,17 @@ note = """
 [[nodes]]
 id = "TRIP-824"
 ticket = "TRIP-824"
-title = "[Figma] Place 확장 — imageUrls·address·admissionFee·description·photoCount"
+title = "[Figma] Place 확장 잔여 — imageUrls·admissionFee·description (값이 DB 에 없다)"
 status = "todo"
 owner = "장소"
 migration = true
 touches = ["backend/modules/place-data", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
 note = """
+**2026-10-11 쪼갬 — 지금 할 수 있는 조각은 [[PLACE-DETAIL-API]] 가 잇는다**(단건 경로 + 이미 있는
+`address`). 이 노드에는 **값을 채워야 하는 세 필드**만 남는다. 아래 "네 필드가 `poi` 에 없다"는
+이제 셋이다 — `address` 는 V2.58(TRIP-1062-ADDR)로 들어갔다. `photoCount` 는 `imageUrls.size` 로
+파생될 것으로 본다 — 별도 필드가 필요한지는 티켓 「확인 필요 3」에서 값을 채울 때 가린다.
+
 **확인(2026-09-26) — `GET /places/{id}` 는 `openapi.yaml` 에 아직 없다.** 노드가 말한 "단건 신설
 여부가 선행 결정"이 그대로 열려 있다(주석에 *"후보마다 `GET /places/{id}`"* 라는 **언급만** 있다).
 
@@ -801,12 +813,17 @@ note = """
 [[nodes]]
 id = "TRIP-828"
 ticket = "TRIP-828"
-title = "[Figma] Reflection mood·shortMemo + 데이터 부족 시 부분 분석"
+title = "[Figma] 데이터 부족 시 부분 분석 — 채움 규칙 미정 (828 잔여)"
 status = "todo"
 owner = "회고"
-migration = true
-touches = ["backend/modules/reflection", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
+migration = false
+touches = ["backend/modules/reflection", "backend/docs/design/openapi.yaml"]
 note = """
+**2026-10-11 쪼갬 — `mood`·`shortMemo` 는 [[REFLECTION-MOOD]] 가 잇는다.** 아래 "애초에 영속할
+것인가"는 **영속으로 정해졌다**(사용자 승인 2026-10-11). 이 노드에는 세 번째 항목(부분 분석)만
+남고, 그것은 컬럼이 아니라 채움 규칙이라 마이그레이션이 없다. **정의가 먼저다** — "부분 분석"이
+무엇인지 정해지기 전에는 착수하지 않는다.
+
 **대조 완료(2026-09-26) — FE 가 `mood` 를 저장하지 않는다.** `DailyReflectionPage` 주석이
 *"mood/memo 비영속"* 이라고 명시한다. 값 집합(닫힌 enum 인지)을 정하기 전에 **애초에 영속할
 것인가**가 먼저다 — 지금 만들면 아무도 안 쓰는 컬럼이 된다.
@@ -3436,4 +3453,164 @@ note = """
    이면 스텝 로그를 뒤질 것이 없고 **환경 정책**을 봐야 한다(로그에 이유가 안 남는다).
    처방: `gh api -X POST repos/<o>/<r>/environments/github-pages/deployment-branch-policies
    -f name=develop -f type=branch`.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2026-10-11 루프 — 인수인계에서 넘어온 다섯
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 순서는 의존이 아니라 공유 자원이 정한다. 새 간선은 없고, 다투는 것은 `openapi.yaml` 과 Flyway
+# 번호다 — 그래서 스택으로 쌓지 않고 각자 `origin/develop` 에서 잘라 한 번에 하나씩 연다.
+
+[[nodes]]
+id = "SOCIAL-TOKEN-AUD"
+ticket = "TRIP-1316"
+title = "토큰 로그인 경로가 구글 토큰의 발급 대상을 확인하지 않는다 — 쓰는 곳 없는 문을 닫는다"
+status = "done"
+owner = "인증"
+migration = false
+touches = ["backend/modules/auth", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1040 (머지됨 · 2026-10-12).** 유스케이스가 토큰 경로에서 구글을 501 로 거절한다.
+적대적 리뷰가 잔여 셋을 냈다 — 카카오·네이버 토큰 경로의 이메일 선점은 **`SOCIAL-TOKEN-APP` 노드
+(TRIP-1317)로 떼었고**, PKCE 없는 네이버 code 경로도 같은 노드로 넘겼고(앱이 SDK 키 없는 빌드에서 그 경로로 폴백한다), 그리고
+"네이버 id 가 앱 단위 값"이라는 전제는 **2026-10-12 공식 명세로 확인됐다**(앱이 다르면 id 가 다르다).
+
+**인수인계가 가리킨 곳(`AbstractOAuth2Client.kt:20` 의 state·nonce TODO)은 실제 위험이 아니었다.**
+서버는 `state` 를 받지 않고(앱 몫), code 경로는 PKCE 가 있고, 3사는 id_token 을 쓰지 않아 nonce 가
+해당 없다. 코드를 따라가 보니 구멍은 그 옆이다 — `fetchProfileByAccessToken` 이 userinfo 만 부르고
+**토큰이 우리 앱에 발급된 것인지 보지 않는다.**
+
+**구글만 문제다.** 구글 `sub` 는 계정 전역 값이라 남의 앱에 발급된 토큰도 같은 `sub` 를 낸다.
+카카오 회원번호·네이버 id 는 앱마다 달라 기존 계정에 닿지 않고, 애플은 aud 를 이미 본다.
+그리고 **앱은 이 경로로 구글을 보내지 않는다**(code+PKCE 경로만 쓴다) — 검증을 붙이는 것보다
+문을 닫는 편이 작다. 구글 네이티브 SDK 를 들이면 그때 `tokeninfo` 의 `aud` 대조를 붙여 연다.
+"""
+
+[[nodes]]
+id = "SOCIAL-TOKEN-APP"
+ticket = "TRIP-1317"
+title = "카카오·네이버 토큰 로그인이 남의 앱 토큰으로 가입을 받는다 — 남의 이메일로 계정이 선점된다"
+status = "todo"
+owner = "인증"
+migration = false
+touches = ["backend/modules/auth", "deploy/eks", "docker-compose.yml"]
+note = """
+`SOCIAL-TOKEN-AUD` 에서 뗀 잔여(2026-10-12 사용자 승인으로 티켓화). 계정 탈취는 아니다 — 카카오
+회원번호·네이버 id 는 앱마다 달라 기존 계정에 닿지 않는다. 대신 남의 앱 토큰이 **가입 분기**로 들어와
+그 토큰의 이메일로 계정이 생기고, 본인의 첫 가입이 409(`SOCIAL_EMAIL_CONFLICT`)로 막힌다.
+
+**카카오**는 `access_token_info` 의 `app_id` 대조로 닫는다. **사람 몫 선행: 카카오 앱 ID 를 서버 설정에
+넣는 것**(값은 카카오 개발자 콘솔) — 코드에 선행이 아니라 값에 선행이라 간선으로 그리지 않았다.
+**네이버**는 토큰의 발급 대상을 확인할 수단이 있는지 조사부터다(미확인). 없으면 code 경로 전환이
+대안인데 네이버는 PKCE 가 없어 따로 따져야 한다.
+
+**PKCE 없는 네이버 code 경로도 이 노드 몫이다**(2026-10-12 머지 전 검수에서 정정). 앱은
+`EXPO_PUBLIC_NAVER_URL_SCHEME` 이 있는 빌드에서만 네이버를 SDK 토큰 경로로 보내고, 없으면 PKCE 없는
+code 경로로 폴백한다 — "앱이 쓰지 않는 경로"라는 처음 판단이 틀렸다. 출시 빌드에 그 값이 들어가는지,
+안 쓰는 경로면 서버에서 닫을 수 있는지를 프론트 폴백과 같이 정한다.
+
+`SOCIAL-TOKEN-AUD`(#1040)는 머지됐다 — 착수 가능.
+"""
+
+[[nodes]]
+id = "TRIP-1315"
+ticket = "TRIP-1315"
+title = "회고·기록 카드 방문 순번 — BE 몫인지부터 가린다"
+status = "done"
+owner = "기록"
+migration = false
+touches = ["backend/modules/archive", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1041 (머지됨 · 2026-10-12). 아래 "BE 변경이 0 일 수 있다"는 틀렸다** — 기록(`/records`)은
+오름차순인데 허브(`/visits/days/{day}`)는 저장소 순서(최신 먼저)였다. 순서를 정하는 자리를
+`VisitCheck.inVisitOrder()` 하나로 모으고 계약에 "배열 순서 = 방문 순서"를 적었다. 순번 필드는 없다.
+**번호를 그리는 것은 프론트 몫으로 남는다** — 기록 화면의 자체 정렬(`orderByArrival`)이 서버와 달라
+그대로 두면 두 화면 번호가 어긋난다(티켓 댓글 4건).
+
+**BE 변경이 0 일 수 있다.** `TripRecordService` 가 이미 도착 시각(없으면 생성 시각) 순으로 정렬해
+주고, 건너뛴 방문·즉석 방문도 같은 배열에 있다 — 배열 순서가 곧 방문 순서다. 허브(i01)와 기록(j01)이
+**같은 순서의 배열을 받는지**만 확인하고, 맞으면 FE 로 넘기고 닫는다. 어긋나면 그때 순번 필드를
+서버가 싣는다(그 경우 `touches` 에 archive·openapi 를 적는다).
+"""
+
+[[nodes]]
+id = "REFLECTION-MOOD"
+ticket = "TRIP-828"
+title = "회고 mood·shortMemo 영속 — FE 가 '비영속'이라 적고 기다린다 (828 에서 뗌)"
+status = "done"
+owner = "회고"
+migration = true
+touches = ["backend/modules/reflection", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1042 (머지됨 · 2026-10-12 · V2.63).** 기존 PUT 을 넓혔다 — `card`·`mood`·`shortMemo` 모두
+선택, 하나는 있어야 한다. null 은 그대로·빈 문자열은 지움. `mood` 는 코드 모양만 검사한다.
+쓰기 경로는 행을 잠그고 읽는다(겹친 수정이 서로를 되돌리던 것 — 머지 전 검수에서 발견).
+**남은 것(종전부터 있던 것): 행이 아직 없을 때 겹친 첫 쓰기는 진 쪽이 500 이다**(UNIQUE 위반이 catch-all 로 간다).
+
+`DailyReflectionPage.tsx` 가 *"mood/memo 비영속 … 통합 저장은 계약 확장 티켓 TRIP-823"* 이라고
+적어 둔 자리다. 컬럼 둘 + `EditReflectionRequest.card` 를 선택으로 완화(부분 갱신).
+
+**`mood` 는 닫힌 enum 으로 만들지 않는다** — 값 집합의 정본은 Figma 인데 BE 는 접근이 없다.
+길이 제한이 있는 문자열로 받고, 집합이 굳으면 그때 CHECK 를 건다(넓히는 것은 쉽고 좁히는 것은
+마이그레이션이다). **다음 Flyway 번호는 V2.63** — [[AFFILIATE-LINK]] 가 먼저 쓰면 올린다.
+"""
+
+[[nodes]]
+id = "TRIP-1314"
+ticket = "TRIP-1314"
+title = "같은 여행 재생성이 무제한 — 계정당 일일 상한 (FE 임시가드 TRIP-1268 대체)"
+status = "done"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1043 (머지됨 · 2026-10-12).** 세지 않는 것이 `FAILED` 하나가 아니라 셋이 됐다 — 실패, **폴백으로
+끝난 생성**(AI 가 죽으면 FAILED 가 아니라 폴백으로 완료된다), **멈춘 세션**(세기 전에 실패로 닫는다).
+남는 것: 프론트가 `GENERATION_DAILY_LIMIT` 를 잇고 TRIP-1268 로컬 카운터를 걷어 내기 · 슬롯 후보
+연타는 이 상한 밖.
+
+**상한은 10회, 개발자 계정은 예외다**(2026-10-12 사용자 결정). 예외 등록은 시크릿 `backend` 그룹의
+`ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS`(쉼표 구분 계정 UUID, 환경마다 다르다) → 재배포.
+갈아치운(취소·대체된) 생성은 **센다** — AI 가 실패 없이 늘어지는 동안의 연타는 횟수를 쓴다.
+
+`generation_session` 에 `account_id`·`started_at`·`status` 가 이미 있어 **마이그레이션이 없다**.
+선례는 `notification/application/PushRateLimits.kt`.
+
+**[[TRIP-1312]] 를 기다리지 않는다.** 그쪽은 상한 **값**의 근거이지 손잡이의 선행이 아니다 —
+티켓 원문이 *"손잡이만 먼저 만들고 값은 나중에 돌려도 된다"* 고 적었다. 값은 FE 임시가드와 같은
+5회/일을 설정으로 두고 관측이 나오면 돌린다. `FAILED` 세션은 세지 않는다(PARTIAL 탈출구 보존).
+
+**응답은 429 다**(티켓 본문은 409 라고 적었으나 TRIP-1268 의 졸업 조건이 "BE 한도의 429 처리"다).
+"""
+
+[[nodes]]
+id = "TRIP-1312"
+ticket = "TRIP-1312"
+title = "[AI] llm_cost 로그에 계정·여행 식별자 — 상한 값의 근거"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = "[[TRIP-1314]] 의 **값**을 정하는 입력이다. 선행이 아니라서 간선을 긋지 않았다 — 머지되면 1314 의 상한을 실측으로 돌리는 후속 노드를 연다."
+
+[[nodes]]
+id = "PLACE-DETAIL-API"
+ticket = "TRIP-824"
+title = "장소 상세 단건 GET /places/{poiId} — 값이 이미 있는 것만 싣는다 (824 에서 뗌)"
+status = "done"
+owner = "장소"
+migration = false
+touches = ["backend/modules/place-data", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1044 (머지됨 · 2026-10-12).** `Place` 를 건드리지 않아 프론트 계약 가드와 무관하다.
+ACTIVE 만으로 거르지 않되(담아 둔 폐업 장소가 열려야 한다) `UNVERIFIED` 는 404 다(INV-1).
+
+상세 화면(d06·i10)이 목록에서 받은 값으로 그리고 있어 **목록 밖에서 상세를 열 길이 없다.**
+단건 경로를 열고 `address`(V2.58 로 이미 있다)를 싣는다. 값이 없는 세 필드는 [[TRIP-824]] 잔여다 —
+컬럼만 만들면 전부 null 이라 화면이 그대로다(움브렐라 규약 3번).
+
+⚠ FE 계약 가드(`frontend/src/__tests__/openapiContract.test.ts`)가 `Place` 를 줄 전체 일치로
+고정한다 — `Place` 를 건드리면 같은 PR 에서 함께 고쳐야 frontend-ci 가 초록이다. 상세 전용 스키마를
+새로 두면 닿지 않는다.
 """
