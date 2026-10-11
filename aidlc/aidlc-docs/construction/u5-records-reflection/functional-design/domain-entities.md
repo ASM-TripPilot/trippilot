@@ -22,6 +22,8 @@
 | `poi` | V2.0 | U1(C7) | 읽기 | 방문 장소 표시·카테고리 통계 |
 | 오프라인 큐 | **기기 로컬** | 클라이언트 | — | DEC-U5-10 — 서버에 큐 테이블 없음 |
 
+> **[개정 · 2026-10-12] 물리 번호 — 실번호(원문 보존).** 제안 번호(V2.28~V2.32)는 다른 마이그레이션과 겹쳐 재배정됐다. 실제: `visit_photo_meta` **V2.33** · `visit_memo` **V2.34** · `reflection` **V2.36**(카드 전환 **V2.44** `reflection_card`) · `trip_summary` **V2.38** · `style_analysis` **V2.39**(+**V2.41** `style_analysis_double`) — `backend/app/src/main/resources/db/migration/`. (V2.28은 `outbox_schema_version`, V2.31·V2.32는 U6 `notification`·`notification_schedule`이다.) **[이연 · 2026-10-12 → U10]** `actual_route_point` 행은 U4가 아니라 U10 소관이다. **오프라인 큐** 행은 보류(사용자 결정 2026-09-11, FE 미구현).
+
 ---
 
 ## 2. 승계 — `visit_check` (V2.21 실장 · 확장 없음)
@@ -63,6 +65,8 @@
 | `created_at` | timestamptz | |
 
 **INV-U5-03** — 서버에 **사진 바이너리를 저장하지 않는다**(DEC-U5-9). `storage_key` 류 컬럼을 만들지 않는다 — 만들어 두면 다음 사이클이 채운다. 커뮤니티 공개(U7)는 별도 테이블로 신설하고 이 테이블을 늘리지 않는다.
+
+> **[개정 · 2026-10-12] U7 폐기.** "커뮤니티 공개(U7)는 별도 테이블로 신설" 전제는 사라졌다 — U7 커뮤니티는 사용자 결정(2026-10-12)으로 폐기됐다. INV-U5-03(바이너리 미저장)은 그대로 유효하다.
 
 **INV-U5-04** — 위치 동의(V1.3 `gps_recording_opt_in`)가 없으면 `exif_lat/lng`는 **null로 저장**한다. 사진에 좌표가 박혀 있어도 서버는 받지 않는다.
 
@@ -159,6 +163,8 @@
 | **`poi.category`**(V2.0 · CHECK 교체 V2.6) | 스타일 분석 카테고리 통계의 입력. 허용값 **8종** = `명소·맛집·카페·야경·자연·쇼핑·문화·액티비티`. ⚠ `activity_category`라는 컬럼은 **없다**(V2.6은 컬럼 추가가 아니라 `poi_category_check` 교체다 — 2026-08-22 실측 정정) |
 | `consent`(V1.3 `gps_recording_opt_in`) | EXIF 위치 저장 여부(INV-U5-04)·실제 경로 레이어 활성 |
 
+> **[개정 · 2026-10-12] 읽기 표 갱신.** `change_log_entry` 읽기는 `ChangeLogFacade.findTimeline`으로 실재한다(`TripRecordService`). `j02` 화면은 삭제됐다(TRIP-769) — 서버 합본(`changes`)의 현재 FE 소비처는 이 개정에서 확인하지 않았다. **[이연 · 2026-10-12 → U10]** `actual_route_point` 행과 `gps_recording_opt_in`의 "실제 경로 레이어 활성" 용도는 U10 소관이다.
+
 ---
 
 ## 6. 이벤트
@@ -186,3 +192,5 @@
 - 현재 최신은 **V2.27**(실측). U4 잔여분(`actual_route_point` 등)이 먼저 머지되면 번호가 밀린다 — **번호는 머지 시점에 재배정**한다.
 - **append-only 회수 대상 없음.** 이 5종은 전부 사용자 데이터라 파기 대상이고, 앱 롤에 DELETE 권한이 있어야 한다(`change_log_entry`·`location_legal_log`와 다르다).
 - 전부 `trip` 또는 `account` FK CASCADE — 여행/계정 파기 시 함께 지워진다.
+
+> **[개정 · 2026-10-12] §7 — 실번호로 머지됨.** V2.33 `visit_photo_meta` · V2.34 `visit_memo` · V2.36 `reflection` · V2.38 `trip_summary` · V2.39 `style_analysis`(이후 V2.41 `style_analysis_double`, V2.44 `reflection_card`). 마이그레이션 최신은 V2.62다(2026-10-12 실측).

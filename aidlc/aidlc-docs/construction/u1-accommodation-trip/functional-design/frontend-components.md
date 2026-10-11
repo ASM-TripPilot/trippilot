@@ -33,6 +33,8 @@ src/app/
       must-visits.tsx          # 필수 방문지 관리
 ```
 
+> **[개정 · 2026-10-12]** 현행 라우트와의 차이(원문 보존, 정본은 `ls frontend/app`): ① 라우트는 `src/app/` 이 아니라 **리포 `frontend/app/`**(Expo Router `root: './app'`). ② **`explore/community.tsx` 없음** — U7 커뮤니티는 폐기됐고(2026-10-12 사용자 결정) d05 자리도 없다. 대신 `explore/places/[poiId].tsx`(장소 상세)가 있다. ③ 필수 방문지는 `trips/[tripId]/must-visits.tsx` 가 아니라 **`frontend/app/trips/[tripId]/itinerary/must-visits/{index,[poiId]}.tsx`**(일정 흐름 아래). ④ `explore/region.tsx`·`destination/[region].tsx`·`places.tsx`·`saved-places.tsx`·`stays/{index,[stayId],saved,register}.tsx`·`trips/new/{_layout,step1,step2}.tsx`·`trips/[tripId]/bases.tsx` 는 그대로 실재. 추가로 `my/stays.tsx`·`magazine.tsx` 가 있다.
+
 - 위저드·등록·상세는 **몰입 화면**이므로 탭바를 숨긴다(U0 BR-U0-29 상속).
 
 ## 2. 탐색 컴포넌트 (밴드 d · C7)
@@ -48,6 +50,8 @@ src/app/
 | `PlaceExplorer` | **d04** 검색바 + 카테고리 칩 + **정렬 칩 3종**(요즘 담긴 순·지금 뜨는 순·가까운 순) · 2열 사진 그리드 카드(♥ 토글 · 담긴 카드는 `♥ 담음` 배지) · 하단 고정 CTA `③ 담은 장소로 여행 만들기` | Zustand: 담기 낙관적 업데이트 | `GET /places` · `POST /saved-places` · `DELETE /saved-places/{savedPlaceId}` |
 | `SavedPlaceList` | **d02** 헤더 `담은 장소` + 부제 `6곳 · 마음에 든 순서대로` · 순번 배지(1..N) + 썸네일 + 이름 + 📍지역구 + 태그 칩 1개 + ♥(해제) · 하단 CTA `이 장소들로 여행 만들기`. empty: `마음에 드는 곳을 담아 보세요` / `부산 인기 장소를 둘러보고 ♥로 담으면 여기에 모여 바로 여행이 돼요` / CTA `장소 둘러보기` | — | `GET /saved-places` · `DELETE /saved-places/{savedPlaceId}` |
 | `CommunityTeaser` | **1차 자리만** — 섹션 헤더 + 준비 중 안내. 실데이터·상세 라우팅 없음(BR-U1-05) | — | — |
+
+> **[개정 · 2026-10-12]** `CommunityTeaser`·d05 는 **U7 커뮤니티 폐기**로 대상 자체가 없어졌다(라우트 `explore/community.tsx` 부재). 계약 쪽은 `GET /regions` 가 생겼고(`backend/modules/place-data/.../adapter/in/web/RegionController.kt`, openapi `/regions`), `/explore/landing`·`/regions/{region}` 은 여전히 openapi 에 없다.
 
 ### 2-1. 라이브 Figma 실측 노드 (2026-08-02 · TRIP-184 준비)
 

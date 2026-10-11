@@ -53,6 +53,8 @@ U0 오토스케일(min 2) + 429 저하 계승. U1 델타 없음(외부 쿼터 �
 - **캐시하지 않는 것**: 최저가 스냅숏·POI 원본(= 캐시가 아니라 **PG 영속 테이블**) · **정확 1박가(DATA-U1-03 절대 금지)**.
 - **캐시는 가속층일 뿐 정합성 원본이 아니다** — 캐시 미스·Redis 장애 시 PG 직읽기로 폴백. 정합성은 항상 PG.
 
+> **[개정 · 2026-10-12 · Infra 결정]** P-PERF-U1-2 는 **구현되지 않은 채 철회**된다(Infra Q5=A — ElastiCache 제거). 위 표의 대상은 모두 "PG 직읽기" 경로로 서빙된다. 머리말의 "기준선 변경", §2 의 "Redis 캐시로 흡수", §7 의 Redis 행도 같이 철회된다. 검색어 5분 캐시(PERF-U1-03·COST 겸용)가 필요해지면 인메모리부터 검토한다. 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
+
 ### P-PERF-U1-3 — 입력 디바운스 + 순수 계산 클라 처리
 지도·장소 검색 입력 디바운스 300ms. 커버리지 판정·박수 합 검증은 서버 왕복 없이 클라(프론트 PBT 대상).
 
@@ -64,6 +66,8 @@ U0 P-SEC-5 계승. 여행·저장 숙소·담은 장소는 소유 계정만, 타
 ### P-SEC-U1-2 — 딥링크 무결성
 - 아웃바운드에 **서버 생성 추적 ID**. 포스트백은 **제휴사별 공유 시크릿 HMAC-SHA256** 검증(키·검증 로직은 `OtaPartner` 설정 보유) + **타임스탬프 skew ±5분** 재전송 차단 + **거래 ID 멱등**.
 - 검증 실패는 저장하지 않고 보안 이벤트로 기록. 전환·수수료 지표는 **응답 스키마 수준에서 사용자 노출 차단**(INV-U1-10).
+
+> **[개정 · 2026-10-12]** 포스트백 수신·HMAC 서명 검증·거래 ID 멱등은 **구현되지 않았다** — 수신 엔드포인트 0건, `affiliate_click.postback_status` 는 전부 `NONE`(`backend/app/src/main/resources/db/migration/V2.59__affiliate_click.sql`). `OtaPartner` 설정 테이블도 없다. 현행은 아웃바운드 302 + 클릭 기록(fail-open)까지: `backend/modules/affiliate-link/src/main/kotlin/com/trippilot/affiliatelink/{adapter/in/web/OutboundController.kt,application/OutboundService.kt}`, 벤더 `WEBSEARCH`(기본)·`TRIPCOM`(`AFFILIATE_MODE=tripcom`, `clickId`→`trip_sub1` 관통 — 포스트백 전제만 깔림).
 
 ### P-SEC-U1-3 — 입력 경계 방어
 - 링크 붙여넣기 URL은 **허용 OTA 도메인 화이트리스트**(외부화)로만 파싱, 그 외 거부(SSRF 방지). 실패 시 원문 유지 + 타 탭 유도(BR-U1-24).

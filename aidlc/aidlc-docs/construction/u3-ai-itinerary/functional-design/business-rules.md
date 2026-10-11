@@ -16,6 +16,8 @@
 | **BR-U3-05** | ~~[취소]는 세션을 `CANCELED`로 두고 부분 결과를 버린다.~~ **개정(팀 확정 2026-09-11, TRIP-789)**: [취소] 동작을 제거한다 — 생성 중 화면에 취소 버튼·footer·백그라운드 버튼을 두지 않고, **앱바 뒤로 = 백그라운드 이탈(홈으로)**로 단일화한다. 이미 나간 생성 POST 는 언마운트로 취소되지 않으므로(axios+react-query) 서버가 백그라운드에서 일정을 완성하고, 사용자는 홈에서 h05 "만드는 중" 상태로 확인한다. `CANCELED` 세션 상태는 UI 트리거가 없다(서버가 별도 경로로 만료시킨다). 진행률(퍼센트)은 서버 계약에 진행 수치 필드가 없어 미표시(⚑C, 가짜 진척 금지) |
 | **BR-U3-06** | 생성 방식(완전 AI·같이 고르기·직접)은 **언제든 전환** 가능하며 **진행분을 보존**한다(US-SCHED-10). 전환이 이미 만든 슬롯을 지우지 않는다 |
 
+> **[개정 · 2026-10-12] BR-U3-03 — day1 예산 5,000ms → 15,000ms.** 호출자(backend) 소유 원칙은 그대로이고 값만 바뀌었다 — **day1 15,000ms / 전체 60,000ms**, 시한 강제 기본 on(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ScheduleDeadlineProperties.kt`, TRIP-1000). 종전 5s는 상위 티어 모델이 사실상 못 맞추는 값이었다는 것이 코드 주석의 근거다. EKS 배포값도 같다(`deploy/eks/chart/values.yaml`·`values-dev.yaml`·`values-prd.yaml`).
+
 ## 2. 표시 규칙
 
 | ID | 규칙 |

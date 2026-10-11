@@ -68,3 +68,5 @@ Outbox                                  (전 모듈 공용 이벤트 적재 — 
 
 ### Outbox (`outbox`, V1.0) — 골격만(Q9)
 - U0 발행 이벤트: `AccountCreated`, `AccountDeletionRequested`, `PreferencesUpdated`(C2). 상태 변경과 단일 TX 적재. 릴레이 실소비는 후속 유닛(U1+).
+
+> **[개정 · 2026-10-12]** 실제 테이블명은 `outbox_event` 다(`backend/app/src/main/resources/db/migration/V1.0__common_outbox.sql`, 후속 V2.28 schema_version · V2.45 backoff). 릴레이는 골격이 아니라 실재한다(`backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt` · `JdbcOutboxStore.kt`). U0 이벤트 중 `AccountCreated`(`backend/modules/auth/.../api/event/AccountCreated.kt`)·`AccountDeletionRequested`/`AccountDeletionCancelled`(`AccountDeletionEvents.kt`)는 실재하나 **`PreferencesUpdated` 는 정의·발행 모두 0건**이다(backend·ai 전역 검색 0). 취향 변경 이벤트가 필요해지면 새 티켓으로 다룬다 — 사용자 판단 대상.

@@ -7,11 +7,13 @@
 - **Current Phase**: CONSTRUCTION — **설계 문서 단계만** (2026-07-17 사용자 명시 지시로 진입, docs/SCOPE.md 개정)
 - **Current Stage**: **U6 설계 종료 (2026-08-24) — 1차 핵심 여정 유닛 U0~U6 설계 문서 전량 완료.** 남은 유닛은 후속 게이트 U7~U9(1차 범위 밖)뿐이라 **AI-DLC 문서 트랙은 사실상 종료**다. 다음 = 팀 개발(최우선 = 아웃박스 릴레이 배선) 또는 사용자 지시. 유닛별 종료: U0 07-17 · U1 07-23 · U2·U3 08-07 · U4 08-09 · U5 08-22 · U6 08-24
 - **Execution Scope**: 유닛별 설계 문서(Functional/NFR Requirements/NFR Design/Infrastructure Design)까지만. **Code Generation·Build and Test 제외** — 코드는 팀이 각 패키지 디렉토리(`backend/`·`frontend/`·`ai/`)에서 직접 개발. 기획 참조는 `aidlc-docs/inception/` (planning/은 2026-07-17 제거).
+- **[개정 · 2026-10-12] Current Stage**: **범위 개정 + 사후 정합 진행 중** — U8 Assistant 개발 범위 편입·**U10 GPS·위치 자동화 신설**·U7/U9 **폐기**·인프라 **구축 완료(as-built 소급)** (`docs/SCOPE.md` 2026-10-12, audit 2026-10-11T16:20Z). 전수 조사(ai·backend·frontend 대조)로 낡은 서술 약 100곳 → U0~U6·인셉션 문서를 원문 보존 + 개정 블록으로 정정. 다음 = U8·U10 Functional Design 질문 게이트, shared-infrastructure 승인.
 
 ## Workspace State (2026-07-17 동기화 — 인셉션 종료 후 팀 개발 현황 반영)
 - **Existing Code**: Yes — 인셉션 종료 후 AI-DLC 워크플로 밖에서 팀 개발 진행 중 (하단 Post-Inception Progress)
 - **Programming Languages**: Kotlin(backend) · TypeScript(frontend — 아키텍처 확정, 코드 스캐폴드 예정) · Python(ai — 예정)
 - **Build System**: Gradle 멀티모듈(backend) · pnpm + Expo(frontend, 예정)
+- **[개정 · 2026-10-12]** 위 두 줄의 '예정'은 낡았다 — **frontend**: Expo SDK 54 / RN 0.81 앱 구현·App Store 심사 단계(`frontend/package.json`, 라우트 `frontend/app/`), **ai**: FastAPI 서비스 구현·EKS 배포(열린 경로 정본 `ai/docs/openapi.json`), **backend**: 모듈 목록 정본 `backend/settings.gradle.kts`, 스키마 정본 `backend/app/src/main/resources/db/migration/`. 배포 = AWS EKS(`infra/terraform/stack/`, `deploy/eks/chart`).
 - **Project Structure**: trippilot 모노레포 — `backend/` · `frontend/` · `ai/` · `aidlc/`(본 워크스페이스) · `docs/`
 - **Reverse Engineering Needed**: No
 - **Workspace Root**: /Users/taehyeonpark/Desktop/dev/trippilot/aidlc (모노레포 하위로 이관)
@@ -35,6 +37,7 @@
 
 ## Key User Directives (override PRD where stated)
 - **AI 솔버 전략 — 단계적/진화형 교체 확정 (2026-07-12, 2026-07-11 지시를 정제/대체, 2026-07-12 재확정)**: "하이브리드"는 **런타임 이중 엔진이 아니라 단계적 교체(마이그레이션) 전략**을 뜻함. **Phase 1 = 결정론적 AI 솔버(OPTW/TOPTW, ADR-0009 계승)로 구현·출시** (초기 출시 엔진, 솔버가 실현가능성 소유). **향후 = 솔버 산출물 품질이 부적절('별로')하면 일정 엔진을 AWS Bedrock AgentCore 에이전트로 교체** (프로젝트 수준 결정, 런타임 요청별 폴백 아님). 교체 범위 = **옵션 B**(엔진 교체 + 기존 PRD 강제 규칙 일부[생성시각 노출 금지·이동 소요시간 미표시 등] 재검토/완화). **실현가능성(등록 숙소=출발점 앵커·영업시간·이동시간·필수 방문지·시각 충돌 없음)은 항상 결정론적 컴포넌트가 소유** — Phase 1은 솔버, 교체 후엔 에이전트가 호출하는 결정론적 검증/최적화 도구(Q2=A). 사용자 노출 시각 = 항상 검증값(환각 금지). 불변식 두 단계 공통 유지. 어시스턴트(모듈 16)·공동편집(모듈 17)의 '솔버' 참조 = 현행 일정 엔진. '별로' 판정 기준(교체 트리거)은 Application Design/운영에서 정의(Open O-SOLVER). 이번 구현 범위는 Phase 1(결정론적 솔버).
+  - **[개정 · 2026-10-12] 현행 구현과 다름** — 코드에 AgentCore·`BedrockAgentSolverAdapter` 흔적 0건. 실제 = `ai/` 단일 서비스의 `HybridAssemblyFacade`(OR-Tools → 규칙 폴백 2단, LLM 2차 단계 미배선 — `ai/src/trippilot/api/wiring.py`) + LLM 기능 18종 `claude-fable-5-1` 통일(커밋 fb0d51e2, 기능별 effort). Bedrock은 REMINDER_COPY 증류 학생 모델·Titan 임베딩에만 쓴다. '실현가능성은 결정론 컴포넌트 소유'·불변식 INV-1~4는 그대로 유효. 엔진 교체 트리거(O-SOLVER) 논의는 이 기준선에서 다시 연다.
 - **Requirements 결정**: Q4=핵심 여정 1차 유닛 + 어시스턴트/커뮤니티/공동편집 후속 분리 게이트 / Q5=모바일(iOS+Android)+클라우드 백엔드·국내·한국어 / Q6=정량 NFR 목표를 가정으로 포함 / Q7=인셉션에서 Figma 대표 화면 갭 점검.
 - **복원력(Resiliency) 결정 (2026-07-12, 후속 질문)**: Q3=E(단일 리전 + 다중 AZ로 충분, 리전 간 DR 불필요 — RTO/RPO는 AZ 이중화에 의존) / Q4=A(단일 리전·다중 AZ 토폴로지) / Q5=A(**기존 조직 변경관리 프로세스 사용 — Jira · Slack · Git**; 신규 프로세스 발명 금지, 산출물을 이 도구체계에 정합) / Q6=B(공식 장애대응 프로세스 없음 → **경량 장애대응 + COE/포스트모템을 AI가 제안**해 채택). RESILIENCY-04(CI/CD·롤백·배포)·RESILIENCY-14(복원력 테스트)는 CONSTRUCTION NFR Design으로 이연(이번 범위 밖).
 
@@ -58,6 +61,7 @@
 - **범위 밖(자동 진입 안 함)**: CONSTRUCTION 전체(Functional/NFR/Infra Design·Code Gen·Build&Test) + Operations. RESILIENCY-04·14 질의는 CONSTRUCTION NFR 단계로 이연.
 
 ### CONSTRUCTION Phase (설계 문서 단계만 — Code Generation 제외, 2026-07-17 범위 개정)
+> **[개정 · 2026-10-12] Infrastructure Design SKIP 사유 해소** — 아래 U0~U6의 "배포/클라우드 계획 부재" SKIP은 재개 조건(배포 진입 결정 — EKS, 2026-08-31)이 충족되고 **구축까지 완료**됐다. 유닛별 소급 7회가 아니라 as-built 통합 문서 1건 `construction/shared-infrastructure.md`로 대체한다(승인 대기). 각 유닛 줄의 "후속(설계 밖)" 목록도 대부분 구현됐다 — 아웃박스 릴레이+ShedLock(`app/event/OutboxRelay.kt`), U4 3모듈, `/api/v1/me/export`, `VisitChecked` 발행, `ChangeLogFacade.findTimeline`, ai HTTP 표면(G-U4-3), 지시어 규약(O-U4-5), 회고 `/ai/v1/reflection/*`. 지도는 `KakaoMapView`(WebView)가 아니라 **네이버 네이티브 `MapView`**(`frontend/src/shared/map/MapView.tsx`)로 대체 — 각 유닛의 'KakaoMapView 확장' 항목은 소멸. `ScheduleAgentPort`는 현재 **6메서드**(generate·validate·repair·explanations·proposeSlotCandidates·replan). 개별 문서 정정은 각 유닛 산출물의 `[개정 · 2026-10-12]` 블록.
 - **U0 Foundation** (워킹 스켈레톤·인증·온보딩·보안/PBT 스캐폴딩)
   - [x] Functional Design — 승인 완료 (2026-07-17) · 산출물 4종 + BR-U0-01~30 + 갭 G-1~G-4
   - [x] NFR Requirements — 승인 완료 (2026-07-17) · 산출물 2종: nfr-requirements.md(35 요구: SCALE 3·PERF 4·UX 5·AVAIL 3·SEC 10·RES 4·OBS 3·LEGAL 3 + PBT 매핑 6) · tech-stack-decisions.md(기존 확정 기록 + U0 델타 6)
@@ -136,6 +140,23 @@
   - 🎯 **1차 핵심 여정(U0~U6) 설계 문서 전량 완료** — 총 **44종**(U0 8 · U1 8 · U2 2 · U3 6 · U4 8 · U5 4 · U6 6 + 계획서 별도). 개발 최우선 = **아웃박스 릴레이 배선**(ShedLock 추가 → `common/core/event` 릴레이 → `itinerary.ItineraryGenerated` 구독으로 U3 코드 수정 없이 첫 경로 개통)
   - 후속(설계 밖): **backend** `notification` 모듈 + 마이그레이션 4(V2.33~36) + **아웃박스 릴레이**(`@Scheduled`+ShedLock, **라이브러리 의존성 추가 필요** — 테이블만 선재) + 이벤트 3종 발행부(U1 숙소·U4 Plan-B·U5 회고) + `ExpoPushAdapter` + **데이터 내보내기 엔드포인트 신설**(G-U6-3) / **frontend** 밴드 `l` 6화면 + `shared/push` 배선(신규 의존성 0) / **디자인 확인 3**(G-U6-4 Plan-B 민감도 — U4 G-U4-6 미반영 · G-U6-5 `SLOT_PRE` 간격 · `l05`·`l06` dialog 문안) / **U1 연결**(G-U6-6 `l05`가 `G-U1-09` 예산 입력 경로) / **인셉션 정정 상신**(G-U6-9 이벤트 이름 규약) / 미결 O-U6-1~6
 - U7~U9 — 유닛별 사용자 지시 대기
+- **[개정 · 2026-10-12] 후속 유닛 재편**
+  - **U7 Community · U9 Collaborative Editing — 폐기** (사용자 결정). 착수 없음.
+  - **U8 Conversational Assistant** — 개발 범위 편입. 08-31 착수분(`u8-fd-preserve` 7f1fddba)의 계획서를 이관해 현행 `ai/` 구현 기준으로 갱신
+    - [x] Functional Design — **승인 완료 (2026-10-12 "그럼 권고로 ㄱㄱ")** · 계획 Q1~Q15 답변 확정(Q12=B·나머지 추천) · 산출물 4종 `u8-conversational-assistant/functional-design/`(DEC-U8-1~15·BR-U8-01~53·INV-U8-01~09·G-U8-1~14·O-U8-1~9) + US-ASSIST-01~08 전개
+    - [x] NFR Requirements — **승인 완료 (2026-10-12 "ㄱㄱ")** · 산출물 2종 `u8-conversational-assistant/nfr-requirements/`(COST·PERF·SEC·DATA·REL·OBS-U8, 권고 Q1~Q11)
+    - [~] NFR Design — **SKIPPED** (2026-10-12 승인) · 사유 = 신규 인프라·외부 의존 0, 패턴 5종(advisory 락 리미터·트랜잭션 3구간·남은 예산 전달·버튼 모드 강등·삭제 이벤트 구독)이 nfr-requirements에 적용 위치까지 기술(U3·U5·U6 선례). 재개 조건 = SSE·Redis 도입, 다중 의도 착수, OTel 수집기 개통
+    - [~] Infrastructure Design — **변경 없음** (shared-infrastructure 증분 0 — 게이트웨이 timeout 620s·ingress `/api` 그대로)
+    - ✅ **U8 설계 단계 종료 (2026-10-12)** — 산출물 = functional-design 4 + nfr-requirements 2 = **6종** + US-ASSIST-01~08. 다음 = 팀 개발(선행: G-U8-1 편집 퍼사드·G-U8-4 ai 대화 경계·openapi 초안·Figma ✦ FAB/b01)
+    - [~] Code Generation — 범위 제외
+  - **U10 GPS·위치 자동화 (신설)** — 지오펜스 자동 도착·이탈, 백그라운드 위치, 실제 경로·토글, GPS 방문 기록, 위치 법정 로그. 기준선 = 포그라운드 위치·수동 체크인
+    - [x] Functional Design — **승인 완료 (2026-10-12 "그럼 권고로 ㄱㄱ")** · 계획 Q1~Q22 답변 확정(Q1=B·Q3=B·나머지 추천) · 산출물 4종 `u10-gps-location-automation/functional-design/`(DEC-U10-1~22·BR-U10-01~48·INV-U10-1~11·G-U10-1~15·O-U10-1~11) + U4·U5·U6 개정 블록
+    - [x] NFR Requirements — **승인 완료 (2026-10-12 "ㄱㄱ")** · 산출물 2종 `u10-gps-location-automation/nfr-requirements/`(MOBILE·PERF·STORE·LEGAL·SEC·REL·OBS-U10, 권고 Q1~Q14)
+    - [~] NFR Design — 산출물 2종 `u10-gps-location-automation/nfr-design/`(백그라운드 전용 전송·A/B 교대 쓰기 큐·RDP+정지점 150m 은닉, O-U10-8 해소) · **승인 대기**
+    - [~] Infrastructure Design — `shared-infrastructure.md` `## U10 증분` (신규 AWS 자원 0) · **승인 대기**
+    - [~] Code Generation — 범위 제외
+- **[개정 · 2026-10-12] 공통 Infrastructure Design (as-built 소급)**
+  - [x] `construction/shared-infrastructure.md` — **권고안 확정 (2026-10-12 "그럼 권고로 ㄱㄱ")** · Q1=A·Q2=A(가용성 99.5%)·Q3=A·Q4=A(RTO 4h/RPO 15m)·Q5=A(Redis 제거)·Q6=B(버전 핀 롤백) · 후속 인프라 작업 5건은 팀 핸드오프(§12)
 
 ## Open Items (U0 — 설계 문서 없이 개발 중 처리)
 - **소셜 IdP 4종 콘솔 설정**: 앱 등록·키 발급(Apple p8·카카오/네이버 네이티브 키)·리다이렉트 URI(로컬/디바이스) — U0 인증 개발의 선결 블로커. Infrastructure Design SKIP으로 문서화 생략, 개발 중 각자 처리(사용자 승인 2026-07-17)
@@ -153,6 +174,7 @@
 
 ## Skipped Stages
 - Reverse Engineering — SKIPPED (그린필드, 기존 코드 없음)
+  - *[개정 · 2026-10-12]* 지금은 브라운필드(3 패키지 구현 완료)지만 별도 RE 산출물은 만들지 않는다 — 각 패키지 정본(`frontend/README.md`·`frontend/docs/structure.md`, `backend/docs/design/`, `ai/README.md`·`ai/docs/openapi.json`)이 그 역할을 하고, 2026-10-12 전수 조사 결과는 개정 블록으로 흡수했다.
 
 ## Post-Inception Progress (AI-DLC 워크플로 밖 팀 개발 — 기록용, 스테이지 진행 아님)
 - **backend**: 모듈러 모놀리스 Gradle 골격(TRIP-145) · 로컬 통합 스택 docker-compose + GHCR CI(TRIP-146) · DB 스키마 Flyway V1.0~V1.6 + 기준 데이터 시드(TRIP-147) — main 머지 완료
@@ -160,6 +182,8 @@
 - **U0 구현 현황 점검 (2026-07-22)**: backend = U0 범위 사실상 완료(openapi 20경로 매핑 전부 존재, `./gradlew test`는 미실행 — 녹색 미검증) / frontend ≈85%(TRIP-170 진행 중, HomeScreen 3 red) · **U0 설계 대비 프론트 미착수 4건**: 삭제유예 복구화면(BR-U0-24) · 로그아웃 클라 흐름(BR-U0-09) · 마이탭 닉네임·취향 수정(BR-U0-18) · age 별도화면이 로그인화면에 흡수(설계 이탈). 이 4건은 U1 설계와 병렬로 프론트 티켓 처리(사용자 결정)
 - **CI**: `.github/workflows/{backend-ci, frontend-ci, ai-ci}.yml`
 - **참조 기준(팀 결정 2026-07-17)**: 후속 개발의 기획 참조는 `aidlc-docs/inception/` 산출물 기준. 각 패키지 아키텍처 정본은 해당 패키지 소유(`frontend/README.md`, `backend/docs/design/`)
+
+- **[개정 · 2026-10-12] 현황 스냅숏** — 위 항목들은 2026-07 시점 기록. 지금: backend 모듈 18(`settings.gradle.kts`)·마이그레이션 V2.62·openapi 83경로 / frontend U0~U6 화면 구현, TestFlight·App Store 심사 진행, 지도 네이버 네이티브 SDK / ai FastAPI 11경로(백엔드 호출 경로 정본 `HttpScheduleAgentAdapter.CALLED_PATHS`) / 배포 AWS EKS(+RDS multi-AZ·ElastiCache·ECR·Secrets Manager, `aws-deploy.yml`). CI는 머지 게이트 3종 외 배포·수집 배치 워크플로 다수(`.github/workflows/`). 위 Open Items 중 Redis 컨테이너·시크릿 매니저 선정·배포 의존 토폴로지는 인프라 구축으로 해소(backend 코드는 Redis를 아직 쓰지 않음 — shared-infrastructure 간극 절). 카카오 지도 SDK 콘솔 항목은 지도 공급자가 네이버로 바뀌어 NCP Maps Client ID로 대체(로컬 검색 API는 별개).
 
 ## Notes
 - 초기 출시: 국내(대한민국) 한정. 국내 지도 API(카카오/네이버/TMap) 우선.

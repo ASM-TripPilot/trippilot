@@ -27,6 +27,12 @@ Expo(dev build+prebuild)·Expo Router·TanStack Query v5+Zustand·RHF+Zod·axios
 | 시크릿 | 코드·설정 파일에 시크릿 0 — 주입 인터페이스만 U0 확정, 매니저 제품은 Infrastructure Design | NFR-U0-SEC-01 |
 | 관측 수집 | U0는 stdout JSON + Sentry까지. 수집·APM·알림 라우팅 제품은 Infrastructure Design | NFR-U0-OBS |
 
+> **[개정 · 2026-10-12]** 액세스 토큰 서명 알고리즘은 **RS256** 이다(원문 보존 — 개정 전: "ES256"). 근거: `backend/common/security/src/main/kotlin/com/trippilot/security/AccessTokenIssuer.kt`(`SignatureAlgorithm.RS256`) · `JwtSigningKeys.kt`(RSA 키, kid=RFC 7638 지문) · `JwtSecurityConfig.kt`. ES256 은 **Apple `client_secret` 서명에만** 쓴다(`backend/modules/auth/.../external/AppleClientSecret.kt`, TRIP-933). 검증 셋은 현재 **단일 키**(`ImmutableJWKSet(JWKSet(rsaKey))`)라 "kid 2키 중첩 롤오버"(P-SEC-2)는 미구현이다. 서명키는 env `JWT_SIGNING_KEY` 로 주입되며 배포 환경에서는 AWS Secrets Manager(`trippilot/{env}/backend`, `infra/terraform/stack/registry-secrets.tf`) → Helm `deploy/eks/chart/templates/backend.yaml` 경로다.
+
+> **[개정 · 2026-10-12]** 앱 내 PostgreSQL 카운터 레이트리미터는 **구현되지 않았다** — `RateLimited` 예외(`backend/common/core/.../error/DomainException.kt`)와 429 매핑(`GlobalExceptionHandler.kt`)은 있으나 던지는 지점 0건(backend main 전역 검색). 현행 429 는 **배포 게이트웨이(nginx) IP 단위 `limit_req` 10r/s · burst 30**(`deploy/eks/chart/templates/gateway-config.yaml`, `/api`·`/api/` 경로)이 담당한다. 엔드포인트별 임계(로그인·닉네임 등)는 없다 — 필요 여부는 사용자 판단 대상.
+
 ## 4. 이연 (Infrastructure Design 대상)
 
 시크릿 매니저 제품 · 로그 수집/APM/알림 제품 · CI/CD 배포·롤백 상세(RESILIENCY-04) · 복원력 테스트 시나리오(RESILIENCY-14) · 인프라 토폴로지 상세(다중 AZ 배치·LB·헬스체크 연결).
+
+> **[개정 · 2026-10-12]** 인프라는 **AWS EKS 로 배포됐다** — 이연 항목의 현행 결정은 유닛별이 아니라 공용 문서 `aidlc/aidlc-docs/construction/shared-infrastructure.md` 가 정본이다. 코드 근거: Terraform `infra/terraform/stack/{network,eks,data,registry-secrets}.tf`(VPC·EKS·RDS PostgreSQL·ElastiCache Redis·ECR·Secrets Manager `trippilot/{env}/{backend,ai,database,shared}`·CloudWatch Container Insights), Helm `deploy/eks/chart`(values-dev/prd), 배포 워크플로 `.github/workflows/aws-deploy.yml`. 시크릿 매니저 제품 = AWS Secrets Manager(JWT 서명키 `JWT_SIGNING_KEY` 포함).

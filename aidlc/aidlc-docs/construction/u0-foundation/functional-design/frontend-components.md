@@ -21,6 +21,8 @@ src/app/
   force-update.tsx           # 강제 업데이트 게이트 (풀스크린·서비스 차단)
 ```
 
+> **[개정 · 2026-10-12]** 위 골격은 현행 라우트와 다르다(원문 보존). 현행 정본은 파일 시스템 자체다 — `ls frontend/app`(Expo Router `root: './app'`, `frontend/app.config.ts`). 차이: ① 라우트는 `src/app/` 이 아니라 **리포 `frontend/app/`** 에 있다(`src/app/` 은 FSD app 층). ② `(auth)/` 는 `login.tsx` 하나 — **`deletion-pending.tsx` 없음**(삭제 유예 전용 복구 화면 부재). ③ `(onboarding)/` 은 `index.tsx`(진행 단계 리다이렉트)·`terms`·`nickname`·`location`·`push`·`pref1`·`pref2` — **`age.tsx` 없음**(연령 확인은 로그인 화면의 바텀시트 `needs-age` 단계, `frontend/src/pages/auth/login/ui/SocialLoginScreen.tsx`), 취향 위저드는 `preferences/[step].tsx` 7단계가 아니라 **`pref1`·`pref2` 2화면**. ④ 홈은 `(tabs)/home.tsx` 가 아니라 **`(tabs)/index.tsx`**. ⑤ `force-update.tsx` 는 그대로 실재하며 `reconsent.tsx`(약관 재동의)가 추가됐다.
+
 ## 2. 온보딩 컴포넌트
 
 | 컴포넌트 | 책임 | props / state | 서버 연동 |
@@ -33,6 +35,8 @@ src/app/
 | `NicknameScreen` | 자동 생성값 프리필(BR-U0-16), 인라인 검증(2~20자 — UX 사본), 서버 거부(중복·금칙어) 시 대체 추천 원탭 | RHF+Zod | `POST /nickname/suggestions` · `POST /nickname/check` · `PATCH /me/profile/nickname` |
 | `PreferenceWizard` + `steps/*` 7종 | 단계 렌더·선택 저장·'건너뛰기'·'나중에 설정하고 시작'(BR-U0-20). 값 도메인은 서버 스키마와 동일 상수(UX 사본) | Zustand: 위저드 진행 단계·선택 임시값 | `PUT /me/preferences` · `POST /onboarding/complete` |
 | `LocationPreprompt` | 재사용 프레임(목적 카드+계속/나중에) — **U0에서 발화 지점 없음**(BR-U0-30) | props: `purposeContext`, `onProceed`, `onDefer` | — |
+
+> **[개정 · 2026-10-12]** `LocationPreprompt`(`frontend/src/shared/location`)는 온보딩 위치 단계 `LocationPage` 에 꽂혀 **OS 다이얼로그를 실제로 발화한다**(BR-U0-30 개정 블록 참조). 짝인 `PushPreprompt`(`frontend/src/shared/push`)가 온보딩 푸시 단계에 추가됐다. 두 프레임 모두 "나중에" 버튼은 심사 대응으로 제거됐다(커밋 79b518d5). 표의 `AgeScreen`·`DeletionPendingScreen` 은 별도 화면으로 존재하지 않는다 — §1 개정 블록 참조.
 
 **온보딩 위저드 UX 규칙**: 각 단계 이전/다음 이동 가능(US-ONB-11), 약관·닉네임은 탈출구 미제공, 완료 시 `(tabs)/home` 진입.
 

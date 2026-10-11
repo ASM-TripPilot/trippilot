@@ -17,6 +17,8 @@
 | 관측 | `@sentry/react-native`(클라) · AI 관측 레코드 4종 · backend actuator | 이미 있음 |
 | 네트워크 상태 | `@react-native-community/netinfo` | 이미 있음 — 오프라인 **감지**는 가능 |
 
+> **[개정 · 2026-10-12] 지도 행 — 카카오 WebView → 네이버 네이티브.** 지도는 **`@mj-studio/react-native-naver-map`**(네이버 지도 네이티브 SDK, TRIP-861)로 교체됐다. 공용 컴포넌트는 `frontend/src/shared/map/MapView.tsx`(`MapView`·`CenterPinPicker`)이고 `KakaoMapView`·`react-native-webview`는 리포에 없다(`frontend/package.json`). 네이티브 모듈이라 의존 변경 시 dev build 재빌드가 필요하다.
+
 ## 2. U3 델타
 
 ### 델타 1 — `KakaoMapView` 확장 (필수)
@@ -33,6 +35,8 @@
 
 > 근거: 지도 벤더를 바꾸면 U1의 숙소 등록·핀 지정(`e05`)이 함께 흔들린다. 확장이 교체보다 싸다.
 > **참고**: 라이브 Figma 시안은 OSM/CARTO 타일로 그려져 있으나 **실장은 카카오**다. 벤더 불일치는 U1에서 이미 결정된 사항으로 보고 따르되, 타일 저작권 표기 문구는 실장 기준으로 맞춘다.
+
+> **[개정 · 2026-10-12] 델타 1 — 결정 뒤집힘(원문 보존).** "새 지도 라이브러리를 도입하지 않고 `KakaoMapView`를 확장한다"는 결정은 실행되지 않았다. 지도는 **네이버 네이티브 SDK로 교체**됐고(TRIP-861), 위에서 요구한 기능은 `frontend/src/shared/map/MapView.tsx`가 네이티브로 제공한다 — 번호 핀 다중 표시(`NaverMapMarkerOverlay`), 동선 폴리라인(`NaverMapPathOverlay`), 반경 원(`NaverMapCircleOverlay`), 점선(`strokeDasharray`), 좌표 맞춤(`fitRegion.ts`). WebView 메시지 프로토콜(`PIN_DROP`·`MARKER_TAP` 등)과 "WebView 1장" 제약은 함께 사라졌다. 핀 지정은 `CenterPinPicker`(중앙 고정 핀)가 맡는다.
 
 ### 델타 2 — 영속 로컬 저장소 (조건부)
 
@@ -58,10 +62,16 @@
 | `itinerary_revision` 테이블 | **신설**(domain-entities §2.1). jsonb 스냅숏 + 정리 정책(DATA-U3-01) |
 | actuator 노출 | 현재 `health,info`만. OBS-U3-02 지표 발행 시 노출 범위 확장 여부를 그때 결정(운영 보안과 함께) |
 
+> **[개정 · 2026-10-12] backend 델타 — 이행 상태.** `visit_slot.placement_reason` 컬럼은 **V2.13**(`V2.13__explanations_candidates_summary.sql`, `itinerary.candidates_summary` 함께)으로, `itinerary_revision` 테이블은 **V2.14**(`V2.14__itinerary_revision.sql`)로 들어갔다(`backend/app/src/main/resources/db/migration/`). COST-U3-01 진행 중 거부는 `GenerationSessionService`(`GENERATION_IN_PROGRESS` 409)로 구현됐다. `ItineraryStatus`는 여전히 `PLANNED, CONFIRMED` 두 값이다(`domain/Itinerary.kt`).
+
 ## 4. AI 델타
 
 **없음.** U3는 AI 경계를 소비만 한다. `proposeSlotCandidates` 개통(U2 §7.1)은 **계약 추가**이지 스택 변경이 아니다. C1 토큰·타임아웃 설정(`max_tokens=1024` · `timeout_sec=2.5`)도 그대로 승계한다.
 
+> **[개정 · 2026-10-12] §4 C1 설정 인용 갱신.** C1 설정 정본은 `ai/src/trippilot/llm_gateway/config.py`이며 `timeout_sec` 기본 **10.0**, 공용 `max_tokens=1024` + 기능별 `feature_max_tokens`, `temperature` 설정 없음, 전 기능 `claude-fable-5-1`(#1038)이다(nfr-requirements COST-U3-04 개정). `proposeSlotCandidates`는 개통됐다 — 와이어는 **`POST /ai/v1/planb/alternatives`**(`HttpScheduleAgentAdapter.ALTERNATIVES_PATH`, `ai/docs/openapi.json` `AlternativesRequest`/`AlternativesResponse`).
+
 ## 5. 이연 (Infrastructure Design 몫)
 
 U0·U1과 동일하게 배포·클라우드 결정은 이연한다 — 지도 JS 키 배포 방식, 재생성 회차 상한의 저장 위치(설정 서버 vs DB), 관측 지표 수집 파이프라인.
+
+> **[개정 · 2026-10-12] §5 이연 — 인프라는 AWS EKS로 배포됐다.** 배포·클라우드 결정은 이제 공용 인프라 문서 `aidlc/aidlc-docs/construction/shared-infrastructure.md`를 본다. 지도 키는 네이버 Client ID(`EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`, 앱 빌드 env)로 바뀌었고, 생성 시한은 Helm values(`deploy/eks/chart/values*.yaml`)로 주입된다.

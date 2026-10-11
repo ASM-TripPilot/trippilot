@@ -1489,3 +1489,88 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: INCEPTION·CONSTRUCTION 승인 상태 **유지**(국소 개정). TRIP-1061 은 이 개정으로 종결 — 서버 가드 신설 없이 현행 동작이 정본이 된다.
 
 ---
+## Change Request — 개발 범위 수정 및 문서 생성 착수 (전수 조사)
+**Timestamp**: 2026-10-11T16:02:41Z
+**User Input**: "지금부터 aidlc 문서 업데이트 할거임 그전에 브랜치 최신화 aidlc 문서 작업은 해당 폴더 클로드 문서를 따른다" / "일단 브랜치 파봐 할거는 개발 범위 수정 및 문서 생성 일단 ai backend app 전수 조사해서 낡은 부분 찾고 브랜치 먼저 만들고"
+**AI Response**: develop 최신화(fb0d51e2) 후 브랜치 `docs/aidlc-scope-refresh` 생성. `ai/`·`backend/`·`frontend/`(app) 실코드와 `aidlc-docs/` 산출물(SCOPE·state·inception·construction U0~U6) 대조 전수 조사 착수 — 낡은 서술 목록을 먼저 보고한 뒤 수정 범위를 사용자와 확정한다.
+**Context**: CONSTRUCTION 설계 문서 단계(SCOPE.md 2026-07-17). 조사 단계 — 문서 변경 없음.
+
+---
+## Change Request — 범위 개정(U8 유지·U7/U9 폐기·U10 GPS 신설) · 낡은 서술 일괄 개정 · 인프라 as-built 반영
+**Timestamp**: 2026-10-11T16:20:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "7~9가 뭐지?" / "여기서 어시스턴트만 만들고 + gps 기능 관련 기능 아직 구현안해서 새 문서에서 계획 최신화는 ai fe be 현재 구현을 기준으로 하고 낡은거는 업데이트 + infra 배포까지 완료" / 확인 질문 답변: "infra 배포까지 완료"="이미 완료 — 문서에 반영" · GPS 기능 위치="새 유닛 U10 신설 (Recommended)" · U7·U9="폐기" · U8 시작점="보존 브랜치 계획서를 가져와 갱신 (Recommended)"
+**Current State**: CONSTRUCTION 설계 문서 단계, U0~U6 설계 종료(2026-08-24). U8 FD는 `u8-fd-preserve`(7f1fddba)에 계획서·Q1~Q7 대기로 보존. 전수 조사(ai·backend·frontend 대조)로 낡은 서술 약 100곳 확인.
+**Impact Assessment**: `workflow-changes.md` §8 Adding/Removing Units — U7(C15)·U9(C17) 제거(폐기, 기능 재분배 없음 — 1차와 인터페이스만 있었음), U10(GPS·위치 자동화) 추가 → unit-of-work 3종 개정 + U10 전체 설계 필요. U8 유지(후속 게이트 → 개발 범위). 기존 U0~U6 산출물은 §4 Low impact modify(원문 보존 + 개정 블록) — 재실행 아님. Infrastructure Design은 "배포 계획 부재" SKIP 사유가 해소(EKS·Terraform·aws-deploy 구축 완료)되어 as-built 통합 문서 1건으로 소급 작성.
+**User Confirmation**: 위 질문 4건 답변으로 명시 확정.
+**Action Taken**: (진행 중) SCOPE.md·aidlc-state.md·unit-of-work 3종 개정 → inception·construction 낡은 서술 개정 → `construction/shared-infrastructure.md` as-built → U8 FD 계획서 이관·갱신 → U10 FD 계획서 신설(질문 게이트).
+**Artifacts Affected**: 진행하며 이 항목 아래 후속 항목으로 기록.
+
+---
+## Change Request — 범위 개정 산출물 1차 (SCOPE·state·unit-of-work·인셉션 정정·U8/U10 계획서)
+**Timestamp**: 2026-10-11T17:10:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "작업 단위 별로 해서 커밋하는 것도 잊지말고"
+**AI Response**: 완료분을 작업 단위별로 커밋한다.
+**Action Taken**:
+- `docs/SCOPE.md` — 현행 범위 2026-10-12 절 신설(U8 편입·U10 신설·U7/U9 폐기·인프라 as-built), 2026-07-17 절은 이력으로 보존.
+- `aidlc-state.md` — 개정 블록 8(현재 단계·Workspace State·AI 솔버 지시·Infra SKIP 해소·U7~U9 재편+U8/U10/shared-infra 체크박스·Reverse Engineering·현황 스냅숏).
+- `unit-of-work.md`·`unit-of-work-dependency.md`·`unit-of-work-story-map.md` — §8 유닛 추가·제거 반영(U10 정의, 유효 스토리 106, U10 부분 이관 표, 실제 코드 조직). U10 컴포넌트는 C1(위치 동의 = auth 모듈 소유)로 정정.
+- `requirements.md`·`stories.md`·`docs/design/wireframes.md` — 개정·이연·폐기 블록(소셜 전용, 여행 삭제 전 상태, AI 엔진 실제, 지연 예산 15s/60s, 지도 네이버·검색 카카오 로컬, 에픽 K·L 폐기, U10 이연, j02·오프라인 보류, 화면 정본=라이브 Figma). NFR-PERF-02 시한 강제 서술은 오케스트레이터가 values-dev/prd `true` 로 정정.
+- `application-design/{components,component-methods,services,component-dependency,application-design}.md` — 개정 블록 58(ScheduleAgentPort 6메서드, replan 단일안, C5 302+클릭기록, Expo 푸시·폴링, 이벤트 카탈로그 현행, adapter 계층 등).
+- `construction/plans/u8-conversational-assistant-functional-design-plan.md` — `u8-fd-preserve`(7f1fddba) 이관 + 현재 구현 기준선 + Q1~Q15 (**답변 대기**).
+- `construction/plans/u10-gps-location-automation-functional-design-plan.md` — 신설, 기준선 + Q1~Q22 (**답변 대기**).
+**Context**: INCEPTION·CONSTRUCTION 기존 승인 상태 유지(국소 개정). U8·U10 FD는 질문 게이트에서 정지.
+
+---
+## Change Request — 범위 개정 산출물 2차 (shared-infrastructure as-built · construction U0~U6 정정)
+**Timestamp**: 2026-10-11T17:40:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "그럼 8 10 이렇게 U 문서 생성 하는건가?"
+**AI Response**: 그렇다 — U8·U10은 `construction/u8-*`·`u10-*` 아래 FD→NFR→NFR Design 산출물을 만들고 인프라는 shared-infrastructure 증분. 현재 FD 질문 게이트(U8 Q1~Q15 · U10 Q1~Q22)에서 정지.
+**Action Taken**:
+- `construction/shared-infrastructure.md` + `plans/shared-infrastructure-design-plan.md` — as-built(서울 단일 리전, dev·prd 정의/실운영=dev, EKS Auto Mode, RDS PG16, Secrets Manager→K8s Secret, Actions OIDC+Helm --atomic), 간극 G-01~16, 질문 6 (**승인 대기**).
+- `construction/u0~u2/**` — 개정 블록(RS256·outbox_event+릴레이·BR-U0-30 온보딩 권한·라우트 골격·네이버 지도/카카오 로컬·C5 클릭기록·Trip 일과 창·조립 2단·ScheduleAgentPort 6·시한 15s/60s·Plan-B 25s).
+- `construction/u3~u6/**` — 개정·이연 블록(지도 MapView·LLM 설정·AssemblyRunRecord·replan 와이어·G-U4-3/O-U4-2/4/5 종결·U10 이연·회고 rule|http·findTimeline/VisitChecked·마이그레이션 실번호·오프라인/j02 보류·OutboxRelay·/me/export·account_setting·푸시 재빌드 필요).
+**Context**: 기존 승인 상태 유지(국소 개정). 원문 삭제 0.
+
+---
+## Functional Design — U8 · U10 질문 답변 수령
+**Timestamp**: 2026-10-11T18:10:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "확인하고 입력안한거는 다 추천으로" (계획서 `[Answer]:` 칸 직접 입력분 — U8: Q1~Q5=A · Q12=B · Q14="비로그인기능 제공하지 않은 상태" / U10: Q1=B · Q3=B)
+**AI Response**: 미입력 칸을 추천안으로 채움(각 칸에 지시 원문 주석). U8 = Q1~Q11·Q13·Q15 A, Q12 B(✦ FAB를 기존 FAB 스택 위에 추가 — PRD 문언), Q14 A와 동치(비로그인 N/A). U10 = Q1 B(백그라운드 지오펜스 전면 도입·거부 시 수동 강등) · Q2 A · Q3 B(백그라운드 저전력 연속 경로) · Q4 C · Q5~Q22 A. 모순 검토: Q1=B·Q3=B는 Q13(설명 후 승격 요청)·Q14(기능 플래그 별도 출시)·Q16(강등 시 수동 전환)과 정합 — 후속 질문 불요. 인프라 계획서(Q1~Q6)는 추천안 표기가 없어 채우지 않음(사용자 별도 답변 대기).
+**Context**: CONSTRUCTION — U8·U10 Functional Design Step 5 완료 → Step 6 산출물 생성 착수.
+
+---
+## Functional Design — U8 · U10 산출물 생성, 승인 게이트 제시
+**Timestamp**: 2026-10-11T19:00:00Z (작업 시점, 초 단위 미측정)
+**User Input**: (없음 — 생성 완료 후 승인 요청)
+**AI Response**: U8 FD 4종(`construction/u8-conversational-assistant/functional-design/`) + `stories.md` US-ASSIST-01~08 전개 · U10 FD 4종(`construction/u10-gps-location-automation/functional-design/`) + U4·U5·U6 `[개정 · 2026-10-12 · U10 FD]` 블록. 표준 2-option 완료 메시지로 승인 요청(유닛별).
+**Context**: CONSTRUCTION — U8·U10 Functional Design Step 7~8(승인 대기).
+
+---
+## Functional Design 승인 — U8 · U10 / 후속 게이트 권고안 일괄 지시
+**Timestamp**: 2026-10-11T19:20:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "뭐 확인해야해? 더 작성해야하는 문서가 있나?" / "그럼 권고로 ㄱㄱ"
+**AI Response**: U8·U10 Functional Design을 승인으로 기록(검토 포인트 제시 후 "권고로 ㄱㄱ"). 같은 지시를 남은 게이트의 권고안 일괄 적용으로 해석: ① 공통 Infra 계획 Q1~Q6 — 추천 표기가 없어 AI가 근거를 붙여 권고안을 선택·적용(선택값과 근거를 계획서에 명기) ② U10 NFR Requirements(필수 — 배터리·심사·Play 신고·privacy manifest) ③ U8 NFR Requirements(얇게 — 신규 축만, O-U8-9 판정 = 필요). NFR 질문은 계획서에 권고안을 표시하고 같은 지시로 적용하되, 산출물 완료 시 표준 승인 게이트는 다시 제시한다.
+**Context**: CONSTRUCTION — U8·U10 FD 완료 → NFR Requirements 착수, shared-infrastructure 승인 처리.
+
+---
+## Infrastructure Design(공통) 확정 · NFR Requirements 생성 — U8 · U10
+**Timestamp**: 2026-10-11T20:10:00Z (작업 시점, 초 단위 미측정)
+**User Input**: (2026-10-11T19:20Z "그럼 권고로 ㄱㄱ" 지시의 적용분)
+**AI Response**: ① shared-infrastructure 계획 Q1~Q6 — 추천 표기가 없어 AI가 근거를 붙여 선택(Q1=A dev 운영 겸용 · Q2=A 가용성 99.5% · Q3=A CloudWatch+알람 · Q4=A RTO 4h/RPO 15m · Q5=A Redis 제거 · Q6=B 버전 핀 롤백), `shared-infrastructure.md` §12 확정 결정 + U0·U1·U6 NFR 개정 블록. ② U8 NFR Requirements 2종(권고 Q1~Q11, NFR Design SKIP 권고). ③ U10 NFR Requirements 2종(권고 Q1~Q14, NFR Design 얇게 진행 권고). U8·U10 NFR은 표준 승인 게이트 제시.
+**Context**: CONSTRUCTION — shared-infrastructure 완료, U8·U10 NFR Requirements 승인 대기.
+
+---
+## NFR Requirements 승인 — U8 · U10
+**Timestamp**: 2026-10-11T20:20:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "ㄱㄱ"
+**AI Response**: U8·U10 NFR Requirements 승인 기록. U8 = NFR Design SKIP(권고대로) · Infra 증분 없음 → **U8 설계 단계 종료**. U10 = NFR Design(얇게 3주제) 착수.
+**Context**: CONSTRUCTION — U8 종료, U10 NFR Design 진행.
+
+---
+## NFR Design · Infra 증분 생성 — U10 / PR 머지 지시
+**Timestamp**: 2026-10-11T21:00:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "푸시하고 PR 올려" / "머지 되면 develop에서 pull 해서 최신화 해봐" / "스쿼시 머지 잊지말고" / "지금 돌아가는 에이전트는 뭐하는거야?"
+**AI Response**: PR #1045 생성(develop 대상). U10 NFR Design 2종 + shared-infrastructure U10 증분 생성(계획 Q1~Q3 권고 적용). 승인 게이트 대기 상태로 PR 에 포함해 squash merge 후 develop 최신화.
+**Context**: CONSTRUCTION — U10 NFR Design·Infra 증분 승인 대기.
+
+---

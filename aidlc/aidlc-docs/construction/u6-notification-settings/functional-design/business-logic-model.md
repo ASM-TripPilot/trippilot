@@ -32,6 +32,8 @@
 | **아웃박스 릴레이**(`@Scheduled` + ShedLock) | ❌ | **이것만 없다** |
 | ShedLock 라이브러리 의존성 | ❌ | `libs.versions.toml`에 없음(테이블만 선재) |
 
+> **[개정 · 2026-10-12] §0.1 — "릴레이만 없다"는 해소됐다.** 아웃박스 릴레이 `backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt`(TRIP-539, `@Scheduled` + `@SchedulerLock(name = "outbox-relay")`)와 ShedLock 의존성(`backend/gradle/libs.versions.toml` `shedlock-spring`·`shedlock-jdbc`)이 들어왔다. 백오프는 `next_attempt_at`(V2.45, TRIP-845). 발행 이벤트도 늘었다 — 알림이 구독하는 `stay.StayRegistered`·`planb.PlanBTriggered`·`reflection.ReflectionReady`가 실재한다(`backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/in/event/DomainNotificationSubscribers.kt`).
+
 즉 **구멍은 하나다 — 릴레이.** 계약·envelope·발행 구현·락 테이블·PBT는 이미 서 있고, `EventEnvelope.kt` 주석이 *"아웃박스 릴레이(@Scheduled + ShedLock)는 후속"* 이라고 명시해 뒀다.
 
 **이벤트 이름 규약도 실측이 정본이다**: `{module}.{EventName}`(예: `itinerary.ItineraryGenerated`). 인셉션이 쓴 `StayRegistered`·`PlanBTriggered`·`ReflectionReady`는 **이 규약으로 다시 지어야 한다**(§4).
@@ -53,6 +55,11 @@
 | **DEC-U6-7a** ⚠️ | **단, 저장 위치는 "기기 로컬"에서 "서버"로 정정한다.** `l05` 실물이 이 값을 **설정 화면의 토글**(`외부 이동 시 제휴 안내 다시 보기`)로 그린다 — 설정에 있는 값이 기기마다 다르면 사용자 모델이 깨진다 | 계획서 Q7 해설에서 기기 로컬을 권했는데 **시각 확인으로 뒤집혔다**. 설정 항목이므로 계정 단위 저장(§3.3) |
 | **DEC-U6-8** | 알림 종류는 **8종**: `STAY` · `TRIP_PRE` · `TRIP_DAY` · `SLOT_PRE` · `PLAN_B` · `REFLECTION` · `COMMUNITY` · **`SYSTEM`**. 토글 가능한 것은 **7종**(`SYSTEM` 제외), `COMMUNITY` 행은 **U7 개통까지 UI에서 숨긴다**(Q8=A) | `l01`에 `시스템 · 2일 전`(새 기기 로그인)이 실재하고 `l02` 토글엔 없다 — "모든 알림을 꺼도 보안·계정 알림은 알림함에 표시"의 실체다. 커뮤니티는 화면이 **좋아요·댓글을 1행으로 병합**했으므로 값도 하나 |
 | **DEC-U6-9** | 산출물은 **FD 4종**, NFR 필요 여부는 FD 종료 시 판정(Q9=A) | Q3=A로 푸시를 열었으므로 COST(발송량)·LEGAL(야간)·DATA(토큰 만료) 축이 실재한다 — **U5처럼 자동 스킵되지 않는다** |
+
+> **[개정 · 2026-10-12] DEC 표 — 실장 대조(원문 보존).**
+> - **DEC-U6-1**: 릴레이 물리 배치는 `backend/common/core`가 아니라 **`backend/app/.../app/event/OutboxRelay.kt`**다. "U7도 같은 걸 쓴다"는 U7 폐기(사용자 결정 2026-10-12)로 의미를 잃었다.
+> - **DEC-U6-3**: Expo push는 구현됐다(`backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/out/push/ExpoPushAdapter.kt`). 그러나 "EAS 재빌드가 이미 지불됐을 가능성"은 **틀렸다** — iOS 빌드가 `aps-environment` entitlement를 제거한다(`frontend/app.config.ts` `withEntitlementsPlist`, TRIP-935). 푸시를 켜려면 ASC 번들 ID Push capability → 래핑 제거 → 재빌드가 필요하고, EKS 런타임 기본은 `PUSH_MODE=off`다(`deploy/eks/runtime_secrets.py`).
+> - **DEC-U6-8**: `COMMUNITY` 행의 "U7 개통까지 숨김"은 U7 폐기로 **영구 숨김**과 같다. 행 존치 여부는 사용자 결정 항목이다.
 
 ---
 
@@ -76,6 +83,8 @@
         │
         └─ 성공: published_at = now()  /  실패: attempts++ (다음 폴링에서 재시도)
 ```
+
+> **[개정 · 2026-10-12]** 그림의 `OutboxDispatcher · shared`는 실장에서 `OutboxRelay`(`backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt`)이고, 실패 시 `attempts++`와 함께 `next_attempt_at`으로 지수 백오프한다(V2.45).
 
 **핵심은 ③이 ④보다 먼저**라는 것이다. **인앱함 적재가 푸시 발송의 성공 여부와 무관**해야 catch-up이 "누락 0"이 된다(BR-U6-12).
 
@@ -117,6 +126,8 @@
 | `REFLECTION` | 회고 생성 완료 | U5 `ReflectionReady` | 이벤트 미실장(G-U5-13) |
 | `SYSTEM` | 새 기기 로그인 등 | U0 auth | 토글 불가 |
 
+> **[개정 · 2026-10-12] §3.1 상태 열 갱신.** `STAY`·`PLAN_B`·`REFLECTION`의 "이벤트 미실장"은 해소됐다 — 각각 `stay.StayRegistered`·`planb.PlanBTriggered`·`reflection.ReflectionReady` 구독자가 `DomainNotificationSubscribers.kt`에 있다. `SLOT_PRE` 간격 선택 UI(G-U6-5)는 FE `settings-notifications`에서 확인되지 않았다.
+
 ### 3.2 시각 기반 알림은 이벤트가 아니다 ★
 
 `TRIP_PRE`·`TRIP_DAY`·`SLOT_PRE` 셋은 **아무 일도 일어나지 않았는데 시각이 되어 발화**한다. 아웃박스로는 못 만든다.
@@ -137,6 +148,8 @@
 | 알림 | 알림 설정 → `l02` | **U6 신규** | U6 |
 | 제휴 안내 | **`외부 이동 시 제휴 안내 다시 보기` 토글** | **U6 신규**(DEC-U6-7a) | U6 |
 | 위험 영역 | 계정 삭제(`위험` 뱃지) | `POST /me/deletion`(→ `DELETION_PENDING`, GPS 즉시 파기) · `DELETE`(유예 내 철회) | U0 + **고지 목록은 U6** |
+
+> **[개정 · 2026-10-12] §3.3 — 데이터 내보내기·설정 저장 실재.** "데이터 내보내기 엔드포인트 없음"은 해소됐다 — **`GET /api/v1/me/export`**(`backend/app/src/main/kotlin/com/trippilot/app/export/AccountExportController.kt`, 기여자 예 `archive` `VisitExportContributor.kt`). 제휴 안내 토글 등 계정 설정은 `account_setting`(**V2.42**, key-value)과 `GET/PATCH /api/v1/me/settings`(`backend/modules/profile/src/main/kotlin/com/trippilot/profile/adapter/in/web/AccountSettingController.kt`)로 저장된다.
 
 > **예산이 `미설정`으로 그려져 있다** — U1이 `G-U1-09`로 "예산 입력 화면 부재"를 남겼던 그 항목이다. **`l05`가 그 입력 경로**다 → U1 갭 해소 경로로 연결(G-U6-6).
 
@@ -176,6 +189,8 @@
 | **G-U6-7** ★ | **`l03` 메뉴 6행 중 3행이 U7 소관**(`내 일정 공개/공유 설정`·`내가 공유한 일정`·`숨긴 사용자 관리`) | 1차에서는 **숨긴다**(COMMUNITY 토글과 같은 처리) |
 | **G-U6-8** | **`l03` 스타일 dot 게이지 3축이 U5에 없다** | U5에 `trait_gauges` 신설 반영 완료. **산출식은 O-U5-9** |
 
+> **[개정 · 2026-10-12] 갭 상태 갱신.** **G-U6-1 해소**(OutboxRelay + ShedLock, TRIP-539). **G-U6-2 해소**(발행부 3종 실재 — `DomainNotificationSubscribers.kt`). **G-U6-3 해소**(`GET /api/v1/me/export`). **G-U6-4** — FE `src/pages/settings/settings-notifications/`에 민감도 UI는 확인되지 않았다(백엔드는 `plan_b_sensitivity` V2.18 + `SensitivityController` 실재). **G-U6-7** — U7 폐기로 3행은 "1차 숨김"이 아니라 **열 계획 없음**이다.
+
 ---
 
 ## 6. 스토리 커버리지
@@ -194,5 +209,7 @@
 | 10 취향 수정 | `l05` 7행 | BR-U6-28 | U0 배선 |
 | 11 위치 동의 | `l06` 3상태 | BR-U6-29~31 | **1토글↔3층**(DEC-U6-11) |
 | 12 제휴 고지 | `l07`(=U1 시트) + `l05` 토글 | BR-U6-32·33 | 시트 구현됨, 토글만 신규 |
+
+> **[개정 · 2026-10-12] 커버리지 갱신.** 01·03·04의 "이벤트 대기"는 해소(구독자 실재). 09의 "내보내기 미구현"은 해소(`AccountExportController`). 단 **푸시 채널은 운영에서 꺼져 있다**(`PUSH_MODE=off` 기본, iOS `aps-environment` 제거 — DEC 표 개정) — 현재 실제로 "울리는" 것은 인앱함이다.
 
 **미커버 0.** 단 01~04는 **다른 유닛의 발행부가 붙어야** 실제로 울린다.

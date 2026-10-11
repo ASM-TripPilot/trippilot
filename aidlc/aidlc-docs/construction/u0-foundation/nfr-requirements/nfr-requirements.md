@@ -12,6 +12,8 @@
 | SCALE-02 | 마케팅 스파이크 대비 10x 헤드룸(단시간 500 RPS)에서 오류율 급증 없이 저하(rate limit 429) |
 | SCALE-03 | 단일 리전·다중 AZ 내 수평 확장(무상태 앱 — 액세스 토큰 무상태 검증이 전제)으로 충분. 리전 간 DR 비대상(기지시) |
 
+> **[개정 · 2026-10-12 · Infra 결정]** SCALE-03 의 "다중 AZ" 는 **컴퓨트 층에만** 성립한다. 운영 트래픽은 dev 스택이 받고(Q1=A, prd 비용 보류), dev 는 EKS 노드 2 AZ · RDS 단일 AZ · NAT 1 이다. 단일 AZ 데이터 계층은 Q2=A 로 수용했다. 재평가 트리거(유료 매출 · DAU 가 SCALE-01 의 30% · 월 99.5% 미달)에 걸리면 prd 이전이나 dev RDS Multi-AZ 를 다시 묻는다. 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
+
 ## 2. 성능 (NFR-U0-PERF)
 
 | ID | 요구 |
@@ -39,6 +41,8 @@
 | AVAIL-02 | 인증은 fail-closed(가용성 저하 시 익명 접근 허용 금지) — 완충은 스플래시 로컬 폴백(BR-U0-27)과 UX-01 피드백 |
 | AVAIL-03 | 무중단 배포 내성(그레이스풀 셧다운·롤링) — 상세 절차는 NFR Design(RESILIENCY-04 이연분) |
 
+> **[개정 · 2026-10-12 · Infra 결정]** **AVAIL-01 목표를 월 99.9% → 월 99.5% 로 낮춘다**(Q2=A, 원문 보존). 운영 dev 스택의 데이터 계층이 단일 AZ 라서 "다중 AZ 전제"가 성립하지 않는다. 99.9%(월 약 43분)는 RDS AZ 장애 복구 시간을 담을 수 없다. **RTO 4시간 · RPO 15분을 추가한다**(Q4=A, RESILIENCY-02). 근거는 RDS PITR(보존 14일)과 수동 재배포이고, PITR 복원 리허설 1회로 실증한다(후속 작업, 미실시). 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
+
 ## 5. 보안 (NFR-U0-SEC) — security-baseline Full
 
 | ID | 요구 |
@@ -53,6 +57,8 @@
 | SEC-08 | 동의 증적·법정 데이터: append-only + app DB 역할 UPDATE/DELETE 권한 회수(V1.7 기존재) 유지. 파기 시에도 증적 보존(BR-U0-13) |
 | SEC-09 | 전송·저장: 전 구간 TLS, 클라 토큰은 OS 보안 저장소만(frontend 정본 기확정) |
 | SEC-10 | 입력 검증: 전 DTO 선언적 제약(+문자열 최대 길이 명시), 파라미터라이즈드 쿼리, 닉네임 저장 전 금칙어 검사(BR-U0-17) |
+
+> **[개정 · 2026-10-12]** 액세스 토큰 서명 알고리즘은 **RS256** 이다(원문 보존 — 개정 전: "ES256"). 근거: `backend/common/security/src/main/kotlin/com/trippilot/security/AccessTokenIssuer.kt`(`SignatureAlgorithm.RS256`) · `JwtSigningKeys.kt`(RSA 키, kid=RFC 7638 지문) · `JwtSecurityConfig.kt`. ES256 은 **Apple `client_secret` 서명에만** 쓴다(`backend/modules/auth/.../external/AppleClientSecret.kt`, TRIP-933). 검증 셋은 현재 **단일 키**(`ImmutableJWKSet(JWKSet(rsaKey))`)라 "kid 2키 중첩 롤오버"(P-SEC-2)는 미구현이다. 서명키는 env `JWT_SIGNING_KEY` 로 주입되며 배포 환경에서는 AWS Secrets Manager(`trippilot/{env}/backend`, `infra/terraform/stack/registry-secrets.tf`) → Helm `deploy/eks/chart/templates/backend.yaml` 경로다.
 
 ## 6. 복원력 (NFR-U0-RES) — resiliency-baseline Full
 
@@ -70,6 +76,8 @@
 | OBS-01 | 서버 로그: stdout 구조화 JSON + 요청당 상관 ID(응답 헤더 반환·비동기 전파) — TRIP-148 자산 채택 |
 | OBS-02 | 보안 이벤트 5분류 정의(U0): 가입 · 로그인 실패 급증 · 리프레시 재사용 감지(건당) · 429 급증 · 삭제 요청/복구. 수집·대시보드·알림 라우팅 제품은 Infra Design 이연 |
 | OBS-03 | 클라이언트: Sentry(frontend 정본) — `beforeSend` 토큰·PII 스크러빙, 부트스트랩 폴백 발동률·로그인 실패율 계측 이벤트 정의 |
+
+> **[개정 · 2026-10-12 · Infra 결정]** OBS-02 의 "Infra Design 이연" 분을 정했다(Q3=A). 수집은 **CloudWatch Logs**(컨테이너 로그 수집 애드온, 운영 dev 보존 90일)이고, 라우팅은 **CloudWatch 알람 → SNS → Slack** 이다. 첫 범위의 보안 이벤트 알람은 리프레시 재사용 감지(건당, 로그 메트릭 필터)다. 나머지 4분류의 임계 알람은 로그 수집이 켜진 뒤 팀이 정한다. 담당자도 팀이 지정한다. 구현은 후속 작업이다(as-built 알람 0건). 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
 
 ## 8. 준수 (NFR-U0-LEGAL)
 

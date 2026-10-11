@@ -26,6 +26,14 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 | **MOBILE-U4-06** | 만보계·모션 센서 권한을 **요청하지 않는다** | DEC-U4-8. `expo-sensors` 미설치 유지 |
 | **MOBILE-U4-07** | 지오펜스 wake에서 하는 일은 **평가 요청 1회 + 필요 시 로컬 알림**뿐이다. 깨어난 김에 동기화·프리페치를 하지 않는다 | wake 예산은 OS가 짧게 준다 |
 
+> **[이연 · 2026-10-12 → U10] MOBILE-U4-01·02·04·05·07 (지오펜스·백그라운드 위치).** 원문은 보존한다. 현재 실장: `expo-task-manager` 미추가(`frontend/package.json`), `frontend/app.config.ts` `expo-location` 플러그인은 `locationAlwaysPermission: false`·`locationAlwaysAndWhenInUsePermission: false`(**TRIP-936** — 앱 심사 대응으로 '항상 허용'을 명시적으로 끔), 지오펜스는 `frontend/src/shared/location/geofence.ts`의 **degrade 스텁**(순수 매핑만, 네이티브 `startGeofencingAsync` 미배선). 이 축은 신설 유닛 **U10 "GPS·위치 자동화"**(미구현, 사용자 결정 2026-10-12)로 넘어간다. **MOBILE-U4-03**(거부 = 정상 경로, 수동 체크인 강등)과 **MOBILE-U4-06**(모션 센서 미요청)은 U4에 그대로 유효하다 — 지금은 강등 사슬의 끝(포그라운드·수동)이 상시 동작이다.
+
+> **[개정 · 2026-10-12 · U10 FD] MOBILE-U4-01·02·04·05·07 — U10 FD가 다시 정했다(NFR 값은 U10 NFR Requirements).**
+> - **MOBILE-U4-01·02 유효** — `expo-task-manager` 추가 · always 설정 · Android 백그라운드 위치. 단 **빌드 플래그 뒤**에 둔다: 플래그 OFF 빌드는 TRIP-936 이후 권한 표면과 같다(Q14=A · DEC-U10-12).
+> - **MOBILE-U4-04** — 리전 = 진행 중 슬롯 + 남은 슬롯 순번, 합계 최대 10(Q9=A).
+> - **MOBILE-U4-05 "연속 위치 추적을 켜지 않는다"는 철회**한다(Q3=B 사용자 선택). 무장(always + 정확 + 동의 + 여행 구간 + 플래그) 동안 **저전력 연속 기록**(낮은 정확도 등급 · 거리 필터 · 지연 일괄 전달)을 한다. 배터리 예산의 근거가 바뀌므로 U10 NFR Requirements에서 예산을 다시 세운다. iOS 상태바 위치 표시는 여행 내내 뜬다.
+> - **MOBILE-U4-07** — wake에서 하는 일은 "평가 요청 1회"가 아니라 **판정 + 자동 결과 배치 1회 + 필요 시 리전 재선택**이다. 로컬 알림은 만들지 않는다(지연 알림은 서버 경로).
+
 ## 2. 성능 (NFR-U4-PERF)
 
 | ID | 요구 | 실장 / 근거 |
@@ -35,6 +43,11 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 | **PERF-U4-03** | 재계획 응답 예산은 **U3 생성보다 짧게** 잡는다 — 범위가 하루 이내이므로. 구체값은 **O-U4-4 미결**(생성 day1 5s·전체 20s가 상한선) | BR-U3-03 승계 · 미결 유지 |
 | **PERF-U4-04** | 실제 경로 폴리라인은 **표시 전 다운샘플링**한다(화면 픽셀 밀도 기준). 원본 점열을 그대로 WebView에 넘기지 않는다 | 하루 수백~수천 점 가능 |
 | **PERF-U4-05** | 도착 체크는 **낙관적 갱신**으로 즉시 반영하고 실패 시 되돌린다. 서버 왕복을 기다려 UI를 막지 않는다 | 현장에서 회선이 나쁠 수 있다 |
+
+> **[개정 · 2026-10-12] PERF-U4-02·03·04.**
+> - **PERF-U4-02**: 지도는 WebView가 아니라 **네이버 네이티브 SDK**(`frontend/src/shared/map/MapView.tsx`, `@mj-studio/react-native-naver-map`)다. "WebView 1장" 제약은 근거가 사라졌고 "전환 시 재요청 없음"만 유효하다.
+> - **PERF-U4-03**(O-U4-4) **종결** — 재계획 예산은 **25,000ms**로 정해졌다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ReplanFacadeService.kt` `REPLAN_DEADLINE_MS = 25_000L`). 인용한 생성 예산도 day1 15s·전체 60s로 바뀌어(U3 COST-U3-01 개정) "생성보다 짧게"는 전체 예산 기준으로만 성립한다.
+> - **PERF-U4-04**(실제 경로 다운샘플링) — **[이연 · 2026-10-12 → U10]**.
 
 ## 3. 비용·외부 호출 (NFR-U4-COST)
 
@@ -46,6 +59,8 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 | **COST-U4-04** | 영업시간·휴무는 **C7(U1) 정본 조회**다 — U4가 외부 POI API를 직접 부르지 않는다 | 소유 경계 |
 | **COST-U4-05** | 거리 추정은 `TravelEstimatePort` 승계. U4가 별도 지도 API 예산을 만들지 않는다 | U1 소유 |
 | **COST-U4-06** | LLM 상한은 **C1 실장값 승계**(`max_tokens`·`temperature`·`timeout_sec`). U4가 별도 상한을 만들지 않는다 | COST-U3-04 승계 |
+
+> **[개정 · 2026-10-12] COST-U4-06 — C1 실장값 갱신.** `temperature` 설정은 없고 `timeout_sec` 기본 10.0, 출력 상한은 공용 1024 + 기능별 `feature_max_tokens`, 전 기능 `claude-fable-5-1`(#1038)이다(`ai/src/trippilot/llm_gateway/config.py`, U3 COST-U3-04 개정). 재계획 경로는 방향 지시어 번역(`REPLAN_DIRECTIVE_TRANSLATION`)·대안 선택(`ALTERNATIVE_SELECTION`) LLM 호출을 쓴다.
 
 ## 4. 데이터·법적 처리 (NFR-U4-DATA / LEGAL) ★
 
@@ -63,6 +78,10 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 | **DATA-U4-03** | `plan_b_trigger`는 **발화하지 않은 판정도 기록**한다(무발화의 근거). 대신 **여행 종료 후 정리 대상**이다 | INV-U4-01 |
 | **DATA-U4-04** | `replan_session`의 `draft`(json)는 **세션 수명 동안만** 유지한다. 확정분은 `change_log_entry`·`itinerary_revision`이 이미 남기므로 중복 보관하지 않는다 | DEC-U4-11 |
 | **DATA-U4-05** | 만료된 `replan_session` 정리는 **기존 `StalePartialSweeper` 패턴을 재사용**한다 | **실장**: `AsyncConfig.kt`에 `@EnableScheduling` 실재 — 신규 스케줄링 인프라 0 |
+
+> **[이연 · 2026-10-12 → U10] LEGAL-U4-01~04 · DATA-U4-01·02 (실제 경로 수집·보존).** `actual_route_point` 테이블은 만들어지지 않았고(`backend/app/src/main/resources/db/migration/`에 없음) FE의 `useActualRoute`도 없다 — 실제 경로(US-PLANB-13)는 U10 소관이다. 원문은 U10 설계 입력으로 보존한다. **U4에 남는 위치 법적 처리**: 위치 동의(L2) 철회 시 재계획 기준점 좌표를 파기하고 `origin_kind='PURGED'`로 남긴다(TRIP-992 — `V2.56__replan_origin_purged.sql`, `backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/adapter/in/event/LocationLegalConsentRevokedSubscriber.kt`). LEGAL-U4-05(일회성 현재 위치 미적재)는 유효하다.
+
+> **[개정 · 2026-10-12 · U10 FD] LEGAL-U4-02·04 · DATA-U4-01·02.** LEGAL-U4-02(수집 구간 시작·종료에 `COLLECTION` 1건씩)는 유지하고, **서버가 하루치 경로를 저장한 순간 `COLLECTION` 1건**과 **지오펜스 무장 구간 시작·종료 `USE` 1건씩**을 더한다(Q12=A — 법무 확인 대상 O-U10-1). LEGAL-U4-04의 "기존 점열 파기"는 `actual_route_day` 전량 파기 + `PURGE(ACTUAL_ROUTE)`로 읽는다. **DATA-U4-01**(50m 샘플링)은 기기 쪽 저전력 기록 + 다운샘플로 대체되고 값은 U10 NFR이 정한다. **DATA-U4-02**("여행 종료 후 N일 파기, 초기값 90일")는 **폐기** — 보존 = 여행 기록 수명, L3 철회 시 즉시 파기(Q7=A · DEC-U10-7).
 
 ## 5. 관측 (NFR-U4-OBS)
 
@@ -87,6 +106,8 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 | **OFFLINE-U4-03** | **재계획은 온라인 전용**이다. 오프라인에서는 진입 자체를 막고 사유를 표시한다 — 솔버 호출이라 우회 경로가 없다 | 침묵 실패 금지 |
 | **OFFLINE-U4-04** | 오프라인 감지는 기존 `@react-native-community/netinfo`를 쓴다 | **실장 실재** |
 | **OFFLINE-U4-05** | U3 `OFFLINE-U3-01`(확정 일정 로컬 캐시)이 구현되면 여행 중 화면이 **자동으로 그 혜택을 받는다**. U4가 별도 캐시를 만들지 않는다 | 중복 방지 |
+
+> **[개정 · 2026-10-12] OFFLINE-U4-02 — 보류.** 방문 체크 오프라인 큐는 구현되지 않았다 — `frontend/src/shared/storage/`에는 `idSet`·`installId`·`stringValue`·`tokenStorage`만 있고, 방문 체크 훅(`frontend/src/features/check-visit/model/useVisitCheck.ts`)은 온라인 호출이다. 오프라인 방문 기록은 **사용자 결정(2026-09-11)으로 보류**됐다(되돌릴 수 있는 보류).
 
 ## 7. 보안 (NFR-U4-SEC)
 
