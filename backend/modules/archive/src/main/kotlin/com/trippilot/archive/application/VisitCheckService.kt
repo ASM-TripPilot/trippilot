@@ -9,6 +9,7 @@ import com.trippilot.archive.api.VisitConflictState
 import com.trippilot.archive.domain.CheckSource
 import com.trippilot.archive.domain.VisitCheck
 import com.trippilot.archive.domain.VisitCheckRepository
+import com.trippilot.archive.domain.inVisitOrder
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Service
@@ -138,7 +139,7 @@ class VisitCheckService(
     fun listByDay(accountId: UUID, tripId: UUID, day: LocalDate): List<VisitCheck> {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         // 즉석 방문은 슬롯 키가 없어 날짜로 못 거른다 — 도착 시각(여행지 기준 날짜)으로 판단한다.
-        return checks.findByTrip(tripId).filter { it.dayOf() == day }
+        return checks.findByTrip(tripId).filter { it.dayOf() == day }.inVisitOrder()
     }
 
     /**

@@ -166,3 +166,15 @@ interface VisitCheckRepository {
 /** 방문의 최종 결과. 재생 시 "원하던 것"과 "기록된 것"을 견주는 데만 쓴다. */
 enum class VisitOutcome(val label: String) { COMPLETED("완료"), SKIPPED("건너뜀") }
 
+/**
+ * **지나온 순서** — 도착 시각, 도착한 적이 없으면(도착 전 건너뛰기) 기록된 시각.
+ *
+ * 화면이 이 순서로 "몇 번째 방문"을 매긴다(TRIP-1315). 허브(`/visits/days/{day}`)와 기록(`/records`)이
+ * 각자 정렬하면 같은 방문이 두 화면에서 다른 번호를 받는다 — 실제로 한쪽은 저장소 순서(최신 먼저)를
+ * 그대로 내보내고 있었다. 순서를 정하는 자리는 여기 하나다.
+ *
+ * 시각이 같으면 기록된 순, 그것도 같으면 id — **동점에서 번호가 요청마다 뒤집히지 않게** 한다.
+ * 사용자가 시각을 손으로 고치면(`adjustTimes`) 같은 분의 방문이 실제로 생긴다.
+ */
+fun List<VisitCheck>.inVisitOrder(): List<VisitCheck> =
+    sortedWith(compareBy({ it.arrivedAt ?: it.createdAt }, { it.createdAt }, { it.visitCheckId }))

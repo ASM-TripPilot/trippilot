@@ -4,6 +4,7 @@ import com.trippilot.archive.domain.VisitCheck
 import com.trippilot.archive.domain.VisitCheckRepository
 import com.trippilot.archive.domain.VisitMemoRepository
 import com.trippilot.archive.domain.VisitPhotoMetaRepository
+import com.trippilot.archive.domain.inVisitOrder
 import com.trippilot.archive.api.ArchiveDayView
 import com.trippilot.archive.api.ArchiveRecordFacade
 import com.trippilot.archive.api.ArchiveVisitView
@@ -65,7 +66,7 @@ class TripRecordService(
                     baseStayId = baseByDate[date]?.savedStayId,
                     baseStayName = baseByDate[date]?.name,
                     planned = planned.filter { it.date == date }.sortedBy { it.orderIndex },
-                    actual = actual.filter { it.dayOf() == date }.sortedBy { it.arrivedAt ?: it.createdAt }
+                    actual = actual.filter { it.dayOf() == date }.inVisitOrder()
                         .map { it.toRecord(photoCounts[it.visitCheckId] ?: 0, memoTexts[it.visitCheckId]) },
                     unvisitedSlotKeys = unvisited.filter { it.date == date }.map { it.slotKey },
                 )
@@ -92,7 +93,7 @@ class TripRecordService(
         return all.groupBy { it.dayOf() }.toSortedMap().map { (date, visits) ->
             ArchiveDayView(
                 date = date,
-                visits = visits.sortedBy { it.arrivedAt ?: it.createdAt }.map {
+                visits = visits.inVisitOrder().map {
                     ArchiveVisitView(
                         visitCheckId = it.visitCheckId,
                         poiId = it.poiId,
