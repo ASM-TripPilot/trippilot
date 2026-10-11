@@ -17,7 +17,12 @@ internal val OAUTH_JSON: ObjectMapper = ObjectMapper()
  * 제공자별 endpoint 설정([config])과 userinfo 파싱([parseProfile])만 하위가 구현한다.
  * (Google·Kakao·Naver 공통. Apple 은 id_token 기반이라 별도.)
  *
- * TODO(SECURITY, IdP 등록 후): id_token 서명 검증(JWKS)·nonce·state 검증 추가.
+ * **id_token·nonce·state 를 여기서 검증하지 않는 것은 누락이 아니다**(TRIP-1316 에서 대조). 3사는 신원을
+ * id_token 이 아니라 userinfo 로 받으므로 서명·nonce 가 해당 없고, `state` 는 서버에 오지 않는다 —
+ * 인가 요청을 연 앱이 대조한다. code 가로채기는 PKCE(`code_verifier`)가 막는다 — **네이버는 예외다**:
+ * PKCE 를 지원하지 않아 code 경로에 그 방어가 없다. 앱은 네이버 SDK 키(`EXPO_PUBLIC_NAVER_URL_SCHEME`)가
+ * 있는 빌드에서만 토큰 경로로 보내고, **없으면 이 code 경로로 폴백한다** — 열려 있는 잔여다(TRIP-1317).
+ * 실제로 비어 있는 것은 **토큰의 발급 대상(aud) 확인**이며 그 처리는 [fetchProfileByAccessToken] 에 적었다.
  */
 abstract class AbstractOAuth2Client(
     restClientBuilder: RestClient.Builder,
@@ -38,10 +43,14 @@ abstract class AbstractOAuth2Client(
     /**
      * SDK 발급 토큰 흐름 — 교환 없이 userinfo 만 호출한다.
      *
-     * **여기엔 미설정 가드가 없다.** 이 경로는 `clientId` 를 쓰지 않기 때문이다 — 소유증명은 앱이
-     * 네이티브 SDK 에서 이미 받아 온 토큰이 하고, 서버는 그것으로 userinfo 만 묻는다. 실제로
-     * `GoogleOAuthClientTest` 가 `userInfoUri` 만 채운 설정으로 이 경로를 검증한다. 키 미발급은
-     * 이 경로에서 **앱 쪽이 먼저 막는다**(SDK 초기화가 안 된다).
+     * **여기엔 미설정 가드가 없다.** 이 경로는 `clientId` 를 쓰지 않기 때문이다 — 앱이 네이티브 SDK 에서
+     * 이미 받아 온 토큰으로 서버는 userinfo 만 묻는다. 실제로 `UnconfiguredProviderGuardTest` 가 `userInfoUri` 만
+     * 채운 설정으로 이 경로를 검증한다. 키 미발급은 이 경로에서 **앱 쪽이 먼저 막는다**(SDK 초기화가 안 된다).
+     *
+     * **그 토큰이 우리 앱에 발급된 것인지는 보지 않는다** — 토큰은 "이 사람이 누구인가"만 답하고
+     * "우리 앱에 로그인하려 했는가"는 답하지 않는다. 식별자가 계정 전역인 제공자(구글)에서는 남의 앱
+     * 토큰이 계정 탈취로 이어지므로 `AuthenticateWithSocialUseCase` 가 구글을 이 경로에서 거절한다.
+     * 나머지에 남는 범위도 거기 적었다(TRIP-1316).
      */
     override fun fetchProfileByAccessToken(accessToken: String): SocialProfile =
         parseProfile(requestUserInfo(config(), accessToken))

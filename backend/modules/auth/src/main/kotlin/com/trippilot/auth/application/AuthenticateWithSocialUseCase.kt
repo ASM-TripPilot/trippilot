@@ -16,6 +16,7 @@ import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.FieldError
+import com.trippilot.core.error.ProviderNotSupported
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.event.DomainEventPublisher
 import org.springframework.stereotype.Service
@@ -53,9 +54,27 @@ class AuthenticateWithSocialUseCase(
         return completeLogin(profile, command.ageMethod, command.birthDate, command.deviceId)
     }
 
-    /** 네이티브 SDK 토큰 흐름(카카오·네이버) — 프로필 취득만 다르고 이후는 동일. */
+    /**
+     * 네이티브 SDK 토큰 흐름(카카오·네이버·애플) — 프로필 취득만 다르고 이후는 동일.
+     *
+     * **구글은 받지 않는다**(TRIP-1316). 이 경로는 받은 토큰으로 userinfo 만 묻고 **그 토큰이 우리 앱에
+     * 발급된 것인지 보지 않는다.** 애플은 id_token 의 aud 를 검증하고, 카카오 회원번호와 네이버 `id` 는
+     * 앱마다 달라 남의 앱 토큰이 기존 계정으로 **로그인되지는** 않는다(네이버 회원 프로필 조회 API 명세:
+     * "애플리케이션이 다르면 id값이 다르다" — 2026-10-12 확인). 구글 `sub` 만 계정 전역 값이라 남의 앱에 발급된 토큰도 같은 `sub` 를 낸다 —
+     * 받으면 그 토큰이 우리 계정 로그인으로 통한다. 앱은 구글을 code+PKCE 경로로만 보내므로 닫아도 잃는
+     * 것이 없다. 구글 네이티브 SDK 를 들이면 `tokeninfo` 의 `aud` 를 우리 clientId 와 대조하는 검증을
+     * 붙여서 연다 — 이 줄만 지우지 말 것.
+     *
+     * **카카오·네이버에 남는 것**: 남의 앱 토큰은 새 식별자로 **가입 분기**에 들어온다. 그 이메일이 미가입이면
+     * 남의 이메일을 쥔 계정이 생겨 본인의 첫 로그인이 409(`SOCIAL_EMAIL_CONFLICT`)로 막히고, 가입돼 있으면
+     * 409 가 어느 제공자로 가입했는지 알려 준다. 계정 탈취는 아니지만 열려 있다 — 카카오는
+     * `access_token_info` 의 `app_id` 대조로 닫을 수 있고 앱 ID 주입이 선행이다.
+     */
     @Transactional
     fun authenticateWithAccessToken(command: SocialTokenLoginCommand): SocialLoginResult {
+        if (command.provider == Provider.GOOGLE) {
+            throw ProviderNotSupported("${command.provider.displayName()} 로그인은 이 방식으로 지원하지 않아요.")
+        }
         val profile = socialAuthPort.authenticateWithAccessToken(command.provider, command.accessToken)
         val result = completeLogin(profile, command.ageMethod, command.birthDate, command.deviceId)
         // 로그인이 확정된 **뒤에** 교환한다 — 연령확인 누락(400) 등으로 로그인이 무산되면 일회용 code 를
