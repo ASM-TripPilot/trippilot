@@ -101,11 +101,13 @@ trippilot:
       mode: ${AI_REMINDER_COPY_MODE:off}
       base-url: ${AI_URL:http://localhost:8000}
       service-token: ${SERVICE_AUTH_TOKEN:}
-  # 계정당 하루 AI 일정 생성 횟수(TRIP-1314). 값의 근거(계정별 사용 분포)가 아직 없어 프론트 임시 가드와
-  # 같은 5 로 시작한다 — 관측이 나오면 여기만 돌린다. 직접 만들기(MANUAL)·슬롯 후보·재계획은 세지 않는다.
+  # 계정당 하루 AI 일정 생성 횟수(TRIP-1314). 값의 근거(계정별 사용 분포)가 아직 없어 10 으로
+  # 시작한다 — 관측이 나오면 여기만 돌린다. 직접 만들기(MANUAL)·슬롯 후보·재계획은 세지 않는다.
   itinerary:
     generation-limit:
-      daily: ${ITINERARY_GENERATION_DAILY_LIMIT:5}
+      daily: ${ITINERARY_GENERATION_DAILY_LIMIT:10}
+      # 상한을 받지 않는 개발자 계정 ID(쉼표 구분 UUID). 오타가 있으면 기동이 실패한다 — 조용히 빠지는 것보다 낫다.
+      exempt-account-ids: ${ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS:}
   place:
     geocode:
       mode: ${PLACE_GEOCODE_MODE:stub}

@@ -121,6 +121,7 @@ class GenerationSessionService(
      * 직접 만들기(MANUAL)는 AI 를 부르지 않아 세션을 열지 않으므로 여기 오지 않는다.
      */
     private fun guardDailyLimit(accountId: UUID, now: Instant) {
+        if (accountId in limits.exemptAccountIds) return
         val today = now.atZone(TRAVEL_ZONE).toLocalDate()
         val used = sessions.countStartedSince(accountId, today.atStartOfDay(TRAVEL_ZONE).toInstant())
         if (used < limits.daily) return

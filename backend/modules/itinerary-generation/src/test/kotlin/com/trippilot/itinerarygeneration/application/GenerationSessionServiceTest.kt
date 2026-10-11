@@ -329,6 +329,21 @@ class GenerationDailyLimitTest : StringSpec({
         stubTrips, repo, Clock.fixed(now, ZoneOffset.UTC), defaultDeadlines, GenerationLimitProperties(daily),
     )
 
+    "개발자로 등록한 계정은 상한을 넘겨도 만들 수 있다 — 등록하지 않은 계정은 그대로 막힌다" {
+        val repo = FakeGenerationSessions()
+        val other = UUID.randomUUID()
+        val otherTrip = UUID.randomUUID()
+        fun exempting() = GenerationSessionService(
+            stubTrips, repo, Clock.fixed(at, ZoneOffset.UTC), defaultDeadlines,
+            GenerationLimitProperties(daily = 1, exemptAccountIds = setOf(acc)),
+        )
+
+        repeat(3) { exempting().start(acc, trip, GenerationMode.FULLY_AI) }
+        exempting().start(other, otherTrip, GenerationMode.FULLY_AI)
+
+        shouldThrow<RateLimited> { exempting().start(other, otherTrip, GenerationMode.FULLY_AI) }
+    }
+
     "하루 상한까지는 같은 여행을 다시 만들 수 있고, 그다음은 사유와 함께 거절한다" {
         val repo = FakeGenerationSessions()
         repeat(limit) { svc(repo).start(acc, trip, GenerationMode.FULLY_AI) }
