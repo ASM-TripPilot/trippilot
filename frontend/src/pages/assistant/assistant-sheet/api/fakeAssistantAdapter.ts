@@ -2,6 +2,7 @@ import type {
   AssistantMessage,
   AssistantSessionSummary,
   OpenSessionResponse,
+  ProposalStatus,
   QuickReply,
   SendTurnRequest,
   SendTurnResponse,
@@ -104,7 +105,7 @@ export class FakeAssistantAdapter implements AssistantPort {
   private readonly issued = new Map<string, QuickReply>();
   private readonly proposals = new Map<
     string,
-    { status: string; hasViolation: boolean; tripId: string | null }
+    { status: ProposalStatus; hasViolation: boolean; tripId: string | null }
   >();
   private seq = 0;
   /** 테스트 관측용 — 각 메서드 호출 수. */
@@ -147,6 +148,19 @@ export class FakeAssistantAdapter implements AssistantPort {
         tripId,
       });
     }
+  }
+
+  /** 제안 상태를 바꾸면 저장된 메시지의 제안도 같이 바꾼다 — 다시 조회해도 서버 정본과 같게. */
+  private setProposalStatus(proposalId: string, status: ProposalStatus): void {
+    const proposal = this.proposals.get(proposalId);
+    if (proposal) proposal.status = status;
+    this.sessions.forEach((state) => {
+      state.messages = state.messages.map((message) =>
+        message.proposal?.id === proposalId
+          ? { ...message, proposal: { ...message.proposal, status } }
+          : message
+      );
+    });
   }
 
   private session(sessionId: string): SessionState {
@@ -296,10 +310,10 @@ export class FakeAssistantAdapter implements AssistantPort {
     if (proposal.hasViolation) throw new AssistantApiError('NOT_APPLICABLE');
     const mode = this.options.apply ?? 'OK';
     if (mode !== 'OK') {
-      proposal.status = mode === 'NOT_APPLICABLE' ? 'PROPOSED' : mode;
+      if (mode !== 'NOT_APPLICABLE') this.setProposalStatus(proposalId, mode);
       throw new AssistantApiError(mode);
     }
-    proposal.status = 'APPLIED';
+    this.setProposalStatus(proposalId, 'APPLIED');
     const tripId = proposal.tripId ?? '';
     const log: AssistantMessage = {
       id: this.nextId('log'),
@@ -333,7 +347,7 @@ export class FakeAssistantAdapter implements AssistantPort {
     if (!proposal || proposal.status !== 'PROPOSED') {
       throw new AssistantApiError('NOT_APPLICABLE');
     }
-    proposal.status = 'DISMISSED';
+    this.setProposalStatus(proposalId, 'DISMISSED');
     return { proposal: { id: proposalId, status: 'DISMISSED' as const } };
   }
 

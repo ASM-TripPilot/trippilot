@@ -619,6 +619,7 @@
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.tsx`  →  AssistantSheetPageProps · AssistantSheetPage
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetView.tsx`  →  AssistantSheetViewProps · AssistantSheetView
 - `src/pages/assistant/assistant-sheet/ui/MessageList.tsx`  →  MessageListProps · UserBubble · AssistantBubble · NextActionButton · MessageList
+- `src/pages/assistant/assistant-sheet/ui/ProposalCard.tsx`  →  ProposalCardProps · ProposalCard
 
 ## src/pages/auth/login/config/
 - `src/pages/auth/login/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
@@ -1638,4 +1639,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1006개 파일
+합계 1007개 파일

@@ -8,9 +8,13 @@ import type {
   QuickReply,
   TurnInput,
 } from '../api/assistantContract';
+import { isAssistantApiError } from '../api/assistantPort';
 import {
+  useApplyProposal,
   useAssistantMessages,
   useAssistantSession,
+  useDismissProposal,
+  useMarkProposal,
   useSendTurn,
 } from '../model/assistantQueries';
 import { newClientTurnId } from '../model/clientTurnId';
@@ -51,7 +55,16 @@ export function AssistantSheetPage({
   const sessionId = session.data?.session.id;
   const messagesQuery = useAssistantMessages(sessionId);
   const sendTurn = useSendTurn(sessionId);
+  const applyProposal = useApplyProposal(sessionId, tripKey);
+  const dismissProposal = useDismissProposal(sessionId);
+  const markProposal = useMarkProposal(sessionId);
   const [draft, setDraft] = useState('');
+  // 적용 중인 제안 id — 화면 비활성과 ref 잠금 둘 다. 이중 적용의 최종 차단은 서버 상태기계(INV-U8-08).
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const applyingRef = useRef(false);
+  const [proposalErrors, setProposalErrors] = useState<Record<string, string>>(
+    {}
+  );
 
   const state = resolveSheetState({
     status: session.status,
@@ -122,6 +135,52 @@ export function AssistantSheetPage({
     if (picked) send({ type: 'ACTION', quickReplyId: picked.id });
   }
 
+  function handleApply(proposalId: string): void {
+    if (applyingRef.current) return;
+    applyingRef.current = true;
+    setApplyingId(proposalId);
+    applyProposal.mutate(proposalId, {
+      onError: (error) => {
+        // 409 STALE·EXPIRED — 서버가 이미 그 상태로 옮겼다. 카드를 낡음으로(BR-U8-32).
+        if (
+          isAssistantApiError(error) &&
+          (error.code === 'STALE' || error.code === 'EXPIRED')
+        ) {
+          markProposal(proposalId, error.code);
+          return;
+        }
+        setProposalErrors((prev) => ({
+          ...prev,
+          [proposalId]:
+            isAssistantApiError(error) && error.code === 'NOT_APPLICABLE'
+              ? '이 제안은 지금 적용할 수 없어요'
+              : '적용하지 못했어요. 잠시 후 다시 시도해 주세요',
+        }));
+      },
+      onSettled: () => {
+        applyingRef.current = false;
+        setApplyingId(null);
+      },
+    });
+  }
+
+  function handleDismiss(proposalId: string): void {
+    if (applyingRef.current || dismissProposal.isPending) return;
+    dismissProposal.mutate(proposalId);
+  }
+
+  // [다시 제안] — 그 제안을 부른 사용자 요청을 새 턴으로 다시 보낸다(클라가 quick reply 를 짓지 않는다).
+  function handleRepropose(messageId: string): void {
+    const index = rawMessages.findIndex((message) => message.id === messageId);
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const message = rawMessages[i];
+      if (message.role === 'USER' && message.text) {
+        send({ type: 'TEXT', text: message.text });
+        return;
+      }
+    }
+  }
+
   function lastUserText(): string | null {
     for (let i = rawMessages.length - 1; i >= 0; i -= 1) {
       const message = rawMessages[i];
@@ -176,6 +235,13 @@ export function AssistantSheetPage({
           message={message}
           onPressAction={handleAction}
           onPickCandidate={handlePickCandidate}
+          proposal={{
+            applyingId,
+            errors: proposalErrors,
+            onApply: handleApply,
+            onDismiss: handleDismiss,
+            onRepropose: handleRepropose,
+          }}
         />
       )}
     />

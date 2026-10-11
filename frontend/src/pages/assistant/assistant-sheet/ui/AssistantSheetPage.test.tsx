@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
+  configure,
   fireEvent,
   render,
   screen,
@@ -19,6 +20,11 @@ import { AssistantSheetPage } from './AssistantSheetPage';
  * TRIP-1322 — 시트 page 배선(가짜 서버 주입). 서버 HTTP 가 없어 MSW 대신 `setAssistantPort` 로
  * FakeAssistantAdapter 를 끼운다 — 그래서 integration(MSW) 버킷이 아니라 node 버킷이다.
  */
+
+// 전체 스위트 병렬 부하(+ 같은 기계의 다른 레인 jest)에서 한 테스트의 여러 왕복이 기본 1초·5초를 넘는 일이
+// 실측됐다(TRIP-1324 전체 실행 3회 중 1회) — 이 파일만 기다림을 늘린다. 판정 내용은 그대로다.
+configure({ asyncUtilTimeout: 8000 });
+jest.setTimeout(20000);
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
@@ -233,5 +239,79 @@ describe('AssistantSheetPage · 카드 배선 (TRIP-1323)', () => {
       fireEvent.press(await screen.findByTestId('assistant-fallback-continue'));
     });
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AssistantSheetPage · 제안 적용 (TRIP-1324)', () => {
+  async function openProposal(): Promise<void> {
+    const input = await screen.findByTestId('assistant-input');
+    fireEvent.changeText(input, '둘째 날 카페를 조용한 곳으로 바꿔줘');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-send'));
+    });
+    await screen.findByTestId('assistant-proposal-apply');
+  }
+
+  it('[적용] → apply 1회 · 적용 기록 메시지 · 일정 쿼리 무효화 (§4-4)', async () => {
+    renderPage();
+    const client = clients[clients.length - 1];
+    client.setQueryData(['/trips/t1/itinerary'], { days: [] });
+    await openProposal();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-proposal-apply'));
+    });
+    await waitFor(() => expect(fake.calls.applyProposal).toBe(1));
+    expect(await screen.findByText('일정에 반영했어요.')).toBeOnTheScreen();
+    expect(client.getQueryState(['/trips/t1/itinerary'])?.isInvalidated).toBe(
+      true
+    );
+    expect(screen.getByTestId('assistant-proposal-status')).toHaveTextContent(
+      '적용했어요'
+    );
+  });
+
+  it('금지 · 적용 진행 중 [적용]을 다시 눌러도 두 번째 호출이 없다', async () => {
+    renderPage({ latencyMs: 0 });
+    await openProposal();
+    fake.configure({ latencyMs: 30 });
+    const apply = screen.getByTestId('assistant-proposal-apply');
+    await act(async () => {
+      fireEvent.press(apply);
+      fireEvent.press(apply);
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId('assistant-proposal-apply')).toBeNull()
+    );
+    expect(fake.calls.applyProposal).toBe(1);
+  });
+
+  it('금지 · [취소] 하면 apply 는 0회다', async () => {
+    renderPage();
+    await openProposal();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-proposal-dismiss'));
+    });
+    // 호출 수는 가짜 서버가 응답 전에 올린다 — 결과 표지(응답 반영)를 기다린 뒤에 센다.
+    expect(
+      await screen.findByTestId('assistant-proposal-status')
+    ).toHaveTextContent('취소했어요');
+    expect(fake.calls.dismissProposal).toBe(1);
+    expect(fake.calls.applyProposal).toBe(0);
+  });
+
+  it('BR-U8-32 · 409 STALE 이면 카드가 낡음으로 바뀌고 [다시 제안]은 같은 요청을 다시 보낸다', async () => {
+    renderPage({ apply: 'STALE' });
+    await openProposal();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-proposal-apply'));
+    });
+    expect(
+      await screen.findByTestId('assistant-proposal-stale')
+    ).toBeOnTheScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-proposal-repropose'));
+    });
+    await waitFor(() => expect(fake.calls.sendTurn).toBe(2));
   });
 });

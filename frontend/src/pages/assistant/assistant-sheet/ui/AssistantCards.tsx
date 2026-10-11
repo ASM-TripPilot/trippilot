@@ -13,6 +13,7 @@ import type {
   ReviewPayload,
   ScopePayload,
 } from '../api/assistantContract';
+import { ProposalCard } from './ProposalCard';
 import {
   ChevronRightGlyph,
   InfoGlyph,
@@ -29,6 +30,14 @@ import {
 export interface MessageCardHandlers {
   onPressAction: (action: NextAction) => void;
   onPickCandidate: (poiId: string) => void;
+  /** 제안 카드(TRIP-1324) — 없으면 PROPOSAL 메시지는 카드 없이 말풍선만. */
+  proposal?: {
+    applyingId: string | null;
+    errors: Readonly<Record<string, string>>;
+    onApply: (proposalId: string) => void;
+    onDismiss: (proposalId: string) => void;
+    onRepropose: (messageId: string) => void;
+  };
 }
 
 const CONTINUE_ACTION: NextAction = {
@@ -362,12 +371,26 @@ export function cardConsumes(message: AssistantMessage): string[] {
   return [];
 }
 
-/** kind 별 카드 — 카드가 없는 kind(TEXT·CLARIFY)는 null. PROPOSAL 은 TRIP-1324. */
+/** kind 별 카드 — 카드가 없는 kind(TEXT·CLARIFY)는 null. */
 export function MessageCard({
   message,
   onPressAction,
   onPickCandidate,
+  proposal,
 }: { message: AssistantMessage } & MessageCardHandlers): ReactNode {
+  if (message.kind === 'PROPOSAL') {
+    if (!message.proposal || !proposal) return null;
+    return (
+      <ProposalCard
+        proposal={message.proposal}
+        applying={proposal.applyingId === message.proposal.id}
+        errorText={proposal.errors[message.proposal.id] ?? null}
+        onApply={proposal.onApply}
+        onDismiss={proposal.onDismiss}
+        onRepropose={() => proposal.onRepropose(message.id)}
+      />
+    );
+  }
   const payload = message.payload;
   if (!payload && message.kind !== 'FALLBACK') return null;
   switch (message.kind) {
