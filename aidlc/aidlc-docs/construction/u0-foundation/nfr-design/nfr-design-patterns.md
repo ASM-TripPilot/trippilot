@@ -87,6 +87,8 @@ U0 부하(~50 RPS, SCALE-01)에서 읽기 복제본은 과설계 — **단일 �
 
 서명(ES256, kid 조회) → `alg` 화이트리스트(**`none`·대칭 거부 고정**) → `iss`·`aud`·`exp` → 주체 확정. 어느 단계든 판정 불가 = 401. 알고리즘은 **토큰의 헤더가 아니라 서버 정책이 결정**한다(알고리즘 혼동 공격 차단).
 
+> **[개정 · 2026-10-12]** 액세스 토큰 서명 알고리즘은 **RS256** 이다(원문 보존 — 개정 전: "ES256"). 근거: `backend/common/security/src/main/kotlin/com/trippilot/security/AccessTokenIssuer.kt`(`SignatureAlgorithm.RS256`) · `JwtSigningKeys.kt`(RSA 키, kid=RFC 7638 지문) · `JwtSecurityConfig.kt`. ES256 은 **Apple `client_secret` 서명에만** 쓴다(`backend/modules/auth/.../external/AppleClientSecret.kt`, TRIP-933). 검증 셋은 현재 **단일 키**(`ImmutableJWKSet(JWKSet(rsaKey))`)라 "kid 2키 중첩 롤오버"(P-SEC-2)는 미구현이다. 서명키는 env `JWT_SIGNING_KEY` 로 주입되며 배포 환경에서는 AWS Secrets Manager(`trippilot/{env}/backend`, `infra/terraform/stack/registry-secrets.tf`) → Helm `deploy/eks/chart/templates/backend.yaml` 경로다.
+
 ### P-SEC-2 — JWK 2키 중첩 롤오버 (무중단)
 
 **상태**: 서명키(현행 1) + 검증 전용키(직전 1) = JWK 셋 최대 2.

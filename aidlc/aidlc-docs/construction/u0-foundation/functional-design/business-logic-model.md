@@ -74,6 +74,8 @@
 | 감사·법정 증적 | append-only 권한 분리(V1.7 grants) 그대로 수용 | V1.2·V1.7 |
 | 위치 권한 | **프리프롬프트 프레임(재사용 UI)만** — OS 다이얼로그 실제 발화는 후속 유닛(탐색·여행 중) | V1.3(동의 상태) |
 
+> **[개정 · 2026-10-12]** ① 아웃박스: 테이블명 `outbox_event`(V1.0), 릴레이 `backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt` 실재 — "릴레이 실소비는 후속"은 해소. ② 위치 권한: 온보딩 위치·푸시 단계가 **OS 다이얼로그를 발화한다**(`frontend/src/pages/onboarding/onboarding-location/ui/LocationPage.tsx`, `onboarding-push/ui/PushPage.tsx`) — 상세는 business-rules.md BR-U0-30 개정 블록.
+
 ## 8. 기준선 정합 검증 (계획 항목 7)
 
 **정합 확인**: 소셜 전용 MVP ✓(V1.1 주석) · 연령 2방식 ✓(V1.1) · 필수 3종 동의 ✓(V1.2 terms_type 존재) · 회전 체인 90일 ✓(V1.4) · 30일 유예+복구 ✓(V1.4 `cancelled_at`) · 취향 7축+중립 파생 ✓(V1.5) · 부트스트랩 3필드 ✓(openapi).
@@ -85,3 +87,5 @@
 | G-2 | 마케팅 동의 — 스키마(V1.2)·API(`/me/marketing-consent`) 존재하나 U0 UI는 이연(Q5) | 온보딩 화면에서 제외, 설정 화면(후속 유닛)에서 노출. API·스키마 변경 없음 |
 | G-3 | US-ONB-01 이메일 가입 서술 vs Q1 이연 결정 | 스토리 대비 범위 축소를 본 문서로 기록(스키마·API는 이미 소셜 전용 — 추가 조치 없음) |
 | G-4 | 재동의 흐름(Q5: 버전 모델만, 흐름 이연) | `terms_version.reconsent_required`·부트스트랩 `reconsent` 필드는 유지, 클라 분기 자리만 설계 |
+
+> **[개정 · 2026-10-12]** G-1 은 **해소됐다** — `grantType` 필드가 아니라 **경로 분리**로: `POST /auth/social/{provider}`(인가 코드, `SocialLoginRequest`) + `POST /auth/social/{provider}/token`(네이티브 SDK 토큰, `SocialTokenLoginRequest` — 애플은 `identityToken`) (`backend/docs/design/openapi.yaml` · `backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/in/web/`).

@@ -54,6 +54,8 @@
 | SEC-09 | 전송·저장: 전 구간 TLS, 클라 토큰은 OS 보안 저장소만(frontend 정본 기확정) |
 | SEC-10 | 입력 검증: 전 DTO 선언적 제약(+문자열 최대 길이 명시), 파라미터라이즈드 쿼리, 닉네임 저장 전 금칙어 검사(BR-U0-17) |
 
+> **[개정 · 2026-10-12]** 액세스 토큰 서명 알고리즘은 **RS256** 이다(원문 보존 — 개정 전: "ES256"). 근거: `backend/common/security/src/main/kotlin/com/trippilot/security/AccessTokenIssuer.kt`(`SignatureAlgorithm.RS256`) · `JwtSigningKeys.kt`(RSA 키, kid=RFC 7638 지문) · `JwtSecurityConfig.kt`. ES256 은 **Apple `client_secret` 서명에만** 쓴다(`backend/modules/auth/.../external/AppleClientSecret.kt`, TRIP-933). 검증 셋은 현재 **단일 키**(`ImmutableJWKSet(JWKSet(rsaKey))`)라 "kid 2키 중첩 롤오버"(P-SEC-2)는 미구현이다. 서명키는 env `JWT_SIGNING_KEY` 로 주입되며 배포 환경에서는 AWS Secrets Manager(`trippilot/{env}/backend`, `infra/terraform/stack/registry-secrets.tf`) → Helm `deploy/eks/chart/templates/backend.yaml` 경로다.
+
 ## 6. 복원력 (NFR-U0-RES) — resiliency-baseline Full
 
 | ID | 요구 |

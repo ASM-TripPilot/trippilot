@@ -51,12 +51,16 @@ U1 (backend modules)
 | NFR | **P-SEC-U1-2** — 서버 추적 ID · HMAC-SHA256 서명 검증 · skew ±5분 · 거래 ID 멱등 · 지표 응답 노출 차단 |
 | 통합 | `OtaPartner`에 벤더별 시크릿·딥링크 템플릿 보유. 검증 실패 = 미저장 + 보안 이벤트 |
 
+> **[개정 · 2026-10-12]** 포스트백 수신·HMAC 서명 검증·거래 ID 멱등은 **구현되지 않았다** — 수신 엔드포인트 0건, `affiliate_click.postback_status` 는 전부 `NONE`(`backend/app/src/main/resources/db/migration/V2.59__affiliate_click.sql`). `OtaPartner` 설정 테이블도 없다. 현행은 아웃바운드 302 + 클릭 기록(fail-open)까지: `backend/modules/affiliate-link/src/main/kotlin/com/trippilot/affiliatelink/{adapter/in/web/OutboundController.kt,application/OutboundService.kt}`, 벤더 `WEBSEARCH`(기본)·`TRIPCOM`(`AFFILIATE_MODE=tripcom`, `clickId`→`trip_sub1` 관통 — 포스트백 전제만 깔림).
+
 ### LC-U1-5. `PlaceSearchPort` + `MapRenderPort` (카카오)
 | | |
 |---|---|
 | 책임 | 장소·주소 검색·좌표 해석(Local) + 지도 렌더·핀(Map SDK) |
 | NFR | P-SEC-U1-3(**키 서버 프록시**) · P-COST-U1-1(쿼터 소진율 관측·상한 없음) · P-PERF-U1-3(디바운스 300ms·검색어 5분 캐시) · P-RES-U1-4(실패 시 핀/주소 폴백) |
 | 통합 | `PlaceSearchPort`는 실연동 가능(국내 쿼터). 지도 SDK는 Expo dev build 필요 |
+
+> **[개정 · 2026-10-12]** 벤더가 **둘로 갈렸다**(원문 보존 — 개정 전: "지도·장소 검색 = 카카오 한 벤더"). ① **장소·주소 검색·좌표 해석 = 카카오 로컬, 서버 프록시 유지** — `backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/adapter/out/external/{KakaoPlaceLookupAdapter,KakaoRegionGeocodeAdapter,KakaoLocalClientConfiguration}.kt`, 진입점 `GET /stays/geocode`·`/stays/reverse-geocode`(`backend/modules/saved-accommodation/.../adapter/in/web/GeocodeController.kt`). ② **지도 렌더 = 네이버 지도 네이티브 SDK**(`@mj-studio/react-native-naver-map` 2.9.0, `frontend/package.json`) — 공급자 중립 래퍼 `frontend/src/shared/map/MapView.tsx`·`CenterPinPicker.tsx`(TRIP-861, 2026-09-14 전환). 키는 `EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`(NCP Maps, 사용처 제한 = iOS Bundle ID·Android 패키지명), 네이티브 모듈이라 dev build 재빌드 필요. 백엔드에 `MapRenderPort` 는 없다 — 지도 렌더는 클라이언트 전용이다.
 
 ### LC-U1-6. `PoiCollectionGate` — INV-1 소유자
 | | |
@@ -100,6 +104,8 @@ U1 (backend modules)
 | 지도·검색 어댑터 | 카카오 SDK 차이 흡수 → 서버 프록시 호출 | LC-U1-5와 대칭·키 미보유 |
 | 낙관적 담기 토글 | 즉시 반영 후 서버 확인 | UX-U1-03(입력 보존) |
 
+> **[개정 · 2026-10-12]** 프론트 지도 어댑터는 카카오가 아니라 **네이버 지도 네이티브**(`frontend/src/shared/map/MapView.tsx`)이고, 검색은 서버 프록시(`GET /stays/geocode`) 호출이다. LC-U1-5 개정 블록 참조.
+
 ## 5. 컴포넌트 → NFR 추적
 
 | 컴포넌트 | NFR |
@@ -116,3 +122,5 @@ U1 (backend modules)
 ## 6. Infrastructure Design 이연
 
 Redis 운영 토폴로지(관리형/자체·다중 AZ) · 카카오 API 키·시크릿 주입 · 스냅숏 배치 실행 환경 · POI 초기 적재 파이프라인(TourAPI 등) · 외부 포트 실어댑터 전환 시 벤더 계약·과금 방어(COST 재평가). — U0와 동일하게 **로컬 전용이면 SKIP 대상**.
+
+> **[개정 · 2026-10-12]** 인프라는 **AWS EKS 로 배포됐다** — "로컬 전용이면 SKIP" 전제는 해소. 현행 결정은 공용 문서 `aidlc/aidlc-docs/construction/shared-infrastructure.md` 가 정본(Terraform `infra/terraform/stack/{network,eks,data,registry-secrets}.tf` · Helm `deploy/eks/chart` · `.github/workflows/aws-deploy.yml`). 단 백엔드는 아직 Redis 를 쓰지 않는다(tech-stack-decisions §4 개정 블록).

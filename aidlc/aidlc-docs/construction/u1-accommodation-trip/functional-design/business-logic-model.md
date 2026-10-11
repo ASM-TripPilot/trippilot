@@ -25,6 +25,8 @@
 | DEC-12 | 탐색 밴드 d 전체를 U1이 설계(랜딩·목적지 상세·장소 담기·지역 선택) | Q12=A |
 | DEC-13 | 커뮤니티(여행자 일정)는 **1차 제외** — 자리(placeholder)만, 실데이터·상세는 U7 | Q13=A |
 
+> **[개정 · 2026-10-12]** DEC-5 의 지도 쪽은 **네이버 지도 네이티브 SDK** 로 바뀌었다(TRIP-861, `frontend/src/shared/map/MapView.tsx`). 장소 검색은 카카오 로컬 서버 프록시 그대로다 — 상세는 §4 외부 포트 개정 블록.
+
 ---
 
 ## 2. 컴포넌트 경계 (U1 확정판)
@@ -148,6 +150,10 @@ PLANNED ──(일정 확정: U3)──→ CONFIRMED ──(시작일 도래·�
 | `OtaDeeplinkPort` | OTA별 딥링크 생성·포스트백 | 템플릿 치환 스텁 | 다른 OTA 링크 / 장소 검색 우회 |
 | `PlaceSearchPort` | 장소·주소 검색, 좌표 해석(카카오 로컬) | 실연동 가능(국내 무료 쿼터) | 핀 직접 지정 |
 | `MapRenderPort` | 지도 렌더·핀(카카오맵 SDK) | 실연동 | 정적 지도 이미지 → 주소 텍스트 |
+
+> **[개정 · 2026-10-12]** 벤더가 **둘로 갈렸다**(원문 보존 — 개정 전: "지도·장소 검색 = 카카오 한 벤더"). ① **장소·주소 검색·좌표 해석 = 카카오 로컬, 서버 프록시 유지** — `backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/adapter/out/external/{KakaoPlaceLookupAdapter,KakaoRegionGeocodeAdapter,KakaoLocalClientConfiguration}.kt`, 진입점 `GET /stays/geocode`·`/stays/reverse-geocode`(`backend/modules/saved-accommodation/.../adapter/in/web/GeocodeController.kt`). ② **지도 렌더 = 네이버 지도 네이티브 SDK**(`@mj-studio/react-native-naver-map` 2.9.0, `frontend/package.json`) — 공급자 중립 래퍼 `frontend/src/shared/map/MapView.tsx`·`CenterPinPicker.tsx`(TRIP-861, 2026-09-14 전환). 키는 `EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`(NCP Maps, 사용처 제한 = iOS Bundle ID·Android 패키지명), 네이티브 모듈이라 dev build 재빌드 필요. 백엔드에 `MapRenderPort` 는 없다 — 지도 렌더는 클라이언트 전용이다.
+
+> **[개정 · 2026-10-12]** 포스트백 수신·HMAC 서명 검증·거래 ID 멱등은 **구현되지 않았다** — 수신 엔드포인트 0건, `affiliate_click.postback_status` 는 전부 `NONE`(`backend/app/src/main/resources/db/migration/V2.59__affiliate_click.sql`). `OtaPartner` 설정 테이블도 없다. 현행은 아웃바운드 302 + 클릭 기록(fail-open)까지: `backend/modules/affiliate-link/src/main/kotlin/com/trippilot/affiliatelink/{adapter/in/web/OutboundController.kt,application/OutboundService.kt}`, 벤더 `WEBSEARCH`(기본)·`TRIPCOM`(`AFFILIATE_MODE=tripcom`, `clickId`→`trip_sub1` 관통 — 포스트백 전제만 깔림).
 
 ---
 

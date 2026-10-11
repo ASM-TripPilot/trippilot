@@ -75,6 +75,8 @@
 - `OutboundClick`: accountId · savedStayId? · stayExternalId · otaPartnerId · clickedAt · **postbackStatus** ⚠(`NONE`·`RECEIVED`)
 - **INV-U1-10**: 전환·수수료는 **내부 운영 지표로만** 저장하며 어떤 사용자 대면 응답에도 포함하지 않는다. 포스트백 처리는 멱등(같은 거래 ID 재수신 시 무변화).
 
+> **[개정 · 2026-10-12]** 구현은 위 모델과 다르다(원문 보존). **`OtaPartner` 테이블은 없다.** 클릭 기록은 `affiliate_click`(`backend/app/src/main/resources/db/migration/V2.59__affiliate_click.sql`): `click_id · account_id(**nullable — 익명 클릭**, 브라우저·커스텀탭이 Authorization 을 못 실음) · stay_id("{출처}:{식별자}" 합성 키, FK 없음) · vendor(문자열) · check_in · check_out · adults · clicked_at · postback_status(기본 NONE)`. 벤더는 설정 스위치 `AFFILIATE_MODE`(`backend/app/src/main/resources/application.yml` `trippilot.affiliate.mode`, 기본 `fallback`)로 고른다 — 기본 `WEBSEARCH`(`backend/modules/affiliate-link/.../adapter/out/external/WebSearchFallbackAdapter.kt`), `tripcom` 이면 `TRIPCOM` 키워드 검색 착지(`TripcomDeeplinkAdapter.kt`, `clickId`→`trip_sub1`). 진입점 `GET /api/v1/stays/{stayId}/outbound`(`OutboundController.kt`, 302). **포스트백 수신 엔드포인트는 없다** — `postback_status` 는 전부 `NONE`. INV-U1-10(내부 지표 전용)은 유지된다.
+
 ---
 
 ## 3. 여행 (C6)
@@ -96,6 +98,8 @@
 - **INV-U1-12 (DEC-9)**: 모든 목적지가 **대한민국 영역** 안이어야 생성된다. 하나라도 밖이면 생성 거부.
 - **INV-U1-13**: 상태 전이는 `PLANNED → CONFIRMED → ACTIVE → ENDED` 단방향. `ENDED`·`deletedAt` 이후 편집 불가.
 - **INV-U1-20** **[신설 · 2026-09-28 → 개정 · 2026-10-01, TRIP-1061 · US-TRIP-10]**: `deletedAt`은 소유자의 삭제 요청으로 **어느 상태에서든** 설정될 수 있다(전 상태 허용 — 사용자 결정 2026-10-01, 서버 상태 가드 없음). 개정 전 문면("작성중 여행에만 설정될 수 있다")은 원문 보존 차원에서 남긴다 — 그 제한은 이제 **FE 노출 정책**이지 불변식이 아니다. 삭제 시 딸린 데이터 정리는 확정됨 — `TripDeleted` 이벤트로 리마인드 예약 비움, 거점 '사용 중' 판정 live-trip 한정(PR #798). 일정·리비전 등 나머지 행은 소프트 삭제 원칙대로 남고 조회가 `deletedAt` 을 거른다.
+
+> **[개정 · 2026-10-12]** Trip 표에 없는 현행 속성·부속 테이블: ① **일과 창** `day_start_at · first_day_start_at · last_day_end_at`(time, 전부 NULL 허용 = 09:00/21:00 기본, 당일치기 CHECK `chk_trip_same_day_window`) — `backend/app/src/main/resources/db/migration/V2.62__trip_day_window.sql`(TRIP-1252 후속). ② **`trip_poi_rejection`**(trip_id·poi_id·kind `SWAPPED_OUT`/`REGENERATED`·count) — 여행 스코프 거절 이력, AI 점수 강등 재료(V2.53, TRIP-964). ③ **`trip_scored_candidate_pool`**(여행당 1행, 상위 200 후보 jsonb·radius_m) — 슬롯 교체 즉답용 생성 시점 점수 풀(V2.55, TRIP-969). 셋 다 `trip` CASCADE.
 
 ### TripDestination ⚠ 신설 (G-U1-08)
 | 속성 | 타입 | 비고 |

@@ -65,6 +65,8 @@ U0 P-SEC-5 계승. 여행·저장 숙소·담은 장소는 소유 계정만, 타
 - 아웃바운드에 **서버 생성 추적 ID**. 포스트백은 **제휴사별 공유 시크릿 HMAC-SHA256** 검증(키·검증 로직은 `OtaPartner` 설정 보유) + **타임스탬프 skew ±5분** 재전송 차단 + **거래 ID 멱등**.
 - 검증 실패는 저장하지 않고 보안 이벤트로 기록. 전환·수수료 지표는 **응답 스키마 수준에서 사용자 노출 차단**(INV-U1-10).
 
+> **[개정 · 2026-10-12]** 포스트백 수신·HMAC 서명 검증·거래 ID 멱등은 **구현되지 않았다** — 수신 엔드포인트 0건, `affiliate_click.postback_status` 는 전부 `NONE`(`backend/app/src/main/resources/db/migration/V2.59__affiliate_click.sql`). `OtaPartner` 설정 테이블도 없다. 현행은 아웃바운드 302 + 클릭 기록(fail-open)까지: `backend/modules/affiliate-link/src/main/kotlin/com/trippilot/affiliatelink/{adapter/in/web/OutboundController.kt,application/OutboundService.kt}`, 벤더 `WEBSEARCH`(기본)·`TRIPCOM`(`AFFILIATE_MODE=tripcom`, `clickId`→`trip_sub1` 관통 — 포스트백 전제만 깔림).
+
 ### P-SEC-U1-3 — 입력 경계 방어
 - 링크 붙여넣기 URL은 **허용 OTA 도메인 화이트리스트**(외부화)로만 파싱, 그 외 거부(SSRF 방지). 실패 시 원문 유지 + 타 탭 유도(BR-U1-24).
 - 지도·검색 API 키는 **서버 프록시 엔드포인트 뒤에만** 존재(클라 원 키 노출 금지).
