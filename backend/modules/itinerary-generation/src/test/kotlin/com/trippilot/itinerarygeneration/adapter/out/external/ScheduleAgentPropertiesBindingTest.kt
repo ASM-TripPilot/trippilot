@@ -54,7 +54,7 @@ class ScheduleAgentPropertiesBindingTest : StringSpec({
         )
         return Binder.get(environment)
             .bind("trippilot.itinerary.generation-limit", GenerationLimitProperties::class.java)
-            .orElseGet { GenerationLimitProperties() }
+            .get() // 기본값으로 숨지 않는다 — 안 붙으면 여기서 터져야 한다
     }
 
     "상한 예외 계정은 쉼표로 이어 적는다 — 비워 두면 예외가 없다" {

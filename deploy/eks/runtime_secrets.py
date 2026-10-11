@@ -6,6 +6,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import uuid
 from urllib.parse import quote
 
 from runtime_io import CommandError
@@ -149,6 +150,18 @@ def validate_groups(groups):
             "GOOGLE_CLIENT_SECRET must stay empty: the Google client is a public (iOS) client, "
             "so sending a secret makes Google reject the exchange with invalid_client"
         )
+    # 생성 상한 2종(TRIP-1314)은 없으면 백엔드 기본(10·예외 없음)이다. **있는데 틀리면** 백엔드가 기동에서
+    # 죽는다(빈 상한·0·UUID 오타) — 파드가 뜨다 죽기 전에 여기서 막는다.
+    limit = backend.get("ITINERARY_GENERATION_DAILY_LIMIT")
+    if limit is not None and not (limit.isascii() and limit.isdigit() and int(limit) >= 1):
+        raise ValueError("ITINERARY_GENERATION_DAILY_LIMIT must be a positive integer; remove the key to use the default")
+    exempt = backend.get("ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS", "")
+    if exempt.strip():
+        try:
+            for item in exempt.split(","):
+                uuid.UUID(item.strip())
+        except ValueError:
+            raise ValueError("ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS must be comma-separated UUIDs") from None
     if backend.get("PLACE_GEOCODE_MODE") == "kakao":
         require(backend, ("KAKAO_CLIENT_ID",), "kakao geocoding")
     if backend.get("WEATHER_MODE") == "kma":
