@@ -3,9 +3,11 @@ package com.trippilot.placedata.adapter.`in`.web
 import com.trippilot.placedata.application.PoiQueryService
 import com.trippilot.placedata.domain.PoiCategory
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.util.UUID
 
 /**
  * 장소(POI) 탐색 — 탐색 랜딩(US-EXPL-01). ACTIVE만(INV-U1-01), 지역·카테고리 필터.
@@ -27,4 +29,8 @@ class PoiController(
         val page = query.search(region, category, q, cursor, limit)
         return PlaceListResponse(page.items.map { PlaceResponse.from(it) }, page.nextCursor)
     }
+
+    /** 단건 상세. 목록과 **같은 모양**이다 — 상세 전용 필드는 값이 채워질 때 붙인다(TRIP-824 잔여). */
+    @GetMapping("/{poiId}")
+    fun get(@PathVariable poiId: UUID): PlaceResponse = PlaceResponse.from(query.get(poiId))
 }
