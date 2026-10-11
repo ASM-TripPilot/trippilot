@@ -1,8 +1,10 @@
 package com.trippilot.placedata.application
 
 import com.trippilot.core.error.FieldError
+import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.placedata.api.RegionLookupFacade
+import com.trippilot.placedata.domain.DataStatus
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PoiCursor
@@ -51,6 +53,21 @@ class PoiQueryService(
         } else null
         return PoiPage(items, next)
     }
+
+    /**
+     * 장소 한 곳(TRIP-824) — 상세 화면이 **목록을 거치지 않고** 여는 길.
+     *
+     * **ACTIVE 만으로 거르지 않는다.** 목록은 ACTIVE 만 내지만(INV-U1-01 — 새로 고를 수 있는 곳), 상세는 이미
+     * 알고 있는 장소를 다시 여는 화면이다. 담아 둔 곳이 폐업(`CLOSED`)하거나 원본에서 빠지면(`LOST`) 목록에서는
+     * 사라지는데, 상세까지 404 를 내면 사용자는 담은 장소가 왜 안 열리는지 모른다. `dataStatus` 를 실어
+     * 화면이 말하게 한다. 둘 다 **한때 ACTIVE 였던**, 게이트를 통과한 데이터다.
+     *
+     * **`UNVERIFIED` 는 없는 것으로 답한다** — 수집 게이트를 통과한 적이 없는 행이라 어느 조회에도 나오면
+     * 안 된다(INV-1). 지금 이 상태를 쓰는 코드 경로는 없지만(컬럼 기본값이라 SQL 직접 삽입에서만 생긴다),
+     * 열어 두면 게이트가 id 하나로 우회된다.
+     */
+    fun get(poiId: UUID): Poi =
+        repo.findById(poiId)?.takeIf { it.dataStatus != DataStatus.UNVERIFIED } ?: throw ResourceNotFound()
 
     /**
      * **후보풀용 — 화면 상한을 적용하지 않는다.**

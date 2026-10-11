@@ -111,6 +111,9 @@ services:
       TRIPCOM_ALLIANCE_ID: ${TRIPCOM_ALLIANCE_ID:-}
       TRIPCOM_SID: ${TRIPCOM_SID:-}
       TRIPCOM_AD_ID: ${TRIPCOM_AD_ID:-}
+      # 하루 생성 상한과 예외(개발자) 계정(TRIP-1314). 상한은 빈 값이 넘어가면 숫자 바인딩이 깨져 기본을 적는다.
+      ITINERARY_GENERATION_DAILY_LIMIT: ${ITINERARY_GENERATION_DAILY_LIMIT:-10}
+      ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS: ${ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS:-}
       # Apple 은 시크릿이 없다 — id_token 서명을 JWKS 로 검증할 뿐이라 iOS 번들 ID 하나뿐이다(TRIP-858).
       # 이 값이 없으면 애플 로그인은 401 이 아니라 501(미지원)로 나간다.
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}

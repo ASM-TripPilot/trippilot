@@ -121,4 +121,55 @@ class SavedPlaceApiIT : AbstractPostgresIntegrationTest() {
 
         place.has("regionCode") shouldBe true
     }
+
+    // ── 단건 상세(TRIP-824) ─────────────────────────────────────────────
+
+    /** 상세는 목록과 **같은 모양·같은 값**이다 — 따로 조립하면 두 화면이 같은 장소를 다르게 그린다. */
+    @Test
+    fun `장소 단건은 목록의 그 장소와 똑같이 나온다`() {
+        val token = newToken()
+        val listed = call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"][0]
+
+        val (status, place) = call(HttpMethod.GET, "/api/v1/places/${listed["poiId"].asText()}", token)
+
+        status shouldBe 200
+        place shouldBe listed
+    }
+
+    @Test
+    fun `없는 장소는 404 · 형식이 깨진 id 는 400 · 인증이 없으면 401`() {
+        val token = newToken()
+
+        call(HttpMethod.GET, "/api/v1/places/00000000-0000-4000-8000-000000009999", token).first shouldBe 404
+        call(HttpMethod.GET, "/api/v1/places/not-a-uuid", token).first shouldBe 400
+        call(HttpMethod.GET, "/api/v1/places/00000000-0000-4000-8000-000000009999", null).first shouldBe 401
+    }
+
+    /**
+     * 목록에서 사라진 장소도 상세는 열린다. 담아 둔 곳이 폐업하면 목록(ACTIVE 만)에서는 빠지는데,
+     * 상세까지 404 면 사용자는 담은 장소가 왜 안 열리는지 모른다. 시드의 폐업 장소(…f2)를 쓴다.
+     */
+    @Test
+    fun `폐업한 장소도 단건은 열리고 상태를 말한다 — 목록에서는 빠진다`() {
+        val token = newToken()
+
+        val (status, place) = call(HttpMethod.GET, "/api/v1/places/$CLOSED_POI", token)
+
+        status shouldBe 200
+        place["dataStatus"].asText() shouldBe "CLOSED"
+        val listed = call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"]
+        (0 until listed.size()).none { listed[it]["poiId"].asText() == CLOSED_POI } shouldBe true
+    }
+
+    /** 게이트를 통과한 적 없는 행은 id 를 알아도 안 나온다(INV-1). 시드의 미확인 장소(…f1). */
+    @Test
+    fun `수집 게이트를 통과하지 못한 장소는 단건으로도 열리지 않는다`() {
+        call(HttpMethod.GET, "/api/v1/places/$UNVERIFIED_POI", newToken()).first shouldBe 404
+    }
+
+    private companion object {
+        /** `R__seed_stub_pois.sql` 의 게이트 검증용 행. */
+        const val UNVERIFIED_POI = "e0000000-0000-4000-8000-0000000000f1"
+        const val CLOSED_POI = "e0000000-0000-4000-8000-0000000000f2"
+    }
 }

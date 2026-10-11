@@ -296,7 +296,9 @@ class ChartTests(unittest.TestCase):
                            if item["kind"] == "Deployment" and item["metadata"]["name"] == "backend")
             env = {item["name"]: item
                    for item in backend["spec"]["template"]["spec"]["containers"][0]["env"]}
-            for name in ("AFFILIATE_MODE", "TRIPCOM_ALLIANCE_ID", "TRIPCOM_SID", "TRIPCOM_AD_ID"):
+            # 생성 상한 2종(TRIP-1314)도 같은 길이다 — 빠지면 등록한 개발자 계정이 조용히 상한에 걸린다.
+            for name in ("AFFILIATE_MODE", "TRIPCOM_ALLIANCE_ID", "TRIPCOM_SID", "TRIPCOM_AD_ID",
+                         "ITINERARY_GENERATION_DAILY_LIMIT", "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS"):
                 ref = env[name]["valueFrom"]["secretKeyRef"]
                 self.assertEqual(ref["name"], "trippilot-backend")
                 self.assertEqual(ref["key"], name)

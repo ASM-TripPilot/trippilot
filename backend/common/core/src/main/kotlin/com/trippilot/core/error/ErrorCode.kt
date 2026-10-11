@@ -25,6 +25,7 @@ enum class ErrorCode {
     NICKNAME_TAKEN,          // 닉네임 대소문자 무시 중복(409, INV-P1)
     GENERATION_IN_PROGRESS,  // 다른 여행의 일정을 생성 중(409, TRIP-403)
     GENERATION_SUPERSEDED,   // 취소·대체된 생성 요청의 뒤늦은 1일차 — 반영 안 함(409, TRIP-1058)
+    GENERATION_DAILY_LIMIT,  // 계정의 하루 AI 일정 생성 횟수 소진(429, TRIP-1314) — 내일 풀린다, 재시도로는 안 풀린다
     MODERATION_UNAVAILABLE,  // 활성 금칙어 사전 미로드 — 검증 차단(503, fail-closed INV-B2)
     VISIT_ALREADY_RECORDED,  // 재생한 방문 기록이 **이미 서버에 같은 상태로 있다**(409, BR-U5-20)
     VISIT_CONFLICT,          // 재생한 방문 기록이 서버와 **다른 상태**다 — 사용자 해소 필요(409, BR-U5-21)

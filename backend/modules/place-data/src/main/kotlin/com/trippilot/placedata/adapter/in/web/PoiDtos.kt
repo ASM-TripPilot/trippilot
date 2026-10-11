@@ -7,7 +7,7 @@ import java.util.UUID
 
 /**
  * 탐색·담기 응답(최소) — 명·카테고리·좌표·지역·저장수·상태. 소요시간 없음(INV-3, 거리는 후보풀에서).
- * dataStatus: 탐색은 항상 ACTIVE, 담기 목록은 폐업·미검증도 오므로 클라가 뱃지 표시.
+ * dataStatus: 탐색 목록은 항상 ACTIVE. 단건은 폐업·유실도, 담기 목록은 미검증까지 오므로 클라가 뱃지 표시.
  */
 data class PlaceResponse(
     val poiId: UUID,
