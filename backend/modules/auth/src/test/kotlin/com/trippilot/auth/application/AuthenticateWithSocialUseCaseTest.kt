@@ -21,6 +21,7 @@ import com.trippilot.auth.domain.port.TokenIssuer
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.ProviderNotSupported
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
@@ -52,8 +53,9 @@ private class FakeSocialIdentityRepository : SocialIdentityRepository {
 }
 
 private class FakeSocialAuthPort(private val profile: SocialProfile) : SocialAuthPort {
+    var tokenCalls = 0
     override fun exchange(provider: Provider, authorizationCode: String, codeVerifier: String, redirectUri: String) = profile
-    override fun authenticateWithAccessToken(provider: Provider, accessToken: String) = profile
+    override fun authenticateWithAccessToken(provider: Provider, accessToken: String) = profile.also { tokenCalls++ }
 }
 
 /** 교환 결과를 고정으로 돌려주고, 불린 횟수를 센다. */
@@ -143,6 +145,27 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         relogin.isNewUser shouldBe false
         identities.stored shouldHaveSize 1
         events.events.shouldBeEmpty()
+    }
+
+    // TRIP-1316 — 구글 `sub` 는 계정 전역 값이라 **남의 앱에 발급된 토큰도 같은 sub 를 낸다.**
+    // 이 경로는 토큰의 발급 대상을 보지 않으므로 구글을 받으면 그 토큰이 우리 계정 로그인으로 통한다.
+    // Fake 포트는 무엇을 넣어도 프로필을 돌려준다 — 가드가 없으면 계정이 만들어져 이 테스트가 깨진다.
+    "구글은 SDK 토큰 경로로 로그인할 수 없다 — 제공자에 묻기 전에 거절하고 계정을 만들지 않는다" {
+        val port = FakeSocialAuthPort(profile)
+        val accounts = FakeAccountRepository()
+        val identities = FakeSocialIdentityRepository()
+        val useCase = AuthenticateWithSocialUseCase(
+            port, accounts, identities, FakeTokenIssuer(clock),
+            RefreshTokenService(FakeRefreshSessionRepository(), accounts, FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock),
+            CapturingEventPublisher(), clock, FakeTokenRevocation(), FakeRevocationTokens(),
+        )
+
+        shouldThrow<ProviderNotSupported> {
+            useCase.authenticateWithAccessToken(tokenCommand.copy(provider = Provider.GOOGLE))
+        }
+
+        port.tokenCalls shouldBe 0
+        identities.stored.shouldBeEmpty()
     }
 
     // TRIP-249 5번 — 계약(TokenPair)이 선언한 만료·계정 요약이 결과에 실제로 실리는가.

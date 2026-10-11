@@ -93,6 +93,20 @@ class AuthErrorContractIT : AbstractPostgresIntegrationTest() {
         body["error"]["code"].asText() shouldBe "PROVIDER_NOT_SUPPORTED"
     }
 
+    /**
+     * TRIP-1316 — 설정이 채워져 있어도 구글은 토큰 경로에서 거절한다(발급 대상 미확인 + 전역 sub).
+     * 401 이 아니라 501 인 이유는 위와 같다: 재시도로 풀리지 않는다.
+     */
+    @Test
+    fun `구글 SDK 토큰 로그인은 501 이다 — 토큰 경로는 구글을 받지 않는다`() {
+        val (status, body) = call(
+            HttpMethod.POST, "/api/v1/auth/social/google/token", """{"accessToken":"token"}""",
+        )
+
+        status shouldBe 501
+        body["error"]["code"].asText() shouldBe "PROVIDER_NOT_SUPPORTED"
+    }
+
     @Test
     fun `미지원 사유는 본문에 새지 않는다 — 가용성만 말한다(SECURITY-15)`() {
         val body = call(HttpMethod.POST, "/api/v1/auth/social/apple", appleBody).second
