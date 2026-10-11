@@ -357,3 +357,102 @@ async function openAndApplyProposal(): Promise<void> {
   });
   await screen.findByText('일정에 반영했어요.');
 }
+
+describe('AssistantSheetPage · 턴 흐름 (TRIP-1326)', () => {
+  async function typeAndSend(text: string): Promise<void> {
+    fireEvent.changeText(await screen.findByTestId('assistant-input'), text);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-send'));
+    });
+  }
+
+  it('BR-U8-21 · 저장 실패 → 보내지 못함, [다시 보내기]는 같은 clientTurnId 로 재전송', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-input');
+    const spy = jest.spyOn(fake, 'sendTurn');
+    fake.configure({ turn: 'SERVER_ERROR' });
+    await typeAndSend('오늘 날씨');
+    expect(await screen.findByTestId('assistant-resend')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('assistant-user-bubble-pending')
+    ).toHaveTextContent('오늘 날씨', { exact: false });
+
+    fake.configure({ turn: 'OK' });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-resend'));
+    });
+    expect(await screen.findByText('지금 날씨예요.')).toBeOnTheScreen();
+    const ids = spy.mock.calls.map(([, request]) => request.clientTurnId);
+    expect(ids).toHaveLength(2);
+    expect(ids[1]).toBe(ids[0]);
+    expect(screen.queryByTestId('assistant-user-bubble-pending')).toBeNull();
+  });
+
+  it('BR-U8-44 · 대기 중 [대기 취소] → 보내지 못함 + 입력 복원', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-input');
+    fake.configure({ latencyMs: 2000 });
+    await typeAndSend('오늘 날씨');
+    expect(screen.getByTestId('assistant-progress')).toBeOnTheScreen();
+    expect(screen.getByTestId('assistant-send-pending')).toBeOnTheScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-progress-cancel'));
+    });
+    expect(await screen.findByTestId('assistant-resend')).toBeOnTheScreen();
+    expect(screen.getByTestId('assistant-input').props.value).toBe('오늘 날씨');
+    expect(screen.queryByTestId('assistant-progress')).toBeNull();
+  });
+
+  it('429 Retry-After 5 → 보내기 비활성 + 남은 초 표시', async () => {
+    renderPage({ rateLimitSeconds: 5 });
+    await typeAndSend('오늘 날씨');
+    expect(
+      await screen.findByTestId('assistant-rate-limited')
+    ).toHaveTextContent('5초', { exact: false });
+    fireEvent.changeText(screen.getByTestId('assistant-input'), '다시');
+    expect(
+      screen.getByTestId('assistant-send').props.accessibilityState
+    ).toEqual(expect.objectContaining({ disabled: true }));
+  });
+
+  it('금지 · 보내는 중 연타해도 턴 요청은 1회', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-input');
+    fake.configure({ latencyMs: 100 });
+    fireEvent.changeText(screen.getByTestId('assistant-input'), '오늘 날씨');
+    const send = screen.getByTestId('assistant-send');
+    await act(async () => {
+      fireEvent.press(send);
+      fireEvent.press(send);
+    });
+    expect(await screen.findByText('지금 날씨예요.')).toBeOnTheScreen();
+    expect(fake.calls.sendTurn).toBe(1);
+  });
+
+  it('BR-U8-44 · 15초가 지나면 진행 표시를 유지하고 [대기 취소]를 강조한다', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-input');
+    jest.useFakeTimers();
+    try {
+      fake.configure({ latencyMs: 60_000 });
+      fireEvent.changeText(screen.getByTestId('assistant-input'), '오늘 날씨');
+      act(() => {
+        fireEvent.press(screen.getByTestId('assistant-send'));
+      });
+      act(() => {
+        jest.advanceTimersByTime(14_000);
+      });
+      expect(screen.queryByTestId('assistant-progress-slow')).toBeNull();
+      act(() => {
+        jest.advanceTimersByTime(2_000);
+      });
+      expect(screen.getByTestId('assistant-progress-slow')).toBeOnTheScreen();
+      expect(screen.getByTestId('assistant-progress-cancel')).toBeOnTheScreen();
+      act(() => {
+        fireEvent.press(screen.getByTestId('assistant-progress-cancel'));
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

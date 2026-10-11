@@ -177,3 +177,82 @@ export function Composer({
     </View>
   );
 }
+
+/**
+ * 입력창 위 한 줄(TRIP-1326) — 보내는 중(진행 + [대기 취소], 15s 넘으면 강조) · 보내지 못함([다시 보내기]) ·
+ * 429(남은 초). 하나도 아니면 그리지 않는다.
+ */
+export function TurnStatusRow({
+  sending,
+  slow,
+  failed,
+  rateLimitedSeconds,
+  onCancel,
+  onResend,
+}: {
+  sending: boolean;
+  slow: boolean;
+  failed: boolean;
+  rateLimitedSeconds: number;
+  onCancel: () => void;
+  onResend: () => void;
+}): ReactElement | null {
+  if (rateLimitedSeconds > 0) {
+    return (
+      <View testID="assistant-rate-limited" className="px-lg py-xs">
+        <Text className="font-noto text-caption text-primary-text">
+          잠시 후 다시 시도해 주세요 ({rateLimitedSeconds}초)
+        </Text>
+      </View>
+    );
+  }
+  if (sending) {
+    return (
+      <View
+        testID="assistant-progress"
+        className="flex-row items-center justify-between px-lg py-xs"
+      >
+        <Text
+          testID={slow ? 'assistant-progress-slow' : undefined}
+          className={`font-noto text-caption ${slow ? 'text-primary-text' : 'text-muted'}`}
+        >
+          {slow ? '응답이 늦어지고 있어요' : '답을 준비하고 있어요…'}
+        </Text>
+        <Pressable
+          testID="assistant-progress-cancel"
+          accessibilityRole="button"
+          onPress={onCancel}
+          hitSlop={8}
+          className={`rounded-button px-md py-xs ${slow ? 'bg-primary' : 'bg-surface-strong'}`}
+        >
+          <Text
+            className={`font-noto-bold text-caption font-bold ${slow ? 'text-on-primary' : 'text-ink'}`}
+          >
+            대기 취소
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+  if (failed) {
+    return (
+      <View className="flex-row items-center justify-between px-lg py-xs">
+        <Text className="font-noto text-caption text-primary-text">
+          보내지 못했어요 · 임시 보관 중
+        </Text>
+        <Pressable
+          testID="assistant-resend"
+          accessibilityRole="button"
+          onPress={onResend}
+          hitSlop={8}
+          className="rounded-button bg-surface-strong px-md py-xs"
+        >
+          <Text className="font-noto-bold text-caption font-bold text-ink">
+            다시 보내기
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+  return null;
+}

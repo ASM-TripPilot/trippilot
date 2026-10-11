@@ -611,10 +611,12 @@
 - `src/pages/assistant/assistant-sheet/model/nextActionRoute.ts`  →  InternalAction · NextActionTarget · NextActionContext · nextActionRoute
 - `src/pages/assistant/assistant-sheet/model/resolveSheetState.ts`  →  SheetState · SheetSessionQuery · resolveSheetState
 - `src/pages/assistant/assistant-sheet/model/sheetModel.ts`  →  currentQuickReplies · needsCapabilitiesChip · isSendableText
+- `src/pages/assistant/assistant-sheet/model/turnTiming.ts`  →  SLOW_TURN_MS · isSlowTurn · secondsLeft
+- `src/pages/assistant/assistant-sheet/model/useTurnFlow.ts`  →  PendingTurn · TurnFlow · useTurnFlow
 
 ## src/pages/assistant/assistant-sheet/ui/
 - `src/pages/assistant/assistant-sheet/ui/AssistantCards.tsx`  →  MessageCardHandlers · ReviewCard · CandidateCard · InfoCard · ScopeCard · RefusalNotice · FallbackNotice · ActionLogRow · cardConsumes · MessageCard
-- `src/pages/assistant/assistant-sheet/ui/AssistantSheetChrome.tsx`  →  AssistantSheetHeader · ContextChip · QuickReplyBar · Composer
+- `src/pages/assistant/assistant-sheet/ui/AssistantSheetChrome.tsx`  →  AssistantSheetHeader · ContextChip · QuickReplyBar · Composer · TurnStatusRow
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetGlyphs.tsx`  →  CloseGlyph · SendArrowGlyph · ChevronRightGlyph · WarningGlyph · InfoGlyph · RetryGlyph · CheckGlyph
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.tsx`  →  AssistantSheetPageProps · AssistantSheetPage
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetView.tsx`  →  AssistantSheetViewProps · AssistantSheetView
@@ -1640,4 +1642,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1008개 파일
+합계 1010개 파일

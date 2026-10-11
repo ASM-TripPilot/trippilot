@@ -21,9 +21,8 @@ import {
   useClearSession,
   useDismissProposal,
   useMarkProposal,
-  useSendTurn,
 } from '../model/assistantQueries';
-import { newClientTurnId } from '../model/clientTurnId';
+import { useTurnFlow } from '../model/useTurnFlow';
 import { CAPABILITIES_LABEL, displayMessage } from '../model/displayActions';
 import { nextActionRoute } from '../model/nextActionRoute';
 import { resolveSheetState } from '../model/resolveSheetState';
@@ -33,6 +32,7 @@ import {
   needsCapabilitiesChip,
 } from '../model/sheetModel';
 import { MessageCard } from './AssistantCards';
+import { TurnStatusRow } from './AssistantSheetChrome';
 import { AssistantSheetView } from './AssistantSheetView';
 import { HistoryView } from './HistoryView';
 
@@ -61,12 +61,12 @@ export function AssistantSheetPage({
   const session = useAssistantSession(tripKey);
   const sessionId = session.data?.session.id;
   const messagesQuery = useAssistantMessages(sessionId);
-  const sendTurn = useSendTurn(sessionId);
   const applyProposal = useApplyProposal(sessionId, tripKey);
   const dismissProposal = useDismissProposal(sessionId);
   const markProposal = useMarkProposal(sessionId);
   const clearSession = useClearSession(tripKey);
   const [draft, setDraft] = useState('');
+  const turn = useTurnFlow(sessionId, surface, setDraft);
   // 이력 보기(b06) — 별도 라우트가 아니라 시트 안 보기 전환(깜빡임 없이, frontend-components §1).
   const [view, setView] = useState<'CHAT' | 'HISTORY'>('CHAT');
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -102,38 +102,58 @@ export function AssistantSheetPage({
   const ctx = { tripId: tripKey, surface };
   const rawMessages: readonly AssistantMessage[] =
     messagesQuery.data?.messages ?? session.data?.messages ?? [];
-  const messages = rawMessages.map((message) => displayMessage(message, ctx));
+  // 보내는 중·보내지 못한 턴의 사용자 말풍선(낙관) — 서버 응답이 오면 진짜 USER 메시지로 바뀐다.
+  const pendingBubble: AssistantMessage[] = turn.pending
+    ? [
+        {
+          id: 'pending',
+          role: 'USER',
+          kind: 'TEXT',
+          text: turn.pending.text,
+          nextActions: [],
+          createdAt: '',
+        },
+      ]
+    : [];
+  const messages = [...rawMessages, ...pendingBubble].map((message) =>
+    displayMessage(message, ctx)
+  );
   const quickReplies = currentQuickReplies(
     rawMessages,
     session.data?.quickReplies ?? []
   );
 
-  function send(input: TurnInput): void {
-    if (!sessionId || sendTurn.isPending) return;
-    sendTurn.mutate({
-      request: { clientTurnId: newClientTurnId(), input, screen: { surface } },
-    });
+  const blocked = turn.inFlight || turn.rateLimitedSeconds > 0;
+
+  function send(input: TurnInput, text: string): void {
+    if (!sessionId || blocked) return;
+    turn.send(input, text);
+  }
+
+  function sendText(text: string): void {
+    send({ type: 'TEXT', text }, text);
   }
 
   function handleSend(): void {
-    if (!isSendableText(draft)) return;
-    send({ type: 'TEXT', text: draft.trim() });
+    if (!isSendableText(draft) || blocked) return;
+    const text = draft.trim();
     setDraft('');
+    sendText(text);
   }
 
   function handleQuickReply(reply: QuickReply): void {
-    send({ type: 'ACTION', quickReplyId: reply.id });
+    send({ type: 'ACTION', quickReplyId: reply.id }, reply.label);
   }
 
   function handleCapabilities(): void {
     const issued = quickReplies.find(
       (reply) => reply.action === 'SHOW_CAPABILITIES'
     );
-    send(
-      issued
-        ? { type: 'ACTION', quickReplyId: issued.id }
-        : { type: 'TEXT', text: CAPABILITIES_LABEL }
-    );
+    if (issued) {
+      send({ type: 'ACTION', quickReplyId: issued.id }, issued.label);
+    } else {
+      sendText(CAPABILITIES_LABEL);
+    }
   }
 
   // 후보 카드 — 서버가 그 후보에 발급한 PICK_CANDIDATE quick reply 로만 보낸다(id 를 지어내지 않는다).
@@ -144,7 +164,7 @@ export function AssistantSheetPage({
         (reply) =>
           reply.action === 'PICK_CANDIDATE' && reply.params.poiId === poiId
       );
-    if (picked) send({ type: 'ACTION', quickReplyId: picked.id });
+    if (picked) send({ type: 'ACTION', quickReplyId: picked.id }, picked.label);
   }
 
   function handleApply(proposalId: string): void {
@@ -187,7 +207,7 @@ export function AssistantSheetPage({
     for (let i = index - 1; i >= 0; i -= 1) {
       const message = rawMessages[i];
       if (message.role === 'USER' && message.text) {
-        send({ type: 'TEXT', text: message.text });
+        sendText(message.text);
         return;
       }
     }
@@ -229,7 +249,7 @@ export function AssistantSheetPage({
         return;
       case 'RETRY_TURN': {
         const text = lastUserText();
-        if (text) send({ type: 'TEXT', text });
+        if (text) sendText(text);
         return;
       }
     }
@@ -243,7 +263,7 @@ export function AssistantSheetPage({
       quickReplies={quickReplies}
       showCapabilitiesChip={needsCapabilitiesChip(quickReplies)}
       draft={draft}
-      canSend={isSendableText(draft) && !sendTurn.isPending}
+      canSend={isSendableText(draft) && !blocked}
       onChangeDraft={setDraft}
       onSend={handleSend}
       onPressQuickReply={handleQuickReply}
@@ -251,7 +271,18 @@ export function AssistantSheetPage({
       onPressAction={handleAction}
       onClose={handleClose}
       onRetryOpen={() => void session.refetch()}
-      repliesDisabled={sendTurn.isPending}
+      repliesDisabled={blocked}
+      sendTestID={turn.inFlight ? 'assistant-send-pending' : 'assistant-send'}
+      statusRow={
+        <TurnStatusRow
+          sending={turn.inFlight}
+          slow={turn.slow}
+          failed={turn.pending?.status === 'FAILED'}
+          rateLimitedSeconds={turn.rateLimitedSeconds}
+          onCancel={turn.cancel}
+          onResend={turn.resend}
+        />
+      }
       headerTrailing={
         <Pressable
           testID="assistant-history-toggle"
