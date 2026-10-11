@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
 import {
@@ -29,6 +29,13 @@ import type {
 } from '../model/homeTypes';
 import { HomeScreen } from './HomeScreen';
 import { useTripWizardStore } from '@/features/create-trip';
+import {
+  AssistantFab,
+  TAB_TWO_STACK,
+  assistantFabBottom,
+  assistantHref,
+  toastBottomWith,
+} from '@/features/open-assistant';
 
 interface HomeNav {
   onPressCreateTrip: () => void;
@@ -43,6 +50,7 @@ interface HomeNav {
   onToggleSavedMenu: () => void;
   spotsLane: HomeSpotsLane;
   collectionsLane: HomeCollectionsLane;
+  assistantFab: ReactElement;
 }
 
 /** 컬렉션 레인 장수 — 이만큼 못 채우면 레인을 숨긴다(TRIP-1209). */
@@ -223,6 +231,21 @@ export function HomePage() {
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
     spotsLane,
     collectionsLane,
+    // TRIP-1321 — ✦ 도우미. 계획 중 여행이 있으면 그 여행 문맥으로 연다(BR-U8-02 surface·tripId 만).
+    assistantFab: (
+      <AssistantFab
+        onPress={() =>
+          router.push(
+            assistantHref(
+              'HOME',
+              phase?.kind === 'planning' ? phase.dominantTripId : undefined
+            )
+          )
+        }
+        bottom={assistantFabBottom(TAB_TWO_STACK)}
+        toastBottom={toastBottomWith(TAB_TWO_STACK)}
+      />
+    ),
   };
 
   // 조회 진행 중 — 섹션만 로딩 스켈레톤, phase 미전달. no-trip(discovery)으로 확정하지 않는다(INV-4).

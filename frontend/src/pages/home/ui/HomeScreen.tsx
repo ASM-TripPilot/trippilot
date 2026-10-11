@@ -1281,6 +1281,7 @@ export function HomeScreen({
   savedStaysCount,
   savedMenuOpen,
   onToggleSavedMenu,
+  assistantFab,
 }: HomeScreenProps): ReactElement {
   const menuOpen = savedMenuOpen ?? false;
   return (
@@ -1329,6 +1330,8 @@ export function HomeScreen({
               savedPlacesCount={savedPlacesCount}
               savedStaysCount={savedStaysCount}
             />
+            {/* TRIP-1321 — ✦ 도우미 FAB 는 스택 맨 위(바닥 220). 메뉴가 펼쳐진 동안은 빼서 딤 위로 뜨지 않게(BR-U8-53). */}
+            {menuOpen ? null : assistantFab}
           </>
         ) : null}
       </View>

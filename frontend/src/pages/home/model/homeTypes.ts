@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 // 홈 "발견·영감 피드" 프레젠테이션 화면의 prop 계약(TRIP-316 · 라이브 Figma 2091:1357).
 // HomeScreen은 이 타입만 알고 서버·네비게이션을 모른다 — 네트워크·라우팅은 이 계약 밖
 // (repo-trap: 홈 전용 서버 API 없음). 구 세대 "여행 상태 대시보드" 계약(trip·nextPlan·
@@ -242,4 +244,9 @@ export interface HomeScreenProps {
   onPressMagazine?: () => void;
   /** 인사 헤더 종 press → 알림함(TRIP-939). 라우팅은 `(tabs)/index.tsx` 가 진다. */
   onPressBell?: () => void;
+  /**
+   * ✦ AI 도우미 FAB 슬롯(TRIP-1321) — page 가 `AssistantFab` 을 조립해 넣는다. 화면은 다른 FAB 와 같은
+   * 조건(로딩 아님)에서, 담은 곳 메뉴가 펼쳐지지 않은 동안만 그린다(BR-U8-53). 미지정이면 없음.
+   */
+  assistantFab?: ReactNode;
 }

@@ -32,6 +32,7 @@ import {
 import { UnplacedMustVisitNotice } from '@/features/itinerary';
 import { isShareCaptureArmed } from '@/features/share-trip-card';
 import { useTripWizardStore } from '@/features/create-trip';
+import { AssistantFab, assistantHref } from '@/features/open-assistant';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
@@ -393,6 +394,15 @@ export function ItineraryPlanPage({
       selectedDayIndex={selectedDayIndex}
       onSelectDay={setActiveDayIndex}
       onBack={handleBack}
+      // TRIP-1321 — ✦ 도우미. 하단은 시트·CTA 바가 차지해(FD "하단 안전영역+24" 는 CTA 바와 겹친다) 지도
+      // 우상단, 일차 칩 아래 카드 슬롯에 얹는다. 실제 위치·지도 제스처와의 간섭은 6-b 실기.
+      mapCard={
+        <View pointerEvents="box-none" className="items-end pt-md">
+          <AssistantFab
+            onPress={() => router.push(assistantHref('ITINERARY', tripId))}
+          />
+        </View>
+      }
       header={
         <SheetHeader
           title={trip.data?.title ?? ''}

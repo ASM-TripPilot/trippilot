@@ -1,6 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
+
+import { AssistantFab, assistantHref } from '@/features/open-assistant';
 import { Linking, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -585,6 +587,12 @@ export function LiveItineraryPage({
             : null
         }
         fabHidden={memoSheetOpen}
+        // TRIP-1321 — ✦ 도우미는 수정 FAB 앵커 열 맨 위(BR-U8-51). 메모 시트가 열리면 앵커째 빠진다.
+        assistantFab={
+          <AssistantFab
+            onPress={() => router.push(assistantHref('LIVE', tripId))}
+          />
+        }
         triggerChip={triggerChip}
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}

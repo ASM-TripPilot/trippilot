@@ -5,7 +5,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Dimensions, Pressable, Text } from 'react-native';
+import { Dimensions, Pressable, Text, View } from 'react-native';
 import {
   getAnimatedStyle,
   isSharedValue,
@@ -1138,6 +1138,45 @@ function anchorTop(): number {
   );
   return top + shift;
 }
+
+// TRIP-1321 · BR-U8-50·51 — 여행 중 허브의 ✦ 도우미는 수정 FAB 앵커 열의 맨 위(수정 FAB 위 12).
+// 앵커 윗변이 ✦ 몫(56+12)만큼 올라가 수정 FAB 자리는 그대로다. 실제 드래그 추종·터치는 6-b 실기.
+describe('LiveHubView · ✦ 도우미 FAB 앵커 열 (TRIP-1321)', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function Fab() {
+    return <View testID="assistant-fab" />;
+  }
+
+  it('슬롯을 주면 ✦ 가 앵커 안 수정 FAB 보다 먼저(위) 그려진다', () => {
+    renderHub({ initialSnapIndex: 1, assistantFab: <Fab /> });
+    const anchor = screen.getByTestId(ANCHOR);
+    const ids = anchor
+      .findAll((node) => typeof node.props.testID === 'string')
+      .map((node) => node.props.testID as string);
+    expect(ids.indexOf('assistant-fab')).toBeGreaterThanOrEqual(0);
+    expect(ids.indexOf('assistant-fab')).toBeLessThan(
+      ids.indexOf('execution-live-replan-fab')
+    );
+  });
+
+  it('시트 윗변 380 이면 앵커 윗변은 380 − 8 − 52 − (56 + 12) = 252 (수정 FAB 는 그대로 320 에)', () => {
+    renderHub({ initialSnapIndex: 1, assistantFab: <Fab /> });
+    layoutOverlay(15, 40);
+    moveSheet(380);
+    expect(anchorTop()).toBe(252);
+  });
+
+  it('메모 시트가 열리면(fabHidden) ✦ 도 함께 빠진다(BR-U8-53)', () => {
+    renderHub({ fabHidden: true, assistantFab: <Fab /> });
+    expect(screen.queryByTestId('assistant-fab')).toBeNull();
+  });
+});
 
 describe('LiveHubView · HF 수정 FAB 시트 윗변 앵커 (TRIP-1083)', () => {
   beforeEach(() => {

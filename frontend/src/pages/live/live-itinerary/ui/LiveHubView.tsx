@@ -69,6 +69,9 @@ const EXPANDED_GAP_BELOW_OVERLAY_ROW = 104;
 const FAB_SIZE = 52;
 const FAB_GAP = 8;
 const FAB_RIGHT = 16;
+// ✦ 도우미 FAB(TRIP-1321) — 56 원형, 수정 FAB 위 12.
+const ASSISTANT_FAB_SIZE = 56;
+const ASSISTANT_GAP = 12;
 // 좌표 있는 슬롯이 하나도 없을 때의 결정론적 지도 중심(서울 시청, 옛 LiveMapScreen 값 계승).
 const FALLBACK_CENTER: MapCenter = { lat: 37.5665, lng: 126.978 };
 
@@ -145,6 +148,11 @@ export interface LiveHubViewProps {
   memoNotice?: { poiId: string; text: string } | null;
   /** TRIP-1117 — 메모 시트가 열린 동안 수정 FAB 를 숨긴다(Figma 4741:2833). 앵커 자리(HF8)는 그대로. */
   fabHidden?: boolean;
+  /**
+   * ✦ AI 도우미 FAB 슬롯(TRIP-1321 · BR-U8-51) — 수정 FAB 앵커 열의 맨 위(수정 FAB 위 12)에 그린다.
+   * 주면 앵커 윗변이 ✦ 몫(56+12)만큼 올라가 수정 FAB 자리는 그대로다. `fabHidden` 이면 함께 빠진다.
+   */
+  assistantFab?: ReactNode;
   /** 트리거 알약(TRIP-748) — 지도 위 일자 칩 아래(셸 `mapCard`)에 그린다. */
   triggerChip?: ReactNode;
   /** 알약이 가리키는 트리거 id — 이 키를 숨겼으면 알약을 안 그리고, 키가 바뀌면 다시 보인다. */
@@ -222,6 +230,7 @@ export function LiveHubView({
   onPressPhotoSettings,
   memoNotice,
   fabHidden = false,
+  assistantFab,
   triggerChip,
   triggerPillKey,
   slotBadgeLabel,
@@ -252,8 +261,13 @@ export function LiveHubView({
   // 오버레이 줄(뒤로+일자 칩) 하단 — onLayout 실측(계산 사본 아님). 재기 전엔 0.
   const [overlayBottom, setOverlayBottom] = useState(0);
   // useAnimatedStyle = sheetTop 이 바뀔 때마다 리렌더 없이 UI 스레드에서 스타일을 다시 계산하는 훅.
+  // ✦ 도우미가 열 맨 위에 얹히면 앵커 윗변을 그 몫만큼 올린다(TRIP-1321) — 수정 FAB 의 시트 추종 자리는 불변.
+  const assistantStack = assistantFab ? ASSISTANT_FAB_SIZE + ASSISTANT_GAP : 0;
   const fabAnchorStyle = useAnimatedStyle(() => ({
-    top: Math.max(overlayBottom + FAB_GAP, sheetTop.value - FAB_GAP - FAB_SIZE),
+    top: Math.max(
+      overlayBottom + FAB_GAP,
+      sheetTop.value - FAB_GAP - FAB_SIZE - assistantStack
+    ),
   }));
   // "어느 트리거를 숨겼나"를 키로 든다 — 새 트리거(다른 키)가 오면 비교가 저절로 풀려 다시 보인다.
   // 숨김은 editMenuOpen 을 건드리지 않는다(HP9 공존).
@@ -468,6 +482,15 @@ export function LiveHubView({
           pointerEvents="box-none"
           style={[{ position: 'absolute', right: FAB_RIGHT }, fabAnchorStyle]}
         >
+          {assistantFab ? (
+            <View
+              pointerEvents="box-none"
+              className="items-end"
+              style={{ marginBottom: ASSISTANT_GAP }}
+            >
+              {assistantFab}
+            </View>
+          ) : null}
           <View
             pointerEvents="box-none"
             className="flex-row items-center gap-sm"

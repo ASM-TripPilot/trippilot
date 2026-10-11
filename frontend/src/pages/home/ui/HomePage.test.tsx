@@ -1324,3 +1324,51 @@ describe('연타 관통 — 홈 쪽 반쪽', () => {
     );
   });
 });
+
+// TRIP-1321 · US-ASSIST-01 · BR-U8-50~53 — ✦ AI 도우미 FAB. 실제 겹침·탭바 거리는 6-b 실기.
+describe('✦ 도우미 FAB (TRIP-1321)', () => {
+  function fabStyle(): Record<string, unknown> {
+    return Object.assign(
+      {},
+      ...[screen.getByTestId('assistant-fab').props.style].flat(Infinity)
+    );
+  }
+
+  it('여행이 없으면 surface 만 싣고 도우미 시트로 1회 간다', () => {
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('assistant-fab'));
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/assistant', params: { surface: 'HOME' } }],
+    ]);
+  });
+
+  it('계획 중 여행이 있으면 그 여행 id 를 싣는다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([trip({ status: 'PLANNED' })]));
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('assistant-fab'));
+    expect(mockPush).toHaveBeenLastCalledWith({
+      pathname: '/assistant',
+      params: {
+        surface: 'HOME',
+        tripId: '11111111-1111-1111-1111-111111111111',
+      },
+    });
+  });
+
+  it('스택 2단 위 바닥 220 에 뜬다(fabStack 계산값)', () => {
+    render(<HomePage />);
+    expect(fabStyle()).toEqual(expect.objectContaining({ bottom: 220 }));
+  });
+
+  it('담은 곳 메뉴가 펼쳐진 동안·조회 중에는 트리에 없다(BR-U8-53)', () => {
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+    expect(screen.queryByTestId('assistant-fab')).toBeNull();
+  });
+
+  it('조회 중에는 없다(다른 FAB 와 같이 숨는다)', () => {
+    mockUseGetTrips.mockReturnValue(TRIPS_PENDING);
+    render(<HomePage />);
+    expect(screen.queryByTestId('assistant-fab')).toBeNull();
+  });
+});

@@ -9,9 +9,10 @@
  * INV-3: 어떤 타입에도 소요시간(`duration`) 필드가 없다. 시각·거리는 서버 문자열 그대로다(INV-2).
  */
 
-/** 도우미를 연 화면 — 앱이 보내는 문맥은 이것과 tripId 뿐이다(BR-U8-02). */
-export type AssistantSurface =
-  'HOME' | 'STAY_SEARCH' | 'ITINERARY' | 'LIVE' | 'STAY_DETAIL';
+import type { AssistantSurface } from '@/features/open-assistant';
+
+/** 도우미를 연 화면 — 정의는 진입 feature(`open-assistant`)가 가진다(FAB 가 라우트 params 로 싣는 값과 하나). */
+export type { AssistantSurface };
 
 export const ASSISTANT_SURFACES: readonly AssistantSurface[] = [
   'HOME',

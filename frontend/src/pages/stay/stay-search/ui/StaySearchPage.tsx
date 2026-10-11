@@ -30,6 +30,13 @@ import {
 import { stayKey } from '@/features/save-stay';
 import { resolveStaySearchState } from '../model/staySearchState';
 import { useStaySearch } from '@/features/stay';
+import {
+  AssistantFab,
+  TAB_TWO_STACK,
+  assistantFabBottom,
+  assistantHref,
+  toastBottomWith,
+} from '@/features/open-assistant';
 import { StayFilterSheet } from './StayFilterSheet';
 import { StayPriceSheet } from './StayPriceSheet';
 import { StaySearchScreen } from './StaySearchScreen';
@@ -227,6 +234,16 @@ export function StaySearchPage(): ReactElement {
         )}
         nameQuery={nameQuery}
         onChangeNameQuery={setNameQuery}
+        // TRIP-1321 — ✦ 도우미(스택 맨 위 220). 시트가 열린 동안은 트리에서 뺀다(BR-U8-53).
+        assistantFab={
+          sheetOpen || priceSheetOpen ? undefined : (
+            <AssistantFab
+              onPress={() => router.push(assistantHref('STAY_SEARCH'))}
+              bottom={assistantFabBottom(TAB_TWO_STACK)}
+              toastBottom={toastBottomWith(TAB_TWO_STACK)}
+            />
+          )
+        }
       />
       {sheetOpen ? (
         <StayFilterSheet
