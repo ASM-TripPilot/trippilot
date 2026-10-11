@@ -47,6 +47,7 @@
 # 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
 # `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
 #
+# 갱신: 2026-10-12 · `SOCIAL-TOKEN-APP`(TRIP-1317) 추가 — TRIP-1316 잔여(이메일 선점)를 노드로 뗌
 # 갱신: 2026-10-11 · 루프 착수 전 정리 — 새 노드 셋(SOCIAL-TOKEN-AUD·TRIP-1315·TRIP-1314)과 외부 짝 하나
 # (TRIP-1312), 그리고 **지금 할 수 있는 조각을 떼어 낸 것 둘**(828 → REFLECTION-MOOD · 824 →
 # PLACE-DETAIL-API). 새 간선은 0 이다 — 1312→1314 는 티켓 원문이 "손잡이만 먼저 만들고 값은 나중에
@@ -3470,8 +3471,9 @@ migration = false
 touches = ["backend/modules/auth", "backend/docs/design/openapi.yaml"]
 note = """
 **PR #1040 (머지 대기 · 2026-10-11).** 유스케이스가 토큰 경로에서 구글을 501 로 거절한다.
-적대적 리뷰가 잔여 셋을 냈고 TRIP-1316 댓글에 남겼다 — 카카오·네이버 토큰 경로의 이메일 선점(카카오
-앱 ID 주입이 선행), PKCE 없는 네이버 code 경로, 그리고 **"네이버 id 가 앱 단위 값"이라는 미확인 전제**.
+적대적 리뷰가 잔여 셋을 냈다 — 카카오·네이버 토큰 경로의 이메일 선점은 **`SOCIAL-TOKEN-APP` 노드
+(TRIP-1317)로 떼었고**, PKCE 없는 네이버 code 경로는 앱이 쓰지 않아 티켓 없이 보류(코드 주석), 그리고
+"네이버 id 가 앱 단위 값"이라는 전제는 **2026-10-12 공식 명세로 확인됐다**(앱이 다르면 id 가 다르다).
 
 **인수인계가 가리킨 곳(`AbstractOAuth2Client.kt:20` 의 state·nonce TODO)은 실제 위험이 아니었다.**
 서버는 `state` 를 받지 않고(앱 몫), code 경로는 PKCE 가 있고, 3사는 id_token 을 쓰지 않아 nonce 가
@@ -3482,6 +3484,27 @@ note = """
 카카오 회원번호·네이버 id 는 앱마다 달라 기존 계정에 닿지 않고, 애플은 aud 를 이미 본다.
 그리고 **앱은 이 경로로 구글을 보내지 않는다**(code+PKCE 경로만 쓴다) — 검증을 붙이는 것보다
 문을 닫는 편이 작다. 구글 네이티브 SDK 를 들이면 그때 `tokeninfo` 의 `aud` 대조를 붙여 연다.
+"""
+
+[[nodes]]
+id = "SOCIAL-TOKEN-APP"
+ticket = "TRIP-1317"
+title = "카카오·네이버 토큰 로그인이 남의 앱 토큰으로 가입을 받는다 — 남의 이메일로 계정이 선점된다"
+status = "todo"
+owner = "인증"
+migration = false
+touches = ["backend/modules/auth", "deploy/eks", "docker-compose.yml"]
+note = """
+`SOCIAL-TOKEN-AUD` 에서 뗀 잔여(2026-10-12 사용자 승인으로 티켓화). 계정 탈취는 아니다 — 카카오
+회원번호·네이버 id 는 앱마다 달라 기존 계정에 닿지 않는다. 대신 남의 앱 토큰이 **가입 분기**로 들어와
+그 토큰의 이메일로 계정이 생기고, 본인의 첫 가입이 409(`SOCIAL_EMAIL_CONFLICT`)로 막힌다.
+
+**카카오**는 `access_token_info` 의 `app_id` 대조로 닫는다. **사람 몫 선행: 카카오 앱 ID 를 서버 설정에
+넣는 것**(값은 카카오 개발자 콘솔) — 코드에 선행이 아니라 값에 선행이라 간선으로 그리지 않았다.
+**네이버**는 토큰의 발급 대상을 확인할 수단이 있는지 조사부터다(미확인). 없으면 code 경로 전환이
+대안인데 네이버는 PKCE 가 없어 따로 따져야 한다.
+
+`SOCIAL-TOKEN-AUD`(#1040)와 같은 파일을 만진다 — 그쪽 머지 뒤에 착수한다.
 """
 
 [[nodes]]
