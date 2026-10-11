@@ -184,6 +184,30 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
         rows(tripId) shouldBe 1
     }
 
+    /**
+     * 기분·한 줄이 **실 DB 를 왕복**한다(V2.63 · TRIP-828).
+     *
+     * 인메모리 대역은 객체를 그대로 들고 있어 매핑이 빠져도 초록이다 — 엔티티에 컬럼을 안 달거나
+     * `upsert` 의 기존 행 갱신에서 빠뜨리면 여기서만 드러난다. 재생성 뒤까지 보는 이유가 그것이다:
+     * 기존 행을 고치는 경로가 두 값을 null 로 덮으면 사용자가 쓴 것이 사라진다.
+     */
+    @Test
+    fun `기분·한 줄이 저장되고 재생성 뒤에도 남는다 — 이모지 60자가 그대로 들어간다 — V2_63`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        reflections.generateDaily(accountId, tripId, day)
+        val memo = "😀".repeat(60)
+
+        reflections.edit(accountId, tripId, day, cardPayload = null, mood = "GOOD", shortMemo = memo)
+        val again = reflections.generateDaily(accountId, tripId, day)
+
+        again.mood shouldBe "GOOD"
+        again.shortMemo shouldBe memo
+        jdbc.queryForMap("SELECT mood, short_memo FROM reflection WHERE trip_id = ?", tripId) shouldBe
+            mapOf("mood" to "GOOD", "short_memo" to memo)
+        rows(tripId) shouldBe 1
+    }
+
     @Test
     fun `stats 가 jsonb 로 왕복한다 — 이중 인코딩되면 여기서 깨진다`() {
         val accountId = newAccount()

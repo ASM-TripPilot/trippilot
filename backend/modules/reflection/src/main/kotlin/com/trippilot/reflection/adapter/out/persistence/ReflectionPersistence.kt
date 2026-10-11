@@ -53,6 +53,8 @@ class ReflectionEntity(
     @Column(name = "stats") var stats: Map<String, Any?>,
     @Column(name = "generated_at") var generatedAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
+    @Column(name = "mood") var mood: String? = null,
+    @Column(name = "short_memo") var shortMemo: String? = null,
 )
 
 interface ReflectionJpaRepository : JpaRepository<ReflectionEntity, UUID> {
@@ -80,6 +82,8 @@ class ReflectionRepositoryAdapter(
             source = reflection.source.name
             stats = reflection.stats.toMap()
             updatedAt = reflection.updatedAt
+            mood = reflection.mood
+            shortMemo = reflection.shortMemo
         } ?: reflection.toEntity()
         return jpa.save(entity).toDomain()
     }
@@ -93,7 +97,7 @@ class ReflectionRepositoryAdapter(
     private fun Reflection.toEntity() = ReflectionEntity(
         reflectionId, tripId, dayDate, draftCard.toMap(), editedCard?.toMap(),
         draftCard.templateId, draftCard.format, source.name,
-        stats.toMap(), generatedAt, updatedAt,
+        stats.toMap(), generatedAt, updatedAt, mood, shortMemo,
     )
 
     /** 카드 원문(JSON) → jsonb 로 넘길 Map. 문자열 그대로 넘기면 이중 인코딩된다. */
@@ -140,6 +144,8 @@ class ReflectionRepositoryAdapter(
         stats = stats.toStats(),
         generatedAt = generatedAt,
         updatedAt = updatedAt,
+        mood = mood,
+        shortMemo = shortMemo,
     )
 
     /**

@@ -98,11 +98,25 @@ class ReflectionService(
      * 기본 카드라 **지어낸 문장이 아니다**(BR-U5-31).
      */
     @Transactional
-    fun edit(accountId: UUID, tripId: UUID, dayDate: LocalDate, cardPayload: String): Reflection {
+    fun edit(
+        accountId: UUID,
+        tripId: UUID,
+        dayDate: LocalDate,
+        cardPayload: String?,
+        mood: String? = null,
+        shortMemo: String? = null,
+    ): Reflection {
+        // 셋 다 비면 바꿀 것이 없다 — 조용히 200 을 내면 "저장됐다"로 읽힌다.
+        if (cardPayload == null && mood == null && shortMemo == null) {
+            throw ValidationFailed(listOf(FieldError("card", "card·mood·shortMemo 중 하나는 보내야 합니다")))
+        }
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         requireWithinTrip(period, dayDate)
         val current = reflections.find(tripId, dayDate) ?: draftFor(accountId, tripId, dayDate)
-        return reflections.upsert(current.edit(cards.read(cardPayload), clock.instant()))
+        val now = clock.instant()
+        // 카드는 **보냈을 때만** 갈아끼운다(TRIP-828) — 기분만 고치는 요청이 카드를 건드리면 안 된다.
+        val carded = cardPayload?.let { current.edit(cards.read(it), now) } ?: current
+        return reflections.upsert(carded.note(mood, shortMemo, now))
     }
 
     /**
