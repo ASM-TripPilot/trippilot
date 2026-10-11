@@ -20,7 +20,8 @@ internal val OAUTH_JSON: ObjectMapper = ObjectMapper()
  * **id_token·nonce·state 를 여기서 검증하지 않는 것은 누락이 아니다**(TRIP-1316 에서 대조). 3사는 신원을
  * id_token 이 아니라 userinfo 로 받으므로 서명·nonce 가 해당 없고, `state` 는 서버에 오지 않는다 —
  * 인가 요청을 연 앱이 대조한다. code 가로채기는 PKCE(`code_verifier`)가 막는다 — **네이버는 예외다**:
- * PKCE 를 지원하지 않아 code 경로에 그 방어가 없다(앱은 네이버를 SDK 토큰 경로로만 보낸다).
+ * PKCE 를 지원하지 않아 code 경로에 그 방어가 없다. 앱은 네이버 SDK 키(`EXPO_PUBLIC_NAVER_URL_SCHEME`)가
+ * 있는 빌드에서만 토큰 경로로 보내고, **없으면 이 code 경로로 폴백한다** — 열려 있는 잔여다(TRIP-1317).
  * 실제로 비어 있는 것은 **토큰의 발급 대상(aud) 확인**이며 그 처리는 [fetchProfileByAccessToken] 에 적었다.
  */
 abstract class AbstractOAuth2Client(
