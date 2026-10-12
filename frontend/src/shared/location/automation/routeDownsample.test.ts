@@ -283,6 +283,7 @@ describe('routeDownsample (PBT-U10-F5)', () => {
     const body = downsampleRoute(samples, cfg);
     expect(body.storedPointCount).toBeLessThanOrEqual(cfg.route.maxPoints);
     expect(body.rawPointCount).toBe(20_000);
-    expect(Date.now() - started).toBeLessThan(15_000);
+    // 청크가 O(n²)를 막는다 — 로컬 4초, CI 전체 병렬 부하에서 17초 실측. 청크를 빼면 분 단위.
+    expect(Date.now() - started).toBeLessThan(60_000);
   });
 });
