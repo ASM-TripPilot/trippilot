@@ -77,7 +77,11 @@ class WorkflowContractTests(unittest.TestCase):
         # 아래 계약 테스트가 읽는 워크플로가 바뀌어도 게이트가 돈다
         for filename in ('aws-deploy.yml', 'aws-bootstrap.yml', 'infra-validate.yml'):
             self.assertIn(f'.github/workflows/{filename}', paths)
+        # deploy/eks/tests 가 실제 파일을 읽는다(runtime_pois.SCRIPT) — 옮기거나 지우면 여기서 걸려야 한다
+        self.assertIn('backend/scripts/ingest_pois.py', paths)
         self.assertEqual(value['permissions'], {'contents': 'read'})
+        # 잡 단위 permissions 는 워크플로 단위를 덮는다 — 거기서 쓰기 토큰을 여는 길도 막는다
+        self.assertNotIn('permissions', value['jobs']['validate'])
         text = (ROOT / '.github/workflows/infra-validate.yml').read_text()
         for forbidden in ('id-token', 'secrets.', 'vars.', 'environment:', 'configure-aws-credentials'):
             self.assertNotIn(forbidden, text)

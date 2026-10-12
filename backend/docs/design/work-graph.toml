@@ -3379,10 +3379,18 @@ note = """
 id = "INFRA-PR-GATE"
 ticket = ""
 title = "인프라·배포 변경이 PR 에서 검증되지 않는다 — 초록이 무관한 것을 증명한다"
-status = "todo"
+status = "done"
 migration = false
 touches = [".github/workflows"]
 note = """
+**닫음(2026-10-12, PR #1067).** 아래 처방대로 validate 잡을 재사용 워크플로(`infra-validate.yml`)로 떼어
+`pull_request` 에 걸었고 `aws-deploy.yml` 이 그것을 호출한다. 경로는 `infra/**`·`deploy/**` + 스위트가
+바깥에서 읽는 파일(워크플로 셋, `backend/scripts/ingest_pois.py`).
+**2번(무관한 초록)은 없애지 않았다** — backend-ci 의 `deploy/**` 경로는 `AppleClientIdWiringTest` 가 쓰므로
+그대로 두었고, 차트 PR 은 이제 gradle 초록과 **함께** 이 게이트를 받는다.
+main 에는 다음 릴리스 승격 때 들어간다 — **두 파일은 함께 옮긴다**(`aws-deploy.yml` 만 가면 prd 배포가
+"workflow not found" 로 멈춘다).
+아래는 닫기 전 기록이다.
 2026-10-05 발견(#956·#957 검수 중). 두 가지가 겹쳐 있다.
 
 **1. `infra/terraform/**` 은 어떤 PR 트리거에도 없다.** `aws-deploy.yml` 이 `workflow_dispatch`
