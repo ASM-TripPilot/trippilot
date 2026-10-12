@@ -19,7 +19,7 @@
  * 안 생긴다. 담긴 목록은 `useSavedPlaces`가 한 곳에서 낸다(01b Seed Q2 ⓐ).
  */
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import BottomSheet, {
@@ -223,10 +223,24 @@ export function PlaceExplorePage(): ReactElement {
     }
   }
 
-  function handleToggleSave(place: Place): void {
+  // TRIP-1349 — 카드(memo)에 내려가는 두 콜백은 참조가 렌더 간 같아야 memo 가 먹는다. attemptToggle 은
+  // 매 렌더 새 클로저(isSaved·save·remove 를 닫는다)라 ref 로 최신본을 읽는다.
+  const attemptToggleRef = useRef(attemptToggle);
+  useEffect(() => {
+    attemptToggleRef.current = attemptToggle;
+  });
+  const handleToggleSave = useCallback((place: Place): void => {
     // 판정(담기냐 해제냐)은 attemptToggle 안에서 한다 — 화면은 "이 카드가 눌렸다"만 올린다.
-    void attemptToggle(place);
-  }
+    void attemptToggleRef.current(place);
+  }, []);
+  // TRIP-1282 — 홈 "더 보기"의 창 안이면 무시(연타 관통 표적).
+  const handlePressCard = useMemo(
+    () =>
+      guardPress((place: Place) =>
+        router.push(`/explore/places/${place.poiId}`)
+      ),
+    []
+  );
 
   function handleChangeSearchText(text: string): void {
     setSaveError(null);
@@ -279,10 +293,7 @@ export function PlaceExplorePage(): ReactElement {
         onSelectCategory={handleSelectCategory}
         onChangeSearchText={handleChangeSearchText}
         onToggleSave={handleToggleSave}
-        // TRIP-1282 — 홈 "더 보기"의 창 안이면 무시(연타 관통 표적).
-        onPressCard={guardPress((place: Place) =>
-          router.push(`/explore/places/${place.poiId}`)
-        )}
+        onPressCard={handlePressCard}
         onPressCreateTrip={() => {
           // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
           useTripWizardStore.getState().reset();

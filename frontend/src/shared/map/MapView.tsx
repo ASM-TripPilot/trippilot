@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import type { ImageSourcePropType } from 'react-native';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, {
@@ -269,6 +269,38 @@ const RECORD_DIMS: Record<
 };
 
 /**
+ * TRIP-1349 — 마커 anchor·래퍼 style 은 모듈 상수다. 인라인 객체는 렌더마다 새 참조라 네이티브 마커에
+ * 매번 "바뀐 prop"으로 보인다.
+ */
+const DROP_ANCHOR = { x: 0.5, y: 1 } as const;
+const CURRENT_LOCATION_ANCHOR = { x: 0.5, y: 0.85 } as const;
+const CURRENT_LOCATION_STYLE = { width: 72, alignItems: 'center' } as const;
+const DROP_WRAP_LARGE_STYLE = { width: 35, height: 46 } as const;
+const DROP_WRAP_SMALL_STYLE = { width: 28, height: 36 } as const;
+const RECORD_WRAP_STYLE: Record<
+  MapPinKind,
+  {
+    width: number;
+    height: number;
+    alignItems: 'center';
+    justifyContent: 'center';
+  }
+> = {
+  visited: wrapStyle(RECORD_DIMS.visited),
+  planned: wrapStyle(RECORD_DIMS.planned),
+  stay: wrapStyle(RECORD_DIMS.stay),
+  candidate: wrapStyle(RECORD_DIMS.candidate),
+};
+function wrapStyle(d: { width: number; height: number }) {
+  return {
+    width: d.width,
+    height: d.height,
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as const;
+}
+
+/**
  * 기록 마커족 한 개(TRIP-768). PinTeardrop(state 물방울) 옆 형제 분기다 — `kind` 가 있을 때만 그린다.
  *  · visited: 라운드 사각 사진 썸네일(`<Image href>`, `map-marker-photo-{n}` testID)에 좌상단 빨강 번호 배지.
  *  · planned: 회색 점선 빈 원 + 가운데 회색 번호(채움·사진 없음).
@@ -450,7 +482,7 @@ const ACTUAL_ROUTE_WIDTH = 3;
 /** 실제 경로가 켜졌을 때 계획 연결선(흐림). */
 const PLAN_DIMMED_WIDTH = 1.5;
 
-export function MapView({
+function MapViewImpl({
   center,
   actualRoute,
   pins,
@@ -606,12 +638,7 @@ export function MapView({
                   key={`pin-${pin.number}-${pin.kind}`}
                   collapsable={false}
                   testID={`map-marker-pin-${pin.number}`}
-                  style={{
-                    width: dims.width,
-                    height: dims.height,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
+                  style={RECORD_WRAP_STYLE[pin.kind]}
                 >
                   <RecordMarker
                     kind={pin.kind}
@@ -638,7 +665,7 @@ export function MapView({
               key={pin.number}
               latitude={pin.lat}
               longitude={pin.lng}
-              anchor={{ x: 0.5, y: 1 }}
+              anchor={DROP_ANCHOR}
               width={wrapW}
               height={wrapH}
               onTap={() => onPinTap?.(index)}
@@ -652,7 +679,7 @@ export function MapView({
                 key={`pin-${pin.number}-${pinState}`}
                 collapsable={false}
                 testID={`map-marker-pin-${pin.number}`}
-                style={{ width: wrapW, height: wrapH }}
+                style={isLarge ? DROP_WRAP_LARGE_STYLE : DROP_WRAP_SMALL_STYLE}
               >
                 <PinTeardrop
                   state={pinState}
@@ -670,14 +697,14 @@ export function MapView({
             key="current-location"
             latitude={currentLocation.lat}
             longitude={currentLocation.lng}
-            anchor={{ x: 0.5, y: 0.85 }}
+            anchor={CURRENT_LOCATION_ANCHOR}
             width={72}
             height={70}
           >
             <View
               collapsable={false}
               testID="map-current-location"
-              style={{ width: 72, alignItems: 'center' }}
+              style={CURRENT_LOCATION_STYLE}
             >
               {/* 라벨 pill(흰 배경+파란 텍스트) — 반드시 SVG(Rect+Text). RN <Text> 는 마커 래스터에
                 안 찍힌다(TRIP-876). */}
@@ -755,3 +782,10 @@ export function MapView({
     </View>
   );
 }
+
+/**
+ * TRIP-1349 — memo: 셸 snapIndex 같은 부모 자체 상태 변경마다 마커 N개 JSX 가 재생성되던 것을 막는다.
+ * 얕은 비교라 pins·center·onPinTap 등이 바뀌면 그대로 갱신된다. 소비처가 렌더마다 새 배열·콜백을 주면
+ * 효과가 없다(그 경우 memo 는 무해하게 통과).
+ */
+export const MapView = memo(MapViewImpl);
