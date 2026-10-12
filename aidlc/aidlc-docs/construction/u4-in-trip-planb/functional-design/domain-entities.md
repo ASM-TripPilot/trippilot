@@ -111,6 +111,8 @@
 
 > **[개정 · 2026-10-12] `replan_session` 실장 차이.** ① `originKind`에 **`PURGED`**가 추가됐다 — 위치 동의 철회 시 기준점 좌표를 지우고 "파기됨"을 값으로 남긴다(TRIP-992, `V2.56__replan_origin_purged.sql`). ② **`target_date`**(재계획 대상 일자, NOT NULL 백필)가 추가돼 오늘 외의 날도 다시 짤 수 있다(TRIP-1182, `V2.60__replan_session_target_date.sql`). 본 테이블은 `V2.17__replan_session.sql`.
 
+> **[개정안 · 2026-10-12 · 승인 대기] `replan_session.targetDate`.** 실장에는 `target_date`(date, NOT NULL, V2.60)가 있다 — **어느 날을 다시 짰는가.** 요청이 생략하면 서버가 정한 '오늘'이 들어간다. `scope` 가 `PARTIAL_SLOTS` 인 세션의 `targetDate` 는 항상 오늘이다. 정본 반영 여부는 `business-logic-model.md` DEC-U4-3 개정안의 승인에 따른다.
+
 **INV-U4-05**: `status`가 `APPLIED`가 되기 전에는 `itinerary`·`visit_slot`에 **어떤 쓰기도 발생하지 않는다**. `i18` [취소]는 세션만 `CANCELED`로 닫는다.
 
 **INV-U4-06**: 한 여행에 `COLLECTING`/`SOLVING`/`DRAFT` 세션은 **최대 1개**. 새 재계획 진입은 기존 열린 세션을 `CANCELED`로 닫고 시작한다.

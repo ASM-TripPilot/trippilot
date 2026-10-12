@@ -1581,3 +1581,12 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U10 종료. 남은 AI-DLC 대상 없음(Code Generation·Build and Test는 SCOPE 밖).
 
 ---
+
+---
+## Functional Design 개정안 초안 — U4 DEC-U4-3 (재계획 대상 일자)
+**Timestamp**: 2026-10-12T11:11:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "추천대로 가고 2번 3번 먼저 시작해 너가 작업하는동안 너가 요구하는 값들을 전달해줄게" (직전 AI 제안 12번 "재계획 날짜 입력 정본 개정(DEC-U4-3) — 개정안 초안은 제가 쓰고, AI-DLC 승인은 송님이 합니다"에 대한 응답)
+**AI Response**: U4 FD 3종(`business-logic-model.md`·`business-rules.md`·`domain-entities.md`)에 `[개정안 · 2026-10-12 · 승인 대기]` 블록을 추가(원문 보존). 내용: DEC-U4-3·BR-U4-11 의 "하루 단위·범위 2종·다일 없음"은 유지하고 "그 하루가 오늘이어야 한다"만 푼다 — 실장(TRIP-1182, `target_date` V2.60)이 먼저 간 이탈의 뒤처리. G-U4-8 은 디자인 결정으로 남김. **승인 전까지 원문이 정본이다.**
+**Context**: CONSTRUCTION — U4 Functional Design 개정안, 승인 대기.
+
+---
