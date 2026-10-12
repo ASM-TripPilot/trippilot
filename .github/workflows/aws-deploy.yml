@@ -33,6 +33,10 @@ on:
         description: POI 공유본 적재 때 그 출처의 ACTIVE 중 공유본에 없는 것을 LOST 로 내린다 (기본 off — upsert 만). 비율 가드(409)에 걸리면 스텝이 실패하고 아무것도 닫지 않는다
         type: boolean
         default: false
+      poi_close_missing_dry_run:
+        description: 퇴출하면 몇 건이 닫힐지만 서버에 묻고(닫지 않음) 평소대로 upsert 한다 — 결과는 배포 요약의 "POI load" 줄. poi_close_missing 이 켜져 있으면 무시
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -111,6 +115,7 @@ jobs:
       EMBEDDING_ENABLED: ${{ inputs.embedding_enabled }}
       PUSH_MODE_INPUT: ${{ inputs.push_mode }}
       POI_CLOSE_MISSING: ${{ inputs.poi_close_missing }}
+      POI_CLOSE_MISSING_DRY_RUN: ${{ inputs.poi_close_missing_dry_run }}
       DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
@@ -260,17 +265,20 @@ jobs:
       # 공유본(ai/data/collected_pois.json)을 백엔드 DB 에 upsert — 리뷰·머지된 문서가 이미지에 들어간 뒤라
       # 가이드 §자동화하지 않은 이유의 완충(공유본 PR 리뷰)은 그대로다. 사람의 port-forward 단계만 대체한다.
       - name: Load the POI shared document into the backend
+        id: poi-load
         if: steps.config.outputs.deploy_application == 'true'
         timeout-minutes: 25  # Job 대기 1200s(runtime_pois.DEADLINE_SEC) + 정리
         run: |
           poi_args=()
           if [ "$POI_CLOSE_MISSING" = true ]; then poi_args+=(--close-missing); fi
+          if [ "$POI_CLOSE_MISSING_DRY_RUN" = true ]; then poi_args+=(--close-missing-dry-run); fi
           python3 deploy/eks/runtime.py load-pois --namespace trippilot "${poi_args[@]}"
       - name: Deployment summary
         if: success()
         env:
           TF_STATE_BUCKET: ${{ steps.config.outputs.state_bucket }}
           DEPLOYED: ${{ steps.config.outputs.deploy_application }}
+          POI_SUMMARY: ${{ steps.poi-load.outputs.summary }}
         run: |
           {
             echo "### TripPilot AWS $DEPLOY_ENVIRONMENT"
@@ -280,6 +288,7 @@ jobs:
             if [ "$DEPLOYED" = true ]; then
               echo "- Image tag: $IMAGE_TAG"
               echo "- API: https://$API_HOSTNAME"
+              echo "- POI load: ${POI_SUMMARY:-(skipped)}"
               echo "- Load balancer DNS (point API hostname here):"
               kubectl -n trippilot get service gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
               echo

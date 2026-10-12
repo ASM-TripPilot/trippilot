@@ -283,6 +283,6 @@ curl -s -H "X-Service-Token: $SERVICE_AUTH_TOKEN" \
 
 **배포(dev)는 그 완충 뒤에서 적재한다 (2026-10-12).** `aws-deploy.yml` 의 "Load the POI shared document" 스텝이 서빙 AI 이미지에 들어간 `data/collected_pois.json` — 즉 리뷰·머지된 공유본 — 을 이 스크립트 그대로(`deploy/eks/runtime_pois.py` 가 ConfigMap 으로 싣는다) `backend:8080` 에 upsert 한다. 사람의 port-forward 단계만 대체하고 리뷰 단계는 건너뛰지 않는다. 그래서 위 절차는 **로컬·수동 복구용**으로 남고, dev 에 새 공유본을 넣는 보통의 길은 "공유본 PR 머지 → 배포" 다. 되감기가 채운 휴무 원문이 dev 에 못 닿던 것(자격 있는 사람이 없으면 멈춤)이 이 스텝을 만든 이유다.
 
-- 기본은 **upsert 만**. `--close-missing` 은 배포 입력 `poi_close_missing` 으로만 켜고, `--allow-mass-close` 는 배포가 **절대** 넘기지 않는다 — 비율 가드(409)는 "문서가 그 출처의 전부가 아니다"는 신호라 사람이 봐야 한다. 가드에 걸리면 닫힌 행도 적재된 행도 없이 스텝이 실패한다. 첫 정리는 로컬에서 `--dry-run --close-missing` 으로 닫힐 수를 보고 사람이 한 번 `--allow-mass-close` 로 하는 것이 맞다.
+- 기본은 **upsert 만**. `--close-missing` 은 배포 입력 `poi_close_missing` 으로만 켜고, `--allow-mass-close` 는 배포가 **절대** 넘기지 않는다 — 비율 가드(409)는 "문서가 그 출처의 전부가 아니다"는 신호라 사람이 봐야 한다. 가드에 걸리면 닫힌 행도 적재된 행도 없이 스텝이 실패한다. 첫 정리는 로컬에서 `--dry-run --close-missing` 으로 닫힐 수를 보고 사람이 한 번 `--allow-mass-close` 로 하는 것이 맞다. **kubectl 자격이 없으면** 배포 입력 `poi_close_missing_dry_run` 으로 같은 드라이런을 Job 이 대신 묻는다 — 닫지 않고 "닫을 것 N" 만 배포 요약의 "POI load" 줄에 올린 뒤 평소대로 upsert 한다.
 - "효과 없음"은 성공이 아니다 — 합계 줄이 없거나 신규·갱신이 둘 다 0 이면 스텝이 실패한다. 탈락·지역코드미상은 로그에 크게 보이되 배포를 막지 않는다(코드 출시를 데이터 품질에 묶지 않는다).
 - 되돌리기 SQL 은 파드 `/tmp` 에 쓰이고 끝나면 로그에 그대로 찍힌다 — 파드가 사라지면 파일도 사라지니 필요하면 배포 로그에서 복사한다.
