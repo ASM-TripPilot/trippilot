@@ -3524,6 +3524,12 @@ owner = "인증"
 migration = false
 touches = ["backend/modules/auth", "deploy/eks", "docker-compose.yml"]
 note = """
+**진행(2026-10-12 밤) — 카카오 대조가 DEV 에서 켜졌고, 네이버 code 경로를 닫는다.**
+`KAKAO_APP_ID` 를 DEV 시크릿에 넣고 재배포했다(파드 env·기동 로그로 확인, 배포 경고 없음). **실 카카오 로그인
+왕복은 아직 못 봤다** — 앱 ID 가 DEV 빌드의 카카오 앱과 다르면 카카오 로그인이 전부 401 이고 서버 로그에
+"발급 앱이 우리 앱이 아니라"가 찍힌다. 네이버는 code 경로에서 501 로 거절한다(PKCE 미지원 — 사용자 확인:
+출시 빌드에 `EXPO_PUBLIC_NAVER_URL_SCHEME` 이 들어가 SDK 토큰 경로만 쓴다). **남는 것은 네이버 토큰 경로의
+발급 앱 확인 하나다**(수단을 못 찾음). 프론트의 네이버 브라우저 폴백은 이제 501 을 받으므로 걷어내는 것이 프론트 몫으로 남는다.
 **진행(2026-10-12) — 카카오 절반을 닫았다.** `KakaoOAuthClient` 가 `access_token_info` 의 `app_id` 를
 `KAKAO_APP_ID` 와 대조하고 다르면 401 이다. **값이 주입돼야 켜진다** — 비면 대조를 건너뛰고 기동 경고를
 남긴다. 통로는 compose·`.env.example`·시크릿 동기화·차트까지 뚫었고, DEV 시크릿에 값을 넣고 재배포하는

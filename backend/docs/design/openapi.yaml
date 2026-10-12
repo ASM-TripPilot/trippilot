@@ -39,7 +39,10 @@ paths:
     post:
       tags: [auth]
       summary: 소셜 로그인/가입 (서버 code 교환)
-      description: 신규 (provider, sub)=가입(즉시 ACTIVE, 연령확인 필수)·기존=로그인.
+      description: >
+        신규 (provider, sub)=가입(즉시 ACTIVE, 연령확인 필수)·기존=로그인.
+        **네이버는 이 경로로 받지 않는다(501)** — 네이버는 PKCE 를 지원하지 않아 가로챈 code 를
+        막을 수단이 없다(TRIP-1317). 네이버는 `/auth/social/naver/token`(SDK 토큰)으로 보낸다.
       security: []
       parameters:
         - name: provider
@@ -69,7 +72,8 @@ paths:
         '409': { $ref: '#/components/responses/SocialEmailConflict' }
         '422': { $ref: '#/components/responses/AgeNotMet' }
         '429': { $ref: '#/components/responses/RateLimited' }
-        '501': { description: 그 제공자를 **아직** 지원하지 않는다(PROVIDER_NOT_SUPPORTED). 401 과 갈린다 — 재시도로 풀리지 않는다 }
+        '501':
+          description: "그 제공자를 이 방식으로 지원하지 않는다(PROVIDER_NOT_SUPPORTED) — 키가 아직 없거나, 네이버처럼 이 경로로는 받지 않는다. 401 과 갈린다 — 재시도로 풀리지 않는다"
 
   /auth/social/{provider}/token:
     post:
@@ -115,7 +119,8 @@ paths:
         '409': { $ref: '#/components/responses/SocialEmailConflict' }
         '422': { $ref: '#/components/responses/AgeNotMet' }
         '429': { $ref: '#/components/responses/RateLimited' }
-        '501': { description: 그 제공자를 이 경로로 지원하지 않는다(PROVIDER_NOT_SUPPORTED) — 키 미발급이거나, 구글처럼 이 경로를 닫아 둔 경우. 401 과 갈린다 — 재시도로 풀리지 않는다 }
+        '501':
+          description: "그 제공자를 이 경로로 지원하지 않는다(PROVIDER_NOT_SUPPORTED) — 키 미발급이거나, 구글처럼 이 경로를 닫아 둔 경우. 401 과 갈린다 — 재시도로 풀리지 않는다"
 
   /auth/token/refresh:
     post:

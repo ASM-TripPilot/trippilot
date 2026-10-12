@@ -7,6 +7,7 @@ import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotBeBlank
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Value
@@ -120,7 +121,7 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `신규 가입인데 연령확인 누락이면 400 VALIDATION_ERROR`() {
         val (status, body) = post(
-            "/api/v1/auth/social/naver",
+            "/api/v1/auth/social/kakao",
             """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth"}""",
         )
 
@@ -138,7 +139,7 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     fun `만 14세 미만이면 422 — 400 과 갈린다`() {
         val underage = LocalDate.now(ZoneId.of("Asia/Seoul")).minusYears(10)
         val (status, body) = post(
-            "/api/v1/auth/social/naver",
+            "/api/v1/auth/social/kakao",
             """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth",
                 "ageConfirmation":{"method":"BIRTH_DATE","birthDate":"$underage"}}""",
         )
@@ -168,10 +169,10 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
         )
         firstStatus shouldBe 200
 
-        // 실행 — 같은 이메일을 가진 네이버 계정으로 신규 가입을 시도한다.
+        // 실행 — 같은 이메일을 가진 구글 계정으로 신규 가입을 시도한다(네이버는 code 경로를 닫았다 — TRIP-1317).
         val (status, body) = post(
-            "/api/v1/auth/social/naver",
-            """{"authorizationCode":"$FIXED_EMAIL_MARKER-naver","codeVerifier":"v","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"}}""",
+            "/api/v1/auth/social/google",
+            """{"authorizationCode":"$FIXED_EMAIL_MARKER-google","codeVerifier":"v","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"}}""",
         )
 
         // 단언 — 안내가 message 문자열이 아니라 **계약 필드**로 실려야 한다(TRIP-211 · BR-U0-04).
@@ -184,7 +185,7 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     fun `소셜 충돌이 아닌 에러 응답에는 existingProvider 필드가 나타나지 않는다`() {
         // 대조군 — 다른 409·4xx 의 응답 형태가 이 필드 추가로 바뀌지 않았다(회귀 금지).
         val (status, body) = post(
-            "/api/v1/auth/social/naver",
+            "/api/v1/auth/social/kakao",
             """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth"}""",
         )
 
@@ -197,6 +198,29 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     // OpenApiContractIT 는 **경로**가 맞는지만 본다. 응답 **본문 필드**는 아무도 안 봤고,
     // 그래서 TokenPair 가 7필드를 선언하는 동안 서버는 3필드만 내보내도 전부 초록이었다.
     // 아래 둘이 그 구멍을 막는다 — 계약이 선언한 키 집합과 실제 응답 키 집합을 정확히 대조한다.
+
+    /**
+     * 501 설명이 **통째로** 계약에 실린다(TRIP-1317). `{ description: … }` 흐름 매핑 안의 평문에 쉼표가 들면
+     * YAML 이 거기서 값을 끊고 나머지를 **별개의 키**로 읽는다 — 파일은 여전히 유효해서 아무것도 빨개지지 않고,
+     * "어느 제공자를 왜 안 받는지"가 계약에서 조용히 사라진다(실측: 구글 쪽 설명이 그렇게 잘려 머지돼 있었다).
+     */
+    @Test
+    fun `두 로그인 경로의 501 설명이 잘리지 않는다 — 닫아 둔 제공자를 계약이 말한다`() {
+        @Suppress("UNCHECKED_CAST")
+        fun response501(path: String): Map<String, Any?> {
+            val spec = Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
+            val post = ((spec["paths"] as Map<String, Any>)[path] as Map<String, Any>)["post"] as Map<String, Any>
+            return (post["responses"] as Map<Any, Any>).entries.single { it.key.toString() == "501" }.value as Map<String, Any?>
+        }
+
+        val code = response501("/auth/social/{provider}")
+        code.keys shouldBe setOf("description")
+        code["description"].toString() shouldContain "네이버"
+
+        val token = response501("/auth/social/{provider}/token")
+        token.keys shouldBe setOf("description")
+        token["description"].toString() shouldContain "구글"
+    }
 
     /** openapi 정본에서 스키마 하나의 property 이름 집합을 읽는다. */
     private fun schemaProperties(name: String): Set<String> {
