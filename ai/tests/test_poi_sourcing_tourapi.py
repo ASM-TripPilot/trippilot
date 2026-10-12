@@ -540,3 +540,17 @@ def test_대괄호_요일_머리는_구역마다_그_요일의_창이다(
 ])
 def test_대괄호_요일_머리로_확정할_수_없으면_포기한다(hours_raw: str) -> None:
     assert parse_open_hours(hours_raw, "연중무휴") == ()
+
+
+# 비영업 라벨 **앞**의 범위는 영업시간이다(#1054 리뷰 후속, 실물). 종전엔 라벨이 든 구간을 통째로 버려
+# 그 장소의 시간을 잃거나(다이도) 토요일 줄이 사라졌다(돗가비).
+@pytest.mark.parametrize(("hours_raw", "rest_raw", "want"), [
+    ("11:00~22:00준비시간 14:30~16:30- 마지막 주문20:30", "매주 일요일", {"월화수목금토": (660, 1320)}),
+    ("11:00~21:00 (15:00~17:00 브레이크타임)<br>20:30 라스트오더<br>토요일 11:00~14:00 13:30 라스트오더", "매주 일요일",
+     {"월화수목금": (660, 1260), "토": (660, 840)}),
+])
+def test_비영업_라벨_앞의_범위는_남긴다(
+        hours_raw: str, rest_raw: str | None, want: dict[str, tuple[int, int]]) -> None:
+    hours = parse_open_hours(hours_raw, rest_raw)
+    assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == {
+        "월화수목금토일".index(c): w for days, w in want.items() for c in days}
