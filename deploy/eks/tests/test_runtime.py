@@ -67,6 +67,8 @@ class SecretTests(unittest.TestCase):
             # 카카오 앱 ID(TRIP-1317) 자리에 REST API 키를 넣는 실수 — 카카오 로그인이 전부 401 이 된다.
             {"backend": {"KAKAO_APP_ID": "0123456789abcdef0123456789abcdef"}},
             {"backend": {"KAKAO_APP_ID": " 1519823"}},
+            # 앞자리 0 은 카카오가 돌려주는 정수와 영영 안 맞는다.
+            {"backend": {"KAKAO_APP_ID": "01519823"}},
         ]
         for changed in cases:
             with self.subTest(changed=changed), self.assertRaises(ValueError):
@@ -81,6 +83,16 @@ class SecretTests(unittest.TestCase):
         for app_id in ("1519823", ""):
             runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
                 "KAKAO_APP_ID": app_id}})
+
+    def test_missing_kakao_app_id_is_called_out_on_every_deploy(self):
+        """값이 빠져도 배포는 막지 않는다 — 대신 조용히 넘어가지 않는다(TRIP-1317). 로그인에 카카오를 쓰는데
+        앱 ID 가 없으면 남의 앱 토큰으로 가입이 열린 채 돈다."""
+        def gaps(backend):
+            return list(runtime_secrets.open_gaps({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": backend}))
+        self.assertEqual(len(gaps({"KAKAO_CLIENT_ID": "rest-key"})), 1)
+        self.assertIn("KAKAO_APP_ID", gaps({"KAKAO_CLIENT_ID": "rest-key", "KAKAO_APP_ID": ""})[0])
+        self.assertEqual(gaps({"KAKAO_CLIENT_ID": "rest-key", "KAKAO_APP_ID": "1519823"}), [])
+        self.assertEqual(gaps({}), [])  # 카카오를 안 쓰는 환경은 말하지 않는다
 
     def test_google_client_secret_must_stay_empty(self):
         """공개(iOS) 클라이언트에 시크릿을 보내면 Google 이 invalid_client 로 거절한다(2026-09-23 실측).

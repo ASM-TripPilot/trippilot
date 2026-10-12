@@ -168,7 +168,7 @@ def validate_groups(groups):
     # 카카오 앱 ID(TRIP-1317)는 숫자다. REST API 키(32자 hex)를 잘못 넣으면 파드는 뜨는데 **카카오 로그인이
     # 전부 401** 이 된다(발급 앱과 영영 안 맞는다) — 가장 흔한 실수라 여기서 막는다. 빈 값은 "대조 안 함"이다.
     kakao_app_id = backend.get("KAKAO_APP_ID", "")
-    if kakao_app_id and not (kakao_app_id.isascii() and kakao_app_id.isdigit()):
+    if kakao_app_id and not (kakao_app_id.isascii() and kakao_app_id.isdigit() and kakao_app_id[0] != "0"):
         raise ValueError("KAKAO_APP_ID must be the numeric Kakao app ID, not the REST API key")
     if backend.get("PLACE_GEOCODE_MODE") == "kakao":
         require(backend, ("KAKAO_CLIENT_ID",), "kakao geocoding")
@@ -198,10 +198,22 @@ def runtime_manifests(groups, outputs, namespace, embedding_enabled):
              "stringData": values[name]} for name in GROUP_KEYS]
 
 
+def open_gaps(groups):
+    """배포는 되지만 **알고 있어야 하는 열린 구멍**. 막지 않는 이유는 각 줄에 있다 — 대신 배포마다 크게 말한다."""
+    backend = groups["backend"]
+    # 필수로 걸지 않는다: 값을 시크릿에 넣는 일과 이 코드가 배포되는 일 사이에 어느 순서로든 배포가 죽는
+    # 구간이 생긴다(옛 코드는 모르는 키를 거절한다). 그래서 통과시키되, 빠져 있으면 조용히 넘어가지 않는다.
+    if backend.get("KAKAO_CLIENT_ID") and not backend.get("KAKAO_APP_ID"):
+        yield ("KAKAO_APP_ID is not set in the backend secret: Kakao SDK-token logins are NOT checked against "
+               "our app, so tokens issued to other Kakao apps can sign up (TRIP-1317)")
+
+
 def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None):
     region = outputs["aws_region"]
     groups = {name: get_secret(shell, region, arn) for name, arn in outputs["app_secret_arns"].items()}
     validate_groups(groups)
+    for gap in open_gaps(groups):
+        print(f"::warning title=Open security gap::{gap}")  # 실행 요약 맨 위에 주석으로 뜬다
     seeded = seed_groups(groups)
     if push_mode is not None:
         # 배포 입력이 고른 값으로 덮는다 — 시크릿 손편집만이 켜는 길이면 로컬 자격이 만료된 날엔 못 켠다.

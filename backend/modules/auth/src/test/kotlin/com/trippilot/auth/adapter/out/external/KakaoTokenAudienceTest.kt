@@ -7,7 +7,6 @@ import com.trippilot.core.error.UpstreamUnavailable
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldNotContain
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.web.client.MockRestServiceServer
@@ -58,9 +57,8 @@ class KakaoTokenAudienceTest : StringSpec({
         val thrown = shouldThrow<AuthenticationRequired> { adapter.authenticateWithAccessToken(Provider.KAKAO, "sdk-token") }
 
         thrown.errorCode shouldBe ErrorCode.SOCIAL_AUTH_FAILED
-        // 왜 거절됐는지는 싣지 않는다(SECURITY-15) — 대조 기준을 알려 주지 않는다.
-        thrown.message.orEmpty() shouldNotContain "app"
-        thrown.message.orEmpty() shouldNotContain "1519823"
+        // 왜 거절됐는지는 응답에 싣지 않는다(SECURITY-15) — 무효 토큰과 같은 문구라 대조 기준이 드러나지 않는다.
+        thrown.message shouldBe "소셜 인증에 실패했습니다."
         server.verify()
     }
 

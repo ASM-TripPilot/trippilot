@@ -45,8 +45,9 @@ class KakaoOAuthClient(
      * 앱이 받은 토큰도 그대로 통과해 그 토큰의 이메일로 계정이 만들어졌다 — 본인의 첫 가입이 409 로 막힌다.
      * `access_token_info` 의 `app_id` 가 그 토큰의 발급 앱이다.
      *
-     * 거절은 401(`SOCIAL_AUTH_FAILED`)이고 사유는 싣지 않는다(SECURITY-15). 조회 자체의 실패(무효 토큰 401·
-     * 카카오 장애 5xx)는 userinfo 호출과 같은 길로 [SocialAuthAdapter] 가 가른다.
+     * 거절은 401(`SOCIAL_AUTH_FAILED`)이고 응답에 사유는 싣지 않는다(SECURITY-15) — 로그에만 남긴다.
+     * 조회 자체의 실패는 userinfo 호출과 같은 길로 [SocialAuthAdapter] 가 가른다: 4xx 는 401, 5xx·타임아웃은
+     * 503. 카카오는 일시 내부 장애(-1)도 HTTP 400 으로 답하므로 그 경우는 401 로 나간다(userinfo 도 같다).
      */
     override fun fetchProfileByAccessToken(accessToken: String): SocialProfile {
         val cfg = config()
@@ -56,7 +57,11 @@ class KakaoOAuthClient(
                 .header("Authorization", "Bearer $accessToken")
                 .retrieve()
                 .body(String::class.java) ?: error("빈 토큰 정보 응답")
-            if (OAUTH_JSON.readTree(body).text("app_id") != cfg.appId.trim()) {
+            val issuedTo = OAUTH_JSON.readTree(body).text("app_id")
+            if (issuedTo != cfg.appId.trim()) {
+                // 응답에는 사유를 싣지 않으므로 여기 남긴다 — 없으면 앱 ID 를 잘못 넣은 환경(모든 카카오 로그인이
+                // 401)과 만료 토큰을 로그로도 못 가른다. 앱 ID 는 시크릿이 아니다.
+                log.warn("카카오 토큰의 발급 앱이 우리 앱이 아니라 거절합니다. 기대={} 실제={}", cfg.appId.trim(), issuedTo)
                 throw AuthenticationRequired("소셜 인증에 실패했습니다.", ErrorCode.SOCIAL_AUTH_FAILED)
             }
         }
