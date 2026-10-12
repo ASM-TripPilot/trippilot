@@ -2908,6 +2908,7 @@ def build_dev_app(
     place_ids: dict | None = None,     # content_id→place_id
     feature_models: dict | None = None,  # 기능별 모델 오버라이드 (TRIP-513)
     retry_models: dict | None = None,  # 타임아웃 재시도 모델 (TRIP-522 2단 폴백)
+    score_max_parallel: int = 10,      # 취향 점수 병렬 청크 상한 (TRIP-1313) — env 해석은 main.py
     events: EventPort | None = None,
     vector_store: object | None = None,
     embedding: object | None = None,
@@ -2957,7 +2958,8 @@ def build_dev_app(
         ),
         c1_config=C1Config(model_ids=model_ids,
                            feature_models=feature_models or {},
-                           retry_models=retry_models or {}),
+                           retry_models=retry_models or {},
+                           score_max_parallel=score_max_parallel),
         weather=weather,
         travel_port=travel_port,  # 실경로 어댑터 (TRIP-432)
         events=events,  # 행사 저장소 (TRIP-421) — None이면 무보정
