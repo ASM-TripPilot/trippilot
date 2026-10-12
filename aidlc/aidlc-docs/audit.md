@@ -1588,3 +1588,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U4 Functional Design 사후 개정, 승인 대기(PR #1071).
 
 ---
+## Functional Design 사후 개정 승인 — U4 DEC-U4-3 · BR-U4-11 · G-U4-8
+**Timestamp**: 2026-10-12T11:21:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "1071 결함없을떄까지 검수하고 머지 ㄱㄱ"
+**AI Response**: PR #1071 의 머지 지시를 U4 FD 사후 개정(재계획 대상 일자)의 승인으로 기록. 조건("결함 없을 때까지 검수")에 따라 독립 검수를 지적 0건이 나올 때까지 돌린 뒤 머지한다. 그래프 노드 `REPLAN-TARGET-DATE-CANON` 을 닫는다.
+**Context**: CONSTRUCTION — U4 Functional Design 사후 개정 승인. 남은 것은 앱 동작의 Figma 추인(G-U4-8, 설계 문서 밖).
+
+---
