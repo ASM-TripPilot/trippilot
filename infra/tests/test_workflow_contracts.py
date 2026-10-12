@@ -86,6 +86,8 @@ class WorkflowContractTests(unittest.TestCase):
         """잡을 복제하면 두 사본이 갈라진다 — 배포는 PR 게이트를 그대로 호출한다."""
         deploy = workflow('aws-deploy.yml')
         self.assertEqual(deploy['jobs']['validate']['uses'], './.github/workflows/infra-validate.yml')
+        # 호출 쪽에서 자격을 넘겨주는 길(`secrets: inherit`·`permissions`)도 막는다 — 검증 잡은 `uses`·`with` 뿐이다
+        self.assertEqual(set(deploy['jobs']['validate']), {'uses', 'with'})
         self.assertEqual(deploy['jobs']['deploy']['needs'], 'validate')
         self.assertEqual(deploy['env']['TF_VERSION'], workflow('infra-validate.yml')['env']['TF_VERSION'])
         # 입력 기본값이 false 라, 이 배선이 빠지면 앱 배포 직전의 종료 설정 검사가 조용히 건너뛰어진다
