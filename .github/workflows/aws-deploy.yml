@@ -29,6 +29,10 @@ on:
         type: choice
         options: [keep, off, expo]
         default: keep
+      poi_close_missing:
+        description: POI 공유본 적재 때 그 출처의 ACTIVE 중 공유본에 없는 것을 LOST 로 내린다 (기본 off — upsert 만). 비율 가드(409)에 걸리면 스텝이 실패하고 아무것도 닫지 않는다
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -106,6 +110,7 @@ jobs:
       DEPLOY_APPLICATION: ${{ inputs.deploy_application }}
       EMBEDDING_ENABLED: ${{ inputs.embedding_enabled }}
       PUSH_MODE_INPUT: ${{ inputs.push_mode }}
+      POI_CLOSE_MISSING: ${{ inputs.poi_close_missing }}
       DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
@@ -252,6 +257,15 @@ jobs:
         if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled
         timeout-minutes: 65  # Job 대기 3600s(runtime_kb.DEADLINE_SEC) + 정리
         run: python3 deploy/eks/runtime.py load-kb --namespace trippilot
+      # 공유본(ai/data/collected_pois.json)을 백엔드 DB 에 upsert — 리뷰·머지된 문서가 이미지에 들어간 뒤라
+      # 가이드 §자동화하지 않은 이유의 완충(공유본 PR 리뷰)은 그대로다. 사람의 port-forward 단계만 대체한다.
+      - name: Load the POI shared document into the backend
+        if: steps.config.outputs.deploy_application == 'true'
+        timeout-minutes: 25  # Job 대기 1200s(runtime_pois.DEADLINE_SEC) + 정리
+        run: |
+          poi_args=()
+          if [ "$POI_CLOSE_MISSING" = true ]; then poi_args+=(--close-missing); fi
+          python3 deploy/eks/runtime.py load-pois --namespace trippilot "${poi_args[@]}"
       - name: Deployment summary
         if: success()
         env:
