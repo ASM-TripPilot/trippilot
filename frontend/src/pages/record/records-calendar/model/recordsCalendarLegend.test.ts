@@ -301,14 +301,23 @@ const periodOf = (t: Trip): string => `${t.startDate}_${t.endDate}`;
 const rowMemberIds = (row: LegendRow): string[] =>
   row.kind === 'group' ? row.members.map((m) => m.tripId) : [row.tripId];
 
-/** 분기 도달 카운터 — 속성이 묶음·자르기·제외·달 밖·undefined 를 실제로 밟았는지 P2 가 확인한다. */
-const reached = {
-  group: 0,
-  hidden: 0,
-  excludedZero: 0,
-  outOfMonth: 0,
-  undefinedKept: 0,
-};
+/**
+ * 분기 도달은 카운터가 아니라 examples 로 박는다(README §테스트 전략 — 적중을 시드 운에 맡기지 않는다; TRIP-1354).
+ * 9월 하나로 묶음(같은 기간 2건)·숨김(기간 4개 > 3줄)·0 제외·달 밖·undefined 유지를 한 번에 지난다.
+ */
+const BRANCH_EXAMPLE: [(Trip | null)[], string] = [
+  [
+    trip('t0', SEOUL, '2026-09-01', '2026-09-02'),
+    trip('t1', SEOUL, '2026-09-01', '2026-09-02'),
+    trip('t2', '강진군 여행', '2026-09-12', '2026-09-14'),
+    trip('t3', '부산 여행', '2026-09-28', '2026-09-29'),
+    trip('t4', '부산 여행', '2026-09-28', '2026-09-30'),
+    trip('t5', SEOUL, '2026-09-30', '2026-10-02', 0),
+    trip('t6', SEOUL, '2026-10-05', '2026-10-06'),
+    trip('t7', '강진군 여행', '2026-09-12', '2026-09-14', 'absent'),
+  ],
+  '2026-09',
+];
 
 describe('🔴 TRIP-1084 · buildMonthLegends 속성 (AC-7)', () => {
   it('보이는 줄 ≤ 3 · 보이는 + 숨긴 = 묶은 뒤 전체 · 여행이 사라지거나 겹치지 않는다 · 정렬·대표 규칙', () => {
@@ -359,26 +368,8 @@ describe('🔴 TRIP-1084 · buildMonthLegends 속성 (AC-7)', () => {
         for (let i = 1; i < keys.length; i++) {
           expect(keys[i - 1] > keys[i]).toBe(true);
         }
-
-        // 분기 도달 기록(P2).
-        if (rows.some((r) => r.kind === 'group')) reached.group++;
-        if (hiddenCount > 0) reached.hidden++;
-        if (inMonth.some((t) => t.itineraryDayCount === 0))
-          reached.excludedZero++;
-        if (real.some((t) => !overlapsMonth(t, ym))) reached.outOfMonth++;
-        if (eligible.some((t) => t.itineraryDayCount === undefined))
-          reached.undefinedKept++;
       }),
-      { numRuns: 300 }
+      { numRuns: 300, examples: [BRANCH_EXAMPLE] }
     );
-  });
-
-  it('공허 방지 — 위 속성이 묶음·숨김·0 제외·달 밖·undefined 유지 분기를 실제로 밟았다', () => {
-    // 위 it 가 먼저 실행된다(같은 describe, 선언 순서). 0 이면 생성기가 약해져 속성이 공허해진 것이다.
-    expect(reached.group).toBeGreaterThan(0);
-    expect(reached.hidden).toBeGreaterThan(0);
-    expect(reached.excludedZero).toBeGreaterThan(0);
-    expect(reached.outOfMonth).toBeGreaterThan(0);
-    expect(reached.undefinedKept).toBeGreaterThan(0);
   });
 });

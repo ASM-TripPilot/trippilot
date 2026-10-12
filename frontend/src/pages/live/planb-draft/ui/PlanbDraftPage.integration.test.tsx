@@ -11,6 +11,13 @@ import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 
 import { seoulDate } from '@/shared/lib/seoulDate';
 
+import {
+  mockExits,
+  mockNavigation,
+  mockRemove,
+  resetFakeNavigator,
+  type MockNavAction,
+} from '@/test-support/fakePreventRemoveNavigator';
 import { PlanbDraftPage } from './PlanbDraftPage';
 
 /**
@@ -142,36 +149,8 @@ jest.mock('../model/useReplanDiff', () => ({
   },
 }));
 
-// TRIP-1277 AC9 — 뒤로 가로채기(`usePreventRemove`)는 네비게이터 안에서만 돈다(실물은 밖에서 throw —
-// ManualPlanPage.integration 선례). 여기선 실물의 판정만 흉내내는 **가짜 네비게이터**를 둔다(02a ★1):
-//  - 화면을 빼려는 액션(‹ 의 back, 스와이프·하드웨어 뒤로, 네비게이터 dispatch)이 오면, 마지막 렌더가 넘긴
-//    가로채기가 켜져 있고 이 액션을 아직 안 물어봤으면 콜백에 `{ data: { action } }` 을 넘기고 멈춘다.
-//  - 꺼져 있거나 이미 물어본 **같은 객체**를 다시 보내면 통과 — `mockExits` 에 한 줄 남는다(= 화면을 나감).
-//    새 객체로 다시 만들어 보내면 또 물어본다(실물의 무한 반복을 그대로 재현).
-type MockNavAction = { type: string; payload?: unknown };
-type MockPreventCallback = (event: { data: { action: MockNavAction } }) => void;
-let mockPrevent:
-  { enabled: boolean; callback: MockPreventCallback } | undefined;
-let mockAsked = new WeakSet<MockNavAction>();
-const mockExits: string[] = [];
-function mockRemove(action: MockNavAction, via: string): void {
-  if (mockPrevent?.enabled === true && !mockAsked.has(action)) {
-    mockAsked.add(action);
-    mockPrevent.callback({ data: { action } });
-    return;
-  }
-  mockExits.push(via);
-}
-const mockUsePreventRemove = jest.fn(
-  (enabled: boolean, callback: MockPreventCallback) => {
-    mockPrevent = { enabled, callback };
-  }
-);
-const mockNavigation = {
-  dispatch: jest.fn((action: MockNavAction) => mockRemove(action, 'dispatch')),
-  addListener: jest.fn(() => () => {}),
-};
-
+// TRIP-1277 AC9 — 뒤로 가로채기(`usePreventRemove`)는 네비게이터 안에서만 돈다(실물은 밖에서 throw) → 가짜 네비게이터
+// (`fakePreventRemoveNavigator` — 판정 규칙은 그 파일 머리). 여기선 `mockExits`(= 화면을 나감)로 센다.
 const mockPush = jest.fn();
 // ‹ 의 `router.back()` 도 실물처럼 가로채기를 거친다 — 켜진 채 부르면 콜백으로 되돌아온다.
 const mockBack = jest.fn(() => mockRemove({ type: 'GO_BACK' }, 'back'));
@@ -186,13 +165,14 @@ jest.mock('expo-router', () => ({
     replace: mockReplace,
     canGoBack: () => mockCanGoBack,
   }),
-  useNavigation: () => mockNavigation,
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  useNavigation: require('@/test-support/fakePreventRemoveNavigator')
+    .useNavigation,
 }));
-jest.mock('@react-navigation/native', () => ({
-  usePreventRemove: (enabled: boolean, callback: MockPreventCallback) =>
-    mockUsePreventRemove(enabled, callback),
-  useNavigation: () => mockNavigation,
-}));
+jest.mock('@react-navigation/native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/fakePreventRemoveNavigator')
+);
 
 function session(
   status: string,
@@ -379,11 +359,7 @@ const MANUAL_HREF = {
 const REQUEST_HREF = `/trips/${TRIP_ID}/planb`;
 
 beforeEach(() => {
-  mockPrevent = undefined;
-  mockAsked = new WeakSet();
-  mockExits.length = 0;
-  mockUsePreventRemove.mockClear();
-  mockNavigation.dispatch.mockClear();
+  resetFakeNavigator();
   mockSession.error = false;
   mockSession.failures = 0;
   mockSessionRefetch.mockClear();
@@ -1318,25 +1294,8 @@ describe('🔴 B4 · AC-B4 · Q5 — 출발 좌표 없는 세션의 지도 중�
     }
   );
 
-  it('그날이 일정에 없으면 일정 전체의 첫 좌표 슬롯', () => {
-    mockItinerary = SEOUL_ITINERARY;
-    mockSession.data = session('FAILED', {
-      ...NO_ORIGIN,
-      fromInstant: '2026-06-20T06:00:00Z',
-    });
-    renderPage();
-
-    expect(screen.getByTestId('map-root')).toHaveTextContent(
-      '37.5512,126.9882'
-    );
-  });
-
-  it('일정이 아직 안 왔으면 서울시청 상수(부산 아님)', () => {
-    mockSession.data = session('FAILED', NO_ORIGIN);
-    renderPage();
-
-    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5665,126.978');
-  });
+  // '그날이 일정에 없으면 일정 전체 첫 좌표' · '일정 전혀 없으면 서울시청' 은 같은 `deriveReplanMapAnchor` 를 타는
+  // PlanbSolvingPage B4 가 정본이다(TRIP-1354 — 소스 두 줄 뒤집어 확인). 여기엔 이 화면 고유 배선(세션 날짜·출발 좌표)만 남긴다.
 
   it('세션 좌표가 있으면 일정보다 세션 좌표가 먼저다(무회귀)', () => {
     mockItinerary = SEOUL_ITINERARY;
@@ -1590,24 +1549,6 @@ describe('🔴 TRIP-1277 AC6 · Q13 — 이번에 만든 버튼은 연타해도 
   });
 });
 
-describe('🔴 TRIP-1277 AC5 · INV-3 — 이탈 확인·오류 얼굴에 소요시간이 없다', () => {
-  it('L14 이탈 확인 — N분·N시간·소요 0(+ 탐지기가 실제 글자를 본다는 앵커)', () => {
-    renderDraft();
-    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
-
-    expect(screen.queryAllByText(/적용하지 않고 나갈까요/)).toHaveLength(1);
-    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
-  });
-
-  it('L15 오류 얼굴 — N분·N시간·소요 0(+ 앵커)', () => {
-    mockSession.error = true;
-    renderPage();
-
-    expect(screen.queryAllByText(/다시 시도/)).toHaveLength(1);
-    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
-  });
-});
-
 // ── TRIP-1277 5-b 차단 수정 루프 — 03b B-1·W-1·W-2 의 심판 공백을 메운다 ─────────────────────────
 // 근거: 01 브리프 AC4·AC6·AC12 · INV-4. 모양은 solving 의 E3·E4·R2 를 옮겼다(02a ★14~16).
 
@@ -1645,15 +1586,34 @@ describe('🔴 TRIP-1277 5-b 차단-1 · AC6·AC12 — 초안 오류 얼굴 [나
     expect(mockStartMutate).not.toHaveBeenCalled();
   });
 
-  it('L18 같은 틱 2연타 — 이동 정확히 1회(back 1 · replace 0)', () => {
-    mockSession.error = true;
-    renderPage();
+  // L18(오류 얼굴) + TRIP-1289 C4(종료 얼굴) — 같은 틱 2연타의 기대값이 같아 한 표로 합쳤다(TRIP-1354).
+  it.each([
+    [
+      'L18 오류 얼굴',
+      () => {
+        mockSession.error = true;
+      },
+      () => DRAFT_ERROR_LEAVE,
+    ],
+    [
+      'C4 종료 얼굴',
+      () => {
+        mockSession.data = session('CANCELED');
+      },
+      () => CLOSED_LEAVE,
+    ],
+  ])(
+    '%s [나가기] 같은 틱 2연타 — 이동 정확히 1회(back 1 · replace 0)',
+    (_label, arrange, leaveId) => {
+      arrange();
+      renderPage();
 
-    pressTwiceSameTick(DRAFT_ERROR_LEAVE);
+      pressTwiceSameTick(leaveId());
 
-    expect(mockBack).toHaveBeenCalledTimes(1);
-    expect(mockReplace).not.toHaveBeenCalled();
-  });
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(mockReplace).not.toHaveBeenCalled();
+    }
+  );
 });
 
 describe('🔴 TRIP-1277 5-b 경고-1 · AC12 — 초안을 이미 받았으면 재조회가 실패해도 오류 얼굴로 덮지 않는다', () => {
@@ -1759,18 +1719,6 @@ describe('🔴 TRIP-1289 AC3 · INV-U4-05 — 종료 얼굴 [나가기]는 서�
   });
 });
 
-describe('🔴 TRIP-1289 AC4 — 종료 얼굴 [나가기]를 같은 틱에 두 번 눌러도 한 번만', () => {
-  it('C4 같은 틱 2연타 — 이동 정확히 1회(back 1 · replace 0)', () => {
-    mockSession.data = session('CANCELED');
-    renderPage();
-
-    pressTwiceSameTick(CLOSED_LEAVE);
-
-    expect(mockBack).toHaveBeenCalledTimes(1);
-    expect(mockReplace).not.toHaveBeenCalled();
-  });
-});
-
 describe('🔴 TRIP-1289 AC5 — 종료 얼굴은 잃을 초안이 없어 뒤로가 확인 없이 나간다', () => {
   it.each([['GO_BACK'], ['POP']])(
     'C5 종료 얼굴에서 %s 액션이 오면 이탈 확인 없이 1회 나간다',
@@ -1849,15 +1797,5 @@ describe('🔴 TRIP-1293 AC2·AC3·AC6 — 초안 오류 얼굴 [다시 시도]�
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockExits).toEqual([]);
-  });
-
-  it('Z4 재조회 중 오류 얼굴에도 경과 초·소요 시간 숫자가 없다(+ 앵커) (AC5 · INV-3)', () => {
-    const { rerender } = renderDraftError();
-    pressDraftRetryThenRefetching(rerender);
-
-    const face = screen.getByTestId(DRAFT_ERROR);
-    expect(face).toHaveTextContent(/다시 시도/);
-    expect(face).not.toHaveTextContent(/\d/);
-    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
   });
 });

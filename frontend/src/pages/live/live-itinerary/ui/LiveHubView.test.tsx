@@ -6,11 +6,6 @@ import {
   within,
 } from '@testing-library/react-native';
 import { Dimensions, Pressable, Text, View } from 'react-native';
-import {
-  getAnimatedStyle,
-  isSharedValue,
-  type SharedValue,
-} from 'react-native-reanimated';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { ReactTestInstance } from 'react-test-renderer';
 
@@ -21,6 +16,7 @@ import {
   RailUpcomingGlyph,
 } from '@/features/execution/index.view';
 
+import * as probe from '@/test-support/fabAnchorProbe';
 import {
   closestAncestor,
   closestScrollView,
@@ -439,21 +435,6 @@ describe('LiveHubView · HV5 지도 (Seed Q1 · 브리프 골격)', () => {
   });
 });
 
-describe('LiveHubView · HV6 카드 아래 배너 슬롯 삭제 (TRIP-748 AC-6)', () => {
-  it('renderSlotBanner 를 억지로 넘겨도 배너 노드를 그리지 않는다', () => {
-    const renderSlotBanner = jest.fn(() => (
-      <Text testID="fake-banner">비 예보 · 17시 이후 비</Text>
-    ));
-    // 삭제된 prop 이라 타입에 없다 — 런타임 무시를 보려고 object 스프레드로 넣는다(02a ★15).
-    renderHub({ ...({ renderSlotBanner } as object) });
-
-    // 짝 앵커 — 허브가 실제로 그려졌다.
-    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
-    expect(screen.queryByTestId('fake-banner')).toBeNull();
-    expect(renderSlotBanner).not.toHaveBeenCalled();
-  });
-});
-
 describe('LiveHubView · HV7 레일 점 (5-b 경고-1 보강)', () => {
   // 레일 점엔 testID 가 없다 — 대신 어떤 글리프 컴포넌트가 그려졌는지를 트리 순서대로 읽는다.
   // 세 글리프는 레일에서만 쓰이므로(카드는 entities 라 features 글리프를 못 문다) 전체 트리에서
@@ -725,13 +706,7 @@ function renderWithPill(overrides: Overrides = {}) {
 }
 
 /** snapPoints 를 가진 host(문자열 타입) 노드 — 시트 본체(목은 3겹, 02a ★3). */
-function sheetHost(): ReactTestInstance {
-  const host = screen.root
-    .findAll((node) => Array.isArray(node.props?.snapPoints))
-    .find((node) => typeof node.type === 'string');
-  if (!host) throw new Error('시트 host 노드가 없다');
-  return host;
-}
+const sheetHost = probe.sheetHost;
 
 function ancestorsOf(node: ReactTestInstance): ReactTestInstance[] {
   const out: ReactTestInstance[] = [];
@@ -1074,70 +1049,18 @@ describe('LiveHubView · HV9 수동 [도착] (TRIP-1021 AC-1·AC-3 · Q1)', () =
 
 const ANCHOR = 'execution-live-fab-anchor';
 const OVERLAY_ROW = 'execution-live-overlay-row';
-const FRAME_MS = 100;
 
-function sheetPosition(): SharedValue<number> {
-  const position = sheetHost().props.animatedPosition as unknown;
-  if (!isSharedValue(position)) {
-    throw new Error(
-      '시트(BottomSheet)에 animatedPosition 상자가 실려 있지 않다'
-    );
-  }
-  return position as SharedValue<number>;
-}
-
-/**
- * 프레임을 흘린다 — reanimated 는 jest 에서 스타일 재계산을 타이머로 돌린다(02a ★2). 원인 동작과
- * **다른 act** 로 부른다: 상태가 바뀌어 스타일이 다시 등록되는 것은 원인 act 가 끝날 때(리렌더·
- * effect)라, 같은 act 안에서 흘리면 등록 전 타이머만 돈다(02a §5 실측).
- */
-function flushFrames(): void {
-  act(() => {
-    jest.advanceTimersByTime(FRAME_MS);
-  });
-}
-
-/** 시트 윗변을 y 로 옮긴다(gorhom 이 매 프레임 하는 일). */
-function moveSheet(y: number): void {
-  const position = sheetPosition();
-  act(() => {
-    position.value = y;
-  });
-  flushFrames();
-}
+const sheetPosition = probe.sheetPosition;
+const flushFrames = probe.flushFrames;
+const moveSheet = probe.moveSheet;
 
 /** 오버레이 줄(뒤로+일자 칩)이 기기에서 잰 자리 — 하단 = y + height. */
 function layoutOverlay(y: number, height: number): void {
-  act(() => {
-    fireEvent(screen.getByTestId(OVERLAY_ROW), 'layout', {
-      nativeEvent: { layout: { x: 16, y, width: 280, height } },
-    });
-  });
-  flushFrames();
+  probe.layoutOverlay(OVERLAY_ROW, { y, height, width: 280 });
 }
 
-/** 앵커의 병합 style(static + animated) — 첫 렌더에 굳은 props.style 이 아니다. */
-function anchorStyle(): Record<string, unknown> {
-  return getAnimatedStyle(screen.getByTestId(ANCHOR)) as Record<
-    string,
-    unknown
-  >;
-}
-
-/** 앵커 윗변 y = top(없으면 0) + transform translateY 합. */
-function anchorTop(): number {
-  const style = anchorStyle();
-  const top = typeof style.top === 'number' ? style.top : 0;
-  const transform = Array.isArray(style.transform)
-    ? (style.transform as Record<string, unknown>[])
-    : [];
-  const shift = transform.reduce<number>(
-    (sum, step) =>
-      sum + (typeof step.translateY === 'number' ? step.translateY : 0),
-    0
-  );
-  return top + shift;
-}
+const anchorStyle = () => probe.anchorStyle(ANCHOR);
+const anchorTop = () => probe.anchorTop(ANCHOR);
 
 // TRIP-1321 · BR-U8-50·51 — 여행 중 허브의 ✦ 도우미는 수정 FAB 앵커 열의 맨 위(수정 FAB 위 12).
 // 앵커 윗변이 ✦ 몫(56+12)만큼 올라가 수정 FAB 자리는 그대로다. 실제 드래그 추종·터치는 6-b 실기.

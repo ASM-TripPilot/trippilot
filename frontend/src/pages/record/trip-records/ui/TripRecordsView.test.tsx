@@ -6,15 +6,12 @@ import {
   within,
 } from '@testing-library/react-native';
 import { DeviceEventEmitter, Dimensions, Keyboard, View } from 'react-native';
-import {
-  getAnimatedStyle,
-  isSharedValue,
-  type SharedValue,
-} from 'react-native-reanimated';
+import { isSharedValue } from 'react-native-reanimated';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Path } from 'react-native-svg';
 import type { ReactTestInstance } from 'react-test-renderer';
 
+import * as probe from '@/test-support/fabAnchorProbe';
 import { MemoInline } from '@/features/attach-visit-media/index.view';
 import { NoteGlyph } from '@/features/record';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
@@ -868,8 +865,6 @@ describe('「오늘의 회고」 FAB', () => {
 
   const OVERLAY_ROW = 'record-trip-overlay-row';
 
-  const FRAME_MS = 100;
-
   function baseProps(): TripRecordsViewProps {
     return {
       tripTitle: '부산 여행',
@@ -927,72 +922,17 @@ describe('「오늘의 회고」 FAB', () => {
     return out;
   }
 
-  /** snapPoints 를 가진 host 노드 = 시트 본체(통과형 목이 props 를 host 에 펼친다, 02a ★7 선례). */
-  function sheetHost(): ReactTestInstance {
-    const host = screen.root
-      .findAll((node) => Array.isArray(node.props?.snapPoints))
-      .find((node) => typeof node.type === 'string');
-    if (!host) throw new Error('시트 host 노드가 없다');
-    return host;
-  }
-
-  function sheetPosition(): SharedValue<number> {
-    const position = sheetHost().props.animatedPosition as unknown;
-    if (!isSharedValue(position)) {
-      throw new Error(
-        '시트(BottomSheet)에 animatedPosition 상자가 실려 있지 않다'
-      );
-    }
-    return position as SharedValue<number>;
-  }
-
-  /** 프레임을 흘린다 — 원인 동작과 다른 act 로 부른다(02a ★2). */
-  function flushFrames(): void {
-    act(() => {
-      jest.advanceTimersByTime(FRAME_MS);
-    });
-  }
-
-  /** 시트 윗변을 y 로 옮긴다(gorhom 이 매 프레임 하는 일). */
-  function moveSheet(y: number): void {
-    const position = sheetPosition();
-    act(() => {
-      position.value = y;
-    });
-    flushFrames();
-  }
+  const sheetHost = probe.sheetHost;
+  const flushFrames = probe.flushFrames;
+  const moveSheet = probe.moveSheet;
 
   /** 칩 줄(‹ + 일차 칩)이 기기에서 잰 자리 — 하단 = y + height. */
   function layoutOverlay(y: number, height: number): void {
-    act(() => {
-      fireEvent(screen.getByTestId(OVERLAY_ROW), 'layout', {
-        nativeEvent: { layout: { x: 16, y, width: 200, height } },
-      });
-    });
-    flushFrames();
+    probe.layoutOverlay(OVERLAY_ROW, { y, height, width: 200 });
   }
 
-  function anchorStyle(): Record<string, unknown> {
-    return getAnimatedStyle(screen.getByTestId(ANCHOR)) as Record<
-      string,
-      unknown
-    >;
-  }
-
-  /** 앵커 윗변 y = top(없으면 0) + transform translateY 합. */
-  function anchorTop(): number {
-    const style = anchorStyle();
-    const top = typeof style.top === 'number' ? style.top : 0;
-    const transform = Array.isArray(style.transform)
-      ? (style.transform as Record<string, unknown>[])
-      : [];
-    const shift = transform.reduce<number>(
-      (sum, step) =>
-        sum + (typeof step.translateY === 'number' ? step.translateY : 0),
-      0
-    );
-    return top + shift;
-  }
+  const anchorStyle = () => probe.anchorStyle(ANCHOR);
+  const anchorTop = () => probe.anchorTop(ANCHOR);
 
   function isWhite(color: unknown): boolean {
     return /^(white|#fff|#ffffff)$/i.test(String(color));

@@ -52,11 +52,12 @@ jest.mock('@/shared/storage', () => ({
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 // TRIP-1071 — [공유] 진입은 네이티브 캡처 모듈 3종이 이 빌드에 있을 때만(`isShareCaptureArmed`). jest-expo 는
-// 세 모듈을 "있는 척"해서 실 판정이면 늘 true 가 된다 → 이 파일(B-6 "공유 진입이 되살아나지 않는다")은
-// **재빌드 전 빌드**를 뜻하도록 false 로 고정한다. 개통 짝은 TripSummaryPage.hookMock.test 가 진다.
+// 세 모듈을 "있는 척"해서 실 판정이면 늘 true 가 된다 → 기본은 **재빌드 전 빌드**(false)로 고정하고
+// (B-6 "공유 진입이 되살아나지 않는다"), 개통 짝(TRIP-574 AC-6a → j06 push)만 홀더를 true 로 올린다.
+const mockShareArmed = { value: false };
 jest.mock('@/features/share-trip-card/model/shareCapture', () => ({
   ...jest.requireActual('@/features/share-trip-card/model/shareCapture'),
-  isShareCaptureArmed: () => false,
+  isShareCaptureArmed: () => mockShareArmed.value,
 }));
 
 const mockPush = jest.fn();
@@ -155,7 +156,10 @@ function isTouchable(node: ReactTestInstance): boolean {
 }
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-beforeEach(() => setAccessToken('a'));
+beforeEach(() => {
+  setAccessToken('a');
+  mockShareArmed.value = false;
+});
 afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
@@ -314,6 +318,22 @@ describe('🟢 TRIP-987 B-6·B-9 · 되살리지 않는 것(회귀 앵커)', () 
     const card = screen.getByTestId('reflection-summary-day-card');
     expect(isTouchable(card)).toBe(false);
     expect(within(card).queryByText('›')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-574 AC-6a · 공유 → j06 라우트 push (TRIP-939: 캡처 개통 시에만)', () => {
+  it('캡처가 장전됐으면 [공유] press → /trips/{tripId}/records/share 로 push 한다(B-6 의 짝)', async () => {
+    mockShareArmed.value = true;
+    server.use(
+      summaryHandler({ ready: true, summary: summary(true, ['코엑스']) }),
+      tripOk()
+    );
+
+    renderPage();
+    await waitSummary();
+    fireEvent.press(screen.getByTestId('reflection-summary-share'));
+
+    expect(mockPush.mock.calls).toEqual([[`/trips/${TRIP_ID}/records/share`]]);
   });
 });
 

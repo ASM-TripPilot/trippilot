@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import {
   act,
   fireEvent,
@@ -7,16 +6,9 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
 import { useDailyReflection } from '../model/useDailyReflection';
-import { DailyReflectionScreen } from './DailyReflectionScreen';
-import {
-  useGetTripsTripIdReflections,
-  usePostTripsTripIdReflectionsDayDate,
-  usePutTripsTripIdReflectionsDayDate,
-} from '@/shared/api/index.hooks';
 import type {
   Reflection,
   ReflectionCard,
@@ -29,17 +21,14 @@ import { DailyReflectionPage } from './DailyReflectionPage';
 
 /**
  * j03 오늘의 회고 페이지 — 훅(`useDailyReflection`·여행 조회)을 목으로 갈아 끼워 **페이지 배선만** 본다(node 버킷).
- * 실제 HTTP 로 보는 흐름은 `DailyReflectionPage.integration.test.tsx`(msw). 관점마다 describe 하나(옛 파일 하나).
+ * 실제 HTTP 로 보는 흐름(생성·저장·회고 카드 title/scenes·pending/error/미래 날짜의 POST 횟수)은
+ * `DailyReflectionPage.integration.test.tsx`(msw)가 정본이다 — 옛 hookMock 의 「회고 카드」·「공유 배선 없음」
+ * 묶음과 「얼굴」의 AC-4 ①③·AC-6·7·8 은 뮤테이션 확인 뒤 지웠다(TRIP-1354). 여기는 훅 목이어야 한 렌더로 박을 수 있는
+ * 관점만 남는다: 서버 stats 별 얼굴 표, 미치환 템플릿, pending 크롬, 마운트당 한 번 생성, 지도 자리 사유,
+ * 오늘 칩, ‹ 폴백, 탭바 dismissTo.
  *
- * 옛 파일마다 목 모양이 달랐다 — jest.mock 은 파일 맨 위로 끌어올려져 파일 전체에 한 번만 걸리므로
- * 관점별 차이는 아래 장치로 가른다:
- *  - `useDailyReflection`: 기본은 빈 jest.fn(각 테스트가 mockReturnValue 로 답을 정한다). 회고 카드 묶음만
- *    beforeEach 에서 **실물 훅**으로 바꿔 생성 reflection 훅 목 위에서 돌린다.
- *  - 화면(`DailyReflectionScreen`): 실물을 그대로 그리되 jest.fn 으로 한 겹 감싸, 공유 묶음이 페이지가 넘긴
- *    props 를 `mock.calls` 로 읽는다(옛 공유 파일은 null 스텁이었다 — 스텁 스위치를 빼도 green 이라 실측 뒤 걷었다).
- *  - 위치 권한(`expo-location`): 기본은 값 없음(undefined) = 옛 무목 파일이 받던 jest-expo 기본과 같다 →
- *    페이지가 "모름"으로 둔다. 지도 사유 묶음만 granted/denied 를 정한다. (j01 `TripRecordsPage` 와 기본값이 다르다 —
- *    거긴 같은 undefined 가 catch 로 떨어져 일반 모드.)
+ *  - `useDailyReflection`: 빈 jest.fn(각 테스트가 mockReturnValue 로 답을 정한다).
+ *  - 위치 권한(`expo-location`): 기본은 값 없음(undefined) → 페이지가 "모름"으로 둔다. 지도 사유 묶음만 granted/denied 를 정한다.
  *  - 매 테스트 뒤 최상위 afterEach 가 이 값들을 되돌린다. (개념) `jest.clearAllMocks()` 는 호출 기록만 지우고
  *    `mockReturnValue` 는 남긴다 — 앞 describe 의 답이 뒤 describe 로 새지 않게 `mockReset()` 으로 지운다.
  */
@@ -62,33 +51,12 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTripsTripId: jest.fn(),
 }));
 
-jest.mock('@/shared/api/generated/reflection/reflection', () => ({
-  useGetTripsTripIdReflections: jest.fn(),
-  usePostTripsTripIdReflectionsDayDate: jest.fn(),
-  usePutTripsTripIdReflectionsDayDate: jest.fn(),
-}));
-
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) =>
     mockGetForeground(...args),
   requestForegroundPermissionsAsync: (...args: unknown[]) =>
     mockRequestForeground(...args),
 }));
-
-// 화면은 실물 — jest.fn 한 겹은 페이지가 넘긴 props 를 mock.calls 로 읽으려는 것뿐이다(공유 묶음).
-// 팩토리 안에서 JSX 를 쓰면 babel 이 바깥 변수(_jsx)를 참조해 호이스팅 검사에 걸린다 → createElement.
-jest.mock('./DailyReflectionScreen', () => {
-  const actual = jest.requireActual<typeof import('./DailyReflectionScreen')>(
-    './DailyReflectionScreen'
-  );
-  return {
-    ...actual,
-    DailyReflectionScreen: jest.fn((props: object) =>
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('react').createElement(actual.DailyReflectionScreen, props)
-    ),
-  };
-});
 
 const PAST_TODAY = '2026-09-26';
 /** 소요시간 표기 탐지기(INV-3) — reflectionStructure G6 과 같은 식. */
@@ -135,8 +103,6 @@ describe('얼굴 — 레코드 없음 ≠ 활동 없음, 생성 조건', () => {
   const TRIP_ID = 'trip-1068';
 
   const DAY = '2026-09-24';
-
-  const FUTURE_TODAY = '2026-09-23';
 
   const WRITTEN = '바다를 보며 천천히 걸은 하루';
 
@@ -311,26 +277,6 @@ describe('얼굴 — 레코드 없음 ≠ 활동 없음, 생성 조건', () => {
   });
 
   describe('AC-4 · 조회·생성 중에는 pending — empty 로 접지 않는다 (INV-4)', () => {
-    it('① 목록을 아직 못 받았으면 pending 이고 empty 는 없으며, 레코드 유무를 모르니 만들지 않는다', () => {
-      const create = arrange({ isPending: true });
-
-      render(page(PAST_TODAY));
-
-      expect(screen.getByTestId('reflection-daily-pending')).toBeOnTheScreen();
-      expect(screen.queryByTestId('reflection-daily-empty')).toBeNull();
-      expect(create).not.toHaveBeenCalled();
-    });
-
-    it('③ 목록은 왔고 그 날 레코드가 없으면 생성을 한 번 부르고, 훅이 아직 "생성 중"이라 말하지 않아도 pending 이다', () => {
-      const create = arrange({ reflection: undefined });
-
-      render(page(PAST_TODAY));
-
-      expect(create).toHaveBeenCalledTimes(1);
-      expect(screen.getByTestId('reflection-daily-pending')).toBeOnTheScreen();
-      expect(screen.queryByTestId('reflection-daily-empty')).toBeNull();
-    });
-
     it('pending 은 본문만 바꾼다 — 헤더 "편집"·일차 탭·탭바는 남고 하단 CTA 는 없으며, 안내 글자가 비지 않았다 (Q2)', () => {
       arrange({ reflection: undefined });
 
@@ -367,303 +313,6 @@ describe('얼굴 — 레코드 없음 ≠ 활동 없음, 생성 조건', () => {
       rerender(page(DAY));
 
       expect(create).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('AC-6 · 미래 날짜는 만들지 않는다 (결정 2)', () => {
-    it('보는 날이 오늘보다 뒤면 생성 0회, 기존 empty(중립 문구)이고 pending 이 아니다', () => {
-      const create = arrange({ reflection: undefined });
-
-      render(page(FUTURE_TODAY));
-
-      expect(create).not.toHaveBeenCalled();
-      expect(screen.getByTestId('reflection-daily-empty')).toHaveTextContent(
-        '이 날 기록된 활동이 없습니다'
-      );
-      expect(screen.queryByTestId('reflection-daily-pending')).toBeNull();
-    });
-  });
-
-  describe('AC-7 · 그 날 레코드가 이미 있으면 만들지 않는다 (결정 2)', () => {
-    it('0·0 레코드가 있어도 생성 0회', () => {
-      const create = arrange({
-        reflection: record({ visitCount: 0, photoCount: 0 }),
-      });
-
-      render(page(PAST_TODAY));
-
-      expect(create).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('AC-8 · 목록 조회가 실패하면 만들지 않는다', () => {
-    it('조회 실패면 생성 0회, error 얼굴이고 pending 이 아니다', () => {
-      const create = arrange({ isError: true });
-
-      render(page(PAST_TODAY));
-
-      expect(create).not.toHaveBeenCalled();
-      expect(screen.getByTestId('reflection-daily-error')).toBeOnTheScreen();
-      expect(screen.queryByTestId('reflection-daily-pending')).toBeNull();
-    });
-  });
-});
-
-describe('회고 카드 — 서버가 고른 card 를 그리고 { card } 로 저장한다(실물 훅)', () => {
-  // TRIP-945 (옛 DailyReflectionPage.card.test.tsx)
-  /**
-   * TRIP-945 · j03 오늘의 회고 — 회고 계약 이전(narrative→card · text→card)을 사용자 흐름으로 잠근다.
-   *
-   * 무엇을 보장하나:
-   *  - AC-1: 본문은 서버가 고른 `card.subtitle` 이다. 클라가 `editedCard ?? draftCard` 를 다시 고르지 않는다.
-   *  - AC-3: 편집을 열면 입력칸 초기값도 `card.subtitle`(회고가 없으면 빈 칸).
-   *  - AC-4·5: 고쳐 저장하면 PUT 바디는 `{ card }` 한 필드이고, 그 카드의 cover.title 이 비지 않는다.
-   *  - AC-6: 규칙 카드를 그린 화면 어디에도 소요시간 표기가 없다(INV-3).
-   *
-   * 생성 훅 3개만 목하고 페이지·useDailyReflection·화면은 실물로 태운다 — 저장 버튼에서 PUT 바디까지 한 줄.
-   */
-  beforeEach(() => {
-    (useDailyReflection as jest.Mock).mockImplementation(
-      jest.requireActual<typeof import('../model/useDailyReflection')>(
-        '../model/useDailyReflection'
-      ).useDailyReflection
-    );
-  });
-  // 옛 파일의 trips 목 기본값 — 여행 조회가 "아직 없음"을 돌려준다(이 묶음은 trip 을 arrange 하지 않는다).
-  beforeEach(() => {
-    (useGetTripsTripId as jest.Mock).mockImplementation(() => ({
-      data: undefined,
-      isPending: false,
-      isError: false,
-    }));
-  });
-
-  const TRIP_ID = 'trip-1';
-
-  const DAY = '2026-06-11';
-
-  const RULE_TITLE = '광안리해수욕장 외 3곳';
-
-  const RULE_SUBTITLE =
-    '광안리해수욕장·부산시립미술관·해운대시장 외 1곳 을(를) 다녀왔어요. 이동 거리는 약 12.0km 였어요. 사진 6장을 남겼어요.';
-
-  const RULE_SCENES = [
-    '광안리해수욕장',
-    '부산시립미술관',
-    '해운대시장',
-    '감천문화마을',
-  ].map((name) => ({ layout: 'TEXT', caption: `${name} 을(를) 다녀왔어요.` }));
-
-  const RULE_CARD: ReflectionCard = {
-    templateId: 'backend.rule.daily.v1',
-    format: 'CARD',
-    title: RULE_TITLE,
-    subtitle: RULE_SUBTITLE,
-    payload: JSON.stringify({
-      template_id: 'backend.rule.daily.v1',
-      format: 'CARD',
-      cover: { title: RULE_TITLE, subtitle: RULE_SUBTITLE },
-      scenes: RULE_SCENES,
-    }),
-  };
-
-  function withSubtitle(subtitle: string): ReflectionCard {
-    return { ...RULE_CARD, subtitle };
-  }
-
-  /** card 와 제목·장면이 다른 카드 — 저장 바탕이 card 가 아니면 PUT 바디에 이 제목이 실린다. */
-  function otherCard(title: string): ReflectionCard {
-    return {
-      ...RULE_CARD,
-      title,
-      subtitle: `${title} 문장`,
-      payload: JSON.stringify({
-        template_id: 'backend.rule.daily.v1',
-        format: 'CARD',
-        cover: { title, subtitle: `${title} 문장` },
-        scenes: [],
-      }),
-    };
-  }
-
-  function reflection(over: Partial<Reflection> = {}): Reflection {
-    return {
-      dayDate: DAY,
-      card: RULE_CARD,
-      draftCard: withSubtitle('초안 D'),
-      editedCard: null,
-      source: 'RULE',
-      stats: {
-        visitCount: 4,
-        distanceKm: 12,
-        distanceSource: 'VISIT_LINE',
-        photoCount: 6,
-      },
-      generatedAt: '2026-06-11T09:00:00Z',
-      updatedAt: '2026-06-11T10:00:00Z',
-      ...over,
-    };
-  }
-
-  const put = jest.fn();
-
-  function mockApi(items: Reflection[]) {
-    (useGetTripsTripIdReflections as jest.Mock).mockReturnValue({
-      data: { items },
-      isPending: false,
-      isError: false,
-      refetch: jest.fn(),
-    });
-    (usePostTripsTripIdReflectionsDayDate as jest.Mock).mockReturnValue({
-      mutate: jest.fn(),
-    });
-    (usePutTripsTripIdReflectionsDayDate as jest.Mock).mockReturnValue({
-      mutate: put,
-    });
-  }
-
-  /** 훅이 캐시를 고치려고 useQueryClient() 를 불러도 렌더가 죽지 않게 Provider 로 감싼다(TRIP-980). */
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={new QueryClient()}>
-        {children}
-      </QueryClientProvider>
-    );
-  }
-
-  function renderPage() {
-    render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} />, {
-      wrapper: Wrapper,
-    });
-  }
-
-  function saveEdit(text: string) {
-    fireEvent.press(screen.getByTestId('reflection-daily-edit'));
-    fireEvent.changeText(
-      screen.getByTestId('reflection-daily-edit-input'),
-      text
-    );
-    fireEvent.press(screen.getByTestId('reflection-daily-edit-save'));
-  }
-
-  /** put.mutate 첫 호출의 인자(= { tripId, dayDate, data }). */
-  function putArgs() {
-    return put.mock.calls[0][0];
-  }
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('AC-1 · 본문은 서버가 고른 card.subtitle 이다 (BR-U5-35)', () => {
-    it('card.subtitle 을 본문 칸에 그대로 그린다', () => {
-      mockApi([reflection()]);
-
-      renderPage();
-
-      expect(
-        screen.getByTestId('reflection-daily-narrative')
-      ).toHaveTextContent(RULE_SUBTITLE);
-    });
-
-    it('editedCard 가 card 와 달라도 card.subtitle 을 그린다(클라가 표시본을 다시 고르지 않는다)', () => {
-      mockApi([reflection({ editedCard: withSubtitle('수정본 E') })]);
-
-      renderPage();
-
-      expect(
-        screen.getByTestId('reflection-daily-narrative')
-      ).toHaveTextContent(RULE_SUBTITLE);
-    });
-  });
-
-  describe('AC-3 · 편집 입력칸의 초기값', () => {
-    it('편집을 열면 card.subtitle 이 입력칸에 채워진다(editedCard ?? draftCard 를 다시 고르지 않는다)', () => {
-      mockApi([reflection({ editedCard: withSubtitle('수정본 E') })]);
-      renderPage();
-
-      fireEvent.press(screen.getByTestId('reflection-daily-edit'));
-
-      expect(
-        screen.getByTestId('reflection-daily-edit-input')
-      ).toHaveDisplayValue(RULE_SUBTITLE);
-    });
-
-    it('회고가 없는 지난 날은 생성 중(pending)에도 헤더 "편집"으로 빈 칸 입력을 연다 (TRIP-1068 Q2)', () => {
-      mockApi([]);
-      renderPage();
-      // 전제 앵커 — 레코드 없는 지난 날(실시계 기준 06-11)은 이제 empty 가 아니라 생성 중이다.
-      expect(screen.getByTestId('reflection-daily-pending')).toBeOnTheScreen();
-
-      fireEvent.press(screen.getByTestId('reflection-daily-edit'));
-
-      expect(
-        screen.getByTestId('reflection-daily-edit-input')
-      ).toHaveDisplayValue('');
-    });
-  });
-
-  describe('AC-4 · 저장하면 PUT 바디는 { card } 한 필드다 (결정 2 · PBT-U5-F1)', () => {
-    it('원래 카드에서 cover.subtitle 만 고친 카드 문자열을 보낸다(text 필드 없음)', () => {
-      mockApi([reflection()]);
-      renderPage();
-
-      saveEdit('바다가 좋았다');
-
-      expect(put).toHaveBeenCalledTimes(1);
-      const { tripId, dayDate, data } = putArgs();
-      expect(tripId).toBe(TRIP_ID);
-      expect(dayDate).toBe(DAY);
-      expect(Object.keys(data)).toEqual(['card']);
-      const parsed = JSON.parse(data.card);
-      expect(parsed.cover.subtitle).toBe('바다가 좋았다');
-      expect(parsed.cover.title).toBe(RULE_TITLE);
-      expect(parsed.scenes).toEqual(RULE_SCENES);
-    });
-
-    it('draftCard·editedCard 가 card 와 달라도 저장 바탕은 서버가 고른 card 다(클라가 다시 고르지 않는다)', () => {
-      mockApi([
-        reflection({
-          draftCard: otherCard('초안 제목 D'),
-          editedCard: otherCard('수정본 제목 E'),
-        }),
-      ]);
-      renderPage();
-
-      saveEdit('바다가 좋았다');
-
-      const parsed = JSON.parse(putArgs().data.card);
-      expect(parsed.cover.title).toBe(RULE_TITLE);
-      expect(parsed.scenes).toEqual(RULE_SCENES);
-    });
-  });
-
-  describe('AC-5 · 회고가 없는 날 직접 써서 저장해도 cover.title 이 채워진다 (BR-U5-36)', () => {
-    it('사용자 글의 첫 줄을 제목으로 쓰고 template_id 는 보내지 않는다', () => {
-      mockApi([]);
-      renderPage();
-
-      saveEdit('직접 쓴 하루\n둘째 줄');
-
-      expect(put).toHaveBeenCalledTimes(1);
-      const { data } = putArgs();
-      expect(Object.keys(data)).toEqual(['card']);
-      const parsed = JSON.parse(data.card);
-      expect(parsed.cover.title).toBe('직접 쓴 하루');
-      expect(parsed.cover.subtitle).toBe('직접 쓴 하루\n둘째 줄');
-      expect(parsed).not.toHaveProperty('template_id');
-    });
-  });
-
-  describe('AC-6 · 규칙 카드를 그린 화면에 소요시간 표기가 없다 (INV-3)', () => {
-    it('화면 전체 글자에 소요·N분·N시간이 없고, 거리 문장은 있다', () => {
-      mockApi([reflection()]);
-
-      renderPage();
-
-      expect(screen.root).not.toHaveTextContent(DURATION_TEXT);
-      // 긍정 짝 — 규칙 카드 문장이 실제로 그려졌다(빈 화면이라 통과하는 게 아니다).
-      expect(screen.root).toHaveTextContent(/12\.0km/);
     });
   });
 });
@@ -1326,67 +975,6 @@ describe('‹ 와 「확인」 — 히스토리 없으면 기록 탭', () => {
       expect(refetch).toHaveBeenCalledTimes(1);
       expect(router.replace).not.toHaveBeenCalled();
       expect(router.back).not.toHaveBeenCalled();
-    });
-  });
-});
-
-describe('공유 배선 없음', () => {
-  // TRIP-762 AC-11 (옛 DailyReflectionPage.share.test.tsx)
-  /**
-   * TRIP-762 · AC-11 — j03 오늘의 회고 헤더 **공유 게이트·배선 제거**(구 TRIP-574 공유 게이트 폐기).
-   *
-   * 라이브 j03 에 공유가 0 이라, 페이지가 `useGetTripsTripId(...).status==='ENDED'` 로 공유를
-   * 판정해 화면에 `canShare`/`onShare` 로 내리던 배선을 **제거**한다. 화면을 감싼 jest.fn 으로
-   * 페이지가 넘기는 props 를 본다(화면 자체는 실물로 그려진다 — 파일 머리 목 설명).
-   *
-   * 무엇을 보장하나(승인 계약):
-   *  - 🔴 페이지가 화면에 `onShare` 를 넘기지 않는다(공유 배선 제거 — 현행은 함수를 넘기므로 red).
-   *  - 🔴 페이지가 화면에 `canShare` 를 넘기지 않는다(status 게이트 제거).
-   *  - 긍정 짝 — 화면은 여전히 배선된다(narrative 등 완성 VM 이 넘어온다 — 페이지가 안 깨졌다는 앵커).
-   *
-   * (개념) 화면을 감싼 `jest.fn` → `mock.calls[0][0]` 이 전달 props · `toBeUndefined()` = 그
-   *   prop 자체가 안 넘어왔음을 단언(공유 배선 부재).
-   */
-  // 옛 파일의 trips 목 기본값 — 여행 조회가 "아직 없음"을 돌려준다(이 묶음은 trip 을 arrange 하지 않는다).
-  beforeEach(() => {
-    (useGetTripsTripId as jest.Mock).mockImplementation(() => ({
-      data: undefined,
-      isPending: false,
-      isError: false,
-    }));
-  });
-
-  function mockDaily() {
-    (useDailyReflection as jest.Mock).mockReturnValue({
-      reflection: undefined,
-      isPending: false,
-      isError: false,
-      refetch: jest.fn(),
-      create: jest.fn(),
-      saveEdit: jest.fn(),
-    });
-  }
-
-  function capturedProps() {
-    return (DailyReflectionScreen as unknown as jest.Mock).mock.calls[0][0];
-  }
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('🔴 AC-11 · 페이지가 공유를 화면에 배선하지 않는다(게이트 제거)', () => {
-    it('onShare·canShare 를 넘기지 않고, 화면은 여전히 배선된다', () => {
-      mockDaily();
-
-      render(<DailyReflectionPage tripId="trip-1" date="2026-06-11" />);
-
-      const props = capturedProps();
-      // 부정 — 공유 배선 제거.
-      expect(props.onShare).toBeUndefined();
-      expect(props.canShare).toBeUndefined();
-      // 긍정 짝 — 화면은 완성 VM 으로 배선된다(페이지가 안 깨졌다).
-      expect(props.narrative).toBeDefined();
     });
   });
 });

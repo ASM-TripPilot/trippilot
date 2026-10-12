@@ -41,6 +41,11 @@ paths:
 | `src/test-support/envSandbox.ts` | `EXPO_PUBLIC_*` env 저장/복원 샌드박스(TRIP-1355) — `oauthConfig`·`makeAuthorize.{flow,nativeSdk,apple,realOauth}`·`LoginPage.apple` 5벌이 `ENV_KEYS` 저장·복원 블록을 복사하던 것 — 파일 최상위에서 `sandboxEnv(keys, {clearBefore?})` 한 줄 |
 | `src/test-support/apiBase.ts` | `BASE`(`'http://localhost:8080/api/v1'`) 상수 한 벌 — MSW 핸들러 URL 의 베이스. 통합 테스트마다 `const BASE` 를 다시 적지 않는다(TRIP-1355) |
 | `src/pages/auth/login/model/__fixtures__/socialLogin.ts` | `useSocialLogin.*` 4파일 공용 — `tokenPair`·`ageConfirmationRequired`·`authorizeWith`(TRIP-1355). `test-support` 가 아니라 슬라이스 옆에 둔 이유: 로그인 슬라이스 전용 모양이다 |
+| `src/test-support/liveHubFixtures.ts` | i01 허브 통합 공용 픽스처(TRIP-1354) — `liveTrip`·`liveItinerary`·`liveSlot`·`liveVisit`·`liveHubHandlers`. LiveItineraryPage.integration 의 8 describe 와 `.directions` 가 복사하던 `itinerary()/trip()/slot/visit()·seed(handlers)·wrapper·renderHub` 한 벌 |
+| `src/test-support/tripRecordsFixtures.ts` | j01 기록 통합 공용 픽스처 — `daySlot`·`daySlotAt`·`tripItinerary`·`completedVisitOn`. ⚠️ 소비 파일 맨 위의 LA 타임존 `@jest-environment` docblock 은 그대로 둔다(이 모듈이 시간대를 정하지 않는다) |
+| `src/test-support/fakePreventRemoveNavigator.tsx` | `usePreventRemove` 대역 네비게이터 — PlanbDraft·PlanbSolving 통합이 복제하던 `mockRemove/mockExits` 판정 규칙(파일 머리 주석) |
+| `src/test-support/fabAnchorProbe.ts` | 시트 따라가는 FAB 앵커 프로브(`getAnimatedStyle`+`flushFrames`) — LiveHubView·TripRecordsView 테스트 공용. `animatedPosition` 상자 통과의 심판이 이 두 테스트다(MapSheetShell 단위 테스트는 지웠다) |
+| `src/test-support/mswHookHarness.tsx` | 훅 단위 msw 하네스 — `createWrapper`·`createGate`(응답 붙잡기)·`createHitLog`. 적용: useAdjustVisitTimes·useVisitAttachments·useReplanDiff. 후속 적용 대상: useVisitCheck×2(레인 A)·useTripBases·useCreateTrip·useStayAddresses |
 | `src/test-support/queryClientProbe.tsx` | `SplashGate` 자리의 관찰용 가짜 — 렌더 시 `useQueryClient()`를 담아(`getObservedQueryClient`) `query-client-probe` 마커를 그린다. `resetObservedQueryClient`로 파일 간 상태를 비운다 |
 | `src/test-support/keyWarnings.ts` | `guardKeyWarnings()` — 파일 맨 위(describe 밖)에서 한 번 부르면 그 파일 모든 테스트 앞뒤로 React 목록 key 경고(같은 key 2개·key 누락)를 엿봐 0 을 단언한다(TRIP-1296). **React 는 key 누락 경고를 파일당 한 번만 낸다** — describe 안에서만 걸면 앞 테스트가 그 한 번을 써 버려 못 잡는다. 그 밖의 `console.error` 는 그대로 통과 |
 | `src/test-support/nativeSocialSdkMock.ts` | 카카오·네이버 로그인 SDK `{virtual:true}` 가짜 모듈 + 스파이(default·named 네임스페이스·named 함수 세 import 형태가 같은 스파이에 닿는다). `naverInitializeSpy`는 **일부러 리셋하지 않는다**(모듈 스코프 메모이즈 구현도 관측되게) |
@@ -106,9 +111,7 @@ paths:
 | `src/pages/record/trip-records/model/useVisitAttachments.integration.test.tsx` | (TRIP-1155로 features/record에서 이사) msw — addPhoto→GET 재조회 · saveMemo 공백 무시 · savedMemo 시드·같은 값 PUT 0·실패 시 savedMemo 유지 |
 | `src/pages/record/records-calendar/model/recordsCalendar.test.ts` | (TRIP-1155로 features/record에서 이사) 마킹·월 경계·겹침 유일·null 방어·필터/정렬·라벨 표 |
 | `src/pages/record/trip-records/ui/VisitRecordCard.checkPop.test.tsx` | (TRIP-1155로 features/record에서 이사) 체크 튐 심판 — 전이 감지(`prevStatus`)·답 전 언마운트(C-4)·튐 도중 되돌림 `setValue(1)`(C-5). `Animated.timing`/`spring`을 스파이해 설정은 기록하고 실행은 JS로 돈다(`Animated.loop`은 판정 함수가 아니라 설정의 `useNativeDriver`를 본다) |
-| `src/pages/record/trip-records/ui/VisitRecordCard.nameFit.test.tsx` | (TRIP-1155로 features/record에서 이사) 긴 이름 말줄임(TRIP-1086) — 머리 행 세 겹(바깥 `gap-sm`·왼쪽 묶음 `min-w-0 flex-1`·이름 Text `numberOfLines={1}`+`shrink`). RN은 `flexShrink` 기본 0이라 Text 자체에 `shrink`가 있어야 줄어든다. **jest는 토큰·prop까지만** — 실제 `…`·간격 픽셀은 6-b 육안 |
-| `src/pages/record/trip-records/ui/VisitRecordCard.test.tsx` | (TRIP-1155로 features/record에서 이사) 4상태 present/absent 짝·upcoming 완료 불가·skip·시각 수정 버튼 유무. 슬롯 테스트는 `.wiring.test.tsx`로 격리(새 import가 이 파일을 오염시키지 않게) |
-| `src/pages/record/trip-records/ui/VisitRecordCard.wiring.test.tsx` | (TRIP-1155로 features/record에서 이사) 슬롯 계약 testID 마커로 잠금 |
+| `src/pages/record/trip-records/ui/VisitRecordCard.test.tsx` | (TRIP-1155로 features/record에서 이사) 4상태 present/absent 짝·upcoming 완료 불가·skip·시각 수정 버튼 유무·슬롯 계약 testID 마커·수동 체크인(옛 `.wiring`·`.manualCheckin` 합본 — "무회귀 증거로 별 파일" 사유가 TRIP-1145 이후 없어졌다, TRIP-1354). 긴 이름 말줄임 토큰 테스트(`.nameFit`)는 jest 가 토큰·prop 까지만 보므로 지웠다 |
 | `src/pages/record/trip-records/ui/VisitTimeSheet.test.tsx` | (TRIP-1155로 features/record에서 이사) 셀 선택·diff 저장·휠 초기 위치·정지 확정·완료 휠 disabled 배선(W6, 선택 집합 마스크 84셀 앵커)·onClose/key(W4·W5·P1~P4)·인라인 오류·INV-3 렌더 스캔(동적 `${m}분`까지) |
 | `src/pages/record/trip-records/ui/SpontaneousVisitButton.test.tsx` | (TRIP-1155로 features/record에서 이사) 즉석 추가 UI |
 | `src/pages/record/trip-records/ui/PhotoThumbStrip.test.tsx` | (TRIP-1155로 features/record에서 이사) 상태 present/absent 짝 + add + 다건 |

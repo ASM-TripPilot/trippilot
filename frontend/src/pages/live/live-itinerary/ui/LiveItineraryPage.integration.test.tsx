@@ -31,6 +31,12 @@ import {
 } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
+import {
+  liveItinerary,
+  liveSlot,
+  liveTrip,
+  liveVisit,
+} from '@/test-support/liveHubFixtures';
 import { safeAreaPaints } from '@/test-support/safeAreaFace';
 import {
   createFakeAutomationSink,
@@ -220,46 +226,14 @@ afterAll(() => server.close());
 // TRIP-395 → TRIP-746 · TRIP-747 · TRIP-987 (옛 LiveItineraryPage.integration.test.tsx)
 describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () => {
   const itinerary = (): Itinerary =>
-    ({
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
-        {
-          date: TODAY,
-          slots: [
-            {
-              poiId: 'p1',
-              startAt: '10:00:00',
-              endAt: '11:00:00',
-              isFixed: false,
-              endsNextDay: false,
-              hasViolation: false,
-              nameKo: '감천문화마을',
-              distanceRange: null,
-              openingHours: null,
-              tags: [],
-            },
-          ],
-        },
-      ],
-    }) as unknown as Itinerary;
-
-  const trip = () => ({
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: TODAY,
-    endDate: '2026-08-22',
-    party: 2,
-    destinations: [{ seq: 1, region: '부산', nights: 2 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-01T00:00:00Z',
-    updatedAt: '2026-08-01T00:00:00Z',
-  });
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p1', '감천문화마을', '10:00:00', { endAt: '11:00:00' }),
+        ],
+      },
+    ]);
 
   /** p1 방문 완료 기록 — done 카드를 만든다(I8). */
   const completedVisit = (): VisitCheck => ({
@@ -276,7 +250,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
 
   /** trip 핸들러는 항상 등록(page 가 무조건 조회). itinerary 핸들러만 케이스별로 갈아끼운다. */
   const tripHandler = () =>
-    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip()));
+    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip()));
   const itineraryOk = () =>
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
@@ -772,7 +746,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
             http.get(`${BASE}/trips/:tripId`, async () => {
               await tripGate;
               return tripResponse === 200
-                ? HttpResponse.json(trip())
+                ? HttpResponse.json(liveTrip())
                 : new HttpResponse(null, { status: tripResponse });
             })
           );
@@ -1064,7 +1038,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
               calls += 1;
               const status = statuses[Math.min(calls, statuses.length) - 1];
               return status === 200
-                ? HttpResponse.json(trip())
+                ? HttpResponse.json(liveTrip())
                 : new HttpResponse(null, { status });
             });
           }
@@ -1506,58 +1480,28 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
 // TRIP-754 (옛 LiveItineraryPage.applied.integration.test.tsx) — 옛 목이 이동 4종·setParams 를 모두 가져 부재 단언을 더하지 않는다.
 describe('i08 변경 반영 시트', () => {
   const SESSION_ID = 's1';
-  const baseSlot = {
-    endAt: '18:00:00',
-    isFixed: false,
-    endsNextDay: false,
-    hasViolation: false,
-    distanceRange: null,
-    tags: [],
-    category: null,
-    openingHours: null,
-  };
-
   const itinerary = (): Itinerary =>
-    ({
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
-        {
-          date: TODAY,
-          slots: [
-            {
-              ...baseSlot,
-              poiId: 'p0',
-              startAt: '09:30:00',
-              nameKo: '감천문화마을',
-            },
-            {
-              ...baseSlot,
-              poiId: 'p1',
-              startAt: '17:00:00',
-              nameKo: 'F1963 복합문화공간',
-            },
-          ],
-        },
-      ],
-    }) as unknown as Itinerary;
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p0', '감천문화마을', '09:30:00', {
+            endAt: '18:00:00',
+            category: null,
+          }),
+          liveSlot('p1', 'F1963 복합문화공간', '17:00:00', {
+            endAt: '18:00:00',
+            category: null,
+          }),
+        ],
+      },
+    ]);
 
-  const trip = () => ({
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: TODAY,
-    endDate: TODAY,
-    party: 2,
-    destinations: [{ seq: 1, region: '부산', nights: 0 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-01T00:00:00Z',
-    updatedAt: '2026-08-01T00:00:00Z',
-  });
+  const trip = () =>
+    liveTrip({
+      endDate: TODAY,
+      destinations: [{ seq: 1, region: '부산', nights: 0 }],
+    });
 
   const itineraryHandler = () =>
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
@@ -2024,66 +1968,29 @@ describe('메모 시트', () => {
   const CARD_NOTICE = 'execution-arrive-memo-notice';
   const FAB = 'execution-live-replan-fab';
 
-  const slot = (poiId: string, nameKo: string, startAt: string) => ({
-    poiId,
-    startAt,
-    endAt: startAt,
-    isFixed: false,
-    endsNextDay: false,
-    hasViolation: false,
-    nameKo,
-    distanceRange: null,
-    openingHours: null,
-    tags: [],
-  });
-
   const itinerary = (): Itinerary =>
-    ({
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
-        {
-          date: TODAY,
-          slots: [
-            slot('p1', '감천문화마을', '13:00:00'),
-            slot('p2', '광안리 해변', '15:00:00'),
-          ],
-        },
-      ],
-    }) as unknown as Itinerary;
-
-  const trip = () => ({
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: TODAY,
-    endDate: '2026-08-22',
-    party: 2,
-    destinations: [{ seq: 1, region: '부산', nights: 2 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-01T00:00:00Z',
-    updatedAt: '2026-08-01T00:00:00Z',
-  });
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p1', '감천문화마을', '13:00:00'),
+          liveSlot('p2', '광안리 해변', '15:00:00'),
+        ],
+      },
+    ]);
 
   const visit = (
     visitCheckId: string,
     poiId: string,
     completedAt: string | null
-  ): VisitCheck => ({
-    visitCheckId,
-    poiId,
-    slotKey: `${TODAY}#${poiId}`,
-    arrivedAt: '2026-08-20T13:00:00',
-    completedAt,
-    skippedAt: null,
-    source: 'MANUAL',
-    spontaneous: false,
-    updatedAt: '2026-08-20T13:00:05Z',
-  });
+  ): VisitCheck =>
+    liveVisit({
+      visitCheckId,
+      poiId,
+      arrivedAt: '2026-08-20T13:00:00',
+      completedAt,
+      updatedAt: '2026-08-20T13:00:05Z',
+    });
   const memoHits = () => observedHits.filter((hit) => hit.endsWith('/memo'));
   let memoBodies: unknown[] = [];
   let memoStatus = 200;
@@ -2122,7 +2029,7 @@ describe('메모 시트', () => {
     // 옛 목 값 — 이 관점은 뒤로가기 히스토리가 없는 것으로 돌았다.
     mockCanGoBack.mockReturnValue(false);
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip())),
       http.get(`${BASE}/trips/:tripId/itinerary`, () =>
         HttpResponse.json(itinerary())
       ),
@@ -2611,11 +2518,6 @@ describe('관람 중 카드 [사진]·[메모]', () => {
   const CONSENT_GET = 'GET /api/v1/me/location-consent';
 
   const COPY_DENIED = '사진 접근 권한이 없어 사진을 불러올 수 없어요';
-  const COPY_NO_ASSET_ID =
-    '선택한 사진을 기록에 붙일 수 없어요. 다른 사진을 고르거나 설정에서 사진 접근 범위를 확인해 주세요';
-  const COPY_LIMITED =
-    '사진 접근이 "선택한 사진만"으로 제한돼 있어요. 접근 범위는 설정에서 바꿀 수 있어요';
-  const COPY_FAILED = '사진을 불러올 수 없어요';
   const COPY_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
 
   const PICKED_ASSET = {
@@ -2627,59 +2529,23 @@ describe('관람 중 카드 [사진]·[메모]', () => {
   };
 
   const itinerary = (): Itinerary =>
-    ({
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
-        {
-          date: TODAY,
-          slots: [
-            {
-              poiId: 'p1',
-              startAt: '13:00:00',
-              endAt: '14:00:00',
-              isFixed: false,
-              endsNextDay: false,
-              hasViolation: false,
-              nameKo: '감천문화마을',
-              distanceRange: null,
-              openingHours: null,
-              tags: [],
-            },
-          ],
-        },
-      ],
-    }) as unknown as Itinerary;
-
-  const trip = () => ({
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: TODAY,
-    endDate: '2026-08-22',
-    party: 2,
-    destinations: [{ seq: 1, region: '부산', nights: 2 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-01T00:00:00Z',
-    updatedAt: '2026-08-01T00:00:00Z',
-  });
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p1', '감천문화마을', '13:00:00', { endAt: '14:00:00' }),
+        ],
+      },
+    ]);
 
   /** p1 에 도착했고 아직 완료 전 — 허브에서 관람 중 카드가 된다. */
-  const arrivedVisit = (): VisitCheck => ({
-    visitCheckId: 'v1',
-    poiId: 'p1',
-    slotKey: `${TODAY}#p1`,
-    arrivedAt: '2026-08-20T13:00:00',
-    completedAt: null,
-    skippedAt: null,
-    source: 'MANUAL',
-    spontaneous: false,
-    updatedAt: '2026-08-20T13:00:05Z',
-  });
+  const arrivedVisit = (): VisitCheck =>
+    liveVisit({
+      visitCheckId: 'v1',
+      poiId: 'p1',
+      arrivedAt: '2026-08-20T13:00:00',
+      updatedAt: '2026-08-20T13:00:05Z',
+    });
 
   const consent = (legalConsent: boolean, gpsRecordingOptIn: boolean) => ({
     osPermissionMirror: 'GRANTED',
@@ -2716,7 +2582,7 @@ describe('관람 중 카드 [사진]·[메모]', () => {
     });
     mockResolveUri.mockReset().mockResolvedValue(null);
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip())),
       http.get(`${BASE}/trips/:tripId/itinerary`, () =>
         HttpResponse.json(itinerary())
       ),
@@ -2804,64 +2670,13 @@ describe('관람 중 카드 [사진]·[메모]', () => {
     });
   });
 
-  describe('🔴 AC-8 · 좌표는 GPS 기록 동의가 켜졌을 때만 싣는다 (BR-U5-12 · INV-U5-04)', () => {
-    it.each([
-      [
-        '법적 동의만 켜짐 · GPS 기록 꺼짐 → 좌표 없음',
-        () => HttpResponse.json(consent(true, false)),
-        false,
-      ],
-      [
-        '법적 동의 꺼짐 · GPS 기록 켜짐 → 좌표 있음',
-        () => HttpResponse.json(consent(false, true)),
-        true,
-      ],
-      [
-        '동의 조회 실패(500) → 끈 것으로 보고 좌표 없음',
-        () =>
-          HttpResponse.json(
-            { error: { code: 'INTERNAL', message: 'boom' } },
-            { status: 500 }
-          ),
-        false,
-      ],
-    ])('L4 %s', async (_label, response, expectCoords) => {
-      consentResponse = response;
-      const photo = await renderHub();
-
-      fireEvent.press(photo);
-
-      // 동의 조회가 실패해도 사진 기록은 막지 않는다 — POST 는 나간다.
-      await waitFor(() => expect(hitCount(PHOTOS_POST)).toBe(1));
-      const body = photoBodies[0] ?? {};
-      if (expectCoords) {
-        expect(body).toMatchObject({ exifLat: 35.1532, exifLng: 129.1186 });
-      } else {
-        expect(body).not.toHaveProperty('exifLat');
-        expect(body).not.toHaveProperty('exifLng');
-      }
-    });
-  });
+  // AC-8 좌표는 GPS 기록 동의가 켜졌을 때만(켜짐·꺼짐·조회 실패)은 같은 `pickPhotoForVisit` 을 타는 j01
+  // `TripRecordsPage.integration` R5 가 정본이다(TRIP-1354 — 조회 실패 케이스를 그쪽으로 옮겼다).
 
   describe('🔴 AC-9·AC-10·AC-12 · 실패 경로 — 취소는 조용히, 나머지는 안내 한 줄', () => {
-    it('L5 앨범에서 취소하면 요청도 안내도 없다', async () => {
-      mockPick.mockResolvedValue({ kind: 'canceled' });
-      const photo = await renderHub();
-
-      fireEvent.press(photo);
-      await waitFor(() => expect(mockPick).toHaveBeenCalledTimes(1));
-      await settle();
-
-      expect(hitCount(PHOTOS_POST)).toBe(0);
-      expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
-    });
-
-    it.each([
-      ['사진 권한 거부', 'denied', COPY_DENIED],
-      ['자산 번호 없음(선택한 사진만 허용)', 'no-asset-id', COPY_NO_ASSET_ID],
-      ['제한 접근', 'limited', COPY_LIMITED],
-      ['피커 실패(재빌드 전 앱)', 'failed', COPY_FAILED],
-    ])(
+    // 사유별 문구 표(denied·no-asset-id·limited·failed)와 취소(L5)는 j01 R6·R7 이 정본 — 허브는 안내가 이 카드 아래에
+    // 그려지는 것만 한 행으로 본다(TRIP-1354).
+    it.each([['사진 권한 거부', 'denied', COPY_DENIED]])(
       'L6 %s → 카드 아래 안내가 뜨고 요청은 0회다',
       async (_label, kind, copy) => {
         mockPick.mockResolvedValue({ kind });
@@ -2900,21 +2715,6 @@ describe('관람 중 카드 [사진]·[메모]', () => {
       expect(openSettings).toHaveBeenCalledTimes(1);
       openSettings.mockRestore();
     });
-
-    it.each(['limited', 'no-asset-id'])(
-      'L6c %s 안내에도 [설정 열기] 가 있다 (TRIP-1216 a)',
-      async (kind) => {
-        mockPick.mockResolvedValueOnce({ kind });
-        const photo = await renderHub();
-
-        fireEvent.press(photo);
-
-        expect(
-          await screen.findByTestId('execution-arrive-photo-settings')
-        ).toBeTruthy();
-        expect(hitCount(PHOTOS_POST)).toBe(0);
-      }
-    );
 
     it('L7 사진 기록 요청이 실패하면(500) 저장 실패 안내가 뜬다', async () => {
       photoStatus = 500;
@@ -3012,75 +2812,28 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
   const SHEET = 'live-memo-sheet';
   const INPUT = 'record-trip-memo-input';
 
-  const slot = (poiId: string, nameKo: string, startAt: string) => ({
-    poiId,
-    startAt,
-    endAt: startAt,
-    isFixed: false,
-    endsNextDay: false,
-    hasViolation: false,
-    nameKo,
-    distanceRange: null,
-    openingHours: null,
-    tags: [],
-  });
-
   const itinerary = (): Itinerary =>
-    ({
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
-        {
-          date: TODAY,
-          slots: [
-            slot('p1', '감천문화마을', '10:00:00'),
-            slot('p2', '광안리 해변', '13:00:00'),
-            slot('p3', '전포 카페거리', '15:00:00'),
-          ],
-        },
-      ],
-    }) as unknown as Itinerary;
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p1', '감천문화마을', '10:00:00'),
+          liveSlot('p2', '광안리 해변', '13:00:00'),
+          liveSlot('p3', '전포 카페거리', '15:00:00'),
+        ],
+      },
+    ]);
 
-  const trip = () => ({
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: TODAY,
-    endDate: '2026-08-22',
-    party: 2,
-    destinations: [{ seq: 1, region: '부산', nights: 2 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-01T00:00:00Z',
-    updatedAt: '2026-08-01T00:00:00Z',
-  });
-
-  const visit = (
-    over: Partial<VisitCheck> & { poiId: string }
-  ): VisitCheck => ({
-    visitCheckId: `v-${over.poiId}`,
-    slotKey: `${TODAY}#${over.poiId}`,
-    arrivedAt: null,
-    completedAt: null,
-    skippedAt: null,
-    source: 'MANUAL',
-    spontaneous: false,
-    updatedAt: '2026-08-20T05:00:05Z',
-    ...over,
-  });
   /** v1 = p1 완료(도착 01:02Z = KST 10:02), v2 = p2 도착·미완료(관람 중). */
   const doneV1 = () =>
-    visit({
+    liveVisit({
       visitCheckId: 'v1',
       poiId: 'p1',
       arrivedAt: '2026-08-20T01:02:00Z',
       completedAt: '2026-08-20T02:00:00Z',
     });
   const activeV2 = () =>
-    visit({
+    liveVisit({
       visitCheckId: 'v2',
       poiId: 'p2',
       arrivedAt: '2026-08-20T04:00:00Z',
@@ -3146,7 +2899,7 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
     });
     mockResolveUri.mockReset().mockResolvedValue(null);
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip())),
       http.get(`${BASE}/trips/:tripId/itinerary`, () =>
         HttpResponse.json(itinerary())
       ),
@@ -3263,13 +3016,13 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
     it('D2 낙관 id(optimistic:) 로 완료된 카드엔 버튼이 없고, 같은 화면의 서버 id 완료 카드엔 있다', async () => {
       // 준비 — p1 완료 레코드는 아직 낙관 id(재조회 전 [방문 완료]와 같은 캐시 상태, 02a ★6), p2 는 서버 id 로 완료.
       visitsResponse = () => [
-        visit({
+        liveVisit({
           visitCheckId: 'optimistic:p1',
           poiId: 'p1',
           arrivedAt: '2026-08-20T00:00:00',
           completedAt: '2026-08-20T00:00:00',
         }),
-        visit({
+        liveVisit({
           visitCheckId: 'v2',
           poiId: 'p2',
           arrivedAt: '2026-08-20T04:00:00Z',
@@ -3571,74 +3324,33 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
 describe('i03 위험 상세 시트', () => {
   const REASON = '17시 이후 비 예보 70%';
 
-  const baseSlot = {
-    endAt: '18:00:00',
-    isFixed: false,
-    endsNextDay: false,
-    hasViolation: false,
-    distanceRange: null,
-    tags: [],
-  };
-
   /** 오늘 2곳(해운대가 2번째) + 내일 1곳. 영업시간은 데이터로만 흘린다(INV-3 스캔 밖). */
   const itinerary = (): Itinerary =>
-    ({
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
-        {
-          date: TODAY,
-          slots: [
-            {
-              ...baseSlot,
-              poiId: 'p0',
-              startAt: '09:30:00',
-              nameKo: '감천문화마을',
-              category: null,
-              openingHours: null,
-            },
-            {
-              ...baseSlot,
-              poiId: 'p1',
-              startAt: '17:00:00',
-              nameKo: '해운대 해변',
-              category: '해변',
-              openingHours: '24시간 개방',
-            },
-          ],
-        },
-        {
-          date: TOMORROW,
-          slots: [
-            {
-              ...baseSlot,
-              poiId: 'p9',
-              startAt: '10:00:00',
-              nameKo: '태종대',
-              category: null,
-              openingHours: null,
-            },
-          ],
-        },
-      ],
-    }) as unknown as Itinerary;
-
-  const trip = () => ({
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: TODAY,
-    endDate: '2026-08-22',
-    party: 2,
-    destinations: [{ seq: 1, region: '부산', nights: 2 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-01T00:00:00Z',
-    updatedAt: '2026-08-01T00:00:00Z',
-  });
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p0', '감천문화마을', '09:30:00', {
+            endAt: '18:00:00',
+            category: null,
+          }),
+          liveSlot('p1', '해운대 해변', '17:00:00', {
+            endAt: '18:00:00',
+            category: '해변',
+            openingHours: '24시간 개방',
+          }),
+        ],
+      },
+      {
+        date: TOMORROW,
+        slots: [
+          liveSlot('p9', '태종대', '10:00:00', {
+            endAt: '18:00:00',
+            category: null,
+          }),
+        ],
+      },
+    ]);
 
   /** 트리거 하나. kind·slotKey·scope 만 케이스가 바꾼다. */
   const mkTrigger = (over: Partial<Trigger> = {}): Trigger =>
@@ -3657,7 +3369,7 @@ describe('i03 위험 상세 시트', () => {
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),
-    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip())),
     http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
       HttpResponse.json({ visits: [] })
     ),
@@ -3868,46 +3580,14 @@ describe('i02 트리거 표면', () => {
 
   /** 오늘 1일 1슬롯(upcoming). 시각은 계획값 10:00–11:00, 재추정 없음. */
   const itinerary = (): Itinerary =>
-    ({
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
-        {
-          date: TODAY,
-          slots: [
-            {
-              poiId: POI,
-              startAt: '10:00:00',
-              endAt: '11:00:00',
-              isFixed: false,
-              endsNextDay: false,
-              hasViolation: false,
-              nameKo: '해운대 해변',
-              distanceRange: null,
-              openingHours: null,
-              tags: [],
-            },
-          ],
-        },
-      ],
-    }) as unknown as Itinerary;
-
-  const trip = () => ({
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: TODAY,
-    endDate: '2026-08-22',
-    party: 2,
-    destinations: [{ seq: 1, region: '부산', nights: 2 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-01T00:00:00Z',
-    updatedAt: '2026-08-01T00:00:00Z',
-  });
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot(POI, '해운대 해변', '10:00:00', { endAt: '11:00:00' }),
+        ],
+      },
+    ]);
 
   /** 트리거 하나. kind·slotKey·scope 만 케이스가 바꾼다. */
   const mkTrigger = (over: Partial<Trigger> = {}): Trigger =>
@@ -3923,7 +3603,7 @@ describe('i02 트리거 표면', () => {
     }) as Trigger;
 
   const tripHandler = () =>
-    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip()));
+    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip()));
   const itineraryHandler = () =>
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
@@ -4183,93 +3863,26 @@ describe('방문 체크', () => {
   const arriveId = (date: string, poiId: string) =>
     `execution-live-slot-arrive-${date}#${poiId}`;
 
-  const slot = (poiId: string, nameKo: string, startAt: string) => ({
-    poiId,
-    startAt,
-    endAt: startAt,
-    isFixed: false,
-    endsNextDay: false,
-    hasViolation: false,
-    nameKo,
-    distanceRange: null,
-    openingHours: null,
-    tags: [],
-  });
-
   /** TRIP-1021 — 날짜별 슬롯을 직접 준다(두 슬롯·이틀 케이스). */
-  const itineraryOf = (
-    days: { date: string; slots: ReturnType<typeof slot>[] }[]
-  ): Itinerary =>
-    ({
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days,
-    }) as unknown as Itinerary;
-
   const itinerary = (): Itinerary =>
-    ({
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
-        {
-          date: TODAY,
-          slots: [
-            {
-              poiId: 'p1',
-              startAt: '13:00:00',
-              endAt: '14:00:00',
-              isFixed: false,
-              endsNextDay: false,
-              hasViolation: false,
-              nameKo: '감천문화마을',
-              distanceRange: null,
-              openingHours: null,
-              tags: [],
-            },
-          ],
-        },
-      ],
-    }) as unknown as Itinerary;
-
-  const trip = () => ({
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: TODAY,
-    endDate: '2026-08-22',
-    party: 2,
-    destinations: [{ seq: 1, region: '부산', nights: 2 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-01T00:00:00Z',
-    updatedAt: '2026-08-01T00:00:00Z',
-  });
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p1', '감천문화마을', '13:00:00', { endAt: '14:00:00' }),
+        ],
+      },
+    ]);
 
   const vc = (
     over: Partial<VisitCheck> & Pick<VisitCheck, 'visitCheckId' | 'poiId'>
-  ): VisitCheck => ({
-    slotKey: `${TODAY}#${over.poiId}`,
-    arrivedAt: null,
-    completedAt: null,
-    skippedAt: null,
-    source: 'MANUAL',
-    spontaneous: false,
+  ): VisitCheck =>
     // 서버 버전 시각(BR-U5-22 · openapi:1953) — codegen 후 required 라 픽스처가 미리 채운다(TRIP-619).
-    updatedAt: '2026-08-20T13:00:05Z',
-    ...over,
-  });
+    liveVisit({ updatedAt: '2026-08-20T13:00:05Z', ...over });
 
   /** trip·itinerary 핸들러는 항상 등록(page 가 무조건 조회). visits 만 케이스가 갈아끼운다. */
   const baseHandlers = (plan: Itinerary = itinerary()) => [
-    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip())),
     http.get(`${BASE}/trips/:tripId/itinerary`, () => HttpResponse.json(plan)),
   ];
   /** POST /visits 로 나간 본문(TRIP-1021 — 슬롯 키 트립와이어). */
@@ -4521,12 +4134,12 @@ describe('방문 체크', () => {
         let failed = false;
         server.use(
           ...baseHandlers(
-            itineraryOf([
+            liveItinerary([
               {
                 date: TODAY,
                 slots: [
-                  slot('p1', '감천문화마을', '13:00:00'),
-                  slot('p2', '광안리 해변', '15:00:00'),
+                  liveSlot('p1', '감천문화마을', '13:00:00'),
+                  liveSlot('p2', '광안리 해변', '15:00:00'),
                 ],
               },
             ])
@@ -4575,12 +4188,12 @@ describe('방문 체크', () => {
     it('W6 진행 중 슬롯이 있으면 다른 예정 카드에도 [도착]이 없다 (AC-3 · Q1)', async () => {
       server.use(
         ...baseHandlers(
-          itineraryOf([
+          liveItinerary([
             {
               date: TODAY,
               slots: [
-                slot('p1', '감천문화마을', '13:00:00'),
-                slot('p2', '광안리 해변', '15:00:00'),
+                liveSlot('p1', '감천문화마을', '13:00:00'),
+                liveSlot('p2', '광안리 해변', '15:00:00'),
               ],
             },
           ])
@@ -4611,9 +4224,15 @@ describe('방문 체크', () => {
     it('W7 [도착]은 오늘 탭에서만 — 내일 탭엔 없고, 오늘로 돌아오면 다시 선다 (Q6)', async () => {
       server.use(
         ...baseHandlers(
-          itineraryOf([
-            { date: TODAY, slots: [slot('p1', '감천문화마을', '13:00:00')] },
-            { date: TOMORROW, slots: [slot('p3', '해운대 해변', '10:00:00')] },
+          liveItinerary([
+            {
+              date: TODAY,
+              slots: [liveSlot('p1', '감천문화마을', '13:00:00')],
+            },
+            {
+              date: TOMORROW,
+              slots: [liveSlot('p3', '해운대 해변', '10:00:00')],
+            },
           ])
         ),
         http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
@@ -4715,19 +4334,19 @@ describe('방문 체크', () => {
    * 보이므로, 그것을 기다리면 "기록이 아직 안 와서 [도착]이 없다"는 공허 통과를 막는다(02c ★1).
    */
   const twoDaysWithDone = () =>
-    itineraryOf([
+    liveItinerary([
       {
         date: TODAY,
         slots: [
-          slot('p0', '자갈치시장', '09:00:00'),
-          slot('p1', '감천문화마을', '13:00:00'),
+          liveSlot('p0', '자갈치시장', '09:00:00'),
+          liveSlot('p1', '감천문화마을', '13:00:00'),
         ],
       },
       {
         date: TOMORROW,
         slots: [
-          slot('p2', '동백섬', '09:00:00'),
-          slot('p3', '해운대 해변', '10:00:00'),
+          liveSlot('p2', '동백섬', '09:00:00'),
+          liveSlot('p3', '해운대 해변', '10:00:00'),
         ],
       },
     ]);
@@ -5003,12 +4622,12 @@ describe('방문 체크', () => {
     it('W16 계획 슬롯 도착 + 즉석 도착이 같은 날이면 계획 카드가 관람 중이고, [방문 완료]는 계획 레코드 id 로 나간다 (AC-1)', async () => {
       server.use(
         ...baseHandlers(
-          itineraryOf([
+          liveItinerary([
             {
               date: TODAY,
               slots: [
-                slot('p1', '감천문화마을', '13:00:00'),
-                slot('p2', '광안리 해변', '15:00:00'),
+                liveSlot('p1', '감천문화마을', '13:00:00'),
+                liveSlot('p2', '광안리 해변', '15:00:00'),
               ],
             },
           ])
@@ -5256,12 +4875,12 @@ describe('방문 체크', () => {
     it('W20 오늘 슬롯 [p1, p2]가 둘 다 도착·미완료이고 서버 목록이 p2 를 앞에 주어도 p1 이 관람 중이고, [방문 완료]는 p1 레코드 id 로 나간다 (AC-6)', async () => {
       server.use(
         ...baseHandlers(
-          itineraryOf([
+          liveItinerary([
             {
               date: TODAY,
               slots: [
-                slot('p1', '감천문화마을', '13:00:00'),
-                slot('p2', '광안리 해변', '15:00:00'),
+                liveSlot('p1', '감천문화마을', '13:00:00'),
+                liveSlot('p2', '광안리 해변', '15:00:00'),
               ],
             },
           ])

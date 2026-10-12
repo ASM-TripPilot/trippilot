@@ -24,6 +24,12 @@ import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { isInsideSheet, renderedText } from '@/test-support/sheetTree';
+import {
+  completedVisitOn,
+  daySlot,
+  daySlotAt,
+  tripItinerary,
+} from '@/test-support/tripRecordsFixtures';
 import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
@@ -174,56 +180,21 @@ describe('기본 — 일자 탭·사진/메모 슬롯·[방문 추가]·메모 �
    *   같은 `1일차` 를 또 그리므로 탭으로 스코프) · `fireEvent.changeText`=입력 이벤트 · `.props.value`=제어값.
    */
 
-  /** 슬롯 1개짜리 일자 — 이름 조인용 poiId·nameKo 만 채우면 충분(나머지는 스키마 필수 최소값). */
-  function daySlot(poiId: string, nameKo: string) {
-    return {
-      poiId,
-      nameKo,
-      startAt: '10:00:00',
-      endAt: '11:00:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      tags: [] as string[],
-    };
-  }
-
   function itinerary() {
-    return {
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'CONFIRMED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
+    return tripItinerary(
+      [
         { date: '2026-08-20', slots: [daySlot('p1', '광안리 해변')] },
         { date: '2026-08-21', slots: [daySlot('p2', '부산시립미술관')] },
         { date: '2026-08-22', slots: [daySlot('p3', '○○ 카페')] },
       ],
-    };
-  }
-
-  /** 완료 방문(arrived+completed) 1건 — 완료 카드라야 사진/메모 슬롯이 붙는다(AC-2 "완료 방문 카드"). */
-  function completedVisit(visitCheckId: string, day: string, poiId: string) {
-    return {
-      visitCheckId,
-      slotKey: `${day}#${poiId}`,
-      poiId,
-      arrivedAt: `${day}T14:20:00`,
-      completedAt: `${day}T15:20:00`,
-      skippedAt: null,
-      source: 'MANUAL',
-      spontaneous: false,
-      updatedAt: `${day}T15:20:00`,
-    };
+      TRIP_ID
+    );
   }
 
   /** day 파라미터로 갈리는 방문 목록 — seed-once 테스트가 day 전환으로 위치0 방문을 바꾼다. */
-  const VISITS_BY_DAY: Record<string, ReturnType<typeof completedVisit>[]> = {
-    '2026-08-20': [completedVisit('v-a', '2026-08-20', 'p1')],
-    '2026-08-21': [completedVisit('v-b', '2026-08-21', 'p2')],
+  const VISITS_BY_DAY: Record<string, ReturnType<typeof completedVisitOn>[]> = {
+    '2026-08-20': [completedVisitOn('v-a', '2026-08-20', 'p1')],
+    '2026-08-21': [completedVisitOn('v-b', '2026-08-21', 'p2')],
     '2026-08-22': [],
   };
 
@@ -423,20 +394,8 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
   const DAY2 = '2026-08-21';
 
   /** 좌표가 있는 계획 슬롯(스키마 필수 최소값 + lat/lng). */
-  function slot(poiId: string, nameKo: string, lat: number, lng: number) {
-    return {
-      poiId,
-      nameKo,
-      startAt: '10:00:00',
-      endAt: '11:00:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      tags: [] as string[],
-      lat,
-      lng,
-    };
-  }
+  const slot = (poiId: string, nameKo: string, lat: number, lng: number) =>
+    daySlot(poiId, nameKo, { lat, lng });
 
   const P1 = { lat: 35.1532, lng: 129.1187 };
 
@@ -449,15 +408,8 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
   const P6 = { lat: 35.101, lng: 129.032 };
 
   function itinerary() {
-    return {
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'CONFIRMED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
+    return tripItinerary(
+      [
         {
           date: DAY1,
           slots: [
@@ -474,7 +426,8 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
           ],
         },
       ],
-    };
+      TRIP_ID
+    );
   }
 
   interface VisitSpec {
@@ -820,30 +773,17 @@ describe('시각·건너뛰기·메모 정비 — 서울 시계(기기 LA)', () 
   };
 
   function itinerary() {
-    return {
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'CONFIRMED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
+    return tripItinerary(
+      [
         {
           date: DAY,
-          slots: Object.entries(PLACES).map(([poiId, nameKo]) => ({
-            poiId,
-            nameKo,
-            startAt: '10:00:00',
-            endAt: '11:00:00',
-            isFixed: false,
-            endsNextDay: false,
-            hasViolation: false,
-            tags: [] as string[],
-          })),
+          slots: Object.entries(PLACES).map(([poiId, nameKo]) =>
+            daySlot(poiId, nameKo)
+          ),
         },
       ],
-    };
+      TRIP_ID
+    );
   }
 
   type Visit = {
@@ -1714,30 +1654,11 @@ describe('수동 체크인 모드 — 권한 없음 → 배너·「방문 체크
 
   const DEFAULT_NOTICE = '오늘의 동선 · 방문한 곳을 사진과 메모로 남겨요';
 
-  function daySlot(poiId: string, nameKo: string) {
-    return {
-      poiId,
-      nameKo,
-      startAt: '10:00:00',
-      endAt: '11:00:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      tags: [] as string[],
-    };
-  }
-
   function itinerary() {
-    return {
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'CONFIRMED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [{ date: DAY, slots: [daySlot('p3', '○○ 카페')] }],
-    };
+    return tripItinerary(
+      [{ date: DAY, slots: [daySlot('p3', '○○ 카페')] }],
+      TRIP_ID
+    );
   }
 
   /** 미방문(UPCOMING) 방문 1건 — 세 timestamp null → 카드가 UPCOMING 으로 파생돼 "방문 체크" pill 진입점이 된다. */
@@ -1919,38 +1840,19 @@ describe('계획 행 — 조인·「방문 체크」 도착·조회 실패·오�
 
   const checkId = (slotKey: string) => `record-trip-plan-check-${slotKey}`;
 
-  function daySlot(poiId: string, nameKo: string, startAt: string) {
-    return {
-      poiId,
-      nameKo,
-      startAt,
-      endAt: startAt,
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      tags: [] as string[],
-    };
-  }
-
   function itinerary() {
-    return {
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'CONFIRMED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
+    return tripItinerary(
+      [
         {
           date: DAY,
           slots: [
-            daySlot('p3', '○○ 카페', '10:00:00'),
-            daySlot('p4', '△△ 미술관', '13:00:00'),
+            daySlotAt('p3', '○○ 카페', '10:00:00'),
+            daySlotAt('p4', '△△ 미술관', '13:00:00'),
           ],
         },
       ],
-    };
+      TRIP_ID
+    );
   }
 
   /** POST /visits 응답 — record 훅은 이 레코드로 낙관 레코드를 교체한다(무효화 없음). */
@@ -2184,7 +2086,7 @@ describe('계획 행 — 조인·「방문 체크」 도착·조회 실패·오�
       ...itinerary(),
       days: [
         ...itinerary().days,
-        { date: DAY2, slots: [daySlot('p5', '◇◇ 시장', '11:00:00')] },
+        { date: DAY2, slots: [daySlotAt('p5', '◇◇ 시장', '11:00:00')] },
       ],
     });
 
@@ -2315,15 +2217,8 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
   const NOTICE_COPY = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
 
   function itinerary() {
-    return {
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'CONFIRMED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
+    return tripItinerary(
+      [
         {
           date: DAY,
           slots: [
@@ -2340,7 +2235,8 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
           ],
         },
       ],
-    };
+      TRIP_ID
+    );
   }
 
   /** 도착만 한 방문(광안리) — 메모칸이 있는 카드. */
@@ -2616,45 +2512,14 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
     sortOrder: 0,
   });
 
-  function daySlot(poiId: string, nameKo: string) {
-    return {
-      poiId,
-      nameKo,
-      startAt: '10:00:00',
-      endAt: '11:00:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      tags: [] as string[],
-    };
-  }
-
   function itinerary() {
-    return {
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'CONFIRMED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [{ date: DAY, slots: [daySlot('p1', '광안리 해변')] }],
-    };
+    return tripItinerary(
+      [{ date: DAY, slots: [daySlot('p1', '광안리 해변')] }],
+      TRIP_ID
+    );
   }
 
-  function completedVisit() {
-    return {
-      visitCheckId: 'v-a',
-      slotKey: `${DAY}#p1`,
-      poiId: 'p1',
-      arrivedAt: `${DAY}T14:20:00`,
-      completedAt: `${DAY}T15:20:00`,
-      skippedAt: null,
-      source: 'MANUAL',
-      spontaneous: false,
-      updatedAt: `${DAY}T15:20:00`,
-    };
-  }
+  const completedVisit = () => completedVisitOn('v-a', DAY, 'p1');
 
   const consent = (gpsRecordingOptIn: boolean) => ({
     osPermissionMirror: 'GRANTED',
@@ -2674,7 +2539,7 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
 
   let photoStatus = 201;
 
-  let gpsOptIn = true;
+  let gpsOptIn: boolean | 'error' = true;
 
   async function settle() {
     await act(async () => {
@@ -2708,7 +2573,12 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
       http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
       http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
       http.get(`${BASE}/me/location-consent`, () =>
-        HttpResponse.json(consent(gpsOptIn))
+        gpsOptIn === 'error'
+          ? HttpResponse.json(
+              { error: { code: 'INTERNAL', message: 'boom' } },
+              { status: 500 }
+            )
+          : HttpResponse.json(consent(gpsOptIn))
       ),
       http.get(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, () =>
         HttpResponse.json({ items: serverPhotos, count: serverPhotos.length })
@@ -2835,9 +2705,11 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
   });
 
   describe('🔴 AC-8 · j01 에서도 좌표는 GPS 기록 동의가 켜졌을 때만 (BR-U5-12)', () => {
-    it.each([
+    // 허브 L4 의 "동의 조회 실패(500) → 끈 것으로 보고 좌표 없음"을 옮겨 왔다(TRIP-1354) — 같은 pickPhotoForVisit 이다.
+    it.each<[string, boolean | 'error']>([
       ['켜짐 → 좌표 있음', true],
       ['꺼짐 → 좌표 키 없음', false],
+      ['조회 실패(500) → 끈 것으로 보고 좌표 키 없음', 'error'],
     ])('R5 GPS 기록 동의 %s', async (_label, optIn) => {
       gpsOptIn = optIn;
       const card = await renderCard();
@@ -2846,7 +2718,7 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
 
       await waitFor(() => expect(hitCount(PHOTOS_POST)).toBe(1));
       const body = photoBodies[0] ?? {};
-      if (optIn) {
+      if (optIn === true) {
         expect(body).toMatchObject({ exifLat: 35.1532, exifLng: 129.1186 });
       } else {
         expect(body).not.toHaveProperty('exifLat');
@@ -2970,34 +2842,15 @@ describe('「오늘의 회고」 FAB 배선', () => {
 
   const FAB = 'record-trip-reflection-fab';
 
-  function daySlot(poiId: string, nameKo: string) {
-    return {
-      poiId,
-      nameKo,
-      startAt: '10:00:00',
-      endAt: '11:00:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      tags: [] as string[],
-    };
-  }
-
   function itinerary() {
-    return {
-      itineraryId: 'it1',
-      tripId: TRIP_ID,
-      status: 'CONFIRMED',
-      solveMode: 'FULL',
-      generationMode: 'AI',
-      isFallback: false,
-      generationState: 'COMPLETE',
-      days: [
+    return tripItinerary(
+      [
         { date: '2026-08-20', slots: [daySlot('p1', '광안리 해변')] },
         { date: '2026-08-21', slots: [daySlot('p2', '부산시립미술관')] },
         { date: '2026-08-22', slots: [daySlot('p3', '○○ 카페')] },
       ],
-    };
+      TRIP_ID
+    );
   }
 
   /** 일차 번호(0부터) → 그날 계획 행 이름(로드 앵커). */

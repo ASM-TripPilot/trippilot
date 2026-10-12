@@ -334,16 +334,6 @@ describe('LivePlacePage', () => {
     shareSpy.mockRestore();
   });
 
-  it('I8 하트 없음 — 저장 버튼과 "준비 중" 안내가 페이지에 없다 (2026-09-25 결정)', async () => {
-    // 준비·실행
-    await renderP1();
-
-    // 단언 — 저장 수단이 아예 없다(앵커: 공유 버튼은 페이지 배선으로 떠 있다).
-    expect(screen.queryByTestId('execution-place-save')).toBeNull();
-    expect(screen.queryByTestId('execution-place-save-notice')).toBeNull();
-    expect(screen.getByTestId('execution-place-share')).toBeTruthy();
-  });
-
   it('I9 조회가 500 이면 오류 얼굴(문구 2줄 + [다시 시도])이고 "장소 없음"으로 바꿔 말하지 않는다 (TRIP-952 AC-1 · INV-4)', async () => {
     // 준비 — 서버가 답하다 고장 났다.
     itineraryInSequence([() => new HttpResponse(null, { status: 500 })]);

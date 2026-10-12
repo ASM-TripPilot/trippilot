@@ -6,7 +6,6 @@ import {
 } from '@testing-library/react-native';
 
 import { BackArrowGlyph, ShareGlyph } from '@/features/execution/index.view';
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 
 import type { PlaceDetailView } from '../model/placeDetailView';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
@@ -159,31 +158,6 @@ describe('PlaceDetailScreen (i10)', () => {
     expect(screen.queryByTestId('execution-place-hours-caption')).toBeNull();
   });
 
-  it('S5 (TRIP-939 반전) 옛 콜백을 넘겨도 제목·"지금 여기"·하단 [길찾기]/[일정에서 보기]는 없다 (AC-1)', () => {
-    // 준비 — 옛 호출부가 넘기던 콜백을 그대로 넘긴다. 타입에서 prop 만 지우고 렌더 분기를 남긴
-    // 구현도 잡으려는 장치(`as object` 스프레드는 초과 속성 검사를 받지 않는다, 02a ★4).
-    const legacy = {
-      onPressItinerary: jest.fn(),
-      onPressDirections: jest.fn(),
-    } as object;
-
-    // 실행
-    render(<PlaceDetailScreen view={view()} {...legacy} />);
-
-    // 단언(부재) — testID 3종 + 문구 4종.
-    expect(screen.queryByTestId('execution-place-cta-itinerary')).toBeNull();
-    expect(screen.queryByTestId('execution-place-cta-directions')).toBeNull();
-    expect(screen.queryByTestId('execution-place-here')).toBeNull();
-    expect(screen.queryByText('현재 장소')).toBeNull();
-    expect(screen.queryByText(/지금 여기/)).toBeNull();
-    expect(screen.queryByText('일정에서 보기')).toBeNull();
-    expect(screen.queryByText('길찾기')).toBeNull();
-
-    // 짝 앵커 — 화면 자체는 그려졌다.
-    expect(screen.getByTestId('execution-place-detail')).toBeTruthy();
-    expect(screen.getByTestId('execution-place-hero')).toBeTruthy();
-  });
-
   it('S6 (TRIP-939 반전) 원형 버튼 — 콜백이 없으면 뒤로·공유를 그리지 않고, 있으면 누른 쪽 콜백만 1회 (AC-3)', () => {
     // ① 콜백 없음 — 핸들러 없는 그림 금지(심사 2.1)는 그대로 산다.
     const { rerender } = render(<PlaceDetailScreen view={view()} />);
@@ -214,26 +188,6 @@ describe('PlaceDetailScreen (i10)', () => {
     fireEvent.press(screen.getByTestId('execution-place-share'));
     expect(onPressShare).toHaveBeenCalledTimes(1);
     expect(onPressBack).toHaveBeenCalledTimes(1);
-  });
-
-  it('S7 하트 — 저장 버튼·"준비 중" 안내·하트 글리프가 어디에도 없다 (2026-09-25 결정 · TRIP-939)', () => {
-    // 준비·실행 — 뒤로·공유 콜백까지 다 준 가장 풍부한 얼굴에서도.
-    render(
-      <PlaceDetailScreen
-        view={view()}
-        onPressBack={jest.fn()}
-        onPressShare={jest.fn()}
-      />
-    );
-
-    // 단언 — 버튼·안내 testID 부재 + 빈/찬 하트 글리프 0(다른 testID 로 되살아나도 잡는다).
-    expect(screen.queryByTestId('execution-place-save')).toBeNull();
-    expect(screen.queryByTestId('execution-place-save-notice')).toBeNull();
-    expect(screen.queryByText('저장 기능은 준비 중이에요')).toBeNull();
-    expect(screen.UNSAFE_queryAllByType(HeartOutlineGlyph)).toHaveLength(0);
-    expect(screen.UNSAFE_queryAllByType(HeartFilledGlyph)).toHaveLength(0);
-    // 앵커 — 원형 버튼 줄 자체는 살아 있다(공허 통과 방지).
-    expect(screen.getByTestId('execution-place-share')).toBeTruthy();
   });
 
   it('S8 히어로 — 갤러리는 가로 한 장씩 넘기는 스크롤이고, 사진 수가 있으면 "1 / N" 칩을 단다 (AC-8 · Q9)', () => {

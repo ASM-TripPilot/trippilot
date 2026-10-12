@@ -11,6 +11,13 @@ import type { Itinerary, VisitCheckList } from '@/shared/api/index.schemas';
 
 import { safeAreaPaints } from '@/test-support/safeAreaFace';
 
+import {
+  mockExits,
+  mockNavigation,
+  mockRemove,
+  resetFakeNavigator,
+  type MockNavAction,
+} from '@/test-support/fakePreventRemoveNavigator';
 import { PlanbSolvingPage } from './PlanbSolvingPage';
 
 /**
@@ -201,36 +208,12 @@ const mockReplace = jest.fn();
 const mockNavigate = jest.fn();
 let mockCanGoBack = true;
 
-// TRIP-1292 — 뒤로 가로채기(`usePreventRemove`)의 판정만 흉내내는 가짜 네비게이터(PlanbDraftPage.integration 선례).
-// 실물은 네비게이터 밖에서 throw 하므로 `@react-navigation/native` 를 이 둘로 대체한다.
-//  - 화면을 빼려는 액션(back·replace·dispatch·스와이프)이 오면, 마지막 렌더가 켠 가로채기가 이 액션을 아직 안
-//    물어봤을 때만 콜백에 넘기고 멈춘다. 그 밖엔 `mockExits` 에 한 줄(= 화면을 나감).
-//  - 같은 객체를 다시 보내면 통과, 새로 만든 객체는 또 묻는다. push·navigate 는 빼는 화면이 없어 꽂지 않는다.
-type MockNavAction = { type: string; payload?: unknown };
-type MockPreventCallback = (event: { data: { action: MockNavAction } }) => void;
-let mockPrevent:
-  { enabled: boolean; callback: MockPreventCallback } | undefined;
-let mockAsked = new WeakSet<MockNavAction>();
-const mockExits: string[] = [];
-function mockRemove(action: MockNavAction, via: string): void {
-  if (mockPrevent?.enabled === true && !mockAsked.has(action)) {
-    mockAsked.add(action);
-    mockPrevent.callback({ data: { action } });
-    return;
-  }
-  mockExits.push(via);
-}
-const mockNavigation = {
-  dispatch: jest.fn((action: MockNavAction) => mockRemove(action, 'dispatch')),
-  addListener: jest.fn(() => () => {}),
-};
-
-jest.mock('@react-navigation/native', () => ({
-  usePreventRemove: (enabled: boolean, callback: MockPreventCallback) => {
-    mockPrevent = { enabled, callback };
-  },
-  useNavigation: () => mockNavigation,
-}));
+// TRIP-1292 — 뒤로 가로채기(`usePreventRemove`)의 판정만 흉내내는 가짜 네비게이터(`fakePreventRemoveNavigator` —
+// 규칙은 그 파일 머리). 실물은 네비게이터 밖에서 throw 한다. push·navigate 는 빼는 화면이 없어 꽂지 않는다.
+jest.mock('@react-navigation/native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/fakePreventRemoveNavigator')
+);
 
 // 지도 관찰 목 — 핀·중심을 host prop 으로 노출한다(리포 관례, MustVisitListPage 선례 · 02a ★20).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -241,12 +224,20 @@ jest.mock('expo-router', () => {
     // back·replace 는 호출을 적은 뒤 가로채기를 거친다 — 나갔는지는 `mockExits` 로 센다.
     back: (...args: unknown[]) => {
       mockBack(...args);
-      mockRemove({ type: 'GO_BACK' }, 'back');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('@/test-support/fakePreventRemoveNavigator').mockRemove(
+        { type: 'GO_BACK' },
+        'back'
+      );
     },
     push: (...args: unknown[]) => mockPush(...args),
     replace: (...args: unknown[]) => {
       mockReplace(...args);
-      mockRemove({ type: 'REPLACE', payload: args[0] }, 'replace');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('@/test-support/fakePreventRemoveNavigator').mockRemove(
+        { type: 'REPLACE', payload: args[0] },
+        'replace'
+      );
     },
     navigate: (...args: unknown[]) => mockNavigate(...args),
     canGoBack: () => mockCanGoBack,
@@ -254,7 +245,9 @@ jest.mock('expo-router', () => {
   return {
     useRouter: () => routerMock,
     router: routerMock,
-    useNavigation: () => mockNavigation,
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    useNavigation: require('@/test-support/fakePreventRemoveNavigator')
+      .useNavigation,
   };
 });
 
@@ -356,27 +349,13 @@ const DAY_VISITS = {
   ],
 } as unknown as VisitCheckList;
 
-/** 옛 i12 화면에만 있던 문구(AC-5). */
-const REMOVED_TEXTS = [
-  '백그라운드로',
-  '5초쯤',
-  '비 예보·남은 시간 반영',
-  '대안 후보 거리·동선 계산',
-  '대안 영업시간 확인 중',
-  '새 동선 완성',
-  '바뀌는 건 남은 일정 뿐',
-];
-
 const DRAFT_HREF = {
   pathname: '/trips/[tripId]/planb/draft',
   params: { tripId: TRIP_ID, sessionId: SESSION_ID },
 };
 
 beforeEach(() => {
-  mockPrevent = undefined;
-  mockAsked = new WeakSet();
-  mockExits.length = 0;
-  mockNavigation.dispatch.mockClear();
+  resetFakeNavigator();
   mockCancelPending = false;
   mockCancelError = false;
   mockSessionError = false;
@@ -726,24 +705,6 @@ describe('P11 · AC-8 — 결과가 아니면 이동하지 않는다', () => {
       expect(mockPush).not.toHaveBeenCalled();
     }
   );
-});
-
-describe('🔴 P12 · AC-5 — 옛 i12 표면이 페이지 트리에 없다', () => {
-  it('옛 testID 3종과 옛 문구가 0건이다', () => {
-    renderPage();
-
-    for (const id of [
-      'planb-solving-background',
-      'planb-solving-progress',
-      'planb-solving-cancel',
-    ]) {
-      expect(screen.queryByTestId(id)).toBeNull();
-    }
-    const tree = JSON.stringify(screen.toJSON());
-    for (const text of REMOVED_TEXTS) {
-      expect(tree).not.toContain(text);
-    }
-  });
 });
 
 // ── 5-b 후속(03b 경고-2·3 · 참고-1·3) ─────────────────────────────────────────
@@ -1269,21 +1230,8 @@ describe('🔴 ‹ 확인 [나가기] — 뒤가 없어도 나가고, 연타해�
 });
 
 describe('🔴 TRIP-1277 AC5 · INV-3 — 새 얼굴 어디에도 소요시간이 없고, 느림 안내엔 숫자가 없다', () => {
-  it('I1 오류 얼굴 — N분·N시간·소요 0(+ 탐지기가 실제 글자를 본다는 앵커)', () => {
-    renderSessionError();
-
-    expect(screen.queryAllByText(/다시 시도/)).toHaveLength(1);
-    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
-  });
-
-  it('I2 종료 얼굴 — N분·N시간·소요 0(+ 앵커)', () => {
-    mockStatus = 'APPLIED';
-    renderPage();
-
-    expect(screen.queryAllByText(/이미 끝난 재계획/)).toHaveLength(1);
-    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
-  });
-
+  // I1(오류 얼굴)·I2(종료 얼굴)의 소요시간 렌더 스캔은 지웠다(TRIP-1354 — 거리·시각 화면이 아니라 INV-3 렌더 단언 대상이 아님;
+  // 시간·거리 화면의 스캔은 F3, 숫자 카운터 금지는 I3).
   it('I3 느림 안내 — 경과·남은 시간 숫자 0("90초째" 같은 카운터 금지), 화면 전체 N분·N시간·소요 0', () => {
     jest.useFakeTimers();
     renderPage();
@@ -1701,16 +1649,6 @@ describe('🔴 TRIP-1293 AC4·AC5 · 결정 A — 느림 안내 시계는 화면
 
     expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
     expect(screen.getByTestId(SLOW)).toBeOnTheScreen();
-  });
-
-  it('Y7 재조회 중 오류 얼굴에도 경과 초·소요 시간 숫자가 없다(+ 앵커) (AC5 · INV-3)', () => {
-    const { rerender } = renderSessionError();
-    pressRetryThenRefetching(rerender);
-
-    const face = screen.getByTestId(ERROR_FACE);
-    expect(face).toHaveTextContent(/다시 시도/);
-    expect(face).not.toHaveTextContent(/\d/);
-    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
   });
 });
 

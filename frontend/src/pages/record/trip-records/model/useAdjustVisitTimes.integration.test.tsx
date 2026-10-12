@@ -1,11 +1,5 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import {
-  defaultScheduler,
-  notifyManager,
-  QueryClient,
-  QueryClientProvider,
-} from '@tanstack/react-query';
+import { defaultScheduler, notifyManager } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -15,6 +9,11 @@ import type {
   VisitCheck,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import {
+  createGate,
+  createHitLog,
+  createWrapper,
+} from '@/test-support/mswHookHarness';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { deriveVisitStatus } from '@/features/check-visit';
@@ -83,30 +82,18 @@ const vc = (
   ...over,
 });
 
-/** 테스트가 열어 줄 때까지 응답하지 않는 문 — "응답 전"을 시간이 아닌 신호로. */
-function createGate() {
-  let release!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { opened, release };
-}
-
-let observedHits: string[] = [];
+const hits = createHitLog(server);
 let capturedBody: AdjustTimesRequest | undefined;
-const hitCount = (needle: string) =>
-  observedHits.filter((hit) => hit === needle).length;
+const hitCount = hits.count;
 
 beforeAll(() => {
   notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', ({ request }) => {
-    observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
+  hits.attach();
 });
 
 beforeEach(() => {
-  observedHits = [];
+  hits.reset();
   capturedBody = undefined;
   setAccessToken('a');
 });
@@ -120,21 +107,6 @@ afterAll(() => {
   notifyManager.setScheduler(defaultScheduler);
   server.close();
 });
-
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
 
 /** 그 날 방문 기록 조회 + 편집 훅을 함께 띄운다 — 낙관 캐시를 visits.data.visits 로 직접 관찰. */
 function useProbe() {
