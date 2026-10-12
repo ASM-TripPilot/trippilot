@@ -1,5 +1,7 @@
 """Deployment boundary tests: no cloud account or cluster required."""
+import contextlib
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -64,6 +66,11 @@ class SecretTests(unittest.TestCase):
             {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "0d7f17ab5c4b4d6da7f7484ba11dda46"}},
             {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "{0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46}"}},
             {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,"}},
+            # 카카오 앱 ID(TRIP-1317) 자리에 REST API 키를 넣는 실수 — 카카오 로그인이 전부 401 이 된다.
+            {"backend": {"KAKAO_APP_ID": "0123456789abcdef0123456789abcdef"}},
+            {"backend": {"KAKAO_APP_ID": " 1519823"}},
+            # 앞자리 0 은 카카오가 돌려주는 정수와 영영 안 맞는다.
+            {"backend": {"KAKAO_APP_ID": "01519823"}},
         ]
         for changed in cases:
             with self.subTest(changed=changed), self.assertRaises(ValueError):
@@ -75,6 +82,34 @@ class SecretTests(unittest.TestCase):
             "0D7F17AB-5c4b-4d6d-a7f7-484ba11dda46, 11111111-2222-4333-8444-555555555555"}})
         runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
             "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": ""}})
+        for app_id in ("1519823", ""):
+            runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+                "KAKAO_APP_ID": app_id}})
+
+    def test_missing_kakao_app_id_is_called_out_on_every_deploy(self):
+        """값이 빠져도 배포는 막지 않는다 — 대신 조용히 넘어가지 않는다(TRIP-1317). 로그인에 카카오를 쓰는데
+        앱 ID 가 없으면 남의 앱 토큰으로 가입이 열린 채 돈다."""
+        def gaps(backend):
+            return list(runtime_secrets.open_gaps({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": backend}))
+        self.assertEqual(len(gaps({"KAKAO_CLIENT_ID": "rest-key"})), 1)
+        self.assertIn("KAKAO_APP_ID", gaps({"KAKAO_CLIENT_ID": "rest-key", "KAKAO_APP_ID": ""})[0])
+        self.assertEqual(gaps({"KAKAO_CLIENT_ID": "rest-key", "KAKAO_APP_ID": "1519823"}), [])
+        self.assertEqual(gaps({}), [])  # 카카오 키가 아예 없는 환경은 말하지 않는다
+
+    @patch("runtime_secrets.validate_rsa_key")
+    @patch("runtime_secrets.rsa_key", return_value="fake-test-key")
+    def test_sync_prints_open_gaps_as_workflow_warnings(self, keygen, keycheck):
+        """`open_gaps` 가 맞아도 `sync` 가 안 부르면 아무도 못 본다 — 배포 실행 요약에 뜨는 형식까지 본다."""
+        backend_arn = outputs()["app_secret_arns"]["backend"]
+        def execute(argv, payload=None):
+            if "get-secret-value" in argv:
+                kakao = {"KAKAO_CLIENT_ID": "rest-key"} if argv[argv.index("--secret-id") + 1] == backend_arn else {}
+                return json.dumps({"SecretString": json.dumps(kakao)})
+            return "{}"
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)
+        self.assertRegex(printed.getvalue(), r"(?m)^::warning title=[^:,]+::KAKAO_APP_ID is not set")
 
     def test_google_client_secret_must_stay_empty(self):
         """공개(iOS) 클라이언트에 시크릿을 보내면 Google 이 invalid_client 로 거절한다(2026-09-23 실측).

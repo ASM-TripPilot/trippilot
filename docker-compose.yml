@@ -102,6 +102,8 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
+      # 카카오 SDK 토큰의 발급 앱 대조(TRIP-1317). 비면 대조하지 않는다.
+      KAKAO_APP_ID: ${KAKAO_APP_ID:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
       # 제휴 아웃바운드(C5) — fallback = 웹검색(수수료 없음) · tripcom = 트립닷컴 딥링크(수수료 추적).

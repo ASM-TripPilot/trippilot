@@ -50,7 +50,8 @@ abstract class AbstractOAuth2Client(
      * **그 토큰이 우리 앱에 발급된 것인지는 보지 않는다** — 토큰은 "이 사람이 누구인가"만 답하고
      * "우리 앱에 로그인하려 했는가"는 답하지 않는다. 식별자가 계정 전역인 제공자(구글)에서는 남의 앱
      * 토큰이 계정 탈취로 이어지므로 `AuthenticateWithSocialUseCase` 가 구글을 이 경로에서 거절한다.
-     * 나머지에 남는 범위도 거기 적었다(TRIP-1316).
+     * 카카오는 `KakaoOAuthClient` 가 이 함수를 덮어 발급 앱을 대조한다(TRIP-1317). 네이버에 남는 범위는
+     * 유스케이스에 적었다.
      */
     override fun fetchProfileByAccessToken(accessToken: String): SocialProfile =
         parseProfile(requestUserInfo(config(), accessToken))
