@@ -2235,6 +2235,7 @@ note = """
 우리 페이로드는 스키마 검증을 통과했다. 그동안 재계획이 전부 실패로 튀지 않게 그 코드에서만
 종전 generate 경로로 한시 폴백한다. 상대 배선이 끝나면 그 갈래와 `legacyReplanViaGenerate` 를
 함께 지운다 → REPLAN-AI-WIRED 로 잇는다.
+(2026-10-12: 상대 배선이 끝나 그 폴백을 지웠다 — REPLAN-AI-WIRED done.)
 
 곁가지로 `ContractShape` 의 구멍을 메웠다 — `anyOf: [T, null]` 을 안 벗겨 **nullable 객체 아래가
 전부 무검사**였다(세 경계 공통). 계약 파일을 흔들어 보고 알았다.
@@ -2244,13 +2245,19 @@ note = """
 id = "REPLAN-AI-WIRED"
 ticket = ""
 title = "상대 배선 후 한시 폴백 제거 — 재계획이 전용 경로만 쓴다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
   "backend/app/src/test/kotlin/com/trippilot/app/LiveAiRoundTripIT.kt",
 ]
 note = """
+**닫음(2026-10-12, PR #1069).** `legacyReplanViaGenerate` 와 `NOT_WIRED` 갈래를 지웠다. 판정:
+develop 의 `ai/` 로 이미지를 다시 빌드해 실 왕복 — `/ai/v1/planb/replan` 이 잠금 블록을 실은 요청에
+200 을 10/10 냈다(로컬에 있던 10/01 자 이미지는 배선 수정 전이라 판정에 쓸 수 없었다).
+그 왕복이 확인한 것은 **경로 수용**이다 — 저녁에 돌려 `no_slot_after_from_instant` 로 산출이 비었고,
+재계획 품질은 재지 않았다. 이제 상대가 503 을 내면 재계획은 우회 없이 세션 FAILED 로 닫힌다.
+아래는 닫기 전 기록이다.
 **blocked 해제(2026-10-07 재조사) — 선행이 풀렸다.** 아래가 기다리던 두 조건이 모두 찼다:
 상대 오케스트레이터 `replan` 은 `ai/src/trippilot/api/wiring.py:1661` 에 실재하고,
 500 을 내던 필드명 버그도 고쳐졌다 — `wiring.py:1122` 가 `FixedBlockSchema` 는 `start`/`dwell_min`
@@ -2342,6 +2349,7 @@ A-4 `/replan` 라우트도 **열렸고** `ai/docs/openapi.json` 에 스키마까
 **남은 것은 A-5 오케스트레이터 배선 하나다.** 실 왕복이 503 `ORCHESTRATOR_NOT_WIRED` 를 낸다 —
 상대 docstring 에 "조립이 아직 이 경계를 구현하지 않으면 503 으로 명시 실패한다"고 적혀 있다.
 **우리 페이로드는 스키마 검증을 통과했다**(422 가 아니라 503 이었다). 소스 최신으로 재빌드해 확인했다.
+(2026-10-12: A-5 도 끝났다 — 실 왕복 200. 위는 2026-09-20 시점 기록이다.)
 
 한때 이 노드에 신설 티켓을 달았다가 뗐다 — "AI 절반에 티켓이 없다"는 전제로 만들었는데 틀렸다.
 진짜 병목은 **백엔드 잔여**였다(재계획 전용 경계 노드와 재계획 입력 전달 노드).
@@ -2481,7 +2489,7 @@ from = "AI-REPLAN"
 to = "REPLAN-AI-WIRED"
 kind = "외부선행"
 verified = true
-reason = "실측 2026-09-20 — 상대 라우트는 열렸으나 오케스트레이터 배선 전이라 실 왕복이 503(ORCHESTRATOR_NOT_WIRED). 백엔드 전환(REPLAN-BOUNDARY)은 그 상태로도 끝났고, 폴백 제거만 상대를 기다린다."
+reason = "실측 2026-09-20 — 상대 라우트는 열렸으나 오케스트레이터 배선 전이라 실 왕복이 503(ORCHESTRATOR_NOT_WIRED)이었다. 2026-10-12 해소 — 상대 배선 완료, 실 왕복 200, 폴백 제거(PR #1069)."
 
 [[edges]]
 from = "FE-PUSH-WIRING"
