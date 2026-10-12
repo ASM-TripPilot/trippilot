@@ -54,7 +54,9 @@ private class FakeSocialIdentityRepository : SocialIdentityRepository {
 
 private class FakeSocialAuthPort(private val profile: SocialProfile) : SocialAuthPort {
     var tokenCalls = 0
-    override fun exchange(provider: Provider, authorizationCode: String, codeVerifier: String, redirectUri: String) = profile
+    var exchangeCalls = 0
+    override fun exchange(provider: Provider, authorizationCode: String, codeVerifier: String, redirectUri: String) =
+        profile.also { exchangeCalls++ }
     override fun authenticateWithAccessToken(provider: Provider, accessToken: String) = profile.also { tokenCalls++ }
 }
 
@@ -166,6 +168,34 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
 
         port.tokenCalls shouldBe 0
         identities.stored.shouldBeEmpty()
+    }
+
+    // TRIP-1317 — 네이버는 PKCE 가 없어 code 경로에서 가로챈 code 를 막을 수 없다. 받으면 리다이렉트를
+    // 가로챈 쪽이 그 code 로 피해자 계정에 로그인한다. Fake 포트는 무엇을 넣어도 프로필을 돌려준다 —
+    // 가드가 없으면 계정이 만들어져 이 테스트가 깨진다.
+    "네이버는 code 경로로 로그인할 수 없다 — code 를 교환하기 전에 거절하고 계정을 만들지 않는다" {
+        val port = FakeSocialAuthPort(profile)
+        val accounts = FakeAccountRepository()
+        val identities = FakeSocialIdentityRepository()
+        val useCase = AuthenticateWithSocialUseCase(
+            port, accounts, identities, FakeTokenIssuer(clock),
+            RefreshTokenService(FakeRefreshSessionRepository(), accounts, FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock),
+            CapturingEventPublisher(), clock, FakeTokenRevocation(), FakeRevocationTokens(),
+        )
+
+        shouldThrow<ProviderNotSupported> { useCase.authenticate(command.copy(provider = Provider.NAVER)) }
+
+        port.exchangeCalls shouldBe 0
+        identities.stored.shouldBeEmpty()
+    }
+
+    // 네이버 SDK 토큰 경로는 그대로 열려 있다 — 출시 앱이 쓰는 길이다. code 경로 가드가 여기까지 번지면 안 된다.
+    "네이버 SDK 토큰 경로는 계속 받는다" {
+        val (useCase, identities, _) = fixture()
+
+        useCase.authenticateWithAccessToken(tokenCommand.copy(provider = Provider.NAVER)).isNewUser shouldBe true
+
+        identities.stored.size shouldBe 1
     }
 
     // TRIP-249 5번 — 계약(TokenPair)이 선언한 만료·계정 요약이 결과에 실제로 실리는가.

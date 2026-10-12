@@ -120,7 +120,7 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `신규 가입인데 연령확인 누락이면 400 VALIDATION_ERROR`() {
         val (status, body) = post(
-            "/api/v1/auth/social/naver",
+            "/api/v1/auth/social/kakao",
             """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth"}""",
         )
 
@@ -138,7 +138,7 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     fun `만 14세 미만이면 422 — 400 과 갈린다`() {
         val underage = LocalDate.now(ZoneId.of("Asia/Seoul")).minusYears(10)
         val (status, body) = post(
-            "/api/v1/auth/social/naver",
+            "/api/v1/auth/social/kakao",
             """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth",
                 "ageConfirmation":{"method":"BIRTH_DATE","birthDate":"$underage"}}""",
         )
@@ -168,10 +168,10 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
         )
         firstStatus shouldBe 200
 
-        // 실행 — 같은 이메일을 가진 네이버 계정으로 신규 가입을 시도한다.
+        // 실행 — 같은 이메일을 가진 구글 계정으로 신규 가입을 시도한다(네이버는 code 경로를 닫았다 — TRIP-1317).
         val (status, body) = post(
-            "/api/v1/auth/social/naver",
-            """{"authorizationCode":"$FIXED_EMAIL_MARKER-naver","codeVerifier":"v","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"}}""",
+            "/api/v1/auth/social/google",
+            """{"authorizationCode":"$FIXED_EMAIL_MARKER-google","codeVerifier":"v","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"}}""",
         )
 
         // 단언 — 안내가 message 문자열이 아니라 **계약 필드**로 실려야 한다(TRIP-211 · BR-U0-04).
@@ -184,7 +184,7 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     fun `소셜 충돌이 아닌 에러 응답에는 existingProvider 필드가 나타나지 않는다`() {
         // 대조군 — 다른 409·4xx 의 응답 형태가 이 필드 추가로 바뀌지 않았다(회귀 금지).
         val (status, body) = post(
-            "/api/v1/auth/social/naver",
+            "/api/v1/auth/social/kakao",
             """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth"}""",
         )
 

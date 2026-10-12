@@ -42,9 +42,19 @@ class AuthenticateWithSocialUseCase(
     private val tokenRevocation: ProviderTokenRevocationPort,
     private val revocationTokens: ProviderRevocationTokenRepository,
 ) {
-    /** code 교환 흐름(웹·커스텀 스킴 redirect). */
+    /**
+     * code 교환 흐름(웹·커스텀 스킴 redirect).
+     *
+     * **네이버는 받지 않는다**(TRIP-1317). 이 흐름에서 가로챈 code 를 막는 것은 PKCE(`code_verifier`)인데
+     * 네이버는 PKCE 를 지원하지 않는다 — 앱의 리다이렉트를 가로챈 쪽이 그 code 를 여기로 보내면 피해자로
+     * 로그인된다(교환에 쓰는 client_secret 은 서버가 대신 붙여 준다). 출시 빌드는 네이버를 SDK 토큰 경로로만
+     * 보내므로(2026-10-12 확인) 닫아도 잃는 것이 없다. 네이버 SDK 키가 없는 빌드의 브라우저 폴백은 501 을 받는다.
+     */
     @Transactional
     fun authenticate(command: SocialLoginCommand): SocialLoginResult {
+        if (command.provider == Provider.NAVER) {
+            throw ProviderNotSupported("${command.provider.displayName()} 로그인은 이 방식으로 지원하지 않아요.")
+        }
         val profile = socialAuthPort.exchange(
             provider = command.provider,
             authorizationCode = command.authorizationCode,
