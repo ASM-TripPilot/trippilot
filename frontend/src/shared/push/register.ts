@@ -6,7 +6,11 @@ import {
   postMePushTokens,
 } from '@/shared/api/generated/notifications/notifications';
 
-import { readStringValue, writeStringValue } from '@/shared/storage';
+import {
+  PUSH_REGISTERED_KEY,
+  readStringValue,
+  writeStringValue,
+} from '@/shared/storage';
 
 import { getPushPermission } from './permissions';
 import type { PushPermissionStatus } from './permissions';
@@ -54,8 +58,8 @@ let storedToken: string | null = null;
 const UNREGISTER_TIMEOUT_MS = 3000;
 
 /** 마지막으로 서버에 올린 `토큰|osPermission` 서명(TRIP-1348) — 앱을 다시 켜도 같으면 POST 를 생략한다.
- * 서버가 osPermission 도 기록하므로 토큰만이 아니라 권한까지 같아야 건너뛴다. 해제 때 비운다(빈 문자열). */
-const REGISTERED_KEY = 'pushTokenRegistered';
+ * 서버가 osPermission 도 기록하므로 토큰만이 아니라 권한까지 같아야 건너뛴다. 해제 때 비우고(빈 문자열), 세션 만료는 `clearTokens` 가 키를 지운다. */
+const REGISTERED_KEY = PUSH_REGISTERED_KEY;
 
 async function readRegistered(): Promise<string | null> {
   try {

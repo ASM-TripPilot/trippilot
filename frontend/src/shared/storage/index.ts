@@ -25,6 +25,10 @@ const deleteItemAsync = (k: string): Promise<void> =>
 const ACCESS_TOKEN_KEY = 'accessToken';
 const REFRESH_TOKEN_KEY = 'refreshToken';
 
+/** 푸시 "이미 서버에 올린 토큰|권한" 기억의 키(TRIP-1348, 값은 `shared/push` 가 쓴다). 세션이 끝나면 함께 지워야
+ * 해서 여기 둔다 — 세션 만료(401)는 로그아웃 경로를 안 타고 `clearTokens` 만 부른다. */
+export const PUSH_REGISTERED_KEY = 'pushTokenRegistered';
+
 export interface TokenBundle {
   accessToken: string;
   refreshToken: string;
@@ -54,6 +58,7 @@ export async function clearTokens(): Promise<void> {
   await Promise.all([
     deleteItemAsync(ACCESS_TOKEN_KEY),
     deleteItemAsync(REFRESH_TOKEN_KEY),
+    deleteItemAsync(PUSH_REGISTERED_KEY),
   ]);
 }
 

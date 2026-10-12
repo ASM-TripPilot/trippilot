@@ -6,6 +6,7 @@ jest.mock('@/shared/api/generated/notifications/notifications');
 // 영속 저장소(SecureStore) 대역 — 콜드스타트 사이에 남는 값을 흉내 낸다(TRIP-1348).
 const mockStore = new Map<string, string>();
 jest.mock('@/shared/storage', () => ({
+  PUSH_REGISTERED_KEY: 'pushTokenRegistered',
   readStringValue: jest.fn(async (key: string) => mockStore.get(key) ?? null),
   writeStringValue: jest.fn(async (key: string, value: string) => {
     mockStore.set(key, value);
