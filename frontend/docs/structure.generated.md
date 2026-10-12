@@ -906,6 +906,7 @@
 
 ## src/pages/live/planb-draft/model/
 - `src/pages/live/planb-draft/model/replanFromInstant.ts`  →  readFromInstant
+- `src/pages/live/planb-draft/model/replanPollCap.ts`  →  REPLAN_POLL_CAP_MS · replanCapDeadlineMs · isReplanPollCapped
 - `src/pages/live/planb-draft/model/replanState.ts`  →  ReplanState · resolveReplanState
 - `src/pages/live/planb-draft/model/useReplanDiff.ts`  →  useReplanDiff
 - `src/pages/live/planb-draft/model/useReplanSession.ts`  →  useReplanSession
@@ -1534,6 +1535,7 @@
 - `src/shared/lib/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
 - `src/shared/lib/reduceMotion.ts`  →  startUnlessReduceMotion
 - `src/shared/lib/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
+- `src/shared/lib/useDeadlineFlag.ts`  →  useDeadlineFlag
 - `src/shared/lib/useElapsedFlag.ts`  →  useElapsedFlag
 
 ## src/shared/location/
@@ -1680,4 +1682,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1042개 파일
+합계 1044개 파일

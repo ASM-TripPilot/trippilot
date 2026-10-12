@@ -1,4 +1,5 @@
 import { usePreventRemove } from '@react-navigation/native';
+import type { Href } from 'expo-router';
 import { useNavigation, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -12,10 +13,14 @@ import { useLiveItinerary } from '@/features/execution';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { formatCoPickDayHeader } from '@/features/itinerary';
 import { readFromInstant } from '../model/replanFromInstant';
+import { replanCapDeadlineMs } from '../model/replanPollCap';
 import { deriveReplanMapAnchor } from '@/features/request-replan';
 import { resolveReplanState } from '../model/replanState';
 import { useReplanSession } from '../model/useReplanSession';
+import { seoulDate } from '@/shared/lib/seoulDate';
+import { useDeadlineFlag } from '@/shared/lib/useDeadlineFlag';
 import { useElapsedFlag } from '@/shared/lib/useElapsedFlag';
+import type { ReplanSession } from '@/shared/api/index.schemas';
 import {
   useGetTripsTripIdVisitsDaysDay,
   usePostTripsTripIdReplanSessionsSessionIdCancel,
@@ -58,6 +63,10 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *    · 화면에 들어온 지 90초가 지나면 시트 맨 위 느림 안내 — 요청·폴링은 그대로 둔다. 미도착·오류 구간도
  *      끊지 않고 마운트부터 잰다(TRIP-1293) — 폴링 응답마다 리셋하지 않는다(restartKey 없음).
  *    · [취소] 요청이 실패하면(`cancel.isError`) 한 줄로 알린다.
+ *  - TRIP-1363 — **8분 상한**(`replanPollCap`). 세션 `createdAt`(없으면 마운트 시각)부터 8분이 지나도 진행 얼굴이면
+ *    본문(`PlanbSolvingBody`)을 내려 폴링을 끊고 `solving-capped` 얼굴을 보인다 — [홈으로] · [다시 시도](= 재계획
+ *    요청 화면으로 교체 이동, 새 POST 는 거기서 기존 경로로 — 열린 세션은 새 요청이 닫는다, INV-U4-06). 조용히 계속
+ *    돌거나 이전 일정으로 말없이 되돌리지 않는다(INV-4). 폴링 훅(`useReplanSession`)은 건드리지 않고 이 껍데기가 조합한다.
  *  - 오류·종료 얼굴과 ‹ 확인의 나가기 연타는 ref 로 막는다(같은 틱 두 번째 누름은 옛 state 를 본다).
  *    그 ref 가 "나가는 중" 신호라, 선 뒤의 뒤로는 확인 없이 통과한다.
  */
@@ -69,10 +78,51 @@ export interface PlanbSolvingPageProps {
   sessionId: string;
 }
 
+/** 상한에 닿았을 때 본문이 넘기는 세션 스냅샷(`null` = 응답을 한 번도 못 받았다). */
+type CappedSession = ReplanSession | null;
+
 export function PlanbSolvingPage({
   tripId,
   sessionId,
 }: PlanbSolvingPageProps): ReactElement | null {
+  const router = useRouter();
+  const [capped, setCapped] = useState<CappedSession | undefined>(undefined);
+  if (capped !== undefined) {
+    // 본문이 내려가 세션 폴링도 끝났다. [다시 시도]는 같은 날로 요청 화면을 다시 연다(PlanbDraftPage 의
+    // onReopenRequest 와 같은 규칙 — 날짜를 빠뜨리면 오늘로 조용히 바뀐다).
+    const targetDate = capped?.targetDate;
+    return (
+      <ReplanNoticeFace
+        kind="solving-capped"
+        onRetry={() =>
+          router.replace(
+            targetDate && targetDate !== seoulDate(new Date())
+              ? `/trips/${tripId}/planb?targetDate=${targetDate}`
+              : `/trips/${tripId}/planb`
+          )
+        }
+        onLeave={() => router.replace('/(tabs)' as Href)}
+      />
+    );
+  }
+  return (
+    <PlanbSolvingBody
+      tripId={tripId}
+      sessionId={sessionId}
+      onCapped={(session) => setCapped(session ?? null)}
+    />
+  );
+}
+
+interface PlanbSolvingBodyProps extends PlanbSolvingPageProps {
+  onCapped: (session: ReplanSession | undefined) => void;
+}
+
+function PlanbSolvingBody({
+  tripId,
+  sessionId,
+  onCapped,
+}: PlanbSolvingBodyProps): ReactElement | null {
   const router = useRouter();
   const navigation = useNavigation();
   const session = useReplanSession(tripId, sessionId);
@@ -114,6 +164,21 @@ export function PlanbSolvingPage({
     data === undefined || kind === 'solving',
     SLOW_MS
   );
+
+  // TRIP-1363 — 8분 상한. 진행 얼굴(미도착 포함)에서만 잰다 — 오류 얼굴·결과가 나온 뒤엔 재지 않는다.
+  // 기준은 세션 createdAt, 응답 전이면 마운트 시각(마운트 ref 는 렌더 간 고정).
+  const mountedAtRef = useRef(Date.now());
+  const capWatching = !errorFace && (data === undefined || kind === 'solving');
+  const capReached = useDeadlineFlag(
+    capWatching
+      ? replanCapDeadlineMs(data?.createdAt, mountedAtRef.current)
+      : null
+  );
+  useEffect(() => {
+    if (capReached) onCapped(data);
+    // data 는 상한 도달 시점의 스냅샷만 넘기면 된다 — 의존성에 두면 폴링 응답마다 재발화한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capReached]);
 
   // 진행 얼굴(미도착 포함)에서만 스와이프·하드웨어 뒤로를 ‹ 와 같은 확인으로 붙잡는다.
   const solvingFace = data === undefined ? !errorFace : kind === 'solving';

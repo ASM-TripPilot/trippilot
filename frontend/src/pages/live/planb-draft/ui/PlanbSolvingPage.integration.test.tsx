@@ -59,6 +59,10 @@ let mockOrigin: { lat: number | null; lng: number | null } = {
 };
 // TRIP-1195 — 세션이 다시 짜는 날(`ReplanSession.targetDate`). null 이면 종전처럼 fromInstant 의 KST 날짜(= 오늘 세션).
 let mockTargetDate: string | null = null;
+// TRIP-1363 — 세션 생성 시각. null 이면 '지금'(8분 상한에 안 닿는 기본) — 상한 케이스만 값을 준다.
+let mockCreatedAt: string | null = null;
+// TRIP-1363 — 세션 폴링 훅이 지금 마운트돼 있는가(상한에 닿으면 본문이 내려가 폴링이 끝난다).
+let mockSessionMounted = 0;
 const mockSessionCache = new Map<string, unknown>();
 // TRIP-1277 — 세션 조회가 data 없이 실패(mockStatus=null 과 함께 true)·[다시 시도]가 부를 재조회 seam.
 let mockSessionError = false;
@@ -70,6 +74,14 @@ const mockSessionFailure = new Error('세션 조회 실패');
 
 jest.mock('../model/useReplanSession', () => ({
   useReplanSession: () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useEffect } = require('react') as typeof import('react');
+    useEffect(() => {
+      mockSessionMounted += 1;
+      return () => {
+        mockSessionMounted -= 1;
+      };
+    }, []);
     // TRIP-1293 — data 없는 두 모양은 TanStack v5.101 이 실제로 내놓는 필드 값을 옮겼다(02a §5 실측 1·2).
     // 실패 뒤 재조회는 isError 를 유지하지 않는다 — data 가 없으면 status 가 pending 으로 돌아간다.
     if (mockStatus === null) {
@@ -106,7 +118,7 @@ jest.mock('../model/useReplanSession', () => ({
           };
     }
     // 5-b 경고-1 — data 가 있어도 재조회가 실패하면 isError=true(TanStack v5 는 data 를 남긴다).
-    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}|${mockTargetDate}|${mockSessionError}|${mockSessionFailures}`;
+    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}|${mockTargetDate}|${mockSessionError}|${mockSessionFailures}|${mockCreatedAt}`;
     if (!mockSessionCache.has(key)) {
       mockSessionCache.set(key, {
         data: {
@@ -125,7 +137,7 @@ jest.mock('../model/useReplanSession', () => ({
           originLng: mockOrigin.lng,
           originEstimated: mockOrigin.lat === null,
           status: mockStatus,
-          createdAt: mockFromInstant,
+          createdAt: mockCreatedAt ?? new Date().toISOString(),
         },
         status: mockSessionError ? 'error' : 'success',
         fetchStatus: 'idle',
@@ -369,6 +381,8 @@ beforeEach(() => {
   mockCancelError = false;
   mockSessionError = false;
   mockSessionFailures = 0;
+  mockCreatedAt = null;
+  mockSessionMounted = 0;
   mockSessionRefetch.mockClear();
   mockVisitsState = 'ok';
   mockStatus = 'SOLVING';
@@ -1697,5 +1711,103 @@ describe('🔴 TRIP-1293 AC4·AC5 · 결정 A — 느림 안내 시계는 화면
     expect(face).toHaveTextContent(/다시 시도/);
     expect(face).not.toHaveTextContent(/\d/);
     expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
+  });
+});
+
+describe('🔴 TRIP-1363 · 재계획 세션 8분 상한 — 늦어지고 있어요 얼굴 + [홈으로]·[다시 시도], 폴링 중단', () => {
+  const CAP = 'planb-solving-capped';
+  const CAP_MS = 8 * 60 * 1000;
+
+  /** 가짜 시계 기준 `agoMs` 전에 만든 세션. */
+  function sessionCreatedAgo(agoMs: number): void {
+    mockCreatedAt = new Date(Date.now() - agoMs).toISOString();
+  }
+
+  it('U1 8분 직전엔 진행 얼굴·폴링 그대로, 8분이 되면 상한 얼굴로 바뀌고 폴링 훅이 내려간다', () => {
+    jest.useFakeTimers();
+    renderPage();
+    advance(CAP_MS - 1);
+    expect(screen.queryByTestId(CAP)).toBeNull();
+    expect(screen.getByTestId('generation-progress-cancel')).toBeOnTheScreen();
+    expect(mockSessionMounted).toBe(1);
+
+    advance(1);
+    const face = screen.getByTestId(CAP);
+    expect(within(face).getByText('생성이 늦어지고 있어요')).toBeOnTheScreen();
+    expect(screen.getByTestId('planb-solving-capped-retry')).toBeOnTheScreen();
+    expect(screen.getByTestId('planb-solving-capped-home')).toBeOnTheScreen();
+    expect(screen.queryByTestId('generation-progress-cancel')).toBeNull();
+    // 폴링이 멈춘다 — 세션 조회 훅(refetchInterval 소유자)이 더 이상 마운트돼 있지 않다.
+    expect(mockSessionMounted).toBe(0);
+    // 말없는 이동·취소 없음(INV-4), 소요시간 표기 없음(INV-3).
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
+    expect(screen.queryAllByText(DURATION_TEXT)).toHaveLength(0);
+  });
+
+  it('U2 기준은 마운트가 아니라 세션 createdAt 이다 — 7분 전 세션은 1분 뒤에 상한이다', () => {
+    jest.useFakeTimers();
+    sessionCreatedAgo(7 * 60 * 1000);
+    renderPage();
+    advance(59_999);
+    expect(screen.queryByTestId(CAP)).toBeNull();
+    advance(1);
+    expect(screen.getByTestId(CAP)).toBeOnTheScreen();
+  });
+
+  it('U3 이미 8분이 넘은 세션을 열면 곧바로 상한 얼굴이다', () => {
+    jest.useFakeTimers();
+    sessionCreatedAgo(CAP_MS + 1000);
+    renderPage();
+    advance(0);
+    expect(screen.getByTestId(CAP)).toBeOnTheScreen();
+    expect(mockSessionMounted).toBe(0);
+  });
+
+  it('U4 첫 응답이 끝내 안 와도(미도착) 마운트부터 8분이면 상한 얼굴이다', () => {
+    jest.useFakeTimers();
+    mockStatus = null;
+    renderPage();
+    advance(CAP_MS - 1);
+    expect(screen.queryByTestId(CAP)).toBeNull();
+    advance(1);
+    expect(screen.getByTestId(CAP)).toBeOnTheScreen();
+  });
+
+  it('U5 [홈으로]는 홈 탭으로 replace 1회(cancel 0), [다시 시도]는 같은 날로 요청 화면을 replace 1회(cancel·POST 0)', () => {
+    jest.useFakeTimers();
+    sessionCreatedAgo(CAP_MS + 1000);
+    renderPage();
+    advance(0);
+
+    fireEvent.press(screen.getByTestId('planb-solving-capped-home'));
+    expect(mockReplace).toHaveBeenLastCalledWith('/(tabs)');
+
+    mockReplace.mockClear();
+    fireEvent.press(screen.getByTestId('planb-solving-capped-retry'));
+    // 세션 targetDate(6/11)는 오늘이 아니라 날짜를 싣는다 — 빠뜨리면 오늘로 조용히 바뀐다.
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(
+      `/trips/${TRIP_ID}/planb?targetDate=2026-06-11`
+    );
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it('U6 결과가 나온 세션(DRAFT)은 오래됐어도 상한 얼굴이 아니라 i06 로 간다 — 상한은 진행 얼굴에서만 잰다', () => {
+    jest.useFakeTimers();
+    mockStatus = 'DRAFT';
+    sessionCreatedAgo(CAP_MS + 1000);
+    renderPage();
+    advance(CAP_MS);
+    expect(screen.queryByTestId(CAP)).toBeNull();
+    expect(mockReplace).toHaveBeenCalledWith(DRAFT_HREF);
+  });
+
+  it('U7 조회 실패 얼굴(data 없는 실패)은 상한을 재지 않는다 — 오류 얼굴이 그대로다', () => {
+    jest.useFakeTimers();
+    renderSessionError();
+    advance(CAP_MS * 2);
+    expect(screen.queryByTestId(CAP)).toBeNull();
+    expect(screen.getByTestId('planb-solving-error')).toBeOnTheScreen();
   });
 });
