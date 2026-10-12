@@ -31,6 +31,14 @@
 요청당 집계: `trace_id` 별 누계. 이 계층은 요청 종료를 모르므로 종료 이벤트 대신
 **호출마다 누계를 함께 싣는다** — 한 trace_id 의 마지막 `llm_cost` 줄이 그 요청의 총액이다.
 
+여행 단위 집계(TRIP-1312): 줄마다 `trip_id` 를 싣는다 — 와이어에 계정 식별자가 없어
+여행이 "누가 몇 번 부르는가"의 단위다(계정은 백엔드 DB 에서 trip_id 로 잇는다).
+`LlmCallRecord` 는 trace_id 만 들고 있으므로, 요청 진입 때 미들웨어가 바디의
+`request_meta.request_id`(= trace_id) → `trip_id` 를 `bind_trip` 으로 묶어 두고 여기서 찾는다.
+contextvar 가 아닌 이유: 점수 청크는 병렬 스레드에서 호출돼 문맥이 건너가지 않는다 —
+trace_id 가 모든 호출에 실린 유일한 공통 키다. 여행 누계는 싣지 않는다 — 여러 파드·재기동에
+걸치므로 합은 로그 쪽에서 `trip_id` 로 묶는 것이 정본이다.
+
 # ponytail: 프로세스 로컬 dict 누계(단일 컨테이너 전제 — preference_cache 와 같은 한계).
 # 다중 인스턴스로 가면 누계는 로그 수집 쪽에서 trace_id 로 합치는 것이 맞다.
 """
@@ -39,6 +47,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -52,6 +61,21 @@ PRICES_ENV = "TRIPPILOT_LLM_PRICES"
 _PER_TOKENS = 1_000_000  # 단가 기준 단위 — 두 벤더 공시가 모두 100만 토큰당이다
 _DEFAULT_CURRENCY = "USD"
 _MAX_TRACES = 1024  # 누계 보관 상한 — 초과 시 오래된 trace 부터 버린다(LRU)
+
+
+# trace_id → trip_id. 비용 단가와 무관한 사실이라 ledger 인스턴스가 아니라 프로세스에 둔다
+# (미들웨어는 ledger 를 모른다). 상한·LRU 는 누계와 같다. 쓰기는 요청 스레드 여럿이라 잠근다.
+_TRIP_BY_TRACE: OrderedDict[str, str] = OrderedDict()
+_TRIP_LOCK = threading.Lock()
+
+
+def bind_trip(trace_id: str, trip_id: str) -> None:
+    """요청 진입 시 1회 — 이 trace 의 LLM 호출이 어느 여행 몫인지 묶는다."""
+    with _TRIP_LOCK:
+        _TRIP_BY_TRACE[trace_id] = trip_id
+        _TRIP_BY_TRACE.move_to_end(trace_id)
+        while len(_TRIP_BY_TRACE) > _MAX_TRACES:
+            _TRIP_BY_TRACE.popitem(last=False)
 
 
 class PriceConfigError(ValueError):
@@ -161,6 +185,7 @@ class CostLedger:
         return {
             "event": "llm_cost",
             "trace_id": key,
+            "trip_id": _TRIP_BY_TRACE.get(key),  # None = 여행 없는 경계(회고·알림 문구)
             "feature": record.feature,
             "model_id": record.model_id,
             "success": record.success,

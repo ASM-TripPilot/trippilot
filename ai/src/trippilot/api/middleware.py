@@ -44,6 +44,7 @@ from typing import Any, Awaitable, Callable, Mapping
 
 from fastapi import FastAPI
 
+from trippilot.api.cost import bind_trip
 from trippilot.api.schemas import ErrorBody
 
 _Scope = dict[str, Any]
@@ -161,6 +162,7 @@ class WireMeta:
 
     request_id: str | None
     deadline_ms: int | None
+    trip_id: str | None = None  # 바디 최상위 `trip_id` — 비용 줄의 여행 단위(TRIP-1312)
 
 
 def parse_wire_meta(body: bytes) -> WireMeta:
@@ -182,6 +184,7 @@ def parse_wire_meta(body: bytes) -> WireMeta:
         return WireMeta(None, None)
     request_id = meta.get("request_id")
     deadline = meta.get("deadline_ms")
+    trip_id = doc.get("trip_id")
     return WireMeta(
         request_id=request_id if isinstance(request_id, str) and request_id else None,
         deadline_ms=(
@@ -189,6 +192,8 @@ def parse_wire_meta(body: bytes) -> WireMeta:
             if isinstance(deadline, int) and not isinstance(deadline, bool) and deadline > 0
             else None
         ),
+        # 식별자 문자만 남긴다 — 로그에 자유서술이 실리지 않게(trace_id 와 같은 정제)
+        trip_id=_sanitize_trace_id(trip_id) if isinstance(trip_id, str) else None,
     )
 
 
@@ -270,6 +275,9 @@ class TraceMiddleware:
         if trace_id is None:
             trace_id = _sanitize_trace_id(meta.request_id) or uuid.uuid4().hex
         scope[_TRACE_SCOPE_KEY] = trace_id  # 하위 계층(백스톱 로그 등)이 재사용
+        # LLM 호출 기록의 trace_id 는 헤더가 아니라 바디 request_id 다(오케스트레이터 규약) — 그 키로 묶는다.
+        if meta.request_id is not None and meta.trip_id is not None:
+            bind_trip(meta.request_id, meta.trip_id)
 
         status: int | None = None
         started_at = time.monotonic()
@@ -294,6 +302,7 @@ class TraceMiddleware:
             _request_logger.info(json.dumps({
                 "event": "http_request",
                 "trace_id": trace_id,
+                "trip_id": meta.trip_id,
                 "method": scope.get("method"),
                 "path": scope.get("path"),
                 "status": status,  # None = 응답 미발신(연결 단절 등) — 그것도 사실대로
