@@ -18,7 +18,8 @@ import type { MapCenter, MapPin } from '@/shared/map';
  *  - 🟢 F5 (5-c 보강, 03b 참고-1) F2 의 짝 — 핀 **값이 바뀌면** region 도 새로 계산돼 새 핀을 담는다
  *    (memo 가 첫 마운트 값에 얼어붙지 않는다).
  *  - 🟢 F3 `fitPins` 미전달 → 지금과 같다(region 없음, camera = center).
- *  - 🟢 F4 `fitPins` 여도 핀 1개면 region 없이 기존 카메라(줌 값은 6-b 조정 대상이라 적지 않고
+ *  - 🟢 F4 (TRIP-1363 개정) `fitPins` 면 핀 1개도 region — 옛 "핀 1개면 기존 카메라"는 2핀↔1핀 전환에서 key 가 뒤집혀
+ *    지도가 remount 됐다. 핀 0개만 기존 카메라. (옛 서술: 줌 값은 6-b 조정 대상이라 적지 않고
  *    `fitPins` 없이 그린 카메라와 같음으로 잰다).
  *
  * 3동작 뼈대: 준비=center·핀·fitPins → 실행=MapView 렌더 → 단언=네이티브 지도가 받은 prop.
@@ -147,17 +148,39 @@ describe('F3 · AC-B2 — fitPins 미전달이면 지금과 같다 (무회귀 ·
   });
 });
 
-describe('F4 · AC-B3 — fitPins 여도 핀 1개면 기존 카메라 (무회귀 · 선제 green)', () => {
-  it('region 은 없고, camera 가 fitPins 없이 그린 카메라와 같다', () => {
-    const one: MapPin[] = [PINS[0]];
+describe('F4 · TRIP-1363 — fitPins + 핀 1개도 region 이다 (2핀↔1핀 전환에서 key 플립 없음)', () => {
+  it('핀 1개면 그 점을 가운데 둔 region 이고 camera 는 없다', () => {
+    render(<MapView center={CENTER} pins={[PINS[0]]} fitPins />);
 
-    const plain = render(<MapView center={CENTER} pins={one} />);
-    const expected = nativeProps().camera;
-    plain.unmount();
+    const region = nativeProps().region as NativeRegion | undefined;
+    expect(region).toBeDefined();
+    if (region === undefined) return;
+    expect(region.latitude + region.latitudeDelta / 2).toBeCloseTo(PINS[0].lat);
+    expect(region.longitude + region.longitudeDelta / 2).toBeCloseTo(
+      PINS[0].lng
+    );
+    expect(nativeProps().camera).toBeUndefined();
+  });
 
-    render(<MapView center={CENTER} pins={one} fitPins />);
+  it('핀 2개 날 → 1개 날로 바뀌어도 region 모드가 유지된다(camera 로 떨어지지 않는다)', () => {
+    const { rerender } = render(
+      <MapView center={CENTER} pins={PINS.slice(0, 2)} fitPins />
+    );
+    expect(nativeProps().region).toBeDefined();
+
+    rerender(<MapView center={CENTER} pins={[PINS[1]]} fitPins />);
+
+    const region = nativeProps().region as NativeRegion | undefined;
+    expect(region).toBeDefined();
+    if (region === undefined) return;
+    expect(region.latitude + region.latitudeDelta / 2).toBeCloseTo(PINS[1].lat);
+    expect(nativeProps().camera).toBeUndefined();
+  });
+
+  it('핀 0개면 기존 center 카메라다(무회귀)', () => {
+    render(<MapView center={CENTER} pins={[]} fitPins />);
 
     expect(nativeProps().region).toBeUndefined();
-    expect(nativeProps().camera).toEqual(expected);
+    expect(nativeProps().camera).toBeDefined();
   });
 });

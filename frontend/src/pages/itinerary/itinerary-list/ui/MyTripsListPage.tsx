@@ -32,7 +32,7 @@ import {
   type MyTripsSortKey,
 } from '../model/myTripsOrder';
 import {
-  DRAFT_POLL_INTERVAL_MS,
+  pollIntervalMs,
   isGenerationRunning,
   itineraryDestinationHref,
   resolveItineraryDestination,
@@ -93,7 +93,7 @@ export function MyTripsListPage(): ReactElement {
             query.state.status !== 'error' &&
             (query.state.data?.generationState === 'PARTIAL' ||
               isGenerationRunning(query.state.data))
-              ? DRAFT_POLL_INTERVAL_MS
+              ? pollIntervalMs(query.state.dataUpdateCount)
               : false,
         },
       })

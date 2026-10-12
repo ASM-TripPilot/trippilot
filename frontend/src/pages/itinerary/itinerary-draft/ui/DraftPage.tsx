@@ -10,7 +10,7 @@ import {
   buildDraftDayTabs,
   buildDraftPins,
   buildGenerationGauge,
-  DRAFT_POLL_INTERVAL_MS,
+  pollIntervalMs,
   foldGenerationGauge,
   formatDraftDayHeader,
   resolveDraftView,
@@ -150,7 +150,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           generationState: query.state.data?.generationState,
           dataUpdateCount: pollsSinceBaseline(query.state.dataUpdateCount),
         })
-          ? DRAFT_POLL_INTERVAL_MS
+          ? pollIntervalMs(pollsSinceBaseline(query.state.dataUpdateCount))
           : false,
     },
   });

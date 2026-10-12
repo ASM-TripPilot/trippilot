@@ -1,5 +1,5 @@
-import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { memo, type ReactElement } from 'react';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { SavedStayCardVM } from '@/entities/stay';
@@ -97,6 +97,48 @@ function AppBar({
   );
 }
 
+const RESULTS_CONTENT_STYLE = {
+  paddingHorizontal: 16,
+  paddingTop: 4,
+  paddingBottom: 16,
+} as const;
+
+function keyOfSavedStay(vm: SavedStayCardVM): string {
+  return vm.savedStayId;
+}
+
+/** 저장 숙소 한 행 — memo: 같은 vm·콜백이면 목록이 다시 그려져도 행은 안 그린다(TRIP-1363). */
+const SavedStayRow = memo(function SavedStayRow({
+  vm,
+  onPressCard,
+}: {
+  vm: SavedStayCardVM;
+  onPressCard?: (savedStayId: string) => void;
+}): ReactElement {
+  return (
+    // 저장 목록이라 항상 담김(selected 고정). 담김 하트는 표시용이라 카드가 소유하지 않고
+    // trailing 으로 주입한다(카드는 하트 불가지) — 담김은 색이 아니라 accessibilityState +
+    // 별도 글리프 testID 로 잰다(★4·★5). 거점·지역·가격은 계약 공백이라 VM 값 그대로 흘리고
+    // (실앱은 미설정 → 카드가 이름만), 날짜라벨은 e04 에서 뗀다(F-10 — subtitle 미전달).
+    <SavedStayCard
+      testID={`saved-stay-card-${vm.savedStayId}`}
+      name={vm.name}
+      layout="vertical"
+      selected
+      isBase={vm.isBase}
+      region={vm.region}
+      priceLabel={vm.priceLabel}
+      trailing={
+        <HeartFilledGlyph
+          size={27}
+          testID={`saved-stay-heart-filled-${vm.savedStayId}`}
+        />
+      }
+      onPress={() => onPressCard?.(vm.savedStayId)}
+    />
+  );
+});
+
 function ResultsFace({
   savedStays,
   onPressCard,
@@ -108,38 +150,17 @@ function ResultsFace({
 }): ReactElement {
   return (
     <View className="flex-1">
-      <ScrollView
+      {/* TRIP-1363 — 저장 숙소는 상한이 없어 ScrollView 전체 마운트였다. 행 높이가 일정(카드 mb-lg 자체 간격)이라
+          세퍼레이터는 없고, getItemLayout·removeClippedSubviews 는 쓰지 않는다(가변 높이·absolute 배지 잘림). */}
+      <FlatList<SavedStayCardVM>
         className="flex-1"
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: 4,
-          paddingBottom: 16,
-        }}
-      >
-        {savedStays.map((vm) => (
-          // 저장 목록이라 항상 담김(selected 고정). 담김 하트는 표시용이라 카드가 소유하지 않고
-          // trailing 으로 주입한다(카드는 하트 불가지) — 담김은 색이 아니라 accessibilityState +
-          // 별도 글리프 testID 로 잰다(★4·★5). 거점·지역·가격은 계약 공백이라 VM 값 그대로 흘리고
-          // (실앱은 미설정 → 카드가 이름만), 날짜라벨은 e04 에서 뗀다(F-10 — subtitle 미전달).
-          <SavedStayCard
-            key={vm.savedStayId}
-            testID={`saved-stay-card-${vm.savedStayId}`}
-            name={vm.name}
-            layout="vertical"
-            selected
-            isBase={vm.isBase}
-            region={vm.region}
-            priceLabel={vm.priceLabel}
-            trailing={
-              <HeartFilledGlyph
-                size={27}
-                testID={`saved-stay-heart-filled-${vm.savedStayId}`}
-              />
-            }
-            onPress={() => onPressCard?.(vm.savedStayId)}
-          />
-        ))}
-      </ScrollView>
+        data={savedStays}
+        keyExtractor={keyOfSavedStay}
+        renderItem={({ item }) => (
+          <SavedStayRow vm={item} onPressCard={onPressCard} />
+        )}
+        contentContainerStyle={RESULTS_CONTENT_STYLE}
+      />
 
       <View className="w-full bg-canvas px-lg pb-lg pt-md">
         <Pressable

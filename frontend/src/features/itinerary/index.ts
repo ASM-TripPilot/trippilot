@@ -11,6 +11,7 @@ export {
   foldGenerationGauge,
   formatCoPickDayHeader,
   formatDraftDayHeader,
+  pollIntervalMs,
   resolveDraftView,
   resolveFallbackNotice,
   resolveShortfallNotice,

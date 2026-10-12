@@ -19,6 +19,20 @@ import type {
 /** 정본 부재 — 01b Seed 가 정한 이 사이클의 발명값(간격 2초 · 상한 30회 ≒ 60초). */
 export const DRAFT_POLL_INTERVAL_MS = 2000;
 export const DRAFT_POLL_MAX_COUNT = 30;
+/** TRIP-1363 · 폴링 백오프 — 초반 15회는 2초(빠른 응답 체감), 이후는 5초(LTE 라디오 tail 보다 길게). */
+export const DRAFT_POLL_SLOW_INTERVAL_MS = 5000;
+export const DRAFT_POLL_FAST_COUNT = 15;
+
+/**
+ * 폴링 간격 한 벌(TRIP-1363) — `count` 는 TanStack Query 의 `dataUpdateCount`(지금까지 받은 응답 수).
+ * 초안·슬롯 채움·내 여행 목록·재계획 세션 네 곳이 같은 곡선을 쓴다. 상한 판정은 이 함수가 아니라
+ * 각 호출부(`shouldKeepPollingDraft` 등)가 따로 한다 — 이 함수는 "다음에 언제"만 안다.
+ */
+export function pollIntervalMs(count: number): number {
+  return count < DRAFT_POLL_FAST_COUNT
+    ? DRAFT_POLL_INTERVAL_MS
+    : DRAFT_POLL_SLOW_INTERVAL_MS;
+}
 
 const MS_PER_DAY = 86_400_000;
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];

@@ -29,21 +29,34 @@ const pointArb = fc.record({
 
 // 일반 입력 + 한 점이 n 번 겹친 퇴화 입력을 섞는다.
 const pointsArb = fc.oneof(
-  fc.array(pointArb, { minLength: 2, maxLength: 8 }),
+  fc.array(pointArb, { minLength: 1, maxLength: 8 }),
   fc
     .tuple(pointArb, fc.integer({ min: 2, max: 5 }))
     .map(([point, n]) => Array.from({ length: n }, () => ({ ...point })))
 );
 
 describe('TRIP-1022 · buildFitRegion — 예시', () => {
-  it('R1 점이 0개·1개면 영역이 없다(null)', () => {
+  it('R1 점이 0개면 영역이 없다(null) — center 카메라 사다리가 맡는다', () => {
     expect(buildFitRegion([])).toBeNull();
-    expect(buildFitRegion([{ lat: 37.57, lng: 126.98 }])).toBeNull();
+  });
+
+  it('R1b 점이 1개여도 최소 폭 영역이 나오고 그 점이 가운데다(TRIP-1363 — 2핀↔1핀 전환에서 region 이 null 로 떨어지지 않는다)', () => {
+    const region = buildFitRegion([{ lat: 37.57, lng: 126.98 }]);
+
+    expect(region).not.toBeNull();
+    if (region === null) return;
+    expect(region.latitudeDelta).toBeCloseTo(0.01, 10);
+    expect(region.longitudeDelta).toBeCloseTo(0.01, 10);
+    expect(region.latitude + region.latitudeDelta / 2).toBeCloseTo(37.57, 10);
+    expect(region.longitude + region.longitudeDelta / 2).toBeCloseTo(
+      126.98,
+      10
+    );
   });
 });
 
 describe('TRIP-1022 · buildFitRegion — 성질 (AC-B4 · PBT)', () => {
-  it('R2 점이 2개 이상이면 모든 점이 영역 안에 있고 두 폭이 유한한 양수다', () => {
+  it('R2 점이 1개 이상이면 모든 점이 영역 안에 있고 두 폭이 유한한 양수다', () => {
     fc.assert(
       fc.property(pointsArb, (points) => {
         const region = buildFitRegion(points);

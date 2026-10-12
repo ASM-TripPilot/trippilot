@@ -123,9 +123,9 @@ export interface MapViewProps {
   /** 지도 빈 곳 탭(마커 아님, TRIP-748 — i01 허브 트리거 알약 로컬 숨김). `onCameraIdle` 과 같은
    * 옵트인 — 준 때만 NaverMapView 에 단다(미전달 시 콜백 부착 0). 좌표는 올리지 않는다. */
   onTapMap?: () => void;
-  /** 핀 전부가 한 화면에 들어오게 연다(TRIP-1022, h02). **옵트인** — 켜고 핀이 2개 이상일 때만
-   * `camera` 대신 `region` 을 넘긴다(SDK 는 camera 가 있으면 region 을 버린다). 핀 1개 이하·미전달이면
-   * 기존 center 카메라 그대로. */
+  /** 핀 전부가 한 화면에 들어오게 연다(TRIP-1022, h02). **옵트인** — 켜고 핀이 1개 이상일 때만
+   * `camera` 대신 `region` 을 넘긴다(SDK 는 camera 가 있으면 region 을 버린다). 핀 0개·미전달이면
+   * 기존 center 카메라 그대로(핀 1개는 최소 폭 region — TRIP-1363). */
   fitPins?: boolean;
 }
 
