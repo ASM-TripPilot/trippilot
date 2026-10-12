@@ -20,6 +20,7 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.LocalDate
+import java.util.Objects
 import java.util.UUID
 
 /**
@@ -67,6 +68,10 @@ interface ReflectionJpaRepository : JpaRepository<ReflectionEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from ReflectionEntity r where r.tripId = :tripId and r.dayDate = :dayDate")
     fun lockByTripIdAndDayDate(tripId: UUID, dayDate: LocalDate): ReflectionEntity?
+
+    /** 트랜잭션 범위 권고 잠금. FROM 절 형태인 이유는 `GenerationSessionJpaRepository.advisoryXactLock` 주석과 같다. */
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(:namespace, :key)", nativeQuery = true)
+    fun advisoryXactLock(namespace: Int, key: Int): Int
 }
 
 @Component
@@ -98,8 +103,14 @@ class ReflectionRepositoryAdapter(
     override fun find(tripId: UUID, dayDate: LocalDate): Reflection? =
         jpa.findByTripIdAndDayDate(tripId, dayDate)?.toDomain()
 
-    override fun findForUpdate(tripId: UUID, dayDate: LocalDate): Reflection? =
-        jpa.lockByTripIdAndDayDate(tripId, dayDate)?.toDomain()
+    /**
+     * 행 잠금만으로는 **아직 행이 없는 하루**를 못 막는다 — 겹친 첫 쓰기 둘이 모두 "없음"을 읽고 넣어
+     * 진 쪽이 UNIQUE 위반(500)으로 끝났다. 그 하루에 권고 잠금을 먼저 걸어, 뒤 요청이 앞 요청의 행을 읽게 한다.
+     */
+    override fun findForUpdate(tripId: UUID, dayDate: LocalDate): Reflection? {
+        jpa.advisoryXactLock(LOCK_NAMESPACE, Objects.hash(tripId, dayDate))
+        return jpa.lockByTripIdAndDayDate(tripId, dayDate)?.toDomain()
+    }
 
     override fun findByTrip(tripId: UUID): List<Reflection> =
         jpa.findByTripIdOrderByDayDate(tripId).map { it.toDomain() }
@@ -170,4 +181,9 @@ class ReflectionRepositoryAdapter(
             ?.let { runCatching { DistanceSource.valueOf(it) }.getOrNull() } ?: DistanceSource.VISIT_LINE,
         photoCount = (this["photoCount"] as? Number)?.toInt() ?: 0,
     )
+
+    companion object {
+        /** 다른 용도의 권고 잠금(생성 세션 403)과 안 겹치게 하는 이름공간. */
+        private const val LOCK_NAMESPACE = 828
+    }
 }
