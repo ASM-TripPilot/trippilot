@@ -263,9 +263,11 @@ _SEGMENT_SPLIT = re.compile(r"[\n<>()（）\[\]※/]|·|-(?!\s*\d)")
 _DATED_REMARK = re.compile(r"※[^※\n<]*?(?:\d{4}\s*년|\d{1,2}\s*월\s*\d{1,2}\s*일)[^※\n<]*")
 # 영업 구간 머리의 요일 한정자 — `평일`(`주중`)·`주말`·`X(요일)`·`X(요일)~Y(요일)`(사이 요일까지, 주를 넘어도),
 # 그리고 그것들을 `·`·`/`·`,` 로 이은 목록(`토·일요일`·`화요일 / 목요일~금요일`).
-# 머리 **전체**가 한정자여야 한다 — `하절기 평일`·`법정공휴일` 은 요일 구간이 아니다(종전 규칙으로 간다).
+# 머리 **전체**가 한정자여야 한다 — `하절기 평일` 은 요일 구간이 아니다(종전 규칙으로 간다). `공휴일` 은 요일이
+# 아니라 목록 안에서는 무시하고(`주말·공휴일` = 토·일), 홀로면 한정자이되 요일이 없다(그 범위는 어느 요일 것도 아니다).
 _DAY_ITEM_RE = re.compile(
-    r"(평일|주중)|(주말)|([월화수목금토일])(?:요일)?(?:[ \t]*[~∼～〜\-–—][ \t]*([월화수목금토일])(?:요일)?)?")
+    r"(평일|주중)|(주말)|([월화수목금토일])(?:요일)?(?:[ \t]*[~∼～〜\-–—][ \t]*([월화수목금토일])(?:요일)?)?"
+    r"|(?:법정[ \t]*)?공휴일")
 _DAY_ITEM = rf"(?:{_DAY_ITEM_RE.pattern})"
 _DAY_QUALIFIER = re.compile(rf"[\s\-:,]*{_DAY_ITEM}(?:[ \t]*[·/,、][ \t]*{_DAY_ITEM})*[\s:]*")
 # 구간 분할(`·`·`/`·숫자 앞 아닌 `-`)이 요일 목록·범위를 먼저 자르지 않게 미리 `,`·`~` 로 바꿔 둔다 —
@@ -309,12 +311,28 @@ def _weekday_windows(text: str) -> tuple[dict[int, tuple[int, int]], tuple[int, 
     - **원문이 말하지 않은 요일 ≠ 휴무.** 나머지 요일의 창은 한정자 없는 구간이 없으면 원문 전체의 종전
       창이다 — 그 요일들은 이 수정 전과 같다. 닫는 것은 영업 원문 안의 명시 휴무 절과 휴무 원문뿐이다.
       추론 휴무가 틀리면 그 요일 후보가 통째로 빠진다(HC1 은 요일 행이 없으면 닫힌 날로 본다).
+    - **구역 머리가 전부 요일이면**(`[평일 / 토요일]<br>- 08:00~19:30<br>…[일요일]<br>- 08:00~15:30`) 머리가 곧
+      한정자다 — 구역 본문마다 종전 규칙(첫 범위·이른 폐점·2시간·비영업 라벨)으로 읽어 그 요일들에 준다. 종전엔
+      구역 머리가 둘 이상이라 통째로 포기했다(공유본 386건). 하나라도 요일이 아니면(`[사우나]`) 어느 구역이
+      장소 전체인지 모른다 — 종전대로 포기. 구역 창을 못 읽거나 같은 요일이 두 머리에 나와도 포기.
     """
-    if len(_SECTION_HEAD.findall(text)) > 1:
+    heads = list(_SECTION_HEAD.finditer(text))
+    sections = [(_qualifier_days(_protect_days(h[0][1:-1])), text[h.end():end])
+                for h, end in zip(heads, [h.start() for h in heads[1:]] + [len(text)])]
+    if sections and all(days is not None for days, _ in sections):
+        preamble = text[:heads[0].start()]
+    elif len(heads) > 1:
         return None
+    else:
+        sections, preamble = [], text
     by_day: dict[int, tuple[int, int]] = {}
+    for days, body in sections:
+        window = _first_range_window([span for ranges in _open_ranges(body) for _, span in ranges])
+        if window is None or any(d in by_day for d in days):
+            return None
+        by_day.update(dict.fromkeys(days, window))
     rest: list[tuple[int, int]] = []
-    for ranges in _open_ranges(text):
+    for ranges in _open_ranges(preamble):
         qualified = False
         for head, (start, end) in ranges:
             days = _qualifier_days(head)
@@ -325,7 +343,7 @@ def _weekday_windows(text: str) -> tuple[dict[int, tuple[int, int]], tuple[int, 
                     rest.append((start, end))
                 continue
             qualified = True
-            if end - start <= _MIN_WINDOW_MIN or any(d in by_day for d in days):
+            if days and end - start <= _MIN_WINDOW_MIN or any(d in by_day for d in days):
                 return None
             by_day.update(dict.fromkeys(days, (start, end)))
     if not by_day:
@@ -333,7 +351,9 @@ def _weekday_windows(text: str) -> tuple[dict[int, tuple[int, int]], tuple[int, 
     # 한정자 없는 구간의 창이 2시간 이하로 기각돼도 종전 규칙으로 되돌아간다 — None 이면
     # 7일을 못 채워 영업시간을 통째로 잃는다("평일 …<br>- 휴계시간 12:30~13:30"). 항상 종전
     # 규칙으로 가면 이 수정이 고친 오독이 되살아난다(공유본 19건, #1054 리뷰).
-    others = (_first_range_window(rest) if rest else None) or _multi_range_window(text)
+    # 구역 머리를 요일로 읽었으면 그 머리는 종전 규칙의 포기 사유(어느 구역이 장소 전체인지)가 아니다.
+    others = (_first_range_window(rest) if rest else None) or _first_range_window(
+        [span for ranges in _open_ranges(text) for _, span in ranges])
     return by_day, others
 
 
@@ -367,7 +387,7 @@ def _multi_range_window(text: str) -> tuple[int, int] | None:
 
 
 def _qualifier_days(head: str) -> list[int] | None:
-    """범위 앞 머리가 요일 한정자(목록)면 그 요일들, 아니면 None."""
+    """범위 앞 머리가 요일 한정자(목록)면 그 요일들(공휴일뿐이면 빈 목록), 아니면 None."""
     if not _DAY_QUALIFIER.fullmatch(head):
         return None
     days: list[int] = []
@@ -376,7 +396,7 @@ def _qualifier_days(head: str) -> list[int] | None:
             days += range(5)
         elif weekend:
             days += (5, 6)
-        else:
+        elif a:
             first, last = _WEEKDAY_INDEX[a], _WEEKDAY_INDEX[b or a]
             days += ((first + k) % 7 for k in range((last - first) % 7 + 1))
     return days
