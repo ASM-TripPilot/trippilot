@@ -4,10 +4,10 @@
 # 스케줄(KST 새벽 4:40 — POI 수집 4:00과 시간차) 또는 수동 실행만.
 #
 # 파이프라인: NAVER API HUB 검색(웹문서·블로그·지역) → C1 EVENT_EXTRACTION(LLM,
-# GPT-5.6) → 게이트(환각 드롭) → collected_events.json 등록·만료 청소.
+# claude-fable-5-1) → 게이트(환각 드롭) → collected_events.json 등록·만료 청소.
 # 행사는 POI가 아니다(INV-1) — 저장소는 EventProvider가 읽는 행사 전용 문서.
 #
-# 키: Repository Secrets NAVER_SEARCH_CLIENT_ID/SECRET(검색) + AZUREAPIKEY(추출).
+# 키: Repository Secrets NAVER_SEARCH_CLIENT_ID/SECRET(검색) + ANTHROPIC_API_KEY(추출 — CI 전용 키).
 # **하드캡**: NAVER_MAX_CALLS(vars, 기본 300)를 클라이언트가 호출 전 검사 — 상한
 # 초과 호출 0건 ("정확히 무료까지만" — 현재 HUB 검색은 한시 무료·월 775k 한도지만
 # 유료화 공지가 떠도 이 캡이 방어선). 키 미등록이면 생략하고 성공 종료.
@@ -81,12 +81,11 @@ jobs:
           EVENT_REGIONS: ${{ inputs.regions || '' }}
           EVENT_REGIONS_PER_RUN: ${{ inputs.regions_per_run || vars.EVENT_REGIONS_PER_RUN || '3' }}
           EVENTS_STORE: collected_events.json
-          # LLM 추출 — ai-llm-smoke와 동일 조립 (GPT-5.6 v1 표면, Responses API)
-          LLM_PROVIDER: openai
-          OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
-          OPENAI_BASE_URL: ${{ vars.AZURE_OPENAI_ENDPOINT }}
-          OPENAI_MODEL: gpt-5.6-luna   # 행사 추출은 luna 배포 사용 (사용자 지정 2026-08-21)
-          OPENAI_API: responses
+          # LLM 추출 — 서비스와 같은 모델로 통일 (2026-10-12 사용자 지정, 종전 gpt-5.6-luna).
+          # 멘토 게이트웨이(무과금)에서 CI 전용 Anthropic 키(과금)로 옮겼다 — 하루 17회 호출.
+          LLM_PROVIDER: anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: claude-fable-5-1
         run: |
           if [ -z "$NAVER_SEARCH_CLIENT_ID" ]; then
             echo "::notice::NAVER_SEARCH_CLIENT_ID 미등록 — 수집 생략"
