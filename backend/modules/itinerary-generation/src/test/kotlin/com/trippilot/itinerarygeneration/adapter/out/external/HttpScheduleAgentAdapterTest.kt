@@ -290,36 +290,17 @@ class HttpScheduleAgentAdapterTest : StringSpec({
     }
 
     /**
-     * **상대가 아직 배선 전이면(503) 종전 경로로 내려간다.** 계약·스키마는 출하됐는데 오케스트레이터만
-     * 진행 중인 상태가 실재한다(실측 2026-09-20). 그동안 재계획을 전부 실패로 올리면 사용자는
-     * "다시 짜기"를 누를 때마다 수동 편집으로 튕긴다.
+     * **재계획 실패는 그대로 올린다 — generate 로 내려가지 않는다.** 상대 배선 전(503)에 한해 종전
+     * generate 경로로 내려가던 한시 폴백이 있었고, 배선이 끝나 지웠다. 되살아나면 두 경로가 공존해
+     * "재계획만 가끔 취향이 안 먹는다"가 돌아온다(종전 경로는 사유·지시·자유입력·원 일정·담은 장소를 버린다).
+     * 폴백 판정은 INV-4 대로 위에서 한다.
      */
-    "상대가 재계획 경로를 배선 전이면(503) 종전 generate 경로로 내려간다" {
+    "재계획 실패는 그대로 올린다 — 배선 전 503 이어도 generate 로 내려가지 않는다" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andRespond(
                 withStatus(HttpStatus.SERVICE_UNAVAILABLE)
                     .body("""{"error_code":"ORCHESTRATOR_NOT_WIRED","message":"배선 미완료","retryable":false}""")
-                    .contentType(MediaType.APPLICATION_JSON),
-            )
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/generate"))
-            .andRespond(withSuccess(aiBody("OR_TOOLS"), MediaType.APPLICATION_JSON))
-
-        adapter.replan(replanInput()).days.single().slots.single().poiId shouldBe poi
-
-        server.verify()
-    }
-
-    /**
-     * **다른 503 은 폴백하지 않는다.** 배선 전과 상대 장애는 다른 사실이고, 장애를 조용히 종전 경로로
-     * 흘리면 "AI 가 죽었는데 재계획만 이상하게 돈다"가 된다 — 폴백 판정은 INV-4 대로 위에서 한다.
-     */
-    "배선 전이 아닌 실패는 종전 경로로 내려가지 않는다" {
-        val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
-            .andRespond(
-                withStatus(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body("""{"error_code":"UPSTREAM_DOWN","message":"LLM 게이트웨이 장애","retryable":true}""")
                     .contentType(MediaType.APPLICATION_JSON),
             )
 
