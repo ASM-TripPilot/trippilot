@@ -53,9 +53,9 @@ interface ScheduleAgentPort {
     fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput
 
     /**
-     * 여행 중 재계획(U4 정본 §3.1 · DEC-U4-5) — **새 솔버 개념을 만들지 않는다**.
-     * 잠금 슬롯([ReplanInput.lockedSlotKeys])이 고정 블록으로 승격돼 HC3 보호를 받으므로,
-     * 상대는 이미 있는 재생성 경로를 그대로 쓴다.
+     * 여행 중 재계획(U4 정본 §3.1 · DEC-U4-5) — 상대의 **재계획 전용 경로**로 간다(TRIP-854).
+     * 잠금은 고정 블록([ReplanInput.lockedBlocks])으로 실려 HC3 보호를 받는다. generate 를 재사용하던
+     * 종전 경로와 그리로 내려가던 한시 폴백은 없다.
      *
      * 반환이 곧 **초안**이다 — 원 일정에 반영하지 않는다(INV-U4-05). 해가 없으면 빈 일자를 돌려주고,
      * 호출 실패는 [ScheduleAgentCallFailed] 로 올려 수동 편집 전환을 유도한다(INV-4).

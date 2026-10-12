@@ -3,9 +3,7 @@ package com.trippilot.itinerarygeneration.adapter.out.external
 import com.trippilot.itinerarygeneration.domain.RepairContext
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
-import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
-import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
@@ -221,19 +219,7 @@ class HttpScheduleAgentAdapter(
             excludedPoiIds = input.excludedPoiIds,
         )
 
-        val res = try {
-            post(REPLAN_PATH, request, AiReplanResponse::class.java)
-        } catch (e: ScheduleAgentCallFailed) {
-            // **상대가 아직 이 경로를 구현하지 않았다**(503 `ORCHESTRATOR_NOT_WIRED`). 계약과 스키마는
-            // 이미 출하됐고 오케스트레이터 배선만 진행 중이다 — 그동안 재계획을 전부 실패로 올리면
-            // 사용자는 "다시 짜기"를 누를 때마다 수동 편집으로 튕긴다. 종전 경로로 한 번 더 시도한다.
-            //
-            // **이 갈래는 상대가 배선을 마치면 지운다**(그날 실 왕복이 200 을 낸다). 남겨 두면 두 경로가
-            // 공존하며 "왜 취향이 가끔만 먹지"를 다시 만든다 — 종전 경로는 열 종 중 다섯을 버린다.
-            if (e.errorCode != NOT_WIRED) throw e
-            log.warn("상대가 재계획 전용 경로를 아직 배선하지 않았습니다(503) — 종전 generate 경로로 내려갑니다. 열 종 중 다섯(사유·지시·자유입력·원 일정·담은 장소)은 이 경로에서 버려집니다.")
-            return legacyReplanViaGenerate(input)
-        }
+        val res = post(REPLAN_PATH, request, AiReplanResponse::class.java)
 
         // 상대가 못 알아들은 지시는 **드러낸다.** 삼키면 "지시를 넣었는데 왜 안 먹었나"를 못 짚는다.
         if (res.unknownDirectives.isNotEmpty()) {
@@ -324,39 +310,6 @@ class HttpScheduleAgentAdapter(
         )
     }
 
-    /**
-     * 종전 재계획 — 잠금을 고정 블록으로 승격해 `generate` 를 재사용한다.
-     *
-     * **한시적이다.** 상대가 `replan` 배선을 마치면 이 함수와 위의 503 갈래를 함께 지운다.
-     * 여기서는 사유·지시·자유입력·원 일정·담은 장소를 **실을 자리가 없어 버린다** —
-     * 그래서 취향이 중립은 아니지만(동반·예산·취향은 싣는다) 재계획 의도는 전달되지 않는다.
-     */
-    private fun legacyReplanViaGenerate(input: ReplanInput): ScheduleAgentOutput {
-        val generateInput = ScheduleAgentInput(
-            tripId = input.tripId,
-            generationMode = GenerationMode.FULLY_AI,
-            tripContext = TripContext(
-                input.destinations, input.targetDate, input.targetDate,
-                input.companionType, input.budgetLevel,
-            ),
-            anchors = listOfNotNull(
-                input.originLat?.let { lat -> input.originLng?.let { lng -> DayAnchor(input.targetDate, lat, lng) } },
-            ),
-            timeWindows = listOf(TimeWindow(input.targetDate, DAY_START, DAY_END)),
-            fixedBlocks = input.lockedBlocks,
-            preferenceProfile = input.preferenceProfile,
-            recommendationStrength = null,
-            requestMeta = input.requestMeta,
-            excludedPoiIds = input.excludedPoiIds,
-        )
-        val wire = post(GENERATE_PATH, generateInput, AiScheduleResponse::class.java)
-        return try {
-            wire.toDomain(clock.instant()).groundAlternatives()
-        } catch (e: IllegalArgumentException) {
-            throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 재계획 응답 스키마 불일치: ${e.message}", cause = e)
-        }
-    }
-
     /** 에러 응답 → 도메인 실패. 바디 `{error_code, message, retryable}`(계약) 파싱 실패해도 상태코드로 판정. */
     private fun callFailed(status: Int, body: ByteArray): ScheduleAgentCallFailed {
         val parsed = runCatching { ERROR_MAPPER.readValue(body, AiErrorBody::class.java) }.getOrNull()
@@ -382,9 +335,6 @@ class HttpScheduleAgentAdapter(
         // 있고, **이 상수에서 구 경로가 사라지는 것이 상대의 구 경로 삭제 조건**이다(TRIP-960 ④).
         internal const val ALTERNATIVES_PATH = "/ai/v1/planb/alternatives"
         internal const val REPLAN_PATH = "/ai/v1/planb/replan"
-
-        /** 상대가 경로는 열었지만 배선 전일 때의 코드(`ai/src/trippilot/api/errors.py`). 한시 폴백의 유일한 방아쇠다. */
-        private const val NOT_WIRED = "ORCHESTRATOR_NOT_WIRED"
 
         /**
          * **이 목록이 계약 게이트의 입력이다.** 손으로 관리하는 목록을 테스트가 따로 또 들고 있으면
