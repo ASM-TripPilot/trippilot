@@ -1,18 +1,24 @@
 import { useEffect, type ReactNode } from 'react';
+import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   initialWindowMetrics,
   SafeAreaProvider,
 } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
-import { Inter_700Bold } from '@expo-google-fonts/inter';
-import {
-  NotoSansKR_400Regular,
-  NotoSansKR_500Medium,
-  NotoSansKR_700Bold,
-} from '@expo-google-fonts/noto-sans-kr';
+// 루트 배럴이 아니라 weight 서브패스로 — 배럴은 전 weight 폰트 27종을 번들에 끌어온다(TRIP-1347).
+import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
+import { NotoSansKR_400Regular } from '@expo-google-fonts/noto-sans-kr/400Regular';
+import { NotoSansKR_500Medium } from '@expo-google-fonts/noto-sans-kr/500Medium';
+import { NotoSansKR_700Bold } from '@expo-google-fonts/noto-sans-kr/700Bold';
+import NetInfo from '@react-native-community/netinfo';
 import * as SplashScreen from 'expo-splash-screen';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  focusManager,
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 
 import { retryUnlessNotFound } from '@/shared/api';
 import { ToastHost } from '@/shared/ui/Toast';
@@ -25,8 +31,31 @@ import { initSentry } from './initSentry';
 // 적용되므로 페이지 단독 옵션만으로는 막히지 않는다. staleTime 등 나머지는 여전히 그 값을 실제로
 // 쓰는 소비 화면이 붙는 칸에서 근거와 함께 정한다(TRIP-179 D5).
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: retryUnlessNotFound } },
+  defaultOptions: {
+    queries: {
+      retry: retryUnlessNotFound,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
+      staleTime: 30_000,
+      gcTime: 10 * 60_000,
+    },
+  },
 });
+
+// RN 에는 document 가 없어 focusManager 가 항상 focused 로 읽힌다 — 배선하지 않으면 백그라운드에서도
+// refetchInterval 이 돈다. AppState 'active' 만 focused 로 본다(TRIP-1347). jest 는 이 배선을 못 본다.
+focusManager.setEventListener((handleFocus) => {
+  const sub = AppState.addEventListener('change', (state) => {
+    handleFocus(state === 'active');
+  });
+  return () => sub.remove();
+});
+
+// 오프라인이면 요청을 보류하고 복귀 시 재개한다. isConnected 가 null(미확인)이면 온라인으로 본다.
+onlineManager.setEventListener((setOnline) =>
+  NetInfo.addEventListener((state) => {
+    setOnline(state.isConnected !== false);
+  }),
+);
 
 // 네이티브 스플래시(OS 부팅 화면)를 폰트 로드가 끝날 때까지 자동으로 숨기지 않게 붙잡는다.
 // 이것은 인앱 SplashScreen 컴포넌트(SplashGate 가 부트스트랩 중 그리는 화면)와는 별개 레이어 —
