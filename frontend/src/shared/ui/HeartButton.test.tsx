@@ -204,61 +204,68 @@ describe('🔴 H-1 · AC-11·AC-13 — 누른 뒤 안 담김 → 담김으로 �
   });
 });
 
-describe('H-2~H-4 · AC-12 — 바뀌는 순간이 아니면 튀지 않는다', () => {
-  it('처음부터 담긴 채로 마운트하면 튀지 않고 제 모양이다', async () => {
-    render(heart(true));
+// TRIP-1356 — 「바뀌는 순간이 아니면 튀지 않는다」 5 it(H-2·H-3·H-4·H-5·H-7)을 표로 모았다. 전부 같은 모양이다:
+// 시작 상태로 마운트 → 단계(누름 / 다음 saved 값) 실행 → 기대 얼굴이 뜨고 3초 동안 표본이 하나(안 튐)·제 모양.
+type Step = 'press' | boolean;
+describe('H-2~H-5·H-7 · AC-12 — 바뀌는 순간이 아니면 튀지 않는다', () => {
+  it.each<[string, boolean, boolean, Step[], string]>([
+    [
+      'H-2 처음부터 담긴 채로 마운트하면 튀지 않고 제 모양이다',
+      true,
+      false,
+      [],
+      FILLED,
+    ],
+    [
+      'H-3 눌러서 담김 → 안 담김(담기 취소)으로 바뀌면 튀지 않는다',
+      true,
+      false,
+      ['press', false],
+      OUTLINE,
+    ],
+    [
+      'H-4 동작 줄이기가 켜져 있으면 눌러서 안 담김 → 담김이어도 튀지 않고 바로 제 모양이다',
+      false,
+      true,
+      ['press', true],
+      FILLED,
+    ],
+    [
+      'H-5 누르지 않았는데 안 담김 → 담김(저장 목록 늦게 도착·로그인 뒤 도착)이면 튀지 않는다',
+      false,
+      false,
+      [true],
+      FILLED,
+    ],
+    [
+      'H-7 담긴 하트를 눌러 취소하면 누름 몫이 소멸해, 이후 누름 없는 안 담김 → 담김에는 튀지 않는다',
+      true,
+      false,
+      ['press', false, true],
+      FILLED,
+    ],
+  ])('%s', async (_label, initial, reduceMotion, steps, expectedFace) => {
+    if (reduceMotion) reduceMotionMock.mockResolvedValue(true);
+    const view = render(heart(initial));
     await flush();
 
-    expect(screen.getByTestId(FILLED)).toBeOnTheScreen();
-    const faces = sampleFaces(3000);
-    expect(distinct(faces)).toBe(1);
-    expectAtRest(faces[0]);
-  });
+    for (const step of steps) {
+      if (step === 'press') {
+        press();
+      } else {
+        view.rerender(heart(step));
+        await flush();
+      }
+    }
 
-  it('눌러서 담김 → 안 담김(담기 취소)으로 바뀌면 튀지 않는다', async () => {
-    const view = render(heart(true));
-    await flush();
-
-    press();
-    view.rerender(heart(false));
-    await flush();
-
-    expect(screen.getByTestId(OUTLINE)).toBeOnTheScreen();
-    const faces = sampleFaces(3000);
-    expect(distinct(faces)).toBe(1);
-    expectAtRest(faces[0]);
-  });
-
-  it('동작 줄이기가 켜져 있으면 눌러서 안 담김 → 담김이어도 튀지 않고 바로 제 모양이다', async () => {
-    reduceMotionMock.mockResolvedValue(true);
-    const view = render(heart(false));
-    await flush();
-
-    press();
-    view.rerender(heart(true));
-    await flush();
-
-    expect(screen.getByTestId(FILLED)).toBeOnTheScreen();
+    expect(screen.getByTestId(expectedFace)).toBeOnTheScreen();
     const faces = sampleFaces(3000);
     expect(distinct(faces)).toBe(1);
     expectAtRest(faces[0]);
   });
 });
 
-describe('🔴 H-5~H-7 · AC-12 (5-b W3) — 튐은 누름 1회당 최대 1회, 누르지 않은 변화로는 튀지 않는다', () => {
-  it('H-5 누르지 않았는데 안 담김 → 담김(저장 목록 늦게 도착·로그인 뒤 도착)이면 튀지 않는다', async () => {
-    const view = render(heart(false));
-    await flush();
-
-    view.rerender(heart(true));
-    await flush();
-
-    expect(screen.getByTestId(FILLED)).toBeOnTheScreen();
-    const faces = sampleFaces(3000);
-    expect(distinct(faces)).toBe(1);
-    expectAtRest(faces[0]);
-  });
-
+describe('🔴 H-6 · AC-12 (5-b W3) — 튐은 누름 1회당 최대 1회, 누르지 않은 변화로는 튀지 않는다', () => {
   it('H-6 누른 뒤 담김 반영이 늦어도 1회 튀고, 그 뒤 누름 없는 안 담김 → 담김에는 다시 튀지 않는다', async () => {
     const view = render(heart(false));
     await flush();
@@ -285,23 +292,6 @@ describe('🔴 H-5~H-7 · AC-12 (5-b W3) — 튐은 누름 1회당 최대 1회, 
     const again = sampleFaces(3000);
     expect(distinct(again)).toBe(1);
     expectAtRest(again[0]);
-  });
-
-  it('H-7 담긴 하트를 눌러 취소하면 누름 몫이 소멸해, 이후 누름 없는 안 담김 → 담김에는 튀지 않는다', async () => {
-    const view = render(heart(true));
-    await flush();
-
-    press();
-    view.rerender(heart(false));
-    await flush();
-
-    view.rerender(heart(true));
-    await flush();
-
-    expect(screen.getByTestId(FILLED)).toBeOnTheScreen();
-    const faces = sampleFaces(3000);
-    expect(distinct(faces)).toBe(1);
-    expectAtRest(faces[0]);
   });
 });
 

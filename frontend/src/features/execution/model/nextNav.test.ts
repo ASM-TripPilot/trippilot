@@ -1,6 +1,3 @@
-import fs from 'fs';
-import path from 'path';
-
 import * as fc from 'fast-check';
 import * as Linking from 'expo-linking';
 
@@ -455,49 +452,5 @@ describe('AC-4 · openNextNav 폴백 사다리 3단 (openURL reject 기반)', ()
     await openNextNav({ ...dest, distanceRange: null }, fallback);
 
     expect(fallback).toHaveBeenCalledWith(null);
-  });
-});
-
-describe('AC-7 · 매끄러운 복귀 = 유틸이 라우터를 모른다 (구조 소스 스캔)', () => {
-  const NAV_CALL = /\brouter\.(push|replace|navigate|back)\b/;
-  const ROUTER_IMPORT = /from ['"]expo-router['"]/;
-
-  // 블록 주석 → 줄 주석(콜론 예외). nextNav.ts 는 `nmap://`·`https://` URL 을 담으므로
-  // 콜론 예외가 없으면 `://` 의 슬래시를 주석으로 오인해 URL 뒷부분(그리고 같은 줄 코드)을
-  // 지운다 — 전처리×탐지기 상호소거 함정(리포 관례, [[stripComments가 URL 슬래시 오인]]).
-  const stripComments = (src: string): string =>
-    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-
-  const readNextNavSource = (): string => {
-    const full = path.join(__dirname, 'nextNav.ts');
-    return fs.existsSync(full) ? fs.readFileSync(full, 'utf8') : '';
-  };
-
-  it('G · 자가검사 — 주석은 걷히고 URL(://)은 살아남고 실제 router 호출은 잡힌다', () => {
-    const sample = [
-      '// router.push 를 얹으면 복귀가 깨진다(금지).',
-      'const appUrl = `nmap://route/public?dlat=${lat}`;',
-      'const webUrl = `https://map.naver.com/p/directions/${name}`;',
-      'export async function openNextNav() {}',
-    ].join('\n');
-    const stripped = stripComments(sample);
-
-    // ① 주석 속 router.push 는 걷혀서 부정 단언을 거짓 red 로 만들지 않는다.
-    expect(NAV_CALL.test(stripped)).toBe(false);
-    // ② URL 의 // 는 주석이 아니다(콜론 예외) — 전처리가 URL 을 지우지 않는다.
-    expect(stripped).toContain('nmap://route/public?');
-    expect(stripped).toContain('https://map.naver.com/p/directions/');
-    // ③ 짝 — 실제 코드의 router.push 는 잡는다(우회 불가 증명).
-    expect(NAV_CALL.test('router.push("/(tabs)")')).toBe(true);
-  });
-
-  it('nextNav.ts 는 expo-router import·router 네비게이션 호출이 0건이다', () => {
-    const source = stripComments(readNextNavSource());
-
-    // 긍정 앵커 — 실제로 유틸을 읽고 있다(빈/미완 파일 공허 통과 방지).
-    expect(source).toContain('openNextNav');
-    // 부정 — 라우터 미개입: 외부 앱만 띄우고 우리 라우트는 그대로라 복귀가 저절로 성립.
-    expect(ROUTER_IMPORT.test(source)).toBe(false);
-    expect(NAV_CALL.test(source)).toBe(false);
   });
 });

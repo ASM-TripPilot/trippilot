@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 
 import {
+  buildMonthGrid,
   daysInMonth,
   firstWeekdayOfMonth,
   isDateInRange,
@@ -15,7 +16,7 @@ import {
  * 지키는 대상은 공유 달력 수학이고, 여행 달력(`PeriodEditSheet` · `TripNewStep1Page`)이 계속 쓴다.
  * 숙소 등록 달력이 사라지며(TRIP-1052) 두 파일을 지우므로, 본문을 바꾸지 않고 여기로 옮긴다 —
  * 파일째 지우면 전 스위트가 green인 채로 이 성질들만 조용히 사라진다.
- * 예시 기반 단언은 `monthGrid.test.ts`, 성질(임의 입력) 단언은 이 파일이다.
+ * 예시·성질 단언 모두 이 파일이다(TRIP-1356 — 옛 `monthGrid.test.ts` 를 합쳤다: PBT 와 이중인 예제는 지우고 buildMonthGrid 2예제만 옮겼다).
  *
  * 시간대 함정: 기대값은 **에포크 일수(정수) → ISO 문자열** 한 방향(UTC)으로만 만든다 —
  * 실행 기계의 시간대와 무관하게 결정론적이다.
@@ -104,6 +105,8 @@ describe('isDateInRange — 범위 판정 (F-4)', () => {
     expect(isDateInRange('2026-06-12', '2026-06-10', '2026-06-12')).toBe(true);
     expect(isDateInRange('2026-06-09', '2026-06-10', '2026-06-12')).toBe(false);
     expect(isDateInRange('2026-06-13', '2026-06-10', '2026-06-12')).toBe(false);
+    // 역전(start>end)이면 그 사이처럼 보이는 날도 false (TRIP-1356 · 옛 monthGrid.test 에서 이관).
+    expect(isDateInRange('2026-06-11', '2026-06-12', '2026-06-10')).toBe(false);
   });
 
   it('범위가 미완성(한쪽 null)이면 어떤 날짜도 범위 안이 아니다', () => {
@@ -232,5 +235,26 @@ describe('shiftMonth — 달력 표시 월 이동', () => {
       ),
       { numRuns: 500 }
     );
+  });
+});
+
+describe('buildMonthGrid — 6×7 셀 배열(앞뒤 null 패딩, 길이 7의 배수)', () => {
+  it('월요일 시작 달은 앞을 1칸 비우고 뒤를 채워 7의 배수로 만든다', () => {
+    // 2026-06은 1일=월(요일 1), 30일.
+    const grid = buildMonthGrid('2026-06');
+    expect(grid.length % 7).toBe(0);
+    expect(grid[0]).toBeNull();
+    expect(grid[1]).toEqual({ date: '2026-06-01', day: 1 });
+    expect(grid[30]).toEqual({ date: '2026-06-30', day: 30 });
+    expect(grid.filter((cell) => cell !== null)).toHaveLength(30);
+  });
+
+  it('일요일 시작 달은 앞 패딩이 없다', () => {
+    // 2026-02는 1일=일(요일 0), 28일 → 정확히 4주(28칸), 패딩 0.
+    const grid = buildMonthGrid('2026-02');
+    expect(grid).toHaveLength(28);
+    expect(grid[0]).toEqual({ date: '2026-02-01', day: 1 });
+    expect(grid[27]).toEqual({ date: '2026-02-28', day: 28 });
+    expect(grid.filter((cell) => cell === null)).toHaveLength(0);
   });
 });

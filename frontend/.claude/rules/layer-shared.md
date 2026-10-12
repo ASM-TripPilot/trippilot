@@ -35,7 +35,7 @@ paths:
 | `src/shared/push/pushColors.ts` | 푸시 글리프 색 상수(raw hex 분리) — 토큰 색과 **수동 동기화** 필요 |
 | `src/shared/lib/formatRelativeTime.ts` | `formatRelativeTime(iso, now)` — 경과 시각("방금·N분 전·어제·N일 전"). INV-3 소요시간과 무관 |
 | `src/shared/lib/monthGrid.ts` | 월 그리드 순수 산술(`daysInMonth`·`firstWeekdayOfMonth`·`shiftMonth`·`isDateInRange`·`buildMonthGrid` — 7의 배수, 4~6주 가변). stay·trip·record가 공유하는 유일한 정의(재구현 금지). 에포크 일수 산술로 TZ-safe, `firstWeekdayOfMonth`는 음수 나머지를 흡수한다 |
-| `src/shared/lib/monthGrid.test.ts` | 윤년·연 경계·양끝 포함·월/일요일 시작 패딩 표 전수 |
+| `src/shared/lib/monthGrid.property.test.ts` | 윤년·연 경계·양끝 포함·역전 + `buildMonthGrid` 예제 2개(윤년·일요일 시작) + PBT (옛 `monthGrid.test` 합본, TRIP-1356) |
 | `src/shared/photo/index.ts` | `pickPhotoAsset()`·`resolvePhotoUri()` — TRIP-1070부터 실장(`expo-image-picker`/`expo-media-library` 두 네이티브 모듈의 **유일한 입구**, eslint `no-restricted-imports` 가 잠그고 `eslintReleaseRules.test.ts` 가 발동을 탐침 — 다른 파일이 이 모듈 밖에서 직접 import하면 error). `pickPhotoAsset`은 권한→앨범→`PhotoPickResult`(판별 유니온 `kind`: picked·canceled·denied·no-asset-id·failed, 전체 try/catch)까지 한 함수로 접는다. picked는 촬영시각 ISO 문자열 + 좌표는 있을 때만 키 생성 + `getInstallId()` 결과를 함께 담는다. `resolvePhotoUri`는 권한 재요청 없이 `getAssetInfoAsync` → `info?.localUri ?? null`로 접는다(jest-expo 자동 목이 미해결 호출에 `undefined`를 주는 형제 테스트 대비 방어) |
 | `src/shared/storage/installId.ts` | `getInstallId()` — SecureStore에 있으면 그 값, 없으면 `randomUUID()`로 만들어 같은 키에 저장. 동시 최초 호출에 id가 여러 개 생기지 않도록 **완성값이 아니라 진행 중 Promise 하나**를 메모이즈한다(`pending ??= (async () => …)()`), 실패하면 `pending = null`로 되돌려 다음 호출이 재시도하게 한다(단 이 재시도 자체를 심판하는 테스트는 없다 — 03b 참고-2). 공개 API `@/shared/storage`로 import(TRIP-1157 — 딥 경로 전용 계약 폐기) |
 | `src/shared/ui/HeartGlyphs.tsx` | 하트 채움/외곽 인라인 SVG — place 카드와 stay 검색 카드가 공유. `features/stay/ui/StayGlyphs.tsx`에 22-viewBox 하트 사본이 따로 남아 있다 |

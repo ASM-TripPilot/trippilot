@@ -819,38 +819,8 @@ describe('생성 게이지 칸 접기(foldGenerationGauge)', () => {
     });
   });
 
-  describe('🔴 F2 · AC-2 — 활성이 앞쪽이면 뒤를 접는다', () => {
-    it('5일 여행·day1 만 도착 → [1 완성, 2 생성 중, 3 대기, …]', () => {
-      expect(summary(foldOf([true, false, false, false, false]))).toEqual([
-        '1:done',
-        '2:active',
-        '3:waiting',
-        '…',
-      ]);
-    });
-  });
-
-  describe('🔴 F3 · AC-3 — 활성이 뒤로 밀리면 앞을 접고 활성이 창 끝에 선다 (결정 2 = b · Q1)', () => {
-    it('7일 여행·day1~4 도착 → […, 3 완성, 4 완성, 5 생성 중]', () => {
-      expect(
-        summary(foldOf([true, true, true, true, false, false, false]))
-      ).toEqual(['…', '3:done', '4:done', '5:active']);
-    });
-  });
-
-  describe('🔴 F4 · AC-4 — 활성이 없으면(전부 도착) 마지막 일차를 기준으로 앞을 접는다', () => {
-    it('7일·5일 전부 도착 → … + 마지막 3일', () => {
-      expect(
-        summary(foldOf([true, true, true, true, true, true, true]))
-      ).toEqual(['…', '5:done', '6:done', '7:done']);
-      expect(summary(foldOf([true, true, true, true, true]))).toEqual([
-        '…',
-        '3:done',
-        '4:done',
-        '5:done',
-      ]);
-    });
-  });
+  // F2·F3·F4(활성 앞쪽 뒤 접기 · 활성 밀림 앞 접기 · 전부 도착) 예제는 TRIP-1356 에서 지웠다 — 아래 F6 PBT 가
+  // 같은 규칙(anchor 위치·접기 칸 위치·창 끝 정렬)을 임의 입력으로 잠그고, F1·F5 가 경계 예제 둘을 남긴다.
 
   describe('🔴 F5 · AC-5⑤ — 뒤 접기 ↔ 앞 접기가 바뀌는 경계', () => {
     it('5일에서 3일차 생성 중이면 뒤 접기, 4일차 생성 중이면 앞 접기다', () => {

@@ -12,19 +12,8 @@ import { PushPreprompt } from './PushPreprompt';
  *  - 권한 창 앞 안내라 어디에도 "허용"을 쓰지 않는다(TRIP-935 R8 · 심사 5.1.1(iv)).
  *  - 버튼은 콜백만 올려보낸다 — OS 권한 창·토큰 등록은 호출자(페이지) 몫이다.
  *  - 바로 앞 화면인 위치 카드와 하단 바·버튼·히어로 틀이 같다(R5 선례 복제).
- *
- * 지뢰 목: 아래 세 모듈은 **실리는 순간** 터진다. 카드가 OS 알림 API 나 권한 루틴을 import 만 해도
- * 이 파일 전체가 red 다 — "부르지 않았다"(0회)보다 강한 "싣지도 않았다"를 잰다.
+ * (TRIP-1356 — 「OS 알림 API·권한 루틴을 싣지 않는다」 지뢰 목과 P6 it 을 지웠다: import 구조 가드. 부르지 않음은 P3 콜백 계약이 본다.)
  */
-jest.mock('@/shared/push/register', () => {
-  throw new Error('카드가 권한 루틴(@/shared/push/register)을 실었다');
-});
-jest.mock('@/shared/push/request', () => {
-  throw new Error('카드가 권한 요청(@/shared/push/request)을 실었다');
-});
-jest.mock('expo-notifications', () => {
-  throw new Error('카드가 expo-notifications(OS 알림 API)를 실었다');
-});
 
 const TITLE = '알림을 켜면 여행 중 변화를\n바로 알 수 있어요';
 const PURPOSE =
@@ -127,12 +116,6 @@ describe('🔴 TRIP-1108 · 콜백만 올려보낸다', () => {
     fireEvent.press(screen.getByTestId('onboarding-push-allow'));
 
     expect(onProceed).toHaveBeenCalledTimes(1);
-  });
-
-  it('P6 카드 모듈은 OS 알림 API·권한 루틴을 싣지 않는다(파일 머리 지뢰 목 아래에서 그려진다)', () => {
-    renderCard();
-
-    expect(screen.getByTestId('onboarding-push-root')).toBeOnTheScreen();
   });
 });
 

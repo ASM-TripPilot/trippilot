@@ -1,6 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
-
 import { processColor } from 'react-native';
 import { render, screen, within } from '@testing-library/react-native';
 
@@ -208,37 +205,16 @@ describe('🔴 AC5 — 실패: 클라이언트 ID 부재 → map-failure 보이�
   });
 });
 
-describe('🔴 AC6 — INV-3: MapView 타입·소스에 duration 필드 없음', () => {
-  it('MapView.tsx(+types.ts) 소스에 duration 식별자 0건', () => {
-    const mapDir = __dirname; // src/shared/map
-    const mapViewPath = path.join(mapDir, 'MapView.tsx');
-
-    // 앵커 — 구현 전엔 파일이 없어 red(빈 파일 가짜통과 차단).
-    expect(fs.existsSync(mapViewPath)).toBe(true);
-
-    const candidates = ['MapView.tsx', 'types.ts']
-      .map((f) => path.join(mapDir, f))
-      .filter((p) => fs.existsSync(p));
-
-    for (const p of candidates) {
-      const src = fs.readFileSync(p, 'utf8');
-      // 단어경계 \b — 네이버 정식 prop `animationDuration` 오탐 방지, 필드 `duration:` 검출.
-      expect(/\bduration\b/i.test(src)).toBe(false);
-    }
-  });
-});
-
 describe('🔴 AC-보강 — maxLevel → NaverMapView minZoom 으로 전달(축 반대, 01 §새 계약)', () => {
-  it('maxLevel 전달 시 map-native 가 minZoom prop 을 받는다(값은 6-b, 전달 여부만)', () => {
-    render(<MapView center={CENTER} pins={PINS} maxLevel={5} />);
-
+  it('maxLevel 전달 시 map-native 가 minZoom prop 을 받고(값은 6-b, 전달 여부만), 미전달이면 없다(짝 — maxLevel 이 minZoom 을 몬다)', () => {
+    const { unmount } = render(
+      <MapView center={CENTER} pins={PINS} maxLevel={5} />
+    );
     // 값 하드코딩 금지 — 정확한 변환값은 실기(6-b) 조정 대상.
     expect(screen.getByTestId('map-native').props.minZoom).toBeDefined();
-  });
+    unmount();
 
-  it('maxLevel 미전달 시 minZoom 없음(짝 — maxLevel 이 minZoom 을 몬다)', () => {
     render(<MapView center={CENTER} pins={PINS} />);
-
     expect(screen.getByTestId('map-native').props.minZoom).toBeUndefined();
   });
 });

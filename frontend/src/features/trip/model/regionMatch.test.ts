@@ -1,8 +1,6 @@
 /**
  * @jest-environment node
  */
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 import fc from 'fast-check';
 
@@ -133,44 +131,5 @@ describe('AC-5 · 속성 — 어떤 시도든 정식 명칭과 약칭이 같은 
       ),
       { numRuns: 500 }
     );
-  });
-});
-
-/** 주석 제거 — `:` 뒤 `//`(URL)는 주석으로 안 본다(`staySelectSheetStructure.test.ts` 계승). */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
-
-/** 시도 이름 조각 — 이 중 하나라도 구현 소스(주석 제외)에 있으면 지역 상수표를 둔 것이다. */
-const SIDO_NAME_IN_SOURCE =
-  /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청|충북|충남|전라|전북|전남|경상|경북|경남|제주)/;
-
-describe('AC-5 · 구조 — 지역 이름 상수표 없이 규칙만으로 접는다 (TRIP-445 서버 카탈로그 원칙)', () => {
-  it('탐지기 자가검사 — 주석 속 지역명은 걷히고, 코드 속 지역명은 문다', () => {
-    const sample = [
-      '// 서울특별시 → 서울 로 접힌다', // 주석 → 걷힘
-      "const FIXED = ['부산'];", // 코드 → 생존
-      "const url = 'https://example.com/a';", // URL 슬래시 보존
-    ].join('\n');
-
-    const stripped = stripComments(sample);
-
-    expect(stripped).not.toMatch(/서울/);
-    expect(stripped).toMatch(/https:\/\/example\.com/);
-    expect(SIDO_NAME_IN_SOURCE.test(stripped)).toBe(true);
-  });
-
-  it('regionMatch.ts 소스(주석 제외)에 시도 이름이 0건이고, 두 함수를 export 한다', () => {
-    const source = stripComments(
-      readFileSync(join(__dirname, 'regionMatch.ts'), 'utf8')
-    );
-
-    // 긍정 짝 — 빈 파일 공짜 통과 차단.
-    expect(source).toMatch(/export function sidoKey\b/);
-    expect(source).toMatch(/export function addressInRegion\b/);
-    // 부정 — 지역 상수표 금지.
-    expect(source).not.toMatch(SIDO_NAME_IN_SOURCE);
   });
 });

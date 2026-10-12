@@ -152,21 +152,7 @@ describe('🔴 EditorView · B4-2 — filled 얼굴(AC-2)', () => {
   });
 });
 
-describe('🔴 EditorView · B4-3 — 제거 대상 부재(AC-3, 긍정 짝 동반)', () => {
-  it('히어로·시간대밴드·"Day N"·"지도는 곧"·"다른 후보"·핸들이 없다', () => {
-    renderView({ slots: [slot('a'), slot('b')] });
-
-    // 긍정 짝 — 화면 자체는 떠 있다(공허 통과 방지).
-    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
-
-    // 제거 대상 부재.
-    expect(screen.queryByText('지도는 곧 제공돼요')).toBeNull();
-    expect(screen.queryByText('다른 후보 ›')).toBeNull();
-    expect(screen.queryByText('오전')).toBeNull();
-    expect(screen.queryByText('점심')).toBeNull();
-    expect(screen.queryByText(/^Day \d/)).toBeNull(); // "Day 1" → "1일차" 로 대체
-  });
-});
+// B4-3(제거 대상 부재 — 히어로·시간대밴드·"Day N" 등 not-in-DOM 단언)은 TRIP-1356 에서 지웠다(README 판정 3: 구조·기능 회귀 부재 단언).
 
 describe('🔴 EditorView · B4-4 — day-chip 다일자(AC-4)', () => {
   it('일차 칩 press 가 onSelectDay 를 부르고 헤더가 활성 일자를 반영한다', () => {
@@ -249,18 +235,7 @@ describe('🔴 EditorView · L1 — 주입 라벨 saveLabel (TRIP-1038 B1)', () 
   });
 });
 
-describe('🔴 EditorView · B4-9 — dragging 얼굴(AC-9)', () => {
-  it('isDragging 이면 드롭존이 CTA 자리를 대체한다', () => {
-    renderView({ slots: [slot('a'), slot('b')], isDragging: true });
-
-    expect(screen.getByTestId('itinerary-edit-dropzone')).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-edit-dropzone-active')
-    ).toBeOnTheScreen();
-    // 드래그 중엔 저장 CTA 자리가 드롭존으로 대체된다.
-    expect(screen.queryByTestId('sheet-cta-button-0')).toBeNull();
-  });
-});
+// B4-9(isDragging 이면 드롭존이 CTA 를 대체)는 TRIP-1356 에서 지웠다 — 아래 D7 이 같은 단언(드롭존 활성·CTA 없음)에 + 자리 보존까지 더한 상위 집합이다.
 
 // ── TRIP-753 · i07 일정 편집(inTrip) — h12 편집기를 여행 중 편집으로 재사용 ──────────────────────
 //
@@ -447,16 +422,7 @@ describe('🔴 EditorView · V3 — 방문 완료 행은 회색 알약만, 자�
   });
 });
 
-describe('EditorView · V4 — 예정 행 ⌄ 한 번 누름 = 콜백 한 번 (TRIP-753 AC-5)', () => {
-  it('행 3 시각칩 press 가 onPressTimeChip 을 그 slotKey 로 정확히 1회 부른다', () => {
-    const cb = renderI07();
-
-    fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('p3')}`));
-
-    expect(cb.onPressTimeChip).toHaveBeenCalledTimes(1);
-    expect(cb.onPressTimeChip).toHaveBeenCalledWith(k('p3'));
-  });
-});
+// V4(예정 칩 press = 콜백 1회)는 TRIP-1356 에서 지웠다 — V3 두 번째 it 의 짝 단언(예정 칩 press → 정확히 1회 · slotKey)이 같다.
 
 describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분홍 알약 (TRIP-753 AC-6)', () => {
   it('행 3 에만 "숙소 고정 충돌" 배지를 primary-pale 로 그린다', () => {
@@ -509,7 +475,6 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
 // 문구는 서버 ViolationText.phraseOf 와 글자 단위로 같아야 해서 리터럴로 든다 — 구분자 점은 U+00B7(02a ★6).
 const HC2 = '앞 장소에서 이동할 시간이 빠듯해요';
 const OPENING = '영업시간과 맞지 않아요';
-const NOTICE = '일정 확인이 필요해요';
 const KNOWN = '약 2.1km · 도보 추정';
 
 const p3Badge = (): ReturnType<typeof screen.getByTestId> =>
@@ -522,39 +487,6 @@ function renderWithP3(over: Partial<EditorSlot>): void {
 }
 
 describe('🔴 EditorView · V8 — 위반 알약은 h08 과 같은 규칙: 거리를 모르면 "빠듯"을 빼고, 숫자는 고정 문구', () => {
-  it('V8-1 · 사유가 이동 문구뿐 · 거리 null → 알약은 남고 "일정 확인이 필요해요"', () => {
-    renderWithP3({
-      hasViolation: true,
-      violationReason: HC2,
-      distanceRange: null,
-    });
-
-    expect(screen.getAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(1);
-    expect(p3Badge()).toHaveTextContent(NOTICE);
-    // 문자열을 not 에 쓰면 완전 일치 부정이라 늘 통과한다 — 포함 여부는 정규식으로(02a ★1).
-    expect(p3Badge()).not.toHaveTextContent(/빠듯/);
-  });
-
-  it('V8-2 · 같은 사유라도 거리를 알면 서버 문구 그대로(짝)', () => {
-    renderWithP3({
-      hasViolation: true,
-      violationReason: HC2,
-      distanceRange: KNOWN,
-    });
-
-    expect(p3Badge()).toHaveTextContent(HC2);
-  });
-
-  it('V8-3 · 이동 문구 · 영업시간 · 거리 null → 영업시간 문구만', () => {
-    renderWithP3({
-      hasViolation: true,
-      violationReason: `${HC2} · ${OPENING}`,
-      distanceRange: null,
-    });
-
-    expect(p3Badge()).toHaveTextContent(OPENING);
-  });
-
   // 기대값을 h08 이 쓰는 함수로 계산한다 — 문구가 아니라 "두 화면이 같은 규칙"이라는 관계를 잰다(02a ★4).
   it.each<[string, Partial<EditorSlot>]>([
     ['이동 문구 · 거리 null', { violationReason: HC2, distanceRange: null }],
@@ -579,23 +511,8 @@ describe('🔴 EditorView · V8 — 위반 알약은 h08 과 같은 규칙: 거�
     expect(p3Badge()).toHaveTextContent(violationNotice(data) as string);
   });
 
-  it.each([
-    '영업시간 밖: 543~618',
-    '영업시간 밖: 543~618 · 이동 54분 필요, 간격 -60분',
-    '이동 25분 필요',
-    '이동 1시간 필요',
-  ])('V8-5 · 숫자가 섞인 사유 %p → 고정 문구, N분·N시간 없음', (reason) => {
-    renderWithP3({
-      hasViolation: true,
-      violationReason: reason,
-      distanceRange: KNOWN,
-    });
-
-    // 긍정 앵커 먼저 — "분 없음"만으로는 HH:mm 로 바꾼 옛 문구도 통과한다(02a ★2).
-    expect(p3Badge()).toHaveTextContent(NOTICE);
-    expect(p3Badge()).not.toHaveTextContent(/\d+\s*분/);
-    expect(p3Badge()).not.toHaveTextContent(/\d+\s*시간/);
-  });
+  // V8-1·2·3·5(문구 개별 예시)는 TRIP-1356 에서 지웠다 — V8-4 표가 같은 입력을 h08 과 같은 함수(violationNotice)로 대조하고,
+  // 문구 규칙 자체(숫자 제거·거리 없으면 빠듯 제거)는 entities/itinerary-slot/lib/violationLabel.test 가 잠근다.
 
   it('V8-6 · hasViolation 이 false 면 거리 없는 이동 문구여도 알약이 없다', () => {
     renderWithP3({
@@ -1216,7 +1133,7 @@ describe('🔴 EditorView · N1 — 시트는 손잡이로만 끌린다: 콘텐�
       renderI07(overrides);
 
       // toBe(false) — prop 을 지우면 undefined = 라이브러리 기본 true 로 되돌아가 스와이프를 시트가 뺏는다.
-      //   짝(기본 셸은 미지정)은 MapSheetShell.bodyScroll SH18c 가 잡는다.
+      //   짝(기본 셸은 미지정)은 MapSheetShell.test SH18c 가 잡는다.
       expect(editorSheetHost().props.enableContentPanningGesture).toBe(false);
     }
   );

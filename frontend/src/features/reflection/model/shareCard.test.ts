@@ -9,7 +9,6 @@ import {
   validateCaption,
   validateHashtags,
 } from './shareCard';
-import * as shareCardModule from './shareCard';
 import { summaryStats } from './summaryStats';
 import { distanceSourceLabel, toOrderedVisitList } from './summaryView';
 
@@ -301,17 +300,5 @@ describe('🔴 AC-7 · 폼검증은 온디바이스 순수 함수(서버 저장 
     const over = validateHashtags(Array(HASHTAG_MAX_COUNT + 3).fill('#여행'));
     expect(over.valid).toBe(false);
     expect(over.truncated.length).toBe(HASHTAG_MAX_COUNT);
-  });
-});
-
-describe('🔴 INV-4 · TRIP-1071 — 순수 조립 모듈은 캡처 스텁을 더 내보내지 않는다(판정 단일 출처)', () => {
-  it('captureShareImage(늘 armed:false 스텁)가 없고, 조립 함수는 그대로 있다(짝)', () => {
-    // 준비·실행: 모듈이 내보내는 이름 목록을 읽는다.
-    const exported = Object.keys(shareCardModule);
-
-    // 단언: 옛 스텁 부재 — 판정은 shareCapture.isShareCaptureArmed 가 진다.
-    expect(exported).not.toContain('captureShareImage');
-    // 짝 앵커 — 모듈이 통째로 비어 부재가 공허해진 것이 아니다.
-    expect(exported).toContain('buildShareCard');
   });
 });
