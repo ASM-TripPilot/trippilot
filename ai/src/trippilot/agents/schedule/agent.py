@@ -390,16 +390,22 @@ class ScheduleAgent:
         #    고른 1곳은 **시각 없는 필수 방문**으로도 올린다 — 가산만으로는 조립이 안 넣을 수
         #    있었다(서울 8회 중 1회 카페 0곳, 2026-10-12). 필수 방문은 OR 의 소프트 지배 항이라
         #    INFEASIBLE 이 없고(TRIP-1249), 못 넣으면 아래 ④ 뒤에서 노트로 보고한다(INV-4).
+        #    그날 휴무가 **증명된** 곳도 고르지 않는다 — 1위 카페가 일요일 휴무면 필수 방문이
+        #    못 놓여 "카페 0곳 + 미배치 노트"가 된다(열린 2위가 있는데도). 판정은 HC1 과 같다:
+        #    영업정보 없음은 막지 않고, 항목이 있는데 그 요일이 없으면 휴무.
         add_one_required: tuple[PoiId, ...] = ()
         if request.add_one_categories:
             index = {p.poi_id: p for p in pool.pois}
+            # 재계획은 하루다 — add_one 은 재계획에서만 실린다(generate 는 빈 집합).
+            day = request.days[0]
+            closed = {p.poi_id for p in pool.pois if p.open_hours
+                      and all(oh.day_of_week != day.weekday() for oh in p.open_hours)}
             candidates, add_one_required = boost_add_one(
                 candidates, index, request.add_one_categories,
-                skip=request.excluded_poi_ids | {b.poi_id for b in fixed_blocks},
+                skip=request.excluded_poi_ids | {b.poi_id for b in fixed_blocks} | closed,
             )
-            # 재계획은 하루다 — add_one 은 재계획에서만 실린다(generate 는 빈 집합).
             required_visits += tuple(
-                RequiredVisit(poi_id=p, day=request.days[0], dwell_min=None, reason="add_one")
+                RequiredVisit(poi_id=p, day=day, dwell_min=None, reason="add_one")
                 for p in add_one_required)
             self._observe(
                 trace_id, now, "directives", "add_one", "add_one",
