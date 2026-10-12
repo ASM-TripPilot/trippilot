@@ -466,3 +466,25 @@ def test_요일_목록과_둘째_한정자와_하이픈_범위도_요일마다_�
     hours = parse_open_hours(hours_raw, rest_raw)
     assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == {
         "월화수목금토일".index(c): w for days, w in want.items() for c in days}
+
+
+# 영업 원문 안의 명시 휴무 절은 줄째 휴무 원문 규칙으로 읽는다(#1054 리뷰 후속). 종전엔 괄호·`/` 조각마다
+# 요일을 주워 조건 단서가 매주 휴무가 됐고, 시각 2회 원문에서는 아예 읽지 않았다.
+@pytest.mark.parametrize(("hours_raw", "rest_raw", "want"), [
+    # 실물(어깨동무스토리움) — 시각 2회 + 휴무 원문 `연중무휴`. 종전엔 월요일이 열렸다
+    ("10:00 ~ 17:00<br>\n매주 월요일 휴관 (월요일이 공휴일인 경우 다음날 휴관), 설날·추석 당일 휴관", "연중무휴",
+     {"화수목금토일": (600, 1020)}),
+    # 괄호 조건 단서의 요일(일·월)은 매주 휴무가 아니다
+    ("- 평일 10:00~20:00<br>- 주말 10:00~18:00<br>- 매주 화요일 휴무 (일요일이 공휴일인 경우 월요일 휴무)", None,
+     {"월수목금": (600, 1200), "토일": (600, 1080)}),
+    # 낱말과 요일이 괄호로 갈린 절
+    ("- 평일 10:00~20:00<br>- 주말 10:00~18:00<br>- 휴관일(매주 월요일)", None,
+     {"화수목금": (600, 1200), "토일": (600, 1080)}),
+    # 못 읽는 휴무 절은 무시한다 — 그 줄 때문에 영업시간을 버리지 않는다
+    ("10:00~18:00<br>동절기 휴관", None, {"월화수목금토일": (600, 1080)}),
+])
+def test_영업_원문_안_휴무_절은_줄째_휴무_원문_규칙으로_읽는다(
+        hours_raw: str, rest_raw: str | None, want: dict[str, tuple[int, int]]) -> None:
+    hours = parse_open_hours(hours_raw, rest_raw)
+    assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == {
+        "월화수목금토일".index(c): w for days, w in want.items() for c in days}
