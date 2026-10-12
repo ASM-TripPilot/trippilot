@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -8,14 +6,15 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { BASE } from '@/test-support/apiBase';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { regionPickerHref } from '@/features/explore';
-import { wizardOriginParams } from '@/features/create-trip';
-import { useTripWizardStore } from '@/features/create-trip';
+import { wizardOriginParams, useTripWizardStore } from '@/features/create-trip';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,
@@ -126,7 +125,6 @@ jest.mock('expo-router', () => ({
 }));
 
 /** authWiring.integration.test.ts:59 와 같은 값(리포 관례). */
-const BASE = 'http://localhost:8080/api/v1';
 
 function makePlace(
   poiId: string,
@@ -260,26 +258,9 @@ afterEach(() => {
 
 afterAll(() => server.close());
 
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
-      // 붙잡는다. **mutations 쪽도 반드시 0** 이다(빼면 이 버킷이 300초 매달린다, 리포 실측).
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
-
 /** 목록이 도착해 카드가 그려진 상태까지 만든다 — 이후 증가분이 곧 이 칸의 사정거리다. */
 async function renderPage() {
-  render(<PlaceExplorePage />, { wrapper: createWrapper() });
+  render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
   await waitFor(() =>
     expect(
       screen.getAllByTestId(/^explore-places-card-/).length
@@ -684,7 +665,7 @@ describe('P-10 · 다지역 부분 성공 — 한 지역이 실패해도 나머�
     );
 
     // 실행(Act) — 화면을 그린다.
-    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+    render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
 
     // 단언(Assert) — 부산 두 장이 뜨고(부분 성공), 경주는 없다, error 얼굴도 아니다.
     await waitFor(() =>
@@ -704,7 +685,7 @@ describe('P-10 · 다지역 부분 성공 — 한 지역이 실패해도 나머�
       http.get(`${BASE}/places`, () => new HttpResponse(null, { status: 500 }))
     );
 
-    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+    render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
 
     // 단언 — 조회 실패 안내(다시 시도)가 뜨고 카드는 없다.
     await waitFor(() =>
@@ -745,7 +726,7 @@ describe('P-11 · 다지역 부분 실패면 degraded 배너를 얹고 다시 �
     setAccessToken('valid-access');
     usePartialFailureHandler();
 
-    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+    render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
 
     // 배너가 뜬다(성공분은 살아 있고 부분 실패만 알린다).
     await waitFor(() =>
@@ -764,7 +745,7 @@ describe('P-11 · 다지역 부분 실패면 degraded 배너를 얹고 다시 �
     setAccessToken('valid-access');
     usePartialFailureHandler();
 
-    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+    render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
     await waitFor(() =>
       expect(
         screen.getByTestId('explore-places-partialfailure')
@@ -1055,7 +1036,7 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
 
   /** 그리기만 한다 — 첫 조회가 문 뒤에 서 있는 동안을 재는 케이스(S-1·S-2·S-4)용. */
   function renderNow() {
-    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+    render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
   }
 
   /** 카드가 하나도 없을 때 빈 배열을 돌려준다(위 `cardTestIds` 는 0장이면 throw). */
@@ -1523,7 +1504,7 @@ describe('카드 → 상세 push', () => {
   describe('AC-1 · d04 카드 → d06 push', () => {
     it('카드를 누르면 그 카드의 poiId로 /explore/places/{poiId} 로 이동한다 (첫·둘째 각자)', async () => {
       // 준비 — 카드가 도착할 때까지.
-      render(<PlaceExplorePage />, { wrapper: createWrapper() });
+      render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId('explore-places-card-p2')).toBeOnTheScreen()
       );
@@ -1551,7 +1532,7 @@ describe('카드 → 상세 push', () => {
     afterEach(() => clock?.mockRestore());
 
     it('창이 열려 있으면 카드를 눌러도 장소 상세로 안 가고, 창이 닫힌 뒤 한 번 누르면 그 카드 상세로 정확히 1회 간다', async () => {
-      render(<PlaceExplorePage />, { wrapper: createWrapper() });
+      render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId('explore-places-card-p2')).toBeOnTheScreen()
       );

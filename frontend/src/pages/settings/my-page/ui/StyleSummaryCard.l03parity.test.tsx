@@ -8,10 +8,8 @@ import { StyleSummaryCard } from './StyleSummaryCard';
  *
  * 무엇을 보장하나:
  *  - AC-4 게이지 행이 양끝 벌림(`justify-between`)이 아니다 — dot 이 라벨 바로 뒤에 붙는다.
- *  - AC-4 `headline` 을 받으면 그 문장을 보이고, 안 받으면 문장 자리가 아예 없다
- *    (서버에 헤드라인 필드가 없는 동안 비워 두는 계약 공백 슬롯).
  *
- * 채움 dot 개수(AC-S2)·메타줄 부재(AC-S1)는 `StyleSummaryCard.test.tsx` 가 진다.
+ * 채움 dot 개수(AC-S2)·메타줄 부재(AC-S1)·헤드라인 슬롯(AC-4)은 `StyleSummaryCard.test.tsx` 가 진다.
  */
 
 const OFFICIAL: StyleCardVM = {
@@ -25,8 +23,6 @@ const OFFICIAL: StyleCardVM = {
   sampleTripCount: 6,
   updatedAt: '2026-08-28T09:00:00Z',
 };
-
-const HEADLINE = '바다와 미식을 천천히 즐기는 여행자';
 
 /** className 을 공백으로 쪼갠 토큰 배열(부분 문자열 오탐 방지). */
 function tokens(className: unknown): string[] {
@@ -42,20 +38,5 @@ describe('AC-4 · 게이지 정렬', () => {
     rows.forEach((row) => {
       expect(tokens(row.props.className)).not.toContain('justify-between');
     });
-  });
-});
-
-describe('AC-4 · 헤드라인 슬롯(계약 공백)', () => {
-  it('headline 을 주입하면 그 문장 한 줄이 보인다', () => {
-    render(<StyleSummaryCard vm={OFFICIAL} headline={HEADLINE} />);
-
-    expect(screen.getByTestId('my-style-headline')).toHaveTextContent(HEADLINE);
-  });
-
-  it('headline 을 주입하지 않으면 문장 자리가 없다(카드는 그대로)', () => {
-    render(<StyleSummaryCard vm={OFFICIAL} />);
-
-    expect(screen.queryByTestId('my-style-headline')).toBeNull();
-    expect(screen.getByTestId('my-style-card')).toBeOnTheScreen();
   });
 });

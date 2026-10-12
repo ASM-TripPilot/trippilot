@@ -1,9 +1,4 @@
-import {
-  fireEvent,
-  screen,
-  within,
-  render,
-} from '@testing-library/react-native';
+import { fireEvent, screen, within } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import type {
   Itinerary,
@@ -46,7 +41,6 @@ import {
   BookmarkGlyph,
   HeartGlyph,
 } from '@/features/settings/ui/SettingsGlyphs';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
  * l03 마이 — MyPage 배선을 생성 훅 목으로 보는 node 버킷 테스트(msw 없음).
@@ -109,6 +103,35 @@ beforeEach(() => {
 afterEach(() => resetPressGuard());
 
 // TRIP-1123
+/** 조회 결과 모양(`{ data, isPending, isError }`)의 목 — 다섯 관점 describe 가 각자 복사해 쓰던 것(TRIP-1355). */
+function asQuery<T>(data: T): never {
+  return { data, isPending: false, isError: false } as never;
+}
+
+/** 정식 분석 envelope — 배선이 실제로 이 값을 카드까지 흘려보내는지 본다. 평균 값만 관점별로 갈린다. */
+function officialEnvelope(
+  over: { avgPlacesPerDay?: number; avgRadiusKm?: number } = {}
+): StyleAnalysisEnvelope {
+  return {
+    official: true,
+    progress: { current: 14, required: 10 },
+    analysis: {
+      descriptors: ['#바다', '#미식'],
+      traitGauges: { easygoing: 4, foodAffinity: 4, activeness: 3 },
+      categoryBreakdown: [],
+      avgPlacesPerDay: over.avgPlacesPerDay ?? 3.2,
+      avgRadiusKm: over.avgRadiusKm ?? 5.1,
+      sampleTripCount: 6,
+      updatedAt: '2026-08-28T09:00:00Z',
+    },
+    preview: null,
+  };
+}
+
+function renderPage() {
+  return renderWithQueryClient(<MyPage />);
+}
+
 describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
   /**
    * TRIP-1123 · l03 마이페이지 — 목록·CTA 제거, 숫자 3칸 → 탭 이동, 집계에서 초안 제외(QA-2026-09-29 #28·#29).
@@ -154,20 +177,12 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
   const EN_DASH = '–';
   const BUCKETS = ['upcoming', 'active', 'ended'] as const;
 
-  function asQuery<T>(data: T) {
-    return { data, isPending: false, isError: false } as unknown;
-  }
-
   /** 여행 목록 + 여행별 일정 대본을 한 번에 건다. */
   function script(trips: Trip[], itins: Record<string, ItinScript>): void {
     mockUseTrips.mockReturnValue(
       asQuery(trips) as ReturnType<typeof useGetTrips>
     );
     scriptItineraryOptions(mockQueryOptions, itins);
-  }
-
-  function renderPage() {
-    return renderWithQueryClient(<MyPage />);
   }
 
   /** 세 칸 숫자 자리 글자 — [예정, 진행 중, 종료]. */
@@ -656,10 +671,6 @@ describe('지난 여행 카드 (옛 .l03empty)', () => {
 
   type RecordsResult = ReturnType<typeof useGetMeRecords>;
 
-  function asQuery<T>(data: T) {
-    return { data, isPending: false, isError: false } as unknown;
-  }
-
   /** 소요시간 탐지기(TripCardContainer.test 와 같은 식) — 일수·거리는 안 걸리고 "분·시간·소요"만 걸린다. */
   const DURATION = /소요|\d+\s*분|\d+\s*시간/;
 
@@ -953,27 +964,6 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
     typeof useGetMeRecords
   >;
 
-  function asQuery<T>(data: T) {
-    return { data, isPending: false, isError: false } as unknown;
-  }
-
-  function officialEnvelope(): StyleAnalysisEnvelope {
-    return {
-      official: true,
-      progress: { current: 14, required: 10 },
-      analysis: {
-        descriptors: ['#바다', '#미식'],
-        traitGauges: { easygoing: 4, foodAffinity: 4, activeness: 3 },
-        categoryBreakdown: [],
-        avgPlacesPerDay: 3.2,
-        avgRadiusKm: 5.1,
-        sampleTripCount: 6,
-        updatedAt: '2026-08-28T09:00:00Z',
-      },
-      preview: null,
-    };
-  }
-
   /** 미달 — 정식 분석 없음, 온보딩 취향 미리보기만 있다. */
   function insufficientEnvelope(): StyleAnalysisEnvelope {
     return {
@@ -1175,39 +1165,6 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
     typeof useGetMeStyle
   >;
 
-  /** 정식 분석 envelope — 배선이 실제로 이 값을 카드까지 흘려보내는지 본다. */
-  function officialEnvelope(): StyleAnalysisEnvelope {
-    return {
-      official: true,
-      progress: { current: 14, required: 10 },
-      analysis: {
-        descriptors: ['#바다', '#미식'],
-        traitGauges: { easygoing: 4, foodAffinity: 4, activeness: 3 },
-        categoryBreakdown: [],
-        avgPlacesPerDay: 3.2,
-        avgRadiusKm: 5.1,
-        sampleTripCount: 6,
-        updatedAt: '2026-08-28T09:00:00Z',
-      },
-      preview: null,
-    };
-  }
-
-  function asQuery<T>(data: T) {
-    return { data, isPending: false, isError: false } as unknown as ReturnType<
-      typeof useGetMe
-    >;
-  }
-
-  function renderPage() {
-    const client = new QueryClient();
-    render(
-      <QueryClientProvider client={client}>
-        <MyPage />
-      </QueryClientProvider>
-    );
-  }
-
   beforeEach(() => {
     mockPush.mockClear();
     resetPressGuard();
@@ -1393,39 +1350,6 @@ describe('스타일 카드 상세 진입 (옛 .styleDetail.integration)', () => 
     typeof useGetMeStyle
   >;
 
-  /** 정식 envelope — 카드가 official 얼굴로 그려져 my-style-detail 이 렌더된다. */
-  function officialEnvelope(): StyleAnalysisEnvelope {
-    return {
-      official: true,
-      progress: { current: 14, required: 10 },
-      analysis: {
-        descriptors: ['#바다', '#미식'],
-        traitGauges: { easygoing: 4, foodAffinity: 4, activeness: 3 },
-        categoryBreakdown: [],
-        avgPlacesPerDay: 4,
-        avgRadiusKm: 1.2,
-        sampleTripCount: 6,
-        updatedAt: '2026-08-28T09:00:00Z',
-      },
-      preview: null,
-    };
-  }
-
-  function asQuery<T>(data: T) {
-    return { data, isPending: false, isError: false } as unknown as ReturnType<
-      typeof useGetMe
-    >;
-  }
-
-  function renderPage() {
-    const client = new QueryClient();
-    render(
-      <QueryClientProvider client={client}>
-        <MyPage />
-      </QueryClientProvider>
-    );
-  }
-
   // 옛 목엔 replace 가 없어 부르면 TypeError 였다 — 합친 목은 replace 를 주므로 그 그물을 단언으로 옮긴다.
   afterEach(() => {
     expect(mockReplace).not.toHaveBeenCalled();
@@ -1436,7 +1360,9 @@ describe('스타일 카드 상세 진입 (옛 .styleDetail.integration)', () => 
     mockUseMe.mockReturnValue(asQuery({ email: 'a@b.c' }));
     mockUseProfile.mockReturnValue(asQuery({ nickname: '테스터' }));
     mockUseTrips.mockReturnValue(asQuery([]));
-    mockUseStyle.mockReturnValue(asQuery(officialEnvelope()));
+    mockUseStyle.mockReturnValue(
+      asQuery(officialEnvelope({ avgPlacesPerDay: 4, avgRadiusKm: 1.2 }))
+    );
     mockUseRecords.mockReturnValue(
       asQuery(undefined) as unknown as ReturnType<typeof useGetMeRecords>
     );

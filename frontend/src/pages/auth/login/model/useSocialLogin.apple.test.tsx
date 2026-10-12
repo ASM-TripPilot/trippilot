@@ -1,9 +1,13 @@
-import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { postSocialLogin, postSocialTokenLogin } from '@/shared/api';
 import { saveTokens } from '@/shared/storage';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import {
+  tokenPair,
+  ageConfirmationRequired,
+  authorizeWith,
+} from './__fixtures__/socialLogin';
 import { useSocialLogin, type AuthorizeResult } from './useSocialLogin';
 
 /**
@@ -40,58 +44,16 @@ const mockPostSocialTokenLogin = postSocialTokenLogin as jest.MockedFunction<
 >;
 const mockSaveTokens = saveTokens as jest.MockedFunction<typeof saveTokens>;
 
-/** 인가 결과를 그대로 돌려주는 스텁 authorize. */
-function authorizeWith(result: AuthorizeResult) {
-  return jest.fn(async (): Promise<AuthorizeResult> => result);
-}
-
 const APPLE_RESULT: AuthorizeResult = {
   type: 'success-token',
   accessToken: 'id-tok',
   authorizationCode: 'auth-code',
 };
 
-function tokenPair(isNewUser: boolean) {
-  return {
-    accessToken: 'server-access-token',
-    tokenType: 'Bearer',
-    expiresIn: 3600,
-    refreshToken: 'server-refresh-token',
-    refreshExpiresIn: 7776000,
-    isNewUser,
-    account: {
-      accountId: '00000000-0000-0000-0000-000000000001',
-      status: 'ACTIVE',
-      email: null,
-      socialProviders: ['APPLE'],
-      onboardingCompleted: false,
-    },
-  };
-}
-
-/** 서버가 "연령확인이 아직 없다"며 거절할 때 훅에 닿는 정규화 에러(status 는 일부러 뺀다). */
-function ageConfirmationRequired() {
-  return {
-    code: 'VALIDATION_ERROR',
-    fields: [
-      {
-        field: 'ageConfirmation',
-        reason: '신규 가입 시 연령확인이 필요합니다',
-      },
-    ],
-  };
-}
-
 function renderSocialLogin() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  return renderHook(() => useSocialLogin(), {
+    wrapper: createWrapper(newTestQueryClient()),
   });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return renderHook(() => useSocialLogin(), { wrapper: Wrapper });
 }
 
 beforeEach(() => {
@@ -103,7 +65,7 @@ beforeEach(() => {
 describe('AC-6 · 애플 token 갈래는 accessToken 과 authorizationCode 를 함께 보낸다', () => {
   it('postSocialTokenLogin("apple", { accessToken, authorizationCode }) 를 완전 일치로 부르고 code 경로는 안 부른다', async () => {
     // 준비
-    mockPostSocialTokenLogin.mockResolvedValue(tokenPair(false));
+    mockPostSocialTokenLogin.mockResolvedValue(tokenPair(false, 'APPLE'));
     const { result } = renderSocialLogin();
 
     // 실행
@@ -128,7 +90,7 @@ describe('AC-7 · 카카오·네이버 바디에는 authorizationCode 키 자체
     '%s 는 { accessToken } 만 보낸다 — authorizationCode: undefined 도 허용하지 않는다',
     async (provider) => {
       // 준비 — code 가 없는 SDK 결과.
-      mockPostSocialTokenLogin.mockResolvedValue(tokenPair(false));
+      mockPostSocialTokenLogin.mockResolvedValue(tokenPair(false, 'APPLE'));
       const { result } = renderSocialLogin();
 
       // 실행
@@ -157,7 +119,7 @@ describe('AC-8 · 연령확인 재전송에도 authorizationCode 가 다시 실�
     // 준비 — 첫 호출만 400, 두 번째부터 가입 성공.
     mockPostSocialTokenLogin
       .mockRejectedValueOnce(ageConfirmationRequired())
-      .mockResolvedValue(tokenPair(true));
+      .mockResolvedValue(tokenPair(true, 'APPLE'));
     const { result } = renderSocialLogin();
 
     // 실행 1 — 로그인 → 연령확인 단계.

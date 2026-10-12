@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -9,6 +7,8 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 
+import { BASE } from '@/test-support/apiBase';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import type { Notification } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -50,7 +50,6 @@ jest.mock('expo-router', () => ({
   router: { push: jest.fn(), back: jest.fn() },
 }));
 
-const BASE = 'http://localhost:8080/api/v1';
 const LIST_PATH = '/api/v1/me/notifications';
 const MARK_ALL = 'notification-inbox-mark-all';
 const MARK_ALL_ERROR = 'notification-inbox-mark-all-error';
@@ -180,18 +179,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false, gcTime: 0 },
-    },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  render(<NotificationInboxPage />, { wrapper: Wrapper });
+  render(<NotificationInboxPage />, { wrapper: createGcZeroWrapper() });
 }
 
 /** 첫 목록(3행)이 도착할 때까지 기다린다. */

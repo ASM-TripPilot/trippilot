@@ -1,9 +1,9 @@
-import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { postSocialLogin, postSocialTokenLogin } from '@/shared/api';
 import { saveTokens } from '@/shared/storage';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import { tokenPair, ageConfirmationRequired } from './__fixtures__/socialLogin';
 import { useSocialLogin, type AuthorizeResult } from './useSocialLogin';
 
 /**
@@ -57,59 +57,10 @@ const authorizeCode = jest.fn(async (): Promise<AuthorizeResult> => ({
   redirectUri: 'trippilot://oauth/google',
 }));
 
-function tokenPair(isNewUser: boolean) {
-  return {
-    accessToken: 'server-access-token',
-    tokenType: 'Bearer',
-    expiresIn: 3600,
-    refreshToken: 'server-refresh-token',
-    refreshExpiresIn: 7776000,
-    isNewUser,
-    account: {
-      accountId: '00000000-0000-0000-0000-000000000001',
-      status: 'ACTIVE',
-      email: null,
-      socialProviders: ['KAKAO'],
-      onboardingCompleted: false,
-    },
-  };
-}
-
-/**
- * TRIP-248 — 백엔드가 "연령확인이 아직 없다"고 거절할 때 훅에 닿는 정규화 에러.
- *
- * ⚠️ `status` 를 일부러 담지 않는다(D2). 판정은 body 의 `code` + `fields` 만 보아야 하고,
- * 픽스처에 400 을 넣어 주면 `status === 400` 으로 짠 구현이 그대로 통과해 D2 가 아무 심판도
- * 못 받는다. 연령 관련 상태코드는 이미 정본(422)과 백엔드 구현(403)이 갈라진 전례가 있다.
- *
- * `field` 값은 백엔드 AuthenticateWithSocialUseCase.kt:77 원문 그대로다.
- */
-function ageConfirmationRequired() {
-  return {
-    code: 'VALIDATION_ERROR',
-    fields: [
-      {
-        field: 'ageConfirmation',
-        reason: '신규 가입 시 연령확인이 필요합니다',
-      },
-    ],
-  };
-}
-
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
-
 function renderSocialLogin() {
-  return renderHook(() => useSocialLogin(), { wrapper: createWrapper() });
+  return renderHook(() => useSocialLogin(), {
+    wrapper: createWrapper(newTestQueryClient()),
+  });
 }
 
 beforeEach(() => {
@@ -122,7 +73,7 @@ beforeEach(() => {
 describe('AC-1(훅) · 카카오 토큰 갈래는 /token 호출자로만 나간다', () => {
   it('accessToken 만 실어 postSocialTokenLogin("kakao") 을 부르고, 성공하면 저장 후 success 가 된다', async () => {
     // 준비 — 기존 사용자(isNewUser:false)라 연령확인 없이 바로 저장까지 간다.
-    mockPostSocialTokenLogin.mockResolvedValue(tokenPair(false));
+    mockPostSocialTokenLogin.mockResolvedValue(tokenPair(false, 'KAKAO'));
     const { result } = renderSocialLogin();
 
     // 실행
@@ -146,7 +97,7 @@ describe('AC-1(훅) · 카카오 토큰 갈래는 /token 호출자로만 나간�
 describe('AC-2(훅) · 네이버 토큰 갈래도 동형이다', () => {
   it('accessToken 만 실어 postSocialTokenLogin("naver") 을 부르고 success 가 된다', async () => {
     // 준비
-    mockPostSocialTokenLogin.mockResolvedValue(tokenPair(false));
+    mockPostSocialTokenLogin.mockResolvedValue(tokenPair(false, 'KAKAO'));
     const { result } = renderSocialLogin();
 
     // 실행
@@ -202,7 +153,7 @@ describe('TRIP-248 AC-7 · 재전송은 같은 accessToken 을 /token 으로 다
     // accessToken 은 만료 전까지 재사용 가능하므로 갈래를 바꾸거나 다시 인가받을 필요가 없다.
     mockPostSocialTokenLogin
       .mockRejectedValueOnce(ageConfirmationRequired())
-      .mockResolvedValue(tokenPair(true));
+      .mockResolvedValue(tokenPair(true, 'KAKAO'));
     const { result } = renderSocialLogin();
 
     // 실행 1 — 첫 로그인 → 연령확인 단계까지.
@@ -330,7 +281,7 @@ describe('TRIP-1035 AC-6·7 · 갈래 판정 없이 온 code 결과는 선언을
 describe('AC-4 · google 은 기존 code 교환 경로에 남는다 (D3)', () => {
   it('code 갈래는 postSocialLogin 으로 가고 /token 호출자는 건드리지 않는다', async () => {
     // 준비 — 이 칸은 카카오·네이버만 옮긴다. google 이 딸려 오면 실서버가 거부한다.
-    mockPostSocialLogin.mockResolvedValue(tokenPair(false));
+    mockPostSocialLogin.mockResolvedValue(tokenPair(false, 'KAKAO'));
     const { result } = renderSocialLogin();
 
     // 실행
@@ -347,24 +298,34 @@ describe('AC-4 · google 은 기존 code 교환 경로에 남는다 (D3)', () =>
   });
 });
 
-describe('AC-5(훅) · 취소는 실패가 아니고 서버로 나가지도 않는다', () => {
-  it('어댑터가 cancel 을 주면 phase=cancelled · errorCode=null 이고 두 엔드포인트 모두 호출되지 않는다', async () => {
-    // 준비 — 카카오 reject 도 네이버 isCancel 도 어댑터에서 이 한 형태로 합쳐진다(T1-3·T1-4).
-    // 여기서는 그 합쳐진 결과를 훅이 어떻게 다루는지만 본다.
-    const authorizeCancel = jest.fn(async (): Promise<AuthorizeResult> => ({
-      type: 'cancel',
-    }));
-    const { result } = renderSocialLogin();
+// 취소 계약의 정본 자리 — 옛 `useSocialLogin.test.tsx` 의 「취소 (AC-ONB-01-4)」·「취소·실패 분리 (AC-S5)」와 이 파일의
+// AC-5(훅)를 합쳤다(TRIP-1355: 같은 cancel/dismiss 흐름). 두 엔드포인트가 나란히 목이라 "어느 쪽으로도 안 나간다"까지 본다.
+describe('취소 계약 · AC-ONB-01-4 · AC-S5 · AC-5(훅) — 취소·dismiss 는 실패가 아니고 서버로 나가지도 않는다', () => {
+  it.each([
+    // 카카오 reject 도 네이버 isCancel 도 어댑터에서 이 한 형태로 합쳐진다(T1-3·T1-4) — 훅은 합쳐진 결과만 본다.
+    ['cancel', 'google'],
+    ['dismiss', 'naver'],
+    ['cancel', 'kakao'],
+  ] as const)(
+    '인가 결과 %s (%s) → phase=cancelled · errorCode=null 이고 두 엔드포인트·토큰 저장 모두 0회다',
+    async (type, provider) => {
+      // 준비 — 취소(resolve) 전용 목. reject 목과 겸용하지 않는다(7-21).
+      const authorizeCancelled = jest.fn(
+        async (): Promise<AuthorizeResult> => ({ type })
+      );
+      const { result } = renderSocialLogin();
 
-    // 실행
-    act(() => {
-      result.current.signIn('kakao', authorizeCancel);
-    });
+      // 실행
+      act(() => {
+        result.current.signIn(provider, authorizeCancelled);
+      });
 
-    // 단언 — errorCode 가 채워지면 화면에 실패 배너가 뜬다(INV-4 의 반대 방향 위반).
-    await waitFor(() => expect(result.current.phase).toBe('cancelled'));
-    expect(result.current.errorCode).toBeNull();
-    expect(mockPostSocialTokenLogin).not.toHaveBeenCalled();
-    expect(mockPostSocialLogin).not.toHaveBeenCalled();
-  });
+      // 단언 — errorCode 가 채워지면 화면에 실패 배너가 뜬다(INV-4 의 반대 방향 위반).
+      await waitFor(() => expect(result.current.phase).toBe('cancelled'));
+      expect(result.current.errorCode).toBeNull();
+      expect(mockPostSocialTokenLogin).not.toHaveBeenCalled();
+      expect(mockPostSocialLogin).not.toHaveBeenCalled();
+      expect(mockSaveTokens).not.toHaveBeenCalled();
+    }
+  );
 });

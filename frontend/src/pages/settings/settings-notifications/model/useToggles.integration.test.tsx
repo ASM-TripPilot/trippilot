@@ -1,12 +1,8 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import {
-  defaultScheduler,
-  notifyManager,
-  QueryClient,
-  QueryClientProvider,
-} from '@tanstack/react-query';
+import { defaultScheduler, notifyManager } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { BASE } from '@/test-support/apiBase';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { useGetMeNotificationSettings } from '@/shared/api/index.hooks';
@@ -55,8 +51,6 @@ jest.mock('@/shared/storage', () => ({
   clearTokens: jest.fn().mockResolvedValue(undefined),
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
-
-const BASE = 'http://localhost:8080/api/v1';
 
 /** 토글 하나. 케이스가 push/inApp 만 바꾼다. */
 const tg = (
@@ -116,21 +110,6 @@ afterAll(() => {
   server.close();
 });
 
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
-
 /** 정본 GET 쿼리로 낙관 캐시를 직접 관찰 + useToggles 를 함께 띄운다. */
 function useProbe() {
   return {
@@ -146,7 +125,9 @@ async function renderProbeReady() {
       HttpResponse.json({ items: INITIAL_ITEMS })
     )
   );
-  const rendered = renderHook(() => useProbe(), { wrapper: createWrapper() });
+  const rendered = renderHook(() => useProbe(), {
+    wrapper: createGcZeroWrapper(),
+  });
   await waitFor(() =>
     expect(rendered.result.current.settings.isSuccess).toBe(true)
   );

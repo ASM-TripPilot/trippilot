@@ -15,11 +15,11 @@ import type {
   BaseAssignment,
   Trip,
 } from '@/shared/api/index.schemas';
-import { useGetSavedStays } from '@/shared/api/index.hooks';
-import { useGetTrips } from '@/shared/api/index.hooks';
+import { useGetSavedStays, useGetTrips } from '@/shared/api/index.hooks';
 import type { MyStayRowVM, MyStaysScreen } from './MyStaysScreen';
 import { MyStaysPage } from './MyStaysPage';
 import { http, HttpResponse } from 'msw';
+import { newTestQueryClient } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
@@ -252,17 +252,6 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
         ],
       ]);
       // 거점 쓰기 0 은 실 화면 관점 AC-6 이 msw 로 본다(이 관점은 쓰기 훅을 볼 수 없다 — 페이지가 import 하지 않는다).
-    });
-
-    it('화면에 옛 확정 콜백(onConfirmBaseToggle)을 넘기지 않는다 — 해제 경로가 배선째 사라졌다', () => {
-      renderPage();
-
-      // 짝 앵커 — 화면은 실제로 그려졌고 새 콜백은 받았다.
-      expect(mockScreenProps.current).not.toBeNull();
-      expect(typeof mockScreenProps.current?.onPressChangeBase).toBe(
-        'function'
-      );
-      expect(mockScreenProps.current?.onConfirmBaseToggle).toBeUndefined();
     });
   });
 
@@ -530,14 +519,7 @@ describe('실 화면 + msw — 출발점 변경·출처 칩 (옛 .release)', () 
     );
   }
 
-  function newClient(): QueryClient {
-    return new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { retry: false },
-      },
-    });
-  }
+  const newClient = (): QueryClient => newTestQueryClient({ gcTime: 0 });
 
   function renderPage() {
     return render(

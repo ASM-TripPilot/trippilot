@@ -15,11 +15,10 @@ import { summarizePreferences } from './preferenceSummary';
  * TRIP-778 AC-1 — 서버 취향(`PreferenceView`)을 설정 화면 행 값으로 바꾸는 순수 함수.
  *
  * 무엇을 보장하나:
- *  - 설정된 축은 서버 값을 **서버 순서 그대로** 가운뎃점(U+00B7)으로 잇는다(D5 — enum 원문).
- *  - 미설정 축(축 없음 · `isNeutralDefault:true` · 빈 값)은 빈 문자열이 아니라 `unset` 표지다 —
+ *  - 설정된 축은 `value`, 미설정 축(축 없음 · `isNeutralDefault:true` · 빈 값)은 빈 문자열이 아니라 `unset` 표지다 —
  *    화면은 이것을 회색 `미설정` 칩으로 그린다. `isNeutralDefault:true`면 값이 있어도 미설정이다.
- *  - 동행은 `반려동물`을 덧붙이고, 예산은 등급만 쓴다(`rawAmount` 무시, D6).
- *  - 어떤 입력에서도 'undefined'·'null' 글자가 새지 않는다.
+ *  - 동행은 반려동물만 있어도 값이고, 예산은 등급만 본다(`rawAmount` 무시, D6).
+ *  - 값 문자열(`text`)은 소비처가 없어 TRIP-1355 에서 지웠다 — 표·속성은 `kind` 만 잠근다.
  *
  * 3동작 뼈대: 준비=PreferenceView 픽스처 → 실행=summarizePreferences → 단언=행 key 별 요약.
  *
@@ -28,21 +27,13 @@ import { summarizePreferences } from './preferenceSummary';
  *  "어떤 입력이든 성립하는 성질"을 확인한다.
  */
 
-const DOT = '·';
-
 describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
   it.each<[string, PreferenceView, string, unknown]>([
     [
       '배열 축 복수 값은 서버 순서로 · 연결',
       { styles: { value: ['휴양', '자연'], isNeutralDefault: false } },
       'style',
-      { kind: 'value', text: `휴양${DOT}자연` },
-    ],
-    [
-      '배열 축 순서를 정렬하지 않는다',
-      { styles: { value: ['자연', '휴양'], isNeutralDefault: false } },
-      'style',
-      { kind: 'value', text: `자연${DOT}휴양` },
+      { kind: 'value' },
     ],
     ['축이 없으면 미설정', {}, 'food', { kind: 'unset' }],
     [
@@ -61,7 +52,7 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
       '스칼라(pace) 값은 서버 원문 그대로',
       { pace: { value: '느긋하게', isNeutralDefault: false } },
       'pace',
-      { kind: 'value', text: '느긋하게' },
+      { kind: 'value' },
     ],
     [
       '스칼라 null 이면 미설정',
@@ -79,7 +70,7 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
         },
       },
       'companions',
-      { kind: 'value', text: `친구${DOT}반려동물` },
+      { kind: 'value' },
     ],
     [
       '반려동물만 있어도 값이다',
@@ -91,7 +82,7 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
         },
       },
       'companions',
-      { kind: 'value', text: '반려동물' },
+      { kind: 'value' },
     ],
     [
       '동행이 비고 반려동물도 없으면 미설정',
@@ -109,7 +100,7 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
       '예산은 등급만(rawAmount 무시)',
       { budget: { tier: '중간', rawAmount: 500000, isNeutralDefault: false } },
       'budget',
-      { kind: 'value', text: '중간' },
+      { kind: 'value' },
     ],
     [
       '예산 등급이 없으면 금액이 있어도 미설정',
@@ -145,13 +136,13 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
 
     // 단언(완전일치 · 7키 전부): 빠진 key·남는 key 도 red.
     expect(summary).toEqual({
-      style: { kind: 'value', text: `휴양${DOT}자연` },
+      style: { kind: 'value' },
       budget: { kind: 'unset' },
-      companions: { kind: 'value', text: '친구' },
-      activities: { kind: 'value', text: `맛집투어${DOT}전시` },
-      transport: { kind: 'value', text: '대중교통' },
-      food: { kind: 'value', text: '일식' },
-      pace: { kind: 'value', text: '느긋하게' },
+      companions: { kind: 'value' },
+      activities: { kind: 'value' },
+      transport: { kind: 'value' },
+      food: { kind: 'value' },
+      pace: { kind: 'value' },
     });
   });
 
@@ -200,7 +191,7 @@ const ARRAY_AXES = [
 
 describe('TRIP-778 AC-1 · summarizePreferences — 속성', () => {
   it.each(ARRAY_AXES)(
-    '배열 축(%s): 어떤 enum 부분집합이든 입력 순서 그대로 · 로 잇고, 구분자 수 = 원소 수 − 1',
+    '배열 축(%s): 비어 있지 않은 enum 부분집합이면 어떤 조합이든 값(value)이다',
     (axis, key, values) => {
       fc.assert(
         fc.property(subsetOf(values), (picked) => {
@@ -211,17 +202,13 @@ describe('TRIP-778 AC-1 · summarizePreferences — 속성', () => {
           const row = summary[key];
 
           // 단언
-          expect(row).toEqual({ kind: 'value', text: picked.join(DOT) });
-          if (row.kind === 'value') {
-            expect(row.text.split(DOT)).toHaveLength(picked.length);
-            expect(row.text).not.toMatch(/undefined|null/);
-          }
+          expect(row).toEqual({ kind: 'value' });
         })
       );
     }
   );
 
-  it('동행: 어떤 부분집합 + 반려동물 여부든 반려동물은 끝에 한 번만 붙는다', () => {
+  it('동행: 비어 있지 않은 부분집합이면 반려동물 여부와 무관하게 값(value)이다', () => {
     fc.assert(
       fc.property(
         subsetOf(Object.values(PreferenceInputCompanionTypesItem)),
@@ -235,11 +222,7 @@ describe('TRIP-778 AC-1 · summarizePreferences — 속성', () => {
             },
           });
 
-          const expected = pet ? [...types, '반려동물'] : types;
-          expect(summary.companions).toEqual({
-            kind: 'value',
-            text: expected.join(DOT),
-          });
+          expect(summary.companions).toEqual({ kind: 'value' });
         }
       )
     );

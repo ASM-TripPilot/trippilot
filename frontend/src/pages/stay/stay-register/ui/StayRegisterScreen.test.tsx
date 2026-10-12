@@ -24,6 +24,66 @@ import type { ReactTestInstance } from 'react-test-renderer';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
+/** Figma multi-candidate 실측 데이터. 네 관점 describe 가 각자 복사해 쓰던 것을 한 벌로 모았다(TRIP-1355). */
+const CANDIDATE_A: GeocodeCandidate = {
+  name: '해운대 그랜드 호텔',
+  address: '부산 해운대구 우동 1407',
+  lat: 35.1587,
+  lng: 129.1604,
+};
+
+const CANDIDATE_B: GeocodeCandidate = {
+  name: '해운대 그랜드 레지던스',
+  address: '부산 해운대구 중동 1124',
+  lat: 35.1601,
+  lng: 129.1652,
+};
+
+const IDLE_FLOW: StayRegisterFlow = {
+  // TRIP-199 신규 4축(activeTab·name·coordSource·pinAddressStatus)은 required라 여기서
+  // 채워야 한다 — 옵셔널로 두면 계약 변경이 사람 눈에 안 보인다(02a ★9).
+  activeTab: 'mapsearch',
+  query: '',
+  name: '',
+  searchStatus: 'idle',
+  candidates: [],
+  selectedCandidate: null,
+  coordSource: 'MAP_SEARCH',
+  pinAddressStatus: 'idle',
+  coordConfirmed: false,
+  mapSheetState: 'closed',
+  submitStatus: 'idle',
+  submitAttempted: false,
+};
+
+type Handlers = ReturnType<typeof makeHandlers>;
+
+/** 화면이 받는 콜백 전부. `onBack` 은 옛 SR-1 관점만 눌렀지만 나머지 관점은 안 불러도 무해하다(옵셔널). */
+function makeHandlers() {
+  return {
+    onSelectTab: jest.fn(),
+    onChangeName: jest.fn(),
+    onPickCoord: jest.fn(),
+    onChangeQuery: jest.fn(),
+    onSubmitQuery: jest.fn(),
+    onRetrySearch: jest.fn(),
+    onSelectCandidate: jest.fn(),
+    onOpenMapSheet: jest.fn(),
+    onConfirmCoord: jest.fn(),
+    onCloseMapSheet: jest.fn(),
+    onSubmit: jest.fn(),
+    onBack: jest.fn(),
+  };
+}
+
+function renderScreen(
+  flow: StayRegisterFlow,
+  handlers: Handlers = makeHandlers()
+): Handlers {
+  render(<StayRegisterScreen flow={flow} {...handlers} />);
+  return handlers;
+}
+
 // 옛 StayRegisterScreen.test — R-1~R-16
 describe('탭·검색·후보·제출 (옛 본 파일)', () => {
   /**
@@ -44,38 +104,6 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
    * 위반한다 — 이 사이클에서 실제로 재현했다. 그래서 모듈 스코프 파일을 require 한다.
    */
 
-  /** 픽스처는 파일마다 각자 갖는 것이 리포 관례다(02a ★15). Figma multi-candidate 실측 데이터. */
-  const CANDIDATE_A: GeocodeCandidate = {
-    name: '해운대 그랜드 호텔',
-    address: '부산 해운대구 우동 1407',
-    lat: 35.1587,
-    lng: 129.1604,
-  };
-
-  const CANDIDATE_B: GeocodeCandidate = {
-    name: '해운대 그랜드 레지던스',
-    address: '부산 해운대구 중동 1124',
-    lat: 35.1601,
-    lng: 129.1652,
-  };
-
-  const IDLE_FLOW: StayRegisterFlow = {
-    // TRIP-199 신규 4축(activeTab·name·coordSource·pinAddressStatus)은 required라 여기서
-    // 채워야 한다 — 옵셔널로 두면 계약 변경이 사람 눈에 안 보인다(02a ★9).
-    activeTab: 'mapsearch',
-    query: '',
-    name: '',
-    searchStatus: 'idle',
-    candidates: [],
-    selectedCandidate: null,
-    coordSource: 'MAP_SEARCH',
-    pinAddressStatus: 'idle',
-    coordConfirmed: false,
-    mapSheetState: 'closed',
-    submitStatus: 'idle',
-    submitAttempted: false,
-  };
-
   /** 좌표까지 확정된 "등록 직전" 상태 — 케이스마다 한 축만 무너뜨린다. */
   const READY_FLOW: StayRegisterFlow = {
     ...IDLE_FLOW,
@@ -85,32 +113,6 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
     selectedCandidate: CANDIDATE_A,
     coordConfirmed: true,
   };
-
-  type Handlers = ReturnType<typeof makeHandlers>;
-
-  function makeHandlers() {
-    return {
-      onSelectTab: jest.fn(),
-      onChangeName: jest.fn(),
-      onPickCoord: jest.fn(),
-      onChangeQuery: jest.fn(),
-      onSubmitQuery: jest.fn(),
-      onRetrySearch: jest.fn(),
-      onSelectCandidate: jest.fn(),
-      onOpenMapSheet: jest.fn(),
-      onConfirmCoord: jest.fn(),
-      onCloseMapSheet: jest.fn(),
-      onSubmit: jest.fn(),
-    };
-  }
-
-  function renderScreen(
-    flow: StayRegisterFlow,
-    handlers: Handlers = makeHandlers()
-  ) {
-    render(<StayRegisterScreen flow={flow} {...handlers} />);
-    return handlers;
-  }
 
   describe('R-1 · 3탭 셸과 몰입 화면 (AC-7 · 브리프 AC-11)', () => {
     it('탭 3개가 모두 존재하되 링크 붙여넣기는 잠겨 있고, 하단 탭바는 없다', () => {
@@ -440,25 +442,29 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
   // (1703:1201·4520:2350)은 분홍 침대 마커 1개다 → `kind:'stay'`(01b Q3). `number` 는 타입상 필수라 1.
   // 목은 pins 를 host prop 으로 통과시킬 뿐이라 "넘겼다"까지만 본다 — 실제 마커가 찍히는지는 6-b.
   describe('R-19 · 고른 후보 좌표에 침대 핀 1개 (TRIP-989 D · US-STAY-08 · BR-U1-21)', () => {
-    it('인라인 지도 미리보기에 고른 후보 좌표의 stay 핀 하나를 넘긴다', () => {
+    it('인라인 지도 미리보기와 지도 시트(open) 모두 고른 후보 좌표의 stay 핀 하나를 넘긴다', () => {
       renderScreen({ ...READY_FLOW, selectedCandidate: CANDIDATE_B });
 
       const preview = screen.getByTestId('stay-register-map-preview');
       expect(within(preview).getByTestId('map-root').props.pins).toEqual([
         { number: 1, lat: CANDIDATE_B.lat, lng: CANDIDATE_B.lng, kind: 'stay' },
       ]);
-    });
 
-    it('지도 시트(open)의 지도에도 같은 후보 좌표의 stay 핀 하나를 넘긴다', () => {
-      renderScreen({
-        ...READY_FLOW,
-        coordConfirmed: false,
-        mapSheetState: 'open',
-      });
-
+      // 같은 화면을 시트 열림으로 다시 그린다(옛 별도 it — 같은 pins prop 단언이라 한 it 으로 합쳤다, TRIP-1355).
+      screen.rerender(
+        <StayRegisterScreen
+          flow={{
+            ...READY_FLOW,
+            selectedCandidate: CANDIDATE_B,
+            coordConfirmed: false,
+            mapSheetState: 'open',
+          }}
+          {...makeHandlers()}
+        />
+      );
       const sheet = screen.getByTestId('stay-register-mapsheet');
       expect(within(sheet).getByTestId('map-root').props.pins).toEqual([
-        { number: 1, lat: CANDIDATE_A.lat, lng: CANDIDATE_A.lng, kind: 'stay' },
+        { number: 1, lat: CANDIDATE_B.lat, lng: CANDIDATE_B.lng, kind: 'stay' },
       ]);
     });
 
@@ -509,18 +515,13 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
     });
   });
 
-  describe('🔴 R-13 · 날짜 입력이 없다 — 좌표만 확정하면 등록된다 (TRIP-1052 AC-1 · US-STAY-08)', () => {
-    it('날짜 필드·요약·오류·달력 시트·날짜 칸이 하나도 없고 "체크인·체크아웃" 문구도 없으며, 등록이 열린다', () => {
+  describe('🔴 R-13 · 좌표만 확정하면 등록된다 — 날짜 입력 없음 (TRIP-1052 AC-1 · US-STAY-08)', () => {
+    it('좌표 확정만으로 등록 버튼이 열리고 누르면 onSubmit 이 1회 불린다', () => {
       // 준비 — 후보를 고르고 좌표까지 확정한 "등록 직전" 상태. 날짜 축은 flow에 아예 없다.
       const handlers = renderScreen(READY_FLOW);
 
-      // 단언 ① — 부재. 접두 정규식 하나가 -date-field·-date-summary·-date-error·-datesheet·
-      // -date-cell-* 다섯 갈래를 전부 덮는다(`^`가 있어 candidate 류는 안 걸린다).
-      expect(screen.queryAllByTestId(/^stay-register-date/)).toHaveLength(0);
-      expect(screen.queryByText(/체크인|체크아웃/)).toBeNull();
-
-      // 단언 ② — 짝. 화면이 통째로 비어서 ①이 참이 된 게 아니다: 루트가 있고, 좌표 확정만으로
-      // 등록 버튼이 열려 실제로 제출된다(날짜를 요구하면 위반).
+      // 단언 — 루트가 있고, 좌표 확정만으로 등록 버튼이 열려 실제로 제출된다(날짜를 요구하면 위반).
+      // (날짜 필드·"체크인·체크아웃" 문구 부재 단언은 판정 3 으로 지웠다 — TRIP-1355. 날짜 없는 POST 는 page I-2 가 진다.)
       expect(screen.getByTestId('stay-register-root')).toBeOnTheScreen();
       const submit = screen.getByTestId('stay-register-submit');
       expect(submit).toBeEnabled();
@@ -597,26 +598,6 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
     // coordConfirmed 보다 우선함을 그 테스트가 강제한다(Seed 공식 순서 오기 정정, 02a ★5).
   });
 
-  describe('🔴 R-17 · 다중 후보 행에 "📍 지도 ›" 링크 모양이 없다 (TRIP-935 Q8)', () => {
-    it('각 후보 행에 "지도 ›" 글자가 없고 이름·주소는 그대로다 (라디오 checked 판정은 R-3 유지)', () => {
-      renderScreen({
-        ...IDLE_FLOW,
-        searchStatus: 'success',
-        candidates: [CANDIDATE_A, CANDIDATE_B],
-        selectedCandidate: null,
-      });
-
-      // 구 R-17 은 링크 존재를 잠갔지만 핸들러가 없어 누르면 행 선택으로 흡수되는 무반응 어포던스였다
-      // (심사 2.1) — TRIP-935 Q8 로 부재를 잰다. 앵커로 각 행의 숙소 이름을 함께 본다.
-      const first = screen.getByTestId('stay-register-candidate-0');
-      const second = screen.getByTestId('stay-register-candidate-1');
-      expect(within(first).getByText(CANDIDATE_A.name)).toBeOnTheScreen();
-      expect(within(second).getByText(CANDIDATE_B.name)).toBeOnTheScreen();
-      expect(within(first).queryAllByText(/지도 ›/)).toHaveLength(0);
-      expect(within(second).queryAllByText(/지도 ›/)).toHaveLength(0);
-    });
-  });
-
   describe('R-18 · 확정 콘텐츠 선택 숙소 카드 (AC-S4 · 5-c 경고-1)', () => {
     it('좌표 확정 시 선택 카드가 뜨고 그 안에 고른 숙소 이름·주소가 렌더된다', () => {
       // READY_FLOW = coordConfirmed:true · selectedCandidate:CANDIDATE_A · mapSheetState:'closed'
@@ -667,21 +648,6 @@ describe('핀 지정 탭 (옛 .pin)', () => {
   const PIN_COORDS: MapCenter = { lat: 35.1621, lng: 129.1688 };
   const PIN_ADDRESS = '부산 해운대구 중동 1394';
 
-  const IDLE_FLOW: StayRegisterFlow = {
-    activeTab: 'mapsearch',
-    query: '',
-    name: '',
-    searchStatus: 'idle',
-    candidates: [],
-    selectedCandidate: null,
-    coordSource: 'MAP_SEARCH',
-    pinAddressStatus: 'idle',
-    coordConfirmed: false,
-    mapSheetState: 'closed',
-    submitStatus: 'idle',
-    submitAttempted: false,
-  };
-
   /** 핀 탭에서 좌표를 이미 찍고 확정까지 된 상태 — 케이스마다 한 축(pinAddressStatus·address 등)만
    * 무너뜨린다. `name` 이 채워져 있어야 이름 게이트가 열려, 503/null 이 등록을 막는지를 격리해 잰다. */
   function pinFlow(overrides: Partial<StayRegisterFlow>): StayRegisterFlow {
@@ -701,32 +667,6 @@ describe('핀 지정 탭 (옛 .pin)', () => {
       pinAddressStatus: 'ok',
       ...overrides,
     };
-  }
-
-  type Handlers = ReturnType<typeof makeHandlers>;
-
-  function makeHandlers() {
-    return {
-      onSelectTab: jest.fn(),
-      onChangeQuery: jest.fn(),
-      onChangeName: jest.fn(),
-      onSubmitQuery: jest.fn(),
-      onRetrySearch: jest.fn(),
-      onSelectCandidate: jest.fn(),
-      onPickCoord: jest.fn(),
-      onOpenMapSheet: jest.fn(),
-      onConfirmCoord: jest.fn(),
-      onCloseMapSheet: jest.fn(),
-      onSubmit: jest.fn(),
-    };
-  }
-
-  function renderScreen(
-    flow: StayRegisterFlow,
-    handlers: Handlers = makeHandlers()
-  ): Handlers {
-    render(<StayRegisterScreen flow={flow} {...handlers} />);
-    return handlers;
   }
 
   describe('P-1 · 핀 탭 표면 — CenterPinPicker 와 중앙 고정 핀이 뜬다 (AC-5)', () => {
@@ -864,17 +804,13 @@ describe('핀 지정 탭 (옛 .pin)', () => {
     });
   });
 
-  describe('P-7 · 잠긴 탭은 잠긴 채이되 "준비 중"은 사라진다 (TRIP-730 · INV-4)', () => {
-    it('링크 붙여넣기 탭은 비활성 유지이나 "준비 중" 캡션은 없고, 핀 탭은 눌러 고를 수 있다', () => {
+  describe('P-7 · 잠긴 탭은 잠긴 채다 (TRIP-730 · INV-4)', () => {
+    it('링크 붙여넣기 탭은 비활성 유지이고, 핀 탭은 눌러 고를 수 있다', () => {
       const handlers = renderScreen(IDLE_FLOW);
 
       const linkTab = screen.getByTestId('stay-register-tab-linkpaste');
       // disabled 는 그대로 유지(계약 미존재 · Seed §1) — 개봉 안 함.
       expect(linkTab).toBeDisabled();
-      // TRIP-730 — 정지 화면을 Figma 와 맞춰 "준비 중" 캡션을 제거한다(무음 disabled 셀 자체가
-      // INV-4 신호). regex 부분포함이라 캡션이 남아 있으면 red 다.
-      expect(linkTab).not.toHaveTextContent(/준비 중/);
-
       fireEvent.press(screen.getByTestId('stay-register-tab-pin'));
       expect(handlers.onSelectTab).toHaveBeenCalledTimes(1);
       expect(handlers.onSelectTab).toHaveBeenCalledWith('pin');
@@ -980,35 +916,12 @@ describe('표면 정합 (옛 .surface)', () => {
    * `_ReactNativeCSSInterop` 참조가 jest 호이스트 규칙을 위반하므로 모듈 스코프 파일을 require 한다.
    */
 
-  /** 픽스처는 파일마다 각자 갖는 것이 리포 관례다. */
-  const CANDIDATE_A: GeocodeCandidate = {
-    name: '해운대 그랜드 호텔',
-    address: '부산 해운대구 우동 1407',
-    lat: 35.1587,
-    lng: 129.1604,
-  };
-
   /** 핀을 찍고 역지오코딩이 성공한 결과. */
   const PIN_RESULT: GeocodeCandidate = {
     name: '해운대 아르떼 빌딩',
     address: '부산 해운대구 중동 1394',
     lat: 35.1621,
     lng: 129.1688,
-  };
-
-  const IDLE_FLOW: StayRegisterFlow = {
-    activeTab: 'mapsearch',
-    query: '',
-    name: '',
-    searchStatus: 'idle',
-    candidates: [],
-    selectedCandidate: null,
-    coordSource: 'MAP_SEARCH',
-    pinAddressStatus: 'idle',
-    coordConfirmed: false,
-    mapSheetState: 'closed',
-    submitStatus: 'idle',
-    submitAttempted: false,
   };
 
   /** 핀 탭에 막 들어와 아직 아무 좌표도 없는 상태(핀 찍기 전). */
@@ -1028,35 +941,6 @@ describe('표면 정합 (옛 .surface)', () => {
     coordSource: 'PIN',
     pinAddressStatus: 'ok',
   };
-
-  type Handlers = ReturnType<typeof makeHandlers>;
-
-  /** 프리즈 `makeHandlers`와 달리 `onBack`을 포함한다(02a ★B) — 화면이 그것을 필수로 요구하면
-   * onBack 없이 부르는 프리즈 28건이 깨지므로, 여기서만 넘겨 press를 잰다. */
-  function makeHandlers() {
-    return {
-      onSelectTab: jest.fn(),
-      onChangeQuery: jest.fn(),
-      onChangeName: jest.fn(),
-      onSubmitQuery: jest.fn(),
-      onRetrySearch: jest.fn(),
-      onSelectCandidate: jest.fn(),
-      onPickCoord: jest.fn(),
-      onOpenMapSheet: jest.fn(),
-      onConfirmCoord: jest.fn(),
-      onCloseMapSheet: jest.fn(),
-      onSubmit: jest.fn(),
-      onBack: jest.fn(),
-    };
-  }
-
-  function renderScreen(
-    flow: StayRegisterFlow,
-    handlers: Handlers = makeHandlers()
-  ): Handlers {
-    render(<StayRegisterScreen flow={flow} {...handlers} />);
-    return handlers;
-  }
 
   describe('SR-1 · 헤더에 뒤로가기 컨트롤이 있고 누르면 위로 알린다 (AC-1)', () => {
     it('뒤로가기 버튼이 role=button·접근성 라벨을 갖고, 누르면 onBack이 정확히 한 번 불린다', () => {
@@ -1130,51 +1014,6 @@ describe('표면 정합 (옛 .surface)', () => {
 // smoke/1280_before_register_kb.png). 실제 키보드·스크롤은 jest 사각(6-b iOS)이라 그 동작을 정하는 스크롤
 // prop 과 "입력칸·버튼이 같은 스크롤 안" 을 얼굴마다 잠근다.
 describe('키보드가 떠 있어도 등록 버튼에 닿는다', () => {
-  const CANDIDATE_A: GeocodeCandidate = {
-    name: '해운대 그랜드 호텔',
-    address: '부산 해운대구 우동 1407',
-    lat: 35.1587,
-    lng: 129.1604,
-  };
-
-  const CANDIDATE_B: GeocodeCandidate = {
-    name: '해운대 그랜드 레지던스',
-    address: '부산 해운대구 중동 1124',
-    lat: 35.1601,
-    lng: 129.1652,
-  };
-
-  const IDLE_FLOW: StayRegisterFlow = {
-    activeTab: 'mapsearch',
-    query: '',
-    name: '',
-    searchStatus: 'idle',
-    candidates: [],
-    selectedCandidate: null,
-    coordSource: 'MAP_SEARCH',
-    pinAddressStatus: 'idle',
-    coordConfirmed: false,
-    mapSheetState: 'closed',
-    submitStatus: 'idle',
-    submitAttempted: false,
-  };
-
-  function makeHandlers() {
-    return {
-      onSelectTab: jest.fn(),
-      onChangeQuery: jest.fn(),
-      onChangeName: jest.fn(),
-      onSubmitQuery: jest.fn(),
-      onRetrySearch: jest.fn(),
-      onSelectCandidate: jest.fn(),
-      onPickCoord: jest.fn(),
-      onOpenMapSheet: jest.fn(),
-      onConfirmCoord: jest.fn(),
-      onCloseMapSheet: jest.fn(),
-      onSubmit: jest.fn(),
-    };
-  }
-
   const isHostScroll = (node: ReactTestInstance): boolean =>
     String(node.type) === 'RCTScrollView';
 

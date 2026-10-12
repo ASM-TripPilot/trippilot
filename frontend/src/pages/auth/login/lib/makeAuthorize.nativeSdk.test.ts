@@ -10,6 +10,7 @@ import {
 } from '@/test-support/expoAuthSessionMock';
 
 import { makeAuthorize } from './makeAuthorize';
+import { sandboxEnv } from '@/test-support/envSandbox';
 
 /**
  * AC-1(어댑터) · AC-2(어댑터) · AC-5 · AC-8′(런타임) — 네이티브 SDK 인가 어댑터.
@@ -68,19 +69,9 @@ const ENV_KEYS = [
   'EXPO_PUBLIC_NAVER_URL_SCHEME',
 ] as const;
 
-const ORIGINAL_ENV: Record<string, string | undefined> = {};
-for (const key of ENV_KEYS) {
-  ORIGINAL_ENV[key] = process.env[key];
-}
+sandboxEnv(ENV_KEYS);
 
 afterEach(() => {
-  for (const key of ENV_KEYS) {
-    if (ORIGINAL_ENV[key] === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = ORIGINAL_ENV[key];
-    }
-  }
   resetNativeSocialSdkMock();
   resetExpoAuthSessionMock();
 });

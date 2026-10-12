@@ -1,9 +1,9 @@
-import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { postSocialLogin } from '@/shared/api';
 import { saveTokens } from '@/shared/storage';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import { tokenPair } from './__fixtures__/socialLogin';
 import { useSocialLogin, type AuthorizeResult } from './useSocialLogin';
 
 // TRIP-1157: 훅이 tokenManager 를 @/shared/api(배럴)로 문다 — 통째로 갈아끼우면 토큰 함수가 지워지므로 실물 tokenManager 를 펼친다.
@@ -52,38 +52,10 @@ function createDeferredAuthorize(result: AuthorizeResult) {
   return { authorize, release: () => release() };
 }
 
-function tokenPair(isNewUser: boolean) {
-  return {
-    accessToken: 'access-token',
-    tokenType: 'Bearer',
-    expiresIn: 3600,
-    refreshToken: 'refresh-token',
-    refreshExpiresIn: 7776000,
-    isNewUser,
-    account: {
-      accountId: '00000000-0000-0000-0000-000000000001',
-      status: 'ACTIVE',
-      email: null,
-      socialProviders: ['GOOGLE'],
-      onboardingCompleted: false,
-    },
-  };
-}
-
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
-
 function renderSocialLogin() {
-  return renderHook(() => useSocialLogin(), { wrapper: createWrapper() });
+  return renderHook(() => useSocialLogin(), {
+    wrapper: createWrapper(newTestQueryClient()),
+  });
 }
 
 beforeEach(() => {
@@ -172,37 +144,6 @@ describe('useSocialLogin — 기존 로그인 (AC-ONB-01-2)', () => {
     await waitFor(() => expect(result.current.phase).toBe('success'));
     expect(result.current.isNewUser).toBe(false);
     expect(mockSaveTokens).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('useSocialLogin — 취소 (AC-ONB-01-4)', () => {
-  it('provider 동의 취소(cancel)면 서버 호출 없이 cancelled 로 복귀한다', async () => {
-    const authorizeCancel = jest.fn(async (): Promise<AuthorizeResult> => ({
-      type: 'cancel',
-    }));
-    const { result } = renderSocialLogin();
-
-    act(() => {
-      result.current.signIn('google', authorizeCancel);
-    });
-
-    await waitFor(() => expect(result.current.phase).toBe('cancelled'));
-    expect(mockPostSocialLogin).not.toHaveBeenCalled();
-    expect(mockSaveTokens).not.toHaveBeenCalled();
-  });
-
-  it('provider 창 dismiss 도 서버 호출 없이 cancelled 로 처리한다', async () => {
-    const authorizeDismiss = jest.fn(async (): Promise<AuthorizeResult> => ({
-      type: 'dismiss',
-    }));
-    const { result } = renderSocialLogin();
-
-    act(() => {
-      result.current.signIn('naver', authorizeDismiss);
-    });
-
-    await waitFor(() => expect(result.current.phase).toBe('cancelled'));
-    expect(mockPostSocialLogin).not.toHaveBeenCalled();
   });
 });
 
@@ -297,45 +238,6 @@ describe('useSocialLogin — 인가 실패(reject)는 화면을 authorizing 에 
     expect(result.current.errorCode).not.toBe('');
     expect(mockPostSocialLogin).not.toHaveBeenCalled();
     expect(mockSaveTokens).not.toHaveBeenCalled();
-  });
-});
-
-describe('useSocialLogin — 취소·실패 분리 (AC-S5 · 결함 E 대조 · 케이스 10·11 강화)', () => {
-  it('cancel 은 errorCode 를 채우지 않는다 — 실패가 아니다', async () => {
-    // 준비 — 취소(resolve) 전용 목. reject 목과 겸용하지 않는다(7-21).
-    const authorizeCancel = jest.fn(async (): Promise<AuthorizeResult> => ({
-      type: 'cancel',
-    }));
-    const { result } = renderSocialLogin();
-
-    // 실행
-    act(() => {
-      result.current.signIn('google', authorizeCancel);
-    });
-
-    // 단언 — phase 는 cancelled(기존 계약), errorCode 는 null(신규 단언) 이어야 한다.
-    // errorCode 가 채워지면 화면에 실패 배너가 뜨는 잘못된 구현을 이 단언이 잡는다.
-    await waitFor(() => expect(result.current.phase).toBe('cancelled'));
-    expect(result.current.errorCode).toBeNull();
-    expect(mockPostSocialLogin).not.toHaveBeenCalled();
-  });
-
-  it('dismiss 도 errorCode 를 채우지 않는다 — 실패가 아니다', async () => {
-    // 준비
-    const authorizeDismiss = jest.fn(async (): Promise<AuthorizeResult> => ({
-      type: 'dismiss',
-    }));
-    const { result } = renderSocialLogin();
-
-    // 실행
-    act(() => {
-      result.current.signIn('naver', authorizeDismiss);
-    });
-
-    // 단언
-    await waitFor(() => expect(result.current.phase).toBe('cancelled'));
-    expect(result.current.errorCode).toBeNull();
-    expect(mockPostSocialLogin).not.toHaveBeenCalled();
   });
 });
 

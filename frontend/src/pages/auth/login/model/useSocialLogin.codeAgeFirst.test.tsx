@@ -1,9 +1,9 @@
-import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { postSocialLogin, postSocialTokenLogin } from '@/shared/api';
 import { saveTokens } from '@/shared/storage';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import { tokenPair, ageConfirmationRequired } from './__fixtures__/socialLogin';
 import { useSocialLogin, type AuthorizeResult } from './useSocialLogin';
 
 /**
@@ -78,51 +78,10 @@ function withFlowDeferred(flow: 'code' | 'token', result: AuthorizeResult) {
   return { authorize, release: () => release() };
 }
 
-function tokenPair(isNewUser: boolean) {
-  return {
-    accessToken: 'server-access-token',
-    tokenType: 'Bearer',
-    expiresIn: 3600,
-    refreshToken: 'server-refresh-token',
-    refreshExpiresIn: 7776000,
-    isNewUser,
-    account: {
-      accountId: '00000000-0000-0000-0000-000000000001',
-      status: 'ACTIVE',
-      email: null,
-      socialProviders: ['GOOGLE'],
-      onboardingCompleted: false,
-    },
-  };
-}
-
-/** 서버의 "연령확인이 아직 없다" 거절(정규화 후). status 는 일부러 뺀다(TRIP-248 D2). */
-function ageConfirmationRequired() {
-  return {
-    code: 'VALIDATION_ERROR',
-    fields: [
-      {
-        field: 'ageConfirmation',
-        reason: '신규 가입 시 연령확인이 필요합니다',
-      },
-    ],
-  };
-}
-
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
-
 function renderSocialLogin() {
-  return renderHook(() => useSocialLogin(), { wrapper: createWrapper() });
+  return renderHook(() => useSocialLogin(), {
+    wrapper: createWrapper(newTestQueryClient()),
+  });
 }
 
 beforeEach(() => {

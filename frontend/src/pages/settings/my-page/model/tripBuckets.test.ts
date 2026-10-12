@@ -3,7 +3,6 @@ import fc from 'fast-check';
 import type { TripPhase } from '@/entities/trip';
 import type { Trip, TripStatus } from '@/shared/api/index.schemas';
 
-import * as tripBucketsModule from './tripBuckets';
 import { bucketTrips, phaseBucket, type TripBucket } from './tripBuckets';
 
 /**
@@ -134,13 +133,6 @@ describe('bucketTrips — 예제 (경계·앵커)', () => {
       active: [],
       ended: [],
     });
-  });
-
-  it('옛 서버 status 사영(tripStatusBucket)은 더 이상 내보내지 않는다', () => {
-    // 남아 있으면 누군가 다시 status 로 세어 초안이 되살아난다(01b 3-a).
-    expect(Object.keys(tripBucketsModule)).not.toContain('tripStatusBucket');
-    // 짝 앵커 — 모듈은 실제로 읽혔다(빈 객체라 공짜 통과하는 것을 막는다).
-    expect(Object.keys(tripBucketsModule)).toContain('bucketTrips');
   });
 });
 

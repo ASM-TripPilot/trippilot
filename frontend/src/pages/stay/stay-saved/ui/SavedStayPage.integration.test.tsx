@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { BASE } from '@/test-support/apiBase';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -54,8 +54,6 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: () => {} }),
   useLocalSearchParams: () => ({}),
 }));
-
-const BASE = 'http://localhost:8080/api/v1';
 
 // 하트 저장분(외부키 있음) — stayId는 stayKey(=SOURCE:ID)가 돼야 한다.
 const HEARTED: SavedStay = {
@@ -105,21 +103,6 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
-
 describe('AC-2 · 서버 N건 → 카드 N개 + 개수 부제', () => {
   it('저장 숙소 2건이면 카드 2개와 부제 개수 2가 뜬다', async () => {
     // 준비 — 서버가 2건을 준다.
@@ -130,7 +113,7 @@ describe('AC-2 · 서버 N건 → 카드 N개 + 개수 부제', () => {
     );
 
     // 실행 — 페이지를 그리고 데이터 도착을 기다린다.
-    render(<SavedStayPage />, { wrapper: createWrapper() });
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
     await screen.findByTestId('saved-stay-card-ss-1');
 
     // 단언 — 두 카드와 개수 부제(정규식=부분포함, 02a §5-1).
@@ -146,7 +129,7 @@ describe('AC-5 · 카드 press → 상세 push 는 stayId 만 (TRIP-940 AC-10 �
         HttpResponse.json([HEARTED, PINNED])
       )
     );
-    render(<SavedStayPage />, { wrapper: createWrapper() });
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
     await screen.findByTestId('saved-stay-card-ss-1');
 
     // 실행 — 하트 숙소 카드를 누른다.
@@ -164,7 +147,7 @@ describe('AC-5 · 카드 press → 상세 push 는 stayId 만 (TRIP-940 AC-10 �
         HttpResponse.json([HEARTED, PINNED])
       )
     );
-    render(<SavedStayPage />, { wrapper: createWrapper() });
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
     await screen.findByTestId('saved-stay-card-ss-2');
 
     // 실행 — 외부키가 null인 핀 숙소 카드를 누른다.
@@ -182,7 +165,7 @@ describe('AC-6 · 하단 "거점 지정" → /stays/register', () => {
     server.use(
       http.get(`${BASE}/saved-stays`, () => HttpResponse.json([HEARTED]))
     );
-    render(<SavedStayPage />, { wrapper: createWrapper() });
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
     await screen.findByTestId('saved-stay-register');
 
     fireEvent.press(screen.getByTestId('saved-stay-register'));
@@ -195,7 +178,7 @@ describe('AC-7 · empty CTA "숙소 둘러보기" → /stays', () => {
   it('0건 empty 에서 CTA press → /stays 로 push 한다', async () => {
     // 기본 핸들러가 [] 를 주지만 명시적으로 둔다(의도 표시).
     server.use(http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])));
-    render(<SavedStayPage />, { wrapper: createWrapper() });
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
     await screen.findByTestId('saved-stay-browse');
 
     fireEvent.press(screen.getByTestId('saved-stay-browse'));
@@ -216,7 +199,7 @@ describe('AC-4 · 게스트는 조회를 안 내보내고 게스트 얼굴을 �
       })
     );
 
-    render(<SavedStayPage />, { wrapper: createWrapper() });
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
 
     // 단언 — 게스트 얼굴이 뜬다(enabled:isAuthed=false 라 조회가 영원히 pending인데, 게스트
     // 분기가 상태 판정보다 먼저라 끝나지 않는 로딩에 안 빠진다, d02 ★1).
@@ -236,7 +219,7 @@ describe('AC-11 · 실앱 degrade — 페이지가 거점/지역/가격을 발�
     server.use(
       http.get(`${BASE}/saved-stays`, () => HttpResponse.json([HEARTED]))
     );
-    render(<SavedStayPage />, { wrapper: createWrapper() });
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
     const card = await screen.findByTestId('saved-stay-card-ss-1');
 
     // 긍정 짝 — 이름은 뜬다(카드 자체가 안 떠서 공짜 통과하는 것 차단).

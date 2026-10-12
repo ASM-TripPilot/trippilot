@@ -1,5 +1,4 @@
 import type * as PreferencesModel from '../model/usePreferences';
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -9,6 +8,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { PreferenceView } from '@/shared/api/index.schemas';
@@ -110,18 +110,7 @@ describe('GET 초기값 → 타일 → PUT 저장·400 (옛 .integration)', () =
   });
 
   function renderScreen() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { retry: false },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    render(<PreferencesEditScreen />, { wrapper: Wrapper });
+    render(<PreferencesEditScreen />, { wrapper: createGcZeroWrapper() });
   }
 
   /** GET /me/preferences 를 지정한 View 로 응답하게 건다(케이스마다 기본 픽스처를 덮는다). */

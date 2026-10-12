@@ -1,4 +1,5 @@
 import { getOAuthConfig } from './oauthConfig';
+import { sandboxEnv } from '@/test-support/envSandbox';
 
 /**
  * AC-S4 · getOAuthConfig — kakao·naver authorize 설정 (결함 C).
@@ -25,20 +26,7 @@ const ENV_KEYS = [
   'EXPO_PUBLIC_NAVER_REDIRECT_URI',
 ] as const;
 
-const ORIGINAL_ENV: Record<string, string | undefined> = {};
-for (const key of ENV_KEYS) {
-  ORIGINAL_ENV[key] = process.env[key];
-}
-
-afterEach(() => {
-  for (const key of ENV_KEYS) {
-    if (ORIGINAL_ENV[key] === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = ORIGINAL_ENV[key];
-    }
-  }
-});
+sandboxEnv(ENV_KEYS);
 
 describe('getOAuthConfig — kakao (AC-S4 · 결함 C · 케이스 15)', () => {
   it('env 주입 시 kakao clientId·discovery(kauth.kakao.com)·usePKCE:true·requiresState:false 를 채운다', () => {

@@ -147,6 +147,22 @@ function settleCallbacks(
   }
 }
 
+/**
+ * TRIP-778 — 페이지가 새로 부르는 조회 4종·변경 1종을 "응답 전" 모양으로 채운다. 자동 목은 `undefined` 를
+ * 돌려줘 페이지가 `.data` 에서 죽으므로 이 파일의 관심사와 무관해도 채워야 한다(02a ★2).
+ * (관점 describe 마다 복사돼 있던 5벌을 모듈 최상위 하나로 모았다 — TRIP-1355.)
+ */
+function primeL05Hooks(): void {
+  (useGetMePreferences as jest.Mock).mockReturnValue({ data: undefined });
+  (useGetMeLocationConsent as jest.Mock).mockReturnValue({ data: undefined });
+  (useGetMePersonalization as jest.Mock).mockReturnValue({ data: undefined });
+  (useGetMeSettings as jest.Mock).mockReturnValue({ data: undefined });
+  (usePatchMeSettings as jest.Mock).mockReturnValue({
+    mutate: jest.fn(),
+    isPending: false,
+  });
+}
+
 // TRIP-608 · TRIP-935 · TRIP-990
 describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () => {
   /**
@@ -256,21 +272,6 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
         socialProviders: ['KAKAO'],
         onboardingCompleted: true,
       },
-    });
-  }
-
-  /**
-   * TRIP-778 — 페이지가 새로 부르는 조회 4종·변경 1종을 "응답 전" 모양으로 채운다. 자동 목은 `undefined` 를
-   * 돌려줘 페이지가 `.data` 에서 죽으므로 이 파일의 관심사와 무관해도 채워야 한다(02a ★2).
-   */
-  function primeL05Hooks(): void {
-    (useGetMePreferences as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeLocationConsent as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMePersonalization as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeSettings as jest.Mock).mockReturnValue({ data: undefined });
-    (usePatchMeSettings as jest.Mock).mockReturnValue({
-      mutate: jest.fn(),
-      isPending: false,
     });
   }
 
@@ -465,23 +466,7 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
     });
   });
 
-  describe('TRIP-608 · 닉네임 (AC-2 · AC-7 · AC-8 · AC-9)', () => {
-    it('AC-7: 길이 밖(2자 미만)이면 PATCH 미발화 + 인라인 오류', () => {
-      const patchSpy = jest.fn();
-      primeMutation(mockUsePatchNickname, { spy: patchSpy });
-      renderPage();
-
-      // 실행: 편집 확장 → 1자 입력 → 저장.
-      fireEvent.press(screen.getByTestId('settings-nickname-edit'));
-      fireEvent.changeText(screen.getByTestId('settings-nickname-input'), '가');
-      fireEvent.press(screen.getByTestId('settings-nickname-save'));
-
-      // 단언(급소): 클라 길이 검증이 먼저 막아 요청이 나가지 않는다.
-      expect(patchSpy).not.toHaveBeenCalled();
-      // 단언: 인라인 오류를 명시한다(침묵 금지).
-      expect(screen.getByTestId('settings-nickname-error')).toBeOnTheScreen();
-    });
-
+  describe('TRIP-608 · 닉네임 (AC-2 · AC-9 — AC-7·AC-8 은 아래 S3 짝 it 이 진다, TRIP-1355)', () => {
     it('AC-2: 2~20자면 PATCH 발화 + 200 시 요약 갱신', () => {
       const patchSpy = jest.fn();
       primeMutation(mockUsePatchNickname, {
@@ -502,26 +487,6 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
       expect(patchSpy).toHaveBeenCalledWith({ data: { nickname: '새이름' } });
       // 단언(완전일치): 200 뒤 요약값이 새 닉네임으로 갱신된다.
       expect(screen.getByText('새이름')).toBeOnTheScreen();
-    });
-
-    it('AC-8: 409 NicknameTaken → "이미 사용 중" 인라인, 요약 미변경', () => {
-      primeMutation(mockUsePatchNickname, {
-        spy: jest.fn(),
-        error: httpError(409),
-      });
-      renderPage();
-
-      fireEvent.press(screen.getByTestId('settings-nickname-edit'));
-      fireEvent.changeText(
-        screen.getByTestId('settings-nickname-input'),
-        '중복이름'
-      );
-      fireEvent.press(screen.getByTestId('settings-nickname-save'));
-
-      // 단언(부분포함): 중복 안내(정확 카피는 구현 재량).
-      expect(screen.getByText(/이미 사용 중/)).toBeOnTheScreen();
-      // 단언(완전일치): 요약값은 바뀌지 않는다 — 서버가 거부했으므로.
-      expect(screen.getByText('여행자123')).toBeOnTheScreen();
     });
 
     it('AC-9: 503 ModerationUnavailable → 모더레이션 불가 인라인', () => {
@@ -698,19 +663,23 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
       expect(dismiss).toHaveBeenCalled();
     });
 
-    it('짝: 빈 값이면 인라인 오류만 뜨고 토스트는 없다', () => {
-      const patchSpy = jest.fn();
-      primeMutation(mockUsePatchNickname, { spy: patchSpy });
-      renderPageWithToast();
+    // TRIP-608 AC-7(길이 밖 2자 미만 → PATCH 미발화 + 인라인 오류)을 흡수했다 — 빈 값과 1자 둘 다 돈다.
+    it.each([[''], ['가']])(
+      '짝: 길이 밖 입력(%j)이면 인라인 오류만 뜨고 토스트는 없다',
+      (value) => {
+        const patchSpy = jest.fn();
+        primeMutation(mockUsePatchNickname, { spy: patchSpy });
+        renderPageWithToast();
 
-      submitNickname('');
+        submitNickname(value);
 
-      expect(patchSpy).not.toHaveBeenCalled();
-      expect(screen.getByTestId('settings-nickname-error')).toBeOnTheScreen();
-      expect(screen.queryByTestId('settings-nickname-saved')).toBeNull();
-      // 실패는 고쳐 써야 하므로 키보드를 내리지 않는다.
-      expect(dismiss).not.toHaveBeenCalled();
-    });
+        expect(patchSpy).not.toHaveBeenCalled();
+        expect(screen.getByTestId('settings-nickname-error')).toBeOnTheScreen();
+        expect(screen.queryByTestId('settings-nickname-saved')).toBeNull();
+        // 실패는 고쳐 써야 하므로 키보드를 내리지 않는다.
+        expect(dismiss).not.toHaveBeenCalled();
+      }
+    );
 
     it('짝: 409 로 거절되면 인라인 오류만 뜨고 토스트는 없다', () => {
       primeMutation(mockUsePatchNickname, {
@@ -722,6 +691,9 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
       submitNickname('중복이름');
 
       expect(screen.getByTestId('settings-nickname-error')).toBeOnTheScreen();
+      // TRIP-608 AC-8 흡수 — 중복 안내 문구, 그리고 서버가 거부했으므로 요약값은 바뀌지 않는다.
+      expect(screen.getByText(/이미 사용 중/)).toBeOnTheScreen();
+      expect(screen.getByText('여행자123')).toBeOnTheScreen();
       expect(screen.queryByTestId('settings-nickname-saved')).toBeNull();
       expect(dismiss).not.toHaveBeenCalled();
     });
@@ -1273,21 +1245,6 @@ describe('OSM 출처 링크 (옛 .attribution)', () => {
     );
   }
 
-  /**
-   * TRIP-778 — 페이지가 새로 부르는 조회 4종·변경 1종을 "응답 전" 모양으로 채운다. 자동 목은 `undefined` 를
-   * 돌려줘 페이지가 `.data` 에서 죽으므로 이 파일의 관심사와 무관해도 채워야 한다(02a ★2).
-   */
-  function primeL05Hooks(): void {
-    (useGetMePreferences as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeLocationConsent as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMePersonalization as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeSettings as jest.Mock).mockReturnValue({ data: undefined });
-    (usePatchMeSettings as jest.Mock).mockReturnValue({
-      mutate: jest.fn(),
-      isPending: false,
-    });
-  }
-
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseGetMe.mockReturnValue({
@@ -1395,14 +1352,7 @@ describe('진입 라우트 (옛 .nav)', () => {
     });
     mockUseGetMeProfile.mockReturnValue({ data: { nickname: '여행자123' } });
     // TRIP-778 새 조회·변경 훅 — 응답 전 모양. 이 파일은 라우트만 본다(값·토글은 l05parity.integration).
-    (useGetMePreferences as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeLocationConsent as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMePersonalization as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeSettings as jest.Mock).mockReturnValue({ data: undefined });
-    (usePatchMeSettings as jest.Mock).mockReturnValue({
-      mutate: jest.fn(),
-      isPending: false,
-    });
+    primeL05Hooks();
   });
 
   describe('TRIP-618 · SettingsPage 진입 배선', () => {
@@ -1597,14 +1547,7 @@ describe('삭제·철회 ↔ 푸시 토큰 (옛 .push)', () => {
     jest.clearAllMocks();
     primeAccount('ACTIVE');
     mockUseGetMeProfile.mockReturnValue({ data: { nickname: '여행자123' } });
-    (useGetMePreferences as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeLocationConsent as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMePersonalization as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeSettings as jest.Mock).mockReturnValue({ data: undefined });
-    (usePatchMeSettings as jest.Mock).mockReturnValue({
-      mutate: jest.fn(),
-      isPending: false,
-    });
+    primeL05Hooks();
     primeMutation(mockUsePostMeDeletion, {
       onSuccessData: { purgeAt: '2026-10-25T00:00:00Z', cascadeSummary: {} },
     });
@@ -1697,21 +1640,6 @@ describe('버전 줄 출처 (옛 .version)', () => {
         <SettingsPage />
       </QueryClientProvider>
     );
-  }
-
-  /**
-   * TRIP-778 — 페이지가 새로 부르는 조회 4종·변경 1종을 "응답 전" 모양으로 채운다. 자동 목은 `undefined` 를
-   * 돌려줘 페이지가 `.data` 에서 죽으므로 이 파일의 관심사와 무관해도 채워야 한다(02a ★2).
-   */
-  function primeL05Hooks(): void {
-    (useGetMePreferences as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeLocationConsent as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMePersonalization as jest.Mock).mockReturnValue({ data: undefined });
-    (useGetMeSettings as jest.Mock).mockReturnValue({ data: undefined });
-    (usePatchMeSettings as jest.Mock).mockReturnValue({
-      mutate: jest.fn(),
-      isPending: false,
-    });
   }
 
   beforeEach(() => {

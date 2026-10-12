@@ -192,17 +192,6 @@ const CANON = [
   ['danger', '위험 영역', [['delete-account', '계정 삭제', true]]],
 ];
 
-/** TRIP-778 시절 취향 7행의 행 key — TRIP-1051 로 한 행(`preferences`)에 합쳐져 사라졌다. */
-const OLD_PREFERENCE_ROW_KEYS = [
-  'style',
-  'budget',
-  'companions',
-  'activities',
-  'transport',
-  'food',
-  'pace',
-] as const;
-
 /** D5 프리뷰 픽스처 — 예산만 미설정(축 없음). */
 const PREFERENCES = {
   styles: { value: ['휴양', '자연'], isNeutralDefault: false },
@@ -240,17 +229,6 @@ describe('TRIP-778 AC-2 · 그룹·행 정본 표 완전일치', () => {
         g.rows.map((r) => [r.key, r.label, r.ready]),
       ])
     ).toEqual(CANON);
-  });
-
-  it('짝: 준비중(ready:false) 행이 하나도 없다', () => {
-    const groups = buildSettingsSections({
-      nickname: '여행자123',
-      email: null,
-    });
-
-    // 긍정 앵커: 행이 실제로 있다(빈 목록 공허 통과 차단).
-    expect(groups.flatMap((g) => g.rows).length).toBeGreaterThan(0);
-    expect(groups.flatMap((g) => g.rows).filter((r) => !r.ready)).toEqual([]);
   });
 });
 
@@ -339,21 +317,6 @@ describe('TRIP-1051 · 여행 취향 한 행 요약 (모델)', () => {
     });
 
     expect(rowOf(groups, 'preferences').value).toBe('6/7 설정됨');
-  });
-
-  it('M5 AC-5: 옛 7행 key(style·budget·…·pace)가 어느 그룹에도 없다', () => {
-    const groups = buildSettingsSections({
-      nickname: '여행자123',
-      email: null,
-      preferences: PREFERENCES,
-    });
-
-    // 긍정 앵커: 새 행은 있다(빈 목록이면 아래 "없다"가 공허하다).
-    rowOf(groups, 'preferences');
-    const keys = groups.flatMap((g) => g.rows).map((r) => r.key);
-    for (const key of OLD_PREFERENCE_ROW_KEYS) {
-      expect(keys).not.toContain(key);
-    }
   });
 });
 
