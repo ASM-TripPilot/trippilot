@@ -267,7 +267,9 @@ describe('후보 조회·선택·교체 배선', () => {
       );
 
       await waitFor(() => expect(mockClose).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(getCalls).toBe(2));
+      // 캐시를 PUT 응답으로 교체했다 — 같은 키 GET 재조회는 없다(TRIP-1348). 재조회가 있었다면 닫힘 직후 나갔을 시간.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(getCalls).toBe(1);
     });
 
     it('K4 · AC4(★h09) — 확정 CTA 동기 연속 2회여도 PUT 은 1건이다(firedRef)', async () => {
@@ -1533,7 +1535,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
   });
 
   describe('차선책 경로 — 확정', () => {
-    it('A5 · AC-5 — 차선책 행을 고르면 곧바로 교체하기가 켜지고 치환 PUT 1건 + 닫힘 + 재조회', async () => {
+    it('A5 · AC-5 — 차선책 행을 고르면 곧바로 교체하기가 켜지고 치환 PUT 1건 + 닫힘 + 재조회 0(응답 교체)', async () => {
       // 준비
       renderWithItinerary();
       await waitMountSettled();
@@ -1556,7 +1558,8 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
         ['poiId', 'startAt', 'endAt', 'isFixed', 'endsNextDay'].sort()
       );
       await waitFor(() => expect(mockClose).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(getCalls).toBe(2));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(getCalls).toBe(1);
       expect(postBodies).toHaveLength(0);
     });
 

@@ -138,7 +138,16 @@ export function useBootstrapGate(): BootstrapGateState {
       setPhase('resolved');
     }, BOOTSTRAP_TIMEOUT_MS);
 
+    // NetInfo 는 구독 즉시 현재 상태로 핸들러를 한 번 부른다 — 재연결이 아니라 "지금 상태" 통지다.
+    // 이걸 재조회로 치면 토큰 복원(hydrate) 전에 무인증 GET /bootstrap 이 먼저 나가 부팅 요청이 2건이
+    // 된다(TRIP-1348). 첫 통지는 건너뛰고, 이후의 끊김→연결만 재조회한다(AC-SHELL-01-9).
+    // effect 를 재실행하지 않고 같은 effect 안 플래그로 푼다 — 재실행은 3초 타이머를 재무장한다(AC-S2).
+    let netInfoPrimed = false;
     const unsubscribe = NetInfo.addEventListener((state) => {
+      if (!netInfoPrimed) {
+        netInfoPrimed = true;
+        return;
+      }
       if (state.isConnected && !settled) {
         void applyServerResult();
       }

@@ -29,11 +29,10 @@ import { OPTIMISTIC_VISIT_ID_PREFIX } from './visitStatus';
  * ★ 새 HTTP 함수를 만들지 않는다 — 생성 클라이언트의 4함수만 재사용한다(G5). 409/404 분류는
  * axios 를 직접 import 하지 않고 `@/shared/api` 의 판정 헬퍼(isAlreadyRegistered·isNotFound)로 한다.
  *
- * ★ 무효화 비대칭(테스트가 강제한다): complete·skip 은 성공 시 그 날 캐시를 무효화(재조회)하지만,
- * arrive 는 무효화하지 않고 **서버가 돌려준 레코드로 낙관 레코드를 교체**한다. 즉석 방문(AC-5)은
- * 목록을 게이트 없이 관측하는데, 무효화하면 재조회가 낙관 삽입을 덮어 즉석 2건이 사라진다 —
- * arrive 는 이미 권위 있는 생성 레코드(실 id·spontaneous 배지)를 응답으로 받으므로 그걸 심는다.
- * 실패 경로는 셋 다 무효화하지 않는다(재요청이 롤백을 덮으면 "되돌렸나"를 관측 못 함).
+ * ★ 재조회 없음(TRIP-1348): arrive·complete·skip 모두 성공 시 **서버가 돌려준 레코드로 그 레코드만
+ * 교체**한다(무효화·재조회 0). 즉석 방문(AC-5)은 목록을 게이트 없이 관측하는데, 재조회가 낙관 삽입을
+ * 덮으면 즉석 2건이 사라지고(옛 arrive 무효화 비대칭), complete·skip 도 응답이 권위 있는 레코드(VisitCheck)라
+ * 통째 재조회할 이유가 없다. 실패 경로는 셋 다 무효화하지 않는다(재요청이 롤백을 덮으면 "되돌렸나"를 관측 못 함).
  *
  * TRIP-1021 · 연타 가드 — 같은 슬롯(키 없으면 poi)의 도착 요청이 진행 중이면 두 번째 호출은 요청 없이
  * `conflict` 로 끝난다. 두 번 나가면 같은 낙관 id 두 개가 한 응답으로 함께 교체돼 같은 카드가 둘 선다.
@@ -72,6 +71,13 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
     queryClient.setQueryData<VisitCheckList>(key, (current) => ({
       visits: update(current?.visits ?? []),
     }));
+  }
+
+  /** 서버 응답 레코드로 그 레코드 하나만 교체한다 — 다른 레코드(진행 중 낙관 포함)는 건드리지 않는다. */
+  function replaceRecord(visitCheckId: string, record: VisitCheck): void {
+    patchCache((visits) =>
+      visits.map((v) => (v.visitCheckId === visitCheckId ? record : v))
+    );
   }
 
   async function arrive(input: {
@@ -135,11 +141,12 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
     );
 
     try {
-      await postTripsTripIdVisitsVisitCheckIdComplete(
+      const done = await postTripsTripIdVisitsVisitCheckIdComplete(
         deps.tripId,
         visitCheckId
       );
-      void queryClient.invalidateQueries({ queryKey: key });
+      // 재조회 대신 응답 레코드로 그 레코드만 교체(TRIP-1348) — 도착(arrive)과 같은 방식.
+      replaceRecord(visitCheckId, done);
       return { kind: 'completed' };
     } catch (error) {
       // ★ 레코드 단위 롤백 — 그 레코드만 미완료로 원복(다른 레코드 불변).
@@ -162,8 +169,11 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
     );
 
     try {
-      await postTripsTripIdVisitsVisitCheckIdSkip(deps.tripId, visitCheckId);
-      void queryClient.invalidateQueries({ queryKey: key });
+      const skipped = await postTripsTripIdVisitsVisitCheckIdSkip(
+        deps.tripId,
+        visitCheckId
+      );
+      replaceRecord(visitCheckId, skipped);
       return { kind: 'skipped' };
     } catch (error) {
       patchCache((visits) =>

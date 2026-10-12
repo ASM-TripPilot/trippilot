@@ -15,6 +15,9 @@ export function useReplanSession(tripId: string, sessionId: string) {
   return useGetTripsTripIdReplanSessionsSessionId(tripId, sessionId, {
     query: {
       refetchInterval: (query) => {
+        // 조회가 오류로 떨어지면 서 버린다(INV-4, TRIP-1348) — 오류 뒤에도 옛 data 가 남아 있어
+        // (SOLVING) 그대로 두면 서버가 죽어 있는 동안 영구 폴링한다. 오류 표면은 페이지가 그린다.
+        if (query.state.status === 'error') return false;
         const status = query.state.data?.status;
         return status === 'COLLECTING' || status === 'SOLVING'
           ? POLL_INTERVAL_MS

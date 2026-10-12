@@ -222,10 +222,13 @@ beforeEach(() => {
     ),
     // 나간 PUT 바디를 관측한다(add→PUT·삽입 순서 심판의 급소).
     http.put(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
-      putBodies.push((await request.json()) as EditItineraryRequest);
+      const body = (await request.json()) as EditItineraryRequest;
+      putBodies.push(body);
+      // 서버는 저장한 일정을 그대로 돌려준다 — 페이지가 이 응답으로 일정 GET 캐시를 교체한다(TRIP-1348).
+      // 날(date)을 보존해야 시트 헤더("N일차")가 안 흔들린다.
       return HttpResponse.json({
         ...ITINERARY_ENVELOPE,
-        days: [{ date: '2026-06-10', slots: [] }],
+        days: body.days.map((day) => ({ date: day.date, slots: [] })),
       });
     })
   );
@@ -310,8 +313,10 @@ describe('🔴 P2 · AC-5·TRIP-502 — 검색은 서버가 한다(q) — 로드
     fireEvent.changeText(screen.getByTestId('itinerary-place-search'), '해');
 
     // 검색은 서버가 한다 — '해' 안 든 p1 은 사라지고, q 를 실은 새 요청이 나간다(로드된 페이지 한정 아님).
-    await waitFor(() =>
-      expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull()
+    // 검색어는 300ms 디바운스 뒤 서버로 나간다(TRIP-1348) — 기본 1초 대기는 부하 속에서 빠듯해 3초로 둔다.
+    await waitFor(
+      () => expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull(),
+      { timeout: 3000 }
     );
     const hits = hitsOf('GET', '/api/v1/places');
     expect(hits.length).toBeGreaterThanOrEqual(2);
@@ -322,6 +327,38 @@ describe('🔴 P2 · AC-5·TRIP-502 — 검색은 서버가 한다(q) — 로드
       expect(screen.getByTestId('itinerary-place-card-p2')).toBeOnTheScreen()
     );
     expect(screen.queryByTestId('itinerary-place-card-p3')).toBeNull();
+  });
+});
+
+describe('TRIP-1348 · 검색어 디바운스 — 연속 입력이 키 입력마다 요청이 되지 않는다', () => {
+  it('5글자를 연달아 입력하면 /places 는 첫 조회 + 마지막 검색어 1건뿐이다', async () => {
+    await renderPage();
+    const before = hitsOf('GET', '/api/v1/places').length;
+    // 앵커 — 첫 조회 1건.
+    expect(before).toBe(1);
+
+    const input = screen.getByTestId('itinerary-place-search');
+    for (const text of ['한', '한옥', '한옥마', '한옥마을', '한옥마을길']) {
+      fireEvent.changeText(input, text);
+      // 키 입력 간격(실제 타이핑은 100ms 안팎) — 이 간격이면 디바운스 없는 구현은 글자마다 요청이 나간다.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      });
+    }
+
+    await waitFor(() =>
+      expect(
+        hitsOf('GET', '/api/v1/places').some(
+          (hit) => new URL(hit.url).searchParams.get('q') === '한옥마을길'
+        )
+      ).toBe(true)
+    );
+    // 중간 글자('한'·'한옥'…) 는 한 건도 나가지 않았다 — 첫 조회 + 최종 1건 = 2건 이하.
+    const hits = hitsOf('GET', '/api/v1/places');
+    expect(hits.length).toBeLessThanOrEqual(2);
+    expect(
+      hits.some((hit) => new URL(hit.url).searchParams.get('q') === '한옥')
+    ).toBe(false);
   });
 });
 
@@ -385,19 +422,30 @@ describe('🟢 A6 · TRIP-798/338 — add → PUT + 캐시 무효화 (W-1 회귀
     expect(day?.slots.map((slot) => slot.poiId)).toContain('p1');
   });
 
-  it('A6b · PUT 성공 → 일정 GET 캐시가 무효화된다 (누락 시 h19 에 영영 안 보임)', async () => {
+  it('A6b · PUT 성공 → 일정 GET 캐시가 응답으로 교체되고 재조회는 없다 (누락 시 h19 에 영영 안 보임)', async () => {
     const client = makeClient();
+    const setSpy = jest.spyOn(client, 'setQueryData');
     const invalidateSpy = jest.spyOn(client, 'invalidateQueries');
     renderPageWith(client);
     await screen.findByTestId('itinerary-place-add-p1');
+    const getsBefore = hitsOf('GET', '/api/v1/trips/t1/itinerary').length;
 
     await addPlaceAndApply('p1');
 
-    // onSuccess 의 invalidateQueries(일정 키)를 관측 — 이 배선을 지우면 호출 0 으로 red.
+    // onSuccess 의 setQueryData(일정 키, PUT 응답)를 관측 — 이 배선을 지우면 호출 0 으로 red(TRIP-1348).
     await waitFor(() =>
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: getGetTripsTripIdItineraryQueryKey('t1'),
-      })
+      expect(setSpy).toHaveBeenCalledWith(
+        getGetTripsTripIdItineraryQueryKey('t1'),
+        expect.objectContaining({ days: expect.any(Array) })
+      )
+    );
+    // 무효화·재조회가 없다 — 같은 키 GET 이 늘지 않는다.
+    expect(invalidateSpy).not.toHaveBeenCalledWith({
+      queryKey: getGetTripsTripIdItineraryQueryKey('t1'),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(hitsOf('GET', '/api/v1/trips/t1/itinerary')).toHaveLength(
+      getsBefore
     );
   });
 });
@@ -768,7 +816,11 @@ describe('TRIP-924 · E — 후보 0건 안내 (조회 성공 뒤에만, 검색�
 
     // 단언 — 카드는 사라지고 안내가 같은 문구로 뜬다.
     expect(
-      await screen.findByTestId('itinerary-place-empty')
+      await screen.findByTestId(
+        'itinerary-place-empty',
+        {},
+        { timeout: 3000 } // 300ms 디바운스(TRIP-1348) 뒤에 조회가 나간다
+      )
     ).toHaveTextContent(EMPTY_COPY);
     expect(screen.queryAllByTestId(/^itinerary-place-card-/)).toHaveLength(0);
   });

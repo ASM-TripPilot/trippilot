@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
 
 import { addSlot, insertSlotAt } from '@/features/edit-itinerary';
@@ -23,6 +23,8 @@ import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
 // 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
+/** 검색어가 이 시간 동안 멈춰야 서버 조회 키가 바뀐다(TRIP-1348). */
+const SEARCH_DEBOUNCE_MS = 300;
 
 /**
  * h13 장소 추가 배선(TRIP-798, 구 h20 TRIP-338·TRIP-502 계승) — `usePlacesInfinite` 로 후보를 받아
@@ -65,7 +67,16 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   const [addedPoiIds, setAddedPoiIds] = useState<string[]>([]);
 
   // 검색은 서버가 한다(q) + 커서 무한 스크롤(TRIP-502) — 클라 이름 필터·전량 수신을 없앤다.
-  const trimmedQuery = searchText.trim();
+  // 입력창은 즉시 반영하되 서버 조회 키만 300ms 멈춘 값으로 민다 — 글자마다 요청이 나가던 것을 줄인다(TRIP-1348).
+  const typedQuery = searchText.trim();
+  const [trimmedQuery, setTrimmedQuery] = useState(typedQuery);
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setTrimmedQuery(typedQuery),
+      SEARCH_DEBOUNCE_MS
+    );
+    return () => clearTimeout(timer);
+  }, [typedQuery]);
   // 후보는 여행 목적지로 좁힌다(TRIP-981 #041). 여행 조회가 끝나기 전엔 장소 조회를 켜지 않는다 —
   // 켜면 전국 목록이 먼저 떴다가 바뀐다. 실패·목적지 0곳이면 region 없이 연다(INV-4).
   // 재시도 없음 — 기본 3회(1+2+4초)를 다 기다리면 실패 시 목록이 ~7초 빈다.
@@ -157,12 +168,13 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
     save.mutate(
       { tripId, data: buildEditItineraryRequest(nextDays) },
       {
-        // 저장 성공 → 일정 GET 캐시 무효화. h19 가 갱신 재조회해 추가한 슬롯·서버 재검증
-        // 결과(hasViolation)를 표시한다 — 없으면 추가가 화면에 영영 안 보인다(SlotCandidate 선례).
-        onSuccess: () => {
-          void queryClient.invalidateQueries({
-            queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
-          });
+        // 저장 성공 → PUT 응답(추가한 슬롯·서버 재검증 결과 hasViolation)으로 일정 GET 캐시를 교체한다
+        // (재조회 0, TRIP-1348). h19 가 그 캐시를 읽는다 — 없으면 추가가 화면에 영영 안 보인다.
+        onSuccess: (data) => {
+          queryClient.setQueryData(
+            getGetTripsTripIdItineraryQueryKey(tripId),
+            data
+          );
         },
       }
     );
