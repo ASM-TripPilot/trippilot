@@ -67,6 +67,25 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('--push-mode', sync['run'])
         self.assertIn('PUSH_MODE_INPUT', sync['run'])
 
+    def test_infra_changes_are_validated_on_pull_requests_without_credentials(self):
+        """Terraform PR 에는 체크가 없었고 차트 PR 은 gradle 초록만 받았다 — 깨진 변경이 머지 뒤
+        다음 배포에서야 드러났다(#887). PR 에서 도는 잡이라 자격 증명에 닿으면 안 된다."""
+        value = workflow('infra-validate.yml')
+        paths = value['on']['pull_request']['paths']
+        self.assertIn('infra/**', paths)
+        self.assertIn('deploy/**', paths)
+        self.assertEqual(value['permissions'], {'contents': 'read'})
+        text = (ROOT / '.github/workflows/infra-validate.yml').read_text()
+        for forbidden in ('id-token', 'secrets.', 'vars.', 'environment:', 'configure-aws-credentials'):
+            self.assertNotIn(forbidden, text)
+
+    def test_deploy_runs_the_same_validation_as_pull_requests(self):
+        """잡을 복제하면 두 사본이 갈라진다 — 배포는 PR 게이트를 그대로 호출한다."""
+        deploy = workflow('aws-deploy.yml')
+        self.assertEqual(deploy['jobs']['validate']['uses'], './.github/workflows/infra-validate.yml')
+        self.assertEqual(deploy['jobs']['deploy']['needs'], 'validate')
+        self.assertEqual(deploy['env']['TF_VERSION'], workflow('infra-validate.yml')['env']['TF_VERSION'])
+
 
 if __name__ == '__main__':
     unittest.main()

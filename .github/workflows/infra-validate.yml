@@ -1,0 +1,74 @@
+name: infra-validate
+
+# 인프라·배포 변경의 오프라인 검증(자격 증명 없음). 두 군데서 같은 잡을 돈다:
+#  - PR: `infra/**`·`deploy/**` 변경이 머지 전에 검증된다. 종전에는 Terraform PR 에 체크가 하나도
+#    없었고, 차트 PR 은 backend-ci 의 gradle 초록만 받았다(변경과 무관한 초록) — 깨진 차트가 develop 에
+#    먼저 들어가 다음 사람의 배포에서 터졌다(#887).
+#  - aws-deploy.yml 의 validate 잡이 이 파일을 호출한다. 복제하지 않는다 — 사본은 갈라진다.
+on:
+  pull_request:
+    branches: [develop, main]
+    paths: ['infra/**', 'deploy/**', '.github/workflows/infra-validate.yml', '.github/workflows/aws-deploy.yml']
+  workflow_call:
+    inputs:
+      verify_backend_shutdown:
+        description: 앱 배포 직전에만 도는 백엔드 종료 설정 검사(gradle)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+  TF_VERSION: '1.13.5'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: azure/setup-helm@v4.3.1
+        with:
+          version: v3.19.0
+      - name: Validate deployment contracts and Helm manifests
+        run: |
+          python -m pip install -r infra/requirements-test.txt
+          python -m coverage run --rcfile=infra/.coveragerc -m unittest discover -s infra/tests -v
+          python -m coverage run --rcfile=infra/.coveragerc --append -m unittest discover -s deploy/eks/tests -v
+          python -m coverage report --rcfile=infra/.coveragerc
+          python -m unittest discover -s infra/bootstrap/tests -v
+          python -m unittest discover -s deploy/eks/chart/tests -v
+          for environment in dev prd; do
+            helm lint --strict deploy/eks/chart -f "deploy/eks/chart/values-$environment.yaml" \
+              --set images.backend.repository=example/backend,images.backend.tag=sha123 \
+              --set images.ai.repository=example/ai,images.ai.tag=sha123 \
+              --set config.databaseHost=database.example.internal,config.redisHost=redis.example.internal \
+              --set gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc \
+              --set gateway.hostname=api.example.com
+          done
+      - uses: actions/setup-java@v4
+        if: inputs.verify_backend_shutdown
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Verify backend shutdown configuration
+        if: inputs.verify_backend_shutdown
+        working-directory: backend
+        run: ./gradlew :app:test --tests 'com.trippilot.app.config.AsyncConfigTest' --no-daemon
+      - name: Validate Terraform offline
+        working-directory: infra/terraform/stack
+        run: |
+          terraform fmt -check -recursive ..
+          terraform init -backend=false -lockfile=readonly
+          terraform validate
+          terraform test
