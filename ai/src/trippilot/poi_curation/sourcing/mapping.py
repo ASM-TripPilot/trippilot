@@ -305,7 +305,11 @@ def _weekday_windows(text: str) -> tuple[dict[int, tuple[int, int]], tuple[int, 
         return None
     closed = {d for seg in _SEGMENT_SPLIT.split(text)
               if not _RANGE_RE.search(seg) and _HOURS_REST_WORD.search(seg) for d in _rest_weekdays(seg)}
-    return by_day, _first_range_window(rest) if rest else _multi_range_window(text), frozenset(closed)
+    # 한정자 없는 구간의 창이 2시간 이하로 기각돼도 종전 규칙으로 되돌아간다 — None 이면
+    # 7일을 못 채워 영업시간을 통째로 잃는다("평일 …<br>- 휴계시간 12:30~13:30"). 항상 종전
+    # 규칙으로 가면 이 수정이 고친 오독이 되살아난다(공유본 19건, #1054 리뷰).
+    others = (_first_range_window(rest) if rest else None) or _multi_range_window(text)
+    return by_day, others, frozenset(closed)
 
 
 def _multi_range_window(text: str) -> tuple[int, int] | None:

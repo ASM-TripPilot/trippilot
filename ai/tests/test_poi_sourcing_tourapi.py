@@ -426,3 +426,17 @@ def test_요일별_구간도_휴무_원문의_요일은_닫는다() -> None:
 def test_요일별로_확정할_수_없으면_종전_규칙(raw: str) -> None:
     hours = parse_open_hours(raw, None)
     assert len(hours) == 7 and len({(h.open_min, h.close_min) for h in hours}) == 1
+
+
+@pytest.mark.parametrize(("raw", "weekday"), [
+    # 오타 라벨이 `<br>` 로 갈려 한정자 없는 구간이 ≤2h 로 기각되는 모양(#1054 리뷰 재현)
+    ("- 평일 10:00~17:30<br>- 휴계시간 12:30~13:30", (600, 1050)),
+    ("- 평일 10:00~20:00<br>- 09:00~10:30", (600, 1200)),
+    ("- 평일 10:00~20:00<br>- 점심 12:00~13:00", (600, 1200)),
+    ("- 평일 10:00~20:00<br>- 체험 14:00~15:30", (600, 1200)),
+])
+def test_한정자_없는_구간이_기각돼도_영업시간을_통째로_잃지_않는다(
+        raw: str, weekday: tuple[int, int]) -> None:
+    hours = parse_open_hours(raw, None)
+    assert len(hours) == 7, hours
+    assert {(h.open_min, h.close_min) for h in hours if h.day_of_week in _MON_FRI} == {weekday}
