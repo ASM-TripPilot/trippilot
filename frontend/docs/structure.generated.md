@@ -6,7 +6,7 @@
 - `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · BottomSheetFlatList · BottomSheetTextInput · useBottomSheetModal
 
 ## __mocks__/@mj-studio/
-- `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay · NaverMapCircleOverlay
+- `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay · NaverMapCircleOverlay · NaverMapPolylineOverlay
 
 ## __mocks__/
 - `__mocks__/expo-notifications.ts`  →  getPermissionsAsync · requestPermissionsAsync · getExpoPushTokenAsync · setNotificationChannelAsync · AndroidImportance
@@ -160,6 +160,7 @@
 - `src/__tests__/itineraryEditRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveHubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveLocationRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/locationAutomationBuildConfig.test.ts`  →  (export 없음)
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/magazineRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/manualRouteFreshPassthrough.test.tsx`  →  (export 없음)
@@ -204,6 +205,7 @@
 ## src/app/entrypoint/
 - `src/app/entrypoint/AppProviders.tsx`  →  AppProviders
 - `src/app/entrypoint/initSentry.ts`  →  initSentry
+- `src/app/entrypoint/registerBackgroundTasks.ts`  →  registerBackgroundTasks
 
 ## src/app/
 - `src/app/index.ts`  →  AppProviders · SplashGate
@@ -358,13 +360,18 @@
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
 
 ## src/features/check-visit/
-- `src/features/check-visit/index.ts`  →  rememberSpontaneousName · useSpontaneousNames · useVisitCheck · deriveVisitStatus · isOptimisticVisit
-- `src/features/check-visit/index.view.ts`  →  rememberSpontaneousName · useSpontaneousNames · deriveVisitStatus · isOptimisticVisit
+- `src/features/check-visit/index.ts`  →  rememberSpontaneousName · useSpontaneousNames · useVisitCheck · deriveVisitStatus · isOptimisticVisit · useRevertAutoVisit · autoRecordPart · AutoRevertDialog
+- `src/features/check-visit/index.view.ts`  →  rememberSpontaneousName · useSpontaneousNames · deriveVisitStatus · isOptimisticVisit · autoRecordPart · AutoRevertDialog
 
 ## src/features/check-visit/model/
+- `src/features/check-visit/model/autoRecord.ts`  →  autoRecordPart
 - `src/features/check-visit/model/spontaneousNames.ts`  →  rememberSpontaneousName · useSpontaneousNames
+- `src/features/check-visit/model/useRevertAutoVisit.ts`  →  RevertOutcome · useRevertAutoVisit
 - `src/features/check-visit/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 - `src/features/check-visit/model/visitStatus.ts`  →  OPTIMISTIC_VISIT_ID_PREFIX · isOptimisticVisit · VisitStatus · deriveVisitStatus
+
+## src/features/check-visit/ui/
+- `src/features/check-visit/ui/AutoRevertDialog.tsx`  →  AutoRevertPart · AutoRevertError · AutoRevertDialog
 
 ## src/features/create-trip/
 - `src/features/create-trip/index.ts`  →  mustVisitFailureNotice · seedMustVisits · MAX_TRIP_NIGHTS · nightsSum · validateTripDraft · formatWizardStep · summaryBudget · summaryCompanion · summaryDestinations · summaryPeriod · summaryPreferences · COMPANION_OPTIONS · deriveEndDate · fromEpochDay · minNightsFor · useTripWizardStore · isWizardOrigin · wizardOriginParams
@@ -851,6 +858,7 @@
 - `src/pages/live/live-itinerary/index.ts`  →  LiveItineraryPage
 
 ## src/pages/live/live-itinerary/model/
+- `src/pages/live/live-itinerary/model/automationInput.ts`  →  automationVisitRefs
 - `src/pages/live/live-itinerary/model/foldScope.ts`  →  foldScope
 - `src/pages/live/live-itinerary/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
 - `src/pages/live/live-itinerary/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
@@ -1529,12 +1537,41 @@
 - `src/shared/lib/useElapsedFlag.ts`  →  useElapsedFlag
 
 ## src/shared/location/
-- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph
+- `src/shared/location/LocationAlwaysExplainer.tsx`  →  LocationAlwaysExplainerProps · LocationAlwaysExplainer
+- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph · LocationGearGlyph
 - `src/shared/location/LocationPreprompt.tsx`  →  LocationPrepromptState · LocationPrepromptProps · LocationPreprompt
+
+## src/shared/location/automation/
+- `src/shared/location/automation/arming.ts`  →  OsPermission · ArmingInput · ArmingState · ArmingReason · ArmingResult · resolveArming
+- `src/shared/location/automation/autoEventQueue.ts`  →  AutoQueueItem · AutoVisitEventBody · AutoVisitEventBatch · BatchOutcome · BatchItemResult · MAX_BATCH_EVENTS · toQueueItem · enqueue · dropStale · buildBatch · applyBatchResults · IntervalReport · serializeIntervalReport
+- `src/shared/location/automation/config.ts`  →  AUTOMATION_CONFIG · AutomationConfig
+- `src/shared/location/automation/deps.ts`  →  getEngineDeps · overrideEngineDeps
+- `src/shared/location/automation/distanceSource.ts`  →  DistanceSource · distanceSourceByDate
+- `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineReason · EngineStatus · ArmingCallInput · setContext · evaluate · handleGeofence · handleLocations · flushQueue · uploadPendingRoutes · markExplainerAsked · clearNotice · wipeAutomation
+- `src/shared/location/automation/expoFs.ts`  →  createExpoFs
+- `src/shared/location/automation/flag.ts`  →  isLocationAutomationEnabled
+- `src/shared/location/automation/native.ts`  →  GEOFENCE_TASK · ROUTE_TASK · NativeAdapters · nativeAdapters
+- `src/shared/location/automation/noticeCopy.ts`  →  AutomationNoticeCopy · automationNoticeCopy · tripDateRangeLabel
+- `src/shared/location/automation/permission.ts`  →  PermissionSnapshot · readPermissionSnapshot · AlwaysRequestResult · requestAlwaysPermission
+- `src/shared/location/automation/polyline.ts`  →  encodePolyline · decodePolyline
+- `src/shared/location/automation/routeDistance.ts`  →  RawSample · GeoPoint · haversineM · splitSegments · pathLengthM · routeDistanceM
+- `src/shared/location/automation/routeDownsample.ts`  →  RouteDayBody · RoutePipeline · runRoutePipeline · downsampleRoute · projector · pointToSegmentM
+- `src/shared/location/automation/routeLayer.ts`  →  routeDayToSegments · routeDayForDate
+- `src/shared/location/automation/sink.ts`  →  RouteDay · RevertResult · UploadResult · AutomationSinkPort · FakeSinkOptions · FakeSinkCall · createFakeAutomationSink · getAutomationSink · setAutomationSink
+- `src/shared/location/automation/statusView.ts`  →  AutomationStatusView · automationStatusView
+- `src/shared/location/automation/store.ts`  →  AutomationSlotRef · AutomationVisitRef · AutomationContext · OpenInterval · AutomationNotice · AutomationState · EMPTY_STATE · StoreFs · pickLatest · AutomationStore · createAutomationStore · createMemoryFs · withStore
+- `src/shared/location/automation/tasks.ts`  →  (export 없음)
+- `src/shared/location/automation/useAutomationStatus.ts`  →  useAutomationStatus
+- `src/shared/location/automation/useLocationAutomation.ts`  →  LocationAutomationInput · LocationAutomationResult · useLocationAutomation
+- `src/shared/location/automation/useTripRoutes.ts`  →  useTripRoutes
+- `src/shared/location/automation/visitJudge.ts`  →  SlotPhase · SlotJudgeState · JudgeState · JudgeEvent · CompletionSource · JudgeEmit · initialJudgeState · judge
+
+## src/shared/location/
 - `src/shared/location/consentPutBody.ts`  →  consentPutBody
-- `src/shared/location/geofence.ts`  →  GeofenceRegion · buildGeofenceRegions · geofenceArriveRequest · registerGeofences · clearGeofences
-- `src/shared/location/index.ts`  →  LocationBackChevronGlyph · LocationClockGlyph · LocationInfoGlyph · LocationPinGlyph · LocationSwapGlyph · LocationWarningGlyph · LocationPreprompt · LOCATION_ICON_COLORS · readDevicePosition · revokeImpact · useLocationConsent
-- `src/shared/location/index.view.ts`  →  LocationBackChevronGlyph · LocationClockGlyph · LocationInfoGlyph · LocationPinGlyph · LocationSwapGlyph · LocationWarningGlyph · LocationPreprompt · LOCATION_ICON_COLORS · revokeImpact
+- `src/shared/location/geofence.ts`  →  GeofenceRegion · buildGeofenceRegions · selectRegions · geofenceArriveRequest · registerGeofences · clearGeofences
+- `src/shared/location/index.automation.ts`  →  loadBackgroundTasks · isLocationAutomationEnabled
+- `src/shared/location/index.ts`  →  LocationBackChevronGlyph · LocationClockGlyph · LocationInfoGlyph · LocationPinGlyph · LocationSwapGlyph · LocationWarningGlyph · LocationPreprompt · LOCATION_ICON_COLORS · readDevicePosition · revokeImpact · useLocationConsent · useLocationAutomation · useTripRoutes · routeDayForDate · routeDayToSegments · LocationAlwaysExplainer · automationNoticeCopy · tripDateRangeLabel · isLocationAutomationEnabled · createFakeAutomationSink · getAutomationSink · setAutomationSink · useAutomationStatus · distanceSourceByDate
+- `src/shared/location/index.view.ts`  →  LocationBackChevronGlyph · LocationClockGlyph · LocationInfoGlyph · LocationPinGlyph · LocationSwapGlyph · LocationWarningGlyph · LocationPreprompt · LOCATION_ICON_COLORS · revokeImpact · routeDayForDate · routeDayToSegments · LocationAlwaysExplainer · automationNoticeCopy · tripDateRangeLabel
 - `src/shared/location/locationColors.ts`  →  LOCATION_ICON_COLORS
 - `src/shared/location/readDevicePosition.ts`  →  readDevicePosition
 - `src/shared/location/revokeImpact.ts`  →  RevokeImpact · revokeImpact
@@ -1543,8 +1580,9 @@
 ## src/shared/map/
 - `src/shared/map/CenterPinPicker.tsx`  →  CenterPinPickerProps · CenterPinPicker
 - `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPinKind · MapPin · MapViewProps · MapView
+- `src/shared/map/RouteToggle.tsx`  →  RouteToggleProps · RouteToggle · actualDistanceLabel
 - `src/shared/map/fitRegion.ts`  →  buildFitRegion · buildCircleRegion
-- `src/shared/map/index.ts`  →  MapView · CenterPinPicker
+- `src/shared/map/index.ts`  →  MapView · CenterPinPicker · RouteToggle · actualDistanceLabel
 
 ## src/shared/photo/
 - `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset · resolvePhotoUri
@@ -1642,4 +1680,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1010개 파일
+합계 1042개 파일

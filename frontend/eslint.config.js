@@ -233,9 +233,11 @@ const NATIVE_MODULES = [
   'expo-media-library',
   'react-native-view-shot',
   'expo-sharing',
+  // TRIP-1338 — U10 백그라운드 태스크. 플래그 OFF 빌드(재빌드 전 dev build 포함)에는 모듈이 없을 수 있다.
+  'expo-task-manager',
 ];
 const NATIVE_MESSAGE =
-  '네이티브 모듈 정적 import 금지 — 사진은 @/shared/photo 의 require 입구, 공유 캡처는 shareCaptureNative 로만.';
+  '네이티브 모듈 정적 import 금지 — 사진은 @/shared/photo 의 require 입구, 공유 캡처는 shareCaptureNative 로만, 위치 자동화 태스크는 shared/location/automation/tasks.ts(플래그 ON 일 때만 require) 로만.';
 const nativePaths = (names) =>
   names.map((name) => ({ name, message: NATIVE_MESSAGE }));
 const nativeSubpaths = (names) =>
@@ -364,6 +366,49 @@ module.exports = defineConfig([
       'no-restricted-imports': restrictedImports(
         nativePaths(['expo-image-picker']),
         nativeSubpaths(['expo-image-picker'])
+      ),
+    },
+  },
+  {
+    // TRIP-1338 — U10 백그라운드 태스크 정의 파일만 expo-task-manager 를 정적으로 문다(이 파일 자체가 플래그 ON 일 때만
+    // require 된다). 태스크는 렌더 트리 밖에서 돌므로 React·화면·Query 캐시를 끌지 않는다(FD §2.2 · LC-U10-2).
+    files: ['src/shared/location/automation/tasks.ts'],
+    rules: {
+      'no-restricted-imports': restrictedImports(
+        [
+          ...nativePaths(
+            NATIVE_MODULES.filter((n) => n !== 'expo-task-manager')
+          ),
+          { name: 'react', message: '태스크는 렌더 트리 밖 — React 금지.' },
+          {
+            name: 'react-native',
+            message: '태스크는 렌더 트리 밖 — RN UI 금지.',
+          },
+          {
+            name: '@tanstack/react-query',
+            message:
+              '태스크는 Query 캐시를 만지지 않는다(포그라운드 훅이 무효화).',
+          },
+        ],
+        [
+          ...nativeSubpaths(
+            NATIVE_MODULES.filter((n) => n !== 'expo-task-manager')
+          ),
+          CAPTURE_ADAPTER_PATTERN,
+          {
+            group: [
+              '@/pages',
+              '@/pages/*',
+              '@/features',
+              '@/features/*',
+              '@/widgets',
+              '@/widgets/*',
+              '@/app',
+              '@/app/*',
+            ],
+            message: '태스크는 화면·기능을 모른다.',
+          },
+        ]
       ),
     },
   },

@@ -19,7 +19,8 @@ import Animated, {
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
-import type { MapCenter } from '@/shared/map';
+import type { MapCenter, RouteToggleProps } from '@/shared/map';
+import { RouteToggle } from '@/shared/map';
 import { DayChipScroller, MapSheetShell } from '@/widgets/map-sheet-shell';
 import { BackChevronGlyph, FullAiGlyph } from '@/widgets/map-sheet-shell';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
@@ -36,6 +37,10 @@ import {
   type SlotProgressState,
 } from '@/entities/itinerary-slot';
 import { SlotProgressCard } from '@/entities/itinerary-slot';
+import {
+  LOCATION_ICON_COLORS,
+  LocationPinGlyph,
+} from '@/shared/location/index.view';
 
 /**
  * TRIP-746 · i01 여행중 허브 **순수 뷰**(pages · api import 0 — preview 가 직접 import, TRIP-610).
@@ -168,6 +173,23 @@ export interface LiveHubViewProps {
   onPressDirections?: (poiId: string) => void;
   /** TRIP-1189 — 앱·웹 모두 실패했을 때 눌린 그 카드 아래 거리 안내(INV-4). */
   directionsNotice?: { poiId: string; text: string } | null;
+  /**
+   * TRIP-1339 — U10 자동 기록 강등·폐기 안내 1줄(Figma u10c 4857:3012). 시트 헤더 바로 위 연회색 띠 —
+   * 제목 + 오른쪽 `설정 열기`(settings 일 때만) + 사유 줄. 미전달이면 띠 없음(플래그 OFF 무회귀). 푸시 아님.
+   */
+  /** TRIP-1340 — 서버 출처가 자동인 방문의 poiId(칩). 페이지가 VisitCheck 출처에서 고른다. */
+  autoRecordedPoiIds?: ReadonlySet<string>;
+  /** TRIP-1340 — 자동 기록 카드 `⋯` → 되돌리기 확인(arg = poiId). 미주입이면 진입 없음. */
+  onPressRevertAuto?: (poiId: string) => void;
+  /** TRIP-1343 — 지도 위 `계획｜실제` 토글(Figma u10e). 미전달이면 토글 없음(플래그 OFF 무회귀). */
+  routeToggle?: Omit<RouteToggleProps, 'testIDPrefix'>;
+  /** TRIP-1343 — 실제 경로 세그먼트(토글이 실제일 때만 페이지가 준다). */
+  actualRoute?: MapCenter[][];
+  automationNotice?: {
+    title: string;
+    detail: string;
+    onPressSettings?: () => void;
+  } | null;
 }
 
 // 레일 점의 행 상단 여백 — 점 크기(18·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
@@ -239,6 +261,11 @@ export function LiveHubView({
   directionsPoiIds,
   onPressDirections,
   directionsNotice,
+  automationNotice,
+  autoRecordedPoiIds,
+  onPressRevertAuto,
+  routeToggle,
+  actualRoute,
 }: LiveHubViewProps): ReactElement {
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
   const insets = useContext(SafeAreaInsetsContext);
@@ -371,7 +398,17 @@ export function LiveHubView({
         overlay={overlay}
         snapPoints={snapPoints}
         initialIndex={initialSnapIndex}
-        mapCard={hiddenPillKey === pillKey ? undefined : triggerChip}
+        mapCard={
+          routeToggle ? (
+            <View className="gap-sm">
+              <RouteToggle testIDPrefix="execution-live" {...routeToggle} />
+              {hiddenPillKey === pillKey ? null : triggerChip}
+            </View>
+          ) : hiddenPillKey === pillKey ? undefined : (
+            triggerChip
+          )
+        }
+        actualRoute={actualRoute}
         onMapTap={hidePill}
         onSheetScrollBeginDrag={hidePill}
         animatedPosition={sheetTop}
@@ -384,6 +421,44 @@ export function LiveHubView({
         }}
         header={
           <View className="px-lg">
+            {automationNotice ? (
+              <View
+                testID="execution-live-automation-notice"
+                className="mb-md flex-row items-start gap-sm rounded-[12px] bg-surface-soft px-md py-sm"
+              >
+                <View className="pt-[2px]">
+                  <LocationPinGlyph
+                    size={16}
+                    color={LOCATION_ICON_COLORS.muted}
+                  />
+                </View>
+                <View className="flex-1">
+                  <View className="flex-row items-center justify-between gap-sm">
+                    <Text className="font-noto-bold text-[13px] font-bold text-ink">
+                      {automationNotice.title}
+                    </Text>
+                    {automationNotice.onPressSettings ? (
+                      <Pressable
+                        testID="execution-live-automation-notice-settings"
+                        accessibilityRole="link"
+                        onPress={automationNotice.onPressSettings}
+                        hitSlop={8}
+                      >
+                        <Text className="font-noto-bold text-[13px] font-bold text-primary-text">
+                          설정 열기
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  <Text
+                    testID="execution-live-automation-notice-detail"
+                    className="font-noto text-[12px] text-muted"
+                  >
+                    {automationNotice.detail}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             <Text
               testID="execution-live-sheet-header"
               className="font-noto-bold text-card-title font-bold text-ink"
@@ -461,6 +536,13 @@ export function LiveHubView({
                     directionsNotice={
                       directionsNotice?.poiId === slot.poiId
                         ? directionsNotice.text
+                        : undefined
+                    }
+                    autoRecorded={autoRecordedPoiIds?.has(slot.poiId) === true}
+                    onPressRevertAuto={
+                      onPressRevertAuto &&
+                      autoRecordedPoiIds?.has(slot.poiId) === true
+                        ? () => onPressRevertAuto(slot.poiId)
                         : undefined
                     }
                   />

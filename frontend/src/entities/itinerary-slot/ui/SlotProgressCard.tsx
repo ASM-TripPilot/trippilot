@@ -85,6 +85,13 @@ export interface SlotProgressCardProps {
   onPressDirections?: () => void;
   /** TRIP-1189 — 길찾기가 앱·웹 모두 실패했을 때 거리 안내 한 줄(INV-4). 상태는 부모가 가진다. 비면 안 그린다. */
   directionsNotice?: string | null;
+  /**
+   * TRIP-1340 — 서버 출처가 자동(AUTO_*)인 방문이면 `자동 기록` 칩(Figma u10b 4860:2849). 판정은 서버 VisitCheck 출처에서
+   * 파생한다(기기 판정 상태를 직접 그리지 않는다). 미전달이면 칩 없음.
+   */
+  autoRecorded?: boolean;
+  /** TRIP-1340 — `⋯` 더보기 → 되돌리기 확인(페이지가 다이얼로그를 띄운다). 미주입이면 버튼이 없다. */
+  onPressRevertAuto?: () => void;
 }
 
 export function SlotProgressCard({
@@ -105,6 +112,8 @@ export function SlotProgressCard({
   onPressArrive,
   onPressDirections,
   directionsNotice,
+  autoRecorded = false,
+  onPressRevertAuto,
 }: SlotProgressCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string =>
@@ -151,6 +160,33 @@ export function SlotProgressCard({
           {nameText(fieldId('name'))}
         </View>
       )}
+      {autoRecorded || onPressRevertAuto ? (
+        <View className="flex-row items-center gap-xs">
+          {autoRecorded ? (
+            <View
+              testID={fieldId('auto-badge')}
+              className="rounded-[12px] bg-primary-pale px-sm py-[3px]"
+            >
+              <Text className="font-noto-bold text-[11px] font-bold text-primary">
+                자동 기록
+              </Text>
+            </View>
+          ) : null}
+          {onPressRevertAuto ? (
+            <Pressable
+              testID={fieldId('auto-revert')}
+              accessibilityRole="button"
+              accessibilityLabel="자동 기록 되돌리기"
+              hitSlop={8}
+              onPress={onPressRevertAuto}
+            >
+              <Text className="font-noto-bold text-body font-bold text-muted">
+                ⋯
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       {state === 'done' ? (
         <View className="flex-row items-baseline">
           <Text

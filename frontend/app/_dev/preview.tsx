@@ -229,6 +229,11 @@ import { LocationPreprompt } from '@/shared/location/index.view';
 // 딥 경로 — 배럴(`@/shared/push`)로 끌면 권한 루틴(expo-notifications)까지 실린다(TRIP-1108 R10).
 import { PushPreprompt } from '@/shared/push/index.view';
 import { revokeImpact } from '@/shared/location/index.view';
+import {
+  LocationAlwaysExplainer,
+  automationNoticeCopy,
+} from '@/shared/location/index.view';
+import { AutoRevertDialog } from '@/features/check-visit/index.view';
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
@@ -2062,6 +2067,40 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
 // Figma 의 현재위치 점(부산시립미술관 근처).
 const LIVE_HUB_PREVIEW_LOCATION = { lat: 35.1655, lng: 129.1335 };
 
+// TRIP-1344 · U10 프리뷰 — 실제 경로 2세그먼트(감천→광안리 · 강 건너 공백 · 미술관 쪽). 좌표는 슬롯 사이를 굽게 이은 가짜 값.
+const U10_ACTUAL_ROUTE = [
+  [
+    { lat: 35.0975, lng: 129.0106 },
+    { lat: 35.112, lng: 129.035 },
+    { lat: 35.128, lng: 129.07 },
+    { lat: 35.14, lng: 129.095 },
+  ],
+  [
+    { lat: 35.1532, lng: 129.1186 },
+    { lat: 35.158, lng: 129.126 },
+    { lat: 35.1655, lng: 129.1335 },
+  ],
+];
+const u10Notice = (reason: string | null, dropped = 0) => {
+  const copy = automationNoticeCopy(
+    reason ? { kind: 'degraded', reason } : null,
+    dropped
+  );
+  return copy
+    ? {
+        title: copy.title,
+        detail: copy.detail,
+        onPressSettings: copy.settings ? noop : undefined,
+      }
+    : null;
+};
+const U10_ROUTE_ON = {
+  mode: 'actual' as const,
+  actualAvailable: true,
+  distanceLabel: '실제 3.2km',
+  onChange: noop,
+};
+
 // j04 요약의 일차 회고 칩(TRIP-987) — 여행 기간 3일(6/11~6/13) 전체. 페이지가 `tripDayChips` 로 조립하는 모양.
 const TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS = [1, 2, 3].map((day) => ({
   day,
@@ -3614,6 +3653,66 @@ export const PREVIEW_STATES: PreviewState[] = [
   // j01 방문 기록 error 얼굴(TRIP-760) — 사진 업로드 실패 표면. default 와 안내문만 다르고(상태별 의도
   // →noticeCopy 분기), 광안리 카드에 upload-failed 셀(⚠ "업로드 실패") + 풀폭 [↻ 다시 시도] 버튼 +
   // "메모와 방문 체크는 저장되었어요"를 얹었다. ⚠ 생김새·surface-strong 톤·↻ 코랄은 jest 사각(6-b 육안).
+  // TRIP-1344 · U10 j01 풀 지도 실제 경로(u10e 4862:3807) + 자동 기록 표식 카드.
+  {
+    key: 'u10-records-route',
+    band: 'j',
+    label: 'U10 · j01 풀 지도 실제 경로·자동 기록 표식',
+    login: null,
+    render: () => (
+      <TripRecordsView
+        tripTitle="부산 여행"
+        dayTabs={[
+          { day: '2026-08-20', label: '1일차' },
+          { day: '2026-08-21', label: '2일차' },
+        ]}
+        activeDay="2026-08-21"
+        onSelectDay={noop}
+        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        mapPins={[
+          { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
+          { number: 2, lat: 35.1667, lng: 129.137, state: 'done' },
+        ]}
+        routeToggle={{ ...U10_ROUTE_ON, distanceLabel: '실제 2.8km' }}
+        actualRoute={[
+          [
+            { lat: 35.1532, lng: 129.1187 },
+            { lat: 35.1555, lng: 129.123 },
+            { lat: 35.158, lng: 129.1265 },
+          ],
+          [
+            { lat: 35.1615, lng: 129.13 },
+            { lat: 35.1667, lng: 129.137 },
+          ],
+        ]}
+        cards={[
+          {
+            visitCheckId: 'r1',
+            slotKey: '2026-08-21#p1',
+            poiId: 'p1',
+            nameKo: '광안리 해변',
+            arrivedAt: '2026-08-21T14:20:00',
+            completedAt: '2026-08-21T15:20:00',
+            skippedAt: null,
+            arrivedLabel: '14:20',
+            autoRecorded: true,
+          },
+          {
+            visitCheckId: 'r2',
+            slotKey: '2026-08-21#p2',
+            poiId: 'p2',
+            nameKo: '부산시립미술관',
+            arrivedAt: '2026-08-21T15:40:00',
+            completedAt: null,
+            skippedAt: null,
+            arrivedLabel: '15:40',
+          },
+        ]}
+        onPressComplete={noop}
+        onPressSkip={noop}
+      />
+    ),
+  },
   {
     key: 'records-error',
     band: 'j',
@@ -6770,6 +6869,134 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => renderLiveHubPreview(2, { initialEditMenuOpen: true }),
   },
+  // TRIP-1344 · U10 GPS·위치 자동화 표면(Figma U10 검토 밴드 y=19950). 판정·OS 대화상자·실제 wake 는 6-b.
+  {
+    key: 'u10-explainer',
+    band: 'i',
+    label: 'U10 · i01 자동 기록 설명 시트(u10a)',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        {renderLiveHubPreview(0)}
+        <LocationAlwaysExplainer
+          dateRangeLabel="6월 10일~12일"
+          onEnable={noop}
+          onLater={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'u10-degrade-notice',
+    band: 'i',
+    label: 'U10 · i01 강등 안내 1줄(u10c)',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, { automationNotice: u10Notice('when-in-use') }),
+  },
+  {
+    key: 'u10-dropped-notice',
+    band: 'i',
+    label: 'U10 · i01 보내지 못한 자동 기록 N건',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, { automationNotice: u10Notice(null, 2) }),
+  },
+  {
+    key: 'u10-auto-badge',
+    band: 'i',
+    label: 'U10 · i01 자동 기록 표식(u10b)',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(2, {
+        autoRecordedPoiIds: new Set(['gamcheon']),
+        onPressRevertAuto: noop,
+      }),
+  },
+  {
+    key: 'u10-auto-revert-dialog',
+    band: 'i',
+    label: 'U10 · i01 자동 기록 되돌리기 확인(u10b dialog)',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        {renderLiveHubPreview(2, {
+          autoRecordedPoiIds: new Set(['gamcheon']),
+          onPressRevertAuto: noop,
+        })}
+        <AutoRevertDialog
+          testIDPrefix="execution-live-slot-auto-revert"
+          placeName="감천문화마을"
+          part="COMPLETION"
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'u10-auto-revert-media',
+    band: 'i',
+    label: 'U10 · i01 되돌리기 409 사진·메모 안내',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        {renderLiveHubPreview(2, {
+          autoRecordedPoiIds: new Set(['gamcheon']),
+          onPressRevertAuto: noop,
+        })}
+        <AutoRevertDialog
+          testIDPrefix="execution-live-slot-auto-revert"
+          placeName="감천문화마을"
+          part="ARRIVAL"
+          error="media"
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'u10-route-actual',
+    band: 'i',
+    label: 'U10 · i01 계획｜실제 — 실제 켜짐·공백 있음(u10e)',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        routeToggle: U10_ROUTE_ON,
+        actualRoute: U10_ACTUAL_ROUTE,
+      }),
+  },
+  {
+    key: 'u10-route-none',
+    band: 'i',
+    label: 'U10 · i01 계획｜실제 — 경로 없음',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        routeToggle: {
+          mode: 'plan',
+          actualAvailable: false,
+          disabledReason: '이 날 기록된 경로가 없어요',
+          onChange: noop,
+        },
+      }),
+  },
+  {
+    key: 'u10-route-no-consent',
+    band: 'i',
+    label: 'U10 · i01 계획｜실제 — 위치 동의 없음',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        routeToggle: {
+          mode: 'plan',
+          actualAvailable: false,
+          disabledReason: '위치 동의가 없어요',
+          onChange: noop,
+        },
+      }),
+  },
   // TRIP-1260 — 7일 여행 허브, 오늘=6일차로 연다. 화면 밖 선택 칩이 열자마자 보이는지(AC-3b)·FAB 하한이
   // 3일 키와 같은지(AC-5) 본다.
   {
@@ -7341,6 +7568,104 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
         <RevokeConfirmDialog
           impact={revokeImpact()}
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  // TRIP-1344 · U10 l06 자동 기록 상태 행(u10d) — 켜짐/꺼짐([켜기])/거부(설정 열기) + 철회 다이얼로그 중단 목록.
+  {
+    key: 'u10-l06-on',
+    band: 'l',
+    label: 'U10 · l06 자동 기록 켜짐(u10d)',
+    login: null,
+    render: () => (
+      <LocationConsentScreen
+        consentOn
+        disabled={false}
+        impact={revokeImpact({ automation: true })}
+        onGrant={noop}
+        onRevokeConfirmed={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+        automation={{
+          status: 'on',
+          reason: '여행 날짜 동안 기록 중이에요',
+          action: null,
+        }}
+      />
+    ),
+  },
+  {
+    key: 'u10-l06-off',
+    band: 'l',
+    label: "U10 · l06 자동 기록 꺼짐 — '사용하는 동안' [켜기]",
+    login: null,
+    render: () => (
+      <LocationConsentScreen
+        consentOn
+        disabled={false}
+        impact={revokeImpact({ automation: true })}
+        onGrant={noop}
+        onRevokeConfirmed={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+        automation={{
+          status: 'off',
+          reason: "위치 권한이 '사용하는 동안'이에요",
+          action: 'enable',
+        }}
+        onPressAutomationEnable={noop}
+      />
+    ),
+  },
+  {
+    key: 'u10-l06-blocked',
+    band: 'l',
+    label: 'U10 · l06 자동 기록 꺼짐 — 거부 확정 설정 열기',
+    login: null,
+    render: () => (
+      <LocationConsentScreen
+        consentOn
+        disabled={false}
+        impact={revokeImpact({ automation: true })}
+        onGrant={noop}
+        onRevokeConfirmed={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+        automation={{
+          status: 'off',
+          reason: "위치 권한이 '사용하는 동안'이에요",
+          action: 'settings',
+        }}
+        onPressAutomationSettings={noop}
+      />
+    ),
+  },
+  {
+    key: 'u10-l06-revoke-dialog',
+    band: 'l',
+    label: 'U10 · l06 철회 다이얼로그 — 자동 기록·경로 삭제 포함',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <LocationConsentScreen
+          consentOn
+          disabled={false}
+          impact={revokeImpact({ automation: true })}
+          onGrant={noop}
+          onRevokeConfirmed={noop}
+          onOpenSettings={noop}
+          onPressBack={noop}
+          automation={{
+            status: 'on',
+            reason: '여행 날짜 동안 기록 중이에요',
+            action: null,
+          }}
+        />
+        <RevokeConfirmDialog
+          impact={revokeImpact({ automation: true })}
           onCancel={noop}
           onConfirm={noop}
         />

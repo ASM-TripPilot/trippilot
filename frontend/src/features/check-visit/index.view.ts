@@ -6,3 +6,6 @@ export {
   useSpontaneousNames,
 } from './model/spontaneousNames';
 export { deriveVisitStatus, isOptimisticVisit } from './model/visitStatus';
+export { autoRecordPart } from './model/autoRecord';
+export { AutoRevertDialog } from './ui/AutoRevertDialog';
+export type { AutoRevertPart, AutoRevertError } from './ui/AutoRevertDialog';

@@ -14,3 +14,12 @@ export type { LocationPrepromptState } from './LocationPreprompt';
 export { LOCATION_ICON_COLORS } from './locationColors';
 export { revokeImpact } from './revokeImpact';
 export type { RevokeImpact } from './revokeImpact';
+export { routeDayForDate, routeDayToSegments } from './automation/routeLayer';
+export type { RouteDay } from './automation/sink';
+export { LocationAlwaysExplainer } from './LocationAlwaysExplainer';
+export {
+  automationNoticeCopy,
+  tripDateRangeLabel,
+} from './automation/noticeCopy';
+export type { AutomationNoticeCopy } from './automation/noticeCopy';
+export type { AutomationStatusView } from './automation/statusView';

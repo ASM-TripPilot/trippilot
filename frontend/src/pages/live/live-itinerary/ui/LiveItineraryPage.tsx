@@ -51,6 +51,26 @@ import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
+import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
+import {
+  LocationAlwaysExplainer,
+  automationNoticeCopy,
+  isLocationAutomationEnabled,
+  routeDayForDate,
+  routeDayToSegments,
+  tripDateRangeLabel,
+  useLocationAutomation,
+  useTripRoutes,
+} from '@/shared/location';
+import { actualDistanceLabel } from '@/shared/map';
+import { automationVisitRefs } from '../model/automationInput';
+import {
+  AutoRevertDialog,
+  autoRecordPart,
+  useRevertAutoVisit,
+  type AutoRevertError,
+  type AutoRevertPart,
+} from '@/features/check-visit';
 
 import { LiveHubView } from './LiveHubView';
 
@@ -225,6 +245,82 @@ export function LiveItineraryPage({
   });
   // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
   const memoAttempt = useRef(0);
+
+  // TRIP-1339 · U10 위치 자동화 — 오늘(KST) 일정·실적으로 문맥을 만들고 판정은 훅이 한다(페이지 1회).
+  // 플래그 OFF 면 동의 조회도 하지 않고 훅은 효과가 없다(BR-U10-07). 훅 규칙상 조기 반환 위에 둔다.
+  const automationOn = isLocationAutomationEnabled();
+  const locationConsent = useGetMeLocationConsent({
+    query: { enabled: automationOn },
+  });
+  const tripDays = state.kind === 'active' ? state.itinerary.days : [];
+  const todaySlots = tripDays.find((day) => day.date === today)?.slots ?? [];
+  const automation = useLocationAutomation({
+    tripId: automationOn && state.kind === 'active' ? tripId : null,
+    startDate: tripDays[0]?.date ?? '',
+    endDate: tripDays[tripDays.length - 1]?.date ?? '',
+    date: today,
+    slots: todaySlots.map((slot) => ({
+      slotKey: buildSlotKey(today, slot.poiId),
+      poiId: slot.poiId,
+      lat: slot.lat ?? null,
+      lng: slot.lng ?? null,
+    })),
+    visits:
+      liveDate === today ? automationVisitRefs(visits.data?.visits ?? []) : [],
+    consentOn: locationConsent.data?.legalConsent === true,
+    onHub: true,
+  });
+  // [켜기]·[나중에] 처리 중 연타 잠금 + 이 화면에서 한 번 닫은 설명은 판정이 늦게 따라와도 다시 그리지 않는다.
+  const [explainerClosed, setExplainerClosed] = useState(false);
+  const [explainerBusy, setExplainerBusy] = useState(false);
+  const automationCopy = automationNoticeCopy(
+    automation.notice,
+    automation.droppedCount
+  );
+
+  // TRIP-1343 · 계획｜실제 토글 — 그날 경로가 있고 위치 동의가 있을 때만 실제 칸이 켜진다(BR-U10-41).
+  const routes = useTripRoutes(automationOn ? tripId : null);
+  const [routeMode, setRouteMode] = useState<'plan' | 'actual'>('plan');
+  const dayRoute = routeDayForDate(routes.routes, liveDate);
+  const routeSegments = dayRoute ? routeDayToSegments(dayRoute) : [];
+  const consentOn = locationConsent.data?.legalConsent === true;
+  const actualAvailable = consentOn && routeSegments.length > 0;
+  const routeToggle = automationOn
+    ? {
+        mode: actualAvailable ? routeMode : ('plan' as const),
+        actualAvailable,
+        disabledReason: !consentOn
+          ? '위치 동의가 없어요'
+          : '이 날 기록된 경로가 없어요',
+        distanceLabel: dayRoute
+          ? actualDistanceLabel(dayRoute.distanceM)
+          : undefined,
+        onChange: setRouteMode,
+      }
+    : undefined;
+
+  // TRIP-1340 · '자동 기록' 칩·되돌리기 — 서버 출처에서 파생(플래그 ON 일 때만). 확정 전 호출 0회.
+  const autoRecords = new Map<
+    string,
+    { visitCheckId: string; part: AutoRevertPart }
+  >();
+  if (automationOn) {
+    for (const visit of visits.data?.visits ?? []) {
+      const part = autoRecordPart(visit);
+      if (part && visit.slotKey)
+        autoRecords.set(visit.poiId, {
+          visitCheckId: visit.visitCheckId,
+          part,
+        });
+    }
+  }
+  const revertAuto = useRevertAutoVisit(tripId);
+  const [revertTarget, setRevertTarget] = useState<{
+    poiId: string;
+    visitCheckId: string;
+    part: AutoRevertPart;
+    error: AutoRevertError;
+  } | null>(null);
 
   // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
   const goBackOrHome = (): void => {
@@ -620,7 +716,81 @@ export function LiveItineraryPage({
         onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
+        autoRecordedPoiIds={new Set(autoRecords.keys())}
+        routeToggle={routeToggle}
+        actualRoute={
+          routeToggle?.mode === 'actual' && actualAvailable
+            ? routeSegments
+            : undefined
+        }
+        onPressRevertAuto={(poiId) => {
+          const target = autoRecords.get(poiId);
+          if (target) setRevertTarget({ poiId, ...target, error: null });
+        }}
+        automationNotice={
+          automationCopy
+            ? {
+                title: automationCopy.title,
+                detail: automationCopy.detail,
+                onPressSettings: automationCopy.settings
+                  ? () => {
+                      void automation.dismissNotice();
+                      void Linking.openSettings();
+                    }
+                  : undefined,
+              }
+            : null
+        }
       />
+      {revertTarget ? (
+        <AutoRevertDialog
+          testIDPrefix="execution-live-slot-auto-revert"
+          placeName={
+            activeSlots.find((slot) => slot.poiId === revertTarget.poiId)
+              ?.nameKo ?? '이 장소'
+          }
+          part={revertTarget.part}
+          pending={revertAuto.pending}
+          error={revertTarget.error}
+          onCancel={() => setRevertTarget(null)}
+          onConfirm={() => {
+            void revertAuto
+              .revert(revertTarget.visitCheckId)
+              .then((outcome) => {
+                if (outcome === 'ok') setRevertTarget(null);
+                else
+                  setRevertTarget((t) =>
+                    t
+                      ? {
+                          ...t,
+                          error: outcome === 'media' ? 'media' : 'failed',
+                        }
+                      : t
+                  );
+              });
+          }}
+        />
+      ) : null}
+      {automation.state === 'EXPLAINER' && !explainerClosed ? (
+        <LocationAlwaysExplainer
+          dateRangeLabel={tripDateRangeLabel(
+            itinerary.days[0]?.date ?? today,
+            itinerary.days[itinerary.days.length - 1]?.date ?? today
+          )}
+          busy={explainerBusy}
+          onEnable={() => {
+            setExplainerBusy(true);
+            void automation.enable().finally(() => {
+              setExplainerBusy(false);
+              setExplainerClosed(true);
+            });
+          }}
+          onLater={() => {
+            setExplainerClosed(true);
+            void automation.later();
+          }}
+        />
+      ) : null}
       {riskSheet}
       {memoSheet}
       {appliedSessionId ? (

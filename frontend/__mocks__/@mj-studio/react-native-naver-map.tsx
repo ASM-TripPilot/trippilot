@@ -66,9 +66,15 @@ function NaverMapCircleOverlay(props: Record<string, unknown>) {
   return <View testID="map-circle" {...props} />;
 }
 
+// TRIP-1342 — 실제 경로 점선(dash `pattern`)용 폴리라인. 같은 통과형 목 — coords·color·pattern 을 그대로 노출한다.
+function NaverMapPolylineOverlay(props: Record<string, unknown>) {
+  return <View testID="map-route-segment" {...props} />;
+}
+
 export {
   NaverMapView,
   NaverMapMarkerOverlay,
   NaverMapPathOverlay,
   NaverMapCircleOverlay,
+  NaverMapPolylineOverlay,
 };

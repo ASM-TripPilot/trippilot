@@ -38,6 +38,8 @@ export interface VisitRecordCardContainerProps {
   onPressSkip?: (visitCheckId: string) => void;
   /** TRIP-1069 · 시각 수정 시트 진입 — 카드로 그대로 넘긴다(미주입이면 컨트롤 부재). */
   onPressEditTime?: (visitCheckId: string) => void;
+  /** TRIP-1340 — 자동 기록 되돌리기 진입(카드로 그대로 넘긴다). */
+  onPressRevertAuto?: (visitCheckId: string) => void;
 }
 
 export function VisitRecordCardContainer({
@@ -46,6 +48,7 @@ export function VisitRecordCardContainer({
   onPressComplete,
   onPressSkip,
   onPressEditTime,
+  onPressRevertAuto,
 }: VisitRecordCardContainerProps): ReactElement {
   const {
     photos,
@@ -141,6 +144,7 @@ export function VisitRecordCardContainer({
       onPressComplete={onPressComplete}
       onPressSkip={onPressSkip}
       onPressEditTime={onPressEditTime}
+      onPressRevertAuto={onPressRevertAuto}
       photoSlot={
         <>
           <PhotoThumbStrip
