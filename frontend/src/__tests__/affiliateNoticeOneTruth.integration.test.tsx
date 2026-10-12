@@ -1,19 +1,22 @@
-import type { ReactNode } from 'react';
 import * as Linking from 'expo-linking';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
   screen,
   waitFor,
-  act,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { SettingsPage } from '@/pages/settings/settings';
 import { StayDetailPage } from '@/pages/stay/stay-detail';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import {
+  createNetworkTracker,
+  settingsHandlers,
+} from '@/test-support/settingsHandlers';
 import type { StayDetail } from '@/shared/api/index.schemas';
 
 /**
@@ -64,15 +67,8 @@ jest.mock('expo-linking', () => ({
 }));
 
 // 토큰 저장소 — 기기 저장소를 건드리지 않게 배럴만 바꾼다(StayDetailPage 통합 선례).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const mockOpenURL = Linking.openURL as jest.Mock;
 
@@ -102,38 +98,14 @@ const ITEM: StayDetail = {
 
 let serverDismissed = false;
 let patchBodies: unknown[] = [];
-let started = 0;
-let ended = 0;
+const network = createNetworkTracker(server);
 let queryClient: QueryClient;
 
 function installServer(): void {
   server.use(
-    http.get(`${BASE}/me`, () =>
-      HttpResponse.json({
-        accountId: 'acc-1',
-        status: 'ACTIVE',
-        email: 'a@b.com',
-        socialProviders: ['KAKAO'],
-        onboardingCompleted: true,
-      })
-    ),
-    http.get(`${BASE}/me/profile`, () =>
-      HttpResponse.json({ nickname: '여행자123' })
-    ),
-    http.get(`${BASE}/me/preferences`, () => HttpResponse.json({})),
-    http.get(`${BASE}/me/location-consent`, () =>
-      HttpResponse.json({ osPermissionMirror: 'GRANTED', legalConsent: true })
-    ),
-    http.get(`${BASE}/me/personalization`, () =>
-      HttpResponse.json({
-        applied: true,
-        reason: 'APPLIED',
-        sharedItems: [],
-      })
-    ),
-    http.get(`${BASE}/me/settings`, () =>
-      HttpResponse.json({ affiliateNoticeDismissed: serverDismissed })
-    ),
+    ...settingsHandlers({
+      settings: () => ({ affiliateNoticeDismissed: serverDismissed }),
+    }),
     http.patch(`${BASE}/me/settings`, async ({ request }) => {
       const body = (await request.json()) as {
         affiliateNoticeDismissed?: boolean | null;
@@ -149,38 +121,23 @@ function installServer(): void {
   );
 }
 
-function wrapper({ children }: { children: ReactNode }) {
-  return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 function renderBoth() {
   return render(
     <>
       <SettingsPage />
       <StayDetailPage />
     </>,
-    { wrapper }
+    { wrapper: createWrapper(queryClient) }
   );
 }
 
-/** 시작한 요청이 모두 끝나고 결과가 화면에 반영될 때까지 흘린다(재조회 경주 종료). */
-async function settleNetwork(): Promise<void> {
-  await waitFor(() => expect(ended).toBe(started));
-  await act(async () => {});
-}
+const { settleNetwork } = network;
 
 const toggle = () => screen.getByTestId('settings-affiliate-toggle');
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', () => {
-    started += 1;
-  });
-  server.events.on('request:end', () => {
-    ended += 1;
-  });
+  network.attach();
 });
 
 beforeEach(() => {
@@ -189,14 +146,8 @@ beforeEach(() => {
   mockSearchParams = { stayId: ITEM.stayId };
   serverDismissed = false;
   patchBodies = [];
-  started = 0;
-  ended = 0;
-  queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false },
-    },
-  });
+  network.reset();
+  queryClient = newTestQueryClient({ gcTime: 0 });
   setAccessToken('valid-access');
   installServer();
 });

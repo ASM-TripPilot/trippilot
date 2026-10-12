@@ -1,7 +1,6 @@
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -13,6 +12,11 @@ import { server } from '@/mocks/server';
 import { MyPage } from '@/pages/settings/my-page';
 import { SettingsPage } from '@/pages/settings/settings';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import {
+  createNetworkTracker,
+  settingsHandlers,
+} from '@/test-support/settingsHandlers';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 /**
@@ -59,15 +63,8 @@ jest.mock('expo-linking', () => ({
 }));
 
 // 토큰 저장소 — 기기 저장소를 건드리지 않게 배럴만 바꾼다(StayDetailPage 통합 선례).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const BASE = `${
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
@@ -79,8 +76,7 @@ const NEW_NICKNAME = '바다고래';
 // ── 서버 상태 ─────────────────────────────────────────────────────────────
 let serverNickname = OLD_NICKNAME;
 let patchBodies: unknown[] = [];
-let started = 0;
-let ended = 0;
+const network = createNetworkTracker(server);
 let queryClient: QueryClient;
 
 type PatchOutcome = 'ok' | 409 | 503 | 'network';
@@ -88,23 +84,19 @@ type PatchOutcome = 'ok' | 409 | 503 | 'network';
 /** 두 페이지가 읽는 조회 전부 + 닉네임 PATCH. PATCH 결과만 케이스마다 바꾼다. */
 function installServer(patch: PatchOutcome): void {
   server.use(
-    http.get(`${BASE}/me`, () =>
-      HttpResponse.json({
-        accountId: 'acc-1',
-        status: 'ACTIVE',
-        email: 'a@b.com',
-        socialProviders: ['KAKAO'],
-        onboardingCompleted: true,
-      })
-    ),
-    // 상태형 — PATCH 가 바꾼 서버 닉네임을 읽는다(★2).
-    http.get(`${BASE}/me/profile`, () =>
-      HttpResponse.json({
+    ...settingsHandlers({
+      // 상태형 — PATCH 가 바꾼 서버 닉네임을 읽는다(★2).
+      profile: () => ({
         nickname: serverNickname,
         nicknameUpdatedAt: '2026-01-01T00:00:00Z',
         onboardingCompletedAt: '2026-01-01T00:00:00Z',
-      })
-    ),
+      }),
+      locationConsent: () => ({
+        osPermissionMirror: 'GRANTED',
+        legalConsent: true,
+        gpsRecordingOptIn: true,
+      }),
+    }),
     http.patch(`${BASE}/me/profile/nickname`, async ({ request }) => {
       const body = (await request.json()) as { nickname?: string };
       patchBodies.push(body);
@@ -127,21 +119,6 @@ function installServer(patch: PatchOutcome): void {
         onboardingCompletedAt: '2026-01-01T00:00:00Z',
       });
     }),
-    // 설정 페이지의 나머지 조회 — 이 파일의 관심사 밖이라 가장 작은 모양으로 준다.
-    http.get(`${BASE}/me/preferences`, () => HttpResponse.json({})),
-    http.get(`${BASE}/me/location-consent`, () =>
-      HttpResponse.json({
-        osPermissionMirror: 'GRANTED',
-        legalConsent: true,
-        gpsRecordingOptIn: true,
-      })
-    ),
-    http.get(`${BASE}/me/personalization`, () =>
-      HttpResponse.json({ applied: true, reason: 'APPLIED', sharedItems: [] })
-    ),
-    http.get(`${BASE}/me/settings`, () =>
-      HttpResponse.json({ affiliateNoticeDismissed: false })
-    ),
     // 마이페이지의 나머지 조회 — 여행 0건(카드 N+1 조회 없음), 기록 0건, 스타일 정식 분석.
     http.get(`${BASE}/trips`, () => HttpResponse.json([])),
     http.get(`${BASE}/me/records`, () =>
@@ -166,32 +143,18 @@ function installServer(patch: PatchOutcome): void {
   );
 }
 
-function newClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false },
-    },
-  });
-}
-
 /** 마이 탭(떠 있음)과 설정 화면을 **한 캐시** 아래 동시에 띄운다(★1). */
 function renderBoth() {
   return render(
-    <QueryClientProvider client={queryClient}>
-      <WithToastHost>
-        <MyPage />
-        <SettingsPage />
-      </WithToastHost>
-    </QueryClientProvider>
+    <WithToastHost>
+      <MyPage />
+      <SettingsPage />
+    </WithToastHost>,
+    { wrapper: createWrapper(queryClient) }
   );
 }
 
-/** 시작한 요청이 모두 끝나고 그 결과가 화면에 반영될 때까지 흘린다. */
-async function settleNetwork(): Promise<void> {
-  await waitFor(() => expect(ended).toBe(started));
-  await act(async () => {});
-}
+const { settleNetwork } = network;
 
 const profileCard = () => screen.getByTestId('my-profile-card');
 
@@ -211,21 +174,15 @@ function submitNickname(value: string): void {
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', () => {
-    started += 1;
-  });
-  server.events.on('request:end', () => {
-    ended += 1;
-  });
+  network.attach();
 });
 
 beforeEach(() => {
   jest.clearAllMocks();
   serverNickname = OLD_NICKNAME;
   patchBodies = [];
-  started = 0;
-  ended = 0;
-  queryClient = newClient();
+  network.reset();
+  queryClient = newTestQueryClient({ gcTime: 0 });
   setAccessToken('valid-access');
 });
 

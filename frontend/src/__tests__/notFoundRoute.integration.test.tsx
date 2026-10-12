@@ -5,6 +5,7 @@ import {
   fireEvent,
   renderRouter,
   screen,
+  within,
 } from 'expo-router/testing-library';
 
 import { SPLASH_MIN_VISIBLE_MS, SplashGate } from '@/app/routing/SplashGate';
@@ -28,6 +29,10 @@ import NotFoundRoute from '@routes/+not-found';
  *   그룹 화면들은 testID 만 가진 가짜다.
  *
  * 3동작: 준비 = 게이트 목적지 + 없는 경로로 앱 열기 → 실행 = [홈으로] → 단언 = 그 목적지의 화면이 보인다.
+ *
+ * TRIP-1350 — 옛 `notFoundRoute.test`(라우터 목) 를 합쳤다. 목은 `router` 싱글턴을 스파이로 바꿔 대신한다:
+ * 문구·영문 기본 문구 부재·"목적지는 누를 때 읽는다"는 라우터를 실제로 움직일 필요가 없어 `dismissTo` 를 막아 둔 채 인자만 본다.
+ * 옛 단위 it 의 "HOME → /(tabs) 1회" 는 실물 라우터 it(HOME 도착 · 탭 두 벌 안 쌓임)이 더 강하게 잠가 둘 다 남긴다.
  *
  * 통합 버킷 이유: 실물 expo-router 는 node 버킷(`--experimental-vm-modules`)에서 로드가 실패한다.
  */
@@ -78,8 +83,23 @@ beforeEach(() => {
 afterEach(() => {
   mockUseBootstrapGate.mockReset();
   resetGateDestination();
+  jest.restoreAllMocks();
   jest.useRealTimers();
 });
+
+/** 게이트가 `destination` 을 연 상태로 없는 경로 앱을 열고 스플래시 floor 까지 넘긴다. */
+function openNotFound(destination: BootstrapDestination): void {
+  mockUseBootstrapGate.mockReturnValue({
+    phase: 'resolved',
+    destination,
+    isProvisional: false,
+  });
+  publishGateDestination(destination);
+  renderRouter(ROUTES, { initialUrl: '/zz-none' });
+  act(() => {
+    jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS);
+  });
+}
 
 describe('🔴 TRIP-935 M-08 · [홈으로]는 게이트가 연 화면에 닿는다', () => {
   it.each<[BootstrapDestination, string]>([
@@ -134,5 +154,57 @@ describe('🔴 TRIP-935 M-08 · [홈으로]는 게이트가 연 화면에 닿는
     // 뒤로가기가 옛 탭의 탐색 화면을 꺼냈다(canGoBack true). navigate·push 였다면 404 가 뒤에 남는다.
     expect(screen.getByTestId('home-root')).toBeOnTheScreen();
     expect(router.canGoBack()).toBe(false);
+  });
+});
+
+describe('🔴 TRIP-935 AC-2 · 없는 경로 화면은 한국어 안내 + [홈으로]', () => {
+  it('제목 "페이지를 찾을 수 없어요"와 [홈으로] 버튼을 그린다', () => {
+    openNotFound('HOME');
+
+    expect(screen.getByText('페이지를 찾을 수 없어요')).toBeOnTheScreen();
+    const home = screen.getByTestId('not-found-home');
+    expect(within(home).getByText('홈으로')).toBeOnTheScreen();
+    expect(home.props.accessibilityRole).toBe('button');
+  });
+
+  it('영문 기본 화면 문구(Unmatched·Sitemap·Go back)가 하나도 없다', () => {
+    openNotFound('HOME');
+
+    // 앵커 — 화면이 실제로 그려졌다(빈 렌더의 공허 통과 차단).
+    expect(screen.getByTestId('not-found-home')).toBeOnTheScreen();
+    expect(
+      screen.queryAllByText(/Unmatched|Sitemap|not found|Go back/i)
+    ).toHaveLength(0);
+  });
+
+  it('[홈으로] press(목적지 HOME) → router.dismissTo("/(tabs)") 정확히 1회, replace·push·back 은 0회', () => {
+    // '/' 가 아니다 — '/' 는 라우터가 닫힌 (onboarding) 으로 풀어 버려졌다(M-08).
+    // replace 가 아니다 — 앱 안에서 열린 404 면 (tabs) 를 한 벌 더 쌓는다(5-b 경고-1).
+    openNotFound('HOME');
+    const dismissTo = jest.spyOn(router, 'dismissTo').mockImplementation();
+    const replace = jest.spyOn(router, 'replace').mockImplementation();
+    const push = jest.spyOn(router, 'push').mockImplementation();
+    const back = jest.spyOn(router, 'back').mockImplementation();
+
+    fireEvent.press(screen.getByTestId('not-found-home'));
+
+    expect(dismissTo).toHaveBeenCalledTimes(1);
+    expect(dismissTo).toHaveBeenCalledWith('/(tabs)');
+    expect(replace).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    expect(back).not.toHaveBeenCalled();
+  });
+
+  it('목적지는 그릴 때가 아니라 누를 때 읽는다 — 404 가 떠 있는 동안 HOME→LOGIN 이면 /login', () => {
+    // 준비 — HOME 으로 그린 뒤 세션이 만료돼 게이트가 LOGIN 을 열었다(화면은 다시 안 그려진다).
+    openNotFound('HOME');
+    const dismissTo = jest.spyOn(router, 'dismissTo').mockImplementation();
+    act(() => {
+      publishGateDestination('LOGIN');
+    });
+
+    fireEvent.press(screen.getByTestId('not-found-home'));
+
+    expect(dismissTo).toHaveBeenCalledWith('/login');
   });
 });

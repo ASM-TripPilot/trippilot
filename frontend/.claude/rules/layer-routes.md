@@ -4,7 +4,7 @@ paths:
 ---
 # `app/` — 라우트 (expo-router 파일시스템 라우트)
 
-- **라우트 파일은 얇은 래퍼다** — params만 읽어 `@/pages/<슬라이스>` 공개 API(`index.ts`)로 위임한다(딥 경로는 lint error — TRIP-1157). 조회·조립·마크업은 페이지 소관. 이 forward 자체는 라우트를 렌더하는 테스트가 없으면 무심판이다.
+- **라우트 파일은 얇은 래퍼다** — params만 읽어 `@/pages/<슬라이스>` 공개 API(`index.ts`)로 위임한다(딥 경로는 lint error — TRIP-1157). 조회·조립·마크업은 페이지 소관. 이 forward 는 무심판이며 QA 몫이다(라우트 forward 만 보는 테스트는 TRIP-1350 에서 지웠다 — 판정 5).
 - **`(tabs)` 밖 라우트는 `SplashGate`의 어떤 `Stack.Protected` guard에도 안 걸린다** — expo-router가 파일시스템 라우트를 자동 등록하므로 미인증 딥링크로 열린다(`stays/*`·`trips/new/**` 실기 확인, 데이터 노출은 서버 401이 막음). 새 라우트를 `(tabs)` 밖에 두면 같은 구조를 공유한다.
 
 | 파일 | 역할 |

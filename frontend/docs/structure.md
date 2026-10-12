@@ -54,7 +54,7 @@ frontend/
           jest.config.js · jest.integration.config.js · metro.config.js · tailwind.config.js
 ```
 
-**FSD 층 방향 규칙 — 도입됨(TRIP-804).** `app → pages → widgets → features → entities → shared` 6층 방향을 `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제한다 — 역방향(하위→상위), features 간 직접 import, 하위 층의 상위 층 참조 상한을 잡는다. `src/__tests__/importBoundaryLayers.test.ts`가 13개 feature 전부에서 형제 feature·역방향 import가 경계 룰로 잡히는지 뮤테이션으로 실측한다(src 직계·세그먼트 허용목록 검사는 Steiger, TRIP-1158). **전방 `app → features` 제한은 아직 미도입** — app이 features를 직접 import하는 곳이 많아(라우트·프리뷰) 소급 이동 없이 못 켜므로 pages 이주 후 별도 티켓에서 켠다(app·app-shell은 이번 zone에서 target 아님).
+**FSD 층 방향 규칙 — 도입됨(TRIP-804).** `app → pages → widgets → features → entities → shared` 6층 방향을 `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제한다 — 역방향(하위→상위), features 간 직접 import, 하위 층의 상위 층 참조 상한을 잡는다. 층 방향 규칙의 발동은 CI lint 가 본다 — 탐침 테스트(`importBoundaryLayers`)는 TRIP-1350 에서 지웠다(src 직계·세그먼트 허용목록 검사는 Steiger, TRIP-1158). **전방 `app → features` 제한은 아직 미도입** — app이 features를 직접 import하는 곳이 많아(라우트·프리뷰) 소급 이동 없이 못 켜므로 pages 이주 후 별도 티켓에서 켠다(app·app-shell은 이번 zone에서 target 아님).
 ## `src/features/` — 아직 시작 안 한 도메인
 
 TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — `stay`는 위 절대로 TRIP-179로 재등장(데이터 계층만), `itinerary`는 위 절대로 TRIP-295로 재등장(순수 함수만). 지금 `src/features/`에는 25개 슬라이스가 있다(목록의 정본은 디렉토리 — 손 카운트는 드리프트한다).

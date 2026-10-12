@@ -138,10 +138,10 @@ frontend/
 | 판정 로직(순수 함수) | 로직이 있는 슬라이스의 `model/`·`lib/` | 옆에 `foo.test.ts` | Jest |
 | 판정 로직의 속성 | 위와 같음 | 함수(또는 함수 묶음)당 PBT 1파일 | fast-check |
 | 출시·보안 계약(ESLint로 표현 못 하는 것) | `src/__tests__` | 아래 판정 3의 남은 목록 | 소스 스캔 |
-| 출시·보안 금지(ESLint로 표현되는 것) | `eslint.config.js` | 규칙 발동 탐침은 `importBoundaryLayers.test.ts` | ESLint `lintText` |
+| 출시·보안 금지(ESLint로 표현되는 것) | `eslint.config.js` | 규칙 발동 탐침은 `eslintReleaseRules.test.ts` | ESLint `lintText` |
 | 개발 도구(`_dev` 프리뷰) | `src/__tests__`(라우트 폴더 `app/` 안은 라우트로 등록돼 못 둔다) | 스모크 1파일 `devPreviewReleaseGate.test.tsx` | RNTL |
 
-- 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다).
+- 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다). **두 버킷은 못 합친다**(TRIP-1350 실측) — node 버킷은 `--experimental-vm-modules` 가 필요하고(`makeAuthorize.*`·`LoginPage.apple`·`shareCapture` 의 `await import()` 와 `eslintReleaseRules` 의 ESLint 설정 로드), MSW 2 의존 트리(ESM)는 그 플래그 아래서 `Must use import to load ES Module` 로 죽는다. FSD 탐침을 지워도 플래그를 켤 이유가 남는다.
 - **버킷 예외 — node 버킷이어야 하는 page 배선 테스트는 `XxxPage.test.tsx`**(TRIP-1146): `await import`로만 닿는 모듈(integration 버킷에선 그 자리에서 동기 throw)이나 생성 훅·스토어 목으로 page 배선을 보는 테스트는 integration 버킷으로 못 가므로 `.integration` 없이 둔다(예: `PrefStep1Page.test.tsx`·`ReconsentPage.test.tsx`). 같은 page에 통합 파일이 따로 있으면 버킷 사유를 접미사로 남긴다(`LoginPage.apple.test.tsx` — 애플 SDK lazy import).
 - testID 규약 `{feature}-{screen}-{role}`(예: `execution-hub-timeline`) — testID 부여는 스펙의 일부다.
 - CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): ESLint · `tsc` · Steiger(`pnpm fsd`) · 구조 지도 드리프트(`structure-index.cjs --write`·`--check`) · Jest(두 버킷)+fast-check — 머지 게이트.
@@ -153,7 +153,7 @@ frontend/
 1. **PBT** → property(`fc.assert`)는 **하나도 지우지 않는다**(루트 CLAUDE.md — PBT는 차단 게이트). 같은 함수를 보는 PBT가 여러 파일이면 한 파일로 **합친다**.
 2. **개발 도구(`_dev` 프리뷰) 테스트** → **스모크 1파일만 남기고 지운다** — 프리뷰 화면이 뜨고, 키 장부에 중복이 없고, 없는 키는 splash로 떨어지는지만 본다(키별 렌더 없음). 운영 빌드에서 프리뷰를 막는 출시 계약도 같은 파일에 있다. 프리뷰는 사람이 눈으로 보는 도구라 세부 동작 검사는 실제 화면 테스트의 몫이다.
 3. **소스 스캔**(파일을 텍스트로 읽고 렌더하지 않는 테스트) — 기능이 구현·QA된 뒤의 회귀 감시는 스캔이 아니라 QA가 맡는다(TRIP-1145).
-   - **출시·보안 계약**(키·시크릿이 git에 안 들어감, 출시 빌드 설정, API 명세, 운영 빌드의 프리뷰 차단, 법정 동의·고지, 사진·공유 카드 서버 업로드 금지) → ESLint로 표현되면 **ESLint 규칙으로 옮기고** 규칙 발동을 `importBoundaryLayers.test.ts`의 `lintText` 탐침으로 지킨다. 표현 못 하면 **남긴다**. 지금 남은 스캔: `socialSdkSecrets`·`mapBridgeStructure`·`releaseBuildConfig`·`openapiContract`·`devPreviewReleaseGate`·`recordPhotoBinaryGuard`·`shareCardStructure`·`locationConsentPutBodyOwnership`·`deletionScopeStructure`·`importBoundaryLayers`(모두 `src/__tests__`).
+   - **출시·보안 계약**(키·시크릿이 git에 안 들어감, 출시 빌드 설정, API 명세, 운영 빌드의 프리뷰 차단, 법정 동의·고지, 사진·공유 카드 서버 업로드 금지) → ESLint로 표현되면 **ESLint 규칙으로 옮기고** 규칙 발동을 `eslintReleaseRules.test.ts`의 `lintText` 탐침으로 지킨다. 표현 못 하면 **남긴다**. 지금 남은 스캔: `socialSdkSecrets`(옛 `mapBridgeStructure` A-3 합본)·`releaseBuildConfig`(옛 `socialSdkConfigPlugin` 합본)·`openapiContract`·`devPreviewReleaseGate`·`photoUploadGuard`(옛 `recordPhotoBinaryGuard`+`shareCardStructure` 합본)·`locationConsentPutBodyOwnership`·`deletionScopeStructure`·`eslintReleaseRules`(옛 `importBoundaryLayers` 중 출시·보안 규칙 탐침만 — FSD 층·딥 import 탐침은 TRIP-1350 에서 지움)(모두 `src/__tests__`).
    - **구조 규칙**(층·슬라이스·세그먼트·props-only 시트 등) → 스캔을 두지 않는다. 층 방향은 ESLint zone, 나머지는 Steiger(TRIP-1158).
    - **기능 회귀**(이미 지운 것의 재등장, 화면 금칙어·소요시간 글자, 바텀시트 prop 결합 등) → 스캔을 두지 않는다. QA가 본다(실화면 QA는 `trippilot-sim-qa` 스킬 — Maestro 묶음은 2026-10-12 삭제).
    - 새 스캔을 더하기 전에 같은 금지를 ESLint `no-restricted-imports`·`no-restricted-syntax`로 표현할 수 있는지 먼저 본다.

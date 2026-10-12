@@ -15,13 +15,17 @@ import path from 'path';
  *  (4) 네이버 `consumerSecret` 은 SDK 필수 파라미터라 예외로 허용하되 env 경유만 하고
  *      그 예외 사실이 코드 주석과 README 에 남는다(D5 · AC-8′).
  *
- * ★ 왜 기존 `mapBridgeStructure.test.ts` 의 32-hex 탐지기를 그대로 쓰지 않았나:
+ * ★ 왜 아래 A-3(옛 `mapBridgeStructure`)의 32-hex 탐지기를 그대로 쓰지 않았나:
  *  - 카카오 네이티브 앱 키는 32-hex 라 그 탐지기가 이미 잡는다 → **중복하지 않는다.**
  *  - 네이버 clientId·secret 은 짧은 영숫자라 **형태로 구별할 수 없다.** 형태 기반으로 넓히면
  *    리포 전체가 오탐이 된다.
  *  - 게다가 그 테스트의 확장자 필터(ts|tsx|js|json|md|…)에는 **`.env` 가 없어서** 실수로
  *    커밋된 `.env` 는 아예 스캔되지 않는다.
  *  → 그래서 여기는 **대입 문맥 기반**(`VAR=<값>`) 탐지기를 **확장자 무관 전 추적 파일**에 건다.
+ *
+ * TRIP-1350 — 옛 `mapBridgeStructure` 의 A-3(지도 키 포함 git 추적 파일 전수 32-hex 리터럴 0건)을 이 파일로
+ * 합쳤다. 같은 `git ls-files` 열거·같은 32-hex 탐지기를 따로 복사해 쓰던 것이다. A-2(shared/map 안 env 참조가
+ * 정확히 한 곳)는 구조 단언이라 지웠다(README 판정 3) — 그 안의 32-hex 리터럴 0건은 A-3 전수 스캔이 포함한다.
  *
  * 전제 — 소스 스캔은 주석을 걷어낸 뒤 훑는다(`stripComments`, 리포 관례상 파일마다 각자 갖는다).
  * 걷어내지 않으면 주석 속 문자열이 긍정 단언을 거짓 만족시킨다. 반대로 AC-8′ 의 "주석에 명시"는
@@ -185,6 +189,49 @@ describe('AC-7 · git 추적 파일 전수에 키 값이 대입돼 있지 않다
         'EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY=real-value\nEXPO_PUBLIC_NAVER_CLIENT_ID=\n'
       )
     ).toBe(true);
+  });
+});
+
+describe('A-3 (옛 mapBridgeStructure) — git 추적 파일 전수에 32-hex 키 리터럴이 0건이다', () => {
+  it('텍스트 추적 파일에 32-hex 키 형태 리터럴이 없고, .env.example 은 지도 키 이름만 있고 값은 비어 있다', () => {
+    const files = trackedFiles();
+
+    const EXCLUDED = ['pnpm-lock.yaml'];
+    // 제외목록이 조용히 넓어지지 않았다 — 늘리려면 이 단언도 함께 고쳐야 게이트에 보인다.
+    expect(EXCLUDED).toEqual(['pnpm-lock.yaml']);
+
+    const TEXT_EXTENSION = /\.(ts|tsx|js|jsx|json|md|yml|yaml|cjs|mjs)$/;
+    const scanned = files.filter(
+      (f) => TEXT_EXTENSION.test(f) && !EXCLUDED.includes(f)
+    );
+    // 도달 앵커 — 스캔량.
+    expect(scanned.length).toBeGreaterThan(200);
+
+    const offenders = scanned.filter((f) =>
+      HEX32_LITERAL.test(fs.readFileSync(f, 'utf8'))
+    );
+    // 본체.
+    expect(offenders).toEqual([]);
+
+    // 탐지기 자가검사 — 합성 위반을 실제로 잡고, 40자 SHA·31자 문자열은 잡지 않는다(`\b` 경계).
+    expect(HEX32_LITERAL.test(`const k = '${SYNTHETIC_HEX32}';`)).toBe(true);
+    expect(HEX32_LITERAL.test(`40-char: ${SYNTHETIC_HEX32}ff112233`)).toBe(
+      false
+    );
+    expect(HEX32_LITERAL.test('31-char: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d')).toBe(
+      false
+    );
+
+    // 지도 키(TRIP-864 로 KAKAO_MAP_JS_KEY 에서 NAVER_MAP_CLIENT_ID 로 바뀜)가 .env.example 에 이름만(값 없음) 선언돼 있다.
+    const keyAssignmentLines = fs
+      .readFileSync('.env.example', 'utf8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('EXPO_PUBLIC_NAVER_MAP_CLIENT_ID='));
+    // 이름이 정확히 1줄 있고, `=` 뒤에 키 형태 문자열이 없다(값 비어 있음).
+    expect(keyAssignmentLines).toEqual([
+      expect.stringMatching(/^EXPO_PUBLIC_NAVER_MAP_CLIENT_ID=\s*$/),
+    ]);
   });
 });
 

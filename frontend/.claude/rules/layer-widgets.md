@@ -8,7 +8,7 @@ paths:
 
 ## import 방향
 - widgets → entities · shared 만 참조한다. 층 린트는 widgets→features를 막지 않는다(그것을 막던 소스 스캔은 TRIP-1145에서 지웠다 — 기계 강제 없음). 그래서 위젯은 features의 판단·글리프를 못 물고 로컬 복제하거나 소비처가 문자열로 넘긴다(`MapSheetGlyphs`·`EditorGlyphs`·`EditorView`의 `dateLabel`).
-- pages · app · app-shell 은 참조하지 못한다. `eslint.config.js`의 층 zone이 강제하고 `src/__tests__/importBoundaryLayers.test.ts`가 실측한다.
+- pages · app · app-shell 은 참조하지 못한다. `eslint.config.js`의 층 zone이 강제하고 (층 방향 탐침은 TRIP-1350 에서 지웠다 — CI lint 가 본다).
 - ⚠️ **features→widgets 는 상향 참조라 금지**다. 위젯을 쓰는 자리는 **pages/app** — features 화면은 `ReactNode` 슬롯으로 완성된 노드만 받는다.
 
 ## 세그먼트

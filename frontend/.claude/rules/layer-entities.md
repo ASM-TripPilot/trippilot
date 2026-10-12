@@ -10,7 +10,7 @@ paths:
 - entities → shared 만 참조한다. features · widgets · pages · app · app-shell 은 참조하지 못한다(하위 층은 상위 층을 모른다).
 - **형제 슬라이스는 서로 모른다**: `entities/place`는 `entities/stay`를 직접 import 하지 못한다(슬라이스마다 zone이 자동 생성). 공용이 생기면 형제에서 꺼내지 말고 `shared`로 내린다.
 - **교차는 `@x` 창구로만**: 도메인끼리 꼭 참조해야 하면 **제공자가 소비자에게만** 내주는 `entities/<제공자>/@x/<소비자>/**` 폴더를 통한다(예: `entities/place/@x/itinerary-slot/`은 `entities/itinerary-slot/**`만 import 가능). 실제 폴더는 필요할 때 만든다.
-- `eslint.config.js`의 층 zone(`import/no-restricted-paths`)이 강제한다 — 형제 격리 except는 자기 슬라이스 + `entities/*/@x/<자기>/**`를 **전부 절대 glob**으로 둔다(상대 glob은 정당한 자기 import까지 오탐). `src/__tests__/importBoundaryLayers.test.ts`가 형제 차단·`@x` 통과를 실측한다.
+- `eslint.config.js`의 층 zone(`import/no-restricted-paths`)이 강제한다 — 형제 격리 except는 자기 슬라이스 + `entities/*/@x/<자기>/**`를 **전부 절대 glob**으로 둔다(상대 glob은 정당한 자기 import까지 오탐). 형제 차단·`@x` 통과 탐침(`importBoundaryLayers`)은 TRIP-1350 에서 지웠다 — CI lint 가 본다.
 - entities→features 역참조 금지라 features 글리프를 못 쓴다 — 필요한 글리프는 슬라이스 `*Glyphs.tsx`에 바이트 복제한다(리포 글리프 로컬 복제 관례).
 
 ## 세그먼트

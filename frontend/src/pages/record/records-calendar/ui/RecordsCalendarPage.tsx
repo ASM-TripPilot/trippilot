@@ -36,7 +36,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * `useRouter()` 를 쓴다(imperative `router` 아님, ★D9) — tabsShell(expoRouterTabsMock)·route 목이
  * `useRouter` 를 제공해 이 페이지가 크래시 없이 렌더된다.
  *
- * legend 파생은 순수 함수 `buildMonthLegends`(TRIP-1084)가 맡고, 페이지 배선은 `tabsRecordsRoute` 가 잠근다.
+ * legend 파생은 순수 함수 `buildMonthLegends`(TRIP-1084)가 맡고, 페이지 배선은 `RecordsCalendarPage.test` 가 잠근다.
  *
  * TRIP-1120 · 진행 중 카드 — 여행마다 일정을 조회해(h06 과 같은 캐시 키) 확정·없음(404)·모름으로 접고
  * `pickOngoingTrip` 이 한 장을 고른다. 404 아닌 실패는 옛 data 가 남아 있어도 모름이다(남은 값을 믿지

@@ -70,7 +70,7 @@ initSentry();
 /**
  * 앱 전역 프로바이더(FSD app 층). 라우트 루트 레이아웃(`app/_layout.tsx`)이 `SplashGate` 를 감싸 조립한다.
  * 배치 계약: 제스처 루트 > SafeArea > (QueryClient > children) + ToastHost — QueryClient 는 SplashGate 바깥,
- * ToastHost 는 Stack(SplashGate) 바깥. 폰트 결판 전에는 아무것도 그리지 않는다(`rootLayout*` 테스트).
+ * ToastHost 는 Stack(SplashGate) 바깥. 폰트 결판 전에는 아무것도 그리지 않는다(`AppProviders.test`).
  */
 export function AppProviders({ children }: { children: ReactNode }) {
   // tailwind.config 의 fontFamily 토큰(font-inter-bold·font-noto* → Inter_700Bold 등)이
@@ -108,7 +108,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
         }
       >
         {/* D4 — SplashGate 바깥. SplashGate 안에 두면 그 훅이 나중에 useQuery로 바뀔 때
-            Provider가 자기보다 아래에 있게 되어 깨진다(rootLayoutQueryProvider.test.tsx가
+            Provider가 자기보다 아래에 있게 되어 깨진다(AppProviders.test.tsx가
             SplashGate를 목으로 갈아끼운 상태에서 이 배치를 간접적으로 강제한다). */}
         <QueryClientProvider client={queryClient}>
           {children}

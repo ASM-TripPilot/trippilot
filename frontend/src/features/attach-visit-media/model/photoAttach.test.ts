@@ -10,7 +10,7 @@ import { photoAttach, type PhotoAssetMeta } from './photoAttach';
  *    **키 자체가 없다**(omit — undefined 로 실어 보내지도 않는다).
  *  - `gpsConsent=true && exif 존재` 면 그대로 실린다(긍정 짝).
  *  - `photoAttach` 는 순수 함수 — 동의를 직접 안 읽고 **plain boolean 을 인자로** 받는다(DI). expo
- *    타입/모듈 import 0(그 잠금은 recordPhotoBinaryGuard G2 가 소스로 담당).
+ *    타입/모듈 import 0(그 잠금은 photoUploadGuard G2 가 소스로 담당).
  *
  * (개념) fast-check = 임의 입력 수백 개로 속성이 항상 성립하는지 확인(PBT). `not.toHaveProperty(k)` =
  *   키가 **존재하지 않아야** 통과 — {exifLat:undefined} 는 키가 있으므로 실패한다(02a §5-A 실측). 그래서

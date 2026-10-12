@@ -951,8 +951,7 @@ describe('헤더 공유 아이콘 없음', () => {
    *  - 재구성된 default 얼굴에 공유 아이콘(`reflection-daily-share`) 표면이 없다(재도입 방지 렌더 가드).
    *
    * ★ red/선제green 판정: 이 렌더 가드는 **선제-green** 이다 — 화면이 onShare 를 안 받으면 예전에도
-   *   아이콘을 안 그렸다. 제거의 **red 잠금**은 소스 스캔(`shareCardStructure.test.ts` G4 —
-   *   DailyReflectionScreen.tsx 에 `reflection-daily-share` **부재**)과 페이지 배선 테스트
+   *   아이콘을 안 그렸다. 제거의 **red 잠금**은 소스 스캔(옛 `shareCardStructure.test.ts` G4 — TRIP-1145 로 지움)과 페이지 배선 테스트
    *   (`DailyReflectionPage.hookMock.test.tsx` 공유 묶음 — onShare/canShare prop 부재)가 진다. 이 파일은 화면
    *   렌더 층에 "공유 표면 재도입 금지" 그물을 영구히 남긴다.
    *

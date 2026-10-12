@@ -30,12 +30,14 @@ import {
   PLANNED,
   deferred,
   myPageTrip,
-  newTestQueryClient,
-  renderWithQueryClient,
   scriptItineraryOptions,
-  settle,
   type ItinScript,
 } from '@/test-support/myPageItineraries';
+import {
+  newTestQueryClient,
+  renderWithQueryClient,
+  settle,
+} from '@/test-support/queryRender';
 import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { MyPage } from './MyPage';
 import { ChevronRightGlyph as TripChevronGlyph } from '@/entities/trip';

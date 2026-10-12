@@ -155,7 +155,7 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
    *  - 🔴 AC-1(BR-U6-20) 여행 0건이면 저장 숙소가 미연결 → 행 VM 이 정확히 '연결된 여행 없음'·unassigned 로 조립된다.
    *
    * 왜 이렇게 테스트하나(02a ★3):
-   *  - 화면(`MyStaysScreen`)을 **props 캡처 목**으로 치환하고 페이지를 렌더한다(route 위임 선례 `liveLocationRoute`).
+   *  - 화면(`MyStaysScreen`)을 **props 캡처 목**으로 치환하고 페이지를 렌더한다(route 위임 선례).
    *    콜백은 캡처해 직접 호출하고, VM 은 캡처된 `rows` 를 읽는다 — 페이지 내부 fetch/N+1 기전에 무의존
    *    (trips 0건 시나리오라 bases 조회가 발화하지 않아 mechanism-agnostic).
    *  - push 인자는 리포 선례(`ItineraryMethodPage` onPressRebase)와 같은 객체 모양으로 완전 잠금(02a ★11).
