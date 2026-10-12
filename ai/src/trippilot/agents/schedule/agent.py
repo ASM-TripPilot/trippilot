@@ -387,16 +387,24 @@ class ScheduleAgent:
         #    골라 두 곳이 가산된다(리뷰 재현 2026-10-10). 앞이어야 고른 1곳이 지도 검증
         #    대상에 든다(②″ 와 같은 이유). 제외·고정 POI 는 고르지 않는다 — 다녀온 카페를
         #    골라 가산이 헛돌면 관측은 1/1 인데 일정엔 카페가 없다.
+        #    고른 1곳은 **시각 없는 필수 방문**으로도 올린다 — 가산만으로는 조립이 안 넣을 수
+        #    있었다(서울 8회 중 1회 카페 0곳, 2026-10-12). 필수 방문은 OR 의 소프트 지배 항이라
+        #    INFEASIBLE 이 없고(TRIP-1249), 못 넣으면 아래 ④ 뒤에서 노트로 보고한다(INV-4).
+        add_one_required: tuple[PoiId, ...] = ()
         if request.add_one_categories:
             index = {p.poi_id: p for p in pool.pois}
-            candidates, picked = boost_add_one(
+            candidates, add_one_required = boost_add_one(
                 candidates, index, request.add_one_categories,
                 skip=request.excluded_poi_ids | {b.poi_id for b in fixed_blocks},
             )
+            # 재계획은 하루다 — add_one 은 재계획에서만 실린다(generate 는 빈 집합).
+            required_visits += tuple(
+                RequiredVisit(poi_id=p, day=request.days[0], dwell_min=None, reason="add_one")
+                for p in add_one_required)
             self._observe(
                 trace_id, now, "directives", "add_one", "add_one",
-                f"add_one_boosted:{len(picked)}/{len(request.add_one_categories)}"
-                + (f" {','.join(str(p) for p in picked)}" if picked else ""),
+                f"add_one_required:{len(add_one_required)}/{len(request.add_one_categories)}"
+                + (f" {','.join(str(p) for p in add_one_required)}" if add_one_required else ""),
             )
 
         # ②‴′ 같은 장소 계열 강등 (TRIP-1181) — generate 에만. **②′ 앞**이라야 지도 검증
@@ -499,6 +507,12 @@ class ScheduleAgent:
             steps.append(Degradation(
                 stage="assembly", reason=f"assembly_degraded:{solution.solve_mode.value}"
             ))
+        # "한 곳 추가"를 못 넣었으면 말한다 — 재계획 notes 로 흐른다(침묵 실패 금지, INV-4).
+        placed_ids = {s.poi_id for day in solution.days for s in day.slots}
+        missed = [p for p in add_one_required if p not in placed_ids]
+        if missed:
+            self._degrade(steps, trace_id, now, "directives", "add_one", "(unplaced)",
+                          "add_one_unplaced: " + ",".join(str(p) for p in missed))
 
         # ⑤ (선택) 설명 부착 — 실패해도 일정은 그대로 나간다
         explanations = self._explain(
