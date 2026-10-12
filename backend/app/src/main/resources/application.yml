@@ -38,6 +38,10 @@ trippilot:
       client-secret: ${KAKAO_CLIENT_SECRET:}
       token-uri: https://kauth.kakao.com/oauth/token
       user-info-uri: https://kapi.kakao.com/v2/user/me
+      # SDK 토큰 로그인에서 토큰의 발급 앱을 이 값과 대조한다(TRIP-1317). 시크릿이 아니다 — 카카오 개발자
+      # 콘솔의 숫자 앱 ID. 비면 대조를 건너뛰고 기동 로그에 경고가 남는다(남의 앱 토큰으로 가입이 열린다).
+      app-id: ${KAKAO_APP_ID:}
+      token-info-uri: https://kapi.kakao.com/v1/user/access_token_info
     # Apple 은 userinfo 가 없다 — 신원이 id_token 안에 있어 JWKS 로 서명을 검증한다(TRIP-858).
     # client-id 는 iOS 번들 ID 이자 id_token 의 aud 기대값이다. 미주입이면 501(미지원)로 나간다.
     apple:

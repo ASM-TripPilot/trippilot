@@ -64,6 +64,9 @@ class SecretTests(unittest.TestCase):
             {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "0d7f17ab5c4b4d6da7f7484ba11dda46"}},
             {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "{0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46}"}},
             {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,"}},
+            # 카카오 앱 ID(TRIP-1317) 자리에 REST API 키를 넣는 실수 — 카카오 로그인이 전부 401 이 된다.
+            {"backend": {"KAKAO_APP_ID": "0123456789abcdef0123456789abcdef"}},
+            {"backend": {"KAKAO_APP_ID": " 1519823"}},
         ]
         for changed in cases:
             with self.subTest(changed=changed), self.assertRaises(ValueError):
@@ -75,6 +78,9 @@ class SecretTests(unittest.TestCase):
             "0D7F17AB-5c4b-4d6d-a7f7-484ba11dda46, 11111111-2222-4333-8444-555555555555"}})
         runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
             "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": ""}})
+        for app_id in ("1519823", ""):
+            runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+                "KAKAO_APP_ID": app_id}})
 
     def test_google_client_secret_must_stay_empty(self):
         """공개(iOS) 클라이언트에 시크릿을 보내면 Google 이 invalid_client 로 거절한다(2026-09-23 실측).

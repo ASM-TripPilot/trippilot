@@ -19,6 +19,12 @@ data class SocialProviderProperties(
         val tokenUri: String = "",
         val userInfoUri: String = "",
         /**
+         * SDK 토큰 흐름에서 **그 토큰이 우리 앱에 발급된 것인지** 대조할 앱 ID 와 조회 주소(현재 카카오만 —
+         * TRIP-1317). 시크릿이 아니다(카카오 개발자 콘솔의 숫자 ID). 비면 대조를 건너뛴다.
+         */
+        val appId: String = "",
+        val tokenInfoUri: String = "",
+        /**
          * OIDC id_token 검증용(현재 Apple 만 사용 — TRIP-858). 나머지 3사는 userinfo 로 신원을 받으므로 빈 값이다.
          * Apple 전용 프로퍼티 클래스를 따로 두지 않는 이유는 제공자 설정이 한 자리에 모여 있어야 비교되기 때문이다.
          */
@@ -45,7 +51,7 @@ data class SocialProviderProperties(
          */
         override fun toString(): String =
             "ProviderConfig(clientId=$clientId, clientSecret=${mask(clientSecret)}, tokenUri=$tokenUri, " +
-                "userInfoUri=$userInfoUri, jwksUri=$jwksUri, issuer=$issuer, revokeUri=$revokeUri, " +
+                "userInfoUri=$userInfoUri, appId=$appId, tokenInfoUri=$tokenInfoUri, jwksUri=$jwksUri, issuer=$issuer, revokeUri=$revokeUri, " +
                 "teamId=$teamId, keyId=$keyId, privateKey=${mask(privateKey)})"
 
         private fun mask(secret: String): String = if (secret.isEmpty()) "(없음)" else "(설정됨)"

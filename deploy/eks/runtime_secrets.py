@@ -18,6 +18,7 @@ APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
 AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
 ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS
+KAKAO_APP_ID
 """.split())
 AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
@@ -164,6 +165,11 @@ def validate_groups(groups):
                     raise ValueError(item)
         except ValueError:
             raise ValueError("ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS must be comma-separated UUIDs") from None
+    # 카카오 앱 ID(TRIP-1317)는 숫자다. REST API 키(32자 hex)를 잘못 넣으면 파드는 뜨는데 **카카오 로그인이
+    # 전부 401** 이 된다(발급 앱과 영영 안 맞는다) — 가장 흔한 실수라 여기서 막는다. 빈 값은 "대조 안 함"이다.
+    kakao_app_id = backend.get("KAKAO_APP_ID", "")
+    if kakao_app_id and not (kakao_app_id.isascii() and kakao_app_id.isdigit()):
+        raise ValueError("KAKAO_APP_ID must be the numeric Kakao app ID, not the REST API key")
     if backend.get("PLACE_GEOCODE_MODE") == "kakao":
         require(backend, ("KAKAO_CLIENT_ID",), "kakao geocoding")
     if backend.get("WEATHER_MODE") == "kma":
