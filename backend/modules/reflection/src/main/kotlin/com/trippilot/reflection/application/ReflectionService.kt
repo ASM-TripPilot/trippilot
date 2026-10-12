@@ -112,7 +112,10 @@ class ReflectionService(
         }
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         requireWithinTrip(period, dayDate)
-        val current = reflections.findForUpdate(tripId, dayDate) ?: draftFor(accountId, tripId, dayDate)
+        // 행이 없으면 **잠그기 전에** 초안부터 만든다(잠금은 draftFor 가 AI 호출 뒤에 잡는다) — 먼저 잡으면
+        // AI 호출 동안 그 하루의 다른 쓰기가 전부 기다린다. 그사이 행이 생겼으면 draftFor 가 그 행을 읽어 온다.
+        val current = (if (reflections.exists(tripId, dayDate)) reflections.findForUpdate(tripId, dayDate) else null)
+            ?: draftFor(accountId, tripId, dayDate)
         val now = clock.instant()
         // 카드는 **보냈을 때만** 갈아끼운다(TRIP-828) — 기분만 고치는 요청이 카드를 건드리면 안 된다.
         val carded = cardPayload?.let { current.edit(cards.read(it), now) } ?: current

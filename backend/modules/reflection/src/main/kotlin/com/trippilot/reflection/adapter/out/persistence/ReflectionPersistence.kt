@@ -64,6 +64,7 @@ class ReflectionEntity(
 interface ReflectionJpaRepository : JpaRepository<ReflectionEntity, UUID> {
     fun findByTripIdAndDayDate(tripId: UUID, dayDate: LocalDate): ReflectionEntity?
     fun findByTripIdOrderByDayDate(tripId: UUID): List<ReflectionEntity>
+    fun existsByTripIdAndDayDate(tripId: UUID, dayDate: LocalDate): Boolean
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from ReflectionEntity r where r.tripId = :tripId and r.dayDate = :dayDate")
@@ -102,6 +103,8 @@ class ReflectionRepositoryAdapter(
 
     override fun find(tripId: UUID, dayDate: LocalDate): Reflection? =
         jpa.findByTripIdAndDayDate(tripId, dayDate)?.toDomain()
+
+    override fun exists(tripId: UUID, dayDate: LocalDate): Boolean = jpa.existsByTripIdAndDayDate(tripId, dayDate)
 
     /**
      * 행 잠금만으로는 **아직 행이 없는 하루**를 못 막는다 — 겹친 첫 쓰기 둘이 모두 "없음"을 읽고 넣어

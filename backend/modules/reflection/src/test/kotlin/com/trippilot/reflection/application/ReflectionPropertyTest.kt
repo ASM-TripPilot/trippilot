@@ -57,8 +57,10 @@ class ReflectionPropertyTest : StringSpec({
     class Reflections : ReflectionRepository {
         val stored = mutableMapOf<Pair<UUID, LocalDate>, Reflection>()
         override fun upsert(reflection: Reflection) = reflection.also { stored[it.tripId to it.dayDate] = it }
+        var locks = 0
         override fun find(tripId: UUID, dayDate: LocalDate) = stored[tripId to dayDate]
-        override fun findForUpdate(tripId: UUID, dayDate: LocalDate) = find(tripId, dayDate)
+        override fun exists(tripId: UUID, dayDate: LocalDate) = (tripId to dayDate) in stored
+        override fun findForUpdate(tripId: UUID, dayDate: LocalDate) = find(tripId, dayDate).also { locks++ }
         override fun findByTrip(tripId: UUID) = stored.values.filter { it.tripId == tripId }.sortedBy { it.dayDate }
     }
 
@@ -528,5 +530,28 @@ class ReflectionPropertyTest : StringSpec({
 
             svc.generateDaily(acc, tripId, day).source shouldNotBe ReflectionSource.AI
         }
+    }
+
+    /**
+     * 행이 없는 하루의 첫 수정은 초안을 만들며 AI 를 부른다. 그 호출 **전에** 잠그면 응답을 기다리는 동안
+     * (읽기 제한 21초) 같은 하루의 다른 쓰기가 전부 멈춘다 — 기분 하나 고치는 요청이 그만큼 걸린다.
+     */
+    "행이 없는 첫 수정은 AI 호출이 끝난 뒤에 잠근다 — 호출 동안 그 하루의 다른 쓰기를 세우지 않는다" {
+        val repo = Reflections()
+        var locksSeenByAgent = -1
+        val agent = object : com.trippilot.reflection.domain.port.ReflectionAgentPort {
+            override val enabled = true
+            override fun generate(input: com.trippilot.reflection.domain.port.ReflectionAgentInput) =
+                null.also { locksSeenByAgent = repo.locks }
+        }
+        val svc = ReflectionService(
+            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock,
+        )
+
+        svc.edit(acc, tripId, day, cardPayload = null, mood = "GOOD")
+
+        locksSeenByAgent shouldBe 0
+        repo.locks shouldBe 1
     }
 })

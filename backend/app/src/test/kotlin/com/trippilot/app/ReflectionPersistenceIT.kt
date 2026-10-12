@@ -249,25 +249,32 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
      */
     @Test
     fun `겹친 첫 쓰기는 둘 다 저장된다 — 행이 없던 하루에 진 쪽이 500 을 받지 않는다`() {
-        val accountId = newAccount()
-        val tripId = newTrip(accountId)
-        val pool = Executors.newSingleThreadExecutor()
-        try {
-            val moodEdit = tx.execute {
-                reflections.edit(accountId, tripId, day, card("먼저 쓴 제목"))
-                val pending = pool.submit<Unit> { reflections.edit(accountId, tripId, day, cardPayload = null, mood = "GOOD") }
-                shouldThrow<TimeoutException> { pending.get(500, TimeUnit.MILLISECONDS) }
-                pending
-            }!!
-            moodEdit.get(10, TimeUnit.SECONDS)
-        } finally {
-            pool.shutdownNow()
-        }
+        // 첫 쓰기가 수정이든 생성이든 같다 — 둘 다 같은 잠금을 지난다.
+        val firstWrites = listOf<Pair<String?, (UUID, UUID) -> Unit>>(
+            "먼저 쓴 한 줄" to { accountId, tripId -> reflections.edit(accountId, tripId, day, cardPayload = null, shortMemo = "먼저 쓴 한 줄") },
+            null to { accountId, tripId -> reflections.generateDaily(accountId, tripId, day) },
+        )
+        firstWrites.forEach { (memo, firstWrite) ->
+            val accountId = newAccount()
+            val tripId = newTrip(accountId)
+            val pool = Executors.newSingleThreadExecutor()
+            try {
+                val moodEdit = tx.execute {
+                    firstWrite(accountId, tripId)
+                    val pending = pool.submit<Unit> { reflections.edit(accountId, tripId, day, cardPayload = null, mood = "GOOD") }
+                    shouldThrow<TimeoutException> { pending.get(500, TimeUnit.MILLISECONDS) }
+                    pending
+                }!!
+                moodEdit.get(10, TimeUnit.SECONDS)
+            } finally {
+                pool.shutdownNow()
+            }
 
-        val saved = reflections.find(accountId, tripId, day)!!
-        saved.mood shouldBe "GOOD"
-        saved.editedCard?.title shouldBe "먼저 쓴 제목"
-        rows(tripId) shouldBe 1
+            val saved = reflections.find(accountId, tripId, day)!!
+            saved.mood shouldBe "GOOD"
+            saved.shortMemo shouldBe memo // 뒤 요청이 앞 요청의 값을 지우지 않았다
+            rows(tripId) shouldBe 1
+        }
     }
 
     @Test
