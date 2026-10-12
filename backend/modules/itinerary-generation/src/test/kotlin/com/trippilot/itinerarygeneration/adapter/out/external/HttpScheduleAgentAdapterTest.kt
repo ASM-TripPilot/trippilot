@@ -761,7 +761,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         out.candidates[0].rationale shouldBe "감성 컨셉에 맞는 카페"
     }
 
-    "후보 0건(fallback_level=2)의 no_candidates 는 ALL_IN_ITINERARY 로 매핑된다" {
+    "후보 0건(fallback_level=2)의 no_candidates(풀이 비었다)는 NO_NEARBY — 넓히기가 통한다(TRIP-1311)" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
             .andRespond(withSuccess(altBody(2, "", emptyReason = "no_candidates"), MediaType.APPLICATION_JSON))
@@ -770,6 +770,17 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
         out.candidates shouldBe emptyList()
         out.freshness.degraded shouldBe true
+        out.emptyReason shouldBe SlotCandidatesEmptyReason.NO_NEARBY
+    }
+
+    "후보 0건의 all_excluded(전부 일정에 있다)는 ALL_IN_ITINERARY — 넓혀도 같은 결과다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
+            .andRespond(withSuccess(altBody(2, "", emptyReason = "all_excluded"), MediaType.APPLICATION_JSON))
+
+        val out = adapter.proposeSlotCandidates(candidatesInput())
+
+        out.candidates shouldBe emptyList()
         out.emptyReason shouldBe SlotCandidatesEmptyReason.ALL_IN_ITINERARY
     }
 

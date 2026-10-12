@@ -498,6 +498,18 @@ def test_pipeline_empty_pool_reports_no_candidates() -> None:
     assert result.fallback_level == 2
 
 
+def test_pipeline_all_excluded_is_not_no_candidates() -> None:
+    """TRIP-1311 — '주변에 없다'와 '전부 일정에 있다'는 사용자가 할 일이 정반대다.
+    같은 `no_candidates` 로 내면 백엔드가 넓히기(NO_NEARBY)를 판단할 수 없다."""
+    store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
+    result = PlanBAgent(emb, store).run(
+        _request(_pool("p1"), excluded=frozenset({PoiId("p1")}))
+    )
+    assert result.alternatives == ()
+    assert result.empty_reason == "all_excluded"
+    assert result.fallback_level == 2
+
+
 def test_pipeline_excluded_pois_are_not_candidates() -> None:
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
     result = PlanBAgent(emb, store).run(

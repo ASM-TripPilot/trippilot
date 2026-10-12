@@ -201,6 +201,11 @@ class SlotCandidateService(
             if (!request.concept.isNullOrBlank()) {
                 log.info("매핑에 없는 컨셉 — 필터 없이 응답합니다. concept={} tripId={}", request.concept, tripId)
             }
+            // 0건 1회 확장(TRIP-1311 · BR-U3-25) — "주변에 없다"면 사용자 손을 기다리지 않고 한 단계 넓혀
+            // 풀을 직접 본다. ALL_IN_ITINERARY 는 넓혀도 같은 결과라 넓히지 않는다.
+            if (kept.isEmpty() && answered.emptyReason == SlotCandidatesEmptyReason.NO_NEARBY) {
+                return poolRefill(null, emptySet(), center, inItinerary, targetPoiId, answered)
+            }
             return answered.copy(candidates = kept)
         }
         val matched = kept.filter { groundedById.getValue(it.poiId).category in conceptSet }
@@ -208,17 +213,18 @@ class SlotCandidateService(
 
         // 경계가 컨셉 밖 후보만 줬다(예: LLM 빈 결과 → 규칙 폴백이 카테고리를 모름). 컨셉 카테고리로
         // 풀을 직접 봐서 채운다 — 반경 안에 맛집이 실재하는데 "주변에 없음"이라 말하면 거짓이다.
-        return conceptRefill(request.concept!!, conceptSet, center, inItinerary, targetPoiId, answered)
+        return poolRefill(request.concept, conceptSet, center, inItinerary, targetPoiId, answered)
     }
 
     /**
-     * 컨셉 카테고리 풀 채움(TRIP-1065) — closed-set 풀([CandidatePoolPort]) 그대로, 거리순.
+     * 풀 직접 채움 — closed-set 풀([CandidatePoolPort]) 그대로, 거리순. 컨셉 카테고리(TRIP-1065)이거나,
+     * 컨셉이 없으면 전 카테고리([categories] 빈 집합 — TRIP-1311 0건 확장).
      * AI 순위가 아니므로 **degraded=true 로 정직하게** 표시한다(INV-4). 0건이면 로컬 폴백과 같은
      * 규약으로 사유를 가른다(BR-U3-25): 반경을 한 번 넓혀 보고, 그래도 없으면 NO_NEARBY,
-     * 있는데 전부 일정에 들어 있으면 ALL_IN_ITINERARY.
+     * 있는데 전부 일정에 들어 있으면 ALL_IN_ITINERARY. 넓히기는 **한 번뿐**이다 — 더 넓히면 엉뚱한 동네다.
      */
-    private fun conceptRefill(
-        concept: String,
+    private fun poolRefill(
+        concept: String?,
         categories: Set<String>,
         center: PoiSurfaceView,
         inItinerary: List<UUID>,
@@ -234,8 +240,8 @@ class SlotCandidateService(
         var radius = base.radiusMUsed
         var nearby = search(radius)
         var found = nearby.filterNot { it.poiId in excluded }
-        if (found.isEmpty() && radius < CONCEPT_WIDENED_RADIUS_M) {
-            radius = CONCEPT_WIDENED_RADIUS_M
+        if (found.isEmpty() && radius < WIDENED_RADIUS_M) {
+            radius = WIDENED_RADIUS_M
             nearby = search(radius)
             found = nearby.filterNot { it.poiId in excluded }
         }
@@ -247,7 +253,7 @@ class SlotCandidateService(
                     distanceRange = it.distanceM?.let { m -> "약 ${"%.1f".format(Locale.ROOT, m / 1000)}km" }
                         ?: "거리 미확인",
                     // 필터를 통과한 카테고리라 이 문구는 참이다(BR-U2-09 — 시각·소요시간 언급 없음).
-                    rationale = "$concept 컨셉에 맞는 ${it.category}",
+                    rationale = concept?.let { c -> "$c 컨셉에 맞는 ${it.category}" } ?: "주변 ${it.category}",
                 )
             },
             radiusMUsed = radius,
@@ -358,7 +364,7 @@ class SlotCandidateService(
         /** 즉답 후보 상한 — 로컬 폴백([LocalSlotCandidateSource])과 같은 개수를 준다. */
         private const val MAX_STORED_CANDIDATES = 5
 
-        /** 컨셉 채움의 넓힌 반경 — 로컬 폴백(h15 "반경 넓힘")과 같은 값. */
-        private const val CONCEPT_WIDENED_RADIUS_M = 12_000
+        /** 풀 채움의 넓힌 반경(컨셉 채움·0건 확장) — 로컬 폴백(h15 "반경 넓힘")과 같은 값. */
+        private const val WIDENED_RADIUS_M = 12_000
     }
 }

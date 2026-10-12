@@ -387,7 +387,9 @@ class PlanBAgent:
                 notes=tuple(notes),
                 retrieved=context.counts(),
                 dropped_out_of_pool=(),
-                empty_reason="no_candidates",
+                # 풀이 빈 것(주변에 없다 — 넓히면 통한다)과 전부 제외된 것(이미 일정에 있다 —
+                # 넓혀도 같다)은 사용자가 할 일이 반대다. 백엔드가 넓히기를 가르는 근거다(TRIP-1311).
+                empty_reason="no_candidates" if not request.pool.pois else "all_excluded",
             )
 
         # [3] Generate
