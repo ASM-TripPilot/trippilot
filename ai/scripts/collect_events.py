@@ -56,7 +56,9 @@ SNIPPET_CAP = 80       # 워커 입력 상한 (프롬프트 비대 방지)
 # 늘어난 스니펫이 **먼저 들어온 순서대로 잘려** 새 쿼리의 결과가 통째로 버려진다.
 # 비용: 실측 스니펫 60개 ≈ 입력 4,936 토큰(지역당)이라 80개면 지역당 +30% 안팎.
 # 하루 17콜 기준 9.5만 → 12만 토큰 수준. 호출 수는 안 변한다.
-EXTRACT_TIMEOUT_SEC = 30.0  # 배치는 지연 예산이 없다 — 넉넉히
+# 배치는 지연 예산이 없다 — 넉넉히. 30 → 120 (2026-10-12): claude-fable-5-1 은 사고를 끌 수
+# 없어 경기 22.5s, 서울은 30s 를 넘겨 0건이었다(luna 는 2.4~10.6s).
+EXTRACT_TIMEOUT_SEC = 120.0
 
 # 광역 17개 — 검색 쿼리용 지역명 (TourAPI 코드 순회와 같은 공평 순회 정신)
 DEFAULT_REGIONS = ("서울", "인천", "대전", "대구", "광주", "부산", "울산", "세종",
@@ -364,8 +366,10 @@ def main() -> int:
         adapter, PromptRegistry(prompts_root), EventExtractionGate(),
         # max_tokens 4096 — 기본 1024에서 행사 다수 지역(서울·경기) 출력이 잘려
         # parse_error 재현 (2026-08-21 풀 배치 실측). 배치 전용 — 실시간 경로 무변.
+        # 4096 → 8192 (2026-10-12): fable 은 사고 토큰도 이 상한 안에서 쓴다 — 경기 출력이
+        # 이미 2,232(luna 1,794)이고 서울은 그보다 크다.
         C1Config(model_ids={ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id},
-                 max_tokens=4096),
+                 max_tokens=8192),
         _StderrTrace(),
     ))
     client = NaverSearchClient(UrllibHttpClient(), client_id, client_secret, max_calls)
