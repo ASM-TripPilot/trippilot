@@ -74,12 +74,12 @@ def test_해석_못_하는_휴무도_싣는다() -> None:
 
 def test_영업_원문의_구분자는_무력화돼_휴무로_갈리지_않는다() -> None:
     """벤더가 usetime 에 `휴무:` 줄을 넣어 보내도 첫 구분자는 우리가 넣은 것이다."""
-    hours = "11:00~21:00\n휴무: 매주 월요일"   # usetime 원문 — 이 줄은 파서가 휴무로 안 읽는다
+    hours = "11:00~21:00\n휴무: 매주 월요일"   # usetime 원문 — 이 줄은 영업 원문 안 휴무 절로 읽힌다(월)
     joined = join_opening_hours_raw(hours, "매주 화요일")
     got_hours, got_rest = split_opening_hours_raw(joined)
     assert got_rest == "매주 화요일"
     assert parse_opening_hours_raw(joined) == parse_open_hours(hours, "매주 화요일")
-    assert [h.day_of_week for h in parse_opening_hours_raw(joined)] == [0, 2, 3, 4, 5, 6]
+    assert [h.day_of_week for h in parse_opening_hours_raw(joined)] == [2, 3, 4, 5, 6]
 
 
 def test_200자를_넘으면_영업을_먼저_자르고_휴무는_보존한다() -> None:
