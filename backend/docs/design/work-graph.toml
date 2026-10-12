@@ -814,11 +814,15 @@ note = """
 id = "TRIP-828"
 ticket = "TRIP-828"
 title = "[Figma] 데이터 부족 시 부분 분석 — 채움 규칙 미정 (828 잔여)"
-status = "todo"
+status = "done"
 owner = "회고"
 migration = false
 touches = ["backend/modules/reflection", "backend/docs/design/openapi.yaml"]
 note = """
+**닫음(2026-10-12, 사용자 결정) — 부분 분석은 현행 유지로 확정한다.** 데이터가 임계 미만이면 지금처럼
+미리보기(`preview`)만 내고 `analysis` 를 채우지 않는다. 새 채움 규칙도, 새 필드도 만들지 않는다 —
+그래서 코드 변경이 없다. 임계 미만에서도 분석을 보여 주기로 바뀌면 그때 새 노드로 연다.
+아래는 닫기 전 기록이다.
 **2026-10-11 쪼갬 — `mood`·`shortMemo` 는 [[REFLECTION-MOOD]] 가 잇는다.** 아래 "애초에 영속할
 것인가"는 **영속으로 정해졌다**(사용자 승인 2026-10-11). 이 노드에는 세 번째 항목(부분 분석)만
 남고, 그것은 컬럼이 아니라 채움 규칙이라 마이그레이션이 없다. **정의가 먼저다** — "부분 분석"이
@@ -3030,16 +3034,24 @@ C8(`ReplanFacadeService`)은 `lockedSlots`·`currentSlots`·`groundingPoint`·`l
 `listOf(tripStart)` 로 되돌리면 동의·파기 4건 + 기간/재진입/취소 3건이 깨진다.
 
 **선행 결정이 남았다 → [[REPLAN-TARGET-DATE-CANON]].** 서버만 아는 필드인 상태다.
+(2026-10-12 정정: 더는 서버만 아는 필드가 아니다 — 앱이 TRIP-1195(#907)로 보낸다. 위는 2026-10-03 시점 기록이다.)
 """
 
 [[nodes]]
 id = "REPLAN-TARGET-DATE-CANON"
 ticket = ""
-title = "DEC-U4-3 개정 + i10 날짜 입력 결정 — targetDate 를 쓰는 화면이 아직 없다"
-status = "todo"
+title = "DEC-U4-3 사후 개정 — 재계획 대상 일자(서버·앱 출하분을 정본에 맞춘다)"
+status = "done"
 migration = false
 touches = ["aidlc/aidlc-docs/construction/u4-in-trip-planb"]
 note = """
+**정정·진행(2026-10-12) — 아래 "어떤 화면도 만들지 않는 필드"는 더는 사실이 아니다.** 앱이 TRIP-1195
+(#907)로 이미 `targetDate` 를 보낸다: 허브가 오늘 이후의 다른 일차를 보면 그 날짜로 i10 을 열고 범위 칩을
+`{N}일차 전체` 하나로 줄인다. 재계획안 페이지의 "대안 없음" 얼굴에는 조건부로 [내일 일정 다시 짜기]가 뜬다. 아래 2번(오늘이 아닌 날에는
+`지금 이후` 칩을 내린다)도 그때 구현됐다. 정본도 §3.1·엔티티 개정 블록(#1045)이 같은 사실을 이미 적었고,
+DEC-U4-3 행·BR-U4-11·G-U4-8·`frontend-components.md` §i10 이 옛 서술이었다 — PR #1071 이 세 문서에 `[개정 · 2026-10-12]` 블록을 달아 맞춘다
+(SCOPE 의 "구현 기준 사후 개정" 범위). **사용자가 2026-10-12 에 그 PR 의 머지를 지시해 승인했고(`audit.md`), 이 노드는 닫는다.**
+남는 것은 앱 동작을 Figma 가 추인하는 일뿐이다(백엔드 몫 아님).
 [[REPLAN-TARGET-DATE]] 가 만든 **정본 이탈의 뒤처리**다. 코드가 먼저 갔으므로 이 노드가 닫히기
 전까지 `targetDate` 는 **어떤 화면도 만들지 않는 필드**다.
 

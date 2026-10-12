@@ -1581,3 +1581,17 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U10 종료. 남은 AI-DLC 대상 없음(Code Generation·Build and Test는 SCOPE 밖).
 
 ---
+## Functional Design 사후 개정 — U4 DEC-U4-3 · BR-U4-11 · G-U4-8 (재계획 대상 일자)
+**Timestamp**: 2026-10-12T11:15:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "추천대로 가고 2번 3번 먼저 시작해 너가 작업하는동안 너가 요구하는 값들을 전달해줄게" (직전 AI 제안 12번 "재계획 날짜 입력 정본 개정(DEC-U4-3) — 개정안 초안은 제가 쓰고, AI-DLC 승인은 송님이 합니다"에 대한 응답)
+**AI Response**: U4 FD 3종(`business-logic-model.md`·`business-rules.md`·`frontend-components.md`)에 `[개정 · 2026-10-12]` 블록 추가(원문 보존). SCOPE 2026-10-12 의 "U0~U6 산출물은 현재 구현 기준으로 사후 개정" 범위다 — 서버(TRIP-1182)·앱(TRIP-1195)이 이미 출하됐고 같은 사실이 §3.1·`domain-entities.md` 개정 블록에 있었으나 DEC-U4-3 행·BR-U4-11·G-U4-8 이 옛 서술로 남아 있었다. 내용: 범위 2종·하루 단위·다일 없음 유지, "그 하루가 오늘이어야 한다"만 해제. 첫 초안은 "화면이 아직 없다"는 낡은 전제로 썼다가 검수에서 정정했다. PR #1071 의 머지를 사용자 승인으로 삼는다 — 승인 요청 상태.
+**Context**: CONSTRUCTION — U4 Functional Design 사후 개정, 승인 대기(PR #1071).
+
+---
+## Functional Design 사후 개정 승인 — U4 DEC-U4-3 · BR-U4-11 · G-U4-8
+**Timestamp**: 2026-10-12T11:21:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "1071 결함없을떄까지 검수하고 머지 ㄱㄱ"
+**AI Response**: PR #1071 의 머지 지시를 U4 FD 사후 개정(재계획 대상 일자)의 승인으로 기록. 조건("결함 없을 때까지 검수")에 따라 독립 검수를 지적 0건이 나올 때까지 돌린 뒤 머지한다. 그래프 노드 `REPLAN-TARGET-DATE-CANON` 을 닫는다.
+**Context**: CONSTRUCTION — U4 Functional Design 사후 개정 승인. 남은 것은 앱 동작의 Figma 추인(G-U4-8, 설계 문서 밖).
+
+---

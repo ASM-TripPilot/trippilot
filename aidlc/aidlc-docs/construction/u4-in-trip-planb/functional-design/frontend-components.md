@@ -158,6 +158,8 @@
 | `ReplanAppliedScreen.tsx` | i19 | 반영 완료 |
 | `ManualEditScreen.tsx` | i15·i22 | 순서·삭제·시각 직접 입력. 숙소 고정 위반 불가(BR-U4-44). error 변형은 **누락 외부 데이터 표기** |
 
+> **[개정 · 2026-10-12] i10 범위 칩 — 오늘이 아닌 날은 한 칩.** `ReplanRequestSheet` 의 "범위 2칩"과 `replanScope.ts` 의 "`오늘 전체`→`FULL_DAY`"는 **오늘**을 다시 짤 때의 서술이다. 허브가 오늘 이후의 다른 일차를 보는 중에 열면 `targetDate` 가 실리고 칩은 `{N}일차 전체`(일차를 모르면 `이 날 전체`) 하나다(TRIP-1195 · `replanScopeOptions`). 와이어 어휘는 여전히 2종이다. 근거는 `business-logic-model.md` 의 DEC-U4-3 개정 블록.
+
 > **[개정 · 2026-10-12] §4 `features/planb` — 실재와 다름.** 화면은 page 슬라이스로 갔다: i10 `ReplanRequestSheet`(`src/pages/live/planb-request/ui/`) · i12·i13·i16 `ReplanSolvingView`·`ReplanDraftView`·`ReplanNoticeFace`(`src/pages/live/planb-draft/ui/`) · i18 `PlanbDiffPage`(`src/pages/live/planb-diff/ui/`) · i19 `ReplanAppliedSheet`(`src/pages/live/live-itinerary/ui/`) · i15 수동 편집은 U3 `ItineraryEditPage`(`inTrip`). **없는 것**: `TriggerWatchlistScreen.tsx`(i09 — `RiskDetailSheet`로 흡수), `RestModeScreen.tsx`(i17 휴식 모드 미구현), `ManualEditScreen.tsx`(U3 편집 재사용). 모델은 `features/request-replan`·`features/apply-replan`·`features/planb`로 갈렸다(§0.1 개정).
 
 ## 5. `src/shared/` 변경 (승격)
