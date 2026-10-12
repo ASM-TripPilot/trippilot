@@ -10,7 +10,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { useReplanSession } from './useReplanSession';
 
 /**
- * TRIP-1348 · INV-4 — 재계획 세션 조회 폴링.
+ * TRIP-1348 · INV-4 — 재계획 세션 조회 폴링(오류 1회는 한 번 더, 연속 2회면 정지).
  *
  * 페이지 테스트(`PlanbSolvingPage`·`PlanbDraftPage`)는 이 seam 을 통째로 목으로 바꿔 끼워 폴링이
  * 실제로 도는지·언제 서는지 안 보인다 — 여기서 가짜 서버(MSW)와 실타이머로 요청 수를 잰다.
@@ -97,7 +97,27 @@ describe('useReplanSession · 폴링', () => {
     });
   });
 
-  it('조회가 오류로 떨어지면 옛 data.status 가 SOLVING 이어도 다음 폴링이 나가지 않는다', async () => {
+  it('오류 1회면 정확히 한 번 더 요청하고, 그게 성공하면 오류 없이 폴링을 이어 간다 (일시 오류 복구)', async () => {
+    server.use(
+      http.get(`${BASE}${PATH}`, () => {
+        hits += 1;
+        return hits === 2
+          ? HttpResponse.json({ code: 'INTERNAL' }, { status: 500 })
+          : HttpResponse.json(makeSession('SOLVING'));
+      })
+    );
+    const { result } = renderHook(() => useReplanSession('t1', 's9'), {
+      wrapper: createWrapper(),
+    });
+    // 1번 SOLVING → 2번 500 → 3번(재시도) SOLVING → 그다음 폴링(4번)까지 이어진다.
+    await waitFor(() => expect(hits).toBeGreaterThanOrEqual(4), {
+      timeout: 9000,
+    });
+    expect(result.current.isError).toBe(false);
+    expect(result.current.data?.status).toBe('SOLVING');
+  }, 14000);
+
+  it('연속 2회 실패하면 폴링을 멈춘다 — 옛 data.status 가 SOLVING 이어도 더 묻지 않고 오류가 선다', async () => {
     server.use(
       http.get(`${BASE}${PATH}`, () => {
         hits += 1;
@@ -110,14 +130,15 @@ describe('useReplanSession · 폴링', () => {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.isError).toBe(true), {
-      timeout: 4000,
+      timeout: 9000,
     });
     // 앵커 — 옛 SOLVING 데이터가 남은 채 오류다. 이게 아니면 아래 단언이 공허하다.
     expect(result.current.data?.status).toBe('SOLVING');
-    expect(hits).toBe(2);
+    // 1(SOLVING) + 2(실패) + 3(재시도 1건, 실패) — 재시도는 한 번뿐이다.
+    expect(hits).toBe(3);
 
     await sleep(LONGER_THAN_POLL_MS);
 
-    expect(hits).toBe(2);
-  }, 12000);
+    expect(hits).toBe(3);
+  }, 16000);
 });

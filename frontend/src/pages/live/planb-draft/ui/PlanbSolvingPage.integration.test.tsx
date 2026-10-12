@@ -1282,18 +1282,21 @@ describe('🔴 TRIP-1277 AC5 · INV-3 — 새 얼굴 어디에도 소요시간�
   });
 });
 
-// ── TRIP-1277 5-b 차단 수정 루프 — 03b W-1: "data 는 있는데 재조회 실패" 경계 ──────────────────────
-// 근거: 01 브리프 AC1(오류 얼굴은 data 없이 실패할 때만) · INV-4(02a ★15).
+// ── TRIP-1348 — "data 는 있는데 재조회 실패" 경계 ──────────────────────────────────────────────
+// 옛 TRIP-1277 5-b 경고-1 은 이 경우 진행 카드에 머물렀다(폴링이 멈춰도 화면은 안 변함 — 침묵 실패, INV-4).
+// 결정(2026-10-13): 재시도까지 실패하면 폴링이 서므로 SOLVING data 가 남아 있어도 오류 얼굴을 보인다.
 
-describe('🔴 TRIP-1277 5-b 경고-1 · AC1 — 짜는 중을 이미 받았으면 폴링이 실패해도 오류 얼굴로 덮지 않는다', () => {
-  it('E5 SOLVING data + isError 면 오류 얼굴 0 · 진행 카드·[취소] 그대로 — 재조회·cancel·이동 0', () => {
+describe('🔴 TRIP-1348 · INV-4 — 짜는 중을 이미 받았어도 조회가 실패로 서면 오류 얼굴이다', () => {
+  it('E5 SOLVING data + isError 면 오류 얼굴 · [다시 시도]=재조회 1회 — 진행 카드 0 · cancel·이동 0', () => {
     mockSessionError = true;
     renderPage();
 
-    expect(screen.queryByTestId(ERROR_FACE)).toBeNull();
-    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
-    expect(screen.getByTestId('generation-progress-cancel')).toBeOnTheScreen();
-    expect(mockSessionRefetch).not.toHaveBeenCalled();
+    expect(screen.getByTestId(ERROR_FACE)).toBeOnTheScreen();
+    expect(screen.queryByTestId('generation-progress-card')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('planb-solving-retry'));
+
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(1);
     expect(mockCancel).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
     expect(forwardDestinations()).toEqual([]);
