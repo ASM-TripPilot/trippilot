@@ -10,14 +10,15 @@ import { act, render } from '@testing-library/react-native';
  * 않는다(`expoRouterStackMock`·`queryClientProbe` 와 같은 이유) — JSX 를 쓰는 헬퍼는 이 형태로만 공유한다.
  */
 
-/** 재시도 0 · 캐시 유지(기본 `Infinity`) 테스트용 클라이언트. 언마운트 직후 캐시를 비워야 하면 `gcTime: 0`. */
+/** 재시도 0 · 캐시 유지(기본 `Infinity`) 테스트용 클라이언트. 언마운트 직후 캐시를 비워야 하면 `gcTime: 0` —
+ * mutations 에도 같이 걸린다(mutation 기본 gcTime 5분 타이머가 테스트 종료 뒤 Node 를 붙잡는다, TRIP-1355). */
 export function newTestQueryClient({
   gcTime = Infinity,
 }: { gcTime?: number } = {}): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime },
-      mutations: { retry: false },
+      mutations: { retry: false, gcTime },
     },
   });
 }
@@ -31,6 +32,15 @@ export function createWrapper(
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   };
+}
+
+/** `gcTime: 0` 클라이언트를 새로 만든 래퍼 — 언마운트 직후 캐시가 비는 통합 테스트용(`createWrapper(newTestQueryClient({ gcTime: 0 }))` 의 줄임). */
+export function createGcZeroWrapper(): ({
+  children,
+}: {
+  children: ReactNode;
+}) => ReactElement {
+  return createWrapper(newTestQueryClient({ gcTime: 0 }));
 }
 
 /** 실 `QueryClient` 아래에서 그린다 — `useQueries` 는 Provider 가 없으면 여행 0건이어도 던진다. */
