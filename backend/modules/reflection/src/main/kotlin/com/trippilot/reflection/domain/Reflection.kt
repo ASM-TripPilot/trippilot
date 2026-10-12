@@ -176,6 +176,9 @@ interface ReflectionRepository {
 
     fun find(tripId: UUID, dayDate: LocalDate): Reflection?
 
+    /** 잠그지도 싣지도 않고 있는지만 본다 — 잠그기 전에 행을 실어 두면 잠근 뒤에도 그 옛 값이 읽힌다. */
+    fun exists(tripId: UUID, dayDate: LocalDate): Boolean
+
     /**
      * **고치려고** 읽는다 — 행을 잠근다. 쓰기는 행 전체를 덮으므로(카드·기분·한 줄), 잠그지 않고 읽으면
      * 겹친 두 요청이 같은 옛 값을 읽고 나중 쪽이 먼저 쪽의 필드를 되돌린다(TRIP-828).
