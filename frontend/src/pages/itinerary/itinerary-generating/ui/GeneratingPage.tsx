@@ -24,7 +24,7 @@ import { seoulDate, seoulTime } from '@/shared/lib/seoulDate';
 import {
   getAccessToken,
   isNotFound,
-  isRateLimited,
+  isGenerationDailyLimit,
   retryAfterSeconds,
 } from '@/shared/api';
 import type { MapCenter, MapPin } from '@/shared/map';
@@ -168,7 +168,7 @@ export function GeneratingPage({
   // 서버 규칙 거절(여행 중·끝난 여행 재생성 409) — 다시 보내도 같은 답이다. 여행 중이면 다시 짜기는 Plan-B 의
   // 몫이라(서버 규칙의 근거, 다녀온 슬롯을 잠근다) 막다른 얼굴 대신 허브 위에 재계획 요청(i04)을 연다.
   // 기간은 거절됐을 때만 묻고, 끝난 여행(재계획도 409)·기간 모름이면 서버 사유 + [닫기]만(INV-4).
-  const aiLimited = isRateLimited(generate.error);
+  const aiLimited = isGenerationDailyLimit(generate.error);
   const refusal = resolveGenerationRefused(generate.error);
   const trip = useGetTripsTripId(tripId, {
     query: { enabled: refusal !== null, retry: false },

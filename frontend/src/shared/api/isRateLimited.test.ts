@@ -1,17 +1,22 @@
 import { AxiosError } from 'axios';
 
-import { isRateLimited, retryAfterSeconds } from './isRateLimited';
+import {
+  isGenerationDailyLimit,
+  isRateLimited,
+  retryAfterSeconds,
+} from './isRateLimited';
 
 /** `isAxiosError` 가 true 여야 판정이 도는 경로를 탄다(`isNotFound.test.ts` 선례). */
 function httpError(
   status: number,
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
+  data: unknown = {}
 ): AxiosError {
   const error = new AxiosError('request failed');
   error.response = {
     status,
     statusText: '',
-    data: {},
+    data,
     headers,
     config: { headers: {} },
   } as AxiosError['response'];
@@ -66,5 +71,35 @@ describe('Retry-After — 숫자 초만 읽고 나머지는 null (TRIP-1368)', (
   it('응답 없는 오류는 null 이다', () => {
     expect(retryAfterSeconds(new AxiosError('Network Error'))).toBeNull();
     expect(retryAfterSeconds(new Error('boom'))).toBeNull();
+  });
+});
+
+describe('일일 한도는 429 + GENERATION_DAILY_LIMIT 일 때만 (TRIP-1368)', () => {
+  const body = (code?: string) => ({ error: code ? { code } : {} });
+
+  it('429 + GENERATION_DAILY_LIMIT 은 true 다 (긍정 앵커)', () => {
+    expect(
+      isGenerationDailyLimit(httpError(429, {}, body('GENERATION_DAILY_LIMIT')))
+    ).toBe(true);
+  });
+
+  it('429 + RATE_LIMITED·모르는 코드·코드 없음·바디 없음은 false 다', () => {
+    expect(
+      isGenerationDailyLimit(httpError(429, {}, body('RATE_LIMITED')))
+    ).toBe(false);
+    expect(isGenerationDailyLimit(httpError(429, {}, body('X')))).toBe(false);
+    expect(isGenerationDailyLimit(httpError(429, {}, body()))).toBe(false);
+    expect(isGenerationDailyLimit(httpError(429, {}, {}))).toBe(false);
+    expect(isGenerationDailyLimit(httpError(429, {}, undefined))).toBe(false);
+    expect(isGenerationDailyLimit(httpError(429, {}, 'oops'))).toBe(false);
+    expect(isGenerationDailyLimit(httpError(429, {}, null))).toBe(false);
+  });
+
+  it('상태가 429 가 아니면 코드가 같아도 false 다 · axios 오류가 아닌 것도 false', () => {
+    expect(
+      isGenerationDailyLimit(httpError(409, {}, body('GENERATION_DAILY_LIMIT')))
+    ).toBe(false);
+    expect(isGenerationDailyLimit(new Error('boom'))).toBe(false);
+    expect(isGenerationDailyLimit(undefined)).toBe(false);
   });
 });

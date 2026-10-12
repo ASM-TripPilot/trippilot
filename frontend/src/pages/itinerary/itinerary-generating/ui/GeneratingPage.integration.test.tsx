@@ -414,7 +414,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
 
   /**
    * TRIP-1368 · 서버 일일 한도(TRIP-1314) — 생성 POST 가 429 + `Retry-After`(KST 자정까지 남은 초)면 일반 실패가
-   * 아니라 한도 얼굴(`ai-limit-notice`, TRIP-1268 임시 장치가 그린 얼굴 승계)을 그린다. 판정은 상태 코드다.
+   * 아니라 한도 얼굴(`ai-limit-notice`, TRIP-1268 임시 장치가 그린 얼굴 승계)을 그린다. 판정은 429 + `error.code === GENERATION_DAILY_LIMIT` 다(그 밖의 429 는 일반 실패).
    * 재시도로 풀리지 않으니 [다시 시도]가 없고 POST 도 더 나가지 않는다. 시계는 Date 만 고정한다(MSW 타이머 유지).
    */
   describe('🔴 L429 · 429 면 한도 얼굴 — 시각(Retry-After)·두 버튼·재시도 POST 0', () => {
@@ -496,19 +496,43 @@ describe('다른 여행 생성 중(409) 안내', () => {
       expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
     });
 
-    it('코드명이 달라도 상태 429 면 같은 얼굴이다 (코드명으로 분기하지 않는다)', async () => {
-      postQueue = [
-        () =>
-          HttpResponse.json(
-            { error: { code: 'SOMETHING_ELSE', message: 'x' } },
-            { status: 429, headers: { 'Retry-After': '60' } }
-          ),
-      ];
+    it.each([
+      [
+        'RATE_LIMITED(짧은 연타 한도)',
+        { error: { code: 'RATE_LIMITED', message: 'x' } },
+      ],
+      ['코드 없음', { error: { message: 'x' } }],
+      ['바디 없음', null],
+    ])(
+      '429 + %s 는 한도 얼굴이 아니라 일반 실패 얼굴이다 — 재시도 가능',
+      async (_n, body) => {
+        postQueue = [
+          () =>
+            HttpResponse.json(body, {
+              status: 429,
+              headers: { 'Retry-After': '60' },
+            }),
+          () =>
+            HttpResponse.json(
+              { error: { code: 'RATE_LIMITED' } },
+              { status: 429 }
+            ),
+        ];
 
-      renderPage();
+        renderPage();
 
-      expect(await screen.findByTestId('ai-limit-notice')).toBeOnTheScreen();
-    });
+        expect(
+          await screen.findByTestId('itinerary-generating-failed')
+        ).toBeOnTheScreen();
+        expect(screen.queryByTestId('ai-limit-notice')).toBeNull();
+        expect(
+          screen.getByTestId('itinerary-generating-retry')
+        ).toBeOnTheScreen();
+        fireEvent.press(screen.getByTestId('itinerary-generating-retry'));
+        await settle();
+        expect(log).toEqual(['POST T1', 'POST T1']);
+      }
+    );
 
     it('[직접 짜기 이어가기] = 편집기로 replace, [닫기] = 홈으로', async () => {
       postQueue = [limited({ 'Retry-After': '60' })];
