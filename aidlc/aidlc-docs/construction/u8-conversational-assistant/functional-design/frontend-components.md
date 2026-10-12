@@ -168,3 +168,32 @@ assistant-history · -history-row-{messageId} · -history-clear · -history-cont
 | 시트 흐름(열기·발화·적용·STALE·폴백) | `pnpm test:integration` — MSW로 서버 응답 고정 |
 | **사각(6-b 실기 전용)** | 투명 모달의 딤·뒤 화면 터치 차단 · 키보드가 입력창을 밀어 올리는지 · ✦와 토스트·탭바 실제 겹침 · `live` 앵커를 따라 움직이는 ✦ (repo-traps "바텀시트·오버레이 다이얼로그" 계열 — jest가 원리적으로 못 본다) |
 | 이력 지우기 확인 다이얼로그 | testID 트리 + 확정 전 mutate 0회까지만 자동 심판(오버레이 다이얼로그 사각과 같은 처지) |
+
+---
+
+## [개정 · 2026-10-12 · U8 FE 구현 (TRIP-1318 서브 1319~1328)]
+
+> 원문 위 절들은 보존한다(append-only). FE 구현이 현 리포 규칙(`frontend/README.md` pages-first·Steiger, 실제 라우트·테스트 목)과 부딪힌 곳은 **구현을 우선**했고(사용자 결정 2026-10-12), 아래가 그 어긋남의 기록이다. 서버(BE assistant 모듈·ai `/interpret`)는 미구현이라 FE 는 가짜 어댑터로 끝까지 구현했다 — 교체 지점 1곳.
+
+| # | 원문 | 구현(근거 코드) | 이유 |
+|---|---|---|---|
+| R1 | §0 `features/assistant/` 에 서버 상태 훅 + `nextActionRoute` | `frontend/src/pages/assistant/assistant-sheet/{api,model}/` — `assistantContract.ts`·`assistantPort.ts`·`assistantClient.ts`(교체 지점)·`fakeAssistantAdapter.ts`·`assistantSamples.ts`·`model/assistantQueries.ts`·`nextActionRoute.ts`·`resolveSheetState.ts` | 소비처가 시트 page 하나 — README "pages first"(세 조건 미충족) + Steiger `insignificant-slice`(소비처 1곳 feature 는 `pnpm fsd` 실패) |
+| R2 | §6 `shared/api/generated` 코드젠 | 손으로 옮긴 계약 타입(`assistantContract.ts`) + `AssistantPort` 인터페이스 + `FakeAssistantAdapter`. 실패는 `AssistantApiError{code: UNAUTHORIZED·RATE_LIMITED·STALE·EXPIRED·NOT_APPLICABLE·ABORTED·SERVER}` 로 정규화 | openapi 에 assistant 태그 0건. BE 개통 시 http 어댑터를 만들어 `assistantClient.ts` 한 줄 교체 |
+| R3 | §6 메시지 DTO | 추가 필드: `footnote?`(Figma `* …` 각주). payload 모양: REVIEW `{title, summary[{label,value}], problems[{slotKey?, reason, fixAction}]}` · CANDIDATES `{candidates[]}` · INFO `{infoKind, title, rows[]}` · REFUSAL `{category, capabilities}` · FALLBACK `{cause, notice?}` · ACTION_LOG `{what, tag?(FILTER/CHANGE/REVIEW), detail?, revisionId?, changeLogEntryId?}` | 클라가 문구를 조립하지 않게(DEC-U8-6) 서버가 표시 문자열을 지어 보내는 모양으로 확정 — BE 계약 초안에 반영 요청 |
+| R4 | §5 FAB 이 `router.push('/assistant', …)` | `features/open-assistant` 의 `AssistantFab` 은 `onPress` 만 올리고, 목적지는 `assistantHref(surface, tripId)` 로 각 page 가 push | 진입 page 마다 expo-router 사용 방식(`useRouter` vs 정적 `router`)과 테스트 목이 달라 FAB 이 라우터를 직접 물면 형제 테스트가 깨진다 |
+| R5 | §5 일정 상세 ✦ = 하단 안전영역 + 24 | 지도 우상단, 일차 칩 아래(`MapSheetShell` `mapCard` 슬롯) — `ItineraryPlanPage.tsx` | 하단은 MapSheetShell 하단 CTA 바(일정 저장하기·일정 수정)와 시트가 차지 — FD 값이면 겹친다. Figma `b08-[✦] 진입 FAB · 일정 상세` 같은 값 |
+| R6 | §5 허브 ✦ = 앵커 열 맨 위 | 그대로 — 단 앵커 윗변을 ✦ 몫(56+12)만큼 올려 수정 FAB 의 시트 추종 자리는 불변(`LiveHubView.tsx` `assistantStack`) | 기존 FAB 추종 계약(TRIP-1083) 보존 |
+| R7 | G-U8-10 토스트를 화면별로 올릴 장치 | `shared/ui/Toast.tsx` `useRaisedToastBottom(px)` — 붙어 있는 화면 값 중 최댓값. ✦ 있는 탭 화면 288 | 마운트 기준이라 홈 탭(항상 마운트)이 있는 동안 다른 탭에서도 288 — 겹침이 아니라 '필요보다 높게' 쪽 오차(포커스 기준 전환은 사람 판단) |
+| R8 | BR-U8-53 키보드가 열리면 ✦ 숨김 | 미구현 — 시트(숙소 필터·가격, 홈 담은 곳 메뉴, 허브 메모 시트)만 숨김 | 숙소 검색 검색창 포커스 시 ✦ 가 키보드 위에 남는지 6-b 확인 후 판단 |
+| R9 | §1·§4 시트 = 투명 모달, next action 은 `router.dismiss` 후 `push` | 투명 모달은 그대로(`SplashGate` 가드 밖 `assistant/index`). 시트 몸체는 gorhom 이 아니라 View + KeyboardAvoidingView(끌어 닫기 없음, 닫기 X·딤 탭). next action 은 `router.replace(href)` 한 번 | 입력창이 하단에 붙는 채팅이라 키보드 회피 우선. replace 는 모달 자리를 목적 화면으로 바꿔 두 걸음 전환을 피한다 |
+| R10 | BR-U8-04 상시 "내가 할 수 있는 것" quick reply | 서버가 `SHOW_CAPABILITIES` quick reply 를 줬으면 그 id 로 ACTION, 아니면 라벨을 TEXT 턴으로 보낸다(`AssistantSheetPage.handleCapabilities`) | 클라가 quick reply id 를 지어내면 '발급 id 만 수락' 규칙(위조 차단)에 걸린다 — BE 가 매 응답에 SHOW_CAPABILITIES 1개를 상시 발급하면 TEXT 경로는 죽는다 |
+| R11 | §4-4 409 STALE → [다시 제안] quick reply | 카드 안 [다시 제안] 버튼이 그 제안을 부른 사용자 발화를 새 TEXT 턴으로 재전송(`handleRepropose`) | 409 응답 본문에 quick reply 가 없다 — BE 가 재제안 quick reply 를 동봉하면 그쪽으로 바꾼다 |
+| R12 | §4-4 무효화 키 `['itinerary', tripId]` | `/trips/{tripId}/itinerary` 로 시작하는 orval 쿼리 키 전부 predicate 무효화(`assistantQueries.invalidateItinerary`) | 실제 키 이름 |
+| R13 | §4.1 `RESTORE_REVISION` → h36 리비전 화면 | `nextActionRoute` 가 null → "내가 할 수 있는 것 보기"로 대체 | FE 에 리비전 화면 라우트가 없다 — BR-U8-34 [되돌리기]는 그 화면이 생겨야 작동(갭) |
+| R14 | §4.1 `OPEN_PLACE` 여행 중 판정 | 도우미를 연 `surface === 'LIVE'` 면 허브 장소, 아니면 탐색 장소 상세 | 서버 params 에 여행 중 표지가 없다 |
+| R15 | §3 `resolveSheetState` 4상태 | + `UNAUTHORIZED`(401 → 페이지가 시트를 닫음) | 오류 얼굴과 닫기를 가르기 위해 |
+| R16 | §3 대기 취소 후 서버 결과는 다음 조회에서 합침 | 취소·저장 실패 모두 낙관 말풍선 '보내지 못함' + [다시 보내기] — **같은 clientTurnId** 재사용(`model/useTurnFlow.ts`). 자동 재조회 트리거는 없음 | 멱등 키로 중복 턴이 생기지 않는다. 429 는 말풍선을 거두고 입력 복원(턴 미기록과 일치) |
+| R17 | §6 `useApplyProposal()` 인자 없음 | `useApplyProposal(sessionId, tripId)` · `useDismissProposal(sessionId)` · `useMarkProposal(sessionId)`(409 상태 반영) | 메시지 캐시 갱신과 일정 무효화에 세션·여행이 필요 |
+| R18 | §8 testID 제안값 | 확정값 추가: `assistant-sheet-root`·`-sheet-scrim`·`-sheet-loading`·`-open-failed`·`-open-retry`·`-quick-reply-capabilities`·`-info-card`·`-action-log-{id}`·`-proposal-status`·`-proposal-repropose`·`-proposal-error`·`-user-bubble-pending`·`-resend`·`-progress-slow`·`-history-empty`·`-history-session-{id}`·`-history-clear-dialog`·`-history-clear-confirm`·`-history-clear-cancel`·`-message-list` | §8 [공백] 소급 기록 |
+| R19 | §9 시트 흐름은 MSW 통합 테스트 | `AssistantSheetPage.test.tsx`(node 버킷) — `setAssistantPort` 로 가짜 어댑터 주입 | HTTP 경계가 아직 없다. BE 개통 후 http 어댑터는 MSW 통합 테스트로 덮는다 |
+| R20 | G-U8-8·9 Figma | 새 프레임(정본 무변경): `b01-[1차] 도우미 · 숙소 요청 → 숙소 검색 넘기기`(4865:3615) · `b08-[✦] 진입 FAB · 홈/숙소 검색/여행 중 허브/일정 상세`(4864:2944·3054·3141·3303) — b 행 끝 | 이식(정본 교체)·DS FAB 변형 승격은 사람 판단 |

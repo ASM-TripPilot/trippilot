@@ -658,6 +658,19 @@ describe('확정 CTA·재조회 배선', () => {
       expect(map.props.fitPins).toBe(true);
     });
   });
+
+  // TRIP-1321 · US-ASSIST-01 · BR-U8-50·51 — 일정 상세(탭 밖)의 ✦ 도우미. 하단은 CTA 바·시트가 차지해
+  // 지도 우상단(일차 칩 아래) 카드 슬롯에 둔다(FD "하단 안전영역+24" 와 다름 — FD 개정 블록). 실제 위치는 6-b.
+  describe('✦ 도우미 FAB (TRIP-1321)', () => {
+    it('누르면 surface=ITINERARY · 이 여행 id 를 싣고 도우미 시트로 간다', async () => {
+      renderPage();
+      fireEvent.press(await screen.findByTestId('assistant-fab'));
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/assistant',
+        params: { surface: 'ITINERARY', tripId: TRIP_ID },
+      });
+    });
+  });
 });
 
 // TRIP-801 · TRIP-939 · 옛 ItineraryPlanPage.confirmed.integration.test.tsx — 공유 게이트 스위치는 이 describe beforeEach 가 false 로 켠다.

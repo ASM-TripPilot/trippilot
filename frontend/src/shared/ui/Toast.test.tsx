@@ -3,7 +3,13 @@ import { act, render, screen, within } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { Path } from 'react-native-svg';
 
-import { TOAST_VISIBLE_MS, ToastHost, hideToast, showToast } from './Toast';
+import {
+  TOAST_VISIBLE_MS,
+  ToastHost,
+  hideToast,
+  showToast,
+  useRaisedToastBottom,
+} from './Toast';
 
 /**
  * TRIP-990 · T1~T3 — 공용 토스트 primitive(스토어 + 호스트 + 호출 함수).
@@ -168,5 +174,53 @@ describe('🔴 위치 · FAB 스택 위 (AC-T1·T2)', () => {
     expect(tokens).toContain('absolute');
     expect(tokens).toContain('bottom-[220px]');
     expect(tokens).not.toContain('bottom-[108px]');
+  });
+});
+
+// TRIP-1321 · G-U8-10 · BR-U8-52 — ✦ 도우미 FAB 가 있는 화면은 토스트 바닥을 ✦ 윗변 + 12(288)로 올린다.
+// 올림은 그 화면이 붙어 있는 동안만 — 떨어지면 기본 220 으로 돌아간다. 실제 겹침 없음은 6-b 실기.
+describe('🔴 위치 · 화면이 토스트 바닥을 올린다 (TRIP-1321)', () => {
+  function Raiser({ bottom }: { bottom?: number }) {
+    useRaisedToastBottom(bottom);
+    return null;
+  }
+
+  it('올림이 붙어 있으면 그 바닥(style.bottom)에, 떨어지면 기본 220 토큰으로 돌아간다', () => {
+    const { rerender } = render(
+      <>
+        <Raiser bottom={288} />
+        <ToastHost />
+      </>
+    );
+    show('A 문구', 'toast-a');
+    const raised = screen.getByTestId('toast-a');
+    expect(raised.props.style).toEqual(
+      expect.objectContaining({ bottom: 288 })
+    );
+    expect(classTokens(raised)).not.toContain('bottom-[220px]');
+
+    rerender(
+      <>
+        <Raiser />
+        <ToastHost />
+      </>
+    );
+    const lowered = screen.getByTestId('toast-a');
+    expect(classTokens(lowered)).toContain('bottom-[220px]');
+    expect(lowered.props.style?.bottom).toBeUndefined();
+  });
+
+  it('여러 화면이 올리면 가장 높은 값을 쓴다(어느 ✦ 와도 안 겹치게)', () => {
+    render(
+      <>
+        <Raiser bottom={152} />
+        <Raiser bottom={288} />
+        <ToastHost />
+      </>
+    );
+    show('A 문구', 'toast-a');
+    expect(screen.getByTestId('toast-a').props.style).toEqual(
+      expect.objectContaining({ bottom: 288 })
+    );
   });
 });

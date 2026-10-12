@@ -542,6 +542,39 @@ describe('2단 FAB 목적지 (옛 .fab)', () => {
       );
     });
   });
+
+  // TRIP-1321 · US-ASSIST-01 · BR-U8-50~53 — ✦ 도우미 FAB(스택 맨 위 220). 실제 겹침은 6-b 실기.
+  describe('✦ 도우미 FAB (TRIP-1321)', () => {
+    it('누르면 surface=STAY_SEARCH 만 싣고 도우미 시트로 간다', async () => {
+      render(<StaySearchPage />, { wrapper: createWrapper() });
+      fireEvent.press(await screen.findByTestId('assistant-fab'));
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/assistant',
+        params: { surface: 'STAY_SEARCH' },
+      });
+    });
+
+    it('바닥 220(2단 스택 위)에 뜨고, 목록 끝 여백이 ✦ 윗변(276)까지 늘어난다', async () => {
+      render(<StaySearchPage />, { wrapper: createWrapper() });
+      const style = Object.assign(
+        {},
+        ...[(await screen.findByTestId('assistant-fab')).props.style].flat(
+          Infinity
+        )
+      );
+      expect(style).toEqual(expect.objectContaining({ bottom: 220 }));
+      expect(
+        String(screen.getByTestId('stay-search-list-footer').props.className)
+      ).toContain('h-[276px]');
+    });
+
+    it('필터 시트·가격대 시트가 열린 동안은 트리에 없다(BR-U8-53)', async () => {
+      render(<StaySearchPage />, { wrapper: createWrapper() });
+      await screen.findByTestId('assistant-fab');
+      fireEvent.press(screen.getByTestId('stay-search-filter-more'));
+      expect(screen.queryByTestId('assistant-fab')).toBeNull();
+    });
+  });
 });
 
 // 옛 StaySearchPage.filter — TRIP-415·TRIP-499

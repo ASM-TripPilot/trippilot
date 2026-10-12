@@ -55,6 +55,7 @@ paths:
 | `app/trips/[tripId]/live/index.tsx` | 여행 중 허브(i01) — `tripId`만 읽어 `@/pages/live/live-itinerary` 얇은 래퍼 |
 | `app/trips/[tripId]/live/place/[poiId].tsx` | 여행 중 장소 상세 — `tripId`·`poiId`만 읽어 `@/pages/live/live-place` 얇은 래퍼 |
 | `app/trips/[tripId]/planb/index.tsx` | 재계획 요청 — `tripId`·`scope`·`triggerId` params를 그대로 `PlanbRequestPage`에 내린다(scope 시드는 페이지 소관). 이 라우트의 `Stack.Screen`은 `SplashGate`에서 `presentation:'transparentModal'`로 선언돼 허브 위에 겹친다(실제 겹침은 6-b 몫) |
+| `app/assistant/index.tsx` | ✦ AI 도우미 시트(b01~b07, TRIP-1322) — `surface`·`tripId` params만 읽어 `AssistantSheetPage`에 내린다(모르는 surface → HOME). `SplashGate`에서 가드 밖 `transparentModal`로 선언돼 진입 화면 위에 겹치고 탭바를 가린다. `(tabs)` 밖이라 미인증 딥링크로 열리지만 세션 생성 401이면 시트가 스스로 닫힌다 |
 | `app/trips/[tripId]/planb/solving.tsx` | 재계획 로딩 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-draft` 얇은 래퍼 |
 | `app/trips/[tripId]/planb/diff.tsx` | 재계획 확정/취소 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-diff` 얇은 래퍼 |
 | `app/trips/[tripId]/planb/manual.tsx` | 여행 중 일정 편집 — `tripId`만 꺼내 `ItineraryEditPage`에 리터럴 `inTrip={true}`로 위임(params를 통째로 펼치지 않는다 — `planbManualRoute.test.tsx` RT1) |

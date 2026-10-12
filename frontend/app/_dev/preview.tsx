@@ -56,6 +56,25 @@ import {
   type StayCardVM,
 } from '@/pages/explore/explore-landing/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/pages/home/ui/HomeScreen';
+import {
+  AssistantFab,
+  TAB_TWO_STACK,
+  assistantFabBottom,
+} from '@/features/open-assistant';
+import {
+  AssistantSheetView,
+  HistoryView,
+  MessageCard,
+  TurnStatusRow,
+  currentQuickReplies,
+  displayMessage,
+  needsCapabilitiesChip,
+  sampleActionLogs,
+  sampleTranscript,
+  type AssistantMessage,
+  type AssistantScenario,
+  type SheetState,
+} from '@/pages/assistant/assistant-sheet/index.view';
 import { MAGAZINE_DEFAULT_PROPS } from '@/pages/magazine/model/magazineFixtures';
 import { MagazineScreen } from '@/pages/magazine/ui/MagazineScreen';
 import {
@@ -444,7 +463,7 @@ function LoginPreview(props: LoginState) {
 
 // Figma 밴드 분류(first-cut 9) + 프레임·코드 둘 다 없는 발명 화면용 '기타'(TRIP-641).
 // 파트 2 네비가 이 값으로 166개 상태를 그룹핑한다 — figma-structure.md 밴드 표가 근거.
-type Band = 'a' | 'c' | 'd' | 'e' | 'g' | 'h' | 'i' | 'j' | 'l' | '기타';
+type Band = 'a' | 'b' | 'c' | 'd' | 'e' | 'g' | 'h' | 'i' | 'j' | 'l' | '기타';
 
 interface PreviewState {
   key: string;
@@ -2411,7 +2430,326 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
 ];
 
 // 프리뷰 스모크(devPreviewReleaseGate)가 이 배열을 순수 데이터로 import 한다(키 중복 0) → named export.
+
+// ── U8 AI 도우미(TRIP-1327) — b01~b07 시트 상태 + ✦ FAB 4화면 위치. 순수 뷰(`index.view`)만 문다 —
+// 페이지(가짜 어댑터·Query 훅)를 싣지 않는다. 숙소 결과 카드(b01 default·zero-result)는 1차 밖(DEC-U8-10).
+const ASSISTANT_PREVIEW_CTX = {
+  tripId: 'trip-busan',
+  surface: 'ITINERARY' as const,
+};
+const ASSISTANT_PREVIEW_HANDLERS = {
+  onPressAction: noop,
+  onPickCandidate: noop,
+  proposal: {
+    applyingId: null,
+    errors: {},
+    onApply: noop,
+    onDismiss: noop,
+    onRepropose: noop,
+  },
+};
+
+function renderAssistantPreview(
+  scenario: AssistantScenario,
+  options: {
+    state?: SheetState;
+    tripId?: string | null;
+    mutate?: (messages: AssistantMessage[]) => AssistantMessage[];
+    statusRow?: ReactElement;
+    body?: ReactElement;
+  } = {}
+): ReactElement {
+  const tripId = options.tripId === undefined ? 'trip-busan' : options.tripId;
+  const transcript = sampleTranscript(scenario, tripId);
+  const raw = options.mutate
+    ? options.mutate(transcript.messages)
+    : transcript.messages;
+  const ctx = { ...ASSISTANT_PREVIEW_CTX, tripId };
+  const replies = currentQuickReplies(raw, transcript.quickReplies);
+  return (
+    <AssistantSheetView
+      state={options.state ?? (tripId === null ? 'NO_CONTEXT' : 'READY')}
+      contextChip={transcript.session.contextChip}
+      messages={raw.map((message) => displayMessage(message, ctx))}
+      quickReplies={replies}
+      showCapabilitiesChip={needsCapabilitiesChip(replies)}
+      draft=""
+      canSend={false}
+      onChangeDraft={noop}
+      onSend={noop}
+      onPressQuickReply={noop}
+      onPressCapabilities={noop}
+      onPressAction={noop}
+      onClose={noop}
+      onRetryOpen={noop}
+      statusRow={options.statusRow}
+      body={options.body}
+      renderCard={(message) => (
+        <MessageCard message={message} {...ASSISTANT_PREVIEW_HANDLERS} />
+      )}
+    />
+  );
+}
+
+const ASSISTANT_FAB_PREVIEW = (
+  <AssistantFab onPress={noop} bottom={assistantFabBottom(TAB_TWO_STACK)} />
+);
+
 export const PREVIEW_STATES: PreviewState[] = [
+  // ── b 밴드 · U8 AI 도우미(TRIP-1327) ──
+  {
+    key: 'assistant-default',
+    band: 'b',
+    label: 'b01 · 도우미 기본(여행 문맥)',
+    login: null,
+    render: () => renderAssistantPreview('greeting'),
+  },
+  {
+    key: 'assistant-review',
+    band: 'b',
+    label: 'b01 · 진행 검토(문제 행)',
+    login: null,
+    render: () => renderAssistantPreview('review'),
+  },
+  {
+    key: 'assistant-candidate',
+    band: 'b',
+    label: 'b01 · 대체 후보',
+    login: null,
+    render: () => renderAssistantPreview('candidates'),
+  },
+  {
+    key: 'assistant-proposal',
+    band: 'b',
+    label: 'b02 · 제안 카드(위반 없음)',
+    login: null,
+    render: () => renderAssistantPreview('proposal'),
+  },
+  {
+    key: 'assistant-proposal-violation',
+    band: 'b',
+    label: 'b02 · 제안 카드(위반 — 적용 없음)',
+    login: null,
+    render: () => renderAssistantPreview('proposal-violation'),
+  },
+  {
+    key: 'assistant-stale',
+    band: 'b',
+    label: 'b02 · 제안 낡음(409 STALE)',
+    login: null,
+    render: () =>
+      renderAssistantPreview('proposal', {
+        mutate: (messages) =>
+          messages.map((message) =>
+            message.proposal
+              ? {
+                  ...message,
+                  proposal: { ...message.proposal, status: 'STALE' },
+                }
+              : message
+          ),
+      }),
+  },
+  {
+    key: 'assistant-scope',
+    band: 'b',
+    label: 'b03 · 범위 밖(외부 예약)',
+    login: null,
+    render: () => renderAssistantPreview('scope'),
+  },
+  {
+    key: 'assistant-refusal',
+    band: 'b',
+    label: 'b04 · 가드레일 거절',
+    login: null,
+    render: () => renderAssistantPreview('refusal'),
+  },
+  {
+    key: 'assistant-fallback-error',
+    band: 'b',
+    label: 'b05 · 폴백 error',
+    login: null,
+    render: () => renderAssistantPreview('fallback-error'),
+  },
+  {
+    key: 'assistant-fallback-solver',
+    band: 'b',
+    label: 'b05 · 폴백 solver-unavailable',
+    login: null,
+    render: () => renderAssistantPreview('fallback-solver'),
+  },
+  {
+    key: 'assistant-history',
+    band: 'b',
+    label: 'b06 · 이력',
+    login: null,
+    render: () =>
+      renderAssistantPreview('greeting', {
+        body: (
+          <HistoryView
+            logs={sampleActionLogs()}
+            otherSessions={[]}
+            confirmingClear={false}
+            clearing={false}
+            onContinue={noop}
+            onRequestClear={noop}
+            onConfirmClear={noop}
+            onCancelClear={noop}
+            onOpenSession={noop}
+          />
+        ),
+      }),
+  },
+  {
+    key: 'assistant-history-clear',
+    band: 'b',
+    label: 'b06 · 이력 지우기 확인',
+    login: null,
+    render: () =>
+      renderAssistantPreview('greeting', {
+        body: (
+          <HistoryView
+            logs={sampleActionLogs()}
+            otherSessions={[]}
+            confirmingClear
+            clearing={false}
+            onContinue={noop}
+            onRequestClear={noop}
+            onConfirmClear={noop}
+            onCancelClear={noop}
+            onOpenSession={noop}
+          />
+        ),
+      }),
+  },
+  {
+    key: 'assistant-no-context',
+    band: 'b',
+    label: 'b07 · 여행 없이 열기',
+    login: null,
+    render: () => renderAssistantPreview('no-context', { tripId: null }),
+  },
+  {
+    key: 'assistant-rate-limited',
+    band: 'b',
+    label: 'b0x · 429 잠시 후 다시',
+    login: null,
+    render: () =>
+      renderAssistantPreview('weather', {
+        statusRow: (
+          <TurnStatusRow
+            sending={false}
+            slow={false}
+            failed={false}
+            rateLimitedSeconds={5}
+            onCancel={noop}
+            onResend={noop}
+          />
+        ),
+      }),
+  },
+  {
+    key: 'assistant-slow',
+    band: 'b',
+    label: 'b0x · 15초 대기(대기 취소 강조)',
+    login: null,
+    render: () =>
+      renderAssistantPreview('greeting', {
+        statusRow: (
+          <TurnStatusRow
+            sending
+            slow
+            failed={false}
+            rateLimitedSeconds={0}
+            onCancel={noop}
+            onResend={noop}
+          />
+        ),
+      }),
+  },
+  {
+    key: 'assistant-open-failed',
+    band: 'b',
+    label: 'b0x · 열기 실패',
+    login: null,
+    render: () => renderAssistantPreview('greeting', { state: 'OPEN_FAILED' }),
+  },
+  // ✦ FAB 위치(BR-U8-50~52) — 실제 겹침(＋84·하트152·✦220·토스트288·탭바)은 6-b 육안의 유일한 자리.
+  {
+    key: 'assistant-fab-home',
+    band: 'b',
+    label: 'b✦ · 홈 FAB 스택',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          spotsLane={HOME_SPOTS_LANE}
+          assistantFab={ASSISTANT_FAB_PREVIEW}
+        />
+      ),
+  },
+  {
+    key: 'assistant-fab-stay-search',
+    band: 'b',
+    label: 'b✦ · 숙소 검색 FAB 스택',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={STAY_SEARCH_PREVIEW_ITEMS}
+        nameQuery=""
+        onChangeNameQuery={noop}
+        onToggleSave={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+        assistantFab={ASSISTANT_FAB_PREVIEW}
+      />
+    ),
+  },
+  {
+    key: 'assistant-fab-itinerary',
+    band: 'b',
+    label: 'b✦ · 일정 상세 지도 우상단',
+    login: null,
+    render: () => (
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H14_PLAN_NO_BASE_SLOTS)}
+        days={[{ label: '1일차' }, { label: '2일차' }]}
+        selectedDayIndex={0}
+        onSelectDay={noop}
+        onBack={noop}
+        mapCard={
+          <View pointerEvents="box-none" className="items-end pt-md">
+            <AssistantFab onPress={noop} />
+          </View>
+        }
+        header={
+          <SheetHeader
+            title="부산 여행"
+            dayLabel="1일차"
+            dateLabel="6월 10일(수)"
+            meta="4곳"
+          />
+        }
+        cta={[{ label: '일정 저장하기', variant: 'primary', onPress: noop }]}
+      >
+        <View />
+      </MapSheetShell>
+    ),
+  },
+  {
+    key: 'assistant-fab-live',
+    band: 'b',
+    label: 'b✦ · 여행 중 허브 앵커 열',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        assistantFab: <AssistantFab onPress={noop} />,
+      }),
+  },
+
   { key: 'splash', band: 'c', label: 'c01 · 기본', login: null },
   {
     key: 'login-idle',
@@ -7306,7 +7644,18 @@ function resolveInitialStateKey(
 
 // first-cut 9밴드 고정 순서(figma-structure.md) — 밴드 버튼 줄이 이 순서대로 선다. '기타'는
 // 해당 상태가 있을 때만 뒤에 붙인다(map-default 하나뿐이지만 하드코딩 대신 데이터에서 파생).
-const FIRST_CUT_BANDS: Band[] = ['a', 'c', 'd', 'e', 'g', 'h', 'i', 'j', 'l'];
+const FIRST_CUT_BANDS: Band[] = [
+  'a',
+  'b',
+  'c',
+  'd',
+  'e',
+  'g',
+  'h',
+  'i',
+  'j',
+  'l',
+];
 
 // 해석된 상태 키의 밴드를 돌려준다 — AC-3 초기 selectedBand 는 이 결과 위에 얹힌다.
 // resolveInitialStateKey 가 늘 존재하는 키(또는 splash)를 주므로 find 는 항상 잡히지만,

@@ -77,3 +77,32 @@ describe('🔴 P1 · planb 요청 라우트 transparentModal 선언 (AC-9)', () 
     }
   );
 });
+
+/**
+ * TRIP-1322 · BR-U8-01 · DEC-U8-13 — ✦ 도우미 시트 라우트도 루트 Stack 의 투명 모달이다. `(tabs)` 밖이라
+ * 탭바가 가려지고 뒤 화면은 딤 아래 남는다. 선언까지만 jest 가 잠근다(딤·비침은 6-b 실기).
+ */
+describe('🔴 도우미 시트 라우트 transparentModal 선언 (TRIP-1322)', () => {
+  it.each(['HOME', 'LOGIN'] as const)(
+    '목적지 %s 에서도 가드 밖에 assistant/index transparentModal 선언이 하나 있다',
+    (destination) => {
+      mockUseBootstrapGate.mockReturnValue({
+        phase: 'resolved',
+        destination,
+        isProvisional: false,
+      });
+
+      render(<SplashGate />);
+      act(() => {
+        jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS);
+      });
+
+      const declared = screen
+        .UNSAFE_getAllByType(Stack.Screen)
+        .filter((node) => node.props.name === 'assistant/index');
+      expect(declared).toHaveLength(1);
+      expect(declared[0].props.options?.presentation).toBe('transparentModal');
+      expect(insideProtected(declared[0])).toBe(false);
+    }
+  );
+});

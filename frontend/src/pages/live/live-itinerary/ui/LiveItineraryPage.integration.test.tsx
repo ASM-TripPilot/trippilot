@@ -283,6 +283,19 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
     );
   }
 
+  // TRIP-1321 · US-ASSIST-01 — 여행 중 허브의 ✦ 도우미(앵커 열 맨 위). 실제 위치·터치는 6-b 실기.
+  describe('✦ 도우미 FAB (TRIP-1321)', () => {
+    it('누르면 surface=LIVE · 이 여행 id 를 싣고 도우미 시트로 간다', async () => {
+      server.use(itineraryOk(), tripHandler(), visitsHandler());
+      await renderActive();
+      fireEvent.press(screen.getByTestId('assistant-fab'));
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/assistant',
+        params: { surface: 'LIVE', tripId: TRIP_ID },
+      });
+    });
+  });
+
   describe('LiveItineraryPage', () => {
     it('I1 오늘 슬롯이 허브에 뜨고 헤더는 "여행명 · N일차 · M월 D일(요일) · N곳" 한 줄이다 (AC-6)', async () => {
       server.use(itineraryOk(), tripHandler(), visitsHandler());
