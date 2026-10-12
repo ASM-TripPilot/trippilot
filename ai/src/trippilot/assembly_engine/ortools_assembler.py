@@ -359,8 +359,12 @@ class OrToolsAssembler:
             existing = next((n for n in nodes if n["poi"].poi_id == rv.poi_id), None)
             if poi is None or (existing is not None and existing["pin"] is not None):
                 continue  # 좌표 미상은 놓을 수 없고, 같은 날 핀이면 이미 간다 → 미배치 판정 몫
-            win = self._day_open_window(poi, day)
-            if win is None:
+            if poi.open_hours:
+                todays = [(oh.open_min, oh.close_min) for oh in poi.open_hours
+                          if oh.day_of_week == day.weekday()]
+            else:
+                todays = [(0, 1440 * 2)]
+            if not todays:
                 continue  # 휴무 — 그날은 못 간다. 해는 그대로 나가고 배선이 미배치로 보고한다
             # 핀과 달리 하한·앵커 출발을 면제받지 않는다 — 시각이 자유라 면제할 이유가 없다.
             # 후보 노드가 있어도 창을 다시 계산한다(사용자 체류면 hi 가 달라진다 — #630 과 같은
@@ -368,18 +372,24 @@ class OrToolsAssembler:
             # 없으면 카테고리 기본(`stay_for`, pace 적용 — 자유 후보와 같다).
             stay = (rv.dwell_min if rv.dwell_min is not None
                     else stay_for(poi.category, problem.pace))
-            lo = max(win[0], ws)
+            # 자유 후보(`_day_open_window` = 최장 창 하나 — 보수 근사, 안 뽑히면 그만)와 달리
+            # 필수는 창 **합집합**이다 — 최장 창만 보면 브레이크타임 식당의 첫 창이 핀에 덮일 때
+            # 저녁 창이 있는데도 미배치(NO_FEASIBLE_SLOT)였다. 규칙 폴백(`_earliest_open`)과 같은 판정.
+            base_lo = ws
             if floor is not None:
-                lo = max(lo, floor + anchor_minutes(problem, poi, self._est))
-            hi = min(win[1], we) - stay
-            if lo > hi:
+                base_lo = max(base_lo, floor + anchor_minutes(problem, poi, self._est))
+            dom = sorted((max(o, base_lo), min(c, we) - stay) for o, c in todays)
+            dom = [(a, b) for a, b in dom if a <= b]
+            if not dom:
                 continue  # 체류가 영업창·하루 창에 안 들어간다 → 미배치
+            lo, hi = dom[0][0], max(b for _, b in dom)
             if existing is not None:
-                existing.update({"stay": stay, "lo": lo, "hi": hi, "required": True})
+                existing.update({"stay": stay, "lo": lo, "hi": hi, "required": True,
+                                 "dom": dom})
             else:
                 nodes.append({"poi": poi, "stay": stay, "lo": lo, "hi": hi,
                               "score": 0.0, "is_llm": False, "pin": None,
-                              "required": True})
+                              "required": True, "dom": dom})
 
         if not nodes:
             return []  # 배치할 것 없음 — 빈 일자 (해 없음 아님)
@@ -407,6 +417,9 @@ class OrToolsAssembler:
             if n["pin"] is not None:
                 m.Add(visit[i] == 1)
                 m.Add(start[i] == n["pin"])
+            elif "dom" in n:  # 필수 — 영업창 합집합 (lo·hi 는 바깥 경계)
+                m.AddLinearExpressionInDomain(
+                    start[i], cp_model.Domain.FromIntervals([list(iv) for iv in n["dom"]]))
 
         arcs = []
         for i in range(k):
