@@ -417,8 +417,13 @@ def _open_ranges(text: str) -> list[list[tuple[str, tuple[int, int]]]]:
     # 숫자 앞의 `-` 는 시각 범위(`09:00-18:00`)라 끊지 않는다.
     out: list[list[tuple[str, tuple[int, int]]]] = []
     for seg in _SEGMENT_SPLIT.split(_protect_days(_DATED_REMARK.sub(" ", text))):
-        if _NOT_OPEN_SEGMENT.search(seg):
-            continue
+        # 라벨부터 구간 끝까지만 버린다 — 라벨 **앞**의 범위는 영업시간이다(`10:00~18:00 입장 마감 19:30`·
+        # `11:00~22:00준비시간 14:30~16:30`). 구간째 버리면 그 장소의 시간을 잃었다(공유본 5건).
+        # 한계: 라벨이 앞 범위를 설명하는 어순(`15:00~17:00 브레이크타임`, 47구간)도 범위가 남는다 — 그것이 원문
+        # 첫 범위면 창이 된다. 공유본에서 첫 범위인 1건은 그 범위가 영업시간이었다(`11:00~21:00 브레이크 타임(…)`).
+        label = _NOT_OPEN_SEGMENT.search(seg)
+        if label:
+            seg = seg[:label.start()]
         ranges: list[tuple[str, tuple[int, int]]] = []
         prev = 0
         for m in _RANGE_RE.finditer(seg):
