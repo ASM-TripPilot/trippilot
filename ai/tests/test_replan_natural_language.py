@@ -212,6 +212,25 @@ def test_점수가_낮은_카페도_한_곳_추가면_들어오고_원래_가던
     assert {"p1", "p2"} & set(placed), f"원래 가던 곳이 다 밀렸다 {placed}"
 
 
+def test_한_곳_추가는_그날_휴무인_카페를_고르지_않는다() -> None:
+    """1위 카페가 그 요일 휴무면 열린 2위를 고른다 — 휴무를 고르면 필수 방문이 못 놓여
+    카페 0곳 + 미배치 노트가 된다(서울 실측: 일요일 휴무 카페가 매번 1위, 2026-10-12)."""
+    pool, req = _case()  # 2026-08-05 수요일
+    monday_only = (OpenHour(day_of_week=0, open_min=540, close_min=1260),)
+    pool = replace(pool, pois=tuple(
+        replace(p, category=PoiCategory.CAFE, open_hours=monday_only) if str(p.poi_id) == "p6"
+        else replace(p, category=PoiCategory.CAFE) if str(p.poi_id) == "p5" else p
+        for p in pool.pois))
+    agent = _agent_scored({f"p{i}": 0.9 for i in range(1, 5)} | {"p5": 0.3, "p6": 0.5})
+
+    outcome = agent.run(_task(pool, request=replace(
+        req, add_one_categories=frozenset({PoiCategory.CAFE}))))
+
+    placed = _placed(outcome)
+    assert "p5" in placed and "p6" not in placed, placed
+    assert not any(d.reason.startswith("add_one_unplaced") for d in outcome.degradations)
+
+
 def test_한_곳_추가를_못_넣으면_재계획_노트로_밝힌다() -> None:
     """고른 카페가 그날 체류만큼 열려 있지 않으면 필수 방문도 못 놓는다 — 그 사실이
     재계획 응답 notes 까지 가야 한다(침묵 실패 금지, INV-4)."""
