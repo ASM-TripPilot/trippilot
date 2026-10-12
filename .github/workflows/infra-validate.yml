@@ -8,7 +8,8 @@ name: infra-validate
 on:
   pull_request:
     branches: [develop, main]
-    paths: ['infra/**', 'deploy/**', '.github/workflows/infra-validate.yml', '.github/workflows/aws-deploy.yml']
+    # aws-bootstrap.yml 도 넣는다 — infra/tests 의 계약 테스트가 그 파일을 읽는다.
+    paths: ['infra/**', 'deploy/**', '.github/workflows/infra-validate.yml', '.github/workflows/aws-deploy.yml', '.github/workflows/aws-bootstrap.yml']
   workflow_call:
     inputs:
       verify_backend_shutdown:

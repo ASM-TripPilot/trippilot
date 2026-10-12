@@ -74,6 +74,9 @@ class WorkflowContractTests(unittest.TestCase):
         paths = value['on']['pull_request']['paths']
         self.assertIn('infra/**', paths)
         self.assertIn('deploy/**', paths)
+        # 아래 계약 테스트가 읽는 워크플로가 바뀌어도 게이트가 돈다
+        for filename in ('aws-deploy.yml', 'aws-bootstrap.yml', 'infra-validate.yml'):
+            self.assertIn(f'.github/workflows/{filename}', paths)
         self.assertEqual(value['permissions'], {'contents': 'read'})
         text = (ROOT / '.github/workflows/infra-validate.yml').read_text()
         for forbidden in ('id-token', 'secrets.', 'vars.', 'environment:', 'configure-aws-credentials'):
@@ -85,6 +88,15 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(deploy['jobs']['validate']['uses'], './.github/workflows/infra-validate.yml')
         self.assertEqual(deploy['jobs']['deploy']['needs'], 'validate')
         self.assertEqual(deploy['env']['TF_VERSION'], workflow('infra-validate.yml')['env']['TF_VERSION'])
+        # 입력 기본값이 false 라, 이 배선이 빠지면 앱 배포 직전의 종료 설정 검사가 조용히 건너뛰어진다
+        self.assertEqual(
+            deploy['jobs']['validate']['with']['verify_backend_shutdown'],
+            "${{ inputs.mode == 'apply' && inputs.deploy_application }}",
+        )
+        gate = workflow('infra-validate.yml')
+        self.assertIn('verify_backend_shutdown', gate['on']['workflow_call']['inputs'])
+        shutdown = next(s for s in gate['jobs']['validate']['steps'] if s.get('name') == 'Verify backend shutdown configuration')
+        self.assertEqual(shutdown['if'], 'inputs.verify_backend_shutdown')
 
 
 if __name__ == '__main__':
