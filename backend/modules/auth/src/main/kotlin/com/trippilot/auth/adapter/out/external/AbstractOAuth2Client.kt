@@ -20,9 +20,10 @@ internal val OAUTH_JSON: ObjectMapper = ObjectMapper()
  * **id_token·nonce·state 를 여기서 검증하지 않는 것은 누락이 아니다**(TRIP-1316 에서 대조). 3사는 신원을
  * id_token 이 아니라 userinfo 로 받으므로 서명·nonce 가 해당 없고, `state` 는 서버에 오지 않는다 —
  * 인가 요청을 연 앱이 대조한다. code 가로채기는 PKCE(`code_verifier`)가 막는다 — 앱이 `code_challenge` 를
- * 실어 연 인가 요청의 code 는 verifier 없이 교환되지 않는다. 구글은 공식 지원이고, **카카오는 REST 문서에
- * PKCE 가 없지만 인증 서버가 실제로 검증한다**(토큰 요청이 `KOE311 code_verifier required`·`KOE313 …does not
- * match code challenge` 로 거절된다 — 카카오 데브톡 2021-04·2023-09 사례). 문서화되지 않은 동작에 기대고
+ * 실어 연 인가 요청의 code 는 맞는 verifier 없이 교환되지 않는다. 구글은 공식 지원이다. **카카오는 REST 문서의
+ * 인가·토큰 요청 파라미터 표에 PKCE 가 없지만**, OIDC discovery 가 `code_challenge_methods_supported: [S256]` 을
+ * 광고하고 인증 서버(kauth 토큰 엔드포인트)가 실제로 검증한다 — verifier 가 틀리면 `KOE313`(iOS SDK 흐름,
+ * 데브톡 2022-11), 없으면 `KOE311`(REST 흐름, 데브톡 2021-04)로 거절된다. 요청 파라미터로는 문서화되지 않은 동작에 기대고
  * 있다는 뜻이기도 하다. **네이버는 PKCE 가 아예 없다** — 그래서 `AuthenticateWithSocialUseCase.authenticate` 가
  * 네이버를 code 경로에서 거절한다(TRIP-1317) — 이 클래스의 네이버 교환은 호출되지 않는다.
  * 실제로 비어 있는 것은 **토큰의 발급 대상(aud) 확인**이며 그 처리는 [fetchProfileByAccessToken] 에 적었다.
