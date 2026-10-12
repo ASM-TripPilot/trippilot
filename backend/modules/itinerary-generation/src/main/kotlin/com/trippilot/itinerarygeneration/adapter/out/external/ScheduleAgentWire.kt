@@ -593,8 +593,9 @@ internal fun AiAlternativesResponse.toDomain(
             candidates.isNotEmpty() -> null
             // AI 가 후보를 줬는데 반경 컷·ground 탈락으로 비었다 — 주변엔 있으니 넓히기·컨셉 변경이 통한다.
             ranked.isNotEmpty() || alternatives.isNotEmpty() -> SlotCandidatesEmptyReason.NO_NEARBY
-            // AI 풀이 비었거나 전부 제외됐다(설계 §3 매핑) — 넓혀도 같은 결과다.
-            emptyReason == "no_candidates" || emptyReason == "all_excluded" -> SlotCandidatesEmptyReason.ALL_IN_ITINERARY
+            // AI 풀이 전부 일정에 있어 제외됐다 — 넓혀도 같은 결과다. 풀 자체가 빈 `no_candidates` 는
+            // "주변에 없다"라 NO_NEARBY 로 떨어지고, 서비스가 한 단계 넓혀 다시 본다(TRIP-1311).
+            emptyReason == "all_excluded" -> SlotCandidatesEmptyReason.ALL_IN_ITINERARY
             // 모르는 사유는 NO_NEARBY 로 떨어뜨린다 — 원문은 어댑터가 WARN 으로 남긴다(침묵 금지).
             else -> SlotCandidatesEmptyReason.NO_NEARBY
         },

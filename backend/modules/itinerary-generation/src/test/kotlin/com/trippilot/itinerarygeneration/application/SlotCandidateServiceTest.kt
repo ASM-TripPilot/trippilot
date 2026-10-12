@@ -517,6 +517,58 @@ class SlotCandidateServiceTest : StringSpec({
         out.emptyReason shouldBe SlotCandidatesEmptyReason.NO_NEARBY
     }
 
+    // ─── 0건 1회 확장(TRIP-1311 · BR-U3-25) — 컨셉 없는 요청도 넓혀 본다 ───
+
+    fun emptyAgent(reason: SlotCandidatesEmptyReason) = object : StubScheduleAgent() {
+        override fun proposeSlotCandidates(input: SlotCandidatesInput) = SlotCandidatesOutput(
+            emptyList(), radiusMUsed = 3_000,
+            freshness = FreshnessMeta(now, degraded = true), emptyReason = reason,
+        )
+    }
+
+    /** 반경별 풀 — 요청 반경 이내만 돌려주고, 몇 번·어느 반경으로 물었는지 남긴다. */
+    class RadiusPool(private val places: List<GroundedPlace>) : CandidatePoolPort {
+        val radii = mutableListOf<Double>()
+        override fun resolve(area: Area, categories: Set<String>): List<GroundedPlace> {
+            val r = (area as Area.Radius).radiusM
+            radii += r
+            return places.filter { (it.distanceM ?: 0.0) <= r }
+        }
+        override fun ground(poiIds: List<UUID>) = poiIds.map { GroundedPlace(it, "장소", 33.45, 126.56, "명소", null, null) }
+    }
+
+    "NO_NEARBY 0건이면 반경을 한 단계 넓혀 1회 다시 본다 — 실제 쓴 반경을 알린다" {
+        val far = UUID.randomUUID()
+        val pool = RadiusPool(listOf(GroundedPlace(far, "먼 국밥집", 33.45, 126.56, "맛집", null, 11_300.0)))
+        val out = conceptSvc(emptyAgent(SlotCandidatesEmptyReason.NO_NEARBY), pool).propose(acc, tripId, req(null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(far) // closed-set 풀에서만(INV-1)
+        out.candidates.single().distanceRange shouldBe "약 11.3km"
+        out.candidates.single().rationale shouldBe "주변 맛집"
+        out.radiusMUsed shouldBe 12_000
+        out.emptyReason shouldBe null
+        out.freshness.degraded shouldBe true // 거리순 채움은 AI 추천이 아니다(INV-4)
+    }
+
+    "ALL_IN_ITINERARY 0건이면 넓히지 않는다 — 넓혀도 같은 결과다" {
+        val pool = RadiusPool(listOf(GroundedPlace(UUID.randomUUID(), "먼 국밥집", 33.45, 126.56, "맛집", null, 11_300.0)))
+        val out = conceptSvc(emptyAgent(SlotCandidatesEmptyReason.ALL_IN_ITINERARY), pool).propose(acc, tripId, req(null))
+
+        out.candidates shouldBe emptyList()
+        out.emptyReason shouldBe SlotCandidatesEmptyReason.ALL_IN_ITINERARY
+        pool.radii shouldBe emptyList()
+    }
+
+    "넓혀도 0건이면 한 번으로 끝난다 — NO_NEARBY 그대로, 무한 확장 없음" {
+        val pool = RadiusPool(listOf(GroundedPlace(UUID.randomUUID(), "아주 먼 곳", 33.45, 126.56, "명소", null, 30_000.0)))
+        val out = conceptSvc(emptyAgent(SlotCandidatesEmptyReason.NO_NEARBY), pool).propose(acc, tripId, req(null))
+
+        out.candidates shouldBe emptyList()
+        out.emptyReason shouldBe SlotCandidatesEmptyReason.NO_NEARBY
+        out.radiusMUsed shouldBe 12_000
+        pool.radii shouldBe listOf(3_000.0, 12_000.0)
+    }
+
     "매핑에 없는 컨셉은 필터 없이 기존 동작 — 400 이 아니다(reason 선례)" {
         val sight = UUID.randomUUID()
         val out = conceptSvc(fixedAgent(cand(sight)), conceptPool(mapOf(sight to "명소")))
