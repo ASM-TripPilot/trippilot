@@ -179,6 +179,18 @@ def test_parallelism_policy(pool_size: int, expected_n: int) -> None:
     assert len(chunks) == expected_n
 
 
+def test_lowered_max_parallel_caps_llm_calls_per_generation() -> None:
+    """TRIP-1313 — 손잡이를 5 로 내리면 실전 풀(250)에서도 점수 호출이 5회다(종전 10)."""
+    llm = _EchoScoresLlm()
+    worker, trace = _worker(llm, C1Config(
+        model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"}, score_max_parallel=5))
+
+    worker.score(_pool(250), _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0)
+
+    assert len(llm.requests) == 5
+    assert trace.of_type(ScoreChunkEvent)[0].chunk_count == 5
+
+
 # ── ② 균등 분할 · 결정론 ────────────────────────────────────────────
 
 

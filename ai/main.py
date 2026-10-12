@@ -667,6 +667,10 @@ def build_app_from_env() -> FastAPI:
                          hours=hours, place_ids=place_ids,
                          feature_models=feature_models,
                          retry_models=_retry_models_from_env(),
+                         # 생성 1회의 PREFERENCE_SCORING 호출 수 상한(TRIP-1313). `or` 모양은
+                         # EXISTENCE_MAX_CALLS 와 같은 이유(TRIP-882 — compose 빈 값의 int('')).
+                         # 0·음수는 C1Config 검증이 기동 시점에 거부한다.
+                         score_max_parallel=int(_env("TRIPPILOT_SCORE_MAX_PARALLEL") or "10"),
                          directives=_replan_directives())
 
 
