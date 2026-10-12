@@ -76,7 +76,9 @@ def backfill_one(p: dict) -> str:
         return "stored_empty"
     if not week:
         return "reparse_empty"
-    if {(h.open_min, h.close_min) for h in stored} != {(h.open_min, h.close_min) for h in week}:
+    # 요일별로 대조한다 — 파서가 요일마다 다른 창을 낼 수 있다(요일별 구간). 창 집합 비교는 한 요일에만
+    # 있는 창(`금요일 11:00~15:30`)이 휴무로 빠질 때 "창이 다름"으로 오판한다.
+    if not set(stored) <= set(week):
         return "window_differs"
     open_days = {h.day_of_week for h in stored}
     week_days = {h.day_of_week for h in week}
