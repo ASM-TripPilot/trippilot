@@ -208,9 +208,12 @@ _ALL_DAY = (0, 24 * 60)
 _WEEKDAY_RE = re.compile(r"(월|화|수|목|금|토|일)요일")
 _WEEKDAY_INDEX = {"월": 0, "화": 1, "수": 2, "목": 3, "금": 4, "토": 5, "일": 6}
 # ── 휴무 원문 (TRIP-1230) — 규칙은 _parse_rest_days, 근거는 data/README 「휴무를 해석 못 하는 POI」
-# 범위는 한 줄 안에서만 — `\s` 로 두면 `<br>` 줄바꿈을 넘어 두 줄의 요일을 범위로 잇는다
+# 범위는 한 줄 안에서만 — `\s` 로 두면 `<br>` 줄바꿈을 넘어 두 줄의 요일을 범위로 잇는다.
+# 양끝 `요일` 은 생략될 수 있다(`매주 월~목요일` — 종전엔 목요일만 닫혔다, 영업 쪽 한정자와 같은 형태).
+# 맨 글자는 한글·숫자에 붙어 있지 않을 때만 요일이다(`3월~`·`매월~` 의 월).
 _DAY_RANGE_RE = re.compile(
-    r"(월|화|수|목|금|토|일)요일[ \t]*[~∼～〜\-–—][ \t]*(월|화|수|목|금|토|일)요일")
+    r"(?:([월화수목금토일])요일|(?<![가-힣\d])([월화수목금토일]))[ \t]*[~∼～〜\-–—][ \t]*"
+    r"([월화수목금토일])(?:요일|(?![가-힣]))")
 # `주말만 운영`·`주말에만 개장` 의 주말은 여는 날이다 — 쉬는 날로 읽으면 뒤집힌다
 _REST_WEEKEND_RE = re.compile(r"주말(?!\s*(?:에\s*)?만)")
 _REST_PAREN = re.compile(r"[(（][^)）]*[)）]")
@@ -254,6 +257,10 @@ _RANGE_RE = re.compile(r"(\d{1,2}):(\d{2})\s*[~\-–—]\s*(\d{1,2}):(\d{2})")
 # 이보다 좁으면 회차·교육 세션을 영업시간으로 읽은 것이다 (실측으로 정한 값).
 _MIN_WINDOW_MIN = 120
 _SEGMENT_SPLIT = re.compile(r"[\n<>()（）\[\]※/]|·|-(?!\s*\d)")
+# 날짜가 든 ※ 비고는 기간 한정 안내다(`※ 2025년 07월 22일~08월 31일 10:00~20:00`) — 그 범위가 평소 창
+# 후보가 되면 나머지 요일의 창이 넓어진다(실물 1건). 비고만 뺀다 — 본문의 `3월 1일 ~ 10월 31일 09:00~18:00`
+# 은 그 장소의 시간이다.
+_DATED_REMARK = re.compile(r"※[^※\n<]*?(?:\d{4}\s*년|\d{1,2}\s*월\s*\d{1,2}\s*일)[^※\n<]*")
 # 영업 구간 머리의 요일 한정자 — `평일`(`주중`)·`주말`·`X(요일)`·`X(요일)~Y(요일)`(사이 요일까지, 주를 넘어도),
 # 그리고 그것들을 `·`·`/`·`,` 로 이은 목록(`토·일요일`·`화요일 / 목요일~금요일`).
 # 머리 **전체**가 한정자여야 한다 — `하절기 평일`·`법정공휴일` 은 요일 구간이 아니다(종전 규칙으로 간다).
@@ -263,8 +270,8 @@ _DAY_ITEM = rf"(?:{_DAY_ITEM_RE.pattern})"
 _DAY_QUALIFIER = re.compile(rf"[\s\-:,]*{_DAY_ITEM}(?:[ \t]*[·/,、][ \t]*{_DAY_ITEM})*[\s:]*")
 # 구간 분할(`·`·`/`·숫자 앞 아닌 `-`)이 요일 목록·범위를 먼저 자르지 않게 미리 `,`·`~` 로 바꿔 둔다 —
 # 안 그러면 `토·일요일 10:00~18:00` 의 `토` 가 떨어져 나가 마지막 토큰만 한정자가 된다(공유본 11건),
-# `월-금 07:30 - 20:30` 은 `월` 과 `금` 으로 갈렸다(7건). 한글 사이에 낀 글자(`매일`·`3월` 의 월)는 요일이 아니다.
-_DAY_EXPR = re.compile(rf"(?<![가-힣]){_DAY_ITEM}(?:[ \t]*[·/,、][ \t]*{_DAY_ITEM})*(?![가-힣])")
+# `월-금 07:30 - 20:30` 은 `월` 과 `금` 으로 갈렸다(7건). 한글·숫자에 붙은 글자(`매일`·`3월` 의 월)는 요일이 아니다.
+_DAY_EXPR = re.compile(rf"(?<![가-힣\d]){_DAY_ITEM}(?:[ \t]*[·/,、][ \t]*{_DAY_ITEM})*(?![가-힣])")
 _DAY_LIST_SEP = re.compile(r"[ \t]*[·/,、][ \t]*")
 _DAY_RANGE_DASH = re.compile(r"[ \t]*[~∼～〜\-–—][ \t]*")
 # 영업 원문 안의 명시 휴무 절(`- 일요일 휴무`) — 시각이 없는 줄만 본다(`_hours_rest_days`).
@@ -389,7 +396,7 @@ def _open_ranges(text: str) -> list[list[tuple[str, tuple[int, int]]]]:
     # 빼고 한 줄로 고쳐 쓴 원문이 늘었다(2026-10-05 되감기 첫 배치 1,691건 중 27건이 이 모양으로 창을 잃었다).
     # 숫자 앞의 `-` 는 시각 범위(`09:00-18:00`)라 끊지 않는다.
     out: list[list[tuple[str, tuple[int, int]]]] = []
-    for seg in _SEGMENT_SPLIT.split(_protect_days(text)):
+    for seg in _SEGMENT_SPLIT.split(_protect_days(_DATED_REMARK.sub(" ", text))):
         if _NOT_OPEN_SEGMENT.search(seg):
             continue
         ranges: list[tuple[str, tuple[int, int]]] = []
@@ -523,10 +530,10 @@ def _rest_clauses(text: str) -> list[str]:
 
 
 def _rest_weekdays(text: str) -> set[int]:
-    """휴무 문구 안의 요일 — `X요일`, 범위 `X요일~Y요일`(사이 요일까지, 주를 넘어도), `주말`."""
+    """휴무 문구 안의 요일 — `X요일`, 범위 `X(요일)~Y(요일)`(사이 요일까지, 주를 넘어도), `주말`."""
     days = {_WEEKDAY_INDEX[m] for m in _WEEKDAY_RE.findall(text)}
-    for a, b in _DAY_RANGE_RE.findall(text):
-        start, end = _WEEKDAY_INDEX[a], _WEEKDAY_INDEX[b]
+    for a, bare, b in _DAY_RANGE_RE.findall(text):
+        start, end = _WEEKDAY_INDEX[a or bare], _WEEKDAY_INDEX[b]
         days.update((start + k) % 7 for k in range((end - start) % 7 + 1))
     if _REST_WEEKEND_RE.search(text):
         days.update((5, 6))
