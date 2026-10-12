@@ -254,11 +254,19 @@ _RANGE_RE = re.compile(r"(\d{1,2}):(\d{2})\s*[~\-–—]\s*(\d{1,2}):(\d{2})")
 # 이보다 좁으면 회차·교육 세션을 영업시간으로 읽은 것이다 (실측으로 정한 값).
 _MIN_WINDOW_MIN = 120
 _SEGMENT_SPLIT = re.compile(r"[\n<>()（）\[\]※/]|·|-(?!\s*\d)")
-# 영업 구간 머리의 요일 한정자 — `평일`(`주중`)·`주말`·`X요일`·`X~Y`·`X요일~Y요일`(사이 요일까지, 주를 넘어도).
+# 영업 구간 머리의 요일 한정자 — `평일`(`주중`)·`주말`·`X(요일)`·`X(요일)~Y(요일)`(사이 요일까지, 주를 넘어도),
+# 그리고 그것들을 `·`·`/`·`,` 로 이은 목록(`토·일요일`·`화요일 / 목요일~금요일`).
 # 머리 **전체**가 한정자여야 한다 — `하절기 평일`·`법정공휴일` 은 요일 구간이 아니다(종전 규칙으로 간다).
-_DAY_QUALIFIER = re.compile(
-    r"[\s\-:]*(?:(평일|주중)|(주말)|([월화수목금토일])(?:요일)?[ \t]*[~∼～〜\-–—][ \t]*([월화수목금토일])(?:요일)?"
-    r"|([월화수목금토일])요일)[\s:]*")
+_DAY_ITEM_RE = re.compile(
+    r"(평일|주중)|(주말)|([월화수목금토일])(?:요일)?(?:[ \t]*[~∼～〜\-–—][ \t]*([월화수목금토일])(?:요일)?)?")
+_DAY_ITEM = rf"(?:{_DAY_ITEM_RE.pattern})"
+_DAY_QUALIFIER = re.compile(rf"[\s\-:,]*{_DAY_ITEM}(?:[ \t]*[·/,、][ \t]*{_DAY_ITEM})*[\s:]*")
+# 구간 분할(`·`·`/`·숫자 앞 아닌 `-`)이 요일 목록·범위를 먼저 자르지 않게 미리 `,`·`~` 로 바꿔 둔다 —
+# 안 그러면 `토·일요일 10:00~18:00` 의 `토` 가 떨어져 나가 마지막 토큰만 한정자가 된다(공유본 11건),
+# `월-금 07:30 - 20:30` 은 `월` 과 `금` 으로 갈렸다(7건). 한글 사이에 낀 글자(`매일`·`3월` 의 월)는 요일이 아니다.
+_DAY_EXPR = re.compile(rf"(?<![가-힣]){_DAY_ITEM}(?:[ \t]*[·/,、][ \t]*{_DAY_ITEM})*(?![가-힣])")
+_DAY_LIST_SEP = re.compile(r"[ \t]*[·/,、][ \t]*")
+_DAY_RANGE_DASH = re.compile(r"[ \t]*[~∼～〜\-–—][ \t]*")
 # 영업 원문 안의 명시 휴무 절(`- 일요일 휴무`) — 시각이 없는 구간만 본다.
 _HOURS_REST_WORD = re.compile(r"휴무|휴관|휴업|휴점|정기\s*휴일")
 
@@ -269,8 +277,9 @@ def _weekday_windows(text: str) -> tuple[dict[int, tuple[int, int]], tuple[int, 
     `- 평일 12:00~21:30<br>- 토요일 12:00~19:00` 을 첫 범위·이른 폐점(계절 보정)으로 읽으면 7일 전부
     12:00~19:00 이 됐다 — 요일 구분을 계절 변형으로 오인해 평일 마감을 잘랐다(2026-10-12 실물).
 
-    - 한정자 구간은 **그 구간의 첫 범위**를 그 요일들에 준다(같은 구간 나머지 범위는 버린다). 2시간
-      이하면 회차로 보고 포기(None).
+    - 한정자는 **바로 뒤 범위**를 그 요일들에 준다. 한 구간에 한정자가 여럿이면(`화~금 10:00~21:00, 토~일
+      9:00~18:00`·`10:00~21:00, 월 10:00~19:00`) 각자 제 범위를 받는다. 한정자 뒤의 한정자 없는 범위는 그
+      요일의 부가 안내라 버린다. 2시간 이하면 회차로 보고 포기(None).
     - 같은 요일이 두 번 나오면 어느 것이 그 요일의 시간인지 모른다 → None(종전 규칙).
     - 한정자 **없는** 구간끼리는 종전 규칙(첫 범위·이른 폐점)으로 **나머지 요일의 창**을 만든다 —
       계절 보정은 한정자 없는 구간 사이에서만 산다(하절기/동절기 함정이 되살아나지 않게).
@@ -282,28 +291,23 @@ def _weekday_windows(text: str) -> tuple[dict[int, tuple[int, int]], tuple[int, 
         return None
     by_day: dict[int, tuple[int, int]] = {}
     rest: list[tuple[int, int]] = []
-    for head, spans in _open_ranges(text):
-        q = _DAY_QUALIFIER.fullmatch(head)
-        if q is None:
-            rest.extend(spans)
-            continue
-        # 같은 구간의 둘째 범위부터는 그 요일의 부가 안내다(`평일 10:00~17:30휴계시간 12:30~13:30` — 오타 라벨이
-        # 비영업 줄 검사를 빠져나간 실물). 나머지 요일의 창으로 새면 안 된다.
-        start, end = spans[0]
-        weekday, weekend, a, b, single = q.groups()
-        if weekday:
-            days: list[int] = list(range(5))
-        elif weekend:
-            days = [5, 6]
-        else:
-            first, last = _WEEKDAY_INDEX[a or single], _WEEKDAY_INDEX[b or single]
-            days = [(first + k) % 7 for k in range((last - first) % 7 + 1)]
-        if end - start <= _MIN_WINDOW_MIN or any(d in by_day for d in days):
-            return None
-        by_day.update(dict.fromkeys(days, (start, end)))
+    for ranges in _open_ranges(text):
+        qualified = False
+        for head, (start, end) in ranges:
+            days = _qualifier_days(head)
+            if days is None:
+                # 한정자 뒤의 한정자 없는 범위는 그 요일의 부가 안내다(`평일 10:00~17:30휴계시간 12:30~13:30` — 오타
+                # 라벨이 비영업 줄 검사를 빠져나간 실물). 나머지 요일의 창으로 새면 안 된다.
+                if not qualified:
+                    rest.append((start, end))
+                continue
+            qualified = True
+            if end - start <= _MIN_WINDOW_MIN or any(d in by_day for d in days):
+                return None
+            by_day.update(dict.fromkeys(days, (start, end)))
     if not by_day:
         return None
-    closed = {d for seg in _SEGMENT_SPLIT.split(text)
+    closed = {d for seg in _SEGMENT_SPLIT.split(_protect_days(text))
               if not _RANGE_RE.search(seg) and _HOURS_REST_WORD.search(seg) for d in _rest_weekdays(seg)}
     # 한정자 없는 구간의 창이 2시간 이하로 기각돼도 종전 규칙으로 되돌아간다 — None 이면
     # 7일을 못 채워 영업시간을 통째로 잃는다("평일 …<br>- 휴계시간 12:30~13:30"). 항상 종전
@@ -338,28 +342,52 @@ def _multi_range_window(text: str) -> tuple[int, int] | None:
     """
     if len(_SECTION_HEAD.findall(text)) > 1:
         return None
-    return _first_range_window([span for _, spans in _open_ranges(text) for span in spans])
+    return _first_range_window([span for ranges in _open_ranges(text) for _, span in ranges])
 
 
-def _open_ranges(text: str) -> list[tuple[str, list[tuple[int, int]]]]:
-    """비영업 줄을 뺀 구간마다 (첫 범위 앞 머리, 그 구간의 (개점, 폐점) 범위들). 범위 없는 구간은 뺀다."""
+def _qualifier_days(head: str) -> list[int] | None:
+    """범위 앞 머리가 요일 한정자(목록)면 그 요일들, 아니면 None."""
+    if not _DAY_QUALIFIER.fullmatch(head):
+        return None
+    days: list[int] = []
+    for weekday, weekend, a, b in _DAY_ITEM_RE.findall(head):
+        if weekday:
+            days += range(5)
+        elif weekend:
+            days += (5, 6)
+        else:
+            first, last = _WEEKDAY_INDEX[a], _WEEKDAY_INDEX[b or a]
+            days += ((first + k) % 7 for k in range((last - first) % 7 + 1))
+    return days
+
+
+def _protect_days(text: str) -> str:
+    """요일 목록·범위의 이음표를 분할에 안 걸리는 `,`·`~` 로 바꾼다(`_DAY_EXPR` 주석)."""
+    return _DAY_EXPR.sub(lambda m: _DAY_LIST_SEP.sub(",", _DAY_RANGE_DASH.sub("~", m[0])), text)
+
+
+def _open_ranges(text: str) -> list[list[tuple[str, tuple[int, int]]]]:
+    """비영업 줄을 뺀 구간마다 [(범위 앞 머리, (개점, 폐점)) …]. 머리는 구간 첫머리나 앞 범위 끝부터다.
+    범위 없는 구간은 뺀다."""
     # 괄호도 경계다 — `(준비시간 12:00~13:00)` 이 앞 범위와 한 덩어리로 남으면
     # 라벨 검사가 줄 전체를 버려 정상 범위까지 함께 사라진다.
     # 줄바꿈 없는 글머리표(`- 09:00~21:00- 마지막 주문 20:30`)·※ 비고·`/` 도 경계다 — 벤더가 `<br>` 을
     # 빼고 한 줄로 고쳐 쓴 원문이 늘었다(2026-10-05 되감기 첫 배치 1,691건 중 27건이 이 모양으로 창을 잃었다).
     # 숫자 앞의 `-` 는 시각 범위(`09:00-18:00`)라 끊지 않는다.
-    out: list[tuple[str, list[tuple[int, int]]]] = []
-    for seg in _SEGMENT_SPLIT.split(text):
+    out: list[list[tuple[str, tuple[int, int]]]] = []
+    for seg in _SEGMENT_SPLIT.split(_protect_days(text)):
         if _NOT_OPEN_SEGMENT.search(seg):
             continue
-        spans: list[tuple[int, int]] = []
+        ranges: list[tuple[str, tuple[int, int]]] = []
+        prev = 0
         for m in _RANGE_RE.finditer(seg):
             start, end = int(m[1]) * 60 + int(m[2]), int(m[3]) * 60 + int(m[4])
             if end <= start:
                 end += 24 * 60          # 자정 초과 (OpenHour 계약과 동일)
-            spans.append((start, end))
-        if spans:
-            out.append((seg[:_RANGE_RE.search(seg).start()], spans))
+            ranges.append((seg[prev:m.start()], (start, end)))
+            prev = m.end()
+        if ranges:
+            out.append(ranges)
     return out
 
 
