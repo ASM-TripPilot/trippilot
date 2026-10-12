@@ -410,6 +410,17 @@ class RuntimeIntegrationTests(unittest.TestCase):
         closing_shell = closing["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
         self.assertIn("--close-missing", closing_shell)
         self.assertNotIn("--allow-mass-close", closing_shell)
+        # 드라이런은 "닫힐 수"만 묻고 **그 다음 평소대로 upsert** — 드라이런이 upsert 를 대신하면 그 배포는 공유본을 안 붓는다.
+        probing = runtime_pois.manifest("trippilot", "img", "x", close_missing_dry_run=True)
+        probing_shell = probing["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
+        dry, _, real = probing_shell.partition(" && ")
+        self.assertIn("--dry-run --close-missing", dry)
+        self.assertIn("/app/data/collected_pois.json;", real)
+        self.assertNotIn("--close-missing", real.split(";")[0])
+        self.assertNotIn("--allow-mass-close", probing_shell)
+        # 실제 close_missing 이 켜져 있으면 드라이런은 뜻이 없어 건너뛴다
+        both = runtime_pois.manifest("trippilot", "img", "x", close_missing=True, close_missing_dry_run=True)
+        self.assertNotIn("--dry-run", both["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2])
 
     def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
         summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"
@@ -424,6 +435,38 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertIn("job/trippilot-poi-load", calls[3])
         out.assert_any_call(summary)
         self.assertIn("job,configmap", calls[-1])  # 둘 다 치운다
+
+    def test_load_pois_summary_reaches_the_step_output_with_drops_and_dry_run_count(self):
+        """로그를 안 열어도 보이게 — 합계·탈락(사유별)·드라이런 "닫을 것" 을 한 줄로 GITHUB_OUTPUT 에 쓴다.
+        묶음별 진행 줄(`[3/39] …`)·대상 줄은 올리지 않는다."""
+        import os
+        import tempfile
+        import runtime_pois
+        logs = ("대상: http://backend:8080/internal/pois/proposals (토큰 설정됨)\n"
+                "  /app/data/collected_pois.json: source=TOURAPI 제안=19084건 → 요청 39회\n"
+                "  미포함 정리(드라이런 — 닫지 않았다) — TOURAPI ACTIVE 19372 중 목록에 있음 19084 · 닫을 것 288\n"
+                "합계 제안 19084건 — 드라이런이라 적재는 보내지 않았다\n"
+                "  [1/39] 접수=500 신규=0 갱신=500\n"
+                "합계 — 접수=19084 신규=0 갱신=19080 지역코드미상=3\n"
+                "탈락(사유별):\n"
+                "  gate.category_unmapped: 4\n")
+        self.assertEqual(
+            runtime_pois.summary_of(logs),
+            "미포함 정리(드라이런 — 닫지 않았다) — TOURAPI ACTIVE 19372 중 목록에 있음 19084 · 닫을 것 288"
+            " · 합계 제안 19084건 — 드라이런이라 적재는 보내지 않았다"
+            " · 합계 — 접수=19084 신규=0 갱신=19080 지역코드미상=3 · 탈락(사유별): · gate.category_unmapped: 4")
+        with tempfile.TemporaryDirectory() as folder:
+            output = os.path.join(folder, "out")
+            shell = Mock(side_effect=["", "img", "", "", logs, ""])
+            with patch("runtime.command", shell), patch("builtins.print"), \
+                    patch.dict(os.environ, {"GITHUB_OUTPUT": output}):
+                runtime.main(["load-pois", "--close-missing-dry-run"])
+            with open(output, encoding="utf-8") as stream:
+                written = stream.read()
+        self.assertTrue(written.startswith("summary=미포함 정리(드라이런"), written)
+        self.assertEqual(written.count("\n"), 1)  # 한 줄 — 여러 줄이면 GITHUB_OUTPUT 형식이 깨진다
+        applied = json.loads(shell.call_args_list[2].args[1])
+        self.assertIn("--dry-run --close-missing", applied["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2])
 
     def test_load_pois_with_no_effect_is_a_failure(self):
         """적재가 '성공'인데 신규·갱신이 0 이면 아무것도 안 들어간 것이다 — 조용히 지나가면 "효과 없음"이 또 온다."""
@@ -449,6 +492,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
             self.assertTrue(run.call_args.kwargs["close_missing"])
             runtime.main(["load-pois"])
             self.assertFalse(run.call_args.kwargs["close_missing"])
+            self.assertFalse(run.call_args.kwargs["close_missing_dry_run"])
+            runtime.main(["load-pois", "--close-missing-dry-run"])
+            self.assertTrue(run.call_args.kwargs["close_missing_dry_run"])
 
     def test_smoke_checks_internal_denial_and_cleans_up_failure(self):
         import runtime_smoke

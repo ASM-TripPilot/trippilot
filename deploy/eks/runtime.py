@@ -76,6 +76,8 @@ def parser():
         if action == "load-pois":
             # 기본은 upsert 만. 퇴출(LOST)은 입력으로만 켜고, 대량 정리 가드(409)는 여기서 넘길 수 없다.
             sub.add_argument("--close-missing", action="store_true")
+            # 닫힐 수만 묻고(서버 계산) 평소대로 upsert — kubectl 없이 퇴출 규모를 보는 유일한 창.
+            sub.add_argument("--close-missing-dry-run", action="store_true")
         if action in ("sync-secrets", "bootstrap-db", "render-values"):
             sub.add_argument("--outputs", type=Path, required=True)
         if action in ("sync-secrets", "render-values"):
@@ -110,7 +112,8 @@ def main(argv=None):
     elif args.action == "load-kb":
         runtime_kb.run(args.namespace, command)
     elif args.action == "load-pois":
-        runtime_pois.run(args.namespace, command, close_missing=args.close_missing)
+        runtime_pois.run(args.namespace, command, close_missing=args.close_missing,
+                         close_missing_dry_run=args.close_missing_dry_run)
     elif args.action == "render-values":
         values = helm_values(outputs, args.image_tag, args.certificate_arn, args.hostname, args.embedding_enabled)
         Path(args.output).write_text(json.dumps(values, indent=2) + "\n")
