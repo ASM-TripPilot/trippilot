@@ -1055,6 +1055,9 @@ class ScheduleAgent:
         want = (frozenset(b.poi_id for b in request.fixed_blocks)
                 | frozenset(r.poi_id for r in request.required_visits)) - pool.poi_ids
         if self._poi_db is None or not want:
+            if want:  # 조회 포트 미주입 — 풀 밖 POI 는 좌표를 몰라 미배치된다. 침묵 금지 (INV-4)
+                self._observe(trace_id, now, "fixed_poi", "lookup", "(skipped)",
+                              "no_poi_db: " + ",".join(sorted(map(str, want))))
             return request.fixed_blocks, request.required_visits, {}
         found: dict[PoiId, Poi] = {}
         available = (budget.total_ms - (self._clock.monotonic_ms() - t0)

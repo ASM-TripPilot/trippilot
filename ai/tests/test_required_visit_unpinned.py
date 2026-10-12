@@ -378,6 +378,25 @@ def test_or_required_visit_is_absent_when_a_pin_fills_the_whole_day() -> None:
     assert check_all(result, problem, index, _EST) == []
 
 
+def _break_time(pid: str, k: int) -> Poi:
+    """브레이크타임 식당 — 11:00–15:00 / 17:00–21:00, 두 창 길이가 같다(종전 최장 창 = 첫 창)."""
+    return _poi(pid, PoiCategory.FOOD, k, tuple(OpenHour(d, o, c) for d in range(7)
+                                                for o, c in ((11 * 60, 15 * 60), (17 * 60, 21 * 60))))
+
+
+@_BOTH
+def test_required_break_time_food_takes_the_second_window_when_a_pin_covers_the_first(solve) -> None:
+    """첫 창이 핀에 덮이면 저녁 창에 놓인다 — 최장 창 하나만 보면 OR 이 빼고 배선이 NO_FEASIBLE_SLOT 을
+    보고했다(규칙 폴백은 아무 창이나 써서 놓았다 — 두 단계 불일치)."""
+    problem, index = _problem(_sights() + [_break_time("diner", 1)], candidates=["s0", "s3"],
+                              required=(_rv("diner"),), fixed=(_pin("s1", _at(10, 30), _at(15, 30)),))
+    result = solve(problem, index)
+    assert result is not None
+    slot = _slot(result, "diner")
+    assert slot is not None and _mod(slot.start_at) >= 17 * 60 and _mod(slot.end_at) <= 21 * 60
+    assert check_all(result, problem, index, _EST) == []
+
+
 @_BOTH
 @pytest.mark.parametrize("why", ["closed", "pin_covered"])
 def test_one_impossible_required_visit_does_not_drop_the_other(solve, why: str) -> None:
@@ -506,18 +525,25 @@ def _food_cases(draw):
     open_min = draw(st.integers(min_value=8 * 60, max_value=13 * 60))
     close_min = draw(st.integers(min_value=open_min + 120, max_value=22 * 60))
     dwell = draw(st.integers(min_value=30, max_value=90))
+    hours = _hours(open_min, close_min)
+    if draw(st.booleans()):  # 브레이크타임 — 영업창을 둘로 쪼갠다(필수는 창 합집합)
+        cut = draw(st.integers(min_value=open_min + 30, max_value=close_min - 60))
+        reopen = draw(st.integers(min_value=cut + 30, max_value=close_min - 30))
+        hours = tuple(OpenHour(d, o, c) for d in range(7)
+                      for o, c in ((open_min, cut), (reopen, close_min)))
     # 하루 창(09~21시) ∩ 영업창에 체류가 들어가는 경우만 — 안 들어가는 경우는 아래 별도 속성
-    assume(min(close_min, 21 * 60) - max(open_min, 9 * 60) >= dwell)
-    diner = _poi("diner", PoiCategory.FOOD, 7, _hours(open_min, close_min))
+    assume(any(min(oh.close_min, 21 * 60) - max(oh.open_min, 9 * 60) >= dwell
+               for oh in hours if oh.day_of_week == _DAY.weekday()))
+    diner = _poi("diner", PoiCategory.FOOD, 7, hours)
     seed = draw(st.integers(min_value=0, max_value=2**31))
     in_pool = draw(st.booleans())
     return pois, diner, dwell, seed, in_pool
 
 
 def _meal_window_feasible(diner: Poi, dwell: int) -> bool:
-    oh = diner.open_hours[0]
     return any(max(lo, oh.open_min, 9 * 60) + dwell <= min(hi, oh.close_min, 21 * 60)
-               for lo, hi in (_LUNCH, _DINNER))
+               for lo, hi in (_LUNCH, _DINNER)
+               for oh in diner.open_hours if oh.day_of_week == _DAY.weekday())
 
 
 @settings(max_examples=25, deadline=None)
@@ -534,7 +560,7 @@ def test_pbt_required_food_is_in_a_meal_window_whenever_one_is_feasible(solve, c
     assert slot is not None and slot.stay_min == dwell
     assert check_all(result, problem, index, _EST) == []
     if _meal_window_feasible(diner, dwell):
-        assert _in_meal_window(slot), (slot.start_at, slot.end_at, diner.open_hours[0])
+        assert _in_meal_window(slot), (slot.start_at, slot.end_at, diner.open_hours[:2])
 
 
 @st.composite
