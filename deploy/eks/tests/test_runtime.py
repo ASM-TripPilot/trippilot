@@ -413,8 +413,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
         # 드라이런은 "닫힐 수"만 묻고 **그 다음 평소대로 upsert** — 드라이런이 upsert 를 대신하면 그 배포는 공유본을 안 붓는다.
         probing = runtime_pois.manifest("trippilot", "img", "x", close_missing_dry_run=True)
         probing_shell = probing["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
-        dry, _, real = probing_shell.partition(" && ")
+        dry, _, real = probing_shell.partition("; ")
         self.assertIn("--dry-run --close-missing", dry)
+        self.assertNotIn("&&", probing_shell)  # 드라이런이 409 로 끝나도 적재는 간다 — 정보용이지 게이트가 아니다
         self.assertIn("/app/data/collected_pois.json;", real)
         self.assertNotIn("--close-missing", real.split(";")[0])
         self.assertNotIn("--allow-mass-close", probing_shell)

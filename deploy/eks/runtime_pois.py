@@ -43,7 +43,10 @@ def manifest(namespace, image, script_source, *, close_missing=False, close_miss
     command = base + (["--close-missing"] if close_missing else [])
     shell = " ".join(command)
     if close_missing_dry_run and not close_missing:
-        shell = " ".join(base + ["--dry-run", "--close-missing"]) + " && " + shell
+        # `;` 이지 `&&` 가 아니다 — 드라이런도 비율 가드(409)를 받을 수 있고(서버가 dryRun 분기 **앞**에서
+        # 판정한다), 그때 upsert 가 건너뛰어지면 "닫힐 수를 물어본 배포"가 공유본을 안 붓는다. 드라이런은
+        # 정보용이라 그 결과(409 메시지의 `ACTIVE N건 중 목록에 있는 것 P건`도)는 요약에 실리고 적재는 간다.
+        shell = " ".join(base + ["--dry-run", "--close-missing"]) + "; " + shell
     shell += "; status=$?; cat /tmp/close-missing-undo-*.sql 2>/dev/null; exit $status"
     container = {
         "name": "load", "image": image, "imagePullPolicy": "IfNotPresent",
