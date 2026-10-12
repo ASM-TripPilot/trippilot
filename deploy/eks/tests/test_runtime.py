@@ -1,5 +1,7 @@
 """Deployment boundary tests: no cloud account or cluster required."""
+import contextlib
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -92,7 +94,22 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(len(gaps({"KAKAO_CLIENT_ID": "rest-key"})), 1)
         self.assertIn("KAKAO_APP_ID", gaps({"KAKAO_CLIENT_ID": "rest-key", "KAKAO_APP_ID": ""})[0])
         self.assertEqual(gaps({"KAKAO_CLIENT_ID": "rest-key", "KAKAO_APP_ID": "1519823"}), [])
-        self.assertEqual(gaps({}), [])  # 카카오를 안 쓰는 환경은 말하지 않는다
+        self.assertEqual(gaps({}), [])  # 카카오 키가 아예 없는 환경은 말하지 않는다
+
+    @patch("runtime_secrets.validate_rsa_key")
+    @patch("runtime_secrets.rsa_key", return_value="fake-test-key")
+    def test_sync_prints_open_gaps_as_workflow_warnings(self, keygen, keycheck):
+        """`open_gaps` 가 맞아도 `sync` 가 안 부르면 아무도 못 본다 — 배포 실행 요약에 뜨는 형식까지 본다."""
+        backend_arn = outputs()["app_secret_arns"]["backend"]
+        def execute(argv, payload=None):
+            if "get-secret-value" in argv:
+                kakao = {"KAKAO_CLIENT_ID": "rest-key"} if argv[argv.index("--secret-id") + 1] == backend_arn else {}
+                return json.dumps({"SecretString": json.dumps(kakao)})
+            return "{}"
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)
+        self.assertRegex(printed.getvalue(), r"(?m)^::warning title=[^:,]+::KAKAO_APP_ID is not set")
 
     def test_google_client_secret_must_stay_empty(self):
         """공개(iOS) 클라이언트에 시크릿을 보내면 Google 이 invalid_client 로 거절한다(2026-09-23 실측).

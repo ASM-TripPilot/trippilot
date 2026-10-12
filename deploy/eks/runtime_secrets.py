@@ -201,8 +201,10 @@ def runtime_manifests(groups, outputs, namespace, embedding_enabled):
 def open_gaps(groups):
     """배포는 되지만 **알고 있어야 하는 열린 구멍**. 막지 않는 이유는 각 줄에 있다 — 대신 배포마다 크게 말한다."""
     backend = groups["backend"]
-    # 필수로 걸지 않는다: 값을 시크릿에 넣는 일과 이 코드가 배포되는 일 사이에 어느 순서로든 배포가 죽는
-    # 구간이 생긴다(옛 코드는 모르는 키를 거절한다). 그래서 통과시키되, 빠져 있으면 조용히 넘어가지 않는다.
+    # 필수로 걸지 않는다: 앱 ID 를 아직 모르는 환경의 배포를 통째로 막게 된다(dev 와 출시가 같은 카카오 앱인지
+    # 확인되지 않았다). 그래서 통과시키되, 빠져 있으면 조용히 넘어가지 않는다.
+    # KAKAO_CLIENT_ID 를 "이 환경이 카카오를 쓴다"의 표지로 쓴다 — SDK 토큰 경로 자체는 그 값을 쓰지 않으므로
+    # 근사다. 그 키 없이 SDK 로만 카카오 로그인을 받는 환경은 여기서 안 잡히고 백엔드 기동 경고만 남는다.
     if backend.get("KAKAO_CLIENT_ID") and not backend.get("KAKAO_APP_ID"):
         yield ("KAKAO_APP_ID is not set in the backend secret: Kakao SDK-token logins are NOT checked against "
                "our app, so tokens issued to other Kakao apps can sign up (TRIP-1317)")

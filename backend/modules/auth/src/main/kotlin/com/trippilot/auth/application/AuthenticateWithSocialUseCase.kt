@@ -65,8 +65,8 @@ class AuthenticateWithSocialUseCase(
      * 것이 없다. 구글 네이티브 SDK 를 들이면 `tokeninfo` 의 `aud` 를 우리 clientId 와 대조하는 검증을
      * 붙여서 연다 — 이 줄만 지우지 말 것.
      *
-     * **카카오는 닫았다**(TRIP-1317) — `KakaoOAuthClient` 가 `access_token_info` 의 `app_id` 를 우리 앱 ID 와
-     * 대조한다(앱 ID 미주입 환경에서는 건너뛰고 기동 경고를 남긴다).
+     * **카카오는 코드로 닫았다 — 앱 ID 가 주입된 환경에서만 켜진다**(TRIP-1317). `KakaoOAuthClient` 가
+     * `access_token_info` 의 `app_id` 를 우리 앱 ID 와 대조한다. 미주입 환경에서는 건너뛰고 기동 경고를 남긴다.
      *
      * **네이버에 남는 것**: 남의 앱 토큰은 새 식별자로 **가입 분기**에 들어온다. 그 이메일이 미가입이면
      * 남의 이메일을 쥔 계정이 생겨 본인의 첫 로그인이 409(`SOCIAL_EMAIL_CONFLICT`)로 막히고, 가입돼 있으면

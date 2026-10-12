@@ -3490,7 +3490,7 @@ note = """
 [[nodes]]
 id = "SOCIAL-TOKEN-APP"
 ticket = "TRIP-1317"
-title = "네이버 토큰 로그인이 남의 앱 토큰으로 가입을 받는다 — 카카오는 닫았다, 네이버와 PKCE 없는 code 경로가 남았다"
+title = "네이버 토큰 로그인이 남의 앱 토큰으로 가입을 받는다 — 카카오는 코드로 닫았다(값 주입 대기), 네이버와 PKCE 없는 code 경로가 남았다"
 status = "todo"
 owner = "인증"
 migration = false
