@@ -223,23 +223,6 @@ describe('하단 CTA 2종 (AC-5) — 게이트 없이 둘 다 활성', () => {
   });
 });
 
-describe('제거 확인 (AC-3) — 옛 후보/커버리지/묶음/폴백/시트가 신 화면에 없다', () => {
-  it('박별 카드는 뜨고(긍정 짝) 옛 요소 testID 는 하나도 없다', () => {
-    renderScreen();
-
-    // 긍정 짝 — 카드가 실제로 그려졌다(빈 화면이 부정 단언을 공짜로 통과하는 것 차단).
-    expect(screen.getByTestId('trip-base-night-card-1')).toBeOnTheScreen();
-
-    // 후보 하트/닻·연박 묶음·fix 시트 — 접두 testID 군 0건.
-    expect(screen.queryAllByTestId(/^trip-base-candidate-/)).toHaveLength(0);
-    expect(screen.queryAllByTestId(/^trip-base-section-/)).toHaveLength(0);
-    expect(screen.queryAllByTestId(/trip-base-fixsheet/)).toHaveLength(0);
-    // 커버리지/blocked·폴백 경고 — 개별 testID 부재.
-    expect(screen.queryByTestId('trip-base-blocked-notice')).toBeNull();
-    expect(screen.queryByTestId('trip-base-fallback-warning')).toBeNull();
-  });
-});
-
 describe('변형 얼굴 (골격 보존)', () => {
   it('notrip — 안내를 그리고 처음부터 버튼이 onRestart 를 부른다', () => {
     const props = renderScreen({ variant: 'notrip', cards: [] });

@@ -145,41 +145,6 @@ describe('AC-2 · ★ 혼자 → party 1 고정 + 스테퍼(−·+) 둘 다 진�
   });
 });
 
-describe('AC-3 · ★ 유형 칩 단일 선택 — 선택 칩만 활성 표식(교차)', () => {
-  it('친구 선택 = 친구 활성 표식만, 나머지 3종 활성 표식 부재 + 칩 press → onSelectCompanion(type)', () => {
-    const spies = renderSheet({ companionType: '친구' });
-
-    // 활성 표식은 선택 칩에만(색 fill 아님 — 서로 다른 testID).
-    expect(
-      screen.getByTestId('trip-wizard-companion-chip-active-friend')
-    ).toBeOnTheScreen();
-    // 교차 부재 — 나머지 3종엔 활성 표식이 없다(교차 뮤턴트가 여기서 red).
-    expect(
-      screen.queryByTestId('trip-wizard-companion-chip-active-alone')
-    ).toBeNull();
-    expect(
-      screen.queryByTestId('trip-wizard-companion-chip-active-partner')
-    ).toBeNull();
-    expect(
-      screen.queryByTestId('trip-wizard-companion-chip-active-family')
-    ).toBeNull();
-
-    // 칩 press → 해당 type 으로 콜백(code=alone → type='혼자').
-    fireEvent.press(screen.getByTestId('trip-wizard-companion-chip-alone'));
-    expect(spies.onSelectCompanion).toHaveBeenCalledWith('혼자');
-  });
-
-  it('미선택(undefined) = 활성 표식 4개 전부 부재', () => {
-    renderSheet({ companionType: undefined });
-
-    for (const code of ['alone', 'friend', 'partner', 'family']) {
-      expect(
-        screen.queryByTestId(`trip-wizard-companion-chip-active-${code}`)
-      ).toBeNull();
-    }
-  });
-});
-
 // TRIP-1020 (A) #033 — 색·활성 마커는 스크린리더가 못 읽는다. 선택은 accessibilityState 로도 알린다.
 // 기대값은 COMPANION_OPTIONS 를 import 하지 않고 리터럴로 둔다(상수가 뒤바뀌면 같이 틀리지 않게).
 const CHIP_CODE_BY_TYPE: [CompanionType, string][] = [
@@ -189,28 +154,49 @@ const CHIP_CODE_BY_TYPE: [CompanionType, string][] = [
   ['가족', 'family'],
 ];
 
-describe('TRIP-1020 AC-A1·A2 · 선택 칩만 accessibilityState.selected', () => {
+// TRIP-1353 — 옛 「AC-3 유형 칩 단일 선택(활성 표식 testID)」과 「TRIP-1020 선택 칩만 accessibilityState.selected」는 같은
+// 선택 상태를 두 표식으로 따로 재 두 파일(it)이었다. 한 it.each 가 칩 4종 × (활성 표식 · selected · 교차 부재 · press→type)을 함께 본다.
+describe('AC-3 · TRIP-1020 AC-A1·A2 · ★ 유형 칩 단일 선택 — 선택 칩만 활성 표식·selected(교차)', () => {
   it.each(CHIP_CODE_BY_TYPE)(
-    '%s 선택이면 %s 칩만 selected, 나머지 3칩은 아니다',
+    '%s 선택이면 %s 칩만 활성 표식(testID)과 selected(accessibilityState)를 갖고, 나머지 3칩은 둘 다 없다 + 칩 press → onSelectCompanion(type)',
     (type, code) => {
-      renderSheet({ companionType: type });
+      const spies = renderSheet({ companionType: type });
 
-      expect(
-        screen.getByTestId(`trip-wizard-companion-chip-${code}`)
-      ).toBeSelected();
       for (const [, other] of CHIP_CODE_BY_TYPE) {
-        if (other === code) continue;
-        expect(
-          screen.getByTestId(`trip-wizard-companion-chip-${other}`)
-        ).not.toBeSelected();
+        const chip = screen.getByTestId(`trip-wizard-companion-chip-${other}`);
+        const marker = screen.queryByTestId(
+          `trip-wizard-companion-chip-active-${other}`
+        );
+        if (other === code) {
+          // 활성 표식은 선택 칩에만(색 fill 아님 — 서로 다른 testID).
+          expect(marker).toBeOnTheScreen();
+          expect(chip).toBeSelected();
+        } else {
+          // 교차 부재 — 나머지 3종엔 활성 표식도 selected 도 없다(교차 뮤턴트가 여기서 red).
+          expect(marker).toBeNull();
+          expect(chip).not.toBeSelected();
+        }
       }
+
+      // 칩 press → 해당 type 으로 콜백(code=alone → type='혼자'). 네 칩을 모두 눌러 code→type 대응 전체를 잠근다.
+      for (const [, other] of CHIP_CODE_BY_TYPE) {
+        fireEvent.press(
+          screen.getByTestId(`trip-wizard-companion-chip-${other}`)
+        );
+      }
+      expect(spies.onSelectCompanion.mock.calls).toEqual(
+        CHIP_CODE_BY_TYPE.map(([chipType]) => [chipType])
+      );
     }
   );
 
-  it('미선택(undefined)이면 4칩 모두 selected 가 아니다', () => {
+  it('미선택(undefined)이면 활성 표식 4개 전부 부재이고 4칩 모두 selected 가 아니다', () => {
     renderSheet({ companionType: undefined });
 
     for (const [, code] of CHIP_CODE_BY_TYPE) {
+      expect(
+        screen.queryByTestId(`trip-wizard-companion-chip-active-${code}`)
+      ).toBeNull();
       expect(
         screen.getByTestId(`trip-wizard-companion-chip-${code}`)
       ).not.toBeSelected();

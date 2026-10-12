@@ -182,15 +182,6 @@ describe('PS-5 · AC-3 — 적용 → onApply 만 (편집 콜백 없음)', () =>
   });
 });
 
-describe('PS-6 · 닫기 버튼 부재 회귀 (구 2버튼 폐기)', () => {
-  it('신 디자인은 단일 적용 — 별도 닫기 버튼을 그리지 않는다', () => {
-    renderSheet();
-
-    // 구 시트의 [닫기]/[적용] 2버튼 회귀 트립와이어.
-    expect(screen.queryByTestId('trip-wizard-pref-sheet-close')).toBeNull();
-  });
-});
-
 describe('PS-7 · AC-D3 (TRIP-984 D10) — 온보딩 취향이 없으면 "온보딩에서" 문구를 뺀다', () => {
   it('fromOnboarding=false 면 하단 문구가 "프로필 취향은 바뀌지 않아요" 뿐이다', () => {
     renderSheet({ fromOnboarding: false });

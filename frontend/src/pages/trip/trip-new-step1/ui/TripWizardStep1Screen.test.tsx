@@ -18,6 +18,67 @@ import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
  */
 
 /**
+ * 이 파일 전체가 공유하는 픽스처·팩토리(TRIP-1353). 옛 5파일 합본이라 describe 마다 `props()` 팩토리 5벌과 같은 요약 값 상수를
+ * 따로 선언했다 — 한 곳으로 모았다. 요약 셀렉터 실제 출력(TRIP-732 2톤 객체형 — en dash U+2013·미들닷 U+00B7)이다. 화면은 이
+ * 객체를 만들지 않고 받아 2톤으로 그릴 뿐이라(페이지가 셀렉터로 도출), 테스트가 직접 주입한다.
+ */
+const DESTINATION_VALUE = { main: '부산', sub: '2박 · 경주 1박' };
+const PERIOD_VALUE = { main: '6월 10일(수) – 13일(토)', sub: '3박 4일' };
+const COMPANION_VALUE = { main: '친구 2명' }; // sub 없음
+const PREFERENCE_VALUE = { main: '미식 · 전시 · 야경', onboarding: true };
+const BUDGET_VALUE = { main: '120만원', sub: '1인 총액 · 중간' };
+
+function seed(
+  sourcePoiId: string,
+  name: string,
+  imageUrl: string | null = null,
+  region: string | null = null
+): MustVisitSeedItem {
+  return { sourcePoiId, name, imageUrl, region };
+}
+
+/** 초기(빈) 상태 — 요약 5행이 전부 null(플레이스홀더), 스트립 0곳, 게이트 닫힘. (TRIP-732: 요약을 안 보는 describe 는 null 이
+ * 구·신 shape 모두 안전하다 — 2톤 객체를 넣으면 구 화면이 render throw, 02a §4-★E.) */
+function props(
+  over: Partial<TripWizardStep1ScreenProps> = {}
+): TripWizardStep1ScreenProps {
+  return {
+    summaryDestinations: null,
+    summaryPeriod: null,
+    summaryCompanion: null,
+    summaryPreferences: null,
+    summaryBudget: null,
+    onPressSummaryDestination: jest.fn(),
+    onPressSummaryPeriod: jest.fn(),
+    onPressSummaryCompanion: jest.fn(),
+    onPressSummaryPreference: jest.fn(),
+    onPressSummaryBudget: jest.fn(),
+    mustVisits: [],
+    onPressMore: jest.fn(),
+    onPressSeeAll: jest.fn(),
+    canProceed: false,
+    onNext: jest.fn(),
+    onBack: jest.fn(),
+    ...over,
+  };
+}
+
+/** 5행 값이 다 채워진 상태 — 5행 값 present, 게이트 열림(loading 이 실값을 가리는지 보려면 값을 줘야 한다). */
+function filledProps(
+  over: Partial<TripWizardStep1ScreenProps> = {}
+): TripWizardStep1ScreenProps {
+  return props({
+    summaryDestinations: DESTINATION_VALUE,
+    summaryPeriod: PERIOD_VALUE,
+    summaryCompanion: COMPANION_VALUE,
+    summaryPreferences: PREFERENCE_VALUE,
+    summaryBudget: BUDGET_VALUE,
+    canProceed: true,
+    ...over,
+  });
+}
+
+/**
  * TRIP-665 g01 여행 만들기 default 재작성 — **props만 받는 프레젠테이션 화면**(Figma `3742:2068`).
  *
  * 무엇을 보장하나: 신 default 골격이 정본대로 선다 — 앱바(back + 진행바 4칸 + "1 / 4") · 타이틀/부제 ·
@@ -43,63 +104,6 @@ import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
  * 3동작 뼈대: 준비=props 조립 → 실행=render(+press) → 단언=보이는 것 / 불린 콜백.
  */
 describe('default 프레젠테이션', () => {
-  /** Figma `3742:2068` 요약 셀렉터 실제 출력(TRIP-732 2톤 객체형 — en dash U+2013·미들닷 U+00B7).
-   * 화면은 이 객체를 만들지 않고 받아 2톤으로 그릴 뿐이라(페이지가 셀렉터로 도출), 테스트가 직접 주입한다. */
-  const DESTINATION_VALUE = { main: '부산', sub: '2박 · 경주 1박' };
-  const PERIOD_VALUE = { main: '6월 10일(수) – 13일(토)', sub: '3박 4일' };
-  const COMPANION_VALUE = { main: '친구 2명' };
-  const PREFERENCE_VALUE = { main: '미식 · 전시 · 야경', onboarding: true };
-  const BUDGET_VALUE = { main: '120만원', sub: '1인 총액 · 중간' };
-
-  function seed(
-    sourcePoiId: string,
-    name: string,
-    imageUrl: string | null = null,
-    region: string | null = null
-  ): MustVisitSeedItem {
-    return { sourcePoiId, name, imageUrl, region };
-  }
-
-  /** 초기(빈) 상태 — 요약 5행이 전부 null(플레이스홀더), 스트립 0곳, 게이트 닫힘. */
-  function props(
-    over: Partial<TripWizardStep1ScreenProps> = {}
-  ): TripWizardStep1ScreenProps {
-    return {
-      summaryDestinations: null,
-      summaryPeriod: null,
-      summaryCompanion: null,
-      summaryPreferences: null,
-      summaryBudget: null,
-      onPressSummaryDestination: jest.fn(),
-      onPressSummaryPeriod: jest.fn(),
-      onPressSummaryCompanion: jest.fn(),
-      onPressSummaryPreference: jest.fn(),
-      onPressSummaryBudget: jest.fn(),
-      mustVisits: [],
-      onPressMore: jest.fn(),
-      onPressSeeAll: jest.fn(),
-      canProceed: false,
-      onNext: jest.fn(),
-      onBack: jest.fn(),
-      ...over,
-    };
-  }
-
-  /** 온보딩 반영이 다 채워진 상태 — 5행 값 present, 게이트 열림. */
-  function filledProps(
-    over: Partial<TripWizardStep1ScreenProps> = {}
-  ): TripWizardStep1ScreenProps {
-    return props({
-      summaryDestinations: DESTINATION_VALUE,
-      summaryPeriod: PERIOD_VALUE,
-      summaryCompanion: COMPANION_VALUE,
-      summaryPreferences: PREFERENCE_VALUE,
-      summaryBudget: BUDGET_VALUE,
-      canProceed: true,
-      ...over,
-    });
-  }
-
   function root() {
     return screen.getByTestId('trip-wizard-step1-root');
   }
@@ -384,34 +388,8 @@ describe('default 프레젠테이션', () => {
     });
   });
 
-  describe('AC-5 · 옛 인라인 컨트롤이 default 에서 전량 사라졌다', () => {
-    it('프리셋·스테퍼·칩·예산 입력·날짜 카드·등록숙소 행·취향 카드·여행지 시트가 없다', () => {
-      // filledProps 로 화면을 꽉 채워 렌더한다 — 그래도 인라인 컨트롤은 없어야 한다.
-      render(<TripWizardStep1Screen {...filledProps()} />);
-
-      [
-        'trip-wizard-period-preset-3n4d',
-        'trip-wizard-party-stepper',
-        'trip-wizard-companion-friend',
-        'trip-wizard-budget-input',
-        'trip-wizard-budget-block',
-        'trip-wizard-date-field',
-        'trip-wizard-stayimport-block',
-        'trip-wizard-pref-card',
-        'trip-wizard-destination-add',
-      ].forEach((testID) => {
-        expect(screen.queryByTestId(testID)).toBeNull();
-      });
-
-      // 짝(긍정, ★7) — **이게 없으면 아무것도 안 그리는 화면이 위 부재 단언을 공짜로 통과한다.**
-      // 화면은 실제로 그려졌고, 인라인이 요약 행으로 대체됐다.
-      expect(
-        screen.getByTestId('trip-wizard-summary-destination')
-      ).toBeOnTheScreen();
-      expect(root()).toHaveTextContent(/어디로 떠날까요\?/);
-      expect(screen.getByTestId('trip-wizard-step1-next')).toBeOnTheScreen();
-    });
-  });
+  // AC-5 "옛 인라인 컨트롤이 default 에서 전량 사라졌다"는 부재 단언이라 지웠다(TRIP-1353, README 판정 3 — 대응물이 없는 컨트롤의
+  // testID 가 없다는 확인이고, 요약 행이 그려지는 긍정 짝은 위 AC-2·AC-3 이 이미 잡는다).
 });
 
 /**
@@ -442,13 +420,6 @@ describe('default 프레젠테이션', () => {
 describe('두 상태 얼굴 (empty · loading)', () => {
   type StatesProps = TripWizardStep1ScreenProps & { isLoading?: boolean };
 
-  /** Figma 요약 셀렉터 실제 출력(TRIP-732 2톤 객체형 — en dash U+2013 · 미들닷 U+00B7). 화면은 이
-   * 객체를 만들지 않고 받아 2톤으로 그린다. */
-  const DESTINATION_VALUE = { main: '부산', sub: '2박 · 경주 1박' };
-  const PERIOD_VALUE = { main: '6월 10일(수) – 13일(토)', sub: '3박 4일' };
-  const COMPANION_VALUE = { main: '친구 2명' };
-  const PREFERENCE_VALUE = { main: '미식 · 전시 · 야경', onboarding: true };
-  const BUDGET_VALUE = { main: '120만원', sub: '1인 총액 · 중간' };
   /** empty 얼굴 예산은 **tier-only**(금액 없이 프리필 tier "중간"만, Figma empty `3652:2068`). */
   const BUDGET_EMPTY = { main: '중간', sub: '1인 총액 · 온보딩' };
 
@@ -462,40 +433,9 @@ describe('두 상태 얼굴 (empty · loading)', () => {
     [64, 78], // skeleton-5 예산
   ];
 
-  function seed(
-    sourcePoiId: string,
-    name: string,
-    imageUrl: string | null = null,
-    region: string | null = null
-  ): MustVisitSeedItem {
-    return { sourcePoiId, name, imageUrl, region };
-  }
-
-  function baseProps(over: Partial<StatesProps> = {}): StatesProps {
-    return {
-      summaryDestinations: null,
-      summaryPeriod: null,
-      summaryCompanion: null,
-      summaryPreferences: null,
-      summaryBudget: null,
-      onPressSummaryDestination: jest.fn(),
-      onPressSummaryPeriod: jest.fn(),
-      onPressSummaryCompanion: jest.fn(),
-      onPressSummaryPreference: jest.fn(),
-      onPressSummaryBudget: jest.fn(),
-      mustVisits: [],
-      onPressMore: jest.fn(),
-      onPressSeeAll: jest.fn(),
-      canProceed: false,
-      onNext: jest.fn(),
-      onBack: jest.fn(),
-      ...over,
-    };
-  }
-
   /** empty 얼굴 — fresh 진입: 여행지·기간 null, 동행·취향·예산은 prefill 로 채워짐(01b D1 픽스처). */
   function emptyProps(over: Partial<StatesProps> = {}): StatesProps {
-    return baseProps({
+    return props({
       summaryDestinations: null,
       summaryPeriod: null,
       summaryCompanion: COMPANION_VALUE,
@@ -503,19 +443,6 @@ describe('두 상태 얼굴 (empty · loading)', () => {
       summaryBudget: BUDGET_EMPTY,
       mustVisits: [],
       canProceed: false,
-      ...over,
-    });
-  }
-
-  /** 5행 값이 다 채워진 상태(loading 이 실값을 가리는지 보려면 값을 줘야 한다). */
-  function filledProps(over: Partial<StatesProps> = {}): StatesProps {
-    return baseProps({
-      summaryDestinations: DESTINATION_VALUE,
-      summaryPeriod: PERIOD_VALUE,
-      summaryCompanion: COMPANION_VALUE,
-      summaryPreferences: PREFERENCE_VALUE,
-      summaryBudget: BUDGET_VALUE,
-      canProceed: true,
       ...over,
     });
   }
@@ -736,46 +663,11 @@ describe('두 상태 얼굴 (empty · loading)', () => {
  * 3동작 뼈대: 준비=props(mustVisits) → 실행=render(+press) → 단언=보이는 것 / 불린 콜백.
  */
 describe('꼭 갈 곳 가로 스트립', () => {
-  function seed(
-    sourcePoiId: string,
-    name: string,
-    imageUrl: string | null = null,
-    region: string | null = null
-  ): MustVisitSeedItem {
-    return { sourcePoiId, name, imageUrl, region };
-  }
-
   const THREE = [
     seed('poi-1', '감천마을'),
     seed('poi-2', '광안리'),
     seed('poi-3', '전포'),
   ];
-
-  function props(
-    over: Partial<TripWizardStep1ScreenProps> = {}
-  ): TripWizardStep1ScreenProps {
-    return {
-      // TRIP-732: 요약 5행은 이 파일 관심사(스트립)와 무관 → 전부 null 로 둔다(2톤 객체를 넣으면
-      // 구 화면이 render throw, 신 shape 로 tsc 오류 — null 은 구·신 모두 안전, 02a §4-★E).
-      summaryDestinations: null,
-      summaryPeriod: null,
-      summaryCompanion: null,
-      summaryPreferences: null,
-      summaryBudget: null,
-      onPressSummaryDestination: jest.fn(),
-      onPressSummaryPeriod: jest.fn(),
-      onPressSummaryCompanion: jest.fn(),
-      onPressSummaryPreference: jest.fn(),
-      onPressSummaryBudget: jest.fn(),
-      mustVisits: [],
-      onPressMore: jest.fn(),
-      onPressSeeAll: jest.fn(),
-      canProceed: false,
-      onNext: jest.fn(),
-      onBack: jest.fn(),
-      ...over,
-    };
-  }
 
   function block() {
     return screen.getByTestId('trip-wizard-mustvisit-block');
@@ -840,25 +732,6 @@ describe('꼭 갈 곳 가로 스트립', () => {
       fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-see-all'));
       expect(onPressSeeAll).toHaveBeenCalledTimes(1);
       expect(onPressMore).toHaveBeenCalledTimes(1);
-    });
-
-    it('신 계약 — 카드 개별 제거(×)·+N 오버플로우가 없다 (01b D3)', () => {
-      render(<TripWizardStep1Screen {...props({ mustVisits: THREE })} />);
-
-      // 제거는 S12 전체 보기 몫이라 카드에 × 가 없고, 3장 상한 접기(+N)도 신 스트립엔 없다.
-      THREE.forEach((item) => {
-        expect(
-          screen.queryByTestId(
-            `trip-wizard-mustvisit-remove-${item.sourcePoiId}`
-          )
-        ).toBeNull();
-      });
-      expect(screen.queryByTestId('trip-wizard-mustvisit-overflow')).toBeNull();
-
-      // 짝(긍정) — 카드 자체는 정상적으로 그려졌다.
-      expect(
-        screen.getByTestId('trip-wizard-mustvisit-poi-1')
-      ).toBeOnTheScreen();
     });
   });
 
@@ -977,32 +850,6 @@ describe('꼭 갈 곳 가로 스트립', () => {
  * (`text-primary` vs `text-primary-text` 거짓 통과 방지, 02a ★B).
  */
 describe('실패 표면', () => {
-  function props(
-    over: Partial<TripWizardStep1ScreenProps> = {}
-  ): TripWizardStep1ScreenProps {
-    return {
-      // TRIP-732: 실패 배너/다이얼로그가 관심사라 요약은 전부 null(2톤 객체를 넣으면 구 화면이 render
-      // throw, 신 shape 로 tsc 오류 — null 은 구·신 모두 안전, 02a §4-★E). 배너 로직은 무회귀.
-      summaryDestinations: null,
-      summaryPeriod: null,
-      summaryCompanion: null,
-      summaryPreferences: null,
-      summaryBudget: null,
-      onPressSummaryDestination: jest.fn(),
-      onPressSummaryPeriod: jest.fn(),
-      onPressSummaryCompanion: jest.fn(),
-      onPressSummaryPreference: jest.fn(),
-      onPressSummaryBudget: jest.fn(),
-      mustVisits: [],
-      onPressMore: jest.fn(),
-      onPressSeeAll: jest.fn(),
-      canProceed: false,
-      onNext: jest.fn(),
-      onBack: jest.fn(),
-      ...over,
-    };
-  }
-
   describe('S-1 · 제출 실패 배너 — 단일 줄 고정 카피 (§F ⓐ)', () => {
     it('고정 카피 한 줄만 보여주고(옛 제목·서버 사유 미표시), 다시 시도가 콜백을 부른다', () => {
       const onRetrySubmit = jest.fn();
@@ -1209,38 +1056,7 @@ describe('실패 표면', () => {
  * 3동작 뼈대: 준비=props(객체) → 실행=render(+press) → 단언=보이는 것 / 토큰 / 불린 콜백.
  */
 describe('요약 5행 2톤', () => {
-  /** 요약 셀렉터 신 출력(객체형). 화면은 이 객체를 받아 2톤으로 그린다. */
-  const DEST = { main: '부산', sub: '2박 · 경주 1박' };
-  const PERIOD = { main: '6월 10일(수) – 13일(토)', sub: '3박 4일' };
-  const COMPANION = { main: '친구 2명' }; // sub 없음
-  const PREF_ON = { main: '미식 · 전시 · 야경', onboarding: true };
-  const PREF_OFF = { main: '미식 · 전시 · 야경', onboarding: false };
-  const BUDGET = { main: '120만원', sub: '1인 총액 · 중간' };
-
-  function props(
-    over: Partial<TripWizardStep1ScreenProps> = {}
-  ): TripWizardStep1ScreenProps {
-    return {
-      summaryDestinations: DEST,
-      summaryPeriod: PERIOD,
-      summaryCompanion: COMPANION,
-      summaryPreferences: PREF_ON,
-      summaryBudget: BUDGET,
-      onPressSummaryDestination: jest.fn(),
-      onPressSummaryPeriod: jest.fn(),
-      onPressSummaryCompanion: jest.fn(),
-      onPressSummaryPreference: jest.fn(),
-      onPressSummaryBudget: jest.fn(),
-      mustVisits: [],
-      onPressMore: jest.fn(),
-      onPressSeeAll: jest.fn(),
-      canProceed: true,
-      onNext: jest.fn(),
-      onBack: jest.fn(),
-      ...over,
-    };
-  }
-
+  const PREF_OFF = { ...PREFERENCE_VALUE, onboarding: false };
   function root() {
     return screen.getByTestId('trip-wizard-step1-root');
   }
@@ -1256,7 +1072,7 @@ describe('요약 5행 2톤', () => {
 
   describe('AC-4 · sub caption (값 뒤 같은 줄 회색)', () => {
     it('sub 있는 행은 회색 caption 을, 없는 행(동행)은 caption 자체를 안 만든다', () => {
-      render(<TripWizardStep1Screen {...props()} />);
+      render(<TripWizardStep1Screen {...filledProps()} />);
 
       // 여행지 — main + sub(별도 회색 caption).
       const dest = screen.getByTestId('trip-wizard-summary-destination');
@@ -1285,7 +1101,9 @@ describe('요약 5행 2톤', () => {
   describe('AC-5 · 취향 온보딩 배지 (스파클 + 분홍 "온보딩")', () => {
     it('onboarding=true 면 스파클 + 분홍 "온보딩" 텍스트를 붙인다 (옛 " + 온보딩" 문자열 소멸)', () => {
       render(
-        <TripWizardStep1Screen {...props({ summaryPreferences: PREF_ON })} />
+        <TripWizardStep1Screen
+          {...filledProps({ summaryPreferences: PREFERENCE_VALUE })}
+        />
       );
 
       const pref = screen.getByTestId('trip-wizard-summary-preference');
@@ -1305,7 +1123,9 @@ describe('요약 5행 2톤', () => {
 
     it('onboarding=false 면 스파클·"온보딩" 텍스트가 둘 다 없다 (짝)', () => {
       render(
-        <TripWizardStep1Screen {...props({ summaryPreferences: PREF_OFF })} />
+        <TripWizardStep1Screen
+          {...filledProps({ summaryPreferences: PREF_OFF })}
+        />
       );
 
       const pref = screen.getByTestId('trip-wizard-summary-preference');
@@ -1321,7 +1141,7 @@ describe('요약 5행 2톤', () => {
     it('여행지·기간 둘 다 null 이면 empty 부제 (default 부제 아님)', () => {
       render(
         <TripWizardStep1Screen
-          {...props({ summaryDestinations: null, summaryPeriod: null })}
+          {...filledProps({ summaryDestinations: null, summaryPeriod: null })}
         />
       );
 
@@ -1330,7 +1150,7 @@ describe('요약 5행 2톤', () => {
     });
 
     it('여행지 값이 있으면 default 부제 (empty 부제 아님)', () => {
-      render(<TripWizardStep1Screen {...props()} />);
+      render(<TripWizardStep1Screen {...filledProps()} />);
 
       expect(root()).toHaveTextContent(/온보딩에서 고른 취향/);
       expect(root()).not.toHaveTextContent(/여행지와 기간만 정하면/);
@@ -1339,7 +1159,7 @@ describe('요약 5행 2톤', () => {
     it('isLoading 이면 로딩 부제가 empty 부제를 이긴다 (우선순위 loading > empty)', () => {
       render(
         <TripWizardStep1Screen
-          {...props({
+          {...filledProps({
             summaryDestinations: null,
             summaryPeriod: null,
             isLoading: true,
@@ -1372,7 +1192,7 @@ describe('요약 5행 2톤', () => {
     ] as const)(
       '%s 부제는 한글을 어절 단위로 줄바꿈한다 (lineBreakStrategyIOS="hangul-word")',
       (_face, over) => {
-        render(<TripWizardStep1Screen {...props(over)} />);
+        render(<TripWizardStep1Screen {...filledProps(over)} />);
 
         expect(subtitle().props.lineBreakStrategyIOS).toBe('hangul-word');
       }
@@ -1380,7 +1200,7 @@ describe('요약 5행 2톤', () => {
 
     // 원문(children)을 === 로 본다 — getByText·toHaveTextContent 는 U+00A0 을 일반 공백으로 접는다(02a §5).
     it('빈 얼굴 부제는 마지막 두 어절 "수 있어요" 를 줄바꿈 방지 공백으로 잇는다', () => {
-      render(<TripWizardStep1Screen {...props(EMPTY_FACE)} />);
+      render(<TripWizardStep1Screen {...filledProps(EMPTY_FACE)} />);
 
       expect(subtitle().props.children).toBe(
         `여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수${NBSP}있어요`
@@ -1388,7 +1208,7 @@ describe('요약 5행 2톤', () => {
     });
 
     it('온보딩 상속 부제는 마지막 두 어절 "수 있어요" 를 줄바꿈 방지 공백으로 잇는다', () => {
-      render(<TripWizardStep1Screen {...props()} />);
+      render(<TripWizardStep1Screen {...filledProps()} />);
 
       expect(subtitle().props.children).toBe(
         `온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수${NBSP}있어요`
@@ -1397,7 +1217,9 @@ describe('요약 5행 2톤', () => {
 
     it('기본 부제는 지금 문구 그대로다 — 일반 공백만, 묶음 공백 없음 (무회귀)', () => {
       render(
-        <TripWizardStep1Screen {...props({ summaryPreferences: PREF_OFF })} />
+        <TripWizardStep1Screen
+          {...filledProps({ summaryPreferences: PREF_OFF })}
+        />
       );
 
       expect(subtitle().props.children).toBe('행을 누르면 바꿀 수 있어요');
@@ -1408,7 +1230,7 @@ describe('요약 5행 2톤', () => {
     it('활성(canProceed) — 분홍 채움 + on-primary 글자, 눌리면 콜백', () => {
       const onNext = jest.fn();
       render(
-        <TripWizardStep1Screen {...props({ canProceed: true, onNext })} />
+        <TripWizardStep1Screen {...filledProps({ canProceed: true, onNext })} />
       );
 
       const next = screen.getByTestId('trip-wizard-step1-next');
@@ -1426,7 +1248,9 @@ describe('요약 5행 2톤', () => {
     it('비활성(!canProceed) — 연회색 채움 + muted-soft 글자, opacity-40 없음, 실제로 안 눌린다 (3단)', () => {
       const onNext = jest.fn();
       render(
-        <TripWizardStep1Screen {...props({ canProceed: false, onNext })} />
+        <TripWizardStep1Screen
+          {...filledProps({ canProceed: false, onNext })}
+        />
       );
 
       const next = screen.getByTestId('trip-wizard-step1-next');
@@ -1447,7 +1271,7 @@ describe('요약 5행 2톤', () => {
     it('loading 도 비활성 스타일을 공유한다 (canProceed 참이어도)', () => {
       render(
         <TripWizardStep1Screen
-          {...props({ canProceed: true, isLoading: true })}
+          {...filledProps({ canProceed: true, isLoading: true })}
         />
       );
 
@@ -1471,30 +1295,6 @@ describe('요약 5행 2톤', () => {
  * 3동작 뼈대: 준비=props(숫자·콜백 스파이) → 실행=render(+press) → 단언=보이는 문구 / 불린 콜백.
  */
 describe('지역 밖 꼭 갈 곳 안내', () => {
-  function props(
-    over: Partial<TripWizardStep1ScreenProps> = {}
-  ): TripWizardStep1ScreenProps {
-    return {
-      summaryDestinations: null,
-      summaryPeriod: null,
-      summaryCompanion: null,
-      summaryPreferences: null,
-      summaryBudget: null,
-      onPressSummaryDestination: jest.fn(),
-      onPressSummaryPeriod: jest.fn(),
-      onPressSummaryCompanion: jest.fn(),
-      onPressSummaryPreference: jest.fn(),
-      onPressSummaryBudget: jest.fn(),
-      mustVisits: [],
-      onPressMore: jest.fn(),
-      onPressSeeAll: jest.fn(),
-      canProceed: false,
-      onNext: jest.fn(),
-      onBack: jest.fn(),
-      ...over,
-    };
-  }
-
   function classesOf(testID: string): string {
     return String(screen.getByTestId(testID).props.className ?? '');
   }

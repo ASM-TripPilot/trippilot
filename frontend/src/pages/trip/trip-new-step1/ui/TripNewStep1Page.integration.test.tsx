@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
-  render,
   screen,
   waitFor,
   within,
@@ -17,6 +15,16 @@ import {
 } from '@/shared/api/tokenManager';
 import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
+import {
+  BASE,
+  budgetPreference,
+  makePreference,
+  makeTrip,
+  NO_BUDGET,
+  TRIP,
+  TRIP_ID,
+  wizardStep1Harness,
+} from '@/test-support/wizardStep1Harness';
 import { server } from '@/mocks/server';
 import type {
   PreferenceView,
@@ -29,8 +37,6 @@ import { seedMustVisits, useTripWizardStore } from '@/features/create-trip';
 import { regionPickerHref } from '@/features/explore';
 import type { MustVisitSeedItem } from '@/features/create-trip';
 import { useGetTrips } from '@/shared/api/index.hooks';
-
-import { TripNewStep1Page } from './TripNewStep1Page';
 
 /**
  * TRIP-1149 — g01 여행 만들기 1/4 페이지 통합 테스트(실 HTTP·MSW). 옛 12파일을 하나로 합쳤다.
@@ -136,115 +142,31 @@ function expectNoExitWizard(): void {
 describe('제출·예외 배선 (I-1~I-7)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-10';
-
-  /** 프리필이 요약 예산·취향 행 + 제출 바디로 흐른다(칩이 뜨면 프리필 도착의 눈금). rawAmount 800000. */
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식', '전시'] },
-    activities: { value: ['야경'] },
-  };
-
-  /** openapi `Trip.required` 10필드를 그대로 채운다. */
-  const TRIP: Trip = {
-    tripId: '11111111-1111-1111-1111-111111111111',
-    title: '부산 여행',
-    startDate: '2026-06-10',
-    endDate: '2026-06-13',
-    party: 1,
-    companionType: null,
-    budgetTotal: 800000,
-    preferenceSnapshot: {},
-    destinations: [{ seq: 1, region: '부산', nights: 3 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-02T00:00:00Z',
-    updatedAt: '2026-08-02T00:00:00Z',
-    baseCount: 0,
-    itineraryDayCount: 0,
-  };
-
-  let observedHits: string[] = [];
-  let postedBodies: Record<string, unknown>[] = [];
+  const {
+    tracker,
+    preferenceHandler,
+    createTripHandler,
+    renderPage,
+    next,
+    seedValidDraft,
+    waitForPrefill,
+  } = wizardStep1Harness();
 
   function createHits(): number {
-    return observedHits.filter((hit) => hit === 'POST /api/v1/trips').length;
+    return tracker.hits.filter((hit) => hit === 'POST /api/v1/trips').length;
   }
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   beforeEach(() => {
-    observedHits = [];
-    postedBodies = [];
     mockPush.mockClear();
     mockBack.mockClear();
     useTripWizardStore.getState().reset();
 
-    server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE)),
-      http.post(`${BASE}/trips`, async ({ request }) => {
-        postedBodies.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json(TRIP, { status: 201 });
-      })
-    );
+    server.use(preferenceHandler(), createTripHandler());
   });
 
   afterEach(() => {
     server.resetHandlers();
   });
-
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
-  function renderPage() {
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: createWrapper(),
-    });
-  }
-
-  function next() {
-    return screen.getByTestId('trip-wizard-step1-next');
-  }
-
-  /** 정상 제출 가능한 스토어 선상태(부산 3박 + 3박 4일 = 박수 3 ≤ 기간 3). */
-  function seedValidDraft(): void {
-    const store = useTripWizardStore.getState();
-    store.addDestination('부산', 3);
-    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
-  }
-
-  /** 프리필이 예산 요약 행(80만원)까지 흘러온 것을 기다린다 — budgetTotal·스냅숏이 실린 요청을 보려면 필요. */
-  async function waitForPrefill(): Promise<void> {
-    // I-1 이 합친 파일의 첫 테스트라 냉시작(모듈 첫 로드)을 흡수한다 — CI 에서 기본 1000ms 를 넘겨
-    // I-1 만 red(PR #857 CI 2회). TRIP-1144 `SavedPlacesPage` 첫 목록 대기와 같은 5000ms.
-    await waitFor(
-      () =>
-        expect(
-          screen.getByTestId('trip-wizard-summary-budget')
-        ).toHaveTextContent(/80만원/),
-      { timeout: 5000 }
-    );
-  }
 
   describe('I-1 · 정상 제출이 계약대로 나가고 step2 로 이동한다', () => {
     it('[다음]을 누르면 POST /trips 가 정확히 1회 나가고 201 뒤 이동한다', async () => {
@@ -258,8 +180,8 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
       fireEvent.press(next());
 
       await waitFor(() => expect(createHits()).toBe(1));
-      expect(postedBodies).toHaveLength(1);
-      expect(postedBodies[0]).toMatchObject({
+      expect(tracker.postedBodies).toHaveLength(1);
+      expect(tracker.postedBodies[0]).toMatchObject({
         startDate: '2026-06-10',
         endDate: '2026-06-13',
         party: 1,
@@ -267,8 +189,10 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
         budgetTotal: 800000,
       });
       // 취향 스냅숏(정책 A) — override 없이도 프리필 스냅숏이 실린다.
-      expect(Object.keys(postedBodies[0])).toContain('preferenceSnapshot');
-      expect(postedBodies[0].preferenceSnapshot).toMatchObject({
+      expect(Object.keys(tracker.postedBodies[0])).toContain(
+        'preferenceSnapshot'
+      );
+      expect(tracker.postedBodies[0].preferenceSnapshot).toMatchObject({
         styles: ['미식', '전시'],
         activities: ['야경'],
       });
@@ -295,7 +219,7 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
 
       // 단언 — 서버엔 0박 그대로 나가고, 이동은 방식 선택 하나(step2 push 0건).
       await waitFor(() => expect(createHits()).toBe(1));
-      expect(postedBodies[0]).toMatchObject({
+      expect(tracker.postedBodies[0]).toMatchObject({
         startDate: '2026-06-10',
         endDate: '2026-06-10',
         destinations: [{ seq: 1, region: '부산', nights: 0 }],
@@ -323,7 +247,7 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
 
       // 단언 — CompanionType enum 계약값(혼자·친구·연인·가족)이 그대로 나간다.
       await waitFor(() => expect(createHits()).toBe(1));
-      expect(postedBodies[0]).toMatchObject({
+      expect(tracker.postedBodies[0]).toMatchObject({
         companionType: '혼자',
         party: 1,
       });
@@ -422,7 +346,9 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
       let createStarted = false;
       server.use(
         http.post(`${BASE}/trips`, async ({ request }) => {
-          postedBodies.push((await request.json()) as Record<string, unknown>);
+          tracker.postedBodies.push(
+            (await request.json()) as Record<string, unknown>
+          );
           await new Promise<void>((resolve) => {
             release = resolve;
             createStarted = true;
@@ -446,7 +372,7 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
       });
 
       expect(createHits()).toBe(1);
-      expect(postedBodies).toHaveLength(1);
+      expect(tracker.postedBodies).toHaveLength(1);
 
       await act(async () => {
         release();
@@ -478,27 +404,7 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
 describe('꼭 갈 곳 자동 시드 폐지 (로그인)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-10';
-
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-
-  const TRIP: Trip = {
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: '2026-06-10',
-    endDate: '2026-06-13',
-    party: 1,
-    companionType: null,
-    budgetTotal: 800000,
-    preferenceSnapshot: {},
-    destinations: [{ seq: 1, region: '부산', nights: 3 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-02T00:00:00Z',
-    updatedAt: '2026-08-02T00:00:00Z',
-    baseCount: 0,
-    itineraryDayCount: 0,
-  };
+  const { tracker, renderPage, next, seedValidDraft } = wizardStep1Harness();
 
   function makePlace(poiId: string, nameKo: string): Place {
     return {
@@ -530,31 +436,19 @@ describe('꼭 갈 곳 자동 시드 폐지 (로그인)', () => {
     savedPlace('poi-3', '전포'),
   ];
 
-  let observedHits: string[] = [];
-
   /** ⚠️ 완전 일치로 센다 — must-visits 경로가 생성 경로를 접두로 포함하므로 부분 일치로 세면 섞인다. */
   function createHits(): number {
-    return observedHits.filter((hit) => hit === 'POST /api/v1/trips').length;
+    return tracker.hits.filter((hit) => hit === 'POST /api/v1/trips').length;
   }
   function mustVisitHits(): number {
-    return observedHits.filter((hit) => hit.endsWith('/must-visits')).length;
+    return tracker.hits.filter((hit) => hit.endsWith('/must-visits')).length;
   }
   function savedPlaceGetHits(): number {
-    return observedHits.filter((hit) => hit === 'GET /api/v1/saved-places')
+    return tracker.hits.filter((hit) => hit === 'GET /api/v1/saved-places')
       .length;
   }
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   beforeEach(() => {
-    observedHits = [];
     mockPush.mockClear();
     useTripWizardStore.getState().reset();
     // 담은목록 조회는 enabled:isAuthed — 토큰이 있어야 나간다.
@@ -576,34 +470,6 @@ describe('꼭 갈 곳 자동 시드 폐지 (로그인)', () => {
     server.resetHandlers();
     clearAccessToken();
   });
-
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: Wrapper,
-    });
-  }
-
-  function next() {
-    return screen.getByTestId('trip-wizard-step1-next');
-  }
-
-  /** 정상 제출 가능한 스토어 선상태(부산 3박 + 3박 4일 = 박수 3 ≤ 기간 3). */
-  function seedValidDraft(): void {
-    const store = useTripWizardStore.getState();
-    store.addDestination('부산', 3);
-    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
-  }
 
   describe('I-1 · 조회는 나가지만 "꼭 갈 곳"은 자동으로 안 채워진다', () => {
     it('담은 곳 3건이 있어도 스트립 카드는 0장이고, GET /saved-places 는 나간다', async () => {
@@ -666,15 +532,7 @@ describe('꼭 갈 곳 자동 시드 폐지 (로그인)', () => {
 describe('여행지 편집 시트 (W-1~W-5)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-10';
-
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식'] },
-    activities: { value: ['야경'] },
-  };
+  const { preferenceHandler, renderPage, openSheet } = wizardStep1Harness();
 
   beforeEach(() => {
     mockPush.mockClear();
@@ -684,41 +542,12 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
     useTripWizardStore.getState().addDestination('부산', 2);
     useTripWizardStore.getState().addDestination('경주', 1);
 
-    server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE))
-    );
+    server.use(preferenceHandler({ styles: { value: ['미식'] } }));
   });
 
   afterEach(() => {
     server.resetHandlers();
   });
-
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
-  function renderPage() {
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: createWrapper(),
-    });
-  }
-
-  /** 여행지 요약 행을 눌러 시트를 연다(공통). */
-  async function openSheet(): Promise<void> {
-    fireEvent.press(screen.getByTestId('trip-wizard-summary-destination'));
-    await screen.findByTestId('trip-wizard-destination-sheet');
-  }
 
   describe('W-1 · 여행지 행 탭이 시트를 연다', () => {
     it('탭 전엔 시트가 없고, 탭하면 마운트된다', async () => {
@@ -737,7 +566,7 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
   describe('W-2 · 스테퍼가 setNights 로 즉시 반영된다 (01b D3)', () => {
     it('+ 를 누른 그 순간(적용 전) 스토어 박수가 바뀐다 = 로컬 드래프트가 아니다', async () => {
       renderPage();
-      await openSheet();
+      await openSheet('destination');
 
       fireEvent.press(
         screen.getByTestId('trip-wizard-destination-nights-inc-1')
@@ -758,9 +587,13 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
   describe('W-3 · 도시 추가가 explore/region 라우트를 연다 (AC-3)', () => {
     // TRIP-1210 — 도시 하나 제한을 걷었다(옛 계약: 도시가 있으면 이동 대신 "준비 중" 안내). 이 describe 는
     // 부산·경주 두 도시가 담긴 채 시작한다 — 그래도 도시 추가는 지역 피커로 간다.
-    it('도시가 두 곳 담겨 있어도 도시 추가는 지역 피커로 이동하고 준비 중 안내는 없다', async () => {
+    // TRIP-1353 — 옛 3 it(두 곳 담김 · 리터럴 철자 · `regionPickerHref` 같은 출처)은 모두 같은 `push(regionPickerHref('trip'))` 를
+    // 봤다. 한 it 로 합친다: 뮤테이션(리터럴을 다른 철자로·도시가 있으면 이동 대신 안내·도시가 0곳이면 이동 안 함)이 각각 red.
+    // TRIP-985 5-b 참고-1 — 리터럴은 "지금 철자"를, `regionPickerHref` 는 "피커가 위저드로 알아듣는 철자와 같은 출처"를 잠근다.
+    // 헬퍼 유니온에서 'trip' 이름이 바뀌면 인자가 먼저 `pnpm tsc` 에서 걸린다.
+    it('도시 추가는 도시가 두 곳이든 0곳이든 지역 피커(regionPickerHref("trip"))로 이동하고 준비 중 안내는 없다', async () => {
       renderPage();
-      await openSheet();
+      await openSheet('destination');
       expect(useTripWizardStore.getState().destinations).toHaveLength(2);
 
       fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
@@ -768,31 +601,16 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
       await waitFor(() =>
         expect(mockPush.mock.calls).toEqual([[regionPickerHref('trip')]])
       );
+      expect(mockPush).toHaveBeenCalledWith('/explore/region?purpose=trip');
       expect(
         screen.queryByTestId('trip-wizard-destination-one-city-notice')
       ).toBeNull();
-    });
 
-    it('press 가 router.push("/explore/region?purpose=trip") 를 부른다', async () => {
-      useTripWizardStore.setState({ destinations: [] });
-      renderPage();
-      await openSheet();
-
-      fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-      await waitFor(() =>
-        expect(mockPush).toHaveBeenCalledWith('/explore/region?purpose=trip')
-      );
-    });
-
-    // TRIP-985 5-b 참고-1 — 위 리터럴은 "지금 철자"를, 이 단언은 "피커가 위저드로 알아듣는 철자와
-    // 같은 출처"를 잠근다. 헬퍼 유니온에서 'trip' 이름이 바뀌면 여기 인자가 먼저 `pnpm tsc` 에서
-    // 걸리고, 인자를 새 이름으로 고치는 순간 페이지 리터럴과 어긋나 jest 가 red 가 된다.
-    it('도시 추가가 여는 주소는 regionPickerHref("trip") 와 같다 (TRIP-985)', async () => {
-      useTripWizardStore.setState({ destinations: [] });
-      renderPage();
-      await openSheet();
-
+      // 짝 — 도시가 0곳이 돼도 같은 곳으로 간다.
+      mockPush.mockClear();
+      act(() => {
+        useTripWizardStore.setState({ destinations: [] });
+      });
       fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
 
       await waitFor(() =>
@@ -804,7 +622,7 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
   describe('W-4 · 삭제× 가 removeDestination(seq) 로 배선된다 (AC-4/5)', () => {
     it('경주(seq 2) 삭제 → 부산만 남고 seq 가 다시 1..N 으로 매겨진다', async () => {
       renderPage();
-      await openSheet();
+      await openSheet('destination');
 
       fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-2'));
 
@@ -819,7 +637,7 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
   describe('W-5 · 적용은 닫기뿐 — 스토어를 더 안 건드린다 (01b D3·AC-4)', () => {
     it('적용 press 가 시트를 닫고, destinations 는 적용 직전 스냅숏 그대로다', async () => {
       renderPage();
-      await openSheet();
+      await openSheet('destination');
 
       // 스냅숏 — 즉시반영이라 이 시점 값이 곧 최종값이다(적용은 커밋이 아니다).
       const snapshot = useTripWizardStore.getState().destinations;
@@ -863,58 +681,23 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
 describe('기간 편집 시트 (W-1~W-5)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
   // 결정론적 today 주입 — 6/1 이라 6월 전 칸이 활성이다(과거 없음).
-  const BASE_DATE = '2026-06-01';
-
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식'] },
-    activities: { value: ['야경'] },
-  };
+  const { preferenceHandler, renderPage, openSheet } = wizardStep1Harness({
+    baseDate: '2026-06-01',
+  });
 
   beforeEach(() => {
     mockPush.mockClear();
     mockBack.mockClear();
     useTripWizardStore.getState().reset();
 
-    server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE))
-    );
+    server.use(preferenceHandler({ styles: { value: ['미식'] } }));
   });
 
   afterEach(() => {
     server.resetHandlers();
     useTripWizardStore.getState().reset();
   });
-
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
-  function renderPage() {
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: createWrapper(),
-    });
-  }
-
-  /** 기간 요약 행을 눌러 시트를 연다(공통). */
-  async function openSheet(): Promise<void> {
-    fireEvent.press(screen.getByTestId('trip-wizard-summary-period'));
-    await screen.findByTestId('trip-wizard-period-sheet');
-  }
 
   describe('W-1 · 기간 행 탭이 시트를 연다', () => {
     it('탭 전엔 시트가 없고, 탭하면 마운트된다', async () => {
@@ -946,7 +729,7 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
       // 준비 — 박수 합 3.
       seedDestinations([1, 2]);
       renderPage();
-      await openSheet();
+      await openSheet('period');
 
       // 실행 ① — 6/10 한 번. 끝(6/13)을 누르지 않아도 범위가 완성돼 그려진다.
       fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-10'));
@@ -984,7 +767,7 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
     it('탭 전엔 적용이 닫혀 있고, 6/10 한 번 탭하면 열리며, 적용하면 6/10–6/13 이 커밋된다', async () => {
       seedDestinations([1, 2]);
       renderPage();
-      await openSheet();
+      await openSheet('period');
       const apply = () => screen.getByTestId('trip-wizard-period-apply');
 
       // 앵커 — 아직 아무것도 안 골랐다(02a ★7).
@@ -1015,7 +798,7 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
     it('6/10 탭 → 시작 표식만(끝·사이 없음) · 적용 열림 → 커밋 6/10–6/10', async () => {
       expect(useTripWizardStore.getState().destinations).toHaveLength(0);
       renderPage();
-      await openSheet();
+      await openSheet('period');
 
       fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-10'));
 
@@ -1068,7 +851,7 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
       );
       seedDestinations([1, 1]);
       renderPage();
-      await openSheet();
+      await openSheet('period');
       fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-10'));
       fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
       fireEvent.press(screen.getByTestId('trip-wizard-summary-destination'));
@@ -1121,56 +904,21 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
 describe('동행 편집 시트 (C-1~C-5)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-01';
-
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식'] },
-    activities: { value: ['야경'] },
-  };
+  const { preferenceHandler, renderPage, openSheet } = wizardStep1Harness({
+    baseDate: '2026-06-01',
+  });
 
   beforeEach(() => {
     mockPush.mockClear();
     mockBack.mockClear();
     useTripWizardStore.getState().reset();
 
-    server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE))
-    );
+    server.use(preferenceHandler({ styles: { value: ['미식'] } }));
   });
 
   afterEach(() => {
     server.resetHandlers();
   });
-
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
-  function renderPage() {
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: createWrapper(),
-    });
-  }
-
-  /** 동행 요약 행을 눌러 시트를 연다(공통). */
-  async function openSheet(): Promise<void> {
-    fireEvent.press(screen.getByTestId('trip-wizard-summary-companion'));
-    await screen.findByTestId('trip-wizard-companion-sheet');
-  }
 
   describe('C-1 · 동행 행 탭이 시트를 연다', () => {
     it('탭 전엔 시트가 없고, 탭하면 마운트된다', async () => {
@@ -1188,7 +936,7 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
   describe('C-2 · ★ 드래프트 계약 — 적용 전 store 불변, 적용에서만 커밋', () => {
     it('스테퍼·칩 전이는 store 를 안 건드리고, 적용에서만 setParty·selectCompanion 이 반영된다', async () => {
       renderPage();
-      await openSheet();
+      await openSheet('companion');
 
       // 친구 칩 먼저 → 활성 표식 전이. store companionType 은 아직 기본값 '혼자'.
       // (TRIP-1045: 드래프트가 '혼자'로 열려 스테퍼가 잠겨 있으므로 칩을 먼저 바꿔야 + 가 먹는다.)
@@ -1219,7 +967,7 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
   describe('C-3 · ★ 혼자 → 배선이 draftParty 1 고정 + 커밋', () => {
     it('인원을 올린 뒤 혼자를 고르면 값이 1명으로 고정·스테퍼 비활성, 적용하면 party 1 커밋', async () => {
       renderPage();
-      await openSheet();
+      await openSheet('companion');
 
       // 기본 '혼자'로 열려 스테퍼가 잠겨 있다(TRIP-1045) — 친구로 풀고 + 두 번 → 드래프트 "3명".
       fireEvent.press(screen.getByTestId('trip-wizard-companion-chip-friend'));
@@ -1252,7 +1000,7 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
       useTripWizardStore.getState().setParty(3);
       useTripWizardStore.getState().selectCompanion('가족');
 
-      await openSheet();
+      await openSheet('companion');
 
       // 프리필이 store 를 안 읽으면 "1명"·활성표식 없음으로 red.
       expect(screen.getByText('3명')).toBeOnTheScreen();
@@ -1268,7 +1016,7 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
       renderPage();
 
       // 실행
-      await openSheet();
+      await openSheet('companion');
 
       // 단언 — 기본값이 시트 드래프트(D3 프리필)까지 흐른다.
       expect(
@@ -1323,96 +1071,36 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
 describe('취향 편집 시트 (PI·PA)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-10';
+  const {
+    tracker,
+    preferenceHandler,
+    createTripHandler,
+    renderPage,
+    next,
+    seedValidDraft,
+    openSheet,
+    waitForPrefill,
+  } = wizardStep1Harness();
 
   /** 프리필 — styles 2종은 전부 7칩 안의 값(미식·자연), activities 는 야경(TRIP-1092 전엔 시트 밖 값).
    *  budget rawAmount 800000 → 요약 예산 "80만원"이 프리필 도착의 눈금(override 무관, 항상 뜬다). */
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식', '자연'] },
-    activities: { value: ['야경'] },
-  };
-
-  /** openapi `Trip.required` 10필드. */
-  const TRIP: Trip = {
-    tripId: '11111111-1111-1111-1111-111111111111',
-    title: '부산 여행',
-    startDate: '2026-06-10',
-    endDate: '2026-06-13',
-    party: 1,
-    companionType: null,
-    budgetTotal: 800000,
-    preferenceSnapshot: {},
-    destinations: [{ seq: 1, region: '부산', nights: 3 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-02T00:00:00Z',
-    updatedAt: '2026-08-02T00:00:00Z',
-    baseCount: 0,
-    itineraryDayCount: 0,
-  };
-
-  let observedHits: string[] = [];
-  let postedBodies: Record<string, unknown>[] = [];
+  const PREF_NATURE = makePreference({ styles: { value: ['미식', '자연'] } });
 
   function createHits(): number {
-    return observedHits.filter((hit) => hit === 'POST /api/v1/trips').length;
+    return tracker.hits.filter((hit) => hit === 'POST /api/v1/trips').length;
   }
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   beforeEach(() => {
-    observedHits = [];
-    postedBodies = [];
     mockPush.mockClear();
     mockBack.mockClear();
     useTripWizardStore.getState().reset();
 
-    server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE)),
-      http.post(`${BASE}/trips`, async ({ request }) => {
-        postedBodies.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json(TRIP, { status: 201 });
-      })
-    );
+    server.use(preferenceHandler(PREF_NATURE), createTripHandler());
   });
 
   afterEach(() => {
     server.resetHandlers();
   });
-
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
-  function renderPage() {
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: createWrapper(),
-    });
-  }
-
-  function next() {
-    return screen.getByTestId('trip-wizard-step1-next');
-  }
 
   function summaryPreferenceRow() {
     return screen.getByTestId('trip-wizard-summary-preference');
@@ -1420,28 +1108,6 @@ describe('취향 편집 시트 (PI·PA)', () => {
 
   function chip(slug: string) {
     return screen.getByTestId(`trip-wizard-pref-chip-${slug}`);
-  }
-
-  /** 정상 제출 가능한 스토어 선상태(부산 3박 + 3박 4일 = 박수 3 ≤ 기간 3). */
-  function seedValidDraft(): void {
-    const store = useTripWizardStore.getState();
-    store.addDestination('부산', 3);
-    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
-  }
-
-  /** 프리필이 도착해 요약 예산 행(80만원)이 뜬 것을 기다린다 — override 유무와 무관한 프리필 눈금. */
-  async function waitForPrefill(): Promise<void> {
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).toHaveTextContent(/80만원/)
-    );
-  }
-
-  /** 취향 요약 행을 눌러 시트를 연다(공통). */
-  async function openSheet(): Promise<void> {
-    fireEvent.press(summaryPreferenceRow());
-    await screen.findByTestId('trip-wizard-pref-sheet');
   }
 
   describe('PI-1 · AC-5 취향 행 탭이 시트를 연다', () => {
@@ -1462,7 +1128,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
     it('시트를 열면 프리필 styles(미식·자연) 칩만 selected 로 시작한다', async () => {
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       expect(chip('gourmet')).toBeSelected();
       expect(chip('nature')).toBeSelected();
@@ -1483,7 +1149,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
     it('미식 해제 → 미식만 꺼지고 자연은 남고, 문화예술 추가 → 켜진다', async () => {
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       fireEvent.press(chip('gourmet'));
       await waitFor(() => expect(chip('gourmet')).not.toBeSelected());
@@ -1498,7 +1164,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
     it('오버라이드 드래프트를 만들고 적용하면 store 에 실리고 시트가 닫힌다', async () => {
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       // 프리필(미식·자연)에서 둘 다 끄고 휴양을 켜 → 드래프트 ['휴양'].
       fireEvent.press(chip('gourmet'));
@@ -1526,7 +1192,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
     it('적용해 닫은 뒤 다시 열면 프리필이 아니라 오버라이드 칩이 selected 로 시작한다', async () => {
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       // 프리필(미식·자연)에서 둘 다 끄고 휴양을 켜 → 적용 → 닫힘.
       fireEvent.press(chip('gourmet'));
@@ -1538,7 +1204,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
         expect(screen.queryByTestId('trip-wizard-pref-sheet')).toBeNull()
       );
 
-      await openSheet();
+      await openSheet('preference');
 
       // `styleOverride ?? prefillStyles` 에서 오버라이드 우선이 빠지면 미식·자연이 다시 켜진다.
       expect(chip('rest')).toBeSelected();
@@ -1560,7 +1226,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       fireEvent.press(next());
 
       await waitFor(() => expect(createHits()).toBe(1));
-      const snapshot = postedBodies[0].preferenceSnapshot as {
+      const snapshot = tracker.postedBodies[0].preferenceSnapshot as {
         styles: unknown;
         activities: unknown;
       };
@@ -1571,7 +1237,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
 
       // 계정 취향은 GET 으로만 읽는다 — PUT 이 나가면 BR-U1-38 위반.
       expect(
-        observedHits.some((hit) => hit === 'PUT /api/v1/me/preferences')
+        tracker.hits.some((hit) => hit === 'PUT /api/v1/me/preferences')
       ).toBe(false);
 
       await waitFor(() =>
@@ -1585,7 +1251,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       seedValidDraft();
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       // 프리필 미식·자연 둘 다 해제 → toggleMulti 가 null → 배선이 [] 로 매핑해야 한다.
       fireEvent.press(chip('gourmet'));
@@ -1603,7 +1269,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       fireEvent.press(next());
 
       await waitFor(() => expect(createHits()).toBe(1));
-      const snapshot = postedBodies[0].preferenceSnapshot as {
+      const snapshot = tracker.postedBodies[0].preferenceSnapshot as {
         styles: unknown;
       };
       // 빈 오버라이드 — effectiveStyles = [] ?? prefill 이 [] 를 폴백하면(프리필 ['미식','자연']) red.
@@ -1627,7 +1293,9 @@ describe('취향 편집 시트 (PI·PA)', () => {
       fireEvent.press(next());
 
       await waitFor(() => expect(createHits()).toBe(1));
-      expect(postedBodies[0].preferenceSnapshot).toEqual({ styles: ['휴양'] });
+      expect(tracker.postedBodies[0].preferenceSnapshot).toEqual({
+        styles: ['휴양'],
+      });
     });
   });
 
@@ -1704,7 +1372,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       server.use(
         http.get(`${BASE}/me/preferences`, () =>
           HttpResponse.json({
-            ...PREFERENCE,
+            ...PREF_NATURE,
             styles: { value: [] },
             activities: { value: [] },
           })
@@ -1712,7 +1380,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       );
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       const sheet = screen.getByTestId('trip-wizard-pref-sheet');
       expect(
@@ -1724,12 +1392,12 @@ describe('취향 편집 시트 (PI·PA)', () => {
     it('D3b · TRIP-1092 Q2 — styles 가 0개여도 activities 가 있으면 "온보딩에서" 문구가 붙는다', async () => {
       server.use(
         http.get(`${BASE}/me/preferences`, () =>
-          HttpResponse.json({ ...PREFERENCE, styles: { value: [] } })
+          HttpResponse.json({ ...PREF_NATURE, styles: { value: [] } })
         )
       );
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       const sheet = screen.getByTestId('trip-wizard-pref-sheet');
       expect(
@@ -1742,7 +1410,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
     it('D4 · 온보딩 styles 가 있으면 기존 문구 그대로다 (무회귀)', async () => {
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       expect(
         screen.getByText(
@@ -1763,14 +1431,14 @@ describe('취향 편집 시트 (PI·PA)', () => {
 
   /** A13 재현 — 온보딩 styles=[미식, 자연] · activities=[역사문화](역사문화는 스타일 7칩에 없다). */
   const PREF_A13: PreferenceView = {
-    ...PREFERENCE,
+    ...PREF_NATURE,
     styles: { value: ['미식', '자연'] },
     activities: { value: ['역사문화'] },
   };
 
   /** 결정 2 재현 — 자연이 두 축 모두에 있다. */
   const PREF_DUP: PreferenceView = {
-    ...PREFERENCE,
+    ...PREF_NATURE,
     styles: { value: ['미식', '자연'] },
     activities: { value: ['자연', '야경'] },
   };
@@ -1812,12 +1480,12 @@ describe('취향 편집 시트 (PI·PA)', () => {
   }
 
   function putHits(): number {
-    return observedHits.filter((hit) => hit === 'PUT /api/v1/me/preferences')
+    return tracker.hits.filter((hit) => hit === 'PUT /api/v1/me/preferences')
       .length;
   }
 
   function postedSnapshot(): { styles: unknown; activities: unknown } {
-    return postedBodies[0].preferenceSnapshot as {
+    return tracker.postedBodies[0].preferenceSnapshot as {
       styles: unknown;
       activities: unknown;
     };
@@ -1830,7 +1498,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       await waitForPrefill();
       expect(preferenceValue('미식 · 자연 · 역사문화')).toBeOnTheScreen();
 
-      await openSheet();
+      await openSheet('preference');
 
       expect(activityChip('history')).toBeSelected();
       // 스타일 자연이 켜져 있어도 활동 자연은 꺼져 있다(라벨 공유 아님).
@@ -1855,7 +1523,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       seedValidDraft();
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       fireEvent.press(activityChip('history'));
       await waitFor(() => expect(activityChip('history')).not.toBeSelected());
@@ -1880,13 +1548,13 @@ describe('취향 편집 시트 (PI·PA)', () => {
       servePreference(PREF_A13);
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
       fireEvent.press(activityChip('history'));
       await waitFor(() => expect(activityChip('history')).not.toBeSelected());
       applySheet();
       await waitForSheetClosed();
 
-      await openSheet();
+      await openSheet('preference');
 
       expect(activityChip('history')).not.toBeSelected();
     });
@@ -1902,7 +1570,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
         screen.getByTestId('trip-wizard-preference-sparkle')
       ).toBeOnTheScreen();
 
-      await openSheet();
+      await openSheet('preference');
       fireEvent.press(activityChip('nightview'));
       await waitFor(() => expect(activityChip('nightview')).toBeSelected());
       applySheet();
@@ -1914,7 +1582,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       ).toBeOnTheScreen();
 
       // 배지를 뗀 행에 "여행에서 못 바꾼 온보딩 값"이 남지 않는다 — 다시 열어 전부 켜진 칩으로 확인.
-      await openSheet();
+      await openSheet('preference');
       expectEveryRowLabelIsSelectedChip('미식 · 자연 · 역사문화 · 야경');
     });
   });
@@ -1939,7 +1607,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       seedValidDraft();
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
       expect(activityChip('nature')).toBeSelected();
       expect(chip('nature')).toBeSelected();
 
@@ -1967,7 +1635,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       servePreference(PREF_DUP);
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
       expect(activityChip('shopping')).not.toBeSelected();
       expect(chip('shopping')).not.toBeSelected();
 
@@ -2004,7 +1672,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       seedValidDraft();
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('preference');
 
       fireEvent.press(chip('gourmet'));
       await waitFor(() => expect(chip('gourmet')).not.toBeSelected());
@@ -2027,7 +1695,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
   describe('PA-9 · TRIP-1092 AC-8 — 온보딩 취향 0개면 행은 플레이스홀더 (무회귀)', () => {
     it('styles·activities 모두 비면 행 값은 "취향 선택" 이고 온보딩 배지가 없다 (선제 green 앵커)', async () => {
       servePreference({
-        ...PREFERENCE,
+        ...PREF_NATURE,
         styles: { value: [] },
         activities: { value: [] },
       });
@@ -2074,117 +1742,36 @@ describe('취향 편집 시트 (PI·PA)', () => {
 describe('예산 편집 시트 (B·S6·D)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-10';
-
-  /** 프리필이 요약 예산 행 + 시트 초기 드래프트 + 제출 바디로 흐른다. rawAmount 800000·tier 중간. */
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식'] },
-    activities: { value: ['야경'] },
-  };
-
-  /** openapi `Trip.required` 10필드. */
-  const TRIP: Trip = {
-    tripId: '11111111-1111-1111-1111-111111111111',
-    title: '부산 여행',
-    startDate: '2026-06-10',
-    endDate: '2026-06-13',
-    party: 1,
-    companionType: null,
-    budgetTotal: 800000,
-    preferenceSnapshot: {},
-    destinations: [{ seq: 1, region: '부산', nights: 3 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-02T00:00:00Z',
-    updatedAt: '2026-08-02T00:00:00Z',
-    baseCount: 0,
-    itineraryDayCount: 0,
-  };
-
-  let observedHits: string[] = [];
-  let postedBodies: Record<string, unknown>[] = [];
+  const {
+    tracker,
+    preferenceHandler,
+    createTripHandler,
+    serveBudget,
+    renderPage,
+    next,
+    seedValidDraft,
+    openSheet,
+    waitForPrefill,
+  } = wizardStep1Harness();
 
   function createHits(): number {
-    return observedHits.filter((hit) => hit === 'POST /api/v1/trips').length;
+    return tracker.hits.filter((hit) => hit === 'POST /api/v1/trips').length;
   }
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   beforeEach(() => {
-    observedHits = [];
-    postedBodies = [];
     mockPush.mockClear();
     mockBack.mockClear();
     useTripWizardStore.getState().reset();
 
     server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE)),
-      http.post(`${BASE}/trips`, async ({ request }) => {
-        postedBodies.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json(TRIP, { status: 201 });
-      })
+      preferenceHandler({ styles: { value: ['미식'] } }),
+      createTripHandler()
     );
   });
 
   afterEach(() => {
     server.resetHandlers();
   });
-
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
-  function renderPage() {
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: createWrapper(),
-    });
-  }
-
-  function next() {
-    return screen.getByTestId('trip-wizard-step1-next');
-  }
-
-  /** 예산 요약 행을 눌러 시트를 연다(공통). */
-  async function openSheet(): Promise<void> {
-    fireEvent.press(screen.getByTestId('trip-wizard-summary-budget'));
-    await screen.findByTestId('trip-wizard-budget-sheet');
-  }
-
-  /** 정상 제출 가능한 스토어 선상태(부산 3박 + 3박 4일). */
-  function seedValidDraft(): void {
-    const store = useTripWizardStore.getState();
-    store.addDestination('부산', 3);
-    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
-  }
-
-  /** 프리필이 예산 요약 행(80만원)까지 흘러온 것을 기다린다 — 시트 초기 드래프트·제출 바디를 보려면 필요. */
-  async function waitForPrefill(): Promise<void> {
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).toHaveTextContent(/80만원/)
-    );
-  }
 
   describe('B-1 · 예산 행 탭이 시트를 연다', () => {
     it('탭 전엔 시트가 없고, 탭하면 마운트된다', async () => {
@@ -2204,7 +1791,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
     it('시트는 effective 문자열로 열리고, 금액 전이는 store 를 안 건드리며 적용에서만 커밋된다', async () => {
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('budget');
 
       // D3 프리필 — 열자마자 입력에 effective(프리필 포맷) 값이 시드된다.
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
@@ -2240,7 +1827,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       seedValidDraft();
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('budget');
 
       fireEvent.changeText(
         screen.getByTestId('trip-wizard-budget-input'),
@@ -2255,7 +1842,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
 
       await waitFor(() => expect(createHits()).toBe(1));
       // "항상 프리필" 뮤턴트면 800000 으로 red.
-      expect(postedBodies[0]).toMatchObject({ budgetTotal: 500000 });
+      expect(tracker.postedBodies[0]).toMatchObject({ budgetTotal: 500000 });
     });
   });
 
@@ -2266,7 +1853,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       seedValidDraft();
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('budget');
 
       // 실행 — 럭셔리 칩(하루 400,000 × 4일) → 적용 → 제출.
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
@@ -2282,7 +1869,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
 
       // 단언 — tier 는 어디에도 안 간다(CreateTripRequest 에 budgetTier 없음). 실으면 red.
       await waitFor(() => expect(createHits()).toBe(1));
-      const body = postedBodies[0];
+      const body = tracker.postedBodies[0];
       expect(Object.keys(body)).not.toContain('budgetTier');
       expect(Object.keys(body)).not.toContain('tier');
       // 칩이 채운 금액이 곧 사용자 금액이다 — 프리필(800000)이 남으면 red.
@@ -2296,7 +1883,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       seedValidDraft();
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('budget');
 
       // Act: 금액을 500000 으로 바꿔 적용.
       fireEvent.changeText(
@@ -2380,7 +1967,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
 
       await waitFor(() => expect(createHits()).toBe(1));
       // 현행(결함): budgetTotal:0 을 보낸다 → 키가 있어 red. `>0` 가드 후엔 키 자체가 없다.
-      expect(Object.keys(postedBodies[0])).not.toContain('budgetTotal');
+      expect(Object.keys(tracker.postedBodies[0])).not.toContain('budgetTotal');
     });
 
     it('AC-S6D-2 · 양수 프리필(1,200,000)은 budgetTotal:1200000 을 보내고 요약에 표시한다 (무회귀)', async () => {
@@ -2410,7 +1997,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
 
       await waitFor(() => expect(createHits()).toBe(1));
       // 양수는 여전히 전송 — `>0` 가드가 정상 경로를 막지 않는다(★8 회귀 방어).
-      expect(postedBodies[0]).toMatchObject({ budgetTotal: 1200000 });
+      expect(tracker.postedBodies[0]).toMatchObject({ budgetTotal: 1200000 });
     });
   });
 
@@ -2424,7 +2011,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
     it('AC-S6E-1 · 시트에 invalid("abc")를 입력하면 오류 노드(trip-wizard-error-budget)가 렌더된다', async () => {
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('budget');
 
       fireEvent.changeText(
         screen.getByTestId('trip-wizard-budget-input'),
@@ -2439,7 +2026,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
     it('AC-S6E-2 · invalid 상태에서 "적용"을 눌러도 커밋되지 않고 시트가 닫히지 않는다 (조용한 소멸 방지)', async () => {
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('budget');
 
       fireEvent.changeText(
         screen.getByTestId('trip-wizard-budget-input'),
@@ -2477,7 +2064,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
         // 준비 — 프리필(80만원) 도착 후 시트를 연다.
         renderPage();
         await waitForPrefill();
-        await openSheet();
+        await openSheet('budget');
 
         // 실행 ① — 잘못된 금액 입력.
         fireEvent.changeText(
@@ -2517,29 +2104,6 @@ describe('예산 편집 시트 (B·S6·D)', () => {
     );
   });
 
-  /** TRIP-984 · `/me/preferences` 를 주어진 예산 축으로 덮어쓴다(취향 styles 는 미식 — 도착 눈금). */
-  function serveBudget(budget: NonNullable<PreferenceView['budget']>): void {
-    server.use(
-      http.get(`${BASE}/me/preferences`, () =>
-        HttpResponse.json({
-          pace: { value: '균형있게', isNeutralDefault: false },
-          budget,
-          styles: { value: ['미식'] },
-          activities: { value: [] },
-        })
-      )
-    );
-  }
-
-  /** 예산 행이 처음부터 "예산 선택"일 수 있어 예산 행으로는 도착을 못 잰다 — 취향 행(미식)으로 기다린다. */
-  async function waitForPreferenceRow(): Promise<void> {
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('trip-wizard-summary-preference')
-      ).toHaveTextContent(/미식/)
-    );
-  }
-
   const NO_BUDGET = { tier: null, rawAmount: null, isNeutralDefault: true };
 
   /**
@@ -2552,8 +2116,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       // TRIP-1045 이전엔 "tier 만 고르면 비활성"이었다 — 이제 칩이 금액을 채우므로 빈칸은 칩을 안 눌렀을 때뿐이다.
       serveBudget(NO_BUDGET);
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
 
       // 짝(전제) — 칩이 하나도 안 켜졌고 입력이 비어 있다.
       expect(
@@ -2588,8 +2152,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       useTripWizardStore.getState().setBudgetText('500000');
       renderPage();
       // 요약 예산이 스토어값(50만원)이라 80만원 눈금은 안 뜬다 — 프리필 도착은 취향 행으로 잰다.
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
 
       fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '');
       const apply = screen.getByTestId('trip-wizard-budget-apply');
@@ -2610,8 +2174,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
     it('TRIP-1219 b · 상한 — 10억원 초과(14자리)는 안내가 보이고 적용이 막힌다, 10억원 정각은 통과', async () => {
       serveBudget(NO_BUDGET);
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
 
       fireEvent.changeText(
         screen.getByTestId('trip-wizard-budget-input'),
@@ -2638,8 +2202,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       serveBudget(NO_BUDGET);
       seedValidDraft();
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
 
       fireEvent.changeText(
         screen.getByTestId('trip-wizard-budget-input'),
@@ -2661,7 +2225,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       fireEvent.press(next());
 
       await waitFor(() => expect(createHits()).toBe(1));
-      expect(postedBodies[0]).toMatchObject({ budgetTotal: 120000 });
+      expect(tracker.postedBodies[0]).toMatchObject({ budgetTotal: 120000 });
     });
   });
 
@@ -2687,8 +2251,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
         isNeutralDefault: false,
       });
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
 
       // 짝(전제) — 온보딩 tier·금액이 실제로 시트까지 왔다(옛 코드라면 노트가 뜨는 얼굴).
       expect(
@@ -2726,8 +2290,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       useTripWizardStore.getState().setParty(2);
       serveBudget(NO_BUDGET);
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
       expect(screen.getByTestId('trip-wizard-budget-apply')).toBeDisabled();
 
       // 실행
@@ -2750,8 +2314,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       renderPage();
       // 짝(전제) — 여행지 0곳(beforeEach reset).
       expect(useTripWizardStore.getState().destinations).toHaveLength(0);
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
 
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
 
@@ -2767,8 +2331,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       serveBudget(NO_BUDGET);
       renderPage();
       expect(useTripWizardStore.getState().startDate).toBeUndefined();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
 
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
 
@@ -2794,8 +2358,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
         );
         serveBudget(NO_BUDGET);
         renderPage();
-        await waitForPreferenceRow();
-        await openSheet();
+        await waitForPrefill('preference');
+        await openSheet('budget');
 
         // 실행
         fireEvent.press(screen.getByTestId(`trip-wizard-budget-tier-${code}`));
@@ -2811,7 +2375,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       seedValidDraft();
       renderPage();
       await waitForPrefill();
-      await openSheet();
+      await openSheet('budget');
       // 짝(전제) — 프리필 800,000 으로 열렸다(칩이 이것을 덮어쓴다).
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
         '800,000'
@@ -2835,7 +2399,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       fireEvent.press(next());
 
       await waitFor(() => expect(createHits()).toBe(1));
-      expect(postedBodies[0]).toMatchObject({ budgetTotal: 250000 });
+      expect(tracker.postedBodies[0]).toMatchObject({ budgetTotal: 250000 });
     });
 
     it('D5 · 이미 켜진 칩을 다시 눌러도 채우고, 손으로 고친 뒤에도 마지막 칩이 이긴다', async () => {
@@ -2844,8 +2408,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       seedValidDraft();
       serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-mid')
       ).toBeOnTheScreen();
@@ -2885,8 +2449,8 @@ describe('예산 편집 시트 (B·S6·D)', () => {
       seedValidDraft();
       serveBudget(NO_BUDGET);
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
       fireEvent.changeText(
         screen.getByTestId('trip-wizard-budget-input'),
@@ -2911,7 +2475,7 @@ describe('예산 편집 시트 (B·S6·D)', () => {
         screen.getByTestId('trip-wizard-summary-budget')
       ).toHaveTextContent(/110만원/);
       // 다시 열어도 칩 금액으로 되돌리지 않는다 — 여는 순간 재계산하는 뮤턴트면 600,000 으로 red.
-      await openSheet();
+      await openSheet('budget');
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
         '1,100,000'
       );
@@ -2951,81 +2515,34 @@ describe('예산 편집 시트 (B·S6·D)', () => {
 describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
+  const {
+    tracker,
+    createTripHandler,
+    serveBudget,
+    renderPage,
+    seedValidDraft,
+    openSheet,
+    waitForPrefill,
+  } = wizardStep1Harness();
+
   const PREFERENCES_PATH = '/api/v1/me/preferences';
-
-  /** openapi `Trip.required` 필드. */
-  const TRIP: Trip = {
-    tripId: '11111111-1111-1111-1111-111111111111',
-    title: '부산 여행',
-    startDate: '2026-06-10',
-    endDate: '2026-06-13',
-    party: 1,
-    companionType: null,
-    budgetTotal: null,
-    preferenceSnapshot: {},
-    destinations: [{ seq: 1, region: '부산', nights: 3 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-02T00:00:00Z',
-    updatedAt: '2026-08-02T00:00:00Z',
-    baseCount: 0,
-    itineraryDayCount: 0,
-  };
-
-  const NO_BUDGET = { tier: null, rawAmount: null, isNeutralDefault: true };
-
-  let observedHits: string[] = [];
-  let postedBodies: Record<string, unknown>[] = [];
-
-  function preferenceWith(
-    budget: NonNullable<PreferenceView['budget']>
-  ): PreferenceView {
-    return {
-      pace: { value: '균형있게', isNeutralDefault: false },
-      budget,
-      styles: { value: ['미식'] },
-      activities: { value: [] },
-    };
-  }
-
-  function serveBudget(budget: NonNullable<PreferenceView['budget']>): void {
-    server.use(
-      http.get(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(preferenceWith(budget))
-      )
-    );
-  }
 
   /** 등급만 있는 온보딩 계정(운영 모양 — budget_raw_amount NULL). */
   function serveTierOnly(tier: string | null): void {
     serveBudget({ tier, rawAmount: null, isNeutralDefault: false });
   }
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   beforeEach(() => {
-    observedHits = [];
-    postedBodies = [];
     useTripWizardStore.getState().reset();
 
     server.use(
-      http.post(`${BASE}/trips`, async ({ request }) => {
-        postedBodies.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json(TRIP, { status: 201 });
-      }),
+      createTripHandler(makeTrip({ budgetTotal: null })),
       // 계정 취향 쓰기 — 불리면 안 되지만, 불렸을 때 흔적이 확실히 남도록 받아 준다.
       http.put(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(preferenceWith(NO_BUDGET))
+        HttpResponse.json(budgetPreference(NO_BUDGET))
       ),
       http.patch(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(preferenceWith(NO_BUDGET))
+        HttpResponse.json(budgetPreference(NO_BUDGET))
       )
     );
   });
@@ -3036,47 +2553,12 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
     server.resetHandlers();
   });
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
-  function renderPage() {
-    return render(<TripNewStep1Page baseDate="2026-06-10" />, {
-      wrapper: createWrapper(),
-    });
-  }
-
-  /** 예산 행이 "예산 선택"·등급 얼굴일 수 있어 도착은 취향 행(미식)으로 잰다. */
-  async function waitForPreferenceRow(): Promise<void> {
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('trip-wizard-summary-preference')
-      ).toHaveTextContent(/미식/)
-    );
-  }
-
   const row = () => screen.getByTestId('trip-wizard-summary-budget');
   const rowSub = () => screen.getByTestId('trip-wizard-summary-budget-sub');
   const input = () => screen.getByTestId('trip-wizard-budget-input');
   const apply = () => screen.getByTestId('trip-wizard-budget-apply');
   const activeChips = () =>
     screen.queryAllByTestId(/^trip-wizard-budget-tier-active-/);
-
-  async function openSheet(): Promise<void> {
-    fireEvent.press(row());
-    await screen.findByTestId('trip-wizard-budget-sheet');
-  }
 
   /** 적용 없이 닫기 — 딤 탭·아래로 끌기가 부르는 라이브러리 `onClose` 를 대신 부른다(StayPriceSheet 선례). */
   function closeSheetWithoutApply(): void {
@@ -3091,22 +2573,15 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
     expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull();
   }
 
-  /** 제출 가능한 스토어 선상태(부산 3박 + 3박 4일). */
-  function seedValidDraft(): void {
-    const store = useTripWizardStore.getState();
-    store.addDestination('부산', 3);
-    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
-  }
-
   describe('AC-1 · 등급만 있는 저가 계정 — 첫 열림에 50,000(1일)이 채워지고 적용이 열린다', () => {
     it('저가·금액 없음으로 시트를 열면 50,000 · 저가 칩 · 적용 활성 · 빈칸 안내 없음', async () => {
       // 준비
       serveTierOnly('저가');
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       // 실행
-      await openSheet();
+      await openSheet('budget');
 
       // 단언 — 여행지가 없으니 1일 × 저가 하루 50,000.
       expect(input()).toHaveDisplayValue('50,000');
@@ -3125,10 +2600,10 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
       seedValidDraft();
       serveTierOnly('고급');
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       // 실행
-      await openSheet();
+      await openSheet('budget');
 
       // 단언 — 200,000 × 4일. 1일로 계산하면 200,000, 박수(3)만 곱하면 600,000, 옛 고정값이면
       // 2,000,000 으로 red.
@@ -3153,23 +2628,21 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
       ['고급', 'high', '200,000'],
       ['럭셔리', 'luxury', '400,000'],
     ] as const)(
-      '%s 로 열면 %s 칩이 켜지고 %s 이며, 같은 칩을 눌러도 값이 같다',
+      '%s 로 열면 %s 칩이 켜지고 %s 이다',
       async (tier, code, expected) => {
         serveTierOnly(tier);
         renderPage();
-        await waitForPreferenceRow();
+        await waitForPrefill('preference');
 
-        await openSheet();
+        await openSheet('budget');
 
         expect(input()).toHaveDisplayValue(expected);
         expect(
           screen.getByTestId(`trip-wizard-budget-tier-active-${code}`)
         ).toBeOnTheScreen();
         expect(apply()).not.toBeDisabled();
-
-        // 칩 press 경로와 같은 출처인지 — 눌러도 값이 그대로여야 한다.
-        fireEvent.press(screen.getByTestId(`trip-wizard-budget-tier-${code}`));
-        expect(input()).toHaveDisplayValue(expected);
+        // (TRIP-1353) "같은 칩을 눌러도 값이 같다" 단언은 지웠다 — 이미 채워진 칸에서 같은 칩 재누름은 값이 안 바뀌어 판별력이 0 이다.
+        // "칩 경로와 같은 출처"는 「예산 편집 시트」 describe D(칩 = 대표 금액)가 지킨다.
       }
     );
   });
@@ -3178,8 +2651,8 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
     it('저가 프리필 50,000 을 적용하면 store 에 커밋되고 행은 "5만원 · 1인 총액 · 저가"', async () => {
       serveTierOnly('저가');
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
 
       fireEvent.press(apply());
 
@@ -3203,7 +2676,7 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
       renderPage();
       await waitFor(() => expect(row()).toHaveTextContent(/120만원/));
 
-      await openSheet();
+      await openSheet('budget');
 
       expect(input()).toHaveDisplayValue('1,200,000');
       expect(
@@ -3216,15 +2689,15 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
     it('고급(금액 없음)에서 1,800,000 을 적용한 뒤 다시 열면 1,800,000 이다 (200,000 으로 되돌리지 않는다)', async () => {
       serveTierOnly('고급');
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
       fireEvent.changeText(input(), '1,800,000');
       fireEvent.press(apply());
       await waitFor(() =>
         expect(useTripWizardStore.getState().budgetText).toBe('1,800,000')
       );
 
-      await openSheet();
+      await openSheet('budget');
 
       expect(input()).toHaveDisplayValue('1,800,000');
     });
@@ -3236,9 +2709,9 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
       async (tier) => {
         serveTierOnly(tier);
         renderPage();
-        await waitForPreferenceRow();
+        await waitForPrefill('preference');
 
-        await openSheet();
+        await openSheet('budget');
 
         expect(
           screen.getByTestId('trip-wizard-budget-sheet')
@@ -3256,11 +2729,11 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
       seedValidDraft();
       serveTierOnly('중간');
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
       expect(useTripWizardStore.getState().budgetText).toBe('');
 
       // 실행 — 열어서 프리필(중간 100,000 × 4일)을 확인(새어 나갈 값이 실제로 있다)하고 적용 없이 닫은 뒤 [다음].
-      await openSheet();
+      await openSheet('budget');
       expect(input()).toHaveDisplayValue('400,000');
       closeSheetWithoutApply();
 
@@ -3271,8 +2744,8 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
 
       fireEvent.press(screen.getByTestId('trip-wizard-step1-next'));
 
-      await waitFor(() => expect(postedBodies).toHaveLength(1));
-      expect(Object.keys(postedBodies[0])).not.toContain('budgetTotal');
+      await waitFor(() => expect(tracker.postedBodies).toHaveLength(1));
+      expect(Object.keys(tracker.postedBodies[0])).not.toContain('budgetTotal');
     });
   });
 
@@ -3280,19 +2753,19 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
     it('저가 프리필로 열고 닫고, 다시 열어 럭셔리를 누르고 닫아도 /me/preferences 쓰기는 0회다', async () => {
       serveTierOnly('저가');
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
       expect(useTripWizardStore.getState().budgetText).toBe('');
 
-      await openSheet();
+      await openSheet('budget');
       expect(input()).toHaveDisplayValue('50,000');
       closeSheetWithoutApply();
-      await openSheet();
+      await openSheet('budget');
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
       closeSheetWithoutApply();
 
       // 관측기 짝 — 같은 기록기가 프리필 GET 은 봤다(리스너가 죽어 0 이 된 게 아니다).
-      expect(observedHits).toContain(`GET ${PREFERENCES_PATH}`);
-      const preferenceWrites = observedHits.filter(
+      expect(tracker.hits).toContain(`GET ${PREFERENCES_PATH}`);
+      const preferenceWrites = tracker.hits.filter(
         (hit) => hit.endsWith(` ${PREFERENCES_PATH}`) && !hit.startsWith('GET ')
       );
       expect(preferenceWrites).toEqual([]);
@@ -3320,77 +2793,28 @@ describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
 describe('예산 행 역산 등급 (AC4~AC13)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
+  const {
+    tracker,
+    createTripHandler,
+    serveBudget,
+    renderPage,
+    openSheet,
+    waitForPrefill,
+  } = wizardStep1Harness();
+
   const PREFERENCES_PATH = '/api/v1/me/preferences';
 
-  /** openapi `Trip.required` 필드. */
-  const TRIP: Trip = {
-    tripId: '11111111-1111-1111-1111-111111111111',
-    title: '부산 여행',
-    startDate: '2026-06-10',
-    endDate: '2026-06-13',
-    party: 1,
-    companionType: null,
-    budgetTotal: 1800000,
-    preferenceSnapshot: {},
-    destinations: [{ seq: 1, region: '부산', nights: 3 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-02T00:00:00Z',
-    updatedAt: '2026-08-02T00:00:00Z',
-    baseCount: 0,
-    itineraryDayCount: 0,
-  };
-
-  const NO_BUDGET = { tier: null, rawAmount: null, isNeutralDefault: true };
-
-  let observedHits: string[] = [];
-  let postedBodies: Record<string, unknown>[] = [];
-
-  /** 프리필의 예산 축만 바꾼다(취향 styles 는 미식 — 도착 눈금). */
-  function preferenceWith(
-    budget: NonNullable<PreferenceView['budget']>
-  ): PreferenceView {
-    return {
-      pace: { value: '균형있게', isNeutralDefault: false },
-      budget,
-      styles: { value: ['미식'] },
-      activities: { value: [] },
-    };
-  }
-
-  function serveBudget(budget: NonNullable<PreferenceView['budget']>): void {
-    server.use(
-      http.get(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(preferenceWith(budget))
-      )
-    );
-  }
-
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   beforeEach(() => {
-    observedHits = [];
-    postedBodies = [];
     useTripWizardStore.getState().reset();
 
     server.use(
-      http.post(`${BASE}/trips`, async ({ request }) => {
-        postedBodies.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json(TRIP, { status: 201 });
-      }),
+      createTripHandler(makeTrip({ budgetTotal: 1800000 })),
       // 계정 취향 쓰기 — 불리면 안 되지만, 불렸을 때 흔적이 확실히 남도록 받아 준다.
       http.put(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(preferenceWith(NO_BUDGET))
+        HttpResponse.json(budgetPreference(NO_BUDGET))
       ),
       http.patch(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(preferenceWith(NO_BUDGET))
+        HttpResponse.json(budgetPreference(NO_BUDGET))
       )
     );
   });
@@ -3401,42 +2825,8 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
     server.resetHandlers();
   });
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
-  function renderPage() {
-    return render(<TripNewStep1Page baseDate="2026-06-10" />, {
-      wrapper: createWrapper(),
-    });
-  }
-
-  async function waitForPreferenceRow(): Promise<void> {
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('trip-wizard-summary-preference')
-      ).toHaveTextContent(/미식/)
-    );
-  }
-
   const row = () => screen.getByTestId('trip-wizard-summary-budget');
   const rowSub = () => screen.getByTestId('trip-wizard-summary-budget-sub');
-
-  async function openSheet(): Promise<void> {
-    fireEvent.press(row());
-    await screen.findByTestId('trip-wizard-budget-sheet');
-  }
 
   async function applyAndClose(): Promise<void> {
     fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
@@ -3447,7 +2837,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
 
   /** 시트를 열어 금액을 손으로 넣고 적용한다(칩 안 누름). */
   async function applyTyped(text: string): Promise<void> {
-    await openSheet();
+    await openSheet('budget');
     fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), text);
     await applyAndClose();
   }
@@ -3457,12 +2847,12 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       // 준비 — 운영 모양: 온보딩 등급만 있고 금액은 없다(행은 tier-only 얼굴).
       serveBudget({ tier: '고급', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
       // 앵커 — 적용 전엔 아직 온보딩 얼굴이다(역산 결과가 미리 보이면 안 된다).
       expect(rowSub()).toHaveTextContent('1인 총액 · 온보딩');
 
       // 실행
-      await openSheet();
+      await openSheet('budget');
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
       await applyAndClose();
 
@@ -3477,7 +2867,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
     it('온보딩 중간에서 180,000(1일)을 적용하면 행 등급은 고급이다', async () => {
       serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       // 하루 180,000 — 150,000 ≤ 180,000 < 300,000 이라 고급. 옛 총액 경계면 저가로 red.
       await applyTyped('180,000');
@@ -3491,7 +2881,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
     it('온보딩 저가에서 75,000 · 150,000 · 300,000 을 차례로 적용하면 중간 · 고급 · 럭셔리다', async () => {
       serveBudget({ tier: '저가', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       await applyTyped('75000');
       expect(rowSub()).toHaveTextContent('1인 총액 · 중간');
@@ -3506,7 +2896,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
     it('온보딩 럭셔리에서 74,999 를 적용하면 저가다', async () => {
       serveBudget({ tier: '럭셔리', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       await applyTyped('74999');
 
@@ -3528,7 +2918,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       expect(rowSub()).toHaveTextContent('1인 총액 · 고급');
 
       // 시트 쪽도 같은 출처여야 한다(결정 2) — 적용 없이 열면 역산 럭셔리가 아니라 프리필 고급 칩(5-b 경고 1).
-      await openSheet();
+      await openSheet('budget');
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-high')
       ).toBeTruthy();
@@ -3540,7 +2930,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
     it('금액 없이 등급만 있으면 tier-only 얼굴 "중간 · 1인 총액 · 온보딩" 그대로다', async () => {
       serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       expect(row()).toHaveTextContent(/중간/);
       expect(rowSub()).toHaveTextContent('1인 총액 · 온보딩');
@@ -3551,7 +2941,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
     it('0 을 적용하면 행에 등급이 없고, 다시 열면 저가가 아니라 온보딩 고급 칩이 켜진다', async () => {
       serveBudget({ tier: '고급', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       await applyTyped('0');
 
@@ -3559,7 +2949,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       expect(screen.queryByTestId('trip-wizard-summary-budget-sub')).toBeNull();
 
       // 0 에 역산을 태우면 저가가 켜져 "예산 선택" 행과 다른 말을 한다.
-      await openSheet();
+      await openSheet('budget');
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-high')
       ).toBeOnTheScreen();
@@ -3573,8 +2963,8 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
     it('온보딩 고급에서 저가를 적용한 뒤 다시 열면 active-low 하나만 켜진다', async () => {
       serveBudget({ tier: '고급', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
-      await openSheet();
+      await waitForPrefill('preference');
+      await openSheet('budget');
       // 앵커 — 첫 오픈은 온보딩 등급(고급)이다.
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-high')
@@ -3585,7 +2975,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
 
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
       await applyAndClose();
-      await openSheet();
+      await openSheet('budget');
 
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-low')
@@ -3603,10 +2993,10 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
     it('온보딩 중간에서 180,000(1일)을 적용한 뒤 다시 열면 고급 칩이 켜지고 중간은 꺼져 있다', async () => {
       serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       await applyTyped('180,000');
-      await openSheet();
+      await openSheet('budget');
 
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-high')
@@ -3630,10 +3020,10 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       seedThreeDays();
       serveBudget({ tier: '럭셔리', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       // 실행 — 중간 칩(100,000 × 3일) → 적용.
-      await openSheet();
+      await openSheet('budget');
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
       expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
         '300,000'
@@ -3645,7 +3035,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       expect(rowSub()).toHaveTextContent('1인 총액 · 중간');
 
       // 단언 ② — 재오픈 칩도 같은 일수로 역산한 중간 하나뿐. 칩 쪽만 1일로 나누면 럭셔리가 켜져 red.
-      await openSheet();
+      await openSheet('budget');
       expect(
         screen.getByTestId('trip-wizard-budget-tier-active-mid')
       ).toBeOnTheScreen();
@@ -3659,7 +3049,7 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       seedThreeDays();
       serveBudget({ tier: '럭셔리', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       // 224,999 ÷ 3 = 74,999.67 — 반올림하면 75,000 이라 중간으로 red, 1일로 나누면 럭셔리로 red.
       await applyTyped('224999');
@@ -3678,18 +3068,18 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
       serveBudget({ tier: '고급', rawAmount: null, isNeutralDefault: false });
       renderPage();
-      await waitForPreferenceRow();
+      await waitForPrefill('preference');
 
       // 실행 — 저가 칩 적용 → 다시 열어 손으로 1,800,000 → 적용 → [다음].
-      await openSheet();
+      await openSheet('budget');
       fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
       await applyAndClose();
       await applyTyped('1,800,000');
       fireEvent.press(screen.getByTestId('trip-wizard-step1-next'));
 
       // 단언 — 등록은 1회, 바디 최상위와 스냅숏 안 어디에도 등급이 없다.
-      await waitFor(() => expect(postedBodies).toHaveLength(1));
-      const body = postedBodies[0];
+      await waitFor(() => expect(tracker.postedBodies).toHaveLength(1));
+      const body = tracker.postedBodies[0];
       expect(Object.keys(body)).not.toContain('tier');
       expect(Object.keys(body)).not.toContain('budgetTier');
       expect(body).toMatchObject({ budgetTotal: 1800000 });
@@ -3702,8 +3092,8 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
       });
 
       // 관측기 짝 — 같은 기록기가 프리필 GET 은 봤다(리스너가 죽어 0 이 된 게 아니다).
-      expect(observedHits).toContain(`GET ${PREFERENCES_PATH}`);
-      const preferenceWrites = observedHits.filter(
+      expect(tracker.hits).toContain(`GET ${PREFERENCES_PATH}`);
+      const preferenceWrites = tracker.hits.filter(
         (hit) => hit.endsWith(` ${PREFERENCES_PATH}`) && !hit.startsWith('GET ')
       );
       expect(preferenceWrites).toEqual([]);
@@ -3722,21 +3112,15 @@ describe('예산 행 역산 등급 (AC4~AC13)', () => {
 describe('만든 여행의 취향 잠금 (AC-10)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TOAST = 'trip-wizard-pref-locked-toast';
+  const { preferenceHandler, renderPage, waitForPrefill } = wizardStep1Harness({
+    Inner: WithToastHost,
+  });
 
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식', '전시'] },
-    activities: { value: ['야경'] },
-  };
+  const TOAST = 'trip-wizard-pref-locked-toast';
 
   beforeEach(() => {
     useTripWizardStore.getState().reset();
-    server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE))
-    );
+    server.use(preferenceHandler());
   });
 
   afterEach(() => {
@@ -3744,31 +3128,8 @@ describe('만든 여행의 취향 잠금 (AC-10)', () => {
     server.resetHandlers();
   });
 
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>
-          <WithToastHost>{children}</WithToastHost>
-        </QueryClientProvider>
-      );
-    }
-    return render(<TripNewStep1Page baseDate="2026-06-10" />, {
-      wrapper: Wrapper,
-    });
-  }
-
   function preferenceRow() {
     return screen.getByTestId('trip-wizard-summary-preference');
-  }
-
-  async function waitForPrefill(): Promise<void> {
-    await waitFor(() => expect(preferenceRow()).toHaveTextContent(/미식/));
   }
 
   describe('AC-10 · 이미 만든 여행이면 취향 행이 잠긴다', () => {
@@ -3777,7 +3138,7 @@ describe('만든 여행의 취향 잠금 (AC-10)', () => {
         .getState()
         .setCreatedTripId('11111111-1111-1111-1111-111111111111');
       renderPage();
-      await waitForPrefill();
+      await waitForPrefill('preference');
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
       fireEvent.press(preferenceRow());
@@ -3791,7 +3152,7 @@ describe('만든 여행의 취향 잠금 (AC-10)', () => {
 
     it('🟢 L-2 createdTripId 가 없으면 지금처럼 시트가 열리고 토스트는 없다', async () => {
       renderPage();
-      await waitForPrefill();
+      await waitForPrefill('preference');
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
       fireEvent.press(preferenceRow());
@@ -3823,33 +3184,14 @@ describe('만든 여행의 취향 잠금 (AC-10)', () => {
 describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-10';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식', '전시'] },
-    activities: { value: ['야경'] },
-  };
-
-  const TRIP: Trip = {
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: '2026-06-10',
-    endDate: '2026-06-13',
-    party: 1,
-    companionType: null,
-    budgetTotal: 800000,
-    preferenceSnapshot: {},
-    destinations: [{ seq: 1, region: '부산', nights: 3 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-02T00:00:00Z',
-    updatedAt: '2026-08-02T00:00:00Z',
-    baseCount: 0,
-    itineraryDayCount: 0,
-  };
+  const {
+    tracker,
+    preferenceHandler,
+    renderPage,
+    next,
+    seedValidDraft,
+    waitForPrefill,
+  } = wizardStep1Harness();
 
   const CREATE = 'POST /api/v1/trips';
   const PATCH = `PATCH /api/v1/trips/${TRIP_ID}`;
@@ -3858,7 +3200,6 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
   const MV_ADD = `POST ${MV_PATH}`;
   const mvDelete = (mustVisitId: string) => `DELETE ${MV_PATH}/${mustVisitId}`;
 
-  let observedHits: string[] = [];
   let patchedBodies: Record<string, unknown>[] = [];
   let addedBodies: Record<string, unknown>[] = [];
   /** 가짜 서버에 등록된 꼭 갈 곳 — POST 가 더하고 DELETE 가 뺀다. */
@@ -3872,10 +3213,9 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
   /** push 가 불린 그 순간의 PATCH 수(AC-2b 순서 단언). */
   let pushSnapshots: number[] = [];
 
-  const hits = (line: string) =>
-    observedHits.filter((hit) => hit === line).length;
+  const hits = tracker.count;
   const mustVisitHits = () =>
-    observedHits.filter((hit) => /\/must-visits(\/|$)/.test(hit)).length;
+    tracker.hits.filter((hit) => /\/must-visits(\/|$)/.test(hit)).length;
 
   function mustVisit(poiId: string): MustVisit {
     return {
@@ -3897,17 +3237,7 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
 
   const errorBody = (code: string) => ({ error: { code, message: code } });
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   beforeEach(() => {
-    observedHits = [];
     patchedBodies = [];
     addedBodies = [];
     registered = [];
@@ -3924,7 +3254,7 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
     useTripWizardStore.getState().reset();
 
     server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE)),
+      preferenceHandler(),
       http.post(`${BASE}/trips`, () =>
         HttpResponse.json(TRIP, { status: 201 })
       ),
@@ -3975,51 +3305,14 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
     server.resetHandlers();
   });
 
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: Wrapper,
-    });
-  }
-
-  function next() {
-    return screen.getByTestId('trip-wizard-step1-next');
-  }
-
-  /** 부산 3박 + 2026-06-10~13 — 「다음」이 열리는 최소 드래프트. */
-  function seedValidDraft(): void {
-    const store = useTripWizardStore.getState();
-    store.addDestination('부산', 3);
-    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
-  }
-
   /** 이전 제출이 만든 여행이 남아 있는 재진입 상태. */
   function seedReentry(): void {
     seedValidDraft();
     useTripWizardStore.getState().setCreatedTripId(TRIP_ID);
   }
 
-  /** 프리필이 도착한 눈금 — 요약 취향 행에 프리필 칩이 뜬다. */
-  async function waitForPrefill(): Promise<void> {
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('trip-wizard-summary-preference')
-      ).toHaveTextContent(/미식/)
-    );
-  }
-
   async function pressNextAfterPrefill(): Promise<void> {
-    await waitForPrefill();
+    await waitForPrefill('preference');
     fireEvent.press(next());
   }
 
@@ -4148,9 +3441,9 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
       expect(hits(mvDelete('mv-poi-A'))).toBe(1);
       expect(hits(mvDelete('mv-poi-B'))).toBe(0);
       // 동기화는 PATCH 성공 뒤다.
-      expect(observedHits.indexOf(PATCH)).toBeGreaterThanOrEqual(0);
-      expect(observedHits.indexOf(PATCH)).toBeLessThan(
-        observedHits.indexOf(MV_GET)
+      expect(tracker.hits.indexOf(PATCH)).toBeGreaterThanOrEqual(0);
+      expect(tracker.hits.indexOf(PATCH)).toBeLessThan(
+        tracker.hits.indexOf(MV_GET)
       );
       expect(hits(CREATE)).toBe(0);
     });
@@ -4331,7 +3624,7 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
       await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
       expect(mockPush).toHaveBeenCalledWith('/trips/new/step2');
       expect(hits(CREATE)).toBe(1);
-      expect(observedHits.filter((hit) => hit.startsWith('PATCH '))).toEqual(
+      expect(tracker.hits.filter((hit) => hit.startsWith('PATCH '))).toEqual(
         []
       );
       expect(hits(MV_GET)).toBe(0);
@@ -4489,31 +3782,22 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
  * 라우터 목(push·back·replace·canGoBack)은 파일 최상위로 옮겼다 — 이 describe 의 beforeEach 가 그대로 되돌린다.
  */
 describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-10';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
+  const { tracker, preferenceHandler, renderPage, seedValidDraft } =
+    wizardStep1Harness({ Inner: WithTripsList });
+
   const HOME_FALLBACK = '/(tabs)';
   const ERROR_TEXT = '삭제하지 못했어요. 다시 시도해 주세요.';
-
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식', '전시'] },
-    activities: { value: ['야경'] },
-  };
 
   const DELETE_TRIP = `DELETE /api/v1/trips/${TRIP_ID}`;
   const LIST_TRIPS = 'GET /api/v1/trips';
 
   type DeleteMode = 204 | 404 | 500 | 'network' | 'gate';
 
-  let observedHits: string[] = [];
   let deleteMode: DeleteMode = 204;
   /** `gate` 모드에서 붙잡힌 DELETE 를 풀어 줄 문들. */
   let gates: (() => void)[] = [];
 
-  const hits = (line: string) =>
-    observedHits.filter((hit) => hit === line).length;
+  const hits = tracker.count;
 
   function openGates(): void {
     const pending = gates;
@@ -4521,17 +3805,7 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
     pending.forEach((resolve) => resolve());
   }
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   beforeEach(() => {
-    observedHits = [];
     deleteMode = 204;
     gates = [];
     mockRouter.push.mockReset();
@@ -4542,7 +3816,7 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
     useTripWizardStore.getState().reset();
 
     server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE)),
+      preferenceHandler(),
       http.get(`${BASE}/trips`, () => HttpResponse.json([])),
       http.delete(`${BASE}/trips/:tripId`, async () => {
         if (deleteMode === 'network') return HttpResponse.error();
@@ -4582,24 +3856,14 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
     return null;
   }
 
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { retry: false, gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>
-          <TripsListObserver />
-          {children}
-        </QueryClientProvider>
-      );
-    }
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: Wrapper,
-    });
+  /** 하네스 Provider 안쪽에 목록 관찰자를 함께 그린다. */
+  function WithTripsList({ children }: { children: ReactNode }) {
+    return (
+      <>
+        <TripsListObserver />
+        {children}
+      </>
+    );
   }
 
   /** 요청이 출발할 시간을 준다(02a §5 실측 — 30ms 한 번이면 DELETE 가 이미 잡힌다). */
@@ -4611,13 +3875,6 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
   function tap(testID: string): void {
     resetPressGuard();
     fireEvent.press(screen.getByTestId(testID));
-  }
-
-  /** 부산 3박 + 2026-06-10~13 — 「다음」이 열리는 최소 드래프트. */
-  function seedValidDraft(): void {
-    const store = useTripWizardStore.getState();
-    store.addDestination('부산', 3);
-    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
   }
 
   /** 이 위저드 세션에서 이미 여행을 만든 상태. */
@@ -4708,7 +3965,7 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
       seedCreated();
       await openLeaveDialog();
       const before = draftSnapshot();
-      const requestsBefore = observedHits.length;
+      const requestsBefore = tracker.hits.length;
 
       // 실행
       tap('trip-wizard-leave-stay');
@@ -4717,7 +3974,7 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
       // 단언
       expect(screen.queryByTestId('trip-wizard-leave-dialog')).toBeNull();
       expect(navCalls()).toEqual({ back: 0, replace: 0, push: 0 });
-      expect(observedHits.length).toBe(requestsBefore);
+      expect(tracker.hits.length).toBe(requestsBefore);
       expect(useTripWizardStore.getState().createdTripId).toBe(TRIP_ID);
       expect(draftSnapshot()).toEqual(before);
     });
@@ -5093,19 +4350,10 @@ describe('‹ 나가기 확인 (AC-1~AC-12)', () => {
 describe('TRIP-1210 · 다도시 여행 제목이 생성·수정 본문에 실린다', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-10';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식'] },
-    activities: { value: ['야경'] },
-  };
+  const { preferenceHandler, renderPage } = wizardStep1Harness();
 
   /** openapi `Trip.required` 필드를 채운 응답. 응답 제목은 단언에 쓰지 않는다(보낸 본문만 본다). */
-  const TRIP: Trip = {
+  const SEOUL_BUSAN_TRIP: Trip = {
     tripId: TRIP_ID,
     title: '서울·부산 여행',
     startDate: '2026-10-10',
@@ -5134,14 +4382,14 @@ describe('TRIP-1210 · 다도시 여행 제목이 생성·수정 본문에 실�
     useTripWizardStore.getState().reset();
 
     server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE)),
+      preferenceHandler({ styles: { value: ['미식'] } }),
       http.post(`${BASE}/trips`, async ({ request }) => {
         postedBodies.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json(TRIP, { status: 201 });
+        return HttpResponse.json(SEOUL_BUSAN_TRIP, { status: 201 });
       }),
       http.patch(`${BASE}/trips/:tripId`, async ({ request }) => {
         patchedBodies.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json(TRIP);
+        return HttpResponse.json(SEOUL_BUSAN_TRIP);
       }),
       http.get(`${BASE}/trips/:tripId/must-visits`, () => HttpResponse.json([]))
     );
@@ -5150,23 +4398,6 @@ describe('TRIP-1210 · 다도시 여행 제목이 생성·수정 본문에 실�
   afterEach(() => {
     server.resetHandlers();
   });
-
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: Wrapper,
-    });
-  }
 
   /** 지역 피커가 담는 것과 같은 모양(이름 + 지역 코드, 1박)으로 도시를 담고 10/10 을 시작으로 고른다. */
   function seedCities(cities: [string, string][]): void {
@@ -5300,19 +4531,11 @@ describe('TRIP-1210 · 다도시 여행 제목이 생성·수정 본문에 실�
 describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
   afterEach(expectNoExitWizard);
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const BASE_DATE = '2026-06-10';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-
-  const PREFERENCE: PreferenceView = {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
-    styles: { value: ['미식'] },
-    activities: { value: ['야경'] },
-  };
+  const { tracker, preferenceHandler, renderPage, waitForPrefill } =
+    wizardStep1Harness();
 
   /** openapi `Trip.required` 를 채운 응답(서울 1박). */
-  const TRIP: Trip = {
+  const SEOUL_TRIP: Trip = {
     tripId: TRIP_ID,
     title: '서울특별시 여행',
     startDate: '2026-10-10',
@@ -5384,15 +4607,13 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     useTripWizardStore.getState().addDestination(name, 1, code);
   }
 
-  let observedHits: string[] = [];
   let mustVisitPosts: { poiId: string; type: string }[] = [];
   /** 재진입(P-11) 가짜 서버에 등록된 꼭 갈 곳 — POST 가 더하고 DELETE 가 뺀다(★11). */
   let registered: MustVisit[] = [];
   /** P-10 — 손으로 붙잡는 생성 응답. null 이면 바로 응답한다. */
   let holdCreate: null | { release: () => void; started: boolean } = null;
 
-  const hits = (line: string) =>
-    observedHits.filter((hit) => hit === line).length;
+  const hits = tracker.count;
 
   function mustVisitRow(poiId: string): MustVisit {
     return {
@@ -5403,27 +4624,18 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     };
   }
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   beforeEach(() => {
     // "아직 없다" 앵커 — 앞 테스트의 시드·목적지가 새면 여기서 red(★9).
     const store = useTripWizardStore.getState();
     expect(store.mustVisits).toHaveLength(0);
     expect(store.destinations).toHaveLength(0);
 
-    observedHits = [];
     mustVisitPosts = [];
     registered = [];
     holdCreate = null;
 
     server.use(
-      http.get(`${BASE}/me/preferences`, () => HttpResponse.json(PREFERENCE)),
+      preferenceHandler({ styles: { value: ['미식'] } }),
       http.post(`${BASE}/trips`, async () => {
         if (holdCreate !== null) {
           const gate = holdCreate;
@@ -5432,9 +4644,9 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
             gate.started = true;
           });
         }
-        return HttpResponse.json(TRIP, { status: 201 });
+        return HttpResponse.json(SEOUL_TRIP, { status: 201 });
       }),
-      http.patch(`${BASE}/trips/:tripId`, () => HttpResponse.json(TRIP)),
+      http.patch(`${BASE}/trips/:tripId`, () => HttpResponse.json(SEOUL_TRIP)),
       http.get(`${BASE}/trips/:tripId/must-visits`, () =>
         HttpResponse.json(registered)
       ),
@@ -5464,32 +4676,6 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     holdCreate = null;
     server.resetHandlers();
   });
-
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<TripNewStep1Page baseDate={BASE_DATE} />, {
-      wrapper: Wrapper,
-    });
-  }
-
-  /** 프리필이 도착한 눈금(★7) — 그 전엔 스트립이 스켈레톤이라 카드가 없다. */
-  async function waitForPrefill(): Promise<void> {
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('trip-wizard-summary-preference')
-      ).toHaveTextContent(/미식/)
-    );
-  }
 
   function notice() {
     return screen.queryByTestId('trip-wizard-outside-notice');
@@ -5527,7 +4713,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
 
     // 실행
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
 
     // 단언 — 지역 밖이 보인다. 조용히 빠지지도 않는다(카드 둘 다).
     expectNotice(1);
@@ -5567,7 +4753,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
       setup();
 
       renderPage();
-      await waitForPrefill();
+      await waitForPrefill('preference');
 
       expect(card(anchor)).toBeOnTheScreen();
       expect(notice()).toBeNull();
@@ -5578,7 +4764,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
   it('P-3 · 아무것도 안 고르고 [다음]을 누르면 막지 않고 두 곳 다 등록되며, 안내는 계속 보인다', async () => {
     seedSeoulWithNamwon();
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
 
     pressNext();
 
@@ -5595,7 +4781,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
   it('P-4 · [빼기]를 누르면 남원 장소가 시드·스트립에서 빠지고, [다음] 뒤 등록 요청은 경복궁 하나뿐이다', async () => {
     seedSeoulWithNamwon();
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
     expectNotice(1);
 
     // 실행 — [빼기]
@@ -5623,7 +4809,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
   it('P-5 · [그대로 두기]를 누르면 안내만 걷히고 두 카드가 남으며, [다음] 뒤 두 곳 다 등록된다', async () => {
     seedSeoulWithNamwon();
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
     expectNotice(1);
 
     fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-keep'));
@@ -5647,7 +4833,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     // 준비 — 목적지 0곳 + 남원 시드. 판정 불가라 처음엔 안내 없음.
     seedFromSaved([GWANGHALLU]);
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
     expect(card(GWANGHALLU)).toBeOnTheScreen();
     expect(notice()).toBeNull();
 
@@ -5670,7 +4856,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     addCity('서울특별시', '11');
     seedFromSaved([GWANGHALLU, HAEUNDAE, GYEONGBOK]);
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
     expectNotice(2);
 
     act(() => useTripWizardStore.getState().removeMustVisit(HAEUNDAE));
@@ -5686,7 +4872,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     addCity('서울특별시', '11');
     seedFromSaved([GWANGHALLU]);
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
     expectNotice(1);
 
     fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-keep'));
@@ -5710,7 +4896,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     addCity('전북특별자치도', '52');
     seedFromSaved([GWANGHALLU, GYEONGBOK]);
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
     expect(notice()).toBeNull();
 
     fireEvent.press(screen.getByTestId('trip-wizard-summary-destination'));
@@ -5736,7 +4922,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     seedSeoulWithNamwon();
     holdCreate = { release: () => {}, started: false };
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
 
     // 실행 — [다음], 생성 요청이 출발했지만 응답은 붙잡혀 있다.
     pressNext();
@@ -5767,7 +4953,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     seedSeoulWithNamwon();
     useTripWizardStore.getState().setCreatedTripId(TRIP_ID);
     renderPage();
-    await waitForPrefill();
+    await waitForPrefill('preference');
     expectNotice(1);
 
     // 실행

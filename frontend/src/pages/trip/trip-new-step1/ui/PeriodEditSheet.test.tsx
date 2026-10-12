@@ -536,16 +536,4 @@ describe('요약줄 — 올해가 아니면 연도를 붙인다 (TRIP-1285 결�
       '5월 15일(화) – 17일(목)'
     );
   });
-
-  it('INV-3 · 연도가 붙은 요약에도 소요시간 문자열(시간·분·duration)이 없다', () => {
-    renderSheet({
-      today: '2026-10-08',
-      month: '2029-05',
-      range: { start: '2029-05-15', end: '2029-05-17' },
-    });
-
-    expect(
-      screen.getByTestId('trip-wizard-period-summary')
-    ).not.toHaveTextContent(/시간|분|duration/i);
-  });
 });

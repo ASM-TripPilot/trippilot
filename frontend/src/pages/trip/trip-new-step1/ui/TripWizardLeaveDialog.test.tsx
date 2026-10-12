@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { ReactTestInstance } from 'react-test-renderer';
 import {
   fireEvent,
@@ -19,8 +17,8 @@ import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
  *  - 실패 문구는 `failed` 일 때만, 다이얼로그 안에 뜬다.
  *  - 위→아래 [저장하고 나가기](코랄) · [삭제하고 나가기](아웃라인) · [계속 작성](텍스트) — 01b Q2.
  *  - 딤·카드·제목·본문 토큰은 형제 `BaseRegenerateDialog` 와 같다(AC-9).
- *  - 뷰는 props 만 받는다 — 쿼리·라우터·스토어·API 를 import 하지 않는다(01b Q4, 프리뷰가 네트워크
- *    계층을 끌고 오지 않게).
+ *  - (뷰는 props 만 받는다 — 쿼리·라우터·스토어·API 를 import 하지 않는다(01b Q4, 프리뷰가 네트워크 계층을 끌고 오지 않게).
+ *    그 소스 import 스캔 it(옛 AC-11)은 TRIP-1353 에서 지웠다 — README 판정 3, 이 뷰의 props 계약은 위 it 들이 렌더로 잠근다.)
  *
  * 커버하지 않는 것: 딤이 실제로 화면을 덮는지·중앙 정렬·터치 차단(조건부 렌더 오버레이의 jest 사각 — 6-b).
  * 언제 열리고 누른 뒤 무엇이 나가는지는 `TripNewStep1Page.integration` 「‹ 나가기 확인」 몫.
@@ -206,53 +204,5 @@ describe('🔴 AC-9 · 레이아웃 토큰 (BaseRegenerateDialog 동형)', () =>
     expect(tokens(screen.getByText(BODY))).toEqual(
       expect.arrayContaining(['font-noto', 'text-body', 'leading-[21px]'])
     );
-  });
-});
-
-describe('🔴 AC-11(Q4 모양) · 뷰는 props 만 받는다', () => {
-  const SOURCE = join(__dirname, 'TripWizardLeaveDialog.tsx');
-  const FORBIDDEN = [
-    '@tanstack/react-query',
-    'expo-router',
-    'axios',
-    '@/shared/api',
-    // TRIP-1157: 스토어는 슬라이스 공개 API(index·index.view)로도 들어온다 — model 딥 접두가 아니라 슬라이스 접두로 막는다.
-    '@/features/trip',
-    '@/features/create-trip',
-    '@/pages',
-    '@/app',
-    '@routes',
-  ];
-  /** `from '…'` 절의 모듈 경로만 뽑는다(심볼명이 아니라 from 절 기준 — 동명 이심볼 오탐 방지). */
-  const specifiersOf = (source: string): string[] =>
-    [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
-  const isForbidden = (spec: string): boolean =>
-    FORBIDDEN.some(
-      (prefix) => spec === prefix || spec.startsWith(`${prefix}/`)
-    ) ||
-    spec.startsWith('../model') ||
-    /^(\.\.\/)+features\//.test(spec); // 상대경로로 슬라이스 밖 features 를 뚫는 것도 금칙
-
-  it('탐지기 자가검사 — 금칙 import 는 잡고 react-native 는 통과시킨다', () => {
-    const sample = [
-      "import { useQueryClient } from '@tanstack/react-query';",
-      "import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';",
-      "import { useTripWizardStore as viaIndex } from '@/features/create-trip';",
-      "import { Pressable, Text, View } from 'react-native';",
-    ].join('\n');
-
-    expect(specifiersOf(sample).filter(isForbidden)).toEqual([
-      '@tanstack/react-query',
-      '@/features/create-trip/model/tripWizardStore',
-      '@/features/create-trip',
-    ]);
-  });
-
-  it('뷰 파일이 react-native 를 쓰고, 쿼리·라우터·API·스토어 import 는 0건이다', () => {
-    const specifiers = specifiersOf(readFileSync(SOURCE, 'utf8'));
-
-    // 긍정 짝 — 빈 파일이면 "금칙 0건"이 공허하게 통과한다.
-    expect(specifiers).toContain('react-native');
-    expect(specifiers.filter(isForbidden)).toEqual([]);
   });
 });
