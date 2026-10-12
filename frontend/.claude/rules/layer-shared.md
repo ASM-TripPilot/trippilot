@@ -14,6 +14,7 @@ paths:
 | `src/shared/api/tokenManager.ts` | 동기 in-memory 액세스토큰 홀더(인터셉터가 동기로 읽는다, SecureStore와 공존). `subscribeAccessToken`은 값이 실제로 바뀔 때만 통지 |
 | `src/shared/api/isAlreadyRegistered.ts` | 409(이미 등록됨) 판정. `features/save-place/model/savedPlaces.ts`에는 인라인 409 판정이 따로 남아 있어 판정이 두 벌이다 |
 | `src/shared/api/isNotFound.ts` | `isNotFound(error)` — 네트워크 오류(응답 없음)는 `false`(모르면 "아니다"로 접는 fail-closed). `retryUnlessNotFound`는 react-query `retry`에 넣는 함수(3회, 404만 즉시 포기) — 같은 쿼리 키의 다른 관찰자가 먼저 요청을 시작하면 그쪽 retry가 이기므로 전역(`app/_layout.tsx`)과 페이지가 같은 함수를 참조한다. |
+| `src/shared/api/isRateLimited.ts` | (TRIP-1368) `isRateLimited(error)` — 429 를 **상태 코드**로만 판정(코드명 분기 금지, 응답 없는 오류는 `false`). `retryAfterSeconds(error)` — `Retry-After` 헤더의 정수 초, 없거나 숫자가 아니면 `null`(호출부는 시각 없이 안내). 쓰는 곳: 생성 화면의 AI 일일 한도 얼굴. |
 | `src/shared/api/visitConflict.ts` | `resolveVisitConflict(error)` — 409 `error.code`를 openapi 리터럴(`VISIT_CONFLICT`·`VISIT_ALREADY_RECORDED`)로 분류. `features/edit-itinerary/model/slotSwapError.ts`와 구조만 같다(features 간 import 금지라 재사용 불가). 본체 공개 API `@/shared/api`로 import(TRIP-1157) |
 | `src/shared/api/visitConflict.test.ts` | 409 code를 발명하지 않고 openapi 리터럴을 직접 넣어 매핑을 계약값에 못박는다 |
 | `src/shared/api/generationInProgress.ts` | `resolveGenerationInProgress(error)` — 생성 POST 409 `GENERATION_IN_PROGRESS`+`activeTripId` 판정. 생성 mutation 타입은 `void\|ErrorResponse`라고 적지만 **런타임은 항상 AxiosError**라 `isAxiosError` 통과 뒤 `response.data.error`만 읽는다. `cancelActiveGeneration`은 404·409·500·네트워크 실패를 전부 `true`로 접는다(사용자에게 취소 실패 안내 없음, 심판 없음). |

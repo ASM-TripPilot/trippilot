@@ -404,6 +404,7 @@ export async function completeOnboarding(): Promise<void> {
 
 export { isAlreadyRegistered } from './isAlreadyRegistered';
 export { isNotFound, retryUnlessNotFound } from './isNotFound';
+export { isRateLimited, retryAfterSeconds } from './isRateLimited';
 export {
   getAccessToken,
   hydrate,

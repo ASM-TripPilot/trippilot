@@ -193,7 +193,7 @@ describe('🔴 S6 · AC-5 — 지도 카드는 pins 있을 때만 뜬다 (INV-2 
   });
 });
 
-// TRIP-1268 · AI 일정 생성 일일 한도(클라이언트 임시 장치) — 한도 얼굴의 렌더 계약.
+// TRIP-1368 · AI 일정 생성 일일 한도(서버 429 수신) — 한도 얼굴의 렌더 계약(TRIP-1268 이 그린 얼굴을 승계).
 describe('AI 일일 한도 얼굴', () => {
   /**
    * 무엇을 보장하나:
@@ -207,7 +207,7 @@ describe('AI 일일 한도 얼굴', () => {
    *
    * 3동작 뼈대: 준비 = 콜백 spy 로 `aiLimit` 을 넘겨 렌더 → 실행 = 렌더만/버튼 press → 단언 = 보이는 얼굴·불린 콜백.
    */
-  const TITLE = '오늘 AI 일정 만들기 5번을 모두 썼어요';
+  const TITLE = '오늘 AI 일정 만들기를 모두 썼어요';
 
   function limitProps() {
     return { onContinueManual: jest.fn(), onClose: jest.fn() };
@@ -219,14 +219,14 @@ describe('AI 일일 한도 얼굴', () => {
         <GeneratingScreen
           onBackground={noop}
           onRetry={noop}
-          aiLimit={limitProps()}
+          aiLimit={{ ...limitProps(), retryAt: { day: '내일', time: '00:00' } }}
         />
       );
 
       const notice = screen.getByTestId('ai-limit-notice');
       expect(within(notice).getByText(TITLE)).toBeOnTheScreen();
       expect(
-        within(notice).getByText(/내일 0시에 다시 쓸 수 있어요/)
+        within(notice).getByText(/내일 00:00 이후에 다시 쓸 수 있어요/)
       ).toBeOnTheScreen();
       expect(
         within(notice).getByText(/직접 짜기는 계속 쓸 수 있어요/)
@@ -244,6 +244,27 @@ describe('AI 일일 한도 얼굴', () => {
       expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
       expect(screen.queryByTestId('itinerary-generating-progress')).toBeNull();
       expect(screen.queryByTestId('itinerary-generating-pulse-1')).toBeNull();
+    });
+  });
+
+  describe('🔴 L1b · Retry-After 가 없으면 — 시각 없이 안내만 한다 (INV-4)', () => {
+    it('retryAt 이 null 이면 시각 문장이 없고 나머지 얼굴은 그대로다', () => {
+      render(
+        <GeneratingScreen
+          onBackground={noop}
+          onRetry={noop}
+          aiLimit={{ ...limitProps(), retryAt: null }}
+        />
+      );
+
+      const notice = screen.getByTestId('ai-limit-notice');
+      expect(within(notice).getByText(TITLE)).toBeOnTheScreen();
+      expect(within(notice).queryByText(/이후에 다시 쓸 수 있어요/)).toBeNull();
+      expect(
+        within(notice).getByText(/직접 짜기는 계속 쓸 수 있어요/)
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId('ai-limit-manual-cta')).toBeOnTheScreen();
+      expect(screen.getByTestId('ai-limit-close')).toBeOnTheScreen();
     });
   });
 

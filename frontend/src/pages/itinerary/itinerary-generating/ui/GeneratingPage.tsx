@@ -1,24 +1,18 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { useSavedPlaces } from '@/features/save-place';
 import { firstCoPickSlotKey } from '@/features/itinerary';
 import { buildMustVisitPins } from '@/features/itinerary';
 import { useGenerationBusy } from '@/features/itinerary';
-import { GeneratingScreen } from './GeneratingScreen';
-import {
-  isAiDailyLimitReached,
-  recordAiGeneration,
-  type AiUsageStore,
-} from '../model/aiDailyLimit';
+import { GeneratingScreen, type AiLimitRetryAt } from './GeneratingScreen';
 import type {
   GenerateItineraryRequestGenerationMode,
   Itinerary,
 } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
-  getMe,
   resolveGenerationRefused,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
@@ -26,19 +20,29 @@ import {
   usePostTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { isDateInRange } from '@/shared/lib/monthGrid';
-import { seoulDate } from '@/shared/lib/seoulDate';
-import { isNotFound } from '@/shared/api';
-import { getAccessToken } from '@/shared/api';
+import { seoulDate, seoulTime } from '@/shared/lib/seoulDate';
+import {
+  getAccessToken,
+  isNotFound,
+  isRateLimited,
+  retryAfterSeconds,
+} from '@/shared/api';
 import type { MapCenter, MapPin } from '@/shared/map';
-import { readStringValue, writeStringValue } from '@/shared/storage';
 import { showToast } from '@/shared/ui/Toast';
 
 const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
 const PLANB_HANDOFF_TOAST_MESSAGE = '여행 중이라 재계획으로 다시 짜요';
-const aiUsageStore: AiUsageStore = {
-  read: readStringValue,
-  write: writeStringValue,
-};
+
+/** 429 의 Retry-After(초) → 풀리는 KST 시각. 헤더 없음·깨진 값이면 null(시각 없이 안내, INV-4). */
+function resolveRetryAt(error: unknown, now: Date): AiLimitRetryAt | null {
+  const seconds = retryAfterSeconds(error);
+  if (seconds === null) return null;
+  const at = new Date(now.getTime() + seconds * 1000);
+  return {
+    day: seoulDate(at) === seoulDate(now) ? '오늘' : '내일',
+    time: seoulTime(at),
+  };
+}
 
 /**
  * h09 배선(TRIP-305) — 생성 POST 를 소유·발화하고 진행/성공/실패/이탈을 화면에 잇는다.
@@ -70,11 +74,10 @@ const aiUsageStore: AiUsageStore = {
  *     언마운트) 마지막 렌더가 진행 중이고 성공 콜백 전이면 한 번 알린다. 발화는 언마운트 한 곳뿐 —
  *     `goHome` 은 409 [기다리기]·관찰 모드와 공유라 거기 넣으면 거짓 토스트가 샌다. 성공 표지는
  *     호출별 onSuccess 첫 줄: replace 가 결과 재렌더보다 먼저 화면을 내릴 수 있어서다.
- *  7. **AI 일일 한도(TRIP-1268, 클라 임시 장치).** AI 모드(FULLY_AI·CO_PLAN)의 `start()` 는 `GET /me` 로
- *     계정을 알아낸 뒤 오늘 횟수를 보고 한도면 POST 대신 한도 얼굴을 띄운다. 조회 중엔 POST 를 보류한다.
- *     조회 실패·accountId 없음·저장소 읽기 실패는 허용(fail-open). 성공 계수는 훅 옵션 onSuccess 자리 —
- *     화면을 떠난 뒤 끝난 성공도 센다(1번과 같은 이유). 계정 조회는 순수 fetcher(`getMe`)로 한다 —
- *     react-query 훅은 QueryClient 없이 렌더하는 형제 테스트를 깬다.
+ *  7. **AI 일일 한도(TRIP-1314 서버 · TRIP-1368 수신).** POST 가 429 면 일반 실패가 아니라 한도 얼굴
+ *     (`ai-limit-notice`, [직접 짜기 이어가기]·[닫기] — [다시 시도] 없음)을 띄운다. 429 는 **상태 코드**로 판정하고
+ *     (코드명으로 분기하지 않는다), 풀리는 시각은 `Retry-After`(초)로 계산하며 헤더가 없으면 시각 없이 안내한다.
+ *     한도는 서버 몫이라 클라는 세지 않는다 — 기기 로컬 카운터(TRIP-1268 임시 장치)는 이 칸에서 삭제됐다.
  */
 export function GeneratingPage({
   tripId,
@@ -93,9 +96,6 @@ export function GeneratingPage({
     | '/trips/[tripId]/itinerary/copick/[slotKey]';
 }): ReactElement {
   const router = useRouter();
-  /** AI 모드 start 가 알아낸 계정 — 훅 옵션 onSuccess 가 이 계정으로 센다(undefined = 세지 않음). */
-  const aiAccountIdRef = useRef<string | undefined>(undefined);
-  const [aiLimited, setAiLimited] = useState(false);
   // 캐시 반영은 훅 옵션 자리에 둔다 — `mutate(…, { onSuccess })` 콜백은 화면이 떠나면 불리지 않아,
   // 생성 중 홈으로 이탈하면 홈이 들고 있던 404 가 남는다(TRIP-1015 A · QA #046).
   const generate = usePostTripsTripIdItinerary({
@@ -105,14 +105,6 @@ export function GeneratingPage({
           getGetTripsTripIdItineraryQueryKey(vars.tripId),
           data
         );
-        // AI 모드 start 만 계정을 채운다 — MANUAL 이나 계정을 모르는 성공은 세지 않는다.
-        const accountId = aiAccountIdRef.current;
-        if (accountId !== undefined) {
-          void recordAiGeneration(accountId, {
-            store: aiUsageStore,
-            now: new Date(),
-          });
-        }
       },
     },
   });
@@ -172,39 +164,11 @@ export function GeneratingPage({
     );
   }, [generate, router, tripId, mode, successRoute]);
 
-  // 검사 잠금(AC-23) — 조회·판정이 도는 동안 [다시 시도]·[취소하고 새로 만들기] 재진입을 즉시 막는다.
-  // 상태가 아니라 ref 인 이유: 같은 프레임의 두 번째 탭은 다음 렌더 전이라 상태로는 못 막는다.
-  const checkingRef = useRef(false);
-  const start = useCallback(() => {
-    if (mode !== 'FULLY_AI' && mode !== 'CO_PLAN') {
-      fire();
-      return;
-    }
-    if (checkingRef.current) return;
-    checkingRef.current = true;
-    void getMe()
-      .then(
-        (me) => me.accountId,
-        () => undefined
-      )
-      .then(async (accountId) => {
-        aiAccountIdRef.current = accountId;
-        const reached = await isAiDailyLimitReached(accountId, {
-          store: aiUsageStore,
-          now: new Date(),
-        });
-        if (reached) setAiLimited(true);
-        else fire();
-      })
-      .finally(() => {
-        checkingRef.current = false;
-      });
-  }, [fire, mode]);
-
-  const busy = useGenerationBusy(generate.error, start);
+  const busy = useGenerationBusy(generate.error, fire);
   // 서버 규칙 거절(여행 중·끝난 여행 재생성 409) — 다시 보내도 같은 답이다. 여행 중이면 다시 짜기는 Plan-B 의
   // 몫이라(서버 규칙의 근거, 다녀온 슬롯을 잠근다) 막다른 얼굴 대신 허브 위에 재계획 요청(i04)을 연다.
   // 기간은 거절됐을 때만 묻고, 끝난 여행(재계획도 409)·기간 모름이면 서버 사유 + [닫기]만(INV-4).
+  const aiLimited = isRateLimited(generate.error);
   const refusal = resolveGenerationRefused(generate.error);
   const trip = useGetTripsTripId(tripId, {
     query: { enabled: refusal !== null, retry: false },
@@ -233,8 +197,8 @@ export function GeneratingPage({
   useEffect(() => {
     if (firedRef.current) return;
     firedRef.current = true;
-    start();
-  }, [start]);
+    fire();
+  }, [fire]);
 
   const mapPins = firstPin ? pins : undefined;
   const mapCenter = firstPin
@@ -263,6 +227,7 @@ export function GeneratingPage({
       aiLimit={
         aiLimited
           ? {
+              retryAt: resolveRetryAt(generate.error, new Date()),
               onContinueManual: () =>
                 router.replace({
                   pathname: '/trips/[tripId]/itinerary/manual',
@@ -282,7 +247,7 @@ export function GeneratingPage({
       busy={busy && { ...busy, onWait: goHome }}
       pins={mapPins}
       center={mapCenter}
-      onRetry={start}
+      onRetry={fire}
       onBackground={() => {
         // 앱바 뒤로 = 백그라운드 이탈(화면만 홈으로). 뮤테이션은 리셋하지 않는다 — 이미 나간
         // POST 는 언마운트로 취소되지 않아(axios+react-query) 서버가 백그라운드에서 일정을 완성한다

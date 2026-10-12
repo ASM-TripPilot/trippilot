@@ -58,10 +58,14 @@ const BUSY_UNCANCELABLE_NOTE =
   '지금은 첫날을 만드는 중이라 취소할 수 없어요. 조금 뒤에 다시 시도해 주세요.';
 const BUSY_CANCEL_RETRY_LABEL = '취소하고 새로 만들기';
 const BUSY_WAIT_LABEL = '기다리기';
-// TRIP-1268 — AI 일정 생성 일일 한도(클라 임시 장치). Figma 프레임 없음(busy 와 같은 발명 선례). 시각으로만 말한다(INV-3).
-const AI_LIMIT_TITLE = '오늘 AI 일정 만들기 5번을 모두 썼어요';
-const AI_LIMIT_NOTE =
-  '내일 0시에 다시 쓸 수 있어요.\n직접 짜기는 계속 쓸 수 있어요.';
+// TRIP-1368 — 서버 일일 한도(429) 안내. TRIP-1268 임시 장치가 그린 얼굴을 승계(Figma 프레임 없음 — busy 와 같은 발명 선례).
+// 시각으로만 말한다(INV-3). 횟수는 서버 규칙이라 문구에 박지 않는다.
+const AI_LIMIT_TITLE = '오늘 AI 일정 만들기를 모두 썼어요';
+const AI_LIMIT_MANUAL_NOTE = '직접 짜기는 계속 쓸 수 있어요.';
+const aiLimitNote = (retryAt: AiLimitRetryAt | null | undefined): string =>
+  retryAt
+    ? `${retryAt.day} ${retryAt.time} 이후에 다시 쓸 수 있어요.\n${AI_LIMIT_MANUAL_NOTE}`
+    : AI_LIMIT_MANUAL_NOTE;
 const AI_LIMIT_MANUAL_LABEL = '직접 짜기 이어가기';
 const AI_LIMIT_CLOSE_LABEL = '닫기';
 // 서버 규칙 거절(409) 중 Plan-B 로 넘길 수 없는 경우(끝난 여행·기간 모름). 본문은 서버 사유 그대로 — 규칙의 주인은 서버다.
@@ -167,6 +171,12 @@ function useStepPulse(count: number): Animated.Value[] {
   return values;
 }
 
+/** 한도가 풀리는 KST 벽시계 — `day` 는 '오늘'|'내일'(기준일 대비), `time` 은 'HH:mm'. */
+export interface AiLimitRetryAt {
+  day: '오늘' | '내일';
+  time: string;
+}
+
 export interface GeneratingScreenProps {
   /** 앱바 뒤로 셰브론 press — 배선이 앞으로 이탈(여행/홈), 뮤테이션은 살아 있음(뒤로가기=백그라운드). */
   onBackground: () => void;
@@ -184,8 +194,10 @@ export interface GeneratingScreenProps {
     onCancelAndRetry: () => void;
     onWait: () => void;
   } | null;
-  /** TRIP-1268 — 오늘 AI 생성 한도에 닿았으면 다른 얼굴보다 먼저 한도 안내([다시 시도] 없음). */
+  /** TRIP-1368 — 서버가 오늘 AI 생성 한도(429)를 알렸으면 다른 얼굴보다 먼저 한도 안내([다시 시도] 없음).
+   * `retryAt` = 풀리는 시각(Retry-After 로 계산) — 헤더가 없으면 null 이라 시각 없이 안내만 한다. */
   aiLimit?: {
+    retryAt?: AiLimitRetryAt | null;
     onContinueManual: () => void;
     onClose: () => void;
   } | null;
@@ -236,7 +248,7 @@ export function GeneratingScreen({
               testID="ai-limit-notice"
               icon={<AlertCircleGlyph />}
               title={AI_LIMIT_TITLE}
-              description={AI_LIMIT_NOTE}
+              description={aiLimitNote(aiLimit.retryAt)}
               actions={[
                 {
                   testID: 'ai-limit-manual-cta',
