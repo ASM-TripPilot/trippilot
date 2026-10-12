@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -23,6 +24,7 @@ from fastapi.testclient import TestClient
 
 from trippilot.agents.planb.rag import PlanBRagRequest
 from trippilot.agents.schedule.agent import (
+    ScheduleAgent,
     apply_directives,
     boost_add_one,
     trim_planb_rank_for_add_one,
@@ -31,17 +33,24 @@ from trippilot.api.wiring import build_dev_app
 from trippilot.assembly_engine.scorer import DIRECTIVE_STEP, near_fit
 from trippilot.domain.common import GeoPoint, PoiId, Rejection, RejectionKind
 from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi import OpenHour, PoiCategory
 from trippilot.llm_gateway.gates.replan_directive_translation import DirectiveTranslation
+from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.alternative_selection import (
     AlternativeSelectionInput,
     build_alternative_selection_vars,
 )
+from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 
+from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_embedding import FakeEmbedding
+from tests.fakes.fake_llm import FakeLlm
+from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.fakes.in_memory_vector_store import InMemoryVectorStore
 from tests.test_api_replan_wired import _DIRECTIVES, _body
 from tests.test_replan_via_planb import _agent, _case, _placed, _task
+from tests.test_schedule_coordinator import _C1CFG, _AssemblyProvider, _Renderer, _Sink
 
 
 # ── ① LLM 점수에도 지시가 붙는다 ─────────────────────────────────────────
@@ -177,6 +186,46 @@ def test_PlanB_가_다른_카페를_올려도_카페는_한_곳이다() -> None:
     assert "p4" in placed, f"PlanB 의 선택을 존중해야 한다 {placed}"
 
 
+def _agent_scored(scores: dict[str, float]) -> ScheduleAgent:
+    trace = InMemoryTrace()
+    llm = FakeLlm(json.dumps(
+        {"scores": [{"poiId": k, "score": v, "reason": "r"} for k, v in scores.items()]}))
+    gateway = GatewayFacade(llm, _Renderer(), ClosedSetGate(), _C1CFG, trace)
+    return ScheduleAgent(PreferenceScoringWorker(gateway),
+                         _AssemblyProvider(trace, _Sink(), primary=True), FakeClock(), trace)
+
+
+def test_점수가_낮은_카페도_한_곳_추가면_들어오고_원래_가던_곳은_남는다() -> None:
+    """가산(+0.3)만으로는 0.9 판을 못 이기는 카페 — 종전엔 카페 0곳이 **조용히** 나왔다
+    (서울 실측 8회 중 1회, 2026-10-12). 고른 1곳은 시각 없는 필수 방문으로 올라간다."""
+    pool, req = _case()
+    pool = replace(pool, pois=tuple(
+        replace(p, category=PoiCategory.CAFE) if str(p.poi_id) == "p6" else p
+        for p in pool.pois))
+    agent = _agent_scored({f"p{i}": 0.9 for i in range(1, 6)} | {"p6": 0.3})
+
+    outcome = agent.run(_task(pool, request=replace(
+        req, add_one_categories=frozenset({PoiCategory.CAFE}))))
+
+    placed = _placed(outcome)
+    assert "p6" in placed, f"말한 카페가 안 들어왔다 {placed}"
+    assert {"p1", "p2"} & set(placed), f"원래 가던 곳이 다 밀렸다 {placed}"
+
+
+def test_한_곳_추가를_못_넣으면_재계획_노트로_밝힌다() -> None:
+    """고른 카페가 그날 체류만큼 열려 있지 않으면 필수 방문도 못 놓는다 — 그 사실이
+    재계획 응답 notes 까지 가야 한다(침묵 실패 금지, INV-4)."""
+    def narrow_cafe(task):
+        first = task.pool.pois[0]
+        cafe = replace(first, category=PoiCategory.CAFE,
+                       open_hours=(OpenHour(day_of_week=0, open_min=660, close_min=680),))
+        return replace(task, pool=replace(task.pool, pois=(cafe, *task.pool.pois[1:])))
+
+    body, _ = _replan(directives=["ADD_CAFE"], tweak_task=narrow_cafe)
+
+    assert any(n.startswith("add_one_unplaced: ") for n in body["notes"]), body["notes"]
+
+
 def test_풀에_카페가_없으면_한_곳_추가도_못_닿는다고_밝힌다() -> None:
     """ONE 지시는 prefer 가 아니라 add_one 으로 가므로 노트가 빠지면 침묵 실패다(리뷰 재현)."""
     body, _ = _replan(directives=["ADD_CAFE"])
@@ -214,7 +263,7 @@ def test_가까운_데로는_먼_후보를_더_내린다() -> None:
     assert out[0].score > out[1].score
 
 
-def _replan(**over):
+def _replan(tweak_task=lambda task: task, **over):
     app = build_dev_app(directives=_DIRECTIVES, embedding=FakeEmbedding(),
                         vector_store=InMemoryVectorStore())
     orchestrator = app.state.orchestrator
@@ -224,7 +273,7 @@ def _replan(**over):
     class _Spy:
         def run(self, task):
             seen["agent"].append(task.request)
-            return real_agent.run(task)
+            return real_agent.run(tweak_task(task))
 
     class _RagSpy:
         def run(self, request):
