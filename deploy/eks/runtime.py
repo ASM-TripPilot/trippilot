@@ -11,6 +11,7 @@ from runtime_io import CommandError, command
 import runtime_db
 import runtime_secrets
 import runtime_kb
+import runtime_pois
 import runtime_smoke
 
 HOST_PATTERN = r"(?=.{1,253}$)[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?"
@@ -68,9 +69,13 @@ def ensure_namespace(namespace, shell):
 def parser():
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="action", required=True)
-    for action in ("ensure-namespace", "sync-secrets", "bootstrap-db", "cleanup-db", "render-values", "smoke", "load-kb"):
+    for action in ("ensure-namespace", "sync-secrets", "bootstrap-db", "cleanup-db", "render-values", "smoke", "load-kb",
+                   "load-pois"):
         sub = commands.add_parser(action)
         sub.add_argument("--namespace", default="trippilot")
+        if action == "load-pois":
+            # 기본은 upsert 만. 퇴출(LOST)은 입력으로만 켜고, 대량 정리 가드(409)는 여기서 넘길 수 없다.
+            sub.add_argument("--close-missing", action="store_true")
         if action in ("sync-secrets", "bootstrap-db", "render-values"):
             sub.add_argument("--outputs", type=Path, required=True)
         if action in ("sync-secrets", "render-values"):
@@ -104,6 +109,8 @@ def main(argv=None):
         runtime_smoke.run(args.namespace, command)
     elif args.action == "load-kb":
         runtime_kb.run(args.namespace, command)
+    elif args.action == "load-pois":
+        runtime_pois.run(args.namespace, command, close_missing=args.close_missing)
     elif args.action == "render-values":
         values = helm_values(outputs, args.image_tag, args.certificate_arn, args.hostname, args.embedding_enabled)
         Path(args.output).write_text(json.dumps(values, indent=2) + "\n")

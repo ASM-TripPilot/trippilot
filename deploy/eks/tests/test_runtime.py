@@ -385,6 +385,71 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertNotIn("s3cret", shown)
         self.assertIn("delete", shell.call_args_list[-1].args[0])
 
+    def test_load_pois_job_uses_serving_image_and_the_canonical_script(self):
+        """공유본은 서빙 ai 이미지 안에 있고, 스크립트는 복제하지 않고 ConfigMap 으로 싣는다.
+        `--close-missing` 은 입력으로만, `--allow-mass-close` 는 어떤 경우에도 넘기지 않는다."""
+        import runtime_pois
+        bundle = runtime_pois.manifest("trippilot", "123.dkr.ecr/ai:sha-1", "print('canon')")
+        self.assertEqual(bundle["kind"], "List")
+        configmap, job = bundle["items"]
+        self.assertEqual(configmap["data"], {"ingest_pois.py": "print('canon')"})
+        pod = job["spec"]["template"]["spec"]
+        container = pod["containers"][0]
+        self.assertEqual(container["image"], "123.dkr.ecr/ai:sha-1")
+        shell = container["command"][2]
+        self.assertIn("/scripts/ingest_pois.py --base-url http://backend:8080 /app/data/collected_pois.json", shell)
+        self.assertNotIn("--close-missing", shell)
+        self.assertEqual(container["workingDir"], "/tmp")  # 되돌리기 SQL 이 쓰이는 곳(루트는 읽기 전용)
+        env = {e["name"]: e for e in container["env"]}
+        self.assertEqual(env["SERVICE_AUTH_TOKEN"]["valueFrom"]["secretKeyRef"],
+                         {"name": "trippilot-shared", "key": "SERVICE_AUTH_TOKEN", "optional": False})
+        self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
+        self.assertEqual(job["spec"]["template"]["metadata"]["labels"]["app.kubernetes.io/name"],
+                         "trippilot-poi-load")
+        closing = runtime_pois.manifest("trippilot", "img", "x", close_missing=True)
+        closing_shell = closing["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
+        self.assertIn("--close-missing", closing_shell)
+        self.assertNotIn("--allow-mass-close", closing_shell)
+
+    def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
+        summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", summary, ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out:
+            runtime.main(["load-pois"])
+        calls = [c.args[0] for c in shell.call_args_list]
+        self.assertIn("deployment/ai", calls[1])
+        applied = json.loads(shell.call_args_list[2].args[1])
+        self.assertEqual(applied["kind"], "List")
+        self.assertIn("ingest_pois.py", applied["items"][0]["data"])  # 정본 스크립트가 실제로 읽혀 실렸다
+        self.assertIn("job/trippilot-poi-load", calls[3])
+        out.assert_any_call(summary)
+        self.assertIn("job,configmap", calls[-1])  # 둘 다 치운다
+
+    def test_load_pois_with_no_effect_is_a_failure(self):
+        """적재가 '성공'인데 신규·갱신이 0 이면 아무것도 안 들어간 것이다 — 조용히 지나가면 "효과 없음"이 또 온다."""
+        shell = Mock(side_effect=["", "img", "", "", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
+        with patch("runtime.command", shell), patch("builtins.print"), self.assertRaises(RuntimeError):
+            runtime.main(["load-pois"])
+        self.assertIn("delete", shell.call_args_list[-1].args[0])
+
+    def test_load_pois_failure_shows_the_cause_without_the_token(self):
+        logs = "SERVICE_AUTH_TOKEN=s3cret 가 비어 있다\n  [3/39] HTTP 401 — 중단한다. 응답: unauthorized\n"
+        shell = Mock(side_effect=["", "img", "", runtime.CommandError("kubectl", "timed out"), logs, ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out, \
+                self.assertRaises(runtime.CommandError):
+            runtime.main(["load-pois"])
+        shown = "\n".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("HTTP 401", shown)
+        self.assertNotIn("s3cret", shown)
+        self.assertIn("delete", shell.call_args_list[-1].args[0])
+
+    def test_load_pois_cli_passes_close_missing(self):
+        with patch("runtime.runtime_pois.run") as run, patch("builtins.print"):
+            runtime.main(["load-pois", "--close-missing"])
+            self.assertTrue(run.call_args.kwargs["close_missing"])
+            runtime.main(["load-pois"])
+            self.assertFalse(run.call_args.kwargs["close_missing"])
+
     def test_smoke_checks_internal_denial_and_cleans_up_failure(self):
         import runtime_smoke
         manifest = runtime_smoke.manifest("trippilot")
