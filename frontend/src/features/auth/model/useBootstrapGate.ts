@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import NetInfo from '@react-native-community/netinfo';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { fetchBootstrap } from '@/shared/api';
 import { getTokens, hasStoredToken } from '@/shared/storage';
 import { getAccessToken, hydrate, subscribeAccessToken } from '@/shared/api';
 import { subscribeBootstrapReeval } from '@/shared/lib/bootstrapReeval';
 import { publishGateDestination } from './gateDestination';
+import { prefetchTrips } from './prefetchTrips';
 import {
   resolveBootstrapDestination,
   type BootstrapDestination,
@@ -31,6 +33,9 @@ interface BootstrapGateState {
  * subscribeAccessToken 이 부트스트랩을 재조회한다 — 단, effect 를 재실행하지 않고 같은
  * applyServerResult 를 다시 부르기만 한다. effect 재실행으로 만들면 3초 타임아웃이 재무장돼
  * 재조회 무응답이 잠정 분기(HOME)로 새어 AC-S2 를 어긴다.
+ *
+ * TRIP-1362 — 저장 토큰이 있으면 hydrate 직후 홈의 `GET /trips` 를 /bootstrap 과 나란히 미리 받는다(게스트는 401 만
+ * 낭비하므로 안 보낸다). QueryClient 는 effect 안에서 ref 로 읽어 deps 를 [] 로 유지한다(재실행 = 타이머 재무장).
  */
 export function useBootstrapGate(): BootstrapGateState {
   const [phase, setPhase] = useState<BootstrapPhase>('loading');
@@ -38,6 +43,7 @@ export function useBootstrapGate(): BootstrapGateState {
     null
   );
   const [isProvisional, setIsProvisional] = useState(false);
+  const queryClientRef = useRef(useQueryClient());
 
   useEffect(() => {
     let cancelled = false;
@@ -101,6 +107,9 @@ export function useBootstrapGate(): BootstrapGateState {
       }
       // 결함 B 판별의 절반 — "부팅 시 저장 토큰이 hydrate 됐나"(홀더가 401 로 비면 인증 실패).
       hadStoredToken = Boolean(stored?.accessToken);
+      if (hadStoredToken) {
+        prefetchTrips(queryClientRef.current);
+      }
       // hydrate 뒤·첫 왕복 앞에 구독한다 — hydrate 통지는 이미 지나가 부팅 중복 요청이 없고(케이스 3),
       // 첫 왕복이 느린 동안의 로그아웃도 재조회를 부른다(TRIP-1034 03b 경고-2).
       unsubscribeToken = subscribeAccessToken(() => {

@@ -9,7 +9,11 @@ import {
   requestPushPermission,
 } from '@/shared/push';
 
-import { SplashGate, SPLASH_MIN_VISIBLE_MS } from './SplashGate';
+import {
+  PUSH_REGISTER_DELAY_MS,
+  SplashGate,
+  SPLASH_MIN_VISIBLE_MS,
+} from './SplashGate';
 
 /**
  * AC-W-01·02·03·06 · SplashGate — 부트스트랩 게이트의 렌더 분기 배선.
@@ -47,6 +51,15 @@ jest.mock('@/app/model/useAccountBoundaryReset', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('expo-router', () => require('@/test-support/expoRouterStackMock'));
 
+// 하한 기준점(JS 모듈 로드 시각)은 모듈 최상위 값이라 테스트가 바꿀 수 없다 — 목으로 갈아 beforeEach 에서 "지금"으로 맞춘다
+// (그래야 마운트 시점 경과 0 = 옛 동작과 같다). 경과를 흉내 내는 테스트는 mockBootAt 을 과거로 둔다(TRIP-1362).
+let mockBootAt = 0;
+jest.mock('./bootClock', () => ({
+  get BOOT_MODULE_LOADED_AT() {
+    return mockBootAt;
+  },
+}));
+
 jest.mock('@/shared/push', () => ({
   promptAndRegisterPush: jest.fn(() => Promise.resolve()),
   registerPushIfGranted: jest.fn(() => Promise.resolve()),
@@ -75,11 +88,21 @@ function gate(overrides: Partial<GateState> = {}): GateState {
 beforeEach(() => {
   jest.clearAllMocks();
   jest.useFakeTimers();
+  mockBootAt = Date.now();
 });
 
 function passFloor(): void {
   act(() => {
     jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS);
+  });
+}
+
+// 푸시 재등록은 HOME 진입 뒤 PUSH_REGISTER_DELAY_MS 만큼 미룬다(TRIP-1362) — 그 시간을 흘려야 루틴이 불린다.
+function passPushDelay(): void {
+  act(() => {
+    jest.advanceTimersByTime(PUSH_REGISTER_DELAY_MS);
+    // InteractionManager.runAfterInteractions 는 큐를 한 틱 뒤에 비운다.
+    jest.runOnlyPendingTimers();
   });
 }
 
@@ -202,6 +225,45 @@ describe('SplashGate — 최소 노출 floor (TRIP-579)', () => {
     expect(screen.queryByTestId('gate-stack')).toBeNull();
   });
 
+  it('하한 기준점은 마운트가 아니라 JS 모듈 로드 시각이다 — 로드 후 400ms 가 지났으면 마운트 뒤 500ms 에 풀린다 (TRIP-1362)', () => {
+    mockBootAt = Date.now() - 400;
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+
+    render(<SplashGate />);
+    act(() => {
+      jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS - 400 - 1);
+    });
+    expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
+
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(screen.getByTestId('gate-route-(tabs)')).toBeOnTheScreen();
+  });
+
+  it('로드 후 이미 900ms 를 넘겼으면 하한은 마운트 즉시 풀리되 0 으로 내려가진 않는다(한 프레임은 스플래시가 보인다) (TRIP-1362)', () => {
+    mockBootAt = Date.now() - 5000;
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+
+    render(<SplashGate />);
+    expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
+
+    act(() => {
+      jest.advanceTimersByTime(0);
+    });
+    expect(screen.getByTestId('gate-route-(tabs)')).toBeOnTheScreen();
+  });
+
+  it('시계가 뒤로 가 경과가 음수여도 하한(900ms)보다 오래 기다리지 않는다 (TRIP-1362)', () => {
+    mockBootAt = Date.now() + 60_000;
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+
+    render(<SplashGate />);
+    passFloor();
+
+    expect(screen.getByTestId('gate-route-(tabs)')).toBeOnTheScreen();
+  });
+
   it('부트스트랩이 floor 이후에 resolved 되면 추가 지연 없이 즉시 라우팅한다 (하한 전용 · AC-3)', () => {
     mockUseBootstrapGate.mockReturnValue(
       gate({ phase: 'loading', destination: null })
@@ -249,7 +311,9 @@ describe('TRIP-835 AC-4 · HOME 진입 → 조용한 재등록', () => {
     passFloor();
     view.rerender(<SplashGate />);
 
-    // 단언
+    // 단언 — 홈 첫 요청과 경쟁하지 않게 지연 전에는 0회, 지연 뒤 1회(TRIP-1362)
+    expect(mockRegisterIfGranted).not.toHaveBeenCalled();
+    passPushDelay();
     expect(mockRegisterIfGranted).toHaveBeenCalledTimes(1);
     expect(promptAndRegisterPush).not.toHaveBeenCalled();
     expect(requestPushPermission).not.toHaveBeenCalled();
@@ -288,9 +352,22 @@ describe('TRIP-835 AC-4 · HOME 진입 → 조용한 재등록', () => {
     // 실행: 로그인 성공 → 게이트가 다시 조회해 HOME.
     mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
     view.rerender(<SplashGate />);
+    passPushDelay();
 
     // 단언
     expect(mockRegisterIfGranted).toHaveBeenCalledTimes(1);
+  });
+
+  it('H4b 지연 중에 HOME 을 떠나면(로그아웃) 예약된 등록은 취소된다 — 0회 (TRIP-1362)', () => {
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+    const view = render(<SplashGate />);
+    passFloor();
+
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'LOGIN' }));
+    view.rerender(<SplashGate />);
+    passPushDelay();
+
+    expect(mockRegisterIfGranted).not.toHaveBeenCalled();
   });
 
   it('H5 로그아웃 뒤 다시 로그인하면(HOME → LOGIN → HOME) 다시 부른다 — 총 2회', () => {
@@ -298,10 +375,13 @@ describe('TRIP-835 AC-4 · HOME 진입 → 조용한 재등록', () => {
     const view = render(<SplashGate />);
     passFloor();
 
+    passPushDelay();
+
     mockUseBootstrapGate.mockReturnValue(gate({ destination: 'LOGIN' }));
     view.rerender(<SplashGate />);
     mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
     view.rerender(<SplashGate />);
+    passPushDelay();
 
     expect(mockRegisterIfGranted).toHaveBeenCalledTimes(2);
   });

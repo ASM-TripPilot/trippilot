@@ -41,6 +41,15 @@ jest.mock('expo-router', () => ({
   },
 }));
 
+// 하한 기준점(JS 모듈 로드 시각)은 모듈 최상위 값이라 테스트가 바꿀 수 없다 — 목으로 갈아 beforeEach 에서 "지금"으로 맞춘다
+// (그래야 마운트 시점 경과 0 = 옛 동작과 같다). 경과를 흉내 내는 테스트는 mockBootAt 을 과거로 둔다(TRIP-1362).
+let mockBootAt = 0;
+jest.mock('./bootClock', () => ({
+  get BOOT_MODULE_LOADED_AT() {
+    return mockBootAt;
+  },
+}));
+
 jest.mock('@/shared/push', () => ({
   promptAndRegisterPush: jest.fn(() => Promise.resolve()),
   registerPushIfGranted: jest.fn(() => Promise.resolve()),
@@ -123,6 +132,7 @@ function expectNothingCleaned(): void {
 beforeEach(() => {
   jest.clearAllMocks();
   jest.useFakeTimers();
+  mockBootAt = Date.now();
   queryClient = new QueryClient();
   authMountedAt = { dismissAll: null, replace: null };
   mockCanDismiss.mockReturnValue(true);
