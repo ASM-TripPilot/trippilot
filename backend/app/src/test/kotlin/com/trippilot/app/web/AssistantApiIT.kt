@@ -276,7 +276,9 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         val (accountId, token) = newAccount()
         val old = open(token, null).second["session"]["id"].asText()
         insertMessage(old, accountId, "USER", "오래된 말")
-        jdbc.update("UPDATE assistant_session SET expires_at = now() - interval '1 second' WHERE session_id = ?::uuid", old)
+        // 넉넉히 지난 시각으로 심는다 — 만료는 앱 시계로 판정하고 이 값은 DB 시계라, 1초 차이로 두면 두 시계가 조금만
+        // 어긋나도 "아직 안 지났다"가 된다(전체 빌드에서 실제로 한 번 흔들렸다).
+        jdbc.update("UPDATE assistant_session SET expires_at = now() - interval '1 hour' WHERE session_id = ?::uuid", old)
 
         call(HttpMethod.GET, "/api/v1/assistant/sessions", token).second.size() shouldBe 0
         call(HttpMethod.GET, "/api/v1/assistant/sessions/$old/messages", token).first shouldBe 404 // id 로도 읽히지 않는다
@@ -331,11 +333,10 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `턴과 제안은 계약만 열려 있다 — 채워질 때까지 501`() {
+    fun `제안은 계약만 열려 있다 — 채워질 때까지 501`() {
         val (_, token) = newAccount()
         val id = UUID.randomUUID()
 
-        call(HttpMethod.POST, "/api/v1/assistant/sessions/$id/turns", token, "{}").first shouldBe 501
         call(HttpMethod.POST, "/api/v1/assistant/proposals/$id/apply", token).first shouldBe 501
         call(HttpMethod.POST, "/api/v1/assistant/proposals/$id/dismiss", token).first shouldBe 501
     }

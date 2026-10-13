@@ -3,6 +3,7 @@ package com.trippilot.assistant.application
 import com.trippilot.savedaccommodation.api.TripBaseStayFacade
 import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Component
+import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
@@ -24,12 +25,21 @@ class TripContextReader(
         val nights = ChronoUnit.DAYS.between(trip.startDate, trip.endDate).toInt()
         // 숙소가 여럿이면 첫 숙박일의 것을 말한다 — 칩은 한 줄이고, 날마다의 숙소는 진행 검토가 다룬다.
         val stayName = baseStays.findBaseStays(tripId, trip.startDate, trip.endDate).minByOrNull { it.date }?.name
-        return TripContext(trip.destinations, nights, stayName)
+        return TripContext(trip.destinations, nights, stayName, trip.startDate, trip.endDate)
     }
 }
 
 /** @property nights 숙박 수. 0 이면 당일 여행이다. */
-data class TripContext(val destinations: List<String>, val nights: Int, val baseStayName: String?) {
+data class TripContext(
+    val destinations: List<String>,
+    val nights: Int,
+    val baseStayName: String?,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+) {
+    /** 여행 중인가 — 시작일부터 마지막 날까지(양 끝 포함). */
+    fun inTrip(today: LocalDate): Boolean = today in startDate..endDate
+
     /** 칩 문구 — `부산 2박 3일 · 등록 숙소 서면`(`b01`). 숙소가 없으면 뒷부분을 뺀다(없는 것을 있다고 하지 않는다). */
     fun chip(): String {
         val where = destinations.joinToString("·").ifEmpty { "여행" }

@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":common:core"))
     implementation(project(":modules:trip"))                  // R1: 소유 확인·컨텍스트 칩 재료 — trip.api
     implementation(project(":modules:saved-accommodation"))   // R1: 기준 숙소 이름(칩) — TripBaseStayFacade
+    implementation(project(":modules:moderation"))            // R1: 입력 선검사 — TextModerationFacade
     implementation(libs.spring.boot.starter.jdbc)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

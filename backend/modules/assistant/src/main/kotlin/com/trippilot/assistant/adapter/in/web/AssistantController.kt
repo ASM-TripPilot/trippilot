@@ -1,13 +1,19 @@
 package com.trippilot.assistant.adapter.`in`.web
 
 import com.trippilot.assistant.application.AssistantSessionService
+import com.trippilot.assistant.application.AssistantTurnService
 import com.trippilot.assistant.application.MessagePage
 import com.trippilot.assistant.application.OpenedSession
 import com.trippilot.assistant.application.SessionSummary
+import com.trippilot.assistant.application.TurnInput
+import com.trippilot.assistant.application.TurnResult
 import com.trippilot.assistant.domain.AssistantMessage
+import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.NextAction
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.core.error.AuthenticationRequired
+import com.trippilot.core.error.FieldError
+import com.trippilot.core.error.ValidationFailed
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -29,13 +35,16 @@ import java.util.UUID
  * **응답 모양은 프론트가 먼저 만든 계약을 따른다**(`frontend/…/assistant-sheet/api/assistantContract.ts`,
  * 사용자 결정 2026-10-13) — 세션 목록이 감싸는 객체 없이 배열인 것도 그래서다.
  *
- * 턴·제안은 **계약만 열려 있다**. `OpenApiContractIT` 가 계약과 핸들러의 일치를 요구해 자리를 두되, 채워질 때까지
- * 501 을 낸다(TRIP-1378·1379). 501 을 예외가 아니라 응답으로 직접 내는 이유: `DomainException` 이 sealed 라
+ * 제안(적용·취소)은 **계약만 열려 있다**. `OpenApiContractIT` 가 계약과 핸들러의 일치를 요구해 자리를 두되, 채워질 때까지
+ * 501 을 낸다(TRIP-1379). 501 을 예외가 아니라 응답으로 직접 내는 이유: `DomainException` 이 sealed 라
  * 새 501 은 `common/core` 에 타입이 하나 들고, 곧 지워질 코드에 그만한 값어치가 없다.
  */
 @RestController
 @RequestMapping("/api/v1/assistant")
-class AssistantController(private val sessions: AssistantSessionService) {
+class AssistantController(
+    private val sessions: AssistantSessionService,
+    private val turns: AssistantTurnService,
+) {
 
     @PostMapping("/sessions")
     fun open(principal: Principal, @RequestBody request: OpenSessionRequest): OpenSessionResponse =
@@ -58,7 +67,8 @@ class AssistantController(private val sessions: AssistantSessionService) {
     fun clear(principal: Principal, @PathVariable sessionId: UUID) = sessions.clear(principal.accountId(), sessionId)
 
     @PostMapping("/sessions/{sessionId}/turns")
-    fun sendTurn(principal: Principal, @PathVariable sessionId: UUID): ResponseEntity<Void> = notYet(principal)
+    fun sendTurn(principal: Principal, @PathVariable sessionId: UUID, @RequestBody request: SendTurnRequest): SendTurnResponse =
+        SendTurnResponse.from(turns.send(principal.accountId(), sessionId, request.clientTurnId, request.input.toInput(), request.screen.surface))
 
     @PostMapping("/proposals/{proposalId}/apply")
     fun applyProposal(principal: Principal, @PathVariable proposalId: UUID): ResponseEntity<Void> = notYet(principal)
@@ -76,6 +86,36 @@ class AssistantController(private val sessions: AssistantSessionService) {
 /** 토큰 sub → 계정 id. UUID 가 아니면 인증 실패로 다룬다(형식 오류를 500 으로 흘리지 않는다). */
 private fun Principal.accountId(): UUID =
     runCatching { UUID.fromString(name) }.getOrElse { throw AuthenticationRequired() }
+
+/**
+ * 한 턴. [clientTurnId] 가 멱등 키다 — 앱은 재시도할 때 같은 값을 다시 보낸다(BR-U8-21).
+ * [screen] 은 도우미를 연 화면뿐이다. 일정 내용은 받지 않는다 — 서버가 직접 읽는다(BR-U8-02).
+ */
+data class SendTurnRequest(
+    val clientTurnId: UUID,
+    val input: TurnInputRequest,
+    val screen: ScreenRequest,
+)
+
+/** `TEXT` 면 [text], `ACTION` 이면 [quickReplyId] 가 있어야 한다. 길이·발급 여부는 서비스가 본다. */
+data class TurnInputRequest(val type: TurnInputType, val text: String? = null, val quickReplyId: String? = null) {
+    fun toInput(): TurnInput = when (type) {
+        TurnInputType.TEXT -> TurnInput.Text(text ?: throw ValidationFailed(listOf(FieldError("input.text", "발화가 없습니다."))))
+        TurnInputType.ACTION ->
+            TurnInput.Action(quickReplyId ?: throw ValidationFailed(listOf(FieldError("input.quickReplyId", "빠른 답 id 가 없습니다."))))
+    }
+}
+
+enum class TurnInputType { TEXT, ACTION }
+
+data class ScreenRequest(val surface: AssistantSurface)
+
+/** 사용자 메시지 1건 + 도우미 메시지 1건 이상. [quickReplies] 는 입력창 위에 보일 빠른 답이다. */
+data class SendTurnResponse(val messages: List<MessageResponse>, val quickReplies: List<QuickReply>) {
+    companion object {
+        fun from(r: TurnResult) = SendTurnResponse(r.messages.map { MessageResponse.from(it) }, r.quickReplies)
+    }
+}
 
 /** [tripId] null = 여행 없이 연다(일반 도움 모드, BR-U8-05). 화면이 어디인지(`surface`)는 턴이 싣는다. */
 data class OpenSessionRequest(val tripId: UUID? = null)
