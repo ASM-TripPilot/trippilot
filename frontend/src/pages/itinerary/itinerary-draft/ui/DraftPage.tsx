@@ -36,9 +36,10 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { getAccessToken } from '@/shared/api';
+import { useAccessToken } from '@/shared/api';
 import { isDateInRange } from '@/shared/lib/monthGrid';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import { useQueryDataUpdateCount } from '@/shared/lib/useQueryDataUpdateCount';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
@@ -125,21 +126,21 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
    * (AC-9 · AC-10 · INV-4). 기준선을 기억해 두면 캐시를 건드리지 않고도 다시 셀 수 있다.
    * (재생성은 이제 생성 화면을 거쳐 이 화면을 **새로 마운트**하므로 그 마운트가 기준선을 다시 잡는다 — TRIP-1037.)
    *
-   * `useRef` 는 **다시 그리지 않고 값만 들고 있는 상자**다 — 이 값은 화면에 안 보이고
-   * 판정에만 쓰이므로 바뀌었다고 다시 그릴 이유가 없다.
+   * `useState` 의 초기화 함수는 **첫 렌더에서만** 돈다(TRIP-1364) — 렌더 중에 캐시를 직접 읽는 줄이
+   * React Compiler 아래서도 마운트 때 딱 한 번만 읽히는 걸 코드로 못 박는다(`useRef(읽기())` 는 인자가
+   * 매 렌더 계산돼 컴파일러가 그 식을 memo 하면 의미가 흐려진다). 값은 setter 를 안 쓰므로 안 바뀐다.
    *
    * 처음 값은 0이 아니라 **마운트 순간의 캐시 카운터**다(TRIP-1006 #084). 카운터는 이 화면 것이
    * 아니라 캐시 속 쿼리 하나의 것이라, 같은 일정을 보는 다른 화면(같이 짜기의 PARTIAL 폴링 등)이
    * 이미 30 넘게 올려 둘 수 있다. 0부터 세면 열자마자 "상한 도달"로 판정해 폴링을 시작조차 안 한다.
-   * (`useRef` 의 인자는 첫 렌더에서만 쓰인다 — 이후 렌더에서 다시 계산돼도 버려진다.)
    */
-  const pollBaseline = useRef(
-    queryClient.getQueryState(itineraryQueryKey)?.dataUpdateCount ?? 0
+  const [pollBaseline] = useState(
+    () => queryClient.getQueryState(itineraryQueryKey)?.dataUpdateCount ?? 0
   );
 
   /** 캐시가 새로 만들어져 카운터가 되감기면 음수가 될 수 있어 0으로 바닥을 둔다. */
   function pollsSinceBaseline(dataUpdateCount: number): number {
-    return Math.max(0, dataUpdateCount - pollBaseline.current);
+    return Math.max(0, dataUpdateCount - pollBaseline);
   }
 
   const trip = useGetTripsTripId(tripId);
@@ -198,8 +199,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // 상한(30회 ≒ 60초)에 걸려 폴링이 멈췄는데 아직 `PARTIAL` 이면 2차 생성이 영영 안 온
   // 것이다. 이 항이 없으면 폴링만 조용히 멈추고 화면은 **완전히 정상으로 보인다**(AC-9
   // 후반절 · INV-4). 횟수는 `useQuery` 반환값에 없고 캐시의 `QueryState` 에만 있다.
+  // 구독으로 읽는다(TRIP-1364) — 렌더 중 `getQueryState()` 직접 읽기는 React Compiler 가 memo 해 첫 값에 굳는다.
   const pollCount = pollsSinceBaseline(
-    queryClient.getQueryState(itineraryQueryKey)?.dataUpdateCount ?? 0
+    useQueryDataUpdateCount(itineraryQueryKey)
   );
   const pollExhausted =
     itinerary.data?.generationState === 'PARTIAL' &&
@@ -235,8 +237,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // TRIP-1094 — 넣지 못한 꼭 갈 곳의 이름은 담은 장소에서 찾는다. 조회는 미배치가 있고 로그인일 때만
   // (AC-13). 조회 대기·실패·게스트면 담은 장소가 빈 배열이라 서버 문구만 먼저 보인다(Q4 · INV-4).
   const unplaced = itinerary.data?.unplacedMustVisits;
+  // 구독으로 읽는다(TRIP-1364) — 렌더 중 `getAccessToken()` 은 컴파일러가 memo 해 로그인·로그아웃을 놓친다.
+  const accessToken = useAccessToken();
   const { savedPlaces } = useSavedPlaces({
-    isAuthed: getAccessToken() !== null && (unplaced?.length ?? 0) > 0,
+    isAuthed: accessToken !== null && (unplaced?.length ?? 0) > 0,
   });
   const unplacedRows = resolveUnplacedNames({ unplaced, savedPlaces });
 
