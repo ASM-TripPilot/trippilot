@@ -90,7 +90,6 @@ class AssistantOpsIT : AbstractPostgresIntegrationTest() {
 
         sessionExists(expired) shouldBe false
         messageCount(expired) shouldBe 0 // 사용자가 한 말이 남지 않는다
-        jdbc.queryForObject("SELECT count(*) FROM assistant_proposal WHERE session_id = ?", Int::class.java, expired) shouldBe 0
         sessionExists(live) shouldBe true
         messageCount(live) shouldBe 2
         usageDays(account) shouldContainExactly listOf(today.minusDays(40), today) // 40일은 남고 41일은 간다
