@@ -3917,7 +3917,12 @@ components:
           description: >
             closed-set 이지만 문자열로 연다(다음 행동의 type 과 같은 이유 — 앱은 모르는 값을 그리지 않는다).
             SEND_TEXT · REVIEW · PICK_CANDIDATE · PICK_OPTION · SHOW_CAPABILITIES · RETRY
-        params: { type: object, additionalProperties: { type: string } }
+        params:
+          type: object
+          additionalProperties: { type: string }
+          description: >
+            빠른 답에 딸린 값. 후보 고르기는 `poiId` 를 싣는다. `intent`·`open` 은 서버가 자기 처리를 고르는 데 쓰는
+            값이라 앱은 읽지 않는다 — 앱은 `id` 만 돌려보낸다.
     AssistantProposal:
       type: object
       required: [id, status, diff, violations, applyHint]

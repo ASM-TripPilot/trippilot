@@ -27,6 +27,7 @@ import com.trippilot.core.error.ValidationFailed
 import com.trippilot.moderation.api.TextModerationFacade
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -58,8 +59,13 @@ data class TurnResult(val messages: List<AssistantMessage>, val quickReplies: Li
  *
  * 하나로 묶으면 상대를 기다리는 동안 DB 연결을 쥔다 — 동시에 열 턴이면 다른 모든 API 가 굶는다.
  * 계정 잠금(분당 제한을 파드 수와 무관하게 정확히 세는 장치, SEC-U8-01)은 1 과 3 에서 각각 걸고, 상대를 부르는 동안은
- * 풀려 있다. 3 에서 다시 거는 이유: 같은 턴이 겹쳐 들어왔을 때(앱이 대기를 취소하고 같은 턴 id 로 다시 보내면 서버의
- * 첫 처리는 아직 돌고 있다) 응답이 둘 생기지 않게 — 먼저 끝난 쪽만 남기고 늦은 쪽은 그것을 돌려준다(INV-U8-05).
+ * 풀려 있다.
+ *
+ * ## 같은 턴이 겹쳐 들어오면 뒤쪽은 기다린다(INV-U8-05)
+ *
+ * 앱이 대기를 취소하고 같은 턴 id 로 다시 보내면 서버의 첫 처리는 아직 돌고 있다. 뒤쪽은 다시 해석하지 않고 앞쪽이
+ * 응답을 남기기를 기다렸다가 그것을 돌려준다. 응답은 위치가 아니라 **턴 id 로** 묶인다(`reply_to`) — 서로 다른 턴이
+ * 겹쳐도 각자의 답이 각자의 턴에 붙는다.
  *
  * ## 2 에서 무엇이 잘못돼도 턴은 도우미 메시지 한 건으로 끝난다(BR-U8-40)
  *
@@ -88,19 +94,46 @@ class AssistantTurnService(
     fun send(accountId: UUID, sessionId: UUID, clientTurnId: UUID, input: TurnInput, surface: AssistantSurface): TurnResult {
         val startedAt = clock.instant()
         val verdict = inspect(input, sessionId)
-        val accepted = tx.execute { accept(accountId, sessionId, clientTurnId, input, verdict, startedAt) }!!
-        if (accepted is Accepted.Replay) return accepted.result
-
-        accepted as Accepted.New
+        val accepted = when (val first = tx.execute { accept(accountId, sessionId, clientTurnId, input, verdict, startedAt) }!!) {
+            is Accepted.Replay -> return first.result
+            is Accepted.New -> first
+            // 같은 턴이 이미 들어와 있다 — 앞선 처리가 답을 남기기를 기다린다. 못 남기고 죽었으면 넘겨받는다.
+            is Accepted.Pending -> awaitFirst(first, sessionId, clientTurnId)?.let { return it } ?: first.resumed
+        }
         val reply = runCatching { respond(accepted, surface, startedAt) }.getOrElse { e ->
             // 처리기·조회의 예상 못 한 실패도 턴을 죽이지 않는다 — 사용자 행은 이미 남았다.
             log.warn("도우미 턴 처리 실패 — 폴백으로 답합니다. sessionId={} type={}", sessionId, e.javaClass.simpleName)
             Reply(AssistantTemplates.fallback(FallbackCause.SOURCE_UNAVAILABLE), streak = Streak.KEEP)
         }
         val finishedAt = clock.instant()
-        val replies = tx.execute { finish(accepted, clientTurnId, reply, startedAt, finishedAt) }!!
+        val replies = try {
+            tx.execute { finish(accepted, clientTurnId, reply, startedAt, finishedAt) }!!
+        } catch (e: DataIntegrityViolationException) {
+            // 답하는 사이 대화가 지워졌다(이력 지우기·여행 삭제) — 남길 곳이 없다. 500 이 아니라 "그 대화는 없다"다.
+            throw ResourceNotFound()
+        }
         return TurnResult(listOf(accepted.user) + replies, replies.last().quickReplies ?: StartQuickReplies.of(accepted.session.tripId != null))
     }
+
+    /**
+     * 앞선 처리가 끝나기를 기다린다 — 끝나면 그 응답을 그대로 준다(INV-U8-05). **다시 해석하지 않는다**: 같은 턴 id 를
+     * 여러 번 겹쳐 보내 해석을 그 수만큼 돌리면 분당 제한(사용자 행은 하나뿐이다)과 하루 LLM 상한을 비켜 간다.
+     *
+     * 턴 예산이 지나도록 응답이 없으면 앞선 처리는 죽은 것이다(남기기 실패·파드 종료) — null 을 돌려 넘겨받게 한다.
+     * 기다리는 동안 DB 연결은 쥐지 않는다.
+     */
+    private fun awaitFirst(pending: Accepted.Pending, sessionId: UUID, clientTurnId: UUID): TurnResult? {
+        val giveUpAt = pending.resumed.user.createdAt + Duration.ofMillis(properties.turnBudgetMs + properties.readMarginMs)
+        while (clock.instant() < giveUpAt) {
+            pause(POLL_MS)
+            val turn = tx.execute { messages.findTurn(sessionId, clientTurnId) } ?: throw ResourceNotFound() // 그 사이 대화가 지워졌다
+            if (turn.replies.isNotEmpty()) return turn.toResult(pending.resumed.session)
+        }
+        return null
+    }
+
+    /** 기다리는 방법 — 테스트가 시계를 밀 수 있게 갈아끼운다. */
+    internal var pause: (Long) -> Unit = { Thread.sleep(it) }
 
     // ── 0. 입력 검사(트랜잭션 밖) ──────────────────────────────────────────
 
@@ -126,6 +159,9 @@ class AssistantTurnService(
     private sealed interface Accepted {
         data class Replay(val result: TurnResult) : Accepted
 
+        /** 사용자 행은 있는데 응답이 아직 없다 — 앞선 처리가 돌고 있거나 죽었다. [resumed] 는 넘겨받을 때 쓸 모양이다. */
+        data class Pending(val resumed: New) : Accepted
+
         /** @property utterance 해석에 태울 문장. null 이면 해석 없이 [action] 으로 답한다. */
         data class New(
             val session: AssistantSession,
@@ -148,9 +184,9 @@ class AssistantTurnService(
         // 같은 턴이 다시 왔다(재전송·재시도) — 새로 만들지 않고 처음 응답을 그대로 준다(INV-U8-05).
         messages.findTurn(sessionId, clientTurnId)?.let { turn ->
             if (turn.replies.isNotEmpty()) return Accepted.Replay(turn.toResult(session))
-            // 사용자 행만 있고 응답이 없다 — 지난번이 3 에서 실패했거나, 첫 처리가 아직 2 에 있다.
-            // 어느 쪽이든 사용자 행을 다시 만들지 않고 이어서 답한다. 겹친 경우는 3 이 한 건만 남긴다.
-            return resume(session, turn.user, input)
+            // 사용자 행만 있고 응답이 없다 — 첫 처리가 아직 2 에 있거나, 지난번이 3 에서 실패했다.
+            // 어느 쪽이든 사용자 행을 다시 만들지 않는다. 어느 쪽인지는 밖에서 기다려 보고 가른다.
+            return Accepted.Pending(resume(session, turn, input))
         }
 
         val window = messages.userTurnTimesSince(accountId, now - WINDOW)
@@ -167,7 +203,8 @@ class AssistantTurnService(
                 val clean = verdict == InputVerdict.CLEAN
                 val user = messages.appendUser(
                     sessionId, accountId, clientTurnId,
-                    NewMessage(MessageRole.USER, MessageKind.TEXT, text = input.text.takeIf { clean }, redacted = !clean), now,
+                    // 왜 가려졌는지를 행에 남긴다 — 이 턴을 넘겨받는 요청이 "위반"과 "검사 못 함"을 다시 가를 수 있게.
+                    NewMessage(MessageRole.USER, MessageKind.TEXT, text = input.text.takeIf { clean }, redacted = !clean, outcome = verdict.name.takeIf { !clean }), now,
                 )
                 Accepted.New(session, user, utterance = input.text.takeIf { clean }, action = null, verdict = verdict)
             }
@@ -189,11 +226,17 @@ class AssistantTurnService(
             ?: messages.findIssuedQuickReply(session.sessionId, quickReplyId)
             ?: throw ValidationFailed(listOf(FieldError("input.quickReplyId", "발급된 적 없는 빠른 답입니다.")))
 
-    private fun resume(session: AssistantSession, user: AssistantMessage, input: TurnInput): Accepted.New = when (input) {
-        // 저장된 행이 가려져 있으면(위반·검사 불가) 원문으로 다시 해석하지 않는다 — 처음 판정을 따른다.
-        is TurnInput.Text -> Accepted.New(session, user, utterance = user.text, action = null,
-            verdict = if (user.text == null) InputVerdict.VIOLATION else InputVerdict.CLEAN)
-        is TurnInput.Action -> Accepted.New(session, user, null, issued(session, input.quickReplyId), InputVerdict.CLEAN)
+    private fun resume(session: AssistantSession, turn: RecordedTurn, input: TurnInput): Accepted.New = when (input) {
+        // **저장된 행의 판정을 따른다** — 이번 요청의 원문으로 다시 판정하지 않는다(그 사이 사전이 바뀌어도 처음 그대로).
+        is TurnInput.Text -> Accepted.New(
+            session, turn.user, utterance = turn.user.text, action = null,
+            verdict = when {
+                turn.user.text != null -> InputVerdict.CLEAN
+                turn.redaction == InputVerdict.UNCHECKED.name -> InputVerdict.UNCHECKED
+                else -> InputVerdict.VIOLATION
+            },
+        )
+        is TurnInput.Action -> Accepted.New(session, turn.user, null, issued(session, input.quickReplyId), InputVerdict.CLEAN)
     }
 
     private fun RecordedTurn.toResult(session: AssistantSession) =
@@ -332,11 +375,15 @@ class AssistantTurnService(
 
     private fun finish(turn: Accepted.New, clientTurnId: UUID, reply: Reply, startedAt: Instant, finishedAt: Instant): List<AssistantMessage> {
         val session = turn.session
-        // 같은 턴이 겹쳐 처리됐으면 먼저 끝난 쪽만 남긴다 — 줄을 세우고 다시 본다. 늦은 쪽은 응답도 사용량도 쓰지 않는다.
+        // 같은 턴이 겹쳐 처리됐으면(넘겨받기가 둘 이상 겹친 드문 경우) 먼저 끝난 쪽만 남긴다 — 줄을 세우고 다시 본다.
+        // 늦은 쪽은 응답을 쓰지 않는다. 다만 LLM 을 실제로 썼으면 그 한 번은 센다 — 안 세면 겹쳐 보내기가 상한 우회가 된다.
         lock.acquire(session.accountId)
-        messages.findTurn(session.sessionId, clientTurnId)?.replies?.takeIf { it.isNotEmpty() }?.let { return it }
+        messages.findTurn(session.sessionId, clientTurnId)?.replies?.takeIf { it.isNotEmpty() }?.let { existing ->
+            if (reply.llm) usage.record(session.accountId, today(startedAt), llm = true, turn = false)
+            return existing
+        }
         val stored = messages.appendAssistant(
-            session.sessionId, session.accountId,
+            session.sessionId, session.accountId, clientTurnId,
             reply.message.copy(latencyMs = Duration.between(startedAt, finishedAt).toMillis().toInt()), finishedAt,
         )
         sessions.recordTurn(
@@ -360,6 +407,7 @@ class AssistantTurnService(
         const val MAX_UTTERANCE_LENGTH = 500
         private val WINDOW: Duration = Duration.ofSeconds(60)
         private const val REFUSALS_BEFORE_GUIDE = 2
+        private const val POLL_MS = 200L
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
         private val log = LoggerFactory.getLogger(AssistantTurnService::class.java)
     }

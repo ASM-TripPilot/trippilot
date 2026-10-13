@@ -14,6 +14,7 @@ import com.trippilot.assistant.domain.InterpretRequest
 import com.trippilot.assistant.domain.Interpretation
 import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
+import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.NextAction
 import com.trippilot.core.error.RateLimited
 import com.trippilot.core.error.ResourceNotFound
@@ -102,7 +103,10 @@ class AssistantTurnServiceTest : StringSpec({
         val usage: FakeUsage = FakeUsage(),
         val clock: MovingClock,
         val interpreter: Interpreter?,
-    )
+    ) {
+        /** 같은 턴의 앞선 처리를 기다리는 동안 일어날 일 — 테스트가 "그 사이 앞선 처리가 끝났다"를 심는다. */
+        var onPause: () -> Unit = {}
+    }
 
     fun world(
         intent: Intent = Intent.GET_WEATHER,
@@ -115,7 +119,7 @@ class AssistantTurnServiceTest : StringSpec({
     ) = AssistantTurnService(
         sessions, messages, usage, AccountTurnLock { }, moderation, provider(interpreter), IntentDispatcher(),
         TripContextReader(trips, stays), properties, json, clock, NOOP_TX,
-    )
+    ).also { it.pause = { ms -> clock.now = clock.now.plusMillis(ms); onPause() } } // 기다림은 시계를 민다
 
     fun World.session(withTrip: Boolean = true): AssistantSession =
         AssistantSession(UUID.randomUUID(), acc, tripId.takeIf { withTrip }, start, start, start.plusSeconds(3600)).also { sessions.rows += it }
@@ -187,17 +191,75 @@ class AssistantTurnServiceTest : StringSpec({
         }
     }
 
-    /** 사용자 행만 남고 응답 저장이 실패한 턴 — 재전송은 사용자 행을 다시 만들지 않고 이어서 답한다. */
-    "응답 없이 끊긴 턴을 다시 보내면 사용자 행은 그대로 두고 답만 채운다" {
+    /** 사용자 행만 남고 응답 저장이 실패한 턴(한참 전) — 재전송은 사용자 행을 다시 만들지 않고 이어서 답한다. */
+    "응답 없이 끊긴 턴을 다시 보내면 사용자 행은 그대로 두고 답만 채운다 — 기다리지 않는다" {
         val w = world()
         val s = w.session()
         val turn = UUID.randomUUID()
-        w.messages.appendUser(s.sessionId, acc, turn, com.trippilot.assistant.domain.NewMessage(MessageRole.USER, MessageKind.TEXT, "오늘 날씨"), start)
+        w.messages.appendUser(s.sessionId, acc, turn, NewMessage(MessageRole.USER, MessageKind.TEXT, "오늘 날씨"), start.minusSeconds(60))
 
         val result = w.say(s, "오늘 날씨", turn)
 
         result.messages.map { it.role } shouldContainExactly listOf(MessageRole.USER, MessageRole.ASSISTANT)
+        result.messages[1].nextActions.single().type shouldBe "OPEN_ITINERARY" // 제대로 해석해 답했다
         w.messages.rows.size shouldBe 2
+        w.clock.now shouldBe start // 앞선 처리는 이미 죽었다 — 기다릴 것이 없다
+    }
+
+    /**
+     * 앱이 대기를 취소하고 같은 턴 id 로 다시 보내면 서버의 첫 처리는 아직 돌고 있다. 뒤쪽이 또 해석하면 응답이 둘이 되고,
+     * 여러 번 겹쳐 보내 해석을 그만큼 돌리는 것이 분당 제한·하루 LLM 상한의 우회가 된다 — **기다렸다가 앞쪽의 답을 준다.**
+     */
+    "같은 턴이 아직 처리 중이면 다시 해석하지 않고 그 응답을 기다린다" {
+        val w = world()
+        val s = w.session()
+        val turn = UUID.randomUUID()
+        w.messages.appendUser(s.sessionId, acc, turn, NewMessage(MessageRole.USER, MessageKind.TEXT, "오늘 날씨"), start)
+        var pauses = 0
+        w.onPause = {
+            // 세 번째로 들여다볼 때쯤 앞선 처리가 답을 남겼다
+            if (++pauses == 3) w.messages.appendAssistant(s.sessionId, acc, turn, AssistantTemplates.capabilities(true), w.clock.now)
+        }
+
+        val result = w.say(s, "오늘 날씨", turn)
+
+        result.messages.map { it.role } shouldContainExactly listOf(MessageRole.USER, MessageRole.ASSISTANT)
+        result.messages[1].messageId shouldBe w.messages.rows.last().message.messageId
+        w.interpreter!!.requests shouldBe emptyList()
+        w.messages.rows.size shouldBe 2
+        w.usage.turns[acc to today] shouldBe null // 턴과 사용량은 앞선 처리의 몫이다
+    }
+
+    /**
+     * 응답은 위치가 아니라 **턴에** 묶인다. 앱이 대기를 취소하고 새 말을 보내면 앞선 턴은 아직 처리 중이다 —
+     * 위치로 묶으면 먼저 끝난 쪽의 답이 다른 턴의 답으로 읽히고, 한쪽은 영영 응답 없는 턴이 된다.
+     */
+    "서로 다른 두 턴이 겹쳐 처리돼도 답은 각자의 턴에 붙는다" {
+        val (a, b) = UUID.randomUUID() to UUID.randomUUID()
+        lateinit var w: World
+        lateinit var s: AssistantSession
+        var nested = false
+        w = world(interpreter = Interpreter { r ->
+            // A 가 해석 중일 때 B 가 들어와 먼저 끝난다
+            if (!nested) {
+                nested = true
+                w.say(s, "스타일 분석해줘", b)
+            }
+            framed(if ("날씨" in r.utterance) Intent.GET_WEATHER else Intent.STYLE_ANALYSIS)(r)
+        })
+        s = w.session()
+
+        val first = w.say(s, "오늘 날씨", a)
+
+        first.messages.map { it.text } shouldContainExactly listOf("오늘 날씨", "일정 화면에서 확인할 수 있어요.")
+        w.messages.rows.map { it.message.role } shouldContainExactly
+            listOf(MessageRole.USER, MessageRole.USER, MessageRole.ASSISTANT, MessageRole.ASSISTANT)
+        // 다시 보내면 각자 처음 응답을 그대로 받는다 — 새 행도, 새 해석도 없다
+        w.say(s, "오늘 날씨", a).messages.map { it.messageId } shouldContainExactly first.messages.map { it.messageId }
+        w.say(s, "스타일 분석해줘", b).messages.map { it.text } shouldContainExactly listOf("스타일 분석해줘", "여행 스타일은 기록에서 볼 수 있어요.")
+        w.messages.rows.size shouldBe 4
+        w.interpreter!!.requests.size shouldBe 2
+        w.usage.turns[acc to today] shouldBe 2
     }
 
     "분당 20턴을 넘기면 429 다 — 거절된 턴은 남지 않고, 창이 지나면 다시 받는다" {
@@ -324,18 +386,18 @@ class AssistantTurnServiceTest : StringSpec({
      * 앱이 대기를 취소하고 같은 턴 id 로 다시 보내면 서버의 첫 처리는 아직 해석 중이다. 둘 다 끝까지 가면
      * 응답이 둘 생기고 사용량이 두 번 세어진다 — 먼저 끝난 쪽만 남는다(INV-U8-05).
      */
-    "같은 턴이 겹쳐 처리돼도 응답은 하나고 사용량도 한 번이다" {
+    "넘겨받기가 겹쳐 같은 턴이 두 번 처리돼도 응답은 하나고 턴도 한 번 센다 — 쓴 LLM 만 더 센다" {
         val turn = UUID.randomUUID()
         lateinit var w: World
         lateinit var s: AssistantSession
         var inner: TurnResult? = null
         w = world(interpreter = Interpreter { r ->
-            // 첫 처리가 해석 중일 때 같은 턴이 다시 들어와 먼저 끝난다
+            // 첫 처리가 해석 중일 때 같은 턴이 다시 들어온다. 그쪽은 턴 예산만큼 기다리다 넘겨받아 먼저 끝난다.
             if (inner == null) {
                 inner = TurnResult(emptyList(), emptyList())
                 inner = w.say(s, "오늘 날씨", turn)
             }
-            framed(Intent.GET_WEATHER)(r)
+            framed(Intent.GET_WEATHER, llmCalls = 1)(r)
         })
         s = w.session()
 
@@ -344,6 +406,22 @@ class AssistantTurnServiceTest : StringSpec({
         outer.messages.map { it.messageId } shouldContainExactly inner!!.messages.map { it.messageId }
         w.messages.rows.map { it.message.role } shouldContainExactly listOf(MessageRole.USER, MessageRole.ASSISTANT)
         w.usage.turns[acc to today] shouldBe 1
+        w.usage.llm[acc to today] shouldBe 1 // 늦게 끝난 쪽이 쓴 LLM — 안 세면 겹쳐 보내기가 상한 우회가 된다
+    }
+
+    "검사를 못 해 가려진 턴을 넘겨받으면 거절이 아니라 처음과 같은 폴백이다" {
+        val w = world()
+        val s = w.session()
+        val turn = UUID.randomUUID()
+        w.messages.appendUser(
+            s.sessionId, acc, turn,
+            NewMessage(MessageRole.USER, MessageKind.TEXT, text = null, redacted = true, outcome = "UNCHECKED"), start.minusSeconds(60),
+        )
+
+        val result = w.say(s, "오늘 날씨", turn)
+
+        result.messages[1].kind shouldBe MessageKind.FALLBACK
+        w.sessions.rows.single().refusalStreak shouldBe 0
     }
 
     "해석 응답에 프레임이 없으면 계약이 어긋난 것이다 — 지어내지 않고 폴백한다" {

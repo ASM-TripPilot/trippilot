@@ -2,6 +2,7 @@ package com.trippilot.app.web
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.assistant.domain.AssistantUsageRepository
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
@@ -18,6 +19,7 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.client.RestClient
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -38,6 +40,7 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var usage: AssistantUsageRepository
 
     private val json = ObjectMapper()
 
@@ -124,6 +127,48 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
         say(token, session, "스타일 분석해줘", turn).body shouldBe first.body
     }
 
+    /**
+     * 같은 턴 id 가 **동시에** 들어온다(앱의 재전송이 첫 요청과 겹친다). 계정 잠금이 멱등 확인보다 앞에 있어야 뒤쪽이
+     * 앞쪽의 사용자 행을 본다 — 아니면 둘 다 넣으려다 하나가 유니크 위반(500)이다. 뒤쪽은 다시 처리하지 않고 기다린다.
+     */
+    @Test
+    fun `같은 턴 id 가 동시에 와도 전부 200 이고 메시지는 한 쌍, 사용량은 한 번이다`() {
+        val (accountId, token) = newAccount()
+        val session = open(token)
+        val turn = UUID.randomUUID()
+
+        val results = Executors.newFixedThreadPool(3).use { pool ->
+            pool.invokeAll(List(3) { Callable { say(token, session, "스타일 분석해줘", turn) } }).map { it.get() }
+        }
+
+        results.map { it.status } shouldContainExactly listOf(200, 200, 200)
+        results.map { it.body }.distinct().size shouldBe 1
+        count("SELECT count(*) FROM assistant_message WHERE session_id = ?::uuid AND role = 'USER'", session) shouldBe 1
+        count("SELECT count(*) FROM assistant_message WHERE session_id = ?::uuid AND role = 'ASSISTANT'", session) shouldBe 1
+        count("SELECT turns FROM assistant_usage_daily WHERE account_id = ?", accountId) shouldBe 1
+    }
+
+    /** 응답은 그 턴을 가리킨다(`reply_to`) — 실 DB 로: 뒤 턴의 사용자 행 뒤에 적힌 앞 턴의 답도 앞 턴의 것이다. */
+    @Test
+    fun `늦게 적힌 응답도 자기 턴에 붙는다`() {
+        val (accountId, token) = newAccount()
+        val session = open(token)
+        val (a, b) = UUID.randomUUID() to UUID.randomUUID()
+        // A 의 사용자 행만 먼저(처리 중), 그 사이 B 가 끝까지 갔다
+        jdbc.update(
+            "INSERT INTO assistant_message (message_id, session_id, account_id, client_turn_id, role, kind, text, created_at) VALUES (?, ?::uuid, ?, ?, 'USER', 'TEXT', '오늘 날씨', now() - interval '1 minute')",
+            UUID.randomUUID(), session, accountId, a,
+        )
+        val second = say(token, session, "스타일 분석해줘", b)
+
+        val first = say(token, session, "오늘 날씨", a) // A 를 넘겨받아 끝낸다 — 응답은 B 의 것들 뒤에 적힌다
+
+        first.body["messages"].map { it["text"].asText() } shouldContainExactly listOf("오늘 날씨", "먼저 여행을 만들거나 숙소를 등록하면 일정을 함께 볼 수 있어요.")
+        say(token, session, "오늘 날씨", a).body shouldBe first.body
+        say(token, session, "스타일 분석해줘", b).body shouldBe second.body
+        count("SELECT count(*) FROM assistant_message WHERE session_id = ?::uuid", session) shouldBe 4
+    }
+
     /** 연달아 누르면 "다시 시도"라는 말을 해석하게 된다 — 그 행들을 건너뛰고 원래 말을 다시 태운다. */
     @Test
     fun `다시 시도를 연달아 눌러도 원래 말을 다시 태운다`() {
@@ -186,6 +231,22 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.DELETE, "/api/v1/assistant/sessions/$session", token).status shouldBe 204
 
         count("SELECT turns FROM assistant_usage_daily WHERE account_id = ?", accountId) shouldBe 2
+    }
+
+    /** 겹쳐 처리된 같은 턴이 LLM 을 한 번 더 썼을 때의 기록 — 턴 수는 그대로, LLM 턴만 는다(실 SQL 로). */
+    @Test
+    fun `사용량은 턴과 LLM 턴을 따로 센다`() {
+        val (accountId, _) = newAccount()
+        val day = LocalDate.parse("2026-10-14")
+
+        usage.record(accountId, day, llm = false)
+        usage.record(accountId, day, llm = true)
+        usage.record(accountId, day, llm = true, turn = false)
+
+        jdbc.queryForMap("SELECT turns, llm_turns FROM assistant_usage_daily WHERE account_id = ?", accountId)
+            .let { listOf(it["turns"], it["llm_turns"]) shouldContainExactly listOf(2, 2) }
+        usage.llmTurns(accountId, day) shouldBe 2
+        usage.llmTurns(accountId, day.plusDays(1)) shouldBe 0
     }
 
     /** BR-U8-23 — 실 사전으로: 걸러진 원문은 DB 에 없다. */

@@ -45,7 +45,10 @@ internal class FakeSessions : AssistantSessionRepository {
 
 internal class FakeMessages : AssistantMessageRepository {
     /** 저장된 행 — 화면에 안 나가는 칸(계정·턴 id·관측 칸)까지 본다. */
-    data class Row(val sessionId: UUID, val accountId: UUID, val clientTurnId: UUID?, val saved: NewMessage, val message: AssistantMessage)
+    data class Row(
+        val sessionId: UUID, val accountId: UUID, val clientTurnId: UUID?, val saved: NewMessage, val message: AssistantMessage,
+        val replyTo: UUID? = null,
+    )
 
     val rows = mutableListOf<Row>()
     private var seq = 0L
@@ -58,25 +61,24 @@ internal class FakeMessages : AssistantMessageRepository {
 
     override fun appendUser(sessionId: UUID, accountId: UUID, clientTurnId: UUID, message: NewMessage, at: Instant): AssistantMessage {
         check(rows.none { it.sessionId == sessionId && it.clientTurnId == clientTurnId }) { "같은 턴 id 의 두 번째 행 — DB 는 유니크로 거부한다" }
-        return insert(sessionId, accountId, clientTurnId, message, at)
+        return insert(sessionId, accountId, clientTurnId, null, message, at)
     }
 
-    override fun appendAssistant(sessionId: UUID, accountId: UUID, message: NewMessage, at: Instant): AssistantMessage {
+    override fun appendAssistant(sessionId: UUID, accountId: UUID, replyTo: UUID, message: NewMessage, at: Instant): AssistantMessage {
         check(message.nextActions.isNotEmpty()) { "다음 행동 없는 도우미 메시지 — DB 는 CHECK 로 거부한다(INV-U8-03)" }
-        return insert(sessionId, accountId, null, message, at)
+        return insert(sessionId, accountId, null, replyTo, message, at)
     }
 
-    private fun insert(sessionId: UUID, accountId: UUID, clientTurnId: UUID?, m: NewMessage, at: Instant): AssistantMessage {
+    private fun insert(sessionId: UUID, accountId: UUID, clientTurnId: UUID?, replyTo: UUID?, m: NewMessage, at: Instant): AssistantMessage {
         val stored = AssistantMessage(UUID.randomUUID(), ++seq, m.role, m.kind, m.text, m.payload, m.nextActions, m.quickReplies, null, at)
-        rows += Row(sessionId, accountId, clientTurnId, m, stored)
+        rows += Row(sessionId, accountId, clientTurnId, m, stored, replyTo)
         return stored
     }
 
     override fun findTurn(sessionId: UUID, clientTurnId: UUID): RecordedTurn? {
         val inSession = rows.filter { it.sessionId == sessionId }.sortedBy { it.message.seq }
         val user = inSession.firstOrNull { it.clientTurnId == clientTurnId } ?: return null
-        val replies = inSession.dropWhile { it.message.seq <= user.message.seq }.takeWhile { it.message.role == MessageRole.ASSISTANT }
-        return RecordedTurn(user.message, replies.map { it.message })
+        return RecordedTurn(user.message, inSession.filter { it.replyTo == clientTurnId }.map { it.message }, user.saved.outcome)
     }
 
     override fun userTurnTimesSince(accountId: UUID, since: Instant) =
@@ -100,8 +102,8 @@ internal class FakeUsage : AssistantUsageRepository {
     val turns = mutableMapOf<Pair<UUID, LocalDate>, Int>()
     val llm = mutableMapOf<Pair<UUID, LocalDate>, Int>()
     override fun llmTurns(accountId: UUID, day: LocalDate) = llm[accountId to day] ?: 0
-    override fun record(accountId: UUID, day: LocalDate, llm: Boolean) {
-        turns.merge(accountId to day, 1, Int::plus)
+    override fun record(accountId: UUID, day: LocalDate, llm: Boolean, turn: Boolean) {
+        if (turn) turns.merge(accountId to day, 1, Int::plus)
         if (llm) this.llm.merge(accountId to day, 1, Int::plus)
     }
 }

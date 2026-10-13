@@ -82,14 +82,19 @@ data class NewMessage(
     val latencyMs: Int? = null,
 )
 
-/** 이미 들어온 턴 — 사용자 행과, 그 뒤 다음 사용자 행 전까지의 도우미 행들. */
-data class RecordedTurn(val user: AssistantMessage, val replies: List<AssistantMessage>)
+/**
+ * 이미 들어온 턴 — 사용자 행과 **그 턴에 대한** 도우미 행들.
+ *
+ * @property redaction 사용자 행이 가려진 이유([NewMessage.outcome]). 가려지지 않았으면 null.
+ */
+data class RecordedTurn(val user: AssistantMessage, val replies: List<AssistantMessage>, val redaction: String? = null)
 
 interface AssistantMessageRepository {
     /** 사용자 행을 넣는다. [clientTurnId] 가 멱등 키다 — 같은 값이 이미 있으면 유니크 위반으로 실패한다(호출측이 먼저 [findTurn] 한다). */
     fun appendUser(sessionId: UUID, accountId: UUID, clientTurnId: UUID, message: NewMessage, at: Instant): AssistantMessage
 
-    fun appendAssistant(sessionId: UUID, accountId: UUID, message: NewMessage, at: Instant): AssistantMessage
+    /** [replyTo] 는 이 응답이 답하는 턴의 id 다 — 응답을 위치가 아니라 턴에 묶는다. */
+    fun appendAssistant(sessionId: UUID, accountId: UUID, replyTo: UUID, message: NewMessage, at: Instant): AssistantMessage
 
     /** 그 턴 id 로 이미 받은 턴(INV-U8-05). 없으면 null. */
     fun findTurn(sessionId: UUID, clientTurnId: UUID): RecordedTurn?

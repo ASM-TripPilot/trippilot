@@ -113,42 +113,40 @@ class AssistantMessageRepositoryAdapter(
     private val reader = mapper.reader().without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
 
     override fun appendUser(sessionId: UUID, accountId: UUID, clientTurnId: UUID, message: NewMessage, at: Instant) =
-        insert(sessionId, accountId, clientTurnId, message, at)
+        insert(sessionId, accountId, clientTurnId, null, message, at)
 
-    override fun appendAssistant(sessionId: UUID, accountId: UUID, message: NewMessage, at: Instant) =
-        insert(sessionId, accountId, null, message, at)
+    override fun appendAssistant(sessionId: UUID, accountId: UUID, replyTo: UUID, message: NewMessage, at: Instant) =
+        insert(sessionId, accountId, null, replyTo, message, at)
 
     /** `RETURNING` 으로 DB 가 매긴 순번까지 한 번에 받는다 — 넣고 다시 읽으면 그 사이가 한 번 더 비는 왕복이다. */
-    private fun insert(sessionId: UUID, accountId: UUID, clientTurnId: UUID?, m: NewMessage, at: Instant): AssistantMessage = jdbc.query(
+    private fun insert(sessionId: UUID, accountId: UUID, clientTurnId: UUID?, replyTo: UUID?, m: NewMessage, at: Instant): AssistantMessage = jdbc.query(
         """
         INSERT INTO assistant_message (
-            message_id, session_id, account_id, client_turn_id, role, kind, text, redacted, payload, next_actions, quick_replies,
+            message_id, session_id, account_id, client_turn_id, reply_to, role, kind, text, redacted, payload, next_actions, quick_replies,
             intent, match_route, outcome, llm_calls, latency_ms, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?)
         RETURNING $COLUMNS
         """.trimIndent(),
         { rs, _ -> rs.toMessage() },
-        UUID.randomUUID(), sessionId, accountId, clientTurnId, m.role.name, m.kind.name, m.text, m.redacted,
+        UUID.randomUUID(), sessionId, accountId, clientTurnId, replyTo, m.role.name, m.kind.name, m.text, m.redacted,
         m.payload?.let(mapper::writeValueAsString), mapper.writeValueAsString(m.nextActions), m.quickReplies?.let(mapper::writeValueAsString),
         m.intent, m.matchRoute, m.outcome, m.llmCalls, m.latencyMs, Timestamp.from(at),
     ).single()
 
-    /** 사용자 행과, 그 뒤 **다음 사용자 행 전까지**의 도우미 행 — 한 턴의 응답은 그 사이에만 있다. */
+    /**
+     * 사용자 행과 **그 턴을 가리키는**(`reply_to`) 도우미 행. 위치로 묶지 않는다 — 한 대화에 두 턴이 겹쳐 처리되면
+     * 먼저 온 턴의 답이 늦게 온 턴의 사용자 행 뒤에 적힌다.
+     */
     override fun findTurn(sessionId: UUID, clientTurnId: UUID): RecordedTurn? {
-        val user = jdbc.query(
-            "SELECT $COLUMNS FROM assistant_message WHERE session_id = ? AND client_turn_id = ?",
-            { rs, _ -> rs.toMessage() }, sessionId, clientTurnId,
+        val (user, redaction) = jdbc.query(
+            "SELECT $COLUMNS, outcome FROM assistant_message WHERE session_id = ? AND client_turn_id = ?",
+            { rs, _ -> rs.toMessage() to rs.getString("outcome") }, sessionId, clientTurnId,
         ).firstOrNull() ?: return null
         val replies = jdbc.query(
-            """
-            SELECT $COLUMNS FROM assistant_message
-             WHERE session_id = ? AND role = 'ASSISTANT' AND seq > ?
-               AND seq < COALESCE((SELECT min(seq) FROM assistant_message WHERE session_id = ? AND role = 'USER' AND seq > ?), 9223372036854775807)
-             ORDER BY seq
-            """.trimIndent(),
-            { rs, _ -> rs.toMessage() }, sessionId, user.seq, sessionId, user.seq,
+            "SELECT $COLUMNS FROM assistant_message WHERE session_id = ? AND reply_to = ? ORDER BY seq",
+            { rs, _ -> rs.toMessage() }, sessionId, clientTurnId,
         )
-        return RecordedTurn(user, replies)
+        return RecordedTurn(user, replies, redaction)
     }
 
     override fun userTurnTimesSince(accountId: UUID, since: Instant): List<Instant> = jdbc.query(
@@ -220,14 +218,14 @@ class AssistantUsageRepositoryAdapter(private val jdbc: JdbcTemplate) : Assistan
         { rs, _ -> rs.getInt(1) }, accountId, java.sql.Date.valueOf(day),
     ).firstOrNull() ?: 0
 
-    override fun record(accountId: UUID, day: LocalDate, llm: Boolean) {
+    override fun record(accountId: UUID, day: LocalDate, llm: Boolean, turn: Boolean) {
         jdbc.update(
             """
-            INSERT INTO assistant_usage_daily (account_id, day, turns, llm_turns) VALUES (?, ?, 1, ?)
+            INSERT INTO assistant_usage_daily (account_id, day, turns, llm_turns) VALUES (?, ?, ?, ?)
             ON CONFLICT (account_id, day) DO UPDATE
-               SET turns = assistant_usage_daily.turns + 1, llm_turns = assistant_usage_daily.llm_turns + EXCLUDED.llm_turns
+               SET turns = assistant_usage_daily.turns + EXCLUDED.turns, llm_turns = assistant_usage_daily.llm_turns + EXCLUDED.llm_turns
             """.trimIndent(),
-            accountId, java.sql.Date.valueOf(day), if (llm) 1 else 0,
+            accountId, java.sql.Date.valueOf(day), if (turn) 1 else 0, if (llm) 1 else 0,
         )
     }
 
