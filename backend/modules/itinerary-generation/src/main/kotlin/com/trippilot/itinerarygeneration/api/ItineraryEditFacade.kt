@@ -23,7 +23,8 @@ interface ItineraryEditFacade {
      * 없거나 타 계정 여행이면 `ResourceNotFound`, 여행 전 확정 일정·생성 중 미도착 일자면 `ConflictDetected` —
      * REST 편집과 같은 판정이다.
      *
-     * @param reason 왜 바꿨는지 한 줄. 비우면 [source] 에 맞는 기본 문구가 남는다(이력은 비워 두지 않는다, BR-U4-31).
+     * @param reason 왜 바꿨는지 한 줄, **500자 이하**(넘으면 `ValidationFailed` — 변경 이력 칸의 상한이다).
+     *   null·공백이면 [source] 에 맞는 기본 문구가 남는다(이력은 비워 두지 않는다, BR-U4-31).
      */
     fun edit(accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource): ItineraryEditResult
 }
@@ -52,5 +53,10 @@ data class EditSlotCommand(
 /**
  * 저장 결과. 도우미는 제안 때 위반이 없던 안만 적용하지만, **저장 시점의 재검증이 다르게 판정할 수 있다** —
  * 그때 숨기지 않고 알리려면 이 값이 필요하다(U8 FD §2.1 5단계).
+ *
+ * @property hasViolation 저장된 일정에 위반 표시가 있는가.
+ * @property judged 이번 저장에서 재검증이 **실제로 판정됐는가**. AI 가 닿지 않으면 편집은 막지 않고 판정을 보류한다 —
+ *   그때 [hasViolation] 은 직전 표시를 이은 값이라, 새로 들어온 장소는 아무도 검증하지 않았는데 `false` 다.
+ *   **`judged=false` 인 `hasViolation=false` 를 "문제없음"으로 읽지 말 것.**
  */
-data class ItineraryEditResult(val itineraryId: UUID, val hasViolation: Boolean)
+data class ItineraryEditResult(val itineraryId: UUID, val hasViolation: Boolean, val judged: Boolean)

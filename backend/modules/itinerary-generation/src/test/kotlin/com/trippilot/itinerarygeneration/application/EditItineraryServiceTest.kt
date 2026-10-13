@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.Itinerary
@@ -421,11 +422,55 @@ class EditItineraryServiceTest : StringSpec({
         val clean = repoWith(current())
         val cleanResult = facadeWith(EditFakeAgent(), clean).edit(acc, tripId, facadeDays, null, ItineraryEditSource.ASSISTANT)
         cleanResult.hasViolation shouldBe false
+        cleanResult.judged shouldBe true
         cleanResult.itineraryId shouldBe clean.findByTrip(tripId).single().itineraryId
 
         val flagged = repoWith(current())
         facadeWith(EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null))), flagged)
             .edit(acc, tripId, facadeDays, null, ItineraryEditSource.ASSISTANT).hasViolation shouldBe true
+    }
+
+    // AI 가 닿지 않으면 편집은 막지 않고 판정을 보류한다. 그때 새로 들어온 장소(poiB)는 직전 표시가 없어
+    // 위반 플래그가 false 다 — 아무도 검증하지 않았는데 "문제없음"으로 읽히면 도우미가 깨끗하게 적용됐다고 말한다.
+    "AI 가 판정하지 못한 저장은 judged=false 다 — 검증 안 된 일정을 문제없다고 말하지 않게" {
+        val repo = repoWith(current())
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, EditFakeAgent(failure = RuntimeException("AI 다운")), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        val result = facade.edit(acc, tripId, facadeDays, null, ItineraryEditSource.ASSISTANT)
+
+        result.judged shouldBe false
+        result.hasViolation shouldBe false // 직전 표시를 이은 값일 뿐이다 — 이것만 보면 깨끗해 보인다
+        repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA) // 저장은 됐다
+    }
+
+    // REST 는 요청 DTO 가 500자를 막는다. 퍼사드가 안 막으면 여행 중 편집에서 변경 이력 칸(varchar 500)이 넘쳐
+    // 편집 전체가 롤백되고 호출 모듈은 DB 예외를 받는다.
+    "퍼사드는 500자를 넘는 사유를 저장 전에 거절한다 — 아무것도 바뀌지 않는다" {
+        val repo = repoWith(current())
+        val logs = CapturingChangeLogs()
+        val agent = EditFakeAgent()
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        shouldThrow<ValidationFailed> { facade.edit(acc, tripId, facadeDays, "가".repeat(501), ItineraryEditSource.ASSISTANT) }
+
+        repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiA) // 원래 그대로
+        logs.appended.isEmpty() shouldBe true
+        agent.validateCalls shouldBe 0 // AI 를 부르기 전에 막는다
+        facade.edit(acc, tripId, facadeDays, "가".repeat(500), ItineraryEditSource.ASSISTANT).judged shouldBe true // 경계값은 받는다
+    }
+
+    "공백뿐인 사유는 없는 것으로 본다 — 이력의 사유 칸이 빈 채 남지 않는다(BR-U4-31)" {
+        val repo = repoWith(current())
+        val logs = CapturingChangeLogs()
+        val revisions = FakeRevisions()
+        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(revisions, repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        svc.edit(acc, tripId, editReq.copy(reason = "   ")) // REST 경로도 같은 저장 함수를 탄다
+
+        logs.appended.single().reason shouldBe "일정을 직접 수정함"
+        revisions.appended.last().summary shouldBe "일정을 직접 수정함"
     }
 
     "퍼사드도 남의 여행은 404 다 — 소유 판정을 호출 모듈이 되풀이하지 않는다" {

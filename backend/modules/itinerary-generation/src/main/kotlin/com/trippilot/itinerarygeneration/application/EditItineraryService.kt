@@ -4,6 +4,8 @@ import com.trippilot.changelog.api.AppendChangeLog
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.FieldError
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.itinerarygeneration.api.EditDayCommand
 import com.trippilot.itinerarygeneration.api.ItineraryEditFacade
 import com.trippilot.itinerarygeneration.api.ItineraryEditResult
@@ -78,18 +80,30 @@ class EditItineraryService(
 
     /** 다른 모듈의 입구(U8 도우미 [적용]) — REST 편집과 **같은 [edit]** 를 탄다. 다른 것은 출처뿐이다. */
     override fun edit(accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource): ItineraryEditResult {
+        // REST 는 요청 DTO 가 같은 상한을 건다. 여기서 안 막으면 여행 중 편집에서 `change_log_entry.reason varchar(500)` 이
+        // 넘쳐 편집 전체가 롤백되고 호출측은 DB 예외를 받는다.
+        if (reason != null && reason.length > MAX_REASON_LENGTH) {
+            throw ValidationFailed(listOf(FieldError("reason", "사유는 ${MAX_REASON_LENGTH}자 이하여야 합니다")))
+        }
         val command = EditItinerary(
             days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
             reason,
         )
-        val saved = edit(accountId, tripId, command, source)
+        val (saved, judged) = save(accountId, tripId, command, source)
         return ItineraryEditResult(
             itineraryId = saved.itineraryId,
             hasViolation = saved.days.any { d -> d.slots.any { it.hasViolation } },
+            judged = judged,
         )
     }
 
-    fun edit(accountId: UUID, tripId: UUID, edit: EditItinerary, source: ItineraryEditSource = ItineraryEditSource.MANUAL): Itinerary {
+    fun edit(accountId: UUID, tripId: UUID, edit: EditItinerary): Itinerary =
+        save(accountId, tripId, edit, ItineraryEditSource.MANUAL).first
+
+    /** @return 저장된 일정과, 이번 저장에서 재검증이 **판정됐는지**(AI 불통으로 보류됐으면 false). */
+    private fun save(accountId: UUID, tripId: UUID, edit: EditItinerary, source: ItineraryEditSource): Pair<Itinerary, Boolean> {
+        // 빈 문자열도 "사유 없음"이다 — 그대로 두면 이력의 사유 칸이 빈 채 남는다(BR-U4-31).
+        val reason = edit.reason?.takeIf { it.isNotBlank() }
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val current = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
         // 확정 잠금은 **여행 시작 전**만이다(TRIP-999 결정 (a) · BR-U3-28 개정). 여행이 시작되면
@@ -124,7 +138,7 @@ class EditItineraryService(
         }
         val flagged = reshape(current, edit, verdict, (repair as? RepairAttempt.Used)?.days)
         ViolationText.warnUnattached(verdict.violations(), flagged.days, tripId)
-        return tx.execute {
+        val saved = tx.execute {
             // 트랜잭션 안에서 다시 읽는다 — 위 재검증(외부 호출) 동안 다른 편집이 커밋됐으면 밖에서 읽은 값은 낡았다.
             val beforeWrite = itineraries.findByTrip(tripId).firstOrNull() ?: current
             // 편집 전 상태로 돌아갈 지점이 없으면 먼저 남긴다 — 첫 편집으로 원본이 사라지면 안 된다(INV-U3-08).
@@ -139,7 +153,7 @@ class EditItineraryService(
                 // 이력은 **같은 트랜잭션**에 — 일정만 바뀌고 이력이 빠지는 상태를 만들지 않는다(INV-U3-06).
                 // 주체는 도우미 경로에서도 USER 다 — 제안을 [적용]한 것은 사용자다(리비전 주체를 늘릴지는 U8 O-U8-7 미결).
                 // 대신 요약에 표지를 붙여 목록에서 가려지게 한다(U8 FD G-U8-1).
-                revisions.record(saved, RevisionActor.USER, RevisionKind.EDIT, source.revisionSummary(edit.reason))
+                revisions.record(saved, RevisionActor.USER, RevisionKind.EDIT, source.revisionSummary(reason))
                 // 여행 중 수동 편집은 변경 이력 1행(BR-U4-30 MANUAL) — 재계획 반영(PLAN_B)과 같은 축이다.
                 // 여행 전 편집은 이 축의 대상이 아니다(그쪽 기록은 리비전 h36 이 담당한다).
                 if (today() >= period.startDate) {
@@ -148,7 +162,7 @@ class EditItineraryService(
                             tripId = tripId,
                             actor = accountId.toString(),
                             sourceType = source.changeSourceType,
-                            reason = edit.reason ?: source.defaultReason, // BR-U4-31 — 비워 두지 않는다
+                            reason = reason ?: source.defaultReason, // BR-U4-31 — 비워 두지 않는다
                             before = beforeWrite.toChangeLogSnapshot(),
                             after = saved.toChangeLogSnapshot(),
                         ),
@@ -163,6 +177,7 @@ class EditItineraryService(
             rejections.record(tripId, removed, RejectedPoi.Kind.SWAPPED_OUT)
             saved
         }!!
+        return saved to (verdict !is Revalidation.Withheld)
     }
 
     /** 여행지 기준 오늘(KST) — 러너 기본 존(UTC)으로 재면 하루가 어긋난다(verify-gates 실측). */
@@ -171,6 +186,9 @@ class EditItineraryService(
     private companion object {
         /** 국내 전용이라 고정(GenerateItineraryService 와 같은 값). */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+
+        /** `change_log_entry.reason varchar(500)` — REST 요청 DTO(`EditItineraryRequest.reason`)와 같은 값. */
+        private const val MAX_REASON_LENGTH = 500
         private val log = LoggerFactory.getLogger(EditItineraryService::class.java)
     }
 
