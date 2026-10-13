@@ -1,10 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
+
+import { SheetShell } from '@/shared/ui/SheetShell';
 
 import type { StayFilterOption } from '../model/stayFilterOptions';
 
@@ -34,12 +31,6 @@ export interface StayFilterSheetProps {
   onToggleStayType: (value: string) => void;
   onApply: () => void;
   onClose: () => void;
-}
-
-function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
-  return (
-    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-  );
 }
 
 /** 값 하나 = 누를 수 있는 토글 칩. 선택되면 accessibilityState.selected 로 표시. */
@@ -122,64 +113,57 @@ export function StayFilterSheet({
   const isEmpty = amenities.length === 0 && stayTypes.length === 0;
 
   return (
-    <BottomSheet
-      index={0}
-      enablePanDownToClose
+    <SheetShell
+      testID="stay-filter-sheet"
       onClose={onClose}
-      backdropComponent={renderBackdrop}
+      title={SHEET_TITLE}
+      titleSize="section"
+      contentClassName="w-full gap-lg px-lg pb-2xl pt-sm"
+      handle="default"
     >
-      <BottomSheetView
-        testID="stay-filter-sheet"
-        className="w-full gap-lg px-lg pb-2xl pt-sm"
-      >
-        <Text className="font-noto-bold text-section font-bold text-ink">
-          {SHEET_TITLE}
-        </Text>
+      {isEmpty ? (
+        <Text className="font-noto text-body text-muted">{EMPTY_LABEL}</Text>
+      ) : (
+        <ScrollView className="max-h-[360px]" showsVerticalScrollIndicator>
+          <View className="w-full gap-lg">
+            <FilterGroup
+              title={AMENITY_LABEL}
+              axis="amenity"
+              options={amenities}
+              onToggle={onToggleAmenity}
+            />
+            <FilterGroup
+              title={STAY_TYPE_LABEL}
+              axis="staytype"
+              options={stayTypes}
+              onToggle={onToggleStayType}
+            />
+          </View>
+        </ScrollView>
+      )}
 
-        {isEmpty ? (
-          <Text className="font-noto text-body text-muted">{EMPTY_LABEL}</Text>
-        ) : (
-          <ScrollView className="max-h-[360px]" showsVerticalScrollIndicator>
-            <View className="w-full gap-lg">
-              <FilterGroup
-                title={AMENITY_LABEL}
-                axis="amenity"
-                options={amenities}
-                onToggle={onToggleAmenity}
-              />
-              <FilterGroup
-                title={STAY_TYPE_LABEL}
-                axis="staytype"
-                options={stayTypes}
-                onToggle={onToggleStayType}
-              />
-            </View>
-          </ScrollView>
-        )}
-
-        <View className="w-full flex-row gap-sm">
-          <Pressable
-            testID="stay-filter-close"
-            accessibilityRole="button"
-            onPress={onClose}
-            className="flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas py-md"
-          >
-            <Text className="font-noto-bold text-body font-bold text-ink">
-              {CLOSE_LABEL}
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="stay-filter-apply"
-            accessibilityRole="button"
-            onPress={onApply}
-            className="flex-1 items-center justify-center rounded-button bg-primary py-md"
-          >
-            <Text className="font-noto-bold text-body font-bold text-on-primary">
-              {APPLY_LABEL}
-            </Text>
-          </Pressable>
-        </View>
-      </BottomSheetView>
-    </BottomSheet>
+      <View className="w-full flex-row gap-sm">
+        <Pressable
+          testID="stay-filter-close"
+          accessibilityRole="button"
+          onPress={onClose}
+          className="flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas py-md"
+        >
+          <Text className="font-noto-bold text-body font-bold text-ink">
+            {CLOSE_LABEL}
+          </Text>
+        </Pressable>
+        <Pressable
+          testID="stay-filter-apply"
+          accessibilityRole="button"
+          onPress={onApply}
+          className="flex-1 items-center justify-center rounded-button bg-primary py-md"
+        >
+          <Text className="font-noto-bold text-body font-bold text-on-primary">
+            {APPLY_LABEL}
+          </Text>
+        </Pressable>
+      </View>
+    </SheetShell>
   );
 }
