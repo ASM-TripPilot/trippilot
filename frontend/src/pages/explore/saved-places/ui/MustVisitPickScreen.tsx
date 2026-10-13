@@ -1,5 +1,5 @@
-import { Fragment, type ReactElement } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Fragment, memo, useMemo, type ReactElement } from 'react';
+import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceListState } from '@/features/explore/index.view';
@@ -93,7 +93,7 @@ function AppBar({
   );
 }
 
-function PickRow({
+const PickRow = memo(function PickRow({
   saved,
   rank,
   selected,
@@ -194,7 +194,7 @@ function PickRow({
       )}
     </View>
   );
-}
+});
 
 function CompleteBar({
   onPress,
@@ -273,6 +273,15 @@ function RegionEmptyBlock({
   );
 }
 
+const RESULTS_CONTENT_STYLE = {
+  paddingHorizontal: 16,
+  paddingBottom: 16,
+} as const;
+
+function keyOfSavedPlace(saved: SavedPlace): string {
+  return saved.savedPlaceId;
+}
+
 function ResultsBody({
   savedPlaces,
   outsideRegionPlaces,
@@ -297,21 +306,32 @@ function ResultsBody({
   onPressAddMore: () => void;
 }): ReactElement {
   // 안 → (밖이 있으면) 머리글 → 밖. 마지막 행 판정은 보이는 전체 순서로 센다(01b Q2). 순번은 안 행만.
-  const rows = [...savedPlaces, ...outsideRegionPlaces];
+  const rows = useMemo(
+    () => [...savedPlaces, ...outsideRegionPlaces],
+    [savedPlaces, outsideRegionPlaces]
+  );
+  // TRIP-1363 — 담은 곳 수에 상한이 없어 ScrollView 전체 마운트였다. FlatList 로 보이는 행만 마운트하고,
+  // 선택·잠금 판정은 Set 으로(행마다 includes 선형 탐색 제거). getItemLayout·removeClippedSubviews 는
+  // 쓰지 않는다(행 높이 가변 · absolute 체크/배지 잘림).
+  const selectedSet = useMemo(() => new Set(selectedPoiIds), [selectedPoiIds]);
+  const lockedSet = useMemo(() => new Set(lockedPoiIds), [lockedPoiIds]);
   return (
     <>
-      <ScrollView
+      <FlatList<SavedPlace>
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
-      >
-        {regionEmptyLabel ? (
-          <RegionEmptyBlock
-            label={regionEmptyLabel}
-            onPressBrowse={onPressAddMore}
-          />
-        ) : null}
-        {rows.map((saved, index) => (
-          <Fragment key={saved.savedPlaceId}>
+        contentContainerStyle={RESULTS_CONTENT_STYLE}
+        data={rows}
+        keyExtractor={keyOfSavedPlace}
+        ListHeaderComponent={
+          regionEmptyLabel ? (
+            <RegionEmptyBlock
+              label={regionEmptyLabel}
+              onPressBrowse={onPressAddMore}
+            />
+          ) : null
+        }
+        renderItem={({ item: saved, index }) => (
+          <Fragment>
             {/* Figma 2437:1500 — 12px muted 캡션, pt 8. */}
             {index === savedPlaces.length && outsideRegionPlaces.length > 0 ? (
               <Text
@@ -324,8 +344,8 @@ function ResultsBody({
             <PickRow
               saved={saved}
               rank={index < savedPlaces.length ? index + 1 : null}
-              selected={selectedPoiIds.includes(saved.place.poiId)}
-              locked={lockedPoiIds.includes(saved.place.poiId)}
+              selected={selectedSet.has(saved.place.poiId)}
+              locked={lockedSet.has(saved.place.poiId)}
               isLast={index === rows.length - 1}
               outside={index >= savedPlaces.length}
               location={
@@ -334,20 +354,22 @@ function ResultsBody({
               onToggleSelect={onToggleSelect}
             />
           </Fragment>
-        ))}
-        {regionEmptyLabel ? null : (
-          <Pressable
-            testID="mustvisit-pick-addmore"
-            accessibilityRole="button"
-            onPress={onPressAddMore}
-            className="items-center justify-center py-[18px]"
-          >
-            <Text className="font-noto-bold text-[14px] font-bold text-primary">
-              + 탐색에서 더 담기
-            </Text>
-          </Pressable>
         )}
-      </ScrollView>
+        ListFooterComponent={
+          regionEmptyLabel ? null : (
+            <Pressable
+              testID="mustvisit-pick-addmore"
+              accessibilityRole="button"
+              onPress={onPressAddMore}
+              className="items-center justify-center py-[18px]"
+            >
+              <Text className="font-noto-bold text-[14px] font-bold text-primary">
+                + 탐색에서 더 담기
+              </Text>
+            </Pressable>
+          )
+        }
+      />
       {/* 새로 고른 곳이 0이면 잠근다 — 잠긴(이미 등록) 체크만 있으면 보낼 것이 없다(TRIP-1093 AC-9). */}
       <CompleteBar
         onPress={onComplete}

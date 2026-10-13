@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { memo, type ReactElement } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
 import type { Place } from '../model';
@@ -28,7 +28,7 @@ export interface PlaceGridCardProps {
   onPressCard?: (place: Place) => void;
 }
 
-export function PlaceGridCard({
+function PlaceGridCardImpl({
   place,
   saved,
   pending,
@@ -96,3 +96,10 @@ export function PlaceGridCard({
     </Pressable>
   );
 }
+
+/**
+ * TRIP-1349 — memo: 검색 키 입력마다 마운트된 셀 전부가 재렌더되던 것을 막는다. 기본 얕은 비교라
+ * `place`·`saved`·`pending`·콜백 중 하나라도 바뀌면 다시 그린다(갱신 누락 없음). 소비처가 콜백을
+ * 안정 참조로 줘야 효과가 난다(`PlaceExplorePage` 가 그렇게 준다).
+ */
+export const PlaceGridCard = memo(PlaceGridCardImpl);

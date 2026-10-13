@@ -10,10 +10,7 @@ import {
   countPickedCoPickSlots,
   nextCoPickSlotKey,
 } from '@/features/itinerary';
-import {
-  DRAFT_POLL_INTERVAL_MS,
-  formatCoPickDayHeader,
-} from '@/features/itinerary';
+import { pollIntervalMs, formatCoPickDayHeader } from '@/features/itinerary';
 import { regionForDay } from '@/entities/trip';
 import { tripDayChips } from '@/features/add-must-visit';
 import { isConfirmLocked } from '@/features/itinerary';
@@ -102,13 +99,13 @@ export function SlotFillPage({
 }: SlotFillPageProps): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
-  // PARTIAL 인 동안만 2초마다 다시 부르고 COMPLETE·FAILED 에서 멈춘다(함수형 refetchInterval — 매 응답
+  // PARTIAL 인 동안만 2초(15회 뒤 5초, pollIntervalMs)마다 다시 부르고 COMPLETE·FAILED 에서 멈춘다(함수형 refetchInterval — 매 응답
   // 뒤 다음 간격을 정한다). 상한은 두지 않는다 — 짧은 상한은 반쪽 일정에서 조용히 멈춘다(openapi).
   const itinerary = useGetTripsTripIdItinerary(tripId, {
     query: {
       refetchInterval: (query) =>
         isConfirmLocked(query.state.data?.generationState)
-          ? DRAFT_POLL_INTERVAL_MS
+          ? pollIntervalMs(query.state.dataUpdateCount)
           : false,
     },
   });

@@ -14,7 +14,7 @@
  * softNote·미니맵 카드 등)을 단계 데이터로 파라미터화해 조립한다. INV-3(소요시간 미표시)는
  * 어떤 얼굴에도 소요시간 문자열·필드를 두지 않는다 — 시각(09:30)·거리(950m)만 표시한다.
  */
-import { useState, type ReactElement } from 'react';
+import { memo, useState, type ReactElement } from 'react';
 import {
   Image,
   Pressable,
@@ -213,7 +213,7 @@ function TripsLoadError({
 // 무관하게 Image 를 무조건 렌더한다 — jest 에선 uri 가 null(사진 없는 카드)이지만 Image 엘리먼트
 // 자체는 그려져 AC-5 렌더 계약을 만족한다. TRIP-696 이후 두 캐러셀 모두 showDots={false}로 넘겨
 // 기본 true(내부 3-dot) 경로는 미소비다 — 리팩토링(5-c) 정리 후보.
-function MagazineHero({
+function MagazineHeroImpl({
   hero,
   testID = 'home-magazine-hero',
   showDots = true,
@@ -303,6 +303,10 @@ function MagazineHero({
     </View>
   );
 }
+
+// TRIP-1349 — 캐러셀 page state 가 바뀔 때마다 풀블리드 슬라이드 5장(Image+LinearGradient)이 재렌더되던 것을
+// 막는다. props(hero·testID·onPress…)가 같으면 bail-out, 하나라도 바뀌면 다시 그린다(얕은 비교).
+const MagazineHero = memo(MagazineHeroImpl);
 
 // ── discovery 히어로 캐러셀(TRIP-694 · 5페이지 페이징) ─────────────────────
 // discovery 얼굴의 단일 MagazineHero 를 5장 페이징 캐러셀로 바꾼다. 페이지 래퍼는 N당 정확히
@@ -426,7 +430,6 @@ function CollectionCard({
       testID={`home-collection-card-${index}`}
       accessibilityRole={onPress ? 'button' : undefined}
       onPress={onPress}
-      style={softCardShadow}
       className="h-[300px] w-[230px] overflow-hidden rounded-[18px]"
     >
       <View className="absolute inset-0 bg-surface-strong" />
@@ -776,7 +779,6 @@ function PastTripCard({
   return (
     <View
       testID={`home-past-trip-card-${index}`}
-      style={softCardShadow}
       className="h-[120px] w-[158px] overflow-hidden rounded-[12px]"
     >
       <View className="absolute inset-0 bg-surface-strong" />

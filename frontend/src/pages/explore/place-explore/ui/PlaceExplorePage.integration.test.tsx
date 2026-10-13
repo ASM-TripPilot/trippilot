@@ -24,6 +24,8 @@ import {
   wizardDraftData,
 } from '@/test-support/wizardDraftFixture';
 
+import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
+
 import { PlaceExplorePage } from './PlaceExplorePage';
 
 /**
@@ -69,6 +71,14 @@ import { PlaceExplorePage } from './PlaceExplorePage';
 
 // authedClient(생성 클라이언트가 타는 mutator 의 인증 계층)가 @/shared/storage 를 정적으로
 // 물고 있다 — expo-secure-store 실물 로드를 피하려면 목킹해야 한다(리포 관례).
+// TRIP-1349 P-15 — 카드 안 PlaceSubtitle 호출 수로 "카드가 재렌더됐나"를 센다(투명 래퍼, 다른 테스트 무영향).
+jest.mock('@/entities/place/ui/PlaceSubtitle', () => {
+  const actual = jest.requireActual('@/entities/place/ui/PlaceSubtitle');
+  return {
+    PlaceSubtitle: jest.fn((props: unknown) => actual.PlaceSubtitle(props)),
+  };
+});
+
 jest.mock('@/shared/storage', () => ({
   saveTokens: jest.fn().mockResolvedValue(undefined),
   getTokens: jest.fn().mockResolvedValue({
@@ -475,6 +485,25 @@ describe('P-13 · 복제 BottomTabBar 는 dismissTo 로 항법한다 (AC-1 · TR
     expect(mockDismissTo.mock.calls).toEqual([['/(tabs)'], ['/records']]);
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('P-15 · 페이지가 다시 그려져도 마운트된 카드는 재렌더되지 않는다 (TRIP-1349)', () => {
+  it('카테고리 시트 열기(페이지 state 변경)가 카드를 다시 그리지 않는다 — 콜백 참조가 안정이다', async () => {
+    setAccessToken('valid-access');
+    await renderPage();
+    const subtitle = PlaceSubtitle as unknown as jest.Mock;
+    const before = subtitle.mock.calls.length;
+    expect(before).toBeGreaterThan(0);
+
+    fireEvent.press(screen.getByTestId('explore-places-filter'));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('explore-places-category-sheet')
+      ).toBeOnTheScreen()
+    );
+
+    expect(subtitle.mock.calls.length).toBe(before);
   });
 });
 

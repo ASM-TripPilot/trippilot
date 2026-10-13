@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, type ReactElement } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -481,6 +481,12 @@ function SaveErrorBanner({
   );
 }
 
+/** 행 간격 — 모듈 상수여야 FlatList 가 매 렌더 세퍼레이터 타입을 새로 보지 않는다(인라인 화살표는 전부 remount, TRIP-1349). */
+const GRID_ROW_SEPARATOR_STYLE = { height: 18 } as const;
+function GridRowSeparator(): ReactElement {
+  return <View style={GRID_ROW_SEPARATOR_STYLE} />;
+}
+
 export function PlaceExploreScreen({
   places,
   savedPoiIds,
@@ -508,8 +514,8 @@ export function PlaceExploreScreen({
   isFetchingMore = false,
   degraded = false,
 }: PlaceExploreScreenProps): ReactElement {
-  const savedSet = new Set(savedPoiIds);
-  const pendingSet = new Set(pendingPoiIds);
+  const savedSet = useMemo(() => new Set(savedPoiIds), [savedPoiIds]);
+  const pendingSet = useMemo(() => new Set(pendingPoiIds), [pendingPoiIds]);
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
@@ -534,7 +540,7 @@ export function PlaceExploreScreen({
             paddingBottom: 156,
             flexGrow: 1,
           }}
-          ItemSeparatorComponent={() => <View style={{ height: 18 }} />}
+          ItemSeparatorComponent={GridRowSeparator}
           ListHeaderComponent={
             <View className="gap-lg pb-lg">
               <SearchBar

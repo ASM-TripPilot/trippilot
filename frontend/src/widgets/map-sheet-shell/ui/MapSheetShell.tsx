@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { useContext, useMemo, useState } from 'react';
+import { useCallback, useContext, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import {
@@ -173,7 +173,8 @@ export function MapSheetShell<T = unknown>({
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
   const [mapFailed, setMapFailed] = useState(false);
   // 이름 붙인 핸들러 — `<MapView>` 태그를 짧게 유지한다(옛 소스 스캔 정규식 대응의 흔적).
-  const handleMapLoadFailed = () => setMapFailed(true);
+  // TRIP-1349 — 참조 고정: 매 렌더 새 콜백이면 memo(MapView)가 snapIndex 변경마다 무력해진다.
+  const handleMapLoadFailed = useCallback(() => setMapFailed(true), []);
   const handleMapRetry = () => setMapFailed(false);
   // 진입 칸 — 기본 진입값(peek)은 기본 배열에만. 직접 준 배열(i05)로 새면 그 소비처가 펼침으로 열린다.
   const startIndex = initialIndex ?? (snapPoints ? 0 : DEFAULT_INDEX);

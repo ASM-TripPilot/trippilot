@@ -10,10 +10,12 @@ const MIN_DELTA_DEG = 0.01;
 
 /**
  * 핀 전부가 한 화면에 들어오는 네이버 `Region`(남서 모서리 + 양수 폭)을 만든다(TRIP-1022 #040).
- * 핀이 2개 미만이면 null — 한 점은 기존 center 카메라가 맡는다.
+ * 핀이 없으면 null(center 카메라 사다리가 맡는다). **핀 1개도 region** 이다(TRIP-1363) — 최소 폭
+ * `MIN_DELTA_DEG` 로 그 점을 가운데 둔다. 1개일 때만 camera 로 떨어지면 일차 전환(2핀↔1핀)에서
+ * MapView 의 key='region'/'camera' 가 뒤집혀 네이티브 지도가 통째 remount(타일 재로드·깜빡임)된다.
  */
 export function buildFitRegion(points: readonly MapCenter[]): Region | null {
-  if (points.length < 2) return null;
+  if (points.length < 1) return null;
 
   const lats = points.map((p) => p.lat);
   const lngs = points.map((p) => p.lng);

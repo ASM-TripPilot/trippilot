@@ -152,6 +152,11 @@ const softCardShadow = {
   elevation: 2,
 } as const;
 
+/** 카드 사이 간격 — 모듈 상수여야 FlatList 가 매 렌더 세퍼레이터 타입을 새로 보지 않는다(TRIP-1349). */
+function ListSeparator(): ReactElement {
+  return <View className="h-lg" />;
+}
+
 const FILTER_CHIPS: { axis: 'price' | 'region' | 'more'; label: string }[] = [
   { axis: 'price', label: '가격대' },
   { axis: 'region', label: '지역' },
@@ -665,7 +670,7 @@ export function StaySearchScreen({
               </View>
             );
           }}
-          ItemSeparatorComponent={() => <View className="h-lg" />}
+          ItemSeparatorComponent={ListSeparator}
           // 2단 원형 FAB(흰 하트 absolute bottom-152 + size56 = 상단 208)·탭바(96) 오버레이가
           // 마지막 카드를 가리지 않도록 스크롤 끝 여백을 208까지 확보한다(TRIP-725, fabSpacer 대응).
           // TRIP-1321 — ✦ 도우미 FAB 가 위에 얹히면(바닥 220 + 56) 여백도 그 윗변 276 까지.

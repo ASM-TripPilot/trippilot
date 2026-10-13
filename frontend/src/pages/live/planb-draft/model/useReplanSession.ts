@@ -1,4 +1,5 @@
 import { useGetTripsTripIdReplanSessionsSessionId } from '@/shared/api/index.hooks';
+import { pollIntervalMs } from '@/features/itinerary';
 
 /**
  * TRIP-440 · i12 재계획 세션 조회 폴링 — `useGetTripsTripIdReplanSessionsSessionId` 얇은 래퍼.
@@ -9,7 +10,6 @@ import { useGetTripsTripIdReplanSessionsSessionId } from '@/shared/api/index.hoo
  * 폴링이 "실제로 도는가"는 실타이머가 필요해 jest 사각(페이지 테스트가 이 seam 을 목한다).
  */
 
-const POLL_INTERVAL_MS = 2000;
 /** 일시 오류는 한 번 더 묻는다(TRIP-1348) — 그래도 실패하면 오류로 서고 폴링이 멈춘다. */
 const RETRY_COUNT = 1;
 const RETRY_DELAY_MS = 1000;
@@ -26,7 +26,7 @@ export function useReplanSession(tripId: string, sessionId: string) {
         if (query.state.status === 'error') return false;
         const status = query.state.data?.status;
         return status === 'COLLECTING' || status === 'SOLVING'
-          ? POLL_INTERVAL_MS
+          ? pollIntervalMs(query.state.dataUpdateCount)
           : false;
       },
     },

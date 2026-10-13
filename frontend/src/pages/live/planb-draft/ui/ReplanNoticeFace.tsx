@@ -10,6 +10,8 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  *  - `solving-closed` — 진행 화면인데 세션이 이미 끝났다(APPLIED·CANCELED). [나가기].
  *  - `draft-error` — 재계획안 화면에서 세션 조회가 data 없이 실패. [다시 시도] · [나가기].
  *    두 오류 얼굴 모두 `retrying` 이면 [다시 시도]만 잠근다(TRIP-1293 — 재조회 중 연타 피드백).
+ *  - `solving-capped` — TRIP-1363 · 진행 화면이 8분 상한(`replanPollCap`)에 닿았다. 폴링은 이미 멈췄다.
+ *    [다시 시도]=재계획 요청 화면으로 새로 시작 · [홈으로]. 디자인 미확정 — 기존 오류 얼굴(StateNotice)을 재사용한다.
  *  - `draft-closed` — TRIP-1289 · 재계획안 화면인데 세션이 이미 끝났다. `solving-closed` 와 문구·버튼이 같고
  *    testID 만 다르다(어느 화면의 얼굴인지 실기·테스트에서 갈라 읽는다).
  *
@@ -19,7 +21,11 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  */
 
 type ReplanNoticeKind =
-  'solving-error' | 'solving-closed' | 'draft-error' | 'draft-closed';
+  | 'solving-error'
+  | 'solving-closed'
+  | 'solving-capped'
+  | 'draft-error'
+  | 'draft-closed';
 
 const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
@@ -32,11 +38,11 @@ const LOAD_FAILED = {
 
 export interface ReplanNoticeFaceProps {
   kind: ReplanNoticeKind;
-  /** 세션 재조회 — `solving-error`·`draft-error` 만 쓴다. */
+  /** 세션 재조회(`solving-error`·`draft-error`) · 새 재계획 요청(`solving-capped`). */
   onRetry?: () => void;
   /** TRIP-1293 · 재조회 중 — [다시 시도]만 잠근다([취소]·[나가기]는 그대로). */
   retrying?: boolean;
-  /** 서버 호출 없이 나가기. */
+  /** 서버 호출 없이 나가기(`solving-capped` 에선 [홈으로]). */
   onLeave: () => void;
 }
 
@@ -47,59 +53,79 @@ export function ReplanNoticeFace({
   onLeave,
 }: ReplanNoticeFaceProps): ReactElement {
   const notice =
-    kind === 'solving-closed' || kind === 'draft-closed'
+    kind === 'solving-capped'
       ? {
-          testID:
-            kind === 'solving-closed'
-              ? 'planb-solving-closed'
-              : 'planb-draft-closed',
-          title: '이미 끝난 재계획이에요',
-          // 적용된 세션일 수도 있어 "원래 일정은 그대로"라고 말하지 않는다.
-          description: '나가서 지금 일정을 확인해 주세요',
+          testID: 'planb-solving-capped',
+          title: '생성이 늦어지고 있어요',
+          description: '원래 일정은 그대로예요',
           actions: [
             {
-              testID:
-                kind === 'solving-closed'
-                  ? 'planb-solving-closed-leave'
-                  : 'planb-draft-closed-leave',
-              label: '나가기',
+              testID: 'planb-solving-capped-retry',
+              label: '다시 시도',
               variant: 'filled' as const,
+              onPress: onRetry,
+            },
+            {
+              testID: 'planb-solving-capped-home',
+              label: '홈으로',
+              variant: 'outline' as const,
               onPress: onLeave,
             },
           ],
         }
-      : {
-          ...LOAD_FAILED,
-          testID:
-            kind === 'solving-error'
-              ? 'planb-solving-error'
-              : 'planb-draft-error',
-          actions: [
-            {
-              testID:
-                kind === 'solving-error'
-                  ? 'planb-solving-retry'
-                  : 'planb-draft-retry',
-              label: '다시 시도',
-              variant: 'filled' as const,
-              onPress: onRetry,
-              disabled: retrying,
-            },
-            kind === 'solving-error'
-              ? {
-                  testID: 'planb-solving-error-cancel',
-                  label: '취소',
-                  variant: 'outline' as const,
-                  onPress: onLeave,
-                }
-              : {
-                  testID: 'planb-draft-error-leave',
-                  label: '나가기',
-                  variant: 'outline' as const,
-                  onPress: onLeave,
-                },
-          ],
-        };
+      : kind === 'solving-closed' || kind === 'draft-closed'
+        ? {
+            testID:
+              kind === 'solving-closed'
+                ? 'planb-solving-closed'
+                : 'planb-draft-closed',
+            title: '이미 끝난 재계획이에요',
+            // 적용된 세션일 수도 있어 "원래 일정은 그대로"라고 말하지 않는다.
+            description: '나가서 지금 일정을 확인해 주세요',
+            actions: [
+              {
+                testID:
+                  kind === 'solving-closed'
+                    ? 'planb-solving-closed-leave'
+                    : 'planb-draft-closed-leave',
+                label: '나가기',
+                variant: 'filled' as const,
+                onPress: onLeave,
+              },
+            ],
+          }
+        : {
+            ...LOAD_FAILED,
+            testID:
+              kind === 'solving-error'
+                ? 'planb-solving-error'
+                : 'planb-draft-error',
+            actions: [
+              {
+                testID:
+                  kind === 'solving-error'
+                    ? 'planb-solving-retry'
+                    : 'planb-draft-retry',
+                label: '다시 시도',
+                variant: 'filled' as const,
+                onPress: onRetry,
+                disabled: retrying,
+              },
+              kind === 'solving-error'
+                ? {
+                    testID: 'planb-solving-error-cancel',
+                    label: '취소',
+                    variant: 'outline' as const,
+                    onPress: onLeave,
+                  }
+                : {
+                    testID: 'planb-draft-error-leave',
+                    label: '나가기',
+                    variant: 'outline' as const,
+                    onPress: onLeave,
+                  },
+            ],
+          };
 
   return (
     <SafeAreaView

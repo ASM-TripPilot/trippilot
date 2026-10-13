@@ -13,6 +13,7 @@ import {
   DRAFT_POLL_MAX_COUNT,
   formatDraftDayHeader,
   isCandidatesDemoted,
+  pollIntervalMs,
   resolveDraftView,
   shouldKeepPollingDraft,
   type DraftDayTab,
@@ -933,5 +934,25 @@ describe('생성 게이지 칸 접기(foldGenerationGauge)', () => {
         { numRuns: 500 }
       );
     });
+  });
+});
+
+describe('TRIP-1363 · pollIntervalMs (폴링 백오프 한 벌)', () => {
+  it('P1 · 15회 미만은 2초, 15회부터는 5초다(경계 포함)', () => {
+    expect(pollIntervalMs(0)).toBe(2000);
+    expect(pollIntervalMs(14)).toBe(2000);
+    expect(pollIntervalMs(15)).toBe(5000);
+    expect(pollIntervalMs(99)).toBe(5000);
+    expect(pollIntervalMs(0)).toBe(DRAFT_POLL_INTERVAL_MS);
+  });
+
+  it('P2 · 생성 대기 2분 동안 요청 수가 고정 2초(60회)에서 33회로 준다', () => {
+    let elapsed = 0;
+    let requests = 0;
+    while (elapsed < 120_000) {
+      elapsed += pollIntervalMs(requests);
+      requests += 1;
+    }
+    expect(requests).toBe(33);
   });
 });
