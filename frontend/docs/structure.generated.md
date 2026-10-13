@@ -193,7 +193,8 @@
 - `src/app/model/useAccountBoundaryReset.ts`  →  useAccountBoundaryReset
 
 ## src/app/routing/
-- `src/app/routing/SplashGate.tsx`  →  SPLASH_MIN_VISIBLE_MS · SplashGate
+- `src/app/routing/SplashGate.tsx`  →  SPLASH_MIN_VISIBLE_MS · PUSH_REGISTER_DELAY_MS · SplashGate
+- `src/app/routing/bootClock.ts`  →  BOOT_MODULE_LOADED_AT
 
 ## src/entities/itinerary-slot/config/
 - `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
@@ -330,6 +331,7 @@
 
 ## src/features/auth/model/
 - `src/features/auth/model/gateDestination.ts`  →  publishGateDestination · getGateDestination · waitForGateDestination · resetGateDestination
+- `src/features/auth/model/prefetchTrips.ts`  →  prefetchTrips
 - `src/features/auth/model/resolveBootstrapDestination.ts`  →  BootstrapDestination · resolveBootstrapDestination
 - `src/features/auth/model/useBootstrapGate.ts`  →  BOOTSTRAP_TIMEOUT_MS · useBootstrapGate
 
@@ -1675,4 +1677,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1037개 파일
+합계 1039개 파일
