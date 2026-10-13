@@ -48,3 +48,8 @@ trippilot:
     # 파기 시점 제공자 토큰 revoke 스위퍼도 같은 이유로 끈다(TRIP-933). 동작은 sweep() 직접 호출로 잰다.
     provider-token-revoke-sweep-ms: 3600000
     provider-token-revoke-initial-delay-ms: 3600000
+  # 도우미 보존 청소도 같은 이유로 끈다(TRIP-1380) — 만료된 대화를 심어 놓고 재는 IT 의 행을 배경 청소가 먼저 지운다.
+  # 동작은 `AssistantOpsIT` 가 sweep() 직접 호출로 잰다.
+  assistant:
+    retention-sweep-ms: 3600000
+    retention-initial-delay-ms: 3600000

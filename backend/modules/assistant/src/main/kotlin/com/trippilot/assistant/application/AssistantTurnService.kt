@@ -309,6 +309,12 @@ class AssistantTurnService(
             log.warn("도우미 강등 — 하루 LLM 턴 상한에 닿아 버튼 모드로 답합니다. account={}", session.accountId.hashCode())
             return Reply(AssistantTemplates.buttonMode(hasTrip), streak = Streak.KEEP)
         }
+        // 서비스 전역 월 상한(COST-U8-04) — 계정이 아니라 **전체**가 낮아진다. 달이 바뀌면 저절로 풀린다. 0 이면 꺼져 있다.
+        // ponytail: 턴마다 이번 달 합계를 센다(40일치 카운터 테이블이라 작다). 느려지면 분 단위로 기억해 둔다.
+        if (properties.monthlyLlmCallLimit > 0 && usage.llmTurnsSince(today(startedAt).withDayOfMonth(1)) >= properties.monthlyLlmCallLimit) {
+            log.warn("도우미 강등 — 이번 달 전역 LLM 상한({})에 닿아 버튼 모드로 답합니다.", properties.monthlyLlmCallLimit)
+            return Reply(AssistantTemplates.buttonMode(hasTrip), streak = Streak.KEEP)
+        }
 
         // 컨텍스트를 먼저 읽는다 — 그 시간도 턴 예산에서 나가고, 여기서 실패한 것은 상대가 아니라 우리 원천이다.
         val snapshot = runCatching { snapshots.build(session.accountId, session.tripId, surface, today(startedAt)) }.getOrElse { e ->

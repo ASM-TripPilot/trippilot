@@ -17,6 +17,10 @@ import java.time.Duration
  * @property rateLimitPerMinute 계정당 분당 사용자 턴(BR-U8-24). 빠른 답도 센다.
  * @property dailyLlmTurnLimit 계정당 하루 LLM 턴(COST-U8-02). 넘으면 막지 않고 버튼 모드로 낮춘다.
  *   **근거 없는 초기값이다** — 사용 분포가 관측되면 여기만 돌린다.
+ * @property monthlyLlmCallLimit 서비스 전역의 이번 달 LLM 턴 상한(COST-U8-04). 넘으면 **모든 계정**이 버튼 모드로 낮아지고
+ *   달이 바뀌면 풀린다. **0 이면 꺼져 있다** — 값은 호출당 단가를 실측한 뒤 정한다(PERF-U8-03). 꺼져 있는 동안의 그물은
+ *   벤더 콘솔의 지출 한도뿐이다(COST-U8-05) — 해석을 운영에 열기 전에 둘 중 하나는 걸려 있어야 한다.
+ * @property usageRetentionDays 사용량 행 보관(DATA-U8-04) — 월 상한 집계에 필요한 만큼. 발화가 없는 카운터라 대화 보존과 따로다.
  * @property snapshotMaxDays 해석에 보내는 일정의 일자 수 상한(SEC-U8-08) — 입력 토큰이 곧 비용이고 지연이다.
  * @property snapshotMaxSlotsPerDay 같은 상한의 일자당 슬롯 수. 어느 쪽이든 넘으면 오늘 ±1일만 보낸다.
  * @property interpret 해석 스위치(REL-U8-06) — `off` 는 운영자가 거는 버튼 모드, `fake` 는 대역(로컬 기본).
@@ -32,6 +36,8 @@ data class AssistantProperties(
     val readMarginMs: Long = 1_000,
     val rateLimitPerMinute: Int = 20,
     val dailyLlmTurnLimit: Int = 30,
+    val monthlyLlmCallLimit: Long = 0,
+    val usageRetentionDays: Long = 40,
     val snapshotMaxDays: Int = 14,
     val snapshotMaxSlotsPerDay: Int = 20,
     val interpret: Interpret = Interpret(),

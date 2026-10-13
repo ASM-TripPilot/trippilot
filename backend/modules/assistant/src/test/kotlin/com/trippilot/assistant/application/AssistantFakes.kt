@@ -63,6 +63,8 @@ internal class FakeSessions : AssistantSessionRepository {
     }
     override fun delete(accountId: UUID, sessionId: UUID): Int = remove { it.sessionId == sessionId && it.accountId == accountId }
     override fun deleteByTrip(tripId: UUID): Int = remove { it.tripId == tripId }
+    override fun deleteByAccount(accountId: UUID): Int = remove { it.accountId == accountId }
+    override fun deleteExpired(now: Instant): Int = remove { it.expiresAt <= now }
     private fun remove(match: (AssistantSession) -> Boolean): Int {
         val before = rows.size
         rows.removeAll(match)
@@ -217,6 +219,9 @@ internal class FakeUsage : AssistantUsageRepository {
         if (turn) turns.merge(accountId to day, 1, Int::plus)
         if (llm) this.llm.merge(accountId to day, 1, Int::plus)
     }
+    override fun llmTurnsSince(from: LocalDate) = llm.filterKeys { it.second >= from }.values.sum().toLong()
+    override fun deleteBefore(before: LocalDate) = (turns.keys + llm.keys).filter { it.second < before }.toSet().onEach { turns.remove(it); llm.remove(it) }.size
+    override fun deleteByAccount(accountId: UUID) = (turns.keys + llm.keys).filter { it.first == accountId }.toSet().onEach { turns.remove(it); llm.remove(it) }.size
 }
 
 internal val NOOP_TX = object : PlatformTransactionManager {

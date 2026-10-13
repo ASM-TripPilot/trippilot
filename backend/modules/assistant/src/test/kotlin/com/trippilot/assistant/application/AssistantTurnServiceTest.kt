@@ -535,6 +535,30 @@ class AssistantTurnServiceTest : StringSpec({
         capped.interpreter.requests.size shouldBe 1
     }
 
+    /**
+     * COST-U8-04 — 서비스 전역 월 상한. 계정이 아니라 **전체**가 낮아진다: 한 계정이 하루 상한 안에 있어도, 모두의 이번 달
+     * 합이 상한에 닿았으면 해석을 부르지 않는다. 지난달 것은 세지 않고(달이 바뀌면 풀린다), 0 이면 꺼져 있다.
+     */
+    "이번 달 전역 LLM 상한에 닿으면 모든 계정이 버튼 모드다 — 지난달 것은 세지 않고 0 이면 꺼져 있다" {
+        val others = UUID.randomUUID()
+        val capped = AssistantProperties(monthlyLlmCallLimit = 100)
+        val w = world()
+        val s = w.session()
+
+        w.usage.llm[others to today.withDayOfMonth(1)] = 99
+        w.usage.llm[others to today.withDayOfMonth(1).minusDays(1)] = 5_000 // 지난달
+        w.say(s, "오늘 날씨", service = w.service(properties = capped))
+        w.interpreter!!.requests.size shouldBe 1 // 99 < 100 — 아직 부른다(그리고 이 턴은 LLM 0회라 합이 그대로다)
+
+        w.usage.llm[others to today] = 1 // 남의 계정이 채웠다
+        w.say(s, "오늘 날씨", service = w.service(properties = capped))
+        w.messages.rows.last().saved.outcome shouldBe "DOWNGRADED"
+        w.interpreter.requests.size shouldBe 1
+
+        w.say(s, "오늘 날씨") // 상한이 0(기본값)이면 합이 얼마든 부른다
+        w.interpreter.requests.size shouldBe 2
+    }
+
     "LLM 을 쓴 해석만 LLM 턴으로 센다" {
         val w = world(interpreter = Interpreter(framed(Intent.GET_WEATHER, llmCalls = 2)))
         val s = w.session()

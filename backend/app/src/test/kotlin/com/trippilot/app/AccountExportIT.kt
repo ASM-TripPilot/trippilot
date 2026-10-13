@@ -86,7 +86,7 @@ class AccountExportIT : AbstractPostgresIntegrationTest() {
 
         val sections = export.export(accountId).sections.map { it.section }
 
-        sections shouldBe listOf("consents", "profile", "savedStays", "trips", "visits")
+        sections shouldBe listOf("assistantMessages", "consents", "profile", "savedStays", "trips", "visits")
     }
 
     @Test
