@@ -5817,8 +5817,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // TRIP-1268 — AI 일정 생성 일일 한도(클라 임시 장치). Figma 프레임 없는 발명 얼굴이라 육안 대조 자리는
-  // 이 키뿐이다. 서버 한도가 배포돼 카운터를 지울 때 이 키도 지운다.
+  // TRIP-1268·1368 — AI 일정 생성 일일 한도 얼굴(서버 429 `GENERATION_DAILY_LIMIT`). Figma 프레임 없는
+  // 발명 얼굴이라 육안 대조 자리는 이 키뿐이다.
   {
     key: 'h07-generating-ai-limit',
     band: 'h',

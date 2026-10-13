@@ -240,27 +240,6 @@ jest.mock('@/shared/push', () => ({
   requestPushPermission: jest.fn(() => Promise.resolve('UNDETERMINED')),
 }));
 
-// TRIP-1268: 생성 POST 전에 계정 id(`GET /me`)를 순수 fetcher `getMe` 로 읽는다 — 이 파일은 QueryClient 가
-// 없어서 react-query 훅(`useGetMe`)으로는 못 읽는다(01b 제약 1). 목이 없으면 실제 axios 가 나간다.
-// 실물을 펼친 뒤 `getMe` 만 덮는다 — `index.hooks` 가 이 모듈을 재수출하므로 어느 배럴로 불러도 같은 목이다.
-const mockGetMe = jest.fn();
-jest.mock('@/shared/api/generated/account/account', () => ({
-  ...jest.requireActual('@/shared/api/generated/account/account'),
-  getMe: (...args: unknown[]) => mockGetMe(...args),
-}));
-
-// TRIP-1268: 한도 카운터 저장소(SecureStore 문자열) — 메모리 Map 으로 바꾼다. jest-expo 의 실물 폴백은
-// 늘 null 을 돌려줘 "0회"가 우연히만 결정된다(02a ★2). 실물을 펼친 뒤 두 함수만 덮는다.
-const mockVault = new Map<string, string>();
-const mockReadStringValue = jest.fn();
-const mockWriteStringValue = jest.fn();
-jest.mock('@/shared/storage', () => ({
-  ...jest.requireActual('@/shared/storage'),
-  readStringValue: (key: string) => mockReadStringValue(key),
-  writeStringValue: (key: string, value: string) =>
-    mockWriteStringValue(key, value),
-}));
-
 // TRIP-929: 좌표는 담은 장소에서 온다 — 빈 목록으로 둔다. 팩토리 목이라 실물(QueryClient 필요 ·
 // 생성 클라이언트·인증 계층)을 로드하지 않는다.
 jest.mock('@/features/save-place/model/savedPlaces', () => ({
@@ -303,31 +282,12 @@ beforeEach(() => {
   mockDismissTo.mockClear();
   mockBack.mockClear();
   mockNavigate.mockClear();
-  // TRIP-1268: 계정 조회는 바로 성공, 오늘 쓴 횟수는 0 — 한도에 안 걸려 기존 케이스의 POST 가 그대로 나간다.
-  mockGetMe.mockReset().mockResolvedValue({
-    accountId: 'acc-hm',
-    status: 'ACTIVE',
-  });
-  mockVault.clear();
-  mockReadStringValue
-    .mockReset()
-    .mockImplementation(async (key: string) => mockVault.get(key) ?? null);
-  mockWriteStringValue
-    .mockReset()
-    .mockImplementation(async (key: string, value: string) => {
-      mockVault.set(key, value);
-    });
 });
 
 // 토스트는 모듈 싱글턴이다 — 진행 중(pending)으로 끝나는 케이스는 언마운트 때 이탈 토스트를 띄운다. 옛 본 파일엔
 // 토스트 호스트가 없어 상관없었지만, 합친 뒤엔 그 토스트가 뒤 「화면을 떠날 때」 describe 로 샌다 → 최상위에서 비운다.
-// TRIP-1268: 사전 검사(계정 조회·횟수 읽기)는 Promise 라 렌더만 하고 끝나는 케이스에선 테스트 뒤에도 매달려 있다가
-// 다음 케이스의 mockClear 뒤에 mutate 를 부를 수 있다 — 매크로태스크 한 번을 흘려 그 케이스 안에서 끝낸다(02a ★6).
-afterEach(async () => {
+afterEach(() => {
   resetToast();
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
 });
 
 function renderPage() {
