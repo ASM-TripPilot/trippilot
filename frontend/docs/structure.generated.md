@@ -1588,6 +1588,7 @@
 ## src/shared/ui/
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
+- `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
@@ -1686,4 +1687,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1046개 파일
+합계 1047개 파일
