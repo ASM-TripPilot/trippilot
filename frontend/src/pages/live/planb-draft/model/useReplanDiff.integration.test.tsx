@@ -1,11 +1,10 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import type { ReplanDiff } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { createHitLog, createWrapper } from '@/test-support/mswHookHarness';
 
 import { useReplanDiff } from './useReplanDiff';
 
@@ -57,17 +56,15 @@ const DIFF: ReplanDiff = {
   impact: null,
 };
 
-let hits: string[] = [];
+const hits = createHitLog(server);
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', ({ request }) => {
-    hits.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
+  hits.attach();
 });
 
 beforeEach(() => {
-  hits = [];
+  hits.reset();
   setAccessToken('a');
   server.use(http.get(`${BASE}${DIFF_PATH}`, () => HttpResponse.json(DIFF)));
 });
@@ -79,18 +76,6 @@ afterEach(() => {
 
 afterAll(() => server.close());
 
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
-
 describe('🔴 H1 · TRIP-1007 AC-1 — useReplanDiff 는 GET …/replan-sessions/{id}/diff 를 부른다', () => {
   it('서버 초안이 data 로 오고, 그 경로로 GET 이 정확히 1번 나간다', async () => {
     const { result } = renderHook(() => useReplanDiff('t1', 's9'), {
@@ -101,8 +86,6 @@ describe('🔴 H1 · TRIP-1007 AC-1 — useReplanDiff 는 GET …/replan-session
     expect(result.current.data?.after.map((slot) => slot.slotKey)).toEqual([
       '2026-06-11#p1',
     ]);
-    expect(
-      hits.filter((hit) => hit === `GET /api/v1${DIFF_PATH}`)
-    ).toHaveLength(1);
+    expect(hits.count(`GET /api/v1${DIFF_PATH}`)).toBe(1);
   });
 });

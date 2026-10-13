@@ -4,7 +4,9 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
+import { View } from 'react-native';
 
+import { PlusGlyph } from '@/features/record';
 import { VisitRecordCard } from './VisitRecordCard';
 
 /**
@@ -300,5 +302,234 @@ describe('🔴 TRIP-760 · AC-3 · 업로드 재시도 버튼 + 보조 안내', 
     expect(screen.queryByTestId('record-trip-upload-retry-v1')).toBeNull();
     expect(screen.queryByText('다시 시도')).toBeNull();
     expect(screen.queryByText('메모와 방문 체크는 저장되었어요')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-566 · AC-6 — j01 카드 사진/메모 슬롯 배선(옵셔널 prop, 후방호환).
+ *
+ * 무엇을 보장하나:
+ *  - 카드가 정적 스캐폴딩(L148-155) 자리에 `photoSlot`/`memoSlot`(ReactNode)를 렌더한다 — 주면 present,
+ *    안 주면 부재(후방호환, 565 `onPressComplete?`·613 `onPressEditTime?` 동형).
+ *  - 사진 상태가 나빠도(unavailable) 완료 체크서클·메모가 눌리지 않는다(메모·체크 독립, AC-3).
+ *
+ * ★ 왜 마커 노드인가: 카드의 책임은 "받은 슬롯을 그 자리에 렌더"뿐이다 — 슬롯이 나르는 실제 testID
+ *   (record-trip-photo-add=PhotoThumbStrip · record-trip-memo-input=MemoInline)의 소유·거동은 각 컴포넌트
+ *   테스트가 잠근다. 카드 테스트는 마커에 그 계약 testID 를 실어 "카드가 슬롯을 surface 하는지"만 본다
+ *   (실 컴포넌트 의존 제거 → W2 선제 green 보존).
+ *
+ * (개념) `queryByTestId(...)`=없으면 null(부재 단언). 카드 VM 은 status 를 세 timestamp 로 내부 파생.
+ */
+
+const photoAddMarker = <View testID="record-trip-photo-add" />;
+const memoMarker = <View testID="record-trip-memo-input" />;
+
+const wiringCard = {
+  visitCheckId: 'v1',
+  poiId: 'p1',
+  nameKo: '광안리',
+  slotKey: null,
+  arrivedAt: '2026-08-31T14:20:00',
+  completedAt: null,
+  skippedAt: null,
+  arrivedLabel: '14:20',
+};
+
+describe('🔴 AC-6 · W1 — 슬롯 주입 시 사진/메모 자리가 배선된다', () => {
+  it('photoSlot·memoSlot 주입 → record-trip-photo-add · record-trip-memo-input present', () => {
+    render(
+      <VisitRecordCard
+        card={wiringCard}
+        photoSlot={photoAddMarker}
+        memoSlot={memoMarker}
+      />
+    );
+
+    expect(screen.getByTestId('record-trip-photo-add')).toBeTruthy();
+    expect(screen.getByTestId('record-trip-memo-input')).toBeTruthy();
+  });
+});
+
+describe('AC-6 · W2 — 슬롯 미주입 시 부재(후방호환, 선제 green)', () => {
+  it('slot prop 없이 렌더 → 두 자리 모두 부재(565 호출자·프리뷰 무영향)', () => {
+    render(<VisitRecordCard card={wiringCard} />);
+
+    expect(screen.queryByTestId('record-trip-photo-add')).toBeNull();
+    expect(screen.queryByTestId('record-trip-memo-input')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1069 · AC-13 · D3 — 슬롯을 안 주면 **아무것도 그리지 않는다**.
+ *
+ * 옛 카드는 슬롯이 없으면 눌러도 반응 없는 '+' 타일과 '메모를 남겨보세요' 글자를 정적으로 그렸다(INV-4
+ * 무반응 버튼). 그 폴백 자체를 지운다. '+' 타일엔 testID 가 없어 `PlusGlyph` 컴포넌트 개수로 센다.
+ * `queryByText` 는 Text 노드만 보므로 MemoInline 의 placeholder(TextInput 속성)와 섞이지 않는다.
+ */
+describe('AC-13 · W4 — 슬롯 미주입이면 정적 +·메모 글자가 없다', () => {
+  it.each([
+    ['IN_PROGRESS', { arrivedAt: '2026-08-31T05:20:00Z' }],
+    ['UPCOMING', { arrivedAt: null }],
+  ])('%s 카드 → 메모 안내 글자 0 · + 글리프 0', (_status, over) => {
+    render(<VisitRecordCard card={{ ...wiringCard, ...over }} />);
+
+    // 앵커 — 카드는 그려졌다.
+    expect(screen.getByText('광안리')).toBeOnTheScreen();
+    expect(screen.queryByText('메모를 남겨보세요')).toBeNull();
+    expect(screen.UNSAFE_queryAllByType(PlusGlyph)).toHaveLength(0);
+  });
+});
+
+describe('🔴 AC-6 · W3 — 사진 상태가 나빠도 체크·메모는 독립으로 산다', () => {
+  it('unavailable 사진 슬롯 + 메모 슬롯 + active 카드 → 완료 체크서클·메모가 동시 present', () => {
+    render(
+      <VisitRecordCard
+        card={wiringCard}
+        photoSlot={<View testID="record-photo-unavailable-ph1" />}
+        memoSlot={memoMarker}
+      />
+    );
+
+    // 완료 발화 체크서클(IN_PROGRESS)은 사진 상태와 무관하게 존재한다.
+    expect(screen.getByTestId('record-visit-check-active-v1')).toBeTruthy();
+    // 메모·사진 슬롯도 함께 산다(사진이 unavailable 이어도 눌리지 않음).
+    expect(screen.getByTestId('record-trip-memo-input')).toBeTruthy();
+    expect(screen.getByTestId('record-photo-unavailable-ph1')).toBeTruthy();
+  });
+});
+
+/**
+ * 🔴 TRIP-761 · AC-4·AC-5·AC-6 — j01 manual-checkin 카드의 "방문 체크" 코랄 pill.
+ *
+ * 위치 권한이 없을 때(수동 체크인 모드) 미방문(UPCOMING) 카드에 "방문 체크" pill 이 붙어, press 하면
+ * 도착을 **수동으로** 생성한다(`arrive({source:'MANUAL'})`). complete(완료)가 아니라 arrive(도착 생성)다.
+ *
+ * 무엇을 보장하나(승인 계약):
+ *  - 🔴 AC-4  `manualCheckin` && UPCOMING → pill(`record-visit-manual-check-{id}`) + "방문 체크" 텍스트가 뜬다.
+ *            manualCheckin false 거나 UPCOMING 이 아니면 부재(무회귀 짝).
+ *  - 🔴 AC-5  pill press → `onPressManualCheck(poiId)` 정확히 1회(seed §3-a).
+ *  - 🔴 AC-6  ★manual 모드도 complete 아님 — pill press 는 `onPressComplete` 를 0회로 두고, UPCOMING 완료 발화
+ *            Pressable(`record-visit-check-active-*`)은 여전히 부재다(완료 게이트 구조 유지).
+ *
+ * ★fill 함정(02a §4-★7): "방문 체크" pill 을 완료 마커(coral 채운 원)로 착각해 색만 바꾸면 심판이 green 인
+ *   채 "도착했다는 거짓말"이 통과한다 → present/absent 짝 testID + complete 0회 로만 판정(색 의존 금지, repo 관례).
+ *
+ * (개념) `getByTestId('문자열')`=완전일치 · `queryByTestId(...)`=없으면 null(부재) · `getByText(문자열)`=단일
+ *   Text leaf 완전일치 · `toHaveBeenCalledWith(값)`=콜백 인자 일치 · `not.toHaveBeenCalled()`=미발화.
+ */
+
+const PILL_TEXT = '방문 체크';
+
+const manualUpcoming = baseCard({ visitCheckId: 'v3', poiId: 'p3' });
+
+describe('🔴 TRIP-761 · AC-4 · "방문 체크" pill 존재', () => {
+  it('B4a · manualCheckin true + UPCOMING → pill + "방문 체크" 텍스트가 뜬다', () => {
+    render(
+      <VisitRecordCard
+        card={manualUpcoming}
+        manualCheckin
+        onPressManualCheck={jest.fn()}
+      />
+    );
+
+    expect(screen.getByTestId('record-visit-manual-check-v3')).toBeTruthy();
+    expect(screen.getByText(PILL_TEXT)).toBeTruthy();
+  });
+});
+
+describe('🔴 TRIP-761 · AC-4 · pill 부재 행렬(무회귀 짝)', () => {
+  // manualCheckin && UPCOMING 만 present — false 거나 UPCOMING 이 아니면 전부 absent.
+  const cases: Array<{ name: string; card: Card; manualCheckin?: boolean }> = [
+    {
+      name: 'manualCheckin false + UPCOMING',
+      card: manualUpcoming,
+      manualCheckin: false,
+    },
+    {
+      name: 'manualCheckin true + COMPLETED',
+      card: baseCard({
+        visitCheckId: 'v3',
+        poiId: 'p3',
+        arrivedAt: T,
+        completedAt: T,
+      }),
+      manualCheckin: true,
+    },
+    {
+      name: 'manualCheckin true + IN_PROGRESS',
+      card: baseCard({ visitCheckId: 'v3', poiId: 'p3', arrivedAt: T }),
+      manualCheckin: true,
+    },
+    {
+      name: 'manualCheckin true + SKIPPED',
+      card: baseCard({
+        visitCheckId: 'v3',
+        poiId: 'p3',
+        arrivedAt: T,
+        skippedAt: T,
+      }),
+      manualCheckin: true,
+    },
+    {
+      name: 'manualCheckin 미주입 + UPCOMING',
+      card: manualUpcoming,
+      manualCheckin: undefined,
+    },
+  ];
+
+  it.each(cases)('$name → pill 부재', ({ card, manualCheckin }) => {
+    render(
+      <VisitRecordCard
+        card={card}
+        manualCheckin={manualCheckin}
+        onPressManualCheck={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId('record-visit-manual-check-v3')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-761 · AC-5 · 카드 레벨 arrive 발화', () => {
+  it('B5 · pill press → onPressManualCheck(poiId) 정확히 1회', () => {
+    const onPressManualCheck = jest.fn();
+    render(
+      <VisitRecordCard
+        card={manualUpcoming}
+        manualCheckin
+        onPressManualCheck={onPressManualCheck}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('record-visit-manual-check-v3'));
+
+    expect(onPressManualCheck).toHaveBeenCalledTimes(1);
+    // seed §3-a: onPressManualCheck(poiId). 페이지가 이 poiId 로 arrive({source:'MANUAL', poiId}) 를 쏜다.
+    expect(onPressManualCheck).toHaveBeenCalledWith('p3');
+  });
+});
+
+describe('🔴 TRIP-761 · AC-6 · ★manual 모드도 complete 아님(무회귀)', () => {
+  it('B6 · manual-check press → onPressManualCheck 1회 / onPressComplete 0회 + 완료 발화 Pressable 여전히 부재', () => {
+    const onPressManualCheck = jest.fn();
+    const onPressComplete = jest.fn();
+    render(
+      <VisitRecordCard
+        card={manualUpcoming}
+        manualCheckin
+        onPressManualCheck={onPressManualCheck}
+        onPressComplete={onPressComplete}
+      />
+    );
+
+    // UPCOMING 완료 게이트는 구조로 유지 — 도착 없는 슬롯엔 완료 발화 Pressable 이 없고, 상태 표식만 비활성.
+    expect(screen.queryByTestId('record-visit-check-active-v3')).toBeNull();
+    expect(screen.getByTestId('record-visit-check-upcoming-v3')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('record-visit-manual-check-v3'));
+
+    // manual-check 는 arrive 로만 흐른다 — complete 는 절대 안 쏜다(두 콜백은 다른 물건).
+    expect(onPressManualCheck).toHaveBeenCalledTimes(1);
+    expect(onPressComplete).not.toHaveBeenCalled();
   });
 });

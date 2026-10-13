@@ -195,3 +195,23 @@ describe('🔴 AC-S6 · 상세 진입 정직 degrade(INV-4)', () => {
     expect(() => fireEvent.press(detail)).not.toThrow();
   });
 });
+
+// TRIP-775 · AC-4 — `headline` 슬롯(계약 공백): 서버에 헤드라인 필드가 없는 동안, 받으면 그 문장을 보이고
+// 안 받으면 문장 자리가 아예 없다. (옛 `StyleSummaryCard.l03parity.test.tsx` 에서 옮겼다 — TRIP-1355.
+// 게이지 좌측 정렬 className 단언은 생김새라 그 파일에 남아 21번 칸이 받는다.)
+describe('AC-4 · 헤드라인 슬롯(계약 공백)', () => {
+  const HEADLINE = '바다와 미식을 천천히 즐기는 여행자';
+
+  it('headline 을 주입하면 그 문장 한 줄이 보인다', () => {
+    render(<StyleSummaryCard vm={officialVM()} headline={HEADLINE} />);
+
+    expect(screen.getByTestId('my-style-headline')).toHaveTextContent(HEADLINE);
+  });
+
+  it('headline 을 주입하지 않으면 문장 자리가 없다(카드는 그대로)', () => {
+    render(<StyleSummaryCard vm={officialVM()} />);
+
+    expect(screen.queryByTestId('my-style-headline')).toBeNull();
+    expect(screen.getByTestId('my-style-card')).toBeOnTheScreen();
+  });
+});

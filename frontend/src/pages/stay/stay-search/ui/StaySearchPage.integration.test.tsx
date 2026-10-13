@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -8,6 +7,8 @@ import {
   fireEvent,
   within,
 } from '@testing-library/react-native';
+import { BASE } from '@/test-support/apiBase';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { StaySearchPage } from './StaySearchPage';
 import type { StayItem, SavedStay } from '@/shared/api/index.schemas';
@@ -114,7 +115,6 @@ describe('요청 URL — region 과 부산 폴백 (옛 본 파일)', () => {
    */
 
   /** authWiring.integration.test.ts:59와 같은 값(리포 관례). */
-  const BASE = 'http://localhost:8080/api/v1';
 
   /** msw가 돌려줄 1건 응답 — 화면까지 실제로 데이터가 흘렀는지 이름으로 확인한다. */
   const FIXTURE = {
@@ -161,22 +161,6 @@ describe('요청 URL — region 과 부산 폴백 (옛 본 파일)', () => {
   });
 
   /** useBootstrapGate.test.tsx:53 · useStaySearch.integration.test.tsx:139의 것과 동형. */
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        // gcTime: 0 — 기본값(5분)이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
-        // 300초 붙잡는다(useStaySearch.integration.test.tsx:141-145 실측).
-        queries: { retry: false, gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
   describe('StaySearchPage — region이 요청 URL에 그대로 실린다 (AC-8)', () => {
     it('쿼리 파라미터의 region이 /stays/search 요청 URL에 실리고 응답이 화면까지 흐른다', async () => {
       // 준비 — ASCII 값을 쓴다(한글은 퍼센트 인코딩되어 실패 메시지를 읽을 수 없다,
@@ -184,7 +168,7 @@ describe('요청 URL — region 과 부산 폴백 (옛 본 파일)', () => {
       mockSearchParams = { region: 'jeju' };
 
       // 실행
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByText('테스트 스테이')).toBeOnTheScreen()
       );
@@ -202,7 +186,7 @@ describe('요청 URL — region 과 부산 폴백 (옛 본 파일)', () => {
     it('useLocalSearchParams가 빈 객체를 주면 region=부산으로 요청이 나간다', async () => {
       mockSearchParams = {};
 
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
 
       // useQuery는 첫 렌더에 data가 undefined다 — 페이지가 data.items로 접근하면 여기서
       // TypeError로 죽는다. `data?.items ?? []` 방어의 유일한 심판이 이 렌더다(Seed §3).
@@ -233,8 +217,6 @@ describe('카드 → 상세 push (옛 .cardNav)', () => {
    * 걸지 않는다(이중 인코딩 회피). TRIP-940 부터 load-bearing 은 `stayId` 하나다 — 상세가 그 값으로
    * `GET /stays/{stayId}` 를 부른다(구 `item` JSON param 폐기, 01b D0).
    */
-
-  const BASE = 'http://localhost:8080/api/v1';
 
   const ITEM_A: StayItem = {
     externalSource: 'NAVER',
@@ -267,17 +249,6 @@ describe('카드 → 상세 push (옛 .cardNav)', () => {
     );
   });
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    return function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    };
-  }
-
   /** push 호출 인자 중 상세 라우트로 가는 객체형 push 만 골라낸다. */
   function detailPushes() {
     return mockPush.mock.calls
@@ -294,7 +265,7 @@ describe('카드 → 상세 push (옛 .cardNav)', () => {
     // TRIP-940 AC-10 재작성 — 상세가 `GET /stays/{stayId}` 로 스스로 조회하므로 item(JSON) 을 싣지
     // 않는다(01b D0). toHaveBeenCalledWith 는 toEqual 과 같은 재귀 비교라 params 에 item 이 남으면 red.
     it('카드를 누르면 stayKey 만 실어 /stays/[stayId] 로 push 한다(item 없음)', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByText(ITEM_A.name)).toBeOnTheScreen()
       );
@@ -311,9 +282,9 @@ describe('카드 → 상세 push (옛 .cardNav)', () => {
   describe('N2 · 하트 press 는 상세 push 를 삼키지 않는다 (AC-7 배선)', () => {
     it('게스트 하트 press 는 상세 라우트 push 를 0건으로 둔다', async () => {
       // "아직 없다" 앵커 — 게스트 전제. 토큰은 모듈 싱글턴이라 앞 describe 가 켜 두면 새는데, 지금 이 앞에는 토큰을 켜는 관점이 없다
-      // (저장 하트는 파일 뒤쪽이다 — 그 리셋의 심판은 저장 하트 바로 뒤 「토큰 격리 앵커」). 순서가 바뀌어도 게스트 전제를 지킨다.
+      // (저장 하트는 파일 뒤쪽이다 — 리셋은 최상위 afterEach 의 clearAccessToken 이 맡는다). 순서가 바뀌어도 게스트 전제를 지킨다.
       expect(getAccessToken()).toBeNull();
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(
           screen.getByTestId(`stay-card-save-${KEY_A}-outline`)
@@ -348,8 +319,6 @@ describe('빈 결과 CTA 배선 (옛 .emptyCta)', () => {
    * 정적 싱글턴을 쓰므로 목이 `router` 객체를 제공해야 한다(useRouter 훅 아님).
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-
   /** 0건 + 필터 사유 없음 → empty 상태로 접힌다. */
   const EMPTY_RESPONSE = { items: [], degraded: false, filterZeroReasons: [] };
   /** 0건 + 필터 사유 있음 → filter-zero 상태로 접힌다. */
@@ -369,21 +338,10 @@ describe('빈 결과 CTA 배선 (옛 .emptyCta)', () => {
     );
   });
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    return function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    };
-  }
-
   describe('StaySearchPage — empty 지역 바꾸기 (TRIP-499 · AC-4)', () => {
     it('지역 바꾸기 버튼을 누르면 여행지 선택 /explore/region?purpose=stay 로 push 한다', async () => {
       // 준비: 필터 없는 빈 상태.
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId('stay-search-empty')).toBeOnTheScreen()
       );
@@ -400,7 +358,7 @@ describe('빈 결과 CTA 배선 (옛 .emptyCta)', () => {
     it('적용필터가 있을 때 필터 완화 버튼을 누르면 전체 해제로 setParams 한다', async () => {
       // 준비: amenity 가 걸린 빈 상태(→ activeFilterCount 1, 버튼 노출).
       mockSearchParams = { region: 'jeju', amenity: '조식' };
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId('stay-search-empty')).toBeOnTheScreen()
       );
@@ -422,7 +380,7 @@ describe('빈 결과 CTA 배선 (옛 .emptyCta)', () => {
           HttpResponse.json(FILTER_ZERO_RESPONSE)
         )
       );
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId('stay-search-filterzero')).toBeOnTheScreen()
       );
@@ -444,7 +402,7 @@ describe('빈 결과 CTA 배선 (옛 .emptyCta)', () => {
           HttpResponse.json(FILTER_ZERO_RESPONSE)
         )
       );
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId('stay-search-filterzero')).toBeOnTheScreen()
       );
@@ -473,8 +431,6 @@ describe('2단 FAB 목적지 (옛 .fab)', () => {
    * QueryClientProvider 래퍼를 복제한다(공용화 안 함 — 리포 관례). FAB press 는 인증과 무관하므로
    * 게스트(토큰 미설정)로 돌린다(담은 목록 GET 은 안 나간다).
    */
-
-  const BASE = 'http://localhost:8080/api/v1';
 
   const ITEM: StayItem = {
     externalSource: 'NAVER',
@@ -507,20 +463,9 @@ describe('2단 FAB 목적지 (옛 .fab)', () => {
     );
   });
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    return function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    };
-  }
-
   describe('AC-8 · e02 2단 FAB 목적지 배선 (TRIP-725)', () => {
     it('흰 하트 FAB press → router.push("/stays/saved")', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
 
       // FAB 은 데이터와 무관한 absolute 오버레이라 즉시 뜬다.
       const saved = await screen.findByTestId('stay-search-fab-saved');
@@ -532,7 +477,7 @@ describe('2단 FAB 목적지 (옛 .fab)', () => {
     });
 
     it('분홍 ＋ FAB press → router.push("/stays/register")', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
 
       const register = await screen.findByTestId('stay-search-fab-register');
       fireEvent.press(register);
@@ -546,7 +491,7 @@ describe('2단 FAB 목적지 (옛 .fab)', () => {
   // TRIP-1321 · US-ASSIST-01 · BR-U8-50~53 — ✦ 도우미 FAB(스택 맨 위 220). 실제 겹침은 6-b 실기.
   describe('✦ 도우미 FAB (TRIP-1321)', () => {
     it('누르면 surface=STAY_SEARCH 만 싣고 도우미 시트로 간다', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       fireEvent.press(await screen.findByTestId('assistant-fab'));
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/assistant',
@@ -555,7 +500,7 @@ describe('2단 FAB 목적지 (옛 .fab)', () => {
     });
 
     it('바닥 220(2단 스택 위)에 뜨고, 목록 끝 여백이 ✦ 윗변(276)까지 늘어난다', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       const style = Object.assign(
         {},
         ...[(await screen.findByTestId('assistant-fab')).props.style].flat(
@@ -569,7 +514,7 @@ describe('2단 FAB 목적지 (옛 .fab)', () => {
     });
 
     it('필터 시트·가격대 시트가 열린 동안은 트리에 없다(BR-U8-53)', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await screen.findByTestId('assistant-fab');
       fireEvent.press(screen.getByTestId('stay-search-filter-more'));
       expect(screen.queryByTestId('assistant-fab')).toBeNull();
@@ -591,8 +536,6 @@ describe('지역 칩·필터 시트 (옛 .filter)', () => {
    *
    * 인프라(msw·mock·wrapper)는 기존 `StaySearchPage.integration.test.tsx`와 동형.
    */
-
-  const BASE = 'http://localhost:8080/api/v1';
 
   const FIXTURE = {
     items: [
@@ -621,20 +564,9 @@ describe('지역 칩·필터 시트 (옛 .filter)', () => {
     );
   });
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    return function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    };
-  }
-
   describe('StaySearchPage — 지역 칩 (TRIP-499 · AC-3)', () => {
     it('지역 칩을 누르면 여행지 선택 /explore/region?purpose=stay 로 간다', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByText('테스트 스테이')).toBeOnTheScreen()
       );
@@ -648,7 +580,7 @@ describe('지역 칩·필터 시트 (옛 .filter)', () => {
 
   describe('StaySearchPage — 필터 시트 (TRIP-415)', () => {
     it('필터 칩 → 시트 열림 → 옵션 토글 → 적용 시 그 조건이 setParams 로 나간다', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByText('테스트 스테이')).toBeOnTheScreen()
       );
@@ -678,7 +610,7 @@ describe('지역 칩·필터 시트 (옛 .filter)', () => {
       // 적용값(params)에서 나와야 "1"이다(code-critic W-2 — 초안에서 뽑으면 0으로 거짓말).
       mockSearchParams = { region: 'jeju', amenity: 'ocean' };
 
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByText('테스트 스테이')).toBeOnTheScreen()
       );
@@ -703,8 +635,6 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
    * *(개념·★F-11)* gorhom 목이 통과 컴포넌트라 실제 시트 열림은 무심판 — "페이지가 시트를
    * 마운트했나(testID present)"·"목록이 실제로 좁혀졌나"만 잰다. 실 슬라이드/딤은 6-b 실기.
    */
-
-  const BASE = 'http://localhost:8080/api/v1';
 
   const CHEAP: StayItem = {
     externalSource: 'NAVER',
@@ -748,20 +678,9 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
     );
   });
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    return function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    };
-  }
-
   describe('PF1·PF2 · 가격대 칩 복구 (AC-12)', () => {
     it('가격대 칩 → 시트 열림 → over-200k 선택 → 저가 카드가 사라진다', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() => {
         expect(screen.getByTestId(`stay-card-${KEY_CHEAP}`)).toBeOnTheScreen();
         expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen();
@@ -776,22 +695,6 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
 
       expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen();
       expect(screen.queryByTestId(`stay-card-${KEY_CHEAP}`)).toBeNull();
-    });
-  });
-
-  describe('PF3 · 지역 칩 무회귀 (TRIP-499 · AC-3)', () => {
-    it('지역 칩은 여행지 선택 /explore/region?purpose=stay 로 간다', async () => {
-      // AC-3 본체(filter.integration)와 같은 소스 push 사이트(StaySearchPage.tsx:109)를 누른다 —
-      // 그 사이트가 하나뿐이라, 여기 목적지를 갱신하지 않으면 구현이 이 파일을 영구 red 로 만든다.
-      render(<StaySearchPage />, { wrapper: createWrapper() });
-      await waitFor(() =>
-        expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
-      );
-
-      fireEvent.press(screen.getByTestId('stay-search-filter-region'));
-
-      // 철자는 공유 헬퍼 출력으로 잠근다(TRIP-989 F — 985 철자 사슬의 stay 고리).
-      expect(mockPush).toHaveBeenCalledWith(regionPickerHref('stay'));
     });
   });
 
@@ -837,7 +740,7 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
   // 갇힌다(INV-4, E-3). 구 E-2("배지 1")를 지우지 않고 새 계약으로 옮겼다.
   describe('E-2 · 가격대는 "필터" 배지에 세지 않되, 0곳의 "필터 완화"는 켠다 (TRIP-1019 #013 · BR-U1-16 · INV-4)', () => {
     it('가격대만 걸면 "필터" 배지에 숫자가 없고, 0곳 카드의 "필터 완화"는 켜져 있다', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
       );
@@ -864,7 +767,7 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
 
     it('편의시설 1개 + 가격대를 걸면 배지는 1이다(가격은 세지 않는다)', async () => {
       mockSearchParams = { region: '부산', amenity: '오션뷰' };
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
       );
@@ -893,7 +796,7 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
   // (마운트 해제)까지만 잰다. 실제 슬라이드 닫힘은 6-b.
   describe('PF-close · 옵션을 고르면 적용과 함께 시트가 닫힌다 (TRIP-1019 #013 · 01b Q1)', () => {
     it('over-200k 를 누르면 목록이 좁혀지고, 가격대 시트가 사라진다', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
       );
@@ -913,7 +816,7 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
 
   describe('E-3 · 가격 때문에 0곳 → "필터 완화"로 빠져나온다 (TRIP-989 · 01b E · INV-4)', () => {
     it('empty "필터 완화"를 누르면 가격대가 풀리고 두 카드가 다시 보인다', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
       );
@@ -934,7 +837,7 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
           HttpResponse.json(FILTER_ZERO_RESPONSE)
         )
       );
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId('stay-search-filterzero')).toBeOnTheScreen()
       );
@@ -952,7 +855,7 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
   describe('Q4 · 지역이 바뀌면 가격대·검색어를 비운다 (TRIP-989 F · 01b Q4)', () => {
     it('다른 지역으로 돌아오면 가격대 칩이 풀리고 검색창이 빈다', async () => {
       const { rerender } = render(<StaySearchPage />, {
-        wrapper: createWrapper(),
+        wrapper: createGcZeroWrapper(),
       });
       await waitFor(() =>
         expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
@@ -975,7 +878,7 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
 
     it('짝: 지역은 그대로이고 다른 조건만 바뀌면 가격대·검색어가 남는다', async () => {
       const { rerender } = render(<StaySearchPage />, {
-        wrapper: createWrapper(),
+        wrapper: createGcZeroWrapper(),
       });
       await waitFor(() =>
         expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
@@ -1009,7 +912,7 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
         sido: '서울특별시',
       };
       const { rerender } = render(<StaySearchPage />, {
-        wrapper: createWrapper(),
+        wrapper: createGcZeroWrapper(),
       });
       await waitFor(() =>
         expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
@@ -1056,8 +959,6 @@ describe('저장 하트 (옛 .save)', () => {
    * observedHits/POST 본문 관찰을 복제(공용화 안 함 — 리포 관례). 인증은 `@/shared/api/tokenManager`의
    * set/clear로 구동(`getAccessToken() !== null`을 렌더 시점 읽는 PlaceExplorePage seam).
    */
-
-  const BASE = 'http://localhost:8080/api/v1';
 
   /** 검색결과 카드 2건(A·B). */
   const ITEM_A: StayItem = {
@@ -1165,20 +1066,6 @@ describe('저장 하트 (옛 .save)', () => {
     );
   });
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    return function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    };
-  }
-
   describe('P1 · 담기 — POST 본문·낙관·무효화 (AC-1)', () => {
     it('미담김 하트 press → buildSaveStayRequest 본문으로 POST + 낙관적 찬 하트 + 성공 후 재조회', async () => {
       // 준비 — 로그인 + 담은 목록 비어 있음. POST 응답은 문 뒤에 세운다.
@@ -1193,7 +1080,7 @@ describe('저장 하트 (옛 .save)', () => {
           });
         })
       );
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       // 카드 A의 빈 하트가 뜰 때까지 기다린다(GET 두 건 도착).
       await waitFor(() =>
         expect(
@@ -1239,7 +1126,7 @@ describe('저장 하트 (옛 .save)', () => {
           return new HttpResponse(null, { status: 204 });
         })
       );
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       // 초기 채움(AC-3 겸) — A가 찬 하트로 뜬다.
       await waitFor(() =>
         expect(
@@ -1294,7 +1181,7 @@ describe('저장 하트 (옛 .save)', () => {
           HttpResponse.json([savedFrom(ITEM_A, SAVED_ID_A), pinSaved])
         )
       );
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
 
       // 단언 — A는 찬 하트+selected, B는 빈 하트+not selected(핀 저장은 어느 카드와도 매칭 안 됨).
       await waitFor(() =>
@@ -1314,7 +1201,7 @@ describe('저장 하트 (옛 .save)', () => {
     it('게스트는 GET/POST 0건이고, 하트 press는 /(auth)/login으로 push한다', async () => {
       // 준비 — 토큰 없음(게스트).
       clearAccessToken();
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       // 카드가 뜰 때까지(검색 GET는 인증과 무관) — 빈 하트.
       await waitFor(() =>
         expect(
@@ -1353,7 +1240,7 @@ describe('저장 하트 (옛 .save)', () => {
           });
         })
       );
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(
           screen.getByTestId(`stay-card-save-${KEY_A}-outline`)
@@ -1382,23 +1269,6 @@ describe('저장 하트 (옛 .save)', () => {
 });
 
 // 옛 StaySearchPage.states — AC-11·AC-12 (INV-4 재시도)
-// 토큰 격리 앵커(TRIP-1187) — 저장 하트 describe 가 켠 액세스 토큰은 최상위 훅이 비운다.
-// 최상위 beforeEach 도 같은 줄을 갖고 있어 "테스트 안"에서 읽으면 어느 한쪽만 있어도 참이 된다 —
-// 그래서 beforeAll 로 **앞 테스트의 afterEach 직후, 이 describe 의 beforeEach 직전**을 읽는다.
-// afterEach 의 clearAccessToken 을 지우면 저장 하트 P5 의 토큰이 남아 여기서 red 다(기본 순서에서도).
-// ⚠️ 반드시 저장 하트 describe **바로 뒤**여야 한다 — 사이에 다른 테스트가 끼면 그 테스트의 beforeEach 가 토큰을 먼저 비워 앵커가 눈이 먼다(실측).
-// 또 저장 하트 묶음의 **마지막 테스트가 토큰을 켠 채 끝나야** 한다(지금은 P5) — 그 자리에 게스트 테스트가 오면 리셋 줄을 지워도 이 앵커가 통과한다.
-describe('토큰 격리 앵커 (describe 사이 리셋)', () => {
-  let tokenAtEntry: string | null | undefined;
-  beforeAll(() => {
-    tokenAtEntry = getAccessToken();
-  });
-
-  it('앞 describe 가 켠 토큰이 남아 있지 않다', () => {
-    expect(tokenAtEntry).toBeNull();
-  });
-});
-
 describe('상태별 재시도·딥링크 파라미터 (옛 .states)', () => {
   afterEach(expectNoRouterCall);
 
@@ -1411,8 +1281,6 @@ describe('상태별 재시도·딥링크 파라미터 (옛 .states)', () => {
    * `amenity`·`stayType`이 나가는 URL 쿼리에 그대로 실린다(AC-12). 인프라(msw·mock·wrapper)는
    * `StaySearchPage.integration.test.tsx`에서 그대로 복사한다(공용화하지 않는 것이 리포 관례).
    */
-
-  const BASE = 'http://localhost:8080/api/v1';
 
   /** partial-failure 모양 1건 응답 — degraded:true라 F5-1의 배너가 뜬다. */
   const FIXTURE = {
@@ -1457,23 +1325,6 @@ describe('상태별 재시도·딥링크 파라미터 (옛 .states)', () => {
     );
   });
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        // retry:false가 없으면 TanStack Query가 스스로 재시도해 누르기 전에 이미 2건이
-        // 된다(F5-2 필수 조건). gcTime:0 — 기본값(5분) 타이머가 테스트 종료 후에도 살아남아
-        // Node 프로세스를 붙잡는다(useStaySearch.integration.test.tsx:141-145 실측).
-        queries: { retry: false, gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
   function staysHits(): string[] {
     return observedUrls.filter(
       (raw) => new URL(raw).pathname === '/api/v1/stays/search'
@@ -1482,7 +1333,7 @@ describe('상태별 재시도·딥링크 파라미터 (옛 .states)', () => {
 
   describe('StaySearchPage — partial-failure 재시도가 실제로 재요청한다 (AC-11)', () => {
     it('재시도 버튼을 누르면 /stays/search로 요청이 한 번 더 나간다', async () => {
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(
           screen.getByTestId('stay-search-partialfailure')
@@ -1508,7 +1359,7 @@ describe('상태별 재시도·딥링크 파라미터 (옛 .states)', () => {
         )
       );
 
-      render(<StaySearchPage />, { wrapper: createWrapper() });
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
       await waitFor(() =>
         expect(screen.getByTestId('stay-search-error')).toBeOnTheScreen()
       );
@@ -1556,7 +1407,7 @@ describe('상태별 재시도·딥링크 파라미터 (옛 .states)', () => {
       async ({ params, expectedRegion, expectedAmenity, expectedStayType }) => {
         mockSearchParams = params;
 
-        render(<StaySearchPage />, { wrapper: createWrapper() });
+        render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
         await waitFor(() => expect(staysHits().length).toBeGreaterThan(0));
 
         // 짝 — 호출이 정확히 1건 없으면 아래 URL 단언이 공허해진다.
@@ -1580,8 +1431,6 @@ describe('이름검색 0건 탈출구 (TRIP-935)', () => {
    *  - [필터 초기화](필터가 걸렸을 때만) → 필터 두 키를 비워 재조회 → 이름에 맞는 숙소가 보인다.
    * 서버 목은 stayType 쿼리가 있으면 리조트만, 없으면 호텔까지 돌려준다.
    */
-
-  const BASE = 'http://localhost:8080/api/v1';
 
   const RESORT: StayItem = {
     externalSource: 'NAVER',
@@ -1625,17 +1474,6 @@ describe('이름검색 0건 탈출구 (TRIP-935)', () => {
   // 최상위 beforeEach 는 mockClear 라 구현을 안 지운다 — 아래 mockImplementation 이 다른 describe 로 새지 않게.
   afterEach(() => mockSetParams.mockReset());
 
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    return function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    };
-  }
-
   /** "호텔"을 쳐서 이름 0건 카드가 뜨게 한다. */
   async function typeHotelUntilNameEmpty(): Promise<void> {
     await waitFor(() =>
@@ -1648,7 +1486,7 @@ describe('이름검색 0건 탈출구 (TRIP-935)', () => {
   it('이름 + 유형 필터 0건 → 두 버튼이 보이고, 검색어 지우기는 목록을 되살린다', async () => {
     // 준비: 리조트 필터가 걸린 채 "호텔" 검색.
     mockSearchParams = { region: '부산', stayType: 'RESORT' };
-    render(<StaySearchPage />, { wrapper: createWrapper() });
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
     await typeHotelUntilNameEmpty();
     expect(
       screen.getByTestId('stay-search-name-empty-reset')
@@ -1675,7 +1513,7 @@ describe('이름검색 0건 탈출구 (TRIP-935)', () => {
       mockSearchParams = { ...mockSearchParams, ...next };
     });
     const { rerender } = render(<StaySearchPage />, {
-      wrapper: createWrapper(),
+      wrapper: createGcZeroWrapper(),
     });
     await typeHotelUntilNameEmpty();
 
@@ -1698,7 +1536,7 @@ describe('이름검색 0건 탈출구 (TRIP-935)', () => {
   it('필터 없는 이름 0건 → 검색어 지우기만 보인다', async () => {
     // 준비: 필터 없음. "없는숙소"로 0건.
     mockSearchParams = { region: '부산' };
-    render(<StaySearchPage />, { wrapper: createWrapper() });
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
     await waitFor(() =>
       expect(screen.getByTestId(`stay-card-${KEY_HOTEL}`)).toBeOnTheScreen()
     );
@@ -1723,7 +1561,6 @@ describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)
    * replace 면 이 화면만 (tabs) 로 바뀌어 [(tabs)탐색, (tabs)기록] 두 겹이 남는다(QA F3).
    * 준비: 빈 검색 응답 → 실행: 기록·탐색 탭 press → 단언: dismissTo 인자 순서, replace·push 0회.
    */
-  const BASE = 'http://localhost:8080/api/v1';
 
   it('기록·탐색 탭 press → dismissTo(/records) · dismissTo(/explore), replace 0회', async () => {
     server.use(
@@ -1763,8 +1600,6 @@ describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)
  * 준비: URL params + 서울·부산 강서구와 주소 모름이 섞인 응답 → 실행: 렌더 → 단언: 화면 카드·헤더 개수·나간 요청.
  */
 describe('동명 구 · URL 의 시도로 다른 시도 숙소를 거른다 (F3 · AC-F1·F2·F4)', () => {
-  const BASE = 'http://localhost:8080/api/v1';
-
   function stay(externalId: string, address: string | null): StayItem {
     return {
       externalSource: 'LOCALDATA',
@@ -1864,7 +1699,6 @@ describe('동명 구 · URL 의 시도로 다른 시도 숙소를 거른다 (F3 
  * 정확한 인자로 1회(무회귀). 시계는 응답이 도착한 뒤에 멈춘다(그다음엔 기다릴 것이 없다).
  */
 describe('연타 관통 — 한 페이지 안에서 드러난 요소', () => {
-  const BASE = 'http://localhost:8080/api/v1';
   const FROZEN_NOW = 1_790_000_000_000;
 
   const CHEAP: StayItem = {

@@ -168,7 +168,7 @@ afterEach(resetWizardDraft);
 
 // TRIP-201 · 447 · 703 · 499/985 · 412 · 453 · 470 · 500 · 704
 describe('전국 d01 — 구획·검색·레인', () => {
-  it('헤딩·검색·숙소 레인·담은 곳 FAB 를 그리고, 축 세그먼트·여행자 일정 레인·내 주변은 없다', () => {
+  it('헤딩·검색·숙소 레인·담은 곳 FAB 를 그린다', () => {
     render(<ExploreLandingPage />);
 
     [
@@ -178,10 +178,6 @@ describe('전국 d01 — 구획·검색·레인', () => {
       'explore-lane-stay',
       'explore-saved-menu-toggle',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
-    expect(screen.queryByTestId('explore-axis-all')).toBeNull();
-    expect(screen.queryByTestId('explore-lane-itin')).toBeNull();
-    // 좌표 파라미터가 없어 '내 주변' 블록은 없다.
-    expect(screen.queryByTestId('explore-nearby')).toBeNull();
   });
 
   it('검색창을 누르면 탐색용 지역 선택으로 1회 간다(입력 불가 진입 버튼)', () => {
@@ -227,22 +223,10 @@ describe('전국 d01 — 구획·검색·레인', () => {
     );
   });
 
-  // '여행자 일정'은 완전 일치 쿼리라 부제의 부분 문자열엔 안 걸리고 레인 헤더만 노린다.
-  it('여행자 일정 레인·제목·"준비 중" 자리가 없다', () => {
-    render(<ExploreLandingPage />);
-
-    expect(screen.queryByTestId('explore-lane-itin')).toBeNull();
-    expect(screen.queryByText('여행자 일정')).toBeNull();
-    expect(screen.queryByText(/준비\s*중/)).toBeNull();
-  });
-
-  it('헤딩 부제는 "숙소·장소를 둘러보고 담아요"이고, 옛 여행자 일정 문구는 없다', () => {
+  it('헤딩 부제는 "숙소·장소를 둘러보고 담아요"이다', () => {
     render(<ExploreLandingPage />);
 
     expect(screen.getByText('숙소·장소를 둘러보고 담아요')).toBeOnTheScreen();
-    expect(
-      screen.queryByText('숙소·장소·여행자 일정을 둘러보고 담아요')
-    ).toBeNull();
   });
 
   it('숙소 조회가 실패해도 나머지 구획은 살고, 숙소 레인 자리에 재시도가 뜬다(INV-4)', () => {

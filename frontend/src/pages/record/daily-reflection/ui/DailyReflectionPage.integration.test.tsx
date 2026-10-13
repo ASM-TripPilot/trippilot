@@ -31,7 +31,7 @@ import { DailyReflectionPage } from './DailyReflectionPage';
  *  - 레코드가 없는 날 한 번 만들어 보여주기(생성) — 옛 `DailyReflectionPage.generate.integration.test.tsx`
  *  - 직접 쓴 회고 저장 뒤 같은 화면(저장) — 옛 `DailyReflectionPage.save.integration.test.tsx`
  * 서버 기동·정지는 파일 최상위 한 번, 관점별 가짜 서버 상태(serverItems·응답 스위치)는 각 describe 의 beforeEach 가 다시 세운다.
- * 훅·화면을 목으로 갈아 끼워 배선만 보는 node 테스트는 `DailyReflectionPage.hookMock.test.tsx`.
+ * 훅·화면을 목으로 갈아 끼워 배선만 보는 node 테스트는 `DailyReflectionPage.test.tsx`.
  */
 
 jest.mock('@/shared/storage', () => ({
@@ -375,6 +375,12 @@ describe('생성 — 레코드가 없는 지난 날·오늘은 한 번 만들어
       expect(screen.getByTestId('reflection-daily-pending')).toBeOnTheScreen();
       expect(screen.queryByTestId('reflection-daily-empty')).toBeNull();
       expect(screen.queryByText(EMPTY_TEXT)).toBeNull();
+
+      // TRIP-1068 Q2(옛 hookMock 회고 카드 묶음에서 옮김) — 생성 중에도 헤더 "편집"은 빈 칸 입력을 연다.
+      fireEvent.press(screen.getByTestId('reflection-daily-edit'));
+      expect(
+        screen.getByTestId('reflection-daily-edit-input')
+      ).toHaveDisplayValue('');
     });
   });
 
@@ -806,6 +812,79 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
       await waitForNarrative(WRITTEN);
       expect(screen.queryByTestId('reflection-daily-empty')).toBeNull();
       expect(screen.queryByText(SAVE_FAILED)).toBeNull();
+    });
+  });
+
+  /**
+   * TRIP-945 AC-1·3·4·6(옛 DailyReflectionPage.hookMock 「회고 카드」 묶음에서 옮김) — 표시·편집 시드·저장 바탕이 모두
+   * 서버가 고른 `card` 다. 클라가 `editedCard ?? draftCard` 를 다시 고르지 않는다. 서버가 card 와 다른 draft·edited 를
+   * 내려주는 상태에서 본문·입력칸 시드·PUT 바디(title·scenes)가 전부 card 의 것이어야 한다.
+   */
+  describe('TRIP-945 · 본문·편집 시드·저장 바탕은 서버가 고른 card 다 (BR-U5-35)', () => {
+    const CARD_SUBTITLE =
+      '광안리해수욕장·부산시립미술관·해운대시장 외 1곳 을(를) 다녀왔어요. 이동 거리는 약 12.0km 였어요.';
+    const CARD_TITLE = '광안리해수욕장 외 3곳';
+    const CARD_SCENES = ['광안리해수욕장', '부산시립미술관'].map((name) => ({
+      layout: 'TEXT',
+      caption: `${name} 을(를) 다녀왔어요.`,
+    }));
+
+    function cardWith(title: string, subtitle: string, scenes: unknown[]) {
+      const made: ReflectionCard = {
+        templateId: 'backend.rule.daily.v1',
+        format: 'CARD',
+        title,
+        subtitle,
+        payload: JSON.stringify({
+          template_id: 'backend.rule.daily.v1',
+          format: 'CARD',
+          cover: { title, subtitle },
+          scenes,
+        }),
+      };
+      return made;
+    }
+
+    it('본문·입력칸 시드는 card.subtitle, 저장 PUT 은 { card } 한 필드이며 title·scenes 는 card 것이다', async () => {
+      serverItems = [
+        {
+          ...EXISTING,
+          card: cardWith(CARD_TITLE, CARD_SUBTITLE, CARD_SCENES),
+          draftCard: cardWith('초안 제목 D', '초안 D 문장', []),
+          editedCard: cardWith('수정본 제목 E', '수정본 E 문장', []),
+          stats: {
+            visitCount: 4,
+            distanceKm: 12,
+            distanceSource: 'VISIT_LINE',
+            photoCount: 6,
+          },
+        },
+      ];
+      renderPage();
+
+      await waitForNarrative(CARD_SUBTITLE);
+      // INV-3 — 규칙 카드를 그린 화면에 소요시간 표기가 없고, 거리 문장은 있다.
+      expect(screen.root).not.toHaveTextContent(DURATION_TEXT);
+      expect(screen.root).toHaveTextContent(/12\.0km/);
+
+      fireEvent.press(screen.getByTestId('reflection-daily-narrative-edit'));
+      expect(
+        screen.getByTestId('reflection-daily-edit-input')
+      ).toHaveDisplayValue(CARD_SUBTITLE);
+
+      fireEvent.changeText(
+        screen.getByTestId('reflection-daily-edit-input'),
+        '바다가 좋았다'
+      );
+      fireEvent.press(screen.getByTestId('reflection-daily-edit-save'));
+
+      await waitFor(() => expect(putCount()).toBe(1));
+      expect(putPaths).toEqual([PUT_PATH]);
+      expect(Object.keys(putBodies[0])).toEqual(['card']);
+      const parsed = JSON.parse(putBodies[0].card);
+      expect(parsed.cover.subtitle).toBe('바다가 좋았다');
+      expect(parsed.cover.title).toBe(CARD_TITLE);
+      expect(parsed.scenes).toEqual(CARD_SCENES);
     });
   });
 

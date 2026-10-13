@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -12,8 +11,14 @@ import * as Linking from 'expo-linking';
 
 import { buildAppNavUrl, buildWebNavUrl } from '@/features/execution';
 import { server } from '@/mocks/server';
-import type { Itinerary, VisitCheck } from '@/shared/api/index.schemas';
+import type { VisitCheck } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import {
+  liveHubHandlers,
+  liveItinerary,
+  liveSlot,
+  liveVisit,
+} from '@/test-support/liveHubFixtures';
 
 import { LiveItineraryPage } from './LiveItineraryPage';
 
@@ -61,7 +66,6 @@ jest.mock('expo-linking', () => ({
 }));
 const mockOpenURL = Linking.openURL as jest.Mock;
 
-const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 'trip-1';
 const TODAY = '2026-08-20';
 
@@ -75,67 +79,29 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
-const slotOf = (poiId: string, over: Record<string, unknown> = {}) => ({
-  poiId,
-  startAt: '10:00:00',
-  endAt: '11:00:00',
-  isFixed: false,
-  endsNextDay: false,
-  hasViolation: false,
-  nameKo: `장소-${poiId}`,
-  distanceRange: '약 1.2km · 도보 추정',
-  openingHours: null,
-  tags: [],
-  lat: 35.1,
-  lng: 129.1,
-  ...over,
-});
+const slotOf = (poiId: string, over: Record<string, unknown> = {}) =>
+  liveSlot(poiId, `장소-${poiId}`, '10:00:00', {
+    endAt: '11:00:00',
+    distanceRange: '약 1.2km · 도보 추정',
+    lat: 35.1,
+    lng: 129.1,
+    ...over,
+  });
 
-const doneVisit = (poiId: string): VisitCheck => ({
-  visitCheckId: `v-${poiId}`,
-  poiId,
-  slotKey: `${TODAY}#${poiId}`,
-  arrivedAt: '2026-08-20T09:00:00',
-  completedAt: '2026-08-20T09:50:00',
-  skippedAt: null,
-  source: 'MANUAL',
-  spontaneous: false,
-  updatedAt: '2026-08-20T09:50:05Z',
-});
+const doneVisit = (poiId: string): VisitCheck =>
+  liveVisit({
+    poiId,
+    arrivedAt: '2026-08-20T09:00:00',
+    completedAt: '2026-08-20T09:50:00',
+    updatedAt: '2026-08-20T09:50:05Z',
+  });
 
 function seed(slots: unknown[], visits: VisitCheck[] = []) {
   server.use(
-    http.get(`${BASE}/trips/:tripId`, () =>
-      HttpResponse.json({
-        tripId: TRIP_ID,
-        title: '부산 여행',
-        startDate: TODAY,
-        endDate: '2026-08-22',
-        party: 2,
-        destinations: [{ seq: 1, region: '부산', nights: 2 }],
-        status: 'PLANNED',
-        createdAt: '2026-08-01T00:00:00Z',
-        updatedAt: '2026-08-01T00:00:00Z',
-      })
-    ),
-    http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-      HttpResponse.json({
-        itineraryId: 'it1',
-        tripId: TRIP_ID,
-        status: 'PLANNED',
-        solveMode: 'FULL',
-        generationMode: 'AI',
-        isFallback: false,
-        generationState: 'COMPLETE',
-        days: [{ date: TODAY, slots }],
-      } as unknown as Itinerary)
-    ),
-    http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
-      HttpResponse.json({ visits })
-    ),
-    http.get(`${BASE}/trips/:tripId/triggers`, () =>
-      HttpResponse.json({ triggers: [] })
-    )
+    ...liveHubHandlers({
+      itinerary: liveItinerary([{ date: TODAY, slots }]),
+      visits,
+    })
   );
 }
 

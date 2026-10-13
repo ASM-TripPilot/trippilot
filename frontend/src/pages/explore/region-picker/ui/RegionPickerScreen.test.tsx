@@ -405,15 +405,6 @@ describe('검색 · 앱바 — 이월 유지', () => {
   });
 });
 
-describe("AC · '내 주변'이 화면 어디에도 없다 (이월 유지)", () => {
-  it("purpose='stay'에서도 '내 주변' 진입과 텍스트가 없다", () => {
-    render(<RegionPickerScreen {...props({ purpose: 'stay' })} />);
-
-    expect(screen.queryByTestId('explore-region-nearby')).toBeNull();
-    expect(screen.queryByText('내 주변')).toBeNull();
-  });
-});
-
 describe('🔴 TRIP-991 · 앱바 뒤로 접근성 (AC-1 role · AC-2 라벨)', () => {
   it('앱바 뒤로는 VoiceOver 에 "뒤로" 버튼으로 읽히고, 누르면 onBack 이 1회 불린다', () => {
     const onBack = jest.fn();

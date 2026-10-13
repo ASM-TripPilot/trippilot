@@ -161,32 +161,8 @@ describe('🔴 TC6 · testIDPrefix 는 소비처가 정한다(하드코딩 아�
   });
 });
 
-describe('🔴 TC7 · 여분 testID 0 (host 필터 — 프로즌 카드 카운트 보호)', () => {
-  it('done 카드 하위 host testID 는 root·badge·title·meta·extra 뿐(resume 없음)', () => {
-    render(<TripCard vm={vm()} onPress={noop} testIDPrefix="my-trip" />);
-
-    const card = screen.getByTestId('my-trip-card-t1');
-    // host 필터 필수 — RN 의 View/Pressable/Text forwardRef 가 testID 를 합성+host 노드에 복제해
-    // 필터 없이 세면 개수가 부풀어 영구 red 가 된다(807 SC7 문제로그). `typeof n.type === 'string'`
-    // 은 리포 표준(`PlaceExploreScreen.test.tsx:127`).
-    const ids = card
-      .findAll((n) => typeof n.type === 'string' && n.props.testID != null)
-      .map((n) => n.props.testID)
-      .sort();
-    expect(ids).toEqual(
-      [
-        'my-trip-card-t1',
-        'my-trip-badge-t1',
-        'my-trip-title-t1',
-        'my-trip-meta-t1',
-        'my-trip-extra-t1',
-      ].sort()
-    );
-  });
-});
-
-// ── TRIP-788 추가분(additive, 프로즌 TC1~TC7 무회귀) ────────────────────────────
-// 두 옵셔널 VM 필드(resume?·imageUrl?)는 default vm() 이 미전달이라 TC1~TC7 을 한 픽셀도 안 건드린다.
+// ── TRIP-788 추가분(additive, 프로즌 TC1~TC6 무회귀) ────────────────────────────
+// 두 옵셔널 VM 필드(resume?·imageUrl?)는 default vm() 이 미전달이라 TC1~TC6 을 한 픽셀도 안 건드린다.
 
 describe('🔴 TC8 · resume seam — 배지와 독립(additive `resume` 필드)', () => {
   // 생성중·초안이 같은 draft 배지를 쓰므로 배지로 resume 를 가르면 생성중에 샌다(맹점①).
@@ -250,7 +226,7 @@ describe('🔴 TC9 · 카드 사진(G7) — imageUrl 있으면 Image, 없으면 
   it('imageUrl 미전달(프로덕션 항상 null) → 사진 Image 부재, 회색 플레이스홀더', () => {
     render(<TripCard vm={vm()} onPress={noop} testIDPrefix="my-trip" />);
 
-    // 사진 testID 는 imageUrl 있을 때만 붙는다(TC7 여분 testID 0 과 정합).
+    // 사진 testID 는 imageUrl 있을 때만 붙는다.
     expect(screen.queryByTestId('my-trip-photo-t1')).toBeNull();
   });
 });

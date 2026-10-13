@@ -14,7 +14,7 @@ import PlanbManualRoute from '@routes/trips/[tripId]/planb/manual';
  * `initialDate` 로 넘긴다(편집기가 그 날로 열린다). `date` 라는 이름 그대로 props 에 새면 안 된다.
  *
  * ★ `@/pages/itinerary/itinerary-edit` 을 스파이 컴포넌트로 치환 — 실 페이지 렌더(조회)를 막고 위임만 본다
- *   (liveLocationRoute 선례). 옛 `@/pages/planb-manual` 은 목으로 막지 않는다 — 구현 뒤엔 그 모듈이
+ *   (라우트 위임 테스트 관례). 옛 `@/pages/planb-manual` 은 목으로 막지 않는다 — 구현 뒤엔 그 모듈이
  *   없어서 목 자체가 해석 실패로 죽는다(02a ★13).
  *
  * 3동작: 준비(params 목 + 페이지 스파이) → 실행(라우트 렌더) → 단언(위임된 props).

@@ -176,20 +176,43 @@ async function renderSettledProbe() {
   return rendered;
 }
 
+type ProbeResult = Awaited<ReturnType<typeof renderSettledProbe>>['result'];
+
+/** 미배정 구간(UNCOVERED_FROM~TO)에 stay-a 를 붙이는 기본 요청. */
+const UNCOVERED_REQUEST = {
+  savedStayId: 'stay-a',
+  dateFrom: UNCOVERED_FROM,
+  dateTo: UNCOVERED_TO,
+};
+
+/**
+ * `assign.mutateAsync` 를 act 안에서 부르고 거부됐는지를 돌려준다(TRIP-1353 — 같은 4줄 블록이 5곳이었다). 거부를 삼키므로
+ * "거부되면 안 되는" 케이스는 `rejected === false` 를 단언해야 옛 동작(거부 시 act 가 throw → red)이 유지된다.
+ */
+async function assign(
+  result: ProbeResult,
+  data: {
+    savedStayId: string;
+    dateFrom: string;
+    dateTo: string;
+  } = UNCOVERED_REQUEST
+): Promise<{ rejected: boolean }> {
+  let rejected = false;
+  await act(async () => {
+    await result.current.assign
+      .mutateAsync({ tripId: TRIP_ID, data })
+      .catch(() => {
+        rejected = true;
+      });
+  });
+  return { rejected };
+}
+
 describe('★4 · 01b D11 — 지정은 bases 를 다시 받아오되 saved-stays 는 안 건드린다', () => {
   it('🔴 지정에 성공하면 bases 를 다시 받아오고 saved-stays 는 안 받아온다', async () => {
     const { result } = await renderSettledProbe();
 
-    await act(async () => {
-      await result.current.assign.mutateAsync({
-        tripId: TRIP_ID,
-        data: {
-          savedStayId: 'stay-a',
-          dateFrom: UNCOVERED_FROM,
-          dateTo: UNCOVERED_TO,
-        },
-      });
-    });
+    expect((await assign(result)).rejected).toBe(false);
 
     // 긍정 — 배정 목록이 실제로 다시 왔다.
     await waitFor(() => expect(hitCount(BASES_HIT)).toBe(2));
@@ -202,16 +225,7 @@ describe('★4 · 01b D11 — 지정은 bases 를 다시 받아오되 saved-stay
   it('나가는 본문이 AssignBaseRequest 3필드 그대로다 (01b D1)', async () => {
     const { result } = await renderSettledProbe();
 
-    await act(async () => {
-      await result.current.assign.mutateAsync({
-        tripId: TRIP_ID,
-        data: {
-          savedStayId: 'stay-a',
-          dateFrom: UNCOVERED_FROM,
-          dateTo: UNCOVERED_TO,
-        },
-      });
-    });
+    expect((await assign(result)).rejected).toBe(false);
 
     // 앵커 — 요청이 실제로 나갔다. 없으면 아래 키 단언이 "아무것도 안 보내서" 통과한다.
     expect(capturedBody).not.toBeNull();
@@ -230,21 +244,7 @@ describe('01b D13-b — 409는 실패가 아니라 성공이다', () => {
     postStatus = 409;
     const { result } = await renderSettledProbe();
 
-    let rejected = false;
-    await act(async () => {
-      await result.current.assign
-        .mutateAsync({
-          tripId: TRIP_ID,
-          data: {
-            savedStayId: 'stay-a',
-            dateFrom: UNCOVERED_FROM,
-            dateTo: UNCOVERED_TO,
-          },
-        })
-        .catch(() => {
-          rejected = true;
-        });
-    });
+    const { rejected } = await assign(result);
 
     expect(rejected).toBe(false);
     await waitFor(() => expect(hitCount(BASES_HIT)).toBe(2));
@@ -256,21 +256,7 @@ describe('01b D13-b — 409는 실패가 아니라 성공이다', () => {
     postStatus = 500;
     const { result } = await renderSettledProbe();
 
-    let rejected = false;
-    await act(async () => {
-      await result.current.assign
-        .mutateAsync({
-          tripId: TRIP_ID,
-          data: {
-            savedStayId: 'stay-a',
-            dateFrom: UNCOVERED_FROM,
-            dateTo: UNCOVERED_TO,
-          },
-        })
-        .catch(() => {
-          rejected = true;
-        });
-    });
+    const { rejected } = await assign(result);
 
     expect(rejected).toBe(true);
     // TRIP-1011 C(01b Q1 · INV-4) — 실패해도 거점을 다시 받는다. 교체는 DELETE·POST 두 요청이라
@@ -331,15 +317,7 @@ describe('AC-3 · 교체 중 지울 배정이 이미 없으면(DELETE 404) 붙�
 
   async function replaceAndReport(): Promise<{ rejected: boolean }> {
     const { result } = await renderSettledProbe();
-    let rejected = false;
-    await act(async () => {
-      await result.current.assign
-        .mutateAsync({ tripId: TRIP_ID, data: REPLACE_REQUEST })
-        .catch(() => {
-          rejected = true;
-        });
-    });
-    return { rejected };
+    return assign(result, REPLACE_REQUEST);
   }
 
   it('DELETE 가 404 여도 거부되지 않고, 새 배정 POST 가 그대로 나간다', async () => {

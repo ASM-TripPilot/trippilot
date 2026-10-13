@@ -3,7 +3,6 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { capturedTabsProps } from '@/test-support/expoRouterTabsMock';
-import { renderWithQueryClient } from '@/test-support/myPageItineraries';
 
 /**
  * AC-6~AC-8 · SC-1 · SC-4 · SC-5 — `(tabs)` 레이아웃·어댑터·라우트 래퍼.
@@ -14,36 +13,27 @@ import { renderWithQueryClient } from '@/test-support/myPageItineraries';
  *  (2) `Tabs`에 `tabBar` 렌더프롭을 넘겨 탭바를 전면 커스텀한다(Q4),
  *  (3) 그 렌더프롭이 네비게이션 상태(state.index)를 `shell-tabbar-*` 활성 탭으로 정확히
  *      매핑하고, press 시 `navigation.navigate(라우트 이름)`을 호출한다,
- *  (4) `(tabs)/index.tsx`가 실물 `HomeScreen`을 그리고, `itinerary`는 TRIP-299로,
- *      `explore`는 TRIP-201로 실화면 승격(그 탭 동작은 각각
- *      `src/__tests__/tabsItineraryRoute.test.tsx`·`pages/explore/explore-landing/ui/ExploreLandingPage.test.tsx`가 잠근다),
- *      나머지 2탭(records·my)은 TRIP-290으로 "준비 중" 상태 안내로 승격(더는 껍데기 아님).
+ *  (4) `(tabs)/index.tsx`가 실물 `HomeScreen`을 그린다. explore·records 라우트 래퍼를 렌더하던 it 은 TRIP-1350 에서 지웠다 —
+ *      라우트는 page 를 꽂기만 하고, 그 탭 동작은 `pages/explore/explore-landing/ui/ExploreLandingPage.test.tsx`·
+ *      `pages/record/records-calendar/ui/RecordsCalendarPage.test.tsx`·`src/__tests__/tabsItineraryRoute.test.tsx` 가 잠근다.
  *
  * 왜 라우트 폴더(`app/`) 밖에 두는가: expo-router의 require.context가 `.test.tsx`를 라우트로
- * 등록해 버리므로(`rootLayout.test` 관례) 라우트 파일 테스트는 항상 `src/__tests__/`에 둔다.
+ * 등록해 버리므로(`AppProviders.test` 관례) 라우트 파일 테스트는 항상 `src/__tests__/`에 둔다.
  *
  * expo-router는 파일 상단에서 반드시 목킹한다 — node 버킷은 `--experimental-vm-modules`로
  * 돌아 expo-router 실물 import가 `ERR_REQUIRE_ESM`으로 죽는다(02a §6-2).
  */
 
-// 탐색 page 가 `useLocalSearchParams` 로 지역 필터를 읽는다 — 탭 목에 빈 주소를 더한다(TRIP-1142).
-jest.mock('expo-router', () => ({
+jest.mock('expo-router', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  ...require('@/test-support/expoRouterTabsMock'),
-  useLocalSearchParams: () => ({}),
-}));
+  require('@/test-support/expoRouterTabsMock')
+);
 
 // (tabs)/index.tsx 가 TRIP-371 로 useGetTrips·useSavedPlaces 를 물면서, IndexRoute 를 직접
 // 렌더하는 아래 SC-1 이 QueryClient 부재로 크래시한다 — discovery(빈 목록·담김 0)로 목킹해
 // home-dashboard-root 만 뜨게 둔다. 목적지 왕복·얼굴 판정은 pages/home/ui/HomePage.test.tsx 가 진다.
-// TRIP-1120 — 기록 탭 페이지가 여행별 일정을 `useQueries` 로 조회한다. 옵션 함수도 같은 목에
-// 둔다(일정은 영영 안 온다 — tabsRecordsRoute.test.tsx 기본 대본과 같다).
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: () => ({ data: [], isPending: false, isError: false }),
-  getGetTripsTripIdItineraryQueryOptions: (tripId: string) => ({
-    queryKey: [`/trips/${tripId}/itinerary`],
-    queryFn: () => new Promise(() => {}),
-  }),
 }));
 jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: [] }),
@@ -64,24 +54,10 @@ jest.mock('@/shared/api/generated/places/places', () => ({
 jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: () => ({ savedCount: 0 }),
 }));
-// TRIP-1142 — 탐색 라우트 래퍼도 렌더한다. 숙소 검색은 빈 목록 무해 스텁(담기 훅은 위 저장 숙소 스텁).
-jest.mock('@/features/stay/model/useStaySearch', () => ({
-  useStaySearch: () => ({
-    data: { items: [], degraded: false, filterZeroReasons: [] },
-    isPending: false,
-    isError: false,
-    refetch: () => {},
-  }),
-}));
-
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const TabsLayout = require('@routes/(tabs)/_layout').default;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const IndexRoute = require('@routes/(tabs)/index').default;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const ExploreRoute = require('@routes/(tabs)/explore').default;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const RecordsRoute = require('@routes/(tabs)/records').default;
 
 // 라우트 이름 5개 → 조작 네비 상태(state.routes)에 쓸 최소 형태.
 const ROUTE_NAMES = ['index', 'explore', 'itinerary', 'records', 'my'];
@@ -185,36 +161,6 @@ describe('(tabs)/index.tsx — 홈 라우트 래퍼 (SC-1 · SC-5)', () => {
     render(<IndexRoute />);
 
     expect(screen.getByTestId('home-dashboard-root')).toBeOnTheScreen();
-  });
-});
-
-// TRIP-1142 — 라우트는 page 를 꽂기만 한다. 진짜 탭바는 (tabs) 레이아웃이 그리므로 라우트·page 가
-// 탭바를 또 그리면 red 다(옛 소스 스캔 exploreRegionFilterStructure AC-8 의 라우트 줄을 대체).
-describe('(tabs)/explore — 탐색 라우트 래퍼', () => {
-  it('기본 export 가 탐색 page 루트를 그리고, 탭바를 따로 그리지 않는다', () => {
-    render(<ExploreRoute />);
-
-    expect(screen.getByTestId('explore-landing')).toBeOnTheScreen();
-    expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
-  });
-});
-
-describe('(tabs)/records — 기록 탭 허브 (AC-1 · 셸 교체)', () => {
-  // records 는 TRIP-575 로 "준비 중" 자리표시자(StateNotice) → 여행 캘린더 허브로 승격.
-  // placeholder 계약이 끝났다(my 탭 TRIP-604 승격 선례). itinerary(TRIP-299/401)·
-  // explore(TRIP-201)·my(TRIP-604) 는 이미 실화면이라 각자 라우트 테스트가 잠근다.
-  // 크래시 스텁은 이미 존재한다 — 상단 전역 jest.mock('@/shared/api/generated/trips/trips')
-  // 가 빈 목록을 주므로 허브가 '빈 상태' 얼굴(record-calendar-empty)로 렌더돼 QueryClient
-  // 부재 크래시가 안 난다(TRIP-371 선례 — 새 목 추가 불필요).
-  // 여기선 "자리표시자가 사라지고 허브가 뜬다"만 잠근다 — 마킹·목록·항법은 각각
-  // recordsCalendar 모델·RecordsCalendarScreen·tabsRecordsRoute 가 잠근다.
-  // TRIP-1120 — 페이지가 `useQueries` 를 물어 여행 0건이어도 Provider 없으면 던진다 → 실
-  // QueryClient 아래에서 그린다(단언 무변경).
-  it('기록 탭은 placeholder 가 아니라 여행 캘린더 허브(빈 상태)를 그린다', () => {
-    renderWithQueryClient(<RecordsRoute />);
-
-    expect(screen.queryByTestId('shell-tab-placeholder-records')).toBeNull();
-    expect(screen.getByTestId('record-calendar-empty')).toBeOnTheScreen();
   });
 });
 

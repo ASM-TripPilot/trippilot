@@ -118,19 +118,10 @@ describe('LiveLocationView — i21 권한 거부 얼굴 (state=permission-denied
   });
 });
 
-describe('🔴 AC-B3 · Q6 — 선택 위치 라벨은 받은 기준 장소에서 만든다(광안리 하드코딩 없음)', () => {
-  it.each([['manual'], ['permission-denied']])(
-    '%s — placeName 이 있으면 "{이름} 인근(추정)"',
-    (state) => {
-      render(
-        <LiveLocationView state={state} center={SEOUL} placeName="경복궁" />
-      );
-
-      expect(screen.getByText('경복궁 인근(추정)')).toBeOnTheScreen();
-      expect(screen.queryByText(/광안리/)).toBeNull();
-    }
-  );
-
+// AC-B3 의 "placeName 이 있으면 {이름} 인근(추정)" 과 AC-B2 의 "받은 center 로 picker 마운트 · center null 이면
+// loading 만"은 LiveLocationPage.integration 이 같은 뷰를 실물로 그려 잠근다(TRIP-1354, 뮤테이션으로 확인).
+// 여기엔 뷰 전용 폴백(placeName null)만 남긴다.
+describe('🔴 AC-B3 · Q6 — placeName 이 없으면 "여행지 기준(추정)"', () => {
   it.each([['manual'], ['permission-denied']])(
     '%s — placeName 이 null 이면 "여행지 기준(추정)"',
     (state) => {
@@ -142,35 +133,6 @@ describe('🔴 AC-B3 · Q6 — 선택 위치 라벨은 받은 기준 장소에�
       expect(screen.queryByText(/광안리/)).toBeNull();
     }
   );
-});
-
-describe('🔴 AC-B2 — 지도 중심은 받은 center 이고, center 가 없으면 지도를 마운트하지 않는다', () => {
-  it('picker 가 마운트될 때 받은 center 를 그대로 넘긴다', () => {
-    render(
-      <LiveLocationView state="manual" center={SEOUL} placeName="경복궁" />
-    );
-
-    expect(screen.getByTestId('center-pin-picker').props.center).toEqual(SEOUL);
-    expect(screen.queryByTestId('live-location-loading')).toBeNull();
-  });
-
-  it('center 가 null 이면 loading 자리만 있고 picker 는 없으며, 확정을 눌러도 콜백이 없다', () => {
-    const onConfirm = jest.fn();
-    render(
-      <LiveLocationView
-        state="manual"
-        center={null}
-        placeName={null}
-        onConfirm={onConfirm}
-      />
-    );
-
-    expect(screen.getByTestId('live-location-loading')).toBeOnTheScreen();
-    expect(screen.queryByTestId('center-pin-picker')).toBeNull();
-
-    fireEvent.press(screen.getByTestId('live-location-confirm'));
-    expect(onConfirm).not.toHaveBeenCalled();
-  });
 });
 
 describe('🔴 AC-9 · AC-B5 — 좌표 확정: 중심좌표를 확정 콜백으로, 역지오코딩은 0회', () => {

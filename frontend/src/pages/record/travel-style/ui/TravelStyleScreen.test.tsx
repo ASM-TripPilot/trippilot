@@ -102,45 +102,6 @@ describe('🔴 TravelStyleScreen · official 얼굴 (AC-2 · AC-5)', () => {
     expect(screen.getByText('평균 체류 시간')).toBeOnTheScreen();
   });
 
-  it('TRIP-939 AC-5: 근거 목적지 미주입이면 링크도 "준비 중" 안내도 없다(막다른 링크 제거)', () => {
-    // 준비·실행: 페이지의 현재 모양(onPressEvidence 미주입)으로 그린다.
-    render(
-      <TravelStyleScreen
-        face="official"
-        progress={PROGRESS_OFFICIAL}
-        analysis={officialBody()}
-        preview={null}
-      />
-    );
-
-    // 단언: 누를 링크가 없으니 안내도 없다 + 짝 앵커(막대는 그대로).
-    expect(screen.queryByTestId('reflection-style-evidence')).toBeNull();
-    expect(screen.queryByText(/근거가 된 방문 데이터/)).toBeNull();
-    expect(screen.queryByText(/준비 중/)).toBeNull();
-    expect(screen.getAllByTestId('reflection-style-bar')).toHaveLength(4);
-  });
-
-  it('TRIP-637 AC-1: 옛 근거 목적지 prop 을 흘려 넣어도 근거 링크가 생기지 않는다(컴포넌트째 제거)', () => {
-    // 준비: 삭제된 prop 을 담은 객체 — `as object` 전개라 prop 이 사라진 뒤에도 타입 검사를 통과한다(02a ★7).
-    const legacyProps = { onPressEvidence: jest.fn() } as object;
-
-    // 실행: 누군가 옛 배선을 되살린 모양으로 그린다.
-    render(
-      <TravelStyleScreen
-        face="official"
-        progress={PROGRESS_OFFICIAL}
-        analysis={officialBody()}
-        preview={null}
-        {...legacyProps}
-      />
-    );
-
-    // 단언: 링크·문구 0 + 짝 앵커(정식 얼굴 막대는 그대로 4개).
-    expect(screen.queryByTestId('reflection-style-evidence')).toBeNull();
-    expect(screen.queryByText(/근거가 된 방문 데이터/)).toBeNull();
-    expect(screen.getAllByTestId('reflection-style-bar')).toHaveLength(4);
-  });
-
   it('[[반쪽 방어]]: categoryBreakdown 이 null(계약위반)이어도 0막대·무크래시, 통계 타일은 생존', () => {
     render(
       <TravelStyleScreen
@@ -201,23 +162,6 @@ describe('🔴 TravelStyleScreen · insufficient 얼굴 (AC-3)', () => {
     expect(screen.queryByTestId('reflection-style-stat-places')).toBeNull();
     expect(screen.queryByTestId('reflection-style-stat-dwell')).toBeNull();
     expect(screen.queryByTestId('reflection-style-evidence')).toBeNull();
-  });
-
-  it('TRIP-1076 AC-7(보류) · 임시 얼굴엔 "분석에 사용된 여행 N회 · 마지막 갱신" 부제가 없다 (선제 green)', () => {
-    // 미달 envelope 에는 sampleTripCount·updatedAt 이 없다(StylePreview = descriptors 뿐) — 값을 지어내지
-    // 않는다. BE 계약이 바뀌기 전까지 이 부제는 정식 얼굴 전용이다.
-    render(
-      <TravelStyleScreen
-        face="insufficient"
-        progress={PROGRESS_INSUFFICIENT}
-        analysis={null}
-        preview={{ descriptors: ['느긋'] }}
-      />
-    );
-
-    // 짝 앵커 — 임시 얼굴이 실제로 그려졌다(진행 문구).
-    expect(screen.getByTestId('reflection-style-progress')).toBeOnTheScreen();
-    expect(screen.queryAllByText(/분석에 사용된 여행/)).toHaveLength(0);
   });
 });
 

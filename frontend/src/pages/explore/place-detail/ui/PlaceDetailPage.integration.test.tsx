@@ -10,6 +10,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import { BASE } from '@/test-support/apiBase';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { getGetPlacesQueryKey } from '@/shared/api/index.hooks';
@@ -65,8 +66,6 @@ jest.mock('expo-router', () => ({
   }),
   useLocalSearchParams: () => ({}),
 }));
-
-const BASE = 'http://localhost:8080/api/v1';
 
 function makePlace(overrides: Partial<Place> = {}): Place {
   return {

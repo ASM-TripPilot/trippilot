@@ -7,6 +7,7 @@ import {
 } from '@/test-support/expoAuthSessionMock';
 
 import { makeAuthorize } from './makeAuthorize';
+import { sandboxEnv } from '@/test-support/envSandbox';
 
 /**
  * AC-OA-1(runtime) · AC-OA-2 · AC-OA-3 · AC-OA-4 · AC-OA-5 — makeAuthorize 실 OAuth 경로(목).
@@ -51,19 +52,9 @@ const ENV_KEYS = [
   'EXPO_PUBLIC_NAVER_REDIRECT_URI',
 ] as const;
 
-const ORIGINAL_ENV: Record<string, string | undefined> = {};
-for (const key of ENV_KEYS) {
-  ORIGINAL_ENV[key] = process.env[key];
-}
+sandboxEnv(ENV_KEYS);
 
 afterEach(() => {
-  for (const key of ENV_KEYS) {
-    if (ORIGINAL_ENV[key] === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = ORIGINAL_ENV[key];
-    }
-  }
   resetExpoAuthSessionMock();
 });
 

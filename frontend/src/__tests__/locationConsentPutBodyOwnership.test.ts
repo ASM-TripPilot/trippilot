@@ -25,7 +25,7 @@ import { join, relative, resolve, sep } from 'node:path';
  * ⚠️ 탐지 대상은 **객체 리터럴 키**(`legalConsent:` 콜론)다 — GET 응답 읽기 `data?.legalConsent`(점접근)·
  *  구조분해 `{ gpsRecordingOptIn }` 는 콜론이 없어 정당하게 통과한다. 그리고 전처리(`stripComments`)의
  *  줄 주석 정규식이 URL 의 `//` 를 주석으로 오인하면 그 줄의 진짜 조립이 사라져 거짓 green 이
- *  난다(2026-07-31 실사고). `:` 뒤의 `//` 는 주석으로 보지 않고, 그 성질을 아래 자가검사가 잠근다.
+ *  난다(2026-07-31 실사고). `:` 뒤의 `//` 는 주석으로 보지 않고, 그 성질의 자가검사 it 은 TRIP-1350 에서 지웠다 — 아래 양성 짝(consentPutBody.ts 가 실제로 조립한다고 탐지됨)이 탐지기 고장을 막는다.
  *
  * 가짜 통과 방지 규약(리포 관례): 모든 "없어야 한다" 단언은 "있어야 한다" 단언과 짝을 이룬다.
  */
@@ -72,41 +72,6 @@ function collectSources(dir: string): string[] {
 }
 
 describe('TRIP-609 · consentPutBody 단일 통로 + shared 배치 가드', () => {
-  it('탐지기 자가검사 — 콜론키 조립은 잡히고, 점접근/구조분해/주석은 통과하며, URL 옆 조립은 살아남는다', () => {
-    // ① 조립부(양성).
-    expect(
-      assemblesPutBody('return { legalConsent: on, gpsRecordingOptIn: on };')
-    ).toBe(true);
-    // ② 인라인 누출(위반) — 이걸 잡는 게 이 가드의 존재 이유.
-    expect(assemblesPutBody('mutate({ data: { legalConsent: true } });')).toBe(
-      true
-    );
-    // ③ GET 읽기 점접근(정당) — 콜론 없음.
-    expect(assemblesPutBody('const on = data?.legalConsent ?? false;')).toBe(
-      false
-    );
-    // ④ 구조분해(정당) — 콜론 없음.
-    expect(assemblesPutBody('const { gpsRecordingOptIn } = data ?? {};')).toBe(
-      false
-    );
-    // ⑤ 주석 안의 키는 전처리로 제거된다.
-    expect(
-      assemblesPutBody('// { legalConsent: true }\nexport const k = 1;')
-    ).toBe(false);
-    // ⑥ 블록 주석을 먼저 지우는 순서라야 같은 줄 코드가 살아남는다.
-    expect(
-      assemblesPutBody(
-        '/* legalConsent: x */ const y = data.gpsRecordingOptIn;'
-      )
-    ).toBe(false);
-    // ⑦ 회귀 가드 — URL 의 `//` 를 줄 주석으로 오인하면 진짜 조립이 사라져 거짓 green(2026-07-31 실사고).
-    expect(
-      assemblesPutBody(
-        "const doc = 'https://x.io/p'; const b = { gpsRecordingOptIn: v };"
-      )
-    ).toBe(true);
-  });
-
   it('consentPutBody.ts 가 실재하고 실제로 PUT 바디를 조립한다(양성 짝 — 빈 스텁 차단)', () => {
     expect(existsSync(CONSENT_PUT_BODY_FILE)).toBe(true);
     expect(assemblesPutBody(readFileSync(CONSENT_PUT_BODY_FILE, 'utf8'))).toBe(

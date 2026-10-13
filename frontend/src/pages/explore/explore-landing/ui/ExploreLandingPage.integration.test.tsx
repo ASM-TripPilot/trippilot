@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -9,6 +7,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { BASE } from '@/test-support/apiBase';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -57,8 +57,6 @@ const mockUseStaySearch = useStaySearch as jest.MockedFunction<
   typeof useStaySearch
 >;
 
-const BASE = 'http://localhost:8080/api/v1';
-
 /** 네트워크 도착을 기다리는 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산. */
 const WAIT = { timeout: 4000 };
 
@@ -83,22 +81,8 @@ function stayResults(items: StayItem[]) {
   } as unknown as ReturnType<typeof useStaySearch>;
 }
 
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
-  return function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  };
-}
-
 function renderPage(): void {
-  render(<ExploreLandingPage />, { wrapper: createWrapper() });
+  render(<ExploreLandingPage />, { wrapper: createGcZeroWrapper() });
 }
 
 beforeAll(() => {

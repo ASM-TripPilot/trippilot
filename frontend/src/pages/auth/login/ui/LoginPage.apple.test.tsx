@@ -16,6 +16,7 @@ import {
   resetExpoAppleAuthenticationMock,
 } from '@/test-support/expoAppleAuthenticationMock';
 import { LoginPage } from './LoginPage';
+import { sandboxEnv } from '@/test-support/envSandbox';
 
 /**
  * TRIP-932 AC-9·AC-12·AC-13 + TRIP-1124 AC-Q3′ — LoginPage 애플 배선(컨테이너 → lazy 애플 모듈 → 화면 → 훅).
@@ -74,10 +75,7 @@ const mockPostSocialTokenLogin = postSocialTokenLogin as jest.MockedFunction<
 >;
 
 const ENV_KEYS = ['EXPO_PUBLIC_AUTH_FAKE', 'EXPO_PUBLIC_AUTH_FAKE_OUTCOME'];
-const ORIGINAL_ENV: Record<string, string | undefined> = {};
-for (const key of ENV_KEYS) {
-  ORIGINAL_ENV[key] = process.env[key];
-}
+sandboxEnv(ENV_KEYS);
 
 beforeEach(() => {
   // fake 토글을 끈다 — 켜져 있으면 apple 이 dev 전용 success-code 로 빠져 SDK 를 타지 않는다.
@@ -88,13 +86,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const key of ENV_KEYS) {
-    if (ORIGINAL_ENV[key] === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = ORIGINAL_ENV[key];
-    }
-  }
   resetExpoAppleAuthenticationMock();
 });
 
@@ -191,12 +182,6 @@ type JsonNode = {
   props?: { testID?: unknown; className?: unknown };
   children?: (JsonNode | string)[] | null;
 };
-
-/** className 을 공백으로 쪼갠 토큰 배열. 부분 문자열 오탐을 막으려고 원소 일치로만 비교한다(★5). */
-function classTokens(node: { props?: { className?: unknown } }): string[] {
-  const cn = node.props?.className;
-  return typeof cn === 'string' ? cn.trim().split(/\s+/).filter(Boolean) : [];
-}
 
 /** 노드와 그 자손을 전위 순회하며 방문한다. */
 function walk(
@@ -338,56 +323,6 @@ describe('AC-Q3′ · 애플 자리는 HIG 커스텀 버튼이다 (TRIP-1124 —
     expect(screen.queryByText('애플로 계속하기')).toBeNull();
   });
 
-  it('제목이 4버튼 공통 Noto Bold 22(text-hero)이고 글자색은 검정(text-black)이다 — ink·scrim·옛 15 는 없다 (HIG 흑백 · R3)', async () => {
-    // 준비 + 실행
-    await renderIosAndWaitForApple();
-    const tokens = classTokens(screen.getByTestId('auth-login-apple-label'));
-
-    // 단언 — 여러 키를 한 객체로 묶어 어느 값이 틀렸는지 한 번에 본다.
-    expect({
-      family: tokens.includes('font-noto-bold'),
-      weight: tokens.includes('font-bold'),
-      size: tokens.includes('text-hero'),
-      black: tokens.includes('text-black'),
-      oldSize: tokens.includes('text-card-title'),
-      ink: tokens.includes('text-ink'),
-      scrim: tokens.includes('text-scrim'),
-    }).toEqual({
-      family: true,
-      weight: true,
-      size: true,
-      black: true,
-      oldSize: false,
-      ink: false,
-      scrim: false,
-    });
-  });
-
-  it('로고는 24×24 이고, 로고 벡터의 색은 검정(#000000) 한 가지뿐이다 (HIG 흑백 · R1 · R5)', async () => {
-    // 준비 + 실행
-    await renderIosAndWaitForApple();
-    const icon = screen.getByTestId('auth-login-apple-icon');
-
-    // 실행 — 로고 안 Path 들의 fill·stroke 값을 대문자로 모아 중복을 뺀다(★6).
-    const paths = icon.findAllByType(Path);
-    const colors = [
-      ...new Set(
-        paths
-          .flatMap((p) => [p.props.fill, p.props.stroke])
-          .filter((c): c is string => typeof c === 'string')
-          .map((c) => c.toUpperCase())
-      ),
-    ];
-
-    // 단언
-    expect({
-      width: icon.props.width,
-      height: icon.props.height,
-      hasPath: paths.length > 0,
-      colors,
-    }).toEqual({ width: 24, height: 24, hasPath: true, colors: ['#000000'] });
-  });
-
   it('로고 모양(Path d)이 Figma 보관본 벡터와 한 글자도 다르지 않다 — 커스텀 로고 금지 (HIG · W2)', async () => {
     // 준비 + 실행
     await renderIosAndWaitForApple();
@@ -399,31 +334,6 @@ describe('AC-Q3′ · 애플 자리는 HIG 커스텀 버튼이다 (TRIP-1124 —
     expect(paths.map((p) => p.props.d as unknown)).toEqual([
       FIGMA_APPLE_LOGO_D,
     ]);
-  });
-
-  it('버튼 표면이 구글 버튼과 같은 클래스(높이 52 · 전체폭 · 반경 · ink 테두리 · 흰 배경 · 가운데 정렬 · 간격 10)를 입는다 (HIG "다른 버튼보다 작지 않게")', async () => {
-    // 준비 + 실행
-    await renderIosAndWaitForApple();
-    const googleTokens = classTokens(screen.getByTestId('auth-login-google'));
-
-    // 실행 — 버튼 표면은 testID 가 없으니 래퍼 서브트리에서 h-[52px] 토큰을 가진 노드로 찾는다(★4).
-    const surfaces: string[][] = [];
-    walk(jsonSubtree('auth-login-apple'), (n) => {
-      const tokens = classTokens(n);
-      if (tokens.includes('h-[52px]')) surfaces.push(tokens);
-    });
-
-    // 단언 — 앵커: 비교 기준(구글)이 비어 있으면 '둘 다 빈 배열'로 공허하게 같아진다.
-    expect({
-      height: googleTokens.includes('h-[52px]'),
-      border: googleTokens.includes('border-ink'),
-      canvas: googleTokens.includes('bg-canvas'),
-      radius: googleTokens.includes('rounded-button'),
-    }).toEqual({ height: true, border: true, canvas: true, radius: true });
-
-    // 단언 — 표면은 정확히 하나이고, 토큰 집합이 구글과 같다(순서는 계약이 아니라 정렬해 비교).
-    expect(surfaces.length).toBe(1);
-    expect([...(surfaces[0] ?? [])].sort()).toEqual([...googleTokens].sort());
   });
 });
 

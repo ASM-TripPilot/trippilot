@@ -9,7 +9,7 @@ import {
   act,
   within,
 } from '@testing-library/react-native';
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
 
 import { server } from '@/mocks/server';
 import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
@@ -25,7 +25,6 @@ import type {
   ItineraryGenerationMode,
   GenerationSession,
   ItineraryUnplacedMustVisitsItem,
-  SavedPlace,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import {
@@ -35,6 +34,31 @@ import {
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { AlertCircleGlyph, CheckCircleGlyph } from '@/features/itinerary';
 import { guardKeyWarnings } from '@/test-support/keyWarnings';
+import {
+  DAY1,
+  DAY2,
+  DAY3,
+  TRIP_ID,
+  day,
+  daysOf,
+  itinerary,
+  oneStopDay,
+  slot,
+  threeStopDays,
+  threeStopSlots,
+  trip,
+} from '@/test-support/itineraryFixtures';
+import {
+  BASE,
+  createRequestLog,
+  serveItinerary,
+} from '@/test-support/mswItinerary';
+import { savedPlace } from '@/test-support/mustVisitFixtures';
+import {
+  createWrapper,
+  newTestQueryClient,
+  renderWithQueryClient,
+} from '@/test-support/queryRender';
 
 import { DraftPage } from './DraftPage';
 
@@ -55,15 +79,8 @@ import { DraftPage } from './DraftPage';
  */
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려지므로 바깥 변수를 못 본다 — 이름이 `mock` 으로
 // 시작하는 변수만 예외다(리포 확립 규칙).
@@ -90,7 +107,36 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 // describe 하나로는 못 본다 — 그래서 최상위에 건다(02a 5-b 보강).
 const keyWarnings = guardKeyWarnings();
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+/** 나간 요청의 `METHOD /경로` 누적(도착 순서) — describe 들이 `log.reset()` 으로 비우고 `log.hitsFor` 로 센다. */
+const log = createRequestLog(server);
+
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: 'error' });
+  log.attach();
+});
+
+/** 렌더된 문자열 전부를 공백으로 이어 붙인다 — 퍼센트·소요 부정 스캔의 모집단(소스가 아니라 **보이는 글자**). */
+function renderedText(): string {
+  const out: string[] = [];
+  screen.root
+    .findAll(() => true)
+    .forEach((node) => {
+      const children = node.props?.children as unknown;
+      const list = Array.isArray(children) ? children : [children];
+      list.forEach((child) => {
+        if (typeof child === 'string') out.push(child);
+      });
+    });
+  return out.join(' ');
+}
+
+/** 초안 페이지를 `retry:false`·`gcTime:0` 클라이언트 아래에 그린다 — 폴링 타이머가 종료 뒤에도 프로세스를 붙잡지 않게. */
+function renderPage(tripId: string = TRIP_ID) {
+  return renderWithQueryClient(
+    <DraftPage tripId={tripId} />,
+    newTestQueryClient({ gcTime: 0 })
+  );
+}
 
 beforeEach(() => {
   mockPush.mockClear();
@@ -124,79 +170,11 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
    * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=화면을 열고 기다리거나 누른다 → 단언=나간 요청·보이는 것.
    */
 
-  /** `authWiring.integration.test.ts:59` 와 같은 값(리포 관례). */
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
-  const DAY3 = '2026-06-12';
-
-  /** `endDate` 를 케이스가 정할 수 있게 열어 둔다 — 탭 개수의 출처가 여행 기간이라
-   * (TRIP-297 01b D7) "부분 0건에도 탭이 그대로"(TRIP-298 AC-9)를 재려면 2일 여행이 필요하다. */
-  function trip(endDate: string = DAY3): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '제주 3일',
-      // ★ 탭 개수의 출처 — `days.length` 가 아니라 이 두 날짜다(01b D7).
-      startDate: DAY1,
-      endDate,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '제주', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
-
+  /** DAY1~DAY3 중 앞 `count` 일 — 각 날 슬롯 하나(`poi-{date}`). */
   function daysUpTo(count: number): ItineraryDaysItem[] {
-    return [DAY1, DAY2, DAY3].slice(0, count).map((date) => ({
-      date,
-      slots: [
-        {
-          poiId: `poi-${date}`,
-          startAt: '09:30:00',
-          endAt: '11:00:00',
-          isFixed: false,
-          endsNextDay: false,
-          hasViolation: false,
-          alternatives: [],
-          tags: [],
-          nameKo: `${date} 첫 장소`,
-          lat: 33.458,
-          lng: 126.942,
-        },
-      ],
-    }));
-  }
-
-  function itinerary(input: {
-    dayCount: number;
-    generationState: ItineraryGenerationState;
-    status?: ItineraryStatus;
-    /** TRIP-298 — 3상태 옵셔널(`undefined`/`null`/객체)을 그대로 태운다. `undefined` 는
-     * JSON 직렬화에서 키째 사라지므로 "키 자체가 없는" 응답이 실제로 만들어진다. */
-    candidatesSummary?: ItineraryCandidatesSummary;
-    /** 일자 모양을 케이스가 직접 정할 때(슬롯 0장 · 날짜별 개수 차이). 없으면 기존 `dayCount`. */
-    days?: ItineraryDaysItem[];
-    /** TRIP-304 — 폴백 신호 두 축. 기본값은 정상 경로(FULL_AI, false)라 I1~I7 은 무영향이다. */
-    solveMode?: ItinerarySolveMode;
-    isFallback?: boolean;
-  }): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: input.status ?? 'PLANNED',
-      solveMode: input.solveMode ?? 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: input.generationState,
-      isFallback: input.isFallback ?? false,
-      candidatesSummary: input.candidatesSummary,
-      days: input.days ?? daysUpTo(input.dayCount),
-    };
+    return daysOf([DAY1, DAY2, DAY3].slice(0, count), (date) => [
+      slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+    ]);
   }
 
   /** 카드 루트만 세는 셀렉터 — 번호·라벨·배지·사진이 같은 접두를 공유하므로 제외한다
@@ -221,9 +199,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       });
   }
 
-  /** 나간 요청의 `METHOD /경로` 누적 — **도착 순서 그대로** 쌓인다. */
-  let observedHits: string[] = [];
-  /** GET /itinerary 가 몇 번 처리됐나. ⚠️ `observedHits` 로 세지 않는다 — `request:start` 는
+  /** GET /itinerary 가 몇 번 처리됐나. ⚠️ 요청 로그(`log`)로 세지 않는다 — `request:start` 는
    * 핸들러가 돌기 **전에** 발화하므로 그 값으로 시나리오를 고르면 한 칸씩 밀린다. */
   let itineraryGetCalls = 0;
   /** GET /itinerary 가 n 번째(0-based)로 불릴 때 무엇을 돌려줄지 — 시나리오를 테스트가 정한다. */
@@ -242,26 +218,14 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
     ).length;
   }
 
-  function hitsFor(method: string, includes: string): number {
-    return observedHits.filter(
-      (hit) => hit.startsWith(method) && hit.includes(includes)
-    ).length;
-  }
-
   /** 실타이머로 n 밀리초를 실제로 흘려보낸다. 폴링 간격이 2초라 "그 뒤에도 요청이 안 나갔다"를
    * 재려면 벽시계가 필요하다 — 가짜 타이머를 쓰면 MSW 의 응답 파이프라인과 엉킨다. */
   function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
   beforeEach(() => {
-    observedHits = [];
+    log.reset();
     itineraryGetCalls = 0;
     mockPush.mockClear();
     mockBack.mockClear();
@@ -270,28 +234,25 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
     // 기본: 히스토리 있음. 딥링크(canGoBack=false) 케이스만 각 테스트에서 뒤집는다.
     mockCanGoBack.mockReturnValue(true);
     itineraryScript = () =>
-      itinerary({ dayCount: 3, generationState: 'COMPLETE' });
+      itinerary({ days: daysUpTo(3), generationState: 'COMPLETE' });
     tripScript = () => trip();
     setAccessToken('valid-access');
 
     // 통합 버킷은 `onUnhandledRequest: 'error'` 라 핸들러가 없으면 AC 실패가 아니라 **준비
     // 단계에서 죽는다**. 이 칸이 쓰는 세 경로를 매번 명시적으로 건다.
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(tripScript())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+    serveItinerary(server, {
+      trip: () => tripScript(),
+      itinerary: () => {
         const call = itineraryGetCalls;
         itineraryGetCalls += 1;
-        return HttpResponse.json(itineraryScript(call));
-      }),
-      http.post(`${BASE}/trips/:tripId/itinerary`, () =>
+        return itineraryScript(call);
+      },
+      post: () =>
         HttpResponse.json(
-          itinerary({ dayCount: 1, generationState: 'PARTIAL' }),
-          {
-            status: 201,
-          }
-        )
-      )
-    );
+          itinerary({ days: daysUpTo(1), generationState: 'PARTIAL' }),
+          { status: 201 }
+        ),
+    });
   });
 
   afterEach(() => {
@@ -299,34 +260,16 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
     clearAccessToken();
   });
 
-  /**
-   * `gcTime: 0` — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를 붙잡는다.
-   * `retry: false` — 실패를 즉시 실패로 본다(재시도가 돌면 요청 개수 단언이 흔들린다).
-   * ⚠️ `refetchInterval` 은 **여기서 주지 않는다** — 그것이 배선의 책임이고 이 테스트의 심판이다.
-   */
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    const utils = render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-    return { ...utils, client };
-  }
+  // ⚠️ 이 describe 의 `renderPage` 는 파일 최상위 것이다 — `refetchInterval` 은 **주지 않는다**(그것이 배선의 책임이고
+  // 이 테스트의 심판이다). `retry: false` 로 실패를 즉시 실패로 본다(재시도가 돌면 요청 개수 단언이 흔들린다).
 
   describe('🔴 I1 · AC-4 · AC-9 — 2단계 생성을 폴링으로 잇고, 다 받으면 멈춘다', () => {
     it('PARTIAL 이면 2초 뒤 다시 조회해 COMPLETE 셸(h08)로 바뀌고, COMPLETE 뒤에는 요청이 더 안 나간다 (TRIP-792 플립)', async () => {
       // 준비 — 첫 조회는 day1 만 담긴 PARTIAL, 그 다음부터 3일 전부 담긴 COMPLETE.
       itineraryScript = (call) =>
         call === 0
-          ? itinerary({ dayCount: 1, generationState: 'PARTIAL' })
-          : itinerary({ dayCount: 3, generationState: 'COMPLETE' });
+          ? itinerary({ days: daysUpTo(1), generationState: 'PARTIAL' })
+          : itinerary({ days: daysUpTo(3), generationState: 'COMPLETE' });
 
       renderPage();
 
@@ -361,90 +304,6 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       await sleep(DRAFT_POLL_INTERVAL_MS + 400);
       expect(itineraryGetCalls).toBe(2);
     }, 20000);
-  });
-
-  describe('🔴 I2 · AC-9 · AC-10 — 2차 실패해도 1차분은 살아남는다 (INV-4)', () => {
-    it('FAILED 응답에도 day1 카드가 셸에 남고 시트 안 안내가 곁에 붙는다 (TRIP-1039 — 목록 → 셸)', async () => {
-      // 준비 — openapi: "FAILED=2차 실패(**1차분은 유효**)". 받은 것까지 버리면 사용자는
-      // 아무것도 없는 화면을 보고 다시 생성하는 수밖에 없다.
-      itineraryScript = () =>
-        itinerary({ dayCount: 1, generationState: 'FAILED' });
-
-      renderPage();
-
-      // ① 실패가 삼켜지지 않았다.
-      expect(
-        await screen.findByTestId(
-          'itinerary-draft-stale-failed',
-          {},
-          { timeout: 4000 }
-        )
-      ).toBeOnTheScreen();
-
-      // ② 목록이 지워지지 않았다 — 1일차 슬롯이 셸 카드로 그려진다(TRIP-1039).
-      expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
-      expect(screen.queryAllByTestId(/^slot-stopcard-/).length).toBeGreaterThan(
-        0
-      );
-      // ③ 전면 실패 얼굴로 갈아 끼우지 않았다.
-      expect(screen.queryAllByTestId('itinerary-draft-failed')).toEqual([]);
-    });
-  });
-
-  describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 생성 화면으로 보낸다 (01b D8 · TRIP-1037 플립)', () => {
-    it('PLANNED 면 누를 때 생성 화면으로 replace 1회 · 초안 화면 POST 0', async () => {
-      itineraryScript = () =>
-        itinerary({
-          dayCount: 3,
-          generationState: 'COMPLETE',
-          status: 'PLANNED',
-        });
-
-      renderPage();
-
-      // TRIP-792 플립 — 깨끗한 COMPLETE·PLANNED → h08 셸. 재생성은 이제 셸의 '다시 짜기'(cta[0]).
-      const retry = await screen.findByTestId('sheet-cta-button-0');
-      expect(retry).toHaveTextContent('다시 짜기');
-      fireEvent.press(retry);
-
-      // TRIP-1037 — 재생성 POST 는 생성 화면이 마운트될 때 1회 보낸다. 초안 화면은 이동만 한다.
-      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
-      expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/itinerary/generating',
-        params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
-      });
-      await sleep(300);
-      expect(hitsFor('POST', '/itinerary')).toBe(0);
-    });
-
-    it('🔴 CONFIRMED 면 다시 짜기를 눌러도 재생성 POST 가 0건이다 — 확정이 풀리면 되돌릴 수 없다 (TRIP-792 플립)', async () => {
-      /**
-       * ⚠️ openapi POST 원문: *"확정 일정에 호출하면 확정이 풀리고 PLANNED 새 일정으로 대체되며,
-       * 동결됐던 poi_snapshot 참조는 사라진다."* 확정 해제 API 는 없다 — 되돌릴 방법이 없다.
-       * TRIP-792 플립: CONFIRMED·깨끗한 COMPLETE 도 narrow 조건상 h08 셸로 간다(status 는 조건에
-       * 없음). 셸의 CtaBar 는 disabled prop 이 없어(회색 잠금 없음) **진짜 방어는 handleRetry 의
-       * CONFIRMED early-return**이다 — '다시 짜기'(cta[0])를 눌러도 **나간 POST 0건**으로 그 방어를 잰다.
-       */
-      itineraryScript = () =>
-        itinerary({
-          dayCount: 3,
-          generationState: 'COMPLETE',
-          status: 'CONFIRMED',
-        });
-
-      renderPage();
-
-      const retry = await screen.findByTestId('sheet-cta-button-0');
-      expect(retry).toHaveTextContent('다시 짜기');
-
-      fireEvent.press(retry);
-      await sleep(50);
-
-      expect(hitsFor('POST', '/itinerary')).toBe(0);
-      // TRIP-1037 — 초안 화면은 이제 어떤 경우에도 POST 를 안 보내 위 단언만으론 공허하다. 확정 가드의
-      // 실체는 "생성 화면으로 보내지 않는다" 다(생성 화면이 마운트되면 POST 가 나가 확정이 풀린다).
-      expect(generatingMoves()).toBe(0);
-    });
   });
 
   /* ═════════════════════════ TRIP-791 · 폴백 인터스티셜 라우팅 (배너·zero 흡수) ═════════════════════════
@@ -495,7 +354,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       async ({ solveMode, isFallback, summary }) => {
         itineraryScript = () =>
           itinerary({
-            dayCount: 3,
+            days: daysUpTo(3),
             generationState: 'COMPLETE',
             solveMode,
             isFallback,
@@ -525,7 +384,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       // F-7 방어가 화면 승격 뒤에도 **안 흔들림**을 잠근다(직접 만들기 빈 일정에 거짓 폴백 안내 금지).
       itineraryScript = () =>
         itinerary({
-          dayCount: 3,
+          days: daysUpTo(3),
           generationState: 'COMPLETE',
           solveMode: 'MINIMAL',
           isFallback: false,
@@ -545,57 +404,11 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
     });
   });
 
-  describe('🔴 I6 · 01b D3 — "기본 일정 보기"는 로컬 dismiss 로 같은 데이터의 초안 셸을 연다', () => {
-    it('인터스티셜에서 "기본 일정 보기"를 누르면 인터스티셜이 사라지고 셸이 폴백 안내와 함께 뜬다 (TRIP-1039 플립)', async () => {
-      itineraryScript = () =>
-        itinerary({
-          dayCount: 3,
-          generationState: 'COMPLETE',
-          solveMode: 'DETERMINISTIC',
-          isFallback: true,
-        });
-
-      renderPage();
-
-      // 인터스티셜에서 주 CTA press.
-      fireEvent.press(
-        await screen.findByTestId(
-          'itinerary-fallback-view-plan',
-          {},
-          { timeout: 4000 }
-        )
-      );
-
-      // ① 인터스티셜이 감춰지고 초안 셸이 뜬다(같은 데이터 · route push 아님, 01b D3).
-      await waitFor(() =>
-        expect(screen.queryAllByTestId(INTERSTITIAL)).toEqual([])
-      );
-      expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
-      expect(screen.queryAllByTestId(/^slot-stopcard-/).length).toBeGreaterThan(
-        0
-      );
-
-      // ② 셸 시트 안에 폴백 안내가 1개 붙는다 — 폴백 사실은 dismiss 뒤에도 계속 보인다(BR-U3-11 ·
-      //    INV-4 · TRIP-1039). 옛 계약(TRIP-791: dismiss 뒤 배너 0)을 뒤집었다.
-      expect(
-        screen.queryAllByTestId('itinerary-draft-fallback-banner')
-      ).toHaveLength(1);
-
-      // ③ dismiss 는 라우팅이 아니다(route push 0 · 로컬 상태 토글).
-      expect(mockPush).not.toHaveBeenCalled();
-    });
-  });
-
   describe('I7 · AC-5 — 폴백 신호 없는 빈 응답은 빈 화면이다 (선제 green · 무회귀)', () => {
     it('일자 없음 + 요약 없음 → 인터스티셜·셸 아닌 빈 화면', async () => {
       // 現 코드도 이 조합은 빈 얼굴이라 구현 전후 green — 폴백/zero 승격이 빈 얼굴을 안 건드림을 잠근다.
       itineraryScript = () =>
-        itinerary({
-          dayCount: 0,
-          generationState: 'COMPLETE',
-          days: [],
-          candidatesSummary: undefined,
-        });
+        itinerary({ generationState: 'COMPLETE', days: [] });
 
       renderPage();
 
@@ -651,7 +464,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
        */
       itineraryScript = () =>
         itinerary({
-          dayCount: 3,
+          days: daysUpTo(3),
           generationState: 'COMPLETE',
           status: 'CONFIRMED',
         });
@@ -666,7 +479,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       fireEvent.press(retry);
       await sleep(50);
 
-      expect(hitsFor('POST', '/itinerary')).toBe(0);
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
       // TRIP-1037 — 초안 화면은 이제 어떤 경우에도 POST 를 안 보내 위 단언만으론 공허하다. 확정 가드의
       // 실체는 "생성 화면으로 보내지 않는다" 다(생성 화면이 마운트되면 POST 가 나가 확정이 풀린다).
       expect(generatingMoves()).toBe(0);
@@ -683,7 +496,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
        */
       itineraryScript = () =>
         itinerary({
-          dayCount: 1,
+          days: daysUpTo(1),
           generationState: 'PARTIAL',
           status: 'PLANNED',
         });
@@ -720,7 +533,8 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       face: 'shell',
       backTestId: 'sheet-daychip-back',
       faceMarker: 'map-sheet-shell-root',
-      script: () => itinerary({ dayCount: 3, generationState: 'COMPLETE' }),
+      script: () =>
+        itinerary({ days: daysUpTo(3), generationState: 'COMPLETE' }),
     },
   ];
 
@@ -792,66 +606,38 @@ describe('폴링 상한 기준점', () => {
     expect(mockCanGoBack).not.toHaveBeenCalled();
   });
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '66666666-6666-6666-6666-666666666666';
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
   const ITINERARY_KEY = getGetTripsTripIdItineraryQueryKey(TRIP_ID);
 
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '부산 2일',
-      startDate: DAY1,
-      endDate: DAY2,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '부산', nights: 1 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
+  const BUSAN_TRIP = trip({
+    title: '부산 2일',
+    endDate: DAY2,
+    destinations: [{ seq: 1, region: '부산', nights: 1 }],
+  });
 
-  function day(date: string): ItineraryDaysItem {
-    return {
-      date,
-      slots: [
-        {
-          poiId: `poi-${date}`,
-          nameKo: '광안리 해변',
-          category: '자연',
-          startAt: '09:30:00',
-          endAt: '11:00:00',
-          isFixed: false,
-          endsNextDay: false,
-          hasViolation: false,
-          alternatives: [],
-          tags: [],
-          imageUrl: null,
-          distanceRange: null,
-          lat: 35.153,
-          lng: 129.118,
-        },
-      ],
-    };
+  function busanDay(date: string): ItineraryDaysItem {
+    return day(date, [
+      slot(`poi-${date}`, {
+        nameKo: '광안리 해변',
+        category: '자연',
+        imageUrl: null,
+        distanceRange: null,
+        lat: 35.153,
+        lng: 129.118,
+      }),
+    ]);
   }
 
   /** PARTIAL 은 1일차만, COMPLETE 는 2일 전부. */
-  function itinerary(generationState: ItineraryGenerationState): Itinerary {
-    return {
+  function itineraryFor(generationState: ItineraryGenerationState): Itinerary {
+    return itinerary({
       itineraryId: 'itin-baseline',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
       generationMode: 'CO_PLAN',
       generationState,
-      isFallback: false,
       days:
-        generationState === 'PARTIAL' ? [day(DAY1)] : [day(DAY1), day(DAY2)],
-    };
+        generationState === 'PARTIAL'
+          ? [busanDay(DAY1)]
+          : [busanDay(DAY1), busanDay(DAY2)],
+    });
   }
 
   let getCalls = 0;
@@ -862,13 +648,13 @@ describe('폴링 상한 기준점', () => {
     getCalls = 0;
     stateForCall = () => 'PARTIAL';
     setAccessToken('valid-access');
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+    serveItinerary(server, {
+      trip: () => BUSAN_TRIP,
+      itinerary: () => {
         getCalls += 1;
-        return HttpResponse.json(itinerary(stateForCall(getCalls)));
-      })
-    );
+        return itineraryFor(stateForCall(getCalls));
+      },
+    });
   });
 
   afterEach(() => {
@@ -878,22 +664,8 @@ describe('폴링 상한 기준점', () => {
 
   /** `gcTime: Infinity` — 마운트 전에 채운 캐시가 관찰자 없이 다음 틱에 지워지면 카운터가 0부터
    * 다시 시작해 옛 코드도 통과한다(거짓 green, 02a ★7). */
-  function newClient(): QueryClient {
-    return new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: Infinity },
-        mutations: { gcTime: 0 },
-      },
-    });
-  }
-
   function renderDraft(client: QueryClient) {
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
+    return renderWithQueryClient(<DraftPage tripId={TRIP_ID} />, client);
   }
 
   function sleep(ms: number): Promise<void> {
@@ -903,9 +675,9 @@ describe('폴링 상한 기준점', () => {
   describe('🔴 C1 · 다른 화면이 이미 올린 카운터 위에서 열려도 폴링한다 (#084)', () => {
     it('캐시 카운터 31에서 열려도 다시 조회해 COMPLETE 를 받고 결과 얼굴로 넘어간다', async () => {
       // 준비 ① 같이 짜기 화면이 PARTIAL 을 31번 받아 둔 캐시를 흉내 낸다.
-      const client = newClient();
+      const client = newTestQueryClient();
       for (let i = 0; i < 31; i += 1) {
-        client.setQueryData(ITINERARY_KEY, itinerary('PARTIAL'));
+        client.setQueryData(ITINERARY_KEY, itineraryFor('PARTIAL'));
       }
       // 준비 자가검사 — 카운터가 정말 상한(30)을 넘었다(아니면 이 테스트는 아무것도 못 가른다).
       expect(client.getQueryState(ITINERARY_KEY)?.dataUpdateCount).toBe(31);
@@ -930,7 +702,7 @@ describe('폴링 상한 기준점', () => {
   describe('🟢 C2 · (회귀) 이번 마운트 뒤 30회가 쌓이면 여전히 멈춘다', () => {
     it('마운트 뒤 PARTIAL 응답이 30회를 넘기면 한 간격이 지나도 GET 이 더 나가지 않는다', async () => {
       // 준비 — 빈 캐시에서 연다. 서버는 영영 PARTIAL(2차 생성이 멈춘 상황).
-      const client = newClient();
+      const client = newTestQueryClient();
       renderDraft(client);
       await screen.findByTestId('generation-progress-card');
       await waitFor(() => expect(getCalls).toBeGreaterThanOrEqual(1));
@@ -938,7 +710,7 @@ describe('폴링 상한 기준점', () => {
       // 실행 — 이번 마운트 뒤 30회 더 받은 것으로 만든다(60초를 기다리지 않으려고, 02a ★8).
       act(() => {
         for (let i = 0; i < 30; i += 1) {
-          client.setQueryData(ITINERARY_KEY, itinerary('PARTIAL'));
+          client.setQueryData(ITINERARY_KEY, itineraryFor('PARTIAL'));
         }
       });
       const callsAtCap = getCalls;
@@ -975,102 +747,49 @@ describe('다른 후보 시트 배선', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=트리거/닫기/manual press → 단언=마운트·POST·push.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-
   /** 1일 여행 — 탭 흔들림·폴링을 피한다. */
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '제주 하루',
-      startDate: DAY1,
-      endDate: DAY1,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '제주', nights: 0 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
+  const ONE_DAY_TRIP = trip({
+    title: '제주 하루',
+    endDate: DAY1,
+    destinations: [{ seq: 1, region: '제주', nights: 0 }],
+  });
 
   /** day1 = [고정 숙소(21:00) · 비고정 a · 비고정 b]. 고정은 트리거가 없어야 한다. */
-  function days(): ItineraryDaysItem[] {
-    return [
-      {
-        date: DAY1,
-        slots: [
-          {
-            poiId: 'poi-fixed',
-            startAt: '21:00:00',
-            endAt: '22:00:00',
-            isFixed: true,
-            endsNextDay: false,
-            hasViolation: false,
-            alternatives: [],
-            tags: [],
-            nameKo: '제주 신라스테이',
-          },
-          {
-            poiId: 'poi-a',
-            startAt: '09:30:00',
-            endAt: '11:00:00',
-            isFixed: false,
-            endsNextDay: false,
-            hasViolation: false,
-            alternatives: [],
-            tags: ['바다'],
-            nameKo: '성산일출봉',
-          },
-          {
-            poiId: 'poi-b',
-            startAt: '12:30:00',
-            endAt: '13:30:00',
-            isFixed: false,
-            endsNextDay: false,
-            hasViolation: false,
-            alternatives: [],
-            tags: [],
-            nameKo: '광안리',
-          },
-        ],
-      },
-    ];
-  }
+  const DAYS = [
+    day(DAY1, [
+      slot('poi-fixed', {
+        startAt: '21:00:00',
+        endAt: '22:00:00',
+        isFixed: true,
+        nameKo: '제주 신라스테이',
+        lat: undefined,
+        lng: undefined,
+      }),
+      slot('poi-a', {
+        tags: ['바다'],
+        nameKo: '성산일출봉',
+        lat: undefined,
+        lng: undefined,
+      }),
+      slot('poi-b', {
+        startAt: '12:30:00',
+        endAt: '13:30:00',
+        nameKo: '광안리',
+        lat: undefined,
+        lng: undefined,
+      }),
+    ]),
+  ];
 
   /** 경로1 — staleFailed(FAILED+슬롯). fallbackNotice=null(FULL_AI·isFallback false)이라 인터스티셜을
    * 건너뛰고 h08 셸로 간다(TRIP-1039 — 옛 계약은 DraftScreen). staleFailed 안내가 시트 안에 붙지만
    * alt 트리거·시트 계약엔 영향 없다. */
-  function staleFailedItinerary(): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'FAILED',
-      isFallback: false,
-      days: days(),
-    };
-  }
+  const staleFailedItinerary = () =>
+    itinerary({ generationState: 'FAILED', days: DAYS });
 
   /** 경로2 — 깨끗한 COMPLETE. isPartial=false·staleFailed=false·fallbackNotice=null 이라 h08 지도+시트
    * 셸(MapSheetShell) 분기로 떨어진다(SlotStopCard 의 alt 트리거가 시트를 여는 유일 경로). */
-  function cleanItinerary(): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      days: days(),
-    };
-  }
+  const cleanItinerary = () => itinerary({ days: DAYS });
 
   const CANDIDATES = {
     candidates: [
@@ -1103,12 +822,12 @@ describe('다른 후보 시트 배선', () => {
     mockPush.mockClear();
     setAccessToken('valid-access');
 
+    // 기본은 경로1(staleFailed). 경로2 는 각 it 에서 server.use 로 덮는다.
+    serveItinerary(server, {
+      trip: () => ONE_DAY_TRIP,
+      itinerary: staleFailedItinerary,
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      // 기본은 경로1(staleFailed). 경로2 는 각 it 에서 server.use 로 덮는다.
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(staleFailedItinerary())
-      ),
       http.post(
         `${BASE}/trips/:tripId/itinerary/slot-candidates`,
         async ({ request }) => {
@@ -1124,21 +843,6 @@ describe('다른 후보 시트 배선', () => {
     server.resetHandlers();
     clearAccessToken();
   });
-
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-  }
 
   // ─── 경로1: h08 셸(staleFailed) · 형제 마운트 (TRIP-1039 — 옛 DraftScreen 경로) ───────────
   describe('🔴 D1 · AC-1 — 배선 전엔 시트가 없다 (조건부 마운트 · staleFailed 셸 경로)', () => {
@@ -1228,14 +932,6 @@ describe('다른 후보 시트 배선', () => {
       return renderPage();
     }
 
-    it('D7 · AC-1 — 셸 트리거 누르기 전엔 시트가 없고 POST 0건이다', async () => {
-      renderShell();
-      await screen.findByTestId(stopcardAltId('poi-a'));
-
-      expect(screen.queryByTestId(SHEET)).toBeNull();
-      expect(postCalls).toBe(0);
-    });
-
     it('D8 · AC-1·D9(첫 실배선) — 비고정 슬롯 alt press → 시트 마운트 + 그 slotKey 로 POST 1건', async () => {
       renderShell();
       fireEvent.press(await screen.findByTestId(stopcardAltId('poi-a')));
@@ -1246,14 +942,6 @@ describe('다른 후보 시트 배선', () => {
       expect((postBody as { slotKey: string }).slotKey).toBe(
         buildSlotKey(DAY1, 'poi-a')
       );
-    });
-
-    it('D9 · AC-2 — 고정 슬롯은 alt 트리거 부재(비고정엔 있음)', async () => {
-      renderShell();
-      await screen.findByTestId(stopcardAltId('poi-a'));
-
-      expect(screen.queryByTestId(stopcardAltId('poi-fixed'))).toBeNull();
-      expect(screen.getByTestId(stopcardAltId('poi-a'))).toBeOnTheScreen();
     });
   });
 
@@ -1273,18 +961,8 @@ describe('다른 후보 시트 배선', () => {
 
     /** 폴백 추천안 — COMPLETE + DETERMINISTIC + isFallback 이라 `deterministic` 인터스티셜이 먼저 뜨고,
      * "기본 일정 보기"(로컬 dismiss)를 눌러야 셸 폴백 얼굴에 닿는다(TRIP-1039). */
-    function fallbackItinerary(): Itinerary {
-      return {
-        itineraryId: 'itin-1',
-        tripId: TRIP_ID,
-        status: 'PLANNED',
-        solveMode: 'DETERMINISTIC',
-        generationMode: 'FULLY_AI',
-        generationState: 'COMPLETE',
-        isFallback: true,
-        days: days(),
-      };
-    }
+    const fallbackItinerary = () =>
+      itinerary({ solveMode: 'DETERMINISTIC', isFallback: true, days: DAYS });
 
     let putCalls = 0;
 
@@ -1390,197 +1068,45 @@ describe('h08 셸 기본 얼굴', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=화면을 열고/누른다 → 단언=보이는 얼굴·testID·나간 요청.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
-  const DAY3 = '2026-06-12';
-
-  /** 3일 여행 — day-chip 개수의 출처는 `days.length` 가 아니라 이 두 날짜다(01b D7). */
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '제주 3일',
-      startDate: DAY1,
-      endDate: DAY3,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '제주', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
-
-  /**
-   * 하루치 3슬롯 — AC-3·AC-5·AC-7 을 한 픽스처로 잰다.
-   *  - poi-b 는 **isFixed=true**(고정)인데도 시각 칩이 떠야 한다(AC-3 핵심 · BR-U3-07 개정).
-   *  - 첫 슬롯 distanceRange 는 **null**(거점 없는 날)이다. 헤더 합은 커넥터 구간(`slice(1)`)만 더하므로
-   *    3.5km(2.1+1.4)다 — TRIP-1110 이후 전 슬롯을 넘기면 첫 null 에 접혀 A5 가 red 가 된다(A5b-2 짝).
-   *  - lat/lng 를 실어 셸 지도(map-root)가 마운트되고 DraftPage 가 center 를 계산하게 한다.
-   */
-  function daySlots(date: string): ItineraryDaysItemSlotsItem[] {
-    return [
-      {
-        poiId: 'poi-a',
-        startAt: '09:30:00',
-        endAt: '11:00:00',
-        isFixed: false,
-        endsNextDay: false,
-        hasViolation: false,
-        alternatives: [],
-        tags: ['바다', '산책'],
-        nameKo: '광안리 해변',
-        category: '자연',
-        imageUrl: null,
-        distanceRange: null,
-        lat: 33.458,
-        lng: 126.942,
-      },
-      {
-        poiId: 'poi-b',
-        startAt: '13:00:00',
-        endAt: '14:30:00',
-        isFixed: true,
-        endsNextDay: false,
-        hasViolation: false,
-        alternatives: [],
-        tags: ['호텔'],
-        nameKo: `${date} 숙소`,
-        category: '숙소',
-        imageUrl: null,
-        distanceRange: '2.1km',
-        lat: 33.512,
-        lng: 126.522,
-      },
-      {
-        poiId: 'poi-c',
-        startAt: '15:00:00',
-        endAt: '16:00:00',
-        isFixed: false,
-        endsNextDay: false,
-        hasViolation: false,
-        alternatives: [],
-        tags: ['카페'],
-        nameKo: '흰여울 마을',
-        category: '자연',
-        imageUrl: null,
-        distanceRange: '1.4km',
-        lat: 33.245,
-        lng: 126.412,
-      },
-    ];
-  }
-
-  function daysUpTo(count: number): ItineraryDaysItem[] {
-    return [DAY1, DAY2, DAY3]
-      .slice(0, count)
-      .map((date) => ({ date, slots: daySlots(date) }));
-  }
-
-  function itinerary(input: {
-    dayCount: number;
-    generationState: ItineraryGenerationState;
-    status?: ItineraryStatus;
-    solveMode?: ItinerarySolveMode;
-    isFallback?: boolean;
-    candidatesSummary?: ItineraryCandidatesSummary;
-  }): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: input.status ?? 'PLANNED',
-      solveMode: input.solveMode ?? 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: input.generationState,
-      isFallback: input.isFallback ?? false,
-      candidatesSummary: input.candidatesSummary,
-      days: daysUpTo(input.dayCount),
-    };
-  }
-
   /** 깨끗한 COMPLETE 3일에서 매일 슬롯 a·b·c 의 distanceRange 만 `ranges` 로 덮어쓴다(TRIP-1110 헤더 케이스). */
   function completeWithRanges(ranges: (string | null)[]): Itinerary {
-    const base = itinerary({ dayCount: 3, generationState: 'COMPLETE' });
-    return {
-      ...base,
-      days: base.days.map((day) => ({
-        ...day,
-        slots: day.slots.map((slot, index) => ({
-          ...slot,
+    return itinerary({
+      days: threeStopDays(3).map((one) => ({
+        ...one,
+        slots: one.slots.map((one2, index) => ({
+          ...one2,
           distanceRange: ranges[index],
         })),
       })),
-    };
+    });
   }
 
   /** GET /itinerary 응답을 케이스가 정한다. 기본은 깨끗한 COMPLETE 3일(→ h08 셸). */
   let itineraryHandler: () => Response;
-  /** 다시 짜기(재생성) POST 가 몇 번 나갔나. */
-  let postCount = 0;
-
-  /** 렌더된 문자열 전부를 공백으로 이어 붙인다(퍼센트·소요 부정 스캔의 모집단, h07 선례). */
-  function renderedText(): string {
-    const out: string[] = [];
-    screen.root
-      .findAll(() => true)
-      .forEach((node) => {
-        const children = node.props?.children as unknown;
-        const list = Array.isArray(children) ? children : [children];
-        list.forEach((child) => {
-          if (typeof child === 'string') out.push(child);
-        });
-      });
-    return out.join(' ');
-  }
-
   beforeEach(() => {
     mockPush.mockClear();
     mockBack.mockClear();
     mockReplace.mockClear();
-    postCount = 0;
     setAccessToken('valid-access');
     itineraryHandler = () =>
-      HttpResponse.json(
-        itinerary({ dayCount: 3, generationState: 'COMPLETE' })
-      );
+      HttpResponse.json(itinerary({ days: threeStopDays(3) }));
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => itineraryHandler()),
-      http.post(`${BASE}/trips/:tripId/itinerary`, () => {
-        postCount += 1;
-        return HttpResponse.json(
-          itinerary({ dayCount: 1, generationState: 'PARTIAL' }),
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => itineraryHandler(),
+      // 초안 화면은 POST 를 안 보낸다(재생성 POST 는 생성 화면 몫 — L suite 가 건수를 잰다). 핸들러는 두어 '미처리 요청 error' 그물이 아니라 명시 응답이 되게 한다.
+      post: () =>
+        HttpResponse.json(
+          itinerary({ days: threeStopDays(1), generationState: 'PARTIAL' }),
           { status: 201 }
-        );
-      })
-    );
+        ),
+    });
   });
 
   afterEach(() => {
     server.resetHandlers();
     clearAccessToken();
   });
-
-  /** `retry:false`·`gcTime:0` — 실패 즉시, 폴링 타이머 잔존 방지. COMPLETE 는 폴링을 안 유발한다. */
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-  }
 
   describe('🔴 A1 · AC-1 — 깨끗한 COMPLETE 면 h08 셸 얼굴이 뜬다 (D1-R · 계약 플립)', () => {
     it('셸 골격이 뜨고 옛 DraftScreen 앱바·일차 탭은 사라진다', async () => {
@@ -1611,7 +1137,7 @@ describe('h08 셸 기본 얼굴', () => {
       // `!staleFailed` 를 뺐다 — 안내는 셸 시트 안으로 옮겨 간다(INV-4 — 안내 소실 금지).
       itineraryHandler = () =>
         HttpResponse.json(
-          itinerary({ dayCount: 1, generationState: 'FAILED' })
+          itinerary({ days: threeStopDays(1), generationState: 'FAILED' })
         );
 
       renderPage();
@@ -1634,7 +1160,7 @@ describe('h08 셸 기본 얼굴', () => {
       itineraryHandler = () =>
         HttpResponse.json(
           itinerary({
-            dayCount: 3,
+            days: threeStopDays(3),
             generationState: 'COMPLETE',
             solveMode: 'DETERMINISTIC',
             isFallback: true,
@@ -1651,49 +1177,6 @@ describe('h08 셸 기본 얼굴', () => {
       expect(
         screen.queryByTestId('itinerary-draft-fallback-banner')
       ).toBeNull();
-    });
-  });
-
-  describe('🔴 A2 · AC-2 — CTA 두 갈래 배선 (혼동 방지)', () => {
-    it('확정하기 press → /trips/[tripId]/itinerary 로 tripId 를 실어 한 번 push 한다', async () => {
-      renderPage();
-      await screen.findByTestId('sheet-cta-root');
-
-      // 순서 계약 — cta[1]=확정하기(primary). 라벨을 함께 확인해 index 뒤바뀜을 잡는다.
-      const confirm = screen.getByTestId('sheet-cta-button-1');
-      expect(confirm).toHaveTextContent('확정하기');
-      fireEvent.press(confirm);
-
-      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-
-      // ★ 완전일치(맹점④) — `'itinerary'` 부분문자열은 draft·generating 경로에도 있어 substring 이면
-      //   엉뚱한 곳으로 가도 통과한다. h14 는 접미 없는 index 라우트이고 객체형 push 여야 `[tripId]` 가
-      //   해소된다(I9·must-visits push 선례 동형).
-      const dest = mockPush.mock.calls[0][0] as {
-        pathname?: string;
-        params?: { tripId?: string };
-      };
-      expect(dest.pathname).toBe('/trips/[tripId]/itinerary');
-      expect(dest.params?.tripId).toBe(TRIP_ID);
-    });
-
-    it('다시 짜기 press → 생성 화면으로 replace 1회(mode=FULLY_AI) · 초안 화면 POST 0 (TRIP-1037 플립)', async () => {
-      renderPage();
-      await screen.findByTestId('sheet-cta-root');
-
-      // 순서 계약 — cta[0]=다시 짜기(outline).
-      const retry = screen.getByTestId('sheet-cta-button-0');
-      expect(retry).toHaveTextContent('다시 짜기');
-      fireEvent.press(retry);
-
-      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
-      expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/itinerary/generating',
-        params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
-      });
-      // POST 는 생성 화면 몫 — 흘려 보낸 뒤에도 초안 화면이 보낸 것은 0이다.
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      expect(postCount).toBe(0);
     });
   });
 
@@ -1845,7 +1328,7 @@ describe('h08 셸 기본 얼굴', () => {
       lat: number,
       lng: number
     ): ItineraryDaysItemSlotsItem[] {
-      return daySlots(date).map((slot, index) =>
+      return threeStopSlots(date).map((slot, index) =>
         index === 0 ? { ...slot, lat, lng } : slot
       );
     }
@@ -1854,26 +1337,12 @@ describe('h08 셸 기본 얼굴', () => {
       days: ItineraryDaysItem[],
       generationMode: ItineraryGenerationMode = 'FULLY_AI'
     ): Itinerary {
-      return {
-        ...itinerary({ dayCount: 3, generationState: 'COMPLETE' }),
-        generationMode,
-        days,
-      };
+      return itinerary({ generationMode, days });
     }
 
-    /** 나간 요청 경로 — 거점·담은 숙소 조회가 붙지 않았는지 센다(결정 2=A). */
-    let hits: string[] = [];
-    const record = ({ request }: { request: Request }) => {
-      hits.push(new URL(request.url).pathname);
-    };
-
+    // 나간 요청 경로 — 거점·담은 숙소 조회가 붙지 않았는지 센다(결정 2=A). 요청 로그는 파일 최상위 `log` 다.
     beforeEach(() => {
-      hits = [];
-      server.events.on('request:start', record);
-    });
-
-    afterEach(() => {
-      server.events.removeListener('request:start', record);
+      log.reset();
     });
 
     it.each([
@@ -1887,7 +1356,7 @@ describe('h08 셸 기본 얼굴', () => {
           HttpResponse.json(
             completeWith(
               [
-                { date: DAY1, slots: daySlots(DAY1) },
+                { date: DAY1, slots: threeStopSlots(DAY1) },
                 { date: DAY2, slots: [] },
                 { date: DAY3, slots: firstAt(DAY3, 33.499, 126.531) },
               ],
@@ -1920,7 +1389,7 @@ describe('h08 셸 기본 얼굴', () => {
           completeWith(
             [DAY1, DAY2, DAY3].map((date) => ({
               date,
-              slots: daySlots(date).map((slot) => ({
+              slots: threeStopSlots(date).map((slot) => ({
                 ...slot,
                 lat: null,
                 lng: null,
@@ -1935,9 +1404,9 @@ describe('h08 셸 기본 얼굴', () => {
 
       // 단언
       expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
-      expect(hits).toContain(`/api/v1/trips/${TRIP_ID}/itinerary`);
+      expect(log.all()).toContain(`GET /api/v1/trips/${TRIP_ID}/itinerary`);
       expect(
-        hits.filter((path) => /\/(bases|saved-stays)$/.test(path))
+        log.all().filter((hit) => /\/(bases|saved-stays)$/.test(hit))
       ).toEqual([]);
     });
 
@@ -1956,7 +1425,7 @@ describe('h08 셸 기본 얼굴', () => {
       itineraryHandler = () =>
         HttpResponse.json(
           completeWith([
-            { date: DAY1, slots: daySlots(DAY1) },
+            { date: DAY1, slots: threeStopSlots(DAY1) },
             { date: DAY2, slots: [] },
             { date: DAY3, slots: firstAt(DAY3, 33.499, 126.531) },
           ])
@@ -1983,10 +1452,13 @@ describe('h08 셸 기본 얼굴', () => {
           completeWith([
             {
               date: DAY1,
-              slots: daySlots(DAY1).map((slot) => ({ ...slot, lng: null })),
+              slots: threeStopSlots(DAY1).map((slot) => ({
+                ...slot,
+                lng: null,
+              })),
             },
             { date: DAY2, slots: firstAt(DAY2, 33.499, 126.531) },
-            { date: DAY3, slots: daySlots(DAY3) },
+            { date: DAY3, slots: threeStopSlots(DAY3) },
           ])
         );
 
@@ -2027,11 +1499,6 @@ describe('폴백·위반 라벨', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=렌더(+기본 일정 보기 press) → 단언=testID 텍스트·0건 스캔.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-  const DAY3 = '2026-06-12';
-
   /** 서버 사유 — HC2(소요시간 섞임) · HC1(원시 분 범위)을 ` · ` 로 이은 실제 결합 형태. */
   const RAW_REASON = '이동 54분 필요, 간격 -60분 · 영업시간 밖: 543~618';
   const VIOLATION_LABEL = '일정 확인이 필요해요';
@@ -2042,71 +1509,17 @@ describe('폴백·위반 라벨', () => {
 
   const k = (poiId: string): string => buildSlotKey(DAY1, poiId);
 
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '제주 3일',
-      startDate: DAY1,
-      endDate: DAY3,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '제주', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
-
-  function slot(
-    poiId: string,
-    over: Partial<ItineraryDaysItemSlotsItem> = {}
-  ): ItineraryDaysItemSlotsItem {
-    return {
-      poiId,
-      startAt: '09:30:00',
-      endAt: '11:00:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
-      tags: [],
-      nameKo: `장소-${poiId}`,
-      lat: 33.458,
-      lng: 126.942,
-      ...over,
-    };
-  }
-
-  /** day1 비고정 2장 — `poi-a` 는 위반(HC2 소요시간 + HC1 원시 분값), `poi-b` 는 위반 없음. */
-  function daySlots(): ItineraryDaysItemSlotsItem[] {
-    return [
-      slot('poi-a', {
-        hasViolation: true,
-        violationReason: RAW_REASON,
-      }),
+  /** day1 비고정 2장 — `poi-a` 는 위반(HC2 소요시간 + HC1 원시 분값), `poi-b` 는 위반 없음. 케이스가 슬롯을 고쳐 쓰므로(withQualitative·swapped) 매번 새로 만든다. */
+  const violationDays = () => [
+    day(DAY1, [
+      slot('poi-a', { hasViolation: true, violationReason: RAW_REASON }),
       slot('poi-b', { startAt: '13:00:00', endAt: '14:00:00' }),
-    ];
-  }
+    ]),
+  ];
 
-  function itinerary(input: {
-    solveMode: ItinerarySolveMode;
-    isFallback: boolean;
-    generationState?: ItineraryGenerationState;
-    candidatesSummary?: ItineraryCandidatesSummary;
-  }): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: input.solveMode,
-      generationMode: 'FULLY_AI',
-      generationState: input.generationState ?? 'COMPLETE',
-      isFallback: input.isFallback,
-      candidatesSummary: input.candidatesSummary,
-      days: [{ date: DAY1, slots: daySlots() }],
-    };
+  /** 위 일자를 단 일정 — 케이스가 정하는 것은 분기 신호(`solveMode`·`isFallback`·`generationState`·요약)뿐이다. */
+  function violationItinerary(over: Partial<Itinerary>): Itinerary {
+    return itinerary({ days: violationDays(), ...over });
   }
 
   let itineraryScript: () => Itinerary;
@@ -2118,37 +1531,17 @@ describe('폴백·위반 라벨', () => {
     mockCanGoBack.mockClear();
     mockCanGoBack.mockReturnValue(true);
     setAccessToken('valid-access');
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itineraryScript())
-      ),
-      http.post(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itineraryScript(), { status: 201 })
-      )
-    );
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => itineraryScript(),
+      post: () => HttpResponse.json(itineraryScript(), { status: 201 }),
+    });
   });
 
   afterEach(() => {
     server.resetHandlers();
     clearAccessToken();
   });
-
-  /** `retry:false`·`gcTime:0` — 동결 DraftPage 통합 테스트와 같은 클라이언트. */
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-  }
 
   /** 네트워크 응답을 기다리는 첫 조회 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산. */
   const WAIT = { timeout: 4000 };
@@ -2186,7 +1579,11 @@ describe('폴백·위반 라벨', () => {
       '$kind — 제목·안내 제목이 기본 일정 결이고 카드엔 AI 배지가 없다',
       async ({ solveMode, isFallback, summary }) => {
         itineraryScript = () =>
-          itinerary({ solveMode, isFallback, candidatesSummary: summary });
+          violationItinerary({
+            solveMode,
+            isFallback,
+            candidatesSummary: summary,
+          });
 
         await openFallbackShell();
 
@@ -2218,34 +1615,11 @@ describe('폴백·위반 라벨', () => {
     );
   });
 
-  describe('B4 · 폴백 아닌 staleFailed 셸의 제목은 그대로 "AI 추천안" 이다 (무회귀 짝)', () => {
-    it('FULL_AI·FAILED·isFallback=false → 인터스티셜 없이 셸, 제목 AI 추천안, 폴백 안내 없음', async () => {
-      // 갈래: fallbackNotice=null 이라 인터스티셜 없음 · listed(staleFailed) → h08 셸(TRIP-1039).
-      itineraryScript = () =>
-        itinerary({
-          solveMode: 'FULL_AI',
-          isFallback: false,
-          generationState: 'FAILED',
-        });
-
-      renderPage();
-      await screen.findByTestId('itinerary-draft-stale-failed', {}, WAIT);
-
-      expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
-      expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
-        'AI 추천안'
-      );
-      expect(
-        screen.queryByTestId('itinerary-draft-fallback-banner')
-      ).toBeNull();
-    });
-  });
-
   describe('🔴 C1·C2 · h08 셸(깨끗한 COMPLETE) — 위반 슬롯 카드에만 고정 라벨 표식, 사유 원문·소요시간 0건 (INV-3)', () => {
     it('poi-a 카드 안에 "일정 확인이 필요해요" 표식, 전체 1개, 소요시간·사유 원문·원시 분 범위 0건', async () => {
       // 갈래: FULL_AI·COMPLETE·isFallback=false·요약 없음 → fallbackNotice=null·!staleFailed → h08 셸.
       itineraryScript = () =>
-        itinerary({ solveMode: 'FULL_AI', isFallback: false });
+        violationItinerary({ solveMode: 'FULL_AI', isFallback: false });
 
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
@@ -2271,9 +1645,9 @@ describe('폴백·위반 라벨', () => {
   describe('🔴 TRIP-1031 · h08 셸·폴백 셸 — 서버 정성 문구(숫자 없음)는 그대로 보인다', () => {
     const QUALITATIVE = '앞 장소에서 이동할 시간이 빠듯해요';
     function withQualitative(
-      input: Parameters<typeof itinerary>[0]
+      input: Parameters<typeof violationItinerary>[0]
     ): Itinerary {
-      const it = itinerary(input);
+      const it = violationItinerary(input);
       it.days[0].slots[0].violationReason = QUALITATIVE;
       // TRIP-1274 — 거리를 아는 슬롯이어야 이동 문구가 "근거 있음"으로 남는다(거리 null 이면 뺀다).
       it.days[0].slots[0].distanceRange = '약 2.1km · 도보 추정';
@@ -2316,7 +1690,10 @@ describe('폴백·위반 라벨', () => {
      *  - d: 이동 문구 + 거리 있음 → 그대로(근거 있는 경고는 남는다 — 짝)
      */
     function swappedItinerary(): Itinerary {
-      const it = itinerary({ solveMode: 'FULL_AI', isFallback: false });
+      const it = violationItinerary({
+        solveMode: 'FULL_AI',
+        isFallback: false,
+      });
       it.days[0].slots = [
         slot('poi-a', {
           startAt: '09:30:00',
@@ -2398,7 +1775,7 @@ describe('폴백·위반 라벨', () => {
     it('인터스티셜을 넘긴 셸의 poi-a 카드 안에 표식, 전체 1개, 소요시간·사유 원문·원시 분 범위 0건', async () => {
       // 갈래: MINIMAL+isFallback=true → 인터스티셜 → "기본 일정 보기" → h08 셸(TRIP-1039).
       itineraryScript = () =>
-        itinerary({ solveMode: 'MINIMAL', isFallback: true });
+        violationItinerary({ solveMode: 'MINIMAL', isFallback: true });
 
       await openFallbackShell();
 
@@ -2440,11 +1817,6 @@ describe('폴백 셸', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=렌더(+기본 일정 보기 press) → 단언=셸·안내 testID·글자.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-  const DAY3 = '2026-06-12';
-
   /** 네트워크 응답을 기다리는 첫 조회 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산. */
   const WAIT = { timeout: 4000 };
 
@@ -2461,105 +1833,21 @@ describe('폴백 셸', () => {
   const cardId = (poiId: string): string =>
     `slot-stopcard-${buildSlotKey(DAY1, poiId)}`;
 
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '제주 3일',
-      startDate: DAY1,
-      endDate: DAY3,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '제주', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
-
-  function slot(
-    poiId: string,
-    over: Partial<ItineraryDaysItemSlotsItem> = {}
-  ): ItineraryDaysItemSlotsItem {
-    return {
-      poiId,
-      startAt: '09:30:00',
-      endAt: '11:00:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
-      tags: [],
-      nameKo: `장소-${poiId}`,
-      lat: 33.458,
-      lng: 126.942,
-      ...over,
-    };
-  }
-
-  function itinerary(input: {
-    solveMode?: ItinerarySolveMode;
-    isFallback?: boolean;
-    generationState?: ItineraryGenerationState;
-    generationMode?: ItineraryGenerationMode;
-    candidatesSummary?: ItineraryCandidatesSummary;
-    /** 일자 목록을 통째로 바꿀 때만(S9 — 데이터 없는 날). 기본은 1일차 2슬롯. */
-    days?: Itinerary['days'];
-  }): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: input.solveMode ?? 'FULL_AI',
-      generationMode: input.generationMode ?? 'FULLY_AI',
-      generationState: input.generationState ?? 'COMPLETE',
-      isFallback: input.isFallback ?? false,
-      candidatesSummary: input.candidatesSummary,
-      days: input.days ?? [
-        {
-          date: DAY1,
-          slots: [
-            slot('poi-a'),
-            slot('poi-b', { startAt: '13:00:00', endAt: '14:00:00' }),
-          ],
-        },
-      ],
-    };
-  }
-
   let itineraryScript: () => Itinerary;
 
   beforeEach(() => {
     mockPush.mockClear();
     setAccessToken('valid-access');
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itineraryScript())
-      )
-    );
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => itineraryScript(),
+    });
   });
 
   afterEach(() => {
     server.resetHandlers();
     clearAccessToken();
   });
-
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-  }
 
   /** 인터스티셜 「기본 일정 보기」 → 셸 도착까지. 폴백은 인터스티셜이 먼저 잡는다(02a ★7). */
   async function openFallbackShell(): Promise<void> {
@@ -3023,9 +2311,6 @@ describe('칸 상한 게이지 접기', () => {
     expect(mockCanGoBack).not.toHaveBeenCalled();
   });
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-
   /** 6월 10일부터 `count` 일의 날짜. */
   function datesFrom10(count: number): string[] {
     return Array.from(
@@ -3035,71 +2320,42 @@ describe('칸 상한 게이지 접기', () => {
   }
 
   /** 여행 기간 — 게이지 칸의 출처는 `days.length` 가 아니라 이 두 날짜다. */
-  function trip(dayCount: number): Trip {
+  function tripFor(dayCount: number): Trip {
     const dates = datesFrom10(dayCount);
-    return {
-      tripId: TRIP_ID,
+    return trip({
       title: `제주 ${dayCount}일`,
       startDate: dates[0],
       endDate: dates[dates.length - 1],
-      party: 2,
-      preferenceSnapshot: {},
       destinations: [{ seq: 1, region: '제주', nights: dayCount - 1 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
+    });
   }
 
   /** 하루치 슬롯 1개 — 이 파일은 게이지만 본다(시각·거리 심판은 형제 파일 몫). 좌표는 지도 center 용. */
-  function daySlots(date: string): ItineraryDaysItemSlotsItem[] {
+  function gaugeSlots(date: string): ItineraryDaysItemSlotsItem[] {
     return [
-      {
-        poiId: `poi-${date}`,
-        startAt: '09:30:00',
-        endAt: '11:00:00',
-        isFixed: false,
-        endsNextDay: false,
-        hasViolation: false,
-        alternatives: [],
+      slot(`poi-${date}`, {
         tags: ['바다'],
         nameKo: '광안리 해변',
         category: '자연',
         imageUrl: null,
         distanceRange: null,
-        lat: 33.458,
-        lng: 126.942,
-      },
+      }),
     ];
   }
 
   /** 생성 중(PARTIAL) — 앞에서부터 `arrivedCount` 일만 도착했다. */
-  function partialItinerary(tripDays: number, arrivedCount: number): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'PARTIAL',
-      isFallback: false,
-      days: datesFrom10(tripDays)
-        .slice(0, arrivedCount)
-        .map((date) => ({ date, slots: daySlots(date) })),
-    };
-  }
-
   function serve(tripDays: number, arrivedCount: number) {
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () =>
-        HttpResponse.json(trip(tripDays))
-      ),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(partialItinerary(tripDays, arrivedCount))
-      )
-    );
+    serveItinerary(server, {
+      trip: () => tripFor(tripDays),
+      itinerary: () =>
+        itinerary({
+          generationState: 'PARTIAL',
+          days: daysOf(
+            datesFrom10(tripDays).slice(0, arrivedCount),
+            gaugeSlots
+          ),
+        }),
+    });
   }
 
   beforeEach(() => {
@@ -3110,22 +2366,6 @@ describe('칸 상한 게이지 접기', () => {
     server.resetHandlers();
     clearAccessToken();
   });
-
-  /** `retry:false`·`gcTime:0` — 형제 파일과 같다. PARTIAL 은 폴링을 부르지만 같은 값이라 첫 렌더만 본다. */
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-  }
 
   /** 게이지 칸 testID 를 화면 순서대로(트랙 testID 는 접두가 달라 안 잡힌다). */
   function cellOrder(): string[] {
@@ -3220,9 +2460,7 @@ describe('이 여행 생성 중 확인', () => {
    * 3동작: 준비 = 가짜 서버 응답 → 실행 = 화면을 열고 [다시 시도]·확인·안내 버튼을 누른다 → 단언 = 얼굴·요청.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   /** 이 화면의 여행(T1)과 그 생성 세션(S1). */
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
   const OWN_SESSION_ID = '44444444-4444-4444-4444-444444444444';
 
   const LABEL: Record<string, string> = {
@@ -3237,68 +2475,6 @@ describe('이 여행 생성 중 확인', () => {
     params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
   };
 
-  const DAY1 = '2026-06-10';
-  const DAY3 = '2026-06-12';
-
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '제주 3일',
-      startDate: DAY1,
-      endDate: DAY3,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '제주', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
-
-  function oneDay(date: string): ItineraryDaysItem {
-    return {
-      date,
-      slots: [
-        {
-          poiId: 'poi-a',
-          startAt: '09:30:00',
-          endAt: '11:00:00',
-          isFixed: false,
-          endsNextDay: false,
-          hasViolation: false,
-          alternatives: [],
-          tags: [],
-          nameKo: '광안리 해변',
-          category: '자연',
-          imageUrl: null,
-          distanceRange: null,
-          lat: 33.458,
-          lng: 126.942,
-        },
-      ],
-    };
-  }
-
-  function itinerary(input: {
-    generationState: ItineraryGenerationState;
-    generationSessionId?: string | null;
-    days: ItineraryDaysItem[];
-  }): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: input.generationState,
-      generationSessionId: input.generationSessionId,
-      isFallback: false,
-      days: input.days,
-    };
-  }
-
   /** 이 여행이 생성 중 — 1일차도 아직 안 와 빈 얼굴(★4). */
   const ownGenerating = (): Itinerary =>
     itinerary({
@@ -3309,9 +2485,8 @@ describe('이 여행 생성 중 확인', () => {
   /** 깨끗한 COMPLETE 3일 — h08 셸, 하단 [다시 짜기]. */
   const completeThreeDays = (): Itinerary =>
     itinerary({
-      generationState: 'COMPLETE',
       generationSessionId: null,
-      days: [oneDay(DAY1), oneDay('2026-06-11'), oneDay(DAY3)],
+      days: [oneStopDay(DAY1), oneStopDay(DAY2), oneStopDay(DAY3)],
     });
 
   const created = (): Response =>
@@ -3319,7 +2494,7 @@ describe('이 여행 생성 중 확인', () => {
       itinerary({
         generationState: 'PARTIAL',
         generationSessionId: OWN_SESSION_ID,
-        days: [oneDay(DAY1)],
+        days: [oneStopDay(DAY1)],
       }),
       { status: 201 }
     );
@@ -3336,34 +2511,36 @@ describe('이 여행 생성 중 확인', () => {
   }
 
   /** 관심 요청만 순서대로: `POST T1` · `CANCEL T1/S1` (자기 조회·폴링은 적지 않는다). 이 파일 전부에서 비어야 한다. */
-  let log: string[] = [];
+  let eventLog: string[] = [];
   /** T1 일정 GET 응답(케이스가 정한다). */
   let ownItinerary: () => Itinerary;
 
   const count = (prefix: string): number =>
-    log.filter((line) => line.startsWith(prefix)).length;
+    eventLog.filter((line) => line.startsWith(prefix)).length;
 
   beforeEach(() => {
-    log = [];
+    eventLog = [];
     mockPush.mockClear();
     mockReplace.mockClear();
     mockBack.mockClear();
     setAccessToken('valid-access');
     ownItinerary = completeThreeDays;
 
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => ownItinerary(),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(ownItinerary())
-      ),
       http.post(`${BASE}/trips/:tripId/itinerary`, ({ params }) => {
-        log.push(`POST ${label(params.tripId)}`);
+        eventLog.push(`POST ${label(params.tripId)}`);
         return created();
       }),
       http.post(
         `${BASE}/trips/:tripId/generation-sessions/:sessionId/cancel`,
         ({ params }) => {
-          log.push(`CANCEL ${label(params.tripId)}/${label(params.sessionId)}`);
+          eventLog.push(
+            `CANCEL ${label(params.tripId)}/${label(params.sessionId)}`
+          );
           return HttpResponse.json(canceledSession());
         }
       )
@@ -3375,40 +2552,9 @@ describe('이 여행 생성 중 확인', () => {
     clearAccessToken();
   });
 
-  /** `retry:false`·`gcTime:0` — 형제 DraftPage 통합 테스트와 같은 클라이언트. */
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-  }
-
   /** "안 나갔다"는 나갈 시간을 준 뒤에야 의미가 있다(02a ★5). */
   function settle(ms = 300): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  /** 렌더된 문자열 전부(소요시간 부정 스캔의 모집단 — DraftPage.default 선례). */
-  function renderedText(): string {
-    const out: string[] = [];
-    screen.root
-      .findAll(() => true)
-      .forEach((node) => {
-        const children = node.props?.children as unknown;
-        const list = Array.isArray(children) ? children : [children];
-        list.forEach((child) => {
-          if (typeof child === 'string') out.push(child);
-        });
-      });
-    return out.join(' ');
   }
 
   /** 빈 얼굴(DraftScreen)이 뜬 뒤 앱바 [다시 시도]를 누른다. */
@@ -3520,11 +2666,6 @@ describe('직접 짠(MANUAL) 초안', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=렌더·버튼 press → 단언=제목·CTA 글자·라우터 호출·POST 건수.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '44444444-4444-4444-4444-444444444444';
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
-
   /** 첫 조회 대기 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산. */
   const WAIT = { timeout: 4000 };
 
@@ -3544,73 +2685,14 @@ describe('직접 짠(MANUAL) 초안', () => {
   const cardId = (poiId: string): string =>
     `slot-stopcard-${buildSlotKey(DAY1, poiId)}`;
 
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '강릉 2일',
-      startDate: DAY1,
-      endDate: DAY2,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '강릉', nights: 1 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
-
-  function slot(
-    poiId: string,
-    over: Partial<ItineraryDaysItemSlotsItem> = {}
-  ): ItineraryDaysItemSlotsItem {
-    return {
-      poiId,
-      startAt: '09:30:00',
-      endAt: '11:00:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
-      tags: [],
-      nameKo: `장소-${poiId}`,
-      lat: 37.75,
-      lng: 128.9,
-      ...over,
-    };
-  }
-
-  function itinerary(input: {
-    generationMode: ItineraryGenerationMode;
-    solveMode?: ItinerarySolveMode;
-    isFallback?: boolean;
-    generationState?: ItineraryGenerationState;
-    status?: ItineraryStatus;
-    days?: Itinerary['days'];
-  }): Itinerary {
-    return {
-      itineraryId: 'itin-1038',
-      tripId: TRIP_ID,
-      status: input.status ?? 'PLANNED',
-      solveMode: input.solveMode ?? 'FULL_AI',
-      generationMode: input.generationMode,
-      generationState: input.generationState ?? 'COMPLETE',
-      isFallback: input.isFallback ?? false,
-      days: input.days ?? [
-        {
-          date: DAY1,
-          slots: [
-            slot('poi-a'),
-            slot('poi-b', { startAt: '13:00:00', endAt: '14:00:00' }),
-          ],
-        },
-      ],
-    };
-  }
+  const MANUAL_TRIP = trip({
+    title: '강릉 2일',
+    endDate: DAY2,
+    destinations: [{ seq: 1, region: '강릉', nights: 1 }],
+  });
 
   /** 직접 짠 일정 — MANUAL 은 MINIMAL 인데 isFallback=false 다(실패가 아니라 선택 · traps-itinerary). */
-  function manual(over: Partial<Parameters<typeof itinerary>[0]> = {}) {
+  function manual(over: Partial<Itinerary> = {}) {
     return itinerary({
       generationMode: 'MANUAL',
       solveMode: 'MINIMAL',
@@ -3622,7 +2704,6 @@ describe('직접 짠(MANUAL) 초안', () => {
   /** 폴백 초안 — 인터스티셜이 먼저 잡고, 「기본 일정 보기」 뒤에 셸 폴백 얼굴(링크 있음)이 뜬다. */
   function fallback(status: ItineraryStatus = 'PLANNED') {
     return itinerary({
-      generationMode: 'FULLY_AI',
       solveMode: 'DETERMINISTIC',
       isFallback: true,
       status,
@@ -3637,37 +2718,20 @@ describe('직접 짠(MANUAL) 초안', () => {
     generatePosts = 0;
     [mockPush, mockReplace, mockBack].forEach((fn) => fn.mockClear());
     setAccessToken('valid-access');
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itineraryScript())
-      ),
-      http.post(`${BASE}/trips/:tripId/itinerary`, () => {
+    serveItinerary(server, {
+      trip: () => MANUAL_TRIP,
+      itinerary: () => itineraryScript(),
+      post: () => {
         generatePosts += 1;
         return HttpResponse.json(itineraryScript(), { status: 201 });
-      })
-    );
+      },
+    });
   });
 
   afterEach(() => {
     server.resetHandlers();
     clearAccessToken();
   });
-
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-  }
 
   /** 누름 → mutate → fetch → msw 는 비동기다 — 흘려 보낸 뒤에 세야 "0건"이 뜻을 갖는다(02a ★4). */
   async function flush(): Promise<void> {
@@ -3960,147 +3024,22 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
     expect(mockCanGoBack).not.toHaveBeenCalled();
   });
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
-  const DAY3 = '2026-06-12';
-
-  /** 3일 여행 — 탭·게이지 셀 개수의 출처는 `days.length` 가 아니라 이 두 날짜다(01b D7). */
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '제주 3일',
-      startDate: DAY1,
-      endDate: DAY3,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '제주', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
-
-  /**
-   * 하루치 3슬롯 — AC-2·AC-4 를 한 픽스처로 잰다.
-   *  - 슬롯 b 는 **isFixed=true**(고정)인데도 시각 칩이 떠야 한다(AC-2 핵심 · D6).
-   *  - 첫 슬롯 distanceRange 는 **null**(거점 없는 날)이다. 헤더 합은 커넥터 구간(`slice(1)`)만 더하므로
-   *    3.5km(2.1+1.4)다 — TRIP-1110 이후 전 슬롯을 넘기면 첫 null 에 접혀 A8-1e 가 red 가 된다(A8-4b 짝).
-   *  - lat/lng 를 실어 셸 지도(map-root)가 마운트되고 DraftPage 가 center 를 계산하게 한다.
-   */
-  function daySlots(date: string): ItineraryDaysItemSlotsItem[] {
-    return [
-      {
-        poiId: 'poi-a',
-        startAt: '09:30:00',
-        endAt: '11:00:00',
-        isFixed: false,
-        endsNextDay: false,
-        hasViolation: false,
-        alternatives: [],
-        tags: ['바다', '산책'],
-        nameKo: '광안리 해변',
-        category: '자연',
-        imageUrl: null,
-        distanceRange: null,
-        lat: 33.458,
-        lng: 126.942,
-      },
-      {
-        poiId: 'poi-b',
-        startAt: '13:00:00',
-        endAt: '14:30:00',
-        isFixed: true,
-        endsNextDay: false,
-        hasViolation: false,
-        alternatives: [],
-        tags: ['호텔'],
-        nameKo: `${date} 숙소`,
-        category: '숙소',
-        imageUrl: null,
-        distanceRange: '2.1km',
-        lat: 33.512,
-        lng: 126.522,
-      },
-      {
-        poiId: 'poi-c',
-        startAt: '15:00:00',
-        endAt: '16:00:00',
-        isFixed: false,
-        endsNextDay: false,
-        hasViolation: false,
-        alternatives: [],
-        tags: ['카페'],
-        nameKo: '흰여울 마을',
-        category: '자연',
-        imageUrl: null,
-        distanceRange: '1.4km',
-        lat: 33.245,
-        lng: 126.412,
-      },
-    ];
-  }
-
-  /** 도착한 일자만 담는다(PARTIAL 은 day1 만). */
-  function daysUpTo(count: number): ItineraryDaysItem[] {
-    return [DAY1, DAY2, DAY3]
-      .slice(0, count)
-      .map((date) => ({ date, slots: daySlots(date) }));
-  }
-
-  function itinerary(input: {
-    dayCount: number;
-    generationState: ItineraryGenerationState;
-  }): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: input.generationState,
-      isFallback: false,
-      days: daysUpTo(input.dayCount),
-    };
-  }
-
   /** PARTIAL day1 에서 슬롯 a·b·c 의 distanceRange 만 `ranges` 로 덮어쓴다(TRIP-1110 헤더 케이스). */
   function partialWithRanges(ranges: (string | null)[]): Itinerary {
-    const base = itinerary({ dayCount: 1, generationState: 'PARTIAL' });
-    return {
-      ...base,
-      days: base.days.map((day) => ({
-        ...day,
-        slots: day.slots.map((slot, index) => ({
-          ...slot,
+    return itinerary({
+      generationState: 'PARTIAL',
+      days: threeStopDays(1).map((one) => ({
+        ...one,
+        slots: one.slots.map((one2, index) => ({
+          ...one2,
           distanceRange: ranges[index],
         })),
       })),
-    };
+    });
   }
 
   /** GET /itinerary 응답을 케이스가 정한다(PARTIAL day1만 · COMPLETE 3일 전부). */
   let itineraryHandler: () => Response;
-
-  /** 렌더된 문자열 전부를 공백으로 이어 붙인다. 퍼센트·소요 부정 스캔의 모집단이다 — 소스가 아니라
-   * **보이는 글자**를 훑는다(DraftScreen.test.tsx C14 와 동일 패턴). */
-  function renderedText(): string {
-    const out: string[] = [];
-    screen.root
-      .findAll(() => true)
-      .forEach((node) => {
-        const children = node.props?.children as unknown;
-        const list = Array.isArray(children) ? children : [children];
-        list.forEach((child) => {
-          if (typeof child === 'string') out.push(child);
-        });
-      });
-    return out.join(' ');
-  }
 
   beforeEach(() => {
     mockPush.mockClear();
@@ -4108,21 +3047,18 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
     setAccessToken('valid-access');
     itineraryHandler = () =>
       HttpResponse.json(
-        itinerary({ dayCount: 3, generationState: 'COMPLETE' })
+        itinerary({ days: threeStopDays(3), generationState: 'COMPLETE' })
       );
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => itineraryHandler()),
-      http.post(`${BASE}/trips/:tripId/itinerary`, () =>
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => itineraryHandler(),
+      post: () =>
         HttpResponse.json(
-          itinerary({ dayCount: 1, generationState: 'PARTIAL' }),
-          {
-            status: 201,
-          }
-        )
-      )
-    );
+          itinerary({ days: threeStopDays(1), generationState: 'PARTIAL' }),
+          { status: 201 }
+        ),
+    });
   });
 
   afterEach(() => {
@@ -4130,48 +3066,12 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
     clearAccessToken();
   });
 
-  /** `retry:false`·`gcTime:0` — 실패를 즉시 실패로, 폴링 타이머가 종료 후 프로세스를 붙잡는 것 방지.
-   * refetchInterval 은 배선의 책임이라 여기서 주지 않는다. PARTIAL 응답은 폴링을 유발하지만 값이
-   * 안정적이라(같은 PARTIAL) 재렌더가 무해하고, 첫 렌더 상태만 findBy 로 즉시 단언한다. */
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-  }
-
-  describe('A8-0 · 탐지기 자가검사 — 이게 통과해야 아래 "퍼센트 0건"이 의미를 갖는다', () => {
-    it('퍼센트 스캔은 쪼개 그린 6·7·% 도 잡는다 (조합 실검증 · ★6)', () => {
-      // ★ 조합 검증 — `renderedText()` 는 문자열 자식을 모아 공백으로 잇는다. Text 가 3조각으로
-      //   쪼개져도 그 전처리가 `%` 를 지우지 않고 `\d+\s*%` 패턴이 살아남음을 실행으로 확인한다.
-      render(
-        <Text testID="pct-probe">
-          <Text>6</Text>
-          <Text>7</Text>
-          <Text>%</Text>
-        </Text>
-      );
-
-      const text = renderedText();
-      expect(text).toContain('%');
-      expect(text).toMatch(/\d+\s*%/);
-    });
-  });
-
   describe('🔴 A8-1 · AC-8 — PARTIAL 이면 h07 부분 결과(셸) 얼굴이 뜬다 (D1)', () => {
     beforeEach(() => {
       // 준비 — day1 만 담긴 PARTIAL, 여행은 3일.
       itineraryHandler = () =>
         HttpResponse.json(
-          itinerary({ dayCount: 1, generationState: 'PARTIAL' })
+          itinerary({ days: threeStopDays(1), generationState: 'PARTIAL' })
         );
     });
 
@@ -4273,7 +3173,7 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
       // 준비 — day1 만 담긴 PARTIAL(생성 중 셸).
       itineraryHandler = () =>
         HttpResponse.json(
-          itinerary({ dayCount: 1, generationState: 'PARTIAL' })
+          itinerary({ days: threeStopDays(1), generationState: 'PARTIAL' })
         );
     });
 
@@ -4332,7 +3232,7 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
       // 준비 — day1 만 담긴 PARTIAL(A8-1 과 같은 응답).
       itineraryHandler = () =>
         HttpResponse.json(
-          itinerary({ dayCount: 1, generationState: 'PARTIAL' })
+          itinerary({ days: threeStopDays(1), generationState: 'PARTIAL' })
         );
     });
 
@@ -4385,24 +3285,17 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
 
   // TRIP-1295 — 부분 결과(1일차만)의 좌표가 전무해도 지도 중심이 0,0 으로 가지 않는다(INV-4).
   describe('🔴 h07 지도 중심 — 좌표 없는 부분 결과에도 0,0 바다로 가지 않는다', () => {
-    /** 나간 요청 경로 — 거점·담은 숙소 조회가 붙지 않았는지 센다(결정 2=A). */
-    let hits: string[] = [];
-    const record = ({ request }: { request: Request }) => {
-      hits.push(new URL(request.url).pathname);
-    };
-
+    // 나간 요청 경로 — 거점·담은 숙소 조회가 붙지 않았는지 센다(결정 2=A). 요청 로그는 파일 최상위 `log` 다.
     beforeEach(() => {
-      hits = [];
-      server.events.on('request:start', record);
-    });
-
-    afterEach(() => {
-      server.events.removeListener('request:start', record);
+      log.reset();
     });
 
     it('P1 · AC-2 — 1일차 슬롯 좌표가 전부 없으면 서울시청이고, 거점·숙소 조회는 붙지 않는다', async () => {
       // 준비 — PARTIAL(1일차만), 좌표 전부 null.
-      const partial = itinerary({ dayCount: 1, generationState: 'PARTIAL' });
+      const partial = itinerary({
+        days: threeStopDays(1),
+        generationState: 'PARTIAL',
+      });
       itineraryHandler = () =>
         HttpResponse.json({
           ...partial,
@@ -4420,16 +3313,16 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
       expect(screen.getByTestId('map-root')).toHaveTextContent(
         '37.5665,126.978'
       );
-      expect(hits).toContain(`/api/v1/trips/${TRIP_ID}/itinerary`);
+      expect(log.all()).toContain(`GET /api/v1/trips/${TRIP_ID}/itinerary`);
       expect(
-        hits.filter((path) => /\/(bases|saved-stays)$/.test(path))
+        log.all().filter((hit) => /\/(bases|saved-stays)$/.test(hit))
       ).toEqual([]);
     });
 
     it('P2 · AC-3 — 1일차에 좌표 장소가 있으면 지금처럼 첫 핀이 중심이다', async () => {
       itineraryHandler = () =>
         HttpResponse.json(
-          itinerary({ dayCount: 1, generationState: 'PARTIAL' })
+          itinerary({ days: threeStopDays(1), generationState: 'PARTIAL' })
         );
 
       renderPage();
@@ -4463,12 +3356,7 @@ describe('다시 만들기 연타 잠금', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=화면을 열고 누른다 → 단언=라우터 호출·나간 요청.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
   const SESSION_ID = '44444444-4444-4444-4444-444444444444';
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
-  const DAY3 = '2026-06-12';
   const WAIT = { timeout: 4000 };
 
   const GENERATING = '/trips/[tripId]/itinerary/generating';
@@ -4482,72 +3370,18 @@ describe('다시 만들기 연타 잠금', () => {
   const HEADER_RETRY = 'itinerary-draft-retry';
   const CONFIRM = 'itinerary-draft-inprogress-confirm';
 
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '제주 3일',
-      startDate: DAY1,
-      endDate: DAY3,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '제주', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
-
-  function oneDay(date: string): ItineraryDaysItem {
-    return {
-      date,
-      slots: [
-        {
-          poiId: 'poi-a',
-          startAt: '09:30:00',
-          endAt: '11:00:00',
-          isFixed: false,
-          endsNextDay: false,
-          hasViolation: false,
-          alternatives: [],
-          tags: [],
-          nameKo: '광안리 해변',
-          category: '자연',
-          imageUrl: null,
-          distanceRange: null,
-          lat: 33.458,
-          lng: 126.942,
-        },
-      ],
-    };
-  }
-
-  function itinerary(
-    input: {
-      status?: ItineraryStatus;
-      generationMode?: ItineraryGenerationMode;
-      generationState?: ItineraryGenerationState;
-      generationSessionId?: string | null;
-      days?: ItineraryDaysItem[];
-    } = {}
-  ): Itinerary {
-    return {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status: input.status ?? 'PLANNED',
-      solveMode: input.generationMode === 'MANUAL' ? 'MINIMAL' : 'FULL_AI',
-      generationMode: input.generationMode ?? 'FULLY_AI',
-      generationState: input.generationState ?? 'COMPLETE',
-      generationSessionId: input.generationSessionId ?? null,
-      isFallback: false,
-      days: input.days ?? [oneDay(DAY1), oneDay(DAY2), oneDay(DAY3)],
-    };
+  /** 기본 — 깨끗한 COMPLETE 3일(각 날 슬롯 하나), 세션 없음. 케이스가 정하는 것은 분기 신호뿐이다. */
+  function planned(over: Partial<Itinerary> = {}): Itinerary {
+    return itinerary({
+      generationSessionId: null,
+      days: [oneStopDay(DAY1), oneStopDay(DAY2), oneStopDay(DAY3)],
+      ...over,
+    });
   }
 
   /** 이 여행이 생성 중 — 세션 있음 · 1일차도 아직 없어 빈 얼굴(헤더 버튼이 닿는 유일한 PARTIAL). */
   const ownGenerating = (): Itinerary =>
-    itinerary({
+    planned({
       generationState: 'PARTIAL',
       generationSessionId: SESSION_ID,
       days: [],
@@ -4571,21 +3405,21 @@ describe('다시 만들기 연타 잠금', () => {
 
   beforeEach(() => {
     [mockPush, mockReplace, mockBack].forEach((fn) => fn.mockClear());
-    itineraryScript = () => itinerary();
+    itineraryScript = () => planned();
     itineraryGets = 0;
     postCount = 0;
     postResponse = () =>
       HttpResponse.json(
-        itinerary({ generationState: 'PARTIAL', days: [oneDay(DAY1)] }),
+        planned({ generationState: 'PARTIAL', days: [oneStopDay(DAY1)] }),
         { status: 201 }
       );
     gate = null;
     releaseGate = null;
     setAccessToken('valid-access');
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: async () => {
         itineraryGets += 1;
         if (gate !== null) await gate;
         const body = itineraryScript();
@@ -4595,13 +3429,13 @@ describe('다시 만들기 연타 잠금', () => {
             { status: body }
           );
         }
-        return HttpResponse.json(body);
-      }),
-      http.post(`${BASE}/trips/:tripId/itinerary`, () => {
+        return body;
+      },
+      post: () => {
         postCount += 1;
         return postResponse();
-      })
-    );
+      },
+    });
   });
 
   // 문을 안 열고 끝나면 붙잡힌 요청이 열린 핸들로 남는다 — describe 밖 최상위에서 항상 연다.
@@ -4610,21 +3444,6 @@ describe('다시 만들기 연타 잠금', () => {
     server.resetHandlers();
     clearAccessToken();
   });
-
-  function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-  }
 
   /** 생성 화면으로 간 라우터 호출 수 — replace 든 push 든(push 로 가도 여기서 잡힌다). */
   function toGenerating(): number {
@@ -4647,7 +3466,7 @@ describe('다시 만들기 연타 잠금', () => {
     it.each<ItineraryGenerationMode>(['FULLY_AI', 'CO_PLAN'])(
       '%s 초안 — 다시 짜기 press 직후 replace 1회(mode=FULLY_AI) · POST 0',
       async (generationMode) => {
-        itineraryScript = () => itinerary({ generationMode });
+        itineraryScript = () => planned({ generationMode });
         renderPage();
         const retry = await screen.findByTestId(CTA0, {}, WAIT);
         expect(retry).toHaveTextContent('다시 짜기');
@@ -4700,7 +3519,7 @@ describe('다시 만들기 연타 잠금', () => {
 
   describe('🔴 L4 · AC-2 — 헤더 「다시 만들기」(빈 얼굴)도 세 번 눌러 이동 1회', () => {
     it('itinerary-draft-retry press 3번 → 이동 1 · POST 0', async () => {
-      itineraryScript = () => itinerary({ days: [] });
+      itineraryScript = () => planned({ days: [] });
       renderPage();
       await screen.findByTestId('itinerary-draft-empty', {}, WAIT);
       const retry = screen.getByTestId(HEADER_RETRY);
@@ -4775,7 +3594,7 @@ describe('다시 만들기 연타 잠금', () => {
       await settle();
       expect(toGenerating()).toBe(0);
 
-      itineraryScript = () => itinerary();
+      itineraryScript = () => planned();
       fireEvent.press(screen.getByTestId(HEADER_RETRY));
 
       await waitFor(() => expect(toGenerating()).toBe(1), WAIT);
@@ -4789,7 +3608,7 @@ describe('다시 만들기 연타 잠금', () => {
   describe('🟢 L8 · AC-4 — 조회 전 누른 뒤 도착한 일정이 확정(CONFIRMED)이면 이동 0 (선제 green · 무회귀)', () => {
     it('로딩 중 press → CONFIRMED 도착 → 셸이 떠도 이동 0 · POST 0', async () => {
       holdItineraryGet();
-      itineraryScript = () => itinerary({ status: 'CONFIRMED' });
+      itineraryScript = () => planned({ status: 'CONFIRMED' });
       renderPage();
       await screen.findByTestId('itinerary-draft-loading', {}, WAIT);
 
@@ -4873,7 +3692,8 @@ describe('다시 만들기 연타 잠금', () => {
 
   describe('🟢 L12 · AC-9 — 직접 짠(MANUAL) 일정은 어떤 버튼으로도 생성 화면에 가지 않는다 (선제 green · TRIP-1038 무회귀)', () => {
     it('MANUAL 셸의 첫 CTA(편집하기) press → 생성 화면 이동 0 · POST 0', async () => {
-      itineraryScript = () => itinerary({ generationMode: 'MANUAL' });
+      itineraryScript = () =>
+        planned({ generationMode: 'MANUAL', solveMode: 'MINIMAL' });
       renderPage();
       const cta = await screen.findByTestId(CTA0, {}, WAIT);
       expect(cta).toHaveTextContent('편집하기');
@@ -4890,7 +3710,8 @@ describe('다시 만들기 연타 잠금', () => {
       renderPage();
       await screen.findByTestId('itinerary-draft-failed', {}, WAIT);
 
-      itineraryScript = () => itinerary({ generationMode: 'MANUAL' });
+      itineraryScript = () =>
+        planned({ generationMode: 'MANUAL', solveMode: 'MINIMAL' });
       fireEvent.press(screen.getByTestId(HEADER_RETRY));
       // 앵커 — 재조회가 도착해 MANUAL 셸(「내 일정」)로 바뀌었다(판정 재료가 손에 있었다).
       expect(
@@ -4914,12 +3735,7 @@ describe('다시 만들기 연타 잠금', () => {
   }
 
   function renderWithSibling() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Tree({ showDraft }: { showDraft: boolean }) {
       return (
         <QueryClientProvider client={client}>
@@ -4937,7 +3753,7 @@ describe('다시 만들기 연타 잠금', () => {
 
   describe('🔴 L13 · 5-b 경고-1 — 조회를 기다리는 동안 초안 화면을 떠나면, 조회가 도착해도 생성 화면으로 보내지 않는다', () => {
     it.each<{ name: string; arrives: () => Itinerary | 404; settled: string }>([
-      { name: 'PLANNED 도착', arrives: () => itinerary(), settled: 'success' },
+      { name: 'PLANNED 도착', arrives: () => planned(), settled: 'success' },
       { name: '404(일정 없음) 도착', arrives: () => 404, settled: 'error' },
     ])(
       '로딩 중 다시 만들기 → 응답 전 초안 화면만 언마운트 → $name → 생성 화면 이동 0 · POST 0',
@@ -4990,10 +3806,7 @@ describe('넣지 못한 꼭 갈 곳', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=렌더(+기본 일정 보기 press) → 단언=testID·글자·요청 수.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const SAVED_PATH = '/api/v1/saved-places';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
 
   /** 네트워크 응답을 기다리는 한도 — 로컬 기본 1000ms 의 CI 러너 환산(fallbackShell 선례). */
   const WAIT = { timeout: 4000 };
@@ -5022,109 +3835,37 @@ describe('넣지 못한 꼭 갈 곳', () => {
   const cardId = (poiId: string): string =>
     `slot-stopcard-${buildSlotKey(DAY1, poiId)}`;
 
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '제주 3일',
-      startDate: DAY1,
-      endDate: '2026-06-12',
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '제주', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
+  /** 1일차 슬롯 둘 — poi-a 09:30, poi-b 13:00(시작=끝). */
+  const unplacedDays = () => [
+    day(DAY1, [
+      slot('poi-a', { endAt: '09:30:00' }),
+      slot('poi-b', { startAt: '13:00:00', endAt: '13:00:00' }),
+    ]),
+  ];
 
-  function slot(poiId: string, startAt: string): ItineraryDaysItemSlotsItem {
-    return {
-      poiId,
-      startAt,
-      endAt: startAt,
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
-      tags: [],
-      nameKo: `장소-${poiId}`,
-      lat: 33.458,
-      lng: 126.942,
-    };
-  }
-
-  function itinerary(input: {
-    unplaced?: ItineraryUnplacedMustVisitsItem[];
-    solveMode?: ItinerarySolveMode;
-    isFallback?: boolean;
-    generationState?: ItineraryGenerationState;
-  }): Itinerary {
-    return {
-      itineraryId: 'itin-1094',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: input.solveMode ?? 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: input.generationState ?? 'COMPLETE',
-      isFallback: input.isFallback ?? false,
-      days: [
-        {
-          date: DAY1,
-          slots: [slot('poi-a', '09:30:00'), slot('poi-b', '13:00:00')],
-        },
-      ],
-      ...(input.unplaced === undefined
-        ? {}
-        : { unplacedMustVisits: input.unplaced }),
-    };
-  }
-
-  function savedPlace(poiId: string, nameKo: string): SavedPlace {
-    return {
-      savedPlaceId: `sp-${poiId}`,
-      savedAt: '2026-08-01T10:00:00.000Z',
-      place: {
-        poiId,
-        nameKo,
-        category: '명소',
-        lat: 33.458,
-        lng: 126.942,
-        tags: [],
-        savedCount: 0,
-        dataStatus: 'ACTIVE',
-      },
-    };
+  /** 이 파일의 일정 — 케이스가 정하는 것은 미배치 목록(`unplacedMustVisits`)과 분기 신호뿐이다. */
+  function unplacedItinerary(over: Partial<Itinerary>): Itinerary {
+    return itinerary({ days: unplacedDays(), ...over });
   }
 
   let itineraryScript: () => Itinerary;
   let savedScript: () => Promise<Response> | Response;
-  let observed: { method: string; url: string }[] = [];
   /** 담은 장소 응답을 테스트가 풀 때까지 붙잡는 게이트(02a ★7). afterEach 가 반드시 연다. */
   let releaseSaved: () => void = () => undefined;
 
   function savedHits(): number {
-    return observed.filter(
-      (hit) => hit.method === 'GET' && new URL(hit.url).pathname === SAVED_PATH
-    ).length;
+    return log.all().filter((hit) => hit === `GET ${SAVED_PATH}`).length;
   }
 
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observed.push({ method: request.method, url: request.url });
-    });
-  });
-
   beforeEach(() => {
-    observed = [];
+    log.reset();
     setAccessToken('valid-access');
     savedScript = () => HttpResponse.json([savedPlace('poi-mv-1', NAME_1)]);
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => itineraryScript(),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itineraryScript())
-      ),
       // AC-13 은 이 핸들러를 **항상** 등록해 두고 요청 수로 잰다(02a ★10).
       http.get(`${BASE}/saved-places`, () => savedScript())
     );
@@ -5136,22 +3877,6 @@ describe('넣지 못한 꼭 갈 곳', () => {
     server.resetHandlers();
     clearAccessToken();
   });
-
-  function renderPage(): { client: QueryClient } {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
-    return { client };
-  }
 
   /** 정확한 testID 몇 개를 트리 전위 순서(부모→자식, 형→아우)로 뽑는다(fallbackShell 선례 · 02a ★11). */
   function treeOrder(ids: string[]): string[] {
@@ -5192,7 +3917,8 @@ describe('넣지 못한 꼭 갈 곳', () => {
 
   describe('🔴 D1 · AC-1·2·3·11·13 · Q5 — COMPLETE 셸 시트 맨 위에 블록이 서고, 이름은 담은 장소에서 온다', () => {
     it('헤더 뒤·첫 카드 앞 · 항목 2 · 이름 있음/없음 두 얼굴 · 소요시간 0 · 담은 장소 1회 조회', async () => {
-      itineraryScript = () => itinerary({ unplaced: UNPLACED });
+      itineraryScript = () =>
+        unplacedItinerary({ unplacedMustVisits: UNPLACED });
 
       const { client } = renderPage();
 
@@ -5232,7 +3958,8 @@ describe('넣지 못한 꼭 갈 곳', () => {
 
   describe('🔴 D2 · Q4 — 담은 장소 조회가 대기 중이어도 블록과 서버 문구가 먼저 보인다', () => {
     it('응답 보류 중엔 문구만 · 응답이 오면 이름이 채워진다', async () => {
-      itineraryScript = () => itinerary({ unplaced: UNPLACED });
+      itineraryScript = () =>
+        unplacedItinerary({ unplacedMustVisits: UNPLACED });
       const gate = new Promise<void>((resolve) => {
         releaseSaved = resolve;
       });
@@ -5264,7 +3991,8 @@ describe('넣지 못한 꼭 갈 곳', () => {
 
   describe('🔴 D3 · AC-3 · INV-4 — 담은 장소 조회가 실패해도 항목은 남고 서버 문구만 보인다', () => {
     it('/saved-places 500 → 조회가 끝난 뒤에도 블록·항목 2 · 대체 이름 없음', async () => {
-      itineraryScript = () => itinerary({ unplaced: UNPLACED });
+      itineraryScript = () =>
+        unplacedItinerary({ unplacedMustVisits: UNPLACED });
       savedScript = () => new HttpResponse(null, { status: 500 });
 
       const { client } = renderPage();
@@ -5281,7 +4009,8 @@ describe('넣지 못한 꼭 갈 곳', () => {
   describe('🔴 D4 · Q4 — 게스트는 담은 장소를 조회하지 않고, 문구는 그대로 보인다', () => {
     it('토큰 없음 → /saved-places 0회 · 두 항목 문구만', async () => {
       clearAccessToken();
-      itineraryScript = () => itinerary({ unplaced: UNPLACED });
+      itineraryScript = () =>
+        unplacedItinerary({ unplacedMustVisits: UNPLACED });
 
       const { client } = renderPage();
       await screen.findByTestId(BLOCK, {}, WAIT);
@@ -5296,7 +4025,8 @@ describe('넣지 못한 꼭 갈 곳', () => {
       ['빈 배열', [] as ItineraryUnplacedMustVisitsItem[]],
       ['필드 없음', undefined],
     ])('%s → 블록 0 · /saved-places 0회', async (_label, unplaced) => {
-      itineraryScript = () => itinerary({ unplaced });
+      itineraryScript = () =>
+        unplacedItinerary({ unplacedMustVisits: unplaced });
 
       const { client } = renderPage();
 
@@ -5313,7 +4043,10 @@ describe('넣지 못한 꼭 갈 곳', () => {
   describe('🔴 D6 · AC-10ⓐ — 일부 실패(staleFailed) 안내와 블록이 함께 뜬다', () => {
     it('FAILED + 미배치 → 헤더 → 일부 실패 안내 → 블록 → 첫 카드', async () => {
       itineraryScript = () =>
-        itinerary({ unplaced: UNPLACED, generationState: 'FAILED' });
+        unplacedItinerary({
+          unplacedMustVisits: UNPLACED,
+          generationState: 'FAILED',
+        });
 
       renderPage();
 
@@ -5328,8 +4061,8 @@ describe('넣지 못한 꼭 갈 곳', () => {
   describe('🔴 D7 · AC-10ⓑ · Q3 · 결정 1 — 폴백 안내와 블록이 함께 뜨고, 블록은 안내 밖 형제다', () => {
     it('인터스티셜엔 블록 없음 → 「기본 일정 보기」 → 헤더 → 폴백 안내 → 블록 → 첫 카드', async () => {
       itineraryScript = () =>
-        itinerary({
-          unplaced: UNPLACED,
+        unplacedItinerary({
+          unplacedMustVisits: UNPLACED,
           solveMode: 'DETERMINISTIC',
           isFallback: true,
         });
@@ -5360,7 +4093,10 @@ describe('넣지 못한 꼭 갈 곳', () => {
   describe('D8 · 결정 1 — PARTIAL 진행 셸에는 블록이 없다 (선제 green 트립와이어)', () => {
     it('PARTIAL + 미배치 → 진행 카드는 뜨고 블록은 없다', async () => {
       itineraryScript = () =>
-        itinerary({ unplaced: UNPLACED, generationState: 'PARTIAL' });
+        unplacedItinerary({
+          unplacedMustVisits: UNPLACED,
+          generationState: 'PARTIAL',
+        });
 
       renderPage();
 
@@ -5385,10 +4121,6 @@ describe('같은 날 같은 장소 두 번', () => {
    * 3동작 뼈대: 준비 = 초안 응답·콘솔 스파이 → 실행 = 화면 열기 → 단언 = 경고 key 목록·카드·번호·거리.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '12960000-0000-0000-0000-000000001296';
-  const D1 = '2026-06-10';
-  const D2 = '2026-06-11';
   const CARD_ROOT = /^slot-stopcard-\d{4}-\d{2}-\d{2}#/;
   const D1_KM = '약 1.1km · 도보 추정';
   const D2_KM = '약 2.2km · 도보 추정';
@@ -5401,79 +4133,53 @@ describe('같은 날 같은 장소 두 번', () => {
   ];
 
   /** 2일 여행 — PARTIAL 은 1일차만 도착, COMPLETE 는 두 날 다. */
-  function trip(): Trip {
-    return {
-      tripId: TRIP_ID,
-      title: '부산 여행',
-      startDate: D1,
-      endDate: D2,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '부산', nights: 1 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
-  }
+  const BUSAN_TRIP = trip({
+    title: '부산 여행',
+    endDate: DAY2,
+    destinations: [{ seq: 1, region: '부산', nights: 1 }],
+  });
 
-  function slot(
+  function dupSlot(
     poiId: string,
     hour: number,
     distanceRange: string | null
   ): ItineraryDaysItemSlotsItem {
     const hh = String(hour).padStart(2, '0');
-    return {
-      poiId,
+    return slot(poiId, {
       startAt: `${hh}:00:00`,
       endAt: `${hh}:30:00`,
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
-      tags: [],
       nameKo: poiId,
       category: '자연',
       imageUrl: null,
       distanceRange,
       lat: 35.15 + hour / 1000,
       lng: 129.11,
-    };
+    });
   }
 
   /** [A, B, A, C] — 같은 장소 p-a 가 1번·3번. */
   const duplicateSlots = () => [
-    slot('p-a', 10, null),
-    slot('p-b', 11, D1_KM),
-    slot('p-a', 13, D2_KM),
-    slot('p-c', 15, D3_KM),
+    dupSlot('p-a', 10, null),
+    dupSlot('p-b', 11, D1_KM),
+    dupSlot('p-a', 13, D2_KM),
+    dupSlot('p-c', 15, D3_KM),
   ];
   /** [A, B, C] — 보통 응답(무회귀). */
   const normalSlots = () => [
-    slot('p-a', 10, null),
-    slot('p-b', 11, D1_KM),
-    slot('p-c', 15, D2_KM),
+    dupSlot('p-a', 10, null),
+    dupSlot('p-b', 11, D1_KM),
+    dupSlot('p-c', 15, D2_KM),
   ];
 
-  function itinerary(
+  function faceItinerary(
     face: Face,
     day1Slots: ItineraryDaysItemSlotsItem[]
   ): Itinerary {
-    const days: ItineraryDaysItem[] = [{ date: D1, slots: day1Slots }];
+    const days: ItineraryDaysItem[] = [day(DAY1, day1Slots)];
     if (face === 'COMPLETE') {
-      days.push({ date: D2, slots: [slot('p-d', 10, null)] });
+      days.push(day(DAY2, [dupSlot('p-d', 10, null)]));
     }
-    return {
-      itineraryId: 'itin-1296',
-      tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: face,
-      isFallback: false,
-      days,
-    };
+    return itinerary({ itineraryId: 'itin-1296', generationState: face, days });
   }
 
   let activeClient: QueryClient | null = null;
@@ -5495,25 +4201,15 @@ describe('같은 날 같은 장소 두 번', () => {
     face: Face,
     day1Slots: ItineraryDaysItemSlotsItem[]
   ) {
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary(face, day1Slots))
-      )
-    );
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
+    serveItinerary(server, {
+      trip: () => BUSAN_TRIP,
+      itinerary: () => faceItinerary(face, day1Slots),
     });
+    const client = newTestQueryClient({ gcTime: 0 });
     activeClient = client;
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
+    render(<DraftPage tripId={TRIP_ID} />, {
+      wrapper: createWrapper(client),
+    });
     // 그 얼굴이 맞는지 — PARTIAL 은 진행 카드, COMPLETE 는 CTA 바가 있다.
     await screen.findByTestId(
       face === 'PARTIAL' ? 'generation-progress-card' : 'sheet-cta-root'
@@ -5524,20 +4220,6 @@ describe('같은 날 같은 장소 두 번', () => {
 
   const texts = (nodes: { props: { children?: unknown } }[]) =>
     nodes.map((node) => node.props.children);
-
-  it('K0 · 탐지기 자가검사 — 겹친 key 와 빠진 key 를 둘 다 잡는다', () => {
-    function NoKeyList() {
-      // eslint-disable-next-line react/jsx-key -- 일부러 key 를 뺀다(누락 경고 자가검사)
-      return [<View />, <View />];
-    }
-
-    render(<View>{[<View key="dup" />, <View key="dup" />]}</View>);
-    render(<NoKeyList />);
-
-    expect(keyWarnings.keys()).toEqual(['dup']);
-    expect(keyWarnings.missing()).toBe(1);
-    keyWarnings.clear(); // 일부러 낸 경고 — 파일 감시가 이 테스트를 실패시키지 않게 비운다.
-  });
 
   it.each(FACES)(
     '🔴 K1 · AC-2 — %s · 같은 장소가 두 번 있어도 중복 key 경고가 없다',
@@ -5562,7 +4244,7 @@ describe('같은 날 같은 장소 두 번', () => {
         '4',
       ]);
       expect(
-        texts(screen.getAllByTestId(`slot-stopcard-time-${D1}#p-a`))
+        texts(screen.getAllByTestId(`slot-stopcard-time-${DAY1}#p-a`))
       ).toEqual(['10:00–10:30', '13:00–13:30']);
       expect(
         texts(screen.getAllByTestId(/^sheet-connector-distance-/))

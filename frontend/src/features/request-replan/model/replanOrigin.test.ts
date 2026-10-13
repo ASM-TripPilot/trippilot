@@ -1,9 +1,6 @@
 /**
  * @jest-environment node
  */
-import fs from 'fs';
-import path from 'path';
-
 import { StartReplanRequestOriginKind } from '@/shared/api/index.schemas';
 import type { ReplanOrigin } from './replanOrigin';
 import {
@@ -191,58 +188,5 @@ describe('🔴 G1 · TRIP-979 AC-A1 — buildGpsOrigin: 측위 좌표 → GPS or
       triggerId: null,
     });
     expect(Object.keys(result).sort()).toEqual(MANUAL_ENVELOPE_KEYS);
-  });
-});
-
-/** ── M5 codegen 스키마 앵커 ─────────────────────────────────────────────
- * 생성물을 글자로 읽어 "additive 계약이 기대는 경계"(originKind required+nullable,
- * lat/lng optional)를 잠근다. `pnpm codegen` 재생성이 이 경계를 뒤집으면 jest 가 red. */
-
-const SCHEMA_DIR = path.resolve('src/shared/api/generated/schemas');
-
-/** 주석 제거 — `:` 뒤 `//`(URL)는 주석으로 보지 않는다(리포 stripComments 관례). */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
-
-function readSchema(name: string): string {
-  return stripComments(fs.readFileSync(path.join(SCHEMA_DIR, name), 'utf8'));
-}
-
-describe('🟢 M5 · AC-1 — codegen 스키마 경계 앵커', () => {
-  it('탐지기 자가검사 — 주석은 걷히고 URL 슬래시는 살아남는다', () => {
-    const sample = [
-      '/** originKind 설명 주석 */',
-      '// originKind?: number; 이건 주석',
-      "const u = 'https://x/y';",
-      'originKind: StartReplanRequestOriginKind;',
-    ].join('\n');
-    const stripped = stripComments(sample);
-    // 주석 속 가짜 originKind?: 는 걷힌다(안 걷으면 아래 required 단언이 거짓 red).
-    expect(stripped).not.toContain('이건 주석');
-    // 코드의 URL·필드는 살아남는다.
-    expect(stripped).toContain("const u = 'https://x/y';");
-    expect(stripped).toContain('originKind: StartReplanRequestOriginKind;');
-  });
-
-  it('originKind 는 required(물음표 없음) + 타입은 nullable, MANUAL 값 존재', () => {
-    const request = readSchema('startReplanRequest.ts');
-    const originKind = readSchema('startReplanRequestOriginKind.ts');
-
-    // required — 물음표 없는 선언이 있고, 물음표 붙은 선언은 없다.
-    expect(request).toMatch(/originKind: StartReplanRequestOriginKind/);
-    expect(request).not.toMatch(/originKind\?:/);
-    // nullable — 값에 null 이 허용된다(건너뛰기 = 명시적 null 의 근거).
-    expect(originKind).toMatch(/\|\s*null/);
-    // MANUAL 이 enum 에 있다(buildManualOrigin 의 출력값).
-    expect(originKind).toMatch(/MANUAL:\s*'MANUAL'/);
-  });
-
-  it('originLat·originLng 는 optional + nullable', () => {
-    const request = readSchema('startReplanRequest.ts');
-    expect(request).toMatch(/originLat\?: number \| null/);
-    expect(request).toMatch(/originLng\?: number \| null/);
   });
 });

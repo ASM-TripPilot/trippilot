@@ -10,6 +10,7 @@ import {
 } from '@/test-support/expoAuthSessionMock';
 
 import { makeAuthorize } from './makeAuthorize';
+import { sandboxEnv } from '@/test-support/envSandbox';
 
 /**
  * TRIP-932 AC-1~AC-4 — 애플 네이티브 인가 어댑터.
@@ -50,10 +51,7 @@ jest.mock(
 );
 
 const ENV_KEYS = ['EXPO_PUBLIC_AUTH_FAKE', 'EXPO_PUBLIC_AUTH_FAKE_OUTCOME'];
-const ORIGINAL_ENV: Record<string, string | undefined> = {};
-for (const key of ENV_KEYS) {
-  ORIGINAL_ENV[key] = process.env[key];
-}
+sandboxEnv(ENV_KEYS);
 
 beforeEach(() => {
   // fake 토글이 켜져 있으면 apple 은 dev 전용 success-code 로 빠져 SDK 를 타지 않는다.
@@ -61,13 +59,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const key of ENV_KEYS) {
-    if (ORIGINAL_ENV[key] === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = ORIGINAL_ENV[key];
-    }
-  }
   resetExpoAppleAuthenticationMock();
   resetExpoAuthSessionMock();
 });

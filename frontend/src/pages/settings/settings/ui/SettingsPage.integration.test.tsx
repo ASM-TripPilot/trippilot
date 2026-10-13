@@ -10,6 +10,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { BASE } from '@/test-support/apiBase';
+import { newTestQueryClient } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import {
   clearAccessToken,
@@ -22,16 +24,16 @@ import {
   publishGateDestination,
   resetGateDestination,
 } from '@/features/auth/model/gateDestination';
-import { useGetMe } from '@/shared/api/index.hooks';
-import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
-import { useGetMePreferences } from '@/shared/api/index.hooks';
 import {
+  useGetMe,
+  useGetMeLocationConsent,
+  useGetMePersonalization,
+  useGetMePreferences,
   useGetMeProfile,
   useGetMeSettings,
   usePatchMeProfileNickname,
   usePatchMeSettings,
 } from '@/shared/api/index.hooks';
-import { useGetMePersonalization } from '@/shared/api/index.hooks';
 import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
 import { registerPushToken } from '@/shared/push';
 import { primeExpoToken, primeOsPermission } from '@/test-support/pushOsFake';
@@ -235,14 +237,7 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
     );
   }
 
-  function newClient(): QueryClient {
-    return new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { retry: false },
-      },
-    });
-  }
+  const newClient = (): QueryClient => newTestQueryClient({ gcTime: 0 });
 
   function wrapper({ children }: { children: ReactNode }) {
     return (
@@ -739,7 +734,6 @@ describe('로그아웃 순서 · 게이트 대기 (옛 .logout)', () => {
   const mockUseGetMe = useGetMe as jest.Mock;
   const mockUseGetMeProfile = useGetMeProfile as jest.Mock;
 
-  const BASE = 'http://localhost:8080/api/v1';
   const LOGOUT_PATH = '/api/v1/auth/logout';
   /** 이전 계정의 캐시 1건 — 로그아웃 뒤 남으면 다음 계정 화면에 샌다. */
   const CACHED_KEY = ['/api/v1/me/profile'];
@@ -1071,8 +1065,6 @@ describe('로그아웃 → 이 기기 푸시 토큰 해제 (옛 .pushLogout)', (
    *
    * 3동작 뼈대: 준비=로그인 상태 + 이번 세션 등록 + MSW → 실행=[로그아웃] → 확인 → 단언=DELETE·헤더·이동.
    */
-
-  const BASE = 'http://localhost:8080/api/v1';
 
   type DeleteSeen = {
     token: string;

@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -10,6 +8,7 @@ import type {
   VisitPhoto,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { createHitLog, createWrapper } from '@/test-support/mswHookHarness';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
 import type { PhotoAssetMeta } from '@/features/attach-visit-media';
@@ -53,21 +52,18 @@ const photo = (
   ...over,
 });
 
-let observedHits: string[] = [];
+const hits = createHitLog(server);
 let capturedPhotoBody: AddPhotoRequest | null = null;
 let capturedMemoBody: PutMemoRequest | null = null;
-const hitCount = (needle: string) =>
-  observedHits.filter((hit) => hit === needle).length;
+const hitCount = hits.count;
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', ({ request }) => {
-    observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
+  hits.attach();
 });
 
 beforeEach(() => {
-  observedHits = [];
+  hits.reset();
   capturedPhotoBody = null;
   capturedMemoBody = null;
   setAccessToken('a');
@@ -79,21 +75,6 @@ afterEach(() => {
 });
 
 afterAll(() => server.close());
-
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
 
 /** GET photos 를 세팅하고 훅을 띄운다. serverPhotos 를 참조로 넘겨 POST 가 밀어넣게 한다. */
 async function renderReady(serverPhotos: VisitPhoto[]) {

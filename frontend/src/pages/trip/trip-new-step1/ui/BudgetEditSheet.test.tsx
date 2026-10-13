@@ -134,22 +134,20 @@ describe('AC-2 · ★ tier 단일 선택 — 선택 칩만 활성 표식(교차)
 describe('AC-D7 · 노트·range 문자열 없음 (tier 무관)', () => {
   const RANGE_TEXT = /50만 미만|50~150만|150~300만|300만 이상/;
 
-  it.each(['저가', '중간', '고급', '럭셔리'])(
-    '활성 tier 가 %s 여도 노트 testID·range 문자열·"범위로 채웠어요"가 0건',
-    (tier) => {
-      renderSheet({ tier });
+  // (TRIP-1353) 옛 it.each(4등급)은 활성 tier 만 바꿔 같은 부재 단언을 네 번 돌렸다 — 노트는 tier 로 갈리지 않으니 하나면 된다.
+  it('활성 tier 가 있어도 노트 testID·range 문자열·"범위로 채웠어요"가 0건', () => {
+    renderSheet({ tier: '중간' });
 
-      // 짝(긍정) — 시트와 그 tier 의 활성 표식은 실제로 그려졌다(공허 통과 차단).
-      expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
-      expect(
-        screen.getAllByTestId(/^trip-wizard-budget-tier-active-/)
-      ).toHaveLength(1);
+    // 짝(긍정) — 시트와 그 tier 의 활성 표식은 실제로 그려졌다(공허 통과 차단).
+    expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
+    expect(
+      screen.getAllByTestId(/^trip-wizard-budget-tier-active-/)
+    ).toHaveLength(1);
 
-      expect(screen.queryByTestId('trip-wizard-budget-note')).toBeNull();
-      expect(screen.queryAllByText(RANGE_TEXT)).toHaveLength(0);
-      expect(screen.queryAllByText(/범위로 채웠어요/)).toHaveLength(0);
-    }
-  );
+    expect(screen.queryByTestId('trip-wizard-budget-note')).toBeNull();
+    expect(screen.queryAllByText(RANGE_TEXT)).toHaveLength(0);
+    expect(screen.queryAllByText(/범위로 채웠어요/)).toHaveLength(0);
+  });
 });
 
 describe('AC-2c · ★ 칩 press 는 onSelectTier(라벨)만 올린다 — 대표 금액 계산은 배선 몫', () => {

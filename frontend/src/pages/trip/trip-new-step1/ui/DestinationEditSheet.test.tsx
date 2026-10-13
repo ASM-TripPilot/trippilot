@@ -298,11 +298,14 @@ describe('TRIP-1210 · 도시를 여럿 담을 수 있다 (게이트 해제)', (
 });
 
 /**
+ * 박수 합 상한(30박) — TRIP-1210 · TRIP-1219 a (TRIP-1353 에서 두 describe 를 하나로 합쳤다: 같은 20+10 픽스처로
+ * "도시 추가"와 모든 [+]가 같은 `atMaxNights` 를 따르는지를 따로 재던 것이다).
+ *
  * TRIP-1210 — 도시를 여럿 담게 되면서 새로 생긴 길: 박수 합이 이미 30박인데 도시를 더 담으면 31박이 된다
  * (새 도시는 최소 1박). 그래서 30박이면 "도시 추가"도 [+]처럼 진짜로 막고, 안내는 기존 '최대 30박' 문구
- * 하나를 그대로 쓴다(01b 결정 3 — 새 문구 금지).
+ * 하나를 그대로 쓴다(01b 결정 3 — 새 문구 금지). TRIP-1219 a — 같은 상한에서 모든 [+]도 진짜 disabled.
  */
-describe('TRIP-1210 · 박수 합이 30박이면 도시 추가도 막힌다 (기존 상한 안내 재사용)', () => {
+describe('TRIP-1210·TRIP-1219 a · 박수 합이 30박이면 도시 추가와 [+]가 함께 막힌다 (기존 상한 안내 재사용)', () => {
   it.each([
     [
       '두 도시 20+10',
@@ -313,7 +316,7 @@ describe('TRIP-1210 · 박수 합이 30박이면 도시 추가도 막힌다 (기
     ],
     ['한 도시 30', [{ seq: 1, region: '서울특별시', nights: 30 }]],
   ] as [string, TripDestination[]][])(
-    '%s박이면 "도시 추가"가 진짜 disabled — press 해도 onAddCity 0회, 상한 안내는 한 줄뿐이다',
+    '%s박이면 "도시 추가"와 모든 [+]가 진짜 disabled — press 해도 콜백 0회, 상한 안내는 한 줄뿐이다',
     (_label, destinations) => {
       // 준비
       const spies = renderSheet(destinations);
@@ -322,9 +325,17 @@ describe('TRIP-1210 · 박수 합이 30박이면 도시 추가도 막힌다 (기
       // 실행 — disabled 매처 + press + 콜백 0회 3단(가짜 disabled 는 press 가 먹는다).
       expect(add).toBeDisabled();
       fireEvent.press(add);
+      destinations.forEach(({ seq }) => {
+        const inc = screen.getByTestId(
+          `trip-wizard-destination-nights-inc-${seq}`
+        );
+        expect(inc).toBeDisabled();
+        fireEvent.press(inc);
+      });
 
       // 단언
       expect(spies.onAddCity).not.toHaveBeenCalled();
+      expect(spies.onChangeNights).not.toHaveBeenCalled();
       expect(
         screen.getByTestId('trip-wizard-destination-max-note')
       ).toHaveTextContent('최대 30박까지 정할 수 있어요');
@@ -333,42 +344,18 @@ describe('TRIP-1210 · 박수 합이 30박이면 도시 추가도 막힌다 (기
     }
   );
 
-  it('29박이면 "도시 추가"가 살아 있고 상한 안내는 없다 (경계 바로 아래)', () => {
+  it('29박이면 "도시 추가"와 [+]가 살아 있고 상한 안내는 없다 (경계 바로 아래)', () => {
     const spies = renderSheet([
       { seq: 1, region: '부산광역시', nights: 20 },
       { seq: 2, region: '경주시', nights: 9 },
     ]);
 
-    expect(screen.queryByTestId('trip-wizard-destination-max-note')).toBeNull();
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    expect(spies.onAddCity).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('TRIP-1219 a · 박수 상한', () => {
-  it('박수 합이 30이면 모든 [+]가 진짜 disabled — press 해도 콜백 0회, 안내가 보인다', () => {
-    const spies = renderSheet([
-      { seq: 1, region: '부산', nights: 20 },
-      { seq: 2, region: '경주', nights: 10 },
-    ]);
-
-    const inc1 = screen.getByTestId('trip-wizard-destination-nights-inc-1');
-    expect(inc1).toBeDisabled();
-    fireEvent.press(inc1);
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc-2'));
-    expect(spies.onChangeNights).not.toHaveBeenCalled();
-    expect(
-      screen.getByTestId('trip-wizard-destination-max-note')
-    ).toHaveTextContent('최대 30박까지 정할 수 있어요');
-  });
-
-  it('상한 미만이면 [+]가 살아 있고 안내는 없다 (29박)', () => {
-    const spies = renderSheet([{ seq: 1, region: '부산', nights: 29 }]);
-
     expect(
       screen.queryByTestId('trip-wizard-destination-max-note')
     ).not.toBeOnTheScreen();
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc-1'));
-    expect(spies.onChangeNights).toHaveBeenCalledWith(1, 30);
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    expect(spies.onAddCity).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc-2'));
+    expect(spies.onChangeNights).toHaveBeenCalledWith(2, 10);
   });
 });

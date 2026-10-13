@@ -1,5 +1,5 @@
 // 손수 API 계층을 통째로 목한다 — 열람 페이지가 부르는 것은 단건 조회 하나뿐이다(02a ★3). 실 함수 본체
-// (URL `/terms/{termsType}`, 무인증 baseClient)는 MSW 오라클(handlers.integration.test.ts)이 따로 잠근다.
+// (URL `/terms/{termsType}`, 무인증 baseClient)는 MSW 오라클(옛 handlers.integration.test.ts — TRIP-1350 에서 삭제)이 따로 잠갔다.
 jest.mock('@/shared/api', () => ({
   fetchTermsByType: jest.fn(),
 }));

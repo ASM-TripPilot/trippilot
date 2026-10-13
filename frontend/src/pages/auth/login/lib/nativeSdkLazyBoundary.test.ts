@@ -32,6 +32,8 @@ const NAVER_SDK = '@react-native-seoul/naver-login';
 // TRIP-932 — 애플 SDK 도 같은 경계 뒤에 둔다. 애플 버튼(AppleSignInButton)도 SDK 를 정적 import
 // 하는 어댑터 파일에 살므로, 화면이 SDK 를 직접 import 하는 우회도 아래 테스트 3 이 잡는다.
 const APPLE_SDK = 'expo-apple-authentication';
+// 옛 `expoAuthSessionLazyBoundary.test.ts`(AC-OA-1)를 이 파일로 합쳤다(TRIP-1355) — 헬퍼 2벌이 같았다.
+const EXPO_AUTH_SESSION = 'expo-auth-session';
 
 /** 정적 형태의 import(정적 from / side-effect import / require)만 잡는다. 동적 import 는 제외. */
 function hasStaticImportOf(source: string, moduleId: string): boolean {
@@ -226,5 +228,28 @@ describe('AC-11 · 네이티브 SDK lazy 경계 (소스 스캔)', () => {
     expect(
       appleImporters.filter((file) => !file.startsWith('pages/auth/login/lib/'))
     ).toEqual([]);
+  });
+});
+
+describe('AC-OA-1 · expo-auth-session lazy 경계 (소스 스캔)', () => {
+  it('makeAuthorize.ts 는 expo-auth-session 을 정적으로 끌어오지 않고, 실 어댑터가 동적 경계 뒤에서만 참조한다', () => {
+    // 탐지기 자가검사는 위 AC-11 의 hasStaticImportOf/hasDynamicImport 단언이 같은 함수로 맡는다.
+    const makeAuthorizeSource = stripComments(
+      readFileSync(MAKE_AUTHORIZE, 'utf8')
+    );
+    const oauthConfigSource = stripComments(readFileSync(OAUTH_CONFIG, 'utf8'));
+
+    // 긍정 1 — lazy 구조: makeAuthorize.ts 안에 동적 import 가 있다(실 경로를 지연 로드).
+    expect(hasDynamicImport(makeAuthorizeSource)).toBe(true);
+    // 긍정 2 — 실 어댑터 존재: auth/lib 어딘가가 expo-auth-session 을 참조한다.
+    expect(libSources().some((s) => s.source.includes(EXPO_AUTH_SESSION))).toBe(
+      true
+    );
+    // 부정(격리 가드) — makeAuthorize.ts 는 expo-auth-session 을 정적으로 끌어오지 않는다.
+    expect(hasStaticImportOf(makeAuthorizeSource, EXPO_AUTH_SESSION)).toBe(
+      false
+    );
+    // 케이스 25 — oauthConfig.ts 도 정적으로 끌어오지 않는다(간접 오염 경로 차단, 7-3).
+    expect(hasStaticImportOf(oauthConfigSource, EXPO_AUTH_SESSION)).toBe(false);
   });
 });

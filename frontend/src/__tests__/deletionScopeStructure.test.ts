@@ -23,7 +23,7 @@ import { join, relative, resolve, sep } from 'node:path';
  *
  * ⚠️ 전처리(`stripComments`)의 줄 주석 정규식이 URL 의 `//` 를 주석으로 오인하면, 그 줄의 진짜
  * 리터럴이 통째로 사라져 거짓 green 이 난다(2026-07-31 실사고). `:` 뒤의 `//` 는 주석으로 보지
- * 않고(`tripDraftBoundary.test.ts` 확립 규약), 그 성질을 아래 자가검사가 회귀 가드로 잠근다.
+ * 않고(`tripDraftBoundary.test.ts` 확립 규약), 그 성질의 자가검사 it 은 TRIP-1350 에서 지웠다 — 같은 it 의 긍정 앵커(항목 ≥5)가 탐지기 고장을 공허 통과로 두지 않는다.
  *
  * 가짜 통과 방지 규약(리포 관례): 모든 "없어야 한다" 단언은 "있어야 한다" 단언과 짝을 이룬다.
  */
@@ -88,31 +88,6 @@ function collectSources(dir: string): string[] {
 }
 
 describe('AC-13 · deletionScope 단일 소유 가드', () => {
-  it('탐지기 자가검사 — 주석은 걷히고, URL 옆 진짜 리터럴은 살아남고, 배열 항목이 뽑힌다', () => {
-    // ① 주석 안에 적힌 삭제 어휘는 추출에 안 걸린다(머리말 산문이 스캔을 오염시키지 않게).
-    const commented = [
-      '/**',
-      ' * 이 화면은 "등록한 숙소" 목록을 deletionScope 에서만 가져온다.',
-      ' */',
-      "// const scope = ['등록한 숙소', '여행 기록'];",
-      'export const keep = 1;',
-    ].join('\n');
-    expect(stripComments(commented)).not.toContain('등록한 숙소');
-    expect(stripComments(commented)).toContain('export const keep = 1;');
-
-    // ② 회귀 가드 — URL 의 `//` 를 줄 주석으로 오인하면 그 줄의 진짜 리터럴이 사라진다.
-    expect(
-      quotedStringsOf(
-        "const doc = 'https://policy.example.com/delete'; const s = '등록한 숙소';"
-      )
-    ).toContain('등록한 숙소');
-
-    // ③ 블록 주석을 먼저 지우는 순서라야 같은 줄의 리터럴이 살아남는다.
-    expect(quotedStringsOf("/* a // b */ const s = '방문 기록';")).toEqual([
-      '방문 기록',
-    ]);
-  });
-
   it('DELETION_SCOPE 가 실재하고 목록이 비어있지 않다(긍정 짝)', () => {
     // 긍정 ① — 파일이 없으면 아래 추출이 무의미하다(빈 파일 가짜 통과 차단).
     expect(existsSync(DELETION_SCOPE_FILE)).toBe(true);

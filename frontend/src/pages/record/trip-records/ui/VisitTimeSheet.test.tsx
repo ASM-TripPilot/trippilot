@@ -186,23 +186,8 @@ describe('S7 · AC-7 — 분이 안 바뀌면 시각을 보내지 않는다(초�
 });
 
 describe('S8 · AC-8 · D1 — 완료 칸은 원본 완료가 있을 때만 고친다', () => {
-  it('도착만 한 방문 → 완료 칸 비활성, 완료 셀을 눌러도 patch 에 completedAt 이 없다', () => {
-    renderSheet({ completedAt: null });
-
-    expect(
-      screen.getByTestId('record-trip-visit-time-completed')
-    ).toBeDisabled();
-
-    press(cell('completed', 'h', '15'));
-    press(cell('arrived', 'h', '13'));
-    save();
-
-    expect(onSave).toHaveBeenCalledTimes(1);
-    const [patch] = onSave.mock.calls[0]!;
-    // 짝 — 도착은 실린다(공허 통과 방지), 완료는 안 실린다.
-    expect(Object.keys(patch)).toEqual(['arrivedAt']);
-  });
-
+  // '도착만 한 방문 → 완료 칸 비활성 · 눌러도 patch 에 completedAt 없음'은 W6 의 부분집합이라 지웠다(TRIP-1354 —
+  // 완료 휠 disabled 를 풀거나 그룹 비활성 표시를 풀면 W6 가 red).
   it('완료가 있는 방문 → 완료 칸 활성, 바꾼 완료가 07:00Z 순간으로 실린다', () => {
     renderSheet();
 
@@ -231,27 +216,6 @@ describe('S8 · AC-8 · D1 — 완료 칸은 원본 완료가 있을 때만 고�
  * 그래서 쓰지 않는다. 시드 값(00 등)을 박제하지 않으려고 "누르기 전 선택 집합 = 누른 뒤 선택 집합"으로 본다.
  */
 describe('S8b · 5-b 보강 B1 — 닫힌 완료 칸은 눌러도 선택이 움직이지 않는다', () => {
-  /** 완료 칸 셀 중 지금 선택 표시가 켜진 것들의 testID. */
-  const selectedCompletedCells = () =>
-    screen
-      .queryAllByTestId(/^record-trip-visit-time-completed-[hm]-\d{2}$/)
-      .filter((node) => node.props.accessibilityState?.selected === true)
-      .map((node) => node.props.testID as string);
-
-  it('도착만 한 방문 → 완료 15시·45분을 눌러도 선택 집합이 그대로다', () => {
-    renderSheet({ completedAt: null });
-    const before = selectedCompletedCells();
-
-    press(cell('completed', 'h', '15'));
-    press(cell('completed', 'm', '45'));
-
-    expect(selectedCompletedCells()).toEqual(before);
-    expect(
-      screen.getByTestId(cell('completed', 'h', '15')).props.accessibilityState
-        ?.selected
-    ).not.toBe(true);
-  });
-
   it('짝 — 완료가 있는 방문은 완료 16시를 누르면 선택이 15시에서 16시로 옮겨 간다', () => {
     renderSheet();
 

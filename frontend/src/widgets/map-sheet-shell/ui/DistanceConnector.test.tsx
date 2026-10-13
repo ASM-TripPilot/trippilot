@@ -232,27 +232,8 @@ describe('🔴 DistanceConnector · C7 — 글리프 규칙: `자가용` 포함 
   });
 });
 
-describe('🔴 isZeroDistance · Z1 — 경계 예시(TRIP-1054 AC-6)', () => {
-  it.each(['약 0.0km · 대중교통 추정', '약 0.0km · 도보', '약 0.0km'])(
-    '%p 는 "약 0.0km" 로 시작하므로 참',
-    (range) => {
-      expect(isZeroDistance(range)).toBe(true);
-    }
-  );
-
-  it.each([
-    '약 0.05km',
-    '약 10.0km',
-    '약 0km',
-    '약 0m',
-    ' 약 0.0km',
-    '0.0km',
-    '약 1.2km · 도보 추정',
-    '',
-  ])('%p 는 "약 0.0km" 로 시작하지 않으므로 거짓', (range) => {
-    expect(isZeroDistance(range)).toBe(false);
-  });
-});
+// Z1(경계 예시 11행)은 TRIP-1356 에서 지웠다 — 한 줄 함수(startsWith)를 60줄로 잠그던 표였고, 아래 Z2 PBT(a)(NEAR_PREFIXES 경계 접두 포함)가
+// 같은 판정을 임의 입력으로 잠그며 C5·C6 이 화면 쪽 두 갈래를 예시로 남긴다.
 
 // "약 0.0km" 경계 근처의 헛갈리는 접두들 — 무작위 문자열만으로는 이 근처를 거의 못 밟는다(02a ★4).
 const NEAR_PREFIXES = [

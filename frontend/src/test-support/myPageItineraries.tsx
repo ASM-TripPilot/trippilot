@@ -1,7 +1,3 @@
-import type { ReactElement, ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render } from '@testing-library/react-native';
-
 import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 
 /**
@@ -10,6 +6,8 @@ import type { Itinerary, Trip } from '@/shared/api/index.schemas';
  *
  * 쓰는 법: 테스트 파일의 trips 목 팩토리에 `getGetTripsTripIdItineraryQueryOptions: jest.fn()` 을 두고,
  * 그 목을 `scriptItineraryOptions` 에 넘긴다. 목 옵션 함수의 `queryFn` 이 진짜로 돈다 — 실 `QueryClient` 필요.
+ *
+ * `renderWithQueryClient`·`settle`·`newTestQueryClient` 는 `@/test-support/queryRender` 로 일반화해 옮겼다(TRIP-1350).
  *
  * 시계는 흉내 내지 않는다: 기간 안 = 2020~2099, 과거 = 2026-06, 미래 = 2099-06(실제 오늘이 그 사이인 한 결정론).
  */
@@ -72,34 +70,6 @@ export function deferred<T>(): {
     resolve = r;
   });
   return { promise, resolve };
-}
-
-export function newTestQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
-  });
-}
-
-/** 실 `QueryClient` 아래에서 그린다 — `useQueries` 는 Provider 가 없으면 여행 0건이어도 던진다. */
-export function renderWithQueryClient(
-  ui: ReactElement,
-  client: QueryClient = newTestQueryClient()
-) {
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return { client, ...render(ui, { wrapper: Wrapper }) };
-}
-
-/** 비동기 전부 흘려보내기 — react-query 알림은 setTimeout(0)(h06 doneBar·ongoing 선례). */
-export async function settle(): Promise<void> {
-  for (let i = 0; i < 5; i += 1) {
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
-  }
 }
 
 /** 최소 Trip — 서버 `status` 는 일부러 받아 둔다: 판정이 그 값을 쓰면 테스트가 잡도록. */

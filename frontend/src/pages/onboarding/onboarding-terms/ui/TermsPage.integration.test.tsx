@@ -7,6 +7,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 
+import { BASE } from '@/test-support/apiBase';
 import { server } from '@/mocks/server';
 import {
   resetOnboardingScenario,
@@ -61,8 +62,6 @@ function navigationTargets(): string[] {
     (call) => String(call[0])
   );
 }
-
-const BASE = 'http://localhost:8080/api/v1';
 
 const ROW = {
   service: 'onboarding-terms-TERMS_OF_SERVICE',

@@ -2324,7 +2324,7 @@ describe('select › 위저드', () => {
   });
 
   // ── TRIP-1113 결정 2 · select 완료는 위저드 안 재진입이다 — 이미 만든 여행 id 를 셸이 지우지 않게 표식을 켠다 ──
-  // 표식이 켜지면 셸이 id 를 남긴다는 쪽은 `tripWizardReentryPreserve.test.tsx` GP 가 동작으로 잠근다(이 파일의
+  // 표식이 켜지면 셸이 id 를 남긴다는 쪽은 `tripWizardEntryReset.test.tsx` GP 가 동작으로 잠근다(이 파일의
   // expo-router 목엔 Stack 이 없어 셸을 함께 그릴 수 없다). 새 진입(「이 장소들로」 CTA)이 표식을 켜지 않는 쪽은
   // `SavedPlacesPage.integration.test.tsx` C1 이 freshWizardDraft 비교로 잡는다.
 

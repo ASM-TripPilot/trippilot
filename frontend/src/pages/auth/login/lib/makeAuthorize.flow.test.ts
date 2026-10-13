@@ -14,6 +14,7 @@ import {
 } from '@/test-support/nativeSocialSdkMock';
 
 import { makeAuthorize } from './makeAuthorize';
+import { sandboxEnv } from '@/test-support/envSandbox';
 
 /**
  * TRIP-1035 — `makeAuthorize(provider).flow` 는 "이번 인가가 어느 갈래로 갈지"를 인가 **전에**
@@ -82,15 +83,9 @@ const ENV_KEYS = [
   'EXPO_PUBLIC_NAVER_URL_SCHEME',
 ] as const;
 
-const ORIGINAL_ENV: Record<string, string | undefined> = {};
-for (const key of ENV_KEYS) {
-  ORIGINAL_ENV[key] = process.env[key];
-}
+sandboxEnv(ENV_KEYS, { clearBefore: true });
 
 beforeEach(() => {
-  for (const key of ENV_KEYS) {
-    delete process.env[key];
-  }
   // 어댑터가 실제로 불렸을 때 돌려줄 성공 응답(각 SDK 의 실제 모양).
   kakaoLoginSpy.mockResolvedValue({ accessToken: 'kakao-access-token' });
   naverLoginSpy.mockResolvedValue({
@@ -105,13 +100,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const key of ENV_KEYS) {
-    if (ORIGINAL_ENV[key] === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = ORIGINAL_ENV[key];
-    }
-  }
   resetNativeSocialSdkMock();
   resetExpoAuthSessionMock();
   resetExpoAppleAuthenticationMock();

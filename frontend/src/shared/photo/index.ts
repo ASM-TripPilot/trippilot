@@ -15,7 +15,7 @@ import { getInstallId } from '@/shared/storage/installId';
  *    가 아니라 `require` 인 것은 jest node 버킷(vm-modules)에서 `jest.mock` 이 동적 import 에 안 걸려서다
  *    (SettingsPage `loadRouter` 선례). 로드 실패는 아래 try 가 받아 failed/null 로 떨어진다(INV-4).
  *
- * ★ 두 네이티브 사진 모듈을 import 하는 유일한 자리 — recordPhotoBinaryGuard G3 가 잠근다.
+ * ★ 두 네이티브 사진 모듈을 import 하는 유일한 자리 — `eslintReleaseRules` 탐침이 잠근다(eslint `no-restricted-imports`).
  *   촬영 시각 변환(`new Date`)도 여기서만 한다(features/record 는 금지 — 타임존 안전).
  *   자산 정보(duration 필드 포함)를 통째로 내보내지 않는다(INV-3).
  */

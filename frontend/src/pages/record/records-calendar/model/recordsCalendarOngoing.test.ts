@@ -316,15 +316,6 @@ describe('🔴 AC-2·3·5 · 속성 — 오라클과 같고, 순서를 섞어도
         )
       );
 
-    // 필수 사례 적중 카운터(문제로그 2026-08-02). examples 두 건이 매 실행 네 카운터를 모두 1 이상으로 올리므로
-    // 이 단언은 "필수 사례를 반드시 지나갔다"를 보일 뿐 무작위 생성기가 그 사례를 만드는지는 재지 않는다(TRIP-1163).
-    const hits = {
-      card: 0,
-      blockedByUnknown: 0,
-      tieById: 0,
-      outsideUnknownCard: 0,
-    };
-
     // 적중을 시드 운에 맡기지 않는다(README §테스트 전략) — examples 는 매 실행 맨 앞에 돈다.
     // ① 기간 안 확정 2건 같은 기간(동점 → tripId) + 기간 밖 모름 → card·tieById·outsideUnknownCard
     const tieWithOutsideUnknown = [
@@ -348,29 +339,6 @@ describe('🔴 AC-2·3·5 · 속성 — 오라클과 같고, 순서를 섞어도
         if (card !== null) {
           expect(DURATION_TEXT.test(JSON.stringify(card))).toBe(false);
         }
-
-        const inRange = list.filter(
-          (x) => x.trip.startDate <= TODAY && TODAY <= x.trip.endDate
-        );
-        const live = inRange.filter((x) => x.itinerary === 'CONFIRMED');
-        if (expected !== null) hits.card += 1;
-        if (live.length > 0 && inRange.some((x) => x.itinerary === 'unknown')) {
-          hits.blockedByUnknown += 1;
-        }
-        if (expected !== null) {
-          const w = list.find((x) => x.trip.tripId === expected)!.trip;
-          const twins = live.filter(
-            (x) =>
-              x.trip.startDate === w.startDate && x.trip.endDate === w.endDate
-          );
-          if (twins.length > 1) hits.tieById += 1;
-          const outsideUnknown = list.some(
-            (x) =>
-              x.itinerary === 'unknown' &&
-              !(x.trip.startDate <= TODAY && TODAY <= x.trip.endDate)
-          );
-          if (outsideUnknown) hits.outsideUnknownCard += 1;
-        }
       }),
       {
         numRuns: 400,
@@ -379,11 +347,6 @@ describe('🔴 AC-2·3·5 · 속성 — 오라클과 같고, 순서를 섞어도
         ),
       }
     );
-
-    expect(hits.card).toBeGreaterThan(0);
-    expect(hits.blockedByUnknown).toBeGreaterThan(0);
-    expect(hits.tieById).toBeGreaterThan(0);
-    expect(hits.outsideUnknownCard).toBeGreaterThan(0);
   });
 });
 

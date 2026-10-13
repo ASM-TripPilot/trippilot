@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -13,14 +13,24 @@ import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type {
   AssignBaseRequest,
-  BaseAssignment,
   SavedStay,
-  Trip,
   TripStatus,
 } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { getGetTripsTripIdBasesQueryKey } from '@/shared/api/index.hooks';
+import {
+  assignNight,
+  basesAssignment,
+  basesStay,
+  basesTrip,
+  createBasesFakeServer,
+  NETWORK_WAIT,
+  settle,
+  sheetClosed,
+  STAY_A,
+  STAY_B,
+} from '@/test-support/basesFakeServer';
 
 import { TripBasesPage } from './TripBasesPage';
 import { TripNewStep2Page } from './TripNewStep2Page';
@@ -146,156 +156,18 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
   /** 위저드 스토어에 남아 있는 **다른** 여행 — 이 값이 새면 AC-C2·C5 가 red. */
   const TRIP_S = 'trip-s';
 
+  const fake = createBasesFakeServer(TRIP_T);
+  const trip = (nights = 2) => basesTrip(TRIP_T, { nights });
+
   const METHOD_ROUTE = {
     pathname: '/trips/[tripId]/itinerary/method',
     params: { tripId: TRIP_T },
   };
 
-  function stay(savedStayId: string, name: string): SavedStay {
-    return {
-      savedStayId,
-      name,
-      coordConfirmed: true,
-      linkedTripIds: [],
-      checkIn: null,
-      checkOut: null,
-      registerRoute: 'MAP_SEARCH',
-      createdAt: '2026-08-01T00:00:00Z',
-      updatedAt: '2026-08-01T00:00:00Z',
-    };
-  }
-
-  // 두 이름은 서로의 부분 문자열이 아니다 — 카드 텍스트 부분 일치(정규식)가 서로를 잡지 않게.
-  const STAY_A = stay('stay-a', '롯데호텔 서울');
-  const STAY_B = stay('stay-b', '메리어트 동대문');
-
-  /** 서울특별시 N박 여행(9/26 시작). 기본 2박 = 9/26·9/27 두 밤. */
-  function trip(nights = 2): Trip {
-    const endDay = 26 + nights;
-    return {
-      tripId: TRIP_T,
-      title: '서울 여행',
-      startDate: '2026-09-26',
-      endDate: `2026-09-${endDay}`,
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '서울특별시', nights }],
-      status: 'PLANNED',
-      createdAt: '2026-09-01T10:00:00.000Z',
-      updatedAt: '2026-09-01T10:00:00.000Z',
-      baseCount: 1,
-      itineraryDayCount: 0,
-    };
-  }
-
-  function assignment(
-    baseAssignmentId: string,
-    savedStayId: string,
-    dateFrom: string,
-    dateTo: string
-  ): BaseAssignment {
-    return { baseAssignmentId, savedStayId, dateFrom, dateTo };
-  }
-
-  // ── 상태를 기억하는 가짜 서버 ───────────────────────────────────────────────
-
-  /** 서버가 지금 들고 있는 T 의 배정 — DELETE 가 지우고 POST 가 더한다. */
-  let serverBases: BaseAssignment[] = [];
-  let serverTrip: Trip = trip();
-  let savedStays: SavedStay[] = [];
-  /** 나간 요청 `METHOD /경로`(발사 순서). */
-  let hits: string[] = [];
-  /** 서버가 **처리를 끝낸** 순서 — 교체 순서(DELETE 먼저) 판정은 이 기록으로 한다. */
-  let handled: string[] = [];
-  /** 받은 POST 본문(도착 순서). */
-  let postBodies: AssignBaseRequest[] = [];
-  /** n 번째 POST(1부터)를 500 으로 — 중간 실패 재현. */
-  let failPostAt: number | null = null;
-  /** 다음 GET 한 번을 500 으로 — 재시도 재현. 한 번 실패하면 스스로 꺼진다. */
-  let failOnce: { trip: boolean; stays: boolean; bases: boolean };
-  /** 여행 GET 응답을 붙잡는 문 — loading 얼굴을 결정론적으로 만든다. */
-  let tripGate: Promise<void> | null = null;
-  let postSeq = 0;
-
-  function hitCount(needle: string): number {
-    return hits.filter((hit) => hit === needle).length;
-  }
-
   const TRIP_HIT = `GET /api/v1/trips/${TRIP_T}`;
   const STAYS_HIT = 'GET /api/v1/saved-stays';
   const BASES_HIT = `GET /api/v1/trips/${TRIP_T}/bases`;
   const POST_HIT = `POST /api/v1/trips/${TRIP_T}/bases`;
-
-  function useFakeServer(): void {
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, async ({ params }) => {
-        if (params.tripId !== TRIP_T)
-          return new HttpResponse(null, { status: 404 });
-        if (tripGate) await tripGate;
-        if (failOnce.trip) {
-          failOnce.trip = false;
-          return new HttpResponse(null, { status: 500 });
-        }
-        return HttpResponse.json(serverTrip);
-      }),
-      http.get(`${BASE}/saved-stays`, () => {
-        if (failOnce.stays) {
-          failOnce.stays = false;
-          return new HttpResponse(null, { status: 500 });
-        }
-        return HttpResponse.json(savedStays);
-      }),
-      http.get(`${BASE}/trips/:tripId/bases`, ({ params }) => {
-        if (params.tripId !== TRIP_T)
-          return new HttpResponse(null, { status: 404 });
-        if (failOnce.bases) {
-          failOnce.bases = false;
-          return new HttpResponse(null, { status: 500 });
-        }
-        return HttpResponse.json(serverBases);
-      }),
-      http.delete(
-        `${BASE}/trips/:tripId/bases/:baseAssignmentId`,
-        async ({ params }) => {
-          // 일부러 늦게 끝낸다 — DELETE 를 기다리지 않고 POST 를 같이 쏘면 POST 가 먼저 기록된다.
-          await new Promise((resolve) => setTimeout(resolve, 30));
-          const id = String(params.baseAssignmentId);
-          const exists = serverBases.some((row) => row.baseAssignmentId === id);
-          if (params.tripId !== TRIP_T || !exists) {
-            return new HttpResponse(null, { status: 404 });
-          }
-          serverBases = serverBases.filter(
-            (row) => row.baseAssignmentId !== id
-          );
-          handled.push(`DELETE ${id}`);
-          return new HttpResponse(null, { status: 204 });
-        }
-      ),
-      http.post(`${BASE}/trips/:tripId/bases`, async ({ params, request }) => {
-        const body = (await request.json()) as AssignBaseRequest;
-        postBodies.push(body);
-        handled.push(`POST ${body.savedStayId} ${body.dateFrom}`);
-        if (params.tripId !== TRIP_T)
-          return new HttpResponse(null, { status: 404 });
-        if (failPostAt !== null && postBodies.length === failPostAt) {
-          return new HttpResponse(null, { status: 500 });
-        }
-        postSeq += 1;
-        const created = { baseAssignmentId: `new-${postSeq}`, ...body };
-        serverBases = [...serverBases, created];
-        return HttpResponse.json(created, { status: 201 });
-      })
-    );
-  }
-
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      hits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
 
   /** 위저드 스토어를 **다른 여행 S** 로 채운다 — 부산 2박 + 경주 1박, 6/10–6/13(카드 3장이 나오는 값). */
   function seedOtherTripInStore(): void {
@@ -317,21 +189,10 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     };
   }
 
-  let client: QueryClient;
-
   beforeEach(() => {
     // TRIP-1013 — 연타 가드의 400ms 창은 모듈 전역이라 앞 테스트의 "지정" 누름이 새지 않게 닫는다.
     resetPressGuard();
-    serverBases = [];
-    serverTrip = trip();
-    savedStays = [STAY_A, STAY_B];
-    hits = [];
-    handled = [];
-    postBodies = [];
-    failPostAt = null;
-    failOnce = { trip: false, stays: false, bases: false };
-    tripGate = null;
-    postSeq = 0;
+    fake.reset({ serverTrip: trip() });
     mockPush.mockClear();
     mockBack.mockClear();
     mockReplace.mockClear();
@@ -341,14 +202,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     // 모듈 싱글턴 스토어 — 파일 최상위에서 매번 다른 여행 값으로 되돌린다(앞 테스트 누수 차단).
     seedOtherTripInStore();
     setAccessToken('valid-access');
-    // retry:false — 실패를 곧바로 얼굴로. gcTime:0 — 테스트 뒤 타이머가 프로세스를 붙잡지 않게.
-    client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { retry: false, gcTime: 0 },
-      },
-    });
-    useFakeServer();
+    fake.install();
   });
 
   afterEach(() => {
@@ -356,17 +210,9 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     clearAccessToken();
   });
 
-  /**
-   * 네트워크를 타는 기다림의 상한. RNTL 기본(1초)은 첫 실행(모듈 변환·msw 기동)에서 DELETE→POST→재조회
-   * 사슬을 못 기다려 단독 실행에서만 간헐 red 가 났다(실측 — 묶음 실행은 green). 결과를 바꾸지 않고
-   * "얼마나 기다리나"만 늘린다.
-   */
-  // CI 러너는 로컬보다 ~4배 느리다(PR #766 실측 — 이 파일 로컬 10s · CI 40s). 교체 왕복을 기다리는 한도.
-  const NETWORK_WAIT = { timeout: 15000 };
-
   function tripBasesPage(): ReactElement {
     return (
-      <QueryClientProvider client={client}>
+      <QueryClientProvider client={fake.client}>
         <TripBasesPage tripId={TRIP_T} />
       </QueryClientProvider>
     );
@@ -376,30 +222,6 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
   async function renderTripBases(): Promise<void> {
     render(tripBasesPage());
     await screen.findByTestId('trip-base-night-card-1', {}, NETWORK_WAIT);
-  }
-
-  /** n박 카드를 눌러 시트를 열고 숙소를 골라 "지정"한다. */
-  function assignNight(nightNumber: number, savedStayId: string): void {
-    fireEvent.press(screen.getByTestId(`trip-base-night-card-${nightNumber}`));
-    fireEvent.press(
-      screen.getByTestId(`trip-base-staysheet-cand-${savedStayId}`)
-    );
-    fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
-  }
-
-  /** 지정이 끝나 시트가 닫힐 때까지 기다린다. */
-  async function sheetClosed(): Promise<void> {
-    await waitFor(
-      () => expect(screen.queryByTestId('trip-base-staysheet')).toBeNull(),
-      NETWORK_WAIT
-    );
-  }
-
-  /** 요청이 나갈 틈을 준다 — "0건" 단언이 "아직 안 나갔을 뿐"으로 공짜 통과하지 않게. */
-  async function settle(): Promise<void> {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 80));
-    });
   }
 
   // ── AC-C2 ────────────────────────────────────────────────────────────────────
@@ -421,15 +243,18 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     it('1박에 숙소를 지정하면 POST 는 /trips/T/bases 로 {B, 9/26, 9/27} 한 건 — S 로는 한 건도 안 간다', async () => {
       await renderTripBases();
       // 앵커 — 아직 지정 요청이 없다.
-      expect(postBodies).toEqual([]);
+      expect(fake.postBodies).toEqual([]);
 
       assignNight(1, 'stay-b');
 
-      await waitFor(() => expect(hitCount(POST_HIT)).toBe(1), NETWORK_WAIT);
-      expect(postBodies).toEqual([
+      await waitFor(
+        () => expect(fake.hitCount(POST_HIT)).toBe(1),
+        NETWORK_WAIT
+      );
+      expect(fake.postBodies).toEqual([
         { savedStayId: 'stay-b', dateFrom: '2026-09-26', dateTo: '2026-09-27' },
       ]);
-      expect(hits.filter((hit) => hit.includes(TRIP_S))).toEqual([]);
+      expect(fake.hits.filter((hit) => hit.includes(TRIP_S))).toEqual([]);
     });
   });
 
@@ -438,7 +263,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
   describe('AC-C3 · 조회 중이면 loading, 실패하면 error — notrip 은 없다', () => {
     it('여행 조회가 끝나기 전엔 박별 스켈레톤을 그리고 notrip 얼굴이 아니다', async () => {
       let release!: () => void;
-      tripGate = new Promise<void>((resolve) => {
+      fake.tripGate = new Promise<void>((resolve) => {
         release = resolve;
       });
       render(tripBasesPage());
@@ -465,18 +290,18 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     ] as const)(
       '%s 조회가 실패하면 error 얼굴(notrip 아님) — 재시도를 누르면 그 조회를 다시 불러 카드가 뜬다',
       async (_label, key, hit) => {
-        failOnce[key] = true;
+        fake.failOnce[key] = true;
         render(tripBasesPage());
 
         await screen.findByTestId('trip-base-error', {}, NETWORK_WAIT);
         expect(screen.queryByTestId('trip-base-notrip')).toBeNull();
-        const before = hitCount(hit);
+        const before = fake.hitCount(hit);
         expect(before).toBeGreaterThanOrEqual(1);
 
         fireEvent.press(screen.getByTestId('trip-base-error-retry'));
 
         await screen.findByTestId('trip-base-night-card-1', {}, NETWORK_WAIT);
-        expect(hitCount(hit)).toBeGreaterThan(before);
+        expect(fake.hitCount(hit)).toBeGreaterThan(before);
         expect(screen.queryByTestId('trip-base-error')).toBeNull();
       }
     );
@@ -585,7 +410,9 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
 
   describe('AC-C6 · 이미 숙소가 있는 밤을 바꾸면 지우고 다시 붙인다 (교체)', () => {
     it('1박짜리 A 가 있는 1박을 B 로 — DELETE a1 이 끝난 뒤 POST B, 재조회 후 1박 카드가 B 다', async () => {
-      serverBases = [assignment('a1', 'stay-a', '2026-09-26', '2026-09-27')];
+      fake.serverBases = [
+        basesAssignment('a1', 'stay-a', '2026-09-26', '2026-09-27'),
+      ];
       await renderTripBases();
       // 앵커 — 바꾸기 전 카드는 A 다.
       expect(screen.getByTestId('trip-base-night-card-1')).toHaveTextContent(
@@ -596,8 +423,8 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
 
       await sheetClosed();
       // 서버 처리 순서 — 지우기가 먼저 끝나고 붙이기가 온다.
-      expect(handled).toEqual(['DELETE a1', 'POST stay-b 2026-09-26']);
-      expect(postBodies).toEqual([
+      expect(fake.handled).toEqual(['DELETE a1', 'POST stay-b 2026-09-26']);
+      expect(fake.postBodies).toEqual([
         { savedStayId: 'stay-b', dateFrom: '2026-09-26', dateTo: '2026-09-27' },
       ]);
       await waitFor(
@@ -613,20 +440,22 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     });
 
     it('A 가 1–3박 한 배정일 때 2박만 B 로 — DELETE 1회 뒤 A[1박]·A[3박]·B[2박] POST, 카드는 A·B·A', async () => {
-      serverTrip = trip(3);
-      serverBases = [assignment('a', 'stay-a', '2026-09-26', '2026-09-29')];
+      fake.serverTrip = trip(3);
+      fake.serverBases = [
+        basesAssignment('a', 'stay-a', '2026-09-26', '2026-09-29'),
+      ];
       await renderTripBases();
 
       assignNight(2, 'stay-b');
 
       await sheetClosed();
-      expect(handled.filter((line) => line.startsWith('DELETE'))).toEqual([
+      expect(fake.handled.filter((line) => line.startsWith('DELETE'))).toEqual([
         'DELETE a',
       ]);
       // 지우기가 먼저 끝난다 — 첫 기록이 DELETE.
-      expect(handled[0]).toBe('DELETE a');
+      expect(fake.handled[0]).toBe('DELETE a');
       // 보내는 순서는 계약이 아니다(브리프 AC-C6) — 집합으로 잰다.
-      const keys = postBodies
+      const keys = fake.postBodies
         .map((body) => `${body.savedStayId}|${body.dateFrom}|${body.dateTo}`)
         .sort();
       expect(keys).toEqual(
@@ -652,22 +481,26 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     });
 
     it('같은 숙소를 다시 고르면 요청 0건 — 시트는 닫힌다', async () => {
-      serverBases = [assignment('a1', 'stay-a', '2026-09-26', '2026-09-27')];
+      fake.serverBases = [
+        basesAssignment('a1', 'stay-a', '2026-09-26', '2026-09-27'),
+      ];
       await renderTripBases();
 
       assignNight(1, 'stay-a');
 
       await sheetClosed();
       await settle();
-      expect(hits.filter((hit) => hit.startsWith('DELETE'))).toEqual([]);
-      expect(hitCount(POST_HIT)).toBe(0);
+      expect(fake.hits.filter((hit) => hit.startsWith('DELETE'))).toEqual([]);
+      expect(fake.hitCount(POST_HIT)).toBe(0);
     });
 
     it('지운 뒤 붙이기가 실패하면 — 시트 유지·인라인 오류, 거점을 다시 받아 1박을 "숙소 미정"으로 보여 준다 (INV-4)', async () => {
-      serverBases = [assignment('a1', 'stay-a', '2026-09-26', '2026-09-27')];
-      failPostAt = 1;
+      fake.serverBases = [
+        basesAssignment('a1', 'stay-a', '2026-09-26', '2026-09-27'),
+      ];
+      fake.failPostAt = 1;
       await renderTripBases();
-      const basesBefore = hitCount(BASES_HIT);
+      const basesBefore = fake.hitCount(BASES_HIT);
 
       assignNight(1, 'stay-b');
 
@@ -675,7 +508,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
       expect(screen.getByTestId('trip-base-staysheet')).toBeOnTheScreen();
       // 조용히 옛 화면(A)을 들고 있지 않다 — 서버에선 A 가 이미 지워졌다.
       await waitFor(
-        () => expect(hitCount(BASES_HIT)).toBeGreaterThan(basesBefore),
+        () => expect(fake.hitCount(BASES_HIT)).toBeGreaterThan(basesBefore),
         NETWORK_WAIT
       );
       await waitFor(
@@ -695,9 +528,11 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
       store.setCreatedTripId(TRIP_T);
       store.addDestination('서울특별시', 2);
       store.setPeriod(undefined, '2026-09-26', '2026-09-28');
-      serverBases = [assignment('a1', 'stay-a', '2026-09-26', '2026-09-27')];
+      fake.serverBases = [
+        basesAssignment('a1', 'stay-a', '2026-09-26', '2026-09-27'),
+      ];
       render(
-        <QueryClientProvider client={client}>
+        <QueryClientProvider client={fake.client}>
           <TripNewStep2Page />
         </QueryClientProvider>
       );
@@ -712,7 +547,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
       assignNight(1, 'stay-b');
 
       await sheetClosed();
-      expect(handled).toEqual(['DELETE a1', 'POST stay-b 2026-09-26']);
+      expect(fake.handled).toEqual(['DELETE a1', 'POST stay-b 2026-09-26']);
       await waitFor(
         () =>
           expect(
@@ -753,9 +588,9 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
           const reply = replies[seq];
           seq += 1;
           if (reply) return reply();
-          postSeq += 1;
-          const created = { baseAssignmentId: `new-${postSeq}`, ...body };
-          serverBases = [...serverBases, created];
+          fake.postSeq += 1;
+          const created = { baseAssignmentId: `new-${fake.postSeq}`, ...body };
+          fake.serverBases = [...fake.serverBases, created];
           return HttpResponse.json(created, { status: 201 });
         })
       );
@@ -778,7 +613,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     }
 
     function deleteHits(): string[] {
-      return hits.filter((hit) => hit.startsWith('DELETE'));
+      return fake.hits.filter((hit) => hit.startsWith('DELETE'));
     }
 
     async function failureText(): Promise<
@@ -882,7 +717,10 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
           resetPressGuard();
           fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
           // 두 번째 요청이 서버에 닿은 뒤에 본다 — 그 전의 "없다"는 아직 안 눌린 것과 구별되지 않는다.
-          await waitFor(() => expect(hitCount(POST_HIT)).toBe(2), NETWORK_WAIT);
+          await waitFor(
+            () => expect(fake.hitCount(POST_HIT)).toBe(2),
+            NETWORK_WAIT
+          );
 
           expect(screen.queryByTestId('trip-base-staysheet-error')).toBeNull();
 
@@ -896,7 +734,9 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
 
     describe('AC-3 · 일시 실패 뒤 서버가 살아나면 [지정] 한 번으로 바뀐다', () => {
       it('A 를 지운 뒤 붙이기가 500 → 다시 누르면 B 가 붙고 시트가 닫힌다 — 지운 배정을 또 지우지 않는다', async () => {
-        serverBases = [assignment('a1', 'stay-a', '2026-09-26', '2026-09-27')];
+        fake.serverBases = [
+          basesAssignment('a1', 'stay-a', '2026-09-26', '2026-09-27'),
+        ];
         replyPosts([() => errorJson(500, 'INTERNAL')]);
         await renderTripBases();
 
@@ -923,19 +763,19 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
           NETWORK_WAIT
         );
         expect(deleteHits()).toHaveLength(1);
-        expect(hitCount(POST_HIT)).toBe(2);
+        expect(fake.hitCount(POST_HIT)).toBe(2);
       });
     });
 
     describe('AC-5 · 보내면 반드시 실패하는 후보는 요청 없이 곧바로 "다른 숙소를 골라" 문구', () => {
       // 낙관 행은 좌표를 **확정**으로 둔다 — 실서비스의 낙관 행은 미확정이지만, 그러면 좌표 판정 하나만으로도
       // 두 케이스가 다 통과해 "낙관 id 판정"을 잴 수 없다.
-      const OPTIMISTIC: SavedStay = stay(
+      const OPTIMISTIC: SavedStay = basesStay(
         'optimistic:NAVER:opt-1',
         '1996 종로인'
       );
       const UNCONFIRMED: SavedStay = {
-        ...stay('stay-unconfirmed', '서울신라호텔'),
+        ...basesStay('stay-unconfirmed', '서울신라호텔'),
         coordConfirmed: false,
       };
 
@@ -945,7 +785,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
       ] as const)(
         '%s → 문구는 바로 뜨고 POST·DELETE 0건, 다른 숙소로 바꾸면 그대로 지정된다',
         async (_label, candidate) => {
-          savedStays = [STAY_A, STAY_B, candidate];
+          fake.savedStays = [STAY_A, STAY_B, candidate];
           await renderTripBases();
 
           assignNight(1, candidate.savedStayId);
@@ -957,7 +797,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
           expect(screen.getByTestId('trip-base-staysheet')).toBeOnTheScreen();
           // 요청이 나갈 틈을 준 뒤에 센다.
           await settle();
-          expect(hitCount(POST_HIT)).toBe(0);
+          expect(fake.hitCount(POST_HIT)).toBe(0);
           expect(deleteHits()).toEqual([]);
 
           // 막다른 곳이 아니다 — 다른 숙소를 고르면 지정된다.
@@ -967,7 +807,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
           resetPressGuard();
           fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
           await sheetClosed();
-          expect(hitCount(POST_HIT)).toBe(1);
+          expect(fake.hitCount(POST_HIT)).toBe(1);
         }
       );
     });
@@ -977,7 +817,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
         replyPosts([() => errorJson(500, 'INTERNAL')]);
         await renderTripBases();
         // 첫 조회가 성공한 **뒤에** 켠다 — 먼저 켜면 "지정 실패 뒤"가 아니라 "처음부터 error"를 잰다.
-        failOnce.bases = true;
+        fake.failOnce.bases = true;
         // 앵커 — 지정 전에는 error 얼굴이 아니다.
         expect(screen.queryByTestId('trip-base-error')).toBeNull();
 
@@ -999,12 +839,12 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
         store.setPeriod(undefined, '2026-09-26', '2026-09-28');
         replyPosts([() => errorJson(500, 'INTERNAL')]);
         render(
-          <QueryClientProvider client={client}>
+          <QueryClientProvider client={fake.client}>
             <TripNewStep2Page />
           </QueryClientProvider>
         );
         await screen.findByTestId('trip-base-night-card-1', {}, NETWORK_WAIT);
-        failOnce.bases = true;
+        fake.failOnce.bases = true;
 
         assignNight(1, 'stay-b');
 
@@ -1059,139 +899,27 @@ describe('편집 모드 (TRIP-1082)', () => {
   const BASE = 'http://localhost:8080/api/v1';
   const TRIP_T = 'trip-t';
 
+  const fake = createBasesFakeServer(TRIP_T);
+  /** 기본은 확정 + 일정 2일 — "다시 만들 일정이 있는" 여행. */
+  const trip = (status: TripStatus = 'CONFIRMED', itineraryDayCount = 2) =>
+    basesTrip(TRIP_T, { status, itineraryDayCount });
+
   const GENERATING_ROUTE = {
     pathname: '/trips/[tripId]/itinerary/generating',
     params: { tripId: TRIP_T, mode: 'FULLY_AI' },
   };
 
-  function stay(savedStayId: string, name: string): SavedStay {
-    return {
-      savedStayId,
-      name,
-      coordConfirmed: true,
-      linkedTripIds: [],
-      checkIn: null,
-      checkOut: null,
-      registerRoute: 'MAP_SEARCH',
-      createdAt: '2026-08-01T00:00:00Z',
-      updatedAt: '2026-08-01T00:00:00Z',
-    };
-  }
-
-  // 두 이름은 서로의 부분 문자열이 아니다 — 카드 텍스트 부분 일치(정규식)가 서로를 잡지 않게.
-  const STAY_A = stay('stay-a', '롯데호텔 서울');
-  const STAY_B = stay('stay-b', '메리어트 동대문');
-
-  /** 서울특별시 2박(9/26·9/27) 여행. 기본은 확정 + 일정 2일 — "다시 만들 일정이 있는" 여행. */
-  function trip(status: TripStatus = 'CONFIRMED', itineraryDayCount = 2): Trip {
-    return {
-      tripId: TRIP_T,
-      title: '서울 여행',
-      startDate: '2026-09-26',
-      endDate: '2026-09-28',
-      party: 2,
-      preferenceSnapshot: {},
-      destinations: [{ seq: 1, region: '서울특별시', nights: 2 }],
-      status,
-      createdAt: '2026-09-01T10:00:00.000Z',
-      updatedAt: '2026-09-01T10:00:00.000Z',
-      baseCount: 1,
-      itineraryDayCount,
-    };
-  }
-
-  function assignment(
-    baseAssignmentId: string,
-    savedStayId: string,
-    dateFrom: string,
-    dateTo: string
-  ): BaseAssignment {
-    return { baseAssignmentId, savedStayId, dateFrom, dateTo };
-  }
-
   /** 기본 배정 — A 가 두 밤을 **한 행**으로 덮는다(★5: A→B→A 뒤 두 행으로 갈려야 판별력이 생긴다). */
-  const A_BOTH_NIGHTS = [assignment('a', 'stay-a', '2026-09-26', '2026-09-28')];
-
-  // ── 상태를 기억하는 가짜 서버 ───────────────────────────────────────────────
-
-  let serverBases: BaseAssignment[] = [];
-  let serverTrip: Trip = trip();
-  let savedStays: SavedStay[] = [];
-  /** 나간 요청 `METHOD /경로`(발사 순서) — 핸들러 없는 요청도 기록된다. */
-  let hits: string[] = [];
-  /** 서버가 처리를 끝낸 순서. */
-  let handled: string[] = [];
-  let postBodies: AssignBaseRequest[] = [];
-  /** n 번째 bases POST(1부터)를 500 으로 — 부분 실패 재현. */
-  let failPostAt: number | null = null;
-  let postSeq = 0;
-
-  function hitCount(needle: string): number {
-    return hits.filter((hit) => hit === needle).length;
-  }
+  const A_BOTH_NIGHTS = [
+    basesAssignment('a', 'stay-a', '2026-09-26', '2026-09-28'),
+  ];
 
   const BASES_POST_HIT = `POST /api/v1/trips/${TRIP_T}/bases`;
   const ITINERARY_POST_HIT = `POST /api/v1/trips/${TRIP_T}/itinerary`;
 
-  function useFakeServer(): void {
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, ({ params }) => {
-        if (params.tripId !== TRIP_T)
-          return new HttpResponse(null, { status: 404 });
-        return HttpResponse.json(serverTrip);
-      }),
-      http.get(`${BASE}/saved-stays`, () => HttpResponse.json(savedStays)),
-      http.get(`${BASE}/trips/:tripId/bases`, ({ params }) => {
-        if (params.tripId !== TRIP_T)
-          return new HttpResponse(null, { status: 404 });
-        return HttpResponse.json(serverBases);
-      }),
-      http.delete(
-        `${BASE}/trips/:tripId/bases/:baseAssignmentId`,
-        async ({ params }) => {
-          await new Promise((resolve) => setTimeout(resolve, 30));
-          const id = String(params.baseAssignmentId);
-          const exists = serverBases.some((row) => row.baseAssignmentId === id);
-          if (params.tripId !== TRIP_T || !exists) {
-            return new HttpResponse(null, { status: 404 });
-          }
-          serverBases = serverBases.filter(
-            (row) => row.baseAssignmentId !== id
-          );
-          handled.push(`DELETE ${id}`);
-          return new HttpResponse(null, { status: 204 });
-        }
-      ),
-      http.post(`${BASE}/trips/:tripId/bases`, async ({ params, request }) => {
-        const body = (await request.json()) as AssignBaseRequest;
-        postBodies.push(body);
-        handled.push(`POST ${body.savedStayId} ${body.dateFrom}`);
-        if (params.tripId !== TRIP_T)
-          return new HttpResponse(null, { status: 404 });
-        if (failPostAt !== null && postBodies.length === failPostAt) {
-          return new HttpResponse(null, { status: 500 });
-        }
-        postSeq += 1;
-        const created = { baseAssignmentId: `new-${postSeq}`, ...body };
-        serverBases = [...serverBases, created];
-        return HttpResponse.json(created, { status: 201 });
-      })
-    );
-  }
-
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      hits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  // 이 describe 의 관찰자만 떼어 낸다 — 다음 describe 의 요청이 이 배열로 새지 않게.
-  afterAll(() => server.events.removeAllListeners('request:start'));
-
   /** 연타 가드 판정용으로 멈춰 둘 시각 — 흐르지 않는 것이 요점(★7). */
   const FROZEN_NOW = 1_790_000_000_000;
 
-  let client: QueryClient;
   let clock: jest.SpyInstance;
 
   // 모듈 싱글턴(연타 가드 창)·가짜 서버 상태는 파일 최상위에서 매번 되돌린다(앞 테스트 누수 차단).
@@ -1200,14 +928,7 @@ describe('편집 모드 (TRIP-1082)', () => {
     // 시계를 멈춘다 — 지정 성공이 여는 400ms 창 안에서 [완료]를 누르게 된다. [완료]를 연타 가드로 감싸면
     // 그 누름이 삼켜져 결정론적으로 red(TRIP-1013 AC-S: 여행 단위 출구는 가드 밖).
     clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
-    serverBases = [...A_BOTH_NIGHTS];
-    serverTrip = trip();
-    savedStays = [STAY_A, STAY_B];
-    hits = [];
-    handled = [];
-    postBodies = [];
-    failPostAt = null;
-    postSeq = 0;
+    fake.reset({ serverBases: [...A_BOTH_NIGHTS], serverTrip: trip() });
     mockPush.mockClear();
     mockBack.mockClear();
     mockReplace.mockClear();
@@ -1215,13 +936,7 @@ describe('편집 모드 (TRIP-1082)', () => {
     mockCanGoBack.mockReset();
     mockCanGoBack.mockReturnValue(true);
     setAccessToken('valid-access');
-    client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { retry: false, gcTime: 0 },
-      },
-    });
-    useFakeServer();
+    fake.install();
   });
 
   afterEach(() => {
@@ -1230,11 +945,9 @@ describe('편집 모드 (TRIP-1082)', () => {
     clearAccessToken();
   });
 
-  const NETWORK_WAIT = { timeout: 15000 };
-
   function editPage(): ReactElement {
     return (
-      <QueryClientProvider client={client}>
+      <QueryClientProvider client={fake.client}>
         <TripBasesPage tripId={TRIP_T} mode="edit" />
       </QueryClientProvider>
     );
@@ -1248,21 +961,6 @@ describe('편집 모드 (TRIP-1082)', () => {
         expect(screen.getByTestId('trip-base-night-card-1')).toHaveTextContent(
           /롯데호텔 서울/
         ),
-      NETWORK_WAIT
-    );
-  }
-
-  function assignNight(nightNumber: number, savedStayId: string): void {
-    fireEvent.press(screen.getByTestId(`trip-base-night-card-${nightNumber}`));
-    fireEvent.press(
-      screen.getByTestId(`trip-base-staysheet-cand-${savedStayId}`)
-    );
-    fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
-  }
-
-  async function sheetClosed(): Promise<void> {
-    await waitFor(
-      () => expect(screen.queryByTestId('trip-base-staysheet')).toBeNull(),
       NETWORK_WAIT
     );
   }
@@ -1283,13 +981,6 @@ describe('편집 모드 (TRIP-1082)', () => {
     assignNight(1, 'stay-b');
     await sheetClosed();
     await night1Shows(/메리어트 동대문/);
-  }
-
-  /** 요청이 나갈 틈을 준다 — "0건" 단언이 "아직 안 나갔을 뿐"으로 공짜 통과하지 않게. */
-  async function settle(): Promise<void> {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 80));
-    });
   }
 
   function pressDone(): void {
@@ -1330,7 +1021,7 @@ describe('편집 모드 (TRIP-1082)', () => {
       expect(mockBack).toHaveBeenCalledTimes(1);
       expect(mockReplace).not.toHaveBeenCalled();
       expect(mockPush).not.toHaveBeenCalled();
-      expect(hitCount(ITINERARY_POST_HIT)).toBe(0);
+      expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);
     });
 
     it('같은 숙소(A)를 다시 지정하고 [완료] — 요청 0건이라도 성공은 불린다, 그래도 묻지 않는다', async () => {
@@ -1340,14 +1031,14 @@ describe('편집 모드 (TRIP-1082)', () => {
       await sheetClosed();
       await settle();
       // 앵커 — 지정 요청은 정말 0건이었다(같은 숙소 재선택).
-      expect(hitCount(BASES_POST_HIT)).toBe(0);
+      expect(fake.hitCount(BASES_POST_HIT)).toBe(0);
 
       pressDone();
       await settle();
 
       expect(screen.queryByTestId('trip-base-regen-dialog')).toBeNull();
       expect(mockBack).toHaveBeenCalledTimes(1);
-      expect(hitCount(ITINERARY_POST_HIT)).toBe(0);
+      expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);
     });
 
     it('A → B → A 로 되돌리고 [완료] — 행은 갈렸지만 밤의 숙소가 같아 묻지 않는다', async () => {
@@ -1361,16 +1052,16 @@ describe('편집 모드 (TRIP-1082)', () => {
       await sheetClosed();
       await night1Shows(/롯데호텔 서울/);
       // 앵커 — 실제로 두 번 교체됐다(원래 행 a 와 B 행이 지워졌다). 행 id·행 수로 비교하면 여기서 묻는다.
-      expect(handled.filter((line) => line.startsWith('DELETE'))).toHaveLength(
-        2
-      );
+      expect(
+        fake.handled.filter((line) => line.startsWith('DELETE'))
+      ).toHaveLength(2);
 
       pressDone();
       await settle();
 
       expect(screen.queryByTestId('trip-base-regen-dialog')).toBeNull();
       expect(mockBack).toHaveBeenCalledTimes(1);
-      expect(hitCount(ITINERARY_POST_HIT)).toBe(0);
+      expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);
     });
 
     it('뒤로 갈 곳이 없으면(딥링크) l04 로 replace("/my/stays") — back 없음', async () => {
@@ -1385,8 +1076,8 @@ describe('편집 모드 (TRIP-1082)', () => {
 
     it('들어오기 전 캐시(l04 가 채운 옛 값 B)가 서버(A)와 달라도, 아무것도 안 했으면 묻지 않는다 — 기준은 들어와서 받은 서버 값', async () => {
       // 준비 — l04 의 TripBasesProbe 가 같은 키를 채워 둔 상황. gcTime 0 이라 같은 틱에 렌더해 관찰자를 붙인다(★9).
-      client.setQueryData(getGetTripsTripIdBasesQueryKey(TRIP_T), [
-        assignment('old', 'stay-b', '2026-09-26', '2026-09-28'),
+      fake.client.setQueryData(getGetTripsTripIdBasesQueryKey(TRIP_T), [
+        basesAssignment('old', 'stay-b', '2026-09-26', '2026-09-28'),
       ]);
       render(editPage());
       // 재조회가 끝나 카드가 서버 값(A)이 됐다 = 스냅샷 확정.
@@ -1406,19 +1097,19 @@ describe('편집 모드 (TRIP-1082)', () => {
     it.each(['PLANNED', 'CONFIRMED'] as const)(
       '%s 여행에서 1박을 B 로 바꾸고 [완료] — 다이얼로그가 뜨고 아직 아무 데도 안 간다, 일정 POST 0',
       async (status) => {
-        serverTrip = trip(status, 2);
+        fake.serverTrip = trip(status, 2);
         await renderEdit();
 
         await changeNight1ToB();
         // AC-5 앵커 — 편집 모드에서도 지정은 교체다(지우기가 먼저 끝난다).
-        expect(handled[0]).toBe('DELETE a');
+        expect(fake.handled[0]).toBe('DELETE a');
 
         pressDone();
         await settle();
 
         expect(screen.getByTestId('trip-base-regen-dialog')).toBeOnTheScreen();
         expect(routerCalls()).toBe(0);
-        expect(hitCount(ITINERARY_POST_HIT)).toBe(0);
+        expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);
       }
     );
   });
@@ -1438,7 +1129,7 @@ describe('편집 모드 (TRIP-1082)', () => {
       expect(mockBack).toHaveBeenCalledTimes(1);
       expect(mockReplace).not.toHaveBeenCalled();
       expect(mockPush).not.toHaveBeenCalled();
-      expect(hitCount(ITINERARY_POST_HIT)).toBe(0);
+      expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);
     });
 
     it('뒤로 갈 곳이 없으면 replace("/my/stays") — 일정 POST 0', async () => {
@@ -1453,7 +1144,7 @@ describe('편집 모드 (TRIP-1082)', () => {
 
       expect(mockReplace.mock.calls).toEqual([['/my/stays']]);
       expect(mockBack).not.toHaveBeenCalled();
-      expect(hitCount(ITINERARY_POST_HIT)).toBe(0);
+      expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);
     });
   });
 
@@ -1481,7 +1172,7 @@ describe('편집 모드 (TRIP-1082)', () => {
       );
       expect(mockReplace).not.toHaveBeenCalled();
       expect(mockBack).not.toHaveBeenCalled();
-      expect(hitCount(ITINERARY_POST_HIT)).toBe(0);
+      expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);
     });
   });
 
@@ -1491,7 +1182,7 @@ describe('편집 모드 (TRIP-1082)', () => {
     it.each(['ACTIVE', 'ENDED'] as const)(
       '%s 여행에서 바꾸고 [완료] — 재생성 선택지 없이 back() 1회, 일정 POST 0',
       async (status) => {
-        serverTrip = trip(status, 2);
+        fake.serverTrip = trip(status, 2);
         await renderEdit();
         await changeNight1ToB();
 
@@ -1501,12 +1192,12 @@ describe('편집 모드 (TRIP-1082)', () => {
         expect(screen.queryByTestId('trip-base-regen-dialog')).toBeNull();
         expect(screen.queryByTestId('trip-base-regen-confirm')).toBeNull();
         expect(mockBack).toHaveBeenCalledTimes(1);
-        expect(hitCount(ITINERARY_POST_HIT)).toBe(0);
+        expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);
       }
     );
 
     it('일정이 아직 없는 여행(itineraryDayCount 0)은 바꿔도 묻지 않는다', async () => {
-      serverTrip = trip('PLANNED', 0);
+      fake.serverTrip = trip('PLANNED', 0);
       await renderEdit();
       await changeNight1ToB();
 
@@ -1523,8 +1214,10 @@ describe('편집 모드 (TRIP-1082)', () => {
   describe('AC-11 · 부분 실패로 밤이 비어도 "바뀐 것"이다 (INV-4)', () => {
     it('지우기는 성공·붙이기는 실패 → 1박이 "숙소 미정"이 된 뒤 [완료] — 묻는다', async () => {
       // 1박짜리 A 한 행 — B 지정은 DELETE a1 → POST B(실패) 로 끝나 서버의 1박이 빈다(★10).
-      serverBases = [assignment('a1', 'stay-a', '2026-09-26', '2026-09-27')];
-      failPostAt = 1;
+      fake.serverBases = [
+        basesAssignment('a1', 'stay-a', '2026-09-26', '2026-09-27'),
+      ];
+      fake.failPostAt = 1;
       await renderEdit();
 
       assignNight(1, 'stay-b');
@@ -1569,7 +1262,7 @@ describe('편집 모드 (TRIP-1082)', () => {
   describe('AC-13 · mode 없이 열면(h04 입구) 위저드 얼굴 그대로다', () => {
     it('진행바·생성 CTA·숙소 없이 시작하기가 있고 편집 [완료]는 없다', async () => {
       render(
-        <QueryClientProvider client={client}>
+        <QueryClientProvider client={fake.client}>
           <TripBasesPage tripId={TRIP_T} />
         </QueryClientProvider>
       );
@@ -1605,7 +1298,7 @@ describe('편집 모드 (TRIP-1082)', () => {
     });
 
     it('거점 재조회까지 실패하면 error 얼굴만 남는다 — [다시 시도]·‹ 가 있고 [숙소 없이 시작하기]는 없다', async () => {
-      failPostAt = 1;
+      fake.failPostAt = 1;
       await renderEdit();
       // 첫 조회가 성공한 뒤에 다음 거점 조회 한 번만 실패시킨다(once).
       server.use(

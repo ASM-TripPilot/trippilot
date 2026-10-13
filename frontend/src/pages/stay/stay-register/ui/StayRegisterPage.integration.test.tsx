@@ -1,9 +1,8 @@
+import { BASE } from '@/test-support/apiBase';
 import type * as StaysApi from '@/shared/api/generated/stays/stays';
 import type * as SavedStaysApi from '@/shared/api/generated/saved-stays/saved-stays';
-import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -12,6 +11,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 import { useSavedStays } from '@/features/trip';
 import { server } from '@/mocks/server';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
@@ -142,7 +142,6 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
    */
 
   /** authWiring.integration.test.ts:59와 같은 값(리포 관례). */
-  const BASE = 'http://localhost:8080/api/v1';
 
   const ENV_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
 
@@ -220,18 +219,6 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
 
   /** useStaySearch.integration.test.tsx:139의 것과 동형 — gcTime: 0이 없으면 기본값(5분)의
    * 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를 붙잡는다. */
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
   function geocodeHits(): string[] {
     return observedUrls.filter(
       (raw) => new URL(raw).pathname === '/api/v1/stays/geocode'
@@ -262,7 +249,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
 
   describe('I-1 · 정상 등록 (AC-1 · §3-5)', () => {
     it('후보를 고르고 확인하면 MAP_SEARCH 경로로 등록되고, 성공 후 이전 화면으로 돌아간다', async () => {
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       searchFor('busan');
       await selectAndConfirm(0);
@@ -288,7 +275,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
 
   describe('🔴 I-2 · 날짜 입력 없이 등록되고 요청 본문에 checkIn·checkOut 키가 없다 (TRIP-1052 AC-1·AC-2)', () => {
     it('페이지에 날짜 입력 표면이 없고, 등록 요청 본문에 날짜 키 자체가 실리지 않는다', async () => {
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       // 준비 — 페이지 층에서도 날짜 입력 표면(필드·요약·오류·시트·칸)이 0개다. 짝으로 등록
       // 버튼은 있다(화면이 통째로 비어서 참이 된 게 아니다).
@@ -319,7 +306,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
         )
       );
 
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
       searchFor('busan');
 
       await waitFor(() =>
@@ -343,7 +330,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
 
   describe('I-4 · 자동 검색은 없다 (§3-1)', () => {
     it('렌더만으로도, 타이핑만으로도 요청이 나가지 않고 검색 키에서만 나간다', async () => {
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       // 훅의 q가 required라 조건 없이 부르면 빈 문자열로 요청이 나간다(02a ★14).
       expect(geocodeHits()).toHaveLength(0);
@@ -368,7 +355,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
 
   describe('I-5 · 재검색하면 좌표 확정이 풀린다 (§3-2, 가중치 1.0)', () => {
     it('다른 검색어로 다시 찾으면 후보 선택과 좌표 확정이 함께 초기화되고 등록이 다시 잠긴다', async () => {
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       // 1) 부산 숙소를 고르고 좌표까지 확정한다 → 등록이 열린다.
       searchFor('busan');
@@ -402,7 +389,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
   describe('I-6 · 지도가 안 뜨는 환경에서도 등록할 수 있다 (§3-3 · INV-4)', () => {
     it('카카오 키가 없으면 시트가 이름·주소를 보여주고 "이 주소로 확인"으로 확정된다', async () => {
       // beforeEach가 이미 키를 지웠다 — 이것이 실제 개발 환경의 기본 상태다.
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       searchFor('busan');
       fireEvent.press(await screen.findByTestId('stay-register-candidate-0'));
@@ -433,7 +420,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
     it('짝: 카카오 키가 있으면 시트가 지도 얼굴이고 버튼이 "이 위치로 확인"이다', async () => {
       process.env[ENV_KEY] = 'test-js-key';
 
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       searchFor('busan');
       fireEvent.press(await screen.findByTestId('stay-register-candidate-0'));
@@ -459,7 +446,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
         )
       );
 
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       searchFor('busan');
       await selectAndConfirm(0);
@@ -502,7 +489,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
    */
   describe('I-8 · 좌표 있는 후보는 선택만으로 등록이 열린다 (TRIP-600 AC-1·AC-5)', () => {
     it('후보를 탭하기만 하면(지도 확인 없이) 좌표 안내가 사라지고 등록 버튼이 열린다', async () => {
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       // 준비·실행 — 후보를 '탭'하는 것 하나뿐. mapconfirm·mapsheet-confirm을 거치지 않는다.
       searchFor('busan');
@@ -517,7 +504,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
     });
 
     it('선택만으로 실제 등록까지 간다 — 지도 확인 없이 눌러도 coordConfirmed=true가 서버로 나간다', async () => {
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       searchFor('busan');
       fireEvent.press(await screen.findByTestId('stay-register-candidate-0'));
@@ -544,7 +531,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
    */
   describe('🔴 S5 · 등록 성공 토스트 + 뒤로 (#036 · D22)', () => {
     function renderWithToast() {
-      const Wrapper = createWrapper();
+      const Wrapper = createGcZeroWrapper();
       render(
         <Wrapper>
           <WithToastHost>
@@ -654,7 +641,7 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
     }
 
     async function renderWithObserver(): Promise<void> {
-      render(<Harness showRegister />, { wrapper: createWrapper() });
+      render(<Harness showRegister />, { wrapper: createGcZeroWrapper() });
       // 관찰자가 살아 있다는 앵커 — 첫 조회 1회, 목록은 아직 비어 있다.
       await waitFor(() => expect(savedListGets).toBe(1));
       expect(
@@ -1360,18 +1347,6 @@ describe('뒤로가기 배선 (옛 .back)', () => {
 
   /** 프리즈 통합테스트(:145~155)와 동형 — gcTime:0이 없으면 기본값(5분) 타이머가 테스트 종료
    * 후에도 살아남아 Node 프로세스를 붙잡는다. */
-  function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
   // 리셋 앵커(TRIP-1187) — 핀 describe 의 beforeEach 가 켠 `mockPinStubs` 는 최상위 afterEach 만 끈다.
   // 그 줄이 빠지면 여기서 red 다(기본 순서에서도 — 핀 describe 가 이 describe 보다 앞이다).
   it('핀 관점이 켠 훅 스텁 스위치가 이 관점으로 새지 않는다', () => {
@@ -1381,7 +1356,7 @@ describe('뒤로가기 배선 (옛 .back)', () => {
   describe('SB-1 · 뒤로가기 버튼이 router.back()으로 배선된다 (AC-2)', () => {
     it('페이지를 열고 헤더 뒤로가기를 누르면 이전 화면으로 돌아간다', () => {
       // 준비 — 기본 탭(지도 검색) 상태로 연다. 뒤로가기는 탭과 무관하게 헤더에 있다(02a ★L).
-      render(<StayRegisterPage />, { wrapper: createWrapper() });
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       // 실행 — 화면이 그린 뒤로가기 컨트롤을 누른다(없으면 getByTestId가 throw).
       fireEvent.press(screen.getByTestId('stay-register-back'));

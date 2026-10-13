@@ -6,9 +6,12 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+
+import type { MapPin } from '@/shared/map';
 
 import { MapSheetShell } from './MapSheetShell';
 
@@ -417,47 +420,13 @@ const GESTURE_TOGGLES = [
   'isTiltGesturesEnabled',
 ] as const;
 
-/** 통과형 시트 목에 실린 snapPoints 배열들(합성·호스트 두 겹이라 여러 개 — 전부 같아야 한다). */
-function sheetSnapPoints(): unknown[][] {
-  return screen.root
-    .findAll(
-      (node) =>
-        typeof node.props?.index === 'number' &&
-        Array.isArray(node.props?.snapPoints)
-    )
-    .map((node) => node.props.snapPoints as unknown[]);
-}
-
-describe('MapSheetShell · SH9 — snapPoints 가 시트 스냅을 정한다 (TRIP-746)', () => {
-  it('🔴 SH9a · snapPoints 미전달이면 3스냅 [닫힘 28, 45%, 88%] 을 넘긴다 (AC-1 · TRIP-920 개정)', () => {
-    renderShell();
-
-    // 닫힘은 숫자 28(핸들만 보이는 높이 — i01 Figma 4251:2448 · LiveHubView CLOSED_SNAP 과 같은 출처, 01b Q3).
-    // 라이브러리 규칙상 낮은 높이부터 오름차순이라 닫힘이 0번이다.
-    const all = sheetSnapPoints();
-    expect(all.length).toBeGreaterThan(0);
-    all.forEach((points) => expect(points).toEqual([28, '45%', '88%']));
-  });
-
-  it('🔴 SH9b · snapPoints 를 주면 그 배열(3스냅)을 그대로 넘긴다', () => {
-    renderShell({ snapPoints: [28, '55%', '86%'] });
-
-    const all = sheetSnapPoints();
-    expect(all.length).toBeGreaterThan(0);
-    all.forEach((points) => expect(points).toEqual([28, '55%', '86%']));
-  });
-});
+// SH9(snapPoints 미전달 3스냅 · 전달 그대로)은 TRIP-1356 에서 지웠다 — 파일 끝 합본의 CS3(기본 28)·CS4(직접 전달) 가 같은 prop 통과를 잠근다.
 
 describe('MapSheetShell · SH10 — mapViewOnly 로 지도 잠금을 끈다 (TRIP-746 · Seed Q1)', () => {
   beforeEach(withMapKey);
   afterEach(restoreMapKey);
 
-  it('SH10a · mapViewOnly 미전달이면 제스처 4종이 전부 꺼진다(잠금 기본값 · 선제 green)', () => {
-    renderShell();
-
-    const map = screen.getByTestId('map-native');
-    GESTURE_TOGGLES.forEach((toggle) => expect(map.props[toggle]).toBe(false));
-  });
+  // SH10a(mapViewOnly 미전달 = 제스처 4종 꺼짐)는 TRIP-1356 에서 지웠다 — SH5a·SH14b 의 expectMapLocked(true) 가 같은 기본 잠금을 잰다.
 
   it('🔴 SH10b · mapViewOnly={false} 면 제스처 4종이 전부 켜진다(여행 중 자유 탐색)', () => {
     renderShell({ mapViewOnly: false });
@@ -515,33 +484,39 @@ describe('MapSheetShell · SH12 — 시트 끌기·본문 스크롤·지도 탭�
   beforeEach(withMapKey);
   afterEach(restoreMapKey);
 
-  it('SH12a · 세 prop 미전달이면 어디에도 콜백을 달지 않는다 (선제 green · 6 소비처 무회귀)', () => {
-    renderShell();
-
-    // 짝 앵커 — 지도와 시트가 실제로 떴다.
+  // TRIP-1356 — 네 it(a 미전달 · b onSheetAnimate · c onSheetScrollBeginDrag · d onMapTap)을 한 흐름으로 합쳤다. 단언은 하나도 줄이지 않았다.
+  it('SH12 · 세 prop 은 미전달이면 어디에도 콜백을 달지 않고(6 소비처 무회귀), 주면 각자 제 자리로 흘러간다', () => {
+    // a) 미전달 — 짝 앵커: 지도와 시트가 실제로 떴다.
+    const bare = render(
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        onBack={jest.fn()}
+        header={<Text testID="fake-header">헤더</Text>}
+      >
+        <Text testID="fake-body">본문</Text>
+      </MapSheetShell>
+    );
     expect(screen.getByTestId('map-native')).toBeOnTheScreen();
     expect(sheetHost().props.onAnimate).toBeUndefined();
     expect(scrollBeginDragNodes()).toHaveLength(0);
     expect(screen.getByTestId('map-native').props.onTapMap).toBeUndefined();
-  });
+    bare.unmount();
 
-  it('🔴 SH12b · onSheetAnimate 는 BottomSheet onAnimate 로 흘러 (from, to) 를 그대로 올린다', () => {
+    // b) onSheetAnimate 는 BottomSheet onAnimate 로 흘러 (from, to) 를 그대로 올린다.
     const onSheetAnimate = jest.fn();
     renderShell({ onSheetAnimate });
-
     const onAnimate = sheetHost().props.onAnimate as
       ((from: number, to: number, fp: number, tp: number) => void) | undefined;
     expect(onAnimate).toBeDefined();
     onAnimate?.(1, 2, 0, 0);
-
     expect(onSheetAnimate).toHaveBeenCalledTimes(1);
     expect(onSheetAnimate.mock.calls[0].slice(0, 2)).toEqual([1, 2]);
-  });
+    screen.unmount();
 
-  it('🔴 SH12c · onSheetScrollBeginDrag 는 시트 본체가 아니라 본문 스크롤 뷰에 달린다', () => {
+    // c) onSheetScrollBeginDrag 는 시트 본체가 아니라 본문 스크롤 뷰에 달린다.
     const onSheetScrollBeginDrag = jest.fn();
     renderShell({ onSheetScrollBeginDrag });
-
     const nodes = scrollBeginDragNodes();
     expect(nodes.length).toBeGreaterThan(0);
     // 본문 스크롤 뷰 = snapPoints 가 없는 노드(시트 본체에 달면 이 단언이 깨진다).
@@ -554,18 +529,15 @@ describe('MapSheetShell · SH12 — 시트 끌기·본문 스크롤·지도 탭�
         (node) => node.props?.testID === 'fake-body'
       ).length
     ).toBeGreaterThan(0);
-
     (nodes[nodes.length - 1].props.onScrollBeginDrag as (e: unknown) => void)({
       nativeEvent: {},
     });
-
     expect(onSheetScrollBeginDrag).toHaveBeenCalledTimes(1);
-  });
+    screen.unmount();
 
-  it('🔴 SH12d · onMapTap 은 지도 onTapMap 으로 흐른다', () => {
+    // d) onMapTap 은 지도 onTapMap 으로 흐른다.
     const onMapTap = jest.fn();
     renderShell({ onMapTap });
-
     const native = screen.getByTestId('map-native');
     expect(native.props.onTapMap).toBeDefined();
     (native.props.onTapMap as (p: unknown) => void)({
@@ -574,7 +546,6 @@ describe('MapSheetShell · SH12 — 시트 끌기·본문 스크롤·지도 탭�
       x: 1,
       y: 2,
     });
-
     expect(onMapTap).toHaveBeenCalledTimes(1);
   });
 });
@@ -1111,5 +1082,358 @@ describe('🔴 MapSheetShell · SH19 — 본문 아래 여백 = CTA 바 + 하단
       expect(bodyPaddingBottom() ?? 0).toBe(0);
       screen.unmount();
     }
+  });
+});
+
+/* ──── TRIP-1356 · 옛 MapSheetShell.closedSnap.test 합침 ──── */
+/**
+ * 닫힘 스냅이 홈 인디케이터 영역 안에 들어가던 결함 — 핸들(28px)이 화면 맨 아래 하단 안전 영역(≈34px)에
+ * 묻혀 위로 쓸면 iOS 홈 제스처가 우선했다. 닫힘 높이를 `28 + 하단 안전 영역`으로 키워 핸들이 그 위에 오게 한다.
+ *
+ * 무엇을 보장하나(셸이 시트에 넘기는 snapPoints 값까지만):
+ *  - 🔴 CS1 하단 안전 영역 34 → 닫힘 칸이 62(= 28 + 34), 나머지 칸은 그대로.
+ *  - 🔴 CS5 하단 안전 영역 120 → 148 — 0·34·120 세 값이 짝이라 `34 이면 62` 식 고정값은 여기서 걸린다.
+ *  - 🟢 CS2 하단 안전 영역 0(홈 버튼 기종·Provider 의 bottom 0) → 28 그대로.
+ *  - 🟢 CS3 Provider 없음(jest 기본) → 28 그대로 — 기존 소비처 무회귀 앵커.
+ *  - 🟢 CS4 소비처가 snapPoints 를 직접 주면 셸은 손대지 않는다(그쪽 계약은 소비처 소유).
+ * ⚠️ 실제 홈 제스처 충돌 해소는 jest 사각 — 실기(TestFlight)로만 본다.
+ *
+ * 3동작 뼈대: 준비=Provider(bottom 값) → 실행=셸 렌더 → 단언=시트 목이 받은 snapPoints.
+ */
+
+function renderWithBottomInset(
+  bottom: number | null,
+  snapPoints?: (string | number)[]
+) {
+  const shell = (
+    <MapSheetShell
+      center={{ lat: 35.1587, lng: 129.1604 }}
+      pins={[{ number: 1, lat: 35.16, lng: 129.16 }]}
+      onBack={jest.fn()}
+      header={<Text>헤더</Text>}
+      snapPoints={snapPoints}
+    >
+      <Text>본문</Text>
+    </MapSheetShell>
+  );
+  render(
+    bottom === null ? (
+      shell
+    ) : (
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 47, bottom, left: 0, right: 0 }}
+      >
+        {shell}
+      </SafeAreaInsetsContext.Provider>
+    )
+  );
+}
+
+/** 셸이 시트 목에 넘긴 snapPoints — 목은 합성·호스트 겹이 여럿이라 첫 노드 값만 본다. */
+function firstSheetSnapPoints(): unknown[] {
+  const node = screen.root.findAll((n) =>
+    Array.isArray(n.props?.snapPoints)
+  )[0];
+  return node.props.snapPoints as unknown[];
+}
+
+describe('MapSheetShell · 닫힘 스냅이 홈 인디케이터 위에 온다', () => {
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
+  it('CS1 하단 안전 영역 34 → 닫힘 62, 나머지 칸은 그대로', () => {
+    renderWithBottomInset(34);
+    expect(firstSheetSnapPoints()).toEqual([62, '45%', '88%']);
+  });
+
+  it('CS5 하단 안전 영역 120 → 닫힘 148 — 34 로 외운 고정값 구현을 막는 짝(0·34·120)', () => {
+    renderWithBottomInset(120);
+    expect(firstSheetSnapPoints()).toEqual([148, '45%', '88%']);
+  });
+
+  it('CS2 하단 안전 영역 0 → 닫힘 28 그대로', () => {
+    renderWithBottomInset(0);
+    expect(firstSheetSnapPoints()).toEqual([28, '45%', '88%']);
+  });
+
+  it('CS3 Provider 없음 → 닫힘 28 그대로', () => {
+    renderWithBottomInset(null);
+    expect(firstSheetSnapPoints()).toEqual([28, '45%', '88%']);
+  });
+
+  it('CS4 소비처가 snapPoints 를 직접 주면 안전 영역이 있어도 손대지 않는다', () => {
+    renderWithBottomInset(34, [100, '50%']);
+    expect(firstSheetSnapPoints()).toEqual([100, '50%']);
+  });
+});
+
+/* ──── TRIP-1356 · 옛 MapSheetShell.fitPins.test 합침 ──── */
+/**
+ * TRIP-1076 (3) · AC-3 — 셸이 "핀 전부 맞추기"(`fitPins`)를 자기 지도까지 흘린다(옵셔널 additive).
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 FS1 `fitPins` 를 주면 셸이 소유한 `<MapView>` 가 핀 전부를 담는 `region` 으로 열리고 `camera` 는 없다.
+ *    결과 화면(h07·h08·h11·h14·h16)이 이 prop 하나로 옵트인한다.
+ *  - 🟢 FS2 미전달이면 지금과 같다 — `region` 없이 `camera`(center) 경로(다른 셸 소비처 무회귀).
+ *
+ * 실 MapView 를 태운다 — 네이버 목(`__mocks__/@mj-studio/react-native-naver-map.tsx`)의 `map-native` 에
+ * region·camera 가 그대로 실린다. 키가 없으면 MapView 가 실패 표면으로 떨어지므로 키를 넣고 돈다.
+ * ⚠️ 실제 카메라 이동·시트가 가리는 영역은 jest 사각(6-b 실기 — Seed Q3: 시트 인셋 미반영).
+ *
+ * 3동작 뼈대: 준비=키 + 핀 3개 → 실행=셸 렌더(fitPins 유무) → 단언=map-native 의 region/camera.
+ */
+
+type NativeRegion = {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+};
+
+const FIT_CENTER = { lat: 35.1532, lng: 129.1186 };
+// 광안리·황령산·해운대 — 서로 수 km 떨어진 결과 동선 3곳.
+const FIT_PINS: MapPin[] = [
+  { number: 1, lat: 35.1532, lng: 129.1186 },
+  { number: 2, lat: 35.1573, lng: 129.0819 },
+  { number: 3, lat: 35.1587, lng: 129.1604 },
+];
+
+function renderFitShell(fitPins?: boolean) {
+  render(
+    <MapSheetShell
+      center={FIT_CENTER}
+      pins={FIT_PINS}
+      onBack={jest.fn()}
+      header={<Text>헤더</Text>}
+      fitPins={fitPins}
+    >
+      <Text>본문</Text>
+    </MapSheetShell>
+  );
+}
+
+function fitNativeProps(): Record<string, unknown> {
+  return screen.getByTestId('map-native').props as Record<string, unknown>;
+}
+
+describe('TRIP-1076 · 셸 핀 맞추기 통과 (AC-3)', () => {
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
+  it('🔴 FS1 fitPins 를 주면 셸 지도가 세 핀을 모두 담는 region 으로 열리고 camera 는 없다', () => {
+    renderFitShell(true);
+
+    const region = fitNativeProps().region as NativeRegion | undefined;
+    expect(region).toBeDefined();
+    if (region === undefined) return;
+    FIT_PINS.forEach(({ lat, lng }) => {
+      expect(lat).toBeGreaterThanOrEqual(region.latitude);
+      expect(lat).toBeLessThanOrEqual(region.latitude + region.latitudeDelta);
+      expect(lng).toBeGreaterThanOrEqual(region.longitude);
+      expect(lng).toBeLessThanOrEqual(region.longitude + region.longitudeDelta);
+    });
+    // ★ 택일 — camera 가 같이 가면 SDK 가 region 을 버린다(목은 둘 다 기록해 공허 통과할 수 있다).
+    expect(fitNativeProps().camera).toBeUndefined();
+  });
+
+  it('🟢 FS2 미전달이면 region 없이 camera(center) 로 연다 (기존 셸 소비처 무회귀)', () => {
+    renderFitShell();
+
+    expect(fitNativeProps().region).toBeUndefined();
+    expect(fitNativeProps().camera).toBeDefined();
+  });
+});
+
+/* ──── TRIP-1356 · 옛 MapSheetShell.radius.test 합침 ──── */
+/**
+ * TRIP-800 · AC-7 · 01b Q5 — 셸이 반경 원(`radiusCircle`)을 지도까지 흘린다(옵셔널 additive).
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 SR1 `radiusCircle` 을 주면 셸이 소유한 `<MapView>` 가 원을 그린다(네이버 목 `map-circle`) — 반경·중심이
+ *    그대로 닿는다. h15 가 `mapFallback` 에 자체 지도를 끼우는 우회(폴백 슬롯 의미 오용)를 하지 않게 하는 자리.
+ *  - 🟢 SR2 미전달이면 원이 없다 — 기존 셸 소비처(h07·h08·h11·h13·h14·h16·i 밴드) 무회귀 앵커.
+ *
+ * 기존 `MapSheetShell.test.tsx` 는 건드리지 않는다 — 새 prop 만 이 파일에서 잠근다.
+ * 실 MapView 를 태우므로(목 아님) 네이버 목(`__mocks__/@mj-studio/react-native-naver-map.tsx`, 자동 적용)의
+ * `map-circle` 에 props 가 그대로 실린다. 키가 없으면 MapView 가 실패 표면으로 떨어지므로 키를 넣고 돈다.
+ * ⚠️ 원의 점선·색·실제 크기는 jest 사각(6-b 실기).
+ *
+ * 3동작 뼈대: 준비=키 + 원 prop → 실행=셸 렌더 → 단언=map-circle 의 radius·좌표.
+ */
+
+const RADIUS_CENTER = { lat: 35.1587, lng: 129.1604 };
+
+function renderRadiusShell(radiusCircle?: {
+  center: { lat: number; lng: number };
+  radiusM: number;
+}) {
+  render(
+    <MapSheetShell
+      center={RADIUS_CENTER}
+      pins={[{ number: 1, lat: 35.16, lng: 129.16 }]}
+      onBack={jest.fn()}
+      header={<Text>헤더</Text>}
+      radiusCircle={radiusCircle}
+    >
+      <Text>본문</Text>
+    </MapSheetShell>
+  );
+}
+
+describe('TRIP-800 · 셸 반경 원 통과 (AC-7 · Q5)', () => {
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
+  it('🔴 SR1 radiusCircle 을 주면 셸 지도에 원 1개 — 반경·중심이 그대로 닿는다', () => {
+    // 준비·실행 — 무게중심 + 반경 1200m.
+    renderRadiusShell({
+      center: { lat: 35.1601, lng: 129.1502 },
+      radiusM: 1200,
+    });
+
+    // 단언 — 원이 하나 그려지고, 넘긴 값이 네이티브 원 오버레이까지 닿았다.
+    const circles = screen.queryAllByTestId('map-circle');
+    expect(circles).toHaveLength(1);
+    expect(circles[0].props.radius).toBe(1200);
+    expect(circles[0].props.latitude).toBe(35.1601);
+    expect(circles[0].props.longitude).toBe(129.1502);
+  });
+
+  it('🟢 SR2 미전달이면 원이 없다 (기존 셸 소비처 무회귀)', () => {
+    renderRadiusShell();
+
+    // 도달 앵커 — 지도는 실제로 떴다(원이 없는 이유가 "지도가 없어서"가 아니다).
+    expect(screen.getByTestId('map-native')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId('map-circle')).toHaveLength(0);
+  });
+});
+
+/* ──── TRIP-1356 · 옛 MapSheetShell.bodyScroll.test 합침 ──── */
+/**
+ * TRIP-1112 · 셸 가산 opt-in 2개(01b D1) — 편집기처럼 **본문 스크롤러를 스스로 쥐는** 소비처용.
+ *
+ *  - `bodyScroll={false}` — 셸이 body 를 `BottomSheetScrollView` 로 감싸지 않는다. 스크롤 안에 스크롤을
+ *    겹치면 두 스크롤러가 같은 손가락을 두고 싸운다(브리프 H1). `list` 슬롯을 주면 list 가 이긴다.
+ *  - `contentPanning={false}` — 시트 본체에 `enableContentPanningGesture={false}` 로 흘러 시트는 손잡이로만
+ *    끌린다. 값은 정적이다(끄는 중에 뒤집으면 gorhom 이 본문을 재마운트한다 — 브리프 F1).
+ *  - 둘 다 안 주면 지금 경로 그대로다(다른 셸 소비처 11곳 무회귀).
+ *
+ * 관측 방법(02a ★1): gorhom 목은 `BottomSheet`·`BottomSheetScrollView` 가 **같은 통과형 컴포넌트**다.
+ *   그래서 "스크롤 래퍼가 있다/없다" = 본문 노드 위에 그 통과형 조상이 **몇 겹**인가(기본 2 · opt-in 1).
+ *   남는 한 겹은 snapPoints 를 쥔 시트 본체여야 한다.
+ * ⚠️ 원리적 사각: 시트가 정말 손잡이로만 끌리는지·본문이 실제로 스크롤되는지는 목이 prop 을 무시해 6-b.
+ *
+ * 3동작 뼈대: 준비=opt-in 조합으로 셸 렌더 → 실행=렌더 → 단언=시트 본체 prop · 본문 위 통과형 조상 겹수.
+ */
+
+function renderBodyScrollShell(
+  overrides: Partial<Parameters<typeof MapSheetShell>[0]> = {}
+): void {
+  render(
+    <MapSheetShell
+      center={CENTER}
+      pins={[]}
+      days={[{ label: '1일차' }]}
+      selectedDayIndex={0}
+      onSelectDay={jest.fn()}
+      onBack={jest.fn()}
+      header={<Text testID="fake-header">헤더</Text>}
+      cta={[{ label: '저장', variant: 'primary', onPress: jest.fn() }]}
+      {...overrides}
+    >
+      <Text testID="fake-body">본문</Text>
+    </MapSheetShell>
+  );
+}
+
+/** 노드 위(자기 제외)의 gorhom 통과형 조상들 — 가까운 것부터. 목에선 시트 본체와 본문 스크롤 뷰가 같은 타입이다. */
+function sheetPassthroughAncestors(
+  node: ReactTestInstance
+): ReactTestInstance[] {
+  const found: ReactTestInstance[] = [];
+  for (let cur = node.parent; cur; cur = cur.parent) {
+    if (cur.type === (BottomSheet as unknown)) found.push(cur);
+  }
+  return found;
+}
+
+/** 노드 위(자기 제외) 가장 가까운 host(문자열 타입) 조상 — 본문 틀 View 가 여기 잡힌다. */
+function nearestHostAncestor(node: ReactTestInstance): ReactTestInstance {
+  for (let cur = node.parent; cur; cur = cur.parent) {
+    if (typeof cur.type === 'string') return cur;
+  }
+  throw new Error('host 조상이 없다');
+}
+
+/** 노드 위(자기 제외)의 RN `ScrollView` 조상 수 — gorhom 목(통과형)과 별개로 센다. */
+function rnScrollViewAncestorCount(node: ReactTestInstance): number {
+  let n = 0;
+  for (let cur = node.parent; cur; cur = cur.parent) {
+    if (cur.type === (ScrollView as unknown)) n += 1;
+  }
+  return n;
+}
+
+describe('MapSheetShell · SH18 — body 비스크롤·콘텐츠 pan 정적 off opt-in (TRIP-1112 D1 · AC-J1·J2·J4)', () => {
+  it('🔴 SH18a · bodyScroll={false} 면 header·children 위에 스크롤 래퍼가 없고 시트 본체 한 겹뿐이다 (콘텐츠 pan 은 따로 — 미지정 유지)', () => {
+    // 준비/실행 — 본문 스크롤만 끈다.
+    renderBodyScrollShell({ bodyScroll: false });
+
+    // 단언 — header·children 둘 다 시트 안에 그대로 그려지고, 그 위 통과형 조상은 시트 본체 하나다.
+    for (const id of ['fake-header', 'fake-body']) {
+      const ancestors = sheetPassthroughAncestors(screen.getByTestId(id));
+      expect(ancestors).toHaveLength(1);
+      expect(Array.isArray(ancestors[0].props.snapPoints)).toBe(true);
+    }
+    // 본문 틀 모양(5-b 경고-1) — 겹수만 세면 gorhom 이 아닌 래퍼·높이 제약 삭제가 green 이다.
+    // ① 틀이 남은 높이를 채운다: header 바로 위 host 의 className 토큰에 `flex-1`. 빠지면 틀이 내용만큼
+    //    자라 안쪽 Nestable 스크롤에 스크롤할 거리가 없어진다.
+    const frameTokens = String(
+      nearestHostAncestor(screen.getByTestId('fake-header')).props.className
+    ).split(/\s+/);
+    expect(frameTokens).toContain('flex-1');
+    // ② gorhom 이 아닌 스크롤러(RN ScrollView)로도 감싸지 않는다 — 감싸면 스크롤 안의 스크롤(H1)이 돌아온다.
+    //    이 경로의 gorhom 목엔 RN ScrollView 가 없어서 0 이 기준선이다.
+    expect(rnScrollViewAncestorCount(screen.getByTestId('fake-body'))).toBe(0);
+    // 짝 — 두 opt-in 은 서로 묶이지 않는다: 본문 스크롤만 껐으면 콘텐츠 pan 은 라이브러리 기본(미지정)이다.
+    expect(sheetHost().props.enableContentPanningGesture).toBeUndefined();
+  });
+
+  it('🔴 SH18b · contentPanning={false} 면 시트 본체가 enableContentPanningGesture=false 를 받는다', () => {
+    renderBodyScrollShell({ bodyScroll: false, contentPanning: false });
+
+    // toBe(false) — 미전달(undefined)은 라이브러리 기본 true 로 읽힌다(02a ★2).
+    expect(sheetHost().props.enableContentPanningGesture).toBe(false);
+  });
+
+  it('SH18c · 두 opt-in 을 안 주면 지금 경로 그대로다 — 스크롤 래퍼 한 겹 + 시트 본체, 콘텐츠 pan 미지정 (선제 green 회귀 앵커)', () => {
+    renderBodyScrollShell();
+
+    const ancestors = sheetPassthroughAncestors(
+      screen.getByTestId('fake-body')
+    );
+    // 가까운 쪽 = 본문 스크롤 뷰(snapPoints 없음), 먼 쪽 = 시트 본체.
+    expect(ancestors).toHaveLength(2);
+    expect(Array.isArray(ancestors[0].props.snapPoints)).toBe(false);
+    expect(Array.isArray(ancestors[1].props.snapPoints)).toBe(true);
+    expect(sheetHost().props.enableContentPanningGesture).toBeUndefined();
+  });
+
+  it('SH18d · list 를 주면 bodyScroll={false} 여도 list 슬롯이 이긴다 — header·children 은 리스트 안 (선제 green)', () => {
+    renderBodyScrollShell({
+      bodyScroll: false,
+      list: {
+        data: [{ id: 'a' }],
+        renderItem: ({ item }) => (
+          <Text testID={`list-item-${(item as { id: string }).id}`}>행</Text>
+        ),
+        keyExtractor: (item) => (item as { id: string }).id,
+        testID: 'shell-list',
+      },
+    });
+
+    const list = screen.getByTestId('shell-list');
+    expect(within(list).getByTestId('list-item-a')).toBeOnTheScreen();
+    expect(within(list).getByTestId('fake-body')).toBeOnTheScreen();
   });
 });

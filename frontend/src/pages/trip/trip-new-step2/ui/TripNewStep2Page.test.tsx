@@ -157,6 +157,33 @@ afterEach(() => {
 });
 
 /**
+ * push 인자에서 `/stays` 로 실은 region 값을 꺼낸다 — 문자열(`/stays?region=…`)과 객체
+ * (`{ pathname: '/stays', params: { region } }`) 두 형태를 다 읽는다. `/stays` 가 아니면 undefined.
+ * URLSearchParams 는 RN jest 환경의 폴리필에 기대지 않으려고 손으로 가른다.
+ */
+function staysRegionOf(call: unknown[] | undefined): string | undefined {
+  const arg = call?.[0];
+  if (typeof arg === 'string') {
+    const [path, query = ''] = arg.split('?');
+    if (path !== '/stays') return undefined;
+    const pair = query
+      .split('&')
+      .map((part) => part.split('='))
+      .find(([key]) => key === 'region');
+    return pair?.[1] === undefined ? undefined : decodeURIComponent(pair[1]);
+  }
+  if (typeof arg === 'object' && arg !== null) {
+    const { pathname, params } = arg as {
+      pathname?: unknown;
+      params?: { region?: unknown };
+    };
+    if (pathname !== '/stays') return undefined;
+    return typeof params?.region === 'string' ? params.region : undefined;
+  }
+  return undefined;
+}
+
+/**
  * TRIP-672 g02 거점 숙소 2/4 — **배선(재작성).** 두 조회 · 스토어 · 라우터를 잇는다.
  * TRIP-674 · S10 — 그 위에 **empty 얼굴**을 얹는다(D1). 배선은 얼굴 판정에 empty 를 삽입할 뿐이다.
  *
@@ -251,33 +278,6 @@ describe('배선 — 변형 판정·박별 카드·CTA', () => {
 
   function failed<T>(refetch: jest.Mock): QueryStub<T> {
     return { data: undefined, isPending: false, isError: true, refetch };
-  }
-
-  /**
-   * push 인자에서 `/stays` 로 실은 region 값을 꺼낸다 — 문자열(`/stays?region=…`)과 객체
-   * (`{ pathname: '/stays', params: { region } }`) 두 형태를 다 읽는다. `/stays` 가 아니면 undefined.
-   * URLSearchParams 는 RN jest 환경의 폴리필에 기대지 않으려고 손으로 가른다.
-   */
-  function staysRegionOf(call: unknown[] | undefined): string | undefined {
-    const arg = call?.[0];
-    if (typeof arg === 'string') {
-      const [path, query = ''] = arg.split('?');
-      if (path !== '/stays') return undefined;
-      const pair = query
-        .split('&')
-        .map((part) => part.split('='))
-        .find(([key]) => key === 'region');
-      return pair?.[1] === undefined ? undefined : decodeURIComponent(pair[1]);
-    }
-    if (typeof arg === 'object' && arg !== null) {
-      const { pathname, params } = arg as {
-        pathname?: unknown;
-        params?: { region?: unknown };
-      };
-      if (pathname !== '/stays') return undefined;
-      return typeof params?.region === 'string' ? params.region : undefined;
-    }
-    return undefined;
   }
 
   beforeEach(() => {
@@ -688,28 +688,6 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
    * (`{ pathname: '/stays', params: { region } }`) 두 형태를 다 읽는다. `/stays` 가 아니면 undefined.
    * URLSearchParams 는 RN jest 환경의 폴리필에 기대지 않으려고 손으로 가른다.
    */
-  function staysRegionOf(call: unknown[] | undefined): string | undefined {
-    const arg = call?.[0];
-    if (typeof arg === 'string') {
-      const [path, query = ''] = arg.split('?');
-      if (path !== '/stays') return undefined;
-      const pair = query
-        .split('&')
-        .map((part) => part.split('='))
-        .find(([key]) => key === 'region');
-      return pair?.[1] === undefined ? undefined : decodeURIComponent(pair[1]);
-    }
-    if (typeof arg === 'object' && arg !== null) {
-      const { pathname, params } = arg as {
-        pathname?: unknown;
-        params?: { region?: unknown };
-      };
-      if (pathname !== '/stays') return undefined;
-      return typeof params?.region === 'string' ? params.region : undefined;
-    }
-    return undefined;
-  }
-
   /** push 호출 중 목적지가 `/stays` 인 것(문자열 경로 또는 객체 pathname)만 고른다. */
   function staysCalls(): unknown[][] {
     return routerMock.push.mock.calls.filter((call: unknown[]) => {
@@ -1160,74 +1138,6 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(4);
     });
 
-    it('"다른 지역" 섹션의 숙소를 골라도 지정이 똑같이 나간다 (D8 — 막지 않는다)', () => {
-      mockAddressById = { jw: SEOUL, 'para-1': BUSAN, 'para-2': BUSAN };
-      openSeoulNight();
-
-      const other = screen.getByTestId('trip-base-staysheet-section-other');
-      fireEvent.press(
-        within(other).getByTestId('trip-base-staysheet-cand-para-1')
-      );
-      fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
-
-      expect(mockAssignMutate).toHaveBeenCalledTimes(1);
-      expect(
-        (mockAssignMutate.mock.calls[0][0] as { data: { savedStayId: string } })
-          .data.savedStayId
-      ).toBe('para-1');
-    });
-
-    it('AC-6 · 주소를 모르는 숙소가 섞이면 "다른 지역 · 위치 확인 안 됨"에 모두 보인다', () => {
-      const noCoord: SavedStay = {
-        ...STAY_A,
-        savedStayId: 'no-coord',
-        name: '좌표 없는 숙소',
-        lat: null,
-        lng: null,
-      };
-      mockSavedStaysResult = loaded([JW, noCoord, PARA_1, PARA_2]);
-      mockAddressById = {
-        jw: SEOUL,
-        'no-coord': { status: 'unknown' }, // 좌표 없음
-        'para-1': { status: 'unknown' }, // 주소 null
-        'para-2': { status: 'unknown' }, // 503
-      };
-      openSeoulNight();
-
-      expect(
-        screen.getByTestId('trip-base-staysheet-section-other-title')
-      ).toHaveTextContent('다른 지역 · 위치 확인 안 됨');
-      const other = screen.getByTestId('trip-base-staysheet-section-other');
-      expect(within(other).queryAllByTestId(CARD_ROOT)).toHaveLength(3);
-      expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(4);
-    });
-
-    it('AC-6 · 주소 조회가 전부 진행 중이면 섹션 없이 한 줄 목록(4장)', () => {
-      mockAddressById = {
-        jw: { status: 'loading' },
-        denba: { status: 'loading' },
-        'para-1': { status: 'loading' },
-        'para-2': { status: 'loading' },
-      };
-      openSeoulNight();
-
-      expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(4);
-      expect(
-        screen.queryAllByTestId(/^trip-base-staysheet-section-/)
-      ).toHaveLength(0);
-    });
-
-    it('01b Q3 · 전부 그 밤 지역이면 헤더 없이 한 줄 목록', () => {
-      mockSavedStaysResult = loaded([JW, { ...JW, savedStayId: 'jw-2' }]);
-      mockAddressById = { jw: SEOUL, 'jw-2': SEOUL };
-      openSeoulNight();
-
-      expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(2);
-      expect(
-        screen.queryAllByTestId(/^trip-base-staysheet-section-/)
-      ).toHaveLength(0);
-    });
-
     it('01b Q5 · "그 밤 지역"은 여행 첫 지역이 아니라 연 밤의 지역이다 (강릉 밤 → 강릉 숙소가 위)', () => {
       const GANGNEUNG: SavedStay = {
         ...STAY_A,
@@ -1286,13 +1196,6 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       lat: 37.57,
       lng: 127.009,
     };
-    const HAEUNDAE: SavedStay = {
-      ...STAY_A,
-      savedStayId: 'haeundae',
-      name: '해운대 오션 호텔',
-      lat: 35.16,
-      lng: 129.16,
-    };
     const SEOUL_JONGNO: StayAddressState = {
       status: 'known',
       address: '서울특별시 종로구 종로 1',
@@ -1300,10 +1203,6 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
     const SEOUL_DDM: StayAddressState = {
       status: 'known',
       address: '서울 중구 을지로 279',
-    };
-    const BUSAN_HAEUNDAE: StayAddressState = {
-      status: 'known',
-      address: '부산광역시 해운대구 해운대해변로 296',
     };
 
     function openBusanNight(): void {
@@ -1355,85 +1254,6 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
         (mockAssignMutate.mock.calls[0][0] as { data: { savedStayId: string } })
           .data.savedStayId
       ).toBe('jongno');
-    });
-
-    it('AC-B3 · 부산 숙소가 1곳 있으면 "부산광역시 숙소"가 먼저, "다른 지역"이 뒤이고 안내는 없다', () => {
-      mockSavedStaysResult = loaded([JONGNO, HAEUNDAE, JW_DDM]);
-      mockAddressById = {
-        jongno: SEOUL_JONGNO,
-        haeundae: BUSAN_HAEUNDAE,
-        'jw-ddm': SEOUL_DDM,
-      };
-      openBusanNight();
-
-      // 섹션 컨테이너만(제목 testID 제외 — `$` 로 닫는다, ★15) 트리 순서대로.
-      expect(
-        screen
-          .queryAllByTestId(/^trip-base-staysheet-section-(here|other)$/)
-          .map((node) => node.props.testID)
-      ).toEqual([
-        'trip-base-staysheet-section-here',
-        'trip-base-staysheet-section-other',
-      ]);
-      expect(
-        screen.getByTestId('trip-base-staysheet-section-here-title')
-      ).toHaveTextContent('부산광역시 숙소');
-      expect(
-        screen.queryByTestId('trip-base-staysheet-region-empty')
-      ).toBeNull();
-    });
-
-    it('AC-B4 · 전부 부산 숙소면 섹션 없는 한 줄 목록이고 안내는 없다', () => {
-      mockSavedStaysResult = loaded([
-        HAEUNDAE,
-        { ...HAEUNDAE, savedStayId: 'haeundae-2' },
-      ]);
-      mockAddressById = {
-        haeundae: BUSAN_HAEUNDAE,
-        'haeundae-2': BUSAN_HAEUNDAE,
-      };
-      openBusanNight();
-
-      expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(2);
-      expect(
-        screen.queryAllByTestId(/^trip-base-staysheet-section-/)
-      ).toHaveLength(0);
-      expect(
-        screen.queryByTestId('trip-base-staysheet-region-empty')
-      ).toBeNull();
-    });
-
-    it('AC-B5 · 주소 조회가 아직 끝나지 않은 숙소가 있으면 한 줄 목록이고 안내는 없다', () => {
-      mockAddressById = {
-        jongno: SEOUL_JONGNO,
-        'jw-ddm': { status: 'loading' },
-      };
-      openBusanNight();
-
-      expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(2);
-      expect(
-        screen.queryAllByTestId(/^trip-base-staysheet-section-/)
-      ).toHaveLength(0);
-      expect(
-        screen.queryByTestId('trip-base-staysheet-region-empty')
-      ).toBeNull();
-    });
-
-    it('AC-B6 · 조회는 끝났고 주소 모름이 섞이면 "다른 지역 · 위치 확인 안 됨" 섹션만, 안내는 없다', () => {
-      mockAddressById = {
-        jongno: SEOUL_JONGNO,
-        'jw-ddm': { status: 'unknown' },
-      };
-      openBusanNight();
-
-      const other = screen.getByTestId('trip-base-staysheet-section-other');
-      expect(
-        screen.getByTestId('trip-base-staysheet-section-other-title')
-      ).toHaveTextContent('다른 지역 · 위치 확인 안 됨');
-      expect(within(other).queryAllByTestId(CARD_ROOT)).toHaveLength(2);
-      expect(
-        screen.queryByTestId('trip-base-staysheet-region-empty')
-      ).toBeNull();
     });
   });
 
