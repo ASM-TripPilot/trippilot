@@ -31,6 +31,7 @@ import {
   SearchGlyph,
 } from '@/features/home';
 import type { MagazineCard, MagazineScreenProps } from '../model/magazineTypes';
+import { AppBar } from '@/shared/ui/AppBar';
 
 const ABSOLUTE_FILL = StyleSheet.absoluteFillObject;
 
@@ -67,7 +68,7 @@ const cardShadow = {
 // 뒤로가기(꺾쇠·유일한 role="button" — 목적지 router.back 확정) → 타이틀(좌정렬 16 bold) →
 // spacer → 돋보기(검색은 목적지 미확정이라 role 없음 — 죽은 버튼 회피, 홈 벨 관례). 두 컨트롤은
 // 넘겨받은 콜백만 발화한다(라우터 무지, D-1).
-function AppBar({
+function MagazineAppBar({
   onBack,
   onSearch,
 }: {
@@ -75,23 +76,23 @@ function AppBar({
   onSearch?: () => void;
 }): ReactElement {
   return (
-    <View className="w-full flex-row items-center gap-[10px] px-lg pb-[10px] pt-[14px]">
-      <Pressable
-        testID="magazine-appbar-back"
-        accessibilityRole="button"
-        accessibilityLabel="뒤로가기"
-        onPress={onBack}
-      >
-        <BackChevronGlyph size={24} />
-      </Pressable>
-      <Text className="font-noto-bold text-[16px] font-bold text-ink">
-        여행지 둘러보기
-      </Text>
-      <View className="flex-1" />
-      <Pressable testID="magazine-appbar-search" onPress={onSearch}>
-        <SearchGlyph size={22} />
-      </Pressable>
-    </View>
+    <AppBar
+      className="w-full flex-row items-center gap-[10px] px-lg pb-[10px] pt-[14px]"
+      back={{
+        testID: 'magazine-appbar-back',
+        accessibilityRole: 'button',
+        accessibilityLabel: '뒤로가기',
+        onPress: onBack,
+        glyph: <BackChevronGlyph size={24} />,
+      }}
+      title="여행지 둘러보기"
+      titleClassName="font-noto-bold text-[16px] font-bold text-ink"
+      right={
+        <Pressable testID="magazine-appbar-search" onPress={onSearch}>
+          <SearchGlyph size={22} />
+        </Pressable>
+      }
+    />
   );
 }
 
@@ -332,7 +333,7 @@ export function MagazineScreen({
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="magazine-root" className="flex-1 bg-canvas">
-        <AppBar onBack={onBack} onSearch={onSearch} />
+        <MagazineAppBar onBack={onBack} onSearch={onSearch} />
         <ScrollView
           className="flex-1"
           showsVerticalScrollIndicator={false}
