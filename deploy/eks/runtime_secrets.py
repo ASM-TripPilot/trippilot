@@ -18,7 +18,7 @@ APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
 AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
 ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS
-KAKAO_APP_ID
+KAKAO_APP_ID ASSISTANT_INTERPRET_MODE
 """.split())
 AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
@@ -36,6 +36,9 @@ BACKEND_DEFAULTS = {
     "PLACE_GEOCODE_MODE": "stub", "WEATHER_MODE": "fake",
     "PUSH_MODE": "off", "AI_REMINDER_COPY_MODE": "http",
     "AFFILIATE_MODE": "fallback",
+    # 도우미 발화 해석(U8 REL-U8-06). 앱 기본값은 fake(로컬용 낱말 표)라, 여기서 off 를 심지 않으면
+    # 운영이 대역으로 뜬다. off = 버튼 모드 — 켜는 것은 상대 경계와 지출 한도가 선 뒤의 결정이다.
+    "ASSISTANT_INTERPRET_MODE": "off",
 }
 
 
@@ -137,7 +140,9 @@ def validate_groups(groups):
     backend, ai = groups["backend"], groups["ai"]
     modes = {"PLACE_GEOCODE_MODE": {"stub", "kakao"}, "WEATHER_MODE": {"fake", "kma"},
              "PUSH_MODE": {"off", "expo"}, "AI_REMINDER_COPY_MODE": {"off", "http"},
-             "AFFILIATE_MODE": {"fallback", "tripcom"}}
+             "AFFILIATE_MODE": {"fallback", "tripcom"},
+             # http 는 아직 없다 — 백엔드가 기동에서 거부하는 값이라 배포 전에 막는다.
+             "ASSISTANT_INTERPRET_MODE": {"off", "fake"}}
     for key, allowed in modes.items():
         if key in backend and backend[key] not in allowed:
             raise ValueError(f"Unsupported {key} in backend secret")

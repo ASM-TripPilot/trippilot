@@ -331,11 +331,10 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `턴과 제안은 계약만 열려 있다 — 채워질 때까지 501`() {
+    fun `제안은 계약만 열려 있다 — 채워질 때까지 501`() {
         val (_, token) = newAccount()
         val id = UUID.randomUUID()
 
-        call(HttpMethod.POST, "/api/v1/assistant/sessions/$id/turns", token, "{}").first shouldBe 501
         call(HttpMethod.POST, "/api/v1/assistant/proposals/$id/apply", token).first shouldBe 501
         call(HttpMethod.POST, "/api/v1/assistant/proposals/$id/dismiss", token).first shouldBe 501
     }

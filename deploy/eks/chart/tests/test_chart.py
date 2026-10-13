@@ -300,7 +300,9 @@ class ChartTests(unittest.TestCase):
             for name in ("AFFILIATE_MODE", "TRIPCOM_ALLIANCE_ID", "TRIPCOM_SID", "TRIPCOM_AD_ID",
                          "ITINERARY_GENERATION_DAILY_LIMIT", "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS",
                          # 카카오 앱 ID(TRIP-1317) — 빠지면 시크릿에 넣어도 발급 앱 대조가 조용히 꺼진 채 돈다.
-                         "KAKAO_APP_ID"):
+                         "KAKAO_APP_ID",
+                         # 도우미 해석 스위치(U8) — 빠지면 시크릿의 off 가 파드에 안 닿아 운영이 앱 기본값(fake)으로 뜬다.
+                         "ASSISTANT_INTERPRET_MODE"):
                 ref = env[name]["valueFrom"]["secretKeyRef"]
                 self.assertEqual(ref["name"], "trippilot-backend")
                 self.assertEqual(ref["key"], name)

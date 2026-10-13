@@ -1,9 +1,7 @@
 package com.trippilot.assistant.application
 
 import com.trippilot.assistant.domain.AssistantMessage
-import com.trippilot.assistant.domain.AssistantMessageRepository
 import com.trippilot.assistant.domain.AssistantSession
-import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.core.error.ResourceNotFound
@@ -40,31 +38,7 @@ class AssistantSessionServiceTest : StringSpec({
     val now = Instant.parse("2026-10-13T00:00:00Z")
     val clock = Clock.fixed(now, ZoneOffset.UTC)
 
-    /** 실 어댑터와 같은 규칙의 대역 — (계정, 여행)당 하나. */
-    class Sessions : AssistantSessionRepository {
-        val rows = mutableListOf<AssistantSession>()
-        override fun openOrGet(candidate: AssistantSession) =
-            rows.firstOrNull { it.accountId == candidate.accountId && it.tripId == candidate.tripId } ?: candidate.also { rows += it }
-        override fun findOwned(accountId: UUID, sessionId: UUID, now: Instant) =
-            rows.firstOrNull { it.sessionId == sessionId && it.accountId == accountId && it.expiresAt > now }
-        override fun deleteByTrip(tripId: UUID): Int {
-            val before = rows.size
-            rows.removeAll { it.tripId == tripId }
-            return before - rows.size
-        }
-        override fun findByAccount(accountId: UUID, now: Instant, limit: Int) =
-            rows.filter { it.accountId == accountId && it.expiresAt > now }.sortedByDescending { it.lastTurnAt }.take(limit)
-        override fun delete(accountId: UUID, sessionId: UUID): Int {
-            val before = rows.size
-            rows.removeAll { it.sessionId == sessionId && it.accountId == accountId }
-            return before - rows.size
-        }
-    }
-
-    class Messages(private val bySession: Map<UUID, List<AssistantMessage>> = emptyMap()) : AssistantMessageRepository {
-        override fun findPage(sessionId: UUID, beforeSeq: Long?, limit: Int) =
-            bySession[sessionId].orEmpty().filter { beforeSeq == null || it.seq < beforeSeq }.sortedBy { it.seq }.takeLast(limit)
-    }
+    fun seeded(sessionId: UUID, messages: List<AssistantMessage>) = FakeMessages().apply { seed(sessionId, *messages.toTypedArray()) }
 
     fun message(seq: Long) = AssistantMessage(
         UUID.randomUUID(), seq, MessageRole.USER, MessageKind.TEXT, "말 $seq", null, emptyList(), null, null, now,
@@ -90,8 +64,8 @@ class AssistantSessionServiceTest : StringSpec({
     }
 
     fun service(
-        sessions: Sessions = Sessions(),
-        messages: Messages = Messages(),
+        sessions: FakeSessions = FakeSessions(),
+        messages: FakeMessages = FakeMessages(),
         trips: TripFacade = trips(),
         stays: TripBaseStayFacade = stays("서면 호텔", "해운대 호텔"),
     ) = AssistantSessionService(sessions, messages, TripContextReader(trips, stays), tripList, AssistantProperties(retentionDays = 90), clock)
@@ -122,7 +96,7 @@ class AssistantSessionServiceTest : StringSpec({
     }
 
     "다시 열면 같은 대화다 — 여행 대화와 일반 대화는 따로다" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
         val svc = service(sessions)
 
         val first = svc.open(acc, tripId).session.sessionId
@@ -132,7 +106,7 @@ class AssistantSessionServiceTest : StringSpec({
     }
 
     "남의 여행·없는 여행으로는 열지 않는다(404) — 세션도 만들지 않는다" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
 
         shouldThrow<ResourceNotFound> { service(sessions).open(UUID.randomUUID(), tripId) }
         shouldThrow<ResourceNotFound> { service(sessions).open(acc, UUID.randomUUID()) }
@@ -141,11 +115,11 @@ class AssistantSessionServiceTest : StringSpec({
 
     /** 청소가 아직 안 돌았을 뿐 지워졌어야 할 대화다 — 이어 열면 보존 기간이 지난 발화가 되살아난다(DATA-U8-01). */
     "보존 기간이 지난 대화는 이어 열지 않고 새로 만든다" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
         val stale = AssistantSession(UUID.randomUUID(), acc, tripId, now.minusSeconds(100), now.minusSeconds(100), expiresAt = now)
         sessions.rows += stale
 
-        val opened = service(sessions, Messages(mapOf(stale.sessionId to listOf(message(1))))).open(acc, tripId)
+        val opened = service(sessions, seeded(stale.sessionId, listOf(message(1)))).open(acc, tripId)
 
         opened.session.sessionId shouldNotBe stale.sessionId
         opened.page.messages shouldBe emptyList()
@@ -154,16 +128,16 @@ class AssistantSessionServiceTest : StringSpec({
 
     /** 이어 연 대화가 한 쪽보다 길면 커서가 함께 온다 — 없으면 앱이 위로 더 읽을 방법이 없다. */
     "이어 열면 최근 한 쪽과, 더 있을 때의 커서가 온다" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
         val id = service(sessions).open(acc, null).session.sessionId
         val many = (1L..(AssistantSessionService.DEFAULT_PAGE + 2L)).map { message(it) }
 
-        val reopened = service(sessions, Messages(mapOf(id to many))).open(acc, null)
+        val reopened = service(sessions, seeded(id, many)).open(acc, null)
 
         reopened.page.messages.size shouldBe AssistantSessionService.DEFAULT_PAGE
         reopened.page.messages.first().seq shouldBe 3L
         reopened.page.nextBefore shouldBe "3"
-        service(sessions, Messages(mapOf(id to many.take(3)))).open(acc, null).page.nextBefore shouldBe null
+        service(sessions, seeded(id, many.take(3))).open(acc, null).page.nextBefore shouldBe null
     }
 
     /**
@@ -171,7 +145,7 @@ class AssistantSessionServiceTest : StringSpec({
      * "여행 없이 한 대화"로 그리고, 눌러 열면 404 다.
      */
     "목록은 여행을 못 찾는 대화를 뺀다 — 지워진 여행의 대화가 일반 대화처럼 보이지 않게" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
         val orphan = AssistantSession(UUID.randomUUID(), acc, UUID.randomUUID(), now, now, now.plusSeconds(10))
         val general = AssistantSession(UUID.randomUUID(), acc, null, now, now.minusSeconds(60), now.plusSeconds(10))
         sessions.rows += listOf(orphan, general)
@@ -180,7 +154,7 @@ class AssistantSessionServiceTest : StringSpec({
     }
 
     "여행이 지워지면 그 여행의 대화만 지운다 — 두 번 와도 같다" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
         val svc = service(sessions)
         svc.open(acc, tripId)
         val general = svc.open(acc, null).session.sessionId
@@ -191,7 +165,7 @@ class AssistantSessionServiceTest : StringSpec({
     }
 
     "목록은 최근 대화순이고 여행 제목을 붙인다 — 만료된 것과 남의 것은 없다" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
         val general = AssistantSession(UUID.randomUUID(), acc, null, now, now.minusSeconds(60), now.plusSeconds(10))
         val trip = AssistantSession(UUID.randomUUID(), acc, tripId, now, now.minusSeconds(5), now.plusSeconds(10))
         sessions.rows += listOf(
@@ -205,10 +179,10 @@ class AssistantSessionServiceTest : StringSpec({
     }
 
     "메시지는 오래된 것부터 한 페이지 — 더 있으면 그 페이지의 첫 줄이 다음 커서다" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
         val svc = service(sessions)
         val id = svc.open(acc, null).session.sessionId
-        val paged = service(sessions, Messages(mapOf(id to (1L..5L).map { message(it) })))
+        val paged = service(sessions, seeded(id, (1L..5L).map { message(it) }))
 
         val latest = paged.messages(acc, id, before = null, limit = 2)
         latest.messages.map { it.seq } shouldContainExactly listOf(4L, 5L)
@@ -220,7 +194,7 @@ class AssistantSessionServiceTest : StringSpec({
     }
 
     "남의 대화·만료된 대화의 메시지는 404 다 — 잘못된 커서·쪽 크기는 400 이다" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
         val svc = service(sessions)
         val id = svc.open(acc, null).session.sessionId
         val expired = AssistantSession(UUID.randomUUID(), acc, UUID.randomUUID(), now, now, expiresAt = now)
@@ -235,7 +209,7 @@ class AssistantSessionServiceTest : StringSpec({
     }
 
     "지우기는 본인 것만 지우고, 없어도 조용히 끝난다" {
-        val sessions = Sessions()
+        val sessions = FakeSessions()
         val svc = service(sessions)
         val id = svc.open(acc, null).session.sessionId
 

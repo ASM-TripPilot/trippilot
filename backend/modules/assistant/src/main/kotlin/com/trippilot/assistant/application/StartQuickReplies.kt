@@ -28,4 +28,7 @@ object StartQuickReplies {
     )
 
     fun of(hasTrip: Boolean): List<QuickReply> = if (hasTrip) WITH_TRIP else WITHOUT_TRIP
+
+    /** 이 목록이 발급한 id 인가 — ACTION 턴이 받아도 되는 빠른 답인지 확인한다. */
+    fun find(id: String): QuickReply? = (WITH_TRIP + WITHOUT_TRIP).firstOrNull { it.id == id }
 }

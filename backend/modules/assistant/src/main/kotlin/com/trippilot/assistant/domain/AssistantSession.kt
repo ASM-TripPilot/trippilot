@@ -7,7 +7,6 @@ import java.util.UUID
  * 대화 맥락의 단위(DEC-U8-5). 여행 하나에 ACTIVE 세션 하나, 여행 없는 일반 세션도 계정당 하나다(INV-U8-01) —
  * 그 보장은 DB 부분 유니크가 한다. 여기 타입은 그 행의 모양일 뿐이다.
  *
- * `dialogue_context`·`refusal_streak` 은 턴 처리가 쓰는 칸이라 이 타입에 아직 없다(TRIP-1378).
  */
 data class AssistantSession(
     val sessionId: UUID,
@@ -19,6 +18,10 @@ data class AssistantSession(
     val lastTurnAt: Instant,
     /** 보존 만료(DATA-U8-01) — 지나면 열지 않고 새로 만든다. */
     val expiresAt: Instant,
+    /** 상대 `DialogueContext` 직렬형. **해석하지 않는다** — `turn_index` 를 올리는 것 말고는 그대로 반송한다(INV-U8-07). */
+    val dialogueContext: String = "{}",
+    /** 연속 거절(금칙어·범위 밖) 횟수 — 2 이상이면 같은 거절 대신 사용 안내로 바꾼다(BR-U8-25). */
+    val refusalStreak: Int = 0,
 )
 
 interface AssistantSessionRepository {
@@ -33,6 +36,9 @@ interface AssistantSessionRepository {
 
     /** 최근 대화순. 만료된 세션은 빼고 준다. */
     fun findByAccount(accountId: UUID, now: Instant, limit: Int): List<AssistantSession>
+
+    /** 턴 하나가 끝났다 — 마지막 턴 시각·보존 만료·대화 맥락·연속 거절 수를 한 번에 적는다. */
+    fun recordTurn(sessionId: UUID, at: Instant, expiresAt: Instant, dialogueContext: String, refusalStreak: Int)
 
     /** 세션과 그 메시지·제안을 지운다(hard delete, DATA-U8-05). 지운 행 수 — 남의 세션이면 0 이다. */
     fun delete(accountId: UUID, sessionId: UUID): Int

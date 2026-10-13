@@ -43,6 +43,14 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(seeded["shared"]["SERVICE_AUTH_TOKEN"], "secret")
         self.assertEqual(seeded["backend"]["PLACE_GEOCODE_MODE"], "stub")
         self.assertEqual(seeded["backend"]["AFFILIATE_MODE"], "fallback")
+        # 운영은 버튼 모드로 뜬다 — 앱 기본값(fake)이 그대로 닿으면 운영이 대역으로 말을 "알아듣는다".
+        self.assertEqual(seeded["backend"]["ASSISTANT_INTERPRET_MODE"], "off")
+
+    def test_seed_keeps_an_explicit_assistant_mode(self):
+        groups = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        groups["backend"] = {"ASSISTANT_INTERPRET_MODE": "fake"}
+        seeded = runtime_secrets.seed_groups(groups, lambda: "secret", lambda: "rsa")
+        self.assertEqual(seeded["backend"]["ASSISTANT_INTERPRET_MODE"], "fake")
 
     def test_provider_credentials_fail_before_deployment(self):
         cases = [
@@ -56,6 +64,9 @@ class SecretTests(unittest.TestCase):
             {"backend": {"AFFILIATE_MODE": "tripcom"}},
             {"backend": {"AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s"}},
             {"backend": {"AFFILIATE_MODE": "typo"}},
+            # 도우미 해석 — http 는 어댑터가 없어 백엔드가 기동에서 죽는다. 오타도 같다.
+            {"backend": {"ASSISTANT_INTERPRET_MODE": "http"}},
+            {"backend": {"ASSISTANT_INTERPRET_MODE": "on"}},
             # 생성 상한(TRIP-1314) — 있는데 틀리면 백엔드가 기동에서 죽는 값들.
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": ""}},
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "0"}},
