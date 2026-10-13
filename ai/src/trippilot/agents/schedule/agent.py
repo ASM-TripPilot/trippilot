@@ -316,10 +316,14 @@ class ScheduleAgent:
             request, pool, budget, t0, steps, trace_id, now)
 
         # ② 게이트웨이 선호 점수 (전 일자 공용 1회) — 실패·스킵이면 규칙 점수 (INV-4)
+        #    잔여는 어셈블리 바닥(`c2_reserved_ms`)을 **뺀** 값이다 — 다른 단계(⓪·②′·②⁗)와 같은
+        #    식. 전체 잔여를 주면 점수 호출이 바닥까지 먹고 어셈블리가 바닥을 그대로 쓰므로 합이
+        #    시한을 넘는다: 재계획은 에이전트 앞에서 PlanB 가 예산의 절반을 쓰는데, 2026-10-13 DEV
+        #    실측에서 점수 타임아웃 13.4s(=전체 잔여) + OR 5s 로 25s 시한을 넘겨 백스톱 504 가 났다.
         elapsed = self._clock.monotonic_ms() - t0
         candidates, mode = self._score(
-            request, pool, persona, budget, budget.total_ms - elapsed, steps,
-            trace_id, now,
+            request, pool, persona, budget,
+            budget.total_ms - elapsed - budget.c2_reserved_ms, steps, trace_id, now,
         )
         # LLM 모드인데 규칙 점수가 섞인 수(rule_backfill) — 가산·강등 전에 센다.
         backfilled = (sum(1 for c in candidates if not c.is_llm_score)
@@ -575,12 +579,14 @@ class ScheduleAgent:
                           "empty_pool")
             return (), ScoringMode.RULE
 
-        if budget.c1_ms < self._cfg.c1_min_ms or remaining_ms <= 0:
+        if budget.c1_ms < self._cfg.c1_min_ms or remaining_ms < self._cfg.c1_min_ms:
             # DL-2: 진입 전 잔여 확인 — 부를 시간이 없으면 부르지 않는다(침묵 스킵 금지).
+            # 잔여도 같은 하한으로 본다 — 상한이 넉넉해도 앞 단계(재계획의 PlanB)가 다 쓴 뒤
+            # 수백 ms 로 부르면 실호출 바닥(~3s)에 못 미쳐 타임아웃만 기다린다.
             # 이 경로는 페르소나를 읽지 않지만, 소유 검증은 이미 오케스트레이터 ⓪에서
             # 끝났다(TRIP-333 fail-closed) — 남의 persona_ref는 여기 도달하지 못한다.
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
-                          f"deadline:c1_budget={budget.c1_ms}ms")
+                          f"deadline:c1_budget={budget.c1_ms}ms,remaining={remaining_ms}ms")
             return self._rule_scores(request, pool), ScoringMode.RULE
 
         if persona is None:
