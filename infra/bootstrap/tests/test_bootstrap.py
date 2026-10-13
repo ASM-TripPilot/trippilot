@@ -168,6 +168,11 @@ class BootstrapSecurityTests(unittest.TestCase):
                 target = arn("iam", "policy", properties["ManagedPolicyName"])
                 self.assertTrue(allowed("iam:CreatePolicy", target),
                                 f"{name}: 권한 예제에 iam:CreatePolicy {target} 이 없다")
+                # 이름이 고정된 정책은 교체가 안 되므로 내용 변경이 **제자리 갱신**(새 버전 만들기)으로 온다.
+                # 만드는 권한만 있으면 첫 생성은 되고 그다음 수정에서 403 으로 롤백된다.
+                for action in ("iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions",
+                               "iam:GetPolicy", "iam:GetPolicyVersion"):
+                    self.assertTrue(allowed(action, target), f"{name}: 권한 예제에 {action} {target} 이 없다")
                 # 만들기만 하면 역할에 붙지 않는다 — 붙이는 권한도 같이 있어야 한다.
                 for role in properties["Roles"]:
                     holder = arn("iam", "role",
