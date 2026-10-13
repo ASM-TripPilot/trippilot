@@ -557,6 +557,15 @@ class AssistantTurnServiceTest : StringSpec({
 
         w.say(s, "오늘 날씨") // 상한이 0(기본값)이면 합이 얼마든 부른다
         w.interpreter.requests.size shouldBe 2
+
+        // "이번 달"은 여행지 시각(KST)으로 잰다 — UTC 로는 아직 10월 31일인 11월 1일 01:00 KST 에, 10월 것은 지난달이다
+        val newMonth = world()
+        newMonth.clock.now = Instant.parse("2026-10-31T16:00:00Z")
+        val late = AssistantSession(UUID.randomUUID(), acc, tripId, newMonth.clock.now, newMonth.clock.now, newMonth.clock.now.plusSeconds(3600))
+            .also { newMonth.sessions.rows += it }
+        newMonth.usage.llm[others to LocalDate.parse("2026-10-31")] = 5_000
+        newMonth.say(late, "오늘 날씨", service = newMonth.service(properties = capped))
+        newMonth.interpreter!!.requests.size shouldBe 1
     }
 
     "LLM 을 쓴 해석만 LLM 턴으로 센다" {
