@@ -8,7 +8,7 @@ import {
 import { useGetPlaces } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
-import { seoulDate } from '@/shared/lib/seoulDate';
+import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange } from '@/entities/trip';
 import { pickTrendingPlaces } from '@/entities/place';
@@ -135,11 +135,15 @@ export function HomePage() {
   // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
   const [savedMenuOpen, setSavedMenuOpen] = useState(false);
 
+  // 오늘(KST) — 상태로 들어 자정을 넘기면 홈 얼굴(여행 중·후 판정)이 바뀐다(TRIP-1364). 렌더 중
+  // `seoulDate(new Date())` 는 마운트 시점에 굳는다.
+  const today = useSeoulToday();
+
   // 데이터 도착 후에만 여행 유무를 판정한다(대기·실패면 data 가 없어 undefined). 비-ENDED 지배 여행이
   // 있으면 planning, 없으면 undefined→discovery. 스팟 조회 지역이 이 판정을 써서 early return 위에 둔다.
   const phase = resolveHomePhase({
     trips: trips.data ?? [],
-    today: seoulDate(new Date()),
+    today,
     savedCount: savedPoiIds.length,
     formatTripMeta: (trip) =>
       `${formatTripRange(trip.startDate, trip.endDate)} · ${formatNightsLabel(
