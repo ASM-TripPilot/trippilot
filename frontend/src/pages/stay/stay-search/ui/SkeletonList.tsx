@@ -28,12 +28,15 @@ function SkeletonCard({ index }: { index: number }): ReactElement {
       style={softCardShadow}
       className="w-full gap-sm rounded-card border border-hairline bg-canvas p-md"
     >
-      <Skeleton className="h-[178px] w-full rounded-card bg-surface-strong" />
-      <View className="gap-xs">
-        <Skeleton className="h-[14px] w-2/3 rounded-[6px] bg-hairline" />
-        <Skeleton className="h-[12px] w-1/2 rounded-[6px] bg-surface-strong" />
-        <Skeleton className="h-[16px] w-1/3 rounded-[6px] bg-surface-strong" />
-      </View>
+      {/* 펄스 루프는 카드 하나에 하나 — 카드 테두리·배경은 정지, 상자들만 묶어 펄스한다(TRIP-1363). */}
+      <Skeleton className="gap-sm">
+        <View className="h-[178px] w-full rounded-card bg-surface-strong" />
+        <View className="gap-xs">
+          <View className="h-[14px] w-2/3 rounded-[6px] bg-hairline" />
+          <View className="h-[12px] w-1/2 rounded-[6px] bg-surface-strong" />
+          <View className="h-[16px] w-1/3 rounded-[6px] bg-surface-strong" />
+        </View>
+      </Skeleton>
     </View>
   );
 }

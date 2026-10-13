@@ -357,15 +357,18 @@ function LoadingBlock(): ReactElement {
         <View
           key={index}
           testID={`explore-saved-skeleton-${index}`}
-          className="flex-row items-center gap-md border-b border-hairline px-lg py-md"
+          className="border-b border-hairline px-lg py-md"
         >
-          <Skeleton className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
-          <Skeleton className="h-20 w-[104px] rounded-thumb bg-surface-strong" />
-          <View className="flex-1 gap-sm">
-            <Skeleton className="h-[15px] w-2/3 rounded-[6px] bg-hairline" />
-            <Skeleton className="h-[13px] w-1/2 rounded-[6px] bg-surface-strong" />
-          </View>
-          <Skeleton className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
+          {/* 펄스 루프는 행 하나에 하나 — 구분선은 정지, 상자들만 묶어 펄스한다(TRIP-1363). */}
+          <Skeleton className="flex-row items-center gap-md">
+            <View className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
+            <View className="h-20 w-[104px] rounded-thumb bg-surface-strong" />
+            <View className="flex-1 gap-sm">
+              <View className="h-[15px] w-2/3 rounded-[6px] bg-hairline" />
+              <View className="h-[13px] w-1/2 rounded-[6px] bg-surface-strong" />
+            </View>
+            <View className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
+          </Skeleton>
         </View>
       ))}
     </View>

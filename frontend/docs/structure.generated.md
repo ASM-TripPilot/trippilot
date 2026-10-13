@@ -366,13 +366,14 @@
 - `src/features/create-trip/model/wizardOrigin.ts`  →  WizardOriginParams · wizardOriginParams · isWizardOrigin
 
 ## src/features/edit-itinerary/
-- `src/features/edit-itinerary/index.ts`  →  buildEditItineraryRequest · addSlot · insertSlotAt · useItineraryEditStore · useEditorDraft · resolveSlotSwapError · swapSlotPoi · SaveConflictDialog
+- `src/features/edit-itinerary/index.ts`  →  buildEditItineraryRequest · addSlot · insertSlotAt · useItineraryEditStore · useEditorDraft · useConfirmItinerary · resolveSlotSwapError · swapSlotPoi · SaveConflictDialog
 
 ## src/features/edit-itinerary/model/
 - `src/features/edit-itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
 - `src/features/edit-itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · addSlot · insertSlotAt · ItineraryEditState · useItineraryEditStore
 - `src/features/edit-itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
 - `src/features/edit-itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
+- `src/features/edit-itinerary/model/useConfirmItinerary.ts`  →  useConfirmItinerary
 - `src/features/edit-itinerary/model/useEditorDraft.ts`  →  useEditorDraft
 
 ## src/features/edit-itinerary/ui/
@@ -1677,4 +1678,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1039개 파일
+합계 1040개 파일

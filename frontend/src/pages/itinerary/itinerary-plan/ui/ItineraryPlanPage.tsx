@@ -2,7 +2,6 @@ import type { ReactElement, ReactNode } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 
 import { buildSlotKey } from '@/entities/itinerary-slot';
@@ -31,15 +30,13 @@ import {
 } from '@/features/itinerary';
 import { UnplacedMustVisitNotice } from '@/features/itinerary';
 import { isShareCaptureArmed } from '@/features/share-trip-card';
+import { useConfirmItinerary } from '@/features/edit-itinerary';
 import { useTripWizardStore } from '@/features/create-trip';
 import { AssistantFab, assistantHref } from '@/features/open-assistant';
 import {
-  getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
-  usePostTripsTripIdItineraryConfirm,
 } from '@/shared/api/index.hooks';
-import { isAlreadyRegistered } from '@/shared/api';
 import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
 import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
@@ -150,7 +147,6 @@ export function ItineraryPlanPage({
 }): ReactElement {
   const fromNotification = from === 'notification';
   const router = useRouter();
-  const queryClient = useQueryClient();
   // null = 사용자가 아직 날짜를 안 골랐다 — 그동안은 알림 진입이면 오늘, 아니면 1일차(tabs 는 조회 뒤에야 생긴다).
   const [activeDayIndex, setActiveDayIndex] = useState<number | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -206,14 +202,20 @@ export function ItineraryPlanPage({
   const trip = useGetTripsTripId(tripId);
   const itinerary = useGetTripsTripIdItinerary(tripId);
   // TError=unknown 으로 열어 onError 의 error 를 axios 판정(isNotFound)에 그대로 태운다.
-  const confirm = usePostTripsTripIdItineraryConfirm<unknown>();
+  // 캐시 쓰기·409 재조회는 공통 훅, 위저드 비우기는 형제 feature 라 콜백으로 넘긴다.
+  // 이 여행의 위저드 세션은 확정으로 끝났다 — 다음 "여행 만들기"는 항상 새 세션이므로 드래프트(여행지·날짜·
+  // 인원·예산·꼭 갈 곳 시드)를 전부 비운다. 위저드 진입 시점(`trips/new/_layout.tsx`)의 `resetMustVisits()`는
+  // 시드 3필드만 지워 그 외 값이 다음 여행에 새어 들어가던 것을 막는다(BR-U1-33 왕복 보존은 이 지점 이전에만).
+  const confirm = useConfirmItinerary(tripId, () =>
+    useTripWizardStore.getState().reset()
+  );
 
   function handleConfirm(): void {
     setConfirmError(null);
     confirm.mutate(
       { tripId },
       {
-        onSuccess: (data) => {
+        onSuccess: () => {
           // TRIP-1013 #057 — CTA 가 '일정 수정'으로 바뀌는 순간 창을 다시 연다(응답이 400ms보다 늦어도 관통 차단).
           openPressGuardWindow();
           // 확정 알림은 성공 사건에서 1회만(TRIP-1047) — 재진입·재렌더·409 재조회 정합에선 안 뜬다.
@@ -221,30 +223,10 @@ export function ItineraryPlanPage({
             message: CONFIRMED_TOAST,
             testID: 'itinerary-confirmed-toast',
           });
-          // 응답이 곧 최신 Itinerary(CONFIRMED)라 조회 캐시에 직접 써넣는다 — 재조회 0회로
-          // 읽기전용으로 전환된다. resetQueries/removeQueries 는 data 까지 버려 금지(02a ★3).
-          queryClient.setQueryData(
-            getGetTripsTripIdItineraryQueryKey(tripId),
-            data
-          );
-          // 이 여행의 위저드 세션은 확정으로 끝났다 — 다음 "여행 만들기"는 항상 새 세션이므로
-          // 드래프트(여행지·날짜·인원·예산·꼭 갈 곳 시드)를 여기서 전부 비운다. 위저드 진입
-          // 시점(`trips/new/_layout.tsx`)의 `resetMustVisits()`는 시드 3필드만 지워 그 외 값이
-          // 다음 여행에 새어 들어가던 것을 막는다(BR-U1-33 왕복 보존은 이 지점 이전에만 적용).
-          useTripWizardStore.getState().reset();
         },
-        onError: (error) => {
+        // 재조회(409 만)는 공통 훅이 한다. 여기는 인라인 안내만으로 침묵을 깬다(TRIP-355).
+        onError: () => {
           setConfirmError(CONFIRM_ERROR_NOTE);
-          // 재조회는 **409 에서만** 건다 — 409 는 서버 진실이 이미 확정일 수 있어 무효화로
-          // 재조회해 정합한다(무효화만 — data 는 보존). 404·500·네트워크는 재조회하지 않는다:
-          // itinerary 상태가 안 바뀌었고, 백엔드가 넓게 죽은 outage 에서 재조회마저 실패하면
-          // itinerary.isError → resolvePlanState 가 failed 로 판정해 타임라인이 통째로 사라진다
-          // (INV-4 정반대). 인라인 안내(위 setConfirmError)만으로 침묵을 깬다(TRIP-355).
-          if (isAlreadyRegistered(error)) {
-            void queryClient.invalidateQueries({
-              queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
-            });
-          }
         },
       }
     );
