@@ -3724,13 +3724,14 @@ ACTIVE 만으로 거르지 않되(담아 둔 폐업 장소가 열려야 한다) 
 id = "U8-EDIT-FACADE"
 ticket = "TRIP-1374"
 title = "[U8] 일정 편집을 다른 모듈에 여는 퍼사드 — 변경 출처를 받는다 (G-U8-1)"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/itinerary-generation",
   "backend/modules/change-log",
 ]
 note = """
+**완료(2026-10-13, PR #1090).** `ItineraryEditFacade.edit` 가 일정 id·위반 여부·판정 여부를 돌려준다.
 `EditItineraryService` 는 `application` 층에만 있고 퍼사드가 없다. 변경 출처가 `ChangeSourceType.MANUAL` 로
 박혀 있고 change log 는 여행 중에만 남는다(FD 실측). `itinerary-generation/api` 에
 `ItineraryEditFacade.edit(accountId, tripId, days, reason, source)` 를 열어 `ASSISTANT` 를 받게 한다 —
@@ -3742,10 +3743,11 @@ note = """
 id = "U8-PLAN-FACADE-FIELDS"
 ticket = "TRIP-1375"
 title = "[U8] 일정 퍼사드에 거리·위반 3필드 — 진행 검토가 읽을 값이 REST 에만 있다 (G-U8-3)"
-status = "todo"
+status = "done"
 migration = false
 touches = ["backend/modules/itinerary-generation"]
 note = """
+**완료(2026-10-13, PR #1091).** 이 뷰는 기록 응답(`GET …/records`)에 그대로 직렬화돼 나간다 — openapi `PlannedSlot` 도 함께 고쳤다.
 `PlannedSlotView` 에 `distanceRange`·`hasViolation`·`violationReason` 이 없다 — REST `SlotResponse` 에만 있다.
 `ItineraryPlanFacade` 에 세 필드를 더한다(api-safe 문자열·불리언). US-ASSIST-03 "진행 검토"의 선행이다.
 AI·디자인을 기다리지 않는다.
@@ -3755,10 +3757,17 @@ AI·디자인을 기다리지 않는다.
 id = "U8-AI-EDIT-PORT"
 ticket = "TRIP-1376"
 title = "[U8] AI 편집 제안·슬롯 후보를 api 로 연다 — /ai/v1/itinerary/edit 의 백엔드 호출자가 0이다 (G-U8-2)"
-status = "todo"
+status = "done"
 migration = false
 touches = ["backend/modules/itinerary-generation", "backend/app/src/test"]
 note = """
+**완료(2026-10-14, PR #1092 편집 제안 · #1093 슬롯 후보).** 다음 노드가 알아야 할 것:
+- `ItineraryEditProposalFacade.propose(…, deadlineMs)` → `Proposed(baseDays, days, applyHint)`·`Rejected(violations)`·`NotUnderstood`·`Unavailable`.
+  **지문과 '전' 열은 `baseDays` 로 만든다** — 일정을 따로 다시 읽으면 그 사이 편집이 기준에 섞인다.
+- **상대는 일정과 위반을 함께 주지 않는다.** 위반이면 해가 없다 — FD 의 "위반이 있는 비교 카드"는 생길 수 없고, 위반은 카드 없이 사유만이다.
+- **상대의 편집 응답은 거리를 싣지 않는다** — `ProposedSlot.distanceRange` 는 실 모드에서 늘 null 이다(BR-U8-35 의 '후' 거리는 그릴 수 없다).
+- 여행 시작 전 확정 일정은 제안 단계에서 409 다(저장 경로와 같은 잠금).
+- 실 왕복에서 드러난 상대 결함은 [[AI-EDIT-TRANSPORT]].
 **범위를 넓혔다(2026-10-13 쪼갬 검수)** — 포트 배선만으로는 assistant 모듈이 못 쓴다. `ScheduleAgentPort` 는 `domain`,
 `SlotCandidateService` 는 `application` 이고 `itinerary-generation/api` 에는 편집 제안도 슬롯 후보도 없다(R1 — 타 모듈은
 `api` 만 본다). FD 갭 표도 이것을 빠뜨렸다(G-U8-1 은 저장 경로만 다룬다). 이 노드가 **퍼사드까지** 연다:
@@ -3818,6 +3827,40 @@ AI 대화 경계(`POST /ai/v1/dialogue/interpret`)는 상대 미구현([[U8-AI-D
 
 **이 노드는 크다 — 착수하면 쪼갠다**(계약·영속 / 세션·메시지 / 제안·적용 / 가드레일). 착수 전 FD 4종과
 NFR 2종, 그리고 프론트의 `assistantContract.ts` 를 읽는다 — 프론트가 이미 가정한 응답 모양이 있다.
+"""
+
+[[nodes]]
+id = "AI-EDIT-TRANSPORT"
+ticket = "TRIP-1381"
+title = "[AI] 자가용 일정은 편집 제안이 전부 거절된다 — 생성물이 자기 검증(HC2)을 통과하지 못한다"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = """
+[[U8-AI-EDIT-PORT]] 의 실 왕복(2026-10-13)에서 드러났다. 자가용 일정은 슬롯 하나를 빼는 편집도 `REJECTED` 다 —
+재타이밍은 자가용 간격으로 하고 검증은 대중교통으로 잰다. 상대는 고친 날만이 아니라 **일정 전체**를 검증해서,
+손대지 않은 날의 기존 위반 하나로도 그 여행의 모든 제안이 거절된다. 편집 응답에 거리가 없는 것, 발화 번역이
+`REORDER_DAY` 로 빗나가는 것도 같은 티켓에 적었다.
+**구현을 막지는 않는다**(대역과 대중교통 일정으로 선다). 다만 풀리기 전에 [[U8-PROPOSAL]] 을 실 모드로 켜면 자가용 여행에서
+도우미의 변경 제안이 늘 "제안할 수 없어요"다 — U8 개통 조건이다. 백엔드의 우회 하나(교체 제안의 풀 중심을 새 장소로)도
+상대 풀 규칙이 맞춰지면 걷어 낸다.
+"""
+
+[[nodes]]
+id = "TEST-OPEN-IN-VIEW"
+ticket = "TRIP-1387"
+title = "통합 테스트가 open-in-view 를 켠 채 돈다 — 테스트용 application.yml 이 본 설정을 가린다"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/test/resources/application.yml",
+]
+note = """
+[[U8-CONTRACT]](PR #1117)의 동시 열기 IT 가 드러냈다: 8개 동시 요청이 전원 500(연결 풀 고갈), 같은 테스트에
+`spring.jpa.open-in-view=false` 를 주면 통과. 테스트가 운영과 다른 세션 수명으로 돌아 **지연 로딩 예외를 원리적으로 못 잡는다.**
+테스트 설정에 명시하고 전체 빌드를 돌려 숨은 예외가 드러나는지 본다 — 드러나면 운영에서 이미 나고 있는 결함이다.
+본 설정의 다른 키 중 테스트에 닿아야 하는 것이 더 있는지도 대조한다. 닫히면 #1117 IT 의 동시 요청 수(3) 제한을 되돌린다.
 """
 
 [[nodes]]
@@ -3931,7 +3974,7 @@ OBS-02 리프레시 재사용 감지 로그 메트릭 필터 → SNS → Slack, 
 
 # ── U8 본체 넷 + http 어댑터(blocked) (2026-10-13 쪼갬). **노트는 의무의 전부가 아니다 — 정본은 FD·NFR 이고 착수 때 다시 읽는다.**
 # 노트에는 "빠뜨리면 조용히 틀리는 것"과 "어느 노드 몫인지 헷갈리는 것"만 적는다. 루프 순서: EDIT-FACADE → PLAN-FACADE-FIELDS → AI-EDIT-PORT → CONTRACT → TURN → PROPOSAL → OPS.
-# 순서는 의존이 아니라 공유 자원이 정한다 — 앞의 셋은 같은 모듈(itinerary-generation), 뒤의 넷은 assistant 모듈·`openapi.yaml`·`application.yml` 을 한 번에 하나씩 만진다(마이그레이션은 U8-CONTRACT 하나뿐이다).
+# 순서는 의존이 아니라 공유 자원이 정한다 — 앞의 셋은 같은 모듈(itinerary-generation), 뒤의 넷은 assistant 모듈·`openapi.yaml` 을 한 번에 하나씩 만진다(`application.yml` 은 PROPOSAL 을 뺀 셋, 마이그레이션은 U8-CONTRACT 하나뿐이다).
 # **배포는 루프 밖이다.** dev 가 운영이다. 스위치(`ASSISTANT_INTERPRET_MODE=off`)는 **해석만** 끈다 — 엔드포인트는 배포되면
 # 인증된 사용자에게 열린다(출시 앱이 가짜 어댑터를 써서 부르는 쪽이 없을 뿐이다). 자세한 것은 U8-CONTRACT 노트.
 
@@ -4010,6 +4053,7 @@ FD `business-logic-model.md` §2 한 턴의 흐름(10단계)과 §4 디스패치
 - **디스패치**: 조회형(진행 검토·다음 장소·거리·장소·날씨)과 화면 넘기기. closed-set(PBT-U8-9), dead-end 없음(PBT-U8-2).
   변경형 두 의도(`EDIT_SCHEDULE`·`SUGGEST_ALTERNATIVE`)의 처리기는 [[U8-PROPOSAL]] 에서 온다 — **그때까지 이 노드가 임시
   처리기를 둔다**(일정 편집 화면으로 넘기는 `next_action`). 비워 두면 PBT-U8-9(의도마다 처리기 정확히 하나)와 PBT-U8-2 가 못 선다.
+  여행 없는 일반 세션에서는 넘길 화면이 없다 — 앱은 `OPEN_ITINERARY_EDIT` 를 여행이 있을 때만 그리므로 그 경우의 다음 행동을 따로 정한다(BR-U8-05).
 - **사용량과 계정 일 상한**: 턴마다 `assistant_usage_daily` 를 쓴다(③). LLM 턴 일 상한 30(COST-U8-02, 설정값)을 넘으면
   **차단이 아니라 강등** — TEXT 턴이 해석 없이 버튼 응답으로 간다(COST-U8-03 ★). `ASSISTANT_INTERPRET_MODE=off` 도 같은
   응답 모양이다(REL-U8-02·06). 강등은 WARN 1줄(OBS-U8-03)과 카운터(OBS-U8-04)로 남긴다. **전역 월 상한은 [[U8-OPS]]** 가
@@ -4037,6 +4081,7 @@ touches = [
   "backend/modules/assistant",
   "backend/modules/itinerary-generation",
   "backend/modules/change-log",
+  "backend/common/core",
   "backend/docs/design/openapi.yaml",
 ]
 note = """
@@ -4054,6 +4099,13 @@ FD §2.1 · DEC-U8-2·3 · `domain-entities.md` §3.3·§3.5. `EDIT_SCHEDULE`(�
   세지 않으면 가장 비싼 턴 종류(해석 + 편집 번역, COST-U8-06)가 일 상한 30 과 월 상한을 비켜 간다.
 - 편집 단계의 시한은 "턴 잔여 전부"다(PERF-U8-02) — 퍼사드에 마감을 넘길 자리가 있어야 13s 를 지킨다.
 - 여행 전 변경의 리비전에는 `[도우미]` 표지가 붙는다(BR-U8-19) — [[U8-EDIT-FACADE]] 가 출처로 처리한다.
+
+- 409 의 `STALE`·`EXPIRED`·`NOT_APPLICABLE` 을 앱이 `error.code` 로 가른다 — `ErrorCode` 에 그 셋이 없다. `backend/common/core`
+  를 건드린다(상태 매핑은 `ConflictDetected(errorCode=…)` 로 이미 409 다).
+- **여행 중 확정 일정에서는 대체 후보가 늘 409 다** — `SlotCandidateService` 는 PLANNED 가 아니면 전부 거절하는데, 편집 저장은
+  TRIP-999 로 여행 중 확정 일정을 받는다(주석 "골라도 편집이 409 로 막힌다"가 낡았다). 도우미의 진입점에 여행 중 허브가
+  있으므로(BR-U8-50) 가드를 편집 쪽과 맞추거나 여행 중 대체 후보를 다른 길로 보낸다 — REST 동작이 바뀌는 결정이다.
+- 슬롯 후보의 거리는 모를 때 `"거리 미확인"` 문자열이다(null 이 아니다) — 카드에서 그 값을 거리로 그리지 않게 가른다.
 
 **AI `/edit` 와 슬롯 후보를 부르는 길은 [[U8-AI-EDIT-PORT]] 가 `api` 로 연다** — assistant 모듈은 남의 `domain`·`application`
 을 못 본다(R1). 이 노드가 `itinerary-generation`·`change-log` 를 건드리는 것은 위의 편집 결과 확장 때문이다.
