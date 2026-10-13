@@ -1,10 +1,13 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # 행사 웹소싱 일일 배치 (TRIP-421)
 #
 # ai-ci와 완전히 분리 — push/PR 트리거 없음 (CI 실 호출 0, D37). 실 호출은
 # 스케줄(KST 새벽 4:40 — POI 수집 4:00과 시간차) 또는 수동 실행만.
 #
 # 파이프라인: NAVER API HUB 검색(웹문서·블로그·지역) → C1 EVENT_EXTRACTION(LLM,
-# GPT-5.6 sol) → 게이트(환각 드롭) → collected_events.json 등록·만료 청소.
+# GPT-5.6) → 게이트(환각 드롭) → collected_events.json 등록·만료 청소.
 # 행사는 POI가 아니다(INV-1) — 저장소는 EventProvider가 읽는 행사 전용 문서.
 #
 # 키: Repository Secrets NAVER_SEARCH_CLIENT_ID/SECRET(검색) + AZUREAPIKEY(추출).
@@ -45,7 +48,9 @@ jobs:
       run:
         working-directory: ai
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
+        with:
+          ref: develop   # 실행 코드는 develop (main의 ai/는 구버전)
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -85,9 +90,7 @@ jobs:
           LLM_PROVIDER: openai
           OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           OPENAI_BASE_URL: ${{ vars.AZURE_OPENAI_ENDPOINT }}
-          # luna → sol (2026-10-12 사용자 지정). 서비스는 claude-fable-5-1 로 통일했지만(#1038)
-          # 행사는 하루 17회라 fable 이면 월 ~$125 — 무과금 게이트웨이의 상위 배포로 간다.
-          OPENAI_MODEL: gpt-5.6-sol
+          OPENAI_MODEL: gpt-5.6-luna   # 행사 추출은 luna 배포 사용 (사용자 지정 2026-08-21)
           OPENAI_API: responses
         run: |
           if [ -z "$NAVER_SEARCH_CLIENT_ID" ]; then
@@ -124,7 +127,7 @@ jobs:
           ) || echo "::warning::행사 저장소 push 실패 — 내일 재수집으로 자연 복구 (수집 자체는 성공)"
       - name: 산출물 artifact 보존 (30일)
         if: steps.collect.outputs.skipped != 'true'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: collected-events
           path: |

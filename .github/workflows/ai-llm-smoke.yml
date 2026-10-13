@@ -1,3 +1,6 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # 실모델 LLM 스모크 — 일일 스케줄 + 수동 실행 (TRIP-340 K-2, TRIP-346)
 #
 # 목적: 하루 1회(UTC 22시 = KST 아침 7시) 실모델 연결(엔드포인트·키·게이트 파싱)을
@@ -35,13 +38,10 @@ on:
   workflow_dispatch:
     inputs:
       provider:
-        # 기본은 운영과 같은 mixed — 수동 실행에도 이 기본값이 채워지므로,
-        # 여기가 openai 면 아래 `inputs.provider || 'mixed'` 폴백이 스케줄에서만
-        # 먹어 "수동은 openai, 스케줄은 mixed" 로 갈라진다(실측: run 33523506956).
-        description: 'LLM 제공자 (운영과 동일한 mixed 권장 · v1 표면 = openai)'
+        description: 'LLM 제공자 (v1 표면 = openai)'
         type: choice
-        options: [mixed, openai, azure]
-        default: mixed
+        options: [openai, azure]
+        default: openai
       endpoint:
         description: 'base_url — /openai/v1 까지만, /responses 등 경로 제외 (비우면 repo Variable AZURE_OPENAI_ENDPOINT)'
         required: false
@@ -76,27 +76,18 @@ jobs:
       run:
         working-directory: ai
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
+        with:
+          ref: develop   # 실행 코드는 develop (main의 ai/는 구버전)
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
           cache-dependency-glob: ai/uv.lock
       - run: uv sync --locked
-      # 모델 배정의 정본은 .env.example 한 곳 — 여기에 값을 복사해 두면
-      # "운영은 sol/claude, 리허설은 terra" 가 조용히 갈라진다(실제로 갈라져 있었다).
-      # working-directory 가 ai/ 라 정본은 상위에 있다.
-      - name: 기능별 모델 배정 로드 (.env.example = 정본)
-        run: |
-          v=$(sed -n 's/^AI_LLM_FEATURE_MODELS=//p' ../.env.example | head -1)
-          [ -n "$v" ] || { echo "::error::.env.example 에 AI_LLM_FEATURE_MODELS 가 비어 있다"; exit 1; }
-          echo "TRIPPILOT_LLM_FEATURE_MODELS=$v" >> "$GITHUB_ENV"
-          echo "::notice::리허설 모델 배정 = $v"
       - name: 실모델 스모크 1건 (프롬프트 렌더 → 호출 → 게이트 파싱)
         env:
           # schedule 실행에선 inputs.*가 전부 빈 값 — || 기본값이 성립해야 한다
-          LLM_PROVIDER: ${{ inputs.provider || 'mixed' }}
-          # mixed 는 양쪽 키가 다 필요하다(fail-fast). CI 전용 키 — 개인·팀 볼트 키와 별개.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LLM_PROVIDER: ${{ inputs.provider || 'openai' }}
           # 같은 시크릿을 두 이름으로 노출 — 제공자 선택에 따라 스크립트가 맞는 쪽을 읽는다
           AZURE_OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
@@ -169,9 +160,7 @@ jobs:
         if: steps.fetch-pois.outputs.skipped != 'true'
         env:
           # LLM env는 위 INTENT 스모크 스텝과 동일 매핑
-          LLM_PROVIDER: ${{ inputs.provider || 'mixed' }}
-          # mixed 는 양쪽 키가 다 필요하다(fail-fast). CI 전용 키 — 개인·팀 볼트 키와 별개.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LLM_PROVIDER: ${{ inputs.provider || 'openai' }}
           AZURE_OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           AZURE_OPENAI_ENDPOINT: ${{ inputs.endpoint || vars.AZURE_OPENAI_ENDPOINT }}
@@ -190,10 +179,6 @@ jobs:
           EVENTS_STORE: collected_events.json
           # TRIP-524 — 있으면 품질 floors 게이트(FAIL)·3σ 회귀(WARNING), 없으면 무게이트
           SMOKE_BASELINE_JSON: rehearsal_baseline.json
-          # TRIP-869 후속 — 리허설 결과에 LLM 비용을 실어 rehearsal_log.jsonl 시계열에
-          # 누적한다. 없으면 cost=null(모름). 현행 배정은 멘토 게이트웨이라 전건
-          # unpriced 가 정상이고, Claude 배정이 섞이는 순간부터 금액이 잡힌다.
-          TRIPPILOT_LLM_PRICE_FILE: config/llm-prices.json
         run: uv run python scripts/smoke_itinerary.py
       # 후속 3스텝은 !cancelled() — 품질 게이트 FAIL(exit 1)로 잡이 붉어도 그날
       # 기록·artifact는 남긴다 (TRIP-524): 회귀가 처음 발생한 날의 증빙이 가장 귀하다.
@@ -239,7 +224,7 @@ jobs:
           ) || echo "::warning::리허설 로그 push 실패 — 기록만 유실 (리허설 자체는 성공)"
       - name: 리허설 결과 artifact 보존 (30일)
         if: steps.fetch-pois.outputs.skipped != 'true' && !cancelled()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: rehearsal-result
           path: ai/rehearsal_result.json
