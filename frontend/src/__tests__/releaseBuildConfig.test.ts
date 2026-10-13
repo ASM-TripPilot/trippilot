@@ -274,9 +274,11 @@ describe('TRIP-1370 Sentry 운영 켬', () => {
     expect(String(production.env?.EXPO_PUBLIC_API_BASE_URL)).toMatch(
       /^https:\/\/[^/]+$/
     );
+    // 조직·프로젝트 이름은 업로드 토큰의 조직과 같아야 한다(사용자 확인 2026-10-13: Sentry 조직 ajou-s0,
+    // 프로젝트 react-native). 어긋나면 운영 iOS 빌드의 업로드가 "조직 없음/권한 없음"으로 실패한다.
     expect(optionsOf('@sentry/react-native/expo')).toEqual({
-      organization: 'trippilot',
-      project: 'trippilot-frontend',
+      organization: 'ajou-s0',
+      project: 'react-native',
     });
   });
 

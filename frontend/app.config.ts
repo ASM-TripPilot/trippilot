@@ -168,8 +168,8 @@ const config: ExpoConfig = {
     [
       '@sentry/react-native/expo',
       {
-        organization: 'trippilot',
-        project: 'trippilot-frontend',
+        organization: 'ajou-s0',
+        project: 'react-native',
       },
     ],
     ['@react-native-seoul/kakao-login', { kakaoAppKey: kakaoNativeAppKey }],
