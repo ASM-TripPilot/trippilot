@@ -75,8 +75,9 @@ function resolveRetryAt(error: unknown, now: Date): AiLimitRetryAt | null {
  *     `goHome` 은 409 [기다리기]·관찰 모드와 공유라 거기 넣으면 거짓 토스트가 샌다. 성공 표지는
  *     호출별 onSuccess 첫 줄: replace 가 결과 재렌더보다 먼저 화면을 내릴 수 있어서다.
  *  7. **AI 일일 한도(TRIP-1314 서버 · TRIP-1368 수신).** POST 가 429 면 일반 실패가 아니라 한도 얼굴
- *     (`ai-limit-notice`, [직접 짜기 이어가기]·[닫기] — [다시 시도] 없음)을 띄운다. 429 는 **상태 코드**로 판정하고
- *     (코드명으로 분기하지 않는다), 풀리는 시각은 `Retry-After`(초)로 계산하며 헤더가 없으면 시각 없이 안내한다.
+ *     (`ai-limit-notice`, [직접 짜기 이어가기]·[닫기] — [다시 시도] 없음)을 띄운다. 429 **이면서** 오류 코드가
+ *     `GENERATION_DAILY_LIMIT` 일 때만이다(`isGenerationDailyLimit`) — RATE_LIMITED 같은 짧은 429·코드 없는 429 는
+ *     일반 실패(재시도 가능)로 간다. 풀리는 시각은 `Retry-After`(초)로 계산하며 헤더가 없으면 시각 없이 안내한다.
  *     한도는 서버 몫이라 클라는 세지 않는다 — 기기 로컬 카운터(TRIP-1268 임시 장치)는 이 칸에서 삭제됐다.
  */
 export function GeneratingPage({
