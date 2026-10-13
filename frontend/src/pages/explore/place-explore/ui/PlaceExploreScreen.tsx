@@ -270,14 +270,15 @@ function CategoryChips({
  * `className`은 jest에서 `style`로 안 남아 `flexDirection` 신호를 못 쓴다(★1). */
 function SkeletonCard({ index }: { index: number }): ReactElement {
   return (
-    <View
+    // 펄스 루프는 카드 하나에 하나 — 자식 상자는 정지 View 다(TRIP-1363 Skeleton 묶기).
+    <Skeleton
       testID={`explore-places-skeleton-${index}`}
       className="w-[48%] gap-[7px]"
     >
-      <Skeleton className="h-[132px] w-full rounded-[14px] bg-surface-strong" />
-      <Skeleton className="h-[13px] w-2/3 rounded-[6px] bg-hairline" />
-      <Skeleton className="h-[11px] w-1/2 rounded-[6px] bg-surface-strong" />
-    </View>
+      <View className="h-[132px] w-full rounded-[14px] bg-surface-strong" />
+      <View className="h-[13px] w-2/3 rounded-[6px] bg-hairline" />
+      <View className="h-[11px] w-1/2 rounded-[6px] bg-surface-strong" />
+    </Skeleton>
   );
 }
 
