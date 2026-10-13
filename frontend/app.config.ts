@@ -206,6 +206,8 @@ const config: ExpoConfig = {
   ],
   experiments: {
     typedRoutes: true,
+    // TRIP-1364 — React Compiler(참조 안정화). 켜기 전에 렌더 중 비순수 읽기를 정리했다(#1114).
+    reactCompiler: true,
   },
   owner: 'trippilottravel',
   extra: {
