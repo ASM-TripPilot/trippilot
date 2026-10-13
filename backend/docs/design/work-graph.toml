@@ -3757,12 +3757,15 @@ ticket = "TRIP-1376"
 title = "[U8] AI 편집 제안·슬롯 후보를 api 로 연다 — /ai/v1/itinerary/edit 의 백엔드 호출자가 0이다 (G-U8-2)"
 status = "todo"
 migration = false
-touches = ["backend/modules/itinerary-generation"]
+touches = ["backend/modules/itinerary-generation", "backend/app/src/test"]
 note = """
 **범위를 넓혔다(2026-10-13 쪼갬 검수)** — 포트 배선만으로는 assistant 모듈이 못 쓴다. `ScheduleAgentPort` 는 `domain`,
 `SlotCandidateService` 는 `application` 이고 `itinerary-generation/api` 에는 편집 제안도 슬롯 후보도 없다(R1 — 타 모듈은
 `api` 만 본다). FD 갭 표도 이것을 빠뜨렸다(G-U8-1 은 저장 경로만 다룬다). 이 노드가 **퍼사드까지** 연다:
 편집 제안(발화·`command` → 검증된 해 + 위반, 저장 없음)과 슬롯 후보 조회. api-safe 타입으로, 경계 키(`slotKey`)로.
+편집 제안 퍼사드는 **마감(`deadlineMs`)을 받는다** — 편집 단계 시한이 "턴 잔여 전부"라(PERF-U8-02) 없으면 턴이 13s 를 넘는다.
+**커졌다 — 착수하면 쪼갠다**: 슬롯 후보 퍼사드는 기존 서비스를 감싸기만 해서(AI 변경 없음) 깨끗하게 떨어진다.
+포트에 메서드를 더하면 `backend/app` 테스트의 익명 구현(`GenerationSupersededIT`)과 `LiveAiRoundTripIT` 도 같이 바뀐다.
 `ScheduleAgentPort` 에 edit 메서드 + `HttpScheduleAgentAdapter.CALLED_PATHS` 추가. 요청은 `utterance` 또는
 `command`(후보 교체), `confirm=true`(DEC-U8-3). 상대 경로는 이미 열려 있다(`ai/docs/openapi.json`).
 계약 게이트(`AiBoundaryOpenApiTest`)가 필드 이름을 잡고, 수용 여부는 실 왕복으로만 안다
@@ -3926,7 +3929,8 @@ OBS-02 리프레시 재사용 감지 로그 메트릭 필터 → SNS → Slack, 
 관리형 정책의 `Description` 은 건드리지 않는다(anti-patterns, #1085). 파드 지표는 방금 켠 Container Insights 가 낸다.
 """
 
-# ── U8 본체 넷 (2026-10-13 쪼갬). 루프 순서: EDIT-FACADE → PLAN-FACADE-FIELDS → AI-EDIT-PORT → CONTRACT → TURN → PROPOSAL → OPS.
+# ── U8 본체 넷 + http 어댑터(blocked) (2026-10-13 쪼갬). **노트는 의무의 전부가 아니다 — 정본은 FD·NFR 이고 착수 때 다시 읽는다.**
+# 노트에는 "빠뜨리면 조용히 틀리는 것"과 "어느 노드 몫인지 헷갈리는 것"만 적는다. 루프 순서: EDIT-FACADE → PLAN-FACADE-FIELDS → AI-EDIT-PORT → CONTRACT → TURN → PROPOSAL → OPS.
 # 순서는 의존이 아니라 공유 자원이 정한다 — 앞의 셋은 같은 모듈(itinerary-generation), 뒤의 넷은 openapi·마이그레이션 번호를 한 번에 하나씩 만진다.
 # **배포는 루프 밖이다.** dev 가 운영이다. 스위치(`ASSISTANT_INTERPRET_MODE=off`)는 **해석만** 끈다 — 엔드포인트는 배포되면
 # 인증된 사용자에게 열린다(출시 앱이 가짜 어댑터를 써서 부르는 쪽이 없을 뿐이다). 자세한 것은 U8-CONTRACT 노트.
@@ -3941,6 +3945,7 @@ touches = [
   "backend/modules/assistant",
   "backend/app/build.gradle.kts",
   "backend/app/src/main/resources/application.yml",
+  "backend/app/src/main/kotlin/com/trippilot/app/web/error",
   "backend/settings.gradle.kts",
   "backend/app/src/main/resources/db/migration",
   "backend/docs/design/openapi.yaml",
@@ -3950,12 +3955,15 @@ touches = [
 note = """
 `:modules:assistant` 신설 + 마이그레이션(V2.64~: `assistant_session`·`assistant_message`(+OBS-U8-01 컬럼 넷)·
 `assistant_proposal`·`assistant_usage_daily`) + `openapi.yaml` 의 `assistant` 태그 전체(턴·제안 포함 — 계약은 한 번에 연다).
-`assistant.*` 설정 키도 여기서 한 번에 선언한다(tech-stack §4 — 뒤 노드가 값을 읽기만 하게).
+`assistant.*` 설정 키는 여기서 자리를 잡는다(tech-stack §2 델타 4) — 뒤 노드는 자기 키를 더하거나 값을 정한다
+(월 상한 값은 아직 미정이다). 계약도 같다: 태그 전체를 여기서 열고, 뒤 노드는 구현하며 드러난 차이만 고친다.
 
 **구현은 세션까지다**: 세션 열기(계정·여행당 1 + 일반 1, DEC-U8-5)·목록·메시지 조회·대화 지우기(hard delete, 사용량 행은
 남는다 — DATA-U8-05). 세션 열기 응답은 컨텍스트 칩과 시작 quick reply 를 싣는다 — **칩은 스냅샷과 같은 출처에서**
-(BR-U8-03), quick reply 는 **서버가 발급**한다(BR-U8-04). 그래서 스냅샷 출처(`TripFacade`·`TripBaseStayFacade`)의 읽기와
-quick reply 발급기가 이 노드에 들어온다. 턴·제안 엔드포인트는 계약에만 있고 뒤 노드가 채울 때까지 **501** 을 낸다.
+(BR-U8-03), quick reply 는 **서버가 발급**한다(`domain-entities.md` §3.4 · FD §2.2 — BR-U8-04 는 "예시와 '할 수 있는 것 보기'를 늘 보인다"). 그래서 스냅샷 출처(`TripFacade`·`TripBaseStayFacade`)의 읽기와
+quick reply 발급기가 이 노드에 들어온다. 턴·제안 엔드포인트는 계약에만 있고 뒤 노드가 채울 때까지 **501** 을 낸다 —
+`OpenApiContractIT` 가 계약과 핸들러의 일치를 요구하므로 스텁은 필수다. 501 매핑은 지금 `ProviderNotSupported` 뿐이라
+`backend/app/…/web/error` 에 한 줄이 든다. 프론트 오류 코드 집합에는 501 이 없어 `SERVER` 로 떨어진다(무해 — http 어댑터가 아직 없다).
 
 **프론트 계약과 대조가 이 노드의 본체다.** 프론트는 FD 를 보고 타입을 손으로 옮겨 뒀다
 (`frontend/src/pages/assistant/assistant-sheet/api/assistantContract.ts`·`assistantPort.ts`, TRIP-1319) — 일곱 호출
@@ -3987,8 +3995,11 @@ FD `business-logic-model.md` §2 한 턴의 흐름(10단계)과 §4 디스패치
 **흐름**: 소유 확인(404 은닉) → 멱등(`clientTurnId`, PBT-U8-5) → 리미터 → 입력 검사 → 사용자 행 기록 → 해석 → 디스패치 → 기록.
 - **트랜잭션 셋으로 나눈다**(PERF-U8-06 ★): ① 소유·멱등·리미터·사용자 행 → 커밋 → ② AI 호출(트랜잭션 밖) → ③ 도우미 행·
   사용량 기록. AI 대기 동안 커넥션을 쥐면 동시 10턴에 다른 모든 API 가 굶는다. 리미터의 `pg_advisory_xact_lock`
-  (SEC-U8-01, 계정 분당 20 — 최근 60초 `assistant_message` 사용자 행을 센다, PBT-U8-4)은 ①에만 건다.
+  (SEC-U8-01)은 ①에만 건다. 한도는 계정 분당 20(BR-U8-24, PBT-U8-4) — 최근 60초 `assistant_message` 사용자 행을 세고,
+  ACTION 턴도 세며, 거절된 턴은 기록하지 않는다.
 - **예산**: 서버 턴 13s, AI 호출마다 `deadline_ms` 를 잔여에서 깎아 넘기고 잔여 1s 미만이면 부르지 않고 FALLBACK(PERF-U8-01·02).
+  실패한 턴은 재시도·서킷 없이 **FALLBACK 정확히 1건**으로 끝난다(REL-U8-01 ★, BR-U8-40·41). `frames` 가 둘 이상이면
+  실행하지 않고 "하나씩 말씀해 주세요"(DEC-U8-11).
 - **입력 검사**: 길이 1..500 · 금칙어는 AI 호출 **전** — 위반 원문은 저장하지 않고(`redacted`), 사전 예외면 통과가 아니라
   FALLBACK(fail-closed, BR-U8-23). 거절이 연속 2회면 사용 안내로 전환(BR-U8-25).
 - **ACTION 턴**(quick reply)은 해석을 건너뛴다(LLM 0회, COST-U8-07). 서버가 발급한 것이 아니면 400.
@@ -4002,6 +4013,10 @@ FD `business-logic-model.md` §2 한 턴의 흐름(10단계)과 §4 디스패치
   응답 모양이다(REL-U8-02·06). 강등은 WARN 1줄(OBS-U8-03)과 카운터(OBS-U8-04)로 남긴다. **전역 월 상한은 [[U8-OPS]]** 가
   이 강등 분기에 조건을 하나 더 건다.
 - 관측 컬럼 넷(OBS-U8-01: `outcome`·`match_route`·`llm_calls`·`latency_ms`)을 채운다.
+- **차단 PBT 게이트의 배정**: 이 노드 = PBT-U8-2·3·4·5·7·8·9·N1, [[U8-PROPOSAL]] = PBT-U8-1·6(+8 의 제안 diff 몫).
+  PBT-U8-7(`DialogueContext` 저장 → 조회 → 반송이 `turn_index` 외 바이트 동일, INV-U8-07)은 **fake 로도 선다** —
+  되묻기 경로가 그 jsonb 를 저장하고 돌려준다. http 어댑터를 기다리지 않는다. PBT-U8-8(INV-3: 카드·템플릿·칩 어디에도
+  소요시간이 없다)은 카드 모양이 생기는 이 노드에서 건다.
 - AI 해석 경계는 상대 미구현([[U8-AI-DIALOGUE]]) — 포트 + fake 어댑터까지. http 어댑터는 [[U8-INTERPRET-HTTP]].
 
 **미결로 들고 가는 긴장 하나**: 대화 지우기가 hard delete(DATA-U8-05)라 60초 창의 사용자 행도 지워진다 — 지우고 다시
@@ -4030,7 +4045,13 @@ FD §2.1 · DEC-U8-2·3 · `domain-entities.md` §3.3·§3.5. `EDIT_SCHEDULE`(�
   저장이 예외면 `FAILED`. **제안 하나는 많아야 한 번 적용된다**(INV-U8-08, PBT-U8-6 상태기계).
 - **[취소]**(`dismissProposal`) — 프론트가 가정한 일곱 호출 중 하나다.
 - ACTION_LOG 에 리비전·변경 이력 id 를 남기려면(`assistant_proposal.revision_id`·`change_log_entry_id`) 편집 퍼사드 결과에
-  그 둘이 실려야 한다 — [[U8-EDIT-FACADE]] 는 위반 여부만 돌려준다. 여기서 넓힌다(change-log 의 `append` 가 id 를 돌려주게).
+  그 둘이 실려야 한다 — [[U8-EDIT-FACADE]](PR #1090)는 위반 여부와 판정 여부만 돌려준다(`ItineraryRevisionService.record` 와
+  change-log 의 `append` 가 둘 다 Unit 이라). 여기서 넓힌다.
+
+- **발화로 부른 `/edit` 는 LLM 턴이다**(COST-U8-02 — 해석이 LLM 0회로 끝났어도). 그 턴을 `assistant_usage_daily` 에
+  세지 않으면 가장 비싼 턴 종류(해석 + 편집 번역, COST-U8-06)가 일 상한 30 과 월 상한을 비켜 간다.
+- 편집 단계의 시한은 "턴 잔여 전부"다(PERF-U8-02) — 퍼사드에 마감을 넘길 자리가 있어야 13s 를 지킨다.
+- 여행 전 변경의 리비전에는 `[도우미]` 표지가 붙는다(BR-U8-19) — [[U8-EDIT-FACADE]] 가 출처로 처리한다.
 
 **AI `/edit` 와 슬롯 후보를 부르는 길은 [[U8-AI-EDIT-PORT]] 가 `api` 로 연다** — assistant 모듈은 남의 `domain`·`application`
 을 못 본다(R1). 그 노드가 퍼사드까지 열지 않으면 이 노드가 `itinerary-generation` 을 건드리게 된다.
@@ -4100,7 +4121,9 @@ note = """
 `ai/docs/openapi.json` 에 `dialogue` 경로가 0건이다(2026-10-13). 할 일: http 어댑터 · 계약 게이트 등록
 (tech-stack §5 "ai 계약 게이트" — `CALLED_PATHS`·`AiBoundaryOpenApiTest` 는 지금 `itinerary-generation` 에 있다.
 해석 어댑터를 어느 모듈에 둘지, 게이트를 어떻게 공유할지는 착수 때 정한다) · 실 왕복 1회(게이트는 이름만 본다).
-`DialogueContext` 왕복이 바이트 동일한지(INV-U8-07, PBT-U8-7)도 실물로 확인한다.
+`DialogueContext` 왕복(INV-U8-07)은 [[U8-TURN]] 이 fake 로 이미 게이트한다 — 여기서는 실물 직렬형으로 한 번 더 본다.
+**`HttpScheduleAgentAdapter` 의 "4xx = 최소 일정 폴백" 습관을 옮기지 않는다**(REL-U8-05, BR-U8-45) — 이 경계의 실패는
+FALLBACK 메시지일 뿐 일정 폴백 신호가 아니다.
 """
 
 [[edges]]
