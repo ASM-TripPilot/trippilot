@@ -5,19 +5,18 @@ import { Text, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
-import { resolveEditorMapCenter } from '../model/editorMapCenter';
 import { useItineraryTabBack } from '../model/useItineraryTabBack';
-import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
 import {
-  useItineraryEditStore,
-  type EditorDaysItem,
-} from '@/features/edit-itinerary';
+  buildDraftPins,
+  formatCoPickDayHeader,
+  resolvePlanMapCenter,
+} from '@/features/itinerary';
+import { useEditorDraft, type EditorDaysItem } from '@/features/edit-itinerary';
 import { buildPlanDayTabs } from '@/features/itinerary';
 import { SaveConflictDialog } from '@/features/edit-itinerary';
 import { useTripWizardStore } from '@/features/create-trip';
 import { useSavedStays } from '@/features/trip';
 import { useTripBases } from '@/features/assign-trip-base';
-import { parseSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -119,11 +118,15 @@ export function ManualPlanPage({
   // 열린 시각 시트의 slotKey(null = 닫힘) — 조건부 마운트.
   const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
 
-  const seed = useItineraryEditStore((s) => s.seed);
-  const deleteSlot = useItineraryEditStore((s) => s.deleteSlot);
-  const reorderSlots = useItineraryEditStore((s) => s.reorderSlots);
-  const adjustSlotTime = useItineraryEditStore((s) => s.adjustSlotTime);
-  const days = useItineraryEditStore((s) => s.days);
+  const {
+    seed,
+    deleteSlot,
+    reorderSlots,
+    adjustSlotTime,
+    days,
+    editing,
+    editingSlot,
+  } = useEditorDraft(editingSlotKey);
 
   // 직접 고르기 진입이 기존 초안을 빈 MANUAL 로 덮어쓰지 않게 한다(TRIP-601 가드 a · BR-U3-06). 판정 축은
   // `days.length>0` — slots 만 빈 정상 MANUAL 재진입도 보존해 재-POST 를 막는다.
@@ -289,20 +292,12 @@ export function ManualPlanPage({
   const activeDate = loadedDays[activeDayIndex]?.date ?? '';
   const activeSlots = loadedDays[activeDayIndex]?.slots ?? [];
   const pins = buildDraftPins(activeSlots);
-  const center = resolveEditorMapCenter({
-    pins,
-    date: activeDate,
+  const center = resolvePlanMapCenter({
+    days: [{ date: activeDate, slots: activeSlots }],
+    selectedDate: activeDate,
     bases: bases.data,
     stays: savedStays.data,
   });
-
-  const editing = editingSlotKey === null ? null : parseSlotKey(editingSlotKey);
-  const editingSlot =
-    editing !== null && editing.kind === 'ok'
-      ? days
-          .find((day) => day.date === editing.date)
-          ?.slots.find((slot) => slot.poiId === editing.poiId)
-      : undefined;
 
   return (
     <View className="flex-1">

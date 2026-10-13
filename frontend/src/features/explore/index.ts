@@ -1,28 +1,5 @@
-export { resolvePlaceListState } from './model/placeListState';
-export type { PlaceListState } from './model/placeListState';
-export { regionPickerHref } from './model/regionPickerPurpose';
-export type { RegionPickerPurpose } from './model/regionPickerPurpose';
-export {
-  filterRegions,
-  groupRegionsBySido,
-  regionTint,
-  useRegions,
-} from './model/regions';
-export type { RegionGroup } from './model/regions';
+// 순수 뷰·글리프·config·순수 model 은 index.view 가 정본이고, 여기엔 네트워크 훅 등 그 밖의 것만 더한다.
+export * from './index.view';
+
 export { useMultiRegionPlaces } from './model/useMultiRegionPlaces';
 export { usePlacesInfinite } from './model/usePlacesInfinite';
-export {
-  BackChevronGlyph,
-  CheckCircleFilledGlyph,
-  CheckCircleOutlineGlyph,
-  CircleExclaimGlyph,
-  CloseGlyph,
-  FilterSlidersGlyph,
-  InfoGlyph,
-  MapPinGlyph,
-  PlusGlyph,
-  SearchGlyph,
-  ShareGlyph,
-  SuitcaseGlyph,
-  WarningTriangleGlyph,
-} from './ui/ExploreGlyphs';

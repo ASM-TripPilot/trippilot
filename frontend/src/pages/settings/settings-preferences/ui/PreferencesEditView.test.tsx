@@ -7,7 +7,7 @@ import { PreferencesEditView } from './PreferencesEditView';
  *
  * 무엇을 보장하나: 앱바 뒤로 글리프 버튼이 VoiceOver 에 "뒤로" 버튼으로 읽히고(testID
  * `settings-pref-back` 신설), 누르면 onBack 이 1회 불린다 — 이 화면의 뒤로 배선을 잠그는 첫 테스트다.
- * 뷰만 렌더한다(컨테이너 `PreferencesEditScreen` 은 네트워크 훅을 끌고 온다).
+ * 뷰만 렌더한다(컨테이너 `SettingsPreferencesPage` 은 네트워크 훅을 끌고 온다).
  * 3동작 뼈대: 준비=selection null(축 미렌더) → 실행=render → "뒤로" press → 단언=역할·이름·testID·콜백.
  */
 

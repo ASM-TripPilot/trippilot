@@ -1,15 +1,5 @@
-export { APP_ICON_COLORS } from './config/gradients';
-export {
-  getGateDestination,
-  waitForGateDestination,
-} from './model/gateDestination';
-export type { BootstrapDestination } from './model/resolveBootstrapDestination';
+// 순수 뷰·글리프·config·순수 model 은 index.view 가 정본이고, 여기엔 네트워크 훅 등 그 밖의 것만 더한다.
+export * from './index.view';
+
+export { getGateDestination } from './model/gateDestination';
 export { useBootstrapGate } from './model/useBootstrapGate';
-export {
-  AppIconGlyph,
-  AppleLogoGlyph,
-  GoogleIcon,
-  KakaoIcon,
-  NaverIcon,
-} from './ui/AuthGlyphs';
-export { SplashScreen } from './ui/SplashScreen';

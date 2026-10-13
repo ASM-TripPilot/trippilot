@@ -3,7 +3,7 @@
  * `usePreferences`·`@/shared/api`(네트워크 계층)를 import 하지 않는 프레젠테이션 전용이다.
  *
  * 별도 파일로 뺀 이유: `_dev/preview` 는 QueryClient 없이 렌더하는 계약이라 자족 컨테이너
- * `PreferencesEditScreen` 을 직접 못 태운다 — 컨테이너 모듈은 최상단 `usePreferences` import 로
+ * `SettingsPreferencesPage` 을 직접 못 태운다 — 컨테이너 모듈은 최상단 `usePreferences` import 로
  * `@/shared/api` 를 로드 시점에 끌어오는데, 프리뷰 스모크 지뢰 목(`devPreviewReleaseGate.test.tsx`)이 그
  * 모듈 로드를 throw 로 터뜨린다. 뷰만 이 순수 파일에 두면 프리뷰가 픽스처+noop 으로 안전히 태운다.
  *

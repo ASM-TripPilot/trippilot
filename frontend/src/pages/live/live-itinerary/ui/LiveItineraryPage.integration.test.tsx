@@ -4291,16 +4291,15 @@ describe('방문 체크', () => {
       fireEvent.press(arrive);
       fireEvent.press(arrive);
 
-      // 첫 POST 의 응답·무효화(재조회 GET)까지 기다린 뒤 센다 — 두 번째 요청이 늦게 찍히는 것까지 포함(02a ★2).
-      await waitFor(() =>
-        expect(hitCount(VISITS_GET_TODAY)).toBeGreaterThanOrEqual(2)
-      );
+      // 첫 POST 의 응답이 낙관 레코드를 교체해 [방문 완료]가 설 때까지 기다린 뒤 센다 — 두 번째 요청이 늦게 찍히는 것까지 포함(02a ★2).
+      // 도착 뒤 재조회는 없다(TRIP-1357 · 결정 L) — 방문 기록 조회는 처음 1회 그대로다.
       await waitFor(() =>
         expect(
           screen.getByTestId('execution-arrive-complete')
         ).toBeOnTheScreen()
       );
       expect(hitCount(VISITS_PATH)).toBe(1);
+      expect(hitCount(VISITS_GET_TODAY)).toBe(1);
     });
 
     it.each([
@@ -4601,11 +4600,19 @@ describe('방문 체크', () => {
         // 재조회로 반영된 것이 아니다 — 방문 기록 조회 수가 press 전과 같다.
         expect(hitCount(VISITS_GET_TODAY)).toBe(1);
 
-        // 정리 — 응답을 풀고 성공 뒤 재조회까지 이 테스트 안에서 끝낸다(다음 테스트로 요청이 새지 않게).
+        // 정리 — 응답을 풀고 낙관 레코드가 응답 레코드(v9)로 교체될 때까지 이 테스트 안에서 끝낸다(다음 테스트로 요청이 새지 않게).
+        // 응답으로 교체하므로 재조회는 끝까지 0건이다(TRIP-1357 · 결정 L).
         release();
         await waitFor(() =>
-          expect(hitCount(VISITS_GET_TODAY)).toBeGreaterThanOrEqual(2)
+          expect(
+            client
+              .getQueryData<VisitCheckList>(
+                getGetTripsTripIdVisitsDaysDayQueryKey(TRIP_ID, TODAY)
+              )
+              ?.visits.some((v) => v.visitCheckId === 'v9')
+          ).toBe(true)
         );
+        expect(hitCount(VISITS_GET_TODAY)).toBe(1);
       } finally {
         // 단언이 먼저 실패해도 붙잡힌 핸들러를 푼다(두 번 불러도 무해).
         release();
@@ -4754,7 +4761,7 @@ describe('방문 체크', () => {
       ).toBeNull();
     });
 
-    it('W19 즉석 방문이 관람 중인 날 계획 슬롯 [도착] → 낙관·서버 순서 재조회 양쪽에서 관람 중 → [방문 완료]는 서버 id 로 (AC-4 · QA 066)', async () => {
+    it('W19 즉석 방문이 관람 중인 날 계획 슬롯 [도착] → 낙관·응답 교체 양쪽에서 관람 중 → [방문 완료]는 서버 id 로 (AC-4 · QA 066)', async () => {
       const drop = spontaneous({
         visitCheckId: 'vX',
         poiId: 'px',
@@ -4835,18 +4842,21 @@ describe('방문 체크', () => {
         );
         expect(hitCount(VISITS_GET_TODAY)).toBe(1);
 
-        // 실행 ② — 서버 응답 → 재조회([S, X])가 캐시에 들어올 때까지, 그 뒤 한 틱 흘려 재렌더를 받는다(02a ★4).
+        // 실행 ② — 서버 응답이 낙관 레코드를 교체해 캐시가 [X, v9] 가 될 때까지, 그 뒤 한 틱 흘려 재렌더를 받는다(02a ★4).
+        // 재조회는 없다(TRIP-1357 · 결정 L) — 예전엔 서버 순서([S, X])로 다시 받았다.
         release();
         await waitFor(() =>
           expect(
-            client.getQueryData<VisitCheckList>(
-              getGetTripsTripIdVisitsDaysDayQueryKey(TRIP_ID, TODAY)
-            )?.visits[0]?.visitCheckId
-          ).toBe('v9')
+            client
+              .getQueryData<VisitCheckList>(
+                getGetTripsTripIdVisitsDaysDayQueryKey(TRIP_ID, TODAY)
+              )
+              ?.visits.map((v) => v.visitCheckId)
+          ).toEqual(['vX', 'v9'])
         );
         await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
-        // 단언 ② — 재조회 뒤에도 p1 이 관람 중이고 [도착]은 어디에도 없다.
+        // 단언 ② — 응답 교체 뒤에도 p1 이 관람 중이고 [도착]은 어디에도 없다.
         expect(
           within(p1Card()).getByTestId('execution-arrive-complete')
         ).toBeOnTheScreen();
