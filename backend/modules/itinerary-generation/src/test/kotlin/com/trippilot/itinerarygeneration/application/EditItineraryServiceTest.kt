@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.Itinerary
@@ -13,6 +14,10 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRevisionRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryRevision
 import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import com.trippilot.changelog.api.ChangeSourceType
+import com.trippilot.itinerarygeneration.api.EditDayCommand
+import com.trippilot.itinerarygeneration.api.EditSlotCommand
+import com.trippilot.itinerarygeneration.api.ItineraryEditFacade
+import com.trippilot.itinerarygeneration.api.ItineraryEditSource
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
@@ -348,6 +353,132 @@ class EditItineraryServiceTest : StringSpec({
         freezer.frozen shouldBe listOf(poiB) // 이미 얼린 것은 다시 얼리지 않는다
         logs.appended.single().sourceType shouldBe ChangeSourceType.MANUAL // BR-U4-30
         logs.appended.single().reason.isNullOrBlank() shouldBe false // BR-U4-31 — 비워 두지 않는다
+    }
+
+    // ── 다른 모듈의 입구(U8 도우미 [적용], G-U8-1) ──────────────────────────────────────────────
+    // 퍼사드는 REST 편집과 같은 서비스를 탄다. 달라지는 것은 "누가 바꿨는가"뿐이고, 그 값이 이력에 남아야
+    // 사용자가 도우미가 고친 것과 자기가 고친 것을 가려 되짚을 수 있다.
+
+    /** 퍼사드에 싣는 편집안 — [editReq] 와 같은 내용(poiB 10시, poiA 12시). */
+    val facadeDays = listOf(
+        EditDayCommand(
+            day,
+            listOf(
+                EditSlotCommand(poiB, LocalTime.parse("10:00"), LocalTime.parse("11:00"), isFixed = false, endsNextDay = false),
+                EditSlotCommand(poiA, LocalTime.parse("12:00"), LocalTime.parse("13:00"), isFixed = false, endsNextDay = false),
+            ),
+        ),
+    )
+
+    "도우미가 적용한 편집은 변경 이력에 ASSISTANT 로, 리비전에 [도우미] 표지로 남는다 — 직접 수정으로 기록되지 않는다" {
+        val repo = repoWith(current())
+        val logs = CapturingChangeLogs()
+        val revisions = FakeRevisions()
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(revisions, repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        facade.edit(acc, tripId, facadeDays, reason = "둘째 날 오후 카페를 조용한 곳으로", source = ItineraryEditSource.ASSISTANT)
+
+        logs.appended.single().sourceType shouldBe ChangeSourceType.ASSISTANT
+        logs.appended.single().reason shouldBe "둘째 날 오후 카페를 조용한 곳으로"
+        val edited = revisions.appended.last()
+        edited.summary shouldBe "[도우미] 둘째 날 오후 카페를 조용한 곳으로"
+        edited.actor shouldBe RevisionActor.USER // [적용]을 누른 것은 사용자다(O-U8-7 미결 — 주체를 늘리지 않았다)
+        repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA)
+    }
+
+    "도우미 편집에 사유가 없어도 이력은 비지 않는다 — 출처에 맞는 기본 문구가 남는다(BR-U4-31)" {
+        val repo = repoWith(current())
+        val logs = CapturingChangeLogs()
+        val revisions = FakeRevisions()
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(revisions, repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        facade.edit(acc, tripId, facadeDays, reason = null, source = ItineraryEditSource.ASSISTANT)
+
+        logs.appended.single().reason shouldBe "도우미 제안을 적용함"
+        revisions.appended.last().summary shouldBe "[도우미] 도우미 제안을 적용함"
+    }
+
+    "퍼사드로 직접 수정 출처를 주면 REST 편집과 같은 기록이 남는다" {
+        val repo = repoWith(current())
+        val logs = CapturingChangeLogs()
+        val revisions = FakeRevisions()
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(revisions, repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        facade.edit(acc, tripId, facadeDays, reason = null, source = ItineraryEditSource.MANUAL)
+
+        logs.appended.single().sourceType shouldBe ChangeSourceType.MANUAL
+        revisions.appended.last().summary shouldBe "일정을 직접 수정함"
+    }
+
+    // 도우미는 제안 때 위반이 없던 안만 적용한다. 그래도 저장 시점의 재검증이 다르게 판정할 수 있고,
+    // 그때 "솔버가 다시 보니 문제가 있어요"를 말하려면 결과가 위반을 실어 와야 한다(U8 FD §2.1 5단계).
+    "퍼사드 결과는 저장된 일정의 위반 여부를 싣는다 — 적용 뒤 판정이 갈리면 호출측이 알 수 있다" {
+        fun facadeWith(agent: EditFakeAgent, repo: ItineraryRepository): ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        val clean = repoWith(current())
+        val cleanResult = facadeWith(EditFakeAgent(), clean).edit(acc, tripId, facadeDays, null, ItineraryEditSource.ASSISTANT)
+        cleanResult.hasViolation shouldBe false
+        cleanResult.judged shouldBe true
+        cleanResult.itineraryId shouldBe clean.findByTrip(tripId).single().itineraryId
+
+        val flagged = repoWith(current())
+        facadeWith(EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null))), flagged)
+            .edit(acc, tripId, facadeDays, null, ItineraryEditSource.ASSISTANT).hasViolation shouldBe true
+    }
+
+    // AI 가 닿지 않으면 편집은 막지 않고 판정을 보류한다. 그때 새로 들어온 장소(poiB)는 직전 표시가 없어
+    // 위반 플래그가 false 다 — 아무도 검증하지 않았는데 "문제없음"으로 읽히면 도우미가 깨끗하게 적용됐다고 말한다.
+    "AI 가 판정하지 못한 저장은 judged=false 다 — 검증 안 된 일정을 문제없다고 말하지 않게" {
+        val repo = repoWith(current())
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, EditFakeAgent(failure = RuntimeException("AI 다운")), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        val result = facade.edit(acc, tripId, facadeDays, null, ItineraryEditSource.ASSISTANT)
+
+        result.judged shouldBe false
+        result.hasViolation shouldBe false // 직전 표시를 이은 값일 뿐이다 — 이것만 보면 깨끗해 보인다
+        repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA) // 저장은 됐다
+    }
+
+    // REST 는 요청 DTO 가 500자를 막는다. 퍼사드가 안 막으면 여행 중 편집에서 변경 이력 칸(varchar 500)이 넘쳐
+    // 편집 전체가 롤백되고 호출 모듈은 DB 예외를 받는다.
+    "퍼사드는 500자를 넘는 사유를 저장 전에 거절한다 — 아무것도 바뀌지 않는다" {
+        val repo = repoWith(current())
+        val logs = CapturingChangeLogs()
+        val agent = EditFakeAgent()
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        shouldThrow<ValidationFailed> { facade.edit(acc, tripId, facadeDays, "가".repeat(501), ItineraryEditSource.ASSISTANT) }
+
+        repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiA) // 원래 그대로
+        logs.appended.isEmpty() shouldBe true
+        agent.validateCalls shouldBe 0 // AI 를 부르기 전에 막는다
+        facade.edit(acc, tripId, facadeDays, "가".repeat(500), ItineraryEditSource.ASSISTANT).judged shouldBe true // 경계값은 받는다
+    }
+
+    "공백뿐인 사유는 없는 것으로 본다 — 이력의 사유 칸이 빈 채 남지 않는다(BR-U4-31)" {
+        val repo = repoWith(current())
+        val logs = CapturingChangeLogs()
+        val revisions = FakeRevisions()
+        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(revisions, repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        svc.edit(acc, tripId, editReq.copy(reason = "   ")) // REST 경로도 같은 저장 함수를 탄다
+
+        logs.appended.single().reason shouldBe "일정을 직접 수정함"
+        revisions.appended.last().summary shouldBe "일정을 직접 수정함"
+    }
+
+    "퍼사드도 남의 여행은 404 다 — 소유 판정을 호출 모듈이 되풀이하지 않는다" {
+        val repo = repoWith(current())
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(false), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        shouldThrow<ResourceNotFound> { facade.edit(acc, tripId, facadeDays, null, ItineraryEditSource.ASSISTANT) }
     }
 
     "새 장소 동결이 실패해도 저장은 막지 않는다 — 참조만 비운다(비차단, US-SCHED-07)" {
