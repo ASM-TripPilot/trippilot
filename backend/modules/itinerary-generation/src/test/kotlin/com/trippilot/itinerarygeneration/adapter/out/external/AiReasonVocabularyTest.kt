@@ -57,4 +57,14 @@ class AiReasonVocabularyTest : StringSpec({
             AiReasonVocabulary.AI_VOCABULARY shouldContain AiReasonVocabulary.toAi(raw)
         }
     }
+
+    /**
+     * 재계획은 사유 **목록**을 보낸다. 번역 후 중복은 접고, 실제 사유가 있으면 "그냥(none)"은 뺀다.
+     */
+    "재계획 사유 목록은 번역·중복 제거되고 실제 사유 옆의 none 은 빠진다" {
+        AiReasonVocabulary.toAiAll(listOf("LOW_ENERGY")) shouldBe listOf("fatigue")
+        AiReasonVocabulary.toAiAll(listOf("PANDEMIC")) shouldBe listOf("none")
+        AiReasonVocabulary.toAiAll(listOf("JUST_CHANGE", "SLOW_MOVE", "PANDEMIC", "SLOW_MOVE")) shouldBe listOf("delay")
+        AiReasonVocabulary.toAiAll(emptyList()) shouldBe emptyList()
+    }
 })
