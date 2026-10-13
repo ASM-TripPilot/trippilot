@@ -31,13 +31,8 @@
  */
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
+import { SheetShell } from '@/shared/ui/SheetShell';
 
 import { ACTIVITY, STYLE } from '@/features/edit-preferences';
 import {
@@ -66,13 +61,6 @@ export interface PrefOverrideSheetProps {
   onClose: () => void;
   /** TRIP-984 D10 — 온보딩 styles·activities 중 하나라도 1개 이상이면 true("온보딩에서 …" 문구 조건, TRIP-1092). */
   fromOnboarding: boolean;
-}
-
-/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
-function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
-  return (
-    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-  );
 }
 
 /** slug → 글리프. `STYLE`은 slug→한국어 라벨만 갖고 아이콘은 안 담으므로 여기서 잇는다. */
@@ -104,123 +92,100 @@ export function PrefOverrideSheet({
   fromOnboarding,
 }: PrefOverrideSheetProps): ReactElement {
   return (
-    <BottomSheet
-      index={0}
-      enablePanDownToClose
+    <SheetShell
+      testID="trip-wizard-pref-sheet"
       onClose={onClose}
-      backdropComponent={renderBackdrop}
-      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
+      handle="indicator"
+      title="취향"
+      subtitle="이 여행에만 적용돼요"
+      apply={{
+        testID: 'trip-wizard-pref-sheet-apply',
+        onPress: onApply,
+      }}
     >
-      <BottomSheetView
-        testID="trip-wizard-pref-sheet"
-        className="gap-lg px-xl pb-[34px] pt-[10px]"
-      >
-        {/* header */}
-        <View className="gap-xs">
-          <Text className="text-[20px] font-noto-bold font-bold text-ink">
-            취향
+      {/* body — 두 묶음 + 안내문(Figma body gap 20, 묶음 안 gap 12) */}
+      <View className="gap-xl">
+        <View className="gap-md">
+          <Text className="font-noto-bold text-label font-bold text-muted">
+            여행 스타일
           </Text>
-          <Text className="font-noto text-label text-muted">
-            이 여행에만 적용돼요
-          </Text>
-        </View>
-
-        {/* body — 두 묶음 + 안내문(Figma body gap 20, 묶음 안 gap 12) */}
-        <View className="gap-xl">
-          <View className="gap-md">
-            <Text className="font-noto-bold text-label font-bold text-muted">
-              여행 스타일
-            </Text>
-            {/* 7칩 — 선택 칩만 분홍 배경 + accessibilityState(색 fill 아님, 무심판 회피) */}
-            <View className="flex-row flex-wrap gap-sm">
-              {CHIPS.map(({ slug, label }) => {
-                const Glyph = CHIP_GLYPHS[slug];
-                const isSelected = selected.includes(label);
-                return (
-                  <Pressable
-                    key={slug}
-                    testID={`trip-wizard-pref-chip-${slug}`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    onPress={() => onToggle(label)}
-                    className={`flex-row items-center gap-[6px] rounded-pill py-[9px] pl-[14px] pr-[16px] ${
-                      isSelected
-                        ? 'bg-primary'
-                        : 'border border-hairline-strong bg-canvas'
+          {/* 7칩 — 선택 칩만 분홍 배경 + accessibilityState(색 fill 아님, 무심판 회피) */}
+          <View className="flex-row flex-wrap gap-sm">
+            {CHIPS.map(({ slug, label }) => {
+              const Glyph = CHIP_GLYPHS[slug];
+              const isSelected = selected.includes(label);
+              return (
+                <Pressable
+                  key={slug}
+                  testID={`trip-wizard-pref-chip-${slug}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => onToggle(label)}
+                  className={`flex-row items-center gap-[6px] rounded-pill py-[9px] pl-[14px] pr-[16px] ${
+                    isSelected
+                      ? 'bg-primary'
+                      : 'border border-hairline-strong bg-canvas'
+                  }`}
+                >
+                  <Glyph
+                    size={18}
+                    selected={isSelected}
+                    onPrimary={isSelected}
+                  />
+                  <Text
+                    className={`font-noto-bold text-label font-bold ${
+                      isSelected ? 'text-on-primary' : 'text-ink'
                     }`}
                   >
-                    <Glyph
-                      size={18}
-                      selected={isSelected}
-                      onPrimary={isSelected}
-                    />
-                    <Text
-                      className={`font-noto-bold text-label font-bold ${
-                        isSelected ? 'text-on-primary' : 'text-ink'
-                      }`}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
-
-          <View className="gap-md">
-            <Text className="font-noto-bold text-label font-bold text-muted">
-              선호 활동
-            </Text>
-            {/* 활동 8칩 — 글리프 없음이라 높이 36을 직접 준다(스타일 칩은 py+글리프 18로 36) */}
-            <View className="flex-row flex-wrap gap-sm">
-              {ACTIVITY_CHIPS.map(({ slug, label }) => {
-                const isSelected = selectedActivities.includes(label);
-                return (
-                  <Pressable
-                    key={slug}
-                    testID={`trip-wizard-pref-activity-chip-${slug}`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    onPress={() => onToggleActivity(label)}
-                    className={`h-[36px] items-center justify-center rounded-pill px-lg ${
-                      isSelected
-                        ? 'bg-primary'
-                        : 'border border-hairline-strong bg-canvas'
-                    }`}
-                  >
-                    <Text
-                      className={`font-noto-bold text-label font-bold ${
-                        isSelected ? 'text-on-primary' : 'text-ink'
-                      }`}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* 안내문 — "온보딩에서 …" 절은 온보딩 취향이 있을 때만(TRIP-984 D10) */}
-          <Text className="font-noto text-caption text-muted">
-            {fromOnboarding
-              ? '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
-              : '프로필 취향은 바뀌지 않아요'}
-          </Text>
         </View>
 
-        {/* 적용 — 항상 활성(최소 0 허용, 전해제여도 적용 가능·닫기 버튼 없음) */}
-        <Pressable
-          testID="trip-wizard-pref-sheet-apply"
-          accessibilityRole="button"
-          onPress={onApply}
-          className="h-[52px] items-center justify-center rounded-button bg-primary"
-        >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            적용
+        <View className="gap-md">
+          <Text className="font-noto-bold text-label font-bold text-muted">
+            선호 활동
           </Text>
-        </Pressable>
-      </BottomSheetView>
-    </BottomSheet>
+          {/* 활동 8칩 — 글리프 없음이라 높이 36을 직접 준다(스타일 칩은 py+글리프 18로 36) */}
+          <View className="flex-row flex-wrap gap-sm">
+            {ACTIVITY_CHIPS.map(({ slug, label }) => {
+              const isSelected = selectedActivities.includes(label);
+              return (
+                <Pressable
+                  key={slug}
+                  testID={`trip-wizard-pref-activity-chip-${slug}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => onToggleActivity(label)}
+                  className={`h-[36px] items-center justify-center rounded-pill px-lg ${
+                    isSelected
+                      ? 'bg-primary'
+                      : 'border border-hairline-strong bg-canvas'
+                  }`}
+                >
+                  <Text
+                    className={`font-noto-bold text-label font-bold ${
+                      isSelected ? 'text-on-primary' : 'text-ink'
+                    }`}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* 안내문 — "온보딩에서 …" 절은 온보딩 취향이 있을 때만(TRIP-984 D10) */}
+        <Text className="font-noto text-caption text-muted">
+          {fromOnboarding
+            ? '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
+            : '프로필 취향은 바뀌지 않아요'}
+        </Text>
+      </View>
+    </SheetShell>
   );
 }
