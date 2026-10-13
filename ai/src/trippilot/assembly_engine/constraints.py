@@ -89,6 +89,22 @@ def check_hc2_coords_known(solution: ItinerarySolution,
     return out
 
 
+def free_visit_cap(problem: ItineraryProblem, day) -> int | None:
+    """그 일자 **자유 방문** 상한 — `max_visits_per_day` − 고정 블록 − 필수 방문 (BR-U4-47).
+
+    상한은 고정·필수를 세되 빼지 않는다 — 그래서 자유 방문 몫만 깎는다(바닥 0). 필수는 놓였는지와
+    무관하게 센다(두 어셈블러가 같은 값을 쓰도록 문제 필드만 본다). 상한이 없으면 None.
+    """
+    cap = problem.max_visits_per_day
+    if cap is None:
+        return None
+    pinned = {(fb.poi_id, fb.window.start) for fb in problem.fixed_blocks
+              if fb.window.start.date() == day}
+    required = ({rv.poi_id for rv in problem.required_visits if rv.day == day}
+                - {pid for pid, _ in pinned})
+    return max(0, cap - len(pinned) - len(required))
+
+
 def not_before_floor(problem: ItineraryProblem) -> datetime | None:
     """비고정 방문 시작 하한을 분 단위로 **올린다** (TRIP-1182). 자르는 게 없으면 None.
 
