@@ -46,6 +46,7 @@ import {
   SearchGlyph,
   WarningTriangleGlyph,
 } from '@/features/stay/index.view';
+import { AppBar } from '@/shared/ui/AppBar';
 
 export interface StaySearchScreenProps {
   region: string;
@@ -163,24 +164,21 @@ const FILTER_CHIPS: { axis: 'price' | 'region' | 'more'; label: string }[] = [
   { axis: 'more', label: '필터' },
 ];
 
-function AppBar({ onPress }: { onPress?: () => void }): ReactElement {
+function StaySearchAppBar({ onPress }: { onPress?: () => void }): ReactElement {
   return (
-    <View
+    <AppBar
       testID="stay-search-appbar"
       className="h-14 w-full flex-row items-center gap-xs bg-canvas pl-sm pr-lg"
-    >
-      <Pressable
-        testID="stay-search-back"
-        accessibilityRole="button"
-        onPress={onPress}
-        className="h-10 w-10 items-center justify-center"
-      >
-        <BackChevronGlyph size={24} />
-      </Pressable>
-      <Text className="font-noto-bold text-section font-bold text-ink">
-        숙소 검색 결과
-      </Text>
-    </View>
+      back={{
+        testID: 'stay-search-back',
+        accessibilityRole: 'button',
+        onPress,
+        className: 'h-10 w-10 items-center justify-center',
+        glyph: <BackChevronGlyph size={24} />,
+      }}
+      title="숙소 검색 결과"
+      titleClassName="font-noto-bold text-section font-bold text-ink"
+    />
   );
 }
 
@@ -583,7 +581,7 @@ export function StaySearchScreen({
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="stay-search-root" className="flex-1 bg-canvas">
-        <AppBar onPress={onPressBack} />
+        <StaySearchAppBar onPress={onPressBack} />
 
         <FlatList<StayItem>
           testID="stay-search-list"

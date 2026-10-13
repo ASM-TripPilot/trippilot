@@ -26,11 +26,6 @@
  */
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
 
 import {
   daysInMonth,
@@ -39,7 +34,7 @@ import {
   shiftMonth,
 } from '@/shared/lib/monthGrid';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
+import { SheetShell } from '@/shared/ui/SheetShell';
 
 import { dateCell, type TripDateRange } from '../model/tripDatePicker';
 import { summaryPeriod } from '@/features/create-trip';
@@ -67,13 +62,6 @@ export interface PeriodEditSheetProps {
   onApply: () => void;
   /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
   onClose: () => void;
-}
-
-/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
-function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
-  return (
-    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-  );
 }
 
 /** 셀 하나의 범위 상태. start·end 를 먼저 가르므로 `between`은 자연히 양 끝을 뺀 사이만이 된다. */
@@ -195,130 +183,107 @@ export function PeriodEditSheet({
   const summary = summaryLine === null ? null : summaryLine.main;
 
   return (
-    <BottomSheet
-      index={0}
-      enablePanDownToClose
+    <SheetShell
+      testID="trip-wizard-period-sheet"
       onClose={onClose}
-      backdropComponent={renderBackdrop}
-      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
+      handle="indicator"
+      title="기간"
+      subtitle="언제 떠나요?"
+      apply={{
+        testID: 'trip-wizard-period-apply',
+        onPress: onApply,
+        disabled: !rangeComplete,
+      }}
     >
-      <BottomSheetView
-        testID="trip-wizard-period-sheet"
-        className="gap-lg px-xl pb-[34px] pt-[10px]"
-      >
-        {/* header */}
-        <View className="gap-xs">
-          <Text className="text-[20px] font-noto-bold font-bold text-ink">
-            기간
-          </Text>
-          <Text className="font-noto text-label text-muted">언제 떠나요?</Text>
-        </View>
-
-        {/* 선택 요약 — 완성 범위에서만 */}
-        {summary !== null ? (
-          <Text
-            testID="trip-wizard-period-summary"
-            className="font-noto-bold text-card-title font-bold text-ink"
-          >
-            {summary}
-          </Text>
-        ) : null}
-
-        {/* 캘린더 */}
-        <View className="gap-sm">
-          {/* 월 네비 */}
-          <View className="flex-row items-center justify-between">
-            <Pressable
-              testID="trip-wizard-period-prev"
-              accessibilityRole="button"
-              accessibilityLabel="이전 달"
-              disabled={!canGoPrev}
-              onPress={onPrevMonth}
-              className={`h-10 w-10 items-center justify-center ${
-                canGoPrev ? '' : 'opacity-40'
-              }`}
-            >
-              <BackChevronGlyph size={18} tone="muted" />
-            </Pressable>
-            <Text
-              testID="trip-wizard-period-month"
-              className="font-noto-bold text-section font-bold text-ink"
-            >
-              {year}년 {monthNum}월
-            </Text>
-            <Pressable
-              testID="trip-wizard-period-next"
-              accessibilityRole="button"
-              accessibilityLabel="다음 달"
-              disabled={!canGoNext}
-              onPress={onNextMonth}
-              className={`h-10 w-10 items-center justify-center ${
-                canGoNext ? '' : 'opacity-40'
-              }`}
-            >
-              <ChevronRightGlyph size={18} tone="muted" />
-            </Pressable>
-          </View>
-
-          {/* 요일 헤더 (일~토) */}
-          <View className="w-full flex-row flex-wrap">
-            {WEEKDAY_LABELS.map((label) => (
-              <View
-                key={label}
-                className="h-8 w-[14.28%] items-center justify-center"
-              >
-                <Text className="font-noto text-caption text-muted-soft">
-                  {label}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          {/* 주 그리드 */}
-          <View className="w-full flex-row flex-wrap">
-            {Array.from({ length: leadingBlanks }, (_, i) => (
-              <View key={`blank-${i}`} className="h-[44px] w-[14.28%]" />
-            ))}
-            {dayNumbers.map((day) => {
-              const date = dateCell(month, day);
-              return (
-                <DateCell
-                  key={date}
-                  date={date}
-                  day={day}
-                  role={cellRole(date, range)}
-                  single={!hasSpan(range)}
-                  past={date < today}
-                  onPickDate={onPickDate}
-                />
-              );
-            })}
-          </View>
-        </View>
-
-        {/* 안내문 — 고정 문구(TRIP-1267). 끝은 박수로 파생되므로 첫 탭 전에 읽도록 항상 띄운다 */}
+      {/* 선택 요약 — 완성 범위에서만 */}
+      {summary !== null ? (
         <Text
-          testID="trip-wizard-period-note"
-          className="font-noto text-caption text-muted"
+          testID="trip-wizard-period-summary"
+          className="font-noto-bold text-card-title font-bold text-ink"
         >
-          종료일은 여행지에서 정한 박수로 정해져요
+          {summary}
         </Text>
+      ) : null}
 
-        {/* 적용 — 범위 완성 시에만 활성(진짜 disabled prop) */}
-        <Pressable
-          testID="trip-wizard-period-apply"
-          accessibilityRole="button"
-          disabled={!rangeComplete}
-          onPress={onApply}
-          className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-            rangeComplete ? '' : 'opacity-40'
-          }`}
-        >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            적용
+      {/* 캘린더 */}
+      <View className="gap-sm">
+        {/* 월 네비 */}
+        <View className="flex-row items-center justify-between">
+          <Pressable
+            testID="trip-wizard-period-prev"
+            accessibilityRole="button"
+            accessibilityLabel="이전 달"
+            disabled={!canGoPrev}
+            onPress={onPrevMonth}
+            className={`h-10 w-10 items-center justify-center ${
+              canGoPrev ? '' : 'opacity-40'
+            }`}
+          >
+            <BackChevronGlyph size={18} tone="muted" />
+          </Pressable>
+          <Text
+            testID="trip-wizard-period-month"
+            className="font-noto-bold text-section font-bold text-ink"
+          >
+            {year}년 {monthNum}월
           </Text>
-        </Pressable>
-      </BottomSheetView>
-    </BottomSheet>
+          <Pressable
+            testID="trip-wizard-period-next"
+            accessibilityRole="button"
+            accessibilityLabel="다음 달"
+            disabled={!canGoNext}
+            onPress={onNextMonth}
+            className={`h-10 w-10 items-center justify-center ${
+              canGoNext ? '' : 'opacity-40'
+            }`}
+          >
+            <ChevronRightGlyph size={18} tone="muted" />
+          </Pressable>
+        </View>
+
+        {/* 요일 헤더 (일~토) */}
+        <View className="w-full flex-row flex-wrap">
+          {WEEKDAY_LABELS.map((label) => (
+            <View
+              key={label}
+              className="h-8 w-[14.28%] items-center justify-center"
+            >
+              <Text className="font-noto text-caption text-muted-soft">
+                {label}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* 주 그리드 */}
+        <View className="w-full flex-row flex-wrap">
+          {Array.from({ length: leadingBlanks }, (_, i) => (
+            <View key={`blank-${i}`} className="h-[44px] w-[14.28%]" />
+          ))}
+          {dayNumbers.map((day) => {
+            const date = dateCell(month, day);
+            return (
+              <DateCell
+                key={date}
+                date={date}
+                day={day}
+                role={cellRole(date, range)}
+                single={!hasSpan(range)}
+                past={date < today}
+                onPickDate={onPickDate}
+              />
+            );
+          })}
+        </View>
+      </View>
+
+      {/* 안내문 — 고정 문구(TRIP-1267). 끝은 박수로 파생되므로 첫 탭 전에 읽도록 항상 띄운다 */}
+      <Text
+        testID="trip-wizard-period-note"
+        className="font-noto text-caption text-muted"
+      >
+        종료일은 여행지에서 정한 박수로 정해져요
+      </Text>
+    </SheetShell>
   );
 }

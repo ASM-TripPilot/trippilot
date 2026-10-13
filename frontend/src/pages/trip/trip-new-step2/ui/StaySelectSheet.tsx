@@ -28,13 +28,8 @@
  */
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
+import { SheetShell } from '@/shared/ui/SheetShell';
 
 import { SavedStayCard } from '@/entities/stay';
 import { formatBaseNightRange } from '@/entities/trip';
@@ -87,13 +82,6 @@ export interface StaySelectSheetProps {
   assignFailure?: AssignFailure | null;
   /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
   onClose: () => void;
-}
-
-/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
-function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
-  return (
-    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-  );
 }
 
 const EMPTY_MESSAGE = '저장한 숙소가 아직 없어요';
@@ -152,106 +140,91 @@ export function StaySelectSheet({
   }
 
   return (
-    <BottomSheet
-      index={0}
-      enablePanDownToClose
+    <SheetShell
+      testID="trip-base-staysheet"
       onClose={onClose}
-      backdropComponent={renderBackdrop}
-      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
+      handle="indicator"
+      title={title}
+      subtitle={`${dateLabel} 밤 · 어디서 묵을까요?`}
     >
-      <BottomSheetView
-        testID="trip-base-staysheet"
-        className="gap-lg px-xl pb-[34px] pt-[10px]"
-      >
-        {/* header */}
-        <View className="gap-xs">
-          <Text className="text-[20px] font-noto-bold font-bold text-ink">
-            {title}
-          </Text>
-          <Text className="font-noto text-label text-muted">
-            {`${dateLabel} 밤 · 어디서 묵을까요?`}
+      {regionNotice ? (
+        <Text
+          testID="trip-base-staysheet-region-empty"
+          className="font-noto text-body text-muted"
+        >
+          {regionNotice}
+        </Text>
+      ) : null}
+
+      {/* body — 후보 목록 또는 0건 안내(둘은 상호배타) */}
+      {empty ? (
+        <View testID="trip-base-staysheet-empty" className="py-xl">
+          <Text className="font-noto text-body text-muted">
+            {EMPTY_MESSAGE}
           </Text>
         </View>
-
-        {regionNotice ? (
-          <Text
-            testID="trip-base-staysheet-region-empty"
-            className="font-noto text-body text-muted"
-          >
-            {regionNotice}
-          </Text>
-        ) : null}
-
-        {/* body — 후보 목록 또는 0건 안내(둘은 상호배타) */}
-        {empty ? (
-          <View testID="trip-base-staysheet-empty" className="py-xl">
-            <Text className="font-noto text-body text-muted">
-              {EMPTY_MESSAGE}
-            </Text>
-          </View>
-        ) : sections !== undefined ? (
-          // TRIP-1011 — 섹션이 오면 섹션마다 헤더 + 그 섹션 카드. `candidates` 는 다시 그리지 않는다.
-          <View className="gap-lg">
-            {sections.map((section) => (
-              <View
-                key={section.key}
-                testID={`trip-base-staysheet-section-${section.key}`}
-                className="gap-sm"
+      ) : sections !== undefined ? (
+        // TRIP-1011 — 섹션이 오면 섹션마다 헤더 + 그 섹션 카드. `candidates` 는 다시 그리지 않는다.
+        <View className="gap-lg">
+          {sections.map((section) => (
+            <View
+              key={section.key}
+              testID={`trip-base-staysheet-section-${section.key}`}
+              className="gap-sm"
+            >
+              <Text
+                testID={`trip-base-staysheet-section-${section.key}-title`}
+                className="font-noto text-label text-muted"
               >
-                <Text
-                  testID={`trip-base-staysheet-section-${section.key}-title`}
-                  className="font-noto text-label text-muted"
-                >
-                  {section.title}
-                </Text>
-                {section.candidates.map(renderCandidate)}
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View className="gap-sm">{candidates.map(renderCandidate)}</View>
-        )}
+                {section.title}
+              </Text>
+              {section.candidates.map(renderCandidate)}
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View className="gap-sm">{candidates.map(renderCandidate)}</View>
+      )}
 
-        {/* 실패 인라인(INV-4) — 침묵하지 않는다. 성공/미시도면 미렌더. */}
-        {assignFailure ? (
-          <Text
-            testID="trip-base-staysheet-error"
-            className="font-noto text-label text-primary-text"
-          >
-            {ASSIGN_FAILURE_MESSAGE[assignFailure]}
-          </Text>
-        ) : null}
-
-        {/* 둘러보기(outline) — 후보가 있든 없든 항상 있는 탈출구. */}
-        <Pressable
-          testID="trip-base-staysheet-browse"
-          accessibilityRole="button"
-          onPress={onBrowse}
-          className="h-[52px] w-full flex-row items-center justify-center gap-xs rounded-button border-[1.2px] border-hairline-strong bg-canvas"
+      {/* 실패 인라인(INV-4) — 침묵하지 않는다. 성공/미시도면 미렌더. */}
+      {assignFailure ? (
+        <Text
+          testID="trip-base-staysheet-error"
+          className="font-noto text-label text-primary-text"
         >
-          <SearchGlyph size={20} />
-          <Text className="font-noto-bold text-body font-bold text-ink">
-            숙소 둘러보기
+          {ASSIGN_FAILURE_MESSAGE[assignFailure]}
+        </Text>
+      ) : null}
+
+      {/* 둘러보기(outline) — 후보가 있든 없든 항상 있는 탈출구. */}
+      <Pressable
+        testID="trip-base-staysheet-browse"
+        accessibilityRole="button"
+        onPress={onBrowse}
+        className="h-[52px] w-full flex-row items-center justify-center gap-xs rounded-button border-[1.2px] border-hairline-strong bg-canvas"
+      >
+        <SearchGlyph size={20} />
+        <Text className="font-noto-bold text-body font-bold text-ink">
+          숙소 둘러보기
+        </Text>
+      </Pressable>
+
+      {/* 지정(primary) — 후보가 있을 때만. 미선택이면 진짜 disabled 라 눌러도 발화 0(★3). */}
+      {empty ? null : (
+        <Pressable
+          testID="trip-base-staysheet-assign"
+          accessibilityRole="button"
+          disabled={assignDisabled}
+          onPress={onAssign}
+          className={`h-[52px] w-full items-center justify-center rounded-button bg-primary ${
+            assignDisabled ? 'opacity-40' : ''
+          }`}
+        >
+          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
+            이 밤 거점으로 지정
           </Text>
         </Pressable>
-
-        {/* 지정(primary) — 후보가 있을 때만. 미선택이면 진짜 disabled 라 눌러도 발화 0(★3). */}
-        {empty ? null : (
-          <Pressable
-            testID="trip-base-staysheet-assign"
-            accessibilityRole="button"
-            disabled={assignDisabled}
-            onPress={onAssign}
-            className={`h-[52px] w-full items-center justify-center rounded-button bg-primary ${
-              assignDisabled ? 'opacity-40' : ''
-            }`}
-          >
-            <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-              이 밤 거점으로 지정
-            </Text>
-          </Pressable>
-        )}
-      </BottomSheetView>
-    </BottomSheet>
+      )}
+    </SheetShell>
   );
 }

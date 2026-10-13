@@ -62,6 +62,7 @@ import {
   SearchGlyph,
   WarningTriangleGlyph,
 } from '@/features/stay/index.view';
+import { AppBar } from '@/shared/ui/AppBar';
 
 export interface StayRegisterScreenProps {
   flow: StayRegisterFlow;
@@ -106,22 +107,21 @@ const SELECTED_ROW_SHADOW: ViewStyle = {
  * 형태를 지역 함수로 그린다. 뒤로가기는 `onBack`만 부른다 — 화면은 라우팅을 모르므로(구조
  * 가드) `router.back()` 배선은 페이지가 진다. `onBack`이 없으면(프리즈 makeHandlers가 안
  * 넘긴다) 눌러도 아무 일이 없다. */
-function AppBar({ onBack }: { onBack?: () => void }): ReactElement {
+function StayRegisterAppBar({ onBack }: { onBack?: () => void }): ReactElement {
   return (
-    <View className="h-14 w-full flex-row items-center gap-xs bg-canvas pl-sm pr-lg">
-      <Pressable
-        testID="stay-register-back"
-        accessibilityRole="button"
-        accessibilityLabel="뒤로 가기"
-        onPress={onBack}
-        className="h-10 w-10 items-center justify-center"
-      >
-        <BackChevronGlyph size={24} />
-      </Pressable>
-      <Text className="font-noto-bold text-section font-bold text-ink">
-        숙소 등록
-      </Text>
-    </View>
+    <AppBar
+      className="h-14 w-full flex-row items-center gap-xs bg-canvas pl-sm pr-lg"
+      back={{
+        testID: 'stay-register-back',
+        accessibilityRole: 'button',
+        accessibilityLabel: '뒤로 가기',
+        onPress: onBack,
+        className: 'h-10 w-10 items-center justify-center',
+        glyph: <BackChevronGlyph size={24} />,
+      }}
+      title="숙소 등록"
+      titleClassName="font-noto-bold text-section font-bold text-ink"
+    />
   );
 }
 
@@ -559,7 +559,7 @@ export function StayRegisterScreen({
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="stay-register-root" className="flex-1 bg-canvas">
-        <AppBar onBack={onBack} />
+        <StayRegisterAppBar onBack={onBack} />
 
         <ScrollView
           className="flex-1"

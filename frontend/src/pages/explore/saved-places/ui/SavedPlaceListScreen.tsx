@@ -19,6 +19,7 @@ import {
   SearchGlyph,
   WarningTriangleGlyph,
 } from '@/features/explore/index.view';
+import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 
 /**
  * d02 담은 장소(Figma `1693:1183`·`1695:1183`) — **프레젠테이션 화면**. props만 받는다.
@@ -283,35 +284,16 @@ function RemoveErrorBanner({
   notice: PlaceSaveNotice;
   onPressAction?: () => void;
 }): ReactElement {
-  const actionTestId =
-    notice.action === 'login'
-      ? 'explore-saved-removeerror-login'
-      : notice.action === 'retry'
-        ? 'explore-saved-removeerror-retry'
-        : null;
-  const actionLabel = notice.action === 'login' ? '로그인하기' : '다시 시도';
-
   return (
-    <View
+    <NoticeBanner
       testID="explore-saved-removeerror"
-      className="mx-lg mb-sm flex-row items-start gap-[10px] rounded-button bg-primary-pale p-md"
-    >
-      <Text className="flex-1 font-noto text-label text-primary-text">
-        {notice.message}
-      </Text>
-      {actionTestId ? (
-        <Pressable
-          testID={actionTestId}
-          accessibilityRole="button"
-          onPress={onPressAction}
-          className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
-        >
-          <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">
-            {actionLabel}
-          </Text>
-        </Pressable>
-      ) : null}
-    </View>
+      notice={notice}
+      actionTestIDs={{
+        login: 'explore-saved-removeerror-login',
+        retry: 'explore-saved-removeerror-retry',
+      }}
+      onPressAction={onPressAction}
+    />
   );
 }
 

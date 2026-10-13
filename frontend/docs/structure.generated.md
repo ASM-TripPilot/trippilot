@@ -1230,6 +1230,7 @@
 - `src/pages/trip/trip-new-step1/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
 - `src/pages/trip/trip-new-step1/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
 - `src/pages/trip/trip-new-step1/ui/PrefOverrideSheet.tsx`  →  PrefOverrideSheetProps · PrefOverrideSheet
+- `src/pages/trip/trip-new-step1/ui/StepperButton.tsx`  →  StepperButton
 - `src/pages/trip/trip-new-step1/ui/TripNewStep1Page.tsx`  →  TripNewStep1PageProps · TripNewStep1Page
 - `src/pages/trip/trip-new-step1/ui/TripWizardLeaveDialog.tsx`  →  TripWizardLeaveDialog
 - `src/pages/trip/trip-new-step1/ui/TripWizardStep1Screen.tsx`  →  TripWizardStep1ScreenProps · TripWizardStep1Screen
@@ -1508,6 +1509,7 @@
 
 ## src/shared/lib/
 - `src/shared/lib/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
+- `src/shared/lib/chunkPairs.ts`  →  chunkPairs
 - `src/shared/lib/fontScale.ts`  →  isLargeText
 - `src/shared/lib/formatRelativeTime.ts`  →  formatRelativeTime
 - `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
@@ -1515,6 +1517,7 @@
 - `src/shared/lib/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
 - `src/shared/lib/reduceMotion.ts`  →  startUnlessReduceMotion
 - `src/shared/lib/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
+- `src/shared/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
 - `src/shared/lib/useDeadlineFlag.ts`  →  useDeadlineFlag
 - `src/shared/lib/useElapsedFlag.ts`  →  useElapsedFlag
 
@@ -1586,12 +1589,15 @@
 - `src/shared/storage/stringValue.ts`  →  readStringValue · writeStringValue
 
 ## src/shared/ui/
+- `src/shared/ui/AppBar.tsx`  →  AppBarBack · AppBar
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
+- `src/shared/ui/NoticeBanner.tsx`  →  NoticeBannerNotice · NoticeBanner · DismissNotice
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
+- `src/shared/ui/SheetShell.tsx`  →  SheetApply · SheetShellProps · SheetShell
 - `src/shared/ui/Skeleton.tsx`  →  SkeletonProps · Skeleton
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
 - `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · showToast · hideToast · useRaisedToastBottom · ToastHost
@@ -1612,8 +1618,10 @@
 
 ## src/shared/ui/pref/
 - `src/shared/ui/pref/PrefChip.tsx`  →  PrefChipProps · PrefChip
+- `src/shared/ui/pref/PrefOptionTile.tsx`  →  PrefOptionTile
+- `src/shared/ui/pref/PrefStepHeader.tsx`  →  PrefStepHeader
 - `src/shared/ui/pref/PrefTile.tsx`  →  PrefTileIcon · PrefTileProps · PrefTile
-- `src/shared/ui/pref/index.ts`  →  PrefChip · PrefTile
+- `src/shared/ui/pref/index.ts`  →  PrefChip · PrefOptionTile · PrefStepHeader · PrefTile
 
 ## src/test-support/
 - `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes
@@ -1687,4 +1695,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1047개 파일
+합계 1055개 파일

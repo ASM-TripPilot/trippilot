@@ -10,8 +10,13 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PrefChip } from '@/shared/ui/pref';
-import { PrefTile } from '@/shared/ui/pref';
+import { chunkPairs } from '@/shared/lib/chunkPairs';
+import {
+  PrefChip,
+  PrefOptionTile,
+  PrefStepHeader,
+  PrefTile,
+} from '@/shared/ui/pref';
 
 import {
   BikeGlyph,
@@ -115,14 +120,6 @@ const TRANSPORT_OPTIONS: {
   { slug: 'bike', label: '자전거', Icon: BikeGlyph },
 ];
 
-function chunkPairs<T>(items: T[]): T[][] {
-  const rows: T[][] = [];
-  for (let i = 0; i < items.length; i += 2) {
-    rows.push(items.slice(i, i + 2));
-  }
-  return rows;
-}
-
 interface BudgetTileProps {
   slug: string;
   label: string;
@@ -175,45 +172,6 @@ function BudgetTile({
   );
 }
 
-interface TransportTileProps {
-  slug: string;
-  label: string;
-  Icon: GlyphComponent;
-  selected: boolean;
-  onPress: () => void;
-}
-
-function TransportTile({
-  slug,
-  label,
-  Icon,
-  selected,
-  onPress,
-}: TransportTileProps): ReactElement {
-  return (
-    <Pressable
-      testID={`onboarding-pref2-transport-${slug}`}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className={`h-[72px] flex-1 items-center justify-center gap-[6px] rounded-button bg-canvas px-[6px] py-[14px] ${
-        selected ? 'border-[1.5px] border-primary' : 'border border-hairline'
-      }`}
-    >
-      <Icon size={24} selected={selected} />
-      <Text
-        className={
-          selected
-            ? 'font-noto-bold text-label font-bold text-primary-text'
-            : 'font-noto text-label text-body'
-        }
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 export function PrefStep2Screen({
   selectedBudget,
   selectedCompanions,
@@ -231,32 +189,16 @@ export function PrefStep2Screen({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="onboarding-pref2-root" className="flex-1 bg-canvas">
-        <View className="flex-row items-center justify-between px-lg pb-sm pt-2xl">
-          <View className="flex-row items-center gap-sm">
-            <View className="flex-row items-center gap-xs">
-              <View
-                testID="onboarding-pref2-progress-1"
-                className="h-[6px] w-[6px] rounded-pill bg-primary"
-              />
-              <View
-                testID="onboarding-pref2-progress-2"
-                className="h-[6px] w-[6px] rounded-pill bg-primary"
-              />
-            </View>
-            <Text className="font-noto text-caption text-muted">2 / 2</Text>
-          </View>
-          <Pressable
-            testID="onboarding-pref2-skip-top"
-            accessibilityRole="button"
-            onPress={onSkipAll}
-            className="flex-row items-center gap-[3px]"
-          >
-            <Text className="font-noto-bold text-body font-bold text-ink underline">
-              나중에 설정하고 시작
-            </Text>
-            <SkipChevronGlyph size={16} />
-          </Pressable>
-        </View>
+        <PrefStepHeader
+          dots={[
+            { testID: 'onboarding-pref2-progress-1', active: true },
+            { testID: 'onboarding-pref2-progress-2', active: true },
+          ]}
+          progressLabel="2 / 2"
+          skipTestID="onboarding-pref2-skip-top"
+          onSkip={onSkipAll}
+          skipIcon={<SkipChevronGlyph size={16} />}
+        />
 
         <ScrollView className="flex-1">
           <View className="gap-[6px] px-lg pb-xs pt-md">
@@ -375,9 +317,10 @@ export function PrefStep2Screen({
                 className="flex-row gap-[11px]"
               >
                 {row.map(({ slug, label, Icon }) => (
-                  <TransportTile
+                  <PrefOptionTile
                     key={slug}
-                    slug={slug}
+                    testID={`onboarding-pref2-transport-${slug}`}
+                    className="px-[6px]"
                     label={label}
                     Icon={Icon}
                     selected={selectedTransports?.includes(slug) ?? false}
