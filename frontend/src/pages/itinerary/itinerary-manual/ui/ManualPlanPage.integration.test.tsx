@@ -25,6 +25,7 @@ import type {
   SavedStay,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { promptAndRegisterPush } from '@/shared/push';
 import {
   EDIT_LIST,
   fireEditDragEnd,
@@ -35,7 +36,7 @@ import { ManualPlanPage } from './ManualPlanPage';
 
 /**
  * h12/h13 직접 짜기(ManualPlanPage) — **실 훅 + MSW** 통합 테스트(TRIP-1151 에서 다섯 파일을 한 파일로
- * 합쳤다). 생성 훅을 통째로 목으로 바꾼 배선 테스트는 `ManualPlanPage.hookMock.test.tsx`(node)에 있다.
+ * 합쳤다). 생성 훅을 통째로 목으로 바꾼 옛 `ManualPlanPage.hookMock.test.tsx`(node)는 TRIP-1352 에서 이 파일 맨 아래로 이사하고 지웠다.
  *
  * 옛 파일 하나 = 바깥 describe 하나다. 안쪽 describe·it 이름과 각 파일의 픽스처·기본 MSW 핸들러
  * (describe 의 beforeEach)는 그대로다.
@@ -73,9 +74,14 @@ const mockReplace = jest.fn();
 const mockDismissTo = jest.fn();
 // TRIP-1264 — 뒤로 가로채기(`usePreventRemove`)는 네비게이터 안에서만 돈다(실물은 컨테이너 밖에서 throw).
 // 이 파일은 라우터를 통째로 목으로 바꾸므로 가로채기도 목으로 바꾸고, 넘긴 켜짐 여부만 잡는다(02a ★7).
-const mockUsePreventRemove = jest.fn();
+type BlockedAction = { type: string; payload?: object };
+type PreventRemoveCallback = (options: {
+  data: { action: BlockedAction };
+}) => void;
+const mockUsePreventRemove = jest.fn<void, [boolean, PreventRemoveCallback]>();
+const mockDispatch = jest.fn();
 const mockNavigation = {
-  dispatch: jest.fn(),
+  dispatch: mockDispatch,
   addListener: jest.fn(() => () => {}),
 };
 jest.mock('expo-router', () => ({
@@ -94,7 +100,8 @@ jest.mock('expo-router', () => ({
   useNavigation: () => mockNavigation,
 }));
 jest.mock('@react-navigation/native', () => ({
-  usePreventRemove: (...args: unknown[]) => mockUsePreventRemove(...args),
+  usePreventRemove: (prevent: boolean, callback: PreventRemoveCallback) =>
+    mockUsePreventRemove(prevent, callback),
   useNavigation: () => mockNavigation,
 }));
 
@@ -111,6 +118,7 @@ beforeEach(() => {
     mockReplace,
     mockDismissTo,
     mockUsePreventRemove,
+    mockDispatch,
   ].forEach((fn) => fn.mockClear());
 });
 
@@ -502,7 +510,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
    *    TRIP-1233 부터 말미 장소 추가도 보고 있는 날(`date`)을 싣는다 — 안 실으면 h13 이 1일차에 담는다.
    *    뒤로(‹)는 TRIP-1009 부터 `router.back` 이 아니라 일정 탭 `replace` 다(옛 C1b 는 TRIP-1038 로 삭제 — S1 주석).
    *
-   * MANUAL 생성 POST 가드(G-a1~a3·I2)는 `ManualPlanPage.hookMock.test.tsx` 가 계속 잠근다 — 여기선
+   * MANUAL 생성 POST 가드(G-a1~a3)는 이 파일 맨 아래 「진입 POST 가드 · 알림 권한 · 뒤로 가로채기」가 잠근다 — 여기선
    * GET 이 기존 초안(days>0)을 돌려줘 POST 가 나가지 않는 경로만 쓴다.
    *
    * ⚠️ 실제 롱프레스·손가락 이동은 jest 사각(목) — 6-b 실기(AC-15, `/itinerary/manual` 입구).
@@ -1928,7 +1936,7 @@ describe('저장 뒤 위반 요약 게이트', () => {
   }
 
   // TRIP-1264 AC-7 — 뒤로 가로채기는 저장 실패·게이트 열림에도 켜져 있다(TRIP-1009 Q3 "항상 일정 탭").
-  // 이 두 상태를 만드는 MSW 픽스처가 이 describe 에만 있어 여기 붙인다. 나머지 상태·콜백 분기는 hookMock N1~N4.
+  // 이 두 상태를 만드는 MSW 픽스처가 이 describe 에만 있어 여기 붙인다. 나머지 상태·콜백 분기는 맨 아래 「뒤로 제스처·하드웨어 뒤로도 일정 탭으로」.
   describe('🔴 P1·P2 · AC-7 — 저장이 실패해도, 위반 게이트가 떠 있어도 뒤로 가로채기는 켜져 있다', () => {
     /** 지금까지 페이지가 usePreventRemove 에 넘긴 첫 인자 전부(호출 0회면 공허 통과라 길이 앵커를 같이 본다). */
     function expectPreventRemoveAlwaysOn(): void {
@@ -2238,5 +2246,234 @@ describe('저장 뒤 위반 요약 게이트', () => {
         await screen.findByTestId(CONFIRMED_TOAST, {}, WAIT)
       ).toHaveTextContent('일정이 확정됐어요');
     });
+  });
+});
+
+// TRIP-1352 · 옛 ManualPlanPage.hookMock.test.tsx(node 버킷, 생성·조회 훅 목)의 배선 관점을 이사 왔다 — 진입 POST
+// 가드(조회 전 보류 · 일정 없음이면 MANUAL 1건)·생성 성공/실패에도 알림 권한 0회·뒤로 가로채기 콜백. 훅을 목으로
+// 대신하던 지도 중심(M1/M2/C1~C5)은 `editorMapCenter` PBT 와 위 E3 가, 위반 배지(V1·V2)는 V3·V4 가, 폴백 배너
+// 부재(I2)는 판별력이 없어(traps-itinerary: 공허 통과) 옛 파일과 함께 지웠다.
+describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMock)', () => {
+  const BASE = 'http://localhost:8080/api/v1';
+  const TRIP_ID = 't1';
+
+  const EMPTY_MANUAL: Itinerary = {
+    itineraryId: 'it1',
+    tripId: TRIP_ID,
+    status: 'PLANNED',
+    solveMode: 'MINIMAL',
+    generationMode: 'MANUAL',
+    isFallback: false,
+    generationState: 'COMPLETE',
+    days: [{ date: '2026-06-10', slots: [] }],
+  };
+
+  /** 조회 응답 차례 — 테스트가 바꾼다. `'held'` 는 `openGet` 이 풀 때까지 붙잡는다. */
+  let getReply: 'held' | 'notFound' | Itinerary = 'notFound';
+  let openGet: (() => void) | null = null;
+  let getCount = 0;
+  let postBodies: string[] = [];
+  let postStatus = 201;
+
+  beforeEach(() => {
+    getReply = 'notFound';
+    openGet = null;
+    getCount = 0;
+    postBodies = [];
+    postStatus = 201;
+    (promptAndRegisterPush as jest.Mock).mockClear();
+    setAccessToken('valid-access');
+    useItineraryEditStore.getState().reset();
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+        getCount += 1;
+        if (getReply === 'held') {
+          await new Promise<void>((resolve) => {
+            openGet = resolve;
+          });
+        }
+        // 풀린 뒤에는 POST 가 일정을 만든 상태다.
+        if (getReply === 'notFound' || getReply === 'held') {
+          return postBodies.length > 0
+            ? HttpResponse.json(EMPTY_MANUAL)
+            : HttpResponse.json({}, { status: 404 });
+        }
+        return HttpResponse.json(getReply);
+      }),
+      http.post(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
+        postBodies.push(await request.text());
+        return postStatus === 201
+          ? HttpResponse.json(EMPTY_MANUAL, { status: 201 })
+          : HttpResponse.json(
+              { error: { code: 'INTERNAL', message: '서버 오류' } },
+              { status: postStatus }
+            );
+      }),
+      http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+
+  afterEach(() => {
+    openGet?.(); // 붙잡힌 응답을 남기지 않는다.
+    server.resetHandlers();
+    clearAccessToken();
+    useItineraryEditStore.getState().reset();
+  });
+
+  function renderPage(props: { startFresh?: boolean } = {}) {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    return render(
+      <ManualPlanPage tripId={TRIP_ID} startFresh={props.startFresh} />,
+      { wrapper: Wrapper }
+    );
+  }
+  const settleMs = async (ms = 150): Promise<void> => {
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, ms));
+    });
+  };
+
+  describe('🔴 G-a2·a3 · 조회가 끝나기 전엔 POST 를 보류하고, 일정 없음으로 정착하면 MANUAL 한 건만 쏜다', () => {
+    it('조회 중 POST 0 → 404 정착 뒤 POST 1건, 본문은 { generationMode:"MANUAL" } 하나뿐', async () => {
+      getReply = 'held';
+      renderPage();
+
+      // 도착 전 덮어쓰기 금지 — 조회가 붙잡힌 동안(요청은 나갔다) POST 는 0건이다.
+      await waitFor(() => expect(getCount).toBeGreaterThan(0));
+      await settleMs();
+      expect(postBodies).toEqual([]);
+
+      // 일정 없음(404)으로 정착하면 그때 한 번 쏜다.
+      getReply = 'notFound';
+      await act(async () => {
+        openGet?.();
+      });
+      await waitFor(() => expect(postBodies).toHaveLength(1));
+      expect(JSON.parse(postBodies[0])).toEqual({ generationMode: 'MANUAL' });
+    });
+  });
+
+  describe('🔴 TRIP-1108 AC-7 · 직접 짜기 — 일정 생성이 성공하든 실패하든 알림 권한을 묻지 않는다', () => {
+    it.each<[string, number]>([
+      ['성공(201)', 201],
+      ['실패(500)', 500],
+    ])('MANUAL POST %s → 루틴 0회', async (_label, status) => {
+      postStatus = status;
+      renderPage();
+
+      // 앵커 — POST 가 나갔고, 성공이면 그 콜백이 하는 재조회(GET 두 번째)까지 도달했다.
+      await waitFor(() => expect(postBodies).toHaveLength(1));
+      if (status === 201)
+        await waitFor(() => expect(getCount).toBeGreaterThan(1));
+      await settleMs();
+      expect(promptAndRegisterPush).not.toHaveBeenCalled();
+    });
+  });
+
+  // TRIP-1264 · QA F2 — 스와이프·하드웨어 뒤로는 ‹(onBack)를 거치지 않고 네비게이터가 바로 한 칸 뒤로 보낸다.
+  // 페이지가 "이 화면이 빠지려는 이동"을 가로채(`usePreventRemove`), 뒤로 계열이면 ‹ 와 같은 곳으로 보내고
+  // 그 밖의 이동(확정 뒤 h16 replace · 로그아웃 dismissAll · ‹ 자신의 dismissTo)은 받은 그대로 다시 보낸다.
+  describe('뒤로 제스처·하드웨어 뒤로도 일정 탭으로', () => {
+    /** 페이지가 마지막 렌더에 넘긴 가로채기 콜백에 액션을 넣는다(스와이프·하드웨어 뒤로가 막힌 순간). */
+    function blockRemove(action: BlockedAction): void {
+      const callback = mockUsePreventRemove.mock.lastCall?.[1];
+      // 앵커 — 페이지가 가로채기를 등록했다(없으면 아래 단언이 공허해진다).
+      expect(callback).toBeDefined();
+      callback?.({ data: { action } });
+    }
+    async function renderSettled(): Promise<void> {
+      getReply = EMPTY_MANUAL;
+      renderPage();
+      await screen.findByTestId('itinerary-edit-back');
+      await settleMs();
+    }
+
+    it('가로채기는 조회 로딩 중·정착·새로 짜기(비우는 중) 어느 때나 켜져 있다', async () => {
+      const flagsAfter = (): boolean[] =>
+        mockUsePreventRemove.mock.calls.map(([prevent]) => prevent);
+
+      getReply = 'held';
+      const loading = renderPage();
+      await waitFor(() => expect(getCount).toBeGreaterThan(0));
+      expect(flagsAfter().length).toBeGreaterThan(0); // 호출 0회면 "모두 true"가 공허하다
+      loading.unmount();
+      openGet?.();
+
+      getReply = EMPTY_MANUAL;
+      const settled = renderPage();
+      await screen.findByTestId('itinerary-edit-back');
+      settled.unmount();
+
+      renderPage({ startFresh: true });
+      await waitFor(() => expect(postBodies.length).toBeGreaterThan(0));
+
+      const flags = flagsAfter();
+      expect(flags).toEqual(flags.map(() => true));
+    });
+
+    it.each<[string, BlockedAction]>([
+      ['하드웨어 뒤로(GO_BACK)', { type: 'GO_BACK' }],
+      ['iOS 스와이프(POP)', { type: 'POP', payload: { count: 1 } }],
+    ])(
+      '%s → ‹ 와 같은 dismissTo(일정 탭) 1회, 다른 이동 0회',
+      async (_label, action) => {
+        await renderSettled();
+        expect(mockDismissTo).not.toHaveBeenCalled();
+
+        blockRemove(action);
+        expect(mockDismissTo).toHaveBeenCalledTimes(1);
+        expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
+        expect(mockDispatch).not.toHaveBeenCalled();
+        expect(mockBack).not.toHaveBeenCalled();
+        expect(mockReplace).not.toHaveBeenCalled();
+        expect(mockPush).not.toHaveBeenCalled();
+
+        // ‹ 를 누른 이동과 같은 인자다.
+        fireEvent.press(screen.getByTestId('itinerary-edit-back'));
+        expect(mockDismissTo.mock.calls).toEqual([
+          ['/(tabs)/itinerary'],
+          ['/(tabs)/itinerary'],
+        ]);
+      }
+    );
+
+    it.each<[string, BlockedAction]>([
+      [
+        '확정 뒤 h16 으로 교체(REPLACE)',
+        {
+          type: 'REPLACE',
+          payload: { name: 'trips/[tripId]/itinerary/index' },
+        },
+      ],
+      ['계정 경계 dismissAll(POP_TO_TOP)', { type: 'POP_TO_TOP' }],
+      [
+        '‹ 자신이 보낸 dismissTo(POP_TO)',
+        { type: 'POP_TO', payload: { name: '(tabs)' } },
+      ],
+    ])(
+      '뒤로가 아닌 이동 %s → 받은 그 객체로 dispatch 1회, dismissTo 0회',
+      async (_label, action) => {
+        await renderSettled();
+
+        blockRemove(action);
+        // 같은 내용이 아니라 같은 객체 — 다시 만들면 또 막혀 끝없이 돈다.
+        expect(mockDispatch).toHaveBeenCalledTimes(1);
+        expect(mockDispatch.mock.calls[0][0]).toBe(action);
+        expect(mockDismissTo).not.toHaveBeenCalled();
+        expect(mockBack).not.toHaveBeenCalled();
+        expect(mockReplace).not.toHaveBeenCalled();
+      }
+    );
   });
 });
