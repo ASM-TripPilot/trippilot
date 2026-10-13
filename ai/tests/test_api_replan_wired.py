@@ -112,7 +112,10 @@ def test_원_일정_POI_가_후보풀에_합류한다() -> None:
     body_slots = [{"poi_id": str(far.poi_id), "start_at": "10:00", "end_at": "11:30",
                    "placement_reason": "아침에 한적해서"}]
 
-    response = _post(build_dev_app(directives=_DIRECTIVES), current_slots=body_slots)
+    # 사유 없음 — 우천은 이동 줄이기(LESS_MOVE·경로 감점, BR-U4-47)를 얹어 반경 밖 원 일정
+    # POI 를 **정당하게** 밀어낸다. 여기서 보는 것은 합류 자체다.
+    response = _post(build_dev_app(directives=_DIRECTIVES), current_slots=body_slots,
+                     reasons=["none"])
 
     assert response.status_code == 200, response.text
     body = response.json()

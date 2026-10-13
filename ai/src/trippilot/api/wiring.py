@@ -1028,11 +1028,28 @@ _REASON_PRIORITY = ("weather", "closed", "fully_booked", "canceled", "delay", "f
 _REASON_IMPLIED_DIRECTIVES: Mapping[str, tuple[str, ...]] = {
     "fatigue": ("LESS_MOVE", "AVOID_STRENUOUS", "RELAX"),
     "delay": ("LESS_MOVE", "RELAX"),
-    "weather": ("INDOOR",),
+    "weather": ("INDOOR", "LESS_MOVE"),  # 실내 선호가 먼 대체지를 끌어오지 않게
     "closed": ("NEARBY",),
     "fully_booked": ("NEARBY",),
     "canceled": ("NEARBY",),
 }
+
+# 사유 → 경로 길이 감점(점수/도로 km, `ItineraryProblem.travel_weight`, BR-U4-47). `LESS_MOVE`
+# 는 앵커에서 먼 **후보**를 내릴 뿐이라 흩어진 후보끼리 오가는 **경로**는 못 줄였다(실스택:
+# 피로 26.1 → 30.1km, 우천 51.8km). 이 감점이 조립 선택(A)에 이동을 넣는다. 사유가 여럿이면
+# 최댓값. 사용자 칩 LESS_MOVE 도 피로와 같은 값을 받는다(`_USER_LESS_MOVE_WEIGHT`).
+_REASON_ROUTE_WEIGHT: Mapping[str, float] = {
+    "fatigue": 0.05,
+    "delay": 0.05,
+    "weather": 0.02,  # 약하게 — 실내 선호가 주(主)다
+}
+_USER_LESS_MOVE_WEIGHT = 0.05
+
+
+def _route_weight(reasons: Sequence[str], resolved: Sequence[str]) -> float:
+    """사유·사용자 칩 → `travel_weight`. 최댓값 — 사유가 겹쳐도 더 세지지 않는다."""
+    return max((*(_REASON_ROUTE_WEIGHT.get(r, 0.0) for r in reasons),
+                _USER_LESS_MOVE_WEIGHT if "LESS_MOVE" in resolved else 0.0))
 
 # 부정 표현 — 있으면 임베딩 매칭을 건너뛴다. 임베딩은 부정을 못 읽어 "카페는 이제 그만"이
 # ADD_CAFE 로 잡혀 카페가 **늘었고**, 부정 뒤만 떼어 매칭하면 "가고 싶어" 같은 빈 술어가
@@ -1054,9 +1071,10 @@ def _exact_alias(text: str, specs: Sequence[DirectiveSpec]) -> tuple[DirectiveSp
 # 슬롯만 당겨야 해서 거리 감점으로 못 푼다 — 무효로 밝힌다.
 _NEAR_KEYS = frozenset({"NEARBY", "LESS_MOVE"})
 
-# SOLVER 지시 중 배선된 것 — "여유 있게"는 여행 속도 느긋하게(`Pace.SLOW`, 체류 ×1.4)로
-# 집행한다. 체류가 길어지면 같은 창에 방문이 줄어든다(`PACE_STAY_RATIO` 실측 8→7슬롯).
-_SLOW_KEYS = frozenset({"RELAX"})
+# SOLVER 지시 중 배선된 것 — 여행 속도로 집행한다. "여유 있게"는 느긋하게(`Pace.SLOW`, 체류
+# ×1.4), "더 채워서"는 알차게(`Pace.PACKED`, 체류 ×0.9). 체류가 바뀌면 같은 창에 들어가는 방문
+# 수가 바뀐다(`PACE_STAY_RATIO` 실측 7·8·9슬롯). 둘을 같이 고르면 상쇄(무보정) + 노트.
+_PACE_KEYS: Mapping[str, Pace] = {"RELAX": Pace.SLOW, "FILL_MORE": Pace.PACKED}
 
 # 자유 입력 번역(A-3, 경량 티어) 마감 — 요청 예산의 15% 와 이 값 중 작은 쪽. PlanB·점수 몫을
 # 덜 깎으려고 짧게 둔다. 넘기면 지시 없이 진행하고 원문은 PlanB 가 읽는다(INV-4).
@@ -1749,7 +1767,7 @@ class WiredItineraryOrchestrator:
         # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.
         t0 = self._clock.monotonic_ms()
 
-        resolved, unknown, prefer, avoid, near, add_one, slow = self._replan_directives(
+        resolved, unknown, prefer, avoid, near, add_one, pace = self._replan_directives(
             request, notes, trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
 
         transport = _token_or(
@@ -1843,7 +1861,8 @@ class WiredItineraryOrchestrator:
             avoid_categories=avoid,
             add_one_categories=add_one,
             prefer_near=near,
-            pace=Pace.SLOW if slow else None,
+            pace=pace,
+            travel_weight=_route_weight(request.reasons, resolved),
             not_before=not_before,
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
@@ -1872,8 +1891,8 @@ class WiredItineraryOrchestrator:
         self, request: schemas.ReplanRequest, notes: list[str], *,
         trace_id: TraceId, now: datetime, deadline_ms: int,
     ) -> tuple[list[str], list[str], frozenset[PoiCategory], frozenset[PoiCategory], bool,
-               frozenset[PoiCategory], bool]:
-        """칩 + 자유입력 + 사유 → (해석분, 미지분, 선호, 회피, 가까운 데로, 한 곳 추가, 여유).
+               frozenset[PoiCategory], Pace | None]:
+        """칩 + 자유입력 + 사유 → (해석분, 미지분, 선호, 회피, 가까운 데로, 한 곳 추가, 속도).
 
         사유는 암시 지시(`_REASON_IMPLIED_DIRECTIVES`)로 **합집합**으로 얹는다 — 사용자 지시가
         같은 축(`enforced_by`, 한 곳 추가 제외)을 이미 정했으면 그 축은 사용자 것이 이긴다.
@@ -1899,7 +1918,7 @@ class WiredItineraryOrchestrator:
                     r in _REASON_IMPLIED_DIRECTIVES for r in request.reasons):
                 notes.append("directive_dictionary_absent")
             return ([], list(request.directives), frozenset(), frozenset(), False, frozenset(),
-                    False)
+                    None)
 
         known, unknown = resolve_chips(request.directives, self._directives)
         specs = list(known)
@@ -1940,14 +1959,14 @@ class WiredItineraryOrchestrator:
         avoid: set[PoiCategory] = set()
         add_one: set[PoiCategory] = set()
         near = False
-        slow = False
+        paces: set[Pace] = set()
         ineffective: list[str] = []
         for spec in specs:
             if spec.unwired:
                 ineffective.append(spec.key)
                 continue
-            if spec.key in _SLOW_KEYS:
-                slow = True
+            if spec.key in _PACE_KEYS:
+                paces.add(_PACE_KEYS[spec.key])
                 continue
             if spec.enforced_by == "RANKING":
                 # 종전엔 RANKING 셋이 인식만 되고 효과도 노트도 없었다(2026-10-05 실측).
@@ -1977,16 +1996,19 @@ class WiredItineraryOrchestrator:
         # 암시 지시는 사용자 것 **뒤에** 얹는다 — 같은 축이면 `_reason_implied` 가 이미 뺐고,
         # 사용자 "한 곳 추가" 카테고리는 건드리지 않는다(우천 INDOOR 가 카페 전원을 올리면
         # "카페 한 곳"이 하루 전환에 먹혀 `add_one` 이 비워진다).
+        if len(paces) > 1:  # 여유 + 더 채워서 — 상쇄하고 밝힌다
+            notes.append("directives_conflict: pace")
+            paces.clear()
         for spec in implied:
-            if spec.key in _SLOW_KEYS:
-                slow = True
+            if spec.key in _PACE_KEYS:
+                paces = paces or {_PACE_KEYS[spec.key]}  # 사용자 속도가 있으면 축이 이미 빠졌다
             elif spec.key in _NEAR_KEYS:
                 near = True
             else:
                 prefer |= _categories_of(spec.prefer_categories) - add_one
                 avoid |= _categories_of(spec.avoid_categories) - add_one
         return ([s.key for s in specs], list(unknown), frozenset(prefer), frozenset(avoid),
-                near, frozenset(add_one), slow)
+                near, frozenset(add_one), next(iter(paces), None))
 
     def _reason_implied(
         self, reasons: Sequence[str], user: Sequence[DirectiveSpec], notes: list[str], *,
