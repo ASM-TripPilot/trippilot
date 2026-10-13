@@ -3695,7 +3695,7 @@ components:
 
     PlannedSlot:
       type: object
-      required: [slotKey, date, poiId, orderIndex, startAt, endAt, endsNextDay]
+      required: [slotKey, date, poiId, orderIndex, startAt, endAt, endsNextDay, isFixed, hasViolation]
       properties:
         slotKey: { type: string, description: '경계 키 "{date}#{poiId}" — 실적과 견주는 연결 고리' }
         date: { type: string, format: date }
