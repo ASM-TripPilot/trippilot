@@ -1,5 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.api.SlotCandidateFacade
+import com.trippilot.itinerarygeneration.api.SlotCandidateView
+import com.trippilot.itinerarygeneration.api.SlotCandidatesView
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
@@ -67,7 +70,17 @@ class SlotCandidateService(
     /** 그 여행의 취향(BR-U1-38) — 생성과 같은 척도로 후보를 고르게. 계정 취향은 안 실린 축만. */
     private val preferences: PreferenceFacade,
     private val personalization: PersonalizationPort,
-) {
+) : SlotCandidateFacade {
+    /** 공개 퍼사드 — REST 와 같은 경로를 탄다. 반경·컨셉·사유를 고르는 화면이 없는 호출측(도우미)이라 기본값으로 묻는다. */
+    override fun propose(accountId: UUID, tripId: UUID, slotKey: String): SlotCandidatesView =
+        propose(accountId, tripId, RequestSlotCandidates(slotKey, radiusM = null, concept = null, reason = null)).let { out ->
+            SlotCandidatesView(
+                out.candidates.map { SlotCandidateView(it.poiId, it.distanceRange, it.rationale) },
+                out.freshness.degraded,
+                out.emptyReason?.name,
+            )
+        }
+
     fun propose(accountId: UUID, tripId: UUID, request: RequestSlotCandidates): SlotCandidatesOutput {
         // 형식 검사를 먼저 — 일정이 없더라도 잘못된 요청은 400 이어야 한다(404 로 덮으면 원인을 오인한다).
         val (date, targetPoiId) = SlotKey.parse(request.slotKey)

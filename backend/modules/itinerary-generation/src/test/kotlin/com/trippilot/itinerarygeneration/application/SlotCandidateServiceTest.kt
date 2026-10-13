@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.api.SlotCandidateFacade
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
@@ -143,6 +144,27 @@ class SlotCandidateServiceTest : StringSpec({
         candidates: CandidatePoolPort = pool,
         tripFacade: TripFacade = trips,
     ) = SlotCandidateService(tripFacade, Repo(stored), agent, surfaces, candidates, scored, clock, accountPrefs, NoHints)
+
+    /**
+     * 공개 퍼사드(U8 G-U8-2 · TRIP-1376) — 도우미가 보는 것은 이 계약뿐이다. **REST 와 같은 서비스**를 타는지가
+     * 요점이다: 제외 목록·이웃·closed-set 재확인이 그대로 걸려야 화면의 "다른 후보"와 도우미의 후보가 같다.
+     */
+    "공개 퍼사드가 REST 와 같은 경로로 후보를 낸다 — 기본 반경·컨셉 없음, 강등 여부를 싣는다" {
+        val agent = CapturingAgent()
+        val facade: SlotCandidateFacade = service(agent)
+
+        val view = facade.propose(acc, tripId, SlotKey.of(d1, target))
+
+        val sent = agent.captured!!
+        sent.slotKey shouldBe SlotKey.of(d1, target)
+        sent.radiusM shouldBe null
+        sent.concept shouldBe null
+        sent.reason shouldBe null
+        sent.excludePoiIds.isNotEmpty() shouldBe true // 서버가 유도한 제외 목록이 그대로 걸린다(BR-U3-24)
+        view.candidates.single().let { (it.distanceRange to it.rationale) shouldBe ("약 1.1km" to "주변 카페") }
+        view.degraded shouldBe false
+        view.emptyReason shouldBe null
+    }
 
     "경계가 실패하면 503 으로 표면화한다 — 500(우리가 터졌다)이 아니다" {
         // 감싸지 않으면 RuntimeException 이라 전역 핸들러가 500 으로 떨구는데, 사실은 "지금은 못 준다"다.
@@ -596,5 +618,15 @@ class SlotCandidateServiceTest : StringSpec({
                 out.candidates.map { it.poiId } shouldBe ids.filter { it.second in mapped }.map { it.first }
             }
         }
+    }
+
+    "공개 퍼사드가 0건의 이유와 강등을 이름 그대로 옮긴다 — 안내가 정반대라 뭉개지 않는다" {
+        val facade: SlotCandidateFacade = conceptSvc(emptyAgent(SlotCandidatesEmptyReason.ALL_IN_ITINERARY), RadiusPool(emptyList()))
+
+        val view = facade.propose(acc, tripId, SlotKey.of(d1, target))
+
+        view.candidates shouldBe emptyList()
+        view.degraded shouldBe true
+        view.emptyReason shouldBe "ALL_IN_ITINERARY"
     }
 })
