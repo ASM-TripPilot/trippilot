@@ -13,7 +13,6 @@ import {
   useLiveItinerary,
 } from '@/features/execution';
 import { projectSlotProgress } from '@/entities/itinerary-slot';
-import { useVisitCheck } from '../model/useVisitCheck';
 import { photoAttach } from '@/features/attach-visit-media';
 import { pickPhotoForVisit } from '@/features/attach-visit-media';
 import {
@@ -68,6 +67,7 @@ import {
   AutoRevertDialog,
   autoRecordPart,
   useRevertAutoVisit,
+  useVisitCheck,
   type AutoRevertError,
   type AutoRevertPart,
 } from '@/features/check-visit';
