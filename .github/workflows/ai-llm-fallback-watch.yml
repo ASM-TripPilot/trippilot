@@ -1,0 +1,70 @@
+# dev LLM 대체 결과 감시 — 키 소진·한도 도달을 사람이 알게 한다
+#
+# 게이트웨이는 벤더 예외를 전부 폴백 신호로 접는다(INV-4). 그래서 Anthropic 크레딧이
+# 떨어지거나 워크스페이스 한도에 닿으면 모든 AI 기능이 규칙·템플릿으로 **조용히** 내려가고
+# 화면은 멀쩡해 보인다. 매시 dev AI 파드 로그(직전 65분)를 `ai/scripts/mlops/
+# llm_fallback_watch.py` 가 세어 판정하고, 경보면 이 실행이 실패한다. 알림은 GitHub 실패
+# 메일이다 — schedule 실행의 메일은 이 파일의 cron 을 마지막으로 고친 사람에게 간다.
+#
+# 두 잡인 이유는 ai-serving-judge 와 같다: schedule 은 main 에서 돌고, AWS 역할은 develop
+# 만 허용하는 환경 `dev` 에 묶여 있다. 다른 점 하나 — kick 이 dispatch 한 실행을 **기다려서
+# 결과를 물려받는다.** dispatch 된 실행의 주체는 봇이라 그쪽만 실패하면 메일이 아무에게도
+# 가지 않는다. 그래서 workflow 단위 concurrency 를 걸지 않는다(kick 이 자기 자식을 막는다).
+#
+# 로그는 파드 재시작(배포)과 함께 사라진다 — 배포 직후 한 시간은 덜 센다. 읽기만 한다(과금 0).
+name: ai-llm-fallback-watch
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # 매시 17분
+  workflow_dispatch:
+
+jobs:
+  kick:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - run: |
+          since=$(date -u -d '-30 sec' +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run ai-llm-fallback-watch.yml -R "$REPO" --ref develop
+          for _ in $(seq 24); do
+            sleep 5
+            id=$(gh run list -R "$REPO" --workflow ai-llm-fallback-watch.yml --event workflow_dispatch \
+              --limit 5 --json databaseId,createdAt --jq "[.[] | select(.createdAt >= \"$since\")][-1].databaseId // empty")
+            [ -n "$id" ] && break
+          done
+          [ -n "$id" ] || { echo "::error::dispatch 한 실행을 찾지 못했다"; exit 1; }
+          url="https://github.com/$REPO/actions/runs/$id"
+          gh run watch "$id" -R "$REPO" --exit-status --interval 15 > /dev/null \
+            || { echo "::error::dev LLM 대체 경보 — 판정 요약: $url"; exit 1; }
+
+  watch:
+    if: github.event_name == 'workflow_dispatch'
+    environment: dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write        # AWS 역할 (EKS 파드 로그 읽기)
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-llm-watch-${{ github.run_id }}
+      - name: dev AI 로그 판정 (직전 65분)
+        run: |
+          set -o pipefail
+          aws eks update-kubeconfig --name trippilot-dev --region "$AWS_REGION" > /dev/null
+          kubectl -n trippilot logs -l app.kubernetes.io/component=ai -c ai --since=65m --tail=-1 \
+            | python3 ai/scripts/mlops/llm_fallback_watch.py | tee -a "$GITHUB_STEP_SUMMARY"
