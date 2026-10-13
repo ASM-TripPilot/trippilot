@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { ScrollView } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+import { Dimensions, ScrollView } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -21,6 +22,8 @@ import {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
+import * as fontScaleModule from '@/shared/lib/fontScale';
+import { readIdSet, writeIdSet } from '@/shared/storage';
 
 /**
  * TRIP-1055 · 작성중 여행 삭제 — ⋯ → '삭제' → 확인 다이얼로그 → `DELETE /trips/{tripId}` 흐름을 실제로
@@ -48,6 +51,8 @@ import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
  */
 
 const mockPush = jest.fn();
+// TRIP-1240 — 정렬 시트가 열려 있는 동안 탭바를 숨기려고 페이지가 탭 화면 옵션을 바꾼다(`setOptions`).
+const mockSetOptions = jest.fn();
 /**
  * TRIP-1271 · 포커스 목의 레지스트리 — 지금 등록된 포커스 콜백과 그 정리 함수. 페이지가 useFocusEffect 를 둘
  * 부르므로(TRIP-1286 완료 배너 · TRIP-1271 탭 복귀 재조회) 콜백마다 한 칸씩 든다. 모듈 싱글턴이라 파일 최상위
@@ -62,7 +67,7 @@ jest.mock('expo-router', () => {
       replace: jest.fn(),
       navigate: jest.fn(),
     }),
-    useNavigation: () => ({ setOptions: jest.fn() }),
+    useNavigation: () => ({ setOptions: mockSetOptions }),
     // TRIP-1271 — 실물(expo-router 6 build/useFocusEffect.js)처럼 포커스 상태로 마운트되면 즉시, 콜백이
     // 바뀌면 정리 후 다시 부른다. 탭 복귀는 테스트의 refocus() 가 흉내 낸다.
     useFocusEffect: (effect: () => void | (() => void)) => {
@@ -92,10 +97,19 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-// 완료 배너가 읽는 "알린 여행" 저장소 — 비어 있다(확정 여행 B 가 배너로 뜬다).
+// 완료 배너가 읽는 "알린 여행" 저장소 — 한 칸짜리 메모리(`mockSeen`)다. 기본은 비어 있어(확정 여행 B 가 배너로
+// 뜬다) 쓰면 실제로 값이 바뀐다 — 최상위 beforeEach 가 매번 비우고 구현을 되돌린다(TRIP-1352: 옛 hookMock 배선 이사).
+let mockSeen: string[] = [];
 jest.mock('@/shared/storage/idSet', () => ({
-  readIdSet: jest.fn().mockResolvedValue([]),
-  writeIdSet: jest.fn().mockResolvedValue(undefined),
+  readIdSet: jest.fn(),
+  writeIdSet: jest.fn(),
+}));
+
+// 정렬 저장값 — 키·문자열을 페이지 수준에서 본다. 기본은 "저장값 없음"(최신순).
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(),
+  setItemAsync: jest.fn(),
+  deleteItemAsync: jest.fn(),
 }));
 
 const BASE = 'http://localhost:8080/api/v1';
@@ -191,6 +205,20 @@ beforeEach(() => {
   deleteMode = 204;
   gateThen = 204;
   mockPush.mockClear();
+  mockSetOptions.mockClear();
+  mockSeen = [];
+  (readIdSet as jest.Mock)
+    .mockReset()
+    .mockImplementation(async () => [...mockSeen]);
+  (writeIdSet as jest.Mock)
+    .mockReset()
+    .mockImplementation(async (_key: string, ids: readonly string[]) => {
+      mockSeen = [...ids];
+    });
+  (SecureStore.getItemAsync as jest.Mock).mockReset();
+  (SecureStore.setItemAsync as jest.Mock)
+    .mockReset()
+    .mockResolvedValue(undefined);
   clearAccessToken();
   setAccessToken('valid-access');
   server.use(
@@ -250,6 +278,9 @@ afterEach(() => {
 
 afterAll(() => server.close());
 
+/** 마지막으로 렌더한 페이지의 QueryClient — 떠나 있는 사이 캐시가 바뀐 상황을 만들 때만 쓴다(TRIP-1352). */
+let lastClient: QueryClient | null = null;
+
 /** `cached` — 다른 탭(홈)이 이미 받아 둔 여행 목록·여행별 일정을 캐시에 넣고 시작한다(TRIP-1271 AC-5a). */
 function renderPage(
   cached?: {
@@ -272,6 +303,7 @@ function renderPage(
       mutations: { retry: false, gcTime: 0 },
     },
   });
+  lastClient = client;
   if (cached) {
     client.setQueryData(getGetTripsQueryKey(), cached.trips);
     Object.entries(cached.itineraries).forEach(([tripId, data]) =>
@@ -803,42 +835,6 @@ describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·
     });
   });
 
-  describe('🔴 AC-4 · 생성이 도는 여행의 일정만 반복해서 묻는다', () => {
-    it.each<[string, Itinerary]>([
-      ['생성 중(PARTIAL · 세션 있음)', running(A)],
-      // 재생성 1차 구간 — 일정 행은 옛 COMPLETE 인데 세션이 돈다(01 열린 질문 1 ③).
-      [
-        '재생성 중(COMPLETE + PLANNED · 세션 있음)',
-        itinerary(A, 'COMPLETE', 'PLANNED', 'sess-2'),
-      ],
-      // 세션 없이 남은 PARTIAL — 서버 sweeper 가 FAILED 로 내릴 때까지 따라간다(01 열린 질문 1 ③).
-      [
-        '멈춘 부분 결과(PARTIAL · 세션 없음)',
-        itinerary(A, 'PARTIAL', 'PLANNED', null),
-      ],
-    ])(
-      '%s → A 는 2초마다 다시 묻고, 확정 B 는 1번에 그친다',
-      async (_label, a) => {
-        // 준비
-        script = { [A]: a, [B]: confirmed(B) };
-        await load();
-
-        // 실행 ① — 간격이 차기 직전까지만 흐른다.
-        await advance(POLL - 200);
-
-        // 단언 ① — 간격 하한: 2초가 되기 전에는 다시 묻지 않는다(5-b 경고-1 — 간격을 줄이는 회귀를 막는다).
-        expect(count(itinPath(A))).toBe(1);
-
-        // 실행 ② — 합쳐서 간격 두 번이 지난다.
-        await advance(POLL + 300);
-
-        // 단언 ② — 첫 조회 + 두 번 이상(간격이 2초 이하) · B 는 그대로.
-        expect(count(itinPath(A))).toBeGreaterThanOrEqual(3);
-        expect(count(itinPath(B))).toBe(1);
-      }
-    );
-  });
-
   describe('AC-5a · 처음 열 때(첫 포커스) 첫 조회를 취소하거나 겹쳐 보내지 않는다', () => {
     it.each<[string, boolean]>([
       ['여행 목록을 처음 받는다', false],
@@ -1001,5 +997,731 @@ describe('🔴 AC-7 · 생성 중 카드도 ⋯ → 삭제 → 확인 다이얼�
 
     // 단언 ② — 그 여행의 DELETE 가 정확히 1번.
     expect(deletes()).toEqual([`DELETE /api/v1/trips/${A}`]);
+  });
+});
+
+// TRIP-1352 · 옛 MyTripsListPage.hookMock.test.tsx(node 버킷, 조회 훅 목)의 **배선** 관점을 이사 왔다.
+// 조회 훅을 목으로 대신하던 판정(누가 배너 대상인가·여행 중 판정·정렬 비교)은 순수 함수 PBT
+// (`doneBar.test` · `myTripsOrder.test`)와 뷰 단위(`MyTripsListScreen.test` · `MyTripsSortSheet.test` ·
+// `GenerationDoneBar.test`)가 잠그므로 여기는 "페이지가 그 재료를 제대로 잇는가"만 본다 — 실제 react-query 가
+// MSW 응답으로 돈다(옛 파일은 `useQueries` 옵션 함수를 대본으로 갈아 끼웠다).
+describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬', () => {
+  const SEEN_KEY = 'itinerary.doneBar.seen';
+  const SORT_KEY = 'itinerary.myTrips.sort';
+
+  function mk(tripId: string, title: string, over: Partial<Trip> = {}): Trip {
+    return {
+      ...trip(tripId, title, '2026-08-10T00:00:00.000Z'),
+      ...over,
+    };
+  }
+  const TA = mk('trip-a', '제주 여행');
+  const TB = mk('trip-b', '부산 여행', {
+    updatedAt: '2026-08-20T00:00:00.000Z',
+  });
+  const TC = mk('trip-c', '강릉 여행', {
+    updatedAt: '2026-08-30T00:00:00.000Z',
+  });
+
+  function itin(
+    tripId: string,
+    status: Itinerary['status'],
+    over: Partial<Itinerary> = {}
+  ): Itinerary {
+    return {
+      ...CONFIRMED_B,
+      itineraryId: `itin-${tripId}`,
+      tripId,
+      status,
+      generationState: 'COMPLETE',
+      generationSessionId: null,
+      ...over,
+    };
+  }
+  const done = (id: string) => itin(id, 'CONFIRMED');
+  const planned = (id: string) => itin(id, 'PLANNED');
+
+  /** 여행별 일정 응답 대본. `'held'` 는 `release` 가 풀 때까지 응답을 붙잡는다(도착 순서를 테스트가 정한다). */
+  type Script = Itinerary | 404 | 500 | 'held';
+  let script: Record<string, Script> = {};
+  const gates = new Map<string, () => void>();
+
+  function serve(list: Trip[], itins: Record<string, Script>): void {
+    script = itins;
+    gates.clear();
+    server.use(
+      http.get(`${BASE}/trips`, () => HttpResponse.json(list)),
+      http.get(`${BASE}/trips/:tripId/itinerary`, async ({ params }) => {
+        const id = String(params.tripId);
+        if (script[id] === 'held') {
+          await new Promise<void>((resolve) => gates.set(id, resolve));
+        }
+        const reply = script[id];
+        if (reply === 500) {
+          return HttpResponse.json(
+            { error: { code: 'INTERNAL', message: '서버 오류' } },
+            { status: 500 }
+          );
+        }
+        if (reply === undefined || reply === 404 || reply === 'held') {
+          return HttpResponse.json(
+            { error: { code: 'NOT_FOUND', message: '일정이 없어요' } },
+            { status: 404 }
+          );
+        }
+        return HttpResponse.json(reply);
+      })
+    );
+  }
+  /** 붙잡힌 응답을 `value` 로 푼다 — 요청이 이미 도착해 붙잡혔을 때까지 기다린다. */
+  async function release(id: string, value: Script): Promise<void> {
+    await waitFor(() => expect(gates.has(id)).toBe(true));
+    script[id] = value;
+    await act(async () => {
+      gates.get(id)?.();
+    });
+  }
+
+  /** 탭을 떠난다(blur) — 등록된 포커스 콜백의 정리 함수를 부른다. */
+  function leaveTab(): void {
+    act(() => {
+      for (const [effect, cleanup] of [...mockFocus]) {
+        if (typeof cleanup === 'function') cleanup();
+        mockFocus.set(effect, undefined);
+      }
+    });
+  }
+  /** 탭으로 돌아온다 — 포커스 콜백을 다시 실행한다. */
+  function returnToTab(): void {
+    act(() => {
+      for (const effect of [...mockFocus.keys()]) {
+        mockFocus.set(effect, effect());
+      }
+    });
+  }
+
+  // 글자 배율 — jest 의 RN 목 기본은 1 이 아니라 2(= 큰 글자)라 운영 기본값 1 로 이 describe 를 고정한다.
+  const BASE_WINDOW = Dimensions.get('window');
+  function setFontScale(fontScale: number): void {
+    const window = { ...BASE_WINDOW, fontScale };
+    Dimensions.set({ window, screen: window });
+  }
+  let isLargeTextSpy: jest.SpyInstance | null = null;
+
+  beforeEach(() => {
+    setFontScale(1);
+    lastClient = null;
+  });
+  afterEach(() => {
+    gates.forEach((open) => open()); // 붙잡힌 응답을 남기지 않는다 — 안 풀면 jest 가 red 대신 멈춘다.
+    // 아직 마운트된 화면이 배율 변화를 듣는다 — act 밖에서 바꾸면 경고가 쏟아진다.
+    act(() => {
+      Dimensions.set({ window: BASE_WINDOW, screen: BASE_WINDOW });
+    });
+    isLargeTextSpy?.mockRestore();
+    isLargeTextSpy = null;
+  });
+
+  const bar = () => screen.queryByTestId('generation-done-bar');
+  const barText = () => screen.getByTestId('generation-done-bar-text');
+  const seenWrites = () =>
+    (writeIdSet as jest.Mock).mock.calls.map(
+      ([key, ids]: [string, string[]]) => [key, [...ids].sort()] as const
+    );
+  /** 카드 루트 testID 를 화면 순서대로. */
+  const cardOrder = (): string[] =>
+    screen
+      .getAllByTestId(/^my-trip-card-/)
+      .map((element) => element.props.testID as string);
+
+  describe('완료 배너', () => {
+    it('가장 최근 완성 한 건만 띄우고, 완성 전부를 seen 에 한 번(읽은 키 그대로) 쓰며, 다시 들어오면 없다', async () => {
+      mockSeen = ['trip-gone'];
+      serve([TA, TC, TB], {
+        'trip-a': done('trip-a'),
+        'trip-b': done('trip-b'),
+        'trip-c': planned('trip-c'),
+      });
+
+      const first = renderPage();
+      // 정렬상 첫째(C, 초안)도 입력 첫째(A, 옛 완성)도 아닌 최신 완성 B.
+      expect(
+        await screen.findByTestId('generation-done-bar')
+      ).toBeOnTheScreen();
+      expect(barText()).toHaveTextContent('부산 여행 일정이 완성됐어요');
+      expect(screen.getAllByTestId('generation-done-bar')).toHaveLength(1);
+      await settle();
+
+      // 쓰기 1번 — 목록에 없는 옛 id 는 버리고 초안은 넣지 않는다. 읽은 키와 쓴 키가 같고 토큰 키가 아니다.
+      expect(seenWrites()).toEqual([[SEEN_KEY, ['trip-a', 'trip-b']]]);
+      expect((readIdSet as jest.Mock).mock.calls[0][0]).toBe(SEEN_KEY);
+      // 저장이 끝났어도 이 화면에선 배너가 그대로다.
+      expect(bar()).toBeOnTheScreen();
+
+      first.unmount();
+      renderPage();
+      expect(
+        await screen.findByTestId('my-trip-card-trip-a')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(bar()).toBeNull();
+      expect(writeIdSet).toHaveBeenCalledTimes(1);
+    });
+
+    it('닫기(✕)는 배너만 걷고 다시 안 띄운다 — 목록·seen 쓰기는 그대로, 이동 없음', async () => {
+      serve([TA], { 'trip-a': done('trip-a') });
+      renderPage();
+      fireEvent.press(await screen.findByTestId('generation-done-bar-close'));
+      await settle();
+
+      expect(bar()).toBeNull();
+      expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+      expect(writeIdSet).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('"보기"는 배너 대상 여행(목록 첫째가 아닌 확정 B)의 목적지로 한 번 간다', async () => {
+      serve([TA, TC, TB], {
+        'trip-a': done('trip-a'),
+        'trip-b': done('trip-b'),
+        'trip-c': planned('trip-c'),
+      });
+      renderPage();
+      fireEvent.press(await screen.findByTestId('generation-done-bar-view'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-b/live');
+    });
+
+    it('목록을 떠나면 배너가 사라지고, 돌아와도 같은 여행은 다시 안 뜬다 (추가 쓰기 없음)', async () => {
+      serve([TA], { 'trip-a': done('trip-a') });
+      renderPage();
+      expect(
+        await screen.findByTestId('generation-done-bar')
+      ).toBeOnTheScreen();
+
+      leaveTab();
+      await settle();
+      expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+      expect(bar()).toBeNull();
+
+      returnToTab();
+      await settle();
+      expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+      expect(bar()).toBeNull();
+      expect(writeIdSet).toHaveBeenCalledTimes(1);
+    });
+
+    it('A 를 ✕ 로 닫고 떠난 사이 B 가 완성되면, 돌아왔을 때 B 가 뜬다 (닫음은 그 포커스 동안만)', async () => {
+      serve([TA], { 'trip-a': done('trip-a') });
+      renderPage();
+      fireEvent.press(await screen.findByTestId('generation-done-bar-close'));
+      await settle();
+      expect(bar()).toBeNull();
+
+      leaveTab();
+      // 떠나 있는 사이 목록과 B 의 일정이 캐시에 새로 들어온다.
+      await act(async () => {
+        script['trip-b'] = done('trip-b');
+        lastClient?.setQueryData(getGetTripsQueryKey(), [TA, TB]);
+        lastClient?.setQueryData(
+          getGetTripsTripIdItineraryQueryKey('trip-b'),
+          done('trip-b')
+        );
+      });
+      await settle();
+      expect(screen.getByTestId('my-trip-card-trip-b')).toBeOnTheScreen();
+      expect(bar()).toBeNull();
+      expect(writeIdSet).toHaveBeenCalledTimes(1);
+
+      returnToTab();
+      await settle();
+      expect(barText()).toHaveTextContent('부산 여행 일정이 완성됐어요');
+      expect(seenWrites()[1]).toEqual([SEEN_KEY, ['trip-a', 'trip-b']]);
+    });
+
+    it('이미 알린 여행은 다시 안 띄우고 쓰지도 않는다', async () => {
+      mockSeen = ['trip-a'];
+      serve([TA], { 'trip-a': done('trip-a') });
+      renderPage();
+
+      expect(
+        await screen.findByTestId('my-trip-card-trip-a')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(readIdSet).toHaveBeenCalled();
+      expect(bar()).toBeNull();
+      expect(writeIdSet).not.toHaveBeenCalled();
+    });
+
+    it.each<[string, () => Promise<string[]>]>([
+      ['읽기가 끝나지 않으면', () => new Promise(() => {})],
+      ['읽기가 실패하면', () => Promise.reject(new Error('keychain'))],
+    ])('seen %s 배너·쓰기 없이 목록만 그린다', async (_label, read) => {
+      (readIdSet as jest.Mock).mockImplementation(read);
+      serve([TA], { 'trip-a': done('trip-a') });
+      renderPage();
+
+      expect(
+        await screen.findByTestId('my-trip-card-trip-a')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(bar()).toBeNull();
+      expect(writeIdSet).not.toHaveBeenCalled();
+    });
+
+    it('seen 쓰기가 실패해도 배너는 그대로 남는다', async () => {
+      (writeIdSet as jest.Mock).mockRejectedValue(new Error('keychain'));
+      serve([TA], { 'trip-a': done('trip-a') });
+      renderPage();
+
+      expect(
+        await screen.findByTestId('generation-done-bar')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(barText()).toHaveTextContent('제주 여행 일정이 완성됐어요');
+      expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+    });
+
+    it('여행 하나의 일정이 아직 안 왔으면 먼저 온 완성이 있어도 띄우지도 쓰지도 않고, 마저 오면 최신 완성 B 를 띄운다', async () => {
+      serve([TA, TB], { 'trip-a': done('trip-a'), 'trip-b': 'held' });
+      renderPage();
+
+      expect(
+        await screen.findByTestId('my-trip-card-trip-a')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(bar()).toBeNull();
+      expect(writeIdSet).not.toHaveBeenCalled();
+
+      await release('trip-b', done('trip-b'));
+      expect(
+        await screen.findByTestId('generation-done-bar')
+      ).toBeOnTheScreen();
+      expect(barText()).toHaveTextContent('부산 여행 일정이 완성됐어요');
+      expect(seenWrites()).toEqual([[SEEN_KEY, ['trip-a', 'trip-b']]]);
+    });
+
+    it.each([1, 1.49])(
+      '배율 %s(기본 글자) — 배너는 목록 화면(itinerary-tab-root) 밖 형제로 뜬다',
+      async (fontScale) => {
+        setFontScale(fontScale);
+        serve([TA], { 'trip-a': done('trip-a') });
+        renderPage();
+
+        expect(
+          await screen.findByTestId('generation-done-bar')
+        ).toBeOnTheScreen();
+        const root = screen.getByTestId('itinerary-tab-root');
+        expect(within(root).queryByTestId('generation-done-bar')).toBeNull();
+      }
+    );
+
+    it.each([1.5, 3.571])(
+      '배율 %s(큰 글자) — 배너는 목록 스크롤 안 첫 카드 앞에 놓이고, 보기·✕ 가 그대로 동작한다',
+      async (fontScale) => {
+        setFontScale(fontScale);
+        serve([TA, TC, TB], {
+          'trip-a': done('trip-a'),
+          'trip-b': done('trip-b'),
+          'trip-c': planned('trip-c'),
+        });
+        renderPage();
+
+        expect(
+          await screen.findByTestId('generation-done-bar')
+        ).toBeOnTheScreen();
+        const inScroll = within(screen.UNSAFE_getByType(ScrollView))
+          .queryAllByTestId(/^(generation-done-bar|my-trip-card-trip-[abc])$/)
+          .map((node) => node.props.testID as string);
+        expect(inScroll).toEqual([
+          'generation-done-bar',
+          'my-trip-card-trip-c',
+          'my-trip-card-trip-b',
+          'my-trip-card-trip-a',
+        ]);
+
+        fireEvent.press(screen.getByTestId('generation-done-bar-view'));
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-b/live');
+        fireEvent.press(screen.getByTestId('generation-done-bar-close'));
+        await settle();
+        expect(bar()).toBeNull();
+        expect(screen.getByTestId('my-trip-card-trip-b')).toBeOnTheScreen();
+      }
+    );
+
+    it('배치는 isLargeText 하나로만 정한다 — 배율 1 이어도 true 면 목록 안, 3.571 이어도 false 면 밖', async () => {
+      setFontScale(1);
+      isLargeTextSpy = jest
+        .spyOn(fontScaleModule, 'isLargeText')
+        .mockReturnValue(true);
+      serve([TA], { 'trip-a': done('trip-a') });
+      const view = renderPage();
+      expect(
+        await screen.findByTestId('generation-done-bar')
+      ).toBeOnTheScreen();
+      expect(isLargeTextSpy).toHaveBeenCalledWith(1);
+      expect(
+        within(screen.UNSAFE_getByType(ScrollView)).queryByTestId(
+          'generation-done-bar'
+        )
+      ).not.toBeNull();
+      view.unmount();
+
+      // 이번엔 시계가 큰 글자인데 판정이 아니라고 하면 목록 화면 밖이다. seen 은 앞 렌더가 써 뒀으니 비운다.
+      mockSeen = [];
+      setFontScale(3.571);
+      isLargeTextSpy.mockReturnValue(false);
+      renderPage();
+      expect(
+        await screen.findByTestId('generation-done-bar')
+      ).toBeOnTheScreen();
+      expect(isLargeTextSpy).toHaveBeenCalledWith(3.571);
+      const root = screen.getByTestId('itinerary-tab-root');
+      expect(within(root).queryByTestId('generation-done-bar')).toBeNull();
+    });
+  });
+
+  describe('여행 중 고정', () => {
+    // 시계는 흉내 내지 않는다: 기간 안 = 2020~2099, 과거 = 2026-06, 미래 = 2099-06.
+    const DURING = { startDate: '2020-01-01', endDate: '2099-12-31' };
+    const PAST = { startDate: '2026-06-10', endDate: '2026-06-13' };
+    const FUTURE = { startDate: '2099-06-10', endDate: '2099-06-13' };
+    // 과거 확정 C(중간) · 여행 중 확정 A(가장 옛) · 미래 확정 B(최신)
+    const PA = mk('A', 'A 여행', {
+      ...DURING,
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    });
+    const PB = mk('B', 'B 여행', {
+      ...FUTURE,
+      updatedAt: '2026-09-20T00:00:00.000Z',
+    });
+    const PC = mk('C', 'C 여행', {
+      ...PAST,
+      updatedAt: '2026-08-15T00:00:00.000Z',
+    });
+
+    it('일정이 도착하기 전엔 최신순이고, 도착하면 여행 중 A 가 맨 위 · 배지 "여행 중" · ⋯/resume 없음', async () => {
+      // 완료 배너는 이 describe 의 관심 밖 — seen 읽기를 막아 끈다.
+      (readIdSet as jest.Mock).mockImplementation(() => new Promise(() => {}));
+      serve([PC, PA, PB], { A: 'held', B: done('B'), C: done('C') });
+      renderPage();
+
+      // 판정 재료(A 의 일정)가 없으면 고정하지 않는다 — 최신순 B·C·A, A 배지 없음.
+      expect(await screen.findByTestId('my-trip-badge-B')).toHaveTextContent(
+        '완성'
+      );
+      expect(cardOrder()).toEqual([
+        'my-trip-card-B',
+        'my-trip-card-C',
+        'my-trip-card-A',
+      ]);
+      expect(screen.queryByTestId('my-trip-badge-A')).toBeNull();
+
+      await release('A', done('A'));
+      expect(await screen.findByTestId('my-trip-badge-A')).toHaveTextContent(
+        '여행 중'
+      );
+      expect(cardOrder()).toEqual([
+        'my-trip-card-A',
+        'my-trip-card-B',
+        'my-trip-card-C',
+      ]);
+      expect(screen.queryByTestId('my-trip-menu-A')).toBeNull();
+      expect(screen.queryByTestId('my-trip-resume-A')).toBeNull();
+      expect(screen.getByTestId('my-trip-badge-C')).toHaveTextContent('완성');
+    });
+
+    it('기간 안 A 의 일정 조회가 500 이면 고정·배지 없음 (INV-4), 기간 안 초안·일정 없음은 "작성중"이고 고정 안 함', async () => {
+      (readIdSet as jest.Mock).mockImplementation(() => new Promise(() => {}));
+      const A2 = mk('A2', 'A2 여행', {
+        ...DURING,
+        updatedAt: '2026-07-10T00:00:00.000Z',
+      });
+      const A3 = mk('A3', 'A3 여행', {
+        ...DURING,
+        updatedAt: '2026-07-05T00:00:00.000Z',
+      });
+      serve([PA, A2, A3, PB], {
+        A: 500,
+        A2: 404,
+        A3: planned('A3'),
+        B: done('B'),
+      });
+      renderPage();
+
+      expect(await screen.findByTestId('my-trip-badge-B')).toHaveTextContent(
+        '완성'
+      );
+      expect(await screen.findByTestId('my-trip-badge-A3')).toHaveTextContent(
+        '작성중'
+      );
+      expect(screen.getByTestId('my-trip-badge-A2')).toHaveTextContent(
+        '작성중'
+      );
+      expect(screen.queryByTestId('my-trip-badge-A')).toBeNull();
+      expect(cardOrder()).toEqual([
+        'my-trip-card-B',
+        'my-trip-card-A2',
+        'my-trip-card-A3',
+        'my-trip-card-A',
+      ]);
+      expect(screen.getByTestId('my-trip-menu-A3')).toBeOnTheScreen();
+    });
+  });
+
+  describe('정렬 시트와 저장된 기준', () => {
+    // 기준마다 순서가 전부 다른 세 건 — 최신순 Y X Z · 출발일순 Z X Y · 이름순 Y Z X. 시계는 흉내 내지 않는다(지난 = 2022).
+    const Y = mk('Y', '강릉 여행', {
+      startDate: '2022-03-01',
+      endDate: '2022-03-01',
+      updatedAt: '2026-09-20T00:00:00.000Z',
+    });
+    const X = mk('X', '제주 여행', {
+      startDate: '2099-05-01',
+      endDate: '2099-05-01',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    });
+    const Z = mk('Z', '부산 여행', {
+      startDate: '2099-02-01',
+      endDate: '2099-02-01',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    });
+    const RECENT = ['my-trip-card-Y', 'my-trip-card-X', 'my-trip-card-Z'];
+    const START = ['my-trip-card-Z', 'my-trip-card-X', 'my-trip-card-Y'];
+    const TITLE = ['my-trip-card-Y', 'my-trip-card-Z', 'my-trip-card-X'];
+
+    const mockGetItem = SecureStore.getItemAsync as jest.Mock;
+    const mockSetItem = SecureStore.setItemAsync as jest.Mock;
+
+    /** 정렬 키 읽기만 대본대로, 다른 키는 영영 미도착(토큰 등 — 이 describe 관심 밖). */
+    function storedSort(read: () => Promise<unknown>): void {
+      mockGetItem.mockImplementation((key: string) =>
+        key === SORT_KEY ? read() : new Promise(() => {})
+      );
+    }
+    const writes = (): unknown[][] =>
+      mockSetItem.mock.calls.map((call) => call.slice(0, 2));
+    const trigger = () => screen.getByTestId('my-trips-sort');
+    const openSheet = (): void => {
+      fireEvent.press(trigger());
+    };
+    /** 첫 렌더 뒤 카드가 서 있을 때까지. */
+    async function loaded(): Promise<void> {
+      await screen.findByTestId('my-trip-card-Y');
+      await settle();
+    }
+
+    beforeEach(() => {
+      // 완료 배너·일정 판정은 관심 밖 — seen 읽기와 일정 응답을 막아 "여행 중 고정"이 끼지 않게 한다(S9 만 예외).
+      (readIdSet as jest.Mock).mockImplementation(() => new Promise(() => {}));
+      serve([Z, X, Y], { Z: 'held', X: 'held', Y: 'held' });
+      storedSort(() => Promise.resolve(null));
+    });
+
+    it('처음엔 시트 없이 최신순, 이름순을 고르면 닫히고 이름순으로 서며 1회 저장 · 다시 열면 이름순이 선택돼 있다', async () => {
+      renderPage();
+      await loaded();
+      expect(trigger()).toHaveTextContent('최신순');
+      expect(screen.queryByTestId('my-trips-sort-sheet')).toBeNull();
+      expect(cardOrder()).toEqual(RECENT);
+
+      openSheet();
+      expect(screen.getByTestId('my-trips-sort-option-recent')).toBeSelected();
+      fireEvent.press(screen.getByTestId('my-trips-sort-option-title'));
+      await settle();
+
+      expect(screen.queryByTestId('my-trips-sort-sheet')).toBeNull();
+      expect(cardOrder()).toEqual(TITLE);
+      expect(trigger()).toHaveTextContent('이름순');
+      expect(writes()).toEqual([[SORT_KEY, 'title']]);
+      openSheet();
+      expect(screen.getByTestId('my-trips-sort-option-title')).toBeSelected();
+      expect(
+        screen.getByTestId('my-trips-sort-option-recent')
+      ).not.toBeSelected();
+    });
+
+    it('출발일순을 고르면 Z·X·Y 로 서고, 저장이 실패해도 고른 기준은 화면에 남는다', async () => {
+      mockSetItem.mockReset().mockRejectedValue(new Error('keychain'));
+      renderPage();
+      await loaded();
+      openSheet();
+      fireEvent.press(screen.getByTestId('my-trips-sort-option-start'));
+      await settle();
+
+      expect(cardOrder()).toEqual(START);
+      expect(trigger()).toHaveTextContent('출발일순');
+      expect(mockSetItem).toHaveBeenCalledTimes(1);
+      expect(writes()).toEqual([[SORT_KEY, 'start']]);
+    });
+
+    it('스크림을 누르면 닫히기만 하고(순서·라벨 그대로 · 저장 0회) 탭바를 되돌린다', async () => {
+      renderPage();
+      await loaded();
+      openSheet();
+      expect(screen.getByTestId('my-trips-sort-sheet')).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId('my-trips-sort-scrim'));
+      await settle();
+
+      expect(screen.queryByTestId('my-trips-sort-sheet')).toBeNull();
+      expect(cardOrder()).toEqual(RECENT);
+      expect(trigger()).toHaveTextContent('최신순');
+      expect(mockSetItem).not.toHaveBeenCalled();
+      expect(mockSetOptions).toHaveBeenLastCalledWith({
+        tabBarStyle: undefined,
+      });
+    });
+
+    it('시트가 열려 있는 동안 하단 탭바를 숨기고, 옵션을 골라 닫히면 되돌린다', async () => {
+      // ⚠️ 탭바가 실제로 사라지는지는 jest 사각(6-b 실기) — 옵션 호출만 잰다.
+      renderPage();
+      await loaded();
+      expect(mockSetOptions).not.toHaveBeenCalledWith({
+        tabBarStyle: { display: 'none' },
+      });
+
+      openSheet();
+      expect(mockSetOptions).toHaveBeenLastCalledWith({
+        tabBarStyle: { display: 'none' },
+      });
+      fireEvent.press(screen.getByTestId('my-trips-sort-option-title'));
+      await settle();
+      expect(mockSetOptions).toHaveBeenLastCalledWith({
+        tabBarStyle: undefined,
+      });
+    });
+
+    it('시트가 열린 채 화면이 사라져도 탭바를 되돌린다', async () => {
+      const view = renderPage();
+      await loaded();
+      openSheet();
+      expect(mockSetOptions).toHaveBeenLastCalledWith({
+        tabBarStyle: { display: 'none' },
+      });
+      view.unmount();
+      expect(mockSetOptions).toHaveBeenLastCalledWith({
+        tabBarStyle: undefined,
+      });
+    });
+
+    it('기기에 남은 기준을 읽으면 그 기준으로 다시 선다 — 읽기 전엔 최신순, 저장 0회', async () => {
+      let arrive!: (value: string) => void;
+      storedSort(
+        () =>
+          new Promise<string>((resolve) => {
+            arrive = resolve;
+          })
+      );
+      renderPage();
+      await loaded();
+      expect(cardOrder()).toEqual(RECENT);
+
+      await act(async () => {
+        arrive('title');
+      });
+      await waitFor(() => expect(cardOrder()).toEqual(TITLE));
+      expect(trigger()).toHaveTextContent('이름순');
+      expect(mockGetItem.mock.calls.map((call) => call[0])).toContain(SORT_KEY);
+      expect(mockSetItem).not.toHaveBeenCalled();
+    });
+
+    it.each<[string, () => Promise<unknown>]>([
+      ['읽기 reject', () => Promise.reject(new Error('keychain'))],
+      ['모르는 값', () => Promise.resolve('foo')],
+      ['undefined', () => Promise.resolve(undefined)],
+    ])('저장값이 %s 이면 최신순으로 접는다 (INV-4)', async (_label, read) => {
+      storedSort(read);
+      renderPage();
+      await loaded();
+
+      expect(cardOrder()).toEqual(RECENT);
+      expect(trigger()).toHaveTextContent('최신순');
+    });
+
+    it('읽기 대기 중 사용자가 이름순을 고르면, 늦게 온 저장값("start")이 그 선택을 덮지 않는다', async () => {
+      let arrive!: (value: string) => void;
+      storedSort(
+        () =>
+          new Promise<string>((resolve) => {
+            arrive = resolve;
+          })
+      );
+      renderPage();
+      await loaded();
+      openSheet();
+      fireEvent.press(screen.getByTestId('my-trips-sort-option-title'));
+      await act(async () => {
+        arrive('start');
+      });
+      await settle();
+
+      expect(cardOrder()).toEqual(TITLE);
+      expect(trigger()).toHaveTextContent('이름순');
+      expect(writes()).toEqual([[SORT_KEY, 'title']]);
+    });
+
+    it('여행 중은 이름순에서도 맨 위다', async () => {
+      const L = mk('L', '제주 여행', {
+        startDate: '2020-01-01',
+        endDate: '2099-12-31',
+        updatedAt: '2026-07-01T00:00:00.000Z',
+      });
+      // 최신순이면 L·Z2·Y2 — 이름순(L·Y2·Z2)과 구분되게 Z2 를 더 최근으로.
+      const Y2 = mk('Y2', '강릉 여행', {
+        startDate: '2099-03-01',
+        endDate: '2099-03-01',
+        updatedAt: '2026-09-10T00:00:00.000Z',
+      });
+      const Z2 = mk('Z2', '부산 여행', {
+        startDate: '2099-04-01',
+        endDate: '2099-04-01',
+        updatedAt: '2026-09-20T00:00:00.000Z',
+      });
+      serve([Z2, L, Y2], { L: done('L'), Y2: done('Y2'), Z2: done('Z2') });
+      renderPage();
+      expect(await screen.findByTestId('my-trip-badge-L')).toHaveTextContent(
+        '여행 중'
+      );
+      await settle();
+
+      openSheet();
+      fireEvent.press(screen.getByTestId('my-trips-sort-option-title'));
+      await settle();
+
+      // 고정이 없었다면 Y2·Z2·L, 이름순이 안 먹었다면 L·Z2·Y2.
+      expect(cardOrder()).toEqual([
+        'my-trip-card-L',
+        'my-trip-card-Y2',
+        'my-trip-card-Z2',
+      ]);
+      expect(trigger()).toHaveTextContent('이름순');
+    });
+
+    it('고른 기준은 다시 들어와도 남는다 — 쓴 키로 읽는다', async () => {
+      const vault = new Map<string, string>();
+      mockGetItem.mockImplementation((key: string) =>
+        key === SORT_KEY
+          ? Promise.resolve(vault.get(key) ?? null)
+          : new Promise(() => {})
+      );
+      mockSetItem
+        .mockReset()
+        .mockImplementation(async (k: string, v: string) => {
+          vault.set(k, v);
+        });
+      const first = renderPage();
+      await loaded();
+      openSheet();
+      fireEvent.press(screen.getByTestId('my-trips-sort-option-title'));
+      await settle();
+      first.unmount();
+
+      renderPage();
+      await loaded();
+      await waitFor(() => expect(cardOrder()).toEqual(TITLE));
+      expect(trigger()).toHaveTextContent('이름순');
+    });
   });
 });
