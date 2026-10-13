@@ -63,7 +63,7 @@ class ReplanDiffServiceTest : StringSpec({
     ) = PlannedSlotView(
         slotKey = slotKey(poi), date = day, poiId = poi, orderIndex = order,
         startAt = LocalTime.parse(start), endAt = LocalTime.parse(end),
-        isFixed = fixed, endsNextDay = endsNextDay,
+        isFixed = fixed, endsNextDay = endsNextDay, hasViolation = false,
     )
 
     fun draftSlot(poi: UUID, start: String, end: String, fixed: Boolean = false, endsNextDay: Boolean = false) =

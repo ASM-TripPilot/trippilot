@@ -61,11 +61,14 @@ class ItineraryReadFacade(
                     endAt = it.endAt,
                     isFixed = it.isFixed,
                     endsNextDay = it.endsNextDay,
+                    hasViolation = it.hasViolation,
                     nameKo = s?.nameKo,
                     category = s?.category,
                     imageUrl = s?.imageUrl,
                     lat = s?.lat,
                     lng = s?.lng,
+                    violationReason = it.violationReason,
+                    distanceRange = it.distanceRange,
                 )
             }
         }
