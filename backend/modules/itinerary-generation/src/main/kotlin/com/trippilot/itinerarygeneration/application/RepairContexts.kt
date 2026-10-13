@@ -18,9 +18,6 @@ import java.util.UUID
  * 앵커는 [dates] 의 날만 싣는다 — 앵커가 실린 날은 상대가 첫 슬롯을 앵커 이동만큼 밀 수 있어서,
  * 첫 구간이 안 바뀐 날까지 실으면 사용자가 옮겨 둔 시각이 그 편집과 무관하게 움직인다.
  */
-/** [budgetTier] 는 생성 경로가 `budget_level` 로 보내는 그 값이다(취향의 예산 등급 — 여행 총예산이 아니다). */
-data class EditProposalContext(val anchor: DayAnchor, val transportMode: String?, val budgetTier: String?)
-
 @Component
 class RepairContexts(
     private val trips: TripFacade,
@@ -49,6 +46,19 @@ class RepairContexts(
         val anchor = RegionAnchors.dayAnchors(regions, ctx.startDate, ctx.endDate, stays, ctx.destinationRefs)
             .firstOrNull { it.date == date } ?: return null
         val prefs = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
-        return EditProposalContext(anchor, prefs.transportModes.firstOrNull(), prefs.budgetTier)
+        // 생성은 목록을 보내고 상대가 **아는 첫 값**을 고른다. 여기서 그냥 첫 값을 보내면 `["택시","렌터카"]` 가 생성에서는
+        // 자가용, 편집에서는 모르는 값(→ 대중교통)이 되어 같은 여행의 이동 시간 기준이 갈린다.
+        return EditProposalContext(anchor, prefs.transportModes.firstOrNull { it in AI_TRANSPORT_MODES }, prefs.budgetTier)
+    }
+
+    private companion object {
+        /** 상대 `_TRANSPORT_TOKENS` 가 아는 값 중 우리 취향 어휘에 있는 것(택시·자전거는 상대가 모른다). */
+        val AI_TRANSPORT_MODES = setOf("도보", "대중교통", "렌터카")
     }
 }
+
+/**
+ * [budgetTier] 는 생성 경로가 `budget_level` 로 보내는 그 값이다(취향의 예산 등급 — 여행 총예산이 아니다).
+ * [transportMode] 는 상대가 아는 수단 하나다 — 편집 경계는 목록이 아니라 한 값을 받는다.
+ */
+data class EditProposalContext(val anchor: DayAnchor, val transportMode: String?, val budgetTier: String?)

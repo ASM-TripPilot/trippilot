@@ -26,6 +26,7 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import io.kotest.assertions.throwables.shouldThrow
+import org.hamcrest.Matchers.nullValue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -582,7 +583,8 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
             .andExpect(method(HttpMethod.POST))
             .andExpect(jsonPath("$.utterance").value("카페를 조용한 곳으로 바꿔줘"))
-            .andExpect(jsonPath("$.command").doesNotExist())
+            // 없는 키가 아니라 **null 로 나간다**(경계 매퍼는 null 을 싣는다) — 상대 검증기는 null 을 "없음"으로 센다.
+            .andExpect(jsonPath("$.command").value(nullValue()))
             .andExpect(jsonPath("$.confirm").value(true))
             .andExpect(jsonPath("$.target_date").value("2026-08-01"))
             .andExpect(jsonPath("$.anchor.lat").value(33.45))
@@ -606,7 +608,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
     "편집 제안 — 구조화 교체는 command 로 싣는다(발화 없음)" {
         val (adapter, server) = fixture(groundingPool(newPoi))
         server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
-            .andExpect(jsonPath("$.utterance").doesNotExist())
+            .andExpect(jsonPath("$.utterance").value(nullValue()))
             .andExpect(jsonPath("$.command.op").value("REPLACE_SLOT"))
             .andExpect(jsonPath("$.command.params.targetPoiId").value(newPoi.toString()))
             .andExpect(jsonPath("$.command.affected_slots[0]").value(poi.toString()))

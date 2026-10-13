@@ -1,24 +1,29 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.itinerarygeneration.api.EditProposal
 import com.trippilot.itinerarygeneration.api.EditProposalRequest
-import com.trippilot.itinerarygeneration.api.ProposalViolation
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.EditCommand
 import com.trippilot.itinerarygeneration.domain.EditProposalInput
 import com.trippilot.itinerarygeneration.domain.EditProposalOutput
 import com.trippilot.itinerarygeneration.domain.EditProposalStatus
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
+import com.trippilot.placedata.api.FrozenPoiView
+import com.trippilot.placedata.api.PoiSurfaceFacade
+import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
@@ -108,12 +113,24 @@ class EditProposalServiceTest : StringSpec({
         },
         object : PreferenceFacade {
             override fun findPreferences(accountId: UUID) =
-                PreferenceSnapshot(emptyList(), emptyList(), emptyList(), listOf("렌터카", "도보"), null, emptyList(), false, "고급")
+                PreferenceSnapshot(emptyList(), emptyList(), emptyList(), listOf("택시", "렌터카", "도보"), null, emptyList(), false, "고급")
         },
     )
 
-    fun service(agent: Agent, repo: CountingRepo = CountingRepo(stored), trips: TripFacade = trips(), contexts: RepairContexts = contexts()) =
-        EditProposalService(trips, repo, agent, contexts, clock)
+    /** 새 장소([fresh])의 좌표만 아는 정본 — 숙소 앵커(33.45, 126.56)와 다른 곳이다. */
+    val surfaces = object : PoiSurfaceFacade {
+        override fun findSurfaces(poiIds: Collection<UUID>) =
+            poiIds.filter { it == fresh }.associateWith { PoiSurfaceView(it, "새 카페", 33.51, 126.52, "카페", "CAFE", null, null, emptyList()) }
+        override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+    }
+
+    fun service(
+        agent: Agent,
+        repo: CountingRepo = CountingRepo(stored),
+        trips: TripFacade = trips(),
+        contexts: RepairContexts = contexts(),
+        at: Clock = clock,
+    ) = EditProposalService(trips, repo, agent, contexts, surfaces, at)
 
     /** 상대가 [d1] 의 [from] 을 [to] 로 바꾸고 시각을 30분 민 해. 다른 날은 받은 그대로 돌려준다. */
     fun replacing(from: UUID, to: UUID) = { input: EditProposalInput ->
@@ -136,15 +153,20 @@ class EditProposalServiceTest : StringSpec({
         sent.command shouldBe null
         sent.targetDate shouldBe d1
         (sent.anchorLat to sent.anchorLng) shouldBe (33.45 to 126.56) // d2 의 앵커가 아니다
-        sent.transportMode shouldBe "렌터카"
+        sent.transportMode shouldBe "렌터카" // 취향 첫 값은 "택시"지만 상대가 모른다 — 생성과 같은 수단이 가야 한다
         sent.budgetLevel shouldBe "고급"
-        sent.requestMeta.deadlineMs shouldBe 8_000
+        sent.requestMeta.deadlineMs shouldBe 7_500 // 왕복 여유를 뺀 계산 예산
         sent.itinerary.days.map { it.date } shouldContainExactly listOf(d1, d2)
         sent.itinerary.days.first().slots.map { Triple(it.poiId, it.startAt, it.isFixed) } shouldContainExactly
             listOf(Triple(a, LocalTime.of(9, 0), false), Triple(b, LocalTime.of(11, 0), true))
 
         val proposed = result.shouldBeInstanceOf<EditProposal.Proposed>()
         proposed.applyHint shouldBe "AUTO_APPLY"
+        // 기준 = 계산에 쓴 그 일정(저장된 거리 포함). 호출측이 따로 다시 읽으면 그 사이 편집이 기준에 섞인다(INV-U8-04).
+        proposed.baseDays.map { d -> d.date to d.slots.map { Triple(it.poiId, it.startAt, it.distanceRange) } } shouldContainExactly listOf(
+            d1 to listOf(Triple(a, LocalTime.of(9, 0), "약 1km"), Triple(b, LocalTime.of(11, 0), "약 1km")),
+            d2 to listOf(Triple(c, LocalTime.of(10, 0), "약 1km")),
+        )
         proposed.days.map { it.date } shouldContainExactly listOf(d1, d2) // 안 바뀐 날도 — 저장이 전체 교체다
         val first = proposed.days.first().slots.first()
         first.poiId shouldBe fresh
@@ -168,29 +190,76 @@ class EditProposalServiceTest : StringSpec({
         service(agent).propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d1#$a", fresh), 5_000)
             .shouldBeInstanceOf<EditProposal.Proposed>()
 
-        agent.inputs.single().utterance shouldBe null
-        agent.inputs.single().command shouldBe EditCommand.replaceSlot(a, fresh)
+        val sent = agent.inputs.single()
+        sent.utterance shouldBe null
+        sent.command shouldBe EditCommand.replaceSlot(a, fresh)
+        // 후보 풀의 중심은 숙소가 아니라 **새 장소**다 — 숙소 둘레 반경 밖이라는 이유로 우리가 내준 후보가 거절되지 않게.
+        (sent.anchorLat to sent.anchorLng) shouldBe (33.51 to 126.52)
+        sent.budgetLevel shouldBe null // 후보를 고를 때와 같은 풀(예산 미지정)
+        sent.transportMode shouldBe "렌터카" // 재타이밍은 그 여행의 수단 그대로
+    }
+
+    "교체 제안 — 새 장소의 좌표를 모르면 부르지 않고 Unavailable 이다" {
+        val agent = Agent(replacing(a, fresh))
+
+        service(agent).propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d1#$a", UUID.randomUUID()), 5_000) shouldBe EditProposal.Unavailable
+
+        agent.inputs shouldBe emptyList()
+    }
+
+    /** 저장 경로와 같은 잠금이다 — 안 막으면 LLM 을 쓰고 [적용]이 반드시 409 인 카드를 만든다. */
+    "여행 시작 전 확정 일정은 제안하지 않는다(409) — 여행이 시작되면 제안한다" {
+        val confirmed = Itinerary.reconstitute(
+            stored.itineraryId, tripId, ItineraryStatus.CONFIRMED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            GenerationState.COMPLETE, stored.days, now, now, null, emptyList(),
+        )
+        val agent = Agent(replacing(a, fresh))
+
+        shouldThrow<ConflictDetected> { service(agent, repo = CountingRepo(confirmed)).propose(acc, tripId, d1, utter, 5_000) }
+        agent.inputs shouldBe emptyList()
+
+        val duringTrip = Clock.fixed(Instant.parse("2026-08-10T03:00:00Z"), ZoneOffset.UTC) // 시작일 정오(KST)
+        service(agent, repo = CountingRepo(confirmed), at = duringTrip).propose(acc, tripId, d1, utter, 5_000)
+            .shouldBeInstanceOf<EditProposal.Proposed>()
+    }
+
+    "시한에 왕복 여유도 안 남으면 부르지 않고 Unavailable 이다 — 0·음수도 예외가 아니다" {
+        val agent = Agent(replacing(a, fresh))
+
+        listOf(500L, 0L, -200L).forEach { service(agent).propose(acc, tripId, d1, utter, it) shouldBe EditProposal.Unavailable }
+
+        agent.inputs shouldBe emptyList()
     }
 
     /**
      * 거절 사유 원문은 내보내지 않는다 — 상대의 진단 문장("영업시간 밖: 543~618")은 화면 문구가 아니다.
      * 위반은 일정 화면과 같은 번역으로 나간다.
      */
-    "거절 — 위반을 화면 문구로 옮긴다. 붙일 슬롯이 없는 위반은 장소 없이 남는다" {
+    "거절 — 위반을 화면 문구로 옮기고 날짜를 붙인다. 손대지 않은 날의 위반도 그 날로 나간다" {
         val agent = Agent {
             EditProposalOutput(
                 EditProposalStatus.REJECTED, null,
-                listOf(Violation("HC1", null, null, "영업시간 밖: 543~618", fresh.toString()), Violation("HC3", null, null, null, null)),
+                listOf(
+                    Violation("HC1", null, null, "영업시간 밖: 543~618", fresh.toString()), // 새 장소 — 고치려던 날
+                    Violation("HC2", null, null, "이동 26분 필요, 간격 22분", c.toString()), // 손대지 않은 둘째 날에 원래 있던 위반
+                    Violation("HC2", null, null, null, UUID.randomUUID().toString()), // 일정 어디에도 없는 장소
+                    Violation("HC3", null, null, null, null), // 붙일 슬롯이 없다
+                ),
                 "편집 결과가 하드 제약을 위반", "AUTO_APPLY",
             )
         }
         val repo = CountingRepo(stored)
 
-        val result = service(agent, repo).propose(acc, tripId, d1, utter, 5_000)
+        val result = service(agent, repo).propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d1#$a", fresh), 5_000)
 
-        result shouldBe EditProposal.Rejected(
-            listOf(ProposalViolation(fresh, "영업시간과 맞지 않아요"), ProposalViolation(null, "꼭 갈 곳이 일정에 들어가지 못했어요")),
+        val violations = result.shouldBeInstanceOf<EditProposal.Rejected>().violations
+        violations.map { Triple(it.poiId == null, it.date, it.message) } shouldContainExactly listOf(
+            Triple(false, d1, "영업시간과 맞지 않아요"),
+            Triple(false, d2, "앞 장소에서 이동할 시간이 빠듯해요"),
+            Triple(false, null, "앞 장소에서 이동할 시간이 빠듯해요"),
+            Triple(true, null, "꼭 갈 곳이 일정에 들어가지 못했어요"),
         )
+        violations.first().poiId shouldBe fresh
         repo.writes shouldBe 0
     }
 
@@ -252,7 +321,7 @@ class EditProposalServiceTest : StringSpec({
     }
 
     /** 여기서 안 막으면 상대의 422 가 "AI 불통"으로 보여 사용자는 다시 시도만 반복한다. */
-    "입력이 틀리면 부르기 전에 막는다 — 없는 날짜·다른 날의 슬롯·없는 슬롯·깨진 키·빈 발화·긴 발화" {
+    "입력이 틀리면 부르기 전에 막는다 — 없는 날짜·다른 날의 슬롯·없는 슬롯·깨진 키·겹치는 장소·빈 발화·긴 발화" {
         val agent = Agent(replacing(a, fresh))
         val svc = service(agent)
 
@@ -262,6 +331,8 @@ class EditProposalServiceTest : StringSpec({
             { svc.propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d2#$a", fresh), 5_000) },
             { svc.propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d1#$c", fresh), 5_000) },
             { svc.propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("nope", fresh), 5_000) },
+            // 새 장소가 이미 그 날에 있다 — 받으면 같은 날 같은 장소가 둘이 되어 슬롯 키가 겹친다
+            { svc.propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d1#$a", b), 5_000) },
             { svc.propose(acc, tripId, d1, EditProposalRequest.Utterance("  "), 5_000) },
             { svc.propose(acc, tripId, d1, EditProposalRequest.Utterance("가".repeat(501)), 5_000) },
         ).forEach { shouldThrow<ValidationFailed> { it() } }
