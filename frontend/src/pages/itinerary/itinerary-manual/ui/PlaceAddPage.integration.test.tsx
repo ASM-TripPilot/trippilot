@@ -313,10 +313,10 @@ describe('🔴 P2 · AC-5·TRIP-502 — 검색은 서버가 한다(q) — 로드
     fireEvent.changeText(screen.getByTestId('itinerary-place-search'), '해');
 
     // 검색은 서버가 한다 — '해' 안 든 p1 은 사라지고, q 를 실은 새 요청이 나간다(로드된 페이지 한정 아님).
-    // 검색어는 300ms 디바운스 뒤 서버로 나간다(TRIP-1348) — 기본 1초 대기는 부하 속에서 빠듯해 3초로 둔다.
+    // 검색어는 300ms 디바운스 뒤 서버로 나간다(TRIP-1348) — 기본 1초 대기는 CI 부하 속에서 모자라(재실행에도 3초에 실패) 8초로 두고 테스트 한도도 함께 늘린다.
     await waitFor(
       () => expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull(),
-      { timeout: 3000 }
+      { timeout: 8000 }
     );
     const hits = hitsOf('GET', '/api/v1/places');
     expect(hits.length).toBeGreaterThanOrEqual(2);
@@ -327,7 +327,7 @@ describe('🔴 P2 · AC-5·TRIP-502 — 검색은 서버가 한다(q) — 로드
       expect(screen.getByTestId('itinerary-place-card-p2')).toBeOnTheScreen()
     );
     expect(screen.queryByTestId('itinerary-place-card-p3')).toBeNull();
-  });
+  }, 15000);
 });
 
 describe('TRIP-1348 · 검색어 디바운스 — 연속 입력이 키 입력마다 요청이 되지 않는다', () => {
