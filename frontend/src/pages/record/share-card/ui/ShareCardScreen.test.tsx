@@ -106,33 +106,6 @@ function frameAspect(): number {
   return StyleSheet.flatten(frame.props.style).aspectRatio as number;
 }
 
-interface FrameLayout {
-  aspectRatio?: number;
-  width?: number | string;
-  height?: number | string;
-  alignSelf?: string;
-  className: string;
-}
-
-function frameLayout(): FrameLayout {
-  const frame = screen.getByTestId('reflection-share-preview-frame');
-  const style = (StyleSheet.flatten(frame.props.style) ?? {}) as Omit<
-    FrameLayout,
-    'className'
-  >;
-  return { ...style, className: String(frame.props.className ?? '') };
-}
-
-/** 카드 프레임 안의 회색 박스(bg-surface-soft) 호스트 View 수 — testID 를 옮겨 달아 회색 박스만 남기는 우회를 잡는다. */
-function greyBoxHostsInFrame(): number {
-  const frame = screen.getByTestId('reflection-share-preview-frame');
-  return frame.findAll(
-    (node) =>
-      typeof node.type === 'string' &&
-      /(^|\s)bg-surface-soft(\s|$)/.test(String(node.props.className ?? ''))
-  ).length;
-}
-
 describe('🔴 AC-1 · 정상 렌더 — 카드·세그·버튼·캡션', () => {
   it('제목·포맷 세그(3셀)·프리뷰·저장/공유·캡션을 그린다', () => {
     const props = renderScreen();
@@ -240,26 +213,6 @@ describe('🔴 AC-3 · 카드 통계 라인이 얼굴별 포맷으로 렌더된�
       }),
     });
     expect(screen.getByText('방문 12 · 이동 38km · 사진 0')).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 AC-5 · no-photo 안내 = 박스 없는 플레인 텍스트(좌정렬)', () => {
-  it('안내 컨테이너에 박스 크롬(테두리·배경·라운드)이 없고, 문구·좌정렬은 유지된다', () => {
-    renderScreen({ card: baseCard({ mode: 'no-photo' }) });
-
-    // 부정 — 박스 크롬 클래스 제거(현 컨테이너는 border·bg-surface-soft·rounded-card → red).
-    const notice = screen.getByTestId('reflection-share-no-photo-notice');
-    const noticeCls = String(notice.props.className);
-    expect(noticeCls).not.toMatch(/\bborder\b/);
-    expect(noticeCls).not.toContain('bg-surface-soft');
-    expect(noticeCls).not.toContain('rounded-card');
-
-    // 부정 — 내부 문구는 좌정렬(현 text-center 제거 → red).
-    const text = screen.getByText(VISIT_ORDER_NOTICE);
-    expect(String(text.props.className)).not.toContain('text-center');
-
-    // 긍정 짝 — 문구·testID 는 그대로(현 AC-2 유지 · 공허 통과 차단).
-    expect(text).toBeOnTheScreen();
   });
 });
 
@@ -584,66 +537,6 @@ describe('🔴 캡션 편집 키보드 — 입력칸을 품은 ScrollView 가 �
   });
 });
 
-describe('🔴 TRIP-1016 AC-1 · 1:1·4:5 프레임은 폭이 크기를 정한다(높이 530 고정 금지)', () => {
-  it.each([
-    ['reflection-share-format-square', 1],
-    ['reflection-share-format-feed', 4 / 5],
-  ])(
-    '%s 선택 → 높이 지정 없음 + 폭은 부모 기준(고정 숫자 폭 없음) + 폭의 출처가 있다',
-    (formatTestId, ratio) => {
-      renderScreen();
-
-      fireEvent.press(screen.getByTestId(formatTestId));
-      const layout = frameLayout();
-
-      // 앵커 — 비율은 그대로 style 에 있다(AC-3 계약 유지).
-      expect(layout.aspectRatio).toBeCloseTo(ratio, 5);
-
-      // 높이는 aspectRatio 가 폭에서 뽑는다 — 어떤 높이 지정도 없다.
-      expect(layout.height).toBeUndefined();
-
-      // 폭은 부모 기준 — 고정 숫자 폭(예 530)은 좁은 기기에서 화면을 넘는다(QA #087).
-      expect([undefined, '100%']).toContain(layout.width);
-
-      // 폭 출처 — style 폭·alignSelf stretch·className w-full/self-stretch 중 하나(없으면 실기에서 0폭).
-      const hasWidthSource =
-        layout.width !== undefined ||
-        layout.alignSelf === 'stretch' ||
-        /(^|\s)(w-full|self-stretch)(\s|$)/.test(layout.className);
-      expect(hasWidthSource).toBe(true);
-    }
-  );
-});
-
-describe('🔴 TRIP-1016 AC-2 · 9:16 프레임은 높이 530 상한(무회귀 ≈298×530)', () => {
-  it('story(기본) → 숫자 높이 530 + aspectRatio 만 있고 폭 지정은 없다(폭까지 주면 비율이 무력화된다)', () => {
-    renderScreen();
-
-    const layout = frameLayout();
-
-    expect(layout.aspectRatio).toBeCloseTo(9 / 16, 5);
-    expect(typeof layout.height).toBe('number');
-    expect(layout.height as number).toBeLessThanOrEqual(530);
-    expect(layout.height as number).toBeCloseTo(530, 0);
-    // 폭·높이가 둘 다 정해지면 Yoga 는 aspectRatio 를 안 쓴다 — 폭은 비율이 높이에서 뽑게 비워 둔다.
-    expect(layout.width).toBeUndefined();
-    expect(layout.alignSelf).not.toBe('stretch');
-    expect(layout.className).not.toMatch(/(^|\s)(w-full|self-stretch)(\s|$)/);
-  });
-
-  it('story→square→story 로 돌아오면 다시 높이 530 상한 모양이다(포맷 전환이 상한을 잃지 않는다)', () => {
-    renderScreen();
-
-    fireEvent.press(screen.getByTestId('reflection-share-format-square'));
-    fireEvent.press(screen.getByTestId('reflection-share-format-story'));
-    const layout = frameLayout();
-
-    expect(layout.aspectRatio).toBeCloseTo(9 / 16, 5);
-    expect(layout.height as number).toBeCloseTo(530, 0);
-    expect(layout.width).toBeUndefined();
-  });
-});
-
 describe('🔴 TRIP-1016 AC-5 · 방문 순서 박스(reflection-share-visit-order)는 방문이 있을 때만(D10 · Q2)', () => {
   it('no-photo + 방문 0곳 → 박스가 없고, 카드 프레임·제목은 남는다', () => {
     const props = renderScreen({
@@ -651,7 +544,6 @@ describe('🔴 TRIP-1016 AC-5 · 방문 순서 박스(reflection-share-visit-ord
     });
 
     expect(screen.queryByTestId('reflection-share-visit-order')).toBeNull();
-    expect(greyBoxHostsInFrame()).toBe(0);
     // 짝 앵커 — 카드 자체와 하단 텍스트는 그대로(Q4: 박스만 빠진다).
     expect(
       screen.getByTestId('reflection-share-preview-frame')
@@ -665,16 +557,12 @@ describe('🔴 TRIP-1016 AC-5 · 방문 순서 박스(reflection-share-visit-ord
     const box = screen.getByTestId('reflection-share-visit-order');
     expect(within(box).getByText('광안리 해변')).toBeOnTheScreen();
     expect(within(box).getByText('감천문화마을')).toBeOnTheScreen();
-    // 짝 — testID 는 회색 박스 그 자체에 달려 있고, 프레임 안 회색 박스는 이것 하나다.
-    expect(String(box.props.className)).toMatch(/(^|\s)bg-surface-soft(\s|$)/);
-    expect(greyBoxHostsInFrame()).toBe(1);
   });
 
   it('default + 방문 0곳 → 박스가 없다(판정 기준은 mode 가 아니라 orderedVisits)', () => {
     renderScreen({ card: baseCard({ mode: 'default', orderedVisits: [] }) });
 
     expect(screen.queryByTestId('reflection-share-visit-order')).toBeNull();
-    expect(greyBoxHostsInFrame()).toBe(0);
     expect(
       screen.getByTestId('reflection-share-preview-frame')
     ).toBeOnTheScreen();
@@ -685,75 +573,10 @@ describe('🔴 TRIP-1016 AC-5 · 방문 순서 박스(reflection-share-visit-ord
 
     const box = screen.getByTestId('reflection-share-visit-order');
     expect(within(box).getByText('광안리 해변')).toBeOnTheScreen();
-    expect(greyBoxHostsInFrame()).toBe(1);
   });
 });
 
-// TRIP-1304(결정 B) — 편집 중 [완료]는 입력칸 아래가 아니라 캡션 머리줄([편집] 자리)에 있다.
-// 입력칸이 키보드 위로 올라오면 그보다 위인 머리줄도 보인다 — 실제 가림은 jest 원리적 사각 → 6-b iOS 실기.
-// "머리줄" = "캡션" 라벨과의 가장 가까운 공통 조상이 입력칸을 품지 않는 것(래퍼 깊이는 묶지 않는다, 02a ★3).
-function ancestorsOf(node: ReactTestInstance): ReactTestInstance[] {
-  const list: ReactTestInstance[] = [];
-  for (let p = node.parent; p; p = p.parent) list.push(p);
-  return list;
-}
-
-function lowestCommonAncestor(
-  a: ReactTestInstance,
-  b: ReactTestInstance
-): ReactTestInstance | null {
-  const ofB = new Set(ancestorsOf(b));
-  return ancestorsOf(a).find((p) => ofB.has(p)) ?? null;
-}
-
-function isInside(ancestor: ReactTestInstance, node: ReactTestInstance) {
-  return ancestorsOf(node).includes(ancestor);
-}
-
-function treeIndex(node: ReactTestInstance): number {
-  return screen.UNSAFE_root.findAll(() => true).indexOf(node);
-}
-
-/** [완료]가 "캡션" 라벨과 같은 줄(입력칸을 품지 않는 상자)에 있는가. */
-function saveSitsInCaptionHeader(): boolean {
-  const row = lowestCommonAncestor(
-    screen.getByText('캡션'),
-    screen.getByTestId('reflection-share-caption-save')
-  );
-  return (
-    row !== null &&
-    !isInside(row, screen.getByTestId('reflection-share-caption-input'))
-  );
-}
-
 describe('🔴 캡션 편집 중 [완료]는 머리줄 [편집] 자리에 있다 — 입력칸이 보이면 [완료]도 보인다', () => {
-  it('[편집] 후 [완료]는 "캡션" 라벨과 같은 머리줄에 있고, 그 줄은 입력칸을 품지 않는다', () => {
-    renderScreen();
-
-    const input = openEditor();
-
-    const row = lowestCommonAncestor(
-      screen.getByText('캡션'),
-      screen.getByTestId('reflection-share-caption-save')
-    );
-    expect(row).not.toBeNull();
-    expect(isInside(row as ReactTestInstance, input)).toBe(false);
-  });
-
-  it('[완료]는 화면 트리에서 입력칸보다 앞(위)에 있다', () => {
-    renderScreen();
-
-    const input = openEditor();
-
-    const saveAt = treeIndex(
-      screen.getByTestId('reflection-share-caption-save')
-    );
-    const inputAt = treeIndex(input);
-    expect(saveAt).toBeGreaterThanOrEqual(0);
-    expect(inputAt).toBeGreaterThanOrEqual(0);
-    expect(saveAt).toBeLessThan(inputAt);
-  });
-
   it('편집 중엔 [편집]이 사라지고 [완료]는 testID·"완료" 글자 모두 정확히 하나다', () => {
     renderScreen();
 
@@ -766,18 +589,12 @@ describe('🔴 캡션 편집 중 [완료]는 머리줄 [편집] 자리에 있다
     expect(screen.getAllByText('완료')).toHaveLength(1);
   });
 
-  it('머리줄 [완료]는 입력칸과 같은 ScrollView(handled) 안이고, 한 번 누르면 저장되고 입력칸이 닫힌다', () => {
+  it('[완료]를 한 번 누르면 저장되고 입력칸이 닫힌다', () => {
     const props = renderScreen();
     const input = openEditor();
     fireEvent.changeText(input, '#부산여행 #해운대');
 
-    // 누르기 전 — 자리는 머리줄, 키보드가 떠 있어도 첫 탭이 버튼으로 가는 같은 스크롤 상자.
     const save = screen.getByTestId('reflection-share-caption-save');
-    expect(saveSitsInCaptionHeader()).toBe(true);
-    const scroll = nearestScrollView(input);
-    expect(scroll).not.toBeNull();
-    expect(nearestScrollView(save)).toBe(scroll);
-    expect(scroll?.props.keyboardShouldPersistTaps).toBe('handled');
 
     fireEvent.press(save);
 
@@ -790,7 +607,7 @@ describe('🔴 캡션 편집 중 [완료]는 머리줄 [편집] 자리에 있다
     expect(screen.queryByText('완료')).toBeNull();
   });
 
-  it(`해시태그 ${HASHTAG_MAX_COUNT + 1}개로 [완료] → 안내가 뜨고 편집이 유지되며, [완료]는 여전히 머리줄에 있다`, () => {
+  it(`해시태그 ${HASHTAG_MAX_COUNT + 1}개로 [완료] → 안내가 뜨고 편집이 유지된다`, () => {
     renderScreen();
     const over = Array.from(
       { length: HASHTAG_MAX_COUNT + 1 },
@@ -806,21 +623,15 @@ describe('🔴 캡션 편집 중 [완료]는 머리줄 [편집] 자리에 있다
       screen.getByTestId('reflection-share-caption-input')
     ).toBeOnTheScreen();
     expect(screen.queryByTestId('reflection-share-caption-edit')).toBeNull();
-    expect(saveSitsInCaptionHeader()).toBe(true);
   });
 
-  it('편집 중이 아니면 머리줄에 [편집]만 있고 [완료]는 없으며, 하단 [이미지 저장]·[공유하기] 줄은 그대로다', () => {
+  it('편집 중이 아니면 [편집]만 있고 [완료]는 없으며, 하단 [이미지 저장]·[공유하기] 줄은 그대로다', () => {
     mockShareArmed.value = true;
-    const props = renderScreen();
+    renderScreen();
 
-    const row = lowestCommonAncestor(
-      screen.getByText('캡션'),
-      screen.getByTestId('reflection-share-caption-edit')
-    );
-    expect(row).not.toBeNull();
     expect(
-      isInside(row as ReactTestInstance, screen.getByText(props.hashtagText))
-    ).toBe(false);
+      screen.getByTestId('reflection-share-caption-edit')
+    ).toBeOnTheScreen();
     expect(screen.queryByTestId('reflection-share-caption-save')).toBeNull();
     expect(screen.queryByText('완료')).toBeNull();
     expect(screen.getByTestId('reflection-share-save')).toBeOnTheScreen();

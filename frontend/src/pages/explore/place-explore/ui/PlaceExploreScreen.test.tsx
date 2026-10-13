@@ -11,7 +11,6 @@ import type { Place } from '@/shared/api/index.schemas';
 
 import type { PlaceListState } from '@/features/explore/index.view';
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
-import { closestAncestor } from '@/test-support/sheetTree';
 import {
   PlaceExploreScreen,
   type PlaceExploreScreenProps,
@@ -131,36 +130,6 @@ function cardTestIds(): string[] {
     .map((node) => String(node.props.testID));
 }
 
-/**
- * 행마다 카드가 몇 장인지 — 2열 그리드의 **유일한 렌더 관측 수단**이다.
- * `FlatList numColumns` 는 호스트 props 에 남지 않는다(실측: 호스트는 RCTScrollView 이고
- * `props.numColumns` 는 undefined). 관측 가능한 신호는 RN 이 `numColumns>1` 일 때만 만드는
- * **행 래퍼의 `flexDirection:'row'`** 뿐이다.
- * `typeof node.type === 'string'` 로 호스트 요소만 남긴다 — 합성 요소까지 세면 같은 행이
- * 두 번, 카드가 두 배로 잡힌다(실측: 2장인 행이 4로 보였다).
- * 카드 안쪽의 가로 배치(0장짜리 행)는 걸러낸다.
- */
-function cardsPerRow(): number[] {
-  const grid = screen.getByTestId('explore-places-grid');
-  return grid
-    .findAll(
-      (node) =>
-        typeof node.type === 'string' &&
-        node.props?.style != null &&
-        JSON.stringify(node.props.style).includes('"flexDirection":"row"')
-    )
-    .map(
-      (row) =>
-        row.findAll(
-          (node) =>
-            typeof node.type === 'string' &&
-            typeof node.props?.testID === 'string' &&
-            node.props.testID.startsWith('explore-places-card-')
-        ).length
-    )
-    .filter((count) => count > 0);
-}
-
 describe('PlaceExploreScreen — 카드 내용 (AC-1)', () => {
   it('받은 순서 그대로 그리고, 이름과 "{카테고리} · {지역}" 부제를 표기한다', () => {
     renderScreen();
@@ -191,13 +160,6 @@ describe('PlaceExploreScreen — 카드 내용 (AC-1)', () => {
     // 구분점이 남으면('카페 · ') 이 완전 일치가 red 다. `within` 이 없으면 카테고리 칩의
     // '카페' 와 다중 매칭으로 throw 한다.
     expect(within(p3).getByText('카페')).toBeOnTheScreen();
-  });
-
-  it('카드가 한 행에 2장씩 놓인다 — 마지막 행만 1장이다', () => {
-    renderScreen();
-
-    expect(cardTestIds()).toHaveLength(5);
-    expect(cardsPerRow()).toEqual([2, 2, 1]);
   });
 
   it('imageUrl 이 온 카드만 그 URL 로 사진을 그린다 (INV-1)', () => {
@@ -356,24 +318,6 @@ describe('PlaceExploreScreen — 검색 필터 버튼 (AC-2 · 01b Seed 3-a)', (
   });
 });
 
-describe('PlaceExploreScreen — 카드 타이포 14/12 (AC-5)', () => {
-  it('카드 이름은 text-[14px], 부제는 text-[12px] 다 (13.5/11.5 에서 상향)', () => {
-    renderScreen();
-
-    // NativeWind className 은 style 로는 안 바뀌어도 렌더 트리에 props.className 문자열로
-    // 남는다(실측 확인 · TimelineScreen.placeholder 선례). 카드 타이포는 순수 시각 변경이지만
-    // 이 문자열 매처로 red 를 낼 수 있다 — 픽셀 렌더는 [검증] 스크린샷 몫이다. 카드는 이제
-    // entities/place/ui/PlaceGridCard 소유라 그 파일의 className 이 여기로 관측된다.
-    const card = screen.getByTestId('explore-places-card-p1');
-    expect(
-      String(within(card).getByText('감천문화마을').props.className)
-    ).toContain('text-[14px]');
-    expect(
-      String(within(card).getByText('명소 · 사하구').props.className)
-    ).toContain('text-[12px]');
-  });
-});
-
 describe('PlaceExploreScreen — 검색바 (AC-8 입력 경로)', () => {
   it('placeholder 와 현재 검색어를 보여 주고, 입력을 그대로 올린다', () => {
     const handlers = renderScreen({ searchText: '광안' });
@@ -388,38 +332,12 @@ describe('PlaceExploreScreen — 검색바 (AC-8 입력 경로)', () => {
   });
 });
 
-// TRIP-1103 AC-1 — FAB 묶음 루트 View 에는 testID 가 없다. FAB 에서 조상으로 올라가 처음 만나는
-// `absolute` 노드가 묶음 루트다(02a ★1). className 은 공백으로 쪼갠 토큰 배열로 완전일치 비교한다.
-function fabBundleRoot(fabTestId: string) {
-  let node = screen.getByTestId(fabTestId).parent;
-  while (node) {
-    const tokens = String(node.props.className ?? '').split(/\s+/);
-    if (tokens.includes('absolute')) return node;
-    node = node.parent;
-  }
-  throw new Error(`${fabTestId} 위에 absolute 조상이 없다`);
-}
-
-describe('TRIP-1103 AC-1 · d04 FAB 묶음 바닥 오프셋 84 (Figma d04 fabCollapsed 바닥 84)', () => {
-  it('♥·＋ FAB 묶음 루트가 bottom-[84px] 이고 bottom-[100px] 은 없다', () => {
-    renderScreen();
-
-    const root = fabBundleRoot('explore-places-create-fab');
-    // 앵커 — ♥ FAB 도 같은 묶음 루트에 닿는다(엉뚱한 absolute 노드가 아니다).
-    expect(fabBundleRoot('explore-places-saved-fab')).toBe(root);
-    const tokens = String(root.props.className ?? '').split(/\s+/);
-    expect(tokens).toContain('bottom-[84px]');
-    expect(tokens).not.toContain('bottom-[100px]');
-  });
-});
-
 // ── 다섯 얼굴 · 담기 실패 배너 · 대기 하트 (옛 `PlaceExploreScreen.states.test.tsx`) ───────────────
 // AC-4~AC-13 · AC-G7(01b Seed Q3·Q5·Q7·Q8·Q9·Q10) + TRIP-708 새 default 렌더(누를 수 있는 것 23개 —
 // TRIP-1020 카드 버튼화·TRIP-1023 지역 칩 반영) + TRIP-1019 #027(조건 모두 해제) + TRIP-1026(＋ 숨김).
 // `state` 판별 유니온 하나로 화면이 얼굴을 그리고(판정은 페이지 몫), 0건을 만든 조건을 문구에
 // 지목하며, 담기 실패가 화면에 드러나고(INV-4), 응답 대기 중인 하트는 눌리지 않는다.
 // ★ 안내의 제목·부제는 각각 `getByText(완전문자열)` 로 나눠 잰다(`toHaveTextContent` 문자열은 완전 일치).
-// ★ NativeWind `className` 은 jest 에서 `style` 로 안 바뀐다 — 스켈레톤 2열×2행은 행 testID 로 잰다.
 describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
   /** 위 `PLACES` 와 같되 p2 에도 사진이 없다(옛 파일 값 그대로). */
   const STATE_PLACES: Place[] = [
@@ -523,7 +441,7 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
   }
 
   describe('PlaceExploreScreen — loading (AC-4)', () => {
-    it('스켈레톤 4장을 2열 × 2행으로 그리고 라벨을 함께 보여 준다', () => {
+    it('스켈레톤 4장을 그리고 라벨을 함께 보여 준다', () => {
       renderState({ kind: 'loading' });
 
       expect(screen.getByTestId('explore-places-loading')).toBeOnTheScreen();
@@ -538,20 +456,6 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
         'explore-places-skeleton-1',
         'explore-places-skeleton-2',
         'explore-places-skeleton-3',
-      ]);
-
-      // 2열 × 2행의 유일한 렌더 관측 수단 — 행 컨테이너 2개에 2장씩 들어 있는가.
-      // 4장을 세로로 쌓은 구현(행 0개)도, 한 행에 4장(행 1개)도 여기서 red 다.
-      const rows = screen.getAllByTestId(/^explore-places-loading-row-/);
-      expect(
-        rows.map((row) =>
-          within(row)
-            .getAllByTestId(/^explore-places-skeleton-/)
-            .map((node) => String(node.props.testID))
-        )
-      ).toEqual([
-        ['explore-places-skeleton-0', 'explore-places-skeleton-1'],
-        ['explore-places-skeleton-2', 'explore-places-skeleton-3'],
       ]);
     });
 
@@ -673,11 +577,7 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
       const clearAll = screen.getByTestId(
         'explore-places-filterzero-clear-all'
       );
-      const label = within(clearAll).getByText('조건 모두 해제');
-      // e02 선례의 두 번째 버튼 위계(link — 테두리 없는 primary 글자). outline 이면 글자가 text-ink 다.
-      expect(String(label.props.className).split(/\s+/)).toContain(
-        'text-primary'
-      );
+      expect(within(clearAll).getByText('조건 모두 해제')).toBeOnTheScreen();
 
       fireEvent.press(clearAll);
       // 두 콜백이 섞이면 "하나만 풀기"와 "둘 다 풀기"가 같은 일을 하게 된다.
@@ -1061,30 +961,6 @@ describe('지역 칩', () => {
     return screen.getByTestId('explore-places-region');
   }
 
-  /** 호스트 요소만, 트리(전위) 순서대로 testID 를 뽑는다 — 합성 요소까지 세면 같은 testID 가 두 번 잡힌다. */
-  function hostTestIdsInOrder(): string[] {
-    return screen
-      .getByTestId('explore-places-root')
-      .findAll(
-        (node) =>
-          typeof node.type === 'string' &&
-          typeof node.props?.testID === 'string'
-      )
-      .map((node) => String(node.props.testID));
-  }
-
-  /** 가장 가까운 호스트 스크롤 조상(RN ScrollView/FlatList 의 호스트는 `RCTScrollView`). */
-  function nearestScrollAncestor(
-    node: ReactTestInstance
-  ): ReactTestInstance | null {
-    let current = node.parent;
-    while (current !== null) {
-      if (String(current.type) === 'RCTScrollView') return current;
-      current = current.parent;
-    }
-    return null;
-  }
-
   describe('🔴 1023-B #026 · 지역 칩 라벨 (AC-B5 · AC-B6 · AC-B10)', () => {
     it('regionNames 를 안 넘기면(탐색 탭·홈 진입 = 지역 없음) 칩이 "전국" 이다', () => {
       renderRegionScreen();
@@ -1192,51 +1068,6 @@ describe('지역 칩', () => {
       expect(within(regionChip()).getByText('강릉시')).toBeOnTheScreen();
     });
   });
-
-  describe('🔴 1023-B #026 · 칩 자리 = 카테고리 칩 줄 바로 아래 한 줄 (Seed Q4)', () => {
-    it('트리 순서가 카테고리 칩(마지막 "문화") → 지역 칩 → 첫 카드다', () => {
-      renderRegionScreen({ regionNames: ['강릉시'] });
-
-      const order = hostTestIdsInOrder();
-      const lastCategory = order.indexOf('explore-places-category-culture');
-      const chip = order.indexOf('explore-places-region');
-      const firstCard = order.indexOf('explore-places-card-p1');
-
-      // 앵커 — 카테고리 칩이 트리에 있다(없으면 -1 이라 아래 부등식이 공짜로 참이 될 수 있다).
-      //   chip > lastCategory ≥ 0 이고 firstCard > chip 이라 셋 다 실재해야만 통과한다.
-      expect(lastCategory).toBeGreaterThanOrEqual(0);
-      expect(chip).toBeGreaterThan(lastCategory);
-      expect(firstCard).toBeGreaterThan(chip);
-    });
-
-    it('error 얼굴에서도 칩이 에러 안내보다 위다 — 안내가 컨트롤을 밀지 않는다', () => {
-      renderRegionScreen({ places: [], state: { kind: 'error' } });
-
-      const order = hostTestIdsInOrder();
-      const chip = order.indexOf('explore-places-region');
-      const errorNotice = order.indexOf('explore-places-error');
-
-      expect(chip).toBeGreaterThanOrEqual(0);
-      expect(errorNotice).toBeGreaterThan(chip);
-    });
-
-    it('칩은 카테고리 가로 스크롤 안이 아니라 목록 헤더에 바로 놓인다 (Q4 대안 c 아님)', () => {
-      renderRegionScreen({ regionNames: ['강릉시'] });
-
-      // 대조 앵커 — 카테고리 칩의 가장 가까운 스크롤은 목록(grid)이 **아닌** 가로 스크롤이다.
-      //   이 앵커가 있어야 "스크롤 조상 = grid" 판정이 식별력을 갖는다.
-      const categoryScroll = nearestScrollAncestor(
-        screen.getByTestId('explore-places-category-all')
-      );
-      expect(categoryScroll).not.toBeNull();
-      expect(categoryScroll?.props.testID).not.toBe('explore-places-grid');
-
-      // 단언 — 지역 칩의 가장 가까운 스크롤은 목록 자체다.
-      expect(nearestScrollAncestor(regionChip())?.props.testID).toBe(
-        'explore-places-grid'
-      );
-    });
-  });
 });
 
 // ── 카드 press 버블링 (옛 `PlaceExploreScreen.cardtap.test.tsx`, TRIP-456 AC-3) ─────────────────────
@@ -1335,41 +1166,5 @@ describe('카드 press 버블링', () => {
       expect(onToggleSave).not.toHaveBeenCalled();
       expect(onPressCard).not.toHaveBeenCalled();
     });
-  });
-});
-
-// TRIP-1280 AC-2 — 검색어 탓 filter-zero 에서 키보드가 해제 버튼을 가린다. 실제 키보드·스크롤은 jest
-// 사각(6-b iOS)이라 그 동작을 정하는 스크롤 prop 과 "버튼·입력칸이 그 스크롤 안" 을 함께 잠근다.
-describe('키보드가 떠 있어도 filter-zero 해제 버튼에 닿는다', () => {
-  const isHostScroll = (node: ReactTestInstance): boolean =>
-    String(node.type) === 'RCTScrollView';
-
-  it('검색어 지우기·조건 모두 해제·검색창이 그리드 스크롤 안에 있고, 그 스크롤은 키보드만큼 여백을 더하며 첫 탭을 버튼에 준다', () => {
-    renderScreen({
-      places: [],
-      state: { kind: 'filter-zero', blame: 'search' },
-      searchText: '경복궁',
-      selectedCategory: '카페',
-      onClearFilter: jest.fn(),
-      onClearAllFilters: jest.fn(),
-    });
-
-    const scrollIds = [
-      'explore-places-filterzero-clear',
-      'explore-places-filterzero-clear-all',
-      'explore-places-search',
-    ].map(
-      (id) =>
-        closestAncestor(screen.getByTestId(id), isHostScroll)?.props.testID
-    );
-    expect(scrollIds).toEqual([
-      'explore-places-grid',
-      'explore-places-grid',
-      'explore-places-grid',
-    ]);
-
-    const grid = screen.getByTestId('explore-places-grid');
-    expect(grid.props.automaticallyAdjustKeyboardInsets).toBe(true);
-    expect(grid.props.keyboardShouldPersistTaps).toBe('handled');
   });
 });

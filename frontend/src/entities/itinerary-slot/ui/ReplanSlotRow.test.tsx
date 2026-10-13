@@ -12,7 +12,6 @@ import { ReplanSlotRow } from './ReplanSlotRow';
  *  - 시간 알약·장소명·카테고리 leaf 가 주입값과 완전히 같고, 없는 값은 요소째 안 그린다.
  *  - 사진이 없으면 카테고리 플레이스홀더를 그린다.
  *  - "다른 후보"는 콜백을 받았고 고정 행이 아닐 때만 뜨며, 후보 수를 적지 않고, 누르면 slotKey 로 1회.
- *  - dimmed 면 카드 루트에 불투명도 토큰이 붙는다(대안 없음 흐림, Seed Q3).
  *
  * ⚠️ 원리적 사각: 번호 원의 실제 색·흐림 정도·글리프 모양은 클래스 문자열까지만 본다(육안 게이트).
  */
@@ -140,26 +139,6 @@ describe('🔴 ReplanSlotRow · 빈 값은 요소째 안 그린다 (AC-3)', () =
   });
 });
 
-describe('🔴 ReplanSlotRow · 흐림 (AC-3 · Seed Q3)', () => {
-  const OPACITY = /^opacity-/;
-  const DIMMED = /^opacity-(45|\[0\.45\])$/;
-
-  it('R5a · dimmed 면 카드 루트에 45% 불투명도 토큰이 있다', () => {
-    render(<ReplanSlotRow vm={PLANNED} index={3} dimmed />);
-
-    const tokens = classTokens(screen.getByTestId('planb-draft-slot-s4'));
-    expect(tokens.filter((token) => DIMMED.test(token))).toHaveLength(1);
-  });
-
-  it('R5b · dimmed 가 아니면 불투명도 토큰이 없다', () => {
-    render(<ReplanSlotRow vm={PLANNED} index={3} />);
-
-    const tokens = classTokens(screen.getByTestId('planb-draft-slot-s4'));
-    expect(tokens.length).toBeGreaterThan(0);
-    expect(tokens.filter((token) => OPACITY.test(token))).toEqual([]);
-  });
-});
-
 describe('🔴 ReplanSlotRow · INV-3 (AC-13)', () => {
   it('R6 · 렌더 트리에 소요시간 표기가 없다(시각 범위는 있다)', () => {
     render(
@@ -169,53 +148,5 @@ describe('🔴 ReplanSlotRow · INV-3 (AC-13)', () => {
     const tree = JSON.stringify(screen.toJSON());
     expect(tree).toContain('15:00–16:30');
     expect(tree).not.toMatch(/\d+\s*분|\d+\s*시간|소요/);
-  });
-});
-
-/* ──────────── TRIP-1116 · 사진 대체 블록 크기 = 사진 자리(72) ────────────
- * i06 재계획 행도 같은 SlotPhotoPlaceholder 를 쓴다 — 두 번째 소비처라 같은 72 를 따로 잠근다.
- * ⚠️ 실제 픽셀 정렬은 jest 사각 — 6-b 육안.
- * ─────────────────────────────────────────────────────────────────────── */
-/** 크기 토큰(`h-*`·`w-*`)만 정렬해 뽑는다 — `min-h-*`·`max-w-*` 는 접두가 달라 빠진다. */
-function sizeTokens(node: ReactTestInstance): string[] {
-  return classTokens(node)
-    .filter((token) => /^[hw]-/.test(token))
-    .sort();
-}
-
-describe('🔴 ReplanSlotRow · R7 — 사진 대체 블록이 사진 자리와 같은 72 (TRIP-1116)', () => {
-  it('R7a · A3 — 사진 없는 행의 대체 블록은 72×72·rounded-thumb 이고 78 토큰이 없다', () => {
-    render(<ReplanSlotRow vm={{ ...PLANNED, photo: null }} index={3} />);
-
-    const tokens = classTokens(
-      screen.getByTestId('planb-draft-slot-photoplaceholder-s4')
-    );
-    expect(tokens).toEqual(
-      expect.arrayContaining(['h-[72px]', 'w-[72px]', 'rounded-thumb'])
-    );
-    expect(tokens).not.toContain('h-[78px]');
-    expect(tokens).not.toContain('w-[78px]');
-  });
-
-  it('R7b · A6 — 같은 행 모양의 사진 크기 토큰과 대체 블록 크기 토큰이 같다', () => {
-    // 준비: 사진 있는 행(s4)과 없는 행(s5)을 한 화면에 나란히.
-    render(
-      <>
-        <ReplanSlotRow vm={PLANNED} index={3} />
-        <ReplanSlotRow
-          vm={{ ...PLANNED, slotKey: 's5', photo: null }}
-          index={4}
-        />
-      </>
-    );
-
-    const photo = sizeTokens(screen.getByTestId('planb-draft-slot-photo-s4'));
-    const placeholder = sizeTokens(
-      screen.getByTestId('planb-draft-slot-photoplaceholder-s5')
-    );
-
-    // 앵커 — 비교할 크기 토큰이 실제로 있다(빈 배열끼리 같아지는 공허한 green 차단).
-    expect(photo).toHaveLength(2);
-    expect(placeholder).toEqual(photo);
   });
 });

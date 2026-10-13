@@ -99,10 +99,9 @@ describe('Figma 정합 · 목록 높이 상한 (옛 .l05parity)', () => {
    * TRIP-779 · l05 계정 삭제 다이얼로그 — 라이브 Figma(1단 1608:2440 · 2단 4531:3018) 값 정렬(A안).
    *
    * 무엇을 보장하나:
-   *  - AC-4: 1단 불릿 한 줄 = `•` 글리프 + 항목, 둘 다 ink 색.
-   *  - AC-5(구조로 잡히는 몫): 불릿 간격 6, 9항목(228)이 목록 높이 상한에 잘리지 않음, 버튼 h52·라벨 16,
-   *    목록→버튼 20. AC-6: 2단도 버튼 h52·라벨 16, 본문→버튼 20.
-   *  - A안 톤 유지: 1단 [계속] ink, 2단 [계정 삭제] primary.
+   *  - AC-4: 1단 불릿 한 줄 = `•` 글리프 + 항목.
+   *  - AC-5: 불릿 간격 6 · 9항목(228)이 목록 높이 상한에 잘리지 않음(출시 게이트 — BR-U6-25). 버튼 라벨 문구.
+   *  (색·버튼 치수·버튼 줄 간격은 TRIP-1367 로 지웠다 — 생김새는 실화면 몫.)
    *
    * 2단 게이트(AC-12)와 문안(Q7)은 `DeleteAccountDialog.test.tsx`·`SettingsPage.test.tsx`(무수정)가 잠근다.
    * 카드 그림자·실제 잘림·딤 덮임은 jest 사각 — [검증] 스크린샷·6-b 몫.
@@ -177,40 +176,24 @@ describe('Figma 정합 · 목록 높이 상한 (옛 .l05parity)', () => {
     return [...caps];
   }
 
-  function expectButtonSize(testID: string, label: string) {
-    const button = screen.getByTestId(testID);
-    expect(tokens(button)).toContain('h-[52px]');
-    expect(tokens(button)).not.toContain('h-12');
-    const text = within(button).getByText(label);
-    expect(tokens(text)).toContain('text-[16px]');
-    expect(tokens(text)).not.toContain('text-card-title');
-  }
-
-  function expectRowTopGap20(confirmTestID: string) {
-    const row = nearestCommonHost(
-      screen.getByTestId('settings-delete-cancel'),
-      screen.getByTestId(confirmTestID)
-    );
-    const rowTokens = tokens(row);
-    expect(rowTokens.includes('mt-xl') || rowTokens.includes('mt-[20px]')).toBe(
-      true
-    );
-    expect(rowTokens).not.toContain('mt-2xl');
+  function expectButtonLabel(testID: string, label: string) {
+    expect(
+      within(screen.getByTestId(testID)).getByText(label)
+    ).toBeOnTheScreen();
   }
 
   describe('🔴 TRIP-779 · l05 삭제 다이얼로그 1단 — 불릿 목록 (AC-4 · AC-5)', () => {
-    it('불릿 한 줄은 `•` 글리프와 항목이고, 둘 다 ink 색이다(옛 `·` 글리프 없음)', () => {
+    it('불릿 한 줄은 `•` 글리프와 항목이다(옛 `·` 글리프 없음)', () => {
       renderDialog();
 
-      const glyphs = screen.getAllByText('•');
-      expect(glyphs).toHaveLength(DELETION_SCOPE.length);
-      glyphs.forEach((glyph) => expect(tokens(glyph)).toContain('text-ink'));
+      expect(screen.getAllByText('•')).toHaveLength(DELETION_SCOPE.length);
       DELETION_SCOPE.forEach((item) => {
-        expect(tokens(screen.getByText(item))).toContain('text-ink');
+        expect(screen.getByText(item)).toBeOnTheScreen();
       });
       expect(screen.queryAllByText('·')).toHaveLength(0);
     });
 
+    // 잘림 가드의 LIST_HEIGHT 가 불릿 간격 6 을 전제하므로 출시 게이트(BR-U6-25)의 일부로 남긴다.
     it('불릿 사이 간격은 6이다', () => {
       renderDialog();
 
@@ -257,38 +240,22 @@ describe('Figma 정합 · 목록 높이 상한 (옛 .l05parity)', () => {
       }
     });
 
-    it('1단 버튼은 높이 52 · 라벨 16 이고, 버튼 줄은 목록과 20 떨어진다', () => {
+    it('1단 버튼 라벨은 취소 · 계속이다', () => {
       renderDialog();
 
-      expectButtonSize('settings-delete-cancel', '취소');
-      expectButtonSize('settings-delete-confirm', '계속');
-      expectRowTopGap20('settings-delete-confirm');
+      expectButtonLabel('settings-delete-cancel', '취소');
+      expectButtonLabel('settings-delete-confirm', '계속');
     });
   });
 
   describe('🔴 TRIP-779 · l05 삭제 다이얼로그 2단 — 최종 확인 (AC-6)', () => {
-    it('2단 버튼도 높이 52 · 라벨 16 이고, 버튼 줄은 본문과 20 떨어진다', () => {
+    it('2단 버튼 라벨은 취소 · 계정 삭제다', () => {
       renderDialog();
 
       fireEvent.press(screen.getByTestId('settings-delete-confirm'));
 
-      expectButtonSize('settings-delete-cancel', '취소');
-      expectButtonSize('settings-delete-confirm-final', '계정 삭제');
-      expectRowTopGap20('settings-delete-confirm-final');
-    });
-
-    it('A안 톤 유지: 1단 [계속]은 ink, 2단 [계정 삭제]는 primary(핑크)다', () => {
-      renderDialog();
-
-      expect(tokens(screen.getByTestId('settings-delete-confirm'))).toContain(
-        'bg-ink'
-      );
-
-      fireEvent.press(screen.getByTestId('settings-delete-confirm'));
-
-      expect(
-        tokens(screen.getByTestId('settings-delete-confirm-final'))
-      ).toContain('bg-primary');
+      expectButtonLabel('settings-delete-cancel', '취소');
+      expectButtonLabel('settings-delete-confirm-final', '계정 삭제');
     });
   });
 });

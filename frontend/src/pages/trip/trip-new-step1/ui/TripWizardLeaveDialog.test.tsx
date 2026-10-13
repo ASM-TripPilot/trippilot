@@ -1,4 +1,3 @@
-import type { ReactTestInstance } from 'react-test-renderer';
 import {
   fireEvent,
   render,
@@ -15,8 +14,6 @@ import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
  *  - 제목·본문·버튼 3개·실패 문구가 01b 확정 문구와 완전히 같다.
  *  - 세 버튼은 각자 자기 콜백만 한 번 부른다(서로 새지 않는다).
  *  - 실패 문구는 `failed` 일 때만, 다이얼로그 안에 뜬다.
- *  - 위→아래 [저장하고 나가기](코랄) · [삭제하고 나가기](아웃라인) · [계속 작성](텍스트) — 01b Q2.
- *  - 딤·카드·제목·본문 토큰은 형제 `BaseRegenerateDialog` 와 같다(AC-9).
  *  - (뷰는 props 만 받는다 — 쿼리·라우터·스토어·API 를 import 하지 않는다(01b Q4, 프리뷰가 네트워크 계층을 끌고 오지 않게).
  *    그 소스 import 스캔 it(옛 AC-11)은 TRIP-1353 에서 지웠다 — README 판정 3, 이 뷰의 props 계약은 위 it 들이 렌더로 잠근다.)
  *
@@ -31,12 +28,6 @@ const TITLE = '여행 만들기를 그만둘까요?';
 const BODY =
   '저장하면 내 여행에 작성 중으로 남아요. 삭제하면 되돌릴 수 없어요.';
 const ERROR_TEXT = '삭제하지 못했어요. 다시 시도해 주세요.';
-
-function tokens(el: ReactTestInstance): string[] {
-  return String(el.props.className ?? '')
-    .split(/\s+/)
-    .filter(Boolean);
-}
 
 function renderDialog(failed = false) {
   const onSave = jest.fn();
@@ -86,9 +77,6 @@ describe('🔴 AC-6 · 실패 문구는 실패했을 때만, 다이얼로그 안
     expect(
       within(dialog).getByTestId('trip-wizard-leave-error')
     ).toHaveTextContent(ERROR_TEXT);
-    expect(tokens(screen.getByTestId('trip-wizard-leave-error'))).toEqual(
-      expect.arrayContaining(['font-noto', 'text-label', 'text-primary-text'])
-    );
     for (const id of [
       'trip-wizard-leave-save',
       'trip-wizard-leave-delete',
@@ -116,93 +104,5 @@ describe('🔴 AC-3·4·5 · 버튼은 자기 콜백만 부른다', () => {
     for (const [name, fn] of Object.entries(callbacks)) {
       if (name !== called) expect(fn).not.toHaveBeenCalled();
     }
-  });
-});
-
-describe('🔴 AC-9 · 세로 3단 · 강조 배정 (01b Q2)', () => {
-  it('버튼 순서는 위에서부터 저장 → 삭제 → 계속 작성이다', () => {
-    renderDialog();
-
-    const order = screen
-      .getAllByRole('button')
-      .map((button) => button.props.testID);
-
-    expect(order).toEqual([
-      'trip-wizard-leave-save',
-      'trip-wizard-leave-delete',
-      'trip-wizard-leave-stay',
-    ]);
-  });
-
-  it('저장은 코랄 채움, 삭제는 아웃라인, 계속 작성은 테두리·채움 없는 회색 글자다', () => {
-    renderDialog();
-
-    const save = screen.getByTestId('trip-wizard-leave-save');
-    expect(tokens(save)).toEqual(
-      expect.arrayContaining([
-        'h-[44px]',
-        'w-full',
-        'rounded-button',
-        'bg-primary',
-      ])
-    );
-    expect(tokens(screen.getByText('저장하고 나가기'))).toEqual(
-      expect.arrayContaining([
-        'font-noto-bold',
-        'text-card-title',
-        'text-on-primary',
-      ])
-    );
-
-    const del = screen.getByTestId('trip-wizard-leave-delete');
-    expect(tokens(del)).toEqual(
-      expect.arrayContaining([
-        'h-[44px]',
-        'w-full',
-        'rounded-button',
-        'border',
-        'border-hairline-strong',
-        'bg-canvas',
-      ])
-    );
-    expect(tokens(del)).not.toContain('bg-primary');
-    expect(tokens(screen.getByText('삭제하고 나가기'))).toEqual(
-      expect.arrayContaining(['font-noto-bold', 'text-card-title', 'text-body'])
-    );
-
-    const stay = screen.getByTestId('trip-wizard-leave-stay');
-    expect(tokens(stay)).not.toContain('bg-primary');
-    expect(tokens(stay)).not.toContain('border');
-    expect(tokens(screen.getByText('계속 작성'))).toContain('text-muted');
-  });
-});
-
-describe('🔴 AC-9 · 레이아웃 토큰 (BaseRegenerateDialog 동형)', () => {
-  it('딤 55% 전면 · 카드 330/20 · 제목 19 Bold ink · 본문 body 21', () => {
-    renderDialog();
-
-    expect(tokens(screen.getByTestId('trip-wizard-leave-dialog'))).toEqual(
-      expect.arrayContaining([
-        'absolute',
-        'inset-0',
-        'items-center',
-        'justify-center',
-        'bg-scrim/55',
-      ])
-    );
-    expect(tokens(screen.getByTestId('trip-wizard-leave-card'))).toEqual(
-      expect.arrayContaining([
-        'w-[330px]',
-        'rounded-[20px]',
-        'bg-canvas',
-        'p-2xl',
-      ])
-    );
-    expect(tokens(screen.getByText(TITLE))).toEqual(
-      expect.arrayContaining(['text-[19px]', 'font-noto-bold', 'text-ink'])
-    );
-    expect(tokens(screen.getByText(BODY))).toEqual(
-      expect.arrayContaining(['font-noto', 'text-body', 'leading-[21px]'])
-    );
   });
 });

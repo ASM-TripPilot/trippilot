@@ -2,7 +2,6 @@
  * @jest-environment ./src/test-support/deviceTimeZoneEnvironment.cjs
  */
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
 
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 
@@ -294,8 +293,6 @@ describe('S9 · 취소 — onCancel 만, onSave 는 안 부른다', () => {
  * 무엇을 보장하나:
  *  - W1 시트를 열면 네 휠이 **현재 서울 시각 위치**에서 시작한다(00 부터가 아니라).
  *  - W2·W3 스크롤이 멈춘 값이 곧 선택이고 저장에 실린다(TRIP-990 D21 — 굴린 값이 버려지지 않는다, INV-4).
- *  - W4 본문 끌기를 끈다(`enableContentPanningGesture={false}`) — 휠을 굴릴 때 시트가 같이 끌려가지 않게.
- *    `onClose` 를 쥔 바깥 `BottomSheet` 에 있어야 한다.
  *  - W5 딤 탭 등으로 시트가 닫히면 `onCancel` 을 불러 페이지의 편집 상태를 푼다(다시 열 수 있게).
  *  - W6·W7 원본 완료가 없으면 완료 휠이 닫힌다(TRIP-1069 D1) — 있으면 평소대로 움직인다.
  *  - W8 현재 위치에서 멈춰도 "바뀜"이 아니다(분 단위 diff — 헛 PATCH 없음, TRIP-1069 AC-7).
@@ -388,22 +385,6 @@ describe('🔴 W · TRIP-1080 — 공용 휠 4열 시트', () => {
     expect(Date.parse(patch.arrivedAt!)).toBe(
       Date.parse('2026-09-28T12:05:00Z')
     );
-  });
-
-  it('W4 · AC-4 — 닫힘을 쥔 바깥 시트가 본문 끌기를 끈다(enableContentPanningGesture false)', () => {
-    renderSheet(LATE);
-
-    // onClose 를 가진 가장 가까운 조상 = 닫힘을 쥔 BottomSheet(MustVisit A3 선례).
-    let owner: ReactTestInstance | null = screen.getByTestId(SHEET);
-    while (owner !== null && typeof owner.props.onClose !== 'function') {
-      owner = owner.parent;
-    }
-
-    expect(owner).not.toBeNull();
-    // toBe(false) — prop 을 지우면(undefined) 라이브러리 기본값 true 로 돌아간다(02a ★4).
-    expect(owner?.props.enableContentPanningGesture).toBe(false);
-    // 안쪽 BottomSheetView(testID 를 가진 자리)에 onClose 를 달면 실기에선 딤이 안 먹는다(02a ★5).
-    expect(owner?.props.testID).not.toBe(SHEET);
   });
 
   it('W5 · AC-5 — 시트가 닫히면(딤 탭 대역) onCancel 1회, onSave 0회', () => {

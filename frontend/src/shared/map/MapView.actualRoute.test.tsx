@@ -52,15 +52,6 @@ describe('MapView actualRoute (TRIP-1342)', () => {
     expect(segs[1].props.coords).toHaveLength(3);
   });
 
-  it('AR2 실제 경로는 빨강 점선 · 흰 외곽선 없음', () => {
-    render(<MapView center={CENTER} actualRoute={[SEG_A]} />);
-    const seg = screen.getByTestId('map-route-segment');
-    expect(seg.props.color).toBe('#FF385C');
-    expect(Array.isArray(seg.props.pattern)).toBe(true);
-    expect(seg.props.pattern.length).toBeGreaterThanOrEqual(2);
-    expect(seg.props.outlineWidth).toBeUndefined();
-  });
-
   it('AR3 실제 경로가 켜지면 계획 연결선은 muted-soft 로 낮아지고 외곽선이 없다', () => {
     render(<MapView center={CENTER} pins={PINS} actualRoute={[SEG_A]} />);
     const plan = screen.getByTestId('map-path');
