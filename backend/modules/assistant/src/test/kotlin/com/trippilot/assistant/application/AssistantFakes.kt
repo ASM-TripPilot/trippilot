@@ -2,6 +2,10 @@ package com.trippilot.assistant.application
 
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantMessageRepository
+import com.trippilot.assistant.domain.AssistantProposal
+import com.trippilot.assistant.domain.AssistantProposalRepository
+import com.trippilot.assistant.domain.NewProposal
+import com.trippilot.assistant.domain.ProposalStatus
 import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantUsageRepository
@@ -9,7 +13,17 @@ import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.assistant.domain.RecordedTurn
+import com.trippilot.itinerarygeneration.api.EditDayCommand
+import com.trippilot.itinerarygeneration.api.EditProposal
+import com.trippilot.itinerarygeneration.api.EditProposalRequest
+import com.trippilot.itinerarygeneration.api.ItineraryEditFacade
+import com.trippilot.itinerarygeneration.api.ItineraryEditProposalFacade
+import com.trippilot.itinerarygeneration.api.ItineraryEditResult
+import com.trippilot.itinerarygeneration.api.ItineraryEditSource
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
+import com.trippilot.itinerarygeneration.api.ProposedSlot
+import com.trippilot.itinerarygeneration.api.SlotCandidateFacade
+import com.trippilot.itinerarygeneration.api.SlotCandidatesView
 import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.itinerarygeneration.api.ItineraryRef
 import com.trippilot.itinerarygeneration.api.PlannedPlaceView
@@ -54,7 +68,73 @@ internal class FakeSessions : AssistantSessionRepository {
     }
 }
 
-internal class FakeMessages : AssistantMessageRepository {
+internal class FakeProposals : AssistantProposalRepository {
+    val rows = mutableMapOf<UUID, AssistantProposal>()
+
+    override fun create(sessionId: UUID, accountId: UUID, proposal: NewProposal, at: Instant): UUID = UUID.randomUUID().also { id ->
+        rows[id] = AssistantProposal(
+            id, sessionId, accountId, proposal.tripId, proposal.baseFingerprint, proposal.after, proposal.diff, proposal.violations,
+            proposal.applyHint, ProposalStatus.PROPOSED, proposal.expiresAt, claimed = false,
+        )
+    }
+
+    override fun findOwnedForUpdate(accountId: UUID, proposalId: UUID) = rows[proposalId]?.takeIf { it.accountId == accountId }
+    override fun find(proposalId: UUID) = rows[proposalId]
+
+    override fun claim(proposalId: UUID, at: Instant): Boolean {
+        val row = rows[proposalId]?.takeIf { it.status == ProposalStatus.PROPOSED && !it.claimed } ?: return false
+        rows[proposalId] = row.copy(claimed = true)
+        return true
+    }
+
+    override fun close(proposalId: UUID, to: ProposalStatus, claimed: Boolean): Boolean {
+        val row = rows[proposalId]?.takeIf { it.status == ProposalStatus.PROPOSED && it.claimed == claimed } ?: return false
+        rows[proposalId] = row.copy(status = to)
+        return true
+    }
+}
+
+/**
+ * 일정 쪽 변경 퍼사드 셋의 대역 — 제안·후보·저장. **저장이 몇 번 불렸는지**([edits])가 "단독 확정 없음"(PBT-U8-1)과
+ * "많아야 한 번"(PBT-U8-6)의 증거다. 기본 답은 실 대역(fake 에이전트)처럼 발화를 못 알아듣는 것이다.
+ */
+internal class FakeEditing : ItineraryEditProposalFacade, SlotCandidateFacade, ItineraryEditFacade {
+    var proposal: () -> EditProposal = { EditProposal.NotUnderstood }
+    var candidates: () -> SlotCandidatesView = { SlotCandidatesView(emptyList(), degraded = false, emptyReason = "NO_NEARBY") }
+    var save: () -> ItineraryEditResult = { ItineraryEditResult(UUID.randomUUID(), hasViolation = false, judged = true) }
+
+    data class Proposal(val date: LocalDate, val request: EditProposalRequest, val deadlineMs: Long)
+    data class Edit(val days: List<EditDayCommand>, val reason: String?, val source: ItineraryEditSource)
+
+    val proposed = mutableListOf<Proposal>()
+    val asked = mutableListOf<String>()
+    val edits = mutableListOf<Edit>()
+
+    override fun propose(accountId: UUID, tripId: UUID, targetDate: LocalDate, request: EditProposalRequest, deadlineMs: Long): EditProposal {
+        proposed += Proposal(targetDate, request, deadlineMs)
+        return proposal()
+    }
+
+    override fun propose(accountId: UUID, tripId: UUID, slotKey: String): SlotCandidatesView {
+        asked += slotKey
+        return candidates()
+    }
+
+    override fun edit(accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource): ItineraryEditResult {
+        edits += Edit(days, reason, source)
+        return save()
+    }
+}
+
+internal fun dispatcher(data: FakeTripData, editing: FakeEditing = FakeEditing(), properties: AssistantProperties = AssistantProperties()) =
+    IntentDispatcher(QueryCards(data, data, data, data), ProposalCards(editing, editing, data, data, properties))
+
+internal fun proposedSlot(poiId: UUID, start: String, distance: String? = null) =
+    ProposedSlot(poiId, LocalTime.parse(start), LocalTime.parse(start).plusHours(1), isFixed = false, endsNextDay = false, distanceRange = distance)
+
+internal fun surface(poiId: UUID, name: String) = PoiSurfaceView(poiId, name, 35.1, 129.0, "카페", "CAFE", null, null, emptyList())
+
+internal class FakeMessages(val proposals: FakeProposals = FakeProposals()) : AssistantMessageRepository {
     /** 저장된 행 — 화면에 안 나가는 칸(계정·턴 id·관측 칸)까지 본다. */
     data class Row(
         val sessionId: UUID, val accountId: UUID, val clientTurnId: UUID?, val saved: NewMessage, val message: AssistantMessage,
@@ -77,11 +157,21 @@ internal class FakeMessages : AssistantMessageRepository {
 
     override fun appendAssistant(sessionId: UUID, accountId: UUID, replyTo: UUID, message: NewMessage, at: Instant): AssistantMessage {
         check(message.nextActions.isNotEmpty()) { "다음 행동 없는 도우미 메시지 — DB 는 CHECK 로 거부한다(INV-U8-03)" }
-        return insert(sessionId, accountId, null, replyTo, message, at)
+        return insert(sessionId, accountId, null, replyTo, message, at, message.proposal?.let { proposals.create(sessionId, accountId, it, at) })
     }
 
-    private fun insert(sessionId: UUID, accountId: UUID, clientTurnId: UUID?, replyTo: UUID?, m: NewMessage, at: Instant): AssistantMessage {
-        val stored = AssistantMessage(UUID.randomUUID(), ++seq, m.role, m.kind, m.text, m.payload, m.nextActions, m.quickReplies, null, at)
+    override fun appendNote(sessionId: UUID, accountId: UUID, proposalId: UUID, message: NewMessage, at: Instant): AssistantMessage {
+        check(message.nextActions.isNotEmpty()) { "다음 행동 없는 도우미 메시지 — DB 는 CHECK 로 거부한다(INV-U8-03)" }
+        return insert(sessionId, accountId, null, null, message, at, proposalId)
+    }
+
+    private fun insert(
+        sessionId: UUID, accountId: UUID, clientTurnId: UUID?, replyTo: UUID?, m: NewMessage, at: Instant, proposalId: UUID? = null,
+    ): AssistantMessage {
+        val stored = AssistantMessage(
+            UUID.randomUUID(), ++seq, m.role, m.kind, m.text, m.payload, m.nextActions, m.quickReplies, m.footnote, at,
+            proposalId?.let { proposals.rows.getValue(it).view(at) },
+        )
         rows += Row(sessionId, accountId, clientTurnId, m, stored, replyTo)
         return stored
     }

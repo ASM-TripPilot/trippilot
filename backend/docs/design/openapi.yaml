@@ -1844,13 +1844,16 @@ paths:
       summary: 도우미 제안 적용
       description: >
         제안을 일정에 저장한다(`b02`). 제안을 만든 뒤 일정이 바뀌었으면 저장하지 않는다(`STALE`).
-        409 의 `error.code` 는 `STALE`(일정이 바뀜)·`EXPIRED`(제안 만료)·`NOT_APPLICABLE`(위반이 있거나 이미 끝난 제안) 중 하나다.
-        **아직 구현 전이라 501 이다**(TRIP-1379).
+        409 의 `error.code` 는 `STALE`(일정이 바뀜)·`EXPIRED`(제안 만료)·`NOT_APPLICABLE`(위반이 있거나, 이미 끝났거나,
+        다른 적용이 저장 중인 제안) 중 하나다. `STALE`·`EXPIRED` 는 서버가 제안을 이미 그 상태로 옮긴 것이다.
+
+        **200 이어도 `proposal.status` 를 본다.** 저장에 실패하면 `FAILED` 로 오고(일정은 그대로) `messages` 에 그 안내가 실린다.
+        성공이면 `APPLIED` 와 `ACTION_LOG` 메시지가 온다 — 저장할 때의 재검증이 제안 때와 다르게 위반을 판정했으면 그 메시지가
+        그렇게 말한다(저장된 값이 이긴다, BR-U8-34).
       responses:
-        '200': { description: 적용됨, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantApplyProposalResponse' } } } }
+        '200': { description: 처리됨(`APPLIED` 또는 `FAILED`), content: { application/json: { schema: { $ref: '#/components/schemas/AssistantApplyProposalResponse' } } } }
         '404': { description: 없는 제안이거나 타 계정 제안 }
         '409': { description: 적용할 수 없음, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
-        '501': { description: 아직 구현되지 않음 }
   /assistant/proposals/{proposalId}/dismiss:
     parameters:
       - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1858,11 +1861,11 @@ paths:
       tags: [assistant]
       summary: 도우미 제안 취소
       description: >
-        제안을 닫는다. 일정은 그대로다. **아직 구현 전이라 501 이다**(TRIP-1379).
+        제안을 닫는다. 일정은 그대로다. 이미 끝난 제안이면 오류가 아니라 **그 상태를 그대로** 돌려준다
+        (`DISMISSED` 가 아닐 수 있다 — 적용됐으면 `APPLIED`).
       responses:
-        '200': { description: 닫힘, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantDismissProposalResponse' } } } }
+        '200': { description: 닫힘(또는 이미 끝난 상태), content: { application/json: { schema: { $ref: '#/components/schemas/AssistantDismissProposalResponse' } } } }
         '404': { description: 없는 제안이거나 타 계정 제안 }
-        '501': { description: 아직 구현되지 않음 }
   /me/notifications:
     get:
       tags: [notification]
@@ -3931,6 +3934,7 @@ components:
         status: { $ref: '#/components/schemas/AssistantProposalState' }
         diff:
           type: array
+          description: '전후 비교. **위반만 있는 제안은 빈 배열이다** — 상대는 위반인 안의 일정을 주지 않는다'
           items:
             type: object
             required: [change, slotKey]
@@ -3959,9 +3963,10 @@ components:
         payload:
           nullable: true
           description: >
-            카드 데이터 — 모양은 `kind` 가 정한다. REVIEW · INFO · CLARIFY · SCOPE · REFUSAL · FALLBACK 은 아래 스키마다.
-            CANDIDATES · ACTION_LOG 는 그 카드를 내는 구현(TRIP-1379)과 함께 닫는다 — 그때까지는 그 둘의 메시지가 오지 않는다.
+            카드 데이터 — 모양은 `kind` 가 정한다. PROPOSAL 은 payload 가 아니라 `proposal` 에 실린다.
           oneOf:
+            - $ref: '#/components/schemas/AssistantCandidatesPayload'
+            - $ref: '#/components/schemas/AssistantActionLogPayload'
             - $ref: '#/components/schemas/AssistantReviewPayload'
             - $ref: '#/components/schemas/AssistantInfoPayload'
             - $ref: '#/components/schemas/AssistantClarifyPayload'
@@ -4035,6 +4040,32 @@ components:
           type: string
           description: >
             문자열로 연다(앱은 모르는 값을 일반 폴백으로 그린다). 지금 오는 값은 AI_UNAVAILABLE · SOURCE_UNAVAILABLE.
+    AssistantCandidatesPayload:
+      type: object
+      required: [candidates]
+      properties:
+        candidates:
+          type: array
+          description: >
+            대체 후보(최대 5). 고르는 버튼은 같은 메시지의 `quickReplies` 에 있다 — `action = PICK_CANDIDATE`,
+            `params.poiId` 가 이 `poiId` 다. 누르면 그 슬롯을 그 장소로 바꾼 **제안**(`PROPOSAL`)이 온다(저장은 [적용]).
+          items:
+            type: object
+            required: [poiId, name, reason]
+            properties:
+              poiId: { type: string, format: uuid }
+              name: { type: string }
+              distanceRange: { type: string, nullable: true, description: '바꿀 자리에서 이 후보까지의 거리 문자열. 소요시간은 없다(INV-3)' }
+              reason: { type: string }
+    AssistantActionLogPayload:
+      type: object
+      required: [what]
+      properties:
+        what: { type: string, description: "무엇을 바꿨는가 — 예 '카페 모카 → 책방카페'" }
+        tag: { type: string, nullable: true, description: '지금 오는 값은 CHANGE' }
+        detail: { type: string, nullable: true }
+        revisionId: { type: string, format: uuid, nullable: true, description: '지금은 늘 null — 편집 경로가 리비전 id 를 돌려주지 않는다' }
+        changeLogEntryId: { type: string, format: uuid, nullable: true, description: '지금은 늘 null' }
     AssistantProposalOrNull:
       nullable: true
       allOf:

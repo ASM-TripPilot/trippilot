@@ -29,6 +29,8 @@ data class AssistantMessage(
     val quickReplies: List<QuickReply>?,
     val footnote: String?,
     val createdAt: Instant,
+    /** 이 메시지가 가리키는 제안(`PROPOSAL`·`ACTION_LOG`). 상태는 **읽은 시점의 것**이다 — 카드는 저장 당시가 아니라 지금을 그린다. */
+    val proposal: ProposalView? = null,
 )
 
 /**
@@ -82,6 +84,8 @@ data class NewMessage(
     val outcome: String? = null,
     val llmCalls: Int? = null,
     val latencyMs: Int? = null,
+    /** 이 메시지와 함께 만들 제안(`PROPOSAL` 카드). */
+    val proposal: NewProposal? = null,
 )
 
 /**
@@ -97,6 +101,12 @@ interface AssistantMessageRepository {
 
     /** [replyTo] 는 이 응답이 답하는 턴의 id 다 — 응답을 위치가 아니라 턴에 묶는다. */
     fun appendAssistant(sessionId: UUID, accountId: UUID, replyTo: UUID, message: NewMessage, at: Instant): AssistantMessage
+
+    /**
+     * 턴 밖에서 생긴 도우미 메시지 — 제안을 적용한 기록(`ACTION_LOG`)과 그 결과 안내. 어느 턴의 답도 아니라 `reply_to` 가 없다.
+     * [proposalId] 는 이미 있는 제안이다.
+     */
+    fun appendNote(sessionId: UUID, accountId: UUID, proposalId: UUID, message: NewMessage, at: Instant): AssistantMessage
 
     /** 그 턴 id 로 이미 받은 턴(INV-U8-05). 없으면 null. */
     fun findTurn(sessionId: UUID, clientTurnId: UUID): RecordedTurn?
