@@ -104,6 +104,35 @@ class QueryCardsTest : StringSpec({
         cards(data).nextSlot(ctx()).text shouldBe "일정을 만드는 중이에요."
     }
 
+    /** 슬롯이 0건인 것은 셋 중 하나다 — 뭉개면 만드는 중인 여행에 "일정이 없다, 만들어라"고 한다. */
+    "다음 장소 — 장소가 0건이면 일정이 없는지·만드는 중인지·비었는지를 가른다" {
+        cards(FakeTripData(acc, hasItinerary = false)).nextSlot(ctx()).text shouldBe "아직 일정이 없어요."
+        val empty = FakeTripData(acc, slots = emptyList(), generationState = "PARTIAL")
+        cards(empty).nextSlot(ctx()).text shouldBe "일정을 만드는 중이에요."
+        // 같은 여행에 진행 검토도 같은 말을 한다 — 두 카드가 서로 다른 사실을 말하지 않는다
+        rows(cards(empty).review(ctx()).payload, "summary").last() shouldBe ("일정" to "만드는 중 (3일 중 0일 채움)")
+        cards(FakeTripData(acc, slots = emptyList())).nextSlot(ctx()).let { it.text to it.nextActions.single().type } shouldBe
+            ("아직 일정에 장소가 없어요." to "OPEN_ITINERARY")
+        cards(FakeTripData(acc, slots = emptyList()).apply { failItinerary = true }).nextSlot(ctx()).text shouldBe "지금 일정을 확인할 수 없어요."
+    }
+
+    /** 생성이 중간에 멈추면 뒤 일자는 정말 비어 있다 — 그때 맞는 길은 손으로 채우기가 아니라 다시 만들기다. */
+    "진행 검토 — 생성이 멈춘 일정의 빈 일자는 다시 만들기로 보낸다" {
+        val data = FakeTripData(acc, slots = listOf(plannedSlot(d1, 0, "10:00", "해변")), generationState = "FAILED")
+
+        @Suppress("UNCHECKED_CAST")
+        val fixes = problems(cards(data).review(ctx()).payload).map { it["reason"] to (it["fixAction"] as Map<String, Any?>)["type"] }
+        fixes shouldContainExactly listOf("2일차 일정이 비어 있어요" to "OPEN_REGENERATE", "3일차 일정이 비어 있어요" to "OPEN_REGENERATE")
+    }
+
+    /** 일정이 없다는 것을 확인했으면, 슬롯을 못 읽어도 답에 구멍은 없다 — "일부를 못 봤다"고 하지 않는다. */
+    "진행 검토 — 일정이 없음을 확인했으면 슬롯 조회 실패는 구멍이 아니다" {
+        val card = cards(FakeTripData(acc, hasItinerary = false).apply { failPlan = true }).review(ctx())
+
+        card.text shouldBe "지금까지 진행 상태를 정리했어요."
+        rows(card.payload, "summary").last() shouldBe ("일정" to "아직 없음")
+    }
+
     /** 여행 날짜를 바꾸면 일정은 옛 날짜에 남는다. 그 슬롯을 "0일차"라고 부르지 않고, 어긋났다는 사실을 말한다. */
     "진행 검토 — 여행 날짜 밖의 일정은 날짜로 부르고 어긋남을 알린다" {
         val stray = plannedSlot(d1.minusDays(2), 0, "10:00", "옛 날짜의 곳", violation = "영업시간과 맞지 않아요")
@@ -223,6 +252,10 @@ class QueryCardsTest : StringSpec({
         // 해변 → 라떼 는 사이에 모카가 있다 — 라떼에 적힌 거리는 모카에서의 거리다
         cards(data).distance(ctx(arguments = mapOf("origin" to "해변", "destination" to "라떼"))).kind shouldBe MessageKind.TEXT
         cards(data).distance(ctx(arguments = mapOf("origin" to "없는 곳", "destination" to "모카"))).kind shouldBe MessageKind.TEXT
+
+        // 이름이 한 글자인 슬롯은 거의 모든 말에 들어 있다 — 그것이 유일한 "일치"라고 그 슬롯으로 답하지 않는다
+        val oneChar = FakeTripData(acc, slots = listOf(plannedSlot(d2, 0, "09:00", "숲", distance = "300m")))
+        cards(oneChar).distance(ctx(arguments = mapOf("destination" to "대나무숲 산책로"))).kind shouldBe MessageKind.TEXT
     }
 
     /** 확정된 슬롯은 확정 당시의 이름이 이긴다 — 그 판단은 일정 모듈 것이다. 정본에서는 영업시간만 얹는다. */

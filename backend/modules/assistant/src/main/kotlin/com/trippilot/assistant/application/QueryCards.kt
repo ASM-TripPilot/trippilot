@@ -41,12 +41,17 @@ class QueryCards(
         val trip = requireNotNull(ctx.trip)
         val tripId = requireNotNull(ctx.tripId)
         // 못 읽은 것과 없는 것을 가른다 — 못 읽었는데 "없다"고 하면 거짓이다(BR-U8-16).
-        val current = runCatching { Loaded(itineraries.findCurrent(ctx.accountId, tripId)) }.getOrNull()
-        val slots = runCatching { plans.findPlanSlots(ctx.accountId, tripId) }.getOrNull()
-        val partial = current == null || slots == null
+        val current = runCatching { Loaded(itineraries.findCurrent(ctx.accountId, tripId)) }
+            .onFailure { log.warn("도우미 진행 검토 — 일정 요약 조회 실패. type={}", it.javaClass.simpleName) }.getOrNull()
+        val slots = runCatching { plans.findPlanSlots(ctx.accountId, tripId) }
+            .onFailure { log.warn("도우미 진행 검토 — 계획 슬롯 조회 실패. type={}", it.javaClass.simpleName) }.getOrNull()
         val itinerary = current?.value
+        // 실제로 답에 구멍이 난 경우만 "일부를 못 봤다"고 한다 — 일정이 없다는 것을 확인했으면 슬롯을 못 읽어도 구멍이 아니다.
+        val partial = current == null || (itinerary != null && slots == null)
         // 생성이 아직 돌고 있으면 뒤 일자는 "비어 있는" 것이 아니라 "만드는 중"이다 — 문제로 세지 않는다.
         val generating = itinerary?.generationState == "PARTIAL"
+        // 생성이 중간에 멈췄으면 뒤 일자는 정말 비어 있다 — 손으로 채우는 것보다 다시 만드는 쪽이 맞는 길이다.
+        val fillDay = if (itinerary?.generationState == "FAILED") NextAction("OPEN_REGENERATE", "일정 다시 만들기") else editItinerary
 
         val days = generateSequence(trip.startDate) { it.plusDays(1) }.takeWhile { it <= trip.endDate }.toList()
         val byDate = slots.orEmpty().groupBy { it.date }
@@ -62,9 +67,9 @@ class QueryCards(
                 if (!generating) {
                     val empty = days.filter { byDate[it].isNullOrEmpty() }
                     if (empty.size > MAX_EMPTY_DAY_ROWS) {
-                        add(ReviewProblem(null, "일정이 비어 있는 날이 ${empty.size}일 있어요", editItinerary))
+                        add(ReviewProblem(null, "일정이 비어 있는 날이 ${empty.size}일 있어요", fillDay))
                     } else {
-                        empty.forEach { add(ReviewProblem(null, "${dayLabel(it)} 일정이 비어 있어요", editItinerary)) }
+                        empty.forEach { add(ReviewProblem(null, "${dayLabel(it)} 일정이 비어 있어요", fillDay)) }
                     }
                 }
                 // 위반은 **저장된 표기 그대로**다 — 사유가 없으면 사유를 짓지 않는다.
@@ -98,7 +103,15 @@ class QueryCards(
     /** 다음 장소 — 계획 시각이 지금 이후인 첫 슬롯. 방문 여부를 따지지 않는다(그건 여행 중 화면의 일이다). */
     fun nextSlot(ctx: DispatchContext): NewMessage {
         val slots = planned(ctx) ?: return cannotRead()
-        if (slots.isEmpty()) return noItinerary()
+        // 슬롯이 0건인 것은 셋 중 하나다 — 일정이 없다 · 만드는 중이다 · 있는데 비었다. 뭉개면 만드는 중에 "일정이 없다"고 한다.
+        if (slots.isEmpty()) {
+            val current = runCatching { Loaded(itineraries.findCurrent(ctx.accountId, requireNotNull(ctx.tripId))) }.getOrNull() ?: return cannotRead()
+            return when (current.value?.generationState) {
+                null -> noItinerary()
+                "PARTIAL" -> AssistantTemplates.handoff("일정을 만드는 중이에요.", viewItinerary)
+                else -> AssistantTemplates.handoff("아직 일정에 장소가 없어요.", viewItinerary)
+            }
+        }
         val today = LocalDate.ofInstant(ctx.now, TRAVEL_ZONE)
         val nowTime = LocalTime.ofInstant(ctx.now, TRAVEL_ZONE)
         val next = slots.firstOrNull { it.date > today || (it.date == today && it.startAt >= nowTime) }
@@ -187,7 +200,8 @@ class QueryCards(
      */
     private fun mentioned(slots: List<PlannedSlotView>, said: String?): PlannedSlotView? {
         val word = said?.trim()?.takeIf { it.length >= MIN_MENTION_LENGTH } ?: return null
-        return slots.filter { slot -> slot.nameKo?.let { word in it || it in word } == true }.singleOrNull()
+        // 이름이 한 글자거나 빈 슬롯은 거의 모든 말에 "들어 있다" — 그런 슬롯은 후보에서 뺀다.
+        return slots.filter { slot -> slot.nameKo?.takeIf { it.length >= MIN_MENTION_LENGTH }?.let { word in it || it in word } == true }.singleOrNull()
     }
 
     private companion object {
