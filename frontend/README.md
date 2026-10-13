@@ -13,13 +13,13 @@ React Native + Expo (TypeScript strict) 클라이언트.
 | 프레임워크 | Expo SDK 54 (RN 0.81, development build + prebuild) · TypeScript strict · New Architecture | 국내 지도 SDK 등 네이티브 모듈을 config plugin으로 수용하면서 관리형 워크플로 유지 |
 | 내비게이션 | Expo Router (파일 기반) — 탭별 독립 스택, 딥링크 `trippilot://` + universal/app links | 라우트 = 파일 경로 = 딥링크 URL이 한 번에 정리됨. React Navigation을 래핑하므로 저수준 API도 접근 가능 |
 | 상태 관리 | TanStack Query v5(서버 상태) + Zustand(클라이언트 상태) | 서버 데이터의 캐싱·재검증·낙관적 업데이트는 Query가 전담, UI 상태만 경량 스토어로 |
-| 폼·스키마 | React Hook Form + Zod | 다단계 폼 리렌더 최소화, Zod 스키마는 API 응답 런타임 검증에 재사용 |
+| 폼·스키마 | React Hook Form + Zod — **현재 미사용·의존성 제거(2026-10-12)** | 다단계 폼 리렌더 최소화, Zod 스키마는 API 응답 런타임 검증에 재사용. 폼은 zustand 로 구현됐고 Zod 배선(아래 §API 계층)이 붙을 때 의존성을 다시 넣는다 |
 | HTTP | axios(REST 전반) + 토큰 회전 인터셉터(401 시 리프레시 갱신 single-flight 직렬화) · **AI 실시간 응답은 `expo/fetch` 스트리밍 경로** | 동시 401에서 회전이 1회만 일어나야 재사용 오탐이 없음. axios는 XHR 기반이라 SSE/청크 스트리밍 불가 — 일정 생성 진행 표시 등은 expo/fetch(ReadableStream 지원)로. 두 경로가 토큰 첨부·오류 정규화 계층을 공유 |
 | 토큰 저장 | expo-secure-store (iOS Keychain / Android Keystore) | AsyncStorage·MMKV는 평문이라 토큰 저장 부적합 |
 | 소셜 로그인 | 어댑터 인터페이스 1개 뒤 프로바이더별 구현 — **카카오·네이버는 네이티브 SDK**(@react-native-seoul/kakao-login·naver-login — 카카오톡·네이버앱 간편 로그인, 미설치 시 웹 폴백) · Apple은 expo-apple-authentication · Google은 expo-auth-session | 검증·세션 발급은 전부 서버, 앱에 클라이언트 시크릿은 **원칙적으로** 없음(예외는 아래 참고). 어댑터가 서버 전달 자격 증명(인가 코드 또는 SDK 발급 토큰)을 표준화 — 백엔드 `/auth/social/{provider}` code 경로와 `/auth/social/{provider}/token` 토큰 경로(TRIP-210)를 provider 별로 나눠 탄다 |
 | 애니메이션·제스처 | react-native-reanimated + react-native-gesture-handler + @gorhom/bottom-sheet | 바텀시트(제휴 고지·외부 지도 선택·필터)가 전역 UI 패턴. 네이티브 모듈이라 최초 스캐폴드에 포함 — 나중에 추가하면 EAS 재빌드 유발 |
 | 크래시 리포팅 | Sentry (@sentry/react-native + Expo config plugin) | 크래시·JS 오류·성능 수집. `beforeSend` 스크러빙으로 토큰·PII 차단 — "크래시 리포트에 토큰 미포함" 불변식의 집행 지점 |
-| 기기 능력 | expo-notifications(푸시, FCM/APNs) · expo-location(위치, 포그라운드 한정) · @react-native-community/netinfo(네트워크 상태) | `features/notification`·`shared/location`의 구현 스택. netinfo는 오프라인 큐 복구 감지 트리거 |
+| 기기 능력 | expo-notifications(푸시, FCM/APNs) · expo-location(위치, 포그라운드 한정) · @react-native-community/netinfo(네트워크 상태) | `features/notification`·`shared/location`의 구현 스택. netinfo는 부트스트랩 게이트의 네트워크 상태 감지(`useBootstrapGate`) |
 | 스타일링 | NativeWind 4 — **tailwindcss는 3.4.x 고정(4.x 비호환)** | 디자인 토큰을 tailwind.config로 일원화, 화면 양산 속도. 공용 컴포넌트는 `shared/ui` 경유 |
 | API 클라이언트 | orval 코드젠 — `backend/docs/design/openapi.yaml` → axios 클라이언트 + TanStack Query 훅 + Zod 스키마 | 클라이언트 타입 ↔ 스펙 문서의 drift 차단. §API 계층 참고 |
 | 패키지 매니저 | pnpm | 속도·엄격한 의존성 해석 |
@@ -38,6 +38,7 @@ frontend/
   src/            # FSD 층만
     app/          # FSD app 층 — 전역 프로바이더·루트 셸(스플래시 게이트)·전역 폰트/스타일. 슬라이스 없이 세그먼트로만
     pages/        # 화면 — 라우트 하나가 꽂는 슬라이스. 그 화면만 쓰는 UI·상태·요청 조합을 전부 소유한다
+                  # 슬라이스는 여정 단계 그룹 폴더 아래 `pages/<그룹>/<slice>`(home·magazine은 그룹 없음, §층 규칙 「슬라이스 그룹」)
     widgets/      # 공식 비권장 — 새로 만드는 건 조건부(§층 규칙)
     features/     # 여러 화면이 공유하는 사용자 행동 (목록·수 정본: src/features 디렉토리 · docs/structure.generated.md)
     entities/     # 여러 화면이 공유하는 도메인 모델 (목록·수 정본: src/entities 디렉토리 · docs/structure.generated.md)
@@ -47,18 +48,21 @@ frontend/
       ui/         # 디자인 시스템·공용 탭바(5탭)·빈 상태/로딩/오류 표준 패턴·접근성 기준
       map/        # 네이버 지도 SDK(네이티브·config plugin)·지도 렌더·경로 레이어·외부 지도앱 연동
       location/   # 위치 권한·수집 단일 소유(동의 상태 관리·프리프롬프트·포그라운드 수집)
-      validation/ # 경량 제약 검증기 — 서버 발행 규칙 명세 소비, 위반은 경고 배지(차단 아님)
-      storage/    # 로컬 영속 단일 소유 — 오프라인 입력 큐·사진 업로드 대기 큐
+      push/       # 푸시 권한·토큰 등록 단일 소유(프리프롬프트·안드로이드 채널)
+      photo/      # 사진 선택·저장 네이티브 모듈의 유일한 입구
+      lib/        # 업무 규칙 없는 유틸 — 폴더 없이 도메인 이름 파일(monthGrid·seoulDate·pressGuard…), 바렐 없음
+                  # 경량 제약 검증기(닉네임 형식)도 여기, 위반은 경고 배지(차단 아님)
+      storage/    # 로컬 영속 단일 소유 — 토큰·설치 id·본 적 있는 id 집합·문자열 값(오프라인 입력 큐는 보류로 없음)
   package.json / app.json / eas.json / tailwind.config.js / tsconfig.json
   Dockerfile / nginx.conf / web/   # 통합 테스트 스텁 (앱 코드 아님)
   docs/                            # 개발로그·구조 지도
 ```
 
-> **지금 코드와 다른 곳 (이주 중)**: 위 트리는 목표다. 현재 코드는 Expo Router 라우트가 `src/app/`에 있고(루트 `app/`으로 올릴 예정), FSD app 층 역할은 공식에 없는 `src/app-shell/`이 맡으며(`src/app/`으로 옮길 예정), 최상위 `src/assets/`가 남아 있다(쓰는 슬라이스 옆으로) — TRIP-1161. `shared`는 15개 폴더로 트리보다 많고 일부는 `lib`로 모을 유틸이다 — TRIP-1162. features에 화면이 들어 있는 곳은 화면 묶음 단위로 pages로 옮긴다 — TRIP-1146~1154.
+> **지금 코드와 다른 곳 (이주 중)**: 위 트리는 목표다. features에 화면이 들어 있는 곳은 화면 묶음 단위로 pages로 옮긴다 — TRIP-1146~1154.
 
 ### 층 규칙
 
-- **pages first**: 새 코드는 먼저 그 코드를 쓰는 `pages/<slice>`에 둔다. 페이지 사이의 중복은 그 자체로 추출 사유가 아니다. 아래 **세 조건을 모두** 만족할 때만 더 아래 층으로 뺀다.
+- **pages first**: 새 코드는 먼저 그 코드를 쓰는 `pages/<slice>`(그룹이 있으면 `pages/<그룹>/<slice>`)에 둔다. 페이지 사이의 중복은 그 자체로 추출 사유가 아니다. 아래 **세 조건을 모두** 만족할 때만 더 아래 층으로 뺀다.
   1. **지금** 여러 곳이 쓴다(가정이 아니라 실제로).
   2. 특정 소비처와 **독립된 변경 이유**가 있다.
   3. 경계의 책임이 **좁다**.
@@ -75,14 +79,17 @@ frontend/
 
 ### import 경계 규칙 (ESLint로 강제)
 
-- **층 방향**: `app → pages → widgets → features → entities → shared`. 각 층은 자기보다 **아래 층만** import한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 슬라이스별 zone은 `src/<층>` 디렉토리를 읽어 생성한다(새 슬라이스 자동 편입).
+- **층 방향**: `app → pages → widgets → features → entities → shared`. 각 층은 자기보다 **아래 층만** import한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 슬라이스별 zone은 `src/<층>` 디렉토리를 읽어 생성한다(새 슬라이스 자동 편입). 세그먼트 폴더나 `index.ts`가 없는 폴더는 슬라이스 그룹으로 보고 그 아래 슬라이스를 읽는다 — 같은 그룹 형제끼리도 격리된다.
 - **같은 층 형제 슬라이스는 서로 모른다(엄격)**: 형제 직접 import는 lint error다. 공유가 필요하면 순서대로 푼다 — ① 늘 같이 바뀌면 두 슬라이스를 합친다 ② 공유 도메인 책임은 entity로 내린다 ③ 위 층(pages·app)이 두 슬라이스를 받아 조립한다(props·slot) ④ 그래도 불가피하면 상대 슬라이스의 **공개 API(`index.ts`)로만** 받고, 왜 ①~③이 안 되는지 코드 주석으로 남긴다.
 - **entities 교차는 `@x`로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 쓴다(형식 예: `entities/place/@x/itinerary-slot/` — 지금 리포에 `@x` 폴더는 0개, entity 간 import도 0건). 먼저 두 entity를 합칠 수 없는지부터 본다 — `@x`는 마지막 수단이고 features·widgets에는 쓰지 않는다.
 - **공개 API(`index.ts`)**: 슬라이스 밖에서는 그 슬라이스의 `index.ts`로만 import한다. `shared`는 슬라이스가 없으므로 세그먼트(또는 컴포넌트 폴더)마다 `index.ts`를 둔다.
-  - **과도기(TRIP-1157까지)**: 이주 중에는 딥 임포트(`@/features/home/model/homeFixtures`)를 허용한다 — 옮기는 동안 `index.ts`를 두 번 고치지 않기 위해서다. TRIP-1157에서 `index.ts`를 일괄 정비하고 딥 임포트 금지 lint를 켠다. 그 뒤 딥 임포트는 위반이다.
-  - 현재: pages 53개 중 52개가 `index.ts`를 가진다(`magazine`만 없음). entities는 `model/index.ts`(place·stay·trip·itinerary-slot)로 도메인 타입을 내준다.
+  - **딥 임포트 금지(TRIP-1157)**: 슬라이스 밖에서 `@/features/home/ui/HomeGlyphs`처럼 내부 파일을 직접 물면 lint error다. 진입점은 슬라이스(또는 shared 세그먼트) 루트의 `index.ts`와 `index.<이름>.ts`(`index.view`·`index.schemas`·`index.hooks`)뿐이다. shared/ui·shared/lib 루트 직속 파일은 세그먼트 index 없이 직접 import한다.
+  - **두 번째 진입점 `index.view.ts`**: 네트워크·컨테이너를 싣는 슬라이스는 순수 뷰·글리프·config·순수 model만 모은 `index.view.ts`를 따로 둔다. 개발 프리뷰처럼 네트워크 없이 그려야 하는 소비자는 이것을 문다 — `index.ts`를 물면 슬라이스 전체가 평가돼 프리뷰 지뢰(`devPreviewReleaseGate`)가 터진다. 새 공개 심볼을 view에도 넣을지는 "그 정의 모듈이 네트워크·컨테이너에 닿는가"로만 정한다. 타입은 `export type { … }`으로 낸다 — `export { T } from`은 타입이어도 런타임 `require`로 남는다.
+  - **shared/api는 세 진입점**: 본체 `@/shared/api`(클라이언트·토큰·에러 헬퍼) · `@/shared/api/index.schemas`(생성 타입) · `@/shared/api/index.hooks`(생성 react-query 훅 — 물면 네트워크 계층이 실린다). 본체 index로 되돌아오는 헬퍼는 순환을 피해 hooks 진입점으로 낸다.
+  - **테스트**: `jest.mock`·`jest.requireActual` 등 jest 계열 지정자, 목 타이핑(`typeof import`)·`spyOn` 대상 네임스페이스, 공개 API에 없는 테스트 전용 심볼은 정의 모듈(딥 경로)을 겨눈다 — 테스트 때문에 index를 넓히지 않는다. 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual`로 실물을 펼친 뒤 덮는다(재수출이 늘 때 형제 export가 `undefined`가 되지 않게).
+  - 현재: pages 53 · features 25 · widgets 2 · entities 5 슬라이스 전부가 루트 `index.ts`를 가진다. shared는 세그먼트(또는 `ui/pref` 같은 컴포넌트 폴더)마다 `index.ts`를 두고, `index.view.ts`는 15개(features 13 · `shared/location` · `shared/push`)다.
 - **이주 방식**: 화면 묶음 단위로 옮긴다(TRIP-1138 · 서브 1146~1154) — 테스트 정상화를 먼저 하고 그 화면의 이동을 뒤 커밋으로.
-- **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone과 소스 스캔이 경계를 지킨다.
+- **린터**: 경계는 두 도구가 나눠 지킨다 — ESLint zone은 import 줄(층 방향·형제 격리·딥 임포트 금지), 공식 FSD 린터 Steiger(`pnpm fsd`, `steiger.config.ts`)는 폴더·슬라이스 배치(권장 설정 `fsd.configs.recommended` 전 규칙)를 본다. 둘 다 CI 머지 게이트다(TRIP-1158) — 구조 소스 스캔은 TRIP-1145에서 지웠다. Steiger 예외는 셋뿐이고 설정 파일 주석과 같다: ① 테스트는 검사 대상에서 뺀다(아래 「테스트」대로 딥 경로가 설계, ESLint 면제 범위와 같음 — 다시 켤 조건 없음. 개발 프리뷰 `app/_dev/**`는 라우트 폴더라 애초에 `steiger ./src` 밖) ② `src/features`의 `excessive-slicing`을 끈다(25개 > 20, 다시 켤 조건 features ≤ 20 — TRIP-1159 껍데기 정리) ③ `pages/itinerary`·`pages/onboarding` 그룹의 `repetitive-naming`을 끈다(접두를 떼면 16개 개명 + shared 세그먼트와 이름 충돌 — 다시 켤 조건 두 그룹 접두 제거, 별 티켓). 딥 임포트 금지 zone(TRIP-1157)은 프로덕션 파일(라우트 `app/**` 포함)에만 걸고 테스트·`app/_dev/**`는 면제한다. 같은 룰 ID라 층 zone과 한 블록에 함께 펼친다(flat config는 같은 규칙을 거는 뒤 블록이 앞을 덮어쓴다). `import/no-cycle`은 상시 lint에 없다 — 자기 슬라이스 index를 물어 순환을 만들어도 `pnpm lint`는 침묵한다.
 - **`app → features` 제한은 두지 않는다** — 공식 FSD는 app 층이 아래 층 전부를 import하는 것을 허용한다. 라우트 파일은 page를 꽂는 얇은 래퍼로 두는 것을 권장한다(lint 강제 없음, TRIP-1142).
 - 절대 경로 별칭 `@/` = `src/` (tsconfig paths — `@/features/...`, `@/shared/...`).
 
@@ -104,12 +111,12 @@ frontend/
 
 ## 아키텍처 규칙 (클라이언트 불변식)
 
-- **서버 권위**: 판정의 정본은 항상 서버. `shared/validation`의 경량 검증은 경고 배지이며 저장을 차단하지 않는다. 규칙 명세 버전이 서버와 불일치하면 로컬 검사는 보수적으로 비활성화.
+- **서버 권위**: 판정의 정본은 항상 서버. `shared/lib`의 경량 검증(닉네임 형식)은 경고 배지이며 저장을 차단하지 않는다. 규칙 명세 버전이 서버와 불일치하면 로컬 검사는 보수적으로 비활성화.
 - **AI 계층 계약** (`ai/README.md`): 이동 구간에 소요 시간(duration)을 표시하지 않는다 — 거리만. 사용자에게 보이는 시각·순서는 서버(솔버)가 검증한 값만 렌더링한다.
 - **토큰**: OS 보안 저장소에만 저장, 로그아웃·401 확정 시 즉시 삭제, 로그·크래시 리포트에 미포함(Sentry `beforeSend` 스크러빙으로 집행).
 - **스플래시 게이트**: 부트스트랩 1왕복 후 목적지 분기(강제 업데이트 → 세션 → 온보딩 잔여 → 홈)는 부수효과 없는 순수 함수로 구현(PBT 대상). 타임아웃 시 로컬 폴백 — 무한 스플래시 금지.
 - **딥링크 인증 가드**: 비로그인 딥링크 진입은 초대·공유 화면에 한정. 그 외는 레이아웃 레벨 인증 가드가 로그인 리다이렉트 후 원 목적지로 복귀. 클라이언트 가드는 1차일 뿐, 리소스 접근 권한 검증은 서버가 한다.
-- **오프라인**: 일정 조회 오프라인 캐시는 제공하지 않는다. 기록 입력(방문 체크·사진·메모)만 로컬 큐에 쌓고 복구 시 배치 동기화, 충돌은 사용자 선택.
+- **오프라인**: 지원하지 않는다. 일정 조회 오프라인 캐시도, 기록 입력(방문 체크·사진·메모)의 로컬 큐도 없다 — 오프라인 기록은 2026-09-11 보류(US-REC-12). 낙관 갱신 뒤 실패는 롤백 + 안내(INV-4).
 
 ## 환경 구성
 
@@ -130,31 +137,31 @@ frontend/
 | 화면 — 렌더·탭·결과 | `pages/<slice>` (이주 중에는 화면이 있는 곳) | **단위 1** + **통합 1** `XxxPage.integration.test.tsx`. 단위는 화면을 실제로 그리는 컴포넌트에 붙인다 — page가 직접 그리면 `XxxPage.test.tsx`, props만 받는 뷰에 맡기면 **뷰마다** `XxxScreen.test.tsx`(뷰가 하나여도 같다 — 이때 `XxxPage.test.tsx`는 두지 않는다). 뷰 테스트를 page 이름으로 바꿔 합치지 않는다 | React Native Testing Library · 통합은 MSW |
 | 판정 로직(순수 함수) | 로직이 있는 슬라이스의 `model/`·`lib/` | 옆에 `foo.test.ts` | Jest |
 | 판정 로직의 속성 | 위와 같음 | 함수(또는 함수 묶음)당 PBT 1파일 | fast-check |
-| 도구가 못 지키는 계약(INV-3 등) | feature 또는 page 그룹 | 묶음당 계약 스캔 1파일, 리포 전역 불변식은 전역 1파일 | 소스 스캔 |
-| 개발 도구(`_dev` 프리뷰) | `src/app/_dev` | 스모크 1파일 | RNTL |
-| UI E2E | 핵심 해피패스 **1~2개만** | — | 미정(Maestro/Detox). 시나리오 검증 본체는 백엔드 API E2E |
+| 출시·보안 계약(ESLint로 표현 못 하는 것) | `src/__tests__` | 아래 판정 3의 남은 목록 | 소스 스캔 |
+| 출시·보안 금지(ESLint로 표현되는 것) | `eslint.config.js` | 규칙 발동 탐침은 `eslintReleaseRules.test.ts` | ESLint `lintText` |
+| 개발 도구(`_dev` 프리뷰) | `src/__tests__`(라우트 폴더 `app/` 안은 라우트로 등록돼 못 둔다) | 스모크 1파일 `devPreviewReleaseGate.test.tsx` | RNTL |
 
-- 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다).
+- 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다). **두 버킷은 못 합친다**(TRIP-1350 실측) — node 버킷은 `--experimental-vm-modules` 가 필요하고(`makeAuthorize.*`·`LoginPage.apple`·`shareCapture` 의 `await import()` 와 `eslintReleaseRules` 의 ESLint 설정 로드), MSW 2 의존 트리(ESM)는 그 플래그 아래서 `Must use import to load ES Module` 로 죽는다. FSD 탐침을 지워도 플래그를 켤 이유가 남는다.
+- **버킷 예외 — node 버킷이어야 하는 page 배선 테스트는 `XxxPage.test.tsx`**(TRIP-1146): `await import`로만 닿는 모듈(integration 버킷에선 그 자리에서 동기 throw)이나 생성 훅·스토어 목으로 page 배선을 보는 테스트는 integration 버킷으로 못 가므로 `.integration` 없이 둔다(예: `PrefStep1Page.test.tsx`·`ReconsentPage.test.tsx`). 같은 page에 통합 파일이 따로 있으면 버킷 사유를 접미사로 남긴다(`LoginPage.apple.test.tsx` — 애플 SDK lazy import).
 - testID 규약 `{feature}-{screen}-{role}`(예: `execution-hub-timeline`) — testID 부여는 스펙의 일부다.
-- CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): `tsc` · ESLint · Jest(두 버킷)+fast-check — 머지 게이트.
+- CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): ESLint · `tsc` · Steiger(`pnpm fsd`) · 구조 지도 드리프트(`structure-index.cjs --write`·`--check`) · Jest(두 버킷)+fast-check — 머지 게이트.
 
 ### 남김·합침·지움 판정
 
 테스트 파일 하나를 들고 오면 위에서부터 첫 번째로 맞는 줄을 따른다.
 
 1. **PBT** → property(`fc.assert`)는 **하나도 지우지 않는다**(루트 CLAUDE.md — PBT는 차단 게이트). 같은 함수를 보는 PBT가 여러 파일이면 한 파일로 **합친다**.
-2. **개발 도구(`_dev` 프리뷰) 테스트** → 모든 프리뷰 키가 throw 없이 렌더되는지 보는 **스모크 1파일만 남기고 지운다**. 프리뷰는 사람이 눈으로 보는 도구라 세부 동작 검사는 실제 화면 테스트의 몫이다.
-3. **소스 스캔**(파일을 텍스트로 읽고 렌더하지 않는 테스트)
-   - tsc·ESLint가 이미 지키는 것(타입 필드 수·층 경계·import 방향)을 다시 본다 → **지운다**. 단 지우기 전에 그 규칙을 실제로 지키는 tsc/ESLint 규칙이 있는지 확인한다 — 없으면 아래 줄로.
-   - 도구가 못 지키는 계약(INV-3 소요시간 비표시·지도 키 부재 표면 등) → **남기되** feature(또는 page 그룹)당 1파일로 **합친다**.
-   - **화면 소스 가드**(특정 화면 파일이 실재하고 금칙어가 없다 등) → 렌더 결과로 확인할 수 있는 것(텍스트·testID·요소 유무)이면 **화면 테스트로 옮기고 스캔은 지운다**. jest가 원리적으로 못 보는 것(바텀시트 제스처 prop·스타일 클래스 금칙어 등)만 스캔으로 남기되 화면 묶음 계약 파일로 **합친다**. 같은 금칙어를 반복 스캔한다면 ESLint `no-restricted-syntax`로 옮길 수 있는지 먼저 본다.
-   - **탐지기 자가검사**(주석은 걷고 코드는 잡는지 확인하는 블록)는 공용 스캔 헬퍼에서 한 번만 한다 — 스캔 파일마다 반복하지 않는다.
-   - 경로를 문자열로 박은 스캔은 FSD 이동에서 대량으로 깨진다 — 화면 칸에서는 **테스트 정리를 먼저, 그 화면의 이동을 뒤 커밋으로** 한다(지울 테스트를 고치는 헛수고 방지).
+2. **개발 도구(`_dev` 프리뷰) 테스트** → **스모크 1파일만 남기고 지운다** — 프리뷰 화면이 뜨고, 키 장부에 중복이 없고, 없는 키는 splash로 떨어지는지만 본다(키별 렌더 없음). 운영 빌드에서 프리뷰를 막는 출시 계약도 같은 파일에 있다. 프리뷰는 사람이 눈으로 보는 도구라 세부 동작 검사는 실제 화면 테스트의 몫이다.
+3. **소스 스캔**(파일을 텍스트로 읽고 렌더하지 않는 테스트) — 기능이 구현·QA된 뒤의 회귀 감시는 스캔이 아니라 QA가 맡는다(TRIP-1145).
+   - **출시·보안 계약**(키·시크릿이 git에 안 들어감, 출시 빌드 설정, API 명세, 운영 빌드의 프리뷰 차단, 법정 동의·고지, 사진·공유 카드 서버 업로드 금지) → ESLint로 표현되면 **ESLint 규칙으로 옮기고** 규칙 발동을 `eslintReleaseRules.test.ts`의 `lintText` 탐침으로 지킨다. 표현 못 하면 **남긴다**. 지금 남은 스캔: `socialSdkSecrets`(옛 `mapBridgeStructure` A-3 합본)·`releaseBuildConfig`(옛 `socialSdkConfigPlugin` 합본)·`openapiContract`·`devPreviewReleaseGate`·`photoUploadGuard`(옛 `recordPhotoBinaryGuard`+`shareCardStructure` 합본)·`locationConsentPutBodyOwnership`·`deletionScopeStructure`·`eslintReleaseRules`(옛 `importBoundaryLayers` 중 출시·보안 규칙 탐침만 — FSD 층·딥 import 탐침은 TRIP-1350 에서 지움)(모두 `src/__tests__`).
+   - **구조 규칙**(층·슬라이스·세그먼트·props-only 시트 등) → 스캔을 두지 않는다. 층 방향은 ESLint zone, 나머지는 Steiger(TRIP-1158).
+   - **기능 회귀**(이미 지운 것의 재등장, 화면 금칙어·소요시간 글자, 바텀시트 prop 결합 등) → 스캔을 두지 않는다. QA가 본다(실화면 QA는 `trippilot-sim-qa` 스킬 — Maestro 묶음은 2026-10-12 삭제).
+   - 새 스캔을 더하기 전에 같은 금지를 ESLint `no-restricted-imports`·`no-restricted-syntax`로 표현할 수 있는지 먼저 본다.
 4. **같은 화면을 여러 파일이 테스트**(`.select.`·`.errors.`·`.apple.` 같은 티켓·관점 접미사) → 화면 단위 1 + 통합 1로 **합친다**. 관점은 `describe` 블록으로 보존하고, 티켓 번호(`TRIP-####`)는 테스트 이름이 아니라 주석으로 옮긴다(합치며 새로 붙이는 바깥 `describe` 기준 — 옮겨 온 안쪽 `describe`·`it` 이름의 번호까지 고쳐 쓰지는 않는다). 같은 동작을 보는 `it`은 하나만 남긴다.
    - **"같은 동작"은 겉보기 포함이 아니라 뮤테이션으로 판정한다** — 지울 `it`이 잡는 뮤테이션을 남는 `it`에 심어 red일 때만 지운다. 입력·단언이 포함돼 보여도 실제로 잡는 결함이 다를 수 있다.
    - **같은 파일 안에서만** 지운다. 단위↔통합 사이 겹침은 둘 다 남긴다 — 단위는 행 수·문구·토큰 같은 세부를, 통합은 배선을 본다.
    - 옛 파일은 `git rm`으로 지운다(추적 파일 전수를 여는 스캔이 있어 작업트리에서만 지우면 ENOENT).
-   - **소요시간 비표시(INV-3) 렌더 테스트는 시간·거리 데이터를 그리는 화면(일정·경로)에만 둔다.** 받는 데이터에 시간·거리 재료가 없는 화면(담은 장소·고르기·확인 대화상자 등)의 "분·시간·소요 글자 0건" 테스트는 지운다 — 일어날 수 없는 일을 지키는 테스트이고, 코드 쪽 `duration` 금지는 층 소스 스캔이 따로 지킨다.
+   - **소요시간 비표시(INV-3) 렌더 테스트는 시간·거리 데이터를 그리는 화면(일정·경로)에만 둔다.** 받는 데이터에 시간·거리 재료가 없는 화면(담은 장소·고르기·확인 대화상자 등)의 "분·시간·소요 글자 0건" 테스트는 지운다 — 일어날 수 없는 일을 지키는 테스트이고, 코드 쪽 `duration` 금지는 서버 DTO(INV-3)와 QA 몫이다.
 5. 그 밖(순수 함수 단위 테스트 등) → **남긴다**.
 
 ### 합격선 — 정리해도 덜 잡지 않았는가
@@ -164,12 +171,7 @@ frontend/
 - **착수 전 잡히던 뮤테이션을 전부 유지** — 정리하는 칸마다 착수 전에 심판이 잡는 뮤테이션을 심어 두고, 정리 뒤에도 전부 red인지 확인한다. **칸 단위의 주 심판은 이것이다.**
 - **합산 근사 줄 커버리지 하락 2%p 이내** — 기준선 91.64%(2026-09-30 develop `5feef8b0`) → 89.64% 이상. 화면 한 칸의 대상 소스는 전체의 몇 %라 칸 하나로는 이 수치가 거의 움직이지 않는다(합산 근사 줄 커버리지 = 파일마다 두 버킷 중 더 많이 덮은 쪽을 골라 합친 전역 비율). 그래서 전역 수치는 배치 누적 감시용이고, 칸마다 **대상 소스 파일별 covered 전후**를 함께 적는다.
 
-측정은 누구나 같은 명령으로 한다(결과는 gitignore된 `_workspace/test-measure/`).
-
-```bash
-scripts/test-measure.sh <라벨>      # 두 버킷 + 커버리지 → 합산 근사 줄 커버리지·시간·케이스 수
-python3 scripts/test-classify.py    # 테스트 파일 칸 분류(행동·소스 스캔·PBT·단위·개발 도구) → classification.csv
-```
+측정 도구(`scripts/test-measure.sh`·`test-classify.py`)는 TRIP-1138 정리가 끝나 2026-10-12에 지웠다 — 다시 재야 하면 git 이력에서 되살린다.
 
 ### PBT 작성 규칙
 
@@ -183,7 +185,7 @@ python3 scripts/test-classify.py    # 테스트 파일 칸 분류(행동·소스
 - **ESLint** (`eslint.config.js`): `eslint-config-expo` 베이스 + import 경계 규칙(§import 경계) + NativeWind 클래스 정렬 플러그인
 - **Prettier** (`.prettierrc`): 포맷 전담
 - Biome 등 통합 도구 미채택 — Expo 공식 프리셋·NativeWind·경계 강제 플러그인이 전부 ESLint 생태계
-- 스크립트: `pnpm lint` / `pnpm format`
+- 스크립트: `pnpm lint` / `pnpm format` / `pnpm fsd`(Steiger 구조 린트 — `frontend/`에서 실행)
 
 ## 빌드·실행 (스캐폴드 후)
 

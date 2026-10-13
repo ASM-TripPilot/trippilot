@@ -6,7 +6,7 @@
  * 같은 키가 된다. `시·군·구` 는 떼지 않는다 — 떼면 경기 `광주시` 가 `광주`(광역시)와 같아진다.
  */
 
-import type { Region } from '@/shared/api/generated/schemas';
+import type { Region } from '@/shared/api/index.schemas';
 
 // 긴 것부터 — `도` 를 먼저 떼면 `…특별자치도` 가 `…특별자치` 로 남는다.
 const SIDO_SUFFIXES = ['특별자치시', '특별자치도', '특별시', '광역시', '도'];

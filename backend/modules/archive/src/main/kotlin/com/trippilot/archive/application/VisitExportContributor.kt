@@ -29,7 +29,8 @@ class VisitExportContributor(
         val tripIds = trips.findTripsOf(accountId, TRIP_SCAN_LIMIT).map { it.tripId }
         val rows = tripIds.flatMap { tripId ->
             val visits = checks.findByTrip(tripId)
-            val withMemo = memos.findVisitsWithMemo(visits.map { it.visitCheckId })
+            // 본문까지 한 번에 — 종전에는 유무를 묻고 **방문마다 다시 조회**해 N+1 이었다.
+            val memoTexts = memos.findMemosOf(visits.map { it.visitCheckId })
             visits.map { v ->
                 mapOf(
                     "tripId" to tripId.toString(),
@@ -39,7 +40,7 @@ class VisitExportContributor(
                     "arrivedAt" to v.arrivedAt?.toString(),
                     "completedAt" to v.completedAt?.toString(),
                     "skippedAt" to v.skippedAt?.toString(),
-                    "memo" to if (v.visitCheckId in withMemo) memos.find(v.visitCheckId)?.text else null,
+                    "memo" to memoTexts[v.visitCheckId],
                     // 바이너리가 아니라 **어느 기기의 어느 자산이었나**다(INV-U5-03).
                     "photos" to photos.findByVisit(v.visitCheckId).map { p ->
                         mapOf(

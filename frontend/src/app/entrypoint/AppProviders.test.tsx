@@ -1,0 +1,189 @@
+import type { ComponentType } from 'react';
+import { act, render, screen, within } from '@testing-library/react-native';
+import { QueryClient } from '@tanstack/react-query';
+import { AxiosError } from 'axios';
+
+import {
+  getObservedQueryClient,
+  resetObservedQueryClient,
+} from '@/test-support/queryClientProbe';
+
+/**
+ * 루트 레이아웃(`app/_layout.tsx` = `AppProviders` > `SplashGate`) 부팅 골격 — 옛 `rootLayout`·
+ * `rootLayoutSafeArea`·`rootLayoutQueryProvider`·`rootLayoutToastHost` 네 파일을 한 파일로 합쳤다(TRIP-1350).
+ * 관점은 describe 로 남는다. `SplashGate` 자리에는 `queryClientProbe`(QueryClient 를 손에 쥐고 마커를 그린다)를 꽂는다.
+ *
+ * ── 부팅 골격 ─────────────────────────────────────────────────────────
+ *  (1) 폰트가 결판나기 전에는 아무것도 그리지 않는다(시스템 폰트로 잠깐 보였다 바뀌는 깜빡임 방지),
+ *  (2) 결판난 뒤에는 **첫 렌더에 곧바로** SplashGate 가 그려진다(부팅을 붙잡는 비동기 게이트가 없다),
+ *  (3) 그 시점에 네이티브 스플래시가 내려간다(무한 정지 화면 금지),
+ *  (4) GestureHandlerRootView 래핑이 남아 있다(로그인 바텀시트 동작의 전제).
+ *
+ * ── SafeAreaProvider (D4) ────────────────────────────────────────────
+ * ⚠️ "SafeAreaProvider 가 있으면서도 첫 렌더에 자식이 그려진다"는 형식적 회귀 문구가 아니라 **실측된 함정**이다.
+ *    SafeAreaProvider 는 네이티브 레이아웃에서 인셋 값을 받기 전까지 **자식을 렌더하지 않는다** — jest 에는
+ *    레이아웃 패스가 없어 그 값이 영영 오지 않으므로 `initialMetrics` 를 줘야 자식이 그려진다. 그 짝은 위 (2) 가
+ *    SafeAreaProvider 가 실재하는 트리에서 지킨다(E1 이 그 실재를 잠근다).
+ *
+ * ── QueryClientProvider (TRIP-179 AC-3 · D4) ─────────────────────────
+ * Provider 가 `SplashGate` 바깥에 있어야 프로브가 진짜 QueryClient 를 쥔다. 잠그는 것은 "값의 위치"가 아니라
+ * "관찰 가능성"(동작)이라 `AppProviders` 추출 같은 리팩토링에도 살아남는다.
+ * TRIP-986: 앱 전역 retry 기본값은 "404 만 다시 묻지 않는다" — 요청을 시작한 관찰자의 규칙만 적용되므로 전역이어야 한다.
+ * 문자열로 소스를 훑지 않고 부팅된 앱이 실제로 쥔 클라이언트의 기본값을 불러 본다.
+ *
+ * ── 토스트 호스트 (TRIP-990 · D19) ───────────────────────────────────
+ * 저장한 뒤 화면을 떠나도 토스트는 남아야 하므로 호스트는 Stack(SplashGate) **바깥**에 한 번 둔다. SplashGate 를
+ * 마커로 갈아끼웠으므로 호스트를 그 안에 두면 red 다. 실제 네비게이션 뒤 가시성·transparentModal 위 가림은 6-b.
+ *
+ * 왜 라우트 폴더(app/)가 아니라 src/app 인가: expo-router 의 require.context 정규식은 `.test.tsx` 를 제외하지 않는다 →
+ * app/ 아래에 테스트 파일을 두면 실제 라우트로 등록된다.
+ */
+
+process.env.EXPO_PUBLIC_API_MOCK = '1';
+
+// react-native-gesture-handler 는 네이티브 모듈을 요구하므로 공식 jest 목 설정을 먼저 건다.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('react-native-gesture-handler/jestSetup');
+
+// global.css 는 jest 의 transform 대상이 아니라 그대로 require 하면 SyntaxError 가 난다.
+jest.mock('@/app/styles/global.css', () => ({}));
+
+const mockHideAsync = jest.fn();
+jest.mock('expo-splash-screen', () => ({
+  preventAutoHideAsync: jest.fn(),
+  hideAsync: mockHideAsync,
+}));
+
+// 폰트 로드 결과를 테스트마다 갈아끼우기 위해 모듈 스코프 변수로 뺀다.
+// (jest 는 팩토리가 참조하는 외부 변수를 `mock` 접두사일 때만 허용한다.)
+let mockFontsLoaded = true;
+jest.mock('expo-font', () => ({ useFonts: () => [mockFontsLoaded, null] }));
+
+// 실물 SplashGate 는 렌더 즉시 부트스트랩 요청을 발사하므로 QueryClient 관찰 프로브로 대체한다.
+// 배럴(@/app)이 ./routing/SplashGate 를 재수출하므로 깊은 경로를 목으로 갈면 배럴을 타고 내려온다.
+jest.mock('@/app/routing/SplashGate', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/queryClientProbe')
+);
+
+// jestSetup 이 먼저 돌아야 하므로 import 문(호이스팅) 대신 require 로 순서를 고정한다.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { GestureHandlerRootView } = require('react-native-gesture-handler');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { SafeAreaProvider } = require('react-native-safe-area-context');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const RootLayout = require('@routes/_layout').default as ComponentType;
+type ToastModule = typeof import('@/shared/ui/Toast');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const Toast = require('@/shared/ui/Toast') as ToastModule;
+
+beforeEach(() => {
+  mockFontsLoaded = true;
+  mockHideAsync.mockClear();
+  resetObservedQueryClient();
+});
+
+afterEach(() => {
+  act(() => Toast.hideToast());
+});
+
+function httpError(status: number): AxiosError {
+  const error = new AxiosError('request failed');
+  error.response = {
+    status,
+    statusText: '',
+    data: {},
+    headers: {},
+    config: { headers: {} },
+  } as AxiosError['response'];
+  return error;
+}
+
+describe('루트 레이아웃 — 부팅 골격', () => {
+  it('폰트가 결판나기 전에는 아무 화면도 그리지 않고 네이티브 스플래시를 붙잡아 둔다', () => {
+    mockFontsLoaded = false;
+
+    render(<RootLayout />);
+
+    expect(screen.toJSON()).toBeNull();
+    expect(mockHideAsync).not.toHaveBeenCalled();
+  });
+
+  it('폰트가 결판나면 첫 렌더에 곧바로 SplashGate 를 그리고 네이티브 스플래시를 내린다', () => {
+    render(<RootLayout />);
+
+    expect(screen.getByTestId('query-client-probe')).toBeOnTheScreen();
+    expect(mockHideAsync).toHaveBeenCalled();
+  });
+
+  it('GestureHandlerRootView 로 감싸 그린다(바텀시트 동작의 전제)', () => {
+    render(<RootLayout />);
+
+    expect(screen.UNSAFE_getByType(GestureHandlerRootView)).toBeTruthy();
+  });
+});
+
+describe('루트 레이아웃 — SafeAreaProvider 전역 도입 (AC E1)', () => {
+  it('SafeAreaProvider 가 GestureHandlerRootView 안쪽에 존재한다 (D4)', () => {
+    render(<RootLayout />);
+
+    const gestureRoot = screen.UNSAFE_getByType(GestureHandlerRootView);
+    // 바깥/안쪽 순서가 뒤바뀌면 제스처 루트가 인셋 컨텍스트 밖으로 나가 바텀시트 계산이 어긋난다.
+    expect(within(gestureRoot).UNSAFE_getByType(SafeAreaProvider)).toBeTruthy();
+  });
+});
+
+describe('AC-3 · 루트 레이아웃 — QueryClientProvider 관찰 가능성 (C-1)', () => {
+  it('셸 안쪽에서 useQueryClient()를 부를 수 있고, 프로브가 진짜 QueryClient 인스턴스를 받는다', () => {
+    // 실행을 함수로 감싼다 — 렌더를 먼저 실행해 놓고 나중에 단언하면 예외가 그대로 튀어나가 assertion diff 가 사라진다.
+    const renderRoot = () => render(<RootLayout />);
+
+    expect(renderRoot).not.toThrow();
+    expect(screen.getByTestId('query-client-probe')).toBeOnTheScreen();
+    // 가짜 통과 방지 짝 — 프로브가 useQueryClient()를 부르지 않는 멍청한 마커로 퇴화해도 초록이 되지 않게
+    // 진짜 클라이언트 인스턴스를 손에 쥐었는지까지 본다.
+    expect(getObservedQueryClient()).toBeInstanceOf(QueryClient);
+  });
+});
+
+describe('🔴 TRIP-986 · 앱 전역 QueryClient 재시도 기본값 = 404 무재시도 (03b 경고-1)', () => {
+  it('부팅된 앱의 기본 retry 는 404 를 다시 묻지 않고, 500 은 기본처럼 3회까지 묻는다', () => {
+    render(<RootLayout />);
+    const retry = getObservedQueryClient()?.getDefaultOptions().queries?.retry;
+
+    // 함수여야 한다. 기본값을 안 건드리면 undefined(라이브러리 기본 3회)라 여기서 red.
+    expect(typeof retry).toBe('function');
+    const retryFn = retry as (failureCount: number, error: unknown) => boolean;
+
+    // 404 는 첫 실패부터 멈춘다.
+    expect(retryFn(0, httpError(404))).toBe(false);
+    // 짝: 500 은 여전히 묻는다(전부 끄는 `retry:false`·`() => false` 오답 차단) + 3회차에 멈춘다.
+    expect(retryFn(0, httpError(500))).toBe(true);
+    expect(retryFn(2, httpError(500))).toBe(true);
+    expect(retryFn(3, httpError(500))).toBe(false);
+  });
+});
+
+describe('🔴 T4 · 루트 레이아웃 — 토스트 호스트 배선 (D19)', () => {
+  it('폰트가 결판나면 루트 트리에 토스트가 뜨고, SplashGate 도 그대로 그려진다', () => {
+    render(<RootLayout />);
+
+    act(() =>
+      Toast.showToast({ message: '루트 확인', testID: 'root-probe-toast' })
+    );
+
+    expect(screen.getByTestId('root-probe-toast')).toBeOnTheScreen();
+    expect(screen.getByTestId('query-client-probe')).toBeOnTheScreen();
+  });
+
+  it('폰트 결판 전에는 토스트 요청이 있어도 아무것도 그리지 않는다', () => {
+    mockFontsLoaded = false;
+    act(() =>
+      Toast.showToast({ message: '루트 확인', testID: 'root-probe-toast' })
+    );
+
+    render(<RootLayout />);
+
+    expect(screen.toJSON()).toBeNull();
+  });
+});

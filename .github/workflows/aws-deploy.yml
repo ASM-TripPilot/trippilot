@@ -21,7 +21,20 @@ on:
         type: boolean
         default: true
       embedding_enabled:
-        description: 로컬 임베딩 서비스와 pgvector RAG 활성화 (추가 메모리 필요)
+        description: 로컬 임베딩 서비스와 pgvector RAG 활성화 (추가 메모리 필요) — 끄면 재계획·대안이 규칙 랭킹으로만 돈다
+        type: boolean
+        default: true
+      push_mode:
+        description: 푸시 발송 모드 — keep 은 시크릿에 저장된 값 유지, expo 는 Expo 푸시로 실제 발송, off 는 끔
+        type: choice
+        options: [keep, off, expo]
+        default: keep
+      poi_close_missing:
+        description: POI 공유본 적재 때 그 출처의 ACTIVE 중 공유본에 없는 것을 LOST 로 내린다 (기본 off — upsert 만). 비율 가드(409)에 걸리면 스텝이 실패하고 아무것도 닫지 않는다
+        type: boolean
+        default: false
+      poi_close_missing_dry_run:
+        description: 퇴출하면 몇 건이 닫힐지만 서버에 묻고(닫지 않음) 평소대로 upsert 한다 — 결과는 배포 요약의 "POI load" 줄. poi_close_missing 이 켜져 있으면 무시
         type: boolean
         default: false
 
@@ -38,53 +51,11 @@ env:
   TF_VERSION: '1.13.5'
 
 jobs:
+  # 오프라인 검증은 PR 게이트와 같은 잡이다 — 여기 복제하지 않는다(infra-validate.yml).
   validate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false
-      - uses: azure/setup-helm@v4.3.1
-        with:
-          version: v3.19.0
-      - name: Validate deployment contracts and Helm manifests
-        run: |
-          python -m pip install -r infra/requirements-test.txt
-          python -m coverage run --rcfile=infra/.coveragerc -m unittest discover -s infra/tests -v
-          python -m coverage run --rcfile=infra/.coveragerc --append -m unittest discover -s deploy/eks/tests -v
-          python -m coverage report --rcfile=infra/.coveragerc
-          python -m unittest discover -s infra/bootstrap/tests -v
-          python -m unittest discover -s deploy/eks/chart/tests -v
-          for environment in dev prd; do
-            helm lint --strict deploy/eks/chart -f "deploy/eks/chart/values-$environment.yaml" \
-              --set images.backend.repository=example/backend,images.backend.tag=sha123 \
-              --set images.ai.repository=example/ai,images.ai.tag=sha123 \
-              --set config.databaseHost=database.example.internal,config.redisHost=redis.example.internal \
-              --set gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc \
-              --set gateway.hostname=api.example.com
-          done
-      - uses: actions/setup-java@v4
-        if: inputs.mode == 'apply' && inputs.deploy_application
-        with:
-          distribution: temurin
-          java-version: '25'
-      - name: Verify backend shutdown configuration
-        if: inputs.mode == 'apply' && inputs.deploy_application
-        working-directory: backend
-        run: ./gradlew :app:test --tests 'com.trippilot.app.config.AsyncConfigTest' --no-daemon
-      - name: Validate Terraform offline
-        working-directory: infra/terraform/stack
-        run: |
-          terraform fmt -check -recursive ..
-          terraform init -backend=false -lockfile=readonly
-          terraform validate
-          terraform test
+    uses: ./.github/workflows/infra-validate.yml
+    with:
+      verify_backend_shutdown: ${{ inputs.mode == 'apply' && inputs.deploy_application }}
 
   deploy:
     needs: validate
@@ -100,6 +71,9 @@ jobs:
       DEPLOY_MODE: ${{ inputs.mode }}
       DEPLOY_APPLICATION: ${{ inputs.deploy_application }}
       EMBEDDING_ENABLED: ${{ inputs.embedding_enabled }}
+      PUSH_MODE_INPUT: ${{ inputs.push_mode }}
+      POI_CLOSE_MISSING: ${{ inputs.poi_close_missing }}
+      POI_CLOSE_MISSING_DRY_RUN: ${{ inputs.poi_close_missing_dry_run }}
       DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
@@ -216,8 +190,10 @@ jobs:
         run: |
           embedding_args=()
           if [ "$EMBEDDING_ENABLED" = true ]; then embedding_args+=(--embedding-enabled); fi
+          push_args=()
+          if [ "$PUSH_MODE_INPUT" != keep ]; then push_args+=(--push-mode "$PUSH_MODE_INPUT"); fi
           python3 deploy/eks/runtime.py sync-secrets \
-            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --namespace trippilot "${embedding_args[@]}"
+            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --namespace trippilot "${embedding_args[@]}" "${push_args[@]}"
           python3 deploy/eks/runtime.py render-values \
             --outputs "$RUNNER_TEMP/trippilot-outputs.json" --image-tag "$IMAGE_TAG" \
             --certificate-arn "$ACM_CERTIFICATE_ARN" --hostname "$API_HOSTNAME" \
@@ -234,15 +210,33 @@ jobs:
             -f "deploy/eks/chart/values-$DEPLOY_ENVIRONMENT.yaml" \
             -f "$RUNNER_TEMP/trippilot-values.json" \
             --set-string "rolloutNonce=$DEPLOY_RUN_ID" \
-            --atomic --wait --timeout 20m --history-max 10
+            --atomic --wait --timeout 30m --history-max 10
       - name: Verify in-cluster API and AI connectivity
         if: steps.config.outputs.deploy_application == 'true'
         run: python3 deploy/eks/runtime.py smoke --namespace trippilot
+      # 멱등 — 이미 들어간 문서는 건너뛰므로 재배포마다 돌려도 새 문서만 임베딩한다.
+      # 첫 적재(KB-5 1,470건)는 임베딩 파드 CPU 로 수 분 걸린다.
+      - name: Load the Plan-B knowledge base
+        if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled
+        timeout-minutes: 65  # Job 대기 3600s(runtime_kb.DEADLINE_SEC) + 정리
+        run: python3 deploy/eks/runtime.py load-kb --namespace trippilot
+      # 공유본(ai/data/collected_pois.json)을 백엔드 DB 에 upsert — 리뷰·머지된 문서가 이미지에 들어간 뒤라
+      # 가이드 §자동화하지 않은 이유의 완충(공유본 PR 리뷰)은 그대로다. 사람의 port-forward 단계만 대체한다.
+      - name: Load the POI shared document into the backend
+        id: poi-load
+        if: steps.config.outputs.deploy_application == 'true'
+        timeout-minutes: 25  # Job 대기 1200s(runtime_pois.DEADLINE_SEC) + 정리
+        run: |
+          poi_args=()
+          if [ "$POI_CLOSE_MISSING" = true ]; then poi_args+=(--close-missing); fi
+          if [ "$POI_CLOSE_MISSING_DRY_RUN" = true ]; then poi_args+=(--close-missing-dry-run); fi
+          python3 deploy/eks/runtime.py load-pois --namespace trippilot "${poi_args[@]}"
       - name: Deployment summary
         if: success()
         env:
           TF_STATE_BUCKET: ${{ steps.config.outputs.state_bucket }}
           DEPLOYED: ${{ steps.config.outputs.deploy_application }}
+          POI_SUMMARY: ${{ steps.poi-load.outputs.summary }}
         run: |
           {
             echo "### TripPilot AWS $DEPLOY_ENVIRONMENT"
@@ -252,6 +246,7 @@ jobs:
             if [ "$DEPLOYED" = true ]; then
               echo "- Image tag: $IMAGE_TAG"
               echo "- API: https://$API_HOSTNAME"
+              echo "- POI load: ${POI_SUMMARY:-(skipped)}"
               echo "- Load balancer DNS (point API hostname here):"
               kubectl -n trippilot get service gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
               echo

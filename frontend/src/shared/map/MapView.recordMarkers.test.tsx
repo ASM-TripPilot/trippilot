@@ -45,7 +45,7 @@ const CENTER: MapCenter = { lat: 35.1532, lng: 129.1187 };
 
 /** 프리뷰와 같은 로컬 번들 사진(number source). jest 에서는 `{ testUri }` 객체로 온다 — SVG <Image href>
  *  가 받는다(원격 URL 은 TRIP-634 밖). */
-const PHOTO = require('@/assets/itinerary/draft-preview-1.jpg');
+const PHOTO = require('@/shared/ui/placeholders/home/hero-view.jpg');
 
 const GESTURE_TOGGLES = [
   'isScrollGesturesEnabled',
@@ -197,117 +197,115 @@ describe('🔴 AC-5 — stay 마커: 빨강 + 흰 bed, 번호 없음', () => {
 });
 
 describe('🔴 AC-6 — 방문구간 연결선: visited 구간만 잇는다', () => {
-  it('visited 2개만 순서대로(planned·stay 는 선 밖) — j01 형', () => {
-    // Arrange — v1·v2 는 visited, 3·4 는 planned, 5 는 stay. 선은 1→2 만.
-    const pins: MapPin[] = [
-      { number: 1, lat: 35.1, lng: 129.1, kind: 'visited', imageUrl: PHOTO },
-      { number: 2, lat: 35.11, lng: 129.11, kind: 'visited', imageUrl: PHOTO },
-      { number: 3, lat: 35.12, lng: 129.12, kind: 'planned' },
-      { number: 4, lat: 35.13, lng: 129.13, kind: 'planned' },
-      { number: 5, lat: 35.14, lng: 129.14, kind: 'stay' },
-    ];
-
-    // Act
+  // TRIP-1356 — 같은 coords 블록 3벌(jscpd 44)을 표로 모았다. 기대값은 선이 지나는 좌표를 순서대로.
+  it.each<[string, MapPin[], [number, number][]]>([
+    [
+      'visited 2개만 순서대로(planned·stay 는 선 밖) — j01 형',
+      [
+        { number: 1, lat: 35.1, lng: 129.1, kind: 'visited', imageUrl: PHOTO },
+        {
+          number: 2,
+          lat: 35.11,
+          lng: 129.11,
+          kind: 'visited',
+          imageUrl: PHOTO,
+        },
+        { number: 3, lat: 35.12, lng: 129.12, kind: 'planned' },
+        { number: 4, lat: 35.13, lng: 129.13, kind: 'planned' },
+        { number: 5, lat: 35.14, lng: 129.14, kind: 'stay' },
+      ],
+      [
+        [35.1, 129.1],
+        [35.11, 129.11],
+      ],
+    ],
+    [
+      '🟢 짝 — kind 미전달 전핀은 전 구간을 잇는다(무회귀)',
+      [
+        { number: 1, lat: 35.1, lng: 129.1 },
+        { number: 2, lat: 35.12, lng: 129.12 },
+      ],
+      [
+        [35.1, 129.1],
+        [35.12, 129.12],
+      ],
+    ],
+    [
+      'visited 3개(j04 형)면 3점 전부 순서대로',
+      [
+        { number: 1, lat: 35.1, lng: 129.1, kind: 'visited', imageUrl: PHOTO },
+        {
+          number: 2,
+          lat: 35.11,
+          lng: 129.11,
+          kind: 'visited',
+          imageUrl: PHOTO,
+        },
+        {
+          number: 3,
+          lat: 35.12,
+          lng: 129.12,
+          kind: 'visited',
+          imageUrl: PHOTO,
+        },
+      ],
+      [
+        [35.1, 129.1],
+        [35.11, 129.11],
+        [35.12, 129.12],
+      ],
+    ],
+  ])('%s', (_label, pins, expected) => {
     render(<MapView center={CENTER} pins={pins} />);
 
-    // Assert — 경로선 coords 는 visited 좌표 2개뿐(색·픽셀 아니라 배열로 잠근다).
-    const path = screen.getByTestId('map-path');
-    const coords = path.props.coords as {
-      latitude: number;
-      longitude: number;
-    }[];
-    expect(coords).toHaveLength(2);
-    expect(coords[0]).toEqual({ latitude: 35.1, longitude: 129.1 });
-    expect(coords[1]).toEqual({ latitude: 35.11, longitude: 129.11 });
-  });
-
-  it('🟢 짝 — kind 미전달 전핀은 전 구간을 잇는다(무회귀)', () => {
-    // Arrange — kind 없는 핀 둘. 현행 거동(둘 다 선에 포함)이 그대로여야 한다.
-    const pins: MapPin[] = [
-      { number: 1, lat: 35.1, lng: 129.1 },
-      { number: 2, lat: 35.12, lng: 129.12 },
-    ];
-
-    // Act
-    render(<MapView center={CENTER} pins={pins} />);
-
-    // Assert
+    // 경로선 coords 는 기대 좌표 배열과 순서까지 같다(색·픽셀 아니라 배열로 잠근다).
     const coords = screen.getByTestId('map-path').props.coords as {
       latitude: number;
       longitude: number;
     }[];
-    expect(coords).toHaveLength(2);
-    expect(coords[0]).toEqual({ latitude: 35.1, longitude: 129.1 });
-    expect(coords[1]).toEqual({ latitude: 35.12, longitude: 129.12 });
-  });
-
-  it('visited 3개(j04 형)면 3점 전부 순서대로', () => {
-    // Arrange — 전부 visited → 선이 1→2→3.
-    const pins: MapPin[] = [
-      { number: 1, lat: 35.1, lng: 129.1, kind: 'visited', imageUrl: PHOTO },
-      { number: 2, lat: 35.11, lng: 129.11, kind: 'visited', imageUrl: PHOTO },
-      { number: 3, lat: 35.12, lng: 129.12, kind: 'visited', imageUrl: PHOTO },
-    ];
-
-    // Act
-    render(<MapView center={CENTER} pins={pins} />);
-
-    // Assert
-    const coords = screen.getByTestId('map-path').props.coords as unknown[];
-    expect(coords).toHaveLength(3);
+    expect(coords).toEqual(
+      expected.map(([latitude, longitude]) => ({ latitude, longitude }))
+    );
   });
 });
 
 describe('🔴 AC-7 — 줌/축척 opt-in(showZoomControls·showScaleBar), viewOnly 와 독립', () => {
-  it('전달하면 map-native 가 isShowZoomControls·isShowScaleBar 를 true 로 받는다', () => {
-    // Act
-    render(
-      <MapView
-        center={CENTER}
-        pins={[{ number: 1, lat: 35.1, lng: 129.1 }]}
-        showZoomControls
-        showScaleBar
-      />
-    );
+  const PIN = [{ number: 1, lat: 35.1, lng: 129.1 }];
 
-    // Assert
-    const native = screen.getByTestId('map-native');
-    expect(native.props.isShowZoomControls).toBe(true);
-    expect(native.props.isShowScaleBar).toBe(true);
-  });
-
-  it('🟢 짝 — 미전달이면 명시적 false(기본 미표시 — SDK native default true 를 덮는다)', () => {
-    // 왜 undefined 가 아니라 false 인가: 네이버 SDK 는 두 컨트롤 native default 가 true 라, prop 을
-    // 안 주면(undefined) 컨트롤이 저절로 뜬다. "기본 미표시"를 지키려면 명시적으로 false 를 내려야 한다.
-    render(
-      <MapView center={CENTER} pins={[{ number: 1, lat: 35.1, lng: 129.1 }]} />
-    );
-
-    const native = screen.getByTestId('map-native');
-    expect(native.props.isShowZoomControls).toBe(false);
-    expect(native.props.isShowScaleBar).toBe(false);
-  });
-
-  it('viewOnly 와 독립 — viewOnly 는 컨트롤을 켜지 않고(제스처만), 컨트롤은 제스처 off 와 무관하게 켜진다', () => {
-    // Arrange1 — viewOnly 만(컨트롤 prop 없음): 제스처 4토글 off, 컨트롤은 false.
-    const { rerender } = render(
-      <MapView
-        center={CENTER}
-        pins={[{ number: 1, lat: 35.1, lng: 129.1 }]}
-        viewOnly
-      />
+  // TRIP-1356 — 세 it(전달 true · 미전달 명시 false · viewOnly 독립)을 한 흐름으로 합쳤다. 단언은 하나도 줄이지 않았다.
+  it('전달하면 true, 미전달이면 명시적 false(SDK native default true 를 덮는다), viewOnly 와 독립이다', () => {
+    // 1) 전달하면 map-native 가 isShowZoomControls·isShowScaleBar 를 true 로 받는다.
+    const first = render(
+      <MapView center={CENTER} pins={PIN} showZoomControls showScaleBar />
     );
     let native = screen.getByTestId('map-native');
+    expect(native.props.isShowZoomControls).toBe(true);
+    expect(native.props.isShowScaleBar).toBe(true);
+    first.unmount();
+
+    // 2) 짝 — 미전달이면 명시적 false. undefined 가 아닌 이유: 네이버 SDK 는 두 컨트롤 native default 가 true 라
+    //    prop 을 안 주면 컨트롤이 저절로 뜬다. "기본 미표시"를 지키려면 명시적으로 false 를 내려야 한다.
+    const second = render(<MapView center={CENTER} pins={PIN} />);
+    native = screen.getByTestId('map-native');
+    expect(native.props.isShowZoomControls).toBe(false);
+    expect(native.props.isShowScaleBar).toBe(false);
+    second.unmount();
+
+    // 3) viewOnly 만(컨트롤 prop 없음): 제스처 4토글 off, 컨트롤은 false.
+    const { rerender } = render(
+      <MapView center={CENTER} pins={PIN} viewOnly />
+    );
+    native = screen.getByTestId('map-native');
     expect(native.props.isShowZoomControls).toBe(false);
     for (const toggle of GESTURE_TOGGLES) {
       expect(native.props[toggle]).toBe(false);
     }
 
-    // Arrange2 — viewOnly + 컨트롤: 제스처는 여전히 off, 컨트롤은 true(둘이 독립).
+    // 4) viewOnly + 컨트롤: 제스처는 여전히 off, 컨트롤은 true(둘이 독립).
     rerender(
       <MapView
         center={CENTER}
-        pins={[{ number: 1, lat: 35.1, lng: 129.1 }]}
+        pins={PIN}
         viewOnly
         showZoomControls
         showScaleBar

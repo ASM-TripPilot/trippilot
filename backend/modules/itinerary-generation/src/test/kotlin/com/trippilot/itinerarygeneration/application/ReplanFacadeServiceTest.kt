@@ -178,11 +178,12 @@ class ReplanFacadeServiceTest : StringSpec({
         rejections: FakeRejectionStore = FakeRejectionStore(),
         regions: RegionLookupFacade = regionsWith(jejuCenter),
         snapshots: FreezeAllSnapshots = FreezeAllSnapshots(),
+        trips: TripFacade = replanTrips,
     ): Fx {
         repo.byTrip[trip] = itinerary()
-        val revisions = genRevisions(repo, replanTrips, clock)
+        val revisions = genRevisions(repo, trips, clock)
         val changeLogs = CapturingChangeLogs()
-        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, regions, rejections, snapshots, clock), repo, revisions, changeLogs)
+        return Fx(ReplanFacadeService(trips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, regions, rejections, snapshots, clock), repo, revisions, changeLogs)
     }
 
     fun command(fullDay: Boolean = false, completed: List<String> = emptyList()) = ReplanCommand(
@@ -206,6 +207,24 @@ class ReplanFacadeServiceTest : StringSpec({
         fixture(agent, rejections = store).svc.propose(command())
 
         agent.inputs.single().rejections shouldBe listOf(RejectedPoi(rejected, RejectedPoi.Kind.SWAPPED_OUT, 2))
+    }
+
+    "재계획도 여행에서 고른 취향으로 짠다 — 생성과 같은 척도(BR-U1-38)" {
+        val withSnapshot = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(today, today.plusDays(1))
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+                today, today.plusDays(1), refs("제주"), "친구", 500_000, emptyList(),
+                preferenceSnapshot = mapOf("styles" to listOf("힐링"), "activities" to emptyList<String>()),
+            )
+        }
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent, trips = withSnapshot).svc.propose(command())
+
+        val sent = agent.inputs.single().preferenceProfile
+        sent.styles shouldBe listOf("힐링")         // 계정(미식) 아님
+        sent.activities shouldBe emptyList()        // 비운 축은 비운 채로
+        sent.transportModes shouldBe listOf("렌터카") // 여행이 안 정한 축은 계정
     }
 
     // ───── 기준점 사다리 (TRIP-963) ─────────────────────────────────────────
@@ -252,6 +271,38 @@ class ReplanFacadeServiceTest : StringSpec({
         agent.inputs.single().originLng shouldBe 126.56
     }
 
+    /**
+     * **다목적지면 그 날의 목적지 중심으로 내려간다.** 종전 마지막 단은 첫 목적지라 "서울 1박 + 인천 1박"의
+     * 2일차 재계획이 서울에 매달렸다 — 생성 경로(`dayAnchors`, PR #932)와 같은 사다리로 맞춘다.
+     * **좌표로 단언한다** — "서울이 아니다"만 보면 사다리가 끝까지 떨어진 경우와 구분되지 않는다(anti-patterns).
+     */
+    "숙소·좌표가 없는 다목적지 — 2일차 재계획은 그 날 목적지(인천) 중심에 매단다" {
+        val seoul = RegionCenter(37.5665, 126.9780)
+        val incheon = RegionCenter(37.4563, 126.7052)
+        val seoulThenIncheon = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(today, today.plusDays(2))
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+                today, today.plusDays(2),
+                listOf(TripDestinationRef("서울", null, 1), TripDestinationRef("인천", null, 1)),
+                "친구", 500_000, emptyList(),
+            )
+        }
+        val byName = object : RegionLookupFacade {
+            override fun codesOf(regionName: String) = emptyList<String>()
+            override fun isSelectableCode(regionCode: String) = false
+            override fun centerOf(regionName: String) = mapOf("서울" to seoul, "인천" to incheon)[regionName]
+            override fun centerOfCode(regionCode: String) = centerOf(regionCode)
+        }
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent, regions = byName, trips = seoulThenIncheon).svc.propose(
+            command(fullDay = true).copy(targetDate = today.plusDays(1), originLat = null, originLng = null),
+        )
+
+        agent.inputs.single().originLat shouldBe incheon.lat
+        agent.inputs.single().originLng shouldBe incheon.lng
+    }
+
     "지금 이후만 다시 짤 때 — 지나간 슬롯과 시각 고정이 잠긴다" {
         val agent = Agent(proposal(replacement))
         val svc = fixture(agent).svc
@@ -271,6 +322,48 @@ class ReplanFacadeServiceTest : StringSpec({
         svc.propose(command(fullDay = true))
 
         agent.inputs.single().lockedBlocks.map { it.poiId } shouldContainExactly listOf(fixedNoon)
+    }
+
+    /**
+     * **진행 중인 슬롯은 잠그지 않는다** — '지금 이후만'의 잠금 기준은 "시작했나"가 아니라 "시각상 끝났나"다.
+     *
+     * 종전 규칙(`startAt < now`)은 18:19–19:34 저녁 식사를 18:30 에 잠갔고, AI 는 19:34 뒤 하루 창 끝(21:00)
+     * 까지만 채울 수 있어 대개 "대안 없음"이었다(2026-10-04 실측 8건 중 4건, 전부 `no_slot_after_from_instant`).
+     * 사유가 휴무·만석이면 **바로 그 진행 중 장소가 문제**인데 잠겨서 바꿀 수도 없었다. 풀어도 지난 시각이
+     * 새로 채워지지는 않는다 — AI 는 새 방문을 `from_instant` 이후에만 넣는다.
+     *
+     * 자정 넘김(`endsNextDay`) 슬롯의 `endAt` 은 **익일 시각**이라 지금보다 작아 보여도 끝난 것이 아니다.
+     */
+    "지금 이후만 — 진행 중 슬롯은 풀고 시각상 끝난 슬롯만 잠근다(자정 넘김은 안 끝났다)" {
+        val lunch = UUID.randomUUID()
+        val cafe = UUID.randomUUID()
+        val dinner = UUID.randomUUID()
+        val nightMarket = UUID.randomUUID()
+        val agent = Agent(proposal(replacement))
+        val f = fixture(agent)
+        f.repo.byTrip[trip] = Itinerary.create(
+            trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(
+                ItineraryDay.of(
+                    today, 0,
+                    listOf(
+                        slot(lunch, "12:00", "13:30", order = 0),
+                        slot(cafe, "17:00", "18:19", order = 1),
+                        slot(dinner, "18:19", "19:34", order = 2),
+                        VisitSlot.of(nightMarket, null, 3, LocalTime.parse("23:00"), LocalTime.parse("01:00"), endsNextDay = true),
+                    ),
+                ),
+            ),
+            now, GenerationState.COMPLETE,
+        )
+
+        f.svc.propose(command().copy(fromInstant = Instant.parse("2026-08-11T09:30:00Z"))) // KST 18:30 — 저녁 식사 중
+        f.svc.propose(command().copy(fromInstant = Instant.parse("2026-08-11T10:34:00Z"))) // KST 19:34 — 저녁 막 끝남
+
+        // 18:30: 끝난 두 곳만. 저녁(진행 중)·야시장(01:00 은 익일)은 다시 짤 대상이다.
+        agent.inputs[0].lockedBlocks.map { it.poiId } shouldContainExactly listOf(lunch, cafe)
+        // 19:34: 끝나는 시각 == 지금 이면 끝난 것이다(`endAt <= now`).
+        agent.inputs[1].lockedBlocks.map { it.poiId } shouldContainExactly listOf(lunch, cafe, dinner)
     }
 
     // 완료 실적은 C10 만 안다 — 전달이 끊기면 이미 다녀온 곳이 재계획에서 사라진다.
@@ -478,7 +571,17 @@ class ReplanFacadeServiceTest : StringSpec({
     }
 
     "잠근 채 이어받은 슬롯만 원본의 위반 표시를 상속한다 — 재배치 슬롯은 새로 푼 것이다" {
-        val agent = Agent(proposal(fixedNoon, evening, replacement))
+        // 잠금은 원 시각 그대로 돌아온다(HC3) — 상속은 (장소, 시작 시각)으로 짝짓는다.
+        val agent = Agent(
+            listOf(
+                DaySchedule(
+                    today,
+                    listOf(
+                        VisitSlotDisplay(fixedNoon, LocalTime.parse("12:00"), LocalTime.parse("13:30"), false, null, true),
+                    ) + proposal(evening, replacement).single().slots,
+                ),
+            ),
+        )
         val f = fixture(agent)
         // 시각 고정(잠김)과 저녁(잠기지 않음) 둘 다 위반을 단 원본으로 바꿔 둔다.
         f.repo.byTrip[trip] = Itinerary.create(
@@ -505,6 +608,45 @@ class ReplanFacadeServiceTest : StringSpec({
         byPoi.getValue(evening).hasViolation shouldBe false
         byPoi.getValue(evening).violationReason.shouldBeNull()
         byPoi.getValue(replacement).hasViolation shouldBe false
+    }
+
+    "같은 장소가 하루 두 번 잠기면 각 잠금이 자기 위반 표시를 잇는다 — 첫 슬롯 값으로 덮지 않는다" {
+        val cafe = UUID.randomUUID()
+        val agent = Agent(
+            listOf(
+                DaySchedule(
+                    today,
+                    listOf(
+                        VisitSlotDisplay(cafe, LocalTime.parse("09:00"), LocalTime.parse("10:00"), false, null, true),
+                        VisitSlotDisplay(cafe, LocalTime.parse("12:00"), LocalTime.parse("13:30"), false, null, true),
+                    ) + proposal(replacement).single().slots,
+                ),
+            ),
+        )
+        val f = fixture(agent)
+        // 아침에 다녀온 카페(지나감·위반 없음)와 점심 예약(시각 고정·위반 있음) — 같은 장소다.
+        f.repo.byTrip[trip] = Itinerary.create(
+            trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(
+                ItineraryDay.of(
+                    today, 0,
+                    listOf(
+                        slot(cafe, "09:00", "10:00", order = 0),
+                        slot(cafe, "12:00", "13:30", isFixed = true, order = 1, hasViolation = true, violationReason = "영업시간 밖"),
+                    ),
+                ),
+            ),
+            now, GenerationState.COMPLETE,
+        )
+
+        val out = f.svc.propose(command())!!
+
+        agent.inputs.single().lockedBlocks.map { it.poiId to it.start } shouldContainExactly
+            listOf(cafe to LocalTime.parse("09:00"), cafe to LocalTime.parse("12:00"))
+        val byStart = out.slots.filter { it.poiId == cafe }.associateBy { it.startAt }
+        byStart.getValue(LocalTime.parse("09:00")).hasViolation shouldBe false
+        byStart.getValue(LocalTime.parse("12:00")).hasViolation shouldBe true
+        byStart.getValue(LocalTime.parse("12:00")).violationReason shouldBe "영업시간 밖"
     }
 
     "반영이 위반 표시를 일정까지 나른다 — 이 관통이 없으면 반영 순간 배지가 사라진다" {
@@ -566,7 +708,7 @@ class ReplanFacadeServiceTest : StringSpec({
 })
 
 /** 코드 없는 목적지 — 기존 테스트는 전부 이름 경로다(코드 경로는 `RegionCodeAnchorTest`). */
-private fun refs(vararg names: String) = names.map { TripDestinationRef(it, null) }
+private fun refs(vararg names: String) = names.map { TripDestinationRef(it, null, 0) }
 
 /**
  * 초안 맵을 **실제 JSON 을 거쳐** 되읽는다. Hibernate 가 `@JdbcTypeCode(SqlTypes.JSON)` 컬럼에

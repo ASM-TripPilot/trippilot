@@ -11,7 +11,8 @@
   ⑥ 계약 위반 행 1건은 스킵 — 풀 전체를 잃지 않는다
   ⑦ 스킵을 **값으로도 낸다** (TRIP-537, lookup_by_ids): 요청 대비 누락 id + 사유
      (not_found=백엔드가 안 줌 / mapping_failed=줬는데 못 읽음 + 원인 필드명)
-  ⑧ 카테고리 enum 드리프트 — 백엔드 정본과 경계 코드 집합이 같다
+  ⑧ 카테고리 enum 드리프트 — 백엔드 정본과 경계 코드 집합이 같다. 출처 enum 은 값마다 뜻이
+     명시돼 있고, 모르는 출처는 행을 살리되 경고로 드러낸다 (TRIP-1224)
 """
 
 from __future__ import annotations
@@ -26,8 +27,10 @@ from pathlib import Path
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import DataQuality, PoiCategory, PoiSource
 from trippilot.poi_curation.adapters.backend_poi_db import (
+    _SOURCE_MAP,
     BackendPoiDb,
     BackendPoiDbError,
+    _warn_unknown_source,
 )
 
 
@@ -173,6 +176,51 @@ def test_분리_영업은_앞_창만_쓴다() -> None:
     (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
     assert len(poi.open_hours) == 7
     assert all((oh.open_min, oh.close_min) == (540, 780) for oh in poi.open_hours)
+
+
+# ── 원문 칸에 실려 오는 휴무 (TRIP-1226) ─────────────────────────────────
+
+
+def test_원문_칸의_휴무가_런타임에_반영된다() -> None:
+    """수집이 영업 원문 뒤에 휴무 원문을 붙여 보낸다 — 갈라 읽지 않으면 월요일에도 영업이다.
+
+    종전에는 이 칸을 휴무 없이(`parse_open_hours(원문, None)`) 읽어서, 수집 때 반영된
+    주간 휴무가 런타임에 사라졌다(2026-10-02 실측: 주간 휴무 FOOD 312건).
+    """
+    db, _ = _db([_row(opening_hours="09:00~18:00\n휴무: 매주 월요일")])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert [oh.day_of_week for oh in poi.open_hours] == [1, 2, 3, 4, 5, 6]
+    assert all((oh.open_min, oh.close_min) == (540, 1080) for oh in poi.open_hours)
+
+
+def test_박물관_휴무_문구는_런타임에도_월요일만_뺀다() -> None:
+    """연 단위 휴일이 붙어도 매주 휴무는 읽는다(TRIP-1230) — 종전엔 통째로 포기해 창까지 잃었다."""
+    db, _ = _db([_row(opening_hours="09:00~18:00\n휴무: 매주 월요일, 1월 1일, 설날 및 추석 당일")])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert [oh.day_of_week for oh in poi.open_hours] == [1, 2, 3, 4, 5, 6]
+
+
+@pytest.mark.parametrize("rest", [
+    "공연 별로 상이함",     # 어느 날 닫는지 모른다
+    "동절기 휴장",          # 요일 없는 휴무
+])
+def test_해석할_수_없는_휴무면_수집_때처럼_포기한다(rest: str) -> None:
+    """요일을 못 읽는 휴무는 주간 스케줄로 못 쓴다 — 7일 영업으로 읽으면 닫힌 날에 일정이 들어간다.
+
+    대가: 이 POI 는 "정보 없음"이라 HC1 이 안 걸린다(종전엔 휴무가 칸에 없어 7일 창이었다).
+    그래도 수집과 같게 읽는다 — 결정·실측은 data/README 「휴무를 해석 못 하는 POI」.
+    """
+    db, _ = _db([_row(opening_hours=f"09:00~18:00\n휴무: {rest}")])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert poi.open_hours == ()
+
+
+def test_구분자_없는_옛_원문은_종전대로_읽는다() -> None:
+    """백필 전 적재분·다른 출처 원문 — 휴무 칸이 없으면 종전과 같은 7일이다(하위호환)."""
+    db, _ = _db([_row(opening_hours="10:00~22:00<br>※ 휴무일 및 운영시간은 업체 사정에 따라 변동")])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert len(poi.open_hours) == 7
+    assert all((oh.open_min, oh.close_min) == (600, 1320) for oh in poi.open_hours)
 
 
 def test_manual_source_maps_to_seed() -> None:
@@ -365,3 +413,43 @@ def test_backend_data_quality_values_are_known_to_ai() -> None:
     line = next(ln for ln in controller.splitlines() if "dataQuality =" in ln)
     emitted = set(re.findall(r'"([A-Z_]+)"', line))
     assert emitted and emitted <= {q.value for q in DataQuality}
+
+
+def test_every_backend_source_has_an_explicit_ai_meaning(caplog: pytest.LogCaptureFixture) -> None:
+    """백엔드 `PoiSource` 값마다 AI 쪽 뜻이 **명시돼** 있다 — MANUAL 만 SEED, 나머지는 정형 수집분.
+
+    모르는 출처를 PLACES_API 로 읽는 것은 안전망일 뿐이고(아래 테스트 — 경고가 난다), 뜻은 값마다
+    `_SOURCE_MAP` 에 적는다. 새 출처가 WEB 처럼 confidence 를 요구하는 성격인지는 사람이 정해야
+    하기 때문이다(LOCALDATA 일반음식점을 들이며 확인, TRIP-1224). 백엔드가 값을 늘리면 여기서
+    깨진다 — ai-ci 가 `Poi.kt` 변경에도 돌아 **그 백엔드 PR 에서** 깨진다.
+    """
+    m = re.search(r"enum class PoiSource \{([^}]*)\}", _backend_source(_POI_KT))
+    assert m is not None
+    backend = {v.strip() for v in m.group(1).split(",") if v.strip()}
+    assert backend == set(_SOURCE_MAP)
+
+    db, _ = _db([_row(poi_id=s, source=s) for s in sorted(backend)])
+    with caplog.at_level("WARNING"):
+        got = {str(p.poi_id): p.source for p in db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)}
+    assert got == {s: PoiSource.SEED if s == "MANUAL" else PoiSource.PLACES_API for s in backend}
+    assert not [r for r in caplog.records if "모르는 POI 출처" in r.getMessage()]
+
+
+def test_unknown_source_keeps_the_row_but_is_warned_once_per_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """모르는 출처는 행을 살려 PLACES_API 로 읽되 조용히 흡수하지 않는다 — 값마다 한 번 경고.
+
+    백엔드가 출처를 늘려 머지했는데 `_SOURCE_MAP` 이 못 따라온 사이의 런타임 안전망이다. 한
+    응답에 같은 출처가 수백 행 오므로 경고는 값마다 첫 1회만 낸다(다음 요청도 조용하다).
+    """
+    _warn_unknown_source.cache_clear()
+    db, _ = _db([_row(poi_id="a", source="OVERTURE"), _row(poi_id="b", source="OVERTURE"),
+                 _row(poi_id="c", source=None)])
+    with caplog.at_level("WARNING"):
+        pois = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+        db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert [p.source for p in pois] == [PoiSource.PLACES_API] * 3
+    warned = [r.getMessage() for r in caplog.records if "모르는 POI 출처" in r.getMessage()]
+    assert len(warned) == 2
+    assert any("'OVERTURE'" in w for w in warned) and any("None" in w for w in warned)

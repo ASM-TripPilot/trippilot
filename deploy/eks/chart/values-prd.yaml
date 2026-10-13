@@ -1,4 +1,6 @@
 environment: prd
+config:
+  scheduleDeadlineEnforced: true
 backend:
   replicas: 2
 ai:

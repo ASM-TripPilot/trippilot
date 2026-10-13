@@ -3,7 +3,7 @@ import {
   ItineraryGenerationState,
   ItineraryStatus,
   type ItineraryDaysItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,

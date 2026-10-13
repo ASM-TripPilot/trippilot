@@ -469,6 +469,14 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
         a["category"].isNull shouldBe false
         a.has("tags") shouldBe true
         a.has("duration") shouldBe false           // INV-3
+        // 좌표 — 화면이 차선책 핀을 찍는 값. 온디맨드 후보(SlotCandidate)는 TRIP-1063 으로 이미
+        // 싣는데 차선책만 빠져 있었다(같은 카드·같은 지도를 쓰는데 응답 모양이 갈렸다).
+        // **값 동치로 잰다** — null 여부만 보면 lat/lng 뒤바꿈을 못 잡는다(둘 다 non-null 이라
+        // 통과하고, 화면은 경도를 위도로 찍어 엉뚱한 곳에 핀을 꽂는다). 같은 응답의 슬롯 본체가
+        // 같은 정본에서 온 좌표라 비교 기준이 된다.
+        val altPlace = call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"][1]
+        a["lat"].asDouble() shouldBe altPlace["lat"].asDouble()
+        a["lng"].asDouble() shouldBe altPlace["lng"].asDouble()
     }
 
     /** 대부분의 슬롯이 이 경로다 — 여기가 깨지면 일정 조회 전체가 죽는데, 값 있는 표본만 보면 초록이다. */

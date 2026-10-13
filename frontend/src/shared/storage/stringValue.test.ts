@@ -10,8 +10,8 @@ import { readStringValue, writeStringValue } from './stringValue';
  *  - 없으면 null, 쓴 값을 같은 키로 읽으면 그대로, 키끼리 안 섞인다.
  *  - 값을 **그대로** 저장한다(JSON 으로 감싸지 않는다) — h06 정렬 기억은 `'start'` 그 문자열이다.
  *  - 넘겨받은 키로만 SecureStore 를 부르고 토큰 키는 건드리지 않는다(SEC-09 키 분리, idSet 동형).
- *  - `@/shared/storage` 배럴에서 재수출하지 않는다 — 여러 테스트가 배럴을 통째로 목으로 갈아끼워서,
- *    배럴에 얹으면 그 목들이 이 함수를 지운다(idSet 과 같은 이유).
+ *  - `@/shared/storage` 공개 API(배럴)로 나간다(TRIP-1157 — 옛 "딥 경로 전용" 계약 폐기). 배럴을 통째로 목으로
+ *    갈아끼우는 테스트는 `jest.requireActual` 로 실물을 펼친 뒤 덮는다(안 그러면 이 함수가 지워진다).
  *
  * 3동작: 준비(SecureStore 를 메모리 Map 으로) → 실행(읽기/쓰기) → 단언(값·호출 인자).
  */
@@ -76,10 +76,10 @@ describe('🔴 stringValue · 키별 문자열 1개 읽기/쓰기 (AC-12)', () =
     expect(keys).not.toContain('refreshToken');
   });
 
-  it('@/shared/storage 배럴에서 재수출하지 않는다(딥 경로 전용)', () => {
-    // 긍정 짝 — 배럴은 토큰 함수를 그대로 낸다(빈 배럴로 공짜 통과 차단).
+  it('@/shared/storage 공개 API 가 토큰 함수와 함께 문자열 읽기/쓰기를 낸다(TRIP-1157)', () => {
+    // 배럴의 함수가 이 모듈의 것과 같은 참조다 — 다른 구현을 재수출하면 red.
     expect(storageBarrel).toHaveProperty('saveTokens');
-    expect(storageBarrel).not.toHaveProperty('readStringValue');
-    expect(storageBarrel).not.toHaveProperty('writeStringValue');
+    expect(storageBarrel.readStringValue).toBe(readStringValue);
+    expect(storageBarrel.writeStringValue).toBe(writeStringValue);
   });
 });

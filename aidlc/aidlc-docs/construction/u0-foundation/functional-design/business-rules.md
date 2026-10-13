@@ -35,6 +35,8 @@
 | BR-U0-17 | 닉네임 저장 전 금칙어 검사(moderation) 통과 필수. 위반 시 저장 거부 + 대체 닉네임 원탭 추천 | US-ONB-03 · V1.6 |
 | BR-U0-18 | 닉네임·취향은 설정에서 언제든 수정 가능(수정 시 동일 검증). 취향 변경은 `PreferencesUpdated` 이벤트 발행 | US-ONB-12 · C2 |
 
+> **[개정 · 2026-10-12]** BR-U0-18 의 "취향 변경은 `PreferencesUpdated` 이벤트 발행"은 **미구현**이다 — 이벤트 클래스·발행 지점 0건(backend 전역 검색). 취향 수정 자체(설정 화면 `frontend/app/settings/preferences.tsx`)는 동작한다. 이벤트 필요 여부는 사용자 판단 대상(domain-entities Outbox 개정 블록 참조).
+
 ## 취향 (BR-U0-19~22)
 
 | ID | 규칙 | 근거 |
@@ -66,3 +68,5 @@
 | ID | 규칙 | 근거 |
 |---|---|---|
 | BR-U0-30 | U0은 위치 권한 프리프롬프트 프레임(목적 설명+계속/나중에)만 정의 — 온보딩 중 OS 다이얼로그를 발화하지 않는다. 실제 발화는 첫 사용 맥락(후속 유닛). 거부해도 온보딩 중단 없음 | Q9 · US-ONB-04 |
+
+> **[개정 · 2026-10-12]** 현행 온보딩은 **OS 위치·푸시 권한 다이얼로그를 온보딩 안에서 발화한다**(원문 보존 — 개정 전: "온보딩 중 OS 다이얼로그를 발화하지 않는다"). 온보딩 체인 = 약관 → 닉네임 → **위치**(`frontend/app/(onboarding)/location.tsx` → `frontend/src/pages/onboarding/onboarding-location/ui/LocationPage.tsx`, "허용" 시 `Location.requestForegroundPermissionsAsync()` 1회) → **푸시**(`frontend/app/(onboarding)/push.tsx` → `src/pages/onboarding/onboarding-push/ui/PushPage.tsx`, `promptAndRegisterPush`) → 취향(pref1·pref2) → 홈(각 페이지의 `router.replace` 대상으로 확인). App Store 심사 5.1.1(iv) 반려 대응으로 두 프리프롬프트의 **건너뛰기("나중에")가 제거**됐다(커밋 79b518d5, #1029). "거부해도 온보딩 중단 없음"은 유지된다 — 거부 시 denied 프레임 → 다음 단계로 진행. 정본 문서(US-ONB-04)와의 정합은 사용자 판단 대상.

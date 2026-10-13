@@ -1,9 +1,9 @@
-import { useGetTripsTripIdSummary } from '@/shared/api/generated/reflection/reflection';
+import { useGetTripsTripIdSummary } from '@/shared/api/index.hooks';
 import type {
   TripSummary,
   TripSummaryEnvelope,
   TripSummarySource,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-572 · useTripSummary — j04 요약 조회를 잇는 얇은 래퍼(재사용 1훅만, 새 HTTP 0).

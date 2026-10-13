@@ -50,6 +50,8 @@
 | 상태 | 무상태 (JWKS·메타 캐시는 C-8) |
 | 갭 | **G-1** — openapi `SocialLoginRequest`에 `grantType` 필드 추가 개정 필요(백엔드 협의) |
 
+> **[개정 · 2026-10-12]** G-1 은 **해소됐다** — `grantType` 필드가 아니라 **경로 분리**로: `POST /auth/social/{provider}`(인가 코드, `SocialLoginRequest`) + `POST /auth/social/{provider}/token`(네이티브 SDK 토큰, `SocialTokenLoginRequest` — 애플은 `identityToken`) (`backend/docs/design/openapi.yaml` · `backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/in/web/`).
+
 ### C-2. `TokenService`
 
 | 항목 | 내용 |
@@ -59,6 +61,8 @@
 | 불변식 | **INV-R1: 체인당 현행 토큰 ≤ 1** — 회전·재사용 판정은 캐시 미경유, DB 정본 읽기 |
 | 통합 | `auth_session`(V1.4) · 재사용 감지 시 보안 이벤트 발행(P-OBS-2, **건당 즉시**) |
 | 상태 | 서명키 = 시크릿 주입(제품은 Infra Design). 검증 셋 = 최대 2 kid |
+
+> **[개정 · 2026-10-12]** 액세스 토큰 서명 알고리즘은 **RS256** 이다(원문 보존 — 개정 전: "ES256"). 근거: `backend/common/security/src/main/kotlin/com/trippilot/security/AccessTokenIssuer.kt`(`SignatureAlgorithm.RS256`) · `JwtSigningKeys.kt`(RSA 키, kid=RFC 7638 지문) · `JwtSecurityConfig.kt`. ES256 은 **Apple `client_secret` 서명에만** 쓴다(`backend/modules/auth/.../external/AppleClientSecret.kt`, TRIP-933). 검증 셋은 현재 **단일 키**(`ImmutableJWKSet(JWKSet(rsaKey))`)라 "kid 2키 중첩 롤오버"(P-SEC-2)는 미구현이다. 서명키는 env `JWT_SIGNING_KEY` 로 주입되며 배포 환경에서는 AWS Secrets Manager(`trippilot/{env}/backend`, `infra/terraform/stack/registry-secrets.tf`) → Helm `deploy/eks/chart/templates/backend.yaml` 경로다.
 
 ### C-3. `RateLimiter`
 
@@ -70,6 +74,8 @@
 | 상태 | **PostgreSQL 카운터 정본**(Redis 미도입). 임계는 외부화 설정 — 재배포 없이 조정 |
 | 통합 | 인증 처리 **이전** 관문 통과. 429 급증은 보안 이벤트(P-OBS-2) |
 | 트리거 | 카운터 쓰기가 DB 부하 상위 요인이 되면 분산 카운터 재평가 |
+
+> **[개정 · 2026-10-12]** 앱 내 PostgreSQL 카운터 레이트리미터는 **구현되지 않았다** — `RateLimited` 예외(`backend/common/core/.../error/DomainException.kt`)와 429 매핑(`GlobalExceptionHandler.kt`)은 있으나 던지는 지점 0건(backend main 전역 검색). 현행 429 는 **배포 게이트웨이(nginx) IP 단위 `limit_req` 10r/s · burst 30**(`deploy/eks/chart/templates/gateway-config.yaml`, `/api`·`/api/` 경로)이 담당한다. 엔드포인트별 임계(로그인·닉네임 등)는 없다 — 필요 여부는 사용자 판단 대상.
 
 ### C-4. `CircuitBreaker` (제공자별 인스턴스 ×4)
 
@@ -89,6 +95,8 @@
 | NFR | P-RES-1(지수 백오프+지터, 최대 시도 후 DLQ 전이 — 무한 재시도 금지) · at-least-once + **이벤트 ID 멱등 소비** |
 | U0 이벤트 | `AccountCreated` · `AccountDeletionRequested`(캐스케이드 개시 신호) |
 | 통합 | TRIP-148 이벤트버스 자산 — 브로커 미도입(§9 미도입 표) |
+
+> **[개정 · 2026-10-12]** 테이블명은 `outbox_event`(V1.0)이고 릴레이는 `backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt` 로 실재한다(백오프 V2.45). "U0는 골격까지"는 당시 범위 서술로 보존한다.
 
 ### C-6. `ConsentLedger`
 
@@ -149,3 +157,5 @@
 ## 6. Infrastructure Design 이연
 
 시크릿 매니저 제품(C-2 서명키 주입) · 로그 수집/APM/알림 라우팅(P-OBS-2) · 컨테이너 런타임·오토스케일 정책 수치(P-SCALE-1) · LB·헬스체크 연결(AVAIL-01) · 다중 AZ 배치 상세 · DB 백업/복구 목표 · 게임데이 RT-10 실행 환경.
+
+> **[개정 · 2026-10-12]** 인프라는 **AWS EKS 로 배포됐다** — 이연 항목의 현행 결정은 유닛별이 아니라 공용 문서 `aidlc/aidlc-docs/construction/shared-infrastructure.md` 가 정본이다. 코드 근거: Terraform `infra/terraform/stack/{network,eks,data,registry-secrets}.tf`(VPC·EKS·RDS PostgreSQL·ElastiCache Redis·ECR·Secrets Manager `trippilot/{env}/{backend,ai,database,shared}`·CloudWatch Container Insights), Helm `deploy/eks/chart`(values-dev/prd), 배포 워크플로 `.github/workflows/aws-deploy.yml`. 시크릿 매니저 제품 = AWS Secrets Manager(JWT 서명키 `JWT_SIGNING_KEY` 포함).

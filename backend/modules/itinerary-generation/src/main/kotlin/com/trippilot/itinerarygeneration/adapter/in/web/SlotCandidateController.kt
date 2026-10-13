@@ -71,8 +71,15 @@ data class SlotCandidatesRequest(
      */
     @field:Size(max = 40, message = "사유 코드는 40자 이하입니다.")
     val reason: String? = null,
+    /**
+     * 같이 고르기(순차 채우기)에서 왔는가. 생략하면 종전 그대로다 — 완전 AI '다른 후보'는 보내지 않는다.
+     *
+     * 이 값은 **경로 선언**이지 데이터가 아니다. 켜면 서버가 탐색 중심을 직전 슬롯으로 옮기는데,
+     * 그 직전 POI 는 서버가 일정에서 읽는다(클라가 보내지 않는다 — `excludePoiIds` 를 안 받는 것과 같은 이유).
+     */
+    val coPick: Boolean = false,
 ) {
-    fun toCommand() = RequestSlotCandidates(slotKey, radiusM, concept, reason)
+    fun toCommand() = RequestSlotCandidates(slotKey, radiusM, concept, reason, coPick)
 }
 
 /**

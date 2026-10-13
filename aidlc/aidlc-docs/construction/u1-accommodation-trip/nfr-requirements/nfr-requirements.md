@@ -4,6 +4,10 @@
 > **상속(U0 확정 — 재정의 안 함)**: SCALE DAU 1만·피크 500세션·50RPS·10x / AVAIL 99.9% 단일리전·다중AZ / SEC JWT ES256·객체 인가 / OBS 구조화 JSON·상관ID·PII 마스킹·프론트 Sentry / 익스텐션 3종.
 > ⚠ **기준선 변경 1건**: Q8=B로 **Redis 도입** — U0의 "Redis 미도입(과설계 회피)"을 U1에서 뒤집는다. 파급은 `tech-stack-decisions.md` §3·§5.
 
+> **[개정 · 2026-10-12 · Infra 결정]** 두 줄이 바뀐다. ① 상속 AVAIL 은 **월 99.5%**(U0 AVAIL-01 개정, Infra Q2=A)다. 운영 dev 스택의 데이터 계층이 단일 AZ 라서 낮췄다. ② "기준선 변경 1건"(Redis 도입)과 §11 의 "Redis 도입(Q8=B)" 행은 **철회**됐다(Infra Q5=A). U1 은 U0 기준선("Redis 미도입")으로 돌아간다. §11 이 걸어 둔 역방향 재평가가 실현된 것이다. 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
+
+> **[개정 · 2026-10-12]** 상속 SEC 의 액세스 토큰 알고리즘은 **RS256** 이다(`backend/common/security/src/main/kotlin/com/trippilot/security/AccessTokenIssuer.kt`·`JwtSigningKeys.kt`). ES256 은 Apple `client_secret` 서명 전용(`backend/modules/auth/.../external/AppleClientSecret.kt`). U0 nfr-requirements SEC-01 개정 블록 참조.
+
 ## 1. 규모 (NFR-U1-SCALE)
 
 | ID | 요구 | 근거 |
@@ -62,6 +66,10 @@
 | SEC-U1-03 | 전환·수수료 지표는 **응답 스키마 수준에서 사용자 노출 차단**(내부 지표 전용) | Q6=A · INV-U1-10 |
 | SEC-U1-04 | 링크 붙여넣기·검색어 등 사용자 입력은 SSRF·인젝션 관점에서 검증(허용 도메인 화이트리스트로 URL 파싱) | Q6=A · BR-U1-24 |
 | SEC-U1-05 | **장소 검색(로컬 REST) 키**는 서버측 보관·프록시, 클라이언트에 원 키 노출 금지 — 프론트는 서버 엔드포인트(`GET /stays/geocode`)만 호출한다. **⚠️ 지도 표시 키는 예외** — 지도 SDK는 클라이언트 안에서 초기화되므로 키가 앱/번들에 들어가는 것을 물리적으로 피할 수 없다(네이티브 경로는 매니페스트, WebView 경로는 JS 번들). 이 키의 보호 수단은 은닉이 아니라 **벤더 콘솔의 사용처 제한**이다 — 카카오는 요청 origin을 검사해 미등록 도메인에 접근을 거부한다(실측: 미등록 상태에서 `{"errorType":"AccessDeniedError","message":"domain mismatched! caller=https://localhost"}`). 따라서 지도 키는 "노출 금지"가 아니라 **"등록된 사용처에서만 유효하게 유지"**가 요구다. | DEC-5 · SEC 상속 · **예외 명시 2026-07-31**(TRIP-197 실측 · `frontend/README.md` §93 "지도 앱 키 등은 빌드 시 주입") |
+
+> **[개정 · 2026-10-12]** 포스트백 수신·HMAC 서명 검증·거래 ID 멱등은 **구현되지 않았다** — 수신 엔드포인트 0건, `affiliate_click.postback_status` 는 전부 `NONE`(`backend/app/src/main/resources/db/migration/V2.59__affiliate_click.sql`). `OtaPartner` 설정 테이블도 없다. 현행은 아웃바운드 302 + 클릭 기록(fail-open)까지: `backend/modules/affiliate-link/src/main/kotlin/com/trippilot/affiliatelink/{adapter/in/web/OutboundController.kt,application/OutboundService.kt}`, 벤더 `WEBSEARCH`(기본)·`TRIPCOM`(`AFFILIATE_MODE=tripcom`, `clickId`→`trip_sub1` 관통 — 포스트백 전제만 깔림).
+
+> **[개정 · 2026-10-12]** SEC-U1-05 의 "지도 표시 키 예외"는 카카오 JS/WebView 키 기준 서술이다. 현행 지도는 **네이버 지도 네이티브 SDK**(`frontend/src/shared/map/MapView.tsx`, `@mj-studio/react-native-naver-map`)이고 키는 `EXPO_PUBLIC_NAVER_MAP_CLIENT_ID` — 보호 수단은 같은 원리로 **NCP 콘솔 사용처 제한(iOS Bundle ID·Android 패키지명)** 이다. 장소 검색 키(카카오 로컬)는 서버 보관·프록시 그대로(`backend/modules/place-data/.../external/KakaoLocalClientConfiguration.kt`).
 
 ## 7. 준수 — 위치정보 (NFR-U1-LEGAL)
 

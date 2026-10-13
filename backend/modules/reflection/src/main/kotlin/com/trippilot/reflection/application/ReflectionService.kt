@@ -98,11 +98,28 @@ class ReflectionService(
      * 기본 카드라 **지어낸 문장이 아니다**(BR-U5-31).
      */
     @Transactional
-    fun edit(accountId: UUID, tripId: UUID, dayDate: LocalDate, cardPayload: String): Reflection {
+    fun edit(
+        accountId: UUID,
+        tripId: UUID,
+        dayDate: LocalDate,
+        cardPayload: String?,
+        mood: String? = null,
+        shortMemo: String? = null,
+    ): Reflection {
+        // 셋 다 비면 바꿀 것이 없다 — 조용히 200 을 내면 "저장됐다"로 읽힌다.
+        if (cardPayload == null && mood == null && shortMemo == null) {
+            throw ValidationFailed(listOf(FieldError("card", "card·mood·shortMemo 중 하나는 보내야 합니다")))
+        }
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         requireWithinTrip(period, dayDate)
-        val current = reflections.find(tripId, dayDate) ?: draftFor(accountId, tripId, dayDate)
-        return reflections.upsert(current.edit(cards.read(cardPayload), clock.instant()))
+        // 행이 없으면 **잠그기 전에** 초안부터 만든다(잠금은 draftFor 가 AI 호출 뒤에 잡는다) — 먼저 잡으면
+        // AI 호출 동안 그 하루의 다른 쓰기가 전부 기다린다. 그사이 행이 생겼으면 draftFor 가 그 행을 읽어 온다.
+        val current = (if (reflections.exists(tripId, dayDate)) reflections.findForUpdate(tripId, dayDate) else null)
+            ?: draftFor(accountId, tripId, dayDate)
+        val now = clock.instant()
+        // 카드는 **보냈을 때만** 갈아끼운다(TRIP-828) — 기분만 고치는 요청이 카드를 건드리면 안 된다.
+        val carded = cardPayload?.let { current.edit(cards.read(it), now) } ?: current
+        return reflections.upsert(carded.note(mood, shortMemo, now))
     }
 
     /**
@@ -123,7 +140,8 @@ class ReflectionService(
         val draft = aiCard ?: ReflectionNarrator.dailyCard(placeNames, stats)
         val source = if (aiCard != null) ReflectionSource.AI else ReflectionNarrator.sourceFor(stats)
         val now = clock.instant()
-        return reflections.find(tripId, dayDate)?.regenerate(draft, source, stats, now)
+        // AI 호출이 끝난 **뒤에** 잠그고 읽는다 — 먼저 읽어 두면 생성 중에 들어온 기분·수정본을 옛 값으로 덮는다.
+        return reflections.findForUpdate(tripId, dayDate)?.regenerate(draft, source, stats, now)
             ?: Reflection.of(tripId, dayDate, draft, source, stats, now)
     }
 

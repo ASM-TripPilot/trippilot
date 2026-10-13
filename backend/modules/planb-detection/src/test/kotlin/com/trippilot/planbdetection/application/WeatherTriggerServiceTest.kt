@@ -61,7 +61,7 @@ class WeatherTriggerServiceTest : StringSpec({
 
         override fun findGenerationContext(accountId: UUID, tripId: UUID) =
             if (accountId == acc) {
-                TripGenerationContext(today.minusDays(1), today.plusDays(1), destinations.map { TripDestinationRef(it, null) }, "친구", null, emptyList())
+                TripGenerationContext(today.minusDays(1), today.plusDays(1), destinations.map { TripDestinationRef(it, null, 0) }, "친구", null, emptyList())
             } else {
                 null
             }

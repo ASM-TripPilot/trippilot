@@ -329,6 +329,21 @@ export function CalendarGlyph({ size = 32 }: GlyphProps): ReactElement {
   );
 }
 
+/** 🔖 기록 탭 아이콘과 같은 북마크 외곽선(j07 지난 여행 빈 상태 · Figma 4821:2887). 색은 muted-soft. */
+export function BookmarkGlyph({ size = 24 }: GlyphProps): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 3H18C18.2652 3 18.5196 3.10536 18.7071 3.29289C18.8946 3.48043 19 3.73478 19 4V21L12 17L5 21V4C5 3.73478 5.10536 3.48043 5.29289 3.29289C5.48043 3.10536 5.73478 3 6 3Z"
+        stroke={MUTED_SOFT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** ✕ 닫기 — i01 허브 메모 시트 머리(Figma 4741:2993 · Icon close 1237:1058). ink 선이라 home·explore
  *  ✕(흰·on-primary)를 못 쓰고, features 경계로 가져올 수도 없어 벡터만 옮겼다. */
 export function CloseGlyph({ size = 24 }: GlyphProps): ReactElement {

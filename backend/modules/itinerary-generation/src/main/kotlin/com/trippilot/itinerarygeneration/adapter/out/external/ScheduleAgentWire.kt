@@ -3,8 +3,10 @@ package com.trippilot.itinerarygeneration.adapter.out.external
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import tools.jackson.databind.JsonNode
+import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.application.SlotKey
+import com.trippilot.itinerarygeneration.application.ConceptCategories
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
@@ -18,11 +20,13 @@ import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
+import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.placedata.api.GroundedPlace
+import com.trippilot.placedata.api.categoryBoundaryCodeOf
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -56,6 +60,14 @@ internal data class AiScheduleResponse(
      * (배포 순서가 어긋나도 역직렬화가 깨지지 않는다).
      */
     val unplacedMustVisits: List<AiUnplacedMustVisit> = emptyList(),
+    /**
+     * 취향 점수를 누가 매겼나 — `LLM`·`MIXED`(LLM + 규칙 보충)·`RULE`, 모르면 null. `solveMode` 는 조립기
+     * 이름이라 늘 OR_TOOLS 여서 LLM 실패를 가리지 못했다(FE "LLM 이 안 돈다" 오판). **기본값** — 옛 AI
+     * 응답도 같은 뜻. 저장·노출은 TRIP-1173 몫이고, 여기 필드는 계약 게이트(키 정확 일치) 때문에 먼저 실린다.
+     */
+    val scoringMode: String? = null,
+    /** 밟은 강등 계단 코드 `"{stage}:{사유 접두}"`(예 `llm:c1_fallback`) — 문장·시각 없음. */
+    val degradations: List<String> = emptyList(),
 )
 
 /** 미배치 보고 1건. `reason_code` 는 닫힌 집합이지만 **문자열로 받는다** — 아래 매핑 주석 참고. */
@@ -235,6 +247,10 @@ internal data class AiExplanationsRequest(
     val tripId: String,
     val itinerary: AiSchedulePayload,
     val requestMeta: AiRequestMeta,
+    /** 그 여행의 취향(BR-U1-38) — 오면 상대가 이것으로 근거를 쓴다. null 이면 종전 재조회(계정 취향). */
+    val preferenceProfile: PreferenceProfile? = null,
+    /** 그 여행의 동행 — 계정의 평소 동행보다 우선. */
+    val companionType: String? = null,
 )
 
 internal data class AiExplanationsResponse(
@@ -255,6 +271,11 @@ internal data class AiRepairRequest(
     val itinerary: AiSchedulePayload,
     val violations: List<AiViolation> = emptyList(),
     val requestMeta: AiRequestMeta,
+    // 편집 교체 후속(2026-10-05) — 상대 선택 필드, generate 와 같은 스키마(DayAnchorSchema·TimeWindowSchema·
+    // transport_modes 어휘). 창은 앵커가 있는 날의 **출발 시각**으로만 쓰인다. 비면 종전 동작.
+    val anchors: List<DayAnchor> = emptyList(),
+    val timeWindows: List<TimeWindow> = emptyList(),
+    val transportModes: List<String> = emptyList(),
 )
 
 internal data class AiRepairResponse(
@@ -447,7 +468,16 @@ internal data class AiAlternativesRequest(
     val excludedPoiIds: List<String>,
     val affectedReasons: Map<String, String>,
     val savedPlaces: List<AiSavedPlace>,
+    /**
+     * 후보 카테고리 제한(경계 코드 FOOD·CAFE·SIGHT·NIGHT_VIEW·NATURE·CULTURE·ACTIVITY·SHOPPING).
+     * AI 가 후보 풀 단계에서 거른다 — 비면 필터 없음. 같이 짜기 컨셉에서 채운다([toAlternativesRequest]).
+     */
+    val categories: List<String> = emptyList(),
     val requestMeta: AiRequestMeta,
+    /** 그 여행의 취향(BR-U1-38) — ALTERNATIVE_SELECTION 의 페르소나. null 이면 종전 재조회(계정 취향). */
+    val preferenceProfile: PreferenceProfile? = null,
+    /** 그 여행의 동행 — 계정의 평소 동행보다 우선. */
+    val companionType: String? = null,
 )
 
 /**
@@ -492,7 +522,12 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         excludedPoiIds = excludePoiIds.map { it.toString() },
         affectedReasons = placementReason?.let { mapOf(targetPoiId.toString() to it) } ?: emptyMap(),
         savedPlaces = emptyList(), // place-data 에 api 파사드가 없다 — 신설은 별건(설계 §2)
+        // 컨셉 → 경계 코드. 표는 ConceptCategories 한 곳, 코드 변환은 place-data 소유 — 둘 다 다시 만들지 않는다.
+        // 미매핑·null 이면 빈 목록(필터 없음). BE 후처리 필터(SlotCandidateService)는 그대로 둔다(이중 방어).
+        categories = ConceptCategories.of(concept).orEmpty().mapNotNull(::categoryBoundaryCodeOf).sorted(),
         requestMeta = AiRequestMeta(requestMeta.requestId, requestMeta.requestedAt, requestMeta.deadlineMs),
+        preferenceProfile = preferenceProfile,
+        companionType = companionType,
     )
 }
 
@@ -558,8 +593,9 @@ internal fun AiAlternativesResponse.toDomain(
             candidates.isNotEmpty() -> null
             // AI 가 후보를 줬는데 반경 컷·ground 탈락으로 비었다 — 주변엔 있으니 넓히기·컨셉 변경이 통한다.
             ranked.isNotEmpty() || alternatives.isNotEmpty() -> SlotCandidatesEmptyReason.NO_NEARBY
-            // AI 풀이 비었거나 전부 제외됐다(설계 §3 매핑) — 넓혀도 같은 결과다.
-            emptyReason == "no_candidates" || emptyReason == "all_excluded" -> SlotCandidatesEmptyReason.ALL_IN_ITINERARY
+            // AI 풀이 전부 일정에 있어 제외됐다 — 넓혀도 같은 결과다. 풀 자체가 빈 `no_candidates` 는
+            // "주변에 없다"라 NO_NEARBY 로 떨어지고, 서비스가 한 단계 넓혀 다시 본다(TRIP-1311).
+            emptyReason == "all_excluded" -> SlotCandidatesEmptyReason.ALL_IN_ITINERARY
             // 모르는 사유는 NO_NEARBY 로 떨어뜨린다 — 원문은 어댑터가 WARN 으로 남긴다(침묵 금지).
             else -> SlotCandidatesEmptyReason.NO_NEARBY
         },

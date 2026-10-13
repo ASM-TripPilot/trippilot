@@ -5,7 +5,7 @@ import type { ViewStyle } from 'react-native';
  * 바텀시트 핸들 통일값(TRIP-735).
  *
  * gorhom BottomSheet 의 `handleIndicatorStyle` 은 NativeWind className 이 아니라 raw ViewStyle 을
- * 받으므로 여기 상수로 둔다(features/auth/config/gradients.ts·shared/location/lib/locationColors.ts
+ * 받으므로 여기 상수로 둔다(features/auth/config/gradients.ts·shared/location/locationColors.ts
  * 와 동일 패턴 — 시트 .tsx 의 raw-hex 가드는 .tsx 화면 표면만 보므로 .ts 상수 모듈은 대상 밖이다).
  *
  * 값은 tailwind hairline-strong(#DDDDDD)과 정확히 같다. 폭40·높이4·r2 = 종전 콘텐츠 안 커스텀

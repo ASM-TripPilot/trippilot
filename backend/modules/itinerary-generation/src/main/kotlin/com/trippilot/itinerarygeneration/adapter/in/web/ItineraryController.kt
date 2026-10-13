@@ -163,6 +163,13 @@ data class SlotAlternativeResponse(
     val category: String?,
     val tags: List<String>,
     val imageUrl: String?,
+    /**
+     * 후보 핀 좌표 — `SlotCandidateResponse.lat/lng` 와 같은 뜻이다(TRIP-1063 이 온디맨드 후보에만
+     * 더해 **두 응답의 모양이 갈려 있었다**). 차선책도 같은 카드·같은 지도에 올라가므로 함께 싣는다.
+     * 표면이 없으면 null — 반경 중심 등으로 **지어내지 않는다**(BR-U1-06).
+     */
+    val lat: Double?,
+    val lng: Double?,
 ) {
     companion object {
         fun of(a: SlotAlternative, surface: SlotSurface?) = SlotAlternativeResponse(
@@ -173,6 +180,8 @@ data class SlotAlternativeResponse(
             category = surface?.category,
             tags = surface?.tags.orEmpty(),
             imageUrl = surface?.imageUrl,
+            lat = surface?.lat,
+            lng = surface?.lng,
         )
     }
 }

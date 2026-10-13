@@ -146,6 +146,29 @@ class VisitCheckServiceTest : StringSpec({
         service(visits).listByDay(acc, tripId, LocalDate.parse("2026-08-10")).size shouldBe 0
     }
 
+    // TRIP-1315 — 화면이 카드에 "몇 번째 방문"을 붙인다. 기록(`/records`)은 지나온 순서로 주는데 이 목록은
+    // 저장소 순서(최신 먼저)를 그대로 내보내서, 같은 방문이 허브와 기록에서 다른 번호를 받게 돼 있었다.
+    "그 날의 방문은 지나온 순서로 나온다 — 도착 안 한 건너뛰기는 건너뛴 시각으로 사이에 끼어든다" {
+        val visits = Visits()
+        val (first, skipped, last) = List(3) { UUID.randomUUID() }
+        fun at(i: String) = VisitCheckService(trips, visits, CapturingEvents(), clockAt(i))
+        // 일부러 지나온 순서와 다르게 넣는다 — 저장 순서를 그대로 내보내면 깨진다.
+        at("2026-08-11T05:00:00Z").arrive(acc, tripId, "$day#$last", last, CheckSource.MANUAL)
+        at("2026-08-11T01:00:00Z").arrive(acc, tripId, null, first, CheckSource.MANUAL) // 즉석 방문
+        at("2026-08-11T03:00:00Z").skipPlanned(acc, tripId, "$day#$skipped", skipped)
+
+        service(visits).listByDay(acc, tripId, day).map { it.poiId } shouldContainExactly listOf(first, skipped, last)
+    }
+
+    "같은 시각의 방문은 넣은 순서와 무관하게 같은 순서로 나온다 — 번호가 요청마다 뒤집히지 않는다" {
+        val at = Instant.parse("2026-08-11T03:00:00Z")
+        val pair = List(2) { VisitCheck.arrive(tripId, null, UUID.randomUUID(), CheckSource.MANUAL, at) }
+        fun order(input: List<VisitCheck>) =
+            service(Visits().also { v -> input.forEach(v::save) }).listByDay(acc, tripId, day).map { it.visitCheckId }
+
+        order(pair) shouldContainExactly order(pair.reversed())
+    }
+
     "타 계정이면 404 · 다른 여행의 실적도 404" {
         val visits = Visits()
         val svc = service(visits)

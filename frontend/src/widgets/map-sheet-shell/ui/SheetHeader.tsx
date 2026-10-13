@@ -18,6 +18,11 @@ export interface SheetHeaderProps {
   dayLabel: string;
   dateLabel: string;
   meta: string;
+  /** true 면 meta 를 제목 줄 **아래** 한 줄로 내린다(TRIP-1237 e). 긴 meta("확정됨 · 7곳 · 11.2km")가
+   * 오른쪽 폭을 먹으면 제목 줄이 "서울특별시 여행 · 1일차 ·" / "10월 29일 · 목" 으로 끊기기 때문이다.
+   * 제목 줄 폭을 넓혀 덜 끊기게 할 뿐 구분자가 줄 끝에 남는 구조 자체는 그대로다(좁은 폭·큰 글자는 실기 확인).
+   * 소비처가 고른다 — 다른 헤더의 모양은 그대로다. */
+  metaBelow?: boolean;
 }
 
 export function SheetHeader({
@@ -25,6 +30,7 @@ export function SheetHeader({
   dayLabel,
   dateLabel,
   meta,
+  metaBelow = false,
 }: SheetHeaderProps): ReactElement {
   // 비어있지 않은 세그먼트만 남긴다 — 순서(title→day→date)는 유지. 빈 값은 leaf 도, 앞 구분자도 안 뜬다.
   const segments = [
@@ -36,9 +42,15 @@ export function SheetHeader({
   return (
     <View
       testID="sheet-header-root"
-      className="flex-row items-start justify-between gap-sm px-lg pb-md pt-sm"
+      className={
+        metaBelow
+          ? 'gap-xs px-lg pb-md pt-sm'
+          : 'flex-row items-start justify-between gap-sm px-lg pb-md pt-sm'
+      }
     >
-      <View className="flex-1 flex-row flex-wrap items-center gap-[6px]">
+      <View
+        className={`flex-row flex-wrap items-center gap-[6px] ${metaBelow ? '' : 'flex-1'}`}
+      >
         {segments.map((segment, index) => (
           <Fragment key={segment.testID}>
             {/* 구분자는 세그먼트 **사이**에만(첫 세그 앞엔 없음) → 남은 세그 개수-1 개가 뜬다. */}

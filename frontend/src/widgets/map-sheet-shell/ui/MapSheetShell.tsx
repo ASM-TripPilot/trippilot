@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { useContext, useState } from 'react';
+import { useCallback, useContext, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import {
@@ -19,31 +19,31 @@ import {
   type MapViewProps,
 } from '@/shared/map';
 
-import { CtaBar, type CtaButton } from './CtaBar';
+import { CTA_BAR_HEIGHT, CtaBar, type CtaButton } from './CtaBar';
 import { DayChipOverlay, type DayChip } from './DayChipOverlay';
 import { MapFallbackBar } from './MapFallbackBar';
 
 // 위젯 킷 소비처가 시트 body(카드·커넥터)를 조립할 때 쓰는 서버 슬롯 타입을 킷 표면으로 재수출한다
 // (widgets → entities 하향 참조 허용, `entities/itinerary-slot/model` 이 shared/api 를 얇게 재수출).
-export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
+export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot';
 
 /**
  * TRIP-783 · h공통 지도+시트 셸(widgets) — h·i 밴드 지도 결과 화면들이 공유하는 골격. 전면 지도(`<MapView viewOnly>`, 시트 뒤 형제) + 좌상단 일차 칩 오버레이 +
  * 3스냅 바텀시트(닫힘·peek·펼침, `header`·`children`) + 하단 고정 CTA 바를 **조립만** 한다. 시각·합산 같은
- * 판단은 전부 소비처로 밀어냈다(셸은 받은 ReactNode·문자열·콜백만 배치한다). 예외 둘 — 셸이 상태를 쥔다
- * (widgetsStructure F 예외 등재): ① 지도 로드 실패(TRIP-919) — 소비처 배선 없이 폴백을 얻게 하려고.
+ * 판단은 전부 소비처로 밀어냈다(셸은 받은 ReactNode·문자열·콜백만 배치한다). 예외 둘 — 셸이 상태를 쥔다: ① 지도 로드 실패(TRIP-919) — 소비처 배선 없이 폴백을 얻게 하려고.
  * ② 시트가 멈춘 칸(TRIP-920) — 기본 배열의 닫힘(0번)에서만 지도 잠금을 풀고 CTA 바를 뺀다.
  *
  * ⚠️ 원리적 사각(6-b 실기 전용): 스냅 실개폐·딤·`enableContentPanningGesture`(E6) 는 `@gorhom/
  * bottom-sheet` 통과형 목이, 지도 제스처·타일은 네이버 목이 못 본다. 지도는 시트 **뒤 형제**로 두어
  * (시트 콘텐츠 안에 넣지 않아) 제스처 삼킴을 구조로 피한다(E7). jest 는 `map-root`·children·testID
- * 트리만 관측하고, `viewOnly` 실전달은 `itineraryMapSurfaceStructure` S2 소스 스캔이 잠근다.
+ * 트리만 관측하고, `viewOnly` 실전달은 심판이 없다(소스 스캔은 TRIP-1145 에서 지웠다).
  */
 
 // 기본 3스냅(닫힘 28 / peek ≈ 45% / expanded ≈ 88%) — 라이브러리 규칙상 낮은 높이부터 오름차순.
 // 닫힘 28 = 핸들만 보이는 높이(i01 닫힘 Figma 4251:2448 과 같은 출처, `LiveHubView.CLOSED_SNAP` 과 값 일치).
-// 기본 진입은 peek(1) — 실 전환은 6-b 실기 몫.
-const SNAP_POINTS = [28, '45%', '88%'];
+// 실기에선 거기에 하단 안전 영역을 더한다 — 핸들이 홈 인디케이터 영역에 묻히면 위로 쓸 때 iOS 홈 제스처가 우선해
+// 시트를 다시 올릴 수 없다(`closedSnap` 테스트). 기본 진입은 peek(1) — 실 전환은 6-b 실기 몫.
+const CLOSED_HANDLE_HEIGHT = 28;
 const DEFAULT_INDEX = 1;
 
 /**
@@ -102,11 +102,11 @@ export interface MapSheetShellProps<T = unknown> {
    *  (6 소비처 무변경). 타입 선언만 — 렌더 배선은 [구현] 몫(SH8b 가 red 로 강제). h13 이 첫 소비처. */
   list?: MapSheetListSlot<T>;
   /** 바텀시트 스냅 포인트(TRIP-746 가산) — i01 허브가 3스냅(닫힘·중간·펼침)을 준다. 미전달이면
-   *  기본 3스냅 `SNAP_POINTS`. 직접 주면 "0번 = 닫힘" 규칙(지도 풀림·CTA 숨김)이 적용되지 않는다. */
+   *  기본 3스냅(`defaultSnapPoints`). 직접 주면 "0번 = 닫힘" 규칙(지도 풀림·CTA 숨김)이 적용되지 않고,
+   *  기본 배열이 닫힘 칸에 더하는 하단 안전 영역도 더해지지 않는다 — 닫힘 칸을 주려면 소비처가 직접 더한다. */
   snapPoints?: (string | number)[];
   /** 지도 잠금 여부(TRIP-746 가산) — 미전달이면 기본 잠금, 기본 배열의 닫힘 칸에서만 풀림(TRIP-920). i01 허브만
-   *  `false` 로 열어 여행 중 자유 탐색을 유지한다(TRIP-397 결정 계승, `itineraryMapSurfaceStructure`
-   *  S2b 가 소비처를 잠근다). */
+   *  `false` 로 열어 여행 중 자유 탐색을 유지한다(TRIP-397 결정 계승). */
   mapViewOnly?: boolean;
   /** 현재위치 점(TRIP-746 가산) — `<MapView currentLocation>` 으로 흘린다(TRIP-745 계약). 미전달이면
    *  점 없음. */
@@ -125,6 +125,8 @@ export interface MapSheetShellProps<T = unknown> {
   /** 핀 전부 맞추기(TRIP-1076 가산, h07·h08·h11·h14·h16 결과) — `<MapView fitPins>` 로 흘린다.
    *  미전달=center 카메라(기존 소비처 무변경). 시트가 가리는 아래 영역은 맞춤에 반영하지 않는다. */
   fitPins?: boolean;
+  /** TRIP-1343 · 실제 경로 세그먼트(가산) — `<MapView actualRoute>` 로 흘린다. 미전달=현행. */
+  actualRoute?: MapViewProps['actualRoute'];
   /** 시트 윗변 위치 상자(TRIP-1083 가산) — `<BottomSheet animatedPosition>` 으로 그대로 흘린다. gorhom 이
    *  매 프레임 셸 루트 위끝→시트 윗변 y(topInset 포함)를 써 넣는다. 값은 소비처(i01 허브)가 만들어 쥔다.
    *  미전달=미부착. */
@@ -162,6 +164,7 @@ export function MapSheetShell<T = unknown>({
   onMapTap,
   radiusCircle,
   fitPins,
+  actualRoute,
   animatedPosition,
   bodyScroll = true,
   contentPanning,
@@ -169,9 +172,9 @@ export function MapSheetShell<T = unknown>({
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
   const [mapFailed, setMapFailed] = useState(false);
-  // 이름 붙인 핸들러 — `<MapView>` 태그 안에 `=>` 를 두면 itineraryMapSurfaceStructure 의 태그
-  // 정규식이 첫 `>` 에서 잘려 viewOnly 를 못 본다.
-  const handleMapLoadFailed = () => setMapFailed(true);
+  // 이름 붙인 핸들러 — `<MapView>` 태그를 짧게 유지한다(옛 소스 스캔 정규식 대응의 흔적).
+  // TRIP-1349 — 참조 고정: 매 렌더 새 콜백이면 memo(MapView)가 snapIndex 변경마다 무력해진다.
+  const handleMapLoadFailed = useCallback(() => setMapFailed(true), []);
   const handleMapRetry = () => setMapFailed(false);
   // 진입 칸 — 기본 진입값(peek)은 기본 배열에만. 직접 준 배열(i05)로 새면 그 소비처가 펼침으로 열린다.
   const startIndex = initialIndex ?? (snapPoints ? 0 : DEFAULT_INDEX);
@@ -183,7 +186,16 @@ export function MapSheetShell<T = unknown>({
   const mapLocked = mapViewOnly ?? !sheetClosed;
   // 시트 윗변 한계 = 상태바·다이내믹 아일랜드 아래(TRIP-1014 #076). useSafeAreaInsets() 는 Provider 가
   // 없으면 throw 하므로(jest 전반) null 을 허용해 읽는다.
-  const topInset = useContext(SafeAreaInsetsContext)?.top ?? 0;
+  const insets = useContext(SafeAreaInsetsContext);
+  const topInset = insets?.top ?? 0;
+  // CTA 바는 시트 위에 떠 있어(아래 absolute) 스크롤 끝 카드를 덮는다 — 바 높이 + 하단 안전 영역만큼
+  // 본문 아래를 비워 마지막 카드까지 바 위로 올라오게 한다. 같은 이유로 Provider 없으면 0.
+  const hasCta = cta !== undefined && cta.length > 0;
+  const bottomInset = insets?.bottom ?? 0;
+  const defaultSnapPoints = useMemo(
+    () => [CLOSED_HANDLE_HEIGHT + bottomInset, '45%', '88%'],
+    [bottomInset]
+  );
 
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -203,6 +215,7 @@ export function MapSheetShell<T = unknown>({
               onTapMap={onMapTap}
               radiusCircle={radiusCircle}
               fitPins={fitPins}
+              actualRoute={actualRoute}
               onLoadFailed={handleMapLoadFailed}
             />
           ))}
@@ -234,7 +247,7 @@ export function MapSheetShell<T = unknown>({
           ListHeaderComponent 한 자리에 얹힌다(TRIP-798 묶음 C). 미전달이면 현행 스크롤 경로(6 소비처 무변경). */}
       <BottomSheet
         index={startIndex}
-        snapPoints={snapPoints ?? SNAP_POINTS}
+        snapPoints={snapPoints ?? defaultSnapPoints}
         // v5 기본 true 는 콘텐츠 높이 칸을 배열에 몰래 끼워 index·onChange 번호가 어긋난다(03b 경고-1).
         enableDynamicSizing={false}
         // 라이브러리 기본값과 같지만 명시한다 — 시트 안 입력(h13 검색)의 키보드 회피 계약(TRIP-990 D9).
@@ -273,7 +286,14 @@ export function MapSheetShell<T = unknown>({
             {children}
           </View>
         ) : (
-          <BottomSheetScrollView onScrollBeginDrag={onSheetScrollBeginDrag}>
+          <BottomSheetScrollView
+            onScrollBeginDrag={onSheetScrollBeginDrag}
+            contentContainerStyle={
+              hasCta
+                ? { paddingBottom: CTA_BAR_HEIGHT + bottomInset }
+                : undefined
+            }
+          >
             {header}
             {children}
           </BottomSheetScrollView>
@@ -282,7 +302,7 @@ export function MapSheetShell<T = unknown>({
 
       {/* 하단 고정 CTA 바 — CTA 가 있을 때만(빈 배열/미전달이면 통째로 미렌더 · D9). 닫힘 칸에선 안 그린다 —
           28px 핸들을 CTA 바가 덮어 시트를 되올릴 손잡이가 사라진다(TRIP-920). */}
-      {!sheetClosed && cta !== undefined && cta.length > 0 ? (
+      {!sheetClosed && hasCta ? (
         <SafeAreaView
           edges={['bottom']}
           className="absolute bottom-0 left-0 right-0 bg-canvas"

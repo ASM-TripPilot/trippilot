@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
-import { PUSH_ICON_COLORS } from './lib/pushColors';
+import { PUSH_ICON_COLORS } from './pushColors';
 
 // c08-push 전용 벡터 글리프(TRIP-1108, Figma 4774:2965 bellHero). 짝 화면인 위치 카드의 레이더 히어로
 // (shared/location/LocationGlyphs.tsx 의 LocationRadarHero)와 틀·동심원 좌표가 같고, 가운데 점 대신 벨이

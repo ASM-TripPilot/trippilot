@@ -53,6 +53,16 @@ class GlobalExceptionHandlerTest {
         res.headers.getFirst("Retry-After") shouldBe "30"
     }
 
+    /** 하루 횟수 소진(TRIP-1314)은 같은 429 라도 **코드가 달라야** 화면이 [다시 시도]를 감춘다. */
+    @Test
+    fun `전용 코드를 실은 RateLimited 는 429 에 그 코드와 Retry-After 를 함께 준다`() {
+        val res = handler.handleDomain(RateLimited(3600, "오늘 횟수를 모두 썼어요.", ErrorCode.GENERATION_DAILY_LIMIT))
+
+        res.statusCode.value() shouldBe 429
+        res.body!!.error.code shouldBe "GENERATION_DAILY_LIMIT"
+        res.headers.getFirst("Retry-After") shouldBe "3600"
+    }
+
     @Test
     fun `UpstreamUnavailable 는 503 으로 매핑된다`() {
         val res = handler.handleDomain(UpstreamUnavailable(source = "kakao", fallbackApplied = false))

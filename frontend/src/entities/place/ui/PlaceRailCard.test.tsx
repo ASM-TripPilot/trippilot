@@ -185,3 +185,59 @@ describe('🔴 PlaceRailCard 저장 하트 슬롯 (TRIP-1049)', () => {
     );
   });
 });
+
+// TRIP-1281 — d01 장소 레인: 하트는 "{이름} 저장", 카드는 보이는 글자 그대로의 명시 라벨(지금은 라벨이 없어
+// iOS 가 하트의 "담기" 를 카드 라벨 맨 앞에 붙여 읽는다 — 병합 자체는 실기 몫).
+describe('저장 하트·카드 접근성 라벨 (d01 장소 레인)', () => {
+  function renderWithSave(card: PlaceCardVM, saved: boolean) {
+    render(
+      <PlaceRailCard
+        card={card}
+        onPress={jest.fn()}
+        save={{
+          saved,
+          pending: false,
+          onToggle: jest.fn(),
+          testID: 'heart-p1',
+          filledTestID: 'heart-filled-p1',
+          outlineTestID: 'heart-outline-p1',
+        }}
+      />
+    );
+  }
+
+  it.each([false, true])(
+    '하트는 담김=%s 여도 "감천문화마을 저장" 으로 읽히고 selected 는 담김을 따른다',
+    (saved) => {
+      renderWithSave(VM, saved);
+
+      const heart = screen.getByTestId('heart-p1');
+      expect(heart).toHaveAccessibleName('감천문화마을 저장');
+      expect(screen.getByLabelText('감천문화마을 저장').props.testID).toBe(
+        'heart-p1'
+      );
+      if (saved) expect(heart).toBeSelected();
+      else expect(heart).not.toBeSelected();
+    }
+  );
+
+  it('카드는 담겨 있어도 "이름, 지역" 으로 읽힌다(담기·저장·담음 없음)', () => {
+    renderWithSave(VM, true);
+
+    expect(screen.getByTestId('explore-place-card-p1')).toHaveAccessibleName(
+      '감천문화마을, 부산 사하구'
+    );
+  });
+
+  it('지역이 빈 문자열이면 카드 라벨은 이름만이다', () => {
+    renderWithSave({ ...VM, region: '' }, false);
+
+    expect(screen.getByTestId('explore-place-card-p1')).toHaveAccessibleName(
+      '감천문화마을'
+    );
+    // 라벨 없이 글자만 이어 붙여도 위 이름은 같아진다 — 카드 자신의 명시 라벨인지 따로 본다.
+    expect(screen.getByLabelText('감천문화마을').props.testID).toBe(
+      'explore-place-card-p1'
+    );
+  });
+});

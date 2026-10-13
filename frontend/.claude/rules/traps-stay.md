@@ -1,8 +1,10 @@
 ---
 paths:
   - "src/features/stay/**"
-  - "src/pages/stay-*/**"
-  - "src/app/stays/**"
+  - "src/pages/stay/stay-*/**"
+  - "app/stays/**"
+  - "src/features/save-stay/**"
+  - "src/entities/stay/**"
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
 
@@ -12,7 +14,7 @@ paths:
 
 - **`useStaySearch` 기본 파라미터·오류 정규화** → **없다**(D6 이연). params를 그대로 넘기기만 한다.
 - **숙소 목록 무한 스크롤** → `/stays/search`에 **페이지네이션 파라미터가 없다**. `onEndReached`류를 붙이면 같은 1페이지를 반복 요청하는 함정인데, 그 "없음"을 잠그는 단언이 **어느 심판에도 없다**.
-- **이름·지역 검색은 통합 회귀 심판이 0이다** → `StaySearchScreen.tsx`의 `nameQuery`/`onChangeNameQuery`(필터링)와 `StaySearchPage.tsx`의 `nameQuery` state(소유)를 잇는 흐름을 누르는 `StaySearchPage.*.integration.test.tsx`가 없다(`StaySearchScreen.nameSearch.test.tsx`는 화면 단위뿐). `filterByNameQuery`를 지우거나 페이지가 다른 prop 이름으로 넘겨도 통합 스위트 전부 green이다.
+- **눌림 콜백 회귀는 인자 없는 `fireEvent.press(el)`로는 안 잡힌다 — 이벤트를 넘겨라** → 이름검색은 클라에서 거르므로 이름+필터 0건엔 서버 filter-zero가 안 오고 `stay-search-name-empty` 카드가 탈출구(검색어 지우기·필터 있을 때 필터 초기화)를 낸다(TRIP-935, 통합 심판은 `StaySearchPage.integration.test.tsx` 「이름검색 0건 탈출구」). 화면은 `onChangeNameQuery?.('')`를 화살표로 감싸 넘긴다 — 직결하면 실기 RN이 `onPress(눌림이벤트)`로 불러 `query.trim is not a function` 크래시다. RNTL `fireEvent.press(el)`는 인자 없이 불러 `?? ''`가 덮으므로 green이지만, `fireEvent.press(el, { nativeEvent: {} })`로 넘기면 red다(뮤테이션 실측) — 그 통합 케이스가 그렇게 누른다. 콜백이 받은 값을 단언하는 경우(filter-zero 원인 해제 ★3 — 원인 코드로 불렸는지 본다)는 인자 없이 눌러도 직결이 잡힌다; 빈 값으로 리셋하는 콜백만 이 함정에 걸린다. 이 목록은 `keyboardShouldPersistTaps="handled"`다(키보드가 떠 있을 때 뜨는 카드라서) — 실제 키보드 동작은 jest 사각이라 prop 값만 단언한다.
 
 ## stay 등록
 
@@ -20,11 +22,11 @@ paths:
 
 ## stay 담기 (coordConfirmed)
 
-- **`buildSaveStayRequest`의 출력값을 잠그는 심판이 단위·통합 두 층에 나뉘어 있고, 서로를 갱신시키는 기계가 없다** → `buildSaveStayRequest.test.ts`(단위, 함수 반환값)와 `src/pages/stay-search/ui/StaySearchPage.save.integration.test.tsx`(배선층, `EXPECTED_POST_A` 리터럴)가 같은 `coordConfirmed` 값을 각자 리터럴로 굳힌다. 단위 테스트만 갱신하고 통합 테스트를 빠뜨려도 lint·tsc·`pnpm test:node`는 green이다 — `pnpm test:integration`(또는 `pnpm test` 전체)을 돌려야만 드러난다(실측 2건). 이 함수의 반환 필드를 바꿀 때는 두 파일을 함께 grep한다.
+- **`buildSaveStayRequest`의 출력값을 잠그는 심판이 단위·통합 두 층에 나뉘어 있고, 서로를 갱신시키는 기계가 없다** → `buildSaveStayRequest.test.ts`(단위, 함수 반환값)와 `src/pages/stay/stay-search/ui/StaySearchPage.integration.test.tsx` 「저장 하트」 describe(배선층, `EXPECTED_POST_A` 리터럴)가 같은 `coordConfirmed` 값을 각자 리터럴로 굳힌다. 단위 테스트만 갱신하고 통합 테스트를 빠뜨려도 lint·tsc·`pnpm test:node`는 green이다 — `pnpm test:integration`(또는 `pnpm test` 전체)을 돌려야만 드러난다(실측 2건). 이 함수의 반환 필드를 바꿀 때는 두 파일을 함께 grep한다.
 
 ## e03 숙소 상세 GET
 
-- **`GET /stays/{stayId}`는 인증 필요인데 401을 별도로 안 가르고 통합 테스트 목 서버는 무조건 200이다** → `pages/stay-detail/ui/StayDetailPage.tsx`의 `resolveDetailState`는 404(notFound)·400(invalid)만 가르고 401은 나머지(`error`, 재시도 버튼)로 접힌다. 401은 다시 물어도 안 풀리므로 세션 만료 사용자는 재시도를 눌러도 같은 얼굴이 반복된다. `StayDetailPage.integration.test.tsx`의 `beforeEach` 기본 핸들러가 Authorization 헤더를 안 보고 200을 주기 때문에, 게스트 동선 케이스(I7·I8·G1·G2·`affiliateNoticeOneTruth`)가 green이어도 **실서버의 게스트/세션만료 경로는 보장되지 않는다**(정책 미결: 공개 API로 열지 FE가 401 얼굴을 만들지).
+- **`GET /stays/{stayId}`는 인증 필요인데 401을 별도로 안 가르고 통합 테스트 목 서버는 무조건 200이다** → `pages/stay/stay-detail/ui/StayDetailPage.tsx`의 `resolveDetailState`는 404(notFound)·400(invalid)만 가르고 401은 나머지(`error`, 재시도 버튼)로 접힌다. 401은 다시 물어도 안 풀리므로 세션 만료 사용자는 재시도를 눌러도 같은 얼굴이 반복된다. `StayDetailPage.integration.test.tsx`의 `beforeEach` 기본 핸들러가 Authorization 헤더를 안 보고 200을 주기 때문에, 게스트 동선 케이스(I7·I8·G1·G2·`affiliateNoticeOneTruth`)가 green이어도 **실서버의 게스트/세션만료 경로는 보장되지 않는다**(정책 미결: 공개 API로 열지 FE가 401 얼굴을 만들지).
 
 ## 하트 글리프 사본 분기 (6-b 시각 전용)
 
@@ -37,9 +39,9 @@ paths:
 
 ## e05 프리뷰 키 (렌더 얼굴 무심판)
 
-- **`stay-register-pin`·`stay-filter-sheet` 2키의 "렌더된 얼굴"은 어떤 jest 심판도 안 본다** → `devPreviewBandNav.test.tsx`는 `PREVIEW_STATES` 키 존재·개수(정본은 그 파일의 `toHaveLength`)·라벨만 잰다. `preview.tsx`의 `STAY_REGISTER_PIN_FLOW.activeTab`을 `'pin'`→`'mapsearch'`로 바꾸거나 `stay-filter-sheet` 픽스처에 `amenities:[] stayTypes:[]`를 넘겨도(빈 시트) 전 스위트가 green이다 — 6-b 육안 전까지는 "코드상 맞다"이지 "화면이 맞게 뜬다"가 아니다.
+- **`stay-register-pin`·`stay-filter-sheet` 2키의 "렌더된 얼굴"은 어떤 jest 심판도 안 본다** → 프리뷰 스모크(`devPreviewReleaseGate.test.tsx`)는 키 중복·없는 키 폴백만 잰다. `preview.tsx`의 `STAY_REGISTER_PIN_FLOW.activeTab`을 `'pin'`→`'mapsearch'`로 바꾸거나 `stay-filter-sheet` 픽스처에 `amenities:[] stayTypes:[]`를 넘겨도(빈 시트) 전 스위트가 green이다 — 6-b 육안 전까지는 "코드상 맞다"이지 "화면이 맞게 뜬다"가 아니다.
 
 ## stay 저장 (하트)
 
 - **동시에 다른 두 카드를 토글하면 스냅숏 롤백이 서로를 지운다** (savedPlaces 동형) → `savedStays.ts`의 `save`/`remove`는 롤백 시 `previous` **통째 스냅숏**으로 되돌린다. A press(진행중, prev=`[]`) → B press(prev=`[A_opt]`) → A가 404 → `setQueryData([])` 롤백이 아직 진행 중인 B의 낙관 담기까지 지운다. 양쪽 다 실패하면 실패한 A가 optimistic 표식째 유령으로 남아 재진입 refetch 전까진 해제도 안 된다. `pendingKeys`는 **같은** 카드 연타만 막고 다른 두 카드 동시 토글은 심판이 없다. 단일 카드·성공 경로는 무해.
-- **`useSavedStays`가 두 벌이다** → `features/stay/model/savedStays.ts`(POST/DELETE 토글)와 `features/trip/model/useSavedStays.ts`(읽기전용 재수출)가 같은 이름으로 각각 존재한다. features 간 직접 import 금지라 통합 불가 — grep하면 두 벌이 나오고 어느 쪽이 "토글이 되는지"는 파일을 열어야 안다.
+- **`useSavedStays`가 두 벌이다** → `features/save-stay/model/savedStays.ts`(POST/DELETE 토글)와 `features/trip/model/useSavedStays.ts`(읽기전용 재수출)가 같은 이름으로 각각 존재한다. features 간 직접 import 금지라 통합 불가 — grep하면 두 벌이 나오고 어느 쪽이 "토글이 되는지"는 파일을 열어야 안다.

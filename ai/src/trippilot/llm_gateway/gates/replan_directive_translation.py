@@ -34,8 +34,8 @@ class DirectiveTranslation:
     버린 키를 값에 싣는 이유: `GateDropEvent` 는 `dropped_ids: tuple[PoiId, ...]` 로
     **INV-1 환각률 지표 전용**이다(도메인 docstring). 지시 키 드롭을 거기 섞으면 그
     지표가 오염된다 — 후보 환각과 어휘 불일치는 다른 사건이고 처방도 다르다.
-    대신 호출측이 `resolve_chips` 의 unknown 과 같은 목록으로 합쳐 응답에 싣는다
-    (조용한 무시 금지).
+    대신 호출측(`api/wiring._translate_free_text`)이 버린 **건수**를 응답 `notes` 에 싣는다
+    (조용한 무시 금지 — 키 문자열은 LLM 이 쓴 것이라 싣지 않는다).
     """
 
     keys: tuple[str, ...]

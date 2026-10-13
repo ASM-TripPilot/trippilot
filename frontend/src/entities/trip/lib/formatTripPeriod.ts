@@ -67,6 +67,8 @@ export function formatDateRange(
   endDate?: string
 ): string | null {
   if (startDate === undefined || endDate === undefined) return null;
+  // 0박(같은 날)은 날짜 하나 — '6월 10일 – 6월 10일' 처럼 같은 날을 두 번 쓰지 않는다.
+  if (startDate === endDate) return formatMonthDay(startDate);
   return `${formatMonthDay(startDate)} – ${formatMonthDay(endDate)}`;
 }
 
@@ -79,6 +81,9 @@ export function formatSectionRange(dateFrom: string, dateTo: string): string {
 export function formatTripRange(startDate: string, endDate: string): string {
   const [, startMonth, startDay] = startDate.split('-');
   const [, endMonth, endDay] = endDate.split('-');
+  // 0박(같은 날)은 날짜 하나.
+  if (startDate === endDate)
+    return `${Number(startMonth)}월 ${Number(startDay)}일`;
   const tail =
     startMonth === endMonth
       ? `${Number(endDay)}일`
@@ -101,6 +106,7 @@ export function formatConfirmedDateRange(
   const startMonth = startAt.getUTCMonth() + 1;
   const endMonth = endAt.getUTCMonth() + 1;
   const head = `${startMonth}월 ${startAt.getUTCDate()}일`;
+  if (start === end) return head; // 0박(같은 날)은 날짜 하나
   const tail =
     startMonth === endMonth
       ? `${endAt.getUTCDate()}일`
@@ -118,6 +124,7 @@ export function formatTripDateRange(
   const [sy, sm, sd] = start.split('-').map(Number);
   const [ey, em, ed] = end.split('-').map(Number);
   const head = `${sy}.${sm}.${sd}`;
+  if (start === end) return head; // 0박(같은 날)은 날짜 하나
   if (sy !== ey) return `${head}${EN_DASH}${ey}.${em}.${ed}`;
   return `${head}${EN_DASH}${em}.${ed}`;
 }
@@ -133,25 +140,38 @@ export function formatLegendDateRange(
   if (start === null || end === null) return null;
   const [, sm, sd] = start.split('-').map(Number);
   const [, em, ed] = end.split('-').map(Number);
+  if (start === end) return `${sm}.${sd}`; // 0박(같은 날)은 날짜 하나
   return `${sm}.${sd}${EN_DASH}${em}.${ed}`;
 }
 
 /** '6월 10일(수) – 13일(토)'(요일 삽입·공백 en dash·같은 달 생략). 요일은 dayOfWeek(에포크 산술)로
- *  구해 시계를 안 읽는다. summaryPeriod 가 여기에 ' · N박 M일'을 이어 붙인다. */
+ *  구해 시계를 안 읽는다. summaryPeriod 가 여기에 ' · N박 M일'을 이어 붙인다.
+ *  `today`('YYYY-MM-DD')를 주면 연도를 붙인다(TRIP-1285): 시작의 해 ≠ 오늘의 해 → 시작 앞 `YYYY년 `,
+ *  해 넘김 → 끝 앞 `YYYY년 M월`. 안 주면 연도 없는 옛 출력 그대로다. */
 export function formatDateRangeWithDow(
   startDate: string,
-  endDate: string
+  endDate: string,
+  today?: string
 ): string {
   const [startMonth, startDay] = monthDayNums(startDate);
   const [endMonth, endDay] = monthDayNums(endDate);
   const startDow = WEEKDAY_LABELS[dayOfWeek(toEpochDay(startDate))];
   const endDow = WEEKDAY_LABELS[dayOfWeek(toEpochDay(endDate))];
+  const startYear = startDate.slice(0, 4);
+  const endYear = endDate.slice(0, 4);
+  const startPrefix =
+    today !== undefined && startYear !== today.slice(0, 4)
+      ? `${startYear}년 `
+      : '';
 
-  const head = `${startMonth}월 ${startDay}일(${startDow})`;
+  const head = `${startPrefix}${startMonth}월 ${startDay}일(${startDow})`;
+  if (startDate === endDate) return head; // 0박(같은 날)은 날짜 하나
   const tail =
-    startMonth === endMonth
-      ? `${endDay}일(${endDow})`
-      : `${endMonth}월 ${endDay}일(${endDow})`;
+    today !== undefined && startYear !== endYear
+      ? `${endYear}년 ${endMonth}월 ${endDay}일(${endDow})`
+      : startMonth === endMonth
+        ? `${endDay}일(${endDow})`
+        : `${endMonth}월 ${endDay}일(${endDow})`;
   return `${head} ${EN_DASH} ${tail}`;
 }
 

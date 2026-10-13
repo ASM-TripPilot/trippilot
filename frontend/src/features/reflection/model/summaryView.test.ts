@@ -5,7 +5,7 @@ import type {
   TripSummary,
   TripSummaryEnvelope,
   TripSummaryStats,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import {
   daySubtitle,

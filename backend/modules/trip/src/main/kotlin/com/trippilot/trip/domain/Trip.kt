@@ -5,6 +5,7 @@ import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
@@ -38,6 +39,28 @@ data class TripDestination(
 )
 
 /**
+ * 여행의 일과 창 — **하루 몇 시부터 움직이는가**(실사용 피드백 2026-10-07).
+ *
+ * 전부 `null` 이면 미설정이고 일정 생성이 기본 창(09:00~21:00)을 쓴다 — 지금까지의 동작 그대로다.
+ *
+ * 세 값의 성격이 다르다:
+ * - [dayStartAt] 은 **취향**이다("9시는 이르다"). 전 일자에 같이 걸린다.
+ * - [firstDayStartAt]·[lastDayEndAt] 은 **사실**이다(비행기·KTX 도착·출발). 그 날에만 걸리고,
+ *   없으면 그 날도 [dayStartAt]·기본값을 따른다. 이게 없으면 도착 전 시간에 일정이 깔린다.
+ *
+ * 하루 **끝**(전 일자 공통)은 이 범위가 아니다 — 들어온 요구는 시작 쪽이고, 요청 없는 설정은 만들지 않는다.
+ */
+data class TripDayWindow(
+    val dayStartAt: LocalTime? = null,
+    val firstDayStartAt: LocalTime? = null,
+    val lastDayEndAt: LocalTime? = null,
+) {
+    companion object {
+        val UNSET = TripDayWindow()
+    }
+}
+
+/**
  * 여행(C6). 앱 소유. 생성 시 취향 동결(preferenceSnapshot).
  * 불변식: INV-U1-11(end≥start) · INV-U1-14(Σnights≤기간) · INV-U1-13(상태 단방향).
  *
@@ -68,6 +91,8 @@ class Trip private constructor(
      * 발행됐다**는 뜻이다(그 조건부 쓰기가 멱등의 전부다). 기본값이 있어 기존 호출자를 깨지 않는다.
      */
     val endedAt: Instant? = null,
+    /** 일과 창(미설정이면 [TripDayWindow.UNSET]) — 일정 생성이 하루 창을 정할 때 읽는다. */
+    val dayWindow: TripDayWindow = TripDayWindow.UNSET,
 ) {
     /**
      * 편집 가능한가 — **날짜로 판정한다**(TRIP-U1 후속).
@@ -107,15 +132,17 @@ class Trip private constructor(
         budgetTotal: Long?,
         destinations: List<TripDestination>,
         now: Instant,
+        dayWindow: TripDayWindow = this.dayWindow,
     ): Trip {
         // 여행지 기준(KST)으로 오늘을 정한다 — 서버가 UTC 면 자정 무렵 하루가 어긋난다.
         if (!editableAt(now.atZone(TRAVEL_ZONE).toLocalDate())) {
             throw ConflictDetected(message = "종료·삭제된 여행은 편집할 수 없습니다.")
         }
-        validate(startDate, endDate, party, destinations)
+        validate(startDate, endDate, party, destinations, dayWindow)
         return Trip(
             tripId, accountId, resolveTitle(title, destinations), startDate, endDate, party,
             companionType, budgetTotal, preferenceSnapshot, destinations, status, deletedAt, createdAt, now,
+            endedAt, dayWindow,
         )
     }
 
@@ -123,7 +150,7 @@ class Trip private constructor(
         if (deletedAt != null) throw ConflictDetected(message = "이미 삭제된 여행입니다.")
         return Trip(
             tripId, accountId, title, startDate, endDate, party, companionType, budgetTotal,
-            preferenceSnapshot, destinations, status, now, createdAt, now,
+            preferenceSnapshot, destinations, status, now, createdAt, now, endedAt, dayWindow,
         )
     }
 
@@ -143,11 +170,13 @@ class Trip private constructor(
             preferenceSnapshot: Map<String, Any?>,
             destinations: List<TripDestination>,
             now: Instant,
+            dayWindow: TripDayWindow = TripDayWindow.UNSET,
         ): Trip {
-            validate(startDate, endDate, party, destinations)
+            validate(startDate, endDate, party, destinations, dayWindow)
             return Trip(
                 UUID.randomUUID(), accountId, resolveTitle(title, destinations), startDate, endDate, party,
                 companionType, budgetTotal, preferenceSnapshot, destinations, TripStatus.PLANNED, null, now, now,
+                null, dayWindow,
             )
         }
 
@@ -157,15 +186,22 @@ class Trip private constructor(
             party: Int, companionType: CompanionType?, budgetTotal: Long?, preferenceSnapshot: Map<String, Any?>,
             destinations: List<TripDestination>, status: TripStatus, deletedAt: Instant?, createdAt: Instant, updatedAt: Instant,
             endedAt: Instant? = null,
+            dayWindow: TripDayWindow = TripDayWindow.UNSET,
         ): Trip = Trip(
             tripId, accountId, title, startDate, endDate, party, companionType, budgetTotal,
-            preferenceSnapshot, destinations, status, deletedAt, createdAt, updatedAt, endedAt,
+            preferenceSnapshot, destinations, status, deletedAt, createdAt, updatedAt, endedAt, dayWindow,
         )
 
         private fun resolveTitle(title: String?, destinations: List<TripDestination>): String =
             title?.takeIf { it.isNotBlank() } ?: "${destinations.firstOrNull()?.region ?: "새"} 여행"
 
-        private fun validate(startDate: LocalDate, endDate: LocalDate, party: Int, destinations: List<TripDestination>) {
+        private fun validate(
+            startDate: LocalDate,
+            endDate: LocalDate,
+            party: Int,
+            destinations: List<TripDestination>,
+            dayWindow: TripDayWindow,
+        ) {
             val errors = mutableListOf<FieldError>()
             if (endDate.isBefore(startDate)) errors += FieldError("endDate", "종료일은 시작일 이후여야 합니다.") // INV-U1-11
             if (party < 1) errors += FieldError("party", "인원은 1명 이상이어야 합니다.")
@@ -174,6 +210,16 @@ class Trip private constructor(
             val tripNights = ChronoUnit.DAYS.between(startDate, endDate)
             if (destinations.sumOf { it.nights }.toLong() > tripNights) {
                 errors += FieldError("destinations", "도시별 박수 합이 여행 기간을 넘을 수 없습니다.") // INV-U1-14
+            }
+            // 일과 창 — **당일치기에서만** 첫날 시작과 마지막날 종료가 같은 날에 놓인다.
+            // 다일 여행은 두 값이 서로 다른 날이라 비교가 성립하지 않는다("첫날 10시 출발 ·
+            // 마지막날 09시 귀가"는 정상이다). 기본 창(09:00~21:00)과의 대소는 일정 생성 모듈의
+            // 상수라 여기서 판정하지 않는다 — 도메인이 남의 모듈 상수를 알면 그쪽이 바뀔 때 조용히 어긋난다.
+            val sameDay = startDate == endDate
+            val first = dayWindow.firstDayStartAt
+            val last = dayWindow.lastDayEndAt
+            if (sameDay && first != null && last != null && !first.isBefore(last)) {
+                errors += FieldError("firstDayStartAt", "당일치기는 시작 시각이 종료 시각보다 빨라야 합니다.")
             }
             if (errors.isNotEmpty()) throw ValidationFailed(errors)
         }

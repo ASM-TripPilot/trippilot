@@ -71,11 +71,11 @@ class ReplanFacadeService(
         val ctx = trips.findGenerationContext(command.accountId, command.tripId) ?: throw ResourceNotFound()
         // 기준점이 없으면 상대가 후보 풀을 매달 곳이 없다 — 숙소 앵커로 채운다(BR-U4-19 사다리의 마지막 단).
         val origin = groundingPoint(command, ctx)
-        // 취향은 생성 경로와 **같은 척도**로 만든다(PreferenceProfiles KDoc) — §2 이탈 2건은 의도다:
-        // 원천을 trip.preference_snapshot(클라이언트 자유 맵, 타입 보증 없음) 대신 계정 스냅숏+개인화로,
-        // 예산 등급을 trip.budget_total 변환 대신 preference_set.budget_tier(경계 계약 어휘)로.
-        // 두 경로가 다른 취향으로 돌면 "원래 자리보다 나은 것만 바꾼다"(§4) 비교가 성립하지 않는다.
-        val prefs = preferences.findPreferences(command.accountId)
+        // 취향은 생성 경로와 **같은 척도**로 만든다(PreferenceProfiles KDoc) — 원천은 §2 대로 trip.preference_snapshot
+        // (안 실린 축만 계정 값 — overriddenBy). §2 이탈 1건은 의도다: 예산 등급을 trip.budget_total 변환 대신
+        // 취향의 budget_tier(경계 계약 어휘)로. 두 경로가 다른 취향으로 돌면 "원래 자리보다 나은 것만 바꾼다"(§4)
+        // 비교가 성립하지 않는다.
+        val prefs = preferences.findPreferences(command.accountId).overriddenBy(ctx.preferenceSnapshot)
         val profile = prefs.toProfile(personalization.hintsFor(command.accountId))
         val output = scheduleAgent.replan(
             ReplanInput(
@@ -112,10 +112,11 @@ class ReplanFacadeService(
         // 잠긴 슬롯은 재해결 대상이 아니다 — 원본의 위반 표시(BR-U3-13)가 현실에 그대로 남으므로
         // 이어받는다(TRIP-839). 판정은 상대 에코(isFixed)가 아니라 **우리 잠금 집합**으로 한다 —
         // 잠금 규칙의 주인이 이쪽이다. 재배치된 슬롯은 어셈블리를 새로 통과했으니 위반 없음이 정당하다.
-        // 같은 장소가 하루에 두 번 잠기면 첫 슬롯 값을 쓴다(slotKey 규약상 어차피 구분 불가).
-        val lockedByPoi = lockedSlots(current, command).groupBy { it.sourcePoiId }.mapValues { (_, v) -> v.first() }
+        // 짝은 (장소, 시작 시각)으로 짓는다 — 잠금은 원 시각 그대로 돌아온다(HC3). 장소만으로 지으면 같은 곳을
+        // 하루 두 번 잠갔을 때(아침에 다녀옴 + 점심 예약) 둘째가 첫 슬롯의 위반 표시로 덮인다.
+        val lockedByStart = lockedSlots(current, command).associateBy { it.sourcePoiId to it.startAt }
         val slots = day?.slots.orEmpty().map {
-            val locked = lockedByPoi[it.poiId]
+            val locked = lockedByStart[it.poiId to it.startAt]
             ReplanSlot(
                 poiId = it.poiId, startAt = it.startAt, endAt = it.endAt, isFixed = it.isFixed,
                 endsNextDay = it.endsNextDay, distanceRange = it.distanceRange,
@@ -130,7 +131,7 @@ class ReplanFacadeService(
     }
 
     /**
-     * 후보 풀을 매달 좌표. 사다리: 현재 위치 → 그 날 숙소 앵커 → **목적지 중심**(TRIP-963).
+     * 후보 풀을 매달 좌표. 사다리: 현재 위치 → 그 날 숙소 앵커 → **그 날의 목적지 중심 → 첫 목적지 중심**(TRIP-963).
      *
      * 마지막 단은 생성 경로가 TRIP-384 에서 같은 문제를 푼 그 단이다(`GenerateItineraryService.dayAnchors`
      * 의 `RegionAnchors.centerOf` 폴백). 재계획에만 이 단이 없어서, 숙소 0·실적 0·GPS 0 인 사용자가
@@ -148,7 +149,11 @@ class ReplanFacadeService(
         baseAnchors.findStayNightAnchors(command.tripId, ctx.startDate, ctx.endDate)
             .firstOrNull { it.date == command.targetDate }
             ?.let { return it.lat to it.lng }
-        ctx.destinationRefs.firstNotNullOfOrNull { RegionAnchors.centerOf(regions, it) }
+        // 그 날의 목적지 → 첫 목적지 — 생성 경로 `dayAnchors` 와 같은 사다리(PR #932). 첫 목적지로만 내려가면
+        // "서울 1박 + 인천 1박"의 2일차 재계획이 서울에 매달린다.
+        val dayDestination = RegionAnchors.destinationOn(ctx.destinationRefs, ctx.startDate, command.targetDate)
+        (dayDestination?.let { RegionAnchors.centerOf(regions, it) }
+            ?: ctx.destinationRefs.firstNotNullOfOrNull { RegionAnchors.centerOf(regions, it) })
             ?.let { return it.lat to it.lng }
         throw ScheduleAgentCallFailed(
             "NO_GROUNDING_POINT", retryable = false,
@@ -160,7 +165,14 @@ class ReplanFacadeService(
      * 다시 짜도 그대로여야 하는 슬롯(INV-U4-04):
      * - **완료** — 이미 다녀왔다. 지우면 실적과 계획이 어긋난다(C10 이 알려 준다)
      * - **시각 고정** — 예약처럼 시각이 정해진 것(HC3)
-     * - **지금 이전** — '지금 이후만' 범위일 때. 오늘 전체를 다시 짜도 지나간 시각을 새로 채우지는 않는다
+     * - **시각상 끝난 슬롯** — '지금 이후만' 범위일 때. 오늘 전체를 다시 짜도 지나간 시각을 새로 채우지는 않는다
+     *
+     * '지금 이전'(INV-U4-04 · 정본 §3.1 "fromInstant 이전 슬롯")을 **끝난 슬롯**(`endAt <= now`)으로 읽는다 —
+     * 시작 기준(`startAt < now`)이면 **진행 중인 슬롯**까지 잠긴다. 18:30 에 18:19–19:34 저녁이 잠기면 AI 는
+     * 19:34 뒤 하루 창 끝(21:00)까지만 채울 수 있어 대개 "대안 없음"이었고(2026-10-04 실측 8건 중 4건),
+     * 사유가 휴무·만석이면 바로 그 진행 중 장소를 바꿀 수 없었다. 풀어도 지난 시각은 새로 채워지지 않는다 —
+     * AI 가 새 방문을 `from_instant` 이후에만 넣는다. 자정 넘김(`endsNextDay`)의 `endAt` 은 익일 시각이라
+     * 끝난 것으로 보지 않는다.
      *
      * 잠금을 빠뜨리면 이미 다녀온 곳이 일정에서 사라지거나 예약 시각이 밀린다.
      */
@@ -176,7 +188,7 @@ class ReplanFacadeService(
         val completed = command.completedSlotKeys.toSet()
         return day.slots.filter {
             it.isFixed ||
-                (!command.fullDay && it.startAt < now) ||
+                (!command.fullDay && !it.endsNextDay && it.endAt <= now) ||
                 "${command.targetDate}#${it.sourcePoiId}" in completed
         }
     }

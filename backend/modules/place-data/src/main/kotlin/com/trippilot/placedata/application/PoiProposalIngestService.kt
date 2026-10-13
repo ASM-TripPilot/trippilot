@@ -107,7 +107,7 @@ class PoiProposalIngestService(
                 source = source,
                 sourceRef = ref,
                 tags = proposal.tags,
-                imageUrl = proposal.imageUrl,
+                imageUrl = toHttps(proposal.imageUrl),
             )
             // 게이트 판정은 여기 한 번뿐이다 — 통과 못 하면 신규든 갱신이든 손대지 않는다.
             if (!PoiCollectionGate.qualifies(place)) {
@@ -144,6 +144,15 @@ class PoiProposalIngestService(
         )
         return PoiIngestResult(proposals.size, registered, updated, unresolved, dropped)
     }
+
+    /**
+     * 평문 HTTP 이미지는 iOS App Transport Security 가 **에러 없이** 차단한다 — 화면에 회색 자리만 남아
+     * "사진이 없는 장소"로 보인다(2026-10-03 실측: 수집분 16,607건 전부 `http://`, 같은 URL 이 https 로도 200).
+     * 수집원이 늘어도 여기가 단일 관문이고 신규·갱신 두 경로가 이 값을 함께 쓴다.
+     * **스킴만 올린다** — 호스트·경로·질의는 손대지 않는다.
+     */
+    private fun toHttps(url: String?): String? =
+        if (url != null && url.startsWith("http://", ignoreCase = true)) "https://" + url.substring(7) else url
 
     /**
      * 게이트 탈락 사유. 게이트 자체는 통과/불통만 말하므로(순수 판정) 사유는 여기서 되짚는다 —

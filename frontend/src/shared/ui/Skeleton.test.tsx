@@ -7,7 +7,7 @@ import { Skeleton } from './Skeleton';
 /**
  * TRIP-1125 · 공용 스켈레톤 부품의 펄스 계약(AC-1~AC-4).
  *
- * 측정 기법은 `features/itinerary/ui/GeneratingScreen.pulse.test.tsx` 와 같다 — jest 의 RN 목은
+ * 측정 기법은 `GeneratingScreen.test.tsx` 「단계 펄스」 describe 와 같다 — jest 의 RN 목은
  * 네이티브 드라이버 애니메이션을 JS 값에 반영하지 않으므로 `shouldUseNativeDriver` 를 false 로
  * 스파이해 JS 로 돌리고, "네이티브로 설정했나"는 `Animated.timing` 등의 설정 인자로 따로 잰다.
  */

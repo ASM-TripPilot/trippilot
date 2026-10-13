@@ -10,6 +10,8 @@ import sys
 from runtime_io import CommandError, command
 import runtime_db
 import runtime_secrets
+import runtime_kb
+import runtime_pois
 import runtime_smoke
 
 HOST_PATTERN = r"(?=.{1,253}$)[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?"
@@ -67,13 +69,22 @@ def ensure_namespace(namespace, shell):
 def parser():
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="action", required=True)
-    for action in ("ensure-namespace", "sync-secrets", "bootstrap-db", "cleanup-db", "render-values", "smoke"):
+    for action in ("ensure-namespace", "sync-secrets", "bootstrap-db", "cleanup-db", "render-values", "smoke", "load-kb",
+                   "load-pois"):
         sub = commands.add_parser(action)
         sub.add_argument("--namespace", default="trippilot")
+        if action == "load-pois":
+            # 기본은 upsert 만. 퇴출(LOST)은 입력으로만 켜고, 대량 정리 가드(409)는 여기서 넘길 수 없다.
+            sub.add_argument("--close-missing", action="store_true")
+            # 닫힐 수만 묻고(서버 계산) 평소대로 upsert — kubectl 없이 퇴출 규모를 보는 유일한 창.
+            sub.add_argument("--close-missing-dry-run", action="store_true")
         if action in ("sync-secrets", "bootstrap-db", "render-values"):
             sub.add_argument("--outputs", type=Path, required=True)
         if action in ("sync-secrets", "render-values"):
             sub.add_argument("--embedding-enabled", action="store_true")
+        if action == "sync-secrets":
+            # 미지정 = 시크릿에 저장된 푸시 모드 유지. 값은 백엔드가 아는 두 가지뿐이다.
+            sub.add_argument("--push-mode", choices=("off", "expo"))
         if action in ("bootstrap-db", "cleanup-db"):
             sub.add_argument("--run-id", required=True)
         if action == "render-values":
@@ -90,13 +101,19 @@ def main(argv=None):
     if args.action == "ensure-namespace":
         ensure_namespace(args.namespace, command)
     elif args.action == "sync-secrets":
-        runtime_secrets.sync(outputs, args.namespace, args.embedding_enabled, command)
+        runtime_secrets.sync(outputs, args.namespace, args.embedding_enabled, command,
+                             push_mode=args.push_mode)
     elif args.action == "bootstrap-db":
         runtime_db.bootstrap(outputs, args.namespace, args.run_id, command)
     elif args.action == "cleanup-db":
         runtime_db.cleanup(args.namespace, args.run_id, command)
     elif args.action == "smoke":
         runtime_smoke.run(args.namespace, command)
+    elif args.action == "load-kb":
+        runtime_kb.run(args.namespace, command)
+    elif args.action == "load-pois":
+        runtime_pois.run(args.namespace, command, close_missing=args.close_missing,
+                         close_missing_dry_run=args.close_missing_dry_run)
     elif args.action == "render-values":
         values = helm_values(outputs, args.image_tag, args.certificate_arn, args.hostname, args.embedding_enabled)
         Path(args.output).write_text(json.dumps(values, indent=2) + "\n")

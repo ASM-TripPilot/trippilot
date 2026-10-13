@@ -94,14 +94,21 @@ class TimeWindowSchema(BoundaryModel):
 
 
 class FixedBlockSchema(BoundaryModel):
-    """날짜·시각이 확정된 필수방문지(HC3). ANYTIME(시각 미지정) 필수방문의
-    물질화는 백엔드 소유(MustVisitMaterializer, 경계 계약 M1) — AI는 확정된 블록만 받는다."""
+    """필수방문지 1건. `start` 가 있으면 날짜·시각 확정(HC3 핀 — 종전 그대로).
+
+    **`start` 가 null 이면 그 날 꼭 가되 시각은 조립이 정한다(필수 방문, TRIP-1249)** —
+    영업시간 안, 식당이면 식사창 안. 종전엔 ANYTIME 을 백엔드(MustVisitMaterializer)가
+    창 시작(09:00)에 핀해 보냈는데 늦게 여는 곳이 HC1 에 걸려 하루가 통째로 409 였다.
+    `date` 는 여전히 필수 — 날짜까지 미정인 필수방문의 날짜 배정은 백엔드 소유다.
+    재계획 `locked_blocks` 는 이 완화를 받지 않는다 — 스키마는 같지만 `start: null` 인 잠금은
+    `ReplanRequest` 검증이 422 로 거절한다(잠금은 시각이 정체성)."""
 
     poi_id: str = Field(min_length=1)
     date: dt.date
-    start: dt.time
+    start: dt.time | None = None
     # dwell_min 만 선택 유지 — 백엔드 MustVisitMaterializer 가 null 을 그대로 싣는다
-    # (MustVisitMaterializer.kt:70 → GenerateItineraryService.kt:226). 미지정은 wiring 이 60분 적용.
+    # (MustVisitMaterializer.kt:70 → GenerateItineraryService.kt:226). 미지정은 핀(start 있음)이면
+    # wiring 이 60분, 필수 방문(start null)이면 조립이 카테고리 기본 체류를 적용(0 도 미지정으로 본다).
     dwell_min: int | None = Field(default=None, ge=0)
 
 
@@ -253,6 +260,12 @@ class ItineraryPayload(BoundaryModel):
     `unplaced_must_visits`는 additive(기본 빈 리스트 = 전부 배치됨) — generate 응답의
     부분 성공(200) 보고 채널이다. 해소 불가 모순의 409 경로는 그대로다(약화 금지).
     validate/repair 요청으로 왕복될 때는 판정 컨텍스트가 없으므로 소비하지 않는다.
+    `scoring_mode`·`degradations`는 additive(generate 경로만 실값) — 취향 점수의 출처와
+    밟은 강등 계단. `solve_mode`는 어셈블리 단계라 LLM 점수 여부를 말하지 않는다.
+    `scoring_mode`: LLM(전 후보 LLM 점수) · MIXED(LLM 점수 + 빠진 후보 규칙 보충) ·
+    RULE(규칙 점수만) · null(모름 — repair·replan·왕복 본문). `degradations`: 기계 판독용
+    `"{stage}:{사유 접두}"` 코드(예: `llm:c1_fallback`, `weather:weather_error`) —
+    자유 문장·시각·시한 값은 싣지 않는다. 빈 목록 = 강등 없음(또는 모름).
     """
 
     days: list[DayScheduleSchema] = Field(default_factory=list)
@@ -263,6 +276,8 @@ class ItineraryPayload(BoundaryModel):
     freshness: FreshnessMetaSchema | None = None
     candidates_summary: CandidatesSummarySchema | None = None
     unplaced_must_visits: list[UnplacedMustVisitSchema] = Field(default_factory=list)
+    scoring_mode: Literal["LLM", "MIXED", "RULE"] | None = None
+    degradations: list[str] = Field(default_factory=list)
 
 
 # ───────────────────────── 검증 / 수리 ─────────────────────────
@@ -329,6 +344,15 @@ class RepairItineraryRequest(BoundaryModel):
     itinerary: ItineraryPayload
     violations: list[ViolationSchema] = Field(default_factory=list)
     request_meta: RequestMetaSchema
+    # 편집 교체 후속(2026-10-05) — additive optional, generate 와 **같은 스키마·의미·어휘**다.
+    # 앵커가 있는 날은 첫 구간 거리를 앵커→첫 장소로 채우고, 그 날의 창도 있으면 첫 슬롯 시작을
+    # generate 규칙(창 시작 + 앵커 이동) 이상으로 민다. 창은 **출발 시각으로만** 쓴다 — HC4 판정
+    # 창은 종전(당일 전체) 그대로라 사용자가 창 밖에 둔 슬롯을 수리 불가로 만들지 않는다.
+    # 수단은 generate 의 preference_profile.transport_modes 와 같은 목록·번역표(첫 인식 토큰).
+    # 셋 다 없으면 종전 동작(첫 구간 null·PUBLIC).
+    anchors: list[DayAnchorSchema] = Field(default_factory=list)
+    time_windows: list[TimeWindowSchema] = Field(default_factory=list)
+    transport_modes: list[str] = Field(default_factory=list)
 
 
 class RepairItineraryResponse(BoundaryModel):
@@ -416,6 +440,16 @@ class AlternativesRequest(BoundaryModel):
     # ② 규칙 랭킹이 실제로 쓰는 것은 poi_id 집합뿐이며
     # ③ 봉투는 AI 에 적재되지 않아 계정 파기 캐스케이드 부채를 만들지 않는다.
     saved_places: list[SavedPlaceSchema] = Field(default_factory=list)
+    # 후보 카테고리 제한 (TRIP-1065) — 같이 짜기 컨셉을 백엔드가 경계 코드
+    # (FOOD·CAFE·SIGHT·NIGHT_VIEW·NATURE·CULTURE·ACTIVITY·SHOPPING)로 바꿔 보낸다.
+    # 풀 단계에서 거르므로 LLM 선택·규칙 폴백 모두 그 안에서만 고른다. 비거나
+    # 아는 코드가 하나도 없으면 필터 없음(400 아님 — reason 과 같은 규칙).
+    categories: list[str] = Field(default_factory=list)
+    # 그 여행의 취향 (선택, 하위호환) — generate 의 `preference_profile` 과 같은 스키마·어휘.
+    # 오면 이 요청의 페르소나(ALTERNATIVE_SELECTION 의 확정 프로필 줄)로 쓰고, 없으면 종전대로
+    # `trip_id` 재조회(계정 취향). `companion_type` 은 이 여행의 동행 — 계정의 평소 동행보다 우선.
+    preference_profile: PreferenceProfileSchema | None = None
+    companion_type: str | None = None
     request_meta: RequestMetaSchema
 
 
@@ -508,6 +542,17 @@ class ReplanRequest(BoundaryModel):
     excluded_poi_ids: list[str] = Field(default_factory=list)
     request_meta: RequestMetaSchema
 
+    @model_validator(mode="after")
+    def _locks_have_times(self) -> "ReplanRequest":
+        # 잠금은 "못 건드리는 것"이라 시각이 정체성이다 — 시각 없는 잠금은 HC3 로 표현 불가
+        # (`current_slots` 의 시각 없는 `is_fixed` 와 같은 규칙, 422). generate 의 시각 없는
+        # 필수 방문(조립이 시각을 정함)은 이 경계의 것이 아니다.
+        untimed = [b.poi_id for b in self.locked_blocks if b.start is None]
+        if untimed:
+            raise ValueError(
+                f"locked_blocks 에 시각 없는 잠금: {', '.join(untimed)} — 잠금은 start 필수")
+        return self
+
 
 class ReplanEmptyReasonSchema(BoundaryModel):
     """왜 재계획안을 못 만들었나. **문구는 FE 소유** — 여기는 코드와 재료만 준다.
@@ -560,6 +605,9 @@ class ExplanationsRequest(BoundaryModel):
 
     trip_id: str = Field(min_length=1)
     itinerary: ItineraryPayload
+    # 그 여행의 취향 (선택, 하위호환) — `AlternativesRequest` 와 같은 규칙. 없으면 종전 재조회.
+    preference_profile: PreferenceProfileSchema | None = None
+    companion_type: str | None = None
     request_meta: RequestMetaSchema
 
 

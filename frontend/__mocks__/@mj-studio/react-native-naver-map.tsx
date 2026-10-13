@@ -12,7 +12,7 @@ import { View } from 'react-native';
 //
 // 인라인 jest.mock 팩토리로 두면 NativeWind babel 이 주입하는 `_ReactNativeCSSInterop`
 // 참조가 out-of-scope 로 걸리므로(함정), 모듈 스코프 파일로 분리한다
-// (__mocks__/react-native-webview.tsx·__mocks__/@gorhom/bottom-sheet.tsx 와 동형).
+// (__mocks__/@gorhom/bottom-sheet.tsx 와 동형 — 옛 react-native-webview 목은 지도 교체로 삭제).
 
 // prop 타입은 `{ children? }` 만 선언한다(webview 목 동형). isScrollGesturesEnabled 등
 // 실제 prop 은 MapView.tsx 가 **네이버 SDK 실타입**으로 검사받고(목 타입은 목 파일 안에서만
@@ -66,9 +66,15 @@ function NaverMapCircleOverlay(props: Record<string, unknown>) {
   return <View testID="map-circle" {...props} />;
 }
 
+// TRIP-1342 — 실제 경로 점선(dash `pattern`)용 폴리라인. 같은 통과형 목 — coords·color·pattern 을 그대로 노출한다.
+function NaverMapPolylineOverlay(props: Record<string, unknown>) {
+  return <View testID="map-route-segment" {...props} />;
+}
+
 export {
   NaverMapView,
   NaverMapMarkerOverlay,
   NaverMapPathOverlay,
   NaverMapCircleOverlay,
+  NaverMapPolylineOverlay,
 };

@@ -88,19 +88,22 @@ services:
       # 부른다(= 켠 것처럼 보이고 규칙 카드로 조용히 폴백). 일정 경계와 같은 꼴이다(DEC-U5-5).
       TRIPPILOT_AI_REFLECTION_MODE: ${AI_REFLECTION_MODE:-rule}
       TRIPPILOT_AI_REFLECTION_BASE_URL: ${AI_URL:-http://ai:8000}
-      # 시간제약(day1 5s / 전체 20s)을 AI 에 실을지. **기본 off** — FE 연동 기간에는 시간 때문에
-      # 규칙 폴백으로 강등되는 것을 걷어낸다(TRIP-474). 9월 재도입은 여기를 true 로(TRIP-475).
+      # 시간제약을 AI 에 실을지. 코드·배포 기본은 on(TRIP-1000 · #866)이고 **로컬만 off** — FE 연동 중
+      # 시간 때문에 규칙 폴백으로 강등되는 것을 걷어낸다(TRIP-474). 배포와 같게 보려면 .env 에서 true.
       TRIPPILOT_AI_SCHEDULE_DEADLINE_ENFORCED: ${AI_SCHEDULE_DEADLINE_ENFORCED:-false}
       # 시한 **값**도 통로를 연다. 켜는 순간 조정이 필요할 수 있는데(실측 TRIP-373: 취향 점수가
       # 후보 건당 ~0.3초 선형) 통로가 없으면 코드를 고쳐야 하고, 그러면 "우리 기본값이 무엇인지"가 흐려진다.
-      TRIPPILOT_AI_SCHEDULE_DEADLINE_DAY1_MS: ${AI_SCHEDULE_DAY1_DEADLINE_MS:-5000}
-      TRIPPILOT_AI_SCHEDULE_DEADLINE_TOTAL_MS: ${AI_SCHEDULE_TOTAL_DEADLINE_MS:-20000}
+      # 기본값은 코드(ScheduleDeadlineProperties)와 같다 — 켰을 때 배포와 다른 시한으로 돌면 안 된다.
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_DAY1_MS: ${AI_SCHEDULE_DAY1_DEADLINE_MS:-15000}
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_TOTAL_MS: ${AI_SCHEDULE_TOTAL_DEADLINE_MS:-60000}
       # 소셜 로그인 시크릿 — .env 에서 주입(컨테이너는 기본 프로파일이라 application-local.yml 안 읽음).
       # 미설정이면 빈 값 → 소셜 로그인 시도 시에만 실패(기동 무영향). 값은 .env.example 참고.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
+      # 카카오 SDK 토큰의 발급 앱 대조(TRIP-1317). 비면 대조하지 않는다.
+      KAKAO_APP_ID: ${KAKAO_APP_ID:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
       # 제휴 아웃바운드(C5) — fallback = 웹검색(수수료 없음) · tripcom = 트립닷컴 딥링크(수수료 추적).
@@ -110,6 +113,9 @@ services:
       TRIPCOM_ALLIANCE_ID: ${TRIPCOM_ALLIANCE_ID:-}
       TRIPCOM_SID: ${TRIPCOM_SID:-}
       TRIPCOM_AD_ID: ${TRIPCOM_AD_ID:-}
+      # 하루 생성 상한과 예외(개발자) 계정(TRIP-1314). 상한은 빈 값이 넘어가면 숫자 바인딩이 깨져 기본을 적는다.
+      ITINERARY_GENERATION_DAILY_LIMIT: ${ITINERARY_GENERATION_DAILY_LIMIT:-10}
+      ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS: ${ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS:-}
       # Apple 은 시크릿이 없다 — id_token 서명을 JWKS 로 검증할 뿐이라 iOS 번들 ID 하나뿐이다(TRIP-858).
       # 이 값이 없으면 애플 로그인은 401 이 아니라 501(미지원)로 나간다.
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
@@ -162,6 +168,47 @@ services:
       retries: 12
       start_period: 40s
 
+  # ── POI 수집본 적재 (1회성 · TRIP-1223) ────────────────────────
+  # 백엔드가 healthy 가 되면 팀 공유본(ai/data/collected_pois.json)을 /internal/pois/proposals 에
+  # 한 번 붓고 끝난다. **이 한 걸음이 사람 몫이라** DB 는 누가 손으로 넣은 날에 멈춰 있었다 —
+  # QA "서울 맛집 0" 이 그것이다(공유본엔 서울 FOOD 850 이 있는데 DB 엔 없었다).
+  # 수신은 (source, source_ref) upsert 라 `up` 마다 다시 돌아도 행이 늘지 않는다 — 그래서 "이미
+  # 넣었나"를 따지지 않고 매번 붓는다. 단 upsert 만 하므로 공유본에서 **지운** 행은 DB 에 남는다.
+  # 토큰이 비면 /internal 은 닫혀 있다(fail-closed, ServiceTokenAuth.kt — REQUIRE 스위치는 기동 가드일
+  # 뿐 여는 길이 아니다). 그때는 401 을 쌓지 않고 한 줄 안내 후 성공 종료한다.
+  # 배포(EKS)는 이 파일을 안 읽는다 — 거기는 수동 런북(docs/guides/poi-수집본-적재.md)이다.
+  poi-ingest:
+    profiles: ["backend", "full"]
+    image: python:3.12-slim   # ai 이미지와 같은 베이스 — 스크립트가 표준 라이브러리만 쓴다
+    container_name: trippilot-poi-ingest
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      # 컨테이너 stdout 은 TTY 가 아니라 블록 버퍼라, 안 끄면 실패 때 `logs` 에 오류(stderr)가
+      # 맥락 줄("source=… 제안=…건")보다 먼저 찍힌다.
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./backend/scripts/ingest_pois.py:/ingest/ingest_pois.py:ro
+      # 파일이 아니라 디렉토리를 붙인다 — LOCALDATA 문서는 아직 없을 수 있는데, 없는 파일을 붙이면
+      # Docker 가 호스트에 그 이름의 **디렉토리**를 만든다(아래 ai 의 ~/.aws 와 같은 이유).
+      - ./ai/data:/data:ro
+    # LOCALDATA 문서(collected_localdata.json)는 **있으면** 같이 넣는다 — 없으면 공유본만.
+    # `$$` 는 compose 치환을 피해 셸에 `$` 를 넘기는 표기다.
+    command:
+      - sh
+      - -c
+      - |
+        if [ -z "$$SERVICE_AUTH_TOKEN" ]; then
+          echo "SERVICE_AUTH_TOKEN 이 비어 /internal 이 닫혀 있다 — POI 적재를 건너뛴다(.env 에 넣고 다시 up)."
+          exit 0
+        fi
+        set -- /data/collected_pois.json
+        [ -f /data/collected_localdata.json ] && set -- "$$@" /data/collected_localdata.json
+        exec python3 /ingest/ingest_pois.py --base-url http://backend:8080 "$$@"
+
   # ── AI (통합 테스트 스텁 · 실제 C1/C2 는 후속) ─────────────────
   ai:
     profiles: ["full"]
@@ -188,6 +235,8 @@ services:
       # 기능별 벤더 혼용 (TRIP-513, AI_LLM_PROVIDER=mixed) — "FEATURE=model,…"
       TRIPPILOT_LLM_FEATURE_MODELS: ${AI_LLM_FEATURE_MODELS:-}
       TRIPPILOT_LLM_RETRY_MODELS: ${AI_LLM_RETRY_MODELS:-}
+      # 취향 점수 병렬 청크 상한(TRIP-1313) — 생성 1회의 PREFERENCE_SCORING 호출 수. 비우면 10.
+      TRIPPILOT_SCORE_MAX_PARALLEL: ${AI_SCORE_MAX_PARALLEL:-}
       # 파인튜닝 로컬 LLM (REMINDER_COPY) — OpenAI 호환 서버 주소.
       # 앱은 TRIPPILOT_* 만 읽는다. 이 통로가 빠지면 .env 에 값을 넣어도 조용히 무시된다.
       TRIPPILOT_LOCAL_LLM_BASE_URL: ${AI_LOCAL_LLM_BASE_URL:-}

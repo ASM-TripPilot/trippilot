@@ -25,9 +25,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from collect_pois import load_closed_refs  # noqa: E402  (같은 디렉토리 — refetch_intro 와 같은 방식)
 from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     non_travel_reason,
-    parse_open_hours,
+    parse_opening_hours_raw,
 )
 
 
@@ -77,6 +78,10 @@ def reparse_open_hours(proposals: list[dict]) -> int:
     외부 호출 0. 원문(`opening_hours_raw`)이 정본이고 `open_hours` 는 그 파생이라,
     파생을 최신 규칙으로 다시 내는 것은 데이터를 바꾸는 게 아니다. 이미 값이
     있으면 건드리지 않는다 — 수집 시점 판정을 병합이 뒤집지 않는다.
+
+    원문 칸에 휴무가 함께 실려 있으면 갈라서 읽는다(TRIP-1226). 종전에는 휴무 없이
+    읽어서, 여기서 채운 6,055건(#729·#740)은 휴무가 빠진 채 굳었다 — 공유본에 휴무
+    원문이 없어 재수집 없이는 못 되살린다(`backfill_rest_days.py` 는 수집 때 파싱분만 되살린다).
     """
     n = 0
     for p in proposals:
@@ -84,7 +89,7 @@ def reparse_open_hours(proposals: list[dict]) -> int:
         raw = p.get("opening_hours_raw")
         if poi.get("open_hours") or not raw:
             continue
-        hours = parse_open_hours(raw, None)
+        hours = parse_opening_hours_raw(raw)
         if hours:
             poi["open_hours"] = [asdict(h) for h in hours]
             n += 1
@@ -116,6 +121,26 @@ def drop_non_travel(proposals: list[dict]) -> dict[str, int]:
         kept.append(p)
     proposals[:] = kept
     return dropped
+
+
+def drop_closed(proposals: list[dict], closed_refs: frozenset[tuple[str, str]]) -> int:
+    """폐업 확인된 제안을 뺀다. 지운 건수를 돌려준다.
+
+    수집 게이트 2단이 `closed_refs` 로 같은 판정을 하지만 **수집 시점에만** 한다 —
+    근거 파일(2026-09-08)보다 먼저 수집된 것은 색인이 "변경 없음"으로 스킵해 게이트를
+    다시 타지 않는다. 실측(2026-10-05): 공유본 18,605건에 CLOSED 210건(FOOD 134·CAFE 76)이
+    그대로 있었다. `drop_non_travel` 과 **같은 자리·같은 이유**의 소급이다. 외부 호출 0.
+
+    조회 키는 게이트와 같은 `(출처, 벤더 번호)` 다 — 번호는 출처 안에서만 유일하므로
+    (`SourcingCandidate.ref`) 다른 출처의 같은 번호는 건드리지 않는다.
+    """
+    if not closed_refs:
+        return 0
+    kept = [p for p in proposals
+            if (str(p.get("source") or "").lower(), p["provenance"]["content_id"]) not in closed_refs]
+    n = len(proposals) - len(kept)
+    proposals[:] = kept
+    return n
 
 
 def _self_check() -> None:
@@ -167,6 +192,11 @@ def main(argv: list[str]) -> int:
         # "합본 < 공유본이면 실패"로 조용한 유실을 막는데, 의도한 제거도 수를
         # 줄이므로 그 값을 빼고 비교해야 한다. 안 남기면 내일 배치가 빨개진다.
         out["stats"]["non_travel_dropped"] = sum(dropped.values())
+    # 폐업 소급 제거 — 근거 파일이 없으면 빈 집합(= 판정 없음), 위와 같은 축소 가드 규약.
+    if (closed := drop_closed(out["proposals"], load_closed_refs())):
+        print(f"[merge] 폐업 제거 — {closed}건", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        out["stats"]["closed_dropped"] = closed
     text = json.dumps(out, ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")

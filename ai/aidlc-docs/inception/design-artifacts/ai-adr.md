@@ -442,6 +442,33 @@ LLM 문장 품질은 PR마다 평가할 수 없다 (비용·시간·비결정성
 - `_local_route` 의 "ARN 이 있으면 Bedrock 이 이긴다" 는 그대로 두되, 전환을 PR 로 만들려면 시크릿이 아닌 **값 스위치**(`TRIPPILOT_REMINDER_TRANSPORT`)가 필요하다 — TRIP-973 선행 코드.
 - 안티패턴에 이미 있는 것: 베이스 모델이 조용히 서빙돼도 그럴듯한 답이 나온다 → 배포 직후 문체 대조 필수(`docs/conventions/anti-patterns.md`).
 
+**추기 (2026-10-01) — §2 의 매니페스트를 철회한다**: 위 §2 는 인클러스터 서빙을 "기본 꺼짐 측정 실험"으로 리포에 남겨 두기로 했으나, 그 매니페스트(`deploy/eks/chart/templates/reminder-llm.yaml` + `reminderLlm` 값·스키마)를 **지웠다**. 감사에서 결함 4건이 나왔다 — ① Triton 이 `/v1` OpenAI 프런트엔드를 안 띄우는데 앱은 `/v1` 로 부른다(파드 Ready·호출 404) ② `trippilot.podSpec`·`containerSecurity` 미적용 ③ 모델 PVC 없음 ④ KEDA 트리거가 없는 메트릭을 봐 스케일이 영구 0. **"기본 꺼짐"이 "켜면 된다"를 뜻하지 않는 상태**였고, 넷을 고쳐도 Bedrock 과 같은 일을 하는 두 번째 운영 경로가 남는다.
+
+§1(Bedrock 이 실서비스)·§3(판정기)·§4(Modal 기각)는 그대로다. 바뀌는 것은 **전환 비용의 크기**다 — 종전 서술의 "env 한 줄"은 매니페스트가 리포에 있다는 전제였다. 이제 전환은 매니페스트를 **처음부터 다시 쓰는 일**이고(이 커밋을 revert 하지 않는다), 그 전까지 `reminderLlm` 값은 차트 스키마가 거부한다(`test_in_cluster_reminder_serving_was_withdrawn`). `TRIPPILOT_REMINDER_TRANSPORT` 값 스위치는 코드에 남아 있으므로 OpenAI 호환 엔드포인트가 다시 생기면 앱 쪽 조작은 여전히 한 줄이다. 근거는 `ai/docs/mlops/서빙-의사결정-기록.md` §10.
+
+---
+
+## AI-D09: 요청 인라인 취향을 그 요청의 페르소나로 쓴다 — D31 부분 개정 (generate·replan)
+
+**상태**: 확정 (2026-10-01, 사용자 결정). **D31 을 부분 개정한다** — D31 본문은 손대지 않고(append-only) 이 항이 우선한다.
+
+**문제 (실측)**: 페르소나는 주입된 `ContextStore` 재조회만 공급했고 `main.py` 는 그것을 넘기지 않아, 운영의 페르소나가 **전원** `StaticPersonaStore` 고정 요약(취향 없음·SOLO·MID)이었다. 커플·미식 사용자 설명에 "#혼자여행 #혼밥가능"이 나왔다(QA 6회차 AI 칸 — 취향 반영 비일관). generate 요청의 `preference_profile`·`trip_context.companion_type` 은 버려졌고(예산만 점수·필터에 쓰임), replan 은 인라인 프로필이 있어도 상수 페르소나가 먼저 이겼다. 선호 점수 캐시 지문이 `(taste_tags, companion, budget)` 이라 상수 페르소나 아래에서 **모든 사용자가 한 캐시**를 썼고, 프롬프트에 실리는 `activities`·`cuisines` 는 지문에 아예 없었다.
+
+**결정**:
+1. generate·replan 은 요청에 인라인으로 온 `preference_profile`(+ `trip_context.companion_type`)을 `PersonaSummary` 로 만들어 **그 요청의 페르소나**로 쓴다. 수집(PERSONA 패킷)보다 우선한다.
+2. 변환은 재조회 어댑터와 같은 함수(`backend_persona._to_summary`)를 쓴다 — 와이어 필드명이 같다. 이번 여행의 동행이 있으면 계정의 평소 동행(`companion_types`)보다 우선한다.
+3. 전 축 미설정(태그·동행·활동·음식 없음 + 예산 미지정)이면 None — **종전 경로 그대로**(회귀 0).
+4. 캐시 지문 = `PersonaSummary` 전체. 프롬프트에 실리는 것이 정확히 이 요약이므로 취향이 다르면 캐시를 공유하지 않는다.
+5. 프롬프트에 싣는 범위는 기존 `PersonaSummary` 수준(태그·동행·활동·음식 라벨·예산) 그대로다. 새 자유 텍스트는 싣지 않는다.
+
+**이유**:
+- 재조회 저장소(`BackendPersonaStore`)는 `ref_id` 를 **accountId** 로 기대하는데 경계가 만드는 `persona_ref` 는 trip_id 파생이다. 백엔드는 형식이 맞는 없는 UUID 에 404 가 아니라 빈 스냅숏 200 을 주므로, 그대로 꽂으면 **예외도 경고도 없이 전원 '미설정'** 이 된다. 와이어에 사용자 식별자가 생기기 전에는 재조회로 고칠 수 없다.
+- 인라인 값은 백엔드가 요청자 권한 아래 자기 DB 에서 읽어 싣는 값이다 — 클라이언트 원본이 아니라 서버 간 봉투다. D31 이 막으려던 "타 계정 데이터 유출"은 이 값이 이미 그 요청자의 것이라 성립하지 않는다.
+
+**범위**: generate·replan 만. 같은 generate 안의 설명 단계(EXPLANATION·ALTERNATIVE_*)는 같은 `ScheduleTask.persona` 를 쓰므로 함께 반영된다.
+
+**후속**: `/explanations`·`/alternatives` 는 요청에 프로필 필드가 없어 여전히 고정 요약이다 — 백엔드 계약(프로필 필드 추가 또는 accountId 전달) 합의가 필요하다.
+
 ---
 
 ## 미결 결정 사항

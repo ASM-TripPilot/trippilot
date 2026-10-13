@@ -41,6 +41,8 @@ export function PlaceRailCard({
     <Pressable
       testID={`explore-place-card-${card.poiId}`}
       accessibilityRole="button"
+      // 보이는 글자 그대로(TRIP-1281) — 없으면 iOS 가 자식 하트 라벨을 카드에 끌어다 붙인다.
+      accessibilityLabel={[card.name, card.region].filter(Boolean).join(', ')}
       onPress={() => {
         if (!save?.pending) onPress(card.poiId);
       }}
@@ -65,6 +67,7 @@ export function PlaceRailCard({
             testID={save.testID}
             filledTestID={save.filledTestID}
             outlineTestID={save.outlineTestID}
+            name={card.name}
             className="absolute right-sm top-sm"
           />
         ) : null}

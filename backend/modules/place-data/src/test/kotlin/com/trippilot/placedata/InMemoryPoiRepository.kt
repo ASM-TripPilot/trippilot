@@ -7,6 +7,7 @@ import com.trippilot.placedata.domain.PoiSearchOrder
 import com.trippilot.placedata.domain.PoiCursor
 import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.placedata.domain.PoiSource
+import java.time.Instant
 import java.util.UUID
 
 /** 공유 인메모리 PoiRepository 페이크 — 수집·후보풀 테스트 공용. ACTIVE 필터는 실 쿼리와 동일 규칙. */
@@ -67,6 +68,28 @@ class InMemoryPoiRepository : PoiRepository {
         stored.filter { it.source == source && it.sourceRef in sourceRefs }
             .mapNotNull { p -> p.sourceRef?.let { it to p } }
             .toMap()
+
+    override fun findActiveSourceRefs(source: PoiSource) =
+        stored.filter { active(it) && it.source == source }
+            .mapNotNull { p -> p.sourceRef?.let { it to p.poiId } }
+            .toMap()
+
+    // 실 쿼리와 같은 규칙 — 지금 ACTIVE 인 행만 바꾸고 바뀐 수를 센다(이미 닫힌 행은 updatedAt 도 그대로).
+    override fun closeActive(poiIds: Collection<UUID>, now: Instant): Int {
+        val targets = stored.filter { active(it) && it.poiId in poiIds }
+        saveAll(
+            targets.map {
+                Poi.reconstitute(
+                    poiId = it.poiId, nameKo = it.nameKo, lat = it.lat, lng = it.lng, category = it.category,
+                    region = it.region, openingHours = it.openingHours, dataStatus = DataStatus.LOST,
+                    source = it.source, savedCount = it.savedCount, createdAt = it.createdAt, updatedAt = now,
+                    imageUrl = it.imageUrl, tags = it.tags, sourceRef = it.sourceRef, regionCode = it.regionCode,
+                    address = it.address,
+                )
+            },
+        )
+        return targets.size
+    }
 
     private fun active(p: Poi) = p.dataStatus == DataStatus.ACTIVE
 }

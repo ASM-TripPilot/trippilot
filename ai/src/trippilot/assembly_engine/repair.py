@@ -16,11 +16,11 @@ TRIP-292에서 `HybridAssemblyFacade.repair()`가 공개 경계로 승격되면�
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Mapping
 
-from trippilot.domain.common import PoiId
+from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
     ItineraryProblem,
@@ -67,14 +67,17 @@ def _fits_open_hours(poi: Poi, start: datetime, end: datetime) -> bool:
 def repair(solution: ItinerarySolution, problem: ItineraryProblem,
            poi_index: Mapping[PoiId, Poi], estimator,
            policy: MinimalChangePolicy = MinimalChangePolicy.TIME_SHIFT_ONLY,
+           departures: Mapping[date, tuple[GeoPoint, datetime]] | None = None,
            ) -> RepairResult:
+    """`departures` = 날짜별 (앵커, 출발 시각). 없는 날의 첫 슬롯은 종전대로 하한 없음."""
+    departures = departures or {}
     if policy is not MinimalChangePolicy.TIME_SHIFT_ONLY:
         return RepairResult(repaired=None, changes=())
 
-    pinned: dict[tuple, tuple[datetime, datetime]] = {
-        (fb.window.start.date(), fb.poi_id): (fb.window.start, fb.window.end)
-        for fb in problem.fixed_blocks
-    }
+    pinned: dict[tuple, list[tuple[datetime, datetime]]] = {}
+    for fb in problem.fixed_blocks:
+        pinned.setdefault((fb.window.start.date(), fb.poi_id), []).append(
+            (fb.window.start, fb.window.end))
     we_min = _mod(problem.day_window.end)
     changes: list[RepairChange] = []
     new_days: list[DaySolution] = []
@@ -84,20 +87,30 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
         new_slots: list[VisitSlot] = []
         for slot in day.slots:
             stay = int((slot.end_at - slot.start_at).total_seconds() // 60)
-            pin = pinned.get((day.date, slot.poi_id))
+            # 같은 POI 를 하루 두 번 고정할 수 있다 — 시각이 맞는 창이 그 슬롯의 창이다. (날, POI)
+            # 하나로 접으면 09:00 슬롯이 15:00 창으로 끌려가 수리 불가가 된다. 어긋난 슬롯은 창이
+            # 하나일 때만 끌어온다 — 둘 이상이면 어느 창인지 모른다(지어내지 않는다 → HC3 가 거부).
+            pins = pinned.get((day.date, slot.poi_id), [])
+            pin = next((p for p in pins if p[0] == slot.start_at),
+                       pins[0] if len(pins) == 1 else None)
             if pin is not None:
                 start, end = pin  # 고정 블록 — 이동 금지 (HC3)
             else:
                 start = slot.start_at
                 if prev is not None:
                     p1 = poi_index.get(prev.poi_id)
-                    p2 = poi_index.get(slot.poi_id)
-                    if p1 is not None and p2 is not None:
-                        travel = estimator.estimate(
-                            p1.coord, p2.coord, problem.transport).internal_minutes
-                        earliest = prev.end_at + timedelta(minutes=travel)
-                        if start < earliest:
-                            start = earliest  # 전방 이동 (HC2 해소)
+                    origin = (p1.coord, prev.end_at) if p1 is not None else None
+                else:
+                    # 그날 첫 슬롯 — 앵커에서 창 시작에 출발(generate 의 `ws + 앵커 이동` 과 같은 규칙).
+                    # 고정 슬롯은 위 갈래라 면제된다(TRIP-1175 와 같은 규칙).
+                    origin = departures.get(day.date)
+                p2 = poi_index.get(slot.poi_id)
+                if origin is not None and p2 is not None:
+                    travel = estimator.estimate(
+                        origin[0], p2.coord, problem.transport).internal_minutes
+                    earliest = origin[1] + timedelta(minutes=travel)
+                    if start < earliest:
+                        start = earliest  # 전방 이동 (HC2 해소)
                 end = start + timedelta(minutes=stay)
 
             # 이동 결과가 다른 제약을 깨면 수리 불가

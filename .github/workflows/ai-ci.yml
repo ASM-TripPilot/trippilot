@@ -1,12 +1,15 @@
 name: ai-ci
 
+# 백엔드 `Poi.kt` 도 트리거에 넣는다 — AI 테스트가 그 파일을 정본으로 읽어 출처·카테고리 enum 드리프트를
+# 막는데(`ai/tests/test_backend_poi_db.py`, TRIP-1224), ai/ 만 보면 **백엔드가 값을 늘린 PR 에서는 이 게이트가
+# 안 돈다**. 그러면 다음 AI PR 이 남의 변경 때문에 빨개진다(backend-ci 가 ai 계약 파일을 보는 것과 같은 이유).
 on:
   push:
     branches: [develop]
-    paths: ['ai/**', '.github/workflows/ai-ci.yml']
+    paths: ['ai/**', '.github/workflows/ai-ci.yml', 'backend/modules/place-data/**/domain/Poi.kt']
   pull_request:
     branches: [develop, main]
-    paths: ['ai/**', '.github/workflows/ai-ci.yml']
+    paths: ['ai/**', '.github/workflows/ai-ci.yml', 'backend/modules/place-data/**/domain/Poi.kt']
   workflow_dispatch:
 
 env:

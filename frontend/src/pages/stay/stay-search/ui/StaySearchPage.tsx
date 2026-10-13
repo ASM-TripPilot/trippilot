@@ -1,0 +1,276 @@
+/**
+ * 숙소 검색 결과 배선(US-STAY-01 · 01b Seed Q2·Q5·Q8). `useLocalSearchParams`의 `region`
+ * (없으면 `'부산'` 폴백)·`amenity`·`stayType`으로 `useStaySearch`를 호출하고, 응답과
+ * `useQuery` 상태를 `resolveStaySearchState`에 넘겨 판별 유니온 하나로 접어 `StaySearchScreen`에
+ * 내린다 — 상태 판정은 이 파일만 한다(화면은 다시 판정하지 않는다, AC-8 단일 출처). `다시
+ * 시도`는 같은 쿼리의 `refetch`를 그대로 물린다(Q8, 스텁이 아니라 실배선).
+ */
+import type { ReactElement } from 'react';
+import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+
+import type { StayItem } from '@/shared/api/index.schemas';
+import { getAccessToken } from '@/shared/api';
+import { guardPress } from '@/shared/lib/pressGuard';
+import { shellTabHref, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+
+import { regionPickerHref } from '@/features/explore';
+import {
+  filterByPriceRange,
+  type PriceBucketId,
+} from '../model/priceRangeFilter';
+import { filterBySido } from '../model/sidoFilter';
+import { relaxCulpritFilter } from '../model/relaxCulpritFilter';
+import { useSavedStays } from '@/features/save-stay';
+import {
+  buildStayFilterOptions,
+  countActiveFilters,
+  toggleFilterValue,
+} from '../model/stayFilterOptions';
+import { stayKey } from '@/features/save-stay';
+import { resolveStaySearchState } from '../model/staySearchState';
+import { useStaySearch } from '@/features/stay';
+import {
+  AssistantFab,
+  TAB_TWO_STACK,
+  assistantFabBottom,
+  assistantHref,
+  toastBottomWith,
+} from '@/features/open-assistant';
+import { StayFilterSheet } from './StayFilterSheet';
+import { StayPriceSheet } from './StayPriceSheet';
+import { StaySearchScreen } from './StaySearchScreen';
+
+/** URL은 신뢰 경계 — 같은 쿼리 키가 중복되면 배열로 온다. 계약(`GetStaysSearchParams`)은
+ * `amenity`·`stayType` 둘 다 `string[]`이므로 단일 문자열은 배열로 감싼다. 빈 값은 파라미터
+ * 자체를 만들지 않는다 — 빈 배열을 보내면 서버가 "필터 있음"으로 오해할 수 있다(§6 함정 5). */
+function toParamList(value?: string | string[]): string[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+export function StaySearchPage(): ReactElement {
+  const { region, regionCode, sido, amenity, stayType } = useLocalSearchParams<{
+    region?: string;
+    // TRIP-1273(F3) — 지역 피커가 함께 싣는다. 서버엔 안 보낸다(계약에 없음) — 응답 후처리·지역 바뀜 판정 전용.
+    regionCode?: string;
+    sido?: string;
+    amenity?: string | string[];
+    stayType?: string | string[];
+  }>();
+  const rawRegion = Array.isArray(region) ? region[0] : region;
+  const resolvedRegion = rawRegion || '부산';
+  // 같은 키가 중복되면 배열로 온다(신뢰 경계) — region 과 같이 첫 값만 쓴다.
+  const rawSido = Array.isArray(sido) ? sido[0] : sido;
+  const amenityList = toParamList(amenity);
+  const stayTypeList = toParamList(stayType);
+
+  // 필터 시트 상태·선택 초안은 화면이 아니라 이 배선이 진다(features/stay/ui 는 useState 0건
+  // 구조 가드, TRIP-415). 초안은 시트를 열 때 현재 적용값(params)에서 시드한다.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [draftAmenity, setDraftAmenity] = useState<string[]>([]);
+  const [draftStayType, setDraftStayType] = useState<string[]>([]);
+
+  // 가격대 시트(TRIP-457) — 계약(`/stays/search`)에 price 파라미터가 없어 서버 필터가 불가하므로
+  // 응답 items 를 `priceRangeFilter` 순수 함수로 클라 파생 필터한다(01b Q4 (a)). 시트 열림·선택
+  // 버킷은 이 배선이 소유(화면·시트는 useState 0건 구조 가드).
+  const [priceSheetOpen, setPriceSheetOpen] = useState(false);
+  const [priceBucket, setPriceBucket] = useState<PriceBucketId>('all');
+
+  const { data, isPending, isError, refetch } = useStaySearch({
+    region: resolvedRegion,
+    ...(amenityList.length > 0 ? { amenity: amenityList } : {}),
+    ...(stayTypeList.length > 0 ? { stayType: stayTypeList } : {}),
+  });
+
+  // 저장 하트(TRIP-417). isAuthed는 렌더 시점 1회 동기 판정(PlaceExplorePage 선례 — "판정 대기"
+  // 제3 상태가 안 생긴다). 담김 목록·토글은 useSavedStays 한 곳이 소유하고, 응답 대기 키만
+  // 페이지 로컬 상태로 들어 화면이 그 하트를 disabled로 만들게 한다(연타 중복 요청 차단, AC-8).
+  const isAuthed = getAccessToken() !== null;
+  const { isSaved, save, remove, savedKeys } = useSavedStays({ isAuthed });
+  const [pendingKeys, setPendingKeys] = useState<string[]>([]);
+
+  // 이름·지역 검색어(TRIP-469) — 화면이 결과를 클라 부분일치로 좁힌다. 상태만 여기서 소유하고
+  // 좁히기·no-match 판정은 화면(순수)이 지므로 서버 판정(state)엔 안 섞는다.
+  const [nameQuery, setNameQuery] = useState('');
+
+  // 지역 선택은 `dismissTo`로 이 인스턴스에 돌아온다(TRIP-989 F) — URL 필터는 교체돼 사라지지만
+  // 로컬 필터(가격대·검색어)는 남는다. "새 지역 = 새 검색"을 지키려고 지역이 바뀐 렌더에서만 비운다(01b Q4).
+  // 이펙트가 아니라 렌더 중 조정이라 옛 필터로 한 번 그려지는 프레임이 없다.
+  // TRIP-1273(AC-F7) — 동명 구(서울→부산 강서구)는 이름이 같아 코드까지 함께 본다.
+  const regionKey = `${resolvedRegion}|${regionCode ?? ''}`;
+  const [seenRegion, setSeenRegion] = useState(regionKey);
+  if (seenRegion !== regionKey) {
+    setSeenRegion(regionKey);
+    setPriceBucket('all');
+    setNameQuery('');
+  }
+
+  async function attemptToggle(item: StayItem): Promise<void> {
+    const key = stayKey(item);
+    setPendingKeys((keys) => [...keys, key]);
+    const outcome = isSaved(key) ? await remove(item) : await save(item);
+    setPendingKeys((keys) => keys.filter((k) => k !== key));
+
+    // 미인증 누름은 요청 없이 로그인으로 보낸다(BR-U1-03 · Q6, 죽은 버튼 회피).
+    if (outcome.kind === 'failed' && outcome.reason === 'unauthenticated') {
+      router.push('/(auth)/login');
+    }
+  }
+
+  // 가격대 파생 필터(TRIP-457) — 기본 `all`은 순서보존 전량이라 동결 통합테스트가 무회귀다
+  // (★F-6). 화면에 내리는 목록·개수(헤더 "N곳") 둘 다 이 파생 결과에서 나와 갈라지지 않는다.
+  // TRIP-1273(F3) — 그 앞에 시도 후처리 필터(동명 구의 다른 시도 숙소 제외)를 거친다.
+  // 필터 시트 칩도 이 결과에서 만든다 — 다른 시도에만 있는 유형 칩은 고르면 0곳이다(03b 경고-1).
+  const sidoItems = filterBySido(data?.items ?? [], rawSido);
+  const visibleItems = filterByPriceRange(sidoItems, priceBucket);
+
+  const state = resolveStaySearchState({
+    isPending,
+    isError,
+    itemCount: visibleItems.length,
+    degraded: data?.degraded ?? false,
+    filterZeroReasons: data?.filterZeroReasons ?? [],
+  });
+
+  // 필터 칩 — 지역=여행지 선택 진입(/explore/region?purpose=stay, TRIP-499 — 통합검색 은퇴,
+  // 지역 선택 정본으로 복귀), 필터=시트 열기, 가격대=가격대 시트 열기.
+  function handlePressFilter(axis: 'price' | 'region' | 'more'): void {
+    if (axis === 'region') {
+      router.push(regionPickerHref('stay'));
+      return;
+    }
+    if (axis === 'price') {
+      setPriceSheetOpen(true);
+      return;
+    }
+    if (axis === 'more') {
+      setDraftAmenity(amenityList);
+      setDraftStayType(stayTypeList);
+      setSheetOpen(true);
+    }
+  }
+
+  // 적용 = 고른 조건을 URL params 로 밀어 넣는다 → useLocalSearchParams 갱신 → 재조회.
+  function handleApplyFilter(): void {
+    router.setParams({ amenity: draftAmenity, stayType: draftStayType });
+    setSheetOpen(false);
+  }
+
+  const filterOptions = buildStayFilterOptions(
+    sidoItems,
+    draftAmenity,
+    draftStayType
+  );
+
+  return (
+    <>
+      <StaySearchScreen
+        region={resolvedRegion}
+        items={visibleItems}
+        state={state}
+        // 화살표로 감싼다(03b N-3) — `onRetry={refetch}`면 RN이 `onPress(누름이벤트)`로
+        // 불러 그 이벤트가 `refetch`의 옵션 인자 자리로 밀려든다. 여기서 인자를 끊으면
+        // 그 아래 어떤 Pressable을 거치든 `refetch()`가 항상 무인자로 불린다.
+        onRetry={() => refetch()}
+        // 01b Seed §3-6 — e02의 등록 유도 버튼이 e05로 가는 문이 된다. 화면은 라우트를 모른다
+        // (구조 가드, `onPressRegister` prop만 받는다) — 배선은 이 페이지 몫이다.
+        // `useRouter()` 훅이 아니라 정적 `router` 싱글턴을 쓴다 — 통합 테스트의 `expo-router`
+        // 목이 `useLocalSearchParams`와 정적 `router`만 주고 `useRouter`는 없어, 훅으로 바꾸면
+        // 렌더 시점에 즉시 깨진다(TRIP-1148 합본 기준). `router.push`는 실제로 눌렸을 때만 평가된다.
+        onPressRegister={() => router.push('/stays/register')}
+        onPressBack={() => router.back()}
+        // 하단 탭바(TRIP-413) — /stays 는 (tabs) 밖 라우트라 진짜 탭바가 없어 화면이 복제본을
+        // 그린다. 그 복제 탭바를 실 라우팅에 잇는다: 탭 key → 해당 탭 URL 로 dismissTo(스택 밑의
+        // (tabs)까지 걷어낸다 — replace 면 이 화면만 바뀌어 (tabs) 가 두 겹이 됐다, TRIP-1262 · QA F3).
+        // TRIP-1282 — 필터 시트 "적용"의 창 안이면 무시(연타 관통 표적). 공용 탭바는 그대로 둔다(01b Q3).
+        onPressTab={guardPress((key: ShellTabKey) =>
+          router.dismissTo(shellTabHref(key))
+        )}
+        // 흰 원 하트 FAB(TRIP-725) — 담은 숙소 목록(e04)으로. 화면은 라우터를 모른다(구조 가드).
+        // + FAB 는 아래 onPressRegister 를 재사용한다(같은 목적지 /stays/register).
+        onPressSaved={() => router.push('/stays/saved')}
+        // 지역·필터 칩(TRIP-415) — 배지는 필터 시트에서 고른 개수(초안 아님). 가격대는 세지 않는다
+        // (TRIP-1019 #013 — 가격대 칩이 스스로 선택 얼굴을 낸다). 가격만으로 0곳이 됐을 때 "필터 완화"가
+        // 꺼져 갇히지 않게, 화면이 priceBucket 을 함께 보고 완화를 켠다(INV-4).
+        onPressFilter={handlePressFilter}
+        activeFilterCount={countActiveFilters(amenityList, stayTypeList)}
+        priceBucket={priceBucket}
+        // 빈 상태 카드 CTA(TRIP-416) — 화면은 라우터를 모른다(구조 가드), 배선은 이 페이지 몫.
+        // 지역 바꾸기는 필터 칩과 같은 목적지(/explore/region?purpose=stay, 여행지 선택)로 진입한다(TRIP-499).
+        onPressChangeRegion={() => router.push(regionPickerHref('stay'))}
+        // 필터 완화(AC-2)·초기화(AC-4) 공용 — amenity/stayType 두 키만 비운다(region 은 merge 로
+        // 유지되므로 넣지 않는다, ★4). setParams 갱신 → useLocalSearchParams 갱신 → 재조회.
+        // 가격대(로컬 상태)도 푼다 — 가격 때문에 0곳이면 서버 원인이 비어 empty 얼굴이 되고,
+        // 이 버튼이 유일한 탈출구다(TRIP-989 E-3).
+        // TRIP-1282 — 창을 연다: 0곳 → 결과로 바뀐 자리의 숙소 카드에 둘째 탭이 떨어져도 무시된다.
+        onRelaxFilters={guardPress(() => {
+          router.setParams({ amenity: [], stayType: [] });
+          setPriceBucket('all');
+        })}
+        // 원인 필터만 해제(AC-5) — relaxCulpritFilter 가 reason(=reasons[0])을 지금 적용된 두
+        // 배열에 매핑해 그 원인만 뺀 {amenity, stayType}를 낸다(정확히 두 키라 그대로 넘긴다).
+        onClearCulpritFilter={(reason) =>
+          router.setParams(
+            relaxCulpritFilter(reason, {
+              amenity: amenityList,
+              stayType: stayTypeList,
+            })
+          )
+        }
+        // 저장 하트(TRIP-417) — 담김 집합·대기 집합은 값으로, 누름은 콜백으로 내린다. 화면은
+        // 저장/해제·라우팅을 모른다(구조 가드) — attemptToggle이 판정·요청·로그인 이동을 전담.
+        savedKeys={savedKeys}
+        pendingKeys={pendingKeys}
+        onToggleSave={(item) => void attemptToggle(item)}
+        // 카드 탭(TRIP-457 AC-5) → 상세 라우트로 push(객체형·raw stayKey 만 — 상세가 스스로 조회,
+        // TRIP-940. expo-router 자동 인코딩이라 수동 encode 안 함 ★F-3). 화면은 라우터를 모른다(구조 가드).
+        // TRIP-1013 #012 — 탐색 d01 숙소 '모두 보기'의 창 안이면 무시(연타 관통 — 옛 목적지 상세에서 d01 로 이관, TRIP-1105).
+        onPressCard={guardPress((item: StayItem) =>
+          router.push({
+            pathname: '/stays/[stayId]',
+            params: { stayId: stayKey(item) },
+          })
+        )}
+        nameQuery={nameQuery}
+        onChangeNameQuery={setNameQuery}
+        // TRIP-1321 — ✦ 도우미(스택 맨 위 220). 시트가 열린 동안은 트리에서 뺀다(BR-U8-53).
+        assistantFab={
+          sheetOpen || priceSheetOpen ? undefined : (
+            <AssistantFab
+              onPress={() => router.push(assistantHref('STAY_SEARCH'))}
+              bottom={assistantFabBottom(TAB_TWO_STACK)}
+              toastBottom={toastBottomWith(TAB_TWO_STACK)}
+            />
+          )
+        }
+      />
+      {sheetOpen ? (
+        <StayFilterSheet
+          amenities={filterOptions.amenities}
+          stayTypes={filterOptions.stayTypes}
+          onToggleAmenity={(v) =>
+            setDraftAmenity((prev) => toggleFilterValue(prev, v))
+          }
+          onToggleStayType={(v) =>
+            setDraftStayType((prev) => toggleFilterValue(prev, v))
+          }
+          // TRIP-1282 — 창을 연다: 시트가 닫히며 드러난 탭바에 둘째 탭이 떨어져도 무시된다.
+          onApply={guardPress(handleApplyFilter)}
+          onClose={() => setSheetOpen(false)}
+        />
+      ) : null}
+      {priceSheetOpen ? (
+        <StayPriceSheet
+          selected={priceBucket}
+          // 고르면 즉시 적용하고 닫는다("적용" 버튼 없음, TRIP-1019 #013 · 01b Q1).
+          onSelect={(id) => {
+            setPriceBucket(id);
+            setPriceSheetOpen(false);
+          }}
+          onClose={() => setPriceSheetOpen(false)}
+        />
+      ) : null}
+    </>
+  );
+}

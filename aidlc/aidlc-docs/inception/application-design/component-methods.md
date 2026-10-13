@@ -4,6 +4,8 @@
 > **표기**: Kotlin 유사 시그니처(백엔드 가정). 솔버 서비스는 Python이나 계약은 언어 중립 DTO(JSON). `Result<T>`=성공/폴백 래핑, `Instant`=시각, **duration 필드 없음(INV-3)**.
 > **AI/솔버 계약(§2·§3)이 이 문서의 중심**이며 사용자 지시로 최대 구체화. 나머지 facade(§4)는 핵심 메서드만.
 
+> **[개정 · 2026-10-12]** 아래 시그니처는 인셉션 당시 가정이다. 현행 정본은 코드다 — 백엔드 AI 경계 `backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/domain/ScheduleAgentPort.kt`, AI 와이어 `ai/docs/openapi.json`. 각 절 개정 참조.
+
 ---
 
 ## 1. 공용 도메인 타입 (일정 지능)
@@ -63,11 +65,15 @@ data class QualityScore(            // §3.7 · FR-SOLVER-02
 enum class FallbackMode { NONE, DETERMINISTIC_ONLY, PARTIAL_PLACE_DATA, STRAIGHT_LINE_DISTANCE, MINIMAL_ANCHORS_ONLY }
 ```
 
+> **[개정 · 2026-10-12]** §1 타입 보정 — `RegisteredStay.checkIn/checkOut` 은 nullable(옛 데이터용, `saved-accommodation/adapter/in/web/SavedStayDtos.kt`)이고 날짜 구간은 `BaseAssignment` 소유(TRIP-1052). `MustVisitKind{TIME_FIXED, INCLUDE_ONLY}` → `MustVisitType{ANYTIME, FIXED}`(`trip/domain/MustVisit.kt`). `FallbackMode` → 백엔드 `SolveMode{FULL_AI, DETERMINISTIC, MINIMAL}`(`itinerary-generation/domain/Itinerary.kt`) / AI 와이어 `solve_mode`·`is_fallback`·`scoring_mode`·`degradations[]`(`ai/src/trippilot/api/schemas.py`). `QualityScore` 는 AI 내부(`assembly_engine/quality.py`)에만 있고 경계 DTO 에 없다. 백엔드 출력 DTO 는 `ScheduleAgentOutput`·`DaySchedule`·`VisitSlotDisplay`(`ScheduleAgentPort.kt`).
+
 ---
 
 ## 2. `SolverPort` — 일정 지능 엔진 (FR-SOLVER) ★
 
 > 소유: C8·C10 도메인 인터페이스. 구현: Phase 1 `DeterministicSolverAdapter`(Python OPTW/TOPTW) → 향후 `BedrockAgentSolverAdapter`. **어댑터 교체만으로 대체.** 반환값은 항상 검증 완료(INV-2).
+
+> **[개정 · 2026-10-12]** `SolverPort` 는 없다. 실제 포트는 **`ScheduleAgentPort{generate, validate, repair, explanations, proposeSlotCandidates, replan}`**(C8 `domain/`), 구현 `HttpScheduleAgentAdapter` — 호출 경로 정본 `CALLED_PATHS` = `/ai/v1/itinerary/{generate,validate,repair,explanations}` · `/ai/v1/planb/{alternatives,replan}`. 상대 구현은 AI 서비스(`ai/`)의 `HybridAssemblyFacade`(OR-Tools → 규칙 폴백, `ai/src/trippilot/assembly_engine/facade.py`)이며 Bedrock 교체 계획은 현행이 아니다(components.md §3 개정).
 
 ```kotlin
 interface SolverPort {
@@ -102,6 +108,8 @@ data class Violation(val slotRef: SlotRef, val type: ViolationType, val detail: 
 ```
 
 **보장(계약)**: 모든 반환 `TimeSlot.start/end`는 `FeasibilityValidator` 통과값 · `mustVisits(INCLUDE_ONLY)`는 누락 없이 포함 · `anchors`·`TIME_FIXED`는 불변 · 실패 시 `Result`가 `FallbackMode` 동반.
+
+> **[개정 · 2026-10-12]** `recalculate` 는 `replan(ReplanInput): ScheduleAgentOutput`(재계획안 1건)로 대체됐고, C10 이 아니라 C8 `ReplanFacade.propose(): ReplanProposal?` 뒤에 있다. `GenerateItineraryCommand` 의 `candidatePool`·`scored` 필드는 없다 — 백엔드는 풀을 보내지 않고, AI 가 `/internal/pois` 로 풀을 만들어 내부에서 점수화한다(`ai/src/trippilot/poi_curation/adapters/backend_poi_db.py`, `agents/schedule/agent.py`). 입력 DTO 는 `ScheduleAgentInput`. `GenerationMode` 는 `{FULLY_AI, CO_PLAN, MANUAL}`(MANUAL 은 AI 미호출 — 와이어는 `FULLY_AI|CO_PLAN`). 생성 응답의 점수 풀(`ScoredCandidatePool`, 상위 200)은 슬롯 교체 즉답에 재사용된다(TRIP-969). `INCLUDE_ONLY`/`TIME_FIXED` 보장은 `ANYTIME`/`FIXED` 로 읽고, 못 담은 필수 방문지는 `UnplacedMustVisit(reasonCode)` 로 보고된다.
 
 ---
 
@@ -138,6 +146,8 @@ interface TravelEstimatePort {
   fun matrix(points: List<GeoCoord>, mode: TransportMode): Result<DistanceMatrix>
 }
 ```
+
+> **[개정 · 2026-10-12]** §3 포트 4종은 백엔드에 없다 — 모두 AI 서비스 내부 구성요소다: 검증 `assembly_engine/constraints.py`(HC1~HC4), LLM 판단 `llm_gateway`(LlmFeature 18종 — `domain/llm.py`, 단일 `PreferenceScoringPort` 아님), 후보 풀 `orchestrator/info_collector.py` + `poi_curation/adapters/backend_poi_db.py`, 거리 `assembly_engine/travel.py`. 설명 문구는 백엔드가 `ScheduleAgentPort.explanations`(`/ai/v1/itinerary/explanations`)로 받는다.
 
 ---
 
@@ -232,4 +242,19 @@ interface NotificationFacade {
 }
 ```
 
+> **[개정 · 2026-10-12]** §4 facade 보정(코드 근거, 경로는 `backend/modules/` 기준) —
+> - C1: `signUpEmail` 없음 — 소셜 전용 MVP(`auth/adapter/out/external/SocialAuthAdapter.kt`).
+> - C2: `PreferencesUpdated` 미발행, 공개 계약은 `PreferenceFacade`(`profile/api/`).
+> - C4: `RegisteredStayFacade` 대신 `BaseAnchorFacade`·`TripBaseStayFacade`(`saved-accommodation/api/`).
+> - C5: `AffiliateLinkFacade`·`onPostback` 없음 — `GET /api/v1/stays/{stayId}/outbound` 302 + 클릭 기록만(`affiliate-link/adapter/in/web/OutboundController.kt`), `postback_status` 항상 `NONE`(V2.59).
+> - C6: `MustVisitChanged` 미발행.
+> - C8: 재계획 산출·반영은 `ReplanFacade{propose, apply}`(`itinerary-generation/api/ReplanFacade.kt`).
+> - C9: `PlanBDetectionFacade` 없음(`api/` 는 이벤트만).
+> - C10: `RecalculationFacade.proposeAlternatives`(2~3개) 없음 — 세션 모듈이 C8 `ReplanFacade.propose` 로 1건(또는 null)을 받는다.
+> - C12: `uploadForCommunity` 없음(C15 폐기, S3 어댑터 없음). changelog 는 `:modules:change-log` `ChangeLogFacade`.
+> - C13: LLM 직접 호출 아님 — `ReflectionAgentPort` → `/ai/v1/reflection/generate`.
+> - C14: `api/` facade 없이 `OutboxSubscriber` 구독 + REST(`/api/v1/me/notifications`·`/notification-settings`·`/push-tokens`), 푸시 `ExpoPushAdapter`.
+
 > 후속 게이트(C15 Community·C16 Assistant·C17 Collab) 메서드는 인터페이스 수준만 `components.md §2`에 명시, 상세 시그니처는 후속 인셉션.
+
+> **[개정 · 2026-10-12]** C15·C17 은 폐기, C16 은 개발 범위(U8) — C16 시그니처는 U8 construction 설계에서 정한다(사용자 결정 2026-10-12).

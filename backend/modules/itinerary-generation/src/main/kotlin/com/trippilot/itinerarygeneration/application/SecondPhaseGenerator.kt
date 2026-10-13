@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
@@ -69,8 +70,9 @@ class SecondPhaseGenerator(
         assemblyUnplaced: List<UnplacedMustVisit> = emptyList(),
         /** 진행 상태 세션(h09·h10). 사용자가 취소했으면 결과를 버린다(BR-U3-05). */
         sessionId: UUID? = null,
-        /** 시각을 우리가 고른(물질화) 블록 — 폴백의 isFixed 판정용(TRIP-1001). 와이어 직결 타입엔 못 싣는다. */
-        materializedPoiIds: Set<UUID> = emptySet(),
+        /** 그 여행의 취향·동행(BR-U1-38) — 근거 문장도 생성과 같은 취향으로 쓰이게. 하루 여행은 [secondInput] 이 없어 따로 받는다. */
+        preference: PreferenceProfile? = null,
+        companionType: String? = null,
     ) {
         // INV-4: 2차 실패도 1차와 **대칭**으로 결정론 최소 폴백(must_visit 고정블록)으로 채운다.
         // 실패를 이유로 나머지 일자를 비워두지 않되, solveMode=MINIMAL·isFallback 으로 저하를 드러낸다.
@@ -79,7 +81,7 @@ class SecondPhaseGenerator(
                 scheduleAgent.generate(input)
             } catch (e: Exception) {
                 log.warn("2차 생성 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-                MinimalItineraryFallback.of(input, clock.instant(), materializedPoiIds)
+                MinimalItineraryFallback.of(input, clock.instant())
             }
         }
 
@@ -90,7 +92,7 @@ class SecondPhaseGenerator(
         }
 
         try {
-            val applied = applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced, sessionId)
+            val applied = applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced, sessionId, preference, companionType)
             sessionId?.let { sessions.completed(it, applied?.isFallback ?: false, applied?.candidatesSummary?.level) }
         } catch (e: Exception) {
             // 폴백조차 반영하지 못한 경우 — 상태로 드러낸다(침묵 금지).
@@ -114,6 +116,8 @@ class SecondPhaseGenerator(
         isRegeneration: Boolean,
         assemblyUnplaced: List<UnplacedMustVisit>,
         sessionId: UUID?,
+        preference: PreferenceProfile?,
+        companionType: String?,
     ): Itinerary? {
         // 1) 현재 상태를 읽어 최종 일자 목록을 만든다(아직 쓰지 않는다).
         val current = itineraries.findByTrip(tripId).firstOrNull()
@@ -127,7 +131,7 @@ class SecondPhaseGenerator(
         val allDays = current.days + remaining
 
         // 2) 근거를 받아 온다. 실패는 어댑터가 빈 맵으로 접는다 — 근거가 없다고 일정을 죽이지 않는다.
-        val reasons = scheduleAgent.explanations(tripId, allDays.toOutput(current, clock.instant()))
+        val reasons = scheduleAgent.explanations(tripId, allDays.toOutput(current, clock.instant()), preference, companionType)
         val withReasons = allDays.map { d ->
             ItineraryDay.of(
                 d.date, d.dayOrder,
@@ -178,8 +182,11 @@ class SecondPhaseGenerator(
                 output?.solveMode ?: latest.solveMode,
                 output?.isFallback ?: latest.isFallback,
                 output?.candidatesSummary ?: latest.candidatesSummary,
-                // 2차는 전 일자를 보고 판정하므로 그 결과가 최종이다 — 1차(day1만) 판정으로 되돌리지 않는다.
-                assemblyUnplaced + (output?.unplacedMustVisits ?: emptyList()),
+                // 2차가 있으면 전 일자를 보고 판정한 그 결과가 최종이다 — 1차(day1만) 판정으로 되돌리지 않는다.
+                // 2차가 없으면(하루 여행) 1차가 곧 전체라 그 보고가 최종이다 — 빈 목록을 넘기면 "전부 배치됨"으로
+                // 덮여 조립·폴백이 보고한 미배치가 COMPLETE 에서 사라졌다(TRIP-1249 리뷰 실측 · 하루 여행은 ANYTIME 이
+                // 1차에 실리므로 이 보고가 유일한 M2 채널이다).
+                if (output == null) latest.unplacedMustVisits else assemblyUnplaced + output.unplacedMustVisits,
             )
             // 조건부 쓰기 — 위 가드를 읽은 뒤 재생성이 끼어들었으면 여기서 0행이 되어 아무것도 덮어쓰지 않는다.
             if (!itineraries.replaceIfCurrent(tripId, itineraryId, updated)) {

@@ -23,6 +23,12 @@
 
 > 마이페이지·설정은 **자기 테이블이 없다**(DEC-U6-5·6). U6가 새로 만드는 것은 **알림 4종뿐**이다.
 
+> **[개정 · 2026-10-12] 소유 경계표 — 실장 대조(원문 보존).**
+> - `outbox_event`·`shedlock`: 릴레이·라이브러리 모두 실재 — `backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt`(TRIP-539) + `libs.versions.toml` `shedlock-spring`·`shedlock-jdbc`. 백오프 컬럼 `next_attempt_at` V2.45.
+> - 실번호: `notification` **V2.31** · `notification_schedule` **V2.32** · `notification_toggle` **V2.35** · `push_token` **V2.40**(제안 V2.33~V2.36과 다름).
+> - `style_analysis`는 U5 **V2.39**(+V2.41)다.
+> - **설정은 자기 테이블이 생겼다** — `account_setting`(**V2.42**, `account_id`+`key` PK, `value` text) + `AccountSettingController`(`GET/PATCH /api/v1/me/settings`, `backend/modules/profile/`). "U6가 새로 만드는 것은 알림 4종뿐"은 낡은 서술이다.
+
 ---
 
 ## 2. 신설
@@ -66,6 +72,8 @@
 **INV-U6-04** — `SYSTEM` 행은 **만들지 않는다.** 만들면 언젠가 꺼진다.
 
 **INV-U6-05** — `COMMUNITY` 행은 **만들되 UI에서 숨긴다**(DEC-U6-8). U7 개통 시 마이그레이션 0으로 켠다.
+
+> **[개정 · 2026-10-12] INV-U6-05 — U7 폐기.** "U7 개통 시 노출"의 계기가 사라졌다(사용자 결정 2026-10-12). `COMMUNITY` 행을 계속 만들지, 종류에서 뺄지는 사용자 결정 항목이다.
 
 ### 2.3 `push_token` (V2.35)
 
@@ -145,6 +153,8 @@
 
 > ⚠️ 현재 발행은 **인프로세스**(`SpringDomainEventPublisher`)다. U6 소비는 **아웃박스 릴레이 경유**로 승격해야 at-least-once가 성립한다(DEC-U6-1a).
 
+> **[개정 · 2026-10-12]** 승격 완료 — U6 소비는 `OutboxRelay` 경유다(`DomainNotificationSubscribers.kt`의 `OutboxSubscriber` 구현들).
+
 ---
 
 ## 5. 마이그레이션
@@ -159,3 +169,5 @@
 - U5 제안분(V2.28~V2.32) 다음 번호. **머지 시점에 재배정**한다.
 - 4종 전부 **계정 파기 대상**(CASCADE) — append-only 아님, 앱 롤에 DELETE 필요.
 - `outbox_event`는 **기존 테이블 그대로** — 구현만 붙는다(마이그레이션 없음).
+
+> **[개정 · 2026-10-12] §5 — 실번호로 머지됨.** V2.31 `notification` · V2.32 `notification_schedule` · V2.35 `notification_toggle` · V2.40 `push_token`. 후속: V2.42 `account_setting` · V2.45 `outbox_backoff` · V2.46 `notification_push_rate` · V2.47 `notification_schedule_copy`(`backend/app/src/main/resources/db/migration/`).

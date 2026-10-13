@@ -11,3 +11,7 @@ export type {
 // 중앙 고정 핀 좌표 선택기(TRIP-866 S4) — MapView + onCameraIdle 위에 얹은 얇은 래퍼.
 export { CenterPinPicker } from './CenterPinPicker';
 export type { CenterPinPickerProps } from './CenterPinPicker';
+
+// TRIP-1343 — 지도 위 계획｜실제 토글(여행 중·후 공용).
+export { RouteToggle, actualDistanceLabel } from './RouteToggle';
+export type { RouteToggleProps } from './RouteToggle';

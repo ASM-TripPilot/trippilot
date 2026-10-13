@@ -5,7 +5,7 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { getStaysSearch } from '@/shared/api/generated/stays/stays';
+import { getStaysSearch } from '@/shared/api/index.hooks';
 import { useStaySearch } from './useStaySearch';
 
 /**

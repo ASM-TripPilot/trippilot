@@ -61,7 +61,8 @@ STAY_DEFAULT_MIN: dict[PoiCategory, int] = {
 # 3초 벽시계 안에 첫 해를 못 찾는 구간이 생긴다 — 후보 40곳에서 ×0.75 는 3/3 해없음
 # 이었고, 그러면 규칙 폴백으로 강등돼 **알차게를 고른 사용자가 오히려 품질 낮은
 # 그리디 일정을 받는다.** ×0.90 은 후보 25·40곳에서 3/3 정상이었다. 더 공격적인 값은
-# 벽시계 여유(`or_tools_limit_ms`)를 같이 올리지 않는 한 손해다.
+# 벽시계 여유(`or_tools_limit_ms`)를 같이 올리지 않는 한 손해다. (TRIP-1176 전 실측 —
+# 해없음의 원인은 불완전 힌트·무의미한 상계였다. 배율을 더 밀려면 다시 잰다.)
 PACE_STAY_RATIO: dict[Pace, tuple[int, int]] = {
     Pace.SLOW: (7, 5),        # ×1.4
     Pace.BALANCED: (1, 1),    # 무보정 — 현행과 동일
@@ -100,7 +101,26 @@ RAIN_INDOOR: frozenset[PoiCategory] = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class AssemblyConfig:
-    or_tools_limit_ms: int = 3000
+    # 일자당 **벽시계 백스톱**(TRIP-1176). 탐색을 멈추는 것은 아래 결정론 한도이고, 이것이
+    # 먼저 걸리면 결정론이 깨진다. 규칙: or_tools_limit_ms ≥ det × 3.5초 — 운영 파드의 보장
+    # CPU(requests 500m)에서 잰 wall/det 최대가 2.75(arm)·2.92(amd64 에뮬)였다. 실측(실 덤프
+    # 39건 × 2회): CPU 0.5 몫·det 2.0 에서 3000ms 는 50/78 회를 벽시계가 끊었고 1/39 건이 두
+    # 실행 결과가 달랐다. 7000ms 는 끊김 0/78·한 코어 결과와 78/78 동일(일자당 중앙 2.9s·
+    # 최대 3.9s, amd64 에뮬 중앙 3.9s·최대 5.2s). 한 코어(--cpus 2)면 지연은 그대로 det 가
+    # 정한다(중앙 1.7s·p95 2.2s). 동시 요청 둘이 0.5 CPU 를 나누면(wall/det 최대 5.2) 어떤
+    # det 로도 못 지킨다 — `_solve_day` 의 백스톱 경고로 빈도를 보고 requests.cpu 를 올린다.
+    or_tools_limit_ms: int = 7000
+    # CP-SAT max_deterministic_time(결정론 작업량 단위 — 초가 아니다). 일자당 탐색을 **이것**이
+    # 멈추게 해서 같은 입력이 부하와 무관하게 같은 해를 낸다(위 백스톱이 안 걸리는 한).
+    # 2.0 근거(TRIP-1160 실 덤프 39건 × 2회 재생): 해 없음 0·HC 위반 0·반복 동일 39/39.
+    # det 1.0 대비 5/39 건 점수가 높다(점수합 +0.08~1.29), 3.0 은 3/39 건만 더 오른다.
+    or_tools_det_limit: float = 2.0
+    # 재정렬(B 단계, TRIP-1178)의 일자당 벽시계 백스톱 — **일자 몫과 무관한 고정값**이다(남은
+    # 몫으로 줄이면 몫 경계에서 같은 입력이 부하에 따라 다른 순서가 된다). 대가로 일자 몫을 B
+    # 소요만큼 넘길 수 있고, 최악(부하)은 이 값의 두 배다(경로 완성 풀이·본 풀이가 각자 이 한도).
+    # 0 이면 B 를 돌리지 않는다(A 해 그대로).
+    # 실측: 실 덤프 39건 B 최대 36ms(중앙 32ms, 한 코어) × wall/det 최대 2.92 ≈ 105ms → 약 3배.
+    or_tools_reorder_ms: int = 300
     or_tools_min_ms: int = 500          # 이보다 잔여가 적으면 OR-Tools 단계 스킵 (DL-2)
     llm_stage_timeout_ms: int = 2500    # LLM 2차 요구 시간 (DL-2)
     local_search_min_remaining_ms: int = 3000
@@ -124,7 +144,15 @@ class AssemblyConfig:
     # 취향 점수 갭이 한 단(≥0.3) 이상이면 점수 서열이 그대로 이기고, 동률·근소 갭에서만
     # 식사 리듬이 개입한다 — 보정이 취향 점수를 압도하지 않도록.
     meal_bonus: float = 0.3             # 식사 창에 FOOD 1개 배치 시 창당 보상
-    meal_penalty: float = 0.2           # 창 밖 FOOD·FOOD 연속 배치 억제 (건당)
+    meal_penalty: float = 0.2           # 창 밖 FOOD 배치 억제 (건당)
+    # FOOD→FOOD 인접(식당 바로 다음 식당) 억제 — 건당, 점수 축 [0,1] 전체라 어떤 취향 갭으로도
+    # 식당 바로 다음 식당이 이득이 되지 않는다. 종전엔 meal_penalty(0.2)를 같이 써서 점수 차가
+    # 크면 그대로 놓였다(QA 6회차 후속 실측, 로컬 full 스택 10일: 태안 2일차 점심 12:26 식당 →
+    # 13:31 식당 — 두 번째는 끝이 점심창 밖이라 창 상쇄 대상도 아니었다). 폴백은 이미 연속 FOOD 를
+    # 후순위로 미뤄(food-first 는 직전이 FOOD 가 아닐 때만) 이 모양을 안 낸다 — OR 을 그 의미에
+    # 맞춘다. 사이에 다른 장소가 하나라도 끼면 감점 없음. 하드 제약 아님(목적함수만) — 식당만
+    # 있는 풀도 비지 않는다. 0 이면 이 항만 꺼진다(폴백의 후순위는 남는다).
+    food_adjacent_penalty: float = 1.0
     # ── 날씨 소프트 보정 (TRIP-383 — TRIP-379 식사 보정과 동형의 결정론 규칙).
     # 하드 배제 금지: 비가 와도 실외 배치는 가능하고, 실외만 남은 풀에서도 일정은
     # 나온다. problem.daily_rain_prob이 None이면 항 자체가 생기지 않아 종전과 동일.
@@ -150,12 +178,26 @@ class AssemblyConfig:
     # 항만 끄고 폴백의 쿼터 재정렬은 남는다(폴백엔 페널티 개념이 없어 게이트 불가).
     category_free_count: int = 2        # 하루 같은 카테고리 이만큼까지는 무페널티
     category_excess_penalty: float = 0.3  # 초과 1개당 감점 (점수 축 [0,1])
+    # ── FOOD 하루 상한 (위 결정3 의 "맛집 투어 유지"를 하루 3곳까지로 좁히는 개정).
+    # 실측(2026-10-02, 로컬 full 스택 POI 18,605건, 부산 미식 4판): 하루 4~7곳 전부 FOOD·
+    # 관광지 0(한 판 2일차 맛집 7연속). 중립·액티비티 취향은 하루 1~2곳으로 정상. 원인 두 겹:
+    # 백엔드가 일자별 days=1 로 불러 위 공정 몫 허용치가 후보 전량이 되고(항이 꺼짐), 0.3 은
+    # 미식 점수 간격(~0.6)보다 작다(식사 보정 0.3·0.2 도 같은 이유로 진다). 점수 단계는 두고
+    # 하루 구성은 조립이 책임진다 — 위 체감 항·공정 몫 바닥은 그대로(다일 캐스케이드 방지).
+    # 세는 것: FOOD + 이름이 음식 골목인 POI(`domain.poi.counts_as_food`), 그날 고정 블록 포함.
+    # 하드 제약 아님: OR 은 초과 1곳당 감점(목적함수만), 폴백은 초과분 FOOD 를 후순위(배제
+    # 아님 — FOOD 만 남으면 배치). 끄려면 food_daily_max 를 크게 — penalty=0 은 OR 항만 끈다.
+    food_daily_max: int = 3             # 점심·저녁 + 1(간식·야식 한 곳)
+    # 점수 축 [0,1] 전체 — 어떤 취향 갭으로도 초과 FOOD 가 이득이 되지 않는다.
+    food_excess_penalty: float = 1.0
 
     def __post_init__(self) -> None:
-        for name in ("or_tools_limit_ms", "or_tools_min_ms", "llm_stage_timeout_ms",
-                     "local_search_min_remaining_ms", "buffer_min"):
+        for name in ("or_tools_limit_ms", "or_tools_reorder_ms", "or_tools_min_ms",
+                     "llm_stage_timeout_ms", "local_search_min_remaining_ms", "buffer_min"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
+        if self.or_tools_det_limit <= 0:
+            raise ValueError("or_tools_det_limit 양수 필요")
         if self.detour_factor <= 0:
             raise ValueError("detour_factor 양수 필요")
         if self.public_walk_max_km < 0:
@@ -164,10 +206,11 @@ class AssemblyConfig:
             lo, hi = getattr(self, name)
             if not (0 <= lo < hi <= 1440):
                 raise ValueError(f"{name} 은 0 ≤ 시작 < 끝 ≤ 1440 분이어야 함")
-        for name in ("meal_bonus", "meal_penalty",
+        for name in ("meal_bonus", "meal_penalty", "food_adjacent_penalty",
                      "rain_outdoor_penalty", "rain_indoor_bonus",
                      "event_bonus_scale",
-                     "category_free_count", "category_excess_penalty"):
+                     "category_free_count", "category_excess_penalty",
+                     "food_daily_max", "food_excess_penalty"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
         if not 0 <= self.rain_threshold_pct <= 100:

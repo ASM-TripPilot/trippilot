@@ -390,6 +390,64 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.POST, "/api/v1/trips/${UUID.randomUUID()}/replan-sessions", null, startBody).first shouldBe 401
     }
 
+    // ───── 대상 일자 (TRIP-1182) ─────────────────────────────────────────
+    // **이 표면이 아니면 컨트롤러 매핑이 안 잠긴다.** `toCommand()` 에서 `targetDate = null` 로 박아도
+    // 서비스·솔버 단위 테스트는 전부 통과한다 — 기능은 죽었는데 초록인 상태가 된다.
+
+    private fun fullDayBody(target: LocalDate?, scope: String = "FULL_DAY") = """
+        {"scope":"$scope"${target?.let { ",\"targetDate\":\"$it\"" } ?: ""},
+         "originKind":"GPS","originLat":33.45,"originLng":126.56}
+    """.trimIndent()
+
+    @Test
+    fun `대상 일자를 주면 그 날로 세션이 열린다 — 오늘이 아니어도 된다(TRIP-1182)`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId) shouldBe 201
+        val tomorrow = today.plusDays(1)
+
+        val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, fullDayBody(tomorrow))
+
+        rc shouldBe 201
+        body["targetDate"].asText() shouldBe tomorrow.toString()
+        // 미래일에는 지금 서 있는 좌표를 쓰지 않는다 — 그 날 거점으로 내려간다.
+        body["originKind"].asText() shouldBe "STAY_ANCHOR"
+    }
+
+    @Test
+    fun `대상 일자를 생략하면 오늘이다 — 종전 클라이언트가 그대로 돈다`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId) shouldBe 201
+
+        val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+
+        rc shouldBe 201
+        body["targetDate"].asText() shouldBe today.toString()
+    }
+
+    @Test
+    fun `지난 날짜는 다시 짤 수 없다(409) — 이미 다녀온 하루를 덮어쓰지 않는다`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId) shouldBe 201
+
+        call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, fullDayBody(today.minusDays(1)))
+            .first shouldBe 409
+    }
+
+    @Test
+    fun `오늘이 아닌 날짜를 '지금 이후'로 요청하면 400 — 그 날의 '지금'은 없다`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId) shouldBe 201
+
+        call(
+            HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token,
+            fullDayBody(today.plusDays(1), scope = "PARTIAL_SLOTS"),
+        ).first shouldBe 400
+    }
+
     @TestConfiguration
     class ReplanTimingConfig {
         @Bean

@@ -40,5 +40,9 @@ data class ArchiveVisitView(
     val completedAt: Instant?,
     val skipped: Boolean,
     val photoCount: Int,
+    /**
+     * 메모가 **있는지만**. 본문은 싣지 않는다 — 이 뷰의 소비자(reflection)는 유무만 쓰고,
+     * 자유서술은 필요 없이 모듈 경계를 넘을 이유가 없다. 본문이 필요한 화면은 `ActualVisit` 이 낸다.
+     */
     val hasMemo: Boolean,
 )

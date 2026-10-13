@@ -1,7 +1,7 @@
 import type {
   StyleAnalysisEnvelope,
   StyleProgress,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-956 · 스타일 진행도 폴백 — j05(상세)와 l03 요약카드가 같이 쓰는 한 곳.

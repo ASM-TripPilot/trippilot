@@ -44,8 +44,9 @@ class BoundaryFixtureTest : StringSpec({
         timeWindows = listOf(TimeWindow(LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), LocalTime.parse("21:00"))),
         fixedBlocks = listOf(
             FixedBlock(UUID.fromString("22222222-2222-4222-8222-222222222222"), LocalDate.parse("2026-08-01"), LocalTime.parse("12:00"), 90),
-            // 물질화된 ANYTIME(계약 M1) — 백엔드가 날짜·시각을 정해 보낸다. null 이면 AI 가 요청 전체를 거부한다.
-            FixedBlock(UUID.fromString("33333333-3333-4333-8333-333333333333"), LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), null),
+            // 물질화된 ANYTIME(계약 M1 · TRIP-1249) — 백엔드가 **날짜만** 정하고 시각은 비워 보낸다.
+            // `start: null` = "그 날 반드시 가되 시각은 조립이 고른다". 구형 AI 는 이 null 을 422 로 거부한다(AI 먼저 배포).
+            FixedBlock(UUID.fromString("33333333-3333-4333-8333-333333333333"), LocalDate.parse("2026-08-01"), null, null),
         ),
         preferenceProfile = PreferenceProfile(
             styles = listOf("미식"), activities = listOf("야경"), foodTastes = listOf("해산물"),
@@ -66,18 +67,17 @@ class BoundaryFixtureTest : StringSpec({
         // **중첩 필드 이름이 바뀌었다는 뜻**이고, 상대는 extra="forbid" 라 런타임 422 가 된다.
         // (예전엔 build/ 로만 떨궈 매번 새로 만든 문자열을 자기 자신과 비교했다 — 드리프트를 못 잡았다.)
         //
-        // ⚠ **스키마 통과 ≠ 수용**이다. 이 픽스처도 그쪽 Pydantic 은 통과하지만, 한 겹 안쪽
-        // 스키마→도메인 변환(`api/wiring.py`)에서 ANYTIME 블록이 거부돼 요청 전체가 422 가 된다.
-        // 이 테스트는 **필드 이름 드리프트**를 잡는 것이지 요청이 받아들여진다는 보증이 아니다.
+        // ⚠ **스키마 통과 ≠ 수용**이다. 이 테스트는 **필드 이름 드리프트**를 잡는 것이지 요청이 받아들여진다는
+        // 보증이 아니다 — 예컨대 `start: null` 은 TRIP-1249 이후 AI 만 받고 구형은 422 다(배포 순서: AI 먼저).
         json.trim() shouldBe golden.trim()
     }
 
     /**
-     * AI 가 고정 블록을 수용하는 조건 — `api/wiring.py::_fixed_block` 의 판정을 그대로 옮긴 것.
-     * 도메인 `FixedBlock.window` 가 필수라 날짜·시각이 없으면 표현할 수 없고, 조용히 떨어뜨리는 대신
-     * **명시 실패(422)** 로 드러낸다(그쪽 INV-4).
+     * AI 가 고정 블록을 수용하는 조건(TRIP-1249 이후) — 날짜는 필수, 시각은 선택이다.
+     * `start: null` 은 "그 날 반드시 가되 시각은 조립이 고른다"(식당이면 식사 시간대). 날짜가 없으면
+     * 솔버가 담을 날이 없어 조용히 떨어뜨리는 대신 **명시 실패(422)** 로 드러낸다(그쪽 INV-4).
      */
-    fun aiAccepts(block: FixedBlock) = block.date != null && block.start != null
+    fun aiAccepts(block: FixedBlock) = block.date != null
 
     "경계로 나가는 모든 고정 블록은 AI 가 수용하는 모양이다 (M1 물질화 완료)" {
         // 블록 하나만 나빠도 **그 호출 전체가 422** 이고, 그 여행은 통째로 폴백된다.
@@ -85,9 +85,10 @@ class BoundaryFixtureTest : StringSpec({
         val rejected = input.fixedBlocks.filterNot { aiAccepts(it) }
         rejected.size shouldBe 0
 
-        // 물질화의 정의: 날짜와 시각이 **둘 다** 채워진다. 하나만 채우면 그대로 거부다.
-        aiAccepts(FixedBlock(UUID.randomUUID(), LocalDate.parse("2026-08-01"), null, null)) shouldBe false
+        // 물질화의 정의(TRIP-1249): 날짜는 채우고 시각은 비운다. 날짜 없이는 시각이 있어도 거부다.
+        aiAccepts(FixedBlock(UUID.randomUUID(), LocalDate.parse("2026-08-01"), null, null)) shouldBe true
         aiAccepts(FixedBlock(UUID.randomUUID(), null, LocalTime.parse("12:00"), null)) shouldBe false
+        aiAccepts(FixedBlock(UUID.randomUUID(), null, null, null)) shouldBe false
         aiAccepts(FixedBlock(UUID.randomUUID(), LocalDate.parse("2026-08-01"), LocalTime.parse("12:00"), null)) shouldBe true
     }
 

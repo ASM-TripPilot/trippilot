@@ -2,7 +2,8 @@
 
 에이전트가 만들고, 오케스트레이터가 그대로 돌려주며, 경계(`api/wiring.py`)가 와이어로
 사영한다. 와이어로 나가는 것은 solution·explanations·candidates_summary·solved_at·
-slot_alternatives — degradations·scoring_mode 는 내부 관측용이다.
+slot_alternatives, 그리고 generate 경로에서 scoring_mode·degradations 의 **사유 코드**
+(`stage:접두` — 자유 문장·시한 값은 안 나간다).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from trippilot.agents.schedule.budget import DeadlineBudget
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import ItinerarySolution
 from trippilot.domain.llm import CandidatePool, PoiExplanation
+from trippilot.domain.persona import PersonaSummary, TasteTag
 from trippilot.domain.poi import PoiCategory
 
 
@@ -77,12 +79,57 @@ class CandidatesReport:
     shortfall_categories: tuple[str, ...]
 
 
-def candidates_report(pool: CandidatePool) -> CandidatesReport:
+# 하루 최소 슬롯 수 — U3 NFR 의 "하루 5~10슬롯"(nfr-requirements PERF-U3-01·
+# tech-stack-decisions) 하한. 풀이 `일수 × 이 값` 보다 작으면 일정을 채울 후보가
+# 모자란다는 판정이다. 솔버는 슬롯 수를 미리 정하지 않으므로 문서상 하한을 쓴다.
+MIN_SLOTS_PER_DAY = 5
+
+# 취향 → 경계 카테고리 (BR-U2-05 개정 2026-10-02). 코드베이스에 기존 사상이 없어 신설.
+# 대응이 없는 축(REST=휴양)은 싣지 않는다 — 요구 카테고리를 지어내지 않는다.
+_TASTE_CATEGORIES: dict[TasteTag, PoiCategory] = {
+    TasteTag.NATURE: PoiCategory.NATURE,
+    TasteTag.CITY: PoiCategory.SIGHT,  # 관광
+    TasteTag.FOOD: PoiCategory.FOOD,
+    TasteTag.CULTURE: PoiCategory.CULTURE,
+    TasteTag.SHOPPING: PoiCategory.SHOPPING,
+    TasteTag.ACTIVITY: PoiCategory.ACTIVITY,
+}
+# 백엔드 `activities` 8종 (domain/persona.py ACTIVITY_LABELS) — 8종 모두 대응이 있다.
+_ACTIVITY_CATEGORIES: dict[str, PoiCategory] = {
+    "자연": PoiCategory.NATURE,
+    "역사문화": PoiCategory.CULTURE,
+    "테마파크": PoiCategory.ACTIVITY,
+    "맛집투어": PoiCategory.FOOD,
+    "카페": PoiCategory.CAFE,
+    "전시": PoiCategory.CULTURE,
+    "야경": PoiCategory.NIGHT_VIEW,
+    "쇼핑": PoiCategory.SHOPPING,
+}
+
+
+def _wanted_categories(persona: PersonaSummary | None) -> set[PoiCategory]:
+    """취향이 요구하는 경계 카테고리. 페르소나 없음·취향 비어 있음 → 빈 집합."""
+    if persona is None:
+        return set()
+    wanted = {_TASTE_CATEGORIES[t] for t in persona.taste_tags if t in _TASTE_CATEGORIES}
+    wanted |= {_ACTIVITY_CATEGORIES[a] for a in persona.activities
+               if a in _ACTIVITY_CATEGORIES}
+    if persona.cuisines:  # 음식 선호(한식·양식…)는 전부 FOOD 안의 구분이다
+        wanted.add(PoiCategory.FOOD)
+    return wanted
+
+
+def candidates_report(
+    pool: CandidatePool, *, days: int, persona: PersonaSummary | None
+) -> CandidatesReport:
     """후보 풀 실측 → 충분성 보고. 지어내지 않는다 — 전부 풀에서 센 사실이다.
 
-    - shortfall = 풀에 후보가 **0건**인 경계 카테고리 (카테고리별 최소 개수 임계는 1 —
-      임계 발명을 최소화한 1차 규칙. 정교한 판정은 PlaceScoutProvider(S7.1) 승격 시 이관)
-    - level: 풀 자체가 비면 NO_CANDIDATES, 빠진 카테고리가 있으면 LOW, 아니면 OK
+    - shortfall = 풀에 후보가 **0건**인 경계 카테고리 (보고용 — 취향과 무관하게 전부)
+    - level (BR-U2-05 개정 2026-10-02):
+      풀이 비면 NO_CANDIDATES · 취향이 요구하는 카테고리가 0건이거나 풀 크기 <
+      `days × MIN_SLOTS_PER_DAY` 면 LOW · 아니면 OK. 취향과 무관한 공백만으로는
+      LOW 가 아니다 — 종전 "아무 카테고리 0건 → LOW" 는 실데이터에서 거의 매 생성을
+      LOW 로 만들어 FE 가 정상 LLM 결과를 "AI 추천은 잠시 쉬어요"로 오표기했다.
     """
     present = {p.category for p in pool.pois}
     shortfall = tuple(
@@ -90,7 +137,8 @@ def candidates_report(pool: CandidatePool) -> CandidatesReport:
     )
     if not pool.pois:
         level = "NO_CANDIDATES"
-    elif shortfall:
+    elif (_wanted_categories(persona) - present
+          or len(pool.pois) < days * MIN_SLOTS_PER_DAY):
         level = "LOW"
     else:
         level = "OK"
@@ -122,6 +170,9 @@ class GenerationOutcome:
     candidates_summary: CandidatesReport | None
     solved_at: datetime | None
     slot_alternatives: Mapping[str, tuple[SlotAlternative, ...]]
+    # LLM 점수 모드에서 점수가 빠져 규칙 점수로 보충한 후보 수 — 와이어 MIXED 의 근거.
+    # 기본값 없음: 생성 지점이 잊으면 TypeError 로 드러난다(위 두 필드와 같은 이유).
+    rule_backfill_count: int
     error: str | None = None
 
     def __post_init__(self) -> None:
@@ -168,5 +219,6 @@ def failed_outcome(
         candidates_summary=candidates_summary,  # 풀 이전 실패면 None — 모름을 유지
         solved_at=None,  # 해가 없다 — 검증 시각을 지어내지 않는다
         slot_alternatives={},  # 슬롯이 없다 — 슬롯별 제안도 없다
+        rule_backfill_count=0,
         error=error,
     )

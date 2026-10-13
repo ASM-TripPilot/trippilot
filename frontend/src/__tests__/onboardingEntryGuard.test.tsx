@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react-native';
 
 import type { OnboardingProgress } from '@/features/onboarding/model/resolveOnboardingStep';
-import { useOnboardingProgress } from '@/features/onboarding/model/useOnboardingProgress';
-import OnboardingLayout from '@/app/(onboarding)/_layout';
-import OnboardingIndex from '@/app/(onboarding)/index';
+import { useOnboardingProgress } from '@/features/onboarding';
+import OnboardingLayout from '@routes/(onboarding)/_layout';
+import OnboardingIndex from '@routes/(onboarding)/index';
 
 /**
  * T2-1 · T2-2 · T2-3 · T2-4 — (onboarding) 진입 자동 리다이렉트 가드.

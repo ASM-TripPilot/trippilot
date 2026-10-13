@@ -4,6 +4,8 @@
 > **정본 입력**: `docs/PRD/` (기능·규칙·수용기준) + `docs/design/wireframes.md` (Figma UI/UX, fileKey `1MTF3dtptIrbg8gld5IdO2`)
 > **충돌 원칙**: 기능·데이터·규칙 → PRD 우선 / 화면·컴포넌트·상태·인터랙션 → Figma 우선 / 사용자 명시 지시 → PRD보다 우선.
 > 이 문서는 검증 질문(`requirement-verification-questions.md`) + 후속 질문(`requirements-followup-questions.md`) 답변을 반영한 요구사항 정본이다. NFR 정량값은 Q6=B에 따라 **가정(Assumption)**으로 명시하며 CONSTRUCTION에서 확정한다.
+>
+> **[개정 · 2026-10-12 — 사용자 결정 · 범위 재정렬]** 원문은 역사 보존이고 아래 각 항목 뒤 개정 블록이 우선한다. 요지: ① **U7 커뮤니티(PRD 10)·U9 동행 공동편집(PRD 11)은 제품에서 폐기**한다(FR-COMMUNITY·FR-COEDIT 폐기). ② **U8 대화형 어시스턴트(PRD 02)는 후속 게이트가 아니라 개발 범위에 들어온다**(상세는 U8 Functional Design). ③ **U10 — GPS·위치 자동화 유닛을 신설**한다(미구현) — 지오펜스 자동 도착·계획 vs 실제 경로·GPS 방문 기록·백그라운드('항상 허용') 위치 권한이 여기로 이연된다. 현재 앱은 **수동 체크인 + 포그라운드 위치만** 쓴다(`frontend/src/shared/location/geofence.ts` `registerGeofences`가 `armed:false` 스텁 · `frontend/app.config.ts` `locationAlwaysPermission: false`). ④ 인프라는 이미 배포됐다 — AWS EKS(`infra/terraform/stack/`, `deploy/eks/chart`, `.github/workflows/aws-deploy.yml`). ⑤ 화면 정본은 이 문서가 인용하는 `docs/design/wireframes.md`가 아니라 **라이브 Figma 단일 페이지(`1228:1045`)**다(밴드 맵 정본 `frontend/.claude/skills/spec-perception/reference/figma-structure.md`).
 
 ---
 
@@ -32,6 +34,8 @@
 
 > 유닛 경계의 최종 확정은 **Units Generation** 단계 산출물이다. 본 요구는 커버리지 우선순위만 규정한다.
 
+> **[개정 · 2026-10-12 — 사용자 결정]** 위 표의 "후속 분리 게이트" 3모듈은 다음처럼 갈린다 — **02 AI 어시스턴트(U8) = 개발 범위 편입**(후속 게이트 해제) · **10 커뮤니티(U7) = 폐기** · **11 동행 공동편집(U9) = 폐기**. 또 1차 모듈 08·09·07 중 GPS·위치 자동화 부분(지오펜스 자동 도착·계획 vs 실제 경로·GPS 방문 기록·백그라운드 위치)은 **신설 U10(GPS·위치 자동화, 미구현)**으로 이연한다.
+
 ---
 
 ## 3. 기능 요구사항 (Functional Requirements)
@@ -48,6 +52,7 @@
 
 ### FR-ONBOARD — 계정 및 온보딩 (PRD 03)
 - **FR-ONBOARD-01**: 소셜 + 이메일 로그인, 약관 동의, 닉네임.
+  > **[개정 · 2026-10-12]** 로그인은 **소셜 전용 4종(Google·Kakao·Naver·Apple)**이다 — 이메일 가입·인증·비밀번호 로그인은 MVP에서 이연(루트 CLAUDE.md MVP 범위). 근거: `backend/modules/auth/src/main/kotlin/com/trippilot/auth/domain/Provider.kt`(GOOGLE·APPLE·KAKAO·NAVER), `frontend/src/pages/auth/login/ui/SocialLoginScreen.tsx`, auth 모듈 main 소스에 password 0건.
 - **FR-ONBOARD-02**: 위치 권한 요청 흐름(위치정보법 동의 요건 반영 — LEGAL-01).
 - **FR-ONBOARD-03**: 취향 7종(스타일·페이스·예산·동행·활동·이동·음식) 수집 + 기본값. 이 취향이 일정 생성 개인화 입력이 된다.
 
@@ -58,6 +63,7 @@
 
 ### FR-TRIP — 여행 생성 (PRD 05)
 - **FR-TRIP-01**: 여행 생성. 숙소 미등록 시작 허용. 다중/다박 거점, 필수 방문지 지정. **[개정 · 2026-09-28]** 다중/다박 거점의 날짜는 **거점 배정 구간**으로 표현한다(숙소 날짜 불러오기 US-TRIP-05 폐기 · TRIP-1052). **작성중(일정 없음·초안) 여행 삭제**를 허용한다 — 소프트 삭제, 생성 중·확정 이후 불가(US-TRIP-10 · TRIP-1055/1061).
+  > **[개정 · 2026-10-12]** "생성 중·확정 이후 불가"는 낡았다 — 2026-10-01 사용자 결정(TRIP-1061, US-TRIP-10 개정)으로 **서버는 소유자면 전 상태(작성중·확정·여행 중·종료) 소프트 삭제를 허용**한다(상태 가드 없음). 작성중 카드에만 ⋯ 삭제 진입점을 두는 것은 화면 노출 정책(FE 소유)이다. 근거: `backend/modules/trip/src/main/kotlin/com/trippilot/trip/application/TripService.kt` `delete()` — 소유 확인 후 `softDelete` + `TripDeleted` 발행.
 
 ### FR-SCHED — AI 일정 생성 (PRD 06) → **FR-SOLVER 아키텍처 적용**
 - **FR-SCHED-01**: 등록 숙소 위치·체류기간 기준으로 취향 반영 방문지 선정 + 영업시간·이동시간·하루 시간예산 하드 제약을 풀어 날짜별 동선으로 정렬.
@@ -66,28 +72,36 @@
 
 ### FR-PLANB — Plan-B 재계획 (PRD 07)
 - **FR-PLANB-01**: 수동/자동 트리거(날씨·휴무·지연·취소 감지) → 영향 분석 → 대안 후보 → 비교 → 이력.
+  > **[개정 · 2026-10-12]** "대안 후보"는 **단일 재계획안 1개 + 슬롯별 후보 교체**다 — 일정 단위 2~3안을 만들지 않는다(U4 FD DEC-U4-1·BR-U4-20). 근거: `backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api/ReplanFacade.kt` `propose()`(초안 하나, 해 없으면 null → "대안 없음" 3옵션), AI `POST /ai/v1/planb/replan`. `POST /ai/v1/planb/alternatives`(최대 3, 시각·순서 없는 제안)는 백엔드가 **슬롯 후보**(`HttpScheduleAgentAdapter.proposeSlotCandidates`)로 쓴다.
 - **FR-PLANB-02**: 방식 분기(AI 재계획 / 직접 편집), 계획↔실제 경로 토글.
+  > **[이연 · 2026-10-12 → U10]** "계획↔실제 경로 토글"은 GPS 발자취 수집이 전제라 U10(GPS·위치 자동화)으로 이연한다. 현재 구현: 수동 체크인/포그라운드 위치만 — 실제 경로 레이어 없음. 방식 분기(AI 재계획 / 직접 편집)는 유지.
 - **FR-PLANB-03**: 자동 감지 범위는 외부 데이터 커버리지에 비례. 미커버 POI는 수동 트리거·미확인 분리로만 대응(ADR-0011 '침묵 실패 금지').
 
 ### FR-ONTRIP — 여행 중 현장 이용 (PRD 08)
 - **FR-ONTRIP-01**: 장소 도착·방문 체크, 현재 장소 상세, 다음 이동 거리 표기(실제 길안내는 외부 지도앱 위임 — ADR-0012).
+  > **[이연 · 2026-10-12 → U10]** 도착의 **자동 감지(지오펜스)** 부분은 U10으로 이연한다. 현재 구현: 수동 체크인/포그라운드 위치만 — 도착 요청은 `ArriveRequestSource.MANUAL`만 실린다(`frontend/src/pages/live/live-itinerary/ui/LiveItineraryPage.tsx`), 지오펜스 등록은 `armed:false` 스텁(`frontend/src/shared/location/geofence.ts`). 계약의 `AUTO_GEOFENCE` 값은 남아 있다.
 
 ### FR-RECORD — 여행 기록/회고 (PRD 09)
 - **FR-RECORD-01**: plan / actual / changelog 3종 기록. 방문 체크·사진·메모를 일정 위에 남김.
+  > **[개정 · 2026-10-12]** 3종은 **서버에 구분 저장**된다(actual = archive 모듈, change-log = change-log 모듈 `GET /trips/{tripId}/change-log`). 다만 3종을 나란히 보여 주던 기록 비교 화면(j02)은 **삭제됐다**(TRIP-769 · 2026-09-11 사용자 "이것도 빼자", `frontend/src/pages/record/records-calendar/ui/RecordsCalendarPage.tsx` 주석) — change-log 전용 열람 화면은 없고, 당일 회고의 한 줄 변경 요약으로만 보인다(`frontend/src/pages/record/daily-reflection/ui/ChangeSummaryRow.tsx`, TRIP-571).
 - **FR-RECORD-02**: 종료 후 날짜별 기록·지도 경로·회고 자동 생성, 스타일 분석, SNS 공유 카드, 캘린더.
+  > **[이연 · 2026-10-12 → U10]** "지도 경로" 중 **GPS 경로** 부분은 U10으로 이연한다. 현재 구현: 수동 체크인/포그라운드 위치만 — GPS 경로 없음(요약 지도 히어로는 계약에 좌표가 없어 아직 배선 전 — `frontend/src/pages/record/trip-summary/ui/TripSummaryPage.tsx` 주석). 지난 여행은 기록 탭 캘린더(`RecordsCalendarPage`)에서 연다.
 
 ### FR-NOTIF — 알림/마이페이지/설정 (PRD 12)
 - **FR-NOTIF-01**: 알림 채널 토글, 마이페이지, 취향 편집, 위치 동의 관리(철회/일시중지 — LEGAL-01), 제휴 고지.
 
 ### FR-ASSIST — 앱 전반 AI 어시스턴트 (PRD 02) — *후속 게이트*
 - **FR-ASSIST-01**: 대화형 도우미(모달/바텀시트). 호출·컨텍스트·재질의·진행 검토·액션 위임·이력·범위 한계·가드레일·폴백. 기존 모듈(숙소탐색·일정생성·솔버)을 대화로 호출·설명·재질의만 하며 실현가능성 결정은 솔버가 소유(ADR-0008·0015).
+  > **[개정 · 2026-10-12 — 사용자 결정]** *후속 게이트* 표기를 해제한다 — U8 대화형 어시스턴트는 **개발 범위**다. 요구 상세는 U8 Functional Design(`aidlc-docs/construction/` 하위)에서 전개한다.
 
 ### FR-COMMUNITY — 여행자 커뮤니티 / UGC (PRD 10) — *후속 게이트*
+> **[폐기 · 2026-10-12 — 사용자 결정]** 커뮤니티(U7·에픽 K)는 제품에서 폐기한다. 아래 FR-COMM-01~03은 역사 보존용이며 구현 근거로 인용하지 않는다. 단 금칙어 사전·moderation 모듈(`backend/modules/moderation`)은 닉네임 검증(US-ONB-03)에 쓰이므로 남는다. 커뮤니티 전제 경로(공개 사진 S3 업로드·탐색 '여행자 일정' 진입 등)도 함께 사라진다.
 - **FR-COMM-01**: 공개 일정 둘러보기·읽기전용 보기·프로필 보기·'내 여행으로 가져오기'(원본 분리 사본 복제)·좋아요·댓글. 기본 비공개·명시적 옵트인 공개. 팔로우/구독/스크랩/평판 그래프 없음.
 - **FR-COMM-02 (출시 선결)**: UGC 모더레이션 최소 인프라 — (i) 신고 접수·큐, (ii) '검토 중' 노출 보류(침묵 삭제 금지·사유 고지), (iii) 금칙어 기본 사전(닉네임·제목·캡션·댓글 공통), (iv) 차단(양방향 숨김). 이 4종은 커뮤니티 출시 전 구현 필수.
 - **FR-COMM-03**: 민감 필드 마스킹 — 숙소 위치 권역화·여행 날짜 상대화·실시간 소재지 비공개. 사진 EXIF GPS 자동 제거. 자유텍스트 PII·얼굴·핀 역추론은 best-effort + 게시 전 제3자 동의·책임 고지.
 
 ### FR-COEDIT — 동행 공동 편집 (PRD 11) — *후속 게이트*
+> **[폐기 · 2026-10-12 — 사용자 결정]** 동행 공동편집(U9·에픽 L)은 제품에서 폐기한다. 아래 FR-COEDIT-01은 역사 보존용이며 구현 근거로 인용하지 않는다.
 - **FR-COEDIT-01**: 동행자 초대, 권한(소유자/편집자/뷰어), 실시간 공동 편집, 충돌 해소, **솔버 재검증**, 변경 이력.
 
 ### FR-SOLVER — AI 솔버 전략 (단계적·진화형 교체 · 사용자 지시로 PRD 부분 대체 · 2026-07-12 확정)
@@ -111,6 +125,8 @@ Phase 1 (초기 구현·출시)                     향후 (조건부 교체 결
                                             사용자 노출 시각 = 항상 검증값(환각 금지)
 ```
 
+> **[개정 · 2026-10-12 — 구현 현황]** "Phase 1 OPTW → 향후 Bedrock AgentCore 교체" 서술(FR-SOLVER-01~03·위 도식·A2·A3·O-SOLVER)은 실제 구현과 다르다. 실제는 **AI 서비스(FastAPI, `ai/`)의 하이브리드 조립 체인 = OR-Tools 조립 → 규칙 폴백 조립**이다(`ai/src/trippilot/api/wiring.py` `OrToolsAssembler` → `RuleFallbackAssembler`, `ai/src/trippilot/assembly_engine/facade.py` — 최후 단계가 항상 해를 돌려줘 빈손 경로 없음, INV-4). LLM은 판단(선호 점수·해석·설명·대안 선택·회고 문구 등)만 맡고, **LLM 기능 18종 전부 Anthropic Claude `claude-fable-5-1`**로 배정돼 있다(커밋 fb0d51e2, 리포 루트 `.env.example` `AI_LLM_FEATURE_MODELS`, 기능별 effort는 `ai/src/trippilot/llm_gateway/config.py`). **Bedrock AgentCore는 리포 어디에도 없다(검색 0건).** Bedrock은 REMINDER_COPY 증류 학생 모델(Custom Model Import, `AI_BEDROCK_MODEL_ARN`)과 Titan 임베딩(`ai/src/trippilot/llm_gateway/adapters/titan_embedding.py`, KB 적재)에만 쓰인다. FR-SOLVER-04(실현가능성은 결정론적 컴포넌트 소유·노출 시각은 검증값만)는 그대로 유효하다 — 루트 CLAUDE.md INV-1~4가 현행 정본이다. 엔진 교체 판정 게이트(O-SOLVER)는 현재 진행 중인 계획이 없다.
+
 ---
 
 ## 4. 비기능 요구사항 (Non-Functional Requirements)
@@ -120,10 +136,12 @@ Phase 1 (초기 구현·출시)                     향후 (조건부 교체 결
 ### NFR-PERF — 성능 (가정)
 - **NFR-PERF-01 (가정)**: 앱 주요 화면 상호작용 응답 P95 < 300ms(로컬), 서버 API P95 < 800ms.
 - **NFR-PERF-02 (가정)**: AI 일정 생성 완료(정상 경로, 솔버) P95 < 10s; 에이전트 개입 경로 P95 < 30s. 진행 표시(스켈레톤/프로그레스) 제공.
+  > **[개정 · 2026-10-12]** 배포 설정의 일정 생성 시한은 **1일차 15,000ms · 전체 60,000ms**다(`deploy/eks/chart/values.yaml` `scheduleDeadlineDay1Ms`·`scheduleDeadlineTotalMs` — 백엔드 코드 기본 `ScheduleDeadlineProperties`와 같게 맞춤, 실측 생성 ~15s). 시한 강제는 기본값 `scheduleDeadlineEnforced: false`(`values.yaml`)를 환경 오버레이가 켠다 — `values-dev.yaml`·`values-prd.yaml` 모두 `true`. "에이전트 개입 경로"는 존재하지 않는다(FR-SOLVER 개정 참조). P95 목표 재확정은 여전히 미결.
 - **NFR-PERF-03 (가정)**: 외부 API(지도·장소·날씨·OTA·LLM) 호출은 캐싱·rate-limit·폴링 상한을 두어 비용·배터리·rate-limit을 통제(PRD Further Notes 선결과제).
 
 ### NFR-SCALE — 확장성 (가정)
 - **NFR-SCALE-01 (가정)**: 초기 국내 출시 동시 사용자 규모를 가정으로 산정(예: 초기 MAU 수만 규모)하고 오토스케일 상·하한을 둔다(RESILIENCY-09). 서버리스 동시성 상한 설정.
+  > **[개정 · 2026-10-12]** 컴퓨트는 서버리스가 아니라 **AWS EKS 컨테이너**다(`infra/terraform/stack/eks.tf`, Helm 차트 `deploy/eks/chart`, 배포 `.github/workflows/aws-deploy.yml`). "서버리스 동시성 상한"은 **파드 레플리카·HPA·리소스 요청/상한**으로 읽는다(`values.yaml` — 현재 backend·ai `replicas: 1`, ai `autoscaling.enabled: false`).
 
 ### NFR-AVAIL — 가용성 (가정, 복원력 결정 반영)
 - **NFR-AVAIL-01 (가정)**: 목표 가용성 99.9%(가정). **단일 리전 + 다중 AZ**에 의존(Q3=E, Q4=A). 리전 간 DR은 초기 범위 아님.
@@ -137,6 +155,7 @@ Phase 1 (초기 구현·출시)                     향후 (조건부 교체 결
 - **NFR-DATA-01 (출시 게이트)**: 초기 지역 실제 데이터 커버리지를 **정량 게이트**로 확인 후 출시 — POI 영업시간 필드 채움률·장소 좌표 확보율 임계(값은 CONSTRUCTION 확정).
 - **NFR-DATA-02**: 국내 지도 API 약관 준수 — **응답 데이터 영구 캐싱 금지·실시간 호출·출처 표기**를 데이터 모델에 반영(LEGAL-02).
 - **NFR-DATA-03 (사진 저장 모델 · 2026-07-12 결정)**: 회고/기록 사진은 **기기 로컬 자산 참조 + 서버는 메타데이터만**(자산 식별자·촬영 시각·EXIF 위치·연결 장소) 저장하고 S3에 일괄 저장하지 않는다. **커뮤니티 공개에 포함한 사진만 EXIF GPS 제거 후 S3 업로드**(FR-COMM-03). **멀티 디바이스 미지원** — 로컬 사진은 단일 기기, 기기 변경 시 유실(메타데이터만 잔존)은 수용된 트레이드오프.
+  > **[개정 · 2026-10-12]** 커뮤니티 폐기로 **"커뮤니티 공개 사진만 S3 업로드" 경로는 사라졌다** — 사진은 전부 기기 로컬 참조 + 서버 메타데이터다(`frontend/src/shared/api/generated/schemas/addPhotoRequest.ts` `localAssetId`). 업로드 경로 없음.
 
 ---
 
@@ -149,6 +168,7 @@ Phase 1 (초기 구현·출시)                     향후 (조건부 교체 결
 - **SEC-INPUT (SECURITY-05)**: 모든 API 입력 검증(타입·길이·형식 allowlist·XSS 방지·파라미터화 쿼리).
 - **SEC-AUTHZ (SECURITY-08)**: 기본 거부, 객체 수준 인가(IDOR 방지 — 특히 공동편집·커뮤니티 리소스 소유 검증), 서버측 토큰 검증, CORS 제한.
 - **SEC-AUTH (SECURITY-12)**: 소셜+이메일 로그인 — 비밀번호 정책·적응형 해싱·세션(Secure/HttpOnly/SameSite·로그아웃 무효화)·브루트포스 방지·비밀 하드코딩 금지(시크릿 매니저).
+  > **[개정 · 2026-10-12]** 로그인은 소셜 전용 4종(Google·Kakao·Naver·Apple)이라 **비밀번호 정책·적응형 해싱 항목은 현재 적용 대상이 없다**(이메일/비밀번호 로그인 이연 — FR-ONBOARD-01 개정 참조, `backend/modules/auth/.../domain/Provider.kt`). 서버측 토큰 검증·세션 무효화·브루트포스 방지·비밀 하드코딩 금지는 그대로 유효.
 - **SEC-LEASTPRIV (SECURITY-06·07)**: IAM 최소권한(와일드카드 금지), 기본 거부 네트워크 구성.
 - **SEC-DESIGN (SECURITY-11·13·15)**: 보안 핵심 로직 격리, 공개 엔드포인트 rate-limit, 오용 시나리오 고려, 안전한 역직렬화, 감사 가능한 데이터 변경(공동편집 변경 이력과 정합), 예외 시 fail-closed·전역 에러 핸들러.
 - **SEC-SUPPLY (SECURITY-10)**: 의존성 핀·락파일·취약점 스캔·SBOM·신뢰 소스만.
@@ -205,6 +225,7 @@ Phase 1 (초기 구현·출시)                     향후 (조건부 교체 결
 - 소셜 그래프(팔로우·구독·스크랩·평판) 없음.
 - **멀티 디바이스 사진 동기화 없음** — 회고 사진은 로컬 단일 기기(메타데이터만 서버·커뮤니티 공개 사진만 S3). 클라우드 사진 백업은 후속 검토(NFR-DATA-03).
 - **이번 AIDLC 실행 범위**: INCEPTION까지만(SCOPE.md). CONSTRUCTION·Build&Test·OPERATIONS는 자동 진입 안 함.
+  > **[개정 · 2026-10-12]** ① 위 "커뮤니티 공개 사진만 S3" 단서는 커뮤니티 폐기로 소멸(사진 업로드 경로 없음). ② **범위 제외 추가**: 커뮤니티(PRD 10)·동행 공동편집(PRD 11) 전체 — 폐기. ③ AIDLC 실행 범위는 2026-07-17부터 **CONSTRUCTION 설계 문서 단계**까지다(`aidlc/docs/SCOPE.md`, 루트 CLAUDE.md) — 코드는 팀이 각 패키지에서 직접 개발한다.
 
 ---
 
@@ -224,6 +245,14 @@ Phase 1 (초기 구현·출시)                     향후 (조건부 교체 결
 - O5: 이연 항목 — CI/CD·롤백·배포 스타일(RESILIENCY-04), 복원력 테스트(RESILIENCY-14) → CONSTRUCTION NFR Design.
 - O-SOLVER: 솔버 산출물 품질이 '별로'인지 판정하는 기준·게이트(정량/정성) → Bedrock 에이전트 교체 여부를 결정하는 트리거. Application Design/운영에서 정의(FR-SOLVER-02).
 
+> **[개정 · 2026-10-12 — 가정·미결 현황]**
+> - **A2·A3·O-SOLVER**: 전제가 바뀌었다 — 엔진은 OR-Tools → 규칙 폴백 조립 + Claude `claude-fable-5-1` LLM 판단이고 Bedrock AgentCore 교체 계획은 없다(FR-SOLVER 개정 참조).
+> - **O1(OTA 제휴)**: 부분 해소 — 트립닷컴 어필리에이트(2026-09-29 승인) 딥링크가 기본 어댑터다(`backend/modules/affiliate-link/.../adapter/out/external/TripcomDeeplinkAdapter.kt` — 숙소 ID 매핑 없이 키워드 검색결과 착지). 수수료 정산·포스트백은 미결.
+> - **O2(지도·날씨 API)**: 해소 — 클라이언트 지도 = **네이버 지도 네이티브 SDK**(`@mj-studio/react-native-naver-map`, `frontend/src/shared/map/MapView.tsx`, TRIP-861) · 서버 장소 조회·지역 지오코딩 = **카카오 로컬**(`backend/modules/place-data/.../KakaoPlaceLookupAdapter.kt`, `KakaoRegionGeocodeAdapter`) · 날씨 = **기상청(KMA)**(`backend/modules/weather-context/.../KmaWeatherAdapter.kt`).
+> - **O3**: 어시스턴트가 개발 범위로 들어와 U8 Functional Design에서 다룬다(후속 게이트 해제).
+> - **O4(커뮤니티 모더레이션 조정값)**: 커뮤니티 폐기로 소멸.
+> - **O5(CI/CD·배포)**: 해소 — AWS EKS 배포 파이프라인이 있다(`.github/workflows/aws-deploy.yml`, `infra/terraform/stack/`, `deploy/eks/chart`). 복원력 테스트(RESILIENCY-14)는 별도 확인 필요.
+
 **Figma 라이트 점검 후속 2건 (인셉션 진행 비차단)**
 - G1: 매니페스트 미기재 '입력 컴포저' 프로토타입 섹션(~10프레임) 유닛 매핑/제외 결정 → Units Generation.
 - G2: 네거티브·엣지(공유카드 3비율·로그인 4종·계획↔실제 토글 등) 부재 확정은 형제 프레임 전수 감사 필요(라이트 점검 한계).
@@ -236,6 +265,7 @@ Phase 1 (초기 구현·출시)                     향후 (조건부 교체 결
 |---|---|---|
 | FR-CORE·SHELL·ONBOARD·STAY·TRIP·SCHED·PLANB·ONTRIP·RECORD·NOTIF | PRD 01·03·04·05·06·07·08·09·12 | User Stories → Application Design → Units |
 | FR-ASSIST·COMMUNITY·COEDIT | PRD 02·10·11 | 후속 분리 게이트(인터페이스만 1차) |
+| *[개정 · 2026-10-12]* FR-ASSIST / FR-COMMUNITY·COEDIT / GPS·위치 자동화 | PRD 02 / 10·11 / 07·08·09 일부 | U8 개발 범위(U8 FD) / **폐기** / **U10 신설(미구현)** |
 | FR-SOLVER | 사용자 지시(2026-07-12) + PRD 06 정제 | Phase 1=결정론적 솔버 설계 / 향후 조건부 Bedrock 교체(옵션 B) |
 | SEC-* | security-baseline (SECURITY-01~15) | 각 CONSTRUCTION 단계 준수 검증 |
 | RES-* | resiliency-baseline + Q3~Q6 | Application/Infra/NFR Design |

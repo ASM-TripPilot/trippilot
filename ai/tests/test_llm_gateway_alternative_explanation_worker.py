@@ -81,6 +81,19 @@ def test_vars_dedupe_alternative_and_tolerate_unregistered_slot() -> None:
     assert lines[1].endswith("대신: (미등록 장소)")
 
 
+def test_vars_tolerate_unknown_companion() -> None:
+    """동행 미상(None)이면 "미설정" — 본 설명 워커와 같은 규칙.
+
+    #840 부터 고정 요약의 동행이 None 이라 `persona.companion.value` 가 AttributeError 를 던졌고,
+    경계가 그것을 `explain_error` 로 삼켜 **차선책 문장이 늘 비었다**(2026-10-05 로컬 백엔드 로그).
+    """
+    variables = build_alternative_explanation_vars(
+        _POOL, ((_SLOT.poi_id, _ALT1.poi_id),),
+        PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID))
+
+    assert variables["companion"] == "미설정"
+
+
 def test_vars_reject_alternative_outside_pool() -> None:
     with pytest.raises(ValueError, match="풀 밖"):
         build_alternative_explanation_vars(

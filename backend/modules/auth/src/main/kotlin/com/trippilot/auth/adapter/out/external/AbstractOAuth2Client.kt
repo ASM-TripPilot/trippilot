@@ -17,7 +17,16 @@ internal val OAUTH_JSON: ObjectMapper = ObjectMapper()
  * 제공자별 endpoint 설정([config])과 userinfo 파싱([parseProfile])만 하위가 구현한다.
  * (Google·Kakao·Naver 공통. Apple 은 id_token 기반이라 별도.)
  *
- * TODO(SECURITY, IdP 등록 후): id_token 서명 검증(JWKS)·nonce·state 검증 추가.
+ * **id_token·nonce·state 를 여기서 검증하지 않는 것은 누락이 아니다**(TRIP-1316 에서 대조). 3사는 신원을
+ * id_token 이 아니라 userinfo 로 받으므로 서명·nonce 가 해당 없고, `state` 는 서버에 오지 않는다 —
+ * 인가 요청을 연 앱이 대조한다. code 가로채기는 PKCE(`code_verifier`)가 막는다 — 앱이 `code_challenge` 를
+ * 실어 연 인가 요청의 code 는 맞는 verifier 없이 교환되지 않는다. 구글은 공식 지원이다. **카카오는 REST 문서의
+ * 인가·토큰 요청 파라미터 표에 PKCE 가 없지만**, OIDC discovery 가 `code_challenge_methods_supported: [S256]` 을
+ * 광고하고 인증 서버(kauth 토큰 엔드포인트)가 실제로 검증한다 — verifier 가 틀리면 `KOE313`(iOS SDK 흐름,
+ * 데브톡 2022-11), 없으면 `KOE311`(REST 흐름, 데브톡 2021-04)로 거절된다. 요청 파라미터로는 문서화되지 않은 동작에 기대고
+ * 있다는 뜻이기도 하다. **네이버는 PKCE 가 아예 없다** — 그래서 `AuthenticateWithSocialUseCase.authenticate` 가
+ * 네이버를 code 경로에서 거절한다(TRIP-1317) — 이 클래스의 네이버 교환은 호출되지 않는다.
+ * 실제로 비어 있는 것은 **토큰의 발급 대상(aud) 확인**이며 그 처리는 [fetchProfileByAccessToken] 에 적었다.
  */
 abstract class AbstractOAuth2Client(
     restClientBuilder: RestClient.Builder,
@@ -38,10 +47,15 @@ abstract class AbstractOAuth2Client(
     /**
      * SDK 발급 토큰 흐름 — 교환 없이 userinfo 만 호출한다.
      *
-     * **여기엔 미설정 가드가 없다.** 이 경로는 `clientId` 를 쓰지 않기 때문이다 — 소유증명은 앱이
-     * 네이티브 SDK 에서 이미 받아 온 토큰이 하고, 서버는 그것으로 userinfo 만 묻는다. 실제로
-     * `GoogleOAuthClientTest` 가 `userInfoUri` 만 채운 설정으로 이 경로를 검증한다. 키 미발급은
-     * 이 경로에서 **앱 쪽이 먼저 막는다**(SDK 초기화가 안 된다).
+     * **여기엔 미설정 가드가 없다.** 이 경로는 `clientId` 를 쓰지 않기 때문이다 — 앱이 네이티브 SDK 에서
+     * 이미 받아 온 토큰으로 서버는 userinfo 만 묻는다. 실제로 `UnconfiguredProviderGuardTest` 가 `userInfoUri` 만
+     * 채운 설정으로 이 경로를 검증한다. 키 미발급은 이 경로에서 **앱 쪽이 먼저 막는다**(SDK 초기화가 안 된다).
+     *
+     * **그 토큰이 우리 앱에 발급된 것인지는 보지 않는다** — 토큰은 "이 사람이 누구인가"만 답하고
+     * "우리 앱에 로그인하려 했는가"는 답하지 않는다. 식별자가 계정 전역인 제공자(구글)에서는 남의 앱
+     * 토큰이 계정 탈취로 이어지므로 `AuthenticateWithSocialUseCase` 가 구글을 이 경로에서 거절한다.
+     * 카카오는 `KakaoOAuthClient` 가 이 함수를 덮어 발급 앱을 대조한다(TRIP-1317). 네이버에 남는 범위는
+     * 유스케이스에 적었다.
      */
     override fun fetchProfileByAccessToken(accessToken: String): SocialProfile =
         parseProfile(requestUserInfo(config(), accessToken))

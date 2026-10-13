@@ -3,12 +3,14 @@
 // 서버 계약 타입(Trip·TripStatus·TripDestination)은 새로 만들지 않고 `@/shared/api/generated`의
 // 원본을 그대로 다시 내보낸다(re-export) — 서버 계약의 정본은 여전히 shared/api다(`api` 세그먼트 0).
 // TripStatus 는 generated 에서 const object(값)이자 type 인데, 여기선 **타입만** 재수출한다.
+import type { CoverTone } from '../config/coverGradients';
+
 export type {
   Trip,
   TripStatus,
   TripDestination,
   ItineraryStatus,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /** h06 카드 배지 — 'done'=완성(itinerary CONFIRMED) · 'draft'=작성중 · 'live'=여행 중(확정 + 오늘이 기간 안,
  * TRIP-1121) · null=itinerary 미도착(배지 미정). */
@@ -28,6 +30,10 @@ export interface MyTripCardVM {
   resume?: boolean;
   /** TRIP-788 · 카드 사진(픽스처 전용, AC-6 G7). 프로덕션 항상 null(INV-1 — Trip 에 사진 필드 없음). */
   imageUrl?: string | null;
+  /** TRIP-1208 · 커버 도시 이름(첫 목적지 region). 없거나 빈 값이면 글자 없이 그라데이션만. */
+  coverCity?: string | null;
+  /** TRIP-1208 · 커버 그라데이션 톤. 미전달=upcoming. */
+  coverTone?: CoverTone;
 }
 
 /**

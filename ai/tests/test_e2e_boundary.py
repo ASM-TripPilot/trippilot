@@ -28,6 +28,7 @@ from datetime import date
 
 from fastapi.testclient import TestClient
 
+from trippilot.agents.schedule.budget import OrchestratorConfig
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app, build_orchestrator, DEMO_ANCHOR
 from trippilot.llm_gateway.config import C1Config
@@ -121,6 +122,7 @@ def make_client(
     llm: object | None = None,
     pois: tuple[Poi, ...] = _POIS,
     assembly_config: AssemblyConfig | None = None,
+    orchestrator_config: OrchestratorConfig | None = None,
 ) -> TestClient:
     """실 조립(build_orchestrator) + fake 어댑터 — 테스트 공용 진입점."""
     ids = tuple(str(p.poi_id) for p in pois)
@@ -131,6 +133,7 @@ def make_client(
         context_store=_PersonaStore(),
         c1_config=_C1CFG,
         assembly_config=assembly_config,
+        orchestrator_config=orchestrator_config,
         clock=FakeClock(),
         trace=InMemoryTrace(),
     )
@@ -214,6 +217,7 @@ def test_generate_pierces_http_to_assembly() -> None:
         assert set(body) == {
             "days", "day1_ready_at", "explanations", "solve_mode",
             "is_fallback", "freshness", "candidates_summary", "unplaced_must_visits",
+            "scoring_mode", "degradations",
         }
         assert body["solve_mode"] == "OR_TOOLS"     # 1차 단계가 실제로 해를 냈다
         assert body["is_fallback"] is False
@@ -493,10 +497,10 @@ def test_repair_also_reports_unverified_slots() -> None:
 
 
 def test_contradictory_fixed_blocks_return_409() -> None:
-    """같은 POI를 다른 시각에 이중 고정 → 모든 어셈블리 단계 실패 → 409 (d08, 500 아님)."""
+    """같은 POI를 겹치는 시각에 이중 고정 → 모든 어셈블리 단계 실패 → 409 (d08, 500 아님)."""
     conflicting = (
         {"poi_id": "p1", "date": _DAY1.isoformat(), "start": "10:00", "dwell_min": 60},
-        {"poi_id": "p1", "date": _DAY1.isoformat(), "start": "13:00", "dwell_min": 60},
+        {"poi_id": "p1", "date": _DAY1.isoformat(), "start": "10:30", "dwell_min": 60},
     )
     with make_client() as client:
         response = client.post(

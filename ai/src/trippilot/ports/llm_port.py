@@ -20,7 +20,12 @@ from trippilot.domain.prompt import PromptRef
 
 
 class LlmTimeoutError(Exception):
-    """타임아웃 초과. 소비 측이 잡아서 FallbackEvent 발행."""
+    """타임아웃 초과. 소비 측이 잡아서 FallbackEvent 발행.
+
+    경과 시간은 이 예외가 아니라 **게이트웨이가 직접 잰다** — 어댑터마다 싣게 하면
+    벤더별로 빠지고, 실패 호출의 지연이 0 으로 기록되는 사고가 다시 난다
+    (2026-09-29 실서비스 504 가 11.9초를 0ms 로 보이게 했다).
+    """
 
 
 class LlmUnsupportedError(Exception):
@@ -69,6 +74,9 @@ class LlmRequest:
     # 멀티모달 입력 (TRIP-595) — 후미 기본값이라 기존 호출 전부 무영향.
     # 비어있지 않은데 어댑터가 이미지를 못 받으면 LlmUnsupportedError.
     images: tuple[LlmImagePart, ...] = ()
+    # 사고 깊이 (`C1Config.effort_for`) — None 이면 벤더에 안 싣는다(모델 기본값).
+    # 받는 어댑터만 쓴다(Anthropic `output_config.effort`), 나머지는 무시.
+    effort: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +86,9 @@ class LlmResponse:
     output_tokens: int
     latency_ms: int
     model_id: str
+    # 벤더 종료 사유가 "출력 상한 도달"인가 — 잘린 JSON 을 parse_error 와 갈라 보이게 한다.
+    # 후미 기본값이라 종료 사유를 모르는 어댑터·fake 는 무영향.
+    truncated: bool = False
 
 
 class LlmPort(Protocol):

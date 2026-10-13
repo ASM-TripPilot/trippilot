@@ -1,6 +1,3 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { BlurView } from 'expo-blur';
 import type { ReactTestInstance } from 'react-test-renderer';
@@ -164,39 +161,42 @@ describe('BottomTabBar — 활성 무회귀 (TRIP-1104 AC-3)', () => {
   });
 });
 
-describe('BottomTabBar.tsx 주석 — 확정값 표기 (TRIP-1104 AC-4 · 소스 스캔)', () => {
-  const SOURCE = readFileSync(join(__dirname, 'BottomTabBar.tsx'), 'utf8');
+// TRIP-1270 — 최대 글자 크기에서 탭바가 잘리지 않게. 실제 잘림은 jest 가 못 본다(레이아웃 엔진 없음) — 6-b 몫.
+describe('BottomTabBar — 큰 글자 대응 (AC-1)', () => {
+  const tokens = (el: { props: { className?: unknown } }): string[] =>
+    String(el.props.className ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
 
-  // `<BlurView` 줄과 `intensity=` 줄 사이의 `//` 주석 줄만 꺼낸다(없으면 null).
-  function blurComment(source: string): string | null {
-    const lines = source.split('\n');
-    const start = lines.findIndex((l) => l.trim().startsWith('<BlurView'));
-    const end = lines.findIndex(
-      (l, i) => i > start && /^\s*intensity=/.test(l)
+  it('루트는 고정 높이 h-[96px] 대신 최소 높이 min-h-[96px] 이고, 나머지 위치 토큰은 그대로다', () => {
+    render(<BottomTabBar activeKey="home" onPressTab={jest.fn()} />);
+
+    const root = tokens(screen.getByTestId('shell-tabbar-root'));
+    expect(root).toContain('min-h-[96px]');
+    // 토큰 배열 toContain 은 원소 완전 일치라 'min-h-[96px]' 가 여기 걸리지 않는다.
+    expect(root).not.toContain('h-[96px]');
+    expect(root).toEqual(
+      expect.arrayContaining([
+        'absolute',
+        'inset-x-0',
+        'bottom-0',
+        'px-[30px]',
+        'pt-[26px]',
+      ])
     );
-    if (start < 0 || end < 0) return null;
-    return lines
-      .slice(start + 1, end)
-      .filter((l) => l.trim().startsWith('//'))
-      .join('\n');
-  }
+  });
 
-  it('"캘리브레이션 노브" 표기가 사라지고, intensity 바로 위 주석이 확정값과 근거(60~80 범위·기기)를 적는다', () => {
-    const comment = blurComment(SOURCE);
+  it('활성·비활성 다섯 라벨 모두 한 줄(numberOfLines 1)이고 폭이 모자랄 때만 줄여 맞춘다(adjustsFontSizeToFit)', () => {
+    // activeKey=home 하나로 활성 라벨 1 + 비활성 라벨 4 — className 삼항의 두 분기를 다 본다.
+    render(<BottomTabBar activeKey="home" onPressTab={jest.fn()} />);
 
-    expect(comment).not.toBeNull();
-    expect({
-      calibrationKnob: SOURCE.includes('캘리브레이션 노브'),
-      confirmed: comment?.includes('확정'),
-      range: comment?.includes('60~80'),
-      device: comment?.includes('기기'),
-      ponytailMarker: comment?.includes('ponytail:'),
-    }).toEqual({
-      calibrationKnob: false,
-      confirmed: true,
-      range: true,
-      device: true,
-      ponytailMarker: false,
+    TAB_KEYS.forEach((key) => {
+      const label = screen.getByText(TAB_LABELS[key]);
+      expect({
+        key,
+        numberOfLines: label.props.numberOfLines,
+        adjustsFontSizeToFit: label.props.adjustsFontSizeToFit,
+      }).toEqual({ key, numberOfLines: 1, adjustsFontSizeToFit: true });
     });
   });
 });

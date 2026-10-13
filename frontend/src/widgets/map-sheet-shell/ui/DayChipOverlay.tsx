@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { DayChipScroller } from './DayChipScroller';
 import { BackChevronGlyph } from './MapSheetGlyphs';
 
 /**
@@ -47,25 +48,27 @@ export function DayChipOverlay({
       >
         <BackChevronGlyph size={20} />
       </Pressable>
-      {days.map((day, index) => {
-        const selected = index === selectedIndex;
-        return (
-          <Pressable
-            key={day.label}
-            testID={`sheet-daychip-${index}`}
-            onPress={() => onSelectDay(index)}
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
-            className={`rounded-pill px-md py-[6px] ${selected ? 'bg-primary' : 'border border-hairline-strong bg-canvas'}`}
-          >
-            <Text
-              className={`font-noto-bold text-caption font-bold ${selected ? 'text-on-primary' : 'text-ink'}`}
+      <DayChipScroller selectedIndex={selectedIndex}>
+        {days.map((day, index) => {
+          const selected = index === selectedIndex;
+          return (
+            <Pressable
+              key={day.label}
+              testID={`sheet-daychip-${index}`}
+              onPress={() => onSelectDay(index)}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              className={`rounded-pill px-md py-[6px] ${selected ? 'bg-primary' : 'border border-hairline-strong bg-canvas'}`}
             >
-              {day.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+              <Text
+                className={`font-noto-bold text-caption font-bold ${selected ? 'text-on-primary' : 'text-ink'}`}
+              >
+                {day.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </DayChipScroller>
     </View>
   );
 }

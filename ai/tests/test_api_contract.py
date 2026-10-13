@@ -72,6 +72,8 @@ class FakeOutcome:
     day1_ready_at: datetime | None = None
     unplaced_must_visits: Sequence[FakeUnplaced] = ()
     slot_alternatives: Mapping[str, Sequence[FakeAlternative]] = field(default_factory=dict)
+    scoring_mode: str | None = None
+    degradations: Sequence[str] = ()
 
 
 @dataclass
@@ -265,8 +267,10 @@ def test_generate_response_matches_backend_wire_fields() -> None:
     assert set(body) == {
         "days", "day1_ready_at", "explanations", "solve_mode",
         "is_fallback", "freshness", "candidates_summary", "unplaced_must_visits",
+        "scoring_mode", "degradations",
     }
     assert body["unplaced_must_visits"] == []  # 기본 = 전부 배치됨
+    assert body["scoring_mode"] is None and body["degradations"] == []  # 기본 = 모름
     assert body["solve_mode"] == "OR_TOOLS"  # AI 4값 그대로 — 3값 축약은 백엔드 어댑터 몫
     assert body["is_fallback"] is False
     assert set(body["freshness"]) == {"source", "fetched_at", "cache_hit", "ttl_sec", "stale"}

@@ -300,7 +300,7 @@ describe('BR-U1-10 · BR-U1-15 · /stays/search 파라미터 이름 잠금 — �
     //
     // TRIP-202에서 lat·lng·radiusKm 3개가 붙었다('내 주변' 좌표 스코프 · US-STAY-01 · BR-U1-11).
     // 이 셋은 BR-U1-10/15와 충돌하지 않는다 — 날짜·인원이 아니고 정렬을 바꾸지도 않는다
-    // (금지 목록 FORBIDDEN_PARAM_NAMES는 staySearchGenerated 쪽에서 그대로 잠근다).
+    // (생성물 쪽 금지 목록 가드 staySearchGenerated 는 TRIP-1145 로 지웠다 — 이 완전일치가 남은 그물).
     expect(paramNames).toEqual([
       'region',
       'amenity',
@@ -470,12 +470,14 @@ describe('TRIP-294 AC-1 · AC-5 · 일정 4오퍼레이션 경로·메서드·�
     // → put(200·404·409). 세 번째 원소가 '201'이라는 것이 AC-5의 실질이다. "블록 어딘가에
     // 201이 있다"보다 강하다 — 조회가 201을 내도록 뒤집히는 개정도 여기서 잡힌다.
     // post의 409 = 동시 생성 1건 제한(TRIP-403, 계정당 하나) — #283로 계약에 반영됨(기대값 갱신).
+    // post의 429 = 계정당 하루 AI 생성 상한(TRIP-1314, #1043) — 계약에 반영됨(기대값 갱신).
     expect(extractResponseCodes(itineraryBlock)).toEqual([
       '200',
       '404',
       '201',
       '404',
       '409',
+      '429',
       '200',
       '404',
       '409',

@@ -11,6 +11,8 @@ import java.util.UUID
  * INV-4 결정론 폴백 — must_visit 고정 블록만으로 최소 일정. isFallback=true·MINIMAL·거리 없음(INV-3).
  * 시각 미지정(ANYTIME) 고정 블록도 첫 일자에 결정론적으로 배치한다 — 2단계 생성(TRIP-267)에서 ANYTIME 은
  * 2차만 맡으므로, 폴백이 버리면 must_visit 이 일정에서 통째로 사라져 HC3 가 조용히 깨진다.
+ * 날짜만 있는 블록(물질화된 ANYTIME — TRIP-1249 부터 시각은 비워 보낸다)은 **그 날**에 놓는다 —
+ * 폴백이 이 모양을 몰라 어느 목록에도 안 넣고 조용히 버리던 구멍이 있었다.
  */
 class MinimalItineraryFallbackTest : StringSpec({
 
@@ -20,15 +22,12 @@ class MinimalItineraryFallbackTest : StringSpec({
     val poiA = UUID.randomUUID()
     val poiB = UUID.randomUUID()
 
-    fun input(fixed: List<FixedBlock>) = ScheduleAgentInput(
+    fun input(fixed: List<FixedBlock>, dates: List<LocalDate> = listOf(d1, d2)) = ScheduleAgentInput(
         tripId = UUID.randomUUID(),
         generationMode = GenerationMode.FULLY_AI,
         tripContext = TripContext(listOf("제주"), d1, d2, "친구", null),
         anchors = emptyList(),
-        timeWindows = listOf(
-            TimeWindow(d1, LocalTime.of(9, 0), LocalTime.of(21, 0)),
-            TimeWindow(d2, LocalTime.of(9, 0), LocalTime.of(21, 0)),
-        ),
+        timeWindows = dates.map { TimeWindow(it, LocalTime.of(9, 0), LocalTime.of(21, 0)) },
         fixedBlocks = fixed,
         preferenceProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
         recommendationStrength = null,
@@ -63,16 +62,6 @@ class MinimalItineraryFallbackTest : StringSpec({
         out.days.first { it.date == d2 }.slots shouldBe emptyList()
     }
 
-    "물질화된 블록(userPinned=false)은 폴백에서도 고정으로 표시하지 않는다(TRIP-1001)" {
-        // ANYTIME 을 물질화가 날짜·시각에 앉힌 블록 — 시각은 우리가 골랐지 사용자가 아니다(QA #049).
-        val out = MinimalItineraryFallback.of(
-            input(listOf(FixedBlock(poiA, d1, LocalTime.of(9, 0), 60))),
-            at,
-            materializedPoiIds = setOf(poiA),
-        )
-        out.days.first { it.date == d1 }.slots.single().isFixed shouldBe false
-    }
-
     "ANYTIME 이 하루 창을 넘치면 다음 날로 — 자정 감김으로 슬롯 검증이 터지지 않는다" {
         // 09:00~21:00(12시간) 창에 10시간짜리 두 건 — 한 날에 쌓으면 LocalTime 이 자정을 넘어 감긴다.
         val out = MinimalItineraryFallback.of(
@@ -93,5 +82,54 @@ class MinimalItineraryFallbackTest : StringSpec({
         val slots = out.days.first { it.date == d1 }.slots
         slots.map { it.poiId } shouldBe listOf(poiA, poiB)
         slots[1].startAt shouldBe slots[0].endAt // 겹침 없음
+    }
+
+    "날짜만 있는 블록(물질화된 ANYTIME, TRIP-1249)은 그 날에, 지정 블록 뒤에 놓인다 — 고정 표시 없이" {
+        val out = MinimalItineraryFallback.of(
+            input(listOf(FixedBlock(poiA, d2, LocalTime.parse("12:00"), 90), FixedBlock(poiB, d2, null, 60))),
+            at,
+        )
+        out.days.first { it.date == d1 }.slots shouldBe emptyList() // 첫날로 끌어오지 않는다
+        val slots = out.days.first { it.date == d2 }.slots
+        slots.map { it.poiId } shouldBe listOf(poiA, poiB)
+        slots[1].startAt shouldBe LocalTime.parse("13:30") // 지정 블록 끝에 이어 붙는다
+        // 시각을 사용자가 안 정했다 — "변경 불가"로 보이면 사용자가 옮길 수 있는 것을 못 옮긴다고 믿는다(TRIP-1001 · QA #049)
+        slots[1].isFixed shouldBe false
+        slots[0].isFixed shouldBe true // 시각이 있는 블록만 사용자 고정이다
+    }
+
+    "날짜만 있는 블록이 그 날 창에 안 들어가면 버리지 않고 다음 날로 넘긴다" {
+        // 09:00~20:00 지정 블록 뒤에 2시간은 21:00 창 밖 — 버리면 must_visit 이 통째로 사라진다.
+        val out = MinimalItineraryFallback.of(
+            input(listOf(FixedBlock(poiA, d1, LocalTime.parse("09:00"), 60 * 11), FixedBlock(poiB, d1, null, 120))),
+            at,
+        )
+        out.days.first { it.date == d1 }.slots.map { it.poiId } shouldBe listOf(poiA)
+        out.days.first { it.date == d2 }.slots.single().poiId shouldBe poiB
+    }
+
+    "그 날 몫(날짜만 있는 블록)이 날짜 없는 블록보다 먼저다" {
+        val out = MinimalItineraryFallback.of(
+            input(listOf(FixedBlock(poiA, null, null, null), FixedBlock(poiB, d1, null, null))),
+            at,
+        )
+        out.days.first { it.date == d1 }.slots.map { it.poiId } shouldBe listOf(poiB, poiA)
+    }
+
+    "어느 날에도 안 들어가는 시각 없는 블록은 미배치(NO_FEASIBLE_SLOT)로 보고한다 — 조용히 버리지 않는다" {
+        // 하루 여행: 19:00 저녁 고정 뒤 60분은 21:00 창 밖이고 넘길 다음 날도 없다 — 종전엔 일정에도 보고에도 없이 사라졌다.
+        val out = MinimalItineraryFallback.of(
+            input(listOf(FixedBlock(poiA, d1, LocalTime.parse("19:00"), 90), FixedBlock(poiB, d1, null, 60)), dates = listOf(d1)),
+            at,
+        )
+        out.days.single().slots.map { it.poiId } shouldBe listOf(poiA)
+        out.unplacedMustVisits shouldBe listOf(UnplacedMustVisit(poiB, UnplacedReason.NO_FEASIBLE_SLOT))
+    }
+
+    "체류 0분 블록은 어느 날에도 놓이지 않는다 — 그래도 보고에는 남는다" {
+        // 끝 == 커서라 놓을 수 없는 모양. 사용자 입력은 0 을 막지 않는다(MustVisit 은 음수만 거부).
+        val out = MinimalItineraryFallback.of(input(listOf(FixedBlock(poiB, d1, null, 0)), dates = listOf(d1)), at)
+        out.days.single().slots shouldBe emptyList()
+        out.unplacedMustVisits.single().poiId shouldBe poiB
     }
 })

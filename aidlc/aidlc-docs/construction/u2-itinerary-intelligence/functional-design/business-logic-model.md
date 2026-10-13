@@ -21,6 +21,8 @@
 
 > **핵심**: aidlc U2가 "만들 것"은 남아 있지 않다. 남은 것은 **두 팀이 마주 보는 면을 한 장으로 못 박는 일**이다.
 
+> **[개정 · 2026-10-12]** AI 실장 경로가 개명됐다(원문 보존). `c2/` → **`ai/src/trippilot/assembly_engine/`**: `facade.py` `HybridAssemblyFacade`(구 `HybridSolverFacade`) + `ortools_assembler.py` `OrToolsAssembler` · `llm_assembler.py` `LlmAssembler` · `fallback_assembler.py` `RuleFallbackAssembler`(구 `*_solver`), `constraints.py` 는 클래스가 아니라 함수 `check_hc1`~`check_hc4`·`check_all`(`ConstraintChecker` 클래스 없음), `travel.py` `TravelEstimator`, `quality.py`. `c1/` → **`ai/src/trippilot/llm_gateway/`**(`gateway.py`·`gates/` 15종·`workers/`·`adapters/`). `m7/pool_builder.py` → **`ai/src/trippilot/poi_curation/pool_builder.py`**(백엔드 read 어댑터 `poi_curation/adapters/backend_poi_db.py`). 백엔드 포트 경로는 그대로(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/domain/ScheduleAgentPort.kt`).
+
 ### 1.1 인용 정본 (재서술 금지 대상)
 
 | 대상 | 정본 문서 |
@@ -29,6 +31,8 @@
 | HC1~HC4 정의, DL-1~6 시한 규칙, 결정론 규칙, PBT 게이트(U5-P1~P6·DL-P1/P2·GATE-P) | `ai/aidlc-docs/construction/u2-solver/functional-design/business-rules.md` |
 | 도메인 타입(`ItineraryProblem`·`ItinerarySolution`·`SolveMode`·`Violation`·`QualityScore`) | `ai/src/trippilot/domain/itinerary.py` |
 | 경계 필드 매핑 원안 | `ai/.../application-design/agent-io-contracts.md` §1.2 · `backend/docs/design/ai-backend-경계-계약-초안.md` |
+
+> **[개정 · 2026-10-12]** 현행 배선 체인은 **2단 — OR-Tools(1차) → 규칙 폴백(최후 보루)** 이다. `LlmAssembler`(LLM 2차) 클래스는 있으나 **미배선**: `ai/src/trippilot/api/wiring.py` `ChainAssemblyProvider`(약 944행 docstring "LLM 2차 단계(LlmAssembler)는 미배선 … 빠진 단계는 체인 강등이 아니라 기능 부재")·`for_pool()` 의 `stages = (OrToolsAssembler, RuleFallbackAssembler)`. LLM 은 배치가 아니라 **취향 점수(PREFERENCE_SCORING)·설명** 등 판단 단계에서만 쓰인다(`scoring_mode` LLM/MIXED/RULE, `ai/docs/openapi.json` 설명).
 
 ---
 
@@ -59,6 +63,8 @@ PR #76(2026-08-04 합의)로 확정된 그림이다. **조각 조립 경계는 �
 - `camelCase ↔ snake_case` 변환은 backend M8 소유.
 - 프로토콜 = **REST/JSON + 공유 `openapi.yaml` 양방향 코드젠**(결정 4). gRPC 보류.
 
+> **[개정 · 2026-10-12]** 프로토콜은 REST/JSON 그대로이나, 계약 정본은 공유 `openapi.yaml` 이 아니라 **`ai/docs/openapi.json`**(포워드) + 백엔드 대조 게이트 `AiBoundaryOpenApiTest` 다(business-rules BR-U2-10 개정 블록). 포워드 경계는 "1호출"이 아니라 메서드별 경로 6종(§3 개정 블록), 리버스 read 는 3종(§4 개정 블록)이다.
+
 ---
 
 ## 3. 포워드 계약 — ScheduleAgent (경계 정본)
@@ -72,6 +78,8 @@ interface ScheduleAgentPort {
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult  // 최소 조정
 }
 ```
+
+> **[개정 · 2026-10-12]** 현행 `ScheduleAgentPort` 는 **6메서드**다(원문 "3메서드 확정" 보존 — §7.1 의 4메서드, §7.2 의 5메서드도 경과 기록): `generate` · `validate` · `repair`(+ `RepairContext` 오버로드 기본 구현) · `explanations` · `proposeSlotCandidates` · `replan` (`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/domain/ScheduleAgentPort.kt` 17·18·19·26·38·53·63행). 와이어 경로는 `HttpScheduleAgentAdapter.CALLED_PATHS` 가 정본: `/ai/v1/itinerary/{generate,validate,repair,explanations}` · `/ai/v1/planb/alternatives` · `/ai/v1/planb/replan`(`backend/modules/itinerary-generation/.../adapter/out/external/HttpScheduleAgentAdapter.kt`).
 
 ### 3.1 요청 — `ScheduleAgentInput`
 
@@ -89,6 +97,8 @@ interface ScheduleAgentPort {
 
 - **`deadlineMs`는 호출자 소유**(DL-6): AI는 값을 모르고 파라미터로만 받는다. day1 5,000ms · Plan-B 10,000ms · 재생성/백그라운드 관대.
 
+> **[개정 · 2026-10-12]** 시한 값이 바뀌었고 **실제로 집행된다**(원문 "day1 5s / 전체 20s · Plan-B 10,000ms" 보존). 생성: **day1 15,000ms · 전체 60,000ms**, `enforced` 기본 true(TRIP-1000 재도입) — `backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ScheduleDeadlineProperties.kt`. 배포값 `deploy/eks/chart/values.yaml`(`scheduleDeadlineDay1Ms: 15000`·`scheduleDeadlineTotalMs: 60000`, 26~30행)·`values-prd.yaml`/`values-dev.yaml` `scheduleDeadlineEnforced: true`. Plan-B 재계획은 **25,000ms**(`ReplanFacadeService.kt` `REPLAN_DEADLINE_MS`), 편집 재검증 validate 3s·repair 5s 시한(`HttpScheduleAgentAdapter.kt`) + 대기 상한 `editWaitMs` 60s. 초과 시 결정론 폴백(INV-4).
+
 ### 3.2 응답 — `ScheduleAgentOutput`
 
 | 경계 필드 | 의미 | 불변식 |
@@ -99,6 +109,8 @@ interface ScheduleAgentPort {
 | `solveMode` (FULL_AI \| DETERMINISTIC \| MINIMAL) + `isFallback` | 강등 표기 | 침묵 실패 금지(**INV-4**, IO-2). AI 4종 → 경계 3종 매핑 = **BR-U2-03** |
 | `freshness{generatedAt, degraded}` | 데이터 신선도 집계 | 스키마 = **BR-U2-06** |
 | `candidatesSummary` | 후보 충분성(LOW면 "일부 추천 빠짐" 안내) | **신설** = BR-U2-05 |
+
+> **[개정 · 2026-10-12]** `solveMode` 3종은 **백엔드 도메인 사영**이다. AI 와이어(`ai/docs/openapi.json` `solve_mode`)는 4값 `OR_TOOLS | LLM | RULE_FALLBACK | MINIMAL` 을 그대로 보내고, 축약은 어댑터 `ScheduleAgentWire.kt` `toSolveMode()` 가 소유한다 — 단 매핑이 BR-U2-03 표와 다르다(**`OR_TOOLS` → `FULL_AI`**, BR-U2-03 개정 블록 참조). 응답에는 additive 필드 `scoring_mode`(LLM/MIXED/RULE)·`degradations`·`unplaced_must_visits` 도 있다.
 
 **응답 이후는 backend 소유**: 영속 · `poi_snapshot` 동결(확정 시 · AI는 스냅샷 안 만듦, IO-5) · day1 노출 · `ItineraryGenerated` 아웃박스 이벤트 · AI 불통 시 최소 일정 폴백(바깥 겹, `MinimalItineraryFallback.kt`).
 
@@ -126,6 +138,8 @@ backend가 POI 정본을 소유하고 AI는 **read만** 한다(결정 3 — `ups
 | `get_open_window(poi_id, on)` | `GET /internal/pois/{id}/open-window?on={date}` |
 | `batch_check_closed(ids, on)` | `POST /internal/pois:closedCheck` |
 
+> **[개정 · 2026-10-12]** 실재하는 리버스 read 는 **3종**이다(원문 5종 보존): `GET /internal/pois?centerLat&centerLng&radiusKm`(find_by_radius) · **`POST /internal/pois/batch-get`**(find_by_ids — 콜론 표기 `:batchGet` 아님) — `backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/adapter/in/web/PoiInternalController.kt`, AI 측 `ai/src/trippilot/poi_curation/adapters/backend_poi_db.py` — 그리고 **`GET /internal/users/{accountId}/persona`**(페르소나, `backend/modules/profile/.../adapter/in/web/PersonaInternalController.kt` ← `ai/src/trippilot/llm_gateway/adapters/backend_persona.py`). `nearby`·`open-window`·`closedCheck` 엔드포인트는 없다(포트 메서드 `find_nearby`·`get_open_window`·`batch_check_closed` 는 `ai/src/trippilot/ports/poi_db_port.py` 에만 있음). 또 "write 없음"과 달리 같은 컨트롤러에 **`POST /internal/pois/proposals`**(수집 후보 제안 → 백엔드 수집 게이트)·`POST /internal/pois/close-missing` 이 있다 — INV-1 게이트는 여전히 백엔드 소유.
+
 - POI 응답에 **per-POI 비용·평점 없음**(결정 1). 예산은 trip/user 레벨 → AI는 **소프트 가중치**로만 사용(예산은 하드 제약 아님).
 - 인기 정렬 = `savedCount`, 합성 정렬키 = `savedCount ↓ → dataQuality ↓ → 거점거리 ↑ → poiId ↑`(결정론).
 - 카테고리 = **경계 코드 8종** `SIGHT·FOOD·CAFE·SHOPPING·NIGHT_VIEW·NATURE·CULTURE·ACTIVITY`(결정 2). `STAY`·`ETC` 없음.
@@ -146,6 +160,8 @@ M8.generate(tripId, mode)
   ├─ day1ReadyAt 도달분 조기 노출 → 나머지 백그라운드 채움
   └─ 영속 + ItineraryGenerated 아웃박스
 ```
+
+> **[개정 · 2026-10-12]** 체인은 **OR-Tools → 규칙 폴백 2단**(LLM 2차 미배선 — §1.1 개정 블록, `ai/src/trippilot/api/wiring.py` `ChainAssemblyProvider`). 경계 호출은 `POST /ai/v1/itinerary/generate`(day1·전체 2회 호출, §3.1 개정 블록의 시한).
 
 - **AI 불통·타임아웃**: backend가 바깥 겹에서 **최소 일정**(앵커 + 시각 고정 필수 방문지만) 생성 + 재시도 안내. `solveMode=MINIMAL`.
 
@@ -179,6 +195,8 @@ M8.generate(tripId, mode)
 | **INV-2** 검증 시각만 | AI `HybridSolverFacade.solve` — **모든 반환 경로가 `check_all` 통과 후에만** 반환(LLM 2차 포함, 우회 경로 없음). 경계는 검증 완료값만 받는다 | 구조적 강제 |
 | **INV-3** 거리만 | AI: 직렬화 경로 분리(`to_public_dict`에서 `internal_minutes` 제외) · backend: `VisitSlotDisplay`에 duration 필드 부재 | 양쪽 타입으로 강제 |
 | **INV-4** 결정론적 폴백 | AI: `RuleFallbackSolver.required_ms()=0` → 항상 해 반환 · 모든 강등이 `FallbackEvent` · backend: 바깥 겹 `MinimalItineraryFallback` | 침묵 실패 경로 없음 |
+
+> **[개정 · 2026-10-12]** 집행 지점 명칭 갱신: `HybridSolverFacade.solve` → `ai/src/trippilot/assembly_engine/facade.py` `HybridAssemblyFacade.solve`, `RuleFallbackSolver` → `fallback_assembler.py` `RuleFallbackAssembler`(`required_ms = 0` 클래스 속성). INV-2 의 "LLM 2차 포함"은 LLM 2차가 미배선이라 현재 해당 경로가 없다. INV-1 ②(LLM 제안 게이트)는 배치 단계가 아니라 LLM 게이트웨이의 기능별 게이트(`ai/src/trippilot/llm_gateway/gates/` — 예: `scoring.py`·`alternative_selection.py`·`replan_directive_translation.py`)가 closed-set 을 판정하는 형태로 남는다.
 
 - **INV-2 주의점**: `explanations`(LLM 생성 텍스트)가 시각·소요시간을 언급하면 INV-2/INV-3을 우회하게 된다 → 금지 규칙은 BR-U2-09.
 
@@ -217,6 +235,8 @@ fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput
 fun replan(input: ReplanInput): ScheduleAgentOutput   // 어댑터가 ai regenerate(problem, locked_slots)로 매핑
 ```
 
+> **[개정 · 2026-10-12]** "어댑터가 ai `regenerate(problem, locked_slots)` 로 매핑"은 현행과 다르다. 백엔드 `replan` 은 전용 경로 **`POST /ai/v1/planb/replan`**(`HttpScheduleAgentAdapter.REPLAN_PATH`)을 부르고, AI 쪽은 `ai/src/trippilot/api/wiring.py` `replan()`(약 1688~1777행)에서 **PlanBAgent(RAG — KB-3 상황·KB-5 장소 지식 검색, `ai/src/trippilot/agents/planb/rag.py`)가 순서를 내고 → ScheduleAgent 가 페르소나 점수 + `planb_rank` 가산 + 어셈블리 배치**를 한다. 지난 잠금(다녀온 곳)은 솔버 밖 `_past_blocks` 로 원 시각 그대로 되싣는다. `HybridAssemblyFacade.regenerate`(`assembly_engine/facade.py` 196행)는 정의돼 있으나 **호출처 0건**이다. 시한 25,000ms(`ReplanFacadeService.kt`).
+
 시그니처·매핑표는 **U4 `business-logic-model.md` §3.1**에 있다(중복 서술 금지).
 
 > **이로써 `ScheduleAgentPort`는 5메서드**가 된다: `generate` · `validate` · `repair` · `proposeSlotCandidates` · `replan`.
@@ -239,3 +259,10 @@ fun replan(input: ReplanInput): ScheduleAgentOutput   // 어댑터가 ai regener
 | **G-U2-09** | `PlacementReason` 타입 | `component-methods.md` §1 `TimeSlot.reason` | `explanations: Map<String,String>` + **영속 경로 없음** | BR-U2-04(키 규약) + 영속 필요(backend 마이그레이션) |
 
 > **G-U2-02는 인셉션 요구사항(FR-SOLVER) 본문에 닿는 갭**이다. U1의 인셉션 사후 개정(2026-07-23) 선례가 있으므로, 개정 여부는 별도 승인 사안으로 남긴다 — 이 문서는 **사실 기록 + 재정의 제안**까지만 한다.
+
+> **[개정 · 2026-10-12]** 갭 현황 갱신(원문 보존):
+> - **G-U2-02**: "ai 소스 Bedrock/AgentCore 0건"은 더 이상 사실이 아니다 — **Bedrock 어댑터가 실재**한다: `ai/src/trippilot/llm_gateway/adapters/bedrock_adapter.py`(Bedrock Custom Model Import — 학생 모델 서빙, `InvokeModel`), `titan_embedding.py`(Titan Embeddings v2), 조립은 `ai/main.py`(`TRIPPILOT_BEDROCK_MODEL_ARN` 설정 + `local*` 모델명 배정 시 opt-in, 임베딩은 `TRIPPILOT_EMBEDDING_PROVIDER`). 벤더 라우팅 `routing.py` `RoutingLlm`(모델명 접두어 → 어댑터, `claude*` → Anthropic, 그 외 OpenAI 호환 `openai_adapter.py`). 현행 배정은 **LLM 기능 18종 전부 `claude-fable-5-1`**(커밋 fb0d51e2, `ai/.env.example` `AI_LLM_FEATURE_MODELS`) — 일정 판단 LLM 은 여전히 Anthropic 직접이다. **AgentCore 참조는 여전히 0건.**
+> - **G-U2-03**: 경계는 3메서드가 아니라 **6메서드**(§3 개정 블록).
+> - **G-U2-05**: 리버스 read 는 5종이 아니라 3종(§4 개정 블록).
+> - **G-U2-06**: 해소 방식이 바뀌었다 — 경계 와이어 정본은 백엔드 `openapi.yaml` 이 아니라 **`ai/docs/openapi.json`**(AI CI 가 "실행 앱 스키마 == 커밋 계약" 강제)이고, 백엔드는 그 파일을 제자리에서 읽어 대조하는 게이트 **`AiBoundaryOpenApiTest`**(`backend/modules/itinerary-generation/src/test/kotlin/com/trippilot/itinerarygeneration/contract/AiBoundaryOpenApiTest.kt`, TRIP-334)로 드리프트를 잡는다. `/internal/*` 는 백엔드 `openapi.yaml` 에 여전히 없다.
+> - **G-U2-09**: 영속 경로 생겼다 — `visit_slot.placement_reason`·`itinerary.candidates_summary`(`backend/app/src/main/resources/db/migration/V2.13__explanations_candidates_summary.sql`, TRIP-306).

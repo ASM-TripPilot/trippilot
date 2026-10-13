@@ -162,21 +162,19 @@ def test_fallback_populates_placed_fixed_blocks() -> None:
 def test_fallback_unplaced_fixed_block_is_not_exposed() -> None:
     """미배치 고정 블록은 노출하지 않는다 — 배치 사실을 지어내지 않는다.
 
-    같은 POI 이중 고정: 둘째 날 블록은 중복 방어로 스킵(미배치) → 노출도 없어야 한다.
+    같은 (POI, 시작) 이중 고정: 둘째 블록은 중복 방어로 스킵(미배치) → 노출도 없어야 한다.
+    (POI 만 같고 시작이 다르면 중복이 아니다 — 둘 다 배치된다.)
     """
-    d, poi_a, _, problem, index = _fixture()
+    _, poi_a, _, problem, index = _fixture()
     fb1 = _fixed(poi_a.poi_id, 10, 0, 11, 0)
-    fb2 = FixedBlock(poi_a.poi_id,
-                     TimeWindow(datetime(2026, 8, 6, 10, 0, tzinfo=_KST),
-                                datetime(2026, 8, 6, 11, 0, tzinfo=_KST)),
-                     "user_fixed")
+    fb2 = _fixed(poi_a.poi_id, 10, 0, 12, 0)
     solution = RuleFallbackAssembler(index, _EST, _CFG).solve(
-        replace(problem, days=(d, date(2026, 8, 6)), fixed_blocks=(fb1, fb2))
+        replace(problem, fixed_blocks=(fb1, fb2))
     )
-    day1, day2 = solution.days
-    assert day1.fixed_blocks == (fb1,)
-    assert day2.fixed_blocks == ()  # 스킵된 블록 — 슬롯도 노출도 없다
-    assert not day2.slots
+    (day,) = solution.days
+    assert day.fixed_blocks == (fb1,)  # 스킵된 블록 — 슬롯도 노출도 없다
+    assert [(s.start_at, s.end_at) for s in day.slots] == [
+        (fb1.window.start, fb1.window.end)]
 
 
 # TRIP-343 PBT — fixed_blocks는 "그 일자에 정확히 배치된 문제 고정 블록"과 일치

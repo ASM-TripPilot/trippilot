@@ -61,6 +61,23 @@ variable "eks_public_access_cidrs" {
   }
 }
 
+variable "container_logs_enabled" {
+  description = "Install the amazon-cloudwatch-observability add-on so pod stdout is readable without cluster access. Off by default: it bills per ingested GB and per Container Insights observation."
+  type        = bool
+  default     = false
+}
+
+variable "container_logs_retention_days" {
+  description = "Expiry for the Container Insights log groups. CloudWatch keeps log data forever unless a retention is set, so this is always set explicitly."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90], var.container_logs_retention_days)
+    error_message = "container_logs_retention_days must be one of the CloudWatch values 1, 3, 5, 7, 14, 30, 60 or 90; longer storage is a cost decision, not a default."
+  }
+}
+
 variable "vpc_cidr" {
   description = "Environment-specific IPv4 /16; public, private compute and isolated data subnets are derived from this range."
   type        = string
@@ -136,4 +153,24 @@ variable "redis_node_type" {
     condition     = can(regex("^cache\\.[a-z0-9]+\\.[a-z0-9]+$", var.redis_node_type))
     error_message = "redis_node_type must be a valid ElastiCache node class name."
   }
+}
+
+variable "data_protection_enabled" {
+  description = <<-EOT
+    삭제 보호 · 최종 스냅숏 · 백업 보존을 켠다. **환경과 분리된 축이다.**
+
+    종전에는 이 셋이 `local.production`(= environment == "prd") 하나에 묶여 있었다. 그래서 dev
+    스택은 `deletion_protection=false · skip_final_snapshot=true · backup_retention=1일` 로 돌았고,
+    그것은 "꼬이면 날려도 되는 환경"의 올바른 설정이다. 문제는 **스토어 출시를 dev 스택으로
+    받기로 한 순간**(2026-10-04 결정) 그 전제가 깨진다는 것이다 — 실사용자 데이터가 들어오는데
+    삭제 보호가 없고 지워도 최종 스냅숏이 안 남는다.
+
+    `multi_az` 는 **여기 포함하지 않는다** — 그쪽은 가용성·비용 축이고, 끄고 가도 데이터 유실은
+    아니다(AZ 장애 시 복구 시간만 길어진다). Redis 스냅숏(`snapshot_retention_limit`)도 제외다 —
+    Redis 는 캐시이고 영속 사실은 PostgreSQL 에 있다.
+
+    기본값이 `true` 인 이유: 잊었을 때 보호가 켜지는 쪽으로 틀려야 한다.
+  EOT
+  type        = bool
+  default     = true
 }

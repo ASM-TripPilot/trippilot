@@ -24,8 +24,9 @@ const expoPreset = require('jest-expo/jest-preset');
 /** @type {import('jest').Config} */
 module.exports = {
   preset: 'jest-expo',
-  // 이 설정(node 버킷)은 --experimental-vm-modules 아래 돈다(importBoundary 의 ESLint
-  // 동적 import 가 필요). MSW 통합테스트(.integration.test)는 그 flag 아래서 ESM 이 안 떠서
+  // 이 설정(node 버킷)은 --experimental-vm-modules 아래 돈다(코드의 `await import()` 와 eslintReleaseRules 의
+  // ESLint 설정 로드가 필요 — TRIP-1350 실측: flag 없이는 50건 이상 `dynamic import callback` 로 죽는다).
+  // MSW 통합테스트(.integration.test)는 그 flag 아래서 ESM 이 안 떠서
   // 여기서 제외하고, flag 없는 jest.integration.config.js 로 따로 돌린다.
   testPathIgnorePatterns: ['/node_modules/', '\\.integration\\.test\\.'],
   // 프리셋 setupFiles(RN·expo 목 등록)를 보존하고 뒤에 덧붙인다 — 이유는 animatedPreload.cjs 머리 주석.
@@ -60,6 +61,10 @@ module.exports = {
     // 그 조건을 먼저 고른다) `msw/node` 가 해석되지 않는다. CJS dist 로 직접 매핑해 우회한다.
     '^msw/node$': '<rootDir>/node_modules/msw/lib/node/index.js',
     '^msw$': '<rootDir>/node_modules/msw/lib/core/index.js',
+    '^@react-native-community/netinfo$':
+      '<rootDir>/node_modules/@react-native-community/netinfo/jest/netinfo-mock.js',
     '^@/(.*)$': '<rootDir>/src/$1',
+    // 라우트(루트 app/)를 렌더하는 테스트용 별칭(TRIP-1161). 앱 코드가 이 별칭으로 라우트를 끄는 것은 eslint 층 zone 이 막는다.
+    '^@routes/(.*)$': '<rootDir>/app/$1',
   },
 };

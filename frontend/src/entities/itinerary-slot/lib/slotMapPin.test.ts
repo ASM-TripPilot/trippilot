@@ -14,8 +14,8 @@ import type { SlotProgressState } from './slotMapPin';
  *
  * 3동작: 준비(진행상태+좌표) → 실행(toMapPinState/buildStatePins) → 단언(어휘·번호·좌표·건너뜀).
  *
- * 경계(features import 0)와 INV-3 는 `entitiesItinerarySlotStructure.test.ts`(G2·G3)가 이 신규
- * 파일을 재귀 스캔에 자동 편입해 잠근다 — 여기서 복제하지 않는다(02a §1).
+ * 경계(features import 0)는 eslint 층 규칙이 막는다. INV-3 를 재귀 스캔하던
+ * `entitiesItinerarySlotStructure`(G2·G3)는 TRIP-1145 로 지웠다(02a §1).
  */
 
 describe('toMapPinState — 진행상태 어휘를 핀 어휘로 변환 (AC-5)', () => {

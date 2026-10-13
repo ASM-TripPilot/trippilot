@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.DomainException
 import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.RateLimited
 import com.trippilot.core.error.ResourceNotFound
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.property.Arb
@@ -225,7 +226,7 @@ class GenerationSessionConcurrencyTest : StringSpec({
     val tripB = UUID.randomUUID()
 
     fun svc(repo: FakeGenerationSessions, now: Instant = at) =
-        GenerationSessionService(stubTrips, repo, Clock.fixed(now, ZoneOffset.UTC), defaultDeadlines)
+        GenerationSessionService(stubTrips, repo, Clock.fixed(now, ZoneOffset.UTC), defaultDeadlines, defaultLimits)
 
     "진행 중이 없으면 지금과 똑같이 시작한다" {
         val repo = FakeGenerationSessions()
@@ -307,5 +308,132 @@ class GenerationSessionConcurrencyTest : StringSpec({
         svc(repo).start(other, tripA, GenerationMode.FULLY_AI)
 
         svc(repo).start(acc, tripB, GenerationMode.FULLY_AI).tripId shouldBe tripB
+    }
+})
+
+/**
+ * 계정당 하루 AI 생성 횟수(TRIP-1314).
+ *
+ * 같은 여행의 재생성은 탈출구라 동시 생성 제한(TRIP-403)이 막지 않는다 — 그래서 연타가 그대로 LLM 비용에
+ * 곱해졌다. 여기서 막되, **막는 방식이 깨진 생성의 재시도까지 빼앗으면 안 된다.**
+ */
+class GenerationDailyLimitTest : StringSpec({
+
+    // KST 2026-08-06 09:00
+    val at = Instant.parse("2026-08-06T00:00:00Z")
+    val acc = UUID.randomUUID()
+    val trip = UUID.randomUUID()
+    val limit = defaultLimits.daily
+
+    fun svc(repo: FakeGenerationSessions, now: Instant = at, daily: Int = limit) = GenerationSessionService(
+        stubTrips, repo, Clock.fixed(now, ZoneOffset.UTC), defaultDeadlines, GenerationLimitProperties(daily),
+    )
+
+    "개발자로 등록한 계정은 상한을 넘겨도 만들 수 있다 — 등록하지 않은 계정은 그대로 막힌다" {
+        val repo = FakeGenerationSessions()
+        val other = UUID.randomUUID()
+        val otherTrip = UUID.randomUUID()
+        fun exempting() = GenerationSessionService(
+            stubTrips, repo, Clock.fixed(at, ZoneOffset.UTC), defaultDeadlines,
+            GenerationLimitProperties(daily = 1, exemptAccountIds = setOf(acc)),
+        )
+
+        repeat(3) { exempting().start(acc, trip, GenerationMode.FULLY_AI) }
+        exempting().start(other, otherTrip, GenerationMode.FULLY_AI)
+
+        shouldThrow<RateLimited> { exempting().start(other, otherTrip, GenerationMode.FULLY_AI) }
+    }
+
+    "하루 상한까지는 같은 여행을 다시 만들 수 있고, 그다음은 사유와 함께 거절한다" {
+        val repo = FakeGenerationSessions()
+        repeat(limit) { svc(repo).start(acc, trip, GenerationMode.FULLY_AI) }
+        val running = repo.findRunningByTrip(trip)!!
+
+        val e = shouldThrow<RateLimited> { svc(repo).start(acc, trip, GenerationMode.FULLY_AI) }
+
+        // 전용 코드여야 화면이 "잠시 후 다시"가 아니라 "오늘은 끝"을 말한다 — [다시 시도]가 의미 없는 상태다.
+        e.errorCode shouldBe ErrorCode.GENERATION_DAILY_LIMIT
+        // 풀리는 시각은 여행지 자정이다: KST 09:00 → 15시간 뒤.
+        e.retryAfterSeconds shouldBe Duration.ofHours(15).seconds
+        // 거절된 요청이 **돌고 있던 생성을 취소하고 떠나면 안 된다** — 이미 만들어지는 일정은 건드리지 않는다.
+        repo.rows[running.sessionId]!!.status shouldBe GenerationStatus.RUNNING
+        repo.rows.size shouldBe limit
+    }
+
+    "실패한 생성은 세지 않는다 — 깨진 생성을 겪은 사용자가 재시도 횟수까지 잃지 않는다" {
+        val repo = FakeGenerationSessions()
+        repeat(limit * 2) {
+            val s = svc(repo).start(acc, trip, GenerationMode.FULLY_AI)
+            svc(repo).failed(s.sessionId)
+        }
+
+        svc(repo).start(acc, trip, GenerationMode.FULLY_AI).status shouldBe GenerationStatus.RUNNING
+    }
+
+    // AI 가 죽으면 생성은 FAILED 가 아니라 결정론 폴백으로 **완료**된다 — 상태만 보면 장애 동안의 재시도가 전부 세어진다.
+    "폴백으로 끝난 생성도 세지 않는다 — AI 장애 동안 누른 재시도가 횟수를 태우지 않는다" {
+        val repo = FakeGenerationSessions()
+        repeat(limit * 2) {
+            val s = svc(repo).start(acc, trip, GenerationMode.FULLY_AI)
+            svc(repo).completed(s.sessionId, isFallback = true, candidatesLevel = null)
+        }
+
+        svc(repo).start(acc, trip, GenerationMode.FULLY_AI).status shouldBe GenerationStatus.RUNNING
+    }
+
+    // 백그라운드가 day1 전에 죽으면 세션이 RUNNING 인 채 남는다. 그것이 마지막 자리를 쥐면 죽은 생성 때문에 막힌다.
+    "멈춘 세션이 마지막 자리를 쥐고 있어도 다시 만들 수 있다 — 죽은 생성이 사용자를 자정까지 가두지 않는다" {
+        val repo = FakeGenerationSessions()
+        repeat(limit) { svc(repo).start(acc, trip, GenerationMode.FULLY_AI) }
+        val dead = repo.findRunningByTrip(trip)!!
+        val later = at.plus(defaultDeadlines.staleAfter).plusSeconds(1)
+
+        svc(repo, later).start(acc, trip, GenerationMode.FULLY_AI).status shouldBe GenerationStatus.RUNNING
+
+        repo.rows[dead.sessionId]!!.status shouldBe GenerationStatus.FAILED // 취소가 아니다 — 취소는 세어진다
+    }
+
+    "하루는 여행지(KST) 자정에 바뀐다 — 서버 시각(UTC)으로 자르면 오전 9시에 풀린다" {
+        val repo = FakeGenerationSessions()
+        // KST 08-06 08:00 = UTC 08-05 23:00. UTC 로는 '어제'지만 사용자에게는 오늘이다.
+        // 전부 정상 완료시킨다 — 돌다 만 세션을 남기면 시간이 흐른 뒤 "멈춘 것"으로 풀려 경계가 아니라 그 규칙을 재게 된다.
+        val morning = Instant.parse("2026-08-05T23:00:00Z")
+        repeat(limit) {
+            val s = svc(repo, morning).start(acc, trip, GenerationMode.FULLY_AI)
+            svc(repo, morning).completed(s.sessionId, isFallback = false, candidatesLevel = null)
+        }
+
+        // UTC 날짜가 바뀐 직후(KST 10:00) — 아직 같은 날이라 막힌다.
+        shouldThrow<RateLimited> { svc(repo, Instant.parse("2026-08-06T01:00:00Z")).start(acc, trip, GenerationMode.FULLY_AI) }
+        // KST 자정 1초 전까지 막히고
+        shouldThrow<RateLimited> { svc(repo, Instant.parse("2026-08-06T14:59:59Z")).start(acc, trip, GenerationMode.FULLY_AI) }
+        // KST 08-07 00:00 에 풀린다.
+        svc(repo, Instant.parse("2026-08-06T15:00:00Z")).start(acc, trip, GenerationMode.FULLY_AI).status shouldBe
+            GenerationStatus.RUNNING
+    }
+
+    "다른 계정이 쓴 횟수는 내 상한과 무관하다" {
+        val repo = FakeGenerationSessions()
+        val someone = UUID.randomUUID()
+        val theirTrip = UUID.randomUUID()
+        repeat(limit) { svc(repo).start(someone, theirTrip, GenerationMode.FULLY_AI) }
+
+        svc(repo).start(acc, trip, GenerationMode.FULLY_AI).accountId shouldBe acc
+    }
+
+    // 불변식 — 어떤 순서로 만들고 깨지든, 하루에 **세어지는**(실패가 아닌) 생성은 상한을 넘지 않는다.
+    "어떤 순서로 누르든 하루에 세어지는 생성은 상한을 넘지 않는다" {
+        checkAll(Arb.int(1..8), Arb.list(Arb.int(0..2), 0..40)) { daily, ops ->
+            val repo = FakeGenerationSessions()
+            ops.forEach { op ->
+                val started = runCatching { svc(repo, daily = daily).start(acc, trip, GenerationMode.FULLY_AI) }.getOrNull()
+                when (op) { // 0 = 그대로 둔다(다음 요청이 대체) · 1 = 실패 · 2 = 완료
+                    1 -> started?.let { svc(repo, daily = daily).failed(it.sessionId) }
+                    2 -> started?.let { svc(repo, daily = daily).completed(it.sessionId, false, null) }
+                }
+            }
+
+            repo.rows.values.count { it.status != GenerationStatus.FAILED } shouldBeLessThanOrEqual daily
+        }
     }
 })

@@ -47,11 +47,14 @@ class PoiSourceRefPersistenceIT : AbstractPostgresIntegrationTest() {
 
     private val now: Instant = Instant.parse("2026-08-18T03:00:00Z")
 
-    private fun poi(source: PoiSource, ref: String?, name: String = "테스트장소-${UUID.randomUUID()}") =
+    private fun poi(
+        source: PoiSource, ref: String?, name: String = "테스트장소-${UUID.randomUUID()}",
+        status: DataStatus = DataStatus.ACTIVE,
+    ) =
         Poi.reconstitute(
             poiId = UUID.randomUUID(), nameKo = name, lat = 33.5, lng = 126.5,
             category = PoiCategory.자연, region = "제주", openingHours = null,
-            dataStatus = DataStatus.ACTIVE, source = source, savedCount = 0,
+            dataStatus = status, source = source, savedCount = 0,
             createdAt = now, updatedAt = now, sourceRef = ref,
         )
 
@@ -84,6 +87,20 @@ class PoiSourceRefPersistenceIT : AbstractPostgresIntegrationTest() {
         pois.findBySourceRefs(PoiSource.KAKAO_LOCAL, listOf("SHARED-9")) shouldContainKey "SHARED-9"
     }
 
+    /**
+     * 앱 enum 과 DB CHECK(`poi_source_check`)는 **같은 값 집합**이어야 한다(V2.61 · TRIP-1224 LOCALDATA).
+     * enum 만 늘리면 저장이 CHECK 위반으로 죽고, CHECK 만 늘리면 읽기(`PoiSource.valueOf`)가 죽는다 —
+     * 인메모리 페이크로는 어느 쪽도 안 보인다. 값마다 한 행씩 실제로 넣고 다시 읽는다.
+     */
+    @Test
+    fun `모든 출처 값이 DB CHECK 를 통과하고 다시 읽힌다`() {
+        pois.saveAll(PoiSource.entries.map { poi(it, "ALL-SOURCES-${it.name}") })
+
+        PoiSource.entries.forEach {
+            pois.findBySourceRefs(it, listOf("ALL-SOURCES-${it.name}")) shouldContainKey "ALL-SOURCES-${it.name}"
+        }
+    }
+
     // 조회가 상태로 좁혀지면 폐업 처리된 장소를 재수집이 새 행으로 다시 만든다.
     @Test
     fun `상태와 무관하게 찾는다 — 폐업분도 다시 만들지 않는다`() {
@@ -96,5 +113,51 @@ class PoiSourceRefPersistenceIT : AbstractPostgresIntegrationTest() {
         pois.saveAll(listOf(closed))
 
         pois.findBySourceRefs(PoiSource.TOURAPI, listOf("CLOSED-1")) shouldContainKey "CLOSED-1"
+    }
+
+    /**
+     * 미포함 정리(TRIP-1227)의 대조 대상은 **같은 출처 · ACTIVE · 식별자 있음**뿐이다. 하나라도 새면 그 행은
+     * 문서에 없다는 이유로 닫힌다 — 다른 출처의 멀쩡한 가게나 시드가 후보에서 사라진다.
+     * 공유 컨테이너라 같은 출처의 남의 행이 있을 수 있어 같음이 아니라 포함·불포함으로 묻는다.
+     */
+    @Test
+    fun `미포함 정리 대조는 같은 출처의 ACTIVE 이고 식별자 있는 행만 읽는다`() {
+        val active = poi(PoiSource.TOURAPI, "CM-P-1")
+        pois.saveAll(
+            listOf(
+                active,
+                poi(PoiSource.TOURAPI, "CM-P-2", status = DataStatus.CLOSED),
+                poi(PoiSource.TOURAPI, "CM-P-3", status = DataStatus.UNVERIFIED),
+                poi(PoiSource.KAKAO_LOCAL, "CM-P-4"),
+            ),
+        )
+
+        val refs = pois.findActiveSourceRefs(PoiSource.TOURAPI)
+
+        refs["CM-P-1"] shouldBe active.poiId
+        refs.keys.none { it in setOf("CM-P-2", "CM-P-3", "CM-P-4") } shouldBe true
+    }
+
+    /**
+     * 실물이 포트 계약("지금 ACTIVE 인 것만 LOST 로 · 바뀐 수")을 지키는가 — 서비스는 대조 결과만 넘기지만, 대조와 쓰기
+     * 사이에 상태가 바뀌어도 닫힌 행의 시각을 다시 덮지 않아야 언제 닫혔는지가 남는다.
+     * 목록을 묶음(1,000) 너머까지 늘리고 진짜 대상을 **맨 뒤**에 둔다 — 묶음 하나만 보내는 실수를 잡는다.
+     */
+    @Test
+    fun `닫기는 지금 ACTIVE 인 행만 바꾸고 바뀐 수를 센다 — 묶음 너머의 대상까지`() {
+        val a = poi(PoiSource.TOURAPI, "CM-C-1")
+        val b = poi(PoiSource.TOURAPI, "CM-C-2", status = DataStatus.CLOSED)
+        val c = poi(PoiSource.TOURAPI, "CM-C-3", status = DataStatus.UNVERIFIED)
+        pois.saveAll(listOf(a, b, c))
+        val later = Instant.parse("2026-10-04T03:00:00Z")
+
+        val changed = pois.closeActive(List(1_500) { UUID.randomUUID() } + listOf(a.poiId, b.poiId, c.poiId), later)
+
+        changed shouldBe 1
+        val after = pois.findByIds(listOf(a.poiId, b.poiId, c.poiId)).associateBy { it.poiId }
+        after.getValue(a.poiId).dataStatus shouldBe DataStatus.LOST
+        after.getValue(a.poiId).updatedAt shouldBe later
+        after.getValue(b.poiId).updatedAt shouldBe now   // 폐업(CLOSED) 행은 시각도 그대로
+        after.getValue(c.poiId).dataStatus shouldBe DataStatus.UNVERIFIED
     }
 }

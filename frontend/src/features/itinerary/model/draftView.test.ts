@@ -1,7 +1,9 @@
+import fc from 'fast-check';
+
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import {
   buildDraftDayTabs,
@@ -11,10 +13,17 @@ import {
   DRAFT_POLL_MAX_COUNT,
   formatDraftDayHeader,
   isCandidatesDemoted,
+  pollIntervalMs,
   resolveDraftView,
   shouldKeepPollingDraft,
+  type DraftDayTab,
+  resolveFallbackNotice,
+  resolveShortfallNotice,
+  foldGenerationGauge,
+  type FoldedGenerationGaugeCell,
+  type GenerationGaugeCell,
+  type GenerationGaugeFold,
 } from './draftView';
-import type { DraftDayTab } from './draftView';
 
 /**
  * h11 초안 화면의 **순수 판정 5종 + 폴링 상수 2개**. 화면은 이 중 어느 것도 다시 계산하지
@@ -469,5 +478,451 @@ describe('M17 · AC-1 (TRIP-790) — 게이지는 다중일차에서도 tabs.has
     //   상태는 주입이 아니라 hasData 에서 도출돼 "전부 done" 가짜 진척이 원천 불가.
     //   함수는 이미 옳아 이 케이스는 회귀 심판(선제 green) — 뮤테이션 실측은 [구현] 5단계 몫.
     expect(states).toEqual(['done', 'done', 'active', 'waiting']);
+  });
+});
+
+/** 화면(`DraftPage`)이 두 판정에 똑같이 넘기는 신호 묶음의 모양. */
+type Signals = Parameters<typeof resolveShortfallNotice>[0];
+
+// TRIP-304 · 옛 draftView.fallback.test.ts
+describe('폴백 배너 판정(resolveFallbackNotice)', () => {
+  /**
+   * TRIP-304 · 폴백 배너의 **판정 규칙층**(model 순수 함수 `resolveFallbackNotice`).
+   *
+   * 무엇을 보장하나 — "AI 가 쉬었다"(폴백 축) 신호 `isFallback`·`solveMode` 가 배너 하나로 접히고,
+   * 심각도 순위 **MINIMAL > DETERMINISTIC** 를 따른다.
+   *
+   *  - 🔴 **MANUAL 함정**: `solveMode=MINIMAL` 이라도 `isFallback=false` 면 폴백이 아니라 **선택**이다
+   *    (openapi 원문). minimal 갈래는 `isFallback=true` 를 함께 봐야 한다 — 안 그러면 직접 만들기
+   *    빈 일정에 "최소 일정 폴백" 오배너가 뜬다(맹점 후보 ①·INV-4).
+   *  - 🔴 **후보 요약(`level=LOW`)은 이 축을 켜지도 끄지도 않는다**(TRIP-1174). LOW 는 "AI 는 돌았고
+   *    후보가 모자랐다"는 다른 축이라, 여기 섞이면 정상 AI 결과를 "취향 반영 없이 만든 기본 일정"이라고
+   *    거짓말한다. 그 축은 아래 「후보 부족 안내 판정」 이 잰다.
+   *
+   * 화면은 두 함수에 **같은 신호 묶음**(`signals`)을 넘긴다(`DraftPage`) — 이 파일도 그 모양 그대로 넘겨
+   * "LOW 가 함께 와도 폴백 판정이 그대로"를 잰다.
+   *
+   * 3동작 뼈대: 준비=신호 조합을 만든다 → 실행=`resolveFallbackNotice(...)` → 단언=어느 배너/없음.
+   *
+   * *(개념)* **판별 유니온** — `{ kind: 'minimal' | 'deterministic' }` 처럼 "종류 꼬리표를 단 값".
+   * 신호 없으면 `null`(배너 0건).
+   */
+
+  describe('🔴 F-1 · AC-1 — DETERMINISTIC 폴백은 deterministic 배너다 (BR-U3-11)', () => {
+    it('isFallback=true & solveMode=DETERMINISTIC → { kind: "deterministic" }', () => {
+      expect(
+        resolveFallbackNotice({ solveMode: 'DETERMINISTIC', isFallback: true })
+      ).toEqual({ kind: 'deterministic' });
+    });
+  });
+
+  describe('🔴 F-2 · AC-2 — MINIMAL 최소 일정은 minimal 배너다', () => {
+    it('solveMode=MINIMAL & isFallback=true → { kind: "minimal" }', () => {
+      expect(
+        resolveFallbackNotice({ solveMode: 'MINIMAL', isFallback: true })
+      ).toEqual({ kind: 'minimal' });
+    });
+  });
+
+  describe('🔴 F-3 · TRIP-1174 AC-1 — LOW 단독(AI 정상 성공)은 폴백 배너가 아니다', () => {
+    it('FULL_AI·isFallback=false·level=LOW → null 이고, 후보 축 판정은 여전히 LOW 를 안내 대상으로 본다', () => {
+      // 준비 — AI 가 LLM 점수까지 정상으로 끝냈고 후보만 모자란 응답.
+      const signals: Signals = {
+        solveMode: 'FULL_AI',
+        isFallback: false,
+        candidatesSummary: { level: 'LOW' },
+      };
+
+      // 단언 — "AI 가 쉬었다" 배너 0건. 옛 구현({ kind:'demoted' })은 여기서 죽는다.
+      expect(resolveFallbackNotice(signals)).toBeNull();
+
+      // 짝 — LOW 신호 자체는 살아 있다(조용해진 게 아니라 다른 축으로 간 것). 항상 null 을
+      // 돌려주는 구현이 위 단언을 공짜로 통과하는 것은 F-1·F-2 가 막는다.
+      expect(isCandidatesDemoted({ level: 'LOW' })).toBe(true);
+    });
+  });
+
+  describe('🔴 F-4 · AC-4 — 아무 신호 없으면 배너 0건(null)', () => {
+    it('정상값·조용한 요약·전부 미도착 세 경우가 모두 null 이다', () => {
+      // (a) 정상 경로 — FULL_AI 성공, 요약 없음.
+      expect(
+        resolveFallbackNotice({ solveMode: 'FULL_AI', isFallback: false })
+      ).toBeNull();
+
+      // (b) 요약은 왔지만 조용한 값(OK).
+      const quiet: Signals = {
+        solveMode: 'FULL_AI',
+        isFallback: false,
+        candidatesSummary: { level: 'OK' },
+      };
+      expect(resolveFallbackNotice(quiet)).toBeNull();
+
+      // (c) 데이터가 아직 안 온 첫 렌더 — 입력 전부 undefined.
+      expect(resolveFallbackNotice({})).toBeNull();
+    });
+  });
+
+  describe('🔴 F-5 · AC-3 — MINIMAL 과 LOW 가 겹치면 minimal 이다', () => {
+    it('MINIMAL(＋isFallback) 과 LOW 가 동시에 와도 minimal 하나만 반환한다', () => {
+      const signals: Signals = {
+        solveMode: 'MINIMAL',
+        isFallback: true,
+        candidatesSummary: { level: 'LOW' },
+      };
+      expect(resolveFallbackNotice(signals)).toEqual({ kind: 'minimal' });
+    });
+  });
+
+  describe('🔴 F-6 · TRIP-1174 AC-3 — LOW 가 DETERMINISTIC 폴백을 덮지 않는다 (옛 "LOW 가 이긴다" 뒤집음)', () => {
+    it('DETERMINISTIC(＋isFallback) 과 LOW 가 동시에 오면 deterministic 을 반환한다', () => {
+      // 옛 순서(minimal → demoted → deterministic)는 LOW 와 폴백이 **같은 문구**일 때만 무해했다.
+      // 이제 LOW 는 "AI 는 돌았다"는 가벼운 안내라, LOW 가 이기면 진짜 폴백이 "AI 가 쉬었다"를 잃는다.
+      const signals: Signals = {
+        solveMode: 'DETERMINISTIC',
+        isFallback: true,
+        candidatesSummary: { level: 'LOW' },
+      };
+      expect(resolveFallbackNotice(signals)).toEqual({ kind: 'deterministic' });
+    });
+  });
+
+  describe('🔴 F-7 · AC-7 — MANUAL 방어: (MINIMAL, isFallback=false) 는 폴백이 아니다', () => {
+    it('MINIMAL 이라도 isFallback=false 면 LOW 가 함께 와도 폴백 배너 0건이다', () => {
+      // (a) 순수 MANUAL — 빈 일정을 직접 만든 것이지 실패가 아니다. 배너 0건.
+      //     minimal 갈래에서 `&& isFallback` 을 지운 구현은 여기서 { kind:'minimal' } 를 내며 죽는다.
+      expect(
+        resolveFallbackNotice({ solveMode: 'MINIMAL', isFallback: false })
+      ).toBeNull();
+
+      // (b) 같은 (MINIMAL, false) 인데 LOW 요약이 함께 왔다 → 폴백 축은 여전히 0건(LOW 는 후보 축 몫 —
+      //     후보 부족 안내로 뜨는지는 아래 「후보 부족 안내 판정」 SN-6 이 잰다).
+      const signals: Signals = {
+        solveMode: 'MINIMAL',
+        isFallback: false,
+        candidatesSummary: { level: 'LOW' },
+      };
+      expect(resolveFallbackNotice(signals)).toBeNull();
+    });
+  });
+});
+
+// TRIP-1174
+describe('후보 부족 안내 판정(resolveShortfallNotice)', () => {
+  /**
+   * TRIP-1174 · **후보 축** — 후보 요약이 "모자라다"일 때 시트 맨 위에 띄우는 가벼운 한 줄의 문구.
+   *
+   * 무엇을 보장하나:
+   *  - 🔴 켜는 조건은 "조용할 값(`OK`·`HIGH`)" 화이트리스트다 — `LOW` 뿐 아니라 **모르는 `level`
+   *    문자열**도 안내가 뜬다(INV-4: 서버가 어휘를 늘려도 화면이 조용해지지 않는다).
+   *  - 🔴 카테고리는 **한글 이름**으로만 나간다 — 영문 경계 코드(`NIGHT_VIEW` 등)가 문구에 새지 않는다.
+   *  - `OK` 인데 `shortfallCategories` 가 차 있는 응답(정상 생성의 흔한 모양)은 조용하다.
+   *  - 폴백 축이 켜져 있으면 숨긴다(심각도 최상위 하나 — 01 Q2 기본값).
+   *
+   * *(개념)* **`shortfallCategories`** — AI 가 "후보 풀에 0건인 카테고리"를 영문 코드 배열로 준다.
+   * 취향과 무관한 목록이라 LOW 의 *원인*을 말하지는 않지만, "그 카테고리 후보가 근처에 없다"는 사실이다.
+   *
+   * 3동작 뼈대: 준비=신호 묶음 → 실행=`resolveShortfallNotice(...)` → 단언=문구 완전 일치/`null`.
+   */
+
+  const ok: Signals = { solveMode: 'FULL_AI', isFallback: false };
+  const GENERIC = '근처에 추천할 후보가 적어요';
+
+  describe('🔴 SN-1 · AC-2 — LOW(AI 정상)면 일반형 안내가 정확히 뜬다', () => {
+    it('카테고리 정보가 없으면 "근처에 추천할 후보가 적어요"', () => {
+      expect(
+        resolveShortfallNotice({ ...ok, candidatesSummary: { level: 'LOW' } })
+      ).toBe(GENERIC);
+      // 빈 배열도 같다.
+      expect(
+        resolveShortfallNotice({
+          ...ok,
+          candidatesSummary: { level: 'LOW', shortfallCategories: [] },
+        })
+      ).toBe(GENERIC);
+    });
+  });
+
+  describe('🔴 SN-2 · AC-5 — 아는 카테고리는 한글 이름으로, 모르는 코드는 버린다', () => {
+    it('두 개면 가운뎃점으로 잇고, 세 개 이상이면 앞 두 개 + "등"이다', () => {
+      const with_ = (codes: string[]) =>
+        resolveShortfallNotice({
+          ...ok,
+          candidatesSummary: { level: 'LOW', shortfallCategories: codes },
+        });
+
+      expect(with_(['SHOPPING', 'NIGHT_VIEW'])).toBe(
+        '근처에 쇼핑·야경 후보가 적어요'
+      );
+      expect(with_(['CAFE'])).toBe('근처에 카페 후보가 적어요');
+      expect(with_(['SIGHT', 'FOOD', 'ACTIVITY'])).toBe(
+        '근처에 명소·맛집 등 후보가 적어요'
+      );
+      // 모르는 코드는 버리고 아는 것만 — 원시 코드가 문구에 새지 않는다.
+      expect(with_(['UNKNOWN_X', 'NATURE'])).toBe('근처에 자연 후보가 적어요');
+      // 전부 모르면 일반형(빈 이름 "근처에  후보가" 금지).
+      expect(with_(['UNKNOWN_X', 'nope'])).toBe(GENERIC);
+      // 대소문자·공백은 같은 코드로 본다(level 판정과 같은 관대함).
+      expect(with_([' culture '])).toBe('근처에 문화 후보가 적어요');
+    });
+  });
+
+  describe('🔴 SN-3 · AC-4 — 모르는 level 도 안내가 뜬다 (INV-4)', () => {
+    it.each(['MEDIUM', 'NO_CANDIDATES', 'INSUFFICIENT', ''])(
+      'level=%p → 일반형 안내',
+      (level) => {
+        expect(
+          resolveShortfallNotice({ ...ok, candidatesSummary: { level } })
+        ).toBe(GENERIC);
+      }
+    );
+  });
+
+  describe('🔴 SN-4 · AC-7 — 조용한 값·요약 없음은 안내 0건이다', () => {
+    it('OK/HIGH(카테고리가 차 있어도)·undefined·null 은 null', () => {
+      expect(
+        resolveShortfallNotice({
+          ...ok,
+          candidatesSummary: { level: 'OK', shortfallCategories: ['CAFE'] },
+        })
+      ).toBeNull();
+      expect(
+        resolveShortfallNotice({
+          ...ok,
+          candidatesSummary: { level: ' high ', shortfallCategories: ['FOOD'] },
+        })
+      ).toBeNull();
+      expect(resolveShortfallNotice({ ...ok })).toBeNull();
+      expect(
+        resolveShortfallNotice({ ...ok, candidatesSummary: null })
+      ).toBeNull();
+    });
+  });
+
+  describe('SN-5 · 01 Q2 — 폴백 축이 켜지면 후보 부족 안내는 숨긴다', () => {
+    it('DETERMINISTIC·MINIMAL(＋isFallback) + LOW → null', () => {
+      for (const solveMode of ['DETERMINISTIC', 'MINIMAL'] as const) {
+        expect(
+          resolveShortfallNotice({
+            solveMode,
+            isFallback: true,
+            candidatesSummary: { level: 'LOW' },
+          })
+        ).toBeNull();
+      }
+    });
+  });
+
+  describe('SN-6 · AC-6 — MANUAL(MINIMAL·isFallback=false) + LOW 는 후보 안내만 뜬다', () => {
+    it('폴백이 아니므로 숨기지 않는다', () => {
+      expect(
+        resolveShortfallNotice({
+          solveMode: 'MINIMAL',
+          isFallback: false,
+          candidatesSummary: { level: 'LOW' },
+        })
+      ).toBe(GENERIC);
+    });
+  });
+
+  describe('🔴 SN-7 · AC-4·AC-5 성질 — 어떤 level·카테고리 문자열이 와도', () => {
+    it('조용한 값이 아니면 반드시 문구가 있고, 문구에 영문 경계 코드가 새지 않는다', () => {
+      const CODES = [
+        'SIGHT',
+        'FOOD',
+        'CAFE',
+        'NIGHT_VIEW',
+        'NATURE',
+        'SHOPPING',
+        'CULTURE',
+        'ACTIVITY',
+      ];
+      fc.assert(
+        fc.property(
+          fc.string(),
+          fc.array(fc.oneof(fc.constantFrom(...CODES), fc.string())),
+          (level, codes) => {
+            const notice = resolveShortfallNotice({
+              ...ok,
+              candidatesSummary: { level, shortfallCategories: codes },
+            });
+            const quiet = ['OK', 'HIGH'].includes(level.trim().toUpperCase());
+            expect(notice === null).toBe(quiet);
+            if (notice !== null) {
+              expect(notice).toMatch(/^근처에 .+ 후보가 적어요$/);
+              expect(notice).not.toMatch(/[A-Z_]{3,}/);
+            }
+          }
+        )
+      );
+    });
+  });
+});
+
+// TRIP-1040 · 옛 draftView.fold.test.ts
+describe('생성 게이지 칸 접기(foldGenerationGauge)', () => {
+  /**
+   * TRIP-1040 · h07 진행 카드의 **칸 접기**(features 순수 함수 `foldGenerationGauge`).
+   *
+   * 무엇을 보장하나:
+   *  - 여행 일수가 상한(max) 이하면 칸을 그대로 둔다(AC-1 무회귀).
+   *  - 넘치면 칸을 max 개로 묶고, 그중 한 칸을 `…` 접기 칸(`{ kind: 'more' }`)으로 쓴다.
+   *    지금 만드는 중인 일차(active)는 **항상 남는다**(결정 2 = b). active 가 앞쪽이면 뒤를 접고,
+   *    뒤로 밀리면 앞을 접어 active 가 창의 마지막에 선다(Q1).
+   *  - 접기 칸에는 숫자가 없다 — `{ kind: 'more' }` 외의 필드가 0개다(BR-U3-05 ⚑C, 가짜 진척 금지).
+   *  - 접기는 **고르기만** 한다 — 남은 칸의 상태·일차는 입력과 같다.
+   *
+   * 3동작 뼈대: 준비=도착 패턴으로 tabs 를 만든다 → 실행=`buildGenerationGauge` → `foldGenerationGauge`
+   *   → 단언=남은 칸을 `'일차:상태'`·`'…'` 문자열 배열로 읽어 비교한다.
+   */
+
+  /** 도착 여부 배열 → 날짜 탭. `true` 면 그 일차 슬롯이 이미 도착했다(`hasData`). */
+  function tabsOf(arrived: boolean[]): DraftDayTab[] {
+    return arrived.map((hasData, index) => ({
+      date: `2026-06-${String(10 + index).padStart(2, '0')}`,
+      dayNumber: index + 1,
+      hasData,
+    }));
+  }
+
+  function isFold(
+    cell: FoldedGenerationGaugeCell
+  ): cell is GenerationGaugeFold {
+    return 'kind' in cell;
+  }
+
+  /** 칸 배열을 사람이 읽는 문자열로 — 일차 칸은 `'3:done'`, 접기 칸은 `'…'`. */
+  function summary(cells: FoldedGenerationGaugeCell[]): string[] {
+    return cells.map((cell) =>
+      isFold(cell) ? '…' : `${cell.dayNumber}:${cell.state}`
+    );
+  }
+
+  /** 상한 4(소비처 DraftPage 가 넘기는 값)로 접는다. */
+  function foldOf(arrived: boolean[]): FoldedGenerationGaugeCell[] {
+    return foldGenerationGauge(buildGenerationGauge(tabsOf(arrived)), 4);
+  }
+
+  describe('🔴 F1 · AC-1 — 여행 일수가 상한 이하면 칸을 그대로 둔다', () => {
+    it('3일·4일(경계) 여행은 입력과 같고 접기 칸이 없다', () => {
+      const three = buildGenerationGauge(tabsOf([true, false, false]));
+      const four = buildGenerationGauge(tabsOf([true, false, false, false]));
+
+      expect(foldGenerationGauge(three, 4)).toEqual(three);
+      expect(summary(foldGenerationGauge(three, 4))).toEqual([
+        '1:done',
+        '2:active',
+        '3:waiting',
+      ]);
+      // 경계 — 정확히 4일이면 아직 접지 않는다(4칸 모두 일차 칸).
+      expect(foldGenerationGauge(four, 4)).toEqual(four);
+      expect(summary(foldGenerationGauge(four, 4))).not.toContain('…');
+    });
+  });
+
+  // F2·F3·F4(활성 앞쪽 뒤 접기 · 활성 밀림 앞 접기 · 전부 도착) 예제는 TRIP-1356 에서 지웠다 — 아래 F6 PBT 가
+  // 같은 규칙(anchor 위치·접기 칸 위치·창 끝 정렬)을 임의 입력으로 잠그고, F1·F5 가 경계 예제 둘을 남긴다.
+
+  describe('🔴 F5 · AC-5⑤ — 뒤 접기 ↔ 앞 접기가 바뀌는 경계', () => {
+    it('5일에서 3일차 생성 중이면 뒤 접기, 4일차 생성 중이면 앞 접기다', () => {
+      // 활성이 3일차(창 3칸의 마지막 자리) — 아직 1일차부터 보인다.
+      expect(summary(foldOf([true, true, false, false, false]))).toEqual([
+        '1:done',
+        '2:done',
+        '3:active',
+        '…',
+      ]);
+      // 활성이 4일차 — 한 칸 밀려 `…` 가 앞으로 옮겨 간다.
+      expect(summary(foldOf([true, true, true, false, false]))).toEqual([
+        '…',
+        '2:done',
+        '3:done',
+        '4:active',
+      ]);
+    });
+  });
+
+  describe('🔴 F6 · AC-5 속성 — 임의 일수·임의 도착 패턴·임의 상한에서 접기 규칙이 늘 성립한다 (fast-check)', () => {
+    it('길이≤max · 짧으면 그대로 · 접기 칸 1개(숫자 없음) · 연속 구간 · 활성 포함 · 접기 위치 · 입력 불변', () => {
+      fc.assert(
+        fc.property(
+          // 비연속 도착(예: [도착, 미도착, 도착])도 만든다 — anchor 는 "첫 active" 여야 한다.
+          fc.array(fc.boolean(), { minLength: 1, maxLength: 14 }),
+          fc.integer({ min: 3, max: 6 }),
+          (arrived, max) => {
+            // 준비
+            const input = buildGenerationGauge(tabsOf(arrived));
+            const before = JSON.parse(JSON.stringify(input)) as unknown;
+
+            // 실행
+            const out = foldGenerationGauge(input, max);
+
+            // 입력을 바꾸지 않는다(순수 함수).
+            expect(input).toEqual(before);
+            // ① 칸 수는 상한 이하.
+            expect(out.length).toBeLessThanOrEqual(max);
+
+            // ② 짧으면 그대로.
+            if (input.length <= max) {
+              expect(out).toEqual(input);
+              return;
+            }
+
+            // ③ 길면 정확히 max 칸, 그중 접기 칸은 정확히 1개이고 숫자·다른 필드가 없다.
+            expect(out).toHaveLength(max);
+            expect(out.filter(isFold)).toStrictEqual([{ kind: 'more' }]);
+
+            // ③·⑥ 일차 칸은 입력의 연속 구간 그대로(순서·상태·일차 불변).
+            const days = out.filter(
+              (cell: FoldedGenerationGaugeCell): cell is GenerationGaugeCell =>
+                !isFold(cell)
+            );
+            const start = days[0].dayNumber - 1;
+            expect(days).toEqual(input.slice(start, start + days.length));
+
+            // ④ 입력에 active 가 있으면 출력에도 있다.
+            const active = input.find((cell) => cell.state === 'active');
+            if (active !== undefined) {
+              expect(days).toContainEqual(active);
+            }
+
+            // ⑤ 접기 칸이 앞에 오는 것은 anchor(첫 active, 없으면 마지막 일차)가 창 밖으로 밀릴 때뿐.
+            const anchorIndex =
+              active !== undefined ? active.dayNumber - 1 : input.length - 1;
+            const foldFirst = isFold(out[0]);
+            expect(foldFirst).toBe(anchorIndex > max - 2);
+
+            if (foldFirst) {
+              // Q1 — 앞 접기면 anchor 가 창의 마지막 칸이다.
+              expect(days[days.length - 1]).toEqual(input[anchorIndex]);
+            } else {
+              // 뒤 접기면 1일차부터 보이고 `…` 는 맨 끝이다.
+              expect(start).toBe(0);
+              expect(isFold(out[out.length - 1])).toBe(true);
+            }
+          }
+        ),
+        { numRuns: 500 }
+      );
+    });
+  });
+});
+
+describe('TRIP-1363 · pollIntervalMs (폴링 백오프 한 벌)', () => {
+  it('P1 · 15회 미만은 2초, 15회부터는 5초다(경계 포함)', () => {
+    expect(pollIntervalMs(0)).toBe(2000);
+    expect(pollIntervalMs(14)).toBe(2000);
+    expect(pollIntervalMs(15)).toBe(5000);
+    expect(pollIntervalMs(99)).toBe(5000);
+    expect(pollIntervalMs(0)).toBe(DRAFT_POLL_INTERVAL_MS);
+  });
+
+  it('P2 · 생성 대기 2분 동안 요청 수가 고정 2초(60회)에서 33회로 준다', () => {
+    let elapsed = 0;
+    let requests = 0;
+    while (elapsed < 120_000) {
+      elapsed += pollIntervalMs(requests);
+      requests += 1;
+    }
+    expect(requests).toBe(33);
   });
 });

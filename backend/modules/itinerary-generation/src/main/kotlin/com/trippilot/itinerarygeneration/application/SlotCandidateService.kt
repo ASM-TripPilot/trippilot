@@ -24,6 +24,8 @@ import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.profile.api.PreferenceFacade
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.util.Locale
@@ -36,6 +38,16 @@ data class RequestSlotCandidates(
     val concept: String?,
     /** 교체 사유(FE 카탈로그 코드). 사유 없는 흐름은 null — 번역·검증은 경계 어댑터 몫이다. */
     val reason: String?,
+    /**
+     * 같이 고르기(순차 채우기)인가 — **탐색 중심을 어디로 둘지만 가른다**(TRIP-1252).
+     *
+     * 두 경로가 같은 경계를 쓰지만(BR-U3-23) 맥락이 다르다. 완전 AI '다른 후보'는 "이 자리 대체"라
+     * 교체 대상이 중심이고, 같이 고르기는 **방금 고른 곳에서 다음 발걸음**이라 직전 슬롯이 중심이다.
+     *
+     * **직전 POI 를 클라가 보내지 않는다** — 경로만 선언받고 좌표 원천은 서버가 일정에서 유도한다
+     * (제외 목록을 서버가 만드는 것과 같은 이유: 클라가 준 식별자를 믿으면 그쪽 누락이 그대로 샌다).
+     */
+    val coPick: Boolean = false,
 )
 
 /**
@@ -52,6 +64,9 @@ class SlotCandidateService(
     /** 생성 시점 점수 후보 풀(TRIP-969) — 즉답의 재료. 없으면(미생성·http 미개통) 종전 경로 그대로다. */
     private val scoredPools: ScoredCandidatePoolStore,
     private val clock: Clock,
+    /** 그 여행의 취향(BR-U1-38) — 생성과 같은 척도로 후보를 고르게. 계정 취향은 안 실린 축만. */
+    private val preferences: PreferenceFacade,
+    private val personalization: PersonalizationPort,
 ) {
     fun propose(accountId: UUID, tripId: UUID, request: RequestSlotCandidates): SlotCandidatesOutput {
         // 형식 검사를 먼저 — 일정이 없더라도 잘못된 요청은 400 이어야 한다(404 로 덮으면 원인을 오인한다).
@@ -90,9 +105,23 @@ class SlotCandidateService(
         }
         val index = matches.single().index
 
-        // 탐색 중심 = 교체 대상 장소의 좌표. 정본에 없으면(하드 삭제) 좌표를 지어내지 않고 실패시킨다.
-        val center = poiSurfaces.findSurfaces(listOf(targetPoiId))[targetPoiId]
-            ?: throw ResourceNotFound("장소 좌표를 찾을 수 없습니다.")
+        // 탐색 중심 — 기본은 교체 대상 장소다. 같이 고르기만 **직전 슬롯**으로 옮긴다(TRIP-1252).
+        //
+        // 같이 고르기는 선택할 때마다 일정에 저장하고 다음 칸으로 전진하므로, 이 시점의
+        // `slots[index - 1]` 은 **사용자가 방금 고른 그 장소**다(AI 원배치가 아니다). 그걸 중심으로
+        // 쓰지 않으면 칸을 고를수록 동선이 도시 전체로 튄다 — 경산 당일치기 6칸에서 남서↔북동을
+        // 오가는 것으로 재현됐다(2026-10-05). 후보 거리 문구도 같은 중심에서 나오므로 함께 고쳐진다.
+        //
+        // 시간대·카테고리 다양성은 여기서 보정하지 않는다 — 상대 랭킹의 몫이다(결정 1 단서).
+        val previousPoiId = if (request.coPick) day.slots.getOrNull(index - 1)?.sourcePoiId else null
+        val surfaces = poiSurfaces.findSurfaces(listOfNotNull(previousPoiId, targetPoiId))
+        // 정본에 없으면(하드 삭제) 좌표를 지어내지 않는다. 다만 **직전** 슬롯이 사라진 것은 이 요청의
+        // 잘못이 아니라, 교체 대상으로 물러서고 그 사실을 로그로 남긴다(조용히 틀리지 않게).
+        val center = previousPoiId?.let { prev ->
+            surfaces[prev] ?: null.also {
+                log.warn("직전 슬롯 장소가 정본에 없어 교체 대상을 중심으로 씁니다. tripId={} previousPoiId={}", tripId, prev)
+            }
+        } ?: surfaces[targetPoiId] ?: throw ResourceNotFound("장소 좌표를 찾을 수 없습니다.")
 
         // 이미 일정에 있는 장소는 제외한다(BR-U3-24). **클라이언트가 아니라 서버가 유도한다** —
         // 클라가 보내는 목록을 믿으면 누락분이 그대로 재추천된다.
@@ -130,7 +159,7 @@ class SlotCandidateService(
                     excludePoiIds = inItinerary,
                     placementReason = matches.single().value.placementReason,
                     requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), CANDIDATES_DEADLINE_MS),
-                ),
+                ).withTripPreference(accountId, tripId),
             )
         } catch (e: ScheduleAgentCallFailed) {
             log.warn("슬롯 후보 제안 실패 — 503 으로 표면화합니다(폴백 없음). tripId={} errorCode={}", tripId, e.errorCode, e)
@@ -163,14 +192,19 @@ class SlotCandidateService(
             )
         }
 
-        // 컨셉 필터(TRIP-1065 · QA #042) — '식사'를 골라도 명소가 오던 결함. concept 은 AI 계약에
-        // 자리가 없어 경계에서 버려지므로, **모든 경로**(AI LLM·규칙 폴백·로컬 폴백)의 결과를 여기
-        // 한 곳에서 거른다. 필터는 풀을 좁힐 뿐 넓히지 않는다(INV-1). 미매핑 컨셉(자유 문자열·
+        // 컨셉 필터(TRIP-1065 · QA #042) — '식사'를 골라도 명소가 오던 결함. AI 요청에도 categories 로
+        // 실리지만(풀 단계 필터) 상대가 무시할 수 있고 로컬 폴백은 모르므로, **모든 경로**(AI LLM·규칙
+        // 폴백·로컬 폴백)의 결과를 여기 한 곳에서 다시 거른다(이중 방어). 필터는 풀을 좁힐 뿐 넓히지 않는다(INV-1). 미매핑 컨셉(자유 문자열·
         // 구버전 앱)은 400 이 아니라 필터 없음 + 로그 1줄(reason 선례).
         val conceptSet = ConceptCategories.of(request.concept)
         if (conceptSet == null) {
             if (!request.concept.isNullOrBlank()) {
                 log.info("매핑에 없는 컨셉 — 필터 없이 응답합니다. concept={} tripId={}", request.concept, tripId)
+            }
+            // 0건 1회 확장(TRIP-1311 · BR-U3-25) — "주변에 없다"면 사용자 손을 기다리지 않고 한 단계 넓혀
+            // 풀을 직접 본다. ALL_IN_ITINERARY 는 넓혀도 같은 결과라 넓히지 않는다.
+            if (kept.isEmpty() && answered.emptyReason == SlotCandidatesEmptyReason.NO_NEARBY) {
+                return poolRefill(null, emptySet(), center, inItinerary, targetPoiId, answered)
             }
             return answered.copy(candidates = kept)
         }
@@ -179,17 +213,18 @@ class SlotCandidateService(
 
         // 경계가 컨셉 밖 후보만 줬다(예: LLM 빈 결과 → 규칙 폴백이 카테고리를 모름). 컨셉 카테고리로
         // 풀을 직접 봐서 채운다 — 반경 안에 맛집이 실재하는데 "주변에 없음"이라 말하면 거짓이다.
-        return conceptRefill(request.concept!!, conceptSet, center, inItinerary, targetPoiId, answered)
+        return poolRefill(request.concept, conceptSet, center, inItinerary, targetPoiId, answered)
     }
 
     /**
-     * 컨셉 카테고리 풀 채움(TRIP-1065) — closed-set 풀([CandidatePoolPort]) 그대로, 거리순.
+     * 풀 직접 채움 — closed-set 풀([CandidatePoolPort]) 그대로, 거리순. 컨셉 카테고리(TRIP-1065)이거나,
+     * 컨셉이 없으면 전 카테고리([categories] 빈 집합 — TRIP-1311 0건 확장).
      * AI 순위가 아니므로 **degraded=true 로 정직하게** 표시한다(INV-4). 0건이면 로컬 폴백과 같은
      * 규약으로 사유를 가른다(BR-U3-25): 반경을 한 번 넓혀 보고, 그래도 없으면 NO_NEARBY,
-     * 있는데 전부 일정에 들어 있으면 ALL_IN_ITINERARY.
+     * 있는데 전부 일정에 들어 있으면 ALL_IN_ITINERARY. 넓히기는 **한 번뿐**이다 — 더 넓히면 엉뚱한 동네다.
      */
-    private fun conceptRefill(
-        concept: String,
+    private fun poolRefill(
+        concept: String?,
         categories: Set<String>,
         center: PoiSurfaceView,
         inItinerary: List<UUID>,
@@ -205,8 +240,8 @@ class SlotCandidateService(
         var radius = base.radiusMUsed
         var nearby = search(radius)
         var found = nearby.filterNot { it.poiId in excluded }
-        if (found.isEmpty() && radius < CONCEPT_WIDENED_RADIUS_M) {
-            radius = CONCEPT_WIDENED_RADIUS_M
+        if (found.isEmpty() && radius < WIDENED_RADIUS_M) {
+            radius = WIDENED_RADIUS_M
             nearby = search(radius)
             found = nearby.filterNot { it.poiId in excluded }
         }
@@ -218,7 +253,7 @@ class SlotCandidateService(
                     distanceRange = it.distanceM?.let { m -> "약 ${"%.1f".format(Locale.ROOT, m / 1000)}km" }
                         ?: "거리 미확인",
                     // 필터를 통과한 카테고리라 이 문구는 참이다(BR-U2-09 — 시각·소요시간 언급 없음).
-                    rationale = "$concept 컨셉에 맞는 ${it.category}",
+                    rationale = concept?.let { c -> "$c 컨셉에 맞는 ${it.category}" } ?: "주변 ${it.category}",
                 )
             },
             radiusMUsed = radius,
@@ -286,6 +321,18 @@ class SlotCandidateService(
 
     private val log = org.slf4j.LoggerFactory.getLogger(SlotCandidateService::class.java)
 
+
+    /**
+     * 느린 경로(AI 왕복)에만 취향을 싣는다 — 즉답은 생성 때 이미 그 취향으로 매긴 점수라 다시 물을 게 없다.
+     * 매핑은 생성과 **같은 함수**(`overriddenBy` → `toProfile`)다 — 후보가 생성과 다른 취향으로 고르면
+     * "일정은 미식인데 다른 후보는 액티비티"가 된다.
+     */
+    private fun SlotCandidatesInput.withTripPreference(accountId: UUID, tripId: UUID): SlotCandidatesInput {
+        val ctx = trips.findGenerationContext(accountId, tripId) ?: return this
+        val profile = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
+            .toProfile(personalization.hintsFor(accountId))
+        return copy(preferenceProfile = profile, companionType = ctx.companionType)
+    }
     companion object {
         /**
          * 3s → 15s (2026-09-08, 팀 결정). 사용자가 화면에서 기다리는 동작이라 처음엔 생성(20s)보다
@@ -317,7 +364,7 @@ class SlotCandidateService(
         /** 즉답 후보 상한 — 로컬 폴백([LocalSlotCandidateSource])과 같은 개수를 준다. */
         private const val MAX_STORED_CANDIDATES = 5
 
-        /** 컨셉 채움의 넓힌 반경 — 로컬 폴백(h15 "반경 넓힘")과 같은 값. */
-        private const val CONCEPT_WIDENED_RADIUS_M = 12_000
+        /** 풀 채움의 넓힌 반경(컨셉 채움·0건 확장) — 로컬 폴백(h15 "반경 넓힘")과 같은 값. */
+        private const val WIDENED_RADIUS_M = 12_000
     }
 }

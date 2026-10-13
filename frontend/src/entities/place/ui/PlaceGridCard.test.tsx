@@ -179,3 +179,35 @@ describe('TRIP-1020 AC-B1·B2 · 카드 루트는 이름 라벨을 가진 버튼
     expect(screen.getByTestId('explore-places-save-p2')).not.toBeSelected();
   });
 });
+
+// TRIP-1281 — d04 하트도 "{이름} 저장" 으로 읽힌다(지금은 라벨이 없어 testID 가 노출된다). 카드 라벨은
+// 그대로 둔다 — LABEL_P1 끝의 ", 담음" 은 Maestro M-06 선택자가 기대는 값이다.
+describe('저장 하트 접근성 라벨 (d04)', () => {
+  it('하트는 "{이름} 저장" 으로 읽히고, 담김은 라벨이 아니라 selected 로만 갈린다', () => {
+    renderTwoCards();
+
+    const heart1 = screen.getByTestId('explore-places-save-p1');
+    const heart2 = screen.getByTestId('explore-places-save-p2');
+    expect(heart1).toHaveAccessibleName('해운대 암소갈비집 저장');
+    expect(heart1).toBeSelected();
+    expect(heart2).toHaveAccessibleName('감천문화마을 저장');
+    expect(heart2).not.toBeSelected();
+    expect(screen.getByLabelText('해운대 암소갈비집 저장').props.testID).toBe(
+      'explore-places-save-p1'
+    );
+    expect(screen.getByLabelText('감천문화마을 저장').props.testID).toBe(
+      'explore-places-save-p2'
+    );
+  });
+
+  it('하트에 라벨을 달아도 카드 라벨은 그대로다', () => {
+    renderTwoCards();
+
+    expect(screen.getByTestId('explore-places-card-p1')).toHaveAccessibleName(
+      LABEL_P1
+    );
+    expect(screen.getByTestId('explore-places-card-p2')).toHaveAccessibleName(
+      LABEL_P2
+    );
+  });
+});

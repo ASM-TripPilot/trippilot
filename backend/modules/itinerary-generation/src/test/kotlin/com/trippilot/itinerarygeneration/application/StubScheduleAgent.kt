@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ReplanInput
@@ -34,6 +35,6 @@ internal abstract class StubScheduleAgent : ScheduleAgentPort {
      * 빈 맵이 **정상 값**(근거 없음)이라 예외로 막지 않으면 "설명 단계가 통째로 빠진 것"과 구분되지
      * 않는다. 다른 경계와 달리 여기서도 예외를 던져, 쓰는 테스트가 자기 대역을 명시하게 한다.
      */
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations =
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations =
         error("이 테스트는 추천 근거 조회를 쓰지 않는다")
 }

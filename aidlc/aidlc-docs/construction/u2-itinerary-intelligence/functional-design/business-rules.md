@@ -59,6 +59,8 @@
 - **금지 조합**: `(FULL_AI, true)` · `(MINIMAL, false)` — 발생 시 계약 위반.
 - **근거**: 경계 3종은 "사용자에게 어떤 성격의 해인가"(표시·저장 축), AI 4종은 "어느 엔진이 풀었나"(엔진 축). `RULE_FALLBACK`은 결정론이지만 강등이므로 `DETERMINISTIC + isFallback`이 정확한 사영이다. 미정이던 `RULE_FALLBACK` 목적지가 이로써 확정된다.
 
+> **[개정 · 2026-10-12]** 구현된 매핑은 위 표와 **다르다**(원문 보존). `backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/ScheduleAgentWire.kt` `toSolveMode()`: **`OR_TOOLS`·`LLM` → `FULL_AI`**, `RULE_FALLBACK` → `DETERMINISTIC`, `MINIMAL` → `MINIMAL`, 미지 값은 예외(INV-4). `isFallback` 은 이 표에서 파생하지 않고 AI 와이어 `is_fallback` 을 그대로 받는다. 따라서 표의 `OR_TOOLS → (DETERMINISTIC, false)` 는 현행이 아니고, 매핑은 단사가 아니다(`OR_TOOLS`·`LLM` 이 `FULL_AI` 로 합쳐짐 — 다만 현 체인에 LLM 배치 단계가 미배선이라 실제 `LLM` 값은 나오지 않는다). 이 표를 코드에 맞출지, 코드를 표에 맞출지는 사용자 판단 대상(PBT-U2-B2 의 "단사성" 속성도 함께 걸린다).
+
 ### BR-U2-04 · `slotKey` 키 규약 (N3 종결)
 
 **결정**: `slotKey = "{date(ISO-8601)}#{poiId}"` — 예: `2026-09-14#7b0c…`.
@@ -67,6 +69,8 @@
 - **제약**: 같은 날 같은 POI를 두 슬롯에 배치하지 않는다(키 충돌 방지). 필요해지면 `#{ordinal}` 접미로 확장한다.
 - **근거**: DB 저장 전(생성 응답 시점)에 AI가 부여할 수 있어야 하고, 편집으로 순서가 바뀌어도 안정해야 한다. 인덱스 기반 키는 둘 다 실패한다.
 - **영속**: `explanations`는 현재 **저장 경로가 없어 유실**된다(`GenerateItineraryService`에서 도메인 변환 시 탈락). `visit_slot`에 `placement_reason` 컬럼 추가 필요 → backend 마이그레이션 사안(티켓 필요).
+
+> **[개정 · 2026-10-12]** 영속 경로가 생겼다 — `visit_slot.placement_reason varchar(500)`·`itinerary.candidates_summary jsonb`(`backend/app/src/main/resources/db/migration/V2.13__explanations_candidates_summary.sql`, TRIP-306). 설명은 별도 경계 `POST /ai/v1/itinerary/explanations`(`ScheduleAgentPort.explanations`)로도 받는다.
 
 ### BR-U2-05 · `candidatesSummary` 신설 (N4 종결)
 
@@ -81,6 +85,13 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 - **근거**: AI `agent-io-contracts.md` §1.2에 필드는 있으나 backend 포트에 대응이 없고, **타입 정의도 AI 코드에 없다**(미구현). 신설 = 양쪽 동시.
 
 > **소급 주석 (2026-08-11 · TRIP-298 [기록] · 근거: `backend/docs/design/openapi.yaml:1183-1195` 실측)**: 실제 구현 계약(`Itinerary.candidatesSummary.level`)은 위 `HIGH | MEDIUM | LOW` 열거로 **고정돼 있지 않다** — `openapi.yaml`은 `level: { type: string }`으로 열어 두고, "백엔드가 AI 값을 그대로 통과시키므로 `OK`·`LOW`·`NO_CANDIDATES` 같은 AI 어휘가 그대로 온다"고 명시한다. 루트 CLAUDE.md 정본 규칙상 구현 계약(`openapi.yaml`)이 이 문서의 열거 선언보다 우선한다. 프론트(`isCandidatesDemoted`, `src/features/itinerary/model/draftView.ts`)는 이 값을 enum으로 좁히지 않고 "조용할 값의 화이트리스트"(`['OK','HIGH']`)로 비교해, 이 문서가 열거하지 않은 미래 어휘도 자동으로 안전한 쪽(안내 노출)에 떨어지게 짜여 있다. 이 문서의 원 결정(BR-U2-05)이 틀렸다는 뜻은 아니다 — 구현 시점에 계약이 벌어졌다는 사실 기록이다.
+
+> **개정 주석 (2026-10-02 · 사용자 결정 · 근거: FE 오표기 실측)**: `LOW` 판정을 좁힌다. 종전 AI 구현(`ai/src/trippilot/agents/schedule/outcome.py` `candidates_report`)은 경계 카테고리 8종 중 **하나라도 풀에 0건이면 `LOW`** 였다. 실데이터 풀은 쇼핑·야경처럼 얇은 카테고리가 흔히 비어 거의 매 생성이 `LOW` 가 됐고, 프론트(`isCandidatesDemoted` → `resolveFallbackNotice`)는 이를 "AI 추천은 잠시 쉬어요 / 취향 반영(건너뜀)"으로 띄웠다 — LLM 점수가 정상 성공한 생성에서도. 개정 규칙:
+> - `NO_CANDIDATES`: 풀 0건 (불변)
+> - `LOW`: ① 요청 페르소나의 취향(`taste_tags`·`activities`·`cuisines`)을 경계 카테고리로 사상한 집합 중 풀에 0건인 것이 있거나, ② 풀 크기 < `일수 × 5`(하루 최소 슬롯 — U3 NFR "하루 5~10슬롯" 하한). 페르소나가 없거나 취향이 비면 ①은 판정하지 않는다
+> - `OK`: 그 밖. 취향과 무관한 카테고리 공백은 `shortfallCategories` 에만 남는다(필드 의미 불변 — 풀에 0건인 경계 카테고리 전부)
+>
+> 와이어 계약(`level` 어휘·`shortfallCategories` 필드)은 바뀌지 않는다. 취향→카테고리 사상표는 `outcome.py` 한 곳에 있다(코드베이스에 기존 사상이 없어 신설).
 
 ### BR-U2-06 · `FreshnessMeta` 스키마 (N5 종결)
 
@@ -128,9 +139,13 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 - 현재 `openapi.yaml`에 `/ai/*`·`/internal/pois*` 경로가 **0건**이다(G-U2-06) → 이 규칙은 TRIP-282 반영 후 발효.
 - 그 전까지의 임시 정본 = `backend/docs/design/ai-backend-경계-계약-초안.md` + 본 문서.
 
+> **[개정 · 2026-10-12]** 절차가 "백엔드 `openapi.yaml` 먼저 → 양쪽 코드젠"이 아니라 **AI 쪽 계약 파일 + 양쪽 게이트**로 정착했다. 와이어 정본 = **`ai/docs/openapi.json`**(AI CI 가 실행 앱 스키마와 커밋 계약의 일치를 강제), 백엔드 게이트 = `backend/modules/itinerary-generation/src/test/kotlin/com/trippilot/itinerarygeneration/contract/AiBoundaryOpenApiTest.kt`(계약 파일을 복사 없이 읽어 와이어 타입과 키를 엄격 대조, TRIP-334). 열린 경로 예: `/ai/v1/itinerary/{generate,validate,repair,explanations,edit}` · `/ai/v1/planb/{alternatives,replan}` · `/ai/v1/reflection/*` · `/ai/v1/notification/copies`(목록은 그 파일이 정본). 백엔드 와이어 타입은 코드젠이 아니라 수기(`backend/modules/itinerary-generation/.../adapter/out/external/ScheduleAgentWire.kt`)이고 게이트가 드리프트를 잡는다.
+
 ### BR-U2-11 · `deadlineMs` 소유 = 호출자 (DL-6 이행)
 
 **결정**: 지연 예산은 **backend(호출자)가 소유**하고 요청마다 전달한다. AI는 경로별 값을 모른다. 기준값 — day1 5,000ms · Plan-B 10,000ms · 재생성/백그라운드 관대.
+
+> **[개정 · 2026-10-12]** 기준값 갱신(원문 보존): 생성 **day1 15,000ms · 전체 60,000ms**, 기본 집행(`ScheduleDeadlineProperties.kt` `enforced=true`, 배포 `deploy/eks/chart/values.yaml` 26~30행 · `values-prd.yaml` `scheduleDeadlineEnforced: true`) · Plan-B 재계획 **25,000ms**(`ReplanFacadeService.kt` `REPLAN_DEADLINE_MS`) · 편집 validate 3s / repair 5s. 소유 원칙(호출자 소유)은 그대로다.
 
 ### BR-U2-12 · `validate`는 차단하지 않는다
 
@@ -150,6 +165,8 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 | 강등 비율 (`isFallback=true`, `solveMode=MINIMAL`) | AI 텔레메트리 + backend 저장분 | `FallbackEvent` · `solve_mode` |
 | 생성 후 사용자 **수동 편집률** | backend·frontend | 편집 API 호출 / 생성 건수 |
 | **재생성 요청률** | backend·frontend | `regenerate` 호출 / 생성 건수 |
+
+> **[개정 · 2026-10-12]** 산식 출처 경로는 `c2/quality.py` 가 아니라 **`ai/src/trippilot/assembly_engine/quality.py`**(`preference_fit`·`constraint_satisfaction` 등).
 
 - **`QualityScore`는 경계로 넘기지 않는다.** AI 내부 텔레메트리로만 관측한다. 사용자 행동 지표(편집률·재생성률)는 backend/frontend에만 있으므로, **판정 회의에서 두 계열을 합친다.** 경계에 품질 필드를 추가하면 backend가 해석·저장 책임을 지게 되는데 그 책임의 소비자가 아직 없다.
 
@@ -175,6 +192,8 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 
 **조사 결과**: `ai/aidlc-docs/inception/design-artifacts/ai-adr.md` **AI-D06 (2026-07-21)** — LLM 벤더는 **Anthropic API 직접**(`api.anthropic.com`)으로 확정됐고 **AWS Bedrock 경유가 아니다**(회사 결제 승인이 Anthropic 직접 경로로 진행). 같은 ADR이 *"문서 내 'Bedrock' 표기 → 'LLM API(Anthropic)'로 읽는다. **'Bedrock 2차 솔버'도 동일 — Anthropic API 호출로 구현**"* 이라고 명시한다. 실제로 ai 소스 전체에 Bedrock/AgentCore 참조 **0건**이며, 2차 솔버는 `c2/llm_solver.py`(Anthropic 어댑터 경유)로 구현돼 있다.
 
+> **[개정 · 2026-10-12]** "ai 소스 전체에 Bedrock/AgentCore 참조 0건 · 2차 솔버는 `c2/llm_solver.py`(Anthropic 경유)로 구현"은 현행과 다르다(원문 보존). ① **Bedrock 어댑터 실재**: `ai/src/trippilot/llm_gateway/adapters/bedrock_adapter.py`(Custom Model Import 학생 모델, `InvokeModel`) · `titan_embedding.py`(Titan Embeddings v2) — `ai/main.py` 에서 env opt-in(`TRIPPILOT_BEDROCK_MODEL_ARN`+`local*` 모델 배정 / `TRIPPILOT_EMBEDDING_PROVIDER`). ② 벤더는 `routing.py` `RoutingLlm` 이 모델명 접두어로 고른다(`claude*`→`anthropic_adapter.py`, 그 외→`openai_adapter.py`). ③ 현행 배정은 **LLM 기능 18종 전부 `claude-fable-5-1`**(커밋 fb0d51e2 "전 LLM 기능 claude-fable-5-1 통일", `ai/.env.example` `AI_LLM_FEATURE_MODELS`). ④ **AgentCore 는 여전히 0건.** ⑤ LLM 2차 배치 단계(`assembly_engine/llm_assembler.py` `LlmAssembler`)는 **미배선**(`ai/src/trippilot/api/wiring.py` `ChainAssemblyProvider`) — 체인은 OR-Tools → 규칙 폴백 2단. 결정(벤더 중립 "엔진 교체")은 그대로 유효하다.
+
 **결정**:
 
 | 정본 조항 | 재정의 |
@@ -183,6 +202,8 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 | `components.md` §3.1 `BedrockAgentSolverAdapter` | 명칭 폐기. 교체 지점 = ① AI 내부 `SolverPort` 구현체 ② 굵은 경계(`POST /ai/schedule`) 뒤 전체 — **둘 다 어댑터 교체로 대체 가능**(경계가 굵어 backend 변경 0) |
 | FR-SOLVER-03 (옵션 B — 규칙 완화) | **유효하되 트리거 미도래.** 완화 후보(생성 시각 노출 금지·INV-3 소요시간 미표시 등)는 교체 결정 시점에 재검토 |
 | FR-SOLVER-04 (실현가능성 = 결정론 컴포넌트 소유) | **불변 유지 — 이미 준수.** 현 체인은 LLM 2차 해도 `check_all`(HC1~HC4) 통과 후에만 반환한다 |
+
+> **[개정 · 2026-10-12]** 표의 교체 지점 "굵은 경계(`POST /ai/schedule`)"는 현행 경로가 아니다 — 생성 경계는 **`POST /ai/v1/itinerary/generate`**, 정본 `ai/docs/openapi.json`. "AI 내부 `SolverPort` 구현체"는 `ai/src/trippilot/assembly_engine/facade.py` `HybridAssemblyFacade` 의 단계(`ChainStage`)다. FR-SOLVER-04 행의 "LLM 2차 해도 `check_all` 통과"는 LLM 2차 미배선으로 현재 해당 경로가 없다(구조적 보장은 `facade.py` 에 그대로).
 
 - **교체 가능성 확인 결론**: 경계가 **1호출로 굵게** 잡혀 있어 엔진 교체 시 backend 변경이 필요 없다. FR-SOLVER-02의 구조적 전제는 **충족돼 있다** — 별도 설계 없이 판정만 남았다.
 - FR-SOLVER-02·03의 "Bedrock" 문구는 **인셉션 요구사항 본문**(`requirements.md`)에 있다 → 개정은 별도 승인 사안(갭 `G-U2-02`).
@@ -211,3 +232,5 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 | **O-U2-2** | `explanations` 영속 컬럼(`visit_slot.placement_reason`) 마이그레이션 | backend 티켓 |
 | ~~**O-U2-3**~~ | `proposeSlotCandidates` → **종결 (2026-08-07 · U3 DEC-U3-5)**: 완전 AI·같이 고르기 공통 경계로 개통, `ScheduleAgentPort`는 4메서드(§business-logic-model 7.1). `recalculate` → **종결 (2026-08-09 · U4 DEC-U4-5)**: `replan`으로 개통, 어댑터가 ai `regenerate(problem, locked_slots)`로 매핑(§business-logic-model 7.2). `ScheduleAgentPort`는 **5메서드** | 종결 |
 | **O-SOLVER** | 엔진 교체 판정 임계 | 운영(BR-U2-14 트리거 도달 시) |
+
+> **[개정 · 2026-10-12]** 미결 현황 갱신: **O-U2-1** — 미배치 필수 방문지는 HC 코드 신설이 아니라 응답 필드 **`unplaced_must_visits`**(additive, 사유 코드 포함 — `ai/docs/openapi.json`, 백엔드 `ScheduleAgentWire.kt` `UnplacedMustVisit`/`UnplacedReason`)로 표현된다 — 사실상 종결(사용자 확인 대상). **O-U2-2** — 종결: `visit_slot.placement_reason`(V2.13, TRIP-306). **O-U2-3** 의 "5메서드"는 현행 **6메서드**(`explanations` 추가, business-logic-model §3 개정 블록).

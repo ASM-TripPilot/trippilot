@@ -35,3 +35,18 @@ describe('TRIP-609 · revokeImpact (BR-U6-30)', () => {
     expect(revokeImpact()).toEqual(revokeImpact());
   });
 });
+
+describe('TRIP-1341 · revokeImpact 자동 기록 항목(G-U10-8)', () => {
+  it('automation=true 면 중단 목록 끝에 자동 방문 기록·이동 경로(저장된 경로 삭제)', () => {
+    expect(revokeImpact({ automation: true }).stops).toEqual([
+      '이동 지연 알림',
+      '실시간 Plan-B 재계획',
+      '현 위치 기반 추천',
+      '자동 방문 기록·이동 경로 (저장된 경로 삭제)',
+    ]);
+  });
+  it('플래그 OFF(기본)는 현행 3개 그대로', () => {
+    expect(revokeImpact({ automation: false })).toEqual(revokeImpact());
+    expect(revokeImpact().stops).toHaveLength(3);
+  });
+});

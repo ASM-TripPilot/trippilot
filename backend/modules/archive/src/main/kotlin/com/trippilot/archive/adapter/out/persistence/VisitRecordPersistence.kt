@@ -150,12 +150,13 @@ class VisitMemoRepositoryAdapter(
         visitCheckId,
     ).firstOrNull()
 
-    override fun findVisitsWithMemo(visitCheckIds: Collection<UUID>): Set<UUID> {
-        if (visitCheckIds.isEmpty()) return emptySet()
-        return jdbc.queryForList(
-            "SELECT visit_check_id FROM visit_memo WHERE visit_check_id = ANY (?)",
-            UUID::class.java, visitCheckIds.toTypedArray(),
-        ).toSet()
+    override fun findMemosOf(visitCheckIds: Collection<UUID>): Map<UUID, String> {
+        if (visitCheckIds.isEmpty()) return emptyMap()
+        return jdbc.query(
+            "SELECT visit_check_id, text FROM visit_memo WHERE visit_check_id = ANY (?)",
+            { rs, _ -> rs.getObject("visit_check_id", UUID::class.java) to rs.getString("text") },
+            visitCheckIds.toTypedArray(),
+        ).toMap()
     }
 
     override fun delete(visitCheckId: UUID): Boolean =

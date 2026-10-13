@@ -1,4 +1,4 @@
-import { useGetSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
+import { useGetSavedStays } from '@/shared/api/index.hooks';
 
 /**
  * 생성 훅(`useGetSavedStays`)을 도메인 이름으로 재수출한다(`usePreferencePrefill` 선례, 몸통

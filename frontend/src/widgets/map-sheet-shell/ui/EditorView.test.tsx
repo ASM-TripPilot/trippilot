@@ -14,15 +14,23 @@ import DraggableFlatList, * as DraggableModule from 'react-native-draggable-flat
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
-import { buildPlanDayTabs } from '@/features/itinerary/model/planState';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+} from '@/shared/api/index.schemas';
+import { buildPlanDayTabs } from '@/features/itinerary/index.view';
+import { buildSlotKey, violationNotice } from '@/entities/itinerary-slot';
 import {
   EDIT_LIST,
   editListData,
   fireEditDragBegin,
   fireEditDragEnd,
+  fireEditDropOnZone,
+  hoverOverDeleteZone,
 } from '@/test-support/editDragList';
+import {
+  closestAncestor,
+  closestScrollView,
+  fireChipLayout,
+  stubScrollTo,
+} from '@/test-support/sheetTree';
 
 import { EditorView } from './EditorView';
 
@@ -144,21 +152,7 @@ describe('🔴 EditorView · B4-2 — filled 얼굴(AC-2)', () => {
   });
 });
 
-describe('🔴 EditorView · B4-3 — 제거 대상 부재(AC-3, 긍정 짝 동반)', () => {
-  it('히어로·시간대밴드·"Day N"·"지도는 곧"·"다른 후보"·핸들이 없다', () => {
-    renderView({ slots: [slot('a'), slot('b')] });
-
-    // 긍정 짝 — 화면 자체는 떠 있다(공허 통과 방지).
-    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
-
-    // 제거 대상 부재.
-    expect(screen.queryByText('지도는 곧 제공돼요')).toBeNull();
-    expect(screen.queryByText('다른 후보 ›')).toBeNull();
-    expect(screen.queryByText('오전')).toBeNull();
-    expect(screen.queryByText('점심')).toBeNull();
-    expect(screen.queryByText(/^Day \d/)).toBeNull(); // "Day 1" → "1일차" 로 대체
-  });
-});
+// B4-3(제거 대상 부재 — 히어로·시간대밴드·"Day N" 등 not-in-DOM 단언)은 TRIP-1356 에서 지웠다(README 판정 3: 구조·기능 회귀 부재 단언).
 
 describe('🔴 EditorView · B4-4 — day-chip 다일자(AC-4)', () => {
   it('일차 칩 press 가 onSelectDay 를 부르고 헤더가 활성 일자를 반영한다', () => {
@@ -241,18 +235,7 @@ describe('🔴 EditorView · L1 — 주입 라벨 saveLabel (TRIP-1038 B1)', () 
   });
 });
 
-describe('🔴 EditorView · B4-9 — dragging 얼굴(AC-9)', () => {
-  it('isDragging 이면 드롭존이 CTA 자리를 대체한다', () => {
-    renderView({ slots: [slot('a'), slot('b')], isDragging: true });
-
-    expect(screen.getByTestId('itinerary-edit-dropzone')).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-edit-dropzone-active')
-    ).toBeOnTheScreen();
-    // 드래그 중엔 저장 CTA 자리가 드롭존으로 대체된다.
-    expect(screen.queryByTestId('sheet-cta-button-0')).toBeNull();
-  });
-});
+// B4-9(isDragging 이면 드롭존이 CTA 를 대체)는 TRIP-1356 에서 지웠다 — 아래 D7 이 같은 단언(드롭존 활성·CTA 없음)에 + 자리 보존까지 더한 상위 집합이다.
 
 // ── TRIP-753 · i07 일정 편집(inTrip) — h12 편집기를 여행 중 편집으로 재사용 ──────────────────────
 //
@@ -439,16 +422,7 @@ describe('🔴 EditorView · V3 — 방문 완료 행은 회색 알약만, 자�
   });
 });
 
-describe('EditorView · V4 — 예정 행 ⌄ 한 번 누름 = 콜백 한 번 (TRIP-753 AC-5)', () => {
-  it('행 3 시각칩 press 가 onPressTimeChip 을 그 slotKey 로 정확히 1회 부른다', () => {
-    const cb = renderI07();
-
-    fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('p3')}`));
-
-    expect(cb.onPressTimeChip).toHaveBeenCalledTimes(1);
-    expect(cb.onPressTimeChip).toHaveBeenCalledWith(k('p3'));
-  });
-});
+// V4(예정 칩 press = 콜백 1회)는 TRIP-1356 에서 지웠다 — V3 두 번째 it 의 짝 단언(예정 칩 press → 정확히 1회 · slotKey)이 같다.
 
 describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분홍 알약 (TRIP-753 AC-6)', () => {
   it('행 3 에만 "숙소 고정 충돌" 배지를 primary-pale 로 그린다', () => {
@@ -464,7 +438,8 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
     );
   });
 
-  it('사유가 null 이면 지어내지 않고 "일정 충돌" 로 그린다', () => {
+  // TRIP-1298 — 편집기도 h08 과 같은 고정 라벨(옛 `일정 충돌` 폐기).
+  it('사유가 null 이면 지어내지 않고 고정 문구 "일정 확인이 필요해요" 로 그린다', () => {
     renderI07({
       slots: I07_SLOTS.map((s) =>
         s.poiId === 'p3' ? { ...s, violationReason: null } : s
@@ -473,7 +448,7 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
 
     expect(
       screen.getByTestId(`slot-stopcard-violation-${k('p3')}`)
-    ).toHaveTextContent('일정 충돌');
+    ).toHaveTextContent('일정 확인이 필요해요');
   });
 
   it('hasViolation 이 false 면 사유 문자열이 있어도 배지가 없다', () => {
@@ -493,37 +468,64 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
   });
 });
 
-describe('🔴 EditorView · V5-D — 위반 사유의 분 범위는 HH:mm 로 보인다 (TRIP-1008 D1·D3)', () => {
-  it('사유 "영업시간 밖: 543~618" 은 배지에 "영업시간 밖: 09:03~10:18" 로 뜬다', () => {
-    renderI07({
-      slots: I07_SLOTS.map((s) =>
-        s.poiId === 'p3' ? { ...s, violationReason: '영업시간 밖: 543~618' } : s
-      ),
-    });
+// ── TRIP-1298 · 편집기 위반 알약 = h08 과 같은 규칙(violationNotice) ─────────────────────────────────
+//
+// 슬롯 자기 distanceRange 가 비면 "앞 장소에서 이동할 시간이 빠듯해요" 조각을 빼고(TRIP-1274 사용자 결정 —
+// 근거 없는 단정), 숫자가 섞이거나 비면 고정 문구로 막는다(INV-3). 알약 자체는 남긴다(BR-U3-13).
+// 문구는 서버 ViolationText.phraseOf 와 글자 단위로 같아야 해서 리터럴로 든다 — 구분자 점은 U+00B7(02a ★6).
+const HC2 = '앞 장소에서 이동할 시간이 빠듯해요';
+const OPENING = '영업시간과 맞지 않아요';
+const KNOWN = '약 2.1km · 도보 추정';
 
-    expect(
-      screen.getByTestId(`slot-stopcard-violation-${k('p3')}`)
-    ).toHaveTextContent('영업시간 밖: 09:03~10:18');
-    expect(screen.queryAllByText(/\d{3,4}~\d{3,4}/).length).toBe(0);
+const p3Badge = (): ReturnType<typeof screen.getByTestId> =>
+  screen.getByTestId(`slot-stopcard-violation-${k('p3')}`);
+
+function renderWithP3(over: Partial<EditorSlot>): void {
+  renderI07({
+    slots: I07_SLOTS.map((s) => (s.poiId === 'p3' ? { ...s, ...over } : s)),
+  });
+}
+
+describe('🔴 EditorView · V8 — 위반 알약은 h08 과 같은 규칙: 거리를 모르면 "빠듯"을 빼고, 숫자는 고정 문구', () => {
+  // 기대값을 h08 이 쓰는 함수로 계산한다 — 문구가 아니라 "두 화면이 같은 규칙"이라는 관계를 잰다(02a ★4).
+  it.each<[string, Partial<EditorSlot>]>([
+    ['이동 문구 · 거리 null', { violationReason: HC2, distanceRange: null }],
+    ['이동 문구 · 거리 있음', { violationReason: HC2, distanceRange: KNOWN }],
+    [
+      '이동 문구 · 영업시간 · 거리 null',
+      { violationReason: `${HC2} · ${OPENING}`, distanceRange: null },
+    ],
+    ['사유 null', { violationReason: null, distanceRange: KNOWN }],
+    [
+      '옛 원시 분 범위',
+      { violationReason: '영업시간 밖: 543~618', distanceRange: KNOWN },
+    ],
+    [
+      '숫자 없는 기타 사유',
+      { violationReason: '숙소 고정 충돌', distanceRange: null },
+    ],
+  ])('V8-4 · %s → h08(violationNotice)과 같은 문구', (_label, over) => {
+    const data = { ...I07_SLOTS[2], hasViolation: true, ...over };
+    renderWithP3(data);
+
+    expect(p3Badge()).toHaveTextContent(violationNotice(data) as string);
   });
 
-  it('" · " 로 이어진 사유는 분 범위만 바뀌고 "이동 N분 필요" 는 글자 그대로다 (D5 경계)', () => {
-    renderI07({
-      slots: I07_SLOTS.map((s) =>
-        s.poiId === 'p3'
-          ? {
-              ...s,
-              violationReason:
-                '영업시간 밖: 543~618 · 이동 54분 필요, 간격 -60분',
-            }
-          : s
-      ),
+  // V8-1·2·3·5(문구 개별 예시)는 TRIP-1356 에서 지웠다 — V8-4 표가 같은 입력을 h08 과 같은 함수(violationNotice)로 대조하고,
+  // 문구 규칙 자체(숫자 제거·거리 없으면 빠듯 제거)는 entities/itinerary-slot/lib/violationLabel.test 가 잠근다.
+
+  it('V8-6 · hasViolation 이 false 면 거리 없는 이동 문구여도 알약이 없다', () => {
+    renderWithP3({
+      hasViolation: false,
+      violationReason: HC2,
+      distanceRange: null,
     });
 
-    expect(
-      screen.getByTestId(`slot-stopcard-violation-${k('p3')}`)
-    ).toHaveTextContent(
-      '영업시간 밖: 09:03~10:18 · 이동 54분 필요, 간격 -60분'
+    I07_KEYS.forEach((key) =>
+      expect(screen.getByTestId(`slot-stopcard-${key}`)).toBeOnTheScreen()
+    );
+    expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
+      0
     );
   });
 });
@@ -787,34 +789,30 @@ function reorderedIds(mock: jest.Mock): string[] {
   return (mock.mock.calls[0][0] as EditorSlot[]).map((s) => s.poiId);
 }
 
-describe('🔴 EditorView · D1 — 드래그 리스트 계약: 슬롯 n개 + 끝 센티널 1개 (TRIP-921 AC-1·AC-2 전제)', () => {
-  it('itinerary-edit-list 의 data 는 [a,b,c] 뒤에 슬롯 아닌 항목 하나, 키는 모두 다르다', () => {
+describe('🔴 EditorView · D1 — 드래그 리스트 계약: 슬롯 n개뿐, 삭제 칸(센티널)은 리스트에 없다 (TRIP-1246 · 옛 TRIP-921 AC-1·AC-2 전제 개정)', () => {
+  it('itinerary-edit-list 의 data 는 [a,b,c] 슬롯만이고 키는 모두 다르다', () => {
     renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
     expect(screen.getByTestId(EDIT_LIST)).toBeOnTheScreen();
 
     const data = editListData();
-    expect(data).toHaveLength(4);
-    expect(data.slice(0, 3).map((item) => (item as EditorSlot).poiId)).toEqual([
+    expect(data.map((item) => (item as EditorSlot).poiId)).toEqual([
       'a',
       'b',
       'c',
     ]);
-    // 센티널 — 모양은 계약하지 않고 "슬롯이 아니다"만 본다(02a ★1).
-    const last = data[3] as { poiId?: unknown } | null;
-    expect(['a', 'b', 'c']).not.toContain(last?.poiId);
 
     const keyExtractor = (
       screen.UNSAFE_getByType(DraggableFlatList).props as {
         keyExtractor: (item: unknown, index: number) => string;
       }
     ).keyExtractor;
-    expect(new Set(data.map((item, i) => keyExtractor(item, i))).size).toBe(4);
+    expect(new Set(data.map((item, i) => keyExtractor(item, i))).size).toBe(3);
   });
 });
 
-describe('🔴 EditorView · D2 — 센티널 앞에 놓으면 재정렬 (TRIP-921 AC-1)', () => {
-  it('b 를 맨 앞(1→0)에 놓으면 onReorder 가 센티널 뺀 [b,a,c] 로 1회, 삭제는 0회', () => {
+describe('🔴 EditorView · D2 — 삭제 영역 밖에 놓으면 재정렬 (TRIP-921 AC-1 · TRIP-1246 판정 교체)', () => {
+  it('b 를 맨 앞(1→0)에 놓으면 onReorder 가 [b,a,c] 로 1회, 삭제는 0회', () => {
     const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
     fireEditDragEnd(1, 0);
@@ -824,7 +822,7 @@ describe('🔴 EditorView · D2 — 센티널 앞에 놓으면 재정렬 (TRIP-9
     expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
   });
 
-  it('★경계 — 센티널 바로 앞(0→2, [b,c,a,S])은 맨 끝으로 재정렬이지 삭제가 아니다', () => {
+  it('★경계 — 맨 끝(0→2)으로 옮겨도 영역 위가 아니면 재정렬이지 삭제가 아니다', () => {
     const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
     fireEditDragEnd(0, 2);
@@ -835,53 +833,74 @@ describe('🔴 EditorView · D2 — 센티널 앞에 놓으면 재정렬 (TRIP-9
   });
 });
 
-describe('🔴 EditorView · D3 — 센티널 뒤에 놓으면 삭제 (TRIP-921 AC-2)', () => {
-  it('b 를 센티널 뒤(1→3, [a,c,S,b])에 놓으면 onDeleteViaDrag("b") 1회, 재정렬 0회', () => {
+describe('🔴 EditorView · D3 — 삭제 영역 위에서 놓으면 삭제 (TRIP-921 AC-2 · TRIP-1246 판정 교체)', () => {
+  it('b 를 영역 위에서 놓으면 onDeleteViaDrag("b") 1회, 재정렬 0회', async () => {
     const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
-    fireEditDragEnd(1, 3);
+    await fireEditDropOnZone(1);
 
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b');
     expect(cb.onReorder).not.toHaveBeenCalled();
   });
 
-  it('★경계 — 마지막 카드 c 를 한 칸만 내려도(2→3, [a,b,S,c]) 센티널을 넘었으니 삭제다', () => {
+  it('★마지막 카드 c 도 영역 위에서 놓으면 삭제다(칸 index 와 무관)', async () => {
     const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
-    fireEditDragEnd(2, 3);
+    await fireEditDropOnZone(2);
 
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('c');
     expect(cb.onReorder).not.toHaveBeenCalled();
   });
+
+  it('★영역 위에 갔다가 나와서 놓으면 삭제가 아니다(마지막 터치 중 위치가 기준)', async () => {
+    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    await hoverOverDeleteZone(true);
+    await hoverOverDeleteZone(false);
+    fireEditDragEnd(1, 1);
+
+    expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
+    expect(cb.onReorder).toHaveBeenCalledTimes(1);
+  });
+
+  it('★삭제 한 번 뒤 다음 끌기는 영역 위 기록이 지워진 채 시작한다(다음 제자리 놓기는 삭제 아님)', async () => {
+    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    await fireEditDropOnZone(1);
+    fireEditDragBegin(0);
+    fireEditDragEnd(0, 0);
+
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
+  });
 });
 
-describe('🔴 EditorView · D4 — 고정·완료 카드는 드롭존에 놓여도 안 지워진다 (TRIP-921 AC-3 ② 심층 방어)', () => {
-  it('고정 카드를 센티널 뒤로 강제 발화하면 두 콜백 0회 — 짝: 같은 화면의 예정 카드는 지워진다', () => {
+describe('🔴 EditorView · D4 — 고정·완료 카드는 삭제 영역에 놓여도 안 지워진다 (TRIP-921 AC-3 ② 심층 방어)', () => {
+  it('고정 카드를 영역 위에서 강제 발화하면 두 콜백 0회 — 짝: 같은 화면의 예정 카드는 지워진다', async () => {
     const cb = renderView({
       slots: [slot('a'), slot('fix', { isFixed: true }), slot('b')],
     });
 
     // 제스처로는 못 끄는 카드지만, 판정 단계에서 한 번 더 거른다(스토어 deleteSlot 은 고정을 안 본다).
-    fireEditDragEnd(1, 3);
+    await fireEditDropOnZone(1);
     expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
     expect(cb.onReorder).not.toHaveBeenCalled();
 
     // 짝(공허 통과 방지) — 콜백 배선 자체는 살아 있다.
-    fireEditDragEnd(2, 3);
+    await fireEditDropOnZone(2);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b');
   });
 
-  it('방문 완료 카드(p1)를 센티널 뒤로 강제 발화하면 두 콜백 0회 — 짝: 예정 p3 는 지워진다', () => {
+  it('방문 완료 카드(p1)를 영역 위에서 강제 발화하면 두 콜백 0회 — 짝: 예정 p3 는 지워진다', async () => {
     const cb = renderI07();
 
-    fireEditDragEnd(0, 5);
+    await fireEditDropOnZone(0);
     expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
     expect(cb.onReorder).not.toHaveBeenCalled();
 
-    fireEditDragEnd(2, 5);
+    await fireEditDropOnZone(2);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('p3');
   });
@@ -956,13 +975,13 @@ describe('🔴 EditorView · D6 — 드래그 중 얼굴과 놓은 뒤 복귀 (T
     expect(cb.onPressAddBetween).toHaveBeenCalledTimes(1);
   });
 
-  it('드롭존에 놓아 삭제로 끝나도 원래 얼굴로 돌아온다', () => {
+  it('드롭존에 놓아 삭제로 끝나도 원래 얼굴로 돌아온다', async () => {
     renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
     fireEditDragBegin(1);
     expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
 
-    fireEditDragEnd(1, 3);
+    await fireEditDropOnZone(1);
     expect(screen.queryByTestId(ACTIVE)).toBeNull();
     expect(screen.getByTestId(CTA)).toBeOnTheScreen();
   });
@@ -1114,7 +1133,7 @@ describe('🔴 EditorView · N1 — 시트는 손잡이로만 끌린다: 콘텐�
       renderI07(overrides);
 
       // toBe(false) — prop 을 지우면 undefined = 라이브러리 기본 true 로 되돌아가 스와이프를 시트가 뺏는다.
-      //   짝(기본 셸은 미지정)은 MapSheetShell.bodyScroll SH18c 가 잡는다.
+      //   짝(기본 셸은 미지정)은 MapSheetShell.test SH18c 가 잡는다.
       expect(editorSheetHost().props.enableContentPanningGesture).toBe(false);
     }
   );
@@ -1190,5 +1209,137 @@ describe('🔴 EditorView · N5 — 스크롤 끝의 장소 추가·안내줄이
     ) as { paddingBottom?: unknown } | undefined;
     expect(typeof style?.paddingBottom).toBe('number');
     expect(style?.paddingBottom as number).toBeGreaterThanOrEqual(min);
+  });
+});
+
+describe('🔴 EditorView · Z1 — 삭제 영역은 리스트 밖에서 끌기 중에만 뜬다 (TRIP-1246 A)', () => {
+  it('평소엔 없고, 끌기 시작하면 목록 바깥 형제로 뜨고, 놓으면 사라진다 — 어느 때도 목록 안엔 없다', () => {
+    renderView({ slots: [slot('a'), slot('b')] });
+    expect(screen.queryByTestId('itinerary-edit-dropzone')).toBeNull();
+
+    fireEditDragBegin(0);
+    const zone = screen.getByTestId('itinerary-edit-dropzone');
+    expect(zone).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId(EDIT_LIST)).queryByTestId(
+        'itinerary-edit-dropzone'
+      )
+    ).toBeNull();
+    // 짝 — 영역은 시트 본문 래퍼 안(스크롤 컨테이너와 형제)이라 목록 밖이지만 화면 안이다.
+    expect(
+      within(screen.getByTestId('itinerary-edit-viewport')).getByTestId(
+        'itinerary-edit-dropzone'
+      )
+    ).toBe(zone);
+
+    fireEditDragEnd(0, 0);
+    expect(screen.queryByTestId('itinerary-edit-dropzone')).toBeNull();
+  });
+});
+
+describe('🔴 EditorView · Z2 — 놓은 뒤 칸을 새로 그린다: 칸 키가 끌기 종료 뒤에만 바뀐다 (TRIP-1246 B)', () => {
+  function keysNow(): string[] {
+    const { keyExtractor } = screen.UNSAFE_getByType(DraggableFlatList)
+      .props as { keyExtractor: (item: unknown, index: number) => string };
+    return editListData().map((item, i) => keyExtractor(item, i));
+  }
+
+  it('끌기 중엔 키가 그대로, 놓으면(제자리·재정렬 모두) 전 칸 키가 바뀌고 서로 다르다', () => {
+    renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+    const before = keysNow();
+
+    fireEditDragBegin(1);
+    expect(keysNow()).toEqual(before);
+
+    fireEditDragEnd(1, 1);
+    const after = keysNow();
+    expect(new Set(after).size).toBe(3);
+    after.forEach((key, i) => expect(key).not.toBe(before[i]));
+
+    // 두 번째 끌기도 놓을 때마다 또 바뀐다(한 번만 올리는 구현 차단).
+    fireEditDragBegin(0);
+    expect(keysNow()).toEqual(after);
+    fireEditDragEnd(0, 2);
+    keysNow().forEach((key, i) => expect(key).not.toBe(after[i]));
+  });
+});
+
+describe('🔴 EditorView · Z3 — 끌던 카드가 목록 밖 삭제 영역까지 따라간다: dragItemOverflow (TRIP-1246 A)', () => {
+  it('리스트에 dragItemOverflow 가 켜져 있다(없으면 카드가 목록 경계에 묶여 하단 영역에 못 닿는다 — 실제 효과는 6-b)', () => {
+    renderView({ slots: [slot('a'), slot('b')] });
+
+    expect(screen.getByTestId(EDIT_LIST).props.dragItemOverflow).toBe(true);
+  });
+});
+
+// TRIP-1260 · 직접 짜기(QA 재현 경로)·h12·i07 편집기의 일차 칩 줄. 7일 여행이면 7일차 칩이 화면 밖이라
+// 편집할 수 없었다 — 칩만 가로 스크롤 안에 두고 back 은 고정한다. 칩 testID 는 dayIndex(1부터)다.
+// ⚠️ 칩이 실제로 잘리는지·밀리는지는 6-b.
+describe('🔴 EditorView · 일차 칩 줄 가로 스크롤', () => {
+  const SEVEN_DATES = Array.from(
+    { length: 7 },
+    (_, index) => `2026-06-${String(10 + index).padStart(2, '0')}`
+  );
+
+  function editor(activeDayIndex: number): ReactElement {
+    return (
+      <EditorView
+        center={CENTER}
+        days={buildPlanDayTabs(daysOf(...SEVEN_DATES))}
+        slots={[]}
+        activeDayIndex={activeDayIndex}
+        activeDate={SEVEN_DATES[activeDayIndex]}
+        dateLabel="6월 10일(수)"
+        onBack={jest.fn()}
+        onSelectDay={jest.fn()}
+        onPressTimeChip={jest.fn()}
+        onPressAddPlace={jest.fn()}
+        onPressAddBetween={jest.fn()}
+        onSave={jest.fn()}
+      />
+    );
+  }
+
+  it('칩 7개(itinerary-edit-day-1~7)는 한 가로 ScrollView 안에 있고 back 은 그 밖이다 (AC-1·AC-2)', () => {
+    render(editor(0));
+
+    const scroll = closestScrollView(
+      screen.getByTestId('itinerary-edit-day-1')
+    );
+    expect(scroll?.props.horizontal).toBe(true);
+    for (let dayIndex = 1; dayIndex <= 7; dayIndex += 1) {
+      expect(
+        closestScrollView(screen.getByTestId(`itinerary-edit-day-${dayIndex}`))
+      ).toBe(scroll);
+    }
+    const back = screen.getByTestId('itinerary-edit-back');
+    expect(closestAncestor(back, (node) => node === scroll)).toBeNull();
+  });
+
+  it('선택을 6일차로 바꾸면 그 칩(x=400)이 보이게 0 < x ≤ 400 으로 scrollTo 한다 (AC-3)', () => {
+    // 준비
+    const view = render(editor(0));
+    const chip = screen.getByTestId('itinerary-edit-day-6');
+    const scroll = closestScrollView(chip);
+    expect(scroll).not.toBeNull();
+    const scrollTo = stubScrollTo(scroll!);
+    fireChipLayout(chip, 400);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // 실행 — 활성 일자 index 5(= 6일차)
+    view.rerender(editor(5));
+
+    // 단언
+    expect(scrollTo).toHaveBeenCalled();
+    const target = scrollTo.mock.lastCall?.[0] as { x: number };
+    expect(target.x).toBeGreaterThan(0);
+    expect(target.x).toBeLessThanOrEqual(400);
+  });
+
+  it('하루짜리 일정은 칩을 그리지 않고 back 만 남는다 (AC-4 · 선제 green 회귀 앵커)', () => {
+    renderView({ days: buildPlanDayTabs(daysOf(DATE)) });
+
+    expect(screen.getByTestId('itinerary-edit-back')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^itinerary-edit-day-/)).toHaveLength(0);
   });
 });

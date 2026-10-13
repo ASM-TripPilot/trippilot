@@ -4,11 +4,12 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
+import { Dimensions } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
 
-import { ChevronRightGlyph } from './SlotGlyphs';
+import { ChevronRightGlyph, MemoGlyph, PhotoGlyph } from './SlotGlyphs';
 import { SlotProgressCard } from './SlotProgressCard';
 
 /**
@@ -24,8 +25,8 @@ import { SlotProgressCard } from './SlotProgressCard';
  *            거리 줄은 없다. 수동 [도착]은 `onPressArrive` 를 받을 때만 그린다(TRIP-1021 — TRIP-746 의
  *            "도착 자동 원칙" 삭제를 되돌림. 자동 도착(TRIP-1018)이 보류라 수동이 유일한 도착 경로다).
  *
- * 사진 안내 문구(`photoNotice`)의 표시 여부는 카드가 갖지 않는다 — entities ui 는 useState 금지
- * (`entitiesItinerarySlotStructure` G2). 부모가 문구를 주면 버튼 줄 아래에 그대로 그린다.
+ * 사진 안내 문구(`photoNotice`)의 표시 여부는 카드가 갖지 않는다 — entities ui 는 useState 를 두지 않는다
+ * (옛 가드 `entitiesItinerarySlotStructure` G2 는 TRIP-1145 로 지웠다). 부모가 문구를 주면 버튼 줄 아래에 그대로 그린다.
  *
  * 각 leaf 는 값 하나 — `toHaveTextContent(문자열)` 은 trim·공백 정규화 뒤 **완전 일치**다(02a ★3).
  * 3동작: 준비(슬롯·상태·사진/후기) → 실행(렌더·press) → 단언(leaf 문구·존재/부재·콜백 횟수).
@@ -55,6 +56,20 @@ const id = (role: string) => `execution-live-slot-${role}-${KEY}`;
 const PHOTOS = [{ uri: 'file:///a.jpg' }, { uri: 'file:///b.jpg' }];
 const MEMO = '골목마다 알록달록한 벽화. 전망대에서 인증샷 남겼다.';
 
+// TRIP-1270 — 글자 배율(fontScale). jest 의 RN 목은 기본값이 1 이 아니라 2 라서, 고정하지 않으면 이 파일 전부가
+// 큰 글자 가지를 그린다(02a ★1). 모듈 싱글턴(Dimensions)이므로 고정·복원은 describe 밖 최상위에 둔다.
+const BASE_WINDOW = Dimensions.get('window');
+
+/** 렌더 **전에** 부른다 — useWindowDimensions·PixelRatio.getFontScale 둘 다 이 값을 읽는다(02a ★2). */
+function setFontScale(fontScale: number): void {
+  const window = { ...BASE_WINDOW, fontScale };
+  Dimensions.set({ window, screen: window });
+}
+
+beforeEach(() => setFontScale(1));
+
+afterEach(() => Dimensions.set({ window: BASE_WINDOW, screen: BASE_WINDOW }));
+
 describe('SlotProgressCard · done (AC-3)', () => {
   it('C1 이름·chevron·"09:30"+"방문"·사진 2장·후기를 그린다', () => {
     // TRIP-987: '›' 는 이름 진입 목적지가 있을 때만 그린다 — 목적지를 준 모양으로 고정(C11 이 규칙을 잠근다).
@@ -65,6 +80,7 @@ describe('SlotProgressCard · done (AC-3)', () => {
         state="done"
         photos={PHOTOS}
         memo={MEMO}
+        visitedLabel="09:30"
         onPressName={jest.fn()}
       />
     );
@@ -72,7 +88,7 @@ describe('SlotProgressCard · done (AC-3)', () => {
     expect(screen.getByTestId(`execution-live-slot-${KEY}`)).toBeOnTheScreen();
     expect(screen.getByTestId(id('name'))).toHaveTextContent('감천문화마을');
     expect(screen.getByTestId(id('chevron'))).toBeOnTheScreen();
-    // 시각은 계획 startAt 을 자른 값(재추정 없음). "방문" 은 형제 leaf(중첩 금지, 02a ★4).
+    // 시각은 넘겨받은 실제 방문 시각(TRIP-1220). "방문" 은 형제 leaf(중첩 금지, 02a ★4).
     expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('09:30');
     expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('방문');
     // 사진은 준 만큼, 후기는 원문 그대로.
@@ -90,6 +106,25 @@ describe('SlotProgressCard · done (AC-3)', () => {
     // done 엔 액션·상태 알약이 없다.
     expect(screen.queryByTestId('execution-arrive-complete')).toBeNull();
     expect(screen.queryByTestId(id('status'))).toBeNull();
+  });
+
+  it('C1b TRIP-1220 실제 시각(visitedLabel)이 있으면 그 시각 + "방문", 없으면 계획 시각 + "계획"', () => {
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        visitedLabel="07:04"
+      />
+    );
+
+    expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('07:04');
+    expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('방문');
+
+    rerender(<SlotProgressCard slot={mkSlot()} date={DATE} state="done" />);
+
+    expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('09:30');
+    expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('계획');
   });
 
   it('C2 사진·후기가 둘 다 없으면 사진 행과 후기 박스를 통째로 안 그린다 (G6)', () => {
@@ -247,6 +282,45 @@ describe('SlotProgressCard · active (AC-4)', () => {
     expect(
       screen.getByTestId('execution-arrive-photo-notice')
     ).toHaveTextContent('사진을 기록하지 못했어요. 다시 시도해 주세요');
+  });
+});
+
+describe('SlotProgressCard · 사진 안내의 [설정 열기] (TRIP-1216 d)', () => {
+  const base = {
+    slot: mkSlot({
+      startAt: '13:00:00',
+      endAt: '14:30:00',
+      nameKo: '부산시립미술관',
+    }),
+    date: DATE,
+    state: 'active' as const,
+    onPressPhoto: jest.fn(),
+    photoNotice: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+  };
+
+  it('안내가 있고 onPressPhotoSettings 가 오면 [설정 열기] 가 보이고 누르면 1회 호출된다', () => {
+    const onSettings = jest.fn();
+    render(<SlotProgressCard {...base} onPressPhotoSettings={onSettings} />);
+
+    fireEvent.press(screen.getByTestId('execution-arrive-photo-settings'));
+
+    expect(onSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('onPressPhotoSettings 가 없으면 버튼이 없다', () => {
+    render(<SlotProgressCard {...base} />);
+    expect(screen.queryByTestId('execution-arrive-photo-settings')).toBeNull();
+  });
+
+  it('안내가 비면 onPressPhotoSettings 가 와도 버튼이 없다', () => {
+    render(
+      <SlotProgressCard
+        {...base}
+        photoNotice={null}
+        onPressPhotoSettings={jest.fn()}
+      />
+    );
+    expect(screen.queryByTestId('execution-arrive-photo-settings')).toBeNull();
   });
 });
 
@@ -741,23 +815,564 @@ describe('SlotProgressCard · active 메모 (TRIP-1117)', () => {
     );
   });
 
-  it.each(['done', 'upcoming'] as const)(
-    'C18 %s 카드는 memoNotice 를 받아도 안내 줄을 그리지 않는다',
-    (state) => {
+  // TRIP-1203 — done 은 이제 안내를 그린다(아래 「done [사진]·[메모]」 C23). 여기는 upcoming 만 남는다.
+  it('C18 upcoming 카드는 memoNotice·photoNotice 를 받아도 안내 줄을 그리지 않는다', () => {
+    render(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="upcoming"
+        memoNotice={MEMO_NOTICE}
+        photoNotice="사진을 기록하지 못했어요. 다시 시도해 주세요"
+      />
+    );
+
+    // 짝 앵커 — 카드가 실제로 그려졌다.
+    expect(screen.getByTestId(id('name'))).toHaveTextContent('부산시립미술관');
+    expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
+    expect(screen.queryByTestId(id('done-memo-notice'))).toBeNull();
+    expect(screen.queryByTestId(id('done-photo-notice'))).toBeNull();
+  });
+});
+
+// TRIP-1189 · i01 다음 예정지 [길찾기] (Figma 4799:2653 btn·길찾기, US-ONTRIP-03 · BR-U4-39).
+// 카드는 순수 뷰 — 누가 첫 upcoming 인지·외부 앱 호출은 부모(페이지)가 정한다. 콜백이 없으면 버튼이 없다.
+describe('SlotProgressCard · upcoming 길찾기 (TRIP-1189)', () => {
+  const dirId = id('directions');
+
+  it('D1 onPressDirections 를 주면 "길찾기" 버튼이 있고 누르면 그 콜백이 1번 불린다', () => {
+    const onPressDirections = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={onPressDirections}
+      />
+    );
+
+    expect(screen.getByTestId(dirId)).toHaveTextContent('길찾기');
+    fireEvent.press(screen.getByTestId(dirId));
+    expect(onPressDirections).toHaveBeenCalledTimes(1);
+  });
+
+  it('D2 콜백이 없으면 버튼이 없다 (다음 예정지가 아닌 카드 · 좌표 결측)', () => {
+    render(<SlotProgressCard slot={mkSlot()} date={DATE} state="upcoming" />);
+
+    expect(screen.queryByTestId(dirId)).toBeNull();
+  });
+
+  it('D3 터치 타깃은 hitSlop 으로 44pt 를 채운다 (버튼 높이 < 44)', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={jest.fn()}
+      />
+    );
+
+    const { hitSlop } = screen.getByTestId(dirId).props;
+    expect(hitSlop).toBeTruthy();
+    expect(
+      Object.values(hitSlop as Record<string, number>).every((n) => n >= 6)
+    ).toBe(true);
+  });
+
+  it('D4 [도착]과 공존한다 — 둘 다 자기 콜백만 부른다', () => {
+    const onPressDirections = jest.fn();
+    const onPressArrive = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={onPressDirections}
+        onPressArrive={onPressArrive}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId(dirId));
+    expect(onPressArrive).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId(id('arrive')));
+    expect(onPressDirections).toHaveBeenCalledTimes(1);
+    expect(onPressArrive).toHaveBeenCalledTimes(1);
+  });
+
+  it('D5 directionsNotice 를 주면 안내 한 줄을 그리고, 없으면 안 그린다 (INV-4)', () => {
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={jest.fn()}
+      />
+    );
+    expect(screen.queryByTestId(id('directions-notice'))).toBeNull();
+
+    rerender(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={jest.fn()}
+        directionsNotice="지도를 열 수 없어요. 약 1.2km"
+      />
+    );
+    expect(screen.getByTestId(id('directions-notice'))).toHaveTextContent(
+      '지도를 열 수 없어요. 약 1.2km'
+    );
+  });
+
+  it('D6 done 카드에는 길찾기가 없다', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        onPressDirections={jest.fn()}
+      />
+    );
+    expect(screen.queryByTestId(dirId)).toBeNull();
+  });
+
+  it('D7 active(진행 중) 카드에도 길찾기가 있고 누르면 콜백 1번 · 방문 완료 버튼과 공존한다', () => {
+    const onPressDirections = jest.fn();
+    const onPressComplete = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="active"
+        onPressDirections={onPressDirections}
+        onPressComplete={onPressComplete}
+      />
+    );
+
+    expect(screen.getByTestId(dirId)).toHaveTextContent('길찾기');
+    fireEvent.press(screen.getByTestId(dirId));
+    expect(onPressDirections).toHaveBeenCalledTimes(1);
+    expect(onPressComplete).not.toHaveBeenCalled();
+  });
+
+  it('D8 active 카드도 콜백이 없으면 버튼이 없고, directionsNotice 가 있으면 안내를 그린다', () => {
+    const { rerender } = render(
+      <SlotProgressCard slot={mkSlot()} date={DATE} state="active" />
+    );
+    expect(screen.queryByTestId(dirId)).toBeNull();
+
+    rerender(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="active"
+        directionsNotice="지도를 열 수 없어요."
+      />
+    );
+    expect(screen.getByTestId(id('directions-notice'))).toHaveTextContent(
+      '지도를 열 수 없어요.'
+    );
+  });
+});
+
+// ── TRIP-1203 · 방문 완료(done) 카드의 [사진]·[메모] (US-REC-02 · G-U4-7) ─────────────────
+//
+// done 얼굴이 active 와 같은 prop(onPressPhoto·onPressMemo·photoNotice·onPressPhotoSettings·memoNotice)을
+// 읽는다 — 새 prop 은 없다. 카드가 여러 장이라 testID 에 slotKey 를 붙이고(`…-done-…-{slotKey}`), active 의
+// 고정 testID(`execution-arrive-*`)는 쓰지 않는다(02a ★1). 버튼 모양은 active 와 같은 className·글리프다.
+// 세로 순서: 머리줄 → 사진 행 → 버튼 줄 → 사진 안내 → [설정 열기] → 메모 안내 → 메모 박스.
+//
+// (개념) `findByType(컴포넌트)` = 그 노드 아래에서 해당 컴포넌트로 그려진 노드 하나를 찾는다(글리프 props 확인용).
+
+const DONE_IDS = [
+  'done-photo',
+  'done-memo',
+  'done-photo-notice',
+  'done-photo-settings',
+  'done-memo-notice',
+] as const;
+const DONE_ANY = /^execution-live-slot-done-/;
+const PHOTO_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
+const PHOTO_DENIED = '사진 접근 권한이 없어 사진을 불러올 수 없어요';
+const DONE_MEMO_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+
+describe('SlotProgressCard · done [사진]·[메모] (TRIP-1203)', () => {
+  it('C19 done 이 사진·메모 콜백을 받으면 [사진]·[메모]가 서고 각자 제 콜백만 1회 부른다 — [방문 완료]·[길찾기]·고정 testID 는 없다', () => {
+    // 준비 — 네 콜백을 모두 준다(done 이 앞의 둘만 그리는지 본다).
+    const onPressPhoto = jest.fn();
+    const onPressMemo = jest.fn();
+    const onPressComplete = jest.fn();
+    const onPressDirections = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        visitedLabel="09:30"
+        onPressPhoto={onPressPhoto}
+        onPressMemo={onPressMemo}
+        onPressComplete={onPressComplete}
+        onPressDirections={onPressDirections}
+      />
+    );
+
+    // 단언 — 글자는 완전 일치(글리프는 텍스트를 내지 않는다, 02a §5).
+    expect(screen.getByTestId(id('done-photo'))).toHaveTextContent('사진');
+    expect(screen.getByTestId(id('done-memo'))).toHaveTextContent('메모');
+
+    // 실행·단언 — [사진]
+    fireEvent.press(screen.getByTestId(id('done-photo')));
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+    expect(onPressMemo).not.toHaveBeenCalled();
+
+    // 실행·단언 — [메모]
+    fireEvent.press(screen.getByTestId(id('done-memo')));
+    expect(onPressMemo).toHaveBeenCalledTimes(1);
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+
+    // 부재 — 완료 카드엔 [방문 완료]·[길찾기]가 없고, 관람 중 카드의 고정 testID 도 쓰지 않는다(02a ★1·★2).
+    expect(screen.queryByTestId('execution-arrive-complete')).toBeNull();
+    expect(screen.queryByTestId(id('directions'))).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
+    expect(onPressComplete).not.toHaveBeenCalled();
+    expect(onPressDirections).not.toHaveBeenCalled();
+  });
+
+  it('C20 done [사진]·[메모]는 관람 중 카드의 버튼과 className 이 같고, 글리프는 PhotoGlyph·MemoGlyph 16 이다', () => {
+    // 준비 — 같은 슬롯을 관람 중으로 먼저 그려 그 버튼 className 을 읽는다(리터럴 복사 금지, 02a ★15).
+    const activeView = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="active"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+      />
+    );
+    const activePhotoClass = screen.getByTestId('execution-arrive-photo').props
+      .className as string;
+    const activeMemoClass = screen.getByTestId('execution-arrive-memo').props
+      .className as string;
+    activeView.unmount();
+    // 앵커 — 빈 문자열끼리 같아지는 공허 통과 차단.
+    expect(activePhotoClass).toContain('rounded-[10px]');
+
+    // 실행 — 같은 슬롯을 완료로 그린다.
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+      />
+    );
+
+    // 단언
+    const photo = screen.getByTestId(id('done-photo'));
+    const memo = screen.getByTestId(id('done-memo'));
+    expect(photo.props.className).toBe(activePhotoClass);
+    expect(memo.props.className).toBe(activeMemoClass);
+    expect(photo.findByType(PhotoGlyph).props.size).toBe(16);
+    expect(memo.findByType(MemoGlyph).props.size).toBe(16);
+  });
+
+  it('C21 done 이 사진·메모 콜백·안내를 안 받으면 done 버튼·안내가 하나도 없다 (TRIP-939 무회귀)', () => {
+    render(<SlotProgressCard slot={mkSlot()} date={DATE} state="done" />);
+
+    // 짝 앵커 — 카드는 그려졌다.
+    expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('09:30');
+    for (const role of DONE_IDS) {
+      expect(screen.queryByTestId(id(role))).toBeNull();
+    }
+  });
+
+  it('C22 done 이 photoNotice 를 받으면 done 안내 한 줄이, onPressPhotoSettings 까지 받으면 [설정 열기]가 서고 누르면 1회 불린다', () => {
+    // 준비·실행
+    const onPressPhotoSettings = jest.fn();
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        onPressPhoto={jest.fn()}
+        photoNotice={PHOTO_DENIED}
+        onPressPhotoSettings={onPressPhotoSettings}
+      />
+    );
+
+    // 단언 — 문구 완전 일치, 고정 testID 는 아니다.
+    expect(screen.getByTestId(id('done-photo-notice'))).toHaveTextContent(
+      PHOTO_DENIED
+    );
+    expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-photo-settings')).toBeNull();
+    const settings = screen.getByTestId(id('done-photo-settings'));
+    expect(settings).toHaveTextContent('설정 열기');
+    fireEvent.press(settings);
+    expect(onPressPhotoSettings).toHaveBeenCalledTimes(1);
+
+    // 실행·단언 — 안내가 비면 [설정 열기]도 없다.
+    rerender(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        onPressPhoto={jest.fn()}
+        photoNotice={null}
+        onPressPhotoSettings={onPressPhotoSettings}
+      />
+    );
+    expect(screen.getByTestId(id('done-photo'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(id('done-photo-notice'))).toBeNull();
+    expect(screen.queryByTestId(id('done-photo-settings'))).toBeNull();
+  });
+
+  it('C23 done 메모 안내는 그 문구 그대로 한 줄이고, 순서는 사진 행 → 버튼 → 사진 안내 → [설정 열기] → 메모 안내 → 메모 박스다', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        photos={PHOTOS}
+        memo={MEMO}
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+        photoNotice={PHOTO_FAILED}
+        onPressPhotoSettings={jest.fn()}
+        memoNotice={DONE_MEMO_FAILED}
+      />
+    );
+
+    expect(screen.getByTestId(id('done-memo-notice'))).toHaveTextContent(
+      DONE_MEMO_FAILED
+    );
+    expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
+
+    const order = testIdOrder();
+    const at = (testID: string) => order.indexOf(testID);
+    // 앵커 — 이미 있는 두 요소(사진 행 < 메모 박스)가 위→아래로 나온다(추출기 자가검사).
+    expect(at(id('photos'))).toBeGreaterThanOrEqual(0);
+    expect(at(id('memo'))).toBeGreaterThan(at(id('photos')));
+    expect(at(id('done-photo'))).toBeGreaterThan(at(id('photos')));
+    expect(at(id('done-memo'))).toBeGreaterThan(at(id('done-photo')));
+    expect(at(id('done-photo-notice'))).toBeGreaterThan(at(id('done-memo')));
+    expect(at(id('done-photo-settings'))).toBeGreaterThan(
+      at(id('done-photo-notice'))
+    );
+    expect(at(id('done-memo-notice'))).toBeGreaterThan(
+      at(id('done-photo-settings'))
+    );
+    expect(at(id('memo'))).toBeGreaterThan(at(id('done-memo-notice')));
+  });
+
+  it('C24 upcoming 은 사진·메모 콜백·안내를 받아도 done 버튼·안내도 고정 버튼도 그리지 않는다 (누설 앵커)', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot({ startAt: '15:00:00' })}
+        date={DATE}
+        state="upcoming"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+        photoNotice={PHOTO_FAILED}
+        onPressPhotoSettings={jest.fn()}
+        memoNotice={DONE_MEMO_FAILED}
+      />
+    );
+
+    // 짝 앵커 — 예정 얼굴이다.
+    expect(screen.getByTestId(id('time'))).toHaveTextContent('15:00 도착 예정');
+    expect(screen.queryAllByTestId(DONE_ANY)).toHaveLength(0);
+    expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
+  });
+
+  it('C25 active 는 콜백·안내를 다 받아도 고정 testID 만 쓰고 done testID 는 하나도 그리지 않는다 (누설 앵커)', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot({ startAt: '13:00:00' })}
+        date={DATE}
+        state="active"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+        photoNotice={PHOTO_FAILED}
+        onPressPhotoSettings={jest.fn()}
+        memoNotice={DONE_MEMO_FAILED}
+      />
+    );
+
+    expect(screen.getByTestId('execution-arrive-photo')).toBeOnTheScreen();
+    expect(screen.getByTestId('execution-arrive-memo')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('execution-arrive-photo-notice')
+    ).toHaveTextContent(PHOTO_FAILED);
+    expect(
+      screen.getByTestId('execution-arrive-memo-notice')
+    ).toHaveTextContent(DONE_MEMO_FAILED);
+    expect(screen.queryAllByTestId(DONE_ANY)).toHaveLength(0);
+  });
+});
+
+// ── TRIP-1270 · 큰 글자 대응 (AC-4 · AC-5 · AC-7) ─────────────────────────────
+//
+// 머리 줄·아래 줄에는 testID 가 없다(신규 금지). 대신 "두 testID 를 함께 품은 가장 안쪽 호스트 View" 로 정의한다 —
+// 합성 노드(css-interop·Pressable)가 끼어 부모 단계 수가 구현마다 다르므로 `.parent.parent` 로 고정하지 않는다(02a ★3).
+// 이름 testID 는 onPressName 이 없을 때만 Text 에 붙으므로 여기 카드는 onPressName 을 주지 않는다(02a ★4).
+
+function commonHostAncestor(
+  a: ReactTestInstance,
+  b: ReactTestInstance
+): ReactTestInstance {
+  for (let up = a.parent; up; up = up.parent) {
+    if (typeof up.type === 'string' && up.findAll((n) => n === b).length > 0) {
+      return up;
+    }
+  }
+  throw new Error('두 노드를 함께 품은 호스트 조상이 없다');
+}
+
+/** done 은 이름 + 방문 시각, upcoming 은 이름 + 예정 배지가 한 머리 줄을 이룬다. */
+const HEAD_CASES = [
+  { state: 'done', partner: 'visit-time', partnerText: '09:30' },
+  { state: 'upcoming', partner: 'status', partnerText: '예정' },
+] as const;
+
+function renderHead(state: 'done' | 'upcoming') {
+  return render(
+    <SlotProgressCard
+      slot={mkSlot()}
+      date={DATE}
+      state={state}
+      visitedLabel="09:30"
+    />
+  );
+}
+
+describe('SlotProgressCard · 큰 글자 — 머리 줄 배율 분기 (TRIP-1270 AC-5)', () => {
+  it.each([1, 1.49])(
+    '배율 %s(보통 글자)에서는 done·upcoming 머리 줄이 지금 그대로 가로 한 줄이고 이름은 한 줄 말줄임이다',
+    (fontScale) => {
+      for (const { state, partner } of HEAD_CASES) {
+        // 준비 — 배율은 렌더 전에.
+        setFontScale(fontScale);
+        // 실행
+        const { unmount } = renderHead(state);
+        const name = screen.getByTestId(id('name'));
+        const head = commonHostAncestor(name, screen.getByTestId(id(partner)));
+
+        // 단언 — className 완전 일치: 기본 크기에서는 한 글자도 바뀌면 안 된다(Figma 정합 무회귀).
+        expect({ state, className: head.props.className }).toEqual({
+          state,
+          className: 'flex-row items-center justify-between gap-sm',
+        });
+        expect(name.props.numberOfLines).toBe(1);
+        expect(classTokens(name)).toContain('shrink');
+        unmount();
+      }
+    }
+  );
+
+  it.each([1.5, 3.571])(
+    '배율 %s(큰 글자)에서는 머리 줄이 세로로 쌓이고(이름이 위) 이름 줄 제한이 풀리며, testID·글자는 그대로다',
+    (fontScale) => {
+      for (const { state, partner, partnerText } of HEAD_CASES) {
+        // 준비
+        setFontScale(fontScale);
+        // 실행
+        const { unmount } = renderHead(state);
+        const name = screen.getByTestId(id('name'));
+        const head = commonHostAncestor(name, screen.getByTestId(id(partner)));
+
+        // 단언 ① 가로 배치가 아니다 — RN 기본 방향은 세로(column)라 flex-row 가 없으면 쌓인다.
+        expect({ state, tokens: classTokens(head) }).toEqual({
+          state,
+          tokens: expect.not.arrayContaining(['flex-row']),
+        });
+        expect(classTokens(head)).not.toContain('flex-row-reverse');
+        // 단언 ② 이름 줄 제한 해제 — undefined·0 모두 "제한 없음"이라 거짓 값으로 본다(02a ★7).
+        expect(Boolean(name.props.numberOfLines)).toBe(false);
+        // 단언 ③ 세로 배치에서 트리 순서 = 위→아래. 이름이 시각·배지보다 먼저다.
+        expect(
+          screen
+            .queryAllByTestId(
+              new RegExp(`^execution-live-slot-(name|${partner})-`)
+            )
+            .map((el) => el.props.testID)
+        ).toEqual([id('name'), id(partner)]);
+        // 단언 ④ 형제 테스트(LiveHubView 등)가 기대는 testID·글자 보존.
+        expect(name).toHaveTextContent('감천문화마을');
+        expect(screen.getByTestId(id(partner))).toHaveTextContent(partnerText);
+        if (state === 'done') {
+          expect(screen.getByTestId(id('visit-label'))).toHaveTextContent(
+            '방문'
+          );
+        }
+        unmount();
+      }
+    }
+  );
+});
+
+describe('SlotProgressCard · 큰 글자 — upcoming 아래 줄 줄바꿈 (TRIP-1270 AC-4)', () => {
+  it.each([1, 3.571])(
+    '배율 %s 에서도 비활성 아이콘과 [길찾기]·[도착]이 있는 아래 줄은 넘치면 꺾인다(flex-wrap, 배율 무관)',
+    (fontScale) => {
+      // 준비
+      setFontScale(fontScale);
       render(
         <SlotProgressCard
-          slot={activeSlot}
+          slot={mkSlot()}
           date={DATE}
-          state={state}
-          memoNotice={MEMO_NOTICE}
+          state="upcoming"
+          onPressArrive={jest.fn()}
+          onPressDirections={jest.fn()}
         />
       );
 
-      // 짝 앵커 — 카드가 실제로 그려졌다.
-      expect(screen.getByTestId(id('name'))).toHaveTextContent(
-        '부산시립미술관'
+      // 실행 — [도착]과 비활성 아이콘을 함께 품은 가장 안쪽 줄.
+      const row = commonHostAncestor(
+        screen.getByTestId(id('arrive')),
+        screen.getByTestId(id('disabled-check'))
       );
-      expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
+
+      // 단언 — 'flex-row' 는 그 가로 줄을 집었다는 앵커.
+      expect(classTokens(row)).toEqual(
+        expect.arrayContaining(['flex-row', 'flex-wrap'])
+      );
     }
   );
+});
+
+describe('SlotProgressCard · 큰 글자 — INV-3 (TRIP-1270 AC-7)', () => {
+  it('배율 3.571 에서도 세 상태 어디에도 소요시간(N분·N시간·소요)이 렌더되지 않는다', () => {
+    // C9 와 같은 정규식·픽스처 — 영업시간은 HH:mm 범위만("24시간" 오탐 회피, C9 주석 참고).
+    const DURATION = /(\d+\s*분|\d+\s*시간|소요)/;
+
+    for (const state of ['done', 'active', 'upcoming'] as const) {
+      // 준비
+      setFontScale(3.571);
+      // 실행
+      const { toJSON, unmount } = render(
+        <SlotProgressCard
+          slot={mkSlot({
+            openingHours: '11:00 - 22:00',
+            distanceRange: '약 1.2km',
+          })}
+          date={DATE}
+          state={state}
+          photos={PHOTOS}
+          memo="좋았다"
+          visitedLabel="09:30"
+        />
+      );
+      const text = JSON.stringify(toJSON());
+
+      // 단언 — 짝: 렌더가 비지 않았다.
+      expect(text).toContain('감천문화마을');
+      expect(DURATION.test(text)).toBe(false);
+      unmount();
+    }
+  });
 });

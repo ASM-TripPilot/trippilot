@@ -13,6 +13,8 @@ POI 정본은 backend C7(place-data) 단일 소유(INV-1) — 본 어댑터는 S
 원문 문자열(structured 는 백엔드 후속)이라 수집 게이트와 같은 파서
 (`sourcing.mapping.parse_open_hours`)를 재사용한다 — 파싱 불가는 open_hours=()
 로 두고 지어내지 않는다(풀 빌더 ③은 정보 없음을 통과시키고 ⑤가 하위 정렬).
+원문 칸에는 휴무 원문도 함께 실려 오므로(TRIP-1226) 구분자로 갈라 수집 때와 같은
+두 입력으로 부른다(`parse_opening_hours_raw`) — 영업 원문만 넘기면 휴무일에도 영업이다.
 
 한 행이 매핑에 실패하면 스킵하되(풀 전체를 잃지 않는다) **누락을 값으로도 낸다**
 (TRIP-537, `lookup_by_ids`): 로그만 남기면 호출자는 N건을 물어 M건을 받고도 왜
@@ -27,6 +29,7 @@ HTTP 실패는 예외로 올린다 — 빈 풀로 수렴시키면 "후보 없음
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import urllib.error
@@ -36,7 +39,7 @@ from collections.abc import Mapping
 
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.poi_curation.sourcing.mapping import parse_open_hours
+from trippilot.poi_curation.sourcing.mapping import parse_opening_hours_raw
 from trippilot.ports.http_json_port import HttpJson
 from trippilot.ports.poi_db_port import PoiLookup, PoiMiss
 
@@ -49,11 +52,16 @@ _BATCH_PATH = "/internal/pois/batch-get"
 # 도달 가능해졌다(70 슬롯 + 차선책 140). 부가 정보가 본체를 깨면 안 되므로(INV-4) 여기서 나눈다.
 _BATCH_MAX = 200
 _TOKEN_HEADER = "X-Service-Token"
-# 백엔드 PoiSource(KAKAO_LOCAL/TOURAPI/MANUAL) → AI PoiSource.
-# MANUAL=시드 입력분, 나머지 벤더 수집분은 PLACES_API. WEB 은 confidence 필수라
-# (백엔드가 안 보내는 값) 매핑 대상이 아니다 — 지어내지 않는다.
+# 백엔드 PoiSource(Poi.kt) → AI PoiSource. **값마다 명시한다** — 모르는 값은 `_source_of` 가
+# 경고로 드러낸다. MANUAL=시드 입력분, 나머지는 벤더·공공데이터 정형 수집분이라 PLACES_API.
+# WEB 은 confidence 필수라(백엔드가 안 보내는 값) 매핑 대상이 아니다 — 지어내지 않는다.
 # HttpJson 은 ports 로 올라갔다(소비자 둘) — 이 이름으로도 계속 쓰인다.
-_SOURCE_MAP = {"MANUAL": PoiSource.SEED}
+_SOURCE_MAP: Mapping[str, PoiSource] = {
+    "KAKAO_LOCAL": PoiSource.PLACES_API,
+    "TOURAPI": PoiSource.PLACES_API,
+    "LOCALDATA": PoiSource.PLACES_API,
+    "MANUAL": PoiSource.SEED,
+}
 
 
 class BackendPoiDbError(RuntimeError):
@@ -94,6 +102,30 @@ def _enum_or_raise(enum_cls: type, value: object, field: str):
         return enum_cls(value)
     except ValueError:
         raise RowMappingError(field, f"모르는 값: {value!r}") from None
+
+
+def _source_of(value: object) -> PoiSource:
+    """백엔드 출처 → AI 출처. 모르는 값은 행을 살려 PLACES_API 로 읽되 **경고로 드러낸다**.
+
+    카테고리처럼 실패로 올리지 않는 이유: 출처는 지금 후보 판정에 쓰이지 않아(WEB 의 confidence
+    검증뿐) 행을 버리면 그 출처의 POI 가 후보에서 통째로 사라지는 손해만 남는다. 다만 조용히
+    흡수하면 계약 드리프트가 정상 동작으로 위장된다(anti-patterns — 미지 enum 을 기본값으로
+    흡수 금지) — 새 출처가 WEB 처럼 confidence 를 요구하는 성격인지는 사람이 정해야 한다.
+    """
+    known = _SOURCE_MAP.get(value) if isinstance(value, str) else None
+    if known is None:
+        _warn_unknown_source(repr(value))
+        return PoiSource.PLACES_API
+    return known
+
+
+@functools.cache
+def _warn_unknown_source(value: str) -> None:
+    """값마다 첫 1회만 — 같은 출처의 행은 한 응답에 수백 건씩 오므로 이후는 캐시가 삼킨다."""
+    logger.warning(
+        "모르는 POI 출처 %s — PLACES_API 로 읽는다. 백엔드 PoiSource 가 늘었으면 _SOURCE_MAP 에 뜻을 "
+        "정할 것 (같은 값의 이후 행은 로그 생략)", value,
+    )
 
 
 class UrllibJsonClient:
@@ -217,12 +249,12 @@ class BackendPoiDb:
             name=row["name_ko"],
             category=_enum_or_raise(PoiCategory, row.get("category"), "category"),
             coord=GeoPoint(float(row["lat"]), float(row["lng"])),
-            open_hours=parse_open_hours(row.get("opening_hours"), None),
+            open_hours=parse_opening_hours_raw(row.get("opening_hours")),
             avg_cost=None,   # 백엔드 미제공 → 예산 필터 통과 (풀 빌더 ② 계약)
             rating=None,     # 별점 소스 없음 — 지어내지 않는다 (인기는 saved_count)
             saved_count=int(row.get("saved_count") or 0),
             quality=_enum_or_raise(DataQuality, row.get("data_quality"), "data_quality"),
-            source=_SOURCE_MAP.get(row["source"], PoiSource.PLACES_API),
+            source=_source_of(row["source"]),
             confidence=None,
             # 백엔드 `poi.tags text[]` — 내부 read DTO 가 2026-09-16 에 열렸다
             # (`PoiReadResponse.tags`·`sourceRef`). **값이 실제로 들어온다.**

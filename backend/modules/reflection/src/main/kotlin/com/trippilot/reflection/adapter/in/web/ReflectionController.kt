@@ -3,8 +3,6 @@ package com.trippilot.reflection.adapter.`in`.web
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.reflection.application.ReflectionService
 import com.trippilot.reflection.domain.Reflection
-import jakarta.validation.constraints.NotBlank
-import jakarta.validation.constraints.Size
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -42,7 +40,9 @@ class ReflectionController(private val service: ReflectionService) {
         @PathVariable tripId: UUID,
         @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) dayDate: LocalDate,
         @RequestBody request: EditReflectionRequest,
-    ): ReflectionResponse = ReflectionResponse.from(service.edit(principal.accountId(), tripId, dayDate, request.card))
+    ): ReflectionResponse = ReflectionResponse.from(
+        service.edit(principal.accountId(), tripId, dayDate, request.card, request.mood, request.shortMemo),
+    )
 }
 
 /** 토큰 sub → 계정 id. UUID 가 아니면 인증 실패로 다룬다(형식 오류를 500 으로 흘리지 않는다). */
@@ -55,9 +55,15 @@ private fun Principal.accountId(): UUID =
  *
  * [card] 는 카드 원문(JSON 문자열)이다. 상한은 문장 시절 4000자보다 넉넉히 잡는다 — 장면이 여럿이면
  * 원문이 그만큼 길어진다. 형식·`cover.title` 검사는 [ReflectionCardCodec] 이 400 으로 낸다.
+ *
+ * **셋 다 선택이고 하나는 있어야 한다**(TRIP-828). [mood]·[shortMemo] 는 카드와 별개의 입력이라
+ * 그것만 보내는 요청이 카드를 건드리지 않는다. null 은 "그대로", 빈 문자열은 "지운다" — 검사는
+ * `Reflection.note` 가 한다(이 컨트롤러는 `@Valid` 를 걸지 않아 애너테이션이 실행되지 않는다).
  */
 data class EditReflectionRequest(
-    @field:NotBlank @field:Size(max = 20000) val card: String,
+    val card: String? = null,
+    val mood: String? = null,
+    val shortMemo: String? = null,
 )
 
 data class ReflectionListResponse(val items: List<ReflectionResponse>)
@@ -108,6 +114,9 @@ data class ReflectionResponse(
     val stats: ReflectionStatsResponse,
     val generatedAt: Instant,
     val updatedAt: Instant,
+    /** 그날의 기분 코드·한 줄 메모. 남기지 않았으면 null 이다(TRIP-828). */
+    val mood: String?,
+    val shortMemo: String?,
 ) {
     companion object {
         fun from(r: Reflection) = ReflectionResponse(
@@ -116,7 +125,7 @@ data class ReflectionResponse(
             ReflectionStatsResponse(
                 r.stats.visitCount, r.stats.distanceKm, r.stats.distanceSource.name, r.stats.photoCount,
             ),
-            r.generatedAt, r.updatedAt,
+            r.generatedAt, r.updatedAt, r.mood, r.shortMemo,
         )
     }
 }

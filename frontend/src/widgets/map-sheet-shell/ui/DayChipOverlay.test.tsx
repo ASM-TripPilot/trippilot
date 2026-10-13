@@ -1,4 +1,16 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
+
+import {
+  closestAncestor,
+  closestScrollView,
+  fireChipLayout,
+  stubScrollTo,
+} from '@/test-support/sheetTree';
 
 import { DayChipOverlay } from './DayChipOverlay';
 
@@ -60,5 +72,63 @@ describe('🔴 DayChipOverlay · TRIP-991 접근성', () => {
     ).toHaveProp('testID', 'sheet-daychip-1');
     expect(screen.getByRole('button', { name: '1일차' })).not.toBeSelected();
     expect(screen.getByRole('button', { name: '3일차' })).not.toBeSelected();
+  });
+});
+
+// TRIP-1260 · 7일 여행에서 칩 줄이 잘리지 않게 칩만 가로 스크롤 안에 두고 back 은 고정한다.
+// 셸 기본 오버레이(h08·h11·h14·h16)와 j01 기록이 이 컴포넌트 하나를 쓴다.
+// ⚠️ 칩이 실제로 잘리는지·밀리는지는 6-b(jest 는 레이아웃을 계산하지 않는다).
+describe('🔴 DayChipOverlay · 칩 줄 가로 스크롤', () => {
+  const SEVEN_DAYS = Array.from({ length: 7 }, (_, index) => ({
+    label: `${index + 1}일차`,
+  }));
+
+  function overlay(selectedIndex: number) {
+    return (
+      <DayChipOverlay
+        days={SEVEN_DAYS}
+        selectedIndex={selectedIndex}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+      />
+    );
+  }
+
+  it('칩 7개는 한 가로 ScrollView 안에 있고, back 은 그 밖이며, 둘 다 sheet-daychip-root 안이다 (AC-1·AC-2·AC-4)', () => {
+    render(overlay(0));
+
+    const scroll = closestScrollView(screen.getByTestId('sheet-daychip-0'));
+    expect(scroll?.props.horizontal).toBe(true);
+    for (let index = 0; index < 7; index += 1) {
+      expect(
+        closestScrollView(screen.getByTestId(`sheet-daychip-${index}`))
+      ).toBe(scroll);
+    }
+    const back = screen.getByTestId('sheet-daychip-back');
+    expect(closestAncestor(back, (node) => node === scroll)).toBeNull();
+    // 짝 — j01 테스트가 sheet-daychip-root 를 "칩 줄 전체"로 읽는다(back·칩을 계속 품어야 한다).
+    const root = screen.getByTestId('sheet-daychip-root');
+    expect(within(root).getByTestId('sheet-daychip-back')).toBe(back);
+    expect(within(root).getByTestId('sheet-daychip-6')).toBeOnTheScreen();
+  });
+
+  it('선택을 6일차로 바꾸면 그 칩(x=400)이 보이게 0 < x ≤ 400 으로 scrollTo 한다 (AC-3)', () => {
+    // 준비
+    const view = render(overlay(0));
+    const chip = screen.getByTestId('sheet-daychip-5');
+    const scroll = closestScrollView(chip);
+    expect(scroll).not.toBeNull();
+    const scrollTo = stubScrollTo(scroll!);
+    fireChipLayout(chip, 400);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // 실행
+    view.rerender(overlay(5));
+
+    // 단언
+    expect(scrollTo).toHaveBeenCalled();
+    const target = scrollTo.mock.lastCall?.[0] as { x: number };
+    expect(target.x).toBeGreaterThan(0);
+    expect(target.x).toBeLessThanOrEqual(400);
   });
 });

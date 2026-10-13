@@ -85,6 +85,31 @@ def test_shipped_solver_directives_are_marked_unwired() -> None:
             assert spec.unwired, f"{spec.key}: SOLVER 인데 unwired 표시가 없다"
 
 
+def test_shipped_add_directives_are_one_place() -> None:
+    """추가형(ADD_*)은 `cardinality: ONE` — 하루 전환과 같은 기구를 타면 안 된다.
+
+    2026-10-10 멘토 실측: "카페 가고 싶다"가 풀의 카페 전원 가산으로 돌아 남은 하루가
+    카페로 덮였다. 범위 축이 없어서였다 — 사전에서 빠지면 그 사고가 그대로 돌아온다.
+    """
+    by_key = {s.key: s for s in load_directive_file(_DICT, yaml.safe_load)}
+    adds = [k for k in by_key if k.startswith("ADD_")]
+    assert {"ADD_FOOD", "ADD_CAFE"} <= set(adds)
+    for key in adds:  # 새 ADD_* 가 조용히 DAY 로 돌아가지 않게 — 이름으로 전수
+        assert by_key[key].cardinality == "ONE", f"{key}: 한 곳 추가가 아니라 하루 전환으로 읽힌다"
+    assert by_key["INDOOR"].cardinality == "DAY"  # 하루 전환은 그대로
+
+
+def test_one_requires_exactly_one_prefer_category() -> None:
+    """ONE 은 '이 카테고리 한 곳' — 선호가 둘이면 어느 한 곳인지 정의가 없다."""
+    _spec("A", enforced_by="PROMPT", prefer_categories=("CAFE",), cardinality="ONE")
+    with pytest.raises(ValueError, match="정확히 1종"):
+        _spec("B", enforced_by="PROMPT", prefer_categories=("CAFE", "FOOD"), cardinality="ONE")
+    with pytest.raises(ValueError, match="정확히 1종"):
+        _spec("C", enforced_by="PROMPT", avoid_categories=("ACTIVITY",), cardinality="ONE")
+    with pytest.raises(ValueError, match="cardinality"):
+        _spec("D", enforced_by="PROMPT", prefer_categories=("CAFE",), cardinality="SOME")
+
+
 # ── 로더 위생 ──────────────────────────────────────────────────────────
 
 

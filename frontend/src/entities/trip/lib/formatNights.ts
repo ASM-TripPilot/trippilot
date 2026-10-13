@@ -7,6 +7,9 @@
 
 const MS_PER_DAY = 86_400_000;
 
+/** 0박(같은 날) 라벨 — 'N박 M일' 규칙의 예외 하나. */
+const DAY_TRIP = '당일치기';
+
 /** 'YYYY-MM-DD' → UTC 자정 ms. 형식이 아니면 NaN(formatNightsLabel 이 빈 문자열로 갈라낸다). */
 function utcDayTime(date: string): number {
   const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
@@ -28,22 +31,27 @@ export function formatNightsLabel(startDate: string, endDate: string): string {
   if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '';
 
   const nights = Math.round((end - start) / MS_PER_DAY);
-  return `${nights}박 ${nights + 1}일`;
+  return nightsCountLabel(nights);
 }
 
-/** 'N박 M일'. nights<=0(같은날·역전)이거나 null 이면 **null**(가짜 "0박" 금지 — formatNightsLabel 의 ''과 다르다). */
+/** 'N박 M일'. 같은 날(0박)은 '당일치기'. 역전(nights<0)이거나 null 이면 **null**(가짜 라벨 금지 — formatNightsLabel 의 ''과 다르다). */
 export function nightsLabel(
   start: string | null,
   end: string | null
 ): string | null {
   if (start === null || end === null) return null;
   const nights = epochDay(end) - epochDay(start);
-  if (nights <= 0) return null;
-  return `${nights}박 ${nights + 1}일`;
+  if (nights < 0) return null;
+  return nightsCountLabel(nights);
 }
 
-/** 박수(정수) → 'N박 M일'(M=N+1). tripSummary 의 인라인 박수를 export 함수화해 이관한 것 —
- *  출력은 summaryPeriod(`… · 3박 4일`)를 통해서만 관찰된다(무수정 tripSummary.test 가 transitively 잠금). */
+/** 박수(정수) → 'N박 M일'(M=N+1). 0박은 '당일치기'(TRIP-FE 0박 — 하루짜리 여행은 합법이다).
+ *  tripSummary 의 인라인 박수를 export 함수화해 이관한 것 — 출력은 summaryPeriod 로도 관찰된다. */
 export function nightsCountLabel(nights: number): string {
-  return `${nights}박 ${nights + 1}일`;
+  return nights === 0 ? DAY_TRIP : `${nights}박 ${nights + 1}일`;
+}
+
+/** 박수만의 라벨 — 'N박'. 0박은 '당일치기'. 여행지 박수 스테퍼·여행지 요약이 쓴다(일수 M 없는 자리). */
+export function nightsOnlyLabel(nights: number): string {
+  return nights === 0 ? DAY_TRIP : `${nights}박`;
 }

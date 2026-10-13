@@ -287,7 +287,7 @@ export function BottomTabBar({
       // 삼키지 않고(투명 여백 아래 스크롤·탭이 그대로 통과) 자식(알약)만 터치를 받는다
       // (code-critic N1 — RN 순수 View는 투명해도 터치를 흡수한다).
       pointerEvents="box-none"
-      className="absolute inset-x-0 bottom-0 h-[96px] px-[30px] pt-[26px]"
+      className="absolute inset-x-0 bottom-0 min-h-[96px] px-[30px] pt-[26px]"
     >
       {/* 그림자 래퍼 — BlurView의 overflow-hidden 바깥에 둬야 그림자가 안 잘린다. */}
       <View className="rounded-pill" style={PILL_SHADOW_STYLE}>
@@ -322,6 +322,8 @@ export function BottomTabBar({
                   </View>
                 )}
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                   className={
                     selected
                       ? 'font-noto-bold text-micro font-bold text-primary'

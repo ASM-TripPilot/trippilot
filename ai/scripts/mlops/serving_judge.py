@@ -185,8 +185,12 @@ def ledger_row(week_end: dt.date, m: Measured, transport: str, v: Verdict) -> st
     return "| " + " | ".join(c.replace("|", "/") for c in cells) + " |"
 
 
-# 스위치는 차트의 `reminderLlm.transport`(PR #657) — 인클러스터 서빙 블록의 한 줄이다. 블록 안의
-# `transport:` 만 잡는다(다른 블록에 같은 이름의 키가 생겨도 안 건드린다).
+# 스위치는 차트의 `reminderLlm.transport` 였다 — 블록 안의 `transport:` 만 잡는다(다른 블록에
+# 같은 이름의 키가 생겨도 안 건드린다).
+#
+# **2026-10-01: 그 블록은 철회됐다**(인클러스터 GPU 서빙, `서빙-의사결정-기록.md` §10). 읽기는
+# 기본값 bedrock 으로 수렴하므로 판정기는 그대로 돌고, 뒤집기만 막힌다 — 지금은 EKS 게이트가
+# 안 열려 있어(`eks_$/건` 미측정) SWITCH 판정 자체가 나오지 않으니 도달하지 않는 경로다.
 _TRANSPORT = re.compile(r"^(reminderLlm:\n(?:[ \t]+.*\n)*?[ \t]+transport:[ \t]*)(\w+)", re.M)
 
 
@@ -199,7 +203,11 @@ def read_transport(values_yaml: Path) -> str:
 def flip_transport(values_yaml: Path, to: str) -> None:
     text, n = _TRANSPORT.subn(rf"\g<1>{to}", values_yaml.read_text())
     if n != 1:
-        raise ValueError(f"{values_yaml}: reminderLlm.transport 줄이 {n}개 — #657 이 아직 안 들어왔거나 블록이 바뀌었다")
+        raise ValueError(
+            f"{values_yaml}: reminderLlm.transport 줄이 {n}개 — 인클러스터 서빙은 2026-10-01 에 "
+            "철회됐다(서빙-의사결정-기록.md §10). 전환은 값 한 줄이 아니라 매니페스트를 "
+            "다시 쓰는 일이다 — 조용히 줄을 만들지 않는다"
+        )
     values_yaml.write_text(text)
 
 
@@ -297,8 +305,16 @@ def main(argv: list[str] | None = None) -> int:
 
     row = ledger_row(dt.date.today(), m, transport, v)
     args.ledger.write_text(text.rstrip("\n") + "\n" + row + "\n")
-    if v.action == "open_pr":
-        flip_transport(args.values, "local" if v.verdict == SWITCH_TO_LOCAL else "bedrock")
+    # 전환 방향에 따라 PR 의 성격이 다르다(2026-10-01 인클러스터 서빙 철회 이후).
+    #   bedrock 복귀 → 차트 값 한 줄. 여기서 뒤집어 PR 에 싣는다.
+    #   local 전환  → **값 한 줄이 아니다.** 매니페스트를 다시 써야 하므로 PR 은 착수
+    #                 제안이고, 뒤집을 줄이 애초에 없다. 예전 코드는 여기서도
+    #                 flip_transport 를 불러 ValueError 로 죽었고, 원장 행을 **파일에만
+    #                 쓴 뒤** 죽어서 그 주 판정이 커밋되지 않고 사라졌다(워크플로의 PR
+    #                 스텝은 판정 스텝이 실패하면 건너뛴다). 다음 주도 같은 자리에서
+    #                 죽으므로 원장이 영구히 멈춘다.
+    if v.action == "open_pr" and v.verdict == SWITCH_TO_BEDROCK:
+        flip_transport(args.values, "bedrock")
 
     out = {**asdict(v), "transport": transport, "measured": asdict(m), "row": row}
     print(json.dumps(out, ensure_ascii=False, indent=2))

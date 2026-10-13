@@ -62,6 +62,7 @@ export * from './getRegionsParams';
 export * from './getStaysGeocodeParams';
 export * from './getStaysReverseGeocodeParams';
 export * from './getStaysSearchParams';
+export * from './getStaysStayIdOutboundParams';
 export * from './getTripsTripIdChangeLogParams';
 export * from './getTripsTripIdItineraryRevisionsParams';
 export * from './getTripsTripIdRecordsParams';

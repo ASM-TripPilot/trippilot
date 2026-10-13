@@ -44,7 +44,8 @@ _ENV_VARS = ("TRIPPILOT_WIRING", "TRIPPILOT_LLM_PROVIDER", "OPENAI_API_KEY",
              "TRIPPILOT_EMBEDDING_MODEL", "EVENTS_STORE",
              "TRIPPILOT_LOCAL_LLM_BASE_URL", "TRIPPILOT_LOCAL_LLM_API_KEY",
              "TRIPPILOT_BEDROCK_MODEL_ARN", "TRIPPILOT_BEDROCK_REGION",
-             "KAKAO_REST_API_KEY", "KAKAO_CLIENT_ID", "EXISTENCE_MAX_CALLS")
+             "KAKAO_REST_API_KEY", "KAKAO_CLIENT_ID", "EXISTENCE_MAX_CALLS",
+             "TRIPPILOT_SCORE_MAX_PARALLEL")
 
 
 @pytest.fixture(autouse=True)
@@ -269,7 +270,8 @@ def test_vector_env_set_wires_pgvector_and_openai_embedding(
     captured = _spy_dev_app(monkeypatch)
     main.build_app_from_env()  # 커넥션은 지연 팩토리 — 조립 시 실 접속 없음
     assert isinstance(captured["vector_store"], PgVectorStore)
-    assert isinstance(captured["embedding"], OpenAiEmbeddingAdapter)
+    # 캐시 래퍼를 거치지만 provider 가 고른 어댑터는 그대로 안쪽에 있다.
+    assert isinstance(captured["embedding"].inner, OpenAiEmbeddingAdapter)
 
 
 @pytest.mark.parametrize("key", [None, ""])
@@ -386,6 +388,83 @@ def test_vector_rag_local_without_package_fails_fast(monkeypatch) -> None:
     monkeypatch.setitem(_sys.modules, "sentence_transformers", None)  # import 시 ImportError
     with pytest.raises(RuntimeError, match="sentence-transformers 미설치"):
         main._vector_rag()
+
+
+def test_transport_switch_can_pick_local_while_the_arn_stays(monkeypatch) -> None:
+    """ARN 을 지우지 않고 전송로를 고른다 — 없으면 EKS 실험이 PR 로 성립하지 않는다.
+
+    우선순위 규칙(ARN 이 이긴다)만 있으면 다른 경로를 재려면 Secrets Manager 에서 ARN 을
+    **지워야** 한다. 그건 되돌리기가 배포인 조작이라 실험이 아니라 전환이 된다.
+    """
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-x")
+    monkeypatch.setenv("TRIPPILOT_BEDROCK_MODEL_ARN", "arn:aws:bedrock:us-east-1:1:imported-model/x")
+    monkeypatch.setenv("TRIPPILOT_LOCAL_LLM_BASE_URL", "http://reminder-llm:8000/v1")
+    monkeypatch.setenv("TRIPPILOT_REMINDER_TRANSPORT", "local")
+
+    from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
+
+    route = main._local_route(main._feature_models_from_env())
+    assert isinstance(route["local"], OpenAIAdapter)
+
+
+def test_transport_switch_unset_keeps_todays_behaviour(monkeypatch) -> None:
+    # 기본값이 동작을 바꾸면 이 스위치 자체가 사고다 — 미설정은 종전 그대로(ARN 이 이긴다).
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-x")
+    monkeypatch.setenv("TRIPPILOT_BEDROCK_MODEL_ARN", "arn:aws:bedrock:us-east-1:1:imported-model/x")
+    monkeypatch.setenv("TRIPPILOT_LOCAL_LLM_BASE_URL", "http://reminder-llm:8000/v1")
+    monkeypatch.delenv("TRIPPILOT_REMINDER_TRANSPORT", raising=False)
+
+    import sys as _sys
+    import types as _types
+
+    from trippilot.llm_gateway.adapters.bedrock_adapter import BedrockAdapter
+
+    # boto3 는 프로젝트 의존성이 아니다(의도 — Titan 어댑터 선례). 클라이언트는 주입이라
+    # 스텁으로 충분하고, 여기서 보는 것은 **어느 어댑터가 조립되는가** 하나다.
+    stub = _types.ModuleType("boto3")
+    stub.client = lambda *args, **kwargs: object()
+    monkeypatch.setitem(_sys.modules, "boto3", stub)
+
+    route = main._local_route(main._feature_models_from_env())
+    assert isinstance(route["local"], BedrockAdapter)
+
+
+def test_transport_switch_typo_fails_startup(monkeypatch) -> None:
+    # `bedrcok` 이 조용히 로컬로 떨어지면 실서비스가 개발 서버로 나간다.
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-x")
+    monkeypatch.setenv("TRIPPILOT_BEDROCK_MODEL_ARN", "arn:aws:bedrock:us-east-1:1:imported-model/x")
+    monkeypatch.setenv("TRIPPILOT_REMINDER_TRANSPORT", "bedrcok")
+
+    with pytest.raises(RuntimeError, match="TRIPPILOT_REMINDER_TRANSPORT"):
+        main._local_route(main._feature_models_from_env())
+
+
+def test_transport_local_without_base_url_fails_startup(monkeypatch) -> None:
+    # 고르고 주소를 안 준 것은 설정 버그다 — Bedrock 으로 조용히 되돌아가지 않는다.
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-x")
+    monkeypatch.setenv("TRIPPILOT_BEDROCK_MODEL_ARN", "arn:aws:bedrock:us-east-1:1:imported-model/x")
+    monkeypatch.delenv("TRIPPILOT_LOCAL_LLM_BASE_URL", raising=False)
+    monkeypatch.setenv("TRIPPILOT_REMINDER_TRANSPORT", "local")
+
+    with pytest.raises(RuntimeError, match="TRIPPILOT_LOCAL_LLM_BASE_URL"):
+        main._local_route(main._feature_models_from_env())
+
+
+def test_vector_rag_wraps_the_embedding_in_a_cache(monkeypatch) -> None:
+    """요청 경로의 임베딩은 캐시를 거친다 — 닫힌 질의 28가지가 매번 재계산되던 것.
+
+    `model_id` 는 collection 이름에 들어가므로(TRIP-519) 래퍼가 가리면 적재와 질의가
+    다른 collection 을 본다. 통과 여부를 여기서 고정한다.
+    """
+    from trippilot.llm_gateway.adapters.caching_embedding import CachingEmbedding
+
+    monkeypatch.setenv("TRIPPILOT_VECTOR_DB_URL", "postgresql://x:x@localhost:5433/x")
+    monkeypatch.setenv("TRIPPILOT_EMBEDDING_PROVIDER", "http")
+    monkeypatch.setenv("TRIPPILOT_EMBEDDING_BASE_URL", "http://ai-embedding:8100")
+    _, embedding = main._vector_rag()
+    assert isinstance(embedding, CachingEmbedding)
+    assert embedding.model_id == "nlpai-lab/KURE-v1"
+    assert embedding.dim == 1024
 
 
 def test_vector_rag_unknown_provider_lists_local(monkeypatch) -> None:
@@ -563,3 +642,120 @@ def test_bedrock_route_without_base_url(monkeypatch) -> None:
     )
     route = main._local_route(main._feature_models_from_env())
     assert type(route[main._LOCAL_PREFIX]).__name__ == "BedrockAdapter"
+
+
+# ── Bedrock 클라이언트 예산 (2026-09-29 실서비스 504) ─────────────────────────
+
+
+def test_bedrock_client_disables_sdk_retries() -> None:
+    """기본 botocore 는 재시도를 여러 번 한다 — 콜드스타트 오류를 반복해 예산을 먹는다.
+
+    실측: 항목 하나가 11.9초(재시도 4회)를 쓰고 요청 예산 8초를 넘겨, 항목 둘 합 20초가
+    백스톱 13초보다 길어져 **강등 응답 대신 504** 가 나갔다. 리포 규약도 SDK 재시도 0 이다
+    (OpenAI 어댑터 `max_retries=0`).
+
+    **0 이다, 1 이 아니다** — `max_attempts` 는 재시도 횟수이고 botocore 가 +1 해서
+    총 시도를 만든다. 아래 테스트가 실제 botocore 로 그 정규화를 센다.
+    """
+    assert main._bedrock_client_kwargs(4.0)["retries"] == {
+        "max_attempts": 0,
+        "mode": "standard",
+    }
+
+
+def test_bedrock_config_really_sends_one_http_attempt() -> None:
+    """리터럴 비교로는 안 된다 — botocore 의 해석까지 세야 한다.
+
+    `max_attempts: 1` 을 "재시도 1회 = 시도 1회"로 읽어서 한 번 틀렸다(#836). botocore 는
+    그것을 **시도 2회**로 정규화하고, standard 모드의 재시도 대상에 `ReadTimeoutError` 와
+    `ModelNotReadyException` 이 둘 다 들어 있어 좁히려던 두 오류가 그대로 재시도됐다.
+    그래서 여기서는 숫자가 아니라 **나가는 HTTP 요청 수**를 센다.
+    """
+    boto3 = pytest.importorskip("boto3")
+    from botocore.config import Config
+    from botocore.exceptions import ReadTimeoutError
+
+    client = boto3.client(
+        "bedrock-runtime",
+        region_name="us-east-1",
+        aws_access_key_id="x",
+        aws_secret_access_key="y",
+        config=Config(**main._bedrock_client_kwargs(4.0)),
+    )
+    attempts: list[str] = []
+
+    def explode(request, **_):
+        attempts.append(request.url)
+        raise ReadTimeoutError(endpoint_url=request.url)
+
+    client.meta.events.register("before-send.bedrock-runtime.InvokeModel", explode)
+    with pytest.raises(ReadTimeoutError):
+        client.invoke_model(
+            modelId="arn:aws:bedrock:us-east-1:111122223333:imported-model/abc123",
+            body=b"{}",
+        )
+    assert len(attempts) == 1, f"HTTP 시도 {len(attempts)}회 — 예산이 그만큼 배가 된다"
+
+
+def test_bedrock_client_takes_the_per_item_budget_as_socket_timeout() -> None:
+    # botocore 는 호출 인자로 타임아웃을 못 받는다 — 클라이언트 설정이 유일한 자리다.
+    assert main._bedrock_client_kwargs(4.0)["read_timeout"] == 4.0
+
+
+def test_bedrock_client_without_a_budget_uses_the_gateway_default() -> None:
+    # 게이트웨이 기본(10초)보다 길게 열어 두면 게이트웨이가 포기한 뒤에도 벤더를 기다린다.
+    assert main._bedrock_client_kwargs(None)["read_timeout"] == 10.0
+
+
+def test_bedrock_connect_timeout_never_eats_the_whole_budget() -> None:
+    # 붙지도 않는데 예산을 다 쓰면 강등도 그만큼 늦는다.
+    assert main._bedrock_client_kwargs(1.0)["connect_timeout"] == 1.0
+    assert main._bedrock_client_kwargs(30.0)["connect_timeout"] == 3.0
+
+
+# ── 취향 점수 병렬 상한 손잡이 (TRIP-1313) ─────────────────────────────
+# 종전엔 코드 상수(C1Config 기본 10)라 생성 1회가 늘 LLM 10회였다. env 로 뺐고,
+# 빈 문자열은 미설정이다(TRIP-882 — 바로 위 EXISTENCE_MAX_CALLS 와 같은 함정).
+
+
+def _openai_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-no-real-call")
+
+
+@pytest.mark.parametrize(("raw", "expected"), [(None, 10), ("", 10), ("   ", 10), ("5", 5)])
+def test_score_max_parallel_from_env(
+    monkeypatch: pytest.MonkeyPatch, raw: str | None, expected: int,
+) -> None:
+    _openai_env(monkeypatch)
+    if raw is not None:
+        monkeypatch.setenv("TRIPPILOT_SCORE_MAX_PARALLEL", raw)
+    captured = _spy_dev_app(monkeypatch)
+    main.build_app_from_env()
+    assert captured["score_max_parallel"] == expected
+
+
+@pytest.mark.parametrize("raw", ["0", "-3"])
+def test_score_max_parallel_non_positive_fails_startup(
+    monkeypatch: pytest.MonkeyPatch, raw: str,
+) -> None:
+    """기존 C1Config 검증이 기동 시점에 거부한다 — 0 을 '점수 끔'으로 조용히 읽지 않는다."""
+    _openai_env(monkeypatch)
+    monkeypatch.setenv("TRIPPILOT_SCORE_MAX_PARALLEL", raw)
+    with pytest.raises(ValueError, match="score_max_parallel"):
+        main.build_app_from_env()
+
+
+def test_build_dev_app_threads_score_max_parallel_into_c1_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real = wiring.build_orchestrator
+    inner: dict = {}
+
+    def spy(**kwargs: object) -> object:
+        inner.update(kwargs)
+        return real(**kwargs)
+
+    monkeypatch.setattr(wiring, "build_orchestrator", spy)
+    wiring.build_dev_app(score_max_parallel=5)
+    assert inner["c1_config"].score_max_parallel == 5

@@ -1,6 +1,4 @@
-# TripPilot 서비스 이용약관 (초안 v0.1)
-
-> terms_type: `TERMS_OF_SERVICE` · 필수 동의.
+# TripPilot 서비스 이용약관
 
 ## 제1조 (목적)
 

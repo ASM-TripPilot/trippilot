@@ -144,6 +144,11 @@ class TourApiAdapter:
         self.intro_seen: dict[str, int] = {}
         self.intro_filled: dict[str, dict[str, int]] = {}
 
+    @property
+    def alive(self) -> bool:
+        """살아있는 키가 남았는가 — 전부 퇴출되면 이후 호출은 HTTP 없이 실패한다(`_call`)."""
+        return len(self._dead) < len(self._keys)
+
     def _take_key(self) -> str:
         """이번 HTTP 호출에 쓸 키 1건 소모. 키당 상한 도달 또는 퇴출 시 다음 키로.
 
@@ -320,9 +325,16 @@ class TourApiAdapter:
                     cls._opt_str(item.get("cat3")),
                 ) if c
             ),
-            image_url=cls._opt_str(item.get("firstimage")),
+            image_url=cls._https(cls._opt_str(item.get("firstimage"))),
             modified_at=cls._opt_str(item.get("modifiedtime")),
         )
+
+    @staticmethod
+    def _https(url: str | None) -> str | None:
+        """TourAPI 이미지는 전 건이 `http://` 다. 평문 HTTP 이미지는 iOS App Transport Security 가
+        **에러 없이** 차단해 앱에 회색 자리만 남는다 — 스킴만 올린다(같은 URL 이 https 로도 200).
+        """
+        return "https://" + url[len("http://"):] if url and url.startswith("http://") else url
 
     @staticmethod
     def _opt_str(v: object) -> str | None:

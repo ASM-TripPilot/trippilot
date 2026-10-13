@@ -1,0 +1,257 @@
+/**
+ * e05 숙소 등록 배선(01b Seed 전체 · 02a G-2 FSD 상태 소유). `StayRegisterScreen`은 무상태라
+ * 검색·후보·좌표확정·지도시트·제출 5축 상태를 전부 여기서 진다(선례 `StaySearchPage` →
+ * `StaySearchScreen`).
+ *
+ * 검색은 키보드 검색 키(`onSubmitQuery`)에서만 실제 요청을 낸다 — `submittedQuery`가
+ * `null`인 동안은 `useGetStaysGeocode`를 `enabled: false`로 꺼 둔다(02a ★14, `q`가 required라
+ * 조건 없이 부르면 빈 문자열로 나간다). 재검색할 때마다 이전 후보 선택·좌표 확정을 함께
+ * 초기화한다(§3-2 가중치 1.0) — 'A 호텔의 좌표'에 'B 호텔의 이름'이 붙어 서버로 가는 불일치를
+ * 막는다.
+ *
+ * 지도 시트가 어떤 얼굴(open · open-map-failed)을 쓸지는 네이버 지도 Client ID
+ * (`EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`)의 유무로 정한다 — `MapView` 자신도 같은 판단을 하므로
+ * 키 유무가 지도 성공 여부와 정확히 같은 값이다(02a ★6). 이 읽기는 `shared/map` 밖에서 env 를 읽는 자리다(옛 `mapBridgeStructure` A-2 의 "env 참조는 `shared/map` 하나" 구조 가드는
+ * TRIP-1350 에서 지웠다).
+ */
+import { useState } from 'react';
+import type { ReactElement } from 'react';
+import { useRouter } from 'expo-router';
+
+import type { GeocodeCandidate } from '@/shared/api/index.schemas';
+import {
+  getGetSavedStaysQueryKey,
+  usePostSavedStays,
+} from '@/shared/api/index.hooks';
+import {
+  useGetStaysGeocode,
+  useGetStaysReverseGeocode,
+} from '@/shared/api/index.hooks';
+import type { MapCenter } from '@/shared/map';
+
+import {
+  buildStayRegisterRequest,
+  canSubmitStayRegister,
+  type StayRegisterFlow,
+  type StayRegisterTab,
+} from '../model/stayRegisterForm';
+import { StayRegisterScreen } from './StayRegisterScreen';
+import { showToast } from '@/shared/ui/Toast';
+
+const STAY_SAVED_TOAST = '숙소를 등록했어요';
+
+/** 같은 좌표 판정 허용 오차(도). 1e-6도 ≈ 위도 0.1m — SDK 부동소수 오차(실측 ~1e-14)는 흡수하고
+ * 사용자가 지도를 민 이동(수 m 이상)과는 갈린다(TRIP-1299). */
+const SAME_COORD_EPSILON = 1e-6;
+
+export function StayRegisterPage(): ReactElement {
+  const router = useRouter();
+
+  const [activeTab, setActiveTab] = useState<StayRegisterTab>('mapsearch');
+  const [query, setQuery] = useState('');
+  const [name, setName] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
+  const [selectedCandidate, setSelectedCandidate] =
+    useState<GeocodeCandidate | null>(null);
+  const [coordSource, setCoordSource] =
+    useState<StayRegisterFlow['coordSource']>('MAP_SEARCH');
+  const [coordConfirmed, setCoordConfirmed] = useState(false);
+  const [mapSheetState, setMapSheetState] =
+    useState<StayRegisterFlow['mapSheetState']>('closed');
+  const [submitStatus, setSubmitStatus] =
+    useState<StayRegisterFlow['submitStatus']>('idle');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  // 빈 검색어로는 부르지 않는다(5-b W-2). `!== null`만으로는 빈 입력창에서 검색 키를
+  // 누른 경로가 열려 `?q=`가 나가고, 서버 400이 "지도 검색을 사용할 수 없어요"로 표시돼
+  // 검색어를 안 넣었을 뿐인 사용자가 지도 장애 문구를 본다. 02a ★14가 지목한 함정의
+  // 나머지 절반이다(초기 렌더만 막혀 있었다).
+  const geocodeQuery = useGetStaysGeocode(
+    { q: submittedQuery ?? '' },
+    { query: { enabled: (submittedQuery ?? '').trim() !== '' } }
+  );
+  // 등록 성공이면 저장 숙소 목록(e04·위저드 1/4가 보는 키)을 무효화한다(TRIP-1023 #022). 훅 레벨
+  // onSuccess 라 제출 중 화면을 떠나도 돈다 — 호출별 `mutateAsync(vars, { onSuccess })`는 언마운트
+  // 뒤 안 불린다. 실패면 안 돈다(`savedStays.ts` 규율 동형). 클라이언트는 콜백 context 에서 받는다 —
+  // `useQueryClient()`를 부르면 Provider 없이 이 페이지를 그리는 pin 통합 테스트가 깨진다.
+  const postSavedStays = usePostSavedStays({
+    mutation: {
+      onSuccess: (_data, _variables, _onMutateResult, { client }) => {
+        void client.invalidateQueries({
+          queryKey: getGetSavedStaysQueryKey(),
+        });
+      },
+    },
+  });
+
+  // 핀 좌표의 역지오코딩 — **단일 경로**(TRIP-866 S4). 옛 WebView 브리지(PIN_DROP→GEOCODE_OK)를
+  // 걷어내고, 핀으로 찍은 좌표를 이 훅으로 주소로 바꾼다. 핀 좌표(coordSource='PIN' + 좌표 있음)가
+  // 있을 때만 켠다 — 그 외에는 조회 자체가 안 나간다(빈 좌표 헛호출 차단, useGetStaysGeocode 선례).
+  const pinCoords =
+    coordSource === 'PIN' && selectedCandidate !== null
+      ? { lat: selectedCandidate.lat, lng: selectedCandidate.lng }
+      : null;
+  const reverseGeocode = useGetStaysReverseGeocode(
+    { lat: pinCoords?.lat ?? 0, lng: pinCoords?.lng ?? 0 },
+    { query: { enabled: pinCoords !== null } }
+  );
+
+  // 핀 주소 상태는 조회가 **단일 출처**다(별도 state 없음) — 옛 handlePinMessage 가 상태를 손으로
+  // 밀어 넣던 것을 조회 결과에서 파생한다. PIN 모드가 아니면 'idle'. 조회 중이면 'loading',
+  // 벤더 장애(503)면 'error', 도착하면 'ok'(주소가 없어도 'ok' — null 은 장애가 아니다). enabled
+  // 게이트를 먼저 보므로, 조회가 꺼진 동안(react-query 는 그때 isPending=true) 'loading' 으로 새지 않는다.
+  const pinAddressStatus: StayRegisterFlow['pinAddressStatus'] =
+    pinCoords === null
+      ? 'idle'
+      : reverseGeocode.isError
+        ? 'error'
+        : reverseGeocode.isPending
+          ? 'loading'
+          : 'ok';
+  // 표시용 주소 — 성공이고 주소 문자열이면 그 값, 그 좌표에 주소가 없으면(null) 빈 값
+  // ("주소 미확인"은 화면이 그린다). 저장 정본은 좌표라 이 주소는 표시 사본일 뿐이다.
+  const pinAddress =
+    pinCoords !== null &&
+    !reverseGeocode.isError &&
+    typeof reverseGeocode.data?.address === 'string'
+      ? reverseGeocode.data.address
+      : '';
+
+  const candidates = geocodeQuery.data ?? [];
+  const searchStatus: StayRegisterFlow['searchStatus'] =
+    submittedQuery === null
+      ? 'idle'
+      : geocodeQuery.isPending
+        ? 'loading'
+        : geocodeQuery.isError
+          ? 'error'
+          : candidates.length > 0
+            ? 'success'
+            : 'empty';
+
+  // PIN 좌표에는 역지오코딩 주소를 실어 화면에 내린다(MAP_SEARCH 후보는 자체 주소를 유지).
+  // 저장 본문(buildStayRegisterRequest)은 address 를 안 쓰므로 이 주입은 표시에만 영향을 준다.
+  const flowCandidate =
+    pinCoords !== null && selectedCandidate !== null
+      ? { ...selectedCandidate, address: pinAddress }
+      : selectedCandidate;
+
+  const flow: StayRegisterFlow = {
+    activeTab,
+    query,
+    name,
+    searchStatus,
+    candidates,
+    selectedCandidate: flowCandidate,
+    coordSource,
+    pinAddressStatus,
+    coordConfirmed,
+    mapSheetState,
+    submitStatus,
+    submitAttempted,
+  };
+
+  function handleSubmitQuery(): void {
+    setSubmittedQuery(query);
+    setSelectedCandidate(null);
+    setCoordConfirmed(false);
+    setMapSheetState('closed');
+    // 핀 주소 상태는 조회에서 파생되므로 따로 지울 필요가 없다(TRIP-866 S4) — 후보가 null 이 되고
+    // coordSource 가 그대로 'PIN' 이어도 pinCoords 가 null 이 되어 파생값이 'idle' 로 돌아간다.
+    // 재검색은 제출 실패도 지운다(5-b W-3). 안 지우면 "등록에 실패했어요" 배너가 다음
+    // 검색을 넘어 살아남고, 후보가 초기화된 상태라 그 버튼이 침묵 no-op가 된다 —
+    // B-1과 같은 뿌리(재검색이 submitStatus를 안 건드린다)에서 나온 두 번째 증상이다.
+    setSubmitStatus('idle');
+  }
+
+  function handleSelectCandidate(candidate: GeocodeCandidate): void {
+    setSelectedCandidate(candidate);
+    // 검색 후보(GeocodeCandidate)는 lat/lng가 required라 신뢰 가능한 좌표를 이미 가진다 —
+    // 담는 순간이 곧 확정이다(TRIP-600 A안 "좌표 존재=확정"). 좌표를 다시 찍으라고 시트를
+    // 강요하지 않는다(핀 경로는 좌표를 처음 얻으므로 handlePickCoord에서 false로 남긴다).
+    setCoordConfirmed(true);
+    // coordSource 를 MAP_SEARCH 로 되돌리면 pinCoords 가 null 이 되어 역지오코딩이 꺼지고
+    // 파생 pinAddressStatus 가 자연히 'idle' 로 돌아간다(핀 세션 잔상 자동 정리).
+    setCoordSource('MAP_SEARCH');
+  }
+
+  /** 핀 지정 탭의 중앙 고정 핀이 보고한 중심 좌표를 받는다(TRIP-866 S4 · 화면은 무상태, G-2).
+   * 좌표 슬롯은 하나뿐이라(★10) 핀 좌표도 selectedCandidate에 담고 coordSource로만 출처를
+   * 구분한다. 좌표만 담고 확정하지 않는다(coordConfirmed:false — 확정은 기존 bottom-sheet
+   * 단일 경로가 진다). 주소는 위 useGetStaysReverseGeocode 가 이 좌표로 따로 얻는다(단일 경로).
+   * 이름(name)은 자동으로 안 채운다(TRIP-199 W-1 계승 — 검색 탭으로 이름이 새는 것 방지). */
+  function handlePickCoord(center: MapCenter): void {
+    // TRIP-1299 — 탭을 오가면 핀 패널이 새로 그려지고, 새 지도의 첫 멈춤이 담긴 좌표를 그대로
+    // 다시 보고한다. 같은 좌표면 아무것도 바꾸지 않는다(확정·검색 후보 이름·주소·출처 유지 —
+    // BR-U1-22 는 좌표가 *바뀌면* 다시 확인을 요구할 뿐이다). SDK 를 거친 좌표는 끝자리가 달라져
+    // (실측 37.5665 → 37.566500000000005) `===` 로는 못 가른다.
+    if (
+      selectedCandidate !== null &&
+      Math.abs(selectedCandidate.lat - center.lat) < SAME_COORD_EPSILON &&
+      Math.abs(selectedCandidate.lng - center.lng) < SAME_COORD_EPSILON
+    ) {
+      return;
+    }
+    setSelectedCandidate({
+      name: '',
+      address: '',
+      lat: center.lat,
+      lng: center.lng,
+    });
+    setCoordSource('PIN');
+    setCoordConfirmed(false);
+  }
+
+  function handleOpenMapSheet(): void {
+    const hasMapKey = Boolean(process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID);
+    setMapSheetState(hasMapKey ? 'open' : 'open-map-failed');
+  }
+
+  function handleConfirmCoord(): void {
+    setCoordConfirmed(true);
+    setMapSheetState('closed');
+  }
+
+  async function handleSubmit(): Promise<void> {
+    // TRIP-1283 — 게이트보다 먼저 시도를 기록한다. 메인 버튼은 이름이 비어도 눌리므로, 빈 이름은
+    // 아래 게이트에서 요청 없이 돌아가고 화면이 숙소명 오류를 띄운다.
+    setSubmitAttempted(true);
+    // 좌표 게이트는 호출자에 둔다 — 버튼의 disabled에만 두면 그것을 안 건 버튼이
+    // 통째로 우회한다. 실제로 제출 실패 배너의 "다시 시도"가 그 구멍이었다(5-b B-1):
+    // 실패 후 후보를 다시 탭하면 coordConfirmed가 false로 풀리는데, 그 버튼은
+    // 여전히 눌려 coordConfirmed:false 본문이 서버로 나갔다. AC-3은 서버 400에
+    // 기대는 것을 위반으로 규정한다.
+    if (!canSubmitStayRegister(flow)) return;
+
+    const request = buildStayRegisterRequest(flow);
+    if (request === null) return;
+
+    setSubmitStatus('submitting');
+    try {
+      await postSavedStays.mutateAsync({ data: request });
+      // 들어온 곳으로 돌아간 뒤 토스트(TRIP-990 D22 — 루트 호스트라 돌아간 화면 위에 보인다).
+      router.back();
+      showToast({ message: STAY_SAVED_TOAST, testID: 'stay-register-saved' });
+    } catch {
+      setSubmitStatus('error');
+    }
+  }
+
+  return (
+    <StayRegisterScreen
+      flow={flow}
+      onBack={() => router.back()}
+      onSelectTab={setActiveTab}
+      onChangeQuery={setQuery}
+      onChangeName={setName}
+      onSubmitQuery={handleSubmitQuery}
+      onRetrySearch={() => geocodeQuery.refetch()}
+      onSelectCandidate={handleSelectCandidate}
+      onPickCoord={handlePickCoord}
+      onOpenMapSheet={handleOpenMapSheet}
+      onConfirmCoord={handleConfirmCoord}
+      onCloseMapSheet={() => setMapSheetState('closed')}
+      onSubmit={handleSubmit}
+    />
+  );
+}

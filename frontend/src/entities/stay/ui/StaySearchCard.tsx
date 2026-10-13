@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 
 /**
@@ -58,10 +59,12 @@ const cardShadow = {
 
 function SaveButton({
   save,
+  name,
   size,
   className,
 }: {
   save: StaySearchCardSave;
+  name: string;
   size: number;
   className: string;
 }): ReactElement {
@@ -69,6 +72,7 @@ function SaveButton({
     <Pressable
       testID={save.testID}
       accessibilityRole="button"
+      accessibilityLabel={heartSaveLabel(name)}
       // 담김=선택됨 — 빈/찬을 색이 아니라 이 상태 + 아래 글리프 정체성으로 관찰한다.
       accessibilityState={{ selected: save.saved }}
       // pending 이면 눌러도 onToggle 이 안 불린다(연타 가드) — disabled 가
@@ -96,11 +100,14 @@ export function StaySearchCard({
   save,
   onPress,
 }: StaySearchCardProps): ReactElement {
+  // 카드 라벨 = 보이는 글자 그대로(TRIP-1281) — 라벨이 없으면 iOS 가 자식 하트 라벨을 카드에 끌어다 붙인다.
+  const cardLabel = [name, region, priceText].filter(Boolean).join(', ');
   if (variant === 'full') {
     return (
       <Pressable
         testID={testID}
         accessibilityRole="button"
+        accessibilityLabel={cardLabel}
         onPress={onPress}
         style={cardShadow}
         className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
@@ -112,6 +119,7 @@ export function StaySearchCard({
           {save ? (
             <SaveButton
               save={save}
+              name={name}
               size={22}
               className="absolute right-[32px] top-[14px] h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
             />
@@ -145,6 +153,7 @@ export function StaySearchCard({
     <Pressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityLabel={cardLabel}
       onPress={onPress}
       className="w-[160px]"
     >
@@ -155,6 +164,7 @@ export function StaySearchCard({
         {save ? (
           <SaveButton
             save={save}
+            name={name}
             size={18}
             className="absolute right-sm top-sm h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
           />

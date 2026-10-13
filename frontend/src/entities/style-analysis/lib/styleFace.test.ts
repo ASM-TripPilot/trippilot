@@ -3,7 +3,7 @@ import fc from 'fast-check';
 import type {
   StyleAnalysisBody,
   StyleAnalysisEnvelope,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { resolveStyleFace } from './styleFace';
 

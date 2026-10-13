@@ -22,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.dao.DataIntegrityViolationException
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -64,7 +65,8 @@ class ReplanSessionPersistenceIT : AbstractPostgresIntegrationTest() {
         reasons: List<String> = listOf("비가 와요", "다리가 아파요"),
         excluded: List<UUID> = listOf(UUID.randomUUID()),
     ) = ReplanSession.start(
-        tripId, UUID.randomUUID(), null, ReplanScope.PARTIAL_SLOTS, now, origin,
+        tripId, UUID.randomUUID(), null, ReplanScope.PARTIAL_SLOTS,
+        LocalDate.ofInstant(now, ZoneId.of("Asia/Seoul")), now, origin,
         reasons, listOf("실내로 바꿔줘"), "근처 카페면 좋겠어요", excluded, now,
     )
 
@@ -75,6 +77,7 @@ class ReplanSessionPersistenceIT : AbstractPostgresIntegrationTest() {
         val saved = sessions.save(start(tripId, excluded = excluded))
 
         val found = sessions.findById(saved.sessionId)!!
+        found.targetDate shouldBe LocalDate.ofInstant(now, ZoneId.of("Asia/Seoul"))
         found.reasons shouldContainExactly listOf("비가 와요", "다리가 아파요")
         found.directives shouldContainExactly listOf("실내로 바꿔줘")
         found.excludedPoiIds shouldContainExactly excluded

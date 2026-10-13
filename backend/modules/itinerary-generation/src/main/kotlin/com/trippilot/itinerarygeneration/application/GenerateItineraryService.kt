@@ -1,6 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.FieldError
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
@@ -87,10 +89,16 @@ class GenerateItineraryService(
         if (existing != null && existing.generationState != GenerationState.FAILED) {
             guardTripPeriod(ctx.startDate, ctx.endDate)
         }
-        val prefs = preferences.findPreferences(accountId)                                    // 취향 7축·예산등급(계정 스코프)
+        // 취향 7축·예산등급 — 여행에서 고른 값이 최종, 안 실린 축만 계정 값(BR-U1-38 · PreferenceProfiles.overriddenBy).
+        val prefs = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
         // 소유·기간은 위에서 선검증 — 거점 앵커는 기간을 넘겨 조립(중복 trip 조회 없음).
         val stayAnchors = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
         val planDates = planDates(ctx.startDate, ctx.endDate)
+        // 창은 **아무것도 쓰기 전에 전부 검증한다.** 2차 조립은 day1 커밋 뒤에 돌고 그 호출은
+        // 세션을 닫는 try 밖이라, 거기서 던지면 PARTIAL 일정과 열린 세션이 남아 화면이
+        // "생성 중"에 고착된다 — 재시도해도 같은 지점에서 또 터져 사용자가 빠져나올 길이 없다.
+        // 여기서 한 번 돌면 아래의 `dayWindowOf` 는 더 못 던진다.
+        planDates.forEach { dayWindowOf(it, ctx) }
 
         // 직접 만들기는 AI 를 아예 부르지 않는다 — 빈 일자만 깔고 사용자가 편집으로 채운다(US-SCHED-09).
         // 상대 enum 에 MANUAL 이 없어 경계로 나가면 422 이므로, 여기서 갈라 아예 호출 경로에 들어가지 않게 한다.
@@ -151,7 +159,7 @@ class GenerateItineraryService(
                 scheduleAgent.generate(firstInput)
             } catch (e: Exception) {
                 log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-                MinimalItineraryFallback.of(firstInput, clock.instant(), firstAssembly.materializedPoiIds)
+                MinimalItineraryFallback.of(firstInput, clock.instant())
             }
             // **하루 여행도 PARTIAL 이다**(TRIP-511). 추천 근거가 생성에서 떨어져 나와 뒤따라오므로,
             // 여기서 COMPLETE 로 닫으면 화면이 폴링을 멈춰 근거를 영영 못 본다.
@@ -190,6 +198,8 @@ class GenerateItineraryService(
                 isRegeneration = previous != null,
                 assemblyUnplaced = emptyList(),
                 sessionId = session.sessionId,
+                preference = prefs.toProfile(hints),
+                companionType = ctx.companionType,
             )
         } else {
             // 1차에서 배정된 POI 는 2차 후보에서 제외(TRIP-293) — 같은 장소가 두 번 들어가지 않게.
@@ -208,7 +218,8 @@ class GenerateItineraryService(
                 isRegeneration = previous != null,
                 assemblyUnplaced = secondAssembly.unplaced,
                 sessionId = session.sessionId,
-                materializedPoiIds = secondAssembly.materializedPoiIds,
+                preference = secondInput.preferenceProfile,
+                companionType = ctx.companionType,
             )
         }
         return saved
@@ -248,7 +259,7 @@ class GenerateItineraryService(
      * 조립 결과 — 요청과 **넣을 자리가 없어 보내지 못한 필수 방문지**를 함께 돌려준다.
      * 로그로만 남기면 사용자는 자기가 넣은 곳이 왜 없는지 끝내 알 수 없다(M2 채널로 이어붙인다).
      */
-    private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>, val materializedPoiIds: Set<UUID>)
+    private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>)
 
     /**
      * 그 날의 일과 창 — 고정 블록이 기본 창(09:00~21:00)을 넘으면 **그 블록을 포함하도록** 넓힌다
@@ -258,16 +269,42 @@ class GenerateItineraryService(
      * 블록이 자정을 넘으면(23:30+60분) 창 끝은 23:59 에 멈춘다 — TimeWindow 는 하루 안 표현이라
      * 감긴 시각(00:30)을 끝으로 적으면 end < start 가 되어 그 자체가 모순 입력이 된다.
      */
-    private fun expandedWindow(date: LocalDate, blocks: List<FixedBlock>): TimeWindow {
+    private fun expandedWindow(date: LocalDate, blocks: List<FixedBlock>, ctx: TripGenerationContext): TimeWindow {
+        val (base, baseEnd) = dayWindowOf(date, ctx)
         val onDay = blocks.filter { it.date == date && it.start != null }
-        val start = (onDay.map { it.start!! } + DEFAULT_START).min()
+        val start = (onDay.map { it.start!! } + base).min()
         val end = (
             onDay.map { b ->
                 val e = b.start!!.plusMinutes((b.dwellMin ?: 60).toLong())
                 if (e <= b.start) LocalTime.of(23, 59) else e // 자정 감김 — 하루 끝에서 멈춘다
-            } + DEFAULT_END
+            } + baseEnd
             ).max()
         return TimeWindow(date, start, end)
+    }
+
+    /**
+     * 그 날의 **기본** 창 — 사용자가 여행에 적어 둔 값이 있으면 그것, 없으면 상수(09:00~21:00).
+     *
+     * 지금까지 창이 전 일자 09:00~21:00 상수였고 말할 표면이 없었다. 두 증상이 섞여 있었다 —
+     * "매일 9시는 이르다"(취향)와 **"첫날은 비행기 도착 뒤에야 시작할 수 있다"(사실 오류)**.
+     * 뒤쪽이 더 나쁘다: 도착 전 시간에 일정이 깔려도 화면에는 정상으로 보인다.
+     *
+     * 첫날·마지막날 값은 **그 날에만** 걸린다. 없으면 그 날도 전 일자 공통값을 따른다.
+     * 당일치기는 첫날이자 마지막날이라 둘 다 걸린다(도메인이 first < last 를 검증한다).
+     */
+    private fun dayWindowOf(date: LocalDate, ctx: TripGenerationContext): Pair<LocalTime, LocalTime> {
+        val start = (if (date == ctx.startDate) ctx.firstDayStartAt else null)
+            ?: ctx.dayStartAt
+            ?: DEFAULT_START
+        val end = (if (date == ctx.endDate) ctx.lastDayEndAt else null) ?: DEFAULT_END
+        // 사용자가 적은 값끼리 모순이면(예: 하루 시작 23:00) 창이 뒤집힌다. 그대로 보내면 조립기가
+        // 그 날을 "해 없음"으로 접고 증상은 "AI 가 일정을 못 만든다"로만 보인다 — 여기서 드러낸다.
+        if (!start.isBefore(end)) {
+            throw ValidationFailed(
+                listOf(FieldError("dayStartAt", "여행 설정의 하루 시작 시각($start)이 종료($end) 이후입니다.")),
+            )
+        }
+        return start to end
     }
 
     /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
@@ -288,8 +325,9 @@ class GenerateItineraryService(
         // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
         includeExplanations: Boolean = true,
     ): Assembled {
-        // ANYTIME(날짜·시각 미지정)을 여기서 **물질화**한다(계약 M1) — AI 고정 블록은 시간창이 필수라
-        // null 을 담을 자리가 없고, 솔버가 날짜를 다시 고르지도 못한다. 넣을 자리가 없으면 보내지 않고
+        // ANYTIME(날짜·시각 미지정)은 여기서 **날짜만 물질화**한다(계약 M1 · TRIP-1249 개정) — 솔버가 날짜를
+        // 다시 고르지 못해 날짜는 우리 몫이고, 시각은 `start = null` 로 비워 조립이 영업시간·식사창 안에서 고른다
+        // (09:00 에 못 박으면 닫힌 식당이 409 가 되어 그 날이 통째로 폴백됐다). 넣을 날이 없으면 보내지 않고
         // 미배치로 보고한다(M2 채널) — AI 가 거부할 모양을 보내 요청 전체를 죽이느니 낫다.
         val candidates = ctx.fixedVisits
             .filter { it.date in dates || (it.date !in planDates(ctx.startDate, ctx.endDate) && carriesUndatedFixed) }
@@ -298,8 +336,10 @@ class GenerateItineraryService(
             dated = candidates.filter { it.date != null && it.start != null },
             anytime = candidates.filter { it.date == null || it.start == null },
             dates = dates,
-            dayStart = DEFAULT_START,
-            dayEnd = DEFAULT_END,
+            // 물질화도 **그 날 창**을 따른다 — 날짜마다 창이 다를 수 있으므로 하나로 접지 않는다.
+            // 접으면(min/max) 마지막날 10시 귀가가 2차의 전 일자에 걸려, 비어 있는 날에도
+            // "넣을 자리가 없습니다"가 나간다.
+            window = { d -> dayWindowOf(d, ctx) },
         )
         if (materialized.unplaced.isNotEmpty()) {
             log.info(
@@ -308,18 +348,17 @@ class GenerateItineraryService(
             )
         }
         return Assembled(
-            materializedPoiIds = materialized.materializedPoiIds,
             input = ScheduleAgentInput(
             tripId = tripId,
             generationMode = mode,
-            // budgetLevel(등급) = preference_set.budget_tier (경계 계약; trip.budget_total 아님)
+            // budgetLevel(등급) = 취향의 budget_tier (경계 계약; trip.budget_total 아님)
             tripContext = TripContext(ctx.destinations, ctx.startDate, ctx.endDate, ctx.companionType, prefs.budgetTier),
             anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors, ctx.destinationRefs).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
             // 창 밖 사용자 고정 블록이 있는 날은 **그 날만** 일과 창을 블록에 맞춰 넓힌다(TRIP-1001
             // 결정 (c), 2026-09-27). 안 넓히면 21:00 고정 하나가 HC4(day window)를 깨 그 날 전체가
             // "해 없음" → 409 → 2차 통째 최소 폴백이 된다(QA #045 실측). 물질화된 ANYTIME 은
-            // 기본 창 안에만 놓이므로 이 계산에 영향이 없다.
-            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks) },
+            // 시각이 없어(start=null, TRIP-1249) 이 계산에 들어가지 않는다.
+            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks, ctx) },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
             // 하루짜리 1차에 전부 몰면 배치 공간이 없어 HC3 가 깨질 수 있고, 양쪽에 실으면 중복 배치된다.
@@ -352,9 +391,10 @@ class GenerateItineraryService(
      *
      * 정본은 숙소 없는 생성을 허용한다(BR-U1-40 · BR-U1-47 · US-SCHED-11) — 계약이 그걸 막고 있었다.
      *
-     * **다목적지의 날짜별 배정은 하지 않는다.** 목적지에 박수(nights)가 실려 오지 않아 어느 날이
-     * 어느 도시인지 알 수 없다. 첫 목적지 중심을 쓴다 — 단일 목적지(대부분)는 정확하고,
-     * 다목적지는 거칠지만 앵커가 없는 것보다 낫다.
+     * **다목적지는 그 날의 목적지 중심을 쓴다**([RegionAnchors.destinationOn] — FE `dayRegion.ts` 와 같은
+     * 규칙). 예전엔 박수가 실려 오지 않아 모든 날이 첫 목적지로 접혔고, "서울 1박 + 인천 1박"이
+     * 서울 2박처럼 나왔다. 그 날 목적지의 좌표가 없으면 첫 목적지 중심으로 떨어진다(종전 동작).
+     * 우선순위: 숙소 좌표 → 그 날의 목적지 중심 → 첫 목적지 중심.
      *
      * **코드를 먼저 본다**(TRIP-859 후속). 이름으로 찾으면 동명이지역에서 첫 코드를 임의로 집어,
      * 부산 중구를 고른 사용자에게 **서울 중구 좌표**가 앵커로 박힐 수 있다. 증상은 "일정이 다른
@@ -366,20 +406,7 @@ class GenerateItineraryService(
         endDate: LocalDate,
         stayAnchors: List<DayAnchorView>,
         destinations: List<TripDestinationRef>,
-    ): List<DayAnchor> {
-        val byDate = stayAnchors.associateBy { it.date }
-        // 목적지 중심은 한 번만 조회한다 — 날짜마다 부르면 같은 값을 계획일 수만큼 다시 읽는다.
-        val fallback = destinations.firstNotNullOfOrNull { RegionAnchors.centerOf(regions, it) }
-        return planDates(startDate, endDate).mapNotNull { d ->
-            val stay = byDate[d] ?: if (d == endDate) byDate[d.minusDays(1)] else null // 체크아웃일만 전날 거점
-            when {
-                stay != null -> DayAnchor(d, stay.lat, stay.lng)
-                // 목적지 좌표조차 없으면 그 날은 앵커 없이 둔다 — 지어낸 좌표를 보내지 않는다.
-                fallback != null -> DayAnchor(d, fallback.lat, fallback.lng)
-                else -> null
-            }
-        }
-    }
+    ): List<DayAnchor> = RegionAnchors.dayAnchors(regions, startDate, endDate, stayAnchors, destinations) // 편집 수리도 같은 것을 부른다
 
     /**
      * **재생성**이 허용되는 시점인가 — 기존 일정이 있을 때만 부른다(첫 생성은 대상이 아니다).

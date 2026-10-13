@@ -292,7 +292,7 @@ if not validated:
 
 ### 2.6 AlternativeSelection — 워커 (상위 티어) `[정본]` — Plan-B 대체지 선택(TRIP-331)
 
-**목적**: 여행 중 변수(날씨·휴무·지연 등) 발생 시, **대체 후보 closed-set 안에서** 대안 POI를 선호 순서로 고르고 이유를 붙인다. PlanBAgent **전속 도구** `llm.select_alternatives`의 실체 — RAG 파이프라인의 Generate 단계이며, 프롬프트 골격의 정본은 [planb-rag-design.md](../application-design/planb-rag-design.md) §6(Augmented Prompt 구조)이다. 구현: `ai/prompts/alternative_selection.yaml` v0.1.0 · `llm_gateway/gates/alternative_selection.py` · `llm_gateway/workers/alternative_selection.py`.
+**목적**: 여행 중 변수(날씨·휴무·지연 등) 발생 시, **대체 후보 closed-set 안에서** 대안 POI를 선호 순서로 고르고 이유를 붙인다. PlanBAgent **전속 도구** `llm.select_alternatives`의 실체 — RAG 파이프라인의 Generate 단계이며, 프롬프트 골격의 정본은 [planb-rag-design.md](../application-design/planb-rag-design.md) §6(Augmented Prompt 구조)이다. 구현: `ai/prompts/alternative_selection.yaml` v0.3.0 · `llm_gateway/gates/alternative_selection.py` · `llm_gateway/workers/alternative_selection.py`.
 
 **입력 컨텍스트**:
 ```
@@ -303,6 +303,11 @@ if not validated:
   · persona_context (KB-2: 선호·저장 장소)
 - 대체 후보 목록 (poiId + 카테고리 + 상호명만 — 좌표 미포함, poi_id 정렬로 결정론)
   · 이미 방문·거절한 POI(excluded_poi_ids)는 목록에서 아예 제외 — 모델이 고를 수 있는 값 자체를 한정 (INV-1)
+  · 규칙 랭킹 상위 60 + 원 일정 슬롯으로 좁힌 숏리스트 (2026-10-04, 풀 전원이면 입력 63k 토큰)
+  · KB-5 장소 설명은 숏리스트 후보에만 (v0.2.0)
+- user_request (v0.3.0, 2026-10-05) — 재계획 자유 입력 원문. **사용자가 쓴 글이 상위 티어 프롬프트에
+  실리는 유일한 칸**이다: `inline()` 으로 한 줄로 누르고(골격 위조 차단), 후보 자격과 무관(INV-1),
+  출력은 풀 교차 게이트를 그대로 거친다. 없으면 "(없음)" — `/alternatives` 경로는 늘 비어 있다.
 - max_alternatives (최대 선택 수, ≥ 1)
 ```
 

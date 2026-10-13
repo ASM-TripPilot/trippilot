@@ -38,6 +38,8 @@
 | **REL-U6-05** | 구독자 처리가 끝난 **뒤에만** `published_at`을 찍는다. 먼저 찍으면 실패한 알림이 영영 사라진다 |
 | **REL-U6-06** | 서킷 브레이커는 **도입하지 않는다**(U1·U4 결정 승계 — `resilience4j`가 리포에 없다). Expo Push 장애 시에는 재시도 + 인앱 폴백으로 충분하다 |
 
+> **[개정 · 2026-10-12] REL-U6-04 — 구현·운영 조건 충족.** 릴레이는 `backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt`(TRIP-539)이고 `@Scheduled` + `@SchedulerLock(name = "outbox-relay")`로 단일 실행된다. ShedLock 의존성은 `backend/gradle/libs.versions.toml`(`shedlock-spring`·`shedlock-jdbc`)에 들어왔다. EKS dev·prd는 backend **replicas 2**라(`deploy/eks/chart/values-dev.yaml`·`values-prd.yaml`) 락이 실제로 필요한 다중 인스턴스 운영이 시작됐다.
+
 ## 3. 성능 (PERF-U6-\*)
 
 | ID | 요구 |
@@ -109,3 +111,5 @@ FD에서 정의한 **PBT-U6-1~5**를 그대로 게이트로 쓴다. NFR 단계�
 | 릴레이 지연 p95가 목표를 반복 초과 | PERF-U6-01 주기·배치 크기, 또는 WS/SSE 재검토(현재 미도입) |
 | 다중 인스턴스 운영 시작 | REL-U6-04 락 동작 검증(현재 로컬 단일 인스턴스) |
 | U7 커뮤니티 개통 | `COMMUNITY` 종류 노출 + 발송량 급증 → COST-U6-01 재산정 |
+
+> **[개정 · 2026-10-12] §10 재평가 트리거 갱신.** ① "다중 인스턴스 운영 시작"은 **도래했다** — AWS EKS dev·prd backend replicas 2(REL-U6-04 개정). 인프라는 `aidlc/aidlc-docs/construction/shared-infrastructure.md`를 본다. ② "U7 커뮤니티 개통"은 **오지 않는다** — U7은 사용자 결정(2026-10-12)으로 폐기됐다. ③ 서버 푸시 발송은 EKS 런타임 기본값이 **`PUSH_MODE=off`**다(`deploy/eks/runtime_secrets.py`, 허용값 `off|expo`) — iOS 빌드가 `aps-environment`를 빼고 있어서다(tech-stack-decisions §3 개정).

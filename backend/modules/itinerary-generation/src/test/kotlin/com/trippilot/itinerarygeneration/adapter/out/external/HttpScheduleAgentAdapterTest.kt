@@ -32,6 +32,8 @@ import org.springframework.http.MediaType
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter
 import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath
+import com.trippilot.itinerarygeneration.domain.DayAnchor
+import com.trippilot.itinerarygeneration.domain.RepairContext
 import org.springframework.test.web.client.match.MockRestRequestMatchers.method
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
 import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
@@ -288,36 +290,17 @@ class HttpScheduleAgentAdapterTest : StringSpec({
     }
 
     /**
-     * **상대가 아직 배선 전이면(503) 종전 경로로 내려간다.** 계약·스키마는 출하됐는데 오케스트레이터만
-     * 진행 중인 상태가 실재한다(실측 2026-09-20). 그동안 재계획을 전부 실패로 올리면 사용자는
-     * "다시 짜기"를 누를 때마다 수동 편집으로 튕긴다.
+     * **재계획 실패는 그대로 올린다 — generate 로 내려가지 않는다.** 상대 배선 전(503)에 한해 종전
+     * generate 경로로 내려가던 한시 폴백이 있었고, 배선이 끝나 지웠다. 되살아나면 두 경로가 공존해
+     * "재계획만 가끔 취향이 안 먹는다"가 돌아온다(종전 경로는 사유·지시·자유입력·원 일정·담은 장소를 버린다).
+     * 폴백 판정은 INV-4 대로 위에서 한다.
      */
-    "상대가 재계획 경로를 배선 전이면(503) 종전 generate 경로로 내려간다" {
+    "재계획 실패는 그대로 올린다 — 배선 전 503 이어도 generate 로 내려가지 않는다" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andRespond(
                 withStatus(HttpStatus.SERVICE_UNAVAILABLE)
                     .body("""{"error_code":"ORCHESTRATOR_NOT_WIRED","message":"배선 미완료","retryable":false}""")
-                    .contentType(MediaType.APPLICATION_JSON),
-            )
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/generate"))
-            .andRespond(withSuccess(aiBody("OR_TOOLS"), MediaType.APPLICATION_JSON))
-
-        adapter.replan(replanInput()).days.single().slots.single().poiId shouldBe poi
-
-        server.verify()
-    }
-
-    /**
-     * **다른 503 은 폴백하지 않는다.** 배선 전과 상대 장애는 다른 사실이고, 장애를 조용히 종전 경로로
-     * 흘리면 "AI 가 죽었는데 재계획만 이상하게 돈다"가 된다 — 폴백 판정은 INV-4 대로 위에서 한다.
-     */
-    "배선 전이 아닌 실패는 종전 경로로 내려가지 않는다" {
-        val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
-            .andRespond(
-                withStatus(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body("""{"error_code":"UPSTREAM_DOWN","message":"LLM 게이트웨이 장애","retryable":true}""")
                     .contentType(MediaType.APPLICATION_JSON),
             )
 
@@ -488,6 +471,21 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         result.alternatives shouldBe mapOf("2026-08-01#$altPoiId" to "비 오면 여기가 나아요")
     }
 
+    "explanations — 그 여행의 취향·동행을 실어 묻는다(BR-U1-38)" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/explanations"))
+            .andExpect(jsonPath("$.preference_profile.styles[0]").value("미식"))
+            .andExpect(jsonPath("$.companion_type").value("혼자"))
+            .andRespond(withSuccess("""{"explanations":{}}""", MediaType.APPLICATION_JSON))
+
+        adapter.explanations(
+            UUID.randomUUID(), dummyOutput(),
+            PreferenceProfile(listOf("미식"), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null), "혼자",
+        )
+
+        server.verify()
+    }
+
     /**
      * **옛 응답도 깨지지 않는다** — 두 필드가 없던 시절의 AI 가 돌아와도 슬롯 근거는 살아야 한다.
      * 기본값이 빈 맵이라 성립하는데, 그 기본값이 사라지면 역직렬화가 통째로 실패해 근거가 다 없어진다.
@@ -554,6 +552,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         val result = adapter.repair(dummyOutput(), emptyList())
         result.repaired shouldBe dummyOutput()  // 원본 그대로
         result.changes shouldBe emptyList()
+        result.unrepairable shouldBe true // "고칠 것 없이 통과"와 구별된다 — 편집이 수리값을 쓸지 이걸로 가른다
         server.verify()
     }
 
@@ -574,6 +573,37 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         val result = adapter.repair(dummyOutput(), emptyList())
         result.repaired.days.single().slots.single().startAt.toString() shouldBe "11:00"
         result.changes.single() shouldBe "2번째 슬롯을 30분 뒤로"
+        result.unrepairable shouldBe false
+        server.verify()
+    }
+
+    "repair — 컨텍스트의 앵커·수단을 싣고, 앵커가 있는 날만 기본 일과 창을 함께 보낸다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andExpect(jsonPath("$.anchors.length()").value(1))
+            .andExpect(jsonPath("$.anchors[0].date").value("2026-08-02"))
+            .andExpect(jsonPath("$.anchors[0].lat").value(33.5))
+            .andExpect(jsonPath("$.time_windows[0].date").value("2026-08-02"))
+            .andExpect(jsonPath("$.time_windows[0].start").value("09:00:00"))
+            .andExpect(jsonPath("$.transport_modes[0]").value("렌터카"))
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.repair(
+            dummyOutput(), emptyList(),
+            RepairContext(listOf(DayAnchor(java.time.LocalDate.parse("2026-08-02"), 33.5, 126.5)), listOf("렌터카")),
+        )
+        server.verify()
+    }
+
+    "repair — 컨텍스트가 없으면 세 필드는 빈 목록(상대 종전 동작)" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andExpect(jsonPath("$.anchors").isEmpty)
+            .andExpect(jsonPath("$.time_windows").isEmpty)
+            .andExpect(jsonPath("$.transport_modes").isEmpty)
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.repair(dummyOutput(), emptyList())
         server.verify()
     }
 
@@ -625,6 +655,21 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andRespond(withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON))
 
         adapter.proposeSlotCandidates(candidatesInput())
+
+        server.verify()
+    }
+
+    "슬롯 후보 요청에 그 여행의 취향·동행이 실린다 — ALTERNATIVE_SELECTION 페르소나(BR-U1-38)" {
+        val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
+            .andExpect(jsonPath("$.preference_profile.styles[0]").value("미식"))
+            .andExpect(jsonPath("$.companion_type").value("친구"))
+            .andRespond(withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON))
+
+        adapter.proposeSlotCandidates(candidatesInput().copy(
+            preferenceProfile = PreferenceProfile(listOf("미식"), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
+            companionType = "친구",
+        ))
 
         server.verify()
     }
@@ -697,7 +742,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         out.candidates[0].rationale shouldBe "감성 컨셉에 맞는 카페"
     }
 
-    "후보 0건(fallback_level=2)의 no_candidates 는 ALL_IN_ITINERARY 로 매핑된다" {
+    "후보 0건(fallback_level=2)의 no_candidates(풀이 비었다)는 NO_NEARBY — 넓히기가 통한다(TRIP-1311)" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
             .andRespond(withSuccess(altBody(2, "", emptyReason = "no_candidates"), MediaType.APPLICATION_JSON))
@@ -706,6 +751,17 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
         out.candidates shouldBe emptyList()
         out.freshness.degraded shouldBe true
+        out.emptyReason shouldBe SlotCandidatesEmptyReason.NO_NEARBY
+    }
+
+    "후보 0건의 all_excluded(전부 일정에 있다)는 ALL_IN_ITINERARY — 넓혀도 같은 결과다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
+            .andRespond(withSuccess(altBody(2, "", emptyReason = "all_excluded"), MediaType.APPLICATION_JSON))
+
+        val out = adapter.proposeSlotCandidates(candidatesInput())
+
+        out.candidates shouldBe emptyList()
         out.emptyReason shouldBe SlotCandidatesEmptyReason.ALL_IN_ITINERARY
     }
 

@@ -20,6 +20,13 @@
 - **features 간 직접 import 금지.** 화면 이동은 라우팅으로, 데이터 공유는 `shared/api` 훅으로.
 - 테스트는 소스 옆(co-located). 전역 가드만 `src/__tests__/`.
 
+> **[개정 · 2026-10-12] §0 층 배치 — FSD 정합(TRIP-1138 계열) 이후 실재 배치(원문 보존).**
+> - **라우트는 `src/app/**`가 아니라 리포 루트 `frontend/app/`**(Expo Router)에 있다. `frontend/src/app/`은 FSD app 층(`entrypoint`·`model`·`routing`)이다.
+> - **pages는 그룹 폴더 아래 슬라이스**다 — `src/pages/<group>/<slice>`(예 `src/pages/itinerary/itinerary-mustvisit/`, `src/pages/itinerary/itinerary-plan/`). 배럴 import도 `@/pages/itinerary/<slice>` 형태다.
+> - 화면 `*Screen.tsx` 대부분은 `features/itinerary/ui/`가 아니라 **해당 page 슬라이스의 `ui/`**로 이사했다(예 `src/pages/itinerary/itinerary-draft/ui/DraftScreen.tsx`, `itinerary-copick/ui/ConceptPickerScreen.tsx`). `src/features/itinerary/`에는 `model/`(`draftView.ts`·`planState.ts`·`coPickSlots.ts`·`mustVisitList.ts` 등)과 `ui/`(`ItineraryGlyphs.tsx`·`PlaceAddScreen.tsx`·`UnplacedMustVisitNotice.tsx`)만 남았다.
+> - 지도 선례는 `shared/map/KakaoMapView.tsx`가 아니라 **`shared/map/MapView.tsx`**(네이버 네이티브, `@mj-studio/react-native-naver-map`)다.
+> - 구조 가드 `src/__tests__/itinerary*Structure.test.ts`(MustVisit·Draft·MapSurface)는 현재 없다 — TRIP-1145 스캔 정리 원칙("회귀 감시 스캔 대신 eslint·QA")으로 지워졌다. 층 방향은 `eslint.config.js` 층 zone이 강제한다.
+
 ## 0.1 이미 구현된 것 (2026-08-09 실측)
 
 | 파일 | 티켓 | 상태 |
@@ -32,6 +39,8 @@
 | `shared/api/isAlreadyRegistered.ts` | TRIP-296 | ✅ 409 판정 공용 승격 |
 | `__tests__/itineraryMustVisitStructure.test.ts` | TRIP-296 | ✅ |
 | `app/(tabs)/itinerary.tsx` | — | **껍데기** — 아래 §1이 채운다 |
+
+> **[개정 · 2026-10-12] §0.1 — `app/(tabs)/itinerary.tsx`는 껍데기가 아니다.** TRIP-468로 **내 여행 목록**(`MyTripsListPage`, `src/pages/itinerary/itinerary-list/`)을 그린다 — "활성 여행으로 리다이렉트"(§1 첫 행)는 폐기됐다(둘째 이후 여행에 접근 못 하던 결함). 위 표의 경로는 §0 개정 블록대로 `src/pages/itinerary/...`·루트 `app/...`로 읽는다.
 
 ---
 
@@ -59,6 +68,12 @@
 - **h34 확정 읽기전용은 별도 라우트가 아니다** — `index`가 `status=CONFIRMED`일 때의 상태.
 - ⚠️ `trips/**`는 `(tabs)` 밖이라 `SplashGate`의 `Stack.Protected` guard에 안 걸린다 — **미인증 딥링크로 열린다**(`stays/`·`trips/new/**` 선례, structure.md 경고). U3가 새로 만드는 라우트도 같은 조건이며, 데이터 노출은 서버 401이 막는다.
 - **[구현 결정 · TRIP-354, 2026-08-14] h25·h26은 세그먼트가 아니라 단일 화면 상태다.** "화면" 칸의 h25·h26 병기는 예전엔 시간표/지도 두 세그먼트(토글로 전환)를 뜻했으나 그 토글을 폐기했다 — 아래 §2·§4의 소급 기록 참고.
+
+> **[개정 · 2026-10-12] §1 라우트 — 실재 목록(원문 보존).** 실제 라우트는 `frontend/app/trips/[tripId]/itinerary/` 아래 12개다:
+> `method.tsx` · `must-visits/index.tsx` · `must-visits/[poiId].tsx` · `generating.tsx` · `draft.tsx` · `copick/[slotKey].tsx` · `copick/complete.tsx` · `manual/index.tsx` · `manual/add.tsx` · `index.tsx` · `edit.tsx` · `stay-recommend.tsx`.
+> - **없는 것**: `copick/index.tsx`(컨셉 선택은 `ConceptPickerScreen`이 copick 슬라이스 안에서 그린다), `history.tsx`(h36 변경 이력 FE 미구현), `reorder.tsx`(h28 미구현), `stay-suggest.tsx`(→ `stay-recommend.tsx`, `StayRecommendPage`).
+> - 탭 `app/(tabs)/itinerary.tsx` = `MyTripsListPage`(§0.1 개정).
+> - **h 코드는 옛 체계다.** 라이브 Figma h 밴드는 2026-09 재작성으로 **h01~h17**(결번 없음, `xNN-[갈래] 이름 · 상태`)로 재번호됐고 옛 h04~h38 코드는 죽었다(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`). 옛→새 매핑은 볼트 `사이클/20260908-figma-hnew/figma-build.md` 후속 33·38. 이 문서의 h 코드는 역사 기록으로 읽는다.
 
 ## 2. `src/pages/` 슬라이스
 
@@ -143,6 +158,8 @@
 >
 > **요구사항 근거가 아니라 구현 결정의 소급 기록**이다(TRIP-297·339·298·302 선례와 같은 형식) — 다음 사이클이 요구사항 근거로 인용하지 말 것.
 
+> **[개정 · 2026-10-12] 지도 컴포넌트 교체.** 위 서술의 `KakaoMapView`(두 호출부)는 이제 `frontend/src/shared/map/MapView.tsx`(네이버 네이티브)다. 이를 2개로 잠그던 `itineraryMapSurfaceStructure.test.ts`는 현재 없다(TRIP-1145 정리).
+
 ## 5. `src/shared/` 변경
 
 | 대상 | 변경 |
@@ -150,6 +167,8 @@
 | `shared/map/KakaoMapView.tsx` | **확장 필요** — 다중 핀(번호)·폴리라인·center 갱신 미지원(U3 NFR 실측). itinerary와 execution(U4)이 함께 쓰므로 **처음부터 shared 소유** |
 | `shared/ui/StateNotice.tsx` | 재사용 — 지도 실패·후보 0건·오류 상태 |
 | `shared/api/generated/` | `itinerary` 태그 코드젠 추가 필요(`orval.config.ts` `filters.tags`) |
+
+> **[개정 · 2026-10-12] §5 — `KakaoMapView` 확장 행 대체.** 지도는 확장이 아니라 **교체**됐다 — `frontend/src/shared/map/MapView.tsx`(`@mj-studio/react-native-naver-map`)가 다중 번호 핀·폴리라인(`NaverMapPathOverlay`)·반경 원·점선(`strokeDasharray`)·핀 맞춤(`fitRegion.ts`)을 제공하고, 좌표 지정은 `CenterPinPicker`가 맡는다. shared 소유 원칙은 그대로다.
 
 ## 6. 구조 가드 (`src/__tests__/`)
 
@@ -227,6 +246,8 @@ itinerary-draft-retry                  다시 시도 버튼
 - **지도 고정(`viewOnly`)** — h05·h11만 옵트인. 나머지 화면(숙소 등록 3곳·거점 확정 1곳)은 좌표를 정하는 것이 기능 자체라 제외.
 
 근거: Figma `1870:1083`(h11)·`1875:1094`(h05) 실측 · TRIP-339. **요구사항 근거가 아니라 구현 결정의 소급 기록**이다(TRIP-297 선례와 같은 형식) — 다음 사이클이 요구사항 근거로 인용하지 말 것.
+
+> **[개정 · 2026-10-12] TRIP-339 지도 시각 계약 — 구현 매체 변경.** "같은 지도 대본(`buildMapHtml`)"·"WebView 안에는 번들 폰트가 없어 `sans-serif`" 서술은 WebView 시절 것이다. 현재 핀·연결선은 네이버 네이티브 오버레이(`NaverMapMarkerOverlay` 자식 마커·`NaverMapPathOverlay`)로 `frontend/src/shared/map/MapView.tsx`가 그린다. 연결선 h11만·`viewOnly` 옵트인 규칙 자체는 이 개정 범위에서 재확인하지 않았다.
 
 ## 9. PBT (`model/` 순수 함수 · fast-check)
 

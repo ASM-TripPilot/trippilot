@@ -33,6 +33,44 @@ _PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 _SLOTS = ("성산일출봉", "우도")
 
 
+class ServedModelMismatch(RuntimeError):
+    """서버가 요청할 모델을 그 이름으로 서빙하고 있지 않다."""
+
+
+_LOCAL_PREFIX = "local"
+
+
+def assert_served_model(client, model_id: str) -> None:
+    """답을 받기 전에 **누가 답할 것인지** 확인한다.
+
+    병합이 안 된 베이스 모델이 서빙돼도 그럴듯한 답이 나오므로 결과만 보고는 모른다
+    (런북 §4 배포 후 대조 검증). 이름 단계에서 먼저 막는다.
+
+    - 배정 이름이 `local` 로 시작하지 않으면 앱은 로컬 라우트를 아예 안 만든다
+      (`main.py::_local_route`) — 예외 없이 외부 벤더로 나가므로 여기서 끊는다.
+    - 목록 조회 실패를 "해당 없음"으로 읽지 않는다. 도구가 거부한 결과를 부재로
+      읽는 것은 이 리포가 안티패턴으로 적어 둔 사고다.
+    """
+    if not model_id.startswith(_LOCAL_PREFIX):
+        raise ServedModelMismatch(
+            f"모델명 {model_id!r} 이 {_LOCAL_PREFIX!r} 로 시작하지 않는다 — "
+            "앱이 로컬 라우트를 안 켜고 외부 벤더로 나간다(main.py::_local_route)."
+        )
+    try:
+        served = [model.id for model in client.models.list().data]
+    except Exception as e:
+        raise ServedModelMismatch(
+            f"서빙 중인 모델을 확인할 수 없다({type(e).__name__}: {e}) — "
+            "조회 실패를 '해당 없음'으로 읽지 않는다."
+        ) from e
+    if model_id not in served:
+        raise ServedModelMismatch(
+            f"서버가 {model_id!r} 를 서빙하지 않는다. 서빙 중: {served!r}. "
+            "vLLM `--served-model-name`(또는 Triton 모델 디렉토리명)과 "
+            "`AI_LLM_FEATURE_MODELS` 배정값이 전부 같아야 한다."
+        )
+
+
 def main() -> int:
     base_url = os.environ.get("TRIPPILOT_LOCAL_LLM_BASE_URL")
     model_id = os.environ.get("TRIPPILOT_LOCAL_LLM_MODEL")
@@ -44,14 +82,18 @@ def main() -> int:
 
     from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
 
-    adapter = OpenAIAdapter(
-        openai.OpenAI(
-            api_key=os.environ.get("TRIPPILOT_LOCAL_LLM_API_KEY") or "local",
-            base_url=base_url,
-            max_retries=0,
-        ),
-        api="chat",
+    client = openai.OpenAI(
+        api_key=os.environ.get("TRIPPILOT_LOCAL_LLM_API_KEY") or "local",
+        base_url=base_url,
+        max_retries=0,
     )
+    try:
+        assert_served_model(client, model_id)
+    except ServedModelMismatch as e:
+        # 여기서 막지 않으면 A/B 의 한쪽이 다른 모델 성적이 된다.
+        print(f"[smoke] FAIL {e}", file=sys.stderr)
+        return 2
+    adapter = OpenAIAdapter(client, api="chat")
 
     item = ReminderCopyItem(
         schedule_key="smoke", kind="TRIP_DAY", date_label="2026-09-13", slot_names=_SLOTS

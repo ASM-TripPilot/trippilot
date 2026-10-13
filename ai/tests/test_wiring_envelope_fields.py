@@ -10,7 +10,7 @@
      거리만, 소요시간류 토큰 0 (INV-3 — 이번 작업 최대 위험 지점)
   ④ freshness: 도메인 Poi에 수집 시각 메타가 없다 → **계속 null** (풀 생성 시각을
      수집 시각인 척 싣지 않는다)
-  ⑤ repair 봉투: 원 요청 컨텍스트가 없다 → 부가 필드는 기존대로 null/빈 값
+  ⑤ repair 봉투: 원 요청 컨텍스트가 없다 → 부가 필드는 null. 거리는 POI→POI 구간만 채운다
 
 스타일·조립은 test_e2e_boundary.py와 동일(실 조립 + fake 어댑터, 실 호출 0 — D37).
 """
@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timedelta, timezone
 
+from trippilot.agents.schedule.budget import OrchestratorConfig
 from trippilot.api.wiring import _distance_ranges
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator
@@ -47,7 +48,12 @@ _DISTANCE_PATTERN = re.compile(r"^약 \d+\.\dkm · 대중교통 추정$")
 
 
 def test_generate_candidates_summary_reflects_pool_facts() -> None:
-    """e2e 풀 = p1..p6 전부 SIGHT → LOW · pool_size=6 · 나머지 7개 카테고리 부족."""
+    """e2e 풀 = p1..p6 전부 SIGHT · 취향 styles=["자연"] → NATURE 0건이라 LOW.
+
+    BR-U2-05 개정(2026-10-02): LOW 는 "취향 카테고리 0건 또는 풀 과소"일 때만이다 —
+    6건 ≥ 1일×5 라 과소는 아니고, 취향(자연)이 요구하는 NATURE 가 없어서 LOW 다.
+    shortfall 은 종전대로 풀에 없는 경계 카테고리 전부.
+    """
     with make_client() as client:
         response = client.post("/ai/v1/itinerary/generate", json=_request())
 
@@ -160,6 +166,107 @@ def test_repair_envelope_keeps_extras_null() -> None:
     assert repaired["freshness"] is None
 
 
+def test_repair_fills_poi_to_poi_distance_like_generate() -> None:
+    """편집(장소 교체) 뒤 repair 가 시각을 고치면 거리도 같이 와야 한다 — 백엔드가 바뀐
+    구간을 null 로 비운 채 "이동 거리 계산 중"에 영구 고착됐다(2026-10-05 실측).
+
+    generate 와 같은 렌더(`_distance_ranges`·"약 N.Nkm · 대중교통 추정"). repair 와이어엔
+    앵커가 없어 첫 슬롯은 null(지어내지 않는다). 수단은 repair 가 시각 계산에 쓴 것(PUBLIC).
+    """
+    itinerary = {
+        "days": [{"date": _DAY1.isoformat(), "slots": [
+            {"poi_id": "p1", "start_at": "10:00:00", "end_at": "11:00:00"},
+            {"poi_id": "p2", "start_at": "11:05:00", "end_at": "12:00:00"},
+        ]}],
+        "solve_mode": "OR_TOOLS",
+    }
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/repair",
+            json={"itinerary": itinerary, "violations": [], "request_meta": _meta()},
+        )
+
+    assert response.status_code == 200, response.text
+    slots = response.json()["repaired"]["days"][0]["slots"]
+    assert slots[0]["distance_range"] is None  # 앵커 없음 — 지어내지 않는다
+    assert _DISTANCE_PATTERN.fullmatch(slots[1]["distance_range"] or ""), slots[1]
+    for banned in _BANNED_TOKENS:
+        assert banned not in response.text
+    assert "분" not in slots[1]["distance_range"]
+
+
+def _repair_first_slot(extra: dict) -> list[dict]:
+    """그날 첫 슬롯을 앵커에서 먼(p6 ≈ 2.8km) 곳으로 바꾼 편집 — 시각은 옛 첫 슬롯(09:00) 그대로 온다."""
+    itinerary = {
+        "days": [{"date": _DAY1.isoformat(), "slots": [
+            {"poi_id": "p6", "start_at": "09:00:00", "end_at": "10:00:00"},
+            {"poi_id": "p1", "start_at": "10:00:00", "end_at": "11:00:00"},
+        ]}],
+        "solve_mode": "OR_TOOLS",
+    }
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/repair",
+            json={"itinerary": itinerary, "violations": [], "request_meta": _meta(), **extra},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["repaired"] is not None, response.text
+    for banned in _BANNED_TOKENS:
+        assert banned not in response.text
+    return response.json()["repaired"]["days"][0]["slots"]
+
+
+def _minutes(a: GeoPoint, b: GeoPoint, mode: TransportMode) -> int:
+    return TravelEstimator(AssemblyConfig()).estimate(a, b, mode).internal_minutes
+
+
+_ANCHORED = {
+    "anchors": [{"date": _DAY1.isoformat(), "lat": _ANCHOR.lat, "lng": _ANCHOR.lng}],
+    "time_windows": [{"date": _DAY1.isoformat(), "start": "09:00", "end": "21:00"}],
+}
+_P6 = GeoPoint(_ANCHOR.lat + 0.025, _ANCHOR.lng + 0.025)
+
+
+def test_repair_with_anchor_fills_first_leg_and_floors_first_slot_like_generate() -> None:
+    """첫 슬롯 교체 후속(2026-10-05) — 앵커가 오면 첫 구간 거리가 앵커→첫 장소로 채워지고,
+    첫 슬롯 시작은 generate 와 같은 규칙(창 시작 + 앵커 이동) 이상으로 밀린다."""
+    slots = _repair_first_slot(_ANCHORED)
+
+    assert _DISTANCE_PATTERN.fullmatch(slots[0]["distance_range"] or ""), slots[0]
+    assert "분" not in slots[0]["distance_range"]  # INV-3
+    floor = datetime(2026, 8, 5, 9, 0) + timedelta(
+        minutes=_minutes(_ANCHOR, _P6, TransportMode.PUBLIC))
+    assert slots[0]["start_at"] == floor.time().isoformat()
+
+
+def test_repair_with_car_transport_uses_car_for_label_and_times() -> None:
+    """이동수단이 오면 시각 계산·거리 문자열 모두 그 수단 — generate 의 transport_modes 어휘."""
+    slots = _repair_first_slot({**_ANCHORED, "transport_modes": ["택시", "자가용"]})
+
+    assert re.fullmatch(r"^약 \d+\.\dkm · 자가용 추정$", slots[0]["distance_range"] or ""), slots
+    assert slots[1]["distance_range"].endswith("자가용 추정")
+    floor = datetime(2026, 8, 5, 9, 0) + timedelta(
+        minutes=_minutes(_ANCHOR, _P6, TransportMode.CAR))
+    assert slots[0]["start_at"] == floor.time().isoformat()
+
+
+def test_repair_without_new_fields_keeps_previous_behavior() -> None:
+    """하위호환 — 앵커·수단이 없으면 첫 구간 null·PUBLIC, 첫 슬롯 시각 그대로."""
+    slots = _repair_first_slot({})
+
+    assert slots[0]["distance_range"] is None
+    assert slots[0]["start_at"] == "09:00:00"
+    assert _DISTANCE_PATTERN.fullmatch(slots[1]["distance_range"] or ""), slots[1]
+
+
+def test_repair_anchor_without_window_fills_distance_but_keeps_time() -> None:
+    """창이 없으면 출발 시각을 모른다 — 거리만 채우고 시각은 지어내지 않는다."""
+    slots = _repair_first_slot({"anchors": _ANCHORED["anchors"]})
+
+    assert _DISTANCE_PATTERN.fullmatch(slots[0]["distance_range"] or ""), slots[0]
+    assert slots[0]["start_at"] == "09:00:00"
+
+
 # ── 화이트박스: 좌표 미상 구간은 산출하지 않고 다음 구간까지 전파 ────
 
 
@@ -235,8 +342,9 @@ def test_generate_slot_alternatives_from_pool_only_with_slot_based_distance() ->
     차선책은 풀 안 미배치 POI 뿐이고 동률 점수라 **슬롯 POI 에 가까운 순**(p3, p4). 거리 문자열은
     **슬롯 POI 기준**이다 — p2 의 p3 은 "약 0.9km"(앵커·직전 슬롯 p1 기준이면 "약 1.8km"라 갈린다).
     (기본 창 09–21 이면 6건이 전부 배치돼 차선책이 0건 — 그 상태의 단언은 아무것도 증명하지 않는다.)
+    지터 0 — 동률 전제라 결정론 지터(TRIP-1180)가 켜지면 배치가 해시 값에 달린다.
     """
-    with make_client() as client:
+    with make_client(orchestrator_config=OrchestratorConfig(diversity_jitter=0.0)) as client:
         response = client.post(
             "/ai/v1/itinerary/generate", json=_request(window=("09:00", "12:00")))
 

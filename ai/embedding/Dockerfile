@@ -46,12 +46,53 @@ ENV EMBEDDING_MODEL=${EMBEDDING_MODEL} \
 COPY bake_model.py ./
 # 굽고 나면 HF 캐시(fp32 원본 2.1GB)는 필요 없다 — 같은 레이어에서 지워야
 # 이미지에 안 남는다. 런타임은 /models/kure 의 fp16 사본만 읽는다.
+#
+# **구운 뒤 권한을 연다.** safetensors 직렬화가 가중치를 `0600 root` 로 쓴다(다른 산출물은
+# 0644 다). 로컬 compose 는 root 로 돌아 드러나지 않지만, 배포 차트는 비루트(uid 10001)라
+# 거기서만 터진다 — 그리고 터지는 모양이 **`FileNotFoundError: No such file or directory`** 다
+# (safetensors 의 `safe_open` 이 권한 거부를 그렇게 보고한다). 없는 파일을 찾게 만든다.
+# 아래 검사가 재발을 빌드에서 막는다 — 런타임에 드러나면 `/health` 가 200 이라 조용하다.
 RUN HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 \
     /app/.venv/bin/python bake_model.py "${EMBEDDING_MODEL}" "${EMBEDDING_REVISION}" /models/kure \
- && rm -rf /models/hf
+ && rm -rf /models/hf \
+ && chmod -R a+rX /models/kure \
+ && if find /models/kure ! -perm -o+r | grep -q .; then \
+      echo "비루트가 못 읽는 산출물이 남았다:" >&2; find /models/kure ! -perm -o+r >&2; exit 1; \
+    fi
+
+# ONNX 그래프를 굽는다 — `EMBEDDING_BACKEND=onnx` 가 프로세스 안에서 이걸 읽는다
+# (TRIP-965, amd64 실측 13~15% 단축). **기본 백엔드는 여전히 sentence-transformers** 라
+# 이 단계는 선택지를 이미지에 넣어 두는 것이지 동작을 바꾸지 않는다.
+#
+# 굽는 쪽을 빌드에 두는 이유는 bake_model 과 같다 — 런타임에 만들면 파드가 뜰 때마다
+# 수 분을 쓰고, 볼륨에 두면 표준 리셋 절차가 지운다.
+#
+# `onnxruntime` 은 런타임 의존이라 여기서 함께 깐다. `onnx` 는 **내보내기에만** 쓰이고
+# 런타임에는 필요 없다(같은 레이어에서 지운다 — 200MB 급이다).
+ARG EMBEDDING_BAKE_ONNX=1
+COPY export_onnx.py ./
+RUN if [ "${EMBEDDING_BAKE_ONNX}" = "1" ]; then \
+      uv pip install --no-cache "onnx>=1.17" "onnxruntime>=1.19" && \
+      /app/.venv/bin/python export_onnx.py /models/onnx && \
+      uv pip uninstall onnx && \
+      chmod -R a+rX /models/onnx && \
+      if find /models/onnx ! -perm -o+r | grep -q .; then \
+        echo "비루트가 못 읽는 ONNX 산출물이 남았다:" >&2; find /models/onnx ! -perm -o+r >&2; exit 1; \
+      fi ; \
+    fi
+ENV EMBEDDING_ONNX_DIR=/models/onnx
 
 COPY app.py ./
 
+# `/ready` 가 모델 상태를 실제로 가르는지 **빌드에서** 확인한다 — 차트의 startup·readiness
+# 가 이걸 보고, 틀리면 모델 없는 파드가 트래픽을 받는다(check_ready.py 의 docstring 에 경위).
+COPY check_ready.py ./
+RUN /app/.venv/bin/python check_ready.py
+
 EXPOSE 8100
-# 워커 1개 — 모델이 프로세스마다 1.1GB 를 잡는다. 늘리려면 메모리부터 계산할 것.
+# 워커 1개 — 모델이 **프로세스마다 4.2 GiB** 를 잡는다(워밍 직후 4.29 · 배치 정점 4.37,
+# `ai/docs/임베딩-사이징-근거.md` §2). 위의 1.1GB 는 이미지에 저장된 fp16 가중치 크기이고
+# 런타임 상주가 아니다 — app.py 가 `.float()` 로 fp32 로 되올린다. 저장 크기로 계산하면
+# 2워커가 2.2GB 로 보여 한도(limits 6Gi · compose mem_limit 5g) 안에 들어오는 것처럼
+# 되는데, 실제로는 8.4GiB 라 OOMKilled 다. 늘리려면 한도부터 같이 올릴 것.
 CMD ["/app/.venv/bin/uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]

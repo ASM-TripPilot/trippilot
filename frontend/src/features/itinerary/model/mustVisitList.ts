@@ -2,7 +2,7 @@ import type {
   MustVisit,
   MustVisitType,
   SavedPlace,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import type { MapPin } from '@/shared/map';
 
 /**

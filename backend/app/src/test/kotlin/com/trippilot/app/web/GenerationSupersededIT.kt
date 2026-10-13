@@ -1,5 +1,6 @@
 package com.trippilot.app.web
 
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.Account
@@ -100,7 +101,7 @@ class GenerationSupersededIT : AbstractPostgresIntegrationTest() {
                 override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
                 override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult =
                     RepairResult(solution, emptyList())
-                override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
+                override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
                 override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =
                     error("이 테스트는 슬롯 후보를 쓰지 않는다")
                 override fun replan(input: ReplanInput): ScheduleAgentOutput = error("이 테스트는 재계획을 쓰지 않는다")

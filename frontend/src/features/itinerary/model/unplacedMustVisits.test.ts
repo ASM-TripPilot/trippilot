@@ -5,7 +5,7 @@ import type {
   ItineraryUnplacedMustVisitsItemReasonCode,
   Place,
   SavedPlace,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { MUST_VISIT_NAME_PLACEHOLDER } from './mustVisitList';
 import { resolveUnplacedNames } from './unplacedMustVisits';

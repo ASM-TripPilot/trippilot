@@ -57,7 +57,10 @@ class ReflectionPropertyTest : StringSpec({
     class Reflections : ReflectionRepository {
         val stored = mutableMapOf<Pair<UUID, LocalDate>, Reflection>()
         override fun upsert(reflection: Reflection) = reflection.also { stored[it.tripId to it.dayDate] = it }
+        var locks = 0
         override fun find(tripId: UUID, dayDate: LocalDate) = stored[tripId to dayDate]
+        override fun exists(tripId: UUID, dayDate: LocalDate) = (tripId to dayDate) in stored
+        override fun findForUpdate(tripId: UUID, dayDate: LocalDate) = find(tripId, dayDate).also { locks++ }
         override fun findByTrip(tripId: UUID) = stored.values.filter { it.tripId == tripId }.sortedBy { it.dayDate }
     }
 
@@ -340,6 +343,74 @@ class ReflectionPropertyTest : StringSpec({
         events.published.shouldBeEmpty()
     }
 
+    // ── 기분·한 줄 메모(TRIP-828) ─────────────────────────────────────
+    "기분·한 줄만 보내면 카드는 그대로다 — 다시 들어와도 남아 있다" {
+        val repo = Reflections()
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock)
+        svc.edit(acc, tripId, day, userCard("내가 쓴 제목"))
+
+        svc.edit(acc, tripId, day, cardPayload = null, mood = "GOOD", shortMemo = "바람이 좋았다")
+
+        val saved = repo.find(tripId, day)!!
+        saved.mood shouldBe "GOOD"
+        saved.shortMemo shouldBe "바람이 좋았다"
+        saved.editedCard?.title shouldBe "내가 쓴 제목" // 기분을 고쳤는데 내가 쓴 카드가 사라지면 안 된다
+    }
+
+    "한쪽만 고치면 다른 쪽은 남고, 빈 문자열은 지운다 — null 과 빈 값을 뭉치면 메모 수정이 기분을 지운다" {
+        val repo = Reflections()
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock)
+        svc.edit(acc, tripId, day, null, "GOOD", "처음 메모")
+
+        svc.edit(acc, tripId, day, null, null, "고친 메모").mood shouldBe "GOOD"
+        val cleared = svc.edit(acc, tripId, day, null, "", null)
+
+        cleared.mood shouldBe null
+        cleared.shortMemo shouldBe "고친 메모"
+    }
+
+    "재생성이 기분·한 줄을 지우지 않는다 — 초안은 다시 만들 수 있지만 사용자가 쓴 것은 어디에도 없다" {
+        val repo = Reflections()
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock)
+        svc.edit(acc, tripId, day, null, "GOOD", "바람이 좋았다")
+
+        val again = svc.generateDaily(acc, tripId, day)
+
+        again.mood shouldBe "GOOD"
+        again.shortMemo shouldBe "바람이 좋았다"
+    }
+
+    "한 줄은 60자까지다 — 이모지도 한 글자로 센다. 기분에는 문장을 못 넣는다" {
+        val repo = Reflections()
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock)
+
+        svc.edit(acc, tripId, day, null, null, "😀".repeat(60)).shortMemo shouldBe "😀".repeat(60)
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "가".repeat(61)) }
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, "오늘은 정말 좋았다", null) }
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, "A".repeat(21), null) }
+    }
+
+    "한 줄에는 줄바꿈·제어 문자를 못 넣는다 — NUL 은 DB 가 거부해 500 이 된다. 앞뒤 공백은 세지 않는다" {
+        val repo = Reflections()
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock)
+
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "첫 줄\n둘째 줄") }
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "널\u0000문자") }
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "줄\u2028구분자") }
+        // 짝 없는 서로게이트 — 글자 수 검사는 통과하지만 UTF-8 로 옮길 수 없어 저장에서 500 이 된다.
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "깨진\ud83d") }
+        svc.edit(acc, tripId, day, null, null, "이모지🙂").shortMemo shouldBe "이모지🙂"
+        svc.edit(acc, tripId, day, null, null, "  " + "가".repeat(60) + "  ").shortMemo shouldBe "가".repeat(60)
+    }
+
+    "아무것도 안 보내면 400 이다 — 조용히 200 이면 저장된 줄 안다" {
+        val repo = Reflections()
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock)
+
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, null) }
+        repo.stored.size shouldBe 0
+    }
+
     "여행 기간 밖 날짜는 거부한다 — 근거 데이터가 없는 날이다" {
         val svc = ReflectionService(
             trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock,
@@ -459,5 +530,28 @@ class ReflectionPropertyTest : StringSpec({
 
             svc.generateDaily(acc, tripId, day).source shouldNotBe ReflectionSource.AI
         }
+    }
+
+    /**
+     * 행이 없는 하루의 첫 수정은 초안을 만들며 AI 를 부른다. 그 호출 **전에** 잠그면 응답을 기다리는 동안
+     * (읽기 제한 21초) 같은 하루의 다른 쓰기가 전부 멈춘다 — 기분 하나 고치는 요청이 그만큼 걸린다.
+     */
+    "행이 없는 첫 수정은 AI 호출이 끝난 뒤에 잠근다 — 호출 동안 그 하루의 다른 쓰기를 세우지 않는다" {
+        val repo = Reflections()
+        var locksSeenByAgent = -1
+        val agent = object : com.trippilot.reflection.domain.port.ReflectionAgentPort {
+            override val enabled = true
+            override fun generate(input: com.trippilot.reflection.domain.port.ReflectionAgentInput) =
+                null.also { locksSeenByAgent = repo.locks }
+        }
+        val svc = ReflectionService(
+            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock,
+        )
+
+        svc.edit(acc, tripId, day, cardPayload = null, mood = "GOOD")
+
+        locksSeenByAgent shouldBe 0
+        repo.locks shouldBe 1
     }
 })

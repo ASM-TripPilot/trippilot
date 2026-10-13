@@ -21,7 +21,16 @@ import java.util.UUID
  * 실제 어댑터 경로를 타지 않는다 — 그러면 "Apple 이 어떤 실패로 나가는가"를 잴 수 없다.
  * 여기서는 실물 배선 그대로 태운다.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = [
+        // 네이버를 **설정된 상태**로 둔다(TRIP-1317). 비워 두면 "미설정 → 501" 가드가 먼저 걸려,
+        // code 경로 거절이 사라져도 아래 네이버 테스트가 초록이다(역검증 실측). 교환 주소는 닫힌 포트라
+        // 거절이 사라지면 외부로 나가지 않고 503 으로 빨개진다.
+        "trippilot.social.naver.client-id=test-naver-client",
+        "trippilot.social.naver.token-uri=http://localhost:1/oauth2.0/token",
+    ],
+)
 class AuthErrorContractIT : AbstractPostgresIntegrationTest() {
 
     @Value("\${local.server.port}")
@@ -88,6 +97,33 @@ class AuthErrorContractIT : AbstractPostgresIntegrationTest() {
         val (status, body) = call(
             HttpMethod.POST, "/api/v1/auth/social/apple/token", """{"accessToken":"token"}""",
         )
+
+        status shouldBe 501
+        body["error"]["code"].asText() shouldBe "PROVIDER_NOT_SUPPORTED"
+    }
+
+    /**
+     * TRIP-1316 — 설정이 채워져 있어도 구글은 토큰 경로에서 거절한다(발급 대상 미확인 + 전역 sub).
+     * 401 이 아니라 501 인 이유는 위와 같다: 재시도로 풀리지 않는다.
+     */
+    @Test
+    fun `구글 SDK 토큰 로그인은 501 이다 — 토큰 경로는 구글을 받지 않는다`() {
+        val (status, body) = call(
+            HttpMethod.POST, "/api/v1/auth/social/google/token", """{"accessToken":"token"}""",
+        )
+
+        status shouldBe 501
+        body["error"]["code"].asText() shouldBe "PROVIDER_NOT_SUPPORTED"
+    }
+
+    /**
+     * TRIP-1317 — 네이버는 code 경로에서 거절한다(PKCE 미지원이라 가로챈 code 를 막을 수 없다).
+     * **설정이 채워져 있어도** 501 이다(클래스 머리의 properties 가 네이버를 설정된 상태로 둔다).
+     * 401 이 아닌 이유는 위와 같다: 재시도로 풀리지 않는다.
+     */
+    @Test
+    fun `네이버 code 로그인은 501 이다 — code 경로는 네이버를 받지 않는다`() {
+        val (status, body) = call(HttpMethod.POST, "/api/v1/auth/social/naver", appleBody)
 
         status shouldBe 501
         body["error"]["code"].asText() shouldBe "PROVIDER_NOT_SUPPORTED"

@@ -13,8 +13,14 @@ import { consentPutBody } from './consentPutBody';
 
 /** 화면이 소비하는 도메인 계약 — 생성 훅 3종을 감싼다. */
 export interface LocationConsentModel {
-  /** 현재 토글값(GET legalConsent, 미도착이면 false). */
+  /** 현재 토글값(GET legalConsent). `status !== 'ready'` 일 땐 의미 없다 — "동의 안 함"으로 읽지 말 것. */
   consentOn: boolean;
+  /** 조회 상태 — 로딩·실패를 "동의 안 함"으로 접지 않게 화면이 별도 얼굴을 그린다(TRIP-1194). */
+  status: 'loading' | 'error' | 'ready';
+  /** 조회 재시도. */
+  refetch: () => void;
+  /** 마지막 저장(PUT)이 실패했다 — 다음 grant/revoke 시작 때 걷힌다(INV-4). */
+  saveFailed: boolean;
   /** 토글 비활성 — 서버 미러 DENIED **이면서** 단말 실권한도 미허용일 때만. */
   disabled: boolean;
   /** 승낙(OFF→ON) — 재확인 게이트 없이 곧장. */
@@ -41,12 +47,26 @@ export function useLocationConsent(): LocationConsentModel {
   // 저장 성공 뒤 조회를 낡음 표시 — 스택에 남은 설정(l05)의 동의 칩이 옛 값을 보이지 않게 한다(TRIP-778 D11).
   // 키는 `getGetMeLocationConsentQueryKey()` 와 같은 값의 리터럴이다 — 생성 모듈을 자동 목하는 테스트에서
   // 그 함수는 undefined 를 돌려줘 전체 무효화로 번진다.
+  // 저장 진행 잠금 — 법정 로그(append-only)라 같은 PUT 2회는 중복 행이다. isPending 은 리렌더 뒤에야
+  // 서므로 같은 틱 연타는 ref 가 막는다(TRIP-1194). 정착(성공·실패)에서 푼다.
+  const inFlightRef = useRef(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const put = usePutMeLocationConsent({
     mutation: {
       onSuccess: () =>
         queryClient.invalidateQueries({ queryKey: ['/me/location-consent'] }),
+      onError: () => setSaveFailed(true),
+      onSettled: () => {
+        inFlightRef.current = false;
+      },
     },
   });
+  const save = (legal: boolean): void => {
+    if (inFlightRef.current || put.isPending) return;
+    inFlightRef.current = true;
+    setSaveFailed(false);
+    put.mutate({ data: consentPutBody(legal) });
+  };
   const patch = usePatchMeLocationConsentOsPermission();
 
   // 단말 실권한 — 마운트 시 1회 읽어 저장한다(초기 null). 서버 미러가 stale DENIED 여도 단말이
@@ -71,10 +91,19 @@ export function useLocationConsent(): LocationConsentModel {
 
   return {
     consentOn: consent.data?.legalConsent ?? false,
+    status: consent.isError
+      ? 'error'
+      : consent.data === undefined
+        ? 'loading'
+        : 'ready',
+    refetch: () => {
+      void consent.refetch();
+    },
+    saveFailed,
     disabled:
       consent.data?.osPermissionMirror === 'DENIED' &&
       deviceStatus !== 'granted',
-    grant: () => put.mutate({ data: consentPutBody(true) }),
-    revoke: () => put.mutate({ data: consentPutBody(false) }),
+    grant: () => save(true),
+    revoke: () => save(false),
   };
 }

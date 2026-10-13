@@ -1,10 +1,10 @@
-import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
+import { formatDayLabel } from '@/entities/trip';
 import type {
   DayHighlight,
   TripSummaryEnvelope,
   TripSummaryStats,
   TripSummaryStatsDistanceSource,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-572 · j04 여행 요약 — 화면 분기·공유 게이트·방문 평탄화의 **판정 단일 출처**(순수 함수).

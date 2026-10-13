@@ -5,11 +5,13 @@ import com.trippilot.trip.application.EditTripCommand
 import com.trippilot.trip.domain.CompanionType
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripCounts
+import com.trippilot.trip.domain.TripDayWindow
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripStatus
 import jakarta.validation.constraints.NotNull
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -40,10 +42,20 @@ data class CreateTripRequest(
     val budgetTotal: Long? = null,
     val preferenceSnapshot: Map<String, Any?> = emptyMap(),
     val destinations: List<DestinationDto> = emptyList(),
+    /**
+     * 일과 창 — 하루 몇 시부터 움직이는가. 전부 생략하면 종전대로 기본 창(09:00~21:00)이다.
+     *
+     * `dayStartAt` 은 전 일자 공통이고, `firstDayStartAt`·`lastDayEndAt` 은 **그 날에만** 걸린다
+     * (비행기·KTX 도착·출발). 첫날 값이 없으면 첫날도 `dayStartAt` 을 따른다.
+     */
+    val dayStartAt: LocalTime? = null,
+    val firstDayStartAt: LocalTime? = null,
+    val lastDayEndAt: LocalTime? = null,
 ) {
     fun toCommand() = CreateTripCommand(
         title, startDate!!, endDate!!, party, companionType, budgetTotal,
         preferenceSnapshot, destinations.map { it.toDomain() },
+        TripDayWindow(dayStartAt, firstDayStartAt, lastDayEndAt),
     )
 }
 
@@ -56,9 +68,19 @@ data class EditTripRequest(
     val companionType: CompanionType? = null,
     val budgetTotal: Long? = null,
     val destinations: List<DestinationDto> = emptyList(),
+    /**
+     * 일과 창 — 하루 몇 시부터 움직이는가. 전부 생략하면 종전대로 기본 창(09:00~21:00)이다.
+     *
+     * `dayStartAt` 은 전 일자 공통이고, `firstDayStartAt`·`lastDayEndAt` 은 **그 날에만** 걸린다
+     * (비행기·KTX 도착·출발). 첫날 값이 없으면 첫날도 `dayStartAt` 을 따른다.
+     */
+    val dayStartAt: LocalTime? = null,
+    val firstDayStartAt: LocalTime? = null,
+    val lastDayEndAt: LocalTime? = null,
 ) {
     fun toCommand() = EditTripCommand(
         title, startDate!!, endDate!!, party, companionType, budgetTotal, destinations.map { it.toDomain() },
+        TripDayWindow(dayStartAt, firstDayStartAt, lastDayEndAt),
     )
 }
 
@@ -91,6 +113,16 @@ data class TripResponse(
      * 끝났는지는 [status], 언제 끝났는지(상대 표기·정렬)는 이 값이다.
      */
     val endedAt: Instant?,
+    /**
+     * 일과 창(V2.62) — 미설정이면 null 이고 서버가 기본 창(09:00~21:00)을 쓴다.
+     *
+     * **응답에 반드시 실어야 한다.** 편집 요청은 가변 필드를 **대체**하므로(budgetTotal 과 같은 규칙)
+     * 클라이언트가 현재 값을 못 읽으면 다른 칸만 고치려다 이 값을 지운다 — "여행 편집했더니
+     * 9시로 돌아갔다"가 된다. 적대적 리뷰가 잡은 자리다.
+     */
+    val dayStartAt: LocalTime?,
+    val firstDayStartAt: LocalTime?,
+    val lastDayEndAt: LocalTime?,
 ) {
     companion object {
         /**
@@ -105,6 +137,9 @@ data class TripResponse(
             status = t.statusAt(today), createdAt = t.createdAt, updatedAt = t.updatedAt,
             baseCount = counts.baseCount, itineraryDayCount = counts.itineraryDayCount,
             endedAt = t.endedAt,
+            dayStartAt = t.dayWindow.dayStartAt,
+            firstDayStartAt = t.dayWindow.firstDayStartAt,
+            lastDayEndAt = t.dayWindow.lastDayEndAt,
         )
     }
 }

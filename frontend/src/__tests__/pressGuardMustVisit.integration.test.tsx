@@ -8,18 +8,18 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import type {
-  MustVisit,
-  Place,
-  SavedPlace,
-  Trip,
-} from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
+import {
+  TRIP,
+  TRIP_ID,
+  registered,
+  savedPlace,
+} from '@/test-support/mustVisitFixtures';
 import {
   MustVisitListPage,
   MustVisitTimePage,
-} from '@/pages/itinerary-mustvisit';
+} from '@/pages/itinerary/itinerary-mustvisit';
 
 /**
  * TRIP-1013 #042 — 시각 지정 '저장' 연타의 두 번째 탭이, 저장 성공으로 되돌아간 필수 방문지
@@ -31,15 +31,8 @@ import {
  * "창 밖"은 `resetPressGuard()`로 만든다(=400ms 이상 흐른 것과 같다).
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -52,69 +45,12 @@ jest.mock('expo-router', () => ({
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const BASE = 'http://localhost:8080/api/v1';
-const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-
-const TRIP: Trip = {
-  tripId: TRIP_ID,
-  title: '부산 여행',
-  startDate: '2026-06-10',
-  endDate: '2026-06-12',
-  party: 1,
-  companionType: null,
-  budgetTotal: 800000,
-  preferenceSnapshot: {},
-  destinations: [{ seq: 1, region: '부산', nights: 2 }],
-  status: 'PLANNED',
-  createdAt: '2026-08-02T00:00:00Z',
-  updatedAt: '2026-08-02T00:00:00Z',
-  baseCount: 0,
-  itineraryDayCount: 0,
-};
-
-function makePlace(poiId: string, nameKo: string): Place {
-  return {
-    poiId,
-    nameKo,
-    category: '명소',
-    lat: 35.1587,
-    lng: 129.1604,
-    region: '부산진구',
-    openingHours: null,
-    imageUrl: null,
-    tags: [],
-    savedCount: 0,
-    dataStatus: 'ACTIVE',
-  };
-}
-
-const SAVED: SavedPlace[] = [
-  {
-    savedPlaceId: 'sp-poi-a',
-    savedAt: '2026-08-01T10:00:00.000Z',
-    place: makePlace('poi-a', '부산시립미술관'),
-  },
-  {
-    savedPlaceId: 'sp-poi-b',
-    savedAt: '2026-08-01T10:00:00.000Z',
-    place: makePlace('poi-b', '해운대 블루라인파크'),
-  },
-];
-
 /** 둘 다 `ANYTIME` 으로 등록돼 있다. 시각 지정 화면은 poi-a 를 다룬다. */
-const REGISTERED: MustVisit[] = [
-  {
-    mustVisitId: 'mv-poi-a',
-    poiSnapshotId: 'snap-poi-a',
-    sourcePoiId: 'poi-a',
-    type: 'ANYTIME',
-  },
-  {
-    mustVisitId: 'mv-poi-b',
-    poiSnapshotId: 'snap-poi-b',
-    sourcePoiId: 'poi-b',
-    type: 'ANYTIME',
-  },
+const SAVED = [
+  savedPlace('poi-a', '부산시립미술관'),
+  savedPlace('poi-b', '해운대 블루라인파크'),
 ];
+const REGISTERED = [registered('poi-a'), registered('poi-b')];
 
 /** POST 응답을 붙잡아 두는 문 — null 이면 즉시 응답한다. */
 let postGate: Promise<void> | null = null;

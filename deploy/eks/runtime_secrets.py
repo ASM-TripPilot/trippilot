@@ -6,6 +6,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import uuid
 from urllib.parse import quote
 
 from runtime_io import CommandError
@@ -15,11 +16,14 @@ JWT_SIGNING_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET KAKAO_CLIENT_ID
 KAKAO_CLIENT_SECRET NAVER_CLIENT_ID NAVER_CLIENT_SECRET APPLE_CLIENT_ID WEATHER_API
 APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
+AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
+ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS
+KAKAO_APP_ID
 """.split())
 AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
 ANTHROPIC_API_KEY ANTHROPIC_MODEL TRIPPILOT_LLM_FEATURE_MODELS TRIPPILOT_LLM_RETRY_MODELS
-TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API KAKAO_REST_API_KEY
+TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API_BASE KAKAO_REST_API_KEY
 EXISTENCE_MAX_CALLS TMAP_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
 """.split())
@@ -31,6 +35,7 @@ GROUP_KEYS = {
 BACKEND_DEFAULTS = {
     "PLACE_GEOCODE_MODE": "stub", "WEATHER_MODE": "fake",
     "PUSH_MODE": "off", "AI_REMINDER_COPY_MODE": "http",
+    "AFFILIATE_MODE": "fallback",
 }
 
 
@@ -131,7 +136,8 @@ def validate_groups(groups):
             raise ValueError(f"{group} secret values must be strings without NUL")
     backend, ai = groups["backend"], groups["ai"]
     modes = {"PLACE_GEOCODE_MODE": {"stub", "kakao"}, "WEATHER_MODE": {"fake", "kma"},
-             "PUSH_MODE": {"off", "expo"}, "AI_REMINDER_COPY_MODE": {"off", "http"}}
+             "PUSH_MODE": {"off", "expo"}, "AI_REMINDER_COPY_MODE": {"off", "http"},
+             "AFFILIATE_MODE": {"fallback", "tripcom"}}
     for key, allowed in modes.items():
         if key in backend and backend[key] not in allowed:
             raise ValueError(f"Unsupported {key} in backend secret")
@@ -145,10 +151,33 @@ def validate_groups(groups):
             "GOOGLE_CLIENT_SECRET must stay empty: the Google client is a public (iOS) client, "
             "so sending a secret makes Google reject the exchange with invalid_client"
         )
+    # 생성 상한 2종(TRIP-1314)은 없으면 백엔드 기본(10·예외 없음)이다. **있는데 틀리면** 백엔드가 기동에서
+    # 죽는다(빈 상한·0·UUID 오타) — 파드가 뜨다 죽기 전에 여기서 막는다.
+    limit = backend.get("ITINERARY_GENERATION_DAILY_LIMIT")
+    if limit is not None and not (limit.isascii() and limit.isdigit() and 1 <= int(limit) <= 2**31 - 1):
+        raise ValueError("ITINERARY_GENERATION_DAILY_LIMIT must be a positive integer; remove the key to use the default")
+    exempt = backend.get("ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS", "")
+    if exempt.strip():
+        try:
+            for item in (part.strip() for part in exempt.split(",")):
+                # uuid.UUID 는 대시 없는 32자·중괄호·urn 접두도 받는데 백엔드(UUID.fromString)는 거기서 죽는다.
+                if str(uuid.UUID(item)) != item.lower():
+                    raise ValueError(item)
+        except ValueError:
+            raise ValueError("ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS must be comma-separated UUIDs") from None
+    # 카카오 앱 ID(TRIP-1317)는 숫자다. REST API 키(32자 hex)를 잘못 넣으면 파드는 뜨는데 **카카오 로그인이
+    # 전부 401** 이 된다(발급 앱과 영영 안 맞는다) — 가장 흔한 실수라 여기서 막는다. 빈 값은 "대조 안 함"이다.
+    kakao_app_id = backend.get("KAKAO_APP_ID", "")
+    if kakao_app_id and not (kakao_app_id.isascii() and kakao_app_id.isdigit() and kakao_app_id[0] != "0"):
+        raise ValueError("KAKAO_APP_ID must be the numeric Kakao app ID, not the REST API key")
     if backend.get("PLACE_GEOCODE_MODE") == "kakao":
         require(backend, ("KAKAO_CLIENT_ID",), "kakao geocoding")
     if backend.get("WEATHER_MODE") == "kma":
         require(backend, ("WEATHER_API",), "kma weather")
+    if backend.get("AFFILIATE_MODE") == "tripcom":
+        # trip_sub3(AD_ID)가 귀속의 열쇠다(probe 실측 2026-10-01) — 셋 중 하나라도 비면
+        # 파드가 기동 실패로 뒤늦게 죽거나, 뜨더라도 수수료만 조용히 샌다. 배포 전에 막는다.
+        require(backend, ("TRIPCOM_ALLIANCE_ID", "TRIPCOM_SID", "TRIPCOM_AD_ID"), "tripcom affiliate")
     provider = ai.get("TRIPPILOT_LLM_PROVIDER", "")
     if provider not in ("", "openai", "anthropic", "mixed"):
         raise ValueError("Unsupported TRIPPILOT_LLM_PROVIDER in ai secret")
@@ -169,11 +198,30 @@ def runtime_manifests(groups, outputs, namespace, embedding_enabled):
              "stringData": values[name]} for name in GROUP_KEYS]
 
 
-def sync(outputs, namespace, embedding_enabled, shell):
+def open_gaps(groups):
+    """배포는 되지만 **알고 있어야 하는 열린 구멍**. 막지 않는 이유는 각 줄에 있다 — 대신 배포마다 크게 말한다."""
+    backend = groups["backend"]
+    # 필수로 걸지 않는다: 앱 ID 를 아직 모르는 환경의 배포를 통째로 막게 된다(dev 와 출시가 같은 카카오 앱인지
+    # 확인되지 않았다). 그래서 통과시키되, 빠져 있으면 조용히 넘어가지 않는다.
+    # KAKAO_CLIENT_ID 를 "이 환경이 카카오를 쓴다"의 표지로 쓴다 — SDK 토큰 경로 자체는 그 값을 쓰지 않으므로
+    # 근사다. 그 키 없이 SDK 로만 카카오 로그인을 받는 환경은 여기서 안 잡히고 백엔드 기동 경고만 남는다.
+    if backend.get("KAKAO_CLIENT_ID") and not backend.get("KAKAO_APP_ID"):
+        yield ("KAKAO_APP_ID is not set in the backend secret: Kakao SDK-token logins are NOT checked against "
+               "our app, so tokens issued to other Kakao apps can sign up (TRIP-1317)")
+
+
+def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None):
     region = outputs["aws_region"]
     groups = {name: get_secret(shell, region, arn) for name, arn in outputs["app_secret_arns"].items()}
     validate_groups(groups)
+    for gap in open_gaps(groups):
+        print(f"::warning title=Open security gap::{gap}")  # 실행 요약 맨 위에 주석으로 뜬다
     seeded = seed_groups(groups)
+    if push_mode is not None:
+        # 배포 입력이 고른 값으로 덮는다 — 시크릿 손편집만이 켜는 길이면 로컬 자격이 만료된 날엔 못 켠다.
+        # None(유지)이면 저장된 값을 건드리지 않는다(보존 규칙 그대로).
+        seeded["backend"] = {**seeded["backend"], "PUSH_MODE": push_mode}
+        validate_groups(seeded)
     validate_rsa_key(seeded["backend"]["JWT_SIGNING_KEY"])
     for name, values in seeded.items():
         if values != groups[name]:

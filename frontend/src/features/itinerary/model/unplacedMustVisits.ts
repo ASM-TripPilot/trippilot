@@ -1,7 +1,7 @@
 import type {
   ItineraryUnplacedMustVisitsItem,
   SavedPlace,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-1094 · 서버가 보낸 "일정에 넣지 못한 꼭 갈 곳"에 담은 장소의 이름을 붙인다.

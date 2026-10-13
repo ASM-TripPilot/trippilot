@@ -123,6 +123,8 @@ COMPANION_TOKENS: dict[str, CompanionType] = {
     "친구": CompanionType.FRIENDS,
     "가족": CompanionType.FAMILY,
     "부모님": CompanionType.PARENTS,
+    # 여행 단위 `trip.companion_type` 어휘 — 온보딩 '커플'을 여행에선 '연인'으로 적는다(V2.3).
+    "연인": CompanionType.COUPLE,
 }
 
 # 조합 승격 — 둘 중 하나를 버리는 대신 우리 값을 만든다.

@@ -31,6 +31,10 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "trippilot.selector" (dict "root" $ "component" "ai") | nindent 14 }}
+        # 배포가 띄우는 POI 공유본 적재 Job(deploy/eks/runtime_pois.py) — /internal/pois/* 를 부른다.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trippilot-poi-load
         {{- else if eq $component "ai" }}
         - podSelector:
             matchLabels:
@@ -39,6 +43,10 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "trippilot.selector" (dict "root" $ "component" "ai") | nindent 14 }}
+        # The deployment workflow loads the Plan-B KB from a short-lived Job (deploy/eks/runtime_kb.py).
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trippilot-kb-load
         {{- end }}
       {{- end }}
 {{- end }}

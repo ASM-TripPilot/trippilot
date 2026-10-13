@@ -160,3 +160,32 @@ def test_seed_covers_all_trigger_reasons() -> None:
     covered = {r for d in docs for r in d.metadata.get("reasons", ())}
     assert {"weather", "closed", "delay", "canceled", "fully_booked",
             "fatigue", "none"} <= covered
+
+
+# ── 적재 임베딩 마감 (배포 적재 단계 8초 실패, 2026-10-04) ──────────────────
+
+
+def _load_kb_module():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "load_kb.py"
+    spec = importlib.util.spec_from_file_location("load_kb_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_적재는_파드의_요청_경로_마감을_쓰지_않는다() -> None:
+    """ai 파드 env 에는 요청 경로용 임베딩 마감이 (빈 값으로라도) 들어 있다 — `setdefault` 는
+    키가 있으면 안 덮으므로 적재가 기본 5초로 돌았고, 64건 묶음(≈10초)이 첫 묶음에서 끊겼다."""
+    load_kb = _load_kb_module()
+
+    for pod_value in ("", "5"):
+        env = {"TRIPPILOT_EMBEDDING_TIMEOUT_SEC": pod_value}
+        load_kb._use_load_timeout(env)
+        assert float(env["TRIPPILOT_EMBEDDING_TIMEOUT_SEC"]) == load_kb.LOAD_TIMEOUT_SEC
+
+    env = {"TRIPPILOT_EMBEDDING_TIMEOUT_SEC": "600"}  # 더 긴 값은 존중한다(느린 로컬 머신)
+    load_kb._use_load_timeout(env)
+    assert env["TRIPPILOT_EMBEDDING_TIMEOUT_SEC"] == "600"

@@ -70,11 +70,13 @@ class TripRecordServiceTest : StringSpec({
         override fun countByVisits(visitCheckIds: Collection<UUID>) = counts.filterKeys { it in visitCheckIds }
     }
 
-    class Memos(val stored: MutableSet<UUID> = mutableSetOf()) : VisitMemoRepository {
-        override fun upsert(memo: VisitMemo) = memo.also { stored += it.visitCheckId }
+    /** 본문까지 들고 있는다 — 유무만 두면 "본문이 실리는가"를 원리적으로 못 잰다. */
+    class Memos(val stored: MutableMap<UUID, String> = mutableMapOf()) : VisitMemoRepository {
+        constructor(vararg ids: UUID) : this(ids.associateWith { "감상" }.toMutableMap())
+        override fun upsert(memo: VisitMemo) = memo.also { stored[it.visitCheckId] = it.text }
         override fun find(visitCheckId: UUID): VisitMemo? = null
-        override fun findVisitsWithMemo(visitCheckIds: Collection<UUID>) = stored.intersect(visitCheckIds.toSet())
-        override fun delete(visitCheckId: UUID) = stored.remove(visitCheckId)
+        override fun findMemosOf(visitCheckIds: Collection<UUID>) = stored.filterKeys { it in visitCheckIds }
+        override fun delete(visitCheckId: UUID) = stored.remove(visitCheckId) != null
     }
 
     /** 변경 이력은 읽기만 한다 — 쓰기를 부르면 그 자리에서 드러나야 한다(BR-U5-29). */
@@ -215,19 +217,33 @@ class TripRecordServiceTest : StringSpec({
         d.unvisitedSlotKeys shouldContainExactly emptyList()
     }
 
+    // TRIP-1315 — 화면이 이 배열의 `index + 1` 로 "몇 번째 방문"을 매긴다. 허브(`listByDay`)와 같은 함수로 줄 세운다.
+    "그 날 실적은 지나온 순서로 나온다 — 화면이 이 순서로 방문 번호를 매긴다" {
+        val (first, last) = List(2) { UUID.randomUUID() }
+        val checks = Checks()
+        arrived(checks, day1, last, at = "05:00") // 일부러 늦은 방문을 먼저 넣는다
+        arrived(checks, day1, first, at = "01:00")
+        val svc = TripRecordService(trips, plans(), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog())
+
+        svc.compare(acc, tripId).days.single { it.date == day1 }.actual.map { it.poiId } shouldContainExactly listOf(first, last)
+        svc.findDailyVisits(tripId).single { it.date == day1 }.visits.map { it.poiId } shouldContainExactly listOf(first, last)
+    }
+
     "사진 개수·메모 유무가 실적에 함께 온다" {
         val poi = UUID.randomUUID()
         val checks = Checks()
         val v = arrived(checks, day1, poi)
         val svc = TripRecordService(
             trips, plans(slot(day1, poi, 0)), checks,
-            Photos(mapOf(v.visitCheckId to 3)), Memos(mutableSetOf(v.visitCheckId)), bases(), ReadOnlyChangeLog(),
+            Photos(mapOf(v.visitCheckId to 3)), Memos(mutableMapOf(v.visitCheckId to "바다가 좋았다")), bases(), ReadOnlyChangeLog(),
         )
 
         val visit = svc.compare(acc, tripId).days.single().actual.single()
 
         visit.photoCount shouldBe 3
-        visit.hasMemo shouldBe true
+        // **본문**이 실려야 한다 — 유무만 주면 앱 재시작 뒤 메모가 사라진 것처럼 보인다(TRIP-1236).
+        visit.memo shouldBe "바다가 좋았다"
+        visit.hasMemo shouldBe true   // 파생이라 본문과 어긋날 수 없다
     }
 
     "변경 이력은 읽기만 하고 상한을 그대로 넘긴다(BR-U5-29)" {

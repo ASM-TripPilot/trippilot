@@ -129,6 +129,45 @@
         ]
       }
     },
+    "CloudWatchPodRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {"Fn::Sub": "trippilot-${Environment}-cloudwatch-pod"},
+        "Description": "EKS Pod Identity role for the amazon-cloudwatch-observability add-on: write container stdout into this environment Container Insights log groups only. No cloudwatch:PutMetricData, so the collector cannot create custom metrics (per-metric billing) outside those groups.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{"Effect": "Allow", "Principal": {"Service": "pods.eks.amazonaws.com"}, "Action": ["sts:AssumeRole", "sts:TagSession"]}]
+        },
+        "Policies": [
+          {
+            "PolicyName": "WriteContainerInsightsLogs",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "WriteContainerInsightsLogs",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:DescribeLogGroups",
+                    "logs:DescribeLogStreams",
+                    "logs:PutLogEvents",
+                    "logs:PutRetentionPolicy"
+                  ],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/containerinsights/trippilot-${Environment}/*"}
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {"Key": "Project", "Value": "trippilot"},
+          {"Key": "Environment", "Value": {"Ref": "Environment"}},
+          {"Key": "ManagedBy", "Value": "cloudformation"}
+        ]
+      }
+    },
     "DeploymentRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
@@ -551,7 +590,7 @@
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties": {
         "ManagedPolicyName": {"Fn::Sub": "trippilot-${Environment}-github-deploy-extra"},
-        "Description": "Deployment-role statements that do not fit the inline policy (it sits at the 10240-character limit): Pod Identity binding for the AI pods, and read-only serving metrics/cost for the weekly serving judge.",
+        "Description": "Deployment-role statements that do not fit the inline policy (it sits at the 10240-character limit): Pod Identity binding for the AI and CloudWatch collector pods, the Container Insights log groups Terraform creates to cap retention, and read-only serving metrics/cost for the weekly serving judge.",
         "Roles": [{"Ref": "DeploymentRole"}],
         "PolicyDocument": {
           "Version": "2012-10-17",
@@ -592,6 +631,33 @@
               "Action": ["iam:PassRole"],
               "Resource": {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-ai-pod"},
               "Condition": {"StringEquals": {"iam:PassedToService": "pods.eks.amazonaws.com"}}
+            },
+            {
+              "Sid": "ReadCloudWatchPodRole",
+              "Effect": "Allow",
+              "Action": ["iam:GetRole", "iam:ListRoleTags", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:GetRolePolicy"],
+              "Resource": {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-cloudwatch-pod"}
+            },
+            {
+              "Sid": "PassCloudWatchPodRoleToPods",
+              "Effect": "Allow",
+              "Action": ["iam:PassRole"],
+              "Resource": {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-cloudwatch-pod"},
+              "Condition": {"StringEquals": {"iam:PassedToService": "pods.eks.amazonaws.com"}}
+            },
+            {
+              "Sid": "ManageContainerInsightsLogGroups",
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:DeleteLogGroup",
+                "logs:PutRetentionPolicy",
+                "logs:DeleteRetentionPolicy",
+                "logs:ListTagsForResource",
+                "logs:TagResource",
+                "logs:UntagResource"
+              ],
+              "Resource": {"Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/containerinsights/trippilot-${Environment}/*"}
             }
           ]
         }

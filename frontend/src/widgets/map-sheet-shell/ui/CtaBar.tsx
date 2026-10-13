@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
  * TRIP-783 · 하단 고정 CTA 바(widgets · presentation-only). 1~2버튼 변형을 `buttons` prop 으로 받는다
  * (h08=2버튼 `다시 짜기`(outline)+`확정하기`(primary) / h14=1버튼 `일정 저장하기`(primary full)).
  * 라벨·콜백은 소비처 주입. 변형 스타일(primary=채움 / outline=테두리)은 className 토큰으로 잠긴다 —
- * className 은 jest 렌더 트리에 평문 prop 으로 남아 심판이 읽는다(loginVisual 선례).
+ * className 은 jest 렌더 트리에 평문 prop 으로 남아 심판이 읽는다.
  */
 
 export interface CtaButton {
@@ -21,6 +21,10 @@ export interface CtaButton {
 export interface CtaBarProps {
   buttons: CtaButton[];
 }
+
+// CTA 바 높이 — pt-md(12) + 버튼 52 + pb-lg(16) + 윗선 ≈ 81.3pt(TRIP-1112 실기 실측)를 올림.
+// 바가 시트 위에 떠 있으므로, 스크롤 끝 내용이 바 뒤에 숨지 않게 본문 하단 여백으로 쓴다(셸·편집기).
+export const CTA_BAR_HEIGHT = 82;
 
 export function CtaBar({ buttons }: CtaBarProps): ReactElement {
   const single = buttons.length === 1;

@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Image, Text, View } from 'react-native';
 
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
+import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-806 · AC-M2·M5·M6 — 슬롯 후보 카드(itinerary h08·h10 · planb i14 공용).

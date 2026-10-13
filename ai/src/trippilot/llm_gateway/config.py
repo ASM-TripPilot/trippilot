@@ -144,6 +144,58 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
     )
 
 
+def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
+    """기능별 출력 상한 — 여기 없는 기능은 공용 `C1Config.max_tokens`(1024).
+
+    근거 문장 두 기능은 **확정 일정 전 슬롯을 한 번에** 받아 항목마다 한국어를 쓴다.
+    실측(라이브 로그, claude-sonnet-5·gpt-5.6-terra): EXPLANATION 이 매번
+    output_tokens=1024 에서 잘려 `parse_error: JSON 아님: Unterminated string` → 근거 0건.
+    ALTERNATIVE_EXPLANATION 은 슬롯당 차선책 ≤2건 × 1~2문장이라 같은 모양이다.
+    GPT-5 계열은 reasoning 토큰도 이 상한에서 빠진다.
+
+    REFLECTION_TEMPLATE 은 실측 출력이 950~1016 토큰이라 1024 에 붙어 있다 — 3방문
+    짧은 입력도 잘림 1회가 재시도를 부르고, 재시도가 요청 예산을 넘겨 504 가 났다.
+
+    SHARE_CARD_COPY 는 claude-fable-5-1(사고 항상 켜짐, 사고 토큰도 이 상한 안)에서 출력이
+    1000~1024 토큰 — 1024 에서 잘려 정적 문구로 강등됐다(2026-10-11 실측).
+    """
+    return MappingProxyType(
+        {
+            LlmFeature.EXPLANATION: 4096,
+            LlmFeature.ALTERNATIVE_EXPLANATION: 4096,
+            LlmFeature.REFLECTION_TEMPLATE: 2048,
+            LlmFeature.SHARE_CARD_COPY: 2048,
+        }
+    )
+
+
+def default_feature_effort() -> Mapping[LlmFeature, str]:
+    """기능별 사고 깊이(`output_config.effort`) — 여기 없는 기능은 안 싣는다(모델 기본값).
+
+    claude-fable-5-1 은 사고를 끌 수 없고(항상 켜짐) 기본 effort 가 high 다. 사고 토큰은
+    출력 상한 안에서 쓰이므로, 시한이 짧은 기능은 낮춰야 예산 안에 든다. 실측
+    (2026-10-11, 실 경계 하네스):
+      - REFLECTION_TEMPLATE — high: 시도당 ~25s·출력 2048 에서 잘림 → 백엔드 시한 15s 초과로
+        고정 템플릿 강등. low: ~10s·출력 ~900, 3/3 성공.
+      - REMINDER_COPY — high: 항목당 ~8s(배치 시한 8s 에 1건도 빠듯). low: ~1.9s.
+      - ALTERNATIVE_SELECTION — replan(시한 25s)에서 1차 몫이 ~4s 로 내려와 high(3.5~7s)가
+        타임아웃 → 규칙 랭킹. low: ~3.5s, 게이트 드롭 0.
+    low 를 전 기능에 쓰지 않는 이유: EDIT_TRANSLATION·SHARE_CARD_COPY 가 low 에서 게이트
+    위반(대체 장소를 영향 슬롯에 넣음·근거 없는 해시태그)으로 전량 드롭됐다 — high 에선 통과.
+    시한 없는 경계(`/explanations` 등)는 high 그대로 둔다.
+
+    **effort 를 거부하는 모델(haiku-4-5 등)을 여기 있는 기능에 배정하면 400 → 폴백이다.**
+    모델을 바꾸면 이 표부터 본다(temperature #472 와 같은 함정).
+    """
+    return MappingProxyType(
+        {
+            LlmFeature.REFLECTION_TEMPLATE: "low",
+            LlmFeature.REMINDER_COPY: "low",
+            LlmFeature.ALTERNATIVE_SELECTION: "low",
+        }
+    )
+
+
 # 매핑에 없는 feature의 안전 기본 — KeyError로 죽지 않되 **그 사실이 이벤트에
 # 드러난다**. 조용히 그럴듯한 값을 찍으면 #4를 다시 만드는 셈이다.
 # enum이 늘면 테스트(전 feature 스윕)가 먼저 깨진다.
@@ -188,7 +240,13 @@ class C1Config:
     # 2.5 는 "폴백을 강제하는 값"이 됐다 — PlanB 가 컨테이너에서 100% 타임아웃했다.
     # 요청 단위 상한은 `TimeoutBackstopMiddleware`(deadline+margin → 504)가 따로 쥔다.
     timeout_sec: float = 10.0
+    # 출력 상한 — 공용 값 + 기능별 지정(`max_tokens_for`). 지정 없는 기능은 공용 값.
     max_tokens: int = 1024
+    feature_max_tokens: Mapping[LlmFeature, int] = field(
+        default_factory=default_feature_max_tokens
+    )
+    # 사고 깊이 — 기능별 지정만, 공용 값 없음(`effort_for`, 미지정 = 모델 기본값).
+    feature_effort: Mapping[LlmFeature, str] = field(default_factory=default_feature_effort)
     # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라
     # 단계 예산에서 유도한다 (TRIP-380 적응형 공식, workers/preference.py
     # adaptive_chunk_size). 종전 score_chunk_size=20 상수는 공식이 대체 — 예산
@@ -221,3 +279,9 @@ class C1Config:
             raise ValueError("score_chunk_max ≥ score_chunk_min이어야 함")
         if self.score_max_parallel <= 0:
             raise ValueError("score_max_parallel은 양수여야 함")
+
+    def max_tokens_for(self, feature: LlmFeature) -> int:
+        return self.feature_max_tokens.get(feature, self.max_tokens)
+
+    def effort_for(self, feature: LlmFeature) -> str | None:
+        return self.feature_effort.get(feature)

@@ -5,7 +5,7 @@ import type {
   CreateTripRequest,
   PreferenceView,
   Trip,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { getOnboardingScenario } from '@/test-support/onboardingScenarios';
 import { getScenario, type MockScenario } from './scenarios';
 

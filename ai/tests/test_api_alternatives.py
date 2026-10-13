@@ -327,6 +327,29 @@ def test_trip_id_enables_persona_collection_and_profile_line() -> None:
     assert _join_persona((), (), None) == ""
 
 
+def test_inline_preference_profile_becomes_the_persona() -> None:
+    """그 여행의 취향(`preference_profile`)이 오면 그것이 ALTERNATIVE_SELECTION 의 확정 프로필이다.
+
+    없으면 종전대로 `trip_id` 재조회(계정 취향) — 하위호환. 여행 만들기에서 고른 취향(미식)이
+    계정 취향(재조회분)에 덮이면 "취향 반영이 안 된다"가 같이 짜기 후보에 그대로 남는다.
+    """
+    from trippilot.agents.planb.rag import _join_persona
+    from trippilot.domain.persona import CompanionType, TasteTag
+
+    app = build_dev_app()
+    seen = _rag_spy(app)
+    with TestClient(app) as client:
+        with_profile = client.post("/ai/v1/planb/alternatives", json=_request_body(
+            trip_id="trip-pref", preference_profile={"styles": ["미식"]}, companion_type="혼자"))
+        without = client.post("/ai/v1/planb/alternatives", json=_request_body(trip_id="trip-pref"))
+
+    assert with_profile.status_code == 200 and without.status_code == 200
+    inline, legacy = seen[0].persona, seen[1].persona
+    assert inline.taste_tags == (TasteTag.FOOD,) and inline.companion is CompanionType.SOLO
+    assert "취향 FOOD" in _join_persona((), (), inline)        # 프롬프트 페르소나 줄
+    assert legacy is not None and legacy != inline              # 없으면 종전 재조회분
+
+
 # ── ⑧ 시간 단위 날씨 — 지나간 비에 반응하지 않는다 ───────────────────
 
 

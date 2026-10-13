@@ -19,6 +19,14 @@ interface ScheduleAgentPort {
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
 
     /**
+     * [context] 를 함께 싣는 수리(편집 교체 후속, 2026-10-05) — 앵커가 있는 날은 상대가 첫 구간 거리를
+     * 앵커→첫 장소로 채우고 첫 슬롯 시작을 앵커 이동만큼 민다. 수단은 시각·거리 표기 모두에 쓰인다.
+     * 기본 구현은 컨텍스트를 버린다 — 대역(Fake·테스트)이 2인자만 구현해도 되게. 실 어댑터는 재정의한다.
+     */
+    fun repair(solution: ScheduleAgentOutput, violations: List<Violation>, context: RepairContext): RepairResult =
+        repair(solution, violations)
+
+    /**
      * 추천 근거 조회(TRIP-511) — 생성에서 **떼어낸** 단계다.
      *
      * 설명은 LLM 이 만들고 ~10초를 쓴다. 생성에 붙여 두면 사용자가 첫 화면을 그만큼 늦게 본다.
@@ -27,7 +35,16 @@ interface ScheduleAgentPort {
      * **실패는 빈 결과다.** 근거는 부가 정보라 없다고 일정을 죽이지 않는다 — 다만 조용히 지나가지
      * 않게 어댑터가 로그로 드러낸다(INV-4).
      */
-    fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations
+    fun explanations(
+        tripId: UUID,
+        solution: ScheduleAgentOutput,
+        /**
+         * 그 여행의 취향·동행(BR-U1-38) — 근거 문장이 생성과 같은 취향으로 쓰이게. null 이면 상대가 종전대로
+         * 재조회(계정 취향)한다. 오버로드로 나누지 않았다 — 2-인자만 덮은 위임 대역이 조용히 우회됐다(실측).
+         */
+        preference: PreferenceProfile? = null,
+        companionType: String? = null,
+    ): SlotExplanations
 
     /**
      * 슬롯 후보 제안(DEC-U3-5) — **완전 AI·같이 고르기 공통 경계**다. 경로별로 다른 API 를 두지 않는다(BR-U3-23).
@@ -36,9 +53,9 @@ interface ScheduleAgentPort {
     fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput
 
     /**
-     * 여행 중 재계획(U4 정본 §3.1 · DEC-U4-5) — **새 솔버 개념을 만들지 않는다**.
-     * 잠금 슬롯([ReplanInput.lockedSlotKeys])이 고정 블록으로 승격돼 HC3 보호를 받으므로,
-     * 상대는 이미 있는 재생성 경로를 그대로 쓴다.
+     * 여행 중 재계획(U4 정본 §3.1 · DEC-U4-5) — 상대의 **재계획 전용 경로**로 간다(TRIP-854).
+     * 잠금은 고정 블록([ReplanInput.lockedBlocks])으로 실려 HC3 보호를 받는다. generate 를 재사용하던
+     * 종전 경로와 그리로 내려가던 한시 폴백은 없다.
      *
      * 반환이 곧 **초안**이다 — 원 일정에 반영하지 않는다(INV-U4-05). 해가 없으면 빈 일자를 돌려주고,
      * 호출 실패는 [ScheduleAgentCallFailed] 로 올려 수동 편집 전환을 유도한다(INV-4).
@@ -214,7 +231,11 @@ data class DayAnchor(val date: LocalDate, val lat: Double, val lng: Double)
 
 data class TimeWindow(val date: LocalDate, val start: LocalTime, val end: LocalTime)
 
-/** 고정 블록(HC3). ANYTIME이면 date/start/dwellMin 은 null. **와이어에 직결**이라 필드를 더하지 않는다(계약 게이트가 잡는다 — TRIP-1001 실측). */
+/**
+ * 고정 블록(HC3). `start = null` 은 "그 날 반드시 가되 시각은 조립이 고른다"(TRIP-1249 — 물질화된 ANYTIME 의 모양이고,
+ * `start` 를 필수로 아는 구형 AI 는 422 로 거부한다). `date` 까지 null 인 블록은 경계로 나가지 않는다(물질화가 날짜를 채운다).
+ * **와이어에 직결**이라 필드를 더하지 않는다(계약 게이트가 잡는다 — TRIP-1001 실측).
+ */
 data class FixedBlock(val poiId: UUID, val date: LocalDate?, val start: LocalTime?, val dwellMin: Int?)
 
 /** 취향 7축(preference_snapshot). AI가 선호 점수·소프트 가중치에 사용. */
@@ -406,8 +427,22 @@ data class Violation(
     val slotRef: String? = null,
 )
 
-/** 최소 조정 수리 결과 — 시각·순서만(POI 불변). */
-data class RepairResult(val repaired: ScheduleAgentOutput, val changes: List<String>)
+/**
+ * 수리 요청에 싣는 여행 컨텍스트 — generate 와 **같은 출처**의 일자별 앵커와 취향 이동수단(`transport_modes`).
+ * 빈 값이면 상대는 종전 동작(첫 구간 null·대중교통)이다.
+ */
+data class RepairContext(val anchors: List<DayAnchor>, val transportModes: List<String>) {
+    companion object {
+        val NONE = RepairContext(emptyList(), emptyList())
+    }
+}
+
+/**
+ * 최소 조정 수리 결과 — 시각·순서만(POI 불변).
+ * [unrepairable] = 상대가 `repaired=null`(수리 불가, IO-7)을 답했다. 이때 [repaired] 는 보낸 원본이라
+ * "고칠 것 없이 통과"와 구별할 수단이 이 플래그뿐이다 — 편집이 수리값을 검증된 시각으로 쓰기 때문에 필요하다.
+ */
+data class RepairResult(val repaired: ScheduleAgentOutput, val changes: List<String>, val unrepairable: Boolean = false)
 
 /**
  * 슬롯 후보 요청. [excludePoiIds] 는 **백엔드가 현재 일정에서 유도**한다 — 클라이언트가 보내는 값을 믿으면
@@ -441,6 +476,10 @@ data class SlotCandidatesInput(
      */
     val placementReason: String?,
     val requestMeta: RequestMeta,
+    /** 그 여행의 취향(BR-U1-38) — 생성과 같은 척도. null 이면 상대가 종전대로 재조회(계정 취향). */
+    val preferenceProfile: PreferenceProfile? = null,
+    /** 그 여행의 동행 — 계정의 평소 동행보다 우선. */
+    val companionType: String? = null,
 )
 
 /**

@@ -1,6 +1,7 @@
 import type { ExpoConfig } from 'expo/config';
+import { withEntitlementsPlist, withInfoPlist } from 'expo/config-plugins';
 
-// 실 EAS projectId·소셜/지도 SDK 키는 사용자 프로비저닝 시 주입한다(스캐폴드는 placeholder).
+// 소셜/지도 SDK 키는 사용자 프로비저닝 시 주입한다(스캐폴드는 placeholder).
 // 소셜(카카오/네이버)·지도 SDK config plugin 은 실 네이티브 키가 필요하므로 auth·map 유닛에서 배선한다.
 
 // TRIP-210 — 카카오 네이티브 앱 키·네이버 urlScheme. 값은 env 에서만 읽는다(리터럴 커밋 금지 ·
@@ -10,10 +11,19 @@ const kakaoNativeAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? '';
 const naverUrlScheme = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME ?? '';
 
 // TRIP-862 — 네이버 지도 SDK Client ID(NCP Maps 앱 등록). 로그인용 EXPO_PUBLIC_NAVER_CLIENT_ID
-// 와는 다른 키다. 리터럴 커밋 금지 — env 에서만 읽는다(mapBridgeStructure A-3). 미설정 시 빈
+// 와는 다른 키다. 리터럴 커밋 금지 — env 에서만 읽는다(socialSdkSecrets A-3). 미설정 시 빈
 // 문자열이면 config plugin 은 그대로 통과하고, 지도 렌더 실패는 shared/map 의 map-failure
 // 표면으로 드러난다(INV-4, S1 계승).
 const naverMapClientId = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID ?? '';
+
+// TRIP-1337 · U10 위치 자동화 빌드 플래그(BR-U10-07 · NFR 델타 3). 원천은 이 env 하나 — EXPO_PUBLIC_* 로 두지 않고
+// JS 노출은 extra.locationAutomation 한 곳으로 모아 "네이티브 권한 표면과 JS 동작이 같은 값"이 되게 한다.
+// OFF(기본) = TRIP-936 이후 출시 빌드와 같은 표면(always 문구 없음·백그라운드 모드 없음). ON 은 네이티브 재빌드 필수(OTA 불가).
+// ⚠️ privacy manifest(PreciseLocation · AppFunctionality)는 ON/OFF 같은 값을 쓴다(STORE-U10-05) — ON 빌드 제출 전
+// App Store Connect App Privacy 답변과 대조한다(둘 중 하나를 바꾸면 다른 쪽도).
+const locationAutomation = process.env.TRIPPILOT_LOCATION_AUTOMATION === '1';
+const LOCATION_ALWAYS_PERMISSION =
+  'TripPilot가 여행 날짜 동안 앱을 닫아도 일정 장소 도착·방문 완료와 이동 경로를 자동으로 기록하기 위해 위치를 사용합니다.';
 
 // TRIP-1070 — 사진 앨범 권한 문구(expo-image-picker·expo-media-library 공용).
 const PHOTOS_PERMISSION =
@@ -22,9 +32,9 @@ const PHOTOS_PERMISSION =
 const config: ExpoConfig = {
   name: 'TripPilot',
   slug: 'trippilot',
-  version: '0.1.0',
+  version: '1.0.0',
   orientation: 'portrait',
-  // TRIP-936 임시 아이콘(1024 불투명 RGB — App Store 는 알파 채널을 거부한다). 사람이 교체.
+  // Figma AppIcon/Final 기준 최종 아이콘(1024 불투명 RGB — App Store 는 알파 채널을 거부한다).
   icon: './assets/icon.png',
   scheme: 'trippilot',
   userInterfaceStyle: 'automatic',
@@ -35,9 +45,38 @@ const config: ExpoConfig = {
     config: {
       usesNonExemptEncryption: false,
     },
-    // TRIP-936 — required-reason API 선언(ITMS-91053). 수집 데이터 유형은 사람 판단이라 비워 둔다.
+    // TRIP-936 — required-reason API 선언(ITMS-91053). 수집 데이터 유형(NSPrivacyCollectedDataTypes)은 코드에서
+    // 추정한 값이다 — App Store Connect 의 App Privacy 답변과 항목이 같아야 하므로 둘 중 하나를 바꾸면 다른 쪽도 맞춘다.
     privacyManifests: {
       NSPrivacyTracking: false,
+      NSPrivacyCollectedDataTypes: [
+        ...[
+          'EmailAddress', // 소셜 로그인 계정 이메일
+          'Name', // 닉네임
+          'UserID', // 계정 식별자
+          'DeviceID', // 설치 ID · 푸시 토큰
+          'PreciseLocation', // 주변 추천 · 방문 기록(동의 시) 좌표
+          'OtherUserContent', // 일정 · 메모 · 저장한 장소
+        ].map((type) => ({
+          NSPrivacyCollectedDataType: `NSPrivacyCollectedDataType${type}`,
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: [
+            'NSPrivacyCollectedDataTypePurposeAppFunctionality',
+          ],
+        })),
+        ...['CrashData', 'PerformanceData', 'OtherDiagnosticData'].map(
+          (type) => ({
+            // Sentry. sendDefaultPii 는 꺼 뒀지만 ASC App Privacy 설문이 진단을 "사용자에게 연결됨"으로 답해 둬서 같게 둔다.
+            NSPrivacyCollectedDataType: `NSPrivacyCollectedDataType${type}`,
+            NSPrivacyCollectedDataTypeLinked: true,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: [
+              'NSPrivacyCollectedDataTypePurposeAnalytics',
+            ],
+          })
+        ),
+      ],
       NSPrivacyAccessedAPITypes: [
         {
           NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryUserDefaults',
@@ -62,10 +101,22 @@ const config: ExpoConfig = {
   android: {
     package: 'com.trippilot.travel',
     edgeToEdgeEnabled: true,
+    ...(locationAutomation
+      ? {
+          permissions: [
+            'ACCESS_BACKGROUND_LOCATION',
+            'FOREGROUND_SERVICE',
+            'FOREGROUND_SERVICE_LOCATION',
+          ],
+        }
+      : {}),
   },
   plugins: [
     // TRIP-935 R3 — 개발용 라우트 목록(/_sitemap)을 운영 빌드에서 끈다. 네이티브 설정이라 재빌드 필요.
-    ['expo-router', { sitemap: false }],
+    // TRIP-1161 — 라우트 루트를 루트 app/ 로 고정한다. Expo CLI 는 src/app 이 **있으면 무조건** 그것을 라우트 루트로
+    // 고른다(@expo/cli getRouterDirectory) — src/app 은 이제 FSD app 층이라 이 옵션이 없으면 그 층 파일(테스트 포함)이
+    // 화면으로 등록된다. 번들 시점(babel caller routerRoot)에만 쓰이는 값이라 네이티브 재빌드는 필요 없다.
+    ['expo-router', { sitemap: false, root: './app' }],
     // 옵션을 false(불리언)로 줘야 플러그인이 영문 기본 권한 문구를 Info.plist 에서 지운다 —
     // 문자열 'false'·생략은 문구가 남는다. Face ID·"항상 허용" 위치는 쓰지 않는다(TRIP-936).
     ['expo-secure-store', { faceIDPermission: false }],
@@ -74,8 +125,18 @@ const config: ExpoConfig = {
       {
         locationWhenInUsePermission:
           'TripPilot가 주변 여행지와 동선을 추천하기 위해 위치를 사용합니다.',
-        locationAlwaysPermission: false,
-        locationAlwaysAndWhenInUsePermission: false,
+        ...(locationAutomation
+          ? {
+              locationAlwaysPermission: LOCATION_ALWAYS_PERMISSION,
+              locationAlwaysAndWhenInUsePermission: LOCATION_ALWAYS_PERMISSION,
+              isIosBackgroundLocationEnabled: true,
+              isAndroidBackgroundLocationEnabled: true,
+              isAndroidForegroundServiceEnabled: true,
+            }
+          : {
+              locationAlwaysPermission: false,
+              locationAlwaysAndWhenInUsePermission: false,
+            }),
       },
     ],
     // TRIP-1070 — 사진 첨부는 앨범 읽기. 두 플러그인이 같은 Info.plist 키(NSPhotoLibraryUsageDescription)를
@@ -131,11 +192,36 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
   },
+  owner: 'trippilottravel',
   extra: {
     eas: {
-      projectId: '00000000-0000-0000-0000-000000000000',
+      projectId: '9d33458c-a731-4278-8e0a-45ccdae5b66b',
     },
+    ...(locationAutomation ? { locationAutomation: true } : {}),
   },
 };
 
-export default config;
+// 푸시 entitlement(aps-environment)를 뺀다 — 서버 푸시가 꺼져 있고 번들 ID 에 Push 권한이 아직 없어
+// 프로비저닝 프로파일이 Xcode 서명에서 거부된다(TRIP-935 심사 빌드). expo-notifications 는 prebuild 가
+// 설치만 돼 있어도 자동으로 붙여서 plugins 에서 빼도 소용없다 — 결과에서 지운다.
+// 푸시를 켤 때는 ASC 에서 번들 ID 의 Push 권한을 먼저 켜고 이 래핑을 걷는다.
+// TRIP-1337 — expo-task-manager 는 설치만 돼 있어도 prebuild 가 레거시 자동 플러그인으로 붙여 UIBackgroundModes 에
+// 'fetch' 를 넣는다(우리는 백그라운드 fetch 를 쓰지 않는다). 플래그 OFF 빌드의 권한 표면을 TRIP-936 과 같게 두려고
+// 결과에서 지운다 — ON 빌드는 expo-location 플러그인이 넣는 'location' 만 남는다.
+const withoutBackgroundFetch = (input: ExpoConfig): ExpoConfig =>
+  withInfoPlist(input, (mod) => {
+    const modes = mod.modResults.UIBackgroundModes;
+    if (Array.isArray(modes)) {
+      const kept = modes.filter((m) => m !== 'fetch');
+      if (kept.length > 0) mod.modResults.UIBackgroundModes = kept;
+      else delete mod.modResults.UIBackgroundModes;
+    }
+    return mod;
+  });
+
+export default withoutBackgroundFetch(
+  withEntitlementsPlist(config, (mod) => {
+    delete mod.modResults['aps-environment'];
+    return mod;
+  })
+);

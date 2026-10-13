@@ -16,6 +16,12 @@ CI·로컬 테스트 실 호출 0 — D37). 알려진 변주는 반영: 빈 목�
 객체가 아니라 빈 문자열 ""로 오는 것(tourapi와 동일 변주), fcstValue가 문자열로
 오는 것.
 
+**엔드포인트는 공공데이터포털(apis.data.go.kr, `serviceKey`)이다** — 키 종류와 짝이다.
+기상청 API허브 키(apihub.kma.go.kr, `authKey`)를 넣으면 포털은 SERVICE_KEY_IS_NOT_REGISTERED
+(HTTP 403)로 거절한다(2026-10-01 실측 — 이 사고로 날씨 보정이 매 생성 꺼져 있었다).
+팀 결정(2026-10-02): 백엔드 weather-context 와 같은 포털 키 하나로 통일. 응답 JSON 계층
+(`response.header/body.items.item[]`)은 두 엔드포인트가 같다(2026-10-02 실호출 대조).
+
 격자 변환(`latlon_to_grid`)은 기상청 LCC(Lambert Conformal Conic) 공식의 결정론
 구현 — 활용가이드 C 코드의 파라미터(지구반경 6371.00877km · 격자 5km ·
 표준위도 30°/60° · 기준점 (38°N, 126°E)=(43, 136))를 그대로 옮겼다.
@@ -24,6 +30,7 @@ CI·로컬 테스트 실 호출 0 — D37). 알려진 변주는 반영: 빈 목�
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
@@ -33,14 +40,43 @@ from trippilot.poi_curation.sourcing.tourapi import HttpGetJson
 from trippilot.ports.weather_port import WeatherError
 
 _KST = timezone(timedelta(hours=9))
-_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
+# 같은 「단기예보 조회서비스 2.0」을 두 곳이 서비스한다. 경로와 응답 JSON 계층은 같고
+# **키 파라미터 이름과 키 종류만 다르다**(2026-10-02·10-05 실호출 대조).
+_PORTAL_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
+_APIHUB_BASE = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0"
+_APIHUB_HOST = "apihub.kma.go.kr"
+_BASE = _PORTAL_BASE  # 과거 이름 — 밖에서 참조하던 자리를 깨지 않는다
 _OK_CODE = "00"  # NORMAL_SERVICE
+
+
+def key_param_for(base_url: str) -> str:
+    """주소에서 키 파라미터 이름을 고른다 — 이 둘은 **항상** 같이 간다.
+
+    실제로 어긋나 날씨 보정이 두 번 조용히 꺼진 짝이다:
+        포털(`apis.data.go.kr`) 은 ``serviceKey`` · 허브(`apihub.kma.go.kr`) 는 ``authKey``
+        틀리면 403 SERVICE_KEY_IS_NOT_REGISTERED 또는 401 유효한 인증키가 아닙니다
+
+    그래서 파라미터 이름을 설정값으로 두지 않는다 — 주소 하나만 맞으면 따라온다.
+
+    **주소는 키 모양으로 맞히지 않는다.** 한 번 그렇게 만들었다가 틀렸다: 포털 키가
+    base64 라 ``+ / =`` 를 담는다고 보고 "특수문자 없으면 허브"로 갈랐는데,
+    2026-10-05 에 **64자 영숫자 포털 키**가 들어와 허브로 가서 401 이 났다(실측).
+    키 형식은 발급처가 언제든 바꿀 수 있는 것이라 판별 근거가 못 된다 — 주소는
+    `WEATHER_API_BASE` 로 **명시**하고, 기본값은 포털이다.
+    """
+    return "authKey" if _APIHUB_HOST in base_url else "serviceKey"
 # 발표시각(base_time) 8회 고정 + API 제공은 발표 후 ~10분 (활용가이드)
 _BASE_HOURS = (2, 5, 8, 11, 14, 17, 20, 23)
 _PROVIDE_LAG_MIN = 10
 # 단기예보 1개 발표분 ≈ 카테고리 12종 × 시간별 슬롯(+3일 일부) ≤ ~900건.
 # 1페이지로 전부 받는다 (호출 1건 계약) — 상한 초과분은 지평 밖으로 취급.
 _NUM_OF_ROWS = 1500
+
+_log = logging.getLogger(__name__)
+# 키·권한 오류(401/403)는 요청마다 반복되는데 폴백 로그는 INFO 라 운영에서 안 보인다 —
+# 프로세스당 첫 1회만 WARN 으로 올리고 이후는 억제한다(로그 홍수 방지).
+_AUTH_CODES = (401, 403)
+_auth_warned = False
 
 # ── 위경도 → 기상청 격자 (LCC 정격 변환, 결정론) ─────────────────────
 
@@ -95,8 +131,19 @@ def base_datetime_for(now: datetime) -> tuple[str, str]:
     return base_day.strftime("%Y%m%d"), f"{hour:02d}00"
 
 
+def _warn_auth_once(code: int) -> None:
+    global _auth_warned
+    if _auth_warned:
+        return
+    _auth_warned = True
+    _log.warning(
+        "기상청 단기예보 키·권한 오류 HTTP %s — WEATHER_API 가 공공데이터포털 "
+        "디코딩 키인지(API허브 키 아님)·활용신청 상태를 확인할 것. 날씨 보정 없이(no_adjust) 계속한다 "
+        "(이후 같은 오류는 이 프로세스에서 다시 경고하지 않음)", code)
+
+
 class KmaWeatherAdapter:
-    """WeatherPort 구현. service_key는 **디코딩 키** (urlencode는 HTTP 클라이언트 1회).
+    """WeatherPort 구현. service_key는 **공공데이터포털 디코딩 키** (urlencode는 HTTP 클라이언트 1회).
 
     `now_fn` 주입은 base_date/base_time 선택의 결정론 격리용 — 테스트는 고정 시각을
     꽂는다. 기본은 KST 현재 시각 (어댑터는 I/O 경계라 DL-3 대상 밖).
@@ -108,10 +155,18 @@ class KmaWeatherAdapter:
         service_key: str,
         *,
         now_fn: Callable[[], datetime] | None = None,
+        base_url: str | None = None,
     ) -> None:
         self._http = http
         self._key = service_key
+        # 주소는 명시로 고르고(기본 포털), **키 파라미터 이름은 주소에서 따라온다** —
+        # 주소만 바꾸고 파라미터를 안 바꾸는 실수를 만들 수 없게 한다.
+        self._base = (base_url or _PORTAL_BASE).rstrip("/")
+        self._key_param = key_param_for(self._base)
+        _log.info("기상청 단기예보 = %s (키 파라미터 %s)", self._base, self._key_param)
         self._now = now_fn if now_fn is not None else lambda: datetime.now(_KST)
+        # 같은 (좌표, 발표분) 응답을 기억한다 — 아래 `_fetch_body` 참고.
+        self._last: tuple[tuple[float, float, str, str], object] | None = None
 
     def daily_forecast(
         self, coord: GeoPoint, days: Sequence[date]
@@ -133,14 +188,28 @@ class KmaWeatherAdapter:
 
         **호출 1건 = 응답 1건**이다. 시간별을 따로 부르는 것이 아니라 같은 응답을
         다르게 접을 뿐이라, 시간 단위 도입에 추가 API 비용이 없다.
+
+        그 약속을 **마지막 응답 1건 기억**으로 지킨다. `WeatherProvider.fetch` 는
+        `daily_forecast` 와 `hourly_forecast` 를 따로 부르므로, 기억이 없으면 요청당
+        호출이 2건 나가 공공데이터포털 일일 한도를 문서값의 2배로 쓴다. 더 나쁜 쪽은
+        값이다 — 두 호출이 발표시각 경계(02/05/08/11/14/17/20/23시 +10분)를 걸치면
+        daily 와 hourly 가 **서로 다른 발표분**에서 나와, 같은 응답을 접은 것이라는
+        전제가 깨진다. 그래서 키에 발표분을 넣는다(경계를 넘으면 다시 부른다).
+
+        한 칸만 둔다. 한 요청이 한 좌표를 쓰고 어댑터 수명이 프로세스 수명이라
+        LRU 가 필요한 자리가 아니고, 칸을 늘리면 오래된 발표분이 남는 쪽이 위험하다.
+        실패는 기억하지 않는다 — 일시 장애를 굳히면 프로세스를 재시작해야 풀린다.
         """
         nx, ny = latlon_to_grid(coord.lat, coord.lng)
         base_date, base_time = base_datetime_for(self._now())
+        key = (coord.lat, coord.lng, base_date, base_time)
+        if self._last is not None and self._last[0] == key:
+            return self._last[1]
         try:
-            return self._http.get_json(
-                f"{_BASE}/getVilageFcst",
+            body = self._http.get_json(
+                f"{self._base}/getVilageFcst",
                 {
-                    "serviceKey": self._key,
+                    self._key_param: self._key,
                     "dataType": "JSON",
                     "pageNo": "1",
                     "numOfRows": str(_NUM_OF_ROWS),
@@ -151,7 +220,12 @@ class KmaWeatherAdapter:
                 },
             )
         except Exception as e:
+            code = getattr(e, "code", None)  # urllib HTTPError
+            if code in _AUTH_CODES:
+                _warn_auth_once(code)
             raise WeatherError(f"단기예보 호출 실패: {e}") from e
+        self._last = (key, body)
+        return body
 
     def hourly_forecast(
         self, coord: GeoPoint, days: Sequence[date]

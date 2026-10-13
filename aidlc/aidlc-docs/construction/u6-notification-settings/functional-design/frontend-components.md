@@ -4,6 +4,8 @@
 > **현재**: `(tabs)/my.tsx` = **26줄 "마이 준비 중" 셸**(TRIP-290 · `StateNotice`). 밴드 `l` 라우트 **0** → 프런트가 본체.
 > **시각 확인**: `l01 default` · `l02 default` · `l02 permission-denied` · `l03 default` · `l05 default` · `l06 default` **6프레임**. 나머지 10은 이름 수준(§9).
 
+> **[개정 · 2026-10-12] 현재 상태 갱신.** `app/(tabs)/my.tsx`는 셸이 아니다 — **l03 실화면 `MyPage`**(`frontend/src/pages/settings/my-page/`, TRIP-604)를 그린다. 라우트는 리포 루트 `frontend/app/`에 있고(`src/app/`은 FSD app 층), pages는 `src/pages/settings/<slice>/`·`src/pages/stay/my-stays/`다.
+
 ---
 
 ## 1. 라우트
@@ -20,11 +22,15 @@
 > `l07`은 **라우트가 아니다** — U1 `OtaChoiceSheet`(숙소 상세 위 시트)이고 U6는 안 만든다(DEC-U6-7).
 > `(tabs)/my.tsx`(→`/my`)와 `app/my/stays.tsx`(→`/my/stays`) 공존은 **리포 선례**대로 문제없다(`(tabs)/explore.tsx` + `app/explore/places.tsx`).
 
+> **[개정 · 2026-10-12] §1 라우트 — 실재 목록.** 표의 6개(`(tabs)/my.tsx` · `my/stays.tsx` · `settings/index.tsx` · `settings/notifications.tsx` · `settings/location.tsx` · `notifications.tsx`)가 모두 실재하고, 두 개가 더 있다 — **`settings/preferences.tsx`**(l05 취향 전체 수정, `SettingsPreferencesPage`, TRIP-610) · **`settings/personalization.tsx`**(l05 개인화 토글, `PersonalizationPage`, TRIP-612).
+
 ---
 
 ## 2. `src/pages/` 슬라이스 (6)
 
 `my-page/` · `my-stays/` · `settings/` · `settings-notifications/` · `settings-location/` · `notification-inbox/`
+
+> **[개정 · 2026-10-12] §2 슬라이스 실재.** `src/pages/settings/`의 7개 — `my-page` · `settings` · `settings-notifications` · `settings-location` · `settings-preferences` · `settings-personalization` · `notification-inbox` — 와 `src/pages/stay/my-stays/`(l04, 그룹이 `stay`).
 
 ---
 
@@ -47,6 +53,8 @@
 
 `NotificationInboxScreen` · `NotificationRow`(아이콘 · 제목 · `종류 · 상대시각` 메타 · **미읽음 dot** · 액션 링크) · `DayGroupHeader` · `MarkAllReadButton` · `NotificationSettingsScreen` · `ToggleRow`(푸시·인앱 2열) · `PermissionBanner`(`설정 이동`) · `NotificationGlyphs`
 
+> **[개정 · 2026-10-12] §3 `features/notification` — 실재와 다름.** `features/notification`에는 `ui/NotificationGlyphs.tsx`만 있다. 알림함·설정 화면(`NotificationInboxScreen`·`NotificationRow`·`NotificationSettingsScreen`·`ToggleRow`·`PermissionBanner`)은 page 슬라이스 `src/pages/settings/{notification-inbox,settings-notifications}/ui/`에 있다. 푸시 등록은 `src/shared/push/`(`register.ts`·`request.ts`·`permissions.ts`·`PushPreprompt.tsx`).
+
 ---
 
 ## 4. `src/features/settings/`
@@ -66,6 +74,8 @@
 
 `SettingsScreen` · `SettingsGroup` · `SettingsRow`(값 요약·뱃지·chevron) · `LocationConsentScreen`(토글 + `이렇게 사용해요` 3 + `동의를 꺼도 계속 동작해요` 배너) · `RevokeConfirmDialog` · `DeleteAccountDialog`(**위험** 스타일) · `MyPageScreen` · `ProfileCard` · `StyleSummaryCard`(디스크립터 + 칩 + **dot 게이지 3축**) · `TripStatusSegment` · `TripCard` · `MyStaysScreen`
 
+> **[개정 · 2026-10-12] §4 `features/settings` — 실재와 다름.** `features/settings`에는 `ui/SettingsGlyphs.tsx`·`ui/cardShadow.ts`만 있다. 화면(`LocationConsentScreen`·`RevokeConfirmDialog`·`MyPageScreen`·`ProfileCard`·`StyleSummaryCard`·`PreferencesEditScreen`·`PersonalizationScreen` 등)은 `src/pages/settings/*/ui/`에, `useLocationConsent.ts`·`revokeImpact.ts`는 `src/shared/location/`에 있다.
+
 ---
 
 ## 5. `src/shared/` 변경
@@ -75,6 +85,8 @@
 | `shared/push/` | **신설** — `expo-notifications` 배선(권한 요청·토큰·수신 핸들러·포그라운드 표시 정책). ⚠ **이미 설치·플러그인 등록됨**(`app.config.ts:38`)이라 **신규 의존성 0, EAS 재빌드 불필요할 가능성** — U4 `expo-task-manager`와 다른 점(착수 전 확인) |
 | `shared/ui/StateNotice` | 재사용(빈 알림함·빈 숙소·빈 여행) |
 | `shared/api/generated` | orval 태그 추가 — `notification`(신규) · `account`·`location`(기존) |
+
+> **[개정 · 2026-10-12] §5 `shared/push` — 재빌드 판단 정정.** `src/shared/push/`는 실재한다. 그러나 "EAS 재빌드 불필요할 가능성"은 **틀렸다** — iOS 빌드가 푸시 entitlement를 일부러 뺀다: `frontend/app.config.ts`가 `withEntitlementsPlist`로 `aps-environment`를 지운다(TRIP-935 심사 빌드 — 번들 ID에 Push 권한이 없어 서명 거부). 서버 푸시(Expo push, `ExpoPushAdapter`)를 실제로 켜려면 **App Store Connect에서 Push capability 활성화 → 래핑 제거 → 네이티브 재빌드**가 필요하다. 서버 측 발송 스위치 `PUSH_MODE`도 EKS 기본 `off`다(`deploy/eks/runtime_secrets.py`).
 
 ---
 
@@ -89,6 +101,8 @@
 | `deletionScopeStructure.test.ts` | 삭제 고지 목록이 `deletionScope.ts` 한 곳에서만 나온다(화면이 자체 목록을 만들지 못하게) |
 
 > ⚠️ **U5에서 배운 것**: `features/*`는 서로 import할 수 없다. 마이페이지가 U5 스타일 카드를 그릴 때 **`features/reflection`의 컴포넌트를 가져다 쓸 수 없다** — 공유가 필요하면 `shared/`로 승격해야 한다.
+
+> **[개정 · 2026-10-12] §6 구조 가드 — 실재 1종.** 위 5종 중 `src/__tests__/deletionScopeStructure.test.ts`만 실재한다. 나머지는 TRIP-1145 스캔 정리 원칙("회귀 감시 소스 스캔 대신 eslint·QA")으로 만들지 않았다. `notificationKindGuard`의 "U7 개통 전" 조건은 U7 폐기(사용자 결정 2026-10-12)로 영구 조건이 됐다.
 
 ---
 

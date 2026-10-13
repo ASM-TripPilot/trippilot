@@ -16,8 +16,8 @@ env 스위치 (TRIP-344):
   `OPENAI_MODEL`(기본 gpt-5.6-terra) · `OPENAI_API`(chat|responses, 기본 responses
   — 멘토 게이트웨이가 responses만 라우팅). 조립 불가(키 누락 등)는 **기동 실패**로
   드러낸다 — INV-4는 런타임 폴백이지 설정 오류 은폐가 아니다(silent fallback 금지).
-- `WEATHER_API`(TRIP-383) — 기상청 단기예보 서비스키(디코딩 키). 설정 시 날씨
-  소프트 보정용 KmaWeatherAdapter를 주입한다. 미설정 = 무보정(기존 그대로).
+- `WEATHER_API`(TRIP-383) — 기상청 단기예보 서비스키(공공데이터포털 디코딩 키). 설정 시 날씨
+  소프트 보정용 KmaWeatherAdapter를 주입한다. 미설정 = 무보정(기동 시 WARN 1줄).
 - `TRIPPILOT_BACKEND_BASE_URL`(TRIP-408) — 백엔드 `/internal/pois` 실연동 주소
   (compose 네트워크 기준 `http://backend:8080`). 설정 시 BackendPoiDb 주입 —
   `TRIPPILOT_SERVICE_AUTH_TOKEN`(TRIP-393 공유 시크릿) 누락이면 **기동 실패**
@@ -155,10 +155,16 @@ def _anthropic_llm_and_model() -> tuple[object, str]:
 
 
 def _kma_weather():
-    """`WEATHER_API`(기상청 공공데이터포털 디코딩 키, TRIP-383) 설정 시 실 어댑터 조립.
+    """`WEATHER_API`(기상청 단기예보 키, TRIP-383) 설정 시 실 어댑터 조립.
 
     미설정(빈 문자열 포함) = 미배선(None) — 날씨 보정 없이 기존 경로 그대로.
     실 응답 드리프트는 실키 실행에서 검증한다 (테스트·CI 실 호출 0, D37).
+
+    **키 두 종류를 다 받는다.** 공공데이터포털 디코딩 키(88자, `+/=`)와 기상청 API 허브
+    키(짧은 영숫자)는 서비스하는 주소가 다른데, 어댑터가 **키 모양에서 주소를 고른다**
+    (`kma_weather.endpoint_for`). 짝이 어긋나 날씨가 두 번 조용히 꺼졌기 때문에, 맞춰야
+    하는 값을 키 하나로 줄였다. `WEATHER_API_BASE` 로 주소를 직접 줄 수도 있다 —
+    새 형식의 키가 생겼을 때의 비상구이고, 평소에는 비워 둔다.
     """
     key = _env("WEATHER_API")
     if key is None:
@@ -166,7 +172,7 @@ def _kma_weather():
     from trippilot.poi_curation.adapters.kma_weather import KmaWeatherAdapter
     from trippilot.poi_curation.sourcing.tourapi import UrllibHttpClient
 
-    return KmaWeatherAdapter(UrllibHttpClient(), key)
+    return KmaWeatherAdapter(UrllibHttpClient(), key, base_url=_env("WEATHER_API_BASE"))
 
 
 def _place_existence():
@@ -309,7 +315,10 @@ def _tmap_travel():
     from trippilot.assembly_engine.config import AssemblyConfig
     from trippilot.assembly_engine.travel import TravelEstimator
 
-    tmap = TmapRouteAdapter(UrllibHttpClient(), app_key)
+    # 소켓 작업(접속·수신 한 번)당 2s — 멈춘 연결을 끊는 값이지 호출 총시간 상한은 아니다
+    # (느리게 흘러오는 응답·DNS 는 넘긴다). 조립 뒤 거리는 시한(≤1.5s) 안에 끝난 구간만 쓰고
+    # 늦은 호출은 결과를 버린다(TRIP-1179). 조립 앞 TransitProvider 도 이 travel 을 쓴다.
+    tmap = TmapRouteAdapter(UrllibHttpClient(timeout_sec=2.0), app_key)
     fallback = TravelEstimator(AssemblyConfig())
     return ChainedTravelAdapter(primary=tmap, fallback=fallback)
 
@@ -362,9 +371,20 @@ def _vector_rag():
     import psycopg
 
     from trippilot.agents.adapters.pgvector_store import PgVectorStore
+    from trippilot.llm_gateway.adapters.caching_embedding import CachingEmbedding
 
     store = PgVectorStore(lambda: psycopg.connect(url))
-    provider = _env("TRIPPILOT_EMBEDDING_PROVIDER") or "openai"
+    # 요청 경로의 임베딩은 캐시를 거친다. 상황 KB·페르소나 KB 질의는 TriggerKind 4종 ×
+    # _REASON_KO 7종 = 28가지 닫힌 집합이라 같은 문자열이 수명 내내 반복된다
+    # (ai/docs/임베딩-사이징-근거.md). 키는 **정확일치**다 — 유사도로 벡터를 재사용하면
+    # 적재된 공간과 다른 값을 쓰게 되고 차원이 같아 아무 검사도 못 잡는다.
+    # 적재(scripts/load_kb.py)에는 붙이지 않는다: 한 번씩만 부르는 경로다.
+    return store, CachingEmbedding(_embedding_adapter(_env("TRIPPILOT_EMBEDDING_PROVIDER")))
+
+
+def _embedding_adapter(configured: str | None):
+    """provider 이름 → EmbeddingPort 구현. 미지원 값과 자격 미비는 **기동 실패**다."""
+    provider = configured or "openai"
     if provider == "openai":
         api_key = _env("OPENAI_API_KEY")
         if api_key is None:
@@ -379,13 +399,13 @@ def _vector_rag():
 
         client = openai.OpenAI(
             api_key=api_key, base_url=_env("OPENAI_BASE_URL"), max_retries=0)
-        return store, OpenAiEmbeddingAdapter(client)
+        return OpenAiEmbeddingAdapter(client)
     if provider == "titan":
         import boto3
 
         from trippilot.llm_gateway.adapters.titan_embedding import TitanEmbeddingAdapter
 
-        return store, TitanEmbeddingAdapter(boto3.client("bedrock-runtime"))
+        return TitanEmbeddingAdapter(boto3.client("bedrock-runtime"))
     if provider == "local":
         try:
             from sentence_transformers import SentenceTransformer
@@ -401,12 +421,12 @@ def _vector_rag():
         )
 
         model_name = _env("TRIPPILOT_EMBEDDING_MODEL") or DEFAULT_MODEL
-        return store, SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
+        return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
     if provider == "http":
         from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
         from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
 
-        return store, http_embedding(RuntimeError, lambda t: UrllibJsonClient(timeout_sec=t))
+        return http_embedding(RuntimeError, lambda t: UrllibJsonClient(timeout_sec=t))
     raise RuntimeError(
         f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} — openai|titan|local|http"
     )
@@ -443,6 +463,32 @@ def _mixed_llm_and_model() -> tuple[object, str]:
 
 
 _LOCAL_PREFIX = "local"
+# 호출자가 예산을 안 줬을 때의 상한. 게이트웨이 기본 타임아웃(`C1Config.timeout_sec`, 10초)과
+# 같은 값이다 — 소켓을 그보다 길게 열어 두면 게이트웨이가 포기한 뒤에도 벤더를 기다린다.
+_BEDROCK_FALLBACK_TIMEOUT_SEC = 10.0
+
+
+def _bedrock_client_kwargs(timeout_sec: float | None) -> dict:
+    """botocore `Config` 인자 — **재시도 0 + 예산을 소켓 타임아웃으로.**
+
+    `max_attempts` 는 **재시도 횟수**다(총 시도 횟수가 아니다). botocore 가
+    `total_max_attempts = max_attempts + 1` 로 정규화하므로 **0 이 "재시도 없음"이고
+    1 은 2회 시도**다. 실측(botocore 1.43.102, before-send 에서 ReadTimeoutError):
+    `max_attempts=1` → HTTP 2회 · `max_attempts=0` → 1회.
+
+    1 을 쓰면 항목당 실효 상한이 per_item 의 2배가 되어 2026-09-29 504 가 그대로
+    재현된다 — standard 모드의 재시도 대상에 ReadTimeoutError 와
+    ModelNotReadyException 이 둘 다 들어 있어서, 좁히려던 바로 그 두 오류가 재시도된다.
+
+    순수 함수로 떼어 둔 이유는 규칙을 botocore 없이도 검증하려는 것이고, 정규화 자체는
+    별도 테스트가 실제 botocore 로 센다.
+    """
+    budget = timeout_sec or _BEDROCK_FALLBACK_TIMEOUT_SEC
+    return {
+        "retries": {"max_attempts": 0, "mode": "standard"},
+        "read_timeout": budget,
+        "connect_timeout": min(3.0, budget),
+    }
 
 
 def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
@@ -465,17 +511,54 @@ def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
     if not any(str(m).lower().startswith(_LOCAL_PREFIX) for m in feature_models.values()):
         return {}
 
+    # `TRIPPILOT_REMINDER_TRANSPORT` 은 **ARN 을 지우지 않고** 전송로를 고르는 자리다.
+    # 우선순위 규칙만 있으면 다른 경로를 재려고 Secrets Manager 에서 ARN 을 지워야 하고,
+    # 그건 되돌리기가 배포인 조작이라 실험이 아니라 전환이 된다. 미설정이면 종전 그대로다.
+    transport = _env("TRIPPILOT_REMINDER_TRANSPORT")
+    if transport is not None and transport not in ("bedrock", "local"):
+        raise RuntimeError(
+            f"TRIPPILOT_REMINDER_TRANSPORT={transport!r} — 'bedrock' 또는 'local'. "
+            "오타가 조용히 한쪽으로 떨어지면 실서비스가 개발 서버로 나간다"
+        )
+
     model_arn = _env("TRIPPILOT_BEDROCK_MODEL_ARN")
+    if transport == "local":
+        model_arn = None  # 명시적으로 고른 것 — ARN 이 남아 있어도 안 쓴다
+    elif transport == "bedrock" and not model_arn:
+        raise RuntimeError(
+            "TRIPPILOT_REMINDER_TRANSPORT=bedrock 인데 TRIPPILOT_BEDROCK_MODEL_ARN 미설정 "
+            "— 고르고 주소를 안 준 것은 설정 버그다"
+        )
     if model_arn:
         import boto3
 
         from trippilot.llm_gateway.adapters.bedrock_adapter import BedrockAdapter
 
-        client = boto3.client(
-            "bedrock-runtime",
-            region_name=_env("TRIPPILOT_BEDROCK_REGION") or "us-east-1",
-        )
-        return {_LOCAL_PREFIX: BedrockAdapter(client, model_arn)}
+        from botocore.config import Config
+
+        region = _env("TRIPPILOT_BEDROCK_REGION") or "us-east-1"
+
+        def _bedrock_client(timeout_sec: float | None):
+            """항목당 예산을 **클라이언트 설정으로** 내린다 — botocore 는 호출 인자로 못 받는다.
+
+            ## 재시도를 끈다 (2026-09-29 실서비스 504)
+
+            기본 botocore 는 재시도를 4회까지 한다. 유휴 후 첫 호출이 내는
+            `ModelNotReadyException`(콜드스타트)도 재시도 대상이라, 항목 하나가 **11.9초**를
+            쓰고 요청 예산(8초)을 넘겼다. 항목이 둘이라 합이 20초가 되어 백스톱 13초가
+            강등 응답보다 먼저 504 를 냈다 — 강등 경로는 맞게 돌았는데 응답을 만들 시간이
+            없었다. 리포 규약도 **SDK 재시도 0**이다(OpenAI 어댑터 `max_retries=0`).
+
+            콜드스타트는 재시도로 못 줄인다. 폴백 계단이 받아 상수 문구로 강등하는 것이
+            이 경계의 설계다(INV-4) — 그 강등이 **예산 안에서** 일어나야 의미가 있다.
+            """
+            return boto3.client(
+                "bedrock-runtime",
+                region_name=region,
+                config=Config(**_bedrock_client_kwargs(timeout_sec)),
+            )
+
+        return {_LOCAL_PREFIX: BedrockAdapter(_bedrock_client, model_arn)}
 
     base_url = _env("TRIPPILOT_LOCAL_LLM_BASE_URL")
     if not base_url:
@@ -522,6 +605,22 @@ def _replan_directives() -> tuple:
         return ()
 
 
+def _warn_unwired(*, weather, embedding, feature_models: Mapping | None) -> None:
+    """기동은 되고 품질만 조용히 떨어지는 외부 배선 공백을 1회씩 WARN.
+
+    값을 지어내 채우지 않는다 — 알리기만 한다. `feature_models is None` 은 실 LLM
+    미배선(fake 조립)이라 모델 배정 자체가 무의미한 경우다.
+    """
+    log = logging.getLogger("trippilot.main")
+    if embedding is None:
+        log.warning("임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — Plan-B KB 검색 없이 "
+                    "규칙 랭킹으로 강등된다")
+    if feature_models is not None and not feature_models:
+        log.warning("TRIPPILOT_LLM_FEATURE_MODELS 비어 있음 — 전 기능이 단일 기본 모델로 동작")
+    if weather is None:
+        log.warning("WEATHER_API 미설정 — 날씨 보정 없이(no_adjust) 동작")
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     configure_logging()  # 조립 로그부터 보이게 — 실패해도 기동 전에 드러난다 (TRIP-914)
@@ -536,6 +635,7 @@ def build_app_from_env() -> FastAPI:
     vector_store, embedding = _vector_rag()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
+        _warn_unwired(weather=weather, embedding=embedding, feature_models=None)
         return build_dev_app(weather=weather, poi_db=poi_db, events=events,
                              vector_store=vector_store, embedding=embedding,
                              travel_port=travel, existence=existence,
@@ -552,6 +652,7 @@ def build_app_from_env() -> FastAPI:
             "미설정(fake 조립) 또는 openai|anthropic|mixed 만 지원"
         )
     feature_models = _feature_models_from_env()
+    _warn_unwired(weather=weather, embedding=embedding, feature_models=feature_models)
     local_routes = _local_route(feature_models)
     if local_routes:
         from trippilot.llm_gateway.adapters.routing import RoutingLlm
@@ -566,6 +667,10 @@ def build_app_from_env() -> FastAPI:
                          hours=hours, place_ids=place_ids,
                          feature_models=feature_models,
                          retry_models=_retry_models_from_env(),
+                         # 생성 1회의 PREFERENCE_SCORING 호출 수 상한(TRIP-1313). `or` 모양은
+                         # EXISTENCE_MAX_CALLS 와 같은 이유(TRIP-882 — compose 빈 값의 int('')).
+                         # 0·음수는 C1Config 검증이 기동 시점에 거부한다.
+                         score_max_parallel=int(_env("TRIPPILOT_SCORE_MAX_PARALLEL") or "10"),
                          directives=_replan_directives())
 
 

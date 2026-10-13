@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.RepairResult
@@ -188,7 +189,7 @@ class FakeScheduleAgent(
      *
      * 빈 맵으로 두면 "설명 단계가 통째로 빠져도" 테스트가 통과해, 분리한 배선을 아무도 안 지킨다.
      */
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations(
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations(
         slots = solution.days
             .flatMap { d -> d.slots.map { SlotKey.of(d.date, it.poiId) to "일정 흐름에 맞는 곳이에요" } }
             .toMap(),

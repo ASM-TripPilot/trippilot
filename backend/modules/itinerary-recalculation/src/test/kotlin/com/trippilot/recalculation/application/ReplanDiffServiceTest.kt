@@ -80,7 +80,8 @@ class ReplanDiffServiceTest : StringSpec({
      */
     fun session(status: ReplanStatus, draft: Map<String, Any>?) = ReplanSession.start(
         tripId = tripId, itineraryId = UUID.randomUUID(), triggerId = null,
-        scope = ReplanScope.FULL_DAY, fromInstant = Instant.parse("2026-08-11T01:00:00Z"),
+        scope = ReplanScope.FULL_DAY, targetDate = LocalDate.of(2026, 8, 11),
+        fromInstant = Instant.parse("2026-08-11T01:00:00Z"),
         origin = ReplanOrigin(OriginKind.STAY_ANCHOR, null, null),
         reasons = listOf("WEATHER"), directives = emptyList(), freeText = null,
         excludedPoiIds = emptyList(), at = Instant.parse("2026-08-11T01:00:00Z"),

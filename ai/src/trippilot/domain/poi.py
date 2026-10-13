@@ -6,6 +6,7 @@ CachePort에 저장되는 직렬화 경로에서 구조적으로 차단.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 
@@ -36,6 +37,24 @@ class PoiCategory(Enum):
     # 내부 전용(숙소 앵커·체류시간 계산). 경계 카테고리 8종에 포함되지 않으며
     # `/internal/pois` 응답에 등장하지 않는다 (PR #104 회신).
     STAY = "STAY"
+
+
+# 먹자골목·음식 골목은 TourAPI 가 액티비티로 주지만 실질은 식당 밀집이다 — 계열 판정
+# (agents/schedule/family.py)과 조립의 FOOD 하루 상한이 같이 쓴다('자갈치 양곱창 골목'이
+# '자갈치 크루즈'를 눌렀다). '…거리·…타운' 은 **음식 단어가 붙은 꼴만** 잡는다 — '거리|타운$'
+# 전체는 '영화의 거리'·'로데오거리'·'가구거리'·'패션타운'까지 잡는다(2026-10-03 실측: 비FOOD
+# 124곳 중 음식 거리 30곳, 이 규칙은 그 30곳만 잡고 오탐 0). 괄호 접미·공백을 뗀 이름에 건다.
+EATERY_NAME = re.compile(
+    r"골목$|먹자|먹거리|카페거리"
+    r"|(음식|맛집|푸드|포차)[가-힣]*(거리|타운)$"
+    r"|(탕|국|찜|밥|구이|불고기|통닭|대게|한우|홍어|삼겹살|떡볶이|한식)(특화)?(거리|타운)$")
+_NAME_NOISE = re.compile(r"\([^)]*\)|\[[^\]]*\]|\s+")
+
+
+def counts_as_food(poi: Poi) -> bool:
+    """FOOD 이거나 이름이 음식 골목인 POI — 조립의 FOOD 하루 상한이 세는 기준."""
+    return (poi.category is PoiCategory.FOOD
+            or EATERY_NAME.search(_NAME_NOISE.sub("", poi.name)) is not None)
 
 
 class DataQuality(Enum):

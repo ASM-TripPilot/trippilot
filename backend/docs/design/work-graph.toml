@@ -47,7 +47,14 @@
 # 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
 # `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
 #
-# 갱신: 2026-09-22 · **릴리스 선행이 풀렸다.** PR #598 은 닫혔고 #601 이 2026-09-18 에 승격을
+# 갱신: 2026-10-12 · 루프 다섯 노드 머지 완료(#1040~#1044) → done
+# 갱신: 2026-10-12 · `SOCIAL-TOKEN-APP`(TRIP-1317) 추가 — TRIP-1316 잔여(이메일 선점)를 노드로 뗌
+# 갱신: 2026-10-11 · 루프 착수 전 정리 — 새 노드 셋(SOCIAL-TOKEN-AUD·TRIP-1315·TRIP-1314)과 외부 짝 하나
+# (TRIP-1312), 그리고 **지금 할 수 있는 조각을 떼어 낸 것 둘**(828 → REFLECTION-MOOD · 824 →
+# PLACE-DETAIL-API). 새 간선은 0 이다 — 1312→1314 는 티켓 원문이 "손잡이만 먼저 만들고 값은 나중에
+# 돌려도 된다"고 적어 선행이 아니다. 상세는 파일 말미 §2026-10-11 루프.
+#
+# 이전 갱신: 2026-09-22 · **릴리스 선행이 풀렸다.** PR #598 은 닫혔고 #601 이 2026-09-18 에 승격을
 # 끝내, `aws-bootstrap.yml`·`aws-deploy.yml` 이 **이미 main 에 있다**(실측). 따라서 EKS-DEV-LIVE
 # 의 크리티컬 패스는 이제 **AWS-CONSOLE-BOOTSTRAP · DOMAIN-ACM 둘**이다 — 둘 다 사람·결제다.
 #
@@ -433,11 +440,18 @@ TRIP-481 과 무관하다(그쪽은 로컬 위임 경로 버그).
 id = "TRIP-475"
 ticket = "TRIP-475"
 title = "[예약] 일정 생성 시간제약 재도입 — 플래그 on + deadline 재전송"
-status = "deferred"
+status = "done"
 owner = "일정"
 migration = false
 touches = ["backend/modules/itinerary-generation"]
-note = "2026-10 이후로 잡혀 있다. 일정 제약이지 기술 선행이 아니다."
+note = """
+2026-10 이후로 잡혀 있었다. 일정 제약이지 기술 선행이 아니었다.
+
+**닫힘(2026-10-07 재조사).** 앞당겨 이미 켜져 있다 — `ScheduleDeadlineProperties.kt:7,10` 이
+"2026-09-28 다시 켰다(TRIP-1000, TRIP-475 를 앞당김)" 라고 적고 `enforced = true`,
+day1 15s / total 60s 로 돌고 있다. deferred 로 남겨 둔 동안 「우리가 못 푸는 것」 집계를
+한 줄 부풀리고 있었다.
+"""
 
 # ── 누락 보정(2026-09-16) — 열린 BE 티켓인데 그래프에 없던 넷 ────────────────────
 #
@@ -557,7 +571,7 @@ note = """
 id = "AI-INBOUND-AUTH"
 ticket = "TRIP-878"
 title = "[AI] 인바운드 서비스 토큰 검증 — 백엔드는 보내는데 받는 쪽이 없다"
-status = "external"
+status = "done"
 owner = "ai"
 migration = false
 touches = []
@@ -574,6 +588,12 @@ note = """
 
 **상대가 켜기 전에 `SERVICE_AUTH_TOKEN` 실값이 양쪽 환경에 있어야 한다** — 지금 `.env.example` 은
 빈 값이다. 스위치만으로는 값이 생기지 않는다.
+
+**닫힘(2026-10-07 재조사) — 위 "받는 쪽 검사는 없다"는 이제 거짓이다.** 상대가 구현했다:
+`ai/src/trippilot/api/middleware.py:321` `ServiceAuthMiddleware`(x-service-token 불일치 401,
+상수시간 비교), 등록은 `:538`(토큰이 설정된 경우에만). `EXEMPT_PATHS = {"/health", "/"}` 라
+걱정했던 헬스핑은 안 깨진다. DEV 실측으로도 확인했다 — 토큰 없이 `/openapi.json` 을 부르면 401 이다
+(2026-10-05). 남은 것은 코드가 아니라 **시크릿 실값**(사람)이고 그건 스위치 문서가 추적한다.
 """
 
 [[nodes]]
@@ -626,7 +646,7 @@ note = """
 id = "AI-CONTAINER-BOOT"
 ticket = "TRIP-882"
 title = "[AI] 소스 빌드 컨테이너가 기동 불가 — EXISTENCE_MAX_CALLS 빈 값에 int('') 폭발"
-status = "external"
+status = "done"
 owner = "ai"
 migration = false
 touches = []
@@ -637,6 +657,11 @@ note = """
 
 기존 GHCR 이미지로는 안 나고 **빌드해야만** 드러나서 여태 아무도 몰랐다. 로컬은 `.env` 에
 `EXISTENCE_MAX_CALLS=60` 을 넣어 우회했다(2026-09-16).
+
+**닫힘(2026-10-07 재조사).** 상대가 고쳤다 — `ai/main.py:211` 이
+`int(_env("EXISTENCE_MAX_CALLS") or "60")` 로 바뀌었고 주석이 TRIP-882 를 명시한다.
+같은 함정이 남은 자리를 역검증했다: `ai/src`·`main.py` 전체에서 `os.environ.get(key, default)`
+패턴 잔존 0건.
 """
 
 [[nodes]]
@@ -684,12 +709,17 @@ note = """
 [[nodes]]
 id = "TRIP-824"
 ticket = "TRIP-824"
-title = "[Figma] Place 확장 — imageUrls·address·admissionFee·description·photoCount"
+title = "[Figma] Place 확장 잔여 — imageUrls·admissionFee·description (값이 DB 에 없다)"
 status = "todo"
 owner = "장소"
 migration = true
 touches = ["backend/modules/place-data", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
 note = """
+**2026-10-11 쪼갬 — 지금 할 수 있는 조각은 [[PLACE-DETAIL-API]] 가 잇는다**(단건 경로 + 이미 있는
+`address`). 이 노드에는 **값을 채워야 하는 세 필드**만 남는다. 아래 "네 필드가 `poi` 에 없다"는
+이제 셋이다 — `address` 는 V2.58(TRIP-1062-ADDR)로 들어갔다. `photoCount` 는 `imageUrls.size` 로
+파생될 것으로 본다 — 별도 필드가 필요한지는 티켓 「확인 필요 3」에서 값을 채울 때 가린다.
+
 **확인(2026-09-26) — `GET /places/{id}` 는 `openapi.yaml` 에 아직 없다.** 노드가 말한 "단건 신설
 여부가 선행 결정"이 그대로 열려 있다(주석에 *"후보마다 `GET /places/{id}`"* 라는 **언급만** 있다).
 
@@ -783,12 +813,21 @@ note = """
 [[nodes]]
 id = "TRIP-828"
 ticket = "TRIP-828"
-title = "[Figma] Reflection mood·shortMemo + 데이터 부족 시 부분 분석"
-status = "todo"
+title = "[Figma] 데이터 부족 시 부분 분석 — 채움 규칙 미정 (828 잔여)"
+status = "done"
 owner = "회고"
-migration = true
-touches = ["backend/modules/reflection", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
+migration = false
+touches = ["backend/modules/reflection", "backend/docs/design/openapi.yaml"]
 note = """
+**닫음(2026-10-12, 사용자 결정) — 부분 분석은 현행 유지로 확정한다.** 데이터가 임계 미만이면 지금처럼
+미리보기(`preview`)만 내고 `analysis` 를 채우지 않는다. 새 채움 규칙도, 새 필드도 만들지 않는다 —
+그래서 코드 변경이 없다. 임계 미만에서도 분석을 보여 주기로 바뀌면 그때 새 노드로 연다.
+아래는 닫기 전 기록이다.
+**2026-10-11 쪼갬 — `mood`·`shortMemo` 는 [[REFLECTION-MOOD]] 가 잇는다.** 아래 "애초에 영속할
+것인가"는 **영속으로 정해졌다**(사용자 승인 2026-10-11). 이 노드에는 세 번째 항목(부분 분석)만
+남고, 그것은 컬럼이 아니라 채움 규칙이라 마이그레이션이 없다. **정의가 먼저다** — "부분 분석"이
+무엇인지 정해지기 전에는 착수하지 않는다.
+
 **대조 완료(2026-09-26) — FE 가 `mood` 를 저장하지 않는다.** `DailyReflectionPage` 주석이
 *"mood/memo 비영속"* 이라고 명시한다. 값 집합(닫힌 enum 인지)을 정하기 전에 **애초에 영속할
 것인가**가 먼저다 — 지금 만들면 아무도 안 쓰는 컬럼이 된다.
@@ -825,6 +864,15 @@ note = """
 - `photoCount` — `TripRecordSummary` 에 **이미 있다**(지난 여행 카드는 충족). `Trip` 에 더할지는
   "내 여행 카드가 사진 수를 쓰는가"를 화면과 대조한 뒤에 정한다.
 - `coverImageUrl` — 저장이냐 파생이냐가 미결(아카이브 사진 첫 장이면 파생).
+
+**결정(2026-10-09, 사용자 위임) — 파생이다. 원천은 그 여행 일정의 첫 POI 사진.**
+저장(사용자 업로드)을 고르면 **INV-U5-03("서버에 바이너리는 없다")과 충돌**해 이미지 스토리지가
+신규 선행이 된다. 아카이브 첫 장은 `visit_photo_meta` 가 EXIF 메타라 **표시 가능한 URL 이 없을
+가능성이 높다**(착수 전 실측할 것). POI 사진은 DEV 에 16,607 건이 이미 있다 — 가장 싸고 즉시 된다.
+`photoCount` 는 위 대조대로 `Trip` 에 더하지 않는다(`TripRecordSummary` 로 충분).
+
+**착수 조건은 그대로다** — FE 가 `coverImageUrl` 을 읽는 코드를 먼저 낸다. 결정이 났다고 해서
+아무도 안 읽는 필드를 먼저 만들 이유는 생기지 않는다.
 """
 
 [[nodes]]
@@ -1115,8 +1163,8 @@ FE 의 TRIP-323 은 **여전히 보류다** — 계약 3종 중 하나만 풀렸
 [[nodes]]
 id = "AFFILIATE-LINK"
 ticket = ""
-title = "제휴 링크(C5) — U1 1차 컴포넌트 중 유일한 미구현"
-status = "blocked"
+title = "제휴 링크(C5) — 칸 1 개통·DEV 가동 중, 남은 것은 칸 2·3(포스트백·벤더 매핑)"
+status = "todo"
 owner = "숙소"
 migration = true
 touches = [
@@ -1130,7 +1178,17 @@ note = """
 `제휴링크-연동-설계.md` 가 조사·칸 0~3 계획을 2026-09-11 에 박제해 두었고, **그 칸 0 이 지시한
 노드가 이것이다**(그때는 신설하지 않았다 — 2026-09-21 에 만든다).
 
-C5 는 U1 **1차 컴포넌트인데 유일하게 안 만들어졌다.** 설계는 완비다(`AffiliateLinkFacade` ·
+**(2026-10-03 정정 — 아래 서술은 칸 1 이전 상태다.)** 모듈은 만들어졌고 DEV 에서 돌고 있다 —
+`modules/affiliate-link` · `GET /stays/{stayId}/outbound` · `TripcomDeeplinkAdapter`.
+2026-10-03 에 `AFFILIATE_MODE=tripcom` 으로 켜서 **실 딥링크가 나간다**(302 Location 에
+`allianceid·sid·trip_sub1·trip_sub3` 실측). 상세는 [[DEV-REAL-MODES]].
+**PR #875 가 2026-10-03 에 머지됐다** — FE 숙소 [이동]이 서버 아웃바운드(302)를 부르므로
+이제 클릭이 `trip_sub1`(clickId)로 실제 추적된다. 남은 노드 범위는 칸 2(포스트백 수신)·칸 3(벤더 매핑)이고,
+**수수료 확인은 트립닷컴 대시보드 쪽 사람 몫**이다(포스트백이 없으니 우리 DB 로는 전환을 모른다).
+
+이하 2026-09-21 시점 서술:
+
+C5 는 U1 **1차 컴포넌트인데 그때는 유일하게 안 만들어져 있었다.** 설계는 완비다(`AffiliateLinkFacade` ·
 `OtaDeeplinkPort` · `OtaPartner`/`OutboundClick` 엔티티 · BR-U1-29~32). FE 도 제휴 고지 시트가
 구현돼 있다(TRIP-728·611 완료). **빠진 것은 코드가 아니라 계약**이다 — 어느 프로그램에 매체로
 승인받느냐이고, 어필리에이트 심사가 "운영 중인 매체"를 전제해 본계약이 사실상 출시 시점이다.
@@ -1142,7 +1200,18 @@ C5 는 U1 **1차 컴포넌트인데 유일하게 안 만들어졌다.** 설계�
 `GET /stays/{stayId}/outbound` 가 클릭(`affiliate_click`, V2.54)을 적고 302 로 웹검색 폴백에 보낸다.
 숙소 이름은 accommodation-search 의 신설 `StayLookupFacade`(api) 로 가져온다. `AffiliateLinkFacade` 는
 소비자 0이라 안 만들었다(칸 2·3 에서 연다). FE 몫(orval 재생성 → `stayOutbound.ts` 교체)은 남아 있다.
-남은 것은 칸 2·3 — 여전히 계약(OTA) 선행이라 status 는 blocked 유지.
+**진행(2026-10-01) — 칸 3 축소판까지 배송·가동. 계약도 끝났다.**
+트립닷컴 어필리에이트 승인(2026-09-29, Allianceid 10768080 · SID 332381302)으로 "계약 선행" 전제가
+해소됐다. `TripcomDeeplinkAdapter`(#767)가 키워드 검색결과 딥링크를 만들고, **#824 가 `trip_sub3`
+(등록 링크 Ad ID)를 추가**했다 — probe 실험(9/29~10/1)에서 이 값이 없는 클릭은 대시보드에 전혀
+안 잡히고 있는 클릭만 집계됐다. 귀속의 열쇠다. #826 이 컴포즈 통로를 뚫어 `.env` 로 켤 수 있다.
+로컬 스택은 `AFFILIATE_MODE=tripcom` 으로 **켜져 있고**, 302 Location·`affiliate_click` 적재·
+시뮬레이터 착지까지 실측했다(숙소트랙-인계.md §8.7).
+
+**그래서 status 는 blocked → todo.** 남은 것은 둘뿐이다:
+- **칸 2(포스트백 수신)** — 전환 리포트가 `trip_sub1`(clickId)을 되돌려 주는 방식 확인 후. 여전히 상대 의존.
+- **FE 배선(TRIP-1167)** — `stayOutbound.ts` 가 아직 구글 검색 URL 을 **클라에서 조립**한다.
+  이게 붙기 전까지 실사용 수수료는 여전히 0 이다(서버는 준비 완료).
 
 가격(`LivePricePort`)도 여기 딸려 온다 — TourAPI 는 가격을 주지 않는다. 다만 BR-U1-14·15 가
 **가격 없이도 성립하도록** 설계해 두어(가격 부재는 카드 제외 사유가 아니다 · 실시간 가격순 미제공)
@@ -1730,6 +1799,12 @@ note = """
 이 노드는 BE 절반(TRIP-860)만 남는다. touches 에서 frontend 경로를 뺐다.
 코드는 매핑 한 줄인데 **롤아웃이 본체다** — 구버전 앱 기기에 새 channelId 를 실으면 그 기기에서
 알림이 사라진다. FE 배포 침투 후 켜거나 앱 버전 분기.
+
+**정정(2026-10-09) — "프론트가 채널을 안 만든다"는 더는 사실이 아니다.** FE 에 3종이 다 있다:
+`frontend/src/shared/push/request.ts:21,25,29` 가 `passive`·`active`·`time-sensitive` 를
+`setNotificationChannelAsync` 로 만들고, 권한 요청보다 **먼저** 끝낸다(Android 13+ 요건).
+즉 선행은 코드가 아니라 **그 FE 빌드의 배포 침투**뿐이다. 위 롤아웃 주의는 그대로 유효하다 —
+채널이 없는 구버전 기기가 남아 있는 동안 channelId 를 실으면 그 기기에서 알림이 사라진다.
 """
 
 [[nodes]]
@@ -1762,6 +1837,19 @@ note = """
 
 갱신(2026-09-14): 그 "관측"이 티켓이 됐다 — TRIP-843 이 선행이다(티켓 원문: "야간 조용시간·상한
 조정의 선행"). 관측이 깔리고 푸시가 실제로 나가기 시작하면 이 결정은 추측 없이 닫을 수 있다.
+
+**갱신(2026-10-09) — 사용자가 "푸시 켜자"로 결정했다. 그래도 조용시간은 지금 정하지 않는다.**
+위 권고("지금 정하면 근거가 관측이 아니라 추측")가 그대로 유효하고, 오히려 **푸시가 켜지는 지금이
+그 관측이 처음 가능해지는 시점**이다. TRIP-843 관측은 done 이므로 발송이 시작되면 데이터가 쌓인다.
+
+지금 막지 않아도 되는 근거 넷(그래서 보류가 안전하다):
+1. 법적 의무가 아니다 — 우리 8종은 전부 정보성
+2. 발송량 상한이 이미 돈다 — `PushRateLimits` 시간 10 · 일 50(TRIP-844 done)
+3. REFLECTION 이 passive 라 iOS 는 요약에 묶인다
+4. **"남은 구멍은 안드로이드"도 닫혔다** — FE 에 채널 3종이 실재한다
+   (`frontend/src/shared/push/request.ts:21,25,29` · [[PUSH-ANDROID-CHANNEL]] 정정 참조)
+
+닫는 조건: 실발송이 한 주 돈 뒤 야간(21~08) 발송 건수를 세고, 0 에 가까우면 규칙을 만들지 않는다.
 """
 
 [[nodes]]
@@ -2086,11 +2174,13 @@ AI 쪽은 키 표기만 고치면 켜지지만, 백엔드 Plan-B 는 그것과 �
 id = "TRIP-850"
 ticket = "TRIP-850"
 title = "실사용 모드 전환 — 스위치 8종이 전부 가짜/꺼짐 기본값, 환경별 값이 아무 데도 없다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/app/src/main/resources/application.yml",
   "docker-compose.yml",
+  "backend/docs/design/실사용-모드-스위치.md",
+  "deploy/eks/runtime_secrets.py",
 ]
 note = """
 환경별 값 표 + 키 발급 상태 목록 + 기동 차단 조합 문서화. 숙소 stub→db 전환은 전제가 없어
@@ -2114,6 +2204,14 @@ TRIP-360 이후 차단이 아니라 안내 문구 문제). 켜기 자체의 전�
 즉 남은 것은 "스위치를 켜는 일"이 아니라 **시크릿에 값을 넣는 일**(AWS 콘솔)이다.
 `application.yml` 기본값은 **일부러 스텁으로 둔다** — 그건 배포 서술이 아니라 아무 설정도 없을 때의
 안전값이고, CI 의 외부호출 0 정책과 시드 없는 환경의 근거다.
+
+**닫힘(2026-10-03).** 완료 기준 3개 소진: 환경별 값 표·키 발급 상태·차단 조합을
+`backend/docs/design/실사용-모드-스위치.md` 로 모았다(코드가 정본, 문서는 소비 뷰).
+숙소 db 는 이미 compose 기본+차트 고정으로 돼 있었다. 덤으로 잡은 구멍 하나 —
+**9번째 스위치 `AFFILIATE_MODE`(#826)가 EKS allowlist·차트에 배선이 없어 켜는 결정이 나면
+EKS 에서 못 켜는 상태**였다. runtime_secrets allowlist·시드 기본 fallback·tripcom 3종
+배포 전 검증(변이 역검증 완료) + 차트 env 를 추가했고, 차트 배선은 렌더 단언 테스트가 지킨다
+(적대적 리뷰가 "배선만 무방비"를 잡아 추가). 남은 것은 사람 몫 — 시크릿 실값 투입(문서 §4).
 
 숙소 쪽 드리프트는 2026-09-22 에 메웠다 — 로컬 k8s ConfigMap 과 compose 기본값이 EKS 와 갈려
 있었다. 이제 `StayContentModeParityTest` 가 세 배포 서술의 일치를 못 박는다.
@@ -2141,6 +2239,7 @@ note = """
 우리 페이로드는 스키마 검증을 통과했다. 그동안 재계획이 전부 실패로 튀지 않게 그 코드에서만
 종전 generate 경로로 한시 폴백한다. 상대 배선이 끝나면 그 갈래와 `legacyReplanViaGenerate` 를
 함께 지운다 → REPLAN-AI-WIRED 로 잇는다.
+(2026-10-12: 상대 배선이 끝나 그 폴백을 지웠다 — REPLAN-AI-WIRED done.)
 
 곁가지로 `ContractShape` 의 구멍을 메웠다 — `anyOf: [T, null]` 을 안 벗겨 **nullable 객체 아래가
 전부 무검사**였다(세 경계 공통). 계약 파일을 흔들어 보고 알았다.
@@ -2150,13 +2249,25 @@ note = """
 id = "REPLAN-AI-WIRED"
 ticket = ""
 title = "상대 배선 후 한시 폴백 제거 — 재계획이 전용 경로만 쓴다"
-status = "blocked"
+status = "done"
 migration = false
 touches = [
   "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
   "backend/app/src/test/kotlin/com/trippilot/app/LiveAiRoundTripIT.kt",
 ]
 note = """
+**닫음(2026-10-12, PR #1069).** `legacyReplanViaGenerate` 와 `NOT_WIRED` 갈래를 지웠다. 판정:
+develop 의 `ai/` 로 이미지를 다시 빌드해 실 왕복 — `/ai/v1/planb/replan` 이 잠금 블록을 실은 요청에
+200 을 10/10 냈다(로컬에 있던 10/01 자 이미지는 배선 수정 전이라 판정에 쓸 수 없었다).
+그 왕복이 확인한 것은 **경로 수용**이다 — 저녁에 돌려 `no_slot_after_from_instant` 로 산출이 비었고,
+재계획 품질은 재지 않았다. 이제 상대가 503 을 내면 재계획은 우회 없이 세션 FAILED 로 닫힌다.
+아래는 닫기 전 기록이다.
+**blocked 해제(2026-10-07 재조사) — 선행이 풀렸다.** 아래가 기다리던 두 조건이 모두 찼다:
+상대 오케스트레이터 `replan` 은 `ai/src/trippilot/api/wiring.py:1661` 에 실재하고,
+500 을 내던 필드명 버그도 고쳐졌다 — `wiring.py:1122` 가 `FixedBlockSchema` 는 `start`/`dwell_min`
+임을 주석으로 못 박고 공용 변환기(`_fixed_block`)를 쓴다. 남은 것은 **우리 판정 한 번**
+(`LIVE_AI=1` 실왕복 replan 200)과 **지우는 일**뿐이다.
+
 **갱신(2026-09-27) — 상대 배선이 끝났다**(AI #744 PlanBAgent 복원 · #749 /planb 별칭). 우리 몫
 TRIP-960 ②(상수 교체)는 이 커밋으로 끝. **폴백 제거는 아직이다** — 실왕복에서 상대 500 이 나와
 "배선 완료 + 실왕복 200" 조건의 절반만 찼다: `_replan_fixed_blocks`(wiring.py:910)가
@@ -2228,7 +2339,7 @@ setNotificationChannelAsync 0건(2026-09-11 실측). FE 규칙 문서도 "현 �
 id = "AI-REPLAN"
 ticket = ""
 title = "[AI] 재계획 전용 경계 — fully_booked·지시어 사전·번역 워커·라우트 (A-1~A-5)"
-status = "external"
+status = "done"
 owner = "ai"
 migration = false
 touches = []
@@ -2242,6 +2353,7 @@ A-4 `/replan` 라우트도 **열렸고** `ai/docs/openapi.json` 에 스키마까
 **남은 것은 A-5 오케스트레이터 배선 하나다.** 실 왕복이 503 `ORCHESTRATOR_NOT_WIRED` 를 낸다 —
 상대 docstring 에 "조립이 아직 이 경계를 구현하지 않으면 503 으로 명시 실패한다"고 적혀 있다.
 **우리 페이로드는 스키마 검증을 통과했다**(422 가 아니라 503 이었다). 소스 최신으로 재빌드해 확인했다.
+(2026-10-12: A-5 도 끝났다 — 실 왕복 200. 위는 2026-09-20 시점 기록이다.)
 
 한때 이 노드에 신설 티켓을 달았다가 뗐다 — "AI 절반에 티켓이 없다"는 전제로 만들었는데 틀렸다.
 진짜 병목은 **백엔드 잔여**였다(재계획 전용 경계 노드와 재계획 입력 전달 노드).
@@ -2381,7 +2493,7 @@ from = "AI-REPLAN"
 to = "REPLAN-AI-WIRED"
 kind = "외부선행"
 verified = true
-reason = "실측 2026-09-20 — 상대 라우트는 열렸으나 오케스트레이터 배선 전이라 실 왕복이 503(ORCHESTRATOR_NOT_WIRED). 백엔드 전환(REPLAN-BOUNDARY)은 그 상태로도 끝났고, 폴백 제거만 상대를 기다린다."
+reason = "실측 2026-09-20 — 상대 라우트는 열렸으나 오케스트레이터 배선 전이라 실 왕복이 503(ORCHESTRATOR_NOT_WIRED)이었다. 2026-10-12 해소 — 상대 배선 완료, 실 왕복 200, 폴백 제거(PR #1069)."
 
 [[edges]]
 from = "FE-PUSH-WIRING"
@@ -2457,6 +2569,16 @@ EKS 배포 워크플로 등록 + 승격을 끝냈다.** 그 뒤로 develop 에 6
 규약은 **원본과의 차이를 두 덩어리로 고정**한다: 머리 주석 3줄 + `ref: develop`.
 
 **squash 금지 — merge commit 전용.** squash 면 develop 이력과 영구 분기(#58 선례).
+
+**3차 승격 완료(2026-10-01, PR #830 — 222커밋).** #734(09-26, 130커밋)는 머지되지 않은 채
+develop 과 92커밋 벌어져 있어 **닫고 새 브랜치로 다시 끊었다**(스냅숏 브랜치는 오래 두면 그 자체가
+위험이 된다). 상태는 주기 승격이라 todo 로 되돌린다.
+
+**이번에 재현된 함정 — 스케줄 사본은 충돌이 안 나는 쪽이 더 위험하다.** 자동 머지는 충돌난 3종만
+사람에게 묻고, 충돌 없는 3종(`ai-intro2-probe`·`ai-llm-smoke`·`ai-poi-collect`)은 **develop 판으로
+조용히 덮었다** — 릴리스가 야간 배치 운영을 바꾸는 사고다(#734 커밋 `0e19fcd1` 이 같은 일을 겪었다).
+처방: 병합 후 사본 9종을 `git diff origin/main -- <파일>` 로 **전수 대조**하고 다른 것은 되돌린다.
+확인 없이 "충돌 없음 = 안전"으로 읽지 않는다.
 이 PR 에는 CI 체크가 안 붙는다(게이트 트리거가 develop 한정).
 머지는 사용자 몫.
 """
@@ -2491,8 +2613,8 @@ note = """
 [[nodes]]
 id = "EKS-DEV-LIVE"
 ticket = ""
-title = "DEV 실기동 — bootstrap → plan → apply → 시크릿 → 앱 배포 → 스모크"
-status = "todo"
+title = "DEV 실기동 — bootstrap → plan → apply → 앱 배포 → 스모크 (시크릿 충전은 쪼개 냄)"
+status = "done"
 migration = false
 touches = []
 note = """
@@ -2501,6 +2623,14 @@ note = """
 plan → apply+deploy_application=false → Secrets Manager 키 입력(backend=송 · ai=준하 TRIP-892)
 → apply+deploy_application=true(embedding_enabled=false 시작) → NLB DNS 를 CNAME 연결 →
 `LIVE_AI=1 LiveAiRoundTripIT` 를 DEV 주소로. 이후 KB 사이클(TRIP-893)은 준하.
+
+**[완료 2026-10-03] 실기동 확인 — 쪼개서 닫는다.** `https://api-dev.trippilot.co.kr/healthz` 200 ·
+`/api/integration` 이 `backend UP · ai UP` 을 돌려준다(실측). 즉 bootstrap~앱 배포~스모크는 섰다.
+
+**잔여는 [[DEV-SECRETS-FILL]] 이 잇는다.** 노드 제목이 적은 "시크릿" 칸이 비어 있다 — 팀원이
+실기 테스트에서 **구글·애플 로그인 실패**를 보고했고(2026-10-03), 차트가 소셜 키를 `optional` 로
+주입하기 때문에 **키가 없어도 배포는 성공하고 로그인만 죽는다**. 통째로 todo 로 두면 "배포가
+안 됐다"로 읽혀 거짓이므로, 선 쪽을 닫고 잔여를 새 노드로 뺀다.
 """
 
 [[edges]]
@@ -2626,4 +2756,904 @@ note = """
 FE 1055 가 이미 완료(DELETE /trips 호출) — 현행 서버 동작 실사가 1순위: 엔드포인트 유무·
 상태 제한·CASCADE 범위·예약 알림 정리. 정본(US 신설 초안) 동반.
 [완료 2026-09-29] #798 머지 — 코드 몫(TripDeleted→예약 비움, 거점 live-trip 판정+정리). 스토리 US-TRIP-10·결정1·PBT 는 승인 대기(초안 있음).
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEV 실사용 트랙 (2026-10-03 신설 — 팀원 실기 테스트 보고에서 나온 것들)
+#
+# api-dev 가 섰고([[EKS-DEV-LIVE]] done), 그 위에서 처음으로 **사람이 써 본** 결과가 왔다.
+# 다섯 증상 중 인프라 몫 셋을 노드로 세운다. 나머지 둘은 여기 두지 않는다 —
+# 숙소 사진은 원천이 없고(숙소 트랙·계약 대기), FE 표면 넷은 팀원 소유다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "DEV-SECRETS-FILL"
+ticket = ""
+title = "DEV Secrets Manager 충전 — 소셜·AI 키가 비어 로그인·일정생성이 죽었다"
+status = "done"
+owner = "사용자"
+migration = false
+touches = []
+note = """
+[[EKS-DEV-LIVE]] 에서 쪼개 낸 잔여. **사람·콘솔 몫이라 external 이다.**
+
+증상(2026-10-03 팀원 보고): api-dev 에서 **구글·애플 로그인 실패**. 서버는 살아 있다(healthz 200).
+
+원인 구조: 차트가 소셜 키를 `optional: true` 로 주입한다
+(`deploy/eks/chart/templates/backend.yaml` 의 `trippilot.secretEnv ... optional true` 목록).
+**비어도 배포는 성공하고 로그인만 죽는다** — 조용히 실패하는 자리다.
+
+채울 곳은 **두 그룹**이다(이름 주의 — 슬래시다):
+- `trippilot/dev/backend` — GOOGLE_CLIENT_ID · KAKAO_CLIENT_ID · NAVER_CLIENT_ID/SECRET ·
+  APPLE_CLIENT_ID(= 번들 `com.trippilot.travel`) · APPLE_TEAM_ID/KEY_ID/PRIVATE_KEY ·
+  SOCIAL_TOKEN_ENCRYPTION_KEY · WEATHER_API
+- `trippilot/dev/ai` — TRIPPILOT_LLM_PROVIDER + 해당 공급자 키(OPENAI_API_KEY 등).
+  **이쪽을 빠뜨리면 로그인은 고쳐져도 일정 생성이 계속 폴백이다** — 증상이 "AI 가 이상하다"로만 보인다.
+
+**가드 둘을 알고 넣어야 한다**(`deploy/eks/runtime_secrets.py:125~` `validate_groups`):
+1. `GOOGLE_CLIENT_SECRET` 은 **반드시 빈 값** — 현재 구글 클라이언트가 공개(iOS) 유형이라
+   값이 차 있으면 배포가 거부된다(2026-09-23 실측).
+2. **모드와 키는 같은 배포에서 짝이어야 한다** — `PLACE_GEOCODE_MODE=kakao` 면 `KAKAO_CLIENT_ID`,
+   `WEATHER_MODE=kma` 면 `WEATHER_API` 가 없으면 apply 가 죽는다. 모드만 먼저 켜지 말 것.
+   안전 순서: **1차 배포는 키만 채우고, 모드 전환은 2차 배포로** 나눈다.
+
+충전 뒤 `aws-deploy`(dev·apply) 1회 → sync-secrets 가 k8s 로 복사한다.
+
+**[완료 2026-10-03] 충전·배포 완료.** 실측으로 두 가지가 확인됐다 —
+`trippilot/dev/backend` 는 **모드·JWT 5칸뿐**(소셜 키가 하나도 없었다), `trippilot/dev/ai` 는
+**값이 한 번도 안 들어간 그릇**(GetSecretValue 가 NotFound)이었다. 즉 AI 는 LLM 키 없이
+규칙 폴백으로만 돌고 있었고, 그 사실이 "AI 가 이상하다"로만 보였다.
+backend 5→12칸 · ai 0→13칸 머지 후 `aws-deploy`(dev·apply) 성공(run 37113637273),
+파드에 소셜 키 4종 주입 확인. 같은 배포에 PR #866(JVM 힙 75%·AI 워커 2·데드라인 on)도 탔다.
+
+**로컬 `.env` 이름이 시크릿 키 이름과 여럿 다르다** — `AI_LLM_PROVIDER`→`TRIPPILOT_LLM_PROVIDER`,
+`AI_LLM_FEATURE_MODELS`→`TRIPPILOT_LLM_FEATURE_MODELS`, 카카오 키는 AI 그룹에서 `KAKAO_REST_API_KEY`.
+손으로 옮기면 조용히 틀린다(배포 가이드도 *"Compose 별칭 AI_LLM_PROVIDER 는 지원하지 않는다"* 고 적는다).
+
+**남은 것**: 애플 p8 3종(`APPLE_TEAM_ID`·`APPLE_KEY_ID`·`APPLE_PRIVATE_KEY`)과
+`SOCIAL_TOKEN_ENCRYPTION_KEY` 는 로컬에도 없어 못 채웠다 — 로그인 자체는 `APPLE_CLIENT_ID` 로 되고,
+이 셋은 **탈퇴 시 토큰 revoke** 몫이다(TRIP-933).
+"""
+
+[[nodes]]
+id = "POI-INGEST-RUNBOOK"
+ticket = ""
+title = "POI 수집분 적재 런북·스크립트 — 수집이 artifact 로만 남아 서버 DB 가 비어 있었다"
+status = "done"
+migration = false
+touches = ["docs/guides/", "backend/scripts/"]
+note = """
+증상(2026-10-03 팀원 보고): 로컬엔 장소가 전국적으로 많은데 **서버 DB 에는 거의 없다**.
+
+원인: `ai-poi-collect` 워크플로가 **DB 에 직접 쓰지 않는다** — 워크플로 주석이
+*"백엔드 수신 API 협의 전까지는 artifact(30일 보존)로만 남긴다"* 고 적고 있다. 로컬이 많았던 것은
+수집분을 수신 API 로 **로컬에만** 부어 봤기 때문이고, RDS 에는 Flyway `R__` 시드만 들어간다.
+
+**적재 경로는 이미 열려 있다**(2026-10-03 코드 실측 — 이게 이 노드가 작은 이유다):
+- 수집 artifact 포맷 == 백엔드 수신 DTO 계약이다. **변환이 필요 없다.**
+  생산 `ai/src/trippilot/poi_curation/sourcing/pipeline.py:355~` ↔ 소비
+  `backend/modules/place-data/.../PoiProposalDtos.kt` — `schema_version`·`source`·
+  `proposals[].{poi,tags,region,opening_hours_raw,provenance{content_id,image_url,address}}` 가 그대로 맞는다.
+- 수신은 `POST /internal/pois/proposals`, 인증 헤더는 `X-Service-Token`(`ServiceTokenAuth.kt:95`).
+- **게이트웨이가 `/internal` 을 404 로 막는다**(설계) — 외부 URL 로는 못 부른다. `kubectl port-forward` 경유다.
+- 들어가면 **즉시 등록**된다(`PoiProposalIngestService.ingest` 가 registered/updated 를 센다 —
+  수동 승인 단계 없음). 멱등 기준은 `provenance.content_id`.
+- **장소 사진이 같이 들어온다** — TourAPI `firstimage` → `provenance.image_url` → `poi.image_url`.
+  팀원이 보고한 "장소 사진 못 받아옴" 의 절반이 여기서 풀린다(숙소 사진은 원천이 없어 별개다).
+  **(2026-10-03 보강) 적재만으로는 안 풀렸다** — 들어온 URL 이 전부 평문 `http://` 라 iOS 가
+  조용히 막았다. 스킴 정규화가 함께 있어야 화면에 뜬다 → [[POI-IMAGE-HTTPS]].
+
+**artifact 한 장은 전국이 아니다.** 수집이 run 당 호출 예산(지역 공평 순회) 안에서 돌아서,
+전국 수준이 되려면 여러 run 의 artifact 를 순차 적재해야 한다. 런북이 이걸 명시하지 않으면
+"한 번 부었는데 왜 아직 적지" 가 반복된다.
+
+이 노드는 **런북과 스크립트까지**다. 실행은 [[POI-INGEST-RUN]].
+
+**[완료 2026-10-03] PR #882 머지** — `docs/guides/poi-수집본-적재.md` + `backend/scripts/ingest_pois.py`.
+**적재 대상은 회차 artifact 가 아니라 팀 공유본(`ai/data/collected_pois.json`)이 1순위**였다 —
+수집 워크플로가 매일 `merge_pois_docs.py` 로 누적해 롤링 PR(`chore/poi-data-sync`)로 올린다.
+실측 18,605건(사진 보유 16,607). artifact 회차 적재는 그 PR 이 밀렸을 때의 우회로다.
+
+검수에서 결함 둘을 실 클러스터로 잡았다 — 클러스터 이름이 `trippilot-dev-eks`(실제 `trippilot-dev`),
+도달 확인을 "인증 GET 은 405"로 안내(실측 **500** — 비파괴 POST 로 교체).
+"""
+
+[[nodes]]
+id = "POI-INGEST-RUN"
+ticket = ""
+title = "POI 적재 1회 실행 — port-forward 로 수집분을 DEV DB 에 부었다"
+status = "done"
+migration = false
+touches = []
+note = """
+[[POI-INGEST-RUNBOOK]] 의 실행분. **kubectl·AWS 자격이 필요해 external 이다** —
+`/internal` 이 게이트웨이에서 막혀 있어 `kubectl port-forward svc/backend` 경유가 정석이고,
+그 자격은 사람에게만 있다.
+
+코드와 실행을 한 노드에 섞으면 그 노드가 영원히 안 닫힌다(이 파일 머리말의 "쪼개서 닫는다" 와 같은 축).
+
+완료 판정: 적재 응답의 `registered+updated` 가 보낸 건수와 맞고, DEV DB 의 `poi` 수와
+`image_url` 채움률이 오른다.
+
+**[완료 2026-10-03] 적재 성공.** 공유본 18,605건을 500건씩 38회 — **신규 18,605 · 탈락 0 ·
+지역코드미상 0**. DB 실측 `total=18646 with_image=16607 regions=212`.
+**external 이 아니게 된 이유**: EKS access entry 를 받아 세션이 직접 실행했다(아래 CLUSTER-ACCESS).
+
+**사진 경로가 끝까지 뚫려 있는 것도 확인했다** — `poi.image_url` → `PlaceResponse.imageUrl` →
+openapi `Place.imageUrl` → orval. 즉 "장소 사진이 안 보인다"는 계약 공백이 아니라 데이터 공백이었다.
+(주의: 내부 반경 DTO `PoiReadResponse` 에는 사진 칸이 **없다** — AI 후보 전달용이라 그렇고,
+그걸로 사진 유무를 판정하면 0 으로 오독한다.)
+"""
+
+[[nodes]]
+id = "OBSERVABILITY-DEV"
+ticket = "TRIP-894"
+title = "배포 환경 로그 관측 — stdout 뿐이라 클러스터 밖에서는 아무것도 못 본다"
+status = "todo"
+migration = false
+touches = ["infra/terraform/stack/", "deploy/eks/chart/"]
+note = """
+증상(2026-10-03 팀원 보고): api-dev 를 테스트 중인데 **로그 확인이 안 된다**.
+
+구조상 맞는 상태다 — 차트가 `OTEL_SDK_DISABLED=true` 로 배포하고 수집기를 프로비전하지 않는다
+(`backend.yaml` 주석: *"The image embeds a Java agent. No collector is provisioned by this deployment."*).
+로그는 파드 stdout 에만 남아 `kubectl logs` 가 유일한 통로다.
+
+방향: EKS 애드온 `amazon-cloudwatch-observability`(Fluent Bit 가 stdout 수집) — **앱 변경 0** 이라
+`OTEL_SDK_DISABLED` 를 그대로 둘 수 있다. 앱 OTLP 를 켜는 안은 수집기까지 세워야 해 범위가 커진다.
+Pod Identity 선례가 이미 있다(`infra/terraform/stack/eks.tf:89` 의 AI↔Bedrock 연결).
+
+**비용이 드는 변경이다** — 수집량·보존기간에 과금된다. 보존을 명시(dev 짧게)하고,
+적용은 사용자 승인 뒤 `aws-deploy` 로 한다.
+
+이것이 열려야 [[AI-ITIN-QUALITY]] 의 degraded 원인(타임아웃 vs 다른 것)을 가를 수 있다.
+
+**정정(2026-10-03) — "로그가 안 보인다"의 1차 원인은 수집기 부재가 아니었다.**
+클러스터 접근 주체에 **사람이 한 명도 없었다**([[CLUSTER-ACCESS]] 참조) — 수집기가 있든 없든
+`kubectl logs` 조차 못 쓰는 상태였다. access entry 를 열어 그 증상은 해소됐다.
+
+따라서 이 노드의 값어치는 **클러스터 접근이 없는 사람도 보게 하는 것**과 **보존·검색**으로 좁혀진다
+(지금은 파드가 죽으면 그 로그도 같이 사라진다). 우선순위는 내려가지만 사라지지는 않는다.
+PR #885 로 올라가 있고 **적용 전 bootstrap 정책 재등록이 선행**이다(IAM 에 logs:* 가 추가됐다).
+"""
+
+[[nodes]]
+id = "AI-ITIN-QUALITY"
+ticket = "TRIP-1160"
+title = "일정 생성 품질 4건 — 동선 지그재그·계열 중복·결정성·취향 비일관"
+status = "external"
+owner = "AI"
+migration = false
+touches = []
+note = """
+2026-09-30 시뮬레이터 자동 E2E 로 일정 생성을 실서버·실DB 로 4판 돌려 슬롯 단위로 채점한 결과다
+(TRIP-1160 에 전문). **구조 불변식은 무결** — 시간 겹침 0 · 같은 poi_id 중복 0 · 지역 이탈 0 ·
+필수방문지 `is_fixed=t` 배치 · 거점 인접 시작/마감 · INV-3 거리만 · 실패 시 정직 폴백.
+
+남은 것은 품질 4건이고 **AI 서비스 소관이라 external 이다**:
+동선 지그재그(부산 1일차 37.7km 왕복) · 같은 장소 계열 중복(황령산×2, 남산×3) ·
+재생성 결정성 과다(같은 조건이면 80% 동일) · 취향 반영 비일관(미식인데 서울 판은 식당 0).
+
+**degraded 1회**(서울 1차)의 원인은 로그가 필요하다 → [[OBSERVABILITY-DEV]] 선행.
+우리 몫으로 넘어올 가능성이 하나 있다 — 원인이 백엔드 데드라인 예산이면 그때 노드를 새로 세운다
+(예산은 2026-10-03 PR #866 에서 코드 기본과 정렬했다: day1 15s · total 60s).
+"""
+
+[[nodes]]
+id = "DEV-REAL-MODES"
+ticket = ""
+title = "DEV 스위치 실모드 전환 — 지오코딩·날씨·제휴를 가짜에서 실물로"
+status = "done"
+migration = false
+touches = []
+note = """
+2026-10-03. [[DEV-SECRETS-FILL]] 로 키가 들어간 뒤, 꺼져 있던 스위치를 켠 기록이다.
+기동 로그 한 줄이 최종 증거다:
+`[모드] env=dev · geocode=kakao  stay=db  weather=kma  schedule=http  reflect=http
+ push=off  reminder=http  affiliate=tripcom · 서비스토큰=있음  JWT키=있음`
+
+| 스위치 | 전 → 후 | 켜기 전에 한 것 |
+|---|---|---|
+| `PLACE_GEOCODE_MODE` | stub → **kakao** | 카카오 로컬 API 실호출 **200** 확인 |
+| `WEATHER_MODE` | fake → **kma** | 공공데이터포털 단기예보 실호출 **200** 확인 |
+| `AFFILIATE_MODE` | fallback → **tripcom** | 어트리뷰션 판정 완료(사용자) · 302 Location 에 트래킹 4종 실측 |
+| `SOCIAL_TOKEN_ENCRYPTION_KEY` | 없음 → 생성 | 없으면 Apple revoke 토큰을 아예 보관 안 한다 |
+
+**켜기 전에 외부 API 를 직접 때려 본 것이 이 작업의 전부다.** 날씨 키는 처음 것이 86자였고
+세 종류 KMA API 전부 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 를 돌려줬다 — 포털 신청 문제로
+보였지만 실제로는 **키 자체가 엉뚱한 값**이었고, 올바른 64자 키로 바꾸자 즉시 200 이었다.
+그대로 켰다면 Plan-B 우천 트리거가 **조용히 무발화**로 돌았을 것이다(가짜가 차라리 정직하다).
+
+**안 켠 것**: `PUSH_MODE`(Expo 액세스 토큰 없음) · Apple p8 3종(탈퇴 revoke 몫, 로그인은 가능).
+
+제휴는 백엔드만 준비됐다 — **FE 가 아직 `/stays/{id}/outbound` 를 안 부른다**(PR #875 미머지).
+그 PR 이 머지되는 순간부터 실제 클릭이 `trip_sub1`(clickId)·`trip_sub3`(AdID)로 추적된다.
+"""
+
+[[nodes]]
+id = "CLUSTER-ACCESS"
+ticket = ""
+title = "EKS 접근 주체에 사람이 없었다 — kubectl 이 아무에게도 안 열려 있었다"
+status = "done"
+migration = false
+touches = []
+note = """
+2026-10-03 발견. 팀원이 "로그 확인이 안 된다"고 했을 때 원인을 관측성 부재로 짚었는데, 실제로는
+**그보다 한 겹 앞**이었다 — `aws eks list-access-entries` 가 셋만 돌려줬다:
+배포 역할(`trippilot-dev-github-deploy`) · 노드 역할 · EKS 서비스 역할. **사람이 0명이다.**
+
+authenticationMode 는 `API` 라 aws-auth ConfigMap 이 아니라 access entry 가 유일한 통로인데,
+Terraform 이 사람 몫을 만들지 않는다(배포가 돌 만큼만 연다 — 최소권한으로는 옳은 설계다).
+그래서 AWS 콘솔 권한이 있어도 `kubectl` 은 "the server has asked for the client to provide
+credentials" 로 막힌다. **AWS 권한과 쿠버네티스 RBAC 은 별개**라는 것이 이 노드의 교훈이다.
+
+처치: SSO 역할(`AWSReservedSSO_myisb_IsbUsersPS_*`)에 access entry + `AmazonEKSClusterAdminPolicy`.
+같은 SSO 역할로 들어오는 **팀원 전원**이 함께 열린다. 되돌리기는 `delete-access-entry` 한 줄.
+
+이것이 열리자 같은 세션에서 [[POI-INGEST-RUN]] 이 바로 실행 가능해졌다(external → done).
+
+**Terraform 에 넣을지는 미결이다.** 지금은 수동 생성이라 클러스터를 다시 만들면 사라진다.
+`infra/terraform/stack/eks.tf` 에 `aws_eks_access_entry` 로 박아 두는 것이 재현 가능하지만,
+"어느 사람 역할을 코드에 적을 것인가"는 조직 정책 결정이라 여기서 단독으로 정하지 않는다.
+"""
+
+[[nodes]]
+id = "REPLAN-TARGET-DATE"
+ticket = "TRIP-1182"
+title = "재계획이 오늘만 다시 짤 수 있던 것 — 대상 일자를 받는다"
+status = "done"
+migration = true
+touches = [
+  "backend/modules/itinerary-recalculation",
+  "backend/app/src/main/resources/db/migration",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+2026-10-03, PR #892. 막힌 곳은 `ReplanSolver` **한 줄**이었다 — `session.fromInstant` 에서
+'오늘'을 다시 계산해 `ReplanCommand.targetDate` 에 박았다. 나머지는 이미 준비돼 있었다:
+AI 는 `from_instant.date() != target_date` 면 하루 전체를 열어 주고(`wiring.py` `_replan_not_before`),
+C8(`ReplanFacadeService`)은 `lockedSlots`·`currentSlots`·`groundingPoint`·`lockedBlocks`·
+`explanations` 키·`apply` 가 전부 `command.targetDate` 로 날을 고른다. **C8 은 안 건드렸다.**
+
+표면: `StartReplanRequest.targetDate`(생략하면 오늘) → `replan_session.target_date`(V2.60) → 솔버.
+진입 가드 4개 — 지난 날 409 · 기간 밖 409 · 일정에 아직 없는 날 409 · 오늘 아닌 날 + `PARTIAL_SLOTS` 400.
+
+**생략 경로도 같은 가드를 밟는다.** 종전 구조(`?: return today`)는 검증 전체를 우회해
+같은 의도가 **필드 유무로 갈렸다** — 1차 생성만 끝난 일정(1일차뿐)에서 오늘을 명시하면 즉시 409,
+생략하면 통과해 AI 25초를 태운 뒤 확정에서 "그 사이 일정이 바뀌었습니다"로 막히는 **막다른 길**이었다.
+고치자 기존 테스트 7건이 깨졌다 — 픽스처들이 "오늘이 일정에 없는" 상태를 상시로 돌고 있었기 때문이다.
+
+**미래일의 출발 기준점은 그 날 거점이다.** 지금 서 있는 GPS·수동 핀도, 오늘의 마지막 방문지도
+쓰지 않는다(사다리 3단이 숙소 앵커보다 먼저 이기므로 열어 두면 모레가 오늘 동네에 매달린다).
+`OriginResolver` 의 날짜 인자를 `today`→`asOf` 로 바꿨다.
+
+적대적 리뷰가 차단 3건을 냈고 **셋 다 테스트 공백**이었다(컨트롤러 매핑 미검증 · `asOf` 미검증 ·
+`?: return` 우회). 가드를 하나씩 무력화해 **각각 자기 테스트만** 깨지는 것을 확인했다
+(가드 4종 · 미래일 좌표 차단 · 마지막 방문지 `takeIf` · 솔버 일자 · 컨트롤러 매핑).
+"기존 테스트 7건" 은 리뷰어 측정을 **직접 재현해 확인한 값**이다 — 픽스처 기본값을
+`listOf(tripStart)` 로 되돌리면 동의·파기 4건 + 기간/재진입/취소 3건이 깨진다.
+
+**선행 결정이 남았다 → [[REPLAN-TARGET-DATE-CANON]].** 서버만 아는 필드인 상태다.
+(2026-10-12 정정: 더는 서버만 아는 필드가 아니다 — 앱이 TRIP-1195(#907)로 보낸다. 위는 2026-10-03 시점 기록이다.)
+"""
+
+[[nodes]]
+id = "REPLAN-TARGET-DATE-CANON"
+ticket = ""
+title = "DEC-U4-3 사후 개정 — 재계획 대상 일자(서버·앱 출하분을 정본에 맞춘다)"
+status = "done"
+migration = false
+touches = ["aidlc/aidlc-docs/construction/u4-in-trip-planb"]
+note = """
+**정정·진행(2026-10-12) — 아래 "어떤 화면도 만들지 않는 필드"는 더는 사실이 아니다.** 앱이 TRIP-1195
+(#907)로 이미 `targetDate` 를 보낸다: 허브가 오늘 이후의 다른 일차를 보면 그 날짜로 i10 을 열고 범위 칩을
+`{N}일차 전체` 하나로 줄인다. 재계획안 페이지의 "대안 없음" 얼굴에는 조건부로 [내일 일정 다시 짜기]가 뜬다. 아래 2번(오늘이 아닌 날에는
+`지금 이후` 칩을 내린다)도 그때 구현됐다. 정본도 §3.1·엔티티 개정 블록(#1045)이 같은 사실을 이미 적었고,
+DEC-U4-3 행·BR-U4-11·G-U4-8·`frontend-components.md` §i10 이 옛 서술이었다 — PR #1071 이 세 문서에 `[개정 · 2026-10-12]` 블록을 달아 맞춘다
+(SCOPE 의 "구현 기준 사후 개정" 범위). **사용자가 2026-10-12 에 그 PR 의 머지를 지시해 승인했고(`audit.md`), 이 노드는 닫는다.**
+남는 것은 앱 동작을 Figma 가 추인하는 일뿐이다(백엔드 몫 아님).
+[[REPLAN-TARGET-DATE]] 가 만든 **정본 이탈의 뒤처리**다. 코드가 먼저 갔으므로 이 노드가 닫히기
+전까지 `targetDate` 는 **어떤 화면도 만들지 않는 필드**다.
+
+정본(`construction/u4-in-trip-planb/functional-design/business-logic-model.md`)의 `DEC-U4-3` 은
+범위를 `지금 이후`·`오늘 전체` 2종으로 적고 근거 칸에 **"라이브에서 `내일까지` 칩 제거 완료"** 를
+달아 뒀다. 즉 정본이 닫은 것은 다일(多日)만이 아니라 **오늘 아닌 날을 고르는 입력 자체**로 읽힌다.
+같은 문서 `G-U4-8` 이 "범위가 **오늘 단위**(DEC-U4-3)라 `1일차` 칩이 불필요" 로 한 번 더 못 박는다.
+
+구현이 한 것: 다일 금지는 **유지**(한 세션이 하루만 바꾼다), "그 하루가 반드시 오늘이어야 하는가"만 열었다.
+그래도 `FULL_DAY` 의 정본 의미가 "**오늘** 전체"에서 "그 날 전체"로 넓어진 것은 사실이고,
+와이어(`ReplanScope`)는 그대로여서 **조용히 어긋난다**.
+
+필요한 것 둘:
+1. `DEC-U4-3` 개정 또는 신규 DEC — AI-DLC 승인 게이트 몫이라 코드 쪽에서 단독으로 못 고친다
+2. i10 날짜 선택 UI 결정 — 붙일 때 **오늘이 아닌 날짜에는 `지금 이후` 칩을 내려야 한다**
+   (그 날의 '지금'이 없어 서버가 400 으로 막는다). 이것을 모르면 사용자가 칩을 고르고 400 을 본다
+"""
+
+[[nodes]]
+id = "POI-IMAGE-HTTPS"
+ticket = ""
+title = "장소 사진이 안 보이던 것 — 수집본 이미지가 전부 평문 HTTP 였다"
+status = "done"
+migration = false
+touches = ["ai/src/trippilot/poi_curation", "backend/modules/place-data"]
+note = """
+2026-10-03, PR #890. 증상(팀원 보고): 앱에서 장소 사진이 회색 자리로만 보인다.
+
+원인: TourAPI 가 `firstimage` 를 **전 건 `http://`** 로 주고, iOS App Transport Security 가
+평문 HTTP 이미지 로드를 **에러 없이** 차단한다. DEV 적재분 16,607건 전부 `http://tong.visitkorea.or.kr/...`
+였고 **같은 URL 이 https 로도 200 `image/jpg`** 를 준다. DB·계약·DTO·FE 가 전부 정상이라
+코드를 훑어서는 안 보이고, 안드로이드·웹 미리보기에서는 보인다 — 플랫폼 하나에서만 조용히 사라진다.
+
+처치: 수집 어댑터(`tourapi.py`)와 **수신 단일 관문**(`PoiProposalIngestService`) 둘 다에서
+스킴만 올린다. 한 자리만 막으면 다른 출처·재적재가 그대로 샌다. 호스트·경로·질의는 손대지 않는다
+(가공하면 상대 CDN 404 가 나는데 그 실패도 똑같이 "회색 자리"로만 보인다).
+
+**기존 16,607행은 원시 UPDATE 가 아니라 재적재로 고쳤다** — `Poi.refreshed` 가
+`imageUrl ?: existing` 이라 정규화된 값이 덮어쓴다. 이미 테스트된 경로를 태우는 편이 안전하다.
+순서가 중요하다: 정규화는 **백엔드 안**에 있으므로 배포 **뒤에** 부어야 한다(먼저 부으면 http 재유입).
+실측 결과(DEV): `total=18646 · with_image=16607 · http=0 · https=16607`.
+"""
+
+[[nodes]]
+id = "PLANB-KB-DEV"
+ticket = ""
+title = "Plan-B KB(pgvector) 를 DEV 에서 켜고 적재 — 재계획이 규칙 랭킹으로만 돌고 있었다"
+status = "done"
+migration = false
+touches = ["deploy/eks"]
+note = """
+2026-10-03. 팀원 지적("재계획은 KB 검색이 미배선인 것 같다")이 **맞았다 — 단 코드가 아니라 배포였다.**
+`PlanBRagPipeline` 은 재계획 경로에서 실제로 불린다(`wiring.py:1484` `self._rag.run(...)`).
+꺼져 있던 것은 `aws-deploy.yml` 의 **`embedding_enabled` 기본값이 false** 라 `TRIPPILOT_VECTOR_DB_URL`
+이 안 꽂히고, `main._vector_rag()` 가 `(None, None)` 을 돌려 규칙 랭킹으로 강등된 것이다.
+
+켠 절차: `embedding_enabled=true` 로 배포(= pgvector·`ai_kb`·`kb_vectors` 는 `bootstrap.sql` 이
+이미 만들어 둔다) → **클러스터 안에서** ai 이미지로 `scripts/load_kb.py`.
+적재를 클러스터 안에서 하는 이유: DB 는 `publicly_accessible=false` 이고 임베딩은 `embedding:8100`
+서비스라, **둘을 동시에 보는 자리가 거기뿐**이다. `provider=http` 를 반드시 맞춘다 — 적재와 질의가
+다른 벡터 공간을 타면 차원이 같아 아무 검사도 못 잡는다.
+
+결과: `kb_vectors` 상황 38 · 지시어 97, dim 1024. 컬렉션 이름에 모델이 박힌다
+(`planb_situation__nlpai_lab_kure_v1`) — provider 를 바꾸면 **전량 재적재**다(TRIP-519 구조 강제).
+검증은 서비스 자신의 조립(`main._vector_rag()`)으로 실검색을 돌렸다 — 세 질의 모두 4건,
+"비가 와서 야외를 못 간다" → *지붕·실내 전망이 있는 문화·카페로 옮긴다*(0.6244).
+
+**비용**: 임베딩 파드가 2 CPU / 5Gi 를 요청해 기존 노드(c5a.large)에 안 들어가고 Karpenter 가
+`c5a.xlarge` 를 띄운다 — 실측된 변화는 **노드 구성이 `c5a.large 1` → `c5a.xlarge 1 + c5a.large 1`**
+이라는 것까지다. **금액은 확인하지 못했다** — 이 계정에서 Pricing API 가 막혀 있다
+(`GetProducts` → `AccessDeniedException`). 온디맨드 단가는 Cost Explorer 나 콘솔로 확인할 것.
+끄려면 `embedding_enabled=false` 로 한 번 배포하면 노드도 회수된다. 롤아웃마다 maxSurge 로 큰 노드가 **일시적으로** 한 대 더 뜬다(몇 분).
+`maxSurge: 0` 으로 막을 수 있지만 그 대가가 배포마다 임베딩 1~2분 중단이라 **일부러 안 바꿨다** —
+배포가 노드 확보를 못 해 멈추기 시작하면 그때 바꾼다.
+
+켜는 과정에서 결함 둘이 드러났다 → [[EMBEDDING-MODEL-PERMS]] · [[EMBEDDING-READY-PROBE]].
+"""
+
+[[nodes]]
+id = "EMBEDDING-MODEL-PERMS"
+ticket = ""
+title = "임베딩 가중치가 0600 root — 비루트 파드가 못 읽는데 에러는 '파일 없음'이었다"
+status = "done"
+migration = false
+touches = ["ai/embedding"]
+note = """
+2026-10-03, PR #896. [[PLANB-KB-DEV]] 를 켜자 바로 터졌다. 파드는 `1/1 Running`,
+`/health` 200, **배포는 success** 인데 `/embed` 가 전부 500 이었다.
+
+로그는 `FileNotFoundError: No such file or directory: /models/kure/model.safetensors` 였다.
+**그 파일은 1.1GB 로 멀쩡히 있었다.** 모드가 `-rw------- root` 고(같은 디렉토리의 config·tokenizer 는
+0644) 파드는 uid 10001 로 돈다 — safetensors 의 `safe_open` 이 **권한 거부를 "파일 없음"으로 보고**한다.
+그 메시지를 믿고 bake 단계·빌드 캐시·볼륨 섀도잉을 먼저 뒤진 것이 이 작업의 오판이었다.
+`ls -la` 한 줄이 답이었고, 같은 uid 로 맞춘 Job 에서 `head -c 8` 로 `Permission denied` 를 받아 확정했다.
+
+**로컬 compose 는 root 로 돌아 이 결함을 원리적으로 못 본다** — 비루트로 돌리는 EKS 에서 처음 켠 날 드러났다.
+
+처치: 굽는 RUN 과 **같은 레이어**에서 `chmod -R a+rX`, 그리고 비루트 미독 파일이 남으면
+`find ! -perm -o+r` 로 **빌드를 세운다**. 런타임에 드러나면 `/health` 가 200 이라 조용하기 때문이다.
+ONNX 산출물도 같다. 검증은 CI(`ai-embedding-ci`)가 모델 굽기부터 전체 빌드를 돌려 통과한 것으로 한다.
+"""
+
+[[nodes]]
+id = "EMBEDDING-READY-PROBE"
+ticket = ""
+title = "기동·준비 프로브가 /health 였다 — 모델 없는 파드가 정상으로 보이고 배포가 통과했다"
+status = "done"
+migration = false
+touches = ["ai/embedding", "deploy/eks/chart"]
+note = """
+2026-10-03, PR #897. [[EMBEDDING-MODEL-PERMS]] 가 **원인**이고 이쪽이 **그 결함이 조용했던 이유**다.
+
+차트가 startup·readiness·liveness **셋 다 `/health`** 를 봤다. 그런데 그 엔드포인트는 자기
+docstring 에 *"모델 로드 완료를 기다리지 않는다 — 운영자 관측용이지 다른 서비스의 `depends_on`
+대상이 아니다"* 라고 **스스로 적어** 뒀다. 관측용 신호를 트래픽 게이트로 승격시킨 셈이다.
+실측: `/health` → `200 {"loaded":false}` · `/embed` → `500`. 본문은 사실을 말하는데 상태코드가
+거짓말을 하고, 프로브는 상태코드만 본다.
+
+곁가지: `startupProbe` 의 `failureThreshold: 180`(15분)은 **사문**이었다. 느린 워밍을 기다리려고
+쓴 값이 분명한데 `/health` 가 즉시 200 이라 첫 프로브에서 통과했다. `/ready` 가 비로소 그 의도를 실행한다.
+
+처치: `GET /ready`(모델 미로드 503) 신설, 차트의 startup·readiness → `/ready`, **liveness 는 `/health` 유지**.
+liveness 를 옮기지 않은 이유: 모델을 못 읽는 **이미지**는 재시작해도 안 고쳐진다 — CrashLoopBackOff 는
+고장을 드러내는 게 아니라 원인을 덮는 재시작 소음이다. not-ready 로 남아 Service 에서 빠지는 것이 정확하다.
+
+**강등은 그대로다.** 503 이어도 프로세스는 안 죽고 AI 는 규칙 랭킹으로 내려간다(INV-4).
+달라지는 것은 **배포가 실패로 끝나고 사람이 안다**는 것이다.
+
+검사는 `check_ready.py` 로 **Dockerfile RUN 에 박았다** — 이 서비스는 4파일이고 테스트 인프라가
+없으며 CI 는 이미지 빌드만 한다. 아무도 돌리지 않는 테스트 파일은 없는 것보다 나쁘다.
+역검증은 **양방향**으로 했다(항상 200 → exit 1 · 항상 503 → exit 1). 503 만 보면 "항상 503" 구현도
+통과하고, 그러면 임베딩이 멀쩡한데 파드가 영원히 not-ready 로 남는다 — 같은 사고의 반대 방향이다.
+활성화 배포에서 새 파드가 `0/1 Running` 으로 머물다 모델 로드 후 `1/1` 이 되는 것을 실측했다.
+"""
+
+[[nodes]]
+id = "STORE-LAUNCH"
+ticket = ""
+title = "앱스토어 심사 제출 — dev 스택을 실사용자용으로 끌어올려 받는다"
+status = "todo"
+migration = false
+touches = ["infra/terraform", "deploy/eks", "frontend"]
+note = """
+2026-10-04 결정. 팀원이 "심사 넣어도 될 것 같다"고 했을 때 준비 상태를 전수 점검한 결과다.
+
+**준비된 것** — 출시 빌드 설정이 테스트로 굳어 있다(`releaseBuildConfig.test.ts`: 아이콘 알파
+채널·스플래시·한국어 권한 문구·암호화 수출 면제·iPhone 전용·privacy manifest 4범주 ITMS-91053·
+Sentry 업로드 끔·사이트맵 끔). 번들 ID `com.trippilot.travel`, 애플 로그인 있음(타사 로그인이
+있으니 4.8 필수). 탈퇴 엔드포인트(`DELETE /api/v1/me/deletion`) + 2단 확인 다이얼로그.
+약관 6종 **실본문이 실제로 나간다**(DEV 실측: 1,550~2,879자, 플레이스홀더 없음 — TRIP-1004 #776).
+
+**prd 스택을 세우지 않기로 했다.** `prd.tfvars` 는 별 VPC(10.50/16) · 3 AZ ·
+`single_nat_gateway = false`(NAT 3개) · `db.t4g.medium` 100GB · `cache.t4g.small` · 자체 EKS 다.
+인프라가 한 벌 더 생긴다. **금액은 확인하지 못했다** — 이 계정은 Pricing·Cost Explorer 둘 다
+막혀 있다(`AccessDeniedException`). 대신 dev 스택을 실사용자용으로 끌어올린다:
+[[DEV-DATA-PROTECTION]] · [[DEV-HA-REPLICAS]] · [[STORE-API-HOSTNAME]].
+
+**포기한 것은 환경 격리다.** 테스트 데이터와 실데이터가 한 DB 를 쓰고, 잘못된 배포가 실사용자에게
+바로 간다. 실사용자가 생기면 **운영 작업이 개인정보 접근**이 된다(2026-10-03 에 psql Job 으로 DB 를
+읽은 그런 작업). 나중에 prd 로 가려면 **DNS 전환 + 데이터 이전**이 한 번 필요하다 — 그래서 스토어
+빌드에 `api-dev` 가 아니라 `api` 를 박는다([[STORE-API-HOSTNAME]]). 그것만이 앱 업데이트 없이
+옮길 수 있는 길이다.
+
+**심사 전 남은 선행**(사람 몫):
+- 애플 p8 3종 — `APPLE_TEAM_ID`·`APPLE_KEY_ID`·`APPLE_PRIVATE_KEY` 가 로컬·DEV 시크릿 **둘 다 없다**
+  (`APPLE_CLIENT_ID` 만 있다). 코드는 완성(`AppleOAuthClient./auth/revoke` · ES256 client_secret ·
+  파기 스위프). **거절 사유는 아니다** — 설정이 비면 revoke 를 건너뛰고 경고만 남기고 탈퇴 자체는
+  정상 동작한다(설계 주석). 다만 팀이 `App Store 5.1.1(v)` 로 태그한 요구사항 미충족이다.
+- App Store Connect 앱 등록 + 앱 개인정보(수집 데이터 유형) — `app.config.ts` 가 "사람 판단이라
+  비워 둔다"로 남겨 둔 칸이다. 약관 6종 실본문이 근거가 된다.
+- 위치기반서비스사업 신고 — [[TRIP-847]] 이 "코드로 못 푸는 선행"으로 적어 둔 항목.
+- 푸시 결정 — 앱은 알림 권한을 요청하고 Expo 토큰까지 등록하는데(`shared/push/`) 서버는
+  `PUSH_MODE=off` 에 `PUSH_EXPO_ACCESS_TOKEN` 이 **DEV 시크릿에도 없다**. 받아놓고 아무것도 안 오면
+  심사 2.1 소지가 있다 — 토큰을 넣든 권한 요청을 내리든 한쪽으로 정해야 한다.
+- 관측성 — `container_logs_enabled = false`. 실사용자 장애 때 로그가 CloudWatch 에 없고 파드
+  재시작하면 사라진다. 선행이 있다: `trippilot-dev-cloudwatch-pod` 역할이 **없고**(`NoSuchEntity`
+  실측) Terraform 이 그것을 `data` 로 읽어 없으면 plan 이 깨진다. 순서는 dev.tfvars 주석대로
+  **bootstrap 정책 재등록(콘솔) → `aws-bootstrap.yml` → true → 배포**.
+
+**실기 검증이 0 이다.** 아무도 스토어 빌드를 실기에서 돌린 적이 없다. `releaseBuildConfig.test.ts`
+자신이 *"빌드는 성공하는데 결과물이 틀린 조용한 실패라 실기·심사 전에는 아무도 못 본다"* 고
+경고해 둔 상태다. TestFlight 내부 테스터로 먼저 돌린다 — 애플 계정 소유자가 아닌 팀원도
+**ASC 내부 테스터 초대**만 받으면 된다(개발자 계정 공유가 아니다).
+"""
+
+[[nodes]]
+id = "DEV-DATA-PROTECTION"
+ticket = ""
+title = "dev 가 삭제 보호·최종 스냅숏 없이 돌던 것 — 보호를 환경 축에서 분리"
+status = "todo"
+migration = false
+touches = ["infra/terraform"]
+note = """
+2026-10-04, PR #956(머지·apply 대기). 삭제 보호·최종 스냅숏·백업 보존이 `local.production`
+하나에 묶여 있었다. dev 가 "꼬이면 날려도 되는 환경"인 동안에는 **그것이 옳은 설정**이었다 —
+[[STORE-LAUNCH]] 가 그 전제를 깬다.
+
+실측(`trippilot-dev`): `backupDays=1 · multiAZ=false · delProtect=false`. 이 상태에서 잘못된
+apply 나 정리 작업(#648 이 그 성격이다)이 돌면 최종 스냅숏도 없이 사라진다.
+
+`data_protection_enabled`(기본 **true** — 잊으면 보호가 켜지는 쪽으로 틀려야 한다)로 분리하고
+RDS 3종 + 클러스터 삭제 보호를 그쪽에 건다. `skip_final_snapshot` 을 끄면
+`final_snapshot_identifier` 가 **필수**라 그것도 같이 옮겼다 — 안 옮기면 apply 가 깨진다
+(세 줄짜리로 보여서 놓치기 쉬운 자리다).
+
+`multi_az` 는 제외다(가용성·비용 축, 끄고 가도 데이터 유실 아님). Redis 스냅숏도 제외 — 캐시이고
+영속 사실은 PostgreSQL 에 있다(세션조차 `refresh_session` 테이블이다).
+
+**dev 테스트 블록에 이 축의 단정이 하나도 없었다** — prd 만 검사하고 있었다. 보호 3종 +
+"단일 AZ 는 의도"(비용 결정이 조용히 뒤집히는 것도 막는다) 두 개를 추가했다.
+
+**적대적 리뷰가 차단 1건을 냈다**(2026-10-05): `deletion_protection` 과 `skip_final_snapshot` 이
+같은 변수에 같은 방향으로 묶여, **삭제를 허용하는 유일한 길이 최종 스냅숏까지 껐다.**
+게다가 `delete_automated_backups` 가 선언돼 있지 않아 기본값 true — PITR 백업도 함께 사라진다.
+가장 급한 사람이 가장 급할 때 복구 수단이 0 이 되는 경로였다. 처방: 최종 스냅숏·자동 백업
+보존을 **무조건**으로 두고 변수는 "지울 수 있는가"만 정하게 했다.
+같은 리뷰에서 `recovery_window_in_days`(시크릿, `SOCIAL_TOKEN_ENCRYPTION_KEY` 가 들어 있다 —
+7일 뒤 소멸하면 **스냅숏을 복원해도** provider 토큰 복호 불가)도 같은 축으로 옮겼다.
+
+**`terraform test` 는 실 tfvars 를 보지 않는다** — run 블록이 자기 `variables {}` 를 들고
+plan 한다(증거: 테스트 `container_logs_enabled=true` vs `dev.tfvars` false). 그래서 tfvars 에
+`data_protection_enabled = false` 를 적어도 전부 green 이다. `infra/tests/test_environment_tfvars.py`
+로 **배포가 실제로 읽는 파일**에 단정을 걸었다.
+
+**실 state plan 으로 확인**: `0 to add, 6 to change, 0 to destroy` · **교체 0건**
+(RDS 5속성 + 클러스터 + 시크릿 4종). 다만 plan 은 *적용 완료*의 증거가 아니다 —
+`apply_immediately = false` 이고 `BackupRetentionPeriod` 는 `PendingModifiedValues` 대상이라
+**유지보수 창(월 03:00 KST)까지 보류될 수 있다.** 그래서 apply 직후 ① plan 을 다시 돌려
+`No changes` 로 수렴하는지, ② `aws rds describe-db-instances --query
+'DBInstances[0].[BackupRetentionPeriod,DeletionProtection,PendingModifiedValues]'` 를 **반드시**
+확인한다. 수렴하지 않으면 보존 14일을 아직 **못 믿는다**.
+"""
+
+[[nodes]]
+id = "DEV-HA-REPLICAS"
+ticket = ""
+title = "노드 드레인에 유일한 파드가 빠지던 것 — dev 복제본 2 + PDB"
+status = "todo"
+migration = false
+touches = ["deploy/eks/chart"]
+note = """
+2026-10-04, PR #957(머지·배포 대기).
+
+**롤아웃 때문이 아니다 — 처음에 그렇게 진단했고 틀렸다.** backend·ai·gateway 전부
+`maxUnavailable: 0, maxSurge: 1` 이라 replicas 1 에서도 새 파드가 Ready 된 뒤 구 파드를 뺀다.
+롤아웃은 원래 무중단이었다. 실제로 막는 것은 **노드 드레인과 노드 장애**다 — EKS Auto 의
+Karpenter 가 노드를 수시로 통합한다(2026-10-04 하루 두 번 관찰, 파드 이름이 전부 바뀌었다).
+
+`ai` 는 `replicas` 를 올려도 소용없다 — `ai.yaml` 이 HPA 켜질 때 그 필드를 **아예 렌더하지
+않는다**(둘 다 실으면 helm 이 HPA 가 정한 수를 되돌리므로 옳은 설계다). 바닥은 `minReplicas` 다.
+임베딩은 1 유지(5Gi · 프로세스마다 ~4.2GiB · PDB 대상 아님 — 빠지면 AI 가 규칙 랭킹으로
+degraded 하는 계약이라 드레인을 막을 이유가 없다). 분산은 공용 podSpec 의 zone
+topologySpread 가 이미 한다(dev 2 AZ).
+
+**테스트에 불변식을 하나 더했다**: PDB 가 있으면 복제본 바닥이 `minAvailable + 1` 이상.
+복제본 1 에 `minAvailable: 1` 이면 자발적 축출이 **영구히** 거부되어 노드 통합이 멈춘다.
+HPA 가 수를 쥔 컴포넌트는 `replicas` 가 없어 종전 테스트가 그 바닥을 **아무것도 검사하지
+않았다**(`assertNotIn("replicas", …)` 로 건너뛰었다) — 역검증에서 이 단정만 ai 변이를 잡았다.
+
+요청 합이 4.5 CPU / ~8.7Gi 가 되어 노드 2대 여유가 ~1.3Gi/1.35 CPU 로 줄어든다(리뷰어 계산).
+실제로는 노드가 3대로 늘었다.
+
+**측정 완료(2026-10-05) — 파드 롤아웃은 실패 0건이다.** 인증서 교체 배포 중 외부에서
+623 표본을 찍었는데 `api-dev` 의 실패 2건이 **전부 리스너 인증서 교체 순간**(한 시점)이고,
+파드가 교체되는 구간에는 실패가 **없었다**. 복제본 2 + PDB + `maxUnavailable: 0` 조합이
+의도대로 동작한다([[STORE-API-HOSTNAME]] 에 표). 종전 replicas 1 이었다면 Karpenter
+드레인마다 끊겼을 자리다.
+
+적대적 리뷰 반영 3건(2026-10-05):
+- **임베딩 서지 제거**(`maxUnavailable: 1, maxSurge: 0`). helm `--timeout 20m` 과 임베딩
+  `progressDeadlineSeconds: 1200` 이 **같은 값**이라 임베딩 예산이 사문이었고, 복제본 2 로
+  서지 수요가 6.7Gi 가 되면 서지 파드 전부가 신규 노드를 기다린다 → helm 이 먼저 끊고
+  `--atomic` 이 **릴리스 전체를 롤백**한다(보호 설정도 함께 되돌아간다). helm 타임아웃도 30m 로
+  벌렸다. 전날 "비용 때문에 maxSurge 는 안 바꾼다"고 한 판단을 뒤집은 것이다 —
+  근거가 비용이 아니라 롤백 위험으로 바뀌었다.
+- **불변식 구멍**: 오버라이드 테스트가 PDB 켜진 dev 값 위에 `minReplicas=1` 을 덮어 위반
+  매니페스트를 만들면서 검사하지 않았다. `assert_pdb_floors` 헬퍼로 빼 모든 렌더 경로에 적용.
+- **주석 정정**: zone topologySpread 는 `ScheduleAnyway` 라 **보장이 아니라 선호**다. 다른 AZ 에
+  자리가 없으면 한 노드에 붙고, 장애로 그 노드가 빠지면 둘이 함께 사라진다(PDB 는 자발적
+  축출만 막는다).
+
+**미결(결정 필요)**: `limit_req_zone` 은 파드별이라 gateway 복제본 2 가 IP 당 레이트리밋 천장을
+`10r/s`→`20r/s`(버스트 30→60)로 **2배로 만든다.** prd 는 처음부터 2 였으니 새 성질은 아니지만,
+**출시를 받는 환경에서 처음 발효된다.** 캐리어 NAT 오탐을 줄이는 쪽이라 완화가 바람직할 수도
+있어 숫자를 임의로 정하지 않았다 — 정당한 버스트가 얼마인지는 제품 판단이다.
+"""
+
+[[nodes]]
+id = "STORE-API-HOSTNAME"
+ticket = ""
+title = "스토어 빌드가 쓸 주소 — api.trippilot.co.kr 개통(인증서·DNS 완료)"
+status = "done"
+migration = false
+touches = ["deploy/eks"]
+note = """
+2026-10-04 완료. **코드 변경이 없다** — AWS·GitHub 설정 작업이라 PR 이 없어서 여기 남긴다.
+
+왜 지금 하나: 스토어 빌드에 `api-dev` 를 박으면 나중에 prd 로 옮길 때 **앱 업데이트가 필요하다.**
+`api` 를 박아 두면 DNS 만 돌려 옮긴다. [[STORE-LAUNCH]] 가 싼 길을 택해도 미래를 닫지 않는
+유일한 지점이다.
+
+한 것:
+- ACM 인증서 신규 발급 — `api.trippilot.co.kr` + SAN `api-dev.trippilot.co.kr` **두 이름**.
+  종전 인증서(`64fb7381…`)는 `api-dev` 단일 이름이라 와일드카드가 아니었다. DNS 검증 CNAME 2건을
+  Route53(존 `Z06384932H16HBTOG0HEC`)에 UPSERT → 약 20초 만에 ISSUED.
+  새 ARN `b57ebd59-67fa-4cf2-9e78-0430ce378941`.
+- Route53 `api.trippilot.co.kr` CNAME → 게이트웨이 NLB(기존 `api-dev` 와 **같은 형태**: CNAME·TTL 300).
+- GitHub `dev` 환경 변수 `ACM_CERTIFICATE_ARN` 을 새 ARN 으로 교체.
+  **`API_HOSTNAME` 은 `api-dev` 로 남겼다** — 배포 요약에 찍히는 안내용이고, 팀의 기존 테스트
+  주소를 바꾸면 혼란이 생긴다.
+
+**인증서 교체를 복제본 증설과 분리했다**(2026-10-05, 적대적 리뷰 7번). 인증서 ARN 은
+`gateway` Service 의 `aws-load-balancer-ssl-cert` **주석**으로 들어가므로 복제본 증설과
+**같은 helm 리비전**이 된다. 그 배포가 타임아웃하면 `--atomic` 이 주석까지 구 ARN 으로
+되돌리고, 롤백도 타임아웃하면 릴리스가 `pending-rollback` 으로 남아 다음 upgrade 가
+"another operation is in progress" 로 거부된다(사람이 `helm rollback` 을 쳐야 풀린다).
+그래서 `ACM_CERTIFICATE_ARN` 환경변수를 **구 ARN 으로 되돌려** 두었다 —
+[[DEV-DATA-PROTECTION]]·[[DEV-HA-REPLICAS]] 배포가 성공한 뒤 **별도 배포**로 교체한다.
+**구 인증서를 그 전에 삭제하지 마라** — 롤백 경로가 그것을 쓴다(워크플로의
+`Check HTTPS certificate` 는 ISSUED 만 보고 현재 리스너에 붙은 ARN 의 생존은 안 본다).
+
+**교체 완료(2026-10-05).** 두 이름 모두 `CN=api.trippilot.co.kr` + SAN 2개를 서빙한다
+(`openssl s_client` 로 확인). 둘 다 `GET /api/v1/places` 에 401(인증 요구 = 정상).
+이제 `eas.json` 의 production 프로필을 `https://api.trippilot.co.kr` 로 바꿀 수 있다 —
+**프론트 소유라 팀원 몫**이다.
+
+## ⚠ 인증서 교체는 무중단이 아니다 — 1~2초 끊긴다
+
+교체 배포 중 외부에서 2초 간격으로 두 이름을 찍어 측정했다(623 표본):
+
+| 이름 | 결과 |
+|---|---|
+| `api-dev` | 401 × 621 · **연결 실패(000) × 2** — 실패율 0.3% |
+| `api` | 000 × 545 → **02:24:43 부터 401** |
+
+끊김은 `02:24:33` **한 시점**이고 10초 뒤 새 이름이 올라왔다 — 즉 **NLB 리스너 인증서
+교체 순간**이다. 재시도하면 되는 수준이지만 **"무중단"이라고 말하면 거짓이다.**
+인증서를 바꾸는 배포는 끊김이 있다고 알고 해야 한다.
+
+**원인이 분리된 것은 교체를 따로 배포한 덕이다.** 같은 릴리스에 복제본 증설과 섞었다면
+어느 쪽이 끊었는지 못 가렸다(적대적 리뷰 7번의 조언이 측정 가능성까지 줬다).
+"""
+
+[[nodes]]
+id = "INFRA-PR-GATE"
+ticket = ""
+title = "인프라·배포 변경이 PR 에서 검증되지 않는다 — 초록이 무관한 것을 증명한다"
+status = "done"
+migration = false
+touches = [".github/workflows"]
+note = """
+**닫음(2026-10-12, PR #1067).** 아래 처방대로 validate 잡을 재사용 워크플로(`infra-validate.yml`)로 떼어
+`pull_request` 에 걸었고 `aws-deploy.yml` 이 그것을 호출한다. 경로는 `infra/**`·`deploy/**` + 스위트가
+바깥에서 읽는 파일(워크플로 셋, `backend/scripts/ingest_pois.py`).
+**2번(무관한 초록)은 없애지 않았다** — backend-ci 의 `deploy/**` 경로는 `AppleClientIdWiringTest` 가 쓰므로
+그대로 두었고, 차트 PR 은 이제 gradle 초록과 **함께** 이 게이트를 받는다.
+main 에는 다음 릴리스 승격 때 들어간다 — **두 파일은 함께 옮긴다**(`aws-deploy.yml` 만 가면 prd 배포가
+"workflow not found" 로 멈춘다).
+아래는 닫기 전 기록이다.
+2026-10-05 발견(#956·#957 검수 중). 두 가지가 겹쳐 있다.
+
+**1. `infra/terraform/**` 은 어떤 PR 트리거에도 없다.** `aws-deploy.yml` 이 `workflow_dispatch`
+전용이라, Terraform 을 바꾸는 PR 에는 **체크가 하나도 붙지 않는다**(#956 실측: `no checks`).
+사람 눈과 작성자의 로컬 실행이 유일한 그물이다.
+
+**2. `deploy/**` 은 체크가 붙지만 무관한 것을 돌린다.** `backend-ci.yml` 의 PR paths 에
+`deploy/**` 가 있어 초록이 뜨는데, 그 잡이 하는 일은 `./gradlew build` 뿐이다 — helm lint 도
+차트 파이썬 테스트도 돌지 않는다. #957(차트 values·테스트만 변경)이 `test: pass` 를 받았지만
+**그 초록은 "코틀린이 여전히 빌드된다"는 뜻**이고 변경과 무관하다. 이쪽이 1번보다 나쁘다 —
+없는 것보다 **거짓 초록**이 위험하다.
+
+**왜 지금 문제인가.** 현재 순서는 `머지 → 배포 실행 → validate 잡이 처음 검증` 이다. 즉 깨진
+차트·Terraform 이 develop 에 먼저 들어가고 **다음 사람의 배포에서 터진다.** 2026-10-03 에
+`terraform fmt` 로 정확히 그 일이 났다(#887 — 배포가 validate 에서 죽었다).
+
+**처방(미착수).** `aws-deploy.yml` 의 validate 잡은 **자격이 필요 없다**(전부 오프라인):
+`infra/tests` · `deploy/eks/tests` · `infra/bootstrap/tests` · `deploy/eks/chart/tests` 네 묶음 +
+`helm lint --strict`(dev·prd) + `terraform fmt -check -recursive ..` · `init -backend=false
+-lockfile=readonly` · `validate` · `test`. 그걸 그대로 떼어 `pull_request` 트리거
+(`paths: ['infra/**', 'deploy/**', '.github/workflows/aws-deploy.yml']`) 워크플로로 만들면 된다.
+**잡을 복제하지 말고 재사용 가능한 워크플로(`workflow_call`)로 빼는 편이 낫다** — 복제하면
+두 사본이 갈라지고, 이 리포는 그 함정을 이미 겪었다(릴리스 때 스케줄 사본 전수 대조 규약).
+
+#956·#957 은 이 노드를 기다리지 않고 머지했다 — 대신 validate 잡의 **전 항목을 로컬에서
+명령 그대로** 돌려 통과를 확인했다(두 브랜치 각각). 그 증거는 각 PR 본문에 있다.
+"""
+
+[[nodes]]
+id = "LEGAL-PAGES"
+ticket = ""
+title = "약관·처리방침 공개 URL — 심사 제출 필수 필드가 비어 있었다"
+status = "done"
+migration = false
+touches = [".github/workflows", "backend/scripts"]
+note = """
+2026-10-05, PR #963. App Store Connect 가 **공개 웹 URL 로 된 개인정보처리방침**을 제출
+필수로 받는데 우리 약관 6종은 앱 내 API(`GET /api/v1/terms`)로만 나가서 웹 주소가 없었다.
+그 칸이 비면 제출 버튼이 눌리지 않는다.
+
+**가동 주소**: `https://asm-trippilot.github.io/trippilot/privacy.html`
+(목록은 `/trippilot/`, 6종 전부 있다)
+
+**정본은 시드다.** `backend/docs/legal/*.md` 는 초안이고 **낡아 있다** — 초안은
+`시행일: [미확정: 공개 출시일]` 인데 시드(`R__seed_reference_data.sql`)는 `2026-09-28` 로
+해소돼 있다. 초안에서 뽑으면 공개 페이지가 앱 화면과 다른 말을 한다.
+(처음에 시드가 축약본이라고 봤다가 정정했다 — 글자수와 바이트를 비교한 오독이었다.)
+
+**한 번 복사해 올리지 않은 이유**: 본문 개정 때 페이지가 **조용히 갈라진다.** 사용자가 앱에서
+보는 본문과 공개 페이지가 다른 상태는 그 자체가 위험이고 증상이 없다. 시드 변경을 트리거로 묶었다.
+
+**색인은 막았다**(`noindex` + `robots.txt`). 생성물을 감사해 보니 공개되면 대표자명 7회·
+이메일 3회·사업자등록번호 3회·**개인 휴대폰 2회**가 검색에 수집된다. 법정 고지 항목이라 본문에서
+뺄 수 없고 앱에서도 보이는 값이지만, **ASC 는 열리는 URL 만 요구하고 색인을 요구하지 않는다.**
+접근은 그대로 공개다. 색인을 원하면 그 두 줄을 지우면 된다(판단은 사람 몫).
+
+## ⚠ 리포 **설정** 두 건 — 코드에 안 남는다
+
+머지만으로는 배포가 안 됐다. 둘 다 2026-10-05 에 API 로 풀었고, **클러스터를 다시 만들거나
+리포를 포크·이전하면 다시 막힌다.**
+
+1. **Pages 가 꺼져 있었다** — `deploy-pages` 가 `404 Not Found` + *"Ensure GitHub Pages has
+   been enabled"*. 처방: `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow`.
+   (UI 로는 Settings → Pages → Source = **GitHub Actions**)
+2. **`github-pages` 환경이 `main` 만 허용했다** — Pages 를 켜면 GitHub 이 그 환경을 만들면서
+   배포 허용 브랜치를 **기본 브랜치로 제한**한다. 우리 트리거는 `develop` 이라 잡이
+   **스텝을 하나도 실행하지 않고** 죽었다. 진단 신호가 그것이다 — 실패 잡의 `steps` 가 **빈 배열**
+   이면 스텝 로그를 뒤질 것이 없고 **환경 정책**을 봐야 한다(로그에 이유가 안 남는다).
+   처방: `gh api -X POST repos/<o>/<r>/environments/github-pages/deployment-branch-policies
+   -f name=develop -f type=branch`.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2026-10-11 루프 — 인수인계에서 넘어온 다섯
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 순서는 의존이 아니라 공유 자원이 정한다. 새 간선은 없고, 다투는 것은 `openapi.yaml` 과 Flyway
+# 번호다 — 그래서 스택으로 쌓지 않고 각자 `origin/develop` 에서 잘라 한 번에 하나씩 연다.
+
+[[nodes]]
+id = "SOCIAL-TOKEN-AUD"
+ticket = "TRIP-1316"
+title = "토큰 로그인 경로가 구글 토큰의 발급 대상을 확인하지 않는다 — 쓰는 곳 없는 문을 닫는다"
+status = "done"
+owner = "인증"
+migration = false
+touches = ["backend/modules/auth", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1040 (머지됨 · 2026-10-12).** 유스케이스가 토큰 경로에서 구글을 501 로 거절한다.
+적대적 리뷰가 잔여 셋을 냈다 — 카카오·네이버 토큰 경로의 이메일 선점은 **`SOCIAL-TOKEN-APP` 노드
+(TRIP-1317)로 떼었고**, PKCE 없는 네이버 code 경로도 같은 노드로 넘겼고(앱이 SDK 키 없는 빌드에서 그 경로로 폴백한다), 그리고
+"네이버 id 가 앱 단위 값"이라는 전제는 **2026-10-12 공식 명세로 확인됐다**(앱이 다르면 id 가 다르다).
+
+**인수인계가 가리킨 곳(`AbstractOAuth2Client.kt:20` 의 state·nonce TODO)은 실제 위험이 아니었다.**
+서버는 `state` 를 받지 않고(앱 몫), code 경로는 PKCE 가 있고, 3사는 id_token 을 쓰지 않아 nonce 가
+해당 없다. 코드를 따라가 보니 구멍은 그 옆이다 — `fetchProfileByAccessToken` 이 userinfo 만 부르고
+**토큰이 우리 앱에 발급된 것인지 보지 않는다.**
+
+**구글만 문제다.** 구글 `sub` 는 계정 전역 값이라 남의 앱에 발급된 토큰도 같은 `sub` 를 낸다.
+카카오 회원번호·네이버 id 는 앱마다 달라 기존 계정에 닿지 않고, 애플은 aud 를 이미 본다.
+그리고 **앱은 이 경로로 구글을 보내지 않는다**(code+PKCE 경로만 쓴다) — 검증을 붙이는 것보다
+문을 닫는 편이 작다. 구글 네이티브 SDK 를 들이면 그때 `tokeninfo` 의 `aud` 대조를 붙여 연다.
+"""
+
+[[nodes]]
+id = "SOCIAL-TOKEN-APP"
+ticket = "TRIP-1317"
+title = "네이버 토큰 로그인이 남의 앱 토큰으로 가입을 받는다 — 카카오는 코드로 닫았다(값 주입 대기), 네이버와 PKCE 없는 code 경로가 남았다"
+status = "todo"
+owner = "인증"
+migration = false
+touches = ["backend/modules/auth", "deploy/eks", "docker-compose.yml"]
+note = """
+**진행(2026-10-12 밤) — 카카오 대조가 DEV 에서 켜졌고, 네이버 code 경로를 닫는다.**
+`KAKAO_APP_ID` 를 DEV 시크릿에 넣고 재배포했다(파드 env·기동 로그로 확인, 배포 경고 없음). **실 카카오 로그인
+왕복은 아직 못 봤다** — 앱 ID 가 DEV 빌드의 카카오 앱과 다르면 카카오 로그인이 전부 401 이고 서버 로그에
+"발급 앱이 우리 앱이 아니라"가 찍힌다. 네이버는 code 경로에서 501 로 거절한다(PKCE 미지원 — 사용자 확인:
+출시 빌드에 `EXPO_PUBLIC_NAVER_URL_SCHEME` 이 들어가 SDK 토큰 경로만 쓴다). **남는 것은 네이버 토큰 경로의
+발급 앱 확인 하나다**(수단을 못 찾음). 프론트의 네이버 브라우저 폴백은 이제 501 을 받으므로 걷어내는 것이 프론트 몫으로 남는다.
+**진행(2026-10-12) — 카카오 절반을 닫았다.** `KakaoOAuthClient` 가 `access_token_info` 의 `app_id` 를
+`KAKAO_APP_ID` 와 대조하고 다르면 401 이다. **값이 주입돼야 켜진다** — 비면 대조를 건너뛰고 기동 경고를
+남긴다. 통로는 compose·`.env.example`·시크릿 동기화·차트까지 뚫었고, DEV 시크릿에 값을 넣고 재배포하는
+일이 남았다(앱 ID 는 사용자가 전달함). dev 와 출시가 같은 카카오 앱인지는 미확인이다.
+
+**네이버는 그대로 열려 있다.** 토큰의 발급 앱을 서버가 확인할 수단을 **찾지 못했다** — 네이버 개발자
+문서는 접속이 막혀 직접 못 봤고 검색에도 그런 응답 필드가 나오지 않았다("없다"가 아니라 "못 찾았다").
+PKCE 없는 code 경로도 그대로다 — 출시 빌드에 `EXPO_PUBLIC_NAVER_URL_SCHEME` 이 들어가는지가 선행 확인이다.
+아래는 착수 전 기록이다.
+`SOCIAL-TOKEN-AUD` 에서 뗀 잔여(2026-10-12 사용자 승인으로 티켓화). 계정 탈취는 아니다 — 카카오
+회원번호·네이버 id 는 앱마다 달라 기존 계정에 닿지 않는다. 대신 남의 앱 토큰이 **가입 분기**로 들어와
+그 토큰의 이메일로 계정이 생기고, 본인의 첫 가입이 409(`SOCIAL_EMAIL_CONFLICT`)로 막힌다.
+
+**카카오**는 `access_token_info` 의 `app_id` 대조로 닫는다. **사람 몫 선행: 카카오 앱 ID 를 서버 설정에
+넣는 것**(값은 카카오 개발자 콘솔) — 코드에 선행이 아니라 값에 선행이라 간선으로 그리지 않았다.
+**네이버**는 토큰의 발급 대상을 확인할 수단이 있는지 조사부터다(미확인). 없으면 code 경로 전환이
+대안인데 네이버는 PKCE 가 없어 따로 따져야 한다.
+
+**PKCE 없는 네이버 code 경로도 이 노드 몫이다**(2026-10-12 머지 전 검수에서 정정). 앱은
+`EXPO_PUBLIC_NAVER_URL_SCHEME` 이 있는 빌드에서만 네이버를 SDK 토큰 경로로 보내고, 없으면 PKCE 없는
+code 경로로 폴백한다 — "앱이 쓰지 않는 경로"라는 처음 판단이 틀렸다. 출시 빌드에 그 값이 들어가는지,
+안 쓰는 경로면 서버에서 닫을 수 있는지를 프론트 폴백과 같이 정한다.
+
+`SOCIAL-TOKEN-AUD`(#1040)는 머지됐다 — 착수 가능.
+"""
+
+[[nodes]]
+id = "TRIP-1315"
+ticket = "TRIP-1315"
+title = "회고·기록 카드 방문 순번 — BE 몫인지부터 가린다"
+status = "done"
+owner = "기록"
+migration = false
+touches = ["backend/modules/archive", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1041 (머지됨 · 2026-10-12). 아래 "BE 변경이 0 일 수 있다"는 틀렸다** — 기록(`/records`)은
+오름차순인데 허브(`/visits/days/{day}`)는 저장소 순서(최신 먼저)였다. 순서를 정하는 자리를
+`VisitCheck.inVisitOrder()` 하나로 모으고 계약에 "배열 순서 = 방문 순서"를 적었다. 순번 필드는 없다.
+**번호를 그리는 것은 프론트 몫으로 남는다** — 기록 화면의 자체 정렬(`orderByArrival`)이 서버와 달라
+그대로 두면 두 화면 번호가 어긋난다(티켓 댓글 4건).
+
+**BE 변경이 0 일 수 있다.** `TripRecordService` 가 이미 도착 시각(없으면 생성 시각) 순으로 정렬해
+주고, 건너뛴 방문·즉석 방문도 같은 배열에 있다 — 배열 순서가 곧 방문 순서다. 허브(i01)와 기록(j01)이
+**같은 순서의 배열을 받는지**만 확인하고, 맞으면 FE 로 넘기고 닫는다. 어긋나면 그때 순번 필드를
+서버가 싣는다(그 경우 `touches` 에 archive·openapi 를 적는다).
+"""
+
+[[nodes]]
+id = "REFLECTION-MOOD"
+ticket = "TRIP-828"
+title = "회고 mood·shortMemo 영속 — FE 가 '비영속'이라 적고 기다린다 (828 에서 뗌)"
+status = "done"
+owner = "회고"
+migration = true
+touches = ["backend/modules/reflection", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1042 (머지됨 · 2026-10-12 · V2.63).** 기존 PUT 을 넓혔다 — `card`·`mood`·`shortMemo` 모두
+선택, 하나는 있어야 한다. null 은 그대로·빈 문자열은 지움. `mood` 는 코드 모양만 검사한다.
+쓰기 경로는 행을 잠그고 읽는다(겹친 수정이 서로를 되돌리던 것 — 머지 전 검수에서 발견).
+**남은 것(종전부터 있던 것): 행이 아직 없을 때 겹친 첫 쓰기는 진 쪽이 500 이다**(UNIQUE 위반이 catch-all 로 간다).
+
+`DailyReflectionPage.tsx` 가 *"mood/memo 비영속 … 통합 저장은 계약 확장 티켓 TRIP-823"* 이라고
+적어 둔 자리다. 컬럼 둘 + `EditReflectionRequest.card` 를 선택으로 완화(부분 갱신).
+
+**`mood` 는 닫힌 enum 으로 만들지 않는다** — 값 집합의 정본은 Figma 인데 BE 는 접근이 없다.
+길이 제한이 있는 문자열로 받고, 집합이 굳으면 그때 CHECK 를 건다(넓히는 것은 쉽고 좁히는 것은
+마이그레이션이다). **다음 Flyway 번호는 V2.63** — [[AFFILIATE-LINK]] 가 먼저 쓰면 올린다.
+"""
+
+[[nodes]]
+id = "TRIP-1314"
+ticket = "TRIP-1314"
+title = "같은 여행 재생성이 무제한 — 계정당 일일 상한 (FE 임시가드 TRIP-1268 대체)"
+status = "done"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1043 (머지됨 · 2026-10-12).** 세지 않는 것이 `FAILED` 하나가 아니라 셋이 됐다 — 실패, **폴백으로
+끝난 생성**(AI 가 죽으면 FAILED 가 아니라 폴백으로 완료된다), **멈춘 세션**(세기 전에 실패로 닫는다).
+남는 것: 프론트가 `GENERATION_DAILY_LIMIT` 를 잇고 TRIP-1268 로컬 카운터를 걷어 내기 · 슬롯 후보
+연타는 이 상한 밖.
+
+**상한은 10회, 개발자 계정은 예외다**(2026-10-12 사용자 결정). 예외 등록은 시크릿 `backend` 그룹의
+`ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS`(쉼표 구분 계정 UUID, 환경마다 다르다) → 재배포.
+갈아치운(취소·대체된) 생성은 **센다** — AI 가 실패 없이 늘어지는 동안의 연타는 횟수를 쓴다.
+
+`generation_session` 에 `account_id`·`started_at`·`status` 가 이미 있어 **마이그레이션이 없다**.
+선례는 `notification/application/PushRateLimits.kt`.
+
+**[[TRIP-1312]] 를 기다리지 않는다.** 그쪽은 상한 **값**의 근거이지 손잡이의 선행이 아니다 —
+티켓 원문이 *"손잡이만 먼저 만들고 값은 나중에 돌려도 된다"* 고 적었다. 값은 FE 임시가드와 같은
+5회/일을 설정으로 두고 관측이 나오면 돌린다. `FAILED` 세션은 세지 않는다(PARTIAL 탈출구 보존).
+
+**응답은 429 다**(티켓 본문은 409 라고 적었으나 TRIP-1268 의 졸업 조건이 "BE 한도의 429 처리"다).
+"""
+
+[[nodes]]
+id = "TRIP-1312"
+ticket = "TRIP-1312"
+title = "[AI] llm_cost 로그에 계정·여행 식별자 — 상한 값의 근거"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = "[[TRIP-1314]] 의 **값**을 정하는 입력이다. 선행이 아니라서 간선을 긋지 않았다 — 머지되면 1314 의 상한을 실측으로 돌리는 후속 노드를 연다."
+
+[[nodes]]
+id = "PLACE-DETAIL-API"
+ticket = "TRIP-824"
+title = "장소 상세 단건 GET /places/{poiId} — 값이 이미 있는 것만 싣는다 (824 에서 뗌)"
+status = "done"
+owner = "장소"
+migration = false
+touches = ["backend/modules/place-data", "backend/docs/design/openapi.yaml"]
+note = """
+**PR #1044 (머지됨 · 2026-10-12).** `Place` 를 건드리지 않아 프론트 계약 가드와 무관하다.
+ACTIVE 만으로 거르지 않되(담아 둔 폐업 장소가 열려야 한다) `UNVERIFIED` 는 404 다(INV-1).
+
+상세 화면(d06·i10)이 목록에서 받은 값으로 그리고 있어 **목록 밖에서 상세를 열 길이 없다.**
+단건 경로를 열고 `address`(V2.58 로 이미 있다)를 싣는다. 값이 없는 세 필드는 [[TRIP-824]] 잔여다 —
+컬럼만 만들면 전부 null 이라 화면이 그대로다(움브렐라 규약 3번).
+
+⚠ FE 계약 가드(`frontend/src/__tests__/openapiContract.test.ts`)가 `Place` 를 줄 전체 일치로
+고정한다 — `Place` 를 건드리면 같은 PR 에서 함께 고쳐야 frontend-ci 가 초록이다. 상세 전용 스키마를
+새로 두면 닿지 않는다.
 """

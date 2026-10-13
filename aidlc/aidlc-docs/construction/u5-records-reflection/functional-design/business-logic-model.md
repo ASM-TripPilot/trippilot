@@ -29,6 +29,8 @@ U3·U4는 백엔드가 통째 신규였다. U5는 아니다.
 | **actual(경로)** | 어떻게 움직였나 | `actual_route_point` | **U4 유지**(DEC-U5-6 · Q5=B) | 읽기만 |
 | **changelog** | 무엇을 왜 바꿨나 | `change_log_entry` | **`change-log` 모듈 유지**(DEC-U5-8 · Q8=A) | 읽기 소비자 |
 
+> **[이연 · 2026-10-12 → U10] actual(경로) 행.** `actual_route_point`는 여전히 미실장이고(마이그레이션 최신 V2.62까지 부재), 실제 경로 기록·레이어와 GPS 방문 기록(US-REC-03)은 신설 유닛 **U10 "GPS·위치 자동화"**(미구현, 사용자 결정 2026-10-12)로 넘어간다. U5의 "읽기만" 관계는 U10이 실장한 뒤에 성립한다.
+
 **DEC-U5-1** — C12의 "3계층 소유"는 **데이터 모델 소유가 아니라 열람 책임**으로 해석한다. 인셉션 `components.md`의 "plan/actual/changelog 소유" 표기는 이 해석으로 정정 상신한다(G-U5-1). 근거: plan은 U3가 생성하고 U4가 갱신하는 살아 있는 데이터라 U5로 옮길 수 없고, changelog는 append-only 계약을 U4가 이미 쓰고 있어 옮기면 그 계약을 건드린다.
 
 ---
@@ -52,6 +54,16 @@ U3·U4는 백엔드가 통째 신규였다. U5는 아니다.
 | **DEC-U5-12** | 회고·요약의 **이동 거리는 서버가 산출하지 않는다**(§6 참조). 1차 산출 주체는 클라이언트다 | Q5=B의 파생 결과 — §6에서 전개 |
 | **DEC-U5-13** | **누적 통계의 평균 체류 시간은 표시할 수 있다**(`j05` `평균 체류 72분`). 단 **개별 방문의 체류 시간은 U4·U5 화면 모두에서 노출하지 않는다** — 두 층을 가르는 선이 여기다 | **INV-U4-03**이 명시: "INV-3은 *예측 소요시간*의 표시 금지이고 사후 실적은 **U5 기록 소관**". INV-3(`ai/README.md`: "소요시간 미표시 — 거리만")은 솔버 미검증 *예측치*를 막는 규칙이지, 사후 실적 통계를 막는 규칙이 아니다 |
 | **DEC-U5-14** ★ | **회고 산출물은 카드이고, 백엔드는 그것을 모델링하지 않고 보관·중계한다**(2026-09-01 사용자 결정). `draft_card`/`edited_card` 를 jsonb 로 두고 `template_id`·`card_format` 을 버전 키로 쓴다. `cover`/`scenes` 안쪽은 **재검증하지 않는다** | G-U5-4 해소로 실계약이 카드로 확인됐다(§5.3). 우리가 카드를 모델링하면 상대 템플릿 추가가 곧 우리 마이그레이션이 된다 — 그때는 문장 모델이 차라리 낫다. **`DEC-U5-5a`(source 를 항상 싣는다)는 바뀌지 않는다** — 3단 폴백의 관측 근거라 카드에서도 그대로 필요하다 |
+
+> **[개정 · 2026-10-12] DEC 표 — 실장 대조(원문 보존).**
+> - **DEC-U5-5**: 포트 이름은 `ReflectionGeneratorPort`가 아니라 **`ReflectionAgentPort`**(`backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/domain/port/ReflectionAgentPort.kt`), 어댑터는 `HttpReflectionAgentAdapter`(`POST /ai/v1/reflection/generate`). 모드는 **`rule|http` 둘뿐**이고 `llm`(벤더 직결)은 만들지 않았다 — `ReflectionModeAnnouncer.kt`가 그 외 값을 "아는 값이 아닙니다(rule|http)"로 경고한다. 설정 키는 `trippilot.ai.reflection.mode`(기본 `rule`), **EKS 배포는 `http` 고정**(`deploy/eks/chart/templates/backend.yaml` `TRIPPILOT_AI_REFLECTION_MODE: http`).
+> - **DEC-U5-6**: `actual_route_point`는 U4 신설이 아니라 **[이연 · 2026-10-12 → U10]**.
+> - **DEC-U5-9**: "U7 게이트까지 미개통"의 U7은 **폐기**됐다(사용자 결정 2026-10-12). `uploadForCommunity`·`ObjectStoragePort`는 열릴 계기가 없다 — 사진은 로컬 참조 + 서버 메타만으로 확정이다.
+> - **DEC-U5-10**: 오프라인 전부 설계(로컬 큐·`syncState`·충돌 선택)는 FE에 구현되지 않았고 **보류**됐다(사용자 결정 2026-09-11 "오프라인 방문 기록 일단 빼자", Figma `j01 offline`·`sync-conflict` 프레임 삭제). 백엔드에는 충돌 응답 상태(`backend/modules/archive/src/main/kotlin/com/trippilot/archive/api/VisitConflictState.kt`, `updatedAt` 기준)가 남아 있다.
+
+> **[개정 · 2026-10-12 · U10 FD] DEC-U5-6·DEC-U5-12.**
+> - **DEC-U5-6 개정** — 실제 경로는 **U4가 아니라 `archive`(C12) 소유**다(U10 Q5=A). 소유 근거였던 "Plan-B 기준점 계산의 1차 소비자"는 TRIP-992에서 단발 좌표(`replan_session.origin_*`, V2.56)로 해결됐고 LEGAL-U4-05가 그 좌표의 경로 적재를 금한다 — 남은 소비자는 기록·요약(U5)뿐이다. 엔티티도 점열 `actual_route_point`가 아니라 **일 단위 `actual_route_day`**다(Q4=C). U5는 `ArchiveRecordFacade.findRouteDays`로 거리만 읽는다.
+> - **DEC-U5-12 부분 개정** — §6의 (a) "클라 산출 → 서버 전송"은 검증 불가라 거절됐지만, U10은 원시 좌표를 서버에 두지 않기로 했으므로(Q4=C) 서버가 더 나은 값을 만들 수 없다. 그래서 **기기가 원시 표본으로 잰 거리**를 받되 서버가 **폴리라인 길이(하한) · 물리 상한으로 클램프**하고 `distance_clamped`를 남긴다. 경로가 있는 날은 `ROUTE`, 없는 날은 `VISIT_LINE`, 여행 요약은 모든 날이 `ROUTE`일 때만 `ROUTE`. 근거 `construction/u10-gps-location-automation/functional-design/business-logic-model.md` §2.1·§7.2.
 
 ---
 
@@ -87,6 +99,8 @@ U3·U4는 백엔드가 통째 신규였다. U5는 아니다.
 > **(b)** `getRecords`는 plan+actual만 합치고, **화면이 changelog REST를 따로 호출**한다(`j02 변경` 탭이 별도 호출).
 > **기본은 (a)** — `j02`가 세 계층을 한 화면에서 라벨로 섞어 그리므로 서버가 합쳐 주는 편이 시각 정합에 맞다. 다만 **BR-U5-29("U5는 change_log_entry를 읽기만 한다")가 성립하려면 이 확장이 선행**돼야 한다.
 
+> **[개정 · 2026-10-12] G-U5-12 해소 — (a)로 실장됐다.** `ChangeLogFacade`에 **`findTimeline(accountId, tripId, limit)`**가 추가됐고(`backend/modules/change-log/src/main/kotlin/com/trippilot/changelog/api/ChangeLogFacade.kt`), `archive`의 `TripRecordService`가 이를 불러 기록 합본의 `changes`를 채운다(`backend/modules/archive/src/main/kotlin/com/trippilot/archive/application/TripRecordService.kt`). "`append` 하나뿐"은 낡은 서술이다. 단 합본을 그리던 `j02` 비교 화면은 삭제됐다(TRIP-769 — frontend-components 개정).
+
 ---
 
 ## 4. 기록 흐름 (C12)
@@ -119,6 +133,8 @@ U3·U4는 백엔드가 통째 신규였다. U5는 아니다.
 - 충돌 판정 기준은 `visit_check.updated_at` 비교다(BR-U5-22).
 - **오프라인 구간의 회고는 생성하지 않는다** — 복구 후 생성하거나 기본 카드로 대체한다(US-REC-12 예외).
 
+> **[개정 · 2026-10-12] §4.2 — 보류.** 로컬 큐·`syncState`·충돌 시트는 FE에 없다(`frontend/src/features/record/`에는 `ui/RecordGlyphs.tsx`만, `syncQueue`·`ConflictSheet`·`SyncBadge` 부재). 사용자 결정(2026-09-11)으로 오프라인 방문 기록은 **보류**됐고 Figma `j01 offline`·`sync-conflict` 프레임도 지워졌다. 되돌릴 수 있는 보류이므로 위 흐름은 재개 시 입력으로 보존한다.
+
 ### 4.3 숙소·날짜 귀속 (US-REC-05)
 
 - 귀속은 **저장 시점이 아니라 조회 시점의 파생**이다. `visit_check.arrived_at`(여행지 기준 날짜) → `base_assignment`·`trip_base_day`(V2.4)에서 그 날짜를 덮는 기준 숙소를 찾는다.
@@ -141,6 +157,8 @@ U3·U4는 백엔드가 통째 신규였다. U5는 아니다.
 ③ 기본 카드      "방문 N곳 · 이동 Nkm · 사진 N장" 수치만 — **비어 있지 않음이 불변식**(PBT-U5-1)
 ```
 
+> **[개정 · 2026-10-12]** ①의 스위치는 `AI_REFLECTION_MODE=llm|http → ReflectionGeneratorPort`가 아니라 **`trippilot.ai.reflection.mode=rule|http` → `ReflectionAgentPort`**다(DEC 표 개정 참조).
+
 **②가 라이브 화면의 정본 문안이다.** `j03 default`의 본문이 정확히 이 형태다("오늘은 광안리와 미술관 등 4곳을 방문했어요. 12km를 이동했고 사진 6장을 남겼어요.") → **①과 ②가 화면에서 구분되지 않는다**(D-U5-1). 이 사실을 감추지 않는다:
 
 **DEC-U5-5a** — 회고 응답은 `source: AI | RULE | BASIC` 을 **항상 싣는다**. 화면이 지금은 구분해 그리지 않더라도, 서버가 무엇으로 만들었는지는 계약에 남는다. 침묵 실패 금지(INV-4)의 최소 조건이고, 나중에 "AI가 실제로 값을 더하는가"를 측정할 유일한 근거다.
@@ -152,6 +170,8 @@ U3·U4는 백엔드가 통째 신규였다. U5는 아니다.
 | `rule` | 템플릿만. AI 호출 0 | ✅ **기본값** — 즉시 가능, 외부 의존 0. `j03` 라이브 문안이 이 형태다(D-U5-1) |
 | `llm` | **LLM 벤더 직결 신규 포트**(backend 소유 프롬프트·키·비용) | ⚠ **신규 구축**이다. `LlmGatewayPort`는 backend에 **없다**(2차 검수 실측). LLM 소유 모듈이 `ai/`와 둘로 갈리는 대가가 있다 |
 | `http` | `ai/` `POST /ai/v1/reflection/{generate,nudge}` | ✅ **개통 대상으로 확정**(2026-09-01 사용자 결정, O-U5-6 해소). 상대 표면이 실재한다(G-U5-4 해소) — 계약은 §5.3 |
+
+> **[개정 · 2026-10-12] §5.2 표.** `llm` 모드는 **구현되지 않았다**(O-U5-6이 `http`로 닫히며 불필요해짐) — 실재 모드는 `rule`(코드 기본)·`http`(EKS 고정)다(`ReflectionModeAnnouncer.kt`·`deploy/eks/chart/templates/backend.yaml`). 회고 생성 LLM은 AI 쪽 `REFLECTION_TEMPLATE`(·`_VISION`) 기능이고 모델은 전 기능 `claude-fable-5-1`(#1038), REFLECTION_TEMPLATE은 effort `low`로 15s 시한 안에 들어오게 조정됐다(`ai/src/trippilot/llm_gateway/config.py` `default_feature_effort`).
 
 ### 5.3 `ai/` 표면 실계약 (2026-09-01 실측으로 초안 교체 · G-U5-4 해소)
 
@@ -220,6 +240,10 @@ POST /ai/v1/reflection/nudge     { request_meta, destination, trip_days, highlig
 **DEC-U5-12** — 1차는 **(b) 방문점 연결선 근사**를 서버 기본값으로 하고, 응답에 `distanceSource: ROUTE | VISIT_LINE` 을 싣는다. 클라가 실제 경로를 갖고 있으면 화면에서 그 값으로 덮되(**표시만**), 서버 저장값은 근사치를 유지한다. `actual_route_point`가 실장되면 `ROUTE`로 승격한다.
 근거: (a)는 검증 불가값을 서버 통계로 굳히고, (c)는 그려진 화면을 비운다. (b)는 둘 다 피하면서 승격 경로가 열려 있다. **이 결정은 U4 실장에 의존하므로 갭으로 올린다(G-U5-5).**
 
+> **[이연 · 2026-10-12 → U10] §6 실제 이동 거리.** 위 실측 표의 FE 자산은 지금 없다 — `features/execution/model/actualDistance.ts`와 `useActualRoute()`는 리포에서 사라졌다(`frontend/src/features/execution/`에는 `nextNav.ts`·`useLiveItinerary.ts`뿐). `actual_route_point`도 여전히 없다. 따라서 DEC-U5-12의 `VISIT_LINE` 근사가 현행이며, `ROUTE` 승격은 U10 실장 뒤다(O-U5-2도 U10으로 넘어간다).
+
+> **[개정 · 2026-10-12 · U10 FD] §6 — 승격 경로 확정.** U10이 `archive.actual_route_day`(하루치 다운샘플 폴리라인 + 클램프된 거리)를 만들면 그날 거리 출처가 `ROUTE`로 승격된다. 요약 생성 뒤 경로가 오면 **stats만 재계산**한다(`archive.ActualRouteStored` 구독 — 카드 본문 재생성은 U10 O-U10-5). `TripSummaryStats`·`ReflectionStats`의 enum은 늘리지 않고, `DayHighlight`에 날짜별 `distanceKm`·`distanceSource`를 더한다(U10 `business-logic-model.md` §12.5).
+
 ---
 
 ## 7. 이벤트
@@ -231,6 +255,8 @@ POST /ai/v1/reflection/nudge     { request_meta, destination, trip_days, highlig
 | `ReflectionReady` | **U5 `reflection`** | U6 알림(`j03` 인앱 카드/푸시) | **신규** — US-REC-06 "인앱 카드/푸시로 알린다" |
 
 아웃박스 경유(at-least-once·멱등 구독자) — U0 스캐폴딩 그대로.
+
+> **[개정 · 2026-10-12] 이벤트 실장.** `VisitChecked`는 **`archive`가 발행한다** — `backend/modules/archive/src/main/kotlin/com/trippilot/archive/api/event/ArchiveEvents.kt` `data class VisitChecked`, 발행 `application/VisitCheckService.kt`. `ReflectionReady`도 실재한다(`backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/api/event/ReflectionEvents.kt`) — 구독은 `notification` 모듈 `DomainNotificationSubscribers.kt`. G-U5-13("VisitChecked 코드에 없다")은 해소됐다.
 
 ---
 
@@ -254,6 +280,15 @@ POST /ai/v1/reflection/nudge     { request_meta, destination, trip_days, highlig
 | **G-U5-14** ★ | **프런트 `features/record` → `features/execution` import가 ESLint로 금지**된다(`import/no-restricted-paths` · `importBoundary.test.ts`가 잠근다) — `actualDistance.ts` "재사용" 서술이 구조적으로 불가 | `shared/`로 **승격**해야 한다(U4 자산 이동 → U4 프런트 티켓과 조율) |
 | **G-U5-15** | **AI 에 `style` 경로가 없다** — §5.3 초안은 `POST /ai/v1/reflection/style` 을 상정했으나 실계약에 없다(실측) | 스타일 분석(`j05`)은 계속 **백엔드 로컬 산출**이다. AI 개통은 상대 작업 선행 |
 | **G-U5-16** | **`nudge` 에 소비처가 없다** — 상대는 `POST /ai/v1/reflection/nudge` 를 열었으나 여행 전 넛지 화면이 U5 범위 밖이다 | 경계만 열려 있고 우리가 안 부른다. 화면이 정해질 때 U6 와 조율 |
+
+> **[개정 · 2026-10-12] 갭 상태 갱신.**
+> - **G-U5-5** — 미해소, **[이연 · 2026-10-12 → U10]**.
+> - **G-U5-11** — 의미 상실: `llm` 모드를 만들지 않고 `http`로 확정됐다(O-U5-6).
+> - **G-U5-12 해소** — `ChangeLogFacade.findTimeline` 추가(§3.2 개정 블록).
+> - **G-U5-13 해소** — `archive.VisitChecked` 발행(§7 개정 블록).
+> - **G-U5-14** — 승격 대상(`actualDistance.ts`)이 리포에서 사라졌다. 실제 경로 거리 계산은 U10에서 다시 정한다.
+> - **G-U5-16** — 여전히 백엔드는 `nudge`를 부르지 않는다(`ReflectionAgentWire.kt` 주석 "`nudge` 는 여기 없다").
+> - **G-U5-9** — `j02` 자체가 삭제돼(TRIP-769) 의미를 잃었다.
 
 ---
 
@@ -287,5 +322,7 @@ POST /ai/v1/reflection/nudge     { request_meta, destination, trip_days, highlig
 | US-REC-12 오프라인 | `j01` offline·sync-conflict | BR-U5-17~24 | 기기 로컬 큐 | PBT-U5-3 |
 | US-REC-13 SNS 공유 카드 | `j06` 2상태 | BR-U5-46~48 | 저장 없음(온디바이스) | |
 | US-REC-14 여행 캘린더 | `j07` | BR-U5-49 | 조회 | 탭 루트 |
+
+> **[개정 · 2026-10-12] 커버리지 표 갱신.** **US-REC-03 GPS 기록 → [이연 · 2026-10-12 → U10]**. **US-REC-04 3종 구분** — 화면 `j02`(기록 비교)는 사용자 결정(2026-09-11)으로 삭제됐다(TRIP-769, `records/compare.tsx` 없음). **US-REC-12 오프라인** — 보류(사용자 결정 2026-09-11, 미구현). US-REC-02 사진·메모는 FE 실재(`frontend/src/features/attach-visit-media/`, `frontend/src/shared/photo/`).
 
 **미커버 0.** 단, US-REC-03·10·11은 **화면 또는 데이터가 U4·U6 소관**이라 U5 단독으로 완결되지 않는다 — 위 표의 '비고'가 그 의존을 가리킨다.

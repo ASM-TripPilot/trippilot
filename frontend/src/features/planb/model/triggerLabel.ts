@@ -1,4 +1,4 @@
-import type { TriggerKind } from '@/shared/api/generated/schemas';
+import type { TriggerKind } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-561 · triggerLabel — 트리거 kind → 정적 {문구 요지, 아이콘키} 순수 매핑(BR-U4-01).

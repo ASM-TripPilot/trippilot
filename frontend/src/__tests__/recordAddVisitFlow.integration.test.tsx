@@ -15,9 +15,9 @@ import { router } from 'expo-router';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { Place } from '@/shared/api/generated/schemas';
-import { RecordAddVisitPage } from '@/pages/record-add-visit';
-import { TripRecordsPage } from '@/pages/trip-records';
+import type { Place } from '@/shared/api/index.schemas';
+import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
+import { TripRecordsPage } from '@/pages/record/trip-records';
 
 /**
  * 🔴 TRIP-1072 · AC-5~12·AC-14 — j01 [방문 추가] 장소 피커(즉석 방문 = 계획에 없던 곳의 도착 기록).
@@ -38,7 +38,9 @@ import { TripRecordsPage } from '@/pages/trip-records';
  *   밖에서 만들어야 rerender(피커 재마운트) 뒤에도 같은 캐시가 남는다.
  */
 
+// TRIP-1157: 배럴이 idSet·stringValue·installId 도 재수출한다 — 통째로 갈아끼우면 그 함수들이 지워지므로 실물을 펼친 뒤 토큰 함수만 덮는다.
 jest.mock('@/shared/storage', () => ({
+  ...jest.requireActual('@/shared/storage'),
   saveTokens: jest.fn().mockResolvedValue(undefined),
   getTokens: jest
     .fn()
@@ -622,6 +624,14 @@ describe('🔴 AC-11·AC-12 · j01 카드가 재조회 없이 늘고, 제목은 
       within(screen.getByTestId(cardId('v-new-2'))).getByText('해운대 해수욕장')
     ).toBeTruthy();
     expect(dayVisitHits()).toHaveLength(listFetches);
+  });
+});
+
+describe('🔴 TRIP-1204 · 방문 추가 지도는 시트가 열린 채로도 손가락으로 움직인다', () => {
+  it('P15: 셸 지도(map-root)가 viewOnly=false 로 열려 있다', async () => {
+    await renderPicker();
+
+    expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
   });
 });
 

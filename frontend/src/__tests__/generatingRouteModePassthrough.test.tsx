@@ -13,7 +13,7 @@ const mockPageProps: Record<string, unknown>[] = [];
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
 }));
-jest.mock('@/pages/itinerary-generating', () => ({
+jest.mock('@/pages/itinerary/itinerary-generating', () => ({
   GeneratingPage: (props: Record<string, unknown>) => {
     mockPageProps.push(props);
     return null;
@@ -21,7 +21,7 @@ jest.mock('@/pages/itinerary-generating', () => ({
 }));
 
 // eslint-disable-next-line import/first -- 목 뒤에 라우트를 불러야 목이 물린다.
-import ItineraryGeneratingRoute from '@/app/trips/[tripId]/itinerary/generating';
+import ItineraryGeneratingRoute from '@routes/trips/[tripId]/itinerary/generating';
 
 beforeEach(() => {
   mockPageProps.length = 0;

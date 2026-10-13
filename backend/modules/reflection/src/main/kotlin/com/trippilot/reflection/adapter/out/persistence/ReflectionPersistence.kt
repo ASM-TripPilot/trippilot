@@ -10,13 +10,17 @@ import com.trippilot.reflection.domain.ReflectionStats
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.LocalDate
+import java.util.Objects
 import java.util.UUID
 
 /**
@@ -53,11 +57,22 @@ class ReflectionEntity(
     @Column(name = "stats") var stats: Map<String, Any?>,
     @Column(name = "generated_at") var generatedAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
+    @Column(name = "mood") var mood: String? = null,
+    @Column(name = "short_memo") var shortMemo: String? = null,
 )
 
 interface ReflectionJpaRepository : JpaRepository<ReflectionEntity, UUID> {
     fun findByTripIdAndDayDate(tripId: UUID, dayDate: LocalDate): ReflectionEntity?
     fun findByTripIdOrderByDayDate(tripId: UUID): List<ReflectionEntity>
+    fun existsByTripIdAndDayDate(tripId: UUID, dayDate: LocalDate): Boolean
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from ReflectionEntity r where r.tripId = :tripId and r.dayDate = :dayDate")
+    fun lockByTripIdAndDayDate(tripId: UUID, dayDate: LocalDate): ReflectionEntity?
+
+    /** 트랜잭션 범위 권고 잠금. FROM 절 형태인 이유는 `GenerationSessionJpaRepository.advisoryXactLock` 주석과 같다. */
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(:namespace, :key)", nativeQuery = true)
+    fun advisoryXactLock(namespace: Int, key: Int): Int
 }
 
 @Component
@@ -80,6 +95,8 @@ class ReflectionRepositoryAdapter(
             source = reflection.source.name
             stats = reflection.stats.toMap()
             updatedAt = reflection.updatedAt
+            mood = reflection.mood
+            shortMemo = reflection.shortMemo
         } ?: reflection.toEntity()
         return jpa.save(entity).toDomain()
     }
@@ -87,13 +104,24 @@ class ReflectionRepositoryAdapter(
     override fun find(tripId: UUID, dayDate: LocalDate): Reflection? =
         jpa.findByTripIdAndDayDate(tripId, dayDate)?.toDomain()
 
+    override fun exists(tripId: UUID, dayDate: LocalDate): Boolean = jpa.existsByTripIdAndDayDate(tripId, dayDate)
+
+    /**
+     * 행 잠금만으로는 **아직 행이 없는 하루**를 못 막는다 — 겹친 첫 쓰기 둘이 모두 "없음"을 읽고 넣어
+     * 진 쪽이 UNIQUE 위반(500)으로 끝났다. 그 하루에 권고 잠금을 먼저 걸어, 뒤 요청이 앞 요청의 행을 읽게 한다.
+     */
+    override fun findForUpdate(tripId: UUID, dayDate: LocalDate): Reflection? {
+        jpa.advisoryXactLock(LOCK_NAMESPACE, Objects.hash(tripId, dayDate))
+        return jpa.lockByTripIdAndDayDate(tripId, dayDate)?.toDomain()
+    }
+
     override fun findByTrip(tripId: UUID): List<Reflection> =
         jpa.findByTripIdOrderByDayDate(tripId).map { it.toDomain() }
 
     private fun Reflection.toEntity() = ReflectionEntity(
         reflectionId, tripId, dayDate, draftCard.toMap(), editedCard?.toMap(),
         draftCard.templateId, draftCard.format, source.name,
-        stats.toMap(), generatedAt, updatedAt,
+        stats.toMap(), generatedAt, updatedAt, mood, shortMemo,
     )
 
     /** 카드 원문(JSON) → jsonb 로 넘길 Map. 문자열 그대로 넘기면 이중 인코딩된다. */
@@ -140,6 +168,8 @@ class ReflectionRepositoryAdapter(
         stats = stats.toStats(),
         generatedAt = generatedAt,
         updatedAt = updatedAt,
+        mood = mood,
+        shortMemo = shortMemo,
     )
 
     /**
@@ -154,4 +184,9 @@ class ReflectionRepositoryAdapter(
             ?.let { runCatching { DistanceSource.valueOf(it) }.getOrNull() } ?: DistanceSource.VISIT_LINE,
         photoCount = (this["photoCount"] as? Number)?.toInt() ?: 0,
     )
+
+    companion object {
+        /** 다른 용도의 권고 잠금(생성 세션 403)과 안 겹치게 하는 이름공간. */
+        private const val LOCK_NAMESPACE = 828
+    }
 }

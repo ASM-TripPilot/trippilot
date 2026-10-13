@@ -71,7 +71,7 @@ class ReplanDiffIT : AbstractPostgresIntegrationTest() {
 
     private fun openSession(tripId: UUID) = ReplanSession.start(
         tripId = tripId, itineraryId = UUID.randomUUID(), triggerId = null,
-        scope = ReplanScope.FULL_DAY, fromInstant = now,
+        scope = ReplanScope.FULL_DAY, targetDate = day, fromInstant = now,
         origin = ReplanOrigin(OriginKind.STAY_ANCHOR, null, null),
         reasons = listOf("WEATHER"), directives = emptyList(), freeText = null,
         excludedPoiIds = emptyList(), at = now,

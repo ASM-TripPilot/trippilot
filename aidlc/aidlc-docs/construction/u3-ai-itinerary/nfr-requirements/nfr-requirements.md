@@ -18,6 +18,11 @@
 | **COST-U3-04** | LLM 토큰 상한은 **C1 실장값을 승계**한다(`max_tokens=1024`, `temperature=0.0`, `timeout_sec=2.5`). U3가 별도 상한을 만들지 않는다 | 실장 `ai/src/trippilot/c1/config.py` |
 | **COST-U3-05** | `proposeSlotCandidates`(슬롯 교체)는 생성보다 가볍지만 **슬롯마다 호출 가능**하다. 같은 `slotKey`의 연속 호출은 **클라 캐시로 재사용**하고 반경 변경 시에만 재호출 | BR-U3-25 |
 
+> **[개정 · 2026-10-12] COST-U3-01·03·04 — 실장 갱신(원문 보존).**
+> - **COST-U3-01**: 근거로 든 지연 예산 "day1 5s / 전체 20s"는 드리프트였다. 현재 예산은 **day1 15,000ms / 전체 60,000ms**이고 시한 강제가 기본값이다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ScheduleDeadlineProperties.kt` — `enforced=true`·`day1Ms=15_000`·`totalMs=60_000`). EKS 배포도 같은 값을 싣는다(`deploy/eks/chart/values.yaml` `scheduleDeadlineDay1Ms: 15000`·`scheduleDeadlineTotalMs: 60000`, `values-dev.yaml`·`values-prd.yaml` `scheduleDeadlineEnforced: true`). 진행 중 세션 거부는 **구현됐다** — `GenerationSessionService` 가 `ErrorCode.GENERATION_IN_PROGRESS`(409)를 던진다.
+> - **COST-U3-03**: 일일 재생성 회차 상한은 코드에서 찾지 못했다 — 미구현으로 남는다.
+> - **COST-U3-04**: 인용한 C1 실장값·경로가 낡았다. 정본은 `ai/src/trippilot/llm_gateway/config.py`(`C1Config`)다(`ai/src/trippilot/c1/` 경로 없음). **`temperature` 설정은 없다**(두 벤더 모두 파라미터를 거부 — 파일 머리 주석). `timeout_sec` 기본값은 **10.0**이고(안전망 — 예산 있는 호출은 호출측 시한이 관통), 출력 상한은 공용 `max_tokens=1024` + **기능별 `feature_max_tokens`**(`max_tokens_for`)다. 모델은 **전 LLM 기능 `claude-fable-5-1`** 배정(#1038, 루트 `.env.example` `AI_LLM_FEATURE_MODELS`) + 기능별 effort(`C1Config.feature_effort`). U3가 별도 상한을 만들지 않는다는 원칙은 그대로다.
+
 ## 2. 성능 (NFR-U3-PERF) — 화면 쪽만
 
 서버 지연 예산은 FD·U2가 이미 소유한다(day1 5s · 전체 20s · OR-Tools 3s · LLM 2.5s). 여기서는 **화면**만 다룬다.
@@ -30,6 +35,10 @@
 | **PERF-U3-04** | 뷰 전환(시간표 ⇄ 지도)은 **데이터 재요청 없이** 로컬 상태 전환으로 처리 | BR — 같은 데이터 2뷰(US-SCHED-06) |
 | **PERF-U3-05** | 총 이동거리·전후 비교 등 클라 계산(PBT-U3-1·3)은 **서버 왕복 없이** 즉시 | UX 사본 |
 
+> **[개정 · 2026-10-12] §2 서버 예산·PERF-U3-03 — 실장 갱신(원문 보존).**
+> - 위 "day1 5s · 전체 20s · OR-Tools 3s · LLM 2.5s"는 현재 값이 아니다. 생성 예산은 **day1 15s · 전체 60s**(COST-U3-01 개정 참조). 조립 OR-Tools는 일자당 **결정론 한도 `or_tools_det_limit=2.0` + 벽시계 백스톱 `or_tools_limit_ms=7000`**이다(TRIP-1160·TRIP-1176, `ai/src/trippilot/assembly_engine/config.py`). `llm_stage_timeout_ms=2500` 설정은 남아 있으나 **LLM 2차 조립 단계(`LlmAssembler`)는 미배선**이다(`ai/src/trippilot/api/wiring.py` 주석 "LLM 2차 단계(LlmAssembler)는 미배선").
+> - **PERF-U3-03**: 지도는 더 이상 WebView가 아니다. **네이버 네이티브 SDK**(`@mj-studio/react-native-naver-map`)로 바뀌었고 공용 컴포넌트는 `frontend/src/shared/map/MapView.tsx`(`MapView`·`CenterPinPicker` export, `frontend/src/shared/map/index.ts`)다. 다중 핀·폴리라인(`NaverMapPathOverlay`)·반경 원(`NaverMapCircleOverlay`)을 지원하고, `react-native-webview` 의존은 없다(`frontend/package.json`). "화면당 WebView 1장" 제약은 근거(WebView 다중 마운트 비용)가 사라져 무효다 — 1초 렌더 목표만 남는다.
+
 ## 3. 관측 (NFR-U3-OBS)
 
 **실장 확인 결과**: AI는 이미 관측 레코드 **4종**을 발행한다 — `LlmCallRecord`(**input/output 토큰**·latency·success·model_id·feature) · `FallbackEvent`(from_mode→to_mode·reason) · `GateDropEvent`(closed-set 드롭) · `SolverRunRecord`(solve_mode·elapsed_ms·violations_found·repaired). **토큰이 이미 기록되므로 비용 관측은 AI 쪽이 이미 가능하다.** backend는 actuator가 `health,info`만 노출한다.
@@ -41,6 +50,8 @@
 | **OBS-U3-03** | 생성 결과 분포(`solveMode` · `isFallback` · `candidatesSummary.level`)를 **저장**해 사후 집계 가능하게 한다 | 폴백률 산출의 원천 |
 | **OBS-U3-04** | **임계값을 두지 않는다** — 관측만 하고 판정은 O-SOLVER 회의(BR-U2-14) | BR-U2-15 승계 |
 | **OBS-U3-05** | 생성 실패·경계 오류는 기존 에러 관측 경로(`@sentry/react-native` · backend 예외 핸들러)를 재사용한다 | **실장**: Sentry 이미 도입 |
+
+> **[개정 · 2026-10-12] 관측 레코드 이름·수 갱신(원문 보존).** `SolverRunRecord`는 **`AssemblyRunRecord`**로 바뀌었고, 레코드는 현재 5종이다 — `LlmCallRecord`·`FallbackEvent`·`GateDropEvent`·`ScoreChunkEvent`·`AssemblyRunRecord`(`ai/src/trippilot/domain/observability.py`). OBS-U3-01의 "정본 승계" 원칙은 그대로다.
 
 ## 4. 데이터·보관 (NFR-U3-DATA)
 

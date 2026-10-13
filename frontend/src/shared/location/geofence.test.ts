@@ -1,15 +1,20 @@
 import fc from 'fast-check';
 
 import { ArriveRequestSource } from '@/shared/api/generated/schemas';
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type {
+  ItineraryDaysItemSlotsItem,
+  VisitCheck,
+} from '@/shared/api/generated/schemas';
 
 import {
   buildGeofenceRegions,
   clearGeofences,
   geofenceArriveRequest,
   registerGeofences,
+  selectRegions,
   type GeofenceRegion,
 } from './geofence';
+import { AUTOMATION_CONFIG } from './automation/config';
 
 /**
  * TRIP-396 · AC-7 (BR-U4-36) — 지오펜스(예정 좌표 "울타리") 계약 + 순수 매핑.
@@ -20,7 +25,7 @@ import {
  *  - `buildGeofenceRegions(slots, date)` = 좌표가 있는 슬롯만 리전으로(결측 좌표는 제외).
  *  - `registerGeofences`/`clearGeofences` = 등록/해제 계약. 이번 빌드는 네이티브(expo-task-manager·
  *    background 권한·리빌드) 미배선이라 **정직한 degrade 스텁**(armed:false, 무throw) — 거짓
- *    발화를 만들지 않는다(`useActualRoute` 선례).
+ *    발화를 만들지 않는다(옛 `useActualRoute` 선례 — 삭제됨).
  *
  * 3동작 뼈대: 준비=리전/슬롯 → 실행=매핑·도출·등록 → 단언=source/좌표/armed.
  */
@@ -108,5 +113,138 @@ describe('geofence (AC-7)', () => {
       ),
       { numRuns: 300 }
     );
+  });
+});
+
+/**
+ * TRIP-1333 · PBT-U10-F2 (BR-U10-09·11·13) — 리전 선택.
+ * 진행 중 슬롯(도착·미완료·미건너뜀) 전부 + 당일 남은 슬롯 계획 순번, 합계 ≤ limit.
+ * 좌표 없는 슬롯·그날 되돌린 슬롯·완료/건너뜀 슬롯은 0.
+ */
+describe('selectRegions (PBT-U10-F2)', () => {
+  const DATE = '2026-08-20';
+  const visit = (
+    poiId: string,
+    over: Partial<VisitCheck> = {}
+  ): VisitCheck => ({
+    visitCheckId: `v-${poiId}`,
+    slotKey: `${DATE}#${poiId}`,
+    poiId,
+    arrivedAt: null,
+    completedAt: null,
+    skippedAt: null,
+    source: 'MANUAL',
+    spontaneous: false,
+    updatedAt: '2026-08-20T00:00:00Z',
+    ...over,
+  });
+
+  it('SR1 반경은 config 값(150m)이다 — 120m 자리값 대체(BR-U10-13)', () => {
+    const [r] = buildGeofenceRegions([slot({ poiId: 'p1' })], DATE);
+    expect(r.radiusM).toBe(AUTOMATION_CONFIG.geofenceRadiusM);
+  });
+
+  it('SR2 진행 중이 먼저, 그다음 남은 슬롯을 계획 순번대로', () => {
+    const slots = ['a', 'b', 'c', 'd'].map((poiId) => slot({ poiId }));
+    const visits = [
+      visit('a', { arrivedAt: 't', completedAt: 't' }), // 완료 → 제외
+      visit('c', { arrivedAt: 't' }), // 진행 중
+    ];
+    const picked = selectRegions(slots, visits, [], DATE, 10);
+    expect(picked.map((r) => r.poiId)).toEqual(['c', 'b', 'd']);
+  });
+
+  it('SR3 되돌린 슬롯(suppressed)은 빠진다', () => {
+    const slots = ['a', 'b'].map((poiId) => slot({ poiId }));
+    const picked = selectRegions(slots, [], [`${DATE}#a`], DATE, 10);
+    expect(picked.map((r) => r.poiId)).toEqual(['b']);
+  });
+
+  it('SR4 상한에서 남은 슬롯을 자른다', () => {
+    const slots = Array.from({ length: 15 }, (_, i) =>
+      slot({ poiId: `p${i}` })
+    );
+    expect(selectRegions(slots, [], [], DATE, 10)).toHaveLength(10);
+  });
+
+  // 생성기: 슬롯 0~25개(좌표 결측 섞음) · 슬롯별 실적 상태 · 되돌림 표식 · limit 1~12
+  const arbCase = fc
+    .array(
+      fc.record({
+        hasCoord: fc.boolean(),
+        status: fc.constantFrom(
+          'none',
+          'inProgress',
+          'completed',
+          'skipped',
+          'emptyRow'
+        ),
+        suppressed: fc.boolean(),
+      }),
+      { maxLength: 25 }
+    )
+    .chain((rows) =>
+      fc.record({
+        rows: fc.constant(rows),
+        limit: fc.integer({ min: 1, max: 12 }),
+      })
+    );
+
+  it('SR5 (PBT) 수 ≤ limit · 진행 중 전부(상한 안이면) · 결측/되돌림/완료/건너뜀 0', () => {
+    fc.assert(
+      fc.property(arbCase, ({ rows, limit }) => {
+        const slots = rows.map((r, i) =>
+          slot({
+            poiId: `p${i}`,
+            lat: r.hasCoord ? 35 + i / 1000 : null,
+            lng: r.hasCoord ? 129 : null,
+          })
+        );
+        const visits: VisitCheck[] = [];
+        const suppressed: string[] = [];
+        rows.forEach((r, i) => {
+          const id = `p${i}`;
+          if (r.status === 'inProgress')
+            visits.push(visit(id, { arrivedAt: 't' }));
+          if (r.status === 'completed')
+            visits.push(visit(id, { arrivedAt: 't', completedAt: 't' }));
+          if (r.status === 'skipped')
+            visits.push(visit(id, { skippedAt: 't' }));
+          if (r.status === 'emptyRow') visits.push(visit(id));
+          if (r.suppressed) suppressed.push(`${DATE}#${id}`);
+        });
+
+        const picked = selectRegions(slots, visits, suppressed, DATE, limit);
+        const ids = picked.map((p) => Number(p.poiId.slice(1)));
+
+        expect(picked.length).toBeLessThanOrEqual(limit);
+        expect(new Set(ids).size).toBe(ids.length);
+        for (const i of ids) {
+          const r = rows[i];
+          expect(r.hasCoord).toBe(true);
+          expect(['completed', 'skipped']).not.toContain(r.status);
+          // 되돌린 슬롯은 남은 슬롯 후보가 아니다(진행 중이면 이탈 감지를 위해 남는다)
+          if (r.status !== 'inProgress') expect(r.suppressed).toBe(false);
+        }
+        const inProgress = rows
+          .map((r, i) => ({ r, i }))
+          .filter(({ r }) => r.status === 'inProgress' && r.hasCoord)
+          .map(({ i }) => i);
+        if (inProgress.length <= limit) {
+          for (const i of inProgress) expect(ids).toContain(i);
+        }
+        // 남은 슬롯은 계획 순번 오름차순
+        const rest = ids.filter((i) => rows[i].status !== 'inProgress');
+        expect(rest).toEqual([...rest].sort((a, b) => a - b));
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it('SR6 스텁 반환 계약 유지 — {armed:false, reason:native-geofencing-not-wired}', () => {
+    expect(registerGeofences([region()])).toEqual({
+      armed: false,
+      reason: 'native-geofencing-not-wired',
+    });
   });
 });

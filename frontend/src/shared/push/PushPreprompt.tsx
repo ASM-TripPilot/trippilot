@@ -14,13 +14,9 @@ import { PushBellHero } from './PushGlyphs';
 
 export interface PushPrepromptProps {
   onProceed: () => void;
-  onDefer: () => void;
 }
 
-export function PushPreprompt({
-  onProceed,
-  onDefer,
-}: PushPrepromptProps): ReactElement {
+export function PushPreprompt({ onProceed }: PushPrepromptProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="onboarding-push-root" className="flex-1 bg-canvas">
@@ -54,15 +50,6 @@ export function PushPreprompt({
             {/* TRIP-935 R8 — 권한 창 앞 안내에 "허용"을 쓰지 않는다(5.1.1(iv)). */}
             <Text className="font-noto-bold text-card-title font-bold text-on-primary">
               계속
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="onboarding-push-later"
-            onPress={onDefer}
-            className="h-[46px] items-center justify-center"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              나중에 하기
             </Text>
           </Pressable>
         </View>

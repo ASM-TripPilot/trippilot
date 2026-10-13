@@ -22,6 +22,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
+from trippilot.domain.poi import PoiCategory
 from trippilot.ports.poi_sourcing_port import (
     PoiSourcingPort,
     SourcedDetail,
@@ -36,22 +37,25 @@ from trippilot.poi_curation.sourcing.collection_gate import (
 from trippilot.poi_curation.sourcing.mapping import (
     category_tags,
     extract_region,
+    join_opening_hours_raw,
     map_category,
     parse_open_hours,
+    parse_opening_hours_raw,
+    split_opening_hours_raw,
 )
 from trippilot.poi_curation.sourcing.state import (
     CollectState,
     KindCursor,
     empty_state,
 )
+from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
 
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
-# 백엔드 poi.source CHECK 허용값('KAKAO_LOCAL'|'TOURAPI'|'MANUAL')과 동일 어휘.
+# 백엔드 poi.source CHECK 허용값('KAKAO_LOCAL'|'TOURAPI'|'MANUAL'|'LOCALDATA')과 동일 어휘.
 # 실제 피드는 TourAPI 4.0 KorService2.
 SOURCE_NAME = "TOURAPI"
-_OPENING_HOURS_MAX = 200  # backend poi.opening_hours varchar(200)
 _NO_DETAIL = SourcedDetail(hours_raw=None, rest_raw=None)
 
 # TourAPI(KorService2) areaCode ↔ 광역 지자체 이름 — 17개 전부 (기본 순회 대상).
@@ -98,6 +102,13 @@ class CollectStats:
     address_missing: int = 0
     resumed_from: dict[str, int] = field(default_factory=dict)  # kind → 재개 시작 pageNo (>1만)
     completed_kinds: tuple[str, ...] = ()         # 이번 실행 종료 시점 완주 상태인 kind
+    # ── 원문 칸이 런타임에 읽히는 모양 (TRIP-1226, 통과분 기준) ──
+    # 휴무를 해석 못 해 영업시간을 포기한 수 — 영업 원문만으로는 창이 읽힌다. 휴무 문구도
+    # 원문 칸에 실리므로 런타임도 "정보 없음"(HC1 미적용)이다. 결정·실측: ai/data/README.md
+    rest_unparsed: int = 0
+    # 원문 칸을 다시 파싱한 값 ≠ 수집 판정 — 200자 절단·중복 병합(영업시간과 원문의 출처가
+    # 갈림). 런타임은 원문 칸만 읽으므로 이 건들은 수집과 다른 영업시간으로 쓰인다
+    raw_reparse_mismatch: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -114,6 +125,8 @@ class CollectStats:
             "skipped_unchanged": self.skipped_unchanged,
             "resumed_from": dict(self.resumed_from),
             "completed_kinds": list(self.completed_kinds),
+            "rest_unparsed": self.rest_unparsed,
+            "raw_reparse_mismatch": self.raw_reparse_mismatch,
         }
 
 
@@ -123,6 +136,10 @@ class CollectResult:
     stats: CollectStats
     # 이번 실행을 반영한 다음 상태 (커서 + 기제안 색인) — 저장은 스크립트 소관
     next_state: CollectState = field(default_factory=empty_state)
+    # 목록에서 **본** content_id 전부 — 변경 없음으로 스킵한 것도 포함 (TRIP-1248).
+    # 산출 문서는 통과분만, 색인은 통과분만 누적해서 "벤더 목록에서 사라진 것"을 가려낼
+    # 기록이 어디에도 없었다. stats 에는 넣지 않는다(1.8만 개 id 는 통계가 아니다).
+    seen_refs: frozenset[str] = frozenset()
 
 
 class _CallBudget:
@@ -183,6 +200,7 @@ def collect(
     page_failures = 0
     detail_failures = 0
     skipped_unchanged = 0
+    seen_refs: set[str] = set()
     resumed_from: dict[str, int] = {}
     cursors: dict[tuple[str, str], KindCursor] = dict(prior.cursors)
 
@@ -226,6 +244,7 @@ def collect(
             for record in page.records:
                 if not record.source_ref:
                     continue  # 식별자 없는 레코드는 상세 조회·병합 불가 — 목록에서 제외
+                seen_refs.add(record.source_ref)   # 스킵 판정 전 — 본 것은 전부
                 known = prior.proposed.get(record.source_ref)
                 if known is not None and known == record.modified_at:
                     skipped_unchanged += 1
@@ -278,9 +297,11 @@ def collect(
             category_codes=record.category_codes,
             open_hours=parse_open_hours(hours.hours_raw, hours.rest_raw),
             hours_raw=hours.hours_raw,
+            rest_raw=hours.rest_raw,
             image_url=record.image_url,
             modified_at=record.modified_at,
             detail_raw=hours.detail_raw,
+            detail_fetched=record.source_ref in hours_by_ref,
         ))
 
     report = (gate or CollectionGate()).apply(candidates)
@@ -308,6 +329,16 @@ def collect(
         if (c := cursors.get((area_code, kind))) is not None and c.completed
     )
 
+    # 원문 칸이 런타임에 어떻게 읽히는지 센다 (TRIP-1226 — 침묵 금지, CollectStats 주석)
+    rest_unparsed = raw_reparse_mismatch = 0
+    for p in report.passed:
+        cand = p.candidate
+        if not p.poi.open_hours and parse_open_hours(cand.hours_raw, None):
+            rest_unparsed += 1
+        raw = join_opening_hours_raw(cand.hours_raw, cand.rest_raw)
+        if parse_opening_hours_raw(raw) != p.poi.open_hours:
+            raw_reparse_mismatch += 1
+
     stats = CollectStats(
         http_calls=budget.used,
         listed=len(listed),
@@ -322,6 +353,8 @@ def collect(
         skipped_unchanged=skipped_unchanged,
         resumed_from=resumed_from,
         completed_kinds=completed_kinds,
+        rest_unparsed=rest_unparsed,
+        raw_reparse_mismatch=raw_reparse_mismatch,
     )
     logger.info("수집 완료: %s", stats.to_dict())
     return CollectResult(
@@ -331,6 +364,7 @@ def collect(
         # (회전은 collect_areas 소관)
         next_state=CollectState(cursors=cursors, proposed=proposed,
                                 next_area=prior.next_area),
+        seen_refs=frozenset(seen_refs),
     )
 
 
@@ -346,11 +380,16 @@ def to_output_document(
     백엔드 poi 정본 스키마(V2.0·V2.5) 실측 대조로 병행 수록하는 필드:
     - tags: cat2/cat3 분류 **명칭** 배열 (poi.tags text[] — 열린 집합)
     - region: addr1에서 추출한 시·군·구 (poi.region — 추출 실패 시 null)
-    - opening_hours_raw: usetime 원문 200자 절단 (poi.opening_hours varchar(200)
-      — 백엔드는 원문 문자열을 저장하므로 파싱본만 주면 원문이 소실된다)
+    - opening_hours_raw: usetime 원문 + 휴무(restdate) 원문을 한 칸에 200자 이내로
+      (poi.opening_hours varchar(200) — 백엔드는 원문 문자열을 저장하므로 파싱본만 주면
+      원문이 소실된다. AI 런타임은 이 칸을 다시 파싱하므로 휴무도 여기 있어야 한다 —
+      형식은 mapping.join_opening_hours_raw, TRIP-1226)
     - source: 백엔드 CHECK 허용값 어휘 "TOURAPI"
     - provenance.detail: 상세 응답의 표시용 원문(벤더 필드명 그대로, 비파싱). 하나도
       없으면 **키 자체가 없다** — 소비처는 `.get("detail") or {}` 로 읽는다.
+    - provenance.detail_fetched_on: 상세를 실제로 받은 날(수집 시각의 날짜, 빈 응답 포함).
+      못 받았으면(실패·예산 소진) 키가 없다 — 상세 되감기(`refresh_proposal`)가 그런 제안만 다시
+      묻는다. 백엔드는 모르는 provenance 칸을 버린다(ignoreUnknown).
     """
     return {
         "schema_version": SCHEMA_VERSION,
@@ -366,15 +405,69 @@ def to_output_document(
                 "poi": p.poi.to_dict(),
                 "tags": list(category_tags(p.candidate.category_codes)),
                 "region": extract_region(p.candidate.address),
-                "opening_hours_raw": _truncate(p.candidate.hours_raw, _OPENING_HOURS_MAX),
-                "provenance": _provenance(p.candidate),
+                "opening_hours_raw": join_opening_hours_raw(
+                    p.candidate.hours_raw, p.candidate.rest_raw),
+                "provenance": _provenance(p.candidate, collected_at.date().isoformat()),
             }
             for p in result.report.passed
         ],
     }
 
 
-def _provenance(c: SourcingCandidate) -> dict:
+def refresh_proposal(
+    stored: Mapping, detail: SourcedDetail, *, fetched_on: str,
+) -> dict | None:
+    """공유본 제안 1건 + 새로 받은 상세 → 정상 수집이 냈을 제안 (상세 되감기 — scripts/refetch_intro.py).
+
+    목록 유래 칸(이름·좌표·분류·주소·사진·수정시각)은 저장본에서, 상세 유래 칸(영업·휴무 원문·표시용
+    원문)은 새 응답에서 와서 **같은 게이트**를 지나고 같은 함수로 나간다 — 같은 목록 레코드 + 같은 상세면
+    collect()+to_output_document 와 같은 제안이다(속성 테스트가 문다). provisional_id·source·tags·region
+    은 저장본 그대로다(목록 유래 — tags 를 만드는 벤더 분류 코드는 저장본에 없다). 게이트에서 떨어지면
+    None — 정상 수집도 내지 않는다.
+
+    **아는 영업시간을 지우지 않는다.** 새 응답으로는 원문 칸이 비는데(영업 원문 없음 — 빈 응답이거나
+    휴무만 옴) 저장본 칸이 있으면 그 칸을 글자 그대로 지키고 영업시간도 그 칸에서 읽는다(영업·휴무는
+    한 응답의 짝 — 게이트 병합과 같은 규칙). 백엔드는 재적재 때 원문 칸을 null 로도 덮어써서, 정상
+    수집처럼 비우면 알던 영업시간이 사라진다(레포츠 상세는 실측 86.7% 가 빈 응답). 표시용 원문
+    (`provenance.detail`)도 새 응답에 하나도 없으면 저장본 것을 지킨다.
+    """
+    poi, prov = stored["poi"], stored["provenance"]
+    hours_raw, rest_raw = detail.hours_raw, detail.rest_raw
+    raw = join_opening_hours_raw(hours_raw, rest_raw)
+    if not raw and stored.get("opening_hours_raw"):
+        raw = stored["opening_hours_raw"]
+        hours_raw, rest_raw = split_opening_hours_raw(raw)
+    candidate = SourcingCandidate(
+        source_ref=prov["content_id"],
+        kind=prov["content_type_id"],
+        name=poi["name"],
+        address=prov.get("address"),
+        lat=poi["coord"]["lat"],
+        lng=poi["coord"]["lng"],
+        category=PoiCategory(poi["category"]),
+        category_codes=(),   # 태그 파생용 — 태그는 저장본 것을 쓴다
+        open_hours=parse_open_hours(hours_raw, rest_raw),
+        hours_raw=hours_raw,
+        rest_raw=rest_raw,
+        # 어댑터가 목록 레코드에 하는 정규화 그대로 — #890 이전 수집분은 http 로 남아 있다
+        image_url=TourApiAdapter._https(prov.get("image_url")),  # noqa: SLF001
+        modified_at=prov.get("modified_time"),
+        detail_raw=detail.detail_raw or prov.get("detail") or {},
+        detail_fetched=True,
+    )
+    report = CollectionGate().apply([candidate])
+    if not report.passed:
+        return None
+    (passed,) = report.passed
+    return {
+        **stored,
+        "poi": passed.poi.to_dict(),
+        "opening_hours_raw": raw,
+        "provenance": _provenance(passed.candidate, fetched_on),
+    }
+
+
+def _provenance(c: SourcingCandidate, fetched_on: str) -> dict:
     prov: dict = {
         "content_id": c.source_ref,
         "content_type_id": c.kind,
@@ -384,14 +477,9 @@ def _provenance(c: SourcingCandidate) -> dict:
     }
     if c.detail_raw:
         prov["detail"] = dict(c.detail_raw)
+    if c.detail_fetched:
+        prov["detail_fetched_on"] = fetched_on
     return prov
-
-
-def _truncate(text: str | None, limit: int) -> str | None:
-    """저장 상한에 맞춰 자른다(거부 아님) — 잘림은 말줄임표로 드러낸다 (안티패턴 로그)."""
-    if text is None or len(text) <= limit:
-        return text
-    return text[: limit - 1] + "…"
 
 
 # ── 전국 다지역 공평 순회 (TRIP-246 후속) ─────────────────────────────
@@ -403,6 +491,7 @@ class MultiCollectResult:
 
     area_results: tuple[tuple[str, CollectResult], ...]  # (area_code, 결과)
     next_state: CollectState  # 전 지역 커서·색인 + 회전된 라운드로빈 포인터
+    seen_refs: frozenset[str] = frozenset()  # 전 지역 합집합 (CollectResult.seen_refs 참조)
 
 
 def collect_areas(
@@ -488,6 +577,7 @@ def collect_areas(
     return MultiCollectResult(
         area_results=tuple(area_results),
         next_state=replace(current, next_area=next_pointer),
+        seen_refs=frozenset().union(*(r.seen_refs for _, r in area_results)),
     )
 
 
@@ -507,6 +597,7 @@ def to_multi_output_document(
         "http_calls": 0, "listed": 0, "page_failures": 0, "detail_failures": 0,
         "category_unmapped": 0, "address_missing": 0,
         "merged": 0, "passed": 0, "skipped_unchanged": 0,
+        "rest_unparsed": 0, "raw_reparse_mismatch": 0,
     }
     gate_drops: dict[str, int] = {}
     budget_exhausted = False
@@ -526,6 +617,8 @@ def to_multi_output_document(
         totals["merged"] += s.merged
         totals["passed"] += s.passed
         totals["skipped_unchanged"] += s.skipped_unchanged
+        totals["rest_unparsed"] += s.rest_unparsed
+        totals["raw_reparse_mismatch"] += s.raw_reparse_mismatch
         for reason, count in s.gate_drops.items():
             gate_drops[reason] = gate_drops.get(reason, 0) + count
         budget_exhausted = budget_exhausted or s.budget_exhausted

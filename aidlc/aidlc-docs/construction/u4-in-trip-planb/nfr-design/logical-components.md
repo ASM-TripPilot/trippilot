@@ -22,6 +22,8 @@ U4 (frontend — shared 승격)
   features/execution/model/ LC-U4-9 SignalCollector       (신호만 — 임계 모름, P-DET-U4-1)
 ```
 
+> **[개정 · 2026-10-12] 컴포넌트 맵 갱신(원문 보존).** LC-U4-5는 ai `regenerate`가 아니라 **`POST /ai/v1/planb/replan`**에 매핑된다(LC-U4-5 개정). LC-U4-6 `VisitCheckService`는 **U5 `archive` 모듈로 이관 완료**(`backend/modules/archive/src/main/kotlin/com/trippilot/archive/application/VisitCheckService.kt`). **[이연 · 2026-10-12 → U10]** LC-U4-7 `LocationTrailRecorder`(실제 경로)와 LC-U4-8 `GeofenceRegistrar`(지오펜스)는 신설 유닛 U10 "GPS·위치 자동화"(미구현) 소관이다.
+
 ## 2. 컴포넌트 명세
 
 ### LC-U4-1. `TriggerEvaluator` (C9)
@@ -40,6 +42,8 @@ U4 (frontend — shared 승격)
 | 책임 | `plan_b_suppression` 읽기·쓰기. 중복(kind×slotKey) · 일일 상한 · 민감도 3단 |
 | NFR | P-DET-U4-3 — **감지 단계에서 집행**(INV-U4-02) |
 | 상태 | DB. 민감도는 **계정 단위** — 소유는 U6 설정과 함께 확정(**O-U4-2 미결**) |
+
+> **[개정 · 2026-10-12]** 민감도 소유 확정 — 계정 단위 `plan_b_sensitivity`(V2.18) + `SensitivityController`(`backend/modules/planb-detection/`). O-U4-2 종결.
 
 ### LC-U4-3. `WeatherPort` + `KmaWeatherAdapter` + `WeatherSnapshotCache` (C11)
 | | |
@@ -68,12 +72,16 @@ U4 (frontend — shared 승격)
 | PBT | **PBT-U4-1의 실제 검증 지점** — 완료·시각 고정·앵커가 빠짐없이 `lockedSlotKeys`에 들어가는가 |
 | 갭 | ai HTTP 표면 부재(**G-U4-3**) — 어댑터 구현 전 선행 티켓 필요 |
 
+> **[개정 · 2026-10-12] LC-U4-5 — 매핑·갭 갱신.** 어댑터는 `HttpScheduleAgentAdapter`(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt`)이고 `ScheduleAgentPort.replan(ReplanInput)`을 **`POST /ai/v1/planb/replan`**(와이어 `ReplanRequest`/`ReplanResponse`, `ai/docs/openapi.json`)으로 번역한다. AI 쪽 산출은 `regenerate(problem, locked_slots)`가 아니라 **RAG(KB-3) + 지시어 번역 + `ScheduleAgent`**(`ai/src/trippilot/api/wiring.py` `replan`). 시한은 25,000ms(`ReplanFacadeService.kt`). **G-U4-3 해소** — AI HTTP 표면은 POST 11경로가 열려 있다.
+
 ### LC-U4-6. `VisitCheckService` (C10 → U5 이관 예정)
 | | |
 |---|---|
 | 책임 | 도착·완료 체크 기록, 실제 체류 산출, `VisitChecked` 발행 |
 | NFR | PERF-U4-05(낙관적 갱신) · OFFLINE-U4-02(오프라인 큐 — **기기 시각으로 확정해 큐에 실음**) |
 | 경계 | **사진·메모 없음**(DEC-U4-10). `actual` 계층 소유는 U5 C12로 이관 예정(**G-U4-5**) |
+
+> **[개정 · 2026-10-12] LC-U4-6 — U5 이관 완료.** `VisitCheckService`는 `backend/modules/archive/`에 있다. OFFLINE-U4-02 오프라인 큐는 보류(사용자 결정 2026-09-11, 미구현). 사진·메모는 U5에서 기능화됐다.
 
 ### LC-U4-7. `LocationTrailRecorder` + `LegalLogEmitter` (C10 → U5 이관 예정)
 | | |
@@ -82,6 +90,8 @@ U4 (frontend — shared 승격)
 | NFR | P-DATA-U4-1(구간 집계·좌표 본문 밖) · P-DATA-U4-2(**기존 L3 동의 재사용**) · DATA-U4-01·02(50m 샘플링·90일 보존, **근거 없는 초기값**) |
 | 불변식 집행 | INV-U4-07(동의 없으면 행 없음) · INV-U4-08(걸음 수 없음) · LEGAL-U4-05(재계획용 일회성 위치 미적재) |
 | 기존 자산 | `location_consent_state`(3층) · `location_legal_log`(append-only, `V1.7`로 UPDATE/DELETE 회수) — **신설 0** |
+
+> **[이연 · 2026-10-12 → U10] LC-U4-7 전체.** `actual_route_point`가 없고(마이그레이션 최신 V2.62까지 부재) 실제 경로 수집기도 없다. U4에 실재하는 위치 법적 처리는 동의 철회 시 재계획 기준점 좌표 파기(`LocationLegalConsentRevokedSubscriber.kt`, `V2.56__replan_origin_purged.sql`, TRIP-992)다.
 
 ### LC-U4-8. `GeofenceRegistrar` (frontend `shared/location`)
 | | |
@@ -92,6 +102,8 @@ U4 (frontend — shared 승격)
 | 강등 | 권한 없음·등록 실패·정확도 미달 → 포그라운드 감지 → 수동 체크인. **기능 차단 없음** |
 | 의존 | `expo-task-manager`(신규) + `expo-location` plugin 확장 — **EAS 재빌드 선행**(tech-stack 델타 1) |
 | 소유 | `shared/location`이 **위치 권한·수집 단일 소유**다. `features/execution`·`features/planb`가 각자 위치 코드를 만들지 않는다 |
+
+> **[이연 · 2026-10-12 → U10] LC-U4-8 전체.** `expo-task-manager` 미추가, `frontend/app.config.ts` '항상 허용' off(TRIP-936), `frontend/src/shared/location/geofence.ts`는 degrade 스텁(네이티브 발화 미배선). 현재 동작은 강등 사슬의 끝(포그라운드 조회·수동 체크인)이다. "`shared/location`이 위치 권한·수집 단일 소유" 원칙은 유효하다.
 
 ### LC-U4-9. `SignalCollector` (frontend `features/execution/model`)
 | | |
@@ -115,11 +127,15 @@ U4 (frontend — shared 승격)
 | `proposeSlotCandidates` | U3 신설 계약 | `i14` 슬롯 후보 교체에 **그대로 재사용**(신규 경계 0) |
 | `KakaoMapView` | `shared/map` | 점선 레이어만 확장(tech-stack 델타 3) |
 
+> **[개정 · 2026-10-12] 지도 행 — 교체됨.** `KakaoMapView` 확장이 아니라 네이버 네이티브 SDK로 교체됐다 — `frontend/src/shared/map/MapView.tsx`(`@mj-studio/react-native-naver-map`, 점선은 `strokeDasharray`). `proposeSlotCandidates` 행의 와이어는 `POST /ai/v1/planb/alternatives`다.
+
 ## 4. 마이그레이션 (V2.14~ 대역)
 
 `plan_b_trigger` · `plan_b_suppression` · `visit_check` · `replan_session` · `actual_route_point` · `weather_snapshot` — 6종. 상세 필드는 `functional-design/domain-entities.md`가 정본이다.
 
 > **앱 롤 권한**: `location_legal_log`(V1.7)와 `change_log_entry`(V2.11)의 append-only 회수는 **이미 적용돼 있다.** U4 신규 6종 중 append-only가 필요한 것은 없다 — `plan_b_trigger`·`actual_route_point`는 **여행 단위 파기 대상**이라 DELETE 권한이 있어야 한다(LEGAL-U4-04 `PURGE`).
+
+> **[개정 · 2026-10-12] §4 실번호.** `replan_session` V2.17(+V2.56·V2.60) · `plan_b_trigger`·`plan_b_suppression`·`plan_b_sensitivity` V2.18 · `weather_snapshot` V2.19 · `visit_check` V2.21. **`actual_route_point`는 없다 — [이연 · 2026-10-12 → U10].**
 
 ## 5. 미결 (설계 단계에서 닫지 않은 것)
 
@@ -130,3 +146,7 @@ U4 (frontend — shared 승격)
 | O-U4-3 | 체류 초과 임계값 | 개발 중 실측 |
 | O-U4-4 | 재계획 응답 예산 | 개발 중 실측 |
 | O-U4-5 | 방향 지시어 7종의 ai 해석 규약 | G-U4-3 HTTP 표면 티켓과 함께 |
+
+> **[개정 · 2026-10-12] 미결 갱신.** **O-U4-2 종결**(계정 단위 `plan_b_sensitivity`). **O-U4-4 종결**(재계획 25,000ms, `ReplanFacadeService.kt` `REPLAN_DEADLINE_MS`). **O-U4-5 종결** — 지시어 해석은 구현됐다: 사전 `ai/data/replan_directives.yaml`(KB-4), 해석 `ai/src/trippilot/agents/planb/directives.py`, 응답 `resolved_directives`/`unknown_directives`(`ReplanResponse`). O-U4-3은 이 개정에서 확인하지 않았다.
+
+> **[개정 · 2026-10-12] 인프라.** 이 유닛의 배포 전제(스케줄러·서킷·Redis 등 "배포 결정 시" 재평가 항목)는 AWS EKS 배포 이후 공용 인프라 문서 `aidlc/aidlc-docs/construction/shared-infrastructure.md`를 본다.

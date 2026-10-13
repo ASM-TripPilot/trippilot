@@ -11,6 +11,11 @@ import io.kotest.matchers.maps.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.Codepoint
+import io.kotest.property.arbitrary.alphanumeric
+import io.kotest.property.arbitrary.string
+import io.kotest.property.checkAll
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -240,6 +245,29 @@ class PoiProposalIngestServiceTest : StringSpec({
         repo.stored shouldHaveSize 2
     }
 
+    /**
+     * LOCALDATA 일반음식점(TRIP-1224) — TourAPI 식당이 비는 지역을 메우는 두 번째 수집 출처다.
+     * 인허가 관리번호가 멱등 키이고, 영업시간·사진은 원본에 없어 비어서 온다(지어내지 않는다).
+     */
+    "LOCALDATA 출처 제안도 받는다 — 관리번호로 재수집이 같은 행을 찾는다" {
+        val repo = InMemoryPoiRepository()
+        val svc = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+        val food = proposal(
+            ref = "3270000-101-2004-00123", name = "초량밀면", category = PoiCategory.맛집, region = "동구",
+            hours = null, tags = listOf("한식"), imageUrl = null, address = "부산광역시 동구 중앙대로 225, 1층 (초량동)",
+        )
+
+        svc.ingest(PoiSource.LOCALDATA, listOf(food)).registered shouldBe 1
+        svc.ingest(PoiSource.LOCALDATA, listOf(food)).updated shouldBe 1
+
+        val saved = repo.stored.single()
+        saved.source shouldBe PoiSource.LOCALDATA
+        saved.sourceRef shouldBe "3270000-101-2004-00123"
+        saved.regionCode shouldBe "26170"
+        saved.openingHours.shouldBeNull()
+        saved.imageUrl.shouldBeNull()
+    }
+
     "빈 문서는 아무것도 하지 않는다" {
         val repo = InMemoryPoiRepository()
 
@@ -328,5 +356,66 @@ class PoiProposalIngestServiceTest : StringSpec({
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "https://a/new.jpg")))
 
         repo.stored.single().imageUrl shouldBe "https://a/new.jpg"
+    }
+
+    /**
+     * 평문 HTTP 이미지는 iOS App Transport Security 가 **에러 없이** 차단한다 — 앱에 회색 자리만 남아
+     * "사진이 없는 장소"로 보인다(2026-10-03 실측: 적재분 16,607건 전부 `http://`).
+     * 여기가 수집 단일 관문이라 TourAPI 말고 다른 출처가 생겨도 이 정규화가 걸린다.
+     *
+     * 신규·갱신 두 경로를 따로 센다 — 한 경로만 막으면 기존 수집분 재적재가 그대로 샌다.
+     */
+    "신규 등록에서 http 이미지를 https 로 올린다" {
+        val repo = InMemoryPoiRepository()
+
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(
+            PoiSource.TOURAPI,
+            listOf(proposal(imageUrl = "http://tong.visitkorea.or.kr/cms/resource/72/3477972_image2_1.jpg")),
+        )
+
+        repo.stored.single().imageUrl shouldBe
+            "https://tong.visitkorea.or.kr/cms/resource/72/3477972_image2_1.jpg"
+    }
+
+    "갱신에서도 http 이미지를 https 로 올린다" {
+        val repo = InMemoryPoiRepository()
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "https://a/old.jpg")))
+
+        PoiProposalIngestService(repo, FakeRegionCatalog, later)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "http://a/new.jpg")))
+
+        repo.stored.single().imageUrl shouldBe "https://a/new.jpg"
+    }
+
+    // 이미 https 인 값은 그대로 — 위 "이미지 URL 을 그대로 싣는다"·"새 이미지가 오면 갱신한다"가
+    // 두 경로에서 각각 그것을 재고 있다(기본 픽스처가 https).
+
+    "빈 이미지 문자열에도 깨지지 않는다" {
+        val repo = InMemoryPoiRepository()
+
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "")))
+
+        repo.stored.single().imageUrl shouldBe ""
+    }
+
+    /**
+     * **스킴만** 바뀐다. 호스트 치환·리사이즈 파라미터 추가 같은 가공을 하면 상대 CDN 에서 404 가 나는데,
+     * 그 실패도 앱에서는 똑같이 "회색 자리"로만 보여 원인을 되짚을 수 없다.
+     */
+    "http 를 올릴 때 스킴 뒤는 한 글자도 바뀌지 않는다" {
+        checkAll(
+            Arb.string(1..20, Codepoint.alphanumeric()),
+            Arb.string(1..30, Codepoint.alphanumeric()),
+        ) { host, path ->
+            val rest = "$host.example.com/cms/$path.jpg?size=big&n=1"
+            val repo = InMemoryPoiRepository()
+
+            PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+                .ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "http://$rest")))
+
+            repo.stored.single().imageUrl shouldBe "https://$rest"
+        }
     }
 })

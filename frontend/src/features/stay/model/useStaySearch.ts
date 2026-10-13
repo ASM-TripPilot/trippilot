@@ -1,5 +1,5 @@
-import { useGetStaysSearch } from '@/shared/api/generated/stays/stays';
-import type { GetStaysSearchParams } from '@/shared/api/generated/schemas';
+import { useGetStaysSearch } from '@/shared/api/index.hooks';
+import type { GetStaysSearchParams } from '@/shared/api/index.schemas';
 
 /**
  * 생성 훅(`useGetStaysSearch`)을 도메인 이름으로 재수출한다(TRIP-179 D6, 얇은 재수출).

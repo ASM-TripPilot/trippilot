@@ -18,7 +18,7 @@
 | regionCode ⚠ | string? | **[개정 · 2026-09-28, TRIP-1042]** 행정구역 코드(시군구 5자리, 앞 2자리 = 시도). 여행 지역 매칭의 입력(BR-U1-58·INV-U1-21). null 허용 — 판정 불가 장소는 숨기지 않는다. API 노출은 BE 계약 소관. **[보완 · 2026-09-28, TRIP-1042 후속]** 값은 **시군구 5자리 또는 시도 2자리, 없으면 null** — 시드 POI는 시도 2자리 코드만 가진다 |
 | openingHours | string? | 미확인 시 null → 화면은 "미확인" 표기 |
 | dataStatus | enum | `ACTIVE` · `UNVERIFIED` · `LOST` · `CLOSED` |
-| source | enum ⚠ | `KAKAO_LOCAL` · `TOURAPI` · `MANUAL` — 수집 게이트 판정 입력 |
+| source | enum ⚠ | `KAKAO_LOCAL` · `TOURAPI` · `MANUAL` · `LOCALDATA` — 수집 게이트 판정 입력. **[개정 · 2026-10-04, TRIP-1224]** `LOCALDATA`(지방행정 인허가 일반음식점) 추가 — TourAPI 식당이 비는 지역 보강분(V2.61) |
 | savedCount | int ⚠ | d01·d04의 "1.2k 저장" 표시용 파생 집계 |
 
 - **INV-U1-01 (INV-1 집행)**: `dataStatus = ACTIVE`이고 수집 게이트를 통과한 POI만 후보풀에 들어간다. 외부·웹 출처는 `UNVERIFIED`로 먼저 등록되며, 게이트 통과 전에는 추천·후보에 노출되지 않는다.
@@ -75,6 +75,8 @@
 - `OutboundClick`: accountId · savedStayId? · stayExternalId · otaPartnerId · clickedAt · **postbackStatus** ⚠(`NONE`·`RECEIVED`)
 - **INV-U1-10**: 전환·수수료는 **내부 운영 지표로만** 저장하며 어떤 사용자 대면 응답에도 포함하지 않는다. 포스트백 처리는 멱등(같은 거래 ID 재수신 시 무변화).
 
+> **[개정 · 2026-10-12]** 구현은 위 모델과 다르다(원문 보존). **`OtaPartner` 테이블은 없다.** 클릭 기록은 `affiliate_click`(`backend/app/src/main/resources/db/migration/V2.59__affiliate_click.sql`): `click_id · account_id(**nullable — 익명 클릭**, 브라우저·커스텀탭이 Authorization 을 못 실음) · stay_id("{출처}:{식별자}" 합성 키, FK 없음) · vendor(문자열) · check_in · check_out · adults · clicked_at · postback_status(기본 NONE)`. 벤더는 설정 스위치 `AFFILIATE_MODE`(`backend/app/src/main/resources/application.yml` `trippilot.affiliate.mode`, 기본 `fallback`)로 고른다 — 기본 `WEBSEARCH`(`backend/modules/affiliate-link/.../adapter/out/external/WebSearchFallbackAdapter.kt`), `tripcom` 이면 `TRIPCOM` 키워드 검색 착지(`TripcomDeeplinkAdapter.kt`, `clickId`→`trip_sub1`). 진입점 `GET /api/v1/stays/{stayId}/outbound`(`OutboundController.kt`, 302). **포스트백 수신 엔드포인트는 없다** — `postback_status` 는 전부 `NONE`. INV-U1-10(내부 지표 전용)은 유지된다.
+
 ---
 
 ## 3. 여행 (C6)
@@ -95,7 +97,9 @@
 - **INV-U1-11**: `endDate ≥ startDate`. 위반 시 생성 거부.
 - **INV-U1-12 (DEC-9)**: 모든 목적지가 **대한민국 영역** 안이어야 생성된다. 하나라도 밖이면 생성 거부.
 - **INV-U1-13**: 상태 전이는 `PLANNED → CONFIRMED → ACTIVE → ENDED` 단방향. `ENDED`·`deletedAt` 이후 편집 불가.
-- **INV-U1-20** **[신설 · 2026-09-28, TRIP-1061 · US-TRIP-10]**: `deletedAt`은 **작성중 여행**(일정 없음 또는 확정 전 초안)에만 설정될 수 있다. 일정 생성 세션이 진행 중이거나 확정·여행 중·종료된 여행은 삭제되지 않는다(BR-U1-57, 서버 가드는 BE 구현 대기). 딸린 데이터(일정·예약 알림·거점) 정리 범위는 미결 — TRIP-1061.
+- **INV-U1-20** **[신설 · 2026-09-28 → 개정 · 2026-10-01, TRIP-1061 · US-TRIP-10]**: `deletedAt`은 소유자의 삭제 요청으로 **어느 상태에서든** 설정될 수 있다(전 상태 허용 — 사용자 결정 2026-10-01, 서버 상태 가드 없음). 개정 전 문면("작성중 여행에만 설정될 수 있다")은 원문 보존 차원에서 남긴다 — 그 제한은 이제 **FE 노출 정책**이지 불변식이 아니다. 삭제 시 딸린 데이터 정리는 확정됨 — `TripDeleted` 이벤트로 리마인드 예약 비움, 거점 '사용 중' 판정 live-trip 한정(PR #798). 일정·리비전 등 나머지 행은 소프트 삭제 원칙대로 남고 조회가 `deletedAt` 을 거른다.
+
+> **[개정 · 2026-10-12]** Trip 표에 없는 현행 속성·부속 테이블: ① **일과 창** `day_start_at · first_day_start_at · last_day_end_at`(time, 전부 NULL 허용 = 09:00/21:00 기본, 당일치기 CHECK `chk_trip_same_day_window`) — `backend/app/src/main/resources/db/migration/V2.62__trip_day_window.sql`(TRIP-1252 후속). ② **`trip_poi_rejection`**(trip_id·poi_id·kind `SWAPPED_OUT`/`REGENERATED`·count) — 여행 스코프 거절 이력, AI 점수 강등 재료(V2.53, TRIP-964). ③ **`trip_scored_candidate_pool`**(여행당 1행, 상위 200 후보 jsonb·radius_m) — 슬롯 교체 즉답용 생성 시점 점수 풀(V2.55, TRIP-969). 셋 다 `trip` CASCADE.
 
 ### TripDestination ⚠ 신설 (G-U1-08)
 | 속성 | 타입 | 비고 |

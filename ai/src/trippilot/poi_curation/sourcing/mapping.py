@@ -6,7 +6,7 @@
 
 영업시간은 **파싱 가능한 것만** OpenHour로 만든다 — "정보 없음 ≠ 배제"
 원칙에 따라 파싱 불가는 open_hours=() 로 두고, 절대 지어내지 않는다
-(계절별·격주·명절 휴무 등 주간 스케줄로 표현 불가한 원문은 통째로 포기).
+(계절별 시간·요일 없는 휴무 안내 등 주간 스케줄로 못 읽는 원문은 통째로 포기).
 """
 
 from __future__ import annotations
@@ -207,9 +207,39 @@ _ALWAYS_OPEN_RE = re.compile(r"상시\s*개방|24\s*시간\s*개방|연중\s*개
 _ALL_DAY = (0, 24 * 60)
 _WEEKDAY_RE = re.compile(r"(월|화|수|목|금|토|일)요일")
 _WEEKDAY_INDEX = {"월": 0, "화": 1, "수": 2, "목": 3, "금": 4, "토": 5, "일": 6}
-# 주간 스케줄(OpenHour)로 표현할 수 없는 휴무 패턴 — 있으면 통째로 파싱 포기
-_UNREPRESENTABLE_REST = re.compile(r"첫째|둘째|셋째|넷째|다섯째|격주|짝수|홀수|공휴일|명절|설날|추석|법정")
-_NO_REST_TOKENS = frozenset({"연중무휴", "없음", "무휴", "연중 무휴"})
+# ── 휴무 원문 (TRIP-1230) — 규칙은 _parse_rest_days, 근거는 data/README 「휴무를 해석 못 하는 POI」
+# 범위는 한 줄 안에서만 — `\s` 로 두면 `<br>` 줄바꿈을 넘어 두 줄의 요일을 범위로 잇는다.
+# 양끝 `요일` 은 생략될 수 있다(`매주 월~목요일` — 종전엔 목요일만 닫혔다, 영업 쪽 한정자와 같은 형태).
+# 맨 글자는 한글·숫자에 붙어 있지 않을 때만 요일이다(`3월~`·`매월~` 의 월).
+_DAY_RANGE_RE = re.compile(
+    r"(?:([월화수목금토일])요일|(?<![가-힣\d])([월화수목금토일]))[ \t]*[~∼～〜\-–—][ \t]*"
+    r"([월화수목금토일])(?:요일|(?![가-힣]))")
+# `주말만 운영`·`주말에만 개장` 의 주말은 여는 날이다 — 쉬는 날로 읽으면 뒤집힌다
+_REST_WEEKEND_RE = re.compile(r"주말(?!\s*(?:에\s*)?만)")
+_REST_PAREN = re.compile(r"[(（][^)）]*[)）]")
+_REST_REMARK = re.compile(r"※[^\n]*")   # 비고는 그 줄 끝까지 — 다음 줄은 본문이다
+_REST_BREAK = re.compile(r"<br\s*/?>", re.I)
+_REST_CLAUSE_SEP = re.compile(r"[/,\n]")
+_REST_PLACEHOLDER = re.compile(r"[-–—]+|없음|해당\s*없음")
+_NO_REST_RE = re.compile(r"무휴|휴무\s*일?\s*없음")
+# 가게마다 다르다 — 시장·쇼핑몰은 열고 휴무는 개별 점포 몫이라 시설에는 매주 쉬는 날이 없다(2026-10-05 결정,
+# 쇼핑 표본의 절반 68/135). 공연·전시·행사·체험별 상이는 그 프로그램이 있어야 여는 곳이라 여전히 모른다.
+# **절 전체가 이 문구일 때만**(fullmatch) — `점포별 상이·동절기 휴장`·`공연 및 매장별 상이` 처럼 다른 말이 붙으면
+# 그 말의 뜻을 모르므로 휴무 없음으로 확정하지 않는다.
+_STORE_VARIES = re.compile(r"(?:각\s*|입점\s*)?(?:점포|매장|상점)\s*(?:별로?|마다)\s*상이(?:함|합니다)?\.?")
+# 주간 스케줄로 못 쓰는 비정기 휴일 — 연 단위(명절·공휴일·날짜·기념일·기관장 지정일)와
+# 요일 없는 월 단위("월 1회"). 실물 표본에 나온 표기만 넣었다(감으로 늘리지 말 것 — 영업 쪽
+# _NOT_OPEN_SEGMENT 의 교훈). 넓은 낱말은 넣지 않는다 — '설' 단독은 "시설별 상이" 에,
+# '당일'·'휴관일'·'지정' 은 "당일 사정에 따라 휴무"·"휴관일: 홈페이지 참조" 에 걸려 모르는 글이 휴무
+# 없음으로 확정된다.
+_IRREGULAR_REST = re.compile(
+    r"설날|설\s*당일|추석|명절|공휴일|국경일|성탄|부처님|석가|연휴|\d{1,2}\s*월\s*\d{1,2}\s*일|"
+    r"임시\s*휴|(?:지정|정)(?:한|하는)\s*날|기념일|월\s*\d\s*회|근로자의\s*날")
+# 앞 절의 명절에 붙은 꼬리 — `설·추석 전날, 당일` 의 `당일` 처럼 홀로 떨어진 절. **절 전체일 때만**
+# (`당일 사정에 따라 휴무` 는 모르는 글이다)
+_HOLIDAY_TAIL = re.compile(r"(?:전날|당일|다음날|연휴)")
+# 기간 표지 — `11월 1일 ~ 3월 31일 휴장`·`3월 1일부터 휴관` 은 날짜가 있어도 비정기 휴일이 아니라 장기 휴장이다
+_REST_PERIOD = re.compile(r"[~∼～〜]|부터|까지")
 
 
 # 영업시간이 **아닌** 시각이 붙는 줄 — 빼고 읽지 않으면 휴게시간이 개점시간이 된다.
@@ -226,6 +256,105 @@ _SECTION_HEAD = re.compile(r"\[[^\]]{1,20}\]")
 _RANGE_RE = re.compile(r"(\d{1,2}):(\d{2})\s*[~\-–—]\s*(\d{1,2}):(\d{2})")
 # 이보다 좁으면 회차·교육 세션을 영업시간으로 읽은 것이다 (실측으로 정한 값).
 _MIN_WINDOW_MIN = 120
+_SEGMENT_SPLIT = re.compile(r"[\n<>()（）\[\]※/]|·|-(?!\s*\d)")
+# 날짜가 든 ※ 비고는 기간 한정 안내다(`※ 2025년 07월 22일~08월 31일 10:00~20:00`) — 그 범위가 평소 창
+# 후보가 되면 나머지 요일의 창이 넓어진다(실물 1건). 비고만 뺀다 — 본문의 `3월 1일 ~ 10월 31일 09:00~18:00`
+# 은 그 장소의 시간이다.
+_DATED_REMARK = re.compile(r"※[^※\n<]*?(?:\d{4}\s*년|\d{1,2}\s*월\s*\d{1,2}\s*일)[^※\n<]*")
+# 영업 구간 머리의 요일 한정자 — `평일`(`주중`)·`주말`·`X(요일)`·`X(요일)~Y(요일)`(사이 요일까지, 주를 넘어도),
+# 그리고 그것들을 `·`·`/`·`,` 로 이은 목록(`토·일요일`·`화요일 / 목요일~금요일`).
+# 머리 **전체**가 한정자여야 한다 — `하절기 평일` 은 요일 구간이 아니다(종전 규칙으로 간다). `공휴일` 은 요일이
+# 아니라 목록 안에서는 무시하고(`주말·공휴일` = 토·일), 홀로면 한정자이되 요일이 없다(그 범위는 어느 요일 것도 아니다).
+_DAY_ITEM_RE = re.compile(
+    r"(평일|주중)|(주말)|([월화수목금토일])(?:요일)?(?:[ \t]*[~∼～〜\-–—][ \t]*([월화수목금토일])(?:요일)?)?"
+    r"|(?:법정[ \t]*)?공휴일")
+_DAY_ITEM = rf"(?:{_DAY_ITEM_RE.pattern})"
+_DAY_QUALIFIER = re.compile(rf"[\s\-:,]*{_DAY_ITEM}(?:[ \t]*[·/,、][ \t]*{_DAY_ITEM})*[\s:]*")
+# 구간 분할(`·`·`/`·숫자 앞 아닌 `-`)이 요일 목록·범위를 먼저 자르지 않게 미리 `,`·`~` 로 바꿔 둔다 —
+# 안 그러면 `토·일요일 10:00~18:00` 의 `토` 가 떨어져 나가 마지막 토큰만 한정자가 된다(공유본 11건),
+# `월-금 07:30 - 20:30` 은 `월` 과 `금` 으로 갈렸다(7건). 한글·숫자에 붙은 글자(`매일`·`3월` 의 월)는 요일이 아니다.
+_DAY_EXPR = re.compile(rf"(?<![가-힣\d]){_DAY_ITEM}(?:[ \t]*[·/,、][ \t]*{_DAY_ITEM})*(?![가-힣])")
+_DAY_LIST_SEP = re.compile(r"[ \t]*[·/,、][ \t]*")
+_DAY_RANGE_DASH = re.compile(r"[ \t]*[~∼～〜\-–—][ \t]*")
+# 영업 원문 안의 명시 휴무 절(`- 일요일 휴무`) — 시각이 없는 줄만 본다(`_hours_rest_days`).
+_HOURS_REST_WORD = re.compile(r"휴무|휴관|휴업|휴점|정기\s*휴일")
+
+
+def _hours_rest_days(hours_raw: str) -> frozenset[int]:
+    """영업 원문 안의 명시 휴무 절이 닫는 요일 — 시각 범위 없이 휴무 낱말이 든 **줄**을 휴무 원문과 같은 규칙
+    (`_parse_rest_days`)으로 읽는다. 못 읽는 줄은 무시한다(그 줄 때문에 영업시간까지 버리지 않는다).
+
+    종전엔 괄호·`/`·`·` 로 자른 조각마다 요일을 주웠다 — `(일요일이 공휴일인 경우 월요일 휴무)` 같은 조건
+    단서가 매주 휴무가 됐고, `휴관일(매주 월요일)` 은 낱말과 요일이 다른 조각으로 갈려 놓쳤다. 줄째 넘기면
+    괄호 단서는 `_parse_rest_days` 가 걷어 낸다. 시각 2회 원문(`10:00 ~ 17:00<br>매주 월요일 휴관 …`, 실물
+    어깨동무스토리움)에도 적용한다 — 종전엔 요일별 갈래에서만 읽어 휴무 원문 `연중무휴` 에 월요일이 열렸다.
+    """
+    days: set[int] = set()
+    for line in _REST_BREAK.sub("\n", hours_raw).split("\n"):
+        if not _RANGE_RE.search(line) and _HOURS_REST_WORD.search(line):
+            days |= _parse_rest_days(line) or frozenset()
+    return frozenset(days)
+
+
+def _weekday_windows(text: str) -> tuple[dict[int, tuple[int, int]], tuple[int, int] | None] | None:
+    """요일 한정자가 붙은 구간이 있으면 (요일별 창, 나머지 요일의 창). 없으면 None.
+
+    `- 평일 12:00~21:30<br>- 토요일 12:00~19:00` 을 첫 범위·이른 폐점(계절 보정)으로 읽으면 7일 전부
+    12:00~19:00 이 됐다 — 요일 구분을 계절 변형으로 오인해 평일 마감을 잘랐다(2026-10-12 실물).
+
+    - 한정자는 **바로 뒤 범위**를 그 요일들에 준다. 한 구간에 한정자가 여럿이면(`화~금 10:00~21:00, 토~일
+      9:00~18:00`·`10:00~21:00, 월 10:00~19:00`) 각자 제 범위를 받는다. 한정자 뒤의 한정자 없는 범위는 그
+      요일의 부가 안내라 버린다. 2시간 이하면 회차로 보고 포기(None).
+    - 같은 요일이 두 번 나오면 어느 것이 그 요일의 시간인지 모른다 → None(종전 규칙).
+    - 한정자 **없는** 구간끼리는 종전 규칙(첫 범위·이른 폐점)으로 **나머지 요일의 창**을 만든다 —
+      계절 보정은 한정자 없는 구간 사이에서만 산다(하절기/동절기 함정이 되살아나지 않게).
+    - **원문이 말하지 않은 요일 ≠ 휴무.** 나머지 요일의 창은 한정자 없는 구간이 없으면 원문 전체의 종전
+      창이다 — 그 요일들은 이 수정 전과 같다. 닫는 것은 영업 원문 안의 명시 휴무 절과 휴무 원문뿐이다.
+      추론 휴무가 틀리면 그 요일 후보가 통째로 빠진다(HC1 은 요일 행이 없으면 닫힌 날로 본다).
+    - **구역 머리가 전부 요일이면**(`[평일 / 토요일]<br>- 08:00~19:30<br>…[일요일]<br>- 08:00~15:30`) 머리가 곧
+      한정자다 — 구역 본문마다 종전 규칙(첫 범위·이른 폐점·2시간·비영업 라벨)으로 읽어 그 요일들에 준다. 종전엔
+      구역 머리가 둘 이상이라 통째로 포기했다(공유본 386건). 하나라도 요일이 아니면(`[사우나]`) 어느 구역이
+      장소 전체인지 모른다 — 종전대로 포기. 구역 창을 못 읽거나 같은 요일이 두 머리에 나와도 포기.
+    """
+    heads = list(_SECTION_HEAD.finditer(text))
+    sections = [(_qualifier_days(_protect_days(h[0][1:-1])), text[h.end():end])
+                for h, end in zip(heads, [h.start() for h in heads[1:]] + [len(text)])]
+    if sections and all(days is not None for days, _ in sections):
+        preamble = text[:heads[0].start()]
+    elif len(heads) > 1:
+        return None
+    else:
+        sections, preamble = [], text
+    by_day: dict[int, tuple[int, int]] = {}
+    for days, body in sections:
+        window = _first_range_window([span for ranges in _open_ranges(body) for _, span in ranges])
+        if window is None or any(d in by_day for d in days):
+            return None
+        by_day.update(dict.fromkeys(days, window))
+    rest: list[tuple[int, int]] = []
+    for ranges in _open_ranges(preamble):
+        qualified = False
+        for head, (start, end) in ranges:
+            days = _qualifier_days(head)
+            if days is None:
+                # 한정자 뒤의 한정자 없는 범위는 그 요일의 부가 안내다(`평일 10:00~17:30휴계시간 12:30~13:30` — 오타
+                # 라벨이 비영업 줄 검사를 빠져나간 실물). 나머지 요일의 창으로 새면 안 된다.
+                if not qualified:
+                    rest.append((start, end))
+                continue
+            qualified = True
+            if days and end - start <= _MIN_WINDOW_MIN or any(d in by_day for d in days):
+                return None
+            by_day.update(dict.fromkeys(days, (start, end)))
+    if not by_day:
+        return None
+    # 한정자 없는 구간의 창이 2시간 이하로 기각돼도 종전 규칙으로 되돌아간다 — None 이면
+    # 7일을 못 채워 영업시간을 통째로 잃는다("평일 …<br>- 휴계시간 12:30~13:30"). 항상 종전
+    # 규칙으로 가면 이 수정이 고친 오독이 되살아난다(공유본 19건, #1054 리뷰).
+    # 구역 머리를 요일로 읽었으면 그 머리는 종전 규칙의 포기 사유(어느 구역이 장소 전체인지)가 아니다.
+    others = (_first_range_window(rest) if rest else None) or _first_range_window(
+        [span for ranges in _open_ranges(text) for _, span in ranges])
+    return by_day, others
 
 
 def _multi_range_window(text: str) -> tuple[int, int] | None:
@@ -254,17 +383,62 @@ def _multi_range_window(text: str) -> tuple[int, int] | None:
     """
     if len(_SECTION_HEAD.findall(text)) > 1:
         return None
+    return _first_range_window([span for ranges in _open_ranges(text) for _, span in ranges])
+
+
+def _qualifier_days(head: str) -> list[int] | None:
+    """범위 앞 머리가 요일 한정자(목록)면 그 요일들(공휴일뿐이면 빈 목록), 아니면 None."""
+    if not _DAY_QUALIFIER.fullmatch(head):
+        return None
+    days: list[int] = []
+    for weekday, weekend, a, b in _DAY_ITEM_RE.findall(head):
+        if weekday:
+            days += range(5)
+        elif weekend:
+            days += (5, 6)
+        elif a:
+            first, last = _WEEKDAY_INDEX[a], _WEEKDAY_INDEX[b or a]
+            days += ((first + k) % 7 for k in range((last - first) % 7 + 1))
+    return days
+
+
+def _protect_days(text: str) -> str:
+    """요일 목록·범위의 이음표를 분할에 안 걸리는 `,`·`~` 로 바꾼다(`_DAY_EXPR` 주석)."""
+    return _DAY_EXPR.sub(lambda m: _DAY_LIST_SEP.sub(",", _DAY_RANGE_DASH.sub("~", m[0])), text)
+
+
+def _open_ranges(text: str) -> list[list[tuple[str, tuple[int, int]]]]:
+    """비영업 줄을 뺀 구간마다 [(범위 앞 머리, (개점, 폐점)) …]. 머리는 구간 첫머리나 앞 범위 끝부터다.
+    범위 없는 구간은 뺀다."""
     # 괄호도 경계다 — `(준비시간 12:00~13:00)` 이 앞 범위와 한 덩어리로 남으면
     # 라벨 검사가 줄 전체를 버려 정상 범위까지 함께 사라진다.
-    spans: list[tuple[int, int]] = []
-    for seg in re.split(r"[\n<>()（）\[\]]|·", text):
-        if _NOT_OPEN_SEGMENT.search(seg):
-            continue
-        for h1, m1, h2, m2 in _RANGE_RE.findall(seg):
-            start, end = int(h1) * 60 + int(m1), int(h2) * 60 + int(m2)
+    # 줄바꿈 없는 글머리표(`- 09:00~21:00- 마지막 주문 20:30`)·※ 비고·`/` 도 경계다 — 벤더가 `<br>` 을
+    # 빼고 한 줄로 고쳐 쓴 원문이 늘었다(2026-10-05 되감기 첫 배치 1,691건 중 27건이 이 모양으로 창을 잃었다).
+    # 숫자 앞의 `-` 는 시각 범위(`09:00-18:00`)라 끊지 않는다.
+    out: list[list[tuple[str, tuple[int, int]]]] = []
+    for seg in _SEGMENT_SPLIT.split(_protect_days(_DATED_REMARK.sub(" ", text))):
+        # 라벨부터 구간 끝까지만 버린다 — 라벨 **앞**의 범위는 영업시간이다(`10:00~18:00 입장 마감 19:30`·
+        # `11:00~22:00준비시간 14:30~16:30`). 구간째 버리면 그 장소의 시간을 잃었다(공유본 5건).
+        # 한계: 라벨이 앞 범위를 설명하는 어순(`15:00~17:00 브레이크타임`, 47구간)도 범위가 남는다 — 그것이 원문
+        # 첫 범위면 창이 된다. 공유본에서 첫 범위인 1건은 그 범위가 영업시간이었다(`11:00~21:00 브레이크 타임(…)`).
+        label = _NOT_OPEN_SEGMENT.search(seg)
+        if label:
+            seg = seg[:label.start()]
+        ranges: list[tuple[str, tuple[int, int]]] = []
+        prev = 0
+        for m in _RANGE_RE.finditer(seg):
+            start, end = int(m[1]) * 60 + int(m[2]), int(m[3]) * 60 + int(m[4])
             if end <= start:
                 end += 24 * 60          # 자정 초과 (OpenHour 계약과 동일)
-            spans.append((start, end))
+            ranges.append((seg[prev:m.start()], (start, end)))
+            prev = m.end()
+        if ranges:
+            out.append(ranges)
+    return out
+
+
+def _first_range_window(spans: list[tuple[int, int]]) -> tuple[int, int] | None:
+    """첫 범위 + 같은 개점의 이른 폐점 + 2시간 상한 — `_multi_range_window` 독스트링의 규칙."""
     # **하나만 남아도 쓴다.** 비영업 줄을 걷어내면 정상 범위가 하나만 남는 것이
     # 흔하다(`09:00~17:00` + 휴게 + 입장마감 → 하나). 둘 이상을 요구하면 가장
     # 잘 읽히는 모양을 통째로 버린다 — 실제로 그렇게 짰다가 테스트가 잡았다.
@@ -281,11 +455,13 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
     - hours_raw에서 HH:MM이 **정확히 2회** 등장할 때만 개점~폐점으로 읽는다
       (계절별 시간 등 3회 이상은 어느 창이 맞는지 확정 불가 → 포기).
     - 폐점 ≤ 개점이면 자정 초과 영업으로 보고 +24h (OpenHour 계약).
-    - rest_raw는 "매주 X요일" 류만 해석 — 주차·명절 등 가변 휴무가 섞이면
-      해당 요일이 실제로 여는지 확정 불가 → 전체 포기.
+    - rest_raw 해석은 `_parse_rest_days` — 요일을 못 읽고 무휴·비정기 휴일·점포별 상이도 아닌
+      글("동절기 휴장"·"공연 별로 상이함")이면 어느 날 닫는지 모른다 → 전체 포기.
+    - 영업 원문 안의 명시 휴무 절(`매주 월요일 휴관`)도 닫는다 — `_hours_rest_days`, 모든 갈래에 같이.
     """
     if not hours_raw:
         return ()
+    said_closed = _hours_rest_days(hours_raw)
     always_open = _ALWAYS_OPEN_RE.search(hours_raw) is not None
     if always_open:
         open_min, close_min = _ALL_DAY
@@ -297,6 +473,18 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
             if close_min <= open_min:
                 close_min += 24 * 60  # 자정 초과 영업 (시작일 귀속)
         elif len(times) > 2:
+            split = _weekday_windows(hours_raw)
+            if split is not None:
+                by_day, others = split
+                closed_days = _parse_rest_days(rest_raw)
+                if closed_days is None or (others is None and len(by_day) < 7):
+                    return ()   # 휴무를 모르거나, 원문이 말하지 않은 요일의 창을 모른다 — 지어내지 않는다
+                return tuple(
+                    OpenHour(day_of_week=d, open_min=o, close_min=c)
+                    for d in range(7)
+                    if d not in closed_days and d not in said_closed
+                    for o, c in [by_day.get(d) or others]
+                )
             window = _multi_range_window(hours_raw)
             if window is None:
                 return ()
@@ -307,30 +495,135 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
     closed_days = _parse_rest_days(rest_raw)
     if closed_days is None:
         # 휴무를 확신 못 하면 포기 — 단 "상시 개방"은 원문이 이미 휴무 없음을
-        # 말하고 있으므로 읽히지 않는 휴무 문구(명절 안내 등)에 통째로 지지 않는다.
+        # 말하고 있으므로 읽히지 않는 휴무 문구(동절기 휴장 등)에 통째로 지지 않는다.
         if not always_open:
             return ()
         closed_days = frozenset()
     return tuple(
         OpenHour(day_of_week=d, open_min=open_min, close_min=close_min)
         for d in range(7)
-        if d not in closed_days
+        if d not in closed_days and d not in said_closed
     )
 
 
 def _parse_rest_days(rest_raw: str | None) -> frozenset[int] | None:
-    """휴무일 원문 → 휴무 요일 집합. 해석 불가면 None (호출측이 전체 포기)."""
+    """휴무일 원문 → 매주 쉬는 요일 집합. 해석 불가면 None (호출측이 전체 포기).
+
+    종전엔 명절·공휴일·"첫째 주"가 섞이면 통째로 포기했다 — 박물관 전형 `매주 월요일 / 1월 1일 /
+    설·추석 당일` 이 영업시간 창까지 잃었다(표본 584건 중 38.5% 포기). 지금 규칙(TRIP-1230):
+
+    - **요일이 나오면 매주 쉰다고 본다.** `매월 둘째·넷째 월요일` 같은 월 단위도 매주로 넓혀 읽는다 —
+      열린 월요일 몇 번을 놓치는 쪽이 닫힌 월요일에 보내는 쪽보다 낫다. 범위(`월요일~수요일`)는
+      사이 요일까지(종전엔 양끝만 읽었다), `주말` 은 토·일.
+    - **비정기 휴일은 무시한다** — 연 단위(설·추석·1월 1일·공휴일·지정일)와 요일 없는 월 단위.
+      주간 스케줄로 못 쓰고, 버리면 창까지 잃는다. `-` 같은 자리표시자는 휴무 없음.
+    - **괄호 단서와 ※ 비고는 먼저 빼고 읽는다** — `(단, 월요일이 공휴일이면 다음 평일)`·`(토요일·일요일과
+      겹치면 휴관)` 의 요일이 휴무로 잡힌다. 그 밖에 요일이 없을 때만 원문 전체에서 읽는다
+      (`연중무휴 (단 매주 월요일 휴무)`). 구역 머리(`[경매] … [판매] …`)가 둘이면 포기.
+    - 요일 없는 글은 무휴·비정기 휴일·`점포별 상이`**뿐**이어야 휴무 없음이다. 모르는 글(`동절기 휴장`·
+      `공연 별로 상이함`·전화 문의 안내)이나 기간(`11월 1일 ~ 3월 31일 휴장`)이 섞이면 여전히 모른다.
+      비고뿐이면 비고는 `점포별 상이` 만 받는다(`※ 점포 별로 상이함`) — 그 밖의 비고는 종전대로 모른다.
+    """
     if rest_raw is None:
         return frozenset()
-    text = rest_raw.strip()
-    if not text or text in _NO_REST_TOKENS:
+    text = _REST_BREAK.sub("\n", rest_raw).strip()
+    if not text or _REST_PLACEHOLDER.fullmatch(text):
         return frozenset()
-    if _UNREPRESENTABLE_REST.search(text):
+    if len(_SECTION_HEAD.findall(text)) > 1:
         return None
+    body = _REST_REMARK.sub("", _REST_PAREN.sub(" ", text))
+    # 단서·비고 밖에 요일이 없으면 원문 전체에서 읽는다 — `연중무휴 (단 매주 월요일 휴무)`·
+    # `휴관일(매주 월요일)` 처럼 휴무 요일이 괄호·비고에만 있는 문구가 있다. 종전 파서가 읽던 요일을
+    # 놓치면 닫힌 날에 일정이 들어간다(넓게 읽는 쪽이 안전하다).
+    days = _rest_weekdays(body) or _rest_weekdays(text)
+    if days:
+        return frozenset(days)
+    clauses = _rest_clauses(body)
+    if not clauses:
+        # 비고뿐 — `점포별 상이` 만 받는다(2026-10-05 결정의 범위). ※ 마다 끊어 한 줄의 두 비고가 섞이지 않게.
+        remarks = _rest_clauses(_REST_PAREN.sub(" ", text).replace("※", "\n"))
+        return frozenset() if remarks and all(_STORE_VARIES.fullmatch(c) for c in remarks) else None
+    if all((_NO_REST_RE.search(c) or _IRREGULAR_REST.search(c) or _STORE_VARIES.fullmatch(c)
+            or _HOLIDAY_TAIL.fullmatch(c))
+           and not _REST_PERIOD.search(c) for c in clauses):
+        return frozenset()  # 무휴·비정기 휴일·점포별 상이뿐 — 매주 쉬는 요일은 없다
+    return None  # 모르는 글이 섞였다(`동절기 휴장`·`공연 별로 상이함`·전화 문의 안내) — 확신 없음
+
+
+def _rest_clauses(text: str) -> list[str]:
+    return [c for c in (c.strip(" -") for c in _REST_CLAUSE_SEP.split(text)) if c]
+
+
+def _rest_weekdays(text: str) -> set[int]:
+    """휴무 문구 안의 요일 — `X요일`, 범위 `X(요일)~Y(요일)`(사이 요일까지, 주를 넘어도), `주말`."""
     days = {_WEEKDAY_INDEX[m] for m in _WEEKDAY_RE.findall(text)}
-    if not days:
-        return None  # 비어있지 않은데 요일도 못 읽음 — 확신 없음
-    return frozenset(days)
+    for a, bare, b in _DAY_RANGE_RE.findall(text):
+        start, end = _WEEKDAY_INDEX[a or bare], _WEEKDAY_INDEX[b]
+        days.update((start + k) % 7 for k in range((end - start) % 7 + 1))
+    if _REST_WEEKEND_RE.search(text):
+        days.update((5, 6))
+    return days
+
+
+# ── 영업시간 원문 칸 (backend `poi.opening_hours varchar(200)`, TRIP-1226) ──────
+# 백엔드는 원문 한 칸만 저장하고(PoiProposalDtos.toCommand) AI 는 런타임에 그 칸을
+# 다시 파싱한다(backend_poi_db). 휴무 원문(restdate류)을 실을 칸이 따로 없어 영업 원문
+# 뒤에 붙인다 — 영업 원문만 실었을 때는 수집 때 반영한 주간 휴무가 런타임에 사라져
+# 휴무일에도 영업으로 읽혔다(2026-10-02 실측: 주간 휴무 FOOD 312건).
+#
+# 이 칸은 화면에도 그대로 나간다(FE 장소 상세가 `<br>` 만 줄바꿈으로 바꿔 그린다) —
+# 그래서 구분자를 읽히는 모양(줄바꿈 + `휴무: `)으로 정했다. 영업 원문에 같은 문자열이
+# 있으면 한 칸을 띄워 무력화하므로(파싱 결과는 그대로) **첫 등장이 곧 구분자**다.
+# 구분자는 앞머리와 꼬리가 겹치지 않는 문자열이라 경계에 걸친 가짜 등장도 없다.
+OPENING_HOURS_MAX = 200  # backend poi.opening_hours varchar(200)
+REST_SEP = "\n휴무: "
+_REST_SEP_DEFUSED = "\n휴무 : "
+
+
+def join_opening_hours_raw(
+    hours_raw: str | None, rest_raw: str | None, limit: int = OPENING_HOURS_MAX,
+) -> str | None:
+    """영업·휴무 원문 → 원문 칸 하나. 상한을 넘으면 **휴무를 보존하고 영업을 먼저 자른다**.
+
+    휴무 원문이 비었거나 영업 원문이 없으면 종전과 같다(영업 원문 절단만). 영업 원문
+    없이 휴무만 싣지 않는 이유: 백엔드가 이 칸의 유무로 "영업시간 확인됨"을 판정한다
+    (`SlotSurfaceAssembler.openingHoursKnown`).
+
+    파서가 해석 못 하는 휴무(`동절기 휴장`·`공연 별로 상이함` …)도 싣는다. 빼면 런타임이 7일
+    영업으로 읽어 이 칸이 수집 파싱의 입력을 잃는 원래 결함이 되살아나고, 벤더 문구가
+    남지 않아 파서를 고쳐도 다시 받아야 한다. 대가로 그런 POI 는 런타임에도 "정보 없음"
+    (HC1 미적용)이다 — 건수는 수집 stats `rest_unparsed`, 결정·실측은 ai/data/README.md.
+    """
+    if not hours_raw:
+        return hours_raw
+    hours = hours_raw.replace(REST_SEP, _REST_SEP_DEFUSED)
+    rest = (rest_raw or "").strip()
+    if not rest or not hours.strip():
+        return _truncate(hours, limit)
+    tail = REST_SEP + rest
+    # 영업을 먼저 자르되 절반 아래로는 안 내린다 — 긴 휴무 원문이 영업시간을 통째로 밀어내지 않게.
+    hours = _truncate(hours.rstrip(), max(limit - len(tail), limit // 2))
+    return hours + _truncate(tail, limit - len(hours))
+
+
+def split_opening_hours_raw(text: str | None) -> tuple[str | None, str | None]:
+    """원문 칸 → (영업 원문, 휴무 원문). 구분자가 없는 옛 원문은 (원문, None) — 종전 해석 그대로."""
+    if not text:
+        return text, None
+    hours, sep, rest = text.partition(REST_SEP)
+    return (hours, rest) if sep else (text, None)
+
+
+def parse_opening_hours_raw(text: str | None) -> tuple[OpenHour, ...]:
+    """원문 칸 → 주간 OpenHour. 수집 때와 같은 두 입력(영업·휴무)으로 같은 파서를 부른다."""
+    return parse_open_hours(*split_opening_hours_raw(text))
+
+
+def _truncate(text: str | None, limit: int) -> str | None:
+    """저장 상한에 맞춰 자른다(거부 아님) — 잘림은 말줄임표로 드러낸다 (안티패턴 로그)."""
+    if text is None or len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 # ── 교차 출처 동일성 판정 (TRIP-682) ──────────────────────────────────────

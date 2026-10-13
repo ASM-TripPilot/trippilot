@@ -106,6 +106,8 @@ HTTPS NLB는 nginx gateway로 연결된다. gateway는 API 경로와 상태 확�
 
 워크플로는 Terraform 검증·모의 provider 테스트, 배포 도구 테스트, Helm 검증을 통과한 뒤 AWS에 접근한다. 앱을 배포하는 실행에서는 backend 종료 설정의 Gradle 테스트도 수행한다. Helm은 `--atomic --wait`로 rollout 실패 시 이전 release로 복구하며, 성공 후 클러스터 내부에서 gateway/backend/AI 연결을 확인한다. 실제 도메인의 DNS/TLS 확인은 DNS 연결 후 별도로 수행한다.
 
+Pod 로그는 클러스터 접근 없이 CloudWatch Logs 에서 본다. `amazon-cloudwatch-observability` 애드온의 Fluent Bit 가 Pod stdout 을 `/aws/containerinsights/trippilot-<env>/application` 로그 그룹으로 올리므로 앱은 `OTEL_SDK_DISABLED=true` 를 그대로 둔다(이 스택에는 OTLP 수집기가 없다). 한 서비스만 따라가려면 `aws logs tail /aws/containerinsights/trippilot-dev/application --follow --filter-pattern backend` 를 쓴다. 보존은 DEV 7일·PRD 30일(`container_logs_retention_days`)이고, 수집량(GB)·보존 저장량과 Container Insights 관측치가 과금 대상이다. 필요 없는 환경은 `container_logs_enabled = false` 로 애드온 자체를 설치하지 않는다.
+
 긴 일정 생성 요청을 위해 backend/AI Pod 종료 유예를 660초, HTTP 및 backend 비동기 실행기의 종료 대기를 630초로 설정했다. 로컬 backend 비동기 대기는 기존 30초 기본값을 유지한다. 이 대기는 무제한 큐 처리 보장이 아니며, 노드 강제 종료·시간 초과 작업은 기존 앱 복구 로직의 대상이다.
 
 앱 코드를 되돌리려면 배포 브랜치에 revert commit을 만든 뒤 수동 배포한다. 인프라 변경과 DB migration은 Helm rollback으로 되돌아가지 않는다. destructive DB migration은 별도 복구 계획·백업을 준비한다. PRD RDS는 삭제 보호가 켜져 있고, 전체 destroy나 state 삭제 workflow는 제공하지 않는다.

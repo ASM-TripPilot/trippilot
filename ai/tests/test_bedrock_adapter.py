@@ -151,3 +151,67 @@ def test_request_shape_is_openai_chat() -> None:
         "max_tokens": 128,
     }
     assert out.model_id == "local-reminder-qwen3-4b-v1"
+
+
+# ── 예산 관통 (2026-09-29 실서비스 504 의 원인) ──────────────────────────────
+#
+# 실측: `/ai/v1/notification/copies` 가 항목 2건에 각 11.9초·8.3초를 쓰고 백스톱 13초에
+# 걸려 504 를 냈다(trace f2c6722d). 강등 경로 자체는 맞게 돌았지만 **강등 응답을 만들기
+# 전에** 백스톱이 터졌다. 원인은 둘이다 — 어댑터가 `timeout_sec` 를 아예 안 쓰고,
+# 클라이언트에 재시도 설정이 없어 botocore 기본 재시도가 콜드스타트 오류를 4번 반복했다.
+
+
+class _RecordingFactory:
+    """timeout 별 클라이언트를 만드는 팩토리 — main 의 조립을 흉내낸다."""
+
+    def __init__(self, client) -> None:
+        self._client = client
+        self.timeouts: list[float | None] = []
+
+    def __call__(self, timeout_sec):
+        self.timeouts.append(timeout_sec)
+        return self._client
+
+
+def test_per_call_budget_reaches_the_client() -> None:
+    """항목당 예산이 클라이언트까지 내려가야 한다 — botocore 는 호출 인자로 못 받는다.
+
+    그래서 타임아웃별 클라이언트를 만드는 팩토리를 받는다. 이게 없으면 워커가 나눈
+    4초가 어디에도 전달되지 않고, 한 항목이 요청 예산 전체를 먹는다.
+    """
+    factory = _RecordingFactory(_FakeClient(_ok("본문")))
+    BedrockAdapter(factory, ARN).invoke(_request(timeout_sec=4.0))
+
+    assert factory.timeouts == [4.0]
+
+
+def test_same_budget_reuses_one_client() -> None:
+    # 호출마다 새로 만들면 서비스 모델 로딩이 매번 붙는다(수십 ms~).
+    factory = _RecordingFactory(_FakeClient(_ok("본문")))
+    adapter = BedrockAdapter(factory, ARN)
+    adapter.invoke(_request(timeout_sec=4.0))
+    adapter.invoke(_request(timeout_sec=4.0))
+    adapter.invoke(_request(timeout_sec=2.0))
+
+    assert factory.timeouts == [4.0, 2.0]
+
+
+def test_a_plain_client_still_works() -> None:
+    # 기존 호출 방식(클라이언트 직접 주입)을 깨지 않는다 — 테스트·스크립트가 쓴다.
+    client = _FakeClient(_ok("본문"))
+    assert BedrockAdapter(client, ARN).invoke(_request()).raw_text == "본문"
+
+
+def test_cold_start_through_the_factory_is_still_a_timeout() -> None:
+    # 팩토리 경로에서도 콜드스타트가 폴백 계단으로 간다(강등, 500 아님).
+    class _Cold(_FakeClient):
+        def invoke_model(self, **kwargs):
+            class ModelNotReadyException(Exception):
+                pass
+
+            raise ModelNotReadyException("cold start (reached max retries: 4)")
+
+    factory = _RecordingFactory(_Cold())
+    with pytest.raises(LlmTimeoutError):
+        BedrockAdapter(factory, ARN).invoke(_request(timeout_sec=4.0))
+    assert factory.timeouts == [4.0]

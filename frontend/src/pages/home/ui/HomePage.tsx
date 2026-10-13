@@ -1,33 +1,41 @@
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
 import {
   useGetTrips,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { useGetPlaces } from '@/shared/api/generated/places/places';
-import { getAccessToken } from '@/shared/api/tokenManager';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { seoulDate } from '@/shared/date/seoulDate';
-import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
-import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
-import { pickTrendingPlaces } from '@/entities/place/lib/trendingPlaces';
-import { usePlaceSaveToggle } from '@/features/explore/model/placeSaveToggle';
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useSavedStays } from '@/features/stay/model/savedStays';
+} from '@/shared/api/index.hooks';
+import { useGetPlaces } from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
+import { guardPress } from '@/shared/lib/pressGuard';
+import { seoulDate } from '@/shared/lib/seoulDate';
+import { formatNightsLabel } from '@/entities/trip';
+import { formatTripRange } from '@/entities/trip';
+import { pickTrendingPlaces } from '@/entities/place';
+import { usePlaceSaveToggle } from '@/features/save-place';
+import { useSavedPlaces } from '@/features/save-place';
+import { regionPickerHref } from '@/features/explore';
+import { useSavedStays } from '@/features/save-stay';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
-} from '@/features/itinerary/model/planState';
-import { HOME_DEFAULT_PROPS } from '@/features/home/model/homeFixtures';
+} from '@/features/itinerary';
+import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
+import { applyItineraryTarget, resolveHomePhase } from '../model/homePhase';
+import type {
+  HomeCollectionsLane,
+  HomePhase,
+  HomeSpotsLane,
+} from '../model/homeTypes';
+import { HomeScreen } from './HomeScreen';
+import { useTripWizardStore } from '@/features/create-trip';
 import {
-  applyItineraryTarget,
-  resolveHomePhase,
-} from '@/features/home/model/homePhase';
-import type { HomePhase, HomeSpotsLane } from '@/features/home/model/homeTypes';
-import { HomeScreen } from '@/features/home/ui/HomeScreen';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+  AssistantFab,
+  TAB_TWO_STACK,
+  assistantFabBottom,
+  assistantHref,
+  toastBottomWith,
+} from '@/features/open-assistant';
 
 interface HomeNav {
   onPressCreateTrip: () => void;
@@ -41,7 +49,12 @@ interface HomeNav {
   savedMenuOpen: boolean;
   onToggleSavedMenu: () => void;
   spotsLane: HomeSpotsLane;
+  collectionsLane: HomeCollectionsLane;
+  assistantFab: ReactElement;
 }
+
+/** 컬렉션 레인 장수 — 이만큼 못 채우면 레인을 숨긴다(TRIP-1209). */
+const COLLECTION_COUNT = 3;
 
 // 지배 planning 여행이 있을 때만 마운트되는 자식 — 여기서만 지배 여행의 itinerary GET 을 문다.
 // 지배 여행이 없는 렌더(discovery·빈 목록·로딩·오류)는 이 자식을 안 그려 훅이 아예 호출되지
@@ -73,15 +86,19 @@ function PlanningHome({
       })
     : null;
 
+  // TRIP-1282 — 위저드 이탈 다이얼로그 버튼의 창 안이면 무시(연타 관통 표적, 카드 본문·알약 공용).
+  // TRIP-1306 — 목적지 모름(조회 중)은 가드 *바깥*에서 거른다. 안쪽에 두면 아무것도 안 한 누름이 창을 열어
+  // 응답 직후 누름·"더 보기"까지 400ms 동안 먹힌다(창은 모듈 전역 하나).
+  const pushDestination = guardPress(
+    (target: NonNullable<typeof destination>) => {
+      router.push(
+        itineraryDestinationHref(dominantTripId, target, itinerary.data?.days)
+      );
+    }
+  );
   const onPressTripHeroCta = () => {
     if (destination === null) return;
-    router.push(
-      itineraryDestinationHref(
-        dominantTripId,
-        destination,
-        itinerary.data?.days
-      )
-    );
+    pushDestination(destination);
   };
 
   return (
@@ -97,7 +114,7 @@ function PlanningHome({
 }
 
 // 홈 page — CTA 라우팅(TRIP-370)에 더해 GET /trips 실데이터로 여행 유무를 판정한다(TRIP-371).
-// HomeScreen 은 서버·라우터를 모르는 순수 화면(homeStructure D-1)이라, 조회·판정·라우팅은 이
+// HomeScreen 은 서버·라우터를 모르는 순수 화면이라, 조회·판정·라우팅은 이
 // page 만 물고 화면엔 phase/콜백만 내린다(ExploreLandingPage 선례). 라우트 `(tabs)/index.tsx` 는
 // 이 page 를 꽂기만 한다(TRIP-1142).
 //
@@ -106,12 +123,12 @@ function PlanningHome({
 export function HomePage() {
   const router = useRouter();
   const trips = useGetTrips();
-  const isAuthed = getAccessToken() !== null;
-  const savedPlaces = useSavedPlaces({ isAuthed });
+  // 홈은 (tabs) 라 로그인 뒤에만 열린다(SplashGate HOME 가드) — 게스트 분기 없이 로그인으로 넘긴다(TRIP-1164).
+  const savedPlaces = useSavedPlaces({ isAuthed: true });
   const { savedPoiIds } = savedPlaces;
   // 담은 곳 미니 FAB 개수 배지(TRIP-695) — 담은 장소 수·전체 저장 숙소 수를 실데이터에서 뽑아
   // 화면에 주입한다. useSavedStays 는 features/stay 것(savedCount 노출) — features/trip 동명 훅 아님.
-  const { savedCount: savedStaysCount } = useSavedStays({ isAuthed });
+  const { savedCount: savedStaysCount } = useSavedStays({ isAuthed: true });
 
   // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 page 가 소유한다
   // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
@@ -143,15 +160,20 @@ export function HomePage() {
     { ...(spotsRegion ? { region: spotsRegion } : {}), limit: 200 },
     { query: { enabled: !trips.isPending } }
   );
-  const trending = pickTrendingPlaces(places.data?.items ?? [], 4);
+  // 같은 정렬로 7곳을 줄 세워 앞 4장은 '지금 뜨는 장소', 다음 3장은 컬렉션 레인 — 두 레인이 겹치지
+  // 않는다(TRIP-1209). 3곳을 못 채우면 컬렉션은 빈 배열 → 화면이 레인을 숨긴다.
+  const ranked = pickTrendingPlaces(places.data?.items ?? [], 7);
+  const trending = ranked.slice(0, 4);
+  const collectionPlaces = ranked.slice(4);
   const placeSave = usePlaceSaveToggle({
-    isAuthed,
+    isAuthed: true,
     savedPoiIds,
     save: savedPlaces.save,
     remove: savedPlaces.remove,
     places: trending,
-    onRequireLogin: () => router.push('/(auth)/login'),
+    onRequireLogin: () => {},
   });
+  const openPlace = (poiId: string) => router.push(`/explore/places/${poiId}`);
   const spotsLane: HomeSpotsLane = {
     status: places.isPending ? 'loading' : places.isError ? 'error' : 'ready',
     cards: trending.map((place) => ({
@@ -161,8 +183,25 @@ export function HomePage() {
       imageUrl: place.imageUrl,
     })),
     onRetry: () => void places.refetch(),
+    onPressCard: openPlace,
     savedPoiIds,
     ...placeSave,
+  };
+
+  const collectionsLane: HomeCollectionsLane = {
+    status: places.isPending ? 'loading' : places.isError ? 'error' : 'ready',
+    cards:
+      collectionPlaces.length === COLLECTION_COUNT
+        ? collectionPlaces.map((place) => ({
+            poiId: place.poiId,
+            title: place.nameKo,
+            region: place.region ?? '',
+            badge: place.category,
+            imageUrl: place.imageUrl,
+          }))
+        : [],
+    onRetry: () => void places.refetch(),
+    onPressCard: openPlace,
   };
 
   const nav: HomeNav = {
@@ -179,7 +218,8 @@ export function HomePage() {
       setSavedMenuOpen(false);
       router.push('/stays/saved');
     },
-    onPressSpotsMore: () => router.push('/explore/places'),
+    // TRIP-1282 — 창을 연다: 둘째 탭이 장소 탐색 카드에 떨어져도 상세가 안 열린다(연타 관통).
+    onPressSpotsMore: guardPress(() => router.push('/explore/places')),
     onPressSearch: () => router.push(regionPickerHref('explore')),
     // TRIP-935 R1 — 매거진(a02) 진입을 막는다: onPressMagazine 을 넘기지 않아 page0 은 버튼이 아니다.
     // 매거진 화면은 고정 샘플에 무반응 요소뿐이라(심사 2.1) 실데이터가 생기면 여기서 다시 잇는다.
@@ -190,6 +230,22 @@ export function HomePage() {
     savedMenuOpen,
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
     spotsLane,
+    collectionsLane,
+    // TRIP-1321 — ✦ 도우미. 계획 중 여행이 있으면 그 여행 문맥으로 연다(BR-U8-02 surface·tripId 만).
+    assistantFab: (
+      <AssistantFab
+        onPress={() =>
+          router.push(
+            assistantHref(
+              'HOME',
+              phase?.kind === 'planning' ? phase.dominantTripId : undefined
+            )
+          )
+        }
+        bottom={assistantFabBottom(TAB_TWO_STACK)}
+        toastBottom={toastBottomWith(TAB_TWO_STACK)}
+      />
+    ),
   };
 
   // 조회 진행 중 — 섹션만 로딩 스켈레톤, phase 미전달. no-trip(discovery)으로 확정하지 않는다(INV-4).
@@ -203,9 +259,20 @@ export function HomePage() {
     );
   }
 
-  // 조회 실패 — phase 미전달로 discovery(상록 랜딩) 폴백. 오류를 로딩·여행 없음으로 뭉개지 않는다(INV-4).
-  if (trips.isError) {
-    return <HomeScreen {...HOME_DEFAULT_PROPS} {...nav} />;
+  // 조회 실패 — discovery(상록 랜딩)는 그대로 두되 그 위에 오류 안내 + [다시 시도]를 띄운다.
+  // 안내 없이 discovery 만 그리면 "여행 없음"과 구별되지 않는다(INV-4, TRIP-935).
+  // 캐시된 여행이 있으면(재조회만 실패 — v5 는 data 를 남긴 채 error) 그 여행으로 계속 그린다.
+  if (trips.isError && !trips.data) {
+    return (
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        tripsError={{
+          onRetry: () => void trips.refetch(),
+          retrying: trips.isFetching,
+        }}
+        {...nav}
+      />
+    );
   }
 
   // planning 이면 지배 여행 일정을 물어 카드 CTA 목적지를 정하는 자식으로 그린다(조건부-자식 —

@@ -8,7 +8,8 @@
 여기서 증명하는 것은 네 방향이다.
 - **붙어야 할 것은 붙는다** — 표기·좌표·출처가 어떻게 흔들려도 한 건 (merged=1).
 - **붙으면 안 될 것은 안 붙는다** — 같은 건물의 다른 가게, 1자 상호, 그리고
-  주소 키가 유효한 FOOD·CAFE 밖의 카테고리(개심사 ⟷ 그 안의 문화재).
+  포함 관계 상호는 FOOD·CAFE 밖(개심사 ⟷ 그 안의 문화재)과 분류가 다른 쌍에서.
+- **분류가 달라도 같은 곳은 붙는다** — 주소 키 + 상호 완전 일치(TRIP-1231).
 - **모름은 근거가 아니다** — addr_key None 끼리는 주소로 판정하지 않는다.
 - **기존 동작 보존** — 출처 미지정이면 잠정 ID 는 여전히 `tourapi-` 다.
 
@@ -23,7 +24,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.poi import OpenHour, PoiCategory
@@ -314,7 +315,7 @@ def test_같은_주소_1자_상호는_붙지_않는다() -> None:
     assert len(report.passed) == 2 and report.merged == 0
 
 
-# ── 5. 주소 키 분기의 적용 범위 (FOOD·CAFE 한정) ───────────────────
+# ── 5. 포함 관계 상호(㉡)의 적용 범위 (FOOD·CAFE 한정) ──────────────
 @settings(max_examples=60, deadline=None)
 @given(
     names=same_store_name_pairs(),
@@ -328,11 +329,13 @@ def test_pbt_주소키_병합은_FOOD_CAFE_에만_적용된다(
 ) -> None:
     """같은 입력을 **카테고리만 바꿔** 대조한다 — 같은 주소 + 포함관계 상호일 때
     FOOD·CAFE 는 병합, 그 밖(관광지·문화·자연·체험·쇼핑)은 2건으로 남는다.
+    (상호 **완전 일치**는 ㉢ 이 카테고리 무관하게 붙이므로 여기서는 뺀다 — 아래 5′ 절.)
 
     상호 부분일치는 식품업소에서만 검증된 규칙이다(폐업 대조 대상이 식품위생업소뿐).
     관광지에 그대로 쓰면 포함 관계인 **다른** POI 를 병합한다 — 공유본 18,607건에서
     전 카테고리 적용 시 57쌍 중 대부분이 오탐이었다.
     """
+    assume(normalize_business_name(names[0]) != normalize_business_name(names[1]))
     c0, c1 = coords
     pts = ((c0.lat, c0.lng), (c1.lat, c1.lng))
 
@@ -368,6 +371,114 @@ def test_같은_건물_같은_상호_식당은_병합된다() -> None:
     ])
     assert len(report.passed) == 1 and report.merged == 1
     assert str(report.passed[0].poi.poi_id) == "tourapi-1"
+
+
+# ── 5′. 주소 키 + 상호 완전 일치는 카테고리 무관 (TRIP-1231) ─────────
+@settings(max_examples=60, deadline=None)
+@given(
+    names=same_store_name_pairs(),
+    addresses=road_address_pairs(),
+    coords=coord_pairs_apart(max_km=10.0),
+    cats=st.tuples(st.sampled_from(PoiCategory), st.sampled_from(PoiCategory)),
+)
+def test_pbt_같은_주소_같은_상호는_분류가_달라도_한_건이다(
+    names, addresses, coords, cats
+) -> None:
+    """출처마다 분류가 갈린다 — TourAPI 카페 ⟷ LOCALDATA 일반음식점, 캠핑장·수목원 ⟷ 그 이름으로
+    인허가를 낸 식당. 같은 주소 + 같은 상호면 한 건이고, 남는 쪽은 먼저 온 레코드(분류 포함)다."""
+    assume(normalize_business_name(names[0]) == normalize_business_name(names[1]))
+    c0, c1 = coords
+    first, second = _two_sources(
+        names, addresses, ((c0.lat, c0.lng), (c1.lat, c1.lng)), cats[0])
+    report = CollectionGate().apply([first, replace(second, category=cats[1])])
+
+    assert len(report.passed) == 1 and report.merged == 1
+    assert _conserved(report, 2)
+    assert str(report.passed[0].poi.poi_id) == "tourapi-101"
+    assert report.passed[0].poi.category is cats[0]
+
+
+@settings(max_examples=60, deadline=None)
+@given(
+    names=same_store_name_pairs(),
+    addresses=road_address_pairs(),
+    coords=coord_pairs_apart(max_km=10.0),
+    cats=st.lists(st.sampled_from(PoiCategory), min_size=2, max_size=2, unique=True),
+)
+def test_pbt_분류가_다르면_포함관계_상호는_안_붙는다(
+    names, addresses, coords, cats
+) -> None:
+    """㉢ 은 완전 일치만 본다 — 포함 관계로 넓히면 '절 ⟷ 그 안 문화재' 류 오탐이 분류 사이로 번진다."""
+    assume(normalize_business_name(names[0]) != normalize_business_name(names[1]))
+    c0, c1 = coords
+    first, second = _two_sources(
+        names, addresses, ((c0.lat, c0.lng), (c1.lat, c1.lng)), cats[0])
+    report = CollectionGate().apply([first, replace(second, category=cats[1])])
+
+    assert len(report.passed) == 2 and report.merged == 0
+
+
+@settings(max_examples=60, deadline=None)
+@given(
+    names=same_store_name_pairs(),
+    addr_a=road_address_pairs(bldg="101"),
+    addr_b=road_address_pairs(bldg="202"),
+    coords=coord_pairs_apart(min_km=0.2, max_km=10.0),
+    cats=st.lists(st.sampled_from(PoiCategory), min_size=2, max_size=2, unique=True),
+)
+def test_pbt_분류가_다르면_건물이_다른_같은_상호는_안_붙는다(
+    names, addr_a, addr_b, coords, cats
+) -> None:
+    """㉢ 의 근거는 주소 키다 — 상호만 같은 다른 건물(체인 지점·동명 관광지)은 두 건이다."""
+    assume(normalize_business_name(names[0]) == normalize_business_name(names[1]))
+    c0, c1 = coords
+    first, second = _two_sources(
+        names, (addr_a[0], addr_b[0]), ((c0.lat, c0.lng), (c1.lat, c1.lng)), cats[0])
+    report = CollectionGate().apply([first, replace(second, category=cats[1])])
+
+    assert len(report.passed) == 2 and report.merged == 0
+
+
+def test_정규화하면_빈_상호끼리는_분류가_다르면_안_붙는다() -> None:
+    """'본점'·'(1층)' 은 정규화하면 둘 다 빈 문자열이다 — 같다고 읽으면 한 건물의 이름 없는 레코드가 뭉친다."""
+    address = "제주특별자치도 제주시 월랑로 36"
+    report = CollectionGate().apply([
+        _cand("1", name="본점", address=address, category=PoiCategory.SIGHT),
+        _cand("2", name="(1층)", address=address, category=PoiCategory.FOOD,
+              lat=33.51, lng=126.52, source="localdata"),
+    ])
+    assert len(report.passed) == 2 and report.merged == 0
+
+
+def test_분류가_다른_병합은_상세_원문을_옮기지_않는다() -> None:
+    """상세 원문은 벤더 필드명이 타입별이다 — 쇼핑의 판매품목이 문화시설 레코드에 실리면 안 된다.
+    영업시간은 같은 곳의 시간이라 종전대로 비어 있을 때 보충한다."""
+    address = "울산광역시 남구 장생포고래로 244"
+    hours = (OpenHour(1, 570, 1080),)
+    museum = _cand("1", name="장생포고래박물관", address=address, category=PoiCategory.CULTURE)
+    shop = replace(
+        _cand("2", name="장생포고래박물관", address=address, category=PoiCategory.SHOPPING,
+              open_hours=hours, hours_raw="09:30~18:00"),
+        detail_raw={"saleitem": "고래 기념품"})
+    (kept,) = CollectionGate().apply([museum, shop]).passed
+
+    assert kept.poi.category is PoiCategory.CULTURE
+    assert kept.candidate.detail_raw == {}
+    assert kept.poi.open_hours == hours
+
+
+def test_수목원과_같은_이름_식당은_멀어도_병합된다() -> None:
+    """실측 회귀(TRIP-1231) — 공유본 NATURE '청산수목원' ⟷ LOCALDATA 일반음식점 '청산수목원',
+    173.5m. 50m(㉠) 밖이고 분류도 다르지만 주소 키 + 상호 완전 일치라 같은 곳이다."""
+    address = "충청남도 태안군 남면 연꽃길 70"
+    report = CollectionGate().apply([
+        _cand("1", name="청산수목원", address=address,
+              category=PoiCategory.NATURE, lat=36.6045, lng=126.2940),
+        _cand("2", name="청산수목원", address=address,
+              category=PoiCategory.FOOD, lat=36.6060, lng=126.2945, source="localdata"),
+    ])
+    assert len(report.passed) == 1 and report.merged == 1
+    assert report.passed[0].poi.category is PoiCategory.NATURE
 
 
 # ── 6. 배치 전체 — 중복 비율 0~100% 스윕 ───────────────────────────

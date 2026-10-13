@@ -16,7 +16,7 @@ export const APP_ICON_COLORS = ['#ff5c79', '#e8264c'] as const;
 
 // 에러 배너 경고 글리프 stroke 색 — WarningTriangleGlyph(AuthGlyphs.tsx)가 경유한다. SVG 의
 // stroke prop 은 NativeWind className 을 못 받으므로(위 이유와 동일) 여기 raw 상수로 둔다.
-// 값은 tailwind primary-text 토큰과 정확히 같다(shared/location/lib/locationColors.ts 와
+// 값은 tailwind primary-text 토큰과 정확히 같다(shared/location/locationColors.ts 와
 // 같은 패턴 — "토큰"이 아니라 컴포넌트 prop 직행 값이라 상수화가 곧 토큰 경유의 형태다).
 export const AUTH_ICON_COLORS = {
   warning: '#C13515',

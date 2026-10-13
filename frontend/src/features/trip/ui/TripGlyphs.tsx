@@ -18,7 +18,7 @@ const PRIMARY = '#FF385C';
 const PRIMARY_TEXT = '#C13515';
 const ON_PRIMARY = '#FFFFFF';
 /** 등록 숙소 행의 비활성 색(Figma `2226:2027`) — 토큰 컬렉션에 없는 푸른 회색이다.
- * 같은 값이 `features/trip/ui/TripWizardStep1Screen.tsx`의 제목 임의값 클래스에도 있다 —
+ * 같은 값이 `pages/trip/trip-new-step1/ui/TripWizardStep1Screen.tsx`의 제목 임의값 클래스에도 있다 —
  * 색을 바꿀 땐 두 자리를 함께 고친다(색은 어떤 테스트도 단언하지 않는다). */
 const DISABLED = '#C2CCD6';
 
@@ -114,37 +114,6 @@ export function RemoveGlyph({ size = 14, testID }: GlyphProps) {
         d="M10.5 3.5L3.5 10.5"
         stroke={MUTED}
         strokeWidth={1.16667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// '꼭 갈 곳' 썸네일 제거 ×(12) — Figma `1740:1087`. 도시 칩의 RemoveGlyph와 도형은
-// 정비례하지만 색(#484848)과 굵기가 다르다 — 흰 원 위에 얹히는 아이콘이라 더 진하고 굵다.
-const THUMB_REMOVE = '#484848';
-
-export function ThumbRemoveGlyph({ size = 12, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 12 12"
-      fill="none"
-    >
-      <Path
-        d="M3 3L9 9"
-        stroke={THUMB_REMOVE}
-        strokeWidth={1.3}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M9 3L3 9"
-        stroke={THUMB_REMOVE}
-        strokeWidth={1.3}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

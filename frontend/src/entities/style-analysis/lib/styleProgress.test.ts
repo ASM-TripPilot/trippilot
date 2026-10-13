@@ -3,7 +3,7 @@ import fc from 'fast-check';
 import type {
   StyleAnalysisEnvelope,
   StyleProgress,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { resolveStyleProgress } from './styleProgress';
 

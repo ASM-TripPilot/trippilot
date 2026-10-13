@@ -2,7 +2,18 @@
 
 > **최초 결정: 2026-07-11 · 범위 개정: 2026-07-17(사용자 명시 지시)** · 이 문서는 이번 TripPilot AIDLC 실행의 범위 정본이다. 워크플로우는 매 실행/재개 시 이 문서를 먼저 읽고 경계를 준수한다.
 
-## ✅ 현행 범위 — CONSTRUCTION **설계 문서 단계만** (2026-07-17 개정)
+## ✅ 현행 범위 — 2026-10-12 개정 (사용자 명시 지시)
+
+> 원문: "여기서 어시스턴트만 만들고 + gps 기능 관련 기능 아직 구현안해서 새 문서에서 계획 최신화는 ai fe be 현재 구현을 기준으로 하고 낡은거는 업데이트 + infra 배포까지 완료" (audit 2026-10-11T16:20Z)
+
+- **U0~U6**: 설계 종료(2026-08-24) + 팀 구현 완료 단계. 산출물은 **현재 구현(ai·backend·frontend) 기준으로 사후 개정**(원문 보존 + `[개정 · 2026-10-12]` 블록)한다.
+- **U8 Conversational Assistant**: 개발 범위 편입 — Functional Design → NFR Requirements → NFR Design → Infrastructure Design(승인 게이트 포함). 기준선 = 현행 `ai/` 구현.
+- **U10 GPS·위치 자동화(신설)**: 같은 4단계 설계. 기준선 = 현행 포그라운드 위치·수동 체크인.
+- **U7 Community·U9 Collaborative Editing: 폐기** — 착수하지 않는다.
+- **Infrastructure Design**: 배포 **구축 완료**(AWS EKS·Terraform·`aws-deploy.yml`). 유닛별 SKIP을 해소하고 as-built 통합 문서 `aidlc-docs/construction/shared-infrastructure.md` 1건으로 소급 작성. U8·U10의 Infra Design은 이 문서의 증분으로 쓴다.
+- **여전히 제외**: Code Generation · Build and Test — 코드는 팀이 각 패키지 디렉토리에서 직접 개발한다.
+
+## (이력) 범위 — CONSTRUCTION **설계 문서 단계만** (2026-07-17 개정)
 
 사용자 명시 지시로 CONSTRUCTION에 진입하되, **유닛별 설계 문서 작성까지만** 수행한다:
 
@@ -34,6 +45,7 @@ Units Generation 승인 완료 시점에 **전체 Inception 산출물 요약**�
 - **Code Generation · Build and Test** (전 유닛 공통 — 코드는 팀이 각 패키지 디렉토리에서 직접 개발)
 - OPERATIONS
 - U0 이외 유닛의 설계 문서 착수 (유닛별로 사용자 지시 필요)
+  - *(2026-10-12)* U1~U6 설계 종료. U8·U10은 위 현행 범위로 지시됨. U7·U9는 폐기.
 
 ## 처리 규칙
 

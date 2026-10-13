@@ -54,7 +54,7 @@ def build_alternative_explanation_vars(
         )
     return {
         "taste_tags": ", ".join(t.value for t in persona.taste_tags) or "미설정",
-        "companion": persona.companion.value,
+        "companion": persona.companion.value if persona.companion else "미설정",
         "alternatives": "\n".join(lines) or "(선택지 없음)",
     }
 

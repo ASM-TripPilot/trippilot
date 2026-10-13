@@ -9,6 +9,7 @@ BR-U4-05: LlmFeature 밖 호출 = ValueError (폴백 아님)
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -20,6 +21,7 @@ from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import LlmFeature, ModelTier, ScoredPoi
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord
 from trippilot.domain.prompt import PromptRef
+from trippilot.ports.llm_port import LlmTimeoutError
 from tests.fakes.fake_llm import FailingLlm, FakeLlm, SlowLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 
@@ -194,6 +196,28 @@ def test_failure_paths_converge_to_fallback(llm, gate, reason_prefix) -> None:
     assert len(fallbacks) == 1 and fallbacks[0].reason == result.error
     assert fallbacks[0].to_mode == "rule_score"  # 실행은 호출측 (BR-U4-09)
     assert len(trace.of_type(LlmCallRecord)) == 1  # 실패도 계측 (BR-U4-03)
+
+
+def test_failed_call_records_the_time_it_actually_spent() -> None:
+    """실패 호출의 `latency_ms` 가 0 이면 **예산을 먹는 벤더가 관측에서 사라진다.**
+
+    2026-09-29 실서비스 504 가 그랬다 — Bedrock 콜드스타트 재시도가 항목당 11.9초를 썼는데
+    `LlmCallRecord.latency_ms` 는 0 이었다. 응답 객체가 없으면 0 을 적었기 때문이다.
+    경과는 응답이 아니라 **게이트웨이가 잰다** — 그래야 어느 벤더든 빠지지 않는다.
+    """
+
+    class _SlowThenTimeout:
+        def invoke(self, request):
+            time.sleep(0.02)  # 20ms — 측정이 0 이 아닌 것만 보면 된다
+            raise LlmTimeoutError(f"timeout > {request.timeout_sec}s (fake)")
+
+    facade, trace = _facade(_SlowThenTimeout(), AcceptAllGate(_scored("p1")))
+    result = _call(facade)
+
+    assert result.is_fallback is True
+    records = trace.of_type(LlmCallRecord)
+    assert len(records) == 1 and records[0].success is False
+    assert records[0].latency_ms >= 20
 
 
 def test_drop_all_emits_gate_drop_event() -> None:

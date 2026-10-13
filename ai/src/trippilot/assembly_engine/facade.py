@@ -18,14 +18,18 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Mapping, Protocol, Sequence
 
-from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.constraints import (
+    check_all,
+    check_hc2_coords_known,
+    check_not_before,
+)
 from trippilot.assembly_engine.quality import compute_quality
 from trippilot.assembly_engine.repair import MinimalChangePolicy, RepairResult
 from trippilot.assembly_engine.repair import repair as _repair_engine
-from trippilot.domain.common import PoiId, TraceId
+from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.itinerary import (
     FixedBlock,
     ItineraryProblem,
@@ -89,6 +93,7 @@ class HybridAssemblyFacade:
     def repair(self, solution: ItinerarySolution, problem: ItineraryProblem,
                deadline_ms: int, trace_id: TraceId | None = None,
                policy: MinimalChangePolicy = MinimalChangePolicy.TIME_SHIFT_ONLY,
+               departures: Mapping[date, tuple[GeoPoint, datetime]] | None = None,
                ) -> RepairResult:
         """HC 위반 해를 최소 변경으로 수리한다. 수리 불가면 `repaired=None`.
 
@@ -109,7 +114,7 @@ class HybridAssemblyFacade:
             self._emit_fallback(tid, "repair", "(unrepaired)", "deadline")
             return RepairResult(repaired=None, changes=())
 
-        result = _repair_engine(solution, problem, self._pois, self._est, policy)
+        result = _repair_engine(solution, problem, self._pois, self._est, policy, departures)
         if result.repaired is None:
             self._finish_repair(tid, solution, problem, t0, deadline_ms,
                                 repaired=False, reason="unrepairable")
@@ -156,7 +161,12 @@ class HybridAssemblyFacade:
                 continue
             # 체인 내부 검증은 check_all 직접 호출 — 단계별 시한 회계(DL-2)는 위에서
             # 이미 하므로 public validate()의 시한 관측을 중복 발행하지 않는다.
-            violations = check_all(result, problem, self._pois, self._est)
+            # 좌표 미상 인접 쌍은 여기서만 위반이다(fail-closed, TRIP-1177) — 공용
+            # validate 는 "정보 없음은 막지 않는다"를 유지한다. 비고정 슬롯의 시작 하한
+            # (재계획 from_instant, TRIP-1182)도 같은 이유로 여기서만 본다.
+            violations = (check_all(result, problem, self._pois, self._est)
+                          + check_hc2_coords_known(result, self._pois)
+                          + check_not_before(result, problem, self._pois, self._est))
             if violations:  # 유효하지 않은 해는 반환 금지 (INV-2)
                 self._emit_fallback(tid, stage.name, next_name,
                                     f"invalid:{len(violations)}")

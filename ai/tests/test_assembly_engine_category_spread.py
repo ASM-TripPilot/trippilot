@@ -26,6 +26,7 @@ AssemblyConfig에 다양성 항이 켜져 있다). 이 파일은 그 위의 구�
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -50,23 +51,28 @@ _DAY2 = date(2026, 8, 6)
 _CFG = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
 # 항 무발동 = 허용치를 후보 수 위로 올린다 — OR-Tools는 항 생략, 폴백은 재정렬
 # 없음. (category_excess_penalty=0은 OR-Tools만 끄고 폴백 쿼터는 남아 반쪽이다.)
+# FOOD 하루 상한(food_daily_max)도 끈다 — 이 파일은 카테고리 항 단독의 성질을 증명한다
+# (상한은 test_assembly_engine_food_cap.py 소관). FOOD 편중 풀이라 안 끄면 상한이 섞인다.
 _CFG_OFF = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
-                        category_free_count=10_000)
+                        category_free_count=10_000, food_daily_max=10_000)
 # 과장 가중 — 점수 축 [0,1]의 5배. 페널티가 항상 점수를 이기는 적대 구도.
 _CFG_EXTREME = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
                             category_excess_penalty=5.0)
 # 카테고리 항 격리판 (식사 항 0) — 단일 카테고리 FOOD 풀에서는 기존 식사 항
-# (TRIP-379 ③ FOOD·FOOD 인접 -0.2)이 저점수(<0.2) FOOD를 어느 날에 놓아도 순손실로
+# (TRIP-379 ③ FOOD·FOOD 인접 — 종전 -0.2, 지금은 food_adjacent_penalty -1.0 이라 첫 곳
+# 말고는 전부)이 FOOD를 어느 날에 놓아도 순손실로
 # 만들어 떨어뜨린다(커밋 실측 "순창 SIGHT 4→3"과 같은, 수용된 소프트 경제).
 # "카테고리 항 **단독**은 배치를 잃지 않는다(마지막 날 무페널티 흡수)"를 정리로
 # 증명하려면 그 기존 항과 분리해야 한다 — 격리 없이 총량 동등을 걸면 식사 항의
 # 기존 동작을 이 티켓의 회귀로 오인한다.
 _CFG_EXTREME_ISO = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
                                 category_excess_penalty=5.0,
-                                meal_bonus=0.0, meal_penalty=0.0)
+                                meal_bonus=0.0, meal_penalty=0.0, food_adjacent_penalty=0.0,
+                                food_daily_max=10_000)
 _CFG_OFF_ISO = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
                             category_free_count=10_000,
-                            meal_bonus=0.0, meal_penalty=0.0)
+                            meal_bonus=0.0, meal_penalty=0.0, food_adjacent_penalty=0.0,
+                            food_daily_max=10_000)
 _EST = TravelEstimator(_CFG)
 
 
@@ -184,13 +190,19 @@ def test_pbt_category_penalty_keeps_determinism(setup) -> None:
 # 페널티가 아무리 커도 막히지 않는다.
 
 _POOL_LAST_DAY = [(f"f{i}", PoiCategory.FOOD, .90 - .05 * i) for i in range(7)]
+# FOOD 하루 상한·FOOD 인접 억제는 끈다 — 둘 다 이 풀(1일·FOOD 7)을 일부러 줄인다
+# (food_cap·food_adjacent 테스트). 여기서 증명할 것은 카테고리 항 단독의 무발동이다.
+_CFG_EXTREME_NO_CAP = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
+                                     category_excess_penalty=5.0, food_daily_max=10_000,
+                                     food_adjacent_penalty=0.0)
 
 
 def test_single_day_quota_equals_pool_size_ortools() -> None:
     problem, index = _problem(_POOL_LAST_DAY, days=(_DAY,))
-    est = TravelEstimator(_CFG_EXTREME)
-    on = OrToolsAssembler(index, est, _CFG_EXTREME).solve(problem, 3000)
-    off = OrToolsAssembler(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
+    est = TravelEstimator(_CFG_EXTREME_NO_CAP)
+    on = OrToolsAssembler(index, est, _CFG_EXTREME_NO_CAP).solve(problem, 3000)
+    cfg_off = replace(_CFG_OFF, food_adjacent_penalty=0.0)
+    off = OrToolsAssembler(index, TravelEstimator(cfg_off), cfg_off).solve(problem, 3000)
     assert on is not None
     assert on == off  # 허용치 = 후보 수 → 항 자체가 생기지 않는다 (모델 동일)
     assert _total_slots(on) == len(problem.candidates)

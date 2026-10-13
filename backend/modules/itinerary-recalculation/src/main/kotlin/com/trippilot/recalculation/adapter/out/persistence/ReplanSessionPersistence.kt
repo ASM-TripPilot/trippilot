@@ -19,10 +19,11 @@ import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Component
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 /**
- * replan_session 매핑(V2.17).
+ * replan_session 매핑(V2.17 · `target_date` 는 V2.60).
  *
  * `reasons`·`directives`·`excluded_poi_ids` 는 Postgres 배열이다. `@JdbcTypeCode(SqlTypes.ARRAY)` 로
  * 매핑하며 **컬렉션 매핑(@ElementCollection)을 쓰지 않는다** — 그랬다면 별도 조인 테이블이 생겨
@@ -36,6 +37,7 @@ class ReplanSessionEntity(
     @Column(name = "itinerary_id") var itineraryId: UUID,
     @Column(name = "trigger_id") var triggerId: UUID?,
     @Column(name = "scope") var scope: String,
+    @Column(name = "target_date") var targetDate: LocalDate,
     @Column(name = "from_instant") var fromInstant: Instant,
     @Column(name = "origin_kind") var originKind: String,
     @Column(name = "origin_lat") var originLat: Double?,
@@ -50,7 +52,7 @@ class ReplanSessionEntity(
     @Column(name = "closed_at") var closedAt: Instant?,
 ) {
     protected constructor() : this(
-        UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null, "", Instant.EPOCH, "", null, null,
+        UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null, "", LocalDate.EPOCH, Instant.EPOCH, "", null, null,
         emptyArray(), emptyArray(), null, emptyArray(), "", null, Instant.EPOCH, null,
     )
 }
@@ -87,7 +89,7 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         jpa.saveAndFlush(
             ReplanSessionEntity(
                 session.sessionId, session.tripId, session.itineraryId, session.triggerId,
-                session.scope.name, session.fromInstant,
+                session.scope.name, session.targetDate, session.fromInstant,
                 session.origin.kind.name, session.origin.lat, session.origin.lng,
                 session.reasons.toTypedArray(), session.directives.toTypedArray(), session.freeText,
                 session.excludedPoiIds.toTypedArray(),
@@ -109,7 +111,7 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
 
     private fun ReplanSessionEntity.toDomain() = ReplanSession(
         sessionId, tripId, itineraryId, triggerId,
-        ReplanScope.valueOf(scope), fromInstant,
+        ReplanScope.valueOf(scope), targetDate, fromInstant,
         ReplanOrigin(OriginKind.valueOf(originKind), originLat, originLng),
         reasons.toList(), directives.toList(), freeText, excludedPoiIds.toList(),
         ReplanStatus.valueOf(status), draft, createdAt, closedAt,

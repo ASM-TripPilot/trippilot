@@ -8,7 +8,7 @@ import { join, relative, resolve, sep } from 'node:path';
  * TRIP-608 AC-13 · BR-U6-25(DEC-U6-6) — 삭제 고지 목록은 `deletionScope.ts` 가 **단일 소유**한다.
  *
  * 무엇을 보장하나: 계정 삭제 시 함께 삭제되는 것들의 목록(법적 사전 고지)이 오직
- * `features/settings/model/deletionScope.ts` 의 `DELETION_SCOPE` 상수에만 리터럴로 산다.
+ * `pages/settings/settings/model/deletionScope.ts` 의 `DELETION_SCOPE` 상수에만 리터럴로 산다.
  * 다이얼로그는 이 상수를 import·map 해 그리므로(Q1 확정 — Figma 3항목 축약 산문 미채용, 전체 목록
  * 렌더), 설정 표면의 다른 소스 파일에는 이 문자열들이 **인라인으로 중복되지 않아야** 한다. 목록이
  * 두 군데로 갈리면 한쪽만 고쳐 법적 고지가 실제 삭제 범위와 어긋난다.
@@ -16,14 +16,14 @@ import { join, relative, resolve, sep } from 'node:path';
  * 왜 소스 스캔인가: "목록이 한 곳에만 있다"는 런타임 동작이 아니라 코드 배치의 성질이다 —
  * 렌더 테스트로는 표현할 수 없고 소스 층에서만 잡힌다.
  *
- * 왜 **설정 표면 스코프**(features/settings·pages/settings·app/settings)인가, whole-repo 가 아니라:
+ * 왜 **설정 표면 스코프**(features/settings·pages/settings/settings·app/settings·pages/settings/my-page·pages/stay/my-stays·pages/settings/settings-personalization·features/edit-preferences)인가, whole-repo 가 아니라:
  * `회고`·`요약` 같은 삭제 대상 어휘는 `features/reflection` 등에 **정당하게** 등장한다 —
  * 전 리포 스캔은 그걸 위반으로 오탐한다. AC-13 의 실제 표적은 "삭제 고지 목록이 다이얼로그에
  * 인라인 중복되는 것"이고, 그 중복이 생길 곳은 설정 표면뿐이다.
  *
  * ⚠️ 전처리(`stripComments`)의 줄 주석 정규식이 URL 의 `//` 를 주석으로 오인하면, 그 줄의 진짜
  * 리터럴이 통째로 사라져 거짓 green 이 난다(2026-07-31 실사고). `:` 뒤의 `//` 는 주석으로 보지
- * 않고(`tripDraftBoundary.test.ts` 확립 규약), 그 성질을 아래 자가검사가 회귀 가드로 잠근다.
+ * 않고(`tripDraftBoundary.test.ts` 확립 규약), 그 성질의 자가검사 it 은 TRIP-1350 에서 지웠다 — 같은 it 의 긍정 앵커(항목 ≥5)가 탐지기 고장을 공허 통과로 두지 않는다.
  *
  * 가짜 통과 방지 규약(리포 관례): 모든 "없어야 한다" 단언은 "있어야 한다" 단언과 짝을 이룬다.
  */
@@ -31,15 +31,20 @@ import { join, relative, resolve, sep } from 'node:path';
 const SRC_ROOT = resolve(__dirname, '..');
 const DELETION_SCOPE_FILE = join(
   SRC_ROOT,
-  'features',
+  'pages',
+  'settings',
   'settings',
   'model',
   'deletionScope.ts'
 );
 const SCAN_ROOTS = [
   join(SRC_ROOT, 'features', 'settings'),
-  join(SRC_ROOT, 'pages', 'settings'),
-  join(SRC_ROOT, 'app', 'settings'),
+  join(SRC_ROOT, 'pages', 'settings', 'settings'),
+  join(SRC_ROOT, '..', 'app', 'settings'), // 라우트는 루트 app/ (TRIP-1161)
+  join(SRC_ROOT, 'pages', 'settings', 'my-page'),
+  join(SRC_ROOT, 'pages', 'stay', 'my-stays'),
+  join(SRC_ROOT, 'pages', 'settings', 'settings-personalization'),
+  join(SRC_ROOT, 'features', 'edit-preferences'),
 ];
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
 
@@ -83,31 +88,6 @@ function collectSources(dir: string): string[] {
 }
 
 describe('AC-13 · deletionScope 단일 소유 가드', () => {
-  it('탐지기 자가검사 — 주석은 걷히고, URL 옆 진짜 리터럴은 살아남고, 배열 항목이 뽑힌다', () => {
-    // ① 주석 안에 적힌 삭제 어휘는 추출에 안 걸린다(머리말 산문이 스캔을 오염시키지 않게).
-    const commented = [
-      '/**',
-      ' * 이 화면은 "등록한 숙소" 목록을 deletionScope 에서만 가져온다.',
-      ' */',
-      "// const scope = ['등록한 숙소', '여행 기록'];",
-      'export const keep = 1;',
-    ].join('\n');
-    expect(stripComments(commented)).not.toContain('등록한 숙소');
-    expect(stripComments(commented)).toContain('export const keep = 1;');
-
-    // ② 회귀 가드 — URL 의 `//` 를 줄 주석으로 오인하면 그 줄의 진짜 리터럴이 사라진다.
-    expect(
-      quotedStringsOf(
-        "const doc = 'https://policy.example.com/delete'; const s = '등록한 숙소';"
-      )
-    ).toContain('등록한 숙소');
-
-    // ③ 블록 주석을 먼저 지우는 순서라야 같은 줄의 리터럴이 살아남는다.
-    expect(quotedStringsOf("/* a // b */ const s = '방문 기록';")).toEqual([
-      '방문 기록',
-    ]);
-  });
-
   it('DELETION_SCOPE 가 실재하고 목록이 비어있지 않다(긍정 짝)', () => {
     // 긍정 ① — 파일이 없으면 아래 추출이 무의미하다(빈 파일 가짜 통과 차단).
     expect(existsSync(DELETION_SCOPE_FILE)).toBe(true);
@@ -121,6 +101,8 @@ describe('AC-13 · deletionScope 단일 소유 가드', () => {
     expect(existsSync(DELETION_SCOPE_FILE)).toBe(true);
     const items = quotedStringsOf(readFileSync(DELETION_SCOPE_FILE, 'utf8'));
 
+    // 사정거리 앵커 — 스캔 루트가 전부 실재한다(오타·이동으로 빈 목록이 되면 red).
+    expect(SCAN_ROOTS.filter((root) => !existsSync(root))).toEqual([]);
     const files = SCAN_ROOTS.flatMap((root) => collectSources(root));
     // 긍정 짝 — 스캔 집합이 비어 있지 않다(공집합이면 "위반 0"이 공허하다).
     expect(files.length).toBeGreaterThan(0);

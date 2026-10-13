@@ -1,16 +1,16 @@
 import { render, screen } from '@testing-library/react-native';
 
-import TripWizardLayout from '@/app/trips/new/_layout';
-import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
-import { TripNewStep1Page } from '@/pages/trip-new-step1';
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import TripWizardLayout from '@routes/trips/new/_layout';
+import type { MustVisitSeedItem } from '@/features/create-trip';
+import { useTripWizardStore } from '@/features/create-trip';
+import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 /**
  * TRIP-288 AC-1 → 사용자 결정으로 재정의 — '꼭 갈 곳' 시드의 **수명이 어디서 시작하는가**.
  *
- * 무엇을 보장하나: 위저드 셸(`src/app/trips/new/_layout.tsx`)이 마운트되면 드래프트의 시드·채움
+ * 무엇을 보장하나: 위저드 셸(`app/trips/new/_layout.tsx`)이 마운트되면 드래프트의 시드·채움
  * 플래그·"뺀 곳" 기억이 **전부 초기값으로** 돌아간다. ⚠️ **담은 곳(하트) 자동 재시드는 폐지됐다**
  * (사용자 결정) — 예전엔 초기화 뒤 지금 담은 목록으로 다시 채워졌으나(TRIP-288), 이제는 채우는
  * 경로 자체가 없어(`TripNewStep1Page.tsx`의 마운트 효과 삭제) 새 진입마다 "꼭 갈 곳"은 항상
@@ -47,14 +47,23 @@ jest.mock('expo-router', () => {
     ...stackMock,
     useRouter: () => ({ push, back, replace }),
     router: { push, back, replace },
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    useNavigation: require('@/test-support/preventRemoveMock').useNavigation,
   };
 });
 
-jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
+// TRIP-1272 — 페이지가 뒤로 가로채기(`usePreventRemove`)를 건다. 실물은 네비게이터 밖에서 throw 하므로 그려지기만 하게
+// 대역으로 바꾼다(가로채기 동작은 `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx` 몫).
+jest.mock('@react-navigation/native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/preventRemoveMock')
+);
+
+jest.mock('@/pages/trip/trip-new-step1/model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({ data: undefined }),
 }));
 
-jest.mock('@/features/trip/model/useCreateTrip', () => ({
+jest.mock('@/pages/trip/trip-new-step1/model/useCreateTrip', () => ({
   useCreateTrip: () => ({
     mutateAsync: jest.fn(),
     isPending: false,
@@ -71,7 +80,7 @@ jest.mock('@/features/trip/model/useSavedStays', () => ({
   }),
 }));
 
-/** 담은 목록 조회를 손으로 갈아 끼우는 창구(동결 `…mustVisit.test.tsx` 와 같은 형태). */
+/** 담은 목록 조회를 손으로 갈아 끼우는 창구(`TripNewStep1Page.test.tsx` 「담은목록 게이트」 describe 와 같은 형태). */
 const mockRefetch = jest.fn();
 const mockRemove = jest.fn();
 let mockSavedPlaces: {
@@ -82,7 +91,7 @@ let mockSavedPlaces: {
   remove: jest.Mock;
 };
 
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => mockSavedPlaces,
 }));
 
@@ -383,5 +392,60 @@ describe('GC · 위저드 셸 진입이 옛 createdTripId 를 비운다 (TRIP-60
     // 단언 — 클리어를 렌더 본문이나 의존성 있는 효과에 걸면 여기서 진행 중 id 가 날아간다(재개 파손).
     // 마운트에만 걸려 있어야 이 값이 산다(FW-3 와 동형의 경계).
     expect(store().createdTripId).toBe('trip-new');
+  });
+});
+
+/**
+ * TRIP-1113 결정 2 (옛 `tripWizardReentryPreserve.test`, TRIP-1350 에서 합침) — 위저드 **안** 재진입(꼭 갈 곳 고르기
+ * 완료)은 이미 만든 여행 id 를 지키고, 새 진입은 지금처럼 비운다.
+ *
+ * 무엇을 보장하나: `keepCreatedTripIdOnce()` 가 켠 1회성 표식이 있으면 셸 마운트가 `createdTripId` 를 비우지 않고
+ * 표식을 끈다. 다음 마운트부터는 다시 비운다. 새 진입의 `reset()` 은 표식까지 끈다. 위 GC-1~4 는 이 describe 와 별개로 무변경이다.
+ *
+ * ⚠️ jest 는 실제 셸 재마운트 여부를 못 본다(`expo-router` 통째 목) — 여기서는 "마운트되면 무엇이 남는가"까지만 잠근다.
+ * 재마운트가 안 되는 경우는 셸 효과가 아예 안 돌아 id 가 그대로 남는다.
+ */
+describe('GP · 셸 보존 표식 (TRIP-1113 AC-8)', () => {
+  it('🔴 GP-1 표식이 켜진 채 셸이 마운트되면 이미 만든 여행 id 가 남는다', () => {
+    store().setCreatedTripId('trip-A');
+    store().keepCreatedTripIdOnce();
+
+    render(<TripWizardLayout />);
+
+    expect(store().createdTripId).toBe('trip-A');
+    expect(screen.getByTestId('gate-stack')).toBeOnTheScreen();
+  });
+
+  it('🔴 GP-2 표식은 한 번만 쓰인다 — 다음 마운트는 다시 id 를 비운다', () => {
+    store().setCreatedTripId('trip-A');
+    store().keepCreatedTripIdOnce();
+    const first = render(<TripWizardLayout />);
+    expect(store().createdTripId).toBe('trip-A');
+
+    first.unmount();
+    render(<TripWizardLayout />);
+
+    expect(store().createdTripId).toBeUndefined();
+  });
+
+  it('🔴 GP-3 꼭 갈 곳 고르기 완료 상태(시드 표식 + id 표식)면 시드와 id 가 둘 다 남는다', () => {
+    store().seedMustVisitsFromD02([seed('poi-1')]);
+    store().setCreatedTripId('trip-A');
+    store().keepCreatedTripIdOnce();
+
+    render(<TripWizardLayout />);
+
+    expect(store().createdTripId).toBe('trip-A');
+    expect(seedIds()).toEqual(['poi-1']);
+  });
+
+  it('🔴 GP-4 새 진입의 reset() 은 표식까지 끈다 — 그 뒤 마운트는 id 를 비운다', () => {
+    store().keepCreatedTripIdOnce();
+    store().reset();
+    store().setCreatedTripId('trip-B');
+
+    render(<TripWizardLayout />);
+
+    expect(store().createdTripId).toBeUndefined();
   });
 });

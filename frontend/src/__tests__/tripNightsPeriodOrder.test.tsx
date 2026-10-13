@@ -1,10 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { PreferenceView, Region } from '@/shared/api/generated/schemas';
-import { RegionLevel } from '@/shared/api/generated/schemas';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
-import { RegionPickerPage } from '@/pages/region-picker/ui/RegionPickerPage';
-import { TripNewStep1Page } from '@/pages/trip-new-step1/ui/TripNewStep1Page';
+import type { PreferenceView, Region } from '@/shared/api/index.schemas';
+import { RegionLevel } from '@/shared/api/index.schemas';
+import { useTripWizardStore } from '@/features/create-trip';
+import { RegionPickerPage } from '@/pages/explore/region-picker';
+import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
 
 /**
  * TRIP-1027 AC-6 — **어떤 입력 순서로도** 박수 합과 기간이 어긋나 '다음'이 막히지 않는다.
@@ -40,8 +40,17 @@ jest.mock('expo-router', () => {
     useRouter: () => ({ push, back, replace, dismissTo }),
     router: { push, back, replace, dismissTo },
     useLocalSearchParams: () => ({ ...mockParams }),
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    useNavigation: require('@/test-support/preventRemoveMock').useNavigation,
   };
 });
+
+// TRIP-1272 — 페이지가 뒤로 가로채기(`usePreventRemove`)를 건다. 실물은 네비게이터 밖에서 throw 하므로 그려지기만 하게
+// 대역으로 바꾼다(가로채기 동작은 `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx` 몫).
+jest.mock('@react-navigation/native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/preventRemoveMock')
+);
 
 const mockSeoul: Region = {
   regionCode: '11',
@@ -73,11 +82,11 @@ jest.mock('@/features/explore/model/regions', () => ({
 
 let mockPreference: PreferenceView | undefined;
 
-jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
+jest.mock('@/pages/trip/trip-new-step1/model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({ data: mockPreference }),
 }));
 
-jest.mock('@/features/trip/model/useCreateTrip', () => ({
+jest.mock('@/pages/trip/trip-new-step1/model/useCreateTrip', () => ({
   useCreateTrip: () => ({
     mutateAsync: jest.fn().mockResolvedValue(undefined),
     isPending: false,
@@ -85,7 +94,7 @@ jest.mock('@/features/trip/model/useCreateTrip', () => ({
   }),
 }));
 
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({
     savedPlaces: [],
     isPending: false,

@@ -1,5 +1,10 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.trip.api.TripGenerationContext
+import com.trippilot.itinerarygeneration.domain.PersonalizationHints
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.profile.api.PreferenceSnapshot
+import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
@@ -93,6 +98,16 @@ class SlotCandidateServiceTest : StringSpec({
         override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
     }
 
+    // 계정 취향 = 액티비티. 여행 스냅숏이 있으면 그쪽이 이겨야 한다(BR-U1-38).
+    val accountPrefs = object : PreferenceFacade {
+        override fun findPreferences(accountId: UUID) = PreferenceSnapshot(
+            listOf("액티비티"), emptyList(), emptyList(), listOf("대중교통"), null, listOf("혼자"), false, "저가",
+        )
+    }
+    val NoHints = object : PersonalizationPort {
+        override fun hintsFor(accountId: UUID) = PersonalizationHints.NONE
+    }
+
     class CapturingAgent(
         private val failure: ScheduleAgentCallFailed? = null,
         /** true 면 0건 응답 — 즉답 구제(TRIP-969 "전개가 저장분보다 나쁘면") 검증용. */
@@ -126,7 +141,8 @@ class SlotCandidateServiceTest : StringSpec({
         stored: Itinerary? = itinerary,
         scored: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(), // 기본 빈 풀 — 종전 경로 그대로
         candidates: CandidatePoolPort = pool,
-    ) = SlotCandidateService(trips, Repo(stored), agent, surfaces, candidates, scored, clock)
+        tripFacade: TripFacade = trips,
+    ) = SlotCandidateService(tripFacade, Repo(stored), agent, surfaces, candidates, scored, clock, accountPrefs, NoHints)
 
     "경계가 실패하면 503 으로 표면화한다 — 500(우리가 터졌다)이 아니다" {
         // 감싸지 않으면 RuntimeException 이라 전역 핸들러가 500 으로 떨구는데, 사실은 "지금은 못 준다"다.
@@ -143,6 +159,24 @@ class SlotCandidateServiceTest : StringSpec({
         e.fallbackApplied shouldBe false
     }
 
+    "AI 에 묻는 후보는 그 여행에서 고른 취향으로 고른다 — 생성과 같은 척도(BR-U1-38)" {
+        val withSnapshot = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(d1, d1)
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+                d1, d1, emptyList(), "친구", null, emptyList(),
+                preferenceSnapshot = mapOf("styles" to listOf("미식"), "activities" to emptyList<String>()),
+            )
+        }
+        val agent = CapturingAgent()
+
+        service(agent, tripFacade = withSnapshot).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        val sent = agent.captured!!
+        sent.preferenceProfile!!.styles shouldContainExactly listOf("미식")
+        sent.preferenceProfile!!.transportModes shouldContainExactly listOf("대중교통") // 여행이 안 정한 축은 계정
+        sent.companionType shouldBe "친구"
+    }
+
     "이미 일정에 있는 장소를 서버가 제외 목록으로 만든다(BR-U3-24)" {
         val agent = CapturingAgent()
         service(agent).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
@@ -157,6 +191,75 @@ class SlotCandidateServiceTest : StringSpec({
 
         agent.captured!!.neighborSlotKeys shouldContainExactly
             listOf(SlotKey.of(d1, neighborBefore), SlotKey.of(d1, neighborAfter))
+    }
+
+    // ── 탐색 중심(TRIP-1252) ────────────────────────────────────────────────────
+    // POI 마다 좌표가 **달라야** 중심이 어디인지 가려진다. 공용 `surfaces` 는 전 POI 가 같은
+    // 좌표라 이 축을 재지 못한다 — 그걸 쓰면 이 스펙은 늘 통과하는 공허한 단언이 된다.
+    val distinctSurfaces = object : PoiSurfaceFacade {
+        val coords = mapOf(
+            neighborBefore to (33.10 to 126.10), // 직전 — 사용자가 방금 고른 자리
+            target to (33.90 to 126.90),         // 교체 대상 — AI 원배치
+            neighborAfter to (33.50 to 126.50),
+        )
+        override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
+            coords[id]?.let { (lat, lng) -> id to PoiSurfaceView(id, "장소", lat, lng, "명소", "SIGHT", null, null, emptyList()) }
+        }.toMap()
+        override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+    }
+
+    fun serviceWithDistinctCoords(agent: CapturingAgent) =
+        SlotCandidateService(trips, Repo(itinerary), agent, distinctSurfaces, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
+
+    "같이 고르기는 직전 슬롯을 탐색 중심으로 쓴다 — 방금 고른 곳에서 다음 발걸음이다(TRIP-1252)" {
+        val agent = CapturingAgent()
+
+        serviceWithDistinctCoords(agent)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null, coPick = true))
+
+        // AI 원배치(33.90)가 아니라 직전 선택(33.10)이 중심이다. 이게 뒤집히면 칸을 고를수록
+        // 동선이 도시 전체로 튄다 — 경산 6칸 재현(2026-10-05).
+        agent.captured!!.centerLat shouldBe 33.10
+        agent.captured!!.centerLng shouldBe 126.10
+    }
+
+    "완전 AI '다른 후보'는 교체 대상이 중심이다 — '이 자리 대체'라 그 자리가 맥락이다(BR-U3-23 유지)" {
+        val agent = CapturingAgent()
+
+        serviceWithDistinctCoords(agent)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.captured!!.centerLat shouldBe 33.90
+        agent.captured!!.centerLng shouldBe 126.90
+    }
+
+    "직전 슬롯이 정본에서 사라졌으면 교체 대상으로 물러선다 — 그 요청까지 죽이지 않는다" {
+        // 적대적 리뷰가 잡은 미검증 분기: 공용 fake 는 전 POI 에 좌표를 줘서 이 경로를 아무도 안 지난다.
+        // 직전 장소가 하드 삭제된 것은 **이 요청의 잘못이 아니라서** 404 로 죽이지 않고 물러선다.
+        val agent = CapturingAgent()
+        val missingPrev = object : PoiSurfaceFacade {
+            override fun findSurfaces(poiIds: Collection<UUID>) = poiIds
+                .filterNot { it == neighborBefore }   // 직전 슬롯만 정본에서 사라진 상태
+                .associateWith { PoiSurfaceView(it, "장소", 33.90, 126.90, "명소", "SIGHT", null, null, emptyList()) }
+            override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+        }
+
+        SlotCandidateService(trips, Repo(itinerary), agent, missingPrev, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null, coPick = true))
+
+        // 교체 대상 좌표로 물러섰다(요청은 성사된다).
+        agent.captured!!.centerLat shouldBe 33.90
+    }
+
+    "같이 고르기라도 첫 칸이면 교체 대상이 중심이다 — 직전이 없으면 옮길 데가 없다" {
+        val agent = CapturingAgent()
+
+        // neighborBefore 가 그 날의 첫 슬롯이다(index 0).
+        serviceWithDistinctCoords(agent)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, neighborBefore), null, null, null, coPick = true))
+
+        agent.captured!!.centerLat shouldBe 33.10
+        agent.captured!!.centerLng shouldBe 126.10
     }
 
     "첫 슬롯이면 이웃이 하나뿐이다" {
@@ -376,7 +479,7 @@ class SlotCandidateServiceTest : StringSpec({
         }
 
     fun conceptSvc(agent: StubScheduleAgent, pool: CandidatePoolPort) =
-        SlotCandidateService(trips, Repo(itinerary), agent, surfaces, pool, FakeScoredCandidatePoolStore(), clock)
+        SlotCandidateService(trips, Repo(itinerary), agent, surfaces, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
 
     fun req(concept: String?) = RequestSlotCandidates(SlotKey.of(d1, target), null, concept, null)
 
@@ -412,6 +515,58 @@ class SlotCandidateServiceTest : StringSpec({
 
         out.candidates shouldBe emptyList()
         out.emptyReason shouldBe SlotCandidatesEmptyReason.NO_NEARBY
+    }
+
+    // ─── 0건 1회 확장(TRIP-1311 · BR-U3-25) — 컨셉 없는 요청도 넓혀 본다 ───
+
+    fun emptyAgent(reason: SlotCandidatesEmptyReason) = object : StubScheduleAgent() {
+        override fun proposeSlotCandidates(input: SlotCandidatesInput) = SlotCandidatesOutput(
+            emptyList(), radiusMUsed = 3_000,
+            freshness = FreshnessMeta(now, degraded = true), emptyReason = reason,
+        )
+    }
+
+    /** 반경별 풀 — 요청 반경 이내만 돌려주고, 몇 번·어느 반경으로 물었는지 남긴다. */
+    class RadiusPool(private val places: List<GroundedPlace>) : CandidatePoolPort {
+        val radii = mutableListOf<Double>()
+        override fun resolve(area: Area, categories: Set<String>): List<GroundedPlace> {
+            val r = (area as Area.Radius).radiusM
+            radii += r
+            return places.filter { (it.distanceM ?: 0.0) <= r }
+        }
+        override fun ground(poiIds: List<UUID>) = poiIds.map { GroundedPlace(it, "장소", 33.45, 126.56, "명소", null, null) }
+    }
+
+    "NO_NEARBY 0건이면 반경을 한 단계 넓혀 1회 다시 본다 — 실제 쓴 반경을 알린다" {
+        val far = UUID.randomUUID()
+        val pool = RadiusPool(listOf(GroundedPlace(far, "먼 국밥집", 33.45, 126.56, "맛집", null, 11_300.0)))
+        val out = conceptSvc(emptyAgent(SlotCandidatesEmptyReason.NO_NEARBY), pool).propose(acc, tripId, req(null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(far) // closed-set 풀에서만(INV-1)
+        out.candidates.single().distanceRange shouldBe "약 11.3km"
+        out.candidates.single().rationale shouldBe "주변 맛집"
+        out.radiusMUsed shouldBe 12_000
+        out.emptyReason shouldBe null
+        out.freshness.degraded shouldBe true // 거리순 채움은 AI 추천이 아니다(INV-4)
+    }
+
+    "ALL_IN_ITINERARY 0건이면 넓히지 않는다 — 넓혀도 같은 결과다" {
+        val pool = RadiusPool(listOf(GroundedPlace(UUID.randomUUID(), "먼 국밥집", 33.45, 126.56, "맛집", null, 11_300.0)))
+        val out = conceptSvc(emptyAgent(SlotCandidatesEmptyReason.ALL_IN_ITINERARY), pool).propose(acc, tripId, req(null))
+
+        out.candidates shouldBe emptyList()
+        out.emptyReason shouldBe SlotCandidatesEmptyReason.ALL_IN_ITINERARY
+        pool.radii shouldBe emptyList()
+    }
+
+    "넓혀도 0건이면 한 번으로 끝난다 — NO_NEARBY 그대로, 무한 확장 없음" {
+        val pool = RadiusPool(listOf(GroundedPlace(UUID.randomUUID(), "아주 먼 곳", 33.45, 126.56, "명소", null, 30_000.0)))
+        val out = conceptSvc(emptyAgent(SlotCandidatesEmptyReason.NO_NEARBY), pool).propose(acc, tripId, req(null))
+
+        out.candidates shouldBe emptyList()
+        out.emptyReason shouldBe SlotCandidatesEmptyReason.NO_NEARBY
+        out.radiusMUsed shouldBe 12_000
+        pool.radii shouldBe listOf(3_000.0, 12_000.0)
     }
 
     "매핑에 없는 컨셉은 필터 없이 기존 동작 — 400 이 아니다(reason 선례)" {

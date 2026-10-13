@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import type { ImageSourcePropType } from 'react-native';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, {
@@ -16,6 +16,7 @@ import {
   NaverMapMarkerOverlay,
   NaverMapPathOverlay,
   NaverMapCircleOverlay,
+  NaverMapPolylineOverlay,
 } from '@mj-studio/react-native-naver-map';
 import type {
   NaverMapViewRef,
@@ -83,6 +84,12 @@ export interface MapViewProps {
   center: MapCenter;
   /** 번호 마커. 미전달이면 마커·경로선 없이 빈 지도. */
   pins?: MapPin[];
+  /**
+   * TRIP-1342 · 실제 이동 경로(옵트인). 기록이 이어진 구간(세그먼트)마다 점선 1개 — 세그먼트끼리 잇지 않는다.
+   * 켜지면(점 ≥2 세그먼트가 하나라도 있으면) 계획 연결선을 흐리게 낮춘다. 미전달·빈 배열이면 지금 그대로.
+   * 거리만 다룬다 — 시각·속도 필드가 없다(INV-3).
+   */
+  actualRoute?: MapCenter[][];
   /** 보여주기 전용 지도. true 면 사용자 제스처 4종(스크롤·줌·회전·기울임)을 모두 끈다.
    * 기본값(미전달)은 조작 가능 — 지도를 움직여 좌표를 확정하는 화면이 조용히 잠기면 안 된다. */
   viewOnly?: boolean;
@@ -116,9 +123,9 @@ export interface MapViewProps {
   /** 지도 빈 곳 탭(마커 아님, TRIP-748 — i01 허브 트리거 알약 로컬 숨김). `onCameraIdle` 과 같은
    * 옵트인 — 준 때만 NaverMapView 에 단다(미전달 시 콜백 부착 0). 좌표는 올리지 않는다. */
   onTapMap?: () => void;
-  /** 핀 전부가 한 화면에 들어오게 연다(TRIP-1022, h02). **옵트인** — 켜고 핀이 2개 이상일 때만
-   * `camera` 대신 `region` 을 넘긴다(SDK 는 camera 가 있으면 region 을 버린다). 핀 1개 이하·미전달이면
-   * 기존 center 카메라 그대로. */
+  /** 핀 전부가 한 화면에 들어오게 연다(TRIP-1022, h02). **옵트인** — 켜고 핀이 1개 이상일 때만
+   * `camera` 대신 `region` 을 넘긴다(SDK 는 camera 가 있으면 region 을 버린다). 핀 0개·미전달이면
+   * 기존 center 카메라 그대로(핀 1개는 최소 폭 region — TRIP-1363). */
   fitPins?: boolean;
 }
 
@@ -260,6 +267,38 @@ const RECORD_DIMS: Record<
   stay: { width: 34, height: 42, anchor: { x: 0.5, y: 1 } },
   candidate: { width: 28, height: 36, anchor: { x: 0.5, y: 1 } },
 };
+
+/**
+ * TRIP-1349 — 마커 anchor·래퍼 style 은 모듈 상수다. 인라인 객체는 렌더마다 새 참조라 네이티브 마커에
+ * 매번 "바뀐 prop"으로 보인다.
+ */
+const DROP_ANCHOR = { x: 0.5, y: 1 } as const;
+const CURRENT_LOCATION_ANCHOR = { x: 0.5, y: 0.85 } as const;
+const CURRENT_LOCATION_STYLE = { width: 72, alignItems: 'center' } as const;
+const DROP_WRAP_LARGE_STYLE = { width: 35, height: 46 } as const;
+const DROP_WRAP_SMALL_STYLE = { width: 28, height: 36 } as const;
+const RECORD_WRAP_STYLE: Record<
+  MapPinKind,
+  {
+    width: number;
+    height: number;
+    alignItems: 'center';
+    justifyContent: 'center';
+  }
+> = {
+  visited: wrapStyle(RECORD_DIMS.visited),
+  planned: wrapStyle(RECORD_DIMS.planned),
+  stay: wrapStyle(RECORD_DIMS.stay),
+  candidate: wrapStyle(RECORD_DIMS.candidate),
+};
+function wrapStyle(d: { width: number; height: number }) {
+  return {
+    width: d.width,
+    height: d.height,
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as const;
+}
 
 /**
  * 기록 마커족 한 개(TRIP-768). PinTeardrop(state 물방울) 옆 형제 분기다 — `kind` 가 있을 때만 그린다.
@@ -437,8 +476,15 @@ function kakaoMaxLevelToNaverMinZoom(maxLevel: number): number {
   return NAVER_ZOOM_BASELINE - maxLevel;
 }
 
-export function MapView({
+/** 실제 경로 점선 — 대시 길이·간격(pt). 선 모양·대비는 6-b 육안 조정 knob. */
+const ACTUAL_ROUTE_DASH = [6, 5];
+const ACTUAL_ROUTE_WIDTH = 3;
+/** 실제 경로가 켜졌을 때 계획 연결선(흐림). */
+const PLAN_DIMMED_WIDTH = 1.5;
+
+function MapViewImpl({
   center,
+  actualRoute,
   pins,
   viewOnly,
   connectPins,
@@ -525,10 +571,17 @@ export function MapView({
     .filter((pin) => pin.kind === undefined || pin.kind === 'visited')
     .map((pin) => ({ latitude: pin.lat, longitude: pin.lng }));
   const showPath = connectPins !== false && lineCoords.length >= 2;
+  // TRIP-1342 — 실제 경로(세그먼트별). 점 2개 미만 세그먼트는 SDK 가 거부하므로 뺀다. 세그먼트끼리 잇지 않는다
+  // (BR-U10-37). 켜졌을 때만 계획 연결선을 muted-soft 얇게 낮춘다(BR-U10-41 — 계획 흐림·실제 점선).
+  const routeSegments = (actualRoute ?? []).filter((seg) => seg.length >= 2);
+  const actualOn = routeSegments.length > 0;
 
   return (
     <View testID="map-root" className="flex-1">
       <NaverMapView
+        // 맞춤(region)↔카메라 모드가 바뀌면 다시 마운트한다 — 라이브러리가 region=undefined 를 보내면 iOS 가
+        // 기본 0 region 을 camera 뒤에 적용해 0,0 으로 간다(RNCNaverMapView.mm 206–212). 좌표는 넣지 않는다(깜빡임).
+        key={region !== null ? 'region' : 'camera'}
         ref={mapRef}
         style={{ flex: 1 }}
         onLayout={refitRegion}
@@ -585,12 +638,7 @@ export function MapView({
                   key={`pin-${pin.number}-${pin.kind}`}
                   collapsable={false}
                   testID={`map-marker-pin-${pin.number}`}
-                  style={{
-                    width: dims.width,
-                    height: dims.height,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
+                  style={RECORD_WRAP_STYLE[pin.kind]}
                 >
                   <RecordMarker
                     kind={pin.kind}
@@ -617,7 +665,7 @@ export function MapView({
               key={pin.number}
               latitude={pin.lat}
               longitude={pin.lng}
-              anchor={{ x: 0.5, y: 1 }}
+              anchor={DROP_ANCHOR}
               width={wrapW}
               height={wrapH}
               onTap={() => onPinTap?.(index)}
@@ -631,7 +679,7 @@ export function MapView({
                 key={`pin-${pin.number}-${pinState}`}
                 collapsable={false}
                 testID={`map-marker-pin-${pin.number}`}
-                style={{ width: wrapW, height: wrapH }}
+                style={isLarge ? DROP_WRAP_LARGE_STYLE : DROP_WRAP_SMALL_STYLE}
               >
                 <PinTeardrop
                   state={pinState}
@@ -649,14 +697,14 @@ export function MapView({
             key="current-location"
             latitude={currentLocation.lat}
             longitude={currentLocation.lng}
-            anchor={{ x: 0.5, y: 0.85 }}
+            anchor={CURRENT_LOCATION_ANCHOR}
             width={72}
             height={70}
           >
             <View
               collapsable={false}
               testID="map-current-location"
-              style={{ width: 72, alignItems: 'center' }}
+              style={CURRENT_LOCATION_STYLE}
             >
               {/* 라벨 pill(흰 배경+파란 텍스트) — 반드시 SVG(Rect+Text). RN <Text> 는 마커 래스터에
                 안 찍힌다(TRIP-876). */}
@@ -703,15 +751,41 @@ export function MapView({
         {showPath ? (
           // 경로선 빨강(primary) + 흰 케이싱(Figma 4125:3958 route/route-casing). width 는 6-b 조정.
           // coords 는 visited(+무-kind) 구간만 — planned·stay 는 선에서 빠진다(위 lineCoords).
-          <NaverMapPathOverlay
-            coords={lineCoords}
-            color={PIN_PRIMARY}
-            width={2.75}
-            outlineColor={PIN_WHITE}
-            outlineWidth={1.6}
-          />
+          actualOn ? (
+            <NaverMapPathOverlay
+              coords={lineCoords}
+              color={PIN_MUTED_SOFT}
+              width={PLAN_DIMMED_WIDTH}
+              outlineWidth={0}
+            />
+          ) : (
+            <NaverMapPathOverlay
+              coords={lineCoords}
+              color={PIN_PRIMARY}
+              width={2.75}
+              outlineColor={PIN_WHITE}
+              outlineWidth={1.6}
+            />
+          )
         ) : null}
+        {routeSegments.map((seg, i) => (
+          // 실제 경로 = 빨강 점선 · 흰 외곽선 없음. 공백 구간은 세그먼트가 갈려 선이 끊긴다.
+          <NaverMapPolylineOverlay
+            key={`route-${i}`}
+            coords={seg.map((p) => ({ latitude: p.lat, longitude: p.lng }))}
+            color={PIN_PRIMARY}
+            width={ACTUAL_ROUTE_WIDTH}
+            pattern={ACTUAL_ROUTE_DASH}
+          />
+        ))}
       </NaverMapView>
     </View>
   );
 }
+
+/**
+ * TRIP-1349 — memo: 셸 snapIndex 같은 부모 자체 상태 변경마다 마커 N개 JSX 가 재생성되던 것을 막는다.
+ * 얕은 비교라 pins·center·onPinTap 등이 바뀌면 그대로 갱신된다. 소비처가 렌더마다 새 배열·콜백을 주면
+ * 효과가 없다(그 경우 memo 는 무해하게 통과).
+ */
+export const MapView = memo(MapViewImpl);

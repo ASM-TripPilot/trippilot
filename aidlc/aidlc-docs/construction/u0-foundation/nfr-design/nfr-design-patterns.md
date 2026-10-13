@@ -87,6 +87,8 @@ U0 부하(~50 RPS, SCALE-01)에서 읽기 복제본은 과설계 — **단일 �
 
 서명(ES256, kid 조회) → `alg` 화이트리스트(**`none`·대칭 거부 고정**) → `iss`·`aud`·`exp` → 주체 확정. 어느 단계든 판정 불가 = 401. 알고리즘은 **토큰의 헤더가 아니라 서버 정책이 결정**한다(알고리즘 혼동 공격 차단).
 
+> **[개정 · 2026-10-12]** 액세스 토큰 서명 알고리즘은 **RS256** 이다(원문 보존 — 개정 전: "ES256"). 근거: `backend/common/security/src/main/kotlin/com/trippilot/security/AccessTokenIssuer.kt`(`SignatureAlgorithm.RS256`) · `JwtSigningKeys.kt`(RSA 키, kid=RFC 7638 지문) · `JwtSecurityConfig.kt`. ES256 은 **Apple `client_secret` 서명에만** 쓴다(`backend/modules/auth/.../external/AppleClientSecret.kt`, TRIP-933). 검증 셋은 현재 **단일 키**(`ImmutableJWKSet(JWKSet(rsaKey))`)라 "kid 2키 중첩 롤오버"(P-SEC-2)는 미구현이다. 서명키는 env `JWT_SIGNING_KEY` 로 주입되며 배포 환경에서는 AWS Secrets Manager(`trippilot/{env}/backend`, `infra/terraform/stack/registry-secrets.tf`) → Helm `deploy/eks/chart/templates/backend.yaml` 경로다.
+
 ### P-SEC-2 — JWK 2키 중첩 롤오버 (무중단)
 
 **상태**: 서명키(현행 1) + 검증 전용키(직전 1) = JWK 셋 최대 2.
@@ -135,6 +137,8 @@ U0 부하(~50 RPS, SCALE-01)에서 읽기 복제본은 과설계 — **단일 �
 ### P-DEP-3 — 버전 핀 롤백 + 스키마 전방호환 규약 (Q7=A + DB 규약) ⚠️ 핵심
 
 **메커니즘**: 이전 아티팩트 버전 재배포(버전 핀).
+
+> **[개정 · 2026-10-12 · Infra 결정]** 버전 핀을 **유지한다**(Q6=B). 다만 as-built 에는 아직 없다. `.github/workflows/aws-deploy.yml` 에 이미지 태그 입력이 없어서, 지금은 "revert 커밋 → 재빌드 재배포"가 잠정 절차다. 후속 작업으로 기존 ECR 태그(`IMMUTABLE`)를 지정하면 build-push 를 건너뛰는 입력을 추가한다. 롤아웃 실패는 Helm `--atomic` 이 직전 릴리스로 자동 복귀시키며, 이것을 1차 안전망으로 둔다. RT-9 리허설은 이 입력이 구현된 뒤 1회 실시한다. 리포에 실행 기록이 없고, 운영(dev)은 이미 출시됐으므로 "최초 프로덕션 배포 전" 시점은 지났다. 정본: `aidlc/aidlc-docs/construction/shared-infrastructure.md` §12.
 
 **제약**: Flyway가 **forward-only**(V1.x 정본)라 "마이그레이션 역실행"(선택지 D)은 **구조적으로 불가**. 따라서 롤백 가능성은 **스키마가 앱보다 앞서도 안전함**에 의존한다 → 규약이 곧 전제 조건이다.
 

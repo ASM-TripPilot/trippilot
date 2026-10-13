@@ -19,6 +19,8 @@ export interface ReplanSession {
   itineraryId: string;
   triggerId?: string | null;
   scope: ReplanSessionScope;
+  /** 어느 날을 다시 짰는가 — 요청이 생략했으면 서버가 정한 '오늘'이다(TRIP-1182) */
+  targetDate: string;
   /** '지금 이후'의 기준점 — 이 시각 이전 슬롯은 대상이 아니다 */
   fromInstant: string;
   originKind: ReplanSessionOriginKind;

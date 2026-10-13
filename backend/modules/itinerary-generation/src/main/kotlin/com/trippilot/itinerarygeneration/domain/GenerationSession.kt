@@ -155,4 +155,13 @@ interface GenerationSessionRepository {
      * 잠금을 무는 구간은 세션 행 두어 개를 쓰는 동안뿐이다 — 생성 자체는 이 트랜잭션 밖에서 돈다.
      */
     fun lockAccount(accountId: UUID)
+
+    /**
+     * 이 계정이 [since] 이후 **시작한** 생성 수(TRIP-1314 일일 상한). **`FAILED` 와 폴백 결과는 세지 않는다** —
+     * 깨진 생성까지 세면 실패를 겪은 사용자가 재시도 횟수마저 잃는다. 폴백(`isFallback`)이 그 흔한 꼴이다:
+     * AI 가 죽으면 생성은 `FAILED` 가 아니라 결정론 폴백으로 **완료**되므로, 상태만 보면 장애 동안 누른
+     * 재시도가 전부 횟수를 태운다. 취소·대체된 것은 센다: 연타로 밀려난 생성도 이미 LLM 을 불렀고,
+     * 막으려는 것이 바로 그 연타다.
+     */
+    fun countStartedSince(accountId: UUID, since: Instant): Int
 }

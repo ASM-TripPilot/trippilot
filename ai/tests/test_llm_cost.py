@@ -6,6 +6,7 @@
 3. 요청당 누계는 trace_id 별이고 다른 trace 와 섞이지 않는다
 4. 깨진 설정은 조용히 무시되지 않고 예외(기동 실패)
 5. `LoggingTrace.emit` 은 어떤 경우에도 예외를 밖으로 던지지 않는다
+6. 비용 줄마다 `trip_id` — 로그만으로 여행 단위 호출 수·비용 합이 나온다(TRIP-1312)
 """
 
 from __future__ import annotations
@@ -16,17 +17,25 @@ from datetime import datetime, timezone
 
 import pytest
 
+from fastapi.testclient import TestClient
+
+from trippilot.api.app import create_app
 from trippilot.api.cost import (
     PRICE_FILE_ENV,
     PRICES_ENV,
     CostLedger,
     PriceConfigError,
+    bind_trip,
     load_prices,
 )
+from trippilot.api.middleware import MiddlewareSettings, parse_wire_meta
 from trippilot.api.wiring import LoggingTrace
 from trippilot.domain.common import TraceId
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord
 from trippilot.domain.prompt import PromptRef
+
+from tests.test_api_contract import BACKEND_REQUEST, FakeOrchestrator, make_outcome
+from tests.test_api_replan import _body as replan_body
 
 _NOW = datetime(2026, 9, 9, tzinfo=timezone.utc)
 _PRICES = {
@@ -183,3 +192,71 @@ def test_emit_never_raises() -> None:
             raise RuntimeError("boom")
 
     LoggingTrace(Exploding()).emit(_record())  # 예외가 새면 여기서 실패한다
+
+
+# ── 6. 여행 단위 집계 (TRIP-1312) ───────────────────────────────────
+
+
+def test_cost_line_carries_bound_trip_id() -> None:
+    ledger = _ledger()
+    bind_trip("t-bound", "trip-1")
+    assert ledger.add(_record(trace="t-bound"))["trip_id"] == "trip-1"
+    assert ledger.add(_record(trace="t-unbound"))["trip_id"] is None  # 여행 없는 경계
+
+
+def test_wire_trip_id_keeps_identifier_chars_only() -> None:
+    """자유서술이 trip_id 자리로 와도 로그에 실리지 않는다 — 식별자 문자만 남는다."""
+    meta = b'{"request_meta": {"request_id": "r"}, "trip_id": "%s"}'
+    assert parse_wire_meta(meta % b"33333333-3333-4333-8333-333333333333").trip_id == (
+        "33333333-3333-4333-8333-333333333333")
+    assert parse_wire_meta(meta % "카페 가고 싶다".encode()).trip_id is None
+    assert parse_wire_meta(b'{"request_meta": {"request_id": "r"}}').trip_id is None
+
+
+class _Spending(FakeOrchestrator):
+    """경계마다 LLM 1회($1)를 쓴다 — 실 조립처럼 trace_id 는 바디 request_id."""
+
+    def __init__(self, trace: LoggingTrace) -> None:
+        super().__init__(make_outcome())
+        self.trace = trace
+
+    def _spend(self, request) -> None:  # noqa: ANN001
+        self.trace.emit(_record(trace=request.request_meta.request_id))
+
+    def generate(self, request):  # noqa: ANN001
+        self._spend(request)
+        return super().generate(request)
+
+    def replan(self, request):  # noqa: ANN001
+        self._spend(request)
+        raise RuntimeError("응답 사영은 이 테스트 밖 — 실패한 요청도 쓴 토큰은 센다")
+
+
+def test_trip_totals_come_from_log_lines_alone(caplog) -> None:
+    """AC — 한 여행에서 생성 2회·재계획 1회를 돌리면 로그에서 그 여행의 호출 수·비용 합이 나온다."""
+    client = TestClient(
+        create_app(_Spending(LoggingTrace(_ledger())), middleware=MiddlewareSettings()),
+        raise_server_exceptions=False,
+    )
+
+    def generate(request_id: str, trip_id: str) -> None:
+        client.post("/ai/v1/itinerary/generate", json={
+            **BACKEND_REQUEST, "trip_id": trip_id,
+            "request_meta": {**BACKEND_REQUEST["request_meta"], "request_id": request_id},
+        })
+
+    with caplog.at_level(logging.INFO):
+        generate("g-1312-1", "trip-A")
+        generate("g-1312-2", "trip-A")
+        generate("g-1312-3", "trip-B")
+        client.post("/ai/v1/planb/replan", json=replan_body(
+            trip_id="trip-A",
+            request_meta={"request_id": "r-1312-1", "requested_at": "2026-09-21T14:00:00+09:00"},
+        ))
+
+    lines = [json.loads(m[len("llm_cost "):]) for m in caplog.messages if m.startswith("llm_cost ")]
+    trip_a = [line["call_cost"] for line in lines if line["trip_id"] == "trip-A"]
+    assert len(trip_a) == 3 and sum(trip_a) == pytest.approx(3.0)
+    assert [line["trip_id"] for line in lines].count("trip-B") == 1
+    # 금지 — 발화·메모 같은 자유서술은 어떤 로그 줄에도 없다
+    assert not [m for m in caplog.messages if "비 와서" in m]

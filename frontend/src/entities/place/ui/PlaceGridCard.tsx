@@ -1,8 +1,9 @@
-import type { ReactElement } from 'react';
+import { memo, type ReactElement } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
 import type { Place } from '../model';
 
+import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import {
   HeartBadgeGlyph,
   HeartFilledGlyph,
@@ -27,7 +28,7 @@ export interface PlaceGridCardProps {
   onPressCard?: (place: Place) => void;
 }
 
-export function PlaceGridCard({
+function PlaceGridCardImpl({
   place,
   saved,
   pending,
@@ -41,7 +42,7 @@ export function PlaceGridCard({
   return (
     // 카드 루트 = 버튼(TRIP-1020). 라벨은 카드에 보이는 이름·부제 + 담겼으면 ", 담음" — 명시 라벨이
     // 안쪽 글자 읽기를 대체하므로 빼면 VoiceOver 가 담김 여부를 못 듣는다(5-b 경고-1).
-    // d04 role=button 완전일치 목록(`PlaceExploreScreen{,.states}.test.tsx`)이 카드 5장을 센다.
+    // d04 role=button 완전일치 목록(`PlaceExploreScreen.test.tsx`)이 카드 5장을 센다.
     // `!pending` 가드: 대기(disabled) 하트 press 는 부모 Pressable 로 새는데(RNTL Probe C),
     // pending 이면 카드 이동을 무효화해 그 누수를 막는다.
     <Pressable
@@ -72,6 +73,7 @@ export function PlaceGridCard({
         <Pressable
           testID={`explore-places-save-${place.poiId}`}
           accessibilityRole="button"
+          accessibilityLabel={heartSaveLabel(place.nameKo)}
           accessibilityState={{ selected: saved }}
           disabled={pending}
           onPress={() => onToggleSave(place)}
@@ -94,3 +96,10 @@ export function PlaceGridCard({
     </Pressable>
   );
 }
+
+/**
+ * TRIP-1349 — memo: 검색 키 입력마다 마운트된 셀 전부가 재렌더되던 것을 막는다. 기본 얕은 비교라
+ * `place`·`saved`·`pending`·콜백 중 하나라도 바뀌면 다시 그린다(갱신 누락 없음). 소비처가 콜백을
+ * 안정 참조로 줘야 효과가 난다(`PlaceExplorePage` 가 그렇게 준다).
+ */
+export const PlaceGridCard = memo(PlaceGridCardImpl);

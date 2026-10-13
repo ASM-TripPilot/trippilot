@@ -232,6 +232,42 @@ def test_multi_output_document_aggregates_with_per_area_breakdown() -> None:
         == {"tourapi-100", "tourapi-101"}
 
 
+def test_multi_output_document_sums_raw_column_counters() -> None:
+    """원문 칸 계수(TRIP-1226)도 지역 합산된다 — 잡 서머리는 합산 stats 만 찍는다."""
+    museum = "동절기(12~2월) 휴관"   # 요일 없는 휴무 — 해석 불가
+    http = FakeTourApiHttp(
+        pages={
+            ("1", "14", 1): envelope([list_item("700", "박물관", contenttypeid="14")], 1),
+            ("39", "14", 1): envelope([list_item("701", "미술관", contenttypeid="14")], 1),
+        },
+        intros={cid: envelope([intro_item(cid, "14", "09:00~18:00", museum)], 1)
+                for cid in ("700", "701")},
+    )
+    result = collect_areas(_adapter(http), area_codes=["1", "39"],
+                           content_types=["14"], max_calls=10)
+    doc = to_multi_output_document(result, area_codes=["1", "39"],
+                                   content_types=["14"], collected_at=_NOW)
+    assert doc["stats"]["passed"] == 2
+    assert doc["stats"]["rest_unparsed"] == 2
+    assert doc["stats"]["raw_reparse_mismatch"] == 0
+
+
+def test_seen_refs_는_지역_합집합이다() -> None:
+    """지역별 seen_refs 를 합친다 — 스킵한 것 포함 (TRIP-1248). 산출 문서엔 통과분만 실린다."""
+    http = FakeTourApiHttp(pages={
+        ("1", "12", 1): envelope([list_item("100", "경복궁"), list_item("101", "창덕궁")], 2),
+        ("39", "12", 1): envelope([list_item("300", "성산일출봉")], 1),
+    })
+    result = collect_areas(_adapter(http), area_codes=["1", "39"], content_types=["12"],
+                           max_calls=10, state=CollectState(proposed={"101": "20260801120000"}))
+    assert result.seen_refs == frozenset({"100", "101", "300"})
+    assert {a: r.seen_refs for a, r in result.area_results} \
+        == {"1": frozenset({"100", "101"}), "39": frozenset({"300"})}
+    doc = to_multi_output_document(result, area_codes=["1", "39"], content_types=["12"],
+                                   collected_at=_NOW)
+    assert {p["provenance"]["content_id"] for p in doc["proposals"]} == {"100", "300"}
+
+
 def test_collect_areas_rejects_empty_inputs() -> None:
     http = FakeTourApiHttp()
     with pytest.raises(ValueError):

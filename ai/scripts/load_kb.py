@@ -58,7 +58,11 @@ from trippilot.agents.planb.directives import (  # noqa: E402
     load_directive_file,
 )
 
-_DEFAULT_SEEDS = ("data/planb_situation_kb.yaml", "data/replan_directives.yaml")
+# KB-5(장소 지식)도 기본이다 — 빠져 있어 DEV 에는 상황·지시어만 적재돼 있었고, 재계획
+# 프롬프트의 후보 줄에 장소 설명이 한 건도 붙지 않았다(로컬은 손으로 넣어 1,470건).
+_DEFAULT_SEEDS = (
+    "data/planb_situation_kb.yaml", "data/replan_directives.yaml", "data/place_docs.json",
+)
 # 지시 사전(KB-4)은 문서 형식이 다르다 — 루트가 `directives` 고 한 지시가 alias 만큼의
 # 문서로 펼쳐진다. 파일 이름으로 가르지 않고 **루트 키를 보고** 고른다: 이름 규칙에
 # 기대면 파일을 옮기는 순간 조용히 틀린 로더를 탄다.
@@ -159,12 +163,29 @@ def _skip_already_indexed(documents, embedding, url: str):
     ]
 
 
+# 적재 임베딩 마감. 묶음(`INDEX_BATCH` 64건) 단위라 요청 경로 마감(기본 5초 — 검색 1회용)이
+# 맞지 않는다. 로컬 실측 1,458건 4분 ≈ 건당 0.16초 → 64건 ≈ 10초.
+LOAD_TIMEOUT_SEC = 180.0
+
+
+def _use_load_timeout(environ) -> None:
+    """적재 동안 임베딩 마감을 `LOAD_TIMEOUT_SEC` 이상으로 올린다 — 더 긴 값만 존중한다.
+
+    `setdefault` 로는 안 된다: ai 파드(배포 적재 단계가 도는 곳) env 에는 요청 경로용 값이
+    **빈 문자열로라도** 이미 들어 있어 키가 있으면 덮지 않고, 빈 값은 어댑터가 기본 5초로
+    읽는다 — 첫 묶음에서 끊겨 배포 적재 단계가 8초 만에 실패했다(2026-10-04).
+    """
+    current = float(environ.get("TRIPPILOT_EMBEDDING_TIMEOUT_SEC") or 0)
+    if current < LOAD_TIMEOUT_SEC:
+        environ["TRIPPILOT_EMBEDDING_TIMEOUT_SEC"] = str(LOAD_TIMEOUT_SEC)
+
+
 def main(argv: list[str]) -> int:
     # 대량 적재는 런타임 질의와 마감이 다르다. 어댑터 기본 5초는 **질의 1건** 기준이고,
     # 여기서는 한 요청에 수십 건을 태운다(로컬 KURE-v1 실측 건당 ~1.4초 — 기본 배치
     # 64건이면 90초대). 안 올리면 413 이 아니라 타임아웃으로 죽어서 원인이 엉뚱한
     # 곳을 가리킨다. 머신이 바쁘면 더 걸리므로 넉넉히 준다.
-    os.environ.setdefault("TRIPPILOT_EMBEDDING_TIMEOUT_SEC", "180")
+    _use_load_timeout(os.environ)
     url = os.environ.get("TRIPPILOT_VECTOR_DB_URL")
     if not url:
         print("TRIPPILOT_VECTOR_DB_URL 미설정 — 적재 불가", file=sys.stderr)

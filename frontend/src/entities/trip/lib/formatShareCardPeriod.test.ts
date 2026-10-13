@@ -74,6 +74,22 @@ describe('🔴 AC-2 · formatShareCardPeriod — 얼굴별 기간 포맷(통일 
     expect(def).not.toContain('–');
   });
 
+  it('A7 같은 날(0박·당일치기)은 날짜 하나만 — 두 얼굴 모두 같은 날을 두 번 쓰지 않는다', () => {
+    expect(
+      formatShareCardPeriod('2026-06-10', '2026-06-10', { separator: '~' })
+    ).toBe('2026.06.10');
+    expect(
+      formatShareCardPeriod('2026-06-10', '2026-06-10', {
+        separator: '–',
+        nights: true,
+      })
+    ).toBe('당일치기 · 2026.06.10');
+    // 짝 — 하루만 달라도 범위로 돌아온다(같은 날 분기가 과하게 넓지 않다).
+    expect(
+      formatShareCardPeriod('2026-06-10', '2026-06-11', { separator: '~' })
+    ).toBe('2026.06.10 ~ 06.11');
+  });
+
   it('A6 INV-3 — 두 얼굴 출력에 소요시간 문자열이 없다(거리·날짜만)', () => {
     const def = formatShareCardPeriod('2026-06-10', '2026-06-12', {
       separator: '~',

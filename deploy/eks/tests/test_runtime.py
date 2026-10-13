@@ -1,5 +1,7 @@
 """Deployment boundary tests: no cloud account or cluster required."""
+import contextlib
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -40,6 +42,7 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(seeded["backend"]["JWT_SIGNING_KEY"], "rsa")
         self.assertEqual(seeded["shared"]["SERVICE_AUTH_TOKEN"], "secret")
         self.assertEqual(seeded["backend"]["PLACE_GEOCODE_MODE"], "stub")
+        self.assertEqual(seeded["backend"]["AFFILIATE_MODE"], "fallback")
 
     def test_provider_credentials_fail_before_deployment(self):
         cases = [
@@ -50,10 +53,63 @@ class SecretTests(unittest.TestCase):
             {"ai": {"TRIPPILOT_LLM_PROVIDER": "mixed", "OPENAI_API_KEY": "key"}},
             {"ai": {"TRIPPILOT_LLM_PROVIDER": "typo"}},
             {"backend": {"PLACE_GEOCODE_MODE": "typo"}},
+            {"backend": {"AFFILIATE_MODE": "tripcom"}},
+            {"backend": {"AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s"}},
+            {"backend": {"AFFILIATE_MODE": "typo"}},
+            # 생성 상한(TRIP-1314) — 있는데 틀리면 백엔드가 기동에서 죽는 값들.
+            {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": ""}},
+            {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "0"}},
+            {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "abc"}},
+            {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "2147483648"}},
+            {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "not-a-uuid"}},
+            # 파이썬 uuid 는 받지만 백엔드는 못 읽는 모양 — DB 도구에서 대시 없이 복사해 오는 것이 흔하다.
+            {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "0d7f17ab5c4b4d6da7f7484ba11dda46"}},
+            {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "{0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46}"}},
+            {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,"}},
+            # 카카오 앱 ID(TRIP-1317) 자리에 REST API 키를 넣는 실수 — 카카오 로그인이 전부 401 이 된다.
+            {"backend": {"KAKAO_APP_ID": "0123456789abcdef0123456789abcdef"}},
+            {"backend": {"KAKAO_APP_ID": " 1519823"}},
+            # 앞자리 0 은 카카오가 돌려주는 정수와 영영 안 맞는다.
+            {"backend": {"KAKAO_APP_ID": "01519823"}},
         ]
         for changed in cases:
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, **changed})
+        runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+            "AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s", "TRIPCOM_AD_ID": "D1"}})
+        runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+            "ITINERARY_GENERATION_DAILY_LIMIT": "50", "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS":
+            "0D7F17AB-5c4b-4d6d-a7f7-484ba11dda46, 11111111-2222-4333-8444-555555555555"}})
+        runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+            "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": ""}})
+        for app_id in ("1519823", ""):
+            runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+                "KAKAO_APP_ID": app_id}})
+
+    def test_missing_kakao_app_id_is_called_out_on_every_deploy(self):
+        """값이 빠져도 배포는 막지 않는다 — 대신 조용히 넘어가지 않는다(TRIP-1317). 로그인에 카카오를 쓰는데
+        앱 ID 가 없으면 남의 앱 토큰으로 가입이 열린 채 돈다."""
+        def gaps(backend):
+            return list(runtime_secrets.open_gaps({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": backend}))
+        self.assertEqual(len(gaps({"KAKAO_CLIENT_ID": "rest-key"})), 1)
+        self.assertIn("KAKAO_APP_ID", gaps({"KAKAO_CLIENT_ID": "rest-key", "KAKAO_APP_ID": ""})[0])
+        self.assertEqual(gaps({"KAKAO_CLIENT_ID": "rest-key", "KAKAO_APP_ID": "1519823"}), [])
+        self.assertEqual(gaps({}), [])  # 카카오 키가 아예 없는 환경은 말하지 않는다
+
+    @patch("runtime_secrets.validate_rsa_key")
+    @patch("runtime_secrets.rsa_key", return_value="fake-test-key")
+    def test_sync_prints_open_gaps_as_workflow_warnings(self, keygen, keycheck):
+        """`open_gaps` 가 맞아도 `sync` 가 안 부르면 아무도 못 본다 — 배포 실행 요약에 뜨는 형식까지 본다."""
+        backend_arn = outputs()["app_secret_arns"]["backend"]
+        def execute(argv, payload=None):
+            if "get-secret-value" in argv:
+                kakao = {"KAKAO_CLIENT_ID": "rest-key"} if argv[argv.index("--secret-id") + 1] == backend_arn else {}
+                return json.dumps({"SecretString": json.dumps(kakao)})
+            return "{}"
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)
+        self.assertRegex(printed.getvalue(), r"(?m)^::warning title=[^:,]+::KAKAO_APP_ID is not set")
 
     def test_google_client_secret_must_stay_empty(self):
         """공개(iOS) 클라이언트에 시크릿을 보내면 Google 이 invalid_client 로 거절한다(2026-09-23 실측).
@@ -250,6 +306,46 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual(len(applied), 8)
         self.assertEqual(keygen.call_count, 1)
 
+    def test_sync_overrides_push_mode_only_when_asked(self, keygen=None, keycheck=None):
+        """푸시를 켜는 길이 시크릿 손편집뿐이면 로컬 자격이 만료된 날엔 못 켠다 — 배포 입력이 직접 쓴다.
+        지정하지 않으면(유지) 저장된 값을 건드리지 않는다(종전 보존 규칙 그대로)."""
+        saved = {arn: {} for arn in outputs()["app_secret_arns"].values()}
+        backend_arn = outputs()["app_secret_arns"]["backend"]
+        saved[backend_arn] = {"PUSH_MODE": "off"}
+
+        def execute(argv, payload=None):
+            if "get-secret-value" in argv:
+                arn = argv[argv.index("--secret-id") + 1]
+                return json.dumps({"SecretString": json.dumps(saved[arn])})
+            if "put-secret-value" in argv:
+                path = next(a for a in argv if a.startswith("file://"))[len("file://"):]
+                with open(path, encoding="utf-8") as stream:
+                    request = json.load(stream)
+                saved[request["SecretId"]] = json.loads(request["SecretString"])
+                return "{}"
+            return "{}"
+
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"):
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)
+            self.assertEqual(saved[backend_arn]["PUSH_MODE"], "off")
+            runtime_secrets.sync(outputs(), "trippilot", False, execute, push_mode="expo")
+            self.assertEqual(saved[backend_arn]["PUSH_MODE"], "expo")
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)
+            self.assertEqual(saved[backend_arn]["PUSH_MODE"], "expo")  # 유지는 덮지 않는다
+
+    def test_sync_secrets_cli_passes_push_mode_and_rejects_unknown(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "outputs.json"
+            source.write_text(json.dumps({key: {"value": value} for key, value in outputs().items()}))
+            with patch("runtime.runtime_secrets.sync") as sync, patch("builtins.print"):
+                runtime.main(["sync-secrets", "--outputs", str(source), "--push-mode", "expo"])
+                self.assertEqual(sync.call_args.kwargs["push_mode"], "expo")
+                runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertIsNone(sync.call_args.kwargs["push_mode"])
+            with self.assertRaises(SystemExit), patch("sys.stderr"):
+                runtime.main(["sync-secrets", "--outputs", str(source), "--push-mode", "fcm"])
+
     def test_ensure_namespace_and_cli_commands_dispatch_with_validated_arguments(self):
         import tempfile
         with tempfile.TemporaryDirectory() as folder:
@@ -275,6 +371,167 @@ class RuntimeIntegrationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runtime.main(["ensure-namespace", "--namespace", "../invalid"])
 
+    def test_load_kb_runs_as_its_own_job_with_the_serving_image_and_env(self):
+        """서빙 ai 컨테이너에 exec 하면 그 컨테이너 메모리(2Gi, uvicorn 워커 2개)를 나눠 써서
+        적재가 137(OOM)로 죽었다 — 최악엔 서빙 워커가 죽는다. 같은 이미지·같은 벡터 env 로
+        따로 돈다(다른 이미지나 모델이면 적재와 질의가 다른 벡터 공간을 탄다)."""
+        import runtime_kb
+        job = runtime_kb.manifest("trippilot", "123.dkr.ecr/ai:sha-1")
+        pod = job["spec"]["template"]["spec"]
+        container = pod["containers"][0]
+        self.assertEqual(container["image"], "123.dkr.ecr/ai:sha-1")
+        self.assertEqual(container["command"], ["/app/.venv/bin/python", "scripts/load_kb.py"])
+        env = {e["name"]: e for e in container["env"]}
+        self.assertEqual(env["TRIPPILOT_EMBEDDING_PROVIDER"]["value"], "http")
+        self.assertEqual(env["TRIPPILOT_EMBEDDING_BASE_URL"]["value"], "http://embedding:8100")
+        self.assertEqual(env["TRIPPILOT_VECTOR_DB_URL"]["valueFrom"]["secretKeyRef"],
+                         {"name": "trippilot-ai", "key": "TRIPPILOT_VECTOR_DB_URL", "optional": False})
+        self.assertTrue(env["TRIPPILOT_EMBEDDING_MODEL"]["valueFrom"]["secretKeyRef"]["optional"])
+        self.assertEqual(pod["securityContext"]["runAsUser"], 10001)
+        self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
+        self.assertIn("memory", container["resources"]["limits"])
+        self.assertEqual(job["spec"]["template"]["metadata"]["labels"]["app.kubernetes.io/name"],
+                         "trippilot-kb-load")
+
+    def test_load_kb_reads_the_serving_image_prints_logs_and_cleans_up(self):
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "총 1470건", ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out:
+            runtime.main(["load-kb"])
+        calls = [c.args[0] for c in shell.call_args_list]
+        self.assertIn("deployment/ai", calls[1])
+        applied = json.loads(shell.call_args_list[2].args[1])
+        self.assertEqual(applied["spec"]["template"]["spec"]["containers"][0]["image"], "123.dkr.ecr/ai:sha-1")
+        self.assertIn("job/trippilot-kb-load", calls[3])
+        out.assert_any_call("총 1470건")
+        self.assertIn("delete", calls[-1])
+
+    def test_load_kb_failure_shows_the_cause_without_credentials(self):
+        """실패가 'kubectl command failed' 한 줄뿐이라 원인을 몰랐다(2026-10-04 첫 적재). 적재
+        로그의 끝 몇 줄은 원인이고, DSN 같은 자격은 가린다."""
+        logs = ("Traceback (most recent call last):\n"
+                "psycopg.OperationalError: connection to postgresql://ai_kb:s3cret@db:5432/ai_kb failed\n"
+                "TimeoutError: timed out after 5.0s\n")
+        shell = Mock(side_effect=["", "img", "", runtime.CommandError("kubectl", "timed out"), logs, ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out, \
+                self.assertRaises(runtime.CommandError):
+            runtime.main(["load-kb"])
+        shown = "\n".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("TimeoutError: timed out after 5.0s", shown)
+        self.assertNotIn("s3cret", shown)
+        self.assertIn("delete", shell.call_args_list[-1].args[0])
+
+    def test_load_pois_job_uses_serving_image_and_the_canonical_script(self):
+        """공유본은 서빙 ai 이미지 안에 있고, 스크립트는 복제하지 않고 ConfigMap 으로 싣는다.
+        `--close-missing` 은 입력으로만, `--allow-mass-close` 는 어떤 경우에도 넘기지 않는다."""
+        import runtime_pois
+        bundle = runtime_pois.manifest("trippilot", "123.dkr.ecr/ai:sha-1", "print('canon')")
+        self.assertEqual(bundle["kind"], "List")
+        configmap, job = bundle["items"]
+        self.assertEqual(configmap["data"], {"ingest_pois.py": "print('canon')"})
+        pod = job["spec"]["template"]["spec"]
+        container = pod["containers"][0]
+        self.assertEqual(container["image"], "123.dkr.ecr/ai:sha-1")
+        shell = container["command"][2]
+        self.assertIn("/scripts/ingest_pois.py --base-url http://backend:8080 /app/data/collected_pois.json", shell)
+        self.assertNotIn("--close-missing", shell)
+        self.assertEqual(container["workingDir"], "/tmp")  # 되돌리기 SQL 이 쓰이는 곳(루트는 읽기 전용)
+        env = {e["name"]: e for e in container["env"]}
+        self.assertEqual(env["SERVICE_AUTH_TOKEN"]["valueFrom"]["secretKeyRef"],
+                         {"name": "trippilot-shared", "key": "SERVICE_AUTH_TOKEN", "optional": False})
+        self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
+        self.assertEqual(job["spec"]["template"]["metadata"]["labels"]["app.kubernetes.io/name"],
+                         "trippilot-poi-load")
+        closing = runtime_pois.manifest("trippilot", "img", "x", close_missing=True)
+        closing_shell = closing["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
+        self.assertIn("--close-missing", closing_shell)
+        self.assertNotIn("--allow-mass-close", closing_shell)
+        # 드라이런은 "닫힐 수"만 묻고 **그 다음 평소대로 upsert** — 드라이런이 upsert 를 대신하면 그 배포는 공유본을 안 붓는다.
+        probing = runtime_pois.manifest("trippilot", "img", "x", close_missing_dry_run=True)
+        probing_shell = probing["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
+        dry, _, real = probing_shell.partition("; ")
+        self.assertIn("--dry-run --close-missing", dry)
+        self.assertNotIn("&&", probing_shell)  # 드라이런이 409 로 끝나도 적재는 간다 — 정보용이지 게이트가 아니다
+        self.assertIn("/app/data/collected_pois.json;", real)
+        self.assertNotIn("--close-missing", real.split(";")[0])
+        self.assertNotIn("--allow-mass-close", probing_shell)
+        # 실제 close_missing 이 켜져 있으면 드라이런은 뜻이 없어 건너뛴다
+        both = runtime_pois.manifest("trippilot", "img", "x", close_missing=True, close_missing_dry_run=True)
+        self.assertNotIn("--dry-run", both["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2])
+
+    def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
+        summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", summary, ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out:
+            runtime.main(["load-pois"])
+        calls = [c.args[0] for c in shell.call_args_list]
+        self.assertIn("deployment/ai", calls[1])
+        applied = json.loads(shell.call_args_list[2].args[1])
+        self.assertEqual(applied["kind"], "List")
+        self.assertIn("ingest_pois.py", applied["items"][0]["data"])  # 정본 스크립트가 실제로 읽혀 실렸다
+        self.assertIn("job/trippilot-poi-load", calls[3])
+        out.assert_any_call(summary)
+        self.assertIn("job,configmap", calls[-1])  # 둘 다 치운다
+
+    def test_load_pois_summary_reaches_the_step_output_with_drops_and_dry_run_count(self):
+        """로그를 안 열어도 보이게 — 합계·탈락(사유별)·드라이런 "닫을 것" 을 한 줄로 GITHUB_OUTPUT 에 쓴다.
+        묶음별 진행 줄(`[3/39] …`)·대상 줄은 올리지 않는다."""
+        import os
+        import tempfile
+        import runtime_pois
+        logs = ("대상: http://backend:8080/internal/pois/proposals (토큰 설정됨)\n"
+                "  /app/data/collected_pois.json: source=TOURAPI 제안=19084건 → 요청 39회\n"
+                "  미포함 정리(드라이런 — 닫지 않았다) — TOURAPI ACTIVE 19372 중 목록에 있음 19084 · 닫을 것 288\n"
+                "합계 제안 19084건 — 드라이런이라 적재는 보내지 않았다\n"
+                "  [1/39] 접수=500 신규=0 갱신=500\n"
+                "합계 — 접수=19084 신규=0 갱신=19080 지역코드미상=3\n"
+                "탈락(사유별):\n"
+                "  gate.category_unmapped: 4\n")
+        self.assertEqual(
+            runtime_pois.summary_of(logs),
+            "미포함 정리(드라이런 — 닫지 않았다) — TOURAPI ACTIVE 19372 중 목록에 있음 19084 · 닫을 것 288"
+            " · 합계 제안 19084건 — 드라이런이라 적재는 보내지 않았다"
+            " · 합계 — 접수=19084 신규=0 갱신=19080 지역코드미상=3 · 탈락(사유별): · gate.category_unmapped: 4")
+        with tempfile.TemporaryDirectory() as folder:
+            output = os.path.join(folder, "out")
+            shell = Mock(side_effect=["", "img", "", "", logs, ""])
+            with patch("runtime.command", shell), patch("builtins.print"), \
+                    patch.dict(os.environ, {"GITHUB_OUTPUT": output}):
+                runtime.main(["load-pois", "--close-missing-dry-run"])
+            with open(output, encoding="utf-8") as stream:
+                written = stream.read()
+        self.assertTrue(written.startswith("summary=미포함 정리(드라이런"), written)
+        self.assertEqual(written.count("\n"), 1)  # 한 줄 — 여러 줄이면 GITHUB_OUTPUT 형식이 깨진다
+        applied = json.loads(shell.call_args_list[2].args[1])
+        self.assertIn("--dry-run --close-missing", applied["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2])
+
+    def test_load_pois_with_no_effect_is_a_failure(self):
+        """적재가 '성공'인데 신규·갱신이 0 이면 아무것도 안 들어간 것이다 — 조용히 지나가면 "효과 없음"이 또 온다."""
+        shell = Mock(side_effect=["", "img", "", "", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
+        with patch("runtime.command", shell), patch("builtins.print"), self.assertRaises(RuntimeError):
+            runtime.main(["load-pois"])
+        self.assertIn("delete", shell.call_args_list[-1].args[0])
+
+    def test_load_pois_failure_shows_the_cause_without_the_token(self):
+        logs = "SERVICE_AUTH_TOKEN=s3cret 가 비어 있다\n  [3/39] HTTP 401 — 중단한다. 응답: unauthorized\n"
+        shell = Mock(side_effect=["", "img", "", runtime.CommandError("kubectl", "timed out"), logs, ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out, \
+                self.assertRaises(runtime.CommandError):
+            runtime.main(["load-pois"])
+        shown = "\n".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("HTTP 401", shown)
+        self.assertNotIn("s3cret", shown)
+        self.assertIn("delete", shell.call_args_list[-1].args[0])
+
+    def test_load_pois_cli_passes_close_missing(self):
+        with patch("runtime.runtime_pois.run") as run, patch("builtins.print"):
+            runtime.main(["load-pois", "--close-missing"])
+            self.assertTrue(run.call_args.kwargs["close_missing"])
+            runtime.main(["load-pois"])
+            self.assertFalse(run.call_args.kwargs["close_missing"])
+            self.assertFalse(run.call_args.kwargs["close_missing_dry_run"])
+            runtime.main(["load-pois", "--close-missing-dry-run"])
+            self.assertTrue(run.call_args.kwargs["close_missing_dry_run"])
+
     def test_smoke_checks_internal_denial_and_cleans_up_failure(self):
         import runtime_smoke
         manifest = runtime_smoke.manifest("trippilot")
@@ -285,6 +542,67 @@ class RuntimeIntegrationTests(unittest.TestCase):
         with self.assertRaises(runtime.CommandError):
             runtime_smoke.run("trippilot", shell)
         self.assertIn("delete", shell.call_args.args[0])
+
+    def test_smoke_reports_autoscaler_targets_without_gating_the_deploy(self):
+        """HPA 현재값을 배포 로그에 남기되, 비어 있어도 배포를 깨지 않는다.
+
+        metrics-server 가 없으면 HPA 는 목표치가 `<unknown>` 인 채 replica 소유권만
+        가져간다 — 배포가 성공한 뒤에 조용히 시작되는 사고라 로그에 증거가 필요하다.
+        단언하지 않는 이유는 메트릭이 기동 수십 초 뒤에 채워져서, 단언하면 멀쩡한
+        배포가 타이밍으로 깨지기 때문이다.
+        """
+        import runtime_smoke
+        table = "NAME   TARGETS   CURRENT   MIN   MAX   REPLICAS\nai     70        <none>    1     3     1\n"
+        shell = Mock(side_effect=["", "", "", "", table, ""])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", shell)
+        printed = " ".join(str(call.args[0]) for call in output.call_args_list)
+        self.assertIn("ai", printed)
+        self.assertIn("metrics-server", printed)  # 비어 있으면 어디를 볼지 알려준다
+        get = next(call.args[0] for call in shell.call_args_list if call.args[0][:2] == ["kubectl", "get"])
+        self.assertEqual(get[:3], ["kubectl", "get", "hpa"])
+        self.assertIn("--ignore-not-found", get)  # HPA 를 안 켠 환경에서 깨지지 않는다
+
+    def test_smoke_says_nothing_when_no_autoscaler_is_enabled(self):
+        import runtime_smoke
+        shell = Mock(side_effect=["", "", "", "", "", ""])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", shell)
+        output.assert_not_called()
+
+    def test_smoke_reports_ai_wiring_lines_without_gating_the_deploy(self):
+        """AI 기동 배선 한 줄들을 배포 로그에 남기되, 공백이어도 배포를 깨지 않는다.
+
+        키가 빠지면 AI 는 기동에 성공하고 품질만 조용히 떨어진다 — 그 경고는 파드
+        로그에만 남아 클러스터 자격 없이는 안 보였다(2026-10-05 실제로 막힌 자리).
+        단언하지 않는 이유는 `WEATHER_API` 가 선택값이어서, 없이 도는 환경을 배포할 수
+        있어야 하기 때문이다.
+        """
+        import runtime_smoke
+        logs = ("INFO trippilot.poi_curation.adapters.kma_weather 기상청 단기예보 = "
+                "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0 (키 파라미터 serviceKey)\n"
+                "INFO trippilot.api.middleware GET /health 200\n"
+                "WARNING trippilot.main 임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — 규칙 랭킹으로 강등된다\n")
+        shell = Mock(side_effect=["", "", "", "", "", logs])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", shell)
+        printed = " ".join(str(call.args[0]) for call in output.call_args_list)
+        self.assertIn("apis.data.go.kr", printed)  # 날씨가 붙은 증거
+        self.assertIn("serviceKey", printed)  # 주소와 키 파라미터의 짝까지
+        self.assertIn("임베딩 미배선", printed)
+        self.assertNotIn("/health 200", printed)  # 요청 로그는 끌어오지 않는다
+        logs_call = shell.call_args.args[0]
+        self.assertEqual(logs_call[:2], ["kubectl", "logs"])
+        self.assertIn("deployment/ai", logs_call)
+
+    def test_smoke_survives_unreadable_ai_logs(self):
+        """로그를 못 읽어도 배포는 성공한다 — 기록 수단이 게이트가 되면 안 된다."""
+        import runtime_smoke
+        shell = Mock(side_effect=["", "", "", "", "", runtime.CommandError("kubectl", "failed")])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", shell)
+        printed = " ".join(str(call.args[0]) for call in output.call_args_list)
+        self.assertIn("못 읽었다", printed)
 
     @patch("runtime.subprocess.run")
     def test_command_returns_success_without_echo(self, run):

@@ -1,5 +1,5 @@
-import { formatShareCardPeriod } from '@/entities/trip/lib/formatShareCardPeriod';
-import type { Trip, TripSummary } from '@/shared/api/generated/schemas';
+import { formatShareCardPeriod } from '@/entities/trip';
+import type { Trip, TripSummary } from '@/shared/api/index.schemas';
 
 import { summaryStats, type SummaryStatCells } from './summaryStats';
 import {

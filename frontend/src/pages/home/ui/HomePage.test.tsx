@@ -6,15 +6,20 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { Place, Trip } from '@/shared/api/generated/schemas';
+import type { Place, Trip } from '@/shared/api/index.schemas';
 import {
   ItineraryGenerationState,
   ItineraryStatus,
-} from '@/shared/api/generated/schemas';
-import { seoulDate } from '@/shared/date/seoulDate';
-import { SAVE_FAILURE_NOTICE } from '@/features/explore/model/placeSaveGuard';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+} from '@/shared/api/index.schemas';
+import { seoulDate } from '@/shared/lib/seoulDate';
+import {
+  guardPress,
+  openPressGuardWindow,
+  resetPressGuard,
+} from '@/shared/lib/pressGuard';
+import { SAVE_FAILURE_NOTICE } from '@/features/save-place';
+import { regionPickerHref } from '@/features/explore';
+import { useTripWizardStore } from '@/features/create-trip';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,
@@ -62,19 +67,14 @@ jest.mock('@/shared/api/generated/places/places', () => ({
 const mockUseSavedPlaces = jest.fn();
 const mockSave = jest.fn();
 const mockRemove = jest.fn();
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: (...args: unknown[]) => mockUseSavedPlaces(...args),
 }));
 
 // 딥 경로로 목한다 — features/trip 의 동명 훅이 아니다(QueryClient 없이 실훅이 돌면 크래시).
 const mockUseSavedStays = jest.fn();
-jest.mock('@/features/stay/model/savedStays', () => ({
+jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
-}));
-
-let mockToken: string | null = null;
-jest.mock('@/shared/api/tokenManager', () => ({
-  getAccessToken: () => mockToken,
 }));
 
 const TRIP_ID = '33333333-3333-3333-3333-333333333333';
@@ -157,6 +157,15 @@ function place(
   };
 }
 
+/** 담긴 수가 겹치지 않는 n곳 — 인기순 = 입력 순서(실장소0 이 1위). 이름·지역은 부산 고정 픽스처와 겹치지 않는다. */
+function rankedPlaces(n: number): Place[] {
+  return Array.from({ length: n }, (_, i) => ({
+    ...place(`rk${i}`, `실장소${i}`, 100 - i),
+    category: i % 2 === 0 ? '카페' : '명소',
+    region: `서울 ${i}구`,
+  })) as Place[];
+}
+
 function placesOk(items: Place[]) {
   return {
     data: { items, nextCursor: null },
@@ -235,9 +244,8 @@ beforeEach(() => {
     mockSave,
     mockRemove,
   ].forEach((fn) => fn.mockReset());
-  // 기본값 — 게스트 · 여행 없음(discovery) · 담김 0 · 저장 숙소 0 · 뜨는 장소 1곳.
+  // 기본값 — 여행 없음(discovery) · 담김 0 · 저장 숙소 0 · 뜨는 장소 1곳.
   // 장소가 0곳이면 스팟 섹션이 숨어 "더 보기"를 못 찾는다.
-  mockToken = null;
   mockUseGetTrips.mockReturnValue(tripsOk([]));
   mockUseItinerary.mockReturnValue(
     itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
@@ -249,6 +257,8 @@ beforeEach(() => {
 
 // 위저드 드래프트는 모듈 싱글턴이라 describe 밖에서 비운다 — 안에 걸면 앞 테스트 상태가 샌다.
 afterEach(resetWizardDraft);
+// 연타 가드 창도 모듈 싱글턴이다 — 앞 테스트가 연 창이 다음 테스트의 첫 누름을 먹지 않게 닫는다(TRIP-1282).
+afterEach(() => resetPressGuard());
 
 // TRIP-371 실데이터 판정 · TRIP-699 로딩 히어로 · TRIP-935 AC-5
 describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 가른다', () => {
@@ -266,6 +276,8 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
 
     expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
     expect(screen.queryByTestId('home-trip-hero')).toBeNull();
+    // 진짜 "여행 없음"엔 오류 안내가 없다 — 아래 실패 케이스와 짝(안내를 늘 띄우면 둘이 구별 안 된다).
+    expect(screen.queryByTestId('home-trips-error')).toBeNull();
   });
 
   it('종료 여행만 있으면 discovery 로 폴백한다(종료 여행을 얼굴로 올리지 않는다)', () => {
@@ -307,17 +319,58 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
     expect(screen.queryByTestId('home-saved-menu-toggle')).toBeNull();
   });
 
-  it('조회 실패면 discovery 로 폴백하고 로딩·여행 얼굴로 새지 않는다(INV-4)', () => {
-    mockUseGetTrips.mockReturnValue(TRIPS_ERROR);
+  // TRIP-935 — 실패를 안내 없는 discovery 로 접으면 "여행 없음"과 구별되지 않는다(조용한 실패, INV-4).
+  it('조회 실패면 오류 안내 + [다시 시도]를 띄우고, 누르면 여행 목록을 다시 묻는다', () => {
+    const refetch = jest.fn();
+    mockUseGetTrips.mockReturnValue({ ...TRIPS_ERROR, refetch });
 
     render(<HomePage />);
 
+    expect(screen.getByTestId('home-trips-error')).toHaveTextContent(
+      /여행 정보를 불러오지 못했어요/
+    );
+    // discovery 는 서버와 무관한 고정 콘텐츠라 그대로 둔다 — 로딩·여행 얼굴로는 새지 않는다.
     expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
     expect(screen.queryByTestId('home-collections-skeleton')).toBeNull();
     expect(screen.queryByTestId('home-trip-hero')).toBeNull();
+    expect(refetch).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('home-trips-retry'));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
-  // 컬렉션 카드는 부산 고정 픽스처라 여행 지역을 헤더에 끼우면 사실과 다른 표기가 된다(심사 2.3).
+  it('다시 묻는 중이면 [다시 시도]가 비활성이다 — 눌러도 반응 없는 버튼처럼 보이지 않게', () => {
+    const refetch = jest.fn();
+    mockUseGetTrips.mockReturnValue({
+      ...TRIPS_ERROR,
+      isFetching: true,
+      refetch,
+    });
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trips-retry')).toBeDisabled();
+    fireEvent.press(screen.getByTestId('home-trips-retry'));
+    expect(refetch).not.toHaveBeenCalled();
+  });
+
+  // react-query v5 는 이미 받은 데이터가 있는 쿼리의 재조회가 실패하면 data 를 남긴 채 isError 가 된다.
+  it('여행을 이미 받아 둔 뒤 재조회만 실패하면 여행 카드를 유지하고 오류 안내는 없다', () => {
+    mockUseGetTrips.mockReturnValue({
+      data: [beforeTrip()],
+      isPending: false,
+      isError: true,
+      refetch: jest.fn(),
+    });
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-trips-error')).toBeNull();
+  });
+
+  // 계획 중(여행 전)은 전국 조회라 카드가 그 지역 장소라는 보장이 없어 지역 헤더를 끼우지 않는다(TRIP-1209).
   it('계획 중 홈의 컬렉션 헤더는 기본 문구다 — "서울에서 담을 만한 곳"을 끼우지 않는다', () => {
     mockUseGetTrips.mockReturnValue(
       tripsOk([
@@ -329,6 +382,8 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
         }),
       ])
     );
+
+    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(7)));
 
     render(<HomePage />);
 
@@ -378,6 +433,9 @@ describe('진입점 — 누르면 어디로 가나', () => {
     expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
       '2'
     );
+    // 홈은 로그인 뒤에만 열린다 — false 를 넘기면 실훅이 담은 목록 조회를 꺼 배지가 늘 0이 된다(TRIP-1164).
+    expect(mockUseSavedPlaces).toHaveBeenCalledWith({ isAuthed: true });
+    expect(mockUseSavedStays).toHaveBeenCalledWith({ isAuthed: true });
   });
 
   it('뜨는 장소 "더 보기"를 누르면 장소 탐색으로 간다', () => {
@@ -386,6 +444,16 @@ describe('진입점 — 누르면 어디로 가나', () => {
     fireEvent.press(screen.getByTestId('home-spots-more'));
 
     expect(mockPush.mock.calls).toEqual([['/explore/places']]);
+  });
+
+  // TRIP-1221(d) — 스팟 카드는 장소 상세(d06)로 간다. 같은 장소 줄 세우기라 컬렉션도 같은 경로.
+  it('뜨는 장소 카드를 누르면 그 장소 상세로 간다', () => {
+    render(<HomePage />);
+
+    fireEvent.press(screen.getByTestId('home-spot-card-0'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush.mock.calls[0][0]).toMatch(/^\/explore\/places\/.+/);
   });
 
   // 결과가 탐색 탭 d01(진짜 탭바)로 가므로 진입 탭 되싣기(tab=home)는 폐기됐다(TRIP-1105).
@@ -432,6 +500,142 @@ describe('진입점 — 누르면 어디로 가나', () => {
   });
 });
 
+// TRIP-1209 — 홈 컬렉션 레인은 부산 고정 샘플이 아니라 서버 장소 풀(useGetPlaces) 실데이터다.
+// '지금 뜨는 장소' 4장(담긴 수 상위)을 뺀 다음 3곳을 쓰고(겹침 0), 3곳을 못 채우면 레인을 숨긴다.
+describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
+  const BUSAN_FIXTURE_TITLES = ['감천문화마을', '해운대 해변', '해동용궁사'];
+  const seoulTravel = () =>
+    trip({
+      title: '서울 여행',
+      startDate: addDays(seoulDate(new Date()), -1),
+      endDate: addDays(seoulDate(new Date()), 1),
+      status: 'ACTIVE',
+      destinations: [{ seq: 1, region: '서울', nights: 2 }],
+    });
+
+  beforeEach(() => {
+    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(10)));
+  });
+
+  it('서울 여행 중에 부산 고정 카드가 없고, 서버 장소 3장이 담긴 수 순(상위 4곳 다음)으로 나온다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([seoulTravel()]));
+
+    render(<HomePage />);
+
+    const cards = [0, 1, 2].map((i) =>
+      within(screen.getByTestId(`home-collection-card-${i}`))
+    );
+    expect(cards[0].getByText('실장소4')).toBeOnTheScreen();
+    expect(cards[1].getByText('실장소5')).toBeOnTheScreen();
+    expect(cards[2].getByText('실장소6')).toBeOnTheScreen();
+    expect(cards[0].getByText('서울 4구')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-collection-card-3')).toBeNull();
+    for (const title of BUSAN_FIXTURE_TITLES) {
+      expect(screen.queryByText(title)).toBeNull();
+    }
+  });
+
+  it('배지는 하드코딩 "당일치기"·"1박 2일"이 아니라 장소 카테고리다', () => {
+    render(<HomePage />);
+
+    const cards = [0, 1].map((i) =>
+      within(screen.getByTestId(`home-collection-card-${i}`))
+    );
+    expect(cards[0].getByText('카페')).toBeOnTheScreen(); // 실장소4(짝수)
+    expect(cards[1].getByText('명소')).toBeOnTheScreen(); // 실장소5
+    expect(screen.queryByText('당일치기')).toBeNull();
+    expect(screen.queryByText('1박 2일')).toBeNull();
+    expect(screen.queryByText('반나절')).toBeNull();
+  });
+
+  it('"지금 뜨는 장소" 4장과 겹치지 않는다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([seoulTravel()]));
+
+    render(<HomePage />);
+
+    for (const name of ['실장소0', '실장소1', '실장소2', '실장소3']) {
+      // 뜨는 장소 카드에는 있고 컬렉션 카드에는 없다.
+      const inSpots = [0, 1, 2, 3].filter(
+        (i) =>
+          within(screen.getByTestId(`home-spot-card-${i}`)).queryByText(
+            name
+          ) !== null
+      );
+      expect(inSpots).toHaveLength(1);
+      for (const i of [0, 1, 2]) {
+        expect(
+          within(screen.getByTestId(`home-collection-card-${i}`)).queryByText(
+            name
+          )
+        ).toBeNull();
+      }
+    }
+  });
+
+  it('여행이 없는 발견 얼굴에서도 실장소 3장이다', () => {
+    render(<HomePage />);
+
+    expect(
+      within(screen.getByTestId('home-collection-card-0')).getByText('실장소4')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('감천문화마을')).toBeNull();
+  });
+
+  it('장소 조회 대기 중이면 컬렉션 스켈레톤이다(고정 카드를 대신 깔지 않는다)', () => {
+    mockUseGetPlaces.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      refetch: jest.fn(),
+    });
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-collections-skeleton')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
+    expect(screen.queryByText('감천문화마을')).toBeNull();
+  });
+
+  it('장소 조회 실패면 한 줄 재시도이고, 누르면 그 조회를 다시 부른다(침묵 금지)', () => {
+    const refetch = jest.fn();
+    mockUseGetPlaces.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      refetch,
+    });
+
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('home-collections-error'));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
+    expect(screen.queryByText('감천문화마을')).toBeNull();
+  });
+
+  it('뜨는 장소 4곳을 빼고 3곳이 안 남으면(6곳) 컬렉션 레인을 통째로 숨긴다', () => {
+    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(6)));
+
+    render(<HomePage />);
+
+    expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
+    expect(screen.queryByText('요즘 사람들이 담는 곳')).toBeNull();
+    expect(screen.queryByTestId('home-collections-skeleton')).toBeNull();
+    expect(screen.queryByTestId('home-collections-error')).toBeNull();
+    expect(screen.queryByText('감천문화마을')).toBeNull();
+    // 뜨는 장소 레인은 그대로다.
+    expect(screen.getByTestId('home-spot-card-3')).toBeOnTheScreen();
+  });
+
+  it('딱 7곳이면 3장이 찬다(경계)', () => {
+    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(7)));
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-collection-card-2')).toBeOnTheScreen();
+  });
+});
+
 // TRIP-1049 — 여행이 없으면 전국, 여행 중이면 그 여행 지역에서 200곳을 받아 담긴 수 순 4장.
 describe('지금 뜨는 장소', () => {
   /** 서버 순서(이름순) 6곳 — 담긴 수가 뒤섞여 있다. */
@@ -451,7 +655,6 @@ describe('지금 뜨는 장소', () => {
   }
 
   beforeEach(() => {
-    mockToken = 'tkn';
     mockUseGetPlaces.mockReturnValue(placesOk(SIX));
     mockSave.mockResolvedValue({ kind: 'saved' });
     mockRemove.mockResolvedValue({ kind: 'removed' });
@@ -556,17 +759,6 @@ describe('지금 뜨는 장소', () => {
       expect(mockRemove).toHaveBeenCalledTimes(1);
       expect(mockRemove).toHaveBeenCalledWith('p4');
       expect(mockSave).not.toHaveBeenCalled();
-    });
-
-    it('게스트 → 로그인으로 push 하고 담기·해제는 0건', () => {
-      mockToken = null;
-      render(<HomePage />);
-
-      fireEvent.press(screen.getByTestId('home-spot-save-p4'));
-
-      expect(mockPush).toHaveBeenCalledWith('/(auth)/login');
-      expect(mockSave).not.toHaveBeenCalled();
-      expect(mockRemove).not.toHaveBeenCalled();
     });
 
     it('담기 실패 → 담기 실패 문구 배너', async () => {
@@ -987,5 +1179,196 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
 
       expect(mockPush).not.toHaveBeenCalled();
     });
+  });
+});
+
+// TRIP-1282 — 연타 관통(QA A-02 ①·B-15 ⑤). 홈은 ① "더 보기"의 트리거이고 ⑤ 위저드 이탈의 표적이다.
+// 두 화면을 잇는 것은 모듈 전역 400ms 창 하나뿐이라, 이 파일은 홈 쪽 반쪽만 잰다(트리거면 "창을 연다",
+// 표적이면 "열린 창에서 무시된다"). 다른 반쪽은 장소 탐색·위저드 1/4 테스트 파일에 있다.
+describe('연타 관통 — 홈 쪽 반쪽', () => {
+  /** 가드 판정용 멈춘 시각(값 자체는 의미 없다 — 흐르지 않는 것이 요점). */
+  const FROZEN_NOW = 1_790_000_000_000;
+  let clock: jest.SpyInstance;
+  beforeEach(() => {
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+  });
+  afterEach(() => clock.mockRestore());
+
+  /** 다음 화면의 "가드로 감싼 버튼" 대역 — 창이 열려 있으면 안 불린다. 부르는 순간 창을 연다(닫혀 있었다면). */
+  function tapGuardedElsewhere(): jest.Mock {
+    const handler = jest.fn();
+    guardPress(handler)();
+    return handler;
+  }
+
+  it('① "더 보기"를 누르면 장소 탐색으로 1회 가고, 창이 열려 다음 화면의 가드 버튼은 무시된다', () => {
+    render(<HomePage />);
+    // 앵커 — 아직 창이 닫혀 있다(대역이 불린다). 대역이 연 창은 바로 닫는다.
+    expect(tapGuardedElsewhere()).toHaveBeenCalledTimes(1);
+    resetPressGuard();
+
+    fireEvent.press(screen.getByTestId('home-spots-more'));
+
+    // 앵커 — 첫 탭은 제 할 일을 했다.
+    expect(mockPush.mock.calls).toEqual([['/explore/places']]);
+    // 단언 — 창이 열려 있다.
+    expect(tapGuardedElsewhere()).not.toHaveBeenCalled();
+  });
+
+  it.each(['home-trip-hero', 'home-trip-hero-cta'])(
+    '⑤ 창 안의 여행 카드(%s) 누름은 라이브로 가지 않고, 창이 닫힌 뒤 한 번 누르면 라이브로 정확히 1회 간다',
+    (testID) => {
+      mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
+      mockUseItinerary.mockReturnValue(
+        itineraryOk(
+          ItineraryGenerationState.COMPLETE,
+          ItineraryStatus.CONFIRMED
+        )
+      );
+      render(<HomePage />);
+      expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+      // 준비 — 위저드 이탈 다이얼로그 버튼이 방금 눌렸다(창이 열려 있다).
+      openPressGuardWindow();
+
+      fireEvent.press(screen.getByTestId(testID));
+
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // 무회귀 — 창이 닫힌 뒤의 한 번은 같은 카드의 목적지로 간다.
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId(testID));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/live`);
+    }
+  );
+
+  // TRIP-1306 — 목적지를 모르는(일정 조회 중) 누름은 아무것도 안 하므로 창도 열지 않는다.
+  // 시계는 위 beforeEach 가 렌더 전에 멈춰 둔다 — 실제 시계로 연 창은 과거 FROZEN_NOW 기준 음수 경과로 닫힌 것으로 판정된다.
+  describe('일정 조회 중 누름은 창을 열지 않는다', () => {
+    const LIVE = `/trips/${TRIP_ID}/live`;
+
+    it.each(['home-trip-hero', 'home-trip-hero-cta'])(
+      '조회 중 카드(%s) 누름은 이동이 없고, 응답 직후(300ms) 다시 누르면 일정 화면으로 정확히 1회 간다',
+      (testID) => {
+        mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
+        mockUseItinerary.mockReturnValue(ITIN_PENDING);
+        const { rerender } = render(<HomePage />);
+        expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+          '일정 이어서 짜기'
+        );
+
+        fireEvent.press(screen.getByTestId(testID));
+
+        expect(mockPush).not.toHaveBeenCalled();
+
+        // 응답이 와서 목적지가 정해진다 — 조회 중 누름을 기억했다가 지금 이동하지 않는다.
+        mockUseItinerary.mockReturnValue(
+          itineraryOk(
+            ItineraryGenerationState.COMPLETE,
+            ItineraryStatus.CONFIRMED
+          )
+        );
+        rerender(<HomePage />);
+        clock.mockReturnValue(FROZEN_NOW + 300);
+        expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+          '확정 일정 보기'
+        );
+        expect(mockPush).not.toHaveBeenCalled();
+
+        fireEvent.press(screen.getByTestId(testID));
+
+        expect(mockPush.mock.calls).toEqual([[LIVE]]);
+      }
+    );
+
+    // 500 줄: 404 아닌 오류로 끝나도 목적지는 null 이다 — 바깥 검사를 "조회 중"으로만 좁히면 여기서 창이 다시 열린다.
+    it.each([
+      ['조회 중', ITIN_PENDING],
+      ['500 오류로 끝난 뒤', ITIN_SERVER_ERROR],
+    ])(
+      '%s 카드를 누른 직후(100ms) "더 보기"를 누르면 장소 탐색으로 간다',
+      (_label, itinerary) => {
+        // "더 보기"는 여행 중 얼굴에만 있다.
+        mockUseGetTrips.mockReturnValue(tripsOk([duringTrip()]));
+        mockUseItinerary.mockReturnValue(itinerary);
+        render(<HomePage />);
+        expect(screen.getByTestId('home-spots-more')).toBeOnTheScreen();
+
+        fireEvent.press(screen.getByTestId('home-trip-hero'));
+        clock.mockReturnValue(FROZEN_NOW + 100);
+        fireEvent.press(screen.getByTestId('home-spots-more'));
+
+        expect(mockPush.mock.calls).toEqual([['/explore/places']]);
+      }
+    );
+
+    it.each(['home-trip-hero', 'home-trip-hero-cta'])(
+      '목적지가 정해진 카드(%s)를 60ms 간격으로 2연타하면 이동은 1회다',
+      (testID) => {
+        mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
+        mockUseItinerary.mockReturnValue(
+          itineraryOk(
+            ItineraryGenerationState.COMPLETE,
+            ItineraryStatus.CONFIRMED
+          )
+        );
+        render(<HomePage />);
+
+        fireEvent.press(screen.getByTestId(testID));
+        clock.mockReturnValue(FROZEN_NOW + 60);
+        fireEvent.press(screen.getByTestId(testID));
+
+        expect(mockPush.mock.calls).toEqual([[LIVE]]);
+      }
+    );
+  });
+});
+
+// TRIP-1321 · US-ASSIST-01 · BR-U8-50~53 — ✦ AI 도우미 FAB. 실제 겹침·탭바 거리는 6-b 실기.
+describe('✦ 도우미 FAB (TRIP-1321)', () => {
+  function fabStyle(): Record<string, unknown> {
+    return Object.assign(
+      {},
+      ...[screen.getByTestId('assistant-fab').props.style].flat(Infinity)
+    );
+  }
+
+  it('여행이 없으면 surface 만 싣고 도우미 시트로 1회 간다', () => {
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('assistant-fab'));
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/assistant', params: { surface: 'HOME' } }],
+    ]);
+  });
+
+  it('계획 중 여행이 있으면 그 여행 id 를 싣는다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([trip({ status: 'PLANNED' })]));
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('assistant-fab'));
+    expect(mockPush).toHaveBeenLastCalledWith({
+      pathname: '/assistant',
+      params: {
+        surface: 'HOME',
+        tripId: '11111111-1111-1111-1111-111111111111',
+      },
+    });
+  });
+
+  it('스택 2단 위 바닥 220 에 뜬다(fabStack 계산값)', () => {
+    render(<HomePage />);
+    expect(fabStyle()).toEqual(expect.objectContaining({ bottom: 220 }));
+  });
+
+  it('담은 곳 메뉴가 펼쳐진 동안·조회 중에는 트리에 없다(BR-U8-53)', () => {
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+    expect(screen.queryByTestId('assistant-fab')).toBeNull();
+  });
+
+  it('조회 중에는 없다(다른 FAB 와 같이 숨는다)', () => {
+    mockUseGetTrips.mockReturnValue(TRIPS_PENDING);
+    render(<HomePage />);
+    expect(screen.queryByTestId('assistant-fab')).toBeNull();
   });
 });

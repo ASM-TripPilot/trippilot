@@ -20,7 +20,11 @@
 - 게이트 셋 중 하나라도 안 열리면 **HOLD** — 표만 남긴다.
 - EKS 권고(`SWITCH_TO_LOCAL`): `EKS $/건 < 0.7 × Bedrock $/건` **그리고** `eks_p95_ms < fill_deadline_ms`.
 - Bedrock 복귀(`SWITCH_TO_BEDROCK`): 현재 local 인데 `Bedrock $/건 < 0.7 × EKS $/건`. 0.7 은 히스테리시스 — 왔다갔다 금지.
-- 같은 SWITCH 판정이 **2회 연속**이면 `action=open_pr` — `deploy/eks/chart/values.yaml` 의 `reminderLlm.transport` 한 줄 PR(#657 의 스위치). **머지가 승인이다.** 자동 머지는 없다.
+- 같은 SWITCH 판정이 **2회 연속**이면 `action=open_pr`. **머지가 승인이다.** 자동 머지는 없다.
+  - `SWITCH_TO_BEDROCK` 은 값 한 줄이다(`TRIPPILOT_REMINDER_TRANSPORT`).
+  - `SWITCH_TO_LOCAL` 은 **값 한 줄이 아니다**(2026-10-01). 인클러스터 매니페스트를 철회했으므로
+    그 PR 은 "매니페스트를 다시 써야 한다"는 **착수 제안**이다 — 근거는 `서빙-의사결정-기록.md` §10.
+    `eks_$/건` 칸이 비어 있는 동안 이 판정은 애초에 나오지 않는다(게이트 미개방 → HOLD).
 
 ## 주간 기록 (판정기가 붙인다)
 

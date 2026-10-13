@@ -1,0 +1,701 @@
+import type { ReactNode } from 'react';
+import { http, HttpResponse } from 'msw';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
+import { View } from 'react-native';
+
+import { server } from '@/mocks/server';
+import type {
+  Itinerary,
+  ItineraryDaysItem,
+  ItineraryDaysItemSlotsItem,
+  Trip,
+} from '@/shared/api/index.schemas';
+import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { guardKeyWarnings } from '@/test-support/keyWarnings';
+
+import { CoPickCompletePage } from './CoPickCompletePage';
+
+/**
+ * TRIP-796 · AC-1~9 h11 "같이 결과 · CoPick 완료" 얼굴을 **실 HTTP 로** 태우는 심판
+ * (01b D1~D8 · 계약 플립 — 옛 CoPickCompleteScreen(features) 얼굴을 공용 지도+시트 셸로 갈아끼운다).
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 셸 얼굴이 뜬다 — 전면 지도(`map-root`) + day-chip 오버레이(`sheet-daychip-*`) +
+ *    시트 헤더(`sheet-header-*`) + 슬롯 카드 5개(`slot-stopcard-*`) + 단일 CTA(`sheet-cta-*`).
+ *    옛 완성 화면 루트(`itinerary-copick-complete-root`)는 사라진다(AC-1).
+ *  - 🔴 **전 슬롯 검증 시각 칩**(AC-2, BR-U3-07 개정) — 옛 "비고정 시각 렌더 0"의 **정반대**.
+ *    비고정=`HH:mm–HH:mm`(en-dash), 고정 숙소=단일 `21:00`+부제+고정 배지(AC-3).
+ *  - 🔴 "다른 후보 ›" 링크가 **전 슬롯 0개**(h08과 다름 · AC-5) · INV-3 소요시간 0(AC-4).
+ *  - 🔴 헤더 "부산 여행 · 1일차 · 6월 10일…" + meta "4/4 골랐어요"(N=비고정 4 · AC-6).
+ *  - 🔴 단일 CTA "확정하기" → h14 push 완전일치 1회 · "다시 짜기" 부재(AC-7).
+ *  - 🔴 GET 500 → error 얼굴·셸 부재 / 로딩 → 셸 부재(AC-8 · INV-4).
+ *
+ * ⚠️ 함정(02a §4):
+ *  - ★2 en-dash `–`(U+2013): 비고정 시각칩 완전일치가 이 구분자를 강제. 고정은 단일 `21:00`
+ *    (완전일치라 `21:00–21:00` 오구현이 red).
+ *  - ★5 meta 카운트는 비고정만(4/4). coPickProgress(고정 포함 5/5) 재사용 시 red.
+ *  - ★7 "1일차"는 day-chip·헤더 dayLabel 둘 다 그린다 → getByText('1일차') 금지, testID 로만.
+ *
+ * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=화면을 열고/누른다 → 단언=보이는 얼굴·testID·나간 요청.
+ */
+
+// 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
+jest.mock('@/shared/storage', () => ({
+  saveTokens: jest.fn().mockResolvedValue(undefined),
+  getTokens: jest.fn().mockResolvedValue({
+    accessToken: 'old-access',
+    refreshToken: 'old-refresh',
+  }),
+  clearTokens: jest.fn().mockResolvedValue(undefined),
+  hasStoredToken: jest.fn().mockResolvedValue(true),
+}));
+
+const mockPush = jest.fn();
+const mockBack = jest.fn();
+jest.mock('expo-router', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    replace: jest.fn(),
+    canGoBack: () => true,
+  }),
+}));
+
+// 지도는 이 칸의 심판 대상이 아니다 — 남는 props 를 통과시키는 관찰 마커(map-root)로 바꾼다.
+// 셸이 `center` 를 반드시 넘겨야 이 목이 `center.lat` 접근에서 안 죽는다.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
+
+const BASE = 'http://localhost:8080/api/v1';
+const TRIP_ID = '22222222-2222-2222-2222-222222222222';
+const DAY1 = '2026-06-10';
+
+/** 4일 여행 — day-chip 개수의 출처는 `days.length` 가 아니라 이 두 날짜다(01b D2). title(❗name 아님). */
+function trip(): Trip {
+  return {
+    tripId: TRIP_ID,
+    title: '부산 여행',
+    startDate: DAY1,
+    endDate: '2026-06-13',
+    party: 2,
+    preferenceSnapshot: {},
+    destinations: [{ seq: 1, region: '부산', nights: 3 }],
+    status: 'PLANNED',
+    createdAt: '2026-08-01T10:00:00.000Z',
+    updatedAt: '2026-08-01T10:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
+  };
+}
+
+/**
+ * 선택일(day 1) 5슬롯 — 비고정 4 + 고정 1(숙소). AC-2·3·5·6 을 한 픽스처로 잰다.
+ *  - poi-hotel 은 isFixed=true(고정) → 시각칩은 **단일 21:00**(범위 아님) + 부제 + 고정 배지(AC-3).
+ *  - 비고정 4개는 전부 시각 range 칩(AC-2, 옛 "비고정 시각 0"의 정반대).
+ *  - N(비고정)=4 → meta "4/4 골랐어요"(AC-6 · coPickProgress 5/5 재사용이면 red).
+ *  - lat/lng 를 실어 셸 지도(map-root)가 마운트되고 페이지가 center 를 계산하게 한다.
+ */
+function daySlots(): ItineraryDaysItemSlotsItem[] {
+  return [
+    {
+      poiId: 'poi-a',
+      startAt: '10:00:00',
+      endAt: '11:00:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: ['바다', '산책'],
+      nameKo: '광안리 해변',
+      category: '자연',
+      imageUrl: null,
+      distanceRange: null,
+      lat: 35.153,
+      lng: 129.118,
+    },
+    {
+      poiId: 'poi-b',
+      startAt: '11:30:00',
+      endAt: '12:10:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: ['전망', '야경'],
+      nameKo: '황령산 전망대',
+      category: '자연',
+      imageUrl: null,
+      distanceRange: '2.1km',
+      lat: 35.137,
+      lng: 129.089,
+    },
+    {
+      poiId: 'poi-c',
+      startAt: '13:00:00',
+      endAt: '14:30:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: ['미술'],
+      nameKo: '부산시립미술관',
+      category: '전시',
+      imageUrl: null,
+      distanceRange: '0.8km',
+      lat: 35.166,
+      lng: 129.135,
+    },
+    {
+      poiId: 'poi-d',
+      startAt: '14:30:00',
+      endAt: '15:15:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: ['감성', '브런치'],
+      nameKo: '웨이브온 카페',
+      category: '카페',
+      imageUrl: null,
+      distanceRange: '0.6km',
+      lat: 35.201,
+      lng: 129.216,
+    },
+    {
+      poiId: 'poi-hotel',
+      startAt: '21:00:00',
+      endAt: '21:00:00',
+      isFixed: true,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: [],
+      nameKo: '해운대 그랜드 호텔',
+      category: '숙소',
+      imageUrl: null,
+      distanceRange: '0.6km',
+      lat: 35.163,
+      lng: 129.16,
+    },
+  ];
+}
+
+function itinerary(): Itinerary {
+  const days: ItineraryDaysItem[] = [{ date: DAY1, slots: daySlots() }];
+  return {
+    itineraryId: 'itin-796',
+    tripId: TRIP_ID,
+    status: 'PLANNED',
+    solveMode: 'FULL_AI',
+    generationMode: 'CO_PLAN',
+    generationState: 'COMPLETE',
+    isFallback: false,
+    days,
+  };
+}
+
+/** GET /itinerary 응답을 케이스가 정한다. 기본은 완료된 CO_PLAN 일정(→ 셸). */
+let itineraryHandler: () => Response | Promise<Response>;
+
+/** 렌더된 문자열 전부를 공백으로 이어 붙인다(소요·% 부정 스캔의 모집단, h07/h08 선례). */
+function renderedText(): string {
+  const out: string[] = [];
+  screen.root
+    .findAll(() => true)
+    .forEach((node) => {
+      const children = node.props?.children as unknown;
+      const list = Array.isArray(children) ? children : [children];
+      list.forEach((child) => {
+        if (typeof child === 'string') out.push(child);
+      });
+    });
+  return out.join(' ');
+}
+
+// TRIP-1296 — 이 파일의 모든 테스트에서 React key 경고(겹침·누락) 0. 누락 경고는 React 가 파일당 한 번만 내서
+// describe 하나로는 못 본다 — 그래서 최상위에 건다(02a 5-b 보강).
+const keyWarnings = guardKeyWarnings();
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+
+beforeEach(() => {
+  mockPush.mockClear();
+  mockBack.mockClear();
+  setAccessToken('valid-access');
+  itineraryHandler = () => HttpResponse.json(itinerary());
+
+  server.use(
+    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+    http.get(`${BASE}/trips/:tripId/itinerary`, () => itineraryHandler())
+  );
+});
+
+afterEach(() => {
+  server.resetHandlers();
+  clearAccessToken();
+});
+
+afterAll(() => server.close());
+
+/** `retry:false`·`gcTime:0` — 실패 즉시, 잔존 타이머 방지. */
+function renderPage() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+  }
+  return render(<CoPickCompletePage tripId={TRIP_ID} />, { wrapper: Wrapper });
+}
+
+describe('🔴 A1 · AC-1 — 완료 응답이면 지도+시트 셸 얼굴이 뜬다 (계약 플립)', () => {
+  it('셸 골격(지도·오버레이·헤더·5슬롯·CTA)이 뜨고 옛 완성 화면 루트는 사라진다', async () => {
+    renderPage();
+
+    // 셸 골격.
+    await screen.findByTestId('map-sheet-shell-root');
+    expect(screen.getByTestId('map-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-daychip-0')).toBeOnTheScreen(); // DayChipOverlay
+    expect(screen.getByTestId('sheet-header-title')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-meta')).toBeOnTheScreen();
+    // 슬롯 카드 root testID 는 `slot-stopcard-{날짜}#{poiId}`(날짜=digit) — 하위 leaf(time/name…)는
+    // `slot-stopcard-{단어}-…`(letter)라 `/^slot-stopcard-\d/` 가 root 5장만 정확히 센다(§5 실검증).
+    expect(screen.queryAllByTestId(/^slot-stopcard-\d/)).toHaveLength(5);
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+
+    // ★8 옛 완성 화면 루트(features CoPickCompleteScreen) 부재 — 셸로 갈아끼워졌다.
+    expect(screen.queryByTestId('itinerary-copick-complete-root')).toBeNull();
+    expect(screen.queryByTestId('itinerary-copick-complete-total')).toBeNull();
+  });
+});
+
+describe('🔴 A2 · AC-2 — 전 슬롯이 검증 시각 칩을 그린다 (옛 "비고정 시각 0"의 정반대 · en-dash)', () => {
+  it('5슬롯 전부 시각 칩이고, 비고정 슬롯은 range(HH:mm–HH:mm)다', async () => {
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // ★1 전 슬롯 시각 칩 — 옛 계약이면 고정 1개뿐이라 red.
+    expect(screen.queryAllByTestId(/^slot-stopcard-time-/)).toHaveLength(5);
+
+    // ★2 비고정 range — toHaveTextContent(문자열)=완전일치라 en-dash `–`(U+2013)를 정확히 요구.
+    expect(
+      screen.getByTestId(`slot-stopcard-time-${DAY1}#poi-a`)
+    ).toHaveTextContent('10:00–11:00');
+    expect(
+      screen.getByTestId(`slot-stopcard-time-${DAY1}#poi-c`)
+    ).toHaveTextContent('13:00–14:30');
+  });
+});
+
+describe('🔴 A3 · AC-3 — 고정 숙소 슬롯은 단일 시각 + 부제 + 고정 배지 (범위 아님)', () => {
+  it('고정 슬롯 시각칩은 단일 21:00, 부제는 "저녁 · 숙소 · 변경 불가", 고정 배지가 뜬다', async () => {
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const hotelKey = `${DAY1}#poi-hotel`;
+    // ★2 단일 21:00 — 완전일치라 `21:00–21:00` 범위 오구현이면 red(단일/범위 분기가 이 하나로 잠긴다).
+    expect(
+      screen.getByTestId(`slot-stopcard-time-${hotelKey}`)
+    ).toHaveTextContent('21:00');
+    // ★3 부제(발명 display copy, 01b D3 동결) + 고정 배지.
+    expect(
+      screen.getByTestId(`slot-stopcard-subtitle-${hotelKey}`)
+    ).toHaveTextContent('저녁 · 숙소 · 변경 불가');
+    expect(
+      screen.getByTestId(`slot-stopcard-fixed-${hotelKey}`)
+    ).toBeOnTheScreen();
+
+    // 비고정 슬롯엔 부제·고정 배지 부재(부정 짝).
+    expect(
+      screen.queryByTestId(`slot-stopcard-subtitle-${DAY1}#poi-a`)
+    ).toBeNull();
+    expect(
+      screen.queryByTestId(`slot-stopcard-fixed-${DAY1}#poi-a`)
+    ).toBeNull();
+  });
+});
+
+describe('🔴 A4 · AC-4 — 셸 얼굴에 소요시간·% 가 0건이다 (INV-3, 셸 도착 후 유지)', () => {
+  it('분·시간·소요·% 어휘가 화면 어디에도 없다', async () => {
+    renderPage();
+    // 셸 도착까지 기다린 뒤 스캔 — 셸 부재(현재)면 여기서 red, 전환 후엔 소요 0 이 유지돼 green.
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const text = renderedText();
+    expect(text).not.toMatch(/\d+\s*(분|시간)|소요/);
+    expect(text).not.toContain('%');
+  });
+});
+
+describe('🔴 A5 · AC-5 — "다른 후보 ›" 링크가 전 슬롯 0개다 (h08과 다름 · 각주/푸터 부재)', () => {
+  it('어느 슬롯에도 alt 링크가 없고, ✓직접고름 각주·"모든 슬롯" 푸터도 없다', async () => {
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // ★4 alt 링크 0 — h08 은 비고정에 2개. h11 은 onPressAlt 미주입이라 0(주입 실수를 이 심판이 잡는다).
+    expect(screen.queryAllByTestId(/^slot-stopcard-alt-/)).toHaveLength(0);
+    // 옛 각주·푸터 부재.
+    expect(screen.queryByText(/직접 고름/)).toBeNull();
+    expect(screen.queryByText(/모든 슬롯/)).toBeNull();
+  });
+});
+
+describe('🔴 A6 · AC-6 — 시트 헤더 3세그 + meta "4/4 골랐어요"(비고정 카운트)', () => {
+  it('제목=부산 여행·일차=1일차·날짜=6월 10일, meta=4/4 골랐어요(고정 제외)', async () => {
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // ★7 "1일차"는 day-chip·헤더 둘 다 그리므로 testID 로만 스코프(getByText 금지).
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      '부산 여행'
+    );
+    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
+    // ★9 날짜 포맷("· 수" vs "(수)")은 강요 안 함 — 정규식 부분.
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      /6월 10일/
+    );
+    // ★5 meta = 비고정 4 → "4/4". coPickProgress(고정 포함 5/5) 재사용이면 완전일치라 red.
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '4/4 골랐어요'
+    );
+  });
+});
+
+describe('🔴 A7 · AC-7 — 단일 CTA "확정하기" → 확정 일정으로 1회 push (다시 짜기 없음)', () => {
+  it('CTA 는 하나뿐이고 press 시 /trips/[tripId]/itinerary 로 tripId 를 실어 한 번 push 한다', async () => {
+    renderPage();
+    await screen.findByTestId('sheet-cta-root');
+
+    // 단일 CTA — h08 은 2버튼(다시 짜기·확정). h11 은 하나뿐.
+    expect(screen.queryAllByTestId(/^sheet-cta-button-/)).toHaveLength(1);
+    const confirm = screen.getByTestId('sheet-cta-button-0');
+    expect(confirm).toHaveTextContent('확정하기');
+    expect(screen.queryByText('다시 짜기')).toBeNull();
+
+    fireEvent.press(confirm);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+
+    // 완전일치(맹점④) — 'itinerary' 부분문자열은 draft·generating 경로에도 있어 substring 이면
+    //   엉뚱한 곳으로 가도 통과한다. h14 는 접미 없는 index 라우트이고 객체형 push 여야 [tripId] 가 해소된다.
+    const dest = mockPush.mock.calls[0][0] as {
+      pathname?: string;
+      params?: { tripId?: string };
+    };
+    expect(dest.pathname).toBe('/trips/[tripId]/itinerary');
+    expect(dest.params?.tripId).toBe(TRIP_ID);
+  });
+});
+
+describe('🔴 A8 · AC-8 — 얼굴 보존 (INV-4 narrow): 도착 얼굴만 셸', () => {
+  it('GET 500 → error 얼굴이 뜨고 셸은 렌더되지 않는다', async () => {
+    itineraryHandler = () => new HttpResponse(null, { status: 500 });
+    renderPage();
+
+    expect(
+      await screen.findByTestId('itinerary-copick-complete-error')
+    ).toBeOnTheScreen();
+    // ★ broad 로 회귀(에러에도 셸 렌더)하면 여기가 red.
+    expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+  });
+
+  it('로딩(data===undefined) → 셸이 아니라 로딩 얼굴이다', async () => {
+    // ★11 결정론적 loading — itinerary GET 을 미해소로 두면 쿼리가 pending 에 머문다.
+    itineraryHandler = () => new Promise<Response>(() => {});
+    renderPage();
+
+    expect(
+      await screen.findByTestId('itinerary-copick-complete-loading')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+  });
+});
+
+describe('🔴 A9 · AC-1 보강 — 슬롯 사이 거리 커넥터가 셸에 조립된다 (INV-3 거리 verbatim)', () => {
+  it('커넥터가 렌더되고 서버 distanceRange(2.1km)를 가공 없이 그대로 그린다', async () => {
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // 커넥터 존재(AC-1 "커넥터") — 배치 규약(어느 slotKey 로 키잉하는지)엔 커플링하지 않는다.
+    expect(screen.queryAllByTestId(/^sheet-connector-/).length).toBeGreaterThan(
+      0
+    );
+    // 서버 distanceRange '2.1km'(poi-b leg)를 verbatim — INV-3(거리만, 소요시간 아님).
+    expect(screen.getByText('2.1km')).toBeOnTheScreen();
+  });
+});
+
+describe('🟢 TRIP-1073 F6 · 폴백으로 완성된 같이 짜기(isFallback=true)도 같은 셸 얼굴이다 (선제 green)', () => {
+  it('재진입 목적지가 여기로 바뀌어도 h17 은 무변경 — 셸이 뜨고 CTA 는 "확정하기" 하나뿐이다', async () => {
+    // 준비 — #051 실측 경로(폴백 완성). 이 페이지는 isFallback 을 보지 않는다(결정 3·01b 열린 질문 2 (a)).
+    itineraryHandler = () =>
+      HttpResponse.json({ ...itinerary(), isFallback: true });
+
+    // 실행
+    renderPage();
+
+    // 단언 — 셸 · 단일 CTA · 오류 얼굴 없음. 폴백 분기가 셸을 가리면 red.
+    expect(await screen.findByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^sheet-cta-button-/)).toHaveLength(1);
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '확정하기'
+    );
+    expect(screen.queryByTestId('itinerary-copick-complete-error')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1076 AC-3 · h11 같이 짜기 결과 지도는 핀 전부에 맞춰 연다', () => {
+  it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const map = screen.getByTestId('map-root');
+    expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
+    expect(map.props.fitPins).toBe(true);
+  });
+});
+
+// TRIP-1295 — 핀 0개인 날에도 지도 중심이 0,0(기니만 바다)으로 가지 않는다(INV-4).
+describe('🔴 h11 지도 중심 — 빈 날·좌표 없는 일정에도 0,0 바다로 가지 않는다', () => {
+  const DAY2 = '2026-06-11';
+  const DAY1_FIRST_TEXT = '35.153,129.118';
+
+  /** 나간 요청 경로 — 거점·담은 숙소 조회가 붙지 않았는지 센다(결정 2=A). */
+  let hits: string[] = [];
+  const record = ({ request }: { request: Request }) => {
+    hits.push(new URL(request.url).pathname);
+  };
+
+  beforeEach(() => {
+    hits = [];
+    server.events.on('request:start', record);
+  });
+
+  afterEach(() => {
+    server.events.removeListener('request:start', record);
+  });
+
+  it('K1 · AC-5 — 빈 2일차 칩을 누르면 중심은 1일차 첫 좌표 장소다', async () => {
+    // 준비 — 2일차는 날짜는 있고 장소가 0곳이다(빼면 칩 press 가 1일차로 되돌아간다).
+    itineraryHandler = () =>
+      HttpResponse.json({
+        ...itinerary(),
+        days: [
+          { date: DAY1, slots: daySlots() },
+          { date: DAY2, slots: [] },
+        ],
+      });
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // 실행
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+    // 단언 — 먼저 정말 빈 날에 와 있는지(1일차 중심과 기대값이 같아서), 그다음 중심.
+    expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+      '2일차'
+    );
+    const map = screen.getByTestId('map-root');
+    expect(map.props.pins as unknown[]).toHaveLength(0);
+    expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
+  });
+
+  it('K2 · AC-2 — 일정 어디에도 좌표가 없으면 서울시청이고, 거점·숙소 조회는 붙지 않는다', async () => {
+    // 준비 — 슬롯은 있으나 좌표가 전부 null.
+    itineraryHandler = () =>
+      HttpResponse.json({
+        ...itinerary(),
+        days: [
+          {
+            date: DAY1,
+            slots: daySlots().map((slot) => ({
+              ...slot,
+              lat: null,
+              lng: null,
+            })),
+          },
+        ],
+      });
+
+    // 실행
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // 단언
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5665,126.978');
+    expect(hits).toContain(`/api/v1/trips/${TRIP_ID}/itinerary`);
+    expect(hits.filter((path) => /\/(bases|saved-stays)$/.test(path))).toEqual(
+      []
+    );
+  });
+
+  it('K4 · AC-3 — 2일차 칩을 누르면 중심은 1일차가 아니라 2일차 첫 핀이다 (고른 날짜가 함수까지 간다)', async () => {
+    // 준비 — 2일차 첫 장소만 다른 좌표.
+    itineraryHandler = () =>
+      HttpResponse.json({
+        ...itinerary(),
+        days: [
+          { date: DAY1, slots: daySlots() },
+          {
+            date: DAY2,
+            slots: daySlots().map((slot, index) =>
+              index === 0 ? { ...slot, lat: 35.115, lng: 129.041 } : slot
+            ),
+          },
+        ],
+      });
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // 실행
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+    // 단언
+    expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+      '2일차'
+    );
+    expect(screen.getByTestId('map-root')).toHaveTextContent('35.115,129.041');
+  });
+
+  it('K3 · AC-3 — 그날 좌표 장소가 있으면 지금처럼 그날 첫 핀이 중심이고 핀도 그대로다', async () => {
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const map = screen.getByTestId('map-root');
+    expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
+    expect(map.props.pins as unknown[]).toHaveLength(5);
+  });
+});
+
+// TRIP-1296 — 같은 날 같은 장소가 두 번 든 같이 고르기 결과(서버가 BR-U2-04 를 어긴 응답). 중복 key 경고 탐지는 02a ★1·★2.
+describe('같은 날 같은 장소 두 번', () => {
+  /**
+   * h11 같이 고르기 결과 시트가 같은 poiId 슬롯 두 개를 받아도
+   *  - React 중복 key 경고(`console.error`)가 0회다(카드·연결선 둘 다),
+   *  - 카드를 숨기지 않는다 — 카드 수 = 슬롯 수, 번호·시각·거리 순서 그대로(INV-4).
+   *
+   * 픽스처 [A, B, A, C] — A 가 1번·3번이고 둘 다 마지막이 아니라 연결선 key 도 겹친다(02a ★8).
+   * 응답은 파일 최상위 beforeEach 의 `itineraryHandler` 를 덮어 정한다.
+   *
+   * 3동작 뼈대: 준비 = 일정 응답·콘솔 스파이 → 실행 = 화면 열기 → 단언 = 경고 key 목록·카드·번호·거리.
+   */
+
+  const CARD_ROOT = /^slot-stopcard-\d{4}-\d{2}-\d{2}#/;
+  const D1_KM = '약 1.1km · 도보 추정';
+  const D2_KM = '약 2.2km · 도보 추정';
+  const D3_KM = '약 3.3km · 도보 추정';
+
+  function slot(
+    poiId: string,
+    hour: number,
+    distanceRange: string | null
+  ): ItineraryDaysItemSlotsItem {
+    const hh = String(hour).padStart(2, '0');
+    return {
+      poiId,
+      startAt: `${hh}:00:00`,
+      endAt: `${hh}:30:00`,
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: [],
+      nameKo: poiId,
+      category: '자연',
+      imageUrl: null,
+      distanceRange,
+      lat: 35.15 + hour / 1000,
+      lng: 129.11,
+    };
+  }
+
+  /** [A, B, A, C] — 같은 장소 p-a 가 1번·3번. */
+  const duplicateSlots = () => [
+    slot('p-a', 10, null),
+    slot('p-b', 11, D1_KM),
+    slot('p-a', 13, D2_KM),
+    slot('p-c', 15, D3_KM),
+  ];
+  /** [A, B, C] — 보통 응답(무회귀). */
+  const normalSlots = () => [
+    slot('p-a', 10, null),
+    slot('p-b', 11, D1_KM),
+    slot('p-c', 15, D2_KM),
+  ];
+
+  async function openResult(slots: ItineraryDaysItemSlotsItem[]) {
+    itineraryHandler = () =>
+      HttpResponse.json({ ...itinerary(), days: [{ date: DAY1, slots }] });
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+    // 앵커 — 목록이 정말 그려졌다(로딩·다른 얼굴이면 경고 0 이 공짜로 통과한다 · 02a ★3).
+    return screen.findAllByTestId(CARD_ROOT);
+  }
+
+  const texts = (nodes: { props: { children?: unknown } }[]) =>
+    nodes.map((node) => node.props.children);
+
+  it('K0 · 탐지기 자가검사 — 겹친 key 와 빠진 key 를 둘 다 잡는다', () => {
+    function NoKeyList() {
+      // eslint-disable-next-line react/jsx-key -- 일부러 key 를 뺀다(누락 경고 자가검사)
+      return [<View />, <View />];
+    }
+
+    render(<View>{[<View key="dup" />, <View key="dup" />]}</View>);
+    render(<NoKeyList />);
+
+    expect(keyWarnings.keys()).toEqual(['dup']);
+    expect(keyWarnings.missing()).toBe(1);
+    keyWarnings.clear(); // 일부러 낸 경고 — 파일 감시가 이 테스트를 실패시키지 않게 비운다.
+  });
+
+  it('🔴 K1 · AC-2 — h11 · 같은 장소가 두 번 있어도 중복 key 경고가 없다', async () => {
+    const cards = await openResult(duplicateSlots());
+
+    expect(cards).toHaveLength(4);
+    expect(keyWarnings.keys()).toEqual([]);
+  });
+
+  it('K2 · AC-4 — h11 · 같은 장소 두 슬롯을 숨기지 않는다 (카드 4·번호·시각·거리 순서)', async () => {
+    const cards = await openResult(duplicateSlots());
+
+    expect(cards).toHaveLength(4);
+    expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+    ]);
+    expect(
+      texts(screen.getAllByTestId(`slot-stopcard-time-${DAY1}#p-a`))
+    ).toEqual(['10:00–10:30', '13:00–13:30']);
+    expect(texts(screen.getAllByTestId(/^sheet-connector-distance-/))).toEqual([
+      D1_KM,
+      D2_KM,
+      D3_KM,
+    ]);
+  });
+
+  it('K3 · AC-3 — h11 · 보통 결과(장소 중복 없음)는 카드·번호·거리가 그대로다', async () => {
+    const cards = await openResult(normalSlots());
+
+    expect(cards).toHaveLength(3);
+    expect(keyWarnings.keys()).toEqual([]);
+    expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
+      '1',
+      '2',
+      '3',
+    ]);
+    expect(texts(screen.getAllByTestId(/^sheet-connector-distance-/))).toEqual([
+      D1_KM,
+      D2_KM,
+    ]);
+  });
+});

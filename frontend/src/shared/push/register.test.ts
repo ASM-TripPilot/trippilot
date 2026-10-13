@@ -3,6 +3,15 @@ jest.mock('expo-notifications', () => ({
   getExpoPushTokenAsync: jest.fn(),
 }));
 jest.mock('@/shared/api/generated/notifications/notifications');
+// 영속 저장소(SecureStore) 대역 — 콜드스타트 사이에 남는 값을 흉내 낸다(TRIP-1348).
+const mockStore = new Map<string, string>();
+jest.mock('@/shared/storage', () => ({
+  PUSH_REGISTERED_KEY: 'pushTokenRegistered',
+  readStringValue: jest.fn(async (key: string) => mockStore.get(key) ?? null),
+  writeStringValue: jest.fn(async (key: string, value: string) => {
+    mockStore.set(key, value);
+  }),
+}));
 
 import * as Notifications from 'expo-notifications';
 
@@ -16,6 +25,7 @@ import {
   registerPushToken,
   toServerOsPermission,
   unregisterDeviceToken,
+  unregisterStoredPushToken,
 } from './register';
 
 /**
@@ -44,6 +54,7 @@ const mockDelete = deleteMePushTokensToken as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockStore.clear();
 });
 
 describe('P1 · toServerOsPermission — 로컬 유니온 → 서버 enum (맹점②)', () => {
@@ -98,5 +109,62 @@ describe('W2 · unregisterDeviceToken — DELETE /me/push-tokens/{token}', () =>
 
     expect(mockDelete).toHaveBeenCalledTimes(1);
     expect(mockDelete).toHaveBeenCalledWith('ExponentPushToken[TEST]');
+  });
+});
+
+describe('TRIP-1348 · 같은 토큰이면 POST /me/push-tokens 를 다시 보내지 않는다', () => {
+  beforeEach(() => {
+    mockGetPermissions.mockResolvedValue({ status: 'granted' });
+    mockGetExpoToken.mockResolvedValue({ data: 'ExponentPushToken[SAME]' });
+  });
+
+  it('같은 토큰·같은 권한으로 두 번(콜드스타트 두 번) 등록하면 POST 는 첫 번째만 나간다', async () => {
+    await registerPushToken();
+    await registerPushToken();
+
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  it('토큰이 바뀌면 다시 보낸다', async () => {
+    await registerPushToken();
+    mockGetExpoToken.mockResolvedValue({ data: 'ExponentPushToken[OTHER]' });
+    await registerPushToken();
+
+    expect(mockPost).toHaveBeenCalledTimes(2);
+  });
+
+  it('같은 토큰이어도 OS 권한이 바뀌면 다시 보낸다 (서버가 osPermission 을 기록한다)', async () => {
+    await registerPushToken();
+    mockGetPermissions.mockResolvedValue({ status: 'denied' });
+    await registerPushToken();
+
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(mockPost).toHaveBeenLastCalledWith(
+      expect.objectContaining({ osPermission: 'DENIED' })
+    );
+  });
+
+  it('POST 가 실패하면 기억하지 않아 다음 진입이 다시 시도한다', async () => {
+    mockPost.mockRejectedValueOnce(new Error('network'));
+    await expect(registerPushToken()).rejects.toThrow('network');
+    await registerPushToken();
+
+    expect(mockPost).toHaveBeenCalledTimes(2);
+  });
+
+  it('로그아웃(해제)하면 기억을 지워 다음 계정의 첫 등록이 나간다', async () => {
+    await registerPushToken();
+    await unregisterStoredPushToken();
+    await registerPushToken();
+
+    expect(mockPost).toHaveBeenCalledTimes(2);
+  });
+
+  it('캐시를 맞춘 채 건너뛴 세션에서도 로그아웃이 그 토큰을 해제한다 (DELETE 대상 보존)', async () => {
+    await registerPushToken();
+    await registerPushToken(); // 두 번째는 POST 생략
+    await unregisterStoredPushToken();
+
+    expect(mockDelete).toHaveBeenCalledWith('ExponentPushToken[SAME]');
   });
 });

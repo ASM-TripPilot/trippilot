@@ -79,10 +79,14 @@ class TripPeriodFacade(
             startDate = trip.startDate,
             endDate = trip.endDate,
             destinationRefs = trip.destinations.sortedBy { it.seq }
-                .map { TripDestinationRef(it.region, it.regionCode) },
+                .map { TripDestinationRef(it.region, it.regionCode, it.nights) },
             companionType = trip.companionType?.name,
             budgetTotal = trip.budgetTotal,
             fixedVisits = fixed,
+            preferenceSnapshot = trip.preferenceSnapshot,
+            dayStartAt = trip.dayWindow.dayStartAt,
+            firstDayStartAt = trip.dayWindow.firstDayStartAt,
+            lastDayEndAt = trip.dayWindow.lastDayEndAt,
         )
     }
 }
