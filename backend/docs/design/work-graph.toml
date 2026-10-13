@@ -3982,7 +3982,7 @@ OBS-02 리프레시 재사용 감지 로그 메트릭 필터 → SNS → Slack, 
 id = "U8-CONTRACT"
 ticket = "TRIP-1377"
 title = "[U8] assistant 모듈 뼈대·계약 — 테이블 넷·openapi assistant 태그·세션 열기/목록/메시지/지우기"
-status = "todo"
+status = "done"
 migration = true
 touches = [
   "backend/modules/assistant",
@@ -3995,6 +3995,9 @@ touches = [
   "deploy/eks",
 ]
 note = """
+**완료(2026-10-14, PR #1117).** 테이블 넷(V2.64)·세션 API·openapi `assistant` 태그. 여행 삭제는 소프트 삭제라 FK 가 닿지 않아
+구독(`assistantTripDeletedSubscriber`)으로 대화를 지운다. 응답 모양은 프론트가 먼저 만든 계약(`assistantContract.ts`)을 따랐다.
+
 `:modules:assistant` 신설 + 마이그레이션(V2.64~: `assistant_session`·`assistant_message`(+OBS-U8-01 컬럼 넷)·
 `assistant_proposal`·`assistant_usage_daily`) + `openapi.yaml` 의 `assistant` 태그 전체(턴·제안 포함 — 계약은 한 번에 연다).
 `assistant.*` 설정 키는 여기서 자리를 잡는다(tech-stack §2 델타 4) — 뒤 노드는 자기 키를 더하거나 값을 정한다
@@ -4025,7 +4028,7 @@ quick reply 발급기가 이 노드에 들어온다. 턴·제안 엔드포인트
 id = "U8-TURN"
 ticket = "TRIP-1378"
 title = "[U8] 도우미 턴 처리 — 해석(fake)·디스패치·조회형 응답, 분당 제한·금칙어·멱등"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/assistant",
@@ -4033,6 +4036,14 @@ touches = [
   "backend/docs/design/openapi.yaml",
 ]
 note = """
+**완료(2026-10-14, PR #1119 턴 뼈대 · #1120 조회 카드).** 다음에 알아야 할 것:
+- 응답은 위치가 아니라 **턴 id** 로 묶인다(`reply_to`, V2.65). 같은 턴이 겹쳐 오면 뒤쪽은 다시 해석하지 않고 앞쪽의 답을 기다린다.
+- **운영은 버튼 모드다**(`ASSISTANT_INTERPRET_MODE=off` — 배포 기본값). 시작 빠른 답은 `params.intent` 로 해석 없이 처리기에 간다.
+  새 버튼도 그렇게 만든다 — 말로 다시 태우는 버튼은 버튼 모드에서 "버튼으로 도와드릴게요"만 돌려준다.
+- 조회 카드는 저장된 값만 옮긴다. 원천을 못 읽으면 "없다"가 아니라 "확인할 수 없다"고 한다(BR-U8-16) — 읽기 실패는 전부 WARN.
+- 미결 긴장(분당 제한 vs 대화 지우기)은 그대로 두었다 — 지우고 다시 보내면 60초 창이 비지만, 하루 LLM 상한은 별도 테이블이라 안 빈다.
+- **http 해석을 켜기 전에** 할 것은 [[U8-INTERPRET-HTTP]] 노트에 모았다.
+
 FD `business-logic-model.md` §2 한 턴의 흐름(10단계)과 §4 디스패치 표. 착수 전 FD·NFR 을 다시 읽는다 — 아래는 빠뜨리면
 안 되는 것의 목록이지 설계가 아니다.
 
@@ -4075,7 +4086,7 @@ FD `business-logic-model.md` §2 한 턴의 흐름(10단계)과 §4 디스패치
 id = "U8-PROPOSAL"
 ticket = "TRIP-1379"
 title = "[U8] 도우미 제안·적용 — 전후 비교 카드, [적용]을 눌러야만 일정이 바뀐다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/assistant",
@@ -4085,6 +4096,18 @@ touches = [
   "backend/docs/design/openapi.yaml",
 ]
 note = """
+**완료(2026-10-14, PR #1121).** 다음에 알아야 할 것:
+- **도우미 경로에서 일정이 바뀌는 길은 `ProposalService.apply` 하나다**(BR-U8-30, PBT-U8-1). 턴에는 저장으로 가는 길이 없다.
+- 적용은 집기(`applied_at` 을 집힘 표시로 쓴다 — 상태 어휘는 그대로) → 편집 경로로 저장(트랜잭션 밖) → 끝 적기. 지문은 두 번 본다:
+  집을 때, 그리고 **저장 트랜잭션 안에서**(`ItineraryEditFacade.edit` 의 `onlyIf`). 이미 적용된 제안의 재적용은 200 이다.
+- **확정된 일정(여행 중 포함)에서는 버튼만으로 장소를 바꾸는 길이 없다** — 슬롯 후보 경로가 확정 일정에 409 를 낸다(편집 제안 경로는
+  여행 전에만 막는다). 두 경로의 판정을 맞출지는 C8 의 결정으로 남겼다. 그때까지 `다른 곳 추천` 버튼은 확정되지 않은 일정에만 나간다.
+- 정본과 달리 안 준 것: [되돌리기](`RESTORE_REVISION` — 앱에 리비전 화면이 없고 편집 퍼사드가 리비전 id 를 안 준다) ·
+  위반 시 대안 빠른 답 · `STALE`/`FAILED` 뒤 재제안 빠른 답. `ACTION_LOG` 의 `revisionId`·`changeLogEntryId` 는 늘 null.
+- 프론트에 알릴 것: 적용 200 의 `status` 가 `FAILED` 일 수 있고 `messages` 가 빌 수 있다 · 후보 버튼 id 는
+  `qr-pick-{slotKey}-{poiId}` 라 `params.poiId` 만으로 찾으면 옛 카드의 버튼이 잡힌다 · 카드의 [다시 제안]은 직전 문구를 말로
+  다시 보내서, 버튼으로 만든 제안은 버튼 모드에서 다시 제안되지 않는다.
+
 FD §2.1 · DEC-U8-2·3 · `domain-entities.md` §3.3·§3.5. `EDIT_SCHEDULE`(발화)·`SUGGEST_ALTERNATIVE`(후보 → 고르면
 `command`=REPLACE_SLOT, LLM 0회) → AI `/edit`(`confirm=true`) → `ProposalCard`(저장 안 함 — PBT-U8-1 ★ 단독 확정 없음).
 - **[적용]**: 상태·만료(생성 + 30분, O-U8-4) 확인 → **기준 지문 대조**(그사이 일정이 바뀌었으면 STALE 409) → 위반 있는 제안은
@@ -4115,7 +4138,7 @@ FD §2.1 · DEC-U8-2·3 · `domain-entities.md` §3.3·§3.5. `EDIT_SCHEDULE`(�
 id = "U8-OPS"
 ticket = "TRIP-1380"
 title = "[U8] 도우미 운영 의무 — 계정 삭제 즉시 파기·보존 청소·월 호출 상한·내보내기"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/assistant",
@@ -4125,6 +4148,12 @@ touches = [
   "backend/docs/design",
 ]
 note = """
+**완료(2026-10-14, PR #1122).** 보존 청소(만료 대화·40일 지난 사용량, 하루 한 번)·계정 삭제 요청 즉시 파기·`/me/export` 의
+`assistantMessages` 몫·전역 월 LLM 상한. ShedLock 은 쓰지 않았다(만료분 DELETE 는 멱등 — 위치 확인자료 스위퍼와 같은 판단).
+**월 상한은 기본 0(꺼짐)이다** — 값은 호출당 단가 실측 뒤 정한다. 해석을 운영에 열기 전에 이 값이나 벤더 지출 한도 중 하나는 걸려 있어야 한다.
+인덱스 둘은 V2.66(다음 빈 번호 V2.67). **⚠ 도우미는 아직 운영에 나간 적이 없다**(직전 배포 2026-10-13 21:00 KST 는 V2.64 이전) —
+계정 삭제 구독은 소급하지 않으므로, V2.64~V2.66 과 이 구독이 **한 배포로** 나가야 "삭제를 요청했는데 대화가 남는" 틈이 없다.
+
 NFR 이 FD 뒤에 더한 의무들(`tech-stack-decisions.md` §5).
 - **계정 삭제 요청 즉시 파기** — `auth.AccountDeletionRequested` 구독 → 대화·사용량 삭제(DATA-U8-02). FK CASCADE 만으로는
   안 지워진다(30일 파기 배치 미구현). 구독은 멱등이어야 하고(at-least-once), 탈퇴를 철회해도 지운 대화는 되살리지 않는다.
@@ -4178,6 +4207,16 @@ note = """
 `DialogueContext` 왕복(INV-U8-07)은 [[U8-TURN]] 이 fake 로 이미 게이트한다 — 여기서는 실물 직렬형으로 한 번 더 본다.
 **`HttpScheduleAgentAdapter` 의 "4xx = 최소 일정 폴백" 습관을 옮기지 않는다**(REL-U8-05, BR-U8-45) — 이 경계의 실패는
 FALLBACK 메시지일 뿐 일정 폴백 신호가 아니다.
+
+**http 를 켜기 전에 함께 해야 하는 것**(2026-10-14, U8 백엔드 넷을 닫으며 모았다 — 지금은 fake/off 라 무해해서 미뤘다):
+- 같은 턴 id 를 겹쳐 보낸 요청은 앞선 처리를 기다리는데 **기다리는 수에 상한이 없다**(`AssistantTurnService.awaitFirst` 의
+  `ponytail:`). 해석이 십여 초 가면 요청 스레드가 그만큼 선다 — 상한(넘으면 429)을 둔다.
+- 전역 월 상한(`monthly-llm-call-limit`)에 값을 넣거나 벤더 지출 한도를 건다([[U8-OPS]]). 둘 다 없으면 총량 그물이 없다.
+- 되묻기 문안·보기의 길이 상한을 어댑터에서 건다(지금은 fake 라 고정 문구다).
+- 날씨 카드는 상대가 뽑은 `date`·`region` 인자를 읽지 않는다("내일 날씨"에도 오늘 예보를 준다) — 오늘이 아닌 날을 물으면 넘긴다.
+- 편집 경계의 `reason` 이 로그에 남는다(`EditProposalService`·`HttpScheduleAgentAdapter`) — 상대가 발화를 되풀이해 싣지 않는지 확인한다(SEC-U8-06).
+- 넘기기 응답의 "바꾼 조건" 칩(PRD 02-2)은 프론트 계약에 자리가 없어 만들지 않았다.
+- 자가용 일정은 편집 제안이 전부 거절된다([[AI-EDIT-TRANSPORT]]) — 발화 편집을 열어도 그 여행들에서는 "맞지 않아요"만 나온다.
 """
 
 [[edges]]
