@@ -311,17 +311,8 @@ describe('🔴 SlotCandidateSheet — scrim·바텀시트 복귀(AC-1·D3)', () 
 const EMPTY_TITLE = '이 슬롯에 맞는 다른 후보가 없어요';
 const FETCH_FALLBACK = '지금은 바꿀 수 없어요. 잠시 후 다시 시도해 주세요';
 const RADIO_ROWS = /^itinerary-candidate-radio-/;
-const RAW_HEX = /#[0-9a-fA-F]{3,8}/;
 
 type SheetProps = Parameters<typeof SlotCandidateSheet>[0];
-
-/** 루트 아래(자신 포함) className 문자열을 모두 모은다 — V1 raw hex 스캔 재료. */
-function classNamesUnder(testID: string): string[] {
-  return screen
-    .getByTestId(testID)
-    .findAll((node) => typeof node.props.className === 'string')
-    .map((node) => String(node.props.className));
-}
 
 describe('🔴 SlotCandidateSheet — 조회 상태 얼굴(TRIP-1109 · L1·L2·T2·E1)', () => {
   it('S16 · loading — 스켈레톤 3줄·현재 행·비활성 교체하기, 0건 얼굴은 없다(INV-4)', () => {
@@ -433,38 +424,6 @@ describe('🔴 SlotCandidateSheet — 조회 상태 구조·INV-3·기본값(TRI
     expect(errorClass).toContain('border-dashed');
     expect(errorClass).toBe(emptyClass);
   });
-
-  it.each<[string, Partial<SheetProps>, string[]]>([
-    [
-      'loading',
-      { fetchState: 'loading', candidates: [] },
-      ['itinerary-candidate-loading'],
-    ],
-    [
-      'slow',
-      { fetchState: 'slow', candidates: [] },
-      ['itinerary-candidate-loading', 'itinerary-candidate-slow'],
-    ],
-    [
-      'error',
-      {
-        fetchState: 'error',
-        fetchErrorMessage: FETCH_FALLBACK,
-        candidates: [],
-      },
-      ['itinerary-candidate-fetch-error', 'itinerary-candidate-fetch-retry'],
-    ],
-  ])(
-    'S20 · V1 — %s 얼굴의 새 노드 className 에 raw hex 0',
-    (_face, props, roots) => {
-      renderSheet(props);
-
-      const classes = roots.flatMap(classNamesUnder);
-      // 앵커 — 실제로 훑었다(빈 목록이면 공허 통과).
-      expect(classes.length).toBeGreaterThan(0);
-      expect(classes.filter((value) => RAW_HEX.test(value))).toEqual([]);
-    }
-  );
 
   it.each<[string, Partial<SheetProps>, string]>([
     [

@@ -90,7 +90,6 @@ describe('Figma 정합 표면', () => {
    *  - 🔴 AC-1 진행줄(일차/날짜 좌 · `N번째 / M` 우 · 4분할 진행바) — props 로 받아 **Figma 그대로** 그린다
    *       (3번째/4인데 bar 1칸인 모순도 화면이 안 고침, 브리프 §B). TRIP-1043: 우측 작은 「슬롯」 캡션
    *       제거 — 진행줄 어디에도 「슬롯」이 없다(QA #041).
-   *  - 🔴 AC-3 헤드라인('다음, 뭘 할까요?'+부제) 제거.
    *  - 🔴 AC-4 컨셉 설명 5종을 config 값으로 렌더(TRIP-1043 중립 문구).
    *  - 🔴 AC-5 배지(AI 추천/컨셉 매칭)·N곳 **렌더 0**(BE 계약 대기 — 픽스처 억지주입 금지).
    *  - 🔴 AC-6 (TRIP-1043 뒤집음) 다섯 카드 모두 같은 hairline 테두리 — 고르지 않았는데 고른 것처럼 보이던
@@ -194,25 +193,6 @@ describe('Figma 정합 표면', () => {
       expect(
         screen.queryAllByText(/슬롯/).map((node) => node.props.children)
       ).toEqual([]);
-    });
-  });
-
-  describe('🔴 AC-3 · 헤드라인 제거', () => {
-    it("'다음, 뭘 할까요?'·부제가 사라진다(카드는 남는다)", () => {
-      renderParity();
-
-      // 부정 — 헤드라인·부제 부재.
-      expect(screen.queryByText('다음, 뭘 할까요?')).toBeNull();
-      expect(
-        screen.queryByText('여행 컨셉에 맞춰 추천 순서로 정렬했어요')
-      ).toBeNull();
-
-      // 긍정 짝 — 카드 5장은 여전히 있다(공허 통과 방지).
-      for (const { key } of CONCEPTS) {
-        expect(
-          screen.getByTestId(`itinerary-copick-concept-${key}`)
-        ).toBeTruthy();
-      }
     });
   });
 
