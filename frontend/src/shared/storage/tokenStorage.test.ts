@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-import { clearTokens, getTokens, saveTokens } from '.';
+import { PUSH_REGISTERED_KEY, clearTokens, getTokens, saveTokens } from '.';
 
 jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(),
@@ -48,5 +48,15 @@ describe('토큰 저장소 — expo-secure-store 전용 (AC-ONB-01-8)', () => {
     const deleted = mockDeleteItem.mock.calls.map((call) => call[0]);
     expect(deleted).toContain('accessToken');
     expect(deleted).toContain('refreshToken');
+  });
+
+  // TRIP-1348 — 세션 만료(401 확정)는 로그아웃 경로(unregisterStoredPushToken)를 안 타고 clearTokens 만
+  // 부른다. 푸시 "이미 올렸다" 기억이 남으면 같은 기기에서 다른 계정으로 로그인했을 때 첫 POST 가 생략된다.
+  it('clearTokens 는 푸시 등록 기억도 지운다 (세션 만료 뒤 다른 계정의 첫 POST 가 나가도록)', async () => {
+    await clearTokens();
+
+    const deleted = mockDeleteItem.mock.calls.map((call) => call[0]);
+    expect(PUSH_REGISTERED_KEY).toBe('pushTokenRegistered');
+    expect(deleted).toContain(PUSH_REGISTERED_KEY);
   });
 });

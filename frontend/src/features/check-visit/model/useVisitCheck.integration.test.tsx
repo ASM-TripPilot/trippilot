@@ -166,7 +166,7 @@ const cacheStatus = (
 };
 
 describe('AC-1 · BR-U5-01 — 완료는 실적에만 적재, plan 미접촉', () => {
-  it('active 카드 완료 → 응답 전 낙관 + POST complete 1회 + itinerary(plan) 0건 + 성공 재조회', async () => {
+  it('active 카드 완료 → 응답 전 낙관 + POST complete 1회 + itinerary(plan) 0건 + 응답 교체(재조회 0)', async () => {
     const gate = createGate();
     const { result } = await renderProbeReady([
       vc({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T }),
@@ -213,11 +213,11 @@ describe('AC-1 · BR-U5-01 — 완료는 실적에만 적재, plan 미접촉', (
       outcome = await pending;
     });
 
-    // 단언 ④⑤ — 완료로 수렴 + 그 날 방문 기록 재요청(무효화, 1 → 2).
+    // 단언 ④⑤ — 완료로 수렴 + 캐시가 응답 레코드로 교체됐고 그 날 방문 기록 재조회는 0건(TRIP-1348).
     expect(outcome).toEqual({ kind: 'completed' });
-    await waitFor(() =>
-      expect(hitCount(`GET /api/v1/trips/${TRIP}/visits/days/${DAY}`)).toBe(2)
-    );
+    await flushNotifications();
+    expect(cacheRecord(result.current.visits, 'v1')?.completedAt).toBe(T);
+    expect(hitCount(`GET /api/v1/trips/${TRIP}/visits/days/${DAY}`)).toBe(1);
   });
 });
 
@@ -315,7 +315,7 @@ describe('AC-5 · BR-U5-03 — 즉석 방문 여러 건 append', () => {
 });
 
 describe('skip 배선(라이트) — 건너뜀은 낙관 + POST skip 1회', () => {
-  it('skip → 응답 전 SKIPPED 낙관 + POST .../skip 1회 + 성공 무효화', async () => {
+  it('skip → 응답 전 SKIPPED 낙관 + POST .../skip 1회 + 응답 교체(재조회 0)', async () => {
     const gate = createGate();
     const { result } = await renderProbeReady([
       vc({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T }),
@@ -348,9 +348,9 @@ describe('skip 배선(라이트) — 건너뜀은 낙관 + POST skip 1회', () =
       outcome = await pending;
     });
     expect(outcome).toEqual({ kind: 'skipped' });
-    await waitFor(() =>
-      expect(hitCount(`GET /api/v1/trips/${TRIP}/visits/days/${DAY}`)).toBe(2)
-    );
+    await flushNotifications();
+    expect(cacheRecord(result.current.visits, 'v1')?.skippedAt).toBe(T);
+    expect(hitCount(`GET /api/v1/trips/${TRIP}/visits/days/${DAY}`)).toBe(1);
   });
 });
 

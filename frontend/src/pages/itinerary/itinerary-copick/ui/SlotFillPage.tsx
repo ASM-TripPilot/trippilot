@@ -352,13 +352,14 @@ export function SlotFillPage({
       {
         // 확정 성공 = 허브 복귀(구 `router.back()`)가 아니라 **다음 비고정 슬롯으로 선형 전진**.
         // 다음이 없으면 h17(완성 확인)로. 스택에 안 쌓이게 replace(01b 순회 세부).
-        onSuccess: () => {
-          // 전진 전에 GET 캐시를 무효화(재조회)한다 — 안 하면 다음 슬롯 SlotFillPage 가 같은
-          // 쿼리키를 stale 한 옛 days 로 읽어, 방금 확정한 앞 슬롯을 되돌린 채 PUT 한다(순차
-          // 채우기 데이터 손실). 형제 SlotCandidatePanelContainer 와 같은 패턴.
-          void queryClient.invalidateQueries({
-            queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
-          });
+        onSuccess: (data) => {
+          // 전진 전에 GET 캐시를 PUT 응답으로 교체한다(재조회 0, TRIP-1348) — 안 하면 다음 슬롯
+          // SlotFillPage 가 같은 쿼리키를 stale 한 옛 days 로 읽어, 방금 확정한 앞 슬롯을 되돌린 채
+          // PUT 한다(순차 채우기 데이터 손실). 형제 SlotCandidatePanelContainer 와 같은 패턴.
+          queryClient.setQueryData(
+            getGetTripsTripIdItineraryQueryKey(tripId),
+            data
+          );
           if (nextKey === null) {
             router.replace({
               pathname: '/trips/[tripId]/itinerary/copick/complete',

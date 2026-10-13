@@ -185,6 +185,8 @@ describe('useBootstrapGate — 부트스트랩 응답/폴백/재검증', () => {
       isConnected: boolean;
     }) => void;
 
+    // 첫 호출은 구독 직후 현재 상태 통지(TRIP-1348)라 재연결이 아니다 — 끊김을 먼저 알리고 연결로 돌린다.
+    onlineCallback({ isConnected: false });
     await act(async () => {
       onlineCallback({ isConnected: true });
       await jest.advanceTimersByTimeAsync(10);
@@ -193,6 +195,59 @@ describe('useBootstrapGate — 부트스트랩 응답/폴백/재검증', () => {
     expect(mockFetchBootstrap.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(result.current.destination).toBe('LOGIN');
     expect(result.current.isProvisional).toBe(false);
+  });
+
+  it('콜드스타트에서 NetInfo 가 구독 즉시 연결됨을 알려도 GET /bootstrap 은 총 1건이다 (TRIP-1348)', async () => {
+    // 실 NetInfo 는 addEventListener 즉시 최신 상태로 핸들러를 부른다(state.ts add). 기본 목은 안 부른다.
+    mockAddEventListener.mockReset().mockImplementation((cb) => {
+      cb({ isConnected: true });
+      return jest.fn();
+    });
+    mockFetchBootstrap.mockResolvedValue(bootstrap('AUTHENTICATED'));
+    mockGetTokens.mockResolvedValue({
+      accessToken: 'stored-access',
+      refreshToken: 'stored-refresh',
+    });
+    mockHasStoredToken.mockResolvedValue(true);
+
+    const { result } = renderHook(() => useBootstrapGate(), {
+      wrapper: createWrapper(),
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    expect(result.current.destination).toBe('HOME');
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(1);
+    // 무인증 선행 요청이 없다 — 유일한 요청은 토큰 복원(hydrate) 뒤에 나갔다.
+    expect(getAccessToken()).toBe('stored-access');
+  });
+
+  it('즉시 통지를 건너뛴 뒤의 끊김→연결은 첫 왕복이 무응답일 때 재조회한다 (TRIP-1348)', async () => {
+    let netCallback!: (state: { isConnected: boolean }) => void;
+    mockAddEventListener.mockReset().mockImplementation((cb) => {
+      netCallback = cb;
+      cb({ isConnected: true });
+      return jest.fn();
+    });
+    mockFetchBootstrap.mockReturnValueOnce(NEVER());
+    mockFetchBootstrap.mockResolvedValue(bootstrap('AUTHENTICATED'));
+    mockGetTokens.mockResolvedValue(null);
+    mockHasStoredToken.mockResolvedValue(true);
+
+    renderHook(() => useBootstrapGate(), { wrapper: createWrapper() });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(1);
+
+    netCallback({ isConnected: false });
+    await act(async () => {
+      netCallback({ isConnected: true });
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(2);
   });
 });
 

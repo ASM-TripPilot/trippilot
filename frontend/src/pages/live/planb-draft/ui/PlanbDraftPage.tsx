@@ -185,7 +185,11 @@ export function PlanbDraftPage({
 
   // data 없이 한 번이라도 실패했으면 재조회 중에도 오류 얼굴 — data 없는 재조회는 pending 으로 돌아가 isError 가
   // 풀린다(TanStack v5). 첫 로딩(errorUpdateCount 0)은 그대로 렌더 없음.
-  if (data === undefined && session.errorUpdateCount > 0) {
+  // TRIP-1348 — 폴링이 재시도까지 실패해 선 경우, 짜는 중 data 가 남아 있어도 오류 얼굴이다(초안 data 는 지키지 않는다).
+  if (
+    (data === undefined && session.errorUpdateCount > 0) ||
+    (session.isError && state?.kind === 'solving')
+  ) {
     return (
       <ReplanNoticeFace
         kind="draft-error"

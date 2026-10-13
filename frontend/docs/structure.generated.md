@@ -1599,7 +1599,7 @@
 
 ## src/shared/storage/
 - `src/shared/storage/idSet.ts`  →  readIdSet · writeIdSet
-- `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken · readIdSet · writeIdSet · getInstallId · readStringValue · writeStringValue
+- `src/shared/storage/index.ts`  →  PUSH_REGISTERED_KEY · TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken · readIdSet · writeIdSet · getInstallId · readStringValue · writeStringValue
 - `src/shared/storage/installId.ts`  →  getInstallId
 - `src/shared/storage/stringValue.ts`  →  readStringValue · writeStringValue
 

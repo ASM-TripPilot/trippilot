@@ -11,7 +11,11 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { useGetTrips } from '@/shared/api/index.hooks';
-import { useGetPlaces, useGetSavedPlaces } from '@/shared/api/index.hooks';
+import {
+  getGetPlacesQueryKey,
+  useGetPlaces,
+  useGetSavedPlaces,
+} from '@/shared/api/index.hooks';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
@@ -23,7 +27,7 @@ import { useSavedPlaces, type SavedPlacesOutcome } from './savedPlaces';
  *
  * 무엇을 보장하나:
  *  - **I-1 (AC-4)** 담기를 누르면 **서버가 답하기 전에** 담김으로 보이고, 성공 후 담은 목록·
- *    장소 목록 **두 쿼리만** 다시 받아온다.
+ *    장소 목록은 낡음 표시만(재요청은 다음 마운트) 붙는다.
  *  - **I-2 (AC-5)** 해제는 poiId가 아니라 **savedPlaceId**로 나간다.
  *  - **I-3 (AC-6)** 409(이미 담음)는 실패가 아니라 담김으로 수렴한다.
  *  - **I-4 (AC-7 · INV-4)** 404·네트워크 실패는 낙관 반영을 되돌리고 **사유를 호출자에게 준다.**
@@ -156,6 +160,9 @@ afterAll(() => {
   server.close();
 });
 
+/** 가장 최근 createWrapper 가 만든 클라이언트 — 캐시 무효화 표식(isInvalidated)을 읽는 데 쓴다. */
+let lastClient: QueryClient;
+
 function createWrapper() {
   const client = new QueryClient({
     defaultOptions: {
@@ -166,6 +173,7 @@ function createWrapper() {
       mutations: { gcTime: 0 },
     },
   });
+  lastClient = client;
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -264,10 +272,14 @@ describe('AC-4 · 담기 — 응답 전 반영 + 두 쿼리만 무효화 (I-1)',
     // 단언 ③ — 결과가 담김이다(실패도 아니고 "모름"도 아니다).
     expect(outcome).toEqual({ kind: 'saved' });
 
-    // 단언 ④ — 두 쿼리가 무효화되어 실제로 다시 받아왔다(1 → 2).
-    // `GET /places` 도 대상인 근거: `Place.savedCount` 가 담기로 변한다(BR-U1-06 파생 집계).
+    // 단언 ④ — 담은 목록은 다시 받아왔고(1 → 2), 장소 목록은 낡음 표시만 붙었다(1 유지).
+    // `GET /places` 는 낡음 표시만 한다(TRIP-1348) — `Place.savedCount` 는 BR-U1-06 파생 집계지만
+    // 하트는 `/saved-places` 캐시가 그리므로, 떠 있는 /places 관찰자를 즉시 재요청하지 않는다.
     await waitFor(() => expect(hitCount('GET /api/v1/saved-places')).toBe(2));
-    await waitFor(() => expect(hitCount('GET /api/v1/places')).toBe(2));
+    expect(hitCount('GET /api/v1/places')).toBe(1);
+    expect(
+      lastClient.getQueryState(getGetPlacesQueryKey())?.isInvalidated
+    ).toBe(true);
 
     // 단언 ⑤ (부정 짝) — 무효화 사정거리는 그 둘뿐이다.
     expect(hitCount('GET /api/v1/trips')).toBe(1);
@@ -320,7 +332,10 @@ describe('AC-5 · 해제 — poiId 가 아니라 savedPlaceId 로 나간다 (I-2
     // 단언 ④⑤⑥
     expect(outcome).toEqual({ kind: 'removed' });
     await waitFor(() => expect(hitCount('GET /api/v1/saved-places')).toBe(2));
-    await waitFor(() => expect(hitCount('GET /api/v1/places')).toBe(2));
+    expect(hitCount('GET /api/v1/places')).toBe(1);
+    expect(
+      lastClient.getQueryState(getGetPlacesQueryKey())?.isInvalidated
+    ).toBe(true);
     expect(hitCount('GET /api/v1/trips')).toBe(1);
   });
 });

@@ -6,6 +6,12 @@ import {
   postMePushTokens,
 } from '@/shared/api/generated/notifications/notifications';
 
+import {
+  PUSH_REGISTERED_KEY,
+  readStringValue,
+  writeStringValue,
+} from '@/shared/storage';
+
 import { getPushPermission } from './permissions';
 import type { PushPermissionStatus } from './permissions';
 import { ensureAndroidChannels, requestPushPermission } from './request';
@@ -51,15 +57,41 @@ let storedToken: string | null = null;
 /** 해제 응답을 기다리는 상한 — 로그아웃이 느린 서버에 묶이지 않게(TRIP-938 과의 절충, 01b Q3). */
 const UNREGISTER_TIMEOUT_MS = 3000;
 
-/** OS 권한 조회 → Expo 토큰 획득 → `POST /me/push-tokens`(osPermission 매핑 경유). 성공하면 토큰 보관. */
+/** 마지막으로 서버에 올린 `토큰|osPermission` 서명(TRIP-1348) — 앱을 다시 켜도 같으면 POST 를 생략한다.
+ * 서버가 osPermission 도 기록하므로 토큰만이 아니라 권한까지 같아야 건너뛴다. 해제 때 비우고(빈 문자열), 세션 만료는 `clearTokens` 가 키를 지운다. */
+const REGISTERED_KEY = PUSH_REGISTERED_KEY;
+
+async function readRegistered(): Promise<string | null> {
+  try {
+    return await readStringValue(REGISTERED_KEY);
+  } catch {
+    return null; // 저장소 실패는 "모름" — 그냥 올린다(POST 는 멱등).
+  }
+}
+
+async function writeRegistered(value: string): Promise<void> {
+  try {
+    await writeStringValue(REGISTERED_KEY, value);
+  } catch {
+    // 못 적으면 다음 진입이 한 번 더 올릴 뿐이다(멱등).
+  }
+}
+
+/** OS 권한 조회 → Expo 토큰 획득 → `POST /me/push-tokens`(osPermission 매핑 경유). 성공하면 토큰 보관.
+ * 직전에 같은 토큰·같은 권한으로 올렸으면 POST 는 생략하고 보관만 한다(TRIP-1348, 멱등이라 안전성 동일). */
 export async function registerPushToken(): Promise<void> {
   const local = await getPushPermission();
   const { data: token } = await Notifications.getExpoPushTokenAsync();
-  await postMePushTokens({
-    token,
-    platform: Platform.OS === 'android' ? 'ANDROID' : 'IOS',
-    osPermission: toServerOsPermission(local),
-  });
+  const osPermission = toServerOsPermission(local);
+  const signature = `${token}|${osPermission}`;
+  if ((await readRegistered()) !== signature) {
+    await postMePushTokens({
+      token,
+      platform: Platform.OS === 'android' ? 'ANDROID' : 'IOS',
+      osPermission,
+    });
+    await writeRegistered(signature);
+  }
   storedToken = token;
 }
 
@@ -91,6 +123,8 @@ export async function registerPushIfGranted(): Promise<void> {
  * 있을 때 요청이 닿게) 상한에서 끊고, 실패는 삼킨다(404 = 이미 없음). 보관 토큰이 없으면 요청 0회.
  */
 export async function unregisterStoredPushToken(): Promise<void> {
+  // 다음 계정의 첫 등록이 생략되지 않게 기억부터 비운다 — 보관 토큰이 없어도 영속 기억은 남아 있을 수 있다.
+  await writeRegistered('');
   const token = storedToken;
   if (token === null) return;
   storedToken = null;

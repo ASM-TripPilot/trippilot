@@ -10,11 +10,20 @@ import { useGetTripsTripIdReplanSessionsSessionId } from '@/shared/api/index.hoo
  */
 
 const POLL_INTERVAL_MS = 2000;
+/** 일시 오류는 한 번 더 묻는다(TRIP-1348) — 그래도 실패하면 오류로 서고 폴링이 멈춘다. */
+const RETRY_COUNT = 1;
+const RETRY_DELAY_MS = 1000;
 
 export function useReplanSession(tripId: string, sessionId: string) {
   return useGetTripsTripIdReplanSessionsSessionId(tripId, sessionId, {
     query: {
+      // 폴링 한 번이 실패하면 한 번만 더 요청한다 — 전역 기본(재시도 여러 번)을 덮는다. 둘 다 실패해야 error.
+      retry: RETRY_COUNT,
+      retryDelay: RETRY_DELAY_MS,
       refetchInterval: (query) => {
+        // 재시도까지 실패해 오류로 떨어지면 서 버린다(INV-4, TRIP-1348) — 오류 뒤에도 옛 data 가 남아
+        // (SOLVING) 그대로 두면 서버가 죽어 있는 동안 영구 폴링한다. 오류 표면은 페이지가 그린다.
+        if (query.state.status === 'error') return false;
         const status = query.state.data?.status;
         return status === 'COLLECTING' || status === 'SOLVING'
           ? POLL_INTERVAL_MS

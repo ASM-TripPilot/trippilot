@@ -52,6 +52,8 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *      TRIP-1293 — 재조회가 끝날 때까지 오류 얼굴을 지키고 [다시 시도]만 잠근다(`retrying=isFetching`).
  *      TanStack v5 는 data 없는 재조회가 시작되면 status 를 pending 으로 되돌려 isError 가 풀리므로, 판정은
  *      "data 없음 && 실패 이력(errorUpdateCount>0)"이다(첫 로딩은 0 이라 진행 기본 얼굴).
+ *      TRIP-1348 — 폴링은 오류 1회에 한 번 더 묻고 또 실패하면 멈춘다(`useReplanSession`). 그렇게 멈췄을 때 짜는 중
+ *      data 가 남아 있어도(`isError && kind==='solving'`) 오류 얼굴이다 — 진행 카드에 머물면 멈춘 걸 모른다(INV-4).
  *    · closed → 종료 얼굴 + [나가기](서버 호출 없음).
  *    · 화면에 들어온 지 90초가 지나면 시트 맨 위 느림 안내 — 요청·폴링은 그대로 둔다. 미도착·오류 구간도
  *      끊지 않고 마운트부터 잰다(TRIP-1293) — 폴링 응답마다 리셋하지 않는다(restartKey 없음).
@@ -102,7 +104,10 @@ export function PlanbSolvingPage({
 
   // data 없이 한 번이라도 실패했으면 재조회 중에도 오류 얼굴이다 — data 없는 재조회는 status 가 pending 으로
   // 돌아가 isError 가 풀리므로(TanStack v5) 실패 이력(errorUpdateCount)으로 판정한다. 첫 로딩은 0 이라 진행 얼굴.
-  const errorFace = data === undefined && session.errorUpdateCount > 0;
+  // 짜는 중 data 가 남은 채 폴링이 재시도까지 실패로 서도(TRIP-1348) 오류 얼굴이다 — 안 그러면 진행 카드에 머문 채 멈춘다.
+  const errorFace =
+    (data === undefined && session.errorUpdateCount > 0) ||
+    (session.isError && kind === 'solving');
 
   // 훅이라 조기 반환 위에서 — 진입부터 미도착·오류 구간을 끊지 않고 짜는 중까지 이어서 잰다.
   const slow = useElapsedFlag(

@@ -251,14 +251,24 @@ afterEach(() => {
 afterAll(() => server.close());
 
 /** `cached` — 다른 탭(홈)이 이미 받아 둔 여행 목록·여행별 일정을 캐시에 넣고 시작한다(TRIP-1271 AC-5a). */
-function renderPage(cached?: {
-  trips: Trip[];
-  itineraries: Record<string, Itinerary>;
-}) {
+function renderPage(
+  cached?: {
+    trips: Trip[];
+    itineraries: Record<string, Itinerary>;
+  },
+  /** `staleTime` — 기본 0(앱 기본값). 탭 복귀가 "낡은 것만" 다시 묻는지 볼 때만 올린다(TRIP-1348). */
+  options?: { staleTime?: number }
+) {
   const client = new QueryClient({
     defaultOptions: {
       // gcTime 0 — 타이머가 테스트 뒤까지 살아 프로세스를 붙잡지 않게(mutations 도, useCreateTrip 선례).
-      queries: { retry: false, gcTime: 0 },
+      queries: {
+        retry: false,
+        gcTime: 0,
+        ...(options?.staleTime !== undefined
+          ? { staleTime: options.staleTime }
+          : {}),
+      },
       mutations: { retry: false, gcTime: 0 },
     },
   });
@@ -891,6 +901,26 @@ describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·
       );
       expect(count(itinPath(A))).toBe(2);
       expect(count(itinPath(B))).toBe(2);
+    });
+  });
+
+  describe('TRIP-1348 · 탭 복귀는 낡은 일정만 다시 묻는다', () => {
+    it('방금 받은(신선한) 일정은 건너뛰고, 실패한 일정만 다시 묻는다', async () => {
+      // 준비 — staleTime 1분이면 방금 받은 B 는 신선하다. A 는 500(데이터 없음 = 낡음).
+      script = { [A]: 500, [B]: confirmed(B) };
+      renderPage(undefined, { staleTime: 60_000 });
+      await advance(100);
+      expect(count(itinPath(A))).toBe(1);
+      expect(count(itinPath(B))).toBe(1);
+
+      // 실행 — 탭을 떠났다가 곧바로 돌아온다.
+      script[A] = draft(A);
+      refocus();
+      await advance(100);
+
+      // 단언 — 신선한 B 는 안 묻고(1 유지), 실패했던 A 만 다시 물었다.
+      expect(count(itinPath(B))).toBe(1);
+      expect(count(itinPath(A))).toBe(2);
     });
   });
 

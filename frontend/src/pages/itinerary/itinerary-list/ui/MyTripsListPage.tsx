@@ -131,9 +131,14 @@ export function MyTripsListPage(): ReactElement {
       }
       const cached =
         queryClient.getQueryData<Trip[]>(getGetTripsQueryKey()) ?? [];
+      // 낡은 것만 다시 묻는다(TRIP-1348) — 방금 받은 일정까지 N건 무조건 재요청하던 것을 줄인다.
+      // type 'active' 는 종전 invalidate 의 범위(관찰자가 있는 쿼리)를 지킨다 — 기본값 'all' 이면
+      // 지금 안 보는 쿼리까지 새로 받는다.
       cached.forEach((trip) =>
-        queryClient.invalidateQueries({
+        queryClient.refetchQueries({
           queryKey: getGetTripsTripIdItineraryQueryKey(trip.tripId),
+          type: 'active',
+          stale: true,
         })
       );
     }, [queryClient])

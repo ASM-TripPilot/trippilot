@@ -1532,6 +1532,22 @@ describe('🔴 TRIP-1277 AC11 — 요청 대기 중엔 확인도 이동도 없�
   });
 });
 
+describe('🔴 TRIP-1348 · INV-4 — 짜는 중(SOLVING) data 가 남은 채 조회가 실패로 서면 오류 얼굴이다', () => {
+  it('L11b SOLVING data + isError → 오류 얼굴 · [다시 시도]=재조회 1회 — 확정·세션 시작 0', () => {
+    mockSession.data = session('SOLVING');
+    mockSession.error = true;
+    renderPage();
+
+    expect(screen.getByTestId(DRAFT_ERROR)).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId(DRAFT_RETRY));
+
+    expect(mockSessionRefetch).toHaveBeenCalledTimes(1);
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+});
+
 describe('🔴 TRIP-1277 AC12 · Q12 — data 없이 세션 조회가 실패하면 오류 얼굴(재시도 = 재조회)', () => {
   it('L11 오류 얼굴과 [다시 시도]가 보이고, 누르면 refetch 1회 — 확정·세션 시작·이동 0', () => {
     mockSession.error = true;

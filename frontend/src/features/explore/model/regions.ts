@@ -27,13 +27,19 @@ import { RegionLevel } from '@/shared/api/index.schemas';
  * 프리뷰 스모크(`devPreviewReleaseGate`)의 지뢰 목이 준비 단계에서 터진다. 이 훅은 배선 층(page)에서만
  * 불리고 프리뷰는 화면만 그리므로, 로드를 호출 시점까지 미루면 그 전이 경로가 끊긴다.
  */
+/** 지역 카탈로그가 낡았다고 보는 시간 — 1시간. */
+const REGIONS_STALE_MS = 3_600_000;
+
 export function useRegions(params?: GetRegionsParams) {
   type Places = typeof import('@/shared/api/index.hooks');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const places: Places = require('@/shared/api/index.hooks');
   // 반환 타입은 `useStaySearch` 선례처럼 추론에 맡긴다 — 호출이 기본 제네릭 인자를 적용해
   // `data: Region[] | undefined`가 된다(`ReturnType<typeof …>`는 제약을 써 `{}`로 무너진다).
-  return places.useGetRegions(params);
+  // 카탈로그는 거의 안 바뀐다 — 피커·랜딩·d02 를 오갈 때마다 다시 받지 않는다(TRIP-1348).
+  return places.useGetRegions(params, {
+    query: { staleTime: REGIONS_STALE_MS },
+  });
 }
 
 /**

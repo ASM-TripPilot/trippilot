@@ -72,10 +72,16 @@ export function useSavedPlaces(deps: { isAuthed: boolean }) {
 
   /**
    * BR-U1-06 — savedCount는 GET /places가 주는 파생 집계라 담기·해제 둘 다 이 쪽도 흔든다.
+   * 단 낡음 표시만 한다(`refetchType: 'none'`, TRIP-1348) — 하트는 `/saved-places` 캐시가 그리므로
+   * 떠 있는 /places 관찰자(홈·탐색 레인·무한쿼리)를 하트 1회마다 전수 재요청할 이유가 없다.
+   * 표시된 쿼리는 다음 마운트·포커스 때 재조회된다.
    */
   function invalidateBoth(): void {
     void queryClient.invalidateQueries({ queryKey: listKey });
-    void queryClient.invalidateQueries({ queryKey: getGetPlacesQueryKey() });
+    void queryClient.invalidateQueries({
+      queryKey: getGetPlacesQueryKey(),
+      refetchType: 'none',
+    });
   }
 
   // 멱등(TRIP-1049, useSavedStays TRIP-1041 동형) — 인증 판정이 먼저다(캐시가 남은 게스트에게

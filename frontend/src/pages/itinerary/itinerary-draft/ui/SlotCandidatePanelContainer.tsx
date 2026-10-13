@@ -184,11 +184,13 @@ export function SlotCandidatePanelContainer({
     putItinerary(
       { tripId, data: buildEditItineraryRequest(nextDays) },
       {
-        onSuccess: () => {
-          // 성공만 닫는다 — 조회 무효화로 갱신 재조회(GET 1→2)하고 시트를 닫는다.
-          void queryClient.invalidateQueries({
-            queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
-          });
+        onSuccess: (data) => {
+          // 성공만 닫는다 — PUT 응답(서버 재검증 결과)으로 조회 캐시를 바로 교체하고(재조회 0, TRIP-1348)
+          // 시트를 닫는다.
+          queryClient.setQueryData(
+            getGetTripsTripIdItineraryQueryKey(tripId),
+            data
+          );
           onClose();
         },
         onError: (error) => {
