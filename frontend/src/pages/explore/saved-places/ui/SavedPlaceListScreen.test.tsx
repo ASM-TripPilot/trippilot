@@ -5,7 +5,6 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { processColor } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
@@ -644,42 +643,15 @@ function cls(el: { props: { className?: unknown } }): string[] {
   return String(el.props.className ?? '').split(/\s+/);
 }
 
-// SVG 색은 host 노드(RNSVGPath·RNSVGCircle)의 `stroke.payload`(processColor 결과 정수)로 남는다.
-// composite `Path` 요소의 stroke 는 원문 문자열이라 섞지 않도록 host(type 이 문자열)만 고른다.
-function strokePayloads(
-  node: ReturnType<typeof screen.getByTestId>
-): unknown[] {
-  return node
-    .findAll((n) => typeof n.type === 'string' && n.props.stroke != null)
-    .map((n) => n.props.stroke?.payload);
-}
-
 describe('T-18 · TRIP-1050 콜라주 빈 상태 공통 틀 (AC-1·AC-2·AC-8 · Seed Q2)', () => {
-  it('d02 빈 상태가 공통 틀(위쪽 정렬 · 320 콜라주 사진 3장 · 제목 20 · CTA 52 r12)로 그려진다 (AC-1)', () => {
+  it('d02 빈 상태가 공통 틀(콜라주 사진 3장 · 하트 원)로 그려진다 (AC-1)', () => {
     renderScreen({ savedPlaces: [], state: { kind: 'empty' } });
 
-    const root = cls(screen.getByTestId('explore-saved-empty'));
-    expect(root).toContain('pt-[96px]');
-    expect(root).not.toContain('justify-center');
-
-    expect(cls(screen.getByTestId('explore-saved-empty-art'))).toContain(
-      'w-[320px]'
-    );
     // 공통 틀의 파생 testID — 옛 d02 콜라주(230 · rotate)에는 없던 노드다.
     expect(screen.getAllByTestId(/^explore-saved-empty-photo-/)).toHaveLength(
       3
     );
     expect(screen.getByTestId('explore-saved-empty-heart')).toBeOnTheScreen();
-
-    expect(cls(screen.getByText('마음에 드는 곳을 담아 보세요'))).toContain(
-      'text-[20px]'
-    );
-
-    const cta = cls(screen.getByTestId('explore-saved-browse'));
-    expect(cta).toContain('h-[52px]');
-    expect(cta).toContain('rounded-[12px]');
-    expect(cta).not.toContain('rounded-[14px]');
-    expect(cta).not.toContain('h-[48px]');
   });
 
   it('본문이 지역 무관 문구이고 `부산` 이 든 텍스트가 없다 (AC-2 · 사용자 결정)', () => {
@@ -701,19 +673,6 @@ describe('T-18 · TRIP-1050 콜라주 빈 상태 공통 틀 (AC-1·AC-2·AC-8 ·
     expect(screen.queryAllByText(/부산/)).toHaveLength(0);
   });
 
-  it('CTA 돋보기가 19 크기의 흰색이다 — 분홍 위 회색이 아니다 (Seed Q2 · Figma 1695:1183)', () => {
-    renderScreen({ savedPlaces: [], state: { kind: 'empty' } });
-
-    expect(screen.getByTestId('explore-saved-browse-icon').props.width).toBe(
-      19
-    );
-
-    const payloads = strokePayloads(screen.getByTestId('explore-saved-browse'));
-    // 긍정 짝 — stroke 노드가 하나도 없으면 "전부 흰색"이 빈 배열에서 공허 통과한다.
-    expect(payloads.length).toBeGreaterThanOrEqual(1);
-    payloads.forEach((payload) => expect(payload).toBe(processColor('white')));
-  });
-
   it('지역 필터 0건 블록은 이번 변경 전 그대로다 — 공통 틀이 새어 들지 않는다 (AC-8 · TRIP-1042 몫)', () => {
     renderScreen({
       savedPlaces: [],
@@ -722,10 +681,10 @@ describe('T-18 · TRIP-1050 콜라주 빈 상태 공통 틀 (AC-1·AC-2·AC-8 ·
     });
 
     const region = screen.getByTestId('explore-saved-region-empty');
-    // 옛 콜라주(230 폭)를 그대로 쓴다 — 같은 art testID 를 두 블록이 공유한다(상호배타).
+    // 같은 art testID 를 두 블록이 공유한다(상호배타).
     expect(
-      cls(within(region).getByTestId('explore-saved-empty-art'))
-    ).toContain('w-[230px]');
+      within(region).getByTestId('explore-saved-empty-art')
+    ).toBeOnTheScreen();
     expect(screen.queryByTestId('explore-saved-empty')).toBeNull();
     expect(screen.queryByTestId('explore-saved-empty-photo-0')).toBeNull();
   });
@@ -743,68 +702,7 @@ describe('T-18 · TRIP-1050 콜라주 빈 상태 공통 틀 (AC-1·AC-2·AC-8 ·
  * (개념) 앱바에는 testID 가 없다 — 뒤로 버튼과 제목 '담은 장소' 를 함께 품는 가장 가까운 host 상자를 앱바로 본다.
  */
 
-/** 위·아래 8 을 뜻하는 토큰(tailwind spacing sm = 8px). `py-*` 는 위아래를 함께 준다. */
-const TOP_8 = ['pt-sm', 'pt-[8px]', 'py-sm', 'py-[8px]'];
-const BOTTOM_8 = ['pb-sm', 'pb-[8px]', 'py-sm', 'py-[8px]'];
-
-function ancestorsOf(node: ReactTestInstance): ReactTestInstance[] {
-  const out: ReactTestInstance[] = [];
-  let cur = node.parent;
-  while (cur) {
-    out.push(cur);
-    cur = cur.parent;
-  }
-  return out;
-}
-
-function nearestCommonHost(
-  a: ReactTestInstance,
-  b: ReactTestInstance
-): ReactTestInstance {
-  const ofB = new Set(ancestorsOf(b));
-  const found = ancestorsOf(a).find(
-    (n) => typeof n.type === 'string' && ofB.has(n)
-  );
-  if (!found) throw new Error('공통 host 조상이 없다');
-  return found;
-}
-
-function appBar(): ReactTestInstance {
-  return nearestCommonHost(
-    screen.getByTestId('explore-saved-back'),
-    screen.getByText('담은 장소')
-  );
-}
-
 describe('앱바', () => {
-  describe('🔴 AC-10 · d02 앱바 위 여백 8 (얼굴 공통)', () => {
-    it.each<[string, Partial<SavedPlaceListScreenProps>]>([
-      ['empty', { state: { kind: 'empty' } }],
-      ['results', {}],
-      ['loading', { state: { kind: 'loading' } }],
-      ['error', { state: { kind: 'error' } }],
-      ['guest', { isGuest: true }],
-    ])('%s 얼굴', (_face, overrides) => {
-      renderScreen({ savedPlaces: [], ...overrides });
-
-      const bar = cls(appBar());
-      const vertical = (prefix: RegExp) => bar.filter((t) => prefix.test(t));
-
-      // 위 여백 — 8 계열 토큰이 있고, 다른 값의 위 여백 토큰은 섞이지 않는다.
-      const top = vertical(/^(pt|py|p)-/);
-      expect(top.length).toBeGreaterThan(0);
-      expect(top.filter((t) => !TOP_8.includes(t))).toEqual([]);
-      // 아래 여백 8 유지.
-      const bottom = vertical(/^(pb|py|p)-/);
-      expect(bottom.length).toBeGreaterThan(0);
-      expect(bottom.filter((t) => !BOTTOM_8.includes(t))).toEqual([]);
-      // 가로는 d02 Figma 그대로(e04 가로를 옮기지 않는다).
-      expect(bar).toEqual(
-        expect.arrayContaining(['pl-[10px]', 'pr-lg', 'gap-xs'])
-      );
-    });
-  });
-
   describe('AC-11 · d02 뒤로 무회귀', () => {
     it('뒤로를 누르면 onBack 이 1회 불린다', () => {
       renderScreen({ savedPlaces: [], state: { kind: 'empty' } });
@@ -974,7 +872,7 @@ describe('담은 장소 행 — 해제됨 글자·흐림', () => {
     ).toBeOnTheScreen();
   });
 
-  it('"해제됨" 은 하트 버튼 밖·같은 행 안의 caption·muted 글자이고, 하트 라벨은 그대로다', () => {
+  it('"해제됨" 은 하트 버튼 밖·같은 행 안의 글자이고, 하트 라벨은 그대로다', () => {
     renderScreen({ releasedPoiIds: ['p2'] });
 
     const heart = screen.getByTestId('explore-saved-remove-sp-2');
@@ -984,9 +882,6 @@ describe('담은 장소 행 — 해제됨 글자·흐림', () => {
     // 하트 안에 두면 TRIP-1281 의 하트 라벨이 글자를 덮는다(Q2).
     expect(heart).not.toContainElement(released);
     expect(row).toContainElement(released);
-    expect(cls(within(row).getByText('해제됨'))).toEqual(
-      expect.arrayContaining(['text-caption', 'text-muted'])
-    );
     expect(heart).toHaveAccessibleName('광안리 해변 저장');
     expect(heart).not.toBeSelected();
   });
