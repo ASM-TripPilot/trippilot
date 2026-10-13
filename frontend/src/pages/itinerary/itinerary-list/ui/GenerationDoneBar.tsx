@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { CloseGlyph } from '@/features/itinerary/index.view';
-import { DoneCheckGlyph } from './GenerationDoneBarGlyphs';
+import { ToastSuccessGlyph } from '@/shared/ui/ToastGlyphs';
 
 /**
  * TRIP-788 · AC-7 — 완료 도킹 배너(prop-driven, 소비처가 이 page 하나라 TRIP-1143 에 widgets 에서 이동). BottomTab 위에 뜨는 흰 카드로
@@ -42,7 +42,7 @@ export function GenerationDoneBar({
           : 'absolute bottom-[108px] left-[16px] min-h-[52px] w-[358px] flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas px-lg py-[12px]'
       }
     >
-      <DoneCheckGlyph size={20} testID="generation-done-bar-check" />
+      <ToastSuccessGlyph size={20} testID="generation-done-bar-check" />
       <Text
         testID="generation-done-bar-text"
         className="flex-1 font-noto text-card-title leading-[20px] text-ink"
