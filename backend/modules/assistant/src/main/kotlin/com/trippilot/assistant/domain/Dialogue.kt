@@ -1,6 +1,9 @@
 package com.trippilot.assistant.domain
 
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.util.UUID
 
 /** 도우미를 연 화면(BR-U8-02) — 앱이 보내는 문맥은 이 값과 `tripId` 뿐이다. */
 enum class AssistantSurface { HOME, STAY_SEARCH, ITINERARY, LIVE, STAY_DETAIL }
@@ -38,9 +41,33 @@ data class Interpretation(
     val llmCalls: Int,
 )
 
+/**
+ * 해석에 보내는 컨텍스트(FD §5) — **이 타입에 있는 칸이 보내는 것의 전부다**(화이트리스트, BR-U8-22).
+ * 가격·제휴 정보·리비전·후보 풀·점수·취향·위치는 칸이 없다. "보여 주지 마"를 프롬프트에 부탁하지 않고,
+ * 실을 자리를 두지 않는다(PRD 02-6).
+ */
+data class ContextSnapshot(
+    val surface: AssistantSurface,
+    val trip: TripBlock?,
+    val baseStays: List<String>,
+    val itinerary: ItineraryBlock?,
+) {
+    /** @property phase `PLANNING`|`IN_TRIP`|`ENDED` */
+    data class TripBlock(val tripId: UUID, val regions: List<String>, val startDate: LocalDate, val endDate: LocalDate, val phase: String)
+
+    data class ItineraryBlock(val status: String, val days: List<DayBlock>)
+
+    data class DayBlock(val date: LocalDate, val slots: List<SlotBlock>)
+
+    /** [startAt] 은 저장된(검증된) 계획 시각이다. 소요시간은 없다(INV-3). */
+    data class SlotBlock(val slotKey: String, val name: String?, val startAt: LocalTime, val category: String?)
+}
+
 data class InterpretRequest(
     val utterance: String,
     val surface: AssistantSurface,
+    /** 서버가 권한을 확인해 직접 읽은 것만 — 앱이 보낸 일정 내용은 여기 오지 않는다(BR-U8-02). */
+    val context: ContextSnapshot,
     /** 저장돼 있던 직렬형 — `turn_index` 는 호출측이 이미 올렸다. */
     val dialogueContext: String,
     val requestedAt: Instant,

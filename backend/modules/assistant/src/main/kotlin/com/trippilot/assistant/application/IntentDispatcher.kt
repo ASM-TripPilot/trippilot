@@ -5,9 +5,26 @@ import com.trippilot.assistant.domain.Intent
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.NextAction
 import org.springframework.stereotype.Component
+import java.time.Instant
+import java.util.UUID
 
-/** 처리기가 보는 것 — 여행이 있는가, 여행 중인가, 어느 화면에서 열었는가. 발화 원문은 여기 오지 않는다. */
-data class DispatchContext(val hasTrip: Boolean, val inTrip: Boolean, val surface: AssistantSurface)
+/**
+ * 처리기가 보는 것. **발화 원문은 여기 오지 않는다** — 해석이 뽑은 인자([arguments])만 오고, 그것도 저장된 값을
+ * 찾는 데만 쓴다.
+ *
+ * @property trip 소유가 확인된 여행. null 이면 여행 없는 대화다.
+ */
+data class DispatchContext(
+    val accountId: UUID,
+    val tripId: UUID?,
+    val trip: TripContext?,
+    val inTrip: Boolean,
+    val surface: AssistantSurface,
+    val arguments: Map<String, String>,
+    val now: Instant,
+) {
+    val hasTrip: Boolean get() = trip != null && tripId != null
+}
 
 /**
  * 의도 → 처리기(FD §4 디스패치 표). **의도마다 처리기는 정확히 하나다**(PBT-U8-9) — 표를 `when` 으로 두어
@@ -16,12 +33,11 @@ data class DispatchContext(val hasTrip: Boolean, val inTrip: Boolean, val surfac
  * 대화 안에서 끝내는 것은 조회와 제안뿐이고, 나머지는 기존 화면으로 **넘긴다**. 넘기기는 실행이 아니다 —
  * 앱이 그 화면으로 옮기고, 거기 있는 확인·확정 절차가 그대로 돈다.
  *
- * **지금은 전부 넘기기다.** 조회형(진행 검토·다음 장소·거리·장소·날씨)은 값을 읽어 카드로 답하는 처리기가,
- * 변경형(일정 바꾸기·대체 후보)은 제안 카드가 뒤따라 들어온다(TRIP-1378 조회형 · TRIP-1379). 그때까지도
- * 막다른 응답은 없다 — 그 일을 할 수 있는 화면을 연다.
+ * 조회형(진행 검토·다음 장소·거리·장소·날씨)은 [QueryCards] 가 저장된 값으로 답한다. 변경형(일정 바꾸기·대체 후보)은
+ * 제안 카드가 뒤따라 들어온다(TRIP-1379) — 그때까지는 편집 화면으로 넘긴다. 어느 쪽도 막다른 응답은 없다.
  */
 @Component
-class IntentDispatcher {
+class IntentDispatcher(private val cards: QueryCards) {
 
     fun dispatch(intent: Intent, context: DispatchContext): NewMessage {
         // 일반 대화(여행 없음)에서 일정·동선을 물으면 여행부터 만들게 한다(BR-U8-05) — 넘길 화면이 없다.
@@ -40,14 +56,11 @@ class IntentDispatcher {
                 AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
             Intent.GENERATE_SCHEDULE ->
                 AssistantTemplates.handoff("일정 만들기 화면으로 안내할게요.", NextAction("OPEN_ITINERARY_METHOD", "일정 만들기"))
-            Intent.SHOW_SCHEDULE, Intent.GET_DISTANCE, Intent.GET_POI_INFO, Intent.GET_WEATHER ->
-                AssistantTemplates.handoff("일정 화면에서 확인할 수 있어요.", NextAction("OPEN_ITINERARY", "일정 보기"))
-            Intent.GET_NEXT_SLOT ->
-                if (context.inTrip) {
-                    AssistantTemplates.handoff("여행 중 화면에서 다음 장소를 볼 수 있어요.", NextAction("OPEN_LIVE", "여행 중 화면 열기"))
-                } else {
-                    AssistantTemplates.handoff("일정 화면에서 확인할 수 있어요.", NextAction("OPEN_ITINERARY", "일정 보기"))
-                }
+            Intent.SHOW_SCHEDULE -> cards.review(context)
+            Intent.GET_NEXT_SLOT -> cards.nextSlot(context)
+            Intent.GET_DISTANCE -> cards.distance(context)
+            Intent.GET_POI_INFO -> cards.place(context)
+            Intent.GET_WEATHER -> cards.weather(context)
             Intent.GENERATE_REFLECTION ->
                 AssistantTemplates.handoff("회고는 기록 화면에서 만들 수 있어요.", NextAction("OPEN_REFLECTION", "기록 열기"))
             Intent.TRIP_SUMMARY ->

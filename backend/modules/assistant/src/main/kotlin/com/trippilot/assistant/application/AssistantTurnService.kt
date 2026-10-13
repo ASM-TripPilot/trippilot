@@ -84,6 +84,7 @@ class AssistantTurnService(
     private val interpreter: ObjectProvider<DialogueInterpretPort>,
     private val dispatcher: IntentDispatcher,
     private val tripContexts: TripContextReader,
+    private val snapshots: ContextSnapshotBuilder,
     private val properties: AssistantProperties,
     private val mapper: ObjectMapper,
     private val clock: Clock,
@@ -315,6 +316,7 @@ class AssistantTurnService(
             port.interpret(
                 InterpretRequest(
                     utterance = utterance, surface = surface,
+                    context = snapshots.build(session.accountId, session.tripId, surface, today(startedAt)),
                     dialogueContext = bumpTurnIndex(session.dialogueContext),
                     requestedAt = startedAt, deadlineMs = deadlineMs,
                 ),
@@ -351,7 +353,7 @@ class AssistantTurnService(
                     val clarify = result.clarify ?: return@runCatching broken("되묻기인데 clarify 가 없다")
                     reply(AssistantTemplates.clarify(clarify.argument, clarify.question, clarify.options).copy(intent = frame.intent.name))
                 }
-                else -> reply(dispatched(frame.intent, frame.matchRoute, session, surface).message)
+                else -> reply(dispatched(frame.intent, frame.matchRoute, session, surface, frame.arguments).message)
             }
         }.getOrElse { e ->
             log.warn("도우미 응답 조립 실패 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
@@ -359,12 +361,19 @@ class AssistantTurnService(
         }
     }
 
-    private fun dispatched(intent: Intent, matchRoute: String?, session: AssistantSession, surface: AssistantSurface) =
-        Reply(dispatcher.dispatch(intent, context(session, surface)).copy(intent = intent.name, matchRoute = matchRoute ?: "ACTION"))
+    private fun dispatched(
+        intent: Intent, matchRoute: String?, session: AssistantSession, surface: AssistantSurface, arguments: Map<String, String> = emptyMap(),
+    ) = Reply(dispatcher.dispatch(intent, context(session, surface, arguments)).copy(intent = intent.name, matchRoute = matchRoute ?: "ACTION"))
 
-    private fun context(session: AssistantSession, surface: AssistantSurface): DispatchContext {
+    private fun context(session: AssistantSession, surface: AssistantSurface, arguments: Map<String, String> = emptyMap()): DispatchContext {
+        val now = clock.instant()
         val trip = session.tripId?.let { tripContexts.read(session.accountId, it) }
-        return DispatchContext(hasTrip = trip != null, inTrip = trip?.inTrip(today(clock.instant())) ?: false, surface = surface)
+        return DispatchContext(
+            accountId = session.accountId,
+            // 여행을 못 읽었으면(그 사이 삭제) 여행 없는 대화로 다룬다 — 처리기가 없는 여행을 읽으려 들지 않게.
+            tripId = session.tripId.takeIf { trip != null },
+            trip = trip, inTrip = trip?.inTrip(today(now)) ?: false, surface = surface, arguments = arguments, now = now,
+        )
     }
 
     /** 거절이 이어지면 같은 거절을 되풀이하지 않고 쓰는 법을 안내한다(BR-U8-25). */

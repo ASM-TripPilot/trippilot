@@ -123,14 +123,14 @@ class AssistantMessageRepositoryAdapter(
         """
         INSERT INTO assistant_message (
             message_id, session_id, account_id, client_turn_id, reply_to, role, kind, text, redacted, payload, next_actions, quick_replies,
-            intent, match_route, outcome, llm_calls, latency_ms, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?)
+            footnote, intent, match_route, outcome, llm_calls, latency_ms, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?)
         RETURNING $COLUMNS
         """.trimIndent(),
         { rs, _ -> rs.toMessage() },
         UUID.randomUUID(), sessionId, accountId, clientTurnId, replyTo, m.role.name, m.kind.name, m.text, m.redacted,
         m.payload?.let(mapper::writeValueAsString), mapper.writeValueAsString(m.nextActions), m.quickReplies?.let(mapper::writeValueAsString),
-        m.intent, m.matchRoute, m.outcome, m.llmCalls, m.latencyMs, Timestamp.from(at),
+        m.footnote, m.intent, m.matchRoute, m.outcome, m.llmCalls, m.latencyMs, Timestamp.from(at),
     ).single()
 
     /**

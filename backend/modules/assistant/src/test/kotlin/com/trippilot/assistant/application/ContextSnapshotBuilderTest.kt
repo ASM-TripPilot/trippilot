@@ -1,0 +1,145 @@
+package com.trippilot.assistant.application
+
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.module.kotlin.kotlinModule
+import com.trippilot.assistant.domain.AssistantSurface
+import com.trippilot.savedaccommodation.api.DayBaseStayView
+import com.trippilot.savedaccommodation.api.TripBaseStayFacade
+import com.trippilot.trip.api.TripDestinationRef
+import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripGenerationContext
+import com.trippilot.trip.api.TripPeriod
+import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.element
+import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.stringPattern
+import io.kotest.property.checkAll
+import java.time.LocalDate
+import java.util.UUID
+
+/**
+ * 컨텍스트 스냅샷(FD §5 · BR-U8-22 · SEC-U8-08). **이 스냅샷이 권한 경계다** — 프롬프트에 "보여 주지 마"를 부탁하는 것이
+ * 아니라, 싣지 않는다.
+ */
+class ContextSnapshotBuilderTest : StringSpec({
+
+    val today = LocalDate.parse("2026-11-02")
+    val json = ObjectMapper().registerModule(kotlinModule()).registerModule(JavaTimeModule())
+
+    /** 여행은 주인만 읽을 수 있다 — 실 퍼사드와 같은 규칙. */
+    fun trips(owner: UUID, tripId: UUID, region: String, days: Long = 2) = object : TripFacade {
+        override fun findPeriod(accountId: UUID, id: UUID): TripPeriod? = null
+        override fun findGenerationContext(accountId: UUID, id: UUID) =
+            if (accountId == owner && id == tripId) {
+                TripGenerationContext(today.minusDays(1), today.minusDays(1).plusDays(days), listOf(TripDestinationRef(region, null, days.toInt())), "친구", 900_000, emptyList())
+            } else {
+                null
+            }
+    }
+    fun stays(name: String?) = object : TripBaseStayFacade {
+        override fun findBaseStays(tripId: UUID, startDate: LocalDate, endDate: LocalDate) =
+            listOfNotNull(name?.let { DayBaseStayView(startDate, UUID.randomUUID(), it) })
+    }
+    fun builder(trips: TripFacade, stays: TripBaseStayFacade, data: FakeTripData, properties: AssistantProperties = AssistantProperties()) =
+        ContextSnapshotBuilder(TripContextReader(trips, stays), data, data, properties)
+
+    /** 직렬형의 모든 키(중첩 포함). */
+    fun keys(node: JsonNode): Set<String> = when {
+        node.isObject -> node.fieldNames().asSequence().toSet() + node.elements().asSequence().flatMap { keys(it) }
+        node.isArray -> node.elements().asSequence().flatMap { keys(it) }.toSet()
+        else -> emptySet()
+    }
+    val whitelist = setOf(
+        "surface", "trip", "baseStays", "itinerary", // 블록
+        "tripId", "regions", "startDate", "endDate", "phase", // trip
+        "status", "days", "date", "slots", // itinerary
+        "slotKey", "name", "startAt", "category", // slot
+    )
+
+    "여행·숙소·일정이 화이트리스트 필드만으로 실린다" {
+        val (acc, tripId) = UUID.randomUUID() to UUID.randomUUID()
+        val slot = plannedSlot(today, 0, "14:00", "카페 모카", violation = "영업시간과 맞지 않아요", distance = "840m")
+        val snapshot = builder(trips(acc, tripId, "부산"), stays("서면 호텔"), FakeTripData(acc, slots = listOf(slot)))
+            .build(acc, tripId, AssistantSurface.ITINERARY, today)
+
+        snapshot.trip!!.let { listOf(it.tripId, it.regions, it.phase) } shouldContainExactly listOf(tripId, listOf("부산"), "IN_TRIP")
+        snapshot.baseStays shouldContainExactly listOf("서면 호텔")
+        snapshot.itinerary!!.status shouldBe "PLANNED"
+        snapshot.itinerary!!.days.single().slots.single().let { listOf(it.slotKey, it.name, it.startAt.toString(), it.category) } shouldContainExactly
+            listOf(slot.slotKey, "카페 모카", "14:00", "카페")
+        // 위반 사유·거리·좌표·예산·동행은 실을 자리가 없다
+        val wire = json.writeValueAsString(snapshot)
+        listOf("영업시간과", "840m", "900000", "친구", "lat", "lng", "hasViolation").forEach { wire shouldNotContain it }
+        (keys(json.readTree(wire)) - whitelist) shouldBe emptySet()
+    }
+
+    "여행이 없거나 남의 여행이면 화면 값만 간다" {
+        val (acc, tripId) = UUID.randomUUID() to UUID.randomUUID()
+        val b = builder(trips(acc, tripId, "부산"), stays("서면 호텔"), FakeTripData(acc, slots = listOf(plannedSlot(today, 0, "14:00", "카페"))))
+
+        listOf(b.build(acc, null, AssistantSurface.HOME, today), b.build(UUID.randomUUID(), tripId, AssistantSurface.HOME, today)).forEach {
+            it.trip shouldBe null
+            it.baseStays shouldBe emptyList()
+            it.itinerary shouldBe null
+        }
+    }
+
+    /**
+     * PBT-U8-3 — 임의의 두 계정과 임의의 여행 데이터에 대해, A 의 스냅샷에 **B 의 여행·슬롯 id·이름이 나타나지 않고**
+     * 키 집합은 화이트리스트 안이다. A 가 B 의 여행 id 를 들고 와도 마찬가지다.
+     */
+    "임의의 두 계정에서 남의 여행·슬롯이 스냅샷에 실리지 않는다" {
+        val name = Arb.stringPattern("[가-힣]{3,6}")
+        checkAll(60, Arb.list(name, 1..5), Arb.list(name, 1..5), name, name, Arb.element(true, false)) { mine, theirs, myRegion, theirRegion, probeTheirTrip ->
+            val (a, b) = UUID.randomUUID() to UUID.randomUUID()
+            val (tripA, tripB) = UUID.randomUUID() to UUID.randomUUID()
+            val slotsB = theirs.mapIndexed { i, n -> plannedSlot(today, i, "1$i:00", "남의-$n") }
+            // 두 계정의 데이터가 한 저장소에 있다 — 읽기는 계정으로 갈린다
+            val tripFacade = object : TripFacade {
+                override fun findPeriod(accountId: UUID, id: UUID): TripPeriod? = null
+                override fun findGenerationContext(accountId: UUID, id: UUID) =
+                    trips(a, tripA, myRegion).findGenerationContext(accountId, id) ?: trips(b, tripB, "남의-$theirRegion").findGenerationContext(accountId, id)
+            }
+            // 일정 퍼사드도 계정으로 갈린다 — **B 의 일정을 가진 저장소에 A 로 묻는다**: 아무것도 안 나와야 한다.
+            // (A 자신의 일정은 A 의 여행으로 물을 때만 같은 저장소에서 나온다.)
+            val store = if (probeTheirTrip) FakeTripData(b, slots = slotsB) else FakeTripData(a, slots = mine.mapIndexed { i, n -> plannedSlot(today, i, "1$i:00", n) })
+
+            val snapshot = builder(tripFacade, stays("내 숙소"), store).build(a, if (probeTheirTrip) tripB else tripA, AssistantSurface.ITINERARY, today)
+            val wire = json.writeValueAsString(snapshot)
+
+            (keys(json.readTree(wire)) - whitelist) shouldBe emptySet()
+            wire shouldNotContain tripB.toString()
+            wire shouldNotContain "남의-"
+            slotsB.forEach { wire shouldNotContain it.poiId.toString() }
+            if (probeTheirTrip) snapshot.trip shouldBe null // 남의 여행 id 로는 아무것도 못 읽는다
+        }
+    }
+
+    /** SEC-U8-08 — 양도 줄인다. 입력 토큰이 곧 비용이고 지연이다. */
+    "일정이 상한을 넘으면 오늘 ±1일만 보낸다 — 상한 안이면 전부 보낸다" {
+        val (acc, tripId) = UUID.randomUUID() to UUID.randomUUID()
+        val start = today.minusDays(1)
+        checkAll(20, Arb.int(1..6), Arb.int(1..5)) { dayCount, perDay ->
+            val slots = (0 until dayCount).flatMap { d -> (0 until perDay).map { i -> plannedSlot(start.plusDays(d.toLong()), i, "1$i:00", "곳$d-$i") } }
+            val days = builder(
+                trips(acc, tripId, "부산", days = dayCount.toLong() - 1), stays(null), FakeTripData(acc, slots = slots),
+                AssistantProperties(snapshotMaxDays = 3, snapshotMaxSlotsPerDay = 3),
+            ).build(acc, tripId, AssistantSurface.ITINERARY, today).itinerary!!.days
+
+            if (dayCount <= 3 && perDay <= 3) {
+                days.map { it.date } shouldContainExactly (0 until dayCount).map { start.plusDays(it.toLong()) }
+                days.forEach { it.slots.size shouldBe perDay }
+            } else {
+                days.map { it.date } shouldContainExactly listOf(today.minusDays(1), today, today.plusDays(1)).filter { d -> slots.any { it.date == d } }
+                days.forEach { (it.slots.size <= 3) shouldBe true }
+            }
+        }
+    }
+})

@@ -40,10 +40,19 @@ data class TripContext(
     /** 여행 중인가 — 시작일부터 마지막 날까지(양 끝 포함). */
     fun inTrip(today: LocalDate): Boolean = today in startDate..endDate
 
-    /** 칩 문구 — `부산 2박 3일 · 등록 숙소 서면`(`b01`). 숙소가 없으면 뒷부분을 뺀다(없는 것을 있다고 하지 않는다). */
-    fun chip(): String {
+    /** `부산 2박 3일` · `부산 당일` */
+    fun span(): String {
         val where = destinations.joinToString("·").ifEmpty { "여행" }
-        val span = if (nights == 0) "당일" else "${nights}박 ${nights + 1}일"
-        return listOfNotNull("$where $span", baseStayName?.let { "등록 숙소 $it" }).joinToString(" · ")
+        return "$where ${if (nights == 0) "당일" else "${nights}박 ${nights + 1}일"}"
+    }
+
+    /** 칩 문구 — `부산 2박 3일 · 등록 숙소 서면`(`b01`). 숙소가 없으면 뒷부분을 뺀다(없는 것을 있다고 하지 않는다). */
+    fun chip(): String = listOfNotNull(span(), baseStayName?.let { "등록 숙소 $it" }).joinToString(" · ")
+
+    /** `PLANNING`|`IN_TRIP`|`ENDED` — 해석에 보내는 여행 국면(FD §5). */
+    fun phase(today: LocalDate): String = when {
+        today < startDate -> "PLANNING"
+        today > endDate -> "ENDED"
+        else -> "IN_TRIP"
     }
 }

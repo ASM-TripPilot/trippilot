@@ -107,6 +107,40 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
             turn.body["messages"].map { it["id"].asText() }
     }
 
+    /**
+     * 진행 검토가 **실제 일정**을 읽는다 — 일정 생성 API 로 만든 일정, 실 퍼사드, jsonb 로 저장된 카드.
+     * 카드의 값은 저장된 사실이고, 각주까지 다시 열었을 때 그대로 읽힌다.
+     */
+    @Test
+    fun `진행 검토 카드가 실제 여행·일정으로 채워지고 저장된 그대로 다시 읽힌다`() {
+        val (_, token) = newAccount()
+        val trip = call(
+            HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"2026-11-01","endDate":"2026-11-01","party":2,"destinations":[{"seq":0,"region":"제주","nights":0}],"preferenceSnapshot":{}}""",
+        ).body["tripId"].asText()
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).status shouldBe 201 // 하루 여행 — 생성이 즉시 끝난다
+        val session = open(token, trip)
+
+        val review = press(token, session, "qr-review").body["messages"][1]
+
+        review["kind"].asText() shouldBe "REVIEW"
+        review["payload"]["summary"].map { it["label"].asText() to it["value"].asText() } shouldContainExactly
+            listOf("여행" to "제주 당일", "숙소" to "미등록", "일정" to "1일 중 1일 채움")
+        review["payload"]["problems"].map { it["reason"].asText() } shouldContainExactly listOf("등록된 숙소가 없어요")
+        review["payload"]["problems"][0]["fixAction"]["type"].asText() shouldBe "OPEN_STAY_SEARCH"
+        review["footnote"].asText() shouldBe "* 시간·이동 검증은 일정 솔버 기준"
+        review["nextActions"][0]["type"].asText() shouldBe "OPEN_ITINERARY"
+
+        // 다음 장소도 그 일정에서 — 여행은 한참 뒤라 첫 슬롯이다(날짜가 함께 온다)
+        val next = press(token, session, "qr-next").body["messages"][1]
+        next["kind"].asText() shouldBe "INFO"
+        next["payload"]["infoKind"].asText() shouldBe "NEXT_SLOT"
+        next["payload"]["rows"].map { it["label"].asText() }.take(2) shouldContainExactly listOf("날짜", "계획 시각")
+
+        val reread = call(HttpMethod.GET, "/api/v1/assistant/sessions/$session/messages", token).body["messages"]
+        reread.first { it["kind"].asText() == "REVIEW" } shouldBe review
+    }
+
     /** INV-U8-05 — 앱은 응답을 못 받으면 같은 턴 id 로 다시 보낸다. 두 번 만들면 대화가 겹치고 사용량이 두 번 센다. */
     @Test
     fun `같은 턴 id 로 다시 보내면 처음 응답을 그대로 받는다`() {
