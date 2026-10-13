@@ -1,4 +1,4 @@
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Rect } from 'react-native-svg';
 
 import { GLYPH_COLORS } from './colors';
 import type { GlyphProps } from './types';
