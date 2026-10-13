@@ -56,14 +56,15 @@
 
 > **[추가 · 2026-10-13] BR-U4-47 — 사유별 암시 재계획 규칙.** 사유(BR-U4-12)는 PlanB 트리거·KB 질의뿐 아니라 **일정 조립에도 닿는다** — 사유마다 재계획 지시(KB-4 `replan_directives.yaml` 키)를 암시로 얹고, 사용자가 고른 지시와 **같은 기구**로 집행한다. 표의 정본은 AI `api/wiring.py` `_REASON_IMPLIED_DIRECTIVES` 한 곳이다.
 >
-> | 사유(FE → AI) | 암시 지시 | 효과 |
-> |---|---|---|
-> | 체력 저하 `LOW_ENERGY` → `fatigue` | `LESS_MOVE` · `AVOID_STRENUOUS` · `RELAX` | 앵커에서 먼 후보 감점 · 액티비티·자연 회피 · 느긋한 속도(체류 ×1.4 → 방문 수 감소) |
-> | 이동 지연 `SLOW_MOVE` → `delay` | `LESS_MOVE` · `RELAX` | 먼 후보 감점 · 방문 수 감소 |
-> | 날씨 `WEATHER` → `weather` | `INDOOR` | 문화·카페·쇼핑 선호 |
-> | 휴무 `TEMP_CLOSED` → `closed` · 예약 마감 `FULLY_BOOKED` → `fully_booked` · `canceled` | `NEARBY` | 근처 새 스팟으로 대체. 대상 장소 제외는 `excluded_poi_ids` 가 한다 |
-> | 그냥 `JUST_CHANGE` → `none` · 미지 | — | 변화 없음 |
+> | 사유(FE → AI) | 암시 지시 | 경로 감점 | 효과 |
+> |---|---|---|---|
+> | 체력 저하 `LOW_ENERGY` → `fatigue` | `LESS_MOVE` · `AVOID_STRENUOUS` · `RELAX` | 0.05 | 앵커에서 먼 후보 감점 · 경로(연속 이동) 감점 · 액티비티·자연 회피 · 느긋한 속도(체류 ×1.4 → 방문 수 감소) |
+> | 이동 지연 `SLOW_MOVE` → `delay` | `LESS_MOVE` · `RELAX` | 0.05 | 먼 후보·경로 감점 · 방문 수 감소 |
+> | 날씨 `WEATHER` → `weather` | `INDOOR` · `LESS_MOVE` | 0.02 | 문화·카페·쇼핑 선호 · 먼 후보·경로 감점(약하게 — 실내 선호가 먼 대체지를 끌어오지 않게) |
+> | 휴무 `TEMP_CLOSED` → `closed` · 예약 마감 `FULLY_BOOKED` → `fully_booked` · `canceled` | `NEARBY` | — | 근처 새 스팟으로 대체. 대상 장소 제외는 `excluded_poi_ids` 가 한다 |
+> | 그냥 `JUST_CHANGE` → `none` · 미지 | — | — | 변화 없음 |
 >
+> - **경로 감점**(`ItineraryProblem.travel_weight`, 점수/도로 km — 표 `_REASON_ROUTE_WEIGHT`)은 조립 **선택**에 이동 비용을 넣는다. `LESS_MOVE` 는 앵커에서 먼 *후보* 를 내릴 뿐이고 재정렬(B)은 고른 집합 안의 순서만 바꿔서, 흩어진 후보끼리 오가는 경로는 못 줄였다(2026-10-13 실스택 부산: 피로 26.1 → 30.1km, 우천 51.8km). OR 은 지나는 아크마다 −w×km, 규칙 폴백은 지금 위치에서의 km×w 를 뺀 순서(같은 의미의 그리디판). 사유가 여럿이면 최댓값, 사용자 칩 `LESS_MOVE` 도 0.05. 감점은 축 판정(아래 사용자 우선)과 별개다 — 사용자가 거리 축을 `NEARBY` 로 정해 암시 `LESS_MOVE` 가 빠져도 감점은 남는다(같은 방향이라 사용자 지시와 부딪히지 않는다). 목적식 항이라 가해 여부는 바꾸지 않고, 조립의 재시도(pace 무보정·몰아주기)는 이것도 끄고 푼다. 재정렬(B)은 감점을 뺀 소프트 항 합을 A 값 이상으로 묶는다 — 거리를 줄이려 식사창을 내주지 않는다. 기본 0 — 자유 생성 무영향. A 가 OPTIMAL 이면 같은 풀·시드에서 켠 경로 ≤ 끈 경로가 풀마다 성립하고, 결정론 한도에 끊긴 큰 풀은 집계로만 성립한다.
 > - **다중 사유는 합집합**이다. PlanB 에 주는 대표 사유 하나는 우선순위 `weather > closed > fully_booked > canceled > delay > fatigue` 로 고른다(못 가는 사유가 사용자 사정보다 앞).
 > - **사용자 지시 우선**: 사용자가 같은 축(`enforced_by` — 카테고리·거리·속도)을 **효과 있는 지시로** 이미 정했으면 그 축의 암시 지시는 얹지 않는다("한 곳 추가"·미배선·무효 지시는 축을 잡지 않는다). 사용자 "한 곳 추가" 카테고리는 암시 지시가 건드리지 않는다. 자유 입력이 부정문인데 지시로 못 풀었으면 카테고리 축 암시는 보류한다(원문은 PlanB 가 읽는다).
 > - 암시분은 응답 `resolved_directives`(사용자 지시)에 섞지 않고 노트로 밝힌다 — `planb_reason_implied` · `planb_reason_implied_skipped`(침묵 금지, INV-4).

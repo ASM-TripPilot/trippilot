@@ -255,6 +255,10 @@ class ItineraryProblem:
     정한다. 기본 빈 튜플 = 기존 생성자 호출 전부 무영향. 고정 블록처럼 다른 날의 자유
     후보에서는 빠지고 제외(`excluded_poi_ids`)보다 우선하지만, HC3 대상은 아니다 — 못 놓으면
     해에 없을 뿐이고(409 아님) 그 사실은 배선이 보고한다.
+
+    travel_weight: 경로 길이 감점 — 도로 km 당 점수 축([0,1]) 감점. 기본 0 = 무보정(목적함수에
+    이동 항 없음, 기존 생성자 호출 전부 무영향). 재계획 사유(피로·지연·우천)가 켠다(BR-U4-47).
+    목적식 항이라 가해 여부는 안 바꾼다. 조립의 재시도(pace 무보정·몰아주기)는 이것도 끄고 푼다.
     """
 
     schedule_id: ScheduleId
@@ -272,10 +276,13 @@ class ItineraryProblem:
     pace: Pace | None = None  # 여행 속도 — 체류시간 배율 (TRIP-906)
     not_before: datetime | None = None  # 비고정 방문 시작 하한 (TRIP-1182)
     required_visits: tuple[RequiredVisit, ...] = ()  # 시각 없는 필수 방문 (TRIP-1249)
+    travel_weight: float = 0.0  # 경로 길이 감점 — 점수/km (BR-U4-47)
 
     def __post_init__(self) -> None:
         if not self.days:
             raise ValueError("days는 최소 1일")
+        if self.travel_weight < 0:
+            raise ValueError(f"travel_weight 음수 불가: {self.travel_weight}")
         if self.daily_rain_prob is not None:
             for d, pop in self.daily_rain_prob.items():
                 if not 0 <= pop <= 100:
@@ -301,6 +308,7 @@ class ItineraryProblem:
             "pace": self.pace.value if self.pace else None,
             "not_before": to_iso(self.not_before) if self.not_before else None,
             "required_visits": [r.to_dict() for r in self.required_visits],
+            "travel_weight": self.travel_weight,
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -351,6 +359,7 @@ class ItineraryProblem:
             required_visits=tuple(
                 RequiredVisit.from_dict(x) for x in d.get("required_visits", ())
             ),
+            travel_weight=d.get("travel_weight", 0.0),
         )
 
 

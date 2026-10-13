@@ -26,7 +26,7 @@ from hypothesis import given, settings, strategies as st
 
 from trippilot.agents.schedule.agent import ScheduleAgent
 from trippilot.api import schemas
-from trippilot.api.wiring import _REASON_IMPLIED_DIRECTIVES, build_dev_app
+from trippilot.api.wiring import _REASON_IMPLIED_DIRECTIVES, _route_weight, build_dev_app
 from trippilot.domain.common import GeoPoint, Pace, TraceId
 from trippilot.domain.itinerary import TimeWindow
 from trippilot.domain.poi import PoiCategory
@@ -91,19 +91,21 @@ def _spied_request(**over: object):
     return seen[0], response.json()
 
 
-@pytest.mark.parametrize("reason,near,avoid,prefer,pace,implied", [
-    ("fatigue", True, _STRENUOUS, frozenset(), Pace.SLOW, "LESS_MOVE,AVOID_STRENUOUS,RELAX"),
-    ("delay", True, frozenset(), frozenset(), Pace.SLOW, "LESS_MOVE,RELAX"),
-    ("weather", False, frozenset(), _INDOOR, None, "INDOOR"),
-    ("closed", True, frozenset(), frozenset(), None, "NEARBY"),
-    ("fully_booked", True, frozenset(), frozenset(), None, "NEARBY"),
-    ("canceled", True, frozenset(), frozenset(), None, "NEARBY"),
-    ("none", False, frozenset(), frozenset(), None, None),
+@pytest.mark.parametrize("reason,near,avoid,prefer,pace,route,implied", [
+    ("fatigue", True, _STRENUOUS, frozenset(), Pace.SLOW, 0.05, "LESS_MOVE,AVOID_STRENUOUS,RELAX"),
+    ("delay", True, frozenset(), frozenset(), Pace.SLOW, 0.05, "LESS_MOVE,RELAX"),
+    ("weather", True, frozenset(), _INDOOR, None, 0.02, "INDOOR,LESS_MOVE"),
+    ("closed", True, frozenset(), frozenset(), None, 0.0, "NEARBY"),
+    ("fully_booked", True, frozenset(), frozenset(), None, 0.0, "NEARBY"),
+    ("canceled", True, frozenset(), frozenset(), None, 0.0, "NEARBY"),
+    ("none", False, frozenset(), frozenset(), None, 0.0, None),
 ])
-def test_사유별_암시_지시가_에이전트_요청에_실린다(reason, near, avoid, prefer, pace, implied) -> None:
+def test_사유별_암시_지시가_에이전트_요청에_실린다(reason, near, avoid, prefer, pace, route,
+                                       implied) -> None:
     request, body = _spied_request(reasons=[reason])
 
     assert request.prefer_near is near
+    assert request.travel_weight == route  # 경로 길이 감점 — 조립 선택(A)에 이동이 들어간다
     assert request.avoid_categories == avoid
     assert request.prefer_categories == prefer
     assert request.pace is pace
@@ -113,6 +115,34 @@ def test_사유별_암시_지시가_에이전트_요청에_실린다(reason, nea
         assert not any("planb_reason_implied" in n for n in body["notes"]), body["notes"]
     else:
         assert f"planb_reason_implied: {implied}" in body["notes"], body["notes"]
+
+
+def test_경로_감점은_사유_중_최댓값이고_사용자_이동_짧게_칩도_켠다() -> None:
+    assert _route_weight(["weather", "fatigue"], []) == 0.05
+    assert _route_weight(["none"], ["LESS_MOVE"]) == 0.05
+    assert _route_weight(["closed", "none", "모름"], ["NEARBY"]) == 0.0
+    request, _ = _spied_request(reasons=["none"], directives=["LESS_MOVE"])
+    assert request.travel_weight == 0.05
+
+
+def test_더_채워서_칩은_알차게_속도로_집행되고_여유와_같이면_상쇄한다() -> None:
+    request, body = _spied_request(reasons=["none"], directives=["FILL_MORE"])
+    assert request.pace is Pace.PACKED
+    assert not any("directives_unwired" in n for n in body["notes"]), body["notes"]
+    (*_, pace), notes = _directives(reasons=["none"], directives=["FILL_MORE", "RELAX"])
+    assert pace is None and "directives_conflict: pace" in notes
+    # 사용자가 속도 축을 정했으면 피로의 RELAX 는 얹히지 않는다
+    (*_, pace), notes = _directives(reasons=["fatigue"], directives=["FILL_MORE"])
+    assert pace is Pace.PACKED
+    assert "planb_reason_implied_skipped: RELAX (사용자 지시 우선)" in notes, notes
+
+
+def test_야외_피하기_칩은_실외_세_종을_회피한다() -> None:
+    """FE 칩 AVOID_OUTDOOR 가 사전에 없어 unknown 으로 버려졌다(DEV 로그)."""
+    (resolved, unknown, _, avoid, _, _, _), _ = _directives(
+        reasons=["none"], directives=["AVOID_OUTDOOR"])
+    assert resolved == ["AVOID_OUTDOOR"] and unknown == []
+    assert avoid == frozenset({PoiCategory.NATURE, PoiCategory.NIGHT_VIEW, PoiCategory.ACTIVITY})
 
 
 def test_여유_지시는_칩으로도_느긋한_속도로_집행된다() -> None:
@@ -178,7 +208,8 @@ def test_사유는_사용자_지시를_줄이지_않고_합집합으로만_얹�
     assert (r1, u1) == (r0, u0)            # 해석분·미지분은 사용자 것뿐
     assert o1 == o0                        # 사용자 "한 곳 추가"는 그대로
     assert p0 <= p1 and a0 <= a1           # 줄이지 않는다
-    assert n1 >= n0 and s1 >= s0
+    assert n1 >= n0
+    assert s0 is None or s1 == s0          # 사용자가 정한 속도는 사유가 못 바꾼다
     expected = {k for r in reasons for k in _REASON_IMPLIED_DIRECTIVES.get(r, ())}
     lit = {k for n in notes if n.startswith("planb_reason_implied: ")
            for k in n.split(": ")[1].split(",")}
@@ -219,9 +250,10 @@ def _measure(seed: int, reasons: dict[str, list[str]]) -> dict[str, tuple[int, f
     out = {}
     for label, rs in reasons.items():
         # 배선이 실제로 내는 필드를 그대로 쓴다 — 표와 효과가 한 줄로 이어진다
-        (_, _, prefer, avoid, near, add_one, slow), _ = _directives(reasons=rs)
+        (resolved, _, prefer, avoid, near, add_one, pace), _ = _directives(reasons=rs)
         req = replace(base, prefer_categories=prefer, avoid_categories=avoid, prefer_near=near,
-                      add_one_categories=add_one, pace=Pace.SLOW if slow else None)
+                      add_one_categories=add_one, pace=pace,
+                      travel_weight=_route_weight(rs, resolved))
         trace = InMemoryTrace()
         gateway = GatewayFacade(FakeLlm(_scores_json(*[f"p{i}" for i in range(1, n + 1)])),
                                 _Renderer(), ClosedSetGate(), _C1CFG, trace)
