@@ -79,10 +79,13 @@ def test_shipped_categories_are_boundary_eight() -> None:
 
 
 def test_shipped_solver_directives_are_marked_unwired() -> None:
-    """SOLVER 는 A-4 전까지 효과가 없다 — 정본이 '동작 중'으로 읽히면 안 된다."""
+    """SOLVER 는 배선된 것(RELAX → Pace.SLOW)만 효과가 있다 — 나머지가 '동작 중'으로 읽히면 안 된다."""
+    from trippilot.api.wiring import _SLOW_KEYS
+
     for spec in load_directive_file(_DICT, yaml.safe_load):
         if spec.enforced_by == "SOLVER":
-            assert spec.unwired, f"{spec.key}: SOLVER 인데 unwired 표시가 없다"
+            assert spec.unwired != (spec.key in _SLOW_KEYS), (
+                f"{spec.key}: unwired 표시와 배선 여부가 어긋난다")
 
 
 def test_shipped_add_directives_are_one_place() -> None:
