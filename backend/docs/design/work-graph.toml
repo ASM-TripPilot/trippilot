@@ -2916,7 +2916,10 @@ note = """
 `amazon-cloudwatch-observability` v6.7.0 ACTIVE, 수집 파드 5개, 앱 파드 재시작·축출 0, 노드 추가 0,
 `/aws/containerinsights/trippilot-dev/application` 에 backend·ai·gateway·embedding 스트림 7개.
 **이 노드가 닫아도 남는 것**: Q3 의 알람(→ [[OPS-ALARMS]]) · 수집량·비용 실측(며칠 뒤) ·
-`aidlc/…/shared-infrastructure.md` 의 as-built 서술("두 tfvars 모두 false")이 낡았다(사후 개정 필요).
+`aidlc/…/shared-infrastructure.md` 의 as-built 서술이 dev 에 대해 낡았다("두 tfvars 모두 false"·보존 7일 —
+prd 는 여전히 false·30일이다. 사후 개정 필요).
+**아래 기록 가운데 지금은 틀린 문장**: "남은 것은 tfvars 를 켜는 PR 과 배포다"(끝났다) · "보존을 명시(dev 짧게)"
+(90일로 정했다) · 맨 끝의 "적용 전 bootstrap 정책 재등록이 선행이다"(끝났다). 전부 닫기 전 시점의 서술이다.
 **진행(2026-10-13) — 켜기로 했다(사용자 결정, 출시 뒤라 로그 유실이 실제 위험이다).** 막고 있는 것은
 bootstrap 역할 정책 재등록 하나다: 계정의 인라인 정책이 리포 예제보다 14개 액션 뒤처져 있고 전부
 `role/trippilot-dev-cloudwatch-pod` 대상이다(2026-10-13 실측 diff, 삭제 0). 사람이 `aws iam put-role-policy` 를
@@ -2957,6 +2960,7 @@ owner = "AI"
 migration = false
 touches = []
 note = """
+(2026-10-13: 아래가 기다리던 [[OBSERVABILITY-DEV]] 는 끝났다 — 이제 degraded 원인을 CloudWatch 로그로 가를 수 있다.)
 2026-09-30 시뮬레이터 자동 E2E 로 일정 생성을 실서버·실DB 로 4판 돌려 슬롯 단위로 채점한 결과다
 (TRIP-1160 에 전문). **구조 불변식은 무결** — 시간 겹침 0 · 같은 poi_id 중복 0 · 지역 이탈 0 ·
 필수방문지 `is_fixed=t` 배치 · 거점 인접 시작/마감 · INV-3 거리만 · 실패 시 정직 폴백.
@@ -3231,7 +3235,7 @@ note = """
 - 애플 p8 3종 — "둘 다 없다"는 낡았다. 2026-10-12 실측으로 DEV 시크릿에 `APPLE_TEAM_ID`·`APPLE_KEY_ID`·
   `APPLE_PRIVATE_KEY` 가 들어 있다.
 - 푸시 — 사용자가 2026-10-13 에 **켠다**로 정했다. Expo 액세스 토큰 발급 대기 → [[PUSH-LIVE-CHECK]].
-- 관측성 — 켜기로 했다. 로그용 역할까지 만들어졌고 tfvars 를 켜는 PR 과 배포가 남았다 → [[OBSERVABILITY-DEV]].
+- 관측성 — 로그 수집은 켰다([[OBSERVABILITY-DEV]] done). 알람이 남았다 → [[OPS-ALARMS]].
 - ASC 앱 등록·앱 개인정보, TestFlight 실기 검증 — 출시로 지나갔다.
 - **위치기반서비스사업 신고 — 아직 하지 않았다. 사용자가 2026-10-13 에 "나중에 한다"로 정했다.**
   심사 통과와는 별개의 법적 의무다. 잊히지 않게 [[LBS-REGISTRATION]] 노드가 들고 있다.
@@ -3890,7 +3894,9 @@ touches = []
 note = """
 `STORE-LAUNCH` 의 선행 목록에 있던 항목인데 출시가 먼저 됐다. 사용자가 2026-10-13 에 "나중에 한다"로 정했다.
 코드로 풀 수 없다([[TRIP-847]] 이 그렇게 적어 둔 항목). **U10(GPS·위치 자동화)이 백그라운드 위치와 경로 저장을
-열기 전에는 끝나 있어야 한다** — [[U10-BACKEND]] 의 선행 목록에 법무 확인(O-U10-1)이 따로 있다.
+열기 전에는 끝나 있어야 한다** — U10 NFR 의 LEGAL-U10-05 가 신고를 U10 의 전제로 적고 "플래그 ON 외부 배포"
+체크리스트에 올렸다. 정본(`aidlc-state`·LEGAL-02)은 이 신고를 "출시 선결과제"로 부른다 — 즉 **이미 기한을 넘겼다.**
+[[U10-BACKEND]] 의 선행 목록에 있는 법무 확인(O-U10-1)은 이것과 다른 항목이다(목적 범위 등 해석 질문 넷).
 """
 
 [[nodes]]
@@ -3899,11 +3905,15 @@ ticket = ""
 title = "운영 알람 — 5xx·RDS·파드 재시작을 Slack 으로 (인프라 결정 Q3 의 나머지)"
 status = "todo"
 migration = false
-touches = ["infra/terraform/stack"]
+touches = ["infra/terraform/stack/", "infra/bootstrap"]
 note = """
 인프라 결정 Q3=A(`aidlc/aidlc-docs/construction/shared-infrastructure.md` §12, 2026-10-12)는 로그 수집과
 **최소 알람**을 한 묶음으로 정했다: 5xx 비율 · RDS CPU·여유 스토리지·연결 수 · 파드 재시작/NotReady ·
 OBS-02 리프레시 재사용 감지 로그 메트릭 필터 → SNS → Slack, 담당자 지정. 로그 수집은 [[OBSERVABILITY-DEV]] 로
 끝났고 알람은 0건이다. **출시된 서비스에 알람이 없다** — 장애를 사용자 신고로 안다.
-선행: Slack 웹훅(또는 AWS Chatbot) 대상과 담당자를 사람이 정한다. 파드 지표는 방금 켠 Container Insights 가 낸다.
+선행 둘: (1) Slack 웹훅(또는 AWS Chatbot) 대상과 담당자를 사람이 정한다. (2) **배포 역할에 권한이 없다** —
+`infra/bootstrap/template.json` 의 `DeploymentRole` 은 열거식 최소 권한이라 `sns:*`·`cloudwatch:PutMetricAlarm`·
+`logs:PutMetricFilter` 가 없다(`cloudwatch:` 는 조회 둘뿐). 알람 Terraform 은 bootstrap 템플릿을 넓히고 bootstrap 을
+다시 돌린 뒤에야 apply 된다 — 로그 수집 때와 같은 순서이고, **PR 이 둘로 갈린다**(권한 → 알람). 착수하면 쪼갠다.
+관리형 정책의 `Description` 은 건드리지 않는다(anti-patterns, #1085). 파드 지표는 방금 켠 Container Insights 가 낸다.
 """
