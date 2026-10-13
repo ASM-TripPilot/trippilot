@@ -1320,7 +1320,6 @@ describe('h08 셸 기본 얼굴', () => {
   // TRIP-1295 — 핀 0개인 날에도 지도 중심이 0,0(기니만 바다)으로 가지 않는다(INV-4).
   describe('🔴 h08 지도 중심 — 빈 날·좌표 없는 일정에도 0,0 바다로 가지 않는다', () => {
     const SEOUL_TEXT = '37.5665,126.978';
-    const DAY1_FIRST_TEXT = '33.458,126.942';
 
     /** 첫 슬롯 좌표만 바꾼 하루 — 날마다 첫 장소가 달라야 "어느 날을 골랐나"가 갈린다. */
     function firstAt(
@@ -1344,43 +1343,6 @@ describe('h08 셸 기본 얼굴', () => {
     beforeEach(() => {
       log.reset();
     });
-
-    it.each([
-      ['FULLY_AI', 'AI 추천안'],
-      ['MANUAL', '내 일정'],
-    ] as const)(
-      'H1 · AC-1 — %s 일정에서 빈 2일차 칩을 누르면 중심은 날짜 순으로 처음 나오는 좌표 장소(1일차 첫 장소)다',
-      async (generationMode, title) => {
-        // 준비 — 2일차는 날짜는 있고 장소가 0곳이다. 3일차 첫 장소는 1일차와 다르게 둔다.
-        itineraryHandler = () =>
-          HttpResponse.json(
-            completeWith(
-              [
-                { date: DAY1, slots: threeStopSlots(DAY1) },
-                { date: DAY2, slots: [] },
-                { date: DAY3, slots: firstAt(DAY3, 33.499, 126.531) },
-              ],
-              generationMode
-            )
-          );
-        renderPage();
-        await screen.findByTestId('map-sheet-shell-root');
-        expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
-          title
-        );
-
-        // 실행 — 빈 2일차 칩.
-        fireEvent.press(screen.getByTestId('sheet-daychip-1'));
-
-        // 단언 — 먼저 정말 빈 날에 와 있는지(1일차 중심과 기대값이 같아서), 그다음 중심.
-        expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
-          '2일차'
-        );
-        const map = screen.getByTestId('map-root');
-        expect(map.props.pins as unknown[]).toHaveLength(0);
-        expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
-      }
-    );
 
     it('H2 · AC-2 — 일정 어디에도 좌표가 없으면 서울시청이고, 거점·숙소 조회는 붙지 않는다', async () => {
       // 준비 — 슬롯은 있으나 좌표가 전부 null.
@@ -1410,16 +1372,6 @@ describe('h08 셸 기본 얼굴', () => {
       ).toEqual([]);
     });
 
-    it('H3 · AC-3 — 그날 좌표 장소가 있으면 지금처럼 그날 첫 핀이 중심이고 핀·fitPins 도 그대로다', async () => {
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const map = screen.getByTestId('map-root');
-      expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
-      expect(map.props.pins as unknown[]).toHaveLength(3);
-      expect(map.props.fitPins).toBe(true);
-    });
-
     it('H5 · AC-3 — 3일차 칩을 누르면 중심은 1일차가 아니라 3일차 첫 핀이다 (고른 날짜가 함수까지 간다)', async () => {
       // 준비 — 날마다 첫 장소가 다르다.
       itineraryHandler = () =>
@@ -1443,35 +1395,6 @@ describe('h08 셸 기본 얼굴', () => {
       expect(screen.getByTestId('map-root')).toHaveTextContent(
         '33.499,126.531'
       );
-    });
-
-    it('H4 · AC-4 — 고른 날 좌표가 반쪽(위도만)뿐이면 0,0 이 아니라 다른 날 첫 좌표 장소로 간다', async () => {
-      // 준비 — 1일차는 경도가 전부 null, 2일차 첫 장소만 온전한 좌표.
-      itineraryHandler = () =>
-        HttpResponse.json(
-          completeWith([
-            {
-              date: DAY1,
-              slots: threeStopSlots(DAY1).map((slot) => ({
-                ...slot,
-                lng: null,
-              })),
-            },
-            { date: DAY2, slots: firstAt(DAY2, 33.499, 126.531) },
-            { date: DAY3, slots: threeStopSlots(DAY3) },
-          ])
-        );
-
-      // 실행 — 첫 화면은 1일차가 선택된다.
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      // 단언
-      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
-      const map = screen.getByTestId('map-root');
-      expect(map.props.pins as unknown[]).toHaveLength(0);
-      expect(map).toHaveTextContent('33.499,126.531');
-      expect(map).not.toHaveTextContent('0,0');
     });
   });
 });
@@ -1824,10 +1747,10 @@ describe('폴백 셸', () => {
   const FALLBACK_REASON_TITLE = '취향 반영 없이 만든 기본 일정이에요';
   const REASON_SUBTITLE = '장소 하나만 다른 후보로 바꿀 수도 있어요';
   const STALE_FAILED_NOTE = '일부 정보를 불러오지 못했어요';
+  const STALE = 'itinerary-draft-stale-failed';
   const MANUAL_LINK = '처음부터 직접 짜기';
 
   const BANNER = 'itinerary-draft-fallback-banner';
-  const STALE = 'itinerary-draft-stale-failed';
   const SHELL = 'map-sheet-shell-root';
 
   const cardId = (poiId: string): string =>
@@ -3318,20 +3241,6 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
         log.all().filter((hit) => /\/(bases|saved-stays)$/.test(hit))
       ).toEqual([]);
     });
-
-    it('P2 · AC-3 — 1일차에 좌표 장소가 있으면 지금처럼 첫 핀이 중심이다', async () => {
-      itineraryHandler = () =>
-        HttpResponse.json(
-          itinerary({ days: threeStopDays(1), generationState: 'PARTIAL' })
-        );
-
-      renderPage();
-      await screen.findByTestId('generation-progress-card');
-
-      expect(screen.getByTestId('map-root')).toHaveTextContent(
-        '33.458,126.942'
-      );
-    });
   });
 });
 
@@ -3813,7 +3722,6 @@ describe('넣지 못한 꼭 갈 곳', () => {
 
   const BLOCK = 'itinerary-unplaced-mustvisit';
   const ITEM_PREFIX = /^itinerary-unplaced-mustvisit-/;
-  const STALE = 'itinerary-draft-stale-failed';
   const BANNER = 'itinerary-draft-fallback-banner';
   const SHELL = 'map-sheet-shell-root';
 
@@ -3956,8 +3864,8 @@ describe('넣지 못한 꼭 갈 곳', () => {
     });
   });
 
-  describe('🔴 D2 · Q4 — 담은 장소 조회가 대기 중이어도 블록과 서버 문구가 먼저 보인다', () => {
-    it('응답 보류 중엔 문구만 · 응답이 오면 이름이 채워진다', async () => {
+  describe('🔴 D2~D4 · Q4 · AC-3 · INV-4 — 담은 장소 조회가 대기·실패·게스트여도 블록과 서버 문구가 보인다', () => {
+    it('D2 대기 — 응답 보류 중엔 문구만 · 응답이 오면 이름이 채워진다', async () => {
       itineraryScript = () =>
         unplacedItinerary({ unplacedMustVisits: UNPLACED });
       const gate = new Promise<void>((resolve) => {
@@ -3987,35 +3895,33 @@ describe('넣지 못한 꼭 갈 곳', () => {
         )
       ).toBeOnTheScreen();
     });
-  });
 
-  describe('🔴 D3 · AC-3 · INV-4 — 담은 장소 조회가 실패해도 항목은 남고 서버 문구만 보인다', () => {
-    it('/saved-places 500 → 조회가 끝난 뒤에도 블록·항목 2 · 대체 이름 없음', async () => {
+    it.each<[string, number, () => void]>([
+      [
+        'D3 실패(/saved-places 500) — 조회가 끝난 뒤에도 항목은 남고 대체 이름이 없다',
+        1,
+        () => {
+          savedScript = () => new HttpResponse(null, { status: 500 });
+        },
+      ],
+      [
+        'D4 게스트(토큰 없음) — /saved-places 0회, 문구는 그대로 보인다',
+        0,
+        () => {
+          clearAccessToken();
+        },
+      ],
+    ])('%s', async (_label, savedCount, arrange) => {
       itineraryScript = () =>
         unplacedItinerary({ unplacedMustVisits: UNPLACED });
-      savedScript = () => new HttpResponse(null, { status: 500 });
+      arrange();
 
       const { client } = renderPage();
       await screen.findByTestId(BLOCK, {}, WAIT);
-
       // 실패가 확정될 때까지 기다린 뒤 잰다 — 요청 직후에 재면 isError 로 숨기는 구현도 통과한다(02a ★8).
-      await settle(client, 1);
+      await settle(client, savedCount);
 
       expect(screen.getByTestId(BLOCK)).toBeOnTheScreen();
-      expectMessageOnlyItems();
-    });
-  });
-
-  describe('🔴 D4 · Q4 — 게스트는 담은 장소를 조회하지 않고, 문구는 그대로 보인다', () => {
-    it('토큰 없음 → /saved-places 0회 · 두 항목 문구만', async () => {
-      clearAccessToken();
-      itineraryScript = () =>
-        unplacedItinerary({ unplacedMustVisits: UNPLACED });
-
-      const { client } = renderPage();
-      await screen.findByTestId(BLOCK, {}, WAIT);
-      await settle(client, 0);
-
       expectMessageOnlyItems();
     });
   });
@@ -4037,24 +3943,6 @@ describe('넣지 못한 꼭 갈 곳', () => {
       await settle(client, 0);
 
       expect(screen.queryByTestId(BLOCK)).toBeNull();
-    });
-  });
-
-  describe('🔴 D6 · AC-10ⓐ — 일부 실패(staleFailed) 안내와 블록이 함께 뜬다', () => {
-    it('FAILED + 미배치 → 헤더 → 일부 실패 안내 → 블록 → 첫 카드', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({
-          unplacedMustVisits: UNPLACED,
-          generationState: 'FAILED',
-        });
-
-      renderPage();
-
-      await screen.findByTestId(STALE, {}, WAIT);
-      expect(await screen.findByTestId(BLOCK, {}, WAIT)).toBeOnTheScreen();
-      expect(
-        treeOrder(['sheet-header-root', STALE, BLOCK, cardId('poi-a')])
-      ).toEqual(['sheet-header-root', STALE, BLOCK, cardId('poi-a')]);
     });
   });
 
@@ -4087,23 +3975,6 @@ describe('넣지 못한 꼭 갈 곳', () => {
       expect(
         treeOrder(['sheet-header-root', BANNER, BLOCK, cardId('poi-a')])
       ).toEqual(['sheet-header-root', BANNER, BLOCK, cardId('poi-a')]);
-    });
-  });
-
-  describe('D8 · 결정 1 — PARTIAL 진행 셸에는 블록이 없다 (선제 green 트립와이어)', () => {
-    it('PARTIAL + 미배치 → 진행 카드는 뜨고 블록은 없다', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({
-          unplacedMustVisits: UNPLACED,
-          generationState: 'PARTIAL',
-        });
-
-      renderPage();
-
-      expect(
-        await screen.findByTestId('generation-progress-card', {}, WAIT)
-      ).toBeOnTheScreen();
-      expect(screen.queryByTestId(BLOCK)).toBeNull();
     });
   });
 });

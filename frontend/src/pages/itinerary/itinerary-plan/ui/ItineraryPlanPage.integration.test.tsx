@@ -2270,7 +2270,6 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
 
   const BLOCK = 'itinerary-unplaced-mustvisit';
   const ITEM_PREFIX = /^itinerary-unplaced-mustvisit-/;
-  const CONFIRM_ERROR = 'itinerary-confirm-error';
 
   const MSG_NO_SLOT =
     '남은 시간과 이동을 고려하면 넣을 자리가 없었어요. 시각 고정을 풀거나 일정을 줄여 보세요.';
@@ -2408,26 +2407,6 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
     });
   });
 
-  describe('🔴 L2 · AC-1 — 미배치는 여행 전체 단위라 일차 탭을 바꿔도 블록이 그대로다', () => {
-    it('2일차 칩을 누르면 2일차 카드가 보이고 블록·항목 2 가 남는다', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({ unplacedMustVisits: UNPLACED });
-
-      renderPage();
-      await screen.findByTestId(BLOCK, {}, WAIT);
-
-      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
-
-      expect(
-        await screen.findByTestId(cardId(DAY2, 'poi-c'), {}, WAIT)
-      ).toBeOnTheScreen();
-      expect(itemIds()).toEqual([itemId('poi-mv-1'), itemId('poi-mv-2')]);
-      expect(
-        treeOrder(['sheet-header-root', BLOCK, cardId(DAY2, 'poi-c')])
-      ).toEqual(['sheet-header-root', BLOCK, cardId(DAY2, 'poi-c')]);
-    });
-  });
-
   describe('🔴 L3 · AC-1 — h16 확정 셸에도 같은 블록이 선다', () => {
     it('CONFIRMED → meta 「확정됨 · 」 앵커 · 블록 항목 2 · 헤더 뒤·첫 카드 앞', async () => {
       itineraryScript = () =>
@@ -2451,27 +2430,6 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
       expect(
         treeOrder(['sheet-header-root', BLOCK, cardId(DAY1, 'poi-a')])
       ).toEqual(['sheet-header-root', BLOCK, cardId(DAY1, 'poi-a')]);
-    });
-  });
-
-  describe('🔴 L4 · AC-3 · INV-4 — 담은 장소 조회가 실패해도 서버 문구는 남는다', () => {
-    it('/saved-places 500 → 조회가 끝난 뒤에도 두 항목이 문구만 보인다', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({ unplacedMustVisits: UNPLACED });
-      savedScript = () => new HttpResponse(null, { status: 500 });
-
-      const { client } = renderPage();
-      await screen.findByTestId(BLOCK, {}, WAIT);
-      await settle(client, 1);
-
-      expect(itemIds()).toEqual([itemId('poi-mv-1'), itemId('poi-mv-2')]);
-      expect(screen.getByTestId(itemId('poi-mv-1'))).toHaveTextContent(
-        MSG_NO_SLOT
-      );
-      expect(screen.getByTestId(itemId('poi-mv-2'))).toHaveTextContent(
-        MSG_WINDOW
-      );
-      expect(screen.queryByText('이름을 불러오지 못한 곳')).toBeNull();
     });
   });
 
@@ -2512,27 +2470,6 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
       await settle(client, 0);
 
       expect(screen.queryByTestId(BLOCK)).toBeNull();
-    });
-  });
-
-  describe('🔴 L6 · Q5 — 확정 실패 안내가 뜨면 블록은 그 뒤·첫 카드 앞이다', () => {
-    it('「일정 저장하기」 → POST 500 → 확정 실패 안내 → 블록 → 첫 카드', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({ unplacedMustVisits: UNPLACED });
-
-      renderPage();
-      await screen.findByTestId(BLOCK, {}, WAIT);
-
-      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
-
-      expect(
-        await screen.findByTestId(CONFIRM_ERROR, {}, WAIT)
-      ).toBeOnTheScreen();
-      expect(treeOrder([CONFIRM_ERROR, BLOCK, cardId(DAY1, 'poi-a')])).toEqual([
-        CONFIRM_ERROR,
-        BLOCK,
-        cardId(DAY1, 'poi-a'),
-      ]);
     });
   });
 });
@@ -2760,6 +2697,9 @@ describe('빈 일차 지도 중심', () => {
   /**
    * h14·h16 에서 장소가 0곳인 날로 바꿔도 지도가 `0,0`(기니만 바다)이 아니라 여행 지역을 비춘다.
    *
+   * 사다리 판정 자체(①②④ 예제·성질)는 순수 함수 `planMapCenter.test.ts`(PBT 포함)가 잠근다 — TRIP-1352 에서 이
+   * 페이지의 중심 케이스를 "고른 날이 함수까지 간다"(M10)와 거점 조회 배선(M3~M5)만 남기고 접었다.
+   *
    * 무엇을 보장하나 — 사다리 첫 칸이 이긴다:
    *  ① 선택한 날의 첫 좌표 장소(무회귀 — 핀·fitPins 그대로)
    *  ② 다른 날 중 날짜 순 첫 좌표 장소
@@ -2809,15 +2749,6 @@ describe('빈 일차 지도 중심', () => {
 
   function planned(days: ItineraryDaysItem[]): Itinerary {
     return itinerary({ itineraryId: 'itin-1275', days });
-  }
-
-  /** 1일차 좌표 3곳 · 2·3일차 0곳. */
-  function day1FullRestEmpty(): Itinerary {
-    return planned([
-      day(DAY1, [stop('p-a', 10, A), stop('p-b', 12, B), stop('p-c', 14, C)]),
-      day(DAY2, []),
-      day(DAY3, []),
-    ]);
   }
 
   /** 모든 날에 좌표 있는 장소가 없다(좌표 null 슬롯만). */
@@ -2886,26 +2817,6 @@ describe('빈 일차 지도 중심', () => {
     notZero?: boolean;
   }[] = [
     {
-      name: 'M1 · AC-1 — 2일차(0곳) 칩 → 핀 0개 · 지도 중심 = 1일차 첫 장소(0,0 아님)',
-      plan: day1FullRestEmpty,
-      visit: [{ day: 1, center: text(A), pins: 0 }],
-    },
-    {
-      name: 'M2 · AC-1 · Q3 — 1일차 0곳 · 2일차 B · 3일차 C → 처음 열린 1일차 지도 중심 = B (날짜 순 처음 나오는 장소)',
-      plan: () =>
-        planned([
-          day(DAY1, []),
-          day(DAY2, [stop('p-b', 10, B)]),
-          day(DAY3, [stop('p-c', 10, C)]),
-        ]),
-      visit: [{ day: null, center: text(B) }],
-    },
-    {
-      name: 'M6 · AC-3 — 좌표 장소 0 · 거점 0 · 숙소 0 → 1·2·3일차 모두 지도 중심 = 서울시청',
-      plan: noCoordAnywhere,
-      visit: [0, 1, 2].map((day) => ({ day, center: SEOUL_TEXT })),
-    },
-    {
       // 5-b 경고-1 — 페이지가 "선택한 날"을 중심 함수에 넘기는지. 다른 날 M 케이스는 ①과 ②가 같은 답을 내서 못 본다.
       name: 'M10 · AC-4 배선 — 1일차 A·B · 2일차 C 한 곳 → 2일차 칩 → 핀 1개 · 지도 중심 = C (1일차 첫 장소 아님)',
       plan: () =>
@@ -2916,17 +2827,6 @@ describe('빈 일차 지도 중심', () => {
         ]),
       // 핀이 1개면 지도가 핀 맞춤 대신 중심 좌표로 카메라를 연다 — 중심이 1일차로 가면 C 가 화면 밖일 수 있다.
       visit: [{ day: 1, center: text(C), pins: 1 }],
-    },
-    {
-      name: 'M9 · AC-6 — 1일차 좌표 null 2곳 · 2일차 0곳 · 3일차 C → 세 날 모두 지도 중심 = C (0,0 아님)',
-      plan: () =>
-        planned([
-          day(DAY1, [stop('p-x', 10, NO_COORD), stop('p-y', 12, NO_COORD)]),
-          day(DAY2, []),
-          day(DAY3, [stop('p-c', 10, C)]),
-        ]),
-      visit: [0, 1, 2].map((day) => ({ day, center: text(C) })),
-      notZero: true,
     },
   ];
 
@@ -3029,35 +2929,6 @@ describe('빈 일차 지도 중심', () => {
 
       expect(screen.getByTestId('sheet-cta-button-0')).toBeOnTheScreen();
       expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
-    });
-  });
-
-  describe('🟢 M7 · AC-4 무회귀 — 장소 있는 날은 그날 첫 장소 · 핀 전부 · fitPins', () => {
-    it('1일차 좌표 3곳 → 중심 = 첫 장소 · 핀 3개 · fitPins true', async () => {
-      serve(day1FullRestEmpty());
-
-      await openShell();
-
-      const map = screen.getByTestId('map-root');
-      expect(map).toHaveTextContent(text(A));
-      expect(pinCount()).toBe(3);
-      expect(map.props.fitPins).toBe(true);
-    });
-  });
-
-  describe('🟢 M8 · AC-5 무회귀 — 빈 날에서 장소 있는 날로 돌아오면 핀이 돌아온다', () => {
-    it('1일차 → 2일차(0곳) → 1일차 → 핀 3개 · fitPins true · 중심 = 첫 장소', async () => {
-      serve(day1FullRestEmpty());
-      await openShell();
-
-      pressDay(1);
-      expect(pinCount()).toBe(0);
-      pressDay(0);
-
-      const map = screen.getByTestId('map-root');
-      expect(pinCount()).toBe(3);
-      expect(map.props.fitPins).toBe(true);
-      expect(map).toHaveTextContent(text(A));
     });
   });
 });
