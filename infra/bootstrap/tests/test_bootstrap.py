@@ -168,6 +168,11 @@ class BootstrapSecurityTests(unittest.TestCase):
                 target = arn("iam", "policy", properties["ManagedPolicyName"])
                 self.assertTrue(allowed("iam:CreatePolicy", target),
                                 f"{name}: 권한 예제에 iam:CreatePolicy {target} 이 없다")
+                # 이름이 고정된 정책은 교체가 안 되므로 내용 변경이 **제자리 갱신**(새 버전 만들기)으로 온다.
+                # 만드는 권한만 있으면 첫 생성은 되고 그다음 수정에서 403 으로 롤백된다.
+                for action in ("iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions",
+                               "iam:GetPolicy", "iam:GetPolicyVersion"):
+                    self.assertTrue(allowed(action, target), f"{name}: 권한 예제에 {action} {target} 이 없다")
                 # 만들기만 하면 역할에 붙지 않는다 — 붙이는 권한도 같이 있어야 한다.
                 for role in properties["Roles"]:
                     holder = arn("iam", "role",
@@ -178,6 +183,28 @@ class BootstrapSecurityTests(unittest.TestCase):
     def test_role_inline_policy_stays_below_aws_character_limit(self):
         size = sum(len(json.dumps(item["PolicyDocument"], separators=(",", ":"))) for item in self.role["Policies"])
         self.assertLess(size, 10240)
+
+    def test_named_managed_policy_description_is_frozen(self):
+        """`AWS::IAM::ManagedPolicy` 의 `Description` 은 **고칠 수 없는 속성**이다 — 한 글자만 바꿔도
+        CloudFormation 이 정책을 새로 만들려 하고, 이름이 고정(`ManagedPolicyName`)이라 "already exists" 로
+        실패해 스택 전체가 롤백된다. 2026-10-13 dev 실측: #885 가 설명에 "CloudWatch collector" 를 덧붙인
+        뒤 첫 bootstrap 이 그렇게 죽었고, 같은 변경에 든 로그용 역할 생성도 함께 취소됐다.
+        설명을 고쳐야 한다면 정책 이름도 같이 바꾼다(그때 이 상수를 갱신한다). 내용 변경은 PolicyDocument 로 한다.
+        """
+        frozen = {
+            "DeploymentExtraPolicy": (
+                "Deployment-role statements that do not fit the inline policy (it sits at the 10240-character "
+                "limit): Pod Identity binding for the AI pods, and read-only serving metrics/cost for the "
+                "weekly serving judge."
+            ),
+        }
+        named = {
+            name: resource["Properties"].get("Description")
+            for name, resource in self.resources.items()
+            if resource["Type"] == "AWS::IAM::ManagedPolicy" and "ManagedPolicyName" in resource["Properties"]
+        }
+        # 이름이 고정된 관리형 정책이 새로 생기면 여기 등록되기 전에는 통과하지 못한다.
+        self.assertEqual(named, frozen)
 
 
 if __name__ == "__main__":
