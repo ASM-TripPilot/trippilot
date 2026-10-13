@@ -703,10 +703,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         view={view}
         tabs={tabs}
         selectedDate={selectedDate}
-        pins={buildDraftPins(
-          days.find((day) => day.date === selectedDate)?.slots ?? []
-        )}
-        dayHeader={formatDraftDayHeader(selectedDate)}
         canRetry={itinerary.data?.status !== 'CONFIRMED'}
         // 폴백 판정은 위에서 접은 값 그대로(재발명 금지 → F-7 승계). 인터스티셜을 넘긴 목록이 폴백임을
         // 제목·배지로 계속 말한다(BR-U3-11 · TRIP-1008).
@@ -715,19 +711,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         onSelectDay={setPickedDate}
         onRetry={() => void handleRetry()}
         onBack={handleBack}
-        // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
-        // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
-        onComplete={() =>
-          router.push({
-            pathname: '/trips/[tripId]/itinerary',
-            params: { tripId },
-          })
-        }
-        // 비고정 슬롯 "다른 후보 ›" press → 그 슬롯 slotKey 를 **토글**한다(같은 슬롯 재press 는 닫힘 ·
-        // 한 번에 한 슬롯 · TRIP-483 ★C). 재대입 `setEditingSlotKey(k)` 은 같은 값이라 안 닫힌다.
-        onPressSlot={(slotKey) =>
-          setEditingSlotKey((prev) => (prev === slotKey ? null : slotKey))
-        }
         onManualPlan={goManualPlan}
       />
       {/* 스크롤 밖 뒤 형제라야 카드·하단 버튼 위에 그려진다(TRIP-983). */}
