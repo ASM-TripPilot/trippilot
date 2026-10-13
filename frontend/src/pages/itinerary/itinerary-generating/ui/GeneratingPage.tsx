@@ -2,9 +2,7 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 
-import { useSavedPlaces } from '@/features/save-place';
 import { firstCoPickSlotKey } from '@/features/itinerary';
-import { buildMustVisitPins } from '@/features/itinerary';
 import { useGenerationBusy } from '@/features/itinerary';
 import { GeneratingScreen, type AiLimitRetryAt } from './GeneratingScreen';
 import type {
@@ -16,18 +14,15 @@ import {
   resolveGenerationRefused,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
-  useGetTripsTripIdMustVisits,
   usePostTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { isDateInRange } from '@/shared/lib/monthGrid';
 import { seoulDate, seoulTime } from '@/shared/lib/seoulDate';
 import {
-  getAccessToken,
   isNotFound,
   isGenerationDailyLimit,
   retryAfterSeconds,
 } from '@/shared/api';
-import type { MapCenter, MapPin } from '@/shared/map';
 import { showToast } from '@/shared/ui/Toast';
 
 const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
@@ -65,16 +60,11 @@ function resolveRetryAt(error: unknown, now: Date): AiLimitRetryAt | null {
  *     때만 마운트되므로 POST 경로는 여전히 GET 을 모른다. **예외(TRIP-1032)**: POST 가 409
  *     `GENERATION_IN_PROGRESS` 면 안내를 띄우고, 사용자가 [취소하고 새로 만들기]를 누를 때만 **다른
  *     여행**(`activeTripId`)의 일정 GET → cancel → 같은 body 로 재POST 한다(`useGenerationBusy`).
- *  5. **꼭 갈 곳 지도 좌표(TRIP-929).** 핀이 0개면 `pins`·`center` 둘 다 `undefined` 로 넘긴다 —
- *     화면 게이트 `pins && center` 를 두 겹으로 닫는 이중 방어다(INV-4 빈 지도 금지). 어느 한 겹도
- *     중복이 아니다: 서울 폴백 `center` 를 넣으면 `pins` 겹만 남고, `pins` 를 `[]` 그대로 넘기면
- *     (`[]` 는 참) `center` 겹만 남는다. 조회 오류는 지도만 생략하고 `failed` 에 합치지 않는다 —
- *     합치면 POST 가 진행 중인데 생성 실패가 뜬다.
- *  6. **진행 중 이탈 토스트(TRIP-1046).** 화면이 트리에서 빠질 때(‹ replace·스와이프 pop 모두
+ *  5. **진행 중 이탈 토스트(TRIP-1046).** 화면이 트리에서 빠질 때(‹ replace·스와이프 pop 모두
  *     언마운트) 마지막 렌더가 진행 중이고 성공 콜백 전이면 한 번 알린다. 발화는 언마운트 한 곳뿐 —
  *     `goHome` 은 409 [기다리기]·관찰 모드와 공유라 거기 넣으면 거짓 토스트가 샌다. 성공 표지는
  *     호출별 onSuccess 첫 줄: replace 가 결과 재렌더보다 먼저 화면을 내릴 수 있어서다.
- *  7. **AI 일일 한도(TRIP-1314 서버 · TRIP-1368 수신).** POST 가 429 면 일반 실패가 아니라 한도 얼굴
+ *  6. **AI 일일 한도(TRIP-1314 서버 · TRIP-1368 수신).** POST 가 429 면 일반 실패가 아니라 한도 얼굴
  *     (`ai-limit-notice`, [직접 짜기 이어가기]·[닫기] — [다시 시도] 없음)을 띄운다. 429 **이면서** 오류 코드가
  *     `GENERATION_DAILY_LIMIT` 일 때만이다(`isGenerationDailyLimit`) — RATE_LIMITED 같은 짧은 429·코드 없는 429 는
  *     일반 실패(재시도 가능)로 간다. 풀리는 시각은 `Retry-After`(초)로 계산하며 헤더가 없으면 시각 없이 안내한다.
@@ -124,14 +114,6 @@ export function GeneratingPage({
     },
     []
   );
-
-  const mustVisits = useGetTripsTripIdMustVisits(tripId);
-  const savedPlaces = useSavedPlaces({ isAuthed: getAccessToken() !== null });
-  const pins = buildMustVisitPins({
-    items: mustVisits.data ?? [],
-    savedPlaces: savedPlaces.savedPlaces,
-  });
-  const firstPin = pins[0];
 
   const fire = useCallback(() => {
     if (mode === undefined) return;
@@ -201,10 +183,6 @@ export function GeneratingPage({
     fire();
   }, [fire]);
 
-  const mapPins = firstPin ? pins : undefined;
-  const mapCenter = firstPin
-    ? { lat: firstPin.lat, lng: firstPin.lng }
-    : undefined;
   // 앱바 뒤로 = 백그라운드 이탈(화면만 홈으로). 관찰 모드도 같은 결이다.
   const goHome = (): void => {
     // TRIP-1243 — replace 는 현재 화면 하나만 바꿔 끼워 아래 위저드 화면(3/4 등)이 스택에 남는다.
@@ -213,14 +191,7 @@ export function GeneratingPage({
   };
 
   if (mode === undefined) {
-    return (
-      <ObserveGeneration
-        tripId={tripId}
-        pins={mapPins}
-        center={mapCenter}
-        onBackground={goHome}
-      />
-    );
+    return <ObserveGeneration tripId={tripId} onBackground={goHome} />;
   }
 
   return (
@@ -246,8 +217,6 @@ export function GeneratingPage({
       // Plan-B 로 넘기는 중(기간 조회·이동)엔 실패 얼굴을 비추지 않는다 — 진행 표면 그대로 넘어간다.
       failed={generate.isError && !handOffToPlanB}
       busy={busy && { ...busy, onWait: goHome }}
-      pins={mapPins}
-      center={mapCenter}
       onRetry={fire}
       onBackground={() => {
         // 앱바 뒤로 = 백그라운드 이탈(화면만 홈으로). 뮤테이션은 리셋하지 않는다 — 이미 나간
@@ -274,13 +243,9 @@ export function GeneratingPage({
  */
 function ObserveGeneration({
   tripId,
-  pins,
-  center,
   onBackground,
 }: {
   tripId: string;
-  pins: MapPin[] | undefined;
-  center: MapCenter | undefined;
   onBackground: () => void;
 }): ReactElement {
   const router = useRouter();
@@ -309,8 +274,6 @@ function ObserveGeneration({
   return (
     <GeneratingScreen
       failed={itinerary.isError && !notFound}
-      pins={pins}
-      center={center}
       onRetry={() => {
         void itinerary.refetch();
       }}
