@@ -3704,6 +3704,16 @@ components:
         startAt: { type: string, example: '10:00' }
         endAt: { type: string, example: '11:30' }
         endsNextDay: { type: boolean, description: 자정 넘김(HC4). true 면 endAt < startAt }
+        # 아래는 응답에 실제로 실려 나가는 값이다 — 이 타입이 일정 모듈의 공개 뷰를 그대로 직렬화한다(TRIP-1375 에서 문서화).
+        isFixed: { type: boolean, description: 사용자가 시각을 못 박은 슬롯 }
+        hasViolation: { type: boolean, description: '일정 화면의 슬롯 위반 표시와 같은 값' }
+        nameKo: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        imageUrl: { type: string, nullable: true }
+        lat: { type: number, format: double, nullable: true }
+        lng: { type: number, format: double, nullable: true }
+        violationReason: { type: string, nullable: true, description: '위반 사유 문구. 없으면 null' }
+        distanceRange: { type: string, nullable: true, description: '직전 지점에서 이 슬롯까지의 거리 표시 문자열. 모르면 null (소요시간 없음 — INV-3)' }
 
     ActualVisit:
       type: object

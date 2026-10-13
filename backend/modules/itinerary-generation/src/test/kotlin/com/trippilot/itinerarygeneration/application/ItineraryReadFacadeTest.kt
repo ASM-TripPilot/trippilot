@@ -132,7 +132,7 @@ class ItineraryReadFacadeTest : StringSpec({
     }
 
     "거리를 모르는 슬롯은 null 이다 — 0 이나 빈 문자열로 접지 않는다" {
-        facade().findPlanSlots(acc, tripId).forEach { it.distanceRange shouldBe null }
+        facade().findPlanSlots(acc, tripId).map { it.distanceRange } shouldContainExactly listOf(null, null)
     }
 
     "슬롯을 경계 키로 내보낸다 — 물리 키를 내보내면 재계획으로 행이 갈릴 때 참조가 끊긴다" {
