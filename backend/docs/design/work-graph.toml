@@ -1676,14 +1676,19 @@ generate 우회에서 alternatives 로 갈아탈 가치가 있는가. 슬롯 후
 [[nodes]]
 id = "AI-NL-EDIT"
 ticket = ""
-title = "자연어 일정 편집 — AI 는 열었고 우리 표면이 없다 (제품 결정 선행)"
-status = "todo"
+title = "자연어 일정 편집 — U8 대화형 도우미로 흡수됐다(U8-* 노드가 잇는다)"
+status = "dropped"
 migration = false
 touches = [
   "backend/docs/design/openapi.yaml",
   "backend/modules/itinerary-generation",
 ]
 note = """
+**접음(2026-10-13) — 따로 만들지 않는다. U8 이 잇는다.** 아래가 기다리던 "제품 결정"은 2026-10-12 에
+U8 Conversational Assistant 설계(FD 승인)로 났다 — FD 의 G-U8-2 가 이 노드를 직접 지목한다. 자연어 편집은
+도우미의 `EDIT_SCHEDULE` 제안 카드이고, 우리 몫은 [[U8-EDIT-FACADE]] · [[U8-AI-EDIT-PORT]] ·
+[[U8-ASSISTANT-MODULE]] 로 쪼갰다. **이 노드가 U8 설계를 모른 채 하루 동안 "결정 대기"로 남아 있었다** —
+설계 유닛이 승인되면 그래프에 노드를 올리는 것까지가 한 세트다.
 `/ai/v1/itinerary/edit` 요청은 utterance·command·confirm, 응답은 apply_mode·status·violations 다 —
 **자연어 편집**이다. 우리 EditItineraryService 는 구조적 편집(클라가 명시적 조작을 보냄) + solver
 재검증이라 성격이 다르다.
@@ -1927,6 +1932,8 @@ status = "todo"
 migration = false
 touches = []
 note = """
+**진행(2026-10-13) — 푸시를 켜기로 했다(사용자 결정).** Expo 액세스 토큰을 사람이 발급해 시크릿
+`PUSH_EXPO_ACCESS_TOKEN` 에 넣으면 `push_mode=expo` 로 배포한다. 실기기 왕복은 그 뒤다.
 배선·통로는 PR #531 로 끝났다. 남은 것은 **사람과 기기가 필요한 부분**이다 —
 Expo 토큰 등록 → `PUSH_MODE=expo` 기동 → 즉시 알림·예약 리마인드 각 1회 → 기기에서 눈으로 확인.
 
@@ -2546,11 +2553,18 @@ ai 시크릿·KB = 준하.
 [[nodes]]
 id = "RELEASE-MAIN"
 ticket = ""
-title = "develop→main 릴리스 — 주기 승격(#601 이 1차 완료, 이후 64커밋 누적)"
+title = "develop→main 릴리스 — 주기 승격(직전 = #1082, 2026-10-13)"
 status = "todo"
 migration = false
 touches = [".github/workflows/"]
 note = """
+**4차 승격 완료(2026-10-13, PR #1082 — 245커밋, merge commit).** 충돌 0건이었는데도 자동 병합이
+`ai-event-collect` 사본을 main 판도 develop 판도 아닌 내용으로 섞어 놓았다 — 아래 "충돌이 안 나는 쪽이
+더 위험하다"가 그대로 재현됐다. 사본 9종 전수 대조로 잡아 main 판으로 되돌렸다.
+`aws-deploy.yml` 과 `infra-validate.yml` 이 함께 main 에 올라갔다. 상태는 주기 승격이라 todo 다.
+**남은 사본 드리프트(이 노드 밖, `ci(main):` 동기화 PR 몫)**: `ai-event-collect` 의 모델이 main 은
+`gpt-5.6-luna`, develop 은 `gpt-5.6-sol`(#1049) — cron 은 main 판을 돈다. `ai-llm-smoke` 는 main 사본에
+`mixed` 구성이 없다. `ai-intro2-probe`·`ai-fee-sources-probe` 는 `set -o pipefail`(#636) 누락.
 **정정(2026-09-22) — #598 은 닫혔고 #601 이 대신했다.** 이 노트가 "PR #598 열려 있음" 으로
 오래 남아 있었다. 실제로는 #598 이 충돌 상태로 **close** 됐고, **#601 이 2026-09-18 에 머지되어
 EKS 배포 워크플로 등록 + 승격을 끝냈다.** 그 뒤로 develop 에 64커밋이 다시 쌓였다(2026-09-22 실측).
@@ -2893,6 +2907,10 @@ status = "todo"
 migration = false
 touches = ["infra/terraform/stack/", "deploy/eks/chart/"]
 note = """
+**진행(2026-10-13) — 켜기로 했다(사용자 결정, 출시 뒤라 로그 유실이 실제 위험이다).** 막고 있는 것은
+bootstrap 역할 정책 재등록 하나다: 계정의 인라인 정책이 리포 예제보다 14개 액션 뒤처져 있고 전부
+`role/trippilot-dev-cloudwatch-pod` 대상이다(2026-10-13 실측 diff, 삭제 0). 사람이 `aws iam put-role-policy` 를
+한 번 실행하면 → `aws-bootstrap.yml` → `container_logs_enabled = true` → 배포 순서로 간다. 그 역할은 아직 없다.
 증상(2026-10-03 팀원 보고): api-dev 를 테스트 중인데 **로그 확인이 안 된다**.
 
 구조상 맞는 상태다 — 차트가 `OTEL_SDK_DISABLED=true` 로 배포하고 수집기를 프로비전하지 않는다
@@ -3191,10 +3209,17 @@ liveness 를 옮기지 않은 이유: 모델을 못 읽는 **이미지**는 재�
 id = "STORE-LAUNCH"
 ticket = ""
 title = "앱스토어 심사 제출 — dev 스택을 실사용자용으로 끌어올려 받는다"
-status = "todo"
+status = "done"
 migration = false
 touches = ["infra/terraform", "deploy/eks", "frontend"]
 note = """
+**닫음(2026-10-13) — 심사를 통과했고 출시됐다(사용자 확인).** 이제 dev 스택에 실사용자가 들어온다 —
+**DEV 배포는 곧 운영 배포다.** 아래 "심사 전 남은 선행" 가운데 낡은 것과 남은 것:
+- 애플 p8 3종 — "둘 다 없다"는 낡았다. 2026-10-12 실측으로 DEV 시크릿에 `APPLE_TEAM_ID`·`APPLE_KEY_ID`·
+  `APPLE_PRIVATE_KEY` 가 들어 있다.
+- 푸시 — 사용자가 2026-10-13 에 **켠다**로 정했다. Expo 액세스 토큰 발급 대기 → [[PUSH-LIVE-CHECK]].
+- 관측성 — 켜기로 했다. bootstrap 정책 재등록(사람) 대기 → [[OBSERVABILITY-DEV]].
+아래는 닫기 전 기록이다.
 2026-10-04 결정. 팀원이 "심사 넣어도 될 것 같다"고 했을 때 준비 상태를 전수 점검한 결과다.
 
 **준비된 것** — 출시 빌드 설정이 테스트로 굳어 있다(`releaseBuildConfig.test.ts`: 아이콘 알파
@@ -3241,10 +3266,13 @@ Sentry 업로드 끔·사이트맵 끔). 번들 ID `com.trippilot.travel`, 애�
 id = "DEV-DATA-PROTECTION"
 ticket = ""
 title = "dev 가 삭제 보호·최종 스냅숏 없이 돌던 것 — 보호를 환경 축에서 분리"
-status = "todo"
+status = "done"
 migration = false
 touches = ["infra/terraform"]
 note = """
+**닫음(2026-10-13) — 적용돼 있다.** 2026-10-12 실측: `trippilot-dev` RDS `DeletionProtection=true` ·
+`BackupRetentionPeriod=14` · `PendingModifiedValues={}`, EKS 클러스터 `deletionProtection=true`.
+아래 "머지·apply 대기"는 그 전 기록이다.
 2026-10-04, PR #956(머지·apply 대기). 삭제 보호·최종 스냅숏·백업 보존이 `local.production`
 하나에 묶여 있었다. dev 가 "꼬이면 날려도 되는 환경"인 동안에는 **그것이 옳은 설정**이었다 —
 [[STORE-LAUNCH]] 가 그 전제를 깬다.
@@ -3289,10 +3317,13 @@ plan 한다(증거: 테스트 `container_logs_enabled=true` vs `dev.tfvars` fals
 id = "DEV-HA-REPLICAS"
 ticket = ""
 title = "노드 드레인에 유일한 파드가 빠지던 것 — dev 복제본 2 + PDB"
-status = "todo"
+status = "done"
 migration = false
 touches = ["deploy/eks/chart"]
 note = """
+**닫음(2026-10-13).** 머지·배포됐고 backend·ai·gateway 가 복제본 2 로 돈다(2026-10-13 배포 뒤 파드 실측).
+아래 **미결(gateway 레이트리밋 천장 2배)**은 사용자가 2026-10-12 에 "그대로 둔다"로 정했다 —
+IP 당 20r/s(버스트 60). 통신사 NAT 오탐을 줄이는 쪽이다.
 2026-10-04, PR #957(머지·배포 대기).
 
 **롤아웃 때문이 아니다 — 처음에 그렇게 진단했고 틀렸다.** backend·ai·gateway 전부
@@ -3524,6 +3555,10 @@ owner = "인증"
 migration = false
 touches = ["backend/modules/auth", "deploy/eks", "docker-compose.yml"]
 note = """
+**진행(2026-10-13) — 네이버 code 경로 차단이 DEV(=운영)에 나갔다.** 실서버가 `POST /auth/social/naver` 에
+501 `PROVIDER_NOT_SUPPORTED` 를 낸다(직접 호출로 확인). 프론트 폴백 제거는 TRIP-1371.
+카카오 대조는 켜져 있지만 그 뒤 카카오 로그인 요청이 0건이라 **실 왕복은 여전히 미확인**이다.
+남은 것은 네이버 토큰 경로의 발급 앱 확인 하나이고 사용자가 "열어 두고 추적"으로 정했다.
 **진행(2026-10-12 밤) — 카카오 대조가 DEV 에서 켜졌고, 네이버 code 경로를 닫는다.**
 `KAKAO_APP_ID` 를 DEV 시크릿에 넣고 재배포했다(파드 env·기동 로그로 확인, 배포 경고 없음). **실 카카오 로그인
 왕복은 아직 못 봤다** — 앱 ID 가 DEV 빌드의 카카오 앱과 다르면 카카오 로그인이 전부 401 이고 서버 로그에
@@ -3657,3 +3692,132 @@ ACTIVE 만으로 거르지 않되(담아 둔 폐업 장소가 열려야 한다) 
 고정한다 — `Place` 를 건드리면 같은 PR 에서 함께 고쳐야 frontend-ci 가 초록이다. 상세 전용 스키마를
 새로 두면 닿지 않는다.
 """
+
+# ── U8 Conversational Assistant · U10 GPS·위치 자동화 ────────────────────────────────
+# 2026-10-12 에 설계(FD·NFR)가 승인으로 끝났는데 이 그래프에 노드가 하나도 없었다 — 그래서 2026-10-13 의
+# "남은 백엔드 작업" 집계에서 두 유닛이 통째로 빠졌다. 정본은 `aidlc/aidlc-docs/construction/u8-…`·`u10-…`.
+# **착수는 사용자 허가 뒤다**(2026-10-13). 쪼갬은 FD 의 갭 표를 옮긴 예상이고, 착수하면 다시 쪼갠다.
+
+[[nodes]]
+id = "U8-EDIT-FACADE"
+ticket = ""
+title = "[U8] 일정 편집을 다른 모듈에 여는 퍼사드 — 변경 출처를 받는다 (G-U8-1)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation",
+  "backend/modules/change-log",
+]
+note = """
+`EditItineraryService` 는 `application` 층에만 있고 퍼사드가 없다. 변경 출처가 `ChangeSourceType.MANUAL` 로
+박혀 있고 change log 는 여행 중에만 남는다(FD 실측). `itinerary-generation/api` 에
+`ItineraryEditFacade.edit(accountId, tripId, days, reason, source)` 를 열어 `ASSISTANT` 를 받게 한다 —
+`change_log_entry.source` CHECK 에는 `ASSISTANT` 가 이미 있다. 리비전 주체를 늘릴지는 O-U8-7(미결).
+**AI·디자인을 기다리지 않는 첫 조각이다.** U8 의 [적용](US-ASSIST-04)이 전부 여기에 얹힌다.
+"""
+
+[[nodes]]
+id = "U8-PLAN-FACADE-FIELDS"
+ticket = ""
+title = "[U8] 일정 퍼사드에 거리·위반 3필드 — 진행 검토가 읽을 값이 REST 에만 있다 (G-U8-3)"
+status = "todo"
+migration = false
+touches = ["backend/modules/itinerary-generation"]
+note = """
+`PlannedSlotView` 에 `distanceRange`·`hasViolation`·`violationReason` 이 없다 — REST `SlotResponse` 에만 있다.
+`ItineraryPlanFacade` 에 세 필드를 더한다(api-safe 문자열·불리언). US-ASSIST-03 "진행 검토"의 선행이다.
+AI·디자인을 기다리지 않는다.
+"""
+
+[[nodes]]
+id = "U8-AI-EDIT-PORT"
+ticket = ""
+title = "[U8] AI 편집 경로 호출 배선 — /ai/v1/itinerary/edit 의 백엔드 호출자가 0이다 (G-U8-2)"
+status = "todo"
+migration = false
+touches = ["backend/modules/itinerary-generation"]
+note = """
+`ScheduleAgentPort` 에 edit 메서드 + `HttpScheduleAgentAdapter.CALLED_PATHS` 추가. 요청은 `utterance` 또는
+`command`(후보 교체), `confirm=true`(DEC-U8-3). 상대 경로는 이미 열려 있다(`ai/docs/openapi.json`).
+계약 게이트(`AiBoundaryOpenApiTest`)가 필드 이름을 잡고, 수용 여부는 실 왕복으로만 안다
+(`LiveAiRoundTripIT` — 스키마를 통과하고도 안쪽 변환에서 422 가 난 전례).
+"""
+
+[[nodes]]
+id = "U8-ASSISTANT-MODULE"
+ticket = ""
+title = "[U8] assistant 모듈 신설 — 세션·메시지·제안·가드레일 + API 계약 (프론트는 가짜 서버 위에 이미 섰다)"
+status = "todo"
+migration = true
+touches = [
+  "backend/modules/assistant",
+  "backend/settings.gradle.kts",
+  "backend/app/src/main/resources/db/migration",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+**백엔드가 U8 의 병목이다.** 프론트는 TRIP-1318(#1057)로 b01~b07 시트·카드·적용 흐름을 가짜 서버 위에
+세워 뒀고(`frontend/src/pages/assistant/`), 우리 `openapi.yaml` 에는 도우미 표면이 하나도 없다(2026-10-13 실측).
+
+범위(FD `domain-entities.md`·`business-logic-model.md`): `:modules:assistant` 신설 · 테이블
+`assistant_session`·`assistant_message`·`assistant_proposal`(번호는 착수 시 최신 + 1 — 지금 최신은 V2.63) ·
+사용자별 리미터 · 디스패치 · 템플릿 응답 가드레일. 다른 모듈은 이 모듈을 부르지 않는다(앱만 부른다).
+AI 대화 경계(`POST /ai/v1/dialogue/interpret`)는 상대 미구현([[U8-AI-DIALOGUE]])이라 `ASSISTANT_MODE=fake`
+페이크로 먼저 개발한다(기존 `AI_SCHEDULE_MODE` 관례).
+
+**이 노드는 크다 — 착수하면 쪼갠다**(계약·영속 / 세션·메시지 / 제안·적용 / 가드레일). 착수 전 FD 4종과
+NFR 2종, 그리고 프론트의 `assistantContract.ts` 를 읽는다 — 프론트가 이미 가정한 응답 모양이 있다.
+"""
+
+[[nodes]]
+id = "U8-AI-DIALOGUE"
+ticket = ""
+title = "[AI] 대화 경계·dialogue_router — IntentRouter 의 프로덕션 호출자가 0이다 (G-U8-4)"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = """
+`POST /ai/v1/dialogue/interpret` 는 ai 패키지 작업이다. 백엔드는 페이크로 먼저 가므로 이 노드가
+[[U8-ASSISTANT-MODULE]] 의 착수를 막지는 않는다 — 실 연동(http 모드)만 기다린다.
+"""
+
+[[nodes]]
+id = "U10-BACKEND"
+ticket = ""
+title = "[U10] GPS·위치 자동화의 백엔드 몫 — 발생 시각 수용·실제 경로·이동 지연 신호원 (착수 시 쪼갠다)"
+status = "todo"
+migration = true
+touches = [
+  "backend/modules/archive",
+  "backend/modules/planb-detection",
+  "backend/modules/auth",
+  "backend/app/src/main/resources/db/migration",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+2026-10-12 설계 승인(FD·NFR·NFR Design·Infra 증분). 새 컴포넌트는 없고 archive·planb-detection·auth 를 넓힌다.
+FD 갭 표에서 백엔드 몫으로 읽히는 것(착수 전 FD 를 다시 읽고 PR 단위로 쪼갤 것 — 아래는 목록이지 분해가 아니다):
+- G-U10-1 ★ `VisitCheckService.arrive`·`complete` 가 서버 시각만 쓴다 → 발생 시각(`occurredAt`)을 받는 배치 엔드포인트
+- 테이블 2종 `actual_route_day` · `location_automation_interval`(archive 소유, 번호는 머지 시점에)
+- G-U10-2·3 `VisitChecked` 가 완료 때만 나가고 출처·계정이 없다 → `DELAY` 신호원 연결
+- G-U10-12 자동 되돌림으로 도착이 비워진 행을 목록·통계·요약 집계에서 제외
+- G-U10-11 앱 강제 종료 시 구간 END 가 안 온다 → 여행 종료 + 1일 스위퍼
+
+**선행이 많다**(aidlc-state): Figma 4표면 · 법무 확인(O-U10-1) · EAS 재빌드. 가장 큰 미결은 O-U10-ND-1
+(토큰 1시간·백그라운드 미갱신). 백엔드 혼자 먼저 갈 수 있는 것은 G-U10-1 정도다.
+"""
+
+[[edges]]
+from = "U8-EDIT-FACADE"
+to = "U8-ASSISTANT-MODULE"
+kind = "계약선행"
+verified = false
+reason = "U8 FD §8 스토리 커버리지 — US-ASSIST-04 액션 위임은 '편집 퍼사드 선행(G-U8-1·2)'. 모듈의 세션·메시지 부분은 퍼사드 없이도 서므로 모듈 전체의 선행은 아니다(제안 적용만 기다린다)."
+
+[[edges]]
+from = "U8-AI-EDIT-PORT"
+to = "U8-ASSISTANT-MODULE"
+kind = "계약선행"
+verified = false
+reason = "같은 근거(G-U8-2) — EDIT_SCHEDULE 제안이 ai /edit 를 부른다. 모듈의 다른 의도는 기다리지 않는다."
