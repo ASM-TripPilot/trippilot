@@ -31,7 +31,6 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.enum
@@ -209,10 +208,12 @@ class AssistantTurnServiceTest : StringSpec({
             w.clock.now = w.clock.now.plusSeconds(1)
         }
         val before = w.messages.rows.size
+        w.clock.now = w.clock.now.plusMillis(100)
 
         val limited = shouldThrow<RateLimited> { w.say(s, "날씨") }
 
-        limited.retryAfterSeconds shouldBe 40 // 첫 턴(0초)이 창에서 빠지는 60초까지, 지금은 20초
+        // 첫 턴(0초)이 창에서 빠지는 60초까지 39.9초 — 올린다. 내리면 39초 뒤에 다시 보낸 요청이 또 429 다
+        limited.retryAfterSeconds shouldBe 40
         w.messages.rows.size shouldBe before
         w.clock.now = start.plusSeconds(60)
         w.say(s, "날씨").messages.size shouldBe 2
@@ -283,6 +284,9 @@ class AssistantTurnServiceTest : StringSpec({
         result.messages[0].text shouldBe null
         result.messages[1].kind shouldBe MessageKind.FALLBACK
         result.messages[1].payload!!["cause"] shouldBe "SOURCE_UNAVAILABLE"
+        // 그 문장은 저장하지 않았다 — [다시 시도]를 주면 엉뚱한 옛 문장을 다시 보내게 된다
+        result.messages[1].nextActions.map { it.type } shouldContainExactly listOf("CONTINUE_WITHOUT_ASSISTANT")
+        result.quickReplies.map { it.id } shouldContainExactly listOf("qr-capabilities")
         w.interpreter!!.requests shouldBe emptyList()
     }
 
@@ -303,6 +307,53 @@ class AssistantTurnServiceTest : StringSpec({
         w.usage.llm[acc to today] shouldBe null
     }
 
+    /** 폴백은 사용자의 거절도 정상 턴도 아니다 — 연속 거절 수를 올리지도 지우지도 않는다(BR-U8-25). */
+    "폴백은 연속 거절 수를 건드리지 않는다" {
+        var fail = false
+        val w = world(interpreter = Interpreter { r -> if (fail) throw DialogueInterpretFailed("down") else framed(Intent.GET_WEATHER)(r) })
+        val s = w.session()
+        w.say(s, "금칙 문장")
+        fail = true
+
+        w.say(s, "오늘 날씨")
+
+        w.sessions.rows.single().refusalStreak shouldBe 1
+    }
+
+    /**
+     * 앱이 대기를 취소하고 같은 턴 id 로 다시 보내면 서버의 첫 처리는 아직 해석 중이다. 둘 다 끝까지 가면
+     * 응답이 둘 생기고 사용량이 두 번 세어진다 — 먼저 끝난 쪽만 남는다(INV-U8-05).
+     */
+    "같은 턴이 겹쳐 처리돼도 응답은 하나고 사용량도 한 번이다" {
+        val turn = UUID.randomUUID()
+        lateinit var w: World
+        lateinit var s: AssistantSession
+        var inner: TurnResult? = null
+        w = world(interpreter = Interpreter { r ->
+            // 첫 처리가 해석 중일 때 같은 턴이 다시 들어와 먼저 끝난다
+            if (inner == null) {
+                inner = TurnResult(emptyList(), emptyList())
+                inner = w.say(s, "오늘 날씨", turn)
+            }
+            framed(Intent.GET_WEATHER)(r)
+        })
+        s = w.session()
+
+        val outer = w.say(s, "오늘 날씨", turn)
+
+        outer.messages.map { it.messageId } shouldContainExactly inner!!.messages.map { it.messageId }
+        w.messages.rows.map { it.message.role } shouldContainExactly listOf(MessageRole.USER, MessageRole.ASSISTANT)
+        w.usage.turns[acc to today] shouldBe 1
+    }
+
+    "해석 응답에 프레임이 없으면 계약이 어긋난 것이다 — 지어내지 않고 폴백한다" {
+        val w = world(interpreter = Interpreter { r -> Interpretation(InterpretOutcome.FRAME, emptyList(), null, r.dialogueContext, 1) })
+        val s = w.session()
+
+        w.say(s, "오늘 날씨").messages[1].kind shouldBe MessageKind.FALLBACK
+        w.usage.llm[acc to today] shouldBe 1 // 쓴 LLM 턴은 센다
+    }
+
     "턴 예산이 1초도 안 남았으면 해석을 부르지 않고 폴백한다 — 남았으면 남은 만큼만 준다" {
         val w = world()
         val s = w.session()
@@ -318,7 +369,8 @@ class AssistantTurnServiceTest : StringSpec({
 
         w.clock.now = start.plusSeconds(100)
         w.say(s, "날씨", service = w.service(moderation = slowModeration))
-        w.interpreter.requests.single().deadlineMs shouldBe 3_000 // 13초 예산에서 10초를 썼다 — 단계 상한(5초)보다 작은 쪽
+        // 13초 예산에서 10초를 썼고 왕복 여유 1초를 뺀다(PERF-U8-01) — 단계 상한(5초)보다 작은 쪽
+        w.interpreter.requests.single().deadlineMs shouldBe 2_000
     }
 
     /** COST-U8-03 · REL-U8-06 — 막지 않고 낮춘다. 말은 못 알아듣지만 버튼으로는 계속 돕는다. */
@@ -327,7 +379,13 @@ class AssistantTurnServiceTest : StringSpec({
         val s1 = off.session()
         off.say(s1, "오늘 날씨").messages[1].text shouldBe "지금은 아래 버튼으로 도와드릴게요."
         off.row(2).saved.outcome shouldBe "DOWNGRADED"
-        off.press(s1, "qr-review").messages[1].nextActions.single().type shouldBe "OPEN_ITINERARY"
+        // 버튼 모드에 쓸 버튼이 있어야 한다 — 시작 빠른 답은 전부 해석 없이 답한다(운영 기본값이 이 모드다)
+        listOf("qr-review" to "OPEN_ITINERARY", "qr-next" to "OPEN_LIVE", "qr-weather" to "OPEN_ITINERARY", "qr-capabilities" to "OPEN_ITINERARY")
+            .forEach { (id, next) -> off.press(s1, id).messages[1].nextActions.first().type shouldBe next }
+        val general = off.session(withTrip = false)
+        off.press(general, "qr-new-trip").messages[1].nextActions.map { it.type } shouldContainExactly listOf("CREATE_TRIP", "OPEN_STAY_SEARCH")
+        off.press(general, "qr-stay").messages[1].nextActions.map { it.type } shouldContainExactly listOf("OPEN_STAY_SEARCH")
+        off.messages.rows.filter { it.message.role == MessageRole.ASSISTANT }.drop(1).none { it.saved.outcome == "DOWNGRADED" } shouldBe true
 
         val capped = world()
         val s2 = capped.session()
@@ -350,8 +408,8 @@ class AssistantTurnServiceTest : StringSpec({
         w.row(2).saved.llmCalls shouldBe 2
     }
 
-    /** COST-U8-07 — 빠른 답은 해석을 건너뛴다. 말로 다시 태워야 하는 것(SEND_TEXT)만 해석으로 간다. */
-    "빠른 답 — 검토·능력 보기는 해석 없이 답하고, 말 보내기는 그 문구를 해석한다" {
+    /** COST-U8-07 · FD §3.1 — 빠른 답은 해석 경계를 부르지 않는다. 말처럼 보이는 시작 버튼도 의도로 곧장 간다. */
+    "빠른 답은 해석 없이 답한다 — 검토·능력 보기·다음 장소" {
         val w = world(Intent.GET_NEXT_SLOT)
         val s = w.session()
 
@@ -366,7 +424,9 @@ class AssistantTurnServiceTest : StringSpec({
         w.interpreter!!.requests shouldBe emptyList()
 
         w.press(s, "qr-next").messages[1].nextActions.single().type shouldBe "OPEN_LIVE" // 여행 중이다
-        w.interpreter.requests.single().utterance shouldBe "다음 장소 어디야"
+        w.row(6).saved.intent shouldBe "GET_NEXT_SLOT"
+        w.interpreter.requests shouldBe emptyList()
+        w.usage.llm[acc to today] shouldBe null
     }
 
     "[다시 시도]는 직전에 못 알아들은 그 말을 다시 태운다 — 연달아 눌러도 '다시 시도'를 해석하지 않는다" {
@@ -463,11 +523,14 @@ class AssistantTurnServiceTest : StringSpec({
         // 서비스가 고르는 나머지 문구도 같은 성질을 가진다
         listOf(
             AssistantTemplates.capabilities(true), AssistantTemplates.capabilities(false), AssistantTemplates.needTrip(),
-            AssistantTemplates.refusal(null), AssistantTemplates.usageGuide(true), AssistantTemplates.oneAtATime(false),
-            AssistantTemplates.buttonMode(true), AssistantTemplates.clarify("day", "몇째 날?", emptyList()),
-        ).plus(FallbackCause.entries.map { AssistantTemplates.fallback(it) }).forEach { message ->
+            AssistantTemplates.refusal(null), AssistantTemplates.usageGuide(true, "REFUSAL"), AssistantTemplates.oneAtATime(false),
+            AssistantTemplates.buttonMode(true), AssistantTemplates.clarify("day", "몇째 날?", emptyList()), AssistantTemplates.staySearch(),
+        ).plus(FallbackCause.entries.flatMap { listOf(AssistantTemplates.fallback(it), AssistantTemplates.fallback(it, retryable = false)) }).forEach { message ->
             (message.nextActions.isNotEmpty()) shouldBe true
             message.nextActions.forEach { (it.type in NextAction.TYPES) shouldBe true }
+            (message.text.orEmpty() + message.payload.toString()).let { said ->
+                listOf("분 소요", "duration", "시간 걸").forEach { (it in said) shouldBe false }
+            }
         }
         shouldThrow<IllegalArgumentException> { Intent.valueOf("DELETE_EVERYTHING") } // 표 밖 값은 만들 수 없다
     }
@@ -482,6 +545,8 @@ class AssistantTurnServiceTest : StringSpec({
         checkAll(Arb.map(Arb.string(1..8), Arb.string(0..12), maxSize = 6), Arb.int(0..500)) { extra, turnIndex ->
             val original = json.createObjectNode().apply {
                 extra.forEach { (k, v) -> put("x_$k", v) }
+                // 숫자가 왕복에서 갈리기 쉬운 자리다 — 소수·큰 정수·음수를 섞는다
+                put("confidence", 0.93).put("big", 9_007_199_254_740_993L).put("negative", -turnIndex)
                 putObject("pending").put("asked", "몇째 날?").putArray("missing").add("day")
                 put("turn_index", turnIndex)
                 put("clarify_count", 1)
@@ -493,8 +558,7 @@ class AssistantTurnServiceTest : StringSpec({
             (bumped as com.fasterxml.jackson.databind.node.ObjectNode).put("turn_index", turnIndex)
             bumped shouldBe original
         }
-        // 맥락이 아직 없으면 상대의 빈 직렬형으로 시작한다
-        json.readTree(service.bumpTurnIndex("{}")) shouldBe json.readTree("""{"pending":null,"clarify_count":0,"turn_index":1}""")
-        service.bumpTurnIndex("{}") shouldNotBe "{}"
+        // 맥락이 아직 없어도 **만들지 않는다** — 순번만 간다. 나머지 칸의 기본값은 상대가 정한다
+        json.readTree(service.bumpTurnIndex("{}")) shouldBe json.readTree("""{"turn_index":1}""")
     }
 })

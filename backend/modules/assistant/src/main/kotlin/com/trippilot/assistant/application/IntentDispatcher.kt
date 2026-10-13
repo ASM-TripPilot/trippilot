@@ -30,11 +30,11 @@ class IntentDispatcher {
             Intent.EDIT_SCHEDULE, Intent.SUGGEST_ALTERNATIVE ->
                 AssistantTemplates.handoff("일정은 편집 화면에서 바꿀 수 있어요.", NextAction("OPEN_ITINERARY_EDIT", "직접 편집"))
             Intent.REPLAN ->
-                // 재계획은 여행 중에만 있다(FD §4). 여행 전이면 다시 만들기가 같은 일을 한다.
+                // 재계획은 여행 중에만 있다(FD §4). 그 밖(여행 전·후)에는 다시 만들기로 보낸다.
                 if (context.inTrip) {
                     AssistantTemplates.handoff("남은 일정은 다시 짜기에서 바꿀 수 있어요.", NextAction("OPEN_REPLAN", "다시 짜기"))
                 } else {
-                    AssistantTemplates.handoff("여행 전에는 일정을 다시 만들 수 있어요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
+                    AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
                 }
             Intent.REGENERATE ->
                 AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))

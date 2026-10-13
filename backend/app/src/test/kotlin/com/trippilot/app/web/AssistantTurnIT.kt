@@ -224,8 +224,9 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
         )
         val retried = press(token, session, "qr-issued-once")
         retried.status shouldBe 200
-        // 다시 태울 말은 직전의 사용자 발화다 — 앞서 누른 "내가 할 수 있는 것 보기"가 해석으로 갔다(범위 밖)
-        retried.body["messages"][1]["kind"].asText() shouldBe "SCOPE"
+        // 다시 태울 **말**이 없다(앞선 것은 버튼뿐) — 버튼 문구를 말로 해석하지 않고 할 수 있는 것을 보인다
+        retried.body["messages"][1]["kind"].asText() shouldBe "TEXT"
+        retried.body["quickReplies"].map { it["id"].asText() } shouldContainExactly listOf("qr-new-trip", "qr-stay", "qr-capabilities")
     }
 
     @Test
@@ -237,6 +238,7 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
         say(stranger, session, "오늘 날씨").status shouldBe 404
         say(owner, session, "").status shouldBe 400
         say(owner, session, "가".repeat(501)).status shouldBe 400
+        say(owner, session, "널\\u0000문자").status shouldBe 400 // DB 가 받지 않는 문자 — 저장에서 500 이 나기 전에
         call(HttpMethod.POST, "/api/v1/assistant/sessions/$session/turns", owner, """{"input":{"type":"TEXT","text":"안녕"},"screen":{"surface":"HOME"}}""").status shouldBe 400
         call(HttpMethod.POST, "/api/v1/assistant/sessions/$session/turns", owner,
             """{"clientTurnId":"${UUID.randomUUID()}","input":{"type":"TEXT","text":"안녕"},"screen":{"surface":"MOON"}}""").status shouldBe 400

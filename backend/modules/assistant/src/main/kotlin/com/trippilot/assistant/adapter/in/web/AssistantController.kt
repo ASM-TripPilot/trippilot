@@ -14,7 +14,6 @@ import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
-import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -36,8 +35,8 @@ import java.util.UUID
  * **응답 모양은 프론트가 먼저 만든 계약을 따른다**(`frontend/…/assistant-sheet/api/assistantContract.ts`,
  * 사용자 결정 2026-10-13) — 세션 목록이 감싸는 객체 없이 배열인 것도 그래서다.
  *
- * 턴·제안은 **계약만 열려 있다**. `OpenApiContractIT` 가 계약과 핸들러의 일치를 요구해 자리를 두되, 채워질 때까지
- * 501 을 낸다(TRIP-1378·1379). 501 을 예외가 아니라 응답으로 직접 내는 이유: `DomainException` 이 sealed 라
+ * 제안(적용·취소)은 **계약만 열려 있다**. `OpenApiContractIT` 가 계약과 핸들러의 일치를 요구해 자리를 두되, 채워질 때까지
+ * 501 을 낸다(TRIP-1379). 501 을 예외가 아니라 응답으로 직접 내는 이유: `DomainException` 이 sealed 라
  * 새 501 은 `common/core` 에 타입이 하나 들고, 곧 지워질 코드에 그만한 값어치가 없다.
  */
 @RestController
@@ -68,7 +67,7 @@ class AssistantController(
     fun clear(principal: Principal, @PathVariable sessionId: UUID) = sessions.clear(principal.accountId(), sessionId)
 
     @PostMapping("/sessions/{sessionId}/turns")
-    fun sendTurn(principal: Principal, @PathVariable sessionId: UUID, @Valid @RequestBody request: SendTurnRequest): SendTurnResponse =
+    fun sendTurn(principal: Principal, @PathVariable sessionId: UUID, @RequestBody request: SendTurnRequest): SendTurnResponse =
         SendTurnResponse.from(turns.send(principal.accountId(), sessionId, request.clientTurnId, request.input.toInput(), request.screen.surface))
 
     @PostMapping("/proposals/{proposalId}/apply")
@@ -94,7 +93,7 @@ private fun Principal.accountId(): UUID =
  */
 data class SendTurnRequest(
     val clientTurnId: UUID,
-    @field:Valid val input: TurnInputRequest,
+    val input: TurnInputRequest,
     val screen: ScreenRequest,
 )
 

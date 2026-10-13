@@ -171,7 +171,7 @@ class AssistantMessageRepositoryAdapter(
         """
         SELECT text FROM assistant_message
          WHERE session_id = ? AND role = 'USER' AND seq < ? AND redacted = false AND text IS NOT NULL
-           AND intent IS DISTINCT FROM 'RETRY'
+           AND intent IS NULL
          ORDER BY seq DESC LIMIT 1
         """.trimIndent(),
         { rs, _ -> rs.getString(1) }, sessionId, beforeSeq,

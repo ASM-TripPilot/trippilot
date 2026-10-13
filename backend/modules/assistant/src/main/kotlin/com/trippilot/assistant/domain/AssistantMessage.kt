@@ -62,7 +62,9 @@ enum class QuickReplyAction { SEND_TEXT, REVIEW, PICK_CANDIDATE, PICK_OPTION, SH
 /**
  * 저장할 메시지. [seq] 와 시각은 저장소가 매긴다.
  *
- * 관측 칸 넷(OBS-U8-01)은 도우미 행에만 채운다 — 알람·지표의 원천을 DB 행에 둔다. 화면에 쓰지 않는다.
+ * 관측 칸 넷(OBS-U8-01)은 도우미 행에 채운다 — 알람·지표의 원천을 DB 행에 둔다. 화면에 쓰지 않는다.
+ * 사용자 행은 [matchRoute]·[intent] 둘만 쓴다: 버튼을 눌러 생긴 행이면 `ACTION` 과 그 버튼의 종류를 적어,
+ * 직접 한 말(둘 다 null)과 가른다.
  */
 data class NewMessage(
     val role: MessageRole,
@@ -99,8 +101,8 @@ interface AssistantMessageRepository {
     fun findIssuedQuickReply(sessionId: UUID, quickReplyId: String): QuickReply?
 
     /**
-     * [beforeSeq] 앞의 가장 최근 사용자 발화 — [다시 시도]가 다시 태울 문장이다. 가려진 입력과 [다시 시도] 자신은 건너뛴다
-     * (연달아 누르면 "다시 시도"라는 말을 해석하게 된다).
+     * [beforeSeq] 앞의 가장 최근 **직접 한 말** — [다시 시도]가 다시 태울 문장이다. 가려진 입력과 버튼을 눌러 생긴 행은
+     * 건너뛴다: 버튼 문구는 말이 아니고, [다시 시도]를 연달아 누르면 "다시 시도"라는 말을 해석하게 된다.
      */
     fun lastUserText(sessionId: UUID, beforeSeq: Long): String?
 

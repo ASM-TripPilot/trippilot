@@ -7,6 +7,7 @@ import com.trippilot.assistant.domain.IntentFrame
 import com.trippilot.assistant.domain.InterpretOutcome
 import com.trippilot.assistant.domain.InterpretRequest
 import com.trippilot.assistant.domain.Interpretation
+import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -66,10 +67,13 @@ class DialogueInterpretModeGuard {
         check(mode in SUPPORTED) {
             "trippilot.assistant.interpret.mode=$mode 는 지원하지 않습니다 — 지금은 $SUPPORTED 뿐입니다(http 어댑터는 상대 경계가 열리면 붙습니다)."
         }
+        // 꺼져 있는 것은 사건이 아니라 상태다 — 턴마다 경고하지 않고 기동 때 한 번 알린다.
+        log.info("도우미 발화 해석 모드 = {}{}", mode, if (mode == "off") " (버튼 모드 — 말은 해석하지 않고 버튼으로만 돕는다)" else "")
         return mode
     }
 
     private companion object {
         val SUPPORTED = setOf("off", "fake")
+        private val log = LoggerFactory.getLogger(DialogueInterpretModeGuard::class.java)
     }
 }

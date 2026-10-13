@@ -89,7 +89,7 @@ internal class FakeMessages : AssistantMessageRepository {
 
     override fun lastUserText(sessionId: UUID, beforeSeq: Long): String? =
         rows.filter { it.sessionId == sessionId && it.message.role == MessageRole.USER && it.message.seq < beforeSeq }
-            .filter { !it.saved.redacted && it.message.text != null && it.saved.intent != "RETRY" }
+            .filter { !it.saved.redacted && it.message.text != null && it.saved.intent == null }
             .maxByOrNull { it.message.seq }?.message?.text
 
     override fun findPage(sessionId: UUID, beforeSeq: Long?, limit: Int) =
