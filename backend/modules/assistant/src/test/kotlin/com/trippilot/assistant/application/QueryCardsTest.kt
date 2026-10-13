@@ -92,6 +92,16 @@ class QueryCardsTest : StringSpec({
         rows(card.payload, "summary") shouldContainExactly listOf("여행" to "부산 당일", "숙소" to "미등록", "일정" to "1일 중 1일 채움")
     }
 
+    /** 후보 경로는 확정된 일정을 받지 않는다 — 그때 버튼을 주면 눌러도 "바꿀 수 없다"만 돌아온다. */
+    "다음 장소 — 다른 곳 추천은 확정되지 않은 일정에만 준다" {
+        val data = FakeTripData(acc, slots = listOf(plannedSlot(d2, 0, "14:00", "카페 모카")))
+
+        cards(data).nextSlot(ctx()).quickReplies!!.first().let { it.label to it.params["slotKey"] } shouldBe ("다른 곳 추천" to data.slots.single().slotKey)
+        cards(data.apply { status = "CONFIRMED" }).nextSlot(ctx()).quickReplies shouldBe null
+        // 확정 여부를 못 읽었으면 주지 않는다 — 카드 자체는 그대로 나간다
+        cards(data.apply { status = "PLANNED"; failItinerary = true }).nextSlot(ctx()).let { it.kind to it.quickReplies } shouldBe (MessageKind.INFO to null)
+    }
+
     /** 생성은 첫 날부터 온다. 뒤 일자는 "비어 있는" 것이 아니라 아직 만드는 중이다 — 고치라고 하면 거짓이다. */
     "진행 검토 — 일정을 만드는 중이면 뒤 일자를 비었다고 하지 않는다" {
         val data = FakeTripData(acc, slots = listOf(plannedSlot(d1, 0, "10:00", "해변")), generationState = "PARTIAL")

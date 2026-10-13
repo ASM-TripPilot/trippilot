@@ -158,7 +158,7 @@ data class MessagesPageResponse(val messages: List<MessageResponse>, val nextBef
 /**
  * 메시지 한 줄. **소요시간 필드는 없다**(INV-3) — 시각·거리는 서버가 저장한 문자열 그대로다.
  *
- * [proposal] 은 `PROPOSAL`·`ACTION_LOG` 메시지에만 있다. 상태는 **읽은 시점의 것**이다.
+ * [proposal] 은 제안 카드(`PROPOSAL`)와 그 제안을 적용한 결과 안내(`ACTION_LOG`, 실패면 `TEXT`)에만 있다. 상태는 **읽은 시점의 것**이다.
  */
 data class MessageResponse(
     val id: UUID,

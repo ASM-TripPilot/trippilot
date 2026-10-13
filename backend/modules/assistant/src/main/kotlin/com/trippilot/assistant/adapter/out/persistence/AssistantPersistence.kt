@@ -133,7 +133,7 @@ class AssistantMessageRepositoryAdapter(
     /** `RETURNING` 으로 DB 가 매긴 순번까지 한 번에 받는다 — 넣고 다시 읽으면 그 사이가 한 번 더 비는 왕복이다. */
     private fun insert(
         sessionId: UUID, accountId: UUID, clientTurnId: UUID?, replyTo: UUID?, m: NewMessage, at: Instant, proposalId: UUID? = null,
-    ): AssistantMessage = jdbc.query(
+    ): AssistantMessage = messages(
         """
         INSERT INTO assistant_message (
             message_id, session_id, account_id, client_turn_id, reply_to, role, kind, text, redacted, payload, next_actions, quick_replies,
@@ -141,7 +141,6 @@ class AssistantMessageRepositoryAdapter(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING $COLUMNS
         """.trimIndent(),
-        { rs, _ -> rs.toMessage() },
         UUID.randomUUID(), sessionId, accountId, clientTurnId, replyTo, m.role.name, m.kind.name, m.text, m.redacted,
         m.payload?.let(mapper::writeValueAsString), mapper.writeValueAsString(m.nextActions), m.quickReplies?.let(mapper::writeValueAsString),
         m.footnote, m.intent, m.matchRoute, m.outcome, m.llmCalls, m.latencyMs, Timestamp.from(at), proposalId,
@@ -156,10 +155,7 @@ class AssistantMessageRepositoryAdapter(
             "SELECT $COLUMNS, outcome FROM assistant_message WHERE session_id = ? AND client_turn_id = ?",
             { rs, _ -> rs.toMessage() to rs.getString("outcome") }, sessionId, clientTurnId,
         ).firstOrNull() ?: return null
-        val replies = jdbc.query(
-            "SELECT $COLUMNS FROM assistant_message WHERE session_id = ? AND reply_to = ? ORDER BY seq",
-            { rs, _ -> rs.toMessage() }, sessionId, clientTurnId,
-        )
+        val replies = messages("SELECT $COLUMNS FROM assistant_message WHERE session_id = ? AND reply_to = ? ORDER BY seq", sessionId, clientTurnId)
         return RecordedTurn(user, replies, redaction)
     }
 
@@ -190,7 +186,7 @@ class AssistantMessageRepositoryAdapter(
     ).firstOrNull()
 
     /** 최근 것부터 [limit] 건을 집고 뒤집는다 — 화면은 오래된 것이 위다. */
-    override fun findPage(sessionId: UUID, beforeSeq: Long?, limit: Int): List<AssistantMessage> = jdbc.query(
+    override fun findPage(sessionId: UUID, beforeSeq: Long?, limit: Int): List<AssistantMessage> = messages(
         """
         SELECT $COLUMNS
           FROM assistant_message
@@ -198,9 +194,18 @@ class AssistantMessageRepositoryAdapter(
          ORDER BY seq DESC
          LIMIT ?
         """.trimIndent(),
-        { rs, _ -> rs.toMessage() },
         sessionId, beforeSeq ?: Long.MAX_VALUE, limit,
     ).asReversed()
+
+    /**
+     * 메시지를 읽고, **그 조회가 끝난 뒤에** 제안을 붙인다. 행을 읽는 도중에 제안을 조회하면 연결을 하나 쥔 채 하나를 더
+     * 집는다 — 트랜잭션 밖의 목록 조회가 여럿 겹치면 풀이 마른다.
+     *
+     * ponytail: 제안이 달린 메시지마다 한 번 읽는다(N+1). 한 쪽(≤50건)에 제안 카드는 몇 장뿐이다 — 늘면 묶어 읽는다.
+     */
+    private fun messages(sql: String, vararg args: Any?): List<AssistantMessage> =
+        jdbc.query(sql, { rs, _ -> rs.toMessage() to rs.getObject("proposal_id", UUID::class.java) }, *args)
+            .map { (message, proposalId) -> if (proposalId == null) message else message.copy(proposal = proposals.find(proposalId)?.view(clock.instant())) }
 
     private fun ResultSet.toMessage() = AssistantMessage(
         messageId = getObject("message_id", UUID::class.java),
@@ -213,8 +218,6 @@ class AssistantMessageRepositoryAdapter(
         quickReplies = getString("quick_replies")?.let { reader.forType(QUICK_REPLIES).readValue<List<QuickReply>>(it) },
         footnote = getString("footnote"),
         createdAt = getTimestamp("created_at").toInstant(),
-        // ponytail: 제안이 달린 메시지마다 한 번 더 읽는다(N+1). 한 쪽(≤50건)에 제안 카드는 몇 장뿐이다 — 늘면 묶어 읽는다.
-        proposal = getObject("proposal_id", UUID::class.java)?.let { id -> proposals.find(id)?.view(clock.instant()) },
     )
 
     private companion object {

@@ -141,8 +141,11 @@ class AssistantProposalIT : AbstractPostgresIntegrationTest() {
         // 다시 열어도 카드는 지금 상태를 그린다 — 제안 카드와 적용 기록 둘 다 APPLIED
         scene.messages().filter { !it["proposal"].isNull }.map { it["kind"].asText() to it["proposal"]["status"].asText() } shouldContainExactly
             listOf("PROPOSAL" to "APPLIED", "ACTION_LOG" to "APPLIED")
-        // 한 번만(INV-U8-08)
-        apply(scene.token, proposal["id"].asText()).let { it.status to it.body["error"]["code"].asText() } shouldBe (409 to "NOT_APPLICABLE")
+        // 한 번만(INV-U8-08) — 다시 눌러도 다시 저장하지 않고 "적용됐다"고만 답한다. 리비전이 하나 더 쌓이지 않는다.
+        val editsBefore = jdbc.queryForObject("SELECT count(*) FROM itinerary_revision WHERE trip_id = ?::uuid", Int::class.java, scene.trip)
+        apply(scene.token, proposal["id"].asText()).let { Triple(it.status, it.body["proposal"]["status"].asText(), it.body["messages"].size()) } shouldBe
+            Triple(200, "APPLIED", 0)
+        jdbc.queryForObject("SELECT count(*) FROM itinerary_revision WHERE trip_id = ?::uuid", Int::class.java, scene.trip) shouldBe editsBefore
     }
 
     /** INV-U8-04 — 같은 일정을 보고 만든 제안 둘 중 하나를 적용하면, 다른 하나는 옛 일정에 맞춘 안이 된다. */

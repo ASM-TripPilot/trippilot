@@ -114,6 +114,7 @@ class ProposalCardsTest : StringSpec({
         dateFor(emptyMap()) shouldBe null
         dateFor(mapOf("day" to "2026-12-25"), inTrip = true) shouldBe null
         dateFor(mapOf("day" to "9"), inTrip = true) shouldBe null
+        dateFor(mapOf("day" to "999999999999999"), inTrip = true) shouldBe null // 날짜 계산이 넘치는 값도 조용히 "모른다"다
         dateFor(mapOf("day" to "모레쯤"), inTrip = true) shouldBe null
     }
 

@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.itinerarygeneration.domain.GenerationMode
@@ -384,6 +385,34 @@ class EditItineraryServiceTest : StringSpec({
         val edited = revisions.appended.last()
         edited.summary shouldBe "[도우미] 둘째 날 오후 카페를 조용한 곳으로"
         edited.actor shouldBe RevisionActor.USER // [적용]을 누른 것은 사용자다(O-U8-7 미결 — 주체를 늘리지 않았다)
+        repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA)
+    }
+
+    /**
+     * U8 INV-U8-04 — 옛 일정을 보고 만든 전체 교체가 그 사이의 편집을 덮어쓰지 않는다. 조건은 **쓰기 직전에 다시 읽은 일정**으로
+     * 본다(재검증이 상대를 부르는 동안 바뀌었을 수 있다). 거짓이면 일정도 리비전도 이력도 쓰이지 않는다.
+     */
+    "저장 조건이 거짓이면 아무것도 쓰지 않고 STALE 이다 — 조건은 쓰기 직전의 일정을 본다" {
+        val repo = repoWith(current())
+        val logs = CapturingChangeLogs()
+        val revisions = FakeRevisions()
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(revisions, repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+        val before = repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId }
+        var seen: List<EditDayCommand>? = null
+
+        val refused = shouldThrow<ConflictDetected> {
+            facade.edit(acc, tripId, facadeDays, reason = null, source = ItineraryEditSource.ASSISTANT, onlyIf = { seen = it; false })
+        }
+
+        refused.errorCode shouldBe ErrorCode.STALE
+        seen!!.single().slots.map { it.poiId } shouldBe before // 지금 저장돼 있는 것을 보여 준다 — 저장하려는 안이 아니다
+        repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe before
+        logs.appended shouldBe emptyList()
+        revisions.appended.none { it.kind == RevisionKind.EDIT } shouldBe true
+
+        // 참이면 평소대로 저장된다
+        facade.edit(acc, tripId, facadeDays, reason = null, source = ItineraryEditSource.ASSISTANT, onlyIf = { true })
         repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA)
     }
 

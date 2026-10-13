@@ -13,6 +13,8 @@ import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.assistant.domain.RecordedTurn
+import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.itinerarygeneration.api.EditDayCommand
 import com.trippilot.itinerarygeneration.api.EditProposal
 import com.trippilot.itinerarygeneration.api.EditProposalRequest
@@ -110,6 +112,9 @@ internal class FakeEditing : ItineraryEditProposalFacade, SlotCandidateFacade, I
     val asked = mutableListOf<String>()
     val edits = mutableListOf<Edit>()
 
+    /** 저장 직전에 다시 읽은 일정 — null 이면 호출측의 조건(`onlyIf`)을 묻지 않는다(그 사이 바뀐 것이 없다). */
+    var currentAtSave: List<EditDayCommand>? = null
+
     override fun propose(accountId: UUID, tripId: UUID, targetDate: LocalDate, request: EditProposalRequest, deadlineMs: Long): EditProposal {
         proposed += Proposal(targetDate, request, deadlineMs)
         return proposal()
@@ -120,7 +125,12 @@ internal class FakeEditing : ItineraryEditProposalFacade, SlotCandidateFacade, I
         return candidates()
     }
 
-    override fun edit(accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource): ItineraryEditResult {
+    override fun edit(
+        accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource,
+        onlyIf: ((current: List<EditDayCommand>) -> Boolean)?,
+    ): ItineraryEditResult {
+        // 실물처럼 — 조건이 거짓이면 아무것도 쓰지 않는다.
+        currentAtSave?.let { current -> if (onlyIf != null && !onlyIf(current)) throw ConflictDetected(errorCode = ErrorCode.STALE) }
         edits += Edit(days, reason, source)
         return save()
     }
@@ -223,6 +233,7 @@ internal class FakeTripData(
     var surfaces: Map<UUID, PoiSurfaceView> = emptyMap(),
     var reading: WeatherReading? = null,
     var generationState: String = "COMPLETE",
+    var status: String = "PLANNED",
 ) : ItineraryFacade, ItineraryPlanFacade, PoiSurfaceFacade, ContextFacade {
     var failItinerary = false
     var failPlan = false
@@ -231,7 +242,7 @@ internal class FakeTripData(
     override fun findCurrent(accountId: UUID, tripId: UUID): ItineraryRef? {
         check(!failItinerary) { "itinerary down" }
         return if (accountId == owner && hasItinerary) {
-            ItineraryRef(UUID.randomUUID(), "PLANNED", generationState, slots.map { it.date }.distinct(), slots.map { it.slotKey })
+            ItineraryRef(UUID.randomUUID(), status, generationState, slots.map { it.date }.distinct(), slots.map { it.slotKey })
         } else {
             null
         }

@@ -29,7 +29,7 @@ data class AssistantMessage(
     val quickReplies: List<QuickReply>?,
     val footnote: String?,
     val createdAt: Instant,
-    /** 이 메시지가 가리키는 제안(`PROPOSAL`·`ACTION_LOG`). 상태는 **읽은 시점의 것**이다 — 카드는 저장 당시가 아니라 지금을 그린다. */
+    /** 이 메시지가 가리키는 제안 — 제안 카드(`PROPOSAL`)와 그 제안을 적용한 결과 안내(`ACTION_LOG`, 실패면 `TEXT`). 상태는 **읽은 시점의 것**이다 — 카드는 저장 당시가 아니라 지금을 그린다. */
     val proposal: ProposalView? = null,
 )
 

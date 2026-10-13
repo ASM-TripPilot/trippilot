@@ -16,6 +16,7 @@ import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.UpstreamUnavailable
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.itinerarygeneration.api.EditDayCommand
 import com.trippilot.itinerarygeneration.api.EditProposal
 import com.trippilot.itinerarygeneration.api.EditProposalRequest
 import com.trippilot.itinerarygeneration.api.ItineraryEditProposalFacade
@@ -188,7 +189,7 @@ class ProposalCards(
         val trip = requireNotNull(ctx.trip)
         val days = trip.startDate..trip.endDate
         ctx.arguments[ARG_DAY]?.trim()?.let { day ->
-            val date = runCatching { LocalDate.parse(day) }.getOrNull() ?: day.toLongOrNull()?.takeIf { it >= 1 }?.let { trip.startDate.plusDays(it - 1) }
+            val date = runCatching { LocalDate.parse(day) }.getOrNull() ?: day.toLongOrNull()?.takeIf { it in 1..MAX_TRIP_DAYS }?.let { trip.startDate.plusDays(it - 1) }
             return date?.takeIf { it in days }
         }
         ctx.arguments[ARG_TARGET]?.let { target ->
@@ -237,6 +238,9 @@ class ProposalCards(
         /** 위반만 있는 제안은 견줄 기준이 없다 — 적용되지 않으므로 지문을 견줄 일도 없다. */
         private const val NO_BASE = "-"
         private const val MAX_CANDIDATES = 5
+
+        /** "N일차"의 N 이 터무니없으면 날짜 계산이 넘친다 — 여행 길이의 상한보다 넉넉한 값에서 끊는다. */
+        private const val MAX_TRIP_DAYS = 366L
         private const val MAX_VIOLATIONS = 5
         private val APPLY_HINTS = setOf("AUTO_APPLY", "CONFIRM_REQUIRED")
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
@@ -291,6 +295,11 @@ class ProposalCards(
  */
 object ItineraryFingerprint {
     fun of(days: List<ProposedDay>): String = hash(
+        days.sortedBy { it.date }.flatMap { day -> day.slots.map { row(day.date, it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) } },
+    )
+
+    /** 편집 경로가 저장 직전에 다시 읽은 일정 — [ItineraryEditFacade.edit] 의 `onlyIf` 가 받는 모양. */
+    fun ofCurrent(days: List<EditDayCommand>): String = hash(
         days.sortedBy { it.date }.flatMap { day -> day.slots.map { row(day.date, it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) } },
     )
 

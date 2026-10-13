@@ -1,6 +1,9 @@
 package com.trippilot.assistant.application
 
+import com.trippilot.assistant.domain.AssistantMessage
+import com.trippilot.assistant.domain.AssistantMessageRepository
 import com.trippilot.assistant.domain.MessageKind
+import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.NewProposal
 import com.trippilot.assistant.domain.ProposalDay
 import com.trippilot.assistant.domain.ProposalDiffItem
@@ -10,6 +13,8 @@ import com.trippilot.assistant.domain.ProposalStatus
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.itinerarygeneration.api.EditDayCommand
+import com.trippilot.itinerarygeneration.api.EditSlotCommand
 import com.trippilot.itinerarygeneration.api.ItineraryEditResult
 import com.trippilot.itinerarygeneration.api.ItineraryEditSource
 import io.kotest.assertions.throwables.shouldThrow
@@ -20,6 +25,7 @@ import io.kotest.property.Arb
 import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.list
 import io.kotest.property.checkAll
+import org.springframework.dao.DataIntegrityViolationException
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -134,6 +140,51 @@ class ProposalServiceTest : StringSpec({
         w.status(id) shouldBe ProposalStatus.PROPOSED
     }
 
+    /**
+     * 지문은 저장 트랜잭션 안에서 한 번 더 본다 — 재검증이 도는 몇 초 사이에 끼어든 편집을 덮어쓰지 않는다.
+     * 미리 확인할 때는 같았으므로, 이 문이 없으면 그대로 저장된다.
+     */
+    "저장 직전에 일정이 바뀌어 있었으면 쓰지 않고 STALE 로 닫는다" {
+        val w = world()
+        val id = w.propose()
+        w.editing.currentAtSave = listOf(EditDayCommand(day, listOf(EditSlotCommand(moca, LocalTime.parse("15:30"), LocalTime.parse("16:30"), false, false))))
+
+        w.refusal(id) shouldBe ErrorCode.STALE
+
+        w.editing.edits shouldBe emptyList()
+        w.status(id) shouldBe ProposalStatus.STALE
+        w.messages.rows shouldBe emptyList()
+    }
+
+    "저장 직전의 일정이 제안의 기준 그대로면 저장한다 — 같은 일정을 다르게 읽어 낡았다고 하지 않는다" {
+        val w = world()
+        val id = w.propose()
+        w.editing.currentAtSave = listOf(EditDayCommand(day, listOf(EditSlotCommand(moca, LocalTime.parse("14:00"), LocalTime.parse("15:00"), false, false))))
+
+        w.service.apply(acc, id).status shouldBe ProposalStatus.APPLIED
+    }
+
+    /**
+     * 저장은 끝났는데 기록을 못 남겼다(저장이 도는 사이 대화가 지워졌다 등). 500 으로 뒤집으면 일정은 바뀌었는데 앱은
+     * "적용하지 못했다"고 말한다 — 결과는 사실대로 돌려주고, 제안도 집힌 채 두지 않는다.
+     */
+    "적용 기록을 남기지 못해도 적용됐다는 사실은 그대로 돌려준다" {
+        val w = world()
+        val id = w.propose()
+        val broken = object : AssistantMessageRepository by w.messages {
+            override fun appendNote(sessionId: UUID, accountId: UUID, proposalId: UUID, message: NewMessage, at: Instant): AssistantMessage =
+                throw DataIntegrityViolationException("fk_assistant_message_session")
+        }
+        val service = ProposalService(w.proposals, broken, w.data, w.editing, w.clock, NOOP_TX)
+
+        val outcome = service.apply(acc, id)
+
+        outcome.status shouldBe ProposalStatus.APPLIED
+        outcome.messages shouldBe emptyList()
+        w.editing.edits.size shouldBe 1
+        w.status(id) shouldBe ProposalStatus.APPLIED
+    }
+
     /** INV-U8-08 — 한 번만. 저장이 도는 중에 다시 눌러도, 끝난 뒤에 다시 눌러도. */
     "같은 제안은 두 번 적용되지 않는다 — 저장 중에 겹쳐 와도" {
         val w = world()
@@ -147,8 +198,10 @@ class ProposalServiceTest : StringSpec({
         w.service.apply(acc, id).status shouldBe ProposalStatus.APPLIED
 
         during shouldBe ErrorCode.NOT_APPLICABLE
-        w.refusal(id) shouldBe ErrorCode.NOT_APPLICABLE
+        // 끝난 뒤에 다시 누르면(응답을 못 받고 다시 누른 앱) 다시 저장하지 않고 "적용됐다"고 답한다 — 일정은 이미 바뀌어 있다
+        w.service.apply(acc, id).let { it.status to it.messages } shouldBe (ProposalStatus.APPLIED to emptyList())
         w.editing.edits.size shouldBe 1
+        w.messages.rows.size shouldBe 1 // 기록도 한 번뿐이다
     }
 
     /** BR-U8-34 — 저장할 때의 재검증이 제안 때와 다르게 판정하면 저장된 값이 이긴다. 숨기지 않는다. */
@@ -184,7 +237,7 @@ class ProposalServiceTest : StringSpec({
 
         w.service.dismiss(acc, id).status shouldBe ProposalStatus.DISMISSED
         w.service.dismiss(acc, id).status shouldBe ProposalStatus.DISMISSED
-        w.refusal(id) shouldBe ErrorCode.NOT_APPLICABLE
+        w.refusal(id) shouldBe ErrorCode.NOT_APPLICABLE // 취소한 것은 적용되지 않는다
         w.editing.edits shouldBe emptyList()
 
         val applied = w.propose()

@@ -1844,10 +1844,14 @@ paths:
       summary: 도우미 제안 적용
       description: >
         제안을 일정에 저장한다(`b02`). 제안을 만든 뒤 일정이 바뀌었으면 저장하지 않는다(`STALE`).
-        409 의 `error.code` 는 `STALE`(일정이 바뀜)·`EXPIRED`(제안 만료)·`NOT_APPLICABLE`(위반이 있거나, 이미 끝났거나,
+        409 의 `error.code` 는 `STALE`(일정이 바뀜)·`EXPIRED`(제안 만료)·`NOT_APPLICABLE`(위반이 있거나, 취소·실패로 끝났거나,
         다른 적용이 저장 중인 제안) 중 하나다. `STALE`·`EXPIRED` 는 서버가 제안을 이미 그 상태로 옮긴 것이다.
 
+        **이미 적용된 제안을 다시 적용하면 200 `APPLIED` 다**(다시 저장하지 않고, `messages` 는 빈 배열). 저장은 몇 초가 갈 수 있어
+        응답을 못 받고 다시 누르는 일이 있다 — 그때 일정은 이미 바뀌어 있다.
+
         **200 이어도 `proposal.status` 를 본다.** 저장에 실패하면 `FAILED` 로 오고(일정은 그대로) `messages` 에 그 안내가 실린다.
+        `messages` 가 빈 배열일 수 있다(다시 적용했거나, 저장하는 사이 대화가 지워져 기록을 남길 곳이 없을 때) — 그래도 `status` 는 사실이다.
         성공이면 `APPLIED` 와 `ACTION_LOG` 메시지가 온다 — 저장할 때의 재검증이 제안 때와 다르게 위반을 판정했으면 그 메시지가
         그렇게 말한다(저장된 값이 이긴다, BR-U8-34).
       responses:
@@ -1862,7 +1866,7 @@ paths:
       summary: 도우미 제안 취소
       description: >
         제안을 닫는다. 일정은 그대로다. 이미 끝난 제안이면 오류가 아니라 **그 상태를 그대로** 돌려준다
-        (`DISMISSED` 가 아닐 수 있다 — 적용됐으면 `APPLIED`).
+        (`DISMISSED` 가 아닐 수 있다 — 적용됐으면 `APPLIED`). 적용이 저장 중인 제안은 닫지 않고 `PROPOSED` 로 답한다.
       responses:
         '200': { description: 닫힘(또는 이미 끝난 상태), content: { application/json: { schema: { $ref: '#/components/schemas/AssistantDismissProposalResponse' } } } }
         '404': { description: 없는 제안이거나 타 계정 제안 }
