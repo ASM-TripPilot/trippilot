@@ -5,9 +5,12 @@ import { Text, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
-import { resolveEditorMapCenter } from '../model/editorMapCenter';
 import { useItineraryTabBack } from '../model/useItineraryTabBack';
-import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
+import {
+  buildDraftPins,
+  formatCoPickDayHeader,
+  resolvePlanMapCenter,
+} from '@/features/itinerary';
 import {
   useItineraryEditStore,
   type EditorDaysItem,
@@ -289,9 +292,9 @@ export function ManualPlanPage({
   const activeDate = loadedDays[activeDayIndex]?.date ?? '';
   const activeSlots = loadedDays[activeDayIndex]?.slots ?? [];
   const pins = buildDraftPins(activeSlots);
-  const center = resolveEditorMapCenter({
-    pins,
-    date: activeDate,
+  const center = resolvePlanMapCenter({
+    days: [{ date: activeDate, slots: activeSlots }],
+    selectedDate: activeDate,
     bases: bases.data,
     stays: savedStays.data,
   });
