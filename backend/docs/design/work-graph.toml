@@ -4038,7 +4038,7 @@ touches = [
 note = """
 **완료(2026-10-14, PR #1119 턴 뼈대 · #1120 조회 카드).** 다음에 알아야 할 것:
 - 응답은 위치가 아니라 **턴 id** 로 묶인다(`reply_to`, V2.65). 같은 턴이 겹쳐 오면 뒤쪽은 다시 해석하지 않고 앞쪽의 답을 기다린다.
-- **운영은 버튼 모드다**(`ASSISTANT_INTERPRET_MODE=off` — 배포 기본값). 시작 빠른 답은 `params.intent` 로 해석 없이 처리기에 간다.
+- **운영은 버튼 모드다**(`ASSISTANT_INTERPRET_MODE=off` — 배포 기본값). 시작 빠른 답은 전부 해석 없이 처리기에 간다(`params.intent`·`params.open`·`action`).
   새 버튼도 그렇게 만든다 — 말로 다시 태우는 버튼은 버튼 모드에서 "버튼으로 도와드릴게요"만 돌려준다.
 - 조회 카드는 저장된 값만 옮긴다. 원천을 못 읽으면 "없다"가 아니라 "확인할 수 없다"고 한다(BR-U8-16) — 읽기 실패는 전부 WARN.
 - 미결 긴장(분당 제한 vs 대화 지우기)은 그대로 두었다 — 지우고 다시 보내면 60초 창이 비지만, 하루 LLM 상한은 별도 테이블이라 안 빈다.
@@ -4212,11 +4212,15 @@ FALLBACK 메시지일 뿐 일정 폴백 신호가 아니다.
 - 같은 턴 id 를 겹쳐 보낸 요청은 앞선 처리를 기다리는데 **기다리는 수에 상한이 없다**(`AssistantTurnService.awaitFirst` 의
   `ponytail:`). 해석이 십여 초 가면 요청 스레드가 그만큼 선다 — 상한(넘으면 429)을 둔다.
 - 전역 월 상한(`monthly-llm-call-limit`)에 값을 넣거나 벤더 지출 한도를 건다([[U8-OPS]]). 둘 다 없으면 총량 그물이 없다.
-- 되묻기 문안·보기의 길이 상한을 어댑터에서 건다(지금은 fake 라 고정 문구다).
+  **`ASSISTANT_MONTHLY_LLM_CALL_LIMIT` 은 아직 배포 경로에 없다** — `deploy/eks/runtime_secrets.py` 의 `BACKEND_KEYS` 와 차트 env 목록에
+  넣어야 한다(시크릿에만 넣으면 "Unsupported key" 로 거절된다).
+- `http` 는 지금 두 곳에서 거절된다 — `runtime_secrets.py` 의 모드 검사(`off`·`fake` 만)와 기동 가드 `DialogueInterpretModeGuard`. 어댑터와 함께 푼다.
+- 되묻기 문안·보기의 길이 상한을 어댑터에서 건다(지금은 fake 가 되묻기를 내지 않아 닿지 않는다 — `AssistantTemplates.clarify` 는 받은 대로 싣는다).
 - 날씨 카드는 상대가 뽑은 `date`·`region` 인자를 읽지 않는다("내일 날씨"에도 오늘 예보를 준다) — 오늘이 아닌 날을 물으면 넘긴다.
 - 편집 경계의 `reason` 이 로그에 남는다(`EditProposalService`·`HttpScheduleAgentAdapter`) — 상대가 발화를 되풀이해 싣지 않는지 확인한다(SEC-U8-06).
 - 넘기기 응답의 "바꾼 조건" 칩(PRD 02-2)은 프론트 계약에 자리가 없어 만들지 않았다.
-- 자가용 일정은 편집 제안이 전부 거절된다([[AI-EDIT-TRANSPORT]]) — 발화 편집을 열어도 그 여행들에서는 "맞지 않아요"만 나온다.
+- 자가용 일정은 편집 제안이 전부 거절된다([[AI-EDIT-TRANSPORT]]) — 그 여행들에서는 "맞지 않아요"만 나온다. **발화 편집만의 일이 아니다**:
+  버튼 경로(다른 곳 추천 → 고르기)도 같은 `/edit` 를 타므로 `AI_SCHEDULE_MODE=http` 인 곳에서는 지금도 그렇다.
 """
 
 [[edges]]
