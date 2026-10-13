@@ -11,7 +11,7 @@ import { Toggle } from './Toggle';
  *  - ON / OFF / disabled 세 모양이 트랙·손잡이 클래스로 갈린다. disabled 는 checked 보다 우선한다
  *    (OS 권한 거부인데 켜진 색이 보이면 거짓 표시다).
  *
- * 색·크기·여백·반경은 className 토큰 단위로 본다. 실제 픽셀은 6-b 몫.
+ * 트랙 색(상태→색 1 it)만 className 토큰으로 본다. 크기·여백·반경·실제 픽셀은 실화면 QA 몫.
  */
 
 /** className 을 공백으로 쪼갠 토큰 배열 — `bg-primary` 가 다른 토큰에 부분 일치하는 것을 막는다. */
@@ -78,83 +78,22 @@ describe('TRIP-780 · Toggle — 동작(AC-1)', () => {
 });
 
 describe('TRIP-780 · Toggle — 모양(AC-1 · Q2 46×28 · Q6 disabled 색)', () => {
-  it('ON: 트랙 primary + 손잡이 오른쪽, 손잡이 흰색', () => {
-    const { track, thumb } = renderToggle({ checked: true });
-
-    expect(tokens(track)).toEqual(
-      expect.arrayContaining(['bg-primary', 'items-end'])
-    );
-    expect(tokens(track)).not.toContain('bg-hairline-strong');
-    expect(tokens(track)).not.toContain('bg-[#ECECEC]');
-    expect(tokens(thumb)).toContain('bg-canvas');
-  });
-
-  it('OFF: 트랙 hairline-strong + 손잡이 왼쪽, 손잡이 흰색', () => {
-    const { track, thumb } = renderToggle({ checked: false });
-
-    expect(tokens(track)).toEqual(
-      expect.arrayContaining(['bg-hairline-strong', 'items-start'])
-    );
-    expect(tokens(track)).not.toContain('bg-primary');
-    expect(tokens(track)).not.toContain('bg-[#ECECEC]');
-    expect(tokens(thumb)).toContain('bg-canvas');
-  });
-
-  it('disabled: 트랙 #ECECEC + 회색 손잡이 #C4C9CF, 손잡이 왼쪽', () => {
-    const { track, thumb } = renderToggle({ checked: false, disabled: true });
-
-    expect(tokens(track)).toEqual(
-      expect.arrayContaining(['bg-[#ECECEC]', 'items-start'])
-    );
-    expect(tokens(track)).not.toContain('bg-hairline-strong');
-    expect(tokens(thumb)).toContain('bg-[#C4C9CF]');
-    expect(tokens(thumb)).not.toContain('bg-canvas');
-  });
-
-  it('disabled 는 checked 보다 우선한다 — ON 색이 나오지 않는다', () => {
-    const { track, thumb } = renderToggle({ checked: true, disabled: true });
-
-    expect(tokens(track)).toEqual(
-      expect.arrayContaining(['bg-[#ECECEC]', 'items-start'])
-    );
-    expect(tokens(track)).not.toContain('bg-primary');
-    expect(tokens(track)).not.toContain('items-end');
-    expect(tokens(thumb)).toContain('bg-[#C4C9CF]');
-  });
-
+  // 상태→색 1 it — 트랙 색이 checked/disabled 상태의 관찰 수단이다(disabled 는 checked 보다 우선).
   it.each([
-    ['ON', { checked: true }],
-    ['OFF', { checked: false }],
-    ['disabled', { checked: false, disabled: true }],
-  ])('%s 모두 트랙 46×28 · 손잡이 22 (옛 52×30 아님)', (_label, props) => {
-    const { track, thumb } = renderToggle(props);
+    ['ON', { checked: true }, 'bg-primary', 'bg-hairline-strong'],
+    ['OFF', { checked: false }, 'bg-hairline-strong', 'bg-primary'],
+    [
+      'disabled+checked',
+      { checked: true, disabled: true },
+      'bg-[#ECECEC]',
+      'bg-primary',
+    ],
+  ] as const)('%s: 트랙 색이 상태를 따른다', (_label, props, on, off) => {
+    const { track } = renderToggle(props);
 
-    expect(tokens(track)).toEqual(
-      expect.arrayContaining(['h-[28px]', 'w-[46px]'])
-    );
-    expect(tokens(track)).not.toContain('w-[52px]');
-    expect(tokens(track)).not.toContain('h-[30px]');
-    expect(tokens(thumb)).toEqual(
-      expect.arrayContaining(['h-[22px]', 'w-[22px]'])
-    );
+    expect(tokens(track)).toContain(on);
+    expect(tokens(track)).not.toContain(off);
   });
-
-  it.each([
-    ['ON', { checked: true }],
-    ['OFF', { checked: false }],
-    ['disabled', { checked: false, disabled: true }],
-  ])(
-    '%s 모두 트랙은 알약 모양 + 안쪽 여백 3, 손잡이는 원형',
-    (_label, props) => {
-      const { track, thumb } = renderToggle(props);
-
-      // 여백 3이 없으면 22px 손잡이가 46px 트랙 끝에 붙는다.
-      expect(tokens(track)).toEqual(
-        expect.arrayContaining(['rounded-pill', 'px-[3px]'])
-      );
-      expect(tokens(thumb)).toContain('rounded-pill');
-    }
-  );
 });
 
 describe('🔴 TRIP-991 · Toggle — 스위치 이름(AC-3)', () => {

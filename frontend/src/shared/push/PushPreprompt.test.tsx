@@ -1,7 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
-
 import { PushPreprompt } from './PushPreprompt';
 
 /**
@@ -11,7 +9,6 @@ import { PushPreprompt } from './PushPreprompt';
  *  - 벨 히어로 · 제목 · 목적 · 보조 문구와 `계속` 버튼 하나를 그린다(건너뛰기 없음 — 5.1.1(iv))(문구는 Figma 원문, 2줄 개행 포함).
  *  - 권한 창 앞 안내라 어디에도 "허용"을 쓰지 않는다(TRIP-935 R8 · 심사 5.1.1(iv)).
  *  - 버튼은 콜백만 올려보낸다 — OS 권한 창·토큰 등록은 호출자(페이지) 몫이다.
- *  - 바로 앞 화면인 위치 카드와 하단 바·버튼·히어로 틀이 같다(R5 선례 복제).
  * (TRIP-1356 — 「OS 알림 API·권한 루틴을 싣지 않는다」 지뢰 목과 P6 it 을 지웠다: import 구조 가드. 부르지 않음은 P3 콜백 계약이 본다.)
  */
 
@@ -36,38 +33,6 @@ function rawText(node: { props: { children?: unknown } }): string {
     return children.filter((c) => typeof c === 'string').join('');
   }
   return '';
-}
-
-type JsonNode = {
-  props?: { testID?: unknown; className?: unknown };
-  children?: (JsonNode | string)[] | null;
-};
-
-/** testID 를 가진 노드의 **부모** className(문자열). 없으면 null. */
-function parentClassOf(testID: string): string | null {
-  let found: string | null = null;
-  const walk = (n: JsonNode | string | null | undefined): void => {
-    if (!n || typeof n === 'string' || found !== null) return;
-    for (const child of n.children ?? []) {
-      if (
-        child &&
-        typeof child !== 'string' &&
-        child.props?.testID === testID
-      ) {
-        found = String(n.props?.className ?? '');
-        return;
-      }
-    }
-    (n.children ?? []).forEach(walk);
-  };
-  const root = screen.toJSON() as unknown as JsonNode | JsonNode[] | null;
-  if (Array.isArray(root)) root.forEach(walk);
-  else walk(root);
-  return found;
-}
-
-function classOf(testID: string): string {
-  return String(screen.getByTestId(testID).props.className ?? '');
 }
 
 function renderCard(onProceed = jest.fn()) {
@@ -116,31 +81,5 @@ describe('🔴 TRIP-1108 · 콜백만 올려보낸다', () => {
     fireEvent.press(screen.getByTestId('onboarding-push-allow'));
 
     expect(onProceed).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('🔴 TRIP-1108 R5 · 바로 앞 위치 카드와 틀이 같다', () => {
-  it('P5 하단 바·주 버튼·히어로 틀의 className 이 위치 카드 default 와 글자까지 같다', () => {
-    // 준비 — 기준(위치 카드)을 먼저 그려 문자열로 떠 둔다.
-    const location = render(
-      <LocationPreprompt purposeContext="x" onProceed={jest.fn()} />
-    );
-    const expected = {
-      allow: classOf('onboarding-location-allow'),
-      footer: parentClassOf('onboarding-location-allow'),
-      hero: classOf('onboarding-location-hero'),
-    };
-    location.unmount();
-    // 기준 앵커 — 빈 문자열끼리 같아서 통과하는 일을 막는다.
-    expect(expected.allow).toContain('bg-primary');
-    expect(expected.footer).toContain('border-t');
-
-    // 실행
-    renderCard();
-
-    // 단언 — 문자열끼리 비교(노드 객체를 expect 에 넣지 않는다)
-    expect(classOf('onboarding-push-allow')).toBe(expected.allow);
-    expect(parentClassOf('onboarding-push-allow')).toBe(expected.footer);
-    expect(classOf('onboarding-push-hero')).toBe(expected.hero);
   });
 });

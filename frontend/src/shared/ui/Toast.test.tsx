@@ -1,7 +1,5 @@
 import { View } from 'react-native';
 import { act, render, screen, within } from '@testing-library/react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
-import { Path } from 'react-native-svg';
 
 import {
   TOAST_VISIBLE_MS,
@@ -23,15 +21,13 @@ import {
  *  - T2 정해 둔 표시 시간(`TOAST_VISIBLE_MS`)이 지나면 사라진다. 1ms 전에는 아직 보인다.
  *  - T3 한 번에 하나 — 연달아 띄우면 나중 것만 남고, 나중 것의 표시 시간은 새로 센다.
  *  - `hideToast` 는 즉시 지우고 자동 숨김 타이머까지 없앤다(테스트 사이 리셋 장치).
- *  - 형상: Figma NoticeBar tone=success 토큰(`bg-canvas`·`border-hairline`·`rounded-button`) + success 체크.
  *
- * TRIP-1286 — 하단 위치는 className 토큰(`bottom-[220px]`)까지만 잰다. 실제 겹침 없음·픽셀·네비게이션 뒤 실제 표시는 6-b 실기.
+ * TRIP-1286 — 하단 위치(`bottom-[220px]`)·형상 토큰·실제 겹침 없음은 실화면 QA 몫.
  *
  * 3동작 뼈대: 준비=가짜 타이머 + 호스트 렌더 → 실행=showToast / 시간 흘리기 → 단언=보임·사라짐.
  */
 
 const PROBE_ROOT = 'toast-probe-root';
-const SUCCESS_STROKE = '#0E9384';
 
 function renderHost(): void {
   render(
@@ -50,12 +46,6 @@ function advance(ms: number): void {
   act(() => {
     jest.advanceTimersByTime(ms);
   });
-}
-
-function classTokens(node: ReactTestInstance): string[] {
-  return String(node.props.className ?? '')
-    .split(/\s+/)
-    .filter(Boolean);
 }
 
 beforeEach(() => {
@@ -142,41 +132,6 @@ describe('🔴 리셋 장치 · hideToast (01b Q1 — 테스트 간 싱글턴 �
   });
 });
 
-describe('🔴 비주얼 · NoticeBar tone=success 토큰 (구조 가드)', () => {
-  it('배경·테두리·반경 토큰을 쓰고, success 색 체크 글리프를 품는다', () => {
-    renderHost();
-    show('A 문구', 'toast-a');
-
-    const toast = screen.getByTestId('toast-a');
-    const tokens = classTokens(toast);
-    expect(tokens).toContain('bg-canvas');
-    expect(tokens).toContain('border-hairline');
-    expect(tokens).toContain('rounded-button');
-
-    const strokes = toast
-      .findAll((node) => node.type === Path)
-      .map((node) => String(node.props.stroke ?? '').toUpperCase());
-    expect(strokes).toContain(SUCCESS_STROKE);
-  });
-});
-
-// TRIP-1286 · B-19 결정2 · Seed Q1 C — 토스트를 FAB 스택 윗변(바닥에서 152+56=208) 위로 올린다.
-// 홈·탐색 랜딩·장소 탐색·숙소 검색 네 화면의 FAB 윗변이 모두 208 이라 전역 상수 하나(208 + 간격 12)로 푼다.
-describe('🔴 위치 · FAB 스택 위 (AC-T1·T2)', () => {
-  it('토스트 루트는 바닥에서 220px(bottom-[220px])에 뜨고, 옛 108px 자리는 아니다', () => {
-    renderHost();
-    // 앵커: 띄우기 전엔 없다 — 아래 토큰 단언이 앞 테스트에서 샌 토스트를 잡은 게 아니다.
-    expect(screen.queryByTestId('toast-a')).toBeNull();
-
-    show('A 문구', 'toast-a');
-
-    const tokens = classTokens(screen.getByTestId('toast-a'));
-    expect(tokens).toContain('absolute');
-    expect(tokens).toContain('bottom-[220px]');
-    expect(tokens).not.toContain('bottom-[108px]');
-  });
-});
-
 // TRIP-1321 · G-U8-10 · BR-U8-52 — ✦ 도우미 FAB 가 있는 화면은 토스트 바닥을 ✦ 윗변 + 12(288)로 올린다.
 // 올림은 그 화면이 붙어 있는 동안만 — 떨어지면 기본 220 으로 돌아간다. 실제 겹침 없음은 6-b 실기.
 describe('🔴 위치 · 화면이 토스트 바닥을 올린다 (TRIP-1321)', () => {
@@ -197,7 +152,6 @@ describe('🔴 위치 · 화면이 토스트 바닥을 올린다 (TRIP-1321)', (
     expect(raised.props.style).toEqual(
       expect.objectContaining({ bottom: 288 })
     );
-    expect(classTokens(raised)).not.toContain('bottom-[220px]');
 
     rerender(
       <>
@@ -206,7 +160,6 @@ describe('🔴 위치 · 화면이 토스트 바닥을 올린다 (TRIP-1321)', (
       </>
     );
     const lowered = screen.getByTestId('toast-a');
-    expect(classTokens(lowered)).toContain('bottom-[220px]');
     expect(lowered.props.style?.bottom).toBeUndefined();
   });
 

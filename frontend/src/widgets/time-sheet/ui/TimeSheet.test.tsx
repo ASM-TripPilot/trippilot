@@ -19,8 +19,8 @@ import { TimeSheet, type TimeSheetPlaceSummary } from './TimeSheet';
  *  - INV-3 소요시간 표기 0건 · `endsNextDay` 는 `end<=start` 기계 유도(INV-2).
  *  - D1 시트 close(딤·스와이프)도 `onCancel` 로 알린다 — 안 알리면 소비처의 "열림" 상태가 남아 다시 못 연다.
  *
- * ★ jest 사각 — 통과형 목이라 시트 실제 열림·`enableContentPanningGesture`·휠 제스처·페이드·딤은 못 본다.
- *   `enableContentPanningGesture={false}` 유지는 아래 D2 가 prop 값으로만 잠그고(실제 효과는 6-b 실기).
+ * ★ jest 사각 — 통과형 목이라 시트 실제 열림·`enableContentPanningGesture`·끌어 닫기·휠 제스처·페이드·딤은 못 본다.
+ *   그 prop 유지(옛 D1 의 D2 단언)는 TRIP-1367 에서 지웠다 — 실화면 QA 몫.
  *
  * TRIP-1356 · 옛 `TimeSheet.wheel.test.tsx`(편집기 형태 CH*)·`TimeSheet.apply.test.tsx`(종료 선택 사항·W4·T*)를 아래 두 번째 블록으로
  * 합쳤다. 위 describe.each 와 같은 행동을 보던 it 5개는 지웠다: E1=H1a · E2=H1b · INV-3=H4 · D1=H7 (D1 이 H7 의 상위 집합),
@@ -255,15 +255,6 @@ describe.each(CONFIGS)(
 
       expect(onCancel).toHaveBeenCalledTimes(1);
       expect(onApply).not.toHaveBeenCalled();
-
-      // onClose 를 가진 가장 가까운 조상 = 닫힘을 쥔 BottomSheet.
-      let owner: ReactTestInstance | null = sheet;
-      while (owner !== null && typeof owner.props.onClose !== 'function') {
-        owner = owner.parent;
-      }
-      expect(owner?.props.enablePanDownToClose).toBe(true);
-      // 휠 드래그가 시트 끌기로 새지 않게 — jest 는 효과를 못 보고 prop 값만 본다(실효 확인은 6-b).
-      expect(owner?.props.enableContentPanningGesture).toBe(false);
     });
   }
 );

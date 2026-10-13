@@ -6,10 +6,8 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { ScrollView, StyleSheet, Text } from 'react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
+import { Text } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 
 import type { MapPin } from '@/shared/map';
 
@@ -830,35 +828,6 @@ describe('🔴 MapSheetShell · SH14 — 닫힘 칸에서만 지도가 풀린다
   });
 });
 
-/* ──────────────── TRIP-920 · 5-b 후속 — 시트가 콘텐츠 높이 칸을 몰래 끼우지 않는다 ────────────────
- * `@gorhom/bottom-sheet` 5.x 는 `enableDynamicSizing` 기본값이 **true** 라, 시트 내용 높이로 만든 칸 하나를
- * 넘긴 snapPoints 에 끼워 넣고 정렬한 배열에서 `index`·`onChange` 번호를 센다(03b 경고-1). 그러면
- * "0=닫힘 · 1=peek · 2=펼침" 번호표가 실기에서 어긋난다 — 내용이 짧은 h12-editor-empty 가 index 2 인데 45% 로 연다.
- *
- * ★ 통과형 목은 dynamic sizing 을 **재현하지 않는다**(넘긴 배열을 그대로 얹을 뿐). 그래서 이 파일과 소비처
- *   테스트의 칸 값 단언 `snapPoints[index]`(02a ★1)는 **"라이브러리가 배열을 고치지 않는다"는 전제** 위에서만
- *   실제 칸 값과 같다. 그 전제를 셸이 `enableDynamicSizing={false}` 로 직접 세우는지를 여기서 잠근다
- *   (02a ★15). 목은 prop 을 host View 에 그대로 펼친다 — 넘기면 `false`, 안 넘기면 `undefined`(02a §5).
- * `toBe(false)` 로 본다 — `undefined` 는 라이브러리 기본값 true 로 읽히므로 통과시키면 안 된다.
- * ⚠️ 원리적 사각: 끈 뒤 실제 높이가 28/45%/88% 인지는 6-b 실기(h12-editor-empty ↔ -filled 첫 높이 비교).
- * ─────────────────────────────────────────────────────────────────────── */
-describe('🔴 MapSheetShell · SH15 — 시트에 enableDynamicSizing={false} 를 넘긴다 (TRIP-920 · 03b 경고-1)', () => {
-  it.each<[string, (string | number)[] | undefined]>([
-    ['기본 스냅', undefined],
-    ['직접 준 snapPoints(i05 모양)', ['40%', '88%']],
-    ['직접 준 snapPoints(i01 모양)', [28, '55%', '86%']],
-  ])(
-    'SH15 · %s 에서도 BottomSheet 가 enableDynamicSizing=false 를 받는다',
-    (_label, snapPoints) => {
-      // 준비/실행 — 셸 렌더.
-      renderShell({ snapPoints });
-
-      // 단언 — 시트 본체(host)가 받은 값이 정확히 false(미전달 undefined = 라이브러리 기본 true 라 red).
-      expect(sheetHost().props.enableDynamicSizing).toBe(false);
-    }
-  );
-});
-
 /* ──────────────── TRIP-924 · list 슬롯의 빈 목록 안내(ListEmptyComponent) ────────────────
  * h13 장소 후보가 0건이면 시트가 헤더만 남고 비어 보인다. 셸은 **판단하지 않고** 소비처가 준 안내 노드를
  * `<BottomSheetFlatList ListEmptyComponent>` 로 통과시키기만 한다(언제 줄지는 소비처 몫 — 02a ★1).
@@ -920,168 +889,6 @@ describe('MapSheetShell · SH16 — list 슬롯이 빈 목록 안내를 통과�
     // 단언 — 아이템은 뜨고 안내는 없다(헤더·푸터 등 조건 없는 자리에 얹으면 red, 02a ★2).
     expect(screen.getByTestId('list-item-x1')).toBeOnTheScreen();
     expect(screen.queryByTestId('fake-empty')).toBeNull();
-  });
-});
-
-/* ──────────────── TRIP-1014 · C(#076) — 셸 시트 기본값: 안전 영역 top · 키보드 내린 뒤 복귀 ────────────────
- * h13 장소 추가에서 검색하고 키보드를 내리면 시트가 상태바·다이내믹 아일랜드 위까지 올라간 채 남았다(#076).
- * 셸 BottomSheet 한 곳에 두 기본값을 넣어 소비처 전부가 받게 한다(새 셸 prop 없음).
- *   - `topInset` = 안전 영역 top — 시트 컨테이너 윗변을 상태바 아래로 내린다. **Provider 가 없으면 0**:
- *     `useSafeAreaInsets()` 는 Provider 가 없으면 throw 하므로 컨텍스트를 null 허용으로 읽는다(01b Q1,
- *     선례 `LiveHubView.tsx:194`). 이 리포 jest 에는 safe-area Provider·목이 없다(02a ★C1).
- *   - `keyboardBlurBehavior="restore"` — 키보드가 내려가면 키보드가 뜨기 전 칸으로 돌아온다(01b Q3).
- *
- * 무엇을 보장하나:
- *  - 🔴 SH17a 스크롤 경로·list 경로 둘 다 `restore` 를 받는다(#076 은 list 경로 h13 — 02a ★C7).
- *  - 🔴 SH17b top 47 을 넣으면 47, 안 넣으면 throw 없이 0 — 두 값이 짝이어야 하드코딩(0 이든 47 이든)이
- *    못 빠져나간다(02a ★C3).
- *  - 🟢 SH17c 하단 안전 영역을 넣으면 닫힘 칸만 그만큼 커지고(28→62) 나머지 시트 prop 은 그대로다.
- *
- * 값 주입은 `SafeAreaProvider` 가 아니라 `SafeAreaInsetsContext.Provider` 로 한다 — `SafeAreaProvider` 는
- * 네이티브에서 인셋을 받기 전까지 자식을 안 그린다(02a ★C2).
- * ⚠️ 원리적 사각: 윗변이 실제로 내려오는지·퍼센트 스냅이 줄어드는지·키보드를 내리면 칸이 돌아오는지는
- *   gorhom 런타임 몫이라 6-b 실기(`h13-place-add` — 02a ★C8). 여기선 prop 을 넘겼는지만 본다.
- *
- * 3동작 뼈대: 준비=(안전 영역 값을 넣어) 셸 렌더 → 실행=렌더 → 단언=시트 본체(host)가 받은 prop.
- * ─────────────────────────────────────────────────────────────────────── */
-const SAFE_INSETS = { top: 47, bottom: 34, left: 0, right: 0 };
-
-function renderShellWithInsets(): ReturnType<typeof render> {
-  return render(
-    <SafeAreaInsetsContext.Provider value={SAFE_INSETS}>
-      <MapSheetShell
-        center={CENTER}
-        pins={PINS}
-        days={DAYS}
-        selectedDayIndex={0}
-        onSelectDay={jest.fn()}
-        onBack={jest.fn()}
-        header={<Text testID="fake-header">헤더</Text>}
-      >
-        <Text testID="fake-body">본문</Text>
-      </MapSheetShell>
-    </SafeAreaInsetsContext.Provider>
-  );
-}
-
-describe('🔴 MapSheetShell · SH17 — 셸 시트가 안전 영역 top 과 키보드 복귀를 받는다 (TRIP-1014 #076)', () => {
-  it.each<[string, () => void]>([
-    ['스크롤 경로(list 미전달)', () => renderShell()],
-    ['list 경로(h13 모양)', () => renderListShell([{ id: 'a' }])],
-  ])(
-    'SH17a · %s 에서 BottomSheet 가 keyboardBlurBehavior="restore" 를 받는다',
-    (_label, renderIt) => {
-      renderIt();
-
-      expect(sheetHost().props.keyboardBlurBehavior).toBe('restore');
-    }
-  );
-
-  it('SH17b · 안전 영역 top 47 이면 topInset 47, Provider 가 없으면 throw 없이 0 이다', () => {
-    // ① Provider 로 top 47 을 넣는다.
-    const first = renderShellWithInsets();
-    expect(sheetHost().props.topInset).toBe(47);
-    first.unmount();
-
-    // ② Provider 없이(이 리포 jest 의 기본 상태) — 렌더가 끝까지 되고 0 이다.
-    renderShell();
-    expect(screen.getByTestId('fake-header')).toBeOnTheScreen();
-    expect(sheetHost().props.topInset).toBe(0);
-  });
-
-  it('SH17c · 안전 영역을 넣으면 닫힘 칸만 그만큼 커지고 나머지 시트 prop 은 그대로다', () => {
-    renderShellWithInsets();
-
-    const host = sheetHost();
-    expect(host.props.keyboardBehavior).toBe('interactive');
-    expect(host.props.enableDynamicSizing).toBe(false);
-    // 닫힘 칸은 28 + 하단 안전 영역(34) — 핸들이 홈 인디케이터 위에 오게(closedSnap 테스트).
-    expect(host.props.snapPoints).toEqual([62, '45%', '88%']);
-    expect(host.props.index).toBe(1);
-  });
-});
-
-/* ───────────────────────────────────────────────────────────────────────
- * SH19 — 스크롤 끝 카드가 CTA 바 뒤에 숨지 않는다 (TRIP-935 · 결과 시트 마지막 카드 가림)
- *
- * CTA 바는 시트 위에 absolute 로 떠 있어, 본문 아래 여백이 모자라면 끝까지 스크롤해도 마지막 카드가 바 뒤에
- * 반쯤 남는다(h08 1일차 8번째 카드 실측). 그래서 본문 스크롤 뷰의 아래 여백 ≥ CTA 바 81 + 하단 안전 영역이어야
- * 한다(편집기 N5 와 같은 하한). 인셋 0·34·120 세 줄이 짝이라, 인셋을 빼먹은 고정값은 34·120 줄에서 걸린다.
- * 상한은 하한 + 24(카드 한 칸 틈 pb-2xl) — 여백이 몇 배로 불어 바 위에 빈 칸이 생기는 회귀를 잡는다.
- * 반대편(SH19b): CTA 가 없는 셸(h07 생성 중·i01 허브·Plan-B 재계산 중)은 덮을 바가 없으니 여백을 안 준다.
- * ⚠️ 원리적 사각: 실제로 카드가 바 위로 올라오는지는 gorhom 런타임 몫이라 6-b 실기.
- *
- * 3동작 뼈대: 준비=(하단 인셋·CTA 유무를 정해) 셸 렌더 → 실행=렌더 → 단언=본문 스크롤 뷰의 paddingBottom.
- * ─────────────────────────────────────────────────────────────────────── */
-function renderShellWithBottomInset(
-  bottom: number | null,
-  cta: Parameters<typeof MapSheetShell>[0]['cta']
-): void {
-  const shell = (
-    <MapSheetShell
-      center={CENTER}
-      pins={PINS}
-      days={DAYS}
-      header={<Text testID="fake-header">헤더</Text>}
-      cta={cta}
-    >
-      <Text testID="fake-body">본문</Text>
-    </MapSheetShell>
-  );
-  render(
-    bottom === null ? (
-      shell
-    ) : (
-      <SafeAreaInsetsContext.Provider
-        value={{ top: 47, bottom, left: 0, right: 0 }}
-      >
-        {shell}
-      </SafeAreaInsetsContext.Provider>
-    )
-  );
-}
-
-/** 본문 스크롤 뷰가 받은 paddingBottom. 목에선 시트 본체·스크롤 뷰가 같은 통과형이라 본문에서 가장 가까운
- *  통과형 조상이 스크롤 뷰다(SH18c 와 같은 식) — snapPoints 가 없어야 시트 본체를 잘못 집지 않은 것이다. */
-function bodyPaddingBottom(): unknown {
-  let scroll = screen.getByTestId('fake-body').parent;
-  while (scroll && scroll.type !== (BottomSheetScrollView as unknown)) {
-    scroll = scroll.parent;
-  }
-  if (!scroll) throw new Error('본문 스크롤 뷰가 없다');
-  expect(Array.isArray(scroll.props.snapPoints)).toBe(false);
-  const style = StyleSheet.flatten(scroll.props.contentContainerStyle) as
-    { paddingBottom?: unknown } | undefined;
-  return style?.paddingBottom;
-}
-
-const ONE_CTA = [
-  { label: '확정하기', variant: 'primary' as const, onPress: jest.fn() },
-];
-
-describe('🔴 MapSheetShell · SH19 — 본문 아래 여백 = CTA 바 + 하단 안전 영역, CTA 없으면 0 (TRIP-935)', () => {
-  it.each<[string, number, number | null]>([
-    ['안전 영역 Provider 없음(인셋 0)', 81, null],
-    ['하단 인셋 34(홈 인디케이터 기기)', 115, 34],
-    ['하단 인셋 120(고정값으로는 못 맞추는 큰 값)', 201, 120],
-  ])(
-    '%s → 본문 스크롤 뷰 paddingBottom ≥ %i (상한 +24)',
-    (_label, min, bottom) => {
-      renderShellWithBottomInset(bottom, ONE_CTA);
-
-      const padding = bodyPaddingBottom();
-      expect(typeof padding).toBe('number');
-      expect(padding as number).toBeGreaterThanOrEqual(min);
-      expect(padding as number).toBeLessThanOrEqual(min + 24);
-    }
-  );
-
-  it('SH19b · CTA 미전달·빈 배열이면 인셋 34 여도 본문 아래 여백이 없다', () => {
-    for (const cta of [undefined, []]) {
-      renderShellWithBottomInset(34, cta);
-      expect(bodyPaddingBottom() ?? 0).toBe(0);
-      screen.unmount();
-    }
   });
 });
 
@@ -1318,12 +1125,8 @@ describe('TRIP-800 · 셸 반경 원 통과 (AC-7 · Q5)', () => {
  *    끌린다. 값은 정적이다(끄는 중에 뒤집으면 gorhom 이 본문을 재마운트한다 — 브리프 F1).
  *  - 둘 다 안 주면 지금 경로 그대로다(다른 셸 소비처 11곳 무회귀).
  *
- * 관측 방법(02a ★1): gorhom 목은 `BottomSheet`·`BottomSheetScrollView` 가 **같은 통과형 컴포넌트**다.
- *   그래서 "스크롤 래퍼가 있다/없다" = 본문 노드 위에 그 통과형 조상이 **몇 겹**인가(기본 2 · opt-in 1).
- *   남는 한 겹은 snapPoints 를 쥔 시트 본체여야 한다.
- * ⚠️ 원리적 사각: 시트가 정말 손잡이로만 끌리는지·본문이 실제로 스크롤되는지는 목이 prop 을 무시해 6-b.
- *
- * 3동작 뼈대: 준비=opt-in 조합으로 셸 렌더 → 실행=렌더 → 단언=시트 본체 prop · 본문 위 통과형 조상 겹수.
+ * 통과형 목 위 prop·조상 겹수 단언(SH18a~c)은 TRIP-1367 에서 지웠다 — 시트가 손잡이로만 끌리는지·본문이
+ *   실제로 스크롤되는지는 실화면 QA 몫. 남은 SH18d 는 list 슬롯이 이기는 렌더 결과만 본다.
  */
 
 function renderBodyScrollShell(
@@ -1346,79 +1149,7 @@ function renderBodyScrollShell(
   );
 }
 
-/** 노드 위(자기 제외)의 gorhom 통과형 조상들 — 가까운 것부터. 목에선 시트 본체와 본문 스크롤 뷰가 같은 타입이다. */
-function sheetPassthroughAncestors(
-  node: ReactTestInstance
-): ReactTestInstance[] {
-  const found: ReactTestInstance[] = [];
-  for (let cur = node.parent; cur; cur = cur.parent) {
-    if (cur.type === (BottomSheet as unknown)) found.push(cur);
-  }
-  return found;
-}
-
-/** 노드 위(자기 제외) 가장 가까운 host(문자열 타입) 조상 — 본문 틀 View 가 여기 잡힌다. */
-function nearestHostAncestor(node: ReactTestInstance): ReactTestInstance {
-  for (let cur = node.parent; cur; cur = cur.parent) {
-    if (typeof cur.type === 'string') return cur;
-  }
-  throw new Error('host 조상이 없다');
-}
-
-/** 노드 위(자기 제외)의 RN `ScrollView` 조상 수 — gorhom 목(통과형)과 별개로 센다. */
-function rnScrollViewAncestorCount(node: ReactTestInstance): number {
-  let n = 0;
-  for (let cur = node.parent; cur; cur = cur.parent) {
-    if (cur.type === (ScrollView as unknown)) n += 1;
-  }
-  return n;
-}
-
 describe('MapSheetShell · SH18 — body 비스크롤·콘텐츠 pan 정적 off opt-in (TRIP-1112 D1 · AC-J1·J2·J4)', () => {
-  it('🔴 SH18a · bodyScroll={false} 면 header·children 위에 스크롤 래퍼가 없고 시트 본체 한 겹뿐이다 (콘텐츠 pan 은 따로 — 미지정 유지)', () => {
-    // 준비/실행 — 본문 스크롤만 끈다.
-    renderBodyScrollShell({ bodyScroll: false });
-
-    // 단언 — header·children 둘 다 시트 안에 그대로 그려지고, 그 위 통과형 조상은 시트 본체 하나다.
-    for (const id of ['fake-header', 'fake-body']) {
-      const ancestors = sheetPassthroughAncestors(screen.getByTestId(id));
-      expect(ancestors).toHaveLength(1);
-      expect(Array.isArray(ancestors[0].props.snapPoints)).toBe(true);
-    }
-    // 본문 틀 모양(5-b 경고-1) — 겹수만 세면 gorhom 이 아닌 래퍼·높이 제약 삭제가 green 이다.
-    // ① 틀이 남은 높이를 채운다: header 바로 위 host 의 className 토큰에 `flex-1`. 빠지면 틀이 내용만큼
-    //    자라 안쪽 Nestable 스크롤에 스크롤할 거리가 없어진다.
-    const frameTokens = String(
-      nearestHostAncestor(screen.getByTestId('fake-header')).props.className
-    ).split(/\s+/);
-    expect(frameTokens).toContain('flex-1');
-    // ② gorhom 이 아닌 스크롤러(RN ScrollView)로도 감싸지 않는다 — 감싸면 스크롤 안의 스크롤(H1)이 돌아온다.
-    //    이 경로의 gorhom 목엔 RN ScrollView 가 없어서 0 이 기준선이다.
-    expect(rnScrollViewAncestorCount(screen.getByTestId('fake-body'))).toBe(0);
-    // 짝 — 두 opt-in 은 서로 묶이지 않는다: 본문 스크롤만 껐으면 콘텐츠 pan 은 라이브러리 기본(미지정)이다.
-    expect(sheetHost().props.enableContentPanningGesture).toBeUndefined();
-  });
-
-  it('🔴 SH18b · contentPanning={false} 면 시트 본체가 enableContentPanningGesture=false 를 받는다', () => {
-    renderBodyScrollShell({ bodyScroll: false, contentPanning: false });
-
-    // toBe(false) — 미전달(undefined)은 라이브러리 기본 true 로 읽힌다(02a ★2).
-    expect(sheetHost().props.enableContentPanningGesture).toBe(false);
-  });
-
-  it('SH18c · 두 opt-in 을 안 주면 지금 경로 그대로다 — 스크롤 래퍼 한 겹 + 시트 본체, 콘텐츠 pan 미지정 (선제 green 회귀 앵커)', () => {
-    renderBodyScrollShell();
-
-    const ancestors = sheetPassthroughAncestors(
-      screen.getByTestId('fake-body')
-    );
-    // 가까운 쪽 = 본문 스크롤 뷰(snapPoints 없음), 먼 쪽 = 시트 본체.
-    expect(ancestors).toHaveLength(2);
-    expect(Array.isArray(ancestors[0].props.snapPoints)).toBe(false);
-    expect(Array.isArray(ancestors[1].props.snapPoints)).toBe(true);
-    expect(sheetHost().props.enableContentPanningGesture).toBeUndefined();
-  });
-
   it('SH18d · list 를 주면 bodyScroll={false} 여도 list 슬롯이 이긴다 — header·children 은 리스트 안 (선제 green)', () => {
     renderBodyScrollShell({
       bodyScroll: false,

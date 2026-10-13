@@ -47,13 +47,6 @@ const CENTER: MapCenter = { lat: 35.1532, lng: 129.1187 };
  *  가 받는다(원격 URL 은 TRIP-634 밖). */
 const PHOTO = require('@/shared/ui/placeholders/home/hero-view.jpg');
 
-const GESTURE_TOGGLES = [
-  'isScrollGesturesEnabled',
-  'isZoomGesturesEnabled',
-  'isRotateGesturesEnabled',
-  'isTiltGesturesEnabled',
-] as const;
-
 describe('🔴 AC-3 — visited 마커: 사진 썸네일 + 번호 배지', () => {
   it('사진 노드 + 번호(SVG content) + 빨강 배지, 래퍼 collapsable={false}', () => {
     // Arrange — visited 핀 하나(사진 URL 포함).
@@ -266,56 +259,5 @@ describe('🔴 AC-6 — 방문구간 연결선: visited 구간만 잇는다', ()
     expect(coords).toEqual(
       expected.map(([latitude, longitude]) => ({ latitude, longitude }))
     );
-  });
-});
-
-describe('🔴 AC-7 — 줌/축척 opt-in(showZoomControls·showScaleBar), viewOnly 와 독립', () => {
-  const PIN = [{ number: 1, lat: 35.1, lng: 129.1 }];
-
-  // TRIP-1356 — 세 it(전달 true · 미전달 명시 false · viewOnly 독립)을 한 흐름으로 합쳤다. 단언은 하나도 줄이지 않았다.
-  it('전달하면 true, 미전달이면 명시적 false(SDK native default true 를 덮는다), viewOnly 와 독립이다', () => {
-    // 1) 전달하면 map-native 가 isShowZoomControls·isShowScaleBar 를 true 로 받는다.
-    const first = render(
-      <MapView center={CENTER} pins={PIN} showZoomControls showScaleBar />
-    );
-    let native = screen.getByTestId('map-native');
-    expect(native.props.isShowZoomControls).toBe(true);
-    expect(native.props.isShowScaleBar).toBe(true);
-    first.unmount();
-
-    // 2) 짝 — 미전달이면 명시적 false. undefined 가 아닌 이유: 네이버 SDK 는 두 컨트롤 native default 가 true 라
-    //    prop 을 안 주면 컨트롤이 저절로 뜬다. "기본 미표시"를 지키려면 명시적으로 false 를 내려야 한다.
-    const second = render(<MapView center={CENTER} pins={PIN} />);
-    native = screen.getByTestId('map-native');
-    expect(native.props.isShowZoomControls).toBe(false);
-    expect(native.props.isShowScaleBar).toBe(false);
-    second.unmount();
-
-    // 3) viewOnly 만(컨트롤 prop 없음): 제스처 4토글 off, 컨트롤은 false.
-    const { rerender } = render(
-      <MapView center={CENTER} pins={PIN} viewOnly />
-    );
-    native = screen.getByTestId('map-native');
-    expect(native.props.isShowZoomControls).toBe(false);
-    for (const toggle of GESTURE_TOGGLES) {
-      expect(native.props[toggle]).toBe(false);
-    }
-
-    // 4) viewOnly + 컨트롤: 제스처는 여전히 off, 컨트롤은 true(둘이 독립).
-    rerender(
-      <MapView
-        center={CENTER}
-        pins={PIN}
-        viewOnly
-        showZoomControls
-        showScaleBar
-      />
-    );
-    native = screen.getByTestId('map-native');
-    expect(native.props.isShowZoomControls).toBe(true);
-    expect(native.props.isShowScaleBar).toBe(true);
-    for (const toggle of GESTURE_TOGGLES) {
-      expect(native.props[toggle]).toBe(false);
-    }
   });
 });

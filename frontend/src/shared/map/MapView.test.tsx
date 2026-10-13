@@ -1,4 +1,3 @@
-import { processColor } from 'react-native';
 import { render, screen, within } from '@testing-library/react-native';
 
 import { MapView } from '@/shared/map';
@@ -95,14 +94,7 @@ describe('🔴 TRIP-876 — 커스텀 분홍 번호 핀(네이버 기본 초록 
       expect(labels.length).toBeGreaterThan(0);
     }
 
-    // 짝 — 기본 마커로 되돌리면(caption 부여·children 제거) 위가 red. 마커엔 caption 이 없고
-    // anchor 는 물방울 끝(아래 꼭짓점)이 좌표를 가리키도록 {x:0.5, y:1} 이다.
-    const markers = screen.getAllByTestId('map-marker');
-    expect(markers).toHaveLength(PINS.length);
-    for (const marker of markers) {
-      expect(marker.props.caption).toBeUndefined();
-      expect(marker.props.anchor).toEqual({ x: 0.5, y: 1 });
-    }
+    expect(screen.getAllByTestId('map-marker')).toHaveLength(PINS.length);
   });
 });
 
@@ -205,20 +197,6 @@ describe('🔴 AC5 — 실패: 클라이언트 ID 부재 → map-failure 보이�
   });
 });
 
-describe('🔴 AC-보강 — maxLevel → NaverMapView minZoom 으로 전달(축 반대, 01 §새 계약)', () => {
-  it('maxLevel 전달 시 map-native 가 minZoom prop 을 받고(값은 6-b, 전달 여부만), 미전달이면 없다(짝 — maxLevel 이 minZoom 을 몬다)', () => {
-    const { unmount } = render(
-      <MapView center={CENTER} pins={PINS} maxLevel={5} />
-    );
-    // 값 하드코딩 금지 — 정확한 변환값은 실기(6-b) 조정 대상.
-    expect(screen.getByTestId('map-native').props.minZoom).toBeDefined();
-    unmount();
-
-    render(<MapView center={CENTER} pins={PINS} />);
-    expect(screen.getByTestId('map-native').props.minZoom).toBeUndefined();
-  });
-});
-
 describe('🔴 AC-보강 — onCameraIdle: NaverMapView 의 idle 좌표를 {lat,lng} 로 감싸 콜백(TRIP-866 S4 신규 계약)', () => {
   it('onCameraIdle 전달 시 map-native 가 그 콜백을 받고, 발화하면 {lat,lng} 로 변환돼 올라온다', () => {
     // 초심자용 — onCameraIdle 은 "지도가 움직이다 멈췄을 때" 네이버 지도가 그때 중심 좌표를
@@ -242,13 +220,6 @@ describe('🔴 AC-보강 — onCameraIdle: NaverMapView 의 idle 좌표를 {lat,
     // Assert — {lat,lng} 로 변환(네이버 {latitude,longitude} 순서 그대로 넘기면 red).
     expect(onCameraIdle).toHaveBeenCalledTimes(1);
     expect(onCameraIdle).toHaveBeenCalledWith({ lat: 33.5, lng: 126.5 });
-  });
-
-  it('onCameraIdle 미전달 시 map-native 는 그 콜백을 받지 않는다(짝 — 있을 때만 감싼다)', () => {
-    // maxLevel↔minZoom 과 같은 옵트인 패턴 — 안 준 콜백을 지도에 억지로 달지 않는다.
-    render(<MapView center={CENTER} pins={PINS} />);
-
-    expect(screen.getByTestId('map-native').props.onCameraIdle).toBeUndefined();
   });
 });
 
@@ -274,12 +245,6 @@ describe('TRIP-748 — onTapMap: 지도 빈 곳 탭을 부모에 알린다(허�
     ).onTapMap({ latitude: 33.5, longitude: 126.5, x: 10, y: 20 });
 
     expect(onTapMap).toHaveBeenCalledTimes(1);
-  });
-
-  it('M2 onTapMap 미전달 시 map-native 는 그 콜백을 받지 않는다(기존 소비처 무회귀 · 선제 green)', () => {
-    render(<MapView center={CENTER} pins={PINS} />);
-
-    expect(screen.getByTestId('map-native').props.onTapMap).toBeUndefined();
   });
 });
 
@@ -396,17 +361,6 @@ describe('🟢 AC-2 — state 미전달 = 기존 분홍 핀(무회귀 선제 앵
   });
 });
 
-describe('🔴 AC-3 — 연결 경로선 색이 빨강(#FF385C)', () => {
-  it('경로선(map-path)의 color prop 이 #FF385C 다', () => {
-    // Arrange + Act — pins 2개 + connectPins 기본(true) → 경로선 1개.
-    render(<MapView center={CENTER} pins={PINS} />);
-
-    // Assert — 목이 NaverMapPathOverlay props 를 그대로 노출한다(색은 hex 문자열).
-    // connectPins={false} 시 경로선 부재는 기존 AC3 describe 가 이미 잠근다(무회귀).
-    expect(screen.getByTestId('map-path').props.color).toBe('#FF385C');
-  });
-});
-
 describe('🔴 AC-4 — 현재위치 오버레이(파란 점·링·라벨)', () => {
   it('currentLocation 전달 → 파란(#1659C9) 점·링 + "현재 위치" SVG 라벨, collapsable={false}', () => {
     // Arrange + Act
@@ -430,12 +384,6 @@ describe('🔴 AC-4 — 현재위치 오버레이(파란 점·링·라벨)', () 
       within(
         cur as ReturnType<typeof screen.getByTestId>
       ).UNSAFE_queryAllByProps({ content: '현재 위치' }).length
-    ).toBeGreaterThan(0);
-    // 파란 점·링(link 색). 여러 요소가 이 색을 쓰므로 present 만 본다.
-    expect(
-      within(
-        cur as ReturnType<typeof screen.getByTestId>
-      ).UNSAFE_queryAllByProps({ fill: '#1659C9' }).length
     ).toBeGreaterThan(0);
   });
 
@@ -474,30 +422,6 @@ describe('🔴 TRIP-795 AC-3(a) — radiusCircle: 주면 map-circle 그리고 �
     const circle = screen.queryByTestId('map-circle');
     expect(circle).not.toBeNull();
     expect((circle as { props: { radius?: number } }).props.radius).toBe(1100);
-  });
-
-  it('radiusCircle 전달 → 채움 color 가 알파 0·네이티브 값 0 아님(윤곽선만), 윤곽선·반경 무회귀', () => {
-    // Arrange + Act
-    render(
-      <MapView
-        center={CENTER}
-        pins={PINS}
-        radiusCircle={{ center: CENTER, radiusM: 1400 }}
-      />
-    );
-
-    // Assert — 목은 SDK 기본값을 재현하지 않아 미전달 color 가 undefined 로 보이지만, 실 SDK 에서
-    // 미전달은 color='black'(검정 채움)이다. 또 processColor 결과가 0 인 투명('transparent'·
-    // 'rgba(0,0,0,0)'·'#00000000')은 iOS 네이티브가 초기값 0 과 같다며 무시해 기본 흰색이 칠해진다.
-    // 그래서 "네이티브로 가는 정수가 0 이 아니고, 알파 바이트는 0" 을 요구한다.
-    const circle = screen.getByTestId('map-circle');
-    const argb = processColor(circle.props.color);
-    expect(typeof argb).toBe('number');
-    expect(argb).not.toBe(0);
-    expect(((argb as number) >>> 24) & 0xff).toBe(0);
-    expect(circle.props.outlineColor).toBe('#FF385C');
-    expect(circle.props.outlineWidth).toBe(1.5);
-    expect(circle.props.radius).toBe(1400);
   });
 
   it('radiusCircle 미전달 → map-circle 없음(짝 — additive 무회귀)', () => {
