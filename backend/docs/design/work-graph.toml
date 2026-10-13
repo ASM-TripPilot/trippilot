@@ -3224,8 +3224,8 @@ note = """
 - ASC 앱 등록·앱 개인정보, TestFlight 실기 검증 — 출시로 지나갔다.
 - **위치기반서비스사업 신고 — 상태를 이 리포로는 확인할 수 없다.** 심사 통과와는 별개의 법적 의무이고,
   이 노드가 닫히면 그것을 들고 있는 열린 노드가 없다. **사용자 확인 필요(2026-10-13 미확인).**
-  다른 노드(`IDP-REGISTER`·`APPLE-JWKS`·`DEV-SECRETS-FILL`·`DEV-REAL-MODES`)에 남은 "p8 미충전" 서술도
-  위 실측 이전 기록이다.
+  다른 노드(`APPLE-JWKS`·`DEV-SECRETS-FILL`·`DEV-REAL-MODES`)에 남은 "p8 미충전" 서술과 `IDP-REGISTER` 의
+  `external` 상태도 위 실측 이전 기록이다.
 아래는 닫기 전 기록이다.
 2026-10-04 결정. 팀원이 "심사 넣어도 될 것 같다"고 했을 때 준비 상태를 전수 점검한 결과다.
 
@@ -3758,7 +3758,6 @@ status = "todo"
 migration = true
 touches = [
   "backend/modules/assistant",
-  "backend/modules/auth",
   "backend/settings.gradle.kts",
   "backend/app/src/main/resources/db/migration",
   "backend/docs/design/openapi.yaml",
@@ -3770,13 +3769,17 @@ note = """
 범위는 **FD 와 NFR 을 합친 것**이다(NFR 이 FD 뒤에 의무를 더했다 — `nfr-requirements/tech-stack-decisions.md` §5):
 - `:modules:assistant` 신설. 다른 모듈은 이 모듈을 부르지 않는다(앱만 부른다)
 - 테이블 **넷** — FD 의 `assistant_session`·`assistant_message`·`assistant_proposal` + NFR 의
-  `assistant_usage_daily`(COST-U8-01), 그리고 `assistant_message` 에 컬럼 추가(DATA-U8-04). 번호는 착수 시 최신 + 1(지금 V2.63)
+  `assistant_usage_daily`(COST-U8-01), 그리고 `assistant_message` 에 관측용 컬럼 넷(OBS-U8-01: `outcome`·
+  `match_route`·`llm_calls`·`latency_ms`). 번호는 착수 시 최신 + 1(지금 V2.63)
 - 리미터는 계정 단위 `pg_advisory_xact_lock` 안에서 센다(SEC-U8-01) · 서비스 전역 월 LLM 호출 상한과 그때의
   "버튼 모드" 강등(COST-U8-04·REL-U8-02)
 - **계정 삭제 요청 즉시 파기** — `auth.AccountDeletionRequested` 구독(DATA-U8-02). FK CASCADE 만으로는 지워지지
   않는다(30일 파기 배치가 미구현이라 — NFR 이 그렇게 적는다)
 - ShedLock 청소 잡 둘 — 대화 보존(마지막 턴 후 90일) · 사용량 40일
-- `/me/export` 응답에 도우미 절(DATA-U8-06) — 그 응답을 소유한 모듈도 건드린다
+- `/me/export` 응답에 도우미 절(DATA-U8-06) — 응답 조립은 `backend/app` 이 하고 각 모듈이 자기
+  `AccountDataContributor` 를 낸다(archive·auth·trip 선례). 즉 **assistant 모듈 안에 기여자를 하나 둔다**.
+  모듈 밖에서 바뀌는 것은 `openapi.yaml` 의 `/me/export` 설명뿐이다. 계정 삭제 이벤트도 auth 의 공개 api 에
+  이미 있어 구독에 auth 변경이 필요 없다
 - 디스패치 · 템플릿 응답 가드레일 · openapi `assistant` 태그(세션·턴·제안 적용·이력 삭제)
 
 AI 대화 경계(`POST /ai/v1/dialogue/interpret`)는 상대 미구현([[U8-AI-DIALOGUE]])이라 페이크로 먼저 개발한다 —
@@ -3816,7 +3819,8 @@ touches = [
   "backend/docs/design/openapi.yaml",
 ]
 note = """
-2026-10-12 설계 승인(FD·NFR·NFR Design·Infra 증분). 새 컴포넌트는 없고 archive·planb-detection·auth 를 넓힌다.
+2026-10-12 설계 승인(FD·NFR·NFR Design·Infra 증분). 새 컴포넌트는 없고 archive·planb-detection·auth 를 넓히며
+reflection(구독·통계)과 조건부로 trip 이 딸려 온다.
 FD 갭 표에서 백엔드 몫으로 읽히는 것(착수 전 FD 를 다시 읽고 PR 단위로 쪼갤 것 — 아래는 목록이지 분해가 아니다):
 - G-U10-1 ★ `VisitCheckService.arrive`·`complete` 가 서버 시각만 쓴다 → 발생 시각(`occurredAt`)을 받는 배치 엔드포인트
 - 테이블 2종 `actual_route_day` · `location_automation_interval`(archive 소유, 번호는 머지 시점에)
@@ -3825,13 +3829,14 @@ FD 갭 표에서 백엔드 몫으로 읽히는 것(착수 전 FD 를 다시 읽�
 - G-U10-11 앱 강제 종료 시 구간 END 가 안 온다 → 여행 종료 + 1일 스위퍼
 - 마이그레이션은 **셋**이다 — 위 테이블 2종 + `visit_check` 확장(M-U10-a: `completion_source`·백필·CHECK,
   `auto_suppressed_at`). G-U10-12 가 이 컬럼에 기댄다
-- **위치 동의(L3) 철회 시 `actual_route_day` 전량 즉시 파기 + `PURGE(ACTUAL_ROUTE)` 법정 로그**(DEC-U10-7 ·
+- **GPS 옵트인(L3) 철회 시 `actual_route_day` 전량 즉시 파기 + `PURGE(ACTUAL_ROUTE)` 법정 로그**(DEC-U10-7 ·
   INV-U10-1·4) — 법적 무게가 가장 큰 항목이다. `LocationLegalLogFacade` 에 구간 메서드와 새 enum
   (`ROUTE_TRACE`·`ACTUAL_ROUTE`·`LocationUsePurpose`)이 붙는다(auth 를 건드리는 이유)
-- 엔드포인트·이벤트: `PUT/GET /trips/{id}/routes` · `POST …/location-automation/intervals` · 자동 되돌리기 +
+- 엔드포인트·이벤트: `PUT /trips/{tripId}/routes/{date}` · `GET /trips/{tripId}/routes` · `POST …/location-automation/intervals` · 자동 되돌리기 +
   `VisitAutoReverted` · `ArchiveFacade.isAutomationArmed` · `archive.ActualRouteStored` → reflection 이 구독해
   통계를 다시 계산한다(`DayHighlight` 의 거리·출처)
-- G-U10-3 스케줄러 경로에 계정이 없다 → `VisitChecked` 에 `accountId` + `TripFacade` 의 소유자 조회(trip 을 건드리는 이유)
+- G-U10-3 스케줄러 경로에 계정이 없다 → `VisitChecked` 에 `accountId` 를 싣고, 스케줄러 쪽은 `TripFacade` 소유자 조회
+  **또는** 시스템 경로(`evaluateAsSystem`) 중 하나 — FD 가 "백엔드 팀 결정"으로 열어 뒀다(trip 은 앞쪽을 고를 때만 건드린다)
 - G-U10-4 OS 권한 미러의 선택 필드(`scope`·`precise`) · G-U10-13 백엔드 dbml 문서 드리프트
 
 **선행이 많다**(aidlc-state): Figma 4표면 · 법무 확인(O-U10-1) · EAS 재빌드. 가장 큰 미결은 O-U10-ND-1
@@ -3857,4 +3862,4 @@ from = "U8-PLAN-FACADE-FIELDS"
 to = "U8-ASSISTANT-MODULE"
 kind = "계약선행"
 verified = false
-reason = "U8 FD §8 — US-ASSIST-03 진행 검토는 '퍼사드 확장 선행(G-U8-3)'. 위 두 간선과 같은 근거·같은 범위(모듈 전체가 아니라 그 의도만 기다린다)."
+reason = "U8 FD §8 — US-ASSIST-03 진행 검토는 '퍼사드 확장 선행(G-U8-3)'. FD §4 의 거리 조회(GET_DISTANCE)도 같은 필드(distanceRange)를 기다린다. 위 두 간선과 같은 범위다(모듈 전체가 아니라 그 의도들만 기다린다)."
