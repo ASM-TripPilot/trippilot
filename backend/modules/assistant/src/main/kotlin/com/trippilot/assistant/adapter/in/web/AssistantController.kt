@@ -80,15 +80,18 @@ private fun Principal.accountId(): UUID =
 /** [tripId] null = 여행 없이 연다(일반 도움 모드, BR-U8-05). 화면이 어디인지(`surface`)는 턴이 싣는다. */
 data class OpenSessionRequest(val tripId: UUID? = null)
 
+/** [nextBefore] 는 프론트 계약에 없던 칸이다 — 이어 연 대화가 한 쪽보다 길 때 위로 더 읽을 커서(없으면 null). */
 data class OpenSessionResponse(
     val session: SessionResponse,
     val messages: List<MessageResponse>,
+    val nextBefore: String?,
     val quickReplies: List<QuickReply>,
 ) {
     companion object {
         fun from(o: OpenedSession) = OpenSessionResponse(
             SessionResponse(o.session.sessionId, o.session.tripId, o.contextChip),
-            o.messages.map { MessageResponse.from(it) },
+            o.page.messages.map { MessageResponse.from(it) },
+            o.page.nextBefore,
             o.quickReplies,
         )
     }
@@ -121,7 +124,8 @@ data class MessageResponse(
     val text: String?,
     val payload: Map<String, Any?>?,
     val nextActions: List<NextAction>,
-    val quickReplies: List<QuickReply>,
+    /** null = 이 메시지가 정하지 않았다(앱이 시작 빠른 답을 보인다). 빈 목록과 뜻이 다르다. */
+    val quickReplies: List<QuickReply>?,
     val proposal: Any?,
     val footnote: String?,
     val createdAt: Instant,

@@ -1775,7 +1775,7 @@ paths:
       tags: [assistant]
       summary: 내 도우미 대화 목록
       description: >
-        이전 여행의 대화로 돌아가기(`b06`). 최근 대화순이고 보존 기간이 지난 대화는 나오지 않는다.
+        이전 여행의 대화로 돌아가기(`b06`). 최근 대화순이고 보존 기간이 지난 대화와 지워진 여행의 대화는 나오지 않는다.
         **감싸는 객체 없이 배열이다** — 앱이 먼저 만든 계약의 모양을 따랐다.
       responses:
         '200':
@@ -3866,21 +3866,22 @@ components:
         tripId: { type: string, format: uuid, nullable: true, description: 'null 이면 여행 없이 연다(일반 도움 모드)' }
     AssistantSession:
       type: object
-      required: [id]
+      required: [id, tripId, contextChip]
       properties:
         id: { type: string, format: uuid }
         tripId: { type: string, format: uuid, nullable: true }
         contextChip: { type: string, nullable: true, description: '사용한 컨텍스트 한 줄. 여행 없는 대화는 null' }
     AssistantOpenSessionResponse:
       type: object
-      required: [session, messages, quickReplies]
+      required: [session, messages, nextBefore, quickReplies]
       properties:
         session: { $ref: '#/components/schemas/AssistantSession' }
-        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' } }
+        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' }, description: '가장 최근 한 쪽(오래된 것 먼저)' }
+        nextBefore: { type: string, nullable: true, description: '이어 연 대화에 더 오래된 메시지가 있으면 그 커서 — 메시지 조회의 before 로 쓴다' }
         quickReplies: { type: array, items: { $ref: '#/components/schemas/AssistantQuickReply' } }
     AssistantSessionSummary:
       type: object
-      required: [id, lastTurnAt]
+      required: [id, tripId, tripTitle, lastTurnAt]
       properties:
         id: { type: string, format: uuid }
         tripId: { type: string, format: uuid, nullable: true }
@@ -3888,7 +3889,7 @@ components:
         lastTurnAt: { type: string, format: date-time }
     AssistantMessagesPage:
       type: object
-      required: [messages]
+      required: [messages, nextBefore]
       properties:
         messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' } }
         nextBefore: { type: string, nullable: true, description: '더 오래된 메시지가 있으면 그 커서. 없으면 null' }
@@ -3911,14 +3912,18 @@ components:
       properties:
         id: { type: string, description: '서버가 발급한 값. ACTION 턴의 quickReplyId 로 그대로 돌려보낸다' }
         label: { type: string }
-        action: { type: string, enum: [SEND_TEXT, REVIEW, PICK_CANDIDATE, PICK_OPTION, SHOW_CAPABILITIES, RETRY] }
+        action:
+          type: string
+          description: >
+            closed-set 이지만 문자열로 연다(다음 행동의 type 과 같은 이유 — 앱은 모르는 값을 그리지 않는다).
+            SEND_TEXT · REVIEW · PICK_CANDIDATE · PICK_OPTION · SHOW_CAPABILITIES · RETRY
         params: { type: object, additionalProperties: { type: string } }
     AssistantProposal:
       type: object
-      required: [id, status, diff, violations]
+      required: [id, status, diff, violations, applyHint]
       properties:
         id: { type: string, format: uuid }
-        status: { type: string, enum: [PROPOSED, APPLIED, STALE, DISMISSED, EXPIRED, FAILED] }
+        status: { $ref: '#/components/schemas/AssistantProposalState' }
         diff:
           type: array
           items:
@@ -3927,13 +3932,12 @@ components:
             properties:
               change: { type: string, enum: [ADDED, REMOVED, REPLACED, MOVED, RETIMED] }
               slotKey: { type: string }
-              before: { $ref: '#/components/schemas/AssistantProposalSlotFace' }
-              after: { $ref: '#/components/schemas/AssistantProposalSlotFace' }
+              before: { nullable: true, allOf: [{ $ref: '#/components/schemas/AssistantProposalSlotFace' }] }
+              after: { nullable: true, allOf: [{ $ref: '#/components/schemas/AssistantProposalSlotFace' }] }
         violations: { type: array, items: { type: string }, description: '비어 있지 않으면 적용할 수 없다(BR-U8-31)' }
         applyHint: { type: string, nullable: true, enum: [AUTO_APPLY, CONFIRM_REQUIRED, null], description: '표시 힌트일 뿐이다' }
     AssistantProposalSlotFace:
       type: object
-      nullable: true
       required: [name, startAt]
       properties:
         name: { type: string }
@@ -3941,7 +3945,7 @@ components:
         distanceRange: { type: string, nullable: true, description: '직전 구간 거리 문자열. 없으면 그리지 않는다' }
     AssistantMessage:
       type: object
-      required: [id, role, kind, nextActions, quickReplies, createdAt]
+      required: [id, role, kind, nextActions, quickReplies, proposal, createdAt]
       properties:
         id: { type: string, format: uuid }
         role: { type: string, enum: [USER, ASSISTANT] }
@@ -3955,7 +3959,13 @@ components:
             카드 데이터 — 모양은 `kind` 가 정한다(REVIEW · CANDIDATES · INFO · SCOPE · REFUSAL · FALLBACK · ACTION_LOG · CLARIFY).
             종류별 모양은 그 카드를 내는 구현과 함께 닫는다(TRIP-1378·1379).
         nextActions: { type: array, items: { $ref: '#/components/schemas/AssistantNextAction' }, description: '도우미 메시지는 1개 이상' }
-        quickReplies: { type: array, items: { $ref: '#/components/schemas/AssistantQuickReply' } }
+        quickReplies:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/AssistantQuickReply' }
+          description: >
+            **null 과 빈 배열은 뜻이 다르다.** null 이면 이 메시지가 빠른 답을 정하지 않은 것이라 앱이 대화의 시작 빠른 답을
+            보이고, 빈 배열이면 "보일 것이 없다"다. 사용자 메시지는 늘 null 이다.
         proposal: { $ref: '#/components/schemas/AssistantProposalOrNull' }
         footnote: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
@@ -3991,12 +4001,15 @@ components:
       properties:
         messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' }, description: '사용자 1건 + 도우미 1건 이상' }
         quickReplies: { type: array, items: { $ref: '#/components/schemas/AssistantQuickReply' } }
+    AssistantProposalState:
+      type: string
+      enum: [PROPOSED, APPLIED, STALE, DISMISSED, EXPIRED, FAILED]
     AssistantProposalStatus:
       type: object
       required: [id, status]
       properties:
         id: { type: string, format: uuid }
-        status: { type: string, enum: [PROPOSED, APPLIED, STALE, DISMISSED, EXPIRED, FAILED] }
+        status: { $ref: '#/components/schemas/AssistantProposalState' }
     AssistantApplyProposalResponse:
       type: object
       required: [proposal, messages]

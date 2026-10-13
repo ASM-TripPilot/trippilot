@@ -8,6 +8,8 @@
 -- 동의 로그·위치 법정 로그의 append-only 권한 제약을 여기 걸지 않는다(domain-entities §4).
 --
 -- 계정·여행에는 전부 CASCADE 를 건다(DATA-U8-03) — 개인 발화라 탈퇴·여행 삭제와 함께 사라지는 것이 맞다.
+-- 다만 **여행 삭제는 소프트 삭제라 이 CASCADE 가 닿지 않는다**(행이 남는다). 그 경로는 `trip.TripDeleted` 구독이
+-- 맡고, 여기 FK 는 물리 삭제(파기 배치)가 생겼을 때의 안전망이다.
 
 -- ── 세션: 대화 맥락의 단위(DEC-U8-5) ─────────────────────────────────────────
 CREATE TABLE assistant_session (
@@ -71,7 +73,8 @@ CREATE TABLE assistant_message (
   redacted        boolean      NOT NULL DEFAULT false,
   payload         jsonb,
   next_actions    jsonb        NOT NULL DEFAULT '[]'::jsonb,
-  quick_replies   jsonb        NOT NULL DEFAULT '[]'::jsonb,
+  -- NULL 과 '[]' 는 뜻이 다르다(프론트 계약): NULL = 이 메시지가 정하지 않았다(앱이 시작 빠른 답을 보인다), '[]' = 보일 것이 없다.
+  quick_replies   jsonb,
   footnote        text,                    -- 카드 아래 각주(프론트 계약 R3)
   proposal_id     uuid         REFERENCES assistant_proposal(proposal_id) ON DELETE SET NULL,
   -- 관측 칸(OBS-U8-01) — 알람·지표의 원천을 DB 행에 둔다. 화면에 쓰지 않는다.

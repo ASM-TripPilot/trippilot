@@ -28,11 +28,15 @@ interface AssistantSessionRepository {
      */
     fun openOrGet(candidate: AssistantSession): AssistantSession
 
-    fun findOwned(accountId: UUID, sessionId: UUID): AssistantSession?
+    /** 본인의 살아 있는 세션. 보존 기간이 지난 것은 없는 것이다 — 열기·목록이 없다고 하는 대화를 id 로는 읽히게 두지 않는다. */
+    fun findOwned(accountId: UUID, sessionId: UUID, now: Instant): AssistantSession?
 
     /** 최근 대화순. 만료된 세션은 빼고 준다. */
     fun findByAccount(accountId: UUID, now: Instant, limit: Int): List<AssistantSession>
 
     /** 세션과 그 메시지·제안을 지운다(hard delete, DATA-U8-05). 지운 행 수 — 남의 세션이면 0 이다. */
     fun delete(accountId: UUID, sessionId: UUID): Int
+
+    /** 그 여행의 대화를 전부 지운다 — 여행이 지워졌을 때(FD §2.2). 지운 행 수. */
+    fun deleteByTrip(tripId: UUID): Int
 }

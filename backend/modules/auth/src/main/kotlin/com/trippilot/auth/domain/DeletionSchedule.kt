@@ -75,7 +75,7 @@ data class CascadeSummary(
                 // C5 — 제휴 아웃바운드 클릭(V2.59, BR-U1-32 내부 지표도 개인정보다)
                 "AFFILIATE_CLICK",
                 // U8 — 도우미 대화(메시지는 세션 연쇄)·변경 제안·일 사용량(V2.64). 발화는 개인정보다
-                "ASSISTANT_SESSION", "ASSISTANT_PROPOSAL", "ASSISTANT_USAGE_DAILY",
+                "ASSISTANT_SESSION", "ASSISTANT_MESSAGE", "ASSISTANT_PROPOSAL", "ASSISTANT_USAGE_DAILY",
             ),
             // 법정 보존(INV-D3) — 동의 증적·위치 법정 로그는 파기하지 않는다.
             legallyRetained = listOf("CONSENT_RECORD", "LOCATION_LEGAL_LOG"),

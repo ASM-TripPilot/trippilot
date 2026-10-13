@@ -25,7 +25,8 @@ data class AssistantMessage(
     val text: String?,
     val payload: Map<String, Any?>?,
     val nextActions: List<NextAction>,
-    val quickReplies: List<QuickReply>,
+    /** **null 과 빈 목록은 뜻이 다르다** — null 은 "정하지 않았다"(앱이 대화의 시작 빠른 답을 보인다), 빈 목록은 "보일 것이 없다". */
+    val quickReplies: List<QuickReply>?,
     val footnote: String?,
     val createdAt: Instant,
 )
@@ -36,8 +37,16 @@ data class AssistantMessage(
  */
 data class NextAction(val type: String, val label: String, val params: Map<String, String> = emptyMap())
 
-/** 서버가 발급한 빠른 답(domain-entities §3.4). 앱은 만들지 않는다 — 발급된 [id] 만 ACTION 턴으로 받는다. */
-data class QuickReply(val id: String, val label: String, val action: QuickReplyAction, val params: Map<String, String> = emptyMap())
+/**
+ * 서버가 발급한 빠른 답(domain-entities §3.4). 앱은 만들지 않는다 — 발급된 [id] 만 ACTION 턴으로 받는다.
+ *
+ * [action] 도 [NextAction.type] 처럼 **문자열로 둔다**. 저장된 행을 읽는 타입이라, 어휘가 늘어난 뒤 옛 파드가(배포 중·
+ * 롤백 뒤) 새 값을 만나도 목록 조회가 죽으면 안 된다. 만들 때는 [QuickReplyAction] 으로 만든다.
+ */
+data class QuickReply(val id: String, val label: String, val action: String, val params: Map<String, String> = emptyMap()) {
+    constructor(id: String, label: String, action: QuickReplyAction, params: Map<String, String> = emptyMap()) :
+        this(id, label, action.name, params)
+}
 
 enum class QuickReplyAction { SEND_TEXT, REVIEW, PICK_CANDIDATE, PICK_OPTION, SHOW_CAPABILITIES, RETRY }
 

@@ -2,6 +2,7 @@ package com.trippilot.app.web
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.app.event.OutboxRelay
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
@@ -41,6 +42,7 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var relay: OutboxRelay
 
     private companion object {
         const val CONCURRENT_OPENS = 3
@@ -79,9 +81,11 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         jdbc.update(
             """
             INSERT INTO assistant_message (message_id, session_id, account_id, role, kind, text, next_actions, quick_replies, created_at)
-            VALUES (?, ?::uuid, ?, ?, 'TEXT', ?, ?::jsonb, '[{"id":"qr-retry","label":"다시 시도","action":"RETRY","params":{}}]'::jsonb, now())
+            VALUES (?, ?::uuid, ?, ?, 'TEXT', ?, ?::jsonb, ?::jsonb, now())
             """.trimIndent(),
             id, sessionId, accountId, role, text, nextActions,
+            // 나중에 늘어난 필드(`tone`)와 어휘(`SOMETHING_NEW` 는 아래 테스트)가 섞인 행 — 읽기가 죽으면 안 된다
+            if (role == "ASSISTANT") """[{"id":"qr-retry","label":"다시 시도","action":"RETRY","params":{},"tone":"calm"}]""" else null,
         )
         return id
     }
@@ -111,6 +115,7 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         first["session"]["tripId"].asText() shouldBe trip
         first["session"]["contextChip"].asText() shouldBe "제주 2박 3일" // 등록 숙소가 없다 — 없는 것을 말하지 않는다
         first["messages"].size() shouldBe 0
+        first["nextBefore"].isNull shouldBe true
         first["quickReplies"].map { it["id"].asText() } shouldContainExactly listOf("qr-review", "qr-next", "qr-weather", "qr-capabilities")
         first["quickReplies"][0]["action"].asText() shouldBe "REVIEW"
 
@@ -172,6 +177,9 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         assistant["nextActions"][0]["type"].asText() shouldBe "SHOW_CAPABILITIES"
         assistant["quickReplies"][0]["action"].asText() shouldBe "RETRY"
         assistant["proposal"].isNull shouldBe true
+        // 빠른 답을 정하지 않은 행은 null 로 나간다 — 빈 배열이 아니다(앱이 null 에만 시작 빠른 답을 보인다)
+        latest["messages"][1]["role"].asText() shouldBe "USER"
+        latest["messages"][1]["quickReplies"].isNull shouldBe true
 
         val older = call(HttpMethod.GET, "/api/v1/assistant/sessions/$session/messages?limit=3&before=${latest["nextBefore"].asText()}", token).second
         older["messages"].map { it["id"].asText() } shouldContainExactly ids.take(3).map { it.toString() }
@@ -227,9 +235,10 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
 
     @Test
     fun `목록은 여행 제목을 붙이고 여행을 지우면 그 대화도 사라진다`() {
-        val (_, token) = newAccount()
+        val (accountId, token) = newAccount()
         val trip = newTrip(token)
         val tripSession = open(token, trip).second["session"]["id"].asText()
+        insertMessage(tripSession, accountId, "USER", "지워질 여행에서 한 말")
         val general = open(token, null).second["session"]["id"].asText()
 
         val listed = call(HttpMethod.GET, "/api/v1/assistant/sessions", token).second
@@ -237,9 +246,28 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         listed.single { it["id"].asText() == tripSession }["tripTitle"].isNull shouldBe false
         listed.single { it["id"].asText() == general }["tripTitle"].isNull shouldBe true
 
-        // 여행 행이 사라지면(물리 삭제) 대화도 함께 간다 — 남의 여행이 된 대화가 남지 않는다
-        jdbc.update("DELETE FROM trip WHERE trip_id = ?::uuid", trip)
+        // **실제 삭제 경로로 지운다.** 여행 삭제는 소프트 삭제라 FK CASCADE 가 닿지 않는다 — 행을 직접 지워 확인하면
+        // 운영에서 일어나지 않는 일을 재는 셈이다. 삭제 직후(구독이 돌기 전)에도 목록에는 이미 없어야 한다.
+        call(HttpMethod.DELETE, "/api/v1/trips/$trip", token).first shouldBe 204
         call(HttpMethod.GET, "/api/v1/assistant/sessions", token).second.map { it["id"].asText() } shouldContainExactly listOf(general)
+        count("assistant_message", tripSession) shouldBe 1 // 아직 남아 있다 — 지우는 것은 구독이다
+
+        repeat(3) { relay.relay() } // 배치 상한 대비 — 다른 IT 의 미발행분이 앞에 있을 수 있다
+        count("assistant_message", tripSession) shouldBe 0
+        jdbc.queryForObject("SELECT count(*) FROM assistant_session WHERE session_id = ?::uuid", Int::class.java, tripSession) shouldBe 0
+        jdbc.queryForObject("SELECT count(*) FROM assistant_session WHERE session_id = ?::uuid", Int::class.java, general) shouldBe 1
+    }
+
+    /** 물리 삭제(파기 배치)가 생겼을 때의 안전망 — FK CASCADE 자체도 걸려 있다(DATA-U8-03). */
+    @Test
+    fun `여행 행이 물리 삭제되면 대화가 FK 로 함께 간다`() {
+        val (_, token) = newAccount()
+        val trip = newTrip(token)
+        val session = open(token, trip).second["session"]["id"].asText()
+
+        jdbc.update("DELETE FROM trip WHERE trip_id = ?::uuid", trip)
+
+        jdbc.queryForObject("SELECT count(*) FROM assistant_session WHERE session_id = ?::uuid", Int::class.java, session) shouldBe 0
     }
 
     /** 청소 배치가 아직 안 돈 만료 대화 — 목록에 안 나오고, 열면 지난 발화 없이 새 대화다(DATA-U8-01). */
@@ -251,10 +279,35 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         jdbc.update("UPDATE assistant_session SET expires_at = now() - interval '1 second' WHERE session_id = ?::uuid", old)
 
         call(HttpMethod.GET, "/api/v1/assistant/sessions", token).second.size() shouldBe 0
+        call(HttpMethod.GET, "/api/v1/assistant/sessions/$old/messages", token).first shouldBe 404 // id 로도 읽히지 않는다
         val reopened = open(token, null).second
         reopened["session"]["id"].asText() shouldNotBe old
         reopened["messages"].size() shouldBe 0
         count("assistant_message", old) shouldBe 0
+    }
+
+    /**
+     * 저장된 행은 지금의 타입보다 오래 산다. 어휘가 늘어난 뒤 옛 파드가(배포 중·롤백 뒤) 새 값을 만나 한 줄을 못 읽으면
+     * 그 대화는 열기도 조회도 500 이 된다.
+     */
+    @Test
+    fun `모르는 빠른 답 어휘가 저장돼 있어도 대화가 열린다`() {
+        val (accountId, token) = newAccount()
+        val session = open(token, null).second["session"]["id"].asText()
+        jdbc.update(
+            """
+            INSERT INTO assistant_message (message_id, session_id, account_id, role, kind, text, next_actions, quick_replies, created_at)
+            VALUES (?, ?::uuid, ?, 'ASSISTANT', 'TEXT', '답', '[{"type":"OPEN_SOMETHING_NEW","label":"새 화면","params":{}}]'::jsonb,
+                    '[{"id":"qr-x","label":"새 동작","action":"SOMETHING_NEW","params":{}}]'::jsonb, now())
+            """.trimIndent(),
+            UUID.randomUUID(), session, accountId,
+        )
+
+        val (status, reopened) = open(token, null)
+
+        status shouldBe 200
+        reopened["messages"][0]["quickReplies"][0]["action"].asText() shouldBe "SOMETHING_NEW"
+        reopened["messages"][0]["nextActions"][0]["type"].asText() shouldBe "OPEN_SOMETHING_NEW"
     }
 
     /** INV-U8-03 — 도우미 응답이 다음 행동 없이 저장되는 길을 DB 가 막는다. 턴 처리의 버그가 dead-end 로 새지 않게. */
