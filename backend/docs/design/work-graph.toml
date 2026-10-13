@@ -3931,7 +3931,7 @@ OBS-02 리프레시 재사용 감지 로그 메트릭 필터 → SNS → Slack, 
 
 # ── U8 본체 넷 + http 어댑터(blocked) (2026-10-13 쪼갬). **노트는 의무의 전부가 아니다 — 정본은 FD·NFR 이고 착수 때 다시 읽는다.**
 # 노트에는 "빠뜨리면 조용히 틀리는 것"과 "어느 노드 몫인지 헷갈리는 것"만 적는다. 루프 순서: EDIT-FACADE → PLAN-FACADE-FIELDS → AI-EDIT-PORT → CONTRACT → TURN → PROPOSAL → OPS.
-# 순서는 의존이 아니라 공유 자원이 정한다 — 앞의 셋은 같은 모듈(itinerary-generation), 뒤의 넷은 openapi·마이그레이션 번호를 한 번에 하나씩 만진다.
+# 순서는 의존이 아니라 공유 자원이 정한다 — 앞의 셋은 같은 모듈(itinerary-generation), 뒤의 넷은 assistant 모듈·`openapi.yaml`·`application.yml` 을 한 번에 하나씩 만진다(마이그레이션은 U8-CONTRACT 하나뿐이다).
 # **배포는 루프 밖이다.** dev 가 운영이다. 스위치(`ASSISTANT_INTERPRET_MODE=off`)는 **해석만** 끈다 — 엔드포인트는 배포되면
 # 인증된 사용자에게 열린다(출시 앱이 가짜 어댑터를 써서 부르는 쪽이 없을 뿐이다). 자세한 것은 U8-CONTRACT 노트.
 
@@ -3945,7 +3945,6 @@ touches = [
   "backend/modules/assistant",
   "backend/app/build.gradle.kts",
   "backend/app/src/main/resources/application.yml",
-  "backend/app/src/main/kotlin/com/trippilot/app/web/error",
   "backend/settings.gradle.kts",
   "backend/app/src/main/resources/db/migration",
   "backend/docs/design/openapi.yaml",
@@ -3962,8 +3961,10 @@ note = """
 남는다 — DATA-U8-05). 세션 열기 응답은 컨텍스트 칩과 시작 quick reply 를 싣는다 — **칩은 스냅샷과 같은 출처에서**
 (BR-U8-03), quick reply 는 **서버가 발급**한다(`domain-entities.md` §3.4 · FD §2.2 — BR-U8-04 는 "예시와 '할 수 있는 것 보기'를 늘 보인다"). 그래서 스냅샷 출처(`TripFacade`·`TripBaseStayFacade`)의 읽기와
 quick reply 발급기가 이 노드에 들어온다. 턴·제안 엔드포인트는 계약에만 있고 뒤 노드가 채울 때까지 **501** 을 낸다 —
-`OpenApiContractIT` 가 계약과 핸들러의 일치를 요구하므로 스텁은 필수다. 501 매핑은 지금 `ProviderNotSupported` 뿐이라
-`backend/app/…/web/error` 에 한 줄이 든다. 프론트 오류 코드 집합에는 501 이 없어 `SERVER` 로 떨어진다(무해 — http 어댑터가 아직 없다).
+`OpenApiContractIT` 가 계약과 핸들러의 일치를 요구하므로 스텁은 필수다. **스텁은 `ResponseEntity.status(501)` 을 직접 낸다** —
+예외로 내려면 `DomainException` 이 sealed 라 `common/core` 에 새 하위 타입과 `ErrorCode` 가 들고, 있는 501
+(`ProviderNotSupported`)은 뜻이 다르다. 스텁은 뒤 노드에서 사라질 코드라 그만한 값어치가 없다.
+프론트 오류 코드 집합에는 501 이 없어 `SERVER` 로 떨어진다(무해 — http 어댑터가 아직 없다).
 
 **프론트 계약과 대조가 이 노드의 본체다.** 프론트는 FD 를 보고 타입을 손으로 옮겨 뒀다
 (`frontend/src/pages/assistant/assistant-sheet/api/assistantContract.ts`·`assistantPort.ts`, TRIP-1319) — 일곱 호출
@@ -4007,7 +4008,8 @@ FD `business-logic-model.md` §2 한 턴의 흐름(10단계)과 §4 디스패치
 - **화면에 나가는 LLM 유래 문자열은 둘뿐**(SEC-U8-03 ★, PBT-U8-N1 ★ 칩 폐포) — 문구는 백엔드 템플릿(DEC-U8-6).
   주입 회귀 말뭉치를 테스트 자산으로(SEC-U8-05). 로그·예외에 발화 원문·스냅샷을 싣지 않는다(SEC-U8-06 ★).
 - **디스패치**: 조회형(진행 검토·다음 장소·거리·장소·날씨)과 화면 넘기기. closed-set(PBT-U8-9), dead-end 없음(PBT-U8-2).
-  변경형(제안)은 [[U8-PROPOSAL]] 로 넘긴다.
+  변경형 두 의도(`EDIT_SCHEDULE`·`SUGGEST_ALTERNATIVE`)의 처리기는 [[U8-PROPOSAL]] 에서 온다 — **그때까지 이 노드가 임시
+  처리기를 둔다**(일정 편집 화면으로 넘기는 `next_action`). 비워 두면 PBT-U8-9(의도마다 처리기 정확히 하나)와 PBT-U8-2 가 못 선다.
 - **사용량과 계정 일 상한**: 턴마다 `assistant_usage_daily` 를 쓴다(③). LLM 턴 일 상한 30(COST-U8-02, 설정값)을 넘으면
   **차단이 아니라 강등** — TEXT 턴이 해석 없이 버튼 응답으로 간다(COST-U8-03 ★). `ASSISTANT_INTERPRET_MODE=off` 도 같은
   응답 모양이다(REL-U8-02·06). 강등은 WARN 1줄(OBS-U8-03)과 카운터(OBS-U8-04)로 남긴다. **전역 월 상한은 [[U8-OPS]]** 가
@@ -4045,7 +4047,7 @@ FD §2.1 · DEC-U8-2·3 · `domain-entities.md` §3.3·§3.5. `EDIT_SCHEDULE`(�
   저장이 예외면 `FAILED`. **제안 하나는 많아야 한 번 적용된다**(INV-U8-08, PBT-U8-6 상태기계).
 - **[취소]**(`dismissProposal`) — 프론트가 가정한 일곱 호출 중 하나다.
 - ACTION_LOG 에 리비전·변경 이력 id 를 남기려면(`assistant_proposal.revision_id`·`change_log_entry_id`) 편집 퍼사드 결과에
-  그 둘이 실려야 한다 — [[U8-EDIT-FACADE]](PR #1090)는 위반 여부와 판정 여부만 돌려준다(`ItineraryRevisionService.record` 와
+  그 둘이 실려야 한다 — [[U8-EDIT-FACADE]](PR #1090)의 결과는 일정 id·위반 여부·판정 여부뿐이다(`ItineraryRevisionService.record` 와
   change-log 의 `append` 가 둘 다 Unit 이라). 여기서 넓힌다.
 
 - **발화로 부른 `/edit` 는 LLM 턴이다**(COST-U8-02 — 해석이 LLM 0회로 끝났어도). 그 턴을 `assistant_usage_daily` 에
@@ -4054,7 +4056,7 @@ FD §2.1 · DEC-U8-2·3 · `domain-entities.md` §3.3·§3.5. `EDIT_SCHEDULE`(�
 - 여행 전 변경의 리비전에는 `[도우미]` 표지가 붙는다(BR-U8-19) — [[U8-EDIT-FACADE]] 가 출처로 처리한다.
 
 **AI `/edit` 와 슬롯 후보를 부르는 길은 [[U8-AI-EDIT-PORT]] 가 `api` 로 연다** — assistant 모듈은 남의 `domain`·`application`
-을 못 본다(R1). 그 노드가 퍼사드까지 열지 않으면 이 노드가 `itinerary-generation` 을 건드리게 된다.
+을 못 본다(R1). 이 노드가 `itinerary-generation`·`change-log` 를 건드리는 것은 위의 편집 결과 확장 때문이다.
 """
 
 [[nodes]]
