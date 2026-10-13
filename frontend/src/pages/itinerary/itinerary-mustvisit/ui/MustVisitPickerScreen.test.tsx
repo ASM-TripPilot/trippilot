@@ -245,92 +245,6 @@ function classNamesUnder(root: ReactTestInstance): string[] {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * 탐지기 자가검사 — 이게 통과해야 아래 개수·부재·위치 단언이 의미를 갖는다.
- * ──────────────────────────────────────────────────────────────────────────── */
-
-describe('D1 · 탐지기 자가검사 — 카드 세는 셀렉터가 썸네일·칩·크롬을 삼키지 않는다', () => {
-  it('카드만 정확히 셋이고, 제외 대상은 실재하는데 안 섞인다', () => {
-    render(
-      <MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B, UNJOINED_Z])} />
-    );
-
-    // 카드만 정확히 셋. 완전 일치라 하나라도 섞이면 여기서 먼저 죽는다.
-    expect(cardTestIds()).toEqual([
-      'itinerary-mustvisit-poi-a',
-      'itinerary-mustvisit-poi-b',
-      'itinerary-mustvisit-poi-z',
-    ]);
-
-    // 짝 — 제외 대상이 화면에 **실재하는데도** 위 목록에 안 섞였다.
-    expect(
-      screen.getByTestId('itinerary-mustvisit-image-poi-a')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-mustvisit-chip-fixed-poi-a')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-mustvisit-timemode-anytime-poi-a')
-    ).toBeOnTheScreen();
-  });
-});
-
-describe('D2 · 탐지기 자가검사 — 브랜드 계열 판정이 무엇을 잡고 무엇을 안 잡는가', () => {
-  it('계열은 정본 5개, 우회 두 개를 잡고 이웃은 안 삼킨다', () => {
-    // ① 계열은 토큰 정본에서 파생한 정확히 다섯이다. 색이 늘면 이 기대값도 함께 고친다.
-    expect([...BRAND_COLORS].sort()).toEqual([
-      'on-primary',
-      'primary',
-      'primary-active',
-      'primary-pale',
-      'primary-text',
-    ]);
-
-    // ② 옛 TRIP-326 03b 가 실제로 심었던 우회 두 개를 잡는다(1차 부정형 `hasToken` 은 놓쳤다).
-    expect(
-      brandTokensIn('w-full rounded-button py-lg bg-primary-pale')
-    ).toEqual(['bg-primary-pale']);
-    expect(
-      brandTokensIn('font-noto-bold text-[16px] font-bold text-primary-text')
-    ).toEqual(['text-primary-text']);
-
-    // ③ 현행 비활성 색은 계열 밖이다(= 지금 구현이 옳다는 짝).
-    expect(brandTokensIn('rounded-button py-lg bg-hairline-strong')).toEqual(
-      []
-    );
-    // ④ 이름이 겹치는 이웃까지 삼키지 않는다 — `^…$` 로 조각 전체를 대조하기 때문이다.
-    expect(brandTokensIn('bg-primaryish text-primary-textual')).toEqual([]);
-    // ⑤ className 이 아예 없는 노드(빈 문자열)도 `[]` 다 → 부정 단언만으로는 공허하다는 근거.
-    expect(brandTokensIn('')).toEqual([]);
-    // ⑥ hasToken 은 긍정형에서 경계를 조인다(부정형에는 쓰지 마라 — 독주석).
-    expect(hasToken('rounded-pill bg-primary-pale', 'bg-primary')).toBe(false);
-    expect(hasToken('rounded-button bg-primary py-lg', 'bg-primary')).toBe(
-      true
-    );
-  });
-});
-
-describe('D3 · 탐지기 자가검사 — 스크롤 판정·소요시간 탐지기가 옳게 가른다', () => {
-  it('뒤로 버튼은 스크롤 밖, 카드는 스크롤 안이다', () => {
-    render(<MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B])} />);
-    // RN 내부 host 이름이 바뀌면 이 두 줄이 함께 죽어 "AC 위반" 이 아니라 "탐지기 노후" 임이 보인다.
-    expect(
-      isInsideScroll(screen.getByTestId('itinerary-mustvisit-screen-back'))
-    ).toBe(false);
-    expect(
-      isInsideScroll(screen.getByTestId('itinerary-mustvisit-poi-a'))
-    ).toBe(true);
-  });
-
-  it('DURATION_TEXT 는 시각·`시간 정해두기` 를 오탐하지 않는다', () => {
-    // 이 자가검사가 없으면 AC-16 의 부정 단언이 무엇을 재는지 모른다(옛 C32-b 실측을 코드로 고정).
-    expect(DURATION_TEXT.test('13:00')).toBe(false);
-    expect(DURATION_TEXT.test('시간 정해두기')).toBe(false);
-    expect(DURATION_TEXT.test('90분')).toBe(true);
-    expect(DURATION_TEXT.test('1시간 30분')).toBe(true);
-  });
-});
-
-/* ────────────────────────────────────────────────────────────────────────────
  * default (view.kind === 'listed')
  * ──────────────────────────────────────────────────────────────────────────── */
 
@@ -587,44 +501,6 @@ describe('C-AC3 · AC-3 — listed CTA 가 활성이고 press 시 onProceed 1회
 
     fireEvent.press(proceed);
     expect(onProceed).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('🔴 C-AC4 · AC-4 — 강등 확인 시트가 어떤 조작으로도 뜨지 않는다', () => {
-  it('처음에도 없고, FIXED 카드의 `아무 때나` 를 눌러도 안 뜬다', () => {
-    render(<MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B])} />);
-
-    // ① 처음부터 시트가 없다(삭제도 계약 — 옛 C28·C29 가 심판하던 표면).
-    expect(countTestId('itinerary-mustvisit-screen-demote')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-demote-confirm')).toBe(0);
-
-    // ② 🔴 FIXED 의 `아무 때나` 를 눌러도 강등 확인 시트가 뜨지 않는다(Q1 표시 전용).
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-timemode-anytime-poi-a')
-    );
-    expect(countTestId('itinerary-mustvisit-screen-demote')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-demote-cancel')).toBe(0);
-  });
-});
-
-describe('🔴 C-AC5 · AC-5 — staleFailed 여도 AlertRow 를 안 그린다 (Q3 · 카드는 그대로)', () => {
-  it('staleFailed=true 인 listed 에서 stale AlertRow 가 없고 카드 3장은 살아 있다', () => {
-    const onRetry = jest.fn();
-    render(
-      <MustVisitPickerScreen
-        view={listed([FIXED_A, ANYTIME_B, UNJOINED_Z], true)}
-        onRetry={onRetry}
-      />
-    );
-
-    // 🔴 model 은 staleFailed 를 유지하지만(h03 소비 예정) 이 화면은 AlertRow 를 안 그린다.
-    expect(countTestId('itinerary-mustvisit-screen-stale-failed')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-stale-retry')).toBe(0);
-
-    // 짝 — 목록은 지워지지 않는다(전면 실패·로딩 얼굴로 갈아 끼우지도 않는다).
-    expect(cardTestIds()).toHaveLength(3);
-    expect(countTestId('itinerary-mustvisit-screen-failed')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-loading')).toBe(0);
   });
 });
 

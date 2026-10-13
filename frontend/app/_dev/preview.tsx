@@ -5741,14 +5741,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'h',
     label: 'h07 · 생성 중 loading',
     login: null,
-    render: () => (
-      <GeneratingScreen
-        onBackground={noop}
-        onRetry={noop}
-        pins={MUST_VISIT_PREVIEW_PINS}
-        center={{ lat: 35.1532, lng: 129.1188 }}
-      />
-    ),
+    render: () => <GeneratingScreen onBackground={noop} onRetry={noop} />,
   },
   // h07 폴백 인터스티셜(TRIP-791) — Figma `3831:2177` 대조용. 성공(폴백) 변형: 지도 카드(기본
   // 동선)+메시지 카드+체크리스트 4행(3행만 대시·회색)+안내바+CTA 2개. props-only 순수 화면이라
