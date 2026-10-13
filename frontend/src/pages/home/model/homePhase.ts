@@ -95,9 +95,76 @@ function ctaLabelForStatus(status: string): string {
   return '일정 이어서 짜기';
 }
 
+/** 종료 후 이 일수 이내(종료일 당일 0 ~ 7일째 포함)에만 여행 후 얼굴을 띄운다(TRIP-1369, 사용자 확정). */
+const POST_TRIP_WINDOW_DAYS = 7;
+
+/**
+ * 비-ENDED 여행이 하나도 없을 때의 여행 후(postTrip) 얼굴 조립(TRIP-1369).
+ * 가장 최근 종료일(endDate)의 여행이 오늘(KST, 주입)로부터 0~7일 이내일 때만 postTrip, 아니면 undefined
+ * (→ 라우트가 phase 미전달로 discovery). endDate 형식이 깨졌거나 미래인 ENDED(서버 데이터 이상)는
+ * 후보에서 빠지거나 창 밖이라 조용히 postTrip 이 되지 않고 결정적으로 discovery 로 간다(INV-4).
+ * 지난 여행 카드는 가장 최근 것을 뺀 나머지 ENDED 를 최근 종료 순으로 담는다(날짜가 깨진 건 제외).
+ */
+function resolvePostTripPhase(
+  trips: HomeTripInput[],
+  today: string,
+  formatTripMeta: (trip: HomeTripInput) => string
+): HomePhase | undefined {
+  const now = toEpochDay(today);
+  if (Number.isNaN(now)) return undefined;
+
+  const ended = trips
+    .map((trip) => ({ trip, end: toEpochDay(trip.endDate) }))
+    .filter(({ end }) => !Number.isNaN(end))
+    .sort((a, b) => b.end - a.end);
+  const latest = ended[0];
+  if (latest === undefined) return undefined;
+
+  const sinceEnd = now - latest.end;
+  if (sinceEnd < 0 || sinceEnd > POST_TRIP_WINDOW_DAYS) return undefined;
+
+  const { trip } = latest;
+  return {
+    kind: 'postTrip',
+    dominantTripId: trip.tripId,
+    greetTitle: `${trip.title} 잘 다녀오셨어요?`,
+    greetSubtitle: '기록을 정리하고 나눠볼까요',
+    trip: {
+      badge: '여행 완료',
+      badgeTone: 'success',
+      ctaLabel: '회고 보기',
+      title: trip.title,
+      meta: formatTripMeta(trip),
+    },
+    recommendationTitle: '다음엔 여기 어때요',
+    // 추천 카드는 서버 장소가 소스라 화면이 컬렉션 레인(collectionsLane)으로 그린다 — 여기선 비운다.
+    recommendations: [],
+    pastTrips: ended.slice(1).map(({ trip: past }) => ({
+      title: past.title,
+      dateLabel: pastTripDateLabel(past),
+      imageUrl: null,
+    })),
+  };
+}
+
+/** '2026.04 · 2박' — 시작 연.월 + 박수(당일치기는 '당일'). 날짜가 깨졌으면 연.월만 있는 만큼. */
+function pastTripDateLabel(trip: HomeTripInput): string {
+  const nights = toEpochDay(trip.endDate) - toEpochDay(trip.startDate);
+  const ym = /^(\d{4})-(\d{2})/.exec(trip.startDate);
+  const month = ym ? `${ym[1]}.${ym[2]}` : '';
+  const stay =
+    Number.isNaN(nights) || nights < 0
+      ? ''
+      : nights === 0
+        ? '당일'
+        : `${nights}박`;
+  return [month, stay].filter(Boolean).join(' · ');
+}
+
 /**
  * 지배 여행(가장 이른 startDate 의 비-ENDED)을 골라 planning 얼굴을 조립한다.
- * 비-ENDED 여행이 없으면(빈 목록·전부 ENDED) undefined — 라우트가 phase 미전달로 discovery.
+ * 비-ENDED 여행이 없으면: 최근 종료가 7일 이내일 때만 postTrip(TRIP-1369), 그 밖(빈 목록·창 밖)은
+ * undefined — 라우트가 phase 미전달로 discovery.
  *
  * startDate 는 'YYYY-MM-DD' 라 문자열 사전순 비교가 곧 연대순이다(별도 파싱 불필요).
  * badge 는 오늘이 [startDate, endDate] 안이면 '여행 중', 아니면 '계획 중'(TRIP-472). dday 와
@@ -113,7 +180,9 @@ export function resolveHomePhase(
   const { trips, today, savedCount, formatTripMeta } = input;
 
   const active = trips.filter((trip) => trip.status !== 'ENDED');
-  if (active.length === 0) return undefined;
+  if (active.length === 0) {
+    return resolvePostTripPhase(trips, today, formatTripMeta);
+  }
 
   const dominant = active.reduce((earliest, trip) =>
     trip.startDate < earliest.startDate ? trip : earliest

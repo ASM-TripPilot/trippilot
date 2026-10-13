@@ -394,6 +394,128 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
 });
 
 // TRIP-370 · 494/596 · 695 · 935 R1 · 499/985/1105 · 939 AC-9 · 1012 B1
+// TRIP-1369 — 여행 후(postTrip) 얼굴. 진입 조건(사용자 확정 2026-10-13): 비-ENDED 여행 0 ∧ 가장 최근
+// 종료가 7일 이내. 그 밖은 기존대로 discovery/planning.
+describe('여행 후 얼굴 — 종료 직후에만 뜬다 (TRIP-1369)', () => {
+  const endedTrip = (daysAgo: number, overrides: Partial<Trip> = {}) => {
+    const end = addDays(seoulDate(new Date()), -daysAgo);
+    return trip({
+      tripId: TRIP_ID,
+      title: '부산 여행',
+      status: 'ENDED',
+      startDate: addDays(end, -2),
+      endDate: end,
+      ...overrides,
+    });
+  };
+
+  it('ENDED 만 있고 최근 종료가 7일 안이면 여행 완료 히어로를 그리고, 일정 조회는 나가지 않는다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([endedTrip(2)]));
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
+      '여행 완료'
+    );
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(
+      /부산 여행 잘 다녀오셨어요/
+    );
+    // 종료 여행 일정 재조회 불필요 — PlanningHome(조건부 자식)이 마운트되지 않는다.
+    expect(mockUseItinerary).not.toHaveBeenCalled();
+  });
+
+  it('회고 보기 CTA 는 가장 최근 종료 여행의 기록 화면으로 1회 push 한다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([
+        endedTrip(5, { tripId: 'older', title: '옛 여행' }),
+        endedTrip(1),
+      ])
+    );
+
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '회고 보기'
+    );
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/records`);
+  });
+
+  it('지난 여행 카드는 나머지 종료 여행이고, 하나뿐이면 지난 여행 섹션이 없다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([
+        endedTrip(1),
+        endedTrip(3, { tripId: 'older', title: '옛 여행' }),
+      ])
+    );
+    const { unmount } = render(<HomePage />);
+    expect(
+      within(screen.getByTestId('home-past-trip-card-0')).getByText('옛 여행')
+    ).toBeOnTheScreen();
+    unmount();
+
+    mockUseGetTrips.mockReturnValue(tripsOk([endedTrip(1)]));
+    render(<HomePage />);
+    expect(screen.queryByText('지난 여행')).toBeNull();
+    expect(screen.queryByTestId('home-past-trip-card-0')).toBeNull();
+  });
+
+  it('"전체 보기"는 기록 탭(/records)으로 간다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([
+        endedTrip(1),
+        endedTrip(3, { tripId: 'older', title: '옛 여행' }),
+      ])
+    );
+
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('home-past-trips-more'));
+
+    expect(mockPush).toHaveBeenCalledWith('/records');
+  });
+
+  it('"다음엔 여기 어때요" 추천은 서버 장소 레인이다(고정 부산 카드 아님)', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([endedTrip(1)]));
+    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(7)));
+
+    render(<HomePage />);
+
+    expect(screen.getByText('다음엔 여기 어때요')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('home-collection-card-0')).getByText('실장소4')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('감천문화마을')).toBeNull();
+  });
+
+  it('종료 후 7일째는 아직 여행 후 얼굴이고 8일째부터는 discovery 다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([endedTrip(7)]));
+    const { unmount } = render(<HomePage />);
+    expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
+      '여행 완료'
+    );
+    unmount();
+
+    mockUseGetTrips.mockReturnValue(tripsOk([endedTrip(8)]));
+    render(<HomePage />);
+    expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-trip-hero')).toBeNull();
+  });
+
+  it('종료 직후여도 진행/예정 여행이 하나라도 있으면 planning 이다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([endedTrip(1, { tripId: 'e1' }), beforeTrip()])
+    );
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
+      /계획 중/
+    );
+    expect(screen.queryByText('지난 여행')).toBeNull();
+  });
+});
+
 describe('진입점 — 누르면 어디로 가나', () => {
   // 직전 여행 드래프트가 새 여행으로 새지 않게, push 가 불리는 그 순간의 드래프트를 잰다.
   it('＋ 여행 만들기 FAB 는 직전 드래프트를 비우고 step1 로 1회 간다', () => {

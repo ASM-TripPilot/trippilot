@@ -570,7 +570,7 @@ const POST_TRIP_PHASE: HomePhase = {
   trip: {
     badge: '여행 완료',
     badgeTone: 'success', // 초록(01b) — badgeSub 없음(단일 배지)
-    ctaLabel: '회고 보기 ›', // 꺾쇠(›) 포함
+    ctaLabel: '회고 보기', // 라이브 생산자(resolveHomePhase)와 같은 문구 — 꺾쇠 없음(TRIP-1369)
     title: '부산 여행',
     meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13', // 12km=거리(INV-3 OK)
   },
@@ -693,7 +693,7 @@ describe('🔴 HomeScreen — planning 인사 2줄 + INV-3 (TRIP-696 AC-696-4·6
 // ─────────────────────────────────────────────────────────────────────────────
 // TRIP-698 — 여행 완료(postTrip) 얼굴 재작성. 무엇을 보장하나: (1) 구 회색 회고 카드
 // (home-recap-card·MiniMapCard)를 696 통합 히어로로 교체 — 배지 "여행 완료"(단일·success 톤)·
-// 타이틀·메타·CTA "회고 보기 ›"(AC-1), (2) 인사 2줄(AC-2), (3) 섹션 순서 반전 지난여행→추천(AC-3),
+// 타이틀·메타·CTA "회고 보기"(AC-1), (2) 인사 2줄(AC-2), (3) 섹션 순서 반전 지난여행→추천(AC-3),
 // (4) 가로 사진 카드 2장(AC-4), (5) 추천 3장(AC-5), (6) 5페이지·5도트 캐러셀(AC-6),
 // (7) magazineHero·스팟·공유행·회고 카드 숨김 + INV-3(AC-7·8), (8) 배지 톤 success 파라미터화.
 //
@@ -704,7 +704,7 @@ describe('🔴 HomeScreen — planning 인사 2줄 + INV-3 (TRIP-696 AC-696-4·6
 // 6-b 사각: 초록 픽셀·pill r8/shadow·풀블리드 470·3-stop 스크림·좌우 스와이프·활성 도트·가로 스크롤·사진 tint.
 
 describe('🔴 HomeScreen — 여행 완료 통합 히어로 재사용 (TRIP-698 AC-1)', () => {
-  it('배지 "여행 완료"(단일)·타이틀·메타·CTA "회고 보기 ›"를 통합 히어로에 그리고 회고 카드는 사라진다', () => {
+  it('배지 "여행 완료"(단일)·타이틀·메타·CTA "회고 보기"를 통합 히어로에 그리고 회고 카드는 사라진다', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
 
     const hero = screen.getByTestId('home-trip-hero');
@@ -723,7 +723,7 @@ describe('🔴 HomeScreen — 여행 완료 통합 히어로 재사용 (TRIP-698
 
     // CTA 꺾쇠 — toHaveTextContent(문자열) exact(02a §5-a)라 꺾쇠(›) 뺀 뮤턴트를 red 로 잡는다.
     expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
-      '회고 보기 ›'
+      '회고 보기'
     );
 
     // 부정 짝 — 구 회고 카드(home-recap-card·MiniMapCard)는 제거됐다.
@@ -887,6 +887,66 @@ describe('🔴 HomeScreen — planning 버튼 역할 집합 == 배선 CTA 집합
 
     // 집합 동치 — spots-more 가 안 빠지거나(현행) 배선 CTA 가 벗겨지면 red.
     expect(buttonIds).toEqual([...PLANNING_WIRED_CTA_TEST_IDS].sort());
+  });
+});
+
+// TRIP-1369 — postTrip 얼굴 버튼 집합(370-AC-4 를 이 얼굴까지). 콜백 없이 그리면 버튼은 구조 CTA 뿐이고
+// "전체 보기"는 버튼이 아니다(콜백 없는 죽은 버튼 금지, 심사 2.1). 콜백을 주면 그 하나만 버튼이 된다.
+const POST_TRIP_WIRED_CTA_TEST_IDS = [
+  'home-create-trip-fab',
+  'home-saved-menu-toggle',
+  'home-trip-hero-cta',
+  'home-search-bar',
+  'home-trip-hero',
+  'home-dashboard-bell',
+] as const;
+
+describe('🔴 HomeScreen — postTrip 버튼 역할 집합 == 배선 CTA 집합 (TRIP-1369 · 370-AC-4)', () => {
+  it('콜백 없이 그리면 버튼은 여행 카드 CTA·검색바·종·FAB 뿐이고 "전체 보기"는 버튼이 아니다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
+
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID)
+      .sort();
+
+    expect(buttonIds).toEqual([...POST_TRIP_WIRED_CTA_TEST_IDS].sort());
+  });
+
+  it('onPressPastTripsMore 를 주면 "전체 보기"가 버튼이 되고 누르면 1회 발화한다', () => {
+    const onPressPastTripsMore = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        phase={POST_TRIP_PHASE}
+        onPressPastTripsMore={onPressPastTripsMore}
+      />
+    );
+
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID)
+      .sort();
+    expect(buttonIds).toEqual(
+      [...POST_TRIP_WIRED_CTA_TEST_IDS, 'home-past-trips-more'].sort()
+    );
+
+    fireEvent.press(screen.getByTestId('home-past-trips-more'));
+    expect(onPressPastTripsMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('지난 여행이 없으면 지난 여행 섹션 헤더를 그리지 않는다', () => {
+    if (POST_TRIP_PHASE.kind !== 'postTrip') throw new Error('postTrip 픽스처');
+    const postTripPhase = POST_TRIP_PHASE;
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        phase={{ ...postTripPhase, pastTrips: [] }}
+      />
+    );
+
+    expect(screen.queryByText('지난 여행')).toBeNull();
+    expect(screen.queryByTestId('home-past-trips-more')).toBeNull();
   });
 });
 
