@@ -204,6 +204,7 @@ pnpm lint && pnpm tsc --noEmit
 - **`ios/`·`android/` 네이티브 프로젝트는 커밋하지 않는다** — prebuild 산출물이며 EAS 원격 빌드에서 재현된다(CNG). `.gitignore`에 포함.
 - EAS Build 프로파일 3종: development / preview / production (`eas.json`). CI 성공 후 수동 트리거.
 - 네이티브 모듈 추가(지도 SDK·expo-location·expo-notifications 등)는 EAS 재빌드 필요, 순수 JS/TS 변경은 OTA 대상.
+- **운영 빌드 전 EAS 환경변수 2개를 확인한다**(TRIP-1370) — `EXPO_PUBLIC_SENTRY_DSN`(크래시 수집 주소)·`SENTRY_AUTH_TOKEN`(소스맵·dSYM 업로드, secret). DSN 이 비면 `initSentry` 가 에러 없이 꺼져 크래시가 안 쌓인다(빌드는 성공하므로 이 줄이 심판이다). token 이 없으면 **운영 iOS 빌드가 실패한다** — Sentry Xcode 스크립트가 업로드 실패를 `error:` 로 끝내기 때문이다(`SENTRY_ALLOW_FAILURE=true` 로 넘길 수 있으나 그러면 업로드 실패가 조용해져 쓰지 않는다). 값은 리포·채팅에 적지 않는다(`.env.example` 은 키 이름만).
 
 ## 문서
 

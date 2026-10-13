@@ -17,7 +17,6 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "EXPO_PUBLIC_API_BASE_URL": "https://api-dev.trippilot.co.kr"
       }
     },
