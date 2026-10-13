@@ -45,7 +45,9 @@ function isAlreadyAssigned(error: unknown): boolean {
 
 export function useTripBases(tripId: string | undefined) {
   return useGetTripsTripIdBases(tripId ?? '', {
-    query: { enabled: tripId !== undefined },
+    // 'always' — TripBasesPage 가 마운트 뒤 첫 참(isFetchedAfterMount)을 스냅샷으로 쓴다.
+    // 전역 staleTime(30초) 안에 재진입해도 마운트 재조회가 나가야 한다.
+    query: { enabled: tripId !== undefined, refetchOnMount: 'always' },
   });
 }
 

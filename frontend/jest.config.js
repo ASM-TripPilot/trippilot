@@ -60,6 +60,8 @@ module.exports = {
     // 그 조건을 먼저 고른다) `msw/node` 가 해석되지 않는다. CJS dist 로 직접 매핑해 우회한다.
     '^msw/node$': '<rootDir>/node_modules/msw/lib/node/index.js',
     '^msw$': '<rootDir>/node_modules/msw/lib/core/index.js',
+    '^@react-native-community/netinfo$':
+      '<rootDir>/node_modules/@react-native-community/netinfo/jest/netinfo-mock.js',
     '^@/(.*)$': '<rootDir>/src/$1',
     // 라우트(루트 app/)를 렌더하는 테스트용 별칭(TRIP-1161). 앱 코드가 이 별칭으로 라우트를 끄는 것은 eslint 층 zone 이 막는다.
     '^@routes/(.*)$': '<rootDir>/app/$1',
