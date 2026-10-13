@@ -590,7 +590,7 @@
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties": {
         "ManagedPolicyName": {"Fn::Sub": "trippilot-${Environment}-github-deploy-extra"},
-        "Description": "Deployment-role statements that do not fit the inline policy (it sits at the 10240-character limit): Pod Identity binding for the AI and CloudWatch collector pods, the Container Insights log groups Terraform creates to cap retention, and read-only serving metrics/cost for the weekly serving judge.",
+        "Description": "Deployment-role statements that do not fit the inline policy (it sits at the 10240-character limit): Pod Identity binding for the AI pods, and read-only serving metrics/cost for the weekly serving judge.",
         "Roles": [{"Ref": "DeploymentRole"}],
         "PolicyDocument": {
           "Version": "2012-10-17",
