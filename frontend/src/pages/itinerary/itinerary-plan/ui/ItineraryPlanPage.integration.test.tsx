@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import { http, HttpResponse } from 'msw';
 import type { QueryClient } from '@tanstack/react-query';
 import {
@@ -107,15 +108,20 @@ jest.mock('expo-router', () => ({
 }));
 
 // [공유하기] 게이트 스위치 — null 이면 실물 판정(jest-expo 는 캡처 모듈 3종을 "있는 척"한다), boolean 이면 그 값.
-const mockShareArmed: { value: boolean | null } = { value: null };
+const mockShareArmed: { value: boolean | null; calls: number } = {
+  value: null,
+  calls: 0,
+};
 jest.mock('@/features/share-trip-card/model/shareCapture', () => {
   const actual = jest.requireActual<typeof ShareCaptureModule>(
     '@/features/share-trip-card/model/shareCapture'
   );
   return {
     ...actual,
-    isShareCaptureArmed: () =>
-      mockShareArmed.value ?? actual.isShareCaptureArmed(),
+    isShareCaptureArmed: () => {
+      mockShareArmed.calls += 1;
+      return mockShareArmed.value ?? actual.isShareCaptureArmed();
+    },
   };
 });
 
@@ -168,6 +174,7 @@ beforeEach(() => {
   );
   mockCanGoBack.mockReturnValue(true);
   mockShareArmed.value = null;
+  mockShareArmed.calls = 0;
 });
 
 // 토스트 스토어는 모듈 싱글턴이다 — describe 안이 아니라 파일 최상위에서 비운다.
@@ -253,7 +260,9 @@ describe('확정 CTA·재조회 배선', () => {
     activeClient?.clear();
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
     // TRIP-1047 — 토스트 스토어는 모듈 싱글턴이다. describe 안이 아니라 파일 최상위에서 비워야 I4 가
     // 띄운 확정 토스트가 뒤 테스트의 "토스트 없음"으로 새지 않는다(02a ★1).
     resetToast();
@@ -702,7 +711,9 @@ describe('확정 셸(h16) 얼굴', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** trip GET 은 케이스마다 안 갈리니 항상 200, itinerary GET 만 갈린다. */
@@ -781,6 +792,18 @@ describe('확정 셸(h16) 얼굴', () => {
       expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
         '일정 수정'
       );
+    });
+
+    it('TRIP-1364 · 캡처 장전 판정은 마운트 때 한 번만 읽는다 — 다시 그려져도 렌더 중에 다시 부르지 않는다', async () => {
+      mockShareArmed.value = true;
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      // 다시 그리게 한다(일차 칩 선택 = 로컬 상태 변경).
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+      expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
+      expect(mockShareArmed.calls).toBe(1);
     });
 
     it('C2c · 캡처 개통(armed:true)이면 공유하기(button-1) press → j06 공유 push 1회, 활성(짝)', async () => {
@@ -936,6 +959,30 @@ describe('확정 셸(h16) 얼굴', () => {
       await screen.findByTestId('map-sheet-shell-root');
 
       expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+    });
+
+    it('TRIP-1364 · 화면을 연 채 자정(KST)을 넘겨 앱이 다시 앞으로 오면 "오늘" 일차가 따라 바뀐다 — 마운트 시점에 굳지 않는다', async () => {
+      fixToday('2026-06-11T03:00:00Z');
+      const listeners: ((state: string) => void)[] = [];
+      const spy = jest
+        .spyOn(AppState, 'addEventListener')
+        .mockImplementation((_type, handler) => {
+          listeners.push(handler as (state: string) => void);
+          return { remove: jest.fn() };
+        });
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage('notification');
+      await screen.findByTestId('map-sheet-shell-root');
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+
+      // 자정을 넘긴 시각(서울 06-12) — 타이머는 진짜라 앱 복귀(active) 신호로 재계산을 건다.
+      jest.setSystemTime(new Date('2026-06-12T03:00:00Z'));
+      act(() => {
+        listeners.forEach((listener) => listener('active'));
+      });
+
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('3일차');
+      spy.mockRestore();
     });
 
     it('알림으로 열린 뒤 사용자가 1일차 칩을 누르면 그 선택이 유지된다(오늘로 되돌아가지 않는다)', async () => {
@@ -1111,7 +1158,9 @@ describe('탈출구 — 뒤로·일정 만들기', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 얼굴 강제 헤더 — trip GET은 케이스마다 다르지 않아 항상 200, itinerary GET만 갈린다(02a ★2). */
@@ -1358,7 +1407,9 @@ describe('확정 예방 잠금(PARTIAL)', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** press(동기) 후 mutate(비동기) 가 한 틱 돌 시간을 준다 — "그래도 요청이 안 나갔다"를 재려면 필요. */
@@ -1465,7 +1516,9 @@ describe('지도 실패 폴백', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   const CARD_A = `slot-stopcard-${DAY1}#poi-a`;
@@ -1566,7 +1619,9 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
     activeClient?.clear();
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   function renderGuardPage() {
@@ -1739,7 +1794,9 @@ describe('완성 셸(h14) 얼굴', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** trip GET 은 케이스마다 안 갈리니 항상 200, itinerary GET 만 갈린다. */
@@ -2078,7 +2135,9 @@ describe('삭제된 여행 안내', () => {
     activeClient?.clear();
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   let activeClient: QueryClient | null = null;
@@ -2345,7 +2404,9 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
   afterEach(() => {
     resetPressGuard();
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   function treeOrder(ids: string[]): string[] {
@@ -2438,7 +2499,9 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
   // 단언 = /saved-places 0회 · 두 항목이 문구만으로 보인다.
   describe('🔴 L4b · Q4 — 게스트는 담은 장소를 조회하지 않고, 문구는 그대로 보인다', () => {
     it('토큰 없음 → /saved-places 0회 · 두 항목 문구만', async () => {
-      clearAccessToken();
+      act(() => {
+        clearAccessToken();
+      });
       itineraryScript = () =>
         unplacedItinerary({ unplacedMustVisits: UNPLACED });
 
@@ -2529,7 +2592,9 @@ describe('위반 슬롯 경고 표식', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   describe('🔴 C1·C2 · h14/h16 — 위반 슬롯 카드에만 고정 라벨 표식, 사유 원문·소요시간 0건 (확정 여부 무관 · Q3 · INV-3)', () => {
@@ -2781,7 +2846,9 @@ describe('빈 일차 지도 중심', () => {
     releaseBases?.();
     releaseBases = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** `retry:false`·`gcTime:0` — 실패 즉시, 잔존 타이머 방지. */
@@ -3002,7 +3069,9 @@ describe('같은 날 같은 장소 두 번', () => {
     activeClient?.clear();
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   async function openShell(
