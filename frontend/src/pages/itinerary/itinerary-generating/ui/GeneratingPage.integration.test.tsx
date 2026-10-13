@@ -2,6 +2,7 @@ import type { ReactNode, ReactElement } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  configure,
   fireEvent,
   render,
   screen,
@@ -113,6 +114,12 @@ jest.mock('@/shared/api/generated/trips/trips', () => {
 // 지도를 관찰 마커로 바꾼다 — 중심 좌표는 `map-root` 텍스트, 나머지 prop 은 그대로 통과한다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
+
+// 파일의 첫 테스트(G1)는 첫 렌더·첫 요청이 늦게 읽히는 모듈을 그때 처음 불러온다(inlineRequires). 변환 캐시가
+// 식었을 때(`--no-cache` 실측) 렌더 55→379ms · 409→안내 얼굴 52→553ms 로 불어나고, 전체 버킷의 CPU 경합이
+// 겹치면 findBy 기본 1초를 넘긴다(TRIP-1365 — 안내 대신 일반 생성 얼굴이 그려진 채 시간 초과). 기다림은
+// 나타나는 즉시 끝나므로 상한만 늘린다 — 실패(red)의 대기만 길어진다.
+configure({ asyncUtilTimeout: 5000 });
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
