@@ -8,11 +8,8 @@
  */
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
+
+import { SheetShell } from '@/shared/ui/SheetShell';
 
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 
@@ -20,12 +17,6 @@ export interface StayPriceSheetProps {
   selected: PriceBucketId;
   onSelect: (id: PriceBucketId) => void;
   onClose: () => void;
-}
-
-function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
-  return (
-    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-  );
 }
 
 function PriceOption({
@@ -75,31 +66,25 @@ export function StayPriceSheet({
   onClose,
 }: StayPriceSheetProps): ReactElement {
   return (
-    <BottomSheet
-      index={0}
-      enablePanDownToClose
+    <SheetShell
+      testID="stay-price-sheet"
       onClose={onClose}
-      backdropComponent={renderBackdrop}
+      title="가격대"
+      titleSize="section"
+      contentClassName="w-full gap-md px-lg pb-2xl pt-sm"
+      handle="default"
     >
-      <BottomSheetView
-        testID="stay-price-sheet"
-        className="w-full gap-md px-lg pb-2xl pt-sm"
-      >
-        <Text className="font-noto-bold text-section font-bold text-ink">
-          가격대
-        </Text>
-        <View className="w-full gap-sm">
-          {PRICE_BUCKETS.map((bucket) => (
-            <PriceOption
-              key={bucket.id}
-              id={bucket.id}
-              label={bucket.label}
-              selected={bucket.id === selected}
-              onSelect={onSelect}
-            />
-          ))}
-        </View>
-      </BottomSheetView>
-    </BottomSheet>
+      <View className="w-full gap-sm">
+        {PRICE_BUCKETS.map((bucket) => (
+          <PriceOption
+            key={bucket.id}
+            id={bucket.id}
+            label={bucket.label}
+            selected={bucket.id === selected}
+            onSelect={onSelect}
+          />
+        ))}
+      </View>
+    </SheetShell>
   );
 }
