@@ -5,6 +5,8 @@ export {
   useItineraryEditStore,
 } from './model/itineraryEditStore';
 export type { EditorDaysItem, EditorSlot } from './model/itineraryEditStore';
+export { useEditorDraft } from './model/useEditorDraft';
+export { useConfirmItinerary } from './model/useConfirmItinerary';
 export { resolveSlotSwapError } from './model/slotSwapError';
 export { swapSlotPoi } from './model/swapSlotPoi';
 export { SaveConflictDialog } from './ui/SaveConflictDialog';

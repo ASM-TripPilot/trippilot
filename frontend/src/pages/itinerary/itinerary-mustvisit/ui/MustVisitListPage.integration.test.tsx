@@ -36,8 +36,8 @@ import { MustVisitListPage } from './MustVisitListPage';
  *    "목록은 살고 AlertRow 는 없다" 로 뒤집혔다.
  *  - 게스트가 **끝나지 않는 스켈레톤**을 보지 않는다(`useSavedPlaces` 는 `enabled: isAuthed` 라
  *    미로그인이면 `isPending` 이 영원히 true 다).
- *  - 🔴 TRIP-785 재정합: 강등 확인 시트·배선이 사라졌고(부재 단언 하나로 접음), 건너뛰기는
- *    listed 에서 사라져 **failed 얼굴 전용**이 됐다(I13·I16 재작성).
+ *  - 🔴 TRIP-785 재정합: 건너뛰기는 listed 에서 사라져 **failed 얼굴 전용**이 됐다(I13·I16 재작성).
+ *    강등 확인 시트·배선은 사라졌다 — 그 부재 단언은 TRIP-1352 에서 지웠다(삭제된 기능이 되살아나는지는 QA 몫).
  *
  * 왜 통합 버킷인가: 심판의 핵심이 **어떤 요청이 몇 건 나갔나** 다. 훅을 목킹하면 "해제가
  * saved-places 를 안 건드린다" 가 테스트의 *가정*이 되어 그 가정이 틀려도 아무도 모른다
@@ -415,9 +415,7 @@ describe('I6 · D3 — 카드를 누르면 시각 지정 화면으로 간다', (
  *
  * ⚠️ **강등(FIXED→ANYTIME) 2단은 이 화면에서 사라졌다**(TRIP-785 Q2). 계약에 `PATCH` 가 없어
  * DELETE→POST 2단이던 강등 확인 시트·`onDemote`/`onRetryDemote`/`demoteErrorText` 배선을 h02 가
- * 전부 뗐다(h03/TRIP-786 이 흡수). 옛 I9~I12·I14·I15 가 그 2단의 순서·실패 3종(lost·kept·409)·
- * 인플라이트 잠금을 심판했으나, 심판 대상이 통째로 없어져 **부재 단언 하나로 접었다**(아래
- * '강등 배선 제거'). 되살아나면 그 하나가 red — "삭제도 계약".
+ * 전부 뗐다(h03/TRIP-786 이 흡수). 그 부재를 지키던 단언(옛 '강등 배선 제거')은 TRIP-1352 에서 지웠다.
  *
  * 살아남은 케이스는 각자 `server.use(...)` 로 핸들러를 건다(`beforeEach` 기본 핸들러 셋은
  * 그대로 둔다). `onUnhandledRequest:'error'` 라 안 걸면 AC 실패가 아니라 준비 단계에서 죽는다.
@@ -494,41 +492,6 @@ describe('I8 · AC-8 — 시간 정해두기는 h07 로만 가고 요청을 만�
     //    아무 요청도 만들지 않고 입력 화면으로 보내기만 한다.
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
-  });
-});
-
-describe('🔴 강등 배선 제거 (TRIP-785 · Q2 · 삭제도 계약)', () => {
-  /**
-   * 옛 I9~I12·I14·I15 는 FIXED→ANYTIME 강등의 DELETE→POST 2단(순서·본문·실패 3종·인플라이트
-   * 잠금)을 심판했다. TRIP-785 가 그 시트·배선(`onDemote`/`onRetryDemote`/`demoteErrorText`)을
-   * 통째로 뗐다(Q2 · h03/TRIP-786 흡수) — 심판 대상이 없어져 **하나의 부재 단언으로 접는다**.
-   * 되살아나면(시트가 다시 뜨거나 강등 요청이 다시 나가면) 이 하나가 red 다.
-   *
-   * 왜 통합 버킷에 남기나: "강등 요청이 **한 건도 안 나간다**" 는 실 HTTP 위에서만 정직하게
-   * 재진다 — 훅을 목킹하면 "안 나간다" 가 테스트의 가정이 되어 되살아나도 모른다.
-   */
-  it('FIXED 의 `아무 때나` 를 눌러도 확인 시트가 없고 POST·DELETE 가 0건이며 칩은 FIXED 그대로다', async () => {
-    await openList();
-
-    // ① FIXED 카드의 `아무 때나` 칩은 이제 표시 전용이다(Q1) — 눌러도 아무 일이 없다.
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-timemode-anytime-poi-a')
-    );
-
-    // ② 🔴 강등 확인 시트가 뜨지 않는다(어떤 testID 도 없다).
-    expect(countTestId('itinerary-mustvisit-screen-demote')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-demote-confirm')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-demote-cancel')).toBe(0);
-
-    // ③ 🔴 강등 요청(DELETE→POST 2단)이 한 건도 안 나간다 — 배선이 사라졌다.
-    expect(hitsFor('POST', '/must-visits')).toBe(0);
-    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
-
-    // ④ 짝 — 항목은 FIXED 그대로다(강등이 조용히 일어나 필수 칩으로 바뀌지 않았다).
-    expect(
-      screen.getByTestId('itinerary-mustvisit-chip-fixed-poi-a')
-    ).toBeOnTheScreen();
-    expect(cardTestIds()).toHaveLength(3);
   });
 });
 

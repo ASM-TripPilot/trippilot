@@ -108,7 +108,7 @@ import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
-import { PastTripRow } from '@/entities/trip';
+import { PastTripRow, TripCard, type MyTripCardVM } from '@/entities/trip';
 import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip';
 import type { PastTripCardVM } from '@/entities/trip';
 import type { MonthLegends } from '@/pages/record/records-calendar/model/recordsCalendar';
@@ -116,10 +116,6 @@ import { buildSlotKey } from '@/entities/itinerary-slot';
 import { buildStatePins } from '@/entities/itinerary-slot';
 import { TimeSheet } from '@/widgets/time-sheet';
 import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
-import {
-  MyTripCard,
-  type MyTripCardVM,
-} from '@/pages/itinerary/itinerary-list/ui/MyTripCard';
 import { MyTripsListScreen } from '@/pages/itinerary/itinerary-list/ui/MyTripsListScreen';
 import { MyTripsSortSheet } from '@/pages/itinerary/itinerary-list/ui/MyTripsSortSheet';
 import { TripDeleteDialog } from '@/pages/itinerary/itinerary-list/ui/TripDeleteDialog';
@@ -1501,7 +1497,8 @@ function renderH06DeleteList({
       mode="list"
       onPressCreateTrip={noop}
       cards={[
-        <MyTripCard
+        <TripCard
+          testIDPrefix="my-trip"
           key={draft.tripId}
           vm={draft}
           onPress={noop}
@@ -1509,7 +1506,12 @@ function renderH06DeleteList({
           menuOpen={menuOpen}
           onPressMenu={noop}
         />,
-        <MyTripCard key={done.tripId} vm={done} onPress={noop} />,
+        <TripCard
+          testIDPrefix="my-trip"
+          key={done.tripId}
+          vm={done}
+          onPress={noop}
+        />,
       ]}
     />
   );
@@ -1534,19 +1536,26 @@ function renderH06Ongoing() {
       mode="list"
       onPressCreateTrip={noop}
       cards={[
-        <MyTripCard
+        <TripCard
+          testIDPrefix="my-trip"
           key={H06_ONGOING_VM.tripId}
           vm={H06_ONGOING_VM}
           onPress={noop}
         />,
-        <MyTripCard
+        <TripCard
+          testIDPrefix="my-trip"
           key={draft.tripId}
           vm={draft}
           onPress={noop}
           onPressDelete={noop}
           onPressMenu={noop}
         />,
-        <MyTripCard key={done.tripId} vm={done} onPress={noop} />,
+        <TripCard
+          testIDPrefix="my-trip"
+          key={done.tripId}
+          vm={done}
+          onPress={noop}
+        />,
       ]}
     />
   );
@@ -5741,14 +5750,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'h',
     label: 'h07 · 생성 중 loading',
     login: null,
-    render: () => (
-      <GeneratingScreen
-        onBackground={noop}
-        onRetry={noop}
-        pins={MUST_VISIT_PREVIEW_PINS}
-        center={{ lat: 35.1532, lng: 129.1188 }}
-      />
-    ),
+    render: () => <GeneratingScreen onBackground={noop} onRetry={noop} />,
   },
   // h07 폴백 인터스티셜(TRIP-791) — Figma `3831:2177` 대조용. 성공(폴백) 변형: 지도 카드(기본
   // 동선)+메시지 카드+체크리스트 4행(3행만 대시·회색)+안내바+CTA 2개. props-only 순수 화면이라
@@ -5953,7 +5955,12 @@ export const PREVIEW_STATES: PreviewState[] = [
         mode="list"
         onPressCreateTrip={noop}
         cards={MY_TRIPS_PREVIEW_VMS.map((vm) => (
-          <MyTripCard key={vm.tripId} vm={vm} onPress={noop} />
+          <TripCard
+            testIDPrefix="my-trip"
+            key={vm.tripId}
+            vm={vm}
+            onPress={noop}
+          />
         ))}
       />
     ),
@@ -5969,7 +5976,12 @@ export const PREVIEW_STATES: PreviewState[] = [
           mode="list"
           onPressCreateTrip={noop}
           cards={MY_TRIPS_PREVIEW_VMS.map((vm) => (
-            <MyTripCard key={vm.tripId} vm={vm} onPress={noop} />
+            <TripCard
+              testIDPrefix="my-trip"
+              key={vm.tripId}
+              vm={vm}
+              onPress={noop}
+            />
           ))}
         />
         <GenerationDoneBar tripName="서귀포시 여행" onPressView={noop} />
@@ -5996,7 +6008,12 @@ export const PREVIEW_STATES: PreviewState[] = [
           />
         }
         cards={MY_TRIPS_PREVIEW_VMS.map((vm) => (
-          <MyTripCard key={vm.tripId} vm={vm} onPress={noop} />
+          <TripCard
+            testIDPrefix="my-trip"
+            key={vm.tripId}
+            vm={vm}
+            onPress={noop}
+          />
         ))}
       />
     ),

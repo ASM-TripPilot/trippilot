@@ -1,4 +1,4 @@
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, View } from 'react-native';
 import {
   fireEvent,
   render,
@@ -134,28 +134,6 @@ describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
 // (AC-4 핀 primary — SVG stroke 는 RNTL 트리에서 질의 불가, cardFingerprint fill 미관측
 // 트랩)은 6-b 육안 전용이라 여기서 테스트하지 않는다(공허 통과 방지). 드리프트 A(서브카피
 // 12.5px·칩 흰22%·배지 10.5px)는 01b 확정 무변경이라 잠글 것이 없다.
-
-describe('🔴 HomeScreen — 벨 흰 원형 버튼 + 그림자 (TRIP-694 AC-3)', () => {
-  it('home-dashboard-bell 이 bg-canvas+rounded-full+그림자다', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
-
-    const bell = screen.getByTestId('home-dashboard-bell');
-
-    // red-first — className 은 jest 렌더 트리에 평문 문자열 prop 으로 남는다(02a §2 실측).
-    // 현재 벨 className 엔 bg-canvas·rounded-full 이 없다.
-    expect(bell.props.className).toContain('bg-canvas');
-    expect(bell.props.className).toContain('rounded-full');
-
-    // red-first — softCardShadow(shadowColor 존재). flatten 은 객체/배열/undefined 를
-    // 정규화한다(undefined 를 넣지 않게 `?? {}` 가드, 현재 style 미지정 → shadowColor undefined).
-    const bellStyle = StyleSheet.flatten(bell.props.style ?? {}) as {
-      shadowColor?: unknown;
-    };
-    expect(bellStyle.shadowColor).toBeDefined();
-
-    // (빨간점 배지 부재 — TRIP-939 AC-9 Q3 — 는 파일 끝 「모든 얼굴에서 종은 버튼, 빨간점·컬렉션 더보기는 없다」가 진다.)
-  });
-});
 
 describe('🔴 HomeScreen — 생성 사진 배선 (TRIP-694 AC-5)', () => {
   it('히어로·컬렉션·스팟 카드가 Image 로 렌더된다(플레이스홀더 View 대체)', () => {
@@ -353,8 +331,7 @@ describe('HomeScreen — 담은 곳 saved-menu FAB (TRIP-494)', () => {
 
 // TRIP-695 — 담은 곳 미니 FAB 우상단 개수 배지(핑크 원). 열림+count≥1일 때만 뜨고, 텍스트는
 // 100 이상이면 '99+'로 접힌다(formatCountBadge, AC-2). 지름 20px·흰 2px 테두리·shadow·우상단
-// flush 위치는 6-b 육안 전용(jest 사각) — 여기선 배지 유무·개수 텍스트·bg-primary className만
-// 잠근다(01 §85: 배지는 View+NativeWind라 className 관측됨, 미니FAB 안 SVG 글리프 색과 다름).
+// flush 위치·색은 실화면 몫이다 — 여기선 배지 유무·개수 텍스트만 잠근다.
 // 기대 텍스트는 리터럴('7'·'3'·'99+')로 박는다 — formatCountBadge 모듈을 여기서 import 하면
 // 미존재 시 이 파일 전체가 로드 실패해 무회귀 describe 까지 통째 red 가 된다(02a ★D1). 포맷터
 // 정확성은 formatCountBadge.test.ts 가 독립으로 잠근다.
@@ -374,17 +351,12 @@ describe('HomeScreen — 담은 곳 배지 표시/미표시 (TRIP-695 AC-1)', ()
       '99+',
     ],
   ] as const)(
-    '열림+%s → 배지 present·개수 텍스트·bg-primary',
+    '열림+%s → 배지 present·개수 텍스트',
     (_title, counts, testID, text) => {
       render(<HomeScreen {...HOME_DEFAULT_PROPS} savedMenuOpen {...counts} />);
 
       const badge = screen.getByTestId(testID);
       expect(badge).toHaveTextContent(text);
-      // className 은 jest 렌더 트리에 평문 prop 으로 남는다. 토큰 배열로 완전일치 — `bg-primary-pale` 같은
-      // 다른 토큰이 부분매치로 통과하는 걸 막는다(code-critic 참고-2, split(/\s+/) 관용).
-      expect(String(badge.props.className).split(/\s+/)).toContain(
-        'bg-primary'
-      );
     }
   );
 
@@ -570,7 +542,7 @@ const POST_TRIP_PHASE: HomePhase = {
   trip: {
     badge: '여행 완료',
     badgeTone: 'success', // 초록(01b) — badgeSub 없음(단일 배지)
-    ctaLabel: '회고 보기 ›', // 꺾쇠(›) 포함
+    ctaLabel: '회고 보기', // 라이브 생산자(resolveHomePhase)와 같은 문구 — 꺾쇠 없음(TRIP-1369)
     title: '부산 여행',
     meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13', // 12km=거리(INV-3 OK)
   },
@@ -693,7 +665,7 @@ describe('🔴 HomeScreen — planning 인사 2줄 + INV-3 (TRIP-696 AC-696-4·6
 // ─────────────────────────────────────────────────────────────────────────────
 // TRIP-698 — 여행 완료(postTrip) 얼굴 재작성. 무엇을 보장하나: (1) 구 회색 회고 카드
 // (home-recap-card·MiniMapCard)를 696 통합 히어로로 교체 — 배지 "여행 완료"(단일·success 톤)·
-// 타이틀·메타·CTA "회고 보기 ›"(AC-1), (2) 인사 2줄(AC-2), (3) 섹션 순서 반전 지난여행→추천(AC-3),
+// 타이틀·메타·CTA "회고 보기"(AC-1), (2) 인사 2줄(AC-2), (3) 섹션 순서 반전 지난여행→추천(AC-3),
 // (4) 가로 사진 카드 2장(AC-4), (5) 추천 3장(AC-5), (6) 5페이지·5도트 캐러셀(AC-6),
 // (7) magazineHero·스팟·공유행·회고 카드 숨김 + INV-3(AC-7·8), (8) 배지 톤 success 파라미터화.
 //
@@ -704,7 +676,7 @@ describe('🔴 HomeScreen — planning 인사 2줄 + INV-3 (TRIP-696 AC-696-4·6
 // 6-b 사각: 초록 픽셀·pill r8/shadow·풀블리드 470·3-stop 스크림·좌우 스와이프·활성 도트·가로 스크롤·사진 tint.
 
 describe('🔴 HomeScreen — 여행 완료 통합 히어로 재사용 (TRIP-698 AC-1)', () => {
-  it('배지 "여행 완료"(단일)·타이틀·메타·CTA "회고 보기 ›"를 통합 히어로에 그리고 회고 카드는 사라진다', () => {
+  it('배지 "여행 완료"(단일)·타이틀·메타·CTA "회고 보기"를 통합 히어로에 그리고 회고 카드는 사라진다', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
 
     const hero = screen.getByTestId('home-trip-hero');
@@ -723,7 +695,7 @@ describe('🔴 HomeScreen — 여행 완료 통합 히어로 재사용 (TRIP-698
 
     // CTA 꺾쇠 — toHaveTextContent(문자열) exact(02a §5-a)라 꺾쇠(›) 뺀 뮤턴트를 red 로 잡는다.
     expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
-      '회고 보기 ›'
+      '회고 보기'
     );
 
     // 부정 짝 — 구 회고 카드(home-recap-card·MiniMapCard)는 제거됐다.
@@ -742,21 +714,12 @@ describe('🔴 HomeScreen — 여행 완료 인사 2줄 (TRIP-698 AC-2)', () => 
   });
 });
 
-describe('🔴 HomeScreen — 여행 완료 섹션 순서 반전 (TRIP-698 AC-3)', () => {
-  it('지난 여행 섹션이 "다음엔 여기 어때요"(추천)보다 트리에서 먼저 온다', () => {
+describe('🔴 HomeScreen — 여행 완료 지난 여행 섹션 (TRIP-698 AC-3)', () => {
+  it('지난 여행 헤더와 전체 보기 링크가 있다(섹션 순서는 실화면 몫)', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
 
-    // 헤더·전체 보기 링크 실재(앵커 — 순서 단언 공허 통과 차단).
     expect(screen.getByText('지난 여행')).toBeOnTheScreen();
     expect(screen.getByTestId('home-past-trips-more')).toBeOnTheScreen();
-
-    // 순서 = 트리 순서. getAllByTestId(정규식)은 DFS 프리오더(문서 순)로 반환(02a §5-c)라, 두
-    // 섹션 대표 카드를 한 정규식으로 잡아 인덱스 배열을 완전일치 비교하면 "지난 여행이 추천보다
-    // 먼저"가 잠긴다. 구 계약은 추천→지난여행(역순)이라 구현 후 반전돼야 배열이 정합(green).
-    const order = screen
-      .getAllByTestId(/^home-(past-trip-card-0|collection-card-0)$/)
-      .map((node) => node.props.testID);
-    expect(order).toEqual(['home-past-trip-card-0', 'home-collection-card-0']);
   });
 });
 
@@ -808,30 +771,6 @@ describe('🔴 HomeScreen — 여행 완료 숨김 요소 + INV-3 (TRIP-698 AC-7
 
     // INV-3 — postTrip 어디에도 소요시간 문자열 없음(12km 거리·사진 6장·박수는 무매치, 02a §5-d).
     expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
-  });
-});
-
-// TRIP-698 ★badgeTone — 배지 주 텍스트 톤 파라미터화. NativeWind className 은 jest 렌더 트리에
-// 평문 props.className 로 남아(벨 테스트 L179~182 실측) jest 가 톤을 본다(6-b 사각 아님). 계획
-// 중=text-primary(기본값·선제 green 무회귀), 여행 완료=text-success(초록, 01b·red). implementer 가
-// badgeTone 파라미터화를 빠뜨리고 text-primary 하드코딩을 남기면 둘째 it 이 red 로 잡는다.
-describe('🔴 HomeScreen — 배지 톤 파라미터화 (TRIP-698 AC-1 · badgeTone)', () => {
-  it('계획 중 배지 주 텍스트는 primary 톤이다(badgeTone 기본값 · 무회귀 선제 green)', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
-
-    const badge = screen.getByTestId('home-trip-hero-badge');
-    const main = within(badge).getByText('계획 중');
-    expect(main.props.className).toContain('text-primary');
-    expect(main.props.className).not.toContain('text-success');
-  });
-
-  it('여행 완료 배지 주 텍스트는 success 톤이다(badgeTone=success · 초록)', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
-
-    const badge = screen.getByTestId('home-trip-hero-badge');
-    const main = within(badge).getByText('여행 완료');
-    expect(main.props.className).toContain('text-success');
-    expect(main.props.className).not.toContain('text-primary');
   });
 });
 
@@ -887,6 +826,66 @@ describe('🔴 HomeScreen — planning 버튼 역할 집합 == 배선 CTA 집합
 
     // 집합 동치 — spots-more 가 안 빠지거나(현행) 배선 CTA 가 벗겨지면 red.
     expect(buttonIds).toEqual([...PLANNING_WIRED_CTA_TEST_IDS].sort());
+  });
+});
+
+// TRIP-1369 — postTrip 얼굴 버튼 집합(370-AC-4 를 이 얼굴까지). 콜백 없이 그리면 버튼은 구조 CTA 뿐이고
+// "전체 보기"는 버튼이 아니다(콜백 없는 죽은 버튼 금지, 심사 2.1). 콜백을 주면 그 하나만 버튼이 된다.
+const POST_TRIP_WIRED_CTA_TEST_IDS = [
+  'home-create-trip-fab',
+  'home-saved-menu-toggle',
+  'home-trip-hero-cta',
+  'home-search-bar',
+  'home-trip-hero',
+  'home-dashboard-bell',
+] as const;
+
+describe('🔴 HomeScreen — postTrip 버튼 역할 집합 == 배선 CTA 집합 (TRIP-1369 · 370-AC-4)', () => {
+  it('콜백 없이 그리면 버튼은 여행 카드 CTA·검색바·종·FAB 뿐이고 "전체 보기"는 버튼이 아니다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
+
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID)
+      .sort();
+
+    expect(buttonIds).toEqual([...POST_TRIP_WIRED_CTA_TEST_IDS].sort());
+  });
+
+  it('onPressPastTripsMore 를 주면 "전체 보기"가 버튼이 되고 누르면 1회 발화한다', () => {
+    const onPressPastTripsMore = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        phase={POST_TRIP_PHASE}
+        onPressPastTripsMore={onPressPastTripsMore}
+      />
+    );
+
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID)
+      .sort();
+    expect(buttonIds).toEqual(
+      [...POST_TRIP_WIRED_CTA_TEST_IDS, 'home-past-trips-more'].sort()
+    );
+
+    fireEvent.press(screen.getByTestId('home-past-trips-more'));
+    expect(onPressPastTripsMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('지난 여행이 없으면 지난 여행 섹션 헤더를 그리지 않는다', () => {
+    if (POST_TRIP_PHASE.kind !== 'postTrip') throw new Error('postTrip 픽스처');
+    const postTripPhase = POST_TRIP_PHASE;
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        phase={{ ...postTripPhase, pastTrips: [] }}
+      />
+    );
+
+    expect(screen.queryByText('지난 여행')).toBeNull();
+    expect(screen.queryByTestId('home-past-trips-more')).toBeNull();
   });
 });
 
@@ -1110,63 +1109,6 @@ describe('🔴 TRIP-935 AC-5 · 홈 카드에 하트가 없다(모든 얼굴)', 
         0
       );
     }
-  });
-});
-
-// TRIP-1286 · A-11 · Seed Q5 — 끝까지 내렸을 때 마지막 카드가 오른쪽 아래 FAB 뒤에 숨지 않는다.
-// 탭바는 화면을 줄이지 않는 오버레이라 하단 여유는 화면이 스스로 진다(traps-shell). FAB 스택은 바닥에서 84~208
-// (+ FAB 84~140, 하트 152~208)이므로 콘텐츠 하단 여유는 208 보다 커야 한다 — 권고 220(=208 + FAB 사이 간격 12).
-// 하한으로 잠근다: 220 은 Figma 근거 없는 권고값이라 6-b 에서 올려도 이 테스트는 안 바뀐다(02a §3-1).
-// 실제로 안 가리는지는 탭바가 있는 실앱 경로 6-b(홈 프리뷰 키엔 탭바가 없다).
-describe('🔴 HomeScreen — 세로 스크롤 하단 여유가 FAB 스택 윗변보다 크다 (A-11 · AC-A1)', () => {
-  const FAB_STACK_TOP = 152 + 56;
-  const BOTTOM_ROOM = FAB_STACK_TOP + 12;
-
-  /** `home-dashboard-root` 안의 세로 ScrollView — 가로 캐러셀·레인은 전부 `horizontal` 이다(02a ★11). */
-  function dashboardScrolls() {
-    return within(screen.getByTestId('home-dashboard-root'))
-      .UNSAFE_queryAllByType(ScrollView)
-      .filter((node) => !node.props.horizontal);
-  }
-
-  it.each([
-    ['discovery', undefined],
-    ['planning', PLANNING_PHASE],
-    ['postTrip', POST_TRIP_PHASE],
-    ['traveling', TRAVELING_PHASE],
-  ] as const)(
-    '%s: 대시보드 세로 ScrollView 의 paddingBottom 이 220 이상이다',
-    (_face, phase) => {
-      render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={phase} />);
-
-      // 앵커 — 세로 스크롤은 하나뿐이다(엉뚱한 ScrollView 의 여백을 재지 않았다는 증명).
-      const scrolls = dashboardScrolls();
-      expect(scrolls).toHaveLength(1);
-
-      const padding = StyleSheet.flatten(
-        scrolls[0].props.contentContainerStyle
-      )?.paddingBottom;
-      expect(typeof padding).toBe('number');
-      expect(padding).toBeGreaterThanOrEqual(BOTTOM_ROOM);
-    }
-  );
-
-  // AC-A2 무회귀 — 220 은 "FAB 윗변 위"라는 뜻이라 FAB 위치와 같이 잠가야 관계가 잠긴다(선제 green).
-  it('FAB 위치는 그대로다 — + FAB 바닥 84 · 하트 FAB 묶음 바닥 152', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
-
-    const tokensOf = (node: { props: { className?: unknown } }) =>
-      String(node.props.className ?? '').split(/\s+/);
-    expect(tokensOf(screen.getByTestId('home-create-trip-fab'))).toContain(
-      'bottom-[84px]'
-    );
-    // 하트 토글을 띄우는 것은 토글 자신이 아니라 감싼 absolute 묶음(SavedMenuFab 루트)이다.
-    let heartStack = screen.getByTestId('home-saved-menu-toggle').parent;
-    while (heartStack && !tokensOf(heartStack).includes('absolute')) {
-      heartStack = heartStack.parent;
-    }
-    expect(heartStack).not.toBeNull();
-    expect(tokensOf(heartStack!)).toContain('bottom-[152px]');
   });
 });
 

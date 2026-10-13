@@ -34,7 +34,11 @@ from trippilot.assembly_engine.config import (
     stay_for,
     AssemblyConfig,
 )
-from trippilot.assembly_engine.constraints import anchor_minutes, not_before_floor
+from trippilot.assembly_engine.constraints import (
+    anchor_minutes,
+    free_visit_cap,
+    not_before_floor,
+)
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
@@ -213,11 +217,14 @@ class OrToolsAssembler:
                 # 그래서 안전한 배율을 고르는 것으로는 못 막고, 못 냈을 때 무보정으로
                 # 한 번 더 보는 쪽이 맞다 — 이 재시도는 정의상 기준선과 같으므로
                 # **pace 를 켜서 기준선보다 나빠지는 경우가 없다.**
+                # 재시도는 경로 감점(travel_weight)도 끈다 — "기준선과 같다"가 성립하게. 감점만으로는
+                # 재시도하지 않는다: 목적식 항은 가해 여부를 안 바꿔 같은 한도면 같은 None 이고,
+                # 그 시간만큼 아래 몰아주기 재시도(×5 det)의 문턱을 깎는다(리뷰 지적).
                 _log.info("pace=%s 로 해 없음 — 무보정 재시도 (day=%s)",
                           problem.pace.value, day)
                 # 재시도는 같은 후보를 같은 프리필터로 자른다(pace 는 후보를 안 바꾼다) —
                 # 절단 관측을 두 번 남기면 빈도가 두 배로 세진다 (TRIP-908).
-                slots = self._solve_day(replace(problem, pace=None), day,
+                slots = self._solve_day(replace(problem, pace=None, travel_weight=0.0), day,
                                         used, per_day_ms, log_cut=False)
             if slots is None:
                 # **안 쓴 예산을 실패한 일자에 몰아준다 (TRIP-907).**
@@ -250,7 +257,7 @@ class OrToolsAssembler:
                     retry_ms = min(spare_ms, SPARE_RETRY_CAP_MS)
                     _log.info("해 없음 — 남은 예산 %dms 중 %dms 를 몰아 재시도 (day=%s)",
                               spare_ms, retry_ms, day)
-                    slots = self._solve_day(replace(problem, pace=None), day, used,
+                    slots = self._solve_day(replace(problem, pace=None, travel_weight=0.0), day, used,
                                             retry_ms, log_cut=False, cap_ms=retry_ms,
                                             det_limit=self._retry_det_limit())
                     if slots is None:  # 침묵 금지(INV-4) — 퍼사드 no_solution 과 짝
@@ -391,6 +398,13 @@ class OrToolsAssembler:
                               "score": 0.0, "is_llm": False, "pin": None,
                               "required": True, "dom": dom})
 
+        # 하루 방문 상한 (BR-U4-47 — 피로·지연 재계획) — 자유 노드만 묶는다. 고정·필수는 상한에
+        # 세되 빼지 않는다(`free_visit_cap`). 그리디 힌트도 같은 상한을 지켜 완전 힌트가 유지된다.
+        # 몫이 0 이면 자유 노드를 모델에서 뺀다 — 합 ≤ 0 으로 두면 방문 0 인 회로(자기 루프 없는
+        # 깊이0)가 불가라, 핀·필수가 없는 날이 빈 일자가 아니라 해 없음이 된다.
+        free_cap = free_visit_cap(problem, day)
+        if free_cap == 0:
+            nodes = [n for n in nodes if n["pin"] is not None or n["required"]]
         if not nodes:
             return []  # 배치할 것 없음 — 빈 일자 (해 없음 아님)
 
@@ -420,6 +434,9 @@ class OrToolsAssembler:
             elif "dom" in n:  # 필수 — 영업창 합집합 (lo·hi 는 바깥 경계)
                 m.AddLinearExpressionInDomain(
                     start[i], cp_model.Domain.FromIntervals([list(iv) for iv in n["dom"]]))
+        if free_cap:  # 0 이면 자유 노드가 이미 빠졌다(위)
+            m.Add(sum(visit[i] for i, n in enumerate(nodes)
+                      if n["pin"] is None and not n["required"]) <= free_cap)
 
         arcs = []
         for i in range(k):
@@ -452,7 +469,8 @@ class OrToolsAssembler:
         obj_terms += self._event_soft_terms(problem, nodes, visit)
         obj_terms += self._category_soft_terms(problem, day, m, nodes, visit)
         obj_terms += self._food_cap_terms(m, nodes, visit)
-        m.Maximize(sum(obj_terms))
+        travel_terms = self._travel_terms(problem, arcs, coords)
+        m.Maximize(sum(obj_terms) + sum(travel_terms))
 
         cap = self._cfg.or_tools_limit_ms if cap_ms is None else cap_ms
         cp_solver = cp_model.CpSolver()
@@ -543,16 +561,13 @@ class OrToolsAssembler:
                        key=lambda i: (a_solver.Value(start[i]), i))
         for v, val in zip(visit, vals):
             m.Add(v == val)
-        m.Add(sum(obj_terms) >= int(round(a_solver.ObjectiveValue())))
+        # 이동 감점(`_travel_terms`)은 여기 들지 않는다 — 넣으면 B 가 줄인 거리만큼 식사창 등
+        # 다른 소프트 항을 내줄 수 있다(A 가 FEASIBLE 이면 여유가 있다). 감점이 없으면 이 값이
+        # A 목적값 그대로다.
+        m.Add(sum(obj_terms) >= a_solver.Value(sum(obj_terms)))
         on = {0, *(i + 1 for i in order)}  # 비방문 노드의 아크는 회로상 0 — 항이 필요 없다
-        meters = []
-        for i, j, lit in arcs:
-            a = coords[i - 1] if i else problem.anchor
-            b = coords[j - 1] if j else problem.anchor
-            if i == j or i not in on or j not in on or a is None or b is None:
-                continue
-            road_km = self._est.estimate(a, b, problem.transport).distance_km_range[1]
-            meters.append(int(round(road_km * 1000)) * lit)
+        meters = [int(round(d)) * lit for i, j, lit, d in self._arc_meters(problem, arcs, coords)
+                  if i in on and j in on]
         w = 24 * 60 * len(order) + 1  # > Σ시작 최대(분) — 시각은 거리 동률일 때만 가른다
         m.Minimize(w * sum(meters) + sum(start[i] for i in order))
         solver = cp_model.CpSolver()
@@ -570,6 +585,32 @@ class OrToolsAssembler:
                      " %dms)", solver.ResponseProto().deterministic_time, _REORDER_DET_LIMIT,
                      wall_ms)
         return a_solver
+
+    def _arc_meters(self, problem, arcs, coords):
+        """(i, j, 아크 리터럴, 도로 m) — 앵커 출발·복귀 포함, 좌표 미상·자기루프 제외.
+
+        재정렬(B)의 최소화 대상과 경로 길이 감점(`_travel_terms`)이 같은 축을 쓴다.
+        """
+        for i, j, lit in arcs:
+            a = coords[i - 1] if i else problem.anchor
+            b = coords[j - 1] if j else problem.anchor
+            if i == j or a is None or b is None:
+                continue
+            yield i, j, lit, self._est.estimate(a, b, problem.transport).distance_km_range[1] * 1000
+
+    def _travel_terms(self, problem, arcs, coords) -> list:
+        """경로 길이 감점 (BR-U4-47) — 지나는 아크마다 −travel_weight × 도로 km (점수 축 ×1000).
+
+        A 목적식에 이동을 넣는 것은 **요청이 켰을 때만**이다(기본 0 = 항 없음 — 자유 생성은
+        종전과 바이트 동일). 재정렬(B)만으로는 못 줄이는 것이 있다: B 는 A 가 고른 **집합**
+        안의 순서만 바꾸므로, 멀리 흩어진 집합을 고르면 최단 순서도 길다. 피로·지연·우천 재계획은
+        "덜 움직이는" 집합이 필요해 선택(A)에 이동 비용이 들어가야 한다.
+        새 변수 없음 — 기존 아크 리터럴에 계수만 건다(완전 힌트가 그대로 완전하다, TRIP-1176).
+        """
+        w = problem.travel_weight
+        if w <= 0:
+            return []
+        return [-int(round(w * d)) * lit for _, _, lit, d in self._arc_meters(problem, arcs, coords)]
 
     @staticmethod
     def _hint_path(m: cp_model.CpModel, order: list[int], visit, arcs,

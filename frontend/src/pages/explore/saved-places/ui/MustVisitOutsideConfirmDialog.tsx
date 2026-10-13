@@ -1,14 +1,6 @@
 import { type ReactElement } from 'react';
-import { Pressable, Text, View } from 'react-native';
 
-/** 카드 그림자 — 형제 다이얼로그들(`SaveConflictDialog`·`TripDeleteDialog`)과 같은 값, 파일마다 두는 관례. */
-const DIALOG_SHADOW = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 8 },
-  shadowOpacity: 0.12,
-  shadowRadius: 24,
-  elevation: 8,
-} as const;
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
 /**
  * TRIP-1106 · 꼭 갈 곳 고르기(위저드) 완료 때 지역 밖 선택이 섞여 있으면 띄우는 확인. 제목 한 줄뿐이고
@@ -28,42 +20,24 @@ export function MustVisitOutsideConfirmDialog({
   onKeep: () => void;
 }): ReactElement {
   return (
-    <View
+    <ConfirmDialog
       testID="mustvisit-pick-outside-confirm"
-      className="absolute inset-0 items-center justify-center bg-scrim/55 px-2xl"
-    >
-      <View
-        testID="mustvisit-pick-outside-confirm-card"
-        style={DIALOG_SHADOW}
-        className="w-[330px] rounded-[20px] bg-canvas p-2xl"
-      >
-        <Text className="font-noto-bold text-[19px] text-ink">
-          {`이 여행 지역 밖 ${count}곳이 함께 들어가요`}
-        </Text>
-
-        <View className="mt-xl flex-row gap-[10px]">
-          <Pressable
-            testID="mustvisit-pick-outside-exclude"
-            accessibilityRole="button"
-            onPress={onExclude}
-            className="h-[52px] flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-          >
-            <Text className="font-noto-bold text-[16px] text-ink">
-              빼고 완료
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="mustvisit-pick-outside-keep"
-            accessibilityRole="button"
-            onPress={onKeep}
-            className="h-[52px] flex-1 items-center justify-center rounded-button bg-primary"
-          >
-            <Text className="font-noto-bold text-[16px] text-canvas">
-              그대로 넣기
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-    </View>
+      cardTestID="mustvisit-pick-outside-confirm-card"
+      title={`이 여행 지역 밖 ${count}곳이 함께 들어가요`}
+      buttons={[
+        {
+          testID: 'mustvisit-pick-outside-exclude',
+          label: '빼고 완료',
+          tone: 'outline',
+          onPress: onExclude,
+        },
+        {
+          testID: 'mustvisit-pick-outside-keep',
+          label: '그대로 넣기',
+          tone: 'primary',
+          onPress: onKeep,
+        },
+      ]}
+    />
   );
 }

@@ -37,7 +37,10 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
+import { isDateInRange } from '@/shared/lib/monthGrid';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { showToast } from '@/shared/ui/Toast';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
 import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
@@ -57,6 +60,9 @@ const GENERATION_STATUS_LABEL: Record<GenerationDayState, string> = {
 
 /** 진행 카드 칸 상한 — 5일 이상 여행은 `…` 접기 칸 포함 4칸으로 접는다(TRIP-1040 결정 1). */
 const GAUGE_MAX_CELLS = 4;
+
+/** 여행 중 다시 짜기를 Plan-B 로 넘길 때의 안내 — GeneratingPage 의 409 넘김과 같은 문구. */
+const PLANB_HANDOFF_TOAST_MESSAGE = '여행 중이라 재계획으로 다시 짜요';
 
 /**
  * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성은 생성 화면으로 보낸다.
@@ -247,7 +253,8 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const shortfallNotice = resolveShortfallNotice(signals);
 
   /**
-   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. **확정 일정은 어떤 경로로도 보내지 않는다.**
+   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. 여행 중이면 Plan-B 로 보낸다.
+   * **확정 일정은 어떤 경로로도 생성 화면에 보내지 않는다.**
    *
    * ⚠️ 조회가 끝나기 전에는 `status` 를 모른다(`data` 가 `undefined`). 그 상태로 보내면
    * 확정 일정에도 POST 가 나가 확정이 풀리고 동결됐던 poi_snapshot 참조가 사라진다 —
@@ -270,6 +277,21 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     if (!mountedRef.current) return;
     const status = settled.data?.status;
 
+    // 여행 중이면 다시 짜기는 Plan-B 의 몫이다 — 서버는 재생성을 409 로 거절한다(BE `guardTripPeriod`, 생성 실패
+    // 일정만 예외). 생성 화면을 거치면 헛 POST 뒤에야 넘어가므로 곧장 보낸다. 재계획은 확정을 풀지 않아 확정 일정도 간다.
+    // 여행 기간을 모르면 종전대로 생성 화면 — 거기서 409 를 받아 같은 곳으로 넘긴다(GeneratingPage).
+    const today = seoulDate(new Date());
+    if (
+      settled.data !== undefined &&
+      settled.data.generationMode !== 'MANUAL' &&
+      settled.data.generationState !== 'FAILED' &&
+      trip.data !== undefined &&
+      isDateInRange(today, trip.data.startDate, trip.data.endDate)
+    ) {
+      goPlanB(today);
+      return;
+    }
+
     const stop =
       (status === undefined && !isNotFound(settled.error)) ||
       status === 'CONFIRMED' ||
@@ -289,6 +311,26 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     }
 
     goGenerating();
+  }
+
+  /**
+   * 허브를 깔고(replace) 재계획 요청(i04 모달)을 연다(push) — GeneratingPage 의 409 넘김과 같은 모양.
+   * 보고 있는 날이 오늘 뒤면 그 날을 다시 짠다(서버: 오늘이 아닌 날은 하루 전체). 오늘·지난 날이면 오늘.
+   */
+  function goPlanB(today: string): void {
+    const day = selectedDate > today ? selectedDate : undefined;
+    showToast({
+      message: PLANB_HANDOFF_TOAST_MESSAGE,
+      testID: 'itinerary-draft-planb-handoff-toast',
+    });
+    router.replace({
+      pathname: '/trips/[tripId]/live',
+      params: day === undefined ? { tripId } : { tripId, day },
+    });
+    router.push({
+      pathname: '/trips/[tripId]/planb',
+      params: day === undefined ? { tripId } : { tripId, targetDate: day },
+    });
   }
 
   /** 생성 화면으로 replace 1회 — 409 안내·실패·재시도는 그 화면이 진다(TRIP-1037 결정 A). */
@@ -703,10 +745,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         view={view}
         tabs={tabs}
         selectedDate={selectedDate}
-        pins={buildDraftPins(
-          days.find((day) => day.date === selectedDate)?.slots ?? []
-        )}
-        dayHeader={formatDraftDayHeader(selectedDate)}
         canRetry={itinerary.data?.status !== 'CONFIRMED'}
         // 폴백 판정은 위에서 접은 값 그대로(재발명 금지 → F-7 승계). 인터스티셜을 넘긴 목록이 폴백임을
         // 제목·배지로 계속 말한다(BR-U3-11 · TRIP-1008).
@@ -715,19 +753,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         onSelectDay={setPickedDate}
         onRetry={() => void handleRetry()}
         onBack={handleBack}
-        // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
-        // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
-        onComplete={() =>
-          router.push({
-            pathname: '/trips/[tripId]/itinerary',
-            params: { tripId },
-          })
-        }
-        // 비고정 슬롯 "다른 후보 ›" press → 그 슬롯 slotKey 를 **토글**한다(같은 슬롯 재press 는 닫힘 ·
-        // 한 번에 한 슬롯 · TRIP-483 ★C). 재대입 `setEditingSlotKey(k)` 은 같은 값이라 안 닫힌다.
-        onPressSlot={(slotKey) =>
-          setEditingSlotKey((prev) => (prev === slotKey ? null : slotKey))
-        }
         onManualPlan={goManualPlan}
       />
       {/* 스크롤 밖 뒤 형제라야 카드·하단 버튼 위에 그려진다(TRIP-983). */}

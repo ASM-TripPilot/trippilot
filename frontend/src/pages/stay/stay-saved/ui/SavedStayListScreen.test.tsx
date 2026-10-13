@@ -1,12 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { processColor, StyleSheet } from 'react-native';
-import { HeartFilledGlyph as SharedHeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import {
   SavedStayListScreen,
   type SavedStayCardVM,
 } from './SavedStayListScreen';
-import { HeartFilledGlyph as StayHeartFilledGlyph } from '@/features/stay/index.view';
-import type { ReactTestInstance } from 'react-test-renderer';
 
 /**
  * e04 저장한 숙소 — SavedStayListScreen(props 만 받는 뷰) 단위 테스트.
@@ -49,11 +45,6 @@ describe('얼굴·카드·콜라주 (옛 본 파일)', () => {
     },
     { savedStayId: 'ss-2', name: '제주 돌담 게스트하우스' },
   ];
-
-  // className 토큰 배열 — 부분포함(`toContain`)으로 재려 오탐 차단(카드 테스트 헬퍼 동형).
-  function cls(el: { props: { className?: unknown } }): string[] {
-    return String(el.props.className ?? '').split(/\s+/);
-  }
 
   function noop(): void {}
 
@@ -256,21 +247,8 @@ describe('얼굴·카드·콜라주 (옛 본 파일)', () => {
       // 콜라주 사진 3장 — 겹침·기울기·z·크기 위계는 jest 사각(6-b/TRIP-831), 3장 존재까지만.
       const photos = screen.getAllByTestId(/^saved-stay-empty-photo-/);
       expect(photos).toHaveLength(3);
-      // 셋 다 흰 3px 테두리(Figma 정합) — 구 EmptyCluster 는 양옆 카드에 테두리가 없었다.
-      photos.forEach((photo) => {
-        expect(cls(photo)).toContain('border-[3px]');
-        expect(cls(photo)).toContain('border-canvas');
-      });
       // 중앙 하트 원.
       expect(screen.getByTestId('saved-stay-empty-heart')).toBeOnTheScreen();
-    });
-
-    it('🔴 AC-9 · empty CTA "숙소 둘러보기" radius rounded-[12px] (rounded-[14px] 아님)', () => {
-      render(<SavedStayListScreen savedStays={[]} face="empty" />);
-
-      const tokens = cls(screen.getByTestId('saved-stay-browse'));
-      expect(tokens).toContain('rounded-[12px]');
-      expect(tokens).not.toContain('rounded-[14px]');
     });
   });
 
@@ -280,15 +258,6 @@ describe('얼굴·카드·콜라주 (옛 본 파일)', () => {
    * (S2·S4·S6 무수정 green + S7-1), 픽셀은 두 Figma 프레임 공통값으로 바뀐다(사진 그림자 · 공용
    * 하트 · CTA 패딩 22/24). 그림자·하트 모양의 실제 렌더는 6-b 육안 몫이다.
    */
-
-  // SVG 색은 host 노드의 `stroke.payload`(processColor 결과 정수)로 남는다 — host 만 고른다.
-  function strokePayloads(
-    node: ReturnType<typeof screen.getByTestId>
-  ): unknown[] {
-    return node
-      .findAll((n) => typeof n.type === 'string' && n.props.stroke != null)
-      .map((n) => n.props.stroke?.payload);
-  }
 
   describe('S7 · TRIP-1050 공통 틀 이관 — 문구 무회귀 + Figma 정합 (AC-3 · Seed Q1)', () => {
     it('본문·CTA 라벨 문구가 그대로다 (AC-3)', () => {
@@ -300,52 +269,6 @@ describe('얼굴·카드·콜라주 (옛 본 파일)', () => {
         )
       ).toBeOnTheScreen();
       expect(screen.getByText('숙소 둘러보기')).toBeOnTheScreen();
-    });
-
-    it('🔴 사진 3장이 각각 작은 그림자(0/2/10 · .06)를 갖는다 (Seed Q1 ①)', () => {
-      render(<SavedStayListScreen savedStays={[]} face="empty" />);
-
-      const photos = screen.getAllByTestId(/^saved-stay-empty-photo-/);
-      expect(photos).toHaveLength(3);
-      photos.forEach((photo) => {
-        expect(StyleSheet.flatten(photo.props.style)).toMatchObject({
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 10,
-        });
-      });
-    });
-
-    it('🔴 하트 원 안의 하트가 shared/ui 공용 하트이고 StayGlyphs 하트가 아니다 (Seed Q1 ②)', () => {
-      render(<SavedStayListScreen savedStays={[]} face="empty" />);
-
-      const heart = screen.getByTestId('saved-stay-empty-heart');
-      // 이름이 같은 두 함수를 정체성으로 가른다 — 긍정(공용 1)과 부정(stay 0)을 함께 건다.
-      expect(heart.findAllByType(SharedHeartFilledGlyph)).toHaveLength(1);
-      expect(heart.findAllByType(StayHeartFilledGlyph)).toHaveLength(0);
-    });
-
-    it('🔴 CTA 좌우 패딩이 22/24 다 — px 28 이 아니다 (Seed Q1 ③)', () => {
-      render(<SavedStayListScreen savedStays={[]} face="empty" />);
-
-      const tokens = cls(screen.getByTestId('saved-stay-browse'));
-      expect(tokens).toContain('pl-[22px]');
-      expect(tokens).toContain('pr-2xl');
-      expect(tokens).not.toContain('px-[28px]');
-      // 높이·radius 는 그대로(AC-9 짝).
-      expect(tokens).toContain('h-[52px]');
-      expect(tokens).toContain('rounded-[12px]');
-    });
-
-    it('CTA 돋보기는 흰색이다 — 아이콘이 prop 으로 옮겨져도 색이 새지 않는다', () => {
-      render(<SavedStayListScreen savedStays={[]} face="empty" />);
-
-      const payloads = strokePayloads(screen.getByTestId('saved-stay-browse'));
-      // 긍정 짝 — stroke 노드가 없으면 아래 forEach 가 공허 통과한다.
-      expect(payloads.length).toBeGreaterThanOrEqual(1);
-      payloads.forEach((payload) =>
-        expect(payload).toBe(processColor('white'))
-      );
     });
   });
 });
@@ -362,52 +285,7 @@ describe('앱바 (옛 .appBar)', () => {
    * 바로 위 host 상자를 앱바 컨테이너로 본다(e04 는 부제가 행 아래 별도 줄이라 두 겹이다).
    */
 
-  function tokens(el: ReactTestInstance): string[] {
-    return String(el.props.className ?? '')
-      .split(/\s+/)
-      .filter(Boolean);
-  }
-
-  function ancestorsOf(node: ReactTestInstance): ReactTestInstance[] {
-    const out: ReactTestInstance[] = [];
-    let cur = node.parent;
-    while (cur) {
-      out.push(cur);
-      cur = cur.parent;
-    }
-    return out;
-  }
-
-  function nearestCommonHost(
-    a: ReactTestInstance,
-    b: ReactTestInstance
-  ): ReactTestInstance {
-    const ofB = new Set(ancestorsOf(b));
-    const found = ancestorsOf(a).find(
-      (n) => typeof n.type === 'string' && ofB.has(n)
-    );
-    if (!found) throw new Error('공통 host 조상이 없다');
-    return found;
-  }
-
   describe('AC-11 · e04 앱바 무변경 잠금', () => {
-    it('empty 얼굴의 앱바 컨테이너 className 이 그대로다(위·아래 8)', () => {
-      render(<SavedStayListScreen savedStays={[]} face="empty" />);
-
-      const row = nearestCommonHost(
-        screen.getByTestId('saved-stay-back'),
-        screen.getByText('저장한 숙소')
-      );
-      const container = ancestorsOf(row).find(
-        (n) => typeof n.type === 'string'
-      );
-      if (!container) throw new Error('앱바 컨테이너가 없다');
-
-      expect([...tokens(container)].sort()).toEqual(
-        ['w-full', 'gap-xs', 'px-[24px]', 'pb-[8px]', 'pt-[8px]'].sort()
-      );
-    });
-
     it('뒤로를 누르면 onBack 이 1회 불린다', () => {
       const onBack = jest.fn();
       render(

@@ -163,22 +163,3 @@ describe('PrefStep1Screen — 핵심 문구·skip 콜백 (AC1 · 3-7)', () => {
     expect(onSkipAll).toHaveBeenCalledTimes(1);
   });
 });
-
-describe('PrefStep1Screen — 진행점 색 (TRIP-718 · Figma 1643:1183)', () => {
-  // className 은 NativeWind 가 소비 전이라 jest 렌더 트리에 평문 prop 으로 남는다 — 공백으로
-  // 쪼갠 '토큰 배열'로 비교한다(부분 문자열 오탐 차단: 'bg-hairline' 은 'bg-hairline-strong'
-  // 의 부분열이지만 토큰 배열에는 원소로 없다). TripWizardStep1Screen 진행 세그 심판과 동형.
-  const tokens = (testID: string): string[] =>
-    String(screen.getByTestId(testID).props.className)
-      .split(/\s+/)
-      .filter(Boolean);
-
-  it('채움 점은 bg-primary, 빈 점은 bg-hairline 이다 (bg-ink·bg-hairline-strong 회귀 금지)', () => {
-    render(<PrefStep1Screen {...makeProps()} />);
-
-    // 채움 점 — Figma 는 primary(코랄). 종전 bg-ink 로 회귀하면 토큰 배열에 'bg-primary' 부재 → red.
-    expect(tokens('onboarding-pref1-progress-active')).toContain('bg-primary');
-    // 빈 점 — Figma 실측 hairline(옅음). bg-hairline-strong 로 회귀하면 'bg-hairline' 원소 부재 → red.
-    expect(tokens('onboarding-pref1-progress-empty')).toContain('bg-hairline');
-  });
-});

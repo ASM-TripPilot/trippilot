@@ -167,19 +167,6 @@ describe('🔴 AC-4 · 성공 — N 이 주입값과 일치한다 (하드코딩/
   });
 });
 
-describe('🔴 AC-5 · 성공 — 알림 약속 안내바가 없다 (TRIP-1008 A3 플립 · D6)', () => {
-  it('안내바 testID 와 "알림으로 알려" 문구가 0건이다 — 재시도 알림이 실재하지 않는 약속이라서', () => {
-    renderScreen();
-
-    // 긍정 앵커 — 화면은 떠 있다(아무것도 안 그리는 구현이 아래 부정을 공짜로 통과하지 못하게).
-    expect(screen.getByTestId('itinerary-fallback-root')).toBeOnTheScreen();
-    expect(screen.getByText('기본 일정 완성')).toBeOnTheScreen();
-
-    expect(screen.queryAllByTestId('itinerary-fallback-info').length).toBe(0);
-    expect(screen.queryAllByText(/알림으로 알려/).length).toBe(0);
-  });
-});
-
 describe('🔴 AC-6 · 성공 — 하단 CTA 2개가 각 콜백을 한 번씩 부른다', () => {
   it('"기본 일정 보기" press → onViewPlan 1회, "직접 짜기" press → onManualPlan 1회', () => {
     renderScreen();

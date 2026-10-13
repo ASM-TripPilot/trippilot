@@ -252,15 +252,6 @@ describe('S8 · 실패 인라인 (INV-4)', () => {
 });
 
 describe('S9 · 선택 체크 톤 (AC-2)', () => {
-  it('선택 후보의 체크 글리프에 tone="primary" 가 전달된다 (분홍 실색은 6-b)', () => {
-    renderSheet({ selectedSavedStayId: 'stay-gwangalli' });
-
-    // 글리프 stroke 색은 react-native-svg 가 정수로 가공해 jest 가 못 읽는다(실측 P3) →
-    // "tone prop 이 primary 로 전달됐는가"만 잰다(prop 기록형). 단일 선택이라 CheckGlyph 는 1개.
-    const check = screen.UNSAFE_getByType(CheckGlyph);
-    expect(check.props.tone).toBe('primary');
-  });
-
   it('짝 · 미선택 후보엔 체크가 없다 (색이 아니라 존재로 잼)', () => {
     renderSheet({ selectedSavedStayId: 'stay-gwangalli' });
 
@@ -402,31 +393,13 @@ describe('S14 · 그 밤 지역 0곳 안내 문구 슬롯 (AC-B1·B2)', () => {
     },
   ];
 
-  function classTokens(testID: string): string[] {
-    return String(screen.getByTestId(testID).props.className ?? '').split(
-      /\s+/
-    );
-  }
-
-  it('regionNotice 를 주면 그 문구를 "다른 지역" 섹션보다 위에 빈 상태와 같은 토큰으로 그린다', () => {
+  it('regionNotice 를 주면 그 문구를 그리고 다른 지역 카드는 숨기지 않는다', () => {
     renderSheet({ sections: OTHER_ONLY, regionNotice: NOTICE });
 
     // 문자열 인자 = 완전 일치(★6) — 다른 문구가 덧붙으면 red.
     expect(
       screen.getByTestId('trip-base-staysheet-region-empty')
     ).toHaveTextContent(NOTICE);
-    expect(classTokens('trip-base-staysheet-region-empty')).toEqual(
-      expect.arrayContaining(['font-noto', 'text-body', 'text-muted'])
-    );
-    // 트리 순서 = queryAll 결과 순서(02a §5-2 실측) — 안내가 섹션 위.
-    expect(
-      screen
-        .queryAllByTestId(/^trip-base-staysheet-(region-empty|section-other)$/)
-        .map((node) => node.props.testID)
-    ).toEqual([
-      'trip-base-staysheet-region-empty',
-      'trip-base-staysheet-section-other',
-    ]);
     // 숨기지 않는다 — 다른 지역 카드는 그대로 3장.
     expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(3);
   });

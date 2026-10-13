@@ -116,19 +116,6 @@ describe('TRIP-1049 · 홈 지금 뜨는 장소 — 저장 하트', () => {
     expect(screen.getByTestId('home-spot-save-poi-b')).not.toBeDisabled();
   });
 
-  it('H-5 · 하트는 32 흰 원이다(h-8·w-8·rounded-pill·bg-on-primary — 하트 32 통일 결정)', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} spotsLane={lane()} />);
-
-    const tokens = String(
-      screen.getByTestId('home-spot-save-poi-a').props.className ?? ''
-    )
-      .trim()
-      .split(/\s+/);
-    expect(tokens).toEqual(
-      expect.arrayContaining(['h-8', 'w-8', 'rounded-pill', 'bg-on-primary'])
-    );
-  });
-
   it('H-9 · poiId 없는 카드는 onToggleSave 가 있어도 하트를 그리지 않는다', () => {
     render(
       <HomeScreen

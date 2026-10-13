@@ -24,7 +24,11 @@ from trippilot.assembly_engine.config import (
     stay_for,
     AssemblyConfig,
 )
-from trippilot.assembly_engine.constraints import anchor_minutes, not_before_floor
+from trippilot.assembly_engine.constraints import (
+    anchor_minutes,
+    free_visit_cap,
+    not_before_floor,
+)
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -215,7 +219,9 @@ class RuleFallbackAssembler:
             day_cat_total.update(cat_count)
             quota = {c: max(self._cfg.category_free_count, -(-n // remaining_days))
                      for c, n in day_cat_total.items()}
-            while remaining:
+            # 하루 방문 상한 (BR-U4-47) — ② 자유 삽입만 센다. OR 의 자유 노드 합 ≤ 상한과 같은 의미
+            free_left = free_visit_cap(problem, day)
+            while remaining and free_left != 0:
                 if not gap_fill:
                     k = len(slots) - 1
                 last = slots[k] if k >= 0 else None
@@ -257,8 +263,18 @@ class RuleFallbackAssembler:
                     p = self._pois.get(c.poi_id)
                     return food_full and p is not None and counts_as_food(p)
 
+                # 경로 길이 감점(BR-U4-47) — OR 의 아크 감점과 같은 의미의 그리디판: 지금 위치
+                # (말단 슬롯, 없으면 앵커)에서의 도로 km × travel_weight 를 점수에서 빼 다시 줄
+                # 세운다. 0 이면 ranked 순서 그대로(종전과 바이트 동일 — OR 웜스타트도 불변).
+                base = remaining
+                here = last_poi.coord if last_poi is not None else problem.anchor
+                if problem.travel_weight > 0 and here is not None:
+                    base = sorted(remaining, key=lambda c: (-(
+                        self._adjusted_score(problem, day, c)
+                        - problem.travel_weight * self._road_km(problem, here, c)),
+                        str(c.poi_id)))
                 # 안정 정렬 — FOOD 상한 → 쿼터 내 먼저 → 선호 클래스 → ranked 순서
-                order = sorted(remaining, key=lambda c: (
+                order = sorted(base, key=lambda c: (
                     _food_over(c), _over_quota(c), _is_food(c) != food_first))
                 placed = False
                 for cand in order:
@@ -310,6 +326,8 @@ class RuleFallbackAssembler:
                         is_llm_score=cand.is_llm_score,
                     ))
                     used.add(cand.poi_id)
+                    if free_left is not None:
+                        free_left -= 1
                     cat_count[poi.category] += 1  # TRIP-531
                     food_count += counts_as_food(poi)
                     slots.sort(key=lambda s: s.start_at)
@@ -418,24 +436,33 @@ class RuleFallbackAssembler:
         rain = problem.daily_rain_prob
         pop = rain.get(day) if rain is not None else None
         rainy = pop is not None and pop >= self._cfg.rain_threshold_pct
-        event_bonus = problem.event_bonus or {}
-        if not rainy and not event_bonus:
+        if not rainy and not problem.event_bonus:
             return remaining
-
-        def _adjusted(c) -> float:
-            score = c.score
-            # 행사 근접 보너스 (TRIP-421) — 양수만, 날짜 무관 (기간 겹침은 수집 필터가 이미 보장)
-            score += event_bonus.get(c.poi_id, 0.0) * self._cfg.event_bonus_scale
-            if not rainy:
-                return score
-            poi = self._pois.get(c.poi_id)
-            if poi is None:
-                return score
-            if poi.category in RAIN_OUTDOOR:
-                return score - self._cfg.rain_outdoor_penalty
-            if poi.category in RAIN_INDOOR:
-                return score + self._cfg.rain_indoor_bonus
-            return score
-
         # ranked와 동일한 결정론 정렬 키(점수 내림차순 → id 오름차순)의 보정판
-        return sorted(remaining, key=lambda c: (-_adjusted(c), str(c.poi_id)))
+        return sorted(remaining, key=lambda c: (-self._adjusted_score(problem, day, c),
+                                                str(c.poi_id)))
+
+    def _adjusted_score(self, problem: ItineraryProblem, day, c) -> float:
+        """정렬용 보정 점수 — 행사 근접 가산 + 우천일 실외 감점·실내 가산. 슬롯 score 엔 안 싣는다."""
+        # 행사 근접 보너스 (TRIP-421) — 양수만, 날짜 무관 (기간 겹침은 수집 필터가 이미 보장)
+        score = c.score + (problem.event_bonus or {}).get(c.poi_id, 0.0) \
+            * self._cfg.event_bonus_scale
+        rain = problem.daily_rain_prob
+        pop = rain.get(day) if rain is not None else None
+        if pop is None or pop < self._cfg.rain_threshold_pct:
+            return score
+        poi = self._pois.get(c.poi_id)
+        if poi is None:
+            return score
+        if poi.category in RAIN_OUTDOOR:
+            return score - self._cfg.rain_outdoor_penalty
+        if poi.category in RAIN_INDOOR:
+            return score + self._cfg.rain_indoor_bonus
+        return score
+
+    def _road_km(self, problem: ItineraryProblem, here, c) -> float:
+        """지금 위치 → 후보 도로 km (OR 재정렬·경로 감점과 같은 축). 좌표 미상은 0 — 뒤에서 걸러진다."""
+        poi = self._pois.get(c.poi_id)
+        if poi is None:
+            return 0.0
+        return self._est.estimate(here, poi.coord, problem.transport).distance_km_range[1]

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceListState } from '@/features/explore/index.view';
 import type { SavedPlace } from '@/shared/api/index.schemas';
-import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
+import { EmptyCollage } from './EmptyCollage';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
@@ -406,33 +406,6 @@ function LoadingBody({ onComplete }: { onComplete: () => void }): ReactElement {
   );
 }
 
-/** empty 삽화 — Figma 2437:1616 의 사진 3장 부채꼴 + 중앙 하트 원. save 화면의 `EmptyCollage`
- * 와 같은 그림이나, 게이트① 로 `SavedPlaceListScreen.tsx` 를 못 건드려 여기 벡터를 복제한다
- * (그 로컬 함수는 미export — 추출하려면 save 화면을 손대야 한다, 02a EmptyCollage 판정 (b)).
- * 실사진은 에셋 라이선스·출처 미정이라 회색 벡터로 대체(미충족 기록, 6-b 육안). */
-function EmptyCollage(): ReactElement {
-  return (
-    <View
-      testID="mustvisit-pick-empty-art"
-      className="h-[170px] w-[230px] flex-row items-center justify-center"
-    >
-      <View
-        className="h-[118px] w-[74px] rounded-card bg-surface-strong"
-        style={{ transform: [{ rotate: '-12deg' }], marginRight: -12 }}
-      />
-      <View className="z-10 h-[162px] w-[96px] items-center justify-center rounded-card bg-surface-soft">
-        <View className="h-12 w-12 items-center justify-center rounded-pill bg-canvas">
-          <HeartFilledGlyph size={26} />
-        </View>
-      </View>
-      <View
-        className="h-[118px] w-[74px] rounded-card bg-surface-strong"
-        style={{ transform: [{ rotate: '12deg' }], marginLeft: -12 }}
-      />
-    </View>
-  );
-}
-
 function EmptyBody({
   onPressBrowse,
 }: {
@@ -443,7 +416,7 @@ function EmptyBody({
       testID="mustvisit-pick-empty"
       className="w-full flex-1 items-center justify-center gap-lg px-2xl"
     >
-      <EmptyCollage />
+      <EmptyCollage testID="mustvisit-pick-empty-art" />
       <Text className="font-noto-bold text-[21px] font-bold text-ink">
         아직 담은 곳이 없어요
       </Text>

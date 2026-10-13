@@ -162,14 +162,29 @@ const config: ExpoConfig = {
         isAccessMediaLocationEnabled: false,
       },
     ],
+    // TRIP-1361 — 폰트를 JS 런타임 로드(useFonts)가 아니라 네이티브 번들에 임베드한다(Info.plist UIAppFonts · Android assets).
+    // 첫 렌더부터 폰트가 있어 "폰트 전 null 렌더" 게이트가 필요 없다. 네이티브 설정이라 재빌드 필요(OTA 불가).
+    // ⚠️ 폰트명 = 파일명 = 내부 PostScript 이름 = tailwind.config.js fontFamily 토큰 — iOS 는 내부 이름으로, Android 는
+    // 파일명으로 찾는다(assets/fonts/README.md, releaseBuildConfig.test 가 잠근다). Noto 는 한글 2,350자 서브셋이다.
+    [
+      'expo-font',
+      {
+        fonts: [
+          './assets/fonts/Inter_700Bold.ttf',
+          './assets/fonts/NotoSansKR_400Regular.ttf',
+          './assets/fonts/NotoSansKR_500Medium.ttf',
+          './assets/fonts/NotoSansKR_700Bold.ttf',
+        ],
+      },
+    ],
     // 튜플로 줘야 한다 — 문자열 단독이면 레거시 config.splash 경로로 빠진다.
     ['expo-splash-screen', { backgroundColor: '#ffffff' }],
     'expo-notifications',
     [
       '@sentry/react-native/expo',
       {
-        organization: 'trippilot',
-        project: 'trippilot-frontend',
+        organization: 'ajou-s0',
+        project: 'react-native',
       },
     ],
     ['@react-native-seoul/kakao-login', { kakaoAppKey: kakaoNativeAppKey }],

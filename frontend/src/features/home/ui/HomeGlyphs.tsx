@@ -1,4 +1,6 @@
 import Svg, { Circle, Path } from 'react-native-svg';
+// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+export { SuitcaseGlyph, CloseGlyph } from '@/shared/ui/glyphs';
 
 // 홈 "발견·영감 피드" 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs 패턴 계승 · TRIP-316).
 // features 간 직접 import 금지(importBoundary)라 화면끼리 글리프를 공유하지 않는다 — 이 파일은
@@ -208,53 +210,6 @@ export function MapPinGlyph({ size = 26, testID }: GlyphProps) {
         strokeLinejoin="round"
       />
       <Circle cx={12} cy={9} r={2.4} stroke={PRIMARY} strokeWidth={1.8} />
-    </Svg>
-  );
-}
-
-/** 저장한 숙소 미니 FAB — 여행 가방(분홍, 흰 원 위). */
-export function SuitcaseGlyph({ size = 26, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M5 8.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-8A1.5 1.5 0 0 1 5 8.5Z"
-        stroke={PRIMARY}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M9 8.5V7a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 7v1.5"
-        stroke={PRIMARY}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
-      <Path d="M12 8.5V21" stroke={PRIMARY} strokeWidth={1.8} />
-    </Svg>
-  );
-}
-
-/** saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). */
-export function CloseGlyph({ size = 24, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M6 6l12 12M18 6L6 18"
-        stroke={WHITE}
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
     </Svg>
   );
 }

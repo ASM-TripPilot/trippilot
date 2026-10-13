@@ -1,29 +1,4 @@
-export { formatKm } from './model/formatKm';
-export {
-  CAPTION_MAX_LENGTH,
-  HASHTAG_MAX_COUNT,
-  SHARE_FORMATS,
-  buildShareCard,
-  formatShareCardStats,
-  validateCaption,
-  validateHashtags,
-} from './model/shareCard';
-export type { ShareCardVM, ShareFormat } from './model/shareCard';
-export { summaryStats } from './model/summaryStats';
-export type { SummaryStatCells } from './model/summaryStats';
-export {
-  daySubtitle,
-  distanceSourceLabel,
-  resolveSummaryView,
-  shareEnabled,
-  toOrderedVisitList,
-} from './model/summaryView';
-export type { OrderedVisit } from './model/summaryView';
+// 순수 뷰·글리프·config·순수 model 은 index.view 가 정본이고, 여기엔 네트워크 훅 등 그 밖의 것만 더한다.
+export * from './index.view';
+
 export { useTripSummary } from './model/useTripSummary';
-export {
-  BackArrowGlyph,
-  EmptyCircleGlyph,
-  LocationOffGlyph,
-  PhotoOffGlyph,
-  RetryGlyph,
-} from './ui/ReflectionGlyphs';

@@ -1,10 +1,4 @@
-export {
-  COORD_BLOCKED_NOTICE,
-  REMOVE_FAILURE_NOTICE,
-  SAVE_FAILURE_NOTICE,
-  hasUsableCoords,
-} from './model/placeSaveGuard';
-export type { PlaceSaveNotice } from './model/placeSaveGuard';
-export { usePlaceSaveToggle } from './model/placeSaveToggle';
-export { optimisticSavedPlaceId } from './model/savedPlaceIndex';
+// 순수 뷰·글리프·config·순수 model 은 index.view 가 정본이고, 여기엔 네트워크 훅 등 그 밖의 것만 더한다.
+export * from './index.view';
+
 export { useSavedPlaces } from './model/savedPlaces';

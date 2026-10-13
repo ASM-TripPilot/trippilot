@@ -805,11 +805,13 @@ function PastTripCard({
 }
 
 // ── 지난 여행 섹션(postTrip · 가로 스크롤 사진 카드) ─────────────────────
-// 헤더 "지난 여행"16 + "전체 보기"(라이브 미도달 no-op) · 가로 스크롤 사진 카드.
+// 헤더 "지난 여행"16 + "전체 보기"(콜백 있을 때만 버튼, TRIP-1369) · 가로 스크롤 사진 카드.
 function PastTripsSection({
   trips,
+  onPressMore,
 }: {
   trips: readonly PastTrip[];
+  onPressMore?: () => void;
 }): ReactElement {
   return (
     <View className="w-full gap-md">
@@ -817,7 +819,12 @@ function PastTripsSection({
         <Text className="font-noto-bold text-[16px] font-bold text-ink">
           지난 여행
         </Text>
-        <Pressable testID="home-past-trips-more">
+        {/* 콜백이 있을 때만 버튼 — 콜백 없는 호출부(프리뷰)에 죽은 버튼을 만들지 않는다(심사 2.1). */}
+        <Pressable
+          testID="home-past-trips-more"
+          accessibilityRole={onPressMore ? 'button' : undefined}
+          onPress={onPressMore}
+        >
           <Text className="font-noto-bold text-label font-bold text-muted underline">
             전체 보기
           </Text>
@@ -829,7 +836,11 @@ function PastTripsSection({
         contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
       >
         {trips.map((trip, index) => (
-          <PastTripCard key={trip.title} trip={trip} index={index} />
+          <PastTripCard
+            key={`${trip.title}-${index}`}
+            trip={trip}
+            index={index}
+          />
         ))}
       </ScrollView>
     </View>
@@ -1173,12 +1184,18 @@ function PlanningBody({
 function PostTripBody({
   phase,
   hero,
+  sections,
+  collectionsLane,
+  onPressPastTripsMore,
   onPressTripHeroCta,
   onPressSearch,
   onPressBell,
 }: {
   phase: Extract<HomePhase, { kind: 'postTrip' }>;
   hero: readonly HomeMagazineHero[];
+  sections: HomeSections;
+  collectionsLane?: HomeCollectionsLane;
+  onPressPastTripsMore?: () => void;
   onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
   onPressBell?: () => void;
@@ -1197,11 +1214,26 @@ function PostTripBody({
         onPressTripCta={onPressTripHeroCta}
       />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <PastTripsSection trips={phase.pastTrips} />
-        <CollectionStrip
-          title={phase.recommendationTitle}
-          collections={phase.recommendations}
-        />
+        {/* 라이브는 지난 여행이 없을 수 있다 — 빈 섹션 헤더만 남기지 않는다(TRIP-1369). */}
+        {phase.pastTrips.length > 0 ? (
+          <PastTripsSection
+            trips={phase.pastTrips}
+            onPressMore={onPressPastTripsMore}
+          />
+        ) : null}
+        {/* 라이브는 서버 장소 레인(TRIP-1209), 레인이 없는 프리뷰만 phase 의 고정 추천을 그린다. */}
+        {collectionsLane ? (
+          <CollectionsSection
+            sections={sections}
+            title={phase.recommendationTitle}
+            lane={collectionsLane}
+          />
+        ) : (
+          <CollectionStrip
+            title={phase.recommendationTitle}
+            collections={phase.recommendations}
+          />
+        )}
       </View>
     </>
   );
@@ -1216,6 +1248,7 @@ function PhaseBody({
   tripsError,
   phase,
   onPressSpotsMore,
+  onPressPastTripsMore,
   onPressTripHeroCta,
   onPressSearch,
   onPressMagazine,
@@ -1256,6 +1289,9 @@ function PhaseBody({
         <PostTripBody
           phase={phase}
           hero={hero}
+          sections={sections}
+          collectionsLane={collectionsLane}
+          onPressPastTripsMore={onPressPastTripsMore}
           onPressTripHeroCta={onPressTripHeroCta}
           onPressSearch={onPressSearch}
           onPressBell={onPressBell}
@@ -1275,6 +1311,7 @@ export function HomeScreen({
   onPressSavedPlaces,
   onPressSavedStays,
   onPressSpotsMore,
+  onPressPastTripsMore,
   onPressTripHeroCta,
   onPressSearch,
   onPressMagazine,
@@ -1302,6 +1339,7 @@ export function HomeScreen({
             tripsError={tripsError}
             phase={phase}
             onPressSpotsMore={onPressSpotsMore}
+            onPressPastTripsMore={onPressPastTripsMore}
             onPressTripHeroCta={onPressTripHeroCta}
             onPressSearch={onPressSearch}
             onPressMagazine={onPressMagazine}

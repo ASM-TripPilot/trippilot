@@ -138,6 +138,11 @@ class PlanBRagConfig:
     # (`C1Config.retry_models` 주석). 현행 `gpt-5.6-terra` 기준 여유 3.5초.
     # 재시도까지 실패하면 규칙 랭킹이 받으니 손해는 대기 시간뿐이다.
     llm_retry_share: float = 0.35
+    # 재시도 몫이 이보다 짧으면 재시도를 **하지 않는다** — 실호출 바닥(sol 5.0 · terra 5.2 · Fable 5.1
+    # 중앙값 5.0초)에 못 미치는 시한은 어떤 모델도 못 맞춰 그 시간을 그냥 버린다. 2026-10-13 DEV 실측:
+    # 재계획 25초 → PlanB 12.5초 → 재시도 4.4초가 8/8 타임아웃, 그 4.4초가 뒤 단계(점수·어셈블리)
+    # 시한을 밀어 백스톱 504 로 이어졌다. 건너뛰면 규칙 랭킹이 받고(종전과 같은 결과) 시간만 돌아온다.
+    llm_retry_floor_sec: float = 5.0
 
     def __post_init__(self) -> None:
         if self.top_k < 1:
@@ -148,6 +153,8 @@ class PlanBRagConfig:
             raise ValueError("llm_retry_share ∈ [0, 1]")
         if self.llm_budget_share + self.llm_retry_share > 0.85:
             raise ValueError("llm_budget_share + llm_retry_share ≤ 0.85 — 검색·직렬화 몫")
+        if self.llm_retry_floor_sec < 0.0:
+            raise ValueError("llm_retry_floor_sec ≥ 0")
         # 코사인 범위는 [-1, 1] — 음수가 실제로 난다(intent_router 가 max(score, 0) 로 흡수).
         if not -1.0 <= self.min_score <= 1.0:
             raise ValueError("min_score ∈ [-1, 1]")
@@ -560,6 +567,12 @@ class PlanBAgent:
 
         if self._worker is None:
             return rule_ranked, {}, False, _why("alternative_worker_absent"), rule_ranked
+        # 재시도 몫이 실호출 바닥보다 짧으면 재시도 없음(`llm_retry_floor_sec`) — 못 맞출 시한에
+        # 기다리는 시간이 뒤 단계의 시한을 밀었다(2026-10-13 DEV 504). 폴백 사유에 남긴다(침묵 금지).
+        retry_sec = self._llm_timeout(request, self._cfg.llm_retry_share)
+        retry_skipped = retry_sec is not None and retry_sec < self._cfg.llm_retry_floor_sec
+        retry_note = (f" · retry_skipped: {retry_sec:.1f}s<{self._cfg.llm_retry_floor_sec:.1f}s"
+                      if retry_skipped else "")
         try:
             result = self._worker.select(
                 context.shortlist if context.shortlist is not None else request.pool,
@@ -581,12 +594,12 @@ class PlanBAgent:
                 request.trace_id,
                 request.now,
                 timeout_sec=self._llm_timeout(request),
-                retry_timeout_sec=self._llm_timeout(request, self._cfg.llm_retry_share),
+                retry_timeout_sec=None if retry_skipped else retry_sec,
             )
         except Exception as e:  # 설정 버그(프롬프트 미등록 등)도 Plan-B를 죽이지 않는다
             return rule_ranked, {}, False, _why(f"alternative_error: {type(e).__name__}: {e}"), rule_ranked
         if result.is_fallback:
-            return rule_ranked, {}, False, _why(f"alternative_fallback: {result.error}"), rule_ranked
+            return rule_ranked, {}, False, _why(f"alternative_fallback: {result.error}{retry_note}"), rule_ranked
         picked = _as_refs(result.value)
         if picked is None:
             return rule_ranked, {}, False, _why("alternative_bad_shape"), rule_ranked

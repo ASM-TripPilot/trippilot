@@ -658,6 +658,29 @@
                 "logs:UntagResource"
               ],
               "Resource": {"Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/containerinsights/trippilot-${Environment}/*"}
+            },
+            {
+              "Sid": "ReadContainerInsightsLogs",
+              "Effect": "Allow",
+              "Action": [
+                "logs:DescribeLogStreams",
+                "logs:FilterLogEvents",
+                "logs:GetLogEvents",
+                "logs:StartQuery"
+              ],
+              "Resource": [
+                {"Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/containerinsights/trippilot-${Environment}/*"},
+                {"Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/containerinsights/trippilot-${Environment}/*:log-stream:*"}
+              ]
+            },
+            {
+              "Sid": "ReadLogsInsightsQueryResults",
+              "Effect": "Allow",
+              "Action": [
+                "logs:GetQueryResults",
+                "logs:StopQuery"
+              ],
+              "Resource": "*"
             }
           ]
         }

@@ -11,24 +11,16 @@ import { SaveConflictDialog } from './SaveConflictDialog';
  *  - 버튼은 정확히 둘: 왼쪽 [고치기] · 오른쪽 긍정([그대로 확정]/[그대로 저장] = `confirmLabel`).
  *    [AI 자동 보정](`-save-repair`)은 없다(결정 2 — repair 계약 부재).
  *  - 각 버튼은 제 콜백만 부른다.
- *  - 레이아웃 토큰은 TripDeleteDialog 계열이다(결정 3).
  *
- * 커버하지 않는 것: 딤 실제 덮임·중앙 정렬·터치 차단(조건부 렌더 오버레이의 jest 사각 — 6-b). 언제 뜨고
+ * 커버하지 않는 것: 레이아웃 토큰(TripDeleteDialog 계열)·딤 실제 덮임·중앙 정렬·터치 차단(실화면 QA 몫). 언제 뜨고
  * 누른 뒤 어디로 가는지는 두 페이지의 `*.save-conflict.integration` 몫.
  *
- * 3동작: 준비(jest.fn 콜백) → 실행(render + press) → 단언(텍스트·콜백·토큰).
+ * 3동작: 준비(jest.fn 콜백) → 실행(render + press) → 단언(텍스트·콜백).
  */
 
 const GATE = 'itinerary-edit-save-conflict';
-const CARD = 'itinerary-edit-save-conflict-card';
 const ASIS = 'itinerary-edit-save-asis';
 const BACK = 'itinerary-edit-save-back';
-
-function tokens(el: { props: { className?: unknown } }): string[] {
-  return String(el.props.className ?? '')
-    .split(/\s+/)
-    .filter(Boolean);
-}
 
 function renderDialog({
   count = 1,
@@ -101,31 +93,5 @@ describe('SaveConflictDialog · 버튼 (결정 1·2 — 두 갈래, repair 없�
 
     expect(onBack).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
-  });
-});
-
-describe('SaveConflictDialog · 레이아웃 토큰 (결정 3 — TripDeleteDialog 계열)', () => {
-  it('D7 · 딤 55% 전면 · 카드 330/20 캔버스 · 제목 19 Bold ink · 버튼 52 · 긍정만 코랄', () => {
-    renderDialog({ count: 3 });
-
-    expect(tokens(screen.getByTestId(GATE))).toEqual(
-      expect.arrayContaining(['absolute', 'inset-0', 'bg-scrim/55'])
-    );
-    expect(tokens(screen.getByTestId(CARD))).toEqual(
-      expect.arrayContaining(['w-[330px]', 'rounded-[20px]', 'bg-canvas'])
-    );
-    expect(tokens(screen.getByText('3곳에서 시간이 안 맞아요'))).toEqual(
-      expect.arrayContaining(['font-noto-bold', 'text-[19px]', 'text-ink'])
-    );
-    for (const id of [ASIS, BACK]) {
-      expect(tokens(screen.getByTestId(id))).toEqual(
-        expect.arrayContaining(['h-[52px]', 'rounded-button'])
-      );
-    }
-    expect(tokens(screen.getByTestId(ASIS))).toContain('bg-primary');
-    expect(tokens(screen.getByTestId(BACK))).toContain(
-      'border-hairline-strong'
-    );
-    expect(tokens(screen.getByTestId(BACK))).not.toContain('bg-primary');
   });
 });

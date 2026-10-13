@@ -1,5 +1,6 @@
 import { type ReactElement } from 'react';
-import { Pressable, Text, View } from 'react-native';
+
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
 /**
  * TRIP-938 · 로그아웃 확인 다이얼로그(1단). `BaseToggleDialog`·`RevokeConfirmDialog` 와 동형으로 리포 Modal
@@ -14,38 +15,26 @@ export function LogoutConfirmDialog({
   onConfirm: () => void;
 }): ReactElement {
   return (
-    <View
+    <ConfirmDialog
       testID="logout-confirm"
-      className="absolute inset-0 items-center justify-center bg-scrim/55 px-2xl"
-    >
-      <View className="w-[330px] rounded-[20px] bg-canvas p-2xl">
-        <Text className="text-[19px] font-noto-bold text-ink">
-          로그아웃할까요?
-        </Text>
-
-        <View className="mt-2xl flex-row gap-[10px]">
-          <Pressable
-            testID="logout-cancel"
-            accessibilityRole="button"
-            onPress={onCancel}
-            className="h-12 flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-          >
-            <Text className="font-noto-bold text-card-title text-ink">
-              취소
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="logout-confirm-button"
-            accessibilityRole="button"
-            onPress={onConfirm}
-            className="h-12 flex-1 items-center justify-center rounded-button bg-ink"
-          >
-            <Text className="font-noto-bold text-card-title text-canvas">
-              로그아웃
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-    </View>
+      title="로그아웃할까요?"
+      size="sm"
+      shadow="none"
+      buttonsTopClassName="mt-2xl"
+      buttons={[
+        {
+          testID: 'logout-cancel',
+          label: '취소',
+          tone: 'outline',
+          onPress: onCancel,
+        },
+        {
+          testID: 'logout-confirm-button',
+          label: '로그아웃',
+          tone: 'ink',
+          onPress: onConfirm,
+        },
+      ]}
+    />
   );
 }

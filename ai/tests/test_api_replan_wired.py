@@ -112,7 +112,10 @@ def test_원_일정_POI_가_후보풀에_합류한다() -> None:
     body_slots = [{"poi_id": str(far.poi_id), "start_at": "10:00", "end_at": "11:30",
                    "placement_reason": "아침에 한적해서"}]
 
-    response = _post(build_dev_app(directives=_DIRECTIVES), current_slots=body_slots)
+    # 사유 없음 — 우천은 이동 줄이기(LESS_MOVE·경로 감점, BR-U4-47)를 얹어 반경 밖 원 일정
+    # POI 를 **정당하게** 밀어낸다. 여기서 보는 것은 합류 자체다.
+    response = _post(build_dev_app(directives=_DIRECTIVES), current_slots=body_slots,
+                     reasons=["none"])
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -195,11 +198,11 @@ def test_미배선_지시는_해석분에_넣되_무효를_밝힌다() -> None:
 
     섞으면 FE 가 "사전을 늘려야 하나"와 "솔버를 열어야 하나"를 못 가른다.
     """
-    body = _post(build_dev_app(directives=_DIRECTIVES), directives=["RELAX"]).json()
+    body = _post(build_dev_app(directives=_DIRECTIVES), directives=["SHORTER_DAY"]).json()
 
-    assert body["resolved_directives"] == ["RELAX"]   # 사전이 아는 키다
+    assert body["resolved_directives"] == ["SHORTER_DAY"]   # 사전이 아는 키다
     assert body["unknown_directives"] == []
-    assert any("directives_unwired" in n and "RELAX" in n for n in body["notes"]), body["notes"]
+    assert any("directives_unwired" in n and "SHORTER_DAY" in n for n in body["notes"]), body["notes"]
 
 
 def test_사전이_없으면_그_사실을_노트로_낸다() -> None:
@@ -331,7 +334,7 @@ def test_지시가_없으면_요청에도_빈_집합이_실린다() -> None:
 
     object.__setattr__(orchestrator, "_schedule_agent", _Spy())
     with TestClient(app, raise_server_exceptions=False) as client:
-        client.post("/ai/v1/planb/replan", json=_body())
+        client.post("/ai/v1/planb/replan", json=_body(reasons=["none"]))  # 사유도 암시 지시를 건다
 
     assert seen
     assert seen[0].prefer_categories == frozenset()

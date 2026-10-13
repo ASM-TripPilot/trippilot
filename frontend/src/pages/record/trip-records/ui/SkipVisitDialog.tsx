@@ -1,14 +1,6 @@
 import { type ReactElement } from 'react';
-import { Pressable, Text, View } from 'react-native';
 
-/** 카드 그림자(drop 0,8,24 · 12%) — 형제 다이얼로그들과 같은 값, 파일마다 두는 관례. */
-const DIALOG_SHADOW = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 8 },
-  shadowOpacity: 0.12,
-  shadowRadius: 24,
-  elevation: 8,
-} as const;
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
 /**
  * TRIP-1069 · j01 건너뛰기 확인(결정 3(c)). 건너뛴 방문은 되돌릴 수 없고 완료로 바꿀 수 없다(BR-U5-06) —
@@ -31,55 +23,29 @@ export function SkipVisitDialog({
   onConfirm: () => void;
 }): ReactElement {
   return (
-    <View
+    <ConfirmDialog
       testID="record-visit-skip-dialog"
-      className="absolute inset-0 items-center justify-center bg-scrim/55 px-2xl"
-    >
-      <View
-        style={DIALOG_SHADOW}
-        className="w-[330px] rounded-[20px] bg-canvas p-2xl"
-      >
-        <Text className="font-noto-bold text-[19px] text-ink">
-          이 방문을 건너뛸까요?
-        </Text>
-        <Text
-          lineBreakStrategyIOS="hangul-word"
-          className="mt-sm font-noto text-body text-body"
-        >
-          건너뛴 곳은 되돌리거나 완료로 바꿀 수 없어요.
-        </Text>
-        {failed ? (
-          <Text
-            testID="record-visit-skip-dialog-error"
-            className="mt-sm font-noto text-label text-primary-text"
-          >
-            건너뛰지 못했어요. 다시 시도해 주세요.
-          </Text>
-        ) : null}
-
-        <View className="mt-xl flex-row gap-[10px]">
-          <Pressable
-            testID="record-visit-skip-dialog-cancel"
-            accessibilityRole="button"
-            disabled={pending}
-            onPress={onCancel}
-            className="h-[52px] flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-          >
-            <Text className="font-noto-bold text-[16px] text-ink">취소</Text>
-          </Pressable>
-          <Pressable
-            testID="record-visit-skip-dialog-confirm"
-            accessibilityRole="button"
-            disabled={pending}
-            onPress={onConfirm}
-            className="h-[52px] flex-1 items-center justify-center rounded-button bg-primary"
-          >
-            <Text className="font-noto-bold text-[16px] text-canvas">
-              건너뛰기
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-    </View>
+      title="이 방문을 건너뛸까요?"
+      description="건너뛴 곳은 되돌리거나 완료로 바꿀 수 없어요."
+      hangulBreak
+      errorText={failed ? '건너뛰지 못했어요. 다시 시도해 주세요.' : undefined}
+      errorTestID="record-visit-skip-dialog-error"
+      buttons={[
+        {
+          testID: 'record-visit-skip-dialog-cancel',
+          label: '취소',
+          tone: 'outline',
+          onPress: onCancel,
+          disabled: pending,
+        },
+        {
+          testID: 'record-visit-skip-dialog-confirm',
+          label: '건너뛰기',
+          tone: 'primary',
+          onPress: onConfirm,
+          disabled: pending,
+        },
+      ]}
+    />
   );
 }

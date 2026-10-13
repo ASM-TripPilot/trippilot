@@ -1,14 +1,6 @@
 import { type ReactElement } from 'react';
-import { Pressable, Text, View } from 'react-native';
 
-/** 카드 그림자(Figma l05 dialog drop 0,8,24 · 12%) — 형제 다이얼로그들과 같은 값, 파일마다 두는 관례. */
-const DIALOG_SHADOW = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 8 },
-  shadowOpacity: 0.12,
-  shadowRadius: 24,
-  elevation: 8,
-} as const;
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
 /**
  * TRIP-1007 · i05 다시 짜는 중 이탈 확인(QA #062). 나가도 세션은 살아 있지만, 돌아와서 다시 요청하면 새
@@ -50,42 +42,26 @@ export function ReplanLeaveDialog({
   leaveLabel = '나가기',
 }: ReplanLeaveDialogProps): ReactElement {
   return (
-    <View
+    <ConfirmDialog
       testID={testID}
-      className="absolute inset-0 items-center justify-center bg-scrim/55 px-2xl"
-    >
-      <View
-        style={DIALOG_SHADOW}
-        className="w-[330px] rounded-[20px] bg-canvas p-2xl"
-      >
-        <Text className="text-[19px] font-noto-bold text-ink">{title}</Text>
-        <Text className="mt-[10px] font-noto text-body leading-[21px] text-body">
-          {description}
-        </Text>
-
-        <View className="mt-xl flex-row gap-[10px]">
-          <Pressable
-            testID={`${testID}-stay`}
-            accessibilityRole="button"
-            onPress={onStay}
-            className="h-[44px] flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-          >
-            <Text className="font-noto-bold text-card-title text-body">
-              {stayLabel}
-            </Text>
-          </Pressable>
-          <Pressable
-            testID={`${testID}-leave`}
-            accessibilityRole="button"
-            onPress={onLeave}
-            className="h-[44px] flex-1 items-center justify-center rounded-button bg-ink"
-          >
-            <Text className="font-noto-bold text-card-title text-canvas">
-              {leaveLabel}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-    </View>
+      title={title}
+      description={description}
+      descriptionSpacing="loose"
+      size="md"
+      buttons={[
+        {
+          testID: `${testID}-stay`,
+          label: stayLabel,
+          tone: 'outlineBody',
+          onPress: onStay,
+        },
+        {
+          testID: `${testID}-leave`,
+          label: leaveLabel,
+          tone: 'ink',
+          onPress: onLeave,
+        },
+      ]}
+    />
   );
 }

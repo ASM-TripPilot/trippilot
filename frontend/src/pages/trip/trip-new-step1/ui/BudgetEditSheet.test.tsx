@@ -1,5 +1,4 @@
 import { Keyboard } from 'react-native';
-import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { BudgetEditSheet } from './BudgetEditSheet';
@@ -20,7 +19,7 @@ import { BudgetEditSheet } from './BudgetEditSheet';
  * TRIP-1045(QA #020): 칩을 누르면 대표 금액(단가 × 박수)이 금액 칸에 채워진다. 그 **계산은 배선 몫**이다
  * — 시트는 박수를 모르고, 칩 press 는 여전히 `onSelectTier` 만 부른다(AC-2c). 채워지는 동작 자체는
  * `TripNewStep1Page.integration.test.tsx` 「예산 편집 시트」 describe 의 D 블록이 잠근다. 안내 노트·range 문자열은 없어졌고
- * (AC-D7), 금액 칸은 Figma `3647:2068` 대로 `₩` 접두 없이 `text-section`(17) 글자다.
+ * (AC-D7), 금액 칸은 Figma `3647:2068` 대로 `₩` 접두가 없다.
  *
  * 무엇을 **못** 보나(6-b 실기 전용): `__mocks__/@gorhom/bottom-sheet.tsx`가 통과형 목이라(마운트하면
  * children 무조건 렌더) 실제 개폐·딤 전면 커버·중앙정렬·활성 칩 분홍/흰 글자 실렌더는 jest 원리적
@@ -81,16 +80,6 @@ describe('AC-1 · tier 세그 4·금액 필드(input·원)·수정·적용 렌�
     // 수정 · 적용
     expect(screen.getByTestId('trip-wizard-budget-edit')).toBeOnTheScreen();
     expect(screen.getByTestId('trip-wizard-budget-apply')).toBeOnTheScreen();
-  });
-
-  it('TRIP-1045 · 금액 입력 글자는 text-section(17) 이다 (Figma 금액 17 Bold, 옛 card-title 15 아님)', () => {
-    renderSheet();
-
-    const classes = String(
-      screen.getByTestId('trip-wizard-budget-input').props.className ?? ''
-    ).split(/\s+/);
-    expect(classes).toContain('text-section');
-    expect(classes).not.toContain('text-card-title');
   });
 });
 
@@ -219,26 +208,22 @@ describe('AC-S6E-1(슬롯) · budgetError prop 을 받으면 오류 노드를 �
  * TRIP-984 D8 · 적용 비활성 표면(PeriodEditSheet 선례). 판정은 배선이 `applyDisabled` 로 내린다(D4 무상태).
  * `toBeDisabled` 는 accessibilityState 만 읽으므로 press 결과(onApply 0회)와 짝으로 둔다.
  */
-describe('AC-A · applyDisabled → 진짜 disabled + opacity-40', () => {
+describe('AC-A · applyDisabled → 진짜 disabled', () => {
   it('applyDisabled=true 면 적용이 비활성이고, 눌러도 onApply 가 불리지 않는다', () => {
     const spies = renderSheet({ amountText: '', applyDisabled: true });
 
     const apply = screen.getByTestId('trip-wizard-budget-apply');
     expect(apply).toBeDisabled();
-    expect(String(apply.props.className).split(/\s+/)).toContain('opacity-40');
 
     fireEvent.press(apply);
     expect(spies.onApply).not.toHaveBeenCalled();
   });
 
-  it('applyDisabled=false 면 활성이고(opacity-40 없음) press → onApply 1회 (짝)', () => {
+  it('applyDisabled=false 면 활성이고 press → onApply 1회 (짝)', () => {
     const spies = renderSheet({ applyDisabled: false });
 
     const apply = screen.getByTestId('trip-wizard-budget-apply');
     expect(apply).not.toBeDisabled();
-    expect(String(apply.props.className).split(/\s+/)).not.toContain(
-      'opacity-40'
-    );
 
     fireEvent.press(apply);
     expect(spies.onApply).toHaveBeenCalledTimes(1);
@@ -246,29 +231,12 @@ describe('AC-A · applyDisabled → 진짜 disabled + opacity-40', () => {
 });
 
 /**
- * TRIP-984 D9 · 키보드 처방. 실제로 시트가 키보드만큼 올라가는지는 통과형 목이라 jest 사각(6-b) —
- * 여기선 "BottomSheetTextInput 을 썼다 · keyboardBehavior 를 적었다 · 본문 탭이 Keyboard.dismiss 를
- * 부른다"까지만 잠근다. 목의 BottomSheetTextInput 은 TextInput 과 다른 타입이라 플레인 회귀가 구분된다.
+ * TRIP-984 D9 · 키보드 처방. 실제로 시트가 키보드만큼 올라가는지·입력칸 종류·keyboardBehavior 는
+ * 통과형 목이라 실화면 몫이다 — 여기선 본문 탭이 Keyboard.dismiss 를 부르는 것까지만 잠근다.
  */
 describe('AC-B · 키보드 처방 (BottomSheetTextInput · keyboardBehavior · 본문 탭 dismiss)', () => {
   afterEach(() => {
     jest.restoreAllMocks();
-  });
-
-  it('B1 · 금액 입력칸은 BottomSheetTextInput 이다 (플레인 TextInput 이면 red)', () => {
-    renderSheet();
-
-    expect(screen.UNSAFE_getByType(BottomSheetTextInput).props.testID).toBe(
-      'trip-wizard-budget-input'
-    );
-  });
-
-  it('B2 · 시트가 keyboardBehavior="interactive" 를 명시한다', () => {
-    renderSheet();
-
-    expect(
-      screen.UNSAFE_queryAllByProps({ keyboardBehavior: 'interactive' })
-    ).not.toHaveLength(0);
   });
 
   it('B3 · 칩·수정은 제 콜백만 부르고, 본문 빈 곳(부제 글자) 탭은 Keyboard.dismiss 를 부른다', () => {

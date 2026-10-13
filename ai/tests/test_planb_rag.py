@@ -1296,3 +1296,30 @@ def test_원_일정_슬롯은_규칙_상위가_아니어도_숏리스트에_든�
 
     assert current in worker.pool.poi_ids
     assert excluded not in worker.pool.poi_ids  # 제외는 원 슬롯이어도 제외
+
+
+# ── 재시도 몫이 실호출 바닥보다 짧으면 재시도 없음 (2026-10-13 DEV 재계획 504) ──────────────
+
+
+def test_retry_is_skipped_when_its_budget_is_below_the_call_floor() -> None:
+    """재계획 25초 → PlanB 12.5초 → 재시도 몫 4.4초: 어떤 모델도 못 맞추는 시한이라(sol 5.0·terra 5.2·
+    Fable 5.0 중앙값) 8/8 타임아웃만 기다렸고, 그 4.4초가 뒤 단계 시한을 밀어 백스톱 504 가 됐다.
+    바닥(5초) 미만이면 재시도를 건너뛰고 폴백 사유에 남긴다. 20초 예산(재시도 7초)은 종전 그대로."""
+    calls: list[dict] = []
+
+    class _Timing:
+        def select(self, pool, inp, trace_id, now, **kw):
+            calls.append(kw)
+            return SimpleNamespace(is_fallback=True, error="timeout: timeout > 6.2s", value=None)
+
+    pool = _pool("p1")
+    agent = PlanBAgent(FakeEmbedding(dim=_SMALL), InMemoryVectorStore(), alternative_worker=_Timing())
+
+    tight = agent.run(_request(pool, deadline_ms=12_500))
+    assert calls[-1]["timeout_sec"] == pytest.approx(6.25)
+    assert calls[-1]["retry_timeout_sec"] is None                       # 4.375s < 5.0s → 재시도 없음
+    assert any("retry_skipped: 4.4s<5.0s" in n for n in tight.notes), tight.notes
+
+    roomy = agent.run(_request(pool, deadline_ms=20_000))
+    assert calls[-1]["retry_timeout_sec"] == pytest.approx(7.0)           # 종전 그대로
+    assert not any("retry_skipped" in n for n in roomy.notes)

@@ -249,7 +249,9 @@ def test_풀에_카페가_없으면_한_곳_추가도_못_닿는다고_밝힌다
     """ONE 지시는 prefer 가 아니라 add_one 으로 가므로 노트가 빠지면 침묵 실패다(리뷰 재현)."""
     body, _ = _replan(directives=["ADD_CAFE"])
 
-    assert "directive_no_candidates: CAFE" in body["notes"], body["notes"]
+    # 기본 사유(weather)의 암시 INDOOR 가 다른 카테고리를 함께 실을 수 있다 — CAFE 가 있는지만 본다.
+    assert any(n.startswith("directive_no_candidates: ") and "CAFE" in n.split(": ")[1].split(",")
+               for n in body["notes"]), body["notes"]
 
 
 def test_PlanB_순위에서_한_곳_추가_카테고리는_첫_1건만_남긴다() -> None:
@@ -316,7 +318,8 @@ def test_가까운_데로_칩이_에이전트_요청에_실린다() -> None:
 
 def test_숙소_근처_마무리는_무효를_밝힌다() -> None:
     """RANKING 셋 중 END_NEAR_STAY 는 아직 집행 자리가 없다 — 인식만 하고 조용하면 거짓이다."""
-    body, seen = _replan(directives=["END_NEAR_STAY"])
+    # 사유 없음 — 기본 본문의 우천은 LESS_MOVE 를 암시로 얹는다(BR-U4-47)
+    body, seen = _replan(directives=["END_NEAR_STAY"], reasons=["none"])
 
     assert seen["agent"][0].prefer_near is False
     assert any("directives_unwired" in n and "END_NEAR_STAY" in n for n in body["notes"])

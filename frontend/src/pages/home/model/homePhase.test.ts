@@ -113,18 +113,206 @@ describe('resolveHomePhase — discovery 갈래(여행 없음/전ENDED)', () => 
     ).toBeUndefined();
   });
 
-  it('여행이 전부 ENDED 면 undefined(종료 여행을 얼굴로 승격하지 않는다)', () => {
+  it('여행이 전부 ENDED 이고 최근 종료가 7일을 넘었으면 undefined(여행 후 얼굴 창 밖 → discovery)', () => {
     expect(
       resolveHomePhase({
         trips: [
-          trip({ status: 'ENDED', startDate: '2026-01-01' }),
-          trip({ status: 'ENDED', startDate: '2026-02-01' }),
+          trip({
+            status: 'ENDED',
+            startDate: '2026-01-01',
+            endDate: '2026-01-04',
+          }),
+          trip({
+            status: 'ENDED',
+            startDate: '2026-02-01',
+            endDate: '2026-02-04',
+          }),
         ],
         today: '2026-06-01',
         savedCount: 0,
         formatTripMeta: metaOfTitle,
       })
     ).toBeUndefined();
+  });
+});
+
+// ── TRIP-1369 · 여행 후(postTrip) 얼굴 진입 조건 ─────────────────────────────────────────
+// 사용자 확정(2026-10-13): 비-ENDED 여행이 하나도 없고, 가장 최근 종료 여행의 endDate 가
+// 오늘(KST, 주입)로부터 0~7일 이내(7일째 포함)일 때만 postTrip. 그 밖은 undefined(discovery).
+// 날짜가 깨졌거나 endDate 가 미래인 ENDED(서버 데이터 이상)도 조용히 postTrip 으로 가지 않고
+// 결정적으로 undefined 로 간다(INV-4).
+describe('resolveHomePhase — postTrip 진입 조건 (TRIP-1369)', () => {
+  const resolve = (trips: Trip[], today: string) =>
+    resolveHomePhase({
+      trips,
+      today,
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+  const ended = (overrides: Partial<Trip> = {}) =>
+    trip({
+      status: 'ENDED',
+      startDate: '2026-06-10',
+      endDate: '2026-06-13',
+      title: '부산 여행',
+      tripId: 'trip-busan',
+      ...overrides,
+    });
+
+  it('종료 당일부터 7일째까지(경계 포함)는 postTrip 이고 8일째부터는 undefined 다', () => {
+    expect(resolve([ended()], '2026-06-13')?.kind).toBe('postTrip');
+    expect(resolve([ended()], '2026-06-20')?.kind).toBe('postTrip'); // +7 포함
+    expect(resolve([ended()], '2026-06-21')).toBeUndefined(); // +8
+  });
+
+  it('postTrip 얼굴은 가장 최근 종료 여행의 실값으로 조립된다(픽스처 상수 아님)', () => {
+    const result = resolve(
+      [
+        ended({
+          title: '오래전 여행',
+          startDate: '2026-04-01',
+          endDate: '2026-04-03',
+          tripId: 'old',
+        }),
+        ended(),
+      ],
+      '2026-06-15'
+    );
+
+    expect(result?.kind).toBe('postTrip');
+    if (result?.kind !== 'postTrip') return;
+    expect(result.greetTitle).toBe('부산 여행 잘 다녀오셨어요?');
+    expect(result.greetSubtitle).toBe('기록을 정리하고 나눠볼까요');
+    expect(result.dominantTripId).toBe('trip-busan');
+    expect(result.trip).toEqual({
+      badge: '여행 완료',
+      badgeTone: 'success',
+      ctaLabel: '회고 보기',
+      title: '부산 여행',
+      meta: 'META:부산 여행',
+    });
+    // 단일 배지 — 보조 텍스트 없음.
+    expect(result.trip.badgeSub).toBeUndefined();
+    // 지난 여행 = 가장 최근 것을 뺀 나머지(시작 연.월 · 박수).
+    expect(result.pastTrips).toEqual([
+      { title: '오래전 여행', dateLabel: '2026.04 · 2박', imageUrl: null },
+    ]);
+  });
+
+  it('지난 여행은 최근 종료 순이고 당일치기는 "당일" 이다', () => {
+    const result = resolve(
+      [
+        ended({
+          title: 'A',
+          startDate: '2026-01-10',
+          endDate: '2026-01-10',
+          tripId: 'a',
+        }),
+        ended({
+          title: 'B',
+          startDate: '2026-03-01',
+          endDate: '2026-03-02',
+          tripId: 'b',
+        }),
+        ended(),
+      ],
+      '2026-06-14'
+    );
+    if (result?.kind !== 'postTrip') throw new Error('postTrip 이어야 한다');
+    expect(result.pastTrips.map((p) => p.title)).toEqual(['B', 'A']);
+    expect(result.pastTrips[1].dateLabel).toBe('2026.01 · 당일');
+  });
+
+  it('최근 종료 여행이 하나라도 7일 안이면, 더 오래된 ENDED 가 섞여도 postTrip 이다(기준은 가장 최근)', () => {
+    const result = resolve(
+      [
+        ended({ endDate: '2026-01-01', startDate: '2026-01-01', tripId: 'x' }),
+        ended(),
+      ],
+      '2026-06-14'
+    );
+    expect(result?.kind).toBe('postTrip');
+  });
+
+  it('INV-4: endDate 가 미래이거나 형식이 깨진 ENDED 는 postTrip 이 아니라 undefined 다', () => {
+    expect(resolve([ended()], '2026-06-12')).toBeUndefined(); // 종료일이 오늘보다 뒤
+    expect(resolve([ended({ endDate: '' })], '2026-06-14')).toBeUndefined();
+    expect(
+      resolve([ended({ endDate: '2026/06/13' })], '2026-06-14')
+    ).toBeUndefined();
+    expect(resolve([ended()], 'not-a-date')).toBeUndefined();
+  });
+
+  it('깨진 endDate 가 섞여도 정상 ENDED 의 창 판정을 오염시키지 않는다', () => {
+    const result = resolve(
+      [ended({ endDate: 'bad', tripId: 'bad' }), ended()],
+      '2026-06-14'
+    );
+    expect(result?.kind).toBe('postTrip');
+    if (result?.kind === 'postTrip')
+      expect(result.dominantTripId).toBe('trip-busan');
+  });
+
+  it('비-ENDED 가 하나라도 있으면 종료 직후여도 planning 이다', () => {
+    const result = resolve(
+      [
+        ended(),
+        trip({
+          status: 'PLANNED',
+          startDate: '2026-12-01',
+          endDate: '2026-12-03',
+        }),
+      ],
+      '2026-06-14'
+    );
+    expect(result?.kind).toBe('planning');
+  });
+
+  it('빈 목록은 undefined 다(무회귀)', () => {
+    expect(resolve([], '2026-06-14')).toBeUndefined();
+  });
+
+  it('성질(PBT): 비-ENDED 존재 ⟹ postTrip 아님 · ENDED 만 ⟹ postTrip 이면 창 안(0~7일)', () => {
+    const arb = fc.record({
+      status: fc.constantFrom('PLANNED', 'CONFIRMED', 'ACTIVE', 'ENDED'),
+      startEpoch: fc.integer({ min: 20000, max: 22000 }),
+      length: fc.integer({ min: 0, max: 10 }),
+    });
+    fc.assert(
+      fc.property(
+        fc.array(arb, { maxLength: 6 }),
+        fc.integer({ min: 20000, max: 22100 }),
+        (raw, todayEpoch) => {
+          const trips = raw.map((r, i) =>
+            trip({
+              tripId: `t${i}`,
+              status: r.status,
+              startDate: toDateString(r.startEpoch),
+              endDate: toDateString(r.startEpoch + r.length),
+            })
+          );
+          const result = resolve(trips, toDateString(todayEpoch));
+          const hasActive = trips.some((t) => t.status !== 'ENDED');
+          if (hasActive) {
+            expect(result?.kind).not.toBe('postTrip');
+          } else if (result?.kind === 'postTrip') {
+            const latestEnd = Math.max(
+              ...raw.map((r) => r.startEpoch + r.length)
+            );
+            expect(todayEpoch - latestEnd).toBeGreaterThanOrEqual(0);
+            expect(todayEpoch - latestEnd).toBeLessThanOrEqual(7);
+          } else {
+            // postTrip 이 아니면 창 밖(또는 빈 목록)이다.
+            const latestEnd = raw.length
+              ? Math.max(...raw.map((r) => r.startEpoch + r.length))
+              : NaN;
+            const diff = todayEpoch - latestEnd;
+            expect(Number.isNaN(diff) || diff < 0 || diff > 7).toBe(true);
+          }
+        }
+      ),
+      { numRuns: 400 }
+    );
   });
 });
 

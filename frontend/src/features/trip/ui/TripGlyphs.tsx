@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import Svg, { Path } from 'react-native-svg';
+import { BackChevronGlyph as SharedBackChevronGlyph } from '@/shared/ui/glyphs';
 
 // g01 위저드 1/2 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/StayGlyphs/ExploreGlyphs
 // 패턴 계승 · Figma 파일 1MTF3dtptIrbg8gld5IdO2, 노드 1675:1183). 전부 Figma 벡터 path
@@ -47,21 +48,11 @@ export function BackChevronGlyph({
   testID,
 }: GlyphProps & { tone?: 'ink' | 'muted' }) {
   return (
-    <Svg
+    <SharedBackChevronGlyph
+      size={size}
+      color={tone === 'muted' ? 'muted' : 'ink'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M15 18L9 12L15 6"
-        stroke={tone === 'muted' ? MUTED : INK}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 

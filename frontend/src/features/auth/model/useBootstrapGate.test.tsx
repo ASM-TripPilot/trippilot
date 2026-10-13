@@ -18,6 +18,7 @@ import {
   resetGateDestination,
   waitForGateDestination,
 } from './gateDestination';
+import { prefetchTrips } from './prefetchTrips';
 import { BOOTSTRAP_TIMEOUT_MS, useBootstrapGate } from './useBootstrapGate';
 
 // TRIP-1157: 훅은 tokenManager 를 @/shared/api(배럴)로 문다 — 팩토리가 실물 tokenManager 를 펼쳐 넣어야 토큰 함수가
@@ -33,6 +34,8 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn(),
   getTokens: jest.fn(),
 }));
+// 홈 GET /trips 미리 받기(TRIP-1362) — 실물은 생성 API 계층(axios)을 물어 여기서는 호출 여부만 본다.
+jest.mock('./prefetchTrips', () => ({ prefetchTrips: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,
   default: { addEventListener: jest.fn(() => jest.fn()) },
@@ -80,6 +83,7 @@ beforeEach(() => {
   mockFetchBootstrap.mockReset();
   mockHasStoredToken.mockReset();
   mockGetTokens.mockReset();
+  (prefetchTrips as jest.Mock).mockReset();
   mockAddEventListener.mockReset().mockReturnValue(jest.fn());
   // tokenManager 는 모듈 스코프 단일 상태다 — 비우지 않으면 앞 테스트의 토큰이 샌다(7-16).
   clearAccessToken();
@@ -760,5 +764,54 @@ describe('useBootstrapGate — 목적지 공개 통로 (TRIP-1034 AC-2)', () => 
     // 단언 ②: 늦은 옛 응답이 LOGIN 을 HOME 으로 덮어쓰지 않는다.
     expect(result.current.destination).toBe('LOGIN');
     expect(getGateDestination()).toBe('LOGIN');
+  });
+});
+
+describe('useBootstrapGate — 홈 GET /trips 미리 받기 (TRIP-1362)', () => {
+  it('저장 토큰이 있으면 hydrate 직후 /bootstrap 과 나란히 1회, 재조회(로그인·재평가)마다 다시 부르지 않는다', async () => {
+    mockGetTokens.mockResolvedValue({ accessToken: 'a', refreshToken: 'r' });
+    mockHasStoredToken.mockResolvedValue(true);
+    mockFetchBootstrap.mockResolvedValue(bootstrap('AUTHENTICATED'));
+
+    renderHook(() => useBootstrapGate(), { wrapper: createWrapper() });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(prefetchTrips).toHaveBeenCalledTimes(1);
+    expect(prefetchTrips).toHaveBeenCalledWith(expect.any(QueryClient));
+
+    await act(async () => {
+      notifyBootstrapReeval();
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(2);
+    expect(prefetchTrips).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefetch 는 /bootstrap 응답을 기다리지 않고 먼저 나간다(병렬)', async () => {
+    mockGetTokens.mockResolvedValue({ accessToken: 'a', refreshToken: 'r' });
+    mockHasStoredToken.mockResolvedValue(true);
+    mockFetchBootstrap.mockImplementation(NEVER);
+
+    renderHook(() => useBootstrapGate(), { wrapper: createWrapper() });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(1);
+    expect(prefetchTrips).toHaveBeenCalledTimes(1);
+  });
+
+  it('저장 토큰이 없으면(게스트) 401 만 낭비하므로 부르지 않는다', async () => {
+    mockGetTokens.mockResolvedValue(null);
+    mockHasStoredToken.mockResolvedValue(false);
+    mockFetchBootstrap.mockResolvedValue(bootstrap('GUEST'));
+
+    renderHook(() => useBootstrapGate(), { wrapper: createWrapper() });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    expect(prefetchTrips).not.toHaveBeenCalled();
   });
 });

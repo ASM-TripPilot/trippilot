@@ -13,12 +13,12 @@ import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { PreferenceView } from '@/shared/api/index.schemas';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
-import { PreferencesEditScreen } from './PreferencesEditScreen';
+import { SettingsPreferencesPage } from './SettingsPreferencesPage';
 
 /**
- * l05 취향 전체 수정 — PreferencesEditScreen(스스로 조회·저장하는 컨테이너) 통합 테스트.
+ * l05 취향 전체 수정 — SettingsPreferencesPage(스스로 조회·저장하는 컨테이너) 통합 테스트.
  *
- * 한 파일로 합친 기록(TRIP-1154): 옛 `PreferencesEditScreen.{integration,baseline}.test.tsx` 2개를 각자의 바깥
+ * 한 파일로 합친 기록(TRIP-1154): 옛 `SettingsPreferencesPage.{integration,baseline}.test.tsx` 2개를 각자의 바깥
  * describe 로 옮겼다.
  *  - **`usePreferences` 스위치(`mockFakePreferences`)** — 옛 `.baseline` 은 훅을 가짜로 바꿔 회차별 view 를 주입했고,
  *    옛 `.integration` 은 실 훅으로 msw 와 왕복했다. `jest.mock` 은 파일 전체에 걸리므로 팩토리 안에서 **불리는
@@ -110,7 +110,7 @@ describe('GET 초기값 → 타일 → PUT 저장·400 (옛 .integration)', () =
   });
 
   function renderScreen() {
-    render(<PreferencesEditScreen />, { wrapper: createGcZeroWrapper() });
+    render(<SettingsPreferencesPage />, { wrapper: createGcZeroWrapper() });
   }
 
   /** GET /me/preferences 를 지정한 View 로 응답하게 건다(케이스마다 기본 픽스처를 덮는다). */
@@ -136,7 +136,7 @@ describe('GET 초기값 → 타일 → PUT 저장·400 (옛 .integration)', () =
     );
   }
 
-  describe('PreferencesEditScreen — 취향 전체 수정 배선', () => {
+  describe('SettingsPreferencesPage — 취향 전체 수정 배선', () => {
     it('I1(AC-1) GET 초기값이 타일 선택으로 반영되고, 중립 기본값 축은 선택되지 않는다', async () => {
       // 준비 — 스타일·페이스는 진짜 설정, 음식은 중립(미설정→서버 파생값).
       seedGet({
@@ -236,7 +236,7 @@ describe('GET 초기값 → 타일 → PUT 저장·400 (옛 .integration)', () =
    * 표면이 거짓말). 이 화면의 조회는 살아 있으므로(active), 무효화되면 GET 이 실제로 한 번 더 나간다 —
    * 그 "한 번 더"를 와이어에서 센다(무효화 키를 틀리면 재요청이 없어 red).
    */
-  describe('PreferencesEditScreen — 저장 뒤 취향 조회 무효화 (TRIP-778 D11)', () => {
+  describe('SettingsPreferencesPage — 저장 뒤 취향 조회 무효화 (TRIP-778 D11)', () => {
     it('I6(D11) PUT 200 뒤 GET /me/preferences 가 다시 나간다(1 → 2)', async () => {
       // 준비 — GET 호출 수를 센다.
       let gets = 0;
@@ -307,7 +307,7 @@ describe('GET 초기값 → 타일 → PUT 저장·400 (옛 .integration)', () =
       render(
         <QueryClientProvider client={client}>
           <WithToastHost>
-            <PreferencesEditScreen />
+            <SettingsPreferencesPage />
           </WithToastHost>
         </QueryClientProvider>
       );
@@ -376,11 +376,11 @@ describe('저장 diff 기준선 — 가짜 훅 (옛 .baseline)', () => {
     mockSave.mockClear();
   });
 
-  describe('PreferencesEditScreen — 저장 diff 기준선(경고-1)', () => {
+  describe('SettingsPreferencesPage — 저장 diff 기준선(경고-1)', () => {
     it('편집 도중 view 가 갱신돼도 안 만진 축은 시드 기준선으로 빠진다(lost update 금지)', async () => {
       // 준비 — 진입 시 GET=A: styles 설정('휴양'), pace 미설정. 이 A 가 편집 기준선.
       mockView = { styles: { value: ['휴양'], isNeutralDefault: false } };
-      const { rerender } = render(<PreferencesEditScreen />);
+      const { rerender } = render(<SettingsPreferencesPage />);
 
       // 시드 확인(공허 통과 차단) — A 가 타일에 반영됐다.
       expect(
@@ -393,7 +393,7 @@ describe('저장 diff 기준선 — 가짜 훅 (옛 .baseline)', () => {
 
       // 실행 ② — 그 사이 재요청으로 GET=B(타 기기가 styles 를 '미식'으로 바꿈) → 화면 view 가 B 로 갈린다.
       mockView = { styles: { value: ['미식'], isNeutralDefault: false } };
-      rerender(<PreferencesEditScreen />);
+      rerender(<SettingsPreferencesPage />);
 
       // 실행 ③ — 저장.
       fireEvent.press(screen.getByTestId('settings-pref-save'));

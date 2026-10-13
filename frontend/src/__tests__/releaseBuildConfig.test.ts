@@ -17,6 +17,7 @@ import path from 'path';
 import { IOSConfig } from 'expo/config-plugins';
 
 import config from '../../app.config';
+import tailwindConfig from '../../tailwind.config.js';
 
 const ROOT = path.resolve(__dirname, '../..');
 
@@ -85,6 +86,8 @@ const MEDIA_LIBRARY_ALLOWED = [
   'preventAutomaticLimitedAccessAlert',
   'granularPermissions',
 ] as const;
+// expo-font 18 plugin/build/withFonts.d.ts 의 옵션 키(TRIP-1361).
+const FONT_ALLOWED = ['fonts', 'android', 'ios'] as const;
 const SPLASH_ALLOWED = [
   'backgroundColor',
   'imageWidth',
@@ -250,8 +253,8 @@ describe('AC-5 privacy manifest', () => {
   });
 });
 
-describe('AC-6 Sentry 자동 업로드 끔', () => {
-  it('production·preview 빌드 프로파일이 Sentry 자동 업로드를 문자열 "true"로 끄고, Sentry 플러그인 등록은 그대로다', () => {
+describe('TRIP-1370 Sentry 운영 켬', () => {
+  it('production 은 Sentry 자동 업로드를 켜고(소스맵·dSYM), preview 는 문자열 "true"로 끈 채이며, Sentry 플러그인 등록은 그대로다', () => {
     const eas = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'eas.json'), 'utf8')
     ) as {
@@ -262,8 +265,11 @@ describe('AC-6 Sentry 자동 업로드 끔', () => {
     };
     const { production, preview } = eas.build;
 
-    // Sentry Xcode 스크립트가 문자열 `true` 로 비교한다 — 불리언 true 는 안 된다.
-    expect(production.env?.SENTRY_DISABLE_AUTO_UPLOAD).toBe('true');
+    // 운영은 업로드를 켠다(키 자체가 없어야 한다) — 값은 EAS env 의 SENTRY_AUTH_TOKEN 에서 온다(사용자가 등록).
+    // TRIP-935 가 업로드를 끈 것은 심사 빌드 서명 문제 우회였다. 이 키가 다시 production 에 들어오면 운영 크래시가
+    // 소스맵·심볼 없이 쌓인다 — 빌드는 성공하고 에러도 없어서 조용히 틀린다.
+    expect(production.env).not.toHaveProperty('SENTRY_DISABLE_AUTO_UPLOAD');
+    // preview 는 그대로 끈다. Sentry Xcode 스크립트가 문자열 `true` 로 비교한다 — 불리언 true 는 안 된다.
     expect(preview.env?.SENTRY_DISABLE_AUTO_UPLOAD).toBe('true');
     expect(production.autoIncrement).toBe(true);
     // 운영 빌드는 API 주소 env 가 비면 부팅 중 throw 한다(shared/api, TRIP-936) — 빌드 프로파일이 https 주소를 박아 둬야 한다.
@@ -271,10 +277,25 @@ describe('AC-6 Sentry 자동 업로드 끔', () => {
     expect(String(production.env?.EXPO_PUBLIC_API_BASE_URL)).toMatch(
       /^https:\/\/[^/]+$/
     );
+    // 조직·프로젝트 이름은 업로드 토큰의 조직과 같아야 한다(사용자 확인 2026-10-13: Sentry 조직 ajou-s0,
+    // 프로젝트 react-native). 어긋나면 운영 iOS 빌드의 업로드가 "조직 없음/권한 없음"으로 실패한다.
     expect(optionsOf('@sentry/react-native/expo')).toEqual({
-      organization: 'trippilot',
-      project: 'trippilot-frontend',
+      organization: 'ajou-s0',
+      project: 'react-native',
     });
+  });
+
+  // DSN 이 없으면 initSentry 가 아무 에러 없이 no-op 이라 "미설정"이 조용하다 — 키 이름이라도 리포에 박아 둔다.
+  // 값은 절대 커밋하지 않는다(32-hex 전수 스캔 socialSdkSecrets A-3 이 DSN 형태도 잡는다).
+  it('DSN 키 이름이 .env.example 에 값 없이 있고, initSentry 가 같은 이름을 읽는다', () => {
+    const example = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
+    expect(example).toMatch(/^EXPO_PUBLIC_SENTRY_DSN=$/m);
+
+    const init = fs.readFileSync(
+      path.join(ROOT, 'src/app/entrypoint/initSentry.ts'),
+      'utf8'
+    );
+    expect(init).toContain('process.env.EXPO_PUBLIC_SENTRY_DSN');
   });
 });
 
@@ -480,5 +501,75 @@ describe('config plugin 등록 — 애플 로그인 (TRIP-932 AC-17)', () => {
 
     // 티켓 "건드리지 않는 것" — 딥링크 scheme 불변.
     expect(config.scheme).toBe('trippilot');
+  });
+});
+
+/** TTF/OTF 'name' 테이블의 nameID 6(PostScript 이름). iOS 는 RN fontFamily 를 이 내부 이름으로 찾는다. */
+function postScriptName(file: string): string {
+  const b = fs.readFileSync(file);
+  const numTables = b.readUInt16BE(4);
+  for (let i = 0; i < numTables; i += 1) {
+    const rec = 12 + i * 16;
+    if (b.toString('ascii', rec, rec + 4) !== 'name') continue;
+    const table = b.readUInt32BE(rec + 8);
+    const count = b.readUInt16BE(table + 2);
+    const strings = table + b.readUInt16BE(table + 4);
+    for (let n = 0; n < count; n += 1) {
+      const r = table + 6 + n * 12;
+      if (b.readUInt16BE(r + 6) !== 6) continue;
+      const platform = b.readUInt16BE(r);
+      const len = b.readUInt16BE(r + 8);
+      const at = strings + b.readUInt16BE(r + 10);
+      const raw = b.subarray(at, at + len);
+      return platform === 3
+        ? Buffer.from(raw).swap16().toString('utf16le')
+        : raw.toString('latin1');
+    }
+  }
+  return '';
+}
+
+describe('TRIP-1361 · 폰트 네이티브 임베드 — 폰트명 계약', () => {
+  const fontFiles = (): string[] => {
+    const options = optionsOf('expo-font');
+    return ((options?.fonts as string[] | undefined) ?? []).map((f) =>
+      path.resolve(ROOT, f)
+    );
+  };
+
+  it('expo-font 플러그인이 폰트 4개를 옵션 키 오타 없이 등록하고, 파일이 실재하며, Info.plist UIAppFonts 에 들어간다', () => {
+    const options = optionsOf('expo-font');
+
+    expect(options).toBeDefined();
+    expect(unknownKeys(options, FONT_ALLOWED)).toEqual([]);
+    const files = fontFiles();
+    expect(files.map((f) => path.basename(f)).sort()).toEqual([
+      'Inter_700Bold.ttf',
+      'NotoSansKR_400Regular.ttf',
+      'NotoSansKR_500Medium.ttf',
+      'NotoSansKR_700Bold.ttf',
+    ]);
+    files.forEach((f) => expect(fs.existsSync(f)).toBe(true));
+    expect(infoPlist.UIAppFonts).toEqual(
+      expect.arrayContaining(files.map((f) => path.basename(f)))
+    );
+  });
+
+  it('tailwind fontFamily 토큰 = 임베드 파일명 = 폰트 내부 PostScript 이름이 글자 단위로 같다 (iOS 는 내부 이름, Android 는 파일명으로 찾는다)', () => {
+    const tokens = Object.values(
+      (tailwindConfig.theme?.extend?.fontFamily ?? {}) as Record<
+        string,
+        string[]
+      >
+    )
+      .flat()
+      .sort();
+    const files = fontFiles();
+
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(files.map((f) => path.basename(f, '.ttf')).sort()).toEqual(tokens);
+    files.forEach((f) =>
+      expect(postScriptName(f)).toBe(path.basename(f, '.ttf'))
+    );
   });
 });

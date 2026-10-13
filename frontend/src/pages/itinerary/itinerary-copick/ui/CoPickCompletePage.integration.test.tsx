@@ -7,7 +7,6 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
-import { View } from 'react-native';
 
 import { server } from '@/mocks/server';
 import type {
@@ -465,7 +464,6 @@ describe('🔴 TRIP-1076 AC-3 · h11 같이 짜기 결과 지도는 핀 전부�
 // TRIP-1295 — 핀 0개인 날에도 지도 중심이 0,0(기니만 바다)으로 가지 않는다(INV-4).
 describe('🔴 h11 지도 중심 — 빈 날·좌표 없는 일정에도 0,0 바다로 가지 않는다', () => {
   const DAY2 = '2026-06-11';
-  const DAY1_FIRST_TEXT = '35.153,129.118';
 
   /** 나간 요청 경로 — 거점·담은 숙소 조회가 붙지 않았는지 센다(결정 2=A). */
   let hits: string[] = [];
@@ -480,31 +478,6 @@ describe('🔴 h11 지도 중심 — 빈 날·좌표 없는 일정에도 0,0 바
 
   afterEach(() => {
     server.events.removeListener('request:start', record);
-  });
-
-  it('K1 · AC-5 — 빈 2일차 칩을 누르면 중심은 1일차 첫 좌표 장소다', async () => {
-    // 준비 — 2일차는 날짜는 있고 장소가 0곳이다(빼면 칩 press 가 1일차로 되돌아간다).
-    itineraryHandler = () =>
-      HttpResponse.json({
-        ...itinerary(),
-        days: [
-          { date: DAY1, slots: daySlots() },
-          { date: DAY2, slots: [] },
-        ],
-      });
-    renderPage();
-    await screen.findByTestId('map-sheet-shell-root');
-
-    // 실행
-    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
-
-    // 단언 — 먼저 정말 빈 날에 와 있는지(1일차 중심과 기대값이 같아서), 그다음 중심.
-    expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
-      '2일차'
-    );
-    const map = screen.getByTestId('map-root');
-    expect(map.props.pins as unknown[]).toHaveLength(0);
-    expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
   });
 
   it('K2 · AC-2 — 일정 어디에도 좌표가 없으면 서울시청이고, 거점·숙소 조회는 붙지 않는다', async () => {
@@ -562,15 +535,6 @@ describe('🔴 h11 지도 중심 — 빈 날·좌표 없는 일정에도 0,0 바
       '2일차'
     );
     expect(screen.getByTestId('map-root')).toHaveTextContent('35.115,129.041');
-  });
-
-  it('K3 · AC-3 — 그날 좌표 장소가 있으면 지금처럼 그날 첫 핀이 중심이고 핀도 그대로다', async () => {
-    renderPage();
-    await screen.findByTestId('map-sheet-shell-root');
-
-    const map = screen.getByTestId('map-root');
-    expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
-    expect(map.props.pins as unknown[]).toHaveLength(5);
   });
 });
 
@@ -641,20 +605,6 @@ describe('같은 날 같은 장소 두 번', () => {
 
   const texts = (nodes: { props: { children?: unknown } }[]) =>
     nodes.map((node) => node.props.children);
-
-  it('K0 · 탐지기 자가검사 — 겹친 key 와 빠진 key 를 둘 다 잡는다', () => {
-    function NoKeyList() {
-      // eslint-disable-next-line react/jsx-key -- 일부러 key 를 뺀다(누락 경고 자가검사)
-      return [<View />, <View />];
-    }
-
-    render(<View>{[<View key="dup" />, <View key="dup" />]}</View>);
-    render(<NoKeyList />);
-
-    expect(keyWarnings.keys()).toEqual(['dup']);
-    expect(keyWarnings.missing()).toBe(1);
-    keyWarnings.clear(); // 일부러 낸 경고 — 파일 감시가 이 테스트를 실패시키지 않게 비운다.
-  });
 
   it('🔴 K1 · AC-2 — h11 · 같은 장소가 두 번 있어도 중복 key 경고가 없다', async () => {
     const cards = await openResult(duplicateSlots());

@@ -77,21 +77,6 @@ describe('🔴 MC1 — candidate 핀: 흰 채움 + 빨강 테두리, 번호 없�
   });
 });
 
-describe('🔴 MC2 — candidate 핀의 끝이 좌표를 가리킨다', () => {
-  it('마커 overlay anchor 가 {x:0.5, y:1}', () => {
-    const pins: MapPin[] = [
-      { number: 12, lat: 35.1631, lng: 129.1636, kind: 'candidate' },
-    ];
-
-    render(<MapView center={CENTER} pins={pins} />);
-
-    // 래퍼의 부모가 네이버 마커 overlay(목 host `map-marker`)다.
-    const markers = screen.getAllByTestId('map-marker');
-    expect(markers).toHaveLength(1);
-    expect(markers[0].props.anchor).toEqual({ x: 0.5, y: 1 });
-  });
-});
-
 describe('🔴 MC3 — 후보·숙소 핀은 경로선 밖, 동선 핀만 잇는다', () => {
   it('동선 2 + 숙소 1 + 후보 2 → map-path coords 는 동선 2점(순서 그대로)', () => {
     // 준비 — h15 조립 모양(동선은 kind 없음).

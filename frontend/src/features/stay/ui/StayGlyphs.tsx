@@ -1,4 +1,10 @@
 import Svg, { Circle, Path } from 'react-native-svg';
+import {
+  WarningTriangleGlyph as SharedWarningTriangleGlyph,
+  MapPinGlyph as SharedMapPinGlyph,
+} from '@/shared/ui/glyphs';
+// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+export { BackChevronGlyph } from '@/shared/ui/glyphs';
 
 // 숙소 검색 결과(e02) 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/HomeGlyphs 패턴
 // 계승 · Figma 1837:2283). features 간 직접 import 금지(importBoundary 의도 — features/stay는
@@ -19,27 +25,6 @@ type GlyphProps = {
   size?: number;
   testID?: string;
 };
-
-// 앱바 뒤로가기(AC-10) — 표시만, 실동작 미배선(이번 범위 밖 — FAB·탭바와 같은 등급).
-export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M15 18L9 12L15 6"
-        stroke={INK}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
 
 // 필터 칩 '가격대'·'지역' 드롭다운 셰브론.
 export function ChevronDownGlyph({ size = 14, testID }: GlyphProps) {
@@ -107,37 +92,12 @@ export function WarningTriangleGlyph({
   tone = 'ink',
   testID,
 }: GlyphProps & { tone?: 'ink' | 'primary' }) {
-  const color = tone === 'primary' ? PRIMARY : INK;
   return (
-    <Svg
+    <SharedWarningTriangleGlyph
+      size={size}
+      color={tone === 'primary' ? 'primary' : 'ink'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M10 2.5L18.3333 16.6667H1.66667L10 2.5Z"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 7.5V11.6667"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 14.1667H10.0083"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -150,30 +110,12 @@ export function MapPinGlyph({
   tone = 'primary',
   testID,
 }: GlyphProps & { tone?: 'primary' | 'ink' }) {
-  const color = tone === 'ink' ? INK : PRIMARY;
   return (
-    <Svg
+    <SharedMapPinGlyph
+      size={size}
+      color={tone === 'ink' ? 'ink' : 'primary'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-    >
-      <Path
-        d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
-        stroke={color}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
-        stroke={color}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 

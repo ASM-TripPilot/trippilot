@@ -189,7 +189,7 @@ const POST_TRIP_PHASE: HomePhase = {
   trip: {
     badge: '여행 완료',
     badgeTone: 'success', // 초록(01b 확정) — badgeSub 없음(단일 배지)
-    ctaLabel: '회고 보기 ›', // 꺾쇠(›) 포함
+    ctaLabel: '회고 보기', // 라이브 생산자(resolveHomePhase)와 같은 문구 — 꺾쇠 없음(TRIP-1369)
     title: '부산 여행',
     meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13', // 12km=거리(INV-3 OK)
   },

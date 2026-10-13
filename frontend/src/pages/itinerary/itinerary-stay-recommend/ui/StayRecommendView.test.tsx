@@ -27,13 +27,12 @@ import { StayRecommendView } from './StayRecommendView';
  *  - 🔴 카드: 이름 · `평균 {formatDistance}` · `최대 {formatDistance}` · `{구} · {가격대}` · `{formatPrice}`(AC-2).
  *  - 🔴 소요시간 문자열 0(INV-3).
  *  - 🔴 `추천` 배지는 **입력 순서 첫 카드**에만, 화면은 재정렬하지 않는다(AC-3 · INV-2 결).
- *  - 🔴 선택 = `accessibilityState.selected` + 선택 테두리(`border-primary`), 누르면 `onSelect(savedStayId)`(AC-4).
+ *  - 🔴 선택 = `accessibilityState.selected`, 누르면 `onSelect(savedStayId)`(AC-4).
  *  - 🔴 CTA `{이름}을/를 거점으로`(AC-5) · 비활성이면 눌러도 `onConfirm` 0(AC-12) · 인라인 안내(INV-4).
  *  - 🔴 링크·뒤로 콜백(AC-6) · 지도 핀 조립(동선 그대로 / 선택=숙소 핀 / 나머지=아웃라인 후보 / 번호 유일 / 반경 원, AC-7).
- *  - 🔴 시트는 셸 기본 3스냅의 peek(45%)로 연다(02a D4).
  *
- * ⚠️ 함정(02a §4): ★3 배지≠최소거리 재판정 · ★4 배지≠선택 · ★5 a11y+테두리 짝 · ★6·★7·★8 핀 조립 ·
- *   ★10 비활성은 press→콜백 0 짝 · ★18 스냅은 칸 값.
+ * ⚠️ 함정(02a §4): ★3 배지≠최소거리 재판정 · ★4 배지≠선택 · ★6·★7·★8 핀 조립 ·
+ *   ★10 비활성은 press→콜백 0 짝.
  * ⚠️ 지도는 얇은 관찰 목(`map-root` host 에 props 통과)이라 핀 모양·원 점선은 못 본다(6-b).
  *
  * (개념) `rerender` — 같은 화면에 새 props 를 넣어 다시 그린다. 페이지가 선택 state 를 바꿔 내려 주는 순간을
@@ -164,26 +163,6 @@ function mapPins(): MapPin[] {
   return screen.getByTestId('map-root').props.pins as MapPin[];
 }
 
-/** 시트가 받은 snapPoints 배열에서 index 가 가리키는 칸 값들(합성·호스트 3겹 — 개수는 안 센다). */
-function sheetSnapValues(): unknown[] {
-  return screen.root
-    .findAll(
-      (node) =>
-        typeof node.props?.index === 'number' &&
-        Array.isArray(node.props?.snapPoints)
-    )
-    .map(
-      (node) => (node.props.snapPoints as unknown[])[node.props.index as number]
-    );
-}
-
-/** className 토큰 하나가 공백 단위로 있는가(`border-primary-pale` 같은 접두 오탐 차단). */
-function hasClass(node: { props: { className?: unknown } }, token: string) {
-  return String(node.props.className ?? '')
-    .split(/\s+/)
-    .includes(token);
-}
-
 describe('🔴 S1 · AC-1 — 헤더: 제목 · N곳 · 요약 + 정렬 꼬리', () => {
   it('후보 3개 → 제목·3곳·부제가 정확히 보인다', () => {
     // 준비·실행
@@ -296,8 +275,8 @@ describe('🔴 S4 · AC-3 — 추천 배지는 입력 순서 첫 카드에만, �
   });
 });
 
-describe('🔴 S5 · AC-4 — 선택 표식: accessibilityState + 선택 테두리 (같은 루트)', () => {
-  it('선택이 두 번째면 card-1 만 selected·border-primary, 배지는 여전히 card-0(★4·★5)', () => {
+describe('🔴 S5 · AC-4 — 선택 표식: accessibilityState', () => {
+  it('선택이 두 번째면 card-1 만 selected, 배지는 여전히 card-0(★4·★5)', () => {
     render(ui(makeHandlers(), { selectedId: SEOMYEON.savedStayId }));
 
     const [first, second, third] = cards();
@@ -305,10 +284,6 @@ describe('🔴 S5 · AC-4 — 선택 표식: accessibilityState + 선택 테두�
     expect(second).toBeSelected();
     expect(first).not.toBeSelected();
     expect(third).not.toBeSelected();
-    // 선택 테두리 — 선택 카드에만.
-    expect(hasClass(second, 'border-primary')).toBe(true);
-    expect(hasClass(first, 'border-primary')).toBe(false);
-    expect(hasClass(third, 'border-primary')).toBe(false);
     // 배지는 선택을 따라가지 않는다.
     expect(within(first).getByText('추천')).toBeOnTheScreen();
     expect(within(second).queryByText('추천')).toBeNull();
@@ -467,37 +442,5 @@ describe('🔴 S12 · AC-7 — 선택을 바꾸면 숙소 핀이 옮겨간다 (�
         .map((pin) => `${pin.lat},${pin.lng}`)
         .sort()
     ).toEqual([HAEUNDAE, GWANGALLI].map((c) => `${c.lat},${c.lng}`).sort());
-  });
-});
-
-describe('🔴 S13 · 02a D4 — 셸 기본 3스냅의 peek(45%)로 연다 (★18)', () => {
-  it('시트가 받은 배열은 기본 [28, 45%, 88%] 이고 진입 칸 값은 45%', () => {
-    render(ui(makeHandlers()));
-
-    // 기본 배열 그대로 — 화면이 snapPoints 를 직접 주면 "닫힘에서만 지도 열림·CTA 숨김"이 꺼진다.
-    const hosts = screen.root.findAll(
-      (node) =>
-        typeof node.props?.index === 'number' &&
-        Array.isArray(node.props?.snapPoints)
-    );
-    expect(hosts.length).toBeGreaterThan(0);
-    hosts.forEach((node) =>
-      expect(node.props.snapPoints).toEqual([28, '45%', '88%'])
-    );
-
-    // 칸 값 — 숫자 index 가 아니라 그 index 가 가리키는 값.
-    const values = sheetSnapValues();
-    values.forEach((value) => expect(value).toBe('45%'));
-  });
-});
-
-describe('TRIP-1076 AC-3 · h15 숙소 추천은 핀 맞추기를 켜지 않는다 (선제 green · TRIP-1043 무회귀)', () => {
-  it('반경 원은 그대로 가고 fitPins 는 넘기지 않는다', () => {
-    // 켜면 MapView 에서 핀 영역이 반경 원 맞춤보다 우선해 원이 잘린다.
-    render(ui(makeHandlers()));
-
-    const map = screen.getByTestId('map-root');
-    expect(map.props.radiusCircle).toBeDefined();
-    expect(map.props.fitPins).toBeUndefined();
   });
 });

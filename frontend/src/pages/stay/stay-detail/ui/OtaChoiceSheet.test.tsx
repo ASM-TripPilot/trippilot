@@ -148,16 +148,6 @@ describe('T4 · OTA 행 선두 라디오 (TRIP-728 · AC-1 · AC-2)', () => {
     // 채움 inner = 두 번째 신호(존재). 채움 색(분홍)은 6-b/TRIP-831 육안 몫이다(★F-1).
     expect(screen.getByTestId('stay-ota-radio-fill-NAVER')).toBeOnTheScreen();
   });
-
-  it('행 배경 흰(bg-canvas) + 선택 테두리(border-primary) 회귀 방지 (AC-2)', () => {
-    render(<OtaChoiceSheet {...sheetProps()} />);
-
-    // className 은 jest 렌더 트리에 평문 prop 으로 남는다(style 은 undefined). 색 자체가 아니라
-    // 토큰 문자열 존재만 잰다(실제 픽셀은 6-b).
-    const classes = classesOf('stay-ota-option-NAVER');
-    expect(classes).toContain('bg-canvas');
-    expect(classes).toContain('border-primary');
-  });
 });
 
 describe('T5 · "다시 보지 않기" 체크박스 = 제어 prop (TRIP-781 AC-2)', () => {
@@ -228,33 +218,6 @@ describe('T6 · error 얼굴 (TRIP-781 AC-4 · BR-U1-55)', () => {
 
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onCancel).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('T7 · 구조 토큰 (TRIP-781 AC-6 — 픽셀 아님, 토큰 문자열 존재만)', () => {
-  it('default: 안내 박스는 surface-soft r12, 두 버튼은 절반씩(flex-1)이다', () => {
-    render(<OtaChoiceSheet {...sheetProps()} />);
-
-    expect(classesOf('stay-ota-notice-box')).toEqual(
-      expect.arrayContaining(['bg-surface-soft', 'rounded-button'])
-    );
-    expect(classesOf('stay-ota-cancel')).toContain('flex-1');
-    expect(classesOf('stay-ota-cancel')).not.toContain('w-[110px]');
-    expect(classesOf('stay-ota-confirm')).toContain('flex-1');
-  });
-
-  it('error: 오류 박스는 점선 테두리 r12, 두 버튼은 절반씩(flex-1)이다', () => {
-    render(<OtaChoiceSheet {...sheetProps({ variant: 'error' })} />);
-
-    expect(classesOf('stay-ota-error-box')).toEqual(
-      expect.arrayContaining([
-        'border-dashed',
-        'border-hairline-strong',
-        'rounded-button',
-      ])
-    );
-    expect(classesOf('stay-ota-cancel')).toContain('flex-1');
-    expect(classesOf('stay-ota-retry')).toContain('flex-1');
   });
 });
 

@@ -1,5 +1,7 @@
 import type { ReactElement } from 'react';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+export { BackArrowGlyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-571 · j03 오늘의 회고 인라인 아이콘(react-native-svg). `*Glyphs.tsx` raw-hex 스캔 제외 관례
@@ -12,25 +14,9 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
  */
 
 const MUTED = '#9AA1AB';
-const INK = '#222222';
 const CORAL = '#FF385C';
 
 type GlyphProps = { size?: number; color?: string };
-
-/** ‹ 뒤로가기(헤더). */
-export function BackArrowGlyph({ size = 24 }: GlyphProps): ReactElement {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M15 18L9 12L15 6"
-        stroke={INK}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
 
 /** 위치 기록 없음 — 핀 위 사선(data-insufficient 지도 자리). */
 export function LocationOffGlyph({

@@ -17,7 +17,7 @@ import { useItineraryTabBack } from './useItineraryTabBack';
  * 보내는 순간 같은 화면이 또 막히는지(루프), 확정·로그아웃 이동이 조용히 삼켜지는지는 라우터만 안다.
  *
  * 편집기 대신 이 훅만 쓰는 탐침 화면을 꽂는다(편집기는 MSW·지도·스토어가 필요하다). 그래서 이 파일은
- * "ManualPlanPage 가 훅을 부르는가"를 보지 않는다 — 그건 `ManualPlanPage.hookMock.test.tsx` 몫이다.
+ * "ManualPlanPage 가 훅을 부르는가"를 보지 않는다 — 그건 `ManualPlanPage.integration.test.tsx` 「뒤로 제스처·하드웨어 뒤로도 일정 탭으로」 몫이다.
  *
  * 스와이프·하드웨어 뒤로가 보내는 액션은 각각 `router.dismiss()`(POP)·`router.back()`(GO_BACK)으로 흉내 낸다.
  * 실제 손가락 제스처의 모양은 jest 가 못 본다(6-b).

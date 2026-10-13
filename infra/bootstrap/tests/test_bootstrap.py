@@ -180,6 +180,28 @@ class BootstrapSecurityTests(unittest.TestCase):
                     self.assertTrue(allowed("iam:AttachRolePolicy", holder),
                                     f"{name}: {holder} 에 붙일 iam:AttachRolePolicy 가 없다")
 
+    def test_deployment_role_reads_only_this_environment_container_logs(self):
+        """수동 로그 수집 워크플로가 쓰는 읽기 권한 — 읽기뿐이고, 이 환경의 Container Insights 그룹뿐이다.
+
+        dev 는 파드 로그를 CloudWatch 로 보낸다(terraform `container_logs_enabled`, 보존 90일).
+        kubectl 은 지금 파드만 보지만 CloudWatch 는 죽은 파드·롤아웃 전 로그·시간 범위 질의가 된다.
+        `GetQueryResults`/`StopQuery` 는 리소스 수준 권한이 없어 `*` 여야 한다 — 그 문장엔 다른 액션이
+        끼면 안 된다(끼면 `*` 가 그 액션까지 넓힌다).
+        """
+        attached = self.resources["DeploymentExtraPolicy"]["Properties"]["PolicyDocument"]["Statement"]
+        read = next(item for item in attached if item["Sid"] == "ReadContainerInsightsLogs")
+        self.assertTrue(all(action in ("logs:DescribeLogStreams", "logs:FilterLogEvents",
+                                       "logs:GetLogEvents", "logs:StartQuery")
+                            for action in read["Action"]), read["Action"])
+        for resource in read["Resource"]:
+            self.assertIn(":log-group:/aws/containerinsights/trippilot-${Environment}/*", resource["Fn::Sub"])
+        results = next(item for item in attached if item["Sid"] == "ReadLogsInsightsQueryResults")
+        self.assertEqual(sorted(results["Action"]), ["logs:GetQueryResults", "logs:StopQuery"])
+        self.assertEqual(results["Resource"], "*")
+        # 관리형 정책 상한(6,144자) — 인라인 정책이 꽉 차서 여기로 넘긴 문장들이 또 꽉 차면 다음 사람이 막힌다
+        document = self.resources["DeploymentExtraPolicy"]["Properties"]["PolicyDocument"]
+        self.assertLess(len(json.dumps(document, separators=(",", ":"))), 6144)
+
     def test_role_inline_policy_stays_below_aws_character_limit(self):
         size = sum(len(json.dumps(item["PolicyDocument"], separators=(",", ":"))) for item in self.role["Policies"])
         self.assertLess(size, 10240)

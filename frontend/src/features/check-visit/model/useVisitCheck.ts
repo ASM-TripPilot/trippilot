@@ -20,11 +20,10 @@ import { OPTIMISTIC_VISIT_ID_PREFIX } from './visitStatus';
 /**
  * TRIP-565 · AC-1·AC-2·AC-5·skip — record 소관 방문 체크 훅의 낙관적 갱신 + 레코드 단위 롤백.
  *
- * ⚠️ `features/execution/model/useVisitCheck` 를 **import 하지 않는다**(01b Q2) — shape 가 다르고
- * (per-record 4상태 vs poi 집계), execution 테스트를 blast radius 로 끌어들이지 않으려는 것.
- * 패턴만 미러한다: 낙관 갱신(서버 응답 전에 캐시를 먼저 고치고 실패 시 되돌림) + **레코드 단위
- * 롤백**(통짜 스냅숏 복원이 아니라 그 레코드만 원복 — 동시 두 도착이 서로를 안 지운다, savedStays
- * W-2 회귀 방지) + 판별 유니온 결과.
+ * 허브(`pages/live/live-itinerary`)도 이 훅을 쓴다(TRIP-1357 · 결정 L) — 예전 허브 전용 사본(도착 뒤 재조회)은
+ * 지웠다. 허브의 arrive 뒤 동작이 "재조회 1회"에서 "응답으로 낙관 레코드 교체·재조회 0"으로 바뀐다.
+ * 패턴: 낙관 갱신(서버 응답 전에 캐시를 먼저 고치고 실패 시 되돌림) + **레코드 단위 롤백**(통짜 스냅숏 복원이
+ * 아니라 그 레코드만 원복 — 동시 두 도착이 서로를 안 지운다, savedStays W-2 회귀 방지) + 판별 유니온 결과.
  *
  * ★ 새 HTTP 함수를 만들지 않는다 — 생성 클라이언트의 4함수만 재사용한다(G5). 409/404 분류는
  * axios 를 직접 import 하지 않고 `@/shared/api` 의 판정 헬퍼(isAlreadyRegistered·isNotFound)로 한다.

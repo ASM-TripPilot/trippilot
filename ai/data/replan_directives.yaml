@@ -22,7 +22,7 @@
 # 상호명 기억으로 지어낸다 — KB-3 초안 41건 중 28건을 뺀 것이 정확히 그 이유다
 # (`planb_situation_kb.yaml` 헤더 기준 (2)).
 #
-# **SOLVER 는 아직 배선되지 않았다** (A-4 예정). 지금 이 키가 오면 사전이 인식은 하되
+# **SOLVER 는 RELAX·FILL_MORE 만 배선됐다**(Pace.SLOW·PACKED). 나머지는 A-4 예정 — 그 키가 오면 사전이 인식은 하되
 # 아무 효과가 없다 — 그 사실을 `unwired: true` 로 드러낸다. 정본이 "동작 중"으로
 # 서술하는 미배선을 만들지 않기 위해서다(TRIP-529 계열).
 #
@@ -120,6 +120,14 @@ directives:
     avoid_categories: [ACTIVITY, NATURE]
     aliases: [무리 안 되게, 체력이 안 돼, 힘든 건 말고, 많이 안 움직이는]
 
+  # FE 칩 '야외 피하기'(replanChoices.ts) — 사전에 없어 unknown 으로 버려졌다. INDOOR 가 실내를
+  # **올리는** 쪽이면 이것은 실외를 **내리는** 쪽이다. 실외 집합은 우천 보정의 RAIN_OUTDOOR 와 같다.
+  - key: AVOID_OUTDOOR
+    label: 야외 피하기
+    enforced_by: PROMPT
+    avoid_categories: [NATURE, NIGHT_VIEW, ACTIVITY]
+    aliases: [야외 피하기, 밖에 오래 있기 싫어, 바깥 활동 줄여줘]
+
   # ── RANKING — 코드가 거리로 판정 ──────────────────────────────────
   - key: NEARBY
     label: 가까운 곳으로
@@ -136,17 +144,18 @@ directives:
     enforced_by: RANKING
     aliases: [숙소 가까이 마무리, 돌아가기 편하게, 마지막은 숙소 근처]
 
-  # ── SOLVER — 어셈블리 파라미터 (A-4 배선 예정) ──────────────────────
+  # ── SOLVER — 어셈블리 파라미터 (RELAX·FILL_MORE 만 배선, 나머지 A-4 예정) ──────────────────────
   - key: RELAX
     label: 여유 있게
     enforced_by: SOLVER
-    unwired: true
+    # 배선됨 — 여행 속도 느긋하게(Pace.SLOW, 체류 ×1.4)로 집행한다(`_PACE_KEYS`).
+    # 피로·지연 사유의 암시 지시이기도 하다(BR-U4-47).
     aliases: [천천히 돌자, 급하지 않게, 여유롭게, 쉬엄쉬엄]
 
   - key: FILL_MORE
     label: 더 채워서
     enforced_by: SOLVER
-    unwired: true
+    # 배선됨 — 여행 속도 알차게(Pace.PACKED, 체류 ×0.9)로 집행한다(`_PACE_KEYS`).
     aliases: [알차게, 더 많이 넣어줘, 빡빡하게, 시간 남기지 말고]
 
   - key: EARLIER

@@ -217,19 +217,17 @@ describe('visitJudge (PBT-U10-F3)', () => {
       fc.property(arbEvents, (events) => {
         const { emits } = run(events);
         for (const e of emits.filter((x) => x.kind === 'ARRIVE')) {
-          const enterEv = events.find(
+          const enterIdx = events.findIndex(
             (ev) =>
               ev.type === 'enter' &&
               ev.slotKey === e.slotKey &&
               ev.at === e.occurredAt
           );
-          expect(enterEv).toBeDefined(); // ②
-          const nextExit = events.find(
-            (ev) =>
-              ev.type === 'exit' &&
-              ev.slotKey === e.slotKey &&
-              ev.at >= e.occurredAt
-          );
+          expect(enterIdx).toBeGreaterThanOrEqual(0); // ②
+          // 도착 "이후"에 일어난 exit 만 본다(배열 순서) — 시각이 같아도(dt=0) enter 보다 앞선 exit 는 체류를 끊지 않는다.
+          const nextExit = events
+            .slice(enterIdx + 1)
+            .find((ev) => ev.type === 'exit' && ev.slotKey === e.slotKey);
           if (nextExit) {
             expect(nextExit.at - e.occurredAt).toBeGreaterThanOrEqual(
               cfg.arriveDwellMs
@@ -237,7 +235,21 @@ describe('visitJudge (PBT-U10-F3)', () => {
           }
         }
       }),
-      { numRuns: 1000 }
+      {
+        numRuns: 1000,
+        // CI 에서 무작위로 터진 반례(seed -1626418428)를 고정한다 — 같은 시각(dt=0)에 exit 가 enter 보다
+        // 배열 앞에 오는 열. 도착 "이후"의 exit 가 아니라 "앞선" exit 를 집으면 체류 0분으로 잘못 읽힌다.
+        examples: [
+          [
+            [
+              exit('A', T0),
+              enter('A', T0),
+              { type: 'sample', at: T0, accuracyM: 5 },
+              enter('A', T0 + 3 * MIN),
+            ],
+          ],
+        ],
+      }
     );
   });
 

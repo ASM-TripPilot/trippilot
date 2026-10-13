@@ -298,18 +298,19 @@ def test_explicit_trigger_wins_over_derivation() -> None:
     assert out.trigger.payload == {"minutes": 40}
 
 
-def test_multiple_reasons_are_not_silently_dropped() -> None:
-    """PlanB 는 사유를 하나만 받는다 — 버리는 것을 밝힌다. 조용히 첫 번째만 쓰면
-    FE 가 칩 두 개를 눌렀는데 하나만 먹은 것을 알 방법이 없다."""
-    out, notes = _rag_request(reasons=["weather", "fatigue"])
+def test_multiple_reasons_pick_a_primary_by_priority_and_say_so() -> None:
+    """PlanB 는 사유를 하나만 받는다 — 순서가 아니라 우선순위로 대표를 고르고 밝힌다.
+    나머지 사유는 암시 지시로 일정에 닿는다(BR-U4-47)."""
+    out, notes = _rag_request(reasons=["fatigue", "weather"])
     assert out.reason == "weather"
-    assert any("planb_reason_truncated" in n and "2건" in n for n in notes), notes
+    assert out.trigger.kind is TriggerKind.WEATHER
+    assert any("planb_reason_primary" in n and "2건" in n for n in notes), notes
 
 
 def test_no_reason_falls_back_to_none_without_a_note() -> None:
     out, notes = _rag_request(reasons=[])
     assert out.reason == "none"
-    assert not any("truncated" in n for n in notes)
+    assert not any("planb_reason_primary" in n for n in notes)
 
 
 def test_planb_gets_a_share_of_the_request_budget() -> None:

@@ -208,7 +208,7 @@ class HttpScheduleAgentAdapter(
             preferenceProfile = input.preferenceProfile,
             requestMeta = input.requestMeta,
             lockedBlocks = input.lockedBlocks,
-            reasons = input.reasons,
+            reasons = AiReasonVocabulary.toAiAll(input.reasons),
             directives = input.directives,
             freeText = input.freeText,
             currentSlots = input.currentSlots.map {

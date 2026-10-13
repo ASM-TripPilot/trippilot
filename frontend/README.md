@@ -153,13 +153,16 @@ frontend/
 1. **PBT** → property(`fc.assert`)는 **하나도 지우지 않는다**(루트 CLAUDE.md — PBT는 차단 게이트). 같은 함수를 보는 PBT가 여러 파일이면 한 파일로 **합친다**.
 2. **개발 도구(`_dev` 프리뷰) 테스트** → **스모크 1파일만 남기고 지운다** — 프리뷰 화면이 뜨고, 키 장부에 중복이 없고, 없는 키는 splash로 떨어지는지만 본다(키별 렌더 없음). 운영 빌드에서 프리뷰를 막는 출시 계약도 같은 파일에 있다. 프리뷰는 사람이 눈으로 보는 도구라 세부 동작 검사는 실제 화면 테스트의 몫이다.
 3. **소스 스캔**(파일을 텍스트로 읽고 렌더하지 않는 테스트) — 기능이 구현·QA된 뒤의 회귀 감시는 스캔이 아니라 QA가 맡는다(TRIP-1145).
-   - **출시·보안 계약**(키·시크릿이 git에 안 들어감, 출시 빌드 설정, API 명세, 운영 빌드의 프리뷰 차단, 법정 동의·고지, 사진·공유 카드 서버 업로드 금지) → ESLint로 표현되면 **ESLint 규칙으로 옮기고** 규칙 발동을 `eslintReleaseRules.test.ts`의 `lintText` 탐침으로 지킨다. 표현 못 하면 **남긴다**. 지금 남은 스캔: `socialSdkSecrets`(옛 `mapBridgeStructure` A-3 합본)·`releaseBuildConfig`(옛 `socialSdkConfigPlugin` 합본)·`openapiContract`·`devPreviewReleaseGate`·`photoUploadGuard`(옛 `recordPhotoBinaryGuard`+`shareCardStructure` 합본)·`locationConsentPutBodyOwnership`·`deletionScopeStructure`·`eslintReleaseRules`(옛 `importBoundaryLayers` 중 출시·보안 규칙 탐침만 — FSD 층·딥 import 탐침은 TRIP-1350 에서 지움)(모두 `src/__tests__`).
+   - **출시·보안 계약**(키·시크릿이 git에 안 들어감, 출시 빌드 설정, API 명세, 운영 빌드의 프리뷰 차단, 법정 동의·고지, 사진·공유 카드 서버 업로드 금지) → ESLint로 표현되면 **ESLint 규칙으로 옮기고** 규칙 발동을 `eslintReleaseRules.test.ts`의 `lintText` 탐침으로 지킨다. 표현 못 하면 **남긴다**. 지금 남은 스캔: `socialSdkSecrets`(옛 `mapBridgeStructure` A-3 합본)·`releaseBuildConfig`(옛 `socialSdkConfigPlugin` 합본)·`openapiContract`·`devPreviewReleaseGate`·`photoUploadGuard`(옛 `recordPhotoBinaryGuard`+`shareCardStructure` 합본)·`locationConsentPutBodyOwnership`·`deletionScopeStructure`·`eslintReleaseRules`(옛 `importBoundaryLayers` 중 **출시·보안 규칙 발동 탐침만** — FSD 층·딥 import 탐침은 TRIP-1350 에서 지웠고, FSD 층 구조는 ESLint zone·Steiger(`pnpm fsd`)가 지킨다)(모두 `src/__tests__`).
    - **구조 규칙**(층·슬라이스·세그먼트·props-only 시트 등) → 스캔을 두지 않는다. 층 방향은 ESLint zone, 나머지는 Steiger(TRIP-1158).
    - **기능 회귀**(이미 지운 것의 재등장, 화면 금칙어·소요시간 글자, 바텀시트 prop 결합 등) → 스캔을 두지 않는다. QA가 본다(실화면 QA는 `trippilot-sim-qa` 스킬 — Maestro 묶음은 2026-10-12 삭제).
+   - **출시 게이트로 남기는 생김새 검사 4건**(이 목록 밖의 생김새 단언은 아래 판정 4의 "두지 않는다" 대상이다): ① 버튼 role 전수 census(App Store 2.1) · ② 애플 로고 SVG Path `d`(Apple HIG) · ③ 계정 삭제 고지 9항목 잘림 없음(BR-U6-25) · ④ 실결함 폴링 심판 1 `it`(`DraftPage` C2 · `MyTripsList` error 정지). 출시 심사·법정 고지·실결함 재발을 막는 것이라 jest 에 남긴다(TRIP-1366 결정 D).
    - 새 스캔을 더하기 전에 같은 금지를 ESLint `no-restricted-imports`·`no-restricted-syntax`로 표현할 수 있는지 먼저 본다.
 4. **같은 화면을 여러 파일이 테스트**(`.select.`·`.errors.`·`.apple.` 같은 티켓·관점 접미사) → 화면 단위 1 + 통합 1로 **합친다**. 관점은 `describe` 블록으로 보존하고, 티켓 번호(`TRIP-####`)는 테스트 이름이 아니라 주석으로 옮긴다(합치며 새로 붙이는 바깥 `describe` 기준 — 옮겨 온 안쪽 `describe`·`it` 이름의 번호까지 고쳐 쓰지는 않는다). 같은 동작을 보는 `it`은 하나만 남긴다.
    - **"같은 동작"은 겉보기 포함이 아니라 뮤테이션으로 판정한다** — 지울 `it`이 잡는 뮤테이션을 남는 `it`에 심어 red일 때만 지운다. 입력·단언이 포함돼 보여도 실제로 잡는 결함이 다를 수 있다.
-   - **같은 파일 안에서만** 지운다. 단위↔통합 사이 겹침은 둘 다 남긴다 — 단위는 행 수·문구·토큰 같은 세부를, 통합은 배선을 본다.
+   - **같은 파일 안에서만** 지운다. 단위↔통합 사이 겹침은 둘 다 남긴다 — 단위는 행 수·문구·콜백·상태 전이를, 통합은 배선을 본다.
+   - **생김새 단언은 두지 않는다** — className 토큰·레이아웃 수치·SVG stroke/path·트리 순서·Figma 정합 단언은 단위에도 통합에도 두지 않는다(위 "출시 게이트로 남기는 생김새 검사 4건"만 예외). 생김새 회귀는 실화면 테스트가 잡는다 — `trippilot-sim-qa` 스킬 · 6-b 육안 · Figma parity QA(TRIP-1366 결정 A).
+   - **통과형 목 위에서 prop 전달만 보는 `it` 은 두지 않는다** — gorhom 바텀시트·네이버 지도·드래그리스트 목은 어떤 prop 을 줘도 children 을 그대로 그려서(`.claude/rules/repo-traps.md` 바텀시트 절) prop 전달 단언은 실제 동작을 못 지킨다. 실기 결함에서 나온 것도 실화면이 잡는다(결정 B).
    - 옛 파일은 `git rm`으로 지운다(추적 파일 전수를 여는 스캔이 있어 작업트리에서만 지우면 ENOENT).
    - **소요시간 비표시(INV-3) 렌더 테스트는 시간·거리 데이터를 그리는 화면(일정·경로)에만 둔다.** 받는 데이터에 시간·거리 재료가 없는 화면(담은 장소·고르기·확인 대화상자 등)의 "분·시간·소요 글자 0건" 테스트는 지운다 — 일어날 수 없는 일을 지키는 테스트이고, 코드 쪽 `duration` 금지는 서버 DTO(INV-3)와 QA 몫이다.
 5. 그 밖(순수 함수 단위 테스트 등) → **남긴다**.
@@ -169,9 +172,9 @@ frontend/
 줄 수 목표는 두지 않는다(필요한 테스트까지 지우는 압력이 된다). 대신 두 가지를 모두 지킨다.
 
 - **착수 전 잡히던 뮤테이션을 전부 유지** — 정리하는 칸마다 착수 전에 심판이 잡는 뮤테이션을 심어 두고, 정리 뒤에도 전부 red인지 확인한다. **칸 단위의 주 심판은 이것이다.**
-- **합산 근사 줄 커버리지 하락 2%p 이내** — 기준선 91.64%(2026-09-30 develop `5feef8b0`) → 89.64% 이상. 화면 한 칸의 대상 소스는 전체의 몇 %라 칸 하나로는 이 수치가 거의 움직이지 않는다(합산 근사 줄 커버리지 = 파일마다 두 버킷 중 더 많이 덮은 쪽을 골라 합친 전역 비율). 그래서 전역 수치는 배치 누적 감시용이고, 칸마다 **대상 소스 파일별 covered 전후**를 함께 적는다.
+- **합산 근사 줄 커버리지 하락 2%p 이내** — 기준선 93.73%(2026-10-12 develop `1bdd5567`, `measure.sh` 산식) → 91.73% 이상. 화면 한 칸의 대상 소스는 전체의 몇 %라 칸 하나로는 이 수치가 거의 움직이지 않는다(합산 근사 줄 커버리지 = 파일마다 두 버킷 중 더 많이 덮은 쪽을 골라 합친 전역 비율). 그래서 전역 수치는 배치 누적 감시용이고, 칸마다 **대상 소스 파일별 covered 전후**를 함께 적는다.
 
-측정 도구(`scripts/test-measure.sh`·`test-classify.py`)는 TRIP-1138 정리가 끝나 2026-10-12에 지웠다 — 다시 재야 하면 git 이력에서 되살린다.
+측정 도구(`scripts/test-measure.sh`·`test-classify.py`)는 TRIP-1138 정리가 끝나 2026-10-12에 지웠다 — 다시 재야 하면 git 이력에서 되살린다(`measure.sh` 사본은 커밋되지 않는 로컬 작업폴더 `frontend/_workspace/20260930-test-normalization/measure.sh` — 메인 체크아웃에만 있다).
 
 ### PBT 작성 규칙
 
@@ -201,6 +204,7 @@ pnpm lint && pnpm tsc --noEmit
 - **`ios/`·`android/` 네이티브 프로젝트는 커밋하지 않는다** — prebuild 산출물이며 EAS 원격 빌드에서 재현된다(CNG). `.gitignore`에 포함.
 - EAS Build 프로파일 3종: development / preview / production (`eas.json`). CI 성공 후 수동 트리거.
 - 네이티브 모듈 추가(지도 SDK·expo-location·expo-notifications 등)는 EAS 재빌드 필요, 순수 JS/TS 변경은 OTA 대상.
+- **운영 빌드 전 EAS 환경변수 2개를 확인한다**(TRIP-1370) — `EXPO_PUBLIC_SENTRY_DSN`(크래시 수집 주소)·`SENTRY_AUTH_TOKEN`(소스맵·dSYM 업로드, secret). DSN 이 비면 `initSentry` 가 에러 없이 꺼져 크래시가 안 쌓인다(빌드는 성공하므로 이 줄이 심판이다). token 이 없으면 **운영 iOS 빌드가 실패한다** — Sentry Xcode 스크립트가 업로드 실패를 `error:` 로 끝내기 때문이다(`SENTRY_ALLOW_FAILURE=true` 로 넘길 수 있으나 그러면 업로드 실패가 조용해져 쓰지 않는다). 값은 리포·채팅에 적지 않는다(`.env.example` 은 키 이름만).
 
 ## 문서
 
