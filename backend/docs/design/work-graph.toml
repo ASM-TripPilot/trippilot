@@ -2912,7 +2912,10 @@ note = """
 **진행(2026-10-13) — 켜기로 했다(사용자 결정, 출시 뒤라 로그 유실이 실제 위험이다).** 막고 있는 것은
 bootstrap 역할 정책 재등록 하나다: 계정의 인라인 정책이 리포 예제보다 14개 액션 뒤처져 있고 전부
 `role/trippilot-dev-cloudwatch-pod` 대상이다(2026-10-13 실측 diff, 삭제 0). 사람이 `aws iam put-role-policy` 를
-한 번 실행하면 → `aws-bootstrap.yml` → `container_logs_enabled = true` → 배포 순서로 간다. 그 역할은 아직 없다.
+한 번 실행하면 → `aws-bootstrap.yml` → `container_logs_enabled = true` → 배포 순서로 간다.
+**같은 날 진행**: 사용자가 정책을 재등록했고 첫 bootstrap 은 **롤백됐다** — #885 가 관리형 정책
+`DeploymentExtraPolicy` 의 `Description`(고칠 수 없는 속성)을 바꿔 둔 탓이다. 설명을 배포된 값으로 되돌려(#1085)
+다시 돌렸고 스택이 `UPDATE_COMPLETE`, `trippilot-dev-cloudwatch-pod` 역할이 생겼다. 남은 것은 tfvars 를 켜는 PR 과 배포다.
 증상(2026-10-03 팀원 보고): api-dev 를 테스트 중인데 **로그 확인이 안 된다**.
 
 구조상 맞는 상태다 — 차트가 `OTEL_SDK_DISABLED=true` 로 배포하고 수집기를 프로비전하지 않는다
@@ -3758,6 +3761,9 @@ status = "todo"
 migration = true
 touches = [
   "backend/modules/assistant",
+  "backend/app/build.gradle.kts",
+  "backend/app/src/main/resources/application.yml",
+  "backend/app/src/test/kotlin/com/trippilot/app/AccountExportIT.kt",
   "backend/settings.gradle.kts",
   "backend/app/src/main/resources/db/migration",
   "backend/docs/design/openapi.yaml",
@@ -3770,7 +3776,7 @@ note = """
 - `:modules:assistant` 신설. 다른 모듈은 이 모듈을 부르지 않는다(앱만 부른다)
 - 테이블 **넷** — FD 의 `assistant_session`·`assistant_message`·`assistant_proposal` + NFR 의
   `assistant_usage_daily`(COST-U8-01), 그리고 `assistant_message` 에 관측용 컬럼 넷(OBS-U8-01: `outcome`·
-  `match_route`·`llm_calls`·`latency_ms`). 번호는 착수 시 최신 + 1(지금 V2.63)
+  `match_route`·`llm_calls`·`latency_ms`). 번호는 착수 시 최신 + 1(2026-10-13 기준 최신이 V2.63 이라 다음 빈 번호는 V2.64)
 - 리미터는 계정 단위 `pg_advisory_xact_lock` 안에서 센다(SEC-U8-01) · 서비스 전역 월 LLM 호출 상한과 그때의
   "버튼 모드" 강등(COST-U8-04·REL-U8-02)
 - **계정 삭제 요청 즉시 파기** — `auth.AccountDeletionRequested` 구독(DATA-U8-02). FK CASCADE 만으로는 지워지지
@@ -3778,8 +3784,9 @@ note = """
 - ShedLock 청소 잡 둘 — 대화 보존(마지막 턴 후 90일) · 사용량 40일
 - `/me/export` 응답에 도우미 절(DATA-U8-06) — 응답 조립은 `backend/app` 이 하고 각 모듈이 자기
   `AccountDataContributor` 를 낸다(archive·auth·trip 선례). 즉 **assistant 모듈 안에 기여자를 하나 둔다**.
-  모듈 밖에서 바뀌는 것은 `openapi.yaml` 의 `/me/export` 설명뿐이다. 계정 삭제 이벤트도 auth 의 공개 api 에
-  이미 있어 구독에 auth 변경이 필요 없다
+  모듈 밖에서 바뀌는 것은 `openapi.yaml` 의 `/me/export` 설명과 **`AccountExportIT`** 다 — 그 테스트가 절 목록을
+  정확히 고정하고 있어(`consents·profile·savedStays·trips·visits`) 여섯 번째 기여자가 생기면 같은 PR 에서 고쳐야 한다.
+  계정 삭제 이벤트는 auth 의 공개 api 에 이미 있어 구독에 auth 변경이 필요 없다
 - 디스패치 · 템플릿 응답 가드레일 · openapi `assistant` 태그(세션·턴·제안 적용·이력 삭제)
 
 AI 대화 경계(`POST /ai/v1/dialogue/interpret`)는 상대 미구현([[U8-AI-DIALOGUE]])이라 페이크로 먼저 개발한다 —
