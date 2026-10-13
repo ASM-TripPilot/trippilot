@@ -1016,6 +1016,24 @@ _REASON_TO_TRIGGER: Mapping[str, TriggerKind] = {
     # fatigue·none → MANUAL (사용자 사정)
 }
 
+# 사유가 여럿이면 PlanB(트리거·KB 질의)에 줄 **대표 사유** 하나를 이 순서로 고른다 — 장소에
+# 못 가는 사유(날씨·휴무)가 사용자 사정(지연·피로)보다 일정을 더 크게 바꾼다. 나머지 사유는
+# 버리지 않는다 — 아래 암시 지시로 전부 일정에 닿는다. 표에 없는 사유는 맨 뒤.
+_REASON_PRIORITY = ("weather", "closed", "fully_booked", "canceled", "delay", "fatigue")
+
+# 사유 → 암시 지시 (u4 business-rules BR-U4-47). **표는 여기 한 곳이다.** 값은 지시 사전
+# (`replan_directives.yaml`) 키라 사용자가 칩으로 고른 것과 같은 기구를 탄다 — 새 기구 없음.
+# 사용자가 같은 축(`enforced_by`)을 이미 정했으면 그 축의 암시 지시는 얹지 않는다(사용자 우선).
+# 휴무·마감·취소의 "대상 장소 제외"는 `excluded_poi_ids` 가 이미 한다 — 여기선 근처 대체만.
+_REASON_IMPLIED_DIRECTIVES: Mapping[str, tuple[str, ...]] = {
+    "fatigue": ("LESS_MOVE", "AVOID_STRENUOUS", "RELAX"),
+    "delay": ("LESS_MOVE", "RELAX"),
+    "weather": ("INDOOR",),
+    "closed": ("NEARBY",),
+    "fully_booked": ("NEARBY",),
+    "canceled": ("NEARBY",),
+}
+
 # 부정 표현 — 있으면 임베딩 매칭을 건너뛴다. 임베딩은 부정을 못 읽어 "카페는 이제 그만"이
 # ADD_CAFE 로 잡혀 카페가 **늘었고**, 부정 뒤만 떼어 매칭하면 "가고 싶어" 같은 빈 술어가
 # 엉뚱한 지시(ACTIVITY_FOCUS)에 붙었다(2026-10-05 실측). 부정문은 번역 LLM 과 PlanB 선택
@@ -1035,6 +1053,10 @@ def _exact_alias(text: str, specs: Sequence[DirectiveSpec]) -> tuple[DirectiveSp
 # RANKING 지시 중 "가까운 데로" 로 집행하는 것. END_NEAR_STAY(숙소 근처 마무리)는 마지막
 # 슬롯만 당겨야 해서 거리 감점으로 못 푼다 — 무효로 밝힌다.
 _NEAR_KEYS = frozenset({"NEARBY", "LESS_MOVE"})
+
+# SOLVER 지시 중 배선된 것 — "여유 있게"는 여행 속도 느긋하게(`Pace.SLOW`, 체류 ×1.4)로
+# 집행한다. 체류가 길어지면 같은 창에 방문이 줄어든다(`PACE_STAY_RATIO` 실측 8→7슬롯).
+_SLOW_KEYS = frozenset({"RELAX"})
 
 # 자유 입력 번역(A-3, 경량 티어) 마감 — 요청 예산의 15% 와 이 값 중 작은 쪽. PlanB·점수 몫을
 # 덜 깎으려고 짧게 둔다. 넘기면 지시 없이 진행하고 원문은 PlanB 가 읽는다(INV-4).
@@ -1073,11 +1095,13 @@ def _replan_rag_request(
     저장 장소·취향 확정값이 다 온다 — PlanBAgent 가 원래 받도록 설계된 재료다.
     """
     reasons = [r for r in request.reasons if r]
+    reason = min(reasons, key=lambda r: (
+        _REASON_PRIORITY.index(r) if r in _REASON_PRIORITY else len(_REASON_PRIORITY),
+    ), default="none")
     if len(reasons) > 1:
-        # PlanB 는 사유를 하나만 받는다. 버리는 것을 **밝힌다** — 조용히 첫 번째만
-        # 쓰면 FE 가 칩 두 개를 눌렀는데 하나만 먹은 것을 알 방법이 없다.
-        notes.append(f"planb_reason_truncated: {reasons[0]} 사용 / {len(reasons)}건 수신")
-    reason = reasons[0] if reasons else "none"
+        # PlanB 는 사유를 하나만 받는다 — 대표를 밝힌다. 나머지는 암시 지시로 일정에 닿는다
+        # (`_REASON_IMPLIED_DIRECTIVES`, 노트 `planb_reason_implied`).
+        notes.append(f"planb_reason_primary: {reason} 사용 / {len(reasons)}건 수신")
 
     if request.trigger is not None:
         trigger = TriggerParams(
@@ -1725,7 +1749,7 @@ class WiredItineraryOrchestrator:
         # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.
         t0 = self._clock.monotonic_ms()
 
-        resolved, unknown, prefer, avoid, near, add_one = self._replan_directives(
+        resolved, unknown, prefer, avoid, near, add_one, slow = self._replan_directives(
             request, notes, trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
 
         transport = _token_or(
@@ -1819,6 +1843,7 @@ class WiredItineraryOrchestrator:
             avoid_categories=avoid,
             add_one_categories=add_one,
             prefer_near=near,
+            pace=Pace.SLOW if slow else None,
             not_before=not_before,
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
@@ -1847,8 +1872,12 @@ class WiredItineraryOrchestrator:
         self, request: schemas.ReplanRequest, notes: list[str], *,
         trace_id: TraceId, now: datetime, deadline_ms: int,
     ) -> tuple[list[str], list[str], frozenset[PoiCategory], frozenset[PoiCategory], bool,
-               frozenset[PoiCategory]]:
-        """칩 + 자유입력 → (해석분, 미지분, 선호, 회피, 가까운 데로, 한 곳 추가).
+               frozenset[PoiCategory], bool]:
+        """칩 + 자유입력 + 사유 → (해석분, 미지분, 선호, 회피, 가까운 데로, 한 곳 추가, 여유).
+
+        사유는 암시 지시(`_REASON_IMPLIED_DIRECTIVES`)로 **합집합**으로 얹는다 — 사용자 지시가
+        같은 축(`enforced_by`, 한 곳 추가 제외)을 이미 정했으면 그 축은 사용자 것이 이긴다.
+        해석분(`resolved_directives`)은 사용자 지시만이다 — 암시분은 노트로 밝힌다.
 
         `cardinality: ONE` 지시(ADD_FOOD·ADD_CAFE)는 `prefer` 에 접지 않고 `add_one` 으로
         따로 간다 — 접으면 "카페 넣어줘"가 "하루를 카페로"와 같은 기구를 타서 남은 하루가
@@ -1866,9 +1895,11 @@ class WiredItineraryOrchestrator:
         늘려야 하나"와 "솔버를 열어야 하나"를 못 가른다.
         """
         if not self._directives:
-            if request.directives or request.free_text:
+            if request.directives or request.free_text or any(
+                    r in _REASON_IMPLIED_DIRECTIVES for r in request.reasons):
                 notes.append("directive_dictionary_absent")
-            return [], list(request.directives), frozenset(), frozenset(), False, frozenset()
+            return ([], list(request.directives), frozenset(), frozenset(), False, frozenset(),
+                    False)
 
         known, unknown = resolve_chips(request.directives, self._directives)
         specs = list(known)
@@ -1900,14 +1931,23 @@ class WiredItineraryOrchestrator:
             seen = {s.key for s in specs}
             specs += [s for s in matched if s.key not in seen]
 
+        # 부정문을 못 풀었으면 카테고리 축은 비워 둔다 — "카페는 그만"을 못 읽은 채 우천 INDOOR 가
+        # 카페를 올리면 원문과 정반대가 된다. 원문은 PlanB 선택 프롬프트가 읽는다.
+        negated = bool(request.free_text and _NEGATION.search(request.free_text))
+        implied = self._reason_implied(request.reasons, specs, notes, hold_prompt=negated)
+
         prefer: set[PoiCategory] = set()
         avoid: set[PoiCategory] = set()
         add_one: set[PoiCategory] = set()
         near = False
+        slow = False
         ineffective: list[str] = []
         for spec in specs:
             if spec.unwired:
                 ineffective.append(spec.key)
+                continue
+            if spec.key in _SLOW_KEYS:
+                slow = True
                 continue
             if spec.enforced_by == "RANKING":
                 # 종전엔 RANKING 셋이 인식만 되고 효과도 노트도 없었다(2026-10-05 실측).
@@ -1934,8 +1974,54 @@ class WiredItineraryOrchestrator:
             add_one -= cancelled
             avoid -= cancelled
         add_one -= prefer  # 하루 전환이 이미 전원 가산하면 한 곳 추가는 할 일이 없다
+        # 암시 지시는 사용자 것 **뒤에** 얹는다 — 같은 축이면 `_reason_implied` 가 이미 뺐고,
+        # 사용자 "한 곳 추가" 카테고리는 건드리지 않는다(우천 INDOOR 가 카페 전원을 올리면
+        # "카페 한 곳"이 하루 전환에 먹혀 `add_one` 이 비워진다).
+        for spec in implied:
+            if spec.key in _SLOW_KEYS:
+                slow = True
+            elif spec.key in _NEAR_KEYS:
+                near = True
+            else:
+                prefer |= _categories_of(spec.prefer_categories) - add_one
+                avoid |= _categories_of(spec.avoid_categories) - add_one
         return ([s.key for s in specs], list(unknown), frozenset(prefer), frozenset(avoid),
-                near, frozenset(add_one))
+                near, frozenset(add_one), slow)
+
+    def _reason_implied(
+        self, reasons: Sequence[str], user: Sequence[DirectiveSpec], notes: list[str], *,
+        hold_prompt: bool = False,
+    ) -> tuple[DirectiveSpec, ...]:
+        """사유 → 암시 지시(BR-U4-47). 사용자가 정한 축은 건너뛰고, 건 것·건너뛴 것을 밝힌다.
+
+        축을 정하는 것은 **효과 있는** 사용자 지시뿐이다 — 미배선·무효(`END_NEAR_STAY`) 칩이
+        축을 잡으면 사용자 것도 암시 것도 안 먹는 상태가 "사용자 우선"으로 보고된다.
+        """
+        table = index_of(self._directives)
+        taken = {s.enforced_by for s in user
+                 if s.cardinality != "ONE" and not s.unwired
+                 and (s.enforced_by != "RANKING" or s.key in _NEAR_KEYS)}
+        if hold_prompt:
+            taken.add("PROMPT")
+        have = {s.key for s in user}
+        out: list[DirectiveSpec] = []
+        skipped: list[str] = []
+        for key in dict.fromkeys(k for r in reasons for k in _REASON_IMPLIED_DIRECTIVES.get(r, ())):
+            spec = table.get(key)
+            if spec is None:  # 표와 사전이 어긋났다 — 조용히 무효가 되지 않게
+                notes.append(f"planb_reason_implied_missing: {key}")
+                continue
+            if key in have:
+                continue
+            if spec.enforced_by in taken:
+                skipped.append(key)
+                continue
+            out.append(spec)
+        if out:
+            notes.append(f"planb_reason_implied: {','.join(s.key for s in out)}")
+        if skipped:
+            notes.append(f"planb_reason_implied_skipped: {','.join(skipped)} (사용자 지시 우선)")
+        return tuple(out)
 
     def _translate_free_text(
         self, text: str, notes: list[str], *, trace_id: TraceId, now: datetime,

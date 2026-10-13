@@ -249,7 +249,9 @@ def test_풀에_카페가_없으면_한_곳_추가도_못_닿는다고_밝힌다
     """ONE 지시는 prefer 가 아니라 add_one 으로 가므로 노트가 빠지면 침묵 실패다(리뷰 재현)."""
     body, _ = _replan(directives=["ADD_CAFE"])
 
-    assert "directive_no_candidates: CAFE" in body["notes"], body["notes"]
+    # 기본 사유(weather)의 암시 INDOOR 가 다른 카테고리를 함께 실을 수 있다 — CAFE 가 있는지만 본다.
+    assert any(n.startswith("directive_no_candidates: ") and "CAFE" in n.split(": ")[1].split(",")
+               for n in body["notes"]), body["notes"]
 
 
 def test_PlanB_순위에서_한_곳_추가_카테고리는_첫_1건만_남긴다() -> None:
