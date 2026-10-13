@@ -686,7 +686,7 @@ class AssistantTurnServiceTest : StringSpec({
                 acc,
                 slots = names.mapIndexed { i, name -> plannedSlot(today, i, "1${i}:00", name, violation = "영업시간과 맞지 않아요".takeIf { i % 2 == 0 }, distance = "1.2km".takeIf { i % 2 == 1 }) },
                 hasItinerary = names.isNotEmpty(), reading = WeatherReading(40, "호우주의보", start, stale = false).takeIf { !broken },
-            ).apply { failPlan = broken && names.size > 2; failWeather = broken }
+            ).apply { failPlan = broken && names.size > 2; failItinerary = broken && names.size % 2 == 0; failWeather = broken }
             val context = DispatchContext(
                 acc, tripId.takeIf { hasTrip }, tripContext.takeIf { hasTrip }, hasTrip && inTrip, surface,
                 mapOf("destination" to said, "place" to said), start,

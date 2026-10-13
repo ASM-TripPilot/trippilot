@@ -125,6 +125,16 @@ class QueryCardsTest : StringSpec({
         fixes shouldContainExactly listOf("2일차 일정이 비어 있어요" to "OPEN_REGENERATE", "3일차 일정이 비어 있어요" to "OPEN_REGENERATE")
     }
 
+    /** 일정 요약을 못 읽은 것은 "일정이 없다"가 아니다 — 없다고 하면 있는 일정을 두고 만들라고 권한다(BR-U8-16). */
+    "진행 검토 — 일정 요약을 못 읽으면 없다고 하지 않고 못 봤다고 한다" {
+        val card = cards(FakeTripData(acc, slots = listOf(plannedSlot(d1, 0, "10:00", "해변"))).apply { failItinerary = true }).review(ctx())
+
+        card.text shouldBe "일부 정보를 확인할 수 없어 확인된 범위만 정리했어요."
+        rows(card.payload, "summary").last() shouldBe ("일정" to "확인할 수 없어요")
+        problems(card.payload).map { it["reason"] } shouldBe emptyList() // 못 본 일정의 문제를 짓지 않는다
+        card.nextActions.single().type shouldBe "OPEN_ITINERARY"
+    }
+
     /** 일정이 없다는 것을 확인했으면, 슬롯을 못 읽어도 답에 구멍은 없다 — "일부를 못 봤다"고 하지 않는다. */
     "진행 검토 — 일정이 없음을 확인했으면 슬롯 조회 실패는 구멍이 아니다" {
         val card = cards(FakeTripData(acc, hasItinerary = false).apply { failPlan = true }).review(ctx())
@@ -189,6 +199,8 @@ class QueryCardsTest : StringSpec({
         evening.nextActions.single().type shouldBe "OPEN_ITINERARY"
 
         cards(data).nextSlot(ctx(now = Instant.parse("2026-11-04T03:00:00Z"))).text shouldBe "남은 일정이 없어요."
+        // 만드는 중인지를 못 읽었으면 "없다"고 단정하지 않는다
+        cards(data.apply { failItinerary = true }).nextSlot(ctx(now = Instant.parse("2026-11-04T03:00:00Z"))).text shouldBe "지금 일정을 확인할 수 없어요."
         cards(FakeTripData(acc, hasItinerary = false)).nextSlot(ctx()).nextActions.single().type shouldBe "OPEN_ITINERARY_METHOD"
     }
 

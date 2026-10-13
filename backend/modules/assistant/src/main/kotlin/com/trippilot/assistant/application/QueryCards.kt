@@ -41,8 +41,7 @@ class QueryCards(
         val trip = requireNotNull(ctx.trip)
         val tripId = requireNotNull(ctx.tripId)
         // 못 읽은 것과 없는 것을 가른다 — 못 읽었는데 "없다"고 하면 거짓이다(BR-U8-16).
-        val current = runCatching { Loaded(itineraries.findCurrent(ctx.accountId, tripId)) }
-            .onFailure { log.warn("도우미 진행 검토 — 일정 요약 조회 실패. type={}", it.javaClass.simpleName) }.getOrNull()
+        val current = loadCurrent(ctx)
         val slots = runCatching { plans.findPlanSlots(ctx.accountId, tripId) }
             .onFailure { log.warn("도우미 진행 검토 — 계획 슬롯 조회 실패. type={}", it.javaClass.simpleName) }.getOrNull()
         val itinerary = current?.value
@@ -105,7 +104,7 @@ class QueryCards(
         val slots = planned(ctx) ?: return cannotRead()
         // 슬롯이 0건인 것은 셋 중 하나다 — 일정이 없다 · 만드는 중이다 · 있는데 비었다. 뭉개면 만드는 중에 "일정이 없다"고 한다.
         if (slots.isEmpty()) {
-            val current = runCatching { Loaded(itineraries.findCurrent(ctx.accountId, requireNotNull(ctx.tripId))) }.getOrNull() ?: return cannotRead()
+            val current = loadCurrent(ctx) ?: return cannotRead()
             return when (current.value?.generationState) {
                 null -> noItinerary()
                 "PARTIAL" -> AssistantTemplates.handoff("일정을 만드는 중이에요.", viewItinerary)
@@ -115,9 +114,11 @@ class QueryCards(
         val today = LocalDate.ofInstant(ctx.now, TRAVEL_ZONE)
         val nowTime = LocalTime.ofInstant(ctx.now, TRAVEL_ZONE)
         val next = slots.firstOrNull { it.date > today || (it.date == today && it.startAt >= nowTime) }
-            // 생성이 아직 돌고 있으면 뒤 일자가 곧 온다 — "남은 일정이 없다"고 하지 않는다.
-            ?: return if (generating(ctx)) AssistantTemplates.handoff("일정을 만드는 중이에요.", viewItinerary)
-            else AssistantTemplates.handoff("남은 일정이 없어요.", viewItinerary)
+            // 생성이 아직 돌고 있으면 뒤 일자가 곧 온다 — "남은 일정이 없다"고 하지 않는다. 그걸 못 읽었으면 어느 쪽인지 모른다.
+            ?: return when ((loadCurrent(ctx) ?: return cannotRead()).value?.generationState) {
+                "PARTIAL" -> AssistantTemplates.handoff("일정을 만드는 중이에요.", viewItinerary)
+                else -> AssistantTemplates.handoff("남은 일정이 없어요.", viewItinerary)
+            }
         val rows = buildList {
             if (next.date != today) add("날짜" to next.date.format(DATE))
             add("계획 시각" to next.startAt.format(TIME))
@@ -186,8 +187,10 @@ class QueryCards(
         runCatching { plans.findPlanSlots(ctx.accountId, requireNotNull(ctx.tripId)).sortedWith(compareBy({ it.date }, { it.orderIndex })) }
             .onFailure { log.warn("도우미 일정 조회 실패. type={}", it.javaClass.simpleName) }.getOrNull()
 
-    private fun generating(ctx: DispatchContext): Boolean =
-        runCatching { itineraries.findCurrent(ctx.accountId, requireNotNull(ctx.tripId))?.generationState == "PARTIAL" }.getOrDefault(false)
+    /** 일정 요약. **null 이면 못 읽은 것이다** — 읽었는데 일정이 없으면 `Loaded(null)` 이다. */
+    private fun loadCurrent(ctx: DispatchContext) =
+        runCatching { Loaded(itineraries.findCurrent(ctx.accountId, requireNotNull(ctx.tripId))) }
+            .onFailure { log.warn("도우미 일정 요약 조회 실패. type={}", it.javaClass.simpleName) }.getOrNull()
 
     private fun noItinerary() = AssistantTemplates.handoff("아직 일정이 없어요.", makeItinerary)
 

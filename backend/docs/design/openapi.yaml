@@ -3998,7 +3998,7 @@ components:
             type: object
             required: [slotKey, reason, fixAction]
             properties:
-              slotKey: { type: string, nullable: true, description: '슬롯에 붙지 않는 문제(숙소 미등록·빈 일자·날짜 밖 일정·다 못 보인 위반의 수)는 null' }
+              slotKey: { type: string, nullable: true, description: '슬롯에 붙지 않는 문제(숙소 미등록·일정 없음·빈 일자·날짜 밖 일정·다 못 보인 위반의 수)는 null' }
               reason: { type: string }
               fixAction: { $ref: '#/components/schemas/AssistantNextAction' }
     AssistantInfoPayload:
