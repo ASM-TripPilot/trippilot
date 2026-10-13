@@ -89,7 +89,7 @@ paths:
 | `src/pages/itinerary/itinerary-manual/ui/ManualPlanPage.integration.test.tsx` | (TRIP-1352 — 옛 `.hookMock` 의 배선 관점을 이 파일 맨 아래 「진입 POST 가드 · 알림 권한 · 뒤로 가로채기」로 이사하고 hookMock 파일은 지웠다) 조회 중 POST 보류·404 면 `{generationMode:'MANUAL'}` 한 건, 생성 성공/실패에도 `promptAndRegisterPush` 0회, 스와이프·하드웨어 뒤로 콜백(GO_BACK·POP→일정 탭 `dismissTo`, 나머지는 받은 **그 액션 객체**로 `dispatch`). 폴백 배너 부재(I2)·지도 중심(C1~C5)은 지웠다 — 앞은 공허 통과, 뒤는 `editorMapCenter.test` PBT 와 위 E3 가 진다 |
 | `src/pages/itinerary/itinerary-manual/ui/PlaceAddPage.integration.test.tsx` | h20 배선 — 검색·클라 필터·카테고리 재조회. **add→PUT 전체 플로우는 범위 밖**(캐시 무효화 회귀 심판 없음) |
 | `src/entities/itinerary-slot/lib/categoryPlaceholder.test.ts` | `resolveCategoryPlaceholder` 매핑 — 7종 `tintClass` 완전일치·폴백·iconKey distinct. 프로토타입 키 입력은 다루지 않는다 |
-| `src/pages/itinerary/itinerary-list/ui/MyTripCard.test.tsx` | h37 카드 렌더 — 제목·메타·부가정보 완전일치 + 배지/resume 유무 짝. `metaLine` 조립 로직은 컨테이너 소관이라 여기서 안 돈다 |
+| `src/entities/trip/ui/TripCard.test.tsx` | h37 카드 렌더(TRIP-1357 — 옛 MyTripCard.test 이관, ⋯ 메뉴 블록 포함) — 제목·메타·부가정보 완전일치 + 배지/resume 유무 짝. `metaLine` 조립 로직은 컨테이너 소관이라 여기서 안 돈다 |
 | `src/__tests__/planbManualRoute.test.tsx` | i07 라우트가 `ItineraryEditPage`를 `tripId`+`inTrip=true`로 부르고 `variant`가 새지 않는지 |
 | `src/pages/itinerary/itinerary-edit/model/reorderKeepingLocked.test.ts` | 잠긴 칸 고정 재정렬 예시 + fast-check PBT(고정 index 불변·순열·상대 순서 보존). 이 규칙을 부르는 프로덕션 드래그 표면은 아직 없다 |
 | `src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.integration.test.tsx` | 「여행 중 직접 수정(i07)」 describe: h12·i07 페이지 계약 — 완료 알약 press는 시트 안 엶 · 드래그가 `reorderKeepingLocked` 경유 · CONFIRMED 409는 정직 안내(라우터 4메서드 0회) |
@@ -102,7 +102,7 @@ paths:
 | `src/pages/settings/my-page/ui/MyPage.test.tsx` | 마이 페이지 배선+배치(`layer-pages.md` `my-page` 행) — 옛 `.counts`·`.l03empty`·`.l03parity`·`.integration`·`.styleDetail.integration`을 describe 5개로 합침(TRIP-1154, MSW 0이라 node 버킷) |
 | `src/pages/settings/settings-notifications/ui/NotificationSettingsScreen.test.tsx` | 알림 설정 화면 — 행·토글·Figma 정합 + 계약 밖 kind(COMMUNITY·SYSTEM)를 주입받아도 렌더하지 않는지(`VISIBLE_ROWS` 자체 소유, 옛 `__tests__/notificationKindGuard` 흡수 — TRIP-1154) |
 | `src/features/edit-preferences/model/preferenceDraft.test.ts` | 취향 역변환 — 안 만진 축은 omit(`toStrictEqual`로 여분 `undefined` 키까지) |
-| `src/pages/settings/settings-preferences/ui/PreferencesEditScreen.integration.test.tsx` | 취향 편집 MSW 통합 — 시드·한 축 PUT 바디·400 인라인(INV-4) + 저장 diff 기준선이 시드 시점으로 얼어 있는지(lost update 방지, 옛 `.baseline` 흡수 — 스위치 `mockFakePreferences`로 그 describe만 가짜 훅) |
+| `src/pages/settings/settings-preferences/ui/SettingsPreferencesPage.integration.test.tsx` | 취향 편집 MSW 통합 — 시드·한 축 PUT 바디·400 인라인(INV-4) + 저장 diff 기준선이 시드 시점으로 얼어 있는지(lost update 방지, 옛 `.baseline` 흡수 — 스위치 `mockFakePreferences`로 그 describe만 가짜 훅) |
 | `src/pages/settings/settings-personalization/model/personalizationCopy.test.ts` | 개인화 문구표 전수 + `NOT_ENOUGH_RECORDS`에 동의 유도 문구 없음(BR-U5-44) |
 | `src/pages/settings/settings-personalization/ui/PersonalizationScreen.test.tsx` | reason 3얼굴·목록 개수·토글 배선 — `NOT_ENOUGH_RECORDS`는 토글 ON 유지+동의 문구 부재 |
 | `src/pages/settings/settings-personalization/ui/PersonalizationPage.test.tsx` | 토글 → GRANT/REVOKE — `reason`이 아니라 `applied`로 판정하는 뮤턴트를 잡는 `NOT_ENOUGH_RECORDS` 케이스 포함 · termsVersion 필터 · `invalidateQueries` spy |
