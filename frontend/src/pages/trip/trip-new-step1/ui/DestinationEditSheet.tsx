@@ -23,13 +23,8 @@
  */
 import { Fragment, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
+import { SheetShell } from '@/shared/ui/SheetShell';
 
 import { nightsOnlyLabel } from '@/entities/trip';
 import {
@@ -45,6 +40,8 @@ import {
   StepperMinusGlyph,
   StepperPlusGlyph,
 } from '@/features/trip/index.view';
+
+import { StepperButton } from './StepperButton';
 
 export interface DestinationEditSheetProps {
   /** 각 행 렌더 소스(스토어 `destinations` 그대로). */
@@ -63,41 +60,6 @@ export interface DestinationEditSheetProps {
   mustVisitCount?: number;
   /** 여행지 기준 지역 밖 꼭 갈 곳 수(사실값, TRIP-1234). 1 이상이면 안내문이 그 수를 말한다. */
   outsideRegionCount?: number;
-}
-
-/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). 시트가 명시해야 딤이 그려진다(라이브러리
- * 기본은 딤 없음). appearsOnIndex=0·disappearsOnIndex=-1 로 열림에서만 덮는다. */
-function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
-  return (
-    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-  );
-}
-
-/** 스테퍼 원버튼(흰 배경 · #ddd 테두리 · pill · 36×36) — 비활성이면 opacity로 죽인다. */
-function StepperButton({
-  testID,
-  disabled,
-  onPress,
-  children,
-}: {
-  testID: string;
-  disabled?: boolean;
-  onPress: () => void;
-  children: ReactElement;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      className={`h-9 w-9 items-center justify-center rounded-pill border border-hairline-strong bg-canvas ${
-        disabled ? 'opacity-40' : ''
-      }`}
-    >
-      {children}
-    </Pressable>
-  );
 }
 
 function DestinationRow({
@@ -171,93 +133,71 @@ export function DestinationEditSheet({
   // 박수 합이 상한이면 [+]도 [도시 추가]도 죽인다 — 새 도시는 최소 1박이라 담을 자리가 없다(TRIP-1210).
   const atMaxNights = nightsSum(destinations) >= MAX_TRIP_NIGHTS;
   return (
-    <BottomSheet
-      index={0}
-      enablePanDownToClose
+    <SheetShell
+      testID="trip-wizard-destination-sheet"
       onClose={onClose}
-      backdropComponent={renderBackdrop}
-      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
+      handle="indicator"
+      title="여행지"
+      subtitle="도시와 머무는 밤을 정해요"
+      apply={{
+        testID: 'trip-wizard-destination-apply',
+        onPress: onApply,
+      }}
     >
-      <BottomSheetView
-        testID="trip-wizard-destination-sheet"
-        className="gap-lg px-xl pb-[34px] pt-[10px]"
-      >
-        {/* header */}
-        <View className="gap-xs">
-          <Text className="text-[20px] font-noto-bold font-bold text-ink">
-            여행지
-          </Text>
-          <Text className="font-noto text-label text-muted">
-            도시와 머무는 밤을 정해요
-          </Text>
-        </View>
-
-        {/* body */}
-        <View className="gap-md">
-          <View className="rounded-card border border-hairline bg-canvas">
-            {destinations.map((destination, index) => (
-              <Fragment key={destination.seq}>
-                {index > 0 ? <View className="h-[1px] bg-hairline" /> : null}
-                <DestinationRow
-                  destination={destination}
-                  minNights={minNightsFor(destinations.length)}
-                  atMaxNights={atMaxNights}
-                  onChangeNights={onChangeNights}
-                  onRemove={onRemove}
-                />
-              </Fragment>
-            ))}
-          </View>
-
-          <Pressable
-            testID="trip-wizard-destination-add"
-            accessibilityRole="button"
-            disabled={atMaxNights}
-            onPress={onAddCity}
-            className={`flex-row items-center justify-center gap-[6px] rounded-button border-[1.2px] border-dashed border-primary py-md ${
-              atMaxNights ? 'opacity-40' : ''
-            }`}
-          >
-            <PlusGlyph size={16} />
-            <Text className="font-noto-bold text-label font-bold text-primary-text">
-              도시 추가
-            </Text>
-          </Pressable>
-
-          {atMaxNights ? (
-            <Text
-              testID="trip-wizard-destination-max-note"
-              className="font-noto text-label text-muted"
-            >
-              {`최대 ${MAX_TRIP_NIGHTS}박까지 정할 수 있어요`}
-            </Text>
-          ) : null}
-
-          {/* 담은 곳 안내문 — 0·미지정이면 안 그린다(TRIP-736 §F, Figma 근거 없음).
-              앱은 꼭 갈 곳을 여행지에 맞춰 정리하지 않는다 — 하지 않는 일을 약속하지 않는다(TRIP-1234). */}
-          {mustVisitCount != null && mustVisitCount > 0 ? (
-            <Text
-              testID="trip-wizard-destination-note"
-              className="font-noto text-label text-muted"
-            >
-              {outsideRegionCount != null && outsideRegionCount > 0
-                ? `꼭 갈 곳 중 ${outsideRegionCount}곳은 이 여행 지역 밖이에요`
-                : `꼭 갈 곳 ${mustVisitCount}곳은 여행지를 바꿔도 그대로 남아요`}
-            </Text>
-          ) : null}
+      {/* body */}
+      <View className="gap-md">
+        <View className="rounded-card border border-hairline bg-canvas">
+          {destinations.map((destination, index) => (
+            <Fragment key={destination.seq}>
+              {index > 0 ? <View className="h-[1px] bg-hairline" /> : null}
+              <DestinationRow
+                destination={destination}
+                minNights={minNightsFor(destinations.length)}
+                atMaxNights={atMaxNights}
+                onChangeNights={onChangeNights}
+                onRemove={onRemove}
+              />
+            </Fragment>
+          ))}
         </View>
 
         <Pressable
-          testID="trip-wizard-destination-apply"
+          testID="trip-wizard-destination-add"
           accessibilityRole="button"
-          onPress={onApply}
-          className="h-[52px] items-center justify-center rounded-button bg-primary"
+          disabled={atMaxNights}
+          onPress={onAddCity}
+          className={`flex-row items-center justify-center gap-[6px] rounded-button border-[1.2px] border-dashed border-primary py-md ${
+            atMaxNights ? 'opacity-40' : ''
+          }`}
         >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            적용
+          <PlusGlyph size={16} />
+          <Text className="font-noto-bold text-label font-bold text-primary-text">
+            도시 추가
           </Text>
         </Pressable>
-      </BottomSheetView>
-    </BottomSheet>
+
+        {atMaxNights ? (
+          <Text
+            testID="trip-wizard-destination-max-note"
+            className="font-noto text-label text-muted"
+          >
+            {`최대 ${MAX_TRIP_NIGHTS}박까지 정할 수 있어요`}
+          </Text>
+        ) : null}
+
+        {/* 담은 곳 안내문 — 0·미지정이면 안 그린다(TRIP-736 §F, Figma 근거 없음).
+              앱은 꼭 갈 곳을 여행지에 맞춰 정리하지 않는다 — 하지 않는 일을 약속하지 않는다(TRIP-1234). */}
+        {mustVisitCount != null && mustVisitCount > 0 ? (
+          <Text
+            testID="trip-wizard-destination-note"
+            className="font-noto text-label text-muted"
+          >
+            {outsideRegionCount != null && outsideRegionCount > 0
+              ? `꼭 갈 곳 중 ${outsideRegionCount}곳은 이 여행 지역 밖이에요`
+              : `꼭 갈 곳 ${mustVisitCount}곳은 여행지를 바꿔도 그대로 남아요`}
+          </Text>
+        ) : null}
+      </View>
+    </SheetShell>
   );
 }

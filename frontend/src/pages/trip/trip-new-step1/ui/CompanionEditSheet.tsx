@@ -20,21 +20,16 @@
  *
  * 아이콘은 신규 없이 `TripGlyphs` 재사용: 스테퍼 −/+ 는 `StepperMinusGlyph`·`StepperPlusGlyph`
  * (20px), 유형 칩은 `SoloGlyph`/`FriendsGlyph`/`HeartGlyph`/`FamilyGlyph`(각 `selected` prop).
- * 스테퍼 원버튼은 `DestinationEditSheet` 의 로컬 `StepperButton` 을 복제한다 — export 승격은 안
- * 한다(01b D4, rule-of-three 미충족).
+ * 스테퍼 원버튼은 같은 폴더 `StepperButton.tsx` 를 `DestinationEditSheet` 와 같이 쓴다(TRIP-1360 —
+ * 두 사본을 1벌로).
  *
  * ⚠️ 실제 개폐·딤 전면 커버·터치 차단은 `@gorhom/bottom-sheet` 통과형 목이라 jest 가 원리적으로
  * 못 본다(repo-traps 바텀시트 함정) — 6-b 실기(`_dev/preview.tsx` 의 동행 시트 키) 몫이다.
  */
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
+import { SheetShell } from '@/shared/ui/SheetShell';
 
 import type { CompanionType } from '@/shared/api/index.schemas';
 
@@ -49,6 +44,8 @@ import {
   StepperMinusGlyph,
   StepperPlusGlyph,
 } from '@/features/trip/index.view';
+
+import { StepperButton } from './StepperButton';
 
 export interface CompanionEditSheetProps {
   /** 드래프트 인원(배선 소유) — 표시·스테퍼 하한 판정용. */
@@ -65,13 +62,6 @@ export interface CompanionEditSheetProps {
   onClose: () => void;
 }
 
-/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
-function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
-  return (
-    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-  );
-}
-
 /** 칩 코드 → 글리프. `COMPANION_OPTIONS` 는 code·type 만 갖고 글리프는 안 담으므로 여기서 잇는다. */
 const CHIP_GLYPHS: Record<CompanionCode, GlyphComponent> = {
   alone: SoloGlyph,
@@ -79,34 +69,6 @@ const CHIP_GLYPHS: Record<CompanionCode, GlyphComponent> = {
   partner: HeartGlyph,
   family: FamilyGlyph,
 };
-
-/** 스테퍼 원버튼(흰 배경 · #ddd 테두리 · pill · 36×36) — 비활성이면 opacity 로 죽인다.
- * `DestinationEditSheet` 의 동명 로컬 함수를 복제한다(승격 안 함, 01b D4). */
-function StepperButton({
-  testID,
-  disabled,
-  onPress,
-  children,
-}: {
-  testID: string;
-  disabled?: boolean;
-  onPress: () => void;
-  children: ReactElement;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      className={`h-9 w-9 items-center justify-center rounded-pill border border-hairline-strong bg-canvas ${
-        disabled ? 'opacity-40' : ''
-      }`}
-    >
-      {children}
-    </Pressable>
-  );
-}
 
 export function CompanionEditSheet({
   party,
@@ -122,114 +84,91 @@ export function CompanionEditSheet({
   const incDisabled = isSolo;
 
   return (
-    <BottomSheet
-      index={0}
-      enablePanDownToClose
+    <SheetShell
+      testID="trip-wizard-companion-sheet"
       onClose={onClose}
-      backdropComponent={renderBackdrop}
-      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
+      handle="indicator"
+      title="동행"
+      subtitle="누구랑 가세요?"
+      apply={{
+        testID: 'trip-wizard-companion-apply',
+        onPress: onApply,
+      }}
     >
-      <BottomSheetView
-        testID="trip-wizard-companion-sheet"
-        className="gap-lg px-xl pb-[34px] pt-[10px]"
-      >
-        {/* header */}
-        <View className="gap-xs">
-          <Text className="text-[20px] font-noto-bold font-bold text-ink">
-            동행
+      {/* body */}
+      <View className="gap-xl">
+        {/* 인원 스테퍼 */}
+        <View className="flex-row items-center justify-between">
+          <Text className="font-noto-bold text-card-title font-bold text-ink">
+            인원
           </Text>
-          <Text className="font-noto text-label text-muted">
-            누구랑 가세요?
-          </Text>
+          <View className="flex-row items-center gap-[10px]">
+            <StepperButton
+              testID="trip-wizard-companion-party-dec"
+              disabled={decDisabled}
+              onPress={() => onChangeParty(party - 1)}
+            >
+              <StepperMinusGlyph size={20} />
+            </StepperButton>
+            <Text
+              testID="trip-wizard-companion-party-value"
+              className="font-noto-bold text-card-title font-bold text-ink"
+            >
+              {`${party}명`}
+            </Text>
+            <StepperButton
+              testID="trip-wizard-companion-party-inc"
+              disabled={incDisabled}
+              onPress={() => onChangeParty(party + 1)}
+            >
+              <StepperPlusGlyph size={20} />
+            </StepperButton>
+          </View>
         </View>
 
-        {/* body */}
-        <View className="gap-xl">
-          {/* 인원 스테퍼 */}
-          <View className="flex-row items-center justify-between">
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              인원
-            </Text>
-            <View className="flex-row items-center gap-[10px]">
-              <StepperButton
-                testID="trip-wizard-companion-party-dec"
-                disabled={decDisabled}
-                onPress={() => onChangeParty(party - 1)}
+        {/* 유형 칩 4종 — 선택 칩만 분홍 배경 + 별 활성 표식 testID */}
+        <View className="flex-row gap-sm">
+          {COMPANION_OPTIONS.map((option) => {
+            const Glyph = CHIP_GLYPHS[option.code];
+            const selected = companionType === option.type;
+            return (
+              <Pressable
+                key={option.code}
+                testID={`trip-wizard-companion-chip-${option.code}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => onSelectCompanion(option.type)}
+                className={`flex-row items-center gap-[6px] rounded-pill py-[9px] pl-[14px] pr-[16px] ${
+                  selected
+                    ? 'bg-primary'
+                    : 'border border-hairline-strong bg-canvas'
+                }`}
               >
-                <StepperMinusGlyph size={20} />
-              </StepperButton>
-              <Text
-                testID="trip-wizard-companion-party-value"
-                className="font-noto-bold text-card-title font-bold text-ink"
-              >
-                {`${party}명`}
-              </Text>
-              <StepperButton
-                testID="trip-wizard-companion-party-inc"
-                disabled={incDisabled}
-                onPress={() => onChangeParty(party + 1)}
-              >
-                <StepperPlusGlyph size={20} />
-              </StepperButton>
-            </View>
-          </View>
-
-          {/* 유형 칩 4종 — 선택 칩만 분홍 배경 + 별 활성 표식 testID */}
-          <View className="flex-row gap-sm">
-            {COMPANION_OPTIONS.map((option) => {
-              const Glyph = CHIP_GLYPHS[option.code];
-              const selected = companionType === option.type;
-              return (
-                <Pressable
-                  key={option.code}
-                  testID={`trip-wizard-companion-chip-${option.code}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  onPress={() => onSelectCompanion(option.type)}
-                  className={`flex-row items-center gap-[6px] rounded-pill py-[9px] pl-[14px] pr-[16px] ${
-                    selected
-                      ? 'bg-primary'
-                      : 'border border-hairline-strong bg-canvas'
+                {/* 활성 표식 — 색 fill 이 아니라 별 testID(무심판 회피). 절대배치라 레이아웃 무영향. */}
+                {selected ? (
+                  <View
+                    testID={`trip-wizard-companion-chip-active-${option.code}`}
+                    className="absolute"
+                  />
+                ) : null}
+                <Glyph size={18} selected={selected} />
+                <Text
+                  className={`font-noto-bold text-label font-bold ${
+                    selected ? 'text-on-primary' : 'text-ink'
                   }`}
                 >
-                  {/* 활성 표식 — 색 fill 이 아니라 별 testID(무심판 회피). 절대배치라 레이아웃 무영향. */}
-                  {selected ? (
-                    <View
-                      testID={`trip-wizard-companion-chip-active-${option.code}`}
-                      className="absolute"
-                    />
-                  ) : null}
-                  <Glyph size={18} selected={selected} />
-                  <Text
-                    className={`font-noto-bold text-label font-bold ${
-                      selected ? 'text-on-primary' : 'text-ink'
-                    }`}
-                  >
-                    {option.type}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* 안내문 — 고정 문구(데이터 의존 없음) */}
-          <Text className="font-noto text-caption text-muted">
-            동행에 맞춰 장소 추천이 달라져요
-          </Text>
+                  {option.type}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
-        {/* 적용 — 항상 활성(동행은 optional, 정본 AC 에 미선택 잠금 없음, 02a §8-3) */}
-        <Pressable
-          testID="trip-wizard-companion-apply"
-          accessibilityRole="button"
-          onPress={onApply}
-          className="h-[52px] items-center justify-center rounded-button bg-primary"
-        >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            적용
-          </Text>
-        </Pressable>
-      </BottomSheetView>
-    </BottomSheet>
+        {/* 안내문 — 고정 문구(데이터 의존 없음) */}
+        <Text className="font-noto text-caption text-muted">
+          동행에 맞춰 장소 추천이 달라져요
+        </Text>
+      </View>
+    </SheetShell>
   );
 }
