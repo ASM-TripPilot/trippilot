@@ -199,10 +199,19 @@ class EditProposalServiceTest : StringSpec({
         sent.transportMode shouldBe "렌터카" // 재타이밍은 그 여행의 수단 그대로
     }
 
-    "교체 제안 — 새 장소의 좌표를 모르면 부르지 않고 Unavailable 이다" {
+    /** 다시 시도해도 같은 결과다 — Unavailable 로 접으면 호출측이 "잠시 후 다시"를 권하게 된다. */
+    "교체 제안 — 없는 장소는 입력 오류다(400), 좌표 조회가 깨진 것만 Unavailable 이다" {
         val agent = Agent(replacing(a, fresh))
 
-        service(agent).propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d1#$a", UUID.randomUUID()), 5_000) shouldBe EditProposal.Unavailable
+        shouldThrow<ValidationFailed> {
+            service(agent).propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d1#$a", UUID.randomUUID()), 5_000)
+        }
+        val down = object : PoiSurfaceFacade {
+            override fun findSurfaces(poiIds: Collection<UUID>): Map<UUID, PoiSurfaceView> = throw IllegalStateException("db down")
+            override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+        }
+        EditProposalService(trips(), CountingRepo(stored), agent, contexts(), down, clock)
+            .propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d1#$a", fresh), 5_000) shouldBe EditProposal.Unavailable
 
         agent.inputs shouldBe emptyList()
     }
@@ -218,7 +227,8 @@ class EditProposalServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { service(agent, repo = CountingRepo(confirmed)).propose(acc, tripId, d1, utter, 5_000) }
         agent.inputs shouldBe emptyList()
 
-        val duringTrip = Clock.fixed(Instant.parse("2026-08-10T03:00:00Z"), ZoneOffset.UTC) // 시작일 정오(KST)
+        // 시작일 새벽 1시(KST) — UTC 로는 아직 전날이다. 여행지 시간대로 재지 않으면 이 시각에 잠긴다.
+        val duringTrip = Clock.fixed(Instant.parse("2026-08-09T16:00:00Z"), ZoneOffset.UTC)
         service(agent, repo = CountingRepo(confirmed), at = duringTrip).propose(acc, tripId, d1, utter, 5_000)
             .shouldBeInstanceOf<EditProposal.Proposed>()
     }
@@ -263,6 +273,28 @@ class EditProposalServiceTest : StringSpec({
         repo.writes shouldBe 0
     }
 
+    "거절 — 같은 장소가 여러 날에 있으면 어느 날인지 말하지 않는다(새 장소가 다른 날에 이미 있어도)" {
+        val twice = Itinerary.create(
+            tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(
+                ItineraryDay.of(d1, 0, listOf(slot(a, 0, "09:00"), slot(b, 1, "11:00"))),
+                ItineraryDay.of(d2, 1, listOf(slot(b, 0, "10:00"), slot(fresh, 1, "13:00"))),
+            ),
+            now,
+        )
+        val agent = Agent {
+            EditProposalOutput(
+                EditProposalStatus.REJECTED, null,
+                listOf(Violation("HC1", null, null, null, b.toString()), Violation("HC2", null, null, null, fresh.toString())),
+                "편집 결과가 하드 제약을 위반", "AUTO_APPLY",
+            )
+        }
+
+        val result = service(agent, repo = CountingRepo(twice)).propose(acc, tripId, d1, EditProposalRequest.ReplaceSlot("$d1#$a", fresh), 5_000)
+
+        result.shouldBeInstanceOf<EditProposal.Rejected>().violations.map { it.date } shouldContainExactly listOf(null, null)
+    }
+
     "거절 — 편집 규칙에 걸린 것(위반 목록 없음)도 거절이다" {
         val agent = Agent { EditProposalOutput(EditProposalStatus.REJECTED, null, emptyList(), "예약(고정) 슬롯은 편집 대상이 될 수 없음", "AUTO_APPLY") }
         service(agent).propose(acc, tripId, d1, utter, 5_000) shouldBe EditProposal.Rejected(emptyList())
@@ -289,9 +321,11 @@ class EditProposalServiceTest : StringSpec({
         }
         val started = System.nanoTime()
 
-        service(agent).propose(acc, tripId, d1, utter, deadlineMs = 100) shouldBe EditProposal.Unavailable
+        // 왕복 여유(0.5초)보다 큰 시한이어야 한다 — 그보다 작으면 부르기도 전에 돌아와 이 테스트가 아무것도 재지 않는다.
+        service(agent).propose(acc, tripId, d1, utter, deadlineMs = 700) shouldBe EditProposal.Unavailable
 
         ((System.nanoTime() - started) / 1_000_000 < 2_000) shouldBe true
+        agent.inputs.size shouldBe 1 // 실제로 불렀고, 기다리다 그만둔 것이다
     }
 
     "그 날의 앵커를 정할 수 없으면 부르지 않고 Unavailable 이다 — 상대 계약상 앵커가 필수다" {

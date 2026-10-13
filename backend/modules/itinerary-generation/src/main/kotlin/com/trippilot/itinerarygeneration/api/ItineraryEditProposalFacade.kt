@@ -19,7 +19,7 @@ interface ItineraryEditProposalFacade {
      * [targetDate] 하루를 [request] 대로 고친 안을 돌려준다. 상대는 그 날의 슬롯만 움직인다.
      *
      * 없거나 타 계정 여행·일정이 없으면 `ResourceNotFound`, [targetDate] 가 일정에 없는 날이거나 교체 대상이 그 날
-     * 슬롯이 아니거나 새 장소가 이미 그 날에 있으면 `ValidationFailed`, 여행 시작 전 확정 일정이면 `ConflictDetected` —
+     * 슬롯이 아니거나 새 장소가 이미 그 날에 있거나 없는 장소면 `ValidationFailed`, 여행 시작 전 확정 일정이면 `ConflictDetected` —
      * 마지막은 [ItineraryEditFacade.edit] 가 저장을 거부하는 그 조건이다(적용할 수 없는 안을 만들지 않는다).
      *
      * @param deadlineMs 이 호출이 쓸 수 있는 시간. **넘기면 [EditProposal.Unavailable]** 로 돌아온다 — 호출측의 턴 예산
@@ -61,7 +61,10 @@ sealed interface EditProposal {
     /** 발화를 편집으로 옮기지 못했다. */
     data object NotUnderstood : EditProposal
 
-    /** 상대에 닿지 못했거나 시한을 넘겼다. 일정은 그대로다. */
+    /**
+     * 지금은 제안할 수 없다 — 상대에 닿지 못했거나, 시한을 넘겼거나(부를 여유조차 없었던 경우 포함), 그 날의 기준
+     * 좌표를 정하지 못했다. 일정은 그대로다.
+     */
     data object Unavailable : EditProposal
 }
 

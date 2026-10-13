@@ -121,18 +121,19 @@ class EditProposalService(
      * 교체 제안의 후보 풀 중심을 **새 장소**로 옮기고 예산 등급을 뗀다.
      *
      * 상대는 앵커 둘레의 후보 풀 안에 새 장소가 있어야 교체를 받는다(INV-1). 그 날의 숙소를 중심으로 두면 풀 반경이
-     * 수단에 따라 1~14km 라, **우리가 슬롯 후보로 내준 곳**(교체 대상 자리 둘레 · 예산 미지정)이 숙소에서 멀다는
-     * 이유로 "후보 풀 밖" 거절이 난다. 새 장소 자체를 중심에 두면 반경 탓의 거절이 없고, 예산을 떼면 후보를 고를 때와
-     * 같은 풀이 된다. 실재 여부는 응답을 받은 어댑터가 정본에 다시 대조한다.
+     * 수단에 따라 1.4~20km 라, **우리가 슬롯 후보로 내준 곳**(교체 대상 자리 둘레)이 숙소에서 멀다는 이유로
+     * "후보 풀 밖" 거절이 난다. 새 장소 자체를 중심에 두면 반경 탓의 거절이 없다. 예산 등급은 후보를 고를 때와
+     * 같은 값(미지정)을 보낸다 — 지금 상대 풀은 예산으로 거르지 않아 효과는 없고, 거르게 되는 날 갈리지 않게 하는 것이다.
+     * 실재 여부는 응답을 받은 어댑터가 정본에 다시 대조한다.
+     *
+     * @return 좌표 조회가 **깨졌으면** null(지금은 제안할 수 없다). 조회는 됐는데 그런 장소가 없으면 입력 오류다.
      */
     private fun EditProposalContext.centeredOn(poiId: UUID, tripId: UUID): EditProposalContext? {
-        val surface = runCatching { poiSurfaces.findSurfaces(listOf(poiId))[poiId] }
+        val surfaces = runCatching { poiSurfaces.findSurfaces(listOf(poiId)) }
             .onFailure { log.warn("편집 제안 — 새 장소 좌표 조회 실패. tripId={}", tripId, it) }
-            .getOrNull()
-        if (surface == null) {
-            log.warn("편집 제안 불가 — 새 장소의 좌표를 모릅니다. tripId={} poiId={}", tripId, poiId)
-            return null
-        }
+            .getOrNull() ?: return null
+        // 다시 시도해도 같은 결과다 — "지금은 안 된다"로 접으면 호출측이 재시도를 권하게 된다.
+        val surface = surfaces[poiId] ?: throw ValidationFailed(listOf(FieldError("newPoiId", "없는 장소입니다.")))
         return copy(anchor = anchor.copy(lat = surface.lat, lng = surface.lng), budgetTier = null)
     }
 
@@ -177,11 +178,10 @@ class EditProposalService(
             EditProposal.Rejected(
                 violations.map { v ->
                     val poiId = v.slotRef?.let { runCatching { UUID.fromString(it) }.getOrNull() }
-                    // 상대는 장소만 알려 준다. 새 장소면 고치려던 날이고, 아니면 그 장소가 놓인 날 — 하나일 때만.
-                    val date = when (poiId) {
-                        null -> null
-                        replaced?.first -> replaced.second
-                        else -> base.days.filter { d -> d.slots.any { it.sourcePoiId == poiId } }.singleOrNull()?.date
+                    // 상대는 장소만 알려 준다. 그 장소가 놓인 날(새 장소면 고치려던 날도) — **하나일 때만** 말한다.
+                    val date = poiId?.let { id ->
+                        (base.days.filter { d -> d.slots.any { it.sourcePoiId == id } }.map { it.date } + listOfNotNull(replaced?.takeIf { it.first == id }?.second))
+                            .distinct().singleOrNull()
                     }
                     ProposalViolation(poiId, date, requireNotNull(ViolationText.reasonOf(listOf(v))))
                 },
