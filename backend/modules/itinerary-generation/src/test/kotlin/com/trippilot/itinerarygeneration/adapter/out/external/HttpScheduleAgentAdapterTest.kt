@@ -238,7 +238,8 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andExpect(method(HttpMethod.POST))
             .andExpect(jsonPath("$.scope").value("FULL_DAY"))
-            .andExpect(jsonPath("$.reasons[0]").value("WEATHER"))
+            // 사유는 상대 어휘로 번역해 싣는다(연동 설계 §3) — FE 키 그대로면 상대 사유 분기가 전부 빗나간다.
+            .andExpect(jsonPath("$.reasons[0]").value("weather"))
             .andExpect(jsonPath("$.directives[0]").value("INDOOR"))
             .andExpect(jsonPath("$.free_text").value("비 와서 실내로"))
             .andExpect(jsonPath("$.current_slots[0].poi_id").value(REPLAN_POI.toString()))
