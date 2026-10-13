@@ -1689,7 +1689,7 @@ note = """
 **접음(2026-10-13) — 따로 만들지 않는다. U8 이 잇는다.** 아래가 기다리던 "제품 결정"은 2026-10-12 에
 U8 Conversational Assistant 설계(FD 승인)로 났다 — FD 의 G-U8-2 가 이 노드를 직접 지목한다. 자연어 편집은
 도우미의 `EDIT_SCHEDULE` 제안 카드이고, 우리 몫은 [[U8-EDIT-FACADE]] · [[U8-AI-EDIT-PORT]] ·
-[[U8-ASSISTANT-MODULE]] 로 쪼갰다. **이 노드가 U8 설계를 모른 채 하루 동안 "결정 대기"로 남아 있었다** —
+[[U8-PROPOSAL]](모듈 본체는 그 뒤 넷으로 다시 쪼갰다)로 간다. **이 노드가 U8 설계를 모른 채 하루 동안 "결정 대기"로 남아 있었다** —
 설계 유닛이 승인되면 그래프에 노드를 올리는 것까지가 한 세트다.
 `/ai/v1/itinerary/edit` 요청은 utterance·command·confirm, 응답은 apply_mode·status·violations 다 —
 **자연어 편집**이다. 우리 EditItineraryService 는 구조적 편집(클라가 명시적 조작을 보냄) + solver
@@ -3722,7 +3722,7 @@ ACTIVE 만으로 거르지 않되(담아 둔 폐업 장소가 열려야 한다) 
 
 [[nodes]]
 id = "U8-EDIT-FACADE"
-ticket = ""
+ticket = "TRIP-1374"
 title = "[U8] 일정 편집을 다른 모듈에 여는 퍼사드 — 변경 출처를 받는다 (G-U8-1)"
 status = "todo"
 migration = false
@@ -3740,7 +3740,7 @@ note = """
 
 [[nodes]]
 id = "U8-PLAN-FACADE-FIELDS"
-ticket = ""
+ticket = "TRIP-1375"
 title = "[U8] 일정 퍼사드에 거리·위반 3필드 — 진행 검토가 읽을 값이 REST 에만 있다 (G-U8-3)"
 status = "todo"
 migration = false
@@ -3753,12 +3753,19 @@ AI·디자인을 기다리지 않는다.
 
 [[nodes]]
 id = "U8-AI-EDIT-PORT"
-ticket = ""
-title = "[U8] AI 편집 경로 호출 배선 — /ai/v1/itinerary/edit 의 백엔드 호출자가 0이다 (G-U8-2)"
+ticket = "TRIP-1376"
+title = "[U8] AI 편집 제안·슬롯 후보를 api 로 연다 — /ai/v1/itinerary/edit 의 백엔드 호출자가 0이다 (G-U8-2)"
 status = "todo"
 migration = false
-touches = ["backend/modules/itinerary-generation"]
+touches = ["backend/modules/itinerary-generation", "backend/app/src/test"]
 note = """
+**범위를 넓혔다(2026-10-13 쪼갬 검수)** — 포트 배선만으로는 assistant 모듈이 못 쓴다. `ScheduleAgentPort` 는 `domain`,
+`SlotCandidateService` 는 `application` 이고 `itinerary-generation/api` 에는 편집 제안도 슬롯 후보도 없다(R1 — 타 모듈은
+`api` 만 본다). FD 갭 표도 이것을 빠뜨렸다(G-U8-1 은 저장 경로만 다룬다). 이 노드가 **퍼사드까지** 연다:
+편집 제안(발화·`command` → 검증된 해 + 위반, 저장 없음)과 슬롯 후보 조회. api-safe 타입으로, 경계 키(`slotKey`)로.
+편집 제안 퍼사드는 **마감(`deadlineMs`)을 받는다** — 편집 단계 시한이 "턴 잔여 전부"라(PERF-U8-02) 없으면 턴이 13s 를 넘는다.
+**커졌다 — 착수하면 쪼갠다**: 슬롯 후보 퍼사드는 기존 서비스를 감싸기만 해서(AI 변경 없음) 깨끗하게 떨어진다.
+포트에 메서드를 더하면 `backend/app` 테스트의 익명 구현(`GenerationSupersededIT`)과 `LiveAiRoundTripIT` 도 같이 바뀐다.
 `ScheduleAgentPort` 에 edit 메서드 + `HttpScheduleAgentAdapter.CALLED_PATHS` 추가. 요청은 `utterance` 또는
 `command`(후보 교체), `confirm=true`(DEC-U8-3). 상대 경로는 이미 열려 있다(`ai/docs/openapi.json`).
 계약 게이트(`AiBoundaryOpenApiTest`)가 필드 이름을 잡고, 수용 여부는 실 왕복으로만 안다
@@ -3768,8 +3775,9 @@ note = """
 [[nodes]]
 id = "U8-ASSISTANT-MODULE"
 ticket = ""
-title = "[U8] assistant 모듈 신설 — 세션·메시지·제안·가드레일 + API 계약 (프론트는 가짜 서버 위에 이미 섰다)"
-status = "todo"
+title = "[U8] assistant 모듈 신설 — 넷으로 쪼갰다(U8-CONTRACT·U8-TURN·U8-PROPOSAL·U8-OPS)"
+status = "dropped"
+owner = "일정"
 migration = true
 touches = [
   "backend/modules/assistant",
@@ -3781,6 +3789,9 @@ touches = [
   "backend/docs/design/openapi.yaml",
 ]
 note = """
+**쪼갬(2026-10-13, 루프 착수) — 이 노드는 PR 하나가 아니었다.** [[U8-CONTRACT]](모듈 뼈대·테이블·계약·세션) →
+[[U8-TURN]](턴 처리·조회형·가드레일) → [[U8-PROPOSAL]](제안·적용), 그리고 [[U8-OPS]](파기·청소·상한·내보내기)가 잇는다.
+아래 범위 서술은 네 노드의 합이고, 착수 전 읽을 정본 목록으로 남긴다.
 **백엔드가 U8 의 병목이다.** 프론트는 TRIP-1318(#1057)로 b01~b07 시트·카드·적용 흐름을 가짜 서버 위에
 세워 뒀고(`frontend/src/pages/assistant/`), 우리 `openapi.yaml` 에는 도우미 표면이 하나도 없다(2026-10-13 실측).
 
@@ -3819,7 +3830,7 @@ migration = false
 touches = []
 note = """
 `POST /ai/v1/dialogue/interpret` 는 ai 패키지 작업이다. 백엔드는 페이크로 먼저 가므로 이 노드가
-[[U8-ASSISTANT-MODULE]] 의 착수를 막지는 않는다 — 실 연동(http 모드)만 기다린다.
+[[U8-TURN]] 의 착수를 막지는 않는다 — 실 연동(http 모드, [[U8-INTERPRET-HTTP]])만 기다린다.
 """
 
 [[nodes]]
@@ -3864,24 +3875,24 @@ FD 갭 표에서 백엔드 몫으로 읽히는 것(착수 전 FD 를 다시 읽�
 
 [[edges]]
 from = "U8-EDIT-FACADE"
-to = "U8-ASSISTANT-MODULE"
+to = "U8-PROPOSAL"
 kind = "계약선행"
 verified = false
-reason = "U8 FD §8 스토리 커버리지 — US-ASSIST-04 액션 위임은 '편집 퍼사드 선행(G-U8-1·2)'. 모듈의 세션·메시지 부분은 퍼사드 없이도 서므로 모듈 전체의 선행은 아니다(제안 적용만 기다린다)."
+reason = "U8 FD §2.1 4단계 — [적용]은 ItineraryEditFacade.edit(source=ASSISTANT) 로 저장한다(G-U8-1). 제안 생성까지는 퍼사드 없이도 서지만 노드는 하나다."
 
 [[edges]]
 from = "U8-AI-EDIT-PORT"
-to = "U8-ASSISTANT-MODULE"
+to = "U8-PROPOSAL"
 kind = "계약선행"
 verified = false
-reason = "같은 근거(G-U8-2) — EDIT_SCHEDULE 제안이 ai /edit 를 부른다. 모듈의 다른 의도는 기다리지 않는다."
+reason = "U8 FD §3.3·§4 — EDIT_SCHEDULE·SUGGEST_ALTERNATIVE 제안이 ai /edit 와 슬롯 후보를 부른다(G-U8-2). assistant 는 그 길을 api 퍼사드로만 탈 수 있다."
 
 [[edges]]
 from = "U8-PLAN-FACADE-FIELDS"
-to = "U8-ASSISTANT-MODULE"
+to = "U8-TURN"
 kind = "계약선행"
 verified = false
-reason = "U8 FD §8 — US-ASSIST-03 진행 검토는 '퍼사드 확장 선행(G-U8-3)'. FD §4 의 거리 조회(GET_DISTANCE)도 같은 필드(distanceRange)를 기다린다. 위 두 간선과 같은 범위다(모듈 전체가 아니라 그 의도들만 기다린다)."
+reason = "U8 FD §8 — US-ASSIST-03 진행 검토는 '퍼사드 확장 선행(G-U8-3)'. §4 의 거리 조회(GET_DISTANCE)도 같은 필드(distanceRange)를 읽는다. 턴의 그 두 의도만 기다리지만 노드는 하나다."
 
 [[nodes]]
 id = "LBS-REGISTRATION"
@@ -3917,3 +3928,223 @@ OBS-02 리프레시 재사용 감지 로그 메트릭 필터 → SNS → Slack, 
 다시 돌린 뒤에야 apply 된다 — 로그 수집 때와 같은 순서이고, **PR 이 둘로 갈린다**(권한 → 알람). 착수하면 쪼갠다.
 관리형 정책의 `Description` 은 건드리지 않는다(anti-patterns, #1085). 파드 지표는 방금 켠 Container Insights 가 낸다.
 """
+
+# ── U8 본체 넷 + http 어댑터(blocked) (2026-10-13 쪼갬). **노트는 의무의 전부가 아니다 — 정본은 FD·NFR 이고 착수 때 다시 읽는다.**
+# 노트에는 "빠뜨리면 조용히 틀리는 것"과 "어느 노드 몫인지 헷갈리는 것"만 적는다. 루프 순서: EDIT-FACADE → PLAN-FACADE-FIELDS → AI-EDIT-PORT → CONTRACT → TURN → PROPOSAL → OPS.
+# 순서는 의존이 아니라 공유 자원이 정한다 — 앞의 셋은 같은 모듈(itinerary-generation), 뒤의 넷은 assistant 모듈·`openapi.yaml`·`application.yml` 을 한 번에 하나씩 만진다(마이그레이션은 U8-CONTRACT 하나뿐이다).
+# **배포는 루프 밖이다.** dev 가 운영이다. 스위치(`ASSISTANT_INTERPRET_MODE=off`)는 **해석만** 끈다 — 엔드포인트는 배포되면
+# 인증된 사용자에게 열린다(출시 앱이 가짜 어댑터를 써서 부르는 쪽이 없을 뿐이다). 자세한 것은 U8-CONTRACT 노트.
+
+[[nodes]]
+id = "U8-CONTRACT"
+ticket = "TRIP-1377"
+title = "[U8] assistant 모듈 뼈대·계약 — 테이블 넷·openapi assistant 태그·세션 열기/목록/메시지/지우기"
+status = "todo"
+migration = true
+touches = [
+  "backend/modules/assistant",
+  "backend/app/build.gradle.kts",
+  "backend/app/src/main/resources/application.yml",
+  "backend/settings.gradle.kts",
+  "backend/app/src/main/resources/db/migration",
+  "backend/docs/design/openapi.yaml",
+  "docker-compose.yml",
+  "deploy/eks",
+]
+note = """
+`:modules:assistant` 신설 + 마이그레이션(V2.64~: `assistant_session`·`assistant_message`(+OBS-U8-01 컬럼 넷)·
+`assistant_proposal`·`assistant_usage_daily`) + `openapi.yaml` 의 `assistant` 태그 전체(턴·제안 포함 — 계약은 한 번에 연다).
+`assistant.*` 설정 키는 여기서 자리를 잡는다(tech-stack §2 델타 4) — 뒤 노드는 자기 키를 더하거나 값을 정한다
+(월 상한 값은 아직 미정이다). 계약도 같다: 태그 전체를 여기서 열고, 뒤 노드는 구현하며 드러난 차이만 고친다.
+
+**구현은 세션까지다**: 세션 열기(계정·여행당 1 + 일반 1, DEC-U8-5)·목록·메시지 조회·대화 지우기(hard delete, 사용량 행은
+남는다 — DATA-U8-05). 세션 열기 응답은 컨텍스트 칩과 시작 quick reply 를 싣는다 — **칩은 스냅샷과 같은 출처에서**
+(BR-U8-03), quick reply 는 **서버가 발급**한다(`domain-entities.md` §3.4 · FD §2.2 — BR-U8-04 는 "예시와 '할 수 있는 것 보기'를 늘 보인다"). 그래서 스냅샷 출처(`TripFacade`·`TripBaseStayFacade`)의 읽기와
+quick reply 발급기가 이 노드에 들어온다. 턴·제안 엔드포인트는 계약에만 있고 뒤 노드가 채울 때까지 **501** 을 낸다 —
+`OpenApiContractIT` 가 계약과 핸들러의 일치를 요구하므로 스텁은 필수다. **스텁은 `ResponseEntity.status(501)` 을 직접 낸다** —
+예외로 내려면 `DomainException` 이 sealed 라 `common/core` 에 새 하위 타입과 `ErrorCode` 가 들고, 있는 501
+(`ProviderNotSupported`)은 뜻이 다르다. 스텁은 뒤 노드에서 사라질 코드라 그만한 값어치가 없다.
+프론트 오류 코드 집합에는 501 이 없어 `SERVER` 로 떨어진다(무해 — http 어댑터가 아직 없다).
+
+**프론트 계약과 대조가 이 노드의 본체다.** 프론트는 FD 를 보고 타입을 손으로 옮겨 뒀다
+(`frontend/src/pages/assistant/assistant-sheet/api/assistantContract.ts`·`assistantPort.ts`, TRIP-1319) — 일곱 호출
+(openSession·listSessions·getMessages·sendTurn·applyProposal·dismissProposal·clearSession)과 오류 코드
+(RATE_LIMITED·STALE·EXPIRED·NOT_APPLICABLE)를 가정한다. 기본 방향은 **프론트가 만든 모양을 따른다**(사용자 결정
+2026-10-13). FD 와 실질적으로 충돌할 때만 멈춰 묻는다.
+
+**"꺼진 채 머지된다"의 정확한 뜻**: 스위치 `ASSISTANT_INTERPRET_MODE=off|fake|http`(REL-U8-06)의 `off` 는 **해석만** 끈다
+(버튼 모드). `/api/v1/assistant/*` 엔드포인트 자체는 배포되는 순간 인증된 사용자에게 열린다 — 출시 앱은 가짜 어댑터를
+쓰고 있어 부르는 클라이언트가 없을 뿐이다. 로컬 기본은 `fake`(REL-U8-06)라 **배포 값을 `off` 로 명시하는 통로**
+(compose·차트·시크릿 동기화)가 필요하다 — `KAKAO_APP_ID` 를 넣을 때와 같은 네 구간이다.
+"""
+
+[[nodes]]
+id = "U8-TURN"
+ticket = "TRIP-1378"
+title = "[U8] 도우미 턴 처리 — 해석(fake)·디스패치·조회형 응답, 분당 제한·금칙어·멱등"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/assistant",
+  "backend/app/src/main/resources/application.yml",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+FD `business-logic-model.md` §2 한 턴의 흐름(10단계)과 §4 디스패치 표. 착수 전 FD·NFR 을 다시 읽는다 — 아래는 빠뜨리면
+안 되는 것의 목록이지 설계가 아니다.
+
+**흐름**: 소유 확인(404 은닉) → 멱등(`clientTurnId`, PBT-U8-5) → 리미터 → 입력 검사 → 사용자 행 기록 → 해석 → 디스패치 → 기록.
+- **트랜잭션 셋으로 나눈다**(PERF-U8-06 ★): ① 소유·멱등·리미터·사용자 행 → 커밋 → ② AI 호출(트랜잭션 밖) → ③ 도우미 행·
+  사용량 기록. AI 대기 동안 커넥션을 쥐면 동시 10턴에 다른 모든 API 가 굶는다. 리미터의 `pg_advisory_xact_lock`
+  (SEC-U8-01)은 ①에만 건다. 한도는 계정 분당 20(BR-U8-24, PBT-U8-4) — 최근 60초 `assistant_message` 사용자 행을 세고,
+  ACTION 턴도 세며, 거절된 턴은 기록하지 않는다.
+- **예산**: 서버 턴 13s, AI 호출마다 `deadline_ms` 를 잔여에서 깎아 넘기고 잔여 1s 미만이면 부르지 않고 FALLBACK(PERF-U8-01·02).
+  실패한 턴은 재시도·서킷 없이 **FALLBACK 정확히 1건**으로 끝난다(REL-U8-01 ★, BR-U8-40·41). `frames` 가 둘 이상이면
+  실행하지 않고 "하나씩 말씀해 주세요"(DEC-U8-11).
+- **입력 검사**: 길이 1..500 · 금칙어는 AI 호출 **전** — 위반 원문은 저장하지 않고(`redacted`), 사전 예외면 통과가 아니라
+  FALLBACK(fail-closed, BR-U8-23). 거절이 연속 2회면 사용 안내로 전환(BR-U8-25).
+- **ACTION 턴**(quick reply)은 해석을 건너뛴다(LLM 0회, COST-U8-07). 서버가 발급한 것이 아니면 400.
+- **컨텍스트 스냅샷은 화이트리스트**(FD §5, BR-U8-22 ★, PBT-U8-3 ★) + 크기 상한(SEC-U8-08).
+- **화면에 나가는 LLM 유래 문자열은 둘뿐**(SEC-U8-03 ★, PBT-U8-N1 ★ 칩 폐포) — 문구는 백엔드 템플릿(DEC-U8-6).
+  주입 회귀 말뭉치를 테스트 자산으로(SEC-U8-05). 로그·예외에 발화 원문·스냅샷을 싣지 않는다(SEC-U8-06 ★).
+- **디스패치**: 조회형(진행 검토·다음 장소·거리·장소·날씨)과 화면 넘기기. closed-set(PBT-U8-9), dead-end 없음(PBT-U8-2).
+  변경형 두 의도(`EDIT_SCHEDULE`·`SUGGEST_ALTERNATIVE`)의 처리기는 [[U8-PROPOSAL]] 에서 온다 — **그때까지 이 노드가 임시
+  처리기를 둔다**(일정 편집 화면으로 넘기는 `next_action`). 비워 두면 PBT-U8-9(의도마다 처리기 정확히 하나)와 PBT-U8-2 가 못 선다.
+- **사용량과 계정 일 상한**: 턴마다 `assistant_usage_daily` 를 쓴다(③). LLM 턴 일 상한 30(COST-U8-02, 설정값)을 넘으면
+  **차단이 아니라 강등** — TEXT 턴이 해석 없이 버튼 응답으로 간다(COST-U8-03 ★). `ASSISTANT_INTERPRET_MODE=off` 도 같은
+  응답 모양이다(REL-U8-02·06). 강등은 WARN 1줄(OBS-U8-03)과 카운터(OBS-U8-04)로 남긴다. **전역 월 상한은 [[U8-OPS]]** 가
+  이 강등 분기에 조건을 하나 더 건다.
+- 관측 컬럼 넷(OBS-U8-01: `outcome`·`match_route`·`llm_calls`·`latency_ms`)을 채운다.
+- **차단 PBT 게이트의 배정**: 이 노드 = PBT-U8-2·3·4·5·7·8·9·N1, [[U8-PROPOSAL]] = PBT-U8-1·6(+8 의 제안 diff 몫).
+  PBT-U8-7(`DialogueContext` 저장 → 조회 → 반송이 `turn_index` 외 바이트 동일, INV-U8-07)은 **fake 로도 선다** —
+  되묻기 경로가 그 jsonb 를 저장하고 돌려준다. http 어댑터를 기다리지 않는다. PBT-U8-8(INV-3: 카드·템플릿·칩 어디에도
+  소요시간이 없다)은 카드 모양이 생기는 이 노드에서 건다.
+- AI 해석 경계는 상대 미구현([[U8-AI-DIALOGUE]]) — 포트 + fake 어댑터까지. http 어댑터는 [[U8-INTERPRET-HTTP]].
+
+**미결로 들고 가는 긴장 하나**: 대화 지우기가 hard delete(DATA-U8-05)라 60초 창의 사용자 행도 지워진다 — 지우고 다시
+보내면 분당 제한이 초기화된다. 일 상한은 그래서 별도 테이블(COST-U8-01)인데 분당 제한에는 같은 처방이 없다. 착수 때 정한다.
+
+**크다 — 착수하면 가드레일/조회형으로 다시 쪼갤 수 있다.**
+"""
+
+[[nodes]]
+id = "U8-PROPOSAL"
+ticket = "TRIP-1379"
+title = "[U8] 도우미 제안·적용 — 전후 비교 카드, [적용]을 눌러야만 일정이 바뀐다"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/assistant",
+  "backend/modules/itinerary-generation",
+  "backend/modules/change-log",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+FD §2.1 · DEC-U8-2·3 · `domain-entities.md` §3.3·§3.5. `EDIT_SCHEDULE`(발화)·`SUGGEST_ALTERNATIVE`(후보 → 고르면
+`command`=REPLACE_SLOT, LLM 0회) → AI `/edit`(`confirm=true`) → `ProposalCard`(저장 안 함 — PBT-U8-1 ★ 단독 확정 없음).
+- **[적용]**: 상태·만료(생성 + 30분, O-U8-4) 확인 → **기준 지문 대조**(그사이 일정이 바뀌었으면 STALE 409) → 위반 있는 제안은
+  적용 불가 → `ItineraryEditFacade.edit(source=ASSISTANT)` → 저장 뒤 판정이 갈리면 숨기지 않고 알리고 [되돌리기] → ACTION_LOG.
+  저장이 예외면 `FAILED`. **제안 하나는 많아야 한 번 적용된다**(INV-U8-08, PBT-U8-6 상태기계).
+- **[취소]**(`dismissProposal`) — 프론트가 가정한 일곱 호출 중 하나다.
+- ACTION_LOG 에 리비전·변경 이력 id 를 남기려면(`assistant_proposal.revision_id`·`change_log_entry_id`) 편집 퍼사드 결과에
+  그 둘이 실려야 한다 — [[U8-EDIT-FACADE]](PR #1090)의 결과는 일정 id·위반 여부·판정 여부뿐이다(`ItineraryRevisionService.record` 와
+  change-log 의 `append` 가 둘 다 Unit 이라). 여기서 넓힌다.
+
+- **발화로 부른 `/edit` 는 LLM 턴이다**(COST-U8-02 — 해석이 LLM 0회로 끝났어도). 그 턴을 `assistant_usage_daily` 에
+  세지 않으면 가장 비싼 턴 종류(해석 + 편집 번역, COST-U8-06)가 일 상한 30 과 월 상한을 비켜 간다.
+- 편집 단계의 시한은 "턴 잔여 전부"다(PERF-U8-02) — 퍼사드에 마감을 넘길 자리가 있어야 13s 를 지킨다.
+- 여행 전 변경의 리비전에는 `[도우미]` 표지가 붙는다(BR-U8-19) — [[U8-EDIT-FACADE]] 가 출처로 처리한다.
+
+**AI `/edit` 와 슬롯 후보를 부르는 길은 [[U8-AI-EDIT-PORT]] 가 `api` 로 연다** — assistant 모듈은 남의 `domain`·`application`
+을 못 본다(R1). 이 노드가 `itinerary-generation`·`change-log` 를 건드리는 것은 위의 편집 결과 확장 때문이다.
+"""
+
+[[nodes]]
+id = "U8-OPS"
+ticket = "TRIP-1380"
+title = "[U8] 도우미 운영 의무 — 계정 삭제 즉시 파기·보존 청소·월 호출 상한·내보내기"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/assistant",
+  "backend/app/src/main/resources/application.yml",
+  "backend/app/src/test/kotlin/com/trippilot/app/AccountExportIT.kt",
+  "backend/docs/design/openapi.yaml",
+  "backend/docs/design",
+]
+note = """
+NFR 이 FD 뒤에 더한 의무들(`tech-stack-decisions.md` §5).
+- **계정 삭제 요청 즉시 파기** — `auth.AccountDeletionRequested` 구독 → 대화·사용량 삭제(DATA-U8-02). FK CASCADE 만으로는
+  안 지워진다(30일 파기 배치 미구현). 구독은 멱등이어야 하고(at-least-once), 탈퇴를 철회해도 지운 대화는 되살리지 않는다.
+- ShedLock 청소 둘 — 대화 보존(마지막 턴 후 90일, DATA-U8-01) · 사용량 40일(DATA-U8-04).
+- **서비스 전역 월 LLM 호출 상한**(COST-U8-04 ★) — `assistant_usage_daily.llm_turns` 합으로 세고, 도달하면 전역 버튼 모드.
+  세는 행과 강등 분기는 [[U8-TURN]] 이 만든다 — 여기서는 조건 하나를 더 건다. 상한 값은 AI 팀 측정(PERF-U8-03) 뒤에 정해진다.
+- `/me/export` 도우미 절(DATA-U8-06) — assistant 모듈에 `AccountDataContributor` 하나. 금칙어로 지운 입력은 `redacted` 표지로
+  나간다. `AccountExportIT` 의 절 목록 단정을 같이 고친다.
+- 집계 6종 SQL 을 백엔드 문서로(OBS-U8-02 — 턴 수·범위 밖 비율·폴백 비율·적용률·STALE/EXPIRED 비율·경로별 지연).
+- 여행 삭제 시 그 여행 세션 삭제 — `trip_id` FK CASCADE 로 이미 충족되는지 착수 때 확인한다(여행 삭제가 물리 삭제인지).
+
+**개통 전 사람 몫**: AI 벤더 지출 한도(COST-U8-05) · 처리방침 개정 2항목(대화 90일 보관, LLM 처리위탁에 도우미 발화).
+"""
+
+[[edges]]
+from = "U8-CONTRACT"
+to = "U8-TURN"
+kind = "계약선행"
+verified = false
+reason = "턴은 세션·메시지 테이블과 계약 위에 선다 — 모듈과 스키마가 U8-CONTRACT 에서 생긴다."
+
+[[edges]]
+from = "U8-TURN"
+to = "U8-PROPOSAL"
+kind = "계약선행"
+verified = false
+reason = "제안은 턴의 디스패치 결과다(FD §2 8단계 '변경형 → ProposalCard'). 턴 처리 없이 제안이 만들어질 입구가 없다."
+
+[[edges]]
+from = "U8-CONTRACT"
+to = "U8-OPS"
+kind = "계약선행"
+verified = false
+reason = "파기·청소·내보내기의 대상 테이블이 U8-CONTRACT 에서 생긴다."
+
+[[nodes]]
+id = "U8-INTERPRET-HTTP"
+ticket = ""
+title = "[U8] 해석 경계 http 어댑터 — 상대가 /ai/v1/dialogue/interpret 를 열면 붙인다"
+status = "blocked"
+migration = false
+touches = [
+  "backend/modules/assistant",
+  "backend/modules/itinerary-generation",
+]
+note = """
+[[U8-TURN]] 은 포트와 fake 어댑터까지다. 실 연동(`ASSISTANT_INTERPRET_MODE=http`)은 상대 경로가 생겨야 한다 —
+`ai/docs/openapi.json` 에 `dialogue` 경로가 0건이다(2026-10-13). 할 일: http 어댑터 · 계약 게이트 등록
+(tech-stack §5 "ai 계약 게이트" — `CALLED_PATHS`·`AiBoundaryOpenApiTest` 는 지금 `itinerary-generation` 에 있다.
+해석 어댑터를 어느 모듈에 둘지, 게이트를 어떻게 공유할지는 착수 때 정한다) · 실 왕복 1회(게이트는 이름만 본다).
+`DialogueContext` 왕복(INV-U8-07)은 [[U8-TURN]] 이 fake 로 이미 게이트한다 — 여기서는 실물 직렬형으로 한 번 더 본다.
+**`HttpScheduleAgentAdapter` 의 "4xx = 최소 일정 폴백" 습관을 옮기지 않는다**(REL-U8-05, BR-U8-45) — 이 경계의 실패는
+FALLBACK 메시지일 뿐 일정 폴백 신호가 아니다.
+"""
+
+[[edges]]
+from = "U8-AI-DIALOGUE"
+to = "U8-INTERPRET-HTTP"
+kind = "외부선행"
+verified = false
+reason = "상대가 POST /ai/v1/dialogue/interpret 를 구현해야 http 어댑터가 붙을 대상이 생긴다(G-U8-4)."
+
+[[edges]]
+from = "U8-TURN"
+to = "U8-INTERPRET-HTTP"
+kind = "계약선행"
+verified = false
+reason = "해석 포트는 U8-TURN 이 연다 — 어댑터는 그 포트를 구현한다."
+
+[[edges]]
+from = "U8-TURN"
+to = "U8-OPS"
+kind = "계약선행"
+verified = false
+reason = "전역 월 상한(COST-U8-04)은 U8-TURN 이 쓰는 assistant_usage_daily 행과 그 강등 분기 위에 선다. 파기·청소·내보내기만이면 U8-CONTRACT 로 충분하지만 노드는 하나다."
