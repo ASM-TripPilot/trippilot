@@ -460,7 +460,8 @@ class RuntimeIntegrationTests(unittest.TestCase):
 
     def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
         summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"
-        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", summary, ""])
+        # 재시도가 있었던 Job: 성공한 파드 이름·실패 횟수 1 → 그 파드의 로그를 읽고 요약에 재시도를 남긴다
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "trippilot-poi-load-k7x2q", "1", summary, ""])
         with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-pois"])
         calls = [c.args[0] for c in shell.call_args_list]
@@ -470,6 +471,10 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertIn("ingest_pois.py", applied["items"][0]["data"])  # 정본 스크립트가 실제로 읽혀 실렸다
         self.assertIn("job/trippilot-poi-load", calls[3])
         out.assert_any_call(summary)
+        logs_call = next(c for c in calls if c[:2] == ["kubectl", "logs"])
+        self.assertIn("pod/trippilot-poi-load-k7x2q", logs_call)  # `job/…` 이면 실패한 1차 파드 로그를 집을 수 있다
+        printed = " ".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("retried 1 time", printed)
         self.assertIn("job,configmap", calls[-1])  # 둘 다 치운다
 
     def test_load_pois_summary_reaches_the_step_output_with_drops_and_dry_run_count(self):
@@ -493,7 +498,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
             " · 합계 — 접수=19084 신규=0 갱신=19080 지역코드미상=3 · 탈락(사유별): · gate.category_unmapped: 4")
         with tempfile.TemporaryDirectory() as folder:
             output = os.path.join(folder, "out")
-            shell = Mock(side_effect=["", "img", "", "", logs, ""])
+            shell = Mock(side_effect=["", "img", "", "", "trippilot-poi-load-abc12", "0", logs, ""])
             with patch("runtime.command", shell), patch("builtins.print"), \
                     patch.dict(os.environ, {"GITHUB_OUTPUT": output}):
                 runtime.main(["load-pois", "--close-missing-dry-run"])
@@ -506,7 +511,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
 
     def test_load_pois_with_no_effect_is_a_failure(self):
         """적재가 '성공'인데 신규·갱신이 0 이면 아무것도 안 들어간 것이다 — 조용히 지나가면 "효과 없음"이 또 온다."""
-        shell = Mock(side_effect=["", "img", "", "", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
+        shell = Mock(side_effect=["", "img", "", "", "", "0", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
         with patch("runtime.command", shell), patch("builtins.print"), self.assertRaises(RuntimeError):
             runtime.main(["load-pois"])
         self.assertIn("delete", shell.call_args_list[-1].args[0])
