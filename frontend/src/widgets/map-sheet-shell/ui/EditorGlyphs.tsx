@@ -1,4 +1,7 @@
 import Svg, { Path } from 'react-native-svg';
+import { PlusGlyph as SharedPlusGlyph } from '@/shared/ui/glyphs';
+// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+export { InfoCircleGlyph } from '@/shared/ui/glyphs';
 
 // TRIP-921 · h12 편집 뷰(EditorView·SlotDropZone) 전용 인라인 SVG 글리프. widgets 는 `@/features` 를
 // import 하지 않으므로 `features/itinerary/ui/ItineraryGlyphs` 의
@@ -7,8 +10,6 @@ import Svg, { Path } from 'react-native-svg';
 // raw-hex 스캔 제외 관례).
 
 const INK = '#222222';
-const MUTED = '#6A6A6A';
-const PRIMARY = '#FF385C';
 
 type GlyphProps = {
   size?: number;
@@ -56,62 +57,5 @@ export function PlusGlyph({
   tone = 'ink',
   testID,
 }: GlyphProps & { tone?: 'ink' | 'primary' }) {
-  const stroke = tone === 'primary' ? PRIMARY : INK;
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 18 18"
-      fill="none"
-    >
-      <Path
-        d="M9 3.75V14.25"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
-      <Path
-        d="M3.75 9H14.25"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
-// 안내줄 i(16) — InfoCircleGlyph(ItineraryGlyphs) 바이트 복제(편집 뷰가 쓰는 muted 톤만).
-export function InfoCircleGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M10 17.5C14.1421 17.5 17.5 14.1421 17.5 10C17.5 5.85786 14.1421 2.5 10 2.5C5.85786 2.5 2.5 5.85786 2.5 10C2.5 14.1421 5.85786 17.5 10 17.5Z"
-        stroke={MUTED}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 9.16667V13.3333"
-        stroke={MUTED}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 6.66667H10.0083"
-        stroke={MUTED}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <SharedPlusGlyph size={size} color={tone} testID={testID} />;
 }

@@ -1,5 +1,7 @@
 import type { ComponentType } from 'react';
 import Svg, { Path } from 'react-native-svg';
+// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+export { BackChevronGlyph } from '@/shared/ui/glyphs';
 
 // 온보딩(약관·닉네임) 전용 벡터 글리프(TRIP-162 c06/c07 Figma 정합). Figma 에서 내려받은
 // .svg 좌표를 react-native-svg 프리미티브(<Svg><Path/>)로 1:1 옮긴다 — AuthGlyphs.tsx 와
@@ -10,27 +12,6 @@ type GlyphProps = {
   size?: number;
   testID?: string;
 };
-
-// 내비바 back chevron — 표시만(장식), 실동작 미배선(Q3 비목표). terms·nickname 공용.
-export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M15 18L9 12L15 6"
-        stroke="#222222"
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
 
 // 체크박스 체크 표시(흰색) — 약관 checked 상태 안에 얹는다(T5·T6).
 export function CheckGlyph({ size = 14, testID }: GlyphProps) {

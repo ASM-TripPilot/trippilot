@@ -1,4 +1,6 @@
-import Svg, { Path, Rect } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
+// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+export { LockGlyph, ClockGlyph } from '@/shared/ui/glyphs';
 
 // TRIP-809 · entities/itinerary-slot 슬롯 카드 글리프. 카테고리 사진 플레이스홀더 아이콘 8종(명소·맛집·
 // 카페·야경·자연·쇼핑·문화 + 폴백 이미지)을 features/itinerary/ui/ItineraryGlyphs 에서 바이트 그대로
@@ -14,7 +16,6 @@ const PRIMARY_TEXT = '#C13515';
 const INFO = '#0B6E63';
 const SUCCESS = '#0E9384';
 const PRESENCE_BLUE = '#1B6EF3';
-const BODY = '#3F3F3F';
 const INK = '#222222';
 // 비활성 회청(Figma #C2CCD6) — 토큰 없음, TripGlyphs `DISABLED` 선례와 같은 값.
 const DISABLED = '#C2CCD6';
@@ -290,59 +291,6 @@ export function ChevronRightGlyph({
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// TRIP-783 · 시각 칩 시계(20) — features/itinerary/ui/ItineraryGlyphs.ClockGlyph 바이트 복제
-// (entities → features 역참조 금지라 재사용 불가 · 리포 글리프 로컬 복제 관례). 시각 칩 안에서 size=12
-// 로 쓴다. 색은 시각 텍스트(ink)와 한 벌로 보이는 body.
-export function ClockGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M10 17.5C14.1421 17.5 17.5 14.1421 17.5 10C17.5 5.85786 14.1421 2.5 10 2.5C5.85786 2.5 2.5 5.85786 2.5 10C2.5 14.1421 5.85786 17.5 10 17.5Z"
-        stroke={BODY}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 5.83333V10L12.5 11.6667"
-        stroke={BODY}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// 고정 pill 자물쇠(몸통 + 걸쇠).
-export function LockGlyph({ size = 14 }: GlyphProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Rect
-        x={5}
-        y={10.5}
-        width={14}
-        height={9.5}
-        rx={2.2}
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.8}
-      />
-      <Path
-        d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.8}
-        strokeLinecap="round"
       />
     </Svg>
   );
