@@ -4,9 +4,11 @@ import com.trippilot.changelog.api.AppendChangeLog
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.itinerarygeneration.api.EditDayCommand
+import com.trippilot.itinerarygeneration.api.EditSlotCommand
 import com.trippilot.itinerarygeneration.api.ItineraryEditFacade
 import com.trippilot.itinerarygeneration.api.ItineraryEditResult
 import com.trippilot.itinerarygeneration.api.ItineraryEditSource
@@ -79,7 +81,10 @@ class EditItineraryService(
     private val tx = TransactionTemplate(transactionManager)
 
     /** 다른 모듈의 입구(U8 도우미 [적용]) — REST 편집과 **같은 [edit]** 를 탄다. 다른 것은 출처뿐이다. */
-    override fun edit(accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource): ItineraryEditResult {
+    override fun edit(
+        accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource,
+        onlyIf: ((current: List<EditDayCommand>) -> Boolean)?,
+    ): ItineraryEditResult {
         // REST 는 요청 DTO 가 같은 상한을 건다. 여기서 안 막으면 여행 중 편집에서 `change_log_entry.reason varchar(500)` 이
         // 넘쳐 편집 전체가 롤백되고 호출측은 DB 예외를 받는다.
         if (reason != null && reason.length > MAX_REASON_LENGTH) {
@@ -89,7 +94,7 @@ class EditItineraryService(
             days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
             reason,
         )
-        val (saved, judged) = save(accountId, tripId, command, source)
+        val (saved, judged) = save(accountId, tripId, command, source, onlyIf)
         return ItineraryEditResult(
             itineraryId = saved.itineraryId,
             hasViolation = saved.days.any { d -> d.slots.any { it.hasViolation } },
@@ -101,7 +106,10 @@ class EditItineraryService(
         save(accountId, tripId, edit, ItineraryEditSource.MANUAL).first
 
     /** @return 저장된 일정과, 이번 저장에서 재검증이 **판정됐는지**(AI 불통으로 보류됐으면 false). */
-    private fun save(accountId: UUID, tripId: UUID, edit: EditItinerary, source: ItineraryEditSource): Pair<Itinerary, Boolean> {
+    private fun save(
+        accountId: UUID, tripId: UUID, edit: EditItinerary, source: ItineraryEditSource,
+        onlyIf: ((current: List<EditDayCommand>) -> Boolean)? = null,
+    ): Pair<Itinerary, Boolean> {
         // 빈 문자열도 "사유 없음"이다 — 그대로 두면 이력의 사유 칸이 빈 채 남는다(BR-U4-31).
         val reason = edit.reason?.takeIf { it.isNotBlank() }
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
@@ -141,6 +149,10 @@ class EditItineraryService(
         val saved = tx.execute {
             // 트랜잭션 안에서 다시 읽는다 — 위 재검증(외부 호출) 동안 다른 편집이 커밋됐으면 밖에서 읽은 값은 낡았다.
             val beforeWrite = itineraries.findByTrip(tripId).firstOrNull() ?: current
+            // 호출측의 조건은 **여기서** 본다 — 쓰기와 같은 트랜잭션, 다시 읽은 값으로. 던지면 아무것도 쓰이지 않는다.
+            if (onlyIf != null && !onlyIf(beforeWrite.days.map { d -> EditDayCommand(d.date, d.slots.map { EditSlotCommand(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) })) {
+                throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다.", errorCode = ErrorCode.STALE)
+            }
             // 편집 전 상태로 돌아갈 지점이 없으면 먼저 남긴다 — 첫 편집으로 원본이 사라지면 안 된다(INV-U3-08).
             revisions.ensureRestorePoint(beforeWrite)
             // 확정 일정이면 동결을 잇는다(INV-U1-03) — 편집은 전체 교체라 여기서 안 이으면

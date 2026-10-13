@@ -4,6 +4,7 @@ import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.NextAction
+import com.trippilot.assistant.domain.ProposalDiffItem
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.assistant.domain.QuickReplyAction
 import java.util.UUID
@@ -136,6 +137,43 @@ object AssistantTemplates {
         quickReplies = UUID.randomUUID().toString().take(8).let { ask ->
             options.mapIndexed { i, option -> QuickReply("qr-option-$ask-$i", option, QuickReplyAction.PICK_OPTION) }
         },
+    )
+
+    /**
+     * 제안을 적용했다는 기록(`b06` · BR-U8-19). **저장된 값이 이긴다**(BR-U8-34) — 저장할 때의 재검증이 제안 때와 다르게
+     * 판정했으면 숨기지 않고 말하고, 고칠 곳으로 보낸다. 검증을 못 했으면(상대 불통) 문제없다고 하지 않는다.
+     *
+     * ponytail: 되돌리기(`RESTORE_REVISION`)를 주지 않는다 — 앱에 리비전 화면이 없어 그 버튼이 갈 곳이 없고, 편집 퍼사드가
+     * 리비전 id 를 돌려주지 않는다. 둘이 생기면 여기에 싣는다. 그때까지는 편집 화면이 고칠 곳이다.
+     */
+    fun applied(diff: List<ProposalDiffItem>, hasViolation: Boolean, judged: Boolean): NewMessage {
+        val what = whatChanged(diff)
+        val (text, next) = when {
+            !judged -> "적용했어요. 지금은 검증을 하지 못했어요 — 일정에서 확인해 주세요." to NextAction("OPEN_ITINERARY", "일정 보기")
+            hasViolation -> "적용했지만, 다시 검증하니 맞지 않는 곳이 있어요. 일정에서 확인해 주세요." to NextAction("OPEN_ITINERARY_EDIT", "직접 편집")
+            else -> "적용했어요." to NextAction("OPEN_ITINERARY", "일정 보기")
+        }
+        return assistant(
+            MessageKind.ACTION_LOG, text, listOf(next), outcome = if (hasViolation && judged) "APPLIED_WITH_VIOLATION" else "APPLIED",
+            payload = mapOf("what" to what, "tag" to "CHANGE", "detail" to null, "revisionId" to null, "changeLogEntryId" to null),
+        )
+    }
+
+    /** 무엇을 바꿨는가 한 줄 — 적용 기록의 제목이자, 리비전·변경 이력에 남는 사유다(BR-U8-19). */
+    fun whatChanged(diff: List<ProposalDiffItem>): String = diff.firstOrNull()?.let { first ->
+        val head = when (first.change) {
+            "REPLACED" -> "${first.before?.name} → ${first.after?.name}"
+            "ADDED" -> "${first.after?.name} 추가"
+            "REMOVED" -> "${first.before?.name} 삭제"
+            else -> "${first.after?.name} 시각 변경"
+        }
+        if (diff.size > 1) "$head 외 ${diff.size - 1}건" else head
+    } ?: "일정 변경"
+
+    /** 적용하다 저장에 실패했다 — 일정은 그대로다. 그 제안은 끝났고(`FAILED`), 다시 제안받게 한다. */
+    fun applyFailed() = assistant(
+        MessageKind.TEXT, "적용하지 못했어요. 일정은 그대로예요.",
+        listOf(NextAction("OPEN_ITINERARY_EDIT", "직접 편집"), CONTINUE), outcome = "APPLY_FAILED",
     )
 
     /**

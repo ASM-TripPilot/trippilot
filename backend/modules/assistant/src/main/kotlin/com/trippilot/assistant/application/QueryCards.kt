@@ -127,7 +127,12 @@ class QueryCards(
         return AssistantTemplates.info(
             "NEXT_SLOT", "다음 장소예요.", next.nameKo ?: "이름 미확인 장소", rows,
             if (ctx.inTrip) NextAction("OPEN_LIVE", "여행 중 화면 열기") else viewItinerary,
-        )
+            // 버튼만으로 대체 후보까지 간다 — 해석이 꺼진 버튼 모드(운영 기본값)에서 "어느 장소"를 말로 가리킬 수 없다.
+            // 확정된 일정에는 주지 않는다 — 후보 경로가 확정 일정을 받지 않아, 눌러도 "바꿀 수 없다"만 돌아오는 버튼이 된다.
+        ).let { card ->
+            if (loadCurrent(ctx)?.value?.status != "PLANNED") card
+            else card.copy(quickReplies = listOf(ProposalCards.alternativesReply(next.slotKey)) + StartQuickReplies.of(hasTrip = true))
+        }
     }
 
     /**
@@ -197,16 +202,6 @@ class QueryCards(
     /** 원천이 죽었다 — 추측하지 않고 그 화면을 연다(FD §6). 버튼을 눌러 온 턴이라 [다시 시도]로 되풀이할 말이 없다. */
     private fun cannotRead() = AssistantTemplates.handoff("지금 일정을 확인할 수 없어요.", viewItinerary)
 
-    /**
-     * 말에서 가리킨 장소 — 그 이름과 겹치는 슬롯이 **하나뿐일 때만**. 인자는 찾는 데만 쓴다.
-     * 못 찾거나 여럿이면("카페"가 셋이면 어느 카페인가) 지어내지 않고 null — 호출측이 일정 화면으로 보낸다.
-     */
-    private fun mentioned(slots: List<PlannedSlotView>, said: String?): PlannedSlotView? {
-        val word = said?.trim()?.takeIf { it.length >= MIN_MENTION_LENGTH } ?: return null
-        // 이름이 한 글자거나 빈 슬롯은 거의 모든 말에 "들어 있다" — 그런 슬롯은 후보에서 뺀다.
-        return slots.filter { slot -> slot.nameKo?.takeIf { it.length >= MIN_MENTION_LENGTH }?.let { word in it || it in word } == true }.singleOrNull()
-    }
-
     private companion object {
         const val MAX_PROBLEMS = 5
         const val MAX_EMPTY_DAY_ROWS = 3
@@ -215,12 +210,22 @@ class QueryCards(
         const val ARG_DESTINATION = "destination"
         const val ARG_ORIGIN = "origin"
         const val ARG_PLACE = "place"
-
-        /** 한 글자 인자("카")로 엉뚱한 곳이 잡히지 않게. */
-        const val MIN_MENTION_LENGTH = 2
         val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
         val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
         val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("M월 d일")
         private val log = LoggerFactory.getLogger(QueryCards::class.java)
     }
+}
+
+/** 한 글자 인자("카")로 엉뚱한 곳이 잡히지 않게. */
+private const val MIN_MENTION_LENGTH = 2
+
+/**
+ * 말에서 가리킨 장소 — 그 이름과 겹치는 슬롯이 **하나뿐일 때만**. 인자는 찾는 데만 쓴다.
+ * 못 찾거나 여럿이면("카페"가 셋이면 어느 카페인가) 지어내지 않고 null — 호출측이 일정 화면으로 보낸다.
+ */
+internal fun mentioned(slots: List<PlannedSlotView>, said: String?): PlannedSlotView? {
+    val word = said?.trim()?.takeIf { it.length >= MIN_MENTION_LENGTH } ?: return null
+    // 이름이 한 글자거나 빈 슬롯은 거의 모든 말에 "들어 있다" — 그런 슬롯은 후보에서 뺀다.
+    return slots.filter { slot -> slot.nameKo?.takeIf { it.length >= MIN_MENTION_LENGTH }?.let { word in it || it in word } == true }.singleOrNull()
 }

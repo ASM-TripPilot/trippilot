@@ -29,4 +29,8 @@ enum class ErrorCode {
     MODERATION_UNAVAILABLE,  // 활성 금칙어 사전 미로드 — 검증 차단(503, fail-closed INV-B2)
     VISIT_ALREADY_RECORDED,  // 재생한 방문 기록이 **이미 서버에 같은 상태로 있다**(409, BR-U5-20)
     VISIT_CONFLICT,          // 재생한 방문 기록이 서버와 **다른 상태**다 — 사용자 해소 필요(409, BR-U5-21)
+    // 도우미 제안 적용 거절(409, U8 BR-U8-32) — 앱이 카드를 어떻게 바꿀지가 셋으로 갈린다. 이름은 프론트 계약 그대로다.
+    STALE,                   // 제안을 만든 뒤 일정이 바뀌었다 — 저장하지 않았다. 다시 제안받는다
+    EXPIRED,                 // 제안이 만료됐다
+    NOT_APPLICABLE,          // 위반이 있거나, 취소·실패로 끝났거나, 다른 적용이 저장 중인 제안이다
 }

@@ -19,6 +19,12 @@ import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.NextAction
 import com.trippilot.core.error.RateLimited
+import com.trippilot.itinerarygeneration.api.EditProposal
+import com.trippilot.itinerarygeneration.api.EditProposalRequest
+import com.trippilot.itinerarygeneration.api.ProposalViolation
+import com.trippilot.itinerarygeneration.api.ProposedDay
+import com.trippilot.itinerarygeneration.api.SlotCandidateView
+import com.trippilot.itinerarygeneration.api.SlotCandidatesView
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.moderation.api.ModerationVerdict
@@ -108,6 +114,7 @@ class AssistantTurnServiceTest : StringSpec({
         val clock: MovingClock,
         val interpreter: Interpreter?,
         val data: FakeTripData,
+        val editing: FakeEditing = FakeEditing(),
     ) {
         /** 같은 턴의 앞선 처리를 기다리는 동안 일어날 일 — 테스트가 "그 사이 앞선 처리가 끝났다"를 심는다. */
         var onPause: () -> Unit = {}
@@ -127,7 +134,7 @@ class AssistantTurnServiceTest : StringSpec({
         properties: AssistantProperties = AssistantProperties(),
         store: AssistantMessageRepository = messages,
     ) = AssistantTurnService(
-        sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), IntentDispatcher(QueryCards(data, data, data, data)),
+        sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), dispatcher(data, editing, properties),
         TripContextReader(trips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), data, data, properties), properties, json, clock, NOOP_TX,
     ).also { it.pause = { ms -> clock.now = clock.now.plusMillis(ms); onPause() } } // 기다림은 시계를 민다
 
@@ -615,7 +622,7 @@ class AssistantTurnServiceTest : StringSpec({
     "버튼을 눌러 온 턴이 실패하면 다시 시도를 주지 않는다 — 말로 온 턴에는 준다" {
         val w = world()
         val s = w.session()
-        val throwing = IntentDispatcher(QueryCards(w.data, w.data, w.data, w.data)) // 자리만 — 아래에서 원천을 죽인다
+        val throwing = dispatcher(w.data) // 자리만 — 아래에서 원천을 죽인다
         val brokenTrips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
             override fun findGenerationContext(accountId: UUID, id: UUID): TripGenerationContext? = throw IllegalStateException("db down")
@@ -692,7 +699,7 @@ class AssistantTurnServiceTest : StringSpec({
                 mapOf("destination" to said, "place" to said), start,
             )
             // 처리기는 **던지지 않는다** — 원천이 죽어도 스스로 가용한 답을 낸다. 던지면 이 속성이 깨져 드러난다.
-            val message = IntentDispatcher(QueryCards(data, data, data, data)).dispatch(intent, context)
+            val message = dispatcher(data).dispatch(intent, context)
 
             (message.nextActions.isNotEmpty()) shouldBe true
             message.nextActions.forEach { (it.type in NextAction.TYPES) shouldBe true }
@@ -713,6 +720,121 @@ class AssistantTurnServiceTest : StringSpec({
             }
         }
         shouldThrow<IllegalArgumentException> { Intent.valueOf("DELETE_EVERYTHING") } // 표 밖 값은 만들 수 없다
+    }
+
+    /** 제안의 재료 — 오늘 저녁의 카페 모카를 책방카페로 바꾸는 안과, 그 자리의 후보 하나. */
+    fun World.offerBookCafe(hint: String? = "AUTO_APPLY"): UUID {
+        val book = UUID.randomUUID()
+        val moca = data.slots.single()
+        data.surfaces = mapOf(book to surface(book, "책방카페"))
+        editing.candidates = { SlotCandidatesView(listOf(SlotCandidateView(book, "630m", "조용한 좌석")), degraded = false, emptyReason = null) }
+        editing.proposal = {
+            EditProposal.Proposed(
+                listOf(ProposedDay(today, listOf(proposedSlot(moca.poiId, "18:00", "840m")))), listOf(ProposedDay(today, listOf(proposedSlot(book, "18:00")))), hint,
+            )
+        }
+        return book
+    }
+
+    /**
+     * 해석이 꺼진 버튼 모드(운영 기본값)에서도 변경 제안까지 간다 — "어느 장소"를 말로 가리킬 수 없으니 버튼이 슬롯을 실어 나른다.
+     * 그 사이 **일정은 한 번도 저장되지 않는다**(BR-U8-30).
+     */
+    "버튼만으로 다음 장소 → 다른 곳 추천 → 고르기 → 제안까지 간다 — 저장은 없다" {
+        val w = world(interpreter = null)
+        val s = w.session()
+        val book = w.offerBookCafe()
+
+        val next = w.press(s, "qr-next")
+        next.quickReplies.map { it.label } shouldContainExactly listOf("다른 곳 추천") + StartQuickReplies.of(true).map { it.label }
+
+        val candidates = w.press(s, next.quickReplies.first().id)
+        candidates.messages[1].kind shouldBe MessageKind.CANDIDATES
+        w.editing.asked shouldContainExactly listOf(w.data.slots.single().slotKey)
+
+        val proposal = w.press(s, candidates.quickReplies.single().id)
+        proposal.messages[1].kind shouldBe MessageKind.PROPOSAL
+        proposal.messages[1].proposal!!.let { it.status to it.diff.single().change } shouldBe ("PROPOSED" to "REPLACED")
+        w.editing.proposed.single().request shouldBe EditProposalRequest.ReplaceSlot(w.data.slots.single().slotKey, book)
+        (w.editing.proposed.single().deadlineMs in 1..AssistantProperties().editStageMaxMs) shouldBe true
+        proposal.quickReplies.map { it.id } shouldContainExactly StartQuickReplies.of(true).map { it.id } // 제안 뒤에는 시작 빠른 답으로
+        w.messages.proposals.rows.size shouldBe 1
+        w.editing.edits shouldBe emptyList()
+        w.usage.llm[acc to today] shouldBe null // 버튼만 눌렀다 — LLM 0회
+    }
+
+    /** 턴 예산이 다 됐으면 상대를 부르지 않는다 — 부르면 앱의 대기(15초)를 넘긴다(PERF-U8-01). */
+    "남은 턴 예산만큼만 편집 제안에 준다" {
+        val w = world(Intent.EDIT_SCHEDULE)
+        val s = w.session()
+        w.offerBookCafe()
+        w.interpreter!!.answer = { r ->
+            w.clock.now = w.clock.now.plusMillis(9_000) // 해석이 9초를 썼다
+            framed(Intent.EDIT_SCHEDULE)(r)
+        }
+
+        w.say(s, "카페 바꿔줘")
+
+        w.editing.proposed.single().deadlineMs shouldBe 13_000 - 9_000 - 1_000
+    }
+
+    /**
+     * 발화 편집은 상대가 LLM 으로 옮긴다 — 해석이 LLM 을 안 썼어도 그 턴은 LLM 턴이다(COST-U8-02).
+     * 그리고 상대가 돌려준 인자에 **서버 발급 전용 키**가 있어도 쓰지 않는다 — 지어낸 슬롯·장소로 교체가 나가면 안 된다.
+     */
+    "말로 바꾸라고 하면 LLM 턴으로 세고, 상대가 지어낸 슬롯·장소 인자는 버린다" {
+        val forged = mapOf("slotKey" to "$today#${UUID.randomUUID()}", "poiId" to UUID.randomUUID().toString())
+        val w = world(interpreter = Interpreter { r ->
+            Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.EDIT_SCHEDULE, forged, "CONFIDENT")), null, r.dialogueContext, 0)
+        })
+        val s = w.session()
+        w.offerBookCafe()
+
+        val result = w.say(s, "카페 바꿔줘")
+
+        result.messages[1].kind shouldBe MessageKind.PROPOSAL
+        w.editing.proposed.single().request shouldBe EditProposalRequest.Utterance("카페 바꿔줘")
+        w.row(2).saved.llmCalls shouldBe 1
+        w.usage.llm[acc to today] shouldBe 1
+    }
+
+    /**
+     * PBT-U8-1 ★ — **단독 확정 없음.** 말·버튼·상대의 답(`AUTO_APPLY` 포함)이 어떻게 섞여도, [적용]을 누르지 않는 한
+     * 일정 저장은 0번이다. 턴 서비스에는 저장으로 가는 길이 아예 없어야 한다.
+     */
+    "임의의 턴 열에서 적용 없이는 일정이 저장되지 않는다" {
+        checkAll(
+            Arb.list(Arb.element("SAY_EDIT", "SAY_ALTERNATIVE", "NEXT", "ALTERNATIVE", "PICK", "REVIEW"), 1..8),
+            Arb.element("AUTO_APPLY", "CONFIRM_REQUIRED", null), Arb.element("PROPOSED", "REJECTED", "UNAVAILABLE"),
+        ) { steps, hint, kind ->
+            val w = world(interpreter = Interpreter { r ->
+                val (intent, arguments) = if ("대신" in r.utterance) Intent.SUGGEST_ALTERNATIVE to mapOf("target" to "카페") else Intent.EDIT_SCHEDULE to emptyMap()
+                Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(intent, arguments, "CONFIDENT")), null, r.dialogueContext, 1)
+            })
+            val s = w.session()
+            w.offerBookCafe(hint)
+            when (kind) {
+                "REJECTED" -> w.editing.proposal = { EditProposal.Rejected(listOf(ProposalViolation(null, today, "영업시간과 맞지 않아요"))) }
+                "UNAVAILABLE" -> w.editing.proposal = { EditProposal.Unavailable }
+            }
+            val issued = mutableMapOf<String, String>() // 종류 → 가장 최근에 발급된 버튼 id
+            steps.forEach { step ->
+                val result = when (step) {
+                    "SAY_EDIT" -> w.say(s, "카페 바꿔줘")
+                    "SAY_ALTERNATIVE" -> w.say(s, "카페 대신 갈 곳")
+                    "NEXT" -> w.press(s, "qr-next")
+                    "REVIEW" -> w.press(s, "qr-review")
+                    "ALTERNATIVE" -> issued["ALT"]?.let { w.press(s, it) }
+                    else -> issued["PICK"]?.let { w.press(s, it) }
+                }
+                result?.quickReplies?.forEach { reply ->
+                    if (reply.id.startsWith("qr-alt-")) issued["ALT"] = reply.id
+                    if (reply.action == "PICK_CANDIDATE") issued["PICK"] = reply.id
+                }
+                result?.messages?.drop(1)?.forEach { (it.nextActions.isNotEmpty()) shouldBe true }
+            }
+            w.editing.edits shouldBe emptyList()
+        }
     }
 
     /**

@@ -4,18 +4,19 @@ import com.trippilot.assistant.application.AssistantSessionService
 import com.trippilot.assistant.application.AssistantTurnService
 import com.trippilot.assistant.application.MessagePage
 import com.trippilot.assistant.application.OpenedSession
+import com.trippilot.assistant.application.ProposalService
 import com.trippilot.assistant.application.SessionSummary
 import com.trippilot.assistant.application.TurnInput
 import com.trippilot.assistant.application.TurnResult
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.NextAction
+import com.trippilot.assistant.domain.ProposalView
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
 import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -34,16 +35,13 @@ import java.util.UUID
  *
  * **응답 모양은 프론트가 먼저 만든 계약을 따른다**(`frontend/…/assistant-sheet/api/assistantContract.ts`,
  * 사용자 결정 2026-10-13) — 세션 목록이 감싸는 객체 없이 배열인 것도 그래서다.
- *
- * 제안(적용·취소)은 **계약만 열려 있다**. `OpenApiContractIT` 가 계약과 핸들러의 일치를 요구해 자리를 두되, 채워질 때까지
- * 501 을 낸다(TRIP-1379). 501 을 예외가 아니라 응답으로 직접 내는 이유: `DomainException` 이 sealed 라
- * 새 501 은 `common/core` 에 타입이 하나 들고, 곧 지워질 코드에 그만한 값어치가 없다.
  */
 @RestController
 @RequestMapping("/api/v1/assistant")
 class AssistantController(
     private val sessions: AssistantSessionService,
     private val turns: AssistantTurnService,
+    private val proposals: ProposalService,
 ) {
 
     @PostMapping("/sessions")
@@ -71,17 +69,22 @@ class AssistantController(
         SendTurnResponse.from(turns.send(principal.accountId(), sessionId, request.clientTurnId, request.input.toInput(), request.screen.surface))
 
     @PostMapping("/proposals/{proposalId}/apply")
-    fun applyProposal(principal: Principal, @PathVariable proposalId: UUID): ResponseEntity<Void> = notYet(principal)
+    fun applyProposal(principal: Principal, @PathVariable proposalId: UUID): ApplyProposalResponse =
+        proposals.apply(principal.accountId(), proposalId).let { o ->
+            ApplyProposalResponse(ProposalStatusResponse(o.proposalId, o.status.name), o.messages.map { MessageResponse.from(it) })
+        }
 
     @PostMapping("/proposals/{proposalId}/dismiss")
-    fun dismissProposal(principal: Principal, @PathVariable proposalId: UUID): ResponseEntity<Void> = notYet(principal)
-
-    /** 토큰은 여기서도 확인한다 — 미구현 자리라고 계정 형식 오류를 501 로 덮지 않는다. */
-    private fun notYet(principal: Principal): ResponseEntity<Void> {
-        principal.accountId()
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build()
-    }
+    fun dismissProposal(principal: Principal, @PathVariable proposalId: UUID): DismissProposalResponse =
+        proposals.dismiss(principal.accountId(), proposalId).let { DismissProposalResponse(ProposalStatusResponse(it.proposalId, it.status.name)) }
 }
+
+/** [messages] 는 무엇을 했는지의 기록이다(`ACTION_LOG`) — 저장에 실패했으면 그 안내가 온다(그때 `status` 는 `FAILED`). */
+data class ApplyProposalResponse(val proposal: ProposalStatusResponse, val messages: List<MessageResponse>)
+
+data class DismissProposalResponse(val proposal: ProposalStatusResponse)
+
+data class ProposalStatusResponse(val id: UUID, val status: String)
 
 /** 토큰 sub → 계정 id. UUID 가 아니면 인증 실패로 다룬다(형식 오류를 500 으로 흘리지 않는다). */
 private fun Principal.accountId(): UUID =
@@ -155,7 +158,7 @@ data class MessagesPageResponse(val messages: List<MessageResponse>, val nextBef
 /**
  * 메시지 한 줄. **소요시간 필드는 없다**(INV-3) — 시각·거리는 서버가 저장한 문자열 그대로다.
  *
- * [proposal] 은 제안 카드가 생길 때까지 늘 null 이다(TRIP-1379).
+ * [proposal] 은 제안 카드(`PROPOSAL`)와 그 제안을 적용한 결과 안내(`ACTION_LOG`, 실패면 `TEXT`)에만 있다. 상태는 **읽은 시점의 것**이다.
  */
 data class MessageResponse(
     val id: UUID,
@@ -166,14 +169,14 @@ data class MessageResponse(
     val nextActions: List<NextAction>,
     /** null = 이 메시지가 정하지 않았다(앱이 시작 빠른 답을 보인다). 빈 목록과 뜻이 다르다. */
     val quickReplies: List<QuickReply>?,
-    val proposal: Any?,
+    val proposal: ProposalView?,
     val footnote: String?,
     val createdAt: Instant,
 ) {
     companion object {
         fun from(m: AssistantMessage) = MessageResponse(
             id = m.messageId, role = m.role.name, kind = m.kind.name, text = m.text, payload = m.payload,
-            nextActions = m.nextActions, quickReplies = m.quickReplies, proposal = null, footnote = m.footnote, createdAt = m.createdAt,
+            nextActions = m.nextActions, quickReplies = m.quickReplies, proposal = m.proposal, footnote = m.footnote, createdAt = m.createdAt,
         )
     }
 }

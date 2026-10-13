@@ -286,13 +286,14 @@ class AssistantTurnService(
             val pressed = turn.action ?: return Reply(AssistantTemplates.capabilities(hasTrip))
             pressed.params[StartQuickReplies.INTENT]?.let { name ->
                 val intent = runCatching { Intent.valueOf(name) }.getOrNull() ?: return Reply(AssistantTemplates.capabilities(hasTrip))
-                return dispatched(intent, null, session, surface)
+                // 버튼이 실어 온 나머지 값(어느 슬롯인가 등)은 서버가 발급한 것이라 그대로 인자로 쓴다.
+                return dispatched(intent, null, session, surface, startedAt, pressed.params - StartQuickReplies.INTENT)
             }
             if (pressed.params[StartQuickReplies.OPEN] == "OPEN_STAY_SEARCH") return Reply(AssistantTemplates.staySearch())
             when (pressed.action) {
-                QuickReplyAction.REVIEW.name -> return dispatched(Intent.SHOW_SCHEDULE, null, session, surface)
-                // 후보 고르기는 제안 카드와 함께 들어온다(TRIP-1379) — 그때까지는 편집 화면으로 넘긴다.
-                QuickReplyAction.PICK_CANDIDATE.name -> return dispatched(Intent.EDIT_SCHEDULE, null, session, surface)
+                QuickReplyAction.REVIEW.name -> return dispatched(Intent.SHOW_SCHEDULE, null, session, surface, startedAt)
+                // 후보를 골랐다 — 그 슬롯을 그 장소로 바꾼 **제안**을 낸다(LLM 0회). 저장은 [적용]을 눌러야 한다.
+                QuickReplyAction.PICK_CANDIDATE.name -> return dispatched(Intent.EDIT_SCHEDULE, null, session, surface, startedAt, pressed.params)
                 QuickReplyAction.SEND_TEXT.name, QuickReplyAction.PICK_OPTION.name -> pressed.label
                 // [다시 시도] — 직전에 못 알아들은 그 말을 다시 태운다. 다시 태울 말이 없으면 할 수 있는 것을 보인다.
                 QuickReplyAction.RETRY.name -> messages.lastUserText(session.sessionId, beforeSeq = turn.user.seq)
@@ -332,24 +333,27 @@ class AssistantTurnService(
             log.warn("도우미 해석 실패 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
             return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE), streak = Streak.KEEP)
         }
-        return answer(interpretation, session, surface)
+        return answer(interpretation, session, surface, utterance, startedAt)
     }
 
-    private fun answer(result: Interpretation, session: AssistantSession, surface: AssistantSurface): Reply {
+    private fun answer(result: Interpretation, session: AssistantSession, surface: AssistantSurface, utterance: String, startedAt: Instant): Reply {
         val hasTrip = session.tripId != null
-        val llm = result.llmCalls >= 1
         // 해석이 끝난 뒤에 무엇이 잘못돼도 **맥락과 LLM 사용은 남긴다** — 버리면 쓴 LLM 턴이 안 세어지고 보류 중인 되묻기가 사라진다.
-        fun reply(message: NewMessage, streak: Streak = Streak.NORMAL) = Reply(
-            message.copy(llmCalls = result.llmCalls, matchRoute = result.frames.firstOrNull()?.matchRoute ?: message.matchRoute),
-            dialogueContext = result.dialogueContext, streak = streak, llm = llm,
-        )
+        // 처리기가 상대를 한 번 더 불렀으면(발화 편집) 그것도 더한다.
+        fun reply(message: NewMessage, streak: Streak = Streak.NORMAL): Reply {
+            val llmCalls = result.llmCalls + (message.llmCalls ?: 0)
+            return Reply(
+                message.copy(llmCalls = llmCalls, matchRoute = result.frames.firstOrNull()?.matchRoute ?: message.matchRoute),
+                dialogueContext = result.dialogueContext, streak = streak, llm = llmCalls >= 1,
+            )
+        }
         fun broken(what: String): Reply {
             log.warn("도우미 해석 응답이 계약과 다릅니다({}) — 폴백으로 답합니다. sessionId={}", what, session.sessionId)
             return reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE), Streak.KEEP)
         }
         return runCatching {
             if (result.outcome == InterpretOutcome.OUT_OF_SCOPE) {
-                val scope = dispatcher.dispatch(Intent.OUT_OF_SCOPE, context(session, surface)).copy(intent = Intent.OUT_OF_SCOPE.name)
+                val scope = dispatcher.dispatch(Intent.OUT_OF_SCOPE, context(session, surface, startedAt)).copy(intent = Intent.OUT_OF_SCOPE.name)
                 return@runCatching reply(refuse(session, scope, outcome = "OUT_OF_SCOPE").message, Streak.REFUSED)
             }
             // 프레임이 여럿이면 실행하지 않는다(DEC-U8-11) — 여러 요청 중 하나를 골라 하면 반드시 틀린다.
@@ -360,7 +364,8 @@ class AssistantTurnService(
                     val clarify = result.clarify ?: return@runCatching broken("되묻기인데 clarify 가 없다")
                     reply(AssistantTemplates.clarify(clarify.argument, clarify.question, clarify.options).copy(intent = frame.intent.name))
                 }
-                else -> reply(dispatched(frame.intent, frame.matchRoute, session, surface, frame.arguments).message)
+                // 상대가 돌려준 인자에서 **서버 발급 전용 키는 걸러 낸다** — 지어낸 슬롯·장소로 교체를 시키지 못하게(SEC-U8-03).
+                else -> reply(dispatched(frame.intent, frame.matchRoute, session, surface, startedAt, frame.arguments - SERVER_ISSUED_ARGUMENTS, utterance).message)
             }
         }.getOrElse { e ->
             log.warn("도우미 응답 조립 실패 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
@@ -369,10 +374,15 @@ class AssistantTurnService(
     }
 
     private fun dispatched(
-        intent: Intent, matchRoute: String?, session: AssistantSession, surface: AssistantSurface, arguments: Map<String, String> = emptyMap(),
-    ) = Reply(dispatcher.dispatch(intent, context(session, surface, arguments)).copy(intent = intent.name, matchRoute = matchRoute ?: "ACTION"))
+        intent: Intent, matchRoute: String?, session: AssistantSession, surface: AssistantSurface, startedAt: Instant,
+        arguments: Map<String, String> = emptyMap(), utterance: String? = null,
+    ) = Reply(
+        dispatcher.dispatch(intent, context(session, surface, startedAt, arguments, utterance)).copy(intent = intent.name, matchRoute = matchRoute ?: "ACTION"),
+    )
 
-    private fun context(session: AssistantSession, surface: AssistantSurface, arguments: Map<String, String> = emptyMap()): DispatchContext {
+    private fun context(
+        session: AssistantSession, surface: AssistantSurface, startedAt: Instant, arguments: Map<String, String> = emptyMap(), utterance: String? = null,
+    ): DispatchContext {
         val now = clock.instant()
         val trip = session.tripId?.let { tripContexts.read(session.accountId, it) }
         return DispatchContext(
@@ -380,6 +390,9 @@ class AssistantTurnService(
             // 여행을 못 읽었으면(그 사이 삭제) 여행 없는 대화로 다룬다 — 처리기가 없는 여행을 읽으려 들지 않게.
             tripId = session.tripId.takeIf { trip != null },
             trip = trip, inTrip = trip?.inTrip(today(now)) ?: false, surface = surface, arguments = arguments, now = now,
+            utterance = utterance,
+            // 남은 턴 예산에서 왕복 여유를 뺀 만큼만(해석과 같은 셈). 0 이하면 처리기가 부르지 않고 폴백한다.
+            deadlineMs = minOf(properties.editStageMaxMs, properties.turnBudgetMs - Duration.between(startedAt, now).toMillis() - properties.readMarginMs),
         )
     }
 
@@ -437,6 +450,7 @@ class AssistantTurnService(
         const val MAX_UTTERANCE_LENGTH = 500
         private val WINDOW: Duration = Duration.ofSeconds(60)
         private const val REFUSALS_BEFORE_GUIDE = 2
+        private val SERVER_ISSUED_ARGUMENTS = setOf(ProposalCards.ARG_SLOT_KEY, ProposalCards.ARG_POI_ID)
         private const val POLL_MS = 200L
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
         private val log = LoggerFactory.getLogger(AssistantTurnService::class.java)

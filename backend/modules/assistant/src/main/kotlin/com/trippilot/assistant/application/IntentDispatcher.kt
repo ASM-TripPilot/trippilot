@@ -9,10 +9,12 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * 처리기가 보는 것. **발화 원문은 여기 오지 않는다** — 해석이 뽑은 인자([arguments])만 오고, 그것도 저장된 값을
- * 찾는 데만 쓴다.
+ * 처리기가 보는 것. 해석이 뽑은 인자([arguments])는 저장된 값을 **찾는 데만** 쓴다.
  *
  * @property trip 소유가 확인된 여행. null 이면 여행 없는 대화다.
+ * @property utterance 사용자가 한 말(검사를 통과한 것). **일정 변경 제안만 읽는다** — 편집 경계가 말을 받아 편집으로 옮기기
+ *   때문이다. 화면에 그리지도 로그에 남기지도 않는다(SEC-U8-06). 버튼을 눌러 온 턴이면 null.
+ * @property deadlineMs 이 턴에 남은 시간 중 상대 호출 하나에 줄 수 있는 몫(PERF-U8-01·02).
  */
 data class DispatchContext(
     val accountId: UUID,
@@ -22,6 +24,8 @@ data class DispatchContext(
     val surface: AssistantSurface,
     val arguments: Map<String, String>,
     val now: Instant,
+    val utterance: String? = null,
+    val deadlineMs: Long = 0,
 ) {
     val hasTrip: Boolean get() = trip != null && tripId != null
 }
@@ -34,17 +38,17 @@ data class DispatchContext(
  * 앱이 그 화면으로 옮기고, 거기 있는 확인·확정 절차가 그대로 돈다.
  *
  * 조회형(진행 검토·다음 장소·거리·장소·날씨)은 [QueryCards] 가 저장된 값으로 답한다. 변경형(일정 바꾸기·대체 후보)은
- * 제안 카드가 뒤따라 들어온다(TRIP-1379) — 그때까지는 편집 화면으로 넘긴다. 어느 쪽도 막다른 응답은 없다.
+ * [ProposalCards] 가 **제안**으로 답한다 — 저장은 사용자가 [적용]을 누를 때뿐이다(BR-U8-30). 어느 쪽도 막다른 응답은 없다.
  */
 @Component
-class IntentDispatcher(private val cards: QueryCards) {
+class IntentDispatcher(private val cards: QueryCards, private val proposals: ProposalCards) {
 
     fun dispatch(intent: Intent, context: DispatchContext): NewMessage {
         // 일반 대화(여행 없음)에서 일정·동선을 물으면 여행부터 만들게 한다(BR-U8-05) — 넘길 화면이 없다.
         if (intent in NEEDS_TRIP && !context.hasTrip) return AssistantTemplates.needTrip()
         return when (intent) {
-            Intent.EDIT_SCHEDULE, Intent.SUGGEST_ALTERNATIVE ->
-                AssistantTemplates.handoff("일정은 편집 화면에서 바꿀 수 있어요.", NextAction("OPEN_ITINERARY_EDIT", "직접 편집"))
+            Intent.EDIT_SCHEDULE -> proposals.edit(context)
+            Intent.SUGGEST_ALTERNATIVE -> proposals.alternatives(context)
             Intent.REPLAN ->
                 // 재계획은 여행 중에만 있다(FD §4). 그 밖(여행 전·후)에는 다시 만들기로 보낸다.
                 if (context.inTrip) {

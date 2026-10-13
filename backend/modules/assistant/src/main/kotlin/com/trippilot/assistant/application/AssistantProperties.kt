@@ -11,6 +11,8 @@ import java.time.Duration
  * @property retentionDays 대화 보존 = 마지막 턴 후 이만큼(DATA-U8-01). **잠정값** — 처리방침이 정해지면 여기만 바꾼다.
  * @property turnBudgetMs 서버가 한 턴에 쓰는 시간의 상한(PERF-U8-01). 앱의 15초 대기(BR-U8-44)보다 짧다.
  * @property interpretStageMaxMs 해석 한 번의 상한(PERF-U8-02) — 턴 잔여가 이보다 적으면 잔여만큼만 준다.
+ * @property editStageMaxMs 편집 제안 한 번의 상한(O-U8-3 제안값) — 해석 뒤에 남은 턴 예산이 이보다 적으면 그만큼만 준다.
+ * @property proposalTtlMinutes 제안이 [적용]을 기다리는 시간(O-U8-4 제안값). 지나면 `EXPIRED` 다.
  * @property readMarginMs 상대에 주는 계산 예산에서 빼 두는 왕복 여유(PERF-U8-01) — 응답을 읽는 시간까지 턴 예산 안에 들게.
  * @property rateLimitPerMinute 계정당 분당 사용자 턴(BR-U8-24). 빠른 답도 센다.
  * @property dailyLlmTurnLimit 계정당 하루 LLM 턴(COST-U8-02). 넘으면 막지 않고 버튼 모드로 낮춘다.
@@ -25,6 +27,8 @@ data class AssistantProperties(
     val retentionDays: Long = 90,
     val turnBudgetMs: Long = 13_000,
     val interpretStageMaxMs: Long = 5_000,
+    val editStageMaxMs: Long = 8_000,
+    val proposalTtlMinutes: Long = 30,
     val readMarginMs: Long = 1_000,
     val rateLimitPerMinute: Int = 20,
     val dailyLlmTurnLimit: Int = 30,

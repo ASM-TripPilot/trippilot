@@ -6,19 +6,26 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.assistant.domain.AccountTurnLock
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantMessageRepository
+import com.trippilot.assistant.domain.AssistantProposal
+import com.trippilot.assistant.domain.AssistantProposalRepository
 import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantUsageRepository
 import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
+import com.trippilot.assistant.domain.NewProposal
 import com.trippilot.assistant.domain.NextAction
+import com.trippilot.assistant.domain.ProposalDay
+import com.trippilot.assistant.domain.ProposalDiffItem
+import com.trippilot.assistant.domain.ProposalStatus
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.assistant.domain.RecordedTurn
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.sql.ResultSet
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -104,6 +111,8 @@ class AssistantSessionRepositoryAdapter(private val jdbc: JdbcTemplate) : Assist
 class AssistantMessageRepositoryAdapter(
     private val jdbc: JdbcTemplate,
     private val mapper: ObjectMapper,
+    private val proposals: AssistantProposalRepository,
+    private val clock: Clock,
 ) : AssistantMessageRepository {
 
     /**
@@ -116,21 +125,25 @@ class AssistantMessageRepositoryAdapter(
         insert(sessionId, accountId, clientTurnId, null, message, at)
 
     override fun appendAssistant(sessionId: UUID, accountId: UUID, replyTo: UUID, message: NewMessage, at: Instant) =
-        insert(sessionId, accountId, null, replyTo, message, at)
+        insert(sessionId, accountId, null, replyTo, message, at, message.proposal?.let { proposals.create(sessionId, accountId, it, at) })
+
+    override fun appendNote(sessionId: UUID, accountId: UUID, proposalId: UUID, message: NewMessage, at: Instant) =
+        insert(sessionId, accountId, null, null, message, at, proposalId)
 
     /** `RETURNING` 으로 DB 가 매긴 순번까지 한 번에 받는다 — 넣고 다시 읽으면 그 사이가 한 번 더 비는 왕복이다. */
-    private fun insert(sessionId: UUID, accountId: UUID, clientTurnId: UUID?, replyTo: UUID?, m: NewMessage, at: Instant): AssistantMessage = jdbc.query(
+    private fun insert(
+        sessionId: UUID, accountId: UUID, clientTurnId: UUID?, replyTo: UUID?, m: NewMessage, at: Instant, proposalId: UUID? = null,
+    ): AssistantMessage = messages(
         """
         INSERT INTO assistant_message (
             message_id, session_id, account_id, client_turn_id, reply_to, role, kind, text, redacted, payload, next_actions, quick_replies,
-            footnote, intent, match_route, outcome, llm_calls, latency_ms, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?)
+            footnote, intent, match_route, outcome, llm_calls, latency_ms, created_at, proposal_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING $COLUMNS
         """.trimIndent(),
-        { rs, _ -> rs.toMessage() },
         UUID.randomUUID(), sessionId, accountId, clientTurnId, replyTo, m.role.name, m.kind.name, m.text, m.redacted,
         m.payload?.let(mapper::writeValueAsString), mapper.writeValueAsString(m.nextActions), m.quickReplies?.let(mapper::writeValueAsString),
-        m.footnote, m.intent, m.matchRoute, m.outcome, m.llmCalls, m.latencyMs, Timestamp.from(at),
+        m.footnote, m.intent, m.matchRoute, m.outcome, m.llmCalls, m.latencyMs, Timestamp.from(at), proposalId,
     ).single()
 
     /**
@@ -142,10 +155,7 @@ class AssistantMessageRepositoryAdapter(
             "SELECT $COLUMNS, outcome FROM assistant_message WHERE session_id = ? AND client_turn_id = ?",
             { rs, _ -> rs.toMessage() to rs.getString("outcome") }, sessionId, clientTurnId,
         ).firstOrNull() ?: return null
-        val replies = jdbc.query(
-            "SELECT $COLUMNS FROM assistant_message WHERE session_id = ? AND reply_to = ? ORDER BY seq",
-            { rs, _ -> rs.toMessage() }, sessionId, clientTurnId,
-        )
+        val replies = messages("SELECT $COLUMNS FROM assistant_message WHERE session_id = ? AND reply_to = ? ORDER BY seq", sessionId, clientTurnId)
         return RecordedTurn(user, replies, redaction)
     }
 
@@ -176,7 +186,7 @@ class AssistantMessageRepositoryAdapter(
     ).firstOrNull()
 
     /** 최근 것부터 [limit] 건을 집고 뒤집는다 — 화면은 오래된 것이 위다. */
-    override fun findPage(sessionId: UUID, beforeSeq: Long?, limit: Int): List<AssistantMessage> = jdbc.query(
+    override fun findPage(sessionId: UUID, beforeSeq: Long?, limit: Int): List<AssistantMessage> = messages(
         """
         SELECT $COLUMNS
           FROM assistant_message
@@ -184,9 +194,18 @@ class AssistantMessageRepositoryAdapter(
          ORDER BY seq DESC
          LIMIT ?
         """.trimIndent(),
-        { rs, _ -> rs.toMessage() },
         sessionId, beforeSeq ?: Long.MAX_VALUE, limit,
     ).asReversed()
+
+    /**
+     * 메시지를 읽고, **그 조회가 끝난 뒤에** 제안을 붙인다. 행을 읽는 도중에 제안을 조회하면 연결을 하나 쥔 채 하나를 더
+     * 집는다 — 트랜잭션 밖의 목록 조회가 여럿 겹치면 풀이 마른다.
+     *
+     * ponytail: 제안이 달린 메시지마다 한 번 읽는다(N+1). 한 쪽(≤50건)에 제안 카드는 몇 장뿐이다 — 늘면 묶어 읽는다.
+     */
+    private fun messages(sql: String, vararg args: Any?): List<AssistantMessage> =
+        jdbc.query(sql, { rs, _ -> rs.toMessage() to rs.getObject("proposal_id", UUID::class.java) }, *args)
+            .map { (message, proposalId) -> if (proposalId == null) message else message.copy(proposal = proposals.find(proposalId)?.view(clock.instant())) }
 
     private fun ResultSet.toMessage() = AssistantMessage(
         messageId = getObject("message_id", UUID::class.java),
@@ -202,10 +221,77 @@ class AssistantMessageRepositoryAdapter(
     )
 
     private companion object {
-        const val COLUMNS = "message_id, seq, role, kind, text, payload, next_actions, quick_replies, footnote, created_at"
+        const val COLUMNS = "message_id, seq, role, kind, text, payload, next_actions, quick_replies, footnote, created_at, proposal_id"
         val PAYLOAD = object : TypeReference<Map<String, Any?>>() {}
         val NEXT_ACTIONS = object : TypeReference<List<NextAction>>() {}
         val QUICK_REPLIES = object : TypeReference<List<QuickReply>>() {}
+    }
+}
+
+/** assistant_proposal 매핑(V2.64). */
+@Component
+class AssistantProposalRepositoryAdapter(
+    private val jdbc: JdbcTemplate,
+    private val mapper: ObjectMapper,
+) : AssistantProposalRepository {
+
+    /** 저장된 행은 지금의 타입보다 오래 산다 — 모르는 필드는 버린다(메시지와 같은 이유). */
+    private val reader = mapper.reader().without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+
+    override fun create(sessionId: UUID, accountId: UUID, proposal: NewProposal, at: Instant): UUID {
+        val id = UUID.randomUUID()
+        jdbc.update(
+            """
+            INSERT INTO assistant_proposal (
+                proposal_id, session_id, account_id, trip_id, kind, base_fingerprint, after, diff, violations, apply_hint, status, expires_at, created_at
+            ) VALUES (?, ?, ?, ?, 'EDIT', ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, 'PROPOSED', ?, ?)
+            """.trimIndent(),
+            id, sessionId, accountId, proposal.tripId, proposal.baseFingerprint, mapper.writeValueAsString(proposal.after),
+            mapper.writeValueAsString(proposal.diff), mapper.writeValueAsString(proposal.violations), proposal.applyHint,
+            Timestamp.from(proposal.expiresAt), Timestamp.from(at),
+        )
+        return id
+    }
+
+    override fun findOwnedForUpdate(accountId: UUID, proposalId: UUID): AssistantProposal? = jdbc.query(
+        "$SELECT WHERE proposal_id = ? AND account_id = ? FOR UPDATE", { rs, _ -> rs.toProposal() }, proposalId, accountId,
+    ).firstOrNull()
+
+    override fun find(proposalId: UUID): AssistantProposal? =
+        jdbc.query("$SELECT WHERE proposal_id = ?", { rs, _ -> rs.toProposal() }, proposalId).firstOrNull()
+
+    override fun claim(proposalId: UUID, at: Instant): Boolean = jdbc.update(
+        "UPDATE assistant_proposal SET applied_at = ? WHERE proposal_id = ? AND status = 'PROPOSED' AND applied_at IS NULL",
+        Timestamp.from(at), proposalId,
+    ) == 1
+
+    override fun close(proposalId: UUID, to: ProposalStatus, claimed: Boolean): Boolean = jdbc.update(
+        "UPDATE assistant_proposal SET status = ? WHERE proposal_id = ? AND status = 'PROPOSED' AND (applied_at IS NOT NULL) = ?",
+        to.name, proposalId, claimed,
+    ) == 1
+
+    private fun ResultSet.toProposal() = AssistantProposal(
+        proposalId = getObject("proposal_id", UUID::class.java),
+        sessionId = getObject("session_id", UUID::class.java),
+        accountId = getObject("account_id", UUID::class.java),
+        tripId = getObject("trip_id", UUID::class.java),
+        baseFingerprint = getString("base_fingerprint"),
+        after = reader.forType(AFTER).readValue(getString("after")),
+        diff = reader.forType(DIFF).readValue(getString("diff")),
+        violations = reader.forType(VIOLATIONS).readValue(getString("violations")),
+        applyHint = getString("apply_hint"),
+        status = ProposalStatus.valueOf(getString("status")),
+        expiresAt = getTimestamp("expires_at").toInstant(),
+        // `applied_at` 은 적용이 제안을 **집은** 시각이다 — 저장이 끝난 시각이 아니다. 끝은 `status` 가 말한다.
+        claimed = getTimestamp("applied_at") != null,
+    )
+
+    private companion object {
+        const val SELECT =
+            "SELECT proposal_id, session_id, account_id, trip_id, base_fingerprint, after, diff, violations, apply_hint, status, expires_at, applied_at FROM assistant_proposal"
+        val AFTER = object : TypeReference<List<ProposalDay>>() {}
+        val DIFF = object : TypeReference<List<ProposalDiffItem>>() {}
+        val VIOLATIONS = object : TypeReference<List<String>>() {}
     }
 }
 

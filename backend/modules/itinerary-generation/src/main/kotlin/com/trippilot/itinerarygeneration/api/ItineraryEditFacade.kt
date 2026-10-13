@@ -25,8 +25,14 @@ interface ItineraryEditFacade {
      *
      * @param reason 왜 바꿨는지 한 줄, **500자 이하**(넘으면 `ValidationFailed` — 변경 이력 칸의 상한이다).
      *   null·공백이면 [source] 에 맞는 기본 문구가 남는다(이력은 비워 두지 않는다, BR-U4-31).
+     * @param onlyIf **저장 직전의 일정**(저장 트랜잭션 안에서 다시 읽은 것)을 보고 저장할지 정한다. false 면 아무것도 쓰지 않고
+     *   `ConflictDetected(STALE)` 이다. 옛 일정을 보고 만든 전체 교체가 그 사이의 편집을 덮어쓰지 않게 하는 문이다(U8 INV-U8-04) —
+     *   호출측이 미리 확인하고 부르는 것으로는 모자라다: 이 저장은 재검증으로 상대를 부르느라 몇 초가 갈 수 있다.
      */
-    fun edit(accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource): ItineraryEditResult
+    fun edit(
+        accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource,
+        onlyIf: ((current: List<EditDayCommand>) -> Boolean)? = null,
+    ): ItineraryEditResult
 }
 
 /**
