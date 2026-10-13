@@ -303,7 +303,7 @@ class AssistantTurnServiceTest : StringSpec({
 
         val first = w.say(s, "오늘 날씨", a)
 
-        first.messages.map { it.text } shouldContainExactly listOf("오늘 날씨", "지금 예보예요.")
+        first.messages.map { it.text } shouldContainExactly listOf("오늘 날씨", "오늘 예보예요.")
         w.messages.rows.map { it.message.role } shouldContainExactly
             listOf(MessageRole.USER, MessageRole.USER, MessageRole.ASSISTANT, MessageRole.ASSISTANT)
         // 다시 보내면 각자 처음 응답을 그대로 받는다 — 새 행도, 새 해석도 없다
@@ -601,7 +601,7 @@ class AssistantTurnServiceTest : StringSpec({
     /** 해석이 뽑은 인자가 처리기까지 간다 — 안 가면 "모카 어때"가 늘 "일정에서 확인하세요"로 끝난다. */
     "해석이 뽑은 인자로 일정의 장소를 찾아 답한다" {
         val w = world(interpreter = Interpreter { r ->
-            Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.GET_DISTANCE, mapOf("target" to "모카"), "CONFIDENT")), null, r.dialogueContext, 0)
+            Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.GET_DISTANCE, mapOf("destination" to "모카"), "CONFIDENT")), null, r.dialogueContext, 0)
         })
         val s = w.session()
 
@@ -609,6 +609,29 @@ class AssistantTurnServiceTest : StringSpec({
 
         card.kind shouldBe MessageKind.INFO
         card.payload!!["title"] shouldBe "카페 모카" // 말한 "모카"가 아니라 저장된 이름
+    }
+
+    /** 버튼에는 다시 태울 "말"이 없다 — [다시 시도]를 주면 엉뚱한 옛 문장이 나간다. */
+    "버튼을 눌러 온 턴이 실패하면 다시 시도를 주지 않는다 — 말로 온 턴에는 준다" {
+        val w = world()
+        val s = w.session()
+        val throwing = IntentDispatcher(QueryCards(w.data, w.data, w.data, w.data)) // 자리만 — 아래에서 원천을 죽인다
+        val brokenTrips = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
+            override fun findGenerationContext(accountId: UUID, id: UUID): TripGenerationContext? = throw IllegalStateException("db down")
+        }
+        val service = AssistantTurnService(
+            w.sessions, w.messages, w.usage, AccountTurnLock { }, clean, provider(w.interpreter), throwing,
+            TripContextReader(brokenTrips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), w.data, w.data, AssistantProperties()),
+            AssistantProperties(), json, w.clock, NOOP_TX,
+        )
+
+        val pressed = service.send(acc, s.sessionId, UUID.randomUUID(), TurnInput.Action("qr-review"), AssistantSurface.ITINERARY)
+        pressed.messages[1].kind shouldBe MessageKind.FALLBACK
+        pressed.messages[1].nextActions.map { it.type } shouldContainExactly listOf("CONTINUE_WITHOUT_ASSISTANT")
+
+        val said = service.send(acc, s.sessionId, UUID.randomUUID(), TurnInput.Text("오늘 날씨"), AssistantSurface.ITINERARY)
+        said.messages[1].nextActions.map { it.type } shouldContainExactly listOf("RETRY_TURN", "CONTINUE_WITHOUT_ASSISTANT")
     }
 
     /** DEC-U8-11 · BR-U8-43 — 여러 요청 중 하나를 골라 실행하면 반드시 틀린다. */
@@ -665,11 +688,11 @@ class AssistantTurnServiceTest : StringSpec({
                 hasItinerary = names.isNotEmpty(), reading = WeatherReading(40, "호우주의보", start, stale = false).takeIf { !broken },
             ).apply { failPlan = broken && names.size > 2; failWeather = broken }
             val context = DispatchContext(
-                acc, tripId.takeIf { hasTrip }, tripContext.takeIf { hasTrip }, hasTrip && inTrip, surface, mapOf("target" to said), start,
+                acc, tripId.takeIf { hasTrip }, tripContext.takeIf { hasTrip }, hasTrip && inTrip, surface,
+                mapOf("destination" to said, "place" to said), start,
             )
-            val message = runCatching { IntentDispatcher(QueryCards(data, data, data, data)).dispatch(intent, context) }
-                // 원천이 죽어 처리기가 던지면 턴 서비스가 폴백으로 바꾼다 — 그 폴백도 같은 성질을 가져야 한다
-                .getOrElse { AssistantTemplates.fallback(FallbackCause.SOURCE_UNAVAILABLE) }
+            // 처리기는 **던지지 않는다** — 원천이 죽어도 스스로 가용한 답을 낸다. 던지면 이 속성이 깨져 드러난다.
+            val message = IntentDispatcher(QueryCards(data, data, data, data)).dispatch(intent, context)
 
             (message.nextActions.isNotEmpty()) shouldBe true
             message.nextActions.forEach { (it.type in NextAction.TYPES) shouldBe true }

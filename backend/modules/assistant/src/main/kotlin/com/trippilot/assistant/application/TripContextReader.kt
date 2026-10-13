@@ -23,7 +23,7 @@ class TripContextReader(
     fun read(accountId: UUID, tripId: UUID): TripContext? {
         val trip = trips.findGenerationContext(accountId, tripId) ?: return null
         val nights = ChronoUnit.DAYS.between(trip.startDate, trip.endDate).toInt()
-        // 숙소가 여럿이면 첫 숙박일의 것을 말한다 — 칩은 한 줄이고, 날마다의 숙소는 진행 검토가 다룬다.
+        // 숙소가 여럿이면 첫 숙박일의 것을 말한다 — 칩은 한 줄이다. 날마다의 숙소를 다루는 곳은 아직 없다.
         val stayName = baseStays.findBaseStays(tripId, trip.startDate, trip.endDate).minByOrNull { it.date }?.name
         return TripContext(trip.destinations, nights, stayName, trip.startDate, trip.endDate)
     }

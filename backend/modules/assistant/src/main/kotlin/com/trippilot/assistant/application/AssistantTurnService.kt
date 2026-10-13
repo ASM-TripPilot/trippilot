@@ -104,7 +104,8 @@ class AssistantTurnService(
         val reply = runCatching { respond(accepted, surface, startedAt) }.getOrElse { e ->
             // 처리기·조회의 예상 못 한 실패도 턴을 죽이지 않는다 — 사용자 행은 이미 남았다.
             log.warn("도우미 턴 처리 실패 — 폴백으로 답합니다. sessionId={} type={}", sessionId, e.javaClass.simpleName)
-            Reply(AssistantTemplates.fallback(FallbackCause.SOURCE_UNAVAILABLE), streak = Streak.KEEP)
+            // 버튼을 눌러 온 턴에는 [다시 시도]를 주지 않는다 — 다시 태울 "말"이 없어 엉뚱한 옛 문장이 나간다.
+            Reply(AssistantTemplates.fallback(FallbackCause.SOURCE_UNAVAILABLE, retryable = accepted.action == null), streak = Streak.KEEP)
         }
         val finishedAt = clock.instant()
         val replies = try {
@@ -308,6 +309,12 @@ class AssistantTurnService(
             return Reply(AssistantTemplates.buttonMode(hasTrip), streak = Streak.KEEP)
         }
 
+        // 컨텍스트를 먼저 읽는다 — 그 시간도 턴 예산에서 나가고, 여기서 실패한 것은 상대가 아니라 우리 원천이다.
+        val snapshot = runCatching { snapshots.build(session.accountId, session.tripId, surface, today(startedAt)) }.getOrElse { e ->
+            log.warn("도우미 컨텍스트를 읽지 못했습니다 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
+            return Reply(AssistantTemplates.fallback(FallbackCause.SOURCE_UNAVAILABLE), streak = Streak.KEEP)
+        }
+
         // 남은 예산에서 왕복 여유를 뺀 만큼만 준다 — 모자라면 부르지 않는다(PERF-U8-01·02).
         val remaining = properties.turnBudgetMs - Duration.between(startedAt, clock.instant()).toMillis()
         val deadlineMs = minOf(properties.interpretStageMaxMs, remaining - properties.readMarginMs)
@@ -316,7 +323,7 @@ class AssistantTurnService(
             port.interpret(
                 InterpretRequest(
                     utterance = utterance, surface = surface,
-                    context = snapshots.build(session.accountId, session.tripId, surface, today(startedAt)),
+                    context = snapshot,
                     dialogueContext = bumpTurnIndex(session.dialogueContext),
                     requestedAt = startedAt, deadlineMs = deadlineMs,
                 ),

@@ -20,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.client.RestClient
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -114,20 +115,23 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `진행 검토 카드가 실제 여행·일정으로 채워지고 저장된 그대로 다시 읽힌다`() {
         val (_, token) = newAccount()
+        // **오늘 기준 한 달 뒤**로 잡는다 — 날짜를 박아 두면 그 날이 오는 순간 "다음 장소"의 답이 바뀌어 테스트가 깨진다.
+        val day = LocalDate.now(ZoneId.of("Asia/Seoul")).plusDays(30)
         val trip = call(
             HttpMethod.POST, "/api/v1/trips", token,
-            """{"startDate":"2026-11-01","endDate":"2026-11-01","party":2,"destinations":[{"seq":0,"region":"제주","nights":0}],"preferenceSnapshot":{}}""",
+            """{"startDate":"$day","endDate":"$day","party":2,"destinations":[{"seq":0,"region":"제주","nights":0}],"preferenceSnapshot":{}}""",
         ).body["tripId"].asText()
-        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).status shouldBe 201 // 하루 여행 — 생성이 즉시 끝난다
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).status shouldBe 201
         val session = open(token, trip)
 
         val review = press(token, session, "qr-review").body["messages"][1]
 
         review["kind"].asText() shouldBe "REVIEW"
-        review["payload"]["summary"].map { it["label"].asText() to it["value"].asText() } shouldContainExactly
-            listOf("여행" to "제주 당일", "숙소" to "미등록", "일정" to "1일 중 1일 채움")
-        review["payload"]["problems"].map { it["reason"].asText() } shouldContainExactly listOf("등록된 숙소가 없어요")
-        review["payload"]["problems"][0]["fixAction"]["type"].asText() shouldBe "OPEN_STAY_SEARCH"
+        val summary = review["payload"]["summary"].map { it["label"].asText() to it["value"].asText() }
+        summary.take(2) shouldContainExactly listOf("여행" to "제주 당일", "숙소" to "미등록")
+        // 생성이 끝났든 아직 도는 중이든 첫 날은 채워져 있다
+        (summary[2].second in setOf("1일 중 1일 채움", "만드는 중 (1일 중 1일 채움)")) shouldBe true
+        review["payload"]["problems"].size() shouldBe 0 // 당일 여행 — 숙소가 없는 것은 문제가 아니다
         review["footnote"].asText() shouldBe "* 시간·이동 검증은 일정 솔버 기준"
         review["nextActions"][0]["type"].asText() shouldBe "OPEN_ITINERARY"
 

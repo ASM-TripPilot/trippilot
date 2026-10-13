@@ -49,6 +49,7 @@ data class Interpretation(
 data class ContextSnapshot(
     val surface: AssistantSurface,
     val trip: TripBlock?,
+    /** 기준 숙소 이름. 지금은 첫 숙박일의 것 하나만 실린다(칩이 말하는 그 숙소). */
     val baseStays: List<String>,
     val itinerary: ItineraryBlock?,
 ) {

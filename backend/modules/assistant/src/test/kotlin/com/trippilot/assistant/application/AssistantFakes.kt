@@ -132,6 +132,7 @@ internal class FakeTripData(
     var hasItinerary: Boolean = true,
     var surfaces: Map<UUID, PoiSurfaceView> = emptyMap(),
     var reading: WeatherReading? = null,
+    var generationState: String = "COMPLETE",
 ) : ItineraryFacade, ItineraryPlanFacade, PoiSurfaceFacade, ContextFacade {
     var failItinerary = false
     var failPlan = false
@@ -140,7 +141,7 @@ internal class FakeTripData(
     override fun findCurrent(accountId: UUID, tripId: UUID): ItineraryRef? {
         check(!failItinerary) { "itinerary down" }
         return if (accountId == owner && hasItinerary) {
-            ItineraryRef(UUID.randomUUID(), "PLANNED", "COMPLETE", slots.map { it.date }.distinct(), slots.map { it.slotKey })
+            ItineraryRef(UUID.randomUUID(), "PLANNED", generationState, slots.map { it.date }.distinct(), slots.map { it.slotKey })
         } else {
             null
         }
