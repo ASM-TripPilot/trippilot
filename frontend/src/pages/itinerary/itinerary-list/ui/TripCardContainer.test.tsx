@@ -10,7 +10,7 @@ import { TripCardContainer } from './TripCardContainer';
  * TRIP-788 · AC-1~5(급소) — `TripCardContainer` 의 VM 조립을 처음 심판한다.
  *
  * traps-itinerary: 컨테이너의 상태문·resume 조립을 실행하는 승인 심판이 **0**이었다
- * (`MyTripCard.test.tsx` 는 하드코딩 VM props-only, `tabsItineraryRoute` 는 route 통짜라 카드별
+ * (entities `TripCard.test.tsx` 는 하드코딩 VM props-only, `tabsItineraryRoute` 는 route 통짜라 카드별
  * 파생을 정밀히 안 잰다). 그래서 컨테이너를 `useGetTripsTripIdItinerary` 목과 **직접 렌더**해
  * `deriveTripCardFace` 관통(상태문·배지·resume)을 카드별로 못박는다 — 순수 `tripCardFace.test.ts`
  * (매핑)와 짝: 순수만으론 컨테이너가 함수를 안 부르고 상수를 박아도 통과한다.
@@ -23,7 +23,7 @@ import { TripCardContainer } from './TripCardContainer';
  *  - 🔴 **AC-4** isPending → 배지·상태문·resume 전부 부재, 카드·(짝)는 뜬다(공짜 통과 차단).
  *
  * 왜 이렇게 테스트하나: 컨테이너는 `useGetTripsTripIdItinerary` 하나를 물어 VM 을 조립해 순수
- * `MyTripCard`(testIDPrefix="my-trip") 에 내린다. 훅을 목하면 react-query 미구동 →
+ * `TripCard`(testIDPrefix="my-trip") 에 내린다. 훅을 목하면 react-query 미구동 →
  * QueryClientProvider 불필요(tabsItineraryRoute 선례). testID 는 `my-trip-{part}-{tripId}`.
  */
 
