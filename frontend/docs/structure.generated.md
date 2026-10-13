@@ -153,54 +153,34 @@
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
+- `src/__tests__/eslintReleaseRules.test.ts`  →  (export 없음)
 - `src/__tests__/generatingEntryStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
-- `src/__tests__/importBoundary.test.ts`  →  (export 없음)
-- `src/__tests__/importBoundaryLayers.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryEditRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveHubRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/liveLocationRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/locationAutomationBuildConfig.test.ts`  →  (export 없음)
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
-- `src/__tests__/magazineRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/manualRouteFreshPassthrough.test.tsx`  →  (export 없음)
-- `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameMyPageSync.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/notFoundRoute.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/notFoundRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
-- `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
-- `src/__tests__/placeDetailStubRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/planbDiffRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/photoUploadGuard.test.ts`  →  (export 없음)
 - `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/planbRequestRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardMustVisit.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardOnboardingPref.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardOnboardingPush.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardStaySeeAll.test.tsx`  →  (export 없음)
 - `src/__tests__/recordAddVisitFlow.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/recordAddVisitRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
 - `src/__tests__/releaseBuildConfig.test.ts`  →  (export 없음)
-- `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
-- `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
-- `src/__tests__/rootLayoutSafeArea.test.tsx`  →  (export 없음)
-- `src/__tests__/rootLayoutToastHost.test.tsx`  →  (export 없음)
-- `src/__tests__/shareCardStructure.test.ts`  →  (export 없음)
 - `src/__tests__/shellTabDismiss.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
 - `src/__tests__/tabsItineraryRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/tabsMyRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/tabsRecordsRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsShell.test.tsx`  →  (export 없음)
-- `src/__tests__/termsRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/tripBasesRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tripNightsPeriodOrder.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardEntryReset.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/tripWizardReentryPreserve.test.tsx`  →  (export 없음)
 
 ## src/app/entrypoint/
 - `src/app/entrypoint/AppProviders.tsx`  →  AppProviders
@@ -643,6 +623,9 @@
 - `src/pages/auth/login/lib/makeAuthorize.ts`  →  makeAuthorize
 - `src/pages/auth/login/lib/naverAuthorize.ts`  →  naverAuthorize
 - `src/pages/auth/login/lib/realAuthorize.ts`  →  realAuthorize
+
+## src/pages/auth/login/model/__fixtures__/
+- `src/pages/auth/login/model/__fixtures__/socialLogin.ts`  →  tokenPair · ageConfirmationRequired · authorizeWith
 
 ## src/pages/auth/login/model/
 - `src/pages/auth/login/model/useAppleButton.ts`  →  useAppleButton
@@ -1627,27 +1610,42 @@
 - `src/shared/ui/pref/index.ts`  →  PrefChip · PrefTile
 
 ## src/test-support/
+- `src/test-support/apiBase.ts`  →  BASE
+- `src/test-support/basesFakeServer.ts`  →  basesStay · STAY_A · STAY_B · basesAssignment · basesTrip · NETWORK_WAIT · assignNight · sheetClosed · settle · BasesFakeInit · createBasesFakeServer
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
+- `src/test-support/envSandbox.ts`  →  sandboxEnv
 - `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
 - `src/test-support/expoAuthSessionMock.ts`  →  promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
+- `src/test-support/fabAnchorProbe.ts`  →  FRAME_MS · sheetHost · sheetPosition · flushFrames · moveSheet · layoutOverlay · anchorStyle · anchorTop
+- `src/test-support/fakePreventRemoveNavigator.tsx`  →  MockNavAction · MockPreventCallback · mockExits · mockRemove · mockNavigation · useNavigation · usePreventRemove · resetFakeNavigator
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
+- `src/test-support/freezeDate.ts`  →  REAL_TIMER_APIS · freezeDate
+- `src/test-support/itineraryFixtures.ts`  →  TRIP_ID · DAY1 · DAY2 · DAY3 · trip · slot · day · itinerary · daysOf · threeStopSlots · threeStopDays · oneStopDay · planTrip · twoDayItinerary · busanPoi · busanHotel · busanFourPois · busanTrip
 - `src/test-support/keyWarnings.ts`  →  KeyWarnings · guardKeyWarnings
+- `src/test-support/liveHubFixtures.ts`  →  LIVE_TRIP_ID · LIVE_TODAY · liveSlot · liveItinerary · liveTrip · liveVisit · liveHubHandlers
 - `src/test-support/mapViewMock.tsx`  →  MapCenter · MapPin · MapView · CenterPinPicker
-- `src/test-support/myPageItineraries.tsx`  →  DURING · PAST · FUTURE · itin · CONFIRMED · PLANNED · AXIOS_404 · AXIOS_500 · ItinScript · scriptItineraryOptions · deferred · newTestQueryClient · renderWithQueryClient · settle · myPageTrip
+- `src/test-support/mswHookHarness.tsx`  →  createWrapper · createGate · createHitLog
+- `src/test-support/mswItinerary.ts`  →  BASE · createRequestLog · ServeItineraryOptions · serveItinerary
+- `src/test-support/mustVisitFixtures.ts`  →  TRIP_ID · makeTrip · TRIP · makePlace · savedPlace · registered
+- `src/test-support/myPageItineraries.tsx`  →  DURING · PAST · FUTURE · itin · CONFIRMED · PLANNED · AXIOS_404 · AXIOS_500 · ItinScript · scriptItineraryOptions · deferred · myPageTrip
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
 - `src/test-support/preventRemoveMock.ts`  →  mockNavigation · useNavigation · usePreventRemove
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
+- `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle
 - `src/test-support/safeAreaFace.ts`  →  CanvasToken · safeAreaAround · safeAreaEdges · safeAreaPaints · centeredInSafeArea
+- `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
-- `src/test-support/splashGateMock.tsx`  →  SplashGate
+- `src/test-support/storageMock.ts`  →  saveTokens · getTokens · clearTokens · hasStoredToken
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
+- `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn
 - `src/test-support/tripRecordsTrip.ts`  →  tripRecordsTrip
 - `src/test-support/wizardDraftFixture.ts`  →  WizardDraftData · wizardDraftData · freshWizardDraft · withoutSeedFields · leavePreviousTripDraft · captureDraftAtNextCall · resetWizardDraft
+- `src/test-support/wizardStep1Harness.tsx`  →  BASE · PREFERENCE · TRIP_ID · TRIP · makePreference · NO_BUDGET · budgetPreference · makeTrip · WizardStep1HarnessOptions · wizardStep1Harness
 
 ## src/widgets/map-sheet-shell/
 - `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipOverlay · DayChipScroller · DistanceConnector · EditorView · GenerationProgressCard · BackChevronGlyph · FullAiGlyph · MapSheetShell · SheetHeader
@@ -1682,4 +1680,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1044개 파일
+합계 1040개 파일
