@@ -11,6 +11,9 @@ dependencies {
     implementation(project(":modules:trip"))                  // R1: 소유 확인·컨텍스트 칩 재료 — trip.api
     implementation(project(":modules:saved-accommodation"))   // R1: 기준 숙소 이름(칩) — TripBaseStayFacade
     implementation(project(":modules:moderation"))            // R1: 입력 선검사 — TextModerationFacade
+    implementation(project(":modules:itinerary-generation"))  // R1: 일정 요약·계획 슬롯 읽기 — ItineraryFacade · ItineraryPlanFacade
+    implementation(project(":modules:place-data"))            // R1: 장소 표면(영업시간) — PoiSurfaceFacade
+    implementation(project(":modules:weather-context"))       // R1: 표시용 날씨 — ContextFacade
     implementation(libs.spring.boot.starter.jdbc)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
@@ -18,4 +21,5 @@ dependencies {
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))
+    testImplementation(libs.jackson.datatype.jsr310)   // 스냅샷 직렬형(날짜·시각)을 화이트리스트와 견준다
 }

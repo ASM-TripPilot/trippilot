@@ -49,6 +49,33 @@ object AssistantTemplates {
     fun handoff(text: String, vararg actions: NextAction) =
         assistant(MessageKind.TEXT, text, actions.toList(), outcome = "FRAME")
 
+    /**
+     * 조회 카드(`INFO`) — 다음 장소·거리·장소·날씨. **값은 전부 이미 저장·검증된 것**을 그대로 옮긴다(INV-2):
+     * 도우미가 시각을 계산하거나 가능 여부를 판정하지 않는다(BR-U8-28).
+     */
+    fun info(kind: String, text: String, title: String, rows: List<Pair<String, String>>, vararg actions: NextAction) = assistant(
+        MessageKind.INFO, text, actions.toList(), outcome = "FRAME",
+        payload = mapOf("infoKind" to kind, "title" to title, "rows" to rows.map { (label, value) -> mapOf("label" to label, "value" to value) }),
+    )
+
+    /**
+     * 진행 검토 카드(`b01 review`). 문제 행은 **솔버가 이미 표기한 위반과 구조적 사실뿐**이다(BR-U8-14) —
+     * 도우미가 "빠듯해 보여요"를 스스로 판정하지 않는다. 그래서 각주가 그 출처를 말한다.
+     */
+    fun review(text: String, summary: List<Pair<String, String>>, problems: List<ReviewProblem>, next: NextAction) = assistant(
+        MessageKind.REVIEW, text, listOf(next), outcome = "FRAME",
+        payload = mapOf(
+            "title" to "진행 상태 요약",
+            "summary" to summary.map { (label, value) -> mapOf("label" to label, "value" to value) },
+            "problems" to problems.map {
+                mapOf(
+                    "slotKey" to it.slotKey, "reason" to it.reason,
+                    "fixAction" to mapOf("type" to it.fix.type, "label" to it.fix.label, "params" to it.fix.params),
+                )
+            },
+        ),
+    ).copy(footnote = "* 시간·이동 검증은 일정 솔버 기준")
+
     /** 숙소 요청은 넘기기다(DEC-U8-10 · BR-U8-13) — 조건을 맞춰 뒀다고 말하지 않는다. */
     fun staySearch() = handoff("숙소는 숙소 검색에서 찾을 수 있어요.", STAY_SEARCH)
 
@@ -126,3 +153,6 @@ enum class FallbackCause(val text: String) {
     AI_UNAVAILABLE("지금 도우미가 응답하지 못했어요."),
     SOURCE_UNAVAILABLE("지금 일부 정보를 확인할 수 없어요."),
 }
+
+/** 검토 카드의 문제 한 줄 — 무엇이 문제이고([reason]) 어디서 고치는가([fix]). 슬롯에 붙지 않는 문제는 [slotKey] 가 null. */
+data class ReviewProblem(val slotKey: String?, val reason: String, val fix: NextAction)

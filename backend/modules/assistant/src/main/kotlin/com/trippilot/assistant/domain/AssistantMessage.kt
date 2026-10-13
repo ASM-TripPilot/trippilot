@@ -75,6 +75,8 @@ data class NewMessage(
     val nextActions: List<NextAction> = emptyList(),
     /** null = 정하지 않았다(앱이 대화의 시작 빠른 답을 보인다). */
     val quickReplies: List<QuickReply>? = null,
+    /** 카드 아래 회색 각주(템플릿). */
+    val footnote: String? = null,
     val intent: String? = null,
     val matchRoute: String? = null,
     val outcome: String? = null,

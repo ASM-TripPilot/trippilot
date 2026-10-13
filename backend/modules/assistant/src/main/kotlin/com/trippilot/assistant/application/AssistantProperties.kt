@@ -15,6 +15,8 @@ import java.time.Duration
  * @property rateLimitPerMinute 계정당 분당 사용자 턴(BR-U8-24). 빠른 답도 센다.
  * @property dailyLlmTurnLimit 계정당 하루 LLM 턴(COST-U8-02). 넘으면 막지 않고 버튼 모드로 낮춘다.
  *   **근거 없는 초기값이다** — 사용 분포가 관측되면 여기만 돌린다.
+ * @property snapshotMaxDays 해석에 보내는 일정의 일자 수 상한(SEC-U8-08) — 입력 토큰이 곧 비용이고 지연이다.
+ * @property snapshotMaxSlotsPerDay 같은 상한의 일자당 슬롯 수. 어느 쪽이든 넘으면 오늘 ±1일만 보낸다.
  * @property interpret 해석 스위치(REL-U8-06) — `off` 는 운영자가 거는 버튼 모드, `fake` 는 대역(로컬 기본).
  *   `http` 는 상대 경계가 열리면 붙는다 — 지금 고르면 기동이 실패한다(조용히 버튼 모드가 되는 것보다 낫다).
  */
@@ -26,6 +28,8 @@ data class AssistantProperties(
     val readMarginMs: Long = 1_000,
     val rateLimitPerMinute: Int = 20,
     val dailyLlmTurnLimit: Int = 30,
+    val snapshotMaxDays: Int = 14,
+    val snapshotMaxSlotsPerDay: Int = 20,
     val interpret: Interpret = Interpret(),
 ) {
     val retention: Duration get() = Duration.ofDays(retentionDays)

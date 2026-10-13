@@ -9,12 +9,23 @@ import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.assistant.domain.RecordedTurn
+import com.trippilot.itinerarygeneration.api.ItineraryFacade
+import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
+import com.trippilot.itinerarygeneration.api.ItineraryRef
+import com.trippilot.itinerarygeneration.api.PlannedPlaceView
+import com.trippilot.itinerarygeneration.api.PlannedSlotView
+import com.trippilot.placedata.api.FrozenPoiView
+import com.trippilot.placedata.api.PoiSurfaceFacade
+import com.trippilot.placedata.api.PoiSurfaceView
+import com.trippilot.weathercontext.api.ContextFacade
+import com.trippilot.weathercontext.api.WeatherReading
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -113,3 +124,49 @@ internal val NOOP_TX = object : PlatformTransactionManager {
     override fun commit(status: TransactionStatus) {}
     override fun rollback(status: TransactionStatus) {}
 }
+
+/** 일정·장소·날씨 읽기 대역 — **계정으로 소유를 가른다**(실 퍼사드가 그렇다). 남의 계정으로 물으면 없는 것이다. */
+internal class FakeTripData(
+    private val owner: UUID,
+    var slots: List<PlannedSlotView> = emptyList(),
+    var hasItinerary: Boolean = true,
+    var surfaces: Map<UUID, PoiSurfaceView> = emptyMap(),
+    var reading: WeatherReading? = null,
+    var generationState: String = "COMPLETE",
+) : ItineraryFacade, ItineraryPlanFacade, PoiSurfaceFacade, ContextFacade {
+    var failItinerary = false
+    var failPlan = false
+    var failWeather = false
+
+    override fun findCurrent(accountId: UUID, tripId: UUID): ItineraryRef? {
+        check(!failItinerary) { "itinerary down" }
+        return if (accountId == owner && hasItinerary) {
+            ItineraryRef(UUID.randomUUID(), "PLANNED", generationState, slots.map { it.date }.distinct(), slots.map { it.slotKey })
+        } else {
+            null
+        }
+    }
+
+    override fun findPlanSlots(accountId: UUID, tripId: UUID): List<PlannedSlotView> {
+        check(!failPlan) { "plan down" }
+        return if (accountId == owner && hasItinerary) slots else emptyList()
+    }
+
+    override fun findPlannedPlaces(accountId: UUID, tripId: UUID) = emptyMap<LocalDate, List<PlannedPlaceView>>()
+    override fun findSurfaces(poiIds: Collection<UUID>) = surfaces.filterKeys { it in poiIds }
+    override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+    override fun precipProbabilityForTrigger(gridKey: String, at: Instant): Int? = null
+    override fun readingForDisplay(gridKey: String, at: Instant): WeatherReading? {
+        check(!failWeather) { "weather down" }
+        return reading
+    }
+}
+
+internal fun plannedSlot(
+    date: LocalDate, order: Int, start: String, name: String?,
+    violation: String? = null, distance: String? = null, hasViolation: Boolean = violation != null, poiId: UUID = UUID.randomUUID(),
+) = PlannedSlotView(
+    slotKey = "$date#$poiId", date = date, poiId = poiId, orderIndex = order,
+    startAt = LocalTime.parse(start), endAt = LocalTime.parse(start).plusHours(1), isFixed = false, endsNextDay = false,
+    hasViolation = hasViolation, nameKo = name, category = "카페", violationReason = violation, distanceRange = distance,
+)

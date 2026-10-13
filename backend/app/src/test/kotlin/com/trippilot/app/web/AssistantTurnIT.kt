@@ -20,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.client.RestClient
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -105,6 +106,43 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
         reopened.body["messages"].size() shouldBe 0
         call(HttpMethod.GET, "/api/v1/assistant/sessions/$session/messages", token).body["messages"].map { it["id"].asText() } shouldContainExactly
             turn.body["messages"].map { it["id"].asText() }
+    }
+
+    /**
+     * 진행 검토가 **실제 일정**을 읽는다 — 일정 생성 API 로 만든 일정, 실 퍼사드, jsonb 로 저장된 카드.
+     * 카드의 값은 저장된 사실이고, 각주까지 다시 열었을 때 그대로 읽힌다.
+     */
+    @Test
+    fun `진행 검토 카드가 실제 여행·일정으로 채워지고 저장된 그대로 다시 읽힌다`() {
+        val (_, token) = newAccount()
+        // **오늘 기준 한 달 뒤**로 잡는다 — 날짜를 박아 두면 그 날이 오는 순간 "다음 장소"의 답이 바뀌어 테스트가 깨진다.
+        val day = LocalDate.now(ZoneId.of("Asia/Seoul")).plusDays(30)
+        val trip = call(
+            HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"$day","endDate":"$day","party":2,"destinations":[{"seq":0,"region":"제주","nights":0}],"preferenceSnapshot":{}}""",
+        ).body["tripId"].asText()
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).status shouldBe 201
+        val session = open(token, trip)
+
+        val review = press(token, session, "qr-review").body["messages"][1]
+
+        review["kind"].asText() shouldBe "REVIEW"
+        val summary = review["payload"]["summary"].map { it["label"].asText() to it["value"].asText() }
+        summary.take(2) shouldContainExactly listOf("여행" to "제주 당일", "숙소" to "미등록")
+        // 생성이 끝났든 아직 도는 중이든 첫 날은 채워져 있다
+        (summary[2].second in setOf("1일 중 1일 채움", "만드는 중 (1일 중 1일 채움)")) shouldBe true
+        review["payload"]["problems"].size() shouldBe 0 // 당일 여행 — 숙소가 없는 것은 문제가 아니다
+        review["footnote"].asText() shouldBe "* 시간·이동 검증은 일정 솔버 기준"
+        review["nextActions"][0]["type"].asText() shouldBe "OPEN_ITINERARY"
+
+        // 다음 장소도 그 일정에서 — 여행은 한참 뒤라 첫 슬롯이다(날짜가 함께 온다)
+        val next = press(token, session, "qr-next").body["messages"][1]
+        next["kind"].asText() shouldBe "INFO"
+        next["payload"]["infoKind"].asText() shouldBe "NEXT_SLOT"
+        next["payload"]["rows"].map { it["label"].asText() }.take(2) shouldContainExactly listOf("날짜", "계획 시각")
+
+        val reread = call(HttpMethod.GET, "/api/v1/assistant/sessions/$session/messages", token).body["messages"]
+        reread.first { it["kind"].asText() == "REVIEW" } shouldBe review
     }
 
     /** INV-U8-05 — 앱은 응답을 못 받으면 같은 턴 id 로 다시 보낸다. 두 번 만들면 대화가 겹치고 사용량이 두 번 센다. */

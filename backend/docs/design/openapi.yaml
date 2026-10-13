@@ -3957,12 +3957,17 @@ components:
         kind: { type: string, enum: [TEXT, CLARIFY, REVIEW, CANDIDATES, PROPOSAL, INFO, SCOPE, REFUSAL, FALLBACK, ACTION_LOG] }
         text: { type: string, nullable: true, description: '정책 위반으로 저장하지 않은 입력은 null' }
         payload:
-          type: object
           nullable: true
-          additionalProperties: true
           description: >
-            카드 데이터 — 모양은 `kind` 가 정한다(REVIEW · CANDIDATES · INFO · SCOPE · REFUSAL · FALLBACK · ACTION_LOG · CLARIFY).
-            종류별 모양은 그 카드를 내는 구현과 함께 닫는다(TRIP-1378·1379).
+            카드 데이터 — 모양은 `kind` 가 정한다. REVIEW · INFO · CLARIFY · SCOPE · REFUSAL · FALLBACK 은 아래 스키마다.
+            CANDIDATES · ACTION_LOG 는 그 카드를 내는 구현(TRIP-1379)과 함께 닫는다 — 그때까지는 그 둘의 메시지가 오지 않는다.
+          oneOf:
+            - $ref: '#/components/schemas/AssistantReviewPayload'
+            - $ref: '#/components/schemas/AssistantInfoPayload'
+            - $ref: '#/components/schemas/AssistantClarifyPayload'
+            - $ref: '#/components/schemas/AssistantScopePayload'
+            - $ref: '#/components/schemas/AssistantRefusalPayload'
+            - $ref: '#/components/schemas/AssistantFallbackPayload'
         nextActions: { type: array, items: { $ref: '#/components/schemas/AssistantNextAction' }, description: '도우미 메시지는 1개 이상' }
         quickReplies:
           type: array
@@ -3974,6 +3979,62 @@ components:
         proposal: { $ref: '#/components/schemas/AssistantProposalOrNull' }
         footnote: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
+    AssistantLabeledValue:
+      type: object
+      required: [label, value]
+      properties:
+        label: { type: string }
+        value: { type: string, description: '서버가 지은 문자열 그대로 — 저장·검증된 값이다. 소요시간은 없다(INV-3)' }
+    AssistantReviewPayload:
+      type: object
+      description: 진행 검토(`b01 review`). 문제 행은 솔버가 이미 표기한 위반과 구조적 사실뿐이다(BR-U8-14).
+      required: [title, summary, problems]
+      properties:
+        title: { type: string }
+        summary: { type: array, items: { $ref: '#/components/schemas/AssistantLabeledValue' } }
+        problems:
+          type: array
+          items:
+            type: object
+            required: [slotKey, reason, fixAction]
+            properties:
+              slotKey: { type: string, nullable: true, description: '슬롯에 붙지 않는 문제(숙소 미등록·일정 없음·빈 일자·날짜 밖 일정·다 못 보인 위반의 수)는 null' }
+              reason: { type: string }
+              fixAction: { $ref: '#/components/schemas/AssistantNextAction' }
+    AssistantInfoPayload:
+      type: object
+      description: 조회 카드 — 다음 장소·거리·장소·날씨. 모르는 값은 행을 빼거나 "미확인"이라고 한다.
+      required: [infoKind, title, rows]
+      properties:
+        infoKind: { type: string, enum: [NEXT_SLOT, DISTANCE, PLACE, WEATHER] }
+        title: { type: string }
+        rows: { type: array, items: { $ref: '#/components/schemas/AssistantLabeledValue' } }
+    AssistantClarifyPayload:
+      type: object
+      required: [argument, question, options]
+      properties:
+        argument: { type: string }
+        question: { type: string }
+        options: { type: array, nullable: true, items: { type: string }, description: '보기가 없으면 null — 자유 입력을 기다린다' }
+    AssistantScopePayload:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+    AssistantRefusalPayload:
+      type: object
+      required: [category, capabilities]
+      properties:
+        category: { type: string, description: '위반 범주. 원문도 걸린 말도 싣지 않는다' }
+        capabilities: { type: string }
+    AssistantFallbackPayload:
+      type: object
+      required: [cause]
+      properties:
+        cause:
+          type: string
+          description: >
+            문자열로 연다(앱은 모르는 값을 일반 폴백으로 그린다). 지금 오는 값은 AI_UNAVAILABLE · SOURCE_UNAVAILABLE.
     AssistantProposalOrNull:
       nullable: true
       allOf:

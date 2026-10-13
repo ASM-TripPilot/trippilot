@@ -29,6 +29,7 @@ import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
+import com.trippilot.weathercontext.api.WeatherReading
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
@@ -106,6 +107,7 @@ class AssistantTurnServiceTest : StringSpec({
         val usage: FakeUsage = FakeUsage(),
         val clock: MovingClock,
         val interpreter: Interpreter?,
+        val data: FakeTripData,
     ) {
         /** 같은 턴의 앞선 처리를 기다리는 동안 일어날 일 — 테스트가 "그 사이 앞선 처리가 끝났다"를 심는다. */
         var onPause: () -> Unit = {}
@@ -114,15 +116,19 @@ class AssistantTurnServiceTest : StringSpec({
     fun world(
         intent: Intent = Intent.GET_WEATHER,
         interpreter: Interpreter? = Interpreter(framed(intent)),
-    ) = World(clock = MovingClock(start), interpreter = interpreter)
+    ) = World(
+        clock = MovingClock(start), interpreter = interpreter,
+        // 오늘 저녁에 갈 곳 하나와 신선한 예보 — 조회 카드가 값으로 답할 재료
+        data = FakeTripData(acc, slots = listOf(plannedSlot(today, 0, "18:00", "카페 모카", distance = "840m")), reading = WeatherReading(30, null, start, stale = false)),
+    )
 
     fun World.service(
         moderation: TextModerationFacade = clean,
         properties: AssistantProperties = AssistantProperties(),
         store: AssistantMessageRepository = messages,
     ) = AssistantTurnService(
-        sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), IntentDispatcher(),
-        TripContextReader(trips, stays), properties, json, clock, NOOP_TX,
+        sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), IntentDispatcher(QueryCards(data, data, data, data)),
+        TripContextReader(trips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), data, data, properties), properties, json, clock, NOOP_TX,
     ).also { it.pause = { ms -> clock.now = clock.now.plusMillis(ms); onPause() } } // 기다림은 시계를 민다
 
     fun World.session(withTrip: Boolean = true): AssistantSession =
@@ -153,6 +159,9 @@ class AssistantTurnServiceTest : StringSpec({
         val sent = w.interpreter!!.requests.single()
         sent.utterance shouldBe "오늘 날씨 어때"
         sent.surface shouldBe AssistantSurface.ITINERARY
+        // 서버가 직접 읽은 컨텍스트가 함께 간다 — 앱이 보낸 일정 내용이 아니다(BR-U8-02)
+        sent.context.trip!!.regions shouldContainExactly listOf("부산")
+        sent.context.itinerary!!.days.single().slots.single().name shouldBe "카페 모카"
         json.readTree(sent.dialogueContext)["turn_index"].asInt() shouldBe 1
 
         // 관측 칸(OBS-U8-01)과 세션·사용량
@@ -294,7 +303,7 @@ class AssistantTurnServiceTest : StringSpec({
 
         val first = w.say(s, "오늘 날씨", a)
 
-        first.messages.map { it.text } shouldContainExactly listOf("오늘 날씨", "일정 화면에서 확인할 수 있어요.")
+        first.messages.map { it.text } shouldContainExactly listOf("오늘 날씨", "오늘 예보예요.")
         w.messages.rows.map { it.message.role } shouldContainExactly
             listOf(MessageRole.USER, MessageRole.USER, MessageRole.ASSISTANT, MessageRole.ASSISTANT)
         // 다시 보내면 각자 처음 응답을 그대로 받는다 — 새 행도, 새 해석도 없다
@@ -589,6 +598,42 @@ class AssistantTurnServiceTest : StringSpec({
         json.readTree(second.dialogueContext)["turn_index"].asInt() shouldBe 2
     }
 
+    /** 해석이 뽑은 인자가 처리기까지 간다 — 안 가면 "모카 어때"가 늘 "일정에서 확인하세요"로 끝난다. */
+    "해석이 뽑은 인자로 일정의 장소를 찾아 답한다" {
+        val w = world(interpreter = Interpreter { r ->
+            Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.GET_DISTANCE, mapOf("destination" to "모카"), "CONFIDENT")), null, r.dialogueContext, 0)
+        })
+        val s = w.session()
+
+        val card = w.say(s, "모카까지 얼마나 멀어").messages[1]
+
+        card.kind shouldBe MessageKind.INFO
+        card.payload!!["title"] shouldBe "카페 모카" // 말한 "모카"가 아니라 저장된 이름
+    }
+
+    /** 버튼에는 다시 태울 "말"이 없다 — [다시 시도]를 주면 엉뚱한 옛 문장이 나간다. */
+    "버튼을 눌러 온 턴이 실패하면 다시 시도를 주지 않는다 — 말로 온 턴에는 준다" {
+        val w = world()
+        val s = w.session()
+        val throwing = IntentDispatcher(QueryCards(w.data, w.data, w.data, w.data)) // 자리만 — 아래에서 원천을 죽인다
+        val brokenTrips = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
+            override fun findGenerationContext(accountId: UUID, id: UUID): TripGenerationContext? = throw IllegalStateException("db down")
+        }
+        val service = AssistantTurnService(
+            w.sessions, w.messages, w.usage, AccountTurnLock { }, clean, provider(w.interpreter), throwing,
+            TripContextReader(brokenTrips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), w.data, w.data, AssistantProperties()),
+            AssistantProperties(), json, w.clock, NOOP_TX,
+        )
+
+        val pressed = service.send(acc, s.sessionId, UUID.randomUUID(), TurnInput.Action("qr-review"), AssistantSurface.ITINERARY)
+        pressed.messages[1].kind shouldBe MessageKind.FALLBACK
+        pressed.messages[1].nextActions.map { it.type } shouldContainExactly listOf("CONTINUE_WITHOUT_ASSISTANT")
+
+        val said = service.send(acc, s.sessionId, UUID.randomUUID(), TurnInput.Text("오늘 날씨"), AssistantSurface.ITINERARY)
+        said.messages[1].nextActions.map { it.type } shouldContainExactly listOf("RETRY_TURN", "CONTINUE_WITHOUT_ASSISTANT")
+    }
+
     /** DEC-U8-11 · BR-U8-43 — 여러 요청 중 하나를 골라 실행하면 반드시 틀린다. */
     "한 번에 여러 의도가 오면 실행하지 않고 하나씩 말해 달라고 한다" {
         val w = world(interpreter = Interpreter { r ->
@@ -631,9 +676,23 @@ class AssistantTurnServiceTest : StringSpec({
      * 그 응답에는 다음 행동이 하나 이상 있으며 전부 앱이 아는 값이다.
      */
     "임의의 의도·문맥에서 응답은 막다르지 않고 다음 행동이 closed-set 안이다" {
-        val dispatcher = IntentDispatcher()
-        checkAll(Arb.enum<Intent>(), Arb.enum<AssistantSurface>(), Arb.element(true, false), Arb.element(true, false)) { intent, surface, hasTrip, inTrip ->
-            val message = dispatcher.dispatch(intent, DispatchContext(hasTrip, hasTrip && inTrip, surface))
+        val tripContext = TripContext(listOf("부산"), 1, null, today, today.plusDays(1))
+        checkAll(
+            Arb.enum<Intent>(), Arb.enum<AssistantSurface>(), Arb.element(true, false), Arb.element(true, false),
+            // 일정이 있든 없든, 위반·거리·이름이 있든 없든, 원천이 죽었든 — 어느 조합에서도 같은 성질이다
+            Arb.list(Arb.element("카페 모카", "해변", null), 0..4), Arb.element(true, false), Arb.element("해변", "없는 곳", ""),
+        ) { intent, surface, hasTrip, inTrip, names, broken, said ->
+            val data = FakeTripData(
+                acc,
+                slots = names.mapIndexed { i, name -> plannedSlot(today, i, "1${i}:00", name, violation = "영업시간과 맞지 않아요".takeIf { i % 2 == 0 }, distance = "1.2km".takeIf { i % 2 == 1 }) },
+                hasItinerary = names.isNotEmpty(), reading = WeatherReading(40, "호우주의보", start, stale = false).takeIf { !broken },
+            ).apply { failPlan = broken && names.size > 2; failItinerary = broken && names.size % 2 == 0; failWeather = broken }
+            val context = DispatchContext(
+                acc, tripId.takeIf { hasTrip }, tripContext.takeIf { hasTrip }, hasTrip && inTrip, surface,
+                mapOf("destination" to said, "place" to said), start,
+            )
+            // 처리기는 **던지지 않는다** — 원천이 죽어도 스스로 가용한 답을 낸다. 던지면 이 속성이 깨져 드러난다.
+            val message = IntentDispatcher(QueryCards(data, data, data, data)).dispatch(intent, context)
 
             (message.nextActions.isNotEmpty()) shouldBe true
             message.nextActions.forEach { (it.type in NextAction.TYPES) shouldBe true }
