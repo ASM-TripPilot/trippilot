@@ -3722,7 +3722,7 @@ ACTIVE 만으로 거르지 않되(담아 둔 폐업 장소가 열려야 한다) 
 
 [[nodes]]
 id = "U8-EDIT-FACADE"
-ticket = ""
+ticket = "TRIP-1374"
 title = "[U8] 일정 편집을 다른 모듈에 여는 퍼사드 — 변경 출처를 받는다 (G-U8-1)"
 status = "todo"
 migration = false
@@ -3740,7 +3740,7 @@ note = """
 
 [[nodes]]
 id = "U8-PLAN-FACADE-FIELDS"
-ticket = ""
+ticket = "TRIP-1375"
 title = "[U8] 일정 퍼사드에 거리·위반 3필드 — 진행 검토가 읽을 값이 REST 에만 있다 (G-U8-3)"
 status = "todo"
 migration = false
@@ -3753,7 +3753,7 @@ AI·디자인을 기다리지 않는다.
 
 [[nodes]]
 id = "U8-AI-EDIT-PORT"
-ticket = ""
+ticket = "TRIP-1376"
 title = "[U8] AI 편집 경로 호출 배선 — /ai/v1/itinerary/edit 의 백엔드 호출자가 0이다 (G-U8-2)"
 status = "todo"
 migration = false
@@ -3768,8 +3768,9 @@ note = """
 [[nodes]]
 id = "U8-ASSISTANT-MODULE"
 ticket = ""
-title = "[U8] assistant 모듈 신설 — 세션·메시지·제안·가드레일 + API 계약 (프론트는 가짜 서버 위에 이미 섰다)"
-status = "todo"
+title = "[U8] assistant 모듈 신설 — 넷으로 쪼갰다(U8-CONTRACT·U8-TURN·U8-PROPOSAL·U8-OPS)"
+status = "dropped"
+owner = "일정"
 migration = true
 touches = [
   "backend/modules/assistant",
@@ -3781,6 +3782,9 @@ touches = [
   "backend/docs/design/openapi.yaml",
 ]
 note = """
+**쪼갬(2026-10-13, 루프 착수) — 이 노드는 PR 하나가 아니었다.** [[U8-CONTRACT]](모듈 뼈대·테이블·계약·세션) →
+[[U8-TURN]](턴 처리·조회형·가드레일) → [[U8-PROPOSAL]](제안·적용), 그리고 [[U8-OPS]](파기·청소·상한·내보내기)가 잇는다.
+아래 범위 서술은 네 노드의 합이고, 착수 전 읽을 정본 목록으로 남긴다.
 **백엔드가 U8 의 병목이다.** 프론트는 TRIP-1318(#1057)로 b01~b07 시트·카드·적용 흐름을 가짜 서버 위에
 세워 뒀고(`frontend/src/pages/assistant/`), 우리 `openapi.yaml` 에는 도우미 표면이 하나도 없다(2026-10-13 실측).
 
@@ -3864,21 +3868,21 @@ FD 갭 표에서 백엔드 몫으로 읽히는 것(착수 전 FD 를 다시 읽�
 
 [[edges]]
 from = "U8-EDIT-FACADE"
-to = "U8-ASSISTANT-MODULE"
+to = "U8-PROPOSAL"
 kind = "계약선행"
 verified = false
 reason = "U8 FD §8 스토리 커버리지 — US-ASSIST-04 액션 위임은 '편집 퍼사드 선행(G-U8-1·2)'. 모듈의 세션·메시지 부분은 퍼사드 없이도 서므로 모듈 전체의 선행은 아니다(제안 적용만 기다린다)."
 
 [[edges]]
 from = "U8-AI-EDIT-PORT"
-to = "U8-ASSISTANT-MODULE"
+to = "U8-PROPOSAL"
 kind = "계약선행"
 verified = false
 reason = "같은 근거(G-U8-2) — EDIT_SCHEDULE 제안이 ai /edit 를 부른다. 모듈의 다른 의도는 기다리지 않는다."
 
 [[edges]]
 from = "U8-PLAN-FACADE-FIELDS"
-to = "U8-ASSISTANT-MODULE"
+to = "U8-TURN"
 kind = "계약선행"
 verified = false
 reason = "U8 FD §8 — US-ASSIST-03 진행 검토는 '퍼사드 확장 선행(G-U8-3)'. FD §4 의 거리 조회(GET_DISTANCE)도 같은 필드(distanceRange)를 기다린다. 위 두 간선과 같은 범위다(모듈 전체가 아니라 그 의도들만 기다린다)."
@@ -3917,3 +3921,109 @@ OBS-02 리프레시 재사용 감지 로그 메트릭 필터 → SNS → Slack, 
 다시 돌린 뒤에야 apply 된다 — 로그 수집 때와 같은 순서이고, **PR 이 둘로 갈린다**(권한 → 알람). 착수하면 쪼갠다.
 관리형 정책의 `Description` 은 건드리지 않는다(anti-patterns, #1085). 파드 지표는 방금 켠 Container Insights 가 낸다.
 """
+
+# ── U8 본체 넷 (2026-10-13 쪼갬). 루프 순서: EDIT-FACADE → PLAN-FACADE-FIELDS → AI-EDIT-PORT → CONTRACT → TURN → PROPOSAL → OPS.
+# 순서는 의존이 아니라 공유 자원이 정한다 — 앞의 셋은 같은 모듈(itinerary-generation), 뒤의 넷은 openapi·마이그레이션 번호를 한 번에 하나씩 만진다.
+# **배포는 루프 밖이다.** dev 가 운영이라 도우미는 스위치(`ASSISTANT_INTERPRET_MODE`)가 꺼진 채 머지된다.
+
+[[nodes]]
+id = "U8-CONTRACT"
+ticket = "TRIP-1377"
+title = "[U8] assistant 모듈 뼈대·계약 — 테이블 넷·openapi assistant 태그·세션 열기/목록/메시지/지우기"
+status = "todo"
+migration = true
+touches = [
+  "backend/modules/assistant",
+  "backend/app/build.gradle.kts",
+  "backend/app/src/main/resources/application.yml",
+  "backend/settings.gradle.kts",
+  "backend/app/src/main/resources/db/migration",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+`:modules:assistant` 신설 + 마이그레이션(V2.64~: `assistant_session`·`assistant_message`(+OBS-U8-01 컬럼 넷)·
+`assistant_proposal`·`assistant_usage_daily`) + `openapi.yaml` 의 `assistant` 태그 전체(턴·제안 포함 — 계약은 한 번에 연다).
+구현은 세션 열기(계정·여행당 1 + 일반 1, DEC-U8-5)·목록·메시지 조회·대화 지우기까지.
+
+**프론트 계약과 대조가 이 노드의 본체다.** 프론트는 FD 를 보고 타입을 손으로 옮겨 뒀다
+(`frontend/src/pages/assistant/assistant-sheet/api/assistantContract.ts`·`assistantPort.ts`, TRIP-1319) — 일곱 호출
+(openSession·listSessions·getMessages·sendTurn·applyProposal·dismissProposal·clearSession)과 오류 코드
+(RATE_LIMITED·STALE·EXPIRED·NOT_APPLICABLE)를 가정한다. 기본 방향은 **프론트가 만든 모양을 따른다**(사용자 결정
+2026-10-13). FD 와 실질적으로 충돌할 때만 멈춰 묻는다.
+스위치 `ASSISTANT_INTERPRET_MODE=off|fake|http`(REL-U8-06) — 배포 기본은 꺼짐.
+"""
+
+[[nodes]]
+id = "U8-TURN"
+ticket = "TRIP-1378"
+title = "[U8] 도우미 턴 처리 — 해석(fake)·디스패치·조회형 응답, 분당 제한·금칙어·멱등"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/assistant",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+FD `business-logic-model.md` §2 한 턴의 흐름(10단계)과 §4 디스패치 표. 소유 확인(404 은닉) → 멱등(`clientTurnId`) →
+리미터(계정 분당 20, `pg_advisory_xact_lock` 안에서 — SEC-U8-01) → 입력 검사(금칙어 위반 원문은 저장하지 않는다) →
+해석 → 디스패치 → 기록. quick reply 액션은 LLM 0회. 조회형(진행 검토·다음 장소·거리·장소·날씨)과 화면 넘기기.
+**도우미 문구는 백엔드 템플릿**(DEC-U8-6). 해석 실패는 FALLBACK 메시지 1건으로 끝난다(INV-4).
+AI 해석 경계는 상대 미구현([[U8-AI-DIALOGUE]]) — 포트 + fake 어댑터. 제안(변경형)은 [[U8-PROPOSAL]] 로 넘긴다.
+**크다 — 착수하면 조회형/가드레일로 다시 쪼갤 수 있다.**
+"""
+
+[[nodes]]
+id = "U8-PROPOSAL"
+ticket = "TRIP-1379"
+title = "[U8] 도우미 제안·적용 — 전후 비교 카드, [적용]을 눌러야만 일정이 바뀐다"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/assistant",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+FD §2.1 · DEC-U8-2·3. `EDIT_SCHEDULE`·`SUGGEST_ALTERNATIVE` → AI `/edit`(`confirm=true`) → `ProposalCard`(저장 안 함).
+[적용]: 상태·만료 확인 → **기준 지문 대조**(그사이 일정이 바뀌었으면 STALE 409) → 위반 있는 제안은 적용 불가 →
+`ItineraryEditFacade.edit(source=ASSISTANT)` → 저장 뒤 판정이 갈리면 숨기지 않고 알리고 [되돌리기] → ACTION_LOG.
+"""
+
+[[nodes]]
+id = "U8-OPS"
+ticket = "TRIP-1380"
+title = "[U8] 도우미 운영 의무 — 계정 삭제 즉시 파기·보존 청소·월 호출 상한·내보내기"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/assistant",
+  "backend/app/src/test/kotlin/com/trippilot/app/AccountExportIT.kt",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+NFR 이 FD 뒤에 더한 의무들(`tech-stack-decisions.md` §5). `auth.AccountDeletionRequested` 구독 → 대화·사용량 즉시 파기
+(DATA-U8-02 — FK CASCADE 만으로는 안 지워진다) · ShedLock 청소 둘(대화 90일·사용량 40일) · 서비스 전역 월 LLM 호출
+상한과 "버튼 모드" 강등(COST-U8-04·REL-U8-02) · `/me/export` 도우미 절(`AccountDataContributor`, `AccountExportIT` 의
+절 목록 단정을 같이 고친다) · 여행 삭제 시 그 여행 세션 삭제.
+**개통 전 사람 몫**: AI 벤더 지출 한도(COST-U8-05) · 처리방침 개정 2항목(대화 90일 보관, LLM 처리위탁에 도우미 발화).
+"""
+
+[[edges]]
+from = "U8-CONTRACT"
+to = "U8-TURN"
+kind = "계약선행"
+verified = false
+reason = "턴은 세션·메시지 테이블과 계약 위에 선다 — 모듈과 스키마가 U8-CONTRACT 에서 생긴다."
+
+[[edges]]
+from = "U8-TURN"
+to = "U8-PROPOSAL"
+kind = "계약선행"
+verified = false
+reason = "제안은 턴의 디스패치 결과다(FD §2 8단계 '변경형 → ProposalCard'). 턴 처리 없이 제안이 만들어질 입구가 없다."
+
+[[edges]]
+from = "U8-CONTRACT"
+to = "U8-OPS"
+kind = "계약선행"
+verified = false
+reason = "파기·청소·내보내기의 대상 테이블이 U8-CONTRACT 에서 생긴다."
