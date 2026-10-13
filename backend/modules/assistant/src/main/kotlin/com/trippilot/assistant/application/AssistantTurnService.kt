@@ -107,9 +107,17 @@ class AssistantTurnService(
         }
         val finishedAt = clock.instant()
         val replies = try {
-            tx.execute { finish(accepted, clientTurnId, reply, startedAt, finishedAt) }!!
+            tx.execute { finish(accepted, clientTurnId, reply, startedAt, finishedAt) }
         } catch (e: DataIntegrityViolationException) {
+            // 확인과 삽입 사이에 대화가 지워진 찰나의 경합만 "대화가 없다"다. 대화가 그대로 있으면 진짜 결함이다
+            // (다음 행동 없는 응답·길이 초과 등) — 404 로 가리면 응답 없는 턴이 남아 재전송마다 다시 해석한다.
+            if (tx.execute { sessions.findOwned(accountId, sessionId, finishedAt) } != null) throw e
+            log.warn("도우미 응답을 남기려는데 대화가 사라졌습니다. sessionId={} type={}", sessionId, e.javaClass.simpleName)
+            null
+        } ?: run {
             // 답하는 사이 대화가 지워졌다(이력 지우기·여행 삭제) — 남길 곳이 없다. 500 이 아니라 "그 대화는 없다"다.
+            // 그래도 **쓴 LLM 은 센다**: 안 세면 "보내고 지우기"를 되풀이해 하루 상한을 비켜 간다(사용량은 계정에 묶여 남는다).
+            if (reply.llm) tx.execute { usage.record(accountId, today(startedAt), llm = true, turn = false) }
             throw ResourceNotFound()
         }
         return TurnResult(listOf(accepted.user) + replies, replies.last().quickReplies ?: StartQuickReplies.of(accepted.session.tripId != null))
@@ -119,8 +127,12 @@ class AssistantTurnService(
      * 앞선 처리가 끝나기를 기다린다 — 끝나면 그 응답을 그대로 준다(INV-U8-05). **다시 해석하지 않는다**: 같은 턴 id 를
      * 여러 번 겹쳐 보내 해석을 그 수만큼 돌리면 분당 제한(사용자 행은 하나뿐이다)과 하루 LLM 상한을 비켜 간다.
      *
-     * 턴 예산이 지나도록 응답이 없으면 앞선 처리는 죽은 것이다(남기기 실패·파드 종료) — null 을 돌려 넘겨받게 한다.
-     * 기다리는 동안 DB 연결은 쥐지 않는다.
+     * 턴 예산(+ 왕복 여유)이 지나도록 응답이 없으면 앞선 처리는 죽은 것이다(남기기 실패·파드 종료) — null 을 돌려
+     * 넘겨받게 한다. 기다리는 동안 DB 연결은 쥐지 않는다.
+     *
+     * ponytail: 기다리는 요청 수에 상한이 없다 — 같은 턴 id 를 N 번 겹쳐 보내면 요청 스레드 N 개가 앞선 처리가 끝날
+     * 때까지 선다. 해석이 꺼져 있거나 대역일 때는 그 시간이 밀리초라 무해하다. **http 해석을 켜기 전에** 기다리는 수에
+     * 상한(넘으면 429)을 둔다 — 그때는 한 턴이 십여 초를 간다.
      */
     private fun awaitFirst(pending: Accepted.Pending, sessionId: UUID, clientTurnId: UUID): TurnResult? {
         val giveUpAt = pending.resumed.user.createdAt + Duration.ofMillis(properties.turnBudgetMs + properties.readMarginMs)
@@ -373,12 +385,14 @@ class AssistantTurnService(
 
     // ── 3. 남기기 ──────────────────────────────────────────────────────────
 
-    private fun finish(turn: Accepted.New, clientTurnId: UUID, reply: Reply, startedAt: Instant, finishedAt: Instant): List<AssistantMessage> {
+    /** @return 남긴(또는 이미 남아 있던) 응답. **null 이면 그 사이 대화가 지워진 것이다** — 아무것도 쓰지 않았다. */
+    private fun finish(turn: Accepted.New, clientTurnId: UUID, reply: Reply, startedAt: Instant, finishedAt: Instant): List<AssistantMessage>? {
         val session = turn.session
         // 같은 턴이 겹쳐 처리됐으면(넘겨받기가 둘 이상 겹친 드문 경우) 먼저 끝난 쪽만 남긴다 — 줄을 세우고 다시 본다.
         // 늦은 쪽은 응답을 쓰지 않는다. 다만 LLM 을 실제로 썼으면 그 한 번은 센다 — 안 세면 겹쳐 보내기가 상한 우회가 된다.
         lock.acquire(session.accountId)
-        messages.findTurn(session.sessionId, clientTurnId)?.replies?.takeIf { it.isNotEmpty() }?.let { existing ->
+        val recorded = messages.findTurn(session.sessionId, clientTurnId) ?: return null // 사용자 행까지 사라졌다 — 대화가 지워졌다
+        recorded.replies.takeIf { it.isNotEmpty() }?.let { existing ->
             if (reply.llm) usage.record(session.accountId, today(startedAt), llm = true, turn = false)
             return existing
         }

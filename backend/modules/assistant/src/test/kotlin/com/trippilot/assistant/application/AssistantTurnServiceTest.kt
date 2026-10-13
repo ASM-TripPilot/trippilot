@@ -2,6 +2,8 @@ package com.trippilot.assistant.application
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.assistant.domain.AccountTurnLock
+import com.trippilot.assistant.domain.AssistantMessage
+import com.trippilot.assistant.domain.AssistantMessageRepository
 import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.Clarify
@@ -41,6 +43,7 @@ import io.kotest.property.arbitrary.map
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.dao.DataIntegrityViolationException
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -116,8 +119,9 @@ class AssistantTurnServiceTest : StringSpec({
     fun World.service(
         moderation: TextModerationFacade = clean,
         properties: AssistantProperties = AssistantProperties(),
+        store: AssistantMessageRepository = messages,
     ) = AssistantTurnService(
-        sessions, messages, usage, AccountTurnLock { }, moderation, provider(interpreter), IntentDispatcher(),
+        sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), IntentDispatcher(),
         TripContextReader(trips, stays), properties, json, clock, NOOP_TX,
     ).also { it.pause = { ms -> clock.now = clock.now.plusMillis(ms); onPause() } } // 기다림은 시계를 민다
 
@@ -228,6 +232,45 @@ class AssistantTurnServiceTest : StringSpec({
         w.interpreter!!.requests shouldBe emptyList()
         w.messages.rows.size shouldBe 2
         w.usage.turns[acc to today] shouldBe null // 턴과 사용량은 앞선 처리의 몫이다
+    }
+
+    "기다리는 사이나 답하는 사이 대화가 지워지면 404 다 — 그래도 쓴 LLM 은 센다" {
+        // 기다리는 사이
+        val waiting = world()
+        val s1 = waiting.session()
+        val turn = UUID.randomUUID()
+        waiting.messages.appendUser(s1.sessionId, acc, turn, NewMessage(MessageRole.USER, MessageKind.TEXT, "오늘 날씨"), start)
+        waiting.onPause = { waiting.messages.rows.clear() } // 이력 지우기 — 사용자 행까지 사라진다
+        shouldThrow<ResourceNotFound> { waiting.say(s1, "오늘 날씨", turn) }
+
+        // 답하는 사이(해석 도중) — LLM 은 이미 썼다. 안 세면 "보내고 지우기"가 하루 상한의 우회가 된다
+        lateinit var answering: World
+        answering = world(interpreter = Interpreter { r ->
+            answering.messages.rows.clear()
+            framed(Intent.GET_WEATHER, llmCalls = 1)(r)
+        })
+        val s2 = answering.session()
+
+        shouldThrow<ResourceNotFound> { answering.say(s2, "오늘 날씨") }
+
+        answering.messages.rows shouldBe emptyList()
+        answering.usage.llm[acc to today] shouldBe 1
+        answering.usage.turns[acc to today] shouldBe null
+    }
+
+    /**
+     * 대화가 그대로 있는데 응답 저장이 제약에 걸렸다면 우리 결함이다(다음 행동 없는 응답·길이 초과…). 404 로 가리면
+     * 응답 없는 턴이 남아 재전송마다 다시 해석한다 — 그대로 올려 드러낸다.
+     */
+    "대화가 있는데 응답 저장이 제약에 걸리면 404 로 가리지 않는다" {
+        val w = world()
+        val s = w.session()
+        val broken = object : AssistantMessageRepository by w.messages {
+            override fun appendAssistant(sessionId: UUID, accountId: UUID, replyTo: UUID, message: NewMessage, at: Instant): AssistantMessage =
+                throw DataIntegrityViolationException("ck_assistant_message_next_action")
+        }
+
+        shouldThrow<DataIntegrityViolationException> { w.say(s, "오늘 날씨", service = w.service(store = broken)) }
     }
 
     /**

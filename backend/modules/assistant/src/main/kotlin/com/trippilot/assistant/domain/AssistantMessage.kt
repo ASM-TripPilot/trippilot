@@ -63,8 +63,8 @@ enum class QuickReplyAction { SEND_TEXT, REVIEW, PICK_CANDIDATE, PICK_OPTION, SH
  * 저장할 메시지. [seq] 와 시각은 저장소가 매긴다.
  *
  * 관측 칸 넷(OBS-U8-01)은 도우미 행에 채운다 — 알람·지표의 원천을 DB 행에 둔다. 화면에 쓰지 않는다.
- * 사용자 행은 [matchRoute]·[intent] 둘만 쓴다: 버튼을 눌러 생긴 행이면 `ACTION` 과 그 버튼의 종류를 적어,
- * 직접 한 말(둘 다 null)과 가른다.
+ * 사용자 행은 셋을 다른 뜻으로 쓴다: 버튼을 눌러 생긴 행이면 [matchRoute]·[intent] 에 `ACTION` 과 그 버튼의 종류를 적어
+ * 직접 한 말(둘 다 null)과 가르고, 가려진 입력이면 [outcome] 에 가려진 이유(`VIOLATION`|`UNCHECKED`)를 적는다.
  */
 data class NewMessage(
     val role: MessageRole,
