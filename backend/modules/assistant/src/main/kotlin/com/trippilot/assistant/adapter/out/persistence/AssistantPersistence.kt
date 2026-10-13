@@ -82,6 +82,10 @@ class AssistantSessionRepositoryAdapter(private val jdbc: JdbcTemplate) : Assist
 
     override fun deleteByTrip(tripId: UUID): Int = jdbc.update("DELETE FROM assistant_session WHERE trip_id = ?", tripId)
 
+    override fun deleteByAccount(accountId: UUID): Int = jdbc.update("DELETE FROM assistant_session WHERE account_id = ?", accountId)
+
+    override fun deleteExpired(now: Instant): Int = jdbc.update("DELETE FROM assistant_session WHERE expires_at <= ?", Timestamp.from(now))
+
     override fun recordTurn(sessionId: UUID, at: Instant, expiresAt: Instant, dialogueContext: String, refusalStreak: Int) {
         jdbc.update(
             "UPDATE assistant_session SET last_turn_at = ?, expires_at = ?, dialogue_context = ?::jsonb, refusal_streak = ? WHERE session_id = ?",
@@ -314,6 +318,15 @@ class AssistantUsageRepositoryAdapter(private val jdbc: JdbcTemplate) : Assistan
             accountId, java.sql.Date.valueOf(day), if (turn) 1 else 0, if (llm) 1 else 0,
         )
     }
+
+    override fun llmTurnsSince(from: LocalDate): Long = jdbc.queryForObject(
+        "SELECT COALESCE(SUM(llm_turns), 0) FROM assistant_usage_daily WHERE day >= ?", Long::class.java, java.sql.Date.valueOf(from),
+    )!!
+
+    override fun deleteBefore(before: LocalDate): Int =
+        jdbc.update("DELETE FROM assistant_usage_daily WHERE day < ?", java.sql.Date.valueOf(before))
+
+    override fun deleteByAccount(accountId: UUID): Int = jdbc.update("DELETE FROM assistant_usage_daily WHERE account_id = ?", accountId)
 
     /**
      * 트랜잭션이 끝날 때 풀리는 잠금(SEC-U8-01). 이름공간은 이 모듈 것이고, 키는 계정 id 의 해시다 —

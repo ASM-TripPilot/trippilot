@@ -45,4 +45,10 @@ interface AssistantSessionRepository {
 
     /** 그 여행의 대화를 전부 지운다 — 여행이 지워졌을 때(FD §2.2). 지운 행 수. */
     fun deleteByTrip(tripId: UUID): Int
+
+    /** 그 계정의 대화를 전부 지운다 — 계정 삭제 요청(DATA-U8-02). 지운 행 수. */
+    fun deleteByAccount(accountId: UUID): Int
+
+    /** 보존 기간이 지난 대화를 지운다(DATA-U8-01) — 메시지·제안은 CASCADE 로 간다. 지운 행 수. */
+    fun deleteExpired(now: Instant): Int
 }

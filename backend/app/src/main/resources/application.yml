@@ -125,6 +125,11 @@ trippilot:
     # 계정당 분당 턴(BR-U8-24)과 하루 LLM 턴(COST-U8-02 — 근거 없는 초기값, 넘으면 버튼 모드로 낮춘다).
     rate-limit-per-minute: ${ASSISTANT_RATE_LIMIT_PER_MINUTE:20}
     daily-llm-turn-limit: ${ASSISTANT_DAILY_LLM_TURN_LIMIT:30}
+    # 서비스 전역 월 LLM 턴 상한(COST-U8-04). 0 = 꺼짐 — 호출당 단가를 실측한 뒤 정한다. 꺼져 있는 동안의 그물은 벤더 지출 한도뿐이다.
+    monthly-llm-call-limit: ${ASSISTANT_MONTHLY_LLM_CALL_LIMIT:0}
+    # 보존 청소(DATA-U8-01·04) — 만료된 대화와 오래된 사용량 행. 하루 한 번.
+    usage-retention-days: ${ASSISTANT_USAGE_RETENTION_DAYS:40}
+    retention-sweep-ms: ${ASSISTANT_RETENTION_SWEEP_MS:86400000}
     # 해석에 보내는 일정 크기의 상한(SEC-U8-08). 넘으면 오늘 ±1일만 보낸다.
     snapshot-max-days: ${ASSISTANT_SNAPSHOT_MAX_DAYS:14}
     snapshot-max-slots-per-day: ${ASSISTANT_SNAPSHOT_MAX_SLOTS_PER_DAY:20}
