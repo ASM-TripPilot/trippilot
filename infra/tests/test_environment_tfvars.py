@@ -5,7 +5,8 @@
 `infra/terraform/stack/tests/environments.tftest.hcl` 의 `run` 블록은 **자기 `variables {}` 를
 들고** plan 한다. 그 집합은 `terraform plan -var-file=../environments/<env>.tfvars`
 (`aws-deploy.yml`)가 쓰는 집합과 **다르다** — 증거는 리포 안에 있다: 테스트는
-`container_logs_enabled = true` 인데 `dev.tfvars` 는 `false` 다.
+`container_logs_retention_days = 7` 인데 `dev.tfvars` 는 `90` 이다(2026-10-13 까지는 테스트가
+`container_logs_enabled = true`, 파일이 `false` 였다).
 
 즉 누가 `dev.tfvars` 에 `data_protection_enabled = false` 한 줄을 넣어도
 `terraform test` 는 전부 green 이고(2026-10-05 실측), `infra/terraform` 은 PR 트리거가
@@ -52,6 +53,18 @@ class EnvironmentTfvarsTests(unittest.TestCase):
                     '삭제 보호가 풀리고 백업이 1일로 내려간다. 끌 이유가 있으면 '
                     'STORE-LAUNCH 노드의 결정을 먼저 바꿀 것.',
                 )
+
+    def test_dev_keeps_container_logs_on(self):
+        """dev 는 실사용자를 받는 운영 스택이다 — 로그 수집이 꺼지면 파드 재시작과 함께 로그가 사라지고,
+        장애가 난 뒤에야 그 사실을 안다. 비용을 줄이려고 끄는 쪽이 현실적인 경로라 파일에서 막는다.
+        끌 이유가 있으면 인프라 결정 Q3(`shared-infrastructure.md` §12)을 먼저 바꾼다.
+
+        prd 는 스택이 아직 없고(역할도 없다) 켜면 plan 이 깨지므로 여기서 요구하지 않는다.
+        """
+        dev = assignments('dev')
+        self.assertEqual(dev.get('container_logs_enabled'), 'true')
+        # 보존을 안 적으면 변수 기본값 7일로 떨어진다 — 결정은 90일이다.
+        self.assertEqual(dev.get('container_logs_retention_days'), '90')
 
     def test_environment_field_matches_filename(self):
         """`environment` 값이 파일 이름과 같아야 한다 — 어긋나면 한 환경이 다른 환경의
