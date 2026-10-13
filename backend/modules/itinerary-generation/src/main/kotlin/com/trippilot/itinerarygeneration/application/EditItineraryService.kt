@@ -4,6 +4,10 @@ import com.trippilot.changelog.api.AppendChangeLog
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.itinerarygeneration.api.EditDayCommand
+import com.trippilot.itinerarygeneration.api.ItineraryEditFacade
+import com.trippilot.itinerarygeneration.api.ItineraryEditResult
+import com.trippilot.itinerarygeneration.api.ItineraryEditSource
 import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.core.error.ResourceNotFound
@@ -69,10 +73,23 @@ class EditItineraryService(
     private val clock: Clock,
     /** 수리 요청의 앵커·수단(2026-10-05) — generate 와 같은 출처. */
     private val repairContexts: RepairContexts,
-) {
+) : ItineraryEditFacade {
     private val tx = TransactionTemplate(transactionManager)
 
-    fun edit(accountId: UUID, tripId: UUID, edit: EditItinerary): Itinerary {
+    /** 다른 모듈의 입구(U8 도우미 [적용]) — REST 편집과 **같은 [edit]** 를 탄다. 다른 것은 출처뿐이다. */
+    override fun edit(accountId: UUID, tripId: UUID, days: List<EditDayCommand>, reason: String?, source: ItineraryEditSource): ItineraryEditResult {
+        val command = EditItinerary(
+            days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
+            reason,
+        )
+        val saved = edit(accountId, tripId, command, source)
+        return ItineraryEditResult(
+            itineraryId = saved.itineraryId,
+            hasViolation = saved.days.any { d -> d.slots.any { it.hasViolation } },
+        )
+    }
+
+    fun edit(accountId: UUID, tripId: UUID, edit: EditItinerary, source: ItineraryEditSource = ItineraryEditSource.MANUAL): Itinerary {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val current = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
         // 확정 잠금은 **여행 시작 전**만이다(TRIP-999 결정 (a) · BR-U3-28 개정). 여행이 시작되면
@@ -120,7 +137,9 @@ class EditItineraryService(
             // 위반 상태까지 포함해 비교한다(스냅숏 비교는 위반 변화를 못 본다).
             if (!ItineraryContent.sameAs(beforeWrite, saved)) {
                 // 이력은 **같은 트랜잭션**에 — 일정만 바뀌고 이력이 빠지는 상태를 만들지 않는다(INV-U3-06).
-                revisions.record(saved, RevisionActor.USER, RevisionKind.EDIT, edit.reason ?: "일정을 직접 수정함")
+                // 주체는 도우미 경로에서도 USER 다 — 제안을 [적용]한 것은 사용자다(리비전 주체를 늘릴지는 U8 O-U8-7 미결).
+                // 대신 요약에 표지를 붙여 목록에서 가려지게 한다(U8 FD G-U8-1).
+                revisions.record(saved, RevisionActor.USER, RevisionKind.EDIT, source.revisionSummary(edit.reason))
                 // 여행 중 수동 편집은 변경 이력 1행(BR-U4-30 MANUAL) — 재계획 반영(PLAN_B)과 같은 축이다.
                 // 여행 전 편집은 이 축의 대상이 아니다(그쪽 기록은 리비전 h36 이 담당한다).
                 if (today() >= period.startDate) {
@@ -128,8 +147,8 @@ class EditItineraryService(
                         AppendChangeLog(
                             tripId = tripId,
                             actor = accountId.toString(),
-                            sourceType = ChangeSourceType.MANUAL,
-                            reason = edit.reason ?: "일정을 직접 수정함", // BR-U4-31 — 비워 두지 않는다
+                            sourceType = source.changeSourceType,
+                            reason = edit.reason ?: source.defaultReason, // BR-U4-31 — 비워 두지 않는다
                             before = beforeWrite.toChangeLogSnapshot(),
                             after = saved.toChangeLogSnapshot(),
                         ),
@@ -252,6 +271,24 @@ class EditItineraryService(
         )
     }
 
+}
+
+private val ItineraryEditSource.changeSourceType: ChangeSourceType
+    get() = when (this) {
+        ItineraryEditSource.MANUAL -> ChangeSourceType.MANUAL
+        ItineraryEditSource.ASSISTANT -> ChangeSourceType.ASSISTANT
+    }
+
+private val ItineraryEditSource.defaultReason: String
+    get() = when (this) {
+        ItineraryEditSource.MANUAL -> "일정을 직접 수정함"
+        ItineraryEditSource.ASSISTANT -> "도우미 제안을 적용함"
+    }
+
+/** 리비전 요약 — 변경 이력과 달리 출처 칸이 없어, 도우미 경로는 문구 앞에 표지를 붙인다. */
+private fun ItineraryEditSource.revisionSummary(reason: String?): String = when (this) {
+    ItineraryEditSource.MANUAL -> reason ?: defaultReason
+    ItineraryEditSource.ASSISTANT -> "[도우미] ${reason ?: defaultReason}"
 }
 
 /** 편집안 → 재검증 입력(ScheduleAgentOutput). 시각·순서·고정은 슬롯 그대로. 거리/소요시간 없음(INV-3). */
