@@ -61,7 +61,77 @@ interface ScheduleAgentPort {
      * 호출 실패는 [ScheduleAgentCallFailed] 로 올려 수동 편집 전환을 유도한다(INV-4).
      */
     fun replan(input: ReplanInput): ScheduleAgentOutput
+
+    /**
+     * 편집 **제안**(U8 G-U8-2) — 발화나 명령을 상대가 해석·재타이밍·검증해 돌려준다. **저장하지 않는다.**
+     * 결과를 일정에 반영하는 길은 편집 저장 경로 하나뿐이고(BR-U8-33), 거기서 다시 재검증된다.
+     *
+     * 거절([EditProposalStatus.REJECTED])·해석 실패([EditProposalStatus.NOT_UNDERSTOOD])는 **정상 응답**이다 —
+     * [ScheduleAgentCallFailed] 는 유효한 200 을 못 받았을 때만 올린다(INV-4). 일정 폴백 신호가 아니다.
+     */
+    fun proposeEdit(input: EditProposalInput): EditProposalOutput
 }
+
+/**
+ * 편집 제안 입력. [utterance] 와 [command] 는 **정확히 하나**다(상대 계약 — 둘 다거나 둘 다 없으면 422).
+ *
+ * 확인 플래그가 없는 것은 의도다 — 확인은 사용자의 [적용]이 맡으므로 늘 `confirm=true` 로 부른다(DEC-U8-3).
+ * 상대가 확인을 기다리며 해를 숨기면 전후 비교를 그릴 재료가 없다.
+ */
+data class EditProposalInput(
+    val tripId: UUID,
+    /** 지금 저장된 일정 전체 — 상대가 이것을 고쳐 **전체를** 돌려준다. */
+    val itinerary: ScheduleAgentOutput,
+    /** 편집은 하루 단위다 — 상대는 이 날의 슬롯만 움직인다. */
+    val targetDate: LocalDate,
+    /** 후보 풀을 매다는 좌표. 없으면 부를 수 없다(계약 필수). */
+    val anchorLat: Double,
+    val anchorLng: Double,
+    val budgetLevel: String?,
+    val transportMode: String?,
+    val utterance: String?,
+    val command: EditCommand?,
+    val requestMeta: RequestMeta,
+) {
+    init {
+        require((utterance == null) != (command == null)) { "utterance 와 command 중 정확히 하나만 준다." }
+    }
+}
+
+/**
+ * 구조화 편집 명령 — 상대 `EditCommandSchema` 의 모양. [op] 어휘는 상대 소유(`REPLACE_SLOT` 등)이고,
+ * 모르는 값은 상대가 거절로 답한다. **시각을 싣지 않는다** — 시각은 상대 조립이 정한다(INV-2).
+ */
+data class EditCommand(val op: String, val params: Map<String, String>, val affectedPoiIds: List<UUID>) {
+    companion object {
+        /** 한 슬롯의 장소를 후보로 바꾼다 — LLM 을 쓰지 않는 경로다. */
+        fun replaceSlot(oldPoiId: UUID, newPoiId: UUID) =
+            EditCommand("REPLACE_SLOT", mapOf("targetPoiId" to newPoiId.toString()), listOf(oldPoiId))
+    }
+}
+
+enum class EditProposalStatus {
+    /** 검증을 통과한 해가 있다. 이름은 상대 어휘(`APPLIED`)가 아니다 — 우리는 아직 아무것도 반영하지 않았다. */
+    PROPOSED,
+
+    /** 규칙 위반이나 하드 제약 위반으로 해가 없다. 사유([EditProposalOutput.reason])나 위반 목록이 실린다. */
+    REJECTED,
+
+    /** 발화를 편집 명령으로 옮기지 못했다. */
+    NOT_UNDERSTOOD,
+}
+
+/**
+ * [itinerary] 는 [EditProposalStatus.PROPOSED] 일 때만 있고, 시각·순서·거리는 전부 상대 조립이 검증한 값이다(INV-2).
+ * [applyMode] 는 상대의 판단(`AUTO_APPLY`|`CONFIRM_REQUIRED`)을 그대로 옮긴 **표시 힌트**다 — 저장 여부를 정하지 않는다.
+ */
+data class EditProposalOutput(
+    val status: EditProposalStatus,
+    val itinerary: ScheduleAgentOutput?,
+    val violations: List<Violation>,
+    val reason: String?,
+    val applyMode: String?,
+)
 
 /** 재계획 범위(DEC-U4-3) — ai `ReplanScope` 어휘를 그대로 쓴다. */
 enum class ReplanScope { PARTIAL_SLOTS, FULL_DAY }

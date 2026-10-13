@@ -441,6 +441,44 @@ internal data class AiTrigger(
 internal data class AiCoord(val lat: Double, val lng: Double)
 
 /**
+ * `POST /ai/v1/itinerary/edit` 요청(U8 G-U8-2). `command` 와 `utterance` 는 **정확히 하나** — 둘 다거나 둘 다 없으면 422 다.
+ * `confirm` 은 늘 true 로 보낸다(DEC-U8-3) — false 면 상대가 파괴적 편집의 해를 숨기고 확인을 요구한다.
+ */
+internal data class AiEditRequest(
+    val tripId: String,
+    val itinerary: AiSchedulePayload,
+    val targetDate: LocalDate,
+    val anchor: AiCoord,
+    val budgetLevel: String?,
+    val transportMode: String?,
+    val command: AiEditCommand?,
+    val utterance: String?,
+    val confirm: Boolean,
+    val requestMeta: AiRequestMeta,
+)
+
+/** 계약 `EditCommandSchema`. `affected_slots` 는 이름과 달리 **POI id** 목록이다(상대 도메인 `EditCommand.affected_slots: PoiId`). */
+internal data class AiEditCommand(
+    val op: String,
+    val params: Map<String, Any?> = emptyMap(),
+    val affectedSlots: List<String> = emptyList(),
+)
+
+/**
+ * 계약 `EditItineraryResponse`. `status` 는 `APPLIED`|`CONFIRM_REQUIRED`|`REJECTED`|`TRANSLATION_FAILED` 이고
+ * `itinerary` 는 `APPLIED` 일 때만 온다. `command` 는 상대가 해석한 명령의 되울림이라 읽지 않는다 —
+ * 키는 계약 게이트(정확 일치) 때문에 받는다.
+ */
+internal data class AiEditResponse(
+    val status: String,
+    val command: AiEditCommand? = null,
+    val applyMode: String? = null,
+    val itinerary: AiScheduleResponse? = null,
+    val violations: List<AiViolation> = emptyList(),
+    val reason: String? = null,
+)
+
+/**
  * 계약 `SavedPlaceSchema` — `saved_places` 항목은 문자열이 아니라 **객체**다(`poi_id` 필수·`name`).
  * 지금은 항상 빈 목록을 보내지만(§2 — place-data api 파사드 신설은 별건), 타입을 문자열로 뒀다가
  * 나중에 채우는 순간 422 가 나는 함정을 남기지 않는다.

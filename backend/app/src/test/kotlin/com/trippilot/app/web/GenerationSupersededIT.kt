@@ -105,6 +105,8 @@ class GenerationSupersededIT : AbstractPostgresIntegrationTest() {
                 override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =
                     error("이 테스트는 슬롯 후보를 쓰지 않는다")
                 override fun replan(input: ReplanInput): ScheduleAgentOutput = error("이 테스트는 재계획을 쓰지 않는다")
+                override fun proposeEdit(input: com.trippilot.itinerarygeneration.domain.EditProposalInput) =
+                    error("이 테스트는 편집 제안을 쓰지 않는다")
             }
 
         companion object {

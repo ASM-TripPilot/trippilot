@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.RepairContext
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
@@ -34,4 +35,30 @@ class RepairContexts(
         }
         return RepairContext(anchors, preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot).transportModes)
     }
+
+    /**
+     * 편집 제안(U8)에 실을 컨텍스트 — 수리와 **같은 출처**에서 그 날 하나만 뽑는다. 상대는 이 앵커에 후보 풀을
+     * 매달아 추가·교체 대상을 검사한다(INV-1). 앵커를 못 정하면 null — 계약상 필수라 부를 수 없다.
+     */
+    fun forEditProposal(accountId: UUID, tripId: UUID, date: LocalDate): EditProposalContext? {
+        val ctx = trips.findGenerationContext(accountId, tripId) ?: return null
+        val stays = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
+        val anchor = RegionAnchors.dayAnchors(regions, ctx.startDate, ctx.endDate, stays, ctx.destinationRefs)
+            .firstOrNull { it.date == date } ?: return null
+        val prefs = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
+        // 생성은 목록을 보내고 상대가 **아는 첫 값**을 고른다. 여기서 그냥 첫 값을 보내면 `["택시","렌터카"]` 가 생성에서는
+        // 자가용, 편집에서는 모르는 값(→ 대중교통)이 되어 같은 여행의 이동 시간 기준이 갈린다.
+        return EditProposalContext(anchor, prefs.transportModes.firstOrNull { it in AI_TRANSPORT_MODES }, prefs.budgetTier)
+    }
+
+    private companion object {
+        /** 상대 `_TRANSPORT_TOKENS` 가 아는 값 중 우리 취향 어휘에 있는 것(택시·자전거는 상대가 모른다). */
+        val AI_TRANSPORT_MODES = setOf("도보", "대중교통", "렌터카")
+    }
 }
+
+/**
+ * [budgetTier] 는 생성 경로가 `budget_level` 로 보내는 그 값이다(취향의 예산 등급 — 여행 총예산이 아니다).
+ * [transportMode] 는 상대가 아는 수단 하나다 — 편집 경계는 목록이 아니라 한 값을 받는다.
+ */
+data class EditProposalContext(val anchor: DayAnchor, val transportMode: String?, val budgetTier: String?)
