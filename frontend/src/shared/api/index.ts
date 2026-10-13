@@ -415,4 +415,5 @@ export {
   setAccessToken,
   subscribeAccessToken,
 } from './tokenManager';
+export { useAccessToken } from './useAccessToken';
 export { resolveVisitConflict } from './visitConflict';
