@@ -17,6 +17,7 @@ import path from 'path';
 import { IOSConfig } from 'expo/config-plugins';
 
 import config from '../../app.config';
+import tailwindConfig from '../../tailwind.config.js';
 
 const ROOT = path.resolve(__dirname, '../..');
 
@@ -85,6 +86,8 @@ const MEDIA_LIBRARY_ALLOWED = [
   'preventAutomaticLimitedAccessAlert',
   'granularPermissions',
 ] as const;
+// expo-font 18 plugin/build/withFonts.d.ts 의 옵션 키(TRIP-1361).
+const FONT_ALLOWED = ['fonts', 'android', 'ios'] as const;
 const SPLASH_ALLOWED = [
   'backgroundColor',
   'imageWidth',
@@ -498,5 +501,75 @@ describe('config plugin 등록 — 애플 로그인 (TRIP-932 AC-17)', () => {
 
     // 티켓 "건드리지 않는 것" — 딥링크 scheme 불변.
     expect(config.scheme).toBe('trippilot');
+  });
+});
+
+/** TTF/OTF 'name' 테이블의 nameID 6(PostScript 이름). iOS 는 RN fontFamily 를 이 내부 이름으로 찾는다. */
+function postScriptName(file: string): string {
+  const b = fs.readFileSync(file);
+  const numTables = b.readUInt16BE(4);
+  for (let i = 0; i < numTables; i += 1) {
+    const rec = 12 + i * 16;
+    if (b.toString('ascii', rec, rec + 4) !== 'name') continue;
+    const table = b.readUInt32BE(rec + 8);
+    const count = b.readUInt16BE(table + 2);
+    const strings = table + b.readUInt16BE(table + 4);
+    for (let n = 0; n < count; n += 1) {
+      const r = table + 6 + n * 12;
+      if (b.readUInt16BE(r + 6) !== 6) continue;
+      const platform = b.readUInt16BE(r);
+      const len = b.readUInt16BE(r + 8);
+      const at = strings + b.readUInt16BE(r + 10);
+      const raw = b.subarray(at, at + len);
+      return platform === 3
+        ? Buffer.from(raw).swap16().toString('utf16le')
+        : raw.toString('latin1');
+    }
+  }
+  return '';
+}
+
+describe('TRIP-1361 · 폰트 네이티브 임베드 — 폰트명 계약', () => {
+  const fontFiles = (): string[] => {
+    const options = optionsOf('expo-font');
+    return ((options?.fonts as string[] | undefined) ?? []).map((f) =>
+      path.resolve(ROOT, f)
+    );
+  };
+
+  it('expo-font 플러그인이 폰트 4개를 옵션 키 오타 없이 등록하고, 파일이 실재하며, Info.plist UIAppFonts 에 들어간다', () => {
+    const options = optionsOf('expo-font');
+
+    expect(options).toBeDefined();
+    expect(unknownKeys(options, FONT_ALLOWED)).toEqual([]);
+    const files = fontFiles();
+    expect(files.map((f) => path.basename(f)).sort()).toEqual([
+      'Inter_700Bold.ttf',
+      'NotoSansKR_400Regular.ttf',
+      'NotoSansKR_500Medium.ttf',
+      'NotoSansKR_700Bold.ttf',
+    ]);
+    files.forEach((f) => expect(fs.existsSync(f)).toBe(true));
+    expect(infoPlist.UIAppFonts).toEqual(
+      expect.arrayContaining(files.map((f) => path.basename(f)))
+    );
+  });
+
+  it('tailwind fontFamily 토큰 = 임베드 파일명 = 폰트 내부 PostScript 이름이 글자 단위로 같다 (iOS 는 내부 이름, Android 는 파일명으로 찾는다)', () => {
+    const tokens = Object.values(
+      (tailwindConfig.theme?.extend?.fontFamily ?? {}) as Record<
+        string,
+        string[]
+      >
+    )
+      .flat()
+      .sort();
+    const files = fontFiles();
+
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(files.map((f) => path.basename(f, '.ttf')).sort()).toEqual(tokens);
+    files.forEach((f) =>
+      expect(postScriptName(f)).toBe(path.basename(f, '.ttf'))
+    );
   });
 });

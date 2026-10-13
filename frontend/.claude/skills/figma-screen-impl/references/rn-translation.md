@@ -47,7 +47,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 ## 폰트 번들 (expo-font)
 
-디자인 폰트를 `assets/fonts/`에 넣고 로드:
+디자인 폰트를 `assets/fonts/`에 넣고 `app.config.ts` 의 `expo-font` 플러그인(`fonts: [...]`)으로 네이티브에 임베드한다(TRIP-1361 — 현행. 파일명 = 폰트 내부 PostScript 이름 = tailwind 토큰, `assets/fonts/README.md`). 아래 `useFonts` 예시는 옛 JS 런타임 로드 방식이다:
 ```tsx
 import { useFonts } from 'expo-font';
 const [loaded] = useFonts({ 'Inter-Bold': require('...'), 'NotoSansKR-Bold': require('...'), 'NotoSansKR-Regular': require('...') });

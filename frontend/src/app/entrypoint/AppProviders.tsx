@@ -5,12 +5,6 @@ import {
   initialWindowMetrics,
   SafeAreaProvider,
 } from 'react-native-safe-area-context';
-import { useFonts } from 'expo-font';
-// 루트 배럴이 아니라 weight 서브패스로 — 배럴은 전 weight 폰트 27종을 번들에 끌어온다(TRIP-1347).
-import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
-import { NotoSansKR_400Regular } from '@expo-google-fonts/noto-sans-kr/400Regular';
-import { NotoSansKR_500Medium } from '@expo-google-fonts/noto-sans-kr/500Medium';
-import { NotoSansKR_700Bold } from '@expo-google-fonts/noto-sans-kr/700Bold';
 import NetInfo from '@react-native-community/netinfo';
 import * as SplashScreen from 'expo-splash-screen';
 import {
@@ -57,7 +51,7 @@ onlineManager.setEventListener((setOnline) =>
   }),
 );
 
-// 네이티브 스플래시(OS 부팅 화면)를 폰트 로드가 끝날 때까지 자동으로 숨기지 않게 붙잡는다.
+// 네이티브 스플래시(OS 부팅 화면)를 첫 렌더가 끝날 때까지 자동으로 숨기지 않게 붙잡는다.
 // 이것은 인앱 SplashScreen 컴포넌트(SplashGate 가 부트스트랩 중 그리는 화면)와는 별개 레이어 —
 // OS 가 앱 프로세스 시작 직후 그리는 최초 화면이다.
 // ⚠️ 모듈 최상위 호출을 유지한다 — 루트 레이아웃이 이 모듈을 import 하는 순간(번들 로드 시점) 돌아야
@@ -70,29 +64,14 @@ initSentry();
 /**
  * 앱 전역 프로바이더(FSD app 층). 라우트 루트 레이아웃(`app/_layout.tsx`)이 `SplashGate` 를 감싸 조립한다.
  * 배치 계약: 제스처 루트 > SafeArea > (QueryClient > children) + ToastHost — QueryClient 는 SplashGate 바깥,
- * ToastHost 는 Stack(SplashGate) 바깥. 폰트 결판 전에는 아무것도 그리지 않는다(`AppProviders.test`).
+ * ToastHost 는 Stack(SplashGate) 바깥. 폰트는 `app.config.ts` 의 expo-font 플러그인이 네이티브 번들에 넣으므로
+ * JS 가 로드를 기다리지 않는다 — 첫 렌더에 곧바로 그린다(TRIP-1361, 폰트명 계약은 `assets/fonts/README.md`).
  */
 export function AppProviders({ children }: { children: ReactNode }) {
-  // tailwind.config 의 fontFamily 토큰(font-inter-bold·font-noto* → Inter_700Bold 등)이
-  // 실제로 그려지도록 그 폰트명과 정확히 일치하는 파일을 로드한다. [loaded, error] 반환.
-  const [loaded, error] = useFonts({
-    Inter_700Bold,
-    NotoSansKR_400Regular,
-    NotoSansKR_500Medium,
-    NotoSansKR_700Bold,
-  });
-
   useEffect(() => {
-    // 로드 성공이든 실패든 결판나면 네이티브 스플래시를 내려 앱 UI 를 드러낸다.
-    if (loaded || error) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded, error]);
-
-  // 폰트 결판 전에는 네이티브 스플래시를 유지(빈 렌더) — 시스템 폰트로 잠깐 보였다 바뀌는 깜빡임 방지.
-  if (!loaded && !error) {
-    return null;
-  }
+    // 첫 렌더가 커밋되면 네이티브 스플래시를 내려 앱 UI 를 드러낸다.
+    SplashScreen.hideAsync();
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
