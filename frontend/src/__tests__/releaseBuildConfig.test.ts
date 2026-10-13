@@ -250,8 +250,8 @@ describe('AC-5 privacy manifest', () => {
   });
 });
 
-describe('AC-6 Sentry 자동 업로드 끔', () => {
-  it('production·preview 빌드 프로파일이 Sentry 자동 업로드를 문자열 "true"로 끄고, Sentry 플러그인 등록은 그대로다', () => {
+describe('TRIP-1370 Sentry 운영 켬', () => {
+  it('production 은 Sentry 자동 업로드를 켜고(소스맵·dSYM), preview 는 문자열 "true"로 끈 채이며, Sentry 플러그인 등록은 그대로다', () => {
     const eas = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'eas.json'), 'utf8')
     ) as {
@@ -262,8 +262,11 @@ describe('AC-6 Sentry 자동 업로드 끔', () => {
     };
     const { production, preview } = eas.build;
 
-    // Sentry Xcode 스크립트가 문자열 `true` 로 비교한다 — 불리언 true 는 안 된다.
-    expect(production.env?.SENTRY_DISABLE_AUTO_UPLOAD).toBe('true');
+    // 운영은 업로드를 켠다(키 자체가 없어야 한다) — 값은 EAS env 의 SENTRY_AUTH_TOKEN 에서 온다(사용자가 등록).
+    // TRIP-935 가 업로드를 끈 것은 심사 빌드 서명 문제 우회였다. 이 키가 다시 production 에 들어오면 운영 크래시가
+    // 소스맵·심볼 없이 쌓인다 — 빌드는 성공하고 에러도 없어서 조용히 틀린다.
+    expect(production.env).not.toHaveProperty('SENTRY_DISABLE_AUTO_UPLOAD');
+    // preview 는 그대로 끈다. Sentry Xcode 스크립트가 문자열 `true` 로 비교한다 — 불리언 true 는 안 된다.
     expect(preview.env?.SENTRY_DISABLE_AUTO_UPLOAD).toBe('true');
     expect(production.autoIncrement).toBe(true);
     // 운영 빌드는 API 주소 env 가 비면 부팅 중 throw 한다(shared/api, TRIP-936) — 빌드 프로파일이 https 주소를 박아 둬야 한다.
@@ -271,10 +274,25 @@ describe('AC-6 Sentry 자동 업로드 끔', () => {
     expect(String(production.env?.EXPO_PUBLIC_API_BASE_URL)).toMatch(
       /^https:\/\/[^/]+$/
     );
+    // 조직·프로젝트 이름은 업로드 토큰의 조직과 같아야 한다(사용자 확인 2026-10-13: Sentry 조직 ajou-s0,
+    // 프로젝트 react-native). 어긋나면 운영 iOS 빌드의 업로드가 "조직 없음/권한 없음"으로 실패한다.
     expect(optionsOf('@sentry/react-native/expo')).toEqual({
-      organization: 'trippilot',
-      project: 'trippilot-frontend',
+      organization: 'ajou-s0',
+      project: 'react-native',
     });
+  });
+
+  // DSN 이 없으면 initSentry 가 아무 에러 없이 no-op 이라 "미설정"이 조용하다 — 키 이름이라도 리포에 박아 둔다.
+  // 값은 절대 커밋하지 않는다(32-hex 전수 스캔 socialSdkSecrets A-3 이 DSN 형태도 잡는다).
+  it('DSN 키 이름이 .env.example 에 값 없이 있고, initSentry 가 같은 이름을 읽는다', () => {
+    const example = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
+    expect(example).toMatch(/^EXPO_PUBLIC_SENTRY_DSN=$/m);
+
+    const init = fs.readFileSync(
+      path.join(ROOT, 'src/app/entrypoint/initSentry.ts'),
+      'utf8'
+    );
+    expect(init).toContain('process.env.EXPO_PUBLIC_SENTRY_DSN');
   });
 });
 
