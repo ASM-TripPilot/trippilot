@@ -416,6 +416,35 @@ class EditItineraryServiceTest : StringSpec({
         repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA)
     }
 
+    /**
+     * 조건이 보는 것은 **처음 읽은 일정이 아니라 쓰기 직전에 다시 읽은 일정**이다. 재검증(상대 호출)이 도는 사이에 다른 편집이
+     * 커밋되면 처음 읽은 값은 낡았다 — 그것으로 조건을 보면 "안 바뀌었다"고 통과시키고 그 편집을 덮어쓴다.
+     */
+    "저장 조건은 재검증 도중에 끼어든 편집을 본다 — 처음 읽은 일정으로 판정하지 않는다" {
+        val repo = repoWith(current())
+        // 재검증(수리)이 도는 사이 다른 편집이 시각을 바꿔 커밋했다
+        val interleaved = Itinerary.create(
+            tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("15:00"), LocalTime.parse("16:00"))))), clock.instant(),
+        )
+        val agent = EditFakeAgent(repairWith = { repo.replaceForTrip(tripId, interleaved); RepairResult(it, emptyList(), unrepairable = true) })
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+        var seen: List<EditDayCommand>? = null
+
+        shouldThrow<ConflictDetected> {
+            // 호출측의 조건: "09:00 에 시작하는 그 일정일 때만"
+            facade.edit(acc, tripId, facadeDays, reason = null, source = ItineraryEditSource.ASSISTANT, onlyIf = { now ->
+                seen = now
+                now.single().slots.single().startAt == LocalTime.parse("09:00")
+            })
+        }.errorCode shouldBe ErrorCode.STALE
+
+        agent.repairCalls shouldBe 1 // 끼어든 편집이 실제로 그 사이에 일어났다
+        seen!!.single().slots.single().startAt shouldBe LocalTime.parse("15:00")
+        repo.findByTrip(tripId).single().days.single().slots.single().startAt shouldBe LocalTime.parse("15:00") // 끼어든 편집이 살아 있다
+    }
+
     "도우미 편집에 사유가 없어도 이력은 비지 않는다 — 출처에 맞는 기본 문구가 남는다(BR-U4-31)" {
         val repo = repoWith(current())
         val logs = CapturingChangeLogs()

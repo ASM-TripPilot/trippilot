@@ -172,8 +172,11 @@ class ProposalServiceTest : StringSpec({
         val w = world()
         val id = w.propose()
         val broken = object : AssistantMessageRepository by w.messages {
-            override fun appendNote(sessionId: UUID, accountId: UUID, proposalId: UUID, message: NewMessage, at: Instant): AssistantMessage =
+            override fun appendNote(sessionId: UUID, accountId: UUID, proposalId: UUID, message: NewMessage, at: Instant): AssistantMessage {
+                // 실 DB 라면 이 트랜잭션에서 먼저 한 "닫기"도 함께 되돌려진다 — 그것을 흉내 낸다(집힌 채의 PROPOSED 로).
+                w.proposals.rows[proposalId] = w.proposals.rows.getValue(proposalId).copy(status = ProposalStatus.PROPOSED)
                 throw DataIntegrityViolationException("fk_assistant_message_session")
+            }
         }
         val service = ProposalService(w.proposals, broken, w.data, w.editing, w.clock, NOOP_TX)
 
@@ -182,7 +185,7 @@ class ProposalServiceTest : StringSpec({
         outcome.status shouldBe ProposalStatus.APPLIED
         outcome.messages shouldBe emptyList()
         w.editing.edits.size shouldBe 1
-        w.status(id) shouldBe ProposalStatus.APPLIED
+        w.status(id) shouldBe ProposalStatus.APPLIED // 기록 없이 상태만 다시 적었다 — 안 적으면 카드가 만료까지 [적용]을 그린다
     }
 
     /** INV-U8-08 — 한 번만. 저장이 도는 중에 다시 눌러도, 끝난 뒤에 다시 눌러도. */

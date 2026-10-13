@@ -38,6 +38,9 @@ data class ProposalOutcome(val proposalId: UUID, val status: ProposalStatus, val
  * 기준 지문은 **두 번** 본다(INV-U8-04). 1 에서 한 번 — 이미 낡은 제안이면 상대를 부르지도 않는다. 그리고 2 의 저장
  * 트랜잭션 안에서 한 번 더 — 재검증이 도는 몇 초 사이에 끼어든 편집을 덮어쓰지 않는다.
  *
+ * ponytail: 저장 트랜잭션 안의 "다시 읽기"와 "쓰기" 사이(수 밀리초)는 잠겨 있지 않다 — 그 틈에 커밋된 편집은 덮어쓴다.
+ * 직접 편집(REST)끼리도 같은 틈이 있다. 닫으려면 편집 경로가 일정 행을 잠그고 읽는다.
+ *
  * ponytail: 2 도중에 파드가 죽으면 제안은 "집힌 채"로 남는다(저장됐는지는 일정이 말한다). 다시 적용되지 않고,
  * 만료 뒤에는 `EXPIRED` 로 보인다. 행을 치우는 것은 보존 청소다(TRIP-1380).
  */
@@ -70,7 +73,9 @@ class ProposalService(
         }
         // 저장 직전에 일정이 바뀌어 있었다 — 저장되지 않았다. 처음부터 낡았던 제안과 같은 답이다.
         if ((saved.exceptionOrNull() as? ConflictDetected)?.errorCode == ErrorCode.STALE) {
-            tx.execute { proposals.close(proposalId, ProposalStatus.STALE, claimed = true) }
+            // 닫지 못해도 답은 같다 — 저장되지 않았다는 사실이 먼저다(못 닫은 제안은 집힌 채 남아 다시 적용되지 않는다).
+            runCatching { tx.execute { proposals.close(proposalId, ProposalStatus.STALE, claimed = true) } }
+                .onFailure { log.warn("도우미 제안 적용 — STALE 로 닫지 못했습니다. proposalId={} type={}", proposalId, it.javaClass.simpleName) }
             throw stale().toException()
         }
         saved.onFailure { log.warn("도우미 제안 적용 — 저장 실패. proposalId={} type={}", proposalId, it.javaClass.simpleName) }
