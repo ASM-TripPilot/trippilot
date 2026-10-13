@@ -44,6 +44,11 @@ paths:
 | `src/shared/ui/glyphs/colors.ts` · `types.ts` | `GLYPH_COLORS`(토큰 이름→hex, 이 폴더에서 hex 를 가진 유일한 파일 · 토큰과 수동 동기화) · `GlyphProps { size?; color?: GlyphColor; testID? }` |
 | `src/shared/ui/glyphs/NavigationGlyphs.tsx` · `StatusGlyphs.tsx` · `PlaceGlyphs.tsx` | 공용 글리프 본체. 색은 `GLYPH_COLORS[color]` 로만 읽는다(raw hex 0). 담김/안 담김 하트는 여기 없다 — `HeartGlyphs.tsx` 정본(서로 다른 컴포넌트 + testID, `useState` 토글 금지) |
 | `src/shared/ui/ConfirmDialog.tsx` | (TRIP-1359) 확인/삭제류 오버레이 다이얼로그 틀 — 루트 `absolute inset-0` 딤 + 카드 `w-[330px]` + 제목·본문·children·실패 문구·버튼 N개(`tone` 6종 · `size` lg/md/sm · `shadow` default/soft/none · `layout` 기본은 버튼 3개 이상이면 column). 래퍼 11개(`LogoutConfirmDialog`·`DeleteAccountDialog`·`RevokeConfirmDialog` 등)가 파일·태그명·testID 를 유지한 채 이걸 쓴다. **RN Modal·백드롭 탭 닫기·애니메이션이 없다** · 잠금 ref(`lockedRef` 류)는 래퍼/페이지 몫 · 그림자 색은 `'black'`(hex 0 규칙 — 옛 `#000000` 과 같은 색) |
+| `src/shared/ui/SheetShell.tsx` | (TRIP-1360) 바텀시트 공용 틀 — 개폐 틀(index 0·아래로 닫기·딤) + 본문 컨테이너 + 머리글(`title`·`subtitle`) + 적용 버튼(`apply`). 소비 9시트(g01 편집 5·g02 거점 선택·e02 필터·가격·OTA). `handle`·`keyboard`·`dismissKeyboardOnBodyTap`·`backdrop`·`backgroundStyle` 은 소비처가 **명시**한다. **gorhom 통과형 목은 prop 을 지워도 green 이다 — 실기(6-b)가 유일한 그물.** `contentPanning`·`backdropTestID`·`scroll` 은 소비처가 없어 만들지 않았다 |
+| `src/shared/lib/sheetHandle.ts` | `SHEET_HANDLE_INDICATOR_STYLE`(연회색 통일 핸들, hairline-strong 손 복제) — `features/trip/lib/sheetHandle.ts` 가 재수출 |
+| `src/shared/ui/AppBar.tsx` | (TRIP-1360) 뒤로|제목|오른쪽 한 줄 앱바 틀 — 패딩·제목 크기·뒤로 버튼 칸은 Figma parity 값이 화면마다 달라 **소비처가 className 으로 넘긴다**(뭉개면 픽셀이 바뀐다). 소비 5화면(숙소 등록·검색·장소 탐색·여행 스타일·매거진). 부제가 있는 앱바 3벌(저장 숙소·꼭 갈 곳·담은 장소)과 위저드 헤더(`widgets/trip-wizard-header`)는 구조가 달라 옮기지 않았다 |
+| `src/shared/ui/NoticeBanner.tsx` | (TRIP-1360) `NoticeBanner`(연분홍 알림 박스 + 조건부 액션 버튼, 문구·액션 testID 는 소비처) · `DismissNotice`(회색 탭-닫기 줄) — 장소/숙소 담기·해제 실패 배너 5벌 |
+| `src/shared/lib/chunkPairs.ts` | `chunkPairs(items)` — 2개씩 묶어 그리드 행 |
 | `src/shared/ui/HeartButton.tsx` | 32 흰 원 담기 버튼(신규, TRIP-1049) — `saved`·`pending`·**`onPress`**(옛 `onToggle` 표기는 낡았다)·testID 3종(root/filled/outline), `HeartGlyphs`를 감싼다. 위치(`absolute right-sm top-sm` 등)는 소비처 className, 버튼 자체는 32 원·18 하트·`disabled={pending}`·`accessibilityLabel="담기"`(담긴 상태에서도 "담기"로 읽힘, 03b 참고-2)만 고정. **`entities/stay/ui/StaySearchCard.tsx`의 로컬 `SaveButton`·`entities/place/ui/PlaceGridCard.tsx` 인라인 하트와 API가 완전히 같은 3번째 사본**이다 — `entities/place`가 `entities/stay`를 형제 import 못 해 여기 신설 외엔 길이 없었다(드라이브바이 금지로 기존 둘은 안 옮김, 새 티켓 후보). | **튐(TRIP-1125)**: 이 하트를 **누른 뒤** 안 담김→담김으로 바뀌는 순간만 글리프가 1회 튄다(누름 1회=튐 자격 1개, 첫 `saved` 변화가 소비). 저장 목록 늦은 도착·처음부터 담김·동작 줄이기는 안 튄다. 튐 크기·박자는 발명값(6-b). 게스트 누름→로그인→담아 둔 장소 도착 시 튈 수 있음은 실기 미확인(03b R3).
 | `src/shared/ui/Skeleton.tsx` | 로딩 자리 회색 상자(TRIP-1125) — 투명도 1↔0.45, 800ms `Animated.loop`. `testID`·`className`·`style`을 **한 노드**에 얹는다(자식 복제 금지 — 소비처 테스트가 testID 개수를 센다). 동작 줄이기면 불투명 정지. 로딩 자리 15파일 44곳이 쓴다 — **실패·빈 얼굴에는 얹지 않는다**(INV-4 — 기계 강제 없음). `ProfileCard` 이름 자리 막대는 일부러 안 바꿨다(null이 '없음'도 뜻해 영원한 '불러오는 중'이 될 수 있음). |
 | `src/shared/lib/reduceMotion.ts` | `startUnlessReduceMotion(animation, onReduce?)` — 기기 '동작 줄이기'를 **부를 때마다 새로 묻고**(캐시 없음) 켜졌으면 `onReduce`, 아니면 `animation.start()`. 반환 함수가 정리(`stop`). 답이 늦게 오는 사이 떠나면 시작 안 함(`active` 깃발). 설정을 켜고 끄는 순간의 실시간 반영은 범위 밖(마운트 때 1회 확인). 확인이 reject되면 아무것도 안 불린다 — 진행 바는 빈 트랙(03b R2, 실기 거의 불가). `GeneratingScreen.useStepPulse`는 아직 자체 확인 방식(두 벌). |
@@ -92,6 +97,8 @@ paths:
 |---|---|
 | `src/shared/ui/pref/PrefTile.tsx` | id-agnostic 순수 타일 — `testID`·`selected`·`onPress`·`Icon`(슬롯) + 라벨 |
 | `src/shared/ui/pref/PrefChip.tsx` | 아이콘 없는 칩형 변형 |
+| `src/shared/ui/pref/PrefOptionTile.tsx` | (TRIP-1360) 72px 아이콘+라벨 타일 — 온보딩 「여행 페이스」·「이동」 |
+| `src/shared/ui/pref/PrefStepHeader.tsx` | (TRIP-1360) 진행점+「N / 2」+「나중에 설정하고 시작」 머리 행(점 testID·스킵 아이콘은 주입) |
 
 ### `src/shared/lib/useElapsedFlag.ts` — 시간 경과 플래그
 
