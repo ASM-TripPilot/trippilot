@@ -1,0 +1,107 @@
+# dev 파드 로그 꺼내기 — 클러스터 자격이 없는 사람이 실패 원인을 보려고 (읽기 전용)
+#
+# dev 파드 로그는 CloudWatch(`/aws/containerinsights/trippilot-dev/application`, #1086)에도 쌓이지만
+# 배포 역할엔 아직 logs 읽기 권한이 없다(부트스트랩 템플릿 후속, f7). 그래서 ai-llm-fallback-watch 와
+# 같은 길 — 배포 역할로 `kubectl logs` — 로 **지금 떠 있는 파드**의 로그를 받아 아티팩트로 올린다.
+# 롤아웃 전 파드의 로그는 못 본다(`--previous` 는 같은 파드에서 재시작한 컨테이너만).
+#
+# 읽기만 한다 — 클러스터·DB 를 바꾸지 않으므로 `aws-dev` 동시성 그룹에 넣지 않는다(배포와 겹쳐도 무해,
+# 넣으면 서로 뒤에 줄을 선다). 자격 패턴은 deploy/eks/runtime_kb.py 의 _CREDENTIAL 하나로 가린다 —
+# 규칙이 둘이면 한쪽만 고쳐진다. 아티팩트는 리포 협업자만 받고 3일 뒤 사라진다.
+name: aws-dev-logs
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 얼마 전부터 (kubectl --since 형식, 예 6h · 90m)
+        type: string
+        default: 6h
+      component:
+        description: 어느 파드
+        type: choice
+        options: [all, ai, backend, gateway, embedding]
+        default: all
+      pattern:
+        description: 걸러 낸 사본(<component>.filtered.log)을 만들 정규식(grep -E) — 비우면 생략
+        type: string
+        default: ''
+
+jobs:
+  dump:
+    environment: dev          # 배포 역할의 신뢰 정책이 environment claim 으로 묶여 있다 (aws-deploy.yml 과 같음)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write         # AWS 역할 (EKS 파드 로그 읽기)
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      SINCE: ${{ inputs.since }}
+      COMPONENT: ${{ inputs.component }}
+      PATTERN: ${{ inputs.pattern }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-dev-logs-${{ github.run_id }}
+      - name: 파드 로그 수집 (kubectl, 읽기 전용)
+        run: |
+          set -o pipefail
+          aws eks update-kubeconfig --name trippilot-dev --region "$AWS_REGION" > /dev/null
+          mkdir -p logs
+          kubectl -n trippilot get pods -o wide > logs/pods.txt
+          kubectl -n trippilot get events --sort-by=.lastTimestamp 2>/dev/null | tail -300 > logs/events.txt || true
+          comps="ai backend gateway embedding"
+          [ "$COMPONENT" = all ] || comps="$COMPONENT"
+          for c in $comps; do
+            # 파드가 여럿이라(HPA) 줄마다 [pod/container] 머리를 붙인다
+            kubectl -n trippilot logs -l "app.kubernetes.io/component=$c" --all-containers --prefix \
+              --timestamps --since="$SINCE" --tail=-1 > "logs/$c.log" 2> "logs/$c.err" || true
+            kubectl -n trippilot logs -l "app.kubernetes.io/component=$c" --all-containers --prefix \
+              --timestamps --previous --tail=-1 > "logs/$c.previous.log" 2>/dev/null || true
+            [ -s "logs/$c.previous.log" ] || rm -f "logs/$c.previous.log"
+            [ -s "logs/$c.err" ] || rm -f "logs/$c.err"
+          done
+          ls -la logs
+      - name: 자격 가리기 · 걸러 내기 · 요약
+        run: |
+          python3 - <<'EOF'
+          import os, re, sys
+          from pathlib import Path
+          sys.path.insert(0, "deploy/eks")
+          from runtime_kb import _CREDENTIAL  # 가림 규칙은 한 곳에서만
+
+          pattern = os.environ.get("PATTERN", "").strip()
+          flt = re.compile(pattern) if pattern else None
+          signal = re.compile(r"ERROR|WARN|Traceback|Exception|\b5\d\d\b|\b409\b|\b422\b|degrad|fallback|FAILED", re.I)
+          rows = []
+          for path in sorted(Path("logs").glob("*.log")):
+              lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+              scrubbed = [_CREDENTIAL.sub(lambda m: (m.group(1) or m.group(2)) + "***", ln) for ln in lines]
+              path.write_text("\n".join(scrubbed) + ("\n" if scrubbed else ""), encoding="utf-8")
+              hits = sum(1 for ln in scrubbed if signal.search(ln))
+              if flt is not None and not path.name.endswith(".filtered.log"):
+                  kept = [ln for ln in scrubbed if flt.search(ln)]
+                  path.with_name(path.stem + ".filtered.log").write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+                  rows.append((path.name, len(scrubbed), hits, len(kept)))
+              else:
+                  rows.append((path.name, len(scrubbed), hits, None))
+          out = [f"### dev 파드 로그 (`--since={os.environ.get('SINCE')}`, component={os.environ.get('COMPONENT')})", "",
+                 "| 파일 | 줄 | 신호 줄(ERROR·WARN·5xx·409·degrad…) | pattern 일치 |", "|---|---|---|---|"]
+          for name, n, hits, kept in rows:
+              out.append(f"| {name} | {n} | {hits} | {'' if kept is None else kept} |")
+          text = "\n".join(out) + "\n"
+          print(text)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write(text)
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dev-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 3
+          if-no-files-found: error
