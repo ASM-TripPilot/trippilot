@@ -32,6 +32,7 @@ tags:
   - name: preferences
   - name: account
   - name: bootstrap
+  - name: assistant
   - name: notification
 
 paths:
@@ -1754,6 +1755,114 @@ paths:
       responses:
         '200': { description: 변경됨, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationToggle' } } } }
         '400': { description: '`SYSTEM` 은 끌 수 없다(INV-U6-04)' }
+  /assistant/sessions:
+    post:
+      tags: [assistant]
+      summary: 도우미 대화 열기
+      description: >
+        그 여행(또는 여행 없는 일반)의 대화를 연다(`b01`·`b07`). **멱등하다** — 진행 중인 대화가 있으면 이어 열고
+        없으면 만든다. 여행 하나에 대화는 하나다(INV-U8-01).
+        앱이 보내는 문맥은 `tripId` 뿐이고, 여행·숙소·일정은 서버가 권한을 확인한 뒤 직접 읽는다(BR-U8-02).
+        `contextChip` 은 도우미가 실제로 쓰는 컨텍스트와 같은 원천의 문구다(BR-U8-03).
+        `quickReplies` 는 서버가 발급한 것만 쓴다 — 앱이 id 를 지어내면 ACTION 턴이 거부된다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AssistantOpenSessionRequest' } } }
+      responses:
+        '200': { description: 열림(이어 열기 포함), content: { application/json: { schema: { $ref: '#/components/schemas/AssistantOpenSessionResponse' } } } }
+        '404': { description: 없는 여행이거나 타 계정 여행 }
+    get:
+      tags: [assistant]
+      summary: 내 도우미 대화 목록
+      description: >
+        이전 여행의 대화로 돌아가기(`b06`). 최근 대화순이고 보존 기간이 지난 대화는 나오지 않는다.
+        **감싸는 객체 없이 배열이다** — 앱이 먼저 만든 계약의 모양을 따랐다.
+      responses:
+        '200':
+          description: 조회됨
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AssistantSessionSummary' } }
+  /assistant/sessions/{sessionId}:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [assistant]
+      summary: 도우미 대화 지우기
+      description: >
+        대화와 그 메시지·제안을 지운다(되돌릴 수 없다). 이미 적용한 일정 변경과 그 이력은 남는다(BR-U8-20).
+        **멱등하다** — 없거나 남의 대화여도 204 다.
+      responses:
+        '204': { description: 지워짐(이미 없는 경우 포함) }
+  /assistant/sessions/{sessionId}/messages:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [assistant]
+      summary: 도우미 대화 메시지
+      description: >
+        대화 순서(오래된 것 먼저)로 한 페이지. 위로 더 읽으려면 응답의 `nextBefore` 를 `before` 로 그대로 돌려보낸다 —
+        커서는 불투명한 값이라 앱이 해석하거나 만들지 않는다.
+      parameters:
+        - name: before
+          in: query
+          schema: { type: string }
+          description: 앞 응답의 nextBefore. 없으면 가장 최근 메시지부터.
+        - name: limit
+          in: query
+          schema: { type: integer, default: 30, minimum: 1, maximum: 100 }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantMessagesPage' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없는 대화이거나 타 계정 대화 }
+  /assistant/sessions/{sessionId}/turns:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [assistant]
+      summary: 도우미에게 한 턴 보내기
+      description: >
+        발화(`TEXT`) 또는 서버가 발급한 빠른 답(`ACTION`)을 보낸다. 응답은 사용자 메시지 1건과 도우미 메시지 1건 이상이고,
+        도우미 메시지는 다음 행동을 하나 이상 싣는다(BR-U8-06).
+        `clientTurnId` 가 멱등 키다 — 같은 값으로 다시 보내면 처음 응답을 그대로 받는다.
+        일정 변경은 **제안**으로만 온다. 저장은 제안의 [적용]이 한다(BR-U8-30).
+        **아직 구현 전이라 501 이다**(TRIP-1378).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AssistantSendTurnRequest' } } }
+      responses:
+        '200': { description: 처리됨, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantSendTurnResponse' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없는 대화이거나 타 계정 대화 }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '501': { description: 아직 구현되지 않음 }
+  /assistant/proposals/{proposalId}/apply:
+    parameters:
+      - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [assistant]
+      summary: 도우미 제안 적용
+      description: >
+        제안을 일정에 저장한다(`b02`). 제안을 만든 뒤 일정이 바뀌었으면 저장하지 않는다(`STALE`).
+        409 의 `error.code` 는 `STALE`(일정이 바뀜)·`EXPIRED`(제안 만료)·`NOT_APPLICABLE`(위반이 있거나 이미 끝난 제안) 중 하나다.
+        **아직 구현 전이라 501 이다**(TRIP-1379).
+      responses:
+        '200': { description: 적용됨, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantApplyProposalResponse' } } } }
+        '404': { description: 없는 제안이거나 타 계정 제안 }
+        '409': { description: 적용할 수 없음, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '501': { description: 아직 구현되지 않음 }
+  /assistant/proposals/{proposalId}/dismiss:
+    parameters:
+      - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [assistant]
+      summary: 도우미 제안 취소
+      description: >
+        제안을 닫는다. 일정은 그대로다. **아직 구현 전이라 501 이다**(TRIP-1379).
+      responses:
+        '200': { description: 닫힘, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantDismissProposalResponse' } } } }
+        '404': { description: 없는 제안이거나 타 계정 제안 }
+        '501': { description: 아직 구현되지 않음 }
   /me/notifications:
     get:
       tags: [notification]
@@ -3749,6 +3858,156 @@ components:
       properties:
         text: { type: string, maxLength: 2000 }
         updatedAt: { type: string, format: date-time }
+
+    # ── AI 도우미(U8) — 어떤 스키마에도 소요시간(duration) 필드가 없다(INV-3) ──
+    AssistantOpenSessionRequest:
+      type: object
+      properties:
+        tripId: { type: string, format: uuid, nullable: true, description: 'null 이면 여행 없이 연다(일반 도움 모드)' }
+    AssistantSession:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+        tripId: { type: string, format: uuid, nullable: true }
+        contextChip: { type: string, nullable: true, description: '사용한 컨텍스트 한 줄. 여행 없는 대화는 null' }
+    AssistantOpenSessionResponse:
+      type: object
+      required: [session, messages, quickReplies]
+      properties:
+        session: { $ref: '#/components/schemas/AssistantSession' }
+        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' } }
+        quickReplies: { type: array, items: { $ref: '#/components/schemas/AssistantQuickReply' } }
+    AssistantSessionSummary:
+      type: object
+      required: [id, lastTurnAt]
+      properties:
+        id: { type: string, format: uuid }
+        tripId: { type: string, format: uuid, nullable: true }
+        tripTitle: { type: string, nullable: true }
+        lastTurnAt: { type: string, format: date-time }
+    AssistantMessagesPage:
+      type: object
+      required: [messages]
+      properties:
+        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' } }
+        nextBefore: { type: string, nullable: true, description: '더 오래된 메시지가 있으면 그 커서. 없으면 null' }
+    AssistantNextAction:
+      type: object
+      required: [type, label, params]
+      properties:
+        type:
+          type: string
+          description: >
+            closed-set 이지만 문자열로 연다 — 앱은 모르는 값을 그리지 않고 "내가 할 수 있는 것 보기"로 바꾼다(BR-U8-06).
+            OPEN_ITINERARY · OPEN_ITINERARY_EDIT · OPEN_ITINERARY_METHOD · OPEN_REGENERATE · OPEN_REPLAN · OPEN_LIVE ·
+            OPEN_PLACE · OPEN_STAY_SEARCH · OPEN_OTA · OPEN_REFLECTION · OPEN_TRIP_SUMMARY · OPEN_STYLE · CREATE_TRIP ·
+            RETRY_TURN · CONTINUE_WITHOUT_ASSISTANT · SHOW_CAPABILITIES · RESTORE_REVISION
+        label: { type: string }
+        params: { type: object, additionalProperties: { type: string } }
+    AssistantQuickReply:
+      type: object
+      required: [id, label, action, params]
+      properties:
+        id: { type: string, description: '서버가 발급한 값. ACTION 턴의 quickReplyId 로 그대로 돌려보낸다' }
+        label: { type: string }
+        action: { type: string, enum: [SEND_TEXT, REVIEW, PICK_CANDIDATE, PICK_OPTION, SHOW_CAPABILITIES, RETRY] }
+        params: { type: object, additionalProperties: { type: string } }
+    AssistantProposal:
+      type: object
+      required: [id, status, diff, violations]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [PROPOSED, APPLIED, STALE, DISMISSED, EXPIRED, FAILED] }
+        diff:
+          type: array
+          items:
+            type: object
+            required: [change, slotKey]
+            properties:
+              change: { type: string, enum: [ADDED, REMOVED, REPLACED, MOVED, RETIMED] }
+              slotKey: { type: string }
+              before: { $ref: '#/components/schemas/AssistantProposalSlotFace' }
+              after: { $ref: '#/components/schemas/AssistantProposalSlotFace' }
+        violations: { type: array, items: { type: string }, description: '비어 있지 않으면 적용할 수 없다(BR-U8-31)' }
+        applyHint: { type: string, nullable: true, enum: [AUTO_APPLY, CONFIRM_REQUIRED, null], description: '표시 힌트일 뿐이다' }
+    AssistantProposalSlotFace:
+      type: object
+      nullable: true
+      required: [name, startAt]
+      properties:
+        name: { type: string }
+        startAt: { type: string, example: '14:00' }
+        distanceRange: { type: string, nullable: true, description: '직전 구간 거리 문자열. 없으면 그리지 않는다' }
+    AssistantMessage:
+      type: object
+      required: [id, role, kind, nextActions, quickReplies, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [USER, ASSISTANT] }
+        kind: { type: string, enum: [TEXT, CLARIFY, REVIEW, CANDIDATES, PROPOSAL, INFO, SCOPE, REFUSAL, FALLBACK, ACTION_LOG] }
+        text: { type: string, nullable: true, description: '정책 위반으로 저장하지 않은 입력은 null' }
+        payload:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: >
+            카드 데이터 — 모양은 `kind` 가 정한다(REVIEW · CANDIDATES · INFO · SCOPE · REFUSAL · FALLBACK · ACTION_LOG · CLARIFY).
+            종류별 모양은 그 카드를 내는 구현과 함께 닫는다(TRIP-1378·1379).
+        nextActions: { type: array, items: { $ref: '#/components/schemas/AssistantNextAction' }, description: '도우미 메시지는 1개 이상' }
+        quickReplies: { type: array, items: { $ref: '#/components/schemas/AssistantQuickReply' } }
+        proposal: { $ref: '#/components/schemas/AssistantProposalOrNull' }
+        footnote: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    AssistantProposalOrNull:
+      nullable: true
+      allOf:
+        - $ref: '#/components/schemas/AssistantProposal'
+    AssistantSendTurnRequest:
+      type: object
+      required: [clientTurnId, input, screen]
+      properties:
+        clientTurnId: { type: string, format: uuid, description: '멱등 키 — 재시도는 같은 값으로' }
+        input:
+          oneOf:
+            - type: object
+              required: [type, text]
+              properties:
+                type: { type: string, enum: [TEXT] }
+                text: { type: string, minLength: 1, maxLength: 500 }
+            - type: object
+              required: [type, quickReplyId]
+              properties:
+                type: { type: string, enum: [ACTION] }
+                quickReplyId: { type: string }
+        screen:
+          type: object
+          required: [surface]
+          properties:
+            surface: { type: string, enum: [HOME, STAY_SEARCH, ITINERARY, LIVE, STAY_DETAIL] }
+    AssistantSendTurnResponse:
+      type: object
+      required: [messages, quickReplies]
+      properties:
+        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' }, description: '사용자 1건 + 도우미 1건 이상' }
+        quickReplies: { type: array, items: { $ref: '#/components/schemas/AssistantQuickReply' } }
+    AssistantProposalStatus:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [PROPOSED, APPLIED, STALE, DISMISSED, EXPIRED, FAILED] }
+    AssistantApplyProposalResponse:
+      type: object
+      required: [proposal, messages]
+      properties:
+        proposal: { $ref: '#/components/schemas/AssistantProposalStatus' }
+        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' } }
+    AssistantDismissProposalResponse:
+      type: object
+      required: [proposal]
+      properties:
+        proposal: { $ref: '#/components/schemas/AssistantProposalStatus' }
 
     NotificationList:
       type: object
