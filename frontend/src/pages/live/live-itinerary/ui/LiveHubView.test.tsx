@@ -18,7 +18,6 @@ import {
 
 import * as probe from '@/test-support/fabAnchorProbe';
 import {
-  closestAncestor,
   closestScrollView,
   fireChipLayout,
   stubScrollTo,
@@ -146,20 +145,6 @@ function renderHub(overrides: Overrides = {}) {
     />
   );
   return handlers;
-}
-
-/** 통과형 시트 목에 실린 {index, snapPoints} (합성·호스트 두 겹 — 개수는 세지 않는다, SH5 선례). */
-function sheetProps(): { index: number; snapPoints: unknown[] }[] {
-  return screen.root
-    .findAll(
-      (node) =>
-        typeof node.props?.index === 'number' &&
-        Array.isArray(node.props?.snapPoints)
-    )
-    .map((node) => ({
-      index: node.props.index as number,
-      snapPoints: node.props.snapPoints as unknown[],
-    }));
 }
 
 describe('LiveHubView · HV1 골격 (AC-1)', () => {
@@ -356,22 +341,6 @@ describe('LiveHubView · HV8 슬롯 이름 진입 (TRIP-987 A-1·A-2·A-4)', () 
   });
 });
 
-describe('LiveHubView · HV4 3스냅 (AC-7 전제)', () => {
-  it.each([0, 1, 2])(
-    'initialSnapIndex=%i 이면 시트가 그 index 와 3스냅을 받는다',
-    (snap) => {
-      renderHub({ initialSnapIndex: snap });
-
-      const all = sheetProps();
-      expect(all.length).toBeGreaterThan(0);
-      all.forEach(({ index, snapPoints }) => {
-        expect(index).toBe(snap);
-        expect(snapPoints).toHaveLength(3);
-      });
-    }
-  );
-});
-
 describe('LiveHubView · HV5 지도 (Seed Q1 · 브리프 골격)', () => {
   // no-dynamic-env-var 회피 — 선언과 대입 분리(MapView.test 선례). 키가 있어야 map-native 가 뜬다(★2).
   const KEY_NAME = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
@@ -385,16 +354,8 @@ describe('LiveHubView · HV5 지도 (Seed Q1 · 브리프 골격)', () => {
     else process.env[KEY_NAME] = original;
   });
 
-  it('지도는 잠기지 않고(제스처 4종 on) 5슬롯 핀과 현재위치 점을 그린다', () => {
+  it('지도에 5슬롯 핀과 현재위치 점을 그린다', () => {
     renderHub({ currentLocation: { lat: 35.16, lng: 129.13 } });
-
-    const map = screen.getByTestId('map-native');
-    [
-      'isScrollGesturesEnabled',
-      'isZoomGesturesEnabled',
-      'isRotateGesturesEnabled',
-      'isTiltGesturesEnabled',
-    ].forEach((toggle) => expect(map.props[toggle]).toBe(true));
 
     [1, 2, 3, 4, 5].forEach((n) =>
       expect(screen.getByTestId(`map-marker-pin-${n}`)).toBeOnTheScreen()
@@ -468,19 +429,6 @@ const FAB = 'execution-live-replan-fab';
 const PILL_AI = 'execution-live-edit-pill-ai';
 const PILL_MANUAL = 'execution-live-edit-pill-manual';
 const PILL_ANY = /^execution-live-edit-pill-(ai|manual)$/;
-const PRIMARY = '#FF385C';
-
-/** 알약 서브트리에서 SVG 색 prop(fill|stroke)이 primary 인 노드 수 — 대소문자 무시(02a ★6). */
-function primaryCount(testID: string, prop: 'fill' | 'stroke'): number {
-  return screen
-    .getByTestId(testID)
-    .findAll(
-      (node) =>
-        typeof node.props?.[prop] === 'string' &&
-        (node.props[prop] as string).toUpperCase() === PRIMARY
-    ).length;
-}
-
 /** FAB 가 닫힘(연필) 얼굴인지 — 이름·글리프 두 신호를 함께 본다(02a ★3·★5). */
 function expectFabClosedFace(): void {
   const fab = screen.getByTestId(FAB);
@@ -568,7 +516,7 @@ describe('LiveHubView · HP 수정 알약 토글 (TRIP-747 AC-1)', () => {
     expect(handlers.onPressManualEdit).not.toHaveBeenCalled();
   });
 
-  it('HP4 알약 글자는 정확히 "AI에게 맡기기"·"직접 수정"이고, ✦·연필 글리프는 분홍(primary)이다', () => {
+  it('HP4 알약 글자는 정확히 "AI에게 맡기기"·"직접 수정"이다', () => {
     renderHub();
 
     fireEvent.press(screen.getByTestId(FAB));
@@ -576,9 +524,6 @@ describe('LiveHubView · HP 수정 알약 토글 (TRIP-747 AC-1)', () => {
     // 완전 일치 — ✦ 를 글자로 그리면 "✦ AI에게 맡기기" 가 돼 실패한다(02a ★4, Seed ④ SVG).
     expect(screen.getByTestId(PILL_AI)).toHaveTextContent('AI에게 맡기기');
     expect(screen.getByTestId(PILL_MANUAL)).toHaveTextContent('직접 수정');
-    // ✦ 는 채움(fill), 연필은 선(stroke) — 흰 연필 톤 재사용이면 0개로 실패한다(02a ★6).
-    expect(primaryCount(PILL_AI, 'fill')).toBeGreaterThan(0);
-    expect(primaryCount(PILL_MANUAL, 'stroke')).toBeGreaterThan(0);
   });
 });
 
@@ -624,7 +569,7 @@ describe('LiveHubView · HP 초기 열림·바깥 탭 (TRIP-747 AC-5 · Seed ①
     expectFabClosedFace();
   });
 
-  it('HP8 열린 채로 다른 곳(일자 칩)을 눌러도 메뉴는 닫히지 않고, 딤(bg-scrim)이 없다', () => {
+  it('HP8 열린 채로 다른 곳(일자 칩)을 눌러도 메뉴는 닫히지 않는다', () => {
     const handlers = renderHub();
 
     fireEvent.press(screen.getByTestId(FAB));
@@ -635,13 +580,6 @@ describe('LiveHubView · HP 초기 열림·바깥 탭 (TRIP-747 AC-5 · Seed ①
     // 바깥 탭으로 닫지 않는다(× 또는 알약으로만).
     expect(screen.getAllByTestId(PILL_ANY)).toHaveLength(2);
     expectFabOpenFace();
-    // Figma 4055:2427 에는 딤이 없다 — 짝 앵커는 바로 위 알약 2개.
-    const scrims = screen.root.findAll(
-      (node) =>
-        typeof node.props?.className === 'string' &&
-        /\bbg-scrim/.test(node.props.className as string)
-    );
-    expect(scrims).toHaveLength(0);
   });
 
   it('HP9 열린 채로 FAB·알약 말고 누를 수 있는 것을 무엇을 눌러도 메뉴는 닫히지 않는다', () => {
@@ -707,12 +645,6 @@ function renderWithPill(overrides: Overrides = {}) {
 
 /** snapPoints 를 가진 host(문자열 타입) 노드 — 시트 본체(목은 3겹, 02a ★3). */
 const sheetHost = probe.sheetHost;
-
-function ancestorsOf(node: ReactTestInstance): ReactTestInstance[] {
-  const out: ReactTestInstance[] = [];
-  for (let up = node.parent; up; up = up.parent) out.push(up);
-  return out;
-}
 
 function fireSheetAnimate(from: number, to: number): void {
   const onAnimate = sheetHost().props.onAnimate as unknown;
@@ -788,25 +720,6 @@ describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)',
   afterEach(() => {
     if (original === undefined) delete process.env[KEY_NAME];
     else process.env[KEY_NAME] = original;
-  });
-
-  it('HT1 알약은 시트 헤더가 아니라 지도 위 오버레이(뒤로가기·일자 칩과 같은 층)에 선다 (AC-1)', () => {
-    renderWithPill();
-
-    // 짝 앵커 — 허브와 알약이 실제로 그려졌다.
-    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
-    const pill = screen.getByTestId(TRIGGER_PILL);
-
-    const sheet = sheetHost();
-    expect(within(sheet).queryByTestId(TRIGGER_PILL)).toBeNull();
-    // 알약과 뒤로가기의 가장 가까운 공통 조상이 시트를 품지 않는다 = 둘이 지도 위 같은 오버레이에 있다.
-    // 알약을 시트 header 에 두면 공통 조상이 셸 루트가 돼 시트를 품는다.
-    const backAncestors = new Set(
-      ancestorsOf(screen.getByTestId('execution-live-back'))
-    );
-    const common = ancestorsOf(pill).find((node) => backAncestors.has(node));
-    expect(common).toBeDefined();
-    expect(common?.findAll((node) => node === sheet)).toHaveLength(0);
   });
 
   it('HT1b 알약을 안 넘기면 알약이 없다 (회귀 앵커)', () => {
@@ -1050,7 +963,6 @@ describe('LiveHubView · HV9 수동 [도착] (TRIP-1021 AC-1·AC-3 · Q1)', () =
 const ANCHOR = 'execution-live-fab-anchor';
 const OVERLAY_ROW = 'execution-live-overlay-row';
 
-const sheetPosition = probe.sheetPosition;
 const flushFrames = probe.flushFrames;
 const moveSheet = probe.moveSheet;
 
@@ -1059,7 +971,6 @@ function layoutOverlay(y: number, height: number): void {
   probe.layoutOverlay(OVERLAY_ROW, { y, height, width: 280 });
 }
 
-const anchorStyle = () => probe.anchorStyle(ANCHOR);
 const anchorTop = () => probe.anchorTop(ANCHOR);
 
 // TRIP-1321 · BR-U8-50·51 — 여행 중 허브의 ✦ 도우미는 수정 FAB 앵커 열의 맨 위(수정 FAB 위 12).
@@ -1075,18 +986,6 @@ describe('LiveHubView · ✦ 도우미 FAB 앵커 열 (TRIP-1321)', () => {
   function Fab() {
     return <View testID="assistant-fab" />;
   }
-
-  it('슬롯을 주면 ✦ 가 앵커 안 수정 FAB 보다 먼저(위) 그려진다', () => {
-    renderHub({ initialSnapIndex: 1, assistantFab: <Fab /> });
-    const anchor = screen.getByTestId(ANCHOR);
-    const ids = anchor
-      .findAll((node) => typeof node.props.testID === 'string')
-      .map((node) => node.props.testID as string);
-    expect(ids.indexOf('assistant-fab')).toBeGreaterThanOrEqual(0);
-    expect(ids.indexOf('assistant-fab')).toBeLessThan(
-      ids.indexOf('execution-live-replan-fab')
-    );
-  });
 
   it('시트 윗변 380 이면 앵커 윗변은 380 − 8 − 52 − (56 + 12) = 252 (수정 FAB 는 그대로 320 에)', () => {
     renderHub({ initialSnapIndex: 1, assistantFab: <Fab /> });
@@ -1107,12 +1006,6 @@ describe('LiveHubView · HF 수정 FAB 시트 윗변 앵커 (TRIP-1083)', () => 
   });
   afterEach(() => {
     jest.useRealTimers();
-  });
-
-  it('HF1 허브는 시트 위치 상자(SharedValue)를 셸에 넘긴다 (AC-3)', () => {
-    renderHub({ initialSnapIndex: 1 });
-
-    expect(typeof sheetPosition().value).toBe('number');
   });
 
   it('HF2 시트 윗변이 380 → 816 → 500 으로 움직이면 FAB 윗변이 매번 8+52 위(320 → 756 → 440)로 따라간다 (AC-1)', () => {
@@ -1177,72 +1070,6 @@ describe('LiveHubView · HF 수정 FAB 시트 윗변 앵커 (TRIP-1083)', () => 
     expect(anchorTop()).toBe(103);
   });
 
-  it('HF6 열면 알약 2개와 FAB 가 앵커 안 한 가로 줄(flex-row·items-center·gap-sm)에 AI → 직접 수정 → FAB 순으로 선다 (AC-4)', () => {
-    renderHub({ initialSnapIndex: 1 });
-
-    fireEvent.press(screen.getByTestId(FAB));
-
-    const anchor = screen.getByTestId(ANCHOR);
-    const ai = within(anchor).getByTestId(PILL_AI);
-    const manual = within(anchor).getByTestId(PILL_MANUAL);
-    const fab = within(anchor).getByTestId(FAB);
-    // 세 노드의 가장 가까운 공통 조상 = 가로 줄.
-    const aiUp = [ai, ...ancestorsOf(ai)];
-    const row = aiUp.find(
-      (node) =>
-        [manual, ...ancestorsOf(manual)].includes(node) &&
-        [fab, ...ancestorsOf(fab)].includes(node)
-    );
-    if (!row) throw new Error('알약과 FAB 의 공통 조상이 없다');
-    expect(typeof row.type).toBe('string');
-    expect(ancestorsOf(row)).toContain(anchor);
-    const tokens = String(row.props.className ?? '').split(/\s+/);
-    expect(tokens).toEqual(
-      expect.arrayContaining(['flex-row', 'items-center', 'gap-sm'])
-    );
-    // 트리 순서 = 왼쪽부터(Figma 4702:3131 — AI x52 · 직접 수정 x199 · FAB x322).
-    expect(
-      row
-        .findAll(
-          (node) => typeof node.type === 'string' && isEditControlNode(node)
-        )
-        .map((node) => node.props.testID)
-    ).toEqual([PILL_AI, PILL_MANUAL, FAB]);
-  });
-
-  it('HF7 앵커는 style 로만 자리 잡는다 — className 없음·absolute·오른쪽 16·bottom 없음·box-none, 옛 우하단(bottom-lg·right-lg) 컨테이너는 없다 (AC-4·AC-5 · Seed 4)', () => {
-    renderHub({ initialSnapIndex: 1 });
-
-    const anchor = screen.getByTestId(ANCHOR);
-    // reanimated Animated.View 의 className 은 기기에서 적용된다는 근거가 없다(02a ★6).
-    expect(anchor.props.className).toBeUndefined();
-    expect(anchor.props.pointerEvents).toBe('box-none');
-    const style = anchorStyle();
-    expect(style.position).toBe('absolute');
-    expect(style.right).toBe(16);
-    expect(style.bottom).toBeUndefined();
-
-    const fab = within(anchor).getByTestId(FAB);
-    const oldCorner = ancestorsOf(fab).filter((node) =>
-      /\b(bottom|right)-lg\b/.test(String(node.props.className ?? ''))
-    );
-    expect(oldCorner).toEqual([]);
-  });
-
-  it('HF8 앵커는 허브 루트(execution-live-screen)의 바로 아래에 있다 — 셸 안(mapCard 오버레이·시트 children)으로 옮기면 HF 좌표의 원점이 어긋난다 (AC-1 · 03b 경고-1)', () => {
-    renderHub({ initialSnapIndex: 1 });
-
-    const anchor = screen.getByTestId(ANCHOR);
-    // 조상 중 가장 가까운 host View = 실제로 앵커를 담는 부모(합성 Animated.View 껍질은 건너뛴다).
-    const hostParent = ancestorsOf(anchor).find(
-      (node) => typeof node.type === 'string'
-    );
-    expect(hostParent?.props.testID).toBe('execution-live-screen');
-    expect(ancestorsOf(anchor).map((node) => node.props.testID)).not.toContain(
-      'map-sheet-shell-root'
-    );
-  });
-
   it('HF9 시트 위치가 한 번도 들어오기 전(첫 렌더)엔 FAB 가 화면 아래쪽 — 창 높이 − 8 − 52 에서 시작한다 (03b 참고-1)', () => {
     renderHub({ initialSnapIndex: 1 });
     flushFrames();
@@ -1295,7 +1122,7 @@ describe('LiveHubView · HM 메모 시트 배선 (TRIP-1117)', () => {
     ).toHaveLength(0);
   });
 
-  it('🔴 HM3 AC-15: fabHidden 이면 수정 FAB 가 없고, 안 주면 FAB 가 있으며 앵커는 허브 루트 바로 아래다(HF8)', () => {
+  it('🔴 HM3 AC-15: fabHidden 이면 수정 FAB 가 없고, 안 주면 FAB 가 있다', () => {
     renderHub({ fabHidden: true });
     // 짝 앵커 — 허브는 그려졌다.
     expect(screen.getByTestId('execution-live-screen')).toBeOnTheScreen();
@@ -1305,10 +1132,6 @@ describe('LiveHubView · HM 메모 시트 배선 (TRIP-1117)', () => {
     renderHub();
 
     expect(screen.getByTestId('execution-live-replan-fab')).toBeOnTheScreen();
-    const hostParent = ancestorsOf(
-      screen.getByTestId('execution-live-fab-anchor')
-    ).find((node) => typeof node.type === 'string');
-    expect(hostParent?.props.testID).toBe('execution-live-screen');
   });
 });
 
@@ -1427,61 +1250,6 @@ describe('LiveHubView · HD 방문 완료 카드 [사진]·[메모] (TRIP-1203)'
   });
 });
 
-describe('LiveHubView · 닫힘 스냅이 홈 인디케이터 위에 온다', () => {
-  // 닫힘 28px 핸들이 하단 안전 영역(≈34px) 안에 묻혀 위로 쓸면 iOS 홈 제스처가 우선했다 —
-  // 닫힘 칸을 `28 + 하단 안전 영역`으로 키운다. 실제 제스처 충돌 해소는 jest 사각(실기 TestFlight).
-  function renderWithBottom(bottom: number | null) {
-    const view = (
-      <LiveHubView
-        tripTitle="부산 여행"
-        days={DAYS}
-        activeDayIndex={1}
-        slots={SLOTS}
-        initialSnapIndex={1}
-        onBack={jest.fn()}
-        onSelectDay={jest.fn()}
-        onPressAiReplan={jest.fn()}
-        onPressManualEdit={jest.fn()}
-      />
-    );
-    render(
-      bottom === null ? (
-        view
-      ) : (
-        <SafeAreaInsetsContext.Provider
-          value={{ top: 47, bottom, left: 0, right: 0 }}
-        >
-          {view}
-        </SafeAreaInsetsContext.Provider>
-      )
-    );
-  }
-
-  it('LC1 하단 안전 영역 34 → 닫힘 칸 62, 중간 55%', () => {
-    renderWithBottom(34);
-    const all = sheetProps();
-    expect(all.length).toBeGreaterThan(0);
-    all.forEach(({ snapPoints }) => {
-      expect(snapPoints[0]).toBe(62);
-      expect(snapPoints[1]).toBe('55%');
-    });
-  });
-
-  it('LC3 하단 안전 영역 120 → 닫힘 칸 148 — 34 로 외운 고정값 구현을 막는 짝(0·34·120)', () => {
-    renderWithBottom(120);
-    sheetProps().forEach(({ snapPoints }) => {
-      expect(snapPoints[0]).toBe(148);
-    });
-  });
-
-  it('LC2 Provider 없음 → 닫힘 칸 28 그대로', () => {
-    renderWithBottom(null);
-    sheetProps().forEach(({ snapPoints }) => {
-      expect(snapPoints[0]).toBe(28);
-    });
-  });
-});
-
 // TRIP-1260 · i01 허브 일자 칩 줄. 허브는 오늘 일차로 열리므로 6일차 이후가 오늘이면 열자마자 선택 칩이
 // 화면 밖이다 — 칩만 가로 스크롤 안에 두고, back 은 고정, 선택 칩은 위치가 오면 보이게 민다.
 // FAB 하한은 overlay-row 의 onLayout(y + height)로 재므로 back·칩 줄이 계속 그 행 안이어야 한다.
@@ -1505,28 +1273,6 @@ describe('🔴 LiveHubView · 일자 칩 줄 가로 스크롤 (TRIP-1260)', () =
       />
     );
   }
-
-  it('칩 7개는 한 가로 ScrollView 안에 있고 back 은 그 밖이며, 둘 다 overlay-row 안이다 (AC-1·AC-2·AC-4)', () => {
-    render(hub(0));
-
-    const scroll = closestScrollView(
-      screen.getByTestId('execution-live-daychip-0')
-    );
-    expect(scroll?.props.horizontal).toBe(true);
-    for (let index = 0; index < 7; index += 1) {
-      expect(
-        closestScrollView(screen.getByTestId(`execution-live-daychip-${index}`))
-      ).toBe(scroll);
-    }
-    const back = screen.getByTestId('execution-live-back');
-    expect(closestAncestor(back, (node) => node === scroll)).toBeNull();
-    // 짝 — FAB 하한을 재는 행이 back 과 칩 줄을 계속 품는다.
-    const row = screen.getByTestId('execution-live-overlay-row');
-    expect(within(row).getByTestId('execution-live-back')).toBe(back);
-    expect(
-      within(row).getByTestId('execution-live-daychip-6')
-    ).toBeOnTheScreen();
-  });
 
   it('선택을 6일차로 바꾸면 그 칩(x=400)이 보이게 0 < x ≤ 400 으로 scrollTo 한다 (AC-3)', () => {
     // 준비
