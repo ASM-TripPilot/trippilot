@@ -6,6 +6,7 @@ import type { SavedPlace } from '@/shared/api/index.schemas';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import { EmptyCollage } from './EmptyCollage';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
@@ -417,34 +418,6 @@ function GuestBlock({
   );
 }
 
-/** empty 삽화(01b Seed Q4 ⓑ) — Figma의 사진 3장 겹침 콜라주를 라운드 사각 3개 + 하트 원으로
- * 재현한다. 실사진은 에셋 라이선스·출처가 미정이라 벡터로 대체(미충족 기록). */
-function EmptyCollage(): ReactElement {
-  // Figma 1695:1183 — 사진 카드 3장 부채꼴(가운데 앞·크게, 좌우 기울어짐) + 중앙 하트 원.
-  // 실사진은 에셋 라이선스·출처 미정이라 회색 벡터로 대체(미충족 기록, 6-b/후속) — 기울기만
-  // transform 으로 부채꼴 느낌을 낸다(순수 스타일, 저위험).
-  return (
-    <View
-      testID="explore-saved-empty-art"
-      className="h-[170px] w-[230px] flex-row items-center justify-center"
-    >
-      <View
-        className="h-[118px] w-[74px] rounded-card bg-surface-strong"
-        style={{ transform: [{ rotate: '-12deg' }], marginRight: -12 }}
-      />
-      <View className="z-10 h-[162px] w-[96px] items-center justify-center rounded-card bg-surface-soft">
-        <View className="h-12 w-12 items-center justify-center rounded-pill bg-canvas">
-          <HeartFilledGlyph size={26} />
-        </View>
-      </View>
-      <View
-        className="h-[118px] w-[74px] rounded-card bg-surface-strong"
-        style={{ transform: [{ rotate: '12deg' }], marginLeft: -12 }}
-      />
-    </View>
-  );
-}
-
 function EmptyBlock({
   onPressBrowse,
 }: {
@@ -483,7 +456,7 @@ function RegionEmptyBlock({
     <View className="w-full flex-1 items-center justify-center px-2xl">
       <StateNotice
         testID="explore-saved-region-empty"
-        illustration={<EmptyCollage />}
+        illustration={<EmptyCollage testID="explore-saved-empty-art" />}
         title="이 여행 지역에 담은 곳이 없어요"
         description="다른 지역에 담아둔 장소는 여기에 안 보여요. 여행 지역의 장소를 둘러보고 담아 보세요"
         actions={[
