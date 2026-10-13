@@ -24,7 +24,11 @@ from trippilot.assembly_engine.config import (
     stay_for,
     AssemblyConfig,
 )
-from trippilot.assembly_engine.constraints import anchor_minutes, not_before_floor
+from trippilot.assembly_engine.constraints import (
+    anchor_minutes,
+    free_visit_cap,
+    not_before_floor,
+)
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -215,7 +219,9 @@ class RuleFallbackAssembler:
             day_cat_total.update(cat_count)
             quota = {c: max(self._cfg.category_free_count, -(-n // remaining_days))
                      for c, n in day_cat_total.items()}
-            while remaining:
+            # 하루 방문 상한 (BR-U4-47) — ② 자유 삽입만 센다. OR 의 자유 노드 합 ≤ 상한과 같은 의미
+            free_left = free_visit_cap(problem, day)
+            while remaining and free_left != 0:
                 if not gap_fill:
                     k = len(slots) - 1
                 last = slots[k] if k >= 0 else None
@@ -320,6 +326,8 @@ class RuleFallbackAssembler:
                         is_llm_score=cand.is_llm_score,
                     ))
                     used.add(cand.poi_id)
+                    if free_left is not None:
+                        free_left -= 1
                     cat_count[poi.category] += 1  # TRIP-531
                     food_count += counts_as_food(poi)
                     slots.sort(key=lambda s: s.start_at)

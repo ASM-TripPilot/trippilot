@@ -34,7 +34,11 @@ from trippilot.assembly_engine.config import (
     stay_for,
     AssemblyConfig,
 )
-from trippilot.assembly_engine.constraints import anchor_minutes, not_before_floor
+from trippilot.assembly_engine.constraints import (
+    anchor_minutes,
+    free_visit_cap,
+    not_before_floor,
+)
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
@@ -394,6 +398,13 @@ class OrToolsAssembler:
                               "score": 0.0, "is_llm": False, "pin": None,
                               "required": True, "dom": dom})
 
+        # 하루 방문 상한 (BR-U4-47 — 피로·지연 재계획) — 자유 노드만 묶는다. 고정·필수는 상한에
+        # 세되 빼지 않는다(`free_visit_cap`). 그리디 힌트도 같은 상한을 지켜 완전 힌트가 유지된다.
+        # 몫이 0 이면 자유 노드를 모델에서 뺀다 — 합 ≤ 0 으로 두면 방문 0 인 회로(자기 루프 없는
+        # 깊이0)가 불가라, 핀·필수가 없는 날이 빈 일자가 아니라 해 없음이 된다.
+        free_cap = free_visit_cap(problem, day)
+        if free_cap == 0:
+            nodes = [n for n in nodes if n["pin"] is not None or n["required"]]
         if not nodes:
             return []  # 배치할 것 없음 — 빈 일자 (해 없음 아님)
 
@@ -423,6 +434,9 @@ class OrToolsAssembler:
             elif "dom" in n:  # 필수 — 영업창 합집합 (lo·hi 는 바깥 경계)
                 m.AddLinearExpressionInDomain(
                     start[i], cp_model.Domain.FromIntervals([list(iv) for iv in n["dom"]]))
+        if free_cap:  # 0 이면 자유 노드가 이미 빠졌다(위)
+            m.Add(sum(visit[i] for i, n in enumerate(nodes)
+                      if n["pin"] is None and not n["required"]) <= free_cap)
 
         arcs = []
         for i in range(k):

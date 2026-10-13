@@ -1051,6 +1051,35 @@ def _route_weight(reasons: Sequence[str], resolved: Sequence[str]) -> float:
     return max((*(_REASON_ROUTE_WEIGHT.get(r, 0.0) for r in reasons),
                 _USER_LESS_MOVE_WEIGHT if "LESS_MOVE" in resolved else 0.0))
 
+# 사유 → 하루 방문 상한 "원 일정의 남은 방문 − 1"(최소 1, BR-U4-47). 피로 RELAX(체류 ×1.4)만으로는
+# 방문이 안 줄었다 — 이동 감점이 이동 시간을 줄이고 AVOID_STRENUOUS 가 긴 체류(액티비티·자연)를
+# 짧은 것(카페·쇼핑)으로 바꿔, 늘어난 체류를 그 몫이 덮었다(실스택 부산 원 6곳 → 피로 7곳).
+# 사용자가 FILL_MORE 를 골랐으면 생략한다(사용자 우선 — 속도 축과 같은 규칙).
+_REASON_VISIT_CAP = frozenset({"fatigue", "delay"})
+
+
+def _visit_cap(request: schemas.ReplanRequest, resolved: Sequence[str],
+               past: Sequence[FixedBlock], not_before: datetime | None) -> int | None:
+    """하루 방문 상한 — 원 일정 중 아직 안 지난 방문 수 − 1(최소 1). 해당 없으면 None.
+
+    지난 잠금(`_past_blocks`)과 하한 전에 끝난 슬롯은 세지 않는다 — FULL_DAY 는 놓친 오전
+    슬롯이 잠기지 않은 채 오고(BE `lockedSlots`), 자유 방문은 하한 뒤에만 들어간다.
+    원 일정이 비면 줄일 기준이 없어 None.
+    """
+    if "FILL_MORE" in resolved or not _REASON_VISIT_CAP.intersection(request.reasons):
+        return None
+    done = {b.poi_id for b in past}
+
+    def gone(s: schemas.ReplanSlotSchema) -> bool:
+        if PoiId(s.poi_id) in done:
+            return True
+        return (not_before is not None and s.end_at is not None and not s.ends_next_day
+                and datetime.combine(request.target_date, s.end_at,
+                                     tzinfo=not_before.tzinfo) <= not_before)
+
+    left = sum(1 for s in request.current_slots if not gone(s))
+    return max(1, left - 1) if left else None
+
 # 부정 표현 — 있으면 임베딩 매칭을 건너뛴다. 임베딩은 부정을 못 읽어 "카페는 이제 그만"이
 # ADD_CAFE 로 잡혀 카페가 **늘었고**, 부정 뒤만 떼어 매칭하면 "가고 싶어" 같은 빈 술어가
 # 엉뚱한 지시(ACTIVITY_FOCUS)에 붙었다(2026-10-05 실측). 부정문은 번역 LLM 과 PlanB 선택
@@ -1831,6 +1860,9 @@ class WiredItineraryOrchestrator:
             if dropped:
                 notes.append(f"planb_rank_trimmed: add_one dropped={dropped}")
 
+        visit_cap = _visit_cap(request, resolved, past, not_before)
+        if visit_cap is not None:
+            notes.append(f"planb_visit_cap: {visit_cap}")
         window = request.time_window
         domain_request = core.GenerateItineraryRequest(
             schedule_id=ScheduleId(request.trip_id),
@@ -1863,6 +1895,7 @@ class WiredItineraryOrchestrator:
             prefer_near=near,
             pace=pace,
             travel_weight=_route_weight(request.reasons, resolved),
+            max_visits_per_day=visit_cap,
             not_before=not_before,
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
