@@ -1,29 +1,4 @@
-export { SHEET_HANDLE_INDICATOR_STYLE } from './lib/sheetHandle';
-export {
-  addressInRegion,
-  placeLocationLabel,
-  regionCodeInTrip,
-  sidoKey,
-  sigunguLabel,
-} from './model/regionMatch';
+// 순수 뷰·글리프·config·순수 model 은 index.view 가 정본이고, 여기엔 네트워크 훅 등 그 밖의 것만 더한다.
+export * from './index.view';
+
 export { useSavedStays } from './model/useSavedStays';
-export {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  BedGlyph,
-  CheckGlyph,
-  ChevronRightGlyph,
-  FamilyGlyph,
-  FriendsGlyph,
-  GlobeGlyph,
-  HeartGlyph,
-  PlusGlyph,
-  RemoveGlyph,
-  SearchGlyph,
-  SoloGlyph,
-  SparkleGlyph,
-  StepperMinusGlyph,
-  StepperPlusGlyph,
-  WarningTriangleGlyph,
-} from './ui/TripGlyphs';
-export type { GlyphComponent } from './ui/TripGlyphs';
