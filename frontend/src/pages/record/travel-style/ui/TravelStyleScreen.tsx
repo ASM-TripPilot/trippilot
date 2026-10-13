@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
@@ -13,6 +13,7 @@ import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { BackArrowGlyph } from '@/features/reflection/index.view';
 import { CategoryBarList } from './CategoryBarList';
 import { StatTile } from './StatTile';
+import { AppBar } from '@/shared/ui/AppBar';
 
 /**
  * TRIP-573 · j05 여행 스타일 분석 화면(순수 프레젠테이션 — VM·콜백 주입, 조회/조립 0).
@@ -55,21 +56,20 @@ function monthDay(iso: string | null | undefined): string {
   return `${Number(mm)}.${Number(dd)}`;
 }
 
-function AppBar({ onBack }: { onBack?: () => void }): ReactElement {
+function TravelStyleAppBar({ onBack }: { onBack?: () => void }): ReactElement {
   return (
-    <View className="w-full flex-row items-center gap-[6px] bg-canvas pb-[12px] pl-[12px] pr-lg pt-[4px]">
-      <Pressable
-        testID="reflection-style-back"
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        onPress={onBack}
-        className="pr-[2px]"
-      >
-        <BackArrowGlyph size={24} />
-      </Pressable>
-      <Text className="font-noto-bold text-[18px] font-bold text-ink">
-        여행 스타일 분석
-      </Text>
-    </View>
+    <AppBar
+      className="w-full flex-row items-center gap-[6px] bg-canvas pb-[12px] pl-[12px] pr-lg pt-[4px]"
+      back={{
+        testID: 'reflection-style-back',
+        hitSlop: { top: 8, bottom: 8, left: 8, right: 8 },
+        onPress: onBack,
+        className: 'pr-[2px]',
+        glyph: <BackArrowGlyph size={24} />,
+      }}
+      title="여행 스타일 분석"
+      titleClassName="font-noto-bold text-[18px] font-bold text-ink"
+    />
   );
 }
 
@@ -85,7 +85,7 @@ export function TravelStyleScreen({
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }} className="bg-canvas">
-      <AppBar onBack={onBack} />
+      <TravelStyleAppBar onBack={onBack} />
 
       <ScrollView
         className="flex-1"
