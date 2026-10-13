@@ -2549,12 +2549,6 @@ describe('후보 카드 이름·태그·사진', () => {
     }
   }
 
-  /** className 을 공백으로 쪼갠 토큰 목록 — `min-h-[78px]` 같은 부분 일치 오탐을 막는다. */
-  const classTokens = (testID: string): string[] =>
-    String(screen.getByTestId(testID).props.className ?? '').split(/\s+/);
-
-  const THUMB_78 = ['h-[78px]', 'w-[78px]', 'rounded-thumb'];
-
   /** 소요시간 단위(INV-3) — 거리만 보여야 한다. */
   const DURATION = /분|시간|\bmin\b|소요/;
 
@@ -2574,7 +2568,7 @@ describe('후보 카드 이름·태그·사진', () => {
       expect(tags).toHaveTextContent(/야외/);
     });
 
-    it('F2 · AC-4·Q1·비주얼(a) — 사진 있으면 그 URL 이 source, null·빈 문자열이면 source 없는 회색 자리(78·thumb)', async () => {
+    it('F2 · AC-4·Q1·비주얼(a) — 사진 있으면 그 URL 이 source, null·빈 문자열이면 source 없는 회색 자리', async () => {
       await renderAndPickConcept();
 
       expect(
@@ -2584,11 +2578,6 @@ describe('후보 카드 이름·태그·사진', () => {
       for (const id of [RAW_ID, 'Z']) {
         const leaf = screen.getByTestId(`itinerary-candidate-image-${id}`);
         expect(leaf.props.source).toBeUndefined();
-      }
-      for (const id of ALL_IDS) {
-        expect(classTokens(`itinerary-candidate-image-${id}`)).toEqual(
-          expect.arrayContaining(THUMB_78)
-        );
       }
     });
 

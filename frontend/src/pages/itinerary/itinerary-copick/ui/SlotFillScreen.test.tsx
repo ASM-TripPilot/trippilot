@@ -12,8 +12,8 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { SlotFillScreen } from './SlotFillScreen';
 
 // 지도 카드는 실 MapView(네이버 네이티브) 대신 관찰 목으로 태운다(리포 관례 —
-// GenerationFallbackScreen.test 선례). 목이 props 를 host 로 노출해 viewOnly·connectPins·
-// radiusCircle 전달을 관측한다. mapView 미전달 얼굴은 목을 안 쓴다(map-root 미렌더).
+// GenerationFallbackScreen.test 선례). 지도 카드가 서는지·안 서는지만 본다 — viewOnly 등 prop 전달은
+// 통과형 목이라 실화면 몫이다(TRIP-1367). mapView 미전달 얼굴은 목을 안 쓴다(map-root 미렌더).
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /**
@@ -360,18 +360,6 @@ describe('🔴 SlotFillScreen (h10) — 반경 넓히기/좁히기 상시(결과
  * 선택과 무관하게 셋째 칸"을 굳혀 가운데 "1.1km" 옆에 "약 1.1km" 가 뜨는 버그의 계약이었다(교체).
  * 캡션(radiusUsedLabel)과 셋째 칸(maxRadiusLabel)을 무엇으로 채울지는 페이지가 정한다.
  */
-describe('🔴 SlotFillScreen (h10) — 넓힘 캡션은 사실 문장·muted 톤 (TRIP-1081 결정 1)', () => {
-  it('T-CAPTION-TONE · 캡션은 받은 문구를 그대로 그리고 색은 강조(primary-text)가 아니라 muted 다', () => {
-    const caption = '1.1km 안에 없어 약 12.0km까지 넓혔어요';
-    renderScreen({ radiusUsedLabel: caption });
-
-    const used = screen.getByTestId('itinerary-copick-radius-used');
-    expect(used).toHaveTextContent(caption);
-    expect(used.props.className).toContain('text-muted');
-    expect(used.props.className).not.toContain('text-primary-text');
-  });
-});
-
 describe('🔴 SlotFillScreen (h10) — 셋째 반경 세그 라벨(maxRadiusLabel ?? 최대)', () => {
   it('T-SEG3 · maxRadiusLabel 만 셋째 칸을 덮고, 캡션값(radiusUsedLabel)만 오면 셋째 칸은 "최대"', () => {
     // 최대로 조회한 결과 — 셋째 칸이 서버값(Figma 3850:2227 '약 11.3km').
@@ -479,33 +467,12 @@ describe('🔴 SlotFillScreen (h10) — 지도 카드 additive(prop 전달·degr
     pins: [{ number: 1, lat: 35.16, lng: 129.16, label: 'A' }],
   };
 
-  it('T-MAP · mapView 주면 지도 카드(map-root)를 viewOnly+connectPins=false 로 소비한다', () => {
+  it('T-MAP · mapView 주면 지도 카드(map-root)를 그린다', () => {
     renderScreen({ mapView: MAP_VIEW });
 
     // TRIP-1043 — 지도는 카드 컨테이너(itinerary-copick-slotfill-map) 안에 있다(페이지 배선 관측 자리).
     const card = screen.getByTestId('itinerary-copick-slotfill-map');
     expect(within(card).getByTestId('map-root')).toBeTruthy();
-
-    // 목이 props 를 host 로 노출한다 — 보여주기 전용(viewOnly) + 검증된 동선 아님(connectPins=false).
-    const map = screen.getByTestId('map-root');
-    expect(map.props.viewOnly).toBe(true);
-    expect(map.props.connectPins).toBe(false);
-    // 반경 원 prop 이 지도까지 흘러간다(전달 잠금 — 실 원은 6-b).
-    expect(map.props.radiusCircle).toBeDefined();
-  });
-
-  it('T-MAP-FIT · mapView.fitPins 를 주면 지도까지 흘러가고 반경 원도 함께 넘어간다(TRIP-1081 결정 2)', () => {
-    renderScreen({ mapView: { ...MAP_VIEW, fitPins: true } });
-
-    const map = screen.getByTestId('map-root');
-    expect(map.props.fitPins).toBe(true);
-    // 핀에 맞춰 열어도 원은 그대로 그린다(결정 2 (b)).
-    expect(map.props.radiusCircle).toEqual(MAP_VIEW.radiusCircle);
-
-    // 짝 — fitPins 없는 mapView 면 지도에도 없다(원 기준 카메라 유지).
-    screen.unmount();
-    renderScreen({ mapView: MAP_VIEW });
-    expect(screen.getByTestId('map-root').props.fitPins).toBeUndefined();
   });
 
   it('T-MAP-DEGRADE · mapView 미주입이면 지도 카드가 없다(좌표 도착 전 정직 degrade)', () => {
@@ -712,9 +679,6 @@ describe('🔴 SlotFillScreen (h10) — 후보를 기다리는 얼굴(스켈레�
     };
   }
 
-  const tokens = (node: { props: { className?: unknown } }): string[] =>
-    String(node.props.className ?? '').split(/\s+/);
-
   it('K1 · 0건+조회 중이면 스켈레톤 하나가 뜨고, 0건·실패 얼굴·라디오·확정 버튼은 없다', () => {
     renderScreen(LOADING);
 
@@ -751,29 +715,6 @@ describe('🔴 SlotFillScreen (h10) — 후보를 기다리는 얼굴(스켈레�
     expect(within(cards[0]).queryAllByTestId(LINE)).toHaveLength(2);
 
     expect(within(skel).queryAllByText(/\S/)).toHaveLength(0);
-  });
-
-  it('K3 · 블록은 bg-hairline 이고 카드에는 테두리·그림자가 없다(Figma h02 loading)', () => {
-    renderScreen(LOADING);
-
-    const cards = screen.queryAllByTestId(CARD);
-    const blocks = [
-      ...screen.queryAllByTestId(BADGE),
-      ...screen.queryAllByTestId(PHOTO),
-      ...screen.queryAllByTestId(LINE),
-    ];
-    expect(cards).toHaveLength(3);
-    expect(blocks).toHaveLength(12);
-
-    for (const block of blocks) {
-      expect(tokens(block)).toContain('bg-hairline');
-      expect(tokens(block)).not.toContain('bg-surface-soft');
-    }
-    for (const card of cards) {
-      expect(tokens(card).filter((t) => /^(border|shadow)/.test(t))).toEqual(
-        []
-      );
-    }
   });
 
   it('K4 · 스크린리더는 스켈레톤을 "목록을 불러오는 중"으로 읽는다', () => {

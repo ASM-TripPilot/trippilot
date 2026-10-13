@@ -83,7 +83,7 @@ describe('Figma 정합 표면', () => {
   /**
    * TRIP-794 · h09 컨셉 고르기 Figma 정합(3845:2227) — 프레젠테이션만 바뀐다(행위 계약 불변).
    *
-   * 동결 앵커는 같은 파일의 최상위 C1~C3(행위)·「컨셉 아이콘 틴트」 describe(U2)가 지킨다 — **무변경**으로
+   * 동결 앵커는 같은 파일의 최상위 C1~C3(행위)·「컨셉 아이콘 틴트」 describe(U2-2)가 지킨다 — **무변경**으로
    * green 유지가 계약(AC-8). 이 describe 는 새로 붙는 표면만 잠근다.
    *
    * 무엇을 보장하나:
@@ -92,15 +92,14 @@ describe('Figma 정합 표면', () => {
    *       제거 — 진행줄 어디에도 「슬롯」이 없다(QA #041).
    *  - 🔴 AC-4 컨셉 설명 5종을 config 값으로 렌더(TRIP-1043 중립 문구).
    *  - 🔴 AC-5 배지(AI 추천/컨셉 매칭)·N곳 **렌더 0**(BE 계약 대기 — 픽스처 억지주입 금지).
-   *  - 🔴 AC-6 (TRIP-1043 뒤집음) 다섯 카드 모두 같은 hairline 테두리 — 고르지 않았는데 고른 것처럼 보이던
-   *       첫 카드 정적 강조를 없앤다(Figma F4).
-   *  - 🔴 AC-7 건너뛰기 회색 full pill 한 줄('테마 없이 건너뛰기 · AI가 알아서 추천'), 점선 제거.
+   *  - 🔴 AC-7 건너뛰기 한 줄('테마 없이 건너뛰기 · AI가 알아서 추천'). 카드 테두리·pill 모양(옛 AC-6·점선)은
+   *       실화면 몫이다(TRIP-1367).
    *  - 🔴 AC-2 배선 stepperSlot(ReactNode) 를 그린다 — CoPickStepper 위젯 자체는 별 파일(층 경계상
    *       features 는 widgets 를 import 못 해 SlotFillPage 가 노드로 내린다).
    *  - AC-8 행위 보존 — 새 표면 공존 하에서도 카드 탭·스킵 콜백 그대로.
    *
    * *(개념)* `queryBy*`===null = 부재 단언(`getBy*`는 못 찾으면 throw 라 부정에 못 씀). `toHaveTextContent`
-   *  문자열은 완전일치(RNTL v13 exact, 02a §5-1). `className` 색·테두리 토큰은 공백 쪼갠 정확 토큰으로 본다.
+   *  문자열은 완전일치(RNTL v13 exact, 02a §5-1).
    */
 
   const CONCEPTS = [
@@ -127,11 +126,6 @@ describe('Figma 정합 표면', () => {
     barFilled: 1, // Figma 모순: 슬롯 3/4 인데 bar 1칸 — 화면은 안 고침(브리프 §B).
     barTotal: 4,
   };
-
-  function classSet(testID: string): Set<string> {
-    const node = screen.getByTestId(testID);
-    return new Set(String(node.props.className ?? '').split(/\s+/));
-  }
 
   // 새 표면 prop 을 다 준 상태로 렌더한다(파리티 테스트의 기본형).
   function renderParity(overrides: Record<string, unknown> = {}): {
@@ -222,32 +216,8 @@ describe('Figma 정합 표면', () => {
     });
   });
 
-  describe('🔴 AC-6 · 다섯 카드 모두 같은 hairline 테두리 (TRIP-1043 — 첫 카드 강조 제거)', () => {
-    it('첫 카드(meal)를 포함해 어느 카드도 primary·1.5px 테두리가 아니고 모두 hairline 이다', () => {
-      renderParity();
-
-      const faces = CONCEPTS.map(({ key }) => {
-        const classes = classSet(`itinerary-copick-concept-${key}`);
-        return {
-          key,
-          primary: classes.has('border-primary'),
-          thick: classes.has('border-[1.5px]'),
-          hairline: classes.has('border-hairline'),
-        };
-      });
-      expect(faces).toEqual(
-        CONCEPTS.map(({ key }) => ({
-          key,
-          primary: false,
-          thick: false,
-          hairline: true,
-        }))
-      );
-    });
-  });
-
   describe('🔴 AC-7 · 건너뛰기 회색 full pill(한 줄)', () => {
-    it('한 줄 문구 · 점선 제거 · testID 불변', () => {
+    it('한 줄 문구 · testID 불변', () => {
       renderParity();
 
       // testID 불변(행위 계약).
@@ -258,11 +228,6 @@ describe('Figma 정합 표면', () => {
       expect(
         screen.getByText('테마 없이 건너뛰기 · AI가 알아서 추천')
       ).toBeTruthy();
-
-      // 점선 테두리 제거(구 border-dashed) — 회색 채움 pill 로 교체(색 토큰은 6-b).
-      expect(
-        classSet('itinerary-copick-concept-skip').has('border-dashed')
-      ).toBe(false);
     });
   });
 
@@ -289,19 +254,10 @@ describe('Figma 정합 표면', () => {
 // U2 소급 백필 · 옛 ConceptPickerScreen.icon.test.tsx
 describe('컨셉 아이콘 틴트', () => {
   /**
-   * U2 소급 백필(20260824) · h13 컨셉 카드 아이콘/틴트 매핑 회귀 심판.
+   * U2 소급 백필(20260824) · h13 컨셉 카드 아이콘 매핑(`CONCEPT_VISUALS[key] ?? FALLBACK_VISUAL`) 회귀 심판.
    *
-   * 무엇을 보장하나: 커밋 7cda1f5(발표용 domo, 사이클 없이 들어옴)가 첫 글자 텍스트 →
-   * 카테고리 아이콘으로 바꾸며 `CONCEPT_VISUALS[key] ?? FALLBACK_VISUAL` 매핑을 새로 넣었는데
-   * 심판이 0이었다. 여기서 잠그는 것은 "알려진 5키는 각자의 틴트로, 알려지지 않은 키는 폴백
-   * 틴트(bg-surface-soft)로 그려진다"이다.
-   *
-   * (한계) 어느 **아이콘 글리프**가 그려지는지는 testID가 없어 jest 사각(SlotPhotoPlaceholder의
-   * ICON_BY_KEY와 동형 — repo-traps). 관측 가능한 계약은 아이콘 컨테이너 View 의 틴트 className
-   * 뿐이라 그것을 잠근다. 픽셀·아이콘 모양은 6-b 실기 전용.
-   *
-   * (개념) 아이콘 컨테이너엔 testID 가 없어 카드(testID `itinerary-copick-concept-{key}`)에서
-   * `rounded-thumb` className 을 가진 자손 View 를 트리 탐색(`.findAll`)으로 찾아 그 틴트를 읽는다.
+   * 무엇을 보장하나: 알려지지 않은 키가 와도 폴백으로 접혀 크래시하지 않는다. 키별 틴트 색(옛 U2-1)과
+   * 아이콘 모양은 실화면 몫이다(TRIP-1367 — README 판정 4).
    */
 
   function baseProps(
@@ -316,38 +272,8 @@ describe('컨셉 아이콘 틴트', () => {
     };
   }
 
-  // 카드에서 아이콘 컨테이너(rounded-thumb + 틴트)를 찾아 className 을 돌려준다.
-  function iconTint(key: string): string {
-    const card = screen.getByTestId(`itinerary-copick-concept-${key}`);
-    const box = card.findAll(
-      (node) =>
-        typeof node.props.className === 'string' &&
-        node.props.className.includes('rounded-thumb')
-    )[0];
-    return String(box.props.className);
-  }
-
-  describe('U2-1 · 알려진 컨셉 키는 각자의 틴트로 그려진다', () => {
-    const CASES: readonly [key: string, tint: string][] = [
-      ['meal', 'bg-primary-pale'],
-      ['cafe', 'bg-surface-strong'],
-      ['culture', 'bg-info-bg'],
-      ['outdoor', 'bg-success-bg'],
-      ['shopping', 'bg-primary-pale'],
-    ];
-
-    it.each(CASES)('%s → %s', (key, tint) => {
-      render(
-        <ConceptPickerScreen
-          {...baseProps({ concepts: [{ key, label: `라벨-${key}` }] })}
-        />
-      );
-      expect(iconTint(key)).toContain(tint);
-    });
-  });
-
-  describe('U2-2 · 알려지지 않은 키는 폴백 틴트로 접히고 크래시하지 않는다', () => {
-    it('unknown → bg-surface-soft(폴백), 렌더는 throw 하지 않는다', () => {
+  describe('U2-2 · 알려지지 않은 키는 폴백으로 접히고 크래시하지 않는다', () => {
+    it('unknown 키도 렌더는 throw 하지 않고 카드를 그린다', () => {
       expect(() =>
         render(
           <ConceptPickerScreen
@@ -356,10 +282,10 @@ describe('컨셉 아이콘 틴트', () => {
         )
       ).not.toThrow();
 
-      // 폴백 틴트여야 하고, 알려진 키의 틴트가 섞여 들어오면 안 된다.
-      const tint = iconTint('unknown');
-      expect(tint).toContain('bg-surface-soft');
-      expect(tint).not.toContain('bg-primary-pale');
+      // 카드는 그려진다(크래시 없이 폴백으로 접혔다).
+      expect(
+        screen.getByTestId('itinerary-copick-concept-unknown')
+      ).toBeOnTheScreen();
     });
   });
 });

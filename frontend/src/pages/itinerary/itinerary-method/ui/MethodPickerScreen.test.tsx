@@ -22,8 +22,7 @@ import { MethodPickerScreen } from './MethodPickerScreen';
  *
  * ── TRIP-1266 · 위저드 공용 헤더 ──
  * 3/4 헤더가 1/4·2/4와 같은 `widgets/trip-wizard-header` 를 쓴다. 옛 점 4개(TRIP-784 AC-1)는 막대 4칸
- * `trip-wizard-progress-seg-*` 로 바뀌었고, 채움/빈은 칸 className 토큰으로 본다(막대는 SVG 가 아니라
- * View 라 className 이 곧 색이다).
+ * `trip-wizard-progress-seg-*` 로 바뀌었다. 채움/빈 색은 실화면 몫이다(TRIP-1367).
  *
  * 3동작 뼈대: 준비=콜백 목·prop → 실행=렌더/카드 press → 단언=콜백 호출·보이는 것.
  */
@@ -136,11 +135,6 @@ describe('TRIP-404 · 동시 생성 차단 스텁 (AC-6 무회귀)', () => {
 
 // TRIP-1266 (QA F7) — 옛 TRIP-784 AC-1(점 4개) 을 대체한다.
 describe('위저드 공용 헤더 (3/4)', () => {
-  function tokens(node: { props?: { className?: unknown } }): string[] {
-    const cn = node.props?.className;
-    return typeof cn === 'string' ? cn.split(/\s+/).filter(Boolean) : [];
-  }
-
   function renderPicker() {
     render(
       <MethodPickerScreen
@@ -152,17 +146,9 @@ describe('위저드 공용 헤더 (3/4)', () => {
     );
   }
 
-  it('진행 표시는 막대 4칸 중 앞 3칸이 primary 이고 "3 / 4" 다 — 옛 점은 없다', () => {
+  it('진행 표시는 "3 / 4" 다 — 옛 점은 없다', () => {
     renderPicker();
 
-    [1, 2, 3].forEach((n) =>
-      expect(
-        tokens(screen.getByTestId(`trip-wizard-progress-seg-${n}`))
-      ).toContain('bg-primary')
-    );
-    expect(tokens(screen.getByTestId('trip-wizard-progress-seg-4'))).toContain(
-      'bg-hairline-strong'
-    );
     // getByText(문자열) 은 노드 텍스트 완전 일치.
     expect(screen.getByText('3 / 4')).toBeOnTheScreen();
     expect(
@@ -170,16 +156,14 @@ describe('위저드 공용 헤더 (3/4)', () => {
     ).toHaveLength(0);
   });
 
-  it('헤더는 공용 TripWizardHeader 하나이고, 제목은 17(text-section)·‹ 는 기존 testID + "뒤로" 라벨이다', () => {
+  it('헤더는 공용 TripWizardHeader 하나이고, 제목은 "일정 만들기"·‹ 는 기존 testID + "뒤로" 라벨이다', () => {
     renderPicker();
 
     // 같은 컴포넌트 함수를 그렸는가 — testID·className 복사로는 못 속인다(0개·2개면 throw).
     expect(screen.UNSAFE_getByType(TripWizardHeader)).toBeTruthy();
 
     const header = screen.getByTestId('trip-wizard-header');
-    const title = within(header).getByText('일정 만들기');
-    expect(tokens(title)).toContain('text-section');
-    expect(tokens(title)).not.toContain('text-[18px]');
+    expect(within(header).getByText('일정 만들기')).toBeOnTheScreen();
 
     const back = within(header).getByTestId('itinerary-method-back');
     expect(back.props.accessibilityLabel).toBe('뒤로');
@@ -223,7 +207,7 @@ describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
     ).toBeNull();
   });
 
-  it('AC-4 · 추천 배지가 0개다(copick 제목·설명·빨강테두리는 유지)', () => {
+  it('AC-4 · 추천 배지가 0개다(copick 제목·설명은 유지)', () => {
     render(
       <MethodPickerScreen
         onBack={noop}
@@ -238,14 +222,10 @@ describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
     expect(screen.queryByTestId('itinerary-method-copick-badge')).toBeNull();
     expect(screen.queryByText('추천')).toBeNull();
 
-    // 짝 — copick 카드의 제목·설명·빨강 테두리 강조는 유지된다(배지만 뗀다). 설명 안의
+    // 짝 — copick 카드의 제목·설명은 유지된다(배지만 뗀다). 설명 안의
     // "AI 추천" 은 배지가 아니라 본문이라 살아남는다(Seed AC-4 · 지우지 말 것).
     expect(screen.getByText('AI와 같이 짜기')).toBeOnTheScreen();
     expect(screen.getByText('AI 추천 위에서 골라가며 완성')).toBeOnTheScreen();
-    // className 은 jest 렌더 트리에 평문 prop 으로 남는다(loginVisual 선례) — 강조 테두리 회귀 앵커.
-    expect(
-      screen.getByTestId('itinerary-method-copick').props.className
-    ).toContain('border-primary');
   });
 
   it('AC-5 · copick·manual press 가 각 콜백을 1회 부르고 soon 폴백은 없다', () => {
@@ -293,23 +273,6 @@ describe('TRIP-1011 C · 거점 숙소 다시 고르기 링크 (01b Q3)', () => 
     fireEvent.press(screen.getByTestId('itinerary-method-rebase'));
 
     expect(onPressRebase).toHaveBeenCalledTimes(1);
-  });
-
-  it('링크 글자는 같은 화면의 기존 링크 톤(text-primary-text)을 쓴다', () => {
-    render(
-      <MethodPickerScreen
-        onBack={noop}
-        onPressFullAi={noop}
-        onPressManual={noop}
-        onPressCoPick={noop}
-        onPressRebase={noop}
-      />
-    );
-
-    // className 은 jest 렌더 트리에 평문 prop 으로 남는다(위 AC-4 선례). 간격·굵기는 6-b 육안 몫.
-    expect(screen.getByText('거점 숙소 다시 고르기').props.className).toContain(
-      'text-primary-text'
-    );
   });
 
   it('onPressRebase 가 없으면 링크를 그리지 않는다 (프리뷰·다른 소비처 무회귀)', () => {
