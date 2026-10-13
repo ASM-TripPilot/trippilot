@@ -1,5 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.EditProposalInput
+import com.trippilot.itinerarygeneration.domain.EditProposalOutput
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
@@ -30,6 +32,9 @@ internal abstract class StubScheduleAgent : ScheduleAgentPort {
 
     override fun replan(input: ReplanInput): ScheduleAgentOutput =
         error("이 테스트는 재계획을 쓰지 않는다")
+
+    override fun proposeEdit(input: EditProposalInput): EditProposalOutput =
+        error("이 테스트는 편집 제안을 쓰지 않는다")
 
     /**
      * 빈 맵이 **정상 값**(근거 없음)이라 예외로 막지 않으면 "설명 단계가 통째로 빠진 것"과 구분되지

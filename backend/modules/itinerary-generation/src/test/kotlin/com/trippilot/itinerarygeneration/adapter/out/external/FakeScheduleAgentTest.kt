@@ -13,6 +13,13 @@ import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.api.CandidatePoolPort
 import com.trippilot.placedata.api.GroundedPlace
+import com.trippilot.itinerarygeneration.domain.DaySchedule
+import com.trippilot.itinerarygeneration.domain.EditCommand
+import com.trippilot.itinerarygeneration.domain.EditProposalInput
+import com.trippilot.itinerarygeneration.domain.EditProposalStatus
+import com.trippilot.itinerarygeneration.domain.FreshnessMeta
+import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.comparables.shouldBeGreaterThan
@@ -151,5 +158,41 @@ class FakeScheduleAgentTest : StringSpec({
         val slots = out.days.single().slots
         slots.size shouldBe 2
         slots.forEach { it.endAt shouldBeGreaterThan it.startAt }
+    }
+    /**
+     * 기본 모드에서 도우미의 "후보 고르기 → 제안" 이 끝까지 돌게 하는 대역이다. 발화는 해석하지 않는다 —
+     * 대역이 지어낸 해석이 "되는 것처럼" 보이면 실 연동에서야 처음 틀린다.
+     */
+    "편집 제안 — 그 날 슬롯 하나를 정본에 있는 장소로 바꾼다(시각은 자리 그대로), 발화는 해석하지 않는다" {
+        val d2 = d1.plusDays(1)
+        val grounded = object : CandidatePoolPort {
+            override fun resolve(area: Area, categories: Set<String>) = emptyList<GroundedPlace>()
+            override fun ground(poiIds: List<UUID>) =
+                poiIds.filter { it == poiB }.map { GroundedPlace(it, "한라산", 33.3, 126.5, "자연", "제주", null) }
+        }
+        val agent = agentOf(grounded, clock)
+        fun slot(poi: UUID) = VisitSlotDisplay(poi, LocalTime.of(10, 0), LocalTime.of(11, 0), false, "약 1km", isFixed = false)
+        val itinerary = ScheduleAgentOutput(
+            days = listOf(DaySchedule(d1, listOf(slot(poiA))), DaySchedule(d2, listOf(slot(poiA)))),
+            day1ReadyAt = null, explanations = emptyMap(), solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+            freshness = FreshnessMeta(clock.instant(), degraded = false),
+        )
+        fun input(utterance: String? = null, command: EditCommand? = null) = EditProposalInput(
+            UUID.randomUUID(), itinerary, d1, 33.4, 126.9, null, null, utterance, command, RequestMeta("r", clock.instant(), 5_000),
+        )
+
+        val out = agent.proposeEdit(input(command = EditCommand.replaceSlot(poiA, poiB)))
+        out.status shouldBe EditProposalStatus.PROPOSED
+        val replaced = out.itinerary!!.days.first().slots.single()
+        replaced.poiId shouldBe poiB
+        replaced.startAt shouldBe LocalTime.of(10, 0)
+        replaced.distanceRange shouldBe null // 구간이 바뀌었다 — 옛 거리를 물려주면 거짓이다
+        out.itinerary!!.days.last().slots.single().poiId shouldBe poiA // 같은 장소라도 다른 날은 그대로
+
+        // 정본에 없는 장소 · 그 날에 없는 슬롯 · 모르는 명령은 거절이다(INV-1)
+        agent.proposeEdit(input(command = EditCommand.replaceSlot(poiA, UUID.randomUUID()))).status shouldBe EditProposalStatus.REJECTED
+        agent.proposeEdit(input(command = EditCommand.replaceSlot(poiB, poiB))).status shouldBe EditProposalStatus.REJECTED
+        agent.proposeEdit(input(command = EditCommand("CLEAR_DAY", emptyMap(), emptyList()))).status shouldBe EditProposalStatus.REJECTED
+        agent.proposeEdit(input(utterance = "카페로 바꿔줘")).status shouldBe EditProposalStatus.NOT_UNDERSTOOD
     }
 })

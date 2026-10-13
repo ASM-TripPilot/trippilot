@@ -3,6 +3,10 @@ package com.trippilot.app
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.DayAnchor
+import com.trippilot.itinerarygeneration.domain.EditCommand
+import com.trippilot.itinerarygeneration.domain.EditProposalInput
+import com.trippilot.itinerarygeneration.domain.EditProposalOutput
+import com.trippilot.itinerarygeneration.domain.EditProposalStatus
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
@@ -234,6 +238,61 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
         println("[LIVE-AI] replan → solveMode=${output.solveMode} days=${output.days.size} " +
             "slots=${output.days.sumOf { it.slots.size }} isFallback=${output.isFallback} " +
             "totalDistanceKm=${output.totalDistanceKm}")
+    }
+
+    /**
+     * **편집 제안이 실물에 수용되는가**(U8 G-U8-2 · TRIP-1376). 이 경로는 백엔드 호출자가 처음 붙는다 —
+     * 계약 게이트는 이름만 보고, `confirm=true`·앵커·일정 본문 재구성(`untimed="reject"`)이 실제로 통과하는지는
+     * 여기서만 안다.
+     *
+     * 구조화 명령은 LLM 을 안 타므로 결과를 단정한다(해석 실패일 수 없다). 발화는 그날 LLM 상태에 흔들려 기록만 한다.
+     */
+    @Test
+    fun `편집 제안 왕복 — 구조화 명령과 발화가 둘 다 수용된다`() {
+        // **대중교통으로 돈다.** 자가용 일정은 상대가 자기 생성물을 HC2 로 판정해 어떤 편집이든 거절한다(실측 2026-10-13 ·
+        // TRIP-1381) — 그 상태에서는 수용 경로(APPLIED)를 한 번도 못 밟는다. 고쳐지면 이 줄을 지운다.
+        val mode = "대중교통"
+        val generated = agent.generate(input(listOf(today)).let { it.copy(includeExplanations = false, preferenceProfile = it.preferenceProfile.copy(transportModes = listOf(mode))) })
+        val slots = generated.days.single().slots
+        assumeTrue(slots.size >= 2) // 옮길 것이 있어야 한다
+        println("[LIVE-AI] edit 기준 일정의 validate = ${agent.validate(generated).map { "${it.type}:${it.detail}" }}")
+        fun edit(utterance: String? = null, command: EditCommand? = null) = EditProposalInput(
+            tripId = UUID.randomUUID(), itinerary = generated, targetDate = today,
+            anchorLat = 33.4996, anchorLng = 126.5312, budgetLevel = "표준", transportMode = mode,
+            utterance = utterance, command = command,
+            requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 10_000L),
+        )
+        fun report(label: String, out: EditProposalOutput, ms: Long) = println(
+            "[LIVE-AI] edit($label) → status=${out.status} applyMode=${out.applyMode} ${ms}ms reason=${out.reason} " +
+                "violations=${out.violations.map { "${it.type}@${it.slotRef?.take(8)}:${it.detail}" }} " +
+                "slots=${out.itinerary?.days?.flatMap { d -> d.slots.map { "${it.startAt}/${it.distanceRange}" } }}",
+        )
+
+        // 마지막 슬롯을 맨 앞으로 — 고정이 아닌 슬롯만 옮길 수 있다(상대 규칙).
+        val movable = slots.last { !it.isFixed }
+        lateinit var moved: EditProposalOutput
+        val moveMs = measureTimeMillis { moved = agent.proposeEdit(edit(command = EditCommand("MOVE_SLOT", emptyMap(), listOf(movable.poiId)))) }
+        report("MOVE_SLOT", moved, moveMs)
+        assertThat(moved.status).isIn(EditProposalStatus.PROPOSED, EditProposalStatus.REJECTED)
+        if (moved.status == EditProposalStatus.PROPOSED) {
+            val after = moved.itinerary!!.days.single { it.date == today }.slots
+            assertThat(after.map { it.poiId }).containsExactlyInAnyOrderElementsOf(slots.map { it.poiId })
+            assertThat(after.first().poiId).isEqualTo(movable.poiId)
+        }
+
+        // 차선책이 있으면 교체까지 태운다 — 도우미의 "후보 고르기 → 제안" 이 쓰는 명령이다.
+        slots.firstOrNull { !it.isFixed && it.alternatives.isNotEmpty() }?.let { target ->
+            lateinit var replaced: EditProposalOutput
+            val ms = measureTimeMillis {
+                replaced = agent.proposeEdit(edit(command = EditCommand.replaceSlot(target.poiId, target.alternatives.first().poiId)))
+            }
+            report("REPLACE_SLOT", replaced, ms)
+            assertThat(replaced.status).isIn(EditProposalStatus.PROPOSED, EditProposalStatus.REJECTED)
+        } ?: println("[LIVE-AI] edit(REPLACE_SLOT) 건너뜀 — 차선책이 실린 슬롯이 없다")
+
+        lateinit var spoken: EditProposalOutput
+        val utterMs = measureTimeMillis { spoken = agent.proposeEdit(edit(utterance = "마지막 장소를 맨 앞으로 옮겨줘")) }
+        report("utterance", spoken, utterMs)
     }
 
     private fun candidatesInput() = SlotCandidatesInput(

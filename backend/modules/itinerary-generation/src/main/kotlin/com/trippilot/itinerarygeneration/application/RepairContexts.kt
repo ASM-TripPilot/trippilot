@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.RepairContext
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
@@ -17,6 +18,9 @@ import java.util.UUID
  * 앵커는 [dates] 의 날만 싣는다 — 앵커가 실린 날은 상대가 첫 슬롯을 앵커 이동만큼 밀 수 있어서,
  * 첫 구간이 안 바뀐 날까지 실으면 사용자가 옮겨 둔 시각이 그 편집과 무관하게 움직인다.
  */
+/** [budgetTier] 는 생성 경로가 `budget_level` 로 보내는 그 값이다(취향의 예산 등급 — 여행 총예산이 아니다). */
+data class EditProposalContext(val anchor: DayAnchor, val transportMode: String?, val budgetTier: String?)
+
 @Component
 class RepairContexts(
     private val trips: TripFacade,
@@ -33,5 +37,18 @@ class RepairContexts(
             RegionAnchors.dayAnchors(regions, ctx.startDate, ctx.endDate, stays, ctx.destinationRefs).filter { it.date in dates }
         }
         return RepairContext(anchors, preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot).transportModes)
+    }
+
+    /**
+     * 편집 제안(U8)에 실을 컨텍스트 — 수리와 **같은 출처**에서 그 날 하나만 뽑는다. 상대는 이 앵커에 후보 풀을
+     * 매달아 추가·교체 대상을 검사한다(INV-1). 앵커를 못 정하면 null — 계약상 필수라 부를 수 없다.
+     */
+    fun forEditProposal(accountId: UUID, tripId: UUID, date: LocalDate): EditProposalContext? {
+        val ctx = trips.findGenerationContext(accountId, tripId) ?: return null
+        val stays = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
+        val anchor = RegionAnchors.dayAnchors(regions, ctx.startDate, ctx.endDate, stays, ctx.destinationRefs)
+            .firstOrNull { it.date == date } ?: return null
+        val prefs = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
+        return EditProposalContext(anchor, prefs.transportModes.firstOrNull(), prefs.budgetTier)
     }
 }

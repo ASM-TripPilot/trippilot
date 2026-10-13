@@ -2,6 +2,9 @@ package com.trippilot.itinerarygeneration.adapter.out.external
 
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.DaySchedule
+import com.trippilot.itinerarygeneration.domain.EditProposalInput
+import com.trippilot.itinerarygeneration.domain.EditProposalOutput
+import com.trippilot.itinerarygeneration.domain.EditProposalStatus
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
@@ -106,6 +109,31 @@ class FakeScheduleAgent(
      */
     override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =
         localCandidates.propose(input, degraded = false)
+
+    /**
+     * 편집 제안 — **구조화 교체만** 한다. 발화 해석은 LLM 몫이라 대역이 흉내 내지 않는다(지어낸 해석이
+     * 기본 모드에서 "되는 것처럼" 보이면 실 연동에서야 처음 틀린다). 시각은 자리를 그대로 물려준다.
+     */
+    override fun proposeEdit(input: EditProposalInput): EditProposalOutput {
+        val command = input.command
+            ?: return EditProposalOutput(EditProposalStatus.NOT_UNDERSTOOD, null, emptyList(), "fake 모드는 발화를 해석하지 않습니다.", null)
+        val old = command.affectedPoiIds.singleOrNull()
+        val new = command.params["targetPoiId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+        val day = input.itinerary.days.firstOrNull { it.date == input.targetDate }
+        if (command.op != "REPLACE_SLOT" || old == null || new == null || day == null || day.slots.none { it.poiId == old }) {
+            return EditProposalOutput(EditProposalStatus.REJECTED, null, emptyList(), "fake 모드는 그 날 슬롯 하나의 교체만 지원합니다.", null)
+        }
+        // closed-set(INV-1) — 실 상대의 후보 풀 검사에 해당한다.
+        if (candidatePool.ground(listOf(new)).isEmpty() || day.slots.any { it.poiId == new }) {
+            return EditProposalOutput(EditProposalStatus.REJECTED, null, emptyList(), "교체할 수 없는 장소입니다.", "AUTO_APPLY")
+        }
+        val days = input.itinerary.days.map { d ->
+            if (d.date != input.targetDate) d
+            // 거리는 비운다 — 구간이 바뀌었고 대역은 거리를 추정하지 않는다. 차선책도 옛 장소 기준이라 비운다.
+            else d.copy(slots = d.slots.map { if (it.poiId == old) it.copy(poiId = new, distanceRange = null, alternatives = emptyList()) else it })
+        }
+        return EditProposalOutput(EditProposalStatus.PROPOSED, input.itinerary.copy(days = days), emptyList(), null, "AUTO_APPLY")
+    }
 
     /**
      * 재계획 — 잠긴 슬롯은 그대로 두고 **그 뒤만** 다시 채운다(INV-U4-04).

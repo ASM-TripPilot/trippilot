@@ -5,6 +5,9 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiAlternativesRequ
 import com.trippilot.itinerarygeneration.adapter.out.external.AiAlternativesResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiCoord
 import com.trippilot.itinerarygeneration.adapter.out.external.AiDay
+import com.trippilot.itinerarygeneration.adapter.out.external.AiEditCommand
+import com.trippilot.itinerarygeneration.adapter.out.external.AiEditRequest
+import com.trippilot.itinerarygeneration.adapter.out.external.AiEditResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiFreshness
@@ -178,6 +181,21 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(sampleRepairRequest.timeWindows.single()) shouldContainExactly props("TimeWindowSchema")
         mismatches(sampleRepairRequest, "RepairItineraryRequest") shouldContainExactly emptyList()
         required("RepairItineraryRequest").forEach { wireKeys(sampleRepairRequest) shouldContain it }
+    }
+
+    /**
+     * 편집 제안(U8 G-U8-2). `command`·`utterance` 는 실호출에서 둘 중 하나만 싣지만 **표본은 둘 다 채운다** —
+     * 비우면 그 키의 모양을 안 잰다. "정확히 하나"는 계약 스키마가 아니라 상대 검증기의 규칙이라 여기서 못 본다
+     * (도메인 입력의 `init` 과 실 왕복이 지킨다).
+     */
+    "edit 요청·응답 키가 계약과 정확히 일치한다" {
+        wireKeys(sampleEditRequest) shouldContainExactly props("EditItineraryRequest")
+        wireKeys(sampleEditCommand) shouldContainExactly props("EditCommandSchema")
+        wireKeys(sampleEditRequest.anchor) shouldContainExactly props("CoordSchema")
+        mismatches(sampleEditRequest, "EditItineraryRequest") shouldContainExactly emptyList()
+        required("EditItineraryRequest").forEach { wireKeys(sampleEditRequest) shouldContain it }
+        wireKeys(sampleEditResponse) shouldContainExactly props("EditItineraryResponse")
+        mismatches(sampleEditResponse, "EditItineraryResponse") shouldContainExactly emptyList()
     }
 
     "explanations 요청 키가 계약과 정확히 일치한다" {
@@ -393,6 +411,31 @@ private val sampleRepairRequest = AiRepairRequest(
     anchors = listOf(DayAnchor(LocalDate.parse("2026-08-01"), 33.45, 126.56)),
     timeWindows = listOf(TimeWindow(LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), LocalTime.parse("21:00"))),
     transportModes = listOf("렌터카"),
+)
+
+private val sampleEditCommand =
+    AiEditCommand("REPLACE_SLOT", mapOf("targetPoiId" to UUID.randomUUID().toString()), listOf(UUID.randomUUID().toString()))
+
+private val sampleEditRequest = AiEditRequest(
+    tripId = UUID.randomUUID().toString(),
+    itinerary = samplePayload,
+    targetDate = LocalDate.parse("2026-08-01"),
+    anchor = AiCoord(33.45, 126.56),
+    budgetLevel = "표준",
+    transportMode = "렌터카",
+    command = sampleEditCommand,
+    utterance = "둘째 날 카페를 조용한 곳으로 바꿔줘",
+    confirm = true,
+    requestMeta = sampleRequestMeta,
+)
+
+private val sampleEditResponse = AiEditResponse(
+    status = "APPLIED",
+    command = sampleEditCommand,
+    applyMode = "AUTO_APPLY",
+    itinerary = samplePayload,
+    violations = listOf(AiViolation("HC1", slotRef = UUID.randomUUID().toString(), detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)),
+    reason = "편집 결과가 하드 제약을 위반",
 )
 
 private val sampleViolation = AiViolation("HC1", slotRef = "2026-08-01#poi", detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)
