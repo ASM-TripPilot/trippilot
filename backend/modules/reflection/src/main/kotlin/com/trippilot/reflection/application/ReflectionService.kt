@@ -131,7 +131,7 @@ class ReflectionService(
     private fun draftFor(accountId: UUID, tripId: UUID, dayDate: LocalDate): Reflection {
         val visits = archive.findDailyVisits(tripId).firstOrNull { it.date == dayDate }?.visits.orEmpty()
         val surfaces = poiSurfaces.findSurfaces(visits.map { it.poiId })
-        val stats = statsOf(visits, surfaces)
+        val stats = statsOf(visits, surfaces, archive.findRouteDistances(tripId)[dayDate])
         // 근거 안에서만 쓴다(BR-U5-31) — 이름을 못 찾은 방문은 문장에 넣지 않는다.
         val placeNames = visits.filter { !it.skipped }.mapNotNull { surfaces[it.poiId]?.nameKo }
         // 폴백 3단(BR-U5-32): AI 카드 → 규칙 카드 → 기본 카드.
@@ -141,8 +141,11 @@ class ReflectionService(
         val source = if (aiCard != null) ReflectionSource.AI else ReflectionNarrator.sourceFor(stats)
         val now = clock.instant()
         // AI 호출이 끝난 **뒤에** 잠그고 읽는다 — 먼저 읽어 두면 생성 중에 들어온 기분·수정본을 옛 값으로 덮는다.
-        return reflections.findForUpdate(tripId, dayDate)?.regenerate(draft, source, stats, now)
-            ?: Reflection.of(tripId, dayDate, draft, source, stats, now)
+        val current = reflections.findForUpdate(tripId, dayDate)
+        // 통계는 잠근 **뒤에** 다시 센다 — AI 를 기다리는 사이 경로가 올라오면, 앞에서 센 근사값이 경로 갱신(refreshRouteStats)을
+        // 덮어쓴다. 잠근 뒤라면 그 갱신은 이 저장 뒤에 돌거나 이미 커밋돼 여기서 보인다.
+        val fresh = statsOf(visits, surfaces, archive.findRouteDistances(tripId)[dayDate])
+        return current?.regenerate(draft, source, fresh, now) ?: Reflection.of(tripId, dayDate, draft, source, fresh, now)
     }
 
     /**
@@ -251,20 +254,31 @@ class ReflectionService(
     }
 
     /**
+     * 그날 실제 경로가 올라왔다(U10 `ActualRouteStored`) — **통계만** 다시 센다(BR-U10-39). 본문(카드)은 다시 만들지 않는다:
+     * 이미 읽은 글이 바뀌고, AI 를 또 부르게 된다. 회고가 아직 없으면 할 일이 없다 — 나중에 만들 때 경로를 읽는다.
+     */
+    @Transactional
+    fun refreshRouteStats(tripId: UUID, dayDate: LocalDate) {
+        val current = reflections.findForUpdate(tripId, dayDate) ?: return
+        val visits = archive.findDailyVisits(tripId).firstOrNull { it.date == dayDate }?.visits.orEmpty()
+        val stats = statsOf(visits, poiSurfaces.findSurfaces(visits.map { it.poiId }), archive.findRouteDistances(tripId)[dayDate])
+        reflections.upsert(current.copy(stats = stats))
+    }
+
+    /**
      * 근거 수치. **비어 있을 수 없다**(INV-U5-07) — 방문이 0곳이면 0으로 채운다.
      *
-     * 거리는 **방문점 연결선 근사**다(BR-U5-43) — `actual_route_point` 가 미실장이라 서버가 실제
-     * 이동 경로를 모른다. 그래서 [DistanceSource.VISIT_LINE] 을 함께 실어, 받는 쪽이 근사값을
-     * 실측으로 읽지 않게 한다.
+     * 거리는 그날 **실제 경로**가 있으면 그 거리(클램프 후, [DistanceSource.ROUTE])이고, 없으면 **방문점 연결선 근사**다
+     * ([DistanceSource.VISIT_LINE], BR-U5-43 · U10 FD §7.2). 출처를 함께 실어 받는 쪽이 근사값을 실측으로 읽지 않게 한다.
      */
-    private fun statsOf(visits: List<ArchiveVisitView>, surfaces: Map<UUID, PoiSurfaceView>): ReflectionStats {
-        if (visits.isEmpty()) return ReflectionStats.empty()
+    private fun statsOf(visits: List<ArchiveVisitView>, surfaces: Map<UUID, PoiSurfaceView>, routeM: Int?): ReflectionStats {
+        if (visits.isEmpty() && routeM == null) return ReflectionStats.empty()
         val points = visits.filter { !it.skipped }.mapNotNull { surfaces[it.poiId] }
         val km = points.zipWithNext { a, b -> haversineKm(a.lat, a.lng, b.lat, b.lng) }.sum()
         return ReflectionStats(
             visitCount = visits.count { !it.skipped },
-            distanceKm = km,
-            distanceSource = DistanceSource.VISIT_LINE,
+            distanceKm = routeM?.let { it / 1000.0 } ?: km,
+            distanceSource = if (routeM != null) DistanceSource.ROUTE else DistanceSource.VISIT_LINE,
             photoCount = visits.sumOf { it.photoCount },
         )
     }

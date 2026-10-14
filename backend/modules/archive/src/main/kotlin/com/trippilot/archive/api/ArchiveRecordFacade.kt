@@ -22,6 +22,12 @@ interface ArchiveRecordFacade {
      * 호출측이 `poiId` 로 좌표를 얻는다(BR-U5-43).
      */
     fun findDailyVisits(tripId: UUID): List<ArchiveDayView>
+
+    /**
+     * 날짜별 **실제 경로 거리(m, 클램프 후)** — 그날 경로가 올라온 날만 있다(U10 FD §7.2). 회고가 그날 거리 출처를
+     * `ROUTE` 로 올리는 근거다. 좌표·세그먼트는 싣지 않는다(INV-U10-2) — 거리 하나면 된다.
+     */
+    fun findRouteDistances(tripId: UUID): Map<LocalDate, Int>
 }
 
 /** 하루치 실적. 날짜는 **여행지 기준**이다(U4 승계) — 즉석 방문은 슬롯 키가 없어 도착 시각으로 묶인다. */

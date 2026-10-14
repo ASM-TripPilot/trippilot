@@ -1,5 +1,6 @@
 package com.trippilot.reflection.application
 
+import com.trippilot.reflection.domain.DistanceSource
 import com.trippilot.archive.api.ArchiveDayView
 import com.trippilot.archive.api.ArchiveRecordFacade
 import com.trippilot.archive.api.ArchiveVisitView
@@ -60,6 +61,7 @@ class TripSummaryPropertyTest : StringSpec({
         val stored = mutableMapOf<UUID, TripSummary>()
         override fun upsert(summary: TripSummary) = summary.also { stored[it.tripId] = it }
         override fun find(tripId: UUID) = stored[tripId]
+        override fun findForUpdate(tripId: UUID) = stored[tripId]
     }
 
     class Sink : DomainEventPublisher {
@@ -67,8 +69,9 @@ class TripSummaryPropertyTest : StringSpec({
         override fun publish(event: DomainEvent) { published += event }
     }
 
-    fun archiveOf(days: List<ArchiveDayView>) = object : ArchiveRecordFacade {
+    fun archiveOf(days: List<ArchiveDayView>, routes: Map<java.time.LocalDate, Int> = emptyMap()) = object : ArchiveRecordFacade {
         override fun findDailyVisits(tripId: UUID) = days
+        override fun findRouteDistances(tripId: UUID) = routes
     }
 
     /** 좌표를 아는 POI 만 표면을 낸다 — 못 찾는 방문이 섞이는 것이 실제 상황이다. */
@@ -143,6 +146,57 @@ class TripSummaryPropertyTest : StringSpec({
         // 근거가 없는 이름은 지어내지 않는다(BR-U5-31).
         s.highlights.single().places.shouldBeEmpty()
         s.narrative.shouldNotBeBlank()
+    }
+
+    /** U10 FD §7.2 · BR-U10-39 — 날짜 단위로 실제 경로가 근사를 대신하고, 여행 전체 출처는 모든 날이 실제 경로일 때만 ROUTE 다. */
+    "실제 경로가 있는 날은 그 거리를 쓰고, 모든 날이 경로일 때만 요약 출처가 ROUTE 다" {
+        val seoul = UUID.randomUUID()
+        val busan = UUID.randomUUID()
+        val known = mapOf(seoul to (37.5665 to 126.9780), busan to (35.1796 to 129.0756))
+        val days = listOf(
+            ArchiveDayView(day0, listOf(visit(seoul), visit(busan))), // 근사 약 325km
+            ArchiveDayView(day0.plusDays(1), listOf(visit(seoul))),
+        )
+        fun gen(routes: Map<java.time.LocalDate, Int>) =
+            TripSummaryService(trips, archiveOf(days, routes), surfacesOf(known), Summaries(), Sink(), clock).generate(tripId).stats
+
+        gen(mapOf(day0 to 12_000)).let { (it.totalDistanceKm to it.distanceSource) shouldBe (12.0 to DistanceSource.VISIT_LINE) } // 둘째 날은 근사(0)
+        gen(mapOf(day0 to 12_000, day0.plusDays(1) to 3_500)).let { (it.totalDistanceKm to it.distanceSource) shouldBe (15.5 to DistanceSource.ROUTE) }
+        // 방문이 없는 날의 경로도 센다 — 걸었는데 들른 곳이 없던 날이다. 그 날이 근사가 아니므로 출처도 흔들리지 않는다
+        gen(mapOf(day0 to 12_000, day0.plusDays(1) to 3_500, day0.plusDays(2) to 1_000)).let {
+            (it.totalDistanceKm to it.distanceSource) shouldBe (16.5 to DistanceSource.ROUTE)
+        }
+
+        // 날짜별 하이라이트에 그날 거리·출처(FD §12.5) — 경로만 있는 날도 한 칸이다
+        val highlights = TripSummaryService(trips, archiveOf(days, mapOf(day0.plusDays(1) to 3_500, day0.plusDays(2) to 1_000)), surfacesOf(known), Summaries(), Sink(), clock)
+            .generate(tripId).highlights
+        highlights.map { Triple(it.dayOrder, it.distanceSource, it.visitCount) } shouldBe listOf(
+            Triple(1, DistanceSource.VISIT_LINE, 2), Triple(2, DistanceSource.ROUTE, 1), Triple(3, DistanceSource.ROUTE, 0),
+        )
+        (highlights[0].distanceKm!! > 300.0) shouldBe true // 서울↔부산 근사
+        highlights.drop(1).map { it.distanceKm } shouldBe listOf(3.5, 1.0)
+    }
+
+    "경로가 올라오면 이미 만든 요약의 통계만 다시 센다 — 본문은 그대로, 요약이 없으면 만들지 않는다" {
+        val seoul = UUID.randomUUID()
+        val days = listOf(ArchiveDayView(day0, listOf(visit(seoul))))
+        val repo = Summaries()
+        val routes = mutableMapOf<java.time.LocalDate, Int>()
+        val svc = TripSummaryService(trips, archiveOf(days, routes), surfacesOf(mapOf(seoul to (37.5665 to 126.9780))), repo, Sink(), clock)
+
+        svc.refreshRouteStats(tripId)
+        repo.find(tripId) shouldBe null
+
+        val before = svc.generate(tripId)
+        routes[day0] = 7_000
+        svc.refreshRouteStats(tripId)
+
+        val after = repo.find(tripId)!!
+        (after.stats.totalDistanceKm to after.stats.distanceSource) shouldBe (7.0 to DistanceSource.ROUTE)
+        // 그날 하이라이트의 거리 칸도 따라온다(FD §12.5) — 날짜·장소·본문은 그대로
+        after.highlights.single().let { (it.distanceKm to it.distanceSource) shouldBe (7.0 to DistanceSource.ROUTE) }
+        after.copy(stats = before.stats, highlights = before.highlights) shouldBe before
+        after.highlights.single().copy(distanceKm = 0.0, distanceSource = DistanceSource.VISIT_LINE) shouldBe before.highlights.single()
     }
 
     "날이 바뀌는 사이는 이동이 아니다 — 하루 안에서만 잰다(BR-U5-43)" {
