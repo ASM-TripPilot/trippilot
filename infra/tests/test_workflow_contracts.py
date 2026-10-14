@@ -25,7 +25,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(value['on']['workflow_dispatch']['inputs']['mode']['default'], 'plan')
         steps = value['jobs']['deploy']['steps']
         apply = next(step for step in steps if step.get('name') == 'Apply the saved run plan')
-        self.assertEqual(apply['if'], "inputs.mode == 'apply'")
+        self.assertEqual(apply['if'], "inputs.mode == 'apply' && steps.config.outputs.terraform == 'true'")
+        plan = next(step for step in steps if step.get('name') == 'Terraform plan')
+        self.assertEqual(plan['if'], "steps.config.outputs.terraform == 'true'")
         for step in steps:
             if step.get('name', '').startswith(('Build and publish', 'Synchronize runtime', 'Initialize database', 'Deploy and wait')):
                 self.assertIn("steps.config.outputs.deploy_application == 'true'", step['if'])
@@ -67,7 +69,8 @@ class WorkflowContractTests(unittest.TestCase):
         steps = value['jobs']['deploy']['steps']
         names = [s.get('name', '') for s in steps]
         load = steps[names.index('Load the Plan-B knowledge base')]
-        self.assertIn('inputs.embedding_enabled', load['if'])
+        # 입력이 아니라 대상이 정한 값 — 개발 대상은 임베딩을 늘 끈다
+        self.assertIn("steps.config.outputs.embedding_enabled == 'true'", load['if'])
         self.assertIn('runtime.py load-kb', load['run'])
         # 앱이 뜬 뒤여야 한다 — 적재는 ai 파드 안에서 돈다
         self.assertGreater(names.index('Load the Plan-B knowledge base'), names.index('Deploy and wait for healthy workloads'))
@@ -81,7 +84,28 @@ class WorkflowContractTests(unittest.TestCase):
         steps = value['jobs']['deploy']['steps']
         sync = next(s for s in steps if s.get('name') == 'Synchronize runtime secrets and render nonsecret Helm values')
         self.assertIn('--push-mode', sync['run'])
-        self.assertIn('PUSH_MODE_INPUT', sync['run'])
+        self.assertIn('EFFECTIVE_PUSH_MODE', sync['run'])
+
+    def test_deploy_target_drives_namespace_and_never_hardcodes_production(self):
+        """개발 대상 런이 운영 네임스페이스를 건드리면 운영 파드 시크릿이 개발 값으로 덮인다(#1258 검수)."""
+        value = workflow('aws-deploy.yml')
+        self.assertEqual(value['on']['workflow_dispatch']['inputs']['target']['options'], ['prod', 'dev'])
+        self.assertEqual(value['on']['workflow_dispatch']['inputs']['target']['default'], 'prod')
+        env = value['jobs']['deploy']['env']
+        # 인증서·주소는 workflow_config 가 골라 내보낸다 — 잡 env 에서 식으로 고르면 빈 개발 변수가 운영 값으로 떨어진다
+        self.assertNotIn('ACM_CERTIFICATE_ARN', env)
+        self.assertNotIn('API_HOSTNAME', env)
+        self.assertEqual(env['DEV_TARGET_ACM_CERTIFICATE_ARN'], '${{ vars.DEV_TARGET_ACM_CERTIFICATE_ARN }}')
+        self.assertEqual(env['PROD_ACM_CERTIFICATE_ARN'], '${{ vars.ACM_CERTIFICATE_ARN }}')
+        sync = next(s for s in value['jobs']['deploy']['steps'] if s.get('name') == 'Synchronize runtime secrets and render nonsecret Helm values')
+        self.assertIn('EFFECTIVE_PUSH_MODE', sync['run'])
+        self.assertNotIn('PUSH_MODE_INPUT', sync['run'])
+        text = (ROOT / '.github/workflows/aws-deploy.yml').read_text()
+        self.assertNotIn('--namespace trippilot', text)
+        self.assertNotIn('-n trippilot ', text)
+        self.assertNotIn('values-$DEPLOY_ENVIRONMENT', text)
+        # 모든 runtime.py 호출이 대상을 넘긴다(여러 줄 명령이라 횟수로 맞춘다)
+        self.assertEqual(text.count('python3 deploy/eks/runtime.py'), text.count('--target "$DEPLOY_TARGET"'))
 
     def test_infra_changes_are_validated_on_pull_requests_without_credentials(self):
         """Terraform PR 에는 체크가 없었고 차트 PR 은 gradle 초록만 받았다 — 깨진 변경이 머지 뒤
