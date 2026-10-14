@@ -19,7 +19,7 @@ from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from hypothesis import given, settings, strategies as st
+from hypothesis import assume, given, settings, strategies as st
 
 from trippilot.api.wiring import build_dev_app
 from trippilot.assembly_engine.constraints import check_all, free_visit_cap
@@ -116,6 +116,11 @@ def test_상한은_자유_방문만_깎고_고정_필수는_빼지_않는다(see
     ids = list(index)
     fixed = tuple(FixedBlock(ids[i], TimeWindow(_at(10 + 3 * i), _at(11 + 3 * i)), "잠금")
                   for i in range(n_fixed))
+    # 고정 쌍 사이 이동이 간격(120분)을 넘으면 입력부터 성립 불가다 — 상한 없이도 OR 은 None,
+    # 폴백은 같은 HC2 위반을 낸다(seed=850). 상한의 속성이 아니므로 배제한다.
+    assume(all(_EST.estimate(index[a.poi_id].coord, index[b.poi_id].coord, problem.transport)
+               .internal_minutes <= int((b.window.start - a.window.end).total_seconds() // 60)
+               for a, b in zip(fixed, fixed[1:])))
     required = (RequiredVisit(ids[n_fixed], _DAY, None, "필수"),) if with_required else ()
     base = replace(problem, fixed_blocks=fixed, required_visits=required, travel_weight=0.05)
     capped = replace(base, max_visits_per_day=cap)
