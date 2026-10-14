@@ -20,18 +20,18 @@ class LocationAutomationIntervalPersistence(private val jdbc: NamedParameterJdbc
     override fun find(intervalId: UUID): LocationAutomationInterval? =
         jdbc.query("SELECT * FROM location_automation_interval WHERE interval_id = :id", mapOf("id" to intervalId), ::row).firstOrNull()
 
-    override fun insert(interval: LocationAutomationInterval) {
+    override fun insertIfAbsent(interval: LocationAutomationInterval): Boolean =
         jdbc.update(
             """
             INSERT INTO location_automation_interval (interval_id, trip_id, account_id, kind, started_at)
             VALUES (:id, :trip, :account, :kind, :startedAt)
+            ON CONFLICT (interval_id) DO NOTHING
             """.trimIndent(),
             mapOf(
                 "id" to interval.intervalId, "trip" to interval.tripId, "account" to interval.accountId,
                 "kind" to interval.kind.name, "startedAt" to Timestamp.from(interval.startedAt),
             ),
-        )
-    }
+        ) == 1
 
     override fun closeIfOpen(closed: LocationAutomationInterval): Boolean = jdbc.update(
         """
@@ -56,7 +56,8 @@ class LocationAutomationIntervalPersistence(private val jdbc: NamedParameterJdbc
     )
 
     override fun findOpen(): List<LocationAutomationInterval> =
-        jdbc.query("SELECT * FROM location_automation_interval WHERE ended_at IS NULL", ::row)
+        // 순서를 고정한다 — 두 인스턴스가 다른 순서로 행을 잠그면 교착이 난다(하나가 취소될 뿐이지만).
+        jdbc.query("SELECT * FROM location_automation_interval WHERE ended_at IS NULL ORDER BY interval_id", ::row)
 
     private fun row(rs: ResultSet, @Suppress("UNUSED_PARAMETER") n: Int) = LocationAutomationInterval(
         intervalId = rs.getObject("interval_id", UUID::class.java),

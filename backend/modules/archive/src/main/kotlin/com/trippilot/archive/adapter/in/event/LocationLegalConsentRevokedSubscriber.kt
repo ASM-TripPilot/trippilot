@@ -24,7 +24,7 @@ class LocationLegalConsentRevokedSubscriber(
     override fun handle(envelope: EventEnvelope) {
         val accountId = runCatching { UUID.fromString(envelope.aggregateId) }.getOrNull()
             ?: error("LocationLegalConsentRevoked 의 aggregateId 를 계정으로 읽지 못했습니다. eventId=${envelope.eventId}")
-        val closed = automation.closeOnConsentRevoked(accountId, routeOnly = false)
+        val closed = automation.closeOnConsentRevoked(accountId, routeOnly = false, revokedAt = envelope.occurredAt)
         if (closed > 0) log.info("u10.interval_closed reason=CONSENT_REVOKED scope=L2 count={}", closed)
     }
 

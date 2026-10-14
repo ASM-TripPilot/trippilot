@@ -10,6 +10,7 @@ import com.trippilot.auth.api.LocationIntervalPhase
 import com.trippilot.auth.api.LocationLegalLogFacade
 import com.trippilot.auth.api.LocationUsePurpose
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
@@ -73,9 +74,14 @@ class LocationAutomationService(
      */
     @Transactional
     fun report(accountId: UUID, tripId: UUID, report: IntervalReport) {
-        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
+        val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         if (report.at > clock.instant() + CLOCK_SKEW) {
             throw ValidationFailed(listOf(FieldError("at", "보고 시각이 서버 시각보다 앞서 있습니다.")))
+        }
+        // 여행 구간(± 하루) 밖의 시각은 받지 않는다 — 옛 시각의 START 하나가 무장 판정을 여행 전체로 늘린다(SEC-U10-07 정신).
+        val day = LocalDate.ofInstant(report.at, TRAVEL_ZONE)
+        if (day < period.startDate.minusDays(1) || day > period.endDate.plusDays(1)) {
+            throw ValidationFailed(listOf(FieldError("at", "보고 시각이 여행 기간 밖입니다.")))
         }
         val existing = intervals.find(report.intervalId)
         if (existing != null && (existing.tripId != tripId || existing.kind != report.kind)) {
@@ -90,13 +96,17 @@ class LocationAutomationService(
 
     private fun start(accountId: UUID, tripId: UUID, report: IntervalReport, existing: LocationAutomationInterval?) {
         if (existing != null) return // 재전송
-        if (!properties.enabled) throw ConflictDetected(message = "자동 기록이 지금 꺼져 있습니다.")
+        // 409 를 코드로 가른다 — 기기는 둘 다 강등하지만, 원인이 다르고(서버가 껐다 / 사용자가 동의를 안 했다) 다른 409(구간 id
+        // 재사용 등)와 섞이면 기기가 강등해야 할 때를 모른다. 강등하지 않으면 서버엔 구간도 법정 로그도 없는데 기기는 무장한 채다.
+        if (!properties.enabled) throw ConflictDetected(message = "자동 기록이 지금 꺼져 있습니다.", errorCode = ErrorCode.AUTOMATION_DISABLED)
         val consented = consents.hasLocationLegalConsent(accountId) &&
             (report.kind == IntervalKind.GEOFENCE_ARMED || consents.hasGpsRecordingOptIn(accountId))
-        if (!consented) throw ConflictDetected(message = "위치 동의가 없어 시작할 수 없습니다.")
+        if (!consented) {
+            throw ConflictDetected(message = "위치 동의가 없어 시작할 수 없습니다.", errorCode = ErrorCode.LOCATION_CONSENT_REQUIRED)
+        }
         val opened = LocationAutomationInterval(report.intervalId, tripId, accountId, report.kind, report.at)
-        intervals.insert(opened)
-        log(opened, LocationIntervalPhase.START, report.at)
+        // 같은 START 가 동시에 둘 오면 하나만 들어간다 — 들어간 쪽만 로그를 남긴다(500 도 중복 로그도 없다).
+        if (intervals.insertIfAbsent(opened)) log(opened, LocationIntervalPhase.START, report.at)
     }
 
     private fun end(report: IntervalReport, existing: LocationAutomationInterval) {
@@ -112,12 +122,12 @@ class LocationAutomationService(
      * 기기도 철회 즉시 멈추고 END 를 보내지만(BR-U10-46), 철회 뒤에는 아무것도 올리지 않으므로 그 END 가 안 올 수 있다.
      */
     @Transactional
-    fun closeOnConsentRevoked(accountId: UUID, routeOnly: Boolean): Int {
-        val now = clock.instant()
-        return intervals.findOpenByAccount(accountId)
+    fun closeOnConsentRevoked(accountId: UUID, routeOnly: Boolean, revokedAt: Instant): Int =
+        intervals.findOpenByAccount(accountId)
             .filter { !routeOnly || it.kind == IntervalKind.ROUTE_RECORDING }
-            .count { close(it, now, IntervalEndReason.CONSENT_REVOKED, null, null) }
-    }
+            // 끝 시각은 **철회 시각**이다 — 처리 시각으로 닫으면 릴레이 지연(재시도 백오프면 십여 분)만큼 법정 로그가 철회 뒤에도
+            // 이용이 이어진 것으로 적는다.
+            .count { close(it, revokedAt, IntervalEndReason.CONSENT_REVOKED, null, null) }
 
     /**
      * END 가 오지 않은 구간을 **여행 종료 + 1일**에 닫는다(BR-U10-48 · G-U10-11) — 앱이 강제 종료·삭제되면 END 가 영영 안 온다.
@@ -134,9 +144,13 @@ class LocationAutomationService(
         val now = clock.instant()
         val today = LocalDate.ofInstant(now, TRAVEL_ZONE)
         return intervals.findOpen().count { open ->
-            // 여행이 지워졌으면 구간도 CASCADE 로 사라졌다 — 여기 남은 것은 있는 여행이다. 그래도 못 찾으면 둔다.
-            val period = owners.findOwnedPeriod(open.tripId) ?: return@count false
-            today > period.endDate.plusDays(1) && close(open, now, IntervalEndReason.SERVER_TIMEOUT, null, null)
+            val period = owners.findOwnedPeriod(open.tripId)
+                // 여행이 지워졌다 — **소프트 삭제**라 행과 구간이 남고(CASCADE 가 닿지 않는다) 기기의 END 는 404 로 막힌다.
+                // 지금 닫지 않으면 영영 안 닫혀 법정 로그에 시작만 남는다.
+                ?: return@count close(open, now, IntervalEndReason.SERVER_TIMEOUT, null, null)
+            // 끝 시각은 그 하루의 끝(종료 + 2일 00:00)이다 — 훑은 시각으로 닫으면 스위퍼 주기만큼 이용이 늘어난 것으로 적힌다.
+            val deadline = period.endDate.plusDays(2).atStartOfDay(TRAVEL_ZONE).toInstant()
+            now >= deadline && close(open, deadline, IntervalEndReason.SERVER_TIMEOUT, null, null)
         }.also { if (it > 0) log.info("u10.interval_sweep closed={}", it) }
     }
 

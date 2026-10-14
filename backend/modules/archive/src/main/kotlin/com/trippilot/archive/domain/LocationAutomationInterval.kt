@@ -39,7 +39,8 @@ enum class IntervalEndReason { CLIENT_STOP, PERMISSION_DOWNGRADE, ACCURACY_REDUC
 interface LocationAutomationIntervalRepository {
     fun find(intervalId: UUID): LocationAutomationInterval?
 
-    fun insert(interval: LocationAutomationInterval)
+    /** 없을 때만 넣는다. 넣었으면 true — 같은 START 가 동시에 둘 와도 하나만 들어가고 그쪽만 로그를 남긴다. */
+    fun insertIfAbsent(interval: LocationAutomationInterval): Boolean
 
     /**
      * **열려 있을 때만** 닫는다(조건부 쓰기). 닫았으면 true — 기기 END·철회·스위퍼가 겹쳐도 한 번만 닫히고,

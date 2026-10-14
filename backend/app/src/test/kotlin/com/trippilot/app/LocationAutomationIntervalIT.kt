@@ -8,12 +8,14 @@ import com.trippilot.archive.domain.IntervalEndReason
 import com.trippilot.archive.domain.IntervalKind
 import com.trippilot.archive.domain.LocationAutomationIntervalRepository
 import com.trippilot.auth.api.LocationIntervalPhase
+import com.trippilot.auth.application.AccountDeletionService
 import com.trippilot.auth.application.LocationConsentService
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import com.trippilot.trip.application.TripService
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
@@ -49,6 +51,8 @@ class LocationAutomationIntervalIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
     @Autowired private lateinit var mapper: ObjectMapper
+    @Autowired private lateinit var deletions: AccountDeletionService
+    @Autowired private lateinit var tripService: TripService
 
     private val past = Instant.now().minus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS)
 
@@ -120,6 +124,16 @@ class LocationAutomationIntervalIT : AbstractPostgresIntegrationTest() {
         intervals.find(id)!!.endReason shouldBe IntervalEndReason.CLIENT_STOP
     }
 
+    /** 같은 START 가 동시에 둘 오면 둘 다 "없다"를 보고 넣으려 한다 — 하나만 들어가야 하고 다른 쪽은 500 이 아니라 조용히 진다. */
+    @Test
+    fun `같은 구간을 두 번 넣으면 두 번째는 들어가지 않는다`() {
+        val (accountId, tripId) = newTrip()
+        val row = com.trippilot.archive.domain.LocationAutomationInterval(UUID.randomUUID(), tripId, accountId, IntervalKind.GEOFENCE_ARMED, past)
+        intervals.insertIfAbsent(row) shouldBe true
+        intervals.insertIfAbsent(row.copy(startedAt = past.plusSeconds(60))) shouldBe false
+        intervals.find(row.intervalId)!!.startedAt shouldBe past
+    }
+
     @Test
     fun `끝과 사유는 함께 있거나 함께 없다`() {
         val (accountId, tripId) = newTrip()
@@ -152,6 +166,34 @@ class LocationAutomationIntervalIT : AbstractPostgresIntegrationTest() {
 
         intervals.find(armed)!!.endReason shouldBe IntervalEndReason.CONSENT_REVOKED
         intervalLogs(armed).size shouldBe 2
+    }
+
+    /** 계정 삭제는 L2 철회 이벤트를 내지 않고 GPS 옵트아웃(사유 = 계정 삭제)만 낸다. 같은 요청이 세션을 끊어 기기 END 도 못 온다. */
+    @Test
+    fun `계정 삭제를 요청하면 무장 구간까지 닫힌다`() {
+        val (accountId, tripId) = newTrip()
+        val armed = UUID.randomUUID()
+        automation.report(accountId, tripId, IntervalReport(armed, IntervalKind.GEOFENCE_ARMED, LocationIntervalPhase.START, past))
+
+        deletions.requestDeletion(AccountId(accountId))
+        repeat(RELAY_TRIES) { if (intervals.find(armed)!!.isOpen) relay.relay() }
+
+        intervals.find(armed)!!.endReason shouldBe IntervalEndReason.CONSENT_REVOKED
+        intervalLogs(armed).size shouldBe 2
+    }
+
+    /** 여행 삭제는 소프트 삭제라 CASCADE 가 닿지 않는다 — 실 여행 파사드로 스위퍼가 그것을 닫는지 본다. */
+    @Test
+    fun `지워진 여행의 열린 구간은 스위퍼가 닫는다`() {
+        val (accountId, tripId) = newTrip()
+        val id = UUID.randomUUID()
+        automation.report(accountId, tripId, IntervalReport(id, IntervalKind.GEOFENCE_ARMED, LocationIntervalPhase.START, past))
+        tripService.delete(accountId, tripId)
+
+        automation.sweep()
+
+        intervals.find(id)!!.endReason shouldBe IntervalEndReason.SERVER_TIMEOUT
+        intervalLogs(id).size shouldBe 2
     }
 
     private companion object {

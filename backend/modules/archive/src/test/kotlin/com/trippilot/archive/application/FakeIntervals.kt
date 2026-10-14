@@ -9,9 +9,10 @@ import java.util.UUID
 internal class FakeIntervals : LocationAutomationIntervalRepository {
     val rows = linkedMapOf<UUID, LocationAutomationInterval>()
     override fun find(intervalId: UUID) = rows[intervalId]
-    override fun insert(interval: LocationAutomationInterval) {
-        check(interval.intervalId !in rows) { "PK 중복" }
+    override fun insertIfAbsent(interval: LocationAutomationInterval): Boolean {
+        if (interval.intervalId in rows) return false
         rows[interval.intervalId] = interval
+        return true
     }
     override fun closeIfOpen(closed: LocationAutomationInterval): Boolean {
         if (rows[closed.intervalId]?.isOpen != true) return false
