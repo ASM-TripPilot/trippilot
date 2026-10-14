@@ -82,7 +82,11 @@ class KakaoExistenceAdapter:
         self, queries: tuple[ExistenceQuery, ...], *, deadline_ms: int
     ) -> tuple[ExistenceVerdict, ...]:
         started = self._monotonic_ms()
-        self.calls_used = 0          # 요청 1건 = 예산 1벌 (위 주석)
+        # 요청 1건 = 예산 1벌 (위 주석). **지역 변수다** — 인스턴스 하나를 요청 간 공유하고
+        # (main.py 조립) `/generate` 는 sync def 라 스레드풀에서 동시에 돈다. 인스턴스
+        # 카운터를 요청마다 0 으로 되돌리면 끼어든 요청이 남의 사용량을 지워 상한을 넘긴다
+        # (GooglePlacesHoursAdapter 와 같은 결함, #1130).
+        used = 0
         out: list[ExistenceVerdict] = []
         for i, q in enumerate(queries):
             if self._monotonic_ms() - started >= deadline_ms:
@@ -93,14 +97,16 @@ class KakaoExistenceAdapter:
                     for r in queries[i:]
                 )
                 break
+            if used >= self._max_calls:
+                out.append(ExistenceVerdict(q.poi_id, ExistenceStatus.UNVERIFIED,
+                                            reason="call_budget_exhausted"))
+                continue
+            used += 1
             out.append(self._verify_one(q))
+        self.calls_used = used  # 관측용 — 마지막으로 끝난 verify() 의 사용량
         return tuple(out)
 
     def _verify_one(self, q: ExistenceQuery) -> ExistenceVerdict:
-        if self.calls_used >= self._max_calls:
-            return ExistenceVerdict(q.poi_id, ExistenceStatus.UNVERIFIED,
-                                    reason="call_budget_exhausted")
-        self.calls_used += 1
         try:
             payload = self._http.get_json(_ENDPOINT, self._headers, {
                 "query": q.name,
