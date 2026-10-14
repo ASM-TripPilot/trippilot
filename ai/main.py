@@ -642,6 +642,14 @@ def _warn_unwired(*, weather, embedding, feature_models: Mapping | None) -> None
                     "규칙 랭킹으로 강등된다")
     if feature_models is not None and not feature_models:
         log.warning("TRIPPILOT_LLM_FEATURE_MODELS 비어 있음 — 전 기능이 단일 기본 모델로 동작")
+    elif feature_models:
+        # 종수·미배정 목록 한 줄 — 새 feature 가 들어왔는데 시크릿 배정이 안 따라오면 그 기능만
+        # 조용히 티어 기본 모델로 돈다. 배포 smoke(`ai-wiring:`)가 이 줄을 끌어올린다.
+        from trippilot.domain.llm import LlmFeature
+
+        missing = [f.value for f in LlmFeature if f not in feature_models]
+        log.info("기능별 모델 배정 %d종 / 미배정 %d종%s", len(feature_models), len(missing),
+                 f": {', '.join(missing)}" if missing else "")
     if weather is None:
         log.warning("WEATHER_API 미설정 — 날씨 보정 없이(no_adjust) 동작")
 
