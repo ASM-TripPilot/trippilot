@@ -1595,3 +1595,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U4 Functional Design 사후 개정 승인. 남은 것은 앱 동작의 Figma 추인(G-U4-8, 설계 문서 밖).
 
 ---
+## Functional Design 사후 개정 — U3 BR-U3-25 · U2 BR-U2-05 (빈 풀 반경 1회 자동 확대)
+**Timestamp**: 2026-10-14T06:40:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "검색 결과가 비면 반경을 자동으로 넓혀 다시 찾을까? 이거 물어봤잖아. 나는 찬성. 그리고 naver map이나 kakao map으로 해도 되지않아? 걔네는 대중교통 재공해줄거 같은데"
+**AI Response**: 종전 정본은 확대를 사용자가 누르는 h15(BR-U3-25)로 뒀다. 사용자 결정에 따라 생성·재계획은 검색 결과(반경 풀)가 비면 AI 가 반경을 한 단(×1.5, 상한 자차 20km) 넓혀 **한 번** 더 찾는다 — 루프 아님, 넓혀도 비면 종전 경로. U3 `business-rules.md`(BR-U3-25)·`business-logic-model.md`(h35 행), U2 `business-rules.md`(BR-U2-05 NO_CANDIDATES 의미)·`business-logic-model.md`(폴백표 행)에 `[개정 · 2026-10-14]` 블록 추가(원문 보존). 코드: `poi_curation.pool_builder.widened_radius_km`, `schedule_coordinator._generate` ①″, `wiring.replan`. 재계획에서 사용자가 NEARBY·LESS_MOVE 를 직접 말한 경우만 건너뛴다(사유 암시는 막지 않음). 슬롯 교체(h15)의 확대는 종전대로 백엔드 1단(#1051). 네이버·카카오 대중교통은 개방 API 가 없어 불가(TMAP 대중교통 구독 또는 ODsay).
+**Context**: CONSTRUCTION — U3/U2 Functional Design 사후 개정, 승인 대기(같은 PR 의 머지 = 승인, #1071 선례).
+
+---

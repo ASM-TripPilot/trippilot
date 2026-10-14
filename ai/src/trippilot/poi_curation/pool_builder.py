@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from trippilot.domain.common import TransportMode
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.poi import DataQuality, Poi
@@ -17,19 +18,51 @@ from trippilot.poi_curation.config import M7Config
 
 _ALLOWED_QUALITY = frozenset({DataQuality.FULL, DataQuality.PARTIAL})
 
+# 빈 풀 1회 확대 배율(2026-10-14 사용자 결정 — "검색 결과가 비면 자동으로 넓혀 다시 찾는다").
+# 상한은 자차 반경(`radius_km[CAR]`) — 그보다 넓히면 "주변"이 아니다.
+WIDEN_FACTOR = 1.5
+
+
+def base_radius_km(request: CandidatePoolRequest, cfg: M7Config) -> float:
+    """풀 반경 규칙 **한 곳** — 명시 반경이 우선, 없으면 수단별 기본에 다일 축소(×0.7).
+
+    코디네이터가 "비면 넓혀 다시" 를 위해 같은 규칙을 읽는다 — 두 벌이면 한쪽만 바뀐다.
+    """
+    if request.radius_override_km is not None:
+        return request.radius_override_km
+    radius = cfg.radius_km[request.transport]
+    if len(request.dates) > 1:
+        radius *= cfg.multi_day_factor
+    return radius
+
+
+def widened_radius_km(request: CandidatePoolRequest, cfg: M7Config) -> float | None:
+    """빈 풀을 한 번 더 찾을 반경 — 넓힐 여지가 없으면 None(이미 상한이거나 호출자가 반경을 정했다).
+
+    **다일 축소분 위에 ×1.5 다** — PUBLIC 단일 10→15, 다일 7→10.5, WALK 2→3, 자차 단일 20→None(상한).
+    다일 ×0.7 은 "밀집 지역이라 좁혀도 된다"는 가정이고 빈 풀은 그 가정이 깨진 상태라 축소를
+    먼저 되돌리는 안도 있었지만, 상대 50% 한 단으로 통일했다(사용자 체감은 같은 "한 단").
+    """
+    if request.radius_override_km is not None:
+        return None
+    base = base_radius_km(request, cfg)
+    widened = min(base * WIDEN_FACTOR, cfg.radius_km[TransportMode.CAR])
+    return widened if widened > base else None
+
 
 class CandidatePoolBuilder:
     def __init__(self, poi_db, config: M7Config) -> None:
         self._db = poi_db
         self._cfg = config
 
+    @property
+    def config(self) -> M7Config:
+        """반경 규칙을 같은 설정으로 읽어야 하는 쪽(빈 풀 1회 확대)에 내준다 — 기본값을 따로 만들지 않게."""
+        return self._cfg
+
     def build(self, request: CandidatePoolRequest, now: datetime) -> CandidatePool:
-        # ① 반경 (다일 여행 ×0.7)
-        radius = request.radius_override_km
-        if radius is None:
-            radius = self._cfg.radius_km[request.transport]
-            if len(request.dates) > 1:
-                radius *= self._cfg.multi_day_factor
+        # ① 반경 (다일 여행 ×0.7) — 규칙은 `base_radius_km` 한 곳
+        radius = base_radius_km(request, self._cfg)
         pois = list(self._db.find_by_radius(request.anchor, radius))
 
         # ② 예산 — avg_cost None=통과 (미확인=배제 안 함), HIGH=무제한

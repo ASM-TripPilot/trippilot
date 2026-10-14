@@ -250,9 +250,13 @@ def _build(
     renderer=None,
     weather=None,
     events=None,
+    pool_cfg: M7Config | None = None,
+    poi_db=None,
 ):
     trace = InMemoryTrace()
-    builder = CandidatePoolBuilder(InMemoryPoi(tuple(pois)), M7Config())
+    # 빌더와 코디네이터는 **같은** 반경 설정을 본다 — 빈 풀 1회 확대가 그 전제로 돈다(배선도 같은 것을 넘긴다).
+    pool_cfg = pool_cfg if pool_cfg is not None else M7Config()
+    builder = CandidatePoolBuilder(poi_db if poi_db is not None else InMemoryPoi(tuple(pois)), pool_cfg)
     resolver = ContextResolver(_Store(store_value))
     gateway = GatewayFacade(
         score_llm if score_llm is not None else FakeLlm(_scores_json("p1", "p2", "p3")),
@@ -293,6 +297,7 @@ def _build(
         trace,
         context_resolver=resolver,  # 소유 검증(fail-closed, TRIP-333)도 같은 resolver
         config=config,
+        pool_config=pool_cfg,
     )
     return orchestrator, trace, sink
 
@@ -437,6 +442,94 @@ def test_empty_pool_skips_llm_and_still_returns_itinerary() -> None:
     assert any(d.reason == "empty_pool" for d in outcome.degradations)
     assert outcome.solution is not None
     assert outcome.solution.solve_mode is SolveMode.MINIMAL
+
+
+# ── ①″ 빈 풀이면 반경을 한 단 넓혀 한 번 더 (2026-10-14 사용자 결정, BR-U3-25 개정) ──
+# `_poi(i, off)` 는 위도·경도를 off° 씩 밀어 ≈ off × 142km. 오프셋 0.086~0.088° → 12.2~12.5km:
+# PUBLIC 기본 10km 밖, 넓힌 15km(×1.5) 안. (`_FAR_POIS` 는 3.0° ≈ 422km — 넓혀도 안 든다.)
+_RING_POIS = tuple(_poi(i, 0.085 + 0.001 * i) for i in (1, 2, 3))
+
+
+class _SecondCallFails:
+    """1차 반경 조회는 정상, 2차(넓힌 조회)만 예외 — 2차 수집 실패가 '0건'으로 위장되지 않는지."""
+
+    def __init__(self, inner):
+        self._inner, self.calls = inner, 0
+
+    def find_by_radius(self, center, radius_km):
+        self.calls += 1
+        if self.calls == 2:
+            raise RuntimeError("backend 503")
+        return self._inner.find_by_radius(center, radius_km)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def test_empty_pool_widens_the_radius_once_and_uses_the_wider_pool() -> None:
+    orchestrator, _, _ = _build(pois=_RING_POIS)
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.candidate_count == 3, "넓힌 풀이 안 쓰였다"
+    assert not any(d.reason == "empty_pool" for d in outcome.degradations)
+    widened = [d for d in outcome.degradations if d.stage == "pool" and d.reason.startswith("radius_widened:")]
+    assert widened and "10->15km before=0 after=3" in widened[0].reason, outcome.degradations
+    assert outcome.status is GenerationStatus.DEGRADED  # 사용자가 안 누른 확대는 숨기지 않는다
+    assert outcome.candidates_summary.level != "NO_CANDIDATES"  # 요약도 넓힌 풀 기준
+
+
+def test_widening_is_once_and_falls_back_when_still_empty() -> None:
+    orchestrator, _, _ = _build(pois=_FAR_POIS)  # ≈422km — 넓혀도 안 든다
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.candidate_count == 0
+    assert any(d.reason == "empty_pool" for d in outcome.degradations)  # 종전 경로 그대로
+    widened = [d for d in outcome.degradations if d.reason.startswith("radius_widened:")]
+    assert len(widened) == 1 and "after=0" in widened[0].reason  # 루프가 아니라 1회
+    assert outcome.solution is not None and outcome.solution.solve_mode is SolveMode.MINIMAL
+
+
+def test_no_widening_when_caller_fixed_the_radius_or_already_at_the_cap() -> None:
+    from dataclasses import replace as _replace
+
+    orchestrator, _, _ = _build(pois=_RING_POIS)
+    fixed = orchestrator.generate(
+        _replace(_request(), radius_override_km=10.0), 20_000, _TRACE_ID, _NOW)
+    assert fixed.candidate_count == 0
+    assert not any(d.reason.startswith("radius_widened:") for d in fixed.degradations)
+
+    orchestrator, _, _ = _build(pois=_FAR_POIS)
+    car = orchestrator.generate(
+        _replace(_request(), transport=TransportMode.CAR), 20_000, _TRACE_ID, _NOW)  # 20km = 상한
+    assert not any(d.reason.startswith("radius_widened:") for d in car.degradations)
+
+
+def test_failed_widened_lookup_is_reported_as_unavailable_not_as_zero() -> None:
+    """2차 수집이 죽으면 '넓혀도 0건'이 아니라 '넓힌 조회 불가 + 사유'다 — 12km 에 POI 3곳이 실재한다."""
+    db = _SecondCallFails(InMemoryPoi(_RING_POIS))
+    orchestrator, _, _ = _build(poi_db=db)
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert db.calls == 2
+    assert not any(d.reason.startswith("radius_widened:") for d in outcome.degradations)
+    unavailable = [d for d in outcome.degradations if d.reason.startswith("radius_widen_unavailable:")]
+    assert unavailable and "10->15km" in unavailable[0].reason and "503" in unavailable[0].reason, outcome.degradations
+    assert outcome.solution is not None and outcome.solution.solve_mode is SolveMode.MINIMAL  # 종전 폴백
+
+
+def test_widening_reads_the_same_radius_config_as_the_builder() -> None:
+    """반경 5km 설정 — 빌더가 5 로 찾고 코디네이터가 5->7.5 로 넓힌다(둘이 다른 기본값을 보면 어긋난다)."""
+    cfg = M7Config(radius_km={TransportMode.WALK: 1.0, TransportMode.PUBLIC: 5.0, TransportMode.CAR: 20.0})
+    near_ring = tuple(_poi(i, 0.045 + 0.001 * i) for i in (1, 2, 3))  # ≈6.4~6.7km: 5 밖, 7.5 안
+    orchestrator, _, _ = _build(pois=near_ring, pool_cfg=cfg)
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.candidate_count == 3
+    assert any("radius_widened:5->7.5km" in d.reason for d in outcome.degradations), outcome.degradations
 
 
 def test_explanation_failure_keeps_itinerary() -> None:

@@ -70,6 +70,8 @@ from trippilot.domain.llm import CandidatePool
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.poi_curation.config import M7Config
+from trippilot.poi_curation.pool_builder import base_radius_km, widened_radius_km
 from trippilot.orchestrator.event_affinity import event_bonus_map
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.ports.trace_port import TracePort
@@ -121,6 +123,7 @@ class ScheduleCoordinator:
         *,
         context_resolver: OwnershipVerifier,
         config: OrchestratorConfig | None = None,
+        pool_config: M7Config | None = None,
     ) -> None:
         # 수집은 전부 InfoCollector 경유 (TRIP-406·407) — 풀(PLACE)은 필수,
         # 날씨(WEATHER)·페르소나(PERSONA)·행사(EVENT)는 미등록 시 기능 부재로 동작.
@@ -130,6 +133,8 @@ class ScheduleCoordinator:
         self._trace = trace
         self._resolver = context_resolver  # 소유 검증 갈래만 쓴다 (TRIP-333)
         self._cfg = config or OrchestratorConfig()
+        # 빈 풀 1회 확대가 읽는 반경 규칙 — 풀 빌더와 **같은 설정**이어야 한다(배선이 같은 것을 넘긴다).
+        self._pool_cfg = pool_config or M7Config()
 
     # ── 공개 API ────────────────────────────────────────────────────
 
@@ -209,6 +214,54 @@ class ScheduleCoordinator:
         persona = request.persona or self._collected_persona(packets)
         # 풀 실측 보고 (BR-U2-05 — 경계로 그대로 나간다)
         summary = candidates_report(pool, days=len(request.days), persona=persona)
+
+        # ①″ 빈 풀이면 반경을 한 단 넓혀 **한 번** 더 찾는다 (2026-10-14 사용자 결정, BR-U3-25 개정).
+        #    종전엔 0건이면 그대로 폴백(MINIMAL)으로 내려가 "주변에 없다"가 곧 빈 일정이었다 —
+        #    정본은 확대를 사용자가 누르는 h15 로 뒀지만 "비면 자동으로 넓혀 다시" 로 바꿨다.
+        #    루프가 아니라 1회: 넓혀도 비면 종전 경로 그대로. 다시 받는 것은 **PLACE 만** — 페르소나·
+        #    날씨·행사는 반경과 무관한 재료라 1차 패킷을 그대로 쓴다(다시 받으면 외부 HTTP 만 늘고
+        #    시한만 준다). 시계 원점(t0)은 그대로라 재수집 시간은 뒤 단계 잔여에서 저절로 빠진다.
+        #    사실은 숨기지 않는다(INV-4): 강등 `pool:radius_widened`(와이어 degradations 코드 — 표시는
+        #    BE 후속), 2차 수집 자체가 실패하면 `radius_widen_unavailable`(0건으로 위장하지 않는다),
+        #    넓힐 여지가 없으면(호출자 반경·자차 상한) 관측만 남긴다.
+        if summary.level == "NO_CANDIDATES":
+            first_request = CandidatePoolRequest(
+                anchor=request.anchor, dates=request.days, budget=request.budget,
+                transport=request.transport, radius_override_km=request.radius_override_km)
+            widened = widened_radius_km(first_request, self._pool_cfg)
+            if widened is None:
+                why = "override" if request.radius_override_km is not None else "at_cap"
+                self._observe(trace_id, now, "pool", "radius", "radius",
+                              f"radius_widen_skipped:{why}")
+            else:
+                base = base_radius_km(first_request, self._pool_cfg)
+                second = self._info.collect(
+                    Intent.GENERATE_SCHEDULE,
+                    {
+                        "pool_request": CandidatePoolRequest(
+                            anchor=request.anchor, dates=request.days, budget=request.budget,
+                            transport=request.transport, radius_override_km=widened),
+                        "anchor": request.anchor,
+                        "days": request.days,
+                        "now": now,
+                        "principal": request.principal,
+                        "persona_ref": request.persona_ref,
+                    },
+                    only=frozenset({ProviderKind.PLACE}),
+                )
+                widened_pool = self._resolve_pool(second)
+                if widened_pool is None:
+                    place = second.get(ProviderKind.PLACE)
+                    reason = (place.data.get("reason", place.status.value)
+                              if place is not None else "place_provider_unregistered")
+                    self._degrade(steps, trace_id, now, "pool", "radius", "radius",
+                                  f"radius_widen_unavailable:{base:g}->{widened:g}km {reason}")
+                else:
+                    packets[ProviderKind.PLACE] = second[ProviderKind.PLACE]
+                    pool = widened_pool
+                    summary = candidates_report(pool, days=len(request.days), persona=persona)
+                    self._degrade(steps, trace_id, now, "pool", "radius", "radius_widened",
+                                  f"radius_widened:{base:g}->{widened:g}km before=0 after={summary.pool_size}")
         m7_elapsed = self._clock.monotonic_ms() - t0
         if budget.m7_ms and m7_elapsed > budget.m7_ms:
             # 풀 없이는 일정이 없으므로 풀 단계는 스킵 대상이 아니다 — 초과는 관측만 하고,

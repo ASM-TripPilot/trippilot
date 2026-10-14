@@ -177,7 +177,7 @@ from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelecti
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
-from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
+from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, base_radius_km, widened_radius_km
 from trippilot.orchestrator import schedule_coordinator as core
 from trippilot.ports.llm_port import LlmPort
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
@@ -1385,6 +1385,8 @@ class WiredItineraryOrchestrator:
         self._tz = tz
         self._info = info
         self._pool_builder = pool_builder
+        # 재계획의 빈 풀 1회 확대가 읽는 반경 규칙 — 풀 빌더와 같은 설정(기본값을 따로 만들지 않는다).
+        self._pool_cfg = pool_builder.config
         self._rag = rag
         self._explainer = explainer
         self._alt_explainer = alternative_explainer  # 미주입 = 차선책 문장 없음(템플릿 유지)
@@ -1851,8 +1853,40 @@ class WiredItineraryOrchestrator:
             params["persona_ref"] = ResourceRef(
                 kind="persona", ref_id=request.trip_id, owner_id=request.trip_id)
         packets = self._info.collect(Intent.REPLAN, params)
-        pool = self._pool_from(packets, now)
-        pool = self._with_current_slots(pool, request, now, notes)
+        radius_pool = self._pool_from(packets, now)
+        if not radius_pool.pois:
+            # **검색 결과(반경 풀)가 비면** 반경을 한 단 넓혀 **한 번** 더 찾는다 (2026-10-14 사용자 결정,
+            # BR-U3-25 개정). 판정은 원 일정 합류 **앞**에서 — 실 요청은 원 일정 슬롯이 늘 실려 합류 뒤
+            # 풀은 거의 비지 않으므로, 합류 뒤에 걸면 확대가 실서비스에서 한 번도 안 돈다(리뷰 재현).
+            # "가까운 데로"(NEARBY·LESS_MOVE)를 **사용자가 말한** 경우만 건너뛴다 — 넓히는 것이 그 말과
+            # 반대라서. 사유가 암시한 LESS_MOVE(피로·우천 → `near`)는 막지 않는다: 그 사용자에겐
+            # "아무 데도 없음"보다 조금 먼 곳이 낫고, 먼 곳은 뒤의 경로 감점이 알아서 민다(#1103).
+            # 사용자 키는 `resolved`(+ 사전 미주입 때의 `unknown`)에 있고 암시는 `planb_reason_implied`
+            # 노트로 따로다. 다시 받는 것은 PLACE 만(페르소나·날씨는 1차 패킷). 넓혀도 비면 종전
+            # NO_CANDIDATE 그대로. 시계 원점(t0)은 그대로다. 안 넓힌 이유도 노트로 남긴다.
+            near_user = any(key in _NEAR_KEYS for key in (*resolved, *unknown))
+            widened = None if near_user else widened_radius_km(params["pool_request"], self._pool_cfg)
+            if widened is None:
+                why = ("near" if near_user
+                       else "override" if params["pool_request"].radius_override_km is not None
+                       else "at_cap")
+                notes.append(f"pool_widen_skipped: {why}")
+            else:
+                base = base_radius_km(params["pool_request"], self._pool_cfg)
+                second = self._info.collect(
+                    Intent.REPLAN,
+                    {**params, "pool_request": replace(params["pool_request"], radius_override_km=widened)},
+                    only=frozenset({ProviderKind.PLACE}),
+                )
+                place = second.get(ProviderKind.PLACE)
+                if place is None or not isinstance(place.data.get("pool_ref"), str):
+                    reason = place.data.get("reason", place.status.value) if place is not None else "unregistered"
+                    notes.append(f"pool_widened_unavailable: {base:g}->{widened:g}km, {reason}")
+                else:
+                    packets[ProviderKind.PLACE] = place
+                    radius_pool = self._pool_from(packets, now)
+                    notes.append(f"pool_widened: {base:g}->{widened:g}km, before=0, after={len(radius_pool.pois)}")
+        pool = self._with_current_slots(radius_pool, request, now, notes)
         if not pool.pois:
             return self._replan_empty("NO_CANDIDATE", notes, resolved, unknown)
 
@@ -3110,6 +3144,8 @@ def build_orchestrator(
         # 소유 검증(fail-closed, TRIP-333)도 같은 resolver — 보안 규칙의 권위 1곳.
         context_resolver=resolver,
         config=orchestrator_config,
+        # 빈 풀 1회 확대가 읽는 반경 규칙 — 풀 빌더에 준 것과 같은 설정(None 이면 양쪽 다 기본).
+        pool_config=m7_config,
     )
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
