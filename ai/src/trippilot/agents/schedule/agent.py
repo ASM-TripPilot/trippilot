@@ -41,7 +41,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
-from typing import Iterable, Mapping, Protocol, Sequence
+from typing import Collection, Iterable, Mapping, Protocol, Sequence
 
 from trippilot.agents.schedule.budget import DeadlineBudget, OrchestratorConfig
 from trippilot.agents.schedule.family import family_followers, related_to_any
@@ -88,7 +88,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.domain.poi import OpenHour, Poi, PoiCategory
 from trippilot.llm_gateway.workers.alternative_explanation import (
     AlternativeExplanationWorker,
 )
@@ -264,6 +264,28 @@ class ScheduleTask:
     # (25s)에 PlanB·구성·점수 LLM 셋이 들어가면 넘친다(2026-10-13 504, #1102).
     llm_composed: bool = False
 
+
+
+# 영업시간을 끝내 모르는 후보의 **추정 창** (TRIP-1397). 정보 없음을 "종일 영업"으로 읽어 창을 00:00~23:59 로
+# 주면 세종문화회관 00:17·북한산 02:32 에 놓였다(2026-10-13 DEV, 영업시간 보유 ≈46%). 카테고리별로
+# 촘촘히 추정하면 틀린 추정이 멀쩡한 곳을 막으니, "새벽엔 안 간다" 하나만 건다 — 야경만 밤을 연다.
+# 자유 후보에만 건다: 사용자가 고정한 곳·검증(validate) 경로는 정보 없음을 그대로 막지 않는다.
+PRESUMED_OPEN_MIN, PRESUMED_CLOSE_MIN = 7 * 60, 23 * 60
+PRESUMED_NIGHT = (16 * 60, 26 * 60)  # 야경 16:00~익일 02:00
+
+
+def presume_hours(pool: CandidatePool, keep: Collection[PoiId] = ()) -> CandidatePool:
+    """영업시간 없는 후보에 추정 창(요일 전부)을 채운다. 있는 곳·숙소·`keep`(사용자가 고른 곳)은 그대로."""
+    def presumed(p: Poi) -> Poi:
+        if p.open_hours or p.category is PoiCategory.STAY or p.poi_id in keep:
+            return p
+        lo, hi = (PRESUMED_NIGHT if p.category is PoiCategory.NIGHT_VIEW
+                  else (PRESUMED_OPEN_MIN, PRESUMED_CLOSE_MIN))
+        return replace(p, open_hours=tuple(OpenHour(day_of_week=d, open_min=lo, close_min=hi)
+                                           for d in range(7)))
+
+    pois = tuple(presumed(p) for p in pool.pois)
+    return replace(pool, pois=pois) if pois != pool.pois else pool
 
 class ScheduleAgent:
     def __init__(
@@ -466,6 +488,10 @@ class ScheduleAgent:
         #    HC1 이 읽는 것은 바로 아래 `for_pool(pool.pois)` 이다. 이 교체가 그보다
         #    아래면 조립은 옛 POI 를 본다 — 이 리포가 같은 모양으로 네 번 당했다.
         pool = self._enrich_hours(pool, candidates, budget, t0, steps, trace_id, now)
+        # 그래도 없는 곳은 새벽에 놓지 않는다 (TRIP-1397) — 사용자가 고정·필수로 고른 곳은 빼고.
+        pool = presume_hours(pool, keep={fb.poi_id for fb in request.fixed_blocks}
+                             | {rv.poi_id for rv in request.required_visits
+                                if rv.reason != "llm_compose"})
 
         # ⓪′ 영업시간 밖에 핀된 고정 블록은 **빼고 보고한다** (TRIP-1249). 종전엔 HC1 이 OR·그리디
         #    둘 다에서 걸려 409 → BE 가 그 단계를 통째로 최소 일정으로 바꿨다 — 핀 하나로 하루가

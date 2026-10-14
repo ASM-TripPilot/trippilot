@@ -423,6 +423,24 @@ def test_generate_keeps_each_day_inside_its_own_window(assembly_config) -> None:
                 assert start <= slot["start_at"][:5] and slot["end_at"][:5] <= end, (d, slot)
 
 
+# ── ③‴ 영업시간 모르는 곳은 새벽에 안 놓는다 (TRIP-1397) ────────────────
+
+
+def test_unknown_hours_are_not_placed_overnight_but_user_pins_are_kept() -> None:
+    """창을 00:00~23:59 로 주면 정보 없음(=종일)이라 새벽 00:17·02:32 에 놓였다(DEV 10-13)."""
+    body = _request(window=("00:00", "23:59"),
+                    fixed_blocks=({"poi_id": "p1", "date": _DAY1.isoformat(),
+                                   "start": "01:00", "dwell_min": 60},))
+    with make_client(pois=_MANY_POIS) as client:
+        response = client.post("/ai/v1/itinerary/generate", json=body)
+    assert response.status_code == 200, response.text
+    slots = [s for d in response.json()["days"] for s in d["slots"]]
+    pinned = [s for s in slots if s["poi_id"] == "p1"]
+    assert pinned and pinned[0]["start_at"].startswith("01:00")  # 사용자가 고정한 곳은 추정을 안 건다
+    free = [s for s in slots if s["poi_id"] != "p1"]
+    assert free and all("07:00" <= s["start_at"][:5] and s["end_at"][:5] <= "23:00" for s in free), free
+
+
 # ── ④ validate · repair 관통 ─────────────────────────────────────────
 
 
