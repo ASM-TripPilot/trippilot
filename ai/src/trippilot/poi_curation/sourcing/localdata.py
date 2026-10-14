@@ -34,7 +34,7 @@ from trippilot.poi_curation.sourcing.collection_gate import (
     SourcingCandidate,
     _haversine_m,  # 게이트와 같은 거리 — 반경 판정이 게이트 판정과 어긋나지 않게
 )
-from trippilot.poi_curation.sourcing.mapping import extract_region
+from trippilot.poi_curation.sourcing.mapping import extract_region, is_franchise
 from trippilot.poi_curation.sourcing.pipeline import SCHEMA_VERSION
 
 SOURCE_NAME = "LOCALDATA"   # 백엔드 PoiSource 어휘 (V2.61 poi_source_check)
@@ -150,6 +150,7 @@ DROP_NOT_OPEN = "not_open"
 DROP_TYPE_NOT_ADOPTED = "type_not_adopted"
 DROP_NO_NAME = "no_name"
 DROP_NOT_MEAL_STOP = "not_meal_stop"   # 뒤에 ":사유" — cafeteria · funeral · wedding · golf · dog_meat · highway
+DROP_FRANCHISE = "franchise"           # 전국 치킨·버거·피자 체인 (사용자 결정 2026-10-14)
 DROP_NO_ADDRESS = "address_missing"
 DROP_NO_COORD = "no_coord"
 DROP_NO_REF = "no_source_ref"
@@ -203,6 +204,12 @@ def to_candidate(
     reason = not_a_meal_stop(name)
     if reason is not None:
         return f"{DROP_NOT_MEAL_STOP}:{reason}"
+    # 전국 체인(사용자 결정 2026-10-14). 규칙 자체는 `mapping.non_travel_reason` 에도 있어
+    # 모든 출처가 게이트에서 걸리지만, **여기서 한 번 더 일찍 끊는 데 뜻이 있다** — 후보에서
+    # 빠져야 그 앵커의 12자리가 비고 지역 식당이 들어온다. 게이트에서 끊으면 체인이 자리를
+    # 차지한 채 떨어져 그 자리가 그냥 사라진다(실측: 일찍 끊어 지역 식당 61곳이 들어왔다).
+    if is_franchise(name):
+        return DROP_FRANCHISE
     # 도로명이 우선이다 — 게이트 3단 주소 키(addr_key)가 도로명주소만 읽는다
     address = normalize_address(row.get("도로명주소")) or normalize_address(row.get("지번주소"))
     if address is None:
