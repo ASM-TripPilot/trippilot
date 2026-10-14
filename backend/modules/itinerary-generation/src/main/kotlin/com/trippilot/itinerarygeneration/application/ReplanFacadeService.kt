@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.changelog.api.AppendChangeLog
+import com.trippilot.changelog.api.ChangeLogEntryView
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
@@ -24,6 +25,7 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.ReplanChange
 import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
 import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.placedata.api.PoiSnapshotFacade
@@ -36,6 +38,7 @@ import com.trippilot.trip.api.TripGenerationContext
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
@@ -108,6 +111,14 @@ class ReplanFacadeService(
                 // 방금 밀어낸 곳을 다시 제안하지 않게 하는 것이 저장의 목적이다.
                 rejections = rejectionStore.findByTrip(command.tripId),
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), REPLAN_DEADLINE_MS),
+                // 변경 이력(TRIP-975) — 이 날짜를 건드린 것만, diff 로. 조회 실패는 재계획을 막지 않는다:
+                // 이력은 "같은 제안 반복 방지"의 보조 재료라 없으면 종전과 같다.
+                changeLog = runCatching {
+                    changesOn(changeLogs.findTimeline(command.accountId, command.tripId, CHANGE_LOG_SCAN), command.targetDate)
+                }.getOrElse {
+                    log.warn("변경 이력 조회 실패 — 이력 없이 재계획합니다. tripId={}", command.tripId, it)
+                    emptyList()
+                },
             ),
         )
         // **요청한 날짜만** 받는다. 다른 날을 돌려줬을 때 그것을 오늘 초안으로 삼으면, 확정 순간
@@ -293,5 +304,30 @@ class ReplanFacadeService(
         /** 여행 "지금"은 사용자가 있는 곳의 시각이다(서버 UTC 아님). */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
         private const val MINUTES_PER_DAY = 24 * 60L
+
+        /**
+         * 변경 이력을 몇 건까지 훑을까 — 그중 **이 날짜를 건드린 것**만 남는다(TRIP-975).
+         * 상대 계약 상한이 20건이라 남는 것도 20으로 자른다(`ChangeLogEntrySchema` max_length).
+         */
+        private const val CHANGE_LOG_SCAN = 50
+        private val log = org.slf4j.LoggerFactory.getLogger(ReplanFacadeService::class.java)
     }
 }
+
+/** 상대 계약(`ReplanRequest.change_log` max_length)과 같은 값 — 넘기면 422 다. */
+internal const val CHANGE_LOG_MAX = 20
+
+/**
+ * 변경 이력(최신순) → 이 날짜의 diff (TRIP-975). 전후 스냅숏 중 어느 쪽이든 그 날짜가 있으면 대상이고,
+ * 그날 빠진 곳·들어온 곳이 둘 다 없으면(시각만 옮긴 편집) 버린다 — "같은 곳을 또 제안하지 않게"에는
+ * 장소 변화만 쓸모가 있다. 시각·행위자는 싣지 않는다([ReplanChange] KDoc).
+ */
+internal fun changesOn(timeline: List<ChangeLogEntryView>, date: LocalDate): List<ReplanChange> =
+    timeline.mapNotNull { e ->
+        val before = e.before.days.filter { it.date == date }.flatMap { d -> d.slots.map { it.poiId } }.toSet()
+        val after = e.after.days.filter { it.date == date }.flatMap { d -> d.slots.map { it.poiId } }.toSet()
+        val removed = (before - after).sorted()
+        val added = (after - before).sorted()
+        if (removed.isEmpty() && added.isEmpty()) null
+        else ReplanChange(e.sourceType.name, e.reason, e.at, removed, added)
+    }.take(CHANGE_LOG_MAX)

@@ -379,6 +379,17 @@ internal data class AiReplanRequest(
      */
     val savedPlaces: List<AiSavedPlace> = emptyList(),
     val excludedPoiIds: List<UUID> = emptyList(),
+    /** 이 날짜를 건드린 변경 이력(TRIP-975) — 상대 `ChangeLogEntrySchema`. 비면 종전과 같다. */
+    val changeLog: List<AiChangeLogEntry> = emptyList(),
+)
+
+/** 변경 이력 한 건 — 그날 diff 만(시각·행위자 없음, [com.trippilot.itinerarygeneration.domain.ReplanChange]). */
+internal data class AiChangeLogEntry(
+    val source: String,
+    val reason: String?,
+    val at: Instant,
+    val removedPoiIds: List<String>,
+    val addedPoiIds: List<String>,
 )
 
 /** 하루 이용 시각. 창은 **하루 전체**다 — '지금 이후만' 은 잠금으로 표현한다(정본 §3.1). */

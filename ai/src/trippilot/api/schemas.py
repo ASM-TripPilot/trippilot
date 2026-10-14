@@ -502,6 +502,24 @@ class ReplanSlotSchema(BoundaryModel):
     placement_reason: str | None = None  # visit_slot.placement_reason
 
 
+class ChangeLogEntrySchema(BoundaryModel):
+    """변경 이력 한 건 (TRIP-975) — 백엔드 `change_log_entry`(V2.11, append-only)의 **압축형**.
+
+    백엔드는 전후 **스냅숏 전체**를 갖고 있지만 여기로는 그날의 diff 만 온다. 셋을 일부러 뺐다:
+    - 스냅숏 전체 — 원 일정은 `current_slots` 로 이미 온다
+    - 시각 — 프롬프트로 새면 근거 문장에 옮겨 적힌다. 시간표현 게이트는 `09:00` 같은 콜론 형식을
+      통과시키므로 재료에서 빼는 것이 유일한 방어다(INV-2·INV-3)
+    - 행위자(`actor`) — 계정 id 다. 쓸모가 없고 개인 데이터다
+    diff 는 **백엔드가 계산한다** — 전후를 둘 다 가진 쪽이 계산하는 것이 맞다.
+    """
+
+    source: Literal["PLAN_B", "MANUAL", "COEDIT", "ASSISTANT"]
+    reason: str | None = Field(default=None, max_length=500)
+    at: dt.datetime  # 정렬 근거일 뿐 — 프롬프트에 싣지 않는다
+    removed_poi_ids: list[str] = Field(default_factory=list)
+    added_poi_ids: list[str] = Field(default_factory=list)
+
+
 class ReplanRequest(BoundaryModel):
     """POST /ai/v1/planb/replan — 하루를 다시 짠다 (i04 → i06). (구 itinerary 경로는 TRIP-960 ④ 에서 삭제)
 
@@ -548,6 +566,10 @@ class ReplanRequest(BoundaryModel):
     transport_mode: str | None = None
     saved_places: list[SavedPlaceSchema] = Field(default_factory=list)
     excluded_poi_ids: list[str] = Field(default_factory=list)
+    # 이 날짜를 건드린 변경 이력, 최신순 (TRIP-975) — 정본 KB-1 표의 "변경 이력", 용도는 **같은 제안
+    # 반복 방지**. 기본 빈 목록이라 백엔드가 안 보내도 종전과 같다. 상한 20 은 백스톱이고 주된
+    # 제한은 날짜 필터다(실측이 아니라 프롬프트 예산에서 잡은 값).
+    change_log: list[ChangeLogEntrySchema] = Field(default_factory=list, max_length=20)
     request_meta: RequestMetaSchema
 
     @model_validator(mode="after")

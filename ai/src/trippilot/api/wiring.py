@@ -2626,6 +2626,8 @@ class WiredItineraryOrchestrator:
             planb_picks=tuple(index[p].name for p in planb_rank if p in index)[:5],
             persona=_persona_line(persona),
             max_visits=limit,
+            recent_changes=composition.recent_change_lines(
+                request.change_log, {p.poi_id: p.name for p in pool.pois}),
             change_rule=composition.change_rule(
                 request.reasons,
                 day_directives=any(s.cardinality != "ONE" for s in chosen),
