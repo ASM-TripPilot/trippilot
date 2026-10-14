@@ -78,7 +78,9 @@ def _targets(doc: dict, *, only_missing_hours: bool) -> list[tuple[str, str, flo
         poi = p.get("poi") or {}
         prov = p.get("provenance") or {}
         cid = prov.get("content_id")
-        lat, lng = poi.get("lat"), poi.get("lng")
+        # 수집본은 `Poi.to_dict()` 모양 — 좌표가 `coord` 아래 중첩이다(평평한 lat 은 0건)
+        coord = poi.get("coord") or {}
+        lat, lng = coord.get("lat"), coord.get("lng")
         if not cid or lat is None or lng is None or not poi.get("name"):
             continue
         if only_missing_hours and poi.get("open_hours"):
@@ -111,6 +113,10 @@ def main() -> int:
 
     print(f"[place_id] 대상 {len(todo):,}건 (기해결 {len(ids):,}건 건너뜀) · "
           f"상한 {args.max_calls:,}콜", file=sys.stderr)
+    if not targets:
+        # 0건은 대개 "할 일 없음"이 아니라 문서 모양이 바뀐 것이다 — 조용히 끝내지 않는다.
+        print(f"[place_id] ⚠️ 경고: 제안 {len(doc.get('proposals', [])):,}건에서 검색 대상 0건 — "
+              "poi.coord·poi.name·provenance.content_id 모양을 확인하라", file=sys.stderr)
 
     calls = 0
     stat: Counter[str] = Counter()

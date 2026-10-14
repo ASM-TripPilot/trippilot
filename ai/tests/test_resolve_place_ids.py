@@ -16,13 +16,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import resolve_place_ids as R  # noqa: E402
 
+from trippilot.domain.common import GeoPoint, PoiId  # noqa: E402
+from trippilot.domain.poi import (  # noqa: E402
+    DataQuality,
+    OpenHour,
+    Poi,
+    PoiCategory,
+    PoiSource,
+)
+
 
 def _prop(cid: str, name: str, *, hours: list | None = None,
           lat: float = 37.5, lng: float = 127.0) -> dict:
-    return {
-        "provenance": {"content_id": cid},
-        "poi": {"name": name, "lat": lat, "lng": lng, "open_hours": hours or []},
-    }
+    """수집본과 **같은 경로**로 만든다(`pipeline` 이 `p.poi.to_dict()` 를 싣는다).
+
+    손으로 평평한 `lat` 을 쓰던 fixture 가 실물(`poi.coord.lat`)과 어긋난 채 통과해
+    실제 공유본 19,084건에서 대상 0건인 것을 가렸다 — 모양이 바뀌면 여기서 같이 바뀐다.
+    """
+    poi = Poi(
+        poi_id=PoiId(f"tourapi-{cid}"), name=name, category=PoiCategory.SIGHT,
+        coord=GeoPoint(lat, lng),
+        open_hours=tuple(OpenHour.from_dict(h) for h in hours or ()),
+        avg_cost=None, rating=None, quality=DataQuality.PARTIAL,
+        source=PoiSource.PLACES_API, confidence=None,
+    )
+    return {"provenance": {"content_id": cid}, "poi": poi.to_dict()}
 
 
 # ── 대상 선정 — 물을 범위가 곧 비용이다 ────────────────────────────
@@ -46,14 +64,32 @@ def test_all_을_주면_전부_대상이다() -> None:
 
 
 @pytest.mark.parametrize("bad", [
-    {"provenance": {}, "poi": {"name": "x", "lat": 1.0, "lng": 2.0}},        # cid 없음
-    {"provenance": {"content_id": "1"}, "poi": {"lat": 1.0, "lng": 2.0}},    # 이름 없음
-    {"provenance": {"content_id": "1"}, "poi": {"name": "x", "lng": 2.0}},   # 좌표 없음
-    {"provenance": {"content_id": "1"}, "poi": {"name": "x", "lat": 1.0}},
+    {"provenance": {}, "poi": {"name": "x", "coord": {"lat": 1.0, "lng": 2.0}}},      # cid 없음
+    {"provenance": {"content_id": "1"}, "poi": {"coord": {"lat": 1.0, "lng": 2.0}}},  # 이름 없음
+    {"provenance": {"content_id": "1"}, "poi": {"name": "x"}},                        # 좌표 없음
+    {"provenance": {"content_id": "1"}, "poi": {"name": "x", "coord": {"lng": 2.0}}},
+    {"provenance": {"content_id": "1"}, "poi": {"name": "x", "coord": {"lat": 1.0}}},
 ])
 def test_검색에_필요한_것이_없으면_건너뛴다(bad: dict) -> None:
     """좌표가 없으면 동명을 가릴 수 없다 — 지어내기보다 빠뜨리는 편이 낫다."""
     assert R._targets({"proposals": [bad]}, only_missing_hours=True) == []
+
+
+def test_좌표는_수집본의_coord_에서_읽는다() -> None:
+    """수집본 POI 좌표는 `poi.coord.{lat,lng}` 중첩이다 — 평평한 `poi.lat` 을 읽으면
+    실제 공유본 19,084건에서 대상이 **0건**이 된다(Codex 리뷰 재현, 평탄화하면 4,097건)."""
+    (got,) = R._targets({"proposals": [_prop("1", "성산일출봉", lat=33.46, lng=126.94)]},
+                        only_missing_hours=True)
+    assert got == ("1", "성산일출봉", 33.46, 126.94)
+
+
+def test_대상이_0건이면_경고한다(tmp_path: Path, monkeypatch, capsys) -> None:
+    """0건은 "할 일이 없다"가 아니라 대개 **문서 모양이 바뀌었다**는 뜻이다 —
+    조용히 성공으로 끝나면 빈 표를 만들고 기능이 꺼진 채로 남는다."""
+    _run(tmp_path, monkeypatch, results={},
+         doc_props=[{"provenance": {"content_id": "1"}, "poi": {"name": "x"}}])
+    err = capsys.readouterr().err
+    assert "경고" in err and "poi.coord" in err   # 요약의 '대상 0건' 한 줄과 구별된다
 
 
 # ── 요금 경계 — 여기를 건드리면 무료가 유료가 된다 ─────────────────

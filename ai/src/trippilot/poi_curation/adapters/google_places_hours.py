@@ -29,6 +29,7 @@ Google 정책상 `place_id` 를 제외한 Places 콘텐츠는 캐시·저장이 
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
@@ -74,14 +75,17 @@ class GooglePlacesHoursAdapter(PlaceHoursPort):
         # **단조 시계여야 한다** — `time.time()*1000` 은 NTP 역행 한 번에 차분이
         # 음수가 되어 마감이 무력화된다 (KakaoExistenceAdapter 와 같은 이유).
         self._monotonic_ms = monotonic_ms
-        self.calls_used = 0          # 이번 fetch() 에서 쓴 수
+        # 인스턴스 하나를 요청 간 공유한다(main.py 조립) — `/generate` 는 sync def 라
+        # 스레드풀에서 동시에 돈다. 그래서 요청당 카운터는 `fetch` 지역 변수이고,
+        # 공유하는 월 카운터는 확인·차감을 잠금 안에서 한 번에 한다.
+        self._lock = threading.Lock()
         self.calls_total = 0         # 인스턴스 누적 — 월 상한 판정용
 
     def fetch(
         self, queries: tuple[HoursQuery, ...], *, deadline_ms: int
     ) -> tuple[HoursVerdict, ...]:
         started = self._monotonic_ms()
-        self.calls_used = 0
+        calls_used = 0               # 이번 fetch() 에서 쓴 수 — 요청마다 따로 (위 주석)
         out: list[HoursVerdict] = []
         for i, q in enumerate(queries):
             if self._monotonic_ms() - started >= deadline_ms:
@@ -89,16 +93,24 @@ class GooglePlacesHoursAdapter(PlaceHoursPort):
                 out.extend(HoursVerdict(r.poi_id, reason="deadline_exceeded")
                            for r in queries[i:])
                 break
-            out.append(self._fetch_one(q))
+            verdict = self._over_budget(q, calls_used)
+            if verdict is None:
+                calls_used += 1
+                verdict = self._fetch_one(q)
+            out.append(verdict)
         return tuple(out)
 
+    def _over_budget(self, q: HoursQuery, calls_used: int) -> HoursVerdict | None:
+        """상한에 걸리면 그 판정, 아니면 월 카운터 1건을 차감하고 None."""
+        with self._lock:
+            if self.calls_total >= self._monthly_budget:
+                return HoursVerdict(q.poi_id, reason="monthly_budget_exhausted")
+            if calls_used >= self._max_calls:
+                return HoursVerdict(q.poi_id, reason="call_budget_exhausted")
+            self.calls_total += 1
+        return None
+
     def _fetch_one(self, q: HoursQuery) -> HoursVerdict:
-        if self.calls_total >= self._monthly_budget:
-            return HoursVerdict(q.poi_id, reason="monthly_budget_exhausted")
-        if self.calls_used >= self._max_calls:
-            return HoursVerdict(q.poi_id, reason="call_budget_exhausted")
-        self.calls_used += 1
-        self.calls_total += 1
         try:
             payload = self._http.get_json(_ENDPOINT + q.place_id, self._headers)
         except Exception as e:   # noqa: BLE001 — 경계 밖으로 던지지 않는다(DL-5)
@@ -117,7 +129,8 @@ def parse_regular_opening_hours(payload: object) -> tuple[OpenHour, ...]:
     · **요일 번호가 다르다.** Google 은 `0=일요일`, 우리는 `0=월요일`이다.
       그대로 쓰면 **일정이 하루씩 밀린다** — 월요일 휴무가 일요일 휴무가 된다.
     · **`close` 가 없으면 24시간 영업**이다. 빈 값으로 읽어 버리면 늘 열린 곳이
-      늘 닫힌 곳이 된다.
+      늘 닫힌 곳이 된다. 그 요일 하루로만 읽고 전 요일로 넓히지 않는다 — 단 하나,
+      Google 이 정한 **상시 영업(24/7) 표기**는 7일 전부다(아래 본문 주석).
 
     자정 넘김(금 22:00~토 02:00)은 `close_min` 을 1440 초과로 둔다 — `OpenHour`
     계약이 그렇게 정의돼 있고, 수집 파서도 같은 방식이다.
@@ -143,6 +156,18 @@ def parse_regular_opening_hours(payload: object) -> tuple[OpenHour, ...]:
         if closed is None:
             # close 부재 = 24시간 영업. 한 요일만 오더라도 전 요일로 읽지 않는다 —
             # 원문이 말한 것은 "이 구간이 안 닫힌다"까지다.
+            #
+            # 예외는 **상시 영업 표기 하나**: period 가 하나뿐이고 open 이 Google
+            # day=0·hour=0·minute=0(우리 6=일요일 00:00), close 가 없으면 7일 전부다.
+            # 공식 문서(Places API (New) REST `places` 리소스, regularOpeningHours):
+            #   "Note that if a place is always open (24 hours), the close field will
+            #    not be set. Clients can rely on always open (24 hours) being
+            #    represented as an open period containing day with value 0, hour with
+            #    value 0, and minute with value 0."
+            # 일요일 하루로 읽으면 월~토가 휴무가 되어 HC1 이 엿새를 닫힌 곳으로 본다.
+            if len(periods) == 1 and (day, open_min) == (6, 0):
+                return tuple(OpenHour(day_of_week=d, open_min=_ALL_DAY[0],
+                                      close_min=_ALL_DAY[1]) for d in range(7))
             out.append(OpenHour(day_of_week=day, open_min=_ALL_DAY[0],
                                 close_min=_ALL_DAY[1]))
             continue
