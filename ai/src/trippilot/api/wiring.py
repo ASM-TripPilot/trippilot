@@ -339,6 +339,10 @@ def _transport_from(request: schemas.GenerateItineraryRequest) -> TransportMode:
     return _transport_of(request.preference_profile.transport_modes)
 
 
+# 고정 장소가 그날 기준점에서 이만큼 넘게 떨어지면 다른 도시로 본다 — 수도권·광역시 하루 동선(≈40km)의 두 배 남짓.
+_FIXED_FAR_KM = 100.0
+
+
 def _request_findings(request: schemas.GenerateItineraryRequest) -> list[str]:
     """요청이 **조용히 다르게** 처리되는 지점 — 거부하지 않고 `degradations` 로 밝힌다(TRIP-1392, INV-4).
 
@@ -1492,6 +1496,43 @@ def _past_blocks(
     return tuple(b for b in blocks if b.window.end <= not_before)
 
 
+_SOFT_LOCKS = frozenset({"in_progress", "keep_dinner"})  # AI 가 건 잠금 — 사용자 잠금에 양보한다
+
+
+def _overlapping_locks(blocks: Sequence[FixedBlock]) -> tuple[FixedBlock, ...]:
+    """서로 겹치는 잠금 중 솔버에서 뺄 것 (TRIP-1397) — 둘 다 넣으면 모든 조립 단계가 실패한다.
+
+    사용자 잠금을 먼저, 시각 순으로 담고 이미 담은 것과 겹치면 뺀다. 뺀 사용자 잠금은 사영에서
+    원 시각 그대로 되싣는다(`_echo_locks`) — 사용자가 둔 것을 지우지 않는다.
+    """
+    kept: list[FixedBlock] = []
+    out: list[FixedBlock] = []
+    for b in sorted(blocks, key=lambda b: (b.reason in _SOFT_LOCKS, b.window.start)):
+        if any(b.window.start < k.window.end and k.window.start < b.window.end for k in kept):
+            out.append(b)
+        else:
+            kept.append(b)
+    return tuple(out)
+
+
+def _echo_locks(
+    solution: ItinerarySolution, locks: tuple[FixedBlock, ...], day: date
+) -> ItinerarySolution:
+    """조립이 못 지킨 잠금을 원 시각 그대로 되싣는다 — 겹치는 **새** 방문은 뺀다(잠금끼리는 둔다)."""
+    def clash(slot: VisitSlot, pinned: set[tuple[PoiId, datetime]]) -> bool:
+        return (slot.poi_id, slot.start_at) not in pinned and any(
+            slot.start_at < b.window.end and b.window.start < slot.end_at for b in locks)
+
+    days = tuple(
+        replace(d, slots=tuple(
+            s for s in d.slots
+            if not clash(s, {(fb.poi_id, fb.window.start) for fb in d.fixed_blocks})))
+        if d.date == day else d
+        for d in solution.days
+    )
+    return _with_past_blocks(replace(solution, days=days), locks, day)
+
+
 def _with_past_blocks(
     solution: ItinerarySolution, past: tuple[FixedBlock, ...], day: date
 ) -> ItinerarySolution:
@@ -1651,16 +1692,27 @@ class WiredItineraryOrchestrator:
         return self._with_findings(
             request, replace(merged, degradations=(*merged.degradations, *degradations)))
 
-    @staticmethod
-    def _with_findings(request: schemas.GenerateItineraryRequest, out: WiredOutcome) -> WiredOutcome:
-        """요청 이상(`_request_findings`) + 빈 하루를 `degradations` 에 싣는다(TRIP-1392).
+    def _with_findings(self, request: schemas.GenerateItineraryRequest, out: WiredOutcome) -> WiredOutcome:
+        """요청 이상(`_request_findings`) + 빈 하루 + 먼 고정을 `degradations` 에 싣는다(TRIP-1392·1397).
 
         빈 하루(창이 짧거나 후보가 0곳)는 200 으로 나가도 되지만 말없이 나가면 안 된다(INV-4).
+        먼 고정 — 부산 장소를 서울 일정에 고정하면 그 1곳만 든 하루가 말없이 나갔다(329km, DEV 10-13).
         """
         found = _request_findings(request)
         filled = {d.date for d in (out.solution.days if out.solution else ()) if d.slots}
         if any(w.date not in filled for w in request.time_windows):
             found.append("generate:empty_day")
+        if request.fixed_blocks and request.anchors:
+            try:
+                pois = {p.poi_id: p for p in self._poi_db.find_by_ids(
+                    frozenset(PoiId(b.poi_id) for b in request.fixed_blocks))}
+            except Exception:  # 조회 실패면 경고만 못 단다 — 일정은 그대로 나간다
+                pois = {}
+            anchors = {a.date: GeoPoint(a.lat, a.lng) for a in request.anchors}
+            if any(PoiId(b.poi_id) in pois and b.date in anchors
+                   and haversine_km(anchors[b.date], pois[PoiId(b.poi_id)].coord) > _FIXED_FAR_KM
+                   for b in request.fixed_blocks):
+                found.append("request:fixed_far_from_anchor")
         return replace(out, degradations=tuple(dict.fromkeys((*out.degradations, *found))))
 
     def _generate_run(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
@@ -2124,6 +2176,11 @@ class WiredItineraryOrchestrator:
             blocks += in_progress
             notes.append(f"in_progress_kept: {len(in_progress)}")
         past = _past_blocks(blocks, not_before)
+        # 서로 겹치는 잠금은 솔버에 하나만 — 둘 다 넣으면 모든 단계가 실패해 하루가 통째로 비었다(TRIP-1397).
+        # 뺀 사용자 잠금은 사영에서 원 시각 그대로 되싣는다.
+        overlapped = _overlapping_locks(tuple(b for b in blocks if b not in past))
+        if overlapped:
+            notes.append(f"locked_overlap: {','.join(str(b.poi_id) for b in overlapped)}")
         # 시간만 당기기 — 원 일정의 남은 방문이 그대로 필수 방문이다. 장소를 안 바꾸므로 구성 LLM 도,
         # 방문을 줄이는 상한도, 회피 카테고리 제외도 타지 않는다(사용자가 "시간만"이라 했다).
         earlier = _earlier_visits(request, resolved, blocks, not_before, notes,
@@ -2234,9 +2291,9 @@ class WiredItineraryOrchestrator:
             seed=_seed_from(request.trip_id),
             # 지난 잠금은 솔버 밖이다(`_past_blocks`) — 사영에서 원 시각 그대로 되싣고,
             # 다녀온 곳이 새 방문으로 다시 들어오지 않게 제외에 더한다.
-            fixed_blocks=tuple(b for b in blocks if b not in past),
+            fixed_blocks=tuple(b for b in blocks if b not in past and b not in overlapped),
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
-            | {b.poi_id for b in past} | avoided,
+            | {b.poi_id for b in past} | {b.poi_id for b in overlapped} | avoided,
             rejections=_domain_rejections(request.rejections),
             include_explanations=False,  # 재계획 화면(i06)은 설명을 안 쓴다
             prefer_categories=prefer,
@@ -2762,11 +2819,14 @@ class WiredItineraryOrchestrator:
         placed = {(s.poi_id, s.start_at) for day in solution.days for s in day.slots}
         blocks = [b for b in _replan_fixed_blocks(request, self._tz)
                   if b.window.start.date() == request.target_date]
-        lost = [str(b.poi_id) for b in blocks if (b.poi_id, b.window.start) not in placed]
+        lost = [b for b in blocks if (b.poi_id, b.window.start) not in placed]
         if lost:
-            notes.append(f"locked_block_unplaced: {','.join(lost)}")
-            return self._replan_empty(
-                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
+            # 못 지킨 잠금(미등록 장소·영업시간 밖·다른 잠금과 겹침)은 **원 시각 그대로 되싣고** 나머지
+            # 하루를 낸다(TRIP-1397). 종전엔 잠금 하나로 하루 전체가 NO_FEASIBLE_SLOT 이었다. 되실은
+            # 잠금과 겹치는 새 방문은 빼고, 그 잠금 앞뒤 이동은 검증 밖이라 노트로 밝힌다.
+            notes.append(f"locked_block_echoed: {','.join(str(b.poi_id) for b in lost)}")
+            solution = _echo_locks(solution, tuple(lost), request.target_date)
+            placed = {(s.poi_id, s.start_at) for day in solution.days for s in day.slots}
         # 하한 뒤에 새 방문이 0건이면 잠금만 든 하루다 — 그걸 재계획안으로 내면 BE 가
         # 남은 슬롯을 전부 지운 하루로 읽는다. 남은 시간이 없다는 사실을 정직하게 낸다.
         if not_before is not None and placed <= {(b.poi_id, b.window.start) for b in blocks}:

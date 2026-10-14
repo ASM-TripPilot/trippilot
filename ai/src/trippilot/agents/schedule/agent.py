@@ -496,7 +496,7 @@ class ScheduleAgent:
         # ⓪′ 영업시간 밖에 핀된 고정 블록은 **빼고 보고한다** (TRIP-1249). 종전엔 HC1 이 OR·그리디
         #    둘 다에서 걸려 409 → BE 가 그 단계를 통째로 최소 일정으로 바꿨다 — 핀 하나로 하루가
         #    비는 것보다 그 핀만 빠지고 generate 는 `unplaced_must_visits`(NO_FEASIBLE_SLOT), replan 은
-        #    `locked_block_unplaced` 로 보고되는 편이 낫다(침묵 드롭 아님). 영업시간이 **증명**할 때만
+        #    원 시각 그대로 되싣고 `locked_block_echoed` 로 보고되는 편이 낫다(침묵 드롭 아님, TRIP-1397). 영업시간이 **증명**할 때만
         #    이다 — 정보 없음은 둔다(HC1 과 같은 판정 함수). ②⁗ 뒤라 보강된 시간도 본다. 인덱스는
         #    ④ 가 쓰는 것과 같다 — 고정 블록 POI 는 **인덱스에만** 합류, 후보·풀 보고는 그대로 (INV-1).
         index = {**fixed_pois, **{p.poi_id: p for p in pool.pois}}
