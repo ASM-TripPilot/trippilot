@@ -56,6 +56,17 @@ class VisitCheckService(
         }
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val existing = slotKey?.let { checks.findBySlot(tripId, it) }
+        // 자동 도착을 되돌린 자리(억제 표식뿐)는 수동 도착이 재사용한다(BR-U10-32) — 같은 슬롯에 행이 둘이면 "완료됐나"가 갈린다.
+        // 자동 도착은 같은 날 막혀 있다(표식은 남는다).
+        if (existing != null && !existing.isRecorded) {
+            if (source == CheckSource.AUTO_GEOFENCE) {
+                throw ConflictDetected(
+                    current = VisitConflictState(existing.visitCheckId, existing.updatedAt),
+                    message = "오늘은 이 장소를 자동으로 기록하지 않습니다.", errorCode = ErrorCode.VISIT_CONFLICT,
+                )
+            }
+            return checks.save(existing.arriveAgain(source, clock.instant())).also { publish(accountId, it) }
+        }
         if (existing != null) {
             // 지오펜스가 같은 wake 에서 두 번 깨워도(P-MOBILE-U4-1 중복 진입) 하나만 확정된다.
             //
@@ -85,20 +96,7 @@ class VisitCheckService(
         checks.save(owned(accountId, tripId, visitCheckId).complete(clock.instant())).also { publish(accountId, it) }
 
     /** 도착·완료를 알린다(§12.6). 도착이면 `completedAt` 이 비어 나간다. */
-    private fun publish(accountId: UUID, check: VisitCheck) = events.publish(
-        VisitChecked(
-            aggregateId = check.visitCheckId.toString(),
-            tripId = check.tripId.toString(),
-            slotKey = check.slotKey,
-            poiId = check.poiId.toString(),
-            // 도착 또는 완료 직후다 — 둘 다 도착이 있다(`complete()` 가 도착 없는 완료를 409 로 막는다).
-            arrivedAt = check.arrivedAt!!.toString(),
-            completedAt = check.completedAt?.toString(),
-            accountId = accountId.toString(),
-            arrivalSource = check.source.name,
-            completionSource = check.completionSource?.name,
-        ),
-    )
+    private fun publish(accountId: UUID, check: VisitCheck) = events.publish(check.checkedEvent(accountId))
 
     /** 건너뜀(취소, TRIP-118). 안 갔으므로 재계획에서 잠그지 않는다. */
     @Transactional
@@ -115,6 +113,8 @@ class VisitCheckService(
     fun skipPlanned(accountId: UUID, tripId: UUID, slotKey: String, poiId: UUID): VisitCheck {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         checks.findBySlot(tripId, slotKey)?.let { existing ->
+            // 자동 도착을 되돌린 자리(억제 표식뿐)는 사람이 접는 것도 그 행을 쓴다 — 같은 슬롯에 행이 둘이면 결과가 갈린다(BR-U10-32).
+            if (!existing.isRecorded) return checks.save(existing.skip(clock.instant()))
             val sameState = existing.poiId == poiId && existing.skippedAt != null
             throw ConflictDetected(
                 current = VisitConflictState(existing.visitCheckId, existing.updatedAt),
@@ -194,3 +194,16 @@ class VisitCheckService(
         private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
     }
 }
+
+/** 도착·완료 사건(§12.6). 도착 또는 완료 직후에만 부른다 — 둘 다 도착이 있다(도착 없는 완료는 도메인이 막는다). */
+internal fun VisitCheck.checkedEvent(accountId: UUID) = VisitChecked(
+    aggregateId = visitCheckId.toString(),
+    tripId = tripId.toString(),
+    slotKey = slotKey,
+    poiId = poiId.toString(),
+    arrivedAt = arrivedAt!!.toString(),
+    completedAt = completedAt?.toString(),
+    accountId = accountId.toString(),
+    arrivalSource = source.name,
+    completionSource = completionSource?.name,
+)

@@ -117,6 +117,31 @@ data class VisitCheck(
     }
 
     /**
+     * **억제 표식만 남은 행**(자동 도착을 되돌린 자리)에 도착을 다시 남긴다 — 수동 도착은 그 행을 재사용한다(BR-U10-32).
+     * 표식은 지우지 않는다: 그날 그 슬롯의 자동 쓰기는 계속 막혀야 한다(INV-U10-10). 기록이 있는 행에는 쓰지 않는다.
+     */
+    fun arriveAgain(source: CheckSource, at: Instant): VisitCheck {
+        check(!isRecorded) { "기록이 있는 행에 도착을 다시 쓰지 않는다" }
+        return copy(arrivedAt = at, source = source, updatedAt = at)
+    }
+
+    /**
+     * 자동 기록 되돌리기(U10 BR-U10-31) — **자동 출처 부분만** 연다. 자동 완료면 완료만 비우고(도착 유지), 자동 도착(완료 없음)이면
+     * 도착을 비우고 그날 자동 쓰기를 막는 표식을 남긴다. 수동 기록은 [com.trippilot.core.error.ErrorCode.VISIT_NOT_AUTO].
+     * 완료를 비우면 그 슬롯의 재계획 잠금(INV-U4-04)도 풀린다 — 화면이 되돌리기 전에 그것을 고지한다.
+     */
+    fun revertAuto(at: Instant): Pair<VisitCheck, RevertedPart> = when {
+        completedAt != null && completionSource != CompletionSource.MANUAL ->
+            copy(completedAt = null, completionSource = null, updatedAt = at) to RevertedPart.COMPLETION
+        completedAt == null && skippedAt == null && arrivedAt != null && source == CheckSource.AUTO_GEOFENCE ->
+            copy(arrivedAt = null, autoSuppressedAt = at, updatedAt = at) to RevertedPart.ARRIVAL
+        else -> throw ConflictDetected(
+            current = VisitConflictState(visitCheckId, updatedAt),
+            message = "되돌릴 자동 기록이 없습니다.", errorCode = ErrorCode.VISIT_NOT_AUTO,
+        )
+    }
+
+    /**
      * 아직 결과가 정해지지 않았는가(완료도 건너뜀도 아님).
      *
      * **왜 두 코드로 갈리나(BR-U5-20).** 오프라인 큐 재생에서 409 는 실패가 아니다 — 원하던 상태가
@@ -184,6 +209,9 @@ interface VisitCheckRepository {
     /** 같은 슬롯의 실적. 중복 체크인을 막는 데 쓴다 — 둘이면 "완료됐나"가 갈린다. */
     fun findBySlot(tripId: UUID, slotKey: String): VisitCheck?
 }
+
+/** 자동 되돌리기가 비운 부분. */
+enum class RevertedPart { COMPLETION, ARRIVAL }
 
 /** 방문의 최종 결과. 재생 시 "원하던 것"과 "기록된 것"을 견주는 데만 쓴다. */
 enum class VisitOutcome(val label: String) { COMPLETED("완료"), SKIPPED("건너뜀") }
