@@ -8,15 +8,22 @@ import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/index.
  * 실어 보내고, copick 씨앗은 `mode=CO_PLAN`·`successRoute=첫 슬롯 라우트 템플릿`을 실어 보낸다
  * (TRIP-504). mode 없이 열리면(일정 탭 카드·홈 CTA 재진입) 생성을 쏘지 않는 관찰 모드다(TRIP-1006). */
 export default function ItineraryGeneratingRoute() {
-  const { tripId, mode, successRoute } = useLocalSearchParams<{
+  const { tripId, mode, successRoute, targetDate } = useLocalSearchParams<{
     tripId: string;
     mode?: GenerateItineraryRequestGenerationMode;
     successRoute?:
       | '/trips/[tripId]/itinerary/draft'
       | '/trips/[tripId]/itinerary/copick/[slotKey]';
+    /** 여행 중 거절 시 재계획할 날 — 초안이 보던 날(DraftPage). */
+    targetDate?: string;
   }>();
 
   return (
-    <GeneratingPage tripId={tripId} mode={mode} successRoute={successRoute} />
+    <GeneratingPage
+      tripId={tripId}
+      mode={mode}
+      successRoute={successRoute}
+      targetDate={targetDate}
+    />
   );
 }

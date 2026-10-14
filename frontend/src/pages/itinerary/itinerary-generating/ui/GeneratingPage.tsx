@@ -74,6 +74,7 @@ export function GeneratingPage({
   tripId,
   mode,
   successRoute = '/trips/[tripId]/itinerary/draft',
+  targetDate,
 }: {
   tripId: string;
   /** 생성 모드. 미지정=관찰 모드(POST 0, GET 만 — TRIP-1006). 완전AI 는 FULLY_AI, copick 씨앗은
@@ -85,6 +86,8 @@ export function GeneratingPage({
   successRoute?:
     | '/trips/[tripId]/itinerary/draft'
     | '/trips/[tripId]/itinerary/copick/[slotKey]';
+  /** 여행 중 거절(409)로 재계획에 넘길 때 다시 짤 날. 미지정=오늘. 초안에서 오늘 뒤의 날을 보며 눌렀을 때 실린다. */
+  targetDate?: string;
 }): ReactElement {
   const router = useRouter();
   // 캐시 반영은 훅 옵션 자리에 둔다 — `mutate(…, { onSuccess })` 콜백은 화면이 떠나면 불리지 않아,
@@ -173,9 +176,16 @@ export function GeneratingPage({
       testID: 'itinerary-generating-planb-handoff-toast',
     });
     // 재계획 요청은 허브 위에 겹치는 모달이라(SplashGate transparentModal) 허브를 먼저 깐다 — 허브의 진입과 같은 모양.
-    router.replace({ pathname: '/trips/[tripId]/live', params: { tripId } });
-    router.push({ pathname: '/trips/[tripId]/planb', params: { tripId } });
-  }, [refusal, inTrip, router, tripId]);
+    router.replace({
+      pathname: '/trips/[tripId]/live',
+      params:
+        targetDate === undefined ? { tripId } : { tripId, day: targetDate },
+    });
+    router.push({
+      pathname: '/trips/[tripId]/planb',
+      params: targetDate === undefined ? { tripId } : { tripId, targetDate },
+    });
+  }, [refusal, inTrip, router, tripId, targetDate]);
 
   useEffect(() => {
     if (firedRef.current) return;

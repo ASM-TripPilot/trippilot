@@ -260,6 +260,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
     props: {
       mode?: GenerateItineraryRequestGenerationMode;
       successRoute?: '/trips/[tripId]/itinerary/copick/[slotKey]';
+      targetDate?: string;
     } = {}
   ) {
     const client = new QueryClient({
@@ -278,6 +279,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
         tripId={TRIP_ID}
         mode={props.mode ?? 'FULLY_AI'}
         successRoute={props.successRoute}
+        targetDate={props.targetDate}
       />,
       { wrapper: Wrapper }
     );
@@ -571,6 +573,29 @@ describe('다른 여행 생성 중(409) 안내', () => {
       expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
       expect(screen.queryByTestId('itinerary-generating-refused')).toBeNull();
       expect(count('POST')).toBe(1);
+    });
+
+    // 초안에서 오늘 뒤의 날을 보며 [다시 짜기]를 누르면 그 날이 실려 온다(DraftPage). 다녀온 기록이 있어 거절되면
+    // 재계획도 그 날로 열어야 한다 — 빠지면 사용자가 보던 날 대신 오늘이 다시 짜인다.
+    it('R1b 보던 날(targetDate)이 실려 오면 넘김도 그 날로 연다 — 허브 day · 재계획 targetDate', async () => {
+      const today = seoulDate(new Date());
+      const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      server.use(tripHandler(today, '2099-12-31'));
+      postQueue = [refused(IN_TRIP_REASON)];
+
+      renderPage({ targetDate: tomorrow });
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/live',
+        params: { tripId: TRIP_ID, day: tomorrow },
+      });
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/planb',
+        params: { tripId: TRIP_ID, targetDate: tomorrow },
+      });
     });
 
     it('R2 끝난 여행: 서버 사유 + [닫기]만 · 다시 시도 없음 · 닫기 = 홈 · Plan-B 로 안 간다', async () => {

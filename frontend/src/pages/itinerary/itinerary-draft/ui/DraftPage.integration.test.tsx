@@ -525,8 +525,52 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       await sleep(50);
       expect(generatingMoves()).toBe(1);
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, mode: 'FULLY_AI' }, // 오늘을 보면 날짜를 싣지 않는다
+      });
       expect(mockPush).not.toHaveBeenCalled();
       expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+    });
+
+    // 둘째 날 이후의 여행 초안은 1일차(지난 날)로 열린다 — 가장 흔한 모양이다. 지난 날은 싣지 않는다(재계획은 오늘).
+    it('P1c 어제 출발한 여행의 초안을 기본(1일차·지난 날)으로 보며 누르면 날짜를 싣지 않는다', async () => {
+      const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      tripScript = () => trip({ startDate: yesterday, endDate: tomorrow });
+      itineraryScript = () =>
+        itinerary({
+          days: daysOf([yesterday, today, tomorrow], (date) => [
+            slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+          ]),
+          generationState: 'COMPLETE',
+        });
+      renderPage();
+      await pressRetry();
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+      });
+    });
+
+    it('P1b 초안에서 내일 칩을 보며 누르면 그 날을 생성 화면에 싣는다 — 거절되면 재계획이 그 날로 열린다(GeneratingPage R1b)', async () => {
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '2일차'
+      );
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, mode: 'FULLY_AI', targetDate: tomorrow },
+      });
+      expect(mockPush).not.toHaveBeenCalled();
     });
 
     it('P2 확정 일정에서 내일 칩을 보며 누르면 그 날을 다시 짠다 — 허브도 그 날로 연다', async () => {

@@ -38,6 +38,16 @@ it('mode 없이 열리면(카드·홈 재진입) GeneratingPage 에 mode 가 und
   expect(mockPageProps[0].mode).toBeUndefined();
 });
 
+it('targetDate 가 실리면 그대로 넘기고, 없으면 undefined 다 — 재계획 넘김이 보던 날을 쓴다', () => {
+  mockParams = { tripId: 'trip-1', mode: 'FULLY_AI', targetDate: '2026-10-15' };
+  render(<ItineraryGeneratingRoute />);
+  mockParams = { tripId: 'trip-1', mode: 'FULLY_AI' };
+  render(<ItineraryGeneratingRoute />);
+
+  expect(mockPageProps[0].targetDate).toBe('2026-10-15');
+  expect(mockPageProps[1].targetDate).toBeUndefined();
+});
+
 it('mode 가 실리면 그대로 넘긴다 (긍정 짝)', () => {
   mockParams = { tripId: 'trip-1', mode: 'CO_PLAN' };
   render(<ItineraryGeneratingRoute />);
