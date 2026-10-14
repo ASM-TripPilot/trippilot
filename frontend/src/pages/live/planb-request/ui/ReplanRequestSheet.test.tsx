@@ -8,7 +8,7 @@ import { ReplanRequestSheet } from './ReplanRequestSheet';
  * 무엇을 보장하나:
  *  - 섹션 순서 = 왜 바꾸나요 → 바꿀 범위 → 어떻게 바꿀까요 → 직접 말하기 → CTA 1개. 부제·각주·`(선택)` 없음.
  *  - `detected` 가 있으면 사유 맨 앞에 감지 칩(SVG 경고 + 문구)이 서고, 정적 {WEATHER, reasonKey} 칩은 숨는다.
- *  - 방향 11종(key·라벨·순서), 입력 1줄, 스크림·끌어 닫기 → onClose.
+ *  - 방향 10종(key·라벨·순서 — Figma 의 예산 유지는 뺐다), 입력 1줄, 스크림·끌어 닫기 → onClose.
  *  - 삭제된 배너·범위 밖 안내·[직접 고르기]의 testID 가 트리에 없다.
  *
  * 삭제 testID 는 조립한다 — 옛 소스 스캔 `planbRequestSheetStructure` R3 를 피하려던 것이다(TRIP-1145 로 지움, 02a ★3).
@@ -37,7 +37,6 @@ const DIRECTIVES: [string, string][] = [
   ['ADD_FOOD', '맛집 추가'],
   ['END_NEAR_STAY', '숙소 근처에서 끝내기'],
   ['LESS_MOVE', '이동 짧게'],
-  ['KEEP_BUDGET', '예산 유지'],
   ['KEEP_DINNER', '저녁은 그대로'],
   ['AVOID_OUTDOOR', '야외 피하기'],
 ];
@@ -170,8 +169,8 @@ describe('🔴 S5 · 감지 트리거 CLOSURE — 매핑 key 칩도 숨긴다 (A
   });
 });
 
-describe('🔴 S6 · 방향 11칩 (AC-3 · D5 · Q1)', () => {
-  it('11종이 key·라벨·순서 그대로이고 야경 코스는 없으며, 야외 피하기를 누르면 AVOID_OUTDOOR 로 토글된다', () => {
+describe('🔴 S6 · 방향 10칩 (AC-3 · D5 · Q1)', () => {
+  it('10종이 key·라벨·순서 그대로이고 야경 코스·예산 유지는 없으며, 야외 피하기를 누르면 AVOID_OUTDOOR 로 토글된다', () => {
     const props = baseProps();
     render(<ReplanRequestSheet {...props} />);
 
@@ -187,6 +186,8 @@ describe('🔴 S6 · 방향 11칩 (AC-3 · D5 · Q1)', () => {
       ).toHaveTextContent(label)
     );
     expect(screen.queryByText('야경 코스')).toBeNull();
+    // 예산 유지는 서버가 집행할 가격 데이터가 없어 골라도 일정이 그대로였다 — 내지 않는다
+    expect(screen.queryByText('예산 유지')).toBeNull();
 
     fireEvent.press(
       screen.getByTestId('planb-request-directive-AVOID_OUTDOOR')
