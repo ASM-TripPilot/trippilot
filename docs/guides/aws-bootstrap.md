@@ -35,9 +35,9 @@ Repository **Settings → Environments**에서 `dev`, `prd`를 각각 생성한�
 | `AWS_REGION` | 선택. 기본값 `ap-northeast-2` |
 | `AWS_BOOTSTRAP_ROLE_ARN` | 위에서 만든 해당 환경의 bootstrap Role ARN |
 | `AWS_GITHUB_OIDC_PROVIDER_ARN` | 선택. 생략 시 같은 계정의 기본 GitHub provider ARN 사용 |
-| `DEPLOY_BRANCH` | 선택. 기본값: 운영 대상(`target=prod`) `main`, DEV 스택의 개발 대상(`target=dev`) `develop` — 2026-10-15 개발·운영 분리 |
+| `DEPLOY_BRANCH` | 선택. 기본값: DEV `develop`, PRD `main` (bootstrap 워크플로 기준 — 앱 배포의 대상별 브랜치는 `aws-eks-deployment.md`) |
 
-Environment의 deployment branch를 위 값과 같게 제한한다. PRD에는 required reviewers와 prevent self-review를 설정하는 것을 권장한다. OIDC 토큰의 environment claim에는 branch가 포함되지 않으므로 Environment 자체의 branch restriction도 설정해야 한다.
+Environment의 deployment branch를 위 값으로 제한한다(DEV 는 앱 배포의 운영 대상 때문에 `main` 도 함께 허용한다 — `aws-eks-deployment.md` 배포 대상 절). PRD에는 required reviewers와 prevent self-review를 설정하는 것을 권장한다. OIDC 토큰의 environment claim에는 branch가 포함되지 않으므로 Environment 자체의 branch restriction도 설정해야 한다.
 
 ## 초기 워크플로 실행
 

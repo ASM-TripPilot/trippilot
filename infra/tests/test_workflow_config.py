@@ -51,7 +51,8 @@ class WorkflowConfigTests(unittest.TestCase):
                 config.settings(self.settings(**{key: value}))
 
     def test_custom_protected_branch(self):
-        self.assertEqual(config.settings(self.settings(DEPLOY_BRANCH='release', GITHUB_REF='refs/heads/release'))['environment'], 'dev')
+        # 운영 대상은 main 고정이라 사용자 지정 브랜치는 개발 대상·prd 스택에만 먹는다
+        self.assertEqual(config.settings(self.dev(DEPLOY_BRANCH='release', GITHUB_REF='refs/heads/release'))['environment'], 'dev')
 
     def test_certificate_must_match_account_and_region(self):
         with self.assertRaisesRegex(ValueError, 'ACM_CERTIFICATE_ARN'):
@@ -70,6 +71,12 @@ class WorkflowConfigTests(unittest.TestCase):
             config.settings(self.dev(GITHUB_REF='refs/heads/main'))
         self.assertEqual(config.settings(self.settings())['target'], 'prod')
         self.assertEqual(config.settings(self.dev())['target'], 'dev')
+
+    def test_deploy_branch_override_cannot_send_develop_to_production(self):
+        with self.assertRaisesRegex(ValueError, 'branch must be main'):
+            config.settings(self.settings(DEPLOY_BRANCH='develop', GITHUB_REF='refs/heads/develop'))
+        # 개발 대상에는 여전히 먹는다
+        self.assertEqual(config.settings(self.dev(DEPLOY_BRANCH='feature', GITHUB_REF='refs/heads/feature'))['target'], 'dev')
 
     def test_prod_target_is_unchanged(self):
         actual = config.settings(self.settings(EMBEDDING_ENABLED='true'))
