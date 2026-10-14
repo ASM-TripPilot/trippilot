@@ -31,17 +31,11 @@ jobs:
       REPO: ${{ github.repository }}
     steps:
       - run: |
-          since=$(date -u -d '-30 sec' +%Y-%m-%dT%H:%M:%SZ)
-          gh workflow run ai-llm-fallback-watch.yml -R "$REPO" --ref develop
-          for _ in $(seq 24); do
-            sleep 5
-            id=$(gh run list -R "$REPO" --workflow ai-llm-fallback-watch.yml --event workflow_dispatch \
-              --limit 5 --json databaseId,createdAt --jq "[.[] | select(.createdAt >= \"$since\")][-1].databaseId // empty")
-            [ -n "$id" ] && break
-          done
-          [ -n "$id" ] || { echo "::error::dispatch 한 실행을 찾지 못했다"; exit 1; }
-          url="https://github.com/$REPO/actions/runs/$id"
-          gh run watch "$id" -R "$REPO" --exit-status --interval 15 > /dev/null \
+          # gh 는 방금 만든 실행의 URL 을 돌려준다 — 목록에서 시각으로 찾으면 같은 때의
+          # 수동 실행을 자식으로 오인할 수 있다(Codex 리뷰 지적).
+          url=$(gh workflow run ai-llm-fallback-watch.yml -R "$REPO" --ref develop | grep -o 'https://[^ ]*/actions/runs/[0-9]*')
+          [ -n "$url" ] || { echo "::error::dispatch 한 실행의 URL 을 받지 못했다"; exit 1; }
+          gh run watch "${url##*/}" -R "$REPO" --exit-status --interval 15 > /dev/null \
             || { echo "::error::dev LLM 대체 경보 — 판정 요약: $url"; exit 1; }
 
   watch:
