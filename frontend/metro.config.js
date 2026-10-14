@@ -20,7 +20,9 @@ if (process.env.NODE_ENV === 'production') {
 if (process.env.EXPO_INLINE_REQUIRES === '1') {
   const prevGetTransformOptions = config.transformer.getTransformOptions;
   config.transformer.getTransformOptions = async (...args) => {
-    const prev = prevGetTransformOptions ? await prevGetTransformOptions(...args) : {};
+    const prev = prevGetTransformOptions
+      ? await prevGetTransformOptions(...args)
+      : {};
     return { ...prev, transform: { ...prev.transform, inlineRequires: true } };
   };
 }

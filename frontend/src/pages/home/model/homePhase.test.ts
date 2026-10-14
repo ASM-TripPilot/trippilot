@@ -693,7 +693,9 @@ describe('resolveHomePhase — badgeSub 서식은 여행 상태와 정합(PBT, T
 describe('resolveHomePhase — 지역 커버(coverSource)', () => {
   const planned = (destinations: Trip['destinations']) =>
     resolveHomePhase({
-      trips: [trip({ status: 'PLANNED', startDate: '2026-06-22', destinations })],
+      trips: [
+        trip({ status: 'PLANNED', startDate: '2026-06-22', destinations }),
+      ],
       today: '2026-06-01',
       savedCount: 0,
       formatTripMeta: metaOfTitle,
