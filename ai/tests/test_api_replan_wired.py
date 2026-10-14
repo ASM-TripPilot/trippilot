@@ -344,6 +344,26 @@ def test_지시가_없으면_요청에도_빈_집합이_실린다() -> None:
 # ── 잠금 블록 — 백엔드 실왕복이 잡은 500 (2026-09-28 회신) ───────────────────
 
 
+_NIGHT = {"poi_id": "e0000000-0000-4000-8000-000000000002", "start_at": "20:00", "end_at": "01:00",
+          "is_fixed": True, "ends_next_day": True}
+
+
+@pytest.mark.parametrize("form", ["current_slot", "locked_block"])
+def test_자정을_넘는_고정_슬롯이_있어도_422가_아니고_그대로_남는다(form: str) -> None:
+    """TRIP-1390 — `ends_next_day` 를 같은 날로 읽어 end < start → 422 였다. 고치고 나서도 그 슬롯이
+    하루 창(21:00) 밖이라 HC4 가 잠금을 위반으로 세 모든 조립 단계가 하루를 버렸다."""
+    over = ({"current_slots": [_NIGHT]} if form == "current_slot" else {"locked_blocks": [{
+        "poi_id": _NIGHT["poi_id"], "date": "2026-09-21", "start": "20:00", "dwell_min": 300}]})
+    response = _post(build_dev_app(directives=_DIRECTIVES), reasons=[], **over)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["empty_reason"] is None, body["notes"]
+    night = [s for s in body["itinerary"]["days"][0]["slots"] if s["poi_id"] == _NIGHT["poi_id"]]
+    assert night and night[0]["start_at"] == "20:00:00" and night[0]["end_at"] == "01:00:00"
+    assert night[0]["is_fixed"] is True and night[0]["ends_next_day"] is True
+
+
 def test_잠금_블록이_있어도_죽지_않고_그_시각에_고정된다() -> None:
     """`locked_blocks` 는 `FixedBlockSchema`(start·dwell_min)인데 변환이
     `start_at`·`end_at` 을 읽어 **한 건이라도 실리면 AttributeError 500** 이었다 —

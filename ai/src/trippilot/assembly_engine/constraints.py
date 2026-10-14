@@ -118,8 +118,9 @@ def not_before_floor(problem: ItineraryProblem) -> datetime | None:
     floor = nb.replace(second=0, microsecond=0)
     if floor != nb:
         floor += timedelta(minutes=1)
-    ws = problem.day_window.start
-    local = floor.astimezone(ws.tzinfo) if ws.tzinfo is not None else floor
+    tz = problem.day_window.start.tzinfo
+    local = floor.astimezone(tz) if tz is not None else floor
+    ws = problem.window_on(local.date()).start  # 일자별 창 (TRIP-1389)
     return floor if local.time() > ws.time() else None
 
 
@@ -183,14 +184,22 @@ def check_hc3(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Vi
 
 
 def check_hc4(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Violation]:
-    """day window 내 (자정 초과 활동은 시작일 귀속 — end가 자정 넘어도 시작일 창으로 비교)."""
-    ws = _min_of_day(problem.day_window.start)
-    we = _min_of_day(problem.day_window.end)
-    if we <= ws:
-        we += 1440  # window 자체가 자정 초과인 경우
+    """day window 내 (자정 초과 활동은 시작일 귀속 — end가 자정 넘어도 시작일 창으로 비교).
+
+    창은 그 날의 것이다(`window_on` — 일자별 창, TRIP-1389). 고정 블록은 창이 아니라 HC3 가
+    잡는다 — 사용자가 정한 시각(야경 20:00~익일 01:00 등)이 창을 넘는다고 위반으로 세면 모든
+    조립 단계가 그 하루를 버렸다(TRIP-1390). 시작 하한 검사(`check_not_before`)와 같은 규칙."""
+    pinned = {(fb.poi_id, fb.window.start, fb.window.end) for fb in problem.fixed_blocks}
     out: list[Violation] = []
     for day in solution.days:
+        win = problem.window_on(day.date)
+        ws = _min_of_day(win.start)
+        we = _min_of_day(win.end)
+        if we <= ws:
+            we += 1440  # window 자체가 자정 초과인 경우
         for slot in day.slots:
+            if (slot.poi_id, slot.start_at, slot.end_at) in pinned:
+                continue
             start_m = _min_of_day(slot.start_at)
             end_m = start_m + int((slot.end_at - slot.start_at).total_seconds() // 60)
             if start_m < ws or end_m > we:
