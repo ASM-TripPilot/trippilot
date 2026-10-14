@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "source": "LOCALDATA",
-  "collected_at": "2026-10-14T09:07:43.225140+00:00",
+  "collected_at": "2026-10-14T09:41:26.593210+00:00",
   "stats": {
     "source_file": "식품_일반음식점.csv",
     "source_updated_max": "2026-09-07 22:47:52",
     "rows": 2295369,
     "row_drops": {
       "not_open": 1619793,
-      "type_not_adopted": 182636,
+      "type_not_adopted": 182619,
       "no_coord": 14992,
       "franchise": 6782,
       "not_meal_stop:golf": 1148,
@@ -33,14 +33,14 @@
     },
     "picked": 22721,
     "etc_fill": {
-      "admitted": 66,
-      "picked": 66
+      "admitted": 83,
+      "picked": 83
     },
     "gate_merged": 517,
     "gate_drops": {
       "policy_non_travel:convenience_store": 4
     },
-    "passed": 22266,
+    "passed": 22283,
     "by_type": {
       "한식": 14668,
       "경양식": 1310,
@@ -55,18 +55,18 @@
       "외국음식전문점(인도,태국등)": 165,
       "김밥(도시락)": 89,
       "패밀리레스트랑": 81,
-      "기타": 64,
+      "기타": 81,
       "냉면집": 54,
       "패스트푸드": 41,
       "복어취급": 25
     },
     "by_sido": {
+      "제주특별자치도": 2913,
       "부산광역시": 2908,
-      "제주특별자치도": 2901,
       "서울특별시": 2207,
       "강원특별자치도": 2036,
       "경상북도": 1765,
-      "인천광역시": 1567,
+      "인천광역시": 1572,
       "경상남도": 1508,
       "충청남도": 1385,
       "전남광주통합특별시": 1360,
@@ -79,7 +79,7 @@
       "세종특별자치시": 1
     },
     "region_check": {
-      "sigungu": 22265,
+      "sigungu": 22282,
       "sido_only": 1
     },
     "gap_anchors_without_pick_2km": 88,
@@ -479063,6 +479063,134 @@
       }
     },
     {
+      "provisional_id": "localdata-3501000-101-2024-20006",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-3501000-101-2024-20006",
+        "name": "오오수산 월미도본점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.47408473498721,
+          "lng": 126.59756808612276
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제물포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "3501000-101-2024-20006",
+        "address": "인천광역시 제물포구 월미로260번길 14, 2층,3층(옥상층) (북성동1가)",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-3501000-101-2026-20222",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-3501000-101-2026-20222",
+        "name": "철이네양념집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.453577551535574,
+          "lng": 126.60577727141569
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제물포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "3501000-101-2026-20222",
+        "address": "인천광역시 제물포구 연안부두로33번길 36, 2층 26호 (항동7가)",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-3570000-101-2023-00161",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-3570000-101-2023-00161",
+        "name": "뚝배기이탈리아",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.60355081079908,
+          "lng": 126.39874961841953
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "강화군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "3570000-101-2023-00161",
+        "address": "인천광역시 강화군 화도면 해안남로 2143, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-3570000-101-2024-00027",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-3570000-101-2024-00027",
+        "name": "아트팩토리참기름 레스토랑(Restaurant)",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.66835746045671,
+          "lng": 126.47970725453227
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "강화군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "3570000-101-2024-00027",
+        "address": "인천광역시 강화군 길상면 까치골길 109, 1동",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-3580000-101-2001-00041",
       "source": "LOCALDATA",
       "poi": {
@@ -479091,6 +479219,38 @@
       "provenance": {
         "content_id": "3580000-101-2001-00041",
         "address": "인천광역시 옹진군 백령면 백령로 241, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-3580000-101-2011-00005",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-3580000-101-2011-00005",
+        "name": "신도갯벌장어",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.52919078064925,
+          "lng": 126.43868826073304
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "옹진군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "3580000-101-2011-00005",
+        "address": "인천광역시 옹진군 북도면 신도로 281 (2층)",
         "image_url": null
       }
     },
@@ -643607,6 +643767,230 @@
       }
     },
     {
+      "provisional_id": "localdata-6510000-101-2018-00986",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2018-00986",
+        "name": "더애월김치찌개전문점저지점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.33787025915828,
+          "lng": 126.26680877500617
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2018-00986",
+        "address": "제주특별자치도 제주시 한경면 저지12길 99",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6510000-101-2019-00001",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2019-00001",
+        "name": "어음밥집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.40204289761743,
+          "lng": 126.33927410738866
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2019-00001",
+        "address": "제주특별자치도 제주시 애월읍 어림비로 393-1, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6510000-101-2019-00178",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2019-00178",
+        "name": "오즈피자",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.43271811948255,
+          "lng": 126.37809717675023
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2019-00178",
+        "address": "제주특별자치도 제주시 애월읍 소길남길 22, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6510000-101-2019-00897",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2019-00897",
+        "name": "비자해물파전칼국수",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.500032856861466,
+          "lng": 126.81497862419214
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2019-00897",
+        "address": "제주특별자치도 제주시 구좌읍 비자림로 2328, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6510000-101-2019-00982",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2019-00982",
+        "name": "한동밥상",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.52970046623502,
+          "lng": 126.8160824102622
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2019-00982",
+        "address": "제주특별자치도 제주시 구좌읍 한동로 153, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6510000-101-2020-00080",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2020-00080",
+        "name": "동네국수",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.353225770811726,
+          "lng": 126.25890154236308
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2020-00080",
+        "address": "제주특별자치도 제주시 한림읍 중산간서로 3923, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6510000-101-2020-00164",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2020-00164",
+        "name": "녹색식당원동점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.40129473020311,
+          "lng": 126.37823294186445
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2020-00164",
+        "address": "제주특별자치도 제주시 애월읍 애원로 917, 1층",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-6510000-101-2020-00566",
       "source": "LOCALDATA",
       "poi": {
@@ -643639,6 +644023,102 @@
       }
     },
     {
+      "provisional_id": "localdata-6510000-101-2020-00604",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2020-00604",
+        "name": "돈꿀꺽",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.41312605205584,
+          "lng": 126.39588091012149
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2020-00604",
+        "address": "제주특별자치도 제주시 애월읍 평화로 2187, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6510000-101-2021-00635",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2021-00635",
+        "name": "피제리아덤보",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.41831922776209,
+          "lng": 126.37695780150352
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2021-00635",
+        "address": "제주특별자치도 제주시 애월읍 소길남길 202-6, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6510000-101-2025-00252",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2025-00252",
+        "name": "야키니쿠제주",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.42586629819743,
+          "lng": 126.39580396315966
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2025-00252",
+        "address": "제주특별자치도 제주시 애월읍 하소로 658, 1층",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-6520000-101-2010-00098",
       "source": "LOCALDATA",
       "poi": {
@@ -643667,6 +644147,70 @@
       "provenance": {
         "content_id": "6520000-101-2010-00098",
         "address": "제주특별자치도 서귀포시 대정읍 노을해안로 638",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6520000-101-2017-00015",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6520000-101-2017-00015",
+        "name": "로컬크랩",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.368718722882456,
+          "lng": 126.81462243444568
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6520000-101-2017-00015",
+        "address": "제주특별자치도 서귀포시 표선면 번영로 3113, C동",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6520000-101-2020-00447",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6520000-101-2020-00447",
+        "name": "행복한밥상",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.407829189982905,
+          "lng": 126.87390235646689
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6520000-101-2020-00447",
+        "address": "제주특별자치도 서귀포시 성산읍 난고로 470",
         "image_url": null
       }
     },
