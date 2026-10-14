@@ -357,13 +357,13 @@ def test_가까운_데로_칩이_에이전트_요청에_실린다() -> None:
     assert not any("NEARBY" in n for n in body["notes"] if "unwired" in n)
 
 
-def test_숙소_근처_마무리는_무효를_밝힌다() -> None:
-    """RANKING 셋 중 END_NEAR_STAY 는 아직 집행 자리가 없다 — 인식만 하고 조용하면 거짓이다."""
+def test_숙소_근처_마무리는_가까운_데로가_아니다() -> None:
+    """END_NEAR_STAY 는 후보 거리 랭킹이 아니라 끝점(`end_near`)이다 — `test_replan_layout_chips`."""
     # 사유 없음 — 기본 본문의 우천은 LESS_MOVE 를 암시로 얹는다(BR-U4-47)
     body, seen = _replan(directives=["END_NEAR_STAY"], reasons=["none"])
 
     assert seen["agent"][0].prefer_near is False
-    assert any("directives_unwired" in n and "END_NEAR_STAY" in n for n in body["notes"])
+    assert not any("directives_unwired" in n for n in body["notes"]), body["notes"]
 
 
 # ── ③ 부정 ────────────────────────────────────────────────────────────

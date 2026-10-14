@@ -258,6 +258,9 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.time_window.start").value("09:00:00"))
             .andExpect(jsonPath("$.time_window.end").value("21:00:00"))
             .andExpect(jsonPath("$.anchor.lat").value(33.4))
+            // 숙소 근처에서 끝내기(END_NEAR_STAY)의 끝점 — 기준점(anchor)과 다른 값이 따로 실린다.
+            .andExpect(jsonPath("$.stay_anchor.lat").value(33.25))
+            .andExpect(jsonPath("$.stay_anchor.lng").value(126.41))
             .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
 
         adapter.replan(richReplanInput())
@@ -992,6 +995,8 @@ private val REJECTED_POI: UUID = UUID.randomUUID()
 /** 다섯 값을 전부 채운 표본. 비워 두면 "안 싣는다"와 "빈 값을 싣는다"가 구분되지 않는다. */
 private fun richReplanInput() = replanInput().copy(
     freeText = "비 와서 실내로",
+    stayLat = 33.25,
+    stayLng = 126.41,
     currentSlots = listOf(
         ReplanCurrentSlot(
             REPLAN_POI, LocalTime.of(10, 0), LocalTime.of(11, 0),
@@ -1012,6 +1017,8 @@ private fun replanInput() = ReplanInput(
     targetDate = LocalDate.parse("2026-08-01"),
     originLat = 33.4,
     originLng = 126.5,
+    stayLat = null,
+    stayLng = null,
     lockedBlocks = emptyList(),
     reasons = listOf("WEATHER"),
     directives = listOf("INDOOR"),

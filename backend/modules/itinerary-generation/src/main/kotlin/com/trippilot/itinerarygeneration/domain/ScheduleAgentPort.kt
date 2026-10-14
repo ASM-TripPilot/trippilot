@@ -159,6 +159,12 @@ data class ReplanInput(
     val originLat: Double?,
     val originLng: Double?,
     /**
+     * 그날 밤 숙소(없으면 전날 숙소) — '숙소 근처에서 끝내기'(END_NEAR_STAY)가 하루를 마칠 곳.
+     * 기준점(origin)과 따로다: 그것은 GPS·핀·마지막 방문·숙소 중 하나라 숙소를 보장하지 않는다. 숙소가 없으면 null.
+     */
+    val stayLat: Double?,
+    val stayLng: Double?,
+    /**
      * 잠긴 슬롯 — **시각을 포함한다**. 상대는 시각 없는 고정 블록을 거부하므로(계약 M1, 실측 422)
      * 키 문자열만으로는 보낼 수 없다. 정본이 `lockedSlotKeys: List<String>` 로 적은 자리지만,
      * 그 모양은 실 계약과 만나면 성립하지 않는다.

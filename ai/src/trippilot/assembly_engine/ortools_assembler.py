@@ -29,6 +29,7 @@ from typing import Mapping
 from ortools.sat.python import cp_model
 
 from trippilot.assembly_engine.config import (
+    END_NEAR_WEIGHT,
     RAIN_INDOOR,
     RAIN_OUTDOOR,
     stay_for,
@@ -469,6 +470,7 @@ class OrToolsAssembler:
         obj_terms += self._event_soft_terms(problem, nodes, visit)
         obj_terms += self._category_soft_terms(problem, day, m, nodes, visit)
         obj_terms += self._food_cap_terms(m, nodes, visit)
+        obj_terms += self._end_near_terms(problem, arcs, coords)
         travel_terms = self._travel_terms(problem, arcs, coords)
         m.Maximize(sum(obj_terms) + sum(travel_terms))
 
@@ -611,6 +613,21 @@ class OrToolsAssembler:
         if w <= 0:
             return []
         return [-int(round(w * d)) * lit for _, _, lit, d in self._arc_meters(problem, arcs, coords)]
+
+    def _end_near_terms(self, problem, arcs, coords) -> list:
+        """숙소 근처에서 끝내기 — 마지막 방문지(끝 아크 i → 0)의 숙소까지 도로 km 감점 (BR-U4-47).
+
+        `obj_terms` 에 든다 — 재정렬(B)의 "A 목적값 이상" 제약이 이 항을 지켜, 거리만 줄이는 B 가
+        마지막 방문지를 숙소에서 먼 곳으로 되돌리지 못한다. `end_near` 가 없으면 항 없음(종전과 동일).
+        새 변수 없음 — 끝 아크 리터럴에 계수만 건다(완전 힌트 유지, TRIP-1176).
+        """
+        end = problem.end_near
+        if end is None:
+            return []
+        w = END_NEAR_WEIGHT * 1000  # 점수 축 ×1000 (`obj_terms` 와 같은 눈금)
+        return [-int(round(w * self._est.estimate(coords[i - 1], end, problem.transport)
+                           .distance_km_range[1])) * lit
+                for i, j, lit in arcs if j == 0 and i >= 1]
 
     @staticmethod
     def _hint_path(m: cp_model.CpModel, order: list[int], visit, arcs,

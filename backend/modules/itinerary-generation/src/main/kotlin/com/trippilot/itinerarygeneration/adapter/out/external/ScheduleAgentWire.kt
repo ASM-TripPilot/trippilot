@@ -348,6 +348,8 @@ internal data class AiReplanRequest(
     val timeWindow: AiTimeWindow,
     /** 기준점 — 현재 위치, 없으면 호출측이 숙소 앵커로 채운다(BR-U4-19 사다리). */
     val anchor: AiCoord,
+    /** 그날 밤 숙소(없으면 전날) — 상대 `stay_anchor`. '숙소 근처에서 끝내기'가 하루를 마칠 곳. 없으면 null. */
+    val stayAnchor: AiCoord? = null,
     val scope: String,
     val fromInstant: Instant,
     val preferenceProfile: PreferenceProfile,

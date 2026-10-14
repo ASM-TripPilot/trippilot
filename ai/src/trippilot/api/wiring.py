@@ -142,7 +142,7 @@ from trippilot.domain.itinerary import (
 )
 from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource, counts_as_food
 from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
 from trippilot.agents.edit.commands import EditStatus
@@ -1087,6 +1087,106 @@ def _visit_cap(request: schemas.ReplanRequest, resolved: Sequence[str],
     left = sum(1 for s in request.current_slots if not gone(s))
     return max(1, left - 1) if left else None
 
+
+# 하루의 **모양**(잠금·시각·끝점)을 바꾸는 지시 — 카테고리·속도·거리 축이 아니라 `replan` 이 직접
+# 집행한다(BR-U4-47). 그래서 `_replan_directives` 의 축 분류에서 빠진다.
+#   KEEP_DINNER   원 일정의 저녁 식당을 잠근다(`_dinner_blocks`)
+#   EARLIER       장소는 그대로 두고 시각만 지금부터 다시 맞춘다(`_earlier_visits`)
+#   END_NEAR_STAY 마지막 방문지를 숙소 가까이(`ItineraryProblem.end_near`)
+_LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY"})
+
+# 저녁 식사창 — 조립의 식사 소프트 항과 같은 창(17~20시)이다. 창이 둘이면 "저녁"이 두 뜻이 된다.
+_DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
+
+
+def _dinner_blocks(
+    request: schemas.ReplanRequest, resolved: Sequence[str], pool: CandidatePool,
+    blocks: tuple[FixedBlock, ...], tz: timezone, notes: list[str],
+) -> tuple[FixedBlock, ...]:
+    """KEEP_DINNER("저녁은 그대로") — 원 일정에서 저녁 식사창에 걸친 식당 슬롯을 원 시각 그대로 잠근다.
+
+    잠금(HC3)이라 구성 LLM 도 점수·조립도 그 자리를 못 바꾼다. 이미 잠긴 것·제외 요청한 곳·시각 없는 것은
+    건너뛴다. 원 일정에 저녁 식당이 없으면 잠글 것이 없다 — 노트로 밝힌다(침묵 금지).
+    """
+    if "KEEP_DINNER" not in resolved:
+        return ()
+    index = {p.poi_id: p for p in pool.pois}
+    seen = {(b.poi_id, b.window.start) for b in blocks}
+    excluded = set(request.excluded_poi_ids)
+    lo, hi = _DINNER_WINDOW_MIN
+    out: list[FixedBlock] = []
+    for slot in request.current_slots:
+        poi = index.get(PoiId(slot.poi_id))
+        if (poi is None or not counts_as_food(poi) or slot.poi_id in excluded
+                or slot.start_at is None or slot.end_at is None or slot.ends_next_day):
+            continue
+        s_min = slot.start_at.hour * 60 + slot.start_at.minute
+        e_min = slot.end_at.hour * 60 + slot.end_at.minute
+        start = datetime.combine(request.target_date, slot.start_at, tzinfo=tz)
+        if not (s_min < hi and e_min > lo) or (slot.poi_id, start) in seen:
+            continue
+        out.append(FixedBlock(
+            poi_id=PoiId(slot.poi_id),
+            window=TimeWindow(start=start,
+                              end=datetime.combine(request.target_date, slot.end_at, tzinfo=tz)),
+            reason="keep_dinner",
+        ))
+    notes.append(f"keep_dinner: {','.join(str(b.poi_id) for b in out)}" if out
+                 else "keep_dinner_none: 원 일정에 저녁 식사가 없다")
+    return tuple(out)
+
+
+def _earlier_visits(
+    request: schemas.ReplanRequest, resolved: Sequence[str], blocks: tuple[FixedBlock, ...],
+    not_before: datetime | None, notes: list[str],
+) -> tuple[RequiredVisit, ...] | None:
+    """EARLIER("시간만 당기기") — 원 일정의 남은 방문을 **그대로**(장소·체류) 필수 방문으로. 아니면 None.
+
+    시각·순서는 어셈블리가 하한(지금)부터 다시 정한다(INV-2) — 재정렬(B)이 같은 거리 안에서 이른
+    시각을 고르므로 당겨진다. 장소를 바꾸는 다른 사용자 지시가 같이 오면 그쪽이 이기고 이것은
+    무시한다(노트). 잠금·지난 곳·제외 요청·하한 전에 끝난 슬롯은 넣지 않는다(`_visit_cap` 과 같은 기준).
+    """
+    if "EARLIER" not in resolved:
+        return None
+    others = sorted(k for k in resolved if k not in _LAYOUT_KEYS)
+    if others:
+        notes.append(f"earlier_ignored: {','.join(others)}")
+        return None
+    held = {b.poi_id for b in blocks}
+    excluded = {PoiId(p) for p in request.excluded_poi_ids}
+    out: list[RequiredVisit] = []
+    for s in sorted(request.current_slots,
+                    key=lambda s: (s.start_at is None, s.start_at or datetime.min.time())):
+        pid = PoiId(s.poi_id)
+        if pid in held or pid in excluded or any(v.poi_id == pid for v in out):
+            continue
+        timed = s.start_at is not None and s.end_at is not None and not s.ends_next_day
+        if (timed and not_before is not None and datetime.combine(
+                request.target_date, s.end_at, tzinfo=not_before.tzinfo) <= not_before):
+            continue
+        dwell = None
+        if timed:
+            dwell = (s.end_at.hour * 60 + s.end_at.minute) - (s.start_at.hour * 60 + s.start_at.minute)
+        out.append(RequiredVisit(poi_id=pid, day=request.target_date,
+                                 dwell_min=dwell if dwell and dwell > 0 else None,
+                                 reason="earlier_retime"))
+    notes.append(f"earlier_retime: {len(out)}")
+    return tuple(out)
+
+
+def _end_near(request: schemas.ReplanRequest, resolved: Sequence[str],
+              notes: list[str]) -> GeoPoint | None:
+    """END_NEAR_STAY("숙소 근처에서 끝내기") → 하루를 마칠 곳(그날 밤 숙소). 숙소가 없으면 None + 노트.
+
+    `anchor` 로 대신하지 않는다 — 그것은 GPS·수동·마지막 방문일 수 있어 숙소가 아니다.
+    """
+    if "END_NEAR_STAY" not in resolved:
+        return None
+    if request.stay_anchor is None:
+        notes.append("end_near_stay_no_stay: 숙소 좌표가 없어 무효")
+        return None
+    return GeoPoint(request.stay_anchor.lat, request.stay_anchor.lng)
+
 # 부정 표현 — 있으면 임베딩 매칭을 건너뛴다. 임베딩은 부정을 못 읽어 "카페는 이제 그만"이
 # ADD_CAFE 로 잡혀 카페가 **늘었고**, 부정 뒤만 떼어 매칭하면 "가고 싶어" 같은 빈 술어가
 # 엉뚱한 지시(ACTIVITY_FOCUS)에 붙었다(2026-10-05 실측). 부정문은 번역 LLM 과 PlanB 선택
@@ -1104,7 +1204,7 @@ def _exact_alias(text: str, specs: Sequence[DirectiveSpec]) -> tuple[DirectiveSp
 
 
 # RANKING 지시 중 "가까운 데로" 로 집행하는 것. END_NEAR_STAY(숙소 근처 마무리)는 마지막
-# 슬롯만 당겨야 해서 거리 감점으로 못 푼다 — 무효로 밝힌다.
+# 슬롯만 당겨야 해서 거리 감점으로 못 푼다 — 끝점(`end_near`)으로 따로 집행한다(`_LAYOUT_KEYS`).
 _NEAR_KEYS = frozenset({"NEARBY", "LESS_MOVE"})
 
 # SOLVER 지시 중 배선된 것 — 여행 속도로 집행한다. "여유 있게"는 느긋하게(`Pace.SLOW`, 체류
@@ -1903,6 +2003,7 @@ class WiredItineraryOrchestrator:
 
         not_before = _replan_not_before(request, self._tz)
         blocks = _replan_fixed_blocks(request, self._tz)
+        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, notes)  # 저녁은 그대로
         past = _past_blocks(blocks, not_before)
         # 피할 카테고리(야외 피하기·실내로·힘든 건 빼고, 사유 암시 포함)는 **후보에서 뺀다** — 점수 감점만
         # 두면 원 일정의 야외 공원이 그대로 남았다(2026-10-14 DEV "실내로" 3건). 원 일정의 그 곳도
@@ -1955,7 +2056,10 @@ class WiredItineraryOrchestrator:
             if dropped:
                 notes.append(f"planb_rank_trimmed: add_one dropped={dropped}")
 
-        visit_cap = _visit_cap(request, resolved, past, not_before)
+        # 시간만 당기기 — 원 일정의 남은 방문이 그대로 필수 방문이다. 장소를 안 바꾸므로 구성 LLM 도,
+        # 방문을 줄이는 상한도 타지 않는다(사용자가 "시간만"이라 했다).
+        earlier = _earlier_visits(request, resolved, blocks, not_before, notes)
+        visit_cap = None if earlier is not None else _visit_cap(request, resolved, past, not_before)
         if visit_cap is not None:
             notes.append(f"planb_visit_cap: {visit_cap}")
         window = request.time_window
@@ -1967,7 +2071,7 @@ class WiredItineraryOrchestrator:
         active = tuple(b for b in blocks if b not in past)
         try:
             # 상황 추천 = PlanB 순서. 선택 LLM 을 안 불렀으면 규칙 랭킹(우천·저장 장소·거리)이 참고로 간다.
-            composed = self._compose_day(
+            composed = tuple(v.poi_id for v in earlier) if earlier is not None else self._compose_day(
                 request, pool, persona, daily_rain, planb_rank or planb.ranked_poi_ids, resolved,
                 prefer, avoid, avoided, active, past, not_before, visit_cap, budget_level, notes,
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
@@ -2022,11 +2126,12 @@ class WiredItineraryOrchestrator:
             pace=pace,
             travel_weight=_route_weight(request.reasons, resolved),
             max_visits_per_day=(len(active) + len(composed) + len(add_one)
-                                if composed else visit_cap),
+                                if composed or earlier is not None else visit_cap),
             not_before=not_before,
-            required_visits=tuple(
+            required_visits=earlier if earlier is not None else tuple(
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
                               reason="llm_compose") for p in composed),
+            end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
             request=domain_request,
@@ -2046,15 +2151,18 @@ class WiredItineraryOrchestrator:
             planb_rank=planb_rank,
             llm_composed=bool(composed),
         ))
-        if composed and outcome.solution is not None:
+        dinner = any(b.reason == "keep_dinner" for b in blocks)
+        if (composed or dinner) and outcome.solution is not None:
             # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
             # 구성 LLM 이 고른 곳은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가 잠가서
             # 다음 다시 짜기·교체에서 못 바꾼다. 그 표시만 걷는다(시각·순서는 그대로).
+            # "저녁은 그대로" 잠금도 이번 재계획 한정이라 같이 걷는다.
             picked = set(composed)
             outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
                 replace(d, fixed_blocks=tuple(
                     fb for fb in d.fixed_blocks
-                    if not (fb.reason == "required_visit" and fb.poi_id in picked)))
+                    if not (fb.reason == "keep_dinner"
+                            or (fb.reason == "required_visit" and fb.poi_id in picked))))
                 for d in outcome.solution.days)))
         if composed:
             placed = {s.poi_id for d in (outcome.solution.days if outcome.solution else ())
@@ -2297,6 +2405,8 @@ class WiredItineraryOrchestrator:
             if spec.unwired:
                 ineffective.append(spec.key)
                 continue
+            if spec.key in _LAYOUT_KEYS:  # 하루 모양 — `replan` 이 직접 집행한다
+                continue
             if spec.key in _PACE_KEYS:
                 paces.add(_PACE_KEYS[spec.key])
                 continue
@@ -2348,13 +2458,14 @@ class WiredItineraryOrchestrator:
     ) -> tuple[DirectiveSpec, ...]:
         """사유 → 암시 지시(BR-U4-47). 사용자가 정한 축은 건너뛰고, 건 것·건너뛴 것을 밝힌다.
 
-        축을 정하는 것은 **효과 있는** 사용자 지시뿐이다 — 미배선·무효(`END_NEAR_STAY`) 칩이
-        축을 잡으면 사용자 것도 암시 것도 안 먹는 상태가 "사용자 우선"으로 보고된다.
+        축을 정하는 것은 **효과 있는** 사용자 지시뿐이다 — 미배선 칩·하루 모양 칩(`_LAYOUT_KEYS` —
+        잠금·시각·끝점이지 속도·거리 축이 아니다)이 축을 잡으면 사용자 것도 암시 것도 안 먹는 상태가 "사용자 우선"으로 보고된다.
         """
         table = index_of(self._directives)
         taken = {s.enforced_by for s in user
                  if s.cardinality != "ONE" and not s.unwired
-                 and (s.enforced_by != "RANKING" or s.key in _NEAR_KEYS)}
+                 and (s.enforced_by != "RANKING" or s.key in _NEAR_KEYS)
+                 and (s.enforced_by != "SOLVER" or s.key in _PACE_KEYS)}
         if hold_prompt:
             taken.add("PROMPT")
         have = {s.key for s in user}

@@ -265,6 +265,10 @@ class ItineraryProblem:
     무제한(기존 생성자 호출 전부 무영향). 재계획 사유(피로·지연)가 "원 일정 − 1" 로 켠다
     (BR-U4-47). pace 와 달리 **하드**다 — 조립의 재시도도 이것은 끄지 않는다(방문을 줄이는
     쪽이라 해 없음을 만들지 않는다).
+
+    end_near: 하루를 마칠 곳(재계획 "숙소 근처에서 끝내기" — 그날 밤 숙소). 마지막 방문지 →
+    이 점의 도로 km 를 감점한다(`END_NEAR_WEIGHT`). 목적식 항이라 가해 여부는 안 바꾼다.
+    기본 None = 항 없음(기존 생성자 호출 전부 무영향).
     """
 
     schedule_id: ScheduleId
@@ -284,6 +288,7 @@ class ItineraryProblem:
     required_visits: tuple[RequiredVisit, ...] = ()  # 시각 없는 필수 방문 (TRIP-1249)
     travel_weight: float = 0.0  # 경로 길이 감점 — 점수/km (BR-U4-47)
     max_visits_per_day: int | None = None  # 하루 방문 상한 — 고정·필수 포함 (BR-U4-47)
+    end_near: GeoPoint | None = None  # 하루를 마칠 곳 — 마지막 방문지 거리 감점 (BR-U4-47)
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -319,6 +324,7 @@ class ItineraryProblem:
             "required_visits": [r.to_dict() for r in self.required_visits],
             "travel_weight": self.travel_weight,
             "max_visits_per_day": self.max_visits_per_day,
+            "end_near": self.end_near.to_dict() if self.end_near else None,
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -371,6 +377,7 @@ class ItineraryProblem:
             ),
             travel_weight=d.get("travel_weight", 0.0),
             max_visits_per_day=d.get("max_visits_per_day"),
+            end_near=GeoPoint.from_dict(d["end_near"]) if d.get("end_near") else None,
         )
 
 

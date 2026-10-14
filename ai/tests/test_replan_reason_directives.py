@@ -178,10 +178,10 @@ def test_우천_실내가_사용자의_카페_한_곳을_먹지_않는다() -> N
 
 
 def test_무효한_사용자_칩은_축을_잡지_않는다() -> None:
-    """숙소 근처 마무리(무효 RANKING)·일찍 마무리(미배선 SOLVER)가 축을 잡으면 피로의
-    거리·속도 암시가 빠지고 사용자 칩도 안 먹어 아무 효과가 없다(리뷰 재현)."""
+    """숙소 근처 마무리·저녁 유지·시간 당기기(하루 모양 — 거리·속도 축이 아니다)·일찍 마무리(미배선
+    SOLVER)가 축을 잡으면 피로의 거리·속도 암시가 빠지고 사용자 칩도 안 먹는다(리뷰 재현)."""
     (_, _, _, _, near, _, slow), notes = _directives(
-        reasons=["fatigue"], directives=["END_NEAR_STAY", "SHORTER_DAY"])
+        reasons=["fatigue"], directives=["END_NEAR_STAY", "KEEP_DINNER", "SHORTER_DAY"])
     assert near and slow
     assert not any("implied_skipped" in n for n in notes), notes
 

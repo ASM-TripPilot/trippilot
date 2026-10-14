@@ -446,6 +446,7 @@ private val sampleReplanRequest = AiReplanRequest(
     targetDate = LocalDate.parse("2026-08-01"),
     timeWindow = AiTimeWindow(LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), LocalTime.parse("21:00")),
     anchor = AiCoord(33.45, 126.56),
+    stayAnchor = AiCoord(33.25, 126.41),
     scope = "PARTIAL_SLOTS",
     fromInstant = Instant.parse("2026-08-01T05:00:00Z"),
     preferenceProfile = PreferenceProfile(

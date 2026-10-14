@@ -187,6 +187,8 @@ class GenerateItineraryRequest:
     # 하루 방문 상한(고정·필수 포함, BR-U4-47) — 재계획 사유(피로·지연)가 "원 일정 − 1" 로 켠다.
     # 의미는 `ItineraryProblem.max_visits_per_day`. 기본 None = 무제한(generate 무영향).
     max_visits_per_day: int | None = None
+    # 하루를 마칠 곳(재계획 "숙소 근처에서 끝내기") — 의미는 `ItineraryProblem.end_near`. 기본 None = 무영향.
+    end_near: GeoPoint | None = None
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -506,6 +508,7 @@ class ScheduleAgent:
             not_before=request.not_before,
             travel_weight=request.travel_weight,
             max_visits_per_day=request.max_visits_per_day,
+            end_near=request.end_near,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).

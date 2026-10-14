@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from typing import Mapping, Sequence
 
 from trippilot.assembly_engine.config import (
+    END_NEAR_WEIGHT,
     RAIN_INDOOR,
     RAIN_OUTDOOR,
     stay_for,
@@ -268,10 +269,16 @@ class RuleFallbackAssembler:
                 # 세운다. 0 이면 ranked 순서 그대로(종전과 바이트 동일 — OR 웜스타트도 불변).
                 base = remaining
                 here = last_poi.coord if last_poi is not None else problem.anchor
-                if problem.travel_weight > 0 and here is not None:
+                route_on = problem.travel_weight > 0 and here is not None
+                end = problem.end_near
+                # 숙소 근처에서 끝내기 — OR 의 끝 아크 감점의 그리디판. 그리디는 어느 삽입이 마지막인지
+                # 모르므로 매 삽입에 숙소 거리 감점을 건다 — 하루가 숙소 쪽으로 흘러 끝도 가까워진다.
+                # ponytail: 마지막 한 곳만 보는 OR 보다 거칠다 — 폴백 빈도가 오르면 말단 판정을 넣는다.
+                if route_on or end is not None:
                     base = sorted(remaining, key=lambda c: (-(
                         self._adjusted_score(problem, day, c)
-                        - problem.travel_weight * self._road_km(problem, here, c)),
+                        - (problem.travel_weight * self._road_km(problem, here, c) if route_on else 0.0)
+                        - (END_NEAR_WEIGHT * self._road_km(problem, end, c) if end is not None else 0.0)),
                         str(c.poi_id)))
                 # 안정 정렬 — FOOD 상한 → 쿼터 내 먼저 → 선호 클래스 → ranked 순서
                 order = sorted(base, key=lambda c: (
