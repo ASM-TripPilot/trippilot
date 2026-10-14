@@ -231,6 +231,7 @@ class TargetTests(unittest.TestCase):
     def test_dev_outputs_wired_to_production_are_refused(self):
         prod = outputs()
         for dev in ({**self.DEV, "dev_target_database_host": prod["database_host"]},
+                    {**self.DEV, "dev_target_database_master_secret_arn": prod["database_master_secret_arn"]},
                     {**self.DEV, "dev_target_secret_arns": prod["app_secret_arns"]}):
             with self.subTest(dev=dev), self.assertRaises(ValueError):
                 runtime.parse_outputs(self.raw(dev), "dev")
@@ -249,6 +250,12 @@ class TargetTests(unittest.TestCase):
                     self.assertEqual(namespace, "trippilot-dev")
                     self.assertEqual(seen["database_host"], self.DEV["dev_target_database_host"])
                     self.assertFalse(prod_values & {seen["database_host"], seen["database_master_secret_arn"], *seen["app_secret_arns"].values()})
+            values = Path(directory) / "values.json"
+            with patch("builtins.print"):
+                runtime.main(["render-values", "--target", "dev", "--outputs", str(path), "--image-tag", "sha-1",
+                              "--certificate-arn", "arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc",
+                              "--hostname", "dev-api.example.com", "--output", str(values)])
+            self.assertEqual(json.loads(values.read_text())["config"]["databaseHost"], self.DEV["dev_target_database_host"])
 
     def test_target_fixes_the_namespace(self):
         with patch("runtime.runtime_smoke.run") as smoke, patch("builtins.print"):

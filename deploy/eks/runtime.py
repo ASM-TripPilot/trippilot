@@ -48,14 +48,18 @@ def parse_outputs(raw, target="prod"):
     for repository in result["ecr_repositories"].values():
         if not re.fullmatch(r"\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?/[a-z0-9/_-]+", repository):
             raise ValueError("Invalid ECR repository output")
-    if target != "prod" and (result["database_host"] == raw["database_host"]["value"]
-                             or set(result["app_secret_arns"].values()) & set(raw["app_secret_arns"]["value"].values())):
-        raise ValueError("Deploy target outputs must not point at production resources")
     if set(result["app_secret_arns"]) != set(runtime_secrets.GROUP_KEYS):
         raise ValueError("Expected backend, ai, database, shared Secrets Manager ARNs")
     for arn in [result["database_master_secret_arn"], *result["app_secret_arns"].values()]:
         if not re.fullmatch(r"arn:aws(?:-us-gov|-cn)?:secretsmanager:[a-z0-9-]+:\d{12}:secret:[a-zA-Z0-9/_+=.@!-]+", arn):
             raise ValueError("Invalid Secrets Manager ARN output")
+    if target != "prod":
+        # 출력 배선이 틀려 개발 대상이 운영 자원(DB 호스트·마스터 비밀번호·시크릿 그릇)을 가리키면 거절한다.
+        prod = {key: (raw.get(key) or {}).get("value") for key in ("database_host", "database_master_secret_arn", "app_secret_arns")}
+        if (result["database_host"] == prod["database_host"]
+                or result["database_master_secret_arn"] == prod["database_master_secret_arn"]
+                or set(result["app_secret_arns"].values()) & set((prod["app_secret_arns"] or {}).values())):
+            raise ValueError("Deploy target outputs must not point at production resources")
     return result
 
 
