@@ -337,12 +337,21 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     });
   }
 
-  /** 생성 화면으로 replace 1회 — 409 안내·실패·재시도는 그 화면이 진다(TRIP-1037 결정 A). */
+  /**
+   * 생성 화면으로 replace 1회 — 409 안내·실패·재시도는 그 화면이 진다(TRIP-1037 결정 A).
+   * 오늘 뒤의 날을 보고 있으면 그 날을 싣는다 — 여행 중에 다녀온 기록이 있어 거절되면 생성 화면이 재계획을
+   * 그 날로 연다(goPlanB 와 같은 규칙). 빠지면 보던 날 대신 오늘이 다시 짜인다. 여행 전이면 쓰이지 않는다.
+   */
   function goGenerating(): void {
     leavingRef.current = true;
+    const targetDate =
+      selectedDate > seoulDate(new Date()) ? selectedDate : undefined;
     router.replace({
       pathname: '/trips/[tripId]/itinerary/generating',
-      params: { tripId, mode: 'FULLY_AI' },
+      params:
+        targetDate === undefined
+          ? { tripId, mode: 'FULLY_AI' }
+          : { tripId, mode: 'FULLY_AI', targetDate },
     });
   }
 
