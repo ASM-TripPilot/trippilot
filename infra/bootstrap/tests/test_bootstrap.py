@@ -127,6 +127,31 @@ class BootstrapSecurityTests(unittest.TestCase):
         tag = read["Condition"]["StringEquals"]["secretsmanager:ResourceTag/aws:rds:primaryDBInstanceArn"]
         self.assertTrue(tag["Fn::Sub"].endswith(":db:trippilot-${Environment}"))
 
+    def test_alert_grants_stay_inside_this_environment(self):
+        """운영 알람(Q3=A) 권한 — Slack 채널이 쓰는 역할은 읽기뿐이고, 배포 역할의 쓰기는 이 환경의 이름 안이다.
+
+        `chatbot:*` 는 `*` 범위다(Chatbot 리소스 단위 권한이 확실치 않아 좁히면 apply 가 막힐 수 있다). 그 넓이가
+        무해한 이유는 넘길 수 있는 역할이 CloudWatch 읽기만 가진 chatbot 역할 하나뿐이라서다 — 이 테스트가 그 전제를 잡는다.
+        """
+        chatbot = self.resources["ChatbotRole"]["Properties"]
+        self.assertEqual(chatbot["AssumeRolePolicyDocument"]["Statement"][0]["Principal"], {"Service": "chatbot.amazonaws.com"})
+        granted = [action for policy in chatbot["Policies"] for item in policy["PolicyDocument"]["Statement"]
+                   for action in item["Action"]]
+        self.assertTrue(all(action.split(":")[1].startswith(("Describe", "Get", "List")) and action.startswith("cloudwatch:")
+                            for action in granted), granted)
+        self.assertNotIn("ManagedPolicyArns", chatbot)
+
+        attached = {item["Sid"]: item for item in
+                    self.resources["DeploymentExtraPolicy"]["Properties"]["PolicyDocument"]["Statement"]}
+        passes = [item for item in attached.values() if "iam:PassRole" in item["Action"]]
+        chatbot_pass = attached["PassChatbotRoleToSlackChannel"]
+        self.assertEqual(chatbot_pass["Action"], ["iam:PassRole"])
+        self.assertTrue(chatbot_pass["Resource"]["Fn::Sub"].endswith(":role/trippilot-${Environment}-chatbot"))
+        self.assertIn(chatbot_pass, passes)
+        self.assertTrue(attached["ManageAlarms"]["Resource"]["Fn::Sub"].endswith(":alarm:trippilot-${Environment}-*"))
+        for resource in attached["ManageAlertsTopic"]["Resource"]:
+            self.assertIn(":trippilot-${Environment}-alerts", resource["Fn::Sub"])
+
     def test_bootstrap_principal_may_create_everything_the_stack_declares(self):
         """부트스트랩 역할의 권한 예제가 템플릿이 만드는 IAM 리소스를 전부 덮는지.
 
