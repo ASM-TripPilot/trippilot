@@ -1,9 +1,12 @@
 # dev 파드 로그 꺼내기 — 클러스터 자격이 없는 사람이 실패 원인을 보려고 (읽기 전용)
 #
-# dev 파드 로그는 CloudWatch(`/aws/containerinsights/trippilot-dev/application`, #1086)에도 쌓이지만
-# 배포 역할엔 아직 logs 읽기 권한이 없다(부트스트랩 템플릿 후속, f7). 그래서 ai-llm-fallback-watch 와
-# 같은 길 — 배포 역할로 `kubectl logs` — 로 **지금 떠 있는 파드**의 로그를 받아 아티팩트로 올린다.
-# 롤아웃 전 파드의 로그는 못 본다(`--previous` 는 같은 파드에서 재시작한 컨테이너만).
+# 출처 둘(`source`):
+#   kubectl    — 배포 역할로 `kubectl logs`(ai-llm-fallback-watch 와 같은 길). **지금 떠 있는 파드**만 —
+#                롤아웃 전 파드의 로그는 못 본다(`--previous` 는 같은 파드에서 재시작한 컨테이너만).
+#   cloudwatch — Container Insights 로그 그룹 `/aws/containerinsights/trippilot-dev/application`(#1086,
+#                2026-10-13 16:27 KST 부터, 보존 90일)을 Logs Insights 로 질의(읽기 권한 #1099). 죽은 파드·
+#                롤아웃 전 구간까지 본다. 줄 모양을 kubectl 과 같게(`[pod/<pod>/<container>] <RFC3339> <log>`)
+#                맞춰 같은 분석이 그대로 돈다. /health 줄은 질의에서 뺀다(AI 파드는 2시간에 4천 줄).
 #
 # 읽기만 한다 — 클러스터·DB 를 바꾸지 않으므로 `aws-dev` 동시성 그룹에 넣지 않는다(배포와 겹쳐도 무해,
 # 넣으면 서로 뒤에 줄을 선다). 자격 패턴은 deploy/eks/runtime_kb.py 의 _CREDENTIAL 하나로 가린다 —
@@ -13,8 +16,13 @@ name: aws-dev-logs
 on:
   workflow_dispatch:
     inputs:
+      source:
+        description: kubectl(지금 파드) · cloudwatch(롤아웃 전 구간까지, 16:27 KST 10-13 부터)
+        type: choice
+        options: [kubectl, cloudwatch]
+        default: kubectl
       since:
-        description: 얼마 전부터 (kubectl --since 형식, 예 6h · 90m)
+        description: 얼마 전부터 (예 6h · 90m · 2d)
         type: string
         default: 6h
       component:
@@ -37,6 +45,7 @@ jobs:
       id-token: write         # AWS 역할 (EKS 파드 로그 읽기)
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      SOURCE: ${{ inputs.source }}
       SINCE: ${{ inputs.since }}
       COMPONENT: ${{ inputs.component }}
       PATTERN: ${{ inputs.pattern }}
@@ -49,6 +58,7 @@ jobs:
           allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
           role-session-name: trippilot-dev-logs-${{ github.run_id }}
       - name: 파드 로그 수집 (kubectl, 읽기 전용)
+        if: inputs.source == 'kubectl'
         run: |
           set -o pipefail
           aws eks update-kubeconfig --name trippilot-dev --region "$AWS_REGION" > /dev/null
@@ -67,6 +77,68 @@ jobs:
             [ -s "logs/$c.err" ] || rm -f "logs/$c.err"
           done
           ls -la logs
+      - name: 컨테이너 로그 질의 (CloudWatch Logs Insights, 읽기 전용)
+        if: inputs.source == 'cloudwatch'
+        run: |
+          python3 - <<'EOF'
+          import json, os, re, subprocess, sys, time
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          GROUP = "/aws/containerinsights/trippilot-dev/application"
+          LIMIT = 10_000                       # Logs Insights 한 질의의 결과 상한
+          WINDOW = 2 * 3600                    # 상한에 덜 닿게 시간 창을 나눈다
+
+          m = re.fullmatch(r"(\d+)([smhd])", os.environ["SINCE"].strip())
+          if not m:
+              sys.exit(f"since 형식이 아니다: {os.environ['SINCE']!r} (예 6h · 90m · 2d)")
+          span = int(m[1]) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[m[2]]
+          end = int(time.time()); start = end - span
+          comps = ["ai", "backend", "gateway", "embedding"]
+          if os.environ["COMPONENT"] != "all":
+              comps = [os.environ["COMPONENT"]]
+
+          def aws(*args):
+              return json.loads(subprocess.run(["aws", "logs", *args, "--output", "json"],
+                                               check=True, capture_output=True, text=True).stdout)
+
+          out = Path("logs"); out.mkdir(exist_ok=True)
+          truncated = []
+          for c in comps:
+              lines = []
+              for w0 in range(start, end, WINDOW):
+                  w1 = min(end, w0 + WINDOW)
+                  query = ("fields @timestamp, kubernetes.pod_name, kubernetes.container_name, log"
+                           f' | filter kubernetes.namespace_name = "trippilot" and kubernetes.container_name = "{c}"'
+                           " | filter log not like /GET \\/health/"
+                           f" | sort @timestamp asc | limit {LIMIT}")
+                  qid = aws("start-query", "--log-group-name", GROUP, "--start-time", str(w0),
+                            "--end-time", str(w1), "--query-string", query)["queryId"]
+                  while True:
+                      res = aws("get-query-results", "--query-id", qid)
+                      if res["status"] in ("Complete", "Failed", "Cancelled", "Timeout"):
+                          break
+                      time.sleep(2)
+                  if res["status"] != "Complete":
+                      sys.exit(f"{c} {w0}~{w1} 질의 {res['status']}")
+                  rows = res["results"]
+                  if len(rows) >= LIMIT:
+                      truncated.append(f"{c} {datetime.fromtimestamp(w0, timezone.utc):%m-%d %H:%M}Z~ ({LIMIT})")
+                  for row in rows:
+                      f = {x["field"]: x["value"] for x in row}
+                      ts = f.get("@timestamp", "").replace(" ", "T") + "Z"
+                      lines.append(f"[pod/{f.get('kubernetes.pod_name', '?')}/{f.get('kubernetes.container_name', c)}] "
+                                   f"{ts} {f.get('log', '').rstrip()}")
+              (out / f"{c}.log").write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+              print(f"{c}: {len(lines)} 줄")
+          # 상한에 닿은 창이 있으면 그 사실을 남긴다(조용한 절단 금지) — since 를 줄이거나 창을 나눠 다시.
+          (out / "pods.txt").write_text(
+              f"source=cloudwatch group={GROUP} since={os.environ['SINCE']}\n"
+              + ("".join(f"TRUNCATED {t}\n" for t in truncated) if truncated else "truncated: none\n"),
+              encoding="utf-8")
+          if truncated:
+              print("::warning::Logs Insights 상한(10,000)에 닿은 창: " + ", ".join(truncated))
+          EOF
       - name: 자격 가리기 · 걸러 내기 · 요약
         run: |
           python3 - <<'EOF'
@@ -90,7 +162,7 @@ jobs:
                   rows.append((path.name, len(scrubbed), hits, len(kept)))
               else:
                   rows.append((path.name, len(scrubbed), hits, None))
-          out = [f"### dev 파드 로그 (`--since={os.environ.get('SINCE')}`, component={os.environ.get('COMPONENT')})", "",
+          out = [f"### dev 파드 로그 (source={os.environ.get('SOURCE')}, `since={os.environ.get('SINCE')}`, component={os.environ.get('COMPONENT')})", "",
                  "| 파일 | 줄 | 신호 줄(ERROR·WARN·5xx·409·degrad…) | pattern 일치 |", "|---|---|---|---|"]
           for name, n, hits, kept in rows:
               out.append(f"| {name} | {n} | {hits} | {'' if kept is None else kept} |")
