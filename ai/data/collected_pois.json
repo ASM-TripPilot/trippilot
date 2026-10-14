@@ -12229,7 +12229,7 @@
       "poi": {
         "poi_id": "tourapi-2553685",
         "name": "수목원테마파크(아이스뮤지엄)",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.4706885565,
           "lng": 126.4879352279
@@ -72665,7 +72665,7 @@
       "poi": {
         "poi_id": "tourapi-126943",
         "name": "북악스카이 팔각정",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 37.6020279351,
           "lng": 126.9805642714
@@ -2622219,7 +2622219,7 @@
       "poi": {
         "poi_id": "overture-2f667446-b7d7-4f99-995c-91b1d2c148e6",
         "name": "하늘공원",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 37.5671959,
           "lng": 126.8911209
@@ -2623179,7 +2623179,7 @@
       "poi": {
         "poi_id": "overture-d0d10a9f-9919-4712-a144-5f9fb9b445fd",
         "name": "정동전망대",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 37.5643997,
           "lng": 126.9755707
@@ -2634859,7 +2634859,7 @@
       "poi": {
         "poi_id": "overture-9ee5e22b-726f-415b-a282-66831650a153",
         "name": "N서울타워",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 37.558857,
           "lng": 126.9998779
@@ -2639243,7 +2639243,7 @@
       "poi": {
         "poi_id": "overture-ee9e19ce-b49d-49d1-9a6a-805c3cc51708",
         "name": "낙산공원",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 37.5804825,
           "lng": 127.0075378
@@ -2645067,7 +2645067,7 @@
       "poi": {
         "poi_id": "overture-6e625b71-7901-40de-a13a-2448dd14ea58",
         "name": "황령산 봉수대",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 35.1580544,
           "lng": 129.0826263
