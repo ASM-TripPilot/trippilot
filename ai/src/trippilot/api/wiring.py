@@ -94,10 +94,12 @@ from trippilot.llm_gateway.workers.reminder_copy import (
 )
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
+from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightGate
 from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
 from trippilot.llm_gateway.workers.reflection_nudge import (
     FALLBACK_NUDGE_MESSAGE, ReflectionNudgeInput, ReflectionNudgeWorker,
 )
+from trippilot.llm_gateway.workers.photo_highlight import PhotoHighlightWorker
 from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
 from trippilot.llm_gateway.gates.share_card_copy import ShareCardCopyGate
 from trippilot.llm_gateway.workers.share_card_copy import (
@@ -3618,13 +3620,22 @@ def build_orchestrator(
         tz=tz,
     )
     # Reflect 경계 (TRIP-429) — 워커별 게이트 페어링은 위 explainer·edit와 동형
-    # ReflectAgent — 템플릿 워커를 감싼다. Phase 2(vision) 하이라이트 워커는 후속 배선.
+    # ReflectAgent — 템플릿 워커를 감싼다. 하이라이트 워커도 주입한다:
+    # 미주입이면 `ReflectTask.vision` 이 실려 와도 **조용히 텍스트 경로로 간다**
+    # (기능 부재 ≠ 실패라 강등 신호가 0 — 경계가 열리는 날 빼먹으면 원인을 못 찾는다).
+    # 지금은 경계에 사진이 없어 vision=None 이므로 이 주입은 동작을 바꾸지 않는다.
     reflect_agent = ReflectAgent(
         ReflectionTemplateWorker(
             GatewayFacade(llm, renderer, ReflectionTemplateGate(), c1_config, trace)
         ),
         trace,
+        highlight_worker=PhotoHighlightWorker(
+            GatewayFacade(llm, renderer, PhotoHighlightGate(), c1_config, trace)
+        ),
     )
+    # nudge — 여행 전 푸시 문구. **BE 호출 0건**이고 같은 일을 `notification/copies`
+    # (ReminderCopyWorker, 아래)가 하고 있다 — 소비처가 생기기 전에 열렸고 그 자리를
+    # 리마인드 카피 트랙이 가져갔다. 경계는 호출이 없어 해가 없으므로 남겨 둔다.
     nudge_worker = ReflectionNudgeWorker(
         GatewayFacade(llm, renderer, ReflectionNudgeGate(), c1_config, trace)
     )
