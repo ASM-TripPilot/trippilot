@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.VisitRecordPort
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
@@ -268,6 +269,7 @@ class GenerateItineraryServiceTest : StringSpec({
         dayStartAt: LocalTime? = null,
         firstDayStartAt: LocalTime? = null,
         lastDayEndAt: LocalTime? = null,
+        visits: VisitRecordPort = NoVisits,
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -292,7 +294,7 @@ class GenerateItineraryServiceTest : StringSpec({
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다 — 인스턴스를 나누면 취소가 사라진다.
         val sessions = genSessions(trips, sessionRepo, clock, defaultDeadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, scoredPools, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, rejectionStore, scoredPools, personalization, NOOP_TX, clock, defaultDeadlines)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, rejectionStore, scoredPools, personalization, visits, NOOP_TX, clock, defaultDeadlines)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -785,14 +787,13 @@ class GenerateItineraryServiceTest : StringSpec({
             it.isFixed shouldBe true
         }
     }
-    // ── 재생성 가드(여행 기간) ──────────────────────────────────────────────
+    // ── 재생성 가드(여행 기간 × 다녀온 기록) ─────────────────────────────────
     //
-    // 재생성은 기존 일정을 지우고 새로 만든다. 여행 중에 그러면 따라가던 계획이 통째로 갈리고
-    // **방문 실적이 유령이 된다** — visit_check 는 trip_id+slotKey 로 남아 삭제를 견딘다.
-    // 여행 중 변경은 재계획(Plan-B)의 몫이다.
+    // 재생성은 기존 일정을 지우고 새로 만든다. 다녀온 기록이 있는 여행에서 그러면 **방문 실적이 유령이
+    // 된다** — visit_check 는 trip_id+slotKey 로 남아 삭제를 견딘다. 그런 여행의 변경은 재계획(Plan-B)의 몫이다.
     //
-    // **첫 생성은 대상이 아니다** — 지울 계획이 없으면 이 피해가 성립하지 않는다. 그래서 아래 케이스들은
-    // 기존 일정을 미리 깔고 시작한다(그게 "재생성"의 정의다).
+    // **첫 생성과 기록 없는 재생성은 대상이 아니다** — 지울 계획이나 남을 기록이 없으면 이 피해가 성립하지
+    // 않는다. 그래서 아래 케이스들은 기존 일정을 미리 깔고 시작한다(그게 "재생성"의 정의다).
 
     fun clockAt(day: String): Clock = Clock.fixed(Instant.parse("${day}T00:00:00Z"), ZoneOffset.UTC)
 
@@ -869,32 +870,50 @@ class GenerateItineraryServiceTest : StringSpec({
         svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId
     }
 
-    // 경계값 — 시작 당일은 이미 "여행 중"이다. 첫날 아침에 통째로 다시 짜면 그날 일정이 사라진다.
-    "여행 시작 당일이면 409" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-01"))
+    // 경계값 — 시작 당일은 이미 "여행 중"이다. 다녀온 기록이 있으면 통째로 다시 짜지 않는다.
+    "다녀온 기록이 있으면 여행 시작 당일 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-01"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
             .message.orEmpty() shouldContain "재계획"
     }
 
-    "여행 중이면 409" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"))
+    "다녀온 기록이 있으면 여행 중 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
     }
 
     // 경계값 — 마지막 날도 여행 중이다(체크아웃일까지 계획일에 포함된다).
-    "여행 마지막 날이면 409" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-03"))
+    "다녀온 기록이 있으면 여행 마지막 날 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-03"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
     }
 
-    "끝난 여행이면 409 — 문구가 다르다" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-04"))
+    "다녀온 기록이 있으면 끝난 여행 409 — 문구가 다르다" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-04"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
             .message.orEmpty() shouldContain "끝난 여행"
+    }
+
+    /**
+     * 오늘 출발 여행을 만들고 추천안에서 바로 [다시 짜기] — 날짜만 보던 가드가 409 를 냈고, 옛 앱은 그것을
+     * "네트워크 확인"으로 접어 사용자가 연타했다(DEV 10-13 6회 · 10-14 7회). 지킬 기록이 없으니 다시 만든다.
+     */
+    "다녀온 기록이 없으면 여행 시작 당일에도 다시 만든다" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-01"))
+
+        svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId
+    }
+
+    "다녀온 기록이 없으면 여행 중·끝난 여행도 다시 만든다" {
+        listOf("2026-08-02", "2026-08-04").forEach { day ->
+            val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt(day))
+
+            withClue(day) { svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId }
+        }
     }
 
     // 직접 만들기도 같은 가드를 지난다 — AI 를 안 부를 뿐 기존 일정을 지우는 것은 똑같다.
@@ -910,13 +929,13 @@ class GenerateItineraryServiceTest : StringSpec({
                 now, GenerationState.FAILED,
             )
         }
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = failedRepo, clock = clockAt("2026-08-02"))
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = failedRepo, clock = clockAt("2026-08-02"), visits = Visited)
 
         svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId
     }
 
-    "직접 만들기도 여행 중이면 409" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"))
+    "직접 만들기도 다녀온 기록이 있으면 여행 중 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.MANUAL) }
     }
@@ -1079,7 +1098,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다.
         val sessions = genSessions(trips, sessionRepo, clock, deadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, scoredPools, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, FakeRejectionStore(), scoredPools, NoPersonalization, NOOP_TX, clock, deadlines)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, FakeRejectionStore(), scoredPools, NoPersonalization, NoVisits, NOOP_TX, clock, deadlines)
     }
 
     "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
@@ -1799,7 +1818,7 @@ class TwoPhaseDayCoverageTest : StringSpec({
                 override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
             }
             val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
-            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, FakeRejectionStore(), FakeScoredCandidatePoolStore(), NoPersonalization, NOOP_TX, clock, defaultDeadlines)
+            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, FakeRejectionStore(), FakeScoredCandidatePoolStore(), NoPersonalization, NoVisits, NOOP_TX, clock, defaultDeadlines)
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             // 두 호출이 요청한 일자의 합 = 여행 일자, 중복 없음
@@ -1825,6 +1844,10 @@ class TwoPhaseDayCoverageTest : StringSpec({
 private object NoPersonalization : PersonalizationPort {
     override fun hintsFor(accountId: java.util.UUID) = PersonalizationHints.NONE
 }
+
+/** 다녀온 기록 없음 — 생성 테스트 대부분의 전제. 기록이 있을 때의 재생성 가드는 [Visited] 로 본다. */
+private val NoVisits = VisitRecordPort { false }
+private val Visited = VisitRecordPort { true }
 
 private object StubRegions : com.trippilot.placedata.api.RegionLookupFacade {
     /** 코드 검증 — 이 테스트는 이름 경로만 쓴다. */
