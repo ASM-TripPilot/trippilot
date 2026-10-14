@@ -296,7 +296,7 @@ def test_gate_checks_time_expr_in_subtitle_and_hashtags() -> None:
     "text",
     ["한 시간 걸려요", "한시간 반", "두 시간 코스", "삼십 분 정도", "삼십분", "십오 분",
      "반 시간", "이동시간이 짧아요", "시간이 걸리지 않아요", "#한시간코스",
-     "운전 시간이 길어요", "체류 시간 넉넉히"],
+     "운전 시간이 길어요", "체류 시간 넉넉히", "삼십 분이 걸려요"],
 )
 def test_time_expr_catches_korean_numeral_durations(text: str) -> None:
     assert _TIME_EXPR.search(text), text
@@ -307,7 +307,9 @@ def test_time_expr_catches_korean_numeral_durations(text: str) -> None:
     "text",
     ["오후 세 시에 열어요", "09:00 오픈", "한적한 시간대에 좋아요", "시간 여행 테마 카페",
      "#시간여행", "즐거운 시간을 보내요", "특별한 시간을 보내요", "식사 시간을 즐겨요",
-     "분위기 좋은 카페", "기분 좋은 하루", "충분히 둘러보세요", "#분위기카페"],
+     "분위기 좋은 카페", "기분 좋은 하루", "충분히 둘러보세요", "#분위기카페",
+     # 수사 뒤라도 소요시간일 수 없는 말 — 분위기·사람 세는 '분'·시간대
+     "이 분위기 그대로", "두 분이서 오붓하게", "이 시간대엔 한산해요"],
 )
 def test_time_expr_passes_non_duration_phrases(text: str) -> None:
     assert _TIME_EXPR.search(text) is None, text
