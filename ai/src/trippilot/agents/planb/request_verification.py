@@ -51,6 +51,12 @@ MIN_WINDOW_MINUTES = 60
 # 이름 대조 최소 길이 — "카페" 한 단어가 모든 카페에 붙지 않게.
 _MIN_NAME_CHARS = 2
 _NORMALIZE = re.compile(r"[\s\-·.,'\"()\[\]]+")
+# 후보 반경 밖에서 집은 곳 둘레 — 거기까지 가서 그곳 하나만 보고 오면 이동 앞뒤로 몇 시간이 빈다
+# (DEV 2026-10-14: 제주시 → 성산 38km, 12:00~16:00 공백). 둘레의 등록 POI 를 후보에 넣어 구성 LLM 이
+# 그 근처로 하루를 이어 짤 수 있게 한다. 카테고리당 상한은 둘레 463곳 중 393곳이 맛집이라서다.
+NEARBY_RADIUS_KM = 5.0
+NEARBY_MAX = 8
+NEARBY_PER_CATEGORY = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +89,25 @@ def match_place(name: str, registered: Sequence[Poi], anchor: GeoPoint) -> tuple
         return None, "not_registered"
     best = min(pick, key=lambda p: (haversine_km(anchor, p.coord), str(p.poi_id)))
     return best, ("exact" if exact else f"partial/{len(pick)}")
+
+
+def nearby(place: Poi, registered: Sequence[Poi], weekday: int) -> tuple[Poi, ...]:
+    """집은 곳 둘레의 등록 POI — 가까운 순, 카테고리당 `NEARBY_PER_CATEGORY`, 최대 `NEARBY_MAX`.
+    숙소·그날 휴무가 증명된 곳·자기 자신은 뺀다(숏리스트와 같은 자격)."""
+    ranked = sorted(
+        (p for p in registered
+         if p.poi_id != place.poi_id and p.category is not PoiCategory.STAY
+         and hours_label(p, weekday) is not None),
+        key=lambda p: (haversine_km(place.coord, p.coord), str(p.poi_id)))
+    out: list[Poi] = []
+    per: dict[PoiCategory, int] = {}
+    for p in ranked:
+        if per.get(p.category, 0) < NEARBY_PER_CATEGORY:
+            per[p.category] = per.get(p.category, 0) + 1
+            out.append(p)
+            if len(out) == NEARBY_MAX:
+                break
+    return tuple(out)
 
 
 def verify_places(

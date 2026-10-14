@@ -38,10 +38,7 @@ from trippilot.domain.common import PoiId, TransportMode
 from trippilot.domain.edit import EditCommand, EditOp
 from trippilot.domain.itinerary import DaySolution, ItinerarySolution, VisitSlot
 from trippilot.domain.llm import CandidatePool
-from trippilot.llm_gateway.gates.edit_translation import (
-    is_anchor_param_key,
-    is_time_param_key,
-)
+from trippilot.llm_gateway.gates.edit_translation import is_time_param_key
 
 _DEFAULT_STAY_MIN = 60          # 그 날 기존 슬롯이 없을 때의 체류 기본값
 _EMPTY_DAY_START = time(10, 0)  # 빈 날 시작 시각 (ponytail — docstring 참조)
@@ -71,9 +68,7 @@ def validate_command(
     - affected_slots ⊆ 현재 일정 (없는 슬롯 편집 불가)
     - affected_slots ∩ 대상 일자 예약(고정) 슬롯 = ∅ (TRIP-526 — 예약은 닻, 이동·삭제·
       교체 대상 불가). REORDER_DAY는 슬롯 전체 순열이라 제외 — 예약 위치는 retime이 판정
-    - params의 `*PoiId` 값 ⊆ 후보 풀 (INV-1 — 풀 밖 POI 추가·교체 차단).
-      단 MOVE_SLOT 기준점(`afterPoiId`·`beforePoiId`)은 새 POI가 아니라 기존 슬롯 지목이라
-      현재 일정과 교차한다 — 게이트 ②와 **동일 함수** `is_anchor_param_key`
+    - params의 `*PoiId` 값 ⊆ 후보 풀 (INV-1 — 풀 밖 POI 추가·교체 차단)
     - params에 시각·소요시간 키 금지 (시각은 어셈블리 소유 — INV-2·3):
       게이트 ③과 **동일 함수** `is_time_param_key` — 별도 목록을 두지 않는다
     """
@@ -85,10 +80,7 @@ def validate_command(
     for key, value in command.params.items():
         if is_time_param_key(key):
             raise EditRejected(f"params에 시각·소요시간 키 {key!r} — 시각은 어셈블리가 정함")
-        if is_anchor_param_key(key):
-            if not isinstance(value, str) or PoiId(value) not in current_ids:
-                raise EditRejected(f"params {key}={value!r}가 현재 일정에 없음")
-        elif key.endswith("PoiId"):
+        if key.endswith("PoiId"):
             if not isinstance(value, str) or not pool.contains(PoiId(value)):
                 raise EditRejected(
                     f"params {key}={value!r}가 후보 풀 밖 — closed-set 위반(INV-1)")
@@ -124,24 +116,14 @@ def apply_command(
         if moving not in order:
             raise EditRejected(f"이동 대상 {moving}가 그 날 일정에 없음")
         rest = [p for p in order if p != moving]
-        # 기준이 없으면 옮기지 않고 되묻는다. 예전 "없으면 맨 앞" 기본값은 "더 늦게"를
-        # 앞으로 당기는 반대 이동을 조용히 냈다(INV-4). 맨 앞 = 첫 슬롯의 beforePoiId.
-        # 키는 검증과 같은 판정(is_anchor_param_key)으로 모은다 — 정확 키만 읽으면
-        # after_poi_id 같은 변형이 검증은 통과하고 여기선 사라져 "기준 둘" 거부를 피한다.
-        anchors = [(k, v) for k, v in command.params.items() if is_anchor_param_key(k)]
-        if len(anchors) != 1:
-            raise EditRejected(
-                "어디로 옮길지 불명 — afterPoiId(바로 앞 슬롯)·beforePoiId(바로 뒤 슬롯) "
-                "중 하나만 지정")
-        key, raw = anchors[0]
-        anchor = PoiId(raw) if isinstance(raw, str) else None
-        if anchor not in rest:
-            raise EditRejected(f"이동 기준 {raw!r}가 그 날 일정(대상 제외)에 없음")
-        idx = rest.index(anchor) + (1 if key.lower().startswith("after") else 0)
-        moved = tuple(rest[:idx]) + (moving,) + tuple(rest[idx:])
-        if list(moved) == order:  # 원래 이웃을 기준으로 삼은 이동 — "반영됨"으로 위장 금지
-            raise EditRejected(f"이동 결과가 지금 순서와 같음 — {key}={raw!r} 기준")
-        return moved
+        after_raw = command.params.get("afterPoiId")
+        if after_raw is None:
+            return (moving, *rest)  # 기준 없음 = 맨 앞으로
+        after = PoiId(after_raw)
+        if after not in rest:
+            raise EditRejected(f"afterPoiId {after}가 그 날 일정에 없음")
+        idx = rest.index(after) + 1
+        return tuple(rest[:idx]) + (moving,) + tuple(rest[idx:])
     if op is EditOp.REORDER_DAY:
         if sorted(command.affected_slots, key=str) != sorted(order, key=str):
             raise EditRejected("REORDER_DAY는 그 날 슬롯 전체의 순열이어야 함")
