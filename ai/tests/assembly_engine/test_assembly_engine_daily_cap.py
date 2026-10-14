@@ -32,7 +32,7 @@ from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, Tr
 from trippilot.domain.itinerary import (FixedBlock, ItineraryProblem, RequiredVisit,
                                         TimeWindow)
 from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory as C, PoiSource
+from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory as C, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)
@@ -222,6 +222,31 @@ def test_prefilter_still_fills_sixty_from_spill() -> None:
     kept = OrToolsAssembler(index, TravelEstimator(_CFG), _CFG)._prefilter(
         list(problem.candidates), set(), _DAY, [], 60)
     assert len(kept) == 60  # 다른 카테고리가 모자라면 넘친 후보로 다시 채운다 — 풀 손실 없음
+
+
+def test_prefilter_keeps_greedy_hint_pois_so_evening_is_not_empty() -> None:
+    """낮 카테고리 다섯이 상위 60(몫 12씩)을 다 채우고 저녁에 여는 야경은 점수가 낮아 잘리던 경우 —
+    그리디(힌트)는 저녁을 야경으로 채우는데 OR 노드엔 그 POI 가 없어 하루가 17시에 끝났다
+    (2026-10-14 종로 덤프: 그리디 8곳 vs OR 6곳). 힌트 POI 는 프리필터에서 남긴다."""
+    day_only = (OpenHour(day_of_week=_DAY.weekday(), open_min=9 * 60, close_min=17 * 60),)
+    night = (OpenHour(day_of_week=_DAY.weekday(), open_min=15 * 60, close_min=23 * 60),)
+    specs, hours = [], {}
+    for cat in (C.CULTURE, C.SIGHT, C.SHOPPING, C.NATURE, C.ACTIVITY):
+        for i in range(14):
+            specs.append((f"{cat.value}{i:02d}", cat, .9))
+            hours[f"{cat.value}{i:02d}"] = day_only
+    for i in range(3):
+        specs.append((f"nv{i}", C.NIGHT_VIEW, .3))
+        hours[f"nv{i}"] = night
+    problem, index = _setup(specs, same_coord=True)
+    index = {k: replace(p, open_hours=hours[str(k)]) for k, p in index.items()}
+    est = TravelEstimator(_CFG)
+    greedy = RuleFallbackAssembler(index, est, _CFG).solve(problem)
+    assert _cats(greedy, index)[C.NIGHT_VIEW] >= 1  # 전제: 그리디는 저녁을 채운다
+    sol = OrToolsAssembler(index, est, _CFG).solve(problem, 3000)
+    assert sol is not None
+    assert check_all(sol, problem, index, est) == []
+    assert _cats(sol, index)[C.NIGHT_VIEW] >= 1, "힌트 POI 가 노드에 없으면 저녁이 빈다"
 
 
 @pytest.mark.parametrize("field", ["cafe_daily_max", "category_daily_max"])

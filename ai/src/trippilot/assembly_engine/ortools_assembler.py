@@ -223,8 +223,9 @@ class OrToolsAssembler:
                 # 그 시간만큼 아래 몰아주기 재시도(×5 det)의 문턱을 깎는다(리뷰 지적).
                 _log.info("pace=%s 로 해 없음 — 무보정 재시도 (day=%s)",
                           problem.pace.value, day)
-                # 재시도는 같은 후보를 같은 프리필터로 자른다(pace 는 후보를 안 바꾼다) —
-                # 절단 관측을 두 번 남기면 빈도가 두 배로 세진다 (TRIP-908).
+                # 재시도는 같은 후보를 자른다 — 절단 관측을 두 번 남기면 빈도가 두 배로 세진다
+                # (TRIP-908). 남는 집합은 1차와 조금 다를 수 있다: 그리디 힌트 POI 를 남기는데
+                # 힌트가 pace(체류)로 바뀐다. 로그는 1차 절단 기준이다(점수순 절단 관측엔 충분).
                 slots = self._solve_day(replace(problem, pace=None, travel_weight=0.0), day,
                                         used, per_day_ms, log_cut=False)
             if slots is None:
@@ -308,9 +309,15 @@ class OrToolsAssembler:
                  if c.poi_id not in used and c.poi_id not in reserved
                  and c.poi_id in self._pois]
         floor = _not_before_min(problem, day)
+        # 웜스타트 = 그리디 해의 방문 **순서**를 완전 힌트로 (TRIP-1176) — 프리필터 전에 구해
+        # 그 POI 를 노드에 남긴다. 빠지면 힌트 경로가 끊겨 OR 해가 그리디보다 나빠진다: 카테고리
+        # 하루 상한 뒤 그리디는 저녁에 연 식당·상가를 놓는데 그 POI 가 상위 60 밖이라 OR 은 하루
+        # 6곳에 저녁이 비었다(2026-10-14 종로 덤프 — 그리디 8곳 9.23 vs OR 6곳 6.95).
+        hint = self._greedy_hint(problem, day, used)
         if len(cands) > _PREFILTER_TOP_K:
             food_stay = stay_for(PoiCategory.FOOD, problem.pace)
-            kept = self._prefilter(cands, fixed_ids | required_ids, day,
+            hint_ids = {pid for pid, _ in hint}
+            kept = self._prefilter(cands, fixed_ids | required_ids | hint_ids, day,
                                    self._meal_slots(ws, we, floor, food_stay), food_stay)
             if log_cut:
                 _log_prefilter_cut(day, cands, kept, self._pois)
@@ -501,8 +508,6 @@ class OrToolsAssembler:
         cp_solver.parameters.random_seed = problem.seed % (2**31)
         cp_solver.parameters.num_search_workers = 1  # 결정론 (FD §4)
 
-        # 웜스타트 = 그리디 해의 방문 **순서**를 완전 힌트로 (TRIP-1176)
-        hint = self._greedy_hint(problem, day, used)
         # 같은 POI 고정 둘이면 노드도 둘이다 — 핀 시각이 맞는 노드를 먼저 찾는다
         by_poi = {n["poi"].poi_id: i for i, n in enumerate(nodes)}
         by_pin = {(n["poi"].poi_id, n["pin"]): i for i, n in enumerate(nodes)}
@@ -936,6 +941,8 @@ class OrToolsAssembler:
                    meal_slots: list[tuple[int, int]], food_stay: int) -> list[ScoredPoi]:
         """후보 > 60 일 때 노드로 남길 60 — 고정 블록 → 식사창 FOOD 예약석 → 점수순 (TRIP-1183).
 
+        `fixed_ids` 는 무조건 남길 POI — 고정 블록·필수 방문·그리디 힌트(`_solve_day`).
+
         예약석: `meal_slots`(`_meal_slots`) 중 어느 창에든 영업창 안에서 체류가 들어가는 FOOD
         점수 상위 k건(k = 그 창 수). 점수만 보면 규칙 점수 모드에서 FOOD 가 86~108위라 전부
         잘려 OR 해는 식당 0, 같은 입력의 폴백(식사창 food-first)은 식당 4 로 갈렸다 —
@@ -965,7 +972,7 @@ class OrToolsAssembler:
         # FOOD 라 관광지 노드 0 → 상한 뒤 하루 3곳만 남던 것(2026-10-02 부산 미식 실측), 문화 취향에서
         # 상위 60 이 문화·맛집뿐이라 카테고리 상한 뒤 하루 5곳에 오후가 비던 것(2026-10-14 종로 실측).
         # 4배는 영업창·동선 선택 여지(FOOD 는 예약석 수 이상). 다른 묶음이 모자라면 넘친 후보로 다시
-        # 채워 60 을 유지한다(풀 손실 없음). 고정 블록·필수 방문(`fixed_ids`)은 세지 않는다.
+        # 채워 60 을 유지한다(풀 손실 없음). `fixed_ids`(고정·필수·그리디 힌트)는 세지 않는다.
         kept: list[ScoredPoi] = []
         spill: list[ScoredPoi] = []
         taken: Counter = Counter()
