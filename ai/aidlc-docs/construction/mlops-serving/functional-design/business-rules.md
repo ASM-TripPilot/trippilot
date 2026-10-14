@@ -173,10 +173,10 @@ KEDA 0 스케일·Karpenter 노드 반납은 매니페스트의 주장이다. �
 | 차트 렌더 — `reminderLlm` 값을 스키마가 거부 | BR-MLO-17(철회 상태 고정) | `deploy/eks/chart/tests/test_chart.py` |
 | 차트 렌더 — `embedding.autoscaling` 거부 | BR-MLO-14 | 같은 파일 |
 | 차트 렌더 — HPA 켜면 `replicas` 없음 | BR-MLO-15 | 같은 파일 |
-| 배선 — 임베딩이 캐시로 감싸짐 · `.inner` 로 provider 확인 | BR-MLO-10 | `tests/test_wiring_env.py` |
-| 캐시 — 정확일치·LRU·실패 미캐시·통과 필드 | BR-MLO-09·11 | `tests/test_caching_embedding.py` |
-| 되먹임 — 표식·멱등·실패 무전파 | BR-MLO-13 | `tests/test_directive_feedback_cache.py` |
-| 스모크 — 서빙 모델 동일성 | BR-MLO-01·20 | `tests/test_smoke_served_model.py` |
+| 배선 — 임베딩이 캐시로 감싸짐 · `.inner` 로 provider 확인 | BR-MLO-10 | `tests/api/test_wiring_env.py` |
+| 캐시 — 정확일치·LRU·실패 미캐시·통과 필드 | BR-MLO-09·11 | `tests/llm_gateway/test_caching_embedding.py` |
+| 되먹임 — 표식·멱등·실패 무전파 | BR-MLO-13 | `tests/agents/planb/test_directive_feedback_cache.py` |
+| 스모크 — 서빙 모델 동일성 | BR-MLO-01·20 | `tests/scripts/test_smoke_served_model.py` |
 | A/B — 동등성 미달이면 종료 코드 1 | BR-MLO-05 | `scripts/measure_triton_embedding.py` |
 
 **PBT 후보(미작성)**: 캐시 래퍼가 임의 입력 순서·중복에 대해 안쪽 포트 호출 수를 **고유

@@ -76,8 +76,12 @@ branch therefore cannot fire on any path.
 - pgvector + **local `nlpai-lab/KURE-v1` embeddings** (AI-D06 addendum 2026-08-23,
   wired in TRIP-514). Titan is a fallback adapter; it is Bedrock-only.
 - pytest + Hypothesis — **170 `@given` properties across 41 test files** (measured
-  2026-08-25; count with `grep -rc "@given" ai/tests/*.py`). Earlier "19"/"52"
+  2026-08-25; count with `grep -rc --include="*.py" "@given" ai/tests`). Earlier "19"/"52"
   figures were stale.
+- **Test layout mirrors `src/trippilot/`**: put a test in the folder of the package it mainly
+  exercises — `tests/<package>/` (agents by agent: `tests/agents/<schedule|planb|reflect|edit>/`);
+  tests of `ai/scripts` go in `tests/scripts/`. `fakes/`·`fixtures/`·`generators/` and
+  `test_architecture.py` stay at the root.
 - LangChain: **declared but not used** — no dependency in `pyproject.toml`, zero
   imports in `src/`. RAG is hand-built on psycopg + pgvector (TRIP-522 tracks the
   retraction record).
