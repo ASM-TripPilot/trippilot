@@ -16,6 +16,7 @@ import json
 import pathlib
 from datetime import datetime, timedelta, timezone
 
+import pytest
 import yaml  # tests 는 `src/` 밖이라 yaml 규칙 대상이 아니다
 from fastapi.testclient import TestClient
 
@@ -257,6 +258,56 @@ def test_남은_일정을_그대로_고른_수를_노트로_남긴다() -> None:
                for n in body["notes"]), body["notes"]
 
 
+# ── ④′ 바꿀 정도는 요청 종류가 정한다 (TRIP-1394) ────────────────────
+
+
+def test_바꿀_정도는_요청_종류가_정한다() -> None:
+    rule = composition.change_rule
+    assert rule([], day_directives=False, add_one=True, free_text=True) == composition.CHANGE_ADD
+    assert rule(["closed"], day_directives=False, add_one=False, free_text=False) == composition.CHANGE_PLACE
+    assert rule(["weather"], day_directives=False, add_one=False, free_text=False) == composition.CHANGE_MATCH
+    assert rule([], day_directives=True, add_one=False, free_text=False) == composition.CHANGE_MATCH
+    assert rule(["none"], day_directives=False, add_one=False, free_text=False) == composition.CHANGE_REFRESH
+    # 한 곳 추가 + 하루 방향 지시가 같이 오면 하루 방향이 이긴다(맞지 않는 곳은 바꾼다)
+    assert rule([], day_directives=True, add_one=True, free_text=False) == composition.CHANGE_MATCH
+
+
+@pytest.mark.parametrize("over,expected", [
+    ({"directives": ["ADD_CAFE"]}, composition.CHANGE_ADD),
+    ({"reasons": ["closed"], "excluded_poi_ids": [_CAFE]}, composition.CHANGE_PLACE),
+    ({"directives": ["INDOOR"]}, composition.CHANGE_MATCH),
+    ({"reasons": ["none"]}, composition.CHANGE_REFRESH),
+], ids=["add_one", "place_reason", "day_directive", "none"])
+def test_프롬프트에_요청_종류의_한_줄이_실린다(over: dict, expected: str) -> None:
+    """"카페 하나 추가"에 하루를 다 갈던 것(0.2.0, 유지 0/6)과 "실내로"에 아무것도 안 바뀌던 것(0.1.0)."""
+    llm = _ScriptedLlm([_FOOD])
+    _replan(llm, **over)
+    assert expected in llm.compose_prompt()
+
+
+_NOW_10 = {"from_instant": "2026-09-21T10:00:00+09:00", "scope": "PARTIAL_SLOTS"}
+_RUNNING = {"poi_id": _FOOD, "start_at": "09:30", "end_at": "11:00"}
+
+
+def test_진행_중인_방문은_결과에서_사라지지_않는다() -> None:
+    """TRIP-1394 — BE 는 진행 중 슬롯을 잠그지 않고 보내고 AI 는 지금 이후만 채워 그 곳이 사라졌다."""
+    llm = _ScriptedLlm([_CAFE])
+    body = _replan(llm, current_slots=[_RUNNING], **_NOW_10)
+    slots = body["itinerary"]["days"][0]["slots"]
+    running = [s for s in slots if s["poi_id"] == _FOOD]
+    assert running and running[0]["start_at"] == "09:30:00" and running[0]["end_at"] == "11:00:00"
+    assert running[0]["is_fixed"] is False  # 사용자가 고정한 곳이 아니다 — 다음 다시 짜기에서 바꿀 수 있게
+    assert "in_progress_kept: 1" in body["notes"]
+    assert "제주 흑돼지거리 | 진행 중(유지)" in llm.compose_prompt()
+
+
+def test_진행_중인_곳이_휴무_대상이면_바꾼다() -> None:
+    body = _replan(_ScriptedLlm([_CAFE]), current_slots=[_RUNNING], reasons=["closed"],
+                   excluded_poi_ids=[_FOOD], **_NOW_10)
+    assert _FOOD not in _placed(body), body["notes"]
+    assert not any(n.startswith("in_progress_kept") for n in body["notes"])
+
+
 # ── ⑤ 시한 ──────────────────────────────────────────────────────────
 
 
@@ -279,7 +330,7 @@ def test_프롬프트에_기존_일정과_사유와_요청이_실린다() -> Non
     assert "10:00~11:00 | CAFE | 월정리 카페거리 | 남은 일정" in prompt
     assert composition.REASON_LABELS["delay"] in prompt
     assert "바다 보고 싶어" in prompt
-    assert "기존 일정을 그대로 돌려주지 마세요" in prompt  # 0.2.0 — 바꾸려고 누른 것이 전제
+    assert composition.CHANGE_MATCH in prompt  # 사유·자유입력 → 맞지 않는 곳만 (0.3.0)
 
 
 def test_사유_없음은_영문_토큰이_아니라_문장으로_실린다() -> None:
