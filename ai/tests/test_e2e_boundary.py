@@ -452,6 +452,16 @@ def test_unknown_hours_are_not_placed_overnight_but_user_pins_are_kept() -> None
     assert free and all("07:00" <= s["start_at"][:5] and s["end_at"][:5] <= "23:00" for s in free), free
 
 
+def test_generate_turns_on_route_weight_so_a_day_stays_in_one_area() -> None:
+    """TRIP-1398 — 생성은 경로 감점이 0 이라 하루 한가운데 먼 곳이 끼었다(광화문 + 북한산)."""
+    from trippilot.api import schemas
+    from trippilot.api.wiring import KST, _GENERATE_ROUTE_WEIGHT, _domain_generate_request
+
+    domain = _domain_generate_request(
+        schemas.GenerateItineraryRequest.model_validate(_request()), KST)
+    assert domain.travel_weight == _GENERATE_ROUTE_WEIGHT > 0
+
+
 # ── ④ validate · repair 관통 ─────────────────────────────────────────
 
 
