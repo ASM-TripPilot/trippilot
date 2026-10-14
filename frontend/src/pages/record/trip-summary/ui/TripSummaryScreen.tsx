@@ -9,6 +9,8 @@ import {
   BackArrowGlyph,
   LocationOffGlyph,
 } from '@/features/reflection/index.view';
+import { CountUpText } from './CountUpText';
+import { DayCardReveal } from './DayCardReveal';
 import { DayHighlightCard } from './DayHighlightCard';
 import type { SummaryStatCells } from '@/features/reflection/index.view';
 import type { OrderedVisit } from '@/features/reflection/index.view';
@@ -73,6 +75,9 @@ export interface TripSummaryScreenProps {
   onPressDayReflection?: (day: number) => void;
 }
 
+/** TRIP-1386 · 다녀온 길 다시 그리기 — 0.15초 뒤 0.9초(모션 명세 「여행 요약」). 모듈 상수라 렌더마다 같은 참조. */
+const DRAW_PATH = { durationMs: 900, delayMs: 150 };
+
 function StatCell({
   value,
   label,
@@ -84,9 +89,10 @@ function StatCell({
 }): ReactElement {
   return (
     <View className="flex-1 items-center gap-[2px]">
-      <Text className="font-noto-bold text-[20px] font-bold text-ink">
-        {value}
-      </Text>
+      <CountUpText
+        value={value}
+        className="font-noto-bold text-[20px] font-bold text-ink"
+      />
       <Text className="text-label text-muted">{label}</Text>
       {caption ? (
         <Text className="text-[11px] text-muted-soft">{caption}</Text>
@@ -194,7 +200,12 @@ export function TripSummaryScreen({
               // 실 좌표가 없으면 지도 자리에 아무것도 그리지 않는다 — 하드코딩 기본 센터는 거짓 정보(571
               // 경고-2), 자리표시는 미완성 표면(TRIP-939 AC-4). 좌표가 생기면 이 가지가 그대로 지도를 그린다.
               <View className="-mx-lg h-[250px] overflow-hidden">
-                <MapView center={mapCenter} pins={mapPins} viewOnly />
+                <MapView
+                  center={mapCenter}
+                  pins={mapPins}
+                  viewOnly
+                  drawPathOnMount={DRAW_PATH}
+                />
               </View>
             ) : null}
 
@@ -206,15 +217,16 @@ export function TripSummaryScreen({
               </Text>
             )}
 
-            {dayCards.map((card) => (
-              <DayHighlightCard
-                key={card.key}
-                dayLabel={card.dayLabel}
-                visitCountLabel={card.visitCountLabel}
-                subtitle={card.subtitle}
-                distanceSourceLabel={card.distanceSourceLabel}
-                date={card.key}
-              />
+            {dayCards.map((card, index) => (
+              <DayCardReveal key={card.key} index={index}>
+                <DayHighlightCard
+                  dayLabel={card.dayLabel}
+                  visitCountLabel={card.visitCountLabel}
+                  subtitle={card.subtitle}
+                  distanceSourceLabel={card.distanceSourceLabel}
+                  date={card.key}
+                />
+              </DayCardReveal>
             ))}
           </>
         ) : (
