@@ -445,6 +445,10 @@ class AlternativesRequest(BoundaryModel):
     # 풀 단계에서 거르므로 LLM 선택·규칙 폴백 모두 그 안에서만 고른다. 비거나
     # 아는 코드가 하나도 없으면 필터 없음(400 아님 — reason 과 같은 규칙).
     categories: list[str] = Field(default_factory=list)
+    # 바꿀 슬롯의 장소 (선택, 하위호환). `categories` 가 비었고 이 장소가 식사(`counts_as_food`)면
+    # 풀을 식사 후보로 거른다 — 칼국수 칸의 '다른 후보'에 기찻길이 오던 결함(2026-10-14).
+    # 없으면 `affected_reasons` 의 키로 대신한다(그 키도 대상 슬롯이다).
+    target_poi_id: str | None = Field(default=None, min_length=1)
     # 그 여행의 취향 (선택, 하위호환) — generate 의 `preference_profile` 과 같은 스키마·어휘.
     # 오면 이 요청의 페르소나(ALTERNATIVE_SELECTION 의 확정 프로필 줄)로 쓰고, 없으면 종전대로
     # `trip_id` 재조회(계정 취향). `companion_type` 은 이 여행의 동행 — 계정의 평소 동행보다 우선.

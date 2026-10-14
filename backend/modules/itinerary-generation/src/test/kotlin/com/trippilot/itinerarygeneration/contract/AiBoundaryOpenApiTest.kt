@@ -377,6 +377,7 @@ private val sampleAlternativesRequest = AiAlternativesRequest(
     tripId = UUID.randomUUID().toString(),
     preferenceProfile = sampleInput.preferenceProfile,
     companionType = "친구",
+    targetPoiId = UUID.randomUUID().toString(),
 )
 
 private val sampleAlternativesResponse = AiAlternativesResponse(
