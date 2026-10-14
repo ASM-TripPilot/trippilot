@@ -60,7 +60,7 @@ data class TripSummaryBody(
             s.generatedAt,
         )
 
-        private fun DayHighlight.toResponse() = DayHighlightResponse(date, dayOrder, visitCount, places)
+        private fun DayHighlight.toResponse() = DayHighlightResponse(date, dayOrder, visitCount, places, distanceKm, distanceSource?.name)
     }
 }
 
@@ -69,6 +69,10 @@ data class DayHighlightResponse(
     val dayOrder: Int,
     val visitCount: Int,
     val places: List<String>,
+    /** 그날 거리 — **선택 필드**(U10 FD §12.5). U10 전에 만든 요약에는 없다(null) — 0 으로 채우면 근사값 0km 로 읽힌다. */
+    val distanceKm: Double?,
+    /** `ROUTE`(실제 경로) · `VISIT_LINE`(방문점 연결선). [distanceKm] 와 함께 있거나 함께 없다. */
+    val distanceSource: String?,
 )
 
 /**

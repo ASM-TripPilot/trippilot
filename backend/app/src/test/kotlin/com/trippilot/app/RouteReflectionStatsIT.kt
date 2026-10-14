@@ -36,6 +36,10 @@ class RouteReflectionStatsIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var relay: OutboxRelay
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var accounts: AccountRepository
+    @Autowired private lateinit var summaryService: com.trippilot.reflection.application.TripSummaryService
+    @Autowired private lateinit var summaryController: com.trippilot.reflection.adapter.`in`.web.TripSummaryController
+    @Autowired private lateinit var mapper: com.fasterxml.jackson.databind.ObjectMapper
+    @Autowired private lateinit var jdbc: org.springframework.jdbc.core.JdbcTemplate
 
     private val past = Instant.parse("2026-08-11T01:00:00Z")
     private val day = LocalDate.parse("2026-08-11")
@@ -60,6 +64,34 @@ class RouteReflectionStatsIT : AbstractPostgresIntegrationTest() {
         }
 
         reflections.find(accountId, tripId, day)!!.stats.let { (it.distanceSource to it.distanceKm) shouldBe (DistanceSource.ROUTE to 800.0) }
+
+        // 요약 응답의 날짜별 하이라이트에 그날 거리·출처가 실린다(FD §12.5) — 계산만 하고 응답에 빠뜨리면 계약만 거짓말을 한다
+        summaryService.generate(tripId)
+        val body = mapper.readTree(mapper.writeValueAsString(summaryController.get({ accountId.toString() }, tripId)))
+        val highlight = body.findValue("highlights").single { it["date"].asText() == day.toString() }
+        (highlight["distanceKm"].asDouble() to highlight["distanceSource"].asText()) shouldBe (800.0 to "ROUTE")
+    }
+
+    /** U10 전에 만든 요약의 하이라이트는 거리를 모른다 — 0km 로 내보내면 실제 0km 로 읽힌다. 비워서 내보낸다(선택 필드). */
+    @Test
+    fun `거리를 모르는 옛 요약 하이라이트는 거리 칸을 비워 내보낸다`() {
+        val accountId = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, past)).id.value
+        val tripId = trips.save(
+            Trip.create(
+                accountId = accountId, title = null, startDate = LocalDate.parse("2026-08-10"), endDate = LocalDate.parse("2026-08-12"),
+                party = 2, companionType = null, budgetTotal = null, preferenceSnapshot = emptyMap(),
+                destinations = listOf(TripDestination(0, "제주", 2)), now = past,
+            ),
+        ).tripId
+        summaryService.generate(tripId)
+        // U10 전 행의 모양 — 하이라이트에 거리 키가 없다
+        jdbc.update(
+            "UPDATE trip_summary SET highlights = '[{\"date\":\"2026-08-11\",\"dayOrder\":1,\"visitCount\":0,\"places\":[]}]'::jsonb WHERE trip_id = ?",
+            tripId,
+        )
+        val body = mapper.readTree(mapper.writeValueAsString(summaryController.get({ accountId.toString() }, tripId)))
+        val highlight = body.findValue("highlights").single()
+        (highlight["distanceKm"].isNull to highlight["distanceSource"].isNull) shouldBe (true to true)
     }
 
     private companion object {

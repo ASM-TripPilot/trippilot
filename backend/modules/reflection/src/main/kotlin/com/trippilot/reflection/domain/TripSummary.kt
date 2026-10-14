@@ -28,9 +28,12 @@ data class DayHighlight(
     val dayOrder: Int,
     val visitCount: Int,
     val places: List<String>,
-    /** 그날 거리 — 실제 경로가 있으면 그 거리(`ROUTE`), 없으면 방문점 연결선(`VISIT_LINE`)(U10 FD §7.2·§12.5). 소요시간은 없다(INV-3). */
-    val distanceKm: Double = 0.0,
-    val distanceSource: DistanceSource = DistanceSource.VISIT_LINE,
+    /**
+     * 그날 거리 — 실제 경로가 있으면 그 거리(`ROUTE`), 없으면 방문점 연결선(`VISIT_LINE`)(U10 FD §7.2·§12.5). 소요시간은 없다(INV-3).
+     * **U10 전에 만든 요약의 칸은 null 이다** — 모르는 값을 0 으로 채우면 실제 0km 로 읽힌다. 새로 만들거나 경로가 오면 채워진다.
+     */
+    val distanceKm: Double? = null,
+    val distanceSource: DistanceSource? = null,
 )
 
 /**

@@ -66,7 +66,7 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
 
     private fun DayHighlight.toMap(): Map<String, Any?> = mapOf(
         "date" to date.toString(), "dayOrder" to dayOrder, "visitCount" to visitCount, "places" to places,
-        "distanceKm" to distanceKm, "distanceSource" to distanceSource.name,
+        "distanceKm" to distanceKm, "distanceSource" to distanceSource?.name,
     )
 
     private fun TripSummaryStats.toMap(): Map<String, Any?> = mapOf(
@@ -95,10 +95,9 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
             dayOrder = (this["dayOrder"] as? Number)?.toInt() ?: 0,
             visitCount = (this["visitCount"] as? Number)?.toInt() ?: 0,
             places = (this["places"] as? List<String>).orEmpty(),
-            // U10 이전 행에는 없다 — 근사 0 으로 읽는다(그 요약은 다음 생성·경로 갱신 때 채워진다).
-            distanceKm = (this["distanceKm"] as? Number)?.toDouble() ?: 0.0,
-            distanceSource = (this["distanceSource"] as? String)
-                ?.let { runCatching { DistanceSource.valueOf(it) }.getOrNull() } ?: DistanceSource.VISIT_LINE,
+            // U10 이전 행에는 없다 — 모른다(null). 0 으로 채우면 실제 0km 로 읽힌다. 다음 생성·경로 갱신 때 채워진다.
+            distanceKm = (this["distanceKm"] as? Number)?.toDouble(),
+            distanceSource = (this["distanceSource"] as? String)?.let { runCatching { DistanceSource.valueOf(it) }.getOrNull() },
         )
     }
 

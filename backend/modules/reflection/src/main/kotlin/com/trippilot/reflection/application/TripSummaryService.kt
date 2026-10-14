@@ -118,7 +118,7 @@ class TripSummaryService(
     @Transactional
     fun refreshRouteStats(tripId: UUID) {
         // 생성과 같은 잠금 — 생성이 커밋 전이면 여기서 기다렸다가 그 결과를 본다(안 기다리면 "요약 없음"으로 지나가고, 생성은 경로 전
-        // 값으로 커밋돼 굳는다). 하이라이트는 거리 칸만 다시 센다 — 날짜·장소는 그대로다.
+        // 값으로 커밋돼 굳는다). 하이라이트는 지금 실적·경로로 다시 짠다 — 경로만 있는 날이 새로 한 칸이 될 수 있다. 서사·출처는 그대로다.
         val current = summaries.findForUpdate(tripId) ?: return
         val days = archive.findDailyVisits(tripId)
         val routes = archive.findRouteDistances(tripId)
@@ -132,8 +132,7 @@ class TripSummaryService(
         // 날짜별로 잰다 — 날이 바뀌는 사이는 이동이 아니라 숙박이다. 실제 경로가 있는 날은 그 거리, 없는 날은 방문점 연결선(U10 §7.2).
         val all = withRouteOnlyDays(days, routes)
         val dates = all.map { it.date }.toSet()
-        // 같은 날 경로는 한 번만 센다 — 실적 묶음이 한 날에 둘이어도(실제로는 없다) 경로 거리가 두 번 더해지지 않게.
-        val km = all.distinctBy { if (it.date in routes) it.date else it }.sumOf { dayKm(it, surfaces, routes) }
+        val km = all.sumOf { dayKm(it, surfaces, routes) }
         return TripSummaryStats(
             totalVisits = done.size,
             totalDistanceKm = km,

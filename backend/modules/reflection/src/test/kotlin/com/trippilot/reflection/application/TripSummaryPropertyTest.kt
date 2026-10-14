@@ -173,7 +173,7 @@ class TripSummaryPropertyTest : StringSpec({
         highlights.map { Triple(it.dayOrder, it.distanceSource, it.visitCount) } shouldBe listOf(
             Triple(1, DistanceSource.VISIT_LINE, 2), Triple(2, DistanceSource.ROUTE, 1), Triple(3, DistanceSource.ROUTE, 0),
         )
-        (highlights[0].distanceKm > 300.0) shouldBe true // 서울↔부산 근사
+        (highlights[0].distanceKm!! > 300.0) shouldBe true // 서울↔부산 근사
         highlights.drop(1).map { it.distanceKm } shouldBe listOf(3.5, 1.0)
     }
 
