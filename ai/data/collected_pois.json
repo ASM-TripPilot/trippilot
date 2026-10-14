@@ -35,7 +35,7 @@
   ],
   "stats": {
     "merged_runs": 2,
-    "unique_proposals": 57004
+    "unique_proposals": 57002
   },
   "merged_from": [
     {
@@ -2631745,38 +2631745,6 @@
       }
     },
     {
-      "provisional_id": "overture-55253276-5eab-4419-a7b1-f336c4a9909f",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-55253276-5eab-4419-a7b1-f336c4a9909f",
-        "name": "법조타운푸르지오시티",
-        "category": "SIGHT",
-        "coord": {
-          "lat": 37.4828529,
-          "lng": 127.1225281
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "landmark_and_historical_building"
-      ],
-      "region": "송파구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "55253276-5eab-4419-a7b1-f336c4a9909f",
-        "address": "서울특별시 송파구 법원로4길5",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-18788aec-02b0-46f1-9e31-d8f6c16b9578",
       "source": "OVERTURE",
       "poi": {
@@ -2633405,38 +2633373,6 @@
       "provenance": {
         "content_id": "abcead11-4dc0-44b2-b609-7f1bb3842d1c",
         "address": "서울특별시 용산구 서빙고동 199-5",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-df6f633f-cfe6-48c7-aa6e-ea767653bbb3",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-df6f633f-cfe6-48c7-aa6e-ea767653bbb3",
-        "name": "용산 푸르지오 파크타운",
-        "category": "SIGHT",
-        "coord": {
-          "lat": 37.5243034,
-          "lng": 126.9943008
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "landmark_and_historical_building"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "df6f633f-cfe6-48c7-aa6e-ea767653bbb3",
-        "address": "서울특별시 용산구 동빙고동 315",
         "image_url": null
       }
     },
