@@ -511,6 +511,10 @@ class ReplanRequest(BoundaryModel):
     target_date: dt.date
     time_window: TimeWindowSchema  # 하루 전체. 좁히지 않는다 (정본 §1)
     anchor: CoordSchema
+    # 그날 밤 숙소(없으면 전날 숙소) — "숙소 근처에서 끝내기"(END_NEAR_STAY)가 하루를 마칠 곳.
+    # `anchor` 와 따로 둔다: 그것은 후보 풀 기준점(GPS·수동·마지막 방문·숙소 중 하나)이라 숙소를
+    # 보장하지 않는다. 없으면 그 지시는 무효 노트로 밝힌다.
+    stay_anchor: CoordSchema | None = None
 
     # `scope` 와 `locked_blocks` 는 중복이 아니다 — `locked_blocks` = 못 건드리는 것,
     # `scope` = 안 간 곳 중 어디까지 건드리나. FULL_DAY 여도 방문 완료한 곳은 잠긴다.

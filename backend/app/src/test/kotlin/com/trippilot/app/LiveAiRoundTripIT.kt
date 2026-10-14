@@ -212,7 +212,7 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
             ReplanInput(
                 tripId = UUID.randomUUID(), itineraryId = UUID.randomUUID(),
                 scope = ReplanScope.PARTIAL_SLOTS, destinations = listOf("제주"), fromInstant = Instant.now(), targetDate = today,
-                originLat = 33.45, originLng = 126.56, lockedBlocks = listOf(FixedBlock(poi, today, LocalTime.parse("09:00"), 60)),
+                originLat = 33.45, originLng = 126.56, stayLat = null, stayLng = null, lockedBlocks = listOf(FixedBlock(poi, today, LocalTime.parse("09:00"), 60)),
                 // 사유·지시는 **상대 사전**의 값으로 보낸다 — 자연어를 보내면 전부 unknown 으로 돌아온다.
                 reasons = listOf("WEATHER"), directives = listOf("INDOOR"),
                 freeText = "비가 와서 실내 위주로 바꿔 주세요",

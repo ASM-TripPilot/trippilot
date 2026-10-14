@@ -22,8 +22,8 @@
 # 상호명 기억으로 지어낸다 — KB-3 초안 41건 중 28건을 뺀 것이 정확히 그 이유다
 # (`planb_situation_kb.yaml` 헤더 기준 (2)).
 #
-# **SOLVER 는 RELAX·FILL_MORE 만 배선됐다**(Pace.SLOW·PACKED). 나머지는 A-4 예정 — 그 키가 오면 사전이 인식은 하되
-# 아무 효과가 없다 — 그 사실을 `unwired: true` 로 드러낸다. 정본이 "동작 중"으로
+# **SOLVER 는 RELAX·FILL_MORE(Pace.SLOW·PACKED)·EARLIER·KEEP_DINNER 가 배선됐다.** 나머지는 A-4 예정 — 그 키가 오면
+# 사전이 인식은 하되 아무 효과가 없다 — 그 사실을 `unwired: true` 로 드러낸다. 정본이 "동작 중"으로
 # 서술하는 미배선을 만들지 않기 위해서다(TRIP-529 계열).
 #
 # ## `cardinality` — 하루를 바꾸는 지시인가, 한 곳을 더하는 지시인가
@@ -145,9 +145,11 @@ directives:
   - key: END_NEAR_STAY
     label: 숙소 근처에서 끝내기
     enforced_by: RANKING
+    # 배선됨 — 마지막 방문지 → 그날 밤 숙소(`stay_anchor`) 도로 km 를 조립이 감점한다(`end_near`).
+    # 거리 랭킹(NEARBY)과 달리 후보가 아니라 **끝 순서**를 민다. 숙소가 없으면 무효 노트.
     aliases: [숙소 가까이 마무리, 돌아가기 편하게, 마지막은 숙소 근처]
 
-  # ── SOLVER — 어셈블리 파라미터 (RELAX·FILL_MORE 만 배선, 나머지 A-4 예정) ──────────────────────
+  # ── SOLVER — 어셈블리 파라미터 (SHORTER_DAY·KEEP_BUDGET 은 미배선) ──────────────────────
   - key: RELAX
     label: 여유 있게
     enforced_by: SOLVER
@@ -164,7 +166,8 @@ directives:
   - key: EARLIER
     label: 시간 당기기
     enforced_by: SOLVER
-    unwired: true
+    # 배선됨 — 원 일정의 남은 방문을 장소·체류 그대로 필수 방문으로 두고 시각만 지금부터 다시
+    # 맞춘다(`_earlier_visits`). 장소를 바꾸는 다른 사용자 지시가 같이 오면 그쪽이 이긴다(노트).
     aliases: [일찍 시작, 앞으로 당겨줘, 오전에 몰아서]
 
   - key: SHORTER_DAY
@@ -176,11 +179,15 @@ directives:
   - key: KEEP_DINNER
     label: 저녁은 그대로
     enforced_by: SOLVER
-    unwired: true
+    # 배선됨 — 원 일정에서 저녁 식사창(17~20시)에 걸친 식당을 원 시각 그대로 잠근다(`_dinner_blocks`).
+    # 원 일정에 저녁 식당이 없으면 노트(`keep_dinner_none`).
     aliases: [저녁 예약 있어, 저녁만 유지, 저녁은 건드리지 마]
 
   - key: KEEP_BUDGET
     label: 예산 유지
     enforced_by: SOLVER
+    # 미배선 — 집행할 가격 데이터가 없다. `Poi.avg_cost` 는 영구 None 이고(가격 미캐싱), 입장료 파생
+    # 지식(`place_fees.json`)은 명소·문화·자연 일부만 덮고(FOOD·CAFE 0%) 배포 이미지에 없다.
+    # FE 칩은 숨겼다 — 말로 오면 인식은 하되 무효 노트로 밝힌다.
     unwired: true
     aliases: [돈 더 안 쓰게, 비용 그대로, 예산 넘기지 않게]

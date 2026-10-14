@@ -58,6 +58,7 @@ tripContext = TripContext(destinations, targetDate, targetDate, null, null),
 | `anchor` | `replan_session.origin_lat/lng` (없으면 `trip_base_day` 숙소) | 기준점 사다리 BR-U4-19 |
 | `locked_blocks` | `visit_slot.is_fixed` + `visit_check` 완료 + `from_instant` 이전 | 시각 포함 — 시각 없는 블록은 AI 가 거부(422 실측) |
 | `excluded_poi_ids` | `replan_session.excluded_poi_ids` | |
+| `stay_anchor` | `base_assignment` 숙소 — 그날 밤, 없으면 전날 밤(체크아웃일) | [추가 2026-10-14] '숙소 근처에서 끝내기'의 끝점. 없으면 null. `anchor` 와 별개(기준점은 숙소를 보장하지 않는다) |
 | `request_meta` | 런타임 | **`deadline_ms` 는 §6 참조** |
 
 ### 새로 실어야 하는 것 — **DB 에 이미 있다. 읽어서 보내면 된다**
@@ -118,6 +119,7 @@ class ReplanRequest(BoundaryModel):
     target_date: dt.date
     time_window: TimeWindowSchema            # 하루 전체. 좁히지 않는다 (§1)
     anchor: CoordSchema
+    stay_anchor: CoordSchema | None = None   # 그날 밤 숙소(없으면 전날) — END_NEAR_STAY 끝점
 
     scope: Literal["PARTIAL_SLOTS", "FULL_DAY"]
     from_instant: dt.datetime

@@ -98,6 +98,11 @@ RAIN_INDOOR: frozenset[PoiCategory] = frozenset(
     {PoiCategory.CULTURE, PoiCategory.CAFE, PoiCategory.SHOPPING}
 )
 
+# 재계획 "숙소 근처에서 끝내기"(`ItineraryProblem.end_near`) — 마지막 방문지 → 숙소 도로 km 당
+# 점수 축 감점. 사용자 LESS_MOVE 경로 감점(0.05/km)과 같은 크기다. 같은 집합 안의 순서는 점수를
+# 안 바꾸므로 크기와 무관하게 숙소에 가까운 곳이 마지막이 되고, 크기는 집합을 바꿀지만 정한다.
+END_NEAR_WEIGHT = 0.05
+
 
 @dataclass(frozen=True, slots=True)
 class AssemblyConfig:

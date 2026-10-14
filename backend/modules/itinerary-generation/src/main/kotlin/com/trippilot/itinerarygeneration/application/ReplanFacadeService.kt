@@ -30,6 +30,7 @@ import com.trippilot.placedata.api.PoiSnapshotFacade
 import com.trippilot.placedata.api.SavedPlaceLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
+import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
 import org.springframework.stereotype.Service
@@ -71,6 +72,7 @@ class ReplanFacadeService(
         val ctx = trips.findGenerationContext(command.accountId, command.tripId) ?: throw ResourceNotFound()
         // 기준점이 없으면 상대가 후보 풀을 매달 곳이 없다 — 숙소 앵커로 채운다(BR-U4-19 사다리의 마지막 단).
         val origin = groundingPoint(command, ctx)
+        val stay = stayOf(command, ctx)
         // 취향은 생성 경로와 **같은 척도**로 만든다(PreferenceProfiles KDoc) — 원천은 §2 대로 trip.preference_snapshot
         // (안 실린 축만 계정 값 — overriddenBy). §2 이탈 1건은 의도다: 예산 등급을 trip.budget_total 변환 대신
         // 취향의 budget_tier(경계 계약 어휘)로. 두 경로가 다른 취향으로 돌면 "원래 자리보다 나은 것만 바꾼다"(§4)
@@ -87,6 +89,8 @@ class ReplanFacadeService(
                 targetDate = command.targetDate,
                 originLat = origin.first,
                 originLng = origin.second,
+                stayLat = stay?.lat,
+                stayLng = stay?.lng,
                 lockedBlocks = lockedBlocks(current, command),
                 reasons = command.reasons,
                 directives = command.directives,
@@ -128,6 +132,17 @@ class ReplanFacadeService(
         // 빈 초안은 "해 없음"이다 — 빈 하루를 초안이라고 보여 주면 사용자가 그걸 확정한다.
         if (slots.isEmpty()) return null
         return ReplanProposal(current.itineraryId, command.targetDate, slots, output.totalDistanceKm)
+    }
+
+    /**
+     * '숙소 근처에서 끝내기'(END_NEAR_STAY)가 하루를 마칠 곳 — **그날 밤 숙소, 없으면 전날 숙소**.
+     * 체크아웃일은 숙박일이 아니라 앵커가 없다([BaseAnchorFacade]) — 그날은 전날 밤 숙소가 짐을 둔 곳이다.
+     * 둘 다 없으면 null(상대가 그 지시를 무효 노트로 밝힌다). 지시와 무관하게 싣는다 — 값의 뜻이 지시에 매이지 않는다.
+     */
+    private fun stayOf(command: ReplanCommand, ctx: TripGenerationContext): DayAnchorView? {
+        val stays = baseAnchors.findStayNightAnchors(command.tripId, ctx.startDate, ctx.endDate)
+        return stays.firstOrNull { it.date == command.targetDate }
+            ?: stays.firstOrNull { it.date == command.targetDate.minusDays(1) }
     }
 
     /**

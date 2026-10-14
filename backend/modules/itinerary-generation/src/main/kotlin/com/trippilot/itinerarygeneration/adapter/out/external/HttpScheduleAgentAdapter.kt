@@ -203,6 +203,7 @@ class HttpScheduleAgentAdapter(
             targetDate = input.targetDate,
             timeWindow = AiTimeWindow(input.targetDate, DAY_START, DAY_END),
             anchor = AiCoord(lat, lng),
+            stayAnchor = input.stayLat?.let { sLat -> input.stayLng?.let { sLng -> AiCoord(sLat, sLng) } },
             scope = input.scope.name,
             fromInstant = input.fromInstant,
             preferenceProfile = input.preferenceProfile,
