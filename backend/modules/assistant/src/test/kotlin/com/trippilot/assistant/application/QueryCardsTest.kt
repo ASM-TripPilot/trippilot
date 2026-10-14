@@ -98,6 +98,8 @@ class QueryCardsTest : StringSpec({
         cards(data).nextSlot(ctx()).quickReplies!!.first().let { it.label to it.params["slotKey"] } shouldBe ("다른 곳 추천" to data.slots.single().slotKey)
         data.status = "CONFIRMED"
         cards(data).nextSlot(ctx()).quickReplies?.first()?.label shouldBe "다른 곳 추천" // 여행 이틀째(d1 시작)
+        // 여행 첫날이 오늘이면 시작한 것이다(경계)
+        cards(data).nextSlot(ctx().let { it.copy(trip = it.trip!!.copy(startDate = d2)) }).quickReplies?.first()?.label shouldBe "다른 곳 추천"
         // 여행 첫날을 내일로 옮겨 "확정했지만 아직 시작 전"을 만든다
         cards(data).nextSlot(ctx().let { it.copy(trip = it.trip!!.copy(startDate = d2.plusDays(1))) }).quickReplies shouldBe null
         // 확정 여부를 못 읽었으면 주지 않는다 — 카드 자체는 그대로 나간다
