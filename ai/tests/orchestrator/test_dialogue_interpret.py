@@ -352,3 +352,13 @@ def test_rule_extraction_never_emits_handler_owned_op() -> None:
 def test_boundary_rejects_overlong_utterance() -> None:
     client = TestClient(build_dev_app())
     assert client.post("/ai/v1/dialogue/interpret", json=_body("가" * 501)).status_code == 422
+
+
+def test_깨진_turn_index_는_빈_상태로_시작한다():
+    """dialogue_context 의 turn_index 가 정수가 아니어도 턴 전체를 실패시키지 않는다(깨진 상태는 버린다)."""
+    from trippilot.orchestrator.dialogue_interpreter import DialogueContext
+
+    for bad in ("x", [1], {"a": 1}):
+        ctx = DialogueContext.from_dict({"turn_index": bad, "pending": None})
+        assert ctx.turn_index == 0
+        assert ctx.pending is None
