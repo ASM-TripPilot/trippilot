@@ -38,3 +38,20 @@ data class VisitChecked(
     override val eventType: String = "archive.VisitChecked"
     override val aggregateType: String = "VisitCheck"
 }
+
+/**
+ * 하루치 실제 경로가 저장됐다(U10 FD §12.6) — 회고가 구독해 그날 거리 출처를 `ROUTE` 로 올리고 **통계만** 다시 센다(BR-U10-39).
+ * 좌표는 싣지 않는다(INV-U10-2) — 필요한 쪽은 경로 조회로 읽는다.
+ *
+ * @property localDate 여행지 기준 날짜(`yyyy-MM-dd`).
+ */
+data class ActualRouteStored(
+    override val aggregateId: String, // routeDayId
+    val tripId: String,
+    val accountId: String,
+    val localDate: String,
+    val distanceM: Int,
+) : DomainEvent {
+    override val eventType: String = "archive.ActualRouteStored"
+    override val aggregateType: String = "ActualRouteDay"
+}

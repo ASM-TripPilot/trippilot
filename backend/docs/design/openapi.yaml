@@ -1119,6 +1119,42 @@ paths:
         '400': { description: '장소·체크 방식 누락 · 자동 도착(AUTO_GEOFENCE)인데 slotKey 가 없음 — 자동 도착은 계획 슬롯에만 있다(INV-U10-5)' }
         '404': { description: 여행 없음/타 계정 }
         '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요)' }
+  /trips/{tripId}/routes:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 실제 경로 — 날짜별 하루치 경로 목록(U10 · TRIP-1405)
+      description: >
+        기기가 올린 다운샘플 인코딩 폴리라인을 그대로 준다 — 지도는 추가 다운샘플 없이 그린다(PERF-U10-07). 세그먼트는 기록이
+        끊긴 곳에서 나뉘며 서로 잇지 않는다(INV-U10-9). **소요시간·속도·기록 구간은 싣지 않는다**(INV-3 · INV-U10-7).
+      responses:
+        '200': { description: 날짜순, content: { application/json: { schema: { $ref: '#/components/schemas/RouteDayList' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/routes/{date}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: date, in: path, required: true, schema: { type: string, format: date }, description: 여행지 기준 날짜 }
+    put:
+      tags: [trips]
+      summary: 실제 경로 — 하루치 경로 저장(전체 교체 · 멱등, U10 · TRIP-1405)
+      description: >
+        **원시 좌표는 받지 않는다** — 기기가 다운샘플한 인코딩 폴리라인(정밀도 1e-5)뿐이다(INV-U10-2). 위치 이용 동의(L2)와
+        GPS 기록 동의(L3)가 모두 있어야 저장한다. 저장할 때마다 위치 법정 로그 `COLLECTION(phase=STORE)` 1건이 남는다.
+        거리는 서버가 **폴리라인 길이 이상 · 기록 구간 × 시속 300km 이하**로 깎고 깎았으면 `distanceClamped` 다(BR-U10-38).
+        L3 를 철회하면 그 계정의 경로는 전부 즉시 지워진다(DEC-U10-7).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RouteDayUpload' } } }
+      responses:
+        '200': { description: 저장됨, content: { application/json: { schema: { $ref: '#/components/schemas/RouteDay' } } } }
+        '400':
+          description: >
+            필수 값 누락 · 여행 기간 밖의 날짜(정본은 422 `OUT_OF_WINDOW` — 이 API 의 입력 오류는 400 으로 모았다) ·
+            세그먼트 200 개 초과 · 디코드 후 점 2,000 개 초과(푸는 도중 멈춘다, SEC-U10-07) · 인코딩 형식 오류 ·
+            `rawPointCount` < 저장 점 수 · `recordedTo` < `recordedFrom`
+        '404': { description: 여행 없음/타 계정 }
+        '409': { description: '`LOCATION_CONSENT_REQUIRED` — L2 또는 L3 동의 없음. 기기는 그날 원시 표본·큐를 지우고 강등한다(BR-U10-45)' }
   /trips/{tripId}/location-automation/intervals:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2618,6 +2654,30 @@ components:
             이 편집이 딛고 선 서버 버전(BR-U5-22 · TRIP-546). 오프라인 큐를 재생할 때 실어 보내면,
             그 사이 서버가 앞서 나간 경우 **조용히 덮어쓰는 대신** `VISIT_CONFLICT`(409)로 갈린다.
             보내지 않으면 검사하지 않는다 — 온라인 단일 기기 편집 경로를 막지 않는다.
+    RouteDayUpload:
+      type: object
+      required: [segments, distanceM, rawPointCount]
+      properties:
+        segments: { type: array, maxItems: 200, items: { type: string }, description: '인코딩 폴리라인(1e-5) — 다운샘플 후, 공백에서 나뉜다' }
+        distanceM: { type: integer, minimum: 0, description: 기기가 원시 표본으로 잰 거리(공백 구간 제외) }
+        rawPointCount: { type: integer, minimum: 0, description: 다운샘플 전 점 수 }
+        storedPointCount: { type: integer, minimum: 0, nullable: true, description: 기기가 센 저장 점 수 — 서버는 디코드한 수를 쓴다 }
+        recordedFrom: { type: string, format: date-time, nullable: true, description: '기록 구간 시작 — 거리 상한 계산 전용, 저장만 하고 내보내지 않는다. 없으면 하루로 본다' }
+        recordedTo: { type: string, format: date-time, nullable: true }
+    RouteDay:
+      type: object
+      required: [date, segments, distanceM, distanceClamped, updatedAt]
+      properties:
+        date: { type: string, format: date }
+        segments: { type: array, items: { type: string } }
+        distanceM: { type: integer, minimum: 0, description: 클램프 후 거리 }
+        distanceClamped: { type: boolean, description: 기기 값을 서버가 고쳤는가 }
+        updatedAt: { type: string, format: date-time }
+    RouteDayList:
+      type: object
+      required: [routes]
+      properties:
+        routes: { type: array, items: { $ref: '#/components/schemas/RouteDay' } }
     IntervalReportRequest:
       type: object
       required: [intervalId, kind, phase, at]

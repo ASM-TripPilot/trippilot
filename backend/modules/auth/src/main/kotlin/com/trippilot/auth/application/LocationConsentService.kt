@@ -93,12 +93,14 @@ class LocationConsentService(
     }
 
     @Transactional
-    override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID) {
+    override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID, pointCount: Int?) {
         legalLog.append(
             LocationLegalEvent.of(
                 AccountId(accountId), LocationLegalEventType.COLLECTION,
                 // 원시 좌표를 넣지 않는다(V1.3 규약) — 사실 확인자료가 또 하나의 파기 대상이 되면 안 된다.
-                mapOf("source" to source.name, "subjectId" to subjectId.toString()), clock.instant(),
+                mapOf("source" to source.name, "subjectId" to subjectId.toString()) +
+                    (pointCount?.let { mapOf("phase" to "STORE", "pointCount" to it.toString()) } ?: emptyMap()),
+                clock.instant(),
             ),
         )
     }
@@ -140,16 +142,13 @@ class LocationConsentService(
             recordConsentChange(accountId, TermsType.GPS_RECORDING, gpsRecordingOptIn, now)
             state = state.withGpsRecordingOptIn(gpsRecordingOptIn, now)
             if (!gpsRecordingOptIn) {
-                // L3 철회 → 즉시 파기(INV-L4). 발자취 저장소는 아직 없어 여기선 사실 기록만 남는다.
-                legalLog.append(
-                    LocationLegalEvent.of(
-                        accountId, LocationLegalEventType.PURGE,
-                        mapOf("scope" to "gps_track", "reason" to "L3_REVOKED"), now,
-                    ),
-                )
-                // **이미 저장된 위치정보는 소유 모듈이 지운다.** 여기서 직접 지우려면 archive 를
-                // 의존해야 하는데 그쪽이 이미 auth 를 의존해 순환이 된다(R1). 지운 쪽이 자기 scope 로
-                // 파기 기록까지 남긴다 — 위 `gps_track` 로그와 별개다.
+                // L3 철회 → 즉시 파기(INV-L4). **이미 저장된 위치정보는 소유 모듈이 지우고, 지운 쪽이 자기 scope 로 파기
+                // 기록을 남긴다**(EXIF = PHOTO_EXIF, 실제 경로 = ACTUAL_ROUTE). 여기서 직접 지우려면 archive 를 의존해야 하는데
+                // 그쪽이 이미 auth 를 의존해 순환이 된다(R1).
+                //
+                // 종전에는 여기서 `PURGE {scope: gps_track}` 를 **지운 것이 없어도** 남겼다(발자취 저장소가 없던 U1 시절의 자리
+                // 표시). 실제 경로가 생기면서 "지운 건수 > 0 일 때만 정확히 1건"(U10 BR-U10-43 · PBT-U10-1)과 어긋나 걷어냈다
+                // (work-graph D3, 2026-10-14). 계정 삭제 경로의 `gps_track` 로그는 그대로다(아래).
                 events.publish(GpsRecordingOptOut(accountId.value.toString(), GpsRecordingOptOut.REASON_REVOKED))
             }
         }
