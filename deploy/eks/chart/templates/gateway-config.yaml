@@ -23,6 +23,9 @@ data:
       fastcgi_temp_path /tmp/fastcgi_temp;
       uwsgi_temp_path /tmp/uwsgi_temp;
       scgi_temp_path /tmp/scgi_temp;
+      # 지속 속도 10r/s 는 그대로, 한꺼번에 몰리는 몫(burst)만 60 — 마이페이지·내 숙소가 여행마다 일정·숙소를
+      # 같은 1초에 묻는다(여행 38개 → 38~39건, 2026-10-13 DEV 429 ×12, 다음 1초 재시도로 회복). 근본은 목록
+      # 응답에 일정 상태를 싣는 것(계약 변경 — 결정 대기), 그 전까지의 완화다.
       limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
       limit_req_status 429;
       upstream backend {
@@ -60,11 +63,11 @@ data:
           return 200 "ok\n";
         }
         location = /api {
-          limit_req zone=api burst=30 nodelay;
+          limit_req zone=api burst=60 nodelay;
           proxy_pass http://backend;
         }
         location /api/ {
-          limit_req zone=api burst=30 nodelay;
+          limit_req zone=api burst=60 nodelay;
           proxy_pass http://backend;
         }
         # /internal and /actuator are available exclusively on the private backend Service.
