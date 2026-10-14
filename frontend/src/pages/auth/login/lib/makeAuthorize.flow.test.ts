@@ -166,7 +166,7 @@ const ROWS: Row[] = [
     env: { EXPO_PUBLIC_KAKAO_CLIENT_ID: 'test-kakao-client-id' },
     flow: 'code',
   },
-  // 실 빌드 — naver 는 URL 스킴 유무로 갈린다(지금 로컬 .env.local 은 스킴이 없어 code).
+  // 실 빌드 — naver 는 SDK 경로뿐이다(스킴 없음은 아래 별도 it — 성공 결과가 없다).
   {
     label: '실 · naver URL 스킴 있음',
     provider: 'naver',
@@ -177,13 +177,24 @@ const ROWS: Row[] = [
     },
     flow: 'token',
   },
-  {
-    label: '실 · naver URL 스킴 없음',
-    provider: 'naver',
-    env: { EXPO_PUBLIC_NAVER_CLIENT_ID: 'test-naver-client-id' },
-    flow: 'code',
-  },
 ];
+
+// 서버가 네이버 code 경로를 닫았다(#1072 — 항상 501). 스킴(SDK) 없는 빌드가 브라우저 OAuth 로 새면
+// 네이버 로그인 창까지 다 거친 뒤 501 로 끝났다(DEV 10-13 16:30 501 ×4). 이제 어댑터도 서버도
+// 부르지 않고 바로 실패하고, 연령 시트도 먼저 띄우지 않는다(flow ≠ code).
+it('실 · naver URL 스킴 없음 → 브라우저 폴백 없이 인가 전에 실패한다', async () => {
+  // 준비 — 브라우저 OAuth 를 탈 수 있는 clientId 는 있다(폴백이 살아 있으면 그쪽으로 샌다).
+  process.env.EXPO_PUBLIC_NAVER_CLIENT_ID = 'test-naver-client-id';
+
+  // 실행
+  const authorize = makeAuthorize('naver');
+
+  // 단언 — 사전 연령 시트 갈래가 아니고, 인가는 거부되며, 어떤 어댑터도 불리지 않았다.
+  expect(authorize.flow).not.toBe('code');
+  await expect(authorize()).rejects.toThrow();
+  expect(promptAsyncSpy).not.toHaveBeenCalled();
+  expect(naverLoginSpy).not.toHaveBeenCalled();
+});
 
 describe('TRIP-1035 · makeAuthorize(provider).flow — 갈래 판정은 실제 분기와 같은 출처다', () => {
   it.each(ROWS)(

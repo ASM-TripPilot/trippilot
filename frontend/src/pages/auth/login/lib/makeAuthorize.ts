@@ -18,7 +18,9 @@ import { getOAuthConfig } from '../config/oauthConfig';
  *    (naver SDK 필수 파라미터인 consumerSecret 자체는 naverAuthorize.ts 안에서만 env 로 읽는다
  *    — AC-8′ 가 "시크릿 env 참조는 어댑터 파일 1개에만" 을 소스 스캔으로 잠그므로, 이 게이트는
  *    일부러 시크릿이 아닌 EXPO_PUBLIC_NAVER_URL_SCHEME 로 잡는다.)
- *  - 그 외(google, 또는 위 SDK 전용 env 가 비어 아직 미설정인 kakao·naver) — 기존
+ *    없으면 브라우저 OAuth 로 보내지 않고 인가 전에 throw 한다 — 서버가 네이버 code 경로를 닫아
+ *    (#1072, PKCE 없는 code 교환 거절) 그 길은 로그인 창을 다 거친 뒤 항상 501 로 끝난다.
+ *  - 그 외(google, 또는 SDK 전용 env 가 비어 아직 미설정인 kakao) — 기존
  *    getOAuthConfig(provider).clientId 가 있어야 브라우저 OAuth(realAuthorize)로 위임하고,
  *    없으면 빈 값으로 몰래 시도하지 않고 throw 한다(INV-4).
  * 세 SDK 모두 `await import` 로 지연 로드해서만 닿으므로 이 파일의 정적 그래프에 실리지
@@ -42,6 +44,11 @@ export function makeAuthorize(provider: SocialProvider): Authorize {
         const { naverAuthorize } = await import('./naverAuthorize');
         return naverAuthorize();
       }
+      case 'naver-unavailable':
+        // 훅이 AUTHORIZE_FAILED 배너로 드러낸다(INV-4 — 침묵 금지). 서버엔 아무것도 나가지 않는다.
+        throw new Error(
+          '네이버 로그인 미설정: EXPO_PUBLIC_NAVER_URL_SCHEME 이 비어 SDK 로그인을 쓸 수 없습니다.'
+        );
       case 'browser': {
         const config = getOAuthConfig(provider);
         if (!config.clientId) {
@@ -68,11 +75,18 @@ export function makeAuthorize(provider: SocialProvider): Authorize {
         }
     }
   };
+  // naver-unavailable 은 token 으로 둔다 — code 면 훅이 인가 전에 연령 시트부터 띄워, 확인을 받은 뒤에야 실패한다.
   const flow = route === 'browser' || route === 'fake' ? 'code' : 'token';
   return Object.assign(authorize, { flow } as const);
 }
 
-type Route = 'fake' | 'apple' | 'kakao-sdk' | 'naver-sdk' | 'browser';
+type Route =
+  | 'fake'
+  | 'apple'
+  | 'kakao-sdk'
+  | 'naver-sdk'
+  | 'naver-unavailable'
+  | 'browser';
 
 function resolveRoute(provider: SocialProvider): Route {
   if (isFakeAuthEnabled()) {
@@ -84,8 +98,10 @@ function resolveRoute(provider: SocialProvider): Route {
   if (provider === 'kakao' && process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY) {
     return 'kakao-sdk';
   }
-  if (provider === 'naver' && process.env.EXPO_PUBLIC_NAVER_URL_SCHEME) {
-    return 'naver-sdk';
+  if (provider === 'naver') {
+    return process.env.EXPO_PUBLIC_NAVER_URL_SCHEME
+      ? 'naver-sdk'
+      : 'naver-unavailable';
   }
   return 'browser';
 }

@@ -71,12 +71,6 @@ function useKakaoRealPathEnv(): void {
   process.env.EXPO_PUBLIC_KAKAO_CLIENT_ID = 'test-kakao-id';
 }
 
-/** 실 경로 진입 조건(토글 off + naver clientId 설정)을 세팅한다(AC-S4 · PKCE 예외). */
-function useNaverRealPathEnv(): void {
-  process.env.EXPO_PUBLIC_AUTH_FAKE = '';
-  process.env.EXPO_PUBLIC_NAVER_CLIENT_ID = 'test-naver-id';
-}
-
 describe('AC-OA-1 · fake 격리 (실 네이티브 모듈 비접근)', () => {
   it('fake 토글이 켜지면 실 promptAsync 를 부르지 않고 fake success 를 낸다', async () => {
     process.env.EXPO_PUBLIC_AUTH_FAKE = '1';
@@ -188,68 +182,16 @@ describe('AC-S4 · kakao 실 경로 (결함 C · 케이스 21)', () => {
   });
 });
 
-describe('AC-S4 · naver PKCE 예외 (결함 C · 대조쌍 · 케이스 22)', () => {
-  it('naver 는 usePKCE:false + state 를 담고, google 은 usePKCE:true 를 유지한다', async () => {
-    // 준비 — naver·google 두 provider 의 실 경로 env 를 모두 채운다(오염 여부 대조).
-    useNaverRealPathEnv();
-    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID = 'test-google-client-id';
-    process.env.EXPO_PUBLIC_GOOGLE_REDIRECT_URI = 'trippilot://oauth/google';
-    setPromptResult({ type: 'success', params: { code: 'naver-code' } });
-
-    // 실행 — resetExpoAuthSessionMock() 없이 이어서 호출해 같은 스파이의 calls[0]/[1] 로 구분한다.
-    await makeAuthorize('naver')();
-    await makeAuthorize('google')();
-
-    const naverCfg = authRequestConstructorSpy.mock.calls[0][0] as {
-      usePKCE: boolean;
-      state?: string;
-    };
-    const googleCfg = authRequestConstructorSpy.mock.calls[1][0] as {
-      usePKCE: boolean;
-    };
-
-    // 단언 — naver 는 PKCE 꺼짐 + state 비어있지 않음, google 은 PKCE 유지.
-    expect(naverCfg.usePKCE).toBe(false);
-    expect(typeof naverCfg.state).toBe('string');
-    expect((naverCfg.state as string).length).toBeGreaterThan(0);
-    expect(googleCfg.usePKCE).toBe(true);
-    // 대조가 실제로 갈렸다 — naver 예외 처리가 google 을 오염시키지 않았다.
-    expect(googleCfg.usePKCE).not.toBe(naverCfg.usePKCE);
-  });
-});
-
-describe('AC-S4 · naver codeVerifier 비지 않음 (결함 C · 백엔드 @NotBlank · 케이스 23)', () => {
-  it('naver 결과의 codeVerifier 는 빈 문자열이 아니다', async () => {
-    // 준비 — naver 실 경로. 목이 usePKCE:false 를 받으면 codeVerifier 를 undefined 로
-    // 주므로(§3-6 인프라 수정), 여기서 실 위험(빈 문자열 → 백엔드 400)이 재현된다.
-    useNaverRealPathEnv();
-    setPromptResult({ type: 'success', params: { code: 'naver-code' } });
-
-    // 실행
-    const result = await makeAuthorize('naver')();
-
-    // 단언 — 빈 문자열도, 공백만 채운 우회도 금지한다.
-    expect(result.type).toBe('success-code');
-    if (result.type !== 'success-code') {
-      throw new Error('unreachable');
-    }
-    expect(typeof result.codeVerifier).toBe('string');
-    expect(result.codeVerifier).not.toBe('');
-    expect(result.codeVerifier.trim().length).toBeGreaterThan(0);
-  });
-});
-
-describe('AC-S4 · 3종 실 경로 시크릿 비노출 (SEC-06 · 케이스 24)', () => {
-  it.each(['google', 'kakao', 'naver'] as const)(
+// naver 는 빠졌다 — 브라우저 OAuth 폴백이 없어졌다(서버가 code 경로를 닫음, #1072 · makeAuthorize.flow.test).
+describe('AC-S4 · 2종 실 경로 시크릿 비노출 (SEC-06 · 케이스 24)', () => {
+  it.each(['google', 'kakao'] as const)(
     '%s 실 경로 결과에 시크릿이 없다',
     async (provider) => {
       // 준비 — provider 별 실 경로 env.
       if (provider === 'google') {
         useRealPathEnv();
-      } else if (provider === 'kakao') {
-        useKakaoRealPathEnv();
       } else {
-        useNaverRealPathEnv();
+        useKakaoRealPathEnv();
       }
       setPromptResult({
         type: 'success',
