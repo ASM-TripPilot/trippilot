@@ -58,7 +58,8 @@ class ActualRouteService(
     @Transactional
     fun store(accountId: UUID, tripId: UUID, date: LocalDate, upload: RouteDayUpload): ActualRouteDay {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
-        if (!consents.hasLocationLegalConsent(accountId) || !consents.hasGpsRecordingOptIn(accountId)) {
+        // 잠금 읽기 — 철회가 이 저장의 커밋을 기다리게 한다. 그냥 읽으면 철회·파기가 먼저 끝난 뒤 이 저장이 커밋돼 경로가 남는다.
+        if (!consents.holdRouteRecordingConsent(accountId)) {
             // INV-U10-1 — L3 가 거짓인 계정에는 경로 행이 생기지 않는다. 기기는 이 코드를 보고 원시 표본을 지우고 강등한다.
             throw ConflictDetected(message = "위치 동의가 없어 경로를 저장할 수 없습니다.", errorCode = ErrorCode.LOCATION_CONSENT_REQUIRED)
         }
@@ -106,6 +107,10 @@ class ActualRouteService(
 
     /** 세그먼트를 푼다 — 상한을 넘으면 푸는 도중에 멈춘다(SEC-U10-07). */
     private fun decode(upload: RouteDayUpload): List<List<Polyline.Point>> {
+        if (upload.segments.isEmpty()) {
+            // 점 없이 거리만 오면 기기 값을 하루 상한까지 그대로 믿게 된다 — 지울 수도 확인할 수도 없는 숫자다.
+            throw ValidationFailed(listOf(FieldError("segments", "세그먼트가 하나 이상 있어야 합니다.")))
+        }
         if (upload.segments.size > MAX_SEGMENTS) {
             throw ValidationFailed(listOf(FieldError("segments", "세그먼트는 ${MAX_SEGMENTS}개까지입니다.")))
         }
@@ -140,9 +145,15 @@ class ActualRouteService(
      * 상한 = 기록 구간 × 물리 상한 속도. 바꿨으면 `clamped`.
      */
     private fun clamp(reported: Int, segments: List<List<Polyline.Point>>, window: Duration): Pair<Int, Boolean> {
-        val floor = ceil(segments.sumOf { Polyline.lengthM(it) }).toInt()
+        val length = segments.sumOf { Polyline.lengthM(it) }
         val ceiling = (window.seconds * MAX_SPEED_MPS).roundToInt()
-        val bounded = reported.coerceAtLeast(floor).coerceAtMost(maxOf(ceiling, floor))
+        // 폴리라인 자체가 물리 상한보다 길면 그 업로드는 물리적으로 불가능하다 — 하한을 상한보다 앞세워 저장하면 지구를 가로지르는
+        // 지그재그 하나로 터무니없는 값이 고착된다(상한이 막으려던 바로 그것). 받지 않는다.
+        if (length > ceiling) {
+            throw ValidationFailed(listOf(FieldError("segments", "기록 구간에 비해 경로가 물리적으로 불가능하게 깁니다.")))
+        }
+        val floor = ceil(length).toInt()
+        val bounded = reported.coerceIn(floor, ceiling)
         return bounded to (bounded != reported)
     }
 
@@ -151,7 +162,11 @@ class ActualRouteService(
         const val MAX_SEGMENTS = 200
         const val MAX_POINTS = 2_000
 
-        /** 인코딩 문자열 총 길이 — 2,000점 × 점당 최대 약 12자 + 여유. 본문 256KB(PERF-U10-05)보다 작다. */
+        /**
+         * 인코딩 문자열 총 길이 — 2,000점 × 점당 최대 약 12자 + 여유.
+         * ponytail: 이 검사는 본문을 다 읽은 뒤에 돈다 — 본문 크기 자체(PERF-U10-05 의 256KB → 413)는 걸려 있지 않고 게이트웨이의
+         * `client_max_body_size`(20MB)가 유일한 상한이다. 큰 본문으로 힙을 태우는 것을 막아야 하면 라우트별 본문 상한을 둔다.
+         */
         const val MAX_ENCODED_CHARS = 64_000
 
         /**

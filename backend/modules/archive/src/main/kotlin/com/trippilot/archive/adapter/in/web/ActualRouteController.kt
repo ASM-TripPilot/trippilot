@@ -4,6 +4,8 @@ import com.trippilot.archive.application.ActualRouteService
 import com.trippilot.archive.application.RouteDayUpload
 import com.trippilot.archive.domain.ActualRouteDay
 import com.trippilot.core.error.AuthenticationRequired
+import com.trippilot.core.error.FieldError
+import com.trippilot.core.error.ValidationFailed
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.PositiveOrZero
@@ -33,7 +35,7 @@ class ActualRouteController(private val service: ActualRouteService) {
     ): RouteDayResponse = RouteDayResponse.from(
         service.store(
             principal.accountId(), tripId, date,
-            RouteDayUpload(request.segments!!, request.distanceM!!, request.rawPointCount!!, request.storedPointCount, request.recordedFrom, request.recordedTo),
+            RouteDayUpload(request.segments!!.map { it ?: throw nullSegment() }, request.distanceM!!, request.rawPointCount!!, request.storedPointCount, request.recordedFrom, request.recordedTo),
         ),
     )
 
@@ -41,12 +43,15 @@ class ActualRouteController(private val service: ActualRouteService) {
     fun list(principal: Principal, @PathVariable tripId: UUID): RouteDayList =
         RouteDayList(service.list(principal.accountId(), tripId).map(RouteDayResponse::from))
 
+    private fun nullSegment() = ValidationFailed(listOf(FieldError("segments", "세그먼트에 빈 값이 있습니다.")))
+
     private fun Principal.accountId(): UUID =
         runCatching { UUID.fromString(name) }.getOrElse { throw AuthenticationRequired() }
 }
 
 data class RouteDayUploadRequest(
-    @field:NotNull(message = "세그먼트는 필수입니다.") val segments: List<String>?,
+    /** 원소 null 은 바인딩이 막지 않는다 — 서비스에 넘기기 전에 400 으로 거른다(안 거르면 길이를 셀 때 NPE 로 500). */
+    @field:NotNull(message = "세그먼트는 필수입니다.") val segments: List<String?>?,
     @field:NotNull @field:PositiveOrZero val distanceM: Int?,
     @field:NotNull @field:PositiveOrZero val rawPointCount: Int?,
     @field:PositiveOrZero val storedPointCount: Int? = null,

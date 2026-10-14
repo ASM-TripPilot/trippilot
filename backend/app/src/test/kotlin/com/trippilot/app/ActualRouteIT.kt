@@ -42,6 +42,7 @@ class ActualRouteIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
     @Autowired private lateinit var mapper: ObjectMapper
+    @Autowired private lateinit var txManager: org.springframework.transaction.PlatformTransactionManager
 
     private val past = Instant.parse("2026-08-11T01:00:00Z")
     private val day = LocalDate.parse("2026-08-11")
@@ -109,6 +110,52 @@ class ActualRouteIT : AbstractPostgresIntegrationTest() {
         val purges = legal(accountId, "PURGE").map { mapper.readTree(it) }
         purges.map { it["scope"].asText() } shouldBe listOf("ACTUAL_ROUTE") // 지운 것 없는 gps_track 은 더 없다(D3), EXIF 는 지울 게 없었다
         purges.single()["purgedCount"].asText() shouldBe "2"
+    }
+
+    /** 경로는 L2 ∧ L3 위에서만 생긴다(D4). L2 만 거둬도 auth 는 L3 를 그대로 두므로, archive 가 지우지 않으면 경로가 남는다. */
+    @Test
+    fun `위치 동의만 철회해도 경로가 지워진다`() {
+        val (accountId, tripId) = newTrip()
+        routes.store(accountId, tripId, day, RouteDayUpload(listOf(sample), 2_000_000, 10, null))
+
+        consents.update(AccountId(accountId), legalConsent = false, gpsRecordingOptIn = null)
+        repeat(RELAY_TRIES) { if (rows(tripId) > 0) relay.relay() }
+
+        rows(tripId) shouldBe 0
+        legal(accountId, "PURGE").map { mapper.readTree(it)["scope"].asText() } shouldBe listOf("ACTUAL_ROUTE")
+    }
+
+    /**
+     * 저장과 철회가 겹치면: 저장이 동의를 읽고 아직 커밋 전일 때 철회·파기가 먼저 끝나면, 파기는 커밋 전 행을 못 보고 저장은 그 뒤에
+     * 커밋돼 경로가 영영 남는다(INV-U10-1). 저장이 동의 행을 공유 잠금으로 잡으면 철회가 저장의 커밋을 **기다린다** — 그것을 본다.
+     */
+    @Test
+    fun `저장 트랜잭션이 끝나기 전에는 GPS 기록 동의 철회가 커밋되지 않는다`() {
+        val (accountId, tripId) = newTrip()
+        val holding = java.util.concurrent.CountDownLatch(1)
+        val finish = java.util.concurrent.CountDownLatch(1)
+        val tx = org.springframework.transaction.support.TransactionTemplate(txManager)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        val store = pool.submit {
+            tx.executeWithoutResult {
+                routes.store(accountId, tripId, day, RouteDayUpload(listOf(sample), 2_000_000, 10, null))
+                holding.countDown()
+                finish.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            }
+        }
+        holding.await(10, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+        val revoke = pool.submit { consents.update(AccountId(accountId), legalConsent = null, gpsRecordingOptIn = false) }
+
+        Thread.sleep(500)
+        revoke.isDone shouldBe false // 저장이 동의 행을 잡고 있다
+        finish.countDown()
+        store.get(10, java.util.concurrent.TimeUnit.SECONDS)
+        revoke.get(10, java.util.concurrent.TimeUnit.SECONDS)
+        pool.shutdown()
+
+        // 철회 이벤트는 저장 커밋 뒤에 나갔다 — 파기가 저장분을 본다
+        repeat(RELAY_TRIES) { if (rows(tripId) > 0) relay.relay() }
+        rows(tripId) shouldBe 0
     }
 
     private companion object {

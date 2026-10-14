@@ -28,6 +28,7 @@ private class FakeLocationStateRepo : LocationConsentStateRepository {
     val stored = mutableMapOf<AccountId, LocationConsent>()
     override fun find(accountId: AccountId) = stored[accountId]
     override fun save(state: LocationConsent) = state.also { stored[it.accountId] = it }
+    override fun lockRouteRecordingConsent(accountId: AccountId) = stored[accountId]?.let { it.legalConsent && it.gpsRecordingOptIn } == true
 }
 
 private class FakeLegalLogRepo : LocationLegalLogRepository {

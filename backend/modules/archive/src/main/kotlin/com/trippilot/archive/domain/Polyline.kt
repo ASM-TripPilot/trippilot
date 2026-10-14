@@ -49,7 +49,8 @@ object Polyline {
         var shift = 0
         var i = start
         while (true) {
-            if (i >= s.length || shift > 30) throw Malformed()
+            // 유효한 좌표는 덩이 6개(30비트)면 된다 — 일곱째부터는 비트가 잘려 부호가 뒤집힐 수 있으니 받지 않는다.
+            if (i >= s.length || shift > 25) throw Malformed()
             val b = s[i++].code - 63
             if (b !in 0..63) throw Malformed()
             result = result or ((b and 0x1f) shl shift)
@@ -63,7 +64,7 @@ object Polyline {
         val dLat = Math.toRadians(b.lat - a.lat)
         val dLng = Math.toRadians(b.lng - a.lng)
         val h = sin(dLat / 2).pow(2) + cos(Math.toRadians(a.lat)) * cos(Math.toRadians(b.lat)) * sin(dLng / 2).pow(2)
-        return 2 * EARTH_RADIUS_M * asin(sqrt(h))
+        return 2 * EARTH_RADIUS_M * asin(sqrt(minOf(1.0, h))) // 대척점 근처에서 반올림이 1 을 넘어 NaN 이 되지 않게
     }
 
     private const val EARTH_RADIUS_M = 6_371_008.8

@@ -110,6 +110,10 @@ class LocationConsentService(
     @Transactional(readOnly = true)
     override fun hasGpsRecordingOptIn(accountId: UUID): Boolean = get(AccountId(accountId)).gpsRecordingOptIn
 
+    /** 경로 저장 판정 + 철회와의 경합 차단(U10 INV-U10-1) — 호출측 트랜잭션에 참여해 그 끝까지 행을 잡는다. */
+    @Transactional
+    override fun holdRouteRecordingConsent(accountId: UUID): Boolean = stateRepository.lockRouteRecordingConsent(AccountId(accountId))
+
     /** 재계획 기준점 좌표 수용 판정(TRIP-992) — L2 상태를 정본에서 그대로 읽는다(파생 복사 금지). */
     @Transactional(readOnly = true)
     override fun hasLocationLegalConsent(accountId: UUID): Boolean = get(AccountId(accountId)).legalConsent
@@ -121,7 +125,8 @@ class LocationConsentService(
 
     /**
      * L2(법정)·L3(GPS) 변경. null 은 변경 없음. 실제 값이 바뀔 때만 증적·로그를 남긴다.
-     * L3 철회 시 발자취 파기(PURGE) 트리거(INV-L4). L2 철회는 능력 파생으로 차단되며 L3 는 보존한다.
+     * L3 철회 시 위치 데이터 파기 **신호**(INV-L4) — 지우고 파기 로그를 남기는 것은 소유 모듈(archive: EXIF·실제 경로)이다.
+     * L2 철회는 능력 파생으로 차단되며 L3 값은 보존한다(archive 는 L2 철회에도 실제 경로를 지운다 — 경로는 L2 ∧ L3 위에 선다).
      */
     @Transactional
     fun update(accountId: AccountId, legalConsent: Boolean?, gpsRecordingOptIn: Boolean?): LocationConsent {
@@ -156,8 +161,8 @@ class LocationConsentService(
     }
 
     /**
-     * 계정 삭제 요청 시 GPS 발자취 즉시 파기(FD-U1-07). L3 를 끄고 PURGE 를 법정 로그에 남긴다.
-     * 발자취 데이터 저장소는 후속 유닛이라 U1 에선 상태 해제 + 사실 기록이 최소 보장.
+     * 계정 삭제 요청 시 GPS 발자취 즉시 파기(FD-U1-07). L3 를 끄고 `PURGE {gps_track}` 를 법정 로그에 남긴다(U1 의 최소 보장 —
+     * 그대로 둔다, work-graph D3). 실제로 지우는 것은 `GpsRecordingOptOut` 을 받은 archive 다(EXIF·실제 경로·열린 구간).
      */
     @Transactional
     fun purgeForAccountDeletion(accountId: AccountId) {

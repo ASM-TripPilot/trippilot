@@ -20,7 +20,7 @@ import com.trippilot.trip.api.TripPurgeScopeFacade
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
-import io.kotest.matchers.ints.shouldBeLessThanOrEqual
+import io.kotest.matchers.doubles.shouldBeLessThanOrEqual as shouldBeLessThanOrEqual0
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.boolean
@@ -153,6 +153,9 @@ class ActualRouteServiceTest : StringSpec({
         shouldThrow<ValidationFailed> { svc.store(acc, tripId, day, upload(raw = 1)) } // 원시 < 저장
         shouldThrow<ValidationFailed> { svc.store(acc, tripId, day, upload(segments = List(ActualRouteService.MAX_SEGMENTS + 1) { short })) }
         shouldThrow<ValidationFailed> { svc.store(acc, tripId, day, upload(segments = listOf("~~~~"))) }
+        shouldThrow<ValidationFailed> { svc.store(acc, tripId, day, upload(segments = emptyList())) } // 점 없이 거리만
+        // 기록 구간에 비해 물리적으로 불가능한 길이 — 790km 를 1분에
+        shouldThrow<ValidationFailed> { svc.store(acc, tripId, day, upload(segments = listOf(sample), raw = 10).copy(recordedFrom = now.minusSeconds(60), recordedTo = now)) }
         // 점 상한 — 세그먼트를 나눠도 합으로 센다
         val manyPoints = Polyline.encode(List(1_001) { Polyline.Point(37.0 + it * 1e-4, 127.0) })
         shouldThrow<ValidationFailed> { svc.store(acc, tripId, day, upload(segments = listOf(manyPoints, manyPoints), raw = 5_000)) }
@@ -169,14 +172,19 @@ class ActualRouteServiceTest : StringSpec({
             val segments = shape.mapIndexed { i, longer ->
                 Polyline.encode(listOf(Polyline.Point(37.5, 127.0 + i * 0.1), Polyline.Point(37.5 + if (longer) 0.05 else 0.005, 127.0 + i * 0.1)))
             }
-            val floor = kotlin.math.ceil(segments.sumOf { Polyline.lengthM(Polyline.decode(it, 10)) }).toInt()
-            val ceiling = maxOf((seconds * ActualRouteService.MAX_SPEED_MPS).toInt() + 1, floor)
-            val saved = w.service().store(
-                acc, tripId, day, RouteDayUpload(segments, reported, 100, null, now.minusSeconds(seconds), now),
-            )
-            saved.distanceM shouldBeGreaterThanOrEqual floor
-            saved.distanceM shouldBeLessThanOrEqual ceiling
-            saved.distanceClamped shouldBe (saved.distanceM != reported)
+            val length = segments.sumOf { Polyline.lengthM(Polyline.decode(it, 10)) }
+            val ceiling = seconds * ActualRouteService.MAX_SPEED_MPS
+            val upload = RouteDayUpload(segments, reported, 100, null, now.minusSeconds(seconds), now)
+            if (length > ceiling) {
+                // 폴리라인 자체가 물리 상한을 넘으면 받지 않는다 — 하한이 상한을 이기게 두면 터무니없는 값이 고착된다
+                shouldThrow<ValidationFailed> { w.service().store(acc, tripId, day, upload) }
+                w.routes.rows.size shouldBe 0
+            } else {
+                val saved = w.service().store(acc, tripId, day, upload)
+                saved.distanceM shouldBeGreaterThanOrEqual kotlin.math.ceil(length).toInt()
+                saved.distanceM.toDouble() shouldBeLessThanOrEqual0 ceiling + 1
+                saved.distanceClamped shouldBe (saved.distanceM != reported)
+            }
         }
     }
 
