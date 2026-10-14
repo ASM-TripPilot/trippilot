@@ -269,9 +269,10 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
         )
 
         // 마지막 슬롯을 맨 앞으로 — 고정이 아닌 슬롯만 옮길 수 있다(상대 규칙).
+        // 기준 슬롯 필수: 맨 앞 = 첫 슬롯의 beforePoiId (기준 없는 MOVE_SLOT 은 AI 가 거부한다).
         val movable = slots.last { !it.isFixed }
         lateinit var moved: EditProposalOutput
-        val moveMs = measureTimeMillis { moved = agent.proposeEdit(edit(command = EditCommand("MOVE_SLOT", emptyMap(), listOf(movable.poiId)))) }
+        val moveMs = measureTimeMillis { moved = agent.proposeEdit(edit(command = EditCommand("MOVE_SLOT", mapOf("beforePoiId" to slots.first().poiId.toString()), listOf(movable.poiId)))) }
         report("MOVE_SLOT", moved, moveMs)
         assertThat(moved.status).isIn(EditProposalStatus.PROPOSED, EditProposalStatus.REJECTED)
         if (moved.status == EditProposalStatus.PROPOSED) {
