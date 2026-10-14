@@ -306,3 +306,47 @@ def test_non_auth_failure_does_not_warn(monkeypatch, caplog) -> None:
         with pytest.raises(WeatherError):
             _adapter(http).daily_forecast(_COORD, (_D1,))
     assert not [r for r in caplog.records if r.levelno == logging.WARNING]
+
+
+# ── ⑤ NO_DATA 재시도·실패 비기억 (2026-10-14 실측: 무작위 03, 다음 호출에서 정상) ──
+
+
+class _SeqHttp:
+    """준비한 응답을 차례로 돌려준다(마지막 것은 반복)."""
+
+    def __init__(self, *bodies: object) -> None:
+        self._bodies = list(bodies)
+        self.calls = 0
+
+    def get_json(self, url: str, params: dict) -> object:
+        self.calls += 1
+        return self._bodies[min(self.calls, len(self._bodies)) - 1]
+
+
+_NO_DATA = {"response": {"header": {"resultCode": "03", "resultMsg": "NO_DATA"}}}
+
+
+def test_no_data_is_retried_until_normal() -> None:
+    http = _SeqHttp(_NO_DATA, _NO_DATA, _body({"item": [_item("20260805", "POP", "60")]}))
+    assert _adapter(http).daily_forecast(_COORD, [_D1]) == {_D1: 60}
+    assert http.calls == 3
+
+
+def test_no_data_gives_up_after_retries_and_is_not_remembered() -> None:
+    http = _SeqHttp(_NO_DATA)
+    adapter = _adapter(http)
+    with pytest.raises(WeatherError):
+        adapter.daily_forecast(_COORD, [_D1])
+    assert http.calls == 3  # 1회 + 재시도 2회
+    # 실패 응답을 기억하면 같은 발표분 동안 같은 좌표가 계속 실패한다 — 다시 불러야 한다
+    with pytest.raises(WeatherError):
+        adapter.daily_forecast(_COORD, [_D1])
+    assert http.calls == 6
+
+
+def test_other_bad_codes_are_not_retried() -> None:
+    bad = {"response": {"header": {"resultCode": "30", "resultMsg": "SERVICE_KEY_IS_NOT_REGISTERED_ERROR"}}}
+    http = _SeqHttp(bad)
+    with pytest.raises(WeatherError):
+        _adapter(http).daily_forecast(_COORD, [_D1])
+    assert http.calls == 1

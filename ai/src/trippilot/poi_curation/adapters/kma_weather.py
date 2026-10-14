@@ -47,6 +47,8 @@ _APIHUB_BASE = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService
 _APIHUB_HOST = "apihub.kma.go.kr"
 _BASE = _PORTAL_BASE  # 과거 이름 — 밖에서 참조하던 자리를 깨지 않는다
 _OK_CODE = "00"  # NORMAL_SERVICE
+_NO_DATA_CODE = "03"  # NO_DATA — 기상청 쪽 일시 결측, 다시 부르면 풀리는 일이 많다
+_NO_DATA_RETRIES = 2
 
 
 def key_param_for(base_url: str) -> str:
@@ -131,6 +133,13 @@ def base_datetime_for(now: datetime) -> tuple[str, str]:
     return base_day.strftime("%Y%m%d"), f"{hour:02d}00"
 
 
+def _result_code(body: object) -> object:
+    """응답 헤더의 resultCode — 봉투가 깨졌으면 None (판정은 `_items` 가 한다)."""
+    resp = body.get("response") if isinstance(body, Mapping) else None
+    header = resp.get("header") if isinstance(resp, Mapping) else None
+    return header.get("resultCode") if isinstance(header, Mapping) else None
+
+
 def _warn_auth_once(code: int) -> None:
     global _auth_warned
     if _auth_warned:
@@ -205,26 +214,35 @@ class KmaWeatherAdapter:
         key = (coord.lat, coord.lng, base_date, base_time)
         if self._last is not None and self._last[0] == key:
             return self._last[1]
-        try:
-            body = self._http.get_json(
-                f"{self._base}/getVilageFcst",
-                {
-                    self._key_param: self._key,
-                    "dataType": "JSON",
-                    "pageNo": "1",
-                    "numOfRows": str(_NUM_OF_ROWS),
-                    "base_date": base_date,
-                    "base_time": base_time,
-                    "nx": str(nx),
-                    "ny": str(ny),
-                },
-            )
-        except Exception as e:
-            code = getattr(e, "code", None)  # urllib HTTPError
-            if code in _AUTH_CODES:
-                _warn_auth_once(code)
-            raise WeatherError(f"단기예보 호출 실패: {e}") from e
-        self._last = (key, body)
+        # `03 NO_DATA` 는 같은 요청을 다시 보내면 풀리는 일이 많다 — 발표 후 75분이 지난
+        # 발표분에서도 좌표마다 무작위로 섞여 나왔다(2026-10-14 로컬 실측 15회 중 6회,
+        # 다음 호출에서 정상). 0.2초 안에 오는 응답이라 몇 번 다시 불러도 싸다.
+        for _ in range(1 + _NO_DATA_RETRIES):
+            try:
+                body = self._http.get_json(
+                    f"{self._base}/getVilageFcst",
+                    {
+                        self._key_param: self._key,
+                        "dataType": "JSON",
+                        "pageNo": "1",
+                        "numOfRows": str(_NUM_OF_ROWS),
+                        "base_date": base_date,
+                        "base_time": base_time,
+                        "nx": str(nx),
+                        "ny": str(ny),
+                    },
+                )
+            except Exception as e:
+                code = getattr(e, "code", None)  # urllib HTTPError
+                if code in _AUTH_CODES:
+                    _warn_auth_once(code)
+                raise WeatherError(f"단기예보 호출 실패: {e}") from e
+            if _result_code(body) != _NO_DATA_CODE:
+                break
+        # 정상 응답만 기억한다 — 비정상 코드는 HTTP 200 이라 위 except 를 비켜 가서,
+        # 기억하면 같은 발표분 동안 같은 좌표의 요청이 그 실패를 그대로 받는다.
+        if _result_code(body) == _OK_CODE:
+            self._last = (key, body)
         return body
 
     def hourly_forecast(
