@@ -135,7 +135,7 @@ def test_responses_without_effort_sends_no_reasoning() -> None:
 
 
 def test_chat_never_sends_effort() -> None:
-    """chat 표면은 로컬 서빙(MLX·vLLM) 전용 — 추론 파라미터를 싣지 않는다."""
+    """chat 표면은 추론 파라미터를 싣지 않는다 — 로컬 서빙(MLX·vLLM)이 이 표면을 쓴다."""
     from dataclasses import replace
 
     client = RecordingClient()

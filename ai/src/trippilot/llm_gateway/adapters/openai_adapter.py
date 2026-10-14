@@ -72,7 +72,8 @@ class OpenAIAdapter:
                 # 실현 불가 — 모델 기본값에 맡긴다 (TRIP-377). 요청 필드도 없앴다.
                 # effort 는 지정됐을 때만(anthropic 어댑터와 동형). 값은 그대로 —
                 # 표의 값("low")이 두 벤더에 공통이다. gpt-5.6-sol·terra·luna 모두 low 를
-                # 받는다(2026-10-14 실호출). chat 표면엔 싣지 않는다: 로컬 서빙(MLX·vLLM) 전용이다.
+                # 받는다(2026-10-14 실호출). chat 표면엔 싣지 않는다 — 로컬 서빙(MLX·vLLM) 호환.
+                # 그래서 OPENAI_API=chat 으로 GPT 를 붙이면 effort 는 빠진다(운영은 responses 고정).
                 extra = {"reasoning": {"effort": request.effort}} if request.effort else {}
                 resp = self._client.responses.create(
                     model=request.model_id,

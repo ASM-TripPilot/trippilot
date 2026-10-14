@@ -182,7 +182,7 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
 
 
 def default_feature_effort() -> Mapping[LlmFeature, str]:
-    """기능별 사고 깊이(`output_config.effort`) — 여기 없는 기능은 안 싣는다(모델 기본값).
+    """기능별 사고 깊이(Claude `output_config.effort`·GPT `reasoning.effort`) — 여기 없는 기능은 안 싣는다(모델 기본값).
 
     claude-fable-5-1 은 사고를 끌 수 없고(항상 켜짐) 기본 effort 가 high 다. 사고 토큰은
     출력 상한 안에서 쓰이므로, 시한이 짧은 기능은 낮춰야 예산 안에 든다. 실측
