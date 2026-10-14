@@ -87,6 +87,13 @@ run "dev_is_private_and_cost_conscious" {
     error_message = "The dev-target AI pods need the same Bedrock pod identity in their own namespace."
   }
 
+  # 로그 지표는 운영 네임스페이스만 센다 — 같은 클러스터·같은 로그 그룹의 개발 서버(trippilot-dev)가 운영 알람을 울리면 안 된다.
+  assert {
+    condition = alltrue([for filter in [aws_cloudwatch_log_metric_filter.gateway_5xx[0], aws_cloudwatch_log_metric_filter.refresh_reuse[0]] :
+    startswith(filter.pattern, "{ ($.kubernetes.namespace_name = \"trippilot\") && ")])
+    error_message = "Log metric filters must count only the production namespace, never the dev target sharing the log group."
+  }
+
   # 운영 알람(Q3=A) — 5xx·토큰 재사용·파드 재시작 셋·노드·DB 셋이 전부 같은 토픽으로 가고, 그 토픽을 Slack 이 구독한다.
   assert {
     condition = (
