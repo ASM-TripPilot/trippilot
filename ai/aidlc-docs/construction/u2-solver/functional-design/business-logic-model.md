@@ -99,7 +99,7 @@ solve(problem, deadline_ms):
 - 구성 휴리스틱(정본 §4.3 단계 1): 고정 블록 → 점수 내림차순 삽입 → HC 위반 스킵 → 빈 슬롯 허용. **항상 해 반환** (최악 = 고정 블록만 = MINIMAL).
 - 지역 탐색(2-opt/or-opt)은 잔여 ≥ `local_search_min_remaining_ms`일 때만 (정본 규칙 그대로 — 시한 인지의 원형).
 - > 이 규칙 점수는 **ML 후보 1순위(A-1)의 폴백** — AI-D05. 함수 삭제 금지.
-- 규칙 점수도 **취향 카테고리를 prefer 로 반영**한다(2026-10-14) — ScheduleAgent `_rule_scores` 가 페르소나 취향(`_wanted_categories`: taste_tags·activities·cuisines)을 `taste_fit` 으로 싣는다 — 가점 = `max(DIRECTIVE_STEP 0.3, 기본 가중 최댓값 − CATEGORY_WEIGHT[c] + ε 0.05)`, 즉 취향 카테고리는 최소 한 단 오르고 명소(1.0)보다 위가 된다(고정 +0.3 은 카페 0.6+0.3 < 명소라 묻혔다). 과잉은 조립기 식사 상한·식사창이 막고 카페 전용 상한은 없다. c1 폴백·c1_partial 보충 청크 모두. 요청에 카테고리 지시(prefer/avoid)가 있으면 그것만 쓴다(사용자 우선, BR-U4-47). 빈 취향 → 종전과 동일.
+- 규칙 점수도 **취향 카테고리를 prefer 로 반영**한다(2026-10-14) — ScheduleAgent `_rule_scores` 가 페르소나 취향(`_wanted_categories`: taste_tags·activities·cuisines)을 `taste_fit` 으로 싣는다 — 가점 = `max(DIRECTIVE_STEP 0.3, 기본 가중 최댓값 − CATEGORY_WEIGHT[c] + ε 0.05)`, 즉 취향 카테고리는 최소 한 단 오르고 명소(1.0)보다 위가 된다(고정 +0.3 은 카페 0.6+0.3 < 명소라 묻혔다). 과잉은 조립기의 일별 카테고리 체감 감점(`category_excess_penalty`, 허용치 초과 1곳당 −0.3)이 막는다 — 식사 상한은 FOOD 만 세고 카페 전용 상한은 없다. c1 폴백·c1_partial 보충 청크 모두. 요청에 카테고리 지시(prefer/avoid)가 있으면 그것만 쓴다(사용자 우선, BR-U4-47). 빈 취향 → 종전과 동일.
 
 ### 2.6 TravelEstimator (travel.py)
 

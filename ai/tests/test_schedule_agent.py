@@ -948,6 +948,7 @@ def _assert_taste_lift(lift: float, cat: _Cat, wanted) -> None:
     if cat in wanted:
         assert lift >= DIRECTIVE_STEP - 1e-9
         assert CATEGORY_WEIGHT[cat] + lift > _TOP  # 명소보다 위 — 카페 취향이 묻히지 않는다
+        assert CATEGORY_WEIGHT[cat] + lift <= _TOP + DIRECTIVE_STEP  # 한 단 넘게 치솟지 않는다
     else:
         assert abs(lift) < 1e-9
 
