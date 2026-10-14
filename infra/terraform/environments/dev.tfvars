@@ -14,3 +14,6 @@ database_instance_class        = "db.t4g.small"
 database_allocated_storage     = 20
 database_max_allocated_storage = 100
 redis_node_type                = "cache.t4g.micro"
+# 운영 알람 → Slack(인프라 결정 Q3=A). 워크스페이스는 2026-10-14 AWS Chatbot 에 연결했다. ID 는 비밀이 아니다.
+alerts_slack_team_id    = "T0BG08ENPDW"
+alerts_slack_channel_id = "C0C8W4UN7HR"
