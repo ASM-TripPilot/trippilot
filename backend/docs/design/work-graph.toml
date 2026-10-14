@@ -3853,12 +3853,17 @@ note = """
 id = "TEST-OPEN-IN-VIEW"
 ticket = "TRIP-1387"
 title = "통합 테스트가 open-in-view 를 켠 채 돈다 — 테스트용 application.yml 이 본 설정을 가린다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
-  "backend/app/src/test/resources/application.yml",
+  "backend/app/src/test/resources/config/application.yml",
 ]
 note = """
+**닫힘(2026-10-14)** — 키 하나를 더 적는 대신 가림 자체를 없앴다: 테스트 설정을 `config/application.yml` 로 옮겨 본 설정 **위에**
+얹히게 했다. 이제 open-in-view=false 뿐 아니라 `ddl-auto=validate` 등 본 설정 전부가 테스트에 닿는다. 전체 빌드에서 숨은 지연 로딩
+예외는 **0건**이었고, 깨진 것은 마이그레이션 없는 순정 컨테이너를 쓰는 `DatabaseConnectivityIT` 하나(스키마 검증)뿐이라 그 테스트만
+검증을 끈다. #1117 IT 동시 요청 수는 8 로 되돌렸다(설정을 루트로 되돌리면 그 IT 가 다시 빨갛다 — 역검증).
+
 [[U8-CONTRACT]](PR #1117)의 동시 열기 IT 가 드러냈다: 8개 동시 요청이 전원 500(연결 풀 고갈), 같은 테스트에
 `spring.jpa.open-in-view=false` 를 주면 통과. 테스트가 운영과 다른 세션 수명으로 돌아 **지연 로딩 예외를 원리적으로 못 잡는다.**
 테스트 설정에 명시하고 전체 빌드를 돌려 숨은 예외가 드러나는지 본다 — 드러나면 운영에서 이미 나고 있는 결함이다.

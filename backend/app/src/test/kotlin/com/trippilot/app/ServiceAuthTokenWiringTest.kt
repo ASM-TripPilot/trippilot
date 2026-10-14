@@ -20,6 +20,8 @@ class ServiceAuthTokenWiringTest : StringSpec({
      * **클래스패스로 읽지 않는다.** `app/src/test/resources/application.yml` 이 본 파일을 통째로
      * 가려서, `@SpringBootTest` 안에서는 본 파일의 값이 보이지 않는다(실측 2026-09-16).
      * 파일을 경로로 직접 읽어 가림을 우회한다.
+     * (2026-10-14 TEST-OPEN-IN-VIEW 이후 테스트 설정은 `config/application.yml` 로 옮겨져 본 파일 **위에** 얹힌다 —
+     * 가림은 없어졌지만 경로로 읽기는 유지한다: 이 테스트는 env 를 바꿔 끼운 해석 결과를 보려는 것이고, 테스트 덧씌움이 같은 키를 덮을 수 있다.)
      */
     fun resolve(key: String, env: Map<String, Any>): String? {
         val file = File("src/main/resources/application.yml")

@@ -14,8 +14,10 @@ import javax.sql.DataSource
  * TRIP-146 — Testcontainers 통합테스트 하네스 검증.
  * postgres:16 컨테이너를 띄우고 @ServiceConnection 으로 데이터소스를 배선,
  * 스프링 컨텍스트가 실제 DB에 연결되는지 확인한다(걷는 뼈대: "앱이 붙는 상태").
+ *
+ * 마이그레이션 없는 순정 컨테이너라 본 설정의 스키마 검증(ddl-auto=validate)을 끈다 — 검증은 나머지 IT 가 받는다.
  */
-@SpringBootTest
+@SpringBootTest(properties = ["spring.jpa.hibernate.ddl-auto=none"])
 @Testcontainers
 class DatabaseConnectivityIT {
 
