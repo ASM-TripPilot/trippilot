@@ -436,6 +436,15 @@ class OrToolsAssembler:
             elif "dom" in n:  # 필수 — 영업창 합집합 (lo·hi 는 바깥 경계)
                 m.AddLinearExpressionInDomain(
                     start[i], cp_model.Domain.FromIntervals([list(iv) for iv in n["dom"]]))
+        if problem.required_in_order:
+            # "시간만 당기기" — 필수 방문은 준 순서대로(둘 다 놓이면 앞 것이 먼저 끝난다). 모든 쌍에 건다 —
+            # 이웃 쌍만 걸면 가운데가 빠졌을 때 양끝 순서가 풀린다. 재정렬(B)도 같은 모델이라 지킨다.
+            seq = {rv.poi_id: k for k, rv in enumerate(required)}
+            chain = sorted((seq[n["poi"].poi_id], i) for i, n in enumerate(nodes)
+                           if n["required"] and n["poi"].poi_id in seq)
+            for x, (_, a) in enumerate(chain):
+                for _, b in chain[x + 1:]:
+                    m.Add(start[b] >= start[a] + nodes[a]["stay"]).OnlyEnforceIf([visit[a], visit[b]])
         if free_cap:  # 0 이면 자유 노드가 이미 빠졌다(위)
             m.Add(sum(visit[i] for i, n in enumerate(nodes)
                       if n["pin"] is None and not n["required"]) <= free_cap)

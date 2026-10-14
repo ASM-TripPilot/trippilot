@@ -269,6 +269,9 @@ class ItineraryProblem:
     end_near: 하루를 마칠 곳(재계획 "숙소 근처에서 끝내기" — 그날 밤 숙소). 마지막 방문지 →
     이 점의 도로 km 를 감점한다(`END_NEAR_WEIGHT`). 목적식 항이라 가해 여부는 안 바꾼다.
     기본 None = 항 없음(기존 생성자 호출 전부 무영향).
+
+    required_in_order: 필수 방문을 `required_visits` 순서대로 놓는다(재계획 "시간만 당기기" — 장소도
+    순서도 원 일정 그대로, 시각만 다시). 하드다 — 둘 다 놓이면 앞 것이 먼저 끝난다. 기본 False = 무영향.
     """
 
     schedule_id: ScheduleId
@@ -292,6 +295,7 @@ class ItineraryProblem:
     # 일자별 창 (TRIP-1389) — 도착일 15시부터·출발일 12시까지처럼 날마다 다를 때. 없는 날은
     # `day_window` 의 시각을 쓴다. 읽는 쪽은 `window_on(day)` 하나로만 읽는다.
     day_windows: Mapping[date, TimeWindow] | None = None
+    required_in_order: bool = False  # 필수 방문을 준 순서대로 — "시간만 당기기" (BR-U4-47)
 
     def window_on(self, day: date) -> TimeWindow:
         """그 날의 창 — 일자별 창이 있으면 그것, 없으면 공용 창의 시각을 그 날짜에 얹는다."""
@@ -340,6 +344,7 @@ class ItineraryProblem:
                 {d.isoformat(): self.day_windows[d].to_dict() for d in sorted(self.day_windows)}
                 if self.day_windows else None
             ),
+            "required_in_order": self.required_in_order,
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -398,6 +403,7 @@ class ItineraryProblem:
                  for k, v in d["day_windows"].items()}
                 if d.get("day_windows") else None
             ),
+            required_in_order=d.get("required_in_order", False),
         )
 
 

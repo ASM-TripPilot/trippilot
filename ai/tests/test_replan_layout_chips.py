@@ -57,6 +57,17 @@ def test_원_일정에_저녁이_없으면_잠글_것이_없다고_밝힌다() -
     assert any(n.startswith("keep_dinner_none") for n in body["notes"]), body["notes"]
 
 
+def test_저녁은_한_끼만_잠근다() -> None:
+    """창에 걸친 식당 둘을 다 잠그면 둘 사이 이동(흑돼지거리 → 월정리 28km)이 안 맞아 해 없음이었다."""
+    cafe_street = _SEED["월정리 카페거리"]
+    slots = [_slot(_PORK, "18:00", "19:00"), _slot(cafe_street, "19:30", "20:30")]
+    body, seen = _replan(directives=["KEEP_DINNER", "EARLIER"], reasons=["none"], current_slots=slots)
+
+    held = [str(b.poi_id) for b in seen["agent"][0].fixed_blocks if b.reason == "keep_dinner"]
+    assert held == [_PORK]
+    assert body["itinerary"] is not None, body["notes"]
+
+
 def test_이미_끝난_저녁은_잠그지_않는다() -> None:
     """되실으면 고정으로 나가 BE 가 영구히 잠근다 — 지난 저녁은 잠글 대상이 아니다."""
     slots = [_slot(_PORK, "18:00", "19:00")]
@@ -80,6 +91,9 @@ def test_시간만_당기기는_장소_그대로_시각만_앞당긴다() -> Non
     assert sorted(s["poi_id"] for s in placed) == sorted([_HALLA, _PORK])  # 새 장소 없음
     assert min(s["start_at"] for s in placed) < "13:00", placed  # 하한(09:00)부터 당겨졌다
     assert all(s["is_fixed"] is False for s in placed)
+    # 순서도 원 일정 그대로 — 거리로 섞이면 저녁 식당이 아침 첫 방문이 된다(로컬 실스택 2026-10-14)
+    assert req.required_in_order is True
+    assert [s["poi_id"] for s in sorted(placed, key=lambda s: s["start_at"])] == [_HALLA, _PORK]
 
 
 def test_장소를_바꾸는_지시가_같이_오면_그쪽이_이긴다() -> None:

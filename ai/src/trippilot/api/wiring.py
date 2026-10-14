@@ -1152,6 +1152,8 @@ def _dinner_blocks(
     잠금(HC3)이라 구성 LLM 도 점수·조립도 그 자리를 못 바꾼다. 이미 잠긴 것·제외 요청한 곳·시각 없는 것은
     건너뛴다. 이미 끝난 것(되실으면 고정으로 나간다)·지금 영업시간 밖·다른 잠금과 겹치는 것도 잠그지
     않는다 — 고정은 조립이 비킬 수 없어, 하나만 어긋나도 칩 없이는 됐을 재계획이 통째로 해 없음이 된다.
+    **저녁은 한 끼다** — 창에 걸친 식당이 여럿이면 가장 이른 하나만 잠근다. 둘을 잠그면 둘 사이 이동이
+    안 맞을 때(18–19시 흑돼지거리 → 19:30 월정리 28km) 모든 조립 단계가 해 없음이었다(리뷰 재현).
     잠글 것이 없으면 노트로 밝힌다(침묵 금지).
     """
     if "KEEP_DINNER" not in resolved:
@@ -1161,7 +1163,10 @@ def _dinner_blocks(
     excluded = set(request.excluded_poi_ids)
     lo, hi = _DINNER_WINDOW_MIN
     out: list[FixedBlock] = []
-    for slot in request.current_slots:
+    for slot in sorted(request.current_slots,
+                       key=lambda s: (s.start_at is None, s.start_at or datetime.min.time())):
+        if out:
+            break
         poi = index.get(PoiId(slot.poi_id))
         if (poi is None or not counts_as_food(poi) or slot.poi_id in excluded
                 or slot.start_at is None or slot.end_at is None or slot.ends_next_day):
@@ -2206,6 +2211,7 @@ class WiredItineraryOrchestrator:
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
                               reason="llm_compose") for p in composed),
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
+            required_in_order=earlier is not None,  # 시간만 당기기 — 원 일정 순서 그대로
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
             request=domain_request,
