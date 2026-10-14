@@ -1142,7 +1142,7 @@ paths:
         **원시 좌표는 받지 않는다** — 기기가 다운샘플한 인코딩 폴리라인(정밀도 1e-5)뿐이다(INV-U10-2). 위치 이용 동의(L2)와
         GPS 기록 동의(L3)가 모두 있어야 저장한다. 저장할 때마다 위치 법정 로그 `COLLECTION(phase=STORE)` 1건이 남는다.
         거리는 서버가 **폴리라인 길이 이상 · 기록 구간 × 시속 300km 이하**로 깎고 깎았으면 `distanceClamped` 다(BR-U10-38).
-        L3 를 철회하면 그 계정의 경로는 전부 즉시 지워진다(DEC-U10-7).
+        L2 또는 L3 를 철회하면(계정 삭제 포함) 그 계정의 경로는 전부 즉시 지워진다(DEC-U10-7 · D4).
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/RouteDayUpload' } } }
@@ -1151,8 +1151,9 @@ paths:
         '400':
           description: >
             필수 값 누락 · 여행 기간 밖의 날짜(정본은 422 `OUT_OF_WINDOW` — 이 API 의 입력 오류는 400 으로 모았다) ·
-            세그먼트 200 개 초과 · 디코드 후 점 2,000 개 초과(푸는 도중 멈춘다, SEC-U10-07) · 인코딩 형식 오류 ·
-            `rawPointCount` < 저장 점 수 · `recordedTo` < `recordedFrom`
+            세그먼트가 없거나 원소가 null · 세그먼트 200 개 초과 · 인코딩 총 64,000 자 초과 · 디코드 후 점 2,000 개 초과(푸는 도중
+            멈춘다, SEC-U10-07) · 인코딩 형식 오류 · `rawPointCount` < 저장 점 수 · `recordedTo` < `recordedFrom` ·
+            폴리라인 길이가 기록 구간 × 시속 300km 보다 김(물리적으로 불가능 — 기록 구간이 없으면 하루로 본다)
         '404': { description: 여행 없음/타 계정 }
         '409': { description: '`LOCATION_CONSENT_REQUIRED` — L2 또는 L3 동의 없음. 기기는 그날 원시 표본·큐를 지우고 강등한다(BR-U10-45)' }
   /trips/{tripId}/location-automation/intervals:
@@ -2658,7 +2659,7 @@ components:
       type: object
       required: [segments, distanceM, rawPointCount]
       properties:
-        segments: { type: array, maxItems: 200, items: { type: string }, description: '인코딩 폴리라인(1e-5) — 다운샘플 후, 공백에서 나뉜다' }
+        segments: { type: array, minItems: 1, maxItems: 200, items: { type: string }, description: '인코딩 폴리라인(1e-5) — 다운샘플 후, 공백에서 나뉜다' }
         distanceM: { type: integer, minimum: 0, description: 기기가 원시 표본으로 잰 거리(공백 구간 제외) }
         rawPointCount: { type: integer, minimum: 0, description: 다운샘플 전 점 수 }
         storedPointCount: { type: integer, minimum: 0, nullable: true, description: 기기가 센 저장 점 수 — 서버는 디코드한 수를 쓴다 }
