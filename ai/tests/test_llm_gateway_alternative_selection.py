@@ -244,7 +244,7 @@ def test_prompt_asks_to_pick_directly_for_every_reason(reason: str) -> None:
     2026-10-14 실측(claude-fable-5-1·effort=low, 같은 일정·같은 숏리스트 63곳): 입력은
     none 5,677 · fatigue 5,842 토큰으로 같은데 사고 토큰이 none 214~361 · fatigue 0 →
     지연 none 7.0~8.9s · fatigue 3.2~4.0s. KB-3 문서를 fatigue 것으로 바꿔도 none 은 사고했고
-    (사유 단어가 원인), "바로 고르세요" 한 줄로 none 사고 0·4.5s(3/3), fatigue 는 그대로였다.
+    (사유 단어가 원인), "바로 고르세요" 한 줄로 none 사고 0·3.8~5.2s(실 경로 3/3), fatigue 는 그대로였다.
     사유와 무관한 한 줄이라 모든 사유에 같은 문구가 실린다(사유별 분기 없음).
     """
     prompt, _ = PromptRegistry(_PROMPTS).render(
