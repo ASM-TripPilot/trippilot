@@ -142,3 +142,40 @@ describe('🔴 C3 · 부제 "날짜 · 사진 N" — 사진 글자는 따로 된
     }
   );
 });
+
+describe('🔴 C4 · 지역 커버 그림 — 사진이 없을 때만 썸네일 자리에 깐다', () => {
+  const COVER = 1; // jest 에서 번들 이미지는 숫자 id
+
+  it('imageUrl 이 없고 coverSource 가 있으면 썸네일 자리 안에 커버 Image 가 있다', () => {
+    render(
+      <PastTripRow
+        vm={vm({ coverSource: COVER })}
+        onPress={noop}
+        testID={ROOT}
+        compact
+      />
+    );
+    const thumb = screen.getByTestId(`${ROOT}-thumb`);
+    expect(within(thumb).getByTestId(`${ROOT}-cover`)).toBeOnTheScreen();
+    expect(within(thumb).queryByTestId(`${ROOT}-photo`)).toBeNull();
+  });
+
+  it('imageUrl 과 coverSource 가 둘 다 있으면 사진이 이기고 커버는 없다', () => {
+    render(
+      <PastTripRow
+        vm={vm({ imageUrl: 'https://example.com/a.jpg', coverSource: COVER })}
+        onPress={noop}
+        testID={ROOT}
+        compact
+      />
+    );
+    expect(screen.getByTestId(`${ROOT}-photo`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${ROOT}-cover`)).toBeNull();
+  });
+
+  it('둘 다 없으면 커버도 사진도 없이 회색 자리만 남는다', () => {
+    render(<PastTripRow vm={vm()} onPress={noop} testID={ROOT} compact />);
+    expect(screen.queryByTestId(`${ROOT}-cover`)).toBeNull();
+    expect(screen.queryByTestId(`${ROOT}-photo`)).toBeNull();
+  });
+});

@@ -54,4 +54,6 @@ export interface PastTripCardVM {
   photoLabel?: string | null;
   /** TRIP-776 · 썸네일 사진(프리뷰 픽스처 전용, G7). 실앱은 사진 원본이 기기 로컬이라 미전달. */
   imageUrl?: string | null;
+  /** 첫 목적지의 번들 지역 커버 그림(서울·부산·제주). 사진이 없을 때 썸네일 자리에 깐다. */
+  coverSource?: ImageSourcePropType | null;
 }
