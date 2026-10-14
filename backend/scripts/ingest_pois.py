@@ -69,6 +69,23 @@ def load_document(path):
     return doc, source, proposals
 
 
+def split_by_source(path, doc, source, proposals):
+    """항목의 `source` 로 묶어 출처마다 문서 한 장으로 나눈다 — 항목에 없으면 최상단 출처를 따른다.
+
+    병합 공유본(#1202)은 최상단 `source` 가 한 칸(LOCALDATA)인데 항목은 TOURAPI·LOCALDATA 가 섞여 있다.
+    수신(`/proposals`)은 **최상단 출처만** 읽고 유일키가 (source, content_id) 라서, 그대로 보내면 TourAPI
+    항목이 LOCALDATA 로 한 벌 더 생긴다. `/close-missing` 도 출처 단위라 같은 이유로 출처마다 따로 물어야 한다.
+    """
+    groups = {}
+    for item in proposals:
+        own = item.get("source") if isinstance(item, dict) else None
+        groups.setdefault(own if isinstance(own, str) and own.strip() else source, []).append(item)
+    if len(groups) <= 1:
+        only = next(iter(groups), source)
+        return [(path, dict(doc, source=only), only, proposals)]
+    return [(f"{path}[{s}]", dict(doc, source=s), s, items) for s, items in groups.items()]
+
+
 def present_refs(proposals):
     """`--close-missing` 이 보낼 목록 — 각 제안의 `provenance.content_id` 를 **문서 값 그대로**.
 
@@ -224,7 +241,7 @@ def main(argv=None):
     documents = []
     for path in args.paths:
         try:
-            documents.append((path, *load_document(path)))
+            documents.extend(split_by_source(path, *load_document(path)))
         except (OSError, ValueError, json.JSONDecodeError) as e:
             print(f"문서를 읽지 못했다: {e}", file=sys.stderr)
             return 1
@@ -442,6 +459,24 @@ def self_check_close_missing(write, item):
         # 같은 출처 문서가 둘이면 보내기 전에 거부한다.
         code, paths = run(doc, write({"source": "LOCALDATA", "proposals": items[:1]}), "--close-missing")
         assert code != 0 and paths == [], (code, paths)
+
+        # 병합 공유본: 최상단은 한 출처인데 항목이 섞여 있다 — 항목 출처마다 따로 보내고 따로 닫는다.
+        # 최상단 출처로 몰아 보내면 다른 출처 항목이 한 벌 더 생긴다(유일키가 (source, content_id)).
+        tour = [dict(item, source="TOURAPI", provenance={"content_id": f"T{i}"}) for i in range(2)]
+        local = [dict(item, source="LOCALDATA", provenance={"content_id": f"L{i}"}) for i in range(3)]
+        merged = write({"source": "LOCALDATA", "proposals": [tour[0], local[0], tour[1], local[1], local[2]]})
+        code, paths = run(merged, "--close-missing", "--chunk-size", "2")
+        assert code == 0 and paths == [CLOSE_PATH, INGEST_PATH, CLOSE_PATH, INGEST_PATH, INGEST_PATH], (code, paths)
+        sent = [(body["source"], [p["provenance"]["content_id"] for p in body.get("proposals", [])]
+                 or body.get("present_source_refs")) for _path, body in calls]
+        assert sent == [("TOURAPI", ["T0", "T1"]), ("TOURAPI", ["T0", "T1"]),
+                        ("LOCALDATA", ["L0", "L1", "L2"]), ("LOCALDATA", ["L0", "L1"]), ("LOCALDATA", ["L2"])], sent
+        # 병합본과 같은 출처 문서를 함께 주면 겹친 출처로 거부한다(둘째가 첫째의 행을 닫는다).
+        code, paths = run(merged, doc, "--close-missing")
+        assert code != 0 and paths == [], (code, paths)
+        # 항목에 source 가 없으면 최상단을 따른다 — 기존 단일 출처 문서는 그대로.
+        assert split_by_source("p", {"source": "TOURAPI"}, "TOURAPI", [item])[0][1:3] == (
+            {"source": "TOURAPI"}, "TOURAPI")
 
         # 토큰이 없으면 적재만 보는 드라이런은 되고, 닫힐 수를 묻는 드라이런은 보내기 전에 멈춘다.
         os.environ.pop(TOKEN_ENV)
