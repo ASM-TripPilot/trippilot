@@ -756,6 +756,7 @@
 - `src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx`  →  DraftPage
 - `src/pages/itinerary/itinerary-draft/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/pages/itinerary/itinerary-draft/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
+- `src/pages/itinerary/itinerary-draft/ui/RevealItem.tsx`  →  RevealItem
 - `src/pages/itinerary/itinerary-draft/ui/SlotCandidatePanelContainer.tsx`  →  SlotCandidatePanelContainerProps · SlotCandidatePanelContainer
 - `src/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
 
@@ -1574,6 +1575,7 @@
 
 ## src/shared/map/
 - `src/shared/map/CenterPinPicker.tsx`  →  CenterPinPickerProps · CenterPinPicker
+- `src/shared/map/DrawnPathOverlay.tsx`  →  DRAW_PATH_DURATION_MS · DrawnPathOverlay
 - `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPinKind · MapPin · MapViewProps · MapView
 - `src/shared/map/RouteToggle.tsx`  →  RouteToggleProps · RouteToggle · actualDistanceLabel
 - `src/shared/map/fitRegion.ts`  →  buildFitRegion · buildCircleRegion
@@ -1708,4 +1710,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1068개 파일
+합계 1070개 파일

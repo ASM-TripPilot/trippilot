@@ -156,7 +156,11 @@ export function GeneratingPage({
             });
             return;
           }
-          router.replace({ pathname: successRoute, params: { tripId } });
+          // TRIP-1385 — 방금 만든 완성 일정을 처음 여는 순간에만 공개 모션을 켠다(관찰 모드·목록 진입은 안 싣는다).
+          router.replace({
+            pathname: successRoute,
+            params: { tripId, reveal: '1' },
+          });
         },
       }
     );
