@@ -204,7 +204,8 @@ def is_franchise(name: str) -> bool:
     if not n:
         return False
     parts = [p for p in (s.strip() for s in _JOINED.split(n)) if p]
-    return all(_FRANCHISE.search(p) is not None for p in parts)
+    # 구분자만 있는 이름(`&`)은 조각이 0개다 — `all([])` 은 참이라 체인으로 빠졌다(PBT 반례).
+    return bool(parts) and all(_FRANCHISE.search(p) is not None for p in parts)
 
 
 def non_travel_reason(name: str | None) -> str | None:
