@@ -3633,10 +3633,12 @@ def build_orchestrator(
         pool_config=m7_config,
     )
     # U8 도우미 대화 해석(G-U8-4) — 3단 IntentRouter 의 첫 프로덕션 호출자.
-    # 뱅크는 **메모리 스토어**에 첫 해석 때 현재 임베딩 모델로 색인한다(`BankIndex` docstring) —
+    # 뱅크는 **메모리 스토어**에 기동 때 백그라운드로 현재 임베딩 모델로 색인한다(`BankIndex` docstring) —
     # 실 DB 적재·컬렉션 슬러그가 필요 없다. 임베딩 미배선이면 1차를 건너뛰고 3차로 간다.
     # LLM 은 `CountingLlm` 으로 감싼다: 백엔드 사용량 상한이 이 경계의 `llm_calls` 를 센다.
     bank_store = InMemoryVectorStore()
+    bank_index = BankIndex(bank, embedding, bank_store)
+    bank_index.warm()  # 기동 때 백그라운드 색인 — 첫 해석이 색인 시간을 떠안지 않게
     counted = CountingLlm(llm)
     dialogue = DialogueInterpreter(
         IntentRouter(
@@ -3645,7 +3647,7 @@ def build_orchestrator(
             intent_gateway=GatewayFacade(counted, renderer, IntentGate(), c1_config, trace),
             paraphrase_gateway=GatewayFacade(counted, renderer, ParaphraseGate(), c1_config, trace),
         ),
-        BankIndex(bank, embedding, bank_store),
+        bank_index,
     )
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,

@@ -137,3 +137,38 @@ def test_assembly_requires_base_url_and_model(kwargs: dict) -> None:
     args = {"base_url": "http://x", "model": _MODEL} | kwargs
     with pytest.raises(ValueError):
         HttpEmbeddingAdapter(_FakeHttp(_ok()), args["base_url"], model=args["model"])
+
+
+# ── 서비스 건수 상한 (ai/embedding/app.py MAX_TEXTS — 넘기면 413) ──────────
+class _CappedHttp:
+    """실 서비스처럼 한 요청 건수를 상한으로 막고, 받은 순서대로 구별되는 벡터를 돌려준다."""
+
+    def __init__(self, cap: int) -> None:
+        self.cap = cap
+        self.sizes: list[int] = []
+        self._seen = 0
+
+    def request_json(self, method, url, *, params=None, body=None, headers=None):
+        texts = body["texts"]
+        if len(texts) > self.cap:
+            raise RuntimeError("HTTP Error 413: Request Entity Too Large")
+        self.sizes.append(len(texts))
+        start, self._seen = self._seen, self._seen + len(texts)
+        return {"vectors": [[float(start + i)] * _DIM for i in range(len(texts))],
+                "dim": _DIM, "model": _MODEL}
+
+
+def test_batch_over_service_cap_is_split_and_reassembled_in_order() -> None:
+    """질문뱅크(485문장)를 한 번에 보내 DEV 가 413 을 냈다 — 상한 단위로 나눠 보내고 순서대로 잇는다."""
+    http = _CappedHttp(cap=256)
+    adapter = HttpEmbeddingAdapter(http, "http://e", model=_MODEL, dim=_DIM, max_texts=256)
+    vectors = adapter.embed_batch([f"q{i}" for i in range(485)])
+    assert http.sizes == [256, 229]
+    assert [v[0] for v in vectors] == [float(i) for i in range(485)]
+
+
+def test_default_cap_matches_service_default() -> None:
+    """기본값이 서비스 기본(256)을 넘으면 설정 없이 413 이 재발한다."""
+    http = _CappedHttp(cap=256)
+    _adapter(http).embed_batch(["가"] * 300)
+    assert max(http.sizes) <= 256

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import math
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -191,6 +193,40 @@ def test_bank_index_retries_after_outage() -> None:
     now[0] = 61
     idx.ensure()
     assert idx.indexed and store.search(BANK_COLLECTION, (1.0, 0.0), 1)
+
+
+class _SlowEmbedding(_FlakyEmbedding):
+    """색인(embed_batch)을 `release` 가 올 때까지 붙잡는다 — 원격 임베딩 485문장 색인 중인 상태."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail = False
+        self.started, self.release = threading.Event(), threading.Event()
+
+    def embed_batch(self, texts):
+        self.started.set()
+        self.release.wait(5)
+        return super().embed_batch(texts)
+
+
+def test_request_does_not_wait_for_bank_indexing() -> None:
+    """DEV 에서 첫 해석이 색인 시간을 떠안아 백엔드 상한에 닿았다 — 색인은 백그라운드, 요청은 기다리지 않는다."""
+    emb, store = _SlowEmbedding(), InMemoryVectorStore()
+    entry = BankEntry(entry_id="E1", intent=Intent.GET_WEATHER, question="날씨", reviewed=True,
+                      origin="seed", bank_version="t")
+    idx = BankIndex((entry,), emb, store)
+    idx.warm()
+    assert emb.started.wait(5)
+
+    t0 = time.monotonic()
+    idx.ensure()  # 해석 경로 — 다른 스레드가 색인 중이면 곧장 돌아온다
+    assert time.monotonic() - t0 < 0.5 and not idx.indexed
+
+    emb.release.set()
+    deadline = time.monotonic() + 5
+    while not idx.indexed and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert idx.indexed
 
 
 # ── 표 정합 ─────────────────────────────────────────────────────────────
