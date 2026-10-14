@@ -1138,7 +1138,7 @@ paths:
         content: { application/json: { schema: { $ref: '#/components/schemas/IntervalReportRequest' } } }
       responses:
         '204': { description: 반영됨(재전송 포함) }
-        '400': { description: '필수 값 누락 · END 에 endReason 없음 · endReason=SERVER_TIMEOUT(서버 전용) · 보고 시각이 서버 시각 + 5분보다 뒤이거나 여행 기간 ± 1일(서울 날짜) 밖' }
+        '400': { description: '필수 값 누락 · END 에 endReason 없음 · endReason=SERVER_TIMEOUT(서버 전용) · 보고 시각이 서버 시각 + 5분보다 뒤 · START 시각이 여행 기간 ± 1일(서울 날짜) 밖' }
         '404': { description: 여행 없음/타 계정 }
         '409':
           description: >
