@@ -39,7 +39,7 @@ from __future__ import annotations
 import functools
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -179,12 +179,16 @@ class IntentRouter:
         intent_gateway: GatewayFacade | None = None,
         paraphrase_gateway: GatewayFacade | None = None,
         config: IntentRouterConfig | None = None,
+        bank_ready: Callable[[], bool] | None = None,
     ) -> None:
         self._embedding = embedding
         self._store = store
         self._intent_gateway = intent_gateway
         self._paraphrase_gateway = paraphrase_gateway
         self._cfg = config or IntentRouterConfig()
+        # 뱅크가 아직 색인 전이면 1차를 **시도조차 안 한다** — 빈 스토어를 찾으려고 발화를 임베딩하면 그 왕복
+        # (DEV 에선 색인으로 포화된 임베딩 서비스, 죽어 있으면 timeout 5s)이 고스란히 해석 지연이 됐다(8.65s 실측).
+        self._bank_ready = bank_ready or (lambda: True)
 
     # ── 공개 API ────────────────────────────────────────────────────────
 
@@ -196,7 +200,7 @@ class IntentRouter:
         판단 근거가 없으니 답으로 읽는 쪽에 맡긴다.
         """
         text = normalize(utterance)
-        if not text:
+        if not text or not self._bank_ready():
             return None
         try:
             hits = self._match_bank(text)
@@ -240,6 +244,8 @@ class IntentRouter:
         # 1차가 **못 도는 것**(임베딩 서비스 장애·색인 전)은 "뱅크에 없음"과 같게 다룬다 —
         # 3차 LLM 이 남아 있는데 라우팅 전체를 폴백으로 내면 도우미가 모든 말에 "범위 밖"으로
         # 답한다. 비용은 그 동안 LLM 호출이 늘어나는 것이고, 사유는 결과에 남는다(INV-4).
+        if not self._bank_ready():
+            return self._llm_direct(text, "bank_not_ready", trace_id, now)
         try:
             hits = self._match_bank(text)
         except Exception as e:

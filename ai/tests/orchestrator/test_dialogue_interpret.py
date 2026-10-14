@@ -209,6 +209,40 @@ class _SlowEmbedding(_FlakyEmbedding):
         return super().embed_batch(texts)
 
 
+class _CountingFlaky(_FlakyEmbedding):
+    def __init__(self) -> None:
+        super().__init__()
+        self.attempts = 0
+
+    def embed_batch(self, texts):
+        self.attempts += 1
+        return super().embed_batch(texts)
+
+
+def test_warm_keeps_retrying_until_indexed_without_requests() -> None:
+    """DEV: AI 가 임베딩 서비스보다 먼저 떠 기동 색인이 연결 거부로 실패했고, 해석 요청이 와야만 재시도됐다.
+    기동 때 한 번 warm 한 스레드가 서비스가 살아날 때까지 스스로 재시도해야 한다. warm 을 여러 번 불러도 스레드는 하나."""
+    now = [0.0]
+    emb, store = _CountingFlaky(), InMemoryVectorStore()
+    entry = BankEntry(entry_id="E1", intent=Intent.GET_WEATHER, question="날씨", reviewed=True,
+                      origin="seed", bank_version="t")
+
+    def fake_sleep(seconds: float) -> None:
+        now[0] += seconds
+        if emb.attempts >= 3:
+            emb.fail = False  # 세 번째 실패 뒤 서비스가 뜬다
+        time.sleep(0.001)
+
+    idx = BankIndex((entry,), emb, store, retry_after_s=60, clock=lambda: now[0], sleep=fake_sleep)
+    for _ in range(10):
+        idx.warm()  # 해석마다 부르는 모양 — 스레드가 쌓이면 시도 횟수가 튄다
+    deadline = time.monotonic() + 5
+    while not idx.indexed and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert idx.indexed
+    assert emb.attempts == 4  # 실패 3 + 성공 1 — 스레드 하나가 간격마다 한 번씩
+
+
 def test_request_does_not_wait_for_bank_indexing() -> None:
     """DEV 에서 첫 해석이 색인 시간을 떠안아 백엔드 상한에 닿았다 — 색인은 백그라운드, 요청은 기다리지 않는다."""
     emb, store = _SlowEmbedding(), InMemoryVectorStore()

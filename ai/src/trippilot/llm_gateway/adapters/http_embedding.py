@@ -81,7 +81,7 @@ class HttpEmbeddingAdapter:
         *,
         model: str,
         dim: int = 1024,
-        max_texts: int = 256,
+        max_texts: int = 32,
     ) -> None:
         """`model` 은 **필수**다 — 기본값을 주면 대조가 형식적이 된다.
 
@@ -97,7 +97,9 @@ class HttpEmbeddingAdapter:
         self._model = model
         self.model_id = model  # collection 이름에 들어간다 (TRIP-519)
         self.dim = dim
-        # 서비스의 한 요청 건수 상한(`ai/embedding/app.py` MAX_TEXTS, 넘기면 413) — 기본을 서비스 기본과 맞춘다.
+        # 한 요청 건수. 서비스 상한(`ai/embedding/app.py` MAX_TEXTS=256, 넘기면 413)보다 작아야 하고, 한 요청이
+        # 클라이언트 timeout(기본 5s) 안에 끝나야 한다 — DEV(CPU) 에서 256건은 5s 를 넘겼다. 서비스가 안에서
+        # 32건(TRITON_MAX_BATCH)씩 나눠 돌리므로 32 로 보내도 처리량 손해는 왕복 오버헤드뿐이다.
         self._max_texts = max_texts
 
     def embed(self, text: str) -> tuple[float, ...]:

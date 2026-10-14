@@ -3672,6 +3672,7 @@ def build_orchestrator(
             bank_store,
             intent_gateway=GatewayFacade(counted, renderer, IntentGate(), c1_config, trace),
             paraphrase_gateway=GatewayFacade(counted, renderer, ParaphraseGate(), c1_config, trace),
+            bank_ready=lambda: bank_index.indexed,
         ),
         bank_index,
     )
