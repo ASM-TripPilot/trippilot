@@ -6,7 +6,7 @@
     "OVERTURE",
     "TOURAPI"
   ],
-  "collected_at": "2026-10-14T13:37:09.199405+00:00",
+  "collected_at": "2026-10-14T14:26:11.747075+00:00",
   "area_codes": [
     "1",
     "2",
@@ -35,47 +35,50 @@
   ],
   "stats": {
     "merged_runs": 2,
-    "unique_proposals": 57122,
-    "non_travel_dropped": 6
+    "unique_proposals": 57205
   },
   "merged_from": [
     {
-      "collected_at": "2026-10-14T13:02:11.925891+00:00",
-      "proposals": 57001,
+      "collected_at": "2026-10-14T13:37:09.199405+00:00",
+      "proposals": 57122,
       "stats": {
         "merged_runs": 2,
-        "unique_proposals": 57002
+        "unique_proposals": 57122,
+        "non_travel_dropped": 6
       }
     },
     {
-      "collected_at": "2026-10-14T13:37:09.199405+00:00",
-      "proposals": 127,
+      "collected_at": "2026-10-14T14:26:11.747075+00:00",
+      "proposals": 83,
       "stats": {
-        "source_file": "overture 2026-08-19.0 (부산·제주 bbox)",
-        "selection": "비식당 + 지역이 주소/동 이름으로 정확히 풀리는 것만 (최근접 이웃 미사용)",
+        "areas": [
+          "부산",
+          "제주"
+        ],
+        "selection": "비식당 + 지역이 이름 대조로 풀리는 것만 (최근접 이웃은 거부권만)",
         "row_drops": {
-          "식당·카페(제외)": 19319,
-          "지역 못 붙임(버림)": 1212,
-          "게이트로": 185,
-          "좌표와 시도 불일치(버림)": 28
+          "식당·카페(LOCALDATA 담당)": 19319,
+          "지역 못 붙임": 1087,
+          "게이트로": 177,
+          "이미 있음(이름+50m, 카테고리 무관)": 130,
+          "비여행지:complex_management": 17,
+          "좌표와 시도 불일치": 12,
+          "비여행지:public_safety": 1,
+          "비여행지:convenience_store": 1
         },
-        "gate_merged": 2,
-        "gate_drops": {
-          "policy_non_travel:complex_management": 6,
-          "policy_non_travel:public_safety": 1
-        },
+        "gate_merged": 3,
+        "gate_drops": {},
         "llm_triage": {
-          "LLM accept": 127,
-          "LLM reject": 49
+          "reject": 91,
+          "accept": 83
         },
-        "passed": 127,
+        "passed": 83,
         "by_category": {
-          "NATURE": 46,
-          "SIGHT": 40,
-          "CULTURE": 18,
-          "ACTIVITY": 12,
-          "SHOPPING": 10,
-          "NIGHT_VIEW": 1
+          "SIGHT": 35,
+          "NATURE": 20,
+          "SHOPPING": 17,
+          "CULTURE": 8,
+          "ACTIVITY": 3
         }
       }
     }
@@ -2648002,6 +2648005,2662 @@
       "provenance": {
         "content_id": "d965b77c-05ac-4fd4-9b2f-97c19802ccd5",
         "address": "제주특별자치도 제주시 한경면 일주서로4408",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-d8f2fdf9-dbcf-489f-b8d0-1badbb66675f",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-d8f2fdf9-dbcf-489f-b8d0-1badbb66675f",
+        "name": "유호 전망대",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.0150757,
+          "lng": 128.7175598
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "거제시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "d8f2fdf9-dbcf-489f-b8d0-1badbb66675f",
+        "address": "경상남도 거제시 장목면 유호리 산 85-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-c1d49a69-a550-4f77-a53b-a14f3c3f6702",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-c1d49a69-a550-4f77-a53b-a14f3c3f6702",
+        "name": "임호산",
+        "category": "NATURE",
+        "coord": {
+          "lat": 35.2284966,
+          "lng": 128.8889771
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "mountain"
+      ],
+      "region": "김해시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "c1d49a69-a550-4f77-a53b-a14f3c3f6702",
+        "address": "경상남도 김해시 흥동",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-d230720e-aa0c-4107-829d-dae5378c958e",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-d230720e-aa0c-4107-829d-dae5378c958e",
+        "name": "봉하마을 생태문화공원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 35.3142281,
+          "lng": 128.7725677
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "김해시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "d230720e-aa0c-4107-829d-dae5378c958e",
+        "address": "경상남도 김해시 진영읍 봉하로 144",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-56c5e48d-cccc-4ac1-b43d-5fb720b02071",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-56c5e48d-cccc-4ac1-b43d-5fb720b02071",
+        "name": "보황사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.2598228,
+          "lng": 128.825058
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "김해시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "56c5e48d-cccc-4ac1-b43d-5fb720b02071",
+        "address": "경상남도 김해시 주촌면 덕암리 168-3",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-5f773a82-791e-4cdb-b1fe-f725262a367f",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-5f773a82-791e-4cdb-b1fe-f725262a367f",
+        "name": "황용사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.2344513,
+          "lng": 128.8277283
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "김해시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5f773a82-791e-4cdb-b1fe-f725262a367f",
+        "address": "경상남도 김해시 주촌면 천곡리 802",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-d3e6adbd-301e-422d-97a7-2b51bb9aa2e3",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-d3e6adbd-301e-422d-97a7-2b51bb9aa2e3",
+        "name": "선지사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.2398186,
+          "lng": 128.8438873
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "김해시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "d3e6adbd-301e-422d-97a7-2b51bb9aa2e3",
+        "address": "경상남도 김해시 주촌면 선지리 501",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-8322b3cc-5bba-4981-b2eb-2f3c322999b1",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-8322b3cc-5bba-4981-b2eb-2f3c322999b1",
+        "name": "천태정사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.3983459,
+          "lng": 128.8953705
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "양산시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8322b3cc-5bba-4981-b2eb-2f3c322999b1",
+        "address": "경상남도 양산시 원동면 용당리 1003",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-b5cded15-0436-4385-a27d-557c4a079d88",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-b5cded15-0436-4385-a27d-557c4a079d88",
+        "name": "동선사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.3464928,
+          "lng": 128.9613037
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "양산시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "b5cded15-0436-4385-a27d-557c4a079d88",
+        "address": "경상남도 양산시 원동면 서룡리 63",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-d15e630f-e027-4b46-94e8-ac8fcd99974b",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-d15e630f-e027-4b46-94e8-ac8fcd99974b",
+        "name": "이연주갤러리",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 35.1950111,
+          "lng": 129.221817
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "art_gallery"
+      ],
+      "region": "기장군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "d15e630f-e027-4b46-94e8-ac8fcd99974b",
+        "address": "부산광역시 기장군 기장읍 시랑리 170-5",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-44ff4ef0-c584-4a00-8c3e-d4cf2d6314cc",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-44ff4ef0-c584-4a00-8c3e-d4cf2d6314cc",
+        "name": "해동용궁사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.1884232,
+          "lng": 129.2231445
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "기장군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "44ff4ef0-c584-4a00-8c3e-d4cf2d6314cc",
+        "address": "부산광역시 기장군 기장읍 시랑리 416-3",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-cc1de3fe-6adc-43c1-926a-9f910d172bcd",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-cc1de3fe-6adc-43c1-926a-9f910d172bcd",
+        "name": "윤목공방",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 35.1888885,
+          "lng": 129.109436
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "arts_and_crafts"
+      ],
+      "region": "연제구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "cc1de3fe-6adc-43c1-926a-9f910d172bcd",
+        "address": "부산광역시 연제구 연산동 459-58",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-e8b4b415-39f5-4592-b764-4caf8d43f4ce",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-e8b4b415-39f5-4592-b764-4caf8d43f4ce",
+        "name": "안적사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.2141151,
+          "lng": 129.1698303
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "기장군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "e8b4b415-39f5-4592-b764-4caf8d43f4ce",
+        "address": "부산광역시 기장군 기장읍 내리 692",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-c035ff77-d9d8-49e4-ad7b-eadab61dd996",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-c035ff77-d9d8-49e4-ad7b-eadab61dd996",
+        "name": "사라수변공원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 35.2381935,
+          "lng": 129.2070923
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "기장군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "c035ff77-d9d8-49e4-ad7b-eadab61dd996",
+        "address": "부산광역시 기장군 Gijang-eup, 대라리",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-f6c4459c-438d-479a-8fe0-4be01ea71ad7",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-f6c4459c-438d-479a-8fe0-4be01ea71ad7",
+        "name": "용소웰빙공원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 35.2452736,
+          "lng": 129.2063904
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "기장군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "f6c4459c-438d-479a-8fe0-4be01ea71ad7",
+        "address": "부산광역시 기장군 기장읍 서부리 335",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-ca05796c-5a6d-42ed-9ad7-98c48f9ba630",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-ca05796c-5a6d-42ed-9ad7-98c48f9ba630",
+        "name": "보림사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.2731514,
+          "lng": 129.1607361
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "기장군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "ca05796c-5a6d-42ed-9ad7-98c48f9ba630",
+        "address": "부산광역시 기장군 철마면 연구리 269-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-62c324d9-55f1-47b6-a4d8-2211f9445f15",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-62c324d9-55f1-47b6-a4d8-2211f9445f15",
+        "name": "대덕사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.3320351,
+          "lng": 129.218277
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "기장군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "62c324d9-55f1-47b6-a4d8-2211f9445f15",
+        "address": "부산광역시 기장군 장안읍 덕선리 726",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-f7c1d876-713d-44ef-9e97-d1329ba83f6c",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-f7c1d876-713d-44ef-9e97-d1329ba83f6c",
+        "name": "샵제주",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.4882698,
+          "lng": 126.389946
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "souvenir_shop"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "f7c1d876-713d-44ef-9e97-d1329ba83f6c",
+        "address": "제주특별자치도 제주시 애월읍 애월해안로 867",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-8995a7d4-6da8-4423-a1e5-2546b6cbc4dd",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-8995a7d4-6da8-4423-a1e5-2546b6cbc4dd",
+        "name": "제주동백공방 Jeju camellia",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.5045166,
+          "lng": 126.5402374
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "arts_and_crafts"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8995a7d4-6da8-4423-a1e5-2546b6cbc4dd",
+        "address": "제주특별자치도 서귀포시 성산읍 일출로269 동백공방",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-5f357ded-635e-45f1-9780-071be55fe25f",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-5f357ded-635e-45f1-9780-071be55fe25f",
+        "name": "대한불교조계종한마음선",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.4886322,
+          "lng": 126.5697174
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5f357ded-635e-45f1-9780-071be55fe25f",
+        "address": "제주특별자치도 제주시 영평동 1500",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-5af37102-eb5c-4887-9482-76422642ab2e",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-5af37102-eb5c-4887-9482-76422642ab2e",
+        "name": "백련사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.5555687,
+          "lng": 126.7433701
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5af37102-eb5c-4887-9482-76422642ab2e",
+        "address": "제주특별자치도 제주시 구좌읍 김녕리 3959",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-e3d8400c-fd27-4342-9a87-721d2956c20d",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-e3d8400c-fd27-4342-9a87-721d2956c20d",
+        "name": "북촌돌하르방공원",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.5387955,
+          "lng": 126.6886597
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "e3d8400c-fd27-4342-9a87-721d2956c20d",
+        "address": "제주특별자치도 제주시 조천읍 북촌리 976",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-b5ccc90a-ac36-4e23-bf6d-f3b5b5af2bc5",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-b5ccc90a-ac36-4e23-bf6d-f3b5b5af2bc5",
+        "name": "서우봉",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.5458107,
+          "lng": 126.6779175
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "mountain"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "b5ccc90a-ac36-4e23-bf6d-f3b5b5af2bc5",
+        "address": "제주특별자치도 제주시 조천읍 함덕리 169-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-e1f0761b-1807-49fa-9c4b-cb746bf5d918",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-e1f0761b-1807-49fa-9c4b-cb746bf5d918",
+        "name": "현지사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.5410042,
+          "lng": 126.6441498
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "e1f0761b-1807-49fa-9c4b-cb746bf5d918",
+        "address": "제주특별자치도 제주시 조천읍 조천리 1163",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-480d8210-44f2-4b7f-abf6-877f393cf648",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-480d8210-44f2-4b7f-abf6-877f393cf648",
+        "name": "조천만세동산",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.5407753,
+          "lng": 126.6418686
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "480d8210-44f2-4b7f-abf6-877f393cf648",
+        "address": "제주특별자치도 제주시 조천읍 조천리 1142-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-dec7d9a9-e17a-45e3-942e-52a7b2e0e3b9",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-dec7d9a9-e17a-45e3-942e-52a7b2e0e3b9",
+        "name": "고관사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.534771,
+          "lng": 126.636528
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "dec7d9a9-e17a-45e3-942e-52a7b2e0e3b9",
+        "address": "제주특별자치도 제주시 조천읍 조천리 2238",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-6cabefea-fe25-4d00-a1bc-75173a6e31ec",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-6cabefea-fe25-4d00-a1bc-75173a6e31ec",
+        "name": "용문사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.5282555,
+          "lng": 126.8673553
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6cabefea-fe25-4d00-a1bc-75173a6e31ec",
+        "address": "제주특별자치도 제주시 구좌읍 하도리 3142",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-9554dfd3-8b31-4634-be58-0877dc6ebcdc",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-9554dfd3-8b31-4634-be58-0877dc6ebcdc",
+        "name": "작업실 '마인라덴'",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.5251694,
+          "lng": 126.8549347
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "souvenir_shop"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "9554dfd3-8b31-4634-be58-0877dc6ebcdc",
+        "address": "제주특별자치도 제주시 구좌읍 세화1길 20-3",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-ea647fc9-a0a0-4591-aaf3-6f4641cf135a",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-ea647fc9-a0a0-4591-aaf3-6f4641cf135a",
+        "name": "세화민속오일시장",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.526001,
+          "lng": 126.857666
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "farmers_market"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "ea647fc9-a0a0-4591-aaf3-6f4641cf135a",
+        "address": "제주특별자치도 제주시 구좌읍 세화리 1500-71",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-a6f1b6eb-28bf-4913-acc5-4efa6c8e0a0b",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-a6f1b6eb-28bf-4913-acc5-4efa6c8e0a0b",
+        "name": "청강사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.4897194,
+          "lng": 126.9004669
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "a6f1b6eb-28bf-4913-acc5-4efa6c8e0a0b",
+        "address": "제주특별자치도 제주시 구좌읍 종달리 755",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-9fd01ab6-c81d-4f24-a67e-90b6f7278691",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-9fd01ab6-c81d-4f24-a67e-90b6f7278691",
+        "name": "제주도 우도 망루 등대",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.5243263,
+          "lng": 126.9526901
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "9fd01ab6-c81d-4f24-a67e-90b6f7278691",
+        "address": "제주특별자치도 제주시 우도면 연평리",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-66a20489-c9d5-4527-b01d-1298178f6c4a",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-66a20489-c9d5-4527-b01d-1298178f6c4a",
+        "name": "유민미술관",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 33.4659691,
+          "lng": 126.9200668
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "art_gallery"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "66a20489-c9d5-4527-b01d-1298178f6c4a",
+        "address": "제주특별자치도 서귀포시 성산읍 섭지코지로 107",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-5e9f5791-3733-481a-be33-f497ef07adbf",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-5e9f5791-3733-481a-be33-f497ef07adbf",
+        "name": "봉원사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.4569473,
+          "lng": 126.9146652
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5e9f5791-3733-481a-be33-f497ef07adbf",
+        "address": "제주특별자치도 서귀포시 성산읍 오조리 850",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-b3c481fc-3a1e-4a12-9b23-f1049513b17e",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-b3c481fc-3a1e-4a12-9b23-f1049513b17e",
+        "name": "지니어스 로사이",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 33.4291916,
+          "lng": 126.9321899
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "art_gallery"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "b3c481fc-3a1e-4a12-9b23-f1049513b17e",
+        "address": "제주특별자치도 서귀포시 성산읍 고성리 21",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-5cc61c4c-0b05-4df2-b100-bee83b15e882",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-5cc61c4c-0b05-4df2-b100-bee83b15e882",
+        "name": "다이버프로",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 33.4307213,
+          "lng": 126.9275665
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "scuba_diving_center"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5cc61c4c-0b05-4df2-b100-bee83b15e882",
+        "address": "제주특별자치도 제주시 조천읍 조함해안로 378",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-a4f7a90c-ab16-4f7b-9c50-2c91fcb4d538",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-a4f7a90c-ab16-4f7b-9c50-2c91fcb4d538",
+        "name": "아끈다랑쉬오름",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.4750977,
+          "lng": 126.8271103
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "mountain"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "a4f7a90c-ab16-4f7b-9c50-2c91fcb4d538",
+        "address": "제주특별자치도 제주시 구좌읍 세화리 2593-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-5fcc9d69-aff9-4a00-bbb9-f32bb27dccbc",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-5fcc9d69-aff9-4a00-bbb9-f32bb27dccbc",
+        "name": "안돌오름",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.4615211,
+          "lng": 126.7607346
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "mountain"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5fcc9d69-aff9-4a00-bbb9-f32bb27dccbc",
+        "address": "제주특별자치도 제주시 구좌읍 송당리 산66-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-2b2cc270-d777-41cf-9808-0c0658d33bc9",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-2b2cc270-d777-41cf-9808-0c0658d33bc9",
+        "name": "송당본향당",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.4686089,
+          "lng": 126.7756577
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2b2cc270-d777-41cf-9808-0c0658d33bc9",
+        "address": "제주특별자치도 제주시 구좌읍 송당리 산 199-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-f29bfff8-50df-4656-85a1-0a8adf7029df",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-f29bfff8-50df-4656-85a1-0a8adf7029df",
+        "name": "교래자연휴양림 숲속의휴양관",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.4374428,
+          "lng": 126.667923
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "f29bfff8-50df-4656-85a1-0a8adf7029df",
+        "address": "제주특별자치도 제주시 조천읍 남조로 2023",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-b878c830-482f-410d-aaba-1ce7ddcbf56c",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-b878c830-482f-410d-aaba-1ce7ddcbf56c",
+        "name": "포토갤러리 자연사랑 미술관",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 33.3554459,
+          "lng": 126.771698
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "art_gallery"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "b878c830-482f-410d-aaba-1ce7ddcbf56c",
+        "address": "제주특별자치도 서귀포시 표선면 가시리 1920-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-99bb6c9d-3719-4c11-bbe8-bb909fde789e",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-99bb6c9d-3719-4c11-bbe8-bb909fde789e",
+        "name": "휴애리자연생활공원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.3088226,
+          "lng": 126.6337433
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "99bb6c9d-3719-4c11-bbe8-bb909fde789e",
+        "address": "제주특별자치도 서귀포시 남원읍 신례동로 256",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-63056782-1ac8-4763-bf1b-165a5b54879e",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-63056782-1ac8-4763-bf1b-165a5b54879e",
+        "name": "성읍민속마을(Seongeup Folk Village)",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.3903351,
+          "lng": 126.8000793
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "63056782-1ac8-4763-bf1b-165a5b54879e",
+        "address": "제주특별자치도 서귀포시 표선면 성읍정의현로22번길 7-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-149d15bd-9878-4020-a783-46478a928c3c",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-149d15bd-9878-4020-a783-46478a928c3c",
+        "name": "일출랜드",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.3820305,
+          "lng": 126.8420792
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "149d15bd-9878-4020-a783-46478a928c3c",
+        "address": "제주특별자치도 서귀포시 성산읍 삼달리 1010",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-059f6657-26bb-42f2-9b90-bb8cca0f8d01",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-059f6657-26bb-42f2-9b90-bb8cca0f8d01",
+        "name": "법련사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.2811737,
+          "lng": 126.7373352
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "059f6657-26bb-42f2-9b90-bb8cca0f8d01",
+        "address": "제주특별자치도 서귀포시 남원읍 태흥리 1180",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-6e0d2fa5-5754-479f-872c-bd4167c6b1d1",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-6e0d2fa5-5754-479f-872c-bd4167c6b1d1",
+        "name": "불광사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.2616997,
+          "lng": 126.6396484
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6e0d2fa5-5754-479f-872c-bd4167c6b1d1",
+        "address": "제주특별자치도 서귀포시 남원읍 하례리 27",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-ef520333-7c1b-422d-9955-e0ffd9d95624",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-ef520333-7c1b-422d-9955-e0ffd9d95624",
+        "name": "코랄다이브",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 33.2312698,
+          "lng": 126.5065994
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "scuba_diving_center"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "ef520333-7c1b-422d-9955-e0ffd9d95624",
+        "address": "제주특별자치도 서귀포시 막숙포로 68",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-17a19ac5-c750-4948-a496-0d76c4586e64",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-17a19ac5-c750-4948-a496-0d76c4586e64",
+        "name": "산방연대",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.2362823,
+          "lng": 126.3141708
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "17a19ac5-c750-4948-a496-0d76c4586e64",
+        "address": "제주특별자치도 서귀포시 안덕면 사계리 산33-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-6d1933fa-021b-424a-a055-4ef40e9ba441",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-6d1933fa-021b-424a-a055-4ef40e9ba441",
+        "name": "산방사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.2368164,
+          "lng": 126.3124084
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6d1933fa-021b-424a-a055-4ef40e9ba441",
+        "address": "제주특별자치도 서귀포시 안덕면 사계리 176-1호",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-c27ca7e3-afdd-49c0-b514-95bcdb6e716b",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-c27ca7e3-afdd-49c0-b514-95bcdb6e716b",
+        "name": "SARI 상예상점",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.2476311,
+          "lng": 126.3903809
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "souvenir_shop"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "c27ca7e3-afdd-49c0-b514-95bcdb6e716b",
+        "address": "제주특별자치도 서귀포시 상예동1266-4",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-a8376daa-2b65-4c32-b15c-88890f9002cd",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-a8376daa-2b65-4c32-b15c-88890f9002cd",
+        "name": "안덕메이커스",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.259903,
+          "lng": 126.356041
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "arts_and_crafts"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "a8376daa-2b65-4c32-b15c-88890f9002cd",
+        "address": "제주특별자치도 서귀포시 안덕면 일주서로1492",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-2ca4e6cb-a993-47a6-a624-02f32db2ae09",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-2ca4e6cb-a993-47a6-a624-02f32db2ae09",
+        "name": "제주조각공원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.2574234,
+          "lng": 126.322525
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2ca4e6cb-a993-47a6-a624-02f32db2ae09",
+        "address": "제주특별자치도 서귀포시 안덕면 덕수리 산27",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-1fdd8473-9ea8-4cfc-8e97-845a81bf34c7",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-1fdd8473-9ea8-4cfc-8e97-845a81bf34c7",
+        "name": "신세계사이먼 제주프리미엄전문점",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.3073387,
+          "lng": 126.3175507
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "outlet_store"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1fdd8473-9ea8-4cfc-8e97-845a81bf34c7",
+        "address": "제주특별자치도 서귀포시 안덕면 신화역사로304번길 38",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-f0ef6908-9776-4f7d-8a66-dee269660924",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-f0ef6908-9776-4f7d-8a66-dee269660924",
+        "name": "유동룡미술관 - 이타미준 뮤지엄",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 33.3479538,
+          "lng": 126.2816391
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "art_gallery"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "f0ef6908-9776-4f7d-8a66-dee269660924",
+        "address": "제주특별자치도 제주시 한림읍 용금로906-10",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-4c256498-afae-430e-813c-9662fd539740",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-4c256498-afae-430e-813c-9662fd539740",
+        "name": "금악오름",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.3577843,
+          "lng": 126.3170547
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "mountain"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4c256498-afae-430e-813c-9662fd539740",
+        "address": "제주특별자치도 제주시 한림읍 금악리 산1-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-a892c65b-560f-436a-bfab-48ecd9a9c5c9",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-a892c65b-560f-436a-bfab-48ecd9a9c5c9",
+        "name": "성이시돌목장",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.3474426,
+          "lng": 126.3281021
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "a892c65b-560f-436a-bfab-48ecd9a9c5c9",
+        "address": "제주특별자치도 제주시 한림읍 금악리 142",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-f07e7dc8-54f1-435f-aae5-43228aff5746",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-f07e7dc8-54f1-435f-aae5-43228aff5746",
+        "name": "MOI 모아이",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.4669189,
+          "lng": 126.5759888
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "arts_and_crafts"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "f07e7dc8-54f1-435f-aae5-43228aff5746",
+        "address": "제주특별자치도 제주시 동문로 16길 5",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-fcefcd57-3a87-4057-8ee5-af14620465d8",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-fcefcd57-3a87-4057-8ee5-af14620465d8",
+        "name": "브릭캠퍼스 - brickcampus",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 33.4585457,
+          "lng": 126.4852676
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "art_gallery"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "fcefcd57-3a87-4057-8ee5-af14620465d8",
+        "address": "제주특별자치도 제주시 1100로 3045",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-5b017efb-d5ab-40f4-abd8-f1541d24ceb2",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-5b017efb-d5ab-40f4-abd8-f1541d24ceb2",
+        "name": "선물가게바나나 제주공항점",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.4778671,
+          "lng": 126.4680023
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "souvenir_shop"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5b017efb-d5ab-40f4-abd8-f1541d24ceb2",
+        "address": "제주특별자치도 제주시 노형로 284 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-1ed304e9-5ad4-4b5a-ae6c-785ac1bb2cdb",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-1ed304e9-5ad4-4b5a-ae6c-785ac1bb2cdb",
+        "name": "항파두리 항몽유적지",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.4524651,
+          "lng": 126.4088287
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1ed304e9-5ad4-4b5a-ae6c-785ac1bb2cdb",
+        "address": "제주특별자치도 제주시 애월읍 항파두리로 50",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-3e3af7e2-5363-4df2-a7cd-f2b20ce5ca00",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-3e3af7e2-5363-4df2-a7cd-f2b20ce5ca00",
+        "name": "제주사진놀이터",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.4559669,
+          "lng": 126.4419403
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "3e3af7e2-5363-4df2-a7cd-f2b20ce5ca00",
+        "address": "제주특별자치도 제주시 애월읍 평화로 2835",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-ae7f7ac0-a981-4952-b2b2-b667185cfb31",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-ae7f7ac0-a981-4952-b2b2-b667185cfb31",
+        "name": "소길별하",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.4298553,
+          "lng": 126.3758392
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "souvenir_shop"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "ae7f7ac0-a981-4952-b2b2-b667185cfb31",
+        "address": "제주특별자치도 제주시 애월읍 소길남길 34-37",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-6b5008ba-dc54-4ae5-96ee-c3b4877ba831",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-6b5008ba-dc54-4ae5-96ee-c3b4877ba831",
+        "name": "생각하는정원 - Spirited Garden",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.4096146,
+          "lng": 126.3059158
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "botanical_garden"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6b5008ba-dc54-4ae5-96ee-c3b4877ba831",
+        "address": "제주특별자치도 제주시 한경면 녹차분재로 675",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-9987bd7b-e7e9-4535-b710-bf4b373429c8",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-9987bd7b-e7e9-4535-b710-bf4b373429c8",
+        "name": "어도오름",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.4196777,
+          "lng": 126.3084869
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "mountain"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "9987bd7b-e7e9-4535-b710-bf4b373429c8",
+        "address": "제주특별자치도 제주시 애월읍 봉성리 3915",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-af2843ab-e1d1-47a2-b3d3-a99e3a8e07cf",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-af2843ab-e1d1-47a2-b3d3-a99e3a8e07cf",
+        "name": "반짝반짝 지구상회",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.4166603,
+          "lng": 126.3124161
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "arts_and_crafts"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "af2843ab-e1d1-47a2-b3d3-a99e3a8e07cf",
+        "address": "제주특별자치도 제주시 애월읍 봉성로2길 9",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-0c840000-8a0c-4806-806a-114dda7b1ced",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-0c840000-8a0c-4806-806a-114dda7b1ced",
+        "name": "소소재간",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.4439278,
+          "lng": 126.295166
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "souvenir_shop"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "0c840000-8a0c-4806-806a-114dda7b1ced",
+        "address": "제주특별자치도 제주시 한림읍 일주서로 5888",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-15b5cacc-fce4-4193-9b61-48475bf28616",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-15b5cacc-fce4-4193-9b61-48475bf28616",
+        "name": "무무제주, mumu",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.4562416,
+          "lng": 126.3088837
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "souvenir_shop"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "15b5cacc-fce4-4193-9b61-48475bf28616",
+        "address": "제주특별자치도 제주시 애월읍 봉성로3길 11",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-865ff8b2-22e2-4a23-a872-327221e290cf",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-865ff8b2-22e2-4a23-a872-327221e290cf",
+        "name": "한담공원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.4596863,
+          "lng": 126.3110123
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "865ff8b2-22e2-4a23-a872-327221e290cf",
+        "address": "제주특별자치도 제주시 애월읍 애월리 2459-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-06db8d40-a68b-47e2-a146-2b3998f47c6f",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-06db8d40-a68b-47e2-a146-2b3998f47c6f",
+        "name": "부쉬부쉬",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.4471474,
+          "lng": 126.3093109
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "arts_and_crafts"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "06db8d40-a68b-47e2-a146-2b3998f47c6f",
+        "address": "제주특별자치도 제주시 애월읍 곽지8길 23-9 부쉬부쉬",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-81cc556f-275f-4716-813b-7159d2632fa5",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-81cc556f-275f-4716-813b-7159d2632fa5",
+        "name": "용문사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.4484406,
+          "lng": 126.3010559
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "81cc556f-275f-4716-813b-7159d2632fa5",
+        "address": "제주특별자치도 제주시 애월읍 금성리 475",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-d2ddb026-085b-4af7-8c3e-5b3462ded1fc",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-d2ddb026-085b-4af7-8c3e-5b3462ded1fc",
+        "name": "보광사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.4574165,
+          "lng": 126.3378067
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "d2ddb026-085b-4af7-8c3e-5b3462ded1fc",
+        "address": "제주특별자치도 제주시 애월읍 고내봉길 63-16",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-407369c1-6a83-4bc3-ac8e-3e27ca4b29d8",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-407369c1-6a83-4bc3-ac8e-3e27ca4b29d8",
+        "name": "광명사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.4500771,
+          "lng": 126.3226929
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "407369c1-6a83-4bc3-ac8e-3e27ca4b29d8",
+        "address": "제주특별자치도 제주시 애월읍 애월리 1088-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-f31d3689-be95-44b9-9678-5353d8a2ef63",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-f31d3689-be95-44b9-9678-5353d8a2ef63",
+        "name": "한담공원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.4594383,
+          "lng": 126.3239975
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "f31d3689-be95-44b9-9678-5353d8a2ef63",
+        "address": "제주특별자치도 제주시 애월읍 애월리 2459-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-bd6674ec-c865-4152-a020-0d00c4016210",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-bd6674ec-c865-4152-a020-0d00c4016210",
+        "name": "런던다락 Cafe & Shop",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.3936996,
+          "lng": 126.2402191
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "souvenir_shop"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "bd6674ec-c865-4152-a020-0d00c4016210",
+        "address": "제주특별자치도 제주시 한림읍 한림로 335",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-a8f525ed-860e-4dba-8ee3-1bf47893b663",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-a8f525ed-860e-4dba-8ee3-1bf47893b663",
+        "name": "명월대",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.3872261,
+          "lng": 126.2665405
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "landmark_and_historical_building"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "a8f525ed-860e-4dba-8ee3-1bf47893b663",
+        "address": "제주특별자치도 제주시 한림읍 명월리 2223",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-39cd6ed5-defc-4b5d-ade8-38318d3f349b",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-39cd6ed5-defc-4b5d-ade8-38318d3f349b",
+        "name": "수선화정원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.3899574,
+          "lng": 126.241188
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "39cd6ed5-defc-4b5d-ade8-38318d3f349b",
+        "address": "제주특별자치도 제주시 한림읍 한림로 300",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-ae359ad7-812f-43a3-b587-a575f9d0b12d",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-ae359ad7-812f-43a3-b587-a575f9d0b12d",
+        "name": "한림공원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.3902397,
+          "lng": 126.2397079
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "ae359ad7-812f-43a3-b587-a575f9d0b12d",
+        "address": "제주특별자치도 제주시 한림읍 한림리 300",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-5934fc55-8b16-45ee-83ea-dcb7a4678ba2",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-5934fc55-8b16-45ee-83ea-dcb7a4678ba2",
+        "name": "월령리 선인장군락 (Cactus Colony of Wollyeong-ri)",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.3772354,
+          "lng": 126.2141113
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5934fc55-8b16-45ee-83ea-dcb7a4678ba2",
+        "address": "제주특별자치도 제주시 한림읍 월령리 359-3",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-1bb1f00c-629c-4fcf-b851-ba898abb7ca9",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-1bb1f00c-629c-4fcf-b851-ba898abb7ca9",
+        "name": "갤러리데이지",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 33.3376884,
+          "lng": 126.2674408
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "art_gallery"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1bb1f00c-629c-4fcf-b851-ba898abb7ca9",
+        "address": "제주특별자치도 제주시 한경면 저지12길 97-12",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-304a3a00-878a-465e-9c10-f7ddc86adef0",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-304a3a00-878a-465e-9c10-f7ddc86adef0",
+        "name": "환상숲곶자왈공원",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.3227577,
+          "lng": 126.2636642
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "park"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "304a3a00-878a-465e-9c10-f7ddc86adef0",
+        "address": "제주특별자치도 제주시 한경면 녹차분재로 594-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-b816c300-1a59-4e64-8525-71280d40eecc",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-b816c300-1a59-4e64-8525-71280d40eecc",
+        "name": "예술곶산양",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 33.2952614,
+          "lng": 126.2335129
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "art_gallery"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "b816c300-1a59-4e64-8525-71280d40eecc",
+        "address": "제주특별자치도 제주시 한경면 중산간서로 3181",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-9de7f92c-08a9-4a90-8442-bb32683c5497",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-9de7f92c-08a9-4a90-8442-bb32683c5497",
+        "name": "서산사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.2217369,
+          "lng": 126.2460556
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "9de7f92c-08a9-4a90-8442-bb32683c5497",
+        "address": "제주특별자치도 서귀포시 대정읍 동일리 3159",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-50339b5f-b41d-4b9d-8240-fb364ef1b6d3",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-50339b5f-b41d-4b9d-8240-fb364ef1b6d3",
+        "name": "제주스쿠버아카데미투어",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 33.216156,
+          "lng": 126.2590256
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "scuba_diving_center"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "50339b5f-b41d-4b9d-8240-fb364ef1b6d3",
+        "address": "제주특별자치도 서귀포시 대정읍 하모리 584-7",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-adb2d351-d4fa-4010-9c6b-e6929ebbf20a",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-adb2d351-d4fa-4010-9c6b-e6929ebbf20a",
+        "name": "모슬포중앙시장",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 33.2218208,
+          "lng": 126.2548141
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "flea_market"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "adb2d351-d4fa-4010-9c6b-e6929ebbf20a",
+        "address": "제주특별자치도 서귀포시 대정읍 하모리 849-11",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "overture-33cc95d8-523b-414d-b234-6cba0632a226",
+      "source": "OVERTURE",
+      "poi": {
+        "poi_id": "overture-33cc95d8-523b-414d-b234-6cba0632a226",
+        "name": "해운사",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 33.1740494,
+          "lng": 126.2714615
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "buddhist_temple"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "33cc95d8-523b-414d-b234-6cba0632a226",
+        "address": "제주특별자치도 서귀포시 대정읍 가파리 199",
         "image_url": null
       }
     }
