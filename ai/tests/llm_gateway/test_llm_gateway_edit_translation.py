@@ -401,16 +401,20 @@ def test_candidates_capped_per_category_by_pool_rank() -> None:
     """큰 풀은 카테고리마다 풀 순위 앞쪽만 — 실린 후보는 항상 풀 안(INV-1)."""
     from trippilot.llm_gateway.workers.edit_translation import _CANDIDATES_PER_CATEGORY
 
-    pool = _cat_pool(_CANDIDATES_PER_CATEGORY * 3)
+    base = _cat_pool(_CANDIDATES_PER_CATEGORY * 3)
+    # 풀 순서(순위)를 poi_id 역순으로 — "poi_id 로 정렬 후 자르기" 오구현을 잡는다
+    pool = CandidatePool(poi_ids=base.poi_ids, pois=tuple(reversed(base.pois)),
+                         generated_at=_NOW)
     lines = build_edit_translation_vars(
         pool, EditTranslationInput(utterance="u", target_date="d", current_slots=()),
     )["candidates"].splitlines()
     ids = [line[2:].split(" | ")[0] for line in lines]
     assert len(ids) == 2 * _CANDIDATES_PER_CATEGORY
     assert all(pool.contains(PoiId(x)) for x in ids)
-    # 풀 순서(= 순위) 앞쪽이 남는다
-    assert f"CAFE-{_CANDIDATES_PER_CATEGORY - 1:03d}" in ids
-    assert f"CAFE-{_CANDIDATES_PER_CATEGORY:03d}" not in ids
+    # 풀 순서(= 순위) 앞쪽이 남는다 — 역순이라 큰 번호가 상위
+    top = _CANDIDATES_PER_CATEGORY * 3 - 1
+    assert f"CAFE-{top:03d}" in ids and f"CAFE-{top - _CANDIDATES_PER_CATEGORY + 1:03d}" in ids
+    assert f"CAFE-{top - _CANDIDATES_PER_CATEGORY:03d}" not in ids and "CAFE-000" not in ids
 
 
 def test_build_vars_renders_slot_outside_pool_from_caller_info() -> None:
