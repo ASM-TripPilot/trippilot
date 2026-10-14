@@ -64,7 +64,7 @@ from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     PICK_RADIUS_KM,
     SourcingCandidate,
     fill_near,
-    gap_anchors,
+    gap_anchors_split,
     gate_against_tourapi,
     shared_tourapi_candidates,
     to_candidate,
@@ -134,8 +134,10 @@ def _targets(csv_path: Path, per_anchor: int) -> list[SourcingCandidate]:
     food = [GeoPoint(c.lat, c.lng) for c in tour if c.category is PoiCategory.FOOD]
     stays = C.load_stays(_MIGRATION / "R__seed_stay.sql")
     regions = C.load_regions(_MIGRATION / "R__seed_region_catalog.sql")
-    gaps = gap_anchors([p for p, _ in stays], food) + \
-        gap_anchors(C.region_centers(stays, regions), food)
+    # 공백 정의는 수집기와 **같은 함수**로 구한다 — 각자 계산하다 도시 규칙이 한쪽에만
+    # 들어가 어긋난 적이 있다(2026-10-14: 수집기 5,125 대 분류기 2,983).
+    rural_gap, urban_gap, center_gap = gap_anchors_split(stays, C.region_centers(stays, regions), food)
+    gaps = rural_gap + urban_gap + center_gap
 
     fill = fill_near(gaps, adopted, etc, radius_km=PICK_RADIUS_KM, per_anchor=per_anchor)
     # TourAPI 와 같은 가게는 LLM 에 태울 이유가 없다 — 중복은 애초에 안 넣는다(사용자 지시).
@@ -237,7 +239,11 @@ def main() -> int:
         done = min(i + args.batch, len(todo))
         print(f"[기타] {done:,}/{len(todo):,}", file=sys.stderr)
 
-    stat = Counter(v["verdict"] for v in verdicts.values())
+    # **이번 대상에 대해서만** 센다. 공백 정의가 바뀌면 대상에서 빠진 옛 판정이 파일에
+    # 남는데(버리지 않는다 — 다시 대상이 되면 재사용한다), 그것까지 세면 미판정이 음수가 된다.
+    refs = {c.source_ref for c in targets}
+    stat = Counter(v["verdict"] for r, v in verdicts.items() if r in refs)
+    stale = len(verdicts) - sum(stat.values())
     accepted = sorted(r for r, v in verdicts.items() if v["verdict"] == "accept")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps({
@@ -245,13 +251,13 @@ def main() -> int:
         "models": sorted({v.get("model", "?") for v in verdicts.values()}),
         "decided_at": datetime.now(UTC).strftime("%Y-%m-%d"),
         "attempted": len(targets),
-        "stats": {**stat, "미판정": len(targets) - len(verdicts)},
+        "stats": {**stat, "미판정": len(refs) - sum(stat.values()), "대상밖_옛판정": stale},
         "accepted_refs": accepted,
         "verdicts": {r: verdicts[r] for r in sorted(verdicts)},
     }, ensure_ascii=False, indent=1), encoding="utf-8")
 
     print(f"\n[기타] 대상 {len(targets):,} → accept {stat['accept']:,} · reject {stat['reject']:,} "
-          f"· 미판정 {len(targets) - len(verdicts):,}", file=sys.stderr)
+          f"· 미판정 {len(refs) - sum(stat.values()):,} (대상 밖 옛 판정 {stale:,})", file=sys.stderr)
     print(f"[기타] {args.out} 기록", file=sys.stderr)
     print("\n[기타] accept 전수 — 눈으로 확인하라:", file=sys.stderr)
     for r in accepted:

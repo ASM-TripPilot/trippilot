@@ -44,7 +44,7 @@ from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     DROP_TYPE_NOT_ADOPTED,
     GAP_MIN_FOOD,
     GAP_RADIUS_KM,
-    GAP_RADIUS_KM_URBAN,
+    gap_anchors_split,
     PER_ANCHOR,
     PICK_RADIUS_KM,
     SOURCE_NAME,
@@ -196,10 +196,8 @@ def main() -> int:
     # 공백 0곳이었다. 도시는 걸어갈 거리(1km)로 다시 잰다. 지역 중심 앵커는 시골 기준 그대로다
     # (시도·시군구 중심점이라 "그 동네를 걸어다닌다"는 전제가 성립하지 않는다).
     urban, rural = split_urban(stays)
-    gap_rural = gap_anchors(rural, food_pts)
-    gap_urban = gap_anchors(urban, food_pts, radius_km=GAP_RADIUS_KM_URBAN)
+    gap_rural, gap_urban, gap_centers = gap_anchors_split(stays, centers, food_pts)
     gap_stays = gap_rural + gap_urban
-    gap_centers = gap_anchors(centers, food_pts)
     gaps = gap_stays + gap_centers
     print(f"[localdata] 앵커 숙소 {len(stays):,} (도시 {len(urban):,} · 시골 {len(rural):,}) "
           f"+ 지역 중심 {len(centers)} → 공백 시골 {len(gap_rural):,} + "

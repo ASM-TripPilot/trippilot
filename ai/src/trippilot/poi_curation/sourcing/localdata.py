@@ -339,6 +339,25 @@ def split_urban(
     return urban, rural
 
 
+def gap_anchors_split(
+    stays: Sequence[tuple[GeoPoint, str]],
+    centers: Sequence[GeoPoint],
+    food: Sequence[GeoPoint],
+) -> tuple[list[GeoPoint], list[GeoPoint], list[GeoPoint]]:
+    """(시골 공백, 도시 공백, 지역중심 공백) — **수집기와 분류기가 같은 답을 내야 한다.**
+
+    둘이 각자 계산하다 한쪽만 도시 규칙을 받아 어긋난 적이 있다(2026-10-14: 수집기 5,125 대
+    분류기 2,983). 공백의 정의는 여기 한 곳에만 둔다.
+
+    지역 중심 앵커는 시골 기준 그대로다 — 시도·시군구 중심점이라 "그 동네를 걸어다닌다"는
+    전제가 성립하지 않는다.
+    """
+    urban, rural = split_urban(stays)
+    return (gap_anchors(rural, food),
+            gap_anchors(urban, food, radius_km=GAP_RADIUS_KM_URBAN),
+            gap_anchors(centers, food))
+
+
 def pick_near(
     anchors: Sequence[GeoPoint],
     candidates: Sequence[SourcingCandidate],

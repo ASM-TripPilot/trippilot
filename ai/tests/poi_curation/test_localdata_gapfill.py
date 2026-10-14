@@ -44,6 +44,7 @@ from trippilot.poi_curation.sourcing.localdata import (
     URBAN_SIDO,
     fill_near,
     gap_anchors,
+    gap_anchors_split,
     gate_against_tourapi,
     pick_near,
     shared_tourapi_candidates,
@@ -454,3 +455,41 @@ def test_도시_반경에서는_더_많은_앵커가_공백이_된다() -> None:
     far = [GeoPoint(_JEJU[0] + 0.03 * (i + 1) / 6, _JEJU[1]) for i in range(6)]
     assert gap_anchors([anchor], far) == []
     assert gap_anchors([anchor], far, radius_km=GAP_RADIUS_KM_URBAN) == [anchor]
+
+
+def test_공백_정의는_한_곳에만_있다() -> None:
+    """수집기와 분류기가 **같은 함수**로 공백을 구해야 한다.
+
+    둘이 각자 `gap_anchors` 를 부르다 도시 규칙이 수집기에만 들어가 어긋났다
+    (2026-10-14 실측: 수집기 5,125 대 분류기 2,983). 분류기가 덜 본 만큼 '기타'
+    보충 대상이 조용히 빠진다 — 에러 없이 데이터만 줄어드는 종류의 실패다.
+    """
+    root = Path(__file__).resolve().parents[2] / "scripts"
+    for rel in ("collect/collect_localdata.py", "classify/classify_localdata_etc.py"):
+        src = (root / rel).read_text(encoding="utf-8")
+        assert "gap_anchors_split(" in src, f"{rel} 가 공용 함수를 쓰지 않는다"
+        # 숙소 앵커에 직접 gap_anchors 를 부르면 도시 규칙을 건너뛴다
+        assert "gap_anchors([p for p, _ in stays]" not in src, (
+            f"{rel} 가 숙소 앵커에 gap_anchors 를 직접 부른다 — 도시 반경이 빠진다")
+
+
+def test_공백_셋은_서로_겹치지_않는다() -> None:
+    """시골·도시·지역중심은 같은 앵커를 두 번 세면 안 된다 — 보충 수가 부풀려진다."""
+    stays = [(GeoPoint(*_JEJU), "50110"), (GeoPoint(_JEJU[0] + 0.5, _JEJU[1]), "51110")]
+    centers = [GeoPoint(_JEJU[0] + 1.0, _JEJU[1])]
+    rural, urban, center = gap_anchors_split(stays, centers, [])
+    assert len(rural) + len(urban) + len(center) == len(stays) + len(centers)
+    assert len(urban) == 1 and len(rural) == 1 and len(center) == 1
+
+
+def test_도시_앵커는_좁은_자로_걸러진다() -> None:
+    """같은 식당 배치에서 도시 앵커만 공백이 된다 — 이 함수의 존재 이유다."""
+    urban_pt = GeoPoint(*_JEJU)                       # 제주(50) = 도시
+    rural_pt = GeoPoint(_JEJU[0] + 2.0, _JEJU[1])     # 강원(51) = 시골
+    # 각 앵커에서 1km 밖·7km 안에 식당 여섯 곳
+    food = [GeoPoint(p.lat + 0.03 * (i + 1) / 6, p.lng)
+            for p in (urban_pt, rural_pt) for i in range(6)]
+    rural, urban, _ = gap_anchors_split(
+        [(urban_pt, "50110"), (rural_pt, "51110")], [], food)
+    assert urban == [urban_pt], "도시 앵커가 좁은 자로 안 걸러졌다"
+    assert rural == [], "시골 앵커까지 좁은 자로 걸렀다"
