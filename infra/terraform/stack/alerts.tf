@@ -30,28 +30,34 @@ data "aws_iam_role" "chatbot" {
 
 # Chatbot API 는 서울에 없고, 이 조직의 SCP 는 그중 일부 리전만 연다(2026-10-14 실측: us-east-2·us-west-2·eu-west-1
 # 허용, ap-southeast-1 거부). 채널 설정만 그 리전에 두고 토픽은 서울에 둔다 — 설정은 리전을 가리지 않고 구독한다.
+# 리소스 단위 `region`(공급자 6.x) — 별칭 공급자를 따로 두면 알람이 꺼진 환경에서도 그 리전에 STS 를 부른다.
 resource "aws_chatbot_slack_channel_configuration" "alerts" {
-  count    = local.alerts_count
-  provider = aws.chatbot
+  count  = local.alerts_count
+  region = "us-east-2"
 
   configuration_name = "${local.name}-alerts"
   iam_role_arn       = data.aws_iam_role.chatbot[0].arn
   slack_team_id      = var.alerts_slack_team_id
   slack_channel_id   = var.alerts_slack_channel_id
   sns_topic_arns     = [aws_sns_topic.alerts[0].arn]
+  # 채널이 맡는 역할의 상한. 비우면 Chatbot 은 AdministratorAccess 를 상한으로 둔다 — 역할이 나중에 넓어져도
+  # Slack 에서 할 수 있는 것은 CloudWatch 읽기를 넘지 않게 묶는다.
+  guardrail_policy_arns = ["arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"]
 }
 
 # ── 로그에서 세는 것 ──────────────────────────────────────────────────────────────
 
-# 게이트웨이 접근 로그는 `$remote_addr $request_method $uri $status …` 다(차트 gateway-config.yaml). 네 번째 칸이
-# 5xx 인 줄만 센다 — 2026-10-14 test-metric-filter 로 확인: 500·502 는 잡고, 백엔드 로그의 503 · 경로에 5 가 든
-# 404 · 전송 바이트가 500 인 200 은 안 잡는다. NLB 는 L4 라 HTTP 상태 지표가 없어 로그가 유일한 원천이다.
+# 게이트웨이 접근 로그는 `$remote_addr $request_method $uri $status $body_bytes_sent $request_time` 다(차트
+# gateway-config.yaml). **끝에서 세 번째 칸**이 5xx 인 줄만 센다 — `$uri` 는 디코딩된 경로라 `%20` 이 공백이 되어 앞에서
+# 세면 칸이 밀린다(밖에서 `/a%20500%20x` 로 200 을 5xx 로 세게 만들 수 있다). 2026-10-14 test-metric-filter 로 확인:
+# 500·502·공백 든 경로의 503 은 잡고, 백엔드 로그의 503 · 경로에 5 가 든 404 · 바이트가 500 인 200 · 위 위장 줄은 안 잡는다.
+# NLB 는 L4 라 HTTP 상태 지표가 없어 로그가 유일한 원천이다.
 resource "aws_cloudwatch_log_metric_filter" "gateway_5xx" {
   count = local.alerts_count
 
   name           = "${local.name}-gateway-5xx"
   log_group_name = aws_cloudwatch_log_group.container_insights["application"].name
-  pattern        = "{ ($.kubernetes.container_name = \"gateway\") && ($.log = %^\\S+ \\S+ \\S+ 5\\d\\d %) }"
+  pattern        = "{ ($.kubernetes.container_name = \"gateway\") && ($.log = %\\s5\\d\\d\\s\\d+\\s[0-9.]+$%) }"
 
   metric_transformation {
     name      = "Gateway5xx"
@@ -112,8 +118,11 @@ resource "aws_cloudwatch_metric_alarm" "refresh_reuse" {
 # ── 파드·노드 ────────────────────────────────────────────────────────────────────
 
 # 재시작 지표가 파드 수명의 누적인지 구간별 증가분인지 실데이터로 확인하지 못했다(관측 이틀간 0건). 직전 구간과의
-# 차이(DIFF)가 양수일 때만 울리면 어느 쪽이든 "늘었을 때"만 잡는다. 배포로 새 파드가 0 부터 시작해 합이 줄어드는
-# 것은 음수라 울리지 않는다.
+# 차이(DIFF)가 양수일 때만 울리면 어느 쪽이든 "늘었을 때"만 잡는다. 배포로 새 파드가 0 부터 시작하는 것은 음수라
+# 울리지 않는다. **Sum 을 쓰지 않는다** — 1분 표본을 5분 동안 더하면 표본 수(4~6)가 흔들려 재시작 없이도 DIFF 가 뛴다.
+# ponytail: Maximum 이라 같은 워크로드의 다른 파드가 이미 더 많이 재시작했으면 덜 재시작한 파드의 증가를 놓친다 —
+# 놓쳐도 그 파드가 계속 죽으면 곧 최댓값을 넘는다. 파드별로 봐야 하면 FullPodName 차원으로 간다(파드마다 이름이 바뀐다).
+# DIFF 는 직전 점이 있어야 값이 나온다 — 두 구간을 보고 그중 하나가 넘으면 울린다.
 resource "aws_cloudwatch_metric_alarm" "pod_restarts" {
   for_each = local.alerts_restart_watched
 
@@ -121,7 +130,8 @@ resource "aws_cloudwatch_metric_alarm" "pod_restarts" {
   alarm_description   = "${each.key} 컨테이너가 다시 시작했다(OOM·기동 실패·liveness 실패). kubectl describe pod 로 사유를 본다."
   comparison_operator = "GreaterThanThreshold"
   threshold           = 0
-  evaluation_periods  = 1
+  evaluation_periods  = 2
+  datapoints_to_alarm = 1
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts[0].arn]
 
@@ -137,7 +147,7 @@ resource "aws_cloudwatch_metric_alarm" "pod_restarts" {
       namespace   = "ContainerInsights"
       metric_name = "pod_number_of_container_restarts"
       period      = 300
-      stat        = "Sum"
+      stat        = "Maximum"
       dimensions = {
         ClusterName = aws_eks_cluster.this.name
         Namespace   = "trippilot"

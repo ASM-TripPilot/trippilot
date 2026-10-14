@@ -12,11 +12,6 @@ mock_provider "aws" {
   }
 }
 
-# Chatbot 채널 설정만 다른 리전 별칭 공급자를 쓴다(alerts.tf).
-mock_provider "aws" {
-  alias = "chatbot"
-}
-
 variables {
   aws_account_id      = "123456789012"
   deployment_role_arn = "arn:aws:iam::123456789012:role/trippilot-github-dev"
@@ -247,6 +242,18 @@ run "reject_alerts_without_container_logs" {
     environment             = "dev"
     container_logs_enabled  = false
     alerts_slack_team_id    = "T0000000000"
+    alerts_slack_channel_id = "C0000000000"
+  }
+
+  expect_failures = [var.alerts_slack_channel_id]
+}
+
+run "reject_alerts_without_slack_team" {
+  command = plan
+
+  variables {
+    environment             = "dev"
+    container_logs_enabled  = true
     alerts_slack_channel_id = "C0000000000"
   }
 

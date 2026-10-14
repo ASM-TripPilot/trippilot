@@ -27,18 +27,3 @@ provider "aws" {
     }
   }
 }
-
-# Chatbot(Slack 채널 설정) 전용. 서울에는 Chatbot API 가 없다 — alerts.tf 참조.
-provider "aws" {
-  alias               = "chatbot"
-  region              = "us-east-2"
-  allowed_account_ids = [var.aws_account_id]
-
-  default_tags {
-    tags = {
-      Project     = "trippilot"
-      Environment = var.environment
-      ManagedBy   = "terraform"
-    }
-  }
-}
