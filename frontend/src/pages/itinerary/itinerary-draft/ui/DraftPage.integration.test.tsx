@@ -491,11 +491,11 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
   });
 
   /**
-   * 여행 중 [다시 짜기]는 생성 화면을 거치지 않고 곧장 Plan-B 재계획 요청(i04)을 연다. 서버는 여행 중
-   * 재생성을 409 로 거절하므로(BE `guardTripPeriod` — 생성 실패 일정만 예외) 생성 화면으로 보내면 헛 POST 뒤에야
-   * 넘어갔다. 날짜는 실제 오늘(KST) 기준으로 짠다 — 페이지가 벽시계로 여행 중인지 판정한다.
+   * 여행 중 [다시 짜기] — **확정 일정만** 곧장 Plan-B 재계획 요청(i04)을 연다. 초안(PLANNED)은 생성 화면으로
+   * 보내 서버가 판정한다: BE #1183 이후 다녀온 기록이 없으면 여행 중에도 다시 만들고, 기록이 있으면 409 →
+   * 생성 화면이 Plan-B 로 넘긴다(GeneratingPage R1). 날짜는 실제 오늘(KST) 기준 — 페이지가 벽시계로 판정한다.
    */
-  describe('🔴 P1~P4 — 여행 중 다시 짜기는 곧장 Plan-B 로 간다', () => {
+  describe('🔴 P1~P4 — 여행 중 다시 짜기: 초안은 생성 화면, 확정 일정은 Plan-B', () => {
     const today = seoulDate(new Date());
     const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000)
       .toISOString()
@@ -517,29 +517,25 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
     }
 
-    it('P1 오늘을 보며 누르면 허브 replace → 재계획 요청 push 를 이 순서로 한 번씩 · 생성 화면·POST 0', async () => {
+    it('P1 초안은 여행 중이어도 생성 화면으로 간다 — 다시 만들지는 서버가 판정한다 · Plan-B push 0 · 이 화면 POST 0', async () => {
       renderPage();
       await pressRetry();
 
-      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-      expect(mockReplace).toHaveBeenCalledTimes(1);
-      expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/live',
-        params: { tripId: TRIP_ID },
-      });
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/planb',
-        params: { tripId: TRIP_ID },
-      });
-      expect(mockReplace.mock.invocationCallOrder[0]).toBeLessThan(
-        mockPush.mock.invocationCallOrder[0]
-      );
+      // 이동이 일어날 때까지 기다린 뒤 **어디로** 갔는지 잰다 — 생성 화면만 세면 Plan-B 로 간 경우가 타임아웃으로만 보인다.
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       await sleep(50);
-      expect(generatingMoves()).toBe(0);
+      expect(generatingMoves()).toBe(1);
+      expect(mockPush).not.toHaveBeenCalled();
       expect(log.hitsFor('POST', '/itinerary')).toBe(0);
     });
 
-    it('P2 내일 칩을 보며 누르면 그 날을 다시 짠다 — 허브도 그 날로 연다', async () => {
+    it('P2 확정 일정에서 내일 칩을 보며 누르면 그 날을 다시 짠다 — 허브도 그 날로 연다', async () => {
+      itineraryScript = () =>
+        itinerary({
+          days: inTripDays,
+          generationState: 'COMPLETE',
+          status: 'CONFIRMED',
+        });
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
       fireEvent.press(screen.getByTestId('sheet-daychip-1'));
@@ -559,7 +555,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       });
     });
 
-    it('P3 확정 일정도 여행 중이면 Plan-B 로 간다 — 재계획은 확정을 풀지 않는다', async () => {
+    it('P3 확정 일정은 여행 중이면 허브 replace → 재계획 요청 push 를 이 순서로 한 번씩 — 재계획은 확정을 풀지 않는다', async () => {
       itineraryScript = () =>
         itinerary({
           days: inTripDays,
@@ -570,11 +566,21 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       await pressRetry();
 
       await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/live',
+        params: { tripId: TRIP_ID },
+      });
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/planb',
         params: { tripId: TRIP_ID },
       });
+      expect(mockReplace.mock.invocationCallOrder[0]).toBeLessThan(
+        mockPush.mock.invocationCallOrder[0]
+      );
+      await sleep(50);
       expect(generatingMoves()).toBe(0);
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
     });
 
     it('P4 생성 실패(FAILED) 일정은 여행 중이어도 서버가 재생성을 받으므로 생성 화면으로 간다', async () => {

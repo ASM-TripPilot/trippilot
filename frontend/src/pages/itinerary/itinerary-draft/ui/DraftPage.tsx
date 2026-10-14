@@ -257,7 +257,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const shortfallNotice = resolveShortfallNotice(signals);
 
   /**
-   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. 여행 중이면 Plan-B 로 보낸다.
+   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. 여행 중인 확정 일정이면 Plan-B 로 보낸다.
    * **확정 일정은 어떤 경로로도 생성 화면에 보내지 않는다.**
    *
    * ⚠️ 조회가 끝나기 전에는 `status` 를 모른다(`data` 가 `undefined`). 그 상태로 보내면
@@ -281,14 +281,14 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     if (!mountedRef.current) return;
     const status = settled.data?.status;
 
-    // 여행 중이면 다시 짜기는 Plan-B 의 몫이다 — 서버는 재생성을 409 로 거절한다(BE `guardTripPeriod`, 생성 실패
-    // 일정만 예외). 생성 화면을 거치면 헛 POST 뒤에야 넘어가므로 곧장 보낸다. 재계획은 확정을 풀지 않아 확정 일정도 간다.
-    // 여행 기간을 모르면 종전대로 생성 화면 — 거기서 409 를 받아 같은 곳으로 넘긴다(GeneratingPage).
+    // 여행 중 **확정 일정**의 다시 짜기는 Plan-B 의 몫이다 — 확정은 생성 화면에 보내지 않고(아래 stop), 재계획은
+    // 확정을 풀지 않는다. 초안은 생성 화면으로 보내 서버가 판정한다: BE #1183 이후 다녀온 기록이 없으면 여행 중에도
+    // 다시 만들고, 기록이 있으면 409 → 생성 화면이 Plan-B 로 넘긴다(GeneratingPage). 여행 기간을 모를 때도 같은 길이다.
     const today = seoulDate(new Date());
     if (
       settled.data !== undefined &&
+      status === 'CONFIRMED' &&
       settled.data.generationMode !== 'MANUAL' &&
-      settled.data.generationState !== 'FAILED' &&
       trip.data !== undefined &&
       isDateInRange(today, trip.data.startDate, trip.data.endDate)
     ) {
