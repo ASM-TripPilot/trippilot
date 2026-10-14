@@ -67,6 +67,9 @@ class SecretTests(unittest.TestCase):
             {"backend": {"AFFILIATE_MODE": "typo"}},
             # 도우미 해석 — 오타는 백엔드가 기동에서 죽는다(http 는 TRIP-1410 부터 정상 값).
             {"backend": {"ASSISTANT_INTERPRET_MODE": "on"}},
+            # U10 킬 스위치 — 백엔드는 on/off·yes/no 도 받지만 운영 스위치는 두 값으로 고정한다.
+            {"backend": {"LOCATION_AUTOMATION_ENABLED": "off"}},
+            {"backend": {"LOCATION_AUTOMATION_ENABLED": ""}},
             # 생성 상한(TRIP-1314) — 있는데 틀리면 백엔드가 기동에서 죽는 값들.
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": ""}},
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "0"}},
@@ -93,6 +96,9 @@ class SecretTests(unittest.TestCase):
             "0D7F17AB-5c4b-4d6d-a7f7-484ba11dda46, 11111111-2222-4333-8444-555555555555"}})
         runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
             "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": ""}})
+        for switch in ("true", "false"):
+            runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+                "LOCATION_AUTOMATION_ENABLED": switch}})
         for app_id in ("1519823", ""):
             runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
                 "KAKAO_APP_ID": app_id}})
