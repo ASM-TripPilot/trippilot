@@ -125,6 +125,8 @@ export interface MapSheetShellProps<T = unknown> {
   /** 핀 전부 맞추기(TRIP-1076 가산, h07·h08·h11·h14·h16 결과) — `<MapView fitPins>` 로 흘린다.
    *  미전달=center 카메라(기존 소비처 무변경). 시트가 가리는 아래 영역은 맞춤에 반영하지 않는다. */
   fitPins?: boolean;
+  /** TRIP-1385 · 경로 그려지기(h14 완성 일정 공개) — `<MapView drawPathOnMount>` 로 흘린다. 미전달=현행. */
+  drawPathOnMount?: MapViewProps['drawPathOnMount'];
   /** TRIP-1343 · 실제 경로 세그먼트(가산) — `<MapView actualRoute>` 로 흘린다. 미전달=현행. */
   actualRoute?: MapViewProps['actualRoute'];
   /** 시트 윗변 위치 상자(TRIP-1083 가산) — `<BottomSheet animatedPosition>` 으로 그대로 흘린다. gorhom 이
@@ -164,6 +166,7 @@ export function MapSheetShell<T = unknown>({
   onMapTap,
   radiusCircle,
   fitPins,
+  drawPathOnMount,
   actualRoute,
   animatedPosition,
   bodyScroll = true,
@@ -215,6 +218,7 @@ export function MapSheetShell<T = unknown>({
               onTapMap={onMapTap}
               radiusCircle={radiusCircle}
               fitPins={fitPins}
+              drawPathOnMount={drawPathOnMount}
               actualRoute={actualRoute}
               onLoadFailed={handleMapLoadFailed}
             />

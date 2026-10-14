@@ -9,7 +9,7 @@ import {
   act,
   within,
 } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { AccessibilityInfo, Text } from 'react-native';
 
 import { server } from '@/mocks/server';
 import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
@@ -4350,4 +4350,99 @@ describe('같은 날 같은 장소 두 번', () => {
       ).toEqual([D1_KM, D2_KM]);
     }
   );
+});
+
+// TRIP-1385 · 완성 일정 공개 — 생성 직후 첫 진입에만 경로 그려지기 옵션과 카드 등장이 걸린다.
+describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
+  const reduceMotionMock = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
+
+  function renderRevealPage(reveal: boolean) {
+    return renderWithQueryClient(
+      <DraftPage tripId={TRIP_ID} reveal={reveal} />,
+      newTestQueryClient({ gcTime: 0 })
+    );
+  }
+
+  /** `entering`(reanimated 등장 애니메이션)이 걸린 노드 수 — 카드 + 거리 커넥터 묶음. */
+  function enteringCount(): number {
+    return screen.root.findAll((node) => node.props?.entering != null).length;
+  }
+
+  beforeEach(() => {
+    setAccessToken('valid-access');
+    reduceMotionMock.mockResolvedValue(false);
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () =>
+        itinerary({
+          days: daysOf([DAY1, DAY2], (date) => [
+            slot(`a-${date}`, { nameKo: `${date} 첫 장소` }),
+            slot(`b-${date}`, { nameKo: `${date} 둘째 장소` }),
+          ]),
+          generationState: 'COMPLETE',
+        }),
+    });
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+    act(() => {
+      clearAccessToken();
+    });
+  });
+
+  it('생성 직후 첫 진입이면 지도에 그려지기 옵션이 켜지고 카드에 등장 애니메이션이 걸린다', async () => {
+    renderRevealPage(true);
+
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(true);
+  });
+
+  it('다른 진입(목록·재진입)이면 옵션도 등장도 없다', async () => {
+    renderRevealPage(false);
+
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    expect(enteringCount()).toBe(0);
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
+  });
+
+  it('이미 재생된 뒤 일차 칩을 바꾸면 다시 재생하지 않는다', async () => {
+    renderRevealPage(true);
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차')
+    );
+    expect(enteringCount()).toBe(0);
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
+  });
+
+  it('동작 줄이기가 켜져 있으면 카드는 등장 애니메이션 없이 곧장 보인다', async () => {
+    reduceMotionMock.mockResolvedValue(true);
+    renderRevealPage(true);
+
+    const times = await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await act(async () => {});
+    expect(times.length).toBeGreaterThan(0);
+    expect(enteringCount()).toBe(0);
+  });
+
+  it('애니메이션이 걸린 카드의 시간 텍스트는 서버 값 그대로다(INV-2·INV-3)', async () => {
+    renderRevealPage(true);
+
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    const read = (): string[] =>
+      screen
+        .getAllByTestId(/^slot-stopcard-time-/)
+        .map((node) => String(node.props.children ?? ''));
+    const first = read();
+    expect(first).toHaveLength(2);
+    await act(async () => {});
+    expect(read()).toEqual(first);
+    first.forEach((text) => expect(text).toMatch(/^\d{2}:\d{2}.\d{2}:\d{2}$/));
+  });
 });
