@@ -6,17 +6,21 @@ import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/index.
 /** h09 AI 일정 생성 중 — 얇은 라우트, 배선은 `pages/itinerary/itinerary-generating`가 진다
  * (`draft.tsx` 선례). params 는 여기서만 읽어 prop 으로 내린다. 완전AI 는 h02 가 `mode=FULLY_AI` 를
  * 실어 보내고, copick 씨앗은 `mode=CO_PLAN`·`successRoute=첫 슬롯 라우트 템플릿`을 실어 보낸다
- * (TRIP-504). mode 없이 열리면(일정 탭 카드·홈 CTA 재진입) 생성을 쏘지 않는 관찰 모드다(TRIP-1006). */
+ * (TRIP-504). mode 없이 열리면(일정 탭 카드·홈 CTA 재진입) 생성을 쏘지 않는 관찰 모드다(TRIP-1006).
+ * `replan='1'` 이면 재계획 모드다 — 여행 중 [다시 짜기]가 모달 없이 재계획을 돌려 바로 반영한다(2026-10-14). */
 export default function ItineraryGeneratingRoute() {
-  const { tripId, mode, successRoute, targetDate } = useLocalSearchParams<{
-    tripId: string;
-    mode?: GenerateItineraryRequestGenerationMode;
-    successRoute?:
-      | '/trips/[tripId]/itinerary/draft'
-      | '/trips/[tripId]/itinerary/copick/[slotKey]';
-    /** 여행 중 거절 시 재계획할 날 — 초안이 보던 날(DraftPage). */
-    targetDate?: string;
-  }>();
+  const { tripId, mode, successRoute, targetDate, replan } =
+    useLocalSearchParams<{
+      tripId: string;
+      mode?: GenerateItineraryRequestGenerationMode;
+      successRoute?:
+        | '/trips/[tripId]/itinerary/draft'
+        | '/trips/[tripId]/itinerary/copick/[slotKey]';
+      /** 여행 중 거절 시 재계획할 날 — 초안이 보던 날(DraftPage). */
+      targetDate?: string;
+      /** 재계획 모드 신호 — 주소엔 문자열 '1' 로만 실린다. */
+      replan?: string;
+    }>();
 
   return (
     <GeneratingPage
@@ -24,6 +28,7 @@ export default function ItineraryGeneratingRoute() {
       mode={mode}
       successRoute={successRoute}
       targetDate={targetDate}
+      replan={replan === '1'}
     />
   );
 }

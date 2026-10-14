@@ -17,6 +17,8 @@ import type {
   GenerationSession,
   Itinerary,
   ItineraryGenerationState,
+  ReplanSession,
+  ReplanSessionStatus,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resolveItineraryDestination } from '@/features/itinerary';
@@ -518,10 +520,11 @@ describe('다른 여행 생성 중(409) 안내', () => {
   /**
    * 서버 규칙 거절 — 여행 중·끝난 여행의 재생성은 409 `CONFLICT`(+ 사유 문구)다(BE `guardTripPeriod`).
    * 다시 보내도 같은 답이라 "네트워크를 확인하고 다시 시도" 실패 얼굴은 거짓말이다(DEV 실측: 여행 중 재생성
-   * 49개 여행 0회 성공). 여행 중이면 다시 짜기는 Plan-B 의 몫이라 허브를 깔고 재계획 요청(i04)을 연다.
+   * 49개 여행 0회 성공). 여행 중이면 다시 짜기는 Plan-B 의 몫이라 **모달(i04) 없이** 이 생성 화면을 재계획
+   * 모드(`replan:'1'`)로 다시 연다(2026-10-14 사용자 결정 — 사유를 묻지 않고 바로 다시 짜서 반영한다).
    * 끝난 여행·기간 모름이면 서버 사유 + [닫기]만.
    */
-  describe('🔴 R1~R3 — 규칙 거절(409 CONFLICT): 여행 중이면 Plan-B 로 넘기고, 아니면 서버 사유를 보인다', () => {
+  describe('🔴 R1~R3 — 규칙 거절(409 CONFLICT): 여행 중이면 재계획 모드로 넘기고, 아니면 서버 사유를 보인다', () => {
     const IN_TRIP_REASON =
       '여행 중에는 일정을 다시 만들 수 없어요. 재계획으로 오늘 일정을 바꿔 주세요.';
     const refused = (message: string) => (): Response =>
@@ -548,28 +551,21 @@ describe('다른 여행 생성 중(409) 안내', () => {
       );
     }
 
-    it('R1 여행 중: 허브 replace → 재계획 요청 push 를 한 번씩 이 순서로 · 실패·거절 얼굴 없음 · POST 1회', async () => {
+    it('R1 여행 중: 생성 화면을 재계획 모드로 replace 1회 · 모달 push 0 · 실패·거절 얼굴 없음 · POST 1회', async () => {
       const today = seoulDate(new Date());
       server.use(tripHandler(today, '2099-12-31'));
       postQueue = [refused(IN_TRIP_REASON)];
 
       renderPage();
 
-      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-      expect(mockReplace).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/live',
-        params: { tripId: TRIP_ID },
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1' }, // 보던 날이 없으면 날짜를 싣지 않는다(서버가 오늘)
       });
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/planb',
-        params: { tripId: TRIP_ID },
-      });
-      expect(mockReplace.mock.invocationCallOrder[0]).toBeLessThan(
-        mockPush.mock.invocationCallOrder[0]
-      );
       await settle();
-      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
       expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
       expect(screen.queryByTestId('itinerary-generating-refused')).toBeNull();
       expect(count('POST')).toBe(1);
@@ -577,7 +573,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
 
     // 초안에서 오늘 뒤의 날을 보며 [다시 짜기]를 누르면 그 날이 실려 온다(DraftPage). 다녀온 기록이 있어 거절되면
     // 재계획도 그 날로 열어야 한다 — 빠지면 사용자가 보던 날 대신 오늘이 다시 짜인다.
-    it('R1b 보던 날(targetDate)이 실려 오면 넘김도 그 날로 연다 — 허브 day · 재계획 targetDate', async () => {
+    it('R1b 보던 날(targetDate)이 실려 오면 재계획 모드도 그 날로 연다', async () => {
       const today = seoulDate(new Date());
       const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000)
         .toISOString()
@@ -587,15 +583,12 @@ describe('다른 여행 생성 중(409) 안내', () => {
 
       renderPage({ targetDate: tomorrow });
 
-      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/live',
-        params: { tripId: TRIP_ID, day: tomorrow },
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1', targetDate: tomorrow },
       });
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/planb',
-        params: { tripId: TRIP_ID, targetDate: tomorrow },
-      });
+      expect(mockPush).not.toHaveBeenCalled();
     });
 
     it('R2 끝난 여행: 서버 사유 + [닫기]만 · 다시 시도 없음 · 닫기 = 홈 · Plan-B 로 안 간다', async () => {
@@ -1228,6 +1221,276 @@ describe('관찰 모드(mode 없음)', () => {
       expect(postCalls).toBe(0);
     });
   });
+});
+
+describe('재계획 모드(replan)', () => {
+  /**
+   * 2026-10-14 사용자 결정 — 여행 중 [다시 짜기]는 재계획 요청 모달(i04)로 가지 않고, 이 생성 화면을 거쳐
+   * 재계획(Plan-B → ScheduleAgent) 결과를 **확인 없이 바로 반영**한 뒤 추천안(draft)으로 간다. 원 일정은 서버가
+   * 반영 전에 복원 지점을 남긴다(openapi apply 설명 — 되돌릴 지점을 먼저 남긴다).
+   *
+   * 무엇을 보장하나:
+   *  - 🔴 RP1·RP1b 마운트 때 시작 POST 1회, 본문 모양(오늘 = PARTIAL_SLOTS·null / 보던 날 = FULL_DAY·그 날).
+   *    위치는 안 읽는다 — `originKind:null` 이면 서버가 사다리로 정한다(openapi StartReplanRequest.originKind).
+   *  - 🔴 RP2 SOLVING → DRAFT 가 되면 apply 가 **정확히 1회**, 성공하면 draft 로 replace.
+   *  - 🔴 RP3 NO_SOLUTION → 원 일정 유지 안내 + [닫기](=홈). apply 0.
+   *  - 🔴 RP4 시작 409 → 서버 사유 + [닫기]. 세션 조회·apply 0.
+   *  - 🔴 RP5 FAILED → 실패 얼굴 + [다시 시도] = 시작 POST 를 처음부터 다시(새 세션).
+   *  - 모든 케이스: 생성 POST(`POST /itinerary`) 0 — 재계획 모드는 일정을 새로 만들지 않는다.
+   *
+   * 왜 MSW 인가: 핵심 단언이 "apply 가 몇 번 나갔나·생성 POST 가 0 인가" 다. 훅을 목하면 그건 목의 가정이 된다.
+   * 폴링 간격(2초)은 실시간으로 기다린다 — 가짜 타이머는 MSW 응답 파이프라인과 엉킨다(DraftPage 통합 선례).
+   *
+   * 3동작: 준비 = 가짜 서버(시작·세션 차례·apply) → 실행 = replan 으로 화면을 연다(필요하면 버튼) → 단언 = 본문·요청 수·이동·얼굴.
+   */
+
+  const BASE = 'http://localhost:8080/api/v1';
+  const TRIP_ID = '55555555-5555-5555-5555-555555555555';
+  const SESSION_ID = '66666666-6666-6666-6666-666666666666';
+  const SESSION_ID_2 = '77777777-7777-7777-7777-777777777777';
+  const NO_SOLUTION_TEXT =
+    '지금 바꿀 수 있는 곳을 찾지 못했어요. 원래 일정을 그대로 둘게요.';
+
+  /** openapi ReplanSession 모양 — 필수 필드만 채운다. */
+  function replanSession(
+    sessionId: string,
+    status: ReplanSessionStatus
+  ): ReplanSession {
+    return {
+      sessionId,
+      tripId: TRIP_ID,
+      itineraryId: 'itin-replan',
+      scope: 'PARTIAL_SLOTS',
+      targetDate: seoulDate(new Date()),
+      fromInstant: '2026-10-14T03:00:00Z',
+      originKind: 'LAST_VISIT',
+      originEstimated: true,
+      status,
+      createdAt: '2026-10-14T03:00:00Z',
+    };
+  }
+
+  /** 시작 POST 의 본문(파싱한 JSON) 누적. */
+  let startBodies: unknown[] = [];
+  /** 시작 POST 응답 차례. 비면 SESSION_ID 의 SOLVING 세션(201). */
+  let startQueue: (() => Response)[] = [];
+  /** 세션 GET 응답 — 세션 id·몇 번째 조회(0부터)로 케이스가 정한다. */
+  let sessionScript: (sessionId: string, call: number) => ReplanSessionStatus;
+  let sessionGets: Record<string, number> = {};
+  /** apply 가 나간 세션 id(도착 순서). */
+  let applied: string[] = [];
+  let generatePosts = 0;
+
+  beforeEach(() => {
+    startBodies = [];
+    startQueue = [];
+    sessionGets = {};
+    applied = [];
+    generatePosts = 0;
+    sessionScript = () => 'SOLVING';
+    setAccessToken('valid-access');
+
+    server.use(
+      http.post(
+        `${BASE}/trips/:tripId/replan-sessions`,
+        async ({ request }) => {
+          startBodies.push(await request.json());
+          const next = startQueue.shift();
+          return next
+            ? next()
+            : HttpResponse.json(replanSession(SESSION_ID, 'SOLVING'), {
+                status: 201,
+              });
+        }
+      ),
+      http.get(
+        `${BASE}/trips/:tripId/replan-sessions/:sessionId`,
+        ({ params }) => {
+          const id = String(params.sessionId);
+          const call = sessionGets[id] ?? 0;
+          sessionGets[id] = call + 1;
+          return HttpResponse.json(replanSession(id, sessionScript(id, call)));
+        }
+      ),
+      http.post(
+        `${BASE}/trips/:tripId/replan-sessions/:sessionId/apply`,
+        ({ params }) => {
+          applied.push(String(params.sessionId));
+          return HttpResponse.json(
+            replanSession(String(params.sessionId), 'APPLIED')
+          );
+        }
+      ),
+      // 생성 POST — 나가면 안 된다. 핸들러는 "나갔다"를 세기 위해 둔다.
+      http.post(`${BASE}/trips/:tripId/itinerary`, () => {
+        generatePosts += 1;
+        return HttpResponse.json({}, { status: 500 });
+      })
+    );
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  function renderReplan(targetDate?: string) {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    // mode 는 주지 않는다 — 재계획 주소에는 mode 가 없다(DraftPage·409 넘김이 `replan:'1'` 만 싣는다).
+    return render(
+      <GeneratingPage tripId={TRIP_ID} replan targetDate={targetDate} />,
+      { wrapper: Wrapper }
+    );
+  }
+
+  /** "안 나갔다"는 나갈 시간을 준 뒤에야 의미가 있다. */
+  function settle(ms = 300): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  it('RP1 오늘(보던 날 없음)이면 PARTIAL_SLOTS·targetDate null 로 시작 POST 1회 · 진행 얼굴 · 생성 POST 0', async () => {
+    renderReplan();
+
+    await waitFor(() => expect(startBodies).toHaveLength(1));
+    expect(startBodies[0]).toEqual({
+      scope: 'PARTIAL_SLOTS',
+      targetDate: null,
+      originKind: null,
+      reasons: ['JUST_CHANGE'],
+      directives: [],
+    });
+    // 로딩 얼굴은 생성과 같은 화면(진행 바)이다 — 새 화면이 아니다.
+    expect(
+      screen.getByTestId('itinerary-generating-progress')
+    ).toBeOnTheScreen();
+    await settle();
+    expect(startBodies).toHaveLength(1);
+    expect(generatePosts).toBe(0);
+  });
+
+  it('RP1b 보던 날이 실려 오면 FULL_DAY·그 날로 시작한다', async () => {
+    renderReplan('2026-10-20');
+
+    await waitFor(() => expect(startBodies).toHaveLength(1));
+    expect(startBodies[0]).toEqual({
+      scope: 'FULL_DAY',
+      targetDate: '2026-10-20',
+      originKind: null,
+      reasons: ['JUST_CHANGE'],
+      directives: [],
+    });
+    await settle();
+    expect(generatePosts).toBe(0);
+  });
+
+  it('RP2 SOLVING → DRAFT 가 되면 apply 가 정확히 1회 나가고 추천안(draft)으로 replace 한다', async () => {
+    // 준비 — 첫 조회는 짜는 중, 다음 폴링에서 초안.
+    sessionScript = (_id, call) => (call === 0 ? 'SOLVING' : 'DRAFT');
+
+    renderReplan();
+
+    // 단언 ① 짜는 중엔 반영하지 않는다(초안이 없다).
+    await waitFor(() => expect(sessionGets[SESSION_ID]).toBe(1));
+    expect(applied).toEqual([]);
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    // 단언 ② 초안이 오면 확인 없이 바로 반영 → 추천안.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1), {
+      timeout: 6000,
+    });
+    expect(applied).toEqual([SESSION_ID]);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/draft',
+      params: { tripId: TRIP_ID },
+    });
+
+    // 단언 ③ 리렌더·폴링으로 apply 가 두 번 나가지 않는다.
+    await settle();
+    expect(applied).toEqual([SESSION_ID]);
+    expect(generatePosts).toBe(0);
+  }, 15_000);
+
+  it('RP3 NO_SOLUTION 이면 원 일정 유지 안내 + [닫기](=홈) · apply 0', async () => {
+    sessionScript = () => 'NO_SOLUTION';
+
+    renderReplan();
+
+    expect(await screen.findByText(NO_SOLUTION_TEXT)).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('itinerary-generating-refused-close'));
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+    await settle();
+    expect(applied).toEqual([]);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(generatePosts).toBe(0);
+  });
+
+  it('RP4 시작 POST 가 409 면 서버 사유 + [닫기] · 세션 조회·apply 0', async () => {
+    const REASON = '지난 날은 다시 짤 수 없어요.';
+    startQueue = [
+      () =>
+        HttpResponse.json(
+          { error: { code: 'CONFLICT', message: REASON } },
+          { status: 409 }
+        ),
+    ];
+
+    renderReplan();
+
+    expect(await screen.findByText(REASON)).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
+    fireEvent.press(screen.getByTestId('itinerary-generating-refused-close'));
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+
+    await settle();
+    expect(startBodies).toHaveLength(1);
+    expect(sessionGets).toEqual({});
+    expect(applied).toEqual([]);
+    expect(generatePosts).toBe(0);
+  });
+
+  it('RP5 FAILED 면 실패 얼굴 → [다시 시도] 가 시작 POST 를 다시 하고, 새 세션이 초안이면 반영한다', async () => {
+    // 준비 — 첫 세션은 실패, 재시작으로 연 두 번째 세션은 곧장 초안.
+    startQueue = [
+      () =>
+        HttpResponse.json(replanSession(SESSION_ID, 'SOLVING'), {
+          status: 201,
+        }),
+      () =>
+        HttpResponse.json(replanSession(SESSION_ID_2, 'SOLVING'), {
+          status: 201,
+        }),
+    ];
+    sessionScript = (id) => (id === SESSION_ID ? 'FAILED' : 'DRAFT');
+
+    renderReplan();
+
+    // 단언 ① 침묵하지 않는다 — 실패 얼굴, 반영 0.
+    fireEvent.press(await screen.findByTestId('itinerary-generating-retry'));
+
+    // 단언 ② 다시 시도 = 처음부터 다시(새 세션) → 초안이면 그 세션만 반영.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1), {
+      timeout: 6000,
+    });
+    expect(startBodies).toHaveLength(2);
+    expect(applied).toEqual([SESSION_ID_2]);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/draft',
+      params: { tripId: TRIP_ID },
+    });
+    expect(generatePosts).toBe(0);
+  }, 15_000);
 });
 
 // TRIP-1268 · AI 일정 생성 일일 한도 — 클라이언트 임시 장치(BE 일일 한도 + 429 처리 FE 칸이 배포되면 지운다).

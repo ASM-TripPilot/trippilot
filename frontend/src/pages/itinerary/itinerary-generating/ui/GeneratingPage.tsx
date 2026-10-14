@@ -1,9 +1,13 @@
+import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useApplyReplan } from '@/features/apply-replan';
 import { firstCoPickSlotKey } from '@/features/itinerary';
+import { pollIntervalMs } from '@/features/itinerary';
 import { useGenerationBusy } from '@/features/itinerary';
+import { useStartReplan } from '@/features/request-replan';
 import { GeneratingScreen, type AiLimitRetryAt } from './GeneratingScreen';
 import type {
   GenerateItineraryRequestGenerationMode,
@@ -14,6 +18,7 @@ import {
   resolveGenerationRefused,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
+  useGetTripsTripIdReplanSessionsSessionId,
   usePostTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { isDateInRange } from '@/shared/lib/monthGrid';
@@ -27,6 +32,8 @@ import { showToast } from '@/shared/ui/Toast';
 
 const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
 const PLANB_HANDOFF_TOAST_MESSAGE = '여행 중이라 재계획으로 다시 짜요';
+const NO_SOLUTION_MESSAGE =
+  '지금 바꿀 수 있는 곳을 찾지 못했어요. 원래 일정을 그대로 둘게요.';
 
 /** 429 의 Retry-After(초) → 풀리는 KST 시각. 헤더 없음·깨진 값이면 null(시각 없이 안내, INV-4). */
 function resolveRetryAt(error: unknown, now: Date): AiLimitRetryAt | null {
@@ -69,12 +76,15 @@ function resolveRetryAt(error: unknown, now: Date): AiLimitRetryAt | null {
  *     `GENERATION_DAILY_LIMIT` 일 때만이다(`isGenerationDailyLimit`) — RATE_LIMITED 같은 짧은 429·코드 없는 429 는
  *     일반 실패(재시도 가능)로 간다. 풀리는 시각은 `Retry-After`(초)로 계산하며 헤더가 없으면 시각 없이 안내한다.
  *     한도는 서버 몫이라 클라는 세지 않는다 — 기기 로컬 카운터(TRIP-1268 임시 장치)는 이 칸에서 삭제됐다.
+ *  7. **재계획 모드(`replan`, 2026-10-14 사용자 결정).** 여행 중 [다시 짜기]는 모달(i04) 없이 여기서 재계획을
+ *     돌려 **확인 없이 바로 반영**하고 추천안으로 간다(`ReplanGeneration`). POST 경로·관찰 모드는 건드리지 않는다.
  */
 export function GeneratingPage({
   tripId,
   mode,
   successRoute = '/trips/[tripId]/itinerary/draft',
   targetDate,
+  replan = false,
 }: {
   tripId: string;
   /** 생성 모드. 미지정=관찰 모드(POST 0, GET 만 — TRIP-1006). 완전AI 는 FULLY_AI, copick 씨앗은
@@ -88,6 +98,8 @@ export function GeneratingPage({
     | '/trips/[tripId]/itinerary/copick/[slotKey]';
   /** 여행 중 거절(409)로 재계획에 넘길 때 다시 짤 날. 미지정=오늘. 초안에서 오늘 뒤의 날을 보며 눌렀을 때 실린다. */
   targetDate?: string;
+  /** 재계획 모드 — 생성 POST 대신 재계획 세션을 열고 초안이 나오면 바로 반영한다(`ReplanGeneration`). */
+  replan?: boolean;
 }): ReactElement {
   const router = useRouter();
   // 캐시 반영은 훅 옵션 자리에 둔다 — `mutate(…, { onSuccess })` 콜백은 화면이 떠나면 불리지 않아,
@@ -152,7 +164,8 @@ export function GeneratingPage({
 
   const busy = useGenerationBusy(generate.error, fire);
   // 서버 규칙 거절(여행 중·끝난 여행 재생성 409) — 다시 보내도 같은 답이다. 여행 중이면 다시 짜기는 Plan-B 의
-  // 몫이라(서버 규칙의 근거, 다녀온 슬롯을 잠근다) 막다른 얼굴 대신 허브 위에 재계획 요청(i04)을 연다.
+  // 몫이라(서버 규칙의 근거, 다녀온 슬롯을 잠근다) 막다른 얼굴 대신 이 화면을 재계획 모드로 다시 연다(모달 없음).
+  // 같은 라우트여도 replace 는 새 키의 화면을 만든다(StackRouter REPLACE) — 재계획 가지가 새로 마운트돼 시작한다.
   // 기간은 거절됐을 때만 묻고, 끝난 여행(재계획도 409)·기간 모름이면 서버 사유 + [닫기]만(INV-4).
   const aiLimited = isGenerationDailyLimit(generate.error);
   const refusal = resolveGenerationRefused(generate.error);
@@ -175,15 +188,12 @@ export function GeneratingPage({
       message: PLANB_HANDOFF_TOAST_MESSAGE,
       testID: 'itinerary-generating-planb-handoff-toast',
     });
-    // 재계획 요청은 허브 위에 겹치는 모달이라(SplashGate transparentModal) 허브를 먼저 깐다 — 허브의 진입과 같은 모양.
     router.replace({
-      pathname: '/trips/[tripId]/live',
+      pathname: '/trips/[tripId]/itinerary/generating',
       params:
-        targetDate === undefined ? { tripId } : { tripId, day: targetDate },
-    });
-    router.push({
-      pathname: '/trips/[tripId]/planb',
-      params: targetDate === undefined ? { tripId } : { tripId, targetDate },
+        targetDate === undefined
+          ? { tripId, replan: '1' }
+          : { tripId, replan: '1', targetDate },
     });
   }, [refusal, inTrip, router, tripId, targetDate]);
 
@@ -199,6 +209,16 @@ export function GeneratingPage({
     // dismissTo 는 스택의 그 경로까지 사이 화면을 걷어낸다(없으면 현재 화면을 그 경로로 replace).
     router.dismissTo('/(tabs)');
   };
+
+  if (replan) {
+    return (
+      <ReplanGeneration
+        tripId={tripId}
+        targetDate={targetDate}
+        onClose={goHome}
+      />
+    );
+  }
 
   if (mode === undefined) {
     return <ObserveGeneration tripId={tripId} onBackground={goHome} />;
@@ -288,6 +308,131 @@ function ObserveGeneration({
         void itinerary.refetch();
       }}
       onBackground={onBackground}
+    />
+  );
+}
+
+/** 시작 POST 의 규칙 거절(400·409 — 지난 날·기간 밖·일정 없는 날)이면 서버 사유. 다시 보내도 같아 [닫기]만. */
+function startRefusal(error: unknown): string | null {
+  if (!isAxiosError(error)) return null;
+  const status = error.response?.status;
+  if (status !== 400 && status !== 409) return null;
+  const message = (
+    error.response?.data as { error?: { message?: unknown } } | undefined
+  )?.error?.message;
+  return typeof message === 'string' && message !== '' ? message : null;
+}
+
+/**
+ * 재계획 모드(2026-10-14 사용자 결정) — 여행 중 [다시 짜기]가 모달(i04)로 가지 않고 여기로 온다.
+ *  1. 마운트 때 재계획 세션을 **1회** 연다. 사유·방향은 묻지 않는다(`JUST_CHANGE` 하나). 위치도 읽지 않는다 —
+ *     `originKind: null` 이면 서버가 사다리로 정한다(openapi StartReplanRequest.originKind). 보던 날이 오면 그 날 하루
+ *     전체(FULL_DAY — 오늘이 아닌 날은 서버가 FULL_DAY 만 받는다), 없으면 오늘 지금 이후(PARTIAL_SLOTS).
+ *  2. 세션을 COLLECTING·SOLVING 동안 폴링한다(간격·오류 정지 규칙은 `planb-draft` 의 `useReplanSession` 과 같다 —
+ *     pages 끼리 import 금지라 같은 판단을 이 칸에 둔다).
+ *  3. DRAFT 가 되면 **확인 없이 바로** apply(세션당 1회) → 성공하면 추천안(draft)으로 replace. 원 일정은 서버가
+ *     반영 전에 복원 지점을 남긴다(openapi apply — 되돌릴 지점을 먼저 남긴다). 반영 전에 화면을 떠나면(‹) 폴링이
+ *     멈춰 아무것도 반영되지 않는다 — 원 일정 그대로다.
+ *  4. 얼굴은 생성과 같은 화면이다. 시작 거절(400·409)·대안 없음 = 사유 + [닫기]. 실패(FAILED·끊긴 세션·네트워크·
+ *     반영 실패) = 실패 얼굴 + [다시 시도](처음부터 새 세션 — 열린 세션은 새 요청이 닫는다, INV-U4-06). INV-4.
+ */
+function ReplanGeneration({
+  tripId,
+  targetDate,
+  onClose,
+}: {
+  tripId: string;
+  targetDate?: string;
+  onClose: () => void;
+}): ReactElement {
+  const router = useRouter();
+  const start = useStartReplan();
+  const apply = useApplyReplan();
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const session = useGetTripsTripIdReplanSessionsSessionId(
+    tripId,
+    sessionId ?? '',
+    {
+      query: {
+        // 생성 훅의 기본 enabled 는 빈 문자열도 통과시킨다 — 세션을 받기 전엔 묻지 않는다.
+        enabled: sessionId !== null,
+        refetchInterval: (query) => {
+          // 오류로 떨어지면 선다 — 옛 SOLVING 이 남아 서버가 죽어 있는 동안 영구 폴링하지 않게(TRIP-1348 선례).
+          if (query.state.status === 'error') return false;
+          const status = query.state.data?.status;
+          return status === 'COLLECTING' || status === 'SOLVING'
+            ? pollIntervalMs(query.state.dataUpdateCount)
+            : false;
+        },
+      },
+    }
+  );
+  const status = session.data?.status;
+
+  const begin = useCallback(() => {
+    setSessionId(null);
+    apply.reset();
+    start.mutate(
+      {
+        tripId,
+        data: {
+          scope: targetDate ? 'FULL_DAY' : 'PARTIAL_SLOTS',
+          targetDate: targetDate ?? null,
+          originKind: null,
+          reasons: ['JUST_CHANGE'],
+          directives: [],
+        },
+      },
+      { onSuccess: (created) => setSessionId(created.sessionId) }
+    );
+  }, [start, apply, tripId, targetDate]);
+
+  // firedRef 와 같은 이유 — 훅 반환 객체가 렌더마다 새로 와 effect 가 다시 돌아도 한 번만 연다.
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    begin();
+  }, [begin]);
+
+  // 세션당 한 번만 반영한다 — 폴링·리렌더가 effect 를 다시 돌려도 apply 가 두 번 나가지 않게.
+  const appliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (status !== 'DRAFT' || sessionId === null) return;
+    if (appliedRef.current === sessionId) return;
+    appliedRef.current = sessionId;
+    apply.mutate(
+      { tripId, sessionId },
+      {
+        onSuccess: () =>
+          router.replace({
+            pathname: '/trips/[tripId]/itinerary/draft',
+            params: { tripId },
+          }),
+      }
+    );
+  }, [status, sessionId, apply, router, tripId]);
+
+  const refusal = startRefusal(start.error);
+  return (
+    <GeneratingScreen
+      refused={
+        refusal !== null
+          ? { message: refusal, onClose }
+          : status === 'NO_SOLUTION'
+            ? { message: NO_SOLUTION_MESSAGE, onClose }
+            : null
+      }
+      failed={
+        (start.isError && refusal === null) ||
+        session.isError ||
+        status === 'FAILED' ||
+        // 다른 요청이 이 세션을 닫았다(INV-U4-06) — 폴링이 멈춘 채 진행 얼굴로 남지 않게.
+        status === 'CANCELED' ||
+        apply.isError
+      }
+      onRetry={begin}
+      onBackground={onClose}
     />
   );
 }

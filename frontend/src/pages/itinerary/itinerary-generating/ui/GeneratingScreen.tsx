@@ -195,7 +195,8 @@ export interface GeneratingScreenProps {
     onClose: () => void;
   } | null;
   /** 서버가 이 재생성을 규칙으로 거절했고 Plan-B 로도 넘길 수 없다(끝난 여행·기간 모름) — 실패 표면 대신
-   * 서버 사유. 다시 보내도 같아 [다시 시도] 없음. 여행 중 거절은 배선이 Plan-B 로 넘겨 이 얼굴까지 안 온다. */
+   * 서버 사유. 다시 보내도 같아 [다시 시도] 없음. 여행 중 거절은 배선이 Plan-B 로 넘겨 이 얼굴까지 안 온다.
+   * 재계획 모드의 시작 거절(400·409)·대안 없음(NO_SOLUTION)도 이 얼굴이다. */
   refused?: {
     message: string;
     onClose: () => void;
