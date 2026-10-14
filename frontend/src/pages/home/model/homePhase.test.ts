@@ -190,6 +190,7 @@ describe('resolveHomePhase — postTrip 진입 조건 (TRIP-1369)', () => {
       ctaLabel: '회고 보기',
       title: '부산 여행',
       meta: 'META:부산 여행',
+      coverSource: null, // 목적지 regionCode 없음 → 지역 커버 없음
     });
     // 단일 배지 — 보조 텍스트 없음.
     expect(result.trip.badgeSub).toBeUndefined();
@@ -686,5 +687,30 @@ describe('resolveHomePhase — badgeSub 서식은 여행 상태와 정합(PBT, T
       ),
       { numRuns: 500 }
     );
+  });
+});
+
+describe('resolveHomePhase — 지역 커버(coverSource)', () => {
+  const planned = (destinations: Trip['destinations']) =>
+    resolveHomePhase({
+      trips: [trip({ status: 'PLANNED', startDate: '2026-06-22', destinations })],
+      today: '2026-06-01',
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+
+  it('첫 목적지 regionCode 가 부산 시군구면 그 그림이 히어로에 실린다', () => {
+    const result = planned([
+      { seq: 1, region: '해운대구', regionCode: '26350', nights: 2 },
+    ]);
+    expect(result?.kind).toBe('planning');
+    if (result?.kind !== 'planning') return;
+    expect(result.trip.coverSource).toBeTruthy();
+  });
+
+  it('코드가 없는 옛 여행은 커버 없음(null) — 화면이 매거진 사진으로 폴백한다', () => {
+    const result = planned([{ seq: 1, region: '부산', nights: 3 }]);
+    if (result?.kind !== 'planning') throw new Error('planning 이어야 한다');
+    expect(result.trip.coverSource).toBeNull();
   });
 });

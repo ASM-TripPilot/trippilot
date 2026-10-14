@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 
 // 홈 "발견·영감 피드" 프레젠테이션 화면의 prop 계약(TRIP-316 · 라이브 Figma 2091:1357).
 // HomeScreen은 이 타입만 알고 서버·네비게이션을 모른다 — 네트워크·라우팅은 이 계약 밖
@@ -111,6 +112,8 @@ export interface TripHeroData {
   ctaLabel: string;
   /** '부산 여행' — 여행명 타이틀 */
   title: string;
+  /** 지역 커버 이미지(번들) — 있으면 히어로 배경으로 쓴다. 서울·부산·제주 밖이면 없음(매거진 사진 폴백). */
+  coverSource?: ImageSourcePropType | null;
   /** '6월 10일 – 6월 13일 · 3박 4일 · 2명' — 기간·박수·인원(소요시간 아님, INV-3) */
   meta: string;
 }

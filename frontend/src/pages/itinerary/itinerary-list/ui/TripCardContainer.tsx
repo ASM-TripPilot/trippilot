@@ -14,8 +14,11 @@ import {
   type MyTripBadge,
   type MyTripCardVM,
 } from '@/entities/trip';
-import { formatConfirmedDateRange } from '@/entities/trip';
-import { isTripOngoing } from '@/entities/trip';
+import {
+  formatConfirmedDateRange,
+  isTripOngoing,
+  pickRegionCover,
+} from '@/entities/trip';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
@@ -107,6 +110,7 @@ export function TripCardContainer({
     resume,
     // TRIP-1208 · 커버 — 첫 목적지 도시 + 단계 톤(확정 × 오늘: 여행 중=live · 종료=ended · 그 외=upcoming).
     coverCity: pickCoverCity(trip.destinations),
+    coverSource: pickRegionCover(trip.destinations),
     coverTone: coverTone(trip, itinerary.data?.status, today),
   };
 

@@ -708,7 +708,8 @@ function IntegratedTripHero({
     >
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
-        source={imageUrl ? { uri: imageUrl } : undefined}
+        testID="home-trip-hero-cover"
+        source={trip.coverSource ?? (imageUrl ? { uri: imageUrl } : undefined)}
         resizeMode="cover"
         style={ABSOLUTE_FILL}
       />

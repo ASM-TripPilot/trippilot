@@ -3,6 +3,8 @@
 // 서버 계약 타입(Trip·TripStatus·TripDestination)은 새로 만들지 않고 `@/shared/api/generated`의
 // 원본을 그대로 다시 내보낸다(re-export) — 서버 계약의 정본은 여전히 shared/api다(`api` 세그먼트 0).
 // TripStatus 는 generated 에서 const object(값)이자 type 인데, 여기선 **타입만** 재수출한다.
+import type { ImageSourcePropType } from 'react-native';
+
 import type { CoverTone } from '../config/coverGradients';
 
 export type {
@@ -32,6 +34,8 @@ export interface MyTripCardVM {
   imageUrl?: string | null;
   /** TRIP-1208 · 커버 도시 이름(첫 목적지 region). 없거나 빈 값이면 글자 없이 그라데이션만. */
   coverCity?: string | null;
+  /** 지역 커버 이미지(번들) — 있으면 그라데이션 대신 그린다. 서울·부산·제주 밖이거나 코드가 없으면 null. */
+  coverSource?: ImageSourcePropType | null;
   /** TRIP-1208 · 커버 그라데이션 톤. 미전달=upcoming. */
   coverTone?: CoverTone;
 }
