@@ -391,6 +391,9 @@ def test_지역_식당은_체인으로_오인하지_않는다(name: str) -> None
 def test_빈_상호는_체인이_아니다() -> None:
     assert not is_franchise("")
     assert not is_franchise("   ")
+    # 구분자만 남는 이름 — 쪼갠 조각이 0개라 `all([])` 이 참이 돼 체인으로 빠졌다(PBT 반례 `&`).
+    assert not is_franchise("&")
+    assert not is_franchise(" , & ")
 
 
 def test_체인은_후보_단계에서_빠진다() -> None:
