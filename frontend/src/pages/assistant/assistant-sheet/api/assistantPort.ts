@@ -9,8 +9,8 @@ import type {
 } from './assistantContract';
 
 /**
- * 도우미 서버 경계(TRIP-1319) — 화면·훅은 이 인터페이스만 안다. 구현은 지금 `FakeAssistantAdapter`
- * 하나이고, BE assistant API 가 열리면 http 어댑터를 만들어 `assistantClient.ts` 한 곳에서 바꾼다.
+ * 도우미 서버 경계(TRIP-1319) — 화면·훅은 이 인터페이스만 안다. 구현은 실 서버 `HttpAssistantAdapter`
+ * (TRIP-1410)와 프리뷰·테스트용 `FakeAssistantAdapter` 둘이고, 고르는 곳은 `assistantClient.ts` 한 곳이다.
  *
  * 어댑터는 실패를 전부 `AssistantApiError` 로 정규화해 던진다 — 화면은 `code` 로만 분기하고
  * 원시 axios 에러를 보지 않는다(README §API 계층).
