@@ -518,6 +518,8 @@ internal data class AiAlternativesRequest(
     val preferenceProfile: PreferenceProfile? = null,
     /** 그 여행의 동행 — 계정의 평소 동행보다 우선. */
     val companionType: String? = null,
+    /** 바꿀 슬롯의 장소 — 식사 칸이면 AI 가 식사 후보로만 고른다(사용자 컨셉이 없을 때). */
+    val targetPoiId: String? = null,
 )
 
 /**
@@ -568,6 +570,7 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         requestMeta = AiRequestMeta(requestMeta.requestId, requestMeta.requestedAt, requestMeta.deadlineMs),
         preferenceProfile = preferenceProfile,
         companionType = companionType,
+        targetPoiId = targetPoiId.toString(),
     )
 }
 

@@ -1010,6 +1010,26 @@ def restrict_pool_to_categories(
     ), ignored
 
 
+def restrict_pool_to_target_role(
+    pool: CandidatePool, target_id: "str | None", excluded: "frozenset[PoiId]"
+) -> tuple[CandidatePool, list[str]]:
+    """식사 칸의 '다른 후보'는 식사 후보만 (2026-10-14 부산 실측: 칼국수 칸에 기찻길·해파랑길).
+
+    `categories` 가 비었을 때만 부른다(사용자가 고른 종류가 우선). 대상이 풀에 없거나
+    식사가 아니면 그대로 — 비식사 칸은 종전 동작. 거른 뒤 남는 식사 후보가 0 이면 넓힌다
+    (대안 0 보다 낫다, INV-4) — 그 사실은 노트로 남긴다. 좁히기만 한다(INV-1).
+    """
+    target = next((p for p in pool.pois if str(p.poi_id) == target_id), None)
+    if target is None:  # 대상이 반경·품질 밖 — 역할을 모른다(종전 동작이지만 흔적은 남긴다)
+        return pool, ["alternatives_role_unknown"] if target_id else []
+    if not counts_as_food(target):
+        return pool, []
+    kept = tuple(p for p in pool.pois if counts_as_food(p))
+    if not any(p.poi_id not in excluded for p in kept):
+        return pool, ["alternatives_role_relaxed"]
+    return replace(pool, poi_ids=frozenset(p.poi_id for p in kept), pois=kept), []
+
+
 # 재계획 사유(AI 어휘) → 트리거 종류. 백엔드가 `trigger` 를 안 보내는 동안 이 표가
 # 대신 유도한다 — `/alternatives` 가 `kind="MANUAL"` 을 **지어내는** 것과 다르다:
 # 여기 입력(`reasons`)은 FE 칩에서 온 실값이다. 표에 없는 사유는 MANUAL 이고,
@@ -1838,6 +1858,12 @@ class WiredItineraryOrchestrator:
         packets = self._info.collect(Intent.REPLAN, params)
         pool, ignored_categories = restrict_pool_to_categories(
             self._pool_from(packets, now), request.categories)
+        role_notes: list[str] = []
+        if len(ignored_categories) == len(request.categories):  # 사용자가 고른 종류가 없을 때만
+            # 대상 = 명시 필드, 없으면 원래 추천 이유의 키(백엔드는 대상 슬롯 하나만 싣는다)
+            target = request.target_poi_id or next(iter(request.affected_reasons), None)
+            pool, role_notes = restrict_pool_to_target_role(
+                pool, target, frozenset(PoiId(p) for p in request.excluded_poi_ids))
         result = self._rag.run(
             PlanBRagRequest(
                 trigger=TriggerParams(
@@ -1883,7 +1909,7 @@ class WiredItineraryOrchestrator:
             ],
             is_fallback=result.is_fallback,
             fallback_level=result.fallback_level,
-            notes=list(result.notes) + (
+            notes=list(result.notes) + role_notes + (
                 [f"categories_ignored:{','.join(ignored_categories)}"]
                 if ignored_categories else []),
             retrieved=dict(result.retrieved),

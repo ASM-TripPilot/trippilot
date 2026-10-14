@@ -112,6 +112,18 @@
             "title": "Saved Places",
             "type": "array"
           },
+          "target_poi_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Poi Id"
+          },
           "transport_mode": {
             "anyOf": [
               {
