@@ -47,6 +47,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # 차선책 근거 문장 — 설명(EXPLANATION)과 같은 급의 취향 그라운딩 문장 (TRIP-887)
             LlmFeature.ALTERNATIVE_EXPLANATION: ModelTier.HEAVY,
             LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
+            # 남은 하루를 고르는 판단 — 대체지 선택과 같은 급의 상위 과업
+            LlmFeature.REPLAN_COMPOSITION: ModelTier.HEAVY,
             # 장면 시퀀스 연출 생성 — 회고 본문 생성의 정본(구 REFLECTION 흡수), 백그라운드 N회 생성 전제
             # (TRIP-429, BR-U6R-13: 티어·모델 실체는 항상 설정값)
             LlmFeature.REFLECTION_TEMPLATE: ModelTier.HEAVY,
@@ -93,6 +95,9 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # agents/planb/rag.py `_select`→`_rationale` — used_llm=False면 규칙 랭킹
             # ("llm_select_alternatives" / "rule_ranking"도 그 함수의 문자열 그대로).
             LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),
+            # api/wiring.py `_compose_day` — 실패면 고른 목록 없이 종전 재계획
+            # (PlanB 랭킹 가산 + 점수 + 어셈블리 선택)으로 진행한다.
+            LlmFeature.REPLAN_COMPOSITION: ("llm_compose_day", "scored_assembly"),
             # agents/reflect/composer.py `compose` — 전 시도 실패면 고정 폴백 템플릿
             # (그쪽이 직접 내는 FallbackEvent와 같은 모드 쌍).
             LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
@@ -165,6 +170,8 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
             LlmFeature.ALTERNATIVE_EXPLANATION: 4096,
             LlmFeature.REFLECTION_TEMPLATE: 2048,
             LlmFeature.SHARE_CARD_COPY: 2048,
+            # 고른 곳 ≤ 8건 × 이유 1문장 + fable 사고 토큰 — 대체지 선택(≤ 3건)의 두 배 남짓
+            LlmFeature.REPLAN_COMPOSITION: 2048,
         }
     )
 
@@ -192,6 +199,8 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.REFLECTION_TEMPLATE: "low",
             LlmFeature.REMINDER_COPY: "low",
             LlmFeature.ALTERNATIVE_SELECTION: "low",
+            # 같은 재계획 시한(25s) 안에서 PlanB 다음에 돈다 — 대체지 선택과 같은 이유
+            LlmFeature.REPLAN_COMPOSITION: "low",
         }
     )
 

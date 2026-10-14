@@ -311,6 +311,8 @@ _EXPECTED_MODES = {
     # ScheduleAgent._explain_alternatives · wiring.explanations — 실패면 TRIP-871 템플릿 rationale 유지
     LlmFeature.ALTERNATIVE_EXPLANATION: (
         "llm_explain_alternatives", "template_rationale"),
+    # 다시 짜기 하루 구성 — 실패면 고른 목록 없이 종전 재계획(점수 + 어셈블리 선택)
+    LlmFeature.REPLAN_COMPOSITION: ("llm_compose_day", "scored_assembly"),
 }
 
 
