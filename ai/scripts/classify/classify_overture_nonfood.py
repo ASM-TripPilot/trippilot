@@ -48,6 +48,9 @@ from trippilot.domain.prompt import PromptRef  # noqa: E402
 from trippilot.ports.llm_port import LlmRequest  # noqa: E402
 
 _OUT = _AI / "data" / "overture_nonfood_verdicts.json"
+# 프롬프트 판본. **올리면 기존 판정을 다시 묻는다** — 기준이 바뀌었으니 캐시는 무효다.
+# v2(2026-10-14): "분류가 맞는가"를 기준 ②로 추가. v1 은 "가 볼 곳인가"만 물었다.
+PROMPT_VERSION = "2"
 
 # 프롬프트 — 기각 쪽으로 기운다. 넣어서 틀리면 사용자 일정에 아파트가 들어가고, 빼서
 # 틀리면 후보가 한 곳 준다. `classify_localdata_etc.py` 와 같은 비대칭이다.
@@ -56,11 +59,34 @@ _PROMPT = """\
 한국의 장소들이다. 원본이 분류를 뭉뚱그려 보내서, **주거단지·사무실·관리조직이
 관광지로 섞여 들어온다.** 상호와 주소만 보고 각 장소를 판정하라.
 
-**판정 기준 — "여행자가 일정에 넣고 찾아갈 만한 장소인가?"**
+각 줄에는 우리가 붙인 분류(`cat`)가 함께 온다. **두 가지를 같이 본다.**
+
+**기준 ① — "여행자가 일정에 넣고 찾아갈 만한 장소인가?"**
 
 accept: 관광지·명소·사찰·공원·산·전망대·해변·박물관·미술관·갤러리·체험시설·
         수목원·시장·백화점처럼 **외부인이 찾아가는 곳**.
         규모가 작아도(동네 갤러리·공방 체험장) 손님을 받으면 accept.
+
+**기준 ② — "우리가 붙인 분류(`cat`)가 그 장소에 맞는가?"**
+
+원천 데이터가 분류를 틀리게 보내는 일이 있다. 분류가 **명백히 틀리면 reject** 하라 —
+엉뚱한 분류로 들어가면 일정의 잘못된 자리에 놓인다. 분류의 뜻은 이렇다:
+
+    NATURE    자연 — 산·오름·숲·해변·공원·폭포·습지
+    SIGHT     명소 — 사찰·유적·전망대·마을·랜드마크
+    CULTURE   문화시설 — 박물관·미술관·갤러리·전시관·공연장
+    ACTIVITY  체험·레포츠 — 다이빙·클라이밍·체험장·테마파크
+    SHOPPING  쇼핑 — 시장·백화점·공방 판매점·면세점
+    NIGHT_VIEW 야경 — 야경을 보는 전망 지점
+
+실측 오류 예 — 전부 기준 ②로 reject 해야 한다:
+
+    VR 오락실이 NATURE 로 왔다 (원천이 `park` 로 분류)
+    건물 5층 해수온천이 NATURE 로 왔다
+    골프장이 NATURE 로 왔다 (이용객만 들어간다 — 기준 ①로도 reject)
+    문구점이 SIGHT 로 왔다
+
+**애매하면 reject** 가 정답이다. 분류를 고쳐 주려 하지 말고 기각하라 — 우리가 다시 본다.
 
 reject: 아래 중 하나라도 해당하면 기각한다.
   - **아파트·주거단지·오피스텔·주상복합·타운하우스·빌라·개인주택**
@@ -111,7 +137,7 @@ def _ask(llm, model: str, batch: list[dict], timeout: float) -> dict[str, dict]:
         model_id=model,
         prompt=_PROMPT.format(rows=rows),
         prompt_ref=PromptRef(prompt_id="scripts/classify_overture_nonfood.py",
-                             version="1", feature="OVERTURE_NONFOOD_TRIAGE"),
+                             version=PROMPT_VERSION, feature="OVERTURE_NONFOOD_TRIAGE"),
         max_tokens=180 * len(batch) + 500,
         timeout_sec=timeout,
     ))
@@ -164,8 +190,13 @@ def main() -> int:
     verdicts: dict[str, dict] = {}
     if args.out.exists():
         verdicts = dict(json.loads(args.out.read_text(encoding="utf-8")).get("verdicts") or {})
-        print(f"[비식당] 기존 판정 {len(verdicts):,}건 이어받음", file=sys.stderr)
-    todo = [r for r in targets if r["ref"] not in verdicts]
+        stale = sum(1 for v in verdicts.values() if v.get("prompt") != PROMPT_VERSION)
+        print(f"[비식당] 기존 판정 {len(verdicts):,}건 이어받음"
+              + (f" (판본 {PROMPT_VERSION} 아님 {stale:,}건 — 다시 묻는다)" if stale else ""),
+              file=sys.stderr)
+    # **판본이 다르면 다시 묻는다** — 기준이 바뀐 판정을 캐시로 쓰면 조용히 옛 기준이 남는다
+    todo = [r for r in targets
+            if (verdicts.get(r["ref"]) or {}).get("prompt") != PROMPT_VERSION]
     print(f"[비식당] 판정 시작 — 남은 {len(todo):,}곳 / 배치 {args.batch} / 모델 {model}",
           file=sys.stderr)
 
@@ -180,7 +211,7 @@ def main() -> int:
         if missing:
             print(f"[비식당] 배치 {i // args.batch + 1} 미판정 {len(missing)}곳", file=sys.stderr)
         for ref, v in got.items():
-            verdicts[ref] = {**v, "model": model}
+            verdicts[ref] = {**v, "model": model, "prompt": PROMPT_VERSION}
         args.out.write_text(json.dumps(
             {"generated_at": datetime.now(UTC).isoformat(), "verdicts": verdicts},
             ensure_ascii=False, indent=2), encoding="utf-8")
