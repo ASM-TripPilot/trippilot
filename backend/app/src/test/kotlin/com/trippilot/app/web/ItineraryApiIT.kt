@@ -69,7 +69,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * **미래 날짜** 여행 — 재생성이 허용되는 유일한 구간이다(여행 중·후는 409).
+     * **미래 날짜** 여행 — 다녀온 기록과 무관하게 재생성이 허용되는 구간이다(여행 중·후는 기록이 있으면 409).
      * 서버 실 시계로 판정하므로 고정 날짜를 쓸 수 없다. 날짜를 단언하는 테스트는 [newTrip] 을 그대로 쓴다.
      */
     private fun newFutureTrip(token: String): String {
@@ -688,16 +688,25 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
     }
 
     /**
-     * 재생성 가드의 HTTP 표면. 여행 중 재생성은 따라가던 계획을 지우고 방문 실적을 유령으로 만든다 —
-     * 그 변경은 재계획(Plan-B)의 몫이다. **첫 생성은 막지 않는다**(지울 계획이 없다).
+     * 재생성 가드의 HTTP 표면. 다녀온 기록이 있는 여행을 통째로 다시 짜면 방문 실적이 유령이 된다 —
+     * 그 변경은 재계획(Plan-B)의 몫이다. **기록이 없으면 막지 않는다**(남을 유령이 없다).
+     * 기록 유무는 archive 에서 오므로(app 조립 포트) 실제 방문 API 로 기록을 만든다.
      */
     @Test
-    fun `끝난 여행은 첫 생성만 되고 재생성은 409`() {
+    fun `끝난 여행 — 다녀온 기록이 없으면 다시 만들고, 기록이 생기면 409`() {
         val token = newToken()
         val trip = newTrip(token)   // 2026-08-01~02 — 이미 지난 여행
 
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201  // 첫 생성은 허용
         awaitComplete(trip, token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201  // 기록 없음 → 다시 만든다
+        awaitComplete(trip, token)
+
+        val poi = poiId(token)
+        call(
+            HttpMethod.POST, "/api/v1/trips/$trip/visits", token,
+            """{"slotKey":"2026-08-01#$poi","poiId":"$poi","source":"MANUAL"}""",
+        ).first shouldBe 201
 
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 409
     }
