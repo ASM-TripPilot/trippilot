@@ -1502,9 +1502,12 @@ def _with_nl_room(cap: int | None, extra: tuple[PoiId, ...]) -> int | None:
 
 
 # 자연어 추출에 줄 시한 — 재계획 잔여의 이 몫까지, 그리고 이 절대값까지. 뒤에 PlanB·구성 LLM·
-# 어셈블리가 줄 서 있다. 짧은 구조화 출력이라 경량 모델 실측 1~2s 급이다.
-_NL_EXTRACT_SHARE = 0.15
-_NL_EXTRACT_MAX_S = 4.0
+# 어셈블리가 줄 서 있다(구성은 최소 `_COMPOSE_MIN_MS` 를 따로 지킨다).
+# 15%·4s → 25%·5s (2026-10-14 DEV 실호출): 잔여 ~19.6s 에서 2.94s 가 나왔고 `timeout > 2.9442s` 로
+# 추출이 통째로 빠졌다 — 성공한 앞 두 회도 운이었다. 처음 값은 "경량 모델 1~2s" 가정이었는데 DEV 는
+# GPT sol·effort low 로 한 건 3~5s 가 흔하다. 5s 면 그 꼬리를 대부분 덮고, 실패해도 추출 없이 종전 경로다.
+_NL_EXTRACT_SHARE = 0.25
+_NL_EXTRACT_MAX_S = 5.0
 # 지도 실재 확인에 줄 시한(ms) — 생성 ②′ 의 `existence_deadline_ms` 와 같은 급.
 _NL_EXISTENCE_MS = 1_500
 
