@@ -41,11 +41,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from trippilot.domain.common import GeoPoint  # noqa: E402
 from trippilot.domain.poi import PoiCategory  # noqa: E402
 from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
+    DROP_TYPE_NOT_ADOPTED,
     GAP_MIN_FOOD,
     GAP_RADIUS_KM,
     PER_ANCHOR,
     PICK_RADIUS_KM,
     SOURCE_NAME,
+    fill_near,
     gap_anchors,
     gate_against_tourapi,
     pick_near,
@@ -56,6 +58,8 @@ from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
 
 _AI = Path(__file__).resolve().parents[1]
 _MIGRATION = _AI.parent / "backend/app/src/main/resources/db/migration"
+# '기타' 보충용 2차 훑기 — 이 한 종만 연다(TRIP-1282).
+_ETC_TYPES = frozenset({"기타"})
 
 # 생성 시드 한 줄 — gen_stay_seed.py / gen_region_seed.py 가 쓰는 모양 그대로.
 _STAY_ROW = re.compile(r"^\s*\('LOCALDATA', '(?:[^']|'')*', '(?:[^']|'')*', ([0-9.]+), ([0-9.]+), "
@@ -130,6 +134,8 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=_AI / "data" / "collected_localdata.json")
     ap.add_argument("--pois", type=Path, default=_AI / "data" / "collected_pois.json",
                     help="TourAPI 공유본 — 공백 판정·중복 병합 기준")
+    ap.add_argument("--etc-verdicts", type=Path, default=_AI / "data" / "localdata_etc_verdicts.json",
+                    help="업태 '기타' LLM 판정 파일. 없으면 보충 없음(종전과 동일)")
     ap.add_argument("--per-anchor", type=int, default=PER_ANCHOR, help=f"앵커당 상한 (기본 {PER_ANCHOR})")
     args = ap.parse_args()
 
@@ -143,20 +149,39 @@ def main() -> int:
         print(f"[localdata] 원본을 찾지 못했습니다: {args.csv}", file=sys.stderr)
         return 2
 
+    # 0) '기타' 빈자리 보충 판정 (TRIP-1282) — 파일이 없으면 **종전과 완전히 같다.**
+    # 업태 '기타' 10.3만은 상호로 72.9% 를 못 가려 통째로 뺀 칸이다. 그중 공백 앵커의 빈 자리에
+    # 닿는 것만 LLM 이 한 번 보고 확실한 식당만 통과시킨 결과가 이 파일이다
+    # (`scripts/classify_localdata_etc.py`). 판정을 파일로 굳혀 재수집 때 다시 안 묻는다.
+    etc_ok: set[str] = set()
+    if args.etc_verdicts.is_file():
+        etc_ok = set(json.loads(args.etc_verdicts.read_text(encoding="utf-8")).get("accepted_refs") or [])
+        print(f"[localdata] '기타' 보충 판정 {args.etc_verdicts.name} — accept {len(etc_ok):,}건",
+              file=sys.stderr)
+
     # 1) 원본 — 영업 중·채택 업태·관광 무관 이름·고속도로 휴게소 제외·좌표 변환(EPSG:5174 중부원점 TM → WGS84)
     to_wgs84 = Transformer.from_crs("EPSG:5174", "EPSG:4326", always_xy=True).transform
-    rows, row_drops, candidates, updated_max = 0, Counter(), [], ""
+    rows, row_drops, candidates, etc, updated_max = 0, Counter(), [], [], ""
     with args.csv.open(encoding="cp949", errors="replace", newline="") as f:
         for row in csv.DictReader(f):
             rows += 1
             out = to_candidate(row, to_wgs84)
             if isinstance(out, str):
+                # accept 된 '기타'만 같은 행을 한 번 더 — 이름·주소·좌표 규칙은 그대로 탄다.
+                if out == DROP_TYPE_NOT_ADOPTED and (row.get("관리번호") or "").strip() in etc_ok:
+                    again = to_candidate(row, to_wgs84, adopted=_ETC_TYPES)
+                    if not isinstance(again, str):
+                        etc.append(again)
+                        updated_max = max(updated_max, again.modified_at or "")
+                        continue
                 row_drops[out] += 1
                 continue
             candidates.append(out)
             updated_max = max(updated_max, out.modified_at or "")
-    print(f"[localdata] 원본 {rows:,}행 → 후보 {len(candidates):,}곳  드롭 {dict(row_drops.most_common())}",
-          file=sys.stderr)
+    # 세 통이 원본 행수를 정확히 나눠 갖는다 — 어긋나면 통계가 거짓말을 하고 있다
+    assert sum(row_drops.values()) + len(candidates) + len(etc) == rows
+    print(f"[localdata] 원본 {rows:,}행 → 후보 {len(candidates):,}곳 (+ '기타' 보충 {len(etc):,}곳)  "
+          f"드롭 {dict(row_drops.most_common())}", file=sys.stderr)
 
     # 2) 앵커와 공백 — TourAPI 공유본 FOOD 기준 (게이트에는 전 카테고리를 넘긴다 — 아래 3)
     tour = shared_tourapi_candidates(json.loads(args.pois.read_text(encoding="utf-8")))
@@ -172,7 +197,9 @@ def main() -> int:
 
     # 3) 선별 → 게이트(TourAPI 와 같은 가게는 병합으로 빠진다 — 카페·캠핑장 등 다른 카테고리여도)
     picks = pick_near(gaps, candidates, per_anchor=args.per_anchor)
-    outcome = gate_against_tourapi(tour, picks)
+    # '기타'는 **남은 자리에만** 들어간다 — 확실한 한식집을 밀어내지 않는다(사용자 지시 "보충만").
+    fills = fill_near(gaps, candidates, etc, per_anchor=args.per_anchor)
+    outcome = gate_against_tourapi(tour, picks + fills)
     passed = outcome.passed
     passed_pts = [p.poi.coord for p in passed]
 
@@ -192,6 +219,8 @@ def main() -> int:
         "anchors": {"stays": len(stays), "region_centers": len(centers),
                     "gap_stays": len(gap_stays), "gap_region_centers": len(gap_centers)},
         "picked": len(picks),
+        # '기타' 보충 (TRIP-1282) — admitted 는 판정 통과분, picked 는 그중 빈 자리에 실제로 들어간 수
+        "etc_fill": {"admitted": len(etc), "picked": len(fills)},
         "gate_merged": outcome.merged,
         "gate_drops": dict(outcome.drops),
         "passed": len(passed),
