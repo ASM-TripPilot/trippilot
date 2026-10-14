@@ -431,6 +431,15 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertNotIn("s3cret", shown)
         self.assertIn("delete", shell.call_args_list[-1].args[0])
 
+    def test_canonical_ingest_script_passes_its_self_check(self):
+        """Job 이 싣는 정본 스크립트의 자체 점검을 CI 에서 돌린다 — 이 워크플로가 그 파일 경로에 걸려 있다.
+        병합 공유본(출처가 섞인 문서)을 최상단 출처 하나로 몰아 보내면 다른 출처 항목이 한 벌 더 생긴다(#1202)."""
+        import subprocess
+        import runtime_pois
+        done = subprocess.run([sys.executable, str(runtime_pois.SCRIPT), "--self-check"],
+                              capture_output=True, text=True, timeout=120, check=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
     def test_load_pois_job_uses_serving_image_and_the_canonical_script(self):
         """공유본은 서빙 ai 이미지 안에 있고, 스크립트는 복제하지 않고 ConfigMap 으로 싣는다.
         `--close-missing` 은 입력으로만, `--allow-mass-close` 는 어떤 경우에도 넘기지 않는다."""
@@ -484,6 +493,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         out.assert_any_call(summary)
         logs_call = next(c for c in calls if c[:2] == ["kubectl", "logs"])
         self.assertIn("pod/trippilot-poi-load-k7x2q", logs_call)  # `job/…` 이면 실패한 1차 파드 로그를 집을 수 있다
+        self.assertIn("--tail=-1", logs_call)  # 꼬리만 읽으면 병합본(84묶음)의 맨 앞 "미포함 정리" 줄이 요약에서 잘린다
         printed = " ".join(str(c.args[0]) for c in out.call_args_list)
         self.assertIn("retried 1 time", printed)
         self.assertIn("job,configmap", calls[-1])  # 둘 다 치운다
