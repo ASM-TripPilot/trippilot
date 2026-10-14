@@ -62,7 +62,7 @@ class VisitCheckService(
             if (source == CheckSource.AUTO_GEOFENCE) {
                 throw ConflictDetected(
                     current = VisitConflictState(existing.visitCheckId, existing.updatedAt),
-                    message = "오늘은 이 장소를 자동으로 기록하지 않습니다.", errorCode = ErrorCode.VISIT_CONFLICT,
+                    message = "오늘은 이 장소를 자동으로 기록하지 않습니다.", errorCode = ErrorCode.VISIT_AUTO_SUPPRESSED,
                 )
             }
             return checks.save(existing.arriveAgain(source, clock.instant())).also { publish(accountId, it) }
@@ -182,7 +182,9 @@ class VisitCheckService(
     private fun owned(accountId: UUID, tripId: UUID, visitCheckId: UUID): VisitCheck {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         // 여행 범위로 좁혀 찾는다 — id 만으로 찾으면 남의 여행 실적을 건드릴 수 있다.
-        return checks.findById(visitCheckId)?.takeIf { it.tripId == tripId }
+        // 억제 표식만 남은 행(자동 도착을 되돌린 자리)은 방문이 아니다 — 시각 보정·건너뛰기로 도착을 되살리지 않는다.
+        // 그 자리에 다시 남기려면 도착·도착 전 건너뛰기가 같은 행을 쓴다(BR-U10-32).
+        return checks.findById(visitCheckId)?.takeIf { it.tripId == tripId && it.isRecorded }
             ?: throw ResourceNotFound("방문 기록을 찾을 수 없습니다.")
     }
 

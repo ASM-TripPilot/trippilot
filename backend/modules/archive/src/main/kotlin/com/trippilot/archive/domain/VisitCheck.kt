@@ -131,7 +131,9 @@ data class VisitCheck(
      * 완료를 비우면 그 슬롯의 재계획 잠금(INV-U4-04)도 풀린다 — 화면이 되돌리기 전에 그것을 고지한다.
      */
     fun revertAuto(at: Instant): Pair<VisitCheck, RevertedPart> = when {
-        completedAt != null && completionSource != CompletionSource.MANUAL ->
+        // 출처가 **자동일 때만** — null 은 롤링 배포 창에 옛 파드가 쓴 수동 완료다(V2.67 1단계, CHECK 없음). 비우면 사람이 남긴 완료와
+        // 재계획 잠금이 사라진다.
+        completedAt != null && completionSource in AUTO_COMPLETIONS ->
             copy(completedAt = null, completionSource = null, updatedAt = at) to RevertedPart.COMPLETION
         completedAt == null && skippedAt == null && arrivedAt != null && source == CheckSource.AUTO_GEOFENCE ->
             copy(arrivedAt = null, autoSuppressedAt = at, updatedAt = at) to RevertedPart.ARRIVAL
@@ -208,7 +210,12 @@ interface VisitCheckRepository {
 
     /** 같은 슬롯의 실적. 중복 체크인을 막는 데 쓴다 — 둘이면 "완료됐나"가 갈린다. */
     fun findBySlot(tripId: UUID, slotKey: String): VisitCheck?
+
+    /** [findBySlot] + 행 잠금(트랜잭션 끝까지) — 읽고 고쳐 쓰는 사이 다른 쓰기(수동 완료·건너뜀)가 끼어들어 덮이지 않게. */
+    fun findBySlotForUpdate(tripId: UUID, slotKey: String): VisitCheck? = findBySlot(tripId, slotKey)
 }
+
+private val AUTO_COMPLETIONS = setOf(CompletionSource.AUTO_GEOFENCE_EXIT, CompletionSource.AUTO_NEXT_ARRIVAL)
 
 /** 자동 되돌리기가 비운 부분. */
 enum class RevertedPart { COMPLETION, ARRIVAL }

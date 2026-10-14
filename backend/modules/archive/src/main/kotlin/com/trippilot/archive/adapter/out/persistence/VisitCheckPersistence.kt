@@ -43,6 +43,10 @@ interface VisitCheckJpaRepository : JpaRepository<VisitCheckEntity, UUID> {
     fun findByTripIdOrderByArrivedAtDesc(tripId: UUID): List<VisitCheckEntity>
 
     fun findFirstByTripIdAndSlotKey(tripId: UUID, slotKey: String): VisitCheckEntity?
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select v from VisitCheckEntity v where v.tripId = :tripId and v.slotKey = :slotKey")
+    fun lockByTripIdAndSlotKey(tripId: UUID, slotKey: String): VisitCheckEntity?
 }
 
 @Component
@@ -63,6 +67,9 @@ class VisitCheckPersistence(private val jpa: VisitCheckJpaRepository) : VisitChe
 
     override fun findBySlot(tripId: UUID, slotKey: String): VisitCheck? =
         jpa.findFirstByTripIdAndSlotKey(tripId, slotKey)?.toDomain()
+
+    override fun findBySlotForUpdate(tripId: UUID, slotKey: String): VisitCheck? =
+        jpa.lockByTripIdAndSlotKey(tripId, slotKey)?.toDomain()
 
     private fun VisitCheckEntity.toDomain() = VisitCheck.reconstitute(
         visitCheckId, tripId, slotKey, poiId, arrivedAt, completedAt, skippedAt,

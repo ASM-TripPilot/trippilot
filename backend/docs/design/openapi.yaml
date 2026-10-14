@@ -1118,7 +1118,7 @@ paths:
         '201': { description: 체크됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '400': { description: '장소·체크 방식 누락 · 자동 도착(AUTO_GEOFENCE)인데 slotKey 가 없음 — 자동 도착은 계획 슬롯에만 있다(INV-U10-5)' }
         '404': { description: 여행 없음/타 계정 }
-        '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요)' }
+        '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요) · `VISIT_AUTO_SUPPRESSED`(그날 자동 기록을 되돌린 슬롯의 자동 도착 — 기기는 버린다)' }
   /trips/{tripId}/routes:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1208,6 +1208,13 @@ paths:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
       - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+      - name: expectedUpdatedAt
+        in: query
+        required: false
+        schema: { type: string, format: date-time }
+        description: >
+          화면이 본 기록의 `updatedAt`. 무엇을 되돌릴지가 **지금 상태**로 정해지므로, 두 번 누르거나 응답을 못 받고 다시 보내면 완료에 이어
+          도착까지 지워진다 — 이 값을 주면 그 사이 바뀐 것을 409 `VISIT_CONFLICT` 로 가른다(BR-U5-22 와 같은 판정). 안 주면 보지 않는다.
     post:
       tags: [trips]
       summary: 자동 기록 되돌리기(U10 · TRIP-1403)
@@ -1218,7 +1225,7 @@ paths:
       responses:
         '200': { description: 되돌린 뒤의 방문 기록, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '404': { description: 여행·방문 없음/타 계정 }
-        '409': { description: '`VISIT_HAS_MEDIA` — 사진·메모가 붙은 방문의 자동 도착(먼저 지우라고 안내) · `VISIT_NOT_AUTO` — 되돌릴 자동 기록이 없다(수동 기록)' }
+        '409': { description: '`VISIT_HAS_MEDIA` — 사진·메모가 붙은 방문의 자동 도착(먼저 지우라고 안내) · `VISIT_NOT_AUTO` — 되돌릴 자동 기록이 없다(수동 기록, 출처가 빈 완료 포함) · `VISIT_CONFLICT` — `expectedUpdatedAt` 이후 바뀜' }
   /trips/{tripId}/visits/days/{day}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }

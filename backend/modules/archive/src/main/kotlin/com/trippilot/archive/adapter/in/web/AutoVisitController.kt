@@ -7,6 +7,10 @@ import com.trippilot.archive.domain.CompletionSource
 import com.trippilot.core.error.AuthenticationRequired
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Size
+import com.trippilot.core.error.FieldError
+import com.trippilot.core.error.ValidationFailed
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -25,7 +29,11 @@ class AutoVisitController(private val service: AutoVisitService) {
     fun apply(principal: Principal, @PathVariable tripId: UUID, @Valid @RequestBody request: AutoVisitBatchRequest): AutoVisitBatchResponse {
         val result = service.apply(
             principal.accountId(), tripId,
-            request.events!!.map { AutoVisitEvent(it.eventId!!, it.kind!!, it.slotKey!!, it.poiId!!, it.occurredAt!!, it.completionSource) },
+            request.events!!.map { e ->
+                // 원소 null 은 @Valid 가 건너뛴다 — 넘기면 NPE 로 500 이 된다
+                e ?: throw ValidationFailed(listOf(FieldError("events", "빈 항목이 있습니다.")))
+                AutoVisitEvent(e.eventId!!, e.kind!!, e.slotKey!!, e.poiId!!, e.occurredAt!!, e.completionSource)
+            },
         )
         return AutoVisitBatchResponse(
             result.results.map { AutoVisitResultResponse(it.eventId, it.outcome.name, it.visitCheck?.let(VisitCheckResponse::from)) },
@@ -33,15 +41,22 @@ class AutoVisitController(private val service: AutoVisitService) {
         )
     }
 
+    /** `expectedUpdatedAt` — 화면이 본 기록의 `updatedAt`. 주면 그 사이 바뀐 것(다른 기기의 되돌리기·두 번 누르기)을 409 로 가른다. */
     @PostMapping("/{visitCheckId}/revert-auto")
-    fun revert(principal: Principal, @PathVariable tripId: UUID, @PathVariable visitCheckId: UUID): VisitCheckResponse =
-        VisitCheckResponse.from(service.revert(principal.accountId(), tripId, visitCheckId))
+    fun revert(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @PathVariable visitCheckId: UUID,
+        @RequestParam(required = false) expectedUpdatedAt: Instant?,
+    ): VisitCheckResponse = VisitCheckResponse.from(service.revert(principal.accountId(), tripId, visitCheckId, expectedUpdatedAt))
 
     private fun Principal.accountId(): UUID =
         runCatching { UUID.fromString(name) }.getOrElse { throw AuthenticationRequired() }
 }
 
-data class AutoVisitBatchRequest(@field:NotNull @field:Valid val events: List<AutoVisitEventRequest>?)
+data class AutoVisitBatchRequest(
+    @field:NotNull @field:Size(max = AutoVisitService.MAX_BATCH) @field:Valid val events: List<AutoVisitEventRequest?>?,
+)
 
 data class AutoVisitEventRequest(
     @field:NotNull val eventId: UUID?,

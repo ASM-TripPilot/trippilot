@@ -59,14 +59,14 @@ data class ActualRouteStored(
 /**
  * 자동 기록을 되돌렸다(U10 FD §12.2) — 지연 신호원이 구독해, 되돌린 도착·완료를 판정 입력에서 뺀다([[U10-DELAY]]).
  *
- * @property part `COMPLETION`(자동 완료를 비움 — 도착은 남음) · `ARRIVAL`(자동 도착을 비움 — 그날 자동 쓰기가 막힌다).
+ * @property revertedPart `COMPLETION`(자동 완료를 비움 — 도착은 남음) · `ARRIVAL`(자동 도착을 비움 — 그날 자동 쓰기가 막힌다).
  */
 data class VisitAutoReverted(
-    override val aggregateId: String, // visitCheckId
+    override val aggregateId: String, // visitCheckId(정본 §12.6 의 visitCheckId)
     val tripId: String,
     val accountId: String,
     val slotKey: String?,
-    val part: String,
+    val revertedPart: String,
 ) : DomainEvent {
     override val eventType: String = "archive.VisitAutoReverted"
     override val aggregateType: String = "VisitCheck"

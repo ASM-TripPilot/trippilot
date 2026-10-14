@@ -18,6 +18,7 @@ import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.trip.api.TripFacade
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.annotation.Transactional
@@ -77,31 +78,37 @@ class AutoVisitService(
         val enabled = properties.enabled
         // 동의는 배치 단위로 한 번 본다 — L2 가 없으면 전 항목을 거절한다(BR-U10-45). 좌표가 없어도 위치 "이용"의 결과다.
         if (!consents.hasLocationLegalConsent(accountId)) {
-            return AutoVisitBatchResult(batch.map { AutoVisitResult(it.eventId, AutoVisitOutcome.REJECTED_CONSENT, null).also(::observe) }, enabled)
+            return AutoVisitBatchResult(batch.map { e -> AutoVisitResult(e.eventId, AutoVisitOutcome.REJECTED_CONSENT, null).also { observe(e, it) } }, enabled)
         }
-        val planned = plans.findPlanSlots(accountId, tripId).associate { it.slotKey to it.poiId }
+        val planned = plans.findPlanSlots(accountId, tripId).associateBy { it.slotKey }
         val now = clock.instant()
         val results = batch.map { event ->
             val outcome = when {
-                planned[event.slotKey] != event.poiId -> AutoVisitResult(event.eventId, AutoVisitOutcome.CONFLICT, null) // 일정에 없는 슬롯
-                !inWindow(event, period.startDate, period.endDate, now) -> AutoVisitResult(event.eventId, AutoVisitOutcome.OUT_OF_WINDOW, null)
-                else -> tx.execute { applyOne(accountId, tripId, event) }!!
+                planned[event.slotKey]?.poiId != event.poiId -> AutoVisitResult(event.eventId, AutoVisitOutcome.CONFLICT, null) // 일정에 없는 슬롯
+                !inWindow(event, planned.getValue(event.slotKey).date, period.startDate, period.endDate, now) ->
+                    AutoVisitResult(event.eventId, AutoVisitOutcome.OUT_OF_WINDOW, null)
+                else -> try {
+                    tx.execute { applyOne(accountId, tripId, event) }!!
+                } catch (_: DataIntegrityViolationException) {
+                    // 같은 슬롯을 다른 요청(다른 배치·수동 도착)이 방금 만들었다 — 그 트랜잭션은 이 항목만 되돌렸다. 서버 값이 이긴다.
+                    AutoVisitResult(event.eventId, AutoVisitOutcome.ALREADY_RECORDED, checks.findBySlot(tripId, event.slotKey))
+                }
             }
-            observe(outcome)
+            observe(event, outcome)
             outcome
         }
         return AutoVisitBatchResult(results, enabled)
     }
 
     /** BR-U10-21 — 여행 날짜 구간 밖 · 슬롯 날짜와 다른 날 · 서버 시각 + 5분보다 미래는 받지 않는다. */
-    private fun inWindow(event: AutoVisitEvent, start: LocalDate, end: LocalDate, now: Instant): Boolean {
+    private fun inWindow(event: AutoVisitEvent, slotDay: LocalDate, start: LocalDate, end: LocalDate, now: Instant): Boolean {
         val day = LocalDate.ofInstant(event.occurredAt, TRAVEL_ZONE)
-        val slotDay = runCatching { LocalDate.parse(event.slotKey.substringBefore('#')) }.getOrNull() ?: return false
         return day == slotDay && day >= start && day <= end && event.occurredAt <= now + CLOCK_SKEW
     }
 
     private fun applyOne(accountId: UUID, tripId: UUID, event: AutoVisitEvent): AutoVisitResult {
-        val existing = checks.findBySlot(tripId, event.slotKey)
+        // 잠그고 읽는다 — 읽고 저장하는 사이 수동 완료·건너뜀이 끼면 낡은 사본으로 덮는다(행 전체를 쓴다, INV-U10-6).
+        val existing = checks.findBySlotForUpdate(tripId, event.slotKey)
         fun result(outcome: AutoVisitOutcome, check: VisitCheck? = existing) = AutoVisitResult(event.eventId, outcome, check)
         // 그날 자동 기록을 되돌린 슬롯 — 자동 쓰기를 거절한다(INV-U10-10). 수동 도착으로 재사용된 행도 표식은 남아 있다.
         if (existing?.autoSuppressedAt != null) return result(AutoVisitOutcome.SUPPRESSED)
@@ -140,9 +147,17 @@ class AutoVisitService(
      * 기록을 조용히 잃지 않는다(먼저 지우라고 안내). 되돌린 뒤 `VisitAutoReverted` 를 같은 트랜잭션에서 낸다.
      */
     @Transactional
-    fun revert(accountId: UUID, tripId: UUID, visitCheckId: UUID): VisitCheck {
+    fun revert(accountId: UUID, tripId: UUID, visitCheckId: UUID, expectedUpdatedAt: Instant? = null): VisitCheck {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         val current = checks.findById(visitCheckId)?.takeIf { it.tripId == tripId } ?: throw ResourceNotFound("방문 기록을 찾을 수 없습니다.")
+        // 무엇을 되돌릴지가 **지금 상태**로 정해진다 — 두 번 누르거나 응답을 못 받고 다시 보내면 완료에 이어 도착까지 지워진다.
+        // 화면이 본 상태(`updatedAt`)를 함께 보내면 그 사이 바뀐 것을 409 로 가른다(BR-U5-22 와 같은 판정).
+        if (expectedUpdatedAt != null && current.updatedAt != expectedUpdatedAt) {
+            throw ConflictDetected(
+                current = VisitConflictState(current.visitCheckId, current.updatedAt),
+                message = "그 사이 방문 기록이 바뀌었습니다.", errorCode = ErrorCode.VISIT_CONFLICT,
+            )
+        }
         val revertsArrival = current.completedAt == null && current.source == CheckSource.AUTO_GEOFENCE
         if (revertsArrival && (photos.findByVisit(visitCheckId).isNotEmpty() || memos.find(visitCheckId) != null)) {
             throw ConflictDetected(
@@ -152,13 +167,14 @@ class AutoVisitService(
         }
         val (reverted, part) = current.revertAuto(clock.instant())
         val saved = checks.save(reverted)
-        events.publish(VisitAutoReverted(saved.visitCheckId.toString(), tripId.toString(), accountId.toString(), saved.slotKey, part.name))
+        events.publish(VisitAutoReverted(saved.visitCheckId.toString(), tripId.toString(), accountId.toString(), saved.slotKey, revertedPart = part.name))
         log.info("u10.auto_revert part={}", part)
         return saved
     }
 
     /** 사건마다 INFO 한 줄(인프라 U10 로그 규약) — 좌표·계정 id 없음. */
-    private fun observe(r: AutoVisitResult) = log.info("u10.auto_event outcome={}", r.outcome)
+    private fun observe(event: AutoVisitEvent, r: AutoVisitResult) =
+        log.info("u10.auto_event kind={} completionSource={} outcome={}", event.kind, event.completionSource ?: "-", r.outcome)
 
     companion object {
         const val MAX_BATCH = 50
