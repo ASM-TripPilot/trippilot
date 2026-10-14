@@ -52,12 +52,14 @@ resource "aws_chatbot_slack_channel_configuration" "alerts" {
 # 세면 칸이 밀린다(밖에서 `/a%20500%20x` 로 200 을 5xx 로 세게 만들 수 있다). 2026-10-14 test-metric-filter 로 확인:
 # 500·502·공백 든 경로의 503 은 잡고, 백엔드 로그의 503 · 경로에 5 가 든 404 · 바이트가 500 인 200 · 위 위장 줄은 안 잡는다.
 # NLB 는 L4 라 HTTP 상태 지표가 없어 로그가 유일한 원천이다.
+# **운영 네임스페이스만 센다** — 같은 클러스터의 개발 서버(trippilot-dev, 2026-10-15 분리)도 같은 로그 그룹에 쓴다.
+# 안 가르면 개발 배포 중 502 나 개발 쪽 토큰 재사용 시험이 운영 Slack 알람으로 울린다(#1159 검수). 재시작 알람은 이미 Namespace 로 가른다.
 resource "aws_cloudwatch_log_metric_filter" "gateway_5xx" {
   count = local.alerts_count
 
   name           = "${local.name}-gateway-5xx"
   log_group_name = aws_cloudwatch_log_group.container_insights["application"].name
-  pattern        = "{ ($.kubernetes.container_name = \"gateway\") && ($.log = %\\s5\\d\\d\\s\\d+\\s[0-9.]+$%) }"
+  pattern        = "{ ($.kubernetes.namespace_name = \"trippilot\") && ($.kubernetes.container_name = \"gateway\") && ($.log = %\\s5\\d\\d\\s\\d+\\s[0-9.]+$%) }"
 
   metric_transformation {
     name      = "Gateway5xx"
@@ -73,7 +75,7 @@ resource "aws_cloudwatch_log_metric_filter" "refresh_reuse" {
 
   name           = "${local.name}-refresh-reuse"
   log_group_name = aws_cloudwatch_log_group.container_insights["application"].name
-  pattern        = "{ ($.kubernetes.container_name = \"backend\") && ($.log = %REFRESH_REUSE_DETECTED%) }"
+  pattern        = "{ ($.kubernetes.namespace_name = \"trippilot\") && ($.kubernetes.container_name = \"backend\") && ($.log = %REFRESH_REUSE_DETECTED%) }"
 
   metric_transformation {
     name      = "RefreshReuseDetected"
