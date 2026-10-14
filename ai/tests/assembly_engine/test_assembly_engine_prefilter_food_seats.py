@@ -44,10 +44,13 @@ from trippilot.domain.poi import counts_as_food, DataQuality, OpenHour, Poi, Poi
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)                 # 수요일 (weekday 2)
 _CLOSED = (OpenHour(day_of_week=0, open_min=600, close_min=1200),)   # 월요일만 — _DAY 휴무
-_CFG = AssemblyConfig()
+# 카테고리 하루 상한은 끈다 — 켜지면 프리필터의 카테고리별 몫이 비FOOD 점수 서열(① 성질)을
+# 바꾼다. 그 몫은 test_assembly_engine_daily_cap 소관, 여기는 FOOD 예약석만 본다.
+_NO_CAT_CAP = {"cafe_daily_max": 10_000, "category_daily_max": 10_000}
+_CFG = AssemblyConfig(**_NO_CAT_CAP)
 # 보정 off 격리 — FOOD 하루 상한도 끈다(food_daily_max 크게). 상한이 켜지면 프리필터 FOOD 몫
 # (#859 후속)이 '순수 점수 상위 60' 을 바꾸는데, 이 config 가 시험하는 성질은 예약석 0 뿐이다.
-_CFG_OFF = AssemblyConfig(meal_bonus=0.0, meal_penalty=0.0, food_daily_max=10_000)
+_CFG_OFF = AssemblyConfig(meal_bonus=0.0, meal_penalty=0.0, food_daily_max=10_000, **_NO_CAT_CAP)
 _SEATS = 2                              # 식사창 수 (점심·저녁)
 _STAY = stay_for(PoiCategory.FOOD, None)
 _FULL_DAY = (0, 24 * 60)

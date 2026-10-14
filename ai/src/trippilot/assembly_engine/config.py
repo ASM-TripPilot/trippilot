@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from trippilot.domain.common import Pace, TransportMode
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi import Poi, PoiCategory, counts_as_food
 
 
 def _default_speeds() -> dict[TransportMode, float]:
@@ -193,8 +193,31 @@ class AssemblyConfig:
     # 하드 제약 아님: OR 은 초과 1곳당 감점(목적함수만), 폴백은 초과분 FOOD 를 후순위(배제
     # 아님 — FOOD 만 남으면 배치). 끄려면 food_daily_max 를 크게 — penalty=0 은 OR 항만 끈다.
     food_daily_max: int = 3             # 점심·저녁 + 1(간식·야식 한 곳)
-    # 점수 축 [0,1] 전체 — 어떤 취향 갭으로도 초과 FOOD 가 이득이 되지 않는다.
-    food_excess_penalty: float = 1.0
+    # 한 곳이 얻을 수 있는 이득 전부(점수 ≤1 + 식사창 0.3 + 우천 실내 0.1 + 행사 0.15 = 1.55)보다
+    # 크다 — 점수 축 [0,1] 기준으로 어떤 취향 갭·보너스로도 초과분이 이득이 되지 않는다(규칙 점수는
+    # 클램프가 없어 1 을 넘을 수 있다 — 그 여유는 위 체감 항이 함께 막는다). 종전 1.0 은 저녁창
+    # FOOD(0.9+0.3)가 상한을 넘었다(아래 카테고리 상한이 비FOOD 를 묶자 남는 시간에 드러남).
+    # 아래 카테고리 하루 상한에도 같은 값을 쓴다(이름은 FOOD 상한이 먼저 생긴 흔적).
+    food_excess_penalty: float = 2.0
+    # ── 카테고리 하루 상한 (FOOD 상한과 같은 기구를 전 카테고리로 — 2026-10-14).
+    # 실측(로컬, 종로 연인·취향 문화예술/미식/쇼핑/관광 + 카페/전시/맛집투어): 하루 7곳 중 문화 5곳
+    # (DEV 같은 스냅숏은 카페 연속 4곳). 취향 상대 가점이 원하는 카테고리끼리 점수 차를 벌리면 위
+    # 체감 항(0.3)은 못 막는다 — 취향은 "비중을 늘리라"는 뜻이지 하루를 한 카테고리로 덮으라는
+    # 뜻이 아니다. 세는 것: 그 카테고리(FOOD 는 위 food_daily_max 가 counts_as_food 로 센다),
+    # 그날 고정 블록·필수 방문 포함. 감점·후순위·끄는 법은 FOOD 상한과 같다(크게 두면 꺼진다).
+    cafe_daily_max: int = 2             # 카페는 체류가 짧아 하루에 쉽게 몰린다
+    category_daily_max: int = 3         # 그 밖의 비FOOD 카테고리
+
+    def daily_caps(self, poi: Poi) -> tuple[tuple[object, int], ...]:
+        """POI 가 속한 하루 상한 묶음 (키, 상한) — OR 감점·폴백 후순위·프리필터 몫이 같이 쓴다.
+        음식 골목 ACTIVITY 는 FOOD 와 ACTIVITY 양쪽에 든다."""
+        caps: tuple[tuple[object, int], ...] = ()
+        if poi.category is not PoiCategory.FOOD:
+            caps = ((poi.category, self.cafe_daily_max if poi.category is PoiCategory.CAFE
+                     else self.category_daily_max),)
+        if counts_as_food(poi):
+            caps += (("food", self.food_daily_max),)
+        return caps
 
     def __post_init__(self) -> None:
         for name in ("or_tools_limit_ms", "or_tools_reorder_ms", "or_tools_min_ms",
@@ -215,7 +238,8 @@ class AssemblyConfig:
                      "rain_outdoor_penalty", "rain_indoor_bonus",
                      "event_bonus_scale",
                      "category_free_count", "category_excess_penalty",
-                     "food_daily_max", "food_excess_penalty"):
+                     "food_daily_max", "food_excess_penalty",
+                     "cafe_daily_max", "category_daily_max"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
         if not 0 <= self.rain_threshold_pct <= 100:

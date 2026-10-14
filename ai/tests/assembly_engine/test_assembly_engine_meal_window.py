@@ -244,7 +244,8 @@ def test_pbt_food_free_pool_is_unaffected_by_correction(setup) -> None:
 # 없고, 4슬롯이 들어간다 — f·c·f·c(식당 2) 대 f·c·c·c(식당 1)의 점수차 0.15 가 억제 0.2 보다 작다.
 
 _CFG_ONE_WIN = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
-                              lunch_window_min=(11 * 60, 15 * 60 + 30))
+                              lunch_window_min=(11 * 60, 15 * 60 + 30),
+                              cafe_daily_max=10_000)  # 카페 3곳 풀 — 카페 상한이 섞이지 않게
 _POOL_WIN = [("f1", PoiCategory.FOOD, .70), ("f2", PoiCategory.FOOD, .70),
              ("c1", PoiCategory.CAFE, .55), ("c2", PoiCategory.CAFE, .55),
              ("c3", PoiCategory.CAFE, .55)]

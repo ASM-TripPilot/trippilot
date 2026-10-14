@@ -35,8 +35,12 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource, count
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)
-_CFG = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
-_CFG_OFF = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50, food_daily_max=10_000)
+# 카테고리 하루 상한은 끈다 — 이 파일은 FOOD 상한 단독을 본다(비FOOD 6곳이 한 카테고리라 안 끄면
+# 상한이 비FOOD 를 3곳으로 묶어 남는 시간에 FOOD 가 들어간다 — 그쪽은 test_assembly_engine_daily_cap).
+_NO_CAT_CAP = {"cafe_daily_max": 10_000, "category_daily_max": 10_000}
+_CFG = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50, **_NO_CAT_CAP)
+_CFG_OFF = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50, food_daily_max=10_000,
+                          **_NO_CAT_CAP)
 _EST = TravelEstimator(_CFG)
 _F, _S = PoiCategory.FOOD, PoiCategory.SIGHT
 
@@ -139,7 +143,7 @@ def test_food_only_pool_fallback_places_all_food() -> None:
 
 
 def test_food_only_pool_ortools_places_up_to_cap() -> None:
-    """OR 은 초과분이 점수 축 전체(1.0)만큼 깎여 이득이 없다 — 상한만큼만 담는다(비지는 않음).
+    """OR 은 초과분이 한 곳 이득 전부보다 크게(food_excess_penalty) 깎여 이득이 없다 — 상한만큼만 담는다(비지는 않음).
 
     FOOD 인접 억제는 끈다 — 식당만 있는 풀에선 전부 인접이라 그 항이 상한보다 먼저 덜어낸다
     (그 동작은 test_assembly_engine_food_adjacent). 여기서는 상한 항 단독을 본다."""

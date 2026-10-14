@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 from trippilot.api.schemas import ItineraryPayload
+from trippilot.assembly_engine.config import AssemblyConfig
 
 from tests.fakes.fake_llm import FailingLlm
 from tests.api.test_e2e_boundary import (
@@ -23,10 +24,13 @@ from tests.api.test_e2e_boundary import (
 )
 
 _IDS = tuple(f"p{i}" for i in range(1, 7))
+# 풀이 명소 6곳뿐이라 카테고리 하루 상한(3)이 켜지면 셋이 차선책으로 빠져 차선책 설명 LLM 이
+# 불리고, 이 fake 는 그 응답을 모른다(차선책 설명 강등). 여기서 보는 것은 점수 신호뿐이다.
+_NO_CAT_CAP = AssemblyConfig(category_daily_max=10_000)
 
 
 def _generate(llm: object) -> dict:
-    with make_client(llm=llm) as client:
+    with make_client(llm=llm, assembly_config=_NO_CAT_CAP) as client:
         response = client.post("/ai/v1/itinerary/generate", json=_request())
     assert response.status_code == 200, response.text
     return response.json()
