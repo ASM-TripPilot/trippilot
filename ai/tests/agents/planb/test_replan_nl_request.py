@@ -436,3 +436,34 @@ def test_extraction_gets_enough_time_for_a_real_model_call() -> None:
     with TestClient(app, raise_server_exceptions=False) as client:
         client.post("/ai/v1/planb/replan", json=body)
     assert seen and seen[0] >= 4.5, seen
+
+
+def test_extraction_overlaps_the_directive_translation_instead_of_following_it() -> None:
+    """DEV 실측(2026-10-14): 번역 3.75s 와 추출 ~5s 가 **직렬로** 쌓여 구성 LLM 이 시한을 못 받았다.
+    추출은 후보 풀이 필요 없으므로 재계획 시작에 배경으로 띄운다 — **실행이 겹쳐야** 한다.
+
+    판정: 추출이 도는 **동안** 번역이 끝나야 한다. 추출을 맨 앞에서 동기로 돌리면 번역은 추출이
+    끝난 뒤에야 시작되므로 이 단언이 깨진다(순서만 보는 단언으로는 직렬·병렬을 못 가른다).
+    """
+    import threading
+    translated = threading.Event()
+    seen = {}
+
+    class _WaitsForTranslation(_StubExtractor):
+        def extract(self, *a, **kw):
+            seen["overlapped"] = translated.wait(3.0)
+            return super().extract(*a, **kw)
+
+    class _Translate:
+        def translate(self, *a, **kw):
+            translated.set()
+            return TypedResult(value=None, is_fallback=True, error="stub", call_record=None)
+
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    orch._request_extractor = _WaitsForTranslation(ExtractedRequest())
+    orch._directive_translator = _Translate()
+    orch._embedding = None  # 임베딩 매칭을 건너뛰어 번역까지 가게
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/planb/replan", json=_body(free_text="어디 조용한 데 없을까"))
+    assert seen.get("overlapped") is True, seen
