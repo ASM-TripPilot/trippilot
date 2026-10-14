@@ -211,7 +211,7 @@ _TRANSPORT_TOKENS: Mapping[str, TransportMode] = {
     "WALK": TransportMode.WALK, "도보": TransportMode.WALK,
     "PUBLIC": TransportMode.PUBLIC, "대중교통": TransportMode.PUBLIC,
     "CAR": TransportMode.CAR, "자가용": TransportMode.CAR,
-    "자동차": TransportMode.CAR, "렌터카": TransportMode.CAR,
+    "자동차": TransportMode.CAR, "렌터카": TransportMode.CAR, "자차": TransportMode.CAR,
 }
 _DEFAULT_DWELL_MIN = 60  # dwell_min 미지정 고정 블록의 기본 체류(분) — 계약 예시값
 
@@ -339,6 +339,25 @@ def _transport_from(request: schemas.GenerateItineraryRequest) -> TransportMode:
     return _transport_of(request.preference_profile.transport_modes)
 
 
+def _request_findings(request: schemas.GenerateItineraryRequest) -> list[str]:
+    """요청이 **조용히 다르게** 처리되는 지점 — 거부하지 않고 `degradations` 로 밝힌다(TRIP-1392, INV-4).
+
+    거부(4xx)하지 않는 이유: 백엔드가 정상으로 보내는 모양과 겹친다(2단계 생성은 일부 날짜만
+    보낸다 — 그래서 "날짜 누락"은 여기 없다). 없는 장소를 제외로 보내는 것은 무해한 무동작이라 싣지 않는다.
+    """
+    out: list[str] = []
+    ctx = request.trip_context
+    if any(not ctx.start_date <= w.date <= ctx.end_date for w in request.time_windows):
+        out.append("request:window_outside_trip")
+    excluded = set(request.excluded_poi_ids)
+    if any(b.poi_id in excluded for b in request.fixed_blocks):
+        out.append("request:fixed_overrides_excluded")  # 고정이 이긴다 — 사용자가 직접 고른 곳
+    modes = request.preference_profile.transport_modes
+    if modes and all(_TRANSPORT_TOKENS.get(t.strip().upper()) is None for t in modes):
+        out.append("request:transport_unknown")  # 대중교통으로 진행
+    return out
+
+
 def _transport_of(tokens: list[str]) -> TransportMode:
     """첫 인식 토큰 → 수단, 없으면 PUBLIC. generate·repair 가 같은 규칙을 쓴다."""
     for text in tokens:
@@ -370,7 +389,9 @@ def _fixed_block(block: schemas.FixedBlockSchema, tz: timezone) -> FixedBlock:
         raise ValueError(
             f"시각 없는 고정 블록: {block.poi_id} — 시각 미지정은 고정(HC3)으로 표현 불가"
         )
-    dwell = block.dwell_min if block.dwell_min is not None else _DEFAULT_DWELL_MIN
+    # 0분은 미지정과 같다 — 시각 없는 필수 방문(`_required_visit`)과 같은 규칙. 0 을 그대로 쓰면
+    # end == start 라 TimeWindow 가 거부해, 스키마가 허용(ge=0)한 값이 422 였다(TRIP-1391).
+    dwell = block.dwell_min or _DEFAULT_DWELL_MIN
     start = datetime.combine(block.date, block.start, tzinfo=tz)
     return FixedBlock(
         poi_id=PoiId(block.poi_id),
@@ -412,12 +433,14 @@ def _domain_generate_request(
         raise ValueError("anchors 최소 1개 필요 — 후보 풀 기준점(숙소 앵커) 없음")
     anchor_schema = min(request.anchors, key=lambda a: a.date)
     days = tuple(sorted({w.date for w in request.time_windows}))
-    # 도메인 day_window는 전 일자 공용 1개(시각 성분만 쓰인다) — 첫 일자의 창을 채택.
-    first_window = min(request.time_windows, key=lambda w: w.date)
-    day_window = TimeWindow(
-        start=datetime.combine(days[0], first_window.start, tzinfo=tz),
-        end=datetime.combine(days[0], first_window.end, tzinfo=tz),
-    )
+    # 창은 일자마다 다르다(도착일 15시부터·출발일 12시까지, TRIP-1389) — 일자별로 넘긴다.
+    # `day_window`(공용)는 첫 일자의 창 — 일자별 창이 없는 날·시간대 기준으로만 쓰인다.
+    day_windows = {
+        w.date: TimeWindow(start=datetime.combine(w.date, w.start, tzinfo=tz),
+                           end=datetime.combine(w.date, w.end, tzinfo=tz))
+        for w in request.time_windows
+    }
+    day_window = day_windows[days[0]]
     # 와이어에 사용자 식별자가 없다 — trip_id 파생 principal로 소유자 검사(D31)를
     # 자기 참조로 통과시키고, 페르소나 실체는 주입된 ContextStore가 공급한다.
     owner = f"trip:{request.trip_id}"
@@ -426,6 +449,7 @@ def _domain_generate_request(
         anchor=GeoPoint(anchor_schema.lat, anchor_schema.lng),
         days=days,
         day_window=day_window,
+        day_windows=day_windows,
         budget=_budget_from(request),
         transport=_transport_from(request),
         pace=_pace_from(request),
@@ -1387,12 +1411,14 @@ def _replan_fixed_blocks(
         if (slot.poi_id, start) in seen:
             continue
         seen.add((slot.poi_id, start))
+        # 자정을 넘는 슬롯(`ends_next_day`)의 `end_at` 은 다음 날 시각이다 — 같은 날로 붙이면
+        # end < start 라 TimeWindow 가 거부해 422 였다(TRIP-1390). BE 잠금(`dwellMinutes`)과 같은 해석.
+        end = datetime.combine(date, slot.end_at, tzinfo=tz)
+        if slot.ends_next_day or end <= start:
+            end += timedelta(days=1)
         blocks.append(FixedBlock(
             poi_id=PoiId(slot.poi_id),
-            window=TimeWindow(
-                start=start,
-                end=datetime.combine(date, slot.end_at, tzinfo=tz),
-            ),
+            window=TimeWindow(start=start, end=end),
             reason="current_slot_fixed",
         ))
     return tuple(blocks)
@@ -1555,7 +1581,7 @@ class WiredItineraryOrchestrator:
         """
         runs = _anchor_runs(request)
         if len(runs) == 1:
-            return self._generate_run(request)
+            return self._with_findings(request, self._generate_run(request))
         meta = request.request_meta
         entered_ms = self._clock.monotonic_ms()
         fixed = {b.poi_id for b in request.fixed_blocks}
@@ -1580,7 +1606,20 @@ class WiredItineraryOrchestrator:
                 _run_request(request, dates, [p for p in placed if p not in fixed], run_meta)))
             placed += [str(s.poi_id) for d in outs[-1].solution.days for s in d.slots]
         merged = _merged_outcomes(outs)
-        return replace(merged, degradations=(*merged.degradations, *degradations))
+        return self._with_findings(
+            request, replace(merged, degradations=(*merged.degradations, *degradations)))
+
+    @staticmethod
+    def _with_findings(request: schemas.GenerateItineraryRequest, out: WiredOutcome) -> WiredOutcome:
+        """요청 이상(`_request_findings`) + 빈 하루를 `degradations` 에 싣는다(TRIP-1392).
+
+        빈 하루(창이 짧거나 후보가 0곳)는 200 으로 나가도 되지만 말없이 나가면 안 된다(INV-4).
+        """
+        found = _request_findings(request)
+        filled = {d.date for d in (out.solution.days if out.solution else ()) if d.slots}
+        if any(w.date not in filled for w in request.time_windows):
+            found.append("generate:empty_day")
+        return replace(out, degradations=tuple(dict.fromkeys((*out.degradations, *found))))
 
     def _generate_run(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
         meta = request.request_meta

@@ -291,7 +291,8 @@ class OrToolsAssembler:
                    det_limit: float | None = None) -> list[VisitSlot] | None:
         day_started = time.monotonic()
         tz = problem.day_window.start.tzinfo
-        ws, we = _mod(problem.day_window.start), _mod(problem.day_window.end)
+        win = problem.window_on(day)  # 일자별 창 (TRIP-1389)
+        ws, we = _mod(win.start), _mod(win.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
         fixed_ids = {fb.poi_id for fb in fixed}
         # 시각 없는 필수 방문 (TRIP-1249) — 시각은 자유, 방문은 목적함수의 지배 항(`_required_terms`)

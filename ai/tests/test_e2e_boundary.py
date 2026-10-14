@@ -26,6 +26,7 @@ import json
 import uuid
 from datetime import date
 
+import pytest
 from fastapi.testclient import TestClient
 
 from trippilot.agents.schedule.budget import OrchestratorConfig
@@ -345,6 +346,81 @@ def test_llm_and_primary_assembly_down_falls_back_to_rule_chain() -> None:
     assert body["is_fallback"] is True              # AI가 이미 마친 폴백 결과물
     assert body["solve_mode"] == "RULE_FALLBACK"
     assert _slot_ids(body)                          # 빈손이 아니다 (침묵 실패 금지)
+
+
+def test_fixed_block_zero_dwell_is_not_422() -> None:
+    """TRIP-1391 — 스키마는 dwell_min ≥ 0 인데 0 이면 end == start 로 422 였다. 0 = 미지정(기본 체류)."""
+    zero = ({"poi_id": "p1", "date": _DAY1.isoformat(), "start": "10:00", "dwell_min": 0},)
+    with make_client() as client:
+        response = client.post("/ai/v1/itinerary/generate", json=_request(fixed_blocks=zero))
+    assert response.status_code == 200, response.text
+    pinned = [s for d in response.json()["days"] for s in d["slots"] if s["poi_id"] == "p1"]
+    assert pinned and pinned[0]["start_at"].startswith("10:00") and pinned[0]["is_fixed"] is True
+    assert pinned[0]["end_at"] > pinned[0]["start_at"]
+
+
+# ── ③″ 조용한 처리 밝히기 (TRIP-1392) ─────────────────────────────────
+
+
+def _with(**over) -> dict:
+    body = _request()
+    for path, value in over.items():
+        if path == "transport_modes":
+            body["preference_profile"]["transport_modes"] = value
+        else:
+            body[path] = value
+    return body
+
+
+@pytest.mark.parametrize("body,code", [
+    (_with(time_windows=[{"date": "2026-09-01", "start": "09:00", "end": "21:00"}]),
+     "request:window_outside_trip"),
+    (_with(fixed_blocks=[{"poi_id": "p1", "date": _DAY1.isoformat(), "start": "10:00"}],
+           excluded_poi_ids=["p1"]), "request:fixed_overrides_excluded"),
+    (_with(transport_modes=["킥보드"]), "request:transport_unknown"),
+    (_with(time_windows=[{"date": _DAY1.isoformat(), "start": "09:00", "end": "09:30"}]),
+     "generate:empty_day"),
+], ids=["window_outside_trip", "fixed_and_excluded", "transport_unknown", "empty_day"])
+def test_generate_names_what_it_silently_adjusted(body: dict, code: str) -> None:
+    """200 이어도 무엇을 다르게 처리했는지 `degradations` 에 싣는다 — 말없이 나가지 않는다(INV-4)."""
+    with make_client() as client:
+        response = client.post("/ai/v1/itinerary/generate", json=body)
+    assert response.status_code == 200, response.text
+    assert code in response.json()["degradations"], response.json()["degradations"]
+
+
+def test_generate_reads_jacha_as_car_and_reports_nothing_for_a_clean_request() -> None:
+    with make_client() as client:
+        clean = client.post("/ai/v1/itinerary/generate", json=_request()).json()
+        jacha = client.post("/ai/v1/itinerary/generate",
+                            json=_with(transport_modes=["자차"])).json()
+    assert not [d for d in clean["degradations"] if d.startswith(("request:", "generate:empty"))]
+    assert "request:transport_unknown" not in jacha["degradations"]
+
+
+# ── ③′ 일자별 시간창 (TRIP-1389) ─────────────────────────────────────
+# 회귀: 첫 날 창이 전 일자에 적용돼, 출발일 12시까지인 3일 여행에 출발일 창 밖 슬롯이 놓였다.
+
+_DAY3 = date(2026, 8, 7)
+_WINDOWS = {_DAY1: ("15:00", "21:00"), _DAY2: ("09:00", "21:00"), _DAY3: ("09:00", "12:00")}
+_MANY_POIS = tuple(_poi(i, 0.003 * (i - 1)) for i in range(1, 19))
+
+
+@pytest.mark.parametrize("assembly_config", [None, AssemblyConfig(or_tools_min_ms=10**9)],
+                         ids=["or_tools", "rule_fallback"])
+def test_generate_keeps_each_day_inside_its_own_window(assembly_config) -> None:
+    body = _request(dates=tuple(_WINDOWS))
+    body["time_windows"] = [{"date": d.isoformat(), "start": s, "end": e}
+                            for d, (s, e) in _WINDOWS.items()]
+    with make_client(pois=_MANY_POIS, assembly_config=assembly_config) as client:
+        response = client.post("/ai/v1/itinerary/generate", json=body)
+        assert response.status_code == 200, response.text
+        out = response.json()
+        days = {d["date"]: d["slots"] for d in out["days"]}
+        assert days[_DAY1.isoformat()] and days[_DAY3.isoformat()], out
+        for d, (start, end) in _WINDOWS.items():
+            for slot in days.get(d.isoformat(), []):
+                assert start <= slot["start_at"][:5] and slot["end_at"][:5] <= end, (d, slot)
 
 
 # ── ④ validate · repair 관통 ─────────────────────────────────────────

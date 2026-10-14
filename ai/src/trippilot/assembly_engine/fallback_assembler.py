@@ -161,7 +161,7 @@ class RuleFallbackAssembler:
                 if fb_poi is not None:
                     cat_count[fb_poi.category] += 1
                     food_count += counts_as_food(fb_poi)
-            day_end = _at(day, problem.day_window.end)
+            day_end = _at(day, problem.window_on(day).end)
             windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
             meal_done = [False] * len(windows)
             # ①′ 시각 없는 필수 방문 (TRIP-1249) — 고정 블록 사이 틈에서 가장 이른 가능 시각.
@@ -228,7 +228,7 @@ class RuleFallbackAssembler:
                 last = slots[k] if k >= 0 else None
                 nxt = slots[k + 1] if k + 1 < len(slots) else None
                 ref = last.end_at if last is not None \
-                    else _at(day, problem.day_window.start)
+                    else _at(day, problem.window_on(day).start)
                 if not_before is not None and ref < not_before:
                     ref = not_before  # 식사 창 판정도 실제로 놓일 수 있는 시각 기준
                 ref_mod = ref.hour * 60 + ref.minute
@@ -292,7 +292,7 @@ class RuleFallbackAssembler:
                         continue
                     stay = stay_for(poi.category, problem.pace)
                     if last is None:
-                        depart = _at(day, problem.day_window.start)
+                        depart = _at(day, problem.window_on(day).start)
                         travel_min = 0
                         if problem.anchor is not None:
                             travel_min = self._est.estimate(
@@ -377,13 +377,13 @@ class RuleFallbackAssembler:
         **창을 먼저** 돈다 — 같은 창 안에서는 이른 틈이 이긴다. 이웃 좌표를 모르면 그 틈은
         건너뛴다(0분 이동 금지, TRIP-1177).
         """
-        base = _at(day, problem.day_window.start).replace(hour=0, minute=0)
+        base = _at(day, problem.window_on(day).start).replace(hour=0, minute=0)
 
         def mins(dt: datetime) -> int:
             return int((dt - base).total_seconds() // 60)
 
-        ws = mins(_at(day, problem.day_window.start))
-        we = mins(_at(day, problem.day_window.end))
+        ws = mins(_at(day, problem.window_on(day).start))
+        we = mins(_at(day, problem.window_on(day).end))
         floor = (mins(not_before) + anchor_minutes(problem, poi, self._est)
                  if not_before is not None else None)
 
