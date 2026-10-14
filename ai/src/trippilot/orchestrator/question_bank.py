@@ -252,8 +252,9 @@ def bank_fingerprint(entries: Sequence[BankEntry]) -> str:
 
 
 def dump_bank_vectors(path: Path, entries: Sequence[BankEntry], model: str, dim: int,
-                      vectors: Sequence[Sequence[float]]) -> None:
-    """반정밀도(fp16)로 저장 — 485×1024 가 약 1MB. 코사인 오차는 1e-4 수준(1차 임계 간격보다 훨씬 작다)."""
+                      vectors: Sequence[Sequence[float]], *, provenance: Mapping[str, str] | None = None) -> None:
+    """반정밀도(fp16)로 저장 — 485×1024 가 약 1MB. `provenance`(엔진·모델 리비전·게이트 결과)는 사람이 읽는
+    기록이다(BR-MLO-05 모델 동일성 근거) — 적재 판정은 model·dim·지문만 본다."""
     import base64
     import gzip
     import json
@@ -264,7 +265,7 @@ def dump_bank_vectors(path: Path, entries: Sequence[BankEntry], model: str, dim:
     flat = [x for v in vectors for x in v]
     blob = base64.b64encode(struct.pack(f"<{len(flat)}e", *flat)).decode()
     doc = {"model": model, "dim": dim, "count": len(entries),
-           "fingerprint": bank_fingerprint(entries), "f16_b64": blob}
+           "fingerprint": bank_fingerprint(entries), "provenance": dict(provenance or {}), "f16_b64": blob}
     path.write_bytes(gzip.compress(json.dumps(doc).encode(), mtime=0))
 
 
