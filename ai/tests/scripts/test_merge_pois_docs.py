@@ -17,7 +17,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
 
 import merge_pois_docs as M  # noqa: E402
 from collect_pois import load_closed_refs  # noqa: E402
@@ -244,7 +244,7 @@ def test_근거_파일_갱신_절차는_공유본_병합을_같은_PR에_넣는�
     그래서 갱신 절차 두 벌(README · 담당자에게 메일로 가는 리마인더 이슈 본문)이 모두 공유본 병합을 같은
     PR 에 넣으라고 해야 한다 — 절차가 두 곳이라 한쪽만 고쳐지기 쉽다(2026-10-05 리뷰에서 실제로 한쪽이 빠졌다).
     """
-    cmd = "scripts/merge_pois_docs.py -o data/collected_pois.json data/collected_pois.json"
+    cmd = "scripts/collect/merge_pois_docs.py -o data/collected_pois.json data/collected_pois.json"
     readme = (_DATA / "README.md").read_text(encoding="utf-8")
     section = readme.split("## `poi_business_status.json`", 1)[1].split("\n## ", 1)[0]
     assert cmd in section

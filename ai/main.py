@@ -108,7 +108,7 @@ def _openai_llm_and_model() -> tuple[object, str]:
 
     openai SDK는 지연 import — SDK 의존은 c1/adapters 한정(TRIP-340 아키텍처 규칙)
     이고, 클라이언트 생성만은 조립 진입점인 이 파일(src 밖)이 맡는다
-    (scripts/smoke_llm.py `_build_adapter`와 동형). 키 누락·잘못된 OPENAI_API 값은
+    (scripts/smoke/smoke_llm.py `_build_adapter`와 동형). 키 누락·잘못된 OPENAI_API 값은
     여기서 즉시 예외 → 기동 실패로 크게 드러난다.
     """
     api_key = _env("OPENAI_API_KEY")

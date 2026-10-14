@@ -44,7 +44,7 @@ jobs:
         env:
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY_AI }}
         run: |
-          uv run python scripts/probe_poi_existence.py \
+          uv run python scripts/probe/probe_poi_existence.py \
             --sample "${{ inputs.sample }}" \
             --radius "${{ inputs.radius }}" \
             --out probe.json | tee -a "$GITHUB_STEP_SUMMARY"

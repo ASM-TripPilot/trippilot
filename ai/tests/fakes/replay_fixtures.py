@@ -42,7 +42,7 @@ class ReplayMissError(RuntimeError):
     """기록에 없는 입력 — 조용히 다른 값을 돌려주지 않는다.
 
     보통 원인은 하나다: 뱅크·평가셋·프롬프트·모델 중 무언가가 기록 이후에 바뀌었다.
-    해법도 하나다 — 기록을 다시 뜬다(`scripts/trace_intents.py --record`).
+    해법도 하나다 — 기록을 다시 뜬다(`scripts/intent/trace_intents.py --record`).
     """
 
 

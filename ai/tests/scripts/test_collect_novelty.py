@@ -1,6 +1,6 @@
 """수집 신규율 진단 검증 — 순수 로직만, 실 호출 0건 (TRIP-348).
 
-스크립트 본체(scripts/collect_novelty.py)는 pytest 대상이 아니지만, **판정**은
+스크립트 본체(scripts/collect/collect_novelty.py)는 pytest 대상이 아니지만, **판정**은
 워크플로를 빨간불로 만드는 자리라 여기서 못 박는다:
   ① 분류 — 신규 / 갱신(modified_time 변경) / 반복(같은데 또 실림)
   ② 제자리걸음 판정 — 오탐(미수집 지역 첫 수집)과 진짜 회귀를 가르는가
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
 
 from collect_novelty import classify, diagnose, stall_check  # noqa: E402
 

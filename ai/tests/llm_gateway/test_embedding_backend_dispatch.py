@@ -10,7 +10,7 @@
 "바꿨는데 아무것도 안 달라졌다"를 한참 뒤진다. 그래서 기동에서 죽인다.
 
 여기서 추론 정확성은 검증하지 않는다 — 벡터가 같은지는 모킹으로 알 수 없고
-`scripts/measure_triton_embedding.py` 의 동등성 판정(코사인 ≥ 0.9999 · top-4 전부 일치)이
+`scripts/measure/measure_triton_embedding.py` 의 동등성 판정(코사인 ≥ 0.9999 · top-4 전부 일치)이
 그 자리다(BR-MLO-05).
 """
 

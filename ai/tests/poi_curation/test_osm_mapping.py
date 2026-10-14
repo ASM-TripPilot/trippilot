@@ -151,7 +151,7 @@ def test_수집_스크립트의_필터가_채택_표와_정확히_대응한다()
     **그 축은 조용히 0건**이다 — 매핑은 되는데 애초에 받아오질 않는다.
     반대로 필터만 늘리면 받아온 뒤 전부 드롭돼 Overpass 호출만 낭비한다.
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
     import collect_osm  # noqa: PLC0415 — scripts/ 는 패키지가 아니다
 
     parsed: set[tuple[str, str]] = set()
@@ -770,7 +770,7 @@ def test_라이선스_상수가_조용히_사라지지_않는다() -> None:
 def test_수집_스크립트가_라이선스_상수를_그대로_싣는다() -> None:
     """`collect_osm` 이 자기 문자열을 따로 적으면 두 곳이 어긋난다 — 상수를
     import 해서 쓰는지 확인한다(산출 JSON 의 `license`·`attribution`)."""
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
     import collect_osm  # noqa: PLC0415 — scripts/ 는 패키지가 아니다
 
     assert collect_osm.LICENSE is LICENSE

@@ -1,6 +1,6 @@
 """smoke_planb 순수 로직 검증 — 실 호출 0건 (fake만, D37) (TRIP-507).
 
-스크립트 본체(scripts/smoke_planb.py)는 pytest 대상이 아니다 — 실 pgvector·실 LLM은
+스크립트 본체(scripts/smoke/smoke_planb.py)는 pytest 대상이 아니다 — 실 pgvector·실 LLM은
 사람이 손으로 실행할 때만 붙는다. 그 대신 **스크립트가 소유한 순수 로직**과, 스모크
 단언들이 딛고 있는 **구조적 전제**를 여기서 fake 데이터로만 고정한다:
 
@@ -45,7 +45,7 @@ from tests.fakes.in_memory_vector_store import InMemoryVectorStore
 from tests.generators.poi import candidate_pools, pois
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "smoke"))
 
 from smoke_planb import (
     MIN_INDOOR,  # noqa: E402

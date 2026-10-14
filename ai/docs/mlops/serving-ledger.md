@@ -12,7 +12,7 @@
 |---|---|---|
 | gpu_quota | no | TRIP-961 — GPU NodePool·서비스 쿼터가 오면 yes |
 | zero_billing_verified | no | TRIP-968 — EKS GPU 무요청 24h 청구 0 확인 후 yes |
-| eks_p95_ms | - | EKS 첫 측정(콜드스타트 포함 p95, `scripts/smoke_reminder_copy.py`) 후 숫자 |
+| eks_p95_ms | - | EKS 첫 측정(콜드스타트 포함 p95, `scripts/smoke/smoke_reminder_copy.py`) 후 숫자 |
 | fill_deadline_ms | 8000 | 백엔드 `ReminderCopyProperties.deadlineMs` 기본값 — 바뀌면 여기도 |
 
 ## 규칙 (판정기가 적용한다)

@@ -8,7 +8,7 @@
      B 는 "A 목적값 이상"을 지키는데 이 항이 그 목적에 들어 있다). 계수 정수 반올림 몫만 여유.
   ② 폴백은 풀마다가 아니라 집계로 — 그리디는 어느 삽입이 마지막인지 모른다.
   ③ 직렬화 왕복 · 키 없는 기존 덤프
-  (None 이면 항 없음 — 종전과 같은 해. 확인은 `scripts/measure_assembly_stability.py` 전후 동일.)
+  (None 이면 항 없음 — 종전과 같은 해. 확인은 `scripts/measure/measure_assembly_stability.py` 전후 동일.)
 """
 
 from __future__ import annotations

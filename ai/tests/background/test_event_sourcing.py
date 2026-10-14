@@ -151,7 +151,7 @@ def test_store_purges_only_beyond_grace(tmp_path) -> None:
 def test_collect_region_glue(tmp_path) -> None:
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import collect_region
 
     class _RoutingHttp:
@@ -192,7 +192,7 @@ def test_collect_region_geocodes_via_address_fallback(tmp_path) -> None:
     """행사명 질의 실패 → 주소 폴백 질의로 좌표 확보 (첫 배치 실측 1/4 대응)."""
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import collect_region
 
     class _AddressOnlyHttp:
@@ -234,7 +234,7 @@ def test_kakao_geocode_chain(tmp_path) -> None:
     """카카오 배선 시 체인: 네이버 행사명 → 카카오 주소 → 카카오 키워드 (TRIP-421)."""
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import _geocode
     from trippilot.background.kakao_local import KakaoLocalClient
 
@@ -270,7 +270,7 @@ def test_geocode_step_failure_falls_through(tmp_path) -> None:
     """지오코딩 HTTP 실패(403 등)는 배치를 죽이지 않는다 — 다음 단계 시도 후 좌표만 포기."""
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import _geocode
     from trippilot.background.kakao_local import KakaoLocalClient
 
@@ -294,7 +294,7 @@ def test_region_bounds_reject_cross_region_coord() -> None:
     """서울 행사에 부산 좌표(실측 오매칭) — 정합 위반은 좌표 폐기."""
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import coord_in_region
 
     busan = GeoPoint(35.327, 129.295)
@@ -307,7 +307,7 @@ def test_region_bounds_reject_cross_region_coord() -> None:
 def test_generic_name_filter() -> None:
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import is_generic_name
 
     assert is_generic_name("콘서트-광주", "광주") is True
@@ -338,7 +338,7 @@ def test_dedup_absorbs_name_variants(tmp_path) -> None:
 def test_sanitize_retroactively_cleans_store(tmp_path) -> None:
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import coord_in_region, is_generic_name
 
     store = JsonEventStore(tmp_path / "e.json")
@@ -418,7 +418,7 @@ def test_주소_꼬리를_정리한다(address, expected) -> None:
     """지오코더가 못 읽는 군더더기(일원·나열·괄호·우편번호)를 걷어낸다."""
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import clean_address
 
     assert clean_address(address) == expected
@@ -444,7 +444,7 @@ def test_행정단위만_있는_주소를_가려낸다(address, is_admin) -> Non
     """
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import is_admin_only
 
     assert is_admin_only(address) is is_admin
@@ -463,7 +463,7 @@ def test_날짜_있는_스니펫이_캡_안에_먼저_들어간다(tmp_path, mon
     """
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     import collect_events as ce
 
     monkeypatch.setattr(ce, "SNIPPET_CAP", 3)
@@ -510,7 +510,7 @@ def test_같은_입력이면_같은_순서_결정론(tmp_path) -> None:
     실패를 재현할 수 있다. 같은 그룹 안에서는 원래 순서가 유지된다(stable sort)."""
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     import collect_events as ce
 
     pairs = [("a 축제", "설명"), ("b 축제", "9월 1일"), ("c 축제", "설명"),
@@ -531,7 +531,7 @@ def test_LLM_폴백_지역은_coverage_를_찍지_않고_성공_0건은_찍는�
     import sys
     from pathlib import Path as _P
     from types import SimpleNamespace
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     from collect_events import collect_region
 
     class _Http:
@@ -562,7 +562,7 @@ def test_잡_서머리가_폴백_지역을_정상_0건과_가른다(tmp_path, mo
     import json
     import sys
     from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts"))
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
     import collect_events as ce
 
     zero = {"snippets": 40, "extracted": 0, "geocoded": 0, "added": 0, "backfilled": 0}

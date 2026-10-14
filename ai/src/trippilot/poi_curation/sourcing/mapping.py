@@ -681,7 +681,7 @@ def _truncate(text: str | None, limit: int) -> str | None:
 # 오차와 무관하므로 반경을 넓히는 대신 주소 키를 쓴다 (반경을 넓히면 옆 가게를
 # 병합한다).
 #
-# 규칙 자체는 `scripts/match_business_status.py` 의 폐업 대조에서 검증된 것과
+# 규칙 자체는 `scripts/classify/match_business_status.py` 의 폐업 대조에서 검증된 것과
 # 같다(주소 키 83.3%, 주소O이름X 는 붙이지 않음). 다만 **정의가 지금 두 곳에
 # 있다** — 그쪽은 stdlib 만으로 도는 독립 스크립트이고 자체 테스트가 물고 있어
 # 이번 변경에서 건드리지 않았다. 두 곳이 갈라지면 "폐업으로 붙인 가게"와

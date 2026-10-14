@@ -53,7 +53,7 @@ from tests.generators.poi_curation import (
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식으로 경로를 붙인다
 # (test_match_business_status.py 와 동일 관용구, stdlib 전용 모듈이라 부작용 없음).
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "classify"))
 
 from match_business_status import addr_key as script_addr_key  # noqa: E402
 

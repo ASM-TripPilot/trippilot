@@ -1,6 +1,6 @@
 """smoke_itinerary 순수 로직 검증 — 실 호출 0건 (fake만, D37) (TRIP-372).
 
-스크립트 본체(scripts/smoke_itinerary.py)는 pytest 대상이 아니지만, 선택·샘플
+스크립트 본체(scripts/smoke/smoke_itinerary.py)는 pytest 대상이 아니지만, 선택·샘플
 순수 로직과 기록 스키마는 여기서 fake 데이터로 검증한다:
   ① 날짜 시드 결정론 — 같은 (날짜, 데이터)는 항상 같은 선택, 날짜가 바뀌면 변주
   ② 반경 샘플 규칙 — 앵커 포함 6~8개, 전부 앵커 8km 이내
@@ -26,7 +26,7 @@ from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "smoke"))
 
 from smoke_itinerary import (  # noqa: E402
     RehearsalError,

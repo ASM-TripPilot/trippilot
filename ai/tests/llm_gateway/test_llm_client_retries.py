@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "smoke"))
 import smoke_llm  # noqa: E402
 
 import main  # noqa: E402

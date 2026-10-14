@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
+_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts" / "measure"
 _spec = importlib.util.spec_from_file_location(
     "measure_embedding_container", _SCRIPTS / "measure_embedding_container.py"
 )

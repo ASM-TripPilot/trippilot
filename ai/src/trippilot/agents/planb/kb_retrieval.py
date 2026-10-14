@@ -44,7 +44,7 @@ KB_COLLECTIONS: Mapping[KbKind, str] = MappingProxyType(
 # planb-rag-design §9 미결 #4 "20 (임시), 실험 후 조정" — 2026-09-01 실측으로 확정.
 # 20 은 KB 총량(24건)보다 커서 **정렬만 하고 한 건도 거르지 않는 no-op** 이었다.
 #
-# KB-3 24건 · 질의 6종 실측 (재현: `scripts/measure_kb_topk.py`):
+# KB-3 24건 · 질의 6종 실측 (재현: `scripts/measure/measure_kb_topk.py`):
 #     top_k |  2     3     4     5     6     8    20
 #     정밀도 | 1.000 0.833 0.708 0.600 0.528 0.438 0.208
 #     길이   | 149   224   292   369   443   579  1398 자  (프롬프트 골격 630자 대비)

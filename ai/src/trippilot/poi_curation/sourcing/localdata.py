@@ -12,7 +12,7 @@
 (`gate_against_tourapi`).
 
 순수 함수만 둔다 — CSV 읽기·좌표 변환(EPSG:5174 → WGS84, pyproj)·파일 쓰기는
-`ai/scripts/collect_localdata.py` 몫이고 변환기는 주입받는다. 산출은 TourAPI 와 같은 **등록
+`ai/scripts/collect/collect_localdata.py` 몫이고 변환기는 주입받는다. 산출은 TourAPI 와 같은 **등록
 제안** 문서일 뿐이다 — 백엔드 C7 수신 게이트를 다시 탄 뒤에야 후보가 된다(INV-1).
 """
 
@@ -40,7 +40,7 @@ from trippilot.poi_curation.sourcing.pipeline import SCHEMA_VERSION
 SOURCE_NAME = "LOCALDATA"   # 백엔드 PoiSource 어휘 (V2.61 poi_source_check)
 SOURCE = "localdata"        # SourcingCandidate.source — 잠정 ID `localdata-<관리번호>`
 KIND = "일반음식점"           # 인허가 업종 (SourcingCandidate.kind — TourAPI 의 contentTypeId 자리)
-# 영업 중 표기. `scripts/match_business_status.py` 의 OPEN_STATUS 와 같은 값이다 — 원본의
+# 영업 중 표기. `scripts/classify/match_business_status.py` 의 OPEN_STATUS 와 같은 값이다 — 원본의
 # 영업상태명은 이것과 `폐업` 두 값뿐이다(2026-09 원본 229만 행 실측).
 OPEN_STATUS = "영업/정상"
 

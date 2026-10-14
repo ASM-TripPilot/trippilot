@@ -124,7 +124,7 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
             # 오프라인 배치 — 실패하면 그 seed 의 변형을 못 만들 뿐, 런타임 경로가 아니라
             # 강등할 대상이 없다. 스크립트가 사유를 제안 파일의 rejected 에 남긴다
-            # (scripts/augment_bank.py).
+            # (scripts/intent/augment_bank.py).
             LlmFeature.BANK_AUGMENT: ("llm_augment", "(none)"),
             # api/wiring.py `edit` — 자연어 번역 실패는 TRANSLATION_FAILED 정직 보고.
             # 편집은 적용되지 않고, 구조화 진입은 무영향이다.
@@ -133,7 +133,7 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # 해석만 빠진다. 그래서 to_mode 가 "실패"가 아니라 "칩만"이다.
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: (
                 "llm_directive_translation", "chips_only"),
-            # scripts/collect_events.py `collect_region` — 추출 0건으로 그 회차를
+            # scripts/collect/collect_events.py `collect_region` — 추출 0건으로 그 회차를
             # 넘긴다(대체 추출 경로 없음).
             LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
             # agents/reflect/highlight_rule.py — 방문당 1장·시간 분산 결정론 선별.
