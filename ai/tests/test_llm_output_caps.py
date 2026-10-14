@@ -38,6 +38,7 @@ from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.preference import (
     PreferenceScoringWorker,
     plan_chunks,
+    SCORE_TOKENS_PER_ITEM,
     score_chunk_cap,
 )
 from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError
@@ -108,6 +109,7 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.SHARE_CARD_COPY: 2048,
         # 다시 짜기 하루 구성 — 고른 곳 ≤ 8건 × 이유 + fable 사고 토큰
         LlmFeature.REPLAN_COMPOSITION: 2048,
+        LlmFeature.PREFERENCE_SCORING: 2048,
     }.get(feature, 1024)
     assert [r.max_tokens for r in llm.requests] == [expected]
 
@@ -117,7 +119,7 @@ def test_explicit_shared_cap_still_applies_to_unmapped_features() -> None:
     cfg = C1Config(model_ids=_CFG.model_ids, max_tokens=4096)
     assert cfg.max_tokens_for(LlmFeature.EVENT_EXTRACTION) == 4096
     assert cfg.max_tokens_for(LlmFeature.EXPLANATION) == 4096
-    assert _CFG.max_tokens_for(LlmFeature.PREFERENCE_SCORING) == 1024
+    assert _CFG.max_tokens_for(LlmFeature.PREFERENCE_SCORING) == 2048  # 기능별 지정 — 공용 값을 안 따른다
 
 
 @pytest.mark.parametrize("feature", list(LlmFeature))
@@ -173,6 +175,19 @@ def test_default_chunk_cap_fits_scoring_output_budget() -> None:
     cap = score_chunk_cap(_CFG)
     assert cap <= 29  # 실측: 29건 9/10 성공, 32건 1/10
     assert cap >= _CFG.score_chunk_min
+
+
+def test_scoring_cap_leaves_room_for_thinking_without_growing_the_chunk() -> None:
+    """출력 상한을 올린 이유는 사고 토큰(fable)이지 청크를 키우려는 게 아니다 — 2026-10-13 DEV 45회 중 3회가
+    정확히 1024 에서 잘렸다. 청크는 종전 25 그대로, 청크 기대 출력 + 사고 몫 ≤ 상한."""
+    from trippilot.llm_gateway.workers.preference import SCORE_THINKING_RESERVE_TOKENS
+    cap_tokens = _CFG.max_tokens_for(LlmFeature.PREFERENCE_SCORING)
+    assert score_chunk_cap(_CFG) == 25
+    assert score_chunk_cap(_CFG) * SCORE_TOKENS_PER_ITEM + SCORE_THINKING_RESERVE_TOKENS <= cap_tokens
+    # 상한을 1024 로 되돌리는 설정이 와도 청크 0·폭증 없이 절반 몫만 뺀다
+    small = C1Config(model_ids=_CFG.model_ids,
+                     feature_max_tokens={LlmFeature.PREFERENCE_SCORING: 1024})
+    assert score_chunk_cap(small) == 512 // SCORE_TOKENS_PER_ITEM
 
 
 @settings(max_examples=200, deadline=None)
