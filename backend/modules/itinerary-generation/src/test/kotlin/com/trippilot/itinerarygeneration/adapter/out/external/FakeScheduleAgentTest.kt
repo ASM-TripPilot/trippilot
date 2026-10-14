@@ -96,6 +96,19 @@ class FakeScheduleAgentTest : StringSpec({
         slot.isFixed shouldBe true
     }
 
+    "창이 좁으면(지금부터 연 오늘) 창 안에 드는 자리만 놓는다 — 창 밖·자정 감김 자리를 만들지 않는다" {
+        val places = listOf(
+            GroundedPlace(poiA, "성산", 33.4, 126.9, "자연", "제주", null),
+            GroundedPlace(poiB, "한라산", 33.3, 126.5, "자연", "제주", null),
+        )
+        val agent = agentOf(pool("제주", places), clock)
+        // 20:00 시작이면 종전엔 둘째 자리가 23:00~00:00 이었다(자정 감김).
+        val narrow = input(listOf("제주"), emptyList()).copy(timeWindows = listOf(TimeWindow(d1, LocalTime.of(20, 0), LocalTime.of(21, 0))))
+
+        val slots = agent.generate(narrow).days.single().slots
+        slots.map { it.startAt } shouldBe listOf(LocalTime.of(20, 0))
+    }
+
     /**
      * 늦은 시각 재계획 — 기계적으로 3시간씩 더하면 **자정을 넘어** `endAt < startAt` 인 슬롯이 나오고,
      * 도메인 검증(HC4 플래그 없이 되감김)에 걸려 사용자에게 500 이 된다.

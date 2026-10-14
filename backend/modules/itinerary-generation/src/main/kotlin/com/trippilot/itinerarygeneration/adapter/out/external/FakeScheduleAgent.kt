@@ -76,6 +76,9 @@ class FakeScheduleAgent(
                         val start = tw.start.plusHours((i * SLOT_GAP_HOURS).toLong())
                         VisitSlotDisplay(gp.poiId, start, start.plusHours(1), false, gp.distanceM?.let { "약 ${it.toInt() / 1000}km" }, isFixed = false)
                     }
+                    // 창 안에 드는 자리만 — 지금부터로 좁혀진 오늘(19:00~21:00)에 3시간 뒤 자리를 놓으면 창 밖이고,
+                    // 20:30 시작이면 둘째 자리가 23:30~00:30 으로 자정을 감는다.
+                    .filter { it.startAt < it.endAt && it.endAt <= tw.end }
             }
             DaySchedule(tw.date, (fixed + picks).sortedBy { it.startAt })
         }
