@@ -13,6 +13,7 @@ openapi 계약 스냅샷(`ai/docs/openapi.json`)은 불변이다(계약 동결, 
 
 env (전부 선택 — 기본값은 관대하게, 통합테스트·로컬 개발을 방해하지 않는다):
   - `TRIPPILOT_RATE_LIMIT_RPS`   초당 토큰 충전율(기본 100). 0 이하 = rate-limit 비활성.
+    nan·inf 는 기동 실패 — 둘 다 버킷을 늘 가득 채워 **조용히 끄기** 때문이다.
   - `TRIPPILOT_RATE_LIMIT_BURST` 버킷 용량(기본 1000).
   - `TRIPPILOT_TIMEOUT_MARGIN_MS`  deadline 위 여유 마진(기본 5000).
   - `TRIPPILOT_TIMEOUT_DEFAULT_MS` 바디에 deadline이 없을 때의 기준값(기본 600000
@@ -61,6 +62,13 @@ _request_logger = logging.getLogger("trippilot.api.request")
 CODE_RATE_LIMITED = "RATE_LIMITED"
 CODE_UNAUTHORIZED = "UNAUTHORIZED"
 CODE_TIMEOUT_BACKSTOP = "TIMEOUT_BACKSTOP"
+CODE_PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
+
+# 본문 누적 상한. `_wire_meta` 는 인증·유량 제한 **바깥**(Trace)에서 본문을 버퍼링하므로
+# 상한이 없으면 미인증 요청 하나가 메모리를 마음대로 쓴다. 경계 스키마에 이미지(base64) 같은
+# 큰 필드는 없다(사진은 `visit_ref` 참조만) — 그래도 외부 게이트웨이(nginx
+# `client_max_body_size 20m`, deploy/eks/chart)와 같은 값으로 보수적으로 둔다.
+_MAX_BODY_BYTES = 20 * 1024 * 1024
 
 _META_SCOPE_KEY = "trippilot.request_meta"
 _TRACE_SCOPE_KEY = "trippilot.trace_id"
@@ -116,6 +124,10 @@ class MiddlewareSettings:
                 f"timeout_default_deadline_ms는 양수여야 한다"
                 f"(got {self.timeout_default_deadline_ms})"
             )
+        if not math.isfinite(self.rate_limit_rps):
+            # nan 은 `rps <= 0` 도 `tokens >= 1` 도 비켜 가고 `min(burst, nan)` 이 burst 라,
+            # inf 와 마찬가지로 버킷이 늘 가득 찬다 — 제한이 조용히 꺼진다.
+            raise ValueError(f"rate_limit_rps는 유한수여야 한다(got {self.rate_limit_rps})")
         if self.rate_limit_burst < 1:
             raise ValueError(f"rate_limit_burst는 1 이상이어야 한다(got {self.rate_limit_burst})")
         if self.service_auth_token is not None and not self.service_auth_token.strip():
@@ -197,11 +209,16 @@ def parse_wire_meta(body: bytes) -> WireMeta:
     )
 
 
+class _BodyTooLarge(Exception):
+    """본문이 `_MAX_BODY_BYTES` 를 넘었다 — Trace 가 받아 413 으로 바꾼다."""
+
+
 async def _wire_meta(scope: _Scope, receive: _Receive) -> tuple[WireMeta, _Receive]:
     """바디를 한 번만 버퍼링해 메타를 뽑고, 하위 계층에 재생용 receive를 돌려준다.
 
     파싱 결과는 scope에 캐시된다 — trace·timeout 미들웨어가 이중 버퍼링하지 않는다.
     (경계 요청은 전부 소형 JSON — 스트리밍 업로드는 이 API에 없다.)
+    누적이 `_MAX_BODY_BYTES` 를 넘으면 더 읽지 않고 `_BodyTooLarge` 를 던진다.
     """
     cached = scope.get(_META_SCOPE_KEY)
     if cached is not None:
@@ -209,12 +226,17 @@ async def _wire_meta(scope: _Scope, receive: _Receive) -> tuple[WireMeta, _Recei
 
     queued: list[_Message] = []
     chunks: list[bytes] = []
+    size = 0
     while True:
         message = await receive()
         queued.append(message)
         if message["type"] != "http.request":  # http.disconnect 등 — 그대로 재생만 한다
             break
-        chunks.append(message.get("body", b""))
+        chunk = message.get("body", b"")
+        size += len(chunk)
+        if size > _MAX_BODY_BYTES:
+            raise _BodyTooLarge
+        chunks.append(chunk)
         if not message.get("more_body", False):
             break
 
@@ -271,7 +293,11 @@ class TraceMiddleware:
             return
 
         trace_id = _header_trace_id(scope)
-        meta, receive = await _wire_meta(scope, receive)
+        app = self.app
+        try:
+            meta, receive = await _wire_meta(scope, receive)
+        except _BodyTooLarge:  # 하위(인증·유량·라우트)로 보내지 않고 413 — 요청 로그는 그대로 남는다
+            meta, app = WireMeta(None, None), _reject_too_large
         if trace_id is None:
             trace_id = _sanitize_trace_id(meta.request_id) or uuid.uuid4().hex
         scope[_TRACE_SCOPE_KEY] = trace_id  # 하위 계층(백스톱 로그 등)이 재사용
@@ -296,7 +322,7 @@ class TraceMiddleware:
             await send(message)
 
         try:
-            await self.app(scope, receive, send_with_trace)
+            await app(scope, receive, send_with_trace)
         finally:
             elapsed_ms = int((time.monotonic() - started_at) * 1000)
             _request_logger.info(json.dumps({
@@ -308,6 +334,17 @@ class TraceMiddleware:
                 "status": status,  # None = 응답 미발신(연결 단절 등) — 그것도 사실대로
                 "elapsed_ms": elapsed_ms,
             }, ensure_ascii=False))
+
+
+async def _reject_too_large(scope: _Scope, receive: _Receive, send: _Send) -> None:
+    _logger.warning(json.dumps({  # INV-4 — 발동을 로그로 드러낸다
+        "event": "payload_too_large",
+        "trace_id": scope.get(_TRACE_SCOPE_KEY),
+        "path": scope.get("path"),
+        "limit_bytes": _MAX_BODY_BYTES,
+    }, ensure_ascii=False))
+    await _send_error(send, 413, CODE_PAYLOAD_TOO_LARGE,
+                      f"요청 본문이 상한({_MAX_BODY_BYTES} bytes)을 넘었습니다.")
 
 
 def _header_trace_id(scope: _Scope) -> str | None:

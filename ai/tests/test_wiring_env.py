@@ -759,3 +759,12 @@ def test_build_dev_app_threads_score_max_parallel_into_c1_config(
     monkeypatch.setattr(wiring, "build_orchestrator", spy)
     wiring.build_dev_app(score_max_parallel=5)
     assert inner["c1_config"].score_max_parallel == 5
+
+
+def test_kma_weather_waits_at_most_2s_per_socket_op(monkeypatch) -> None:
+    """일정 생성은 Provider 를 순차로 부르고 1차 시한이 15s 다 — 기본 10s 면 멈춘 기상청이
+    LLM 선호 점수 몫을 먹었다. 실측 정상 응답 1.09~1.22s(2026-10-14) 를 자르지 않는 값."""
+    monkeypatch.setenv("WEATHER_API", "test-key")
+    monkeypatch.delenv("WEATHER_API_BASE", raising=False)
+
+    assert main._kma_weather()._http._timeout == 2.0

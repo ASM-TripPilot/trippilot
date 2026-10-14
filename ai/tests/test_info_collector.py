@@ -75,6 +75,22 @@ def test_provider_failure_returns_status_not_exception() -> None:
     assert packet.freshness is None
 
 
+def test_hourly_failure_keeps_daily_and_leaves_a_warning(caplog) -> None:
+    """시간별만 실패하면 일 단위는 살리되 흔적은 남긴다 — 종전엔 사유 없이 `hourly={}` 였다."""
+    class _HourlyBroken(_FakePort):
+        def hourly_forecast(self, coord, days):
+            raise TimeoutError("kma hourly down")
+
+    with caplog.at_level("WARNING", logger="trippilot.providers.weather"):
+        packet = WeatherProvider(_HourlyBroken({_D1: 10})).fetch(_PARAMS)
+
+    assert packet.status is ProviderStatus.OK
+    assert packet.data["daily"] == {"2026-08-20": 10}
+    assert packet.data["hourly"] == {}
+    assert any("hourly_forecast" in r.getMessage() and "kma hourly down" in r.getMessage()
+               for r in caplog.records)
+
+
 # ── ③ 요구표 라우팅 ──────────────────────────────────────────────────
 
 
@@ -211,6 +227,17 @@ def test_place_provider_returns_resolvable_pool_ref() -> None:
     assert packet.data["pool_size"] == 1
     assert provider.resolve(packet.data["pool_ref"]) is pool
     assert provider.resolve("없는-키") is None
+
+
+def test_place_provider_keeps_every_inflight_pool_and_drops_it_on_resolve() -> None:
+    """라우트는 sync def — anyio 스레드풀 기본 40 이 동시에 fetch~resolve 사이에 있을 수 있다.
+    종전(상한 32·get)엔 33번째 fetch 가 아직 안 꺼낸 첫 풀을 밀어내 `pool_unavailable` 이 됐다."""
+    provider = PlaceProvider(_FakeBuilder())
+    refs = [provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW}).data["pool_ref"]
+            for _ in range(40)]
+
+    assert all(provider.resolve(ref) is not None for ref in refs)
+    assert provider.resolve(refs[0]) is None  # 꺼낸 풀은 남지 않는다 — 끝난 요청이 자리를 안 먹는다
 
 
 def test_place_provider_empty_pool_is_no_candidates_with_ref() -> None:

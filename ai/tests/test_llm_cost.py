@@ -119,6 +119,38 @@ def test_request_total_accumulates_per_trace() -> None:
     assert other["request_cost"] == pytest.approx(1.0)  # 다른 요청과 안 섞인다
 
 
+def test_parallel_adds_on_one_trace_do_not_lose_a_call() -> None:
+    """선호 점수 청크는 스레드풀에서 병렬로 emit 한다 — 읽고-더하고-쓰기가 겹치면 1건이 사라진다.
+
+    두 스레드가 **같은 누계를 읽은 직후** 만나게 강제한다(장벽). 잠금이 있으면 둘째는 첫째가
+    끝날 때까지 못 들어와 장벽이 시한으로 깨지고, 각자 앞사람 몫을 읽는다.
+    """
+    import threading
+    from collections import OrderedDict
+
+    barrier = threading.Barrier(2, timeout=0.5)
+
+    class _Interleaving(OrderedDict):
+        def get(self, *a, **k):
+            value = super().get(*a, **k)
+            try:
+                barrier.wait()
+            except threading.BrokenBarrierError:
+                pass
+            return value
+
+    ledger = _ledger()
+    ledger._totals = _Interleaving()
+    threads = [threading.Thread(target=ledger.add, args=(_record(trace="t-1"),))
+               for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert ledger.add(_record(trace="t-1", input_tokens=0))["request_cost"] == pytest.approx(2.0)
+
+
 def test_failed_call_still_counts_tokens() -> None:
     """실패해도 토큰은 과금된다 — success=False 를 제외하면 비용이 과소 보고된다."""
     entry = _ledger().add(_record(success=False, input_tokens=1_000_000))

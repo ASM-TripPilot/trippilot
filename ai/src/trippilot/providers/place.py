@@ -39,7 +39,9 @@ class PlaceProvider:
     - "now": datetime(tz-aware)
     """
 
-    _CACHE_MAX = 32  # 동시 요청 상한보다 넉넉하면 충분 — 초과분은 오래된 것부터 축출
+    # 동시 요청 상한(anyio 스레드풀 기본 40)보다 넉넉하면 충분 — 초과분은 오래된 것부터 축출.
+    # resolve 가 꺼내 가므로 실제로 차는 것은 fetch~resolve 사이에 있는 요청 수뿐이다.
+    _CACHE_MAX = 64
 
     def __init__(self, pool_builder: CandidatePoolBuilder, ttl_sec: int = 86400) -> None:
         self._pool_builder = pool_builder
@@ -77,5 +79,11 @@ class PlaceProvider:
         )
 
     def resolve(self, pool_ref: str) -> CandidatePool | None:
-        """참조 키 → 풀 실체. 축출됐으면 None (호출측이 실패로 판단)."""
-        return self._pools.get(pool_ref)
+        """참조 키 → 풀 실체. **한 번만 꺼낼 수 있다** — 축출됐거나 이미 꺼냈으면 None
+        (호출측이 실패로 판단).
+
+        꺼내면서 지운다. 종전엔 get 만 해서 끝난 요청의 풀이 상한까지 남았고, 동시 요청이
+        상한을 넘으면 아직 resolve 전인 요청의 풀이 밀려나 `pool_unavailable` 이 됐다.
+        호출처(코디네이터 생성·wiring 대안·재계획·편집)는 전부 collect 직후 1회만 꺼낸다.
+        """
+        return self._pools.pop(pool_ref, None)

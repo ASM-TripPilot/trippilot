@@ -237,7 +237,11 @@ def match_free_text(
     threshold: float = DEFAULT_MATCH_THRESHOLD,
     max_resolved: int = MAX_RESOLVED,
 ) -> tuple[DirectiveSpec, ...]:
-    """자유 입력 → 지시 목록. 검색 실패는 예외가 아니라 빈 결과다 (INV-4).
+    """자유 입력 → 지시 목록. 임베딩·스토어 장애는 **예외로 올린다** — 빈 결과는 "지시 없음"만이다.
+
+    종전엔 장애를 삼켜 `()` 를 냈고, 그래서 호출측(`wiring._replan_directives`)의
+    `free_text_match_degraded` 노트가 도달 불가였다 — 장애와 무매칭이 같은 빈 튜플이었다.
+    재계획을 살리는 것은 호출측 몫이다(노트를 남기고 번역 LLM 으로 넘어간다, INV-4).
 
     한 발화에 지시가 여럿일 수 있어("실내로 하고 이동도 줄여줘") top-k 를 보되,
     **임계 미달은 버린다** — 닮지 않은 것을 억지로 고르면 사용자가 말하지 않은 방향으로
@@ -248,11 +252,7 @@ def match_free_text(
     if not text.strip() or top_k <= 0 or max_resolved <= 0:
         return ()
     table = index_of(specs)
-    try:
-        hits = retrieve(KbKind.DIRECTIVE, text, embedding, store, top_k=top_k)
-    except Exception:
-        # 임베딩·스토어 장애로 재계획을 죽이지 않는다 — 칩 선택분은 그대로 살아 있다.
-        return ()
+    hits = retrieve(KbKind.DIRECTIVE, text, embedding, store, top_k=top_k)
     resolved: list[DirectiveSpec] = []
     seen: set[str] = set()
     for hit in hits:
