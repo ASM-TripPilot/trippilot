@@ -2,7 +2,9 @@ package com.trippilot.archive.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.archive.api.ArchiveFacade
 import com.trippilot.archive.api.event.VisitChecked
 import com.trippilot.archive.api.VisitConflictState
@@ -38,9 +40,17 @@ class VisitCheckService(
     private val clock: Clock,
 ) : ArchiveFacade {
 
-    /** 도착 체크. 같은 슬롯에 이미 실적이 있으면 409 — 둘이면 "완료됐나"가 갈린다. */
+    /**
+     * 도착 체크. 같은 슬롯에 이미 실적이 있으면 409 — 둘이면 "완료됐나"가 갈린다.
+     *
+     * **자동 도착은 계획 슬롯에만 있다**(INV-U10-5) — 지오펜스는 일정에 있는 곳에만 걸리므로 슬롯 키 없는 자동 도착은
+     * 앱의 결함이다. 받으면 계획에 없던 즉석 방문이 사용자 손을 거치지 않고 생긴다.
+     */
     @Transactional
     fun arrive(accountId: UUID, tripId: UUID, slotKey: String?, poiId: UUID, source: CheckSource): VisitCheck {
+        if (source == CheckSource.AUTO_GEOFENCE && slotKey == null) {
+            throw ValidationFailed(listOf(FieldError("slotKey", "자동 도착에는 슬롯 키가 필요합니다.")))
+        }
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val existing = slotKey?.let { checks.findBySlot(tripId, it) }
         if (existing != null) {
@@ -57,6 +67,7 @@ class VisitCheckService(
             )
         }
         return checks.save(VisitCheck.arrive(tripId, slotKey, poiId, source, clock.instant()))
+            .also { publish(accountId, it) }
     }
 
     /**
@@ -67,21 +78,24 @@ class VisitCheckService(
      * 릴레이가 나중에 따라잡는다. 둘 중 감당할 수 있는 어긋남은 이쪽뿐이다.
      */
     @Transactional
-    fun complete(accountId: UUID, tripId: UUID, visitCheckId: UUID): VisitCheck {
-        val completed = checks.save(owned(accountId, tripId, visitCheckId).complete(clock.instant()))
-        events.publish(
-            VisitChecked(
-                aggregateId = completed.visitCheckId.toString(),
-                tripId = completed.tripId.toString(),
-                slotKey = completed.slotKey,
-                poiId = completed.poiId.toString(),
-                // 완료됐다면 도착도 있다 — `complete()` 가 도착 없는 완료를 409 로 막는다.
-                arrivedAt = completed.arrivedAt!!.toString(),
-                completedAt = completed.completedAt?.toString(),
-            ),
-        )
-        return completed
-    }
+    fun complete(accountId: UUID, tripId: UUID, visitCheckId: UUID): VisitCheck =
+        checks.save(owned(accountId, tripId, visitCheckId).complete(clock.instant())).also { publish(accountId, it) }
+
+    /** 도착·완료를 알린다(§12.6). 도착이면 `completedAt` 이 비어 나간다. */
+    private fun publish(accountId: UUID, check: VisitCheck) = events.publish(
+        VisitChecked(
+            aggregateId = check.visitCheckId.toString(),
+            tripId = check.tripId.toString(),
+            slotKey = check.slotKey,
+            poiId = check.poiId.toString(),
+            // 도착 또는 완료 직후다 — 둘 다 도착이 있다(`complete()` 가 도착 없는 완료를 409 로 막는다).
+            arrivedAt = check.arrivedAt!!.toString(),
+            completedAt = check.completedAt?.toString(),
+            accountId = accountId.toString(),
+            arrivalSource = check.source.name,
+            completionSource = check.completionSource?.name,
+        ),
+    )
 
     /** 건너뜀(취소, TRIP-118). 안 갔으므로 재계획에서 잠그지 않는다. */
     @Transactional
@@ -132,7 +146,9 @@ class VisitCheckService(
                 errorCode = ErrorCode.VISIT_CONFLICT,
             )
         }
+        // 보정으로 **처음** 완료가 생기면 그것도 완료다(§12.6) — 알리지 않으면 체류 초과 판정이 끝난 방문을 계속 진행 중으로 본다.
         return checks.save(current.adjustTimes(arrivedAt, completedAt, clock.instant()))
+            .also { if (current.completedAt == null && it.completedAt != null) publish(accountId, it) }
     }
 
     @Transactional(readOnly = true)

@@ -1116,7 +1116,7 @@ paths:
         content: { application/json: { schema: { $ref: '#/components/schemas/ArriveRequest' } } }
       responses:
         '201': { description: 체크됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
-        '400': { description: 장소·체크 방식 누락 }
+        '400': { description: '장소·체크 방식 누락 · 자동 도착(AUTO_GEOFENCE)인데 slotKey 가 없음 — 자동 도착은 계획 슬롯에만 있다(INV-U10-5)' }
         '404': { description: 여행 없음/타 계정 }
         '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요)' }
   /trips/{tripId}/visits/days/{day}:
@@ -2604,7 +2604,12 @@ components:
         arrivedAt: { type: string, format: date-time, nullable: true }
         completedAt: { type: string, format: date-time, nullable: true }
         skippedAt: { type: string, format: date-time, nullable: true, description: 건너뜀(취소). 완료와 동시에 참일 수 없다 }
-        source: { type: string, enum: [AUTO_GEOFENCE, MANUAL] }
+        source: { type: string, enum: [AUTO_GEOFENCE, MANUAL], description: 도착 출처(DEC-U10-6). 완료 출처는 completionSource }
+        completionSource:
+          type: string
+          nullable: true
+          enum: [AUTO_GEOFENCE_EXIT, AUTO_NEXT_ARRIVAL, MANUAL]
+          description: 완료 출처 — 완료가 있을 때만 있다(INV-U10-3). 화면이 완료에도 "자동 기록"을 붙이는 근거
         spontaneous: { type: boolean, description: 계획에 없던 곳인가 — 화면의 '즉석 방문' 배지 근거 }
         updatedAt:
           type: string

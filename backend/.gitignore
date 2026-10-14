@@ -1,6 +1,8 @@
 # Gradle
 .gradle/
 build/
+# Kotlin 컴파일 데몬 세션 표식 — 빌드마다 생긴다
+.kotlin/
 !gradle/wrapper/gradle-wrapper.jar
 
 # Kotlin / Java
