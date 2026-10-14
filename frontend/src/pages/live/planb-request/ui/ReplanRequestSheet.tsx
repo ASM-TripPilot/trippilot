@@ -80,7 +80,7 @@ export interface ReplanRequestSheetProps {
  * Figma 칩 크기가 두 벌이다 — 작은 칩(#F2F2F2 · 12.5)과 큰 칩(#F7F7F7 · 13)이 방향 그룹 안에서도 섞여 있다.
  * 12.5 는 `text-caption`(12)로 붙인다 — `text-[12.5px] text-body` 는 CSS 순서상 `text-body` 의 글자 크기
  * (14)가 이겨 오히려 커진다(`body` 가 색이자 글자 크기 토큰).
- * 그룹 단위로 통일한다(브리프 Q5): 범위만 큰 칩. 방향 11개를 큰 칩으로 두면 390 폭에서 넷째 줄로
+ * 그룹 단위로 통일한다(브리프 Q5): 범위만 큰 칩. 방향 10~11개를 큰 칩으로 두면 390 폭에서 넷째 줄로
  * 넘쳐(Figma 3줄) 사유·방향 모두 작은 칩이다.
  */
 type ChipSize = 'small' | 'large';
