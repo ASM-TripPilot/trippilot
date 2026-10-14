@@ -344,7 +344,7 @@ def test_prompt_renders_deterministically_without_coordinates() -> None:
     p1, ref = reg.render(_FEAT, _vars(pool))
     p2, _ = reg.render(_FEAT, _vars(pool))
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/edit_translation.yaml" and ref.version == "0.1.0"
+    assert ref.prompt_id == "prompts/edit_translation.yaml" and ref.version == "0.2.0"
     assert ref.feature == "EDIT_TRANSLATION"
     for poi in pool.pois:
         assert str(poi.poi_id) in p1  # 슬롯·후보 전원 포함
@@ -358,6 +358,59 @@ def test_prompt_states_no_intent_reinterpretation_and_injects_op_closed_set() ->
     assert "EDIT_SCHEDULE" in prompt
     for op in EditOp:
         assert op.value in prompt  # 서버 주입 closed-set 목록
+
+
+def test_op_guide_covers_every_op_and_prompt_maps_kind_only_requests() -> None:
+    """종류만 말한 추가·교체가 ADD_SLOT·REPLACE_SLOT 으로 이어지게 뜻·자리를 싣는다."""
+    from trippilot.llm_gateway.workers.edit_translation import _OP_GUIDE
+
+    assert set(_OP_GUIDE) == set(EditOp)
+    prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars(_pool()))
+    assert "카페 하나 추가해줘" in prompt and "후보 목록 안에서 고르는 것은 지어내기가 아닙니다" in prompt
+    assert "- ADD_SLOT: 후보 1곳을 그 날에 추가" in prompt
+
+
+def _cat_pool(per_cat: int) -> CandidatePool:
+    pois = tuple(
+        Poi(poi_id=PoiId(f"{c.value}-{i:03d}"), name=f"{c.value}{i}", category=c,
+            coord=GeoPoint(36.3, 127.4), open_hours=(), avg_cost=None, rating=None,
+            quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None)
+        for c in (PoiCategory.FOOD, PoiCategory.CAFE)
+        for i in range(per_cat)
+    )
+    return CandidatePool(poi_ids=frozenset(p.poi_id for p in pois), pois=pois,
+                         generated_at=_NOW)
+
+
+def test_candidates_under_cap_render_unchanged() -> None:
+    """결과 동일성 — 상한 이하 풀은 상한 도입 전 렌더(전원·poi_id 정렬) 그대로."""
+    from trippilot.llm_gateway.workers.edit_translation import _CANDIDATES_PER_CATEGORY
+
+    pool = _cat_pool(_CANDIDATES_PER_CATEGORY)
+    inp = EditTranslationInput(utterance="u", target_date="d",
+                               current_slots=(PoiId("FOOD-000"),))
+    before = "\n".join(
+        f"- {p.poi_id} | {p.category.value} | {p.name}"
+        for p in sorted(pool.pois, key=lambda p: str(p.poi_id))
+        if p.poi_id != PoiId("FOOD-000")
+    )
+    assert build_edit_translation_vars(pool, inp)["candidates"] == before
+
+
+def test_candidates_capped_per_category_by_pool_rank() -> None:
+    """큰 풀은 카테고리마다 풀 순위 앞쪽만 — 실린 후보는 항상 풀 안(INV-1)."""
+    from trippilot.llm_gateway.workers.edit_translation import _CANDIDATES_PER_CATEGORY
+
+    pool = _cat_pool(_CANDIDATES_PER_CATEGORY * 3)
+    lines = build_edit_translation_vars(
+        pool, EditTranslationInput(utterance="u", target_date="d", current_slots=()),
+    )["candidates"].splitlines()
+    ids = [line[2:].split(" | ")[0] for line in lines]
+    assert len(ids) == 2 * _CANDIDATES_PER_CATEGORY
+    assert all(pool.contains(PoiId(x)) for x in ids)
+    # 풀 순서(= 순위) 앞쪽이 남는다
+    assert f"CAFE-{_CANDIDATES_PER_CATEGORY - 1:03d}" in ids
+    assert f"CAFE-{_CANDIDATES_PER_CATEGORY:03d}" not in ids
 
 
 def test_build_vars_renders_slot_outside_pool_from_caller_info() -> None:
