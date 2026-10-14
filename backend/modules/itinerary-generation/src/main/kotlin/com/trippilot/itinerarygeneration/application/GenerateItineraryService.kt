@@ -32,6 +32,7 @@ import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.VisitRecordPort
 import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
@@ -74,6 +75,8 @@ class GenerateItineraryService(
     private val scoredPools: ScoredCandidatePoolStore,
     /** 기록 기반 개인화(TRIP-556). **포트다** — 구현은 app 이 조립한다(순환 회피, 아래 주석). */
     private val personalization: PersonalizationPort,
+    /** 다녀온 기록 유무 — 재생성 가드가 묻는다. **포트다**(archive 순환 회피, [VisitRecordPort]). */
+    private val visitRecords: VisitRecordPort,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
     private val deadlines: ScheduleDeadlineProperties,
@@ -82,12 +85,15 @@ class GenerateItineraryService(
 
     fun generate(accountId: UUID, tripId: UUID, mode: GenerationMode): Itinerary {
         val ctx = trips.findGenerationContext(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
-        // **지킬 계획이 있을 때만 막는다.** 첫 생성(일정 없음)과 실패한 생성은 대상이 아니다 —
+        // **지킬 것이 있을 때만 막는다.** 첫 생성(일정 없음)과 실패한 생성은 대상이 아니다 —
         // 여행 중에 "아직 일정이 없는데 지금 만들래"도, "생성이 깨졌으니 다시"도 정상 요구다.
         // 2차 생성이 중단되면 스위퍼가 FAILED 로 내리되 **행은 남기므로**, 이 구분이 없으면
         // 여행 중 사용자가 반쪽 일정에 갇힌다.
+        // **다녀온 기록이 없어도 막지 않는다** — 막는 이유가 유령 실적인데 기록이 없으면 성립하지 않는다.
+        // 오늘 출발 여행을 만들고 바로 [다시 짜기]를 누르면 날짜만으로 409 가 났다(DEV 10-13·10-14 연타 실측).
+        // 직전 일정은 재생성 전에 복원 지점으로 남는다(BR-U3-19) — 갈린 계획은 되돌릴 수 있다.
         val existing = previousOf(tripId)
-        if (existing != null && existing.generationState != GenerationState.FAILED) {
+        if (existing != null && existing.generationState != GenerationState.FAILED && visitRecords.hasAny(tripId)) {
             guardTripPeriod(ctx.startDate, ctx.endDate)
         }
         // 취향 7축·예산등급 — 여행에서 고른 값이 최종, 안 실린 축만 계정 값(BR-U1-38 · PreferenceProfiles.overriddenBy).
@@ -439,12 +445,12 @@ class GenerateItineraryService(
     ): List<DayAnchor> = RegionAnchors.dayAnchors(regions, startDate, endDate, stayAnchors, destinations) // 편집 수리도 같은 것을 부른다
 
     /**
-     * **재생성**이 허용되는 시점인가 — 기존 일정이 있을 때만 부른다(첫 생성은 대상이 아니다).
+     * **재생성**이 허용되는 시점인가 — 기존 일정이 있고 **다녀온 기록이 있을 때만** 부른다.
      *
-     * 재생성은 기존 일정을 지우고 새로 만든다(`replaceForTrip`). 여행 중에 그러면 사용자가 따라가던 계획이
-     * 통째로 갈리고, **방문 실적이 유령이 된다** — `visit_check` 는 `trip_id + slotKey` 로 남아 삭제를 견디므로
-     * 일정에 없는 장소에 "방문 완료"가 남는다. 여행 중 계획 변경은 재계획(Plan-B)이 할 일이고, 그쪽은 오늘 하루만
-     * 다시 짜면서 다녀온 슬롯을 잠근다(INV-U4-04). 끝난 여행은 다시 만들 이유 자체가 없다.
+     * 재생성은 기존 일정을 지우고 새로 만든다(`replaceForTrip`). 기록이 있는 여행에서 그러면 **방문 실적이
+     * 유령이 된다** — `visit_check` 는 `trip_id + slotKey` 로 남아 삭제를 견디므로 일정에 없는 장소에
+     * "방문 완료"가 남는다. 그런 여행의 계획 변경은 재계획(Plan-B)이 할 일이고, 그쪽은 오늘 하루만 다시 짜면서
+     * 다녀온 슬롯을 잠근다(INV-U4-04).
      *
      * **여행 상태(`TripStatus`)로 판정하지 않는 이유**: 여행은 `PLANNED` 로 생성된 뒤 전이되지 않는다 —
      * `canTransitionTo` 를 부르는 프로덕션 코드가 없다. 상태로 막으면 영원히 발화하지 않는 죽은 가드가 된다.

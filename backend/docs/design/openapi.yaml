@@ -1118,7 +1118,7 @@ paths:
         '201': { description: 체크됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '400': { description: '장소·체크 방식 누락 · 자동 도착(AUTO_GEOFENCE)인데 slotKey 가 없음 — 자동 도착은 계획 슬롯에만 있다(INV-U10-5)' }
         '404': { description: 여행 없음/타 계정 }
-        '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요)' }
+        '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요) · `VISIT_AUTO_SUPPRESSED`(그날 자동 기록을 되돌린 슬롯의 자동 도착 — 기기는 버린다)' }
   /trips/{tripId}/routes:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1182,6 +1182,50 @@ paths:
             `error.code` 로 가른다. **`AUTOMATION_DISABLED`**(서버 킬 스위치 꺼짐) · **`LOCATION_CONSENT_REQUIRED`**(무장은 L2, 경로 기록은
             L2·L3 가 없음) — 둘 다 START 에서만 나고, 기기는 **무장을 풀고 강등한다**(안 풀면 서버엔 구간도 법정 로그도 없는데 기기는
             무장한 채다). `CONFLICT` — 시작 보고가 없는 END · 그 구간 id 가 다른 여행·종류에 쓰였음(기기 결함, 강등 신호 아님).
+  /trips/{tripId}/visits/auto-events:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 자동 방문 결과 배치 — 기기가 판정한 도착·완료(U10 · TRIP-1403)
+      description: >
+        **좌표가 없다**(INV-U10-2) — 기기가 지오펜스로 판정한 결과(슬롯·장소·발생 시각)만 온다. 발생 시각(`occurredAt`)을 그대로
+        기록한다(G-U10-1 — 서버 시각이 아니다). 순서대로 적용하고 **항목마다 결과**를 준다 — 409 로 배치 전체를 깨지 않는다(BR-U10-20).
+        멱등: 같은 배치를 몇 번 보내도 최종 상태가 같다 — 재전송은 `ALREADY_RECORDED` 로 수렴한다(PBT-U10-3).
+        **서버 우선**: 이미 있는 기록은 바뀌지 않는다. 예외는 수동 도착 + 미완료에 자동 완료를 더하는 것 하나(§5.2).
+        `outcome`: `APPLIED` · `ALREADY_RECORDED`(이미 그 상태 — 버린다) · `CONFLICT`(일정에 없는 슬롯 · 건너뛴 슬롯 · 도착 없는 완료 ·
+        자동 출처 없는 완료) · `SUPPRESSED`(그날 자동 기록을 되돌린 슬롯) · `REJECTED_CONSENT`(위치 이용 동의 L2 없음 — 전 항목) ·
+        `OUT_OF_WINDOW`(여행 기간 밖 · 슬롯 날짜와 다른 날 · 서버 시각 + 5분보다 미래 · 도착보다 앞선 완료).
+        `automationEnabled` 가 `false` 면 서버 킬 스위치가 꺼진 것이다 — 기기는 강등한다. 꺼져 있어도 온 항목은 정상 처리한다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AutoVisitBatch' } } }
+      responses:
+        '200': { description: 항목별 결과, content: { application/json: { schema: { $ref: '#/components/schemas/AutoVisitBatchResult' } } } }
+        '400': { description: 필수 값 누락 · 한 번에 50 건 초과 }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/visits/{visitCheckId}/revert-auto:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+      - name: expectedUpdatedAt
+        in: query
+        required: false
+        schema: { type: string, format: date-time }
+        description: >
+          화면이 본 기록의 `updatedAt`. 무엇을 되돌릴지가 **지금 상태**로 정해지므로, 두 번 누르거나 응답을 못 받고 다시 보내면 완료에 이어
+          도착까지 지워진다 — 이 값을 주면 그 사이 바뀐 것을 409 `VISIT_CONFLICT` 로 가른다(BR-U5-22 와 같은 판정). 안 주면 보지 않는다.
+    post:
+      tags: [trips]
+      summary: 자동 기록 되돌리기(U10 · TRIP-1403)
+      description: >
+        **자동 출처 부분만** 되돌린다(BR-U10-31). 자동 완료면 완료만 비우고(도착은 남는다 — 그 슬롯의 재계획 잠금도 풀린다), 완료 없는
+        자동 도착이면 도착을 비우고 **그날 그 슬롯의 자동 기록을 막는다**(이후 자동 결과는 `SUPPRESSED`). 그 자리에 사람이 도착·건너뛰기를
+        남기면 같은 행을 쓴다(BR-U10-32).
+      responses:
+        '200': { description: 되돌린 뒤의 방문 기록, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '404': { description: 여행·방문 없음/타 계정 }
+        '409': { description: '`VISIT_HAS_MEDIA` — 사진·메모가 붙은 방문의 자동 도착(먼저 지우라고 안내) · `VISIT_NOT_AUTO` — 되돌릴 자동 기록이 없다(수동 기록, 출처가 빈 완료 포함) · `VISIT_CONFLICT` — `expectedUpdatedAt` 이후 바뀜' }
   /trips/{tripId}/visits/days/{day}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2679,6 +2723,37 @@ components:
       required: [routes]
       properties:
         routes: { type: array, items: { $ref: '#/components/schemas/RouteDay' } }
+    AutoVisitBatch:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [eventId, kind, slotKey, poiId, occurredAt]
+            properties:
+              eventId: { type: string, format: uuid, description: 기기가 짓는다 — 항목 식별용 }
+              kind: { type: string, enum: [ARRIVE, COMPLETE] }
+              slotKey: { type: string, description: '필수 — 자동 결과는 즉석 방문을 만들지 않는다(INV-U10-5)' }
+              poiId: { type: string, format: uuid }
+              occurredAt: { type: string, format: date-time, description: 'ARRIVE = 진입 시각 · COMPLETE = 이탈 시각 또는 다음 장소 진입 시각' }
+              completionSource: { type: string, nullable: true, enum: [AUTO_GEOFENCE_EXIT, AUTO_NEXT_ARRIVAL], description: COMPLETE 일 때만 }
+    AutoVisitBatchResult:
+      type: object
+      required: [results, automationEnabled]
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [eventId, outcome]
+            properties:
+              eventId: { type: string, format: uuid }
+              outcome: { type: string, enum: [APPLIED, ALREADY_RECORDED, CONFLICT, SUPPRESSED, REJECTED_CONSENT, OUT_OF_WINDOW] }
+              visitCheck: { allOf: [{ $ref: '#/components/schemas/VisitCheck' }], nullable: true }
+        automationEnabled: { type: boolean, description: 서버 킬 스위치 — false 면 기기는 강등한다(REL-U10-06) }
     IntervalReportRequest:
       type: object
       required: [intervalId, kind, phase, at]

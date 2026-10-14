@@ -29,6 +29,7 @@ from hypothesis import strategies as st
 from trippilot.domain.poi import PoiCategory
 from trippilot.poi_curation.sourcing.localdata import (
     ADOPTED_TYPES,
+    DROP_FRANCHISE,
     DROP_NO_ADDRESS,
     DROP_NO_COORD,
     DROP_NO_NAME,
@@ -39,6 +40,7 @@ from trippilot.poi_curation.sourcing.localdata import (
     KIND,
     OPEN_STATUS,
     SOURCE,
+    is_franchise,
     normalize_address,
     not_a_meal_stop,
     to_candidate,
@@ -339,3 +341,59 @@ def test_non_finite_conversion_is_dropped(bad: float) -> None:
 def test_missing_management_number_is_dropped() -> None:
     """관리번호가 멱등 키다 — 없으면 백엔드가 `no_source_ref` 로 버린다."""
     assert to_candidate(_row(관리번호=" "), _to_wgs84) == DROP_NO_REF
+
+
+# ── 전국 치킨·버거·피자 체인 (사용자 결정 2026-10-14) ──────────────────
+#
+# 상호 규칙은 **지역 식당을 죽이는 쪽이 더 비싸다.** 아래 두 표는 실제 산출 11,005곳에
+# 돌려 전수 눈검사한 결과에서 그대로 가져왔다 — 가짜 상호가 아니라 진짜 데이터다.
+
+# 빠져야 하는 것 — 전국 체인 지점
+_FRANCHISES = (
+    "노브랜드버거오크밸리점", "bhc빌리리조트점", "BHC치킨 태안만리포점", "Bhc홍천병원점",
+    "비에이치씨 하조대점", "비에이치씨(BHC) 군산선유도점", "BBQ치킨 신안 안좌점",
+    "BBQ(금산추부점)", "비비큐 고창아산점", "비비큐", "자담치킨 비금점", "교촌치킨 양구점",
+    "굽네치킨표선점", "네네치킨 하조대점", "페리카나치킨 거진점", "멕시카나치킨다산점",
+    "또래오래치킨강촌점", "맘스터치 영광점", "롯데리아 대산점", "피자스쿨(양구점)",
+    "처갓집양념치킨(서면점)", "처갓집 양념치킨 구룡포점", "호식이두마리치킨 영동점",
+    "치킨플러스정선사북점", "지코바숯불양념치킨부곡점", "60계치킨영광점", "푸라닭 연천청산점",
+    "노랑통닭 사북고한점", "오븐에빠진닭", "미스터피자&비비큐치킨밸리점",  # 양쪽 다 체인
+)
+
+# 남아야 하는 것 — 체인처럼 보이지만 지역 식당이다
+_LOCALS = (
+    # 상호가 겹칠 뿐 체인이 아니다
+    "처갓집상회", "처갓집씨암탉",
+    # 바비큐(숯불구이) 식당이지 BBQ 체인이 아니다
+    "강촌비비큐하우스(BBQ house)", "소노캄제주BBQ",
+    # 체인이 곁다리로 붙은 지역 식당 — 지역 가게 쪽을 지킨다
+    "무창포 먹거리식당&자담치킨", "청정횟집&비에이치씨치킨무창포해수욕장점",
+    "비에이치씨(BHC)축산지점&태백수산", "비에이치씨 완주대둔산점 & 연꽃메밀막국수",
+    "BHC치킨(원산도), 베이그릴121", "웰빙자담치킨&호프", "비비큐&킹콩부대찌개힐스점",
+    # 기존 규칙이 지켜 온 이름들도 그대로여야 한다
+    "씨씨엘치킨", "육식사관학교", "일박이일명물돈갈비", "삼십년할머니순두부",
+)
+
+
+@pytest.mark.parametrize("name", _FRANCHISES)
+def test_전국_체인은_뺀다(name: str) -> None:
+    assert is_franchise(name), f"체인인데 남았다: {name}"
+
+
+@pytest.mark.parametrize("name", _LOCALS)
+def test_지역_식당은_체인으로_오인하지_않는다(name: str) -> None:
+    assert not is_franchise(name), (
+        f"지역 식당이 체인으로 걸렸다: {name}\n"
+        "상호 규칙을 넓히면 공백 지역의 진짜 식당이 죽는다 — 범주어 말고 브랜드명만 적어라."
+    )
+
+
+def test_빈_상호는_체인이_아니다() -> None:
+    assert not is_franchise("")
+    assert not is_franchise("   ")
+
+
+def test_체인은_후보_단계에서_빠진다() -> None:
+    """`to_candidate` 가 드롭 사유로 `franchise` 를 돌려줘야 통계에 잡힌다."""
+    row = _row(사업장명="bhc치킨 곡성기차마을점")
+    assert to_candidate(row, _to_wgs84) == DROP_FRANCHISE

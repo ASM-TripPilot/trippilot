@@ -166,7 +166,8 @@ class VisitRecordService(
 
     private fun ownedVisit(accountId: UUID, tripId: UUID, visitCheckId: UUID) {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
-        checks.findById(visitCheckId)?.takeIf { it.tripId == tripId }
+        // 억제 표식만 남은 행(자동 도착을 되돌린 자리)은 방문이 아니다 — 사진·메모를 붙이지 않는다(U10 BR-U10-32).
+        checks.findById(visitCheckId)?.takeIf { it.tripId == tripId && it.isRecorded }
             ?: throw ResourceNotFound("방문 기록을 찾을 수 없습니다.")
     }
 

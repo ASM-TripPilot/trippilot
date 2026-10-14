@@ -1,15 +1,16 @@
 {
   "schema_version": 1,
   "source": "LOCALDATA",
-  "collected_at": "2026-10-14T07:25:27.154834+00:00",
+  "collected_at": "2026-10-14T07:59:18.377430+00:00",
   "stats": {
     "source_file": "식품_일반음식점.csv",
     "source_updated_max": "2026-09-07 22:47:52",
     "rows": 2295369,
     "row_drops": {
       "not_open": 1619793,
-      "type_not_adopted": 182630,
-      "no_coord": 15145,
+      "type_not_adopted": 182636,
+      "no_coord": 14992,
+      "franchise": 6782,
       "not_meal_stop:golf": 1148,
       "not_meal_stop:cafeteria": 636,
       "not_meal_stop:funeral": 598,
@@ -17,7 +18,7 @@
       "not_meal_stop:wedding": 287,
       "not_meal_stop:highway": 261
     },
-    "candidates": 474491,
+    "candidates": 467862,
     "criteria": {
       "gap_radius_km": 7.0,
       "gap_min_food": 6,
@@ -30,52 +31,52 @@
       "gap_stays": 2921,
       "gap_region_centers": 62
     },
-    "picked": 11159,
+    "picked": 11126,
     "etc_fill": {
-      "admitted": 72,
-      "picked": 72
+      "admitted": 66,
+      "picked": 66
     },
     "gate_merged": 223,
     "gate_drops": {
       "policy_non_travel:convenience_store": 3
     },
-    "passed": 11005,
+    "passed": 10966,
     "by_type": {
-      "한식": 7637,
-      "횟집": 839,
-      "식육(숯불구이)": 579,
-      "경양식": 442,
-      "중국식": 430,
+      "한식": 7653,
+      "횟집": 840,
+      "식육(숯불구이)": 584,
+      "경양식": 441,
+      "중국식": 433,
       "분식": 369,
-      "일식": 160,
-      "통닭(치킨)": 138,
-      "탕류(보신용)": 113,
+      "일식": 161,
+      "탕류(보신용)": 115,
+      "통닭(치킨)": 86,
       "뷔페식": 75,
-      "기타": 70,
+      "기타": 64,
       "외국음식전문점(인도,태국등)": 36,
-      "패스트푸드": 34,
       "김밥(도시락)": 29,
       "패밀리레스트랑": 27,
+      "패스트푸드": 26,
       "냉면집": 20,
       "복어취급": 7
     },
     "by_sido": {
-      "강원특별자치도": 2051,
-      "경상북도": 1771,
-      "경상남도": 1511,
-      "충청남도": 1391,
-      "전남광주통합특별시": 1363,
-      "전북특별자치도": 882,
+      "강원특별자치도": 2036,
+      "경상북도": 1765,
+      "경상남도": 1508,
+      "충청남도": 1385,
+      "전남광주통합특별시": 1360,
+      "전북특별자치도": 879,
       "충청북도": 769,
-      "경기도": 536,
+      "경기도": 534,
       "제주특별자치도": 324,
       "인천광역시": 165,
       "울산광역시": 143,
-      "대구광역시": 98,
+      "대구광역시": 97,
       "세종특별자치시": 1
     },
     "region_check": {
-      "sigungu": 11004,
+      "sigungu": 10965,
       "sido_only": 1
     },
     "gap_anchors_without_pick_2km": 86,
@@ -1135,38 +1136,6 @@
       "provenance": {
         "content_id": "4181000-101-1997-00047",
         "address": "강원특별자치도 춘천시 남산면 강촌로 258, 1층",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4181000-101-1997-00048",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4181000-101-1997-00048",
-        "name": "또래오래치킨강촌점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.808688687448075,
-          "lng": 127.63668125329727
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "춘천시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4181000-101-1997-00048",
-        "address": "강원특별자치도 춘천시 남산면 강촌로 121, 1층",
         "image_url": null
       }
     },
@@ -2319,38 +2288,6 @@
       "provenance": {
         "content_id": "4181000-101-2013-00324",
         "address": "강원특별자치도 춘천시 남산면 한치로 185",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4181000-101-2014-00027",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4181000-101-2014-00027",
-        "name": "맘스터치강촌점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.81205322915125,
-          "lng": 127.63487073648012
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "춘천시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4181000-101-2014-00027",
-        "address": "강원특별자치도 춘천시 남산면 강촌로 82, 1층",
         "image_url": null
       }
     },
@@ -6739,38 +6676,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4201000-101-1992-00044",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4201000-101-1992-00044",
-        "name": "페리카나치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.61017260397988,
-          "lng": 129.03651954277734
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "강릉시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4201000-101-1992-00044",
-        "address": "강원특별자치도 강릉시 옥계면 현내시장길 59",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4201000-101-1993-00037",
       "source": "LOCALDATA",
       "poi": {
@@ -7791,6 +7696,38 @@
       "provenance": {
         "content_id": "4201000-101-2024-00065",
         "address": "강원특별자치도 강릉시 연곡면 소금강길 470, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4201000-101-2024-00320",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4201000-101-2024-00320",
+        "name": "고가네숯불고기냉면.육개장칼국수",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.609262822793966,
+          "lng": 129.03569390841557
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "강릉시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4201000-101-2024-00320",
+        "address": "강원특별자치도 강릉시 옥계면 현내시장길 71, 1층",
         "image_url": null
       }
     },
@@ -12051,38 +11988,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4241000-101-2016-00018",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4241000-101-2016-00018",
-        "name": "비에이치씨 장호항점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.283705419678306,
-          "lng": 129.31305472533919
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "삼척시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4241000-101-2016-00018",
-        "address": "강원특별자치도 삼척시 근덕면 삼척로 2100",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4241000-101-2016-00020",
       "source": "LOCALDATA",
       "poi": {
@@ -14067,38 +13972,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4251000-101-1992-00015",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4251000-101-1992-00015",
-        "name": "페리카나연봉점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.685504310280216,
-          "lng": 127.87828837223272
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "홍천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4251000-101-1992-00015",
-        "address": "강원특별자치도 홍천군 홍천읍 무궁화로 88",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4251000-101-1992-00023",
       "source": "LOCALDATA",
       "poi": {
@@ -14159,6 +14032,38 @@
       "provenance": {
         "content_id": "4251000-101-1992-00031",
         "address": "강원특별자치도 홍천군 홍천읍 공작산로 106",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4251000-101-1992-00037",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4251000-101-1992-00037",
+        "name": "엄마손닭갈비",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.688475199597434,
+          "lng": 127.87826246706337
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "홍천군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4251000-101-1992-00037",
+        "address": "강원특별자치도 홍천군 홍천읍 홍천로 296",
         "image_url": null
       }
     },
@@ -14607,6 +14512,38 @@
       "provenance": {
         "content_id": "4251000-101-1995-00027",
         "address": "강원특별자치도 홍천군 서면 한치골길 1122-60",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4251000-101-1995-00030",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4251000-101-1995-00030",
+        "name": "장락칼국수",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.70128387947743,
+          "lng": 127.69527200439947
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "홍천군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4251000-101-1995-00030",
+        "address": "강원특별자치도 홍천군 서면 한치골길 1122-58",
         "image_url": null
       }
     },
@@ -17427,38 +17364,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4251000-101-2005-00038",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4251000-101-2005-00038",
-        "name": "처갓집양념치킨(서면점)",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.68981539240729,
-          "lng": 127.69953452558329
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "홍천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4251000-101-2005-00038",
-        "address": "강원특별자치도 홍천군 서면 한치골길 906",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4251000-101-2005-00063",
       "source": "LOCALDATA",
       "poi": {
@@ -17715,38 +17620,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4251000-101-2007-00063",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4251000-101-2007-00063",
-        "name": "Bhc홍천병원점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.80455264719603,
-          "lng": 127.99735887146461
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "분식"
-      ],
-      "region": "홍천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4251000-101-2007-00063",
-        "address": "강원특별자치도 홍천군 두촌면 아홉사리로 43",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4251000-101-2007-00065",
       "source": "LOCALDATA",
       "poi": {
@@ -17839,38 +17712,6 @@
       "provenance": {
         "content_id": "4251000-101-2007-00081",
         "address": "강원특별자치도 홍천군 서면 팔봉강변길 217",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4251000-101-2007-00089",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4251000-101-2007-00089",
-        "name": "자담치킨홍천비발디점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.61693611887083,
-          "lng": 127.67050272388325
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "홍천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4251000-101-2007-00089",
-        "address": "강원특별자치도 홍천군 서면 굴업솔골길 41",
         "image_url": null
       }
     },
@@ -22127,38 +21968,6 @@
       "provenance": {
         "content_id": "4251000-101-2020-00069",
         "address": "강원특별자치도 홍천군 홍천읍 갈마로11길 36",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4251000-101-2020-00081",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4251000-101-2020-00081",
-        "name": "노랑통닭 비발디점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.61959157945568,
-          "lng": 127.66742107454272
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "홍천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4251000-101-2020-00081",
-        "address": "강원특별자치도 홍천군 서면 한서로 2090",
         "image_url": null
       }
     },
@@ -30227,38 +30036,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4291000-101-1989-00014",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4291000-101-1989-00014",
-        "name": "페리카나치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.227212369325166,
-          "lng": 128.81628394067144
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "정선군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4291000-101-1989-00014",
-        "address": "강원특별자치도 정선군 사북읍 사북중앙로 15-5",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4291000-101-1990-00021",
       "source": "LOCALDATA",
       "poi": {
@@ -30447,38 +30224,6 @@
       "provenance": {
         "content_id": "4291000-101-1991-00022",
         "address": "강원특별자치도 정선군 신동읍 함백로 106",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4291000-101-1991-00034",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4291000-101-1991-00034",
-        "name": "페리카나치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.49558464342463,
-          "lng": 128.85060156456743
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "정선군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4291000-101-1991-00034",
-        "address": "강원특별자치도 정선군 임계면 송계5길 5",
         "image_url": null
       }
     },
@@ -33939,6 +33684,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4291000-101-2011-00072",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4291000-101-2011-00072",
+        "name": "한우리",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.22602186562485,
+          "lng": 128.82526624918674
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "식육(숯불구이)"
+      ],
+      "region": "정선군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4291000-101-2011-00072",
+        "address": "강원특별자치도 정선군 사북읍 지장천로 705",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4291000-101-2011-00078",
       "source": "LOCALDATA",
       "poi": {
@@ -34319,38 +34096,6 @@
       "provenance": {
         "content_id": "4291000-101-2012-00036",
         "address": "강원특별자치도 정선군 고한읍 고한로 39",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4291000-101-2012-00045",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4291000-101-2012-00045",
-        "name": "노랑통닭 사북고한점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.22719293743809,
-          "lng": 128.82271236575585
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "정선군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4291000-101-2012-00045",
-        "address": "강원특별자치도 정선군 사북읍 사북중앙로 73",
         "image_url": null
       }
     },
@@ -35187,6 +34932,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4291000-101-2015-00050",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4291000-101-2015-00050",
+        "name": "짜리몽 식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.49490548311414,
+          "lng": 128.8511585186782
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "정선군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4291000-101-2015-00050",
+        "address": "강원특별자치도 정선군 임계면 송계2길 6-2",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4291000-101-2015-00054",
       "source": "LOCALDATA",
       "poi": {
@@ -35247,38 +35024,6 @@
       "provenance": {
         "content_id": "4291000-101-2015-00055",
         "address": "강원특별자치도 정선군 고한읍 고한2길 19",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4291000-101-2016-00001",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4291000-101-2016-00001",
-        "name": "치킨플러스정선사북점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.22813608800169,
-          "lng": 128.83780749482077
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "정선군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4291000-101-2016-00001",
-        "address": "강원특별자치도 정선군 사북읍 소금강로 3535 (산수빌아파트 상가)",
         "image_url": null
       }
     },
@@ -35443,15 +35188,15 @@
       }
     },
     {
-      "provisional_id": "localdata-4291000-101-2016-00032",
+      "provisional_id": "localdata-4291000-101-2016-00045",
       "source": "LOCALDATA",
       "poi": {
-        "poi_id": "localdata-4291000-101-2016-00032",
-        "name": "BHC고한사북점",
+        "poi_id": "localdata-4291000-101-2016-00045",
+        "name": "군간나루",
         "category": "FOOD",
         "coord": {
-          "lat": 37.20068166205113,
-          "lng": 128.85391393205805
+          "lat": 37.22785261083633,
+          "lng": 128.82074071334804
         },
         "open_hours": [],
         "avg_cost": null,
@@ -35469,8 +35214,8 @@
       "region": "정선군",
       "opening_hours_raw": null,
       "provenance": {
-        "content_id": "4291000-101-2016-00032",
-        "address": "강원특별자치도 정선군 고한읍 고한6길 8",
+        "content_id": "4291000-101-2016-00045",
+        "address": "강원특별자치도 정선군 사북읍 사북중앙로 53-1, 1층",
         "image_url": null
       }
     },
@@ -36655,6 +36400,38 @@
       "provenance": {
         "content_id": "4291000-101-2018-00068",
         "address": "강원특별자치도 정선군 고한읍 고한6길 9-13",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4291000-101-2018-00075",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4291000-101-2018-00075",
+        "name": "정든집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.22706639115856,
+          "lng": 128.8167875968634
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "분식"
+      ],
+      "region": "정선군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4291000-101-2018-00075",
+        "address": "강원특별자치도 정선군 사북읍 사북중앙로 17-4",
         "image_url": null
       }
     },
@@ -40307,6 +40084,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4301000-101-1977-00006",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4301000-101-1977-00006",
+        "name": "장수옷닭",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.23964211349034,
+          "lng": 127.43870067286457
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "철원군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4301000-101-1977-00006",
+        "address": "강원특별자치도 철원군 서면 와수로 177-2",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4301000-101-1979-00004",
       "source": "LOCALDATA",
       "poi": {
@@ -40463,6 +40272,38 @@
       "provenance": {
         "content_id": "4301000-101-1990-00075",
         "address": "강원특별자치도 철원군 갈말읍 명성로 146",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4301000-101-1991-00025",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4301000-101-1991-00025",
+        "name": "영진식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.14468325848504,
+          "lng": 127.30863077844516
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "철원군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4301000-101-1991-00025",
+        "address": "강원특별자치도 철원군 갈말읍 삼부연로 4-1",
         "image_url": null
       }
     },
@@ -40947,6 +40788,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4301000-101-1998-00061",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4301000-101-1998-00061",
+        "name": "지동관신철원점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.1451505964607,
+          "lng": 127.3074478262592
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "중국식"
+      ],
+      "region": "철원군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4301000-101-1998-00061",
+        "address": "강원특별자치도 철원군 갈말읍 명성로149번길 8-1",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4301000-101-1998-00149",
       "source": "LOCALDATA",
       "poi": {
@@ -40975,70 +40848,6 @@
       "provenance": {
         "content_id": "4301000-101-1998-00149",
         "address": "강원특별자치도 철원군 동송읍 태봉로 1831",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4301000-101-1998-00199",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4301000-101-1998-00199",
-        "name": "피자스쿨 와수리점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.23943201381454,
-          "lng": 127.43786075581936
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "철원군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4301000-101-1998-00199",
-        "address": "강원특별자치도 철원군 서면 와수로181번길 25-16",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4301000-101-1999-00081",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4301000-101-1999-00081",
-        "name": "또래오래",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.14474992820893,
-          "lng": 127.3076881019891
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "철원군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4301000-101-1999-00081",
-        "address": "강원특별자치도 철원군 갈말읍 명성로 147",
         "image_url": null
       }
     },
@@ -41423,38 +41232,6 @@
       "provenance": {
         "content_id": "4301000-101-2008-00016",
         "address": "강원특별자치도 철원군 동송읍 태봉로 1799-22",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4301000-101-2010-00036",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4301000-101-2010-00036",
-        "name": "굽네치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.1434471662674,
-          "lng": 127.30504512131037
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "철원군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4301000-101-2010-00036",
-        "address": "강원특별자치도 철원군 갈말읍 명성로139번길 13-22",
         "image_url": null
       }
     },
@@ -45747,6 +45524,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4321000-101-1965-00001",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4321000-101-1965-00001",
+        "name": "풍미식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.21621588485546,
+          "lng": 128.05007670608512
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "중국식"
+      ],
+      "region": "양구군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4321000-101-1965-00001",
+        "address": "강원특별자치도 양구군 동면 펀치볼로 58-1",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4321000-101-1978-00002",
       "source": "LOCALDATA",
       "poi": {
@@ -46031,38 +45840,6 @@
       "provenance": {
         "content_id": "4321000-101-1991-00001",
         "address": "강원특별자치도 양구군 양구읍 양록길 103",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4321000-101-1991-00005",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4321000-101-1991-00005",
-        "name": "또래오래",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.106075475617565,
-          "lng": 127.98937635066761
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "양구군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4321000-101-1991-00005",
-        "address": "강원특별자치도 양구군 양구읍 중앙길 29",
         "image_url": null
       }
     },
@@ -46771,38 +46548,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4321000-101-1999-00033",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4321000-101-1999-00033",
-        "name": "피자스쿨(양구점)",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.107868085382954,
-          "lng": 127.98877307516769
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "패스트푸드"
-      ],
-      "region": "양구군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4321000-101-1999-00033",
-        "address": "강원특별자치도 양구군 양구읍 사명길 118-17",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4321000-101-2000-00012",
       "source": "LOCALDATA",
       "poi": {
@@ -47311,38 +47056,6 @@
       "provenance": {
         "content_id": "4321000-101-2006-00019",
         "address": "강원특별자치도 양구군 양구읍 양록길23번길 12-27",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4321000-101-2007-00023",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4321000-101-2007-00023",
-        "name": "또래오래",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.19094684777589,
-          "lng": 128.03561130394576
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "양구군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4321000-101-2007-00023",
-        "address": "강원특별자치도 양구군 동면 금강산로 1543",
         "image_url": null
       }
     },
@@ -47955,38 +47668,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4321000-101-2012-00039",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4321000-101-2012-00039",
-        "name": "처갓집양념치킨 동면점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.19123124335488,
-          "lng": 128.03653260034744
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "양구군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4321000-101-2012-00039",
-        "address": "강원특별자치도 양구군 동면 금강산로 1554, 1554동",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4321000-101-2013-00009",
       "source": "LOCALDATA",
       "poi": {
@@ -48239,38 +47920,6 @@
       "provenance": {
         "content_id": "4321000-101-2014-00012",
         "address": "강원특별자치도 양구군 양구읍 양록길 19",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4321000-101-2014-00028",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4321000-101-2014-00028",
-        "name": "교촌치킨 양구점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.105283512360074,
-          "lng": 127.98933843051073
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "양구군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4321000-101-2014-00028",
-        "address": "강원특별자치도 양구군 양구읍 중앙길 47",
         "image_url": null
       }
     },
@@ -49359,6 +49008,38 @@
       "provenance": {
         "content_id": "4321000-101-2020-00003",
         "address": "강원특별자치도 양구군 양구읍 사명길 103",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4321000-101-2020-00004",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4321000-101-2020-00004",
+        "name": "엄마네밥집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.21613884565838,
+          "lng": 128.0493108517395
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "양구군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4321000-101-2020-00004",
+        "address": "강원특별자치도 양구군 동면 펀치볼로 52",
         "image_url": null
       }
     },
@@ -51827,38 +51508,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4331000-101-2001-00021",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4331000-101-2001-00021",
-        "name": "비비큐",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.06849402057018,
-          "lng": 128.17143911976717
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "인제군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4331000-101-2001-00021",
-        "address": "강원특별자치도 인제군 인제읍 인제로188번길 2",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4331000-101-2001-00032",
       "source": "LOCALDATA",
       "poi": {
@@ -52595,15 +52244,15 @@
       }
     },
     {
-      "provisional_id": "localdata-4331000-101-2006-00040",
+      "provisional_id": "localdata-4331000-101-2006-00015",
       "source": "LOCALDATA",
       "poi": {
-        "poi_id": "localdata-4331000-101-2006-00040",
-        "name": "BHC인제남면점",
+        "poi_id": "localdata-4331000-101-2006-00015",
+        "name": "사또 족발 보쌈",
         "category": "FOOD",
         "coord": {
-          "lat": 37.96786263873993,
-          "lng": 128.08024339991204
+          "lat": 37.967049936178924,
+          "lng": 128.08015980387344
         },
         "open_hours": [],
         "avg_cost": null,
@@ -52616,13 +52265,13 @@
         "source_ref": null
       },
       "tags": [
-        "통닭(치킨)"
+        "한식"
       ],
       "region": "인제군",
       "opening_hours_raw": null,
       "provenance": {
-        "content_id": "4331000-101-2006-00040",
-        "address": "강원특별자치도 인제군 남면 신남로58번길 5",
+        "content_id": "4331000-101-2006-00015",
+        "address": "강원특별자치도 인제군 남면 신남로54번길 10",
         "image_url": null
       }
     },
@@ -53039,38 +52688,6 @@
       "provenance": {
         "content_id": "4331000-101-2009-00063",
         "address": "강원특별자치도 인제군 북면 미시령로 1420",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4331000-101-2010-00041",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4331000-101-2010-00041",
-        "name": "치킨플러스(상동점)",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.06929460751923,
-          "lng": 128.17222887742574
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "경양식"
-      ],
-      "region": "인제군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4331000-101-2010-00041",
-        "address": "강원특별자치도 인제군 인제읍 인제로 197-1, 1층",
         "image_url": null
       }
     },
@@ -55763,6 +55380,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4331000-101-2023-00057",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4331000-101-2023-00057",
+        "name": "끝짱만두·스낵",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.068207064981934,
+          "lng": 128.17149660949215
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "인제군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4331000-101-2023-00057",
+        "address": "강원특별자치도 인제군 인제읍 비봉로6번길 7",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4331000-101-2023-00060",
       "source": "LOCALDATA",
       "poi": {
@@ -55823,6 +55472,38 @@
       "provenance": {
         "content_id": "4331000-101-2023-00064",
         "address": "강원특별자치도 인제군 북면 한계응골길 27, 제2동",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4331000-101-2024-00002",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4331000-101-2024-00002",
+        "name": "키친길리",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.068173040386235,
+          "lng": 128.17164433950356
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "경양식"
+      ],
+      "region": "인제군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4331000-101-2024-00002",
+        "address": "강원특별자치도 인제군 인제읍 인제로188번길 6-1",
         "image_url": null
       }
     },
@@ -56403,38 +56084,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4341000-101-1990-00020",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4341000-101-1990-00020",
-        "name": "페리카나치킨 거진점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.445728594952435,
-          "lng": 128.45427250977127
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "고성군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4341000-101-1990-00020",
-        "address": "강원특별자치도 고성군 거진읍 거탄진로 117",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4341000-101-1993-00004",
       "source": "LOCALDATA",
       "poi": {
@@ -56751,38 +56400,6 @@
       "provenance": {
         "content_id": "4341000-101-1997-00040",
         "address": "강원특별자치도 고성군 현내면 금강산로 416",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4341000-101-1997-00058",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4341000-101-1997-00058",
-        "name": "비비큐",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.50046155352246,
-          "lng": 128.42414366926383
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "고성군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4341000-101-1997-00058",
-        "address": "강원특별자치도 고성군 현내면 한나루로 144",
         "image_url": null
       }
     },
@@ -57231,6 +56848,38 @@
       "provenance": {
         "content_id": "4341000-101-2000-00040",
         "address": "강원특별자치도 고성군 간성읍 간성북로 47-4",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4341000-101-2000-00047",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4341000-101-2000-00047",
+        "name": "장수갈비",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.49905258542789,
+          "lng": 128.4248819016865
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "식육(숯불구이)"
+      ],
+      "region": "고성군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4341000-101-2000-00047",
+        "address": "강원특별자치도 고성군 현내면 한나루로 123-1",
         "image_url": null
       }
     },
@@ -57839,6 +57488,38 @@
       "provenance": {
         "content_id": "4341000-101-2012-00010",
         "address": "강원특별자치도 고성군 죽왕면 짱고개길 13",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4341000-101-2012-00056",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4341000-101-2012-00056",
+        "name": "막창 생구이",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.44600792618139,
+          "lng": 128.454928113324
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "식육(숯불구이)"
+      ],
+      "region": "고성군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4341000-101-2012-00056",
+        "address": "강원특별자치도 고성군 거진읍 거탄진로 124-1",
         "image_url": null
       }
     },
@@ -60883,38 +60564,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4351000-101-1998-00021",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4351000-101-1998-00021",
-        "name": "BBQ 치킨앤 피자",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.01980620164541,
-          "lng": 128.72398498940953
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "양양군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4351000-101-1998-00021",
-        "address": "강원특별자치도 양양군 현북면 하조대1길 54",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4351000-101-1998-00039",
       "source": "LOCALDATA",
       "poi": {
@@ -61523,38 +61172,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4351000-101-2009-00015",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4351000-101-2009-00015",
-        "name": "비에이치씨 하조대점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.02043483408297,
-          "lng": 128.72709484308223
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "양양군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4351000-101-2009-00015",
-        "address": "강원특별자치도 양양군 현북면 하륜길 34",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4351000-101-2009-00037",
       "source": "LOCALDATA",
       "poi": {
@@ -61583,38 +61200,6 @@
       "provenance": {
         "content_id": "4351000-101-2009-00037",
         "address": "강원특별자치도 양양군 서면 쌍솔배기길 49",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4351000-101-2009-00046",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4351000-101-2009-00046",
-        "name": "네네치킨 하조대점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.019223709590236,
-          "lng": 128.72483769659306
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "양양군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4351000-101-2009-00046",
-        "address": "강원특별자치도 양양군 현북면 조준길 6",
         "image_url": null
       }
     },
@@ -62127,6 +61712,38 @@
       "provenance": {
         "content_id": "4351000-101-2015-00022",
         "address": "강원특별자치도 양양군 현남면 인구길 52-3",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4351000-101-2015-00052",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4351000-101-2015-00052",
+        "name": "하조대국수",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.01903219366057,
+          "lng": 128.72449325122673
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "양양군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4351000-101-2015-00052",
+        "address": "강원특별자치도 양양군 현북면 하조대1길 46",
         "image_url": null
       }
     },
@@ -65171,102 +64788,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4191000-101-2016-00173",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4191000-101-2016-00173",
-        "name": "미스터피자&비비큐치킨밸리점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.43415158620521,
-          "lng": 127.81950033385306
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "기타"
-      ],
-      "region": "원주시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4191000-101-2016-00173",
-        "address": "강원특별자치도 원주시 지정면 오크밸리1길 70, 지상1층 (빌리지센타)",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4191000-101-2021-00183",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4191000-101-2021-00183",
-        "name": "비비큐팔레드차밍점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.3892741206429,
-          "lng": 127.78408742864302
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "기타"
-      ],
-      "region": "원주시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4191000-101-2021-00183",
-        "address": "강원특별자치도 원주시 지정면 지정로 1393",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4191000-101-2025-00643",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4191000-101-2025-00643",
-        "name": "노브랜드버거오크밸리점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.40777109087292,
-          "lng": 127.80704802173832
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "기타"
-      ],
-      "region": "원주시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4191000-101-2025-00643",
-        "address": "강원특별자치도 원주시 지정면 오크밸리2길 56, 1층 102호",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4201000-101-2020-00259",
       "source": "LOCALDATA",
       "poi": {
@@ -68083,38 +67604,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4140000-101-1991-00001",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4140000-101-1991-00001",
-        "name": "푸라닭 연천청산점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.02352263392482,
-          "lng": 127.13538654644331
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "연천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4140000-101-1991-00001",
-        "address": "경기도 연천군 청산면 청창로 715",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4140000-101-1991-00011",
       "source": "LOCALDATA",
       "poi": {
@@ -68403,38 +67892,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4140000-101-1995-00067",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4140000-101-1995-00067",
-        "name": "60계치킨경기연천전곡점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.025278263773664,
-          "lng": 127.06902880855021
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "패스트푸드"
-      ],
-      "region": "연천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4140000-101-1995-00067",
-        "address": "경기도 연천군 전곡읍 전곡로144번길 5, 1층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4140000-101-1996-00010",
       "source": "LOCALDATA",
       "poi": {
@@ -68691,6 +68148,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4140000-101-1997-00061",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4140000-101-1997-00061",
+        "name": "고모네식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.02439671690113,
+          "lng": 127.06806019228692
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "분식"
+      ],
+      "region": "연천군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4140000-101-1997-00061",
+        "address": "경기도 연천군 전곡읍 온골로 39",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4140000-101-1998-00058",
       "source": "LOCALDATA",
       "poi": {
@@ -68815,6 +68304,38 @@
       "provenance": {
         "content_id": "4140000-101-2001-00023",
         "address": "경기도 연천군 전곡읍 전곡로 144-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4140000-101-2001-00028",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4140000-101-2001-00028",
+        "name": "삼성식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 38.10187189282695,
+          "lng": 127.07559020223732
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "연천군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4140000-101-2001-00028",
+        "address": "경기도 연천군 연천읍 연천역로5번길 7",
         "image_url": null
       }
     },
@@ -69199,38 +68720,6 @@
       "provenance": {
         "content_id": "4140000-101-2005-00031",
         "address": "경기도 연천군 전곡읍 온골로 40",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4140000-101-2006-00017",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4140000-101-2006-00017",
-        "name": "맘스터치(연천역점)",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.10167013355693,
-          "lng": 127.07598761109467
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "패스트푸드"
-      ],
-      "region": "연천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4140000-101-2006-00017",
-        "address": "경기도 연천군 연천읍 연천역로 7",
         "image_url": null
       }
     },
@@ -82611,38 +82100,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4170000-101-2021-00044",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4170000-101-2021-00044",
-        "name": "bhc빌리리조트점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.59235281241934,
-          "lng": 127.58652048560877
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "기타"
-      ],
-      "region": "양평군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4170000-101-2021-00044",
-        "address": "경기도 양평군 단월면 산음리 856-2",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4170000-101-2023-00164",
       "source": "LOCALDATA",
       "poi": {
@@ -85007,38 +84464,6 @@
       "provenance": {
         "content_id": "5340000-101-1999-00094",
         "address": "경상남도 사천시 곤명면 완사1길 10",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5340000-101-1999-00108",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5340000-101-1999-00108",
-        "name": "지코바양념치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.08541091475147,
-          "lng": 128.08584619580733
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "사천시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5340000-101-1999-00108",
-        "address": "경상남도 사천시 사천읍 사천읍성로 15, 1층",
         "image_url": null
       }
     },
@@ -88243,6 +87668,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5340000-101-2026-00026",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5340000-101-2026-00026",
+        "name": "찬희네흑돼지곰탕",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.084683869964884,
+          "lng": 128.0862907104976
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "탕류(보신용)"
+      ],
+      "region": "사천시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5340000-101-2026-00026",
+        "address": "경상남도 사천시 사천읍 읍내1길 107, 1층",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5340000-101-2026-00074",
       "source": "LOCALDATA",
       "poi": {
@@ -88499,38 +87956,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5350000-101-2009-00043",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5350000-101-2009-00043",
-        "name": "처갓집치킨진영신도시점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.307940015846654,
-          "lng": 128.73029805035438
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "김해시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5350000-101-2009-00043",
-        "address": "경상남도 김해시 진영읍 김해대로365번길 18, 105호 (비전빌딩)",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5350000-101-2010-00427",
       "source": "LOCALDATA",
       "poi": {
@@ -88751,6 +88176,38 @@
       "provenance": {
         "content_id": "5350000-101-2016-00362",
         "address": "경상남도 김해시 진영읍 김해대로365번길 6-23",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5350000-101-2016-00501",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5350000-101-2016-00501",
+        "name": "60계",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.30737797669293,
+          "lng": 128.73039056461582
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "식육(숯불구이)"
+      ],
+      "region": "김해시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5350000-101-2016-00501",
+        "address": "경상남도 김해시 진영읍 김해대로365번길 8, 105호 (굿프라임빌딩)",
         "image_url": null
       }
     },
@@ -89391,6 +88848,38 @@
       "provenance": {
         "content_id": "5360000-101-1992-00044",
         "address": "경상남도 밀양시 단장면 표충로 864",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5360000-101-1993-00016",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5360000-101-1993-00016",
+        "name": "대복식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.37528658301191,
+          "lng": 128.70746833528463
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "밀양시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5360000-101-1993-00016",
+        "address": "경상남도 밀양시 하남읍 수산복개길 28",
         "image_url": null
       }
     },
@@ -91155,38 +90644,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5360000-101-2005-00081",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5360000-101-2005-00081",
-        "name": "네네치킨수산점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.374440169183764,
-          "lng": 128.70768004270005
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "밀양시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5360000-101-2005-00081",
-        "address": "경상남도 밀양시 하남읍 시서길 5",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5360000-101-2006-00010",
       "source": "LOCALDATA",
       "poi": {
@@ -91343,6 +90800,38 @@
       "provenance": {
         "content_id": "5360000-101-2006-00081",
         "address": "경상남도 밀양시 산내면 얼음골로 134-25",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5360000-101-2007-00001",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5360000-101-2007-00001",
+        "name": "맛있는고기에솜씨를더하다",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.482954131306336,
+          "lng": 128.7490978844643
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "식육(숯불구이)"
+      ],
+      "region": "밀양시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5360000-101-2007-00001",
+        "address": "경상남도 밀양시 미리벌중앙로 57, 1층 (삼문동)",
         "image_url": null
       }
     },
@@ -91983,38 +91472,6 @@
       "provenance": {
         "content_id": "5360000-101-2011-00074",
         "address": "경상남도 밀양시 산내면 얼음골로 223-5",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5360000-101-2011-00109",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5360000-101-2011-00109",
-        "name": "교촌치킨 삼문상남점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.48295192947879,
-          "lng": 128.74966945259172
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "밀양시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5360000-101-2011-00109",
-        "address": "경상남도 밀양시 미리벌중앙로 56 (삼문동)",
         "image_url": null
       }
     },
@@ -98195,38 +97652,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5380000-101-2018-00354",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5380000-101-2018-00354",
-        "name": "맘스터치 에덴밸리점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.430730134202804,
-          "lng": 128.98439122974256
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "분식"
-      ],
-      "region": "양산시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5380000-101-2018-00354",
-        "address": "경상남도 양산시 원동면 어실로 1206, 에덴밸리리조트 스키하우스 2층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5380000-101-2018-00420",
       "source": "LOCALDATA",
       "poi": {
@@ -98611,6 +98036,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5400000-101-1996-00010",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5400000-101-1996-00010",
+        "name": "수미정",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.35347105675106,
+          "lng": 128.4273933456958
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "함안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5400000-101-1996-00010",
+        "address": "경상남도 함안군 대산면 대산중앙로 229",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5400000-101-1997-00068",
       "source": "LOCALDATA",
       "poi": {
@@ -98671,38 +98128,6 @@
       "provenance": {
         "content_id": "5400000-101-1998-00017",
         "address": "경상남도 함안군 가야읍 가야10길 16",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5400000-101-1999-00022",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5400000-101-1999-00022",
-        "name": "비에이치씨(BHC) 함안대산점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.35223059457157,
-          "lng": 128.42834404085968
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "함안군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5400000-101-1999-00022",
-        "address": "경상남도 함안군 대산면 대산중앙4길 54-1",
         "image_url": null
       }
     },
@@ -106131,38 +105556,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5420000-101-2009-00004",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5420000-101-2009-00004",
-        "name": "네네치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 34.97698179607001,
-          "lng": 128.31272434024083
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "고성군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5420000-101-2009-00004",
-        "address": "경상남도 고성군 고성읍 성내로 31, 협동그린타운 상가동 1층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5420000-101-2009-00040",
       "source": "LOCALDATA",
       "poi": {
@@ -106671,6 +106064,38 @@
       "provenance": {
         "content_id": "5420000-101-2014-00075",
         "address": "경상남도 고성군 동해면 내산4길 26-4",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5420000-101-2014-00078",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5420000-101-2014-00078",
+        "name": "비촌참숯바베큐",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.97654815142406,
+          "lng": 128.3132849874937
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "통닭(치킨)"
+      ],
+      "region": "고성군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5420000-101-2014-00078",
+        "address": "경상남도 고성군 고성읍 성내로 38",
         "image_url": null
       }
     },
@@ -118995,38 +118420,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5460000-101-1997-00046",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5460000-101-1997-00046",
-        "name": "페리카나치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.63043372410694,
-          "lng": 127.8116971302355
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "함양군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5460000-101-1997-00046",
-        "address": "경상남도 함양군 안의면 강변로 321",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5460000-101-1997-00050",
       "source": "LOCALDATA",
       "poi": {
@@ -119635,6 +119028,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5460000-101-2018-00012",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5460000-101-2018-00012",
+        "name": "안의 미송갈비탕",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.63022555166236,
+          "lng": 127.81432296460326
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "함양군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5460000-101-2018-00012",
+        "address": "경상남도 함양군 안의면 광풍로 161-12, 메리츠화재",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5460000-101-2021-00006",
       "source": "LOCALDATA",
       "poi": {
@@ -119891,38 +119316,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5470000-101-1984-00015",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5470000-101-1984-00015",
-        "name": "멕시카나 가조점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.70843777992373,
-          "lng": 128.01574402474768
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "거창군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5470000-101-1984-00015",
-        "address": "경상남도 거창군 가조면 지산로 1477",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5470000-101-1987-00008",
       "source": "LOCALDATA",
       "poi": {
@@ -119983,6 +119376,38 @@
       "provenance": {
         "content_id": "5470000-101-1988-00020",
         "address": "경상남도 거창군 위천면 원학길 355",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5470000-101-1990-00020",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5470000-101-1990-00020",
+        "name": "시골추어탕",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.70953940032355,
+          "lng": 128.01561076007593
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "거창군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5470000-101-1990-00020",
+        "address": "경상남도 거창군 가조면 지산로 1487",
         "image_url": null
       }
     },
@@ -122643,38 +122068,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5480000-101-1990-00025",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5480000-101-1990-00025",
-        "name": "호식이두마리치킨야로점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.70677616607222,
-          "lng": 128.168917501751
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "합천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5480000-101-1990-00025",
-        "address": "경상남도 합천군 야로면 시장길 6-11",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5480000-101-1990-00036",
       "source": "LOCALDATA",
       "poi": {
@@ -123439,6 +122832,38 @@
       "provenance": {
         "content_id": "5480000-101-1995-00068",
         "address": "경상남도 합천군 봉산면 서부로 4332",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5480000-101-1996-00001",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5480000-101-1996-00001",
+        "name": "경화식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.706866195213074,
+          "lng": 128.16930104739862
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "중국식"
+      ],
+      "region": "합천군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5480000-101-1996-00001",
+        "address": "경상남도 합천군 야로면 가야산로 363 (1층)",
         "image_url": null
       }
     },
@@ -126867,38 +126292,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5480000-101-2022-00001",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5480000-101-2022-00001",
-        "name": "비에이치씨(BHC)합천청덕점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.5238606028805,
-          "lng": 128.35855819995896
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "합천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5480000-101-2022-00001",
-        "address": "경상남도 합천군 청덕면 의합대로 2894",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5480000-101-2022-00007",
       "source": "LOCALDATA",
       "poi": {
@@ -128559,38 +127952,6 @@
       "provenance": {
         "content_id": "5670123-101-2014-00016",
         "address": "경상남도 창원시 의창구 북면 천주로1165번길 1, 1층",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5670123-101-2014-00176",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5670123-101-2014-00176",
-        "name": "bhc창원북면온천점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.35534552651863,
-          "lng": 128.60768754662195
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "창원시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5670123-101-2014-00176",
-        "address": "경상남도 창원시 의창구 북면 천주로1165번길 21, 1층",
         "image_url": null
       }
     },
@@ -135507,6 +134868,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5030000-101-2020-00102",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5030000-101-2020-00102",
+        "name": "소문난해풍멸치국수",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.99111552299596,
+          "lng": 129.55502698579184
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "포항시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5030000-101-2020-00102",
+        "address": "경상북도 포항시 남구 구룡포읍 구룡포길 85, 1층",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5030000-101-2020-00110",
       "source": "LOCALDATA",
       "poi": {
@@ -136047,38 +135440,6 @@
       "provenance": {
         "content_id": "5030000-101-2022-00084",
         "address": "경상북도 포항시 남구 호미곶면 해맞이로 191-1, 1층",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5030000-101-2022-00094",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5030000-101-2022-00094",
-        "name": "처갓집 양념치킨 구룡포점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.99095002252962,
-          "lng": 129.55512309037277
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "포항시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5030000-101-2022-00094",
-        "address": "경상북도 포항시 남구 구룡포읍 구룡포길 86, 1층",
         "image_url": null
       }
     },
@@ -137395,6 +136756,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5040000-101-1980-00058",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5040000-101-1980-00058",
+        "name": "부산횟집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.15286569774813,
+          "lng": 129.3996405038355
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "포항시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5040000-101-1980-00058",
+        "address": "경상북도 포항시 북구 흥해읍 해안로1732번길 76",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5040000-101-1980-00062",
       "source": "LOCALDATA",
       "poi": {
@@ -137583,38 +136976,6 @@
       "provenance": {
         "content_id": "5040000-101-1984-00030",
         "address": "경상북도 포항시 북구 흥해읍 해안로1732번길 66",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5040000-101-1984-00031",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5040000-101-1984-00031",
-        "name": "비비큐 포항 칠포 오도점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.15489117774745,
-          "lng": 129.39806329678555
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "포항시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5040000-101-1984-00031",
-        "address": "경상북도 포항시 북구 흥해읍 해안로1732번길 40",
         "image_url": null
       }
     },
@@ -146451,6 +145812,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5060000-101-1991-00027",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5060000-101-1991-00027",
+        "name": "시암골야식",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.1265735646724,
+          "lng": 128.10788091219018
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "김천시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5060000-101-1991-00027",
+        "address": "경상북도 김천시 김천로 41-1 (평화동)",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5060000-101-1991-00046",
       "source": "LOCALDATA",
       "poi": {
@@ -146767,38 +146160,6 @@
       "provenance": {
         "content_id": "5060000-101-1993-00080",
         "address": "경상북도 김천시 평화길 9-2 (평화동)",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5060000-101-1994-00057",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5060000-101-1994-00057",
-        "name": "지코바숯불양념치킨부곡점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.125330884093316,
-          "lng": 128.10683672596485
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "김천시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5060000-101-1994-00057",
-        "address": "경상북도 김천시 김천로 22-16 (부곡동)",
         "image_url": null
       }
     },
@@ -147635,6 +146996,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5060000-101-2006-00045",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5060000-101-2006-00045",
+        "name": "땅땅치킨부곡점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.1247704116375,
+          "lng": 128.09959874628746
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "김천시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5060000-101-2006-00045",
+        "address": "경상북도 김천시 부곡길 206, 201동 111호 (부곡동,부곡우방타운상가)",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5060000-101-2006-00049",
       "source": "LOCALDATA",
       "poi": {
@@ -147919,38 +147312,6 @@
       "provenance": {
         "content_id": "5060000-101-2008-00060",
         "address": "경상북도 김천시 평화순환길 3 (평화동)",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5060000-101-2009-00004",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5060000-101-2009-00004",
-        "name": "지코바양념치킨부곡점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.123661903234115,
-          "lng": 128.0989993984437
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "김천시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5060000-101-2009-00004",
-        "address": "경상북도 김천시 송설로 132 (부곡동)",
         "image_url": null
       }
     },
@@ -157523,38 +156884,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5110000-101-2001-00351",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5110000-101-2001-00351",
-        "name": "치킨플러스 모서점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.34304448069465,
-          "lng": 127.96024798372709
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "상주시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5110000-101-2001-00351",
-        "address": "경상북도 상주시 모서면 중화로 907",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5110000-101-2001-00390",
       "source": "LOCALDATA",
       "poi": {
@@ -159023,6 +158352,38 @@
       "provenance": {
         "content_id": "5110000-101-2022-00037",
         "address": "경상북도 상주시 화북면 문장로 1707",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5110000-101-2022-00058",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5110000-101-2022-00058",
+        "name": "돈마실",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.333086890691455,
+          "lng": 127.96484604937399
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "식육(숯불구이)"
+      ],
+      "region": "상주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5110000-101-2022-00058",
+        "address": "경상북도 상주시 모서면 중화로 777",
         "image_url": null
       }
     },
@@ -161427,38 +160788,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5130000-101-2007-00104",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5130000-101-2007-00104",
-        "name": "비에이치씨하양점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.91969044355476,
-          "lng": 128.82740002648225
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "경산시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5130000-101-2007-00104",
-        "address": "경상북도 경산시 하양읍 하양로37길 19, 211동 1층 109호 (하양2차코아루 상가)",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5130000-101-2008-00125",
       "source": "LOCALDATA",
       "poi": {
@@ -161583,6 +160912,38 @@
       "provenance": {
         "content_id": "5130000-101-2016-00030",
         "address": "경상북도 경산시 진량읍 낙산길 10-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5130000-101-2016-00303",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5130000-101-2016-00303",
+        "name": "불로손칼국수",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.9450914380034,
+          "lng": 128.83593242300773
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "경산시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5130000-101-2016-00303",
+        "address": "경상북도 경산시 와촌면 금송로 404",
         "image_url": null
       }
     },
@@ -163763,38 +163124,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5160000-101-2018-00005",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5160000-101-2018-00005",
-        "name": "bhc청송주왕산점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.382132963269946,
-          "lng": 129.13142736905317
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "청송군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5160000-101-2018-00005",
-        "address": "경상북도 청송군 주왕산면 주왕산로 714-6",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5160000-101-2018-00006",
       "source": "LOCALDATA",
       "poi": {
@@ -164307,6 +163636,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5170000-101-1998-00009",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5170000-101-1998-00009",
+        "name": "오고파식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.59520195163211,
+          "lng": 129.08985665108582
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "영양군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5170000-101-1998-00009",
+        "address": "경상북도 영양군 입암면 조기리길 30",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5170000-101-2001-00006",
       "source": "LOCALDATA",
       "poi": {
@@ -164335,38 +163696,6 @@
       "provenance": {
         "content_id": "5170000-101-2001-00006",
         "address": "경상북도 영양군 입암면 신구2길 17-5, 대전식당",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5170000-101-2003-00009",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5170000-101-2003-00009",
-        "name": "멕시카나치킨식당",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.59539858864253,
-          "lng": 129.08994428859887
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "영양군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5170000-101-2003-00009",
-        "address": "경상북도 영양군 입암면 입암로 118",
         "image_url": null
       }
     },
@@ -173587,38 +172916,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5200000-101-2010-00033",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5200000-101-2010-00033",
-        "name": "멕시카나치킨다산점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.7935057079367,
-          "lng": 128.3794079702938
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "고령군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5200000-101-2010-00033",
-        "address": "경상북도 고령군 다산면 다산산단로 163",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5200000-101-2010-00035",
       "source": "LOCALDATA",
       "poi": {
@@ -174127,6 +173424,38 @@
       "provenance": {
         "content_id": "5200000-101-2019-00039",
         "address": "경상북도 고령군 대가야읍 월기길 9",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5200000-101-2020-00001",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5200000-101-2020-00001",
+        "name": "푸르내미리내티하우스",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.815487357779745,
+          "lng": 128.38065918331202
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "고령군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5200000-101-2020-00001",
+        "address": "경상북도 고령군 다산면 벌지로 175-115",
         "image_url": null
       }
     },
@@ -174963,38 +174292,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5210000-101-2001-00046",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5210000-101-2001-00046",
-        "name": "멕시카나성주가천점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.884572768127256,
-          "lng": 128.16608827400023
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "성주군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5210000-101-2001-00046",
-        "address": "경상북도 성주군 가천면 가천로 65",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5210000-101-2003-00025",
       "source": "LOCALDATA",
       "poi": {
@@ -175119,6 +174416,38 @@
       "provenance": {
         "content_id": "5210000-101-2007-00056",
         "address": "경상북도 성주군 가천면 마수2길 114",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5210000-101-2009-00036",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5210000-101-2009-00036",
+        "name": "미성각식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.88554620111836,
+          "lng": 128.16470214403165
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "성주군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5210000-101-2009-00036",
+        "address": "경상북도 성주군 가천면 가천로 83",
         "image_url": null
       }
     },
@@ -175599,38 +174928,6 @@
       "provenance": {
         "content_id": "5220000-101-2000-00023",
         "address": "경상북도 칠곡군 왜관읍 봉계3길 51",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5220000-101-2000-00066",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5220000-101-2000-00066",
-        "name": "멕시카나석적중리점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.0761325089351,
-          "lng": 128.40862717616054
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "칠곡군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5220000-101-2000-00066",
-        "address": "경상북도 칠곡군 석적읍 북중리4길 9",
         "image_url": null
       }
     },
@@ -181907,38 +181204,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5250000-101-2001-00008",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5250000-101-2001-00008",
-        "name": "월송멕시카나치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.74159183186331,
-          "lng": 129.46131300006124
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "울진군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5250000-101-2001-00008",
-        "address": "경상북도 울진군 평해읍 월송길 199",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5250000-101-2001-00017",
       "source": "LOCALDATA",
       "poi": {
@@ -183155,38 +182420,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5250000-101-2012-00032",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5250000-101-2012-00032",
-        "name": "bhc 백암온천점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.72215999895546,
-          "lng": 129.3437350720469
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "울진군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5250000-101-2012-00032",
-        "address": "경상북도 울진군 온정면 백암온천로 1275",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5250000-101-2013-00035",
       "source": "LOCALDATA",
       "poi": {
@@ -184175,38 +183408,6 @@
       "provenance": {
         "content_id": "5250000-101-2019-00011",
         "address": "경상북도 울진군 북면 부구2길 9",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5250000-101-2019-00021",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5250000-101-2019-00021",
-        "name": "bhc울진북면점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.10393103012324,
-          "lng": 129.37463102914055
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "울진군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5250000-101-2019-00021",
-        "address": "경상북도 울진군 북면 장터길 109-3",
         "image_url": null
       }
     },
@@ -186387,38 +185588,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5260000-101-1994-00017",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5260000-101-1994-00017",
-        "name": "자담치킨 천부점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.5447429145434,
-          "lng": 130.87334724950838
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "울릉군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5260000-101-1994-00017",
-        "address": "경상북도 울릉군 북면 천부1길 3",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5260000-101-1996-00014",
       "source": "LOCALDATA",
       "poi": {
@@ -188047,38 +187216,6 @@
       "provenance": {
         "content_id": "3480000-101-1995-00104",
         "address": "대구광역시 달성군 구지면 비슬로64길 45",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-3480000-101-1995-00188",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-3480000-101-1995-00188",
-        "name": "BHC 현풍점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.69213626755933,
-          "lng": 128.4559254549736
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "달성군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "3480000-101-1995-00188",
-        "address": "대구광역시 달성군 현풍읍 테크노중앙대로 243, 타임스퀘어 124,125호",
         "image_url": null
       }
     },
@@ -196051,38 +195188,6 @@
       }
     },
     {
-      "provisional_id": "localdata-3580000-101-1997-00007",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-3580000-101-1997-00007",
-        "name": "또래오래치킨피자",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.97166646369489,
-          "lng": 124.71775665000895
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "패스트푸드"
-      ],
-      "region": "옹진군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "3580000-101-1997-00007",
-        "address": "인천광역시 옹진군 백령면 백령로 305, 1층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-3580000-101-1997-00011",
       "source": "LOCALDATA",
       "poi": {
@@ -196175,6 +195280,38 @@
       "provenance": {
         "content_id": "3580000-101-1997-00013",
         "address": "인천광역시 옹진군 백령면 백령로 267, 가동 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-3580000-101-1997-00014",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-3580000-101-1997-00014",
+        "name": "두메칼국수",
+        "category": "FOOD",
+        "coord": {
+          "lat": 37.971211149867145,
+          "lng": 124.71931480795102
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "옹진군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "3580000-101-1997-00014",
+        "address": "인천광역시 옹진군 백령면 백령로 291",
         "image_url": null
       }
     },
@@ -210003,38 +209140,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5835000-101-2011-00038",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5835000-101-2011-00038",
-        "name": "bhc치킨 곡성기차마을점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.279717271436674,
-          "lng": 127.29393747399726
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "곡성군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5835000-101-2011-00038",
-        "address": "전남광주통합특별시 곡성군 곡성읍 읍내8길 11-1",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5835000-101-2012-00015",
       "source": "LOCALDATA",
       "poi": {
@@ -210255,6 +209360,38 @@
       "provenance": {
         "content_id": "5835000-101-2016-00052",
         "address": "전남광주통합특별시 곡성군 곡성읍 중앙로 108-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5835000-101-2017-00010",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5835000-101-2017-00010",
+        "name": "서계리가든",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.27909899451664,
+          "lng": 127.2948463505615
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "일식"
+      ],
+      "region": "곡성군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5835000-101-2017-00010",
+        "address": "전남광주통합특별시 곡성군 곡성읍 곡성로 833",
         "image_url": null
       }
     },
@@ -210803,6 +209940,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5840000-101-1994-00029",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5840000-101-1994-00029",
+        "name": "중동정육식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.31789930075252,
+          "lng": 127.4677236768204
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "구례군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5840000-101-1994-00029",
+        "address": "전남광주통합특별시 구례군 산동면 상관1길 11",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5840000-101-1996-00007",
       "source": "LOCALDATA",
       "poi": {
@@ -211119,38 +210288,6 @@
       "provenance": {
         "content_id": "5840000-101-2001-00095",
         "address": "전남광주통합특별시 구례군 산동면 지리산온천로 261",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5840000-101-2002-00023",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5840000-101-2002-00023",
-        "name": "페리카나치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.317149240679164,
-          "lng": 127.45960277611378
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "패스트푸드"
-      ],
-      "region": "구례군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5840000-101-2002-00023",
-        "address": "전남광주통합특별시 구례군 산동면 하관1길 26",
         "image_url": null
       }
     },
@@ -213747,38 +212884,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5845000-101-2000-00034",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5845000-101-2000-00034",
-        "name": "BHC고흥점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 34.61011744991723,
-          "lng": 127.28712888618412
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "패스트푸드"
-      ],
-      "region": "고흥군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5845000-101-2000-00034",
-        "address": "전남광주통합특별시 고흥군 고흥읍 흥양길 18, 1층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5845000-101-2000-00035",
       "source": "LOCALDATA",
       "poi": {
@@ -214415,38 +213520,6 @@
       "provenance": {
         "content_id": "5845000-101-2007-00020",
         "address": "전남광주통합특별시 고흥군 도양읍 우주항공로 20",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5845000-101-2007-00034",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5845000-101-2007-00034",
-        "name": "비비큐 고흥금산점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 34.46313805654025,
-          "lng": 127.12834849204737
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "패스트푸드"
-      ],
-      "region": "고흥군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5845000-101-2007-00034",
-        "address": "전남광주통합특별시 고흥군 금산면 거금중앙길 137",
         "image_url": null
       }
     },
@@ -215375,6 +214448,38 @@
       "provenance": {
         "content_id": "5845000-101-2017-00053",
         "address": "전남광주통합특별시 고흥군 도양읍 녹동시장길 24-11",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5845000-101-2018-00012",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5845000-101-2018-00012",
+        "name": "계절식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.46161574824064,
+          "lng": 127.12729548362344
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "고흥군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5845000-101-2018-00012",
+        "address": "전남광주통합특별시 고흥군 금산면 상하촌길 26-1, 1층",
         "image_url": null
       }
     },
@@ -216755,6 +215860,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5845000-101-2024-00071",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5845000-101-2024-00071",
+        "name": "pickie(픽키)",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.60862712491262,
+          "lng": 127.28814056981726
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "고흥군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5845000-101-2024-00071",
+        "address": "전남광주통합특별시 고흥군 고흥읍 학교길 70",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5845000-101-2024-00072",
       "source": "LOCALDATA",
       "poi": {
@@ -217775,38 +216912,6 @@
       "provenance": {
         "content_id": "5850000-101-2004-00032",
         "address": "전남광주통합특별시 보성군 보성읍 용문길 19",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5850000-101-2005-00008",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5850000-101-2005-00008",
-        "name": "네네치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 34.76763139362462,
-          "lng": 127.08593986442004
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "보성군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5850000-101-2005-00008",
-        "address": "전남광주통합특별시 보성군 보성읍 중앙로 46-13",
         "image_url": null
       }
     },
@@ -219471,6 +218576,38 @@
       "provenance": {
         "content_id": "5850000-101-2019-00004",
         "address": "전남광주통합특별시 보성군 회천면 우암1길 19-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5850000-101-2019-00028",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5850000-101-2019-00028",
+        "name": "프레드피자 보성점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.76763139362462,
+          "lng": 127.08593986442004
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "분식"
+      ],
+      "region": "보성군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5850000-101-2019-00028",
+        "address": "전남광주통합특별시 보성군 보성읍 중앙로 46-13",
         "image_url": null
       }
     },
@@ -231891,38 +231028,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5890000-101-1983-00013",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5890000-101-1983-00013",
-        "name": "맘스터치 영광점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.27627924892006,
-          "lng": 126.51163578606948
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "영광군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5890000-101-1983-00013",
-        "address": "전남광주통합특별시 영광군 영광읍 물무로 106-4",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5890000-101-1984-00002",
       "source": "LOCALDATA",
       "poi": {
@@ -232307,6 +231412,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5890000-101-2001-00044",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5890000-101-2001-00044",
+        "name": "행복한밥상",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.275349787434415,
+          "lng": 126.50687426098646
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "식육(숯불구이)"
+      ],
+      "region": "영광군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5890000-101-2001-00044",
+        "address": "전남광주통합특별시 영광군 영광읍 천년로13길 30",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5890000-101-2001-00058",
       "source": "LOCALDATA",
       "poi": {
@@ -232591,38 +231728,6 @@
       "provenance": {
         "content_id": "5890000-101-2007-00008",
         "address": "전남광주통합특별시 영광군 영광읍 천년로11길 55",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5890000-101-2008-00011",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5890000-101-2008-00011",
-        "name": "굽네치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.27313233434041,
-          "lng": 126.5020724228641
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "영광군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5890000-101-2008-00011",
-        "address": "전남광주통합특별시 영광군 영광읍 옥당로 123",
         "image_url": null
       }
     },
@@ -232947,38 +232052,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5890000-101-2011-00015",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5890000-101-2011-00015",
-        "name": "교촌치킨",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.27557891046369,
-          "lng": 126.49905434969223
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "영광군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5890000-101-2011-00015",
-        "address": "전남광주통합특별시 영광군 영광읍 신남로 156-1",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5890000-101-2011-00021",
       "source": "LOCALDATA",
       "poi": {
@@ -233107,15 +232180,15 @@
       }
     },
     {
-      "provisional_id": "localdata-5890000-101-2013-00011",
+      "provisional_id": "localdata-5890000-101-2012-00041",
       "source": "LOCALDATA",
       "poi": {
-        "poi_id": "localdata-5890000-101-2013-00011",
-        "name": "자담치킨 영광점",
+        "poi_id": "localdata-5890000-101-2012-00041",
+        "name": "초가",
         "category": "FOOD",
         "coord": {
-          "lat": 35.27415337719298,
-          "lng": 126.50476374479935
+          "lat": 35.27517429985335,
+          "lng": 126.50102724575915
         },
         "open_hours": [],
         "avg_cost": null,
@@ -233128,13 +232201,13 @@
         "source_ref": null
       },
       "tags": [
-        "통닭(치킨)"
+        "횟집"
       ],
       "region": "영광군",
       "opening_hours_raw": null,
       "provenance": {
-        "content_id": "5890000-101-2013-00011",
-        "address": "전남광주통합특별시 영광군 영광읍 천년로13길 3",
+        "content_id": "5890000-101-2012-00041",
+        "address": "전남광주통합특별시 영광군 영광읍 옥당로 147-1",
         "image_url": null
       }
     },
@@ -233331,6 +232404,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5890000-101-2015-00044",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5890000-101-2015-00044",
+        "name": "명품수랏간",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.27557891046369,
+          "lng": 126.49905434969223
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "영광군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5890000-101-2015-00044",
+        "address": "전남광주통합특별시 영광군 영광읍 신남로 156-1",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5890000-101-2016-00011",
       "source": "LOCALDATA",
       "poi": {
@@ -233391,38 +232496,6 @@
       "provenance": {
         "content_id": "5890000-101-2016-00018",
         "address": "전남광주통합특별시 영광군 불갑면 자비길 51-38, 7동 1층",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5890000-101-2016-00033",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5890000-101-2016-00033",
-        "name": "60계치킨영광점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.275314966506414,
-          "lng": 126.4995496177151
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "식육(숯불구이)"
-      ],
-      "region": "영광군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5890000-101-2016-00033",
-        "address": "전남광주통합특별시 영광군 영광읍 천년로11길 35",
         "image_url": null
       }
     },
@@ -234515,6 +233588,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5890000-101-2024-00033",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5890000-101-2024-00033",
+        "name": "영광 충무김밥",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.27583047338313,
+          "lng": 126.51127347467467
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "영광군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5890000-101-2024-00033",
+        "address": "전남광주통합특별시 영광군 영광읍 현암길 59-1, 1층",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5890000-101-2024-00034",
       "source": "LOCALDATA",
       "poi": {
@@ -234735,38 +233840,6 @@
       "provenance": {
         "content_id": "5890000-101-2026-00023",
         "address": "전남광주통합특별시 영광군 영광읍 천년로11길 54, 1층",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5895000-101-1979-00001",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5895000-101-1979-00001",
-        "name": "비비큐 올리브 치킨 카페(bbq OLIVE CHICKEN cafe)",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.299880050169506,
-          "lng": 126.78189622326079
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "경양식"
-      ],
-      "region": "장성군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5895000-101-1979-00001",
-        "address": "전남광주통합특별시 장성군 장성읍 영천로 162 (,6,8,13)",
         "image_url": null
       }
     },
@@ -235439,6 +234512,38 @@
       "provenance": {
         "content_id": "5895000-101-1999-00042",
         "address": "전남광주통합특별시 장성군 북하면 중평1길 2 (,8)",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5895000-101-2000-00003",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5895000-101-2000-00003",
+        "name": "도깨비마을",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.30018026584437,
+          "lng": 126.78130340521342
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "장성군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5895000-101-2000-00003",
+        "address": "전남광주통합특별시 장성군 장성읍 청운길 4-1",
         "image_url": null
       }
     },
@@ -244243,38 +243348,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5910000-101-2021-00002",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5910000-101-2021-00002",
-        "name": "BBQ치킨 신안 안좌점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 34.71536591019116,
-          "lng": 126.11852587313244
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "기타"
-      ],
-      "region": "신안군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5910000-101-2021-00002",
-        "address": "전남광주통합특별시 신안군 안좌면 소곡두리길 319, 2층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5910000-101-2023-00029",
       "source": "LOCALDATA",
       "poi": {
@@ -244367,38 +243440,6 @@
       "provenance": {
         "content_id": "5910000-101-2025-00042",
         "address": "전남광주통합특별시 신안군 압해읍 고이길 14",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5910000-101-2025-00056",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5910000-101-2025-00056",
-        "name": "자담치킨 비금점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 34.754967640603915,
-          "lng": 125.9273109813942
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "기타"
-      ],
-      "region": "신안군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5910000-101-2025-00056",
-        "address": "전남광주통합특별시 신안군 비금면 읍동길 30-3, 102호",
         "image_url": null
       }
     },
@@ -246099,38 +245140,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4671000-101-2015-00100",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4671000-101-2015-00100",
-        "name": "비에이치씨(BHC) 군산선유도점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.81410046939341,
-          "lng": 126.41027823450905
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "군산시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4671000-101-2015-00100",
-        "address": "전북특별자치도 군산시 옥도면 선유북길 121",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4671000-101-2015-00236",
       "source": "LOCALDATA",
       "poi": {
@@ -246899,6 +245908,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4671000-101-2020-00041",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4671000-101-2020-00041",
+        "name": "대식가한식부페",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.94608706563297,
+          "lng": 126.57627858933763
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "군산시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4671000-101-2020-00041",
+        "address": "전북특별자치도 군산시 새만금산단1로 3 (오식도동)",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4671000-101-2020-00108",
       "source": "LOCALDATA",
       "poi": {
@@ -246959,38 +246000,6 @@
       "provenance": {
         "content_id": "4671000-101-2020-00147",
         "address": "전북특별자치도 군산시 옥서면 신동1길 116",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4671000-101-2020-00270",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4671000-101-2020-00270",
-        "name": "맘스터치 새만금산단점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.94700221912552,
-          "lng": 126.5825921055168
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "분식"
-      ],
-      "region": "군산시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4671000-101-2020-00270",
-        "address": "전북특별자치도 군산시 새만금북로 424, 1층 101,102호 (오식도동)",
         "image_url": null
       }
     },
@@ -255987,38 +254996,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4721000-101-2009-00003",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4721000-101-2009-00003",
-        "name": "네네치킨(봉동3공단점)",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.95902348960421,
-          "lng": 127.12341765563197
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "완주군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4721000-101-2009-00003",
-        "address": "전북특별자치도 완주군 봉동읍 원둔산3길 13",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4721000-101-2009-00004",
       "source": "LOCALDATA",
       "poi": {
@@ -259375,6 +258352,38 @@
       "provenance": {
         "content_id": "4721000-101-2023-00078",
         "address": "전북특별자치도 완주군 봉동읍 완주산단8로 5",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4721000-101-2023-00085",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4721000-101-2023-00085",
+        "name": "한이네 대가추어탕(1)",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.95993417351225,
+          "lng": 127.12221477746459
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "완주군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4721000-101-2023-00085",
+        "address": "전북특별자치도 완주군 봉동읍 원둔산5길 9-3",
         "image_url": null
       }
     },
@@ -267155,38 +266164,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4781000-101-2019-00029",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4781000-101-2019-00029",
-        "name": "비비큐 고창아산점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.44026371182361,
-          "lng": 126.63638474070764
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "고창군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4781000-101-2019-00029",
-        "address": "전북특별자치도 고창군 아산면 녹두로 801",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4781000-101-2019-00039",
       "source": "LOCALDATA",
       "poi": {
@@ -267535,38 +266512,6 @@
       "provenance": {
         "content_id": "4781000-101-2022-00016",
         "address": "전북특별자치도 고창군 해리면 구동호1길 10",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4781000-101-2022-00017",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4781000-101-2022-00017",
-        "name": "자담치킨 고창 동호점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.51630536135351,
-          "lng": 126.48350007618257
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "고창군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4781000-101-2022-00017",
-        "address": "전북특별자치도 고창군 해리면 명사십리로 913",
         "image_url": null
       }
     },
@@ -275923,6 +274868,38 @@
       }
     },
     {
+      "provisional_id": "localdata-6520000-101-1996-10031",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6520000-101-1996-10031",
+        "name": "24시일번가",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.27938509897533,
+          "lng": 126.72120778040191
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6520000-101-1996-10031",
+        "address": "제주특별자치도 서귀포시 남원읍 태위로700번길 4",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-6520000-101-1996-10035",
       "source": "LOCALDATA",
       "poi": {
@@ -276883,6 +275860,38 @@
       }
     },
     {
+      "provisional_id": "localdata-6520000-101-2004-10124",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6520000-101-2004-10124",
+        "name": "다미진",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.32509351212686,
+          "lng": 126.84405602634678
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6520000-101-2004-10124",
+        "address": "제주특별자치도 서귀포시 표선면 민속해안로 578-1",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-6520000-101-2005-10078",
       "source": "LOCALDATA",
       "poi": {
@@ -277651,38 +276660,6 @@
       }
     },
     {
-      "provisional_id": "localdata-6520000-101-2010-00194",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-6520000-101-2010-00194",
-        "name": "굽네치킨표선점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 33.32504266444449,
-          "lng": 126.84438036283996
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "서귀포시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "6520000-101-2010-00194",
-        "address": "제주특별자치도 서귀포시 표선면 민속해안로 578-4",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-6520000-101-2011-00014",
       "source": "LOCALDATA",
       "poi": {
@@ -277935,38 +276912,6 @@
       "provenance": {
         "content_id": "6520000-101-2013-00090",
         "address": "제주특별자치도 서귀포시 남원읍 일주동로 7137",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-6520000-101-2013-00091",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-6520000-101-2013-00091",
-        "name": "페리카나남원점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 33.27952719958365,
-          "lng": 126.72004210224513
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "서귀포시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "6520000-101-2013-00091",
-        "address": "제주특별자치도 서귀포시 남원읍 태위로 689",
         "image_url": null
       }
     },
@@ -286931,38 +285876,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4510000-101-2011-00058",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4510000-101-2011-00058",
-        "name": "오븐에빠진닭",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.31519298750605,
-          "lng": 126.51193881799065
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "보령시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4510000-101-2011-00058",
-        "address": "충청남도 보령시 머드로 118 (신흑동)",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4510000-101-2011-00067",
       "source": "LOCALDATA",
       "poi": {
@@ -288239,38 +287152,6 @@
       "provenance": {
         "content_id": "4510000-101-2014-00069",
         "address": "충청남도 보령시 대해로 882 (신흑동)",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4510000-101-2014-00078",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4510000-101-2014-00078",
-        "name": "지코바(신흑점)",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.31932488827978,
-          "lng": 126.50817565192486
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "보령시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4510000-101-2014-00078",
-        "address": "충청남도 보령시 해수욕장10길 60-12 (신흑동)",
         "image_url": null
       }
     },
@@ -292627,38 +291508,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4520000-101-2004-00141",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4520000-101-2004-00141",
-        "name": "비에이치씨치킨 아산도고점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.76263733796211,
-          "lng": 126.8864972619192
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "아산시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4520000-101-2004-00141",
-        "address": "충청남도 아산시 도고면 기곡로62번길 21-9, 1층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4520000-101-2006-00109",
       "source": "LOCALDATA",
       "poi": {
@@ -295091,38 +293940,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4530000-101-2006-00045",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4530000-101-2006-00045",
-        "name": "롯데리아 대산점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.9372059610375,
-          "lng": 126.43559258809267
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "패스트푸드"
-      ],
-      "region": "서산시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4530000-101-2006-00045",
-        "address": "충청남도 서산시 대산읍 구진로 20, 1층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4530000-101-2007-00045",
       "source": "LOCALDATA",
       "poi": {
@@ -295695,6 +294512,38 @@
       "provenance": {
         "content_id": "4530000-101-2012-00106",
         "address": "충청남도 서산시 대산읍 구진로 29-1, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4530000-101-2012-00131",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4530000-101-2012-00131",
+        "name": "행복한돈까스",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.93622631422733,
+          "lng": 126.43565831922007
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "경양식"
+      ],
+      "region": "서산시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4530000-101-2012-00131",
+        "address": "충청남도 서산시 대산읍 구진로 7, 1층",
         "image_url": null
       }
     },
@@ -297679,38 +296528,6 @@
       "provenance": {
         "content_id": "4530000-101-2022-00126",
         "address": "충청남도 서산시 팔봉면 팔봉1로 112, 2층",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4530000-101-2022-00156",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4530000-101-2022-00156",
-        "name": "맘스터치 서산대산점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.93544996770699,
-          "lng": 126.43565919234655
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "경양식"
-      ],
-      "region": "서산시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4530000-101-2022-00156",
-        "address": "충청남도 서산시 대산읍 충의로 1909-2, 세아빌딩 102호",
         "image_url": null
       }
     },
@@ -300979,6 +299796,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4550000-101-1996-00036",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4550000-101-1996-00036",
+        "name": "홍삼겹",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.19369188749111,
+          "lng": 127.45644577878419
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "금산군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4550000-101-1996-00036",
+        "address": "충청남도 금산군 추부면 대학로 165",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4550000-101-1996-00051",
       "source": "LOCALDATA",
       "poi": {
@@ -301135,38 +299984,6 @@
       "provenance": {
         "content_id": "4550000-101-1999-00046",
         "address": "충청남도 금산군 금산읍 인삼약초로 45",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4550000-101-2001-00006",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4550000-101-2001-00006",
-        "name": "BHC충남추부점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.19389595677818,
-          "lng": 127.45609592194822
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "금산군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4550000-101-2001-00006",
-        "address": "충청남도 금산군 추부면 대학로 166, 마르샤",
         "image_url": null
       }
     },
@@ -302451,6 +301268,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4550000-101-2016-00040",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4550000-101-2016-00040",
+        "name": "신평흑염소",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.1942556991228,
+          "lng": 127.45814416825641
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "금산군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4550000-101-2016-00040",
+        "address": "충청남도 금산군 추부면 대학로 148",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4550000-101-2016-00047",
       "source": "LOCALDATA",
       "poi": {
@@ -302799,38 +301648,6 @@
       "provenance": {
         "content_id": "4550000-101-2020-00006",
         "address": "충청남도 금산군 복수면 복수로 795",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4550000-101-2020-00017",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4550000-101-2020-00017",
-        "name": "BBQ(금산추부점)",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.19420846816504,
-          "lng": 127.45685283357912
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "식육(숯불구이)"
-      ],
-      "region": "금산군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4550000-101-2020-00017",
-        "address": "충청남도 금산군 추부면 대학로 158, 학초목빌딩 101호",
         "image_url": null
       }
     },
@@ -305583,38 +304400,6 @@
       "provenance": {
         "content_id": "4580000-101-2010-00083",
         "address": "충청남도 서천군 서면 춘장대로67번길 28",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4580000-101-2012-00060",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4580000-101-2012-00060",
-        "name": "bhc서천서면점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.15363158502488,
-          "lng": 126.521921667682
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "서천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4580000-101-2012-00060",
-        "address": "충청남도 서천군 서면 공암남촌길 178",
         "image_url": null
       }
     },
@@ -310003,15 +308788,15 @@
       }
     },
     {
-      "provisional_id": "localdata-4600000-101-1994-00006",
+      "provisional_id": "localdata-4600000-101-1994-00025",
       "source": "LOCALDATA",
       "poi": {
-        "poi_id": "localdata-4600000-101-1994-00006",
-        "name": "페리카나치킨 갈산점",
+        "poi_id": "localdata-4600000-101-1994-00025",
+        "name": "동팔이네",
         "category": "FOOD",
         "coord": {
-          "lat": 36.604020646262335,
-          "lng": 126.55144931320173
+          "lat": 36.60379380631065,
+          "lng": 126.55127544888819
         },
         "open_hours": [],
         "avg_cost": null,
@@ -310024,13 +308809,13 @@
         "source_ref": null
       },
       "tags": [
-        "통닭(치킨)"
+        "패스트푸드"
       ],
       "region": "홍성군",
       "opening_hours_raw": null,
       "provenance": {
-        "content_id": "4600000-101-1994-00006",
-        "address": "충청남도 홍성군 갈산면 갈산로 109-1",
+        "content_id": "4600000-101-1994-00025",
+        "address": "충청남도 홍성군 갈산면 갈산로 112",
         "image_url": null
       }
     },
@@ -315343,38 +314128,6 @@
       "provenance": {
         "content_id": "4620000-101-2007-00080",
         "address": "충청남도 태안군 원북면 옥파로 1168-1",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4620000-101-2007-00106",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4620000-101-2007-00106",
-        "name": "BHC치킨 태안만리포점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.78574943984006,
-          "lng": 126.14313933263615
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "태안군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4620000-101-2007-00106",
-        "address": "충청남도 태안군 소원면 만리포2길 140, 2층",
         "image_url": null
       }
     },
@@ -324531,6 +323284,38 @@
       }
     },
     {
+      "provisional_id": "localdata-5680000-101-2018-00165",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5680000-101-2018-00165",
+        "name": "달빛",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.96916875302311,
+          "lng": 126.77952339508384
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "당진시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5680000-101-2018-00165",
+        "address": "충청남도 당진시 송악읍 한진1길 250",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-5680000-101-2018-00179",
       "source": "LOCALDATA",
       "poi": {
@@ -324847,38 +323632,6 @@
       "provenance": {
         "content_id": "5680000-101-2019-00135",
         "address": "충청남도 당진시 송악읍 반촌로 140-35, 1층 101호",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5680000-101-2019-00200",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5680000-101-2019-00200",
-        "name": "BBQ한진포구점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.96733772406645,
-          "lng": 126.7794575133802
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "당진시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5680000-101-2019-00200",
-        "address": "충청남도 당진시 송악읍 한진포구길 7",
         "image_url": null
       }
     },
@@ -336627,38 +335380,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4440000-101-1997-00026",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4440000-101-1997-00026",
-        "name": "멕시카나",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.22470511044202,
-          "lng": 127.91009862759778
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "영동군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4440000-101-1997-00026",
-        "address": "충청북도 영동군 황간면 마산리 42-59",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4440000-101-1997-00031",
       "source": "LOCALDATA",
       "poi": {
@@ -337007,38 +335728,6 @@
       "provenance": {
         "content_id": "4440000-101-2004-00015",
         "address": "충청북도 영동군 영동읍 영산로 13-1, 음식점",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4440000-101-2005-00012",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4440000-101-2005-00012",
-        "name": "호식이두마리치킨 영동점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.173737963529575,
-          "lng": 127.777085309763
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "통닭(치킨)"
-      ],
-      "region": "영동군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4440000-101-2005-00012",
-        "address": "충청북도 영동군 영동읍 계산로1길 17",
         "image_url": null
       }
     },
@@ -337587,6 +336276,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4440000-101-2018-00020",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4440000-101-2018-00020",
+        "name": "행복올뱅이식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.225211180719704,
+          "lng": 127.91201587511958
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "영동군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4440000-101-2018-00020",
+        "address": "충청북도 영동군 황간면 영동황간로 1686",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4440000-101-2018-00026",
       "source": "LOCALDATA",
       "poi": {
@@ -337967,6 +336688,38 @@
       "provenance": {
         "content_id": "4440000-101-2022-00047",
         "address": "충청북도 영동군 영동읍 영동시장4길 12",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4440000-101-2023-00010",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4440000-101-2023-00010",
+        "name": "착한감자탕 2호점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.174006064567784,
+          "lng": 127.77707948934334
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "탕류(보신용)"
+      ],
+      "region": "영동군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4440000-101-2023-00010",
+        "address": "충청북도 영동군 영동읍 계산로1길 16, 음식점",
         "image_url": null
       }
     },
@@ -339507,6 +338260,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4450000-101-2002-00026",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4450000-101-2002-00026",
+        "name": "천하",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.85777445405615,
+          "lng": 127.44646271348881
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "한식"
+      ],
+      "region": "진천군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4450000-101-2002-00026",
+        "address": "충청북도 진천군 진천읍 중앙동7길 15",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4450000-101-2002-00082",
       "source": "LOCALDATA",
       "poi": {
@@ -340111,38 +338896,6 @@
       "provenance": {
         "content_id": "4450000-101-2008-00054",
         "address": "충청북도 진천군 진천읍 백사천길 57",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4450000-101-2010-00009",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4450000-101-2010-00009",
-        "name": "피자스쿨 진천점",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.857479313508506,
-          "lng": 127.44467631436198
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "패스트푸드"
-      ],
-      "region": "진천군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4450000-101-2010-00009",
-        "address": "충청북도 진천군 진천읍 중앙동로 85-1",
         "image_url": null
       }
     },
