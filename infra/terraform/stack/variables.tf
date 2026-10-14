@@ -191,3 +191,13 @@ variable "alerts_slack_channel_id" {
     error_message = "alerts_slack_channel_id needs alerts_slack_team_id, and container_logs_enabled = true: the log and pod alarms read what the Container Insights add-on writes."
   }
 }
+
+variable "dev_target_enabled" {
+  description = <<-EOT
+    이 스택 안에 **개발 대상**(네임스페이스 trippilot-dev)용 시크릿 그릇 한 벌을 더 만든다(2026-10-15 개발·운영 분리).
+    개발 대상은 클러스터·DB 장비·NAT 를 운영과 같이 쓰고 데이터·시크릿·DB 역할만 따로 갖는다 — 그 "따로"의 시크릿 절반이 이것이다.
+    이름은 `trippilot/<env>/dev-target/<그룹>` 이라 배포 역할의 기존 권한(`trippilot/<env>/*`) 안에 든다(bootstrap 불필요).
+  EOT
+  type        = bool
+  default     = false
+}

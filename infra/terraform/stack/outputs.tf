@@ -46,6 +46,11 @@ output "app_secret_arns" {
   value       = { for name, secret in aws_secretsmanager_secret.app : name => secret.arn }
 }
 
+output "dev_target_secret_arns" {
+  description = "Dev-target (trippilot-dev namespace) secret container ARNs keyed like app_secret_arns. Empty when dev_target_enabled is false."
+  value       = { for name, secret in aws_secretsmanager_secret.dev_target : name => secret.arn }
+}
+
 output "vpc_id" {
   value = aws_vpc.this.id
 }
