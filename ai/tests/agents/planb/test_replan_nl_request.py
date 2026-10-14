@@ -417,3 +417,22 @@ def test_named_place_without_composer_is_not_locked() -> None:
         body = client.post("/ai/v1/planb/replan", json=_body(free_text="월정리 카페거리 꼭")).json()
     slot = next(s for d in body["itinerary"]["days"] for s in d["slots"] if s["poi_id"] == _WOLJEONG)
     assert slot["is_fixed"] is False, body["notes"]
+
+
+def test_extraction_gets_enough_time_for_a_real_model_call() -> None:
+    """DEV 회귀(2026-10-14) — 시한 2.94s 에 `timeout` 으로 추출이 통째로 빠졌다. GPT sol(effort low) 한 건이
+    3~5s 가 흔하므로, 25초 예산의 일반적인 잔여에서 4.5초 이상은 준다."""
+    seen = []
+
+    class _Capture(_StubExtractor):
+        def extract(self, *a, timeout_sec=None, **kw):
+            seen.append(timeout_sec)
+            return super().extract(*a, **kw)
+
+    app = build_dev_app(directives=_DIRECTIVES)
+    app.state.orchestrator._request_extractor = _Capture(ExtractedRequest())
+    body = _body(free_text="성산일출봉 꼭")
+    body["request_meta"]["deadline_ms"] = 25_000
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/planb/replan", json=body)
+    assert seen and seen[0] >= 4.5, seen
