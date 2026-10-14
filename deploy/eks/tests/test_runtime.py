@@ -194,6 +194,55 @@ class SecretTests(unittest.TestCase):
             self.assertNotIn(secret_string, str(raised.exception))
 
 
+class TargetTests(unittest.TestCase):
+    """개발·운영 분리(2026-10-15) — 대상이 네임스페이스·시크릿 그릇·DB 장비를 통째로 바꾼다."""
+
+    DEV = {
+        "dev_target_secret_arns": {name: f"arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:trippilot/dev/dev-target/{name}-x"
+                                   for name in ("backend", "ai", "database", "shared")},
+        "dev_target_database_host": "dev-target.example.rds.amazonaws.com",
+        "dev_target_database_master_secret_arn": "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:rds!db-dev-target",
+    }
+
+    def raw(self, dev=None):
+        return {key: {"value": value} for key, value in {**outputs(), **(self.DEV if dev is None else dev)}.items()}
+
+    def test_dev_target_reads_only_its_own_secrets_and_database(self):
+        dev = runtime.parse_outputs(self.raw(), "dev")
+        prod = runtime.parse_outputs(self.raw(), "prod")
+        self.assertEqual(prod, outputs())
+        self.assertEqual(dev["app_secret_arns"], self.DEV["dev_target_secret_arns"])
+        self.assertEqual(dev["database_host"], "dev-target.example.rds.amazonaws.com")
+        self.assertIn("rds!db-dev-target", dev["database_master_secret_arn"])
+        # 공유 자원(리전·클러스터·Redis·이미지 저장소)은 같다
+        for key in ("aws_region", "cluster_name", "redis_host", "ecr_repositories"):
+            self.assertEqual(dev[key], prod[key])
+
+    def test_dev_target_never_falls_back_to_production(self):
+        # 스위치가 꺼진 스택은 개발 출력이 빈 값이다 — 운영 값으로 떨어지면 개발 배포가 운영 DB·시크릿을 쓴다
+        empty = {"dev_target_secret_arns": {}, "dev_target_database_host": "", "dev_target_database_master_secret_arn": ""}
+        for dev in ({}, empty):
+            with self.subTest(dev=dev), self.assertRaises(ValueError):
+                runtime.parse_outputs(self.raw(dev), "dev")
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            runtime.parser().parse_args(["smoke", "--target", "staging"])
+
+    def test_target_fixes_the_namespace(self):
+        with patch("runtime.runtime_smoke.run") as smoke, patch("builtins.print"):
+            runtime.main(["smoke", "--target", "dev"])
+            self.assertEqual(smoke.call_args.args[0], "trippilot-dev")
+            runtime.main(["smoke"])
+            self.assertEqual(smoke.call_args.args[0], "trippilot")
+            runtime.main(["smoke", "--target", "dev", "--namespace", "trippilot-dev"])
+            self.assertEqual(smoke.call_args.args[0], "trippilot-dev")
+        # 어긋난 짝은 무엇도 실행하기 전에 거절 — 개발 값이 운영 네임스페이스 시크릿을 덮는 사고
+        for argv in (["smoke", "--target", "dev", "--namespace", "trippilot"],
+                     ["smoke", "--namespace", "trippilot-dev"]):
+            with self.subTest(argv=argv), patch("runtime.runtime_smoke.run") as smoke, self.assertRaises(ValueError):
+                runtime.main(argv)
+            smoke.assert_not_called()
+
+
 class BootstrapTests(unittest.TestCase):
     def test_bootstrap_secret_only_references_passwords_and_sql_uses_psql_quoting(self):
         master = {"username": "master_user", "password": "private-master"}
