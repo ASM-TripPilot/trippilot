@@ -107,7 +107,7 @@ jobs:
           OPENAI_MODEL: ${{ inputs.model || 'gpt-5.6-terra' }}
           OPENAI_API: ${{ inputs.api || 'responses' }}
           SMOKE_UTTERANCE: ${{ inputs.utterance }}
-        run: uv run python scripts/smoke_llm.py
+        run: uv run python scripts/smoke/smoke_llm.py
 
       # ── 일정 생성 리허설 (TRIP-372) — 수집 실 POI × 실 LLM × 솔버 전 구간 ──
       # 수집 artifact가 없으면(런 없음·만료) 리허설만 생략하고 성공 유지 —
@@ -194,7 +194,7 @@ jobs:
           # 누적한다. 없으면 cost=null(모름). 현행 배정은 멘토 게이트웨이라 전건
           # unpriced 가 정상이고, Claude 배정이 섞이는 순간부터 금액이 잡힌다.
           TRIPPILOT_LLM_PRICE_FILE: config/llm-prices.json
-        run: uv run python scripts/smoke_itinerary.py
+        run: uv run python scripts/smoke/smoke_itinerary.py
       # 후속 3스텝은 !cancelled() — 품질 게이트 FAIL(exit 1)로 잡이 붉어도 그날
       # 기록·artifact는 남긴다 (TRIP-524): 회귀가 처음 발생한 날의 증빙이 가장 귀하다.
       # 결과 파일 부재(생성 전 크래시)는 각 스텝이 개별 무해 처리.
@@ -202,7 +202,7 @@ jobs:
         if: steps.fetch-pois.outputs.skipped != 'true' && !cancelled()
         run: |
           if [ -f rehearsal_result.json ]; then
-            uv run python scripts/smoke_itinerary.py --summary rehearsal_result.json >> "$GITHUB_STEP_SUMMARY"
+            uv run python scripts/smoke/smoke_itinerary.py --summary rehearsal_result.json >> "$GITHUB_STEP_SUMMARY"
           else
             echo "리허설 결과 파일 없음 — 생성 전 실패 (로그 참조)" >> "$GITHUB_STEP_SUMMARY"
           fi

@@ -287,7 +287,7 @@ def test_pbt_chip_resolution_partitions_input(keys) -> None:
 def test_threshold_default_is_documented_value() -> None:
     """임계를 조용히 바꾸면 매칭 품질이 말없이 달라진다 — 실측값을 못 박는다.
 
-    0.74 의 근거는 `scripts/measure_directive_match.py` 실측이다(2026-09-12,
+    0.74 의 근거는 `scripts/measure/measure_directive_match.py` 실측이다(2026-09-12,
     정확일치 18/23 · 오검출 0/8). 바꾸려면 그 스크립트를 다시 돌린다.
     """
     assert DEFAULT_MATCH_THRESHOLD == 0.74

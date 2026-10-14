@@ -100,9 +100,9 @@ Karpenter 가 파드 pending 시에만 띄운다. 채움 잡이 발송 수 시�
 
 | 대상 | 방법 | 채택 조건 |
 |---|---|---|
-| 임베딩 Triton | `scripts/measure_embedding_precision.py` — **CPU 4스레드 고정 · KB-3 24건 × 질의 6종** 동일 조건 | p95 지연이 유의미하게 낮고 순위가 동일 |
+| 임베딩 Triton | `scripts/measure/measure_embedding_precision.py` — **CPU 4스레드 고정 · KB-3 24건 × 질의 6종** 동일 조건 | p95 지연이 유의미하게 낮고 순위가 동일 |
 | T1 캐시 | 요청 1회당 임베딩 호출 수 | 닫힌 질의 경로 호출 0회 |
-| T2 되먹임 | `scripts/measure_directive_match.py` 회귀 | **정확일치 ≥ 18/23 ∧ 과다선택 ≤ 3** 유지. 깨지면 되먹임 off |
+| T2 되먹임 | `scripts/measure/measure_directive_match.py` 회귀 | **정확일치 ≥ 18/23 ∧ 과다선택 ≤ 3** 유지. 깨지면 되먹임 off |
 | HPA | 로컬 부하 발생 → 파드 수·p95 | 스케일 아웃이 p95 를 낮춤 |
 | 리마인드 Triton | 대조 검증 + 지연·비용 | 기준선 생긴 뒤 판정 |
 

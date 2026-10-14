@@ -115,7 +115,7 @@ def test_위키_묶음이_TextExtracts_상한을_넘지_않는다() -> None:
     import importlib.util
     import pathlib
 
-    path = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "collect_place_docs.py"
+    path = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "collect" / "collect_place_docs.py"
     spec = importlib.util.spec_from_file_location("collect_place_docs", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

@@ -1,7 +1,7 @@
 """TRIP-340 — OpenAIAdapter 매핑 검증 (fake client, 실 API 0건 — BR-U4-10, D37).
 
 record-and-return fake client로 (요청 매핑, 응답 매핑, 타임아웃 변환)만 검증 —
-test_c1_adapter.py(AnthropicAdapter)와 동형. 실 API 스모크는 scripts/smoke_llm.py
+test_c1_adapter.py(AnthropicAdapter)와 동형. 실 API 스모크는 scripts/smoke/smoke_llm.py
 수동 실행(K-2) — pytest 대상이 아니다.
 """
 

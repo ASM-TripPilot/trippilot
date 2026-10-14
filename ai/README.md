@@ -346,6 +346,7 @@ TripPilot_AI/
 │   └── construction/        ← 유닛별 기능 설계(FD). 실물 목록은 디렉토리를 볼 것
 ├── src/trippilot/           ← 서비스 구현 (api·agents·orchestrator·assembly_engine·llm_gateway)
 ├── tests/                   ← pytest + Hypothesis. src 패키지별 하위 폴더(api·agents/<에이전트>·assembly_engine·llm_gateway·…), scripts 테스트는 tests/scripts/
+├── scripts/                 ← 용도별: collect·classify·measure·probe·smoke·intent·mlops·finetune_reminder (루트엔 export_openapi·load_kb·local_embedding)
 └── docs/openapi.json        ← 와이어 정본 (ai-ci 가 실행 앱 스키마와 일치를 강제)
 ```
 

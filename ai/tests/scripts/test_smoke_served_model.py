@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "smoke"))
 
 from smoke_reminder_copy import ServedModelMismatch, assert_served_model  # noqa: E402
 

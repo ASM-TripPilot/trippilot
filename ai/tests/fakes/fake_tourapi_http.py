@@ -1,7 +1,7 @@
 """FakeTourApiHttp — TourAPI HTTP fake (실 호출 0, TRIP-246).
 
 TourAPI 4.0 문서 형태의 응답 봉투를 그대로 흉내낸다 — 실 응답과의 드리프트는
-실키 스모크(scripts/collect_pois.py 수동 실행)에서 검증한다. get_json 1회 =
+실키 스모크(scripts/collect/collect_pois.py 수동 실행)에서 검증한다. get_json 1회 =
 호출 1건 기록 — 일일 호출 상한 검증의 근거가 된다.
 """
 

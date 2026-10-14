@@ -45,7 +45,7 @@ prompts/intent_clarify.yaml   LlmFeature.INTENT_CLARIFY (LIGHT) — BR-AF-07 5�
 ```
 
 `dialogue_router.py` 를 새로 두고 `intent_router.py` 를 **감싸는** 이유: 라우터는 "발화 → 의도" 한 가지만 하는 상태가
-튜닝에 유리하다. 되묻기·보류·분해를 그 안에 넣으면 `scripts/trace_intents.py` 의 결정론 측정이 불가능해진다.
+튜닝에 유리하다. 되묻기·보류·분해를 그 안에 넣으면 `scripts/intent/trace_intents.py` 의 결정론 측정이 불가능해진다.
 
 ---
 

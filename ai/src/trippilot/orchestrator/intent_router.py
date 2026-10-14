@@ -26,7 +26,7 @@ closed-set 밖 라벨이 실린 엔트리는 매칭에서 제외한다 (뱅크 �
 **관측 (TRIP-653)**: 단계 함수마다 LangSmith `@traceable` — `LANGSMITH_TRACING=true` 일 때만
 발화 1건 = 트리 1개(1차 top-k 점수 · 2차 유사질문/득표율 · 3차 판정, 루트 metadata 에 임계값
 3종)가 전송된다. 미설정이면 데코레이터는 함수를 그대로 통과시킨다(CI 외부 호출 0). 라우터는
-아직 엔드포인트에 배선돼 있지 않으므로(TRIP-529) 발화는 `scripts/trace_intents.py` 가 넣어 준다.
+아직 엔드포인트에 배선돼 있지 않으므로(TRIP-529) 발화는 `scripts/intent/trace_intents.py` 가 넣어 준다.
 트리에는 발화 **원문**과 LLM 변형이 그대로 실린다 — langsmith 는 **dev 그룹**이라 운영
 이미지(`uv sync --no-dev`)에는 없고, 그 경우 아래 no-op 대역이 붙어 배포 환경에서는
 트레이싱이 구조적으로 불가능하다(TRIP-656 — 발화 유출 가드를 의존성 부재로 보장).

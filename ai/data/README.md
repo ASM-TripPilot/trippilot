@@ -7,19 +7,19 @@
 
 **증강분(§3.2 ②)은 전수 검수하지 않는다 — 관문에 걸린 것만 사람이 본다** (팀 결정 2026-09-14, §3.2 ②
 "생성 후 사람 검수 필수"의 운용 변경). 수백 문장 전수 검수는 실행이 안 된다 — 직전 209줄 검수도 한계였다.
-대신 `scripts/augment_bank.py` 의 관문 5종을 통과하고 margin ≥ 0.05 인 것만 자동 채택하고, 경계에 걸린 것만 올린다.
+대신 `scripts/intent/augment_bank.py` 의 관문 5종을 통과하고 margin ≥ 0.05 인 것만 자동 채택하고, 경계에 걸린 것만 올린다.
 ⚠️ 따라서 뱅크의 `reviewed: true` 는 **의도 그룹 단위 표시일 뿐 증강 문장 하나하나를 사람이 봤다는 뜻이 아니다.**
 사람이 전수로 본 것은 seed 125 뿐이다. §3.2 ③ mined 는 아직 이 경로를 쓰지 않는다.
 평가셋과는 **완전 분리**한다: 여기 실린 문장(및 그 augment 변형)은 평가셋에 절대 재사용하지 않는다 — leak 금지 (intent-matching-design §6).
 의도 라벨 정본은 `orchestrator-delegation-design.md` §5 라우팅 테이블 (closed-set 13종, CONFIRM/CANCEL/UNDO 제외).
 
 **검수 도구·기록**
-- 기계 검사: `uv run python scripts/check_intent_bank.py` — 의도 간 유사도 ≥ 0.90 위반(§3.3)과 0.80~0.90 경계 후보를 뽑는다(임베딩만, LLM 0).
-- 증강(§3.2 ②): `uv run python scripts/augment_bank.py --per-seed 3` → 제안 파일 `data/intent_bank_augment_<날짜>.yaml`,
+- 기계 검사: `uv run python scripts/intent/check_intent_bank.py` — 의도 간 유사도 ≥ 0.90 위반(§3.3)과 0.80~0.90 경계 후보를 뽑는다(임베딩만, LLM 0).
+- 증강(§3.2 ②): `uv run python scripts/intent/augment_bank.py --per-seed 3` → 제안 파일 `data/intent_bank_augment_<날짜>.yaml`,
   `--apply <제안파일>` 로 뱅크에 합친다(`--approve "문장a||문장b"` 로 검수 대기분을 함께 채택). **LLM 을 부른다 — 오프라인 전용이다.**
   관문 순서: 형태(빈 문자열·원문 동일·자리표시자 소실) → 같은 의도 중복 ≥`--dup` → 타 의도 ≥`--cross`(§3.3) →
   평가셋 leak ≥`--leak`(§6) → margin ≥`--auto-margin` 이면 자동 채택, 미만은 검수 대기.
-- 평가셋: `intent_eval_set.yaml`(라벨 발화, 뱅크와 분리) — `scripts/trace_intents.py --eval` 이 §6 지표를 채점하고, 평가 문장이 뱅크(원문 + `{장소}` 등 자리표시자를 채운 변형)와 ≥ 0.90 이면 leak 로 경고한다.
+- 평가셋: `intent_eval_set.yaml`(라벨 발화, 뱅크와 분리) — `scripts/intent/trace_intents.py --eval` 이 §6 지표를 채점하고, 평가 문장이 뱅크(원문 + `{장소}` 등 자리표시자를 채운 변형)와 ≥ 0.90 이면 leak 로 경고한다.
 - **평가셋으로 뱅크를 보강하지 않는다** — 평가 발화의 일반화형을 뱅크에 넣으면 그 항목의 회귀 판정이 무력화된다(§6). 뱅크 보강 근거는 개발용 발화(계측 30건 등)에서만 취한다.
 - 2026-09-08 기계 검수 1차(TRIP-678): v0.2 기준 위반 0·경계 후보 23 → 경계 문장 3개 개작(추가 없음) → v0.3-draft 위반 0·경계 후보 17.
 - **2026-09-19 거부 앵커(v0.7, TRIP-868)**: 7계열 35문장 추가 → 485문장, 위반 0·경계 후보 83(450 때와 동일 — 앵커가 새 경계를 만들지 않았다).
@@ -54,7 +54,7 @@
 - **뱅크·평가셋·프롬프트·모델 중 무엇이든 바꾸면 기록을 다시 떠야 한다**:
   ```bash
   cd ai
-  LLM_PROVIDER=mixed uv run --env-file ../.env python scripts/trace_intents.py \
+  LLM_PROVIDER=mixed uv run --env-file ../.env python scripts/intent/trace_intents.py \
       --eval data/intent_eval_set.yaml --record tests/fixtures/intent_gate
   ```
   다시 뜬 기록이 곧 리뷰 대상이다 — 정확도가 내려갔는데 기준선을 같이 낮췄다면 그 PR 에서 보인다.
@@ -121,7 +121,7 @@ for id in $(gh api repos/ASM-TripPilot/trippilot/actions/artifacts --paginate \
   gh api repos/ASM-TripPilot/trippilot/actions/artifacts/$id/zip > /tmp/poi-$id.zip
   unzip -oq /tmp/poi-$id.zip collected_pois.json -d /tmp/poi/$id
 done
-uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/collected_pois.json
+uv run python scripts/collect/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/collected_pois.json
 ```
 
 같은 `content_id` 는 나중 수집분이 이긴다(재제안 = 변경 감지분). 실행별 stats 원문은
@@ -160,7 +160,7 @@ uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/
 - `opening_hours_raw` — 백엔드 `poi.opening_hours varchar(200)` 로 그대로 가는 **원문 칸**이다. 영업 원문 뒤에
   휴무 원문을 `\n휴무: ` 로 이어 싣는다(TRIP-1226 — AI 런타임은 이 칸만 다시 파싱하므로 휴무가 여기 없으면
   휴무일에도 영업으로 읽힌다). 200자를 넘으면 휴무를 보존하고 영업을 먼저 자른다. 형식 정본은 `mapping.py` 의
-  `join_opening_hours_raw`·`split_opening_hours_raw`. ⚠️ 기수집분의 휴무는 `scripts/backfill_rest_days.py` 가
+  `join_opening_hours_raw`·`split_opening_hours_raw`. ⚠️ 기수집분의 휴무는 `scripts/collect/backfill_rest_days.py` 가
   `open_hours` 에서 **합성한 정형 문구**(`매주 월요일`)이지 벤더 원문이 아니다. 병합 재파싱(`merge_pois_docs`)이
   채운 `open_hours` 는 처음부터 휴무 없이 읽힌 것이라 백필로 못 되살렸다 — 재수집으로만 고쳐진다.
   합성 문구는 백필 당시의 **파서 판독치**다 — 그때 파서는 `X요일` 토큰만 세어(`월요일~수요일` → 월·수) 그 오독까지
@@ -173,7 +173,7 @@ uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/
 ### 상세 되감기 재조회 — 옛 수집분에 휴무 원문 (2026-10-05, TRIP-1230 후속)
 
 일일 수집은 기제안·변경 없음(modifiedtime 동일) 항목의 상세를 다시 받지 않는다 — #949 이전 수집분에는 벤더가 원본을
-고치지 않는 한 휴무 원문이 영영 안 붙는다. `ai-poi-collect` 의 「상세 되감기 재조회」 스텝(`scripts/refetch_intro.py`)이
+고치지 않는 한 휴무 원문이 영영 안 붙는다. `ai-poi-collect` 의 「상세 되감기 재조회」 스텝(`scripts/collect/refetch_intro.py`)이
 일일 수집 **뒤에** 남은 한도로 메운다(artifact·신규율 진단 다음 — 이 스텝 중에 런이 죽어도 그날 일일 산출은 남는다).
 
 - **무엇을** — 대기 제안의 `detailIntro2` 를 content_id 로 다시 받아 **정상 수집이 냈을 제안을 그대로** 낸다
@@ -196,7 +196,7 @@ uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/
 - **지켜보기** — 잡 서머리의 「상세 되감기 재조회」 표(대기·키별 시도·다시 낸 제안·저장본 영업시간 유지·게이트 탈락·
   실패 종류별·남은 대기·중단 사유). 같은 수치가 그날 병합본 `merged_from` 의 `stats` 에도 실린다(다음 병합에서
   접힌다). 대기만 보려면
-  `uv run python scripts/refetch_intro.py --dry-run`(호출 0). 시작 시점 대기 약 1.8만 건 — 하루 최대 약 2,700콜
+  `uv run python scripts/collect/refetch_intro.py --dry-run`(호출 0). 시작 시점 대기 약 1.8만 건 — 하루 최대 약 2,700콜
   (KEY2 가 죽어 있으면 약 1,700)이라 1~2주 걸린다
 - **첫 배치(2026-10-05, run 37281478809)** — 1,691건 재조회 · 저장본 원문 null 화 0 · 휴무 원문 697 → 2,222건 ·
   매주 휴무 새로 반영 315 · 창을 잃음 51 · 창이 생김 8. 잃은 51 중 27은 벤더가 `<br>` 을 빼고 한 줄 글머리표로 고쳐 쓴
@@ -276,7 +276,7 @@ uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/
 
 **`detailIntro2` 만 보고 "요금이 없다"고 판단하면 틀린다.** `detailInfo2`(반복정보)에 더 있다 —
 `infoname`/`infotext` 쌍이라 필드명이 고정이 아니어서 스키마를 훑어도 안 보인다.
-실측 도구는 `scripts/probe_fee_sources.py`(엔드포인트 × 전 필드 스캔, 값의 모양으로 찾는다).
+실측 도구는 `scripts/probe/probe_fee_sources.py`(엔드포인트 × 전 필드 스캔, 값의 모양으로 찾는다).
 
 | 타입 | 필드 | 엔드포인트 | 채움 | 성격 |
 |---|---|---|---:|---|
@@ -342,7 +342,7 @@ OPENAI_API_KEY=... \
 ```
 
 FakeEmbedding 적재는 스크립트가 거부한다 — 해시 벡터는 의미 유사도가 없어
-"적재됐는데 검색이 엉터리"인 오염 상태가 된다. 실임베딩 검증은 `scripts/smoke_vector.py`.
+"적재됐는데 검색이 엉터리"인 오염 상태가 된다. 실임베딩 검증은 `scripts/smoke/smoke_vector.py`.
 
 ---
 
@@ -393,11 +393,11 @@ git show origin/collect-state:collected_events.json > ai/data/collected_events.j
 #    행정안전부_휴게음식점     https://www.data.go.kr/data/15006730/fileData.do
 # 2) 매칭 (약 10초 — 294만 행을 스트리밍하되 우리 주소키에 걸리는 행만 담는다)
 cd ai
-LOCALDATA_DIR=<받은 경로> uv run python scripts/match_business_status.py
+LOCALDATA_DIR=<받은 경로> uv run python scripts/classify/match_business_status.py
 # 3) 공유본에 병합을 한 번 돌린다 — 새로 CLOSED 가 된 항목을 소급 제거한다(drop_closed; 영업시간 재파싱도 같이 돈다).
 #    건너뛰면 이 PR 의 ai-ci 가 빨개진다 — 공유본에 CLOSED 가 남아 있지 않은지 보는 테스트(test_merge_pois_docs)가
 #    있고, 매일 병합(봇)은 이 근거 파일이 develop 에 들어간 뒤에야 그 항목을 뺄 수 있다.
-uv run python scripts/merge_pois_docs.py -o data/collected_pois.json data/collected_pois.json
+uv run python scripts/collect/merge_pois_docs.py -o data/collected_pois.json data/collected_pois.json
 # 4) poi_business_status.json 과 collected_pois.json 을 같은 PR 로
 ```
 
@@ -448,7 +448,7 @@ TourAPI 음식점은 전수 수집이 끝났는데도 숙소 12,936곳 중 **22.
 # 1) CSV 내려받기 (data.go.kr 로그인 — 자동 경로가 없다. poi_business_status.json 과 같은 파일)
 # 2) 생성 (약 1분) — pyproj 는 실행할 때만 붙인다(pyproject 의존성이 아니다)
 cd ai
-uv run --with pyproj python scripts/collect_localdata.py <받은 경로>/식품_일반음식점.csv
+uv run --with pyproj python scripts/collect/collect_localdata.py <받은 경로>/식품_일반음식점.csv
 # 3) 빠진 행 닫기 + 적재 — 백엔드 V2.61 이후만 받는다(이전 백엔드는 source 400). 드라이런 먼저:
 #    서버가 닫힐 수를 계산만 해서 돌려준다(토큰·터널 필요 — 런북 §port-forward)
 cd .. && python3 backend/scripts/ingest_pois.py --dry-run --close-missing ai/data/collected_localdata.json
@@ -524,8 +524,8 @@ IT(`PoiProposalRealDocumentIT`)·`merge_pois_docs.py`·`match_business_status.py
 ### 갱신
 
 ```bash
-uv run --with duckdb python scripts/collect_overture.py --out data/overture
-uv run --with duckdb python scripts/collect_overture.py --areas 제주,부산
+uv run --with duckdb python scripts/collect/collect_overture.py --out data/overture
+uv run --with duckdb python scripts/collect/collect_overture.py --areas 제주,부산
 ```
 
 인증이 필요 없다(공개 S3). 좌표는 이미 WGS84 라 변환도 없다.
@@ -608,8 +608,8 @@ Guideline 이 우리 경우를 예시로 들어 "해당 안 됨"이라고 못박
 ### 갱신
 
 ```bash
-uv run python scripts/collect_osm.py --out data/osm
-uv run python scripts/collect_osm.py --areas 제주 --tags viewpoint,beach
+uv run python scripts/collect/collect_osm.py --out data/osm
+uv run python scripts/collect/collect_osm.py --areas 제주 --tags viewpoint,beach
 ```
 
 Overpass 는 **대량 추출용이 아니다**(공용 인스턴스, 타임아웃·과부하 정책).

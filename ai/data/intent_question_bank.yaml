@@ -16,7 +16,7 @@
 # **v0.5 (2026-09-14) — §3.2 ② 증강 292문장 추가, 총 417문장.** seed 125 는 그대로 두고 의도마다
 #   `augmented:` 목록을 따로 둔다(로더가 `origin: augmented` 로 싣는다) — 수기와 LLM 생성분을
 #   한 목록에 섞으면 뱅크가 "전부 사람이 쓴 문장" 이라고 거짓말하고, 증강분만 되돌릴 수단도 없다.
-#   생성·관문·제안 파일은 `scripts/augment_bank.py` 와 `data/intent_bank_augment_20260914.yaml`.
+#   생성·관문·제안 파일은 `scripts/intent/augment_bank.py` 와 `data/intent_bank_augment_20260914.yaml`.
 #   **사람 검수는 예외만** — 관문 5종을 통과하고 margin ≥ 0.05 인 것은 자동 채택했다(팀 결정
 #   2026-09-14, §3.2 ② "생성 후 사람 검수 필수" 의 운용 변경). 관문에 걸린 33건은 검수 대기다.
 #
@@ -57,7 +57,7 @@ intents:
       - "{지역} {기간} 일정 뽑아줘"
       - "{지역} {기간}이면 어떻게 도는 게 좋아?"
       - "아이랑 가는데 무리 없는 일정으로 만들어줘"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "여행 코스 좀 만들어볼까"
@@ -103,7 +103,7 @@ intents:
       - "이 일정 너무 별로다, 새로 뽑아줘"
       # v0.4 — 사람 검수에서 GENERATE_SCHEDULE 로부터 이동. "새(로 다시)" 로 읽는 판정.
       - "새 여행 일정을 생성해 주세요"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "기존 계획은 전부 취소하고 새 일정으로 만들어 주세요"
@@ -151,7 +151,7 @@ intents:
       - "갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘"
       - "폭우 때문에 야외 일정은 못 할 것 같아요, 플랜B 부탁해요"
       - "너무 피곤해서 오늘 남은 일정 좀 줄여서 다시 잡아줘"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "비가 계속 오는데 오늘 남은 코스를 실내 장소 중심으로 조정해 주세요."
@@ -196,7 +196,7 @@ intents:
       - "여기 갈 데가 마땅치 않네, 대안 장소 추천 부탁해"
       - "여기 웨이팅이 너무 길대, 딴 데 없어?"
       - "딴 데 추천 좀"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "{장소} 말고 추천할 만한 곳 있나요?"
@@ -245,7 +245,7 @@ intents:
       - "오늘 하루 돌아보는 글 하나 써줄 수 있어?"
       - "방금 끝난 하루 정리 부탁해"
       - "오늘 찍은 사진으로 하루 정리해줘"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "오늘 있었던 일 바탕으로 일기 작성해줘"
@@ -286,7 +286,7 @@ intents:
       - "처음부터 끝까지 어떻게 다녔는지 요약해줄 수 있어?"
       - "이번 여행 하이라이트만 모아서 정리해줘"
       - "이번 여행 몇 군데나 다녔는지 정리해줘"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "이번 여행을 전반적으로 정리해 주세요"
@@ -327,7 +327,7 @@ intents:
       - "지금까지 기록으로 내 여행 유형 알려줄래?"
       - "나는 계획형이야 즉흥형이야?"
       - "저번 여행들 보면 나 어떤 타입 같아?"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "내가 선호하는 여행 방식 좀 진단해 줄래요?"
@@ -365,7 +365,7 @@ intents:
       - "마지막 일정 하나만 앞으로 당겨줘"
       - "점심을 1시로 늦춰줘"
       - "둘째 날이랑 셋째 날 통째로 바꿔줘"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "저녁 계획에 음식점 하나 넣어주세요"
@@ -415,7 +415,7 @@ intents:
       - "다음 한 곳만 짚어줘"
       - "다음 행선지가 어디야?"
       - "바로 다음 순서 뭐지?"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "다음으로 갈 곳이 어디야?"
@@ -457,7 +457,7 @@ intents:
       - "이따가 어디 가기로 했지?"
       - "이 다음 스케줄 알려줄래?"
       - "오늘 일정 다 끝나면 그다음은 뭐야?"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "일정표 어디 있지?"
@@ -510,7 +510,7 @@ intents:
       - "{지역} 날씨 예보 좀 확인해줄래?"
       - "내일 야외 다니기 괜찮은 날씨야?"
       - "내일 비 올 확률 얼마나 돼?"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "내일 기온이랑 비 소식 좀 알려줘."
@@ -555,7 +555,7 @@ intents:
       - "{장소} 여기서 가까워?"
       - "지금 위치에서 {장소}까지 거리 알려주세요"
       - "{장소}까지 걸어갈 만한 거리야?"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "현 위치에서 {장소}까지 거리가 몇 km야?"
@@ -591,7 +591,7 @@ intents:
       - "{장소} 리뷰나 평점 어때?"
       - "{장소} 주차 돼?"
       - "{장소} 예약해야 들어갈 수 있어?"
-    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).
+    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/intent/augment_bank.py).
     #   제안 파일: intent_bank_augment_20260914.yaml
     augmented:
       - "{장소} 몇 시에 열고 닫아?"

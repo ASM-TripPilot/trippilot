@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
 
 from collect_pois import write_seen_refs  # noqa: E402
 

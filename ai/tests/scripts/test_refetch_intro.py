@@ -28,7 +28,7 @@ from tests.fakes.fake_tourapi_http import (
 )
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
 
 import refetch_intro as R  # noqa: E402
 from merge_pois_docs import merge  # noqa: E402

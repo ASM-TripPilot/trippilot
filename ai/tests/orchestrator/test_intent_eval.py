@@ -2,7 +2,7 @@
 
 §6 가 요구하는 것: intent accuracy(전체/의도별) · 경로별 비중 · FALLBACK율 · p95 지연 ·
 혼동쌍(EDIT↔REPLAN↔GENERATE 경계 중점). 채점은 순수 함수라 여기서 표로 고정한다 —
-러너(scripts/trace_intents.py --eval)는 이 함수를 부를 뿐이다.
+러너(scripts/intent/trace_intents.py --eval)는 이 함수를 부를 뿐이다.
 
 OUT_OF_SCOPE 라벨의 정답 = 라우터가 OUT_OF_SCOPE 로 폴백한 것(FALLBACK 경로).
 """

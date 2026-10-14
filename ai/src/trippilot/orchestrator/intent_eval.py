@@ -2,7 +2,7 @@
 
 §6 핵심 지표: intent accuracy(전체/의도별) · 경로별 비중(CONFIDENT/VOTED/LLM_DIRECT/FALLBACK)
 · FALLBACK율 · p95 지연 · 혼동 행렬(EDIT vs REPLAN vs GENERATE 경계 중점 추적).
-러너(`scripts/trace_intents.py --eval`)가 라우팅 결과를 모아 `score()` 에 넘기고
+러너(`scripts/intent/trace_intents.py --eval`)가 라우팅 결과를 모아 `score()` 에 넘기고
 `format_report()` 로 찍는다. 뱅크·임계값·프롬프트 변경 시 이 수치가 회귀 근거다(§6 게이트).
 
 OUT_OF_SCOPE 라벨의 정답 = 라우터가 **분류를 거절해** OUT_OF_SCOPE 로 폴백한 것(closed-set 밖

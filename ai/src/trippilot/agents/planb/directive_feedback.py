@@ -19,7 +19,7 @@
 1. 되먹임분에는 `source` 표식을 박는다 — 되돌리기가 한 줄이다.
    `DELETE FROM kb_vectors WHERE payload->'metadata'->>'source' = 'feedback';`
 2. 켜는 것은 호출측 판단이고 기본은 꺼짐이다. 켜기 전에
-   `scripts/measure_directive_match.py` 로 회귀를 잰다.
+   `scripts/measure/measure_directive_match.py` 로 회귀를 잰다.
 """
 
 from __future__ import annotations

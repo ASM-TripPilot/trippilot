@@ -9,7 +9,7 @@ fake/기록 재생)". 여기가 그 게이트다.
 
 **재생은 결정론이다.** 그래서 이 게이트가 재는 것은 "LLM 이 오늘 어떤 기분인가"가 아니라
 **"내 변경이 점수를 움직였나"** 다. 흔들림을 없애는 것이 목적이지 실제 품질을 재는 척하는 것이 아니다 —
-실 품질은 여전히 `scripts/trace_intents.py --eval` 를 최소 2회 돌려서 본다(ai/data/README.md).
+실 품질은 여전히 `scripts/intent/trace_intents.py --eval` 를 최소 2회 돌려서 본다(ai/data/README.md).
 
 **기록이 안 맞으면 실패한다.** 뱅크·평가셋·프롬프트·모델 중 무엇이 바뀌어도 기록 키가 달라진다.
 이것이 결함이 아니라 목적이다 — 기록을 다시 뜨게 만들고, 갱신된 기록이 곧 리뷰 대상이 된다.
@@ -22,7 +22,7 @@ fake/기록 재생)". 여기가 그 게이트다.
 
 기록 갱신:
     cd ai
-    LLM_PROVIDER=mixed uv run --env-file ../.env python scripts/trace_intents.py \\
+    LLM_PROVIDER=mixed uv run --env-file ../.env python scripts/intent/trace_intents.py \\
         --eval data/intent_eval_set.yaml --record tests/fixtures/intent_gate
 """
 
@@ -63,7 +63,7 @@ _PROMPTS = _AI_ROOT / "prompts"
 
 pytestmark = pytest.mark.skipif(
     not (_FIXTURES / "meta.json").exists(),
-    reason="기록 픽스처 없음 — scripts/trace_intents.py --record 로 먼저 뜬다",
+    reason="기록 픽스처 없음 — scripts/intent/trace_intents.py --record 로 먼저 뜬다",
 )
 
 
