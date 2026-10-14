@@ -210,11 +210,11 @@ class AutoVisitServiceTest : StringSpec({
             w.visits.stored shouldBe converged
             // 먼저 있던 것: 수동 도착은 자동 완료만 더해질 수 있고(§5.2), 나머지는 한 글자도 바뀌지 않는다
             seeds.forEachIndexed { i, kind ->
-                val now = w.visits.findBySlot(tripId, slots[i])
+                val after = w.visits.findBySlot(tripId, slots[i])
                 when (kind) {
                     "none" -> Unit
-                    "manualArrival" -> (now!!.arrivedAt to now.source) shouldBe (t(3) to CheckSource.MANUAL)
-                    else -> now shouldBe before[slots[i]]
+                    "manualArrival" -> (after!!.arrivedAt to after.source) shouldBe (t(3) to CheckSource.MANUAL)
+                    else -> after shouldBe before[slots[i]]
                 }
             }
         }
@@ -267,6 +267,16 @@ class AutoVisitServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { w.service().revert(acc, tripId, seen.visitCheckId, expectedUpdatedAt = seen.updatedAt) }
             .errorCode shouldBe ErrorCode.VISIT_CONFLICT
         w.visits.stored[seen.visitCheckId]!!.arrivedAt shouldBe t(1) // 도착은 남았다
+    }
+
+    /** 쓰기 응답은 시계 값(나노초), DB 는 마이크로초 반올림 — 1µs 미만은 같은 값으로 본다. 그 이상은 다른 상태다. */
+    "화면 상태는 1µs 미만 차이를 같은 값으로 본다" {
+        val w = World()
+        outcomes(w, arrive(0), complete(0))
+        val id = w.visits.stored.keys.single()
+        val stored = w.visits.stored.getValue(id).updatedAt
+        shouldThrow<ConflictDetected> { w.service().revert(acc, tripId, id, expectedUpdatedAt = stored.plusNanos(1_000)) }
+        w.service().revert(acc, tripId, id, expectedUpdatedAt = stored.plusNanos(999)).completedAt shouldBe null
     }
 
     /** BR-U10-32 — 되돌린 자리에 사람이 도착·건너뛰기를 남기면 같은 행을 쓴다. 자동은 그날 계속 막힌다. */

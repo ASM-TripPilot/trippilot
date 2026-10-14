@@ -90,8 +90,9 @@ class AutoVisitService(
                 else -> try {
                     tx.execute { applyOne(accountId, tripId, event) }!!
                 } catch (_: DataIntegrityViolationException) {
-                    // 같은 슬롯을 다른 요청(다른 배치·수동 도착)이 방금 만들었다 — 그 트랜잭션은 이 항목만 되돌렸다. 서버 값이 이긴다.
-                    AutoVisitResult(event.eventId, AutoVisitOutcome.ALREADY_RECORDED, checks.findBySlot(tripId, event.slotKey))
+                    // 같은 슬롯을 다른 요청(다른 배치·수동 도착·건너뛰기)이 방금 만들었다 — 이 항목의 트랜잭션만 되돌려졌다. 한 번 더 판정하면
+                    // 이긴 쪽의 행을 보고 제 결과(이미 도착 → ALREADY_RECORDED, 건너뜀 → CONFLICT …)를 낸다.
+                    tx.execute { applyOne(accountId, tripId, event) }!!
                 }
             }
             observe(event, outcome)
@@ -152,7 +153,9 @@ class AutoVisitService(
         val current = checks.findById(visitCheckId)?.takeIf { it.tripId == tripId } ?: throw ResourceNotFound("방문 기록을 찾을 수 없습니다.")
         // 무엇을 되돌릴지가 **지금 상태**로 정해진다 — 두 번 누르거나 응답을 못 받고 다시 보내면 완료에 이어 도착까지 지워진다.
         // 화면이 본 상태(`updatedAt`)를 함께 보내면 그 사이 바뀐 것을 409 로 가른다(BR-U5-22 와 같은 판정).
-        if (expectedUpdatedAt != null && current.updatedAt != expectedUpdatedAt) {
+        // 1µs 미만은 같은 값이다 — 쓰기 응답의 시각은 시계 그대로(Linux 는 나노초)이고 DB 는 마이크로초로 반올림해 저장한다. 정확 비교면
+        // 응답 값을 그대로 돌려보낸 정상 요청이 늘 409 다(anti-patterns — 타임스탬프 정확 비교).
+        if (expectedUpdatedAt != null && Duration.between(current.updatedAt, expectedUpdatedAt).abs() >= Duration.ofNanos(1_000)) {
             throw ConflictDetected(
                 current = VisitConflictState(current.visitCheckId, current.updatedAt),
                 message = "그 사이 방문 기록이 바뀌었습니다.", errorCode = ErrorCode.VISIT_CONFLICT,

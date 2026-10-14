@@ -159,6 +159,27 @@ class AutoVisitIT : AbstractPostgresIntegrationTest() {
         }
     }
 
+    /**
+     * 쓰기 응답의 `updatedAt` 을 그대로 돌려보내 되돌리기를 이어 할 수 있어야 한다 — 응답은 시계 값(Linux 는 나노초), DB 는 마이크로초로
+     * 반올림해 저장한다. 정확 비교면 정상 요청이 늘 409 다(macOS 는 시계가 마이크로초라 로컬에선 안 드러난다).
+     */
+    @Test
+    fun `쓰기 응답의 갱신 시각을 그대로 보내 되돌리기를 이어 할 수 있다`() {
+        val (accountId, tripId, pois) = seed()
+        val slot = "$today#${pois[0]}"
+        val completed = auto.apply(
+            accountId, tripId,
+            listOf(
+                AutoVisitEvent(UUID.randomUUID(), AutoVisitKind.ARRIVE, slot, pois[0], early),
+                AutoVisitEvent(UUID.randomUUID(), AutoVisitKind.COMPLETE, slot, pois[0], early.plusSeconds(900), CompletionSource.AUTO_GEOFENCE_EXIT),
+            ),
+        ).results.last().visitCheck!!
+
+        val first = auto.revert(accountId, tripId, completed.visitCheckId, expectedUpdatedAt = completed.updatedAt)
+        val second = auto.revert(accountId, tripId, completed.visitCheckId, expectedUpdatedAt = first.updatedAt)
+        (second.arrivedAt to (second.autoSuppressedAt != null)) shouldBe (null to true)
+    }
+
     @Test
     fun `되돌린 자리를 수동 도착이 같은 행으로 쓰고, 그날 자동 기록은 막힌다`() {
         val (accountId, tripId, pois) = seed()
