@@ -309,6 +309,30 @@ def test_settings_from_env_parses_and_exposes_bad_values() -> None:
         MiddlewareSettings.from_env({"TRIPPILOT_RATE_LIMIT_BURST": "many"})
 
 
+@pytest.mark.parametrize("raw", ["nan", "inf", "-inf"])
+def test_non_finite_rps_fails_at_startup(raw: str) -> None:
+    """nan·inf 는 버킷을 늘 가득 채워 유량 제한을 **조용히 끈다**(`min(burst, nan)` = burst).
+    0 이하가 "끄기"인 것과 달리 의도가 아니라 설정 오류다 — 기동 실패로 드러낸다."""
+    with pytest.raises(ValueError, match="유한"):
+        MiddlewareSettings.from_env({"TRIPPILOT_RATE_LIMIT_RPS": raw})
+
+
+def test_oversized_body_is_413_before_reaching_the_route() -> None:
+    """본문 버퍼링은 인증·유량 제한 **바깥**(Trace)에서 일어난다 — 상한이 없으면 미인증
+    요청 하나가 메모리를 마음대로 쓴다. 넘치면 하위로 보내지 않고 계약 바디 413."""
+    from trippilot.api.middleware import CODE_PAYLOAD_TOO_LARGE, _MAX_BODY_BYTES
+
+    res = client(FakeOrchestrator(make_outcome()), settings=_AUTHED).post(
+        GENERATE, content=b" " * (_MAX_BODY_BYTES + 1),
+        headers={"content-type": "application/json"})
+
+    assert res.status_code == 413
+    assert res.json()["error_code"] == CODE_PAYLOAD_TOO_LARGE  # 401 이 아니다 — 인증 전에 끊었다
+    assert set(res.json()) == {"error_code", "message", "retryable"}
+    assert "x-trace-id" in res.headers  # 계측은 413 에도 적용된다
+    assert _MAX_BODY_BYTES >= 20 * 1024 * 1024  # 외부 게이트웨이(nginx 20m)보다 빡빡하지 않다
+
+
 # ── 인바운드 서비스 토큰 (TRIP-878) ──────────────────────────────────
 
 _TOKEN = "s3cret-service-token"

@@ -227,15 +227,17 @@ def test_max_resolved_caps_the_result() -> None:
     assert len(match_free_text("발화", specs, emb, store, top_k=20, max_resolved=2)) == 2
 
 
-def test_store_failure_returns_empty_not_raise() -> None:
-    """임베딩·스토어 장애로 재계획을 죽이지 않는다 — 칩 선택분은 그대로 살아 있다 (INV-4)."""
+def test_store_failure_raises_instead_of_looking_like_no_match() -> None:
+    """장애는 예외로 올린다 — 빈 결과는 "지시 없음"만이다. 종전엔 `()` 로 삼켜 호출측의
+    `free_text_match_degraded` 노트가 도달 불가였다. 재계획을 살리는 것은 호출측 몫이다."""
     class _Broken:
         def upsert(self, *a, **k): raise RuntimeError("down")
         def search(self, *a, **k): raise RuntimeError("down")
         def delete(self, *a, **k): raise RuntimeError("down")
 
     specs = (_spec("A", "가"),)
-    assert match_free_text("아무 말", specs, _Angles({}), _Broken()) == ()
+    with pytest.raises(RuntimeError, match="down"):
+        match_free_text("아무 말", specs, _Angles({}), _Broken())
 
 
 def test_empty_text_skips_search_entirely() -> None:

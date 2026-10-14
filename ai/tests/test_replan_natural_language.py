@@ -385,9 +385,9 @@ class _StubTranslator:
                                value=DirectiveTranslation(keys=tuple(self.keys), dropped=("NOPE",)))
 
 
-def _replan_with(translator, **over):
+def _replan_with(translator, store=None, **over):
     app = build_dev_app(directives=_DIRECTIVES, embedding=FakeEmbedding(),
-                        vector_store=InMemoryVectorStore())
+                        vector_store=store if store is not None else InMemoryVectorStore())
     orchestrator = app.state.orchestrator
     assert orchestrator._directive_translator is not None  # 합성 루트가 실제로 꽂는다
     object.__setattr__(orchestrator, "_directive_translator", translator)
@@ -442,6 +442,21 @@ def test_번역기가_예외를_던져도_재계획은_된다() -> None:
     body, _ = _replan_with(_Boom(), free_text="ㅠㅠ 다리 아파")
 
     assert "free_text_translation_error: ValueError" in body["notes"]
+
+
+def test_임베딩_매칭_장애는_노트로_남고_번역기가_받는다() -> None:
+    """장애가 "지시 없음"과 같은 빈 결과로 숨어 `free_text_match_degraded` 가 도달 불가였다
+    (`match_free_text` 가 예외를 삼켰다). 장애여도 흐름은 같다 — 번역 LLM(A-3)이 받는다."""
+    class _DownStore(InMemoryVectorStore):
+        def search(self, *a, **k):
+            raise RuntimeError("vector down")
+
+    stub = _StubTranslator(keys=("AVOID_STRENUOUS",))
+    body, _ = _replan_with(stub, store=_DownStore(), free_text="ㅠㅠ 다리 아파")
+
+    assert "free_text_match_degraded: RuntimeError" in body["notes"], body["notes"]
+    assert stub.calls and stub.calls[0][0] == "ㅠㅠ 다리 아파"
+    assert "AVOID_STRENUOUS" in body["resolved_directives"]
 
 
 def test_번역_프롬프트에도_원문은_한_줄로_간다() -> None:

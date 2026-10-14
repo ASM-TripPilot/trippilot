@@ -157,6 +157,9 @@ class CostLedger:
         self._max = max_traces
         # trace_id → (누계, 단가 미상 호출 수). OrderedDict = LRU.
         self._totals: OrderedDict[str, tuple[float, int]] = OrderedDict()
+        # 선호 점수 청크가 스레드풀에서 병렬로 emit 한다 — 읽고-더하고-쓰기를 잠그지 않으면
+        # 같은 trace 의 호출 1건이 누계에서 사라진다(`_TRIP_LOCK` 과 같은 이유).
+        self._lock = threading.Lock()
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "CostLedger | None":
@@ -175,13 +178,14 @@ class CostLedger:
             record.model_id, record.input_tokens, record.output_tokens
         )
         key = str(record.trace_id)
-        total, unpriced = self._totals.get(key, (0.0, 0))
-        total += call_cost or 0.0
-        unpriced += 1 if call_cost is None else 0
-        self._totals[key] = (total, unpriced)
-        self._totals.move_to_end(key)
-        while len(self._totals) > self._max:
-            self._totals.popitem(last=False)
+        with self._lock:
+            total, unpriced = self._totals.get(key, (0.0, 0))
+            total += call_cost or 0.0
+            unpriced += 1 if call_cost is None else 0
+            self._totals[key] = (total, unpriced)
+            self._totals.move_to_end(key)
+            while len(self._totals) > self._max:
+                self._totals.popitem(last=False)
         return {
             "event": "llm_cost",
             "trace_id": key,

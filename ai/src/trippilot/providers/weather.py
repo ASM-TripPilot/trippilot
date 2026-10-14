@@ -10,6 +10,7 @@ TTL: 기상청 발표 주기 1회분 (약 3h).
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import date, datetime
 from typing import Sequence
@@ -21,6 +22,8 @@ from trippilot.domain.freshness import (
     ProviderStatus,
 )
 from trippilot.ports.weather_port import WeatherPort
+
+_log = logging.getLogger(__name__)
 
 
 class WeatherProvider:
@@ -63,8 +66,8 @@ class WeatherProvider:
         # 추가 HTTP 호출이 없다 — 여기서 메서드를 **두 번 부르지만**, 어댑터가 같은
         # (좌표, 발표분)이면 마지막 응답을 돌려주므로 포털 호출은 1건이다
         # (`kma_weather._fetch_body`). 그 기억이 없던 동안 요청당 2건이 나갔다.
-        # 실패해도 일 단위는 이미 얻었으므로 조용히 생략하지 않고 없는 대로 간다 —
-        # 소비측이 키 부재로 일 단위 폴백을 안다.
+        # 실패해도 일 단위는 이미 얻었으므로 패킷은 OK 로 두고 `hourly` 를 비운다 —
+        # 소비측이 키 부재로 일 단위 폴백을 안다. 패킷엔 사유 칸이 없어 경고 로그로 남긴다.
         hourly: dict[str, int] = {}
         if hasattr(self._port, "hourly_forecast"):
             try:
@@ -73,7 +76,8 @@ class WeatherProvider:
                     for slot, pop in self._port.hourly_forecast(
                         params["anchor"], days).items()
                 }
-            except Exception:  # 일 단위는 살아 있다 — 부분 성공을 버리지 않는다
+            except Exception as e:  # 일 단위는 살아 있다 — 부분 성공을 버리지 않는다
+                _log.warning("hourly_forecast 실패 — 일 단위 폴백: %s", e)
                 hourly = {}
         return InfoPacket(
             provider=ProviderKind.WEATHER,

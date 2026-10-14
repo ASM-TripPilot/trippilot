@@ -172,7 +172,11 @@ def _kma_weather():
     from trippilot.poi_curation.adapters.kma_weather import KmaWeatherAdapter
     from trippilot.poi_curation.sourcing.tourapi import UrllibHttpClient
 
-    return KmaWeatherAdapter(UrllibHttpClient(), key, base_url=_env("WEATHER_API_BASE"))
+    # 소켓 작업당 2s — 일정 생성은 Provider 를 순차 호출하고 1차 시한이 15s 라, 기본 10s 면
+    # 멈춘 기상청이 LLM 선호 점수 몫을 먹는다. 실패는 WEATHER_UNKNOWN(무보정+강등 기록)이다.
+    # 실측(2026-10-14 로컬, 정상 응답 15건): 1.09~1.22s — 정상 응답을 자르지 않는 값이다.
+    return KmaWeatherAdapter(UrllibHttpClient(timeout_sec=2.0), key,
+                             base_url=_env("WEATHER_API_BASE"))
 
 
 def _place_existence():
