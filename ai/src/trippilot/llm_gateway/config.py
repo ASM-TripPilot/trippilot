@@ -182,7 +182,7 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
 
 
 def default_feature_effort() -> Mapping[LlmFeature, str]:
-    """기능별 사고 깊이(`output_config.effort`) — 여기 없는 기능은 안 싣는다(모델 기본값).
+    """기능별 사고 깊이(Claude `output_config.effort`·GPT `reasoning.effort`) — 여기 없는 기능은 안 싣는다(모델 기본값).
 
     claude-fable-5-1 은 사고를 끌 수 없고(항상 켜짐) 기본 effort 가 high 다. 사고 토큰은
     출력 상한 안에서 쓰이므로, 시한이 짧은 기능은 낮춰야 예산 안에 든다. 실측
@@ -197,6 +197,8 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
     위반(대체 장소를 영향 슬롯에 넣음·근거 없는 해시태그)으로 전량 드롭됐다 — high 에선 통과.
     시한 없는 경계(`/explanations` 등)는 high 그대로 둔다.
 
+    GPT(responses 표면)에도 `reasoning.effort` 로 같은 값이 실린다 — gpt-5.6-sol·terra·luna 는
+    low 를 받는다(2026-10-14 실호출).
     **effort 를 거부하는 모델(haiku-4-5 등)을 여기 있는 기능에 배정하면 400 → 폴백이다.**
     모델을 바꾸면 이 표부터 본다(temperature #472 와 같은 함정).
     """
