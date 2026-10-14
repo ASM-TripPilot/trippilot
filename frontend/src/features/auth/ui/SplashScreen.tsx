@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { AppIconGlyph } from './AuthGlyphs';
 import { SplashIllustration } from './SplashIllustration';
+import { SplashProgressDot } from './SplashProgressDot';
 import {
   APP_ICON_COLORS,
   SPLASH_BACKGROUND_COLORS,
@@ -75,18 +76,9 @@ export function SplashScreen() {
           testID="shell-splash-progress"
           className="flex-row items-center justify-center gap-[8px] pb-[61px]"
         >
-          <View
-            testID="shell-splash-progress-dot"
-            className="h-[7px] w-[7px] rounded-full bg-primary opacity-[0.45]"
-          />
-          <View
-            testID="shell-splash-progress-dot"
-            className="h-[7px] w-[7px] rounded-full bg-primary opacity-[0.45]"
-          />
-          <View
-            testID="shell-splash-progress-dot"
-            className="h-[7px] w-[7px] rounded-full bg-primary opacity-[0.45]"
-          />
+          <SplashProgressDot index={0} />
+          <SplashProgressDot index={1} />
+          <SplashProgressDot index={2} />
         </View>
       </View>
     </LinearGradient>

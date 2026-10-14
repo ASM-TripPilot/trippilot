@@ -326,6 +326,7 @@
 
 ## src/features/auth/config/
 - `src/features/auth/config/gradients.ts`  →  SPLASH_BACKGROUND_COLORS · SPLASH_BACKGROUND_LOCATIONS · APP_ICON_COLORS · AUTH_ICON_COLORS
+- `src/features/auth/config/splashFlight.ts`  →  SPLASH_FLIGHT_MS · SPLASH_RIPPLE_MS · SPLASH_DOT_PERIOD_MS · SPLASH_DOT_STAGGER_MS · Point · FLIGHT_P0 · FLIGHT_P1 · FLIGHT_P2 · FLIGHT_P3 · flightPoint · flightRotationDeg
 
 ## src/features/auth/
 - `src/features/auth/index.ts`  →  getGateDestination · useBootstrapGate
@@ -340,6 +341,7 @@
 ## src/features/auth/ui/
 - `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleLogoGlyph · KakaoIcon · NaverIcon · WarningTriangleGlyph
 - `src/features/auth/ui/SplashIllustration.tsx`  →  SplashIllustration
+- `src/features/auth/ui/SplashProgressDot.tsx`  →  SplashProgressDot
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
 
 ## src/features/check-visit/
@@ -1520,7 +1522,7 @@
 - `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 - `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
 - `src/shared/lib/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
-- `src/shared/lib/reduceMotion.ts`  →  startUnlessReduceMotion
+- `src/shared/lib/reduceMotion.ts`  →  startUnlessReduceMotion · useReduceMotion
 - `src/shared/lib/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 - `src/shared/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
 - `src/shared/lib/useDeadlineFlag.ts`  →  useDeadlineFlag

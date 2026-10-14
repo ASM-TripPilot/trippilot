@@ -1,5 +1,24 @@
+import { useEffect } from 'react';
 import { View } from 'react-native';
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
+
+import { useReduceMotion } from '@/shared/lib/reduceMotion';
+
+import {
+  FLIGHT_P3,
+  SPLASH_FLIGHT_MS,
+  SPLASH_RIPPLE_MS,
+  flightPoint,
+  flightRotationDeg,
+} from '../config/splashFlight';
 
 // 스플래시 상단 비행경로 일러스트(c01 IO). 점선 곡선 + 종이비행기 마커 + 목적지 핀 2개는
 // 하나의 장식 조합이라 이 존 박스 안에서만 절대좌표 오버레이를 유지한다(SKILL 4단계 예외 —
@@ -69,11 +88,15 @@ function PinLarge() {
   );
 }
 
-export function SplashIllustration() {
+// 동작 줄이기: 전부 정지 — 지금의 정지 그림(비행기는 출발점, 핀 둘, 전체 항로). 파동은 없다.
+function StaticIllustration() {
   return (
     <View testID="shell-splash-illustration" className="h-[300px] w-full">
       <FlightPathCurve />
-      <View className="absolute left-[40px] top-[216px]">
+      <View
+        testID="shell-splash-plane"
+        className="absolute left-[40px] top-[216px]"
+      >
         <AirplaneMarker />
       </View>
       <View className="absolute left-[175px] top-[92px]">
@@ -84,4 +107,136 @@ export function SplashIllustration() {
       </View>
     </View>
   );
+}
+
+const RIPPLE_MIN_R = 6;
+const RIPPLE_MAX_R = 36;
+const PIN_ORIGIN = '50% 100%';
+
+// 진행률 p 가 [from, peak, to] 를 지나며 0→1.15→1 로 튄다.
+function popScale(p: number, from: number, peak: number, to: number) {
+  'worklet';
+  return interpolate(p, [from, peak, to], [0, 1.15, 1], 'clamp');
+}
+
+// 비행기가 점선 항로를 따라 1회 날아 큰 핀에 닿고, 닿은 자리에서 파동이 1회 번진다(TRIP-1383).
+function FlyingIllustration() {
+  const progress = useSharedValue(0);
+  const ripple = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(1, {
+      duration: SPLASH_FLIGHT_MS,
+      easing: Easing.inOut(Easing.ease),
+    });
+    ripple.value = withDelay(
+      SPLASH_FLIGHT_MS,
+      withTiming(1, {
+        duration: SPLASH_RIPPLE_MS,
+        easing: Easing.out(Easing.quad),
+      })
+    );
+  }, [progress, ripple]);
+
+  // 항로는 x 가 단조 증가라 비행기 x 까지만 잘라 보이면 "지나간 만큼만" 이 된다.
+  const trailStyle = useAnimatedStyle(() => ({
+    width: flightPoint(progress.value).x + 2,
+  }));
+  const planeStyle = useAnimatedStyle(() => {
+    const pt = flightPoint(progress.value);
+    return {
+      opacity: interpolate(progress.value, [0.85, 0.97], [1, 0], 'clamp'),
+      transform: [
+        { translateX: pt.x - 17 },
+        { translateY: pt.y - 17 },
+        { rotate: `${flightRotationDeg(progress.value)}deg` },
+      ],
+    };
+  });
+  const smallPinStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: popScale(progress.value, 0.42, 0.5, 0.54) }],
+  }));
+  const largePinStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: popScale(progress.value, 0.88, 0.96, 1) }],
+  }));
+  const rippleStyle = useAnimatedStyle(() => {
+    const r = interpolate(ripple.value, [0, 1], [RIPPLE_MIN_R, RIPPLE_MAX_R]);
+    return {
+      width: r * 2,
+      height: r * 2,
+      borderRadius: r,
+      left: FLIGHT_P3.x - 0.5 - r,
+      top: FLIGHT_P3.y + 1 - r,
+      opacity:
+        ripple.value === 0 ? 0 : interpolate(ripple.value, [0, 1], [0.7, 0]),
+    };
+  });
+
+  return (
+    <View testID="shell-splash-illustration" className="h-[300px] w-full">
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            height: 300,
+            overflow: 'hidden',
+          },
+          trailStyle,
+        ]}
+      >
+        <FlightPathCurve />
+      </Animated.View>
+      <Animated.View
+        testID="shell-splash-arrival-ripple"
+        pointerEvents="none"
+        className="border-2 border-primary"
+        style={[{ position: 'absolute' }, rippleStyle]}
+      />
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            left: 175,
+            top: 92,
+            transformOrigin: PIN_ORIGIN,
+          },
+          smallPinStyle,
+        ]}
+      >
+        <PinSmall />
+      </Animated.View>
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            left: 316,
+            top: 132,
+            transformOrigin: PIN_ORIGIN,
+          },
+          largePinStyle,
+        ]}
+      >
+        <PinLarge />
+      </Animated.View>
+      <Animated.View
+        testID="shell-splash-plane"
+        style={[{ position: 'absolute', left: 0, top: 0 }, planeStyle]}
+      >
+        <AirplaneMarker />
+      </Animated.View>
+    </View>
+  );
+}
+
+export function SplashIllustration() {
+  const reduce = useReduceMotion();
+  // 답이 오기 전(마운트 직후 한두 프레임)은 빈 박스 — 정지 그림이 번쩍였다 모션으로 바뀌지 않게 한다.
+  if (reduce === null) {
+    return (
+      <View testID="shell-splash-illustration" className="h-[300px] w-full" />
+    );
+  }
+  return reduce ? <StaticIllustration /> : <FlyingIllustration />;
 }
