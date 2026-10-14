@@ -441,8 +441,6 @@ def gate_against_tourapi(
     tour: Sequence[SourcingCandidate],
     picks: Sequence[SourcingCandidate],
     gate: CollectionGate | None = None,
-    *,
-    keep_source: str = SOURCE,
 ) -> GateOutcome:
     """기존 수집 게이트를 그대로 태운다 — TourAPI 공유본 **뒤에** LOCALDATA 를 붙여서.
 
@@ -454,9 +452,6 @@ def gate_against_tourapi(
     **시도 단위로 나눠 태운다.** 게이트 3단은 kept 전체를 선형 탐색해 한 지역 배치 규모에서만
     감당된다 — TourAPI 수집도 지역(시도)별로 게이트를 탄다. 시도 경계를 넘는 같은 가게는 주소
     시도가 같을 수밖에 없어(주소 키에 시도가 들어 있다) 잃는 병합이 사실상 없다.
-
-    `keep_source` 가 "우리 몫"을 가른다 — 기본은 LOCALDATA 다. Overture 처럼 다른 출처를
-    같은 방식으로 붙일 때 그 값을 준다(2026-10-14). 안 주면 종전과 완전히 같다.
 
     LOCALDATA 몫은 TourAPI 만 태운 결과와의 차로 센다 — TourAPI 행이 앞에 있어 그쪽 판정은 뒤에
     붙인 행과 무관하게 같다. 폐업 필터(`closed_refs`)는 넣지 않는다: LOCALDATA 는 원본에서 영업
@@ -479,7 +474,7 @@ def gate_against_tourapi(
             continue
         base = gate.apply(tours)
         both = gate.apply([*tours, *ours])
-        passed.extend(p for p in both.passed if p.candidate.source == keep_source)
+        passed.extend(p for p in both.passed if p.candidate.source == SOURCE)
         merged += both.merged - base.merged
         drops.update(Counter(both.drops) - Counter(base.drops))
     return GateOutcome(passed=tuple(passed), merged=merged, drops=dict(drops))

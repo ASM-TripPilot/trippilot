@@ -247,9 +247,8 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
         _spec("replacement", (_PL,), False, "무엇으로 바꿀지",
               lands_in="EditCommand.params.targetPoiId"),
         _spec("position", (_SL,), False,
-              "어디로 옮길지. 워커가 현재 슬롯 기준점(afterPoiId·beforePoiId)으로 번역한다 — "
-              "기준이 없으면 옮기지 않고 거부한다(예전 '비면 맨 앞' 기본값은 '더 늦게'를 앞으로 당겼다)",
-              lands_in="EditCommand.params.afterPoiId|beforePoiId"),
+              "어디로 옮길지. 비면 '맨 앞으로' 라는 뜻 있는 기본값이라 되물을 자리가 아니다",
+              lands_in="EditCommand.params.afterPoiId"),
     ),
     Intent.GET_NEXT_SLOT: (
         # AI 처리 경로 없음(백엔드 DB 조회). 기준점("이거 끝나고")은 inline_context·context_refs 가
