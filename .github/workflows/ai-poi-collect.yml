@@ -260,7 +260,12 @@ jobs:
         # 사람 손에 머지되고 #917 이 또 열린 이유가 이것이다. 이 스텝을 고치면 main 사본도 함께 맞출 것.
         run: |
           BEFORE=$(uv run python -c "import json;print(len(json.load(open('data/collected_pois.json'))['proposals']))")
-          uv run python scripts/collect/merge_pois_docs.py -o data/collected_pois.json \
+          # `--allow-mixed`: 공유본에는 **출처가 둘** 섞여 있다(TOURAPI + LOCALDATA, 2026-10-14
+          # 병합). 합치는 산출물은 TourAPI 라 출처가 갈려서, 플래그 없이는 merge_pois_docs 가
+          # 거부한다(일부러 그렇게 막아 뒀다 — 문서 레벨 source 하나만 읽는 수신에 섞인 문서를
+          # 부으면 전량이 한 출처로 중복 적재된다). 여기서 섞이는 것은 **의도된 것**이고,
+          # 소비자(`ingest_pois.py`)가 항목별 source 로 갈라 보낸다.
+          uv run python scripts/collect/merge_pois_docs.py --allow-mixed -o data/collected_pois.json \
             data/collected_pois.json collected_pois.json rewind_pois.json
           AFTER=$(uv run python -c "import json;print(len(json.load(open('data/collected_pois.json'))['proposals']))")
           # 관광 무관·폐업 소급 제거(병합 단)는 **의도한 감소**다 — 그 몫을 빼고 비교하지

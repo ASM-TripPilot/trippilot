@@ -245,7 +245,9 @@ def test_근거_파일_갱신_절차는_공유본_병합을_같은_PR에_넣는�
     그래서 갱신 절차 두 벌(README · 담당자에게 메일로 가는 리마인더 이슈 본문)이 모두 공유본 병합을 같은
     PR 에 넣으라고 해야 한다 — 절차가 두 곳이라 한쪽만 고쳐지기 쉽다(2026-10-05 리뷰에서 실제로 한쪽이 빠졌다).
     """
-    cmd = "scripts/collect/merge_pois_docs.py -o data/collected_pois.json data/collected_pois.json"
+    # `--allow-mixed` 는 공유본이 섞인 뒤로 필수다(2026-10-14) — 빠진 절차는 거부로 끝난다.
+    cmd = ("scripts/collect/merge_pois_docs.py --allow-mixed "
+           "-o data/collected_pois.json data/collected_pois.json")
     readme = (_DATA / "README.md").read_text(encoding="utf-8")
     section = readme.split("## `poi_business_status.json`", 1)[1].split("\n## ", 1)[0]
     assert cmd in section
@@ -305,3 +307,19 @@ def test_공유본이_섞였으면_sources_가_있다() -> None:
             "공유본 항목 출처가 섞였는데 문서의 sources 와 다르다 — "
             "수신이 최상위 source 하나만 읽어 전량 중복 적재된다"
         )
+
+
+def test_섞인_문서를_혼자_재병합해도_표식이_남는다() -> None:
+    """공유본 재병합(폐업 소급 제거)에서 실제로 하는 일이다 — 문서 레벨만 보면 표식이 사라진다.
+
+    항목 출처가 정본이므로, 문서가 하나여도 그 안이 섞였으면 섞인 것이다.
+    실제로 `merge_pois_docs.py -o data/collected_pois.json data/collected_pois.json`
+    한 번에 `sources` 가 통째로 날아갔다(2026-10-14, 커밋 전 발견).
+    """
+    mixed = _doc("TOURAPI", "1", "2026-10-14T00:00:00Z")
+    mixed["proposals"].append({"provenance": {"content_id": "2"},
+                               "poi": {"name": "수로밥상"}, "source": "LOCALDATA"})
+    with pytest.raises(SystemExit):
+        merge([mixed])
+    out = merge([mixed], allow_mixed=True)
+    assert out["sources"] == ["LOCALDATA", "TOURAPI"]

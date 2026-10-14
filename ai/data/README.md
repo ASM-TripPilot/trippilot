@@ -397,7 +397,9 @@ LOCALDATA_DIR=<받은 경로> uv run python scripts/classify/match_business_stat
 # 3) 공유본에 병합을 한 번 돌린다 — 새로 CLOSED 가 된 항목을 소급 제거한다(drop_closed; 영업시간 재파싱도 같이 돈다).
 #    건너뛰면 이 PR 의 ai-ci 가 빨개진다 — 공유본에 CLOSED 가 남아 있지 않은지 보는 테스트(test_merge_pois_docs)가
 #    있고, 매일 병합(봇)은 이 근거 파일이 develop 에 들어간 뒤에야 그 항목을 뺄 수 있다.
-uv run python scripts/collect/merge_pois_docs.py -o data/collected_pois.json data/collected_pois.json
+#    --allow-mixed: 공유본에 출처가 둘 섞여 있다(TOURAPI + LOCALDATA, 2026-10-14). 플래그 없이는
+#    거부된다 — 섞인 문서를 문서 레벨 source 하나로 부으면 전량이 그 출처로 중복 적재되기 때문이다.
+uv run python scripts/collect/merge_pois_docs.py --allow-mixed -o data/collected_pois.json data/collected_pois.json
 # 4) poi_business_status.json 과 collected_pois.json 을 같은 PR 로
 ```
 

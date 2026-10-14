@@ -43,7 +43,12 @@ def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
     2026-10-14 실측: 19,079 + 22,283 을 합쳤더니 최상위가 LOCALDATA 가 돼, 그대로 부었으면
     TourAPI 19,079곳이 LOCALDATA 출처 새 행으로 중복될 뻔했다(배포 전 발견).
     """
-    sources = {d.get("source") for d in docs}
+    # 문서 레벨만 보면 **이미 섞인 문서 하나**를 다시 병합할 때 표식이 사라진다
+    # (공유본 재병합은 폐업 소급 제거 때 실제로 한다). 항목 출처가 정본이므로 같이 본다.
+    sources = {d.get("source") for d in docs} | {
+        p.get("source") for d in docs for p in d["proposals"] if p.get("source")
+    }
+    sources.discard(None)
     if len(sources) > 1 and not allow_mixed:
         raise SystemExit(
             f"[merge] 출처가 섞였습니다: {sorted(s or '?' for s in sources)}\n"
@@ -69,7 +74,7 @@ def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
         # 섞였으면 **항목별 source 가 정본**이다 — 최상위 하나만 읽으면 틀린다는 것을
         # 문서가 스스로 드러내게 `sources` 를 같이 적는다(수신 DTO 는 ignoreUnknown).
         "source": docs[-1]["source"],
-        **({"sources": sorted(s for s in sources if s)} if len(sources) > 1 else {}),
+        **({"sources": sorted(sources)} if len(sources) > 1 else {}),
         "collected_at": docs[-1]["collected_at"],
         "area_codes": sorted(areas, key=int),
         "content_types": sorted(types, key=int),
