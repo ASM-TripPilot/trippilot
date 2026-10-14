@@ -461,7 +461,8 @@ def test_드롭_키는_policy_non_travel_접두에_표의_사유가_붙는다() 
     접미 집합은 표에서 유도한다."""
     assert DROP_POLICY_NON_TRAVEL == "policy_non_travel"
     one_per_reason = ("GS25 연동바다점", "이마트 서귀포점", "KT 동원텔레콤한림점",
-                      "산삼배양근대리점", "노형 e편한세상 아파트")
+                      "산삼배양근대리점", "노형 e편한세상 아파트",
+                      "강일리버파크9단지관리사무소", "부산북부소방서")
     seen: set[str] = set()
     for i, name in enumerate(one_per_reason):
         seen |= set(CollectionGate().apply([_cand(str(i), name=name)]).drops)
@@ -495,4 +496,40 @@ def test_드롭_키는_policy_non_travel_접두에_표의_사유가_붙는다() 
     ],
 )
 def test_리뷰_후_조인_규칙_회귀(name: str, expected: str | None) -> None:
+    assert non_travel_reason(name) == expected
+
+
+# ── 단지 관리 주체 · 공공안전 (2026-10-14) ───────────────────────────────
+# 아파트 규칙은 **이름 끝**만 보기 때문에, 끝이 조직명인 것들이 통째로 빠져나갔다.
+# 서울 Overture 994 곳 중 5곳이 그 모양으로 공유본에 들어가 있었다.
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        # 실측 — 공유본에 실제로 들어가 있던 5곳
+        ("구로삼성하이츠아파트관리사무소", "complex_management"),
+        ("신대방우성아파트 관리사무소", "complex_management"),
+        ("개포1단지 주공아파트 관리사무소", "complex_management"),
+        ("래미안파크팰리스입주자대표회의", "complex_management"),
+        ("강일리버파크9단지관리사무소", "complex_management"),
+        # 부산·제주 신규 — `대표회의`/`대표회` 양쪽, 자치관리위원회, 관리단
+        ("해운대엑소디움 입주자대표회의", "complex_management"),
+        ("신림 푸르지오 아파트 입주자대표회", "complex_management"),
+        ("봉개반석아르미 자치관리위원회", "complex_management"),
+        ("센텀뷰라움관리단", "complex_management"),
+        # 소방·경찰은 이름 끝일 때만
+        ("부산북부소방서", "public_safety"),
+        ("서귀포경찰서", "public_safety"),
+        ("연동파출소", "public_safety"),
+        # **맨 이름이 그 낱말이면 상호다** — `지구대` 는 제천의 실제 카페(TourAPI).
+        # 그래서 `지구대` 자체를 목록에서 뺐고, 나머지는 앞 글자를 요구한다.
+        ("지구대", None),
+        ("소방서", None),
+        # 소방·경찰 낱말이 이름 끝이 아니면 안 걸린다 — 여행지가 기관명을 쓸 수 있다
+        ("소방서 앞 분식", None),
+        ("경찰박물관", None),
+        # `관리단` 은 끝 고정 — 중간에 있으면 다른 뜻일 수 있다
+        ("관리단지농원", None),
+    ],
+)
+def test_단지_관리주체와_공공안전(name: str, expected: str | None) -> None:
     assert non_travel_reason(name) == expected

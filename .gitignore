@@ -50,3 +50,8 @@ htmlcov/
 # AWS 자격 파일은 리포 어디에도 두지 않는다 — 표준 위치 ~/.aws/credentials. 리포 안에 실수로 만들어도 안 올라가게.
 .aws/
 **/.aws/
+
+# Overture 원본 bbox 추출 — 중간 산출물이고 지역당 4~40MB 다. 공유본
+# (`ai/data/collected_pois.json`)이 정본이므로 리포에 둘 이유가 없다.
+# `ai/data/overture/서울.json`(39MB)이 #1233 에 딸려 들어간 사고를 막는다.
+ai/data/overture/
