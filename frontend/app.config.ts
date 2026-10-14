@@ -32,7 +32,7 @@ const PHOTOS_PERMISSION =
 const config: ExpoConfig = {
   name: 'TripPilot',
   slug: 'trippilot',
-  version: '1.0.0',
+  version: '1.0.1',
   orientation: 'portrait',
   // Figma AppIcon/Final 기준 최종 아이콘(1024 불투명 RGB — App Store 는 알파 채널을 거부한다).
   icon: './assets/icon.png',
