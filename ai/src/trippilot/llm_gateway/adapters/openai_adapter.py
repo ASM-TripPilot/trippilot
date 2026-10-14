@@ -70,11 +70,16 @@ class OpenAIAdapter:
                 # temperature 미전달 — GPT-5 계열은 파라미터째 거부(400,
                 # "Unsupported parameter: 'temperature'"). 결정론 의도는 이 벤더에서
                 # 실현 불가 — 모델 기본값에 맡긴다 (TRIP-377). 요청 필드도 없앴다.
+                # effort 는 지정됐을 때만(anthropic 어댑터와 동형). 값은 그대로 —
+                # 표의 값("low")이 두 벤더에 공통이다. gpt-5.6-sol·terra·luna 모두 low 를
+                # 받는다(2026-10-14 실호출). chat 표면엔 싣지 않는다: 로컬 서빙(MLX·vLLM) 전용이다.
+                extra = {"reasoning": {"effort": request.effort}} if request.effort else {}
                 resp = self._client.responses.create(
                     model=request.model_id,
                     max_output_tokens=request.max_tokens,
                     timeout=request.timeout_sec,
                     input=_responses_input(request),
+                    **extra,
                 )
                 # output_text는 SDK 편의 속성 — reasoning만 나온 응답이면 "" (게이트가 드롭)
                 raw_text = resp.output_text or ""

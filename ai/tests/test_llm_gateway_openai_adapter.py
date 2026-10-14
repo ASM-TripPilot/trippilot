@@ -112,6 +112,39 @@ def test_responses_response_mapping_records_usage_tokens() -> None:
     assert response.model_id == "model-under-test"
 
 
+def test_responses_carries_effort_as_reasoning() -> None:
+    """기능별 effort(`C1Config.effort_for`)를 Responses `reasoning.effort` 로 싣는다.
+
+    실측(2026-10-14): gpt-5.6-sol·terra·luna 모두 `low` 를 200 으로 받는다 — 거부 모델 없음.
+    """
+    from dataclasses import replace
+
+    client = RecordingResponsesClient()
+    OpenAIAdapter(client, api="responses").invoke(replace(_REQUEST, effort="low"))
+
+    assert client.kwargs is not None
+    assert client.kwargs["reasoning"] == {"effort": "low"}
+
+
+def test_responses_without_effort_sends_no_reasoning() -> None:
+    client = RecordingResponsesClient()
+    OpenAIAdapter(client, api="responses").invoke(_REQUEST)
+
+    assert client.kwargs is not None
+    assert "reasoning" not in client.kwargs  # 미지정 = 모델 기본값
+
+
+def test_chat_never_sends_effort() -> None:
+    """chat 표면은 로컬 서빙(MLX·vLLM) 전용 — 추론 파라미터를 싣지 않는다."""
+    from dataclasses import replace
+
+    client = RecordingClient()
+    OpenAIAdapter(client).invoke(replace(_REQUEST, effort="low"))
+
+    assert client.kwargs is not None
+    assert "reasoning_effort" not in client.kwargs and "reasoning" not in client.kwargs
+
+
 def test_unknown_api_is_rejected_at_construction() -> None:
     with pytest.raises(ValueError):
         OpenAIAdapter(RecordingClient(), api="grpc")
