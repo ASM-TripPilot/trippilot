@@ -1,5 +1,6 @@
 import { memo, type ReactElement } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import type { Place } from '../model';
 
@@ -58,7 +59,10 @@ function PlaceGridCardImpl({
         {place.imageUrl ? (
           <Image
             source={{ uri: place.imageUrl }}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={place.poiId}
+            transition={120}
             className="h-full w-full"
           />
         ) : null}

@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
@@ -131,7 +132,9 @@ export function SlotStopCard({
         <Image
           testID={fieldId('photo')}
           source={{ uri: slot.imageUrl as string }}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={slot.poiId}
           className="h-[72px] w-[72px] rounded-thumb"
         />
       ) : (

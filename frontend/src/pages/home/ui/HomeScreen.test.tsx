@@ -1,4 +1,5 @@
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import {
   fireEvent,
   render,

@@ -1,5 +1,6 @@
 import { Fragment, type ReactElement } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -120,7 +121,8 @@ function NightCard({
             <Image
               testID={`trip-base-night-thumb-${card.nightNumber}`}
               source={{ uri: card.imageUrl }}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
               className="h-full w-full"
             />
           </View>

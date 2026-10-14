@@ -16,7 +16,6 @@
  */
 import { memo, useState, type ReactElement } from 'react';
 import {
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -42,6 +41,7 @@ import { CategoryImageGlyph } from '@/entities/itinerary-slot';
 import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';
 import { HeartButton } from '@/shared/ui/HeartButton';
+import { Image } from '@/shared/ui/Image';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import type {
   HomeCollectionCard,
@@ -219,8 +219,11 @@ function MagazineHeroImpl({
   showDots = true,
   asButton = false,
   onPress,
+  priority = 'low',
 }: {
   hero: HomeMagazineHero;
+  // TRIP-1363 — 캐러셀 첫 장만 high, 나머지는 low(화면 밖 페이지가 첫 장 디코드를 밀지 않게).
+  priority?: 'high' | 'low';
   testID?: string;
   showDots?: boolean;
   // TRIP-700 — discovery 캐러셀 page0 만 a02 매거진 목록으로 가는 배선 CTA. TRIP-935 R1 — 운영
@@ -236,7 +239,9 @@ function MagazineHeroImpl({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={hero.imageUrl ? { uri: hero.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority={priority}
         style={ABSOLUTE_FILL}
       />
       <LinearGradient
@@ -338,6 +343,7 @@ function DiscoveryHeroCarousel({
               hero={hero}
               testID={i === 0 ? 'home-magazine-hero' : `home-hero-slide-${i}`}
               showDots={false}
+              priority={i === 0 ? 'high' : 'low'}
               asButton={i === 0 && onPressMagazine !== undefined}
               onPress={i === 0 ? onPressMagazine : undefined}
             />
@@ -435,7 +441,10 @@ function CollectionCard({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={card.imageUrl ? { uri: card.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        recyclingKey={poiId ?? card.imageUrl ?? undefined}
+        transition={120}
         style={ABSOLUTE_FILL}
       />
       {card.imageUrl ? null : (
@@ -495,7 +504,10 @@ function SpotCard({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={card.imageUrl ? { uri: card.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        recyclingKey={poiId ?? card.imageUrl ?? undefined}
+        transition={120}
         style={ABSOLUTE_FILL}
       />
       {card.imageUrl ? null : (
@@ -710,7 +722,9 @@ function IntegratedTripHero({
       <Image
         testID="home-trip-hero-cover"
         source={trip.coverSource ?? (imageUrl ? { uri: imageUrl } : undefined)}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority="high"
         style={ABSOLUTE_FILL}
       />
       <LinearGradient
@@ -785,7 +799,9 @@ function PastTripCard({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={trip.imageUrl ? { uri: trip.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={120}
         style={ABSOLUTE_FILL}
       />
       <LinearGradient

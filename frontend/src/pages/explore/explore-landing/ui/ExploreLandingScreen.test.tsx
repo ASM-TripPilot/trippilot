@@ -670,9 +670,9 @@ describe('TRIP-496 · 장소 레인 카드 사진', () => {
 
     const image = screen.getByTestId('explore-place-card-image-p1');
     expect(image).toBeOnTheScreen();
-    expect(image.props.source).toEqual({
-      uri: 'https://cdn.example.com/p1.jpg',
-    });
+    expect(image.props.source).toEqual([
+      { uri: 'https://cdn.example.com/p1.jpg' },
+    ]);
   });
 
   it('imageUrl 이 없으면 사진을 지어내지 않고 플레이스홀더로 둔다 (INV-1)', () => {

@@ -92,9 +92,9 @@ describe('TC3 · 도시 이름 폴백', () => {
 describe('TC · 지역 커버 이미지', () => {
   it('coverSource 가 있으면 그림 + 스크림이 그려지고 도시 이름이 그 위에 남는다', () => {
     renderCard(vm({ coverSource: { uri: 'cover://26350' } }));
-    expect(screen.getByTestId('my-trip-cover-t1').props.source).toEqual({
-      uri: 'cover://26350',
-    });
+    expect(screen.getByTestId('my-trip-cover-t1').props.source).toEqual([
+      { uri: 'cover://26350' },
+    ]);
     // 남은 LinearGradient 하나는 톤 그라데이션이 아니라 제목 대비용 스크림이다.
     expect(screen.UNSAFE_getAllByType(LinearGradient)).toHaveLength(1);
     expect(screen.getByTestId('my-trip-city-t1')).toHaveTextContent('부산');

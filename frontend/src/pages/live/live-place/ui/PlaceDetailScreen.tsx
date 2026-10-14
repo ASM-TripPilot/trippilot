@@ -1,6 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
 import {
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,6 +7,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -161,7 +161,8 @@ export function PlaceDetailScreen({
                   key={`${index}-${uri}`}
                   testID={`execution-place-gallery-${index}`}
                   source={{ uri }}
-                  resizeMode="cover"
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
                   className="h-full"
                   style={{ width }}
                 />
@@ -346,7 +347,8 @@ export function PlaceDetailScreen({
                     <Image
                       testID={`execution-place-photo-thumb-${index}`}
                       source={{ uri }}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
                       className="h-full w-full"
                     />
                     {index === THUMB_COUNT - 1 && moreCount > 0 ? (
