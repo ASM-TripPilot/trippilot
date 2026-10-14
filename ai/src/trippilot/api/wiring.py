@@ -196,7 +196,7 @@ from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.orchestrator.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
 from trippilot.orchestrator.intent_router import IntentRouter
-from trippilot.orchestrator.question_bank import BankEntry
+from trippilot.orchestrator.question_bank import BankEntry, BankVectors
 from trippilot.ports.llm_port import LlmPort
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -3545,6 +3545,7 @@ def build_orchestrator(
     directives: tuple[DirectiveSpec, ...] = (),
     bank: tuple[BankEntry, ...] = (),
     bank_embedding: EmbeddingPort | None = None,
+    bank_vectors: BankVectors | None = None,
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
 
@@ -3686,8 +3687,10 @@ def build_orchestrator(
     bank_store = InMemoryVectorStore()
     # 색인은 긴 timeout 의 전용 임베딩으로(있으면) — 요청 경로 5s 로 색인하면 DEV 에서 포기·재전송이 쌓였다(main.py).
     # 같은 모델이라 질의(요청 경로 임베딩)와 벡터 공간이 같다. 없으면 요청 경로 임베딩을 그대로 쓴다.
+    # 미리 계산한 벡터(`bank_vectors`)가 지금 뱅크·모델의 것이면 임베딩 호출 없이 즉시 싣는다 — 기동·HPA 증설마다
+    # 원격 임베딩을 수 분 독점하던 색인을 없앤다. 맞지 않으면 아래 원격 색인으로 그대로 간다.
     bank_index = BankIndex(bank, bank_embedding if bank_embedding is not None and embedding is not None
-                           else embedding, bank_store)
+                           else embedding, bank_store, precomputed=bank_vectors)
     bank_index.warm()  # 기동 때 백그라운드 색인 — 첫 해석이 색인 시간을 떠안지 않게
     counted = CountingLlm(llm)
     dialogue = DialogueInterpreter(
@@ -3891,6 +3894,7 @@ def build_dev_app(
     directives: tuple[DirectiveSpec, ...] = (),
     bank: tuple[BankEntry, ...] = (),
     bank_embedding: EmbeddingPort | None = None,
+    bank_vectors: BankVectors | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -3945,5 +3949,6 @@ def build_dev_app(
         directives=directives,
         bank=bank,
         bank_embedding=bank_embedding,
+        bank_vectors=bank_vectors,
     )
     return create_app(orchestrator)

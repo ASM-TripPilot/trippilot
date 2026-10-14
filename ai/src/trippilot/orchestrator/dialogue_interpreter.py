@@ -42,7 +42,7 @@ from trippilot.domain.dialogue import (
 from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
 from trippilot.orchestrator.arguments import extract_argument
 from trippilot.orchestrator.intent_router import IntentRouter, normalize
-from trippilot.orchestrator.question_bank import BankEntry, index_bank
+from trippilot.orchestrator.question_bank import BankEntry, BankVectors, index_bank
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
 from trippilot.ports.vector_store_port import VectorStorePort
@@ -198,6 +198,7 @@ class BankIndex:
         retry_after_s: float = 60.0,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        precomputed: BankVectors | None = None,
     ) -> None:
         self._entries = tuple(entries)
         self._sleep = sleep
@@ -210,6 +211,19 @@ class BankIndex:
         self._lock = threading.Lock()
         self._indexed = not self._entries  # 빈 뱅크는 할 일이 없다
         self._next_try = 0.0
+        if precomputed is not None and not self._indexed and embedding is not None:
+            self._load_precomputed(precomputed, embedding)
+
+    def _load_precomputed(self, pre: BankVectors, embedding: EmbeddingPort) -> None:
+        """미리 계산한 벡터가 지금 뱅크·모델의 것이면 임베딩 호출 없이 바로 싣는다(기동 즉시 1차 가능).
+        아니면 이유를 남기고 종전처럼 원격 색인(`warm`)에 맡긴다 — 맞지 않는 벡터는 싣지 않는다."""
+        reason = pre.unusable_reason(self._entries, embedding.model_id, embedding.dim)
+        if reason is not None:
+            log.warning("미리 계산한 질문뱅크 벡터를 쓰지 않음(%s) — 원격 색인으로", reason)
+            return
+        n = index_bank(self._entries, embedding, self._store, vectors=pre.vectors)
+        self._indexed = True
+        log.info("질문뱅크 색인 완료 — %d문장 (미리 계산한 벡터)", n)
 
     @property
     def indexed(self) -> bool:

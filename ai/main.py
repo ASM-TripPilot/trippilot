@@ -658,6 +658,19 @@ _BANK_PATH = pathlib.Path(__file__).resolve().parent / "data" / "intent_question
 # 질문뱅크 색인은 기동 뒤 백그라운드라 요청 예산(5s)과 무관하다. 5s 로 두면 DEV(CPU 임베딩, 파드 2 × 워커 2 =
 # 색인 4벌)에서 요청이 끝나기 전에 포기하고 다시 보내, 서비스가 버려진 일을 계속 처리하느라 포화됐다.
 _BANK_INDEX_TIMEOUT_SEC = 60.0
+# 질문뱅크 벡터를 미리 계산한 파일(`scripts/intent/build_bank_vectors.py`) — 있으면 기동 때 원격 임베딩을 안 부른다.
+_BANK_VECTORS_PATH = _BANK_PATH.with_name("intent_question_bank.vectors.json.gz")
+
+
+def _bank_vectors():
+    """못 읽으면 None — 원격 색인으로 기동한다(기동을 막지 않고, 로그에 남는다)."""
+    try:
+        from trippilot.orchestrator.question_bank import load_bank_vectors
+
+        return load_bank_vectors(_BANK_VECTORS_PATH)
+    except Exception as e:  # noqa: BLE001 — 기동을 막지 않는다
+        log.warning("미리 계산한 질문뱅크 벡터 로드 실패 %s: %s — 원격 색인으로", type(e).__name__, e)
+        return None
 
 
 def _bank_embedding():
@@ -706,7 +719,8 @@ def build_app_from_env() -> FastAPI:
                              vector_store=vector_store, embedding=embedding,
                              travel_port=travel, existence=existence,
                              hours=hours, place_ids=place_ids,
-                             bank=_intent_bank(), bank_embedding=_bank_embedding())
+                             bank=_intent_bank(), bank_embedding=_bank_embedding(),
+                             bank_vectors=_bank_vectors())
     if provider == "openai":
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
@@ -739,7 +753,8 @@ def build_app_from_env() -> FastAPI:
                          # 0·음수는 C1Config 검증이 기동 시점에 거부한다.
                          score_max_parallel=int(_env("TRIPPILOT_SCORE_MAX_PARALLEL") or "10"),
                          directives=_replan_directives(),
-                         bank=_intent_bank(), bank_embedding=_bank_embedding())
+                         bank=_intent_bank(), bank_embedding=_bank_embedding(),
+                         bank_vectors=_bank_vectors())
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.

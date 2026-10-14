@@ -48,8 +48,9 @@ Provider를 직접 부르지 않는다. 각 Provider는 `ProviderStatus`
 
 `IntentRouter`(질문뱅크 매칭)는 **배선됐다**(2026-10-14) — 경계는 하나뿐이다:
 U8 도우미의 `POST /ai/v1/dialogue/interpret`(`orchestrator/dialogue_interpreter.py`).
-AI 는 해석만, 디스패치는 백엔드 `assistant` 모듈(U8 DEC-U8-1). 질문뱅크는 첫 해석 때 현재
-임베딩 모델로 메모리 스토어에 색인한다(실 DB 적재 없음).
+AI 는 해석만, 디스패치는 백엔드 `assistant` 모듈(U8 DEC-U8-1). 질문뱅크는 기동 때 미리 계산한
+벡터(`data/intent_question_bank.vectors.json.gz`)로 메모리 스토어에 색인한다(실 DB 적재 없음). 뱅크를 고치면
+`scripts/intent/build_bank_vectors.py` 로 재생성 — 옛 파일은 싣지 않고 원격 색인으로 넘어간다.
 
 ## 핵심 설계 문서 (application-design/)
 
