@@ -71,7 +71,7 @@ jobs:
                 --endpoints "${{ inputs.endpoints }}"
                 --out fee_sources.json)
           [ -n "${{ inputs.dump_fields }}" ] && args+=(--dump-fields "${{ inputs.dump_fields }}")
-          uv run python scripts/probe_fee_sources.py "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          uv run python scripts/probe/probe_fee_sources.py "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 결과 보존
         if: always()

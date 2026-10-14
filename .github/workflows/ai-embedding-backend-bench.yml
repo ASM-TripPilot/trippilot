@@ -57,7 +57,7 @@ jobs:
           {
             echo "## 임베딩 백엔드 A/B — amd64 (\`${{ runner.arch }}\`, ubuntu-latest)"
             echo
-            uv run python scripts/measure_triton_embedding.py
+            uv run python scripts/measure/measure_triton_embedding.py
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
   # 위 잡은 **인프로세스**다 — 측정 코드가 ORT 세션을 직접 만들고, 그래프도 측정 중에
@@ -116,7 +116,7 @@ jobs:
             -e EMBEDDING_BACKEND=sentence-transformers \
             -e OMP_NUM_THREADS="$POD_CPUS" -e MKL_NUM_THREADS="$POD_CPUS" \
             "${IMAGE}:bench"
-          uv run python scripts/measure_embedding_container.py \
+          uv run python scripts/measure/measure_embedding_container.py \
             --base-url http://localhost:8100 \
             --label "sentence-transformers (현행)" --out /tmp/st.json
           docker logs bench-st 2>&1 | tail -20
@@ -130,7 +130,7 @@ jobs:
             -e EMBEDDING_ONNX_THREADS="$POD_CPUS" \
             -e OMP_NUM_THREADS="$POD_CPUS" -e MKL_NUM_THREADS="$POD_CPUS" \
             "${IMAGE}:bench"
-          uv run python scripts/measure_embedding_container.py \
+          uv run python scripts/measure/measure_embedding_container.py \
             --base-url http://localhost:8100 \
             --label "ONNX Runtime (구운 그래프)" --out /tmp/onnx.json
           docker logs bench-onnx 2>&1 | tail -20
@@ -143,6 +143,6 @@ jobs:
           {
             echo "## 컨테이너 안 실측 — amd64 (\`${{ runner.arch }}\`, cpus=$POD_CPUS)"
             echo
-            uv run python scripts/measure_embedding_container.py \
+            uv run python scripts/measure/measure_embedding_container.py \
               --compare /tmp/st.json /tmp/onnx.json
           } | tee -a "$GITHUB_STEP_SUMMARY"

@@ -134,7 +134,7 @@ jobs:
             exit 0
           fi
           set -o pipefail
-          uv run python scripts/collect_pois.py 2>&1 | tee collect.log
+          uv run python scripts/collect/collect_pois.py 2>&1 | tee collect.log
       - name: 실패 성격 판정 (러너 IP 차단인가, 진짜 문제인가)
         id: triage
         if: failure()
@@ -154,7 +154,7 @@ jobs:
           fi
       - name: 잡 서머리 (수집·게이트 통과·드롭 통계)
         if: steps.collect.outputs.skipped != 'true'
-        run: uv run python scripts/collect_pois.py --summary collected_pois.json >> "$GITHUB_STEP_SUMMARY"
+        run: uv run python scripts/collect/collect_pois.py --summary collected_pois.json >> "$GITHUB_STEP_SUMMARY"
       - name: 수집 상태 영속 (collect-state 전용 브랜치 커밋·푸시)
         if: steps.collect.outputs.skipped != 'true'
         # plumbing(hash-object→mktree→commit-tree)으로 워킹트리를 건드리지 않고 커밋한다.
@@ -208,7 +208,7 @@ jobs:
         # 같은 modified_time 이 다시 실린 경우. (앞선 판은 "스킵 0건"만 보고 실패시켰다가
         # 미수집 지역 첫 수집(강원 100건 전부 신규)을 회귀로 오인해 빨간불을 냈다.)
         run: |
-          uv run python scripts/collect_novelty.py \
+          uv run python scripts/collect/collect_novelty.py \
             --output collected_pois.json \
             --prev-state collect_state.prev.json \
             --fail-if-stalled >> "$GITHUB_STEP_SUMMARY"
@@ -229,7 +229,7 @@ jobs:
           TOUR_API_KEY: ${{ secrets.TOUR_API_KEY }}
           TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
           TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
-        run: uv run python scripts/refetch_intro.py --pois data/collected_pois.json --daily collected_pois.json --out rewind_pois.json
+        run: uv run python scripts/collect/refetch_intro.py --pois data/collected_pois.json --daily collected_pois.json --out rewind_pois.json
       - name: 팀 공유본 자동 갱신 PR (TRIP-392 — 병합·축소 가드·롤링 브랜치)
         if: steps.collect.outputs.skipped != 'true'
         env:
@@ -265,7 +265,7 @@ jobs:
         # 사람 손에 머지되고 #917 이 또 열린 이유가 이것이다. 이 스텝을 고치면 main 사본도 함께 맞출 것.
         run: |
           BEFORE=$(uv run python -c "import json;print(len(json.load(open('data/collected_pois.json'))['proposals']))")
-          uv run python scripts/merge_pois_docs.py -o data/collected_pois.json \
+          uv run python scripts/collect/merge_pois_docs.py -o data/collected_pois.json \
             data/collected_pois.json collected_pois.json rewind_pois.json
           AFTER=$(uv run python -c "import json;print(len(json.load(open('data/collected_pois.json'))['proposals']))")
           # 관광 무관·폐업 소급 제거(병합 단)는 **의도한 감소**다 — 그 몫을 빼고 비교하지

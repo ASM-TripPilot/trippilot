@@ -80,7 +80,7 @@ jobs:
         # 로그를 파일로도 남긴다 — 아래 판정이 실패 성격을 읽어야 한다.
         run: |
           set -o pipefail
-          uv run python scripts/measure_stay_coverage.py 2>&1 | tee measure.log
+          uv run python scripts/measure/measure_stay_coverage.py 2>&1 | tee measure.log
 
       - name: 실패 성격 판정 (러너 IP 차단인가, 진짜 문제인가)
         id: triage

@@ -100,10 +100,10 @@ jobs:
             echo "skipped=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          uv run python scripts/collect_events.py
+          uv run python scripts/collect/collect_events.py
       - name: 잡 서머리 (지역별 추출·신규 통계)
         if: steps.collect.outputs.skipped != 'true'
-        run: uv run python scripts/collect_events.py --summary collect_events_run.json >> "$GITHUB_STEP_SUMMARY"
+        run: uv run python scripts/collect/collect_events.py --summary collect_events_run.json >> "$GITHUB_STEP_SUMMARY"
       - name: 저장소 영속 (collect-state 브랜치 — 다른 파일 보존)
         if: steps.collect.outputs.skipped != 'true'
         run: |

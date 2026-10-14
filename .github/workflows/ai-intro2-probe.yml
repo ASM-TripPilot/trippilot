@@ -76,7 +76,7 @@ jobs:
                 --out intro2.json)
           [ -n "${{ inputs.from_doc }}" ] && args+=(--from-doc "${{ inputs.from_doc }}")
           [ -n "${{ inputs.dump }}" ] && args+=(--dump "${{ inputs.dump }}")
-          uv run python scripts/probe_intro2.py "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          uv run python scripts/probe/probe_intro2.py "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 결과 보존
         if: always()
