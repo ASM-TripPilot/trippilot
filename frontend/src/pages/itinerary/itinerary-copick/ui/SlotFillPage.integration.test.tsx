@@ -2573,7 +2573,7 @@ describe('후보 카드 이름·태그·사진', () => {
 
       expect(
         screen.getByTestId('itinerary-candidate-image-X').props.source
-      ).toEqual({ uri: X_IMG });
+      ).toEqual([{ uri: X_IMG }]);
       // 회색 자리도 testID 는 유지된다(존재) — 그리고 이미지 source 는 없다(부재).
       for (const id of [RAW_ID, 'Z']) {
         const leaf = screen.getByTestId(`itinerary-candidate-image-${id}`);
