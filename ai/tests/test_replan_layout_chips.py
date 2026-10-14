@@ -80,6 +80,9 @@ def test_시간만_당기기는_장소_그대로_시각만_앞당긴다() -> Non
     assert sorted(s["poi_id"] for s in placed) == sorted([_HALLA, _PORK])  # 새 장소 없음
     assert min(s["start_at"] for s in placed) < "13:00", placed  # 하한(09:00)부터 당겨졌다
     assert all(s["is_fixed"] is False for s in placed)
+    # 순서도 원 일정 그대로 — 거리로 섞이면 저녁 식당이 아침 첫 방문이 된다(로컬 실스택 2026-10-14)
+    assert req.required_in_order is True
+    assert [s["poi_id"] for s in sorted(placed, key=lambda s: s["start_at"])] == [_HALLA, _PORK]
 
 
 def test_장소를_바꾸는_지시가_같이_오면_그쪽이_이긴다() -> None:

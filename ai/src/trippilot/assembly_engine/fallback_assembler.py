@@ -168,15 +168,23 @@ class RuleFallbackAssembler:
             #    식당은 식사창(점심 → 저녁) 안을 먼저, 안 되면 영업시간 안. 못 놓으면 건너뛴다
             #    (예외 없음 — 미배치는 배선이 보고한다). 체류는 사용자 값이면 그대로(pace 없음,
             #    고정과 같다), 없으면 카테고리 기본(`stay_for`, pace 적용 — 자유 후보와 같다).
+            # "시간만 당기기"(`required_in_order`)면 앞 필수 방문 끝이 하한이고 식사창을 먼저 돌지 않는다 —
+            # 창 먼저면 식당이 저녁창으로 건너뛰어 그 뒤 순서의 방문이 앞에 못 들어간다.
+            # ponytail: 하한에 앵커 이동이 한 번 더 붙어 OR 보다 늦게 놓일 수 있다 — 폴백 빈도가 오르면 고친다.
+            req_floor = not_before
             for rv in required_by_day.get(day, []):
                 poi = self._pois.get(rv.poi_id)
                 if poi is None or any(s.poi_id == rv.poi_id for s in slots):
                     continue  # 좌표 미상은 못 놓고, 같은 날 핀이면 이미 간다 (OR 과 같은 규칙)
                 stay = (rv.dwell_min if rv.dwell_min is not None
                         else stay_for(poi.category, problem.pace))
-                start = self._required_start(problem, day, poi, stay, slots, not_before, windows)
+                start = self._required_start(
+                    problem, day, poi, stay, slots, req_floor,
+                    () if problem.required_in_order else windows)
                 if start is None:
                     continue
+                if problem.required_in_order:
+                    req_floor = start + timedelta(minutes=stay)
                 sp = score_of.get(rv.poi_id)
                 slots.append(VisitSlot(
                     poi_id=rv.poi_id, start_at=start,

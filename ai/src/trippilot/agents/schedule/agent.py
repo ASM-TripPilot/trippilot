@@ -191,6 +191,8 @@ class GenerateItineraryRequest:
     end_near: GeoPoint | None = None
     # 일자별 창(TRIP-1389) — 의미는 `ItineraryProblem.day_windows`. 기본 None = 전 일자 `day_window`.
     day_windows: Mapping[date, TimeWindow] | None = None
+    # 필수 방문을 준 순서대로(재계획 "시간만 당기기") — 의미는 `ItineraryProblem.required_in_order`.
+    required_in_order: bool = False
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -512,6 +514,7 @@ class ScheduleAgent:
             max_visits_per_day=request.max_visits_per_day,
             end_near=request.end_near,
             day_windows=request.day_windows,
+            required_in_order=request.required_in_order,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).

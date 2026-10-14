@@ -2206,6 +2206,7 @@ class WiredItineraryOrchestrator:
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
                               reason="llm_compose") for p in composed),
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
+            required_in_order=earlier is not None,  # 시간만 당기기 — 원 일정 순서 그대로
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
             request=domain_request,
