@@ -467,3 +467,24 @@ def test_extraction_overlaps_the_directive_translation_instead_of_following_it()
     with TestClient(app, raise_server_exceptions=False) as client:
         client.post("/ai/v1/planb/replan", json=_body(free_text="어디 조용한 데 없을까"))
     assert seen.get("overlapped") is True, seen
+
+
+def test_named_place_goes_to_the_solver_as_a_priority_visit() -> None:
+    """이름으로 집은 곳만 `priority` — 구성 LLM 이 고른 곳은 보통 필수 방문이다. 같은 무게면 솔버가
+    먼 그 한 곳을 버리고 가까운 둘을 지킨다(DEV 2026-10-14, 2시간 넘는 빈칸에도 미배치)."""
+    composer = _FullDayComposer()
+    app, orch = _crowded_app(composer)
+    seen = []
+    inner = orch._schedule_agent
+
+    class _Spy:
+        def run(self, task):
+            seen.append(task.request)
+            return inner.run(task)
+
+    orch._schedule_agent = _Spy()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/planb/replan", json=_body(free_text="월정리 카페거리 꼭"))
+    flags = {str(r.poi_id): r.priority for r in seen[0].required_visits}
+    assert flags.get(_WOLJEONG) is True, flags
+    assert sum(flags.values()) == 1, flags  # 나머지(구성 LLM 몫)는 보통 필수

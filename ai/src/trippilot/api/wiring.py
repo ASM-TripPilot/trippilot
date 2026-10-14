@@ -2398,10 +2398,12 @@ class WiredItineraryOrchestrator:
                 nl_extra),
             not_before=not_before,
             required_visits=earlier if earlier is not None else tuple(
+                # 구성 결과 안에도 이름으로 집은 곳이 있다(맨 앞에 고정) — 그곳만 우선 가중.
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                              reason="llm_compose") for p in composed) + tuple(
+                              reason="nl_request" if p in nl_ids else "llm_compose",
+                              priority=p in nl_ids) for p in composed) + tuple(
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                              reason="nl_request") for p in nl_extra),
+                              reason="nl_request", priority=True) for p in nl_extra),
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
             required_in_order=earlier is not None,  # 시간만 당기기 — 원 일정 순서 그대로
         )
@@ -2455,7 +2457,7 @@ class WiredItineraryOrchestrator:
                     outcome = self._schedule_agent.run(core.ScheduleTask(
                         request=replace(domain_request, required_visits=tuple(
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                                          reason="nl_request") for p in nl_ids),
+                                          reason="nl_request", priority=True) for p in nl_ids),
                                         max_visits_per_day=visit_cap,
                                         add_one_categories=add_one_asked),
                         pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
