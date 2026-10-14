@@ -311,5 +311,22 @@ class ChartTests(unittest.TestCase):
                 self.assertTrue(ref["optional"])
 
 
+class DevTargetValuesTests(unittest.TestCase):
+    def test_dev_target_is_small_and_never_blocks_drains(self):
+        """개발 대상은 운영과 같은 노드에 올라간다 — 복제본 1·HPA·PDB 없음·임베딩 없음. 복제본 1 에 PDB 가 걸리면
+        드레인이 영구히 막혀 운영 노드 교체까지 멈춘다(values-dev.yaml 주석)."""
+        documents = render("dev-target")
+        kinds = [item["kind"] for item in documents]
+        self.assertNotIn("PodDisruptionBudget", kinds)
+        self.assertNotIn("HorizontalPodAutoscaler", kinds)
+        deployments = {item["metadata"]["name"]: item for item in documents if item["kind"] == "Deployment"}
+        self.assertEqual(set(deployments), {"backend", "ai", "gateway"})
+        for name, deployment in deployments.items():
+            with self.subTest(name=name):
+                self.assertEqual(deployment["spec"]["replicas"], 1)
+                for container in deployment["spec"]["template"]["spec"]["containers"]:
+                    self.assertIn("memory", container["resources"]["limits"])
+
+
 if __name__ == "__main__":
     unittest.main()

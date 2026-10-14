@@ -15,7 +15,7 @@ class WorkflowConfigTests(unittest.TestCase):
             'AWS_ACCOUNT_ID': '123456789012', 'AWS_REGION': 'ap-northeast-2',
             'AWS_ROLE_ARN': 'arn:aws:iam::123456789012:role/trippilot-dev-github-deploy',
             'GITHUB_REF': 'refs/heads/develop', 'DEPLOY_APPLICATION': 'true',
-            'EMBEDDING_ENABLED': 'false', **overrides,
+            'EMBEDDING_ENABLED': 'false', 'DEPLOY_TARGET': 'prod', **overrides,
         }
 
     def test_plan_does_not_require_certificate(self):
@@ -61,6 +61,31 @@ class WorkflowConfigTests(unittest.TestCase):
         self.assertTrue(actual['deploy_application'])
         self.assertTrue(actual['embedding_enabled'])
 
+    def test_prod_target_is_unchanged(self):
+        actual = config.settings(self.settings(EMBEDDING_ENABLED='true'))
+        self.assertEqual((actual['target'], actual['terraform'], actual['namespace'], actual['values_file'], actual['embedding_enabled']),
+                         ('prod', True, 'trippilot', 'values-dev.yaml', True))
+
+    def test_dev_target_skips_terraform_and_forces_embedding_off(self):
+        """기본값(임베딩 켬)으로 개발 배포를 눌러도 큰 임베딩 노드가 뜨지 않고 공유 인프라를 안 바꾼다."""
+        actual = config.settings(self.settings(DEPLOY_TARGET='dev', EMBEDDING_ENABLED='true', DEPLOY_MODE='apply',
+                                               ACM_CERTIFICATE_ARN='arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc',
+                                               API_HOSTNAME='dev-api.example.com'))
+        self.assertEqual((actual['terraform'], actual['namespace'], actual['values_file'], actual['embedding_enabled'], actual['deploy_application']),
+                         (False, 'trippilot-dev', 'values-dev-target.yaml', False, True))
+
+    def test_dev_target_refuses_real_push_and_other_stacks(self):
+        with self.assertRaisesRegex(ValueError, 'push'):
+            config.settings(self.settings(DEPLOY_TARGET='dev', PUSH_MODE_INPUT='expo'))
+        prd = self.settings(DEPLOY_ENVIRONMENT='prd', AWS_ROLE_ARN='arn:aws:iam::123456789012:role/trippilot-prd-github-deploy',
+                            GITHUB_REF='refs/heads/main', DEPLOY_TARGET='dev')
+        with self.assertRaisesRegex(ValueError, 'dev stack'):
+            config.settings(prd)
+        for value in ('', 'staging', 'prod;x'):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'DEPLOY_TARGET'):
+                config.settings(self.settings(DEPLOY_TARGET=value))
+        self.assertEqual(config.settings(self.settings(DEPLOY_TARGET='dev', PUSH_MODE_INPUT='off'))['target'], 'dev')
+
 
 if __name__ == '__main__':
     unittest.main()
@@ -71,10 +96,16 @@ class WorkflowMainTests(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'output'
-            env = {**WorkflowConfigTests().settings(), 'GITHUB_OUTPUT': str(output)}
+            environment = Path(directory) / 'env'
+            env = {**WorkflowConfigTests().settings(DEPLOY_TARGET='dev', EMBEDDING_ENABLED='true'),
+                   'GITHUB_OUTPUT': str(output), 'GITHUB_ENV': str(environment)}
             with patch.dict(config.os.environ, env, clear=True):
                 config.main()
             self.assertIn('deploy_application=false\n', output.read_text())
+            self.assertIn('terraform=false\n', output.read_text())
+            # 뒤 스텝 셸은 대상이 정한 값만 본다 — 입력(EMBEDDING_ENABLED=true)이 아니라
+            self.assertEqual(environment.read_text().splitlines(),
+                             ['NAMESPACE=trippilot-dev', 'VALUES_FILE=values-dev-target.yaml', 'EFFECTIVE_EMBEDDING=false'])
 
     def test_main_fails_before_writing_for_bad_environment(self):
         from unittest.mock import patch
