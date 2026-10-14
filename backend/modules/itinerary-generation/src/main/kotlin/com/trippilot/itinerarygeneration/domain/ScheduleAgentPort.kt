@@ -199,6 +199,24 @@ data class ReplanInput(
      */
     val rejections: List<RejectedPoi>,
     val requestMeta: RequestMeta,
+    /**
+     * 이 날짜를 건드린 변경 이력, 최신순 (TRIP-975) — AI 가 "방금 뺀 곳을 다시 넣지 않게" 쓴다.
+     * 정본 KB-1 표("변경 이력 — 같은 제안 반복 방지")의 마지막 항목이다.
+     */
+    val changeLog: List<ReplanChange> = emptyList(),
+)
+
+/**
+ * 변경 이력 한 건의 경계 사영 — **그날 diff 만**. 스냅숏 전체·시각·행위자는 싣지 않는다:
+ * 원 일정은 [ReplanInput.currentSlots] 로 이미 가고, 시각은 상대 프롬프트로 새면 근거 문장에
+ * 옮겨 적히며(상대 시간표현 게이트가 `09:00` 을 통과시킨다), 행위자는 계정 id 다.
+ */
+data class ReplanChange(
+    val source: String,
+    val reason: String?,
+    val at: Instant,
+    val removedPoiIds: List<UUID>,
+    val addedPoiIds: List<UUID>,
 )
 
 /** 원 일정 슬롯의 경계 사영(§4 `ReplanSlotSchema`) — 산출물 타입([VisitSlotDisplay])과 방향이 반대라 섞지 않는다. */

@@ -64,6 +64,29 @@ def change_rule(reasons: Collection[str], day_directives: bool, add_one: bool,
 
 _WEEKDAYS = "월화수목금토일"
 
+# 변경 이력 출처 — 프롬프트에 영문 enum 을 그대로 싣지 않는다(KB-3 reason 한국어 치환과 같은 이유).
+_CHANGE_SOURCE = {"PLAN_B": "다시 짜기", "MANUAL": "직접 편집", "COEDIT": "같이 편집", "ASSISTANT": "도우미"}
+
+
+def recent_change_lines(change_log, names: "dict[PoiId, str]") -> tuple[str, ...]:
+    """변경 이력 → "다시 짜기(비 예보): 성산일출봉 빠짐 / 제주민속촌 들어옴" 줄들 (TRIP-975).
+
+    이름은 풀에서 가져오고, 못 찾은 id 는 그 줄에서 빠진다(이름 없는 id 를 흘리면 모델이 장소로 읽는다).
+    양쪽 다 못 찾은 항목은 통째로 뺀다. 순서는 백엔드가 보낸 최신순 그대로, 시각은 싣지 않는다.
+    """
+    lines: list[str] = []
+    for ev in change_log:
+        out = [names[PoiId(p)] for p in ev.removed_poi_ids if PoiId(p) in names]
+        into = [names[PoiId(p)] for p in ev.added_poi_ids if PoiId(p) in names]
+        if not out and not into:
+            continue
+        head = _CHANGE_SOURCE.get(ev.source, ev.source)
+        if ev.reason:
+            head += f"({ev.reason})"
+        parts = ([f"{', '.join(out)} 빠짐"] if out else []) + ([f"{', '.join(into)} 들어옴"] if into else [])
+        lines.append(f"{head}: {' / '.join(parts)}")
+    return tuple(lines)
+
 
 def date_label(when: datetime) -> str:
     return f"{when:%Y-%m-%d} ({_WEEKDAYS[when.weekday()]})"

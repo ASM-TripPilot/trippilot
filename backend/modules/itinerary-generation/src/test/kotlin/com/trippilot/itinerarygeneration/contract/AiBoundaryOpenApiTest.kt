@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.contract
 
 import com.trippilot.itinerarygeneration.adapter.out.external.AiAlternative
 import com.trippilot.itinerarygeneration.adapter.out.external.AiAlternativesRequest
+import com.trippilot.itinerarygeneration.adapter.out.external.AiChangeLogEntry
 import com.trippilot.itinerarygeneration.adapter.out.external.AiAlternativesResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiCoord
 import com.trippilot.itinerarygeneration.adapter.out.external.AiDay
@@ -277,6 +278,7 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(sampleReplanRequest.currentSlots.single()) shouldContainExactly props("ReplanSlotSchema")
         wireKeys(sampleReplanRequest.savedPlaces.single()) shouldContainExactly props("SavedPlaceSchema")
         wireKeys(sampleReplanRequest.lockedBlocks.single()) shouldContainExactly props("FixedBlockSchema")
+        wireKeys(sampleReplanRequest.changeLog.single()) shouldContainExactly props("ChangeLogEntrySchema")
     }
 
     "replan 응답 키가 계약과 정확히 일치한다 — 개명되면 거리·사유가 조용히 사라진다" {
@@ -466,6 +468,12 @@ private val sampleReplanRequest = AiReplanRequest(
     ),
     savedPlaces = listOf(AiSavedPlace(UUID.randomUUID().toString(), "담아 둔 카페")),
     excludedPoiIds = listOf(UUID.randomUUID()),
+    changeLog = listOf(
+        AiChangeLogEntry(
+            "PLAN_B", "비 예보", Instant.parse("2026-08-01T04:00:00Z"),
+            listOf(UUID.randomUUID().toString()), listOf(UUID.randomUUID().toString()),
+        ),
+    ),
 )
 
 /** 응답 표본도 전부 채운다 — 비운 칸은 직렬화에서 빠져 "그 필드를 안 읽는다"가 통과해 버린다. */
