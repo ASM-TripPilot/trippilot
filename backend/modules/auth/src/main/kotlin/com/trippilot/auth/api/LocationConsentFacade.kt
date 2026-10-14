@@ -26,4 +26,13 @@ interface LocationConsentFacade {
      * 수동 핀은 단말 권한과 무관하고, GPS 는 FE 가 이미 권한 없이는 못 보낸다.
      */
     fun hasLocationLegalConsent(accountId: UUID): Boolean
+
+    /**
+     * 경로 저장 동의(L2 ∧ L3, U10 D4)가 있는가 — **그리고 호출한 트랜잭션이 끝날 때까지 철회가 커밋되지 못하게 잡는다.**
+     *
+     * 철회 파기는 릴레이로 비동기로 돈다. 저장 트랜잭션이 동의를 그냥 읽으면, 철회가 커밋되고 파기가 돈 **뒤에** 저장이
+     * 커밋돼 철회한 계정에 경로가 영영 남을 수 있다(INV-U10-1). 동의 행을 공유 잠금으로 잡으면 철회(그 행의 UPDATE)가
+     * 저장 커밋을 기다리고, 철회 이벤트는 그 뒤에 나가 파기가 저장분을 본다. 기본 구현은 잠그지 않는다(대역용).
+     */
+    fun holdRouteRecordingConsent(accountId: UUID): Boolean = hasLocationLegalConsent(accountId) && hasGpsRecordingOptIn(accountId)
 }

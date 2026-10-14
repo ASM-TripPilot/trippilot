@@ -26,8 +26,9 @@ interface LocationLegalLogFacade {
      *
      * @param subjectId 대상 식별자(예: `visit_photo_meta_id`). **원시 좌표는 넘기지 않는다** —
      *   이 표는 사실 확인자료이고 좌표 자체를 또 보관하면 파기 대상이 한 곳 더 생긴다(V1.3 규약).
+     * @param pointCount 저장한 점 수 — 하루치 경로 저장(U10 `phase=STORE`)일 때만. 주면 로그에 `phase=STORE` 와 함께 실린다.
      */
-    fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID)
+    fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID, pointCount: Int? = null)
 
     /**
      * 저장된 위치정보를 **실제로 지웠을 때** 파기 사실을 남긴다(INV-L4).
@@ -77,6 +78,9 @@ enum class LocationPurgeScope {
 
     /** 재계획 세션에 저장됐던 기준점 좌표(`replan_session.origin_lat/lng`, TRIP-992). */
     REPLAN_ORIGIN,
+
+    /** U10 하루치 실제 경로(`actual_route_day`). */
+    ACTUAL_ROUTE,
 }
 
 /**

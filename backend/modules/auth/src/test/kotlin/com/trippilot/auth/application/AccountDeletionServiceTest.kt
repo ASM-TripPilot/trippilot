@@ -62,6 +62,7 @@ private class FakeLegalLog : LocationLegalLogRepository {
 private class FakeStateRepo : LocationConsentStateRepository {
     override fun find(accountId: AccountId): LocationConsent? = null
     override fun save(state: LocationConsent) = state
+    override fun lockRouteRecordingConsent(accountId: AccountId) = false
 }
 
 private class EmptyTerms : TermsVersionRepository {

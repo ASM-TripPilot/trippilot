@@ -9,6 +9,9 @@ interface LocationConsentStateRepository {
     fun find(accountId: AccountId): LocationConsent?
 
     fun save(state: LocationConsent): LocationConsent
+
+    /** L2 ∧ L3 를 읽으며 그 계정의 동의 행을 트랜잭션 끝까지 공유 잠금한다. 행이 없으면 false. */
+    fun lockRouteRecordingConsent(accountId: AccountId): Boolean
 }
 
 /** 위치 법정 로그 포트 — **추가 전용**(INV-LL1). */

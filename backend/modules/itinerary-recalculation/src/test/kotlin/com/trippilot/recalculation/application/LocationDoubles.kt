@@ -17,7 +17,7 @@ internal class FakeLocationConsents(var legalConsent: Boolean = true) : Location
 internal class CapturingLegalLogs : LocationLegalLogFacade {
     val collections = mutableListOf<Pair<LocationCollectionSource, UUID>>()
     val purges = mutableListOf<Pair<LocationPurgeScope, Int>>()
-    override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID) {
+    override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID, pointCount: Int?) {
         collections += source to subjectId
     }
     override fun recordPurge(accountId: UUID, scope: LocationPurgeScope, purgedCount: Int) {

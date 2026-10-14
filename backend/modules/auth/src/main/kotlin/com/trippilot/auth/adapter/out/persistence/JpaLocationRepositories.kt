@@ -19,6 +19,8 @@ class JpaLocationConsentStateRepository(
         jpa.save(state.toEntity())
         return state
     }
+
+    override fun lockRouteRecordingConsent(accountId: AccountId): Boolean = jpa.lockRouteRecordingConsent(accountId.value) == true
 }
 
 /** LocationLegalLogRepository 포트의 JPA 구현 — append-only(INV-LL1). detail 맵은 엔티티가 jsonb 로 매핑. */

@@ -100,7 +100,7 @@ class VisitRecordServiceTest : StringSpec({
         val collected = mutableListOf<Triple<UUID, LocationCollectionSource, UUID>>()
         val purged = mutableListOf<Triple<UUID, LocationPurgeScope, Int>>()
 
-        override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID) {
+        override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID, pointCount: Int?) {
             collected += Triple(accountId, source, subjectId)
         }
 

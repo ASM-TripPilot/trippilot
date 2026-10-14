@@ -50,7 +50,7 @@ class LocationAutomationServiceTest : StringSpec({
 
     class Logs : LocationLegalLogFacade {
         val rows = mutableListOf<Logged>()
-        override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID) = Unit
+        override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID, pointCount: Int?) = Unit
         override fun recordPurge(accountId: UUID, scope: LocationPurgeScope, purgedCount: Int) = Unit
         override fun recordUseInterval(
             accountId: UUID, purpose: LocationUsePurpose, intervalId: UUID, tripId: UUID,
