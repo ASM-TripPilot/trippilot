@@ -303,7 +303,7 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 | Expo Push | backend | `PUSH_EXPO_ACCESS_TOKEN`(선택) | `PUSH_MODE` (`off`) | `runtime_secrets.py` · `templates/backend.yaml` |
 | LLM — OpenAI 호환 / Anthropic / 로컬 | ai | `trippilot-ai` | `TRIPPILOT_LLM_PROVIDER` (`openai`·`anthropic`·`mixed`·빈 값) | `runtime_secrets.py` `validate_groups` |
 | LLM — Bedrock imported model | ai | IAM Pod Identity(키 없음) + `TRIPPILOT_BEDROCK_MODEL_ARN`·`_REGION` | 값이 있으면 사용 | `infra/bootstrap/template.json` `AiPodRole` · `templates/ai.yaml` |
-| Kakao REST · TMAP | ai | `KAKAO_REST_API_KEY` · `TMAP_API_KEY` | 값이 있으면 사용 | `templates/ai.yaml` |
+| Kakao REST · TMAP · ODsay(대중교통) | ai | `KAKAO_REST_API_KEY` · `TMAP_API_KEY` · `ODSAY_API_KEY` | 값이 있으면 사용 | `templates/ai.yaml` |
 | TourAPI | GitHub Actions 배치만 | Repository Secrets | 스케줄 | `ai-poi-collect.yml` |
 | 네이버 지도 SDK | 앱(클라이언트) | `EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`(빌드 env) | — | `frontend/app.config.ts` |
 | Sentry | 앱(클라이언트) | `EXPO_PUBLIC_SENTRY_DSN` | DSN 이 있을 때 | `initSentry.ts` |

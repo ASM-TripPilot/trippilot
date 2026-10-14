@@ -218,7 +218,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 |---|---|---|
 | **PlaceScoutAgent** | 장소 후보 확보 (M7 조회 → 충분성 판단 → 웹 소싱 → closed-set 보장, INV-1 관문) | 1차 (MVP) |
 | **WeatherAgent** | 일 단위 기상청 API 조회·캐싱, 강수 80%↑ 트리거 판정 | 1차 (MVP) |
-| **TransitAgent** | 교통·거리 (**TMAP→하버사인 직선** 2단 체인 — 2026-08-25 정정), 지연 30분+ 트리거 판정 | 2차 |
+| **TransitAgent** | 교통·거리 (**TMAP(자동차·보행)·ODsay(대중교통)→하버사인 직선** 2단 체인 — 2026-08-25 정정, 2026-10-14 대중교통 ODsay), 지연 30분+ 트리거 판정 | 2차 |
 | **PersonaAgent** | KB-2 (저장 장소·선호 벡터·거절 이력) 조회·검색 | 2차 |
 | **EventAgent** | 축제·행사 — **NAVER 검색 → `EVENT_EXTRACTION` LLM 추출 → 카카오 로컬 지오코딩 → `JsonEventStore`** (2026-08-25 정정) | 가동 중 (TRIP-421) |
 
@@ -277,7 +277,7 @@ LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 | RAG 프레임워크 | LangChain (부분 도입) | PlanBAgent + LLM 호출에만 (`ChatAnthropic`) |
 | 벡터 스토어 | pgvector (PostgreSQL) | 1차, 추후 OpenSearch 이전 가능 |
 | 임베딩 | **로컬 `nlpai-lab/KURE-v1` (MIT) 확정** | 1024차원 유지 → pgvector 스키마 무변경. Titan v2는 Bedrock 전용이라 대체 (AI-D06 부기 2026-08-23, TRIP-514 배선 완료). 종전 "잠정: multilingual-e5-large 또는 BGE-M3" 표기는 해소 |
-| 테스트 | pytest + Hypothesis (PBT) | 속성 수는 여기 박지 않는다 — 세려면 `grep -rc "@given" ai/tests/*.py` (`ai-ci.yml` 주석과 같은 규칙, TRIP-530). 종전 "19개(+신규 5)"·"170개/41개" 표기는 모두 스테일이었다 |
+| 테스트 | pytest + Hypothesis (PBT) | 속성 수는 여기 박지 않는다 — 세려면 `grep -rc --include="*.py" "@given" ai/tests` (`ai-ci.yml` 주석과 같은 규칙, TRIP-530). 종전 "19개(+신규 5)"·"170개/41개" 표기는 모두 스테일이었다 |
 | 패키지 관리 | uv | U1 FD에서 확정 |
 
 > **표기 규칙 (AI-D06)**: 본 저장소 문서의 기존 "Bedrock" 표기는 "LLM API(Anthropic)"로 읽는다. 점진 개정 중.
@@ -345,7 +345,8 @@ TripPilot_AI/
 │   │   └── units/
 │   └── construction/        ← 유닛별 기능 설계(FD). 실물 목록은 디렉토리를 볼 것
 ├── src/trippilot/           ← 서비스 구현 (api·agents·orchestrator·assembly_engine·llm_gateway)
-├── tests/                   ← pytest + Hypothesis
+├── tests/                   ← pytest + Hypothesis. src 패키지별 하위 폴더(api·agents/<에이전트>·assembly_engine·llm_gateway·…), scripts 테스트는 tests/scripts/
+├── scripts/                 ← 용도별: collect·classify·measure·probe·smoke·intent·mlops·finetune_reminder (루트엔 export_openapi·load_kb·local_embedding)
 └── docs/openapi.json        ← 와이어 정본 (ai-ci 가 실행 앱 스키마와 일치를 강제)
 ```
 
@@ -367,7 +368,7 @@ TripPilot_AI/
 에이전트가 구해온 정보를 실현 가능하도록 배치하는 결정론 엔진.
 
 - OPTW/TOPTW 최적화 + HC1~HC4 하드 제약 검증
-- 이동시간 추정: 어댑터 체인 (**TMAP 실측 → 하버사인 직선거리×1.3**) — 2단 (TRIP-382·405·422·432)
+- 이동시간 추정: 어댑터 체인 (**TMAP(자동차·보행)·ODsay(대중교통) 실측 → 하버사인 직선거리×1.3**) — 2단 (TRIP-382·405·422·432, 대중교통 ODsay 2026-10-14 — TMAP 대중교통 상품 미구독)
 - warm-start 재생성: 고정 블록 보존, 나머지만 재배치
 - 하이브리드: OR-Tools(1차) → LLM(Anthropic)(2차, **미배선** — 위 C2 절 註) → 규칙 폴백(최후)
 

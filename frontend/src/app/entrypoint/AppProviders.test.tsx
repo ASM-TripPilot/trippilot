@@ -14,10 +14,10 @@ import {
  * 관점은 describe 로 남는다. `SplashGate` 자리에는 `queryClientProbe`(QueryClient 를 손에 쥐고 마커를 그린다)를 꽂는다.
  *
  * ── 부팅 골격 ─────────────────────────────────────────────────────────
- *  (1) 폰트가 결판나기 전에는 아무것도 그리지 않는다(시스템 폰트로 잠깐 보였다 바뀌는 깜빡임 방지),
- *  (2) 결판난 뒤에는 **첫 렌더에 곧바로** SplashGate 가 그려진다(부팅을 붙잡는 비동기 게이트가 없다),
- *  (3) 그 시점에 네이티브 스플래시가 내려간다(무한 정지 화면 금지),
- *  (4) GestureHandlerRootView 래핑이 남아 있다(로그인 바텀시트 동작의 전제).
+ *  (1) **첫 렌더에 곧바로** SplashGate 가 그려진다(부팅을 붙잡는 비동기 게이트가 없다 — 폰트는 expo-font 플러그인이
+ *      네이티브 번들에 넣어 JS 가 기다리지 않는다, TRIP-1361),
+ *  (2) 그 시점에 네이티브 스플래시가 내려간다(무한 정지 화면 금지),
+ *  (3) GestureHandlerRootView 래핑이 남아 있다(로그인 바텀시트 동작의 전제).
  *
  * ── SafeAreaProvider (D4) ────────────────────────────────────────────
  * ⚠️ "SafeAreaProvider 가 있으면서도 첫 렌더에 자식이 그려진다"는 형식적 회귀 문구가 아니라 **실측된 함정**이다.
@@ -54,11 +54,6 @@ jest.mock('expo-splash-screen', () => ({
   hideAsync: mockHideAsync,
 }));
 
-// 폰트 로드 결과를 테스트마다 갈아끼우기 위해 모듈 스코프 변수로 뺀다.
-// (jest 는 팩토리가 참조하는 외부 변수를 `mock` 접두사일 때만 허용한다.)
-let mockFontsLoaded = true;
-jest.mock('expo-font', () => ({ useFonts: () => [mockFontsLoaded, null] }));
-
 // 실물 SplashGate 는 렌더 즉시 부트스트랩 요청을 발사하므로 QueryClient 관찰 프로브로 대체한다.
 // 배럴(@/app)이 ./routing/SplashGate 를 재수출하므로 깊은 경로를 목으로 갈면 배럴을 타고 내려온다.
 jest.mock('@/app/routing/SplashGate', () =>
@@ -78,7 +73,6 @@ type ToastModule = typeof import('@/shared/ui/Toast');
 const Toast = require('@/shared/ui/Toast') as ToastModule;
 
 beforeEach(() => {
-  mockFontsLoaded = true;
   mockHideAsync.mockClear();
   resetObservedQueryClient();
 });
@@ -100,16 +94,7 @@ function httpError(status: number): AxiosError {
 }
 
 describe('루트 레이아웃 — 부팅 골격', () => {
-  it('폰트가 결판나기 전에는 아무 화면도 그리지 않고 네이티브 스플래시를 붙잡아 둔다', () => {
-    mockFontsLoaded = false;
-
-    render(<RootLayout />);
-
-    expect(screen.toJSON()).toBeNull();
-    expect(mockHideAsync).not.toHaveBeenCalled();
-  });
-
-  it('폰트가 결판나면 첫 렌더에 곧바로 SplashGate 를 그리고 네이티브 스플래시를 내린다', () => {
+  it('첫 렌더에 곧바로 SplashGate 를 그리고 네이티브 스플래시를 내린다', () => {
     render(<RootLayout />);
 
     expect(screen.getByTestId('query-client-probe')).toBeOnTheScreen();
@@ -165,7 +150,7 @@ describe('🔴 TRIP-986 · 앱 전역 QueryClient 재시도 기본값 = 404 무�
 });
 
 describe('🔴 T4 · 루트 레이아웃 — 토스트 호스트 배선 (D19)', () => {
-  it('폰트가 결판나면 루트 트리에 토스트가 뜨고, SplashGate 도 그대로 그려진다', () => {
+  it('루트 트리에 토스트가 뜨고, SplashGate 도 그대로 그려진다', () => {
     render(<RootLayout />);
 
     act(() =>
@@ -174,16 +159,5 @@ describe('🔴 T4 · 루트 레이아웃 — 토스트 호스트 배선 (D19)', 
 
     expect(screen.getByTestId('root-probe-toast')).toBeOnTheScreen();
     expect(screen.getByTestId('query-client-probe')).toBeOnTheScreen();
-  });
-
-  it('폰트 결판 전에는 토스트 요청이 있어도 아무것도 그리지 않는다', () => {
-    mockFontsLoaded = false;
-    act(() =>
-      Toast.showToast({ message: '루트 확인', testID: 'root-probe-toast' })
-    );
-
-    render(<RootLayout />);
-
-    expect(screen.toJSON()).toBeNull();
   });
 });

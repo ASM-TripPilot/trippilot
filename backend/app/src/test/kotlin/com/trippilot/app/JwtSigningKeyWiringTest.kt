@@ -24,6 +24,8 @@ class JwtSigningKeyWiringTest : StringSpec({
      * `stay.content.mode` 가 전부 null). 그래서 **어떤 IT 도 본 `application.yml` 을 검증한 적이 없다** —
      * 거기 오타가 나도 아무것도 안 빨개진다. 그 자체가 따로 다룰 문제라 노드로 남겼고,
      * 여기서는 파일을 경로로 직접 읽어 가림을 우회한다.
+     * (2026-10-14 TEST-OPEN-IN-VIEW 이후 테스트 설정은 `config/application.yml` 로 옮겨져 본 파일 **위에** 얹힌다 —
+     * 가림은 없어졌지만 경로로 읽기는 유지한다: 이 테스트는 env 를 바꿔 끼운 해석 결과를 보려는 것이고, 테스트 덧씌움이 같은 키를 덮을 수 있다.)
      */
     fun resolve(key: String, env: Map<String, Any>): String? {
         val file = File("src/main/resources/application.yml")

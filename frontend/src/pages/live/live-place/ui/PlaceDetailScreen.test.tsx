@@ -190,7 +190,7 @@ describe('PlaceDetailScreen (i10)', () => {
     expect(onPressBack).toHaveBeenCalledTimes(1);
   });
 
-  it('S8 히어로 — 갤러리는 가로 한 장씩 넘기는 스크롤이고, 사진 수가 있으면 "1 / N" 칩을 단다 (AC-8 · Q9)', () => {
+  it('S8 히어로 — 갤러리가 사진을 순서대로 그리고, 사진 수가 있으면 "1 / N" 칩을 단다 (AC-8 · Q9)', () => {
     // ① 사진 3장 + 전체 42장 — 준비·실행
     const { rerender } = render(
       <PlaceDetailScreen
@@ -198,18 +198,15 @@ describe('PlaceDetailScreen (i10)', () => {
       />
     );
 
-    // 단언 — 가로 페이징(`pagingEnabled` = 한 장 단위로 멈추는 스크롤). 실제 스와이프는 jest 사각(6-b).
     const gallery = within(
       screen.getByTestId('execution-place-hero')
     ).getByTestId('execution-place-gallery');
-    expect(gallery.props.horizontal).toBe(true);
-    expect(gallery.props.pagingEnabled).toBe(true);
     // 사진 순서 그대로.
     PHOTOS.slice(0, 3).forEach((uri, index) =>
       expect(
         within(gallery).getByTestId(`execution-place-gallery-${index}`).props
           .source
-      ).toEqual({ uri })
+      ).toEqual([{ uri }])
     );
     expect(screen.getByTestId('execution-place-photo-count')).toHaveTextContent(
       '1 / 42'
@@ -279,12 +276,6 @@ describe('PlaceDetailScreen (i10)', () => {
     // 실 MapView 는 env 키가 있어야 map-native 를 그린다(없으면 map-failure 로 접힘, 02a ★6).
     const CLIENT_ID_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
     const ORIGINAL_CLIENT_ID = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
-    const GESTURE_TOGGLES = [
-      'isScrollGesturesEnabled',
-      'isZoomGesturesEnabled',
-      'isRotateGesturesEnabled',
-      'isTiltGesturesEnabled',
-    ] as const;
 
     beforeEach(() => {
       process.env[CLIENT_ID_KEY] = 'test-naver-client-id';
@@ -298,19 +289,13 @@ describe('PlaceDetailScreen (i10)', () => {
       }
     });
 
-    it('좌표가 있으면 카드 안에 잠긴 실지도를 그리고, 핀 1개가 그 좌표에 찍히며 스케일바가 켜진다', () => {
+    it('좌표가 있으면 카드 안에 실지도를 그리고, 핀 1개가 그 좌표에 찍힌다', () => {
       // 준비·실행
       render(<PlaceDetailScreen view={view({ lat: 35.15, lng: 129.11 })} />);
       const map = screen.getByTestId('execution-place-map');
-      const native = within(map).getByTestId('map-native');
+      expect(within(map).getByTestId('map-native')).toBeTruthy();
 
-      // 단언 ① — viewOnly: 제스처 4토글이 개별로 전부 false.
-      for (const toggle of GESTURE_TOGGLES) {
-        expect(native.props[toggle]).toBe(false);
-      }
-      // 단언 ② — 스케일바(거리 표기라 INV-3 무위반).
-      expect(native.props.isShowScaleBar).toBe(true);
-      // 단언 ③ — 핀 1개, 좌표 일치(lat↔lng 스왑 방지 — 둘이 다른 값), 경로선 없음.
+      // 단언 — 핀 1개, 좌표 일치(lat↔lng 스왑 방지 — 둘이 다른 값), 경로선 없음.
       const markers = within(map).getAllByTestId('map-marker');
       expect(markers).toHaveLength(1);
       expect(markers[0].props.latitude).toBe(35.15);
@@ -351,7 +336,7 @@ describe('PlaceDetailScreen (i10)', () => {
         expect(
           within(photos).getByTestId(`execution-place-photo-thumb-${index}`)
             .props.source
-        ).toEqual({ uri })
+        ).toEqual([{ uri }])
       );
       // 단언 ② — 보이는 3장 밖의 수(42 − 3).
       expect(

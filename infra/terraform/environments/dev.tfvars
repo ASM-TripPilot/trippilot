@@ -3,13 +3,20 @@ cluster_version         = "1.35"
 vpc_cidr                = "10.40.0.0/16"
 availability_zone_count = 2
 single_nat_gateway      = true
-# 켜기 전에 **반드시 bootstrap 을 먼저 돌린다** — stack 이 trippilot-<env>-cloudwatch-pod 역할을
-# data 로 읽기만 해서, 역할이 없으면 plan 이 깨진다(2026-10-03 실측: 그 역할은 아직 없다).
-# 순서: bootstrap 정책 재등록 → AWS bootstrap 실행 → 여기를 true 로 → deploy.
-# false 로 두는 이유는 머지만으로 다음 배포가 깨지지 않게 하기 위해서다.
-container_logs_enabled         = false
-container_logs_retention_days  = 7
+# dev 는 출시를 받은 운영 스택이다 — 파드가 재시작하면 로그가 사라지는 상태로 둘 수 없다(2026-10-13 켬).
+# 이 값은 stack 이 trippilot-<env>-cloudwatch-pod 역할을 data 로 **읽기만** 한다는 전제 위에 선다:
+# 역할이 없으면 plan 이 깨진다. dev 의 역할은 2026-10-13 bootstrap 으로 만들었다.
+# **새 환경에서 켤 때의 순서**: bootstrap 정책 재등록 → AWS bootstrap 실행 → 여기를 true 로 → deploy.
+# 보존 90일은 인프라 결정 Q3=A(`shared-infrastructure.md` §12, 2026-10-12)다 — 수집·보관량만큼 과금된다.
+container_logs_enabled         = true
+container_logs_retention_days  = 90
 database_instance_class        = "db.t4g.small"
 database_allocated_storage     = 20
 database_max_allocated_storage = 100
 redis_node_type                = "cache.t4g.micro"
+# 개발 대상(trippilot-dev 네임스페이스)의 시크릿 그릇 — 이 스택이 출시를 받은 운영이고, 개발은 같은 클러스터 안에 따로 둔다(2026-10-15).
+dev_target_enabled = true
+# 운영 알람 → Slack(인프라 결정 Q3=A). 워크스페이스는 2026-10-14 AWS Chatbot 에 연결했다. ID 는 비밀이 아니다.
+# 이 값은 배포 역할의 알람 권한과 trippilot-dev-chatbot 역할(#1157, bootstrap)을 전제한다 — 없으면 plan 이 그 역할 조회에서 깨진다.
+alerts_slack_team_id    = "T0BG08ENPDW"
+alerts_slack_channel_id = "C0C8W4UN7HR"

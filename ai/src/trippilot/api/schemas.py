@@ -445,6 +445,10 @@ class AlternativesRequest(BoundaryModel):
     # 풀 단계에서 거르므로 LLM 선택·규칙 폴백 모두 그 안에서만 고른다. 비거나
     # 아는 코드가 하나도 없으면 필터 없음(400 아님 — reason 과 같은 규칙).
     categories: list[str] = Field(default_factory=list)
+    # 바꿀 슬롯의 장소 (선택, 하위호환). `categories` 가 비었고 이 장소가 식사(`counts_as_food`)면
+    # 풀을 식사 후보로 거른다 — 칼국수 칸의 '다른 후보'에 기찻길이 오던 결함(2026-10-14).
+    # 없으면 `affected_reasons` 의 키로 대신한다(그 키도 대상 슬롯이다).
+    target_poi_id: str | None = Field(default=None, min_length=1)
     # 그 여행의 취향 (선택, 하위호환) — generate 의 `preference_profile` 과 같은 스키마·어휘.
     # 오면 이 요청의 페르소나(ALTERNATIVE_SELECTION 의 확정 프로필 줄)로 쓰고, 없으면 종전대로
     # `trip_id` 재조회(계정 취향). `companion_type` 은 이 여행의 동행 — 계정의 평소 동행보다 우선.
@@ -498,6 +502,24 @@ class ReplanSlotSchema(BoundaryModel):
     placement_reason: str | None = None  # visit_slot.placement_reason
 
 
+class ChangeLogEntrySchema(BoundaryModel):
+    """변경 이력 한 건 (TRIP-975) — 백엔드 `change_log_entry`(V2.11, append-only)의 **압축형**.
+
+    백엔드는 전후 **스냅숏 전체**를 갖고 있지만 여기로는 그날의 diff 만 온다. 셋을 일부러 뺐다:
+    - 스냅숏 전체 — 원 일정은 `current_slots` 로 이미 온다
+    - 시각 — 프롬프트로 새면 근거 문장에 옮겨 적힌다. 시간표현 게이트는 `09:00` 같은 콜론 형식을
+      통과시키므로 재료에서 빼는 것이 유일한 방어다(INV-2·INV-3)
+    - 행위자(`actor`) — 계정 id 다. 쓸모가 없고 개인 데이터다
+    diff 는 **백엔드가 계산한다** — 전후를 둘 다 가진 쪽이 계산하는 것이 맞다.
+    """
+
+    source: Literal["PLAN_B", "MANUAL", "COEDIT", "ASSISTANT"]
+    reason: str | None = Field(default=None, max_length=500)
+    at: dt.datetime  # 정렬 근거일 뿐 — 프롬프트에 싣지 않는다
+    removed_poi_ids: list[str] = Field(default_factory=list)
+    added_poi_ids: list[str] = Field(default_factory=list)
+
+
 class ReplanRequest(BoundaryModel):
     """POST /ai/v1/planb/replan — 하루를 다시 짠다 (i04 → i06). (구 itinerary 경로는 TRIP-960 ④ 에서 삭제)
 
@@ -511,6 +533,10 @@ class ReplanRequest(BoundaryModel):
     target_date: dt.date
     time_window: TimeWindowSchema  # 하루 전체. 좁히지 않는다 (정본 §1)
     anchor: CoordSchema
+    # 그날 밤 숙소(없으면 전날 숙소) — "숙소 근처에서 끝내기"(END_NEAR_STAY)가 하루를 마칠 곳.
+    # `anchor` 와 따로 둔다: 그것은 후보 풀 기준점(GPS·수동·마지막 방문·숙소 중 하나)이라 숙소를
+    # 보장하지 않는다. 없으면 그 지시는 무효 노트로 밝힌다.
+    stay_anchor: CoordSchema | None = None
 
     # `scope` 와 `locked_blocks` 는 중복이 아니다 — `locked_blocks` = 못 건드리는 것,
     # `scope` = 안 간 곳 중 어디까지 건드리나. FULL_DAY 여도 방문 완료한 곳은 잠긴다.
@@ -540,6 +566,10 @@ class ReplanRequest(BoundaryModel):
     transport_mode: str | None = None
     saved_places: list[SavedPlaceSchema] = Field(default_factory=list)
     excluded_poi_ids: list[str] = Field(default_factory=list)
+    # 이 날짜를 건드린 변경 이력, 최신순 (TRIP-975) — 정본 KB-1 표의 "변경 이력", 용도는 **같은 제안
+    # 반복 방지**. 기본 빈 목록이라 백엔드가 안 보내도 종전과 같다. 상한 20 은 백스톱이고 주된
+    # 제한은 날짜 필터다(실측이 아니라 프롬프트 예산에서 잡은 값).
+    change_log: list[ChangeLogEntrySchema] = Field(default_factory=list, max_length=20)
     request_meta: RequestMetaSchema
 
     @model_validator(mode="after")
@@ -839,3 +869,85 @@ class ReminderCopyResponse(BoundaryModel):
     copies: list[ReminderCopySchema]
     degraded: bool
     fallback_mode: str | None = None
+
+
+# ───────────────── 대화 해석 경계 (U8 FD §3 — G-U8-4) ─────────────────
+# 백엔드 `assistant` 모듈이 매 턴 부른다. **AI 는 해석만 한다**(DEC-U8-1) — 실행·문구는 백엔드.
+# 컨텍스트 필드는 백엔드 `ContextSnapshot` 화이트리스트(BR-U8-22)와 1:1 이다 — 칸이 없는 값
+# (가격·후보 풀·점수·위치)은 실을 자리 자체가 없다.
+
+
+class AssistantSurface(str, Enum):
+    HOME = "HOME"
+    STAY_SEARCH = "STAY_SEARCH"
+    ITINERARY = "ITINERARY"
+    LIVE = "LIVE"
+    STAY_DETAIL = "STAY_DETAIL"
+
+
+class DialogueSlotSchema(BoundaryModel):
+    """저장된(검증된) 계획 시각. 소요시간 필드는 없다(INV-3)."""
+
+    slot_key: str
+    name: str | None = None
+    start_at: dt.time
+    category: str | None = None
+
+
+class DialogueDaySchema(BoundaryModel):
+    date: dt.date
+    slots: list[DialogueSlotSchema] = Field(default_factory=list)
+
+
+class DialogueItinerarySchema(BoundaryModel):
+    status: str
+    days: list[DialogueDaySchema] = Field(default_factory=list)
+
+
+class DialogueTripSchema(BoundaryModel):
+    trip_id: str
+    regions: list[str] = Field(default_factory=list)
+    start_date: dt.date
+    end_date: dt.date
+    phase: str  # PLANNING | IN_TRIP | ENDED
+
+
+class DialogueContextSnapshot(BoundaryModel):
+    surface: AssistantSurface
+    trip: DialogueTripSchema | None = None
+    base_stays: list[str] = Field(default_factory=list)
+    itinerary: DialogueItinerarySchema | None = None
+
+
+class DialogueInterpretRequest(BoundaryModel):
+    request_meta: RequestMetaSchema
+    # 상한 500 — 라우터(`IntentRouterConfig.max_utterance_chars`)·`/edit` 와 같은 값.
+    utterance: str = Field(min_length=1, max_length=500)
+    # AI 소유 직렬형(`DialogueContext.to_dict`). 백엔드는 해석하지 않고 저장·반송만 한다
+    # (INV-U8-07). 첫 턴은 null 이다. 내용이 깨져 있으면 AI 가 버리고 새로 시작한다.
+    dialogue_context: dict | None = None
+    context: DialogueContextSnapshot
+
+
+class DialogueFrameSchema(BoundaryModel):
+    intent: str
+    # 값은 **요청**이지 확정값이 아니다 — 시각이 담겨도 화면에 그대로 내지 않는다(BR-DLG-05).
+    arguments: dict[str, str] = Field(default_factory=dict)
+    missing: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+    match_route: str  # CONFIDENT | VOTED | LLM_DIRECT | CLARIFY_ANSWER | FALLBACK
+
+
+class DialogueClarifySchema(BoundaryModel):
+    frame_index: int = Field(ge=0)
+    argument: str
+    question: str  # 인자표 고정 문안(`CLARIFY_QUESTIONS`) — LLM 이 짓지 않는다(DEC-U8-6)
+    options: list[str] | None = None
+
+
+class DialogueInterpretResponse(BoundaryModel):
+    outcome: str  # FRAME | ARGUMENT_CLARIFY | OUT_OF_SCOPE
+    frames: list[DialogueFrameSchema]
+    clarify: DialogueClarifySchema | None = None
+    dialogue_context: dict
+    llm_calls: int = Field(ge=0)  # 사용량 상한의 원천(COST-U8-02)

@@ -1,4 +1,6 @@
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
+// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+export { LockGlyph } from '@/shared/ui/glyphs';
 
 /**
  * planb 인라인 SVG 글리프. 색은 이 파일 안에서만 raw hex 로 고정한다 — SVG `stroke`/`fill` 은
@@ -90,29 +92,6 @@ export function ChevronRightGlyph({ size = 16 }: GlyphProps) {
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// 고정 pill 자물쇠(몸통 + 걸쇠).
-export function LockGlyph({ size = 14 }: GlyphProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Rect
-        x={5}
-        y={10.5}
-        width={14}
-        height={9.5}
-        rx={2.2}
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.8}
-      />
-      <Path
-        d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.8}
-        strokeLinecap="round"
       />
     </Svg>
   );

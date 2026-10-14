@@ -3,6 +3,7 @@
 v2 설계(agent-structure-v2 §2 Provider 규칙 로직): 실경로 API → 하버사인 추정 폴백.
 (구 인용 `agent-hierarchy-design §3.3`은 v2가 폐기한 v1 문서였다 — TRIP-530.)
 현재 체인: TMAP(실측, confidence=HIGH) → TravelEstimator(하버사인, confidence=LOW).
+1차는 수단별로 갈릴 수 있다 — `ByModeTravelTime`(자동차·보행 TMAP, 대중교통 ODsay; 2026-10-14).
 
 TravelPort Protocol 만족 — 어셈블리·TransitProvider 모두 이 어댑터를 주입받으면
 별도 코드 변경 없이 실경로 정확도를 얻는다.
@@ -23,13 +24,33 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Mapping
 
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.travel import TravelEstimate
 from trippilot.ports.travel_port import TravelPort
-from trippilot.ports.travel_time_port import TravelTimePort
+from trippilot.ports.travel_time_port import MeasuredTravel, TravelTimeError, TravelTimePort
 
 _log = logging.getLogger(__name__)
+
+
+class ByModeTravelTime:
+    """TravelTimePort — 수단별로 다른 1차 어댑터(대중교통 ODsay, 자동차·보행 TMAP).
+
+    배선되지 않은 수단은 TravelTimeError 로 승격 — 체인이 하버사인으로 폴백하고 첫 1회 경고를
+    남긴다(조용히 다른 수단 API 로 근사하지 않는다, TRIP-405 와 같은 이유).
+    """
+
+    def __init__(self, by_mode: Mapping[TransportMode, TravelTimePort]) -> None:
+        self._by_mode = dict(by_mode)
+
+    def measure(
+        self, from_: GeoPoint, to: GeoPoint, mode: TransportMode
+    ) -> MeasuredTravel:
+        primary = self._by_mode.get(mode)
+        if primary is None:
+            raise TravelTimeError(f"{mode.name} 실경로 어댑터 미배선")
+        return primary.measure(from_, to, mode)
 
 
 class ChainedTravelAdapter:

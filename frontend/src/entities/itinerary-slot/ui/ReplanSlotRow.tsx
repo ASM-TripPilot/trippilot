@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import { ALT_LABEL } from '../config/altLabel';
 import type { ReplanSlotVM } from '../model';
@@ -80,7 +81,8 @@ export function ReplanSlotRow({
         <Image
           testID={fieldId('photo')}
           source={photo}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
           className="h-[72px] w-[72px] rounded-thumb"
         />
       ) : (

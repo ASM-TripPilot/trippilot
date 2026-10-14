@@ -6,8 +6,7 @@
  *  ③ 거점 숙소 좌표(거점엔 좌표가 없어 등록 숙소와 잇는다 · 대기·실패면 건너뜀)
  *  ④ 서울시청 — {0,0} 은 기니만 바다다.
  * Draft·CoPick 은 거점·숙소를 조회하지 않아 `bases`·`stays` 를 `undefined` 로 넘긴다(③ 건너뜀).
- * ③의 거점 고르기는 편집기 `resolveEditorMapCenter`(pages/itinerary-manual)와 같은 규칙이다 — features
- * 는 pages 를 import 할 수 없어 같은 모양을 여기 둔다.
+ * 직접 짜기 편집기(`ManualPlanPage`)도 단일 일자 `days` 로 이 함수를 쓴다(예전 편집기 전용 사본은 삭제).
  */
 
 type Coord = { lat: number; lng: number };

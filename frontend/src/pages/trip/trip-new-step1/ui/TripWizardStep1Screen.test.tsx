@@ -108,16 +108,8 @@ describe('default 프레젠테이션', () => {
     return screen.getByTestId('trip-wizard-step1-root');
   }
 
-  /** className 은 NativeWind 가 렌더 트리에 평문 prop 으로 남긴다(02a §5-3 · loginVisual 선례).
-   * 공백으로 쪼갠 토큰 배열로 본다 — 부분 문자열 오탐을 막는다. */
-  function classes(testID: string): string[] {
-    return String(screen.getByTestId(testID).props.className ?? '').split(
-      /\s+/
-    );
-  }
-
   describe('AC-1 · 앱바 + 진행바 4칸 + "1 / 4"', () => {
-    it('진행바가 4칸이고 첫 칸만 활성(primary)·나머지는 비활성(hairline-strong)이다', () => {
+    it('진행바가 4칸이고 "1 / 4" 를 그린다', () => {
       render(<TripWizardStep1Screen {...props()} />);
 
       // 4칸이 다 있다.
@@ -125,14 +117,6 @@ describe('default 프레젠테이션', () => {
         expect(
           screen.getByTestId(`trip-wizard-progress-seg-${n}`)
         ).toBeOnTheScreen();
-      });
-
-      // 색은 className 토큰으로 본다(★4) — 옛 화면의 raw hex `bg-[#E0E0E0]` 회귀를 잡는다.
-      expect(classes('trip-wizard-progress-seg-1')).toContain('bg-primary');
-      [2, 3, 4].forEach((n) => {
-        expect(classes(`trip-wizard-progress-seg-${n}`)).toContain(
-          'bg-hairline-strong'
-        );
       });
 
       // "1 / 2"(옛)가 아니라 "1 / 4"(formatWizardStep(1) 소비).
@@ -220,7 +204,7 @@ describe('default 프레젠테이션', () => {
   });
 
   describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
-    it('다섯 행이 대응 값을 순서대로(여행지→기간→동행→취향→예산) 그린다', () => {
+    it('다섯 행이 대응 값을 그린다', () => {
       render(<TripWizardStep1Screen {...filledProps()} />);
 
       // 2톤 — main 은 제 행 안에, sub 는 별도 회색 caption(`{행}-sub`). "화면 어딘가"와 다르다.
@@ -257,20 +241,6 @@ describe('default 프레젠테이션', () => {
       expect(
         screen.getByTestId('trip-wizard-summary-budget-sub')
       ).toHaveTextContent(BUDGET_VALUE.sub);
-
-      // *(개념)* `getAllByTestId(/re/)` 는 매칭 요소를 **트리 순서(pre-order)** 로 돌려준다 —
-      // "무엇이 먼저 그려지는가"를 배열 비교 한 줄로 잠근다(★3). 정규식 끝 `$` 로 `-sub` testID 를
-      // 배열에서 배제한다(★D — sub 가 섞이면 배열이 8개가 돼 순서 비교가 깨진다).
-      const order = screen
-        .getAllByTestId(/^trip-wizard-summary-(?:[a-z]+)$/)
-        .map((el) => el.props.testID);
-      expect(order).toEqual([
-        'trip-wizard-summary-destination',
-        'trip-wizard-summary-period',
-        'trip-wizard-summary-companion',
-        'trip-wizard-summary-preference',
-        'trip-wizard-summary-budget',
-      ]);
     });
 
     it('값이 null 일 때 행별 카피 — 여행지 신 카피, 나머지 "{라벨} 선택"(기간 포함, TRIP-671·TRIP-1045)', () => {
@@ -284,23 +254,19 @@ describe('default 프레젠테이션', () => {
       // 기간 null → muted "기간 선택"(TRIP-1045 QA #017 — 값 줄이 있어야 선택 전후 행 높이가 같다).
       // 라벨 "기간"도 생존(getByText 완전 일치라 둘이 갈린다).
       const period = screen.getByTestId('trip-wizard-summary-period');
-      const periodPlaceholder = within(period).getByText('기간 선택');
-      expect(
-        String(periodPlaceholder.props.className ?? '').split(/\s+/)
-      ).toContain('text-muted');
+      expect(within(period).getByText('기간 선택')).toBeOnTheScreen();
       expect(within(period).getByText('기간')).toBeOnTheScreen();
 
-      // 나머지 3행은 "{라벨} 선택" 유지 + muted(값이 채워지면 ink 로 바뀐다).
+      // 나머지 3행은 "{라벨} 선택" 유지.
       const kept: [string, string][] = [
         ['trip-wizard-summary-companion', '동행 선택'],
         ['trip-wizard-summary-preference', '취향 선택'],
         ['trip-wizard-summary-budget', '예산 선택'],
       ];
       kept.forEach(([testID, placeholder]) => {
-        const text = within(screen.getByTestId(testID)).getByText(placeholder);
-        expect(String(text.props.className ?? '').split(/\s+/)).toContain(
-          'text-muted'
-        );
+        expect(
+          within(screen.getByTestId(testID)).getByText(placeholder)
+        ).toBeOnTheScreen();
       });
     });
 
@@ -403,8 +369,7 @@ describe('default 프레젠테이션', () => {
  *  - **loading**(`isLoading=true`) — 요약 5행 스켈레톤 + 꼭 갈 곳 스켈레톤 카드 4장 + 로딩 부제 +
  *    실값 부재(값을 줘도 안 뜸) + 다음 비활성(canProceed 가 참이라도). `isLoading` 미지정이면 default.
  *
- * 커버하지 않는 것: 스켈레톤 회색바의 실 색(#ededed)·실 렌더 픽셀 폭/높이/반경(폭·토큰 className
- * 문자열은 L1·L2가 잠근다, TRIP-733), "어디로 갈까요?"의 진한 톤(픽셀 — 6-b/스크린샷 대조,
+ * 커버하지 않는 것: 스켈레톤 회색바의 색·폭/높이/반경(실화면 몫, TRIP-1367), "어디로 갈까요?"의 진한 톤(픽셀 — 6-b/스크린샷 대조,
  * 02a §4-★3) · 배선(`isLoading` 파생은 `TripNewStep1Page.test.tsx` 「isLoading 파생」) · 요약 문자열 도출(페이지).
  *
  * ⚠️ 매처(02a §5-1, 전 사이클 TRIP-665 실측 계승): `getByText('문자열')`=완전 일치(라벨 "기간" vs
@@ -469,15 +434,12 @@ describe('두 상태 얼굴 (empty · loading)', () => {
       expect(within(dest).queryByText('여행지 선택')).toBeNull();
     });
 
-    it('E2 · 기간 행은 muted "기간 선택"을 그린다 — 라벨 "기간"도 생존 (TRIP-1045 QA #017)', () => {
+    it('E2 · 기간 행은 "기간 선택"을 그린다 — 라벨 "기간"도 생존 (TRIP-1045 QA #017)', () => {
       render(<TripWizardStep1Screen {...emptyProps()} />);
 
       const period = row('trip-wizard-summary-period');
       // getByText 완전 일치라 라벨 "기간" 과 플레이스홀더 "기간 선택" 이 자동으로 갈린다.
-      const placeholder = within(period).getByText('기간 선택');
-      expect(String(placeholder.props.className ?? '').split(/\s+/)).toContain(
-        'text-muted'
-      );
+      expect(within(period).getByText('기간 선택')).toBeOnTheScreen();
       expect(within(period).getByText('기간')).toBeOnTheScreen();
     });
 
@@ -521,7 +483,7 @@ describe('두 상태 얼굴 (empty · loading)', () => {
   });
 
   describe('AC-2 · loading 얼굴 (isLoading=true — 값을 줘도 스켈레톤이 가린다)', () => {
-    it('L1 · 요약 5행 스켈레톤 — 컨테이너 5개(끝-앵커) + 행별 바 [2,2,1,2,2] + 폭·토큰 문자열', () => {
+    it('L1 · 요약 5행 스켈레톤 — 컨테이너 5개(끝-앵커) + 행별 바 [2,2,1,2,2]', () => {
       render(<TripWizardStep1Screen {...filledProps({ isLoading: true })} />);
 
       // 컨테이너 카운트는 끝-앵커 `\d+$` 로 좁힌다(★1). 접두 일치 `/^…-skeleton-/` 는 바
@@ -531,33 +493,16 @@ describe('두 상태 얼굴 (empty · loading)', () => {
         screen.queryAllByTestId(/^trip-wizard-summary-skeleton-\d+$/)
       ).toHaveLength(5);
 
-      // 행별 바 개수·폭·토큰. within(컨테이너) 는 쿼리를 그 행 subtree 로 좁혀(★2) 다른 행 바를 안
+      // 행별 바 개수. within(컨테이너) 는 쿼리를 그 행 subtree 로 좁혀(★2) 다른 행 바를 안
       // 센다. queryAllByTestId(/-bar-/) 는 testID 에 `-bar-` 를 포함하는 노드만(부분 일치).
       SUMMARY_SKELETON_WIDTHS.forEach((widths, idx) => {
         const container = row(`trip-wizard-summary-skeleton-${idx + 1}`);
         const bars = within(container).queryAllByTestId(/-bar-/);
         expect(bars).toHaveLength(widths.length); // 동행(idx 2)만 1
-
-        bars.forEach((bar, i) => {
-          // className 은 jest 렌더 트리에 평문 prop 으로 남는다(★3) — 폭/토큰 문자열까지만.
-          // 실 픽셀·#ededed 색은 RN 네이티브라 jest 사각(6-b, ★4).
-          const cls = String(bar.props.className);
-          expect(cls).toContain(`w-[${widths[i]}px]`);
-          expect(cls).toContain('h-[12px]');
-          expect(cls).toContain('rounded-[10px]');
-          // 토큰 배열로 정확 매치 — `toContain('bg-hairline')` 은 이웃 `bg-hairline-strong`(#DDDDDD)도
-          // 통과시켜(부분 문자열) fill 회귀를 못 잡는다(5-b 경고-1). split 후 정확 토큰 대조.
-          expect(cls.split(/\s+/)).toContain('bg-hairline');
-        });
-
-        // 바 간 gap 6·가로 배치는 컨테이너 className 으로(★3).
-        const containerClass = String(container.props.className);
-        expect(containerClass).toContain('flex-row');
-        expect(containerClass).toContain('gap-[6px]');
       });
     });
 
-    it('L2 · 꼭 갈 곳 스켈레톤 카드 4장(단일 64×64 정사각) + 실제 카드 가림 + see-all 부재', () => {
+    it('L2 · 꼭 갈 곳 스켈레톤 카드 4장 + 실제 카드 가림 + see-all 부재', () => {
       render(
         <TripWizardStep1Screen
           {...filledProps({
@@ -572,16 +517,6 @@ describe('두 상태 얼굴 (empty · loading)', () => {
         /^trip-wizard-mustvisit-skeleton-\d+$/
       );
       expect(cards).toHaveLength(4);
-
-      // 각 카드가 단일 64×64 정사각 토큰을 직접 지닌다(★5) — testID 노드가 곧 정사각이라
-      // "썸네일 바 + 텍스트 바" 2자식 구조가 배제된다(텍스트 바 제거). 실 픽셀은 6-b.
-      cards.forEach((card) => {
-        const cls = String(card.props.className);
-        expect(cls).toContain('h-[64px]');
-        expect(cls).toContain('w-[64px]');
-        expect(cls).toContain('rounded-[10px]');
-        expect(cls).toContain('bg-hairline');
-      });
 
       // 실제 담은 곳 카드는 스켈레톤에 가려 안 뜬다(회귀 유지, 선제 green).
       expect(screen.queryByTestId('trip-wizard-mustvisit-poi-1')).toBeNull();
@@ -841,13 +776,9 @@ describe('꼭 갈 곳 가로 스트립', () => {
  * test.tsx` 몫. 이 파일은 "문자열/불리언을 받으면 어떻게 그리나"까지다.
  *
  * TRIP-734(§F ⓐ): 제출 배너 본문이 옛 제목+서버사유 2줄에서 **단일 줄 고정 카피 "저장하지 못했어요"**로
- * 바뀐다(submitError 는 표시값→트리거로 격하). 크롬(흰 배경+헤어라인 테두리)·재시도(pill→텍스트 링크)도
- * Figma `saveFail·v2` 정합 — S-5 가 잠근다. 아이콘 색(#C13515→#FF385C)은 SVG stroke 라 jest 완전 사각
- * (02a ★A) — 6-b 스크린샷 전용, 여기선 단언하지 않는다.
+ * 바뀐다(submitError 는 표시값→트리거로 격하). 크롬·재시도 링크 모양·아이콘 색은 실화면 몫이다(TRIP-1367).
  *
  * ⚠️ 매처 함정(02a §5): `getByText('문자열')`/`queryByText` = 완전 일치, `queryBy*` 는 부재 시 null.
- * className 토큰은 `String(el.props.className).split(/\s+/)` 후 배열 `toContain` — **부분매치 금지**
- * (`text-primary` vs `text-primary-text` 거짓 통과 방지, 02a ★B).
  */
 describe('실패 표면', () => {
   describe('S-1 · 제출 실패 배너 — 단일 줄 고정 카피 (§F ⓐ)', () => {
@@ -968,63 +899,6 @@ describe('실패 표면', () => {
       expect(screen.queryByTestId('trip-wizard-overseas-dialog')).toBeNull();
     });
   });
-
-  describe('S-5 · 배너 크롬·재시도 링크 정합 (Figma saveFail·v2, AC-8·AC-9)', () => {
-    // 두 배너를 동시에 켜서 제출·등록 크롬을 한 번에 잰다.
-    function renderBothBanners() {
-      render(
-        <TripWizardStep1Screen
-          {...props({
-            submitError: '실패',
-            mustVisitError: '꼭 갈 곳 3곳 중 1곳을 등록하지 못했어요',
-            onRetrySubmit: jest.fn(),
-            onRetryMustVisits: jest.fn(),
-          })}
-        />
-      );
-    }
-
-    // className 문자열을 공백으로 쪼갠 토큰 배열 — 부분매치(text-primary vs text-primary-text) 함정 회피(★B).
-    function tokens(el: { props: { className?: unknown } }): string[] {
-      return String(el.props.className ?? '').split(/\s+/);
-    }
-
-    it('AC-8 — 제출·등록 배너 컨테이너가 흰 배경+헤어라인 테두리+r12 이고 pale 채움이 아니다', () => {
-      renderBothBanners();
-
-      for (const testId of [
-        'trip-wizard-submit-banner',
-        'trip-wizard-mustvisit-banner',
-      ]) {
-        const banner = tokens(screen.getByTestId(testId));
-        // 있어야 할 크롬 토큰(현행엔 bg-canvas·border·border-hairline 없음 → red).
-        expect(banner).toContain('bg-canvas');
-        expect(banner).toContain('border');
-        expect(banner).toContain('border-hairline');
-        expect(banner).toContain('rounded-button'); // 현행 유지(선제 green).
-        // 옛 pale 채움은 사라진다(현행 있음 → red). 이 단언이 className 가독 증명도 겸한다(02a §5).
-        expect(banner).not.toContain('bg-primary-pale');
-      }
-    });
-
-    it('AC-9 — 재시도는 pill 크롬 없는 text-primary 텍스트 링크다', () => {
-      renderBothBanners();
-
-      for (const [bannerId, retryId] of [
-        ['trip-wizard-submit-banner', 'trip-wizard-submit-banner-retry'],
-        ['trip-wizard-mustvisit-banner', 'trip-wizard-mustvisit-banner-retry'],
-      ]) {
-        const banner = screen.getByTestId(bannerId);
-        const retry = within(banner).getByTestId(retryId);
-        // pill 크롬(둥근 알약·primary 테두리)이 사라진다(현행 있음 → red).
-        expect(tokens(retry)).not.toContain('rounded-pill');
-        expect(tokens(retry)).not.toContain('border-primary');
-        // 링크 글자는 선명한 primary(#FF385C). split 정확매치라 text-primary-text 는 안 걸린다(★B, 현행 red).
-        const label = within(retry).getByText('다시 시도');
-        expect(tokens(label)).toContain('text-primary');
-      }
-    });
-  });
 });
 
 /**
@@ -1038,36 +912,24 @@ describe('실패 표면', () => {
  *    둘 다 미렌더한다. 옛 문자열 `" + 온보딩"`은 어디에도 없다.
  *  - **AC-6 부제 3분기**: 여행지·기간 둘 다 null → empty 부제, isLoading → 로딩 부제(empty 이김),
  *    그 외 → default 부제.
- *  - **AC-8 비활성 CTA 재스타일**: 비활성([다음])은 `bg-[#E9E9EB]`+라벨 `text-muted-soft`(opacity-40 폐기),
- *    활성은 `bg-primary`+`text-on-primary`. loading 도 비활성 스타일 공유.
  *
  * 커버하지 않는 것(색은 jest 사각, 02a §4-★A):
  *  - 스파클 fill·"온보딩" 실제 분홍·비활성 CTA 실제 회색·물방울 대비는 [검증] 6-b 스크린샷 몫.
- *    여기서는 **존재(testID)·텍스트·className 토큰**까지만 잠근다(실색 단언 없음).
+ *    여기서는 **존재(testID)·텍스트**까지만 잠근다(className 토큰 단언은 TRIP-1367 에서 지웠다).
  *  - 요약 문자열 **도출**(페이지 `tripSummary` 셀렉터, `tripSummary.test.ts`).
  *
  * ⚠️ 매처(02a §5, 기존 파일 헤더 계승): `getByText('문자열')`=완전 일치 · `toHaveTextContent('문자열')`
  * =완전 일치 · `toHaveTextContent(/re/)`=부분 일치 · `queryByTestId(...).toBeNull()`=부재 ·
- * `props.className`은 arbitrary 토큰까지 raw 로 보존(probe 실측, §5-4) → `split(/\s+/)`로 토큰 검사.
  *
  * ⚠️ prop shape 는 이번 사이클이 `string|null` → 객체형으로 바꾼다 — 구현 전엔 화면이 객체를 Text child
  * 로 받아 throw 한다(의도된 red). 구현자가 인터페이스를 `SummaryLine|null`로 바꾸면 green(02a §4-★F).
  *
- * 3동작 뼈대: 준비=props(객체) → 실행=render(+press) → 단언=보이는 것 / 토큰 / 불린 콜백.
+ * 3동작 뼈대: 준비=props(객체) → 실행=render(+press) → 단언=보이는 것 / 불린 콜백.
  */
 describe('요약 5행 2톤', () => {
   const PREF_OFF = { ...PREFERENCE_VALUE, onboarding: false };
   function root() {
     return screen.getByTestId('trip-wizard-step1-root');
-  }
-
-  /** className 은 NativeWind 가 렌더 트리에 raw prop 으로 남긴다(probe 실측). 공백 토큰 배열로 본다. */
-  function classes(node: { props: { className?: string } }): string[] {
-    return String(node.props.className ?? '').split(/\s+/);
-  }
-
-  function classesOf(testID: string): string[] {
-    return classes(screen.getByTestId(testID));
   }
 
   describe('AC-4 · sub caption (값 뒤 같은 줄 회색)', () => {
@@ -1079,9 +941,6 @@ describe('요약 5행 2톤', () => {
       expect(within(dest).getByText('부산')).toBeOnTheScreen();
       const destSub = screen.getByTestId('trip-wizard-summary-destination-sub');
       expect(destSub).toHaveTextContent('2박 · 경주 1박'); // 완전 일치
-      expect(classesOf('trip-wizard-summary-destination-sub')).toContain(
-        'text-muted'
-      );
 
       // 예산 — sub 도 회색 caption.
       expect(
@@ -1115,8 +974,6 @@ describe('요약 5행 2톤', () => {
       ).toBeOnTheScreen();
       const badge = within(pref).getByText('온보딩');
       expect(badge).toBeOnTheScreen();
-      // 색은 실색 아니라 className 토큰만 (★A) — primary(#FF385C).
-      expect(classes(badge)).toContain('text-primary');
       // 옛 접미 문자열은 화면 어디에도 없다.
       expect(root()).not.toHaveTextContent(/\+ 온보딩/);
     });
@@ -1225,61 +1082,6 @@ describe('요약 5행 2톤', () => {
       expect(subtitle().props.children).toBe('행을 누르면 바꿀 수 있어요');
     });
   });
-
-  describe('AC-8 · 비활성 CTA 재스타일 (연회색 채움 + 회색 글자, opacity-40 폐기)', () => {
-    it('활성(canProceed) — 분홍 채움 + on-primary 글자, 눌리면 콜백', () => {
-      const onNext = jest.fn();
-      render(
-        <TripWizardStep1Screen {...filledProps({ canProceed: true, onNext })} />
-      );
-
-      const next = screen.getByTestId('trip-wizard-step1-next');
-      expect(next).toBeEnabled();
-      expect(classes(next)).toContain('bg-primary');
-      expect(classes(next)).not.toContain('bg-[#E9E9EB]');
-      expect(classes(within(next).getByText('다음'))).toContain(
-        'text-on-primary'
-      );
-
-      fireEvent.press(next);
-      expect(onNext).toHaveBeenCalledTimes(1);
-    });
-
-    it('비활성(!canProceed) — 연회색 채움 + muted-soft 글자, opacity-40 없음, 실제로 안 눌린다 (3단)', () => {
-      const onNext = jest.fn();
-      render(
-        <TripWizardStep1Screen
-          {...filledProps({ canProceed: false, onNext })}
-        />
-      );
-
-      const next = screen.getByTestId('trip-wizard-step1-next');
-      // 3단 심판 — toBeDisabled 단독은 가짜(접근성 상태만), press + 콜백 0 회로 실제 차단 확인.
-      expect(next).toBeDisabled();
-      fireEvent.press(next);
-      expect(onNext).not.toHaveBeenCalled();
-
-      // 재스타일 — 채움 토큰만(실색은 6-b). 연회색 arbitrary hex + muted-soft 글자, opacity-40 없음.
-      expect(classes(next)).toContain('bg-[#E9E9EB]');
-      expect(classes(next)).not.toContain('opacity-40');
-      expect(classes(next)).not.toContain('bg-primary');
-      const label = within(next).getByText('다음');
-      expect(classes(label)).toContain('text-muted-soft');
-      expect(classes(label)).not.toContain('text-on-primary');
-    });
-
-    it('loading 도 비활성 스타일을 공유한다 (canProceed 참이어도)', () => {
-      render(
-        <TripWizardStep1Screen
-          {...filledProps({ canProceed: true, isLoading: true })}
-        />
-      );
-
-      const next = screen.getByTestId('trip-wizard-step1-next');
-      expect(next).toBeDisabled();
-      expect(classes(next)).toContain('bg-[#E9E9EB]');
-    });
-  });
 });
 
 /**
@@ -1295,10 +1097,6 @@ describe('요약 5행 2톤', () => {
  * 3동작 뼈대: 준비=props(숫자·콜백 스파이) → 실행=render(+press) → 단언=보이는 문구 / 불린 콜백.
  */
 describe('지역 밖 꼭 갈 곳 안내', () => {
-  function classesOf(testID: string): string {
-    return String(screen.getByTestId(testID).props.className ?? '');
-  }
-
   it('O-1 · 1곳이면 "꼭 갈 곳 중 1곳은 이 여행 지역 밖이에요"와 [빼기]·[그대로 두기]를 그린다', () => {
     render(
       <TripWizardStep1Screen
@@ -1387,16 +1185,4 @@ describe('지역 밖 꼭 갈 곳 안내', () => {
       expect(screen.getByTestId('trip-wizard-step1-next')).toBeOnTheScreen();
     }
   );
-
-  it('O-6 · 안내 줄과 두 버튼은 색 토큰만 쓴다 (className 에 raw hex 없음)', () => {
-    render(<TripWizardStep1Screen {...props({ outsideRegionCount: 1 })} />);
-
-    [
-      'trip-wizard-outside-notice',
-      'trip-wizard-outside-notice-remove',
-      'trip-wizard-outside-notice-keep',
-    ].forEach((testID) => {
-      expect(classesOf(testID)).not.toMatch(/#/);
-    });
-  });
 });

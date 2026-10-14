@@ -1,34 +1,35 @@
 import type { ReactNode, ReactElement } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
+import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
-  act,
   within,
 } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
 import { server } from '@/mocks/server';
-import type * as TripsModule from '@/shared/api/generated/trips/trips';
 import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
 import type {
   GenerateItineraryRequestGenerationMode,
   GenerationSession,
   Itinerary,
-  MustVisit,
-  Place,
-  SavedPlace,
   ItineraryGenerationState,
+  ReplanSession,
+  ReplanSessionStatus,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resolveItineraryDestination } from '@/features/itinerary';
 import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
-import * as ToastModule from '@/shared/ui/Toast';
-import { resetToast } from '@/test-support/toastHarness';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { GeneratingPage } from './GeneratingPage';
 
@@ -39,7 +40,7 @@ import { GeneratingPage } from './GeneratingPage';
  * beforeEach)는 그대로다. 생성 훅을 통째로 목으로 바꾼 관점은 node 버킷 `GeneratingPage.hookMock.test.tsx`.
  *  - 다른 여행 생성 중(409) 안내 — 옛 `.busy`
  *  - 생성 성공이 홈의 일정 캐시에 닿는다 — 옛 `.homeCache`
- *  - 꼭 갈 곳 지도 — 옛 `.map`(생성 POST 만 진행 중 스텁 — 아래 `mockStubPost` 스위치)
+ *  - (꼭 갈 곳 지도 — 옛 `.map` 은 TRIP-1352 에서 지도 카드 코드째 삭제)
  *  - 관찰 모드(mode 없음) — 옛 `.observe`
  *
  * 합치며 바뀐 장치(02a ★): 서버 listen/close 는 최상위 한 번. 라우터 목은 옛 `.busy`·`.observe` 처럼
@@ -88,37 +89,9 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-// 생성 POST 스위치(TRIP-1150 합치기) — 옛 `.map` 만 trips 를 부분 목했다(조회 훅은 실물, 생성 POST 만
-// 진행 중 스텁). `jest.mock` 은 파일 전체에 걸리므로 목 훅이 **불리는 순간** 이 값을 읽어, 꺼져 있으면
-// 실물 훅으로 넘긴다. 최상위 beforeEach 가 끄고 지도 describe 의 beforeEach 만 켠다.
-let mockStubPost = false;
-const mockMutate = jest.fn();
-// 스텁은 **호출마다 새 객체**를 준다 — 실 useMutation 도 렌더마다 새 객체라, 이래야 `firedRef` 없이는
-// 재렌더마다 effect 가 다시 돌아 POST 가 또 나간다(옛 `.map` M6 이 재는 것).
-jest.mock('@/shared/api/generated/trips/trips', () => {
-  const actual = jest.requireActual<typeof TripsModule>(
-    '@/shared/api/generated/trips/trips'
-  );
-  return {
-    ...actual,
-    usePostTripsTripIdItinerary: (
-      ...args: Parameters<typeof actual.usePostTripsTripIdItinerary>
-    ) =>
-      mockStubPost
-        ? { mutate: mockMutate, isPending: true, isError: false }
-        : actual.usePostTripsTripIdItinerary(...args),
-  };
-});
-
-// 지도를 관찰 마커로 바꾼다 — 중심 좌표는 `map-root` 텍스트, 나머지 prop 은 그대로 통과한다.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
-
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
-  mockStubPost = false;
-  mockMutate.mockClear();
   mockPush.mockClear();
   mockReplace.mockClear();
   mockDismissTo.mockClear();
@@ -281,11 +254,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
           log.push(`CANCEL ${label(params.tripId)}/${label(params.sessionId)}`);
           return cancelHandler();
         }
-      ),
-      http.get(`${BASE}/trips/:tripId/must-visits`, () =>
-        HttpResponse.json([])
-      ),
-      http.get(`${BASE}/saved-places`, () => HttpResponse.json([]))
+      )
     );
   });
 
@@ -298,6 +267,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
     props: {
       mode?: GenerateItineraryRequestGenerationMode;
       successRoute?: '/trips/[tripId]/itinerary/copick/[slotKey]';
+      targetDate?: string;
     } = {}
   ) {
     const client = new QueryClient({
@@ -316,6 +286,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
         tripId={TRIP_ID}
         mode={props.mode ?? 'FULLY_AI'}
         successRoute={props.successRoute}
+        targetDate={props.targetDate}
       />,
       { wrapper: Wrapper }
     );
@@ -554,10 +525,11 @@ describe('다른 여행 생성 중(409) 안내', () => {
   /**
    * 서버 규칙 거절 — 여행 중·끝난 여행의 재생성은 409 `CONFLICT`(+ 사유 문구)다(BE `guardTripPeriod`).
    * 다시 보내도 같은 답이라 "네트워크를 확인하고 다시 시도" 실패 얼굴은 거짓말이다(DEV 실측: 여행 중 재생성
-   * 49개 여행 0회 성공). 여행 중이면 다시 짜기는 Plan-B 의 몫이라 허브를 깔고 재계획 요청(i04)을 연다.
+   * 49개 여행 0회 성공). 여행 중이면 다시 짜기는 Plan-B 의 몫이라 **모달(i04) 없이** 이 생성 화면을 재계획
+   * 모드(`replan:'1'`)로 다시 연다(2026-10-14 사용자 결정 — 사유를 묻지 않고 바로 다시 짜서 반영한다).
    * 끝난 여행·기간 모름이면 서버 사유 + [닫기]만.
    */
-  describe('🔴 R1~R3 — 규칙 거절(409 CONFLICT): 여행 중이면 Plan-B 로 넘기고, 아니면 서버 사유를 보인다', () => {
+  describe('🔴 R1~R3 — 규칙 거절(409 CONFLICT): 여행 중이면 재계획 모드로 넘기고, 아니면 서버 사유를 보인다', () => {
     const IN_TRIP_REASON =
       '여행 중에는 일정을 다시 만들 수 없어요. 재계획으로 오늘 일정을 바꿔 주세요.';
     const refused = (message: string) => (): Response =>
@@ -584,31 +556,44 @@ describe('다른 여행 생성 중(409) 안내', () => {
       );
     }
 
-    it('R1 여행 중: 허브 replace → 재계획 요청 push 를 한 번씩 이 순서로 · 실패·거절 얼굴 없음 · POST 1회', async () => {
+    it('R1 여행 중: 생성 화면을 재계획 모드로 replace 1회 · 모달 push 0 · 실패·거절 얼굴 없음 · POST 1회', async () => {
       const today = seoulDate(new Date());
       server.use(tripHandler(today, '2099-12-31'));
       postQueue = [refused(IN_TRIP_REASON)];
 
       renderPage();
 
-      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-      expect(mockReplace).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/live',
-        params: { tripId: TRIP_ID },
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1' }, // 보던 날이 없으면 날짜를 싣지 않는다(서버가 오늘)
       });
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/planb',
-        params: { tripId: TRIP_ID },
-      });
-      expect(mockReplace.mock.invocationCallOrder[0]).toBeLessThan(
-        mockPush.mock.invocationCallOrder[0]
-      );
       await settle();
-      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
       expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
       expect(screen.queryByTestId('itinerary-generating-refused')).toBeNull();
       expect(count('POST')).toBe(1);
+    });
+
+    // 초안에서 오늘 뒤의 날을 보며 [다시 짜기]를 누르면 그 날이 실려 온다(DraftPage). 다녀온 기록이 있어 거절되면
+    // 재계획도 그 날로 열어야 한다 — 빠지면 사용자가 보던 날 대신 오늘이 다시 짜인다.
+    it('R1b 보던 날(targetDate)이 실려 오면 재계획 모드도 그 날로 연다', async () => {
+      const today = seoulDate(new Date());
+      const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      server.use(tripHandler(today, '2099-12-31'));
+      postQueue = [refused(IN_TRIP_REASON)];
+
+      renderPage({ targetDate: tomorrow });
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1', targetDate: tomorrow },
+      });
+      expect(mockPush).not.toHaveBeenCalled();
     });
 
     it('R2 끝난 여행: 서버 사유 + [닫기]만 · 다시 시도 없음 · 닫기 = 홈 · Plan-B 로 안 간다', async () => {
@@ -919,11 +904,7 @@ describe('생성 성공 → 홈 일정 캐시', () => {
         });
         generated = true;
         return HttpResponse.json(generatedItinerary(), { status: 201 });
-      }),
-      http.get(`${BASE}/trips/:tripId/must-visits`, () =>
-        HttpResponse.json([])
-      ),
-      http.get(`${BASE}/saved-places`, () => HttpResponse.json([]))
+      })
     );
   });
 
@@ -1039,342 +1020,6 @@ describe('생성 성공 → 홈 일정 캐시', () => {
   });
 });
 
-// TRIP-929 · 옛 GeneratingPage.map.integration.test.tsx — 생성 POST 만 진행 중 스텁(mockStubPost).
-describe('꼭 갈 곳 지도', () => {
-  /**
-   * TRIP-929 · h07 생성 중 지도에 **실 좌표**가 흐르는지를 실 HTTP 로 태우는 심판.
-   *
-   * 무엇을 보장하나:
-   *  - 꼭 갈 곳(`GET /trips/{id}/must-visits`)과 담은 장소(`GET /saved-places`)를 이어 번호 핀을
-   *    만들고, 첫 핀 좌표를 지도 중심으로 넘긴다(M1). 연결선은 그리지 않는다(M2, INV-2).
-   *  - 좌표가 하나도 없으면 지도 카드를 통째로 생략한다(M3~M5, INV-4). `[]` 는 JS 에서 참이라
-   *    `pins && center` 게이트를 막는 것은 `center` 뿐이다 — M5 가 그 급소.
-   *  - 조회 도착으로 페이지가 다시 그려져도 생성 POST 는 1회다(M6, `firedRef` 의 첫 심판).
-   *  - 조회가 실패하면 지도만 빠지고 생성 실패 표면은 뜨지 않는다(M7, Seed Q2).
-   *  - CO_PLAN 갈래도 같은 지도를 보인다(M8, Seed Q3).
-   *
-   * 왜 통합 버킷인가: 지도가 뜨는지는 **어떤 요청이 나갔고 무엇이 돌아왔나**에 달려 있다. 조회 훅을
-   * 목킹하면 "미로그인이면 saved-places 가 안 나간다"가 테스트의 가정이 된다. 생성 POST 만 기존
-   * 파일처럼 훅 목으로 둔다(진행 중 상태를 붙들어 두려고).
-   *
-   * 3동작 뼈대: 준비 = 가짜 서버 응답·로그인 상태 → 실행 = 페이지 렌더 후 조회가 끝날 때까지 대기
-   * (`settle`) → 단언 = 지도 카드·좌표·핀·나간 요청·POST 횟수.
-   */
-
-  /** `authWiring.integration.test.ts:59` 와 같은 값(리포 관례). */
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '22222222-2222-2222-2222-222222222222';
-
-  /** 첫 핀(A)과 둘째 핀(B)의 좌표는 서로 다르고 둘의 평균(35.12935,129.1802)과도 다르다 —
-   * 중심이 "첫 핀"이 아니면 텍스트 완전 일치에서 갈린다. */
-  const A = { poiId: 'poi-a', lat: 35.1587, lng: 129.1604 };
-  const B = { poiId: 'poi-b', lat: 35.1, lng: 129.2 };
-  const A_CENTER_TEXT = '35.1587,129.1604';
-
-  function savedPlace(spot: { poiId: string; lat: number; lng: number }) {
-    const place: Place = {
-      poiId: spot.poiId,
-      nameKo: `장소-${spot.poiId}`,
-      category: '명소',
-      lat: spot.lat,
-      lng: spot.lng,
-      region: '부산진구',
-      openingHours: null,
-      imageUrl: null,
-      tags: [],
-      savedCount: 0,
-      dataStatus: 'ACTIVE',
-    };
-    const entry: SavedPlace = {
-      savedPlaceId: `sp-${spot.poiId}`,
-      savedAt: '2026-09-01T10:00:00.000Z',
-      place,
-    };
-    return entry;
-  }
-
-  function mustVisit(sourcePoiId: string): MustVisit {
-    return {
-      mustVisitId: `mv-${sourcePoiId}`,
-      poiSnapshotId: `snap-${sourcePoiId}`,
-      sourcePoiId,
-      type: 'ANYTIME',
-    };
-  }
-
-  /** 나간 요청의 `METHOD /경로` 누적. */
-  let observedHits: string[] = [];
-
-  function hitsFor(method: string, includes: string): number {
-    return observedHits.filter(
-      (hit) => hit.startsWith(method) && hit.includes(includes)
-    ).length;
-  }
-
-  /** 가짜 서버 응답을 건다. 통합 버킷은 `onUnhandledRequest: 'error'` 라 두 GET 을 매번 명시한다. */
-  function serve(input: {
-    mustVisits: MustVisit[] | { status: number };
-    savedPlaces: SavedPlace[] | { status: number };
-  }) {
-    server.use(
-      http.get(`${BASE}/trips/:tripId/must-visits`, () =>
-        Array.isArray(input.mustVisits)
-          ? HttpResponse.json(input.mustVisits)
-          : HttpResponse.json({}, { status: input.mustVisits.status })
-      ),
-      http.get(`${BASE}/saved-places`, () =>
-        Array.isArray(input.savedPlaces)
-          ? HttpResponse.json(input.savedPlaces)
-          : HttpResponse.json({}, { status: input.savedPlaces.status })
-      )
-    );
-  }
-
-  beforeAll(() => {
-    server.events.on('request:start', ({ request }) => {
-      observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-  });
-
-  beforeEach(() => {
-    mockStubPost = true;
-    observedHits = [];
-    mockMutate.mockClear();
-    setAccessToken('valid-access');
-  });
-
-  afterEach(() => {
-    server.resetHandlers();
-    clearAccessToken();
-  });
-
-  /**
-   * `retry: false` — 실패를 즉시 실패로 본다(재시도가 돌면 M7 이 흔들린다).
-   * `gcTime: 0` — 기본 타이머가 테스트 뒤까지 살아 프로세스를 붙잡지 않게.
-   * 클라이언트를 돌려주는 이유: `settle` 이 "조회가 전부 끝났나"를 여기서 읽는다.
-   */
-  function renderPage(props?: {
-    mode?: GenerateItineraryRequestGenerationMode;
-    successRoute?: '/trips/[tripId]/itinerary/copick/[slotKey]';
-  }) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    // TRIP-1006: mode 가 없으면 관찰 모드(POST 0·일정 GET)라 이 파일의 POST 경로 단언이 성립하지 않는다 —
-    // 완전 AI 를 명시하고, 케이스가 준 mode(CO_PLAN)가 덮어쓴다.
-    render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" {...props} />, {
-      wrapper: Wrapper,
-    });
-    return client;
-  }
-
-  /**
-   * 조회가 끝나 **화면까지 도착할 때까지** 기다린다. 첫 렌더엔 조회가 아직 안 끝나 지도가 원래
-   * 없으므로, 이 대기 없이 "지도 없음"을 단언하면 무엇을 구현해도 통과한다.
-   *  ① must-visits 요청이 실제로 나갔다 → ② 진행 중인 조회가 0개 → ③ react-query 가 화면에 알리는
-   *  예약(setTimeout 0) 한 틱을 흘린다.
-   * 이 대기가 충분하다는 것은 M1·M6·M8 이 대기 직후 **기다림 없는** `getByTestId` 로 지도를 찾는
-   * 것으로 매번 증명된다.
-   */
-  async function settle(client: QueryClient) {
-    await waitFor(() =>
-      expect(hitsFor('GET', '/must-visits')).toBeGreaterThanOrEqual(1)
-    );
-    await waitFor(() => expect(client.isFetching()).toBe(0));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-  }
-
-  describe('M1 · AC-1 — 꼭 갈 곳 좌표가 있으면 지도가 뜨고 중심은 첫 핀이다', () => {
-    it('지도 카드가 있고, 중심은 첫 핀(A) 좌표, 핀은 [①A, ②B] 다', async () => {
-      serve({
-        mustVisits: [mustVisit(A.poiId), mustVisit(B.poiId)],
-        savedPlaces: [savedPlace(A), savedPlace(B)],
-      });
-      const client = renderPage();
-
-      await settle(client);
-
-      expect(screen.getByTestId('itinerary-generating-map')).toBeOnTheScreen();
-      const map = screen.getByTestId('map-root');
-      // 완전 일치 — B 좌표·평균 좌표면 red.
-      expect(map).toHaveTextContent(A_CENTER_TEXT);
-      expect(map.props.pins).toEqual([
-        { number: 1, lat: A.lat, lng: A.lng },
-        { number: 2, lat: B.lat, lng: B.lng },
-      ]);
-    });
-  });
-
-  describe('M9 · AC-1 — 첫 꼭 갈 곳에 좌표가 없어도 지도는 뜨고, 핀 번호는 당기지 않는다', () => {
-    it('꼭 갈 곳 [Z, A]·담은 장소 [A] 면 중심은 A, 핀은 [②A] 하나다', async () => {
-      // Z 는 담기를 해제한 곳 — 좌표가 없다. 중심을 "첫 꼭 갈 곳"에서 찾으면 지도가 사라지고,
-      // 핀을 1..n 으로 다시 매기면 ②가 ①이 되어 h05 목록 번호와 어긋난다.
-      serve({
-        mustVisits: [mustVisit('poi-z'), mustVisit(A.poiId)],
-        savedPlaces: [savedPlace(A)],
-      });
-      const client = renderPage();
-
-      await settle(client);
-
-      expect(screen.getByTestId('itinerary-generating-map')).toBeOnTheScreen();
-      const map = screen.getByTestId('map-root');
-      expect(map).toHaveTextContent(A_CENTER_TEXT);
-      expect(map.props.pins).toEqual([{ number: 2, lat: A.lat, lng: A.lng }]);
-    });
-  });
-
-  describe('M2 · AC-3 — 생성 중 지도는 핀 사이 연결선을 그리지 않는다 (INV-2)', () => {
-    it('페이지를 거쳐 그린 지도의 connectPins 가 false 다', async () => {
-      serve({
-        mustVisits: [mustVisit(A.poiId), mustVisit(B.poiId)],
-        savedPlaces: [savedPlace(A), savedPlace(B)],
-      });
-      const client = renderPage();
-
-      await settle(client);
-
-      expect(screen.getByTestId('map-root').props.connectPins).toBe(false);
-    });
-  });
-
-  describe('M3~M5 · AC-2 — 좌표가 없으면 지도 카드를 통째로 생략한다 (INV-4)', () => {
-    it('M3 (a) 담은 꼭 갈 곳이 0곳이면 — 담은 장소가 있어도 — 지도가 없고 진행 표면은 있다', async () => {
-      // 담은 장소 A·B 를 일부러 둔다: 꼭 갈 곳 대신 담은 장소 전부를 핀으로 쓰면 지도가 떠서 red.
-      serve({ mustVisits: [], savedPlaces: [savedPlace(A), savedPlace(B)] });
-      const client = renderPage();
-
-      await settle(client);
-
-      expect(screen.queryByTestId('itinerary-generating-map')).toBeNull();
-      expect(screen.queryByTestId('map-root')).toBeNull();
-      expect(
-        screen.getByTestId('itinerary-generating-progress')
-      ).toBeOnTheScreen();
-    });
-
-    it('M4 (b) 미로그인이면 saved-places 요청이 0건이고 지도가 없으며 진행 표면은 있다 (BR-U1-03)', async () => {
-      clearAccessToken();
-      // 핸들러를 걸어 둬야 "0건"이 공허하지 않다 — 나갔다면 로그에 잡힌다.
-      serve({
-        mustVisits: [mustVisit(A.poiId), mustVisit(B.poiId)],
-        savedPlaces: [savedPlace(A), savedPlace(B)],
-      });
-      const client = renderPage();
-
-      await settle(client);
-
-      expect(hitsFor('GET', '/saved-places')).toBe(0);
-      expect(screen.queryByTestId('itinerary-generating-map')).toBeNull();
-      expect(screen.queryByTestId('map-root')).toBeNull();
-      expect(
-        screen.getByTestId('itinerary-generating-progress')
-      ).toBeOnTheScreen();
-    });
-
-    it('M5 (c) 꼭 갈 곳은 있지만 담은 장소에 짝이 없으면(핀 0개) 지도가 없고 진행 표면은 있다', async () => {
-      // Z 는 담기를 해제한 곳 — saved-places 에 없어 좌표가 없다. 핀은 [] 가 되는데 [] 는 참이라,
-      // 이때 중심에 폴백 좌표를 넣으면 빈 지도가 뜬다(급소).
-      serve({
-        mustVisits: [mustVisit('poi-z')],
-        savedPlaces: [savedPlace(A), savedPlace(B)],
-      });
-      const client = renderPage();
-
-      await settle(client);
-
-      expect(screen.queryByTestId('itinerary-generating-map')).toBeNull();
-      expect(screen.queryByTestId('map-root')).toBeNull();
-      expect(
-        screen.getByTestId('itinerary-generating-progress')
-      ).toBeOnTheScreen();
-    });
-  });
-
-  describe('M6 · AC-5 — 조회 도착으로 다시 그려져도 생성 POST 는 1회다', () => {
-    it('지도가 뜬 뒤(=재렌더가 일어난 뒤)에도 POST 는 1회이고 body 는 generationMode 하나뿐이다', async () => {
-      serve({
-        mustVisits: [mustVisit(A.poiId), mustVisit(B.poiId)],
-        savedPlaces: [savedPlace(A), savedPlace(B)],
-      });
-      const client = renderPage();
-
-      await settle(client);
-
-      // 지도가 있다 = 조회 결과가 도착해 페이지가 최소 한 번 다시 그려졌다(재렌더의 증거).
-      expect(screen.getByTestId('itinerary-generating-map')).toBeOnTheScreen();
-      // TRIP-1268: POST 는 계정 조회(순수 fetcher — `client.isFetching()` 이 모른다) 뒤에 나간다. 1회가 될 때까지
-      // 기다리고, 시간을 더 줘도 1회 그대로인지 본다(02a ★9).
-      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      });
-      expect(mockMutate).toHaveBeenCalledTimes(1);
-      // 좌표 조회가 붙어도 POST body 에 새 키가 붙지 않는다(BR-U3-03, 정확 일치).
-      const vars = mockMutate.mock.calls[0][0] as { data?: unknown };
-      expect(vars.data).toEqual({ generationMode: 'FULLY_AI' });
-    });
-  });
-
-  describe('M7 · Seed Q2 — 좌표 조회가 실패하면 지도만 빠지고 생성 실패 표면은 뜨지 않는다', () => {
-    it.each([
-      {
-        label: 'must-visits 500',
-        mustVisits: { status: 500 },
-        savedPlaces: [savedPlace(A), savedPlace(B)],
-      },
-      {
-        label: 'saved-places 500',
-        mustVisits: [mustVisit(A.poiId), mustVisit(B.poiId)],
-        savedPlaces: { status: 500 },
-      },
-    ])(
-      '$label — 지도 없음, 실패 표면 없음, 진행 표면 있음',
-      async ({ mustVisits, savedPlaces }) => {
-        serve({ mustVisits, savedPlaces });
-        const client = renderPage();
-
-        await settle(client);
-
-        expect(screen.queryByTestId('itinerary-generating-map')).toBeNull();
-        // 생성 POST 는 아직 진행 중이다 — "일정을 만들지 못했어요"가 뜨면 거짓 실패.
-        expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
-        expect(
-          screen.getByTestId('itinerary-generating-progress')
-        ).toBeOnTheScreen();
-      }
-    );
-  });
-
-  describe('M8 · Seed Q3 — CO_PLAN 갈래도 같은 지도를 보인다', () => {
-    it('mode=CO_PLAN 이어도 지도 카드가 있고 중심은 첫 핀(A) 좌표다', async () => {
-      serve({
-        mustVisits: [mustVisit(A.poiId), mustVisit(B.poiId)],
-        savedPlaces: [savedPlace(A), savedPlace(B)],
-      });
-      const client = renderPage({
-        mode: 'CO_PLAN',
-        successRoute: '/trips/[tripId]/itinerary/copick/[slotKey]',
-      });
-
-      await settle(client);
-
-      expect(screen.getByTestId('itinerary-generating-map')).toBeOnTheScreen();
-      expect(screen.getByTestId('map-root')).toHaveTextContent(A_CENTER_TEXT);
-    });
-  });
-});
-
 // TRIP-1006 · 옛 GeneratingPage.observe.integration.test.tsx
 describe('관찰 모드(mode 없음)', () => {
   /**
@@ -1451,11 +1096,7 @@ describe('관찰 모드(mode 없음)', () => {
       http.post(`${BASE}/trips/:tripId/itinerary`, () => {
         postCalls += 1;
         return HttpResponse.json(itinerary('PARTIAL'), { status: 201 });
-      }),
-      http.get(`${BASE}/trips/:tripId/must-visits`, () =>
-        HttpResponse.json([])
-      ),
-      http.get(`${BASE}/saved-places`, () => HttpResponse.json([]))
+      })
     );
   });
 
@@ -1504,6 +1145,8 @@ describe('관찰 모드(mode 없음)', () => {
       expect(replacedTo()).toContain('/itinerary/draft');
       expect(replacedTo()).toContain(TRIP_ID);
       expect(mockPush).not.toHaveBeenCalled();
+      // TRIP-1385 — 다시 여는 진입(관찰)은 공개 모션 신호(reveal)를 싣지 않는다.
+      expect(replacedTo()).not.toContain('reveal');
 
       // 단언 ② 생성은 한 번도 쏘지 않았다(#083 — 재진입이 생성을 다시 돌리면 같이 짜기가 덮인다).
       await settle();
@@ -1583,6 +1226,528 @@ describe('관찰 모드(mode 없음)', () => {
       // 단언 ③ 다시 시도가 생성을 쏘는 경로로 새지 않았다.
       await settle();
       expect(postCalls).toBe(0);
+    });
+  });
+});
+
+describe('재계획 모드(replan)', () => {
+  /**
+   * 2026-10-14 사용자 결정 — 여행 중 [다시 짜기]는 재계획 요청 모달(i04)로 가지 않고, 이 생성 화면을 거쳐
+   * 재계획(Plan-B → ScheduleAgent) 결과를 **확인 없이 바로 반영**한 뒤 추천안(draft)으로 간다. 원 일정은 서버가
+   * 반영 전에 복원 지점을 남긴다(openapi apply 설명 — 되돌릴 지점을 먼저 남긴다).
+   *
+   * 무엇을 보장하나:
+   *  - 🔴 RP1·RP1b 마운트 때 시작 POST 1회, 본문 모양(오늘 = PARTIAL_SLOTS·null / 보던 날 = FULL_DAY·그 날).
+   *    위치는 안 읽는다 — `originKind:null` 이면 서버가 사다리로 정한다(openapi StartReplanRequest.originKind).
+   *  - 🔴 RP2 SOLVING → DRAFT 가 되면 apply 가 **정확히 1회**, 성공하면 draft 로 replace.
+   *  - 🔴 RP3 NO_SOLUTION → 원 일정 유지 안내 + [닫기](=홈). apply 0.
+   *  - 🔴 RP4 시작 409 → 서버 사유 + [닫기]. 세션 조회·apply 0.
+   *  - 🔴 RP5 FAILED → 실패 얼굴 + [다시 시도] = 시작 POST 를 처음부터 다시(새 세션).
+   *  - 🔴 RP2·RP2b 추천안은 **다시 짠 날**로 연다(`day` = 보던 날, 없으면 오늘 KST) — 2일차 이후에 첫 날로 열리면
+   *    바뀐 게 안 보여 "아무 일도 없었다"로 읽힌다(#1235 사후 리뷰 W2).
+   *  - 🔴 RF1~RF5 (#1235 사후 리뷰 B1) 실패 얼굴로 가는 나머지 네 갈래 — 시작 POST 500 · 세션 조회 오류 · CANCELED ·
+   *    자동 반영(apply) 409/500. 반영 실패 뒤 [다시 시도]면 새 세션 동안 실패 얼굴이 남지 않는다(apply 상태 리셋).
+   *  - 🔴 RS1·RF2 (W3) 폴링은 종료 상태(DRAFT·NO_SOLUTION·FAILED)와 조회 오류 뒤 멈춘다.
+   *  - 🔴 RC1 (B2) 세션이 COLLECTING·SOLVING 에 2분 머물면 폴링을 멈추고 실패 얼굴 + [다시 시도](INV-4).
+   *  - 🔴 RB1·RB2 (W5) ‹ 로 나가면 "다시 짜기를 멈췄어요…" 토스트 — 단 반영 요청이 이미 나갔으면 띄우지 않는다
+   *    (서버가 반영할 수 있는데 "원래 일정 그대로"라고 말하면 거짓이다).
+   *  - 모든 케이스: 생성 POST(`POST /itinerary`) 0 — 재계획 모드는 일정을 새로 만들지 않는다.
+   *
+   * 왜 MSW 인가: 핵심 단언이 "apply 가 몇 번 나갔나·생성 POST 가 0 인가" 다. 훅을 목하면 그건 목의 가정이 된다.
+   * 폴링 간격(2초)은 대개 실시간으로 기다린다. 2분 상한(RC1)과 "그 뒤로 더 안 묻는다"(RS)는 가짜 타이머 +
+   * `advanceTimersByTimeAsync` 를 `act` 안에서 흘린다 — 동기 `advanceTimersByTime` 은 MSW 응답(약속)을 못 풀어
+   * 엉킨다(SlotCandidatePanelContainer 통합 선례).
+   *
+   * 3동작: 준비 = 가짜 서버(시작·세션 차례·apply) → 실행 = replan 으로 화면을 연다(필요하면 버튼) → 단언 = 본문·요청 수·이동·얼굴.
+   */
+
+  const BASE = 'http://localhost:8080/api/v1';
+  const TRIP_ID = '55555555-5555-5555-5555-555555555555';
+  const SESSION_ID = '66666666-6666-6666-6666-666666666666';
+  const SESSION_ID_2 = '77777777-7777-7777-7777-777777777777';
+  const NO_SOLUTION_TEXT =
+    '지금 바꿀 수 있는 곳을 찾지 못했어요. 원래 일정을 그대로 둘게요.';
+
+  /** openapi ReplanSession 모양 — 필수 필드만 채운다. */
+  function replanSession(
+    sessionId: string,
+    status: ReplanSessionStatus
+  ): ReplanSession {
+    return {
+      sessionId,
+      tripId: TRIP_ID,
+      itineraryId: 'itin-replan',
+      scope: 'PARTIAL_SLOTS',
+      targetDate: seoulDate(new Date()),
+      fromInstant: '2026-10-14T03:00:00Z',
+      originKind: 'LAST_VISIT',
+      originEstimated: true,
+      status,
+      createdAt: '2026-10-14T03:00:00Z',
+    };
+  }
+
+  /** 시작 POST 의 본문(파싱한 JSON) 누적. */
+  let startBodies: unknown[] = [];
+  /** 시작 POST 응답 차례. 비면 SESSION_ID 의 SOLVING 세션(201). */
+  let startQueue: (() => Response)[] = [];
+  /** 세션 GET 응답 — 세션 id·몇 번째 조회(0부터)로 케이스가 정한다. */
+  let sessionScript: (sessionId: string, call: number) => ReplanSessionStatus;
+  let sessionGets: Record<string, number> = {};
+  /** 세션 GET 을 서버 오류(500)로 답할 차례인가 — 기본은 늘 정상. */
+  let sessionFails: (sessionId: string, call: number) => boolean;
+  /** apply 가 나간 세션 id(도착 순서). */
+  let applied: string[] = [];
+  /** apply 응답 — 기본은 200 APPLIED. 케이스가 409·500·붙잡기(약속)로 바꾼다. */
+  let applyReply: (sessionId: string) => Response | Promise<Response>;
+  let generatePosts = 0;
+
+  /** openapi ErrorResponse 봉투. */
+  const errorBody = (status: number, message = '잠시 후 다시 시도해 주세요.') =>
+    HttpResponse.json(
+      { error: { code: status === 409 ? 'CONFLICT' : 'INTERNAL', message } },
+      { status }
+    );
+  /** 오늘(KST) — 다시 짠 날이 없을 때 추천안이 열 날. */
+  const TODAY = seoulDate(new Date());
+
+  beforeEach(() => {
+    startBodies = [];
+    startQueue = [];
+    sessionGets = {};
+    applied = [];
+    generatePosts = 0;
+    sessionScript = () => 'SOLVING';
+    sessionFails = () => false;
+    applyReply = (id) => HttpResponse.json(replanSession(id, 'APPLIED'));
+    setAccessToken('valid-access');
+
+    server.use(
+      http.post(
+        `${BASE}/trips/:tripId/replan-sessions`,
+        async ({ request }) => {
+          startBodies.push(await request.json());
+          const next = startQueue.shift();
+          return next
+            ? next()
+            : HttpResponse.json(replanSession(SESSION_ID, 'SOLVING'), {
+                status: 201,
+              });
+        }
+      ),
+      http.get(
+        `${BASE}/trips/:tripId/replan-sessions/:sessionId`,
+        ({ params }) => {
+          const id = String(params.sessionId);
+          const call = sessionGets[id] ?? 0;
+          sessionGets[id] = call + 1;
+          if (sessionFails(id, call)) return errorBody(500);
+          return HttpResponse.json(replanSession(id, sessionScript(id, call)));
+        }
+      ),
+      http.post(
+        `${BASE}/trips/:tripId/replan-sessions/:sessionId/apply`,
+        ({ params }) => {
+          applied.push(String(params.sessionId));
+          return applyReply(String(params.sessionId));
+        }
+      ),
+      // 생성 POST — 나가면 안 된다. 핸들러는 "나갔다"를 세기 위해 둔다.
+      http.post(`${BASE}/trips/:tripId/itinerary`, () => {
+        generatePosts += 1;
+        return HttpResponse.json({}, { status: 500 });
+      })
+    );
+  });
+
+  afterEach(() => {
+    // 가짜 타이머 케이스(RS·RC)가 다음 케이스로 새지 않게.
+    jest.useRealTimers();
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  function renderReplan(targetDate?: string) {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    // 토스트 호스트를 곁에 둔다 — ‹ 토스트(RB)를 "보였다"로 잰다(TRIP-990 하네스).
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>
+          <WithToastHost>{children}</WithToastHost>
+        </QueryClientProvider>
+      );
+    }
+    // mode 는 주지 않는다 — 재계획 주소에는 mode 가 없다(DraftPage·409 넘김이 `replan:'1'` 만 싣는다).
+    return render(
+      <GeneratingPage tripId={TRIP_ID} replan targetDate={targetDate} />,
+      { wrapper: Wrapper }
+    );
+  }
+
+  /** "안 나갔다"는 나갈 시간을 준 뒤에야 의미가 있다. */
+  function settle(ms = 300): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** 가짜 타이머 아래에서 시간을 흘리고 그 사이 약속(axios→MSW→TanStack)을 함께 푼다. */
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  const FAILED = 'itinerary-generating-failed';
+  const RETRY = 'itinerary-generating-retry';
+  const PROGRESS = 'itinerary-generating-progress';
+
+  it('RP1 오늘(보던 날 없음)이면 PARTIAL_SLOTS·targetDate null 로 시작 POST 1회 · 진행 얼굴 · 생성 POST 0', async () => {
+    renderReplan();
+
+    await waitFor(() => expect(startBodies).toHaveLength(1));
+    expect(startBodies[0]).toEqual({
+      scope: 'PARTIAL_SLOTS',
+      targetDate: null,
+      originKind: null,
+      reasons: ['JUST_CHANGE'],
+      directives: [],
+    });
+    // 로딩 얼굴은 생성과 같은 화면(진행 바)이다 — 새 화면이 아니다.
+    expect(
+      screen.getByTestId('itinerary-generating-progress')
+    ).toBeOnTheScreen();
+    await settle();
+    expect(startBodies).toHaveLength(1);
+    expect(generatePosts).toBe(0);
+  });
+
+  it('RP1b 보던 날이 실려 오면 FULL_DAY·그 날로 시작한다', async () => {
+    renderReplan('2026-10-20');
+
+    await waitFor(() => expect(startBodies).toHaveLength(1));
+    expect(startBodies[0]).toEqual({
+      scope: 'FULL_DAY',
+      targetDate: '2026-10-20',
+      originKind: null,
+      reasons: ['JUST_CHANGE'],
+      directives: [],
+    });
+    await settle();
+    expect(generatePosts).toBe(0);
+  });
+
+  it('RP2 SOLVING → DRAFT 가 되면 apply 가 정확히 1회 나가고 추천안(draft)으로 replace 한다', async () => {
+    // 준비 — 첫 조회는 짜는 중, 다음 폴링에서 초안.
+    sessionScript = (_id, call) => (call === 0 ? 'SOLVING' : 'DRAFT');
+
+    renderReplan();
+
+    // 단언 ① 짜는 중엔 반영하지 않는다(초안이 없다).
+    await waitFor(() => expect(sessionGets[SESSION_ID]).toBe(1));
+    expect(applied).toEqual([]);
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    // 단언 ② 초안이 오면 확인 없이 바로 반영 → 추천안. 다시 짠 날(보던 날 없음 = 오늘)로 연다(W2).
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1), {
+      timeout: 6000,
+    });
+    expect(applied).toEqual([SESSION_ID]);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/draft',
+      params: { tripId: TRIP_ID, day: TODAY },
+    });
+
+    // 단언 ③ 리렌더·폴링으로 apply 가 두 번 나가지 않는다.
+    await settle();
+    expect(applied).toEqual([SESSION_ID]);
+    expect(generatePosts).toBe(0);
+  }, 15_000);
+
+  it('RP2b 보던 날을 다시 짰으면 추천안을 그 날로 연다 (W2)', async () => {
+    sessionScript = () => 'DRAFT';
+
+    renderReplan('2026-10-20');
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/draft',
+      params: { tripId: TRIP_ID, day: '2026-10-20' },
+    });
+  });
+
+  it('RP3 NO_SOLUTION 이면 원 일정 유지 안내 + [닫기](=홈) · apply 0', async () => {
+    sessionScript = () => 'NO_SOLUTION';
+
+    renderReplan();
+
+    expect(await screen.findByText(NO_SOLUTION_TEXT)).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('itinerary-generating-refused-close'));
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+    await settle();
+    expect(applied).toEqual([]);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(generatePosts).toBe(0);
+  });
+
+  it('RP4 시작 POST 가 409 면 서버 사유 + [닫기] · 세션 조회·apply 0', async () => {
+    const REASON = '지난 날은 다시 짤 수 없어요.';
+    startQueue = [
+      () =>
+        HttpResponse.json(
+          { error: { code: 'CONFLICT', message: REASON } },
+          { status: 409 }
+        ),
+    ];
+
+    renderReplan();
+
+    expect(await screen.findByText(REASON)).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
+    fireEvent.press(screen.getByTestId('itinerary-generating-refused-close'));
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+
+    await settle();
+    expect(startBodies).toHaveLength(1);
+    expect(sessionGets).toEqual({});
+    expect(applied).toEqual([]);
+    expect(generatePosts).toBe(0);
+  });
+
+  it('RP5 FAILED 면 실패 얼굴 → [다시 시도] 가 시작 POST 를 다시 하고, 새 세션이 초안이면 반영한다', async () => {
+    // 준비 — 첫 세션은 실패, 재시작으로 연 두 번째 세션은 곧장 초안.
+    startQueue = [
+      () =>
+        HttpResponse.json(replanSession(SESSION_ID, 'SOLVING'), {
+          status: 201,
+        }),
+      () =>
+        HttpResponse.json(replanSession(SESSION_ID_2, 'SOLVING'), {
+          status: 201,
+        }),
+    ];
+    sessionScript = (id) => (id === SESSION_ID ? 'FAILED' : 'DRAFT');
+
+    renderReplan();
+
+    // 단언 ① 침묵하지 않는다 — 실패 얼굴, 반영 0.
+    fireEvent.press(await screen.findByTestId('itinerary-generating-retry'));
+
+    // 단언 ② 다시 시도 = 처음부터 다시(새 세션) → 초안이면 그 세션만 반영.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1), {
+      timeout: 6000,
+    });
+    expect(startBodies).toHaveLength(2);
+    expect(applied).toEqual([SESSION_ID_2]);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/draft',
+      params: { tripId: TRIP_ID, day: TODAY },
+    });
+    expect(generatePosts).toBe(0);
+  }, 15_000);
+
+  describe('🔴 RF · 실패 얼굴로 가는 나머지 네 갈래 (#1235 사후 리뷰 B1 · INV-4)', () => {
+    it('RF1 시작 POST 가 500(사유 없는 실패)이면 실패 얼굴 + [다시 시도] → 다시 시작해 진행 얼굴로 돌아온다', async () => {
+      startQueue = [() => errorBody(500)];
+
+      renderReplan();
+
+      // 세션 id 를 못 받아 폴링이 시작조차 안 하는 갈래 — 진행 얼굴에 서면 침묵이다.
+      expect(await screen.findByTestId(FAILED)).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-generating-refused')).toBeNull();
+      expect(sessionGets).toEqual({});
+
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(sessionGets[SESSION_ID]).toBe(1));
+      expect(startBodies).toHaveLength(2);
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(screen.getByTestId(PROGRESS)).toBeOnTheScreen();
+      expect(generatePosts).toBe(0);
+    });
+
+    it('RF2 짜는 중에 세션 조회가 오류(500)면 실패 얼굴이고 그 뒤로 더 묻지 않는다 — 남은 SOLVING 으로 진행 얼굴에 머물지 않는다 (W3 겸)', async () => {
+      jest.useFakeTimers();
+      sessionFails = (_id, call) => call === 1;
+
+      renderReplan();
+      await advance(3_000);
+      expect(screen.getByTestId(FAILED)).toBeOnTheScreen();
+      expect(sessionGets[SESSION_ID]).toBe(2);
+
+      await advance(30_000);
+      expect(sessionGets[SESSION_ID]).toBe(2);
+      expect(applied).toEqual([]);
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it('RF3 세션이 CANCELED(다른 요청이 닫음)면 실패 얼굴이다', async () => {
+      sessionScript = () => 'CANCELED';
+
+      renderReplan();
+
+      expect(await screen.findByTestId(FAILED)).toBeOnTheScreen();
+      expect(applied).toEqual([]);
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it.each([409, 500])(
+      'RF4 자동 반영(apply)이 %i 면 실패 얼굴 + [다시 시도] · 추천안으로 가지 않는다',
+      async (status) => {
+        sessionScript = () => 'DRAFT';
+        applyReply = () => errorBody(status, '그 사이 일정이 바뀌었어요.');
+
+        renderReplan();
+
+        // 세션은 DRAFT 라 폴링이 이미 멈췄다 — 이 얼굴이 아니면 진행 얼굴에 영원히 선다.
+        expect(await screen.findByTestId(FAILED)).toBeOnTheScreen();
+        expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+        expect(applied).toEqual([SESSION_ID]);
+        await settle();
+        expect(mockReplace).not.toHaveBeenCalled();
+      }
+    );
+
+    it('RF5 반영 실패 뒤 [다시 시도]면 새 세션이 짜는 동안 진행 얼굴이다 — 지난 반영 실패가 남지 않는다', async () => {
+      startQueue = [
+        () =>
+          HttpResponse.json(replanSession(SESSION_ID, 'SOLVING'), {
+            status: 201,
+          }),
+        () =>
+          HttpResponse.json(replanSession(SESSION_ID_2, 'SOLVING'), {
+            status: 201,
+          }),
+      ];
+      sessionScript = (id) => (id === SESSION_ID ? 'DRAFT' : 'SOLVING');
+      applyReply = (id) =>
+        id === SESSION_ID
+          ? errorBody(409, '그 사이 일정이 바뀌었어요.')
+          : HttpResponse.json(replanSession(id, 'APPLIED'));
+
+      renderReplan();
+      fireEvent.press(await screen.findByTestId(RETRY));
+
+      await waitFor(() => expect(sessionGets[SESSION_ID_2]).toBe(1));
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(screen.getByTestId(PROGRESS)).toBeOnTheScreen();
+      expect(applied).toEqual([SESSION_ID]);
+    });
+  });
+
+  describe('🔴 RS · 폴링은 끝나면 멈춘다 (#1235 사후 리뷰 W3 — 가짜 타이머)', () => {
+    it.each<ReplanSessionStatus>(['DRAFT', 'NO_SOLUTION', 'FAILED'])(
+      'RS1 세션이 %s 로 끝나면 그 뒤로 세션을 더 묻지 않는다',
+      async (terminal) => {
+        jest.useFakeTimers();
+        sessionScript = (_id, call) => (call === 0 ? 'SOLVING' : terminal);
+
+        renderReplan();
+        await advance(3_000);
+        expect(sessionGets[SESSION_ID]).toBe(2);
+
+        await advance(30_000);
+        expect(sessionGets[SESSION_ID]).toBe(2);
+      }
+    );
+    // 조회 오류 뒤 멈춤은 RF2 가 같이 본다.
+  });
+
+  describe('🔴 RC · 대기 상한 2분 (#1235 사후 리뷰 B2 · INV-4 — 가짜 타이머)', () => {
+    // 재계획 AI 시한 25초 + 백엔드 여유. i12(PlanbSolvingPage)의 8분보다 짧다 — 생성 화면이라 기다리게 둘 수 없다.
+    const CAP_MS = 2 * 60 * 1000;
+
+    it('RC1 SOLVING 에 2분 머물면 폴링을 멈추고 실패 얼굴 + [다시 시도] — 직전까지는 진행 얼굴, [다시 시도]는 새 세션', async () => {
+      jest.useFakeTimers();
+
+      renderReplan();
+      await advance(CAP_MS - 10_000);
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(screen.getByTestId(PROGRESS)).toBeOnTheScreen();
+
+      await advance(20_000);
+      expect(screen.getByTestId(FAILED)).toBeOnTheScreen();
+      const gets = sessionGets[SESSION_ID];
+      await advance(60_000);
+      expect(sessionGets[SESSION_ID]).toBe(gets);
+      expect(applied).toEqual([]);
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      // [다시 시도] = 처음부터 새 세션(열린 세션은 새 요청이 닫는다, INV-U4-06) — 상한도 새로 잰다.
+      startQueue = [
+        () =>
+          HttpResponse.json(replanSession(SESSION_ID_2, 'SOLVING'), {
+            status: 201,
+          }),
+      ];
+      fireEvent.press(screen.getByTestId(RETRY));
+      await advance(1_000);
+      expect(startBodies).toHaveLength(2);
+      expect(sessionGets[SESSION_ID_2]).toBe(1);
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(screen.getByTestId(PROGRESS)).toBeOnTheScreen();
+      expect(generatePosts).toBe(0);
+    });
+
+    // 화면이 잠기거나 앱을 바꾼 사이 서버가 이미 끝냈는데, 상한 순간 조회를 꺼서 실패 얼굴이 뜨던 것(#1248 리뷰 W-A).
+    // 상한에 닿으면 실패로 판정하기 **전에 한 번 더** 묻는다 — 결과가 있으면 그대로 반영한다(바로 반영이 사용자 결정).
+    it('RC2 앱이 뒤로 간 사이 서버가 끝났으면, 상한 순간의 마지막 확인으로 실패 얼굴 없이 반영 1회 → 추천안', async () => {
+      jest.useFakeTimers();
+      const t0 = Date.now();
+      // 40초에 서버가 끝난다 — 그 전 조회는 SOLVING.
+      sessionScript = () => (Date.now() - t0 >= 40_000 ? 'DRAFT' : 'SOLVING');
+
+      renderReplan();
+      await advance(10_000);
+      // 앱이 뒤로 갔다 — 주기 조회가 선다(TanStack refetchInterval 은 포커스 없을 때 돌지 않는다, AppProviders 가 AppState 를 물린다).
+      act(() => focusManager.setFocused(false));
+      await advance(CAP_MS + 10_000);
+      act(() => focusManager.setFocused(true));
+      await advance(1_000);
+
+      expect(applied).toEqual([SESSION_ID]);
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.objectContaining({ pathname: '/trips/[tripId]/itinerary/draft' })
+      );
+      act(() => focusManager.setFocused(undefined));
+    });
+  });
+
+  describe('🔴 RB · ‹ 로 나가면 다시 짜기를 멈췄다고 말한다 (#1235 사후 리뷰 W5)', () => {
+    const TOAST = 'itinerary-generating-replan-stopped-toast';
+
+    afterEach(() => resetToast());
+
+    it('RB1 짜는 중 ‹ → 홈으로 + "다시 짜기를 멈췄어요. 원래 일정을 그대로 둘게요." 토스트 · 반영 0', async () => {
+      renderReplan();
+      await waitFor(() => expect(sessionGets[SESSION_ID]).toBe(1));
+
+      fireEvent.press(screen.getByTestId('itinerary-generating-back'));
+
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(screen.getByTestId(TOAST)).toHaveTextContent(
+        '다시 짜기를 멈췄어요. 원래 일정을 그대로 둘게요.'
+      );
+      expect(applied).toEqual([]);
+    });
+
+    it('RB2 반영 요청이 이미 나간 뒤의 ‹ 엔 "원래 일정 그대로" 토스트를 띄우지 않는다 — 서버가 반영할 수 있다', async () => {
+      sessionScript = () => 'DRAFT';
+      // apply 응답을 붙잡아 둔다 — 요청은 나갔고 아직 답이 없다.
+      applyReply = () => new Promise<Response>(() => undefined);
+
+      renderReplan();
+      await waitFor(() => expect(applied).toEqual([SESSION_ID]));
+
+      fireEvent.press(screen.getByTestId('itinerary-generating-back'));
+
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(screen.queryByTestId(TOAST)).toBeNull();
     });
   });
 });

@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 /**
  * TRIP-571 · 사진 그리드. testID `reflection-daily-photo-grid`.
@@ -29,7 +30,8 @@ export function ReflectionPhotoGrid({
           key={`${photo.uri}-${index}`}
           source={{ uri: photo.uri }}
           className="h-[104px] flex-1 rounded-card bg-surface-soft"
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
         />
       ))}
     </View>

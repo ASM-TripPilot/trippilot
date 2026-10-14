@@ -1,16 +1,8 @@
 import { type ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import type { RevokeImpact } from '@/shared/location/index.view';
-
-/** 카드 그림자(Figma drop 0,8,14 · 20%) — 그림자는 className 으로 못 준다. */
-const DIALOG_SHADOW = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 8 },
-  shadowOpacity: 0.2,
-  shadowRadius: 14,
-  elevation: 8,
-} as const;
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
 /**
  * 위치 동의 **철회 재확인 다이얼로그**(BR-U6-30 · AC-1 법적 게이트). 608 DeleteAccountDialog 와 동형으로
@@ -33,44 +25,38 @@ export function RevokeConfirmDialog({
   onConfirm: () => void;
 }): ReactElement {
   return (
-    <View
+    <ConfirmDialog
       testID="settings-location-revoke-confirm"
-      className="absolute inset-0 items-center justify-center bg-scrim/55 px-2xl"
+      title="위치정보 동의를 철회할까요?"
+      size="sm"
+      shadow="soft"
+      cardPaddingClassName="px-[22px] pb-xl pt-2xl"
+      buttonsTopClassName="mt-[30px]"
+      buttons={[
+        {
+          testID: 'settings-location-revoke-cancel',
+          label: '취소',
+          tone: 'outline',
+          onPress: onCancel,
+        },
+        {
+          testID: 'settings-location-revoke-confirm-button',
+          label: '동의 철회',
+          tone: 'ink',
+          onPress: onConfirm,
+        },
+      ]}
     >
-      <View
-        style={DIALOG_SHADOW}
-        className="w-[330px] rounded-[20px] bg-canvas px-[22px] pb-xl pt-2xl"
-      >
-        <Text className="text-[19px] font-noto-bold text-ink">
-          위치정보 동의를 철회할까요?
-        </Text>
-
-        <ScrollView className="mt-md max-h-[260px]">
-          <ImpactBlock label="이런 기능이 멈춰요" items={impact.stops} />
-          <View className="mt-md">
-            <ImpactBlock
-              label="이런 기능은 계속 동작해요"
-              items={impact.continues}
-            />
-          </View>
-        </ScrollView>
-
-        <View className="mt-[30px] flex-row gap-[10px]">
-          <DialogButton
-            testID="settings-location-revoke-cancel"
-            label="취소"
-            tone="ghost"
-            onPress={onCancel}
-          />
-          <DialogButton
-            testID="settings-location-revoke-confirm-button"
-            label="동의 철회"
-            tone="dark"
-            onPress={onConfirm}
+      <ScrollView className="mt-md max-h-[260px]">
+        <ImpactBlock label="이런 기능이 멈춰요" items={impact.stops} />
+        <View className="mt-md">
+          <ImpactBlock
+            label="이런 기능은 계속 동작해요"
+            items={impact.continues}
           />
         </View>
-      </View>
-    </View>
+      </ScrollView>
+    </ConfirmDialog>
   );
 }
 
@@ -93,31 +79,5 @@ function ImpactBlock({
         ))}
       </View>
     </View>
-  );
-}
-
-function DialogButton({
-  testID,
-  label,
-  tone,
-  onPress,
-}: {
-  testID: string;
-  label: string;
-  tone: 'ghost' | 'dark';
-  onPress: () => void;
-}): ReactElement {
-  const surface =
-    tone === 'ghost' ? 'border border-hairline-strong bg-canvas' : 'bg-ink';
-  const text = tone === 'ghost' ? 'text-ink' : 'text-canvas';
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      onPress={onPress}
-      className={`h-12 flex-1 items-center justify-center rounded-button ${surface}`}
-    >
-      <Text className={`font-noto-bold text-card-title ${text}`}>{label}</Text>
-    </Pressable>
   );
 }

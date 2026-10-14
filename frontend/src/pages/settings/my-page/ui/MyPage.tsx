@@ -19,6 +19,7 @@ import { formatTripDateRange } from '@/entities/trip';
 import { classifyTripPhase, type TripPhase } from '@/entities/trip';
 import { ChevronRightGlyph } from '@/entities/trip';
 import { PastTripRow } from '@/entities/trip';
+import { pickRegionCover } from '@/entities/trip';
 import { buildStyleCardModel } from '../model/styleCardModel';
 import { bucketTrips, type TripBucket } from '../model/tripBuckets';
 import { MyPageScreen } from './MyPageScreen';
@@ -170,6 +171,7 @@ export function MyPage(): ReactElement {
             dateRangeLabel: formatTripDateRange(trip.startDate, trip.endDate),
             nightsLabel: null,
             photoLabel: photoLabelOf(trip.tripId),
+            coverSource: pickRegionCover(trip.destinations),
           }}
           onPress={() => router.push(`/trips/${trip.tripId}/records` as Href)}
           trailing={<ChevronRightGlyph size={20} />}

@@ -6,7 +6,7 @@
 
     cd ai && uv run python scripts/export_openapi.py
 
-드리프트 게이트는 `tests/test_api_openapi_contract.py` — 앱과 커밋된 파일이
+드리프트 게이트는 `tests/api/test_api_openapi_contract.py` — 앱과 커밋된 파일이
 어긋나면 테스트가 실패한다. 포맷을 바꾸면 게이트의 직렬화도 같이 바꿔야 한다.
 """
 

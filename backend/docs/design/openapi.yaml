@@ -32,6 +32,7 @@ tags:
   - name: preferences
   - name: account
   - name: bootstrap
+  - name: assistant
   - name: notification
 
 paths:
@@ -1098,7 +1099,7 @@ paths:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidates' } } } }
         '400': { description: 슬롯 키 형식 오류 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
-        '409': { description: 확정된 일정 · 아직 생성 중인 일자(이미 만들어진 일자는 허용 — TRIP-1000) · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
+        '409': { description: 여행 시작 전의 확정 일정(시작 뒤에는 허용 — 편집과 같은 잠금, TRIP-999) · 아직 생성 중인 일자(이미 만들어진 일자는 허용 — TRIP-1000) · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
   /trips/{tripId}/visits:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1115,9 +1116,116 @@ paths:
         content: { application/json: { schema: { $ref: '#/components/schemas/ArriveRequest' } } }
       responses:
         '201': { description: 체크됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
-        '400': { description: 장소·체크 방식 누락 }
+        '400': { description: '장소·체크 방식 누락 · 자동 도착(AUTO_GEOFENCE)인데 slotKey 가 없음 — 자동 도착은 계획 슬롯에만 있다(INV-U10-5)' }
         '404': { description: 여행 없음/타 계정 }
-        '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요)' }
+        '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요) · `VISIT_AUTO_SUPPRESSED`(그날 자동 기록을 되돌린 슬롯의 자동 도착 — 기기는 버린다)' }
+  /trips/{tripId}/routes:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 실제 경로 — 날짜별 하루치 경로 목록(U10 · TRIP-1405)
+      description: >
+        기기가 올린 다운샘플 인코딩 폴리라인을 그대로 준다 — 지도는 추가 다운샘플 없이 그린다(PERF-U10-07). 세그먼트는 기록이
+        끊긴 곳에서 나뉘며 서로 잇지 않는다(INV-U10-9). **소요시간·속도·기록 구간은 싣지 않는다**(INV-3 · INV-U10-7).
+      responses:
+        '200': { description: 날짜순, content: { application/json: { schema: { $ref: '#/components/schemas/RouteDayList' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/routes/{date}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: date, in: path, required: true, schema: { type: string, format: date }, description: 여행지 기준 날짜 }
+    put:
+      tags: [trips]
+      summary: 실제 경로 — 하루치 경로 저장(전체 교체 · 멱등, U10 · TRIP-1405)
+      description: >
+        **원시 좌표는 받지 않는다** — 기기가 다운샘플한 인코딩 폴리라인(정밀도 1e-5)뿐이다(INV-U10-2). 위치 이용 동의(L2)와
+        GPS 기록 동의(L3)가 모두 있어야 저장한다. 저장할 때마다 위치 법정 로그 `COLLECTION(phase=STORE)` 1건이 남는다.
+        거리는 서버가 **폴리라인 길이 이상 · 기록 구간 × 시속 300km 이하**로 깎고 깎았으면 `distanceClamped` 다(BR-U10-38).
+        L2 또는 L3 를 철회하면(계정 삭제 포함) 그 계정의 경로는 전부 즉시 지워진다(DEC-U10-7 · D4).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RouteDayUpload' } } }
+      responses:
+        '200': { description: 저장됨, content: { application/json: { schema: { $ref: '#/components/schemas/RouteDay' } } } }
+        '400':
+          description: >
+            필수 값 누락 · 여행 기간 밖의 날짜(정본은 422 `OUT_OF_WINDOW` — 이 API 의 입력 오류는 400 으로 모았다) ·
+            세그먼트가 없거나 원소가 null · 세그먼트 200 개 초과 · 인코딩 총 64,000 자 초과 · 디코드 후 점 2,000 개 초과(푸는 도중
+            멈춘다, SEC-U10-07) · 인코딩 형식 오류 · `rawPointCount` < 저장 점 수 · `recordedTo` < `recordedFrom` ·
+            폴리라인 길이가 기록 구간 × 시속 300km 보다 김(물리적으로 불가능 — 기록 구간이 없으면 하루로 본다)
+        '404': { description: 여행 없음/타 계정 }
+        '409': { description: '`LOCATION_CONSENT_REQUIRED` — L2 또는 L3 동의 없음. 기기는 그날 원시 표본·큐를 지우고 강등한다(BR-U10-45)' }
+  /trips/{tripId}/location-automation/intervals:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 자동화 구간 보고 — 지오펜스 무장·경로 기록의 시작과 끝(U10 · TRIP-1404)
+      description: >
+        기기가 지오펜스 자동 기록을 무장하거나 경로 기록을 시작·종료할 때 알린다. **좌표는 받지 않는다** — 서버는 구간을 열고
+        닫으며 구간 단위 위치 법정 로그(무장 = `USE`, 경로 기록 = `COLLECTION`)를 남긴다(BR-U10-47).
+        **멱등**(`intervalId` + `phase`) — 오프라인 큐가 같은 보고를 다시 보내도 한 번만 반영되고 204 다.
+        START 는 위치 이용 동의(L2)가 있어야 하고, 경로 기록은 GPS 기록 동의(L3)도 있어야 한다. 서버 킬 스위치가 꺼져 있으면
+        START 는 409 다 — 기기는 강등한다. END 는 언제나 받는다. END 가 오지 않은 구간은 여행 종료 + 1일에 서버가
+        `SERVER_TIMEOUT` 으로 닫는다(여행을 지웠으면 다음 훑기에). 동의를 철회하면(계정 삭제 포함) 서버가 열린 구간을 철회 시각으로
+        `CONSENT_REVOKED` 닫는다 — L3 철회는 경로 기록만, L2 철회·계정 삭제는 전부.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IntervalReportRequest' } } }
+      responses:
+        '204': { description: 반영됨(재전송 포함) }
+        '400': { description: '필수 값 누락 · END 에 endReason 없음 · endReason=SERVER_TIMEOUT(서버 전용) · 보고 시각이 서버 시각 + 5분보다 뒤 · START 시각이 여행 기간 ± 1일(서울 날짜) 밖' }
+        '404': { description: 여행 없음/타 계정 }
+        '409':
+          description: >
+            `error.code` 로 가른다. **`AUTOMATION_DISABLED`**(서버 킬 스위치 꺼짐) · **`LOCATION_CONSENT_REQUIRED`**(무장은 L2, 경로 기록은
+            L2·L3 가 없음) — 둘 다 START 에서만 나고, 기기는 **무장을 풀고 강등한다**(안 풀면 서버엔 구간도 법정 로그도 없는데 기기는
+            무장한 채다). `CONFLICT` — 시작 보고가 없는 END · 그 구간 id 가 다른 여행·종류에 쓰였음(기기 결함, 강등 신호 아님).
+  /trips/{tripId}/visits/auto-events:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 자동 방문 결과 배치 — 기기가 판정한 도착·완료(U10 · TRIP-1403)
+      description: >
+        **좌표가 없다**(INV-U10-2) — 기기가 지오펜스로 판정한 결과(슬롯·장소·발생 시각)만 온다. 발생 시각(`occurredAt`)을 그대로
+        기록한다(G-U10-1 — 서버 시각이 아니다). 순서대로 적용하고 **항목마다 결과**를 준다 — 409 로 배치 전체를 깨지 않는다(BR-U10-20).
+        멱등: 같은 배치를 몇 번 보내도 최종 상태가 같다 — 재전송은 `ALREADY_RECORDED` 로 수렴한다(PBT-U10-3).
+        **서버 우선**: 이미 있는 기록은 바뀌지 않는다. 예외는 수동 도착 + 미완료에 자동 완료를 더하는 것 하나(§5.2).
+        `outcome`: `APPLIED` · `ALREADY_RECORDED`(이미 그 상태 — 버린다) · `CONFLICT`(일정에 없는 슬롯 · 건너뛴 슬롯 · 도착 없는 완료 ·
+        자동 출처 없는 완료) · `SUPPRESSED`(그날 자동 기록을 되돌린 슬롯) · `REJECTED_CONSENT`(위치 이용 동의 L2 없음 — 전 항목) ·
+        `OUT_OF_WINDOW`(여행 기간 밖 · 슬롯 날짜와 다른 날 · 서버 시각 + 5분보다 미래 · 도착보다 앞선 완료).
+        `automationEnabled` 가 `false` 면 서버 킬 스위치가 꺼진 것이다 — 기기는 강등한다. 꺼져 있어도 온 항목은 정상 처리한다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AutoVisitBatch' } } }
+      responses:
+        '200': { description: 항목별 결과, content: { application/json: { schema: { $ref: '#/components/schemas/AutoVisitBatchResult' } } } }
+        '400': { description: 필수 값 누락 · 한 번에 50 건 초과 }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/visits/{visitCheckId}/revert-auto:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+      - name: expectedUpdatedAt
+        in: query
+        required: false
+        schema: { type: string, format: date-time }
+        description: >
+          화면이 본 기록의 `updatedAt`. 무엇을 되돌릴지가 **지금 상태**로 정해지므로, 두 번 누르거나 응답을 못 받고 다시 보내면 완료에 이어
+          도착까지 지워진다 — 이 값을 주면 그 사이 바뀐 것을 409 `VISIT_CONFLICT` 로 가른다(BR-U5-22 와 같은 판정). 안 주면 보지 않는다.
+    post:
+      tags: [trips]
+      summary: 자동 기록 되돌리기(U10 · TRIP-1403)
+      description: >
+        **자동 출처 부분만** 되돌린다(BR-U10-31). 자동 완료면 완료만 비우고(도착은 남는다 — 그 슬롯의 재계획 잠금도 풀린다), 완료 없는
+        자동 도착이면 도착을 비우고 **그날 그 슬롯의 자동 기록을 막는다**(이후 자동 결과는 `SUPPRESSED`). 그 자리에 사람이 도착·건너뛰기를
+        남기면 같은 행을 쓴다(BR-U10-32).
+      responses:
+        '200': { description: 되돌린 뒤의 방문 기록, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '404': { description: 여행·방문 없음/타 계정 }
+        '409': { description: '`VISIT_HAS_MEDIA` — 사진·메모가 붙은 방문의 자동 도착(먼저 지우라고 안내) · `VISIT_NOT_AUTO` — 되돌릴 자동 기록이 없다(수동 기록, 출처가 빈 완료 포함) · `VISIT_CONFLICT` — `expectedUpdatedAt` 이후 바뀜' }
   /trips/{tripId}/visits/days/{day}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1258,8 +1366,13 @@ paths:
       tags: [account]
       summary: 내 데이터 내려받기(l05)
       description: >
-        계정이 소유한 것 전부 — 프로필·취향·여행·저장 숙소·방문 기록·동의 이력. **내보내기만**이고
+        계정이 소유한 것 전부 — 프로필·취향·여행·저장 숙소·방문 기록·동의 이력·도우미 대화. **내보내기만**이고
         계정 삭제는 별개다(U0 유예 삭제).
+
+
+        도우미 대화(`assistantMessages`)는 **메시지 한 건이 한 줄**이다 — 사용자가 한 말과 도우미의 답(`sessionId`·`tripId`·
+        `role`·`kind`·`text`·`redacted`·`createdAt`). 정책 위반으로 가려진 입력은 원문이 서버에 없어 `redacted: true` 표지만
+        나간다. 보존 기간이 지난 대화는 싣지 않는다.
 
 
         ⚠ **사진 바이너리는 없다**(INV-U5-03) — 서버가 갖고 있지 않으므로 메타(기기 자산 식별자·
@@ -1754,6 +1867,124 @@ paths:
       responses:
         '200': { description: 변경됨, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationToggle' } } } }
         '400': { description: '`SYSTEM` 은 끌 수 없다(INV-U6-04)' }
+  /assistant/sessions:
+    post:
+      tags: [assistant]
+      summary: 도우미 대화 열기
+      description: >
+        그 여행(또는 여행 없는 일반)의 대화를 연다(`b01`·`b07`). **멱등하다** — 진행 중인 대화가 있으면 이어 열고
+        없으면 만든다. 여행 하나에 대화는 하나다(INV-U8-01).
+        앱이 보내는 문맥은 `tripId` 뿐이고, 여행·숙소·일정은 서버가 권한을 확인한 뒤 직접 읽는다(BR-U8-02).
+        `contextChip` 은 도우미가 실제로 쓰는 컨텍스트와 같은 원천의 문구다(BR-U8-03).
+        `quickReplies` 는 서버가 발급한 것만 쓴다 — 앱이 id 를 지어내면 ACTION 턴이 거부된다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AssistantOpenSessionRequest' } } }
+      responses:
+        '200': { description: 열림(이어 열기 포함), content: { application/json: { schema: { $ref: '#/components/schemas/AssistantOpenSessionResponse' } } } }
+        '404': { description: 없는 여행이거나 타 계정 여행 }
+    get:
+      tags: [assistant]
+      summary: 내 도우미 대화 목록
+      description: >
+        이전 여행의 대화로 돌아가기(`b06`). 최근 대화순이고 보존 기간이 지난 대화와 지워진 여행의 대화는 나오지 않는다.
+        **감싸는 객체 없이 배열이다** — 앱이 먼저 만든 계약의 모양을 따랐다.
+      responses:
+        '200':
+          description: 조회됨
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AssistantSessionSummary' } }
+  /assistant/sessions/{sessionId}:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [assistant]
+      summary: 도우미 대화 지우기
+      description: >
+        대화와 그 메시지·제안을 지운다(되돌릴 수 없다). 이미 적용한 일정 변경과 그 이력은 남는다(BR-U8-20).
+        **멱등하다** — 없거나 남의 대화여도 204 다.
+      responses:
+        '204': { description: 지워짐(이미 없는 경우 포함) }
+  /assistant/sessions/{sessionId}/messages:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [assistant]
+      summary: 도우미 대화 메시지
+      description: >
+        대화 순서(오래된 것 먼저)로 한 페이지. 위로 더 읽으려면 응답의 `nextBefore` 를 `before` 로 그대로 돌려보낸다 —
+        커서는 불투명한 값이라 앱이 해석하거나 만들지 않는다.
+      parameters:
+        - name: before
+          in: query
+          schema: { type: string }
+          description: 앞 응답의 nextBefore. 없으면 가장 최근 메시지부터.
+        - name: limit
+          in: query
+          schema: { type: integer, default: 30, minimum: 1, maximum: 100 }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantMessagesPage' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없는 대화이거나 타 계정 대화 }
+  /assistant/sessions/{sessionId}/turns:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [assistant]
+      summary: 도우미에게 한 턴 보내기
+      description: >
+        발화(`TEXT`) 또는 서버가 발급한 빠른 답(`ACTION`)을 보낸다. 응답은 사용자 메시지 1건과 도우미 메시지 1건 이상이고,
+        도우미 메시지는 다음 행동을 하나 이상 싣는다(BR-U8-06).
+        `clientTurnId` 가 멱등 키다 — 같은 값으로 다시 보내면 처음 응답을 그대로 받는다.
+        일정 변경은 **제안**으로만 온다. 저장은 제안의 [적용]이 한다(BR-U8-30).
+        해석이 실패해도 200 이다 — 그 턴은 폴백 메시지(`kind: FALLBACK`) 한 건으로 끝난다(BR-U8-40).
+        계정당 분당 20턴을 넘으면 429 이고 그 턴은 기록되지 않는다(`Retry-After` 초 뒤 다시).
+        **429 이지만 `error.code` = `TURN_IN_PROGRESS` 이면 반대다** — 그 턴은 이미 기록돼 처리 중이고, 같은 `clientTurnId` 를
+        겹쳐 보낸 요청이 턴마다 둘을 넘었다(TRIP-1401). 새 턴 id 로 다시 보내지 말고 **같은 id 로** `Retry-After` 초 뒤 다시
+        보내면 처음 응답을 받는다(새 id 로 보내면 같은 말이 두 번 기록되고 두 번 해석된다).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AssistantSendTurnRequest' } } }
+      responses:
+        '200': { description: 처리됨, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantSendTurnResponse' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없는 대화이거나 타 계정 대화 }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /assistant/proposals/{proposalId}/apply:
+    parameters:
+      - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [assistant]
+      summary: 도우미 제안 적용
+      description: >
+        제안을 일정에 저장한다(`b02`). 제안을 만든 뒤 일정이 바뀌었으면 저장하지 않는다(`STALE`).
+        409 의 `error.code` 는 `STALE`(일정이 바뀜)·`EXPIRED`(제안 만료)·`NOT_APPLICABLE`(위반이 있거나, 취소·실패로 끝났거나,
+        다른 적용이 저장 중인 제안) 중 하나다. `STALE`·`EXPIRED` 는 서버가 제안을 이미 그 상태로 옮긴 것이다.
+
+        **이미 적용된 제안을 다시 적용하면 200 `APPLIED` 다**(다시 저장하지 않고, `messages` 는 빈 배열). 저장은 몇 초가 갈 수 있어
+        응답을 못 받고 다시 누르는 일이 있다 — 그때 일정은 이미 바뀌어 있다.
+
+        **200 이어도 `proposal.status` 를 본다.** 저장에 실패하면 `FAILED` 로 오고(일정은 그대로) `messages` 에 그 안내가 실린다.
+        `messages` 가 빈 배열일 수 있다(다시 적용했거나, 저장하는 사이 대화가 지워져 기록을 남길 곳이 없을 때) — 그래도 `status` 는 사실이다.
+        성공이면 `APPLIED` 와 `ACTION_LOG` 메시지가 온다 — 저장할 때의 재검증이 제안 때와 다르게 위반을 판정했으면 그 메시지가
+        그렇게 말한다(저장된 값이 이긴다, BR-U8-34).
+      responses:
+        '200': { description: 처리됨(`APPLIED` 또는 `FAILED`), content: { application/json: { schema: { $ref: '#/components/schemas/AssistantApplyProposalResponse' } } } }
+        '404': { description: 없는 제안이거나 타 계정 제안 }
+        '409': { description: 적용할 수 없음, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+  /assistant/proposals/{proposalId}/dismiss:
+    parameters:
+      - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [assistant]
+      summary: 도우미 제안 취소
+      description: >
+        제안을 닫는다. 일정은 그대로다. 이미 끝난 제안이면 오류가 아니라 **그 상태를 그대로** 돌려준다
+        (`DISMISSED` 가 아닐 수 있다 — 적용됐으면 `APPLIED`). 적용이 저장 중인 제안은 닫지 않고 `PROPOSED` 로 답한다.
+      responses:
+        '200': { description: 닫힘(또는 이미 끝난 상태), content: { application/json: { schema: { $ref: '#/components/schemas/AssistantDismissProposalResponse' } } } }
+        '404': { description: 없는 제안이거나 타 계정 제안 }
   /me/notifications:
     get:
       tags: [notification]
@@ -2468,6 +2699,76 @@ components:
             이 편집이 딛고 선 서버 버전(BR-U5-22 · TRIP-546). 오프라인 큐를 재생할 때 실어 보내면,
             그 사이 서버가 앞서 나간 경우 **조용히 덮어쓰는 대신** `VISIT_CONFLICT`(409)로 갈린다.
             보내지 않으면 검사하지 않는다 — 온라인 단일 기기 편집 경로를 막지 않는다.
+    RouteDayUpload:
+      type: object
+      required: [segments, distanceM, rawPointCount]
+      properties:
+        segments: { type: array, minItems: 1, maxItems: 200, items: { type: string }, description: '인코딩 폴리라인(1e-5) — 다운샘플 후, 공백에서 나뉜다' }
+        distanceM: { type: integer, minimum: 0, description: 기기가 원시 표본으로 잰 거리(공백 구간 제외) }
+        rawPointCount: { type: integer, minimum: 0, description: 다운샘플 전 점 수 }
+        storedPointCount: { type: integer, minimum: 0, nullable: true, description: 기기가 센 저장 점 수 — 서버는 디코드한 수를 쓴다 }
+        recordedFrom: { type: string, format: date-time, nullable: true, description: '기록 구간 시작 — 거리 상한 계산 전용, 저장만 하고 내보내지 않는다. 없으면 하루로 본다' }
+        recordedTo: { type: string, format: date-time, nullable: true }
+    RouteDay:
+      type: object
+      required: [date, segments, distanceM, distanceClamped, updatedAt]
+      properties:
+        date: { type: string, format: date }
+        segments: { type: array, items: { type: string } }
+        distanceM: { type: integer, minimum: 0, description: 클램프 후 거리 }
+        distanceClamped: { type: boolean, description: 기기 값을 서버가 고쳤는가 }
+        updatedAt: { type: string, format: date-time }
+    RouteDayList:
+      type: object
+      required: [routes]
+      properties:
+        routes: { type: array, items: { $ref: '#/components/schemas/RouteDay' } }
+    AutoVisitBatch:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [eventId, kind, slotKey, poiId, occurredAt]
+            properties:
+              eventId: { type: string, format: uuid, description: 기기가 짓는다 — 항목 식별용 }
+              kind: { type: string, enum: [ARRIVE, COMPLETE] }
+              slotKey: { type: string, description: '필수 — 자동 결과는 즉석 방문을 만들지 않는다(INV-U10-5)' }
+              poiId: { type: string, format: uuid }
+              occurredAt: { type: string, format: date-time, description: 'ARRIVE = 진입 시각 · COMPLETE = 이탈 시각 또는 다음 장소 진입 시각' }
+              completionSource: { type: string, nullable: true, enum: [AUTO_GEOFENCE_EXIT, AUTO_NEXT_ARRIVAL], description: COMPLETE 일 때만 }
+    AutoVisitBatchResult:
+      type: object
+      required: [results, automationEnabled]
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [eventId, outcome]
+            properties:
+              eventId: { type: string, format: uuid }
+              outcome: { type: string, enum: [APPLIED, ALREADY_RECORDED, CONFLICT, SUPPRESSED, REJECTED_CONSENT, OUT_OF_WINDOW] }
+              visitCheck: { allOf: [{ $ref: '#/components/schemas/VisitCheck' }], nullable: true }
+        automationEnabled: { type: boolean, description: 서버 킬 스위치 — false 면 기기는 강등한다(REL-U10-06) }
+    IntervalReportRequest:
+      type: object
+      required: [intervalId, kind, phase, at]
+      properties:
+        intervalId: { type: string, format: uuid, description: '기기가 짓는다 — START·END 의 멱등 키' }
+        kind: { type: string, enum: [GEOFENCE_ARMED, ROUTE_RECORDING] }
+        phase: { type: string, enum: [START, END] }
+        at: { type: string, format: date-time }
+        endReason:
+          type: string
+          nullable: true
+          enum: [CLIENT_STOP, PERMISSION_DOWNGRADE, ACCURACY_REDUCED, CONSENT_REVOKED, TRIP_ENDED]
+          description: 'END 에서만, 필수. SERVER_TIMEOUT 은 서버만 쓴다'
+        pointCount: { type: integer, minimum: 0, nullable: true, description: 'ROUTE_RECORDING END 의 표본 수' }
+        regionCount: { type: integer, minimum: 0, nullable: true, description: 'GEOFENCE_ARMED END 의 리전 수' }
     VisitCheckList:
       type: object
       required: [visits]
@@ -2483,7 +2784,12 @@ components:
         arrivedAt: { type: string, format: date-time, nullable: true }
         completedAt: { type: string, format: date-time, nullable: true }
         skippedAt: { type: string, format: date-time, nullable: true, description: 건너뜀(취소). 완료와 동시에 참일 수 없다 }
-        source: { type: string, enum: [AUTO_GEOFENCE, MANUAL] }
+        source: { type: string, enum: [AUTO_GEOFENCE, MANUAL], description: 도착 출처(DEC-U10-6). 완료 출처는 completionSource }
+        completionSource:
+          type: string
+          nullable: true
+          enum: [AUTO_GEOFENCE_EXIT, AUTO_NEXT_ARRIVAL, MANUAL]
+          description: 완료 출처 — 완료가 있을 때만 있다(INV-U10-3). 화면이 완료에도 "자동 기록"을 붙이는 근거
         spontaneous: { type: boolean, description: 계획에 없던 곳인가 — 화면의 '즉석 방문' 배지 근거 }
         updatedAt:
           type: string
@@ -3496,11 +3802,14 @@ components:
     DayHighlight:
       type: object
       required: [date, dayOrder, visitCount, places]
+      description: '하루 한 칸. 실적이 없어도 실제 경로가 있는 날은 한 칸이다(U10 FD §12.5). **소요시간 없음**(INV-3)'
       properties:
         date: { type: string, format: date }
         dayOrder: { type: integer }
         visitCount: { type: integer }
         places: { type: array, items: { type: string } }
+        distanceKm: { type: number, format: double, nullable: true, description: '그날 거리 — 실제 경로가 있으면 그것, 없으면 방문점 연결선. **선택 필드** — U10 전에 만든 요약에는 없다(null)' }
+        distanceSource: { type: string, nullable: true, enum: [ROUTE, VISIT_LINE], description: 'distanceKm 와 함께 있거나 함께 없다' }
 
     TripSummaryStats:
       type: object
@@ -3509,7 +3818,10 @@ components:
       properties:
         totalVisits: { type: integer }
         totalDistanceKm: { type: number, format: double }
-        distanceSource: { type: string, enum: [ROUTE, VISIT_LINE] }
+        distanceSource:
+          type: string
+          enum: [ROUTE, VISIT_LINE]
+          description: '**모든 날이 실제 경로일 때만** `ROUTE` 다 — 한 날이라도 근사면 합계도 근사다(BR-U10-39). 경로가 나중에 오면 통계만 다시 센다'
         totalPhotos: { type: integer }
         hasLocationData:
           type: boolean
@@ -3621,9 +3933,9 @@ components:
         distanceSource:
           type: string
           description: >
-            `VISIT_LINE` 은 **방문점을 이은 직선 합**이지 도로 거리가 아니다(BR-U5-43).
-            `actual_route_point` 가 미실장이라 서버가 실제 이동 경로를 모른다 —
-            밝히지 않으면 사용자가 근사값을 실측으로 읽는다.
+            `ROUTE` 는 그날 기기가 올린 **실제 경로 거리**(서버가 클램프한 값)다(U10 FD §7.2). 경로가 없는 날은
+            `VISIT_LINE` — **방문점을 이은 직선 합**이지 도로 거리가 아니다(BR-U5-43). 밝히지 않으면 사용자가 근사값을 실측으로 읽는다.
+            경로가 나중에 올라오면 이미 만든 회고의 이 값만 바뀐다(본문은 그대로, BR-U10-39).
           enum: [ROUTE, VISIT_LINE]
         photoCount: { type: integer }
 
@@ -3695,7 +4007,7 @@ components:
 
     PlannedSlot:
       type: object
-      required: [slotKey, date, poiId, orderIndex, startAt, endAt, endsNextDay]
+      required: [slotKey, date, poiId, orderIndex, startAt, endAt, endsNextDay, isFixed, hasViolation]
       properties:
         slotKey: { type: string, description: '경계 키 "{date}#{poiId}" — 실적과 견주는 연결 고리' }
         date: { type: string, format: date }
@@ -3704,6 +4016,16 @@ components:
         startAt: { type: string, example: '10:00' }
         endAt: { type: string, example: '11:30' }
         endsNextDay: { type: boolean, description: 자정 넘김(HC4). true 면 endAt < startAt }
+        # 아래는 응답에 실제로 실려 나가는 값이다 — 이 타입이 일정 모듈의 공개 뷰를 그대로 직렬화한다(TRIP-1375 에서 문서화).
+        isFixed: { type: boolean, description: 사용자가 시각을 못 박은 슬롯 }
+        hasViolation: { type: boolean, description: '일정 화면의 슬롯 위반 표시와 같은 값' }
+        nameKo: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        imageUrl: { type: string, nullable: true }
+        lat: { type: number, format: double, nullable: true }
+        lng: { type: number, format: double, nullable: true }
+        violationReason: { type: string, nullable: true, description: '위반 사유 문구. 없으면 null' }
+        distanceRange: { type: string, nullable: true, description: '직전 지점에서 이 슬롯까지의 거리 표시 문자열. 모르면 null (소요시간 없음 — INV-3)' }
 
     ActualVisit:
       type: object
@@ -3739,6 +4061,263 @@ components:
       properties:
         text: { type: string, maxLength: 2000 }
         updatedAt: { type: string, format: date-time }
+
+    # ── AI 도우미(U8) — 어떤 스키마에도 소요시간(duration) 필드가 없다(INV-3) ──
+    AssistantOpenSessionRequest:
+      type: object
+      properties:
+        tripId: { type: string, format: uuid, nullable: true, description: 'null 이면 여행 없이 연다(일반 도움 모드)' }
+    AssistantSession:
+      type: object
+      required: [id, tripId, contextChip]
+      properties:
+        id: { type: string, format: uuid }
+        tripId: { type: string, format: uuid, nullable: true }
+        contextChip: { type: string, nullable: true, description: '사용한 컨텍스트 한 줄. 여행 없는 대화는 null' }
+    AssistantOpenSessionResponse:
+      type: object
+      required: [session, messages, nextBefore, quickReplies]
+      properties:
+        session: { $ref: '#/components/schemas/AssistantSession' }
+        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' }, description: '가장 최근 한 쪽(오래된 것 먼저)' }
+        nextBefore: { type: string, nullable: true, description: '이어 연 대화에 더 오래된 메시지가 있으면 그 커서 — 메시지 조회의 before 로 쓴다' }
+        quickReplies: { type: array, items: { $ref: '#/components/schemas/AssistantQuickReply' } }
+    AssistantSessionSummary:
+      type: object
+      required: [id, tripId, tripTitle, lastTurnAt]
+      properties:
+        id: { type: string, format: uuid }
+        tripId: { type: string, format: uuid, nullable: true }
+        tripTitle: { type: string, nullable: true }
+        lastTurnAt: { type: string, format: date-time }
+    AssistantMessagesPage:
+      type: object
+      required: [messages, nextBefore]
+      properties:
+        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' } }
+        nextBefore: { type: string, nullable: true, description: '더 오래된 메시지가 있으면 그 커서. 없으면 null' }
+    AssistantNextAction:
+      type: object
+      required: [type, label, params]
+      properties:
+        type:
+          type: string
+          description: >
+            closed-set 이지만 문자열로 연다 — 앱은 모르는 값을 그리지 않고 "내가 할 수 있는 것 보기"로 바꾼다(BR-U8-06).
+            OPEN_ITINERARY · OPEN_ITINERARY_EDIT · OPEN_ITINERARY_METHOD · OPEN_REGENERATE · OPEN_REPLAN · OPEN_LIVE ·
+            OPEN_PLACE · OPEN_STAY_SEARCH · OPEN_OTA · OPEN_REFLECTION · OPEN_TRIP_SUMMARY · OPEN_STYLE · CREATE_TRIP ·
+            RETRY_TURN · CONTINUE_WITHOUT_ASSISTANT · SHOW_CAPABILITIES · RESTORE_REVISION
+        label: { type: string }
+        params: { type: object, additionalProperties: { type: string } }
+    AssistantQuickReply:
+      type: object
+      required: [id, label, action, params]
+      properties:
+        id: { type: string, description: '서버가 발급한 값. ACTION 턴의 quickReplyId 로 그대로 돌려보낸다' }
+        label: { type: string }
+        action:
+          type: string
+          description: >
+            closed-set 이지만 문자열로 연다(다음 행동의 type 과 같은 이유 — 앱은 모르는 값을 그리지 않는다).
+            SEND_TEXT · REVIEW · PICK_CANDIDATE · PICK_OPTION · SHOW_CAPABILITIES · RETRY
+        params:
+          type: object
+          additionalProperties: { type: string }
+          description: >
+            빠른 답에 딸린 값. 후보 고르기는 `poiId` 를 싣는다. `intent`·`open` 은 서버가 자기 처리를 고르는 데 쓰는
+            값이라 앱은 읽지 않는다 — 앱은 `id` 만 돌려보낸다.
+    AssistantProposal:
+      type: object
+      required: [id, status, diff, violations, applyHint]
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/AssistantProposalState' }
+        diff:
+          type: array
+          description: '전후 비교. **위반만 있는 제안은 빈 배열이다** — 상대는 위반인 안의 일정을 주지 않는다'
+          items:
+            type: object
+            required: [change, slotKey]
+            properties:
+              change: { type: string, enum: [ADDED, REMOVED, REPLACED, MOVED, RETIMED] }
+              slotKey: { type: string }
+              before: { nullable: true, allOf: [{ $ref: '#/components/schemas/AssistantProposalSlotFace' }] }
+              after: { nullable: true, allOf: [{ $ref: '#/components/schemas/AssistantProposalSlotFace' }] }
+        violations: { type: array, items: { type: string }, description: '비어 있지 않으면 적용할 수 없다(BR-U8-31)' }
+        applyHint: { type: string, nullable: true, enum: [AUTO_APPLY, CONFIRM_REQUIRED, null], description: '표시 힌트일 뿐이다' }
+    AssistantProposalSlotFace:
+      type: object
+      required: [name, startAt]
+      properties:
+        name: { type: string }
+        startAt: { type: string, example: '14:00' }
+        distanceRange: { type: string, nullable: true, description: '직전 구간 거리 문자열. 없으면 그리지 않는다' }
+    AssistantMessage:
+      type: object
+      required: [id, role, kind, nextActions, quickReplies, proposal, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [USER, ASSISTANT] }
+        kind: { type: string, enum: [TEXT, CLARIFY, REVIEW, CANDIDATES, PROPOSAL, INFO, SCOPE, REFUSAL, FALLBACK, ACTION_LOG] }
+        text: { type: string, nullable: true, description: '정책 위반으로 저장하지 않은 입력은 null' }
+        payload:
+          nullable: true
+          description: >
+            카드 데이터 — 모양은 `kind` 가 정한다. PROPOSAL 은 payload 가 아니라 `proposal` 에 실린다.
+          oneOf:
+            - $ref: '#/components/schemas/AssistantCandidatesPayload'
+            - $ref: '#/components/schemas/AssistantActionLogPayload'
+            - $ref: '#/components/schemas/AssistantReviewPayload'
+            - $ref: '#/components/schemas/AssistantInfoPayload'
+            - $ref: '#/components/schemas/AssistantClarifyPayload'
+            - $ref: '#/components/schemas/AssistantScopePayload'
+            - $ref: '#/components/schemas/AssistantRefusalPayload'
+            - $ref: '#/components/schemas/AssistantFallbackPayload'
+        nextActions: { type: array, items: { $ref: '#/components/schemas/AssistantNextAction' }, description: '도우미 메시지는 1개 이상' }
+        quickReplies:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/AssistantQuickReply' }
+          description: >
+            **null 과 빈 배열은 뜻이 다르다.** null 이면 이 메시지가 빠른 답을 정하지 않은 것이라 앱이 대화의 시작 빠른 답을
+            보이고, 빈 배열이면 "보일 것이 없다"다. 사용자 메시지는 늘 null 이다.
+        proposal: { $ref: '#/components/schemas/AssistantProposalOrNull' }
+        footnote: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    AssistantLabeledValue:
+      type: object
+      required: [label, value]
+      properties:
+        label: { type: string }
+        value: { type: string, description: '서버가 지은 문자열 그대로 — 저장·검증된 값이다. 소요시간은 없다(INV-3)' }
+    AssistantReviewPayload:
+      type: object
+      description: 진행 검토(`b01 review`). 문제 행은 솔버가 이미 표기한 위반과 구조적 사실뿐이다(BR-U8-14).
+      required: [title, summary, problems]
+      properties:
+        title: { type: string }
+        summary: { type: array, items: { $ref: '#/components/schemas/AssistantLabeledValue' } }
+        problems:
+          type: array
+          items:
+            type: object
+            required: [slotKey, reason, fixAction]
+            properties:
+              slotKey: { type: string, nullable: true, description: '슬롯에 붙지 않는 문제(숙소 미등록·일정 없음·빈 일자·날짜 밖 일정·다 못 보인 위반의 수)는 null' }
+              reason: { type: string }
+              fixAction: { $ref: '#/components/schemas/AssistantNextAction' }
+    AssistantInfoPayload:
+      type: object
+      description: 조회 카드 — 다음 장소·거리·장소·날씨. 모르는 값은 행을 빼거나 "미확인"이라고 한다.
+      required: [infoKind, title, rows]
+      properties:
+        infoKind: { type: string, enum: [NEXT_SLOT, DISTANCE, PLACE, WEATHER] }
+        title: { type: string }
+        rows: { type: array, items: { $ref: '#/components/schemas/AssistantLabeledValue' } }
+    AssistantClarifyPayload:
+      type: object
+      required: [argument, question, options]
+      properties:
+        argument: { type: string }
+        question: { type: string }
+        options: { type: array, nullable: true, items: { type: string }, description: '보기가 없으면 null — 자유 입력을 기다린다' }
+    AssistantScopePayload:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+    AssistantRefusalPayload:
+      type: object
+      required: [category, capabilities]
+      properties:
+        category: { type: string, description: '위반 범주. 원문도 걸린 말도 싣지 않는다' }
+        capabilities: { type: string }
+    AssistantFallbackPayload:
+      type: object
+      required: [cause]
+      properties:
+        cause:
+          type: string
+          description: >
+            문자열로 연다(앱은 모르는 값을 일반 폴백으로 그린다). 지금 오는 값은 AI_UNAVAILABLE · SOURCE_UNAVAILABLE.
+    AssistantCandidatesPayload:
+      type: object
+      required: [candidates]
+      properties:
+        candidates:
+          type: array
+          description: >
+            대체 후보(최대 5). 고르는 버튼은 같은 메시지의 `quickReplies` 에 있다 — `action = PICK_CANDIDATE`,
+            `params.poiId` 가 이 `poiId` 다. 누르면 그 슬롯을 그 장소로 바꾼 **제안**(`PROPOSAL`)이 온다(저장은 [적용]).
+          items:
+            type: object
+            required: [poiId, name, reason]
+            properties:
+              poiId: { type: string, format: uuid }
+              name: { type: string }
+              distanceRange: { type: string, nullable: true, description: '바꿀 자리에서 이 후보까지의 거리 문자열. 소요시간은 없다(INV-3)' }
+              reason: { type: string }
+    AssistantActionLogPayload:
+      type: object
+      required: [what]
+      properties:
+        what: { type: string, description: "무엇을 바꿨는가 — 예 '카페 모카 → 책방카페'" }
+        tag: { type: string, nullable: true, description: '지금 오는 값은 CHANGE' }
+        detail: { type: string, nullable: true }
+        revisionId: { type: string, format: uuid, nullable: true, description: '지금은 늘 null — 편집 경로가 리비전 id 를 돌려주지 않는다' }
+        changeLogEntryId: { type: string, format: uuid, nullable: true, description: '지금은 늘 null' }
+    AssistantProposalOrNull:
+      nullable: true
+      allOf:
+        - $ref: '#/components/schemas/AssistantProposal'
+    AssistantSendTurnRequest:
+      type: object
+      required: [clientTurnId, input, screen]
+      properties:
+        clientTurnId: { type: string, format: uuid, description: '멱등 키 — 재시도는 같은 값으로' }
+        input:
+          oneOf:
+            - type: object
+              required: [type, text]
+              properties:
+                type: { type: string, enum: [TEXT] }
+                text: { type: string, minLength: 1, maxLength: 500 }
+            - type: object
+              required: [type, quickReplyId]
+              properties:
+                type: { type: string, enum: [ACTION] }
+                quickReplyId: { type: string }
+        screen:
+          type: object
+          required: [surface]
+          properties:
+            surface: { type: string, enum: [HOME, STAY_SEARCH, ITINERARY, LIVE, STAY_DETAIL] }
+    AssistantSendTurnResponse:
+      type: object
+      required: [messages, quickReplies]
+      properties:
+        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' }, description: '사용자 1건 + 도우미 1건 이상' }
+        quickReplies: { type: array, items: { $ref: '#/components/schemas/AssistantQuickReply' } }
+    AssistantProposalState:
+      type: string
+      enum: [PROPOSED, APPLIED, STALE, DISMISSED, EXPIRED, FAILED]
+    AssistantProposalStatus:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/AssistantProposalState' }
+    AssistantApplyProposalResponse:
+      type: object
+      required: [proposal, messages]
+      properties:
+        proposal: { $ref: '#/components/schemas/AssistantProposalStatus' }
+        messages: { type: array, items: { $ref: '#/components/schemas/AssistantMessage' } }
+    AssistantDismissProposalResponse:
+      type: object
+      required: [proposal]
+      properties:
+        proposal: { $ref: '#/components/schemas/AssistantProposalStatus' }
 
     NotificationList:
       type: object

@@ -93,6 +93,8 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 >
 > 와이어 계약(`level` 어휘·`shortfallCategories` 필드)은 바뀌지 않는다. 취향→카테고리 사상표는 `outcome.py` 한 곳에 있다(코드베이스에 기존 사상이 없어 신설).
 
+> **[개정 · 2026-10-14 · 사용자 결정]** `NO_CANDIDATES` 는 **반경 1회 확대 뒤에도 0건**일 때다(BR-U3-25 개정 — ×1.5, 상한 자차 20km, 호출자가 반경을 정했거나 이미 상한이면 미시도). 확대 사실은 `degradations` 코드 `pool:radius_widened`(2차 수집 자체가 실패하면 `pool:radius_widen_unavailable`)로 따로 나간다. 판정식·어휘는 불변.
+
 ### BR-U2-06 · `FreshnessMeta` 스키마 (N5 종결)
 
 **결정**: 경계는 **집계형** `{ generatedAt, degraded }` — backend 실장 유지. AI의 per-source `{source, fetched_at, cache_hit, ttl_sec, stale}`는 **AI 내부 관측용**이며 경계로 올리지 않는다.

@@ -7,7 +7,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { Region } from '@/shared/api/index.schemas';
 import { RegionLevel } from '@/shared/api/index.schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Image } from '@/shared/ui/Image';
 import { Skeleton } from '@/shared/ui/Skeleton';
+
+import { pickRegionCover } from '@/entities/trip';
 
 import { groupRegionsBySido, regionTint } from '@/features/explore/index.view';
 import type { RegionGroup } from '@/features/explore/index.view';
@@ -343,6 +346,8 @@ function PopularStrip({
       {popular.map((group, index) => {
         const [from, to] = regionTint(group.sidoCode);
         const tagline = POPULAR_TAGLINE[group.sidoCode];
+        // 서울·부산·제주는 번들 커버 그림, 그 밖의 시도는 지금처럼 그라데이션.
+        const cover = pickRegionCover([{ seq: 1, regionCode: group.sidoCode }]);
         return (
           <Pressable
             key={group.sidoCode}
@@ -351,10 +356,20 @@ function PopularStrip({
             className="w-[150px] overflow-hidden rounded-card bg-canvas"
           >
             <View>
-              <LinearGradient
-                colors={[from, to]}
-                style={{ height: 120, width: '100%' }}
-              />
+              {cover ? (
+                <Image
+                  testID={`explore-region-popular-cover-${group.sidoCode}`}
+                  source={cover}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  className="h-[120px] w-full"
+                />
+              ) : (
+                <LinearGradient
+                  colors={[from, to]}
+                  style={{ height: 120, width: '100%' }}
+                />
+              )}
               {/* 첫 카드에만 인기 배지(Figma) — 연배경 칩(primary-pale + primary). */}
               {index === 0 ? (
                 <View

@@ -3,6 +3,7 @@ package com.trippilot.archive.adapter.`in`.web
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.archive.application.VisitCheckService
 import com.trippilot.archive.domain.CheckSource
+import com.trippilot.archive.domain.CompletionSource
 import com.trippilot.archive.domain.VisitCheck
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
@@ -143,7 +144,10 @@ data class VisitCheckResponse(
     val arrivedAt: Instant?,
     val completedAt: Instant?,
     val skippedAt: Instant?,
+    /** **도착** 출처. 완료 출처는 [completionSource] 다(DEC-U10-6). */
     val source: CheckSource,
+    /** 완료 출처 — 완료가 있을 때만 있다(INV-U10-3). 화면이 "자동 기록"을 완료에도 붙이는 근거다. */
+    val completionSource: CompletionSource?,
     /** 계획에 없던 곳인가 — 화면이 '즉석 방문' 배지를 그리는 근거. */
     val spontaneous: Boolean,
     /**
@@ -158,7 +162,7 @@ data class VisitCheckResponse(
          * U5 기록의 재료로만 쓰고, U4 화면에서는 노출해 INV-3 과 경계를 흐리지 않는다.
          */
         fun from(v: VisitCheck) = VisitCheckResponse(
-            v.visitCheckId, v.slotKey, v.poiId, v.arrivedAt, v.completedAt, v.skippedAt, v.source, v.isSpontaneous,
+            v.visitCheckId, v.slotKey, v.poiId, v.arrivedAt, v.completedAt, v.skippedAt, v.source, v.completionSource, v.isSpontaneous,
             v.updatedAt,
         )
     }

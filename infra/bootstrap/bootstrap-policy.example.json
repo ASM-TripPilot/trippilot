@@ -137,6 +137,29 @@
       ]
     },
     {
+      "Sid": "ManageAlertsChatbotRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:DeleteRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRoleTags",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/trippilot-<ENVIRONMENT>-chatbot"
+      ]
+    },
+    {
       "Sid": "AttachApprovedEksServicePolicies",
       "Effect": "Allow",
       "Action": [

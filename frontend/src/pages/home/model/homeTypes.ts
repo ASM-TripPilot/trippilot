@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 
 // 홈 "발견·영감 피드" 프레젠테이션 화면의 prop 계약(TRIP-316 · 라이브 Figma 2091:1357).
 // HomeScreen은 이 타입만 알고 서버·네비게이션을 모른다 — 네트워크·라우팅은 이 계약 밖
@@ -111,6 +112,8 @@ export interface TripHeroData {
   ctaLabel: string;
   /** '부산 여행' — 여행명 타이틀 */
   title: string;
+  /** 지역 커버 이미지(번들) — 있으면 히어로 배경으로 쓴다. 서울·부산·제주 밖이면 없음(매거진 사진 폴백). */
+  coverSource?: ImageSourcePropType | null;
   /** '6월 10일 – 6월 13일 · 3박 4일 · 2명' — 기간·박수·인원(소요시간 아님, INV-3) */
   meta: string;
 }
@@ -178,10 +181,15 @@ export type HomePhase =
     }
   | {
       kind: 'postTrip';
+      /**
+       * 가장 최근 종료 여행 tripId(TRIP-1369) — 회고 CTA 가 이 여행의 기록 화면으로 push 한다.
+       * 옵셔널인 이유는 planning 의 `dominantTripId` 와 같다(프리뷰·테스트 리터럴 호환).
+       */
+      dominantTripId?: string;
       greetTitle: string;
       /** TRIP-698 인사 2줄 서브카피('기록을 정리하고 나눠볼까요'). */
       greetSubtitle: string;
-      /** TRIP-698 통합 히어로 재사용 — 배지 "여행 완료"(success)·CTA "회고 보기 ›". */
+      /** TRIP-698 통합 히어로 재사용 — 배지 "여행 완료"(success)·CTA "회고 보기". */
       trip: TripHeroData;
       recommendationTitle: string;
       recommendations: readonly HomeCollectionCard[];
@@ -232,6 +240,8 @@ export interface HomeScreenProps {
   onToggleSavedMenu?: () => void;
   /** "지금 뜨는 장소" 더 보기 press → 장소 탐색 */
   onPressSpotsMore?: () => void;
+  /** postTrip "지난 여행 · 전체 보기" press → 기록 탭(TRIP-1369). 없으면 버튼이 아니다. */
+  onPressPastTripsMore?: () => void;
   /** planning 여행 카드 주 CTA press → 그 여행의 일정 화면(목적지는 라우트가 계산, TRIP-401) */
   onPressTripHeroCta?: () => void;
   /** 검색바 press → 통합 검색(d05, `/explore/search`, TRIP-453) */

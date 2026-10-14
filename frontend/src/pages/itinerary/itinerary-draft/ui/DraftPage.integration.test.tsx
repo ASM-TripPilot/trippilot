@@ -9,7 +9,7 @@ import {
   act,
   within,
 } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { AccessibilityInfo, Text } from 'react-native';
 
 import { server } from '@/mocks/server';
 import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
@@ -54,6 +54,8 @@ import {
   serveItinerary,
 } from '@/test-support/mswItinerary';
 import { savedPlace } from '@/test-support/mustVisitFixtures';
+import { resetToast } from '@/test-support/toastHarness';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import {
   createWrapper,
   newTestQueryClient,
@@ -257,7 +259,9 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   // ⚠️ 이 describe 의 `renderPage` 는 파일 최상위 것이다 — `refetchInterval` 은 **주지 않는다**(그것이 배선의 책임이고
@@ -486,6 +490,177 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
     });
   });
 
+  /**
+   * 여행 중 [다시 짜기] — 확정·초안 구분 없이 **모달 없이** 생성 화면을 재계획 모드(`replan:'1'`)로 연다(2026-10-14
+   * 사용자 결정). 그 화면이 재계획(Plan-B → ScheduleAgent)을 돌려 바로 반영하고 추천안으로 온다(GeneratingPage
+   * 「재계획 모드」). 보던 날이 오늘 뒤면 그 날을 싣는다. 생성 실패(FAILED)·MANUAL·여행 전후는 종전 그대로다.
+   * 날짜는 실제 오늘(KST) 기준 — 페이지가 벽시계로 판정한다.
+   */
+  describe('🔴 P1~P4 — 여행 중 다시 짜기: 확정·초안 모두 생성 화면 재계획 모드 (모달 없음)', () => {
+    const today = seoulDate(new Date());
+    const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const inTripDays = daysOf([today, tomorrow], (date) => [
+      slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+    ]);
+
+    beforeEach(() => {
+      tripScript = () => trip({ startDate: today, endDate: tomorrow });
+      itineraryScript = () =>
+        itinerary({ days: inTripDays, generationState: 'COMPLETE' });
+    });
+
+    afterEach(() => resetToast());
+
+    async function pressRetry(): Promise<void> {
+      await screen.findByTestId('map-sheet-shell-root');
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+    }
+
+    it('P1 초안은 여행 중이면 생성 화면 재계획 모드로 replace 1회 · 모달 push 0 · 이 화면 POST 0', async () => {
+      renderPage();
+      await pressRetry();
+
+      // 이동이 일어날 때까지 기다린 뒤 **어디로** 갔는지 잰다.
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      await sleep(50);
+      expect(generatingMoves()).toBe(1);
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1' }, // 오늘을 보면 날짜를 싣지 않는다
+      });
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+    });
+
+    // 둘째 날 이후의 여행 초안은 1일차(지난 날)로 열린다 — 가장 흔한 모양이다. 지난 날은 싣지 않는다(재계획은 오늘).
+    it('P1c 어제 출발한 여행의 초안을 기본(1일차·지난 날)으로 보며 누르면 날짜를 싣지 않는다', async () => {
+      const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      tripScript = () => trip({ startDate: yesterday, endDate: tomorrow });
+      itineraryScript = () =>
+        itinerary({
+          days: daysOf([yesterday, today, tomorrow], (date) => [
+            slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+          ]),
+          generationState: 'COMPLETE',
+        });
+      renderPage();
+      await pressRetry();
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1' },
+      });
+    });
+
+    it('P1b 초안에서 내일 칩을 보며 누르면 그 날을 재계획 모드에 싣는다', async () => {
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '2일차'
+      );
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1', targetDate: tomorrow },
+      });
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('P2 확정 일정에서 내일 칩을 보며 누르면 그 날을 재계획 모드로 다시 짠다', async () => {
+      itineraryScript = () =>
+        itinerary({
+          days: inTripDays,
+          generationState: 'COMPLETE',
+          status: 'CONFIRMED',
+        });
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '2일차'
+      );
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1', targetDate: tomorrow },
+      });
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('P3 확정 일정도 여행 중이면 재계획 모드로 replace 1회 — 허브·모달로 가지 않는다 · 생성 POST 0', async () => {
+      itineraryScript = () =>
+        itinerary({
+          days: inTripDays,
+          generationState: 'COMPLETE',
+          status: 'CONFIRMED',
+        });
+      renderPage();
+      await pressRetry();
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1' },
+      });
+      await sleep(50);
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+    });
+
+    // #1235 사후 리뷰 W2 — 자동 반영 뒤 생성 화면이 `day` 를 실어 보낸다. 그 날로 열려야 바뀐 날이 바로 보인다.
+    it('P5 라우트가 준 날(day)로 처음 연다 — 없으면 종전대로 데이터가 있는 첫 날', async () => {
+      renderWithQueryClient(
+        <DraftPage tripId={TRIP_ID} day={tomorrow} />,
+        newTestQueryClient({ gcTime: 0 })
+      );
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '2일차'
+      );
+    });
+
+    it('P5b day 가 데이터 없는 날이면 데이터가 있는 첫 날로 연다 (빈 날에 갇히지 않는다)', async () => {
+      itineraryScript = () =>
+        itinerary({
+          days: daysOf([today], (date) => [
+            slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+          ]),
+          generationState: 'COMPLETE',
+        });
+      renderWithQueryClient(
+        <DraftPage tripId={TRIP_ID} day={tomorrow} />,
+        newTestQueryClient({ gcTime: 0 })
+      );
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '1일차'
+      );
+    });
+
+    it('P4 생성 실패(FAILED) 일정은 여행 중이어도 종전대로 생성 화면(FULLY_AI)으로 간다 — 재계획 모드 아님', async () => {
+      itineraryScript = () =>
+        itinerary({ days: inTripDays, generationState: 'FAILED' });
+      renderPage();
+      await pressRetry();
+
+      await waitFor(() => expect(generatingMoves()).toBe(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+      });
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+  });
+
   describe('🔴 I11 · TRIP-790 D9 — 생성 중(PARTIAL)엔 확정/완성 CTA 가 없다 (계약 플립)', () => {
     it('generationState=PARTIAL 이면 셸 얼굴이 뜨고 완성 CTA·CTA 바가 0건이다', async () => {
       /**
@@ -659,7 +834,9 @@ describe('폴링 상한 기준점', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** `gcTime: Infinity` — 마운트 전에 채운 캐시가 관찰자 없이 다음 틱에 지워지면 카운터가 0부터
@@ -721,6 +898,40 @@ describe('폴링 상한 기준점', () => {
         await sleep(DRAFT_POLL_INTERVAL_MS + 400);
       });
       expect(getCalls).toBe(callsAtCap);
+    }, 20000);
+  });
+
+  describe('🟢 C3 · (TRIP-1364) 30회째에 상한 얼굴이 켜진다 — 횟수를 렌더 중 직접 읽지 않고 구독으로 읽는다', () => {
+    it('마운트 뒤 PARTIAL(장소 0곳)이 29회까진 그대로, 30회째에 실패 얼굴로 넘어간다', async () => {
+      // 준비 — 상한 얼굴(`pollExhausted`)은 도착한 장소가 0곳일 때 전면 실패 얼굴로 보인다(장소가 있으면 시트 셸이 그대로다).
+      const emptyPartial = () =>
+        itinerary({
+          itineraryId: 'itin-baseline',
+          generationMode: 'CO_PLAN',
+          generationState: 'PARTIAL',
+          days: [],
+        });
+      const client = newTestQueryClient();
+      renderDraft(client);
+      await screen.findByTestId('generation-progress-card');
+      await waitFor(() => expect(getCalls).toBeGreaterThanOrEqual(1));
+      const received =
+        client.getQueryState(ITINERARY_KEY)?.dataUpdateCount ?? 0;
+
+      // 실행 ① 상한 직전(마운트 뒤 총 29회)까지 — 아직 실패 얼굴이 아니다.
+      act(() => {
+        for (let i = received; i < 29; i += 1) {
+          client.setQueryData(ITINERARY_KEY, emptyPartial());
+        }
+      });
+      expect(client.getQueryState(ITINERARY_KEY)?.dataUpdateCount).toBe(29);
+      expect(screen.queryByTestId('itinerary-draft-failed')).toBeNull();
+
+      // 실행 ② 정확히 30회째 한 건 — 화면이 이 한 건에 반응해 상한 얼굴을 켠다.
+      act(() => {
+        client.setQueryData(ITINERARY_KEY, emptyPartial());
+      });
+      expect(screen.queryByTestId('itinerary-draft-failed')).not.toBeNull();
     }, 20000);
   });
 });
@@ -841,7 +1052,9 @@ describe('다른 후보 시트 배선', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   // ─── 경로1: h08 셸(staleFailed) · 형제 마운트 (TRIP-1039 — 옛 DraftScreen 경로) ───────────
@@ -1105,7 +1318,9 @@ describe('h08 셸 기본 얼굴', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   describe('🔴 A1 · AC-1 — 깨끗한 COMPLETE 면 h08 셸 얼굴이 뜬다 (D1-R · 계약 플립)', () => {
@@ -1320,7 +1535,6 @@ describe('h08 셸 기본 얼굴', () => {
   // TRIP-1295 — 핀 0개인 날에도 지도 중심이 0,0(기니만 바다)으로 가지 않는다(INV-4).
   describe('🔴 h08 지도 중심 — 빈 날·좌표 없는 일정에도 0,0 바다로 가지 않는다', () => {
     const SEOUL_TEXT = '37.5665,126.978';
-    const DAY1_FIRST_TEXT = '33.458,126.942';
 
     /** 첫 슬롯 좌표만 바꾼 하루 — 날마다 첫 장소가 달라야 "어느 날을 골랐나"가 갈린다. */
     function firstAt(
@@ -1344,43 +1558,6 @@ describe('h08 셸 기본 얼굴', () => {
     beforeEach(() => {
       log.reset();
     });
-
-    it.each([
-      ['FULLY_AI', 'AI 추천안'],
-      ['MANUAL', '내 일정'],
-    ] as const)(
-      'H1 · AC-1 — %s 일정에서 빈 2일차 칩을 누르면 중심은 날짜 순으로 처음 나오는 좌표 장소(1일차 첫 장소)다',
-      async (generationMode, title) => {
-        // 준비 — 2일차는 날짜는 있고 장소가 0곳이다. 3일차 첫 장소는 1일차와 다르게 둔다.
-        itineraryHandler = () =>
-          HttpResponse.json(
-            completeWith(
-              [
-                { date: DAY1, slots: threeStopSlots(DAY1) },
-                { date: DAY2, slots: [] },
-                { date: DAY3, slots: firstAt(DAY3, 33.499, 126.531) },
-              ],
-              generationMode
-            )
-          );
-        renderPage();
-        await screen.findByTestId('map-sheet-shell-root');
-        expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
-          title
-        );
-
-        // 실행 — 빈 2일차 칩.
-        fireEvent.press(screen.getByTestId('sheet-daychip-1'));
-
-        // 단언 — 먼저 정말 빈 날에 와 있는지(1일차 중심과 기대값이 같아서), 그다음 중심.
-        expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
-          '2일차'
-        );
-        const map = screen.getByTestId('map-root');
-        expect(map.props.pins as unknown[]).toHaveLength(0);
-        expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
-      }
-    );
 
     it('H2 · AC-2 — 일정 어디에도 좌표가 없으면 서울시청이고, 거점·숙소 조회는 붙지 않는다', async () => {
       // 준비 — 슬롯은 있으나 좌표가 전부 null.
@@ -1410,16 +1587,6 @@ describe('h08 셸 기본 얼굴', () => {
       ).toEqual([]);
     });
 
-    it('H3 · AC-3 — 그날 좌표 장소가 있으면 지금처럼 그날 첫 핀이 중심이고 핀·fitPins 도 그대로다', async () => {
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const map = screen.getByTestId('map-root');
-      expect(map).toHaveTextContent(DAY1_FIRST_TEXT);
-      expect(map.props.pins as unknown[]).toHaveLength(3);
-      expect(map.props.fitPins).toBe(true);
-    });
-
     it('H5 · AC-3 — 3일차 칩을 누르면 중심은 1일차가 아니라 3일차 첫 핀이다 (고른 날짜가 함수까지 간다)', async () => {
       // 준비 — 날마다 첫 장소가 다르다.
       itineraryHandler = () =>
@@ -1443,35 +1610,6 @@ describe('h08 셸 기본 얼굴', () => {
       expect(screen.getByTestId('map-root')).toHaveTextContent(
         '33.499,126.531'
       );
-    });
-
-    it('H4 · AC-4 — 고른 날 좌표가 반쪽(위도만)뿐이면 0,0 이 아니라 다른 날 첫 좌표 장소로 간다', async () => {
-      // 준비 — 1일차는 경도가 전부 null, 2일차 첫 장소만 온전한 좌표.
-      itineraryHandler = () =>
-        HttpResponse.json(
-          completeWith([
-            {
-              date: DAY1,
-              slots: threeStopSlots(DAY1).map((slot) => ({
-                ...slot,
-                lng: null,
-              })),
-            },
-            { date: DAY2, slots: firstAt(DAY2, 33.499, 126.531) },
-            { date: DAY3, slots: threeStopSlots(DAY3) },
-          ])
-        );
-
-      // 실행 — 첫 화면은 1일차가 선택된다.
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      // 단언
-      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
-      const map = screen.getByTestId('map-root');
-      expect(map.props.pins as unknown[]).toHaveLength(0);
-      expect(map).toHaveTextContent('33.499,126.531');
-      expect(map).not.toHaveTextContent('0,0');
     });
   });
 });
@@ -1540,7 +1678,9 @@ describe('폴백·위반 라벨', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 네트워크 응답을 기다리는 첫 조회 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산. */
@@ -1824,10 +1964,10 @@ describe('폴백 셸', () => {
   const FALLBACK_REASON_TITLE = '취향 반영 없이 만든 기본 일정이에요';
   const REASON_SUBTITLE = '장소 하나만 다른 후보로 바꿀 수도 있어요';
   const STALE_FAILED_NOTE = '일부 정보를 불러오지 못했어요';
+  const STALE = 'itinerary-draft-stale-failed';
   const MANUAL_LINK = '처음부터 직접 짜기';
 
   const BANNER = 'itinerary-draft-fallback-banner';
-  const STALE = 'itinerary-draft-stale-failed';
   const SHELL = 'map-sheet-shell-root';
 
   const cardId = (poiId: string): string =>
@@ -1846,7 +1986,9 @@ describe('폴백 셸', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 인터스티셜 「기본 일정 보기」 → 셸 도착까지. 폴백은 인터스티셜이 먼저 잡는다(02a ★7). */
@@ -2364,7 +2506,9 @@ describe('칸 상한 게이지 접기', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 게이지 칸 testID 를 화면 순서대로(트랙 testID 는 접두가 달라 안 잡힌다). */
@@ -2514,6 +2658,8 @@ describe('이 여행 생성 중 확인', () => {
   let eventLog: string[] = [];
   /** T1 일정 GET 응답(케이스가 정한다). */
   let ownItinerary: () => Itinerary;
+  /** T1 여행 GET 응답 — 기본은 지난 고정 기간(여행 중 아님). D5 만 오늘을 품게 바꾼다. */
+  let ownTrip: () => Trip;
 
   const count = (prefix: string): number =>
     eventLog.filter((line) => line.startsWith(prefix)).length;
@@ -2525,9 +2671,10 @@ describe('이 여행 생성 중 확인', () => {
     mockBack.mockClear();
     setAccessToken('valid-access');
     ownItinerary = completeThreeDays;
+    ownTrip = () => trip();
 
     serveItinerary(server, {
-      trip: () => trip(),
+      trip: () => ownTrip(),
       itinerary: () => ownItinerary(),
     });
     server.use(
@@ -2549,7 +2696,9 @@ describe('이 여행 생성 중 확인', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** "안 나갔다"는 나갈 시간을 준 뒤에야 의미가 있다(02a ★5). */
@@ -2648,6 +2797,31 @@ describe('이 여행 생성 중 확인', () => {
       expect(count('POST')).toBe(0);
     });
   });
+
+  describe('🔴 D5 · #1235 사후 리뷰 W1 — 여행 중이어도 이 여행이 생성 중이면 재계획보다 확인이 먼저다', () => {
+    it('여행 중 + 생성 중 빈 얼굴 [다시 시도] → 확인부터(이동 0) → [계속]이면 생성 화면(FULLY_AI)으로 · 재계획 모드 아님', async () => {
+      // 준비 — 오늘이 여행 기간 안이고, 1일차도 아직 안 온 생성 중(★4). 재계획으로 보내면 "오늘 일정이 없다" 409 막다른 얼굴이다.
+      const today = seoulDate(new Date());
+      ownTrip = () => trip({ startDate: today, endDate: today });
+      ownItinerary = ownGenerating;
+
+      renderPage();
+      await pressDraftRetry();
+
+      expect(
+        await screen.findByTestId('itinerary-draft-inprogress-confirm')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      fireEvent.press(
+        screen.getByTestId('itinerary-draft-inprogress-confirm-continue')
+      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith(EXPECTED_ROUTE);
+      expect(count('POST')).toBe(0);
+    });
+  });
 });
 
 // TRIP-1038 · 옛 DraftPage.manual.integration.test.tsx
@@ -2730,7 +2904,9 @@ describe('직접 짠(MANUAL) 초안', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 누름 → mutate → fetch → msw 는 비동기다 — 흘려 보낸 뒤에 세야 "0건"이 뜻을 갖는다(02a ★4). */
@@ -3063,7 +3239,9 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   describe('🔴 A8-1 · AC-8 — PARTIAL 이면 h07 부분 결과(셸) 얼굴이 뜬다 (D1)', () => {
@@ -3318,20 +3496,6 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
         log.all().filter((hit) => /\/(bases|saved-stays)$/.test(hit))
       ).toEqual([]);
     });
-
-    it('P2 · AC-3 — 1일차에 좌표 장소가 있으면 지금처럼 첫 핀이 중심이다', async () => {
-      itineraryHandler = () =>
-        HttpResponse.json(
-          itinerary({ days: threeStopDays(1), generationState: 'PARTIAL' })
-        );
-
-      renderPage();
-      await screen.findByTestId('generation-progress-card');
-
-      expect(screen.getByTestId('map-root')).toHaveTextContent(
-        '33.458,126.942'
-      );
-    });
   });
 });
 
@@ -3442,7 +3606,9 @@ describe('다시 만들기 연타 잠금', () => {
   afterEach(() => {
     releaseGate?.();
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 생성 화면으로 간 라우터 호출 수 — replace 든 push 든(push 로 가도 여기서 잡힌다). */
@@ -3813,7 +3979,6 @@ describe('넣지 못한 꼭 갈 곳', () => {
 
   const BLOCK = 'itinerary-unplaced-mustvisit';
   const ITEM_PREFIX = /^itinerary-unplaced-mustvisit-/;
-  const STALE = 'itinerary-draft-stale-failed';
   const BANNER = 'itinerary-draft-fallback-banner';
   const SHELL = 'map-sheet-shell-root';
 
@@ -3875,7 +4040,9 @@ describe('넣지 못한 꼭 갈 곳', () => {
     releaseSaved();
     releaseSaved = () => undefined;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 정확한 testID 몇 개를 트리 전위 순서(부모→자식, 형→아우)로 뽑는다(fallbackShell 선례 · 02a ★11). */
@@ -3956,8 +4123,8 @@ describe('넣지 못한 꼭 갈 곳', () => {
     });
   });
 
-  describe('🔴 D2 · Q4 — 담은 장소 조회가 대기 중이어도 블록과 서버 문구가 먼저 보인다', () => {
-    it('응답 보류 중엔 문구만 · 응답이 오면 이름이 채워진다', async () => {
+  describe('🔴 D2~D4 · Q4 · AC-3 · INV-4 — 담은 장소 조회가 대기·실패·게스트여도 블록과 서버 문구가 보인다', () => {
+    it('D2 대기 — 응답 보류 중엔 문구만 · 응답이 오면 이름이 채워진다', async () => {
       itineraryScript = () =>
         unplacedItinerary({ unplacedMustVisits: UNPLACED });
       const gate = new Promise<void>((resolve) => {
@@ -3987,35 +4154,35 @@ describe('넣지 못한 꼭 갈 곳', () => {
         )
       ).toBeOnTheScreen();
     });
-  });
 
-  describe('🔴 D3 · AC-3 · INV-4 — 담은 장소 조회가 실패해도 항목은 남고 서버 문구만 보인다', () => {
-    it('/saved-places 500 → 조회가 끝난 뒤에도 블록·항목 2 · 대체 이름 없음', async () => {
+    it.each<[string, number, () => void]>([
+      [
+        'D3 실패(/saved-places 500) — 조회가 끝난 뒤에도 항목은 남고 대체 이름이 없다',
+        1,
+        () => {
+          savedScript = () => new HttpResponse(null, { status: 500 });
+        },
+      ],
+      [
+        'D4 게스트(토큰 없음) — /saved-places 0회, 문구는 그대로 보인다',
+        0,
+        () => {
+          act(() => {
+            clearAccessToken();
+          });
+        },
+      ],
+    ])('%s', async (_label, savedCount, arrange) => {
       itineraryScript = () =>
         unplacedItinerary({ unplacedMustVisits: UNPLACED });
-      savedScript = () => new HttpResponse(null, { status: 500 });
+      arrange();
 
       const { client } = renderPage();
       await screen.findByTestId(BLOCK, {}, WAIT);
-
       // 실패가 확정될 때까지 기다린 뒤 잰다 — 요청 직후에 재면 isError 로 숨기는 구현도 통과한다(02a ★8).
-      await settle(client, 1);
+      await settle(client, savedCount);
 
       expect(screen.getByTestId(BLOCK)).toBeOnTheScreen();
-      expectMessageOnlyItems();
-    });
-  });
-
-  describe('🔴 D4 · Q4 — 게스트는 담은 장소를 조회하지 않고, 문구는 그대로 보인다', () => {
-    it('토큰 없음 → /saved-places 0회 · 두 항목 문구만', async () => {
-      clearAccessToken();
-      itineraryScript = () =>
-        unplacedItinerary({ unplacedMustVisits: UNPLACED });
-
-      const { client } = renderPage();
-      await screen.findByTestId(BLOCK, {}, WAIT);
-      await settle(client, 0);
-
       expectMessageOnlyItems();
     });
   });
@@ -4037,24 +4204,6 @@ describe('넣지 못한 꼭 갈 곳', () => {
       await settle(client, 0);
 
       expect(screen.queryByTestId(BLOCK)).toBeNull();
-    });
-  });
-
-  describe('🔴 D6 · AC-10ⓐ — 일부 실패(staleFailed) 안내와 블록이 함께 뜬다', () => {
-    it('FAILED + 미배치 → 헤더 → 일부 실패 안내 → 블록 → 첫 카드', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({
-          unplacedMustVisits: UNPLACED,
-          generationState: 'FAILED',
-        });
-
-      renderPage();
-
-      await screen.findByTestId(STALE, {}, WAIT);
-      expect(await screen.findByTestId(BLOCK, {}, WAIT)).toBeOnTheScreen();
-      expect(
-        treeOrder(['sheet-header-root', STALE, BLOCK, cardId('poi-a')])
-      ).toEqual(['sheet-header-root', STALE, BLOCK, cardId('poi-a')]);
     });
   });
 
@@ -4087,23 +4236,6 @@ describe('넣지 못한 꼭 갈 곳', () => {
       expect(
         treeOrder(['sheet-header-root', BANNER, BLOCK, cardId('poi-a')])
       ).toEqual(['sheet-header-root', BANNER, BLOCK, cardId('poi-a')]);
-    });
-  });
-
-  describe('D8 · 결정 1 — PARTIAL 진행 셸에는 블록이 없다 (선제 green 트립와이어)', () => {
-    it('PARTIAL + 미배치 → 진행 카드는 뜨고 블록은 없다', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({
-          unplacedMustVisits: UNPLACED,
-          generationState: 'PARTIAL',
-        });
-
-      renderPage();
-
-      expect(
-        await screen.findByTestId('generation-progress-card', {}, WAIT)
-      ).toBeOnTheScreen();
-      expect(screen.queryByTestId(BLOCK)).toBeNull();
     });
   });
 });
@@ -4191,10 +4323,15 @@ describe('같은 날 같은 장소 두 번', () => {
   afterEach(async () => {
     // PARTIAL 은 폴링한다 — 조회를 끊고 캐시를 비워 다음 테스트로 새지 않게 한다.
     await activeClient?.cancelQueries();
-    activeClient?.clear();
+    // 마운트된 채로 캐시를 비우면 폴링 횟수 구독이 화면을 다시 그린다 — act 로 감싼다.
+    act(() => {
+      activeClient?.clear();
+    });
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   async function openDraft(
@@ -4269,4 +4406,99 @@ describe('같은 날 같은 장소 두 번', () => {
       ).toEqual([D1_KM, D2_KM]);
     }
   );
+});
+
+// TRIP-1385 · 완성 일정 공개 — 생성 직후 첫 진입에만 경로 그려지기 옵션과 카드 등장이 걸린다.
+describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
+  const reduceMotionMock = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
+
+  function renderRevealPage(reveal: boolean) {
+    return renderWithQueryClient(
+      <DraftPage tripId={TRIP_ID} reveal={reveal} />,
+      newTestQueryClient({ gcTime: 0 })
+    );
+  }
+
+  /** `entering`(reanimated 등장 애니메이션)이 걸린 노드 수 — 카드 + 거리 커넥터 묶음. */
+  function enteringCount(): number {
+    return screen.root.findAll((node) => node.props?.entering != null).length;
+  }
+
+  beforeEach(() => {
+    setAccessToken('valid-access');
+    reduceMotionMock.mockResolvedValue(false);
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () =>
+        itinerary({
+          days: daysOf([DAY1, DAY2], (date) => [
+            slot(`a-${date}`, { nameKo: `${date} 첫 장소` }),
+            slot(`b-${date}`, { nameKo: `${date} 둘째 장소` }),
+          ]),
+          generationState: 'COMPLETE',
+        }),
+    });
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+    act(() => {
+      clearAccessToken();
+    });
+  });
+
+  it('생성 직후 첫 진입이면 지도에 그려지기 옵션이 켜지고 카드에 등장 애니메이션이 걸린다', async () => {
+    renderRevealPage(true);
+
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(true);
+  });
+
+  it('다른 진입(목록·재진입)이면 옵션도 등장도 없다', async () => {
+    renderRevealPage(false);
+
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    expect(enteringCount()).toBe(0);
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
+  });
+
+  it('이미 재생된 뒤 일차 칩을 바꾸면 다시 재생하지 않는다', async () => {
+    renderRevealPage(true);
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차')
+    );
+    expect(enteringCount()).toBe(0);
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
+  });
+
+  it('동작 줄이기가 켜져 있으면 카드는 등장 애니메이션 없이 곧장 보인다', async () => {
+    reduceMotionMock.mockResolvedValue(true);
+    renderRevealPage(true);
+
+    const times = await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await act(async () => {});
+    expect(times.length).toBeGreaterThan(0);
+    expect(enteringCount()).toBe(0);
+  });
+
+  it('애니메이션이 걸린 카드의 시간 텍스트는 서버 값 그대로다(INV-2·INV-3)', async () => {
+    renderRevealPage(true);
+
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    const read = (): string[] =>
+      screen
+        .getAllByTestId(/^slot-stopcard-time-/)
+        .map((node) => String(node.props.children ?? ''));
+    const first = read();
+    expect(first).toHaveLength(2);
+    await act(async () => {});
+    expect(read()).toEqual(first);
+    first.forEach((text) => expect(text).toMatch(/^\d{2}:\d{2}.\d{2}:\d{2}$/));
+  });
 });

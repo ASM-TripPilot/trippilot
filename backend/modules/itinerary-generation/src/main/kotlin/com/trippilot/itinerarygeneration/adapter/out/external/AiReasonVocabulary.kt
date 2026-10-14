@@ -51,4 +51,13 @@ internal object AiReasonVocabulary {
             log.warn("모르는 재계획 사유 '{}' — '{}' 로 보냅니다(FE 카탈로그와 어긋났는지 확인).", feKey, it)
         }
     }
+
+    /**
+     * 재계획(`replan`)의 사유 목록 번역. 번역 후 중복을 접고, 다른 사유가 있으면 [NONE] 은 뺀다 —
+     * "그냥 바꾸고 싶어요"가 실제 사유 옆에 남으면 상대 트리거 유도가 흐려진다. 사유가 [NONE] 뿐이면 그대로 둔다.
+     */
+    fun toAiAll(feKeys: List<String>): List<String> {
+        val ai = feKeys.map(::toAi).distinct()
+        return ai.filter { it != NONE }.ifEmpty { ai }
+    }
 }

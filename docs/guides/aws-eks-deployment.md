@@ -7,7 +7,7 @@
 | 구성 | DEV | PRD |
 | --- | --- | --- |
 | GitHub Environment | `dev` | `prd` |
-| 기본 배포 브랜치 | `develop` | `main` |
+| 기본 배포 브랜치 | 운영 대상 `main` · 개발 대상(`target=dev`) `develop` | `main` |
 | VPC / EKS / ECR / DB / Redis | `trippilot-dev-*` | `trippilot-prd-*` |
 | 가용 영역 | 2 | 3 |
 | NAT Gateway | 1개 | AZ별 1개 |
@@ -54,11 +54,17 @@ EKS 배포 대상은 Spring Boot backend, FastAPI AI, 선택형 임베딩이다.
 | `AWS_BOOTSTRAP_ROLE_ARN` | 최초 state/배포 역할 생성에 사용하는 기존 OIDC 역할 |
 | `AWS_GITHUB_OIDC_PROVIDER_ARN` | 선택, 기존 GitHub OIDC provider ARN |
 | `AWS_ROLE_ARN` | 부트스트랩 출력 `trippilot-<env>-github-deploy` 역할 ARN |
-| `DEPLOY_BRANCH` | 선택, DEV `develop` / PRD `main` 기본값을 변경할 때 |
+| `DEPLOY_BRANCH` | 선택, 기본값(운영 대상 `main` / 개발 대상 `develop`)을 변경할 때 |
 | `ACM_CERTIFICATE_ARN` | 앱 배포용, 검증 완료한 ACM 인증서 ARN |
 | `API_HOSTNAME` | 앱 배포용, 예: `api-dev.example.com` / `api.example.com` |
+| `DEV_TARGET_ACM_CERTIFICATE_ARN` | DEV 스택의 개발 대상(`target=dev`) 인증서 — 운영 값과 같거나 비면 개발 배포를 거절한다 |
+| `DEV_TARGET_API_HOSTNAME` | 개발 대상 주소, 예: `dev-api.trippilot.co.kr` |
 
-`dev`에는 develop만, `prd`에는 main만 허용하도록 **Deployment branches and tags**도 설정한다. 필요하면 PRD의 required reviewers를 설정한다. workflow의 브랜치 검사는 실수 방지이며, Environment 보호 설정이 OIDC 역할 사용을 제한하는 경계다. bootstrap 역할에 대한 운영자 접근도 별도로 제한한다.
+**배포 대상(2026-10-15)**: DEV 스택 안에 두 서버가 있다. `target=prod`(네임스페이스 `trippilot`, 출시 앱이 보는 서버)는 **main 에서만**, `target=dev`(네임스페이스 `trippilot-dev`, 개발 DB `trippilot-dev-target`, `dev-api`)는 **develop 에서만** 배포된다. 개발 대상은 Terraform 을 건드리지 않고 임베딩·실제 푸시가 늘 꺼진다. GitHub Environment `dev` 의 배포 브랜치 규칙에 `main`·`develop` 둘 다 있어야 한다.
+
+**전환 순서(2026-10-15, 한 번)**: 이 규칙(#1263)을 develop 에 머지하면 develop 으로는 운영 배포가 막히고, main 의 옛 워크플로에는 `target` 이 없어 **승격 전까지 운영 배포 경로가 없다.** 그래서 ① #1263 머지 → ② develop→main 승격(머지 커밋) → ③ Environment `dev` 브랜치 규칙에 `main` 추가 → ④ main 에서 `target=prod` 첫 배포를 연달아 한다. 그 사이를 `DEPLOY_BRANCH` 로 메우지 않는다(운영 대상에는 먹지도 않는다).
+
+`dev`에는 main·develop, `prd`에는 main만 허용하도록 **Deployment branches and tags**도 설정한다. 필요하면 PRD의 required reviewers를 설정한다. Environment 보호 설정이 OIDC 역할 사용을 제한하는 경계다. 단 `dev` 는 두 브랜치를 다 허용하므로 **운영 대상(main)·개발 대상(develop)의 구분은 workflow 검사(`infra/scripts/workflow_config.py`)가 유일한 경계**다 — 운영 대상은 `DEPLOY_BRANCH` 로도 main 에서 못 푼다. main 을 허용하면 `environment: dev` 를 쓰는 main 기준 예약 작업(ai-llm-fallback-watch·ai-serving-judge)도 같은 역할을 쓸 수 있다. bootstrap 역할에 대한 운영자 접근도 별도로 제한한다.
 
 저장소 기본 브랜치에 workflow 파일이 있어야 GitHub의 Run workflow 버튼이 나타난다. 브랜치 이름이 다르면 `DEPLOY_BRANCH`와 Environment 규칙을 함께 바꾼다. AWS 액세스 키를 저장소에 커밋하거나 일반 배포 workflow에 등록할 필요가 없다.
 
@@ -106,7 +112,7 @@ HTTPS NLB는 nginx gateway로 연결된다. gateway는 API 경로와 상태 확�
 
 워크플로는 Terraform 검증·모의 provider 테스트, 배포 도구 테스트, Helm 검증을 통과한 뒤 AWS에 접근한다. 앱을 배포하는 실행에서는 backend 종료 설정의 Gradle 테스트도 수행한다. Helm은 `--atomic --wait`로 rollout 실패 시 이전 release로 복구하며, 성공 후 클러스터 내부에서 gateway/backend/AI 연결을 확인한다. 실제 도메인의 DNS/TLS 확인은 DNS 연결 후 별도로 수행한다.
 
-Pod 로그는 클러스터 접근 없이 CloudWatch Logs 에서 본다. `amazon-cloudwatch-observability` 애드온의 Fluent Bit 가 Pod stdout 을 `/aws/containerinsights/trippilot-<env>/application` 로그 그룹으로 올리므로 앱은 `OTEL_SDK_DISABLED=true` 를 그대로 둔다(이 스택에는 OTLP 수집기가 없다). 한 서비스만 따라가려면 `aws logs tail /aws/containerinsights/trippilot-dev/application --follow --filter-pattern backend` 를 쓴다. 보존은 DEV 7일·PRD 30일(`container_logs_retention_days`)이고, 수집량(GB)·보존 저장량과 Container Insights 관측치가 과금 대상이다. 필요 없는 환경은 `container_logs_enabled = false` 로 애드온 자체를 설치하지 않는다.
+Pod 로그는 클러스터 접근 없이 CloudWatch Logs 에서 본다. `amazon-cloudwatch-observability` 애드온의 Fluent Bit 가 Pod stdout 을 `/aws/containerinsights/trippilot-<env>/application` 로그 그룹으로 올리므로 앱은 `OTEL_SDK_DISABLED=true` 를 그대로 둔다(이 스택에는 OTLP 수집기가 없다). 한 서비스만 따라가려면 `aws logs tail /aws/containerinsights/trippilot-dev/application --follow --filter-pattern backend` 를 쓴다. 보존은 DEV 90일·PRD 30일(`container_logs_retention_days`)이고, 수집량(GB)·보존 저장량과 Container Insights 관측치가 과금 대상이다. 필요 없는 환경은 `container_logs_enabled = false` 로 애드온 자체를 설치하지 않는다.
 
 긴 일정 생성 요청을 위해 backend/AI Pod 종료 유예를 660초, HTTP 및 backend 비동기 실행기의 종료 대기를 630초로 설정했다. 로컬 backend 비동기 대기는 기존 30초 기본값을 유지한다. 이 대기는 무제한 큐 처리 보장이 아니며, 노드 강제 종료·시간 초과 작업은 기존 앱 복구 로직의 대상이다.
 

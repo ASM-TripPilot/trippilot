@@ -125,14 +125,29 @@ def run(namespace, shell, *, close_missing=False, close_missing_dry_run=False, s
             for line in logs.strip().splitlines()[-12:]:
                 print(_CREDENTIAL.sub(lambda m: (m.group(1) or m.group(2)) + "***", line))
             raise
-        logs = shell(["kubectl", "logs", "--namespace", namespace, f"job/{NAME}", "--tail=80"]).strip()
+        # Job 이 재시도했으면 파드가 둘이다 — `logs job/…` 은 아무 파드나 고르므로 **실패한 1차 파드의 로그**를
+        # 성공 요약으로 올릴 수 있다(2026-10-13 run 38391844733: 32번째 묶음에서 연결 거부 → 1차 종료 2 →
+        # 재시도 파드가 39묶음 전부 성공 → 그런데 요약엔 "접수 15500" 이 찍혔다). 성공한 파드를 골라 읽고,
+        # 재시도 횟수는 요약에 남긴다 — 백엔드 롤아웃 중 연결이 한 번 끊긴 사실을 숨기지 않기 위해서다.
+        succeeded = shell(["kubectl", "get", "pods", "--namespace", namespace, f"--selector=job-name={NAME}",
+                           "--field-selector=status.phase=Succeeded", "-o", "jsonpath={.items[0].metadata.name}"]).strip()
+        target = f"pod/{succeeded}" if succeeded else f"job/{NAME}"
+        retries = shell(["kubectl", "get", f"job/{NAME}", "--namespace", namespace,
+                         "-o", "jsonpath={.status.failed}"]).strip()
+        # 전부 읽는다 — 병합 공유본(#1202)은 묶음 줄만 84개라 꼬리 80줄이면 맨 앞의 "미포함 정리"(드라이런 닫을
+        # 수·실 LOST 수)가 요약에서 잘린다. 그 숫자를 보려고 켠 입력이니 잘리면 켠 의미가 없다.
+        logs = shell(["kubectl", "logs", "--namespace", namespace, target, "--tail=-1"]).strip()
         print(logs)
+        if retries and retries != "0":
+            print(f"poi load retried {retries} time(s) before succeeding — 백엔드 연결이 끊겼다 다시 됐다")
         # "효과 없음"은 성공이 아니다(INV-4) — 합계 줄이 없거나 신규·갱신이 둘 다 0 이면 실패로 올린다.
         # 탈락·지역코드미상은 데이터 품질 신호라 로그로 크게 보이되 배포를 막지 않는다(코드 출시를 묶지 않는다).
         summary = re.search(r"합계 — 접수=(\d+) 신규=(\d+) 갱신=(\d+)", logs)
         if summary is None or int(summary.group(2)) + int(summary.group(3)) == 0:
             raise RuntimeError("poi load had no effect — 합계 줄이 없거나 신규·갱신이 0 이다 (위 로그 참조)")
         line = summary_of(logs)
+        if retries and retries != "0":
+            line += f" · 재시도 {retries}회"
         _github_output("summary", line)
         return line
     finally:

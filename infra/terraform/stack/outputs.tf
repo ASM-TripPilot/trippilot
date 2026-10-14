@@ -46,6 +46,21 @@ output "app_secret_arns" {
   value       = { for name, secret in aws_secretsmanager_secret.app : name => secret.arn }
 }
 
+output "dev_target_secret_arns" {
+  description = "Dev-target (trippilot-dev namespace) secret container ARNs keyed like app_secret_arns. Empty when dev_target_enabled is false."
+  value       = { for name, secret in aws_secretsmanager_secret.dev_target : name => secret.arn }
+}
+
+output "dev_target_database_host" {
+  description = "Dev-target PostgreSQL endpoint (separate instance). Empty when dev_target_enabled is false."
+  value       = var.dev_target_enabled ? aws_db_instance.dev_target[0].address : ""
+}
+
+output "dev_target_database_master_secret_arn" {
+  description = "Dev-target RDS administrator secret ARN, never the password value. Empty when dev_target_enabled is false."
+  value       = var.dev_target_enabled ? aws_db_instance.dev_target[0].master_user_secret[0].secret_arn : ""
+}
+
 output "vpc_id" {
   value = aws_vpc.this.id
 }

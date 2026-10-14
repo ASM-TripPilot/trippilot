@@ -1,4 +1,11 @@
 import Svg, { Circle, Path } from 'react-native-svg';
+import {
+  CloseGlyph as SharedCloseGlyph,
+  WarningTriangleGlyph as SharedWarningTriangleGlyph,
+  MapPinGlyph as SharedMapPinGlyph,
+} from '@/shared/ui/glyphs';
+// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+export { SuitcaseGlyph } from '@/shared/ui/glyphs';
 
 // 탐색(밴드 d·e00) 전용 인라인 벡터 글리프 — StayGlyphs/HomeGlyphs 패턴 계승.
 // features 간 직접 import 금지 관례라 StayGlyphs의 셰브론을 가져다 쓰지 않고 여기 새로 그린다.
@@ -17,33 +24,6 @@ type GlyphProps = {
   testID?: string;
 };
 
-/** 담은 곳 saved-menu 저장한 숙소 미니 FAB — 여행 가방(분홍, 흰 원 위). Figma a01 3012:1913. */
-export function SuitcaseGlyph({ size = 26, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M5 8.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-8A1.5 1.5 0 0 1 5 8.5Z"
-        stroke={PRIMARY}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M9 8.5V7a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 7v1.5"
-        stroke={PRIMARY}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
-      <Path d="M12 8.5V21" stroke={PRIMARY} strokeWidth={1.8} />
-    </Svg>
-  );
-}
-
 /** 담은 곳 saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). Figma a01 3012:1909.
  * `tone='primary'`는 d01 지역 칩(연분홍 바탕) 위 분홍 ✕(TRIP-1105, Figma 4767:2957). */
 export function CloseGlyph({
@@ -52,20 +32,11 @@ export function CloseGlyph({
   tone = 'on-primary',
 }: GlyphProps & { tone?: 'on-primary' | 'primary' }) {
   return (
-    <Svg
+    <SharedCloseGlyph
+      size={size}
+      color={tone === 'primary' ? 'primary' : 'onPrimary'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M6 6l12 12M18 6L6 18"
-        stroke={tone === 'primary' ? PRIMARY : ON_PRIMARY}
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -175,31 +146,18 @@ export function MapPinGlyph({
   tone = 'primary',
   testID,
 }: GlyphProps & { tone?: 'primary' | 'muted' | 'on-primary' }) {
-  const stroke =
-    tone === 'muted' ? MUTED : tone === 'on-primary' ? ON_PRIMARY : PRIMARY;
   return (
-    <Svg
+    <SharedMapPinGlyph
+      size={size}
+      color={
+        tone === 'muted'
+          ? 'muted'
+          : tone === 'on-primary'
+            ? 'onPrimary'
+            : 'primary'
+      }
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-    >
-      <Path
-        d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
-        stroke={stroke}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
-        stroke={stroke}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -244,37 +202,12 @@ export function WarningTriangleGlyph({
   tone = 'primary',
   testID,
 }: GlyphProps & { tone?: 'ink' | 'primary' }) {
-  const color = tone === 'primary' ? PRIMARY : INK;
   return (
-    <Svg
+    <SharedWarningTriangleGlyph
+      size={size}
+      color={tone === 'primary' ? 'primary' : 'ink'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M10 2.5L18.3333 16.6667H1.66667L10 2.5Z"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 7.5V11.6667"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 14.1667H10.0083"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 

@@ -12,7 +12,7 @@
 (`gate_against_tourapi`).
 
 순수 함수만 둔다 — CSV 읽기·좌표 변환(EPSG:5174 → WGS84, pyproj)·파일 쓰기는
-`ai/scripts/collect_localdata.py` 몫이고 변환기는 주입받는다. 산출은 TourAPI 와 같은 **등록
+`ai/scripts/collect/collect_localdata.py` 몫이고 변환기는 주입받는다. 산출은 TourAPI 와 같은 **등록
 제안** 문서일 뿐이다 — 백엔드 C7 수신 게이트를 다시 탄 뒤에야 후보가 된다(INV-1).
 """
 
@@ -34,13 +34,13 @@ from trippilot.poi_curation.sourcing.collection_gate import (
     SourcingCandidate,
     _haversine_m,  # 게이트와 같은 거리 — 반경 판정이 게이트 판정과 어긋나지 않게
 )
-from trippilot.poi_curation.sourcing.mapping import extract_region
+from trippilot.poi_curation.sourcing.mapping import extract_region, is_franchise
 from trippilot.poi_curation.sourcing.pipeline import SCHEMA_VERSION
 
 SOURCE_NAME = "LOCALDATA"   # 백엔드 PoiSource 어휘 (V2.61 poi_source_check)
 SOURCE = "localdata"        # SourcingCandidate.source — 잠정 ID `localdata-<관리번호>`
 KIND = "일반음식점"           # 인허가 업종 (SourcingCandidate.kind — TourAPI 의 contentTypeId 자리)
-# 영업 중 표기. `scripts/match_business_status.py` 의 OPEN_STATUS 와 같은 값이다 — 원본의
+# 영업 중 표기. `scripts/classify/match_business_status.py` 의 OPEN_STATUS 와 같은 값이다 — 원본의
 # 영업상태명은 이것과 `폐업` 두 값뿐이다(2026-09 원본 229만 행 실측).
 OPEN_STATUS = "영업/정상"
 
@@ -134,6 +134,23 @@ _SIDO_RENAMES: Mapping[str, str] = {
 # 공백 판정 반경 — 대중교통 다일 여행의 후보풀 반경(M7Config PUBLIC 10km × multi_day_factor 0.7).
 # 일정이 실제로 고르는 범위 안에서 식당이 모자란지를 본다.
 GAP_RADIUS_KM = 7.0
+# 도시는 **걸어갈 거리로 잰다** (TRIP-1283, 사용자 지시 2026-10-14 "데이터를 많이 모으는 쪽으로").
+# 7km 는 시골 기준이다 — 서울 숙소에서 7km 안에 식당 6곳이 있다고 "덮였다"고 할 수 없는데,
+# 그 기준으로는 **서울·부산·제주 숙소 3,481곳 중 공백이 0곳**이라 LOCALDATA 가 한 곳도 들어가지
+# 않았다(실측 2026-10-14). 1km 로 다시 재면 서울 275/1,200 · 부산 561/1,228 · 제주 678/1,053
+# 이 식당 6곳 미만이다. 여행자는 걸어가므로 이쪽이 실제 체감에 가깝다.
+GAP_RADIUS_KM_URBAN = 1.0
+# 특별·광역시와 제주 — 시가지 밀도가 높아 7km 가 의미를 잃는 곳. `R__seed_region_catalog` 시도 코드.
+# 전남광주통합특별시(12)·세종(36)은 농촌이 섞인 광역이라 뺐다 — 시골 기준이 맞다.
+URBAN_SIDO: frozenset[str] = frozenset({
+    "11",  # 서울특별시
+    "26",  # 부산광역시
+    "27",  # 대구광역시
+    "28",  # 인천광역시
+    "30",  # 대전광역시
+    "31",  # 울산광역시
+    "50",  # 제주특별자치도
+})
 # 공백 기준 — 2박3일 점심·저녁 6끼. 어셈블러는 쓴 POI 를 다음 날 후보에서 빼므로(ortools
 # `used`) 끼니마다 다른 식당이 필요하다. 실측: 숙소 2,961곳(22.9%)이 이 기준 미만이다.
 GAP_MIN_FOOD = 6
@@ -150,6 +167,7 @@ DROP_NOT_OPEN = "not_open"
 DROP_TYPE_NOT_ADOPTED = "type_not_adopted"
 DROP_NO_NAME = "no_name"
 DROP_NOT_MEAL_STOP = "not_meal_stop"   # 뒤에 ":사유" — cafeteria · funeral · wedding · golf · dog_meat · highway
+DROP_FRANCHISE = "franchise"           # 전국 치킨·버거·피자 체인 (사용자 결정 2026-10-14)
 DROP_NO_ADDRESS = "address_missing"
 DROP_NO_COORD = "no_coord"
 DROP_NO_REF = "no_source_ref"
@@ -179,17 +197,23 @@ def not_a_meal_stop(name: str) -> str | None:
 def to_candidate(
     row: Mapping[str, str],
     to_wgs84: Callable[[float, float], tuple[float, float]],
+    *,
+    adopted: frozenset[str] = ADOPTED_TYPES,
 ) -> SourcingCandidate | str:
     """CSV 한 행 → 게이트 입력. 못 쓰는 행은 **드롭 사유 문자열**을 돌려준다(산출 통계 키).
 
     `to_wgs84(x, y) -> (경도, 위도)` — pyproj `Transformer.transform` 순서. 원본 좌표는
     EPSG:5174(중부원점 TM)라 변환 없이 쓰면 위도가 45만이 된다.
     판정 순서가 통계를 정한다: 영업상태 → 업태 → 이름 → 주소(없음·고속도로 휴게소) → 좌표 → 관리번호.
+
+    `adopted` 는 **같은 행을 다른 업태 집합으로 한 번 더 훑기 위한 것**이다(`{"기타"}` 로 주면
+    '기타' 풀만 나온다 — TRIP-1282 빈자리 보충). 기본값을 쓰는 호출은 종전과 완전히 같고,
+    위 판정 순서도 그대로라 `row_drops` 통계의 뜻이 변하지 않는다.
     """
     if _cell(row, "영업상태명") != OPEN_STATUS:
         return DROP_NOT_OPEN
     kind = _cell(row, "업태구분명")
-    if kind not in ADOPTED_TYPES:
+    if kind not in adopted:
         return DROP_TYPE_NOT_ADOPTED
     name = _cell(row, "사업장명")
     if not name:
@@ -197,6 +221,12 @@ def to_candidate(
     reason = not_a_meal_stop(name)
     if reason is not None:
         return f"{DROP_NOT_MEAL_STOP}:{reason}"
+    # 전국 체인(사용자 결정 2026-10-14). 규칙 자체는 `mapping.non_travel_reason` 에도 있어
+    # 모든 출처가 게이트에서 걸리지만, **여기서 한 번 더 일찍 끊는 데 뜻이 있다** — 후보에서
+    # 빠져야 그 앵커의 12자리가 비고 지역 식당이 들어온다. 게이트에서 끊으면 체인이 자리를
+    # 차지한 채 떨어져 그 자리가 그냥 사라진다(실측: 일찍 끊어 지역 식당 61곳이 들어왔다).
+    if is_franchise(name):
+        return DROP_FRANCHISE
     # 도로명이 우선이다 — 게이트 3단 주소 키(addr_key)가 도로명주소만 읽는다
     address = normalize_address(row.get("도로명주소")) or normalize_address(row.get("지번주소"))
     if address is None:
@@ -295,6 +325,39 @@ def gap_anchors(
     return [a for a in anchors if len(grid.within(a, radius_km)) < min_food]
 
 
+def split_urban(
+    stays: Sequence[tuple[GeoPoint, str]],
+) -> tuple[list[GeoPoint], list[GeoPoint]]:
+    """숙소 앵커 → (도시, 시골). 지역 코드 앞 두 자리가 `URBAN_SIDO` 면 도시다.
+
+    도시·시골은 **공백을 재는 자가 다르다**(`GAP_RADIUS_KM_URBAN` 대 `GAP_RADIUS_KM`).
+    시군구 코드는 시도 코드로 시작하므로 앞 두 자리만 본다.
+    """
+    urban, rural = [], []
+    for point, code in stays:
+        (urban if code[:2] in URBAN_SIDO else rural).append(point)
+    return urban, rural
+
+
+def gap_anchors_split(
+    stays: Sequence[tuple[GeoPoint, str]],
+    centers: Sequence[GeoPoint],
+    food: Sequence[GeoPoint],
+) -> tuple[list[GeoPoint], list[GeoPoint], list[GeoPoint]]:
+    """(시골 공백, 도시 공백, 지역중심 공백) — **수집기와 분류기가 같은 답을 내야 한다.**
+
+    둘이 각자 계산하다 한쪽만 도시 규칙을 받아 어긋난 적이 있다(2026-10-14: 수집기 5,125 대
+    분류기 2,983). 공백의 정의는 여기 한 곳에만 둔다.
+
+    지역 중심 앵커는 시골 기준 그대로다 — 시도·시군구 중심점이라 "그 동네를 걸어다닌다"는
+    전제가 성립하지 않는다.
+    """
+    urban, rural = split_urban(stays)
+    return (gap_anchors(rural, food),
+            gap_anchors(urban, food, radius_km=GAP_RADIUS_KM_URBAN),
+            gap_anchors(centers, food))
+
+
 def pick_near(
     anchors: Sequence[GeoPoint],
     candidates: Sequence[SourcingCandidate],
@@ -315,6 +378,44 @@ def pick_near(
     for a in anchors:
         near = sorted(grid.within(a, radius_km), key=lambda t: (t[0], t[1].source_ref))
         for _, c in near[:per_anchor]:
+            picked.setdefault(c.source_ref, c)
+    return [picked[ref] for ref in sorted(picked)]
+
+
+def fill_near(
+    anchors: Sequence[GeoPoint],
+    taken: Sequence[SourcingCandidate],
+    extra: Sequence[SourcingCandidate],
+    *,
+    radius_km: float = PICK_RADIUS_KM,
+    per_anchor: int = PER_ANCHOR,
+) -> list[SourcingCandidate]:
+    """앵커마다 `taken` 이 채우고 **남은 자리에만** `extra` 를 가까운 순으로 — 밀어내지 않는다.
+
+    `pick_near` 와 짝이다. 같은 앵커·반경·상한을 쓰되, 그 앵커에서 `taken`(채택 업태 풀 전체)이
+    이미 몇 자리를 쓰는지 먼저 세고 남는 만큼만 가져온다. **기존 선정분은 한 곳도 바뀌지 않는다**
+    — 사용자 지시 "보충만"(2026-10-14). 자리가 꽉 찬 앵커는 건너뛰므로, 확신이 덜한 '기타'가
+    확실한 한식집을 밀어낼 길이 없다.
+
+    `taken` 은 선정 결과가 아니라 **후보 풀**을 넘긴다 — `pick_near` 가 반경 안에서 가까운 순
+    `per_anchor` 곳을 고르므로, 그 앵커가 실제로 쓰는 자리 수는 `min(반경 안 풀 크기, 상한)` 이다.
+    """
+    g_taken: _Grid[None] = _Grid(radius_km)
+    for c in taken:
+        if c.lat is not None and c.lng is not None:
+            g_taken.add(GeoPoint(c.lat, c.lng), None)
+    g_extra: _Grid[SourcingCandidate] = _Grid(radius_km)
+    for c in extra:
+        if c.lat is not None and c.lng is not None:
+            g_extra.add(GeoPoint(c.lat, c.lng), c)
+
+    picked: dict[str, SourcingCandidate] = {}
+    for a in anchors:
+        room = per_anchor - min(len(g_taken.within(a, radius_km)), per_anchor)
+        if room <= 0:
+            continue
+        near = sorted(g_extra.within(a, radius_km), key=lambda t: (t[0], t[1].source_ref))
+        for _, c in near[:room]:
             picked.setdefault(c.source_ref, c)
     return [picked[ref] for ref in sorted(picked)]
 
@@ -340,6 +441,8 @@ def gate_against_tourapi(
     tour: Sequence[SourcingCandidate],
     picks: Sequence[SourcingCandidate],
     gate: CollectionGate | None = None,
+    *,
+    keep_source: str = SOURCE,
 ) -> GateOutcome:
     """기존 수집 게이트를 그대로 태운다 — TourAPI 공유본 **뒤에** LOCALDATA 를 붙여서.
 
@@ -351,6 +454,9 @@ def gate_against_tourapi(
     **시도 단위로 나눠 태운다.** 게이트 3단은 kept 전체를 선형 탐색해 한 지역 배치 규모에서만
     감당된다 — TourAPI 수집도 지역(시도)별로 게이트를 탄다. 시도 경계를 넘는 같은 가게는 주소
     시도가 같을 수밖에 없어(주소 키에 시도가 들어 있다) 잃는 병합이 사실상 없다.
+
+    `keep_source` 가 "우리 몫"을 가른다 — 기본은 LOCALDATA 다. Overture 처럼 다른 출처를
+    같은 방식으로 붙일 때 그 값을 준다(2026-10-14). 안 주면 종전과 완전히 같다.
 
     LOCALDATA 몫은 TourAPI 만 태운 결과와의 차로 센다 — TourAPI 행이 앞에 있어 그쪽 판정은 뒤에
     붙인 행과 무관하게 같다. 폐업 필터(`closed_refs`)는 넣지 않는다: LOCALDATA 는 원본에서 영업
@@ -373,7 +479,7 @@ def gate_against_tourapi(
             continue
         base = gate.apply(tours)
         both = gate.apply([*tours, *ours])
-        passed.extend(p for p in both.passed if p.candidate.source == SOURCE)
+        passed.extend(p for p in both.passed if p.candidate.source == keep_source)
         merged += both.merged - base.merged
         drops.update(Counter(both.drops) - Counter(base.drops))
     return GateOutcome(passed=tuple(passed), merged=merged, drops=dict(drops))

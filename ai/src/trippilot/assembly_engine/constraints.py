@@ -89,6 +89,22 @@ def check_hc2_coords_known(solution: ItinerarySolution,
     return out
 
 
+def free_visit_cap(problem: ItineraryProblem, day) -> int | None:
+    """그 일자 **자유 방문** 상한 — `max_visits_per_day` − 고정 블록 − 필수 방문 (BR-U4-47).
+
+    상한은 고정·필수를 세되 빼지 않는다 — 그래서 자유 방문 몫만 깎는다(바닥 0). 필수는 놓였는지와
+    무관하게 센다(두 어셈블러가 같은 값을 쓰도록 문제 필드만 본다). 상한이 없으면 None.
+    """
+    cap = problem.max_visits_per_day
+    if cap is None:
+        return None
+    pinned = {(fb.poi_id, fb.window.start) for fb in problem.fixed_blocks
+              if fb.window.start.date() == day}
+    required = ({rv.poi_id for rv in problem.required_visits if rv.day == day}
+                - {pid for pid, _ in pinned})
+    return max(0, cap - len(pinned) - len(required))
+
+
 def not_before_floor(problem: ItineraryProblem) -> datetime | None:
     """비고정 방문 시작 하한을 분 단위로 **올린다** (TRIP-1182). 자르는 게 없으면 None.
 
@@ -102,8 +118,9 @@ def not_before_floor(problem: ItineraryProblem) -> datetime | None:
     floor = nb.replace(second=0, microsecond=0)
     if floor != nb:
         floor += timedelta(minutes=1)
-    ws = problem.day_window.start
-    local = floor.astimezone(ws.tzinfo) if ws.tzinfo is not None else floor
+    tz = problem.day_window.start.tzinfo
+    local = floor.astimezone(tz) if tz is not None else floor
+    ws = problem.window_on(local.date()).start  # 일자별 창 (TRIP-1389)
     return floor if local.time() > ws.time() else None
 
 
@@ -167,14 +184,22 @@ def check_hc3(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Vi
 
 
 def check_hc4(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Violation]:
-    """day window 내 (자정 초과 활동은 시작일 귀속 — end가 자정 넘어도 시작일 창으로 비교)."""
-    ws = _min_of_day(problem.day_window.start)
-    we = _min_of_day(problem.day_window.end)
-    if we <= ws:
-        we += 1440  # window 자체가 자정 초과인 경우
+    """day window 내 (자정 초과 활동은 시작일 귀속 — end가 자정 넘어도 시작일 창으로 비교).
+
+    창은 그 날의 것이다(`window_on` — 일자별 창, TRIP-1389). 고정 블록은 창이 아니라 HC3 가
+    잡는다 — 사용자가 정한 시각(야경 20:00~익일 01:00 등)이 창을 넘는다고 위반으로 세면 모든
+    조립 단계가 그 하루를 버렸다(TRIP-1390). 시작 하한 검사(`check_not_before`)와 같은 규칙."""
+    pinned = {(fb.poi_id, fb.window.start, fb.window.end) for fb in problem.fixed_blocks}
     out: list[Violation] = []
     for day in solution.days:
+        win = problem.window_on(day.date)
+        ws = _min_of_day(win.start)
+        we = _min_of_day(win.end)
+        if we <= ws:
+            we += 1440  # window 자체가 자정 초과인 경우
         for slot in day.slots:
+            if (slot.poi_id, slot.start_at, slot.end_at) in pinned:
+                continue
             start_m = _min_of_day(slot.start_at)
             end_m = start_m + int((slot.end_at - slot.start_at).total_seconds() // 60)
             if start_m < ws or end_m > we:

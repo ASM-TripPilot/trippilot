@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -43,6 +44,15 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(seeded["shared"]["SERVICE_AUTH_TOKEN"], "secret")
         self.assertEqual(seeded["backend"]["PLACE_GEOCODE_MODE"], "stub")
         self.assertEqual(seeded["backend"]["AFFILIATE_MODE"], "fallback")
+        # 운영은 버튼 모드로 뜬다 — 앱 기본값(fake)이 그대로 닿으면 운영이 대역으로 말을 "알아듣는다".
+        self.assertEqual(seeded["backend"]["ASSISTANT_INTERPRET_MODE"], "off")
+
+    def test_seed_keeps_an_explicit_assistant_mode(self):
+        groups = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for mode in ("fake", "http"):
+            groups["backend"] = {"ASSISTANT_INTERPRET_MODE": mode}
+            seeded = runtime_secrets.seed_groups(groups, lambda: "secret", lambda: "rsa")
+            self.assertEqual(seeded["backend"]["ASSISTANT_INTERPRET_MODE"], mode)
 
     def test_provider_credentials_fail_before_deployment(self):
         cases = [
@@ -56,6 +66,11 @@ class SecretTests(unittest.TestCase):
             {"backend": {"AFFILIATE_MODE": "tripcom"}},
             {"backend": {"AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s"}},
             {"backend": {"AFFILIATE_MODE": "typo"}},
+            # 도우미 해석 — 오타는 백엔드가 기동에서 죽는다(http 는 TRIP-1410 부터 정상 값).
+            {"backend": {"ASSISTANT_INTERPRET_MODE": "on"}},
+            # U10 킬 스위치 — 백엔드는 on/off·yes/no 도 받지만 운영 스위치는 두 값으로 고정한다.
+            {"backend": {"LOCATION_AUTOMATION_ENABLED": "off"}},
+            {"backend": {"LOCATION_AUTOMATION_ENABLED": ""}},
             # 생성 상한(TRIP-1314) — 있는데 틀리면 백엔드가 기동에서 죽는 값들.
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": ""}},
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "0"}},
@@ -82,6 +97,9 @@ class SecretTests(unittest.TestCase):
             "0D7F17AB-5c4b-4d6d-a7f7-484ba11dda46, 11111111-2222-4333-8444-555555555555"}})
         runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
             "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": ""}})
+        for switch in ("true", "false"):
+            runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+                "LOCATION_AUTOMATION_ENABLED": switch}})
         for app_id in ("1519823", ""):
             runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
                 "KAKAO_APP_ID": app_id}})
@@ -177,6 +195,84 @@ class SecretTests(unittest.TestCase):
             self.assertNotIn(secret_string, str(raised.exception))
 
 
+class TargetTests(unittest.TestCase):
+    """개발·운영 분리(2026-10-15) — 대상이 네임스페이스·시크릿 그릇·DB 장비를 통째로 바꾼다."""
+
+    DEV = {
+        "dev_target_secret_arns": {name: f"arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:trippilot/dev/dev-target/{name}-x"
+                                   for name in ("backend", "ai", "database", "shared")},
+        "dev_target_database_host": "dev-target.example.rds.amazonaws.com",
+        "dev_target_database_master_secret_arn": "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:rds!db-dev-target",
+    }
+
+    def raw(self, dev=None):
+        return {key: {"value": value} for key, value in {**outputs(), **(self.DEV if dev is None else dev)}.items()}
+
+    def test_dev_target_reads_only_its_own_secrets_and_database(self):
+        dev = runtime.parse_outputs(self.raw(), "dev")
+        prod = runtime.parse_outputs(self.raw(), "prod")
+        self.assertEqual(prod, outputs())
+        self.assertEqual(dev["app_secret_arns"], self.DEV["dev_target_secret_arns"])
+        self.assertEqual(dev["database_host"], "dev-target.example.rds.amazonaws.com")
+        self.assertIn("rds!db-dev-target", dev["database_master_secret_arn"])
+        # 공유 자원(리전·클러스터·Redis·이미지 저장소)은 같다
+        for key in ("aws_region", "cluster_name", "redis_host", "ecr_repositories"):
+            self.assertEqual(dev[key], prod[key])
+
+    def test_dev_target_never_falls_back_to_production(self):
+        # 스위치가 꺼진 스택은 개발 출력이 빈 값이다 — 운영 값으로 떨어지면 개발 배포가 운영 DB·시크릿을 쓴다
+        empty = {"dev_target_secret_arns": {}, "dev_target_database_host": "", "dev_target_database_master_secret_arn": ""}
+        for dev in ({}, empty):
+            with self.subTest(dev=dev), self.assertRaises(ValueError):
+                runtime.parse_outputs(self.raw(dev), "dev")
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            runtime.parser().parse_args(["smoke", "--target", "staging"])
+
+    def test_dev_outputs_wired_to_production_are_refused(self):
+        prod = outputs()
+        for dev in ({**self.DEV, "dev_target_database_host": prod["database_host"]},
+                    {**self.DEV, "dev_target_database_master_secret_arn": prod["database_master_secret_arn"]},
+                    {**self.DEV, "dev_target_secret_arns": prod["app_secret_arns"]}):
+            with self.subTest(dev=dev), self.assertRaises(ValueError):
+                runtime.parse_outputs(self.raw(dev), "dev")
+
+    def test_main_hands_the_target_to_every_outputs_consumer(self):
+        """누출을 실제로 막는 줄은 main 이 대상을 parse_outputs 로 넘기는 곳이다 — 빠지면 개발 배포가 운영 값을 쓴다."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "outputs.json"
+            path.write_text(json.dumps(self.raw()))
+            prod_values = {outputs()["database_host"], outputs()["database_master_secret_arn"], *outputs()["app_secret_arns"].values()}
+            for action, patched, extra in (("sync-secrets", "runtime.runtime_secrets.sync", []),
+                                           ("bootstrap-db", "runtime.runtime_db.bootstrap", ["--run-id", "1-1"])):
+                with self.subTest(action=action), patch(patched) as consumer, patch("builtins.print"):
+                    runtime.main([action, "--target", "dev", "--outputs", str(path), *extra])
+                    seen, namespace = consumer.call_args.args[0], consumer.call_args.args[1]
+                    self.assertEqual(namespace, "trippilot-dev")
+                    self.assertEqual(seen["database_host"], self.DEV["dev_target_database_host"])
+                    self.assertFalse(prod_values & {seen["database_host"], seen["database_master_secret_arn"], *seen["app_secret_arns"].values()})
+            values = Path(directory) / "values.json"
+            with patch("builtins.print"):
+                runtime.main(["render-values", "--target", "dev", "--outputs", str(path), "--image-tag", "sha-1",
+                              "--certificate-arn", "arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc",
+                              "--hostname", "dev-api.example.com", "--output", str(values)])
+            self.assertEqual(json.loads(values.read_text())["config"]["databaseHost"], self.DEV["dev_target_database_host"])
+
+    def test_target_fixes_the_namespace(self):
+        with patch("runtime.runtime_smoke.run") as smoke, patch("builtins.print"):
+            runtime.main(["smoke", "--target", "dev"])
+            self.assertEqual(smoke.call_args.args[0], "trippilot-dev")
+            runtime.main(["smoke"])
+            self.assertEqual(smoke.call_args.args[0], "trippilot")
+            runtime.main(["smoke", "--target", "dev", "--namespace", "trippilot-dev"])
+            self.assertEqual(smoke.call_args.args[0], "trippilot-dev")
+        # 어긋난 짝은 무엇도 실행하기 전에 거절 — 개발 값이 운영 네임스페이스 시크릿을 덮는 사고
+        for argv in (["smoke", "--target", "dev", "--namespace", "trippilot"],
+                     ["smoke", "--namespace", "trippilot-dev"]):
+            with self.subTest(argv=argv), patch("runtime.runtime_smoke.run") as smoke, self.assertRaises(ValueError):
+                runtime.main(argv)
+            smoke.assert_not_called()
+
+
 class BootstrapTests(unittest.TestCase):
     def test_bootstrap_secret_only_references_passwords_and_sql_uses_psql_quoting(self):
         master = {"username": "master_user", "password": "private-master"}
@@ -230,6 +326,28 @@ class ConfigurationTests(unittest.TestCase):
         self.assertTrue(values["embedding"]["enabled"])
         self.assertNotIn("secret", json.dumps(values).lower())
         self.assertNotIn("password", json.dumps(values).lower())
+
+    def test_embedding_uses_its_content_tag_so_unchanged_code_does_not_roll(self):
+        """임베딩만 빌드 맥락 내용 해시 태그 — 런 태그를 쓰면 코드가 그대로여도 매 배포 파드가 바뀌고,
+        maxSurge 0 이라 그때마다 엔드포인트가 빈다(10-14 하루 15회+). 다른 셋은 런 태그 그대로."""
+        arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc"
+        values = runtime.helm_values(outputs(), "sha-1-2-1", arn, "api-dev.example.com", True, "emb-abc123")
+        self.assertEqual(values["images"]["embedding"]["tag"], "emb-abc123")
+        self.assertEqual({values["images"][n]["tag"] for n in ("backend", "ai")}, {"sha-1-2-1"})
+        # 안 주면 종전 그대로(임베딩을 끈 배포 등)
+        self.assertEqual(runtime.helm_values(outputs(), "sha-1-2-1", arn, "api-dev.example.com", False)
+                         ["images"]["embedding"]["tag"], "sha-1-2-1")
+        with self.assertRaises(ValueError):
+            runtime.helm_values(outputs(), "sha-1-2-1", arn, "api-dev.example.com", True, "bad tag")
+
+    def test_only_embedding_template_skips_the_rollout_nonce(self):
+        """nonce 는 시크릿 env 를 다시 읽히려는 것 — 시크릿 env 가 있는 셋엔 남고, 없는 임베딩엔 없다."""
+        templates = Path(__file__).resolve().parents[1] / "chart" / "templates"
+        self.assertNotIn("rolloutNonce", (templates / "embedding.yaml").read_text(encoding="utf-8"))
+        self.assertNotIn("secretKeyRef", (templates / "embedding.yaml").read_text(encoding="utf-8"))
+        for name in ("ai.yaml", "backend.yaml", "gateway.yaml"):
+            with self.subTest(name=name):
+                self.assertIn("rolloutNonce", (templates / name).read_text(encoding="utf-8"))
 
     def test_rejects_invalid_image_tag_certificate_and_host(self):
         good_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc"
@@ -420,6 +538,15 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertNotIn("s3cret", shown)
         self.assertIn("delete", shell.call_args_list[-1].args[0])
 
+    def test_canonical_ingest_script_passes_its_self_check(self):
+        """Job 이 싣는 정본 스크립트의 자체 점검을 CI 에서 돌린다 — 이 워크플로가 그 파일 경로에 걸려 있다.
+        병합 공유본(출처가 섞인 문서)을 최상단 출처 하나로 몰아 보내면 다른 출처 항목이 한 벌 더 생긴다(#1202)."""
+        import subprocess
+        import runtime_pois
+        done = subprocess.run([sys.executable, str(runtime_pois.SCRIPT), "--self-check"],
+                              capture_output=True, text=True, timeout=120, check=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
     def test_load_pois_job_uses_serving_image_and_the_canonical_script(self):
         """공유본은 서빙 ai 이미지 안에 있고, 스크립트는 복제하지 않고 ConfigMap 으로 싣는다.
         `--close-missing` 은 입력으로만, `--allow-mass-close` 는 어떤 경우에도 넘기지 않는다."""
@@ -460,7 +587,8 @@ class RuntimeIntegrationTests(unittest.TestCase):
 
     def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
         summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"
-        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", summary, ""])
+        # 재시도가 있었던 Job: 성공한 파드 이름·실패 횟수 1 → 그 파드의 로그를 읽고 요약에 재시도를 남긴다
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "trippilot-poi-load-k7x2q", "1", summary, ""])
         with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-pois"])
         calls = [c.args[0] for c in shell.call_args_list]
@@ -470,6 +598,11 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertIn("ingest_pois.py", applied["items"][0]["data"])  # 정본 스크립트가 실제로 읽혀 실렸다
         self.assertIn("job/trippilot-poi-load", calls[3])
         out.assert_any_call(summary)
+        logs_call = next(c for c in calls if c[:2] == ["kubectl", "logs"])
+        self.assertIn("pod/trippilot-poi-load-k7x2q", logs_call)  # `job/…` 이면 실패한 1차 파드 로그를 집을 수 있다
+        self.assertIn("--tail=-1", logs_call)  # 꼬리만 읽으면 병합본(84묶음)의 맨 앞 "미포함 정리" 줄이 요약에서 잘린다
+        printed = " ".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("retried 1 time", printed)
         self.assertIn("job,configmap", calls[-1])  # 둘 다 치운다
 
     def test_load_pois_summary_reaches_the_step_output_with_drops_and_dry_run_count(self):
@@ -493,7 +626,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
             " · 합계 — 접수=19084 신규=0 갱신=19080 지역코드미상=3 · 탈락(사유별): · gate.category_unmapped: 4")
         with tempfile.TemporaryDirectory() as folder:
             output = os.path.join(folder, "out")
-            shell = Mock(side_effect=["", "img", "", "", logs, ""])
+            shell = Mock(side_effect=["", "img", "", "", "trippilot-poi-load-abc12", "0", logs, ""])
             with patch("runtime.command", shell), patch("builtins.print"), \
                     patch.dict(os.environ, {"GITHUB_OUTPUT": output}):
                 runtime.main(["load-pois", "--close-missing-dry-run"])
@@ -506,7 +639,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
 
     def test_load_pois_with_no_effect_is_a_failure(self):
         """적재가 '성공'인데 신규·갱신이 0 이면 아무것도 안 들어간 것이다 — 조용히 지나가면 "효과 없음"이 또 온다."""
-        shell = Mock(side_effect=["", "img", "", "", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
+        shell = Mock(side_effect=["", "img", "", "", "", "0", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
         with patch("runtime.command", shell), patch("builtins.print"), self.assertRaises(RuntimeError):
             runtime.main(["load-pois"])
         self.assertIn("delete", shell.call_args_list[-1].args[0])

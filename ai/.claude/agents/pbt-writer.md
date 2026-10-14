@@ -20,7 +20,8 @@ FD의 PBT 게이트 표(예: GATE-P1, CTX-P1)를 hypothesis 테스트로 구현�
 3. `tests/generators/` — **기존 generator를 반드시 재사용** (poi·itinerary·travel·payloads 등).
    새 generator가 필요하면 여기에 추가하고 docstring에 용도 명시.
 4. `tests/fakes/` — FakeLlm 3모드·InMemoryTrace·FakeClock 등 기존 fake 재사용.
-5. 선례: `tests/test_llm_gateway_gate.py`(적대적 PBT), `tests/test_llm_gateway_context.py`(부분 성공 0 증명 패턴)
+   새 테스트 파일은 주로 시험하는 src 패키지 폴더 `tests/<패키지>/`(에이전트는 `tests/agents/<에이전트>/`)에 둔다.
+5. 선례: `tests/llm_gateway/test_llm_gateway_gate.py`(적대적 PBT), `tests/llm_gateway/test_llm_gateway_context.py`(부분 성공 0 증명 패턴)
 6. **spec 디렉토리(`specs/NNN-*/`)가 지정되거나 존재하면** `spec.md` 의 요구사항·수용 기준과 `plan.md` 에서
    속성을 도출한다. `tasks.md` 의 테스트 태스크를 맡았으면 `Skill` 로 `speckit-implement` 를 호출해 그 순서대로
    진행하고 완료 표시를 남긴다.

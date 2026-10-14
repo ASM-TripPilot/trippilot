@@ -8,7 +8,7 @@ import {
 import { useGetPlaces } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
-import { seoulDate } from '@/shared/lib/seoulDate';
+import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange } from '@/entities/trip';
 import { pickTrendingPlaces } from '@/entities/place';
@@ -42,6 +42,7 @@ interface HomeNav {
   onPressSavedPlaces: () => void;
   onPressSavedStays: () => void;
   onPressSpotsMore: () => void;
+  onPressPastTripsMore: () => void;
   onPressSearch: () => void;
   onPressBell: () => void;
   savedPlacesCount: number;
@@ -134,11 +135,15 @@ export function HomePage() {
   // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
   const [savedMenuOpen, setSavedMenuOpen] = useState(false);
 
+  // 오늘(KST) — 상태로 들어 자정을 넘기면 홈 얼굴(여행 중·후 판정)이 바뀐다(TRIP-1364). 렌더 중
+  // `seoulDate(new Date())` 는 마운트 시점에 굳는다.
+  const today = useSeoulToday();
+
   // 데이터 도착 후에만 여행 유무를 판정한다(대기·실패면 data 가 없어 undefined). 비-ENDED 지배 여행이
   // 있으면 planning, 없으면 undefined→discovery. 스팟 조회 지역이 이 판정을 써서 early return 위에 둔다.
   const phase = resolveHomePhase({
     trips: trips.data ?? [],
-    today: seoulDate(new Date()),
+    today,
     savedCount: savedPoiIds.length,
     formatTripMeta: (trip) =>
       `${formatTripRange(trip.startDate, trip.endDate)} · ${formatNightsLabel(
@@ -220,6 +225,8 @@ export function HomePage() {
     },
     // TRIP-1282 — 창을 연다: 둘째 탭이 장소 탐색 카드에 떨어져도 상세가 안 열린다(연타 관통).
     onPressSpotsMore: guardPress(() => router.push('/explore/places')),
+    // TRIP-1369 — 여행 후 얼굴 "지난 여행 · 전체 보기" → 기록 탭(마이페이지 캘린더 진입과 같은 /records).
+    onPressPastTripsMore: guardPress(() => router.push('/records')),
     onPressSearch: () => router.push(regionPickerHref('explore')),
     // TRIP-935 R1 — 매거진(a02) 진입을 막는다: onPressMagazine 을 넘기지 않아 page0 은 버튼이 아니다.
     // 매거진 화면은 고정 샘플에 무반응 요소뿐이라(심사 2.1) 실데이터가 생기면 여기서 다시 잇는다.
@@ -283,6 +290,22 @@ export function HomePage() {
         dominantTripId={phase.dominantTripId}
         phase={phase}
         nav={nav}
+      />
+    );
+  }
+
+  // 여행 후 — 종료 여행 일정은 다시 묻지 않는다(PlanningHome 을 안 태운다). 회고 CTA 는 그 여행의 기록 화면.
+  // 연타 가드는 planning CTA 와 같은 창(TRIP-1282).
+  if (phase?.kind === 'postTrip' && phase.dominantTripId !== undefined) {
+    const tripId = phase.dominantTripId;
+    return (
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        phase={phase}
+        onPressTripHeroCta={guardPress(() =>
+          router.push(`/trips/${tripId}/records`)
+        )}
+        {...nav}
       />
     );
   }

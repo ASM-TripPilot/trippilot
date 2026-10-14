@@ -46,8 +46,11 @@ INFO_REQUIREMENTS 표에 따라 모아 **AgentTask 봉투에 실어** 넘긴다 
 Provider를 직접 부르지 않는다. 각 Provider는 `ProviderStatus`
 (`OK`/`LOW`/`NO_CANDIDATES`/`WEATHER_UNKNOWN`/`COLD_START`/`UNAVAILABLE`)를 함께 낸다.
 
-⚠️ `IntentRouter`(질문뱅크 매칭)는 **구현돼 있으나 미배선** — 위 Orchestrator의 의도
-파악은 설계이지 도는 코드가 아니다 (TRIP-529).
+`IntentRouter`(질문뱅크 매칭)는 **배선됐다**(2026-10-14) — 경계는 하나뿐이다:
+U8 도우미의 `POST /ai/v1/dialogue/interpret`(`orchestrator/dialogue_interpreter.py`).
+AI 는 해석만, 디스패치는 백엔드 `assistant` 모듈(U8 DEC-U8-1). 질문뱅크는 기동 때 미리 계산한
+벡터(`data/intent_question_bank.vectors.json.gz`)로 메모리 스토어에 색인한다(실 DB 적재 없음). 뱅크를 고치면
+`scripts/intent/build_bank_vectors.py` 로 재생성 — 옛 파일은 싣지 않고 원격 색인으로 넘어간다.
 
 ## 핵심 설계 문서 (application-design/)
 
@@ -72,8 +75,11 @@ OR-Tools (1차 결정론) → LLM (2차 창의적 제안) → 규칙 폴백 (최
 - pgvector + **로컬 `nlpai-lab/KURE-v1` 임베딩** (AI-D06 부기 2026-08-23, TRIP-514
   배선 완료). Titan은 폴백 어댑터이고 Bedrock 전용이다.
 - pytest + Hypothesis — 속성 개수는 문서에 박지 않는다(늘 때마다 스테일이 된다, TRIP-530).
-  세려면 `grep -rc "@given" ai/tests/*.py`. 종전 "19"·"52"·"170개/41개" 표기는
+  세려면 `grep -rc --include="*.py" "@given" ai/tests`. 종전 "19"·"52"·"170개/41개" 표기는
   모두 스테일이었다.
+- **테스트 폴더는 `src/trippilot/` 를 따라간다**: 주로 시험하는 패키지 폴더 `tests/<패키지>/` 에 둔다
+  (에이전트는 `tests/agents/<schedule|planb|reflect|edit>/`). `ai/scripts` 를 시험하는 것은 `tests/scripts/`.
+  `fakes/`·`fixtures/`·`generators/` 와 `test_architecture.py` 는 루트에 둔다.
 - LangChain: **선언만 있고 쓰지 않는다** — `pyproject.toml`에 의존성이 없고 `src/`에
   import 0건. RAG는 psycopg + pgvector로 직접 구현했다 (철회 기록은 TRIP-522).
 

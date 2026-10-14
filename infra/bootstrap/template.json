@@ -168,6 +168,38 @@
         ]
       }
     },
+    "ChatbotRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {"Fn::Sub": "trippilot-${Environment}-chatbot"},
+        "Description": "Role the Slack channel of AWS Chatbot assumes to post this environment alarm notifications. CloudWatch read only, for the alarm details it renders. No write action anywhere, so channel commands cannot change anything.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{"Effect": "Allow", "Principal": {"Service": "chatbot.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+        },
+        "Policies": [
+          {
+            "PolicyName": "ReadAlarmDetails",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadAlarmDetails",
+                  "Effect": "Allow",
+                  "Action": ["cloudwatch:Describe*", "cloudwatch:Get*", "cloudwatch:List*"],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {"Key": "Project", "Value": "trippilot"},
+          {"Key": "Environment", "Value": {"Ref": "Environment"}},
+          {"Key": "ManagedBy", "Value": "cloudformation"}
+        ]
+      }
+    },
     "DeploymentRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
@@ -551,9 +583,10 @@
                   "Resource": {"Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds!db-*"},
                   "Condition": {
                     "StringEquals": {
-                      "secretsmanager:ResourceTag/aws:rds:primaryDBInstanceArn": {
-                        "Fn::Sub": "arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:db:trippilot-${Environment}"
-                      }
+                      "secretsmanager:ResourceTag/aws:rds:primaryDBInstanceArn": [
+                        {"Fn::Sub": "arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:db:trippilot-${Environment}"},
+                        {"Fn::Sub": "arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:db:trippilot-${Environment}-target"}
+                      ]
                     }
                   }
                 },
@@ -590,7 +623,7 @@
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties": {
         "ManagedPolicyName": {"Fn::Sub": "trippilot-${Environment}-github-deploy-extra"},
-        "Description": "Deployment-role statements that do not fit the inline policy (it sits at the 10240-character limit): Pod Identity binding for the AI and CloudWatch collector pods, the Container Insights log groups Terraform creates to cap retention, and read-only serving metrics/cost for the weekly serving judge.",
+        "Description": "Deployment-role statements that do not fit the inline policy (it sits at the 10240-character limit): Pod Identity binding for the AI pods, and read-only serving metrics/cost for the weekly serving judge.",
         "Roles": [{"Ref": "DeploymentRole"}],
         "PolicyDocument": {
           "Version": "2012-10-17",
@@ -655,9 +688,94 @@
                 "logs:DeleteRetentionPolicy",
                 "logs:ListTagsForResource",
                 "logs:TagResource",
-                "logs:UntagResource"
+                "logs:UntagResource",
+                "logs:PutMetricFilter",
+                "logs:DeleteMetricFilter",
+                "logs:DescribeMetricFilters"
               ],
               "Resource": {"Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/containerinsights/trippilot-${Environment}/*"}
+            },
+            {
+              "Sid": "ReadContainerInsightsLogs",
+              "Effect": "Allow",
+              "Action": [
+                "logs:DescribeLogStreams",
+                "logs:FilterLogEvents",
+                "logs:GetLogEvents",
+                "logs:StartQuery"
+              ],
+              "Resource": [
+                {"Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/containerinsights/trippilot-${Environment}/*"},
+                {"Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/containerinsights/trippilot-${Environment}/*:log-stream:*"}
+              ]
+            },
+            {
+              "Sid": "ReadLogsInsightsQueryResults",
+              "Effect": "Allow",
+              "Action": [
+                "logs:GetQueryResults",
+                "logs:StopQuery"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "ManageAlertsTopic",
+              "Effect": "Allow",
+              "Action": [
+                "sns:CreateTopic",
+                "sns:DeleteTopic",
+                "sns:GetTopicAttributes",
+                "sns:SetTopicAttributes",
+                "sns:ListTagsForResource",
+                "sns:TagResource",
+                "sns:UntagResource",
+                "sns:Subscribe",
+                "sns:Unsubscribe",
+                "sns:GetSubscriptionAttributes",
+                "sns:ListSubscriptionsByTopic"
+              ],
+              "Resource": [
+                {"Fn::Sub": "arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:trippilot-${Environment}-alerts"},
+                {"Fn::Sub": "arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:trippilot-${Environment}-alerts:*"}
+              ]
+            },
+            {
+              "Sid": "ManageAlarms",
+              "Effect": "Allow",
+              "Action": [
+                "cloudwatch:PutMetricAlarm",
+                "cloudwatch:DeleteAlarms",
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:ListTagsForResource",
+                "cloudwatch:TagResource",
+                "cloudwatch:UntagResource"
+              ],
+              "Resource": {"Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:trippilot-${Environment}-*"}
+            },
+            {
+              "Sid": "ManageAlertsSlackChannel",
+              "Effect": "Allow",
+              "Action": ["chatbot:*"],
+              "Resource": "*"
+            },
+            {
+              "Sid": "CreateChatbotServiceLinkedRole",
+              "Effect": "Allow",
+              "Action": ["iam:CreateServiceLinkedRole"],
+              "Resource": {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/management.chatbot.amazonaws.com/*"},
+              "Condition": {"StringEquals": {"iam:AWSServiceName": "management.chatbot.amazonaws.com"}}
+            },
+            {
+              "Sid": "ReadChatbotRole",
+              "Effect": "Allow",
+              "Action": ["iam:GetRole", "iam:ListRoleTags", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:GetRolePolicy"],
+              "Resource": {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-chatbot"}
+            },
+            {
+              "Sid": "PassChatbotRoleToSlackChannel",
+              "Effect": "Allow",
+              "Action": ["iam:PassRole"],
+              "Resource": {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-chatbot"}
             }
           ]
         }

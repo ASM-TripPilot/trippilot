@@ -1,7 +1,7 @@
 # 의도 라우터 평가셋 v1.0 — **사람 검수 완료** (2026-09-13). intent-matching-design §6.
 #
 # - 뱅크(intent_question_bank.yaml)와 **완전 분리** — 뱅크 문장·그 변형을 재사용하지 않는다(leak 금지).
-#   러너(`scripts/trace_intents.py --eval`)가 실행 시 뱅크(원문 + 자리표시자를 채운 변형)와 유사도
+#   러너(`scripts/intent/trace_intents.py --eval`)가 실행 시 뱅크(원문 + 자리표시자를 채운 변형)와 유사도
 #   ≥ 0.90 인 항목을 leak 로 보고한다.
 # - 검수 결과 87문장(초안 88 − 1). 라벨 이동 1건·제외 1건:
 #     "오늘 저녁 뭐 먹지"  OUT_OF_SCOPE → SHOW_SCHEDULE (일정에 뭐가 잡혀 있는지 묻는 말로 판정)
@@ -11,7 +11,7 @@
 #   (타임아웃·키 오류)은 정답으로 세지 않는다 — 채점기가 `unrefused_fallbacks` 로 따로 뺀다.
 # - 경계 3종(EDIT/REPLAN/GENERATE)과 회고↔요약, 실 지역명·POI 명 포함 발화(뱅크의 {지역}/{장소}
 #   자리표시자 효과 측정), 범위 밖 9건을 일부러 넣었다.
-# - 사용법: LLM_PROVIDER=mixed uv run --env-file ../.env python scripts/trace_intents.py --eval data/intent_eval_set.yaml
+# - 사용법: LLM_PROVIDER=mixed uv run --env-file ../.env python scripts/intent/trace_intents.py --eval data/intent_eval_set.yaml
 version: "1.0"
 reviewed: true
 cases:

@@ -1,5 +1,6 @@
 package com.trippilot.reflection.application
 
+import com.trippilot.reflection.domain.DistanceSource
 import com.trippilot.archive.api.ArchiveDayView
 import com.trippilot.archive.api.ArchiveRecordFacade
 import com.trippilot.archive.api.ArchiveVisitView
@@ -69,9 +70,10 @@ class ReflectionPropertyTest : StringSpec({
         override fun publish(event: DomainEvent) { published += event }
     }
 
-    fun archiveOf(visits: List<ArchiveVisitView>) = object : ArchiveRecordFacade {
+    fun archiveOf(visits: List<ArchiveVisitView>, routeM: Int? = null) = object : ArchiveRecordFacade {
         override fun findDailyVisits(tripId: UUID) =
             if (visits.isEmpty()) emptyList() else listOf(ArchiveDayView(day, visits))
+        override fun findRouteDistances(tripId: UUID) = routeM?.let { mapOf(day to it) } ?: emptyMap()
     }
 
     /** 좌표를 아는 POI 만 표면을 낸다 — 못 찾는 방문이 섞이는 것이 실제 상황이다. */
@@ -447,6 +449,60 @@ class ReflectionPropertyTest : StringSpec({
     fun visitOf(poi: UUID, skipped: Boolean) = ArchiveVisitView(
         UUID.randomUUID(), poi, Instant.parse("2026-08-11T03:00:00Z"), null, skipped, 0, false,
     )
+
+    /** U10 FD §7.2 — 그날 실제 경로가 있으면 그 거리가 근사를 대신한다. 걸었는데 들른 곳이 없는 날도 거리는 남는다. */
+    "그날 실제 경로가 있으면 그 거리와 ROUTE 출처를 싣는다" {
+        val poi = UUID.randomUUID()
+        fun gen(visits: List<ArchiveVisitView>, routeM: Int?) = ReflectionService(
+            trips, archiveOf(visits, routeM), surfacesOf(mapOf(poi to (33.4 to 126.5))), Reflections(),
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock,
+        ).generateDaily(acc, tripId, day).stats
+
+        gen(listOf(visitOf(poi, false)), 4_200).let { (it.distanceKm to it.distanceSource) shouldBe (4.2 to DistanceSource.ROUTE) }
+        gen(listOf(visitOf(poi, false)), null).distanceSource shouldBe DistanceSource.VISIT_LINE
+        gen(emptyList(), 900).let { (it.visitCount to it.distanceKm to it.distanceSource) shouldBe (0 to 0.9 to DistanceSource.ROUTE) }
+    }
+
+    /** 다시 만드는 동안(AI 를 기다리는 사이) 경로가 올라오면, 앞에서 센 근사값으로 덮지 않는다 — 잠근 뒤 다시 센다. */
+    "회고를 다시 만드는 사이 올라온 경로를 놓치지 않는다" {
+        val poi = UUID.randomUUID()
+        var calls = 0
+        val archive = object : com.trippilot.archive.api.ArchiveRecordFacade {
+            override fun findDailyVisits(tripId: UUID) = listOf(ArchiveDayView(day, listOf(visitOf(poi, false))))
+            // 첫 조회(초안을 만들 때)엔 경로가 없고, 그 뒤(잠근 뒤)엔 있다
+            override fun findRouteDistances(tripId: UUID) = if (calls++ == 0) emptyMap() else mapOf(day to 6_000)
+        }
+        val stats = ReflectionService(
+            trips, archive, surfacesOf(mapOf(poi to (33.4 to 126.5))), Reflections(),
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock,
+        ).generateDaily(acc, tripId, day).stats
+        (stats.distanceKm to stats.distanceSource) shouldBe (6.0 to DistanceSource.ROUTE)
+    }
+
+    "경로가 올라오면 그날 회고의 통계만 다시 센다 — 카드는 그대로, 회고가 없으면 만들지 않는다" {
+        val poi = UUID.randomUUID()
+        val repo = Reflections()
+        var routeM: Int? = null
+        val archive = object : com.trippilot.archive.api.ArchiveRecordFacade {
+            override fun findDailyVisits(tripId: UUID) = listOf(ArchiveDayView(day, listOf(visitOf(poi, false))))
+            override fun findRouteDistances(tripId: UUID) = routeM?.let { mapOf(day to it) } ?: emptyMap()
+        }
+        val svc = ReflectionService(
+            trips, archive, surfacesOf(mapOf(poi to (33.4 to 126.5))), repo,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock,
+        )
+
+        svc.refreshRouteStats(tripId, day)
+        repo.find(tripId, day) shouldBe null
+
+        val before = svc.generateDaily(acc, tripId, day)
+        routeM = 5_000
+        svc.refreshRouteStats(tripId, day)
+
+        val after = repo.find(tripId, day)!!
+        (after.stats.distanceKm to after.stats.distanceSource) shouldBe (5.0 to DistanceSource.ROUTE)
+        after.copy(stats = before.stats) shouldBe before
+    }
 
     "안 간 장소가 카드에 있으면 규칙 카드로 강등한다" {
         val went = UUID.randomUUID()

@@ -1,5 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.api.SlotCandidateFacade
+import com.trippilot.itinerarygeneration.api.SlotCandidateView
+import com.trippilot.itinerarygeneration.api.SlotCandidatesView
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
@@ -10,7 +13,9 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.error.FieldError
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
+import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.RepairContext
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.ScoredCandidate
@@ -28,6 +33,8 @@ import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
 import org.springframework.stereotype.Service
 import java.time.Clock
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
 
@@ -67,7 +74,19 @@ class SlotCandidateService(
     /** 그 여행의 취향(BR-U1-38) — 생성과 같은 척도로 후보를 고르게. 계정 취향은 안 실린 축만. */
     private val preferences: PreferenceFacade,
     private val personalization: PersonalizationPort,
-) {
+    /** 적합 판정에 실을 수단·앵커 — 편집 저장([EditItineraryService])과 같은 출처. 빼면 두 판정이 갈린다. */
+    private val repairContexts: RepairContexts,
+) : SlotCandidateFacade {
+    /** 공개 퍼사드 — REST 와 같은 경로를 탄다. 반경·컨셉·사유를 고르는 화면이 없는 호출측(도우미)이라 기본값으로 묻는다. */
+    override fun propose(accountId: UUID, tripId: UUID, slotKey: String): SlotCandidatesView =
+        propose(accountId, tripId, RequestSlotCandidates(slotKey, radiusM = null, concept = null, reason = null)).let { out ->
+            SlotCandidatesView(
+                out.candidates.map { SlotCandidateView(it.poiId, it.distanceRange, it.rationale) },
+                out.freshness.degraded,
+                out.emptyReason?.name,
+            )
+        }
+
     fun propose(accountId: UUID, tripId: UUID, request: RequestSlotCandidates): SlotCandidatesOutput {
         // 형식 검사를 먼저 — 일정이 없더라도 잘못된 요청은 400 이어야 한다(404 로 덮으면 원인을 오인한다).
         val (date, targetPoiId) = SlotKey.parse(request.slotKey)
@@ -78,12 +97,14 @@ class SlotCandidateService(
             throw ValidationFailed(listOf(FieldError("radiusM", "탐색 반경은 ${MAX_RADIUS_M / 1000}km 이하입니다.")))
         }
 
-        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
+        val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val itinerary = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
 
-        // 적용할 수 없는 일정에 후보를 제안하지 않는다 — 골라도 편집이 409 로 막힌다.
-        if (itinerary.status != ItineraryStatus.PLANNED) {
-            throw ConflictDetected(message = "확정된 일정은 슬롯을 교체할 수 없습니다.")
+        // 적용할 수 없는 일정에 후보를 제안하지 않는다 — 골라도 편집이 409 로 막힌다. 그래서 잠금 범위는 편집과
+        // **같아야 한다**: 확정 일정은 여행 시작 전만 잠긴다(TRIP-999 결정 (a), EditItineraryService). 여기만
+        // 확정 전체를 막아 두면 여행 중에는 고칠 수는 있는데 바꿀 곳을 고를 수가 없었다.
+        if (itinerary.status == ItineraryStatus.CONFIRMED && LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE) < period.startDate) {
+            throw ConflictDetected(message = "확정된 일정은 여행이 시작되기 전에는 슬롯을 교체할 수 없습니다.")
         }
 
         // 생성 중(PARTIAL) 일괄 409 를 없앴다(TRIP-1000) — day1 조기 노출의 취지가 "보고 고칠 수
@@ -181,6 +202,19 @@ class SlotCandidateService(
             proposed
         }
 
+        // 어느 갈래(즉답·AI·풀 채움)로 골랐든 반환 직전 **한 곳**에서 슬롯 시각 적합 판정을 거친다.
+        return keepFitting(chooseCandidates(request, answered, center, inItinerary, targetPoiId, tripId), itinerary, date, index, accountId, tripId, request.slotKey)
+    }
+
+    /** closed-set 재확인 → 컨셉 필터·풀 채움. [answered] 는 즉답이거나 AI 응답이다. */
+    private fun chooseCandidates(
+        request: RequestSlotCandidates,
+        answered: SlotCandidatesOutput,
+        center: PoiSurfaceView,
+        inItinerary: List<UUID>,
+        targetPoiId: UUID,
+        tripId: UUID,
+    ): SlotCandidatesOutput {
         // closed-set 재확인(INV-1) — 경계 너머가 지어낸 poiId 가 클라이언트로 나가면 그대로 일정에 들어간다.
         // 편집 경로에 POI 실재 검사가 없어 여기서 막지 않으면 확정 동결까지 흘러간다.
         val groundedById = candidatePool.ground(answered.candidates.map { it.poiId }).associateBy { it.poiId }
@@ -214,6 +248,67 @@ class SlotCandidateService(
         // 경계가 컨셉 밖 후보만 줬다(예: LLM 빈 결과 → 규칙 폴백이 카테고리를 모름). 컨셉 카테고리로
         // 풀을 직접 봐서 채운다 — 반경 안에 맛집이 실재하는데 "주변에 없음"이라 말하면 거짓이다.
         return poolRefill(request.concept, conceptSet, center, inItinerary, targetPoiId, answered)
+    }
+
+    /**
+     * 그 슬롯의 시각에 실제로 들어가는 후보만 남긴다. 세 갈래 모두 **슬롯 시각을 모른 채** 고르는데, 사용자가 고르면
+     * 편집 저장([EditItineraryService])이 repair 로 시각을 맞춰 보고 못 맞추면 위반 표시로 저장한다 — 로컬 재현
+     * (부산 2일, 28회 교체)에서 3건이 "영업시간과 맞지 않아요"(HC1)로 저장됐다. 그 판정을 고르기 전에 미리 한다.
+     *
+     * 판정 = 대상 슬롯의 장소만 후보로 바꾼 **그 날**(시각·고정·자정 넘김·그날 다른 슬롯은 그대로)이 수리 불가가 아닌가.
+     * 저장 경로와 같은 변환([toOutput])·같은 질문(repair)·같은 컨텍스트라 두 판정이 어긋나지 않는다 — 컨텍스트를
+     * 빼면 상대가 대중교통·앵커 없음으로 재서, 렌터카 여행이나 첫 칸 교체(저장은 앵커 출발만큼 민다)에서 저장과 다른 답이 된다.
+     * **그 날만 보낸다.** 상대 repair 는 일정 **전체**가 수리되는지를 답하고(HC1~4 는 날 안에서 판정·수리 루프는 날마다
+     * 새로 시작), 하루 창이 23:59 에 끝나 자정 넘김 칸 하나만 있어도 전체가 수리 불가다 — 다른 날을 같이 보내면 그 날의
+     * 무관한 칸 때문에 모든 후보가 부적합으로 나와 필터가 꺼진다. 그 날만 보내면 대상 날의 답은 같고, 상대가 수리 성공마다
+     * 재는 구간 거리(외부 경로 API)도 그 날 것으로 준다.
+     * - 판정이 예외면 그 후보와 **남은 후보 전부**를 판정 없이 남긴다 — 판정 못 함 ≠ 부적합. 상대 불통은 후보마다
+     *   다르지 않아, 계속 부르면 후보 수만큼 읽기 상한(편집 대기 60s)을 다시 기다린다(즉답 갈래는 원래 AI 호출 0회다).
+     * - 전부 부적합이면 원래 목록 그대로 — 0건으로 접으면 "주변에 없음" 같은 거짓 사유가 되고 지금보다 나빠진다.
+     *   그 날의 다른 칸이 이미 수리 불가면(위반 표시로 저장된 칸) 후보와 무관하게 이 갈래로 온다.
+     * 후보는 이미 상한으로 작아 순차로 부른다.
+     */
+    private fun keepFitting(
+        out: SlotCandidatesOutput,
+        itinerary: Itinerary,
+        date: LocalDate,
+        index: Int,
+        accountId: UUID,
+        tripId: UUID,
+        slotKey: String,
+    ): SlotCandidatesOutput {
+        if (out.candidates.isEmpty()) return out
+        // 저장 경로(attemptRepair)와 같은 규칙 — 앵커는 첫 구간이 바뀐 날만 싣고, 장소 하나 교체에서 그런 날은 첫 칸 교체의 그날뿐이다.
+        val context = runCatching { repairContexts.of(accountId, tripId, if (index == 0) setOf(date) else emptySet()) }.getOrElse { e ->
+            log.warn("슬롯 후보 적합 판정 컨텍스트(앵커·수단) 조회 실패 — 컨텍스트 없이 판정합니다. tripId={}", tripId, e)
+            RepairContext.NONE
+        }
+        val current = EditItinerary(
+            itinerary.days.filter { it.date == date }
+                .map { d -> EditDay(d.date, d.slots.map { EditSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
+        )
+        var unjudged = false
+        val fit = out.candidates.filter { c ->
+            if (unjudged) return@filter true
+            val swapped = current.copy(
+                days = current.days.map { d -> d.copy(slots = d.slots.mapIndexed { i, s -> if (i == index) s.copy(poiId = c.poiId) else s }) },
+            )
+            try {
+                !scheduleAgent.repair(swapped.toOutput(itinerary.solveMode, itinerary.isFallback, clock.instant()), emptyList(), context).unrepairable
+            } catch (e: Exception) {
+                log.warn("슬롯 후보 적합 판정(repair) 실패 — 이 후보부터 판정 없이 남깁니다. tripId={} slotKey={} poiId={}", tripId, slotKey, c.poiId, e)
+                unjudged = true
+                true
+            }
+        }
+        if (fit.isEmpty()) {
+            log.warn("슬롯 후보 {}건이 전부 그 슬롯 시각에 맞지 않습니다 — 원래 목록을 그대로 줍니다. tripId={} slotKey={}", out.candidates.size, tripId, slotKey)
+            return out
+        }
+        if (fit.size != out.candidates.size) {
+            log.info("슬롯 시각에 맞지 않는 후보 {}건을 뺐습니다. tripId={} slotKey={}", out.candidates.size - fit.size, tripId, slotKey)
+        }
+        return out.copy(candidates = fit)
     }
 
     /**
@@ -330,10 +425,12 @@ class SlotCandidateService(
     private fun SlotCandidatesInput.withTripPreference(accountId: UUID, tripId: UUID): SlotCandidatesInput {
         val ctx = trips.findGenerationContext(accountId, tripId) ?: return this
         val profile = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
-            .toProfile(personalization.hintsFor(accountId))
+            .toProfile(personalization.hintsFor(accountId), ctx.preferenceSnapshot.keys)
         return copy(preferenceProfile = profile, companionType = ctx.companionType)
     }
     companion object {
+        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+
         /**
          * 3s → 15s (2026-09-08, 팀 결정). 사용자가 화면에서 기다리는 동작이라 처음엔 생성(20s)보다
          * 훨씬 짧게 잡았는데, 그 예산에서는 AI 가 이 경로에 배정한 상위 티어 모델(`gpt-5.6-sol`)이

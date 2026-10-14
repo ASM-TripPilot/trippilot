@@ -44,16 +44,22 @@ _COMPONENT = "c1.worker.preference"
 # 32건부터 잘림(1/10 성공). GPT-5 계열은 reasoning 토큰도 같은 상한에서 빠지므로
 # 실측 상단에 여유를 얹어 40 으로 잡는다 → 상한 1024 에서 청크 상한 25.
 SCORE_TOKENS_PER_ITEM = 40
+# 출력 상한 중 사고 토큰 몫 — 사고를 끌 수 없는 모델(claude-fable-5-1)은 사고 토큰도 같은 상한에서 쓴다.
+# 상한에서 이 몫을 빼고 청크를 역산하므로 상한을 올려도 청크가 같이 커지지 않는다(커지면 청크 지연이
+# 늘어 시한 초과가 는다). 상한이 이 몫의 두 배보다 작으면 상한의 절반만 뺀다(청크 0 방지).
+SCORE_THINKING_RESERVE_TOKENS = 1024
 
 
 def score_chunk_cap(cfg: C1Config) -> int:
-    """청크 크기 절대 상한 — `score_chunk_max` 와 출력 상한 역산 중 작은 쪽.
+    """청크 크기 절대 상한 — `score_chunk_max` 와 (출력 상한 − 사고 몫) 역산 중 작은 쪽.
 
-    청크 기대 출력(건수 × SCORE_TOKENS_PER_ITEM)이 PREFERENCE_SCORING 출력 상한을
-    넘으면 JSON 이 잘려 청크 전체가 폐기된다. 상한이 바뀌면 자동 추종한다.
+    청크 기대 출력(건수 × SCORE_TOKENS_PER_ITEM)과 사고 토큰의 합이 PREFERENCE_SCORING 출력
+    상한을 넘으면 JSON 이 잘려 청크 전체가 폐기된다(2026-10-13 DEV 45회 중 3회). 상한이 바뀌면
+    자동 추종한다.
     """
-    by_tokens = cfg.max_tokens_for(LlmFeature.PREFERENCE_SCORING) // SCORE_TOKENS_PER_ITEM
-    return max(1, min(cfg.score_chunk_max, by_tokens))
+    cap = cfg.max_tokens_for(LlmFeature.PREFERENCE_SCORING)
+    payload = cap - min(SCORE_THINKING_RESERVE_TOKENS, cap // 2)
+    return max(1, min(cfg.score_chunk_max, payload // SCORE_TOKENS_PER_ITEM))
 
 
 def adaptive_chunk_size(stage_budget_ms: float, cfg: C1Config) -> int:

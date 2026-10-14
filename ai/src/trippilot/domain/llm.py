@@ -80,11 +80,19 @@ class LlmFeature(Enum):
     # 발화만** 받는다(1차는 `agents/planb/directives.match_free_text`, 임계 0.74).
     # 지시 목록은 서버가 주입해 사전이 늘어도 프롬프트가 안 바뀐다 (EDIT_TRANSLATION 선례).
     REPLAN_DIRECTIVE_TRANSLATION = "REPLAN_DIRECTIVE_TRANSLATION"  # 재계획 연동 설계 §3
+    # 다시 짜기(재계획) — 기존 일정·사유·상황 추천을 보고 남은 하루의 방문 목록을 고른다.
+    # 출력은 ALTERNATIVE_SELECTION 과 같은 모양(같은 게이트, poiId ⊆ 후보 — INV-1)이고,
+    # 고른 곳은 시각 없는 필수 방문으로 어셈블리에 들어가 시각·순서가 검증된다(INV-2).
+    REPLAN_COMPOSITION = "REPLAN_COMPOSITION"
+    # 다시 짜기 자유입력 → 장소명·시각 제약·날씨 주장. **뽑은 것은 주장**이다 — 호출측
+    # (`agents/planb/request_verification`)이 등록 POI·지도 실재·영업시간·시간창·기상청으로
+    # 검증한 것만 일정에 쓴다. 장소 후보 자격은 등록 POI 대조에서만 생긴다(INV-1).
+    REPLAN_REQUEST_EXTRACTION = "REPLAN_REQUEST_EXTRACTION"
     # 질문뱅크 증강(§3.2 ②) — seed 문장 하나에서 어휘·말투가 다른 변형을 만든다.
     # **PARAPHRASE 와 반대 목적이라 따로 있다**: PARAPHRASE 는 투표용 재질의라 "원문 어휘를
     # 그대로 유지" 가 규칙이지만, 증강은 어휘가 달라야 1차 적중이 오른다(어휘·구조 차이가
     # 1차 미달의 실제 원인 — TRIP-840 실측). **오프라인 전용**: 런타임 요청 경로에서 부르지
-    # 않는다(scripts/augment_bank.py).
+    # 않는다(scripts/intent/augment_bank.py).
     BANK_AUGMENT = "BANK_AUGMENT"  # intent-matching-design §3.2 ②
 
 

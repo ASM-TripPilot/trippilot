@@ -1,6 +1,7 @@
 package com.trippilot.archive.adapter.out.persistence
 
 import com.trippilot.archive.domain.CheckSource
+import com.trippilot.archive.domain.CompletionSource
 import com.trippilot.archive.domain.VisitCheck
 import com.trippilot.archive.domain.VisitCheckRepository
 import jakarta.persistence.Column
@@ -30,9 +31,11 @@ class VisitCheckEntity(
     @Column(name = "source") var source: String,
     @Column(name = "created_at") var createdAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
+    @Column(name = "completion_source") var completionSource: String?,
+    @Column(name = "auto_suppressed_at") var autoSuppressedAt: Instant?,
 ) {
     protected constructor() : this(
-        UUID.randomUUID(), UUID.randomUUID(), null, UUID.randomUUID(), null, null, null, "", Instant.EPOCH, Instant.EPOCH,
+        UUID.randomUUID(), UUID.randomUUID(), null, UUID.randomUUID(), null, null, null, "", Instant.EPOCH, Instant.EPOCH, null, null,
     )
 }
 
@@ -40,6 +43,10 @@ interface VisitCheckJpaRepository : JpaRepository<VisitCheckEntity, UUID> {
     fun findByTripIdOrderByArrivedAtDesc(tripId: UUID): List<VisitCheckEntity>
 
     fun findFirstByTripIdAndSlotKey(tripId: UUID, slotKey: String): VisitCheckEntity?
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select v from VisitCheckEntity v where v.tripId = :tripId and v.slotKey = :slotKey")
+    fun lockByTripIdAndSlotKey(tripId: UUID, slotKey: String): VisitCheckEntity?
 }
 
 @Component
@@ -49,19 +56,24 @@ class VisitCheckPersistence(private val jpa: VisitCheckJpaRepository) : VisitChe
         VisitCheckEntity(
             check.visitCheckId, check.tripId, check.slotKey, check.poiId,
             check.arrivedAt, check.completedAt, check.skippedAt, check.source.name, check.createdAt, check.updatedAt,
+            check.completionSource?.name, check.autoSuppressedAt,
         ),
     ).toDomain()
 
     override fun findById(visitCheckId: UUID): VisitCheck? = jpa.findById(visitCheckId).orElse(null)?.toDomain()
 
     override fun findByTrip(tripId: UUID): List<VisitCheck> =
-        jpa.findByTripIdOrderByArrivedAtDesc(tripId).map { it.toDomain() }
+        jpa.findByTripIdOrderByArrivedAtDesc(tripId).map { it.toDomain() }.filter { it.isRecorded }
 
     override fun findBySlot(tripId: UUID, slotKey: String): VisitCheck? =
         jpa.findFirstByTripIdAndSlotKey(tripId, slotKey)?.toDomain()
 
+    override fun findBySlotForUpdate(tripId: UUID, slotKey: String): VisitCheck? =
+        jpa.lockByTripIdAndSlotKey(tripId, slotKey)?.toDomain()
+
     private fun VisitCheckEntity.toDomain() = VisitCheck.reconstitute(
         visitCheckId, tripId, slotKey, poiId, arrivedAt, completedAt, skippedAt,
         CheckSource.valueOf(source), createdAt, updatedAt,
+        completionSource?.let(CompletionSource::valueOf), autoSuppressedAt,
     )
 }

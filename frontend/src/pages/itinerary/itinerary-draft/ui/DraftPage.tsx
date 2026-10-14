@@ -36,7 +36,10 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { getAccessToken } from '@/shared/api';
+import { useAccessToken } from '@/shared/api';
+import { isDateInRange } from '@/shared/lib/monthGrid';
+import { seoulDate } from '@/shared/lib/seoulDate';
+import { useQueryDataUpdateCount } from '@/shared/lib/useQueryDataUpdateCount';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
@@ -45,6 +48,7 @@ import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 
 import { DraftFallbackBanner } from './DraftFallbackBanner';
+import { RevealItem } from './RevealItem';
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
 
 /** 진행 게이지 셀 라벨의 상태부 — `{n}일차 {완성|생성 중|대기}`(한글 · AC-6). 위젯은 features 를
@@ -74,10 +78,23 @@ const GAUGE_MAX_CELLS = 4;
  *     기간이 늦게 도착) 데이터가 있는 첫 날로 되돌아간다 — 없는 날을 가리킨 채로 두면 화면이
  *     빈 목록을 그린다.
  */
-export function DraftPage({ tripId }: { tripId: string }): ReactElement {
+export function DraftPage({
+  tripId,
+  reveal = false,
+  day,
+}: {
+  tripId: string;
+  /** TRIP-1385 · 생성 화면에서 막 넘어왔다 — 완성 일정이 나타날 때 한 번 경로 그려지기·카드 등장을 건다.
+   *  라우트가 `reveal=1` 파라미터로 내리고, 일차 칩을 바꾸면 꺼진다(다시 재생 안 함). 저장 상태는 없다. */
+  reveal?: boolean;
+  /** 처음 선택할 날(`YYYY-MM-DD`). 재계획 자동 반영 뒤 생성 화면이 다시 짠 날을 싣는다(#1235 사후 리뷰 W2).
+   *  없거나 그 날에 데이터가 없으면 종전대로 데이터가 있는 첫 날이다(아래 `selectedDate`). */
+  day?: string;
+}): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [pickedDate, setPickedDate] = useState<string | null>(null);
+  const [pickedDate, setPickedDate] = useState<string | null>(day ?? null);
+  const [revealing, setRevealing] = useState(reveal);
   // 어느 슬롯의 교체 시트가 열렸나(=그 슬롯 slotKey). null 이면 닫힘. 컨테이너가 이제 바텀시트
   // (`SlotCandidateSheet`, TRIP-793 이 인라인 패널에서 되돌림)를 그린다. h08 셸 얼굴·DraftScreen
   // 얼굴 두 갈래 모두 화면의 **형제(뒤)** 로 조건부 마운트한다 — 스크롤 안에 두면 뒤 카드·하단
@@ -119,21 +136,21 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
    * (AC-9 · AC-10 · INV-4). 기준선을 기억해 두면 캐시를 건드리지 않고도 다시 셀 수 있다.
    * (재생성은 이제 생성 화면을 거쳐 이 화면을 **새로 마운트**하므로 그 마운트가 기준선을 다시 잡는다 — TRIP-1037.)
    *
-   * `useRef` 는 **다시 그리지 않고 값만 들고 있는 상자**다 — 이 값은 화면에 안 보이고
-   * 판정에만 쓰이므로 바뀌었다고 다시 그릴 이유가 없다.
+   * `useState` 의 초기화 함수는 **첫 렌더에서만** 돈다(TRIP-1364) — 렌더 중에 캐시를 직접 읽는 줄이
+   * React Compiler 아래서도 마운트 때 딱 한 번만 읽히는 걸 코드로 못 박는다(`useRef(읽기())` 는 인자가
+   * 매 렌더 계산돼 컴파일러가 그 식을 memo 하면 의미가 흐려진다). 값은 setter 를 안 쓰므로 안 바뀐다.
    *
    * 처음 값은 0이 아니라 **마운트 순간의 캐시 카운터**다(TRIP-1006 #084). 카운터는 이 화면 것이
    * 아니라 캐시 속 쿼리 하나의 것이라, 같은 일정을 보는 다른 화면(같이 짜기의 PARTIAL 폴링 등)이
    * 이미 30 넘게 올려 둘 수 있다. 0부터 세면 열자마자 "상한 도달"로 판정해 폴링을 시작조차 안 한다.
-   * (`useRef` 의 인자는 첫 렌더에서만 쓰인다 — 이후 렌더에서 다시 계산돼도 버려진다.)
    */
-  const pollBaseline = useRef(
-    queryClient.getQueryState(itineraryQueryKey)?.dataUpdateCount ?? 0
+  const [pollBaseline] = useState(
+    () => queryClient.getQueryState(itineraryQueryKey)?.dataUpdateCount ?? 0
   );
 
   /** 캐시가 새로 만들어져 카운터가 되감기면 음수가 될 수 있어 0으로 바닥을 둔다. */
   function pollsSinceBaseline(dataUpdateCount: number): number {
-    return Math.max(0, dataUpdateCount - pollBaseline.current);
+    return Math.max(0, dataUpdateCount - pollBaseline);
   }
 
   const trip = useGetTripsTripId(tripId);
@@ -192,8 +209,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // 상한(30회 ≒ 60초)에 걸려 폴링이 멈췄는데 아직 `PARTIAL` 이면 2차 생성이 영영 안 온
   // 것이다. 이 항이 없으면 폴링만 조용히 멈추고 화면은 **완전히 정상으로 보인다**(AC-9
   // 후반절 · INV-4). 횟수는 `useQuery` 반환값에 없고 캐시의 `QueryState` 에만 있다.
+  // 구독으로 읽는다(TRIP-1364) — 렌더 중 `getQueryState()` 직접 읽기는 React Compiler 가 memo 해 첫 값에 굳는다.
   const pollCount = pollsSinceBaseline(
-    queryClient.getQueryState(itineraryQueryKey)?.dataUpdateCount ?? 0
+    useQueryDataUpdateCount(itineraryQueryKey)
   );
   const pollExhausted =
     itinerary.data?.generationState === 'PARTIAL' &&
@@ -229,8 +247,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // TRIP-1094 — 넣지 못한 꼭 갈 곳의 이름은 담은 장소에서 찾는다. 조회는 미배치가 있고 로그인일 때만
   // (AC-13). 조회 대기·실패·게스트면 담은 장소가 빈 배열이라 서버 문구만 먼저 보인다(Q4 · INV-4).
   const unplaced = itinerary.data?.unplacedMustVisits;
+  // 구독으로 읽는다(TRIP-1364) — 렌더 중 `getAccessToken()` 은 컴파일러가 memo 해 로그인·로그아웃을 놓친다.
+  const accessToken = useAccessToken();
   const { savedPlaces } = useSavedPlaces({
-    isAuthed: getAccessToken() !== null && (unplaced?.length ?? 0) > 0,
+    isAuthed: accessToken !== null && (unplaced?.length ?? 0) > 0,
   });
   const unplacedRows = resolveUnplacedNames({ unplaced, savedPlaces });
 
@@ -247,7 +267,8 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const shortfallNotice = resolveShortfallNotice(signals);
 
   /**
-   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. **확정 일정은 어떤 경로로도 보내지 않는다.**
+   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. 여행 중이면 그 화면의 재계획 모드로 보낸다.
+   * **확정 일정은 생성 POST 경로로 보내지 않는다**(재계획 모드는 생성 POST 를 쏘지 않는다).
    *
    * ⚠️ 조회가 끝나기 전에는 `status` 를 모른다(`data` 가 `undefined`). 그 상태로 보내면
    * 확정 일정에도 POST 가 나가 확정이 풀리고 동결됐던 poi_snapshot 참조가 사라진다 —
@@ -270,6 +291,28 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     if (!mountedRef.current) return;
     const status = settled.data?.status;
 
+    // 여행 중 다시 짜기는 확정·초안 구분 없이 Plan-B(재계획)의 몫이다 — 모달 없이 생성 화면의 재계획 모드로 보내
+    // 바로 다시 짜서 반영한다(2026-10-14 사용자 결정 · 원 일정은 서버가 반영 전 복원 지점을 남긴다). 재계획은 확정을
+    // 풀지 않는다. 생성 실패(FAILED)는 서버가 재생성을 받으므로 종전대로 생성 POST 로 간다 — 다녀온 기록이 있어 409 면
+    // 생성 화면이 재계획 모드로 넘긴다(GeneratingPage). 여행 기간을 모르면 아래 종전 길이다.
+    // 이 여행이 생성 중이면 재계획보다 아래 "진행 중" 확인(TRIP-1032 B)이 먼저다 — 1일차 전이면 재계획은 "오늘 일정이
+    // 없다" 409 막다른 얼굴이 된다(#1235 사후 리뷰 W1).
+    if (
+      settled.data !== undefined &&
+      !isGenerationRunning(settled.data) &&
+      settled.data.generationMode !== 'MANUAL' &&
+      settled.data.generationState !== 'FAILED' &&
+      trip.data !== undefined &&
+      isDateInRange(
+        seoulDate(new Date()),
+        trip.data.startDate,
+        trip.data.endDate
+      )
+    ) {
+      goGenerating(true);
+      return;
+    }
+
     const stop =
       (status === undefined && !isNotFound(settled.error)) ||
       status === 'CONFIRMED' ||
@@ -291,12 +334,22 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     goGenerating();
   }
 
-  /** 생성 화면으로 replace 1회 — 409 안내·실패·재시도는 그 화면이 진다(TRIP-1037 결정 A). */
-  function goGenerating(): void {
+  /**
+   * 생성 화면으로 replace 1회 — 409 안내·실패·재시도는 그 화면이 진다(TRIP-1037 결정 A).
+   * `replan` 이면 그 화면의 재계획 모드(생성 POST 없음)로, 아니면 완전 AI 생성으로 연다.
+   * 오늘 뒤의 날을 보고 있으면 그 날을 싣는다 — 재계획은 그 날 하루를 다시 짜고(서버: 오늘이 아닌 날은 하루 전체),
+   * 생성이 여행 중 409 로 거절되면 재계획 모드도 그 날로 이어진다. 빠지면 보던 날 대신 오늘이 다시 짜인다.
+   */
+  function goGenerating(replan = false): void {
     leavingRef.current = true;
+    const targetDate =
+      selectedDate > seoulDate(new Date()) ? selectedDate : undefined;
+    const params = replan
+      ? { tripId, replan: '1' }
+      : { tripId, mode: 'FULLY_AI' };
     router.replace({
       pathname: '/trips/[tripId]/itinerary/generating',
-      params: { tripId, mode: 'FULLY_AI' },
+      params: targetDate === undefined ? params : { ...params, targetDate },
     });
   }
 
@@ -594,11 +647,15 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           center={center}
           pins={listedPins}
           fitPins
+          drawPathOnMount={revealing}
           // TRIP-1204 — 시트가 열린 채로도 손가락 확대·이동(셸 기본은 열림=잠금). 6-b 실기 전용.
           mapViewOnly={false}
           days={dayChips}
           selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
-          onSelectDay={(index) => setPickedDate(chipTabs[index]?.date ?? null)}
+          onSelectDay={(index) => {
+            setRevealing(false);
+            setPickedDate(chipTabs[index]?.date ?? null);
+          }}
           onBack={handleBack}
           header={
             <SheetHeader
@@ -653,39 +710,49 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
             <UnplacedMustVisitNotice rows={unplacedRows} />
             {listedSlots.flatMap((slot, index) => {
               const items: ReactElement[] = [
-                <SlotStopCard
-                  // 순번을 섞는다 — 같은 날 같은 장소 2회(BR-U2-04 위반 데이터, TRIP-1296)면 poiId 만으론 겹친다. 끌어 옮기지 않는 목록이라 순번 key 가 안전하다.
+                <RevealItem
                   key={`card-${index}-${slot.poiId}`}
-                  slot={slot}
-                  date={selectedDate}
+                  revealing={revealing}
                   index={index}
-                  // 전 슬롯 시각 칩(isFixed 무관 · AC-3 · D8). 구분자는 en-dash U+2013.
-                  timeLabel={`${slot.startAt.slice(0, 5)}–${slot.endAt.slice(
-                    0,
-                    5
-                  )}`}
-                  // "다른 후보 ›" 는 비고정 슬롯에만 표시(고정=미주입→링크 부재 · AC-7). TRIP-793 이
-                  // 이 트리거를 처음 실배선한다 — 시트는 셸의 형제로 조건부 마운트한다(planb
-                  // StaySelectSheet 선례 · `candidateSheet`).
-                  onPressAlt={
-                    slot.isFixed
-                      ? undefined
-                      : () =>
-                          setEditingSlotKey(
-                            buildSlotKey(selectedDate, slot.poiId)
-                          )
-                  }
-                  violation={violationNotice(slot)}
-                />,
+                >
+                  <SlotStopCard
+                    // 순번을 섞는다 — 같은 날 같은 장소 2회(BR-U2-04 위반 데이터, TRIP-1296)면 poiId 만으론 겹친다. 끌어 옮기지 않는 목록이라 순번 key 가 안전하다.
+                    slot={slot}
+                    date={selectedDate}
+                    index={index}
+                    // 전 슬롯 시각 칩(isFixed 무관 · AC-3 · D8). 구분자는 en-dash U+2013.
+                    timeLabel={`${slot.startAt.slice(0, 5)}–${slot.endAt.slice(
+                      0,
+                      5
+                    )}`}
+                    // "다른 후보 ›" 는 비고정 슬롯에만 표시(고정=미주입→링크 부재 · AC-7). TRIP-793 이
+                    // 이 트리거를 처음 실배선한다 — 시트는 셸의 형제로 조건부 마운트한다(planb
+                    // StaySelectSheet 선례 · `candidateSheet`).
+                    onPressAlt={
+                      slot.isFixed
+                        ? undefined
+                        : () =>
+                            setEditingSlotKey(
+                              buildSlotKey(selectedDate, slot.poiId)
+                            )
+                    }
+                    violation={violationNotice(slot)}
+                  />
+                </RevealItem>,
               ];
               if (index < listedSlots.length - 1) {
                 const nextSlot = listedSlots[index + 1];
                 items.push(
-                  <DistanceConnector
+                  <RevealItem
                     key={`conn-${index}-${slot.poiId}`}
-                    slotKey={buildSlotKey(selectedDate, slot.poiId)}
-                    distanceRange={nextSlot.distanceRange}
-                  />
+                    revealing={revealing}
+                    index={index}
+                  >
+                    <DistanceConnector
+                      slotKey={buildSlotKey(selectedDate, slot.poiId)}
+                      distanceRange={nextSlot.distanceRange}
+                    />
+                  </RevealItem>
                 );
               }
               return items;
@@ -703,10 +770,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         view={view}
         tabs={tabs}
         selectedDate={selectedDate}
-        pins={buildDraftPins(
-          days.find((day) => day.date === selectedDate)?.slots ?? []
-        )}
-        dayHeader={formatDraftDayHeader(selectedDate)}
         canRetry={itinerary.data?.status !== 'CONFIRMED'}
         // 폴백 판정은 위에서 접은 값 그대로(재발명 금지 → F-7 승계). 인터스티셜을 넘긴 목록이 폴백임을
         // 제목·배지로 계속 말한다(BR-U3-11 · TRIP-1008).
@@ -715,19 +778,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         onSelectDay={setPickedDate}
         onRetry={() => void handleRetry()}
         onBack={handleBack}
-        // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
-        // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
-        onComplete={() =>
-          router.push({
-            pathname: '/trips/[tripId]/itinerary',
-            params: { tripId },
-          })
-        }
-        // 비고정 슬롯 "다른 후보 ›" press → 그 슬롯 slotKey 를 **토글**한다(같은 슬롯 재press 는 닫힘 ·
-        // 한 번에 한 슬롯 · TRIP-483 ★C). 재대입 `setEditingSlotKey(k)` 은 같은 값이라 안 닫힌다.
-        onPressSlot={(slotKey) =>
-          setEditingSlotKey((prev) => (prev === slotKey ? null : slotKey))
-        }
         onManualPlan={goManualPlan}
       />
       {/* 스크롤 밖 뒤 형제라야 카드·하단 버튼 위에 그려진다(TRIP-983). */}

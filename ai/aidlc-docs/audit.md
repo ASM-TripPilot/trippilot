@@ -371,3 +371,13 @@
 - **되살리는 조건을 적었다**: `ai/scripts/mlops/serving_judge.py`(주 1회 CloudWatch·CE 실측)가 Bedrock 대비 EKS GPU 우위를 수치로 제안할 때. 그때는 결함 4건이 미해결 상태이므로 **이 커밋을 revert 하지 않고 처음부터 다시 쓴다**
 - **TRIP-961(GPU NodePool·쿼터)을 조건 기록으로 되돌렸다.** 09-26 에 "착수 요청으로 승격"으로 적었던 것을 취소한다 — 지금 쿼터를 신청하지 않는다
 - **대신 적지 않은 것**: 전환 판정기의 판정 임계값을 수치로 고치지 않았다. 기준선(문구 1건 1,375ms · CMU 1 · 5분 창 과금)은 있지만 EKS 쪽 실측이 없어 비교할 숫자가 한쪽뿐이다 — 없는 숫자로 임계를 적지 않는다
+
+## 2026-10-14 — 대중교통 실측을 ODsay 로 (TMAP 대중교통 상품 미구독)
+**Timestamp**: 2026-10-14 · ADR `ai-adr.md` 어댑터 순서 항목 추가 · `adapters/odsay.py` · `chained_travel.ByModeTravelTime` · `ODSAY_API_KEY`
+- **사용자 입력(원문)**: "카카오맵이나 네이버맵으로 해봐" → 확인 결과를 보고 "2번으로 가자."
+- **왜 카카오·네이버가 아닌가**: 문서로 확인 — 카카오모빌리티 공개 상품은 자동차 길찾기뿐(도보·자전거는 제휴 전용), 카카오맵 Local API 는 경로 없음, 네이버 Directions 5/15 는 자동차만(대중교통은 지도 표시 레이어). 둘 다 대중교통 경로 API 가 없다. 로컬에 두 회사 키도 없어 호출 시도 자체가 불가능했고, 엔드포인트가 없으니 키가 있어도 같다
+- **선택지 둘**: ① TMAP 대중교통 상품 구독(코드 0, 사용자가 콘솔에서 신청) ② ODsay LAB 어댑터. 권고는 ①이었고 사용자가 ②를 골랐다
+- **무엇을 했나**: `OdsayTransitAdapter`(GET `searchPubTransPathT`, `result.path[].info` 의 `totalTime` **분**·`totalDistance` 미터, 본문 오류 → `TravelTimeError` + `__cause__.code`) · 수단별 1차 라우터 `ByModeTravelTime`(자동차·보행 TMAP, 대중교통 ODsay) · `main._travel_chain`(ODsay 키 없으면 종전대로 TMAP 이 대중교통도 맡아 상품 구독 시 바로 산다) · 시크릿 허용목록·차트·compose·env 예시 · smoke 표식 `실경로 배선`
+- **지키는 것**: 메서드 1회 = HTTP 1건·재시도 없음(TMAP 선례). 실패는 승격·체인이 하버사인으로 폴백·원인별 첫 1회 경고(INV-4). 키가 쿼리 파라미터라 예외 메시지에 원문을 싣지 않는다. 사용자 노출 시각·순서는 여전히 조립값(INV-2) — 실경로가 바꾸는 것은 표시 거리와 TransitProvider 패킷뿐
+- **확인하지 못한 것**: ODsay 의 **제주 커버리지**("전국"만 명시)·무료 일 한도·서버 플랫폼 키의 IP 등록 요건(dev 이그레스는 NAT EIP 1개). 픽스처는 문서 기준이라 실 응답 드리프트는 실키 첫 실행에서 잡는다 — 키 발급 뒤 로컬 스모크로 확정한다
+- **대신 적지 않은 것**: 구현 리포트·스모크 스크립트(`smoke_itinerary.py`) ODsay 분기 — 실키가 생긴 뒤 한 번에 한다

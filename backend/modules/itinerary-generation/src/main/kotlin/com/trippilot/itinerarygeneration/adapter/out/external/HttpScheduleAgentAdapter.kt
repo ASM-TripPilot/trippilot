@@ -1,6 +1,9 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
 import com.trippilot.itinerarygeneration.domain.RepairContext
+import com.trippilot.itinerarygeneration.domain.EditProposalInput
+import com.trippilot.itinerarygeneration.domain.EditProposalOutput
+import com.trippilot.itinerarygeneration.domain.EditProposalStatus
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.FixedBlock
@@ -8,6 +11,7 @@ import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.TimeWindow
+import com.trippilot.itinerarygeneration.domain.TodayWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
@@ -198,14 +202,15 @@ class HttpScheduleAgentAdapter(
                 input.companionType, input.budgetLevel,
             ),
             targetDate = input.targetDate,
-            timeWindow = AiTimeWindow(input.targetDate, DAY_START, DAY_END),
+            timeWindow = AiTimeWindow(input.targetDate, DAY_START, replanDayEnd(input)),
             anchor = AiCoord(lat, lng),
+            stayAnchor = input.stayLat?.let { sLat -> input.stayLng?.let { sLng -> AiCoord(sLat, sLng) } },
             scope = input.scope.name,
             fromInstant = input.fromInstant,
             preferenceProfile = input.preferenceProfile,
             requestMeta = input.requestMeta,
             lockedBlocks = input.lockedBlocks,
-            reasons = input.reasons,
+            reasons = AiReasonVocabulary.toAiAll(input.reasons),
             directives = input.directives,
             freeText = input.freeText,
             currentSlots = input.currentSlots.map {
@@ -217,6 +222,12 @@ class HttpScheduleAgentAdapter(
             savedPlaces = input.savedPlaces.map { AiSavedPlace(it.poiId.toString(), it.name) },
             rejections = input.rejections,
             excludedPoiIds = input.excludedPoiIds,
+            changeLog = input.changeLog.map {
+                AiChangeLogEntry(
+                    it.source, it.reason, it.at,
+                    it.removedPoiIds.map(UUID::toString), it.addedPoiIds.map(UUID::toString),
+                )
+            },
         )
 
         val res = post(REPLAN_PATH, request, AiReplanResponse::class.java)
@@ -247,6 +258,70 @@ class HttpScheduleAgentAdapter(
                 .groundAlternatives()
         } catch (e: IllegalArgumentException) {
             throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 재계획 응답 스키마 불일치: ${e.message}", cause = e)
+        }
+    }
+
+    /**
+     * 편집 제안 — `POST /ai/v1/itinerary/edit`(U8 G-U8-2). 사용자가 대화 안에서 기다리는 동작이라 bounded 클라이언트를 쓴다.
+     *
+     * **새로 들어온 장소는 정본에 대조한다**(INV-1). 편집 저장 경로에는 POI 실재 검사가 없어서, 여기서 안 막으면
+     * 상대가 지어낸 id 가 제안 카드를 거쳐 저장까지 간다. 하나라도 정본에 없으면 응답 전체를 버린다 —
+     * 그 한 곳만 빼면 상대가 검증한 시각·순서가 더는 검증값이 아니다(INV-2).
+     */
+    /**
+     * 재계획 창 끝 — 오늘을 다시 짜면 생성과 같은 규칙([TodayWindow])으로 **끝만** 늘린다. 종전엔 21:00 고정이라 밤 9시에
+     * [다시 짜기]를 누르면 남은 시간이 0 이어서 "대안 없음"이 됐다. 시작은 하루 전체 그대로(09:00 — 좁히면 오전에 잠긴
+     * 고정 블록이 창 밖이 되어 상대가 409 로 거부한다). 다른 날은 종전 그대로.
+     */
+    private fun replanDayEnd(input: ReplanInput): java.time.LocalTime {
+        val now = input.fromInstant.atZone(TRAVEL_ZONE)
+        if (now.toLocalDate() != input.targetDate) return DAY_END
+        val from = TodayWindow.earliest(now.toLocalTime()) ?: return DAY_END
+        return TodayWindow.eveningEnd(from, DAY_END)
+    }
+
+    override fun proposeEdit(input: EditProposalInput): EditProposalOutput {
+        val res = post(
+            EDIT_PATH,
+            AiEditRequest(
+                tripId = input.tripId.toString(),
+                itinerary = input.itinerary.toWire(),
+                targetDate = input.targetDate,
+                anchor = AiCoord(input.anchorLat, input.anchorLng),
+                budgetLevel = input.budgetLevel,
+                transportMode = input.transportMode,
+                command = input.command?.let { AiEditCommand(it.op, it.params, it.affectedPoiIds.map(UUID::toString)) },
+                utterance = input.utterance,
+                confirm = true,
+                requestMeta = AiRequestMeta(input.requestMeta.requestId, input.requestMeta.requestedAt, input.requestMeta.deadlineMs),
+            ),
+            AiEditResponse::class.java,
+            scheduleAgentBoundedRestClient,
+        )
+        return when (res.status) {
+            "APPLIED" -> {
+                val wire = res.itinerary
+                    ?: throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 편집 응답이 APPLIED 인데 일정이 없습니다.")
+                val proposed = try {
+                    wire.toDomain(clock.instant())
+                } catch (e: IllegalArgumentException) {
+                    throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 편집 응답 스키마 불일치: ${e.message}", cause = e)
+                }
+                val before = input.itinerary.days.flatMap { d -> d.slots.map { it.poiId } }.toSet()
+                val added = proposed.days.flatMap { d -> d.slots.map { it.poiId } }.filter { it !in before }.distinct()
+                if (added.isNotEmpty() && candidatePool.ground(added).size < added.size) {
+                    throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 편집 응답에 정본에 없는 장소가 있습니다(INV-1).")
+                }
+                EditProposalOutput(EditProposalStatus.PROPOSED, proposed, emptyList(), null, res.applyMode)
+            }
+            "REJECTED" ->
+                EditProposalOutput(EditProposalStatus.REJECTED, null, res.violations.map { it.toDomain() }, res.reason, res.applyMode)
+            "TRANSLATION_FAILED" -> {
+                log.info("편집 발화를 명령으로 옮기지 못했습니다 — reason={} tripId={}", res.reason, input.tripId)
+                EditProposalOutput(EditProposalStatus.NOT_UNDERSTOOD, null, emptyList(), res.reason, null)
+            }
+            // CONFIRM_REQUIRED 는 confirm=true 로 불렀으니 올 수 없다. 오면 계약이 어긋난 것이라 삼키지 않는다(INV-4).
+            else -> throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 편집 응답의 status 를 모릅니다: ${res.status}")
         }
     }
 
@@ -327,6 +402,7 @@ class HttpScheduleAgentAdapter(
         internal const val VALIDATE_PATH = "/ai/v1/itinerary/validate"
         internal const val REPAIR_PATH = "/ai/v1/itinerary/repair"
         internal const val EXPLANATIONS_PATH = "/ai/v1/itinerary/explanations"
+        internal const val EDIT_PATH = "/ai/v1/itinerary/edit"
         // **여행 중 변수 대응 둘은 `/planb` 접두사다**(TRIP-960 ② · AI #749 별칭 개통).
         // 처리자가 PlanBAgent(RAG·상황 지식)라 경로 이름이 실제 배정을 말한다 — 접두사가
         // `/itinerary` 하나뿐이던 시절, 그 혼동이 실제 배선 뒤바뀜으로 이어졌다(백지 생성
@@ -342,7 +418,7 @@ class HttpScheduleAgentAdapter(
          * 하나 늘리면 여기에 넣게 되고, 그러면 게이트가 저절로 따라온다.
          */
         internal val CALLED_PATHS =
-            listOf(GENERATE_PATH, VALIDATE_PATH, REPAIR_PATH, EXPLANATIONS_PATH, ALTERNATIVES_PATH, REPLAN_PATH)
+            listOf(GENERATE_PATH, VALIDATE_PATH, REPAIR_PATH, EXPLANATIONS_PATH, ALTERNATIVES_PATH, REPLAN_PATH, EDIT_PATH)
 
         // 편집 재검증·보정은 사용자가 화면에서 기다리는 동작이라 생성(20s)보다 짧게 잡는다.
         private const val VALIDATE_DEADLINE_MS = 3_000L
@@ -352,6 +428,7 @@ class HttpScheduleAgentAdapter(
 
         private val DAY_START: java.time.LocalTime = java.time.LocalTime.of(9, 0)
         private val DAY_END: java.time.LocalTime = java.time.LocalTime.of(21, 0)
+        private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
     }
 }
 

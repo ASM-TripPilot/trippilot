@@ -124,8 +124,45 @@ class BootstrapSecurityTests(unittest.TestCase):
 
     def test_rds_master_secret_read_requires_own_database_system_tag(self):
         read = self.statement("ReadEnvironmentRdsMasterSecret")
-        tag = read["Condition"]["StringEquals"]["secretsmanager:ResourceTag/aws:rds:primaryDBInstanceArn"]
-        self.assertTrue(tag["Fn::Sub"].endswith(":db:trippilot-${Environment}"))
+        tags = read["Condition"]["StringEquals"]["secretsmanager:ResourceTag/aws:rds:primaryDBInstanceArn"]
+        # 정확히 두 장비 — 운영 DB 와 개발 대상 DB(2026-10-15 개발·운영 분리, infra/terraform/stack/data.tf dev_target).
+        # 접두어 일치(StringLike `trippilot-${Environment}*`)로 넓히지 않는다: 같은 접두어의 어떤 장비든 마스터 비밀번호가 열린다.
+        self.assertEqual(sorted(tag["Fn::Sub"].split(":db:")[1] for tag in tags),
+                         ["trippilot-${Environment}", "trippilot-${Environment}-target"])
+        self.assertNotIn("StringLike", read["Condition"])
+
+    def test_alert_grants_stay_inside_this_environment(self):
+        """운영 알람(Q3=A) 권한 — Slack 채널이 쓰는 역할은 읽기뿐이고, 배포 역할의 쓰기는 이 환경의 이름 안이다.
+
+        `chatbot:*` 는 `*` 범위다(Chatbot 리소스 단위 권한이 확실치 않아 좁히면 apply 가 막힐 수 있다). 그 넓이가
+        무해한 이유는 넘길 수 있는 역할이 CloudWatch 읽기만 가진 chatbot 역할 하나뿐이라서다 — 이 테스트가 그 전제를 잡는다.
+        단 `chatbot:*` 자체는 환경을 가리지 않는다 — dev 와 prd 가 한 계정이면 dev 배포 역할이 prd 채널 설정을 바꿀 수 있다.
+        지금은 계정이 dev 하나뿐이다. prd 를 같은 계정에 세우면 쓰기 액션을 `chat-configuration/slack-channel/trippilot-${Environment}-*` 로 좁힌다.
+        """
+        chatbot = self.resources["ChatbotRole"]["Properties"]
+        self.assertEqual(chatbot["AssumeRolePolicyDocument"]["Statement"][0]["Principal"], {"Service": "chatbot.amazonaws.com"})
+        granted = [action for policy in chatbot["Policies"] for item in policy["PolicyDocument"]["Statement"]
+                   for action in item["Action"]]
+        self.assertTrue(all(action.split(":")[1].startswith(("Describe", "Get", "List")) and action.startswith("cloudwatch:")
+                            for action in granted), granted)
+        self.assertNotIn("ManagedPolicyArns", chatbot)
+
+        attached = {item["Sid"]: item for item in
+                    self.resources["DeploymentExtraPolicy"]["Properties"]["PolicyDocument"]["Statement"]}
+        chatbot_pass = attached["PassChatbotRoleToSlackChannel"]
+        self.assertEqual(chatbot_pass["Action"], ["iam:PassRole"])
+        self.assertTrue(chatbot_pass["Resource"]["Fn::Sub"].endswith(":role/trippilot-${Environment}-chatbot"))
+        # 그 전제는 "넘길 수 있는 역할이 chatbot 역할뿐"이다 — 다른 PassRole 문장이 와일드카드로 그 역할까지 덮으면 깨진다.
+        everywhere = self.statements + list(attached.values())
+        for item in everywhere:
+            if "iam:PassRole" in item["Action"] and item is not chatbot_pass:
+                resources = item["Resource"] if isinstance(item["Resource"], list) else [item["Resource"]]
+                for resource in resources:
+                    text = resource["Fn::Sub"] if isinstance(resource, dict) else resource
+                    self.assertNotIn("*", text.split(":role/")[-1], f"{item['Sid']}: PassRole 범위가 와일드카드다")
+        self.assertTrue(attached["ManageAlarms"]["Resource"]["Fn::Sub"].endswith(":alarm:trippilot-${Environment}-*"))
+        for resource in attached["ManageAlertsTopic"]["Resource"]:
+            self.assertIn(":trippilot-${Environment}-alerts", resource["Fn::Sub"])
 
     def test_bootstrap_principal_may_create_everything_the_stack_declares(self):
         """부트스트랩 역할의 권한 예제가 템플릿이 만드는 IAM 리소스를 전부 덮는지.
@@ -168,6 +205,11 @@ class BootstrapSecurityTests(unittest.TestCase):
                 target = arn("iam", "policy", properties["ManagedPolicyName"])
                 self.assertTrue(allowed("iam:CreatePolicy", target),
                                 f"{name}: 권한 예제에 iam:CreatePolicy {target} 이 없다")
+                # 이름이 고정된 정책은 교체가 안 되므로 내용 변경이 **제자리 갱신**(새 버전 만들기)으로 온다.
+                # 만드는 권한만 있으면 첫 생성은 되고 그다음 수정에서 403 으로 롤백된다.
+                for action in ("iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions",
+                               "iam:GetPolicy", "iam:GetPolicyVersion"):
+                    self.assertTrue(allowed(action, target), f"{name}: 권한 예제에 {action} {target} 이 없다")
                 # 만들기만 하면 역할에 붙지 않는다 — 붙이는 권한도 같이 있어야 한다.
                 for role in properties["Roles"]:
                     holder = arn("iam", "role",
@@ -175,9 +217,53 @@ class BootstrapSecurityTests(unittest.TestCase):
                     self.assertTrue(allowed("iam:AttachRolePolicy", holder),
                                     f"{name}: {holder} 에 붙일 iam:AttachRolePolicy 가 없다")
 
+    def test_deployment_role_reads_only_this_environment_container_logs(self):
+        """수동 로그 수집 워크플로가 쓰는 읽기 권한 — 읽기뿐이고, 이 환경의 Container Insights 그룹뿐이다.
+
+        dev 는 파드 로그를 CloudWatch 로 보낸다(terraform `container_logs_enabled`, 보존 90일).
+        kubectl 은 지금 파드만 보지만 CloudWatch 는 죽은 파드·롤아웃 전 로그·시간 범위 질의가 된다.
+        `GetQueryResults`/`StopQuery` 는 리소스 수준 권한이 없어 `*` 여야 한다 — 그 문장엔 다른 액션이
+        끼면 안 된다(끼면 `*` 가 그 액션까지 넓힌다).
+        """
+        attached = self.resources["DeploymentExtraPolicy"]["Properties"]["PolicyDocument"]["Statement"]
+        read = next(item for item in attached if item["Sid"] == "ReadContainerInsightsLogs")
+        self.assertTrue(all(action in ("logs:DescribeLogStreams", "logs:FilterLogEvents",
+                                       "logs:GetLogEvents", "logs:StartQuery")
+                            for action in read["Action"]), read["Action"])
+        for resource in read["Resource"]:
+            self.assertIn(":log-group:/aws/containerinsights/trippilot-${Environment}/*", resource["Fn::Sub"])
+        results = next(item for item in attached if item["Sid"] == "ReadLogsInsightsQueryResults")
+        self.assertEqual(sorted(results["Action"]), ["logs:GetQueryResults", "logs:StopQuery"])
+        self.assertEqual(results["Resource"], "*")
+        # 관리형 정책 상한(6,144자) — 인라인 정책이 꽉 차서 여기로 넘긴 문장들이 또 꽉 차면 다음 사람이 막힌다
+        document = self.resources["DeploymentExtraPolicy"]["Properties"]["PolicyDocument"]
+        self.assertLess(len(json.dumps(document, separators=(",", ":"))), 6144)
+
     def test_role_inline_policy_stays_below_aws_character_limit(self):
         size = sum(len(json.dumps(item["PolicyDocument"], separators=(",", ":"))) for item in self.role["Policies"])
         self.assertLess(size, 10240)
+
+    def test_named_managed_policy_description_is_frozen(self):
+        """`AWS::IAM::ManagedPolicy` 의 `Description` 은 **고칠 수 없는 속성**이다 — 한 글자만 바꿔도
+        CloudFormation 이 정책을 새로 만들려 하고, 이름이 고정(`ManagedPolicyName`)이라 "already exists" 로
+        실패해 스택 전체가 롤백된다. 2026-10-13 dev 실측: #885 가 설명에 "CloudWatch collector" 를 덧붙인
+        뒤 첫 bootstrap 이 그렇게 죽었고, 같은 변경에 든 로그용 역할 생성도 함께 취소됐다.
+        설명을 고쳐야 한다면 정책 이름도 같이 바꾼다(그때 이 상수를 갱신한다). 내용 변경은 PolicyDocument 로 한다.
+        """
+        frozen = {
+            "DeploymentExtraPolicy": (
+                "Deployment-role statements that do not fit the inline policy (it sits at the 10240-character "
+                "limit): Pod Identity binding for the AI pods, and read-only serving metrics/cost for the "
+                "weekly serving judge."
+            ),
+        }
+        named = {
+            name: resource["Properties"].get("Description")
+            for name, resource in self.resources.items()
+            if resource["Type"] == "AWS::IAM::ManagedPolicy" and "ManagedPolicyName" in resource["Properties"]
+        }
+        # 이름이 고정된 관리형 정책이 새로 생기면 여기 등록되기 전에는 통과하지 못한다.
+        self.assertEqual(named, frozen)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,7 @@ import {
   WarningTriangleGlyph,
 } from '@/features/explore/index.view';
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { DismissNotice } from '@/shared/ui/NoticeBanner';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존
 // 소비처(placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
@@ -212,17 +213,12 @@ function StaySaveErrorBanner({
   // 담기 실패를 침묵하지 않고 알린다(INV-4). 숙소 전용 일반 문구 — 장소 문구(SAVE_FAILURE_NOTICE)
   // 를 재사용하면 "장소"가 노출된다(Seed Q4). 탭하면 배너가 닫힌다(다음 하트 press 로도 소멸).
   return (
-    <Pressable
+    <DismissNotice
       testID="explore-stay-save-error"
-      accessibilityRole="button"
-      onPress={onDismiss}
-      className="mb-md flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-md"
-    >
-      <WarningTriangleGlyph size={18} tone="primary" />
-      <Text className="flex-1 font-noto text-label text-muted">
-        담기에 실패했어요. 잠시 후 다시 시도해 주세요.
-      </Text>
-    </Pressable>
+      message="담기에 실패했어요. 잠시 후 다시 시도해 주세요."
+      onDismiss={onDismiss}
+      icon={<WarningTriangleGlyph size={18} tone="primary" />}
+    />
   );
 }
 
@@ -235,15 +231,12 @@ function PlaceSaveErrorBanner({
   onDismiss?: () => void;
 }): ReactElement {
   return (
-    <Pressable
+    <DismissNotice
       testID="explore-place-save-error"
-      accessibilityRole="button"
-      onPress={onDismiss}
-      className="mb-md flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-md"
-    >
-      <WarningTriangleGlyph size={18} tone="primary" />
-      <Text className="flex-1 font-noto text-label text-muted">{message}</Text>
-    </Pressable>
+      message={message}
+      onDismiss={onDismiss}
+      icon={<WarningTriangleGlyph size={18} tone="primary" />}
+    />
   );
 }
 

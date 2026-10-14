@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
@@ -20,6 +19,8 @@ import {
   BackChevronGlyph,
   FullAiGlyph,
 } from '@/features/itinerary/index.view';
+
+import { GeneratingIllustration } from './GeneratingIllustration';
 
 /**
  * h07 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `4294:8516`. 프레젠테이션(props만, 재판정 금지).
@@ -32,10 +33,8 @@ import {
  * 진행 바도 채움률(48%) 대신 **비결정형**(좌우로 미끄러지는 세그먼트)으로 "도는 중"만 표현한다.
  * 그래서 화면에 퍼센트·`N초`·소요시간(`N분`/`N시간`) 문자열이 하나도 없다(AC-1·AC-2 · INV-3).
  *
- * **지도 카드(TRIP-789)**: 꼭 갈 곳 핀만 그리고 연결선은 안 그린다(`connectPins={false}`, INV-2 —
- * 생성 중엔 검증된 동선이 없어 실선을 그리면 거짓말이 된다). 좌표(`pins`+`center`)가 있을 때만
- * 렌더하고, 없으면 지도 자체를 정직하게 생략한다(프로덕션은 생성 중 좌표가 없어 미렌더, 프리뷰만
- * 픽스처 주입 — 실 좌표 배관은 후속 티켓).
+ * **지도 카드 없음(TRIP-1352 · 결정 C)**: 생성 중 꼭 갈 곳 지도(TRIP-789·929)는 코드째 걷어냈다 — 생성 중엔
+ * 검증된 동선이 없어 보여 줄 것이 핀뿐이었고, 그 핀을 위해 꼭 갈 곳·담은 장소 조회 둘이 매 생성마다 나갔다.
  * **하단 제거(TRIP-789)**: Figma 프레임에 없는 footer 안내·[생성 취소]·[백그라운드로 전환] 2버튼을
  * 뺐다. 뒤로가기 = 백그라운드(앱바 뒤로 셰브론 = `onBackground`). [취소]=CANCELED 경로(BR-U3-05)가
  * UI에서 사라지는 것은 [기록]에서 canon 드리프트로 보고한다(팀 확정 2026-09-11).
@@ -184,10 +183,6 @@ export interface GeneratingScreenProps {
   onRetry: () => void;
   /** POST 오류(배선의 isError) — 참이면 인라인 실패 표면 노출(INV-4, 침묵 금지). */
   failed?: boolean;
-  /** 꼭 갈 곳 핀 — `center`와 함께 있을 때만 지도 카드를 렌더(정직 폴백, INV-2 연결선 없음). */
-  pins?: MapPin[];
-  /** 지도 중심 — MapView 필수 prop. `pins`와 동반(둘 다 없으면 지도 생략). */
-  center?: MapCenter;
   /** TRIP-1032 — 다른 여행이 생성 중(409)이면 실패 표면 대신 안내. `cancelable=false` 면 [기다리기]만. */
   busy?: {
     cancelable: boolean;
@@ -202,7 +197,8 @@ export interface GeneratingScreenProps {
     onClose: () => void;
   } | null;
   /** 서버가 이 재생성을 규칙으로 거절했고 Plan-B 로도 넘길 수 없다(끝난 여행·기간 모름) — 실패 표면 대신
-   * 서버 사유. 다시 보내도 같아 [다시 시도] 없음. 여행 중 거절은 배선이 Plan-B 로 넘겨 이 얼굴까지 안 온다. */
+   * 서버 사유. 다시 보내도 같아 [다시 시도] 없음. 여행 중 거절은 배선이 Plan-B 로 넘겨 이 얼굴까지 안 온다.
+   * 재계획 모드의 시작 거절(400·409)·대안 없음(NO_SOLUTION)도 이 얼굴이다. */
   refused?: {
     message: string;
     onClose: () => void;
@@ -213,8 +209,6 @@ export function GeneratingScreen({
   onBackground,
   onRetry,
   failed = false,
-  pins,
-  center,
   busy,
   aiLimit,
   refused,
@@ -337,20 +331,8 @@ export function GeneratingScreen({
                 </Text>
               </View>
 
-              {pins && center ? (
-                <View
-                  testID="itinerary-generating-map"
-                  style={cardShadow}
-                  className="h-[230px] w-full overflow-hidden rounded-card border border-hairline"
-                >
-                  <MapView
-                    center={center}
-                    pins={pins}
-                    viewOnly
-                    connectPins={false}
-                  />
-                </View>
-              ) : null}
+              {/* 지도 카드(TRIP-1352 가 걷음) 자리 — 장식 일러스트(TRIP-1384). 진척을 말하지 않는다. */}
+              <GeneratingIllustration />
 
               <View
                 style={cardShadow}

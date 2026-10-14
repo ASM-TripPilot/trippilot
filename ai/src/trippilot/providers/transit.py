@@ -29,6 +29,7 @@ _SOURCE_CONFIDENCE: dict[str, Confidence] = {
     "tmap_car": Confidence.HIGH,
     "tmap_pedestrian": Confidence.HIGH,
     "tmap_transit": Confidence.HIGH,
+    "odsay_transit": Confidence.HIGH,
     "kakao_mobility": Confidence.HIGH,
     "naver": Confidence.MID,
     "haversine_x_detour": Confidence.LOW,

@@ -29,12 +29,17 @@ from typing import Mapping
 from ortools.sat.python import cp_model
 
 from trippilot.assembly_engine.config import (
+    END_NEAR_WEIGHT,
     RAIN_INDOOR,
     RAIN_OUTDOOR,
     stay_for,
     AssemblyConfig,
 )
-from trippilot.assembly_engine.constraints import anchor_minutes, not_before_floor
+from trippilot.assembly_engine.constraints import (
+    anchor_minutes,
+    free_visit_cap,
+    not_before_floor,
+)
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
@@ -78,6 +83,10 @@ _REORDER_DET_LIMIT = 0.5
 # 통째로 잃었다. 소프트면 놓을 수 있는 것만 놓이고 못 놓는 것만 빠진다 — 재풀이 없음, 그 사실은 배선이
 # 미배치로 보고한다. 그리디 힌트가 필수 방문을 품으므로 한도에 걸린 FEASIBLE 해도 그것을 잃지 않는다.
 _W_REQUIRED = 1_000_000
+# 사용자가 이름으로 콕 집은 필수 방문(`RequiredVisit.priority`) — 보통 필수 방문 **100곳**보다 무겁다.
+# 같은 1M 이면 먼 그 한 곳을 넣으려 가까운 두 곳을 빼느니 그 한 곳을 버린다(DEV 2026-10-14: "성산일출봉
+# 꼭" 이 2시간 넘는 빈칸이 있는데도 미배치). 구성 LLM 이 고른 곳은 사용자가 말한 곳이 아니다.
+_W_REQUIRED_PRIORITY = 100 * _W_REQUIRED
 _W_REQUIRED_MEAL = 100_000
 
 
@@ -213,11 +222,15 @@ class OrToolsAssembler:
                 # 그래서 안전한 배율을 고르는 것으로는 못 막고, 못 냈을 때 무보정으로
                 # 한 번 더 보는 쪽이 맞다 — 이 재시도는 정의상 기준선과 같으므로
                 # **pace 를 켜서 기준선보다 나빠지는 경우가 없다.**
+                # 재시도는 경로 감점(travel_weight)도 끈다 — "기준선과 같다"가 성립하게. 감점만으로는
+                # 재시도하지 않는다: 목적식 항은 가해 여부를 안 바꿔 같은 한도면 같은 None 이고,
+                # 그 시간만큼 아래 몰아주기 재시도(×5 det)의 문턱을 깎는다(리뷰 지적).
                 _log.info("pace=%s 로 해 없음 — 무보정 재시도 (day=%s)",
                           problem.pace.value, day)
-                # 재시도는 같은 후보를 같은 프리필터로 자른다(pace 는 후보를 안 바꾼다) —
-                # 절단 관측을 두 번 남기면 빈도가 두 배로 세진다 (TRIP-908).
-                slots = self._solve_day(replace(problem, pace=None), day,
+                # 재시도는 같은 후보를 자른다 — 절단 관측을 두 번 남기면 빈도가 두 배로 세진다
+                # (TRIP-908). 남는 집합은 1차와 조금 다를 수 있다: 그리디 힌트 POI 를 남기는데
+                # 힌트가 pace(체류)로 바뀐다. 로그는 1차 절단 기준이다(점수순 절단 관측엔 충분).
+                slots = self._solve_day(replace(problem, pace=None, travel_weight=0.0), day,
                                         used, per_day_ms, log_cut=False)
             if slots is None:
                 # **안 쓴 예산을 실패한 일자에 몰아준다 (TRIP-907).**
@@ -250,7 +263,7 @@ class OrToolsAssembler:
                     retry_ms = min(spare_ms, SPARE_RETRY_CAP_MS)
                     _log.info("해 없음 — 남은 예산 %dms 중 %dms 를 몰아 재시도 (day=%s)",
                               spare_ms, retry_ms, day)
-                    slots = self._solve_day(replace(problem, pace=None), day, used,
+                    slots = self._solve_day(replace(problem, pace=None, travel_weight=0.0), day, used,
                                             retry_ms, log_cut=False, cap_ms=retry_ms,
                                             det_limit=self._retry_det_limit())
                     if slots is None:  # 침묵 금지(INV-4) — 퍼사드 no_solution 과 짝
@@ -283,7 +296,8 @@ class OrToolsAssembler:
                    det_limit: float | None = None) -> list[VisitSlot] | None:
         day_started = time.monotonic()
         tz = problem.day_window.start.tzinfo
-        ws, we = _mod(problem.day_window.start), _mod(problem.day_window.end)
+        win = problem.window_on(day)  # 일자별 창 (TRIP-1389)
+        ws, we = _mod(win.start), _mod(win.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
         fixed_ids = {fb.poi_id for fb in fixed}
         # 시각 없는 필수 방문 (TRIP-1249) — 시각은 자유, 방문은 목적함수의 지배 항(`_required_terms`)
@@ -299,9 +313,15 @@ class OrToolsAssembler:
                  if c.poi_id not in used and c.poi_id not in reserved
                  and c.poi_id in self._pois]
         floor = _not_before_min(problem, day)
+        # 웜스타트 = 그리디 해의 방문 **순서**를 완전 힌트로 (TRIP-1176) — 프리필터 전에 구해
+        # 그 POI 를 노드에 남긴다. 빠지면 힌트 경로가 끊겨 OR 해가 그리디보다 나빠진다: 카테고리
+        # 하루 상한 뒤 그리디는 저녁에 연 식당·상가를 놓는데 그 POI 가 상위 60 밖이라 OR 은 하루
+        # 6곳에 저녁이 비었다(2026-10-14 종로 덤프 — 그리디 8곳 9.23 vs OR 6곳 6.95).
+        hint = self._greedy_hint(problem, day, used)
         if len(cands) > _PREFILTER_TOP_K:
             food_stay = stay_for(PoiCategory.FOOD, problem.pace)
-            kept = self._prefilter(cands, fixed_ids | required_ids, day,
+            hint_ids = {pid for pid, _ in hint}
+            kept = self._prefilter(cands, fixed_ids | required_ids | hint_ids, day,
                                    self._meal_slots(ws, we, floor, food_stay), food_stay)
             if log_cut:
                 _log_prefilter_cut(day, cands, kept, self._pois)
@@ -385,12 +405,19 @@ class OrToolsAssembler:
             lo, hi = dom[0][0], max(b for _, b in dom)
             if existing is not None:
                 existing.update({"stay": stay, "lo": lo, "hi": hi, "required": True,
-                                 "dom": dom})
+                                 "dom": dom, "priority": rv.priority})
             else:
                 nodes.append({"poi": poi, "stay": stay, "lo": lo, "hi": hi,
                               "score": 0.0, "is_llm": False, "pin": None,
-                              "required": True, "dom": dom})
+                              "required": True, "dom": dom, "priority": rv.priority})
 
+        # 하루 방문 상한 (BR-U4-47 — 피로·지연 재계획) — 자유 노드만 묶는다. 고정·필수는 상한에
+        # 세되 빼지 않는다(`free_visit_cap`). 그리디 힌트도 같은 상한을 지켜 완전 힌트가 유지된다.
+        # 몫이 0 이면 자유 노드를 모델에서 뺀다 — 합 ≤ 0 으로 두면 방문 0 인 회로(자기 루프 없는
+        # 깊이0)가 불가라, 핀·필수가 없는 날이 빈 일자가 아니라 해 없음이 된다.
+        free_cap = free_visit_cap(problem, day)
+        if free_cap == 0:
+            nodes = [n for n in nodes if n["pin"] is not None or n["required"]]
         if not nodes:
             return []  # 배치할 것 없음 — 빈 일자 (해 없음 아님)
 
@@ -420,6 +447,21 @@ class OrToolsAssembler:
             elif "dom" in n:  # 필수 — 영업창 합집합 (lo·hi 는 바깥 경계)
                 m.AddLinearExpressionInDomain(
                     start[i], cp_model.Domain.FromIntervals([list(iv) for iv in n["dom"]]))
+        if problem.required_in_order:
+            # "시간만 당기기" — 필수 방문은 준 순서대로(둘 다 놓이면 앞 것이 먼저 끝난다). 모든 쌍에 건다 —
+            # 이웃 쌍만 걸면 가운데가 빠졌을 때 양끝 순서가 풀린다. 재정렬(B)도 같은 모델이라 지킨다.
+            # 순서에 든 핀(재계획 "저녁은 그대로" 잠금)도 사슬에 든다 — 앞 방문은 그 전, 뒤 방문은 그 후.
+            seq = {rv.poi_id: k for k, rv in enumerate(required)}
+            chain = sorted((seq[n["poi"].poi_id], i) for i, n in enumerate(nodes)
+                           if (n["required"] or n["pin"] is not None) and n["poi"].poi_id in seq)
+            for x, (ka, a) in enumerate(chain):
+                for kb, b in chain[x + 1:]:
+                    if kb == ka:
+                        continue  # 같은 곳 두 핀 — 서로는 시각이 정한다
+                    m.Add(start[b] >= start[a] + nodes[a]["stay"]).OnlyEnforceIf([visit[a], visit[b]])
+        if free_cap:  # 0 이면 자유 노드가 이미 빠졌다(위)
+            m.Add(sum(visit[i] for i, n in enumerate(nodes)
+                      if n["pin"] is None and not n["required"]) <= free_cap)
 
         arcs = []
         for i in range(k):
@@ -451,8 +493,10 @@ class OrToolsAssembler:
         obj_terms += self._rain_soft_terms(problem, day, nodes, visit)
         obj_terms += self._event_soft_terms(problem, nodes, visit)
         obj_terms += self._category_soft_terms(problem, day, m, nodes, visit)
-        obj_terms += self._food_cap_terms(m, nodes, visit)
-        m.Maximize(sum(obj_terms))
+        obj_terms += self._daily_cap_terms(m, nodes, visit)
+        obj_terms += self._end_near_terms(problem, arcs, coords)
+        travel_terms = self._travel_terms(problem, arcs, coords)
+        m.Maximize(sum(obj_terms) + sum(travel_terms))
 
         cap = self._cfg.or_tools_limit_ms if cap_ms is None else cap_ms
         cp_solver = cp_model.CpSolver()
@@ -468,8 +512,6 @@ class OrToolsAssembler:
         cp_solver.parameters.random_seed = problem.seed % (2**31)
         cp_solver.parameters.num_search_workers = 1  # 결정론 (FD §4)
 
-        # 웜스타트 = 그리디 해의 방문 **순서**를 완전 힌트로 (TRIP-1176)
-        hint = self._greedy_hint(problem, day, used)
         # 같은 POI 고정 둘이면 노드도 둘이다 — 핀 시각이 맞는 노드를 먼저 찾는다
         by_poi = {n["poi"].poi_id: i for i, n in enumerate(nodes)}
         by_pin = {(n["poi"].poi_id, n["pin"]): i for i, n in enumerate(nodes)}
@@ -543,16 +585,13 @@ class OrToolsAssembler:
                        key=lambda i: (a_solver.Value(start[i]), i))
         for v, val in zip(visit, vals):
             m.Add(v == val)
-        m.Add(sum(obj_terms) >= int(round(a_solver.ObjectiveValue())))
+        # 이동 감점(`_travel_terms`)은 여기 들지 않는다 — 넣으면 B 가 줄인 거리만큼 식사창 등
+        # 다른 소프트 항을 내줄 수 있다(A 가 FEASIBLE 이면 여유가 있다). 감점이 없으면 이 값이
+        # A 목적값 그대로다.
+        m.Add(sum(obj_terms) >= a_solver.Value(sum(obj_terms)))
         on = {0, *(i + 1 for i in order)}  # 비방문 노드의 아크는 회로상 0 — 항이 필요 없다
-        meters = []
-        for i, j, lit in arcs:
-            a = coords[i - 1] if i else problem.anchor
-            b = coords[j - 1] if j else problem.anchor
-            if i == j or i not in on or j not in on or a is None or b is None:
-                continue
-            road_km = self._est.estimate(a, b, problem.transport).distance_km_range[1]
-            meters.append(int(round(road_km * 1000)) * lit)
+        meters = [int(round(d)) * lit for i, j, lit, d in self._arc_meters(problem, arcs, coords)
+                  if i in on and j in on]
         w = 24 * 60 * len(order) + 1  # > Σ시작 최대(분) — 시각은 거리 동률일 때만 가른다
         m.Minimize(w * sum(meters) + sum(start[i] for i in order))
         solver = cp_model.CpSolver()
@@ -570,6 +609,47 @@ class OrToolsAssembler:
                      " %dms)", solver.ResponseProto().deterministic_time, _REORDER_DET_LIMIT,
                      wall_ms)
         return a_solver
+
+    def _arc_meters(self, problem, arcs, coords):
+        """(i, j, 아크 리터럴, 도로 m) — 앵커 출발·복귀 포함, 좌표 미상·자기루프 제외.
+
+        재정렬(B)의 최소화 대상과 경로 길이 감점(`_travel_terms`)이 같은 축을 쓴다.
+        """
+        for i, j, lit in arcs:
+            a = coords[i - 1] if i else problem.anchor
+            b = coords[j - 1] if j else problem.anchor
+            if i == j or a is None or b is None:
+                continue
+            yield i, j, lit, self._est.estimate(a, b, problem.transport).distance_km_range[1] * 1000
+
+    def _travel_terms(self, problem, arcs, coords) -> list:
+        """경로 길이 감점 (BR-U4-47) — 지나는 아크마다 −travel_weight × 도로 km (점수 축 ×1000).
+
+        A 목적식에 이동을 넣는 것은 **요청이 켰을 때만**이다(기본 0 = 항 없음 — 자유 생성은
+        종전과 바이트 동일). 재정렬(B)만으로는 못 줄이는 것이 있다: B 는 A 가 고른 **집합**
+        안의 순서만 바꾸므로, 멀리 흩어진 집합을 고르면 최단 순서도 길다. 피로·지연·우천 재계획은
+        "덜 움직이는" 집합이 필요해 선택(A)에 이동 비용이 들어가야 한다.
+        새 변수 없음 — 기존 아크 리터럴에 계수만 건다(완전 힌트가 그대로 완전하다, TRIP-1176).
+        """
+        w = problem.travel_weight
+        if w <= 0:
+            return []
+        return [-int(round(w * d)) * lit for _, _, lit, d in self._arc_meters(problem, arcs, coords)]
+
+    def _end_near_terms(self, problem, arcs, coords) -> list:
+        """숙소 근처에서 끝내기 — 마지막 방문지(끝 아크 i → 0)의 숙소까지 도로 km 감점 (BR-U4-47).
+
+        `obj_terms` 에 든다 — 재정렬(B)의 "A 목적값 이상" 제약이 이 항을 지켜, 거리만 줄이는 B 가
+        마지막 방문지를 숙소에서 먼 곳으로 되돌리지 못한다. `end_near` 가 없으면 항 없음(종전과 동일).
+        새 변수 없음 — 끝 아크 리터럴에 계수만 건다(완전 힌트 유지, TRIP-1176).
+        """
+        end = problem.end_near
+        if end is None:
+            return []
+        w = END_NEAR_WEIGHT * 1000  # 점수 축 ×1000 (`obj_terms` 와 같은 눈금)
+        return [-int(round(w * self._est.estimate(coords[i - 1], end, problem.transport)
+                           .distance_km_range[1])) * lit
+                for i, j, lit in arcs if j == 0 and i >= 1]
 
     @staticmethod
     def _hint_path(m: cp_model.CpModel, order: list[int], visit, arcs,
@@ -634,7 +714,7 @@ class OrToolsAssembler:
         for i, n in enumerate(nodes):
             if not n["required"]:
                 continue
-            terms.append(_W_REQUIRED * visit[i])
+            terms.append((_W_REQUIRED_PRIORITY if n.get("priority") else _W_REQUIRED) * visit[i])
             if not counts_as_food(n["poi"]):
                 continue
             bools = in_window.get(i)
@@ -709,20 +789,29 @@ class OrToolsAssembler:
             terms.append(-penalty * excess)
         return terms
 
-    def _food_cap_terms(self, m: cp_model.CpModel, nodes, visit) -> list:
-        """FOOD 하루 상한 — 초과 1곳당 -food_excess_penalty (목적함수만, config 주석).
+    def _daily_cap_terms(self, m: cp_model.CpModel, nodes, visit) -> list:
+        """하루 상한 — FOOD(`food_daily_max`)·카테고리별(`daily_caps`) 초과 1곳당
+        -food_excess_penalty (목적함수만, config 주석).
 
         위 카테고리 항과 같은 꼴이되 허용치에 공정 몫 바닥이 없다 — days=1 일자별 호출에서도
-        켜져 있어야 해서다. 핀(고정 블록) 노드도 센다(카테고리 항의 len(idxs) 와 같은 기준).
+        켜져 있어야 해서다. 핀(고정 블록)·필수 방문 노드도 센다(카테고리 항의 len(idxs) 와 같은
+        기준) — 고정(강제)·필수(지배 항)는 깎이지 않고, 상한은 남은 자유 몫만 줄인다.
         """
         penalty = int(self._cfg.food_excess_penalty * 1000)
-        cap = self._cfg.food_daily_max
-        idxs = [i for i, n in enumerate(nodes) if counts_as_food(n["poi"])]
-        if penalty == 0 or len(idxs) <= cap:
+        if penalty == 0:
             return []
-        excess = m.NewIntVar(0, len(idxs) - cap, "foodx")
-        m.Add(excess >= sum(visit[i] for i in idxs) - cap)
-        return [-penalty * excess]
+        groups: dict = {}
+        for i, n in enumerate(nodes):
+            for key, cap in self._cfg.daily_caps(n["poi"]):
+                groups.setdefault((str(key), cap), []).append(i)
+        terms: list = []
+        for (key, cap), idxs in sorted(groups.items()):
+            if len(idxs) <= cap:
+                continue
+            excess = m.NewIntVar(0, len(idxs) - cap, f"capx_{key}")
+            m.Add(excess >= sum(visit[i] for i in idxs) - cap)
+            terms.append(-penalty * excess)
+        return terms
 
     def _meal_soft_terms(self, m: cp_model.CpModel, nodes, visit, start,
                          arcs) -> tuple[list, dict[int, list]]:
@@ -856,6 +945,8 @@ class OrToolsAssembler:
                    meal_slots: list[tuple[int, int]], food_stay: int) -> list[ScoredPoi]:
         """후보 > 60 일 때 노드로 남길 60 — 고정 블록 → 식사창 FOOD 예약석 → 점수순 (TRIP-1183).
 
+        `fixed_ids` 는 무조건 남길 POI — 고정 블록·필수 방문·그리디 힌트(`_solve_day`).
+
         예약석: `meal_slots`(`_meal_slots`) 중 어느 창에든 영업창 안에서 체류가 들어가는 FOOD
         점수 상위 k건(k = 그 창 수). 점수만 보면 규칙 점수 모드에서 FOOD 가 86~108위라 전부
         잘려 OR 해는 식당 0, 같은 입력의 폴백(식사창 food-first)은 식당 4 로 갈렸다 —
@@ -880,22 +971,23 @@ class OrToolsAssembler:
         seats = {c.poi_id for c in list(filter(seat_ok, ranked))[:len(meal_slots)]}
         # 안정 정렬 — 고정 먼저, 다음 예약석, 그 안에서는 점수순
         head = sorted(ranked, key=lambda c: (c.poi_id not in fixed_ids, c.poi_id not in seats))
-        # FOOD 몫 상한 — 하루 상한(food_daily_max)을 넘는 FOOD 는 목적함수가 어차피 버리므로
-        # 노드를 그 이상 채우면 비FOOD 자리만 뺏는다. 미식 취향에서 상위 60 이 전부 FOOD 라
-        # 관광지 노드 0 → 상한 뒤 하루 3곳만 남던 것(2026-10-02 부산 미식 실측). 4배는 영업창·
-        # 동선 선택 여지. 비FOOD 가 모자라면 넘친 FOOD 로 다시 채워 60 을 유지한다(풀 손실 없음).
-        food_quota = max(len(seats), self._cfg.food_daily_max * 4)
+        # 하루 상한 묶음별 몫(`daily_caps` — FOOD·카테고리별) — 상한을 넘는 몫은 목적함수가 어차피
+        # 버리므로 노드를 그 이상 채우면 다른 카테고리 자리만 뺏는다. 미식 취향에서 상위 60 이 전부
+        # FOOD 라 관광지 노드 0 → 상한 뒤 하루 3곳만 남던 것(2026-10-02 부산 미식 실측), 문화 취향에서
+        # 상위 60 이 문화·맛집뿐이라 카테고리 상한 뒤 하루 5곳에 오후가 비던 것(2026-10-14 종로 실측).
+        # 4배는 영업창·동선 선택 여지(FOOD 는 예약석 수 이상). 다른 묶음이 모자라면 넘친 후보로 다시
+        # 채워 60 을 유지한다(풀 손실 없음). `fixed_ids`(고정·필수·그리디 힌트)는 세지 않는다.
         kept: list[ScoredPoi] = []
         spill: list[ScoredPoi] = []
-        food_taken = 0
+        taken: Counter = Counter()
         for c in head:
             if len(kept) >= _PREFILTER_TOP_K:
                 break
-            food_like = c.poi_id not in fixed_ids and counts_as_food(self._pois[c.poi_id])
-            if food_like and food_taken >= food_quota:
+            caps = () if c.poi_id in fixed_ids else self._cfg.daily_caps(self._pois[c.poi_id])
+            if any(taken[k] >= max(len(seats) if k == "food" else 0, cap * 4) for k, cap in caps):
                 spill.append(c)
                 continue
-            food_taken += food_like
+            taken.update(k for k, _ in caps)
             kept.append(c)
         kept += spill[:_PREFILTER_TOP_K - len(kept)]
         return sorted(kept, key=rank)

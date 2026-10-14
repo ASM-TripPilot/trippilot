@@ -1,5 +1,11 @@
 import type { ComponentType } from 'react';
 import Svg, { Path } from 'react-native-svg';
+import {
+  AlertCircleGlyph as SharedAlertCircleGlyph,
+  BackChevronGlyph as SharedBackChevronGlyph,
+  ChevronDownGlyph as SharedChevronDownGlyph,
+  SearchGlyph as SharedSearchGlyph,
+} from '@/shared/ui/glyphs';
 
 // g01 위저드 1/2 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/StayGlyphs/ExploreGlyphs
 // 패턴 계승 · Figma 파일 1MTF3dtptIrbg8gld5IdO2, 노드 1675:1183). 전부 Figma 벡터 path
@@ -47,21 +53,11 @@ export function BackChevronGlyph({
   testID,
 }: GlyphProps & { tone?: 'ink' | 'muted' }) {
   return (
-    <Svg
+    <SharedBackChevronGlyph
+      size={size}
+      color={tone === 'muted' ? 'muted' : 'ink'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M15 18L9 12L15 6"
-        stroke={tone === 'muted' ? MUTED : INK}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -195,21 +191,12 @@ export function CalendarGlyph({ size = 22, testID }: GlyphProps) {
 // 날짜 카드 chevron-down(20) — Figma `1675:1234`.
 export function ChevronDownGlyph({ size = 20, testID }: GlyphProps) {
   return (
-    <Svg
+    <SharedChevronDownGlyph
+      size={size}
+      color="mutedSoft"
+      strokeWidth={2}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M5 7.5L10 12.5L15 7.5"
-        stroke={MUTED_SOFT}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -431,35 +418,12 @@ export function SparkleGlyph({ size = 18, testID }: GlyphProps) {
 // prop 하나로 겸한다(15px·18px 두 export가 좌표까지 정비례).
 export function AlertCircleGlyph({ size = 15, testID }: GlyphProps) {
   return (
-    <Svg
+    <SharedAlertCircleGlyph
+      size={size}
+      color="primary"
+      strokeWidth={1.83333}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 15 15"
-      fill="none"
-    >
-      <Path
-        d="M7.5 13.125C10.6066 13.125 13.125 10.6066 13.125 7.5C13.125 4.3934 10.6066 1.875 7.5 1.875C4.3934 1.875 1.875 4.3934 1.875 7.5C1.875 10.6066 4.3934 13.125 7.5 13.125Z"
-        stroke={PRIMARY}
-        strokeWidth={1.375}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M7.5 5V8.125"
-        stroke={PRIMARY}
-        strokeWidth={1.375}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M7.5 10.3125H7.50625"
-        stroke={PRIMARY}
-        strokeWidth={1.375}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -687,30 +651,7 @@ export function CheckGlyph({
 
 // g02 empty `숙소 둘러보기` 돋보기(20) — Figma `1708:1208`.
 export function SearchGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M9.16667 15C12.3883 15 15 12.3883 15 9.16667C15 5.94501 12.3883 3.33333 9.16667 3.33333C5.94501 3.33333 3.33333 5.94501 3.33333 9.16667C3.33333 12.3883 5.94501 15 9.16667 15Z"
-        stroke={INK}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M17.5 17.5L13.75 13.75"
-        stroke={INK}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <SharedSearchGlyph size={size} color="ink" testID={testID} />;
 }
 
 // g02 경고 삼각형 — error 배지 32px(`2456:1502`)과 blocked 안내행 20px(`2456:1514`)이 **같은

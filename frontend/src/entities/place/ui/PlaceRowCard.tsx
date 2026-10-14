@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 
@@ -41,6 +42,9 @@ export function PlaceRowCard({
         <Image
           testID={`${testIDPrefix}-photo-${id}`}
           source={{ uri: imageUrl }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={id}
           className="h-[64px] w-[64px] rounded-[12px]"
         />
       ) : (

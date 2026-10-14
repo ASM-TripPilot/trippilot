@@ -41,7 +41,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
-from typing import Iterable, Mapping, Protocol, Sequence
+from typing import Collection, Iterable, Mapping, Protocol, Sequence
 
 from trippilot.agents.schedule.budget import DeadlineBudget, OrchestratorConfig
 from trippilot.agents.schedule.family import family_followers, related_to_any
@@ -53,6 +53,7 @@ from trippilot.agents.schedule.outcome import (
     GenerationStatus,
     ScoringMode,
     SlotAlternative,
+    _wanted_categories,
     failed_outcome,
 )
 from trippilot.assembly_engine.constraints import open_hours_ok
@@ -87,7 +88,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.domain.poi import OpenHour, Poi, PoiCategory
 from trippilot.llm_gateway.workers.alternative_explanation import (
     AlternativeExplanationWorker,
 )
@@ -181,6 +182,18 @@ class GenerateItineraryRequest:
     add_one_categories: frozenset[PoiCategory] = frozenset()
     # "가까운 데로"·"이동 줄여줘"(RANKING 지시) — 앵커에서 먼 후보를 거리만큼 내린다.
     prefer_near: bool = False
+    # 경로 길이 감점(점수/km, BR-U4-47) — 재계획 사유가 켠다. `prefer_near` 는 앵커에서 먼
+    # **후보**를 내리고, 이것은 조립이 고르는 **경로**(연속 이동) 자체를 줄인다. 기본 0 = 무영향.
+    travel_weight: float = 0.0
+    # 하루 방문 상한(고정·필수 포함, BR-U4-47) — 재계획 사유(피로·지연)가 "원 일정 − 1" 로 켠다.
+    # 의미는 `ItineraryProblem.max_visits_per_day`. 기본 None = 무제한(generate 무영향).
+    max_visits_per_day: int | None = None
+    # 하루를 마칠 곳(재계획 "숙소 근처에서 끝내기") — 의미는 `ItineraryProblem.end_near`. 기본 None = 무영향.
+    end_near: GeoPoint | None = None
+    # 일자별 창(TRIP-1389) — 의미는 `ItineraryProblem.day_windows`. 기본 None = 전 일자 `day_window`.
+    day_windows: Mapping[date, TimeWindow] | None = None
+    # 필수 방문을 준 순서대로(재계획 "시간만 당기기") — 의미는 `ItineraryProblem.required_in_order`.
+    required_in_order: bool = False
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -246,7 +259,33 @@ class ScheduleTask:
     # 기존 진입 임계(`c1_min_ms`)가 저절로 점수 단계를 규칙으로 내린다 — 여기서
     # 따로 분기하지 않는다.
     planb_rank: tuple[PoiId, ...] = ()
+    # 다시 짜기에서 LLM 이 갈 곳을 이미 골랐다(`request.required_visits` + 하루 상한) — **/replan 만**.
+    # 그러면 점수는 무엇을 넣을지를 정하지 않으므로 점수 LLM 을 부르지 않는다. 같은 재계획 시한
+    # (25s)에 PlanB·구성·점수 LLM 셋이 들어가면 넘친다(2026-10-13 504, #1102).
+    llm_composed: bool = False
 
+
+
+# 영업시간을 끝내 모르는 후보의 **추정 창** (TRIP-1397). 정보 없음을 "종일 영업"으로 읽어 창을 00:00~23:59 로
+# 주면 세종문화회관 00:17·북한산 02:32 에 놓였다(2026-10-13 DEV, 영업시간 보유 ≈46%). 카테고리별로
+# 촘촘히 추정하면 틀린 추정이 멀쩡한 곳을 막으니, "새벽엔 안 간다" 하나만 건다 — 야경만 밤을 연다.
+# 자유 후보에만 건다: 사용자가 고정한 곳·검증(validate) 경로는 정보 없음을 그대로 막지 않는다.
+PRESUMED_OPEN_MIN, PRESUMED_CLOSE_MIN = 7 * 60, 23 * 60
+PRESUMED_NIGHT = (16 * 60, 26 * 60)  # 야경 16:00~익일 02:00
+
+
+def presume_hours(pool: CandidatePool, keep: Collection[PoiId] = ()) -> CandidatePool:
+    """영업시간 없는 후보에 추정 창(요일 전부)을 채운다. 있는 곳·숙소·`keep`(사용자가 고른 곳)은 그대로."""
+    def presumed(p: Poi) -> Poi:
+        if p.open_hours or p.category is PoiCategory.STAY or p.poi_id in keep:
+            return p
+        lo, hi = (PRESUMED_NIGHT if p.category is PoiCategory.NIGHT_VIEW
+                  else (PRESUMED_OPEN_MIN, PRESUMED_CLOSE_MIN))
+        return replace(p, open_hours=tuple(OpenHour(day_of_week=d, open_min=lo, close_min=hi)
+                                           for d in range(7)))
+
+    pois = tuple(presumed(p) for p in pool.pois)
+    return replace(pool, pois=pois) if pois != pool.pois else pool
 
 class ScheduleAgent:
     def __init__(
@@ -316,11 +355,20 @@ class ScheduleAgent:
             request, pool, budget, t0, steps, trace_id, now)
 
         # ② 게이트웨이 선호 점수 (전 일자 공용 1회) — 실패·스킵이면 규칙 점수 (INV-4)
+        #    잔여는 어셈블리 바닥(`c2_reserved_ms`)을 **뺀** 값이다 — 다른 단계(⓪·②′·②⁗)와 같은
+        #    식. 전체 잔여를 주면 점수 호출이 바닥까지 먹고 어셈블리가 바닥을 그대로 쓰므로 합이
+        #    시한을 넘는다: 재계획은 에이전트 앞에서 PlanB 가 예산의 절반을 쓰는데, 2026-10-13 DEV
+        #    실측에서 점수 타임아웃 13.4s(=전체 잔여) + OR 5s 로 25s 시한을 넘겨 백스톱 504 가 났다.
         elapsed = self._clock.monotonic_ms() - t0
-        candidates, mode = self._score(
-            request, pool, persona, budget, budget.total_ms - elapsed, steps,
-            trace_id, now,
-        )
+        if task.llm_composed:
+            # 강등이 아니다 — 판단은 구성 LLM 이 했다(배선 노트 `llm_composed`). FallbackEvent 를
+            # 내지 않는다 — 내면 폴백 집계에 성공이 폴백으로 섞인다.
+            candidates, mode = self._rule_scores(request, pool, persona), ScoringMode.RULE
+        else:
+            candidates, mode = self._score(
+                request, pool, persona, budget,
+                budget.total_ms - elapsed - budget.c2_reserved_ms, steps, trace_id, now,
+            )
         # LLM 모드인데 규칙 점수가 섞인 수(rule_backfill) — 가산·강등 전에 센다.
         backfilled = (sum(1 for c in candidates if not c.is_llm_score)
                       if mode is ScoringMode.LLM else 0)
@@ -440,11 +488,15 @@ class ScheduleAgent:
         #    HC1 이 읽는 것은 바로 아래 `for_pool(pool.pois)` 이다. 이 교체가 그보다
         #    아래면 조립은 옛 POI 를 본다 — 이 리포가 같은 모양으로 네 번 당했다.
         pool = self._enrich_hours(pool, candidates, budget, t0, steps, trace_id, now)
+        # 그래도 없는 곳은 새벽에 놓지 않는다 (TRIP-1397) — 사용자가 고정·필수로 고른 곳은 빼고.
+        pool = presume_hours(pool, keep={fb.poi_id for fb in request.fixed_blocks}
+                             | {rv.poi_id for rv in request.required_visits
+                                if rv.reason != "llm_compose"})
 
         # ⓪′ 영업시간 밖에 핀된 고정 블록은 **빼고 보고한다** (TRIP-1249). 종전엔 HC1 이 OR·그리디
         #    둘 다에서 걸려 409 → BE 가 그 단계를 통째로 최소 일정으로 바꿨다 — 핀 하나로 하루가
         #    비는 것보다 그 핀만 빠지고 generate 는 `unplaced_must_visits`(NO_FEASIBLE_SLOT), replan 은
-        #    `locked_block_unplaced` 로 보고되는 편이 낫다(침묵 드롭 아님). 영업시간이 **증명**할 때만
+        #    원 시각 그대로 되싣고 `locked_block_echoed` 로 보고되는 편이 낫다(침묵 드롭 아님, TRIP-1397). 영업시간이 **증명**할 때만
         #    이다 — 정보 없음은 둔다(HC1 과 같은 판정 함수). ②⁗ 뒤라 보강된 시간도 본다. 인덱스는
         #    ④ 가 쓰는 것과 같다 — 고정 블록 POI 는 **인덱스에만** 합류, 후보·풀 보고는 그대로 (INV-1).
         index = {**fixed_pois, **{p.poi_id: p for p in pool.pois}}
@@ -485,6 +537,11 @@ class ScheduleAgent:
             event_bonus=task.event_bonus,
             pace=request.pace,
             not_before=request.not_before,
+            travel_weight=request.travel_weight,
+            max_visits_per_day=request.max_visits_per_day,
+            end_near=request.end_near,
+            day_windows=request.day_windows,
+            required_in_order=request.required_in_order,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
@@ -575,20 +632,22 @@ class ScheduleAgent:
                           "empty_pool")
             return (), ScoringMode.RULE
 
-        if budget.c1_ms < self._cfg.c1_min_ms or remaining_ms <= 0:
+        if budget.c1_ms < self._cfg.c1_min_ms or remaining_ms < self._cfg.c1_min_ms:
             # DL-2: 진입 전 잔여 확인 — 부를 시간이 없으면 부르지 않는다(침묵 스킵 금지).
+            # 잔여도 같은 하한으로 본다 — 상한이 넉넉해도 앞 단계(재계획의 PlanB)가 다 쓴 뒤
+            # 수백 ms 로 부르면 실호출 바닥(~3s)에 못 미쳐 타임아웃만 기다린다.
             # 이 경로는 페르소나를 읽지 않지만, 소유 검증은 이미 오케스트레이터 ⓪에서
             # 끝났다(TRIP-333 fail-closed) — 남의 persona_ref는 여기 도달하지 못한다.
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
-                          f"deadline:c1_budget={budget.c1_ms}ms")
-            return self._rule_scores(request, pool), ScoringMode.RULE
+                          f"deadline:c1_budget={budget.c1_ms}ms,remaining={remaining_ms}ms")
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         if persona is None:
             # 페르소나 비가용(COLD_START 등) — 취향 없이 LLM 점수는 의미가 없다.
             # 규칙 점수로 강등 (INV-4 침묵 금지 — 사유는 PERSONA 패킷이 이미 안다).
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           "persona_unavailable")
-            return self._rule_scores(request, pool), ScoringMode.RULE
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         llm_pool = pool
         capacity = self._scoring.capacity
@@ -596,7 +655,7 @@ class ScheduleAgent:
             # 워커가 한 번에 실을 수 있는 건수(병렬 상한 × 청크 상한)를 넘는 풀 — 청크를
             # 키우면 출력 상한에서 잘려 전량 폐기된다(풀 515 → 청크 ~52건, 0/10 성공).
             # LLM 엔 규칙 점수 상위만 보내고, 나머지는 아래 rule_backfill 이 채운다.
-            top = sorted(self._rule_scores(request, pool),
+            top = sorted(self._rule_scores(request, pool, persona),
                          key=lambda sp: (-sp.score, str(sp.poi_id)))[:capacity]
             keep = frozenset(sp.poi_id for sp in top)
             pois = tuple(p for p in pool.pois if p.poi_id in keep)
@@ -619,14 +678,14 @@ class ScheduleAgent:
             # ⓪과 수집 단계(PersonaProvider)에서 이미 예외로 승격됐다 — 여기 도달 불가.
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           f"score_error: {type(e).__name__}: {e}")
-            return self._rule_scores(request, pool), ScoringMode.RULE
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         if result.is_fallback:
             # 게이트웨이가 이미 FallbackEvent(to_mode=rule_score)를 발행했다.
             # 여기서는 실행만 — 같은 강등을 두 번 세지 않는다.
             steps.append(Degradation(stage="llm",
                                      reason=f"c1_fallback: {result.error}"))
-            return self._rule_scores(request, pool), ScoringMode.RULE
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         raw = tuple(result.value or ())
         scored = tuple(sp for sp in raw if pool.contains(sp.poi_id))
@@ -637,7 +696,7 @@ class ScheduleAgent:
         if not scored:
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           "c1_empty_after_closed_set")
-            return self._rule_scores(request, pool), ScoringMode.RULE
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
         if result.error is not None:
             # 부분 청크 실패 (TRIP-378) — 워커가 성공 청크만 병합해 error에 표기했다.
             # 실패 청크의 FallbackEvent는 게이트웨이가 청크별로 이미 발행했으므로
@@ -653,25 +712,40 @@ class ScheduleAgent:
             self._observe(trace_id, now, "llm", "llm_score", "llm_score",
                           f"rule_backfill:{len(missing)}")
             scored = scored + tuple(
-                sp for sp in self._rule_scores(request, pool)
+                sp for sp in self._rule_scores(request, pool, persona)
                 if sp.poi_id in missing
             )
         return scored, ScoringMode.LLM
 
     def _rule_scores(
-        self, request: GenerateItineraryRequest, pool: CandidatePool
+        self, request: GenerateItineraryRequest, pool: CandidatePool,
+        persona: PersonaSummary | None,
     ) -> tuple[ScoredPoi, ...]:
         """결정론 규칙 점수 (동일 입력 → 동일 출력, FR-1.4).
 
         **풀을 순회해서** 만든다 — 후보가 풀 밖일 수 없는 이유가 코드 모양 자체다(INV-1).
+
+        취향(페르소나 taste_tags·activities·cuisines → 카테고리)도 싣는다 — `taste_fit`: 그 카테고리를
+        최소 한 단, 기본 가중이 낮으면 최상위(명소) 위까지 올린다(카페 0.6 이 +0.3 으로는 명소를
+        못 넘었다, 2026-10-14). 종전에는 취향이 LLM 점수 프롬프트에만 실려, c1 폴백
+        (규칙만)·c1_partial 보충 청크에서 "카페 위주" 같은 취향이 통째로 사라졌다(2026-10-13 DEV).
+        이번 요청이 카테고리 축(prefer/avoid — 칩·사유 암시)을 정했으면 그것만 쓴다 — 취향을 그 위에
+        얹지 않는다(BR-U4-47 사용자 우선; 회피한 카테고리에 취향 가점이 붙어 상쇄되는 일도 없다).
+        "한 곳 추가" 카테고리도 취향에서 뺀다 — 그 종류 전체가 오르면 "한 곳"이 여러 곳이 된다
+        (BR-U4-47, `trim_planb_rank_for_add_one` 과 같은 이유).
         """
+        prefer, avoid = request.prefer_categories, request.avoid_categories
+        taste: frozenset[PoiCategory] = frozenset()
+        if not (prefer or avoid):
+            taste = frozenset(_wanted_categories(persona)) - request.add_one_categories
         return tuple(
             ScoredPoi(
                 poi_id=poi.poi_id,
                 score=build_rule_score(
                     poi, request.budget, request.anchor, request.seed,
-                    prefer=request.prefer_categories,
-                    avoid=request.avoid_categories,
+                    prefer=prefer,
+                    avoid=avoid,
+                    taste=taste,
                     # 조인 키는 `source_ref` — KB-5 장소 설명과 같은 길이다.
                     # 없으면 None 이고 그건 '모름'이라 중립이다.
                     fee_won=self._fees.of(poi.source_ref),

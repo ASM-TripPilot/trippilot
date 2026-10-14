@@ -39,9 +39,14 @@ data class VisitCheck(
      * 파생한다 — 저장하면 timestamp 와 어긋날 수 있고, 어긋난 쪽이 무엇인지 나중에 알 수 없다.
      */
     val skippedAt: Instant?,
+    /** **도착** 출처(DEC-U10-6 — 컬럼 이름은 그대로 두고 뜻을 좁혀 읽는다). 완료 출처는 [completionSource] 다. */
     val source: CheckSource,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 완료 출처. **완료가 있을 때만 있다**(INV-U10-3) — 체류 초과(`DELAY`)가 완료를 추정으로 봐야 하는지 가른다. */
+    val completionSource: CompletionSource? = null,
+    /** 자동 도착을 되돌린 시각(INV-U10-10). 이 표식만 남은 행은 방문이 아니다 — 목록·집계에서 뺀다(G-U10-12). */
+    val autoSuppressedAt: Instant? = null,
 ) {
     companion object {
         /** 도착 체크. 지오펜스가 깨웠거나 사용자가 직접 눌렀다. */
@@ -61,8 +66,10 @@ data class VisitCheck(
             visitCheckId: UUID, tripId: UUID, slotKey: String?, poiId: UUID,
             arrivedAt: Instant?, completedAt: Instant?, skippedAt: Instant?, source: CheckSource,
             createdAt: Instant, updatedAt: Instant,
+            completionSource: CompletionSource? = null, autoSuppressedAt: Instant? = null,
         ) = VisitCheck(
             visitCheckId, tripId, slotKey, poiId, arrivedAt, completedAt, skippedAt, source, createdAt, updatedAt,
+            completionSource, autoSuppressedAt,
         )
     }
 
@@ -70,11 +77,11 @@ data class VisitCheck(
      * 방문 완료. 도착 없이 완료할 수 없다 — 그러면 [dwellMinutes] 가 계산되지 않아
      * `DELAY` 트리거 입력이 비고, "얼마나 머물렀나"를 U5 가 승계할 재료도 사라진다.
      */
-    fun complete(at: Instant): VisitCheck {
+    fun complete(at: Instant, by: CompletionSource = CompletionSource.MANUAL): VisitCheck {
         val arrived = arrivedAt ?: throw ConflictDetected(message = "도착 체크 없이 완료할 수 없습니다.")
         requireOpen(VisitOutcome.COMPLETED)
         if (at < arrived) throw ConflictDetected(message = "완료 시각이 도착보다 앞설 수 없습니다.")
-        return copy(completedAt = at, updatedAt = at)
+        return copy(completedAt = at, completionSource = by, updatedAt = at)
     }
 
     /**
@@ -103,7 +110,37 @@ data class VisitCheck(
         if (newCompleted != null && newArrived != null && newCompleted < newArrived) {
             throw ConflictDetected(message = "완료 시각이 도착보다 앞설 수 없습니다.")
         }
-        return copy(arrivedAt = newArrived, completedAt = newCompleted, updatedAt = at)
+        // 시각을 고쳐도 출처는 그대로다(DEC-U10-6). 보정으로 **처음** 완료가 생기면 그 완료는 사람이 적은 것이다 —
+        // 출처 없이 남기면 INV-U10-3(완료 ⇔ 출처)이 깨진다.
+        val newSource = completionSource ?: CompletionSource.MANUAL.takeIf { newCompleted != null }
+        return copy(arrivedAt = newArrived, completedAt = newCompleted, completionSource = newSource, updatedAt = at)
+    }
+
+    /**
+     * **억제 표식만 남은 행**(자동 도착을 되돌린 자리)에 도착을 다시 남긴다 — 수동 도착은 그 행을 재사용한다(BR-U10-32).
+     * 표식은 지우지 않는다: 그날 그 슬롯의 자동 쓰기는 계속 막혀야 한다(INV-U10-10). 기록이 있는 행에는 쓰지 않는다.
+     */
+    fun arriveAgain(source: CheckSource, at: Instant): VisitCheck {
+        check(!isRecorded) { "기록이 있는 행에 도착을 다시 쓰지 않는다" }
+        return copy(arrivedAt = at, source = source, updatedAt = at)
+    }
+
+    /**
+     * 자동 기록 되돌리기(U10 BR-U10-31) — **자동 출처 부분만** 연다. 자동 완료면 완료만 비우고(도착 유지), 자동 도착(완료 없음)이면
+     * 도착을 비우고 그날 자동 쓰기를 막는 표식을 남긴다. 수동 기록은 [com.trippilot.core.error.ErrorCode.VISIT_NOT_AUTO].
+     * 완료를 비우면 그 슬롯의 재계획 잠금(INV-U4-04)도 풀린다 — 화면이 되돌리기 전에 그것을 고지한다.
+     */
+    fun revertAuto(at: Instant): Pair<VisitCheck, RevertedPart> = when {
+        // 출처가 **자동일 때만** — null 은 롤링 배포 창에 옛 파드가 쓴 수동 완료다(V2.67 1단계, CHECK 없음). 비우면 사람이 남긴 완료와
+        // 재계획 잠금이 사라진다. V2.70(CHECK) 이후로는 그런 행이 없지만, 조건은 그대로 자동 출처만 연다.
+        completedAt != null && completionSource in AUTO_COMPLETIONS ->
+            copy(completedAt = null, completionSource = null, updatedAt = at) to RevertedPart.COMPLETION
+        completedAt == null && skippedAt == null && arrivedAt != null && source == CheckSource.AUTO_GEOFENCE ->
+            copy(arrivedAt = null, autoSuppressedAt = at, updatedAt = at) to RevertedPart.ARRIVAL
+        else -> throw ConflictDetected(
+            current = VisitConflictState(visitCheckId, updatedAt),
+            message = "되돌릴 자동 기록이 없습니다.", errorCode = ErrorCode.VISIT_NOT_AUTO,
+        )
     }
 
     /**
@@ -135,6 +172,12 @@ data class VisitCheck(
     val isSpontaneous: Boolean get() = slotKey == null
 
     /**
+     * 방문으로 셀 것이 있는가 — 도착도 건너뜀도 없으면 자동 되돌림이 남긴 억제 표식뿐인 행이다(G-U10-12 · BR-U10-32).
+     * 그 행은 같은 날 자동 쓰기를 막는 데만 쓰이고, 목록·통계·요약에는 나오지 않는다.
+     */
+    val isRecorded: Boolean get() = arrivedAt != null || skippedAt != null
+
+    /**
      * 실제 체류 시간(분) — **파생값이다. 저장하지 않는다.**
      * 저장하면 두 시각과 어긋날 수 있고, 어긋났을 때 어느 쪽이 사실인지 알 수 없다.
      *
@@ -152,16 +195,30 @@ data class VisitCheck(
 /** 도착 감지 방식(DEC-U4-6). 권한이 없거나 정확도가 낮으면 수동으로 대체된다(BR-U4-36). */
 enum class CheckSource { AUTO_GEOFENCE, MANUAL }
 
+/**
+ * 완료 출처(DEC-U10-6). 이탈 감지 · 다음 슬롯 자동 도착으로 미뤄 본 완료(체류에 이동이 섞인다 — BR-U10-24) · 수동.
+ */
+enum class CompletionSource { AUTO_GEOFENCE_EXIT, AUTO_NEXT_ARRIVAL, MANUAL }
+
 interface VisitCheckRepository {
     fun save(check: VisitCheck): VisitCheck
 
     fun findById(visitCheckId: UUID): VisitCheck?
 
+    /** 그 여행의 방문 실적. **억제 표식뿐인 행은 빠진다**([VisitCheck.isRecorded]) — 방문이 아니다. */
     fun findByTrip(tripId: UUID): List<VisitCheck>
 
     /** 같은 슬롯의 실적. 중복 체크인을 막는 데 쓴다 — 둘이면 "완료됐나"가 갈린다. */
     fun findBySlot(tripId: UUID, slotKey: String): VisitCheck?
+
+    /** [findBySlot] + 행 잠금(트랜잭션 끝까지) — 읽고 고쳐 쓰는 사이 다른 쓰기(수동 완료·건너뜀)가 끼어들어 덮이지 않게. */
+    fun findBySlotForUpdate(tripId: UUID, slotKey: String): VisitCheck? = findBySlot(tripId, slotKey)
 }
+
+private val AUTO_COMPLETIONS = setOf(CompletionSource.AUTO_GEOFENCE_EXIT, CompletionSource.AUTO_NEXT_ARRIVAL)
+
+/** 자동 되돌리기가 비운 부분. */
+enum class RevertedPart { COMPLETION, ARRIVAL }
 
 /** 방문의 최종 결과. 재생 시 "원하던 것"과 "기록된 것"을 견주는 데만 쓴다. */
 enum class VisitOutcome(val label: String) { COMPLETED("완료"), SKIPPED("건너뜀") }

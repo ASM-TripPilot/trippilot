@@ -6,23 +6,28 @@ import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
 import {
+  TripCard,
   classifyTripPhase,
   formatNightsLabel,
   pickCoverCity,
   type CoverTone,
+  type MyTripBadge,
+  type MyTripCardVM,
 } from '@/entities/trip';
-import { formatConfirmedDateRange } from '@/entities/trip';
-import { isTripOngoing } from '@/entities/trip';
+import {
+  formatConfirmedDateRange,
+  isTripOngoing,
+  pickRegionCover,
+} from '@/entities/trip';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
 import { deriveTripCardFace } from '../model/tripCardFace';
-import { MyTripCard, type MyTripBadge, type MyTripCardVM } from './MyTripCard';
 
 /**
  * TRIP-468 · 여행 1건 담당 컨테이너 — 그 여행의 `useGetTripsTripIdItinerary` 를 물어
- * VM(배지·부가정보·목적지)을 조립해 순수 `MyTripCard` 에 내린다.
+ * VM(배지·부가정보·목적지)을 조립해 `entities/trip` 의 순수 `TripCard`(testIDPrefix="my-trip")에 내린다.
  *
  * **N+1 훅-per-카드**: React 훅은 배열 루프 안에서 못 부르니(훅 규칙), 여행 하나를 담당하는 이
  * 컴포넌트를 카드 수만큼 렌더해 각자 자기 훅을 부른다(목록 1회 + 카드 N회). 여행 수가 적고(실사용
@@ -105,6 +110,7 @@ export function TripCardContainer({
     resume,
     // TRIP-1208 · 커버 — 첫 목적지 도시 + 단계 톤(확정 × 오늘: 여행 중=live · 종료=ended · 그 외=upcoming).
     coverCity: pickCoverCity(trip.destinations),
+    coverSource: pickRegionCover(trip.destinations),
     coverTone: coverTone(trip, itinerary.data?.status, today),
   };
 
@@ -130,7 +136,8 @@ export function TripCardContainer({
   const deletable = onPressDelete !== undefined && badge === 'draft';
 
   return (
-    <MyTripCard
+    <TripCard
+      testIDPrefix="my-trip"
       vm={vm}
       onPress={onPress}
       onPressDelete={

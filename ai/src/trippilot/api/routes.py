@@ -30,6 +30,8 @@ from trippilot.api.protocols import (
     UnverifiedSlotLike,
 )
 from trippilot.api.schemas import (
+    DialogueInterpretRequest,
+    DialogueInterpretResponse,
     AlternativesRequest,
     AlternativesResponse,
     EditItineraryRequest,
@@ -442,6 +444,28 @@ def notification_copies(
     타깃이면 콜드스타트 직후 첫 배치가 드롭되는 것은 정상 동작이다.
     """
     handler = getattr(orchestrator, "reminder_copy", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))
+
+
+# ───────────────────────── 대화 해석 (U8 FD §3 — G-U8-4) ─────────────────────────
+
+dialogue_router = APIRouter(prefix="/ai/v1/dialogue", tags=["dialogue"])
+
+
+@dialogue_router.post("/interpret", response_model=DialogueInterpretResponse)
+def dialogue_interpret(
+    request: DialogueInterpretRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> DialogueInterpretResponse:
+    """발화 1건 → 의도 프레임 1개 · 인자 되묻기 · 범위 밖 (DEC-U8-1: 해석만, 실행은 백엔드).
+
+    해석 실패는 라우터 안에서 결정론 폴백(`OUT_OF_SCOPE` + 사유)으로 수렴한다 — 이 경계의
+    5xx 는 미배선·설정 오류뿐이고, 백엔드는 그것을 "도우미가 응답하지 못했어요"로 바꾼다
+    (BR-U8-45: 일정 폴백 신호가 아니다).
+    """
+    handler = getattr(orchestrator, "dialogue_interpret", None)
     if handler is None:
         raise orchestrator_not_wired()
     return _guarded(lambda: handler(request))

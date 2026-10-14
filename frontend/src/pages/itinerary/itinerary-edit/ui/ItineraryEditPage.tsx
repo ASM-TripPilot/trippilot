@@ -8,14 +8,14 @@ import { useRouter } from 'expo-router';
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
 import {
-  useItineraryEditStore,
+  useEditorDraft,
   type EditorDaysItem,
   type EditorSlot,
 } from '@/features/edit-itinerary';
 import { buildPlanDayTabs, resolvePlanState } from '@/features/itinerary';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
-import { buildSlotKey, parseSlotKey } from '@/entities/itinerary-slot';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { AlertCircleGlyph, InfoCircleGlyph } from '@/features/itinerary';
 import { SaveConflictDialog } from '@/features/edit-itinerary';
@@ -139,11 +139,15 @@ export function ItineraryEditPage({
   // TError=unknown 으로 열어 onError 의 error 를 axios 판정(isAlreadyRegistered)에 그대로 태운다(h11 선례).
   const save = usePutTripsTripIdItinerary<unknown>();
 
-  const seed = useItineraryEditStore((s) => s.seed);
-  const deleteSlot = useItineraryEditStore((s) => s.deleteSlot);
-  const reorderSlots = useItineraryEditStore((s) => s.reorderSlots);
-  const adjustSlotTime = useItineraryEditStore((s) => s.adjustSlotTime);
-  const days = useItineraryEditStore((s) => s.days);
+  const {
+    seed,
+    deleteSlot,
+    reorderSlots,
+    adjustSlotTime,
+    days,
+    editing,
+    editingSlot,
+  } = useEditorDraft(editingSlotKey);
 
   useEffect(() => {
     const loaded = itinerary.data?.days;
@@ -318,13 +322,6 @@ export function ItineraryEditPage({
 
   // 편집 중인 슬롯의 **현재 드래프트 값**을 찾아 시트에 시드한다 — 시트가 열렸고 그 슬롯이 드래프트에
   // 실재할 때만 마운트한다(둘 중 하나라도 없으면 안 그린다).
-  const editing = editingSlotKey === null ? null : parseSlotKey(editingSlotKey);
-  const editingSlot =
-    editing !== null && editing.kind === 'ok'
-      ? days
-          .find((day) => day.date === editing.date)
-          ?.slots.find((slot) => slot.poiId === editing.poiId)
-      : undefined;
 
   return (
     <View className="flex-1">

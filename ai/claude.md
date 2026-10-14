@@ -48,8 +48,12 @@ them per the INFO_REQUIREMENTS table and passes results **in the AgentTask envel
 — task agents do not call Providers directly. Each returns a `ProviderStatus`
 (`OK`/`LOW`/`NO_CANDIDATES`/`WEATHER_UNKNOWN`/`COLD_START`/`UNAVAILABLE`).
 
-⚠️ `IntentRouter` (question-bank matching) is **implemented but not wired** — the
-Orchestrator's intent detection above is design, not running code (TRIP-529).
+`IntentRouter` (question-bank matching) is **wired** (2026-10-14) through one boundary only —
+`POST /ai/v1/dialogue/interpret` for the U8 assistant (`orchestrator/dialogue_interpreter.py`).
+AI interprets; the backend `assistant` module dispatches (U8 DEC-U8-1). The question bank is
+indexed into an in-memory store at startup from precomputed vectors
+(`data/intent_question_bank.vectors.json.gz` — regenerate with `scripts/intent/build_bank_vectors.py`
+after editing the bank; a stale file falls back to remote indexing, never loads wrong vectors). No DB load.
 
 ## Key Design Documents (application-design/)
 
@@ -74,8 +78,12 @@ branch therefore cannot fire on any path.
 - pgvector + **local `nlpai-lab/KURE-v1` embeddings** (AI-D06 addendum 2026-08-23,
   wired in TRIP-514). Titan is a fallback adapter; it is Bedrock-only.
 - pytest + Hypothesis — **170 `@given` properties across 41 test files** (measured
-  2026-08-25; count with `grep -rc "@given" ai/tests/*.py`). Earlier "19"/"52"
+  2026-08-25; count with `grep -rc --include="*.py" "@given" ai/tests`). Earlier "19"/"52"
   figures were stale.
+- **Test layout mirrors `src/trippilot/`**: put a test in the folder of the package it mainly
+  exercises — `tests/<package>/` (agents by agent: `tests/agents/<schedule|planb|reflect|edit>/`);
+  tests of `ai/scripts` go in `tests/scripts/`. `fakes/`·`fixtures/`·`generators/` and
+  `test_architecture.py` stay at the root.
 - LangChain: **declared but not used** — no dependency in `pyproject.toml`, zero
   imports in `src/`. RAG is hand-built on psycopg + pgvector (TRIP-522 tracks the
   retraction record).

@@ -2,7 +2,7 @@
 
 경계 라우트는 `trippilot.api.routes` 가 소유한다(itinerary·reflection 라우터 2개) —
 경로 목록을 여기 다시 나열하지 않는다(나열이 먼저 낡는다). 와이어 정본은
-`ai/docs/openapi.json` 이고, 앱과의 전수 일치는 `ai/tests/test_api_openapi_contract.py`
+`ai/docs/openapi.json` 이고, 앱과의 전수 일치는 `ai/tests/api/test_api_openapi_contract.py`
 가 강제한다. 경계 밖 `/`·`/health` 는 `trippilot.api.app` 소유.
 조립은 `trippilot.api.wiring` 소유 — main은 env 해석 + 얇은 스위치만 갖는다.
 
@@ -108,7 +108,7 @@ def _openai_llm_and_model() -> tuple[object, str]:
 
     openai SDK는 지연 import — SDK 의존은 c1/adapters 한정(TRIP-340 아키텍처 규칙)
     이고, 클라이언트 생성만은 조립 진입점인 이 파일(src 밖)이 맡는다
-    (scripts/smoke_llm.py `_build_adapter`와 동형). 키 누락·잘못된 OPENAI_API 값은
+    (scripts/smoke/smoke_llm.py `_build_adapter`와 동형). 키 누락·잘못된 OPENAI_API 값은
     여기서 즉시 예외 → 기동 실패로 크게 드러난다.
     """
     api_key = _env("OPENAI_API_KEY")
@@ -172,7 +172,12 @@ def _kma_weather():
     from trippilot.poi_curation.adapters.kma_weather import KmaWeatherAdapter
     from trippilot.poi_curation.sourcing.tourapi import UrllibHttpClient
 
-    return KmaWeatherAdapter(UrllibHttpClient(), key, base_url=_env("WEATHER_API_BASE"))
+    # 소켓 작업당 4s — 일정 생성은 Provider 를 순차 호출하고 1차 시한이 15s 라, 기본 10s 면
+    # 멈춘 기상청이 LLM 선호 점수 몫을 먹는다. 실패는 WEATHER_UNKNOWN(무보정+강등 기록)이다.
+    # 실측(2026-10-14 로컬): 정상 응답 12:08 에 1.09~1.22s, 12:20 에 1.33~2.89s — 2s 는
+    # 정상 응답을 잘랐다(#1133 의 값). 첫 바이트까지가 길어 읽기 대기에 그대로 걸린다.
+    return KmaWeatherAdapter(UrllibHttpClient(timeout_sec=4.0), key,
+                             base_url=_env("WEATHER_API_BASE"))
 
 
 def _place_existence():
@@ -302,25 +307,45 @@ def _backend_poi_db():
     return BackendPoiDb(UrllibJsonClient(), base_url, token)
 
 
-def _tmap_travel():
-    """`TMAP_API_KEY`(TRIP-432) 설정 시 ChainedTravelAdapter 조립.
+def _travel_chain():
+    """`TMAP_API_KEY`(TRIP-432)·`ODSAY_API_KEY` 설정 시 ChainedTravelAdapter 조립.
 
-    TMAP 실경로 1차 → 하버사인 폴백 2차. 미설정 = None (기존 TravelEstimator 그대로).
+    1차 실측은 수단별 — 자동차·보행 TMAP, 대중교통 ODsay(2026-10-14: TMAP 대중교통 상품이
+    미구독 403 이라 대중교통만 ODsay 로 받는다. ODsay 키가 없으면 종전대로 TMAP 이 대중교통도
+    맡아, 상품을 구독하는 순간 산다). 2차는 하버사인. 둘 다 미설정 = None (기존 TravelEstimator
+    그대로). 배선 결과는 INFO 한 줄 — 배포 smoke 의 `ai-wiring:` 이 끌어올린다.
     """
-    app_key = _env("TMAP_API_KEY")
-    if app_key is None:
+    tmap_key, odsay_key = _env("TMAP_API_KEY"), _env("ODSAY_API_KEY")
+    log = logging.getLogger("trippilot.main")
+    if tmap_key is None and odsay_key is None:
+        log.info("실경로 미배선(TMAP_API_KEY·ODSAY_API_KEY 미설정) — 거리는 하버사인 추정")
         return None
-    from trippilot.assembly_engine.adapters.chained_travel import ChainedTravelAdapter
-    from trippilot.assembly_engine.adapters.tmap import TmapRouteAdapter, UrllibHttpClient
+    from trippilot.assembly_engine.adapters.chained_travel import (
+        ByModeTravelTime, ChainedTravelAdapter,
+    )
     from trippilot.assembly_engine.config import AssemblyConfig
     from trippilot.assembly_engine.travel import TravelEstimator
+    from trippilot.domain.common import TransportMode
 
     # 소켓 작업(접속·수신 한 번)당 2s — 멈춘 연결을 끊는 값이지 호출 총시간 상한은 아니다
     # (느리게 흘러오는 응답·DNS 는 넘긴다). 조립 뒤 거리는 시한(≤1.5s) 안에 끝난 구간만 쓰고
     # 늦은 호출은 결과를 버린다(TRIP-1179). 조립 앞 TransitProvider 도 이 travel 을 쓴다.
-    tmap = TmapRouteAdapter(UrllibHttpClient(timeout_sec=2.0), app_key)
-    fallback = TravelEstimator(AssemblyConfig())
-    return ChainedTravelAdapter(primary=tmap, fallback=fallback)
+    by_mode = {}
+    if tmap_key is not None:
+        from trippilot.assembly_engine.adapters.tmap import TmapRouteAdapter, UrllibHttpClient
+
+        tmap = TmapRouteAdapter(UrllibHttpClient(timeout_sec=2.0), tmap_key)
+        by_mode.update({TransportMode.CAR: tmap, TransportMode.WALK: tmap,
+                        TransportMode.PUBLIC: tmap})
+    if odsay_key is not None:
+        from trippilot.assembly_engine.adapters.odsay import OdsayTransitAdapter
+        from trippilot.poi_curation.sourcing.tourapi import UrllibHttpClient as UrllibGetJson
+
+        by_mode[TransportMode.PUBLIC] = OdsayTransitAdapter(UrllibGetJson(timeout_sec=2.0), odsay_key)
+    log.info("실경로 배선 = %s", ", ".join(
+        f"{mode.name}:{type(adapter).__name__}" for mode, adapter in by_mode.items()))
+    return ChainedTravelAdapter(primary=ByModeTravelTime(by_mode),
+                                fallback=TravelEstimator(AssemblyConfig()))
 
 
 def _event_store():
@@ -617,8 +642,62 @@ def _warn_unwired(*, weather, embedding, feature_models: Mapping | None) -> None
                     "규칙 랭킹으로 강등된다")
     if feature_models is not None and not feature_models:
         log.warning("TRIPPILOT_LLM_FEATURE_MODELS 비어 있음 — 전 기능이 단일 기본 모델로 동작")
+    elif feature_models:
+        # 종수·미배정 목록 한 줄 — 새 feature 가 들어왔는데 시크릿 배정이 안 따라오면 그 기능만
+        # 조용히 티어 기본 모델로 돈다. 배포 smoke(`ai-wiring:`)가 이 줄을 끌어올린다.
+        from trippilot.domain.llm import LlmFeature
+
+        missing = [f.value for f in LlmFeature if f not in feature_models]
+        log.info("기능별 모델 배정 %d종 / 미배정 %d종%s", len(feature_models), len(missing),
+                 f": {', '.join(missing)}" if missing else "")
     if weather is None:
         log.warning("WEATHER_API 미설정 — 날씨 보정 없이(no_adjust) 동작")
+
+
+_BANK_PATH = pathlib.Path(__file__).resolve().parent / "data" / "intent_question_bank.yaml"
+# 질문뱅크 색인은 기동 뒤 백그라운드라 요청 예산(5s)과 무관하다. 5s 로 두면 DEV(CPU 임베딩, 파드 2 × 워커 2 =
+# 색인 4벌)에서 요청이 끝나기 전에 포기하고 다시 보내, 서비스가 버려진 일을 계속 처리하느라 포화됐다.
+_BANK_INDEX_TIMEOUT_SEC = 60.0
+# 질문뱅크 벡터를 미리 계산한 파일(`scripts/intent/build_bank_vectors.py`) — 있으면 기동 때 원격 임베딩을 안 부른다.
+_BANK_VECTORS_PATH = _BANK_PATH.with_name("intent_question_bank.vectors.json.gz")
+
+
+def _bank_vectors():
+    """못 읽으면 None — 원격 색인으로 기동한다(기동을 막지 않고, 로그에 남는다)."""
+    try:
+        from trippilot.orchestrator.question_bank import load_bank_vectors
+
+        return load_bank_vectors(_BANK_VECTORS_PATH)
+    except Exception as e:  # noqa: BLE001 — 기동을 막지 않는다
+        log.warning("미리 계산한 질문뱅크 벡터 로드 실패 %s: %s — 원격 색인으로", type(e).__name__, e)
+        return None
+
+
+def _bank_embedding():
+    """질문뱅크 색인 전용 임베딩(긴 timeout) — http 임베딩일 때만. 그 밖은 None = 요청 경로 임베딩을 쓴다
+    (프로세스 안 모델·외부 API 는 요청을 버려도 쌓이는 일이 없다). 같은 모델·같은 주소라 벡터 공간은 같다."""
+    if _env("TRIPPILOT_VECTOR_DB_URL") is None or _env("TRIPPILOT_EMBEDDING_PROVIDER") != "http":
+        return None
+    from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+    from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+
+    return http_embedding(RuntimeError, lambda t: UrllibJsonClient(timeout_sec=t),
+                          timeout_sec=_BANK_INDEX_TIMEOUT_SEC)
+
+
+def _intent_bank() -> tuple:
+    """도우미 대화 해석(U8)의 1차 매칭 재료 — 질문뱅크. 여기서 읽는 이유는 `_replan_directives`
+    와 같다(yaml 파서는 src/ 밖). 못 읽으면 빈 뱅크로 기동한다 — 1차 없이 3차 LLM 으로 해석되고
+    그 사실이 로그에 남는다(조용히 무시하는 것과 다르다)."""
+    try:
+        import yaml
+
+        from trippilot.orchestrator.question_bank import load_bank_file
+
+        return load_bank_file(_BANK_PATH, yaml.safe_load)
+    except Exception as e:  # noqa: BLE001 — 기동을 막지 않는다
+        log.warning("질문뱅크 로드 실패 %s: %s — 도우미 해석이 1차 매칭 없이 기동", type(e).__name__, e)
+        return ()
 
 
 def build_app_from_env() -> FastAPI:
@@ -628,7 +707,7 @@ def build_app_from_env() -> FastAPI:
         return create_app()
     weather = _kma_weather()
     poi_db = _backend_poi_db()
-    travel = _tmap_travel()
+    travel = _travel_chain()
     events = _event_store()
     existence = _place_existence()
     hours, place_ids = _place_hours(), _place_ids()
@@ -639,7 +718,9 @@ def build_app_from_env() -> FastAPI:
         return build_dev_app(weather=weather, poi_db=poi_db, events=events,
                              vector_store=vector_store, embedding=embedding,
                              travel_port=travel, existence=existence,
-                             hours=hours, place_ids=place_ids)
+                             hours=hours, place_ids=place_ids,
+                             bank=_intent_bank(), bank_embedding=_bank_embedding(),
+                             bank_vectors=_bank_vectors())
     if provider == "openai":
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
@@ -671,7 +752,9 @@ def build_app_from_env() -> FastAPI:
                          # EXISTENCE_MAX_CALLS 와 같은 이유(TRIP-882 — compose 빈 값의 int('')).
                          # 0·음수는 C1Config 검증이 기동 시점에 거부한다.
                          score_max_parallel=int(_env("TRIPPILOT_SCORE_MAX_PARALLEL") or "10"),
-                         directives=_replan_directives())
+                         directives=_replan_directives(),
+                         bank=_intent_bank(), bank_embedding=_bank_embedding(),
+                         bank_vectors=_bank_vectors())
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.

@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.api.SlotCandidateFacade
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
@@ -16,6 +17,13 @@ import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.DayAnchor
+import com.trippilot.itinerarygeneration.domain.DaySchedule
+import com.trippilot.itinerarygeneration.domain.RepairContext
+import com.trippilot.itinerarygeneration.domain.RepairResult
+import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.Violation
+import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.itinerarygeneration.domain.ScoredCandidate
 import com.trippilot.itinerarygeneration.domain.ScoredCandidatePool
 import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
@@ -31,11 +39,16 @@ import com.trippilot.placedata.api.FrozenPoiView
 import com.trippilot.placedata.api.GroundedPlace
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
+import com.trippilot.placedata.api.RegionCenter
+import com.trippilot.placedata.api.RegionLookupFacade
+import com.trippilot.savedaccommodation.api.BaseAnchorFacade
+import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.property.Arb
@@ -108,6 +121,21 @@ class SlotCandidateServiceTest : StringSpec({
         override fun hintsFor(accountId: UUID) = PersonalizationHints.NONE
     }
 
+    /** 적합 판정의 수리 컨텍스트 원천 — 앵커는 숙소([stays])로만. 여행 정보가 없으면(공용 [trips]) 컨텍스트 없음이다. */
+    fun contexts(tripFacade: TripFacade = trips, stays: List<DayAnchorView> = emptyList(), prefs: PreferenceFacade = accountPrefs) = RepairContexts(
+        tripFacade,
+        object : BaseAnchorFacade {
+            override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = stays
+        },
+        object : RegionLookupFacade {
+            override fun codesOf(regionName: String) = emptyList<String>()
+            override fun isSelectableCode(regionCode: String) = false
+            override fun centerOf(regionName: String): RegionCenter? = null
+            override fun centerOfCode(regionCode: String): RegionCenter? = null
+        },
+        prefs,
+    )
+
     class CapturingAgent(
         private val failure: ScheduleAgentCallFailed? = null,
         /** true 면 0건 응답 — 즉답 구제(TRIP-969 "전개가 저장분보다 나쁘면") 검증용. */
@@ -124,6 +152,8 @@ class SlotCandidateServiceTest : StringSpec({
                 emptyReason = if (respondEmpty) SlotCandidatesEmptyReason.NO_NEARBY else null,
             )
         }
+        // 적합 판정은 전부 통과 — fake 모드(원본 그대로)와 같다. 판정 자체는 아래 '적합 판정' 스펙이 잰다.
+        override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
     }
 
     // 후보가 정본에 실재하는지 다시 확인하는 경로(INV-1) — 테스트는 전부 통과시키되 호출은 관측한다.
@@ -142,7 +172,29 @@ class SlotCandidateServiceTest : StringSpec({
         scored: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(), // 기본 빈 풀 — 종전 경로 그대로
         candidates: CandidatePoolPort = pool,
         tripFacade: TripFacade = trips,
-    ) = SlotCandidateService(tripFacade, Repo(stored), agent, surfaces, candidates, scored, clock, accountPrefs, NoHints)
+        at: Clock = clock,
+    ) = SlotCandidateService(tripFacade, Repo(stored), agent, surfaces, candidates, scored, at, accountPrefs, NoHints, contexts())
+
+    /**
+     * 공개 퍼사드(U8 G-U8-2 · TRIP-1376) — 도우미가 보는 것은 이 계약뿐이다. **REST 와 같은 서비스**를 타는지가
+     * 요점이다: 제외 목록·이웃·closed-set 재확인이 그대로 걸려야 화면의 "다른 후보"와 도우미의 후보가 같다.
+     */
+    "공개 퍼사드가 REST 와 같은 경로로 후보를 낸다 — 기본 반경·컨셉 없음, 강등 여부를 싣는다" {
+        val agent = CapturingAgent()
+        val facade: SlotCandidateFacade = service(agent)
+
+        val view = facade.propose(acc, tripId, SlotKey.of(d1, target))
+
+        val sent = agent.captured!!
+        sent.slotKey shouldBe SlotKey.of(d1, target)
+        sent.radiusM shouldBe null
+        sent.concept shouldBe null
+        sent.reason shouldBe null
+        sent.excludePoiIds.isNotEmpty() shouldBe true // 서버가 유도한 제외 목록이 그대로 걸린다(BR-U3-24)
+        view.candidates.single().let { (it.distanceRange to it.rationale) shouldBe ("약 1.1km" to "주변 카페") }
+        view.degraded shouldBe false
+        view.emptyReason shouldBe null
+    }
 
     "경계가 실패하면 503 으로 표면화한다 — 500(우리가 터졌다)이 아니다" {
         // 감싸지 않으면 RuntimeException 이라 전역 핸들러가 500 으로 떨구는데, 사실은 "지금은 못 준다"다.
@@ -209,7 +261,7 @@ class SlotCandidateServiceTest : StringSpec({
     }
 
     fun serviceWithDistinctCoords(agent: CapturingAgent) =
-        SlotCandidateService(trips, Repo(itinerary), agent, distinctSurfaces, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
+        SlotCandidateService(trips, Repo(itinerary), agent, distinctSurfaces, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints, contexts())
 
     "같이 고르기는 직전 슬롯을 탐색 중심으로 쓴다 — 방금 고른 곳에서 다음 발걸음이다(TRIP-1252)" {
         val agent = CapturingAgent()
@@ -244,7 +296,7 @@ class SlotCandidateServiceTest : StringSpec({
             override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
         }
 
-        SlotCandidateService(trips, Repo(itinerary), agent, missingPrev, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
+        SlotCandidateService(trips, Repo(itinerary), agent, missingPrev, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints, contexts())
             .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null, coPick = true))
 
         // 교체 대상 좌표로 물러섰다(요청은 성사된다).
@@ -303,13 +355,18 @@ class SlotCandidateServiceTest : StringSpec({
         }
     }
 
-    "확정된 일정에는 후보를 제안하지 않는다 — 골라도 편집이 막힌다" {
+    /** 잠금 범위는 편집(EditItineraryService)과 같다 — 확정 일정은 여행 시작 전만 잠긴다(TRIP-999 결정 (a)). */
+    "확정된 일정은 여행 시작 전에는 후보를 제안하지 않고, 시작한 날부터는 제안한다" {
         val confirmed = itinerary.confirm(
             itinerary.days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }, now,
         )
-        shouldThrow<ConflictDetected> {
-            service(CapturingAgent(), stored = confirmed).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
-        }
+        val request = RequestSlotCandidates(SlotKey.of(d1, target), null, null, null)
+        // 여행 첫날 00:00 KST 의 1초 전 — 잠금 경계는 서울 날짜로 잰다
+        val eve = Clock.fixed(Instant.parse("2026-07-31T14:59:59Z"), ZoneOffset.UTC)
+        val firstDay = Clock.fixed(Instant.parse("2026-07-31T15:00:00Z"), ZoneOffset.UTC)
+
+        shouldThrow<ConflictDetected> { service(CapturingAgent(), stored = confirmed, at = eve).propose(acc, tripId, request) }
+        service(CapturingAgent(), stored = confirmed, at = firstDay).propose(acc, tripId, request).candidates.shouldNotBeEmpty()
     }
 
     "같은 날 같은 장소가 둘이면 어느 슬롯인지 특정할 수 없어 409" {
@@ -463,6 +520,7 @@ class SlotCandidateServiceTest : StringSpec({
             cands.toList(), radiusMUsed = 3_000,
             freshness = FreshnessMeta(now, degraded = false), emptyReason = null,
         )
+        override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
     }
 
     // 종전 거짓 근거를 그대로 재현한 문구 — 필터가 없으면 이대로 나갔다.
@@ -479,7 +537,7 @@ class SlotCandidateServiceTest : StringSpec({
         }
 
     fun conceptSvc(agent: StubScheduleAgent, pool: CandidatePoolPort) =
-        SlotCandidateService(trips, Repo(itinerary), agent, surfaces, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints)
+        SlotCandidateService(trips, Repo(itinerary), agent, surfaces, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints, contexts())
 
     fun req(concept: String?) = RequestSlotCandidates(SlotKey.of(d1, target), null, concept, null)
 
@@ -524,6 +582,7 @@ class SlotCandidateServiceTest : StringSpec({
             emptyList(), radiusMUsed = 3_000,
             freshness = FreshnessMeta(now, degraded = true), emptyReason = reason,
         )
+        override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
     }
 
     /** 반경별 풀 — 요청 반경 이내만 돌려주고, 몇 번·어느 반경으로 물었는지 남긴다. */
@@ -596,5 +655,246 @@ class SlotCandidateServiceTest : StringSpec({
                 out.candidates.map { it.poiId } shouldBe ids.filter { it.second in mapped }.map { it.first }
             }
         }
+    }
+
+    "공개 퍼사드가 0건의 이유와 강등을 이름 그대로 옮긴다 — 안내가 정반대라 뭉개지 않는다" {
+        val facade: SlotCandidateFacade = conceptSvc(emptyAgent(SlotCandidatesEmptyReason.ALL_IN_ITINERARY), RadiusPool(emptyList()))
+
+        val view = facade.propose(acc, tripId, SlotKey.of(d1, target))
+
+        view.candidates shouldBe emptyList()
+        view.degraded shouldBe true
+        view.emptyReason shouldBe "ALL_IN_ITINERARY"
+    }
+
+    // ─── 적합 판정 — 그 슬롯 시각에 실제로 들어가는 후보만(로컬 재현 28회 교체 중 3건이 HC1 위반으로 저장) ───
+
+    /**
+     * 판정 대역 — 일정에 [misfit] 장소가 들어 있으면 수리 불가, [moved] 장소면 시각을 밀어 수리, [broken] 장소면 그 예외.
+     * 후보 판정은 **대상 칸만** 바꾸므로 "그 장소가 일정에 있는가"가 곧 "대상 칸에 그 장소를 넣었는가"다.
+     */
+    class FitAgent(
+        private val proposed: List<UUID> = emptyList(),
+        private val misfit: Set<UUID> = emptySet(),
+        private val moved: Set<UUID> = emptySet(),
+        private val broken: Map<UUID, RuntimeException> = emptyMap(),
+        /** 0건 응답의 사유 — NO_NEARBY 면 풀 직접 채움 갈래(0건 확장)를 탄다. */
+        private val emptyReason: SlotCandidatesEmptyReason? = null,
+    ) : StubScheduleAgent() {
+        val repaired = mutableListOf<Pair<ScheduleAgentOutput, List<Violation>>>()
+        val contexts = mutableListOf<RepairContext>()
+        var proposeCalls = 0
+        override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput {
+            proposeCalls++
+            return SlotCandidatesOutput(
+                proposed.map { SlotCandidate(it, "약 1.0km", "주변 명소") }, radiusMUsed = 3_000,
+                freshness = FreshnessMeta(Instant.parse("2026-08-06T00:00:00Z"), degraded = false), emptyReason = emptyReason,
+            )
+        }
+        override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>, context: RepairContext): RepairResult {
+            contexts += context
+            return repair(solution, violations)
+        }
+        override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult {
+            repaired += solution to violations
+            val placed = solution.days.flatMap { d -> d.slots.map { it.poiId } }.toSet()
+            broken.entries.firstOrNull { it.key in placed }?.let { throw it.value }
+            if (placed.any { it in moved }) { // 실측 28건 중 7건 — repair 가 시각을 밀어 해결(moved=True)
+                val shifted = solution.days.map { d -> d.copy(slots = d.slots.map { it.copy(startAt = it.startAt.plusMinutes(30), endAt = it.endAt.plusMinutes(30)) }) }
+                return RepairResult(solution.copy(days = shifted), listOf("시작 시각 30분 뒤로"))
+            }
+            return RepairResult(solution, emptyList(), unrepairable = placed.any { it in misfit })
+        }
+    }
+
+    fun fitSvc(
+        agent: FitAgent,
+        stored: Itinerary = itinerary,
+        scored: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(),
+        candidates: CandidatePoolPort = pool,
+        tripFacade: TripFacade = trips,
+        repairContexts: RepairContexts = contexts(),
+    ) = SlotCandidateService(tripFacade, Repo(stored), agent, surfaces, candidates, scored, clock, accountPrefs, NoHints, repairContexts)
+
+    // 순서 단언용 고정 ID — 기대 순서와 자연 정렬이 반대라, 정렬로 순서를 바꾸는 구현이 우연히 통과하지 않는다.
+    fun ids(n: Int) = List(n) { UUID(0, (n - it).toLong()) }
+
+    "AI 후보 중 그 슬롯 시각에 못 들어가는 곳은 빠진다 — 시각만 밀면 들어가는 곳은 남고, 순서는 원래 그대로" {
+        val (a, b, c, d, e) = ids(5)
+        val agent = FitAgent(proposed = listOf(a, b, c, d, e), misfit = setOf(b, d), moved = setOf(c))
+
+        val out = fitSvc(agent).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.proposeCalls shouldBe 1 // AI 갈래를 탔다
+        out.candidates.map { it.poiId } shouldContainExactly listOf(a, c, e) // c: 저장하면 수리값으로 들어간다 — fit
+        out.radiusMUsed shouldBe 3_000 // 다른 필드는 건드리지 않는다
+        out.emptyReason shouldBe null
+    }
+
+    "즉답(저장 풀)도 같은 판정을 거친다 — 생성 때 점수는 이 슬롯의 시각을 모른다" {
+        val agent = FitAgent(misfit = setOf(cafeSpareHigh))
+
+        val out = fitSvc(agent, scored = storedPool(), candidates = resolving(cafeSpareHigh to 500.0, cafeSpareLow to 300.0))
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.proposeCalls shouldBe 0 // 즉답 갈래를 탔다
+        out.candidates.map { it.poiId } shouldContainExactly listOf(cafeSpareLow)
+    }
+
+    "풀 직접 채움(0건 확장·컨셉 채움)도 같은 판정을 거친다 — 판정은 closed-set·컨셉 필터·채움 **뒤**다" {
+        val (near, far) = ids(2)
+        val widened = fitSvc(
+            FitAgent(misfit = setOf(near), emptyReason = SlotCandidatesEmptyReason.NO_NEARBY),
+            candidates = RadiusPool(
+                listOf(GroundedPlace(near, "가까운 곳", 33.45, 126.56, "명소", null, 500.0), GroundedPlace(far, "먼 곳", 33.45, 126.56, "명소", null, 900.0)),
+            ),
+        ).propose(acc, tripId, req(null))
+        widened.candidates.map { it.poiId } shouldContainExactly listOf(far)
+        widened.freshness.degraded shouldBe true // 채움 갈래였다
+
+        val (sight, food1, food2) = ids(3)
+        val refilled = fitSvc(
+            FitAgent(proposed = listOf(sight), misfit = setOf(food1)),
+            candidates = conceptPool(
+                mapOf(sight to "명소"),
+                refill = listOf(GroundedPlace(food1, "국밥집", 33.45, 126.56, "맛집", null, 300.0), GroundedPlace(food2, "냉면집", 33.45, 126.56, "맛집", null, 600.0)),
+            ),
+        ).propose(acc, tripId, req("식사"))
+        refilled.candidates.map { it.poiId } shouldContainExactly listOf(food2)
+    }
+
+    "전부 못 들어가면 원래 목록을 그대로 준다 — 0건으로 접으면 '주변에 없음'이라는 거짓이 된다" {
+        val (a, b) = ids(2)
+        val agent = FitAgent(proposed = listOf(a, b), misfit = setOf(a, b))
+
+        val out = fitSvc(agent).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.repaired.size shouldBe 2 // 판정은 했다
+        out.candidates.map { it.poiId } shouldContainExactly listOf(a, b)
+        out.emptyReason shouldBe null
+    }
+
+    "판정이 예외면 그 후보부터 끝까지 판정 없이 남긴다 — 판정 못 함은 부적합이 아니고, 불통에 후보 수만큼 기다리지 않는다" {
+        val (m, x, c) = ids(3)
+        val timeout = FitAgent(
+            proposed = listOf(m, x, c),
+            misfit = setOf(m, c),
+            broken = mapOf(x to ScheduleAgentCallFailed("TIMEOUT", retryable = true, message = "상대가 응답하지 않음")),
+        )
+        fitSvc(timeout).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+            .candidates.map { it.poiId } shouldContainExactly listOf(x, c) // m 은 판정됐고 빠진다, c 는 판정 전이라 남는다
+        timeout.repaired.size shouldBe 2
+
+        // 경계 실패 타입이 아니어도 같다(스키마 불일치 등)
+        val (y, z) = ids(2)
+        val odd = FitAgent(proposed = listOf(y, z), misfit = setOf(z), broken = mapOf(y to IllegalStateException("스키마 불일치")))
+        fitSvc(odd).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+            .candidates.map { it.poiId } shouldContainExactly listOf(y, z)
+        odd.repaired.size shouldBe 1
+    }
+
+    "판정은 저장 경로와 같은 수단·앵커로 묻는다 — 첫 칸 교체면 그날 숙소 앵커, 아니면 앵커 없이" {
+        // 저장(attemptRepair)은 여행 수단과 '첫 구간이 바뀐 날'의 앵커를 싣는다. 빼면 상대가 대중교통·앵커 없음으로 재서
+        // 렌터카 여행이나 첫 칸 교체에서 저장과 다른 판정이 나온다.
+        val rentalTrip = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(d1, d1)
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(d1, d1, emptyList(), "혼자", null, emptyList())
+        }
+        val rental = object : PreferenceFacade {
+            override fun findPreferences(accountId: UUID) =
+                PreferenceSnapshot(emptyList(), emptyList(), emptyList(), listOf("렌터카"), null, emptyList(), false, null)
+        }
+        val withContext = contexts(rentalTrip, stays = listOf(DayAnchorView(d1, 35.15, 129.05)), prefs = rental)
+        val (a, b) = ids(2)
+
+        val first = FitAgent(proposed = listOf(a, b))
+        fitSvc(first, tripFacade = rentalTrip, repairContexts = withContext)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, neighborBefore), null, null, null)) // index 0
+        first.contexts shouldContainExactly List(2) { RepairContext(listOf(DayAnchor(d1, 35.15, 129.05)), listOf("렌터카")) }
+
+        val middle = FitAgent(proposed = listOf(a, b))
+        fitSvc(middle, tripFacade = rentalTrip, repairContexts = withContext)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null)) // index 1
+        middle.contexts shouldContainExactly List(2) { RepairContext(emptyList(), listOf("렌터카")) }
+    }
+
+    "컨텍스트 조회가 깨지면 컨텍스트 없이 판정한다 — 저장 경로와 같은 물러섬" {
+        val broken = contexts(
+            object : TripFacade {
+                override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
+                override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = throw IllegalStateException("db down")
+            },
+        )
+        val (a, b) = ids(2)
+        val agent = FitAgent(proposed = listOf(a, b), misfit = setOf(a))
+
+        val out = fitSvc(agent, repairContexts = broken).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.contexts shouldContainExactly listOf(RepairContext.NONE, RepairContext.NONE)
+        out.candidates.map { it.poiId } shouldContainExactly listOf(b) // 판정은 그대로 했다
+    }
+
+    "판정에 넘기는 일정은 대상 날 하나, 대상 칸의 장소만 후보로 바꾼 것이다 — 시각·고정·자정 넘김·출처는 그대로" {
+        // 대상은 **둘째 날** index 1 이고 첫째 날에도 index 1 이 있다 — 날짜를 안 보거나 첫째 날을 고르는 구현은 첫째 날을 바꾼다.
+        // 다른 날은 보내지 않는다 — 상대 repair 는 일정 전체가 수리되는지를 답해, 다른 날의 무관한 칸이 모든 후보를 떨어뜨린다.
+        // 대상 칸 자체가 자정 넘김·고정이라, 바꾼 칸을 새로 만들며 그 값을 잃는 구현도 걸린다.
+        val d2 = d1.plusDays(1)
+        val other = UUID.randomUUID()
+        val twoDays = Itinerary.create(
+            tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, true,
+            listOf(
+                ItineraryDay.of(
+                    d1, 0,
+                    listOf(
+                        VisitSlot.of(neighborBefore, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"), isFixed = true),
+                        VisitSlot.of(neighborAfter, null, 1, LocalTime.parse("18:30"), LocalTime.parse("20:00")),
+                    ),
+                ),
+                ItineraryDay.of(
+                    d2, 1,
+                    listOf(
+                        VisitSlot.of(other, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:30")),
+                        VisitSlot.of(target, null, 1, LocalTime.parse("22:00"), LocalTime.parse("01:00"), isFixed = true, endsNextDay = true),
+                    ),
+                ),
+            ),
+            now,
+        )
+        val (a, b) = ids(2)
+        val agent = FitAgent(proposed = listOf(a, b))
+
+        fitSvc(agent, stored = twoDays).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d2, target), null, null, null))
+
+        fun expected(placed: UUID) = listOf(
+            DaySchedule(
+                d2,
+                listOf(
+                    VisitSlotDisplay(other, LocalTime.parse("10:00"), LocalTime.parse("11:30"), false, null, isFixed = false),
+                    VisitSlotDisplay(placed, LocalTime.parse("22:00"), LocalTime.parse("01:00"), true, null, isFixed = true),
+                ),
+            ),
+        )
+        agent.repaired.map { it.first.days } shouldContainExactly listOf(expected(a), expected(b))
+        agent.repaired.forEach { (sent, violations) ->
+            violations shouldBe emptyList() // 저장 경로(편집 repair)와 같은 질문 — 위반 목록 없이 맞춰 보라
+            sent.solveMode shouldBe SolveMode.DETERMINISTIC // 저장 경로처럼 일정의 출처를 그대로 싣는다
+            sent.isFallback shouldBe true
+        }
+    }
+
+    "후보가 0건이면 판정하지 않는다 — 컨텍스트 조회(DB)도 하지 않는다" {
+        var lookups = 0
+        val counting = contexts(
+            object : TripFacade {
+                override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
+                override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = null.also { lookups++ }
+            },
+        )
+        val agent = FitAgent(proposed = emptyList())
+
+        fitSvc(agent, repairContexts = counting).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.repaired shouldBe emptyList()
+        lookups shouldBe 0
     }
 })

@@ -16,13 +16,10 @@
  */
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
 
 import type { StayItem } from '@/shared/api/index.schemas';
+
+import { SheetShell } from '@/shared/ui/SheetShell';
 
 import { formatPrice } from '@/entities/stay';
 import { otaConfirmLabel, otaDisplayName } from '@/entities/stay';
@@ -62,17 +59,6 @@ export interface OtaChoiceSheetProps {
   onRetry: () => void;
 }
 
-function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
-  return (
-    <BottomSheetBackdrop
-      {...props}
-      appearsOnIndex={0}
-      disappearsOnIndex={-1}
-      opacity={0.55}
-    />
-  );
-}
-
 export function OtaChoiceSheet({
   item,
   variant = 'default',
@@ -87,133 +73,127 @@ export function OtaChoiceSheet({
   const isError = variant === 'error';
   const isAffiliate = outbound === 'affiliate';
   return (
-    <BottomSheet
-      index={0}
-      enablePanDownToClose
+    <SheetShell
+      testID="stay-ota-sheet"
       onClose={onCancel}
-      backdropComponent={renderBackdrop}
+      title={isError ? '링크를 열 수 없습니다' : '외부 사이트로 이동'}
+      contentClassName="w-full gap-lg px-xl pb-2xl pt-sm"
+      handle="default"
       backgroundStyle={SHEET_BACKGROUND}
+      backdrop="strong"
     >
-      <BottomSheetView
-        testID="stay-ota-sheet"
-        className="w-full gap-lg px-xl pb-2xl pt-sm"
-      >
-        <Text className="font-noto-bold text-[20px] font-bold text-ink">
-          {isError ? '링크를 열 수 없습니다' : '외부 사이트로 이동'}
-        </Text>
-        <Text className="font-noto text-body leading-[21px] text-body">
-          {isError ? '잠시 후 다시 시도하세요.' : BODY}
-        </Text>
+      <Text className="font-noto text-body leading-[21px] text-body">
+        {isError ? '잠시 후 다시 시도하세요.' : BODY}
+      </Text>
 
-        {isError ? (
-          <View
-            testID="stay-ota-error-box"
-            className="w-full flex-row items-center gap-[10px] rounded-button border-[1.4px] border-dashed border-hairline-strong p-[14px]"
-          >
-            <WarningTriangleGlyph size={18} />
-            <Text className="flex-1 font-noto text-caption leading-[18px] text-muted">
-              외부 링크 URL을 확인할 수 없거나 연결에 실패했습니다.
-            </Text>
-          </View>
-        ) : (
-          <>
-            {/* 단일 OTA 행 — 표시명(코드 원문 금지, TRIP-988) + 최저가(복수 OTA·정확가는 이연, 01b Q2). */}
-            <View
-              testID={`stay-ota-option-${item.externalSource}`}
-              className="w-full flex-row items-center gap-md rounded-[14px] border-[1.5px] border-primary bg-canvas py-md pl-lg pr-md"
-            >
-              {/* 라디오 = View 조합(SVG 글리프 아님) — 단일 행이라 항상 선택. 선택 관측은 색이
-                  아니라 accessibilityState.selected + 채움 inner 존재 두 신호(StayPriceSheet 미러). */}
-              <View
-                testID={`stay-ota-radio-${item.externalSource}`}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: true }}
-                className="h-[22px] w-[22px] items-center justify-center rounded-pill border-[1.5px] border-primary"
-              >
-                <View
-                  testID={`stay-ota-radio-fill-${item.externalSource}`}
-                  className="h-[11px] w-[11px] rounded-pill bg-primary"
-                />
-              </View>
-              <View className="flex-1 flex-row items-center gap-xs">
-                <Text className="font-inter-bold text-body font-bold text-ink">
-                  {otaDisplayName(item.externalSource)}
-                </Text>
-                <Text className="font-noto text-label text-muted-soft">·</Text>
-                <Text className="font-inter-bold text-body font-bold text-ink">
-                  {formatPrice(item.price)}
-                </Text>
-              </View>
-              <ChevronRightGlyph size={18} />
-            </View>
-
-            {isAffiliate ? (
-              <View
-                testID="stay-ota-notice-box"
-                className="w-full flex-row items-start gap-[10px] rounded-button bg-surface-soft p-[14px]"
-              >
-                <InfoGlyph size={18} />
-                <Text className="flex-1 font-noto text-caption leading-[18px] text-muted">
-                  {NOTICE}
-                </Text>
-              </View>
-            ) : null}
-
-            {/* 체크 표시는 prop 으로만 — 누름은 콜백만 올린다(TermsScreen 체크박스 모양 선례).
-                웹검색 얼굴은 고지가 없으니 고지 억제 동의도 받지 않는다(01b Q3). */}
-            {showDontShowAgain && isAffiliate ? (
-              <Pressable
-                testID="stay-ota-dont-show"
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: dontShowAgain }}
-                onPress={onToggleDontShowAgain}
-                className="flex-row items-center gap-[10px]"
-              >
-                <View
-                  testID="stay-ota-dont-show-box"
-                  className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
-                    dontShowAgain
-                      ? 'bg-primary'
-                      : 'border-[1.6px] border-hairline-strong bg-canvas'
-                  }`}
-                >
-                  {dontShowAgain ? <CheckGlyph size={14} /> : null}
-                </View>
-                <Text className="font-noto text-label text-body">
-                  이 안내를 다시 보지 않기
-                </Text>
-              </Pressable>
-            ) : null}
-          </>
-        )}
-
-        <View className="w-full flex-row gap-[10px]">
-          <Pressable
-            testID="stay-ota-cancel"
-            accessibilityRole="button"
-            onPress={onCancel}
-            className="h-[50px] flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              취소
-            </Text>
-          </Pressable>
-          <Pressable
-            testID={isError ? 'stay-ota-retry' : 'stay-ota-confirm'}
-            accessibilityRole="button"
-            onPress={isError ? onRetry : onConfirm}
-            className="h-[50px] flex-1 items-center justify-center rounded-button bg-primary"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-              {isError
-                ? '다시 시도'
-                : isAffiliate
-                  ? otaConfirmLabel(item.externalSource)
-                  : '검색 결과로 이동'}
-            </Text>
-          </Pressable>
+      {isError ? (
+        <View
+          testID="stay-ota-error-box"
+          className="w-full flex-row items-center gap-[10px] rounded-button border-[1.4px] border-dashed border-hairline-strong p-[14px]"
+        >
+          <WarningTriangleGlyph size={18} />
+          <Text className="flex-1 font-noto text-caption leading-[18px] text-muted">
+            외부 링크 URL을 확인할 수 없거나 연결에 실패했습니다.
+          </Text>
         </View>
-      </BottomSheetView>
-    </BottomSheet>
+      ) : (
+        <>
+          {/* 단일 OTA 행 — 표시명(코드 원문 금지, TRIP-988) + 최저가(복수 OTA·정확가는 이연, 01b Q2). */}
+          <View
+            testID={`stay-ota-option-${item.externalSource}`}
+            className="w-full flex-row items-center gap-md rounded-[14px] border-[1.5px] border-primary bg-canvas py-md pl-lg pr-md"
+          >
+            {/* 라디오 = View 조합(SVG 글리프 아님) — 단일 행이라 항상 선택. 선택 관측은 색이
+                  아니라 accessibilityState.selected + 채움 inner 존재 두 신호(StayPriceSheet 미러). */}
+            <View
+              testID={`stay-ota-radio-${item.externalSource}`}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: true }}
+              className="h-[22px] w-[22px] items-center justify-center rounded-pill border-[1.5px] border-primary"
+            >
+              <View
+                testID={`stay-ota-radio-fill-${item.externalSource}`}
+                className="h-[11px] w-[11px] rounded-pill bg-primary"
+              />
+            </View>
+            <View className="flex-1 flex-row items-center gap-xs">
+              <Text className="font-inter-bold text-body font-bold text-ink">
+                {otaDisplayName(item.externalSource)}
+              </Text>
+              <Text className="font-noto text-label text-muted-soft">·</Text>
+              <Text className="font-inter-bold text-body font-bold text-ink">
+                {formatPrice(item.price)}
+              </Text>
+            </View>
+            <ChevronRightGlyph size={18} />
+          </View>
+
+          {isAffiliate ? (
+            <View
+              testID="stay-ota-notice-box"
+              className="w-full flex-row items-start gap-[10px] rounded-button bg-surface-soft p-[14px]"
+            >
+              <InfoGlyph size={18} />
+              <Text className="flex-1 font-noto text-caption leading-[18px] text-muted">
+                {NOTICE}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* 체크 표시는 prop 으로만 — 누름은 콜백만 올린다(TermsScreen 체크박스 모양 선례).
+                웹검색 얼굴은 고지가 없으니 고지 억제 동의도 받지 않는다(01b Q3). */}
+          {showDontShowAgain && isAffiliate ? (
+            <Pressable
+              testID="stay-ota-dont-show"
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: dontShowAgain }}
+              onPress={onToggleDontShowAgain}
+              className="flex-row items-center gap-[10px]"
+            >
+              <View
+                testID="stay-ota-dont-show-box"
+                className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
+                  dontShowAgain
+                    ? 'bg-primary'
+                    : 'border-[1.6px] border-hairline-strong bg-canvas'
+                }`}
+              >
+                {dontShowAgain ? <CheckGlyph size={14} /> : null}
+              </View>
+              <Text className="font-noto text-label text-body">
+                이 안내를 다시 보지 않기
+              </Text>
+            </Pressable>
+          ) : null}
+        </>
+      )}
+
+      <View className="w-full flex-row gap-[10px]">
+        <Pressable
+          testID="stay-ota-cancel"
+          accessibilityRole="button"
+          onPress={onCancel}
+          className="h-[50px] flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
+        >
+          <Text className="font-noto-bold text-card-title font-bold text-ink">
+            취소
+          </Text>
+        </Pressable>
+        <Pressable
+          testID={isError ? 'stay-ota-retry' : 'stay-ota-confirm'}
+          accessibilityRole="button"
+          onPress={isError ? onRetry : onConfirm}
+          className="h-[50px] flex-1 items-center justify-center rounded-button bg-primary"
+        >
+          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+            {isError
+              ? '다시 시도'
+              : isAffiliate
+                ? otaConfirmLabel(item.externalSource)
+                : '검색 결과로 이동'}
+          </Text>
+        </Pressable>
+      </View>
+    </SheetShell>
   );
 }

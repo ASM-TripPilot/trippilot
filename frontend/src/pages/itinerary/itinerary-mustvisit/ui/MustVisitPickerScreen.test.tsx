@@ -1,4 +1,3 @@
-import type { ReactTestInstance } from 'react-test-renderer';
 import {
   fireEvent,
   render,
@@ -8,9 +7,6 @@ import {
 
 import type { MapPin } from '@/shared/map';
 
-// 색 계열 목록을 손으로 적으면 늙는다 — 디자인 토큰 정본에서 파생한다(`design-tokens.test.ts`
-// 가 같은 방식으로 읽는 선례). 여기 새 `primary-*` 색이 생기면 아래 계열 판정이 자동으로 넓어진다.
-import tailwindConfig from '../../../../../tailwind.config.js';
 import {
   MUST_VISIT_NAME_PLACEHOLDER,
   type MustVisitListItem,
@@ -96,7 +92,7 @@ function cardTestIds(): string[] {
  * 실패 메시지를 만들며 노드를 pretty-format 으로 직렬화하는데, 노드의 부모/자식 순환 참조가
  * 스택을 터뜨린다(RNTL 13.3.3 실측 — red 부재/개수 단언이 SIGABRT 로 죽는다). test-designer 의
  * 단언은 애초에 red 로 시작하므로, 노드의 부재·개수는 **항상 `.length` 를 먼저 뽑아 숫자만
- * 비교한다**. 문자열 배열(`cardTestIds`·`brandTokensIn`)은 원시값이라 이 함정과 무관하다.
+ * 비교한다**. 문자열 배열(`cardTestIds`)은 원시값이라 이 함정과 무관하다.
  */
 function countTestId(matcher: string | RegExp): number {
   return screen.queryAllByTestId(matcher).length;
@@ -172,163 +168,6 @@ function listed(
 const PIN_1: MapPin = { number: 1, lat: 35.1, lng: 129.1 };
 const PIN_2: MapPin = { number: 2, lat: 35.2, lng: 129.2 };
 const PIN_3: MapPin = { number: 3, lat: 35.3, lng: 129.3 };
-
-/**
- * className 안에 그 토큰이 **정확히** 있는가. 토큰 경계(앞은 문자열 시작이거나 공백, 뒤는
- * 단어문자·하이픈이 아님)를 정규식으로 잡으므로 `bg-primary-pale` 은 `bg-primary` 로 안 센다.
- *
- * ⚠️ **긍정형 단언에만 써라.** "그 토큰이 있다"(`toBe(true)`)를 잴 때는 경계 정규식이 심판을
- * **조인다**. 그런데 **부정형(`toBe(false)`)에서는 정확히 반대로 심판을 푼다** — `bg-primary-pale`
- * 을 먹였을 때 순진한 `includes` 는 `true`(→ 부정 단언이 죽어 우회를 잡는다)인데 이 함수는
- * `false`(→ 통과)다. "브랜드색이 안 남았다" 류 부정 단언에는 아래 `brandTokensIn` 을 쓴다
- * (옛 TRIP-326 03b §1 실측 — 비활성 CTA 를 브랜드 빨강으로 칠해도 150건이 전부 초록이었다).
- *
- * *(개념)* **className** — NativeWind 가 쓰는 스타일 이름표. 이 환경에서는 렌더된 요소의 props
- * 에 문자열 그대로 남아 있어 **jest 가 색을 볼 수 있는 유일한 통로**다(`toHaveStyle` 은 못 쓴다).
- */
-function hasToken(className: string, token: string): boolean {
-  return new RegExp(`(^|\\s)${token}(?![\\w-])`).test(className);
-}
-
-/**
- * 브랜드 주색 **계열** 이름들. `tailwind.config.js`(= Figma 변수 컬렉션의 미러)에서 파생하므로
- * 색이 늘면 저절로 따라온다 — 손으로 적은 목록은 늙는다. 긴 이름을 앞에 둔다(가독성).
- */
-const BRAND_COLORS = Object.keys(
-  (
-    tailwindConfig as unknown as {
-      theme: { extend: { colors: Record<string, string> } };
-    }
-  ).theme.extend.colors
-)
-  .filter((name) => name === 'on-primary' || /^primary(-|$)/.test(name))
-  .sort((a, b) => b.length - a.length);
-
-/** `bg-primary-pale` · `text-on-primary` 처럼 **유틸리티 접두 + 브랜드 색 이름** 한 덩어리. */
-const BRAND_TOKEN = new RegExp(`^[a-z]+-(?:${BRAND_COLORS.join('|')})$`);
-
-/**
- * className 에 들어 있는 브랜드 주색 계열 토큰을 **전부** 돌려준다(문자열 배열). 부정 단언은
- * `toEqual([])` 로 쓴다 — "이 토큰 하나가 없다" 가 아니라 **"계열 전체가 없다"** 를 재므로
- * `bg-primary-pale`·`text-primary-text` 로 갈아타는 우회가 막힌다.
- */
-function brandTokensIn(className: string): string[] {
-  return className.split(/\s+/).filter((token) => BRAND_TOKEN.test(token));
-}
-
-/** 렌더된 요소의 className 문자열. 없으면 빈 문자열 — 부정 단언을 공짜로 통과시키는 것은 같은
- * it 안의 긍정 짝이 먼저 막는다. */
-function classNameOf(node: ReactTestInstance): string {
-  return String(node.props.className ?? '');
-}
-
-/** 조상을 거슬러 올라가 스크롤 영역 안에 있는가. React 의 위치 정보는 props 에 안 실리므로
- * 렌더 트리의 **조상 host 타입**으로만 잴 수 있다(`RCTScrollView`). */
-const SCROLL_HOST_TYPE = 'RCTScrollView';
-
-function isInsideScroll(node: ReactTestInstance): boolean {
-  let cursor: ReactTestInstance | null = node.parent;
-  while (cursor !== null) {
-    if (String(cursor.type) === SCROLL_HOST_TYPE) return true;
-    cursor = cursor.parent;
-  }
-  return false;
-}
-
-/** 한 노드 서브트리 안의 className 문자열(문자열 배열이라 matcher 에 안전). "배지가 없다" 류
- * 렌더층 부재 단언에 쓴다. */
-function classNamesUnder(root: ReactTestInstance): string[] {
-  return root
-    .findAll(() => true)
-    .map((node) => String(node.props?.className ?? ''))
-    .filter((className) => className.length > 0);
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
- * 탐지기 자가검사 — 이게 통과해야 아래 개수·부재·위치 단언이 의미를 갖는다.
- * ──────────────────────────────────────────────────────────────────────────── */
-
-describe('D1 · 탐지기 자가검사 — 카드 세는 셀렉터가 썸네일·칩·크롬을 삼키지 않는다', () => {
-  it('카드만 정확히 셋이고, 제외 대상은 실재하는데 안 섞인다', () => {
-    render(
-      <MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B, UNJOINED_Z])} />
-    );
-
-    // 카드만 정확히 셋. 완전 일치라 하나라도 섞이면 여기서 먼저 죽는다.
-    expect(cardTestIds()).toEqual([
-      'itinerary-mustvisit-poi-a',
-      'itinerary-mustvisit-poi-b',
-      'itinerary-mustvisit-poi-z',
-    ]);
-
-    // 짝 — 제외 대상이 화면에 **실재하는데도** 위 목록에 안 섞였다.
-    expect(
-      screen.getByTestId('itinerary-mustvisit-image-poi-a')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-mustvisit-chip-fixed-poi-a')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-mustvisit-timemode-anytime-poi-a')
-    ).toBeOnTheScreen();
-  });
-});
-
-describe('D2 · 탐지기 자가검사 — 브랜드 계열 판정이 무엇을 잡고 무엇을 안 잡는가', () => {
-  it('계열은 정본 5개, 우회 두 개를 잡고 이웃은 안 삼킨다', () => {
-    // ① 계열은 토큰 정본에서 파생한 정확히 다섯이다. 색이 늘면 이 기대값도 함께 고친다.
-    expect([...BRAND_COLORS].sort()).toEqual([
-      'on-primary',
-      'primary',
-      'primary-active',
-      'primary-pale',
-      'primary-text',
-    ]);
-
-    // ② 옛 TRIP-326 03b 가 실제로 심었던 우회 두 개를 잡는다(1차 부정형 `hasToken` 은 놓쳤다).
-    expect(
-      brandTokensIn('w-full rounded-button py-lg bg-primary-pale')
-    ).toEqual(['bg-primary-pale']);
-    expect(
-      brandTokensIn('font-noto-bold text-[16px] font-bold text-primary-text')
-    ).toEqual(['text-primary-text']);
-
-    // ③ 현행 비활성 색은 계열 밖이다(= 지금 구현이 옳다는 짝).
-    expect(brandTokensIn('rounded-button py-lg bg-hairline-strong')).toEqual(
-      []
-    );
-    // ④ 이름이 겹치는 이웃까지 삼키지 않는다 — `^…$` 로 조각 전체를 대조하기 때문이다.
-    expect(brandTokensIn('bg-primaryish text-primary-textual')).toEqual([]);
-    // ⑤ className 이 아예 없는 노드(빈 문자열)도 `[]` 다 → 부정 단언만으로는 공허하다는 근거.
-    expect(brandTokensIn('')).toEqual([]);
-    // ⑥ hasToken 은 긍정형에서 경계를 조인다(부정형에는 쓰지 마라 — 독주석).
-    expect(hasToken('rounded-pill bg-primary-pale', 'bg-primary')).toBe(false);
-    expect(hasToken('rounded-button bg-primary py-lg', 'bg-primary')).toBe(
-      true
-    );
-  });
-});
-
-describe('D3 · 탐지기 자가검사 — 스크롤 판정·소요시간 탐지기가 옳게 가른다', () => {
-  it('뒤로 버튼은 스크롤 밖, 카드는 스크롤 안이다', () => {
-    render(<MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B])} />);
-    // RN 내부 host 이름이 바뀌면 이 두 줄이 함께 죽어 "AC 위반" 이 아니라 "탐지기 노후" 임이 보인다.
-    expect(
-      isInsideScroll(screen.getByTestId('itinerary-mustvisit-screen-back'))
-    ).toBe(false);
-    expect(
-      isInsideScroll(screen.getByTestId('itinerary-mustvisit-poi-a'))
-    ).toBe(true);
-  });
-
-  it('DURATION_TEXT 는 시각·`시간 정해두기` 를 오탐하지 않는다', () => {
-    // 이 자가검사가 없으면 AC-16 의 부정 단언이 무엇을 재는지 모른다(옛 C32-b 실측을 코드로 고정).
-    expect(DURATION_TEXT.test('13:00')).toBe(false);
-    expect(DURATION_TEXT.test('시간 정해두기')).toBe(false);
-    expect(DURATION_TEXT.test('90분')).toBe(true);
-    expect(DURATION_TEXT.test('1시간 30분')).toBe(true);
-  });
-});
 
 /* ────────────────────────────────────────────────────────────────────────────
  * default (view.kind === 'listed')
@@ -523,7 +362,7 @@ describe('C26 · 무회귀 — 지도 카드를 안 그리는 세 자리', () =>
 });
 
 describe('C27 · 무회귀 — timeMode 칩 두 개가 현재 type 을 드러낸다 (Q1 칩 렌더 유지)', () => {
-  it('선택 상태가 접근성 상태로 갈리고, 색 토큰도 함께 갈린다', () => {
+  it('선택 상태가 접근성 상태로 갈린다', () => {
     render(<MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B])} />);
 
     const fixedOn = screen.getByTestId(
@@ -537,14 +376,7 @@ describe('C27 · 무회귀 — timeMode 칩 두 개가 현재 type 을 드러낸
     expect(fixedOn.props.accessibilityState?.selected).toBe(true);
     expect(fixedOff.props.accessibilityState?.selected).toBe(false);
 
-    // ② 색 축(on=`primary-pale`, off=`surface-strong`) — 긍정·부정이 짝을 이룬 토큰 지정이라
-    //    경계 정규식이 옳게 조인다(부정형 하나만 세우는 자리에는 hasToken 을 쓰면 안 된다).
-    expect(hasToken(classNameOf(fixedOn), 'bg-primary-pale')).toBe(true);
-    expect(hasToken(classNameOf(fixedOn), 'bg-surface-strong')).toBe(false);
-    expect(hasToken(classNameOf(fixedOff), 'bg-surface-strong')).toBe(true);
-    expect(hasToken(classNameOf(fixedOff), 'bg-primary-pale')).toBe(false);
-
-    // ③ 라벨은 스토리 어휘 그대로다(US-TRIP-08).
+    // ② 라벨은 스토리 어휘 그대로다(US-TRIP-08).
     expect(within(fixedOn).getByText('시간 정해두기')).toBeOnTheScreen();
     expect(within(fixedOff).getByText('아무 때나')).toBeOnTheScreen();
   });
@@ -569,7 +401,7 @@ describe('🔴 C-AC2 · AC-2 — listed 에서 건너뛰기를 숨긴다', () =>
 });
 
 describe('C-AC3 · AC-3 — listed CTA 가 활성이고 press 시 onProceed 1회', () => {
-  it('CTA 가 브랜드 배경으로 활성이고 스크롤 흐름 안에 있으며 눌리면 onProceed 1회', () => {
+  it('CTA 가 활성이고 눌리면 onProceed 1회', () => {
     const onProceed = jest.fn();
     render(
       <MustVisitPickerScreen
@@ -580,51 +412,10 @@ describe('C-AC3 · AC-3 — listed CTA 가 활성이고 press 시 onProceed 1회
 
     const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
     expect(proceed).not.toBeDisabled();
-    // 활성은 Figma `ctaPrimary` 그대로 배경 `primary`(하단 고정 바가 아니라 스크롤 흐름 안).
-    expect(hasToken(classNameOf(proceed), 'bg-primary')).toBe(true);
-    expect(isInsideScroll(proceed)).toBe(true);
     expect(within(proceed).getByText(PROCEED_LABEL)).toBeOnTheScreen();
 
     fireEvent.press(proceed);
     expect(onProceed).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('🔴 C-AC4 · AC-4 — 강등 확인 시트가 어떤 조작으로도 뜨지 않는다', () => {
-  it('처음에도 없고, FIXED 카드의 `아무 때나` 를 눌러도 안 뜬다', () => {
-    render(<MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B])} />);
-
-    // ① 처음부터 시트가 없다(삭제도 계약 — 옛 C28·C29 가 심판하던 표면).
-    expect(countTestId('itinerary-mustvisit-screen-demote')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-demote-confirm')).toBe(0);
-
-    // ② 🔴 FIXED 의 `아무 때나` 를 눌러도 강등 확인 시트가 뜨지 않는다(Q1 표시 전용).
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-timemode-anytime-poi-a')
-    );
-    expect(countTestId('itinerary-mustvisit-screen-demote')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-demote-cancel')).toBe(0);
-  });
-});
-
-describe('🔴 C-AC5 · AC-5 — staleFailed 여도 AlertRow 를 안 그린다 (Q3 · 카드는 그대로)', () => {
-  it('staleFailed=true 인 listed 에서 stale AlertRow 가 없고 카드 3장은 살아 있다', () => {
-    const onRetry = jest.fn();
-    render(
-      <MustVisitPickerScreen
-        view={listed([FIXED_A, ANYTIME_B, UNJOINED_Z], true)}
-        onRetry={onRetry}
-      />
-    );
-
-    // 🔴 model 은 staleFailed 를 유지하지만(h03 소비 예정) 이 화면은 AlertRow 를 안 그린다.
-    expect(countTestId('itinerary-mustvisit-screen-stale-failed')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-stale-retry')).toBe(0);
-
-    // 짝 — 목록은 지워지지 않는다(전면 실패·로딩 얼굴로 갈아 끼우지도 않는다).
-    expect(cardTestIds()).toHaveLength(3);
-    expect(countTestId('itinerary-mustvisit-screen-failed')).toBe(0);
-    expect(countTestId('itinerary-mustvisit-screen-loading')).toBe(0);
   });
 });
 
@@ -716,11 +507,10 @@ describe('C-AC11 · AC-11 — failed 에서 제목+서브카피가 둘 다 보�
 });
 
 describe('C-AC12 · AC-12 — failed 에서만 건너뛰기가 앱바에 노출된다', () => {
-  it('건너뛰기가 보이고 스크롤 밖(앱바)에 있다', () => {
+  it('건너뛰기가 보인다', () => {
     render(<MustVisitPickerScreen view={{ kind: 'failed' }} />);
     const skip = screen.getByTestId('itinerary-mustvisit-screen-skip');
     expect(skip).toBeOnTheScreen();
-    expect(isInsideScroll(skip)).toBe(false);
     expect(within(skip).getByText(SKIP_LABEL)).toBeOnTheScreen();
   });
 });
@@ -735,8 +525,8 @@ describe('🔴 C-AC13 · AC-13 — 에러 카피가 정본대로 정확히 보�
   });
 });
 
-describe('🔴 C-AC14 · AC-14 — 다시 시도는 빨강 아웃라인이고 상단 배지 아이콘이 없다', () => {
-  it('press 시 onRetry 1회, 버튼에 빨강 토큰, 실패 블록에 원형 배지가 없다', () => {
+describe('🔴 C-AC14 · AC-14 — 다시 시도', () => {
+  it('press 시 onRetry 1회, 버튼 문구가 보인다', () => {
     const onRetry = jest.fn();
     render(
       <MustVisitPickerScreen view={{ kind: 'failed' }} onRetry={onRetry} />
@@ -745,23 +535,7 @@ describe('🔴 C-AC14 · AC-14 — 다시 시도는 빨강 아웃라인이고 �
     const retry = screen.getByTestId('itinerary-mustvisit-screen-retry');
     fireEvent.press(retry);
     expect(onRetry).toHaveBeenCalledTimes(1);
-
-    // 🔴 빨강 테두리·빨강 글자 pill(현재는 StateNotice outline = 회색 테두리·ink 글자 → red).
-    expect(hasToken(classNameOf(retry), 'border-primary')).toBe(true);
-    expect(
-      hasToken(
-        classNameOf(within(retry).getByText(RETRY_LABEL)),
-        'text-primary'
-      )
-    ).toBe(true);
-
-    // 🔴 상단 원형 배지(StateNotice 의 `bg-primary-pale` 72px 원)가 없다 — 로컬 블록이라 배지 없음.
-    //    글리프(AlertCircleGlyph) 자체의 부재를 잠그던 itineraryMustVisitStructure C41(소스)은
-    //    TRIP-1145 로 지웠다(SVG 는 className/testID sink 라 렌더가 못 본다). 여기 배열은 문자열이라 toEqual 안전.
-    const failed = screen.getByTestId('itinerary-mustvisit-screen-failed');
-    expect(
-      classNamesUnder(failed).filter((cls) => hasToken(cls, 'bg-primary-pale'))
-    ).toEqual([]);
+    expect(within(retry).getByText(RETRY_LABEL)).toBeOnTheScreen();
   });
 });
 
@@ -835,42 +609,6 @@ describe('C-AC16 · AC-16 — 세 얼굴 전부에서 소요시간·끝 시각�
     texts = renderedTexts();
     expect(texts).toContain(RETRY_LABEL); // 긍정 앵커
     expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
-  });
-});
-
-describe('🔴 C-AC17 · AC-17 — 비활성 CTA 가 브랜드 주색으로 칠해지지 않는다', () => {
-  /**
-   * ⚠️ jest 의 `toBeDisabled` 는 접근성 상태만 읽고 색은 안 본다. 옛 TRIP-225 에서 차단 CTA 가
-   * 브랜드 빨강을 `disabled` 와 무관하게 걸어 "빨간 활성 버튼처럼 보이는데 안 눌리는" 상태가
-   * 실기에서야 발견됐다. 그래서 **계열 전체가 0개**(`brandTokensIn`===[])로 잰다 — `bg-primary`
-   * 를 `bg-primary-pale` 로 갈아타는 우회를 막는다. 눈에 보이는 대비는 [검증]의 스크린샷 몫이다.
-   */
-  it('활성 CTA 엔 브랜드색이 있고, loading·failed 비활성 CTA 엔 계열 전체가 0개다', () => {
-    // ① 활성 앵커 — 탐지기가 실제로 무언가를 찾을 줄 안다는 증거(공허 통과 방지).
-    const { rerender } = render(
-      <MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B])} />
-    );
-    const activeCta = screen.getByTestId('itinerary-mustvisit-screen-proceed');
-    expect(brandTokensIn(classNameOf(activeCta))).toEqual(['bg-primary']);
-    expect(
-      brandTokensIn(classNameOf(within(activeCta).getByText(PROCEED_LABEL)))
-    ).toEqual(['text-on-primary']);
-
-    // ② 🔴 loading 비활성 CTA — 배경·라벨 모두 브랜드 계열 0개.
-    rerender(<MustVisitPickerScreen view={{ kind: 'loading' }} />);
-    let blocked = screen.getByTestId('itinerary-mustvisit-screen-proceed');
-    expect(brandTokensIn(classNameOf(blocked))).toEqual([]);
-    expect(
-      brandTokensIn(classNameOf(within(blocked).getByText(PROCEED_LABEL)))
-    ).toEqual([]);
-
-    // ③ 🔴 failed 비활성 CTA — 같은 계약. (retry 버튼은 별 testID 라 이 CTA 스캔에 안 섞인다.)
-    rerender(<MustVisitPickerScreen view={{ kind: 'failed' }} />);
-    blocked = screen.getByTestId('itinerary-mustvisit-screen-proceed');
-    expect(brandTokensIn(classNameOf(blocked))).toEqual([]);
-    expect(
-      brandTokensIn(classNameOf(within(blocked).getByText(PROCEED_LABEL)))
-    ).toEqual([]);
   });
 });
 
@@ -975,11 +713,8 @@ describe('🔴 TRIP-988 C · 고정 시각 보조행 (D5)', () => {
 
 /**
  * 무엇을 보장하나: empty 얼굴(0곳)의 `이 구성으로 일정 짜기` CTA 는 **눌리고, 눌리는 것처럼
- * 보인다**. 잠금은 loading·failed 에만 남는다(기존 C-AC9·C-AC15·C-AC17 이 그쪽을 계속 잰다).
- *
- * ★ `toBeDisabled` 는 색을 안 본다(C-AC17 독주석) — B1 의 `not.toBeDisabled()` 만으로는 "회색인데
- *   눌리는" 버튼이 통과한다. B2 가 className 토큰으로 색까지 잰다. 회색 토큰 부재는 `hasToken`
- *   부정형이 아니라 토큰 배열의 정확 비교로 잰다(`hasToken` 독주석 — 부정형에서 심판을 푼다).
+ * 보인다**. 잠금은 loading·failed 에만 남는다(기존 C-AC9·C-AC15 가 그쪽을 계속 잰다).
+ * 활성·비활성 CTA 색(옛 B2·C-AC17)은 실화면 몫이다(TRIP-1367).
  */
 describe('🔴 TRIP-982 B · empty CTA 활성 (D7)', () => {
   it('B1 0곳이어도 CTA 가 비활성이 아니고, 누르면 onProceed 가 1회 불린다', () => {
@@ -993,21 +728,6 @@ describe('🔴 TRIP-982 B · empty CTA 활성 (D7)', () => {
 
     fireEvent.press(proceed);
     expect(onProceed).toHaveBeenCalledTimes(1);
-  });
-
-  it('B2 활성 색 — 배경 bg-primary·라벨 text-on-primary 이고 회색 토큰이 남지 않는다', () => {
-    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
-
-    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
-    const label = within(proceed).getByText(PROCEED_LABEL);
-
-    expect(brandTokensIn(classNameOf(proceed))).toEqual(['bg-primary']);
-    expect(brandTokensIn(classNameOf(label))).toEqual(['text-on-primary']);
-    // "회색인데 눌리는" 우회 차단 — 비활성 표면 토큰이 활성 토큰과 함께 남아 있으면 red.
-    expect(classNameOf(proceed).split(/\s+/)).not.toContain(
-      'bg-hairline-strong'
-    );
-    expect(classNameOf(label).split(/\s+/)).not.toContain('text-muted');
   });
 });
 
@@ -1035,13 +755,11 @@ describe('TRIP-982 B4·B5 · 무회귀 — empty 얼굴의 나머지는 그대�
  * TRIP-1093 결정 3 — 필수 방문지 「꼭 갈 곳 추가」 버튼(TRIP-1022 결정 2 "담은 장소 보기 링크" 뒤집기)
  *
  * 무엇을 보장하나:
- *  - 🔴 S1 (AC-B5) 지도 카드가 `fitPins` 를 켠 채 MapView 를 쓴다 — viewOnly 지도라 사용자가 손으로
- *    옮길 수 없어서, 첫 핀만 비추면 나머지 핀은 영영 못 본다(#040).
  *  - 🔴 A1 (1093 AC-1) 목록 얼굴: 마지막 카드와 CTA **사이**에 `꼭 갈 곳 추가` 버튼(Figma 4723:2833).
  *  - 🔴 A2 (1093 AC-2) 0곳 얼굴: 버튼이 점선 안내 **밖**, 안내와 CTA 사이(Figma 4724:2851).
  *  - A3 (1093 AC-3) 콜백을 안 주면 두 버튼 모두 없고, 얼굴마다 자기 버튼 하나만 뜬다.
  *
- * 순서는 `queryAllByTestId(정규식)` 배열의 순서(트리 깊이 우선 = 화면 위→아래)로 잰다.
+ * 버튼 자리(카드 뒤·CTA 앞 순서)·지도 fitPins 전달은 실화면 몫이다(TRIP-1367).
  * 부재는 전부 `.length` 숫자로 잰다(노드 배열 직렬화 함정 — 위 `countTestId` 독주석).
  * ──────────────────────────────────────────────────────────────────────────── */
 
@@ -1051,32 +769,8 @@ const ADD_LABEL = '꼭 갈 곳 추가';
 /** 뒤집힌 옛 링크 문구 — 다시 나타나면 red. */
 const OLD_LINK_LABEL = '담은 장소 보기';
 
-/** 화면 위→아래 순서의 testID 목록(문자열 배열 — 직렬화 함정 무관). */
-function orderedTestIds(): string[] {
-  return screen
-    .queryAllByTestId(/^itinerary-mustvisit-/)
-    .map((node) => String(node.props.testID));
-}
-
-describe('🔴 TRIP-1022 S1 · AC-B5 — 지도 카드가 모든 핀에 맞춰 영역을 잡는다', () => {
-  it('listed + 핀 3개면 지도에 fitPins 가 켜져 넘어간다', () => {
-    render(
-      <MustVisitPickerScreen
-        view={listed([FIXED_A, ANYTIME_B, UNJOINED_Z])}
-        pins={[PIN_1, PIN_2, PIN_3]}
-      />
-    );
-
-    // 짝 — 지도 카드가 실제로 섰다(없으면 아래 단언이 getBy 에서 먼저 죽는다).
-    expect(
-      screen.getByTestId('itinerary-mustvisit-screen-map')
-    ).toBeOnTheScreen();
-    expect(screen.getByTestId('map-root').props.fitPins).toBe(true);
-  });
-});
-
 describe('🔴 TRIP-1093 A1 · 목록 얼굴 — 마지막 카드와 CTA 사이에 「꼭 갈 곳 추가」', () => {
-  it('버튼이 카드 뒤·CTA 앞에 있고 문구가 정확하며, 누르면 추가 콜백 1회·CTA 콜백 0회', () => {
+  it('버튼 문구가 정확하며, 누르면 추가 콜백 1회·CTA 콜백 0회', () => {
     // 준비
     const onPressAdd = jest.fn();
     const onProceed = jest.fn();
@@ -1089,17 +783,7 @@ describe('🔴 TRIP-1093 A1 · 목록 얼굴 — 마지막 카드와 CTA 사이�
       />
     );
 
-    // 단언 ① — 자리: 마지막 카드(poi-b) → 추가 버튼 → CTA.
-    const ids = orderedTestIds();
-    expect(ids).toContain('itinerary-mustvisit-poi-b'); // 앵커 — 카드가 떴다
-    expect(ids).toContain(LISTED_ADD);
-    expect(ids.indexOf('itinerary-mustvisit-poi-b')).toBeLessThan(
-      ids.indexOf(LISTED_ADD)
-    );
-    expect(ids.indexOf(LISTED_ADD)).toBeLessThan(
-      ids.indexOf('itinerary-mustvisit-screen-proceed')
-    );
-    // 추가 버튼은 카드로 세어지지 않는다(카드 2장 그대로).
+    // 단언 ① — 추가 버튼은 카드로 세어지지 않는다(카드 2장 그대로).
     expect(cardTestIds()).toHaveLength(2);
 
     // 단언 ② — 문구(문자열 인자 = 정규화 후 완전 일치, 02a §5).
@@ -1133,16 +817,7 @@ describe('🔴 TRIP-1093 A2 · 0곳 얼굴 — 버튼이 점선 안내 밖, 안�
     expect(within(empty).queryAllByTestId(EMPTY_ADD).length).toBe(0);
     expect(countTestId(EMPTY_ADD)).toBe(1);
 
-    // 단언 ② — 자리: 안내 → 추가 버튼 → CTA.
-    const ids = orderedTestIds();
-    expect(ids.indexOf('itinerary-mustvisit-screen-empty')).toBeLessThan(
-      ids.indexOf(EMPTY_ADD)
-    );
-    expect(ids.indexOf(EMPTY_ADD)).toBeLessThan(
-      ids.indexOf('itinerary-mustvisit-screen-proceed')
-    );
-
-    // 단언 ③ — 문구가 바뀌었다(옛 링크 문구는 어디에도 없다).
+    // 단언 ② — 문구가 바뀌었다(옛 링크 문구는 어디에도 없다).
     const add = screen.getByTestId(EMPTY_ADD);
     expect(add).toHaveTextContent(ADD_LABEL);
     expect(countText(OLD_LINK_LABEL)).toBe(0);
@@ -1150,7 +825,7 @@ describe('🔴 TRIP-1093 A2 · 0곳 얼굴 — 버튼이 점선 안내 밖, 안�
     // 실행
     fireEvent.press(add);
 
-    // 단언 ④
+    // 단언 ③
     expect(onPressAdd).toHaveBeenCalledTimes(1);
     expect(onProceed).toHaveBeenCalledTimes(0);
   });

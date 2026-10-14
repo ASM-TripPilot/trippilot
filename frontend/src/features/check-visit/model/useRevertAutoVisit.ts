@@ -7,7 +7,7 @@ export type RevertOutcome = 'ok' | 'media' | 'not-auto' | 'failed';
 
 /**
  * TRIP-1340 · 자동 기록 되돌리기(§12.2 초안 `POST /trips/{tripId}/visits/{visitCheckId}/revert-auto`) — i01·j01 공용
- * 한 곳(G-U10-15: 두 useVisitCheck 중복은 이번 칸에서 합치지 않는다 — 되돌리기만 여기 하나로 둔다).
+ * 한 곳(G-U10-15 → TRIP-1357: 허브 전용 useVisitCheck 사본은 이 슬라이스 훅으로 합쳤다).
  * 지금은 가짜 싱크가 답한다. 성공하면 그 여행 방문 캐시를 무효화해 카드가 서버 값으로 따라온다.
  * 같은 틱 연타는 ref 잠금으로 막는다.
  */

@@ -1,0 +1,1089 @@
+"""ScheduleAgent 단독 계약 — 오케스트레이터 없이 `run(ScheduleTask)` 만으로 (agents/schedule/).
+
+파이프라인 e2e·폴백 계단·시한 배분은 `test_schedule_coordinator.py` 가 코디네이터
+경유로 전부 덮는다. 여기서는 **추출로 새로 생긴 경계**만 증명한다:
+  ① run()은 예외를 던지지 않는다 — 어셈블리 공급자가 터져도 FAILED + 에이전트 이름의
+     error 접두사로 수렴 (DL-5·INV-4)
+  ② 오케스트레이터가 넘긴 prior_degradations 는 결과 status 에 합산된다 (침묵 금지 —
+     수집 단계 강등이 봉투를 건너며 사라지지 않는다)
+  ③ 에이전트 자기 결정 강등은 component="agents.schedule" 로 발행된다 (Reflect 선례)
+  ④ 에이전트는 시계 원점을 오케스트레이터와 공유한다 — 잔여 예산이 started_ms 기준
+     (TRIP-376 배분이 추출 전과 같은 값으로 관통)
+"""
+
+from __future__ import annotations
+
+from trippilot.agents.schedule.agent import ScheduleAgent, ScheduleTask
+from trippilot.agents.schedule.budget import OrchestratorConfig, allocate
+from trippilot.agents.schedule.outcome import (
+    Degradation,
+    GenerationStatus,
+    ScoringMode,
+    candidates_report,
+)
+from trippilot.domain.observability import FallbackEvent
+from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.poi_curation.config import M7Config
+from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
+
+from tests.fakes.fake_clock import FakeClock
+from tests.fakes.fake_llm import FakeLlm
+from tests.fakes.in_memory_poi import InMemoryPoi
+from tests.fakes.in_memory_trace import InMemoryTrace
+from tests.orchestrator.test_schedule_coordinator import (
+    _C1CFG,
+    _NOW,
+    _PERSONA,
+    _POIS,
+    _TRACE_ID,
+    _AssemblyProvider,
+    _Renderer,
+    _Sink,
+    _request,
+    _scores_json,
+)
+
+
+class _ExplodingProvider:
+    """어셈블리 공급자가 설정 버그로 터지는 상황 — 에이전트 경계 밖 예외."""
+
+    def for_pool(self, poi_index):
+        raise RuntimeError("assembly provider misconfigured")
+
+
+def _pool():
+    req = _request()
+    return CandidatePoolBuilder(InMemoryPoi(_POIS), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days,
+                             budget=req.budget, transport=req.transport),
+        _NOW,
+    )
+
+
+def _agent(*, provider=None, clock=None, trace=None, alt_explainer=None):
+    trace = trace if trace is not None else InMemoryTrace()
+    sink = _Sink()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3")), _Renderer(),
+                            ClosedSetGate(), _C1CFG, trace)
+    agent = ScheduleAgent(
+        PreferenceScoringWorker(gateway),
+        provider if provider is not None else _AssemblyProvider(trace, sink, primary=True),
+        clock if clock is not None else FakeClock(),
+        trace,
+        alternative_explanation_worker=alt_explainer,
+    )
+    return agent, trace, sink
+
+
+def _task(pool, *, persona=_PERSONA, started_ms=0, total_ms=20_000, prior=(), request=None):
+    request = request if request is not None else _request()
+    return ScheduleTask(
+        request=request,
+        pool=pool,
+        persona=persona,
+        daily_rain=None,
+        event_bonus=None,
+        candidates_summary=candidates_report(
+            pool, days=len(request.days), persona=persona),
+        budget=allocate(total_ms, OrchestratorConfig()),
+        started_ms=started_ms,
+        trace_id=_TRACE_ID,
+        now=_NOW,
+        prior_degradations=tuple(prior),
+    )
+
+
+# ── ① 무예외 수렴 ───────────────────────────────────────────────────
+
+
+def test_run_never_raises_and_names_itself_in_error() -> None:
+    agent, trace, _ = _agent(provider=_ExplodingProvider())
+
+    outcome = agent.run(_task(_pool()))
+
+    assert outcome.status is GenerationStatus.FAILED
+    assert outcome.solution is None
+    assert (outcome.error or "").startswith("schedule_agent_error: RuntimeError")
+    assert outcome.candidates_summary is not None  # 풀은 이미 알던 사실 — 잃지 않는다
+    agent_events = [e for e in trace.of_type(FallbackEvent) if e.component == "agents.schedule"]
+    assert any(e.stage == "agent" and e.reason == outcome.error for e in agent_events)
+
+
+# ── ② 수집 단계 강등이 결과에 합산 ───────────────────────────────────
+
+
+def test_prior_degradations_fold_into_status() -> None:
+    agent, _, _ = _agent()
+    prior = (Degradation(stage="weather", reason="weather_error: TimeoutError"),)
+
+    outcome = agent.run(_task(_pool(), prior=prior))
+
+    assert outcome.solution is not None
+    assert outcome.status is GenerationStatus.DEGRADED  # 에이전트 단계는 전부 정상이었다
+    assert prior[0] in outcome.degradations
+    assert outcome.scoring_mode is ScoringMode.LLM
+
+
+def test_no_prior_and_no_own_degradation_is_success() -> None:
+    agent, _, _ = _agent()
+
+    outcome = agent.run(_task(_pool()))
+
+    assert outcome.status is GenerationStatus.SUCCESS
+    assert outcome.degradations == ()
+
+
+# ── ③ 발행자 이름 ────────────────────────────────────────────────────
+
+
+def test_own_degradation_is_emitted_as_agents_schedule() -> None:
+    agent, trace, _ = _agent()
+
+    outcome = agent.run(_task(_pool(), persona=None))  # 페르소나 비가용 → 규칙 점수
+
+    assert outcome.scoring_mode is ScoringMode.RULE
+    events = [e for e in trace.of_type(FallbackEvent)
+              if e.stage == "llm" and e.reason.startswith("persona_unavailable")]
+    assert [e.component for e in events] == ["agents.schedule"]
+
+
+# ── ④ 시계 원점 공유 ─────────────────────────────────────────────────
+
+
+def test_remaining_budget_is_measured_from_started_ms() -> None:
+    """오케스트레이터가 4s 를 이미 썼다면(started_ms=0, 시계=4_000) 어셈블리는
+    잔여 16s 를 받는다 — 에이전트가 자기 시계를 새로 시작하면 20s 가 되어 틀린다."""
+    clock = FakeClock(start_ms=4_000)
+    agent, _, sink = _agent(clock=clock)
+
+    outcome = agent.run(_task(_pool(), started_ms=0, total_ms=20_000))
+
+    assert outcome.solution is not None
+    assert sink.deadlines == [16_000]
+
+
+# ── ⑤ 슬롯별 차선책 (TRIP-871) ──────────────────────────────────────
+#
+# 어셈블리가 뽑지 않은 차순위 후보를 슬롯마다 ≤ MAX_SLOT_ALTERNATIVES 건 싣는다.
+# 제안만이다 — 시각·순서 없음(INV-2), 풀 안에서만(INV-1), LLM 0회, 결정론.
+
+from dataclasses import replace
+from datetime import date as date_type, datetime, timedelta
+
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from trippilot.agents.schedule.agent import pick_slot_alternatives
+from trippilot.agents.schedule.outcome import MAX_SLOT_ALTERNATIVES
+from trippilot.domain.common import PoiId
+from trippilot.domain.itinerary import (
+    DaySolution,
+    FixedBlock,
+    ItinerarySolution,
+    SolveMode,
+    TimeWindow,
+    VisitSlot,
+)
+from trippilot.domain.llm import CandidatePool, ScoredPoi
+from trippilot.domain.poi import OpenHour, PoiCategory
+from trippilot.ports.place_hours_port import HoursVerdict
+from trippilot.domain.common import ScheduleId
+
+from tests.generators.poi import candidate_pools
+from tests.orchestrator.test_schedule_coordinator import _DAY1, _KST, _poi
+
+_WED = _DAY1  # 2026-08-05 = 수요일 (weekday 2)
+assert _WED.weekday() == 2
+
+
+def _solution(day: date_type, placed: tuple[PoiId, ...], *, fixed: tuple[PoiId, ...] = ()) -> ItinerarySolution:
+    """배치 순서대로 1시간씩 — 시각 자체는 이 테스트의 관심이 아니다(INV-2 는 사영 테스트 몫)."""
+    slots = tuple(
+        VisitSlot(
+            poi_id=pid,
+            start_at=datetime.combine(day, datetime.min.time(), tzinfo=_KST) + timedelta(hours=9 + i),
+            end_at=datetime.combine(day, datetime.min.time(), tzinfo=_KST) + timedelta(hours=10 + i),
+            stay_min=60, score=0.5, is_llm_score=False,
+        )
+        for i, pid in enumerate(placed)
+    )
+    blocks = tuple(
+        FixedBlock(poi_id=pid, window=TimeWindow(
+            start=datetime.combine(day, datetime.min.time(), tzinfo=_KST) + timedelta(hours=9 + i),
+            end=datetime.combine(day, datetime.min.time(), tzinfo=_KST) + timedelta(hours=10 + i),
+        ), reason="must")
+        for i, pid in enumerate(placed) if pid in fixed
+    )
+    return ItinerarySolution(
+        schedule_id=ScheduleId("s-alt"),
+        days=(DaySolution(date=day, slots=slots, fixed_blocks=blocks),),
+        is_fallback=False, solve_mode=SolveMode.OR_TOOLS, assembly_run=None,
+    )
+
+
+def _pool_of(*pois):
+    return CandidatePool(
+        poi_ids=frozenset(p.poi_id for p in pois), pois=tuple(pois), generated_at=_NOW,
+    )
+
+
+def _scored(scores: dict[str, float]) -> tuple[ScoredPoi, ...]:
+    return tuple(ScoredPoi(poi_id=PoiId(k), score=v, is_llm_score=True) for k, v in scores.items())
+
+
+def test_alternatives_rank_same_category_then_score_then_distance_and_skip_closed() -> None:
+    """p1(카페) 슬롯의 차선책: 같은 카테고리 우선 → 점수 → 거리. 그 요일 휴무(p5)는 뺀다."""
+    here = _poi(1, 0.0, PoiCategory.CAFE)
+    far_cafe = _poi(2, 0.050, PoiCategory.CAFE)      # 같은 카테고리, 점수 낮음, 멀다
+    near_sight = _poi(3, 0.001, PoiCategory.SIGHT)   # 점수 최고지만 다른 카테고리
+    near_cafe = _poi(4, 0.002, PoiCategory.CAFE)     # 같은 카테고리, 점수 높음
+    closed_cafe = replace(  # 점수 최고·같은 카테고리지만 그 요일 휴무
+        _poi(5, 0.001, PoiCategory.CAFE),
+        open_hours=(OpenHour(day_of_week=(_WED.weekday() + 1) % 7, open_min=540, close_min=1260),),
+    )
+    pool = _pool_of(here, far_cafe, near_sight, near_cafe, closed_cafe)
+    scores = _scored({"p1": 0.9, "p2": 0.5, "p3": 0.95, "p4": 0.8, "p5": 0.99})
+
+    picks = pick_slot_alternatives(_solution(_WED, (here.poi_id,)), scores, pool)
+
+    key = f"{_WED.isoformat()}#p1"
+    assert list(picks) == [key]
+    assert [a.poi_id for a in picks[key]] == [PoiId("p4"), PoiId("p2")]  # 같은 카테고리 2건이 상한을 채운다
+    assert picks[key][0].rationale == "같은 카페 후보"
+
+
+def test_alternatives_break_score_ties_by_distance_then_id() -> None:
+    """점수 동률(실 LLM 점수에 흔하다)이면 슬롯 POI 에 가까운 쪽, 거리까지 같으면 poi_id 순."""
+    here = _poi(1, 0.0, PoiCategory.SIGHT)
+    far = _poi(2, 0.010, PoiCategory.SIGHT)
+    near = _poi(3, 0.002, PoiCategory.SIGHT)
+    near_twin = _poi(4, 0.002, PoiCategory.SIGHT)  # near 와 같은 좌표 — id 로만 갈린다
+    pool = _pool_of(here, far, near, near_twin)
+    same = _scored({"p1": 0.9, "p2": 0.9, "p3": 0.9, "p4": 0.9})
+
+    picks = pick_slot_alternatives(_solution(_WED, (here.poi_id,)), same, pool, limit=3)
+
+    assert [a.poi_id for a in picks[f"{_WED.isoformat()}#p1"]] == [PoiId("p3"), PoiId("p4"), PoiId("p2")]
+
+
+def test_alternatives_fall_back_to_other_categories_and_label_them() -> None:
+    here = _poi(1, 0.0, PoiCategory.CAFE)
+    sight = _poi(3, 0.001, PoiCategory.SIGHT)
+    pool = _pool_of(here, sight)
+
+    picks = pick_slot_alternatives(_solution(_WED, (here.poi_id,)), _scored({"p1": 0.9, "p3": 0.1}), pool)
+
+    (alt,) = picks[f"{_WED.isoformat()}#p1"]
+    assert alt.poi_id == PoiId("p3")
+    assert alt.rationale == "주변 명소 후보"
+
+
+def test_alternatives_skip_fixed_slots_and_excluded_pois() -> None:
+    here = _poi(1, 0.0, PoiCategory.CAFE)
+    must = _poi(2, 0.001, PoiCategory.CAFE)      # 고정 블록 슬롯 — 사용자 must-visit
+    spare = _poi(3, 0.001, PoiCategory.CAFE)
+    banned = _poi(4, 0.001, PoiCategory.CAFE)    # 2단계 생성의 기배정 POI
+    pool = _pool_of(here, must, spare, banned)
+    solution = _solution(_WED, (here.poi_id, must.poi_id), fixed=(must.poi_id,))
+
+    picks = pick_slot_alternatives(
+        solution, _scored({"p1": 0.9, "p2": 0.9, "p3": 0.9, "p4": 0.9}), pool,
+        excluded=frozenset({banned.poi_id}),
+    )
+
+    assert set(picks) == {f"{_WED.isoformat()}#p1"}          # 고정 슬롯 p2 에는 제안하지 않는다
+    assert [a.poi_id for a in picks[f"{_WED.isoformat()}#p1"]] == [PoiId("p3")]
+
+
+@st.composite
+def _alt_cases(draw):
+    pool = draw(candidate_pools().filter(lambda p: len(p.pois) >= 1))
+    ids = sorted(pool.poi_ids, key=str)
+    scores = tuple(
+        ScoredPoi(poi_id=pid, score=draw(st.floats(0, 1, allow_nan=False)), is_llm_score=True)
+        for pid in ids
+    )
+    placed = tuple(draw(st.lists(st.sampled_from(ids), unique=True, min_size=1, max_size=len(ids))))
+    fixed = tuple(draw(st.lists(st.sampled_from(placed), unique=True, max_size=len(placed))))
+    excluded = frozenset(draw(st.lists(st.sampled_from(ids), unique=True, max_size=len(ids))))
+    day = draw(st.dates(min_value=date_type(2026, 1, 1), max_value=date_type(2027, 12, 31)))
+    return pool, scores, _solution(day, placed, fixed=fixed), excluded
+
+
+@settings(max_examples=150, deadline=None)
+@given(_alt_cases())
+def test_alternatives_properties(case) -> None:
+    """INV-1 ⊆풀 · ∉배치 · ∉제외 · 자기 자신 아님 · 고정 슬롯 없음 · ≤상한 · 중복 없음 · 결정론."""
+    pool, scores, solution, excluded = case
+    placed = {s.poi_id for d in solution.days for s in d.slots}
+    fixed = {b.poi_id for d in solution.days for b in d.fixed_blocks}
+    keys = {f"{d.date.isoformat()}#{s.poi_id}" for d in solution.days for s in d.slots
+            if s.poi_id not in fixed}
+
+    picks = pick_slot_alternatives(solution, scores, pool, excluded=excluded)
+
+    assert set(picks) <= keys
+    # 하한 — 비고정 슬롯이 풀 안에 있고 그 요일 열린 여분 후보가 있으면 반드시 제안한다 (`return {}` 방어)
+    index = {p.poi_id: p for p in pool.pois}
+    spare = [p for p in pool.pois if p.poi_id not in placed | excluded | fixed]
+    for d in solution.days:
+        dow = d.date.weekday()
+        open_spare = [p for p in spare if not p.open_hours or any(oh.day_of_week == dow for oh in p.open_hours)]
+        for s in d.slots:
+            if s.poi_id in index and s.poi_id not in fixed and open_spare:
+                assert f"{d.date.isoformat()}#{s.poi_id}" in picks
+    for key, alts in picks.items():
+        ids = [a.poi_id for a in alts]
+        assert 1 <= len(ids) <= MAX_SLOT_ALTERNATIVES
+        assert len(set(ids)) == len(ids)
+        for a in alts:
+            assert pool.contains(a.poi_id)
+            assert a.poi_id not in placed and a.poi_id not in excluded
+            assert a.rationale
+    assert picks == pick_slot_alternatives(solution, scores, pool, excluded=excluded)
+
+
+def test_agent_outcome_carries_slot_alternatives_from_pool_only() -> None:
+    """에이전트 경유 — 창을 09–12 로 좁혀 6건 중 2건만 배치되게 하고 차선책을 실값으로 단언한다.
+
+    (기본 창 09–21 이면 6건이 전부 배치돼 차선책이 0건 — 그 상태의 단언은 아무것도 증명하지 않는다.)
+    점수: p1~p3 은 FakeLlm 0.9, p4~p6 은 규칙 점수 보충(TRIP-378). 어셈블리가 p4(SIGHT)·p5(CAFE)를
+    배치하면 여분은 p1·p2·p3·p6 — p4 의 차선책은 같은 SIGHT 중 점수 순(p6 규칙점수 > 0.9), 동률 0.9 셋은
+    p4 와의 거리 순(p3 이 최근접). p5(CAFE)는 같은 카테고리 여분이 없어 "주변 명소 후보"로 내려간다.
+    """
+    pois = _POIS + (_poi(4, 0.015), _poi(5, 0.020, PoiCategory.CAFE), _poi(6, 0.025))
+    req = replace(_request(), day_window=TimeWindow(
+        start=datetime(2026, 8, 5, 9, 0, tzinfo=_KST), end=datetime(2026, 8, 5, 12, 0, tzinfo=_KST)))
+    pool = CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days, budget=req.budget, transport=req.transport), _NOW,
+    )
+    agent, _, _ = _agent()
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert outcome.solution is not None
+    placed = [s.poi_id for d in outcome.solution.days for s in d.slots]
+    assert placed == [PoiId("p4"), PoiId("p5")]  # 전제 — 깨지면 아래 단언의 근거가 바뀐 것
+    picks = outcome.slot_alternatives
+    assert set(picks) == {f"{_WED.isoformat()}#p4", f"{_WED.isoformat()}#p5"}
+    assert [(a.poi_id, a.rationale) for a in picks[f"{_WED.isoformat()}#p4"]] == [
+        (PoiId("p6"), "같은 명소 후보"), (PoiId("p3"), "같은 명소 후보"),
+    ]
+    assert [(a.poi_id, a.rationale) for a in picks[f"{_WED.isoformat()}#p5"]] == [
+        (PoiId("p6"), "주변 명소 후보"), (PoiId("p3"), "주변 명소 후보"),
+    ]
+    for alts in picks.values():
+        assert len(alts) <= MAX_SLOT_ALTERNATIVES
+        assert all(pool.contains(a.poi_id) and a.poi_id not in placed for a in alts)
+
+
+def test_failed_outcome_has_no_alternatives() -> None:
+    agent, _, _ = _agent(provider=_ExplodingProvider())
+    outcome = agent.run(_task(_pool()))
+    assert outcome.slot_alternatives == {}
+
+
+# ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────────
+
+from trippilot.domain.llm import PoiExplanation, TypedResult
+
+
+class _SpyAltExplainer:
+    def __init__(self, texts: dict[str, str] | None = None, *, fallback: bool = False) -> None:
+        self.texts, self.fallback, self.calls, self.pairs = texts or {}, fallback, 0, ()
+
+    def explain(self, pool, pairs, persona, trace_id, now, *, timeout_sec=None):
+        self.calls += 1
+        self.pairs = tuple((str(s), str(a)) for s, a in pairs)
+        if self.fallback:
+            return TypedResult(value=None, is_fallback=True, error="down", call_record=None)
+        return TypedResult(
+            value=tuple(PoiExplanation(PoiId(k), v) for k, v in self.texts.items()),
+            is_fallback=False, error=None, call_record=None,
+        )
+
+
+def _six_poi_case(*, include_explanations: bool = True):
+    """창 09–12 · 풀 6건 → p4(SIGHT)·p5(CAFE) 배치, 차선책은 각각 [p6, p3] (위 테스트와 같은 전제)."""
+    pois = _POIS + (_poi(4, 0.015), _poi(5, 0.020, PoiCategory.CAFE), _poi(6, 0.025))
+    req = replace(_request(), include_explanations=include_explanations, day_window=TimeWindow(
+        start=datetime(2026, 8, 5, 9, 0, tzinfo=_KST), end=datetime(2026, 8, 5, 12, 0, tzinfo=_KST)))
+    pool = CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days, budget=req.budget, transport=req.transport), _NOW,
+    )
+    return pool, req
+
+
+def test_alternative_sentences_replace_template_rationale_where_given() -> None:
+    pool, req = _six_poi_case()
+    spy = _SpyAltExplainer({"p6": "바다 풍경을 좋아하시면 여기도 잘 맞아요."})
+    agent, _, _ = _agent(alt_explainer=spy)
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert [s.poi_id for d in outcome.solution.days for s in d.slots] == [PoiId("p4"), PoiId("p5")]  # 전제
+    assert outcome.status is GenerationStatus.SUCCESS  # 문장 일부 부재는 강등이 아니다
+    assert spy.calls == 1
+    assert set(spy.pairs) == {("p4", "p6"), ("p4", "p3"), ("p5", "p6"), ("p5", "p3")}
+    for key in (f"{_WED.isoformat()}#p4", f"{_WED.isoformat()}#p5"):
+        by_id = {a.poi_id: a.rationale for a in outcome.slot_alternatives[key]}
+        assert by_id[PoiId("p6")] == "바다 풍경을 좋아하시면 여기도 잘 맞아요."  # LLM 문장
+        assert by_id[PoiId("p3")].endswith("명소 후보")                          # 템플릿 유지
+
+
+def test_alternative_sentences_fallback_keeps_template_and_records_degradation() -> None:
+    pool, req = _six_poi_case()
+    agent, _, _ = _agent(alt_explainer=_SpyAltExplainer(fallback=True))
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert outcome.status is GenerationStatus.DEGRADED
+    assert any(d.stage == "alternative_explanation" for d in outcome.degradations)
+    assert all(a.rationale.endswith("명소 후보")
+               for alts in outcome.slot_alternatives.values() for a in alts)
+
+
+def test_alternative_sentences_skipped_when_explanations_not_requested() -> None:
+    pool, req = _six_poi_case(include_explanations=False)
+    spy = _SpyAltExplainer({"p6": "x"})
+    agent, _, _ = _agent(alt_explainer=spy)
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert spy.calls == 0 and outcome.status is GenerationStatus.SUCCESS  # 요청된 생략 = 강등 아님
+    assert outcome.slot_alternatives  # 차선책 자체는 그대로 실린다
+
+
+def test_alternative_sentences_skipped_without_persona_and_not_double_counted() -> None:
+    pool, req = _six_poi_case()
+    spy = _SpyAltExplainer({"p6": "x"})
+    agent, _, _ = _agent(alt_explainer=spy)
+
+    outcome = agent.run(_task(pool, request=req, persona=None))
+
+    assert spy.calls == 0
+    assert not any(d.stage == "alternative_explanation" for d in outcome.degradations)
+
+
+class _RaisingAltExplainer(_SpyAltExplainer):
+    def explain(self, *a, **k):
+        self.calls += 1
+        raise RuntimeError("cfg bug")
+
+
+def test_alternative_sentences_deadline_skips_call_and_records_degradation() -> None:
+    """잔여 < explanation_min_ms 면 부르지 않는다(DL-2) — 강등 + 이벤트, 템플릿 유지."""
+    pool, req = _six_poi_case()
+    spy = _SpyAltExplainer({"p6": "x"})
+    agent, trace, _ = _agent(alt_explainer=spy)
+
+    # 예산 1초 — 정지 시계라 ⑥′ 잔여가 1000ms < explanation_min_ms(1500). 점수 단계도 같은 이유로
+    # 규칙 점수로 내려가지만 여기서 보는 것은 alternative_explanation 스테이지뿐이다.
+    outcome = agent.run(_task(pool, request=req, total_ms=1_000))
+
+    assert spy.calls == 0 and outcome.solution is not None
+    assert outcome.status is GenerationStatus.DEGRADED
+    reasons = [d.reason for d in outcome.degradations if d.stage == "alternative_explanation"]
+    assert len(reasons) == 1 and reasons[0].startswith("deadline:remaining=")
+    assert any(e.stage == "alternative_explanation" for e in trace.of_type(FallbackEvent))
+    assert all(a.rationale.endswith("명소 후보")
+               for alts in outcome.slot_alternatives.values() for a in alts)
+
+
+def test_alternative_sentences_worker_exception_does_not_fail_generation() -> None:
+    """부가 정보의 예외가 일정을 FAILED 로 만들면 안 된다 — DEGRADED + 사유, 템플릿 유지."""
+    pool, req = _six_poi_case()
+    agent, _, _ = _agent(alt_explainer=_RaisingAltExplainer())
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert outcome.solution is not None and outcome.status is GenerationStatus.DEGRADED
+    assert any(d.stage == "alternative_explanation" and d.reason.startswith("explain_error: RuntimeError")
+               for d in outcome.degradations)
+    assert all(a.rationale.endswith("명소 후보")
+               for alts in outcome.slot_alternatives.values() for a in alts)
+
+
+def test_alternative_sentences_only_for_slot_pois_counts_as_empty() -> None:
+    """LLM 이 (프롬프트가 금지한) 확정 장소 설명만 돌려주면 교체 0건 — 침묵이 아니라 강등이다."""
+    pool, req = _six_poi_case()
+    agent, _, _ = _agent(alt_explainer=_SpyAltExplainer({"p4": "확정 장소 설명"}))
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert outcome.status is GenerationStatus.DEGRADED
+    assert any(d.reason == "alternative_explanation_empty" for d in outcome.degradations)
+    assert all(a.rationale.endswith("명소 후보")
+               for alts in outcome.slot_alternatives.values() for a in alts)
+
+
+# ── ②′ 지도 실재 검증 → 점수 강등이 **일정에 닿는다** (TRIP-904) ─────────────
+#
+# 종전(TRIP-898)엔 풀 빌더가 풀 순서만 바꿔 일정이 그대로였다 — 이 절의 첫 테스트가
+# 그 버그의 회귀 가드다. 속성 전수(강등이지 배제 아님·UNVERIFIED 무강등·계약 깨는
+# 포트)는 test_schedule_existence_demote.py 가 덮는다.
+
+from tests.fakes.fake_existence import FakeExistence
+from trippilot.ports.place_existence_port import ExistenceStatus
+
+
+def _existence_case():
+    """풀 p1..p6(전부 SIGHT·같은 LLM 점수 0.9 는 p1~p3, 나머지는 규칙 보충)·창 09–12 → 2건 배치."""
+    pois = tuple(_poi(i, 0.003 * i) for i in range(1, 7))
+    req = replace(_request(), day_window=TimeWindow(
+        start=datetime(2026, 8, 5, 9, 0, tzinfo=_KST), end=datetime(2026, 8, 5, 12, 0, tzinfo=_KST)))
+    pool = CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days, budget=req.budget, transport=req.transport), _NOW,
+    )
+    return pool, req
+
+
+def _agent_with_existence(existence):
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3", "p4", "p5", "p6")), _Renderer(),
+                            ClosedSetGate(), _C1CFG, trace)
+    return ScheduleAgent(
+        PreferenceScoringWorker(gateway), _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace, existence=existence,
+    ), trace
+
+
+def _placed(outcome):
+    return [str(s.poi_id) for d in outcome.solution.days for s in d.slots]
+
+
+def test_map_miss_demotion_changes_the_itinerary() -> None:
+    """배치될 두 곳을 '지도에 없음'으로 주면 다른 후보로 바뀐다 — 강등이 어셈블리에 닿는다."""
+    pool, req = _existence_case()
+    base = _agent_with_existence(None)[0].run(_task(pool, request=req))
+    first = _placed(base)
+    assert len(first) == 2  # 전제
+
+    fake = FakeExistence({pid: ExistenceStatus.NOT_FOUND for pid in first})
+    agent, _ = _agent_with_existence(fake)
+    outcome = agent.run(_task(pool, request=req))
+
+    assert fake.call_count == 1
+    assert not set(_placed(outcome)) & set(first), "지도에서 못 찾은 곳이 그대로 배치됐다"
+    assert outcome.status is GenerationStatus.SUCCESS  # 강등은 정상 동작이다 — 폴백 아님
+
+
+def test_map_miss_is_demotion_not_exclusion() -> None:
+    """전 후보가 '지도에 없음'이면 그래도 일정은 채워진다 — 다른 선택지가 없을 때는 쓴다."""
+    pool, req = _existence_case()
+    base = _placed(_agent_with_existence(None)[0].run(_task(pool, request=req)))
+    agent, _ = _agent_with_existence(FakeExistence(default=ExistenceStatus.NOT_FOUND))
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert _placed(outcome) == base  # 다 같이 깎이면 상대 순서는 그대로다
+
+
+def test_map_verify_failures_never_fail_or_silently_skip() -> None:
+    """포트 예외·전량 확인 실패 → 일정은 그대로 + 강등 기록 (INV-4)."""
+    pool, req = _existence_case()
+    base = _placed(_agent_with_existence(None)[0].run(_task(pool, request=req)))
+
+    class _Boom:
+        def verify(self, queries, *, deadline_ms):
+            raise RuntimeError("vendor down")
+
+    for port, prefix in ((_Boom(), "existence_error: RuntimeError"),
+                         (FakeExistence(default=ExistenceStatus.UNVERIFIED), "existence_unverified")):
+        agent, trace = _agent_with_existence(port)
+        outcome = agent.run(_task(pool, request=req))
+        assert _placed(outcome) == base
+        assert outcome.status is GenerationStatus.DEGRADED
+        assert any(d.stage == "existence" and d.reason.startswith(prefix) for d in outcome.degradations)
+        assert any(e.stage == "existence" for e in trace.of_type(FallbackEvent))
+
+
+def test_map_verify_respects_assembly_floor() -> None:
+    """어셈블리 바닥을 침범할 시간이 없으면 부르지 않는다 — 건너뛴 사실은 남긴다 (DL-2)."""
+    pool, req = _existence_case()
+    fake = FakeExistence(default=ExistenceStatus.NOT_FOUND)
+    agent, trace = _agent_with_existence(fake)
+
+    outcome = agent.run(_task(pool, request=req, total_ms=1_000))  # 바닥 1000ms = 전부
+
+    assert fake.call_count == 0
+    assert any(d.stage == "existence" and d.reason.startswith("deadline:available=")
+               for d in outcome.degradations)
+    # 결과에만 싣고 이벤트를 빠뜨리면 폴백률 지표에서 이 건너뜀이 안 보인다 (INV-4)
+    assert [e.component for e in trace.of_type(FallbackEvent) if e.stage == "existence"] == [
+        "agents.schedule"]
+
+
+
+def test_map_verify_contract_breaking_port_never_fails_generation() -> None:
+    """None·엉뚱한 원소·빈 응답을 돌려주는 포트 → 일정은 그대로 + 강등 기록 (FAILED 아님)."""
+    pool, req = _existence_case()
+    base = _placed(_agent_with_existence(None)[0].run(_task(pool, request=req)))
+
+    class _Returns:
+        def __init__(self, value):
+            self.value = value
+
+        def verify(self, queries, *, deadline_ms):
+            return self.value
+
+    cases = ((None, "existence_error: TypeError"),
+             ([{"poi_id": "p1", "status": "NOT_FOUND"}], "existence_empty_response"),
+             ((), "existence_empty_response"))
+    for value, prefix in cases:
+        agent, trace = _agent_with_existence(_Returns(value))
+        outcome = agent.run(_task(pool, request=req))
+        assert outcome.solution is not None and _placed(outcome) == base, value
+        assert any(d.stage == "existence" and d.reason.startswith(prefix)
+                   for d in outcome.degradations), (value, outcome.degradations)
+        assert len([e for e in trace.of_type(FallbackEvent) if e.stage == "existence"]) == 1
+
+
+def test_demotion_never_raises_a_nonpositive_score() -> None:
+    """음수 점수(원거리 규칙 점수)는 배율을 곱하면 **올라간다** — 0 이하는 그대로 둔다."""
+    from trippilot.agents.schedule.agent import demote_missing_on_map
+    from trippilot.domain.llm import ScoredPoi
+    from trippilot.ports.place_existence_port import ExistenceVerdict
+
+    cands = (ScoredPoi(PoiId("neg"), -0.1, False), ScoredPoi(PoiId("zero"), 0.0, False),
+             ScoredPoi(PoiId("pos"), 0.5, True))
+    verdicts = tuple(ExistenceVerdict(c.poi_id, ExistenceStatus.NOT_FOUND) for c in cands)
+
+    out = demote_missing_on_map(cands, verdicts, 0.2, 0.3)
+
+    assert [c.score for c in out] == [-0.1, 0.0, max(0.5 - 0.3, 0.5 * 0.2)]
+
+
+
+def test_demotion_does_not_become_exclusion_under_rain_soft_terms() -> None:
+    """리뷰 실측 회귀(TRIP-904): 비 오는 날·실외만·전량 미검출이어도 OR-Tools 배치 수는 강등 전과 같다.
+
+    곱셈만 쓰던 첫 안(×0.2)은 0.16 − 0.2(우천 실외 감점) < 0 이라 방문 이득이 음수가 되어
+    **대체 후보가 없는데도** 3곳 → 1곳으로 줄었다(사실상 배제 — 9/12 팀 결정 위반).
+    """
+    from trippilot.agents.schedule.agent import demote_missing_on_map
+    from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+    from trippilot.ports.place_existence_port import ExistenceVerdict
+    from tests.assembly_engine.test_assembly_engine_rain_adjust import (
+        _CFG as _RAIN_CFG, _EST as _RAIN_EST, _POOL_OUTDOOR_ONLY, _RAINY, _problem as _rain_problem,
+    )
+
+    cfg = OrchestratorConfig()
+    for rain in (None, _RAINY):
+        problem, index = _rain_problem(_POOL_OUTDOOR_ONLY, rain=rain)
+        verdicts = tuple(ExistenceVerdict(c.poi_id, ExistenceStatus.NOT_FOUND)
+                         for c in problem.candidates)
+        demoted = replace(problem, candidates=demote_missing_on_map(
+            problem.candidates, verdicts,
+            cfg.existence_demote_factor, cfg.existence_demote_penalty))
+
+        def visits(p):
+            sol = OrToolsAssembler(index, _RAIN_EST, _RAIN_CFG).solve(p, 3000)
+            return sum(len(d.slots) for d in sol.days)
+
+        assert visits(demoted) == visits(problem), f"rain={rain}"
+
+
+# ── 입장료 파생 지식 조인 (2026-09-24) ────────────────────────────────
+
+
+class _SpyFees(dict):
+    """`FeeTable.won` 자리에 끼워 조회 키를 기록한다.
+
+    점수 내부값을 읽지 않고 **배선이 일어났는지**만 본다 — 점수 산식이 바뀌어도
+    이 테스트는 조인만 지킨다.
+    """
+
+    def __init__(self, mapping):
+        super().__init__(mapping)
+        self.asked: list[str] = []
+
+    def get(self, key, default=None):
+        self.asked.append(key)
+        return super().get(key, default)
+
+
+def test_규칙_점수가_source_ref_로_입장료를_조회한다() -> None:
+    """조인이 끊기면 예산이 점수에 아예 안 실린다 — 예외도 로그도 안 난다.
+
+    실측(2026-09-24): 이 테스트를 넣기 전에는 `fee_won=None` 으로 배선을 끊어도
+    이 파일의 26건이 **전부 통과**했다.
+    """
+    from trippilot.poi_curation.place_fees import FeeTable
+
+    # 공유 픽스처 `_POIS` 에는 `source_ref` 가 없다(실 경로에서는 `BackendPoiDb` 가
+    # `PoiReadResponse.sourceRef` 를 옮긴다). 조인을 보려면 여기서 채워야 한다 —
+    # 안 채우면 이 테스트가 **아무것도 안 보면서 통과**한다.
+    from dataclasses import replace as _replace
+
+    from trippilot.domain.llm import CandidatePool as _Pool
+
+    base = _pool()
+    pois = tuple(_replace(p, source_ref=f"ref-{p.poi_id}") for p in base.pois)
+    pool = _Pool(poi_ids=base.poi_ids, pois=pois, generated_at=base.generated_at,
+                 anchor=base.anchor, radius_km=base.radius_km)
+    refs = [p.source_ref for p in pool.pois]
+    spy = _SpyFees({r: 40_000 for r in refs})
+
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3")), _Renderer(),
+                            ClosedSetGate(), _C1CFG, trace)
+    agent = ScheduleAgent(
+        PreferenceScoringWorker(gateway),
+        _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace,
+        fees=FeeTable(won=spy),
+    )
+
+    agent.run(_task(pool, persona=None))  # 페르소나 비가용 → 규칙 점수 경로
+
+    assert spy.asked, "요금 표를 한 번도 조회하지 않았다 — 조인이 끊겼다"
+    assert set(spy.asked) >= set(refs), (
+        f"풀의 source_ref 를 다 안 물었다: 물은 것 {sorted(set(spy.asked))}")
+
+
+def test_요금표_미주입이면_종전과_같은_점수다() -> None:
+    """켜지기 전 동작이 안 바뀌는 것이 배포 안전 조건이다."""
+    pool = _pool()
+    plain, _, _ = _agent()
+    outcome_a = plain.run(_task(pool, persona=None))
+
+    from trippilot.poi_curation.place_fees import EMPTY
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3")), _Renderer(),
+                            ClosedSetGate(), _C1CFG, trace)
+    explicit = ScheduleAgent(
+        PreferenceScoringWorker(gateway),
+        _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace, fees=EMPTY,
+    )
+    outcome_b = explicit.run(_task(pool, persona=None))
+
+    assert [s.poi_id for d in outcome_a.solution.days for s in d.slots] == \
+           [s.poi_id for d in outcome_b.solution.days for s in d.slots]
+
+
+def test_요청의_지시_카테고리가_규칙_점수에_실린다() -> None:
+    """`GenerateItineraryRequest.avoid_categories` → `build_rule_score` 고리.
+
+    실측(2026-09-24): 이 고리를 `frozenset()` 으로 끊었더니 경계 테스트 15건이
+    **전부 통과**했다 — 경계 테스트는 "요청에 실렸나"까지만 보고, 점수까지는
+    안 보기 때문이다. 두 고리를 따로 지켜야 한다.
+    """
+    from dataclasses import replace as _replace
+
+    from trippilot.domain.poi import PoiCategory
+
+    pool = _pool()
+    agent, _, _ = _agent()
+    base_request = _request()
+    avoided = {p.category for p in pool.pois}  # 풀에 실제로 있는 카테고리를 피한다
+    assert avoided, "풀이 비면 이 테스트가 아무것도 안 본다"
+
+    plain = {s.poi_id: s.score for s in agent._rule_scores(base_request, pool, None)}
+    steered = {
+        s.poi_id: s.score
+        for s in agent._rule_scores(
+            _replace(base_request, avoid_categories=frozenset(avoided)), pool, None
+        )
+    }
+
+    assert plain.keys() == steered.keys()
+    assert any(steered[k] < plain[k] for k in plain), (
+        "회피 지시가 점수를 전혀 안 바꿨다 — 요청→점수 고리가 끊겼다")
+
+
+# ── ②⁗ 영업시간 런타임 보강 (2026-09-26) ──────────────────────────
+# **이 단계의 유일한 실패 방식은 "값을 채웠는데 일정이 안 바뀌는 것"이다.**
+# `ScoredPoi` 에 `Poi` 본체가 없어 후보를 바꿔 봐야 HC1 에 안 닿고, 교체가
+# `for_pool(pool.pois)` 보다 아래면 조립이 옛 POI 를 본다. 이 리포가 같은 모양으로
+# 네 번 당했다(TRIP-898·904·#668·#681). 그래서 아래 첫 테스트가 핵심이다.
+
+
+class FakeHours:
+    """place_id → 영업시간. 물어본 것만 기록해 **범위**도 같이 문다(돈이 나가는 자리)."""
+
+    def __init__(self, by_place_id: dict, *, raises: bool = False):
+        self._by = by_place_id
+        self._raises = raises
+        self.asked: list[str] = []
+
+    def fetch(self, queries, *, deadline_ms):
+        if self._raises:
+            raise RuntimeError("vendor down")
+        out = []
+        for q in queries:
+            self.asked.append(q.place_id)
+            hours = self._by.get(q.place_id)
+            out.append(HoursVerdict(q.poi_id, hours=hours) if hours
+                       else HoursVerdict(q.poi_id, reason="no_hours_in_response"))
+        return tuple(out)
+
+
+def _closed_all_week() -> tuple:
+    """월요일만 여는 영업시간 — 여행일(2026-08-05, 수)에는 휴무다."""
+    return (OpenHour(day_of_week=0, open_min=540, close_min=1080),)
+
+
+def _agent_with_hours(hours, place_ids):
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3", "p4", "p5", "p6")),
+                            _Renderer(), ClosedSetGate(), _C1CFG, trace)
+    return ScheduleAgent(
+        PreferenceScoringWorker(gateway), _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace, hours=hours, place_ids=place_ids,
+    ), trace
+
+
+def test_보강한_영업시간이_실제로_일정을_바꾼다() -> None:
+    """**배선이 HC1 에 닿는지** — 이 단계가 존재할 이유 전부다.
+
+    배치되던 두 곳에 "여행일 휴무"를 채우면 그 둘이 빠져야 한다. 안 빠지면
+    값을 채웠지만 조립이 못 본 것이다(풀 교체가 `for_pool` 아래거나, 후보만 바꿨거나).
+    """
+    pool, req = _existence_case()
+    base = _placed(_agent_with_hours(None, {})[0].run(_task(pool, request=req)))
+    assert len(base) == 2  # 전제
+
+    closed = _closed_all_week()
+    fake = FakeHours({f"place-{p}": closed for p in base})
+    agent, _ = _agent_with_hours(fake, {p: f"place-{p}" for p in base})
+    outcome = agent.run(_task(pool, request=req))
+
+    assert not set(_placed(outcome)) & set(base), \
+        "휴무로 밝혀진 곳이 그대로 배치됐다 — 보강이 HC1 에 안 닿는다"
+    assert outcome.status is GenerationStatus.SUCCESS   # 보강은 정상 동작이다
+
+
+def test_이미_영업시간이_있는_후보는_묻지_않는다() -> None:
+    """사용자 결정(2026-09-26) — 덮으면 파서 값과 벤더 값이 섞여 출처를 못 가린다.
+
+    돈이 나가는 자리라 **묻는 범위가 곧 비용**이기도 하다.
+    """
+    pois = tuple(_poi(i, 0.003 * i) for i in range(1, 7))
+    # p1 에만 영업시간을 심는다 — 나머지는 비어 있다
+    pois = tuple(replace(p, open_hours=(OpenHour(day_of_week=2, open_min=0, close_min=1440),))
+                 if str(p.poi_id) == "p1" else p for p in pois)
+    req = replace(_request(), day_window=TimeWindow(
+        start=datetime(2026, 8, 5, 9, 0, tzinfo=_KST),
+        end=datetime(2026, 8, 5, 12, 0, tzinfo=_KST)))
+    pool = CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days, budget=req.budget,
+                             transport=req.transport), _NOW)
+
+    fake = FakeHours({})
+    agent, _ = _agent_with_hours(fake, {f"p{i}": f"place-p{i}" for i in range(1, 7)})
+    agent.run(_task(pool, request=req))
+
+    assert "place-p1" not in fake.asked, "값이 있는 후보에까지 돈을 썼다"
+    assert fake.asked, "물어본 것이 하나도 없다 — 대상 선정이 틀렸다"
+
+
+def test_place_id_가_없으면_묻지_않는다() -> None:
+    """`place_id` 는 미리 해결해 둔 것만 쓴다 — 여기서 검색하면 비용이 두 배다."""
+    pool, req = _existence_case()
+    fake = FakeHours({})
+    agent, _ = _agent_with_hours(fake, {"p1": "place-p1"})   # 하나만 해결돼 있다
+    agent.run(_task(pool, request=req))
+
+    assert fake.asked == ["place-p1"]
+
+
+def test_보강_실패는_일정을_깨지_않는다() -> None:
+    """영업시간을 못 채운 것이 **생성 실패가 되면 안 된다** (INV-4·DL-5)."""
+    pool, req = _existence_case()
+    base = _placed(_agent_with_hours(None, {})[0].run(_task(pool, request=req)))
+
+    for hours in (FakeHours({}, raises=True), FakeHours({})):
+        agent, trace = _agent_with_hours(
+            hours, {f"p{i}": f"place-p{i}" for i in range(1, 7)})
+        outcome = agent.run(_task(pool, request=req))
+        assert _placed(outcome) == base          # 종전 그대로
+        assert any(d.stage == "hours" for d in outcome.degradations), "조용히 넘어갔다"
+
+
+def test_미주입이면_종전과_완전히_같다() -> None:
+    """켜지기 전에 동작이 안 바뀌는 것이 배선의 조건이다."""
+    pool, req = _existence_case()
+    with_port = _placed(_agent_with_hours(FakeHours({}), {})[0].run(_task(pool, request=req)))
+    without = _placed(_agent_with_hours(None, {})[0].run(_task(pool, request=req)))
+    assert with_port == without
+
+
+# ── 규칙 점수에 취향 반영 (2026-10-14) ──────────────────────────────
+#
+# 취향은 LLM 점수 프롬프트에만 실려 c1 폴백·c1_partial 보충 청크에서 통째로 사라졌다
+# (10-13 DEV "취향 반영 안 됨"). 규칙 점수도 `_wanted_categories(persona)` 를 지시 선호와
+# 같은 크기(+DIRECTIVE_STEP)로 실었다가, 카페(0.6+0.3)가 명소(1.0)를 못 넘어 상대 가점으로
+# 바꿨다 — 취향 카테고리는 최소 한 단, 그리고 기본 가중 최상위보다 위. 사용자가 카테고리 축을
+# 정하면 그것만 쓴다.
+
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from trippilot.agents.schedule.outcome import _wanted_categories
+from trippilot.assembly_engine.scorer import CATEGORY_WEIGHT, DIRECTIVE_STEP
+from trippilot.domain.common import BudgetLevel
+from trippilot.domain.persona import ACTIVITY_LABELS, CUISINE_LABELS, PersonaSummary, TasteTag
+from trippilot.domain.poi import PoiCategory as _Cat
+
+from tests.orchestrator.test_schedule_coordinator import (
+    _PROMPTS_DIR,
+    _ChunkFailLlm,
+    _build,
+    _poi,
+)
+from tests.fakes.fake_llm import FailingLlm
+from trippilot.llm_gateway.prompts import PromptRegistry
+
+_ALL_CATS = tuple(c for c in _Cat if c is not _Cat.STAY)
+_TOP = max(CATEGORY_WEIGHT.values())
+
+
+def _assert_taste_lift(lift: float, cat: _Cat, wanted) -> None:
+    """취향 카테고리: 최소 한 단 + 기본 가중 최상위를 넘는다. 그 밖: 정확히 0."""
+    if cat in wanted:
+        assert lift >= DIRECTIVE_STEP - 1e-9
+        assert CATEGORY_WEIGHT[cat] + lift > _TOP  # 명소보다 위 — 카페 취향이 묻히지 않는다
+        assert CATEGORY_WEIGHT[cat] + lift <= _TOP + DIRECTIVE_STEP  # 한 단 넘게 치솟지 않는다
+    else:
+        assert abs(lift) < 1e-9
+
+
+def _persona(taste=(), activities=(), cuisines=()) -> PersonaSummary:
+    return PersonaSummary(taste_tags=tuple(taste), companion=None, budget=BudgetLevel.MID,
+                          activities=tuple(activities), cuisines=tuple(cuisines))
+
+
+def _mixed_pool():
+    req = _request()
+    pois = tuple(_poi(i, 0.0005 * i, _ALL_CATS[i % len(_ALL_CATS)]) for i in range(1, 25))
+    return CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days,
+                             budget=req.budget, transport=req.transport), _NOW)
+
+
+_MIXED = _mixed_pool()
+
+_personas = st.builds(
+    _persona,
+    taste=st.lists(st.sampled_from(list(TasteTag)), unique=True, max_size=4),
+    activities=st.lists(st.sampled_from(ACTIVITY_LABELS), unique=True, max_size=4),
+    cuisines=st.lists(st.sampled_from(CUISINE_LABELS), unique=True, max_size=2),
+)
+_cat_sets = st.frozensets(st.sampled_from(_ALL_CATS), max_size=3)
+
+
+@settings(max_examples=60, deadline=None)
+@given(persona=_personas, prefer=_cat_sets, avoid=_cat_sets)
+def test_property_규칙_점수는_취향_카테고리를_한_단_올리고_사용자_축이_있으면_그것만(
+    persona, prefer, avoid,
+) -> None:
+    from dataclasses import replace as _replace
+
+    agent, _, _ = _agent()
+    request = _replace(_request(), prefer_categories=prefer, avoid_categories=avoid)
+    plain = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, None)}
+    tasted = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, persona)}
+    index = {p.poi_id: p for p in _MIXED.pois}
+
+    assert plain.keys() == tasted.keys() == _MIXED.poi_ids  # INV-1 — 풀 순회 그대로
+    if prefer or avoid:
+        assert tasted == plain  # 사용자 지시 우선 — 취향을 그 축에 얹지 않는다
+        return
+    wanted = _wanted_categories(persona)
+    lifts: dict[_Cat, set[float]] = {}
+    for pid, score in tasted.items():
+        cat, lift = index[pid].category, score - plain[pid]
+        _assert_taste_lift(lift, cat, wanted)  # 빈 취향 → 전부 0, 종전과 동일
+        lifts.setdefault(cat, set()).add(round(lift, 9))
+    assert all(len(v) == 1 for v in lifts.values())  # 카테고리 단위 가점 — 장소마다 다르지 않다
+
+
+def test_사용자_회피가_취향_선호를_이긴다() -> None:
+    from dataclasses import replace as _replace
+
+    agent, _, _ = _agent()
+    cafe = _persona(activities=("카페",))
+    request = _replace(_request(), avoid_categories=frozenset({_Cat.CAFE}))
+    index = {p.poi_id: p for p in _MIXED.pois}
+    plain = {s.poi_id: s.score for s in agent._rule_scores(_request(), _MIXED, None)}
+    steered = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, cafe)}
+
+    for pid, score in steered.items():
+        if index[pid].category is _Cat.CAFE:
+            assert score < plain[pid]
+
+
+def _slot_categories(outcome, pois) -> list[_Cat]:
+    index = {p.poi_id: p for p in pois}
+    return [index[s.poi_id].category for d in outcome.solution.days for s in d.slots
+            if s.poi_id in index]
+
+
+def test_c1_폴백_일정에서_취향_카테고리_비중이_높아진다() -> None:
+    """LLM 점수 전량 실패(규칙만) — 같은 풀·시드에서 카페 취향이면 카페가 더 놓인다."""
+    pois = tuple(_poi(i, 0.0003 * i, _Cat.CAFE if i % 2 else _Cat.CULTURE)
+                 for i in range(1, 21))
+
+    def cafes(persona) -> int:
+        orchestrator, _, _ = _build(score_llm=FailingLlm(), pois=pois, store_value=persona)
+        outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+        assert outcome.scoring_mode is ScoringMode.RULE
+        cats = _slot_categories(outcome, pois)
+        assert cats  # 일정이 나왔다
+        return cats.count(_Cat.CAFE)
+
+    assert cafes(_persona(activities=("카페",))) > cafes(_persona())
+
+
+def test_c1_partial_보충_청크에도_취향이_실린다() -> None:
+    pois = tuple(_poi(i, 0.0001 * i, _Cat.CAFE if i % 2 else _Cat.CULTURE)
+                 for i in range(1, 41))
+    sorted_ids = sorted(str(p.poi_id) for p in pois)
+    by_id = {str(p.poi_id): p for p in pois}
+
+    def backfilled(persona) -> dict[str, float]:
+        orchestrator, _, sink = _build(
+            score_llm=_ChunkFailLlm(sorted_ids[0]), pois=pois, store_value=persona,
+            renderer=PromptRegistry(_PROMPTS_DIR))
+        outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+        assert any(d.reason.startswith("c1_partial") for d in outcome.degradations)
+        return {str(c.poi_id): c.score for c in sink.problems[0].candidates
+                if not c.is_llm_score}
+
+    tasted = backfilled(_persona(activities=("카페",)))
+    plain = backfilled(_persona())
+    assert tasted.keys() == plain.keys() and tasted
+    for pid, score in tasted.items():
+        _assert_taste_lift(score - plain[pid], by_id[pid].category, {_Cat.CAFE})
+
+
+def test_한_곳_추가_카테고리에는_취향_가점을_얹지_않는다() -> None:
+    from dataclasses import replace as _replace
+
+    agent, _, _ = _agent()
+    cafe = _persona(activities=("카페", "야경"))
+    request = _replace(_request(), add_one_categories=frozenset({_Cat.CAFE}))
+    index = {p.poi_id: p for p in _MIXED.pois}
+    plain = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, None)}
+    tasted = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, cafe)}
+
+    for pid, score in tasted.items():
+        # 카페는 "한 곳"만 — 종류 전체 가점 없음
+        _assert_taste_lift(score - plain[pid], index[pid].category, {_Cat.NIGHT_VIEW})
+
+
+def test_카페_취향이면_규칙_점수가_같은_조건의_명소를_넘는다() -> None:
+    """고정 +0.3 일 때 카페(0.6+0.3) < 명소(1.0) 라 "카페 위주"가 규칙 경로에서 묻혔다."""
+    pois = (_poi(1, 0.0005, _Cat.CAFE), _poi(2, 0.0005, _Cat.SIGHT))
+    pool = CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=_request().anchor, dates=_request().days,
+                             budget=_request().budget, transport=_request().transport), _NOW)
+    agent, _, _ = _agent()
+    by_cat = {next(p.category for p in pool.pois if p.poi_id == s.poi_id): s.score
+              for s in agent._rule_scores(_request(), pool, _persona(activities=("카페",)))}
+    assert by_cat[_Cat.CAFE] > by_cat[_Cat.SIGHT]

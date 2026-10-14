@@ -8,12 +8,13 @@ describe('AppProviders — focusManager 배선', () => {
   it('AppState 가 background 면 unfocused, active 로 돌아오면 focused 다', () => {
     const handlers: ((s: string) => void)[] = [];
     const remove = jest.fn();
-    const spy = jest
-      .spyOn(AppState, 'addEventListener')
-      .mockImplementation(((_: string, h: (s: string) => void) => {
-        handlers.push(h);
-        return { remove };
-      }) as never);
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((
+      _: string,
+      h: (s: string) => void
+    ) => {
+      handlers.push(h);
+      return { remove };
+    }) as never);
 
     // isolateModules 는 react-query 도 새로 로드하므로 같은 격리 안에서 focusManager 를 꺼낸다.
     let focusManager!: typeof FocusManager;

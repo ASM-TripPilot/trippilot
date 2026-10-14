@@ -38,3 +38,4 @@ include(":modules:archive")   // C12 방문 실적·기록(actual 계층) — U4
 include(":modules:reflection")   // C13 회고 — 하루 한 장 (TRIP-552 · U5)
 include(":modules:notification")   // C14 알림함·리마인드 스케줄 (TRIP-547 · U6)
 include(":modules:affiliate-link")   // C5 제휴 링크 — 아웃바운드 302·클릭 기록 (제휴링크-연동-설계.md 칸 1)
+include(":modules:assistant")   // C16 AI 도우미 — 대화 세션·메시지·제안 (TRIP-1377 · U8)

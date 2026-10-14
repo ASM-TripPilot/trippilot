@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 
 from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
+from trippilot.llm_gateway.gates.reminder_copy import _NUM
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import LlmFeature
 from trippilot.domain.observability import GateDropEvent
@@ -63,8 +64,21 @@ _CAPTION_MAX = 40
 
 # 시간 표현 (계약 §4.1 하드 — `\d+분`·`\d+시간`·`오전 \d+시`류, INV-3).
 # 보수적 과잉 판정("24시 편의점" 등)은 하드 위반 → 결정론 교체 경로라 fail-safe다.
+# 한글 수사·서술형("한 시간 걸려요"·"삼십 분"·"이동시간")도 막는다 — 리마인드 게이트
+# `_DURATION`(#591)의 소요시간 범위와 같다(수사 정의 `_NUM` 은 공유). 그쪽의 낱말 `시각`
+# 은 소요시간이 아니라 옮기지 않는다. 소요시간일 수 없는 "이 분위기"·"두 분이서"·
+# "이 시간대"만 전방탐색으로 뺀다(리마인드 쪽은 학습 필터라 별도 결정 — 무변).
+# 어림수("몇 분"·"한두 시간"·"수십 분")와 "30여 분"의 `여`도 수량이다 — `_NUM` 에 넣지
+# 않고 여기서만 받는다(`_NUM` 을 바꾸면 리마인드 학습 필터가 따라 바뀐다). 맨 "수"는
+# 넣지 않는다 — "수분 보충"을 막는다.
+_FUZZY_NUM = r"(?:몇십|몇|한두|두세|서너|너덧|대여섯|예닐곱|수십)"
 _TIME_EXPR = re.compile(
-    r"\d+\s*분|\d+\s*시간|(?:오전|오후)\s*\d+\s*시|\d+\s*시(?!간)|duration",
+    r"\d+\s*여?\s*분|\d+\s*여?\s*시간|(?:오전|오후)\s*\d+\s*시|\d+\s*시(?!간)|duration"
+    rf"|(?<![가-힣])(?:{_NUM}|{_FUZZY_NUM})\s*여?\s*(?:분(?!위기|이서)|시간(?!대))"
+    r"|(?:이동|소요|대기|운전|도보|체류)\s*시간|시간이?\s*(?:걸|소요)"
+    # 수량 없이도 소요를 뜻하는 꼴 — "분 정도"·"분 거리". 앞 한글 배제로 "오뚜기분식"·
+    # "기분 정도" 같은 낱말 속 '분'은 지나친다(넛지 게이트가 이 정규식으로 옮겨 온 이유).
+    r"|(?<![가-힣])분\s*(?:정도|가량|남짓|쯤|거리|만에)",
     re.IGNORECASE,
 )
 

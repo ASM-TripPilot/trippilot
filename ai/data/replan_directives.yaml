@@ -22,8 +22,8 @@
 # 상호명 기억으로 지어낸다 — KB-3 초안 41건 중 28건을 뺀 것이 정확히 그 이유다
 # (`planb_situation_kb.yaml` 헤더 기준 (2)).
 #
-# **SOLVER 는 아직 배선되지 않았다** (A-4 예정). 지금 이 키가 오면 사전이 인식은 하되
-# 아무 효과가 없다 — 그 사실을 `unwired: true` 로 드러낸다. 정본이 "동작 중"으로
+# **SOLVER 는 RELAX·FILL_MORE(Pace.SLOW·PACKED)·EARLIER·KEEP_DINNER 가 배선됐다.** 나머지는 A-4 예정 — 그 키가 오면
+# 사전이 인식은 하되 아무 효과가 없다 — 그 사실을 `unwired: true` 로 드러낸다. 정본이 "동작 중"으로
 # 서술하는 미배선을 만들지 않기 위해서다(TRIP-529 계열).
 #
 # ## `cardinality` — 하루를 바꾸는 지시인가, 한 곳을 더하는 지시인가
@@ -56,6 +56,9 @@ directives:
     label: 실내로
     enforced_by: PROMPT
     prefer_categories: [CULTURE, CAFE, SHOPPING]
+    # "실내로"는 실외를 빼 달라는 말이기도 하다 — 선호 가산만이면 원 일정의 공원이 남았다(2026-10-14
+    # DEV). 실외 집합은 AVOID_OUTDOOR·우천 보정(RAIN_OUTDOOR)과 같다. 재계획은 회피 카테고리를 후보에서 뺀다.
+    avoid_categories: [NATURE, NIGHT_VIEW, ACTIVITY]
     aliases: [비 피해서, 야외 말고, 실내에서, 안에서 할 수 있는, 우산 안 쓰고, 비 오니까 안으로]
 
   - key: OUTDOOR
@@ -120,6 +123,14 @@ directives:
     avoid_categories: [ACTIVITY, NATURE]
     aliases: [무리 안 되게, 체력이 안 돼, 힘든 건 말고, 많이 안 움직이는]
 
+  # FE 칩 '야외 피하기'(replanChoices.ts) — 사전에 없어 unknown 으로 버려졌다. INDOOR 가 실내를
+  # **올리는** 쪽이면 이것은 실외를 **내리는** 쪽이다. 실외 집합은 우천 보정의 RAIN_OUTDOOR 와 같다.
+  - key: AVOID_OUTDOOR
+    label: 야외 피하기
+    enforced_by: PROMPT
+    avoid_categories: [NATURE, NIGHT_VIEW, ACTIVITY]
+    aliases: [야외 피하기, 밖에 오래 있기 싫어, 바깥 활동 줄여줘]
+
   # ── RANKING — 코드가 거리로 판정 ──────────────────────────────────
   - key: NEARBY
     label: 가까운 곳으로
@@ -134,25 +145,29 @@ directives:
   - key: END_NEAR_STAY
     label: 숙소 근처에서 끝내기
     enforced_by: RANKING
+    # 배선됨 — 마지막 방문지 → 그날 밤 숙소(`stay_anchor`) 도로 km 를 조립이 감점한다(`end_near`).
+    # 거리 랭킹(NEARBY)과 달리 후보가 아니라 **끝 순서**를 민다. 숙소가 없으면 무효 노트.
     aliases: [숙소 가까이 마무리, 돌아가기 편하게, 마지막은 숙소 근처]
 
-  # ── SOLVER — 어셈블리 파라미터 (A-4 배선 예정) ──────────────────────
+  # ── SOLVER — 어셈블리 파라미터 (SHORTER_DAY·KEEP_BUDGET 은 미배선) ──────────────────────
   - key: RELAX
     label: 여유 있게
     enforced_by: SOLVER
-    unwired: true
+    # 배선됨 — 여행 속도 느긋하게(Pace.SLOW, 체류 ×1.4)로 집행한다(`_PACE_KEYS`).
+    # 피로·지연 사유의 암시 지시이기도 하다(BR-U4-47).
     aliases: [천천히 돌자, 급하지 않게, 여유롭게, 쉬엄쉬엄]
 
   - key: FILL_MORE
     label: 더 채워서
     enforced_by: SOLVER
-    unwired: true
+    # 배선됨 — 여행 속도 알차게(Pace.PACKED, 체류 ×0.9)로 집행한다(`_PACE_KEYS`).
     aliases: [알차게, 더 많이 넣어줘, 빡빡하게, 시간 남기지 말고]
 
   - key: EARLIER
     label: 시간 당기기
     enforced_by: SOLVER
-    unwired: true
+    # 배선됨 — 원 일정의 남은 방문을 장소·체류 그대로 필수 방문으로 두고 시각만 지금부터 다시
+    # 맞춘다(`_earlier_visits`). 장소를 바꾸는 다른 사용자 지시가 같이 오면 그쪽이 이긴다(노트).
     aliases: [일찍 시작, 앞으로 당겨줘, 오전에 몰아서]
 
   - key: SHORTER_DAY
@@ -164,11 +179,15 @@ directives:
   - key: KEEP_DINNER
     label: 저녁은 그대로
     enforced_by: SOLVER
-    unwired: true
+    # 배선됨 — 원 일정에서 저녁 식사창(17~20시)에 걸친 식당을 원 시각 그대로 잠근다(`_dinner_blocks`).
+    # 원 일정에 저녁 식당이 없으면 노트(`keep_dinner_none`).
     aliases: [저녁 예약 있어, 저녁만 유지, 저녁은 건드리지 마]
 
   - key: KEEP_BUDGET
     label: 예산 유지
     enforced_by: SOLVER
+    # 미배선 — 집행할 가격 데이터가 없다. `Poi.avg_cost` 는 영구 None 이고(가격 미캐싱), 입장료 파생
+    # 지식(`place_fees.json`)은 명소·문화·자연 일부만 덮고(FOOD·CAFE 0%) 배포 이미지에 없다.
+    # FE 칩은 숨겼다 — 말로 오면 인식은 하되 무효 노트로 밝힌다.
     unwired: true
     aliases: [돈 더 안 쓰게, 비용 그대로, 예산 넘기지 않게]

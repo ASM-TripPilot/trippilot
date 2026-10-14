@@ -25,7 +25,7 @@ import {
  *    무시해 못 잡는다(실측).
  *
  * 3동작 뼈대: 준비(View·selection 픽스처) → 실행(함수 호출) → 단언(반환 객체의 키·값).
- * 커버하지 않는 것: 화면 렌더·타일 선택 시각은 `PreferencesEditScreen.integration.test.tsx` 몫.
+ * 커버하지 않는 것: 화면 렌더·타일 선택 시각은 `SettingsPreferencesPage.integration.test.tsx` 몫.
  */
 
 describe('initialSelection — GET View를 초기 선택으로', () => {

@@ -103,6 +103,7 @@ class TripRecordServiceTest : StringSpec({
     fun slot(date: LocalDate, poi: UUID, order: Int, start: String = "10:00") = PlannedSlotView(
         slotKey = "$date#$poi", date = date, poiId = poi, orderIndex = order,
         startAt = LocalTime.parse(start), endAt = LocalTime.parse("11:30"), isFixed = false, endsNextDay = false,
+        hasViolation = false,
     )
 
     fun arrived(checks: Checks, date: LocalDate, poi: UUID, at: String = "03:00") = checks.save(
@@ -116,7 +117,7 @@ class TripRecordServiceTest : StringSpec({
         pois.take(3).forEach { arrived(checks, day1, it) }
         val svc = TripRecordService(
             trips, plans(*pois.mapIndexed { i, p -> slot(day1, p, i) }.toTypedArray()),
-            checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(),
+            checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(), NoRoutes()
         )
 
         val record = svc.compare(acc, tripId)
@@ -137,14 +138,14 @@ class TripRecordServiceTest : StringSpec({
 
         val before = TripRecordService(
             trips, plans(slot(day1, visited, 0), slot(day1, notYet, 1)),
-            checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(),
+            checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(), NoRoutes()
         ).compare(acc, tripId).days.single().unvisitedSlotKeys
         before shouldContainExactly listOf("$day1#$notYet")
 
         // 계획에서 그 슬롯이 빠졌다 — 미방문도 사라져야 한다.
         val after = TripRecordService(
             trips, plans(slot(day1, visited, 0)),
-            checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(),
+            checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(), NoRoutes()
         ).compare(acc, tripId).days.single().unvisitedSlotKeys
         after shouldContainExactly emptyList()
     }
@@ -159,7 +160,7 @@ class TripRecordServiceTest : StringSpec({
 
         fun withBase(stayId: UUID, name: String) = TripRecordService(
             trips, plans(slot(day1, poi, 0)), checks, Photos(), Memos(),
-            bases(DayBaseStayView(day1, stayId, name)), ReadOnlyChangeLog(),
+            bases(DayBaseStayView(day1, stayId, name)), ReadOnlyChangeLog(), NoRoutes()
         ).compare(acc, tripId).days.single { it.date == day1 }
 
         withBase(stayA, "제주 숙소").baseStayName shouldBe "제주 숙소"
@@ -172,7 +173,7 @@ class TripRecordServiceTest : StringSpec({
         val checks = Checks()
         arrived(checks, day1, poi)
         val svc = TripRecordService(
-            trips, plans(slot(day1, poi, 0)), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(),
+            trips, plans(slot(day1, poi, 0)), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(), NoRoutes()
         )
 
         val d = svc.compare(acc, tripId).days.single { it.date == day1 }
@@ -189,7 +190,7 @@ class TripRecordServiceTest : StringSpec({
         val v = arrived(checks, day1, poi)
         checks.save(v.complete(Instant.parse("2026-08-11T05:00:00Z"))) // 체류 120분이 산출되는 상태
         val svc = TripRecordService(
-            trips, plans(slot(day1, poi, 0)), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(),
+            trips, plans(slot(day1, poi, 0)), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(), NoRoutes()
         )
 
         val visit = svc.compare(acc, tripId).days.single().actual.single()
@@ -207,7 +208,7 @@ class TripRecordServiceTest : StringSpec({
         arrived(checks, day1, planned)
         checks.save(VisitCheck.arrive(tripId, null, UUID.randomUUID(), CheckSource.MANUAL, Instant.parse("2026-08-11T04:00:00Z")))
         val svc = TripRecordService(
-            trips, plans(slot(day1, planned, 0)), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(),
+            trips, plans(slot(day1, planned, 0)), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(), NoRoutes()
         )
 
         val d = svc.compare(acc, tripId).days.single { it.date == day1 }
@@ -223,7 +224,7 @@ class TripRecordServiceTest : StringSpec({
         val checks = Checks()
         arrived(checks, day1, last, at = "05:00") // 일부러 늦은 방문을 먼저 넣는다
         arrived(checks, day1, first, at = "01:00")
-        val svc = TripRecordService(trips, plans(), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog())
+        val svc = TripRecordService(trips, plans(), checks, Photos(), Memos(), bases(), ReadOnlyChangeLog(), NoRoutes())
 
         svc.compare(acc, tripId).days.single { it.date == day1 }.actual.map { it.poiId } shouldContainExactly listOf(first, last)
         svc.findDailyVisits(tripId).single { it.date == day1 }.visits.map { it.poiId } shouldContainExactly listOf(first, last)
@@ -235,7 +236,7 @@ class TripRecordServiceTest : StringSpec({
         val v = arrived(checks, day1, poi)
         val svc = TripRecordService(
             trips, plans(slot(day1, poi, 0)), checks,
-            Photos(mapOf(v.visitCheckId to 3)), Memos(mutableMapOf(v.visitCheckId to "바다가 좋았다")), bases(), ReadOnlyChangeLog(),
+            Photos(mapOf(v.visitCheckId to 3)), Memos(mutableMapOf(v.visitCheckId to "바다가 좋았다")), bases(), ReadOnlyChangeLog(), NoRoutes()
         )
 
         val visit = svc.compare(acc, tripId).days.single().actual.single()
@@ -249,7 +250,7 @@ class TripRecordServiceTest : StringSpec({
     "변경 이력은 읽기만 하고 상한을 그대로 넘긴다(BR-U5-29)" {
         val checks = Checks()
         val log = ReadOnlyChangeLog()
-        val svc = TripRecordService(trips, plans(), checks, Photos(), Memos(), bases(), log)
+        val svc = TripRecordService(trips, plans(), checks, Photos(), Memos(), bases(), log, NoRoutes())
 
         svc.compare(acc, tripId, changeLimit = 7).changes shouldBe emptyList()
 
@@ -257,7 +258,14 @@ class TripRecordServiceTest : StringSpec({
     }
 
     "타 계정이면 404 — 존재를 알리지 않는다" {
-        val svc = TripRecordService(trips, plans(), Checks(), Photos(), Memos(), bases(), ReadOnlyChangeLog())
+        val svc = TripRecordService(trips, plans(), Checks(), Photos(), Memos(), bases(), ReadOnlyChangeLog(), NoRoutes())
         shouldThrow<ResourceNotFound> { svc.compare(UUID.randomUUID(), tripId) }
     }
 })
+
+/** 경로가 하나도 없는 저장소 — 이 스펙은 실적만 본다. */
+internal class NoRoutes : com.trippilot.archive.domain.ActualRouteDayRepository {
+    override fun upsert(day: com.trippilot.archive.domain.ActualRouteDay) = day
+    override fun findByTrip(tripId: java.util.UUID) = emptyList<com.trippilot.archive.domain.ActualRouteDay>()
+    override fun deleteByTrips(tripIds: List<java.util.UUID>) = 0
+}

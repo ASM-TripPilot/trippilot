@@ -8,6 +8,9 @@ import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.itinerarygeneration.domain.ReplanScope
+import com.trippilot.itinerarygeneration.domain.EditCommand
+import com.trippilot.itinerarygeneration.domain.EditProposalInput
+import com.trippilot.itinerarygeneration.domain.EditProposalStatus
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.placedata.api.Area
@@ -23,6 +26,7 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import io.kotest.assertions.throwables.shouldThrow
+import org.hamcrest.Matchers.nullValue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -238,7 +242,8 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andExpect(method(HttpMethod.POST))
             .andExpect(jsonPath("$.scope").value("FULL_DAY"))
-            .andExpect(jsonPath("$.reasons[0]").value("WEATHER"))
+            // 사유는 상대 어휘로 번역해 싣는다(연동 설계 §3) — FE 키 그대로면 상대 사유 분기가 전부 빗나간다.
+            .andExpect(jsonPath("$.reasons[0]").value("weather"))
             .andExpect(jsonPath("$.directives[0]").value("INDOOR"))
             .andExpect(jsonPath("$.free_text").value("비 와서 실내로"))
             .andExpect(jsonPath("$.current_slots[0].poi_id").value(REPLAN_POI.toString()))
@@ -253,9 +258,37 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.time_window.start").value("09:00:00"))
             .andExpect(jsonPath("$.time_window.end").value("21:00:00"))
             .andExpect(jsonPath("$.anchor.lat").value(33.4))
+            // 숙소 근처에서 끝내기(END_NEAR_STAY)의 끝점 — 기준점(anchor)과 다른 값이 따로 실린다.
+            .andExpect(jsonPath("$.stay_anchor.lat").value(33.25))
+            .andExpect(jsonPath("$.stay_anchor.lng").value(126.41))
             .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
 
         adapter.replan(richReplanInput())
+
+        server.verify()
+    }
+
+    // 오늘을 밤에 다시 짜면 창 끝(21:00)이 막아 "대안 없음"이 됐다 — 생성과 같은 규칙(TodayWindow)으로 끝만 늘린다.
+    // 시작은 하루 전체 그대로(09:00) — 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 409 로 거부한다.
+    "오늘을 밤 9시 반에 다시 짜면 창 끝이 23:59 다 — 야경 한두 곳이 들어갈 자리" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.time_window.start").value("09:00:00"))
+            .andExpect(jsonPath("$.time_window.end").value("23:59:00"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(scope = ReplanScope.PARTIAL_SLOTS, fromInstant = Instant.parse("2026-08-01T12:30:00Z")))
+
+        server.verify()
+    }
+
+    "다른 날을 다시 짜면 창은 그대로다 — 밤 규칙은 오늘에만" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.time_window.end").value("21:00:00"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(fromInstant = Instant.parse("2026-08-01T12:30:00Z"), targetDate = LocalDate.parse("2026-08-02")))
 
         server.verify()
     }
@@ -542,6 +575,143 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
             .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
         adapter.validate(dummyOutput()) shouldBe emptyList()
+    }
+
+    // ───────── 편집 제안(U8 G-U8-2) ─────────
+
+    val newPoi = UUID.randomUUID()
+    fun editInput(utterance: String? = null, command: EditCommand? = null) = EditProposalInput(
+        tripId = UUID.randomUUID(),
+        itinerary = com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput(
+            days = listOf(DaySchedule(d1, listOf(VisitSlotDisplay(poi, LocalTime.of(10, 0), LocalTime.of(11, 0), false, null, isFixed = false)))),
+            day1ReadyAt = null, explanations = emptyMap(), solveMode = SolveMode.FULL_AI, isFallback = false,
+            freshness = com.trippilot.itinerarygeneration.domain.FreshnessMeta(now, false),
+        ),
+        targetDate = d1, anchorLat = 33.45, anchorLng = 126.56, budgetLevel = "표준", transportMode = "렌터카",
+        utterance = utterance, command = command, requestMeta = RequestMeta("edit-1", now, 8_000),
+    )
+    fun groundingPool(vararg known: UUID) = object : CandidatePoolPort {
+        override fun resolve(area: Area, categories: Set<String>) = emptyList<GroundedPlace>()
+        override fun ground(poiIds: List<UUID>) =
+            poiIds.filter { it in known }.map { GroundedPlace(it, "곳", 33.0, 126.0, "카페", null, null) }
+    }
+    fun appliedBody(slotPoi: UUID) = """
+        {"status":"APPLIED","apply_mode":"AUTO_APPLY","command":{"op":"REPLACE_SLOT","params":{},"affected_slots":[]},
+         "itinerary":{"days":[{"date":"2026-08-01","slots":[
+           {"poi_id":"$slotPoi","start_at":"10:30:00","end_at":"11:30:00","distance_range":"약 630m · 도보 추정"}]}],
+          "explanations":{},"solve_mode":"OR_TOOLS","is_fallback":false},
+         "violations":[],"reason":null}
+    """.trimIndent()
+
+    /**
+     * **요청 본문을 본다.** `confirm` 이 false 로 나가면 상대는 파괴적 편집의 해를 숨기고 확인을 요구한다 —
+     * 예외가 아니라 "제안 카드가 안 뜬다"로 보여 원인을 못 짚는다(DEC-U8-3).
+     */
+    "편집 제안 — 발화를 confirm=true 로 싣고 검증된 해를 제안으로 돌려준다" {
+        val (adapter, server) = fixture(groundingPool(newPoi))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(jsonPath("$.utterance").value("카페를 조용한 곳으로 바꿔줘"))
+            // 없는 키가 아니라 **null 로 나간다**(경계 매퍼는 null 을 싣는다) — 상대 검증기는 null 을 "없음"으로 센다.
+            .andExpect(jsonPath("$.command").value(nullValue()))
+            .andExpect(jsonPath("$.confirm").value(true))
+            .andExpect(jsonPath("$.target_date").value("2026-08-01"))
+            .andExpect(jsonPath("$.anchor.lat").value(33.45))
+            .andExpect(jsonPath("$.budget_level").value("표준"))
+            .andExpect(jsonPath("$.transport_mode").value("렌터카"))
+            .andExpect(jsonPath("$.itinerary.days[0].slots[0].poi_id").value(poi.toString()))
+            .andExpect(jsonPath("$.request_meta.deadline_ms").value(8000))
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+
+        val out = adapter.proposeEdit(editInput(utterance = "카페를 조용한 곳으로 바꿔줘"))
+
+        out.status shouldBe EditProposalStatus.PROPOSED
+        out.applyMode shouldBe "AUTO_APPLY"
+        val slot = out.itinerary!!.days.single().slots.single()
+        slot.poiId shouldBe newPoi
+        slot.startAt shouldBe LocalTime.of(10, 30) // 상대 조립이 낸 시각(INV-2)
+        slot.distanceRange shouldBe "약 630m · 도보 추정"
+        server.verify()
+    }
+
+    "편집 제안 — 구조화 교체는 command 로 싣는다(발화 없음)" {
+        val (adapter, server) = fixture(groundingPool(newPoi))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(jsonPath("$.utterance").value(nullValue()))
+            .andExpect(jsonPath("$.command.op").value("REPLACE_SLOT"))
+            .andExpect(jsonPath("$.command.params.targetPoiId").value(newPoi.toString()))
+            .andExpect(jsonPath("$.command.affected_slots[0]").value(poi.toString()))
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+
+        adapter.proposeEdit(editInput(command = EditCommand.replaceSlot(poi, newPoi))).status shouldBe EditProposalStatus.PROPOSED
+        server.verify()
+    }
+
+    /**
+     * 편집 저장 경로에는 POI 실재 검사가 없다 — 여기서 안 막으면 상대가 지어낸 장소가 제안 카드를 거쳐 저장된다(INV-1).
+     * 그 슬롯만 빼지 않는다: 하나를 빼면 나머지 시각이 더는 상대가 검증한 값이 아니다.
+     */
+    "편집 제안 — 새로 들어온 장소가 정본에 없으면 응답 전체를 버린다" {
+        val (adapter, server) = fixture(groundingPool()) // newPoi 를 모른다
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+
+        shouldThrow<ScheduleAgentCallFailed> { adapter.proposeEdit(editInput(utterance = "바꿔줘")) }
+    }
+
+    "편집 제안 — 원래 있던 장소만이면 정본 대조 없이 통과한다(순서·시각 변경)" {
+        val (adapter, server) = fixture(groundingPool()) // 아무것도 모르는 풀
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andRespond(withSuccess(appliedBody(poi), MediaType.APPLICATION_JSON))
+
+        adapter.proposeEdit(editInput(utterance = "30분 늦춰줘")).status shouldBe EditProposalStatus.PROPOSED
+    }
+
+    "편집 제안 — 거절은 정상 응답이다: 위반과 사유를 싣고 일정은 없다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit")).andRespond(
+            withSuccess(
+                """{"status":"REJECTED","apply_mode":"AUTO_APPLY","itinerary":null,
+                    "violations":[{"code":"HC1","slot_ref":"$newPoi","detail":"영업시간 밖: 543~618","day_index":null,"slot_index":null}],
+                    "reason":"편집 결과가 하드 제약을 위반 — 반영하지 않음"}""",
+                MediaType.APPLICATION_JSON,
+            ),
+        )
+
+        val out = adapter.proposeEdit(editInput(command = EditCommand.replaceSlot(poi, newPoi)))
+
+        out.status shouldBe EditProposalStatus.REJECTED
+        out.itinerary shouldBe null
+        out.violations.single().type shouldBe "HC1"
+        out.violations.single().slotRef shouldBe newPoi.toString()
+        out.reason shouldBe "편집 결과가 하드 제약을 위반 — 반영하지 않음"
+    }
+
+    "편집 제안 — 해석 실패는 NOT_UNDERSTOOD 다(호출 실패가 아니다)" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit")).andRespond(
+            withSuccess("""{"status":"TRANSLATION_FAILED","reason":"편집 의도 해석 실패"}""", MediaType.APPLICATION_JSON),
+        )
+
+        adapter.proposeEdit(editInput(utterance = "음…")).status shouldBe EditProposalStatus.NOT_UNDERSTOOD
+    }
+
+    /** confirm=true 로 불렀으니 올 수 없는 값이다. 오면 계약이 어긋난 것 — 빈 제안으로 삼키지 않는다(INV-4). */
+    "편집 제안 — CONFIRM_REQUIRED·모르는 status·일정 없는 APPLIED 는 호출 실패다" {
+        listOf(
+            """{"status":"CONFIRM_REQUIRED","apply_mode":"CONFIRM_REQUIRED"}""",
+            """{"status":"SOMETHING_NEW"}""",
+            """{"status":"APPLIED","itinerary":null}""",
+        ).forEach { body ->
+            val (adapter, server) = fixture()
+            server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit")).andRespond(withSuccess(body, MediaType.APPLICATION_JSON))
+            shouldThrow<ScheduleAgentCallFailed> { adapter.proposeEdit(editInput(utterance = "하루 비워줘")) }
+        }
+    }
+
+    "편집 제안 — 발화와 명령을 함께 주거나 둘 다 비우면 만들 수 없다(상대는 422 다)" {
+        shouldThrow<IllegalArgumentException> { editInput() }
+        shouldThrow<IllegalArgumentException> { editInput(utterance = "바꿔줘", command = EditCommand.replaceSlot(poi, newPoi)) }
     }
 
     "repair — 수리 불가(repaired=null)는 오류가 아니라 원본 유지" {
@@ -850,6 +1020,8 @@ private val REJECTED_POI: UUID = UUID.randomUUID()
 /** 다섯 값을 전부 채운 표본. 비워 두면 "안 싣는다"와 "빈 값을 싣는다"가 구분되지 않는다. */
 private fun richReplanInput() = replanInput().copy(
     freeText = "비 와서 실내로",
+    stayLat = 33.25,
+    stayLng = 126.41,
     currentSlots = listOf(
         ReplanCurrentSlot(
             REPLAN_POI, LocalTime.of(10, 0), LocalTime.of(11, 0),
@@ -870,6 +1042,8 @@ private fun replanInput() = ReplanInput(
     targetDate = LocalDate.parse("2026-08-01"),
     originLat = 33.4,
     originLng = 126.5,
+    stayLat = null,
+    stayLng = null,
     lockedBlocks = emptyList(),
     reasons = listOf("WEATHER"),
     directives = listOf("INDOOR"),

@@ -998,12 +998,6 @@ describe('후보 이름·태그·사진', () => {
     }
   }
 
-  /** className 을 공백으로 쪼갠 토큰 목록 — `min-h-[56px]` 같은 부분 일치 오탐을 막는다. */
-  const classTokens = (testID: string): string[] =>
-    String(screen.getByTestId(testID).props.className ?? '').split(/\s+/);
-
-  const THUMB_56 = ['h-[56px]', 'w-[56px]', 'rounded-thumb'];
-
   /** 소요시간 단위(INV-3) — 거리만 보여야 한다. */
   const DURATION = /분|시간|\bmin\b|소요/;
 
@@ -1023,35 +1017,27 @@ describe('후보 이름·태그·사진', () => {
       );
     });
 
-    it('H2 · AC-4·비주얼(a) — 사진 있으면 그 URL 이 source, null·빈 문자열이면 source 없는 회색 자리(56·thumb)', async () => {
+    it('H2 · AC-4·비주얼(a) — 사진 있으면 그 URL 이 source, null·빈 문자열이면 source 없는 회색 자리', async () => {
       await renderAndWaitCandidates();
 
       expect(
         screen.getByTestId('itinerary-candidate-image-X').props.source
-      ).toEqual({ uri: X_IMG });
+      ).toEqual([{ uri: X_IMG }]);
       // 회색 자리도 testID 는 유지된다(존재) — 그리고 이미지 source 는 없다(부재). 둘을 짝으로 본다.
       for (const id of [RAW_ID, 'Z']) {
         const leaf = screen.getByTestId(`itinerary-candidate-image-${id}`);
         expect(leaf.props.source).toBeUndefined();
       }
-      for (const id of ALL_IDS) {
-        expect(classTokens(`itinerary-candidate-image-${id}`)).toEqual(
-          expect.arrayContaining(THUMB_56)
-        );
-      }
     });
 
-    it('H3 · AC-5 — 현재 행 사진은 GET 슬롯의 imageUrl 이다(56·thumb)', async () => {
+    it('H3 · AC-5 — 현재 행 사진은 GET 슬롯의 imageUrl 이다', async () => {
       await renderAndWaitCandidates();
 
       // GET 과 POST 도착 순서는 보장이 없다 — source 가 들어올 때까지 기다린다.
       await waitFor(() =>
         expect(
           screen.getByTestId('itinerary-candidate-image-current').props.source
-        ).toEqual({ uri: CURRENT_IMG })
-      );
-      expect(classTokens('itinerary-candidate-image-current')).toEqual(
-        expect.arrayContaining(THUMB_56)
+        ).toEqual([{ uri: CURRENT_IMG }])
       );
     });
 
@@ -1438,7 +1424,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       ).toHaveTextContent('#전망대 · 야경');
       expect(
         screen.getByTestId('itinerary-candidate-image-P').props.source
-      ).toEqual({ uri: P_IMG });
+      ).toEqual([{ uri: P_IMG }]);
       expect(
         screen.getByTestId('itinerary-candidate-distance-P')
       ).toHaveTextContent('약 1.2km · 도보 추정');

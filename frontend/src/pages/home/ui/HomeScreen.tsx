@@ -16,7 +16,6 @@
  */
 import { memo, useState, type ReactElement } from 'react';
 import {
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -42,6 +41,7 @@ import { CategoryImageGlyph } from '@/entities/itinerary-slot';
 import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';
 import { HeartButton } from '@/shared/ui/HeartButton';
+import { Image } from '@/shared/ui/Image';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import type {
   HomeCollectionCard,
@@ -219,8 +219,11 @@ function MagazineHeroImpl({
   showDots = true,
   asButton = false,
   onPress,
+  priority = 'low',
 }: {
   hero: HomeMagazineHero;
+  // TRIP-1363 — 캐러셀 첫 장만 high, 나머지는 low(화면 밖 페이지가 첫 장 디코드를 밀지 않게).
+  priority?: 'high' | 'low';
   testID?: string;
   showDots?: boolean;
   // TRIP-700 — discovery 캐러셀 page0 만 a02 매거진 목록으로 가는 배선 CTA. TRIP-935 R1 — 운영
@@ -236,7 +239,9 @@ function MagazineHeroImpl({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={hero.imageUrl ? { uri: hero.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority={priority}
         style={ABSOLUTE_FILL}
       />
       <LinearGradient
@@ -338,6 +343,7 @@ function DiscoveryHeroCarousel({
               hero={hero}
               testID={i === 0 ? 'home-magazine-hero' : `home-hero-slide-${i}`}
               showDots={false}
+              priority={i === 0 ? 'high' : 'low'}
               asButton={i === 0 && onPressMagazine !== undefined}
               onPress={i === 0 ? onPressMagazine : undefined}
             />
@@ -435,7 +441,10 @@ function CollectionCard({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={card.imageUrl ? { uri: card.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        recyclingKey={poiId ?? card.imageUrl ?? undefined}
+        transition={120}
         style={ABSOLUTE_FILL}
       />
       {card.imageUrl ? null : (
@@ -495,7 +504,10 @@ function SpotCard({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={card.imageUrl ? { uri: card.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        recyclingKey={poiId ?? card.imageUrl ?? undefined}
+        transition={120}
         style={ABSOLUTE_FILL}
       />
       {card.imageUrl ? null : (
@@ -708,8 +720,11 @@ function IntegratedTripHero({
     >
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
-        source={imageUrl ? { uri: imageUrl } : undefined}
-        resizeMode="cover"
+        testID="home-trip-hero-cover"
+        source={trip.coverSource ?? (imageUrl ? { uri: imageUrl } : undefined)}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority="high"
         style={ABSOLUTE_FILL}
       />
       <LinearGradient
@@ -784,7 +799,9 @@ function PastTripCard({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={trip.imageUrl ? { uri: trip.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={120}
         style={ABSOLUTE_FILL}
       />
       <LinearGradient
@@ -805,11 +822,13 @@ function PastTripCard({
 }
 
 // ── 지난 여행 섹션(postTrip · 가로 스크롤 사진 카드) ─────────────────────
-// 헤더 "지난 여행"16 + "전체 보기"(라이브 미도달 no-op) · 가로 스크롤 사진 카드.
+// 헤더 "지난 여행"16 + "전체 보기"(콜백 있을 때만 버튼, TRIP-1369) · 가로 스크롤 사진 카드.
 function PastTripsSection({
   trips,
+  onPressMore,
 }: {
   trips: readonly PastTrip[];
+  onPressMore?: () => void;
 }): ReactElement {
   return (
     <View className="w-full gap-md">
@@ -817,7 +836,12 @@ function PastTripsSection({
         <Text className="font-noto-bold text-[16px] font-bold text-ink">
           지난 여행
         </Text>
-        <Pressable testID="home-past-trips-more">
+        {/* 콜백이 있을 때만 버튼 — 콜백 없는 호출부(프리뷰)에 죽은 버튼을 만들지 않는다(심사 2.1). */}
+        <Pressable
+          testID="home-past-trips-more"
+          accessibilityRole={onPressMore ? 'button' : undefined}
+          onPress={onPressMore}
+        >
           <Text className="font-noto-bold text-label font-bold text-muted underline">
             전체 보기
           </Text>
@@ -829,7 +853,11 @@ function PastTripsSection({
         contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
       >
         {trips.map((trip, index) => (
-          <PastTripCard key={trip.title} trip={trip} index={index} />
+          <PastTripCard
+            key={`${trip.title}-${index}`}
+            trip={trip}
+            index={index}
+          />
         ))}
       </ScrollView>
     </View>
@@ -1173,12 +1201,18 @@ function PlanningBody({
 function PostTripBody({
   phase,
   hero,
+  sections,
+  collectionsLane,
+  onPressPastTripsMore,
   onPressTripHeroCta,
   onPressSearch,
   onPressBell,
 }: {
   phase: Extract<HomePhase, { kind: 'postTrip' }>;
   hero: readonly HomeMagazineHero[];
+  sections: HomeSections;
+  collectionsLane?: HomeCollectionsLane;
+  onPressPastTripsMore?: () => void;
   onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
   onPressBell?: () => void;
@@ -1197,11 +1231,26 @@ function PostTripBody({
         onPressTripCta={onPressTripHeroCta}
       />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <PastTripsSection trips={phase.pastTrips} />
-        <CollectionStrip
-          title={phase.recommendationTitle}
-          collections={phase.recommendations}
-        />
+        {/* 라이브는 지난 여행이 없을 수 있다 — 빈 섹션 헤더만 남기지 않는다(TRIP-1369). */}
+        {phase.pastTrips.length > 0 ? (
+          <PastTripsSection
+            trips={phase.pastTrips}
+            onPressMore={onPressPastTripsMore}
+          />
+        ) : null}
+        {/* 라이브는 서버 장소 레인(TRIP-1209), 레인이 없는 프리뷰만 phase 의 고정 추천을 그린다. */}
+        {collectionsLane ? (
+          <CollectionsSection
+            sections={sections}
+            title={phase.recommendationTitle}
+            lane={collectionsLane}
+          />
+        ) : (
+          <CollectionStrip
+            title={phase.recommendationTitle}
+            collections={phase.recommendations}
+          />
+        )}
       </View>
     </>
   );
@@ -1216,6 +1265,7 @@ function PhaseBody({
   tripsError,
   phase,
   onPressSpotsMore,
+  onPressPastTripsMore,
   onPressTripHeroCta,
   onPressSearch,
   onPressMagazine,
@@ -1256,6 +1306,9 @@ function PhaseBody({
         <PostTripBody
           phase={phase}
           hero={hero}
+          sections={sections}
+          collectionsLane={collectionsLane}
+          onPressPastTripsMore={onPressPastTripsMore}
           onPressTripHeroCta={onPressTripHeroCta}
           onPressSearch={onPressSearch}
           onPressBell={onPressBell}
@@ -1275,6 +1328,7 @@ export function HomeScreen({
   onPressSavedPlaces,
   onPressSavedStays,
   onPressSpotsMore,
+  onPressPastTripsMore,
   onPressTripHeroCta,
   onPressSearch,
   onPressMagazine,
@@ -1302,6 +1356,7 @@ export function HomeScreen({
             tripsError={tripsError}
             phase={phase}
             onPressSpotsMore={onPressSpotsMore}
+            onPressPastTripsMore={onPressPastTripsMore}
             onPressTripHeroCta={onPressTripHeroCta}
             onPressSearch={onPressSearch}
             onPressMagazine={onPressMagazine}

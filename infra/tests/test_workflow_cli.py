@@ -17,8 +17,9 @@ class WorkflowCliTests(unittest.TestCase):
                 **os.environ, 'DEPLOY_ENVIRONMENT': 'dev', 'DEPLOY_MODE': 'plan',
                 'AWS_ACCOUNT_ID': '123456789012', 'AWS_REGION': 'ap-northeast-2',
                 'AWS_ROLE_ARN': 'arn:aws:iam::123456789012:role/trippilot-dev-github-deploy',
-                'GITHUB_REF': 'refs/heads/develop', 'DEPLOY_APPLICATION': 'true',
+                'GITHUB_REF': 'refs/heads/main', 'DEPLOY_APPLICATION': 'true',
                 'EMBEDDING_ENABLED': 'false', 'GITHUB_OUTPUT': str(output), 'DEPLOY_BRANCH': '',
+                'DEPLOY_TARGET': 'prod', 'GITHUB_ENV': str(Path(directory) / 'env'),
             }
             result = subprocess.run([sys.executable, str(SCRIPT)], env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)

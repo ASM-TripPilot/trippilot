@@ -112,6 +112,40 @@ trippilot:
       daily: ${ITINERARY_GENERATION_DAILY_LIMIT:10}
       # 상한을 받지 않는 개발자 계정 ID(쉼표 구분 UUID). 오타가 있으면 기동이 실패한다 — 조용히 빠지는 것보다 낫다.
       exempt-account-ids: ${ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS:}
+  # AI 도우미(U8). 대화 보존 = 마지막 턴 후 이만큼(DATA-U8-01) — 잠정값이고 처리방침이 정해지면 여기만 바꾼다.
+  # U10 자동화 구간(TRIP-1404). enabled 는 서버 킬 스위치다(REL-U10-06) — 끄면 새 무장·경로 기록 START 를 409 로 거절하고
+  # 기기가 그것을 보고 강등한다. 기본 켜짐: 기기 쪽 기능 플래그가 꺼져 있는 동안은 아무도 START 를 보내지 않는다.
+  location-automation:
+    enabled: ${LOCATION_AUTOMATION_ENABLED:true}
+    sweep-ms: ${LOCATION_AUTOMATION_SWEEP_MS:3600000}
+  assistant:
+    retention-days: ${ASSISTANT_RETENTION_DAYS:90}
+    # 한 턴의 서버 예산과 해석 한 번의 상한(PERF-U8-01·02). 앱은 15초를 기다린다.
+    turn-budget-ms: ${ASSISTANT_TURN_BUDGET_MS:13000}
+    interpret-stage-max-ms: ${ASSISTANT_INTERPRET_STAGE_MAX_MS:5000}
+    # 편집 제안 한 번의 상한과 제안이 [적용]을 기다리는 시간(O-U8-3·4 제안값).
+    edit-stage-max-ms: ${ASSISTANT_EDIT_STAGE_MAX_MS:8000}
+    proposal-ttl-minutes: ${ASSISTANT_PROPOSAL_TTL_MINUTES:30}
+    read-margin-ms: ${ASSISTANT_READ_MARGIN_MS:1000}
+    # 계정당 분당 턴(BR-U8-24)과 하루 LLM 턴(COST-U8-02 — 근거 없는 초기값, 넘으면 버튼 모드로 낮춘다).
+    rate-limit-per-minute: ${ASSISTANT_RATE_LIMIT_PER_MINUTE:20}
+    daily-llm-turn-limit: ${ASSISTANT_DAILY_LLM_TURN_LIMIT:30}
+    # 서비스 전역 월 LLM 턴 상한(COST-U8-04). 0 = 꺼짐. 20,000 은 2026-10-14 사용자 위임으로 정한 값이다 — 단가 실측 전이라
+    # 근거는 어림이다: 해석은 경량 티어이고 한 턴이 최대 두 번 부르므로(해석 + 편집 번역) 호출당 수 센트를 넘지 않는 한
+    # 월 수백 달러 아래에서 멈춘다. 일 상한 30 으로 치면 약 670 명이 매일 다 쓰는 양이다. 실측이 나오면 여기만 돌린다.
+    monthly-llm-call-limit: ${ASSISTANT_MONTHLY_LLM_CALL_LIMIT:20000}
+    # 보존 청소(DATA-U8-01·04) — 만료된 대화와 오래된 사용량 행. 하루 한 번.
+    usage-retention-days: ${ASSISTANT_USAGE_RETENTION_DAYS:40}
+    retention-sweep-ms: ${ASSISTANT_RETENTION_SWEEP_MS:86400000}
+    # 해석에 보내는 일정 크기의 상한(SEC-U8-08). 넘으면 오늘 ±1일만 보낸다.
+    snapshot-max-days: ${ASSISTANT_SNAPSHOT_MAX_DAYS:14}
+    snapshot-max-slots-per-day: ${ASSISTANT_SNAPSHOT_MAX_SLOTS_PER_DAY:20}
+    # 발화 해석 스위치(REL-U8-06). off = 버튼 모드(운영자 킬 스위치) · fake = 낱말 표 대역(로컬 기본)
+    # · http = 상대 AI 의 POST /ai/v1/dialogue/interpret(TRIP-1410). 주소·자격은 일정 경계와 같은 값을 쓴다.
+    interpret:
+      mode: ${ASSISTANT_INTERPRET_MODE:fake}
+      base-url: ${AI_URL:http://localhost:8000}
+      service-token: ${SERVICE_AUTH_TOKEN:}
   place:
     geocode:
       mode: ${PLACE_GEOCODE_MODE:stub}

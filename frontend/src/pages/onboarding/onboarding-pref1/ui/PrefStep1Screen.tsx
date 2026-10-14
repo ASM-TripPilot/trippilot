@@ -6,7 +6,8 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PrefTile } from '@/shared/ui/pref';
+import { chunkPairs } from '@/shared/lib/chunkPairs';
+import { PrefOptionTile, PrefStepHeader, PrefTile } from '@/shared/ui/pref';
 
 import {
   ActivityGlyph,
@@ -59,54 +60,6 @@ const PACE_OPTIONS: { slug: string; label: string; Icon: GlyphComponent }[] = [
   { slug: 'packed', label: '빡빡', Icon: LightningGlyph },
 ];
 
-// 2개씩 묶어 그리드 행을 만든다(7개라 마지막 행은 1개만 남는다 — Figma 그대로).
-function chunkPairs<T>(items: T[]): T[][] {
-  const rows: T[][] = [];
-  for (let i = 0; i < items.length; i += 2) {
-    rows.push(items.slice(i, i + 2));
-  }
-  return rows;
-}
-
-interface PaceTileProps {
-  slug: string;
-  label: string;
-  Icon: GlyphComponent;
-  selected: boolean;
-  onPress: () => void;
-}
-
-function PaceTile({
-  slug,
-  label,
-  Icon,
-  selected,
-  onPress,
-}: PaceTileProps): ReactElement {
-  return (
-    <Pressable
-      testID={`onboarding-pref1-pace-${slug}`}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className={`h-[72px] flex-1 items-center justify-center gap-[6px] rounded-button bg-canvas py-[14px] ${
-        selected ? 'border-[1.5px] border-primary' : 'border border-hairline'
-      }`}
-    >
-      <Icon size={24} selected={selected} />
-      <Text
-        className={
-          selected
-            ? 'font-noto-bold text-label font-bold text-primary-text'
-            : 'font-noto text-label text-body'
-        }
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 export function PrefStep1Screen({
   selectedStyles,
   selectedPace,
@@ -118,32 +71,16 @@ export function PrefStep1Screen({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="onboarding-pref1-root" className="flex-1 bg-canvas">
-        <View className="flex-row items-center justify-between px-lg pb-sm pt-2xl">
-          <View className="flex-row items-center gap-sm">
-            <View className="flex-row items-center gap-xs">
-              <View
-                testID="onboarding-pref1-progress-active"
-                className="h-[6px] w-[6px] rounded-pill bg-primary"
-              />
-              <View
-                testID="onboarding-pref1-progress-empty"
-                className="h-[6px] w-[6px] rounded-pill bg-hairline"
-              />
-            </View>
-            <Text className="font-noto text-caption text-muted">1 / 2</Text>
-          </View>
-          <Pressable
-            testID="onboarding-pref1-skip-top"
-            accessibilityRole="button"
-            onPress={onSkipAll}
-            className="flex-row items-center gap-[3px]"
-          >
-            <Text className="font-noto-bold text-body font-bold text-ink underline">
-              나중에 설정하고 시작
-            </Text>
-            <SkipChevronGlyph size={16} />
-          </Pressable>
-        </View>
+        <PrefStepHeader
+          dots={[
+            { testID: 'onboarding-pref1-progress-active', active: true },
+            { testID: 'onboarding-pref1-progress-empty', active: false },
+          ]}
+          progressLabel="1 / 2"
+          skipTestID="onboarding-pref1-skip-top"
+          onSkip={onSkipAll}
+          skipIcon={<SkipChevronGlyph size={16} />}
+        />
 
         <ScrollView className="flex-1">
           <View className="gap-[6px] px-lg pb-xs pt-md">
@@ -188,9 +125,9 @@ export function PrefStep1Screen({
             </View>
             <View className="flex-row gap-[11px]">
               {PACE_OPTIONS.map(({ slug, label, Icon }) => (
-                <PaceTile
+                <PrefOptionTile
                   key={slug}
-                  slug={slug}
+                  testID={`onboarding-pref1-pace-${slug}`}
                   label={label}
                   Icon={Icon}
                   selected={selectedPace === slug}

@@ -82,11 +82,14 @@ function SkeletonCard({ index }: { index: number }): ReactElement {
       testID={`my-trip-skeleton-${index}`}
       className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
     >
-      <Skeleton className="h-[178px] w-full bg-surface-soft" />
-      <View className="gap-sm px-[14px] pb-[14px] pt-[13px]">
-        <Skeleton className="h-[15px] w-2/3 rounded-input bg-surface-soft" />
-        <Skeleton className="h-[13px] w-1/2 rounded-input bg-surface-soft" />
-      </View>
+      {/* 펄스 루프는 카드 하나에 하나(TRIP-1363) — 테두리·배경은 정지. */}
+      <Skeleton>
+        <View className="h-[178px] w-full bg-surface-soft" />
+        <View className="gap-sm px-[14px] pb-[14px] pt-[13px]">
+          <View className="h-[15px] w-2/3 rounded-input bg-surface-soft" />
+          <View className="h-[13px] w-1/2 rounded-input bg-surface-soft" />
+        </View>
+      </Skeleton>
     </View>
   );
 }

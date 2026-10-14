@@ -110,6 +110,8 @@ services:
       # tripcom 은 세 값이 전부 있어야 기동한다. trip_sub3(AD_ID)가 **귀속의 열쇠**다(probe 실측
       # 2026-10-01) — 빠지면 사용자는 정상 이동하는데 수수료만 조용히 사라진다.
       AFFILIATE_MODE: ${AFFILIATE_MODE:-fallback}
+      # 도우미 발화 해석(U8). fake = 낱말 표 대역(로컬 기본) · off = 버튼 모드. http 는 아직 없다.
+      ASSISTANT_INTERPRET_MODE: ${ASSISTANT_INTERPRET_MODE:-fake}
       TRIPCOM_ALLIANCE_ID: ${TRIPCOM_ALLIANCE_ID:-}
       TRIPCOM_SID: ${TRIPCOM_SID:-}
       TRIPCOM_AD_ID: ${TRIPCOM_AD_ID:-}
@@ -305,6 +307,8 @@ services:
       # TMAP 실경로 API(TRIP-432). 설정 시 ChainedTravelAdapter 활성화 —
       # 미설정 = 기존 하버사인 추정 그대로.
       TMAP_API_KEY: ${TMAP_API_KEY:-}
+      # ODsay 대중교통 길찾기 — 설정 시 대중교통 실측만 ODsay 가 맡는다(TMAP 대중교통 상품 미구독).
+      ODSAY_API_KEY: ${ODSAY_API_KEY:-}
       # 행사 저장소(TRIP-421). 이미지가 data/ 를 통째로 담으므로 기본값만으로 배선된다 —
       # 키도 네트워크도 필요 없는 로컬 파일이라 켜 두는 것이 기본이다. 끄려면 .env 에
       # AI_EVENTS_STORE= (빈 값)  — `:-` 가 아니라 `-` 라서 빈 값이 기본값을 되살리지 않는다.

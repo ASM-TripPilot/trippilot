@@ -5,10 +5,9 @@ import {
   within,
   act,
 } from '@testing-library/react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
-import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
-import type { MapCenter, MapPin } from '@/shared/map';
+import { hostNodes, useAnimatedProbe } from '@/test-support/animatedProbe';
 
 import { GeneratingScreen } from './GeneratingScreen';
 
@@ -29,14 +28,9 @@ import { GeneratingScreen } from './GeneratingScreen';
  *    소스 가드(`itineraryTimeStructure`)는 `%`·`초`를 아예 안 봐서 이 **렌더 결과** 단언이 유일한 그물.
  *  - 🔴 실패는 삼켜지지 않는다(AC-7 · INV-4): `failed` 면 실패 표면 + [다시 시도]가 뜬다(핸들링 무변경).
  *  - 🔴 앱바 뒤로 셰브론이 **onBackground** 를 부른다(AC-4 — 취소 개념 소멸, 뒤로=백그라운드).
- *  - 🔴 지도 카드는 **pins 있을 때만** 뜬다(AC-5 · INV-2 안전): 없으면 정직하게 생략, 있으면 실 MapView.
  *
- * 3동작 뼈대: 준비 = 콜백 spy·pins 로 렌더 → 실행 = 렌더만/버튼 press → 단언 = 보이는 것·불린 콜백.
+ * 3동작 뼈대: 준비 = 콜백 spy 로 렌더 → 실행 = 렌더만/버튼 press → 단언 = 보이는 것·불린 콜백.
  * (SafeAreaProvider 래핑은 불필요 — `DraftScreen.test.tsx` 선례대로 직접 렌더.)
- *
- * ⚠️ 지도(실 `MapView`)는 env 키가 있어야 목 `map-native` 를 그린다(없으면 `map-failure`) — 그래서
- *   beforeEach 에서 키를 세운다(`PlaceDetailScreen.test.tsx` 선례). pins 없는 S1~S5 는 지도를 안 그려
- *   이 키와 무관.
  *
  * 한 파일로 합친 기록(TRIP-1150): 옛 `.bar`·`.pulse` 두 파일을 바깥 describe 로 붙였다. 두 파일은
  * 최상위에서 가짜 타이머·`Animated` 스파이를 켰는데, 그대로 두면 S1~S6 까지 그 아래서 돈다 — 그래서 각자의
@@ -50,28 +44,7 @@ const PERCENT = /\d\s*%/; // "48%" → "8%" 에 걸림
 const SECONDS = /\d\s*초/; // "10초쯤" → "0초" 에 걸림
 const DURATION = /\d\s*분|\d\s*시간/; // "이동 30분"·"2시간" 에 걸림, "시간 배치" 는 아님
 
-const CLIENT_ID_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
-let ORIGINAL_CLIENT_ID: string | undefined;
-
 const noop = () => {};
-
-/** 지도 카드 픽스처 — 부산 3핀(프리뷰 `MUST_VISIT_PREVIEW_PINS` 와 같은 모양)+중심. */
-const MAP_PINS: MapPin[] = [
-  { number: 1, lat: 35.1379, lng: 129.0596 },
-  { number: 2, lat: 35.1587, lng: 129.1604 },
-  { number: 3, lat: 35.163, lng: 129.0104 },
-];
-const MAP_CENTER: MapCenter = { lat: 35.1532, lng: 129.1104 };
-
-beforeEach(() => {
-  ORIGINAL_CLIENT_ID = process.env[CLIENT_ID_KEY];
-  process.env[CLIENT_ID_KEY] = 'test-naver-client-id';
-});
-
-afterEach(() => {
-  if (ORIGINAL_CLIENT_ID === undefined) delete process.env[CLIENT_ID_KEY];
-  else process.env[CLIENT_ID_KEY] = ORIGINAL_CLIENT_ID;
-});
 
 describe('🔴 S1 · AC-3·AC-4 — 진행 골격은 있고 하단(footer·2버튼)은 사라졌다', () => {
   it('앱바·진행 표시·체크리스트 3행은 있고 footer·[취소]·[백그라운드로]는 없다', () => {
@@ -147,49 +120,6 @@ describe('🔴 S5 · AC-4 — 앱바 뒤로 셰브론이 onBackground 를 부른
 
     fireEvent.press(screen.getByTestId('itinerary-generating-back'));
     expect(onBackground).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('🔴 S6 · AC-5 — 지도 카드는 pins 있을 때만 뜬다 (INV-2 안전 · 정직 폴백)', () => {
-  it('pins 없으면 지도 카드가 없다 (프로덕션 정직 폴백)', () => {
-    render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
-
-    // 부정 — 좌표가 없으면 지도 카드를 아예 안 그린다(빈 지도·가짜 좌표 금지).
-    expect(screen.queryByTestId('itinerary-generating-map')).toBeNull();
-    // 긍정 짝 — 진행 표면은 그대로 떴다(빈 렌더 공허 통과 방지).
-    expect(
-      screen.getByTestId('itinerary-generating-progress')
-    ).toBeOnTheScreen();
-  });
-
-  it('pins·center 를 주면 지도 카드 안에 실 MapView(map-native)가 뜬다', () => {
-    render(
-      <GeneratingScreen
-        onBackground={noop}
-        onRetry={noop}
-        pins={MAP_PINS}
-        center={MAP_CENTER}
-      />
-    );
-
-    // 긍정 — 지도 카드 래퍼가 뜨고, 그 안이 placeholder 가 아니라 실 MapView(목 map-native)다.
-    // (viewOnly·connectPins={false}·연결선 0 을 잠그던 소스층 `itineraryMapSurfaceStructure` 는 TRIP-1145 로 지웠다.)
-    const map = screen.getByTestId('itinerary-generating-map');
-    expect(within(map).getByTestId('map-native')).toBeTruthy();
-  });
-
-  it('pins 만 있고 center 가 없으면 지도 카드를 안 그린다 (게이트가 center 를 요구, 5-b 경고-1)', () => {
-    // 준비/실행 — center 없이 pins 만. 실 MapView 는 center 필수(`center.lat` 접근)라 이 조합으로
-    // 지도를 그리면 크래시한다. 게이트가 `pins && center` 둘 다 요구함을 잠근다 — `&& center` 를
-    // 지우는 뮤턴트는 이 케이스에서 지도를 그려 red 가 된다.
-    render(
-      <GeneratingScreen onBackground={noop} onRetry={noop} pins={MAP_PINS} />
-    );
-
-    expect(screen.queryByTestId('itinerary-generating-map')).toBeNull();
-    expect(
-      screen.getByTestId('itinerary-generating-progress')
-    ).toBeOnTheScreen();
   });
 });
 
@@ -318,84 +248,26 @@ describe('AI 일일 한도 얼굴', () => {
 });
 
 // TRIP-1069 · 옛 GeneratingScreen.bar.test.tsx — 가짜 타이머·Animated 스파이는 이 describe 안에서만 켠다.
-describe('진행 바 반복·동작 줄이기', () => {
+describe('진행 바 · 동작 줄이기', () => {
   /**
-   * TRIP-1125 · h07 진행 바(`itinerary-generating-progress`)의 동작 줄이기 계약(AC-9·AC-10, 01b Q2=(b)).
-   * 측정 기법은 아래 「단계 펄스」 describe 와 같다(JS 드라이버 강제 + 가짜 타이머).
+   * TRIP-1125 · h07 진행 바(`itinerary-generating-progress`)의 동작 줄이기 계약(AC-9, 01b Q2=(b)). "바가 실제로
+   * 미끄러지는가"(옛 B-1)와 "확인이 오기 전에 떠나면 안 움직인다"(옛 B-3)는 TRIP-1352 에서 지웠다 — 가짜 타이머로
+   * 애니메이션 값을 훑는 심판은 접근성 계약이 아니라 구현을 재서 느리고 깨지기 쉽다(실움직임은 6-b).
    *
    * ⚠️ jest 는 `onLayout` 을 부르지 않아 트랙 폭이 0 → translateX 가 항상 0 이다. 폭을 주지 않고
    *   "안 움직인다"를 재면 동작 줄이기를 무시하는 코드도 공허하게 통과한다 — 그래서 layout 이벤트로
    *   폭 300 을 먼저 준다.
    */
-
-  const NativeAnimatedHelper =
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('react-native/src/private/animated/NativeAnimatedHelper') as {
-      default: { shouldUseNativeDriver: (config: unknown) => boolean };
-    };
+  const probe = useAnimatedProbe();
 
   const noop = () => {};
   const BAR = 'itinerary-generating-progress';
   const TRACK_WIDTH = 300;
 
-  const reduceMotionMock = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
-  const reduceMotionDefault = reduceMotionMock.getMockImplementation();
-
-  const realTiming = Animated.timing;
-  const realSpring = Animated.spring;
-  const realDecay = Animated.decay;
-
-  let spies: jest.SpyInstance[] = [];
-  let animationConfigSpies: jest.SpyInstance[] = [];
-
-  beforeEach(() => {
-    jest.useFakeTimers();
-    spies = [
-      jest
-        .spyOn(NativeAnimatedHelper.default, 'shouldUseNativeDriver')
-        .mockReturnValue(false),
-    ];
-    // 설정 인자는 원본(useNativeDriver: true)대로 기록하되 실제로는 JS 로 돌린다 — `Animated.loop` 은
-    // shouldUseNativeDriver 가 아니라 설정의 useNativeDriver 를 보고 네이티브 루프로 넘겨서, 그대로
-    // 두면 jest 에서 단일 timing 루프가 한 바퀴만 돈다(기기에선 네이티브가 반복한다).
-    animationConfigSpies = [
-      jest
-        .spyOn(Animated, 'timing')
-        .mockImplementation((value, config) =>
-          realTiming(value, { ...config, useNativeDriver: false })
-        ),
-      jest
-        .spyOn(Animated, 'spring')
-        .mockImplementation((value, config) =>
-          realSpring(value, { ...config, useNativeDriver: false })
-        ),
-      jest
-        .spyOn(Animated, 'decay')
-        .mockImplementation((value, config) =>
-          realDecay(value, { ...config, useNativeDriver: false })
-        ),
-    ];
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-    [...spies, ...animationConfigSpies].forEach((spy) => spy.mockRestore());
-    if (reduceMotionDefault)
-      reduceMotionMock.mockImplementation(reduceMotionDefault);
-  });
-
   function giveTrackWidth(): void {
     fireEvent(screen.getByTestId(BAR), 'layout', {
       nativeEvent: { layout: { width: TRACK_WIDTH, height: 8 } },
     });
-  }
-
-  function hostNodes(node: ReactTestInstance): ReactTestInstance[] {
-    const own = typeof node.type === 'string' ? [node] : [];
-    const kids = node.children.filter(
-      (child): child is ReactTestInstance => typeof child !== 'string'
-    );
-    return [...own, ...kids.flatMap(hostNodes)];
   }
 
   /**
@@ -414,41 +286,20 @@ describe('진행 바 반복·동작 줄이기', () => {
     };
   }
 
-  function sampleSegments(totalMs: number, stepMs = 20): string[] {
-    const faces = [JSON.stringify(segment())];
-    for (let t = 0; t < totalMs; t += stepMs) {
-      act(() => {
-        jest.advanceTimersByTime(stepMs);
-      });
-      faces.push(JSON.stringify(segment()));
-    }
-    return faces;
-  }
-
-  async function renderWithTrack(): Promise<void> {
-    render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
-    await act(async () => {});
-    giveTrackWidth();
-  }
-
-  describe('B-1 · AC-10 — 동작 줄이기가 꺼져 있으면 바가 지금처럼 반복해서 미끄러진다', () => {
-    it('세그먼트가 보이고, 시간이 흐르면 움직이며, 한 바퀴를 넘긴 3초 이후에도 움직인다', async () => {
-      await renderWithTrack();
-
-      expect(segment().width).toBeGreaterThan(0);
-
-      const faces = sampleSegments(4000);
-      expect(new Set(faces).size).toBeGreaterThan(1);
-      expect(new Set(faces.slice(3000 / 20)).size).toBeGreaterThan(1);
-    });
-  });
-
   describe('🔴 B-2 · AC-9 · Q2(b) — 동작 줄이기가 켜져 있으면 바가 보이는 채로 한 자리에 멈춘다', () => {
     it('시간이 흘러도 세그먼트가 그대로이고, 트랙 안에 완전히 보인다', async () => {
-      reduceMotionMock.mockResolvedValue(true);
-      await renderWithTrack();
+      probe.setReduceMotion(true);
+      render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
+      await act(async () => {});
+      giveTrackWidth();
 
-      const faces = sampleSegments(3000);
+      const faces = [JSON.stringify(segment())];
+      for (let t = 0; t < 3000; t += 20) {
+        act(() => {
+          jest.advanceTimersByTime(20);
+        });
+        faces.push(JSON.stringify(segment()));
+      }
       expect(new Set(faces).size).toBe(1);
 
       // 빈 회색 트랙(세그먼트가 왼쪽 밖에 숨음)이 아니다 — 폭 전체가 트랙 안에 있다.
@@ -458,101 +309,22 @@ describe('진행 바 반복·동작 줄이기', () => {
       expect(translateX + width).toBeLessThanOrEqual(TRACK_WIDTH);
     });
   });
-
-  describe('B-3 · AC-10 — 동작 줄이기 확인이 오기 전에 떠나면 바가 움직이지 않는다', () => {
-    it('확인 Promise 가 언마운트 뒤에 풀려도 어떤 애니메이션 값도 움직이지 않는다', async () => {
-      const view = render(
-        <GeneratingScreen onBackground={noop} onRetry={noop} />
-      );
-      giveTrackWidth();
-
-      view.unmount();
-      // 확인이 RN 의 언마운트 뒤 값 떼어 내기(타이머)보다 늦게 오는 경우 — 먼저 비우면 RN 이 대신 멈춰
-      // 줘 뒤늦은 시작이 안 보인다.
-      act(() => {
-        jest.advanceTimersByTime(100);
-      });
-      await act(async () => {});
-
-      const values = animationConfigSpies.flatMap((spy) =>
-        spy.mock.calls.map((call) => call[0] as { __getValue: () => number })
-      );
-      const before = values.map((value) => value.__getValue());
-      act(() => {
-        jest.advanceTimersByTime(3000);
-      });
-
-      expect(values.map((value) => value.__getValue())).toEqual(before);
-    });
-  });
 });
 
-// 옛 GeneratingScreen.pulse.test.tsx — 가짜 타이머·Animated 스파이는 이 describe 안에서만 켠다.
+// 옛 GeneratingScreen.pulse.test.tsx — 가짜 타이머·JS 드라이버 강제는 이 describe 안에서만 켠다.
 describe('단계 펄스', () => {
   /**
-   * TRIP-1046 · h07 생성 중 3단계 원의 **순차 펄스** 계약(QA #025). 가짜 타이머·JS 드라이버 강제는 이
-   * describe 안에서만 켠다 — 최상위 S1~S6 이 그 아래서 돌지 않게(TRIP-1150 합치기).
-   *
-   * 무엇을 보장하나:
-   *  - 🔴 각 단계 행에 펄스 원(`itinerary-generating-pulse-n`)이 정확히 1개, 세 원은 **같은 얼굴**(⚑C —
-   *    체크·반채움·`완료`/`대기` 차등 금지).
-   *  - 🔴 원이 실제로 움직이고, 시작이 1→2→3 순서로 어긋난다. 애니메이션 설정은 전부 네이티브 드라이버.
-   *  - 🔴 기기 "동작 줄이기"가 켜져 있으면 움직이지 않는 완전히 보이는 원.
+   * TRIP-1046 · h07 생성 중 3단계 원의 펄스 계약(QA #025). "원이 실제로 움직이고 1→2→3 순서로 번지는가"(옛 P-2)·
+   * 정리(P-2d)·확인 전 이탈(P-2e)·세 원이 같은 얼굴인가(P-1 의 구조 서명)는 TRIP-1352 에서 지웠다 — 구현을 재는
+   * 타이머 훑기라 느리고(가짜 타이머 20ms 표본 수백 회) 실움직임은 6-b 몫이다. 남긴 것:
+   *  - 🔴 각 단계 행에 펄스 원이 정확히 1개(⚑C — 완료·대기 차등 없는 균일한 진행 표식).
+   *  - 🔴 기기 "동작 줄이기"가 켜져 있으면 멈춘 완전한 원(접근성).
    *  - 실패·409 얼굴엔 펄스 원이 없다.
-   *
-   * ⚠️ jest 의 RN 목은 네이티브 드라이버 애니메이션을 JS 값에 반영하지 않는다(02a ★2 실측) — 그래서
-   *   `shouldUseNativeDriver` 를 false 로 스파이해 JS 로 돌리고(★3), 대신 "네이티브로 설정했나"는
-   *   `Animated.timing` 등의 설정 인자로 따로 잰다.
-   *
-   * 3동작 뼈대: 준비 = 가짜 타이머·스파이 → 실행 = 렌더 후 시간 흘리기 → 단언 = 원의 모양이 바뀌었나.
    */
-
-  // RN 0.81 내부 경로 — 바뀌면 require 가 throw 해 조용히 green 이 되지 않는다(02a ★3).
-  const NativeAnimatedHelper =
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('react-native/src/private/animated/NativeAnimatedHelper') as {
-      default: { shouldUseNativeDriver: (config: unknown) => boolean };
-    };
+  const probe = useAnimatedProbe();
 
   const noop = () => {};
   const PULSE = /^itinerary-generating-pulse-/;
-  const LABELS = ['장소 수집', '동선 계산', '시간 배치'] as const;
-
-  const reduceMotionMock = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
-  const reduceMotionDefault = reduceMotionMock.getMockImplementation();
-
-  let spies: jest.SpyInstance[] = [];
-  let animationConfigSpies: jest.SpyInstance[] = [];
-
-  beforeEach(() => {
-    jest.useFakeTimers();
-    spies = [
-      jest
-        .spyOn(NativeAnimatedHelper.default, 'shouldUseNativeDriver')
-        .mockReturnValue(false),
-    ];
-    animationConfigSpies = [
-      jest.spyOn(Animated, 'timing'),
-      jest.spyOn(Animated, 'spring'),
-      jest.spyOn(Animated, 'decay'),
-    ];
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-    [...spies, ...animationConfigSpies].forEach((spy) => spy.mockRestore());
-    if (reduceMotionDefault)
-      reduceMotionMock.mockImplementation(reduceMotionDefault);
-  });
-
-  /** 원 서브트리(자기 자신 포함)의 호스트 노드들. */
-  function hostNodes(node: ReactTestInstance): ReactTestInstance[] {
-    const own = typeof node.type === 'string' ? [node] : [];
-    const kids = node.children.filter(
-      (child): child is ReactTestInstance => typeof child !== 'string'
-    );
-    return [...own, ...kids.flatMap(hostNodes)];
-  }
 
   /** 움직이는 얼굴 — 서브트리 호스트들의 opacity·transform(02a ★6). */
   function face(n: number): string {
@@ -565,43 +337,13 @@ describe('단계 펄스', () => {
     );
   }
 
-  /** 구조 서명 — 호스트 타입·className 재귀(testID·style 제외, 02a ★7). */
-  function signature(node: ReactTestInstance): unknown {
-    if (typeof node.type !== 'string') {
-      return node.children
-        .filter(
-          (child): child is ReactTestInstance => typeof child !== 'string'
-        )
-        .map(signature);
-    }
-    return {
-      type: node.type,
-      className: node.props.className,
-      children: node.children.map((child) =>
-        typeof child === 'string' ? child : signature(child)
-      ),
-    };
-  }
-
-  /** 20ms 씩 `totalMs` 동안 세 원의 얼굴을 뜬다. [0] = 흘리기 전. */
-  function sampleFaces(totalMs = 3000, stepMs = 20): string[][] {
-    const perDot: string[][] = [[face(1)], [face(2)], [face(3)]];
-    for (let t = 0; t < totalMs; t += stepMs) {
-      act(() => {
-        jest.advanceTimersByTime(stepMs);
-      });
-      [1, 2, 3].forEach((n, i) => perDot[i].push(face(n)));
-    }
-    return perDot;
-  }
-
   /** 마운트 후 isReduceMotionEnabled 의 Promise 를 비운다(02a ★4). */
   async function renderProgress(): Promise<void> {
     render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
     await act(async () => {});
   }
 
-  describe('🔴 P-1 · AC-1 — 단계 행마다 펄스 원 1개, 세 원은 같은 얼굴(⚑C)', () => {
+  describe('🔴 P-1a · AC-1 — 단계 행마다 펄스 원 1개', () => {
     it('각 단계 행 안에 itinerary-generating-pulse-n 이 정확히 1개씩, 모두 3개다', async () => {
       await renderProgress();
 
@@ -613,133 +355,23 @@ describe('단계 펄스', () => {
       });
       expect(screen.getAllByTestId(PULSE)).toHaveLength(3);
     });
-
-    it('세 원의 구조(타입·className)가 같고, 행 안 글자는 라벨뿐이다(완료·대기 없음)', async () => {
-      await renderProgress();
-
-      const [s1, s2, s3] = [1, 2, 3].map((n) =>
-        signature(screen.getByTestId(`itinerary-generating-pulse-${n}`))
-      );
-      expect(s2).toEqual(s1);
-      expect(s3).toEqual(s1);
-
-      LABELS.forEach((label, i) => {
-        const step = screen.getByTestId(`itinerary-generating-step-${i + 1}`);
-        const texts = within(step)
-          .queryAllByText(/.+/)
-          .map((node) => node.props.children);
-        expect(texts).toEqual([label]);
-      });
-      expect(screen.queryAllByText(/완료|대기/)).toHaveLength(0);
-    });
-  });
-
-  describe('🔴 P-2 · AC-2 — 원이 움직이고, 1→2→3 순서로 번지며, 네이티브 드라이버다', () => {
-    it('시간이 흐르면 세 원 모두 모양(opacity/transform)이 바뀐다', async () => {
-      await renderProgress();
-
-      const perDot = sampleFaces();
-
-      perDot.forEach((faces) => expect(new Set(faces).size).toBeGreaterThan(1));
-    });
-
-    it('처음 움직이기 시작하는 순서가 1번 → 2번 → 3번이다(시작이 어긋난다)', async () => {
-      await renderProgress();
-
-      const perDot = sampleFaces();
-      const firstMove = perDot.map((faces) =>
-        faces.findIndex((f) => f !== faces[0])
-      );
-
-      firstMove.forEach((index) => expect(index).not.toBe(-1));
-      expect(firstMove[0]).toBeLessThan(firstMove[1]);
-      expect(firstMove[1]).toBeLessThan(firstMove[2]);
-    });
-
-    it('한 번 깜빡이고 멈추지 않는다 — 3~4초 구간에서도 세 원 모두 모양이 바뀐다(반복)', async () => {
-      await renderProgress();
-
-      // 한 바퀴(약 1.2초)+어긋남(0.6초)을 넘긴 뒤의 창만 본다 — loop 없이 한 번만 펄스하면 여기선 정지.
-      const perDot = sampleFaces(4000);
-      const lateWindow = perDot.map((faces) => faces.slice(3000 / 20));
-
-      lateWindow.forEach((faces) =>
-        expect(new Set(faces).size).toBeGreaterThan(1)
-      );
-    });
-
-    it('Animated.timing/spring/decay 설정이 전부 useNativeDriver: true 다', async () => {
-      await renderProgress();
-      sampleFaces(1500);
-
-      const configs = animationConfigSpies.flatMap((spy) =>
-        spy.mock.calls.map((call) => call[1] as { useNativeDriver?: boolean })
-      );
-      // 진행 바 1개 + 펄스 1개 이상.
-      expect(configs.length).toBeGreaterThan(1);
-      configs.forEach((config) => expect(config.useNativeDriver).toBe(true));
-    });
-  });
-
-  describe('P-2d · AC-2 — 화면이 사라지면 펄스도 멈춘다(정리)', () => {
-    it('언마운트 뒤에는 시간이 흘러도 어떤 애니메이션 값도 더 바뀌지 않는다', async () => {
-      const view = render(
-        <GeneratingScreen onBackground={noop} onRetry={noop} />
-      );
-      await act(async () => {});
-      // 1번 원만 출발하고 2·3번은 아직 어긋남 대기 중인 시점에 떠난다.
-      act(() => {
-        jest.advanceTimersByTime(100);
-      });
-
-      // 애니메이션을 건 값들 — timing/spring/decay 의 첫 인자(진행 바 + 펄스).
-      const values = animationConfigSpies.flatMap((spy) =>
-        spy.mock.calls.map((call) => call[0] as { __getValue: () => number })
-      );
-      // 짝 — 진행 바 1개 + 펄스 값들이 실제로 잡혔다(비면 아래 "안 바뀐다"가 공허 통과).
-      expect(values.length).toBeGreaterThan(1);
-
-      view.unmount();
-      const before = values.map((value) => value.__getValue());
-      act(() => {
-        jest.advanceTimersByTime(3000);
-      });
-
-      expect(values.map((value) => value.__getValue())).toEqual(before);
-    });
-  });
-
-  describe('P-2e · AC-2 — 동작 줄이기 확인이 오기 전에 떠나면 펄스를 시작하지 않는다', () => {
-    it('확인 Promise 가 언마운트 뒤에 풀려도 어떤 애니메이션 값도 움직이지 않는다', async () => {
-      const view = render(
-        <GeneratingScreen onBackground={noop} onRetry={noop} />
-      );
-      const values = animationConfigSpies.flatMap((spy) =>
-        spy.mock.calls.map((call) => call[0] as { __getValue: () => number })
-      );
-      expect(values.length).toBeGreaterThan(1);
-
-      // Promise 를 비우기 **전에** 떠난다 — 그 뒤 풀리는 확인이 시작을 부르면 안 된다.
-      view.unmount();
-      const before = values.map((value) => value.__getValue());
-      await act(async () => {});
-      act(() => {
-        jest.advanceTimersByTime(3000);
-      });
-
-      expect(values.map((value) => value.__getValue())).toEqual(before);
-    });
   });
 
   describe('🔴 P-4 · AC-4 — 동작 줄이기가 켜져 있으면 펄스를 멈춘 완전한 원', () => {
     it('시간이 흘러도 세 원이 그대로이고, 같은 모양이며, 흐려지거나 줄지 않았다', async () => {
-      reduceMotionMock.mockResolvedValue(true);
+      probe.setReduceMotion(true);
       await renderProgress();
 
       // 짝 — 원이 실제로 있다(없으면 아래 "안 움직인다"가 공허하게 통과).
       expect(screen.getAllByTestId(PULSE)).toHaveLength(3);
 
-      const perDot = sampleFaces();
+      const perDot: string[][] = [[face(1)], [face(2)], [face(3)]];
+      for (let t = 0; t < 3000; t += 20) {
+        act(() => {
+          jest.advanceTimersByTime(20);
+        });
+        [1, 2, 3].forEach((n, i) => perDot[i].push(face(n)));
+      }
       perDot.forEach((faces) => expect(new Set(faces).size).toBe(1));
       expect(perDot[1][0]).toBe(perDot[0][0]);
       expect(perDot[2][0]).toBe(perDot[0][0]);
@@ -786,5 +418,134 @@ describe('단계 펄스', () => {
       expect(screen.getByTestId('itinerary-generation-busy')).toBeOnTheScreen();
       expect(screen.queryAllByTestId(PULSE)).toHaveLength(0);
     });
+  });
+});
+
+// TRIP-1384 · h07 진행 표면의 "빈 일정 카드 섞기" 일러스트. 가짜 타이머·JS 드라이버 강제는 이 describe 안에서만 켠다.
+describe('빈 일정 카드 섞기 일러스트', () => {
+  /**
+   * 생김새(색·픽셀)는 단언하지 않는다(README 판정 4) — 존재·글자 0·접근성 숨김·동작 줄이기 정지만 잠근다.
+   * 실제로 섞이는 모양은 6-b 실기 몫.
+   */
+  const probe = useAnimatedProbe();
+  const noop = () => {};
+  const ILLUSTRATION = 'itinerary-generating-illustration';
+  const TOP_CARD = 'itinerary-generating-illustration-card-top';
+
+  async function renderProgress(): Promise<void> {
+    render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
+    await act(async () => {});
+  }
+
+  function topFace(): string {
+    const card = screen.getByTestId(TOP_CARD, { includeHiddenElements: true });
+    return JSON.stringify(
+      hostNodes(card).map((node) => {
+        const style = StyleSheet.flatten(node.props.style) ?? {};
+        return style.transform;
+      })
+    );
+  }
+
+  /** 카드 컨테이너(Animated.View 래퍼)까지 올라가 transform 을 읽는다. */
+  function wrapperFace(): string {
+    let node = screen.getByTestId(TOP_CARD, { includeHiddenElements: true });
+    const faces: unknown[] = [];
+    for (let i = 0; i < 3 && node.parent; i += 1) {
+      node = node.parent;
+      const style = StyleSheet.flatten(node.props.style) ?? {};
+      faces.push(style.transform);
+    }
+    return JSON.stringify(faces);
+  }
+
+  it('진행 카드·3단계와 함께 일러스트가 뜬다 (긍정 짝)', async () => {
+    await renderProgress();
+
+    expect(
+      screen.getByTestId(ILLUSTRATION, { includeHiddenElements: true })
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId('itinerary-generating-progress')
+    ).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^itinerary-generating-step-/)).toHaveLength(
+      3
+    );
+    [1, 2, 3].forEach((n) =>
+      expect(
+        screen.getByTestId(`itinerary-generating-pulse-${n}`)
+      ).toBeOnTheScreen()
+    );
+  });
+
+  it('일러스트 안에는 글자가 하나도 없다 (INV-1/2/3)', async () => {
+    await renderProgress();
+
+    const illustration = screen.getByTestId(ILLUSTRATION, {
+      includeHiddenElements: true,
+    });
+    // 짝 — 카드 3장이 실제로 있다(없으면 "글자 0" 이 공허하게 통과한다).
+    expect(
+      within(illustration).queryAllByTestId(
+        /^itinerary-generating-illustration-card-/,
+        { includeHiddenElements: true }
+      )
+    ).toHaveLength(3);
+    expect(
+      within(illustration).queryAllByText(/.*/, { includeHiddenElements: true })
+    ).toHaveLength(0);
+  });
+
+  it('접근성 트리에서 숨겨져 스크린리더가 읽지 않는다', async () => {
+    await renderProgress();
+
+    const illustration = screen.getByTestId(ILLUSTRATION, {
+      includeHiddenElements: true,
+    });
+    expect(illustration.props.accessibilityElementsHidden).toBe(true);
+    expect(illustration.props.importantForAccessibility).toBe(
+      'no-hide-descendants'
+    );
+    // 기본 질의(숨김 제외)로는 보이지 않는다.
+    expect(screen.queryByTestId(ILLUSTRATION)).toBeNull();
+  });
+
+  it('동작 줄이기가 꺼져 있으면 카드가 움직이고 (긍정 짝)', async () => {
+    probe.setReduceMotion(false);
+    await renderProgress();
+
+    const faces = new Set([wrapperFace()]);
+    for (let t = 0; t < 3600; t += 100) {
+      act(() => {
+        jest.advanceTimersByTime(100);
+      });
+      faces.add(wrapperFace());
+    }
+    expect(faces.size).toBeGreaterThan(1);
+  });
+
+  it('동작 줄이기가 켜져 있으면 시간이 흘러도 정지 컷 그대로다', async () => {
+    probe.setReduceMotion(true);
+    await renderProgress();
+
+    // 짝 — 카드가 있다.
+    expect(topFace()).toBeTruthy();
+    const faces = new Set([wrapperFace()]);
+    for (let t = 0; t < 3600; t += 100) {
+      act(() => {
+        jest.advanceTimersByTime(100);
+      });
+      faces.add(wrapperFace());
+    }
+    expect(faces.size).toBe(1);
+  });
+
+  it('실패 얼굴에는 일러스트가 없다', async () => {
+    render(<GeneratingScreen onBackground={noop} onRetry={noop} failed />);
+    await act(async () => {});
+
+    expect(
+      screen.queryByTestId(ILLUSTRATION, { includeHiddenElements: true })
+    ).toBeNull();
   });
 });

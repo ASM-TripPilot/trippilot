@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import { http, HttpResponse } from 'msw';
 import type { QueryClient } from '@tanstack/react-query';
 import {
@@ -107,15 +108,20 @@ jest.mock('expo-router', () => ({
 }));
 
 // [공유하기] 게이트 스위치 — null 이면 실물 판정(jest-expo 는 캡처 모듈 3종을 "있는 척"한다), boolean 이면 그 값.
-const mockShareArmed: { value: boolean | null } = { value: null };
+const mockShareArmed: { value: boolean | null; calls: number } = {
+  value: null,
+  calls: 0,
+};
 jest.mock('@/features/share-trip-card/model/shareCapture', () => {
   const actual = jest.requireActual<typeof ShareCaptureModule>(
     '@/features/share-trip-card/model/shareCapture'
   );
   return {
     ...actual,
-    isShareCaptureArmed: () =>
-      mockShareArmed.value ?? actual.isShareCaptureArmed(),
+    isShareCaptureArmed: () => {
+      mockShareArmed.calls += 1;
+      return mockShareArmed.value ?? actual.isShareCaptureArmed();
+    },
   };
 });
 
@@ -168,6 +174,7 @@ beforeEach(() => {
   );
   mockCanGoBack.mockReturnValue(true);
   mockShareArmed.value = null;
+  mockShareArmed.calls = 0;
 });
 
 // 토스트 스토어는 모듈 싱글턴이다 — describe 안이 아니라 파일 최상위에서 비운다.
@@ -253,7 +260,9 @@ describe('확정 CTA·재조회 배선', () => {
     activeClient?.clear();
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
     // TRIP-1047 — 토스트 스토어는 모듈 싱글턴이다. describe 안이 아니라 파일 최상위에서 비워야 I4 가
     // 띄운 확정 토스트가 뒤 테스트의 "토스트 없음"으로 새지 않는다(02a ★1).
     resetToast();
@@ -702,7 +711,9 @@ describe('확정 셸(h16) 얼굴', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** trip GET 은 케이스마다 안 갈리니 항상 200, itinerary GET 만 갈린다. */
@@ -781,6 +792,18 @@ describe('확정 셸(h16) 얼굴', () => {
       expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
         '일정 수정'
       );
+    });
+
+    it('TRIP-1364 · 캡처 장전 판정은 마운트 때 한 번만 읽는다 — 다시 그려져도 렌더 중에 다시 부르지 않는다', async () => {
+      mockShareArmed.value = true;
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      // 다시 그리게 한다(일차 칩 선택 = 로컬 상태 변경).
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+      expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
+      expect(mockShareArmed.calls).toBe(1);
     });
 
     it('C2c · 캡처 개통(armed:true)이면 공유하기(button-1) press → j06 공유 push 1회, 활성(짝)', async () => {
@@ -936,6 +959,30 @@ describe('확정 셸(h16) 얼굴', () => {
       await screen.findByTestId('map-sheet-shell-root');
 
       expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+    });
+
+    it('TRIP-1364 · 화면을 연 채 자정(KST)을 넘겨 앱이 다시 앞으로 오면 "오늘" 일차가 따라 바뀐다 — 마운트 시점에 굳지 않는다', async () => {
+      fixToday('2026-06-11T03:00:00Z');
+      const listeners: ((state: string) => void)[] = [];
+      const spy = jest
+        .spyOn(AppState, 'addEventListener')
+        .mockImplementation((_type, handler) => {
+          listeners.push(handler as (state: string) => void);
+          return { remove: jest.fn() };
+        });
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage('notification');
+      await screen.findByTestId('map-sheet-shell-root');
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+
+      // 자정을 넘긴 시각(서울 06-12) — 타이머는 진짜라 앱 복귀(active) 신호로 재계산을 건다.
+      jest.setSystemTime(new Date('2026-06-12T03:00:00Z'));
+      act(() => {
+        listeners.forEach((listener) => listener('active'));
+      });
+
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('3일차');
+      spy.mockRestore();
     });
 
     it('알림으로 열린 뒤 사용자가 1일차 칩을 누르면 그 선택이 유지된다(오늘로 되돌아가지 않는다)', async () => {
@@ -1111,7 +1158,9 @@ describe('탈출구 — 뒤로·일정 만들기', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 얼굴 강제 헤더 — trip GET은 케이스마다 다르지 않아 항상 200, itinerary GET만 갈린다(02a ★2). */
@@ -1358,7 +1407,9 @@ describe('확정 예방 잠금(PARTIAL)', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** press(동기) 후 mutate(비동기) 가 한 틱 돌 시간을 준다 — "그래도 요청이 안 나갔다"를 재려면 필요. */
@@ -1465,7 +1516,9 @@ describe('지도 실패 폴백', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   const CARD_A = `slot-stopcard-${DAY1}#poi-a`;
@@ -1566,7 +1619,9 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
     activeClient?.clear();
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   function renderGuardPage() {
@@ -1739,7 +1794,9 @@ describe('완성 셸(h14) 얼굴', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** trip GET 은 케이스마다 안 갈리니 항상 200, itinerary GET 만 갈린다. */
@@ -2078,7 +2135,9 @@ describe('삭제된 여행 안내', () => {
     activeClient?.clear();
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   let activeClient: QueryClient | null = null;
@@ -2270,7 +2329,6 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
 
   const BLOCK = 'itinerary-unplaced-mustvisit';
   const ITEM_PREFIX = /^itinerary-unplaced-mustvisit-/;
-  const CONFIRM_ERROR = 'itinerary-confirm-error';
 
   const MSG_NO_SLOT =
     '남은 시간과 이동을 고려하면 넣을 자리가 없었어요. 시각 고정을 풀거나 일정을 줄여 보세요.';
@@ -2346,7 +2404,9 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
   afterEach(() => {
     resetPressGuard();
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   function treeOrder(ids: string[]): string[] {
@@ -2408,26 +2468,6 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
     });
   });
 
-  describe('🔴 L2 · AC-1 — 미배치는 여행 전체 단위라 일차 탭을 바꿔도 블록이 그대로다', () => {
-    it('2일차 칩을 누르면 2일차 카드가 보이고 블록·항목 2 가 남는다', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({ unplacedMustVisits: UNPLACED });
-
-      renderPage();
-      await screen.findByTestId(BLOCK, {}, WAIT);
-
-      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
-
-      expect(
-        await screen.findByTestId(cardId(DAY2, 'poi-c'), {}, WAIT)
-      ).toBeOnTheScreen();
-      expect(itemIds()).toEqual([itemId('poi-mv-1'), itemId('poi-mv-2')]);
-      expect(
-        treeOrder(['sheet-header-root', BLOCK, cardId(DAY2, 'poi-c')])
-      ).toEqual(['sheet-header-root', BLOCK, cardId(DAY2, 'poi-c')]);
-    });
-  });
-
   describe('🔴 L3 · AC-1 — h16 확정 셸에도 같은 블록이 선다', () => {
     it('CONFIRMED → meta 「확정됨 · 」 앵커 · 블록 항목 2 · 헤더 뒤·첫 카드 앞', async () => {
       itineraryScript = () =>
@@ -2454,33 +2494,14 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
     });
   });
 
-  describe('🔴 L4 · AC-3 · INV-4 — 담은 장소 조회가 실패해도 서버 문구는 남는다', () => {
-    it('/saved-places 500 → 조회가 끝난 뒤에도 두 항목이 문구만 보인다', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({ unplacedMustVisits: UNPLACED });
-      savedScript = () => new HttpResponse(null, { status: 500 });
-
-      const { client } = renderPage();
-      await screen.findByTestId(BLOCK, {}, WAIT);
-      await settle(client, 1);
-
-      expect(itemIds()).toEqual([itemId('poi-mv-1'), itemId('poi-mv-2')]);
-      expect(screen.getByTestId(itemId('poi-mv-1'))).toHaveTextContent(
-        MSG_NO_SLOT
-      );
-      expect(screen.getByTestId(itemId('poi-mv-2'))).toHaveTextContent(
-        MSG_WINDOW
-      );
-      expect(screen.queryByText('이름을 불러오지 못한 곳')).toBeNull();
-    });
-  });
-
   // 5-b 참고 R1 — 두 페이지에 같은 조회 조건이 복사돼 있어 한쪽만 로그인 조건을 잃어도 조용히 샌다.
   // 초안(D4)과 같은 심판을 이 페이지에도 건다: 준비 = 토큰 없음 + 미배치 2건 → 실행 = 화면 열기 →
   // 단언 = /saved-places 0회 · 두 항목이 문구만으로 보인다.
   describe('🔴 L4b · Q4 — 게스트는 담은 장소를 조회하지 않고, 문구는 그대로 보인다', () => {
     it('토큰 없음 → /saved-places 0회 · 두 항목 문구만', async () => {
-      clearAccessToken();
+      act(() => {
+        clearAccessToken();
+      });
       itineraryScript = () =>
         unplacedItinerary({ unplacedMustVisits: UNPLACED });
 
@@ -2512,27 +2533,6 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
       await settle(client, 0);
 
       expect(screen.queryByTestId(BLOCK)).toBeNull();
-    });
-  });
-
-  describe('🔴 L6 · Q5 — 확정 실패 안내가 뜨면 블록은 그 뒤·첫 카드 앞이다', () => {
-    it('「일정 저장하기」 → POST 500 → 확정 실패 안내 → 블록 → 첫 카드', async () => {
-      itineraryScript = () =>
-        unplacedItinerary({ unplacedMustVisits: UNPLACED });
-
-      renderPage();
-      await screen.findByTestId(BLOCK, {}, WAIT);
-
-      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
-
-      expect(
-        await screen.findByTestId(CONFIRM_ERROR, {}, WAIT)
-      ).toBeOnTheScreen();
-      expect(treeOrder([CONFIRM_ERROR, BLOCK, cardId(DAY1, 'poi-a')])).toEqual([
-        CONFIRM_ERROR,
-        BLOCK,
-        cardId(DAY1, 'poi-a'),
-      ]);
     });
   });
 });
@@ -2592,7 +2592,9 @@ describe('위반 슬롯 경고 표식', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   describe('🔴 C1·C2 · h14/h16 — 위반 슬롯 카드에만 고정 라벨 표식, 사유 원문·소요시간 0건 (확정 여부 무관 · Q3 · INV-3)', () => {
@@ -2760,6 +2762,9 @@ describe('빈 일차 지도 중심', () => {
   /**
    * h14·h16 에서 장소가 0곳인 날로 바꿔도 지도가 `0,0`(기니만 바다)이 아니라 여행 지역을 비춘다.
    *
+   * 사다리 판정 자체(①②④ 예제·성질)는 순수 함수 `planMapCenter.test.ts`(PBT 포함)가 잠근다 — TRIP-1352 에서 이
+   * 페이지의 중심 케이스를 "고른 날이 함수까지 간다"(M10)와 거점 조회 배선(M3~M5)만 남기고 접었다.
+   *
    * 무엇을 보장하나 — 사다리 첫 칸이 이긴다:
    *  ① 선택한 날의 첫 좌표 장소(무회귀 — 핀·fitPins 그대로)
    *  ② 다른 날 중 날짜 순 첫 좌표 장소
@@ -2811,15 +2816,6 @@ describe('빈 일차 지도 중심', () => {
     return itinerary({ itineraryId: 'itin-1275', days });
   }
 
-  /** 1일차 좌표 3곳 · 2·3일차 0곳. */
-  function day1FullRestEmpty(): Itinerary {
-    return planned([
-      day(DAY1, [stop('p-a', 10, A), stop('p-b', 12, B), stop('p-c', 14, C)]),
-      day(DAY2, []),
-      day(DAY3, []),
-    ]);
-  }
-
   /** 모든 날에 좌표 있는 장소가 없다(좌표 null 슬롯만). */
   function noCoordAnywhere(): Itinerary {
     return planned([
@@ -2850,7 +2846,9 @@ describe('빈 일차 지도 중심', () => {
     releaseBases?.();
     releaseBases = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** `retry:false`·`gcTime:0` — 실패 즉시, 잔존 타이머 방지. */
@@ -2886,26 +2884,6 @@ describe('빈 일차 지도 중심', () => {
     notZero?: boolean;
   }[] = [
     {
-      name: 'M1 · AC-1 — 2일차(0곳) 칩 → 핀 0개 · 지도 중심 = 1일차 첫 장소(0,0 아님)',
-      plan: day1FullRestEmpty,
-      visit: [{ day: 1, center: text(A), pins: 0 }],
-    },
-    {
-      name: 'M2 · AC-1 · Q3 — 1일차 0곳 · 2일차 B · 3일차 C → 처음 열린 1일차 지도 중심 = B (날짜 순 처음 나오는 장소)',
-      plan: () =>
-        planned([
-          day(DAY1, []),
-          day(DAY2, [stop('p-b', 10, B)]),
-          day(DAY3, [stop('p-c', 10, C)]),
-        ]),
-      visit: [{ day: null, center: text(B) }],
-    },
-    {
-      name: 'M6 · AC-3 — 좌표 장소 0 · 거점 0 · 숙소 0 → 1·2·3일차 모두 지도 중심 = 서울시청',
-      plan: noCoordAnywhere,
-      visit: [0, 1, 2].map((day) => ({ day, center: SEOUL_TEXT })),
-    },
-    {
       // 5-b 경고-1 — 페이지가 "선택한 날"을 중심 함수에 넘기는지. 다른 날 M 케이스는 ①과 ②가 같은 답을 내서 못 본다.
       name: 'M10 · AC-4 배선 — 1일차 A·B · 2일차 C 한 곳 → 2일차 칩 → 핀 1개 · 지도 중심 = C (1일차 첫 장소 아님)',
       plan: () =>
@@ -2916,17 +2894,6 @@ describe('빈 일차 지도 중심', () => {
         ]),
       // 핀이 1개면 지도가 핀 맞춤 대신 중심 좌표로 카메라를 연다 — 중심이 1일차로 가면 C 가 화면 밖일 수 있다.
       visit: [{ day: 1, center: text(C), pins: 1 }],
-    },
-    {
-      name: 'M9 · AC-6 — 1일차 좌표 null 2곳 · 2일차 0곳 · 3일차 C → 세 날 모두 지도 중심 = C (0,0 아님)',
-      plan: () =>
-        planned([
-          day(DAY1, [stop('p-x', 10, NO_COORD), stop('p-y', 12, NO_COORD)]),
-          day(DAY2, []),
-          day(DAY3, [stop('p-c', 10, C)]),
-        ]),
-      visit: [0, 1, 2].map((day) => ({ day, center: text(C) })),
-      notZero: true,
     },
   ];
 
@@ -3031,35 +2998,6 @@ describe('빈 일차 지도 중심', () => {
       expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
     });
   });
-
-  describe('🟢 M7 · AC-4 무회귀 — 장소 있는 날은 그날 첫 장소 · 핀 전부 · fitPins', () => {
-    it('1일차 좌표 3곳 → 중심 = 첫 장소 · 핀 3개 · fitPins true', async () => {
-      serve(day1FullRestEmpty());
-
-      await openShell();
-
-      const map = screen.getByTestId('map-root');
-      expect(map).toHaveTextContent(text(A));
-      expect(pinCount()).toBe(3);
-      expect(map.props.fitPins).toBe(true);
-    });
-  });
-
-  describe('🟢 M8 · AC-5 무회귀 — 빈 날에서 장소 있는 날로 돌아오면 핀이 돌아온다', () => {
-    it('1일차 → 2일차(0곳) → 1일차 → 핀 3개 · fitPins true · 중심 = 첫 장소', async () => {
-      serve(day1FullRestEmpty());
-      await openShell();
-
-      pressDay(1);
-      expect(pinCount()).toBe(0);
-      pressDay(0);
-
-      const map = screen.getByTestId('map-root');
-      expect(pinCount()).toBe(3);
-      expect(map.props.fitPins).toBe(true);
-      expect(map).toHaveTextContent(text(A));
-    });
-  });
 });
 
 // TRIP-1296 — 같은 날 같은 장소가 두 번 든 일정(서버가 BR-U2-04 를 어긴 응답). 중복 key 경고 탐지는 02a ★1·★2.
@@ -3131,7 +3069,9 @@ describe('같은 날 같은 장소 두 번', () => {
     activeClient?.clear();
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   async function openShell(

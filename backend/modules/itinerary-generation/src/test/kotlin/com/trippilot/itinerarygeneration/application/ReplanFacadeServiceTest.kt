@@ -174,6 +174,7 @@ class ReplanFacadeServiceTest : StringSpec({
 
     fun fixture(
         agent: Agent,
+        anchors: BaseAnchorFacade = noAnchors,
         repo: ReplanItineraries = ReplanItineraries(),
         rejections: FakeRejectionStore = FakeRejectionStore(),
         regions: RegionLookupFacade = regionsWith(jejuCenter),
@@ -183,7 +184,7 @@ class ReplanFacadeServiceTest : StringSpec({
         repo.byTrip[trip] = itinerary()
         val revisions = genRevisions(repo, trips, clock)
         val changeLogs = CapturingChangeLogs()
-        return Fx(ReplanFacadeService(trips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, regions, rejections, snapshots, clock), repo, revisions, changeLogs)
+        return Fx(ReplanFacadeService(trips, repo, agent, anchors, revisions, changeLogs, preferences, noHints, savedStub, regions, rejections, snapshots, clock), repo, revisions, changeLogs)
     }
 
     fun command(fullDay: Boolean = false, completed: List<String> = emptyList()) = ReplanCommand(
@@ -225,6 +226,36 @@ class ReplanFacadeServiceTest : StringSpec({
         sent.styles shouldBe listOf("힐링")         // 계정(미식) 아님
         sent.activities shouldBe emptyList()        // 비운 축은 비운 채로
         sent.transportModes shouldBe listOf("렌터카") // 여행이 안 정한 축은 계정
+    }
+
+    // ───── 숙소 근처에서 끝내기의 끝점 ─────────────────────────────────────
+
+    fun anchorsOn(vararg days: Pair<LocalDate, Double>) = object : BaseAnchorFacade {
+        override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) =
+            days.map { (d, lat) -> DayAnchorView(d, lat, 126.5) }
+    }
+
+    /** 끝점은 **그날 밤 숙소**다 — 기준점(현재 위치)과 따로 실린다. 전날 숙소가 있어도 그날 것이 이긴다. */
+    "그날 밤 숙소가 끝점으로 실린다 — 기준점과 따로" {
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent, anchors = anchorsOn(today.minusDays(1) to 33.1, today to 33.2)).svc.propose(command())
+
+        val sent = agent.inputs.single()
+        sent.stayLat shouldBe 33.2
+        sent.originLat shouldBe 33.45 // 현재 위치 그대로 — 숙소로 덮지 않는다
+    }
+
+    /** 체크아웃일은 숙박일이 아니라 앵커가 없다 — 전날 밤 숙소로 내려간다. 그것도 없으면 null(지어내지 않는다). */
+    "그날 밤 숙소가 없으면 전날 숙소, 그것도 없으면 끝점 없음" {
+        val fromYesterday = Agent(proposal(replacement))
+        fixture(fromYesterday, anchors = anchorsOn(today.minusDays(1) to 33.1)).svc.propose(command())
+        fromYesterday.inputs.single().stayLat shouldBe 33.1
+
+        val none = Agent(proposal(replacement))
+        fixture(none).svc.propose(command())
+        none.inputs.single().stayLat shouldBe null
+        none.inputs.single().stayLng shouldBe null
     }
 
     // ───── 기준점 사다리 (TRIP-963) ─────────────────────────────────────────

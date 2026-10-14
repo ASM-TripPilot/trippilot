@@ -35,9 +35,12 @@ RUN uv pip install --no-cache \
       "fastapi>=0.115" "uvicorn>=0.30" "sentence-transformers>=3.0"
 
 # 모델을 fp16 으로 굽는다. **리비전을 고정한다** — 업스트림이 바뀌면 적재된 벡터와
-# 공간이 달라지는데, 태그만 쓰면 그게 조용히 일어난다.
+# 공간이 달라지는데, 태그만 쓰면 그게 조용히 일어난다. 종전 기본값이 `main` 이라 주석과 달리
+# 고정돼 있지 않았다(2026-10-14) — 이 해시는 그날 HF main 그대로(09-07 이후 README·로고만 바뀜)라
+# 서빙 벡터는 안 바뀐다. 미리 계산한 질문뱅크 벡터(`ai/data/intent_question_bank.vectors.json.gz`)
+# 머리의 model_revision 과 같아야 한다 — 올리려면 KB·질문뱅크 벡터를 같이 다시 만든다.
 ARG EMBEDDING_MODEL=nlpai-lab/KURE-v1
-ARG EMBEDDING_REVISION=main
+ARG EMBEDDING_REVISION=8b418a58414668e75532ed045c22d9ca018ae2b2
 ENV EMBEDDING_MODEL=${EMBEDDING_MODEL} \
     EMBEDDING_MODEL_PATH=/models/kure \
     HF_HOME=/models/hf \

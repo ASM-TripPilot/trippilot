@@ -63,7 +63,7 @@
 |---|---|
 | **BR-U3-23** | [다른 후보 N]은 **완전 AI·같이 고르기 공통** 경계 `proposeSlotCandidates`를 쓴다. 경로별로 다른 API를 두지 않는다 |
 | **BR-U3-24** | 후보는 **closed-set**(INV-1) — backend가 임의 POI를 섞지 않는다. 이미 일정에 있는 POI는 `excludePoiIds`로 제외한다 |
-| **BR-U3-25** | 후보 0건이면 **반경 확대 / 컨셉 변경**을 제안한다(h15). 확대 반경은 응답의 `radiusMUsed`로 사용자에게 표시한다(`약 11.3km`) |
+| **BR-U3-25** | 후보 0건이면 **반경 확대 / 컨셉 변경**을 제안한다(h15). 확대 반경은 응답의 `radiusMUsed`로 사용자에게 표시한다(`약 11.3km`) **[개정 · 2026-10-14]** 일정 **생성·재계획**은 **검색 결과(반경 풀)가 비면** AI 가 반경을 한 단(×1.5 — 다일 축소분 위에, 상한 자차 20km) 넓혀 **한 번** 더 찾는다 — 사용자가 누르지 않아도. 재계획의 판정은 원 일정 합류 **앞**의 반경 풀이다(합류 뒤는 거의 비지 않는다). 루프가 아니라 1회이며 넓혀도 비면 종전 경로(생성 MINIMAL·재계획 NO_CANDIDATE). 다시 받는 것은 PLACE 만(페르소나·날씨·행사는 1차 그대로). 넓힐 여지가 없으면 건너뛴다 — 호출자가 반경을 정했거나(`radius_override_km`) 이미 상한(자차 단일 20km) — 그 사실도 남긴다. 숨기지 않는다: 생성은 degradations `pool:radius_widened`(AI 와이어 코드 — BE 저장·FE 표시는 후속), 2차 수집 자체가 실패하면 `pool:radius_widen_unavailable`(0건으로 위장하지 않는다); 재계획은 notes `pool_widened: <r>-><r'>km, before=0, after=<n>` / `pool_widened_unavailable: …` / `pool_widen_skipped: near|override|at_cap`. 재계획에서 "가까운 데로"(NEARBY·LESS_MOVE)를 **사용자가 말한** 경우만 넓히지 않는다 — 사유가 암시한 LESS_MOVE(우천·피로, BR-U4-47)는 막지 않는다(그 사용자에겐 "없음"보다 조금 먼 곳이 낫고, 먼 곳은 경로 감점이 민다). 슬롯 교체(h15)의 확대는 종전대로 백엔드 1단(#1051) + 사용자 표시. 구현: `poi_curation.pool_builder.widened_radius_km`, `schedule_coordinator._generate` ①″, `wiring.replan` |
 | **BR-U3-26** | 교체 후 시각은 **재검증 전에는 노출하지 않는다.** 초안 단계는 시간대 라벨만이므로(BR-U3-07) 자연히 지켜진다 |
 
 ## 6. 확정 (US-SCHED-12)

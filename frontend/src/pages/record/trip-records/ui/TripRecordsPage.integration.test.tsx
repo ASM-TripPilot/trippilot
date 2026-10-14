@@ -2644,7 +2644,9 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
 
       const image = await screen.findByTestId('record-photo-thumb-image-ph1');
 
-      expect(image.props.source).toEqual({ uri: 'file:///photos/asset-1.jpg' });
+      expect(image.props.source).toEqual([
+        { uri: 'file:///photos/asset-1.jpg' },
+      ]);
       expect(
         screen.getByTestId('record-photo-available-ph1')
       ).toBeOnTheScreen();

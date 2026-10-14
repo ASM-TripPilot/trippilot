@@ -9,7 +9,7 @@ HTTP 클라이언트는 생성자 주입 — 테스트는 fake, 실행은 Urllib
 `totalDistance`(미터). 대중교통(TRIP-405)은 별도 상품 `/transit/routes` 응답
 `metaData.plan.itineraries[]` 중 `totalTime`(초) — 거리는 `totalDistance` 우선,
 없으면 `legs[].distance` 합산. **실 응답과의 드리프트는 실키 첫 실행
-(scripts/smoke_itinerary.py 수동/스케줄)에서 검증**한다 (TourAPI 어댑터
+(scripts/smoke/smoke_itinerary.py 수동/스케줄)에서 검증**한다 (TourAPI 어댑터
 선례 — 픽스처는 문서 기준, 실키 스모크가 계약을 확정).
 
 실패 시 다른 수단으로 조용히 폴백하지 않는다 — TravelTimeError 승격(INV-4).

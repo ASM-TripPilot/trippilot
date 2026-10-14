@@ -13,4 +13,9 @@ module.exports = {
   ...base,
   testPathIgnorePatterns: ['/node_modules/'],
   testMatch: ['**/*.integration.test.[jt]s?(x)'],
+  // 비동기 대기 기본 상한(RNTL `asyncUtilTimeout`)을 5초로 — 냉캐시·CPU 경합에서 첫 테스트가 1초를 넘긴다(TRIP-1365).
+  setupFilesAfterEnv: [
+    ...(base.setupFilesAfterEnv ?? []),
+    '<rootDir>/src/test-support/integrationSetup.ts',
+  ],
 };

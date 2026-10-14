@@ -1,12 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
@@ -23,6 +17,7 @@ import {
   MapPinGlyph,
   ShareGlyph,
 } from '@/features/explore/index.view';
+import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 
 /**
  * d06 장소 상세(Figma `1907:1083`) — **무상태 프레젠테이션 화면**. props만 받는다. 조회·라우팅·
@@ -86,36 +81,17 @@ function SaveErrorBanner({
   notice: PlaceSaveNotice;
   onPressAction?: () => void;
 }): ReactElement {
-  const actionTestId =
-    notice.action === 'login'
-      ? 'explore-place-saveerror-login'
-      : notice.action === 'retry'
-        ? 'explore-place-saveerror-retry'
-        : null;
-  const actionLabel = notice.action === 'login' ? '로그인하기' : '다시 시도';
-
   return (
-    <View
+    <NoticeBanner
       testID="explore-place-saveerror"
-      className="mx-lg mb-sm flex-row items-start gap-[10px] rounded-button bg-primary-pale p-md"
-    >
-      <InfoGlyph size={18} />
-      <Text className="flex-1 font-noto text-label text-primary-text">
-        {notice.message}
-      </Text>
-      {actionTestId ? (
-        <Pressable
-          testID={actionTestId}
-          accessibilityRole="button"
-          onPress={onPressAction}
-          className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
-        >
-          <Text className="font-noto-bold text-[12.5px] font-bold text-primary-text">
-            {actionLabel}
-          </Text>
-        </Pressable>
-      ) : null}
-    </View>
+      notice={notice}
+      actionTestIDs={{
+        login: 'explore-place-saveerror-login',
+        retry: 'explore-place-saveerror-retry',
+      }}
+      onPressAction={onPressAction}
+      icon={<InfoGlyph size={18} />}
+    />
   );
 }
 
@@ -145,7 +121,8 @@ export function PlaceDetailScreen({
           {place.imageUrl ? (
             <Image
               source={{ uri: place.imageUrl }}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
               className="h-full w-full"
             />
           ) : null}

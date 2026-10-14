@@ -1,4 +1,13 @@
 import Svg, { Circle, Path } from 'react-native-svg';
+import {
+  WarningTriangleGlyph as SharedWarningTriangleGlyph,
+  MapPinGlyph as SharedMapPinGlyph,
+  SearchGlyph as SharedSearchGlyph,
+  HeartStrokeFilledGlyph,
+  HeartStrokeOutlineGlyph,
+} from '@/shared/ui/glyphs';
+// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+export { BackChevronGlyph } from '@/shared/ui/glyphs';
 
 // 숙소 검색 결과(e02) 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/HomeGlyphs 패턴
 // 계승 · Figma 1837:2283). features 간 직접 import 금지(importBoundary 의도 — features/stay는
@@ -19,27 +28,6 @@ type GlyphProps = {
   size?: number;
   testID?: string;
 };
-
-// 앱바 뒤로가기(AC-10) — 표시만, 실동작 미배선(이번 범위 밖 — FAB·탭바와 같은 등급).
-export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M15 18L9 12L15 6"
-        stroke={INK}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
 
 // 필터 칩 '가격대'·'지역' 드롭다운 셰브론.
 export function ChevronDownGlyph({ size = 14, testID }: GlyphProps) {
@@ -107,37 +95,12 @@ export function WarningTriangleGlyph({
   tone = 'ink',
   testID,
 }: GlyphProps & { tone?: 'ink' | 'primary' }) {
-  const color = tone === 'primary' ? PRIMARY : INK;
   return (
-    <Svg
+    <SharedWarningTriangleGlyph
+      size={size}
+      color={tone === 'primary' ? 'primary' : 'ink'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M10 2.5L18.3333 16.6667H1.66667L10 2.5Z"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 7.5V11.6667"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 14.1667H10.0083"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -150,30 +113,12 @@ export function MapPinGlyph({
   tone = 'primary',
   testID,
 }: GlyphProps & { tone?: 'primary' | 'ink' }) {
-  const color = tone === 'ink' ? INK : PRIMARY;
   return (
-    <Svg
+    <SharedMapPinGlyph
+      size={size}
+      color={tone === 'ink' ? 'ink' : 'primary'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-    >
-      <Path
-        d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
-        stroke={color}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
-        stroke={color}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -186,30 +131,13 @@ export function SearchGlyph({
   tone = 'onPrimary',
   testID,
 }: GlyphProps & { tone?: 'onPrimary' | 'mutedSoft' }) {
-  const stroke = tone === 'mutedSoft' ? MUTED_SOFT : ON_PRIMARY;
   return (
-    <Svg
+    <SharedSearchGlyph
+      size={size}
+      color={tone}
+      strokeWidth={1.8}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M9.16667 15C12.3883 15 15 12.3883 15 9.16667C15 5.94501 12.3883 3.33333 9.16667 3.33333C5.94501 3.33333 3.33333 5.94501 3.33333 9.16667C3.33333 12.3883 5.94501 15 9.16667 15Z"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M17.5 17.5L13.75 13.75"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -272,23 +200,7 @@ export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
 // 카드 저장 하트 — 미저장(외곽선). TRIP-181까지는 이 화면의 유일한 하트였다(AC-7 정직한 스텁).
 // ponytail: 회색 플레이스홀더 전제, 실사진 붙으면 흰색으로 되돌린다
 export function HeartOutlineGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 22 22"
-      fill="none"
-    >
-      <Path
-        d="M11 19C11 19 3 14 3 8.6C3 5.9 5.1 3.8 7.7 3.8C9.1 3.8 10.4 4.5 11 5.6C11.6 4.5 12.9 3.8 14.3 3.8C16.9 3.8 19 5.9 19 8.6C19 14 11 19 11 19Z"
-        stroke={MUTED}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <HeartStrokeOutlineGlyph size={size} color="muted" testID={testID} />;
 }
 
 // e03 hero 공유 아이콘(TRIP-457) — 표시만(공유 계약 미존재, 범위 밖 — FAB·탭바 등급의 정적
@@ -670,22 +582,5 @@ export function OceanViewGlyph({ size = 24, testID }: GlyphProps) {
 // 빈/찬을 색으로 재는 것은 jest 무심판(repo-trap: `*Glyphs.tsx` fill은 렌더 트리에 안 남는다)이라,
 // 상태는 이 별도 컴포넌트(=다른 testID) + Pressable의 accessibilityState.selected 두 신호로 잰다.
 export function HeartFilledGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 22 22"
-      fill="none"
-    >
-      <Path
-        d="M11 19C11 19 3 14 3 8.6C3 5.9 5.1 3.8 7.7 3.8C9.1 3.8 10.4 4.5 11 5.6C11.6 4.5 12.9 3.8 14.3 3.8C16.9 3.8 19 5.9 19 8.6C19 14 11 19 11 19Z"
-        fill={PRIMARY}
-        stroke={PRIMARY}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <HeartStrokeFilledGlyph size={size} testID={testID} />;
 }

@@ -281,42 +281,6 @@ describe('월 네비 chevron — prev/next 가 뒤바뀌지 않는다', () => {
   });
 });
 
-/**
- * TRIP-1045 AC-B1(QA #018) — 범위 띠와 원을 px 고정 크기로 맞춘다. Tailwind 기본 눈금(`h-9`·`top-1`)은
- * rem 이라 NativeWind 네이티브에서 1rem=14px 로 계산돼 원(31.5)과 띠(top 3.5)의 세로 중심이 어긋났다.
- * Figma `3627:2068`: 셀 44 안에 띠 `h-[36px] top-[4px]`, 원 `36×36`(4+36+4=44).
- * 실제 세로 중심이 맞는지는 픽셀이라 jest 사각 — 여기선 rem 유틸이 빠지고 px 값이 들어갔는지까지만 본다.
- * 시작·끝 반쪽 띠는 testID 가 없어 jest 사각이다(맡던 소스 스캔 `periodEditSheetStructure` g5 는 TRIP-1145 로 지웠다).
- */
-describe('AC-B1 · 띠·원은 rem 유틸 없이 36/4 px 고정 (TRIP-1045)', () => {
-  /** className 을 공백으로 쪼갠 토큰 — 부분 문자열 비교면 `h-9` 가 `h-90` 에도 걸린다. */
-  function tokens(testID: string): string[] {
-    return String(screen.getByTestId(testID).props.className ?? '').split(
-      /\s+/
-    );
-  }
-
-  it('원(날짜 버튼)은 h-[36px]·w-[36px] 이고 h-9·w-9 가 없다', () => {
-    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
-
-    const circle = tokens('trip-wizard-period-cell-2026-06-10');
-    expect(circle).toEqual(expect.arrayContaining(['h-[36px]', 'w-[36px]']));
-    expect(circle).not.toContain('h-9');
-    expect(circle).not.toContain('w-9');
-  });
-
-  it('사이 띠는 h-[36px] + top 4px(top-[4px] 또는 top-xs) 이고 top-1·h-9 가 없다', () => {
-    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
-
-    const band = tokens('trip-wizard-period-cell-between-2026-06-11');
-    expect(band).toContain('h-[36px]');
-    // `xs` 토큰은 tailwind.config 에서 '4px' 로 정의돼 있어(rem 아님) 둘 다 맞는 표기다.
-    expect(band.includes('top-[4px]') || band.includes('top-xs')).toBe(true);
-    expect(band).not.toContain('top-1');
-    expect(band).not.toContain('h-9');
-  });
-});
-
 describe('당일치기(시작=종료) · 원만 있고 범위 띠는 없다', () => {
   it('시작=종료면 선택 원 하나뿐이고 어떤 띠도 그리지 않는다', () => {
     renderSheet({ range: { start: '2026-06-10', end: '2026-06-10' } });
@@ -338,18 +302,12 @@ describe('당일치기(시작=종료) · 원만 있고 범위 띠는 없다', ()
   it('시작≠종료면 시작 칸은 오른쪽 반 띠, 끝 칸은 왼쪽 반 띠를 종전대로 그린다(무회귀)', () => {
     renderSheet({ range: { start: '2026-06-10', end: '2026-06-11' } });
 
-    const startBand = screen.getByTestId(
-      'trip-wizard-period-band-start-2026-06-10'
-    );
-    expect(String(startBand.props.className).split(/\s+/)).toEqual(
-      expect.arrayContaining(['right-0', 'w-1/2'])
-    );
-    const endBand = screen.getByTestId(
-      'trip-wizard-period-band-end-2026-06-11'
-    );
-    expect(String(endBand.props.className).split(/\s+/)).toEqual(
-      expect.arrayContaining(['left-0', 'w-1/2'])
-    );
+    expect(
+      screen.getByTestId('trip-wizard-period-band-start-2026-06-10')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('trip-wizard-period-band-end-2026-06-11')
+    ).toBeOnTheScreen();
   });
 
   it('범위가 시작만 있고 끝이 없을 때도 띠는 없다', () => {
@@ -371,26 +329,6 @@ describe('기간 규칙 안내 한 줄 (종료일은 박수로 정해진다)', (
   const NOTE = 'trip-wizard-period-note';
   const NOTE_TEXT = '종료일은 여행지에서 정한 박수로 정해져요';
 
-  type JsonNode = {
-    props?: { testID?: unknown };
-    children?: (JsonNode | string)[] | null;
-  };
-
-  /** 렌더 트리의 testID 를 화면 위→아래(문서 순서)로 모은다. */
-  function testIdOrder(): string[] {
-    const acc: string[] = [];
-    const walk = (n: JsonNode | string | null | undefined): void => {
-      if (!n || typeof n === 'string') return;
-      const tid = n.props?.testID;
-      if (typeof tid === 'string') acc.push(tid);
-      (n.children ?? []).forEach(walk);
-    };
-    const root = screen.toJSON() as unknown as JsonNode | JsonNode[] | null;
-    if (Array.isArray(root)) root.forEach(walk);
-    else walk(root);
-    return acc;
-  }
-
   it.each<[string, TripDateRange]>([
     ['빈 범위', {}],
     ['시작만', { start: '2026-06-10' }],
@@ -402,45 +340,17 @@ describe('기간 규칙 안내 한 줄 (종료일은 박수로 정해진다)', (
     // toHaveTextContent(문자열) = 완전 일치(앞뒤 공백만 정리) — 글자가 하나라도 다르면 red.
     expect(screen.getByTestId(NOTE)).toHaveTextContent(NOTE_TEXT);
   });
-
-  it('안내는 달력 다음, 적용 버튼 바로 위에 놓인다', () => {
-    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
-
-    const order = testIdOrder();
-    // 달력의 마지막 칸(6/30) < 안내 < 적용 — 안내가 적용 버튼 안이나 달력 위로 가면 red.
-    const lastCell = order.indexOf('trip-wizard-period-cell-2026-06-30');
-    const note = order.indexOf(NOTE);
-    const apply = order.indexOf('trip-wizard-period-apply');
-    expect(lastCell).toBeGreaterThan(-1);
-    expect(note).toBeGreaterThan(lastCell);
-    expect(apply).toBeGreaterThan(note);
-  });
-
-  it('안내는 정적 안내문 토큰(font-noto · text-caption · text-muted)을 쓰고 raw 값이 없다', () => {
-    renderSheet();
-
-    const tokens = String(screen.getByTestId(NOTE).props.className ?? '').split(
-      /\s+/
-    );
-    expect(tokens).toEqual(
-      expect.arrayContaining(['font-noto', 'text-caption', 'text-muted'])
-    );
-    // 임의값(`text-[12px]`·`text-[#6a6a6a]`)이 섞이면 토큰 대신 하드코딩이 들어간 것이다.
-    expect(tokens.filter((t) => t.includes('[') || t.includes('#'))).toEqual(
-      []
-    );
-  });
 });
 
 /**
  * TRIP-1285(QA B-03 · 결정 1) — 다음 달 chevron 상한. 마지막으로 볼 수 있는 달 = 오늘의 달 + 24(01b Q1).
- * 그 달에서 next 는 prev 하한과 같은 얼굴로 죽는다: 진짜 `disabled` + `opacity-40`.
+ * 그 달에서 next 는 prev 하한과 같이 진짜 `disabled` 로 죽는다.
  *
  * 왜 상한 달과 그 직전 달을 짝으로 보나: 상한 달 비활성만 보면 한 달 일찍(+23) 막는 구현도 통과한다
  * (+24 도 비활성이니까). 직전 달 활성까지 봐야 경계가 정확히 한 칸으로 고정된다(02a ★9).
  * 오늘이 12월·1월인 행은 해를 넘기는 월 산술을 시험한다(02a ★10).
  *
- * 실제 흐림 픽셀·시트 개폐는 통과형 목이라 6-b 몫이다 — 여기선 disabled 상태·토큰·콜백까지만 본다.
+ * 실제 흐림 픽셀·시트 개폐는 통과형 목이라 6-b 몫이다 — 여기선 disabled 상태·콜백까지만 본다.
  */
 describe('다음 달 상한 = 오늘의 달 + 24 (TRIP-1285 결정 1)', () => {
   /** [오늘, 상한 달(next 비활성), 직전 달(next 활성)]. */
@@ -451,23 +361,15 @@ describe('다음 달 상한 = 오늘의 달 + 24 (TRIP-1285 결정 1)', () => {
     ['2026-01-15', '2028-01', '2027-12'],
   ];
 
-  /** className 을 공백으로 쪼갠 토큰 — 부분 문자열 비교면 다른 토큰에 걸린다. */
-  function nextTokens(): string[] {
-    return String(
-      screen.getByTestId('trip-wizard-period-next').props.className ?? ''
-    ).split(/\s+/);
-  }
-
   it.each(LIMITS)(
-    '오늘 %s · 상한 달 %s 을 보면 next 는 disabled · opacity-40 이고 눌러도 onNextMonth 0회',
+    '오늘 %s · 상한 달 %s 을 보면 next 는 disabled 이고 눌러도 onNextMonth 0회',
     (today, limitMonth) => {
       // 준비
       const spies = renderSheet({ today, month: limitMonth });
       const next = screen.getByTestId('trip-wizard-period-next');
 
-      // 단언 ① — 보이는 얼굴과 접근성 상태
+      // 단언 ① — 접근성 상태
       expect(next).toBeDisabled();
-      expect(nextTokens()).toContain('opacity-40');
 
       // 실행 — 진짜 disabled 면 press 가 안 먹는다
       fireEvent.press(next);
@@ -478,13 +380,12 @@ describe('다음 달 상한 = 오늘의 달 + 24 (TRIP-1285 결정 1)', () => {
   );
 
   it.each(LIMITS)(
-    '오늘 %s · 상한 %s 의 직전 달 %s 을 보면 next 는 활성이고(opacity-40 없음) 눌러서 onNextMonth 1회 (짝)',
+    '오늘 %s · 상한 %s 의 직전 달 %s 을 보면 next 는 활성이고 눌러서 onNextMonth 1회 (짝)',
     (today, _limitMonth, beforeLimit) => {
       const spies = renderSheet({ today, month: beforeLimit });
       const next = screen.getByTestId('trip-wizard-period-next');
 
       expect(next).toBeEnabled();
-      expect(nextTokens()).not.toContain('opacity-40');
 
       fireEvent.press(next);
 

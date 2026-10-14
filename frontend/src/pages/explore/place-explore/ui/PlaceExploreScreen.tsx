@@ -30,6 +30,8 @@ import {
   WarningTriangleGlyph,
 } from '@/features/explore/index.view';
 import { PartialFailureBanner } from './PartialFailureBanner';
+import { NoticeBanner } from '@/shared/ui/NoticeBanner';
+import { AppBar } from '@/shared/ui/AppBar';
 
 // 우하단 FAB 그림자 — `ExploreLandingScreen`의 FAB_SHADOW와 동형
 // (RN에 CSS box-shadow가 없어 style prop으로 옮긴다). `#000000`은 raw-hex 가드
@@ -131,21 +133,20 @@ const CATEGORY_CHIPS: {
   })),
 ];
 
-function AppBar({ onBack }: { onBack?: () => void }): ReactElement {
+function PlaceExploreAppBar({ onBack }: { onBack?: () => void }): ReactElement {
   return (
-    <View className="w-full flex-row items-center gap-xs pb-sm pl-[10px] pr-lg">
-      <Pressable
-        testID="explore-places-back"
-        accessibilityRole="button"
-        onPress={onBack}
-        className="h-10 w-10 items-center justify-center"
-      >
-        <BackChevronGlyph size={24} />
-      </Pressable>
-      <Text className="font-noto-bold text-[18px] font-bold text-ink">
-        장소 탐색
-      </Text>
-    </View>
+    <AppBar
+      className="w-full flex-row items-center gap-xs pb-sm pl-[10px] pr-lg"
+      back={{
+        testID: 'explore-places-back',
+        accessibilityRole: 'button',
+        onPress: onBack,
+        className: 'h-10 w-10 items-center justify-center',
+        glyph: <BackChevronGlyph size={24} />,
+      }}
+      title="장소 탐색"
+      titleClassName="font-noto-bold text-[18px] font-bold text-ink"
+    />
   );
 }
 
@@ -270,14 +271,15 @@ function CategoryChips({
  * `className`은 jest에서 `style`로 안 남아 `flexDirection` 신호를 못 쓴다(★1). */
 function SkeletonCard({ index }: { index: number }): ReactElement {
   return (
-    <View
+    // 펄스 루프는 카드 하나에 하나 — 자식 상자는 정지 View 다(TRIP-1363 Skeleton 묶기).
+    <Skeleton
       testID={`explore-places-skeleton-${index}`}
       className="w-[48%] gap-[7px]"
     >
-      <Skeleton className="h-[132px] w-full rounded-[14px] bg-surface-strong" />
-      <Skeleton className="h-[13px] w-2/3 rounded-[6px] bg-hairline" />
-      <Skeleton className="h-[11px] w-1/2 rounded-[6px] bg-surface-strong" />
-    </View>
+      <View className="h-[132px] w-full rounded-[14px] bg-surface-strong" />
+      <View className="h-[13px] w-2/3 rounded-[6px] bg-hairline" />
+      <View className="h-[11px] w-1/2 rounded-[6px] bg-surface-strong" />
+    </Skeleton>
   );
 }
 
@@ -448,36 +450,17 @@ function SaveErrorBanner({
   notice: PlaceSaveNotice;
   onPressAction?: () => void;
 }): ReactElement {
-  const actionTestId =
-    notice.action === 'login'
-      ? 'explore-places-saveerror-login'
-      : notice.action === 'retry'
-        ? 'explore-places-saveerror-retry'
-        : null;
-  const actionLabel = notice.action === 'login' ? '로그인하기' : '다시 시도';
-
   return (
-    <View
+    <NoticeBanner
       testID="explore-places-saveerror"
-      className="mx-lg mb-sm flex-row items-start gap-[10px] rounded-button bg-primary-pale p-md"
-    >
-      <InfoGlyph size={18} />
-      <Text className="flex-1 font-noto text-label text-primary-text">
-        {notice.message}
-      </Text>
-      {actionTestId ? (
-        <Pressable
-          testID={actionTestId}
-          accessibilityRole="button"
-          onPress={onPressAction}
-          className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
-        >
-          <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">
-            {actionLabel}
-          </Text>
-        </Pressable>
-      ) : null}
-    </View>
+      notice={notice}
+      actionTestIDs={{
+        login: 'explore-places-saveerror-login',
+        retry: 'explore-places-saveerror-retry',
+      }}
+      onPressAction={onPressAction}
+      icon={<InfoGlyph size={18} />}
+    />
   );
 }
 
@@ -520,7 +503,7 @@ export function PlaceExploreScreen({
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
       <View testID="explore-places-root" className="flex-1 bg-canvas">
-        <AppBar onBack={onBack} />
+        <PlaceExploreAppBar onBack={onBack} />
 
         <FlatList<Place>
           testID="explore-places-grid"

@@ -174,3 +174,32 @@ variable "data_protection_enabled" {
   type        = bool
   default     = true
 }
+
+variable "alerts_slack_team_id" {
+  description = "Slack workspace ID (T...) already authorized in AWS Chatbot. Alarms are created only when alerts_slack_channel_id is set."
+  type        = string
+  default     = ""
+}
+
+variable "alerts_slack_channel_id" {
+  description = "Slack channel ID (C...) that receives this environment's alarms. Empty means no alarms: an alarm nobody receives only bills."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.alerts_slack_channel_id == "" || (var.alerts_slack_team_id != "" && var.container_logs_enabled)
+    error_message = "alerts_slack_channel_id needs alerts_slack_team_id, and container_logs_enabled = true: the log and pod alarms read what the Container Insights add-on writes."
+  }
+}
+
+variable "dev_target_enabled" {
+  description = <<-EOT
+    이 스택 안에 **개발 대상**(네임스페이스 trippilot-dev)을 둔다(2026-10-15 개발·운영 분리): 시크릿 그릇 한 벌,
+    작은 RDS 한 대(`aws_db_instance.dev_target`), 개발 네임스페이스 AI 파드의 Bedrock 연결.
+    클러스터·NAT·Redis 는 운영과 같이 쓴다.
+    시크릿 이름은 `trippilot/<env>/dev-target/<그룹>`, DB 는 `trippilot-<env>-target` 이라 만들기는 배포 역할 기존 권한 안이다.
+    단 배포가 **개발 DB 마스터 비밀번호를 읽으려면** bootstrap 템플릿 `ReadEnvironmentRdsMasterSecret` 조건에 이 DB 가 들어 있다(#1262, bootstrap 반영 2026-10-15 KST).
+  EOT
+  type        = bool
+  default     = false
+}

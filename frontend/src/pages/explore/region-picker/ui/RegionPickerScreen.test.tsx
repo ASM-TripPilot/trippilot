@@ -197,6 +197,23 @@ describe('AC-1b · 인기 여행지 가로 스트립 (TRIP-650)', () => {
     expect(screen.getByText('항구 · 근대')).toBeOnTheScreen();
     expect(screen.getByText('산 · 휴식')).toBeOnTheScreen();
   });
+
+  it('번들 커버 그림이 있는 시도(서울)는 그림을, 없는 시도(인천)는 그라데이션을 그린다', () => {
+    const SEOUL = region({
+      regionCode: '11',
+      name: '서울특별시',
+      level: RegionLevel.SIDO,
+      sidoName: '서울특별시',
+      poiCount: 80,
+    });
+    render(<RegionPickerScreen {...props({ regions: [SEOUL, INCHEON] })} />);
+
+    const seoul = screen.getByTestId('explore-region-popular-11');
+    expect(
+      within(seoul).getByTestId('explore-region-popular-cover-11')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-region-popular-cover-28')).toBeNull();
+  });
 });
 
 describe('AC-2 · 드릴다운 진입/복귀 + 상세 뒤로 ≠ 앱바 뒤로', () => {

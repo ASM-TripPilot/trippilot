@@ -30,6 +30,12 @@ run "dev_is_private_and_cost_conscious" {
     values = { arn = "arn:aws:iam::123456789012:role/trippilot-dev-node" }
   }
 
+  override_resource {
+    target          = aws_sns_topic.alerts
+    override_during = plan
+    values          = { arn = "arn:aws:sns:ap-northeast-2:123456789012:trippilot-dev-alerts" }
+  }
+
   variables {
     environment                   = "dev"
     availability_zone_count       = 2
@@ -40,6 +46,65 @@ run "dev_is_private_and_cost_conscious" {
     database_instance_class       = "db.t4g.small"
     database_allocated_storage    = 20
     redis_node_type               = "cache.t4g.micro"
+    alerts_slack_team_id          = "T0000000000"
+    alerts_slack_channel_id       = "C0000000000"
+    dev_target_enabled            = true
+  }
+
+  # 개발 대상 시크릿은 운영 그릇과 **이름이 겹치지 않고**, 배포 역할 권한(trippilot/dev/*) 안에 든다.
+  assert {
+    condition = (
+      length(aws_secretsmanager_secret.dev_target) == 4 &&
+      alltrue([for name, secret in aws_secretsmanager_secret.dev_target : secret.name == "trippilot/dev/dev-target/${name}"]) &&
+      length(setintersection(
+        [for secret in aws_secretsmanager_secret.dev_target : secret.name],
+        [for secret in aws_secretsmanager_secret.app : secret.name],
+      )) == 0
+    )
+    error_message = "The dev target needs its own four secret containers under trippilot/dev/dev-target/, never the production ones."
+  }
+
+  # 개발 대상 DB 는 **운영과 다른 장비**다 — 같은 장비면 Flyway 의 app_user 하드코딩 권한이 개발 역할에 닿지 않는다(#1258).
+  # 이름이 trippilot-dev* 라 배포 역할 RDS 권한 안에 든다. 운영 데이터가 없으니 최소 사양·보호 없음.
+  assert {
+    condition = (
+      length(aws_db_instance.dev_target) == 1 &&
+      aws_db_instance.dev_target[0].identifier == "trippilot-dev-target" &&
+      aws_db_instance.dev_target[0].identifier != aws_db_instance.postgres.identifier &&
+      aws_db_instance.dev_target[0].instance_class == "db.t4g.micro" &&
+      !aws_db_instance.dev_target[0].multi_az && !aws_db_instance.dev_target[0].publicly_accessible &&
+      aws_db_instance.dev_target[0].storage_encrypted && aws_db_instance.dev_target[0].manage_master_user_password &&
+      aws_db_instance.dev_target[0].db_subnet_group_name == aws_db_subnet_group.postgres.name &&
+      aws_db_instance.dev_target[0].parameter_group_name == "trippilot-dev-target-postgres16" &&
+      aws_db_parameter_group.dev_target[0].parameter == toset([{ name = "rds.force_ssl", value = "1", apply_method = "pending-reboot" }]) &&
+      !aws_db_instance.dev_target[0].deletion_protection && aws_db_instance.dev_target[0].skip_final_snapshot
+    )
+    error_message = "The dev target needs its own small private encrypted PostgreSQL instance named trippilot-dev-target, inside the same private network as production."
+  }
+
+  assert {
+    condition     = length(aws_eks_pod_identity_association.ai_dev_target) == 1 && aws_eks_pod_identity_association.ai_dev_target[0].namespace == "trippilot-dev" && aws_eks_pod_identity_association.ai_dev_target[0].service_account == "ai" && aws_eks_pod_identity_association.ai_dev_target[0].role_arn == data.aws_iam_role.ai_pod.arn
+    error_message = "The dev-target AI pods need the same Bedrock pod identity in their own namespace."
+  }
+
+  # 로그 지표는 운영 네임스페이스만 센다 — 같은 클러스터·같은 로그 그룹의 개발 서버(trippilot-dev)가 운영 알람을 울리면 안 된다.
+  assert {
+    condition = alltrue([for filter in [aws_cloudwatch_log_metric_filter.gateway_5xx[0], aws_cloudwatch_log_metric_filter.refresh_reuse[0]] :
+    startswith(filter.pattern, "{ ($.kubernetes.namespace_name = \"trippilot\") && ")])
+    error_message = "Log metric filters must count only the production namespace, never the dev target sharing the log group."
+  }
+
+  # 운영 알람(Q3=A) — 5xx·토큰 재사용·파드 재시작 셋·노드·DB 셋이 전부 같은 토픽으로 가고, 그 토픽을 Slack 이 구독한다.
+  assert {
+    condition = (
+      length(aws_cloudwatch_metric_alarm.pod_restarts) == 3 && length(aws_cloudwatch_metric_alarm.database) == 3 &&
+      alltrue([for alarm in concat(
+        [aws_cloudwatch_metric_alarm.gateway_5xx[0], aws_cloudwatch_metric_alarm.refresh_reuse[0], aws_cloudwatch_metric_alarm.failed_nodes[0]],
+        values(aws_cloudwatch_metric_alarm.pod_restarts), values(aws_cloudwatch_metric_alarm.database),
+      ) : alarm.alarm_actions == toset([aws_sns_topic.alerts[0].arn]) && startswith(alarm.alarm_name, "trippilot-dev-")]) &&
+      aws_chatbot_slack_channel_configuration.alerts[0].sns_topic_arns == toset([aws_sns_topic.alerts[0].arn])
+    )
+    error_message = "DEV alarms must all notify the alerts topic, be named for the deploy role's trippilot-dev-* grant, and reach Slack."
   }
 
   assert {
@@ -151,6 +216,12 @@ run "prd_has_high_availability_and_data_protection" {
     redis_node_type               = "cache.t4g.small"
   }
 
+  # 받을 채널이 없으면 알람도 없다 — 아무도 못 받는 알람은 요금만 낸다.
+  assert {
+    condition     = length(aws_sns_topic.alerts) == 0 && length(aws_cloudwatch_metric_alarm.database) == 0 && length(aws_cloudwatch_metric_alarm.pod_restarts) == 0
+    error_message = "Without a Slack channel no alarm or topic is created."
+  }
+
   assert {
     condition     = length(aws_subnet.private) == 3 && length(aws_nat_gateway.this) == 3
     error_message = "PRD must keep NAT egress independent across three AZs."
@@ -182,6 +253,11 @@ run "prd_has_high_availability_and_data_protection" {
   }
 
   assert {
+    condition     = length(aws_secretsmanager_secret.dev_target) == 0 && length(aws_db_instance.dev_target) == 0 && length(aws_db_parameter_group.dev_target) == 0 && length(aws_eks_pod_identity_association.ai_dev_target) == 0
+    error_message = "The dev target lives only inside the DEV stack; PRD must not grow its containers, database or pod identity by default."
+  }
+
+  assert {
     condition     = data.aws_iam_role.cluster.name == "trippilot-prd-cluster" && data.aws_iam_role.node.name == "trippilot-prd-node" && aws_eks_cluster.this.role_arn == data.aws_iam_role.cluster.arn && aws_eks_cluster.this.compute_config[0].node_role_arn == data.aws_iam_role.node.arn
     error_message = "PRD must use its own bootstrap-owned cluster/node roles."
   }
@@ -206,4 +282,29 @@ run "reject_wrong_account_role" {
   }
 
   expect_failures = [var.deployment_role_arn]
+}
+
+run "reject_alerts_without_container_logs" {
+  command = plan
+
+  variables {
+    environment             = "dev"
+    container_logs_enabled  = false
+    alerts_slack_team_id    = "T0000000000"
+    alerts_slack_channel_id = "C0000000000"
+  }
+
+  expect_failures = [var.alerts_slack_channel_id]
+}
+
+run "reject_alerts_without_slack_team" {
+  command = plan
+
+  variables {
+    environment             = "dev"
+    container_logs_enabled  = true
+    alerts_slack_channel_id = "C0000000000"
+  }
+
+  expect_failures = [var.alerts_slack_channel_id]
 }

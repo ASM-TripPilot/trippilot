@@ -66,6 +66,7 @@ class StyleAnalysisPropertyTest : StringSpec({
 
     fun archiveOf(days: List<ArchiveDayView>) = object : ArchiveRecordFacade {
         override fun findDailyVisits(tripId: UUID) = days
+        override fun findRouteDistances(tripId: UUID) = emptyMap<java.time.LocalDate, Int>()
     }
 
     fun surfacesOf(known: Map<UUID, Pair<String, Pair<Double, Double>>>) = object : PoiSurfaceFacade {

@@ -52,6 +52,9 @@ data class PlannedPlaceView(val nameKo: String, val categoryCode: String)
  * @property isFixed 사용자가 시각을 못 박은 슬롯(BR-U4-18). **기본값을 두지 않는다** — 모르는 채
  *   false 로 넘기면 "고정이 아니다"라는 없는 사실이 생기고, 재계획 전후 비교가 그것을 그대로 보여준다.
  * @property endsNextDay 자정을 넘기는 슬롯(HC4). true 면 [endAt] 이 [startAt] 보다 이르다.
+ * @property hasViolation 일정 화면이 이 슬롯에 띄우는 위반 표시(저장된 값 그대로 — 편집·되돌리기·재계획 반영이 쓴다).
+ *   [isFixed] 와 같은 이유로 **기본값을 두지 않는다** —
+ *   모르는 채 false 로 넘기면 "문제없는 슬롯"이라는 없는 사실이 생기고, 도우미의 진행 검토(U8 US-ASSIST-03)가 그것을 그대로 말한다.
  */
 data class PlannedSlotView(
     val slotKey: String,
@@ -62,6 +65,7 @@ data class PlannedSlotView(
     val endAt: LocalTime,
     val isFixed: Boolean,
     val endsNextDay: Boolean,
+    val hasViolation: Boolean,
     /**
      * POI 표면(TRIP-1060 · BR-U3-09) — 재계획 비교(before 열)가 장소를 그릴 재료다.
      * "어느 이름이 이기는가"(확정 슬롯은 동결값, INV-U1-03)는 C8 이 소유하므로 **여기서 채워 내보낸다** —
@@ -73,4 +77,14 @@ data class PlannedSlotView(
     val imageUrl: String? = null,
     val lat: Double? = null,
     val lng: Double? = null,
+    /**
+     * 일정 화면(REST `SlotResponse`)이 보여 주는 값과 **같은 값**이다(U8 G-U8-3) — 다른 모듈이 "무엇이 문제인지"·
+     * "얼마나 떨어져 있는지"를 말하려면 화면이 말하는 것과 달라서는 안 된다. 그래서 다시 계산하지 않고 저장된 표시값을 낸다.
+     *
+     * [violationReason] 사용자 문구(위반이 없거나 사유를 못 붙였으면 null).
+     * [distanceRange] **직전 지점 → 이 슬롯** 구간의 거리 표시 문자열(BR-U2-08). 모르면 null — 0 이 아니다.
+     * 소요시간은 어떤 이유로도 없다(INV-3).
+     */
+    val violationReason: String? = null,
+    val distanceRange: String? = null,
 )

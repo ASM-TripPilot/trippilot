@@ -16,7 +16,7 @@ AI 가 모르는 키는 버리지 않고 `unknown` 으로 되돌린다: FE 가 �
 이 구분이 없으면 "모델이 못 보는 축으로 고르라"는 지시를 쓰게 되고 모델은 상호명
 기억으로 지어낸다 — KB-3 초안 41건 중 28건을 뺀 이유와 같다.
 
-`SOLVER` 는 **아직 배선되지 않았다**(A-4). `unwired=True` 로 드러내고, 소비 측이
+`SOLVER` 는 RELAX(Pace.SLOW)만 배선됐다 — 나머지는 A-4. `unwired=True` 로 드러내고, 소비 측이
 "인식했지만 효과 없음"을 구분할 수 있게 한다.
 """
 
@@ -34,7 +34,7 @@ from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.agents.planb.kb_retrieval import KbLoadError, retrieve
 
 # 자유 입력 매칭 임계 — **실측으로 정했다** (2026-09-12, KURE-v1 × 실 pgvector,
-# 정답 발화 23건 · 비지시 8건, 재현: `scripts/measure_directive_match.py`).
+# 정답 발화 23건 · 비지시 8건, 재현: `scripts/measure/measure_directive_match.py`).
 #
 # IntentRouter 의 질문뱅크 임계(`t_high=0.82`)를 그대로 쓰려 했다가 실측에서 뒤집혔다 —
 # 0.82 는 정답 10건을 놓친다("천천히 여유있게" 0.787, "맛집+카페" 0.790 처럼 **1위가
@@ -237,7 +237,11 @@ def match_free_text(
     threshold: float = DEFAULT_MATCH_THRESHOLD,
     max_resolved: int = MAX_RESOLVED,
 ) -> tuple[DirectiveSpec, ...]:
-    """자유 입력 → 지시 목록. 검색 실패는 예외가 아니라 빈 결과다 (INV-4).
+    """자유 입력 → 지시 목록. 임베딩·스토어 장애는 **예외로 올린다** — 빈 결과는 "지시 없음"만이다.
+
+    종전엔 장애를 삼켜 `()` 를 냈고, 그래서 호출측(`wiring._replan_directives`)의
+    `free_text_match_degraded` 노트가 도달 불가였다 — 장애와 무매칭이 같은 빈 튜플이었다.
+    재계획을 살리는 것은 호출측 몫이다(노트를 남기고 번역 LLM 으로 넘어간다, INV-4).
 
     한 발화에 지시가 여럿일 수 있어("실내로 하고 이동도 줄여줘") top-k 를 보되,
     **임계 미달은 버린다** — 닮지 않은 것을 억지로 고르면 사용자가 말하지 않은 방향으로
@@ -248,11 +252,7 @@ def match_free_text(
     if not text.strip() or top_k <= 0 or max_resolved <= 0:
         return ()
     table = index_of(specs)
-    try:
-        hits = retrieve(KbKind.DIRECTIVE, text, embedding, store, top_k=top_k)
-    except Exception:
-        # 임베딩·스토어 장애로 재계획을 죽이지 않는다 — 칩 선택분은 그대로 살아 있다.
-        return ()
+    hits = retrieve(KbKind.DIRECTIVE, text, embedding, store, top_k=top_k)
     resolved: list[DirectiveSpec] = []
     seen: set[str] = set()
     for hit in hits:

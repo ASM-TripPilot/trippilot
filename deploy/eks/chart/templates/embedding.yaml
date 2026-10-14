@@ -25,8 +25,9 @@ spec:
     metadata:
       labels:
         {{- include "trippilot.selector" (dict "root" . "component" "embedding") | nindent 8 }}
-      annotations:
-        trippilot.io/rollout-nonce: {{ .Values.rolloutNonce | quote }}
+      # rollout-nonce 를 **안 단다**(다른 셋과 다르다). nonce 는 시크릿 env 를 다시 읽히려고 매 배포 파드를 갈지만,
+      # 임베딩엔 시크릿 env 가 없다 — 달면 코드가 그대로여도 매 배포 위의 maxSurge 0 공백이 생긴다(10-14 하루 15회+).
+      # 이미지 태그도 빌드 맥락의 내용 해시(aws-deploy.yml)라, 임베딩 코드가 바뀔 때만 롤아웃된다.
     spec:
       {{- include "trippilot.podSpec" (dict "root" . "component" "embedding" "uid" 10001) | nindent 6 }}
       containers:

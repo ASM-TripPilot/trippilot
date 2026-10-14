@@ -348,6 +348,8 @@ internal data class AiReplanRequest(
     val timeWindow: AiTimeWindow,
     /** 기준점 — 현재 위치, 없으면 호출측이 숙소 앵커로 채운다(BR-U4-19 사다리). */
     val anchor: AiCoord,
+    /** 그날 밤 숙소(없으면 전날) — 상대 `stay_anchor`. '숙소 근처에서 끝내기'가 하루를 마칠 곳. 없으면 null. */
+    val stayAnchor: AiCoord? = null,
     val scope: String,
     val fromInstant: Instant,
     val preferenceProfile: PreferenceProfile,
@@ -377,6 +379,17 @@ internal data class AiReplanRequest(
      */
     val savedPlaces: List<AiSavedPlace> = emptyList(),
     val excludedPoiIds: List<UUID> = emptyList(),
+    /** 이 날짜를 건드린 변경 이력(TRIP-975) — 상대 `ChangeLogEntrySchema`. 비면 종전과 같다. */
+    val changeLog: List<AiChangeLogEntry> = emptyList(),
+)
+
+/** 변경 이력 한 건 — 그날 diff 만(시각·행위자 없음, [com.trippilot.itinerarygeneration.domain.ReplanChange]). */
+internal data class AiChangeLogEntry(
+    val source: String,
+    val reason: String?,
+    val at: Instant,
+    val removedPoiIds: List<String>,
+    val addedPoiIds: List<String>,
 )
 
 /** 하루 이용 시각. 창은 **하루 전체**다 — '지금 이후만' 은 잠금으로 표현한다(정본 §3.1). */
@@ -441,6 +454,44 @@ internal data class AiTrigger(
 internal data class AiCoord(val lat: Double, val lng: Double)
 
 /**
+ * `POST /ai/v1/itinerary/edit` 요청(U8 G-U8-2). `command` 와 `utterance` 는 **정확히 하나** — 둘 다거나 둘 다 없으면 422 다.
+ * `confirm` 은 늘 true 로 보낸다(DEC-U8-3) — false 면 상대가 파괴적 편집의 해를 숨기고 확인을 요구한다.
+ */
+internal data class AiEditRequest(
+    val tripId: String,
+    val itinerary: AiSchedulePayload,
+    val targetDate: LocalDate,
+    val anchor: AiCoord,
+    val budgetLevel: String?,
+    val transportMode: String?,
+    val command: AiEditCommand?,
+    val utterance: String?,
+    val confirm: Boolean,
+    val requestMeta: AiRequestMeta,
+)
+
+/** 계약 `EditCommandSchema`. `affected_slots` 는 이름과 달리 **POI id** 목록이다(상대 도메인 `EditCommand.affected_slots: PoiId`). */
+internal data class AiEditCommand(
+    val op: String,
+    val params: Map<String, Any?> = emptyMap(),
+    val affectedSlots: List<String> = emptyList(),
+)
+
+/**
+ * 계약 `EditItineraryResponse`. `status` 는 `APPLIED`|`CONFIRM_REQUIRED`|`REJECTED`|`TRANSLATION_FAILED` 이고
+ * `itinerary` 는 `APPLIED` 일 때만 온다. `command` 는 상대가 해석한 명령의 되울림이라 읽지 않는다 —
+ * 키는 계약 게이트(정확 일치) 때문에 받는다.
+ */
+internal data class AiEditResponse(
+    val status: String,
+    val command: AiEditCommand? = null,
+    val applyMode: String? = null,
+    val itinerary: AiScheduleResponse? = null,
+    val violations: List<AiViolation> = emptyList(),
+    val reason: String? = null,
+)
+
+/**
  * 계약 `SavedPlaceSchema` — `saved_places` 항목은 문자열이 아니라 **객체**다(`poi_id` 필수·`name`).
  * 지금은 항상 빈 목록을 보내지만(§2 — place-data api 파사드 신설은 별건), 타입을 문자열로 뒀다가
  * 나중에 채우는 순간 422 가 나는 함정을 남기지 않는다.
@@ -478,6 +529,8 @@ internal data class AiAlternativesRequest(
     val preferenceProfile: PreferenceProfile? = null,
     /** 그 여행의 동행 — 계정의 평소 동행보다 우선. */
     val companionType: String? = null,
+    /** 바꿀 슬롯의 장소 — 식사 칸이면 AI 가 식사 후보로만 고른다(사용자 컨셉이 없을 때). */
+    val targetPoiId: String? = null,
 )
 
 /**
@@ -528,6 +581,7 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         requestMeta = AiRequestMeta(requestMeta.requestId, requestMeta.requestedAt, requestMeta.deadlineMs),
         preferenceProfile = preferenceProfile,
         companionType = companionType,
+        targetPoiId = targetPoiId.toString(),
     )
 }
 

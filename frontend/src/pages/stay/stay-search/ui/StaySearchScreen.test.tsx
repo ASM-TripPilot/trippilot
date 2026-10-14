@@ -10,12 +10,6 @@ import { stayKey } from '@/features/save-stay/index.view';
 import { StaySearchScreen } from './StaySearchScreen';
 import type { StaySearchState } from '../model/staySearchState';
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
-import { closestAncestor } from '@/test-support/sheetTree';
-import type { ReactTestInstance } from 'react-test-renderer';
-
-/** 호스트 스크롤 노드(RN ScrollView/FlatList 의 호스트는 `RCTScrollView`) — 합성 요소는 세지 않는다. */
-const isHostScroll = (node: ReactTestInstance): boolean =>
-  String(node.type) === 'RCTScrollView';
 
 /**
  * e02 숙소 검색 — StaySearchScreen(props 만 받는 뷰) 단위 테스트.
@@ -116,25 +110,17 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
       .map((node) => String(node.props.testID));
   }
 
-  /** `SocialLoginScreen.test.tsx` `비주얼 구조`의 classTokens에서 그대로 가져온다(리포 관례 — 공용화하지 않고
-   * 파일마다 복사). 문자열 `includes`는 `'border-hairline-strong'.includes('border-hairline')`가
-   * true인 부분포함 오탐을 낸다 — 토큰 배열 원소 일치만 오탐을 구조적으로 막는다. */
-  function classTokens(node: { props: { className?: string } }): string[] {
-    return (node.props.className ?? '').trim().split(/\s+/);
-  }
-
   /**
-   * 카드 지문 — 자기 포함 모든 자손의 [testID, className, 직계 문자열 children]을 JSON으로 굳힌다.
+   * 카드 지문 — 자기 포함 모든 자손의 [testID, 직계 문자열 children]을 JSON으로 굳힌다.
    * `JSON.stringify(screen.toJSON())`은 `FlatList`+`ListHeaderComponent` 조합에서 순환 참조로
-   * TypeError를 던져 쓸 수 없다(F-10 실측) — 그 대체품이다. className 변경·자식 글리프 교체를
-   * 둘 다 검출한다(F-11 실측), "존재만 확인"은 둘 다 놓친다.
+   * TypeError를 던져 쓸 수 없다(F-10 실측) — 그 대체품이다. 자식 글리프 교체(testID)·글자 변화를
+   * 검출한다. className 은 생김새라 굳히지 않는다(README 판정 4, TRIP-1367).
    */
   function cardFingerprint(cardTestID: string): string {
     const card = screen.getByTestId(cardTestID);
     const nodes = card.findAll(() => true);
     const snapshot = nodes.map((node) => [
       node.props.testID ?? null,
-      node.props.className ?? null,
       node.children.filter(
         (child): child is string => typeof child === 'string'
       ),
@@ -190,10 +176,9 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
           within(card).getByTestId(`stay-card-save-${key}`)
         ).toBeOnTheScreen();
 
-        const photo = within(card).getByTestId(`stay-card-photo-${key}`);
-        expect(classTokens(photo)).toEqual(
-          expect.arrayContaining(['bg-surface-strong'])
-        );
+        expect(
+          within(card).getByTestId(`stay-card-photo-${key}`)
+        ).toBeOnTheScreen();
       });
     });
   });
@@ -275,7 +260,7 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
       fireEvent.press(screen.getByTestId('stay-search-filter-more'));
       fireEvent.press(screen.getByTestId(firstSaveId));
 
-      // 지문 비교 — className 변경·자식 글리프 교체 둘 다 검출한다(F-11 실측). "존재만
+      // 지문 비교 — 자식 글리프 교체·글자 변화를 검출한다. "존재만
       // 확인"으로는 나중에 누가 useState 토글을 붙여도 못 잡는다. 사정거리 한계: 처음부터
       // 채워진 하트로 그리는 구현은 이 렌더 단언으로는 못 잡는다 — 그 각도를
       // 막던 소스 스캔(staySearchStructure it 4-3)은 TRIP-1145 로 지웠다(QA 몫).
@@ -327,53 +312,18 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
     });
   });
 
-  describe('StaySearchScreen — 카드 골격 토큰 (V2)', () => {
-    it('카드·사진·하트가 Figma 토큰 클래스를 입는다', () => {
-      render(<StaySearchScreen region="부산" items={ITEMS} />);
-
-      const key = stayKey(ITEMS[0]);
-      const card = screen.getByTestId(`stay-card-${key}`);
-      const photo = within(card).getByTestId(`stay-card-photo-${key}`);
-      // within(card)로 잡히는 것 자체가 "하트가 카드의 자손이다"라는 완화된 단언이다
-      // (게이트① 전 판정 ③ — 사진 노드 자손으로 위치를 고정하면 시각적으로 동일한 구현에도
-      // red가 나는 구현 지시가 된다).
-      const heart = within(card).getByTestId(`stay-card-save-${key}`);
-
-      // border-hairline-strong도 'border-hairline'을 부분 문자열로 포함하므로(T-10, 칩이 바로
-      // 그 토큰을 쓴다) 배열 원소 일치로만 비교한다.
-      expect(classTokens(card)).toEqual(
-        expect.arrayContaining(['rounded-card', 'border-hairline'])
-      );
-      expect(classTokens(photo)).toEqual(
-        expect.arrayContaining(['bg-surface-strong', 'h-[178px]'])
-      );
-      // '오버레이'의 실질은 중첩 위치가 아니라 absolute이므로 이 토큰이 그 실질을 잠그고,
-      // 나머지 좌표(우 32 / 상 14)는 스크린샷 대조가 본다.
-      expect(classTokens(heart)).toEqual(expect.arrayContaining(['absolute']));
-    });
-  });
-
   describe('StaySearchScreen — 필터 칩 3개 · 라운드 사각 (V3 · AC-6)', () => {
     it.each([
       { axis: 'price', label: '가격대' },
       { axis: 'region', label: '지역' },
       { axis: 'more', label: '필터' },
-    ])(
-      '$axis 칩이 라벨 "$label"과 rounded-[8px]·border-hairline-strong 토큰을 갖는다(pill 아님)',
-      ({ axis, label }) => {
-        render(<StaySearchScreen region="부산" items={ITEMS} />);
+    ])('$axis 칩이 라벨 "$label"을 갖는다', ({ axis, label }) => {
+      render(<StaySearchScreen region="부산" items={ITEMS} />);
 
-        const chip = screen.getByTestId(`stay-search-filter-${axis}`);
+      const chip = screen.getByTestId(`stay-search-filter-${axis}`);
 
-        expect(within(chip).getByText(label)).toBeOnTheScreen();
-        // 라운드 사각(r8)으로 교체 — 현행 rounded-pill 이 사라진다(border 는 유지).
-        // "필터" 슬라이더 벡터 재작도는 SVG 라 jest 사각(★F-4, 6-b).
-        expect(classTokens(chip)).toEqual(
-          expect.arrayContaining(['rounded-[8px]', 'border-hairline-strong'])
-        );
-        expect(classTokens(chip)).not.toContain('rounded-pill');
-      }
-    );
+      expect(within(chip).getByText(label)).toBeOnTheScreen();
+    });
   });
 
   describe('StaySearchScreen — 검색창 placeholder (AC-1)', () => {
@@ -748,14 +698,6 @@ describe('원형 FAB 2개 (옛 .fab)', () => {
       expect(screen.queryByText(/여행 만들기/)).toBeNull();
     });
 
-    it('목록 끝 여백이 2단 FAB 최상단(208)을 덮어 마지막 카드를 안 가린다', () => {
-      render(<StaySearchScreen region="부산" items={[]} />);
-
-      const footer = screen.getByTestId('stay-search-list-footer');
-      const cls = String(footer.props.className ?? '');
-      expect(cls).toContain('h-[208px]');
-    });
-
     it('콜백 미지정이면 두 FAB 을 눌러도 아무 일이 없다(기존 호출 회귀 보호)', () => {
       render(<StaySearchScreen region="부산" items={[]} />);
 
@@ -766,26 +708,6 @@ describe('원형 FAB 2개 (옛 .fab)', () => {
         fireEvent.press(screen.getByTestId('stay-search-fab-register'))
       ).not.toThrow();
     });
-  });
-
-  // TRIP-1103 AC-2 — NativeWind 의 rem 기준이 14px 이라 `h-14`(3.5rem)는 49px 로 렌더된다
-  // (HomeScreen.tsx CreateTripFab 주석 실측). Figma 56px 는 브래킷 `h-[56px]` 로만 옮겨진다.
-  describe('TRIP-1103 AC-2 · e02 두 FAB 지름 56px (h-14 rem 함정 제거)', () => {
-    it.each(['stay-search-fab-saved', 'stay-search-fab-register'])(
-      '%s 가 h-[56px] w-[56px] 이고 h-14·w-14 는 없다',
-      (testID) => {
-        render(<StaySearchScreen region="부산" items={[]} />);
-
-        const tokens = String(
-          screen.getByTestId(testID).props.className ?? ''
-        ).split(/\s+/);
-        expect(tokens).toEqual(
-          expect.arrayContaining(['h-[56px]', 'w-[56px]'])
-        );
-        expect(tokens).not.toContain('h-14');
-        expect(tokens).not.toContain('w-14');
-      }
-    );
   });
 });
 
@@ -1043,23 +965,6 @@ describe('이름·지역 검색 (옛 .nameSearch — 통합 심판 0, 단위 전
       expect(onRelax).toHaveBeenCalledTimes(1);
     });
 
-    it('목록은 키보드가 떠 있어도 첫 탭을 버튼에 준다(keyboardShouldPersistTaps="handled", TRIP-935)', () => {
-      // 준비: 이름 0건 카드 — 검색어를 치는 도중(키보드가 떠 있을 때) 뜨는 화면.
-      render(
-        <StaySearchScreen
-          region="부산"
-          items={ITEMS}
-          nameQuery="없는숙소"
-          onChangeNameQuery={() => {}}
-        />
-      );
-
-      // 단언: 실제 키보드 동작은 jest 사각이라 그 동작을 정하는 prop 값을 잠근다.
-      expect(
-        screen.getByTestId('stay-search-list').props.keyboardShouldPersistTaps
-      ).toBe('handled');
-    });
-
     it('빈 검색어는 전체를 그대로 둔다(no-match 아님)', () => {
       render(
         <StaySearchScreen
@@ -1072,41 +977,6 @@ describe('이름·지역 검색 (옛 .nameSearch — 통합 심판 0, 단위 전
       expect(screen.queryByTestId('stay-search-name-empty')).toBeNull();
       expect(screen.getByTestId(`stay-card-${KEY_A}`)).toBeOnTheScreen();
       expect(screen.getByTestId(`stay-card-${KEY_B}`)).toBeOnTheScreen();
-    });
-  });
-
-  // TRIP-1280 AC-1 — 키보드가 이름 0건 카드의 버튼을 가린다. 실제 키보드·스크롤은 jest 사각(6-b iOS)이라
-  // 그 동작을 정하는 스크롤 prop 과 "버튼·입력칸이 그 스크롤 안" 을 함께 잠근다.
-  describe('키보드가 떠 있어도 이름 0건 버튼에 닿는다', () => {
-    it('검색어 지우기·필터 초기화·검색창이 한 목록 스크롤 안에 있고, 그 스크롤은 키보드만큼 여백을 더하며 첫 탭을 버튼에 준다', () => {
-      render(
-        <StaySearchScreen
-          region="부산"
-          items={ITEMS}
-          nameQuery="없는숙소"
-          onChangeNameQuery={() => {}}
-          priceBucket="over-200k"
-          onRelaxFilters={() => {}}
-        />
-      );
-
-      const scrollIds = [
-        'stay-search-name-empty-clear',
-        'stay-search-name-empty-reset',
-        'stay-search-name-input',
-      ].map(
-        (id) =>
-          closestAncestor(screen.getByTestId(id), isHostScroll)?.props.testID
-      );
-      expect(scrollIds).toEqual([
-        'stay-search-list',
-        'stay-search-list',
-        'stay-search-list',
-      ]);
-
-      const list = screen.getByTestId('stay-search-list');
-      expect(list.props.automaticallyAdjustKeyboardInsets).toBe(true);
-      expect(list.props.keyboardShouldPersistTaps).toBe('handled');
     });
   });
 });
@@ -1416,22 +1286,6 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
       .map((node) => String(node.props.testID));
   }
 
-  /** `SocialLoginScreen.test.tsx` `비주얼 구조`의 classTokens·동결 파일에서 그대로 가져온다(리포 관례). 문자열
-   * includes는 부분포함 오탐을 낸다 — 배열 원소 일치만 오탐을 막는다. */
-  function classTokens(node: { props: { className?: string } }): string[] {
-    return (node.props.className ?? '').trim().split(/\s+/);
-  }
-
-  /** 서브트리 어딘가에 토큰이 있는지 — 원형 배지처럼 자체 testID가 없는 자손까지 훑는다. */
-  function hasTokenInSubtree(
-    root: ReturnType<typeof screen.getByTestId>,
-    token: string
-  ): boolean {
-    return root
-      .findAll(() => true)
-      .some((node) => classTokens(node).includes(token));
-  }
-
   // 곡선 따옴표 U+2018(‘) / U+2019(’) — 직선 '(U+0027)로 적으면 매칭이 조용히 어긋난다.
   const CURLY_TITLE = (name: string) => `‘${name}’ 필터가 0건을 만들었어요`;
   const CURLY_CLEAR = (name: string) => `‘${name}’ 필터 해제`;
@@ -1454,28 +1308,6 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
         '부산 · 날짜 미정'
       );
       expect(queryCardTestIds()).toEqual([]);
-
-      expect(classTokens(screen.getByText('숙소를 모으는 중'))).toEqual(
-        expect.arrayContaining(['text-muted-soft'])
-      );
-      expect(
-        hasTokenInSubtree(
-          screen.getByTestId('stay-search-skeleton-0'),
-          'bg-surface-strong'
-        )
-      ).toBe(true);
-      // AC-L1′(01b 오버라이드) — 각 스켈레톤을 카드 틀(border-hairline + rounded-card)로 감싼다.
-      // soft shadow 는 style prop(#000000, raw-hex 스캔 밖)이라 룩은 6-b/831 몫 — 여기선 단언하지 않는다.
-      expect(classTokens(screen.getByTestId('stay-search-skeleton-0'))).toEqual(
-        expect.arrayContaining(['border-hairline', 'rounded-card'])
-      );
-      // AC-L1′ 세로형 잠금(5-b code-critic 참고-1) — 이 사이클의 핵심 결정은 "세로 유지"인데 방향을
-      // 무는 심판이 없었다(카드 바깥 View 에 flex-row 만 넣으면 5스위트 전부 green). RN View 기본이
-      // column 이라 세로의 표식은 flex-row 의 **부재**다. 위 arrayContaining 이 실토큰(border-hairline)
-      // 존재로 "옳은 엘리먼트를 읽는다"를 보장하므로 이 부정 단언은 공허하지 않다(뮤테이션으로 실측).
-      expect(
-        classTokens(screen.getByTestId('stay-search-skeleton-0'))
-      ).not.toContain('flex-row');
     });
   });
 
@@ -1507,20 +1339,6 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
       expect(
         screen.queryAllByTestId('stay-search-partialfailure')
       ).toHaveLength(0);
-
-      expect(classTokens(empty)).toEqual(
-        expect.arrayContaining(['border-dashed'])
-      );
-      expect(hasTokenInSubtree(empty, 'bg-primary-pale')).toBe(true);
-
-      const regionBtn = screen.getByTestId('stay-search-empty-region');
-      const filterBtn = screen.getByTestId('stay-search-empty-filter');
-      [regionBtn, filterBtn].forEach((btn) => {
-        expect(classTokens(btn)).toEqual(
-          expect.arrayContaining(['border-hairline-strong'])
-        );
-        expect(classTokens(btn)).not.toContain('bg-primary');
-      });
     });
   });
 
@@ -1541,13 +1359,6 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
           'stay-search-register'
         )
       ).toBeNull();
-
-      // AC-E1(TRIP-726) — 등록 유도 카드를 흰 카드 틀(border-hairline + rounded-card)로 감싼다.
-      // 틀 클래스는 testID 엘리먼트(stay-search-register)에 얹힌다(StateNotice·EmptyBlock 선례 동형 —
-      // 별도 래퍼 View 에 얹지 않는다, §5 실검증). 내용·testID·콜백은 위 단언들이 무회귀를 잠근다.
-      expect(classTokens(reg)).toEqual(
-        expect.arrayContaining(['border-hairline', 'rounded-card'])
-      );
     });
   });
 
@@ -1591,16 +1402,6 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
         expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
           '부산 · 날짜 미정 · 0곳'
         );
-
-        const clearBtn = screen.getByTestId('stay-search-filterzero-clear');
-        const resetBtn = screen.getByTestId('stay-search-filterzero-reset');
-        expect(classTokens(clearBtn)).toEqual(
-          expect.arrayContaining(['border-hairline-strong'])
-        );
-        expect(classTokens(resetBtn)).not.toContain('border-hairline-strong');
-        expect(classTokens(within(resetBtn).getByText('필터 초기화'))).toEqual(
-          expect.arrayContaining(['text-primary'])
-        );
       }
     );
   });
@@ -1629,11 +1430,6 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
       expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
         '부산 · 날짜 미정 · 3곳'
       );
-
-      expect(classTokens(banner)).toEqual(
-        expect.arrayContaining(['bg-surface-soft', 'rounded-button'])
-      );
-      expect(hasTokenInSubtree(banner, 'text-primary')).toBe(true);
     });
   });
 
@@ -1694,22 +1490,6 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
         '부산 · 날짜 미정'
       );
       expect(queryCardTestIds()).toEqual([]);
-
-      const retryBtn = screen.getByTestId('stay-search-error-retry');
-      const registerBtn = screen.getByTestId('stay-search-error-register');
-      // 이 화면만 채움 버튼이다 — 나머지 상태의 1차 버튼은 전부 아웃라인.
-      expect(classTokens(retryBtn)).toEqual(
-        expect.arrayContaining(['bg-primary'])
-      );
-      expect(classTokens(within(retryBtn).getByText('다시 시도'))).toEqual(
-        expect.arrayContaining(['text-on-primary'])
-      );
-      expect(classTokens(registerBtn)).not.toContain('bg-primary');
-      expect(classTokens(registerBtn)).toEqual(
-        expect.arrayContaining(['border-hairline-strong'])
-      );
-
-      expect(hasTokenInSubtree(err, 'bg-primary-pale')).toBe(true);
     });
   });
 

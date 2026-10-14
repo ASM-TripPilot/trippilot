@@ -18,13 +18,13 @@ APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
 AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
 ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS
-KAKAO_APP_ID
+KAKAO_APP_ID ASSISTANT_INTERPRET_MODE LOCATION_AUTOMATION_ENABLED
 """.split())
 AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
 ANTHROPIC_API_KEY ANTHROPIC_MODEL TRIPPILOT_LLM_FEATURE_MODELS TRIPPILOT_LLM_RETRY_MODELS
 TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API_BASE KAKAO_REST_API_KEY
-EXISTENCE_MAX_CALLS TMAP_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
+EXISTENCE_MAX_CALLS TMAP_API_KEY ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
 """.split())
 GROUP_KEYS = {
@@ -36,6 +36,10 @@ BACKEND_DEFAULTS = {
     "PLACE_GEOCODE_MODE": "stub", "WEATHER_MODE": "fake",
     "PUSH_MODE": "off", "AI_REMINDER_COPY_MODE": "http",
     "AFFILIATE_MODE": "fallback",
+    # 도우미 발화 해석(U8 REL-U8-06). 앱 기본값은 fake(로컬용 낱말 표)라, 여기서 off 를 심지 않으면
+    # 운영이 대역으로 뜬다. off = 버튼 모드. 상대 경계(TRIP-1410)와 월 상한(20,000 턴)이 섰으므로 켜려면 시크릿 값만
+    # http 로 바꾼다 — 새로 까는 환경의 기본은 여전히 off 다(켜는 것은 환경마다의 결정).
+    "ASSISTANT_INTERPRET_MODE": "off",
 }
 
 
@@ -137,7 +141,11 @@ def validate_groups(groups):
     backend, ai = groups["backend"], groups["ai"]
     modes = {"PLACE_GEOCODE_MODE": {"stub", "kakao"}, "WEATHER_MODE": {"fake", "kma"},
              "PUSH_MODE": {"off", "expo"}, "AI_REMINDER_COPY_MODE": {"off", "http"},
-             "AFFILIATE_MODE": {"fallback", "tripcom"}}
+             "AFFILIATE_MODE": {"fallback", "tripcom"},
+             # http = 상대 AI 해석 경계(TRIP-1410). 오타는 백엔드가 기동에서 거부하므로 배포 전에 막는다.
+             "ASSISTANT_INTERPRET_MODE": {"off", "fake", "http"},
+             # U10 서버 킬 스위치(REL-U10-06). 없으면 켜짐이다. 끄려면 false 를 넣고 백엔드 파드를 다시 띄운다.
+             "LOCATION_AUTOMATION_ENABLED": {"true", "false"}}
     for key, allowed in modes.items():
         if key in backend and backend[key] not in allowed:
             raise ValueError(f"Unsupported {key} in backend secret")

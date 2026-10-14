@@ -57,7 +57,8 @@ class AccountDeletionService(
 
         refreshSessions.revokeByAccount(accountId, now)           // 전 기기 로그아웃(BR-U0-23)
         locationConsent.purgeForAccountDeletion(accountId)        // GPS 발자취 즉시 파기(FD-U1-07)
-        // 이 이벤트는 감사·후속 훅 신호일 뿐, 파기 트리거가 아니다(파기는 위에서 인라인 수행) — 이중 파기 리스너 주의.
+        // GPS 발자취는 위에서 인라인으로 지웠다 — 이 이벤트를 듣고 그것을 또 지우는 리스너를 두지 않는다(이중 파기 주의).
+        // 다른 모듈은 이 이벤트로 **자기 것**을 즉시 지운다(도우미 대화 — U8 DATA-U8-02).
         eventPublisher.publish(AccountDeletionRequested(accountId.value.toString(), schedule.deletionId.toString(), purgeAt))
 
         return DeletionRequestResult(purgeAt, summary)

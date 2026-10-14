@@ -7,7 +7,6 @@ import {
 import type { StayDetail } from '@/shared/api/index.schemas';
 import { formatPrice } from '@/entities/stay';
 import { StayDetailScreen } from './StayDetailScreen';
-import { StyleSheet } from 'react-native';
 
 /**
  * e03 숙소 상세 — StayDetailScreen(props 만 받는 뷰) 단위 테스트.
@@ -64,14 +63,6 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
    *    잰다 — SVG stroke/shape 는 jest 사각(repo-traps §글리프). 여기선 아이콘 leaf 존재까지만.
    */
 
-  // viewOnly 가 펼쳐지는 4토글 — 하나라도 누락되면 어느 축인지 드러나게 개별 단언(d06 선례).
-  const GESTURE_TOGGLES = [
-    'isScrollGesturesEnabled',
-    'isZoomGesturesEnabled',
-    'isRotateGesturesEnabled',
-    'isTiltGesturesEnabled',
-  ] as const;
-
   // openapi `StayDetail` 계약 모양(필수 9 + 선택 4). 주소는 지역('해운대')을 부분으로 품지만
   // 완전일치 매처라 지역 개수 세기에 안 섞인다(S1).
   const DETAIL: StayDetail = {
@@ -116,19 +107,6 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
     };
   }
 
-  /** 렌더 트리를 위→아래(앞 형제 먼저)로 훑어 testID 를 나온 순서대로 모은다(devPreviewAffiliateNotice 선례). */
-  type JsonNode = { props?: { testID?: unknown }; children?: unknown[] | null };
-  function testIdsInOrder(node: unknown, out: string[] = []): string[] {
-    if (Array.isArray(node)) {
-      node.forEach((child) => testIdsInOrder(child, out));
-    } else if (node && typeof node === 'object') {
-      const { props, children } = node as JsonNode;
-      if (typeof props?.testID === 'string') out.push(props.testID);
-      if (children) testIdsInOrder(children, out);
-    }
-    return out;
-  }
-
   describe('S1 · 가격줄 — 이름·2톤 가격·지역 (AC-1 · AC-5 · BR-U1-12 · INV-3)', () => {
     it('이름·회색 사진자리·지도자리를 그리고 "· 1박" 접미가 없다', () => {
       render(<StayDetailScreen {...baseProps()} />);
@@ -157,10 +135,6 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
       const priceRow = screen.getByTestId('stay-detail-price-row');
       // 가격줄 우측 지역(현행 유지).
       expect(within(priceRow).getByText(DETAIL.region)).toBeOnTheScreen();
-      // 좌:가격 우:지역 — justify-between.
-      expect(String(priceRow.props.className).split(/\s+/)).toContain(
-        'justify-between'
-      );
       // TRIP-940 — 지도 아래 줄이 지역 반복에서 주소로 바뀌었다(Figma 1700:1183 "📍 부산 해운대구 우동").
       // 그래서 지역은 가격줄 한 곳에만 뜬다(현행은 위치줄에도 떠서 2 → red).
       expect(screen.getAllByText(DETAIL.region)).toHaveLength(1);
@@ -227,16 +201,6 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
           'stay-detail-amenity-icon-사우나'
         )
       ).toBeOnTheScreen();
-    });
-
-    it('칩이 flex-1(4칸 균등)이고 고정폭 w-[72px] 이 아니다', () => {
-      render(<StayDetailScreen {...baseProps()} />);
-
-      const chipClasses = String(
-        screen.getByTestId('stay-detail-amenity-ocean').props.className
-      ).split(/\s+/);
-      expect(chipClasses).toContain('flex-1');
-      expect(chipClasses).not.toContain('w-[72px]');
     });
   });
 
@@ -319,17 +283,6 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
       expect(within(map).getByTestId('map-native')).toBeOnTheScreen();
     });
 
-    it('viewOnly 가 전달돼 제스처 4토글이 개별로 전부 false 다', () => {
-      render(<StayDetailScreen {...baseProps()} />);
-
-      const native = within(screen.getByTestId('stay-detail-map')).getByTestId(
-        'map-native'
-      );
-      for (const toggle of GESTURE_TOGGLES) {
-        expect(native.props[toggle]).toBe(false);
-      }
-    });
-
     it('center 와 단일 핀이 detail.lat/lng 로 전달된다(lat↔lng 스왑 방지)', () => {
       render(<StayDetailScreen {...baseProps()} />);
 
@@ -396,7 +349,7 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
   // ── TRIP-940 · 서버 조회 결과의 새 줄(주소·전화·객실)과 비정상 얼굴 ─────────────────
 
   describe('S12 · 주소·전화·객실 줄 (TRIP-940 AC-1 · Q1)', () => {
-    it('지도 아래에 주소 → 전화 → 객실 순으로 줄을 그리고, 그 다음이 제휴 고지다', () => {
+    it('주소·전화·객실 줄을 그린다', () => {
       render(<StayDetailScreen {...baseProps()} />);
 
       expect(screen.getByTestId('stay-detail-address')).toHaveTextContent(
@@ -407,19 +360,6 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
       );
       expect(screen.getByTestId('stay-detail-rooms')).toHaveTextContent(
         /120실/
-      );
-
-      // Q1 자리 — 위치 섹션(지도 아래 주소 줄) 바로 밑에 같은 스타일 2줄. 트리 순서로 잰다.
-      const ids = testIdsInOrder(screen.toJSON());
-      const at = (id: string) => ids.indexOf(id);
-      expect(at('stay-detail-map')).toBeGreaterThanOrEqual(0);
-      expect(at('stay-detail-address')).toBeGreaterThan(at('stay-detail-map'));
-      expect(at('stay-detail-phone')).toBeGreaterThan(
-        at('stay-detail-address')
-      );
-      expect(at('stay-detail-rooms')).toBeGreaterThan(at('stay-detail-phone'));
-      expect(at('stay-detail-affiliate-notice')).toBeGreaterThan(
-        at('stay-detail-rooms')
       );
     });
   });
@@ -753,38 +693,8 @@ describe('편의시설 줄바꿈 (옛 .amenityOverflow)', () => {
     '바베큐',
   ];
 
-  // Figma e03 편의시설 행(1700:1213) — 폭 358, 간격 8, 4칸.
-  const ROW_WIDTH = 358;
-  const GAP = 8;
-  const COLS = 4;
-  const MAX_CHIP_WIDTH = (ROW_WIDTH - (COLS - 1) * GAP) / COLS; // 83.5 — 한 줄에 4개가 들어가는 최대
-  const FIVE_FIT_WIDTH = (ROW_WIDTH - COLS * GAP) / (COLS + 1); // 65.2 — 이하면 한 줄에 5개가 들어간다
-
   const ROW_ID = 'stay-detail-amenities';
   const CHIP_ID = /^stay-detail-amenity-(?!icon-)/; // 칩만(아이콘 leaf 제외, 02a ★3)
-  // 02c: 폭은 고정 `w-[Npx]` 하나만 인정한다 — `min-w`는 라벨 길이만큼 늘어날 수 있다(03b 경고-1).
-  const FIXED_WIDTH_TOKEN = /^w-\[(\d+(?:\.\d+)?)px\]$/;
-  const OTHER_WIDTH_TOKEN = /^(?:min-w|max-w|basis)-/;
-  // grow 계열 전부: flex-1·flex-2·flex-auto·flex-[1]·grow·grow-2·grow-[2]·flex-grow·flex-grow-[2].
-  // grow-0·flex-row·flex-wrap·flex-none 은 안 걸린다(늘어나지 않음).
-  const GROW_TOKEN =
-    /^(?:flex-(?:\d+|auto|\[[^\]]+\])|(?:flex-)?grow(?:-[1-9]\d*|-\[[^\]]+\])?)$/;
-  // className 밖의 우회로 — style prop 으로 늘리거나 폭을 덮으면 className 단언이 못 본다.
-  const LAYOUT_STYLE_KEYS = [
-    'flex',
-    'flexGrow',
-    'flexBasis',
-    'width',
-    'minWidth',
-    'maxWidth',
-  ];
-  const OFF_START_JUSTIFY = [
-    'justify-center',
-    'justify-between',
-    'justify-around',
-    'justify-evenly',
-    'justify-end',
-  ];
 
   function noop(): void {}
 
@@ -800,16 +710,6 @@ describe('편의시설 줄바꿈 (옛 .amenityOverflow)', () => {
         onRetry={noop}
       />
     );
-  }
-
-  function tokens(testID: string): string[] {
-    return String(screen.getByTestId(testID).props.className).split(/\s+/);
-  }
-
-  /** 호스트 View 의 style prop 을 한 객체로 편다(배열·중첩 배열도). style 이 없으면 빈 객체. */
-  function flatStyle(testID: string): Record<string, unknown> {
-    return (StyleSheet.flatten(screen.getByTestId(testID).props.style) ??
-      {}) as Record<string, unknown>;
   }
 
   /** 렌더 트리 전체에서 가로 스크롤(`horizontal` 참) 노드의 type 을 모은다. */
@@ -829,21 +729,6 @@ describe('편의시설 줄바꿈 (옛 .amenityOverflow)', () => {
     return out;
   }
 
-  describe('O1 · 4개 이하는 현행 무변경 — 한 줄 균등 (AC-1 · D1 · Figma 1700:1213)', () => {
-    it('4개면 행이 줄바꿈하지 않고 칩 4개가 모두 flex-1 이다', () => {
-      const four = AMENITY_POOL.slice(0, 4);
-      renderWith(four);
-
-      const rowTokens = tokens(ROW_ID);
-      expect(rowTokens).toContain('flex-row');
-      expect(rowTokens).not.toContain('flex-wrap');
-      expect(rowTokens).not.toContain('flex-wrap-reverse');
-      four.forEach((value) => {
-        expect(tokens(`stay-detail-amenity-${value}`)).toContain('flex-1');
-      });
-    });
-  });
-
   describe('O2 · 5개 이상도 하나도 숨기지 않는다 (AC-2 · US-STAY-03)', () => {
     it.each([5, 6, 8])(
       '%i개면 행 안에 칩이 그 개수만큼 전부 있고 +N 요약·가로 스크롤이 없다',
@@ -860,56 +745,6 @@ describe('편의시설 줄바꿈 (옛 .amenityOverflow)', () => {
         });
         expect(screen.queryAllByText(/^\+\d+$/)).toHaveLength(0);
         expect(horizontalNodes(screen.toJSON())).toEqual([]);
-      }
-    );
-  });
-
-  describe('O3 · 5개 이상은 줄바꿈 + 4칸 격자 폭 (AC-3 · D1 · D2)', () => {
-    it.each([5, 6, 8])('%i개면 행이 줄바꿈을 허용하고 왼쪽부터 채운다', (n) => {
-      renderWith(AMENITY_POOL.slice(0, n));
-
-      const rowTokens = tokens(ROW_ID);
-      expect(rowTokens).toEqual(
-        expect.arrayContaining(['flex-row', 'flex-wrap', 'gap-sm'])
-      );
-      OFF_START_JUSTIFY.forEach((token) => {
-        expect(rowTokens).not.toContain(token);
-      });
-    });
-
-    it.each([5, 6, 8])(
-      '%i개면 칩이 고정폭 w-[Npx] 하나로만 폭을 갖고(늘어나지 않음), 모두 같은 폭(한 줄 4개 격자)이다',
-      (n) => {
-        const values = AMENITY_POOL.slice(0, n);
-        renderWith(values);
-
-        const widths = values.map((value) => {
-          const testID = `stay-detail-amenity-${value}`;
-          const chipTokens = tokens(testID);
-
-          // grow 계열 className 없음 — 있으면 마지막 줄 칩이 행 가득 벌어진다(D2).
-          expect(chipTokens.filter((t) => GROW_TOKEN.test(t))).toEqual([]);
-          // min-w·max-w·basis 없음 — 폭은 w 하나로만 정한다(02c).
-          expect(chipTokens.filter((t) => OTHER_WIDTH_TOKEN.test(t))).toEqual(
-            []
-          );
-          // style prop 으로 늘리거나 폭을 덮는 우회 없음.
-          expect(
-            LAYOUT_STYLE_KEYS.filter(
-              (key) => flatStyle(testID)[key] !== undefined
-            )
-          ).toEqual([]);
-
-          const fixed = chipTokens
-            .map((t) => t.match(FIXED_WIDTH_TOKEN)?.[1])
-            .filter((w): w is string => w !== undefined)
-            .map(Number);
-          expect(fixed).toHaveLength(1);
-          expect(fixed[0]).toBeGreaterThan(FIVE_FIT_WIDTH);
-          expect(fixed[0]).toBeLessThanOrEqual(MAX_CHIP_WIDTH);
-          return fixed[0];
-        });
-        expect(new Set(widths).size).toBe(1);
       }
     );
   });

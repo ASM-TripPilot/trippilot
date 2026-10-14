@@ -5,11 +5,15 @@ import { Text, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
-import { resolveEditorMapCenter } from '../model/editorMapCenter';
 import { useItineraryTabBack } from '../model/useItineraryTabBack';
-import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
 import {
-  useItineraryEditStore,
+  buildDraftPins,
+  formatCoPickDayHeader,
+  resolvePlanMapCenter,
+} from '@/features/itinerary';
+import {
+  useConfirmItinerary,
+  useEditorDraft,
   type EditorDaysItem,
 } from '@/features/edit-itinerary';
 import { buildPlanDayTabs } from '@/features/itinerary';
@@ -17,16 +21,13 @@ import { SaveConflictDialog } from '@/features/edit-itinerary';
 import { useTripWizardStore } from '@/features/create-trip';
 import { useSavedStays } from '@/features/trip';
 import { useTripBases } from '@/features/assign-trip-base';
-import { parseSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerary,
-  usePostTripsTripIdItineraryConfirm,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
-import { isAlreadyRegistered } from '@/shared/api';
 import { isNotFound } from '@/shared/api';
 import { showToast } from '@/shared/ui/Toast';
 import { EditorView } from '@/widgets/map-sheet-shell';
@@ -52,8 +53,8 @@ import { TimeSheet } from '@/widgets/time-sheet';
  *  5. **저장 실패·미지정 제외를 침묵하지 않는다(INV-4)** — 실패는 원인 단정 없는 안내 1종(MANUAL
  *     초안에선 409 확정/생성중 갈래가 사실상 안 나온다), 미지정 슬롯이 빠지면 몇 곳인지 알린다.
  *  6. **CTA 는 저장하고 확정한다(TRIP-1038 B)** — PUT 성공 뒤에만 확정 POST, 성공하면 h16 으로 replace.
- *     확정 부수효과(캐시 쓰기·위저드 비우기·409 재조회)는 `ItineraryPlanPage.handleConfirm` 의 복제다
- *     (pages 끼리 import 금지) — 한쪽만 고치면 갈라진다.
+ *     확정 부수효과(캐시 쓰기·409 재조회)는 `features/edit-itinerary` 의 `useConfirmItinerary` 가
+ *     `ItineraryPlanPage` 와 같이 쥔다. 위저드 비우기·이동은 이 페이지가 콜백으로 쥔다.
  *  7. **`startFresh`(TRIP-1038 C)** — 초안의 비우기 확인을 거쳐 오면 가드 a 를 건너뛰고 비운다. 비우는
  *     동안(POST~새 조회 도착) 옛 슬롯을 그리지 않는다 — 그 틈에 저장하면 옛 일정이 확정된다.
  *  8. **위반 있는 저장은 확정 전에 멈춘다(TRIP-1095)** — PUT 응답 전 일자에 위반이 있으면 확정 대신
@@ -84,19 +85,11 @@ export function ManualPlanPage({
   const generate = usePostTripsTripIdItinerary();
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const save = usePutTripsTripIdItinerary<unknown>();
-  // 캐시 쓰기·위저드 비우기는 훅 옵션에 둔다 — 호출별 콜백과 달리 확정 대기 중 화면을 떠나도 불린다
-  // (traps-itinerary GeneratingPage). 이동(replace)은 화면에 딸린 일이라 호출별 콜백에 둔다.
-  const confirm = usePostTripsTripIdItineraryConfirm<unknown>({
-    mutation: {
-      onSuccess: (data) => {
-        queryClient.setQueryData(
-          getGetTripsTripIdItineraryQueryKey(tripId),
-          data
-        );
-        useTripWizardStore.getState().reset();
-      },
-    },
-  });
+  // 캐시 쓰기·409 재조회는 공통 훅이 훅 옵션에 둔다 — 확정 대기 중 화면을 떠나도 불린다(traps-itinerary
+  // GeneratingPage). 위저드 비우기는 형제 feature 라 콜백으로 넘기고, 이동(replace)은 호출별 콜백에 둔다.
+  const confirm = useConfirmItinerary(tripId, () =>
+    useTripWizardStore.getState().reset()
+  );
   // 저장+확정 2왕복 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타·PUT~확정 틈을 못 막는다.
   const inFlightRef = useRef(false);
   // 위반 요약 게이트(null = 닫힘)와 그 버튼 연타 잠금 — 같은 틱 두 누름은 state 로 못 막는다.
@@ -119,11 +112,15 @@ export function ManualPlanPage({
   // 열린 시각 시트의 slotKey(null = 닫힘) — 조건부 마운트.
   const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
 
-  const seed = useItineraryEditStore((s) => s.seed);
-  const deleteSlot = useItineraryEditStore((s) => s.deleteSlot);
-  const reorderSlots = useItineraryEditStore((s) => s.reorderSlots);
-  const adjustSlotTime = useItineraryEditStore((s) => s.adjustSlotTime);
-  const days = useItineraryEditStore((s) => s.days);
+  const {
+    seed,
+    deleteSlot,
+    reorderSlots,
+    adjustSlotTime,
+    days,
+    editing,
+    editingSlot,
+  } = useEditorDraft(editingSlotKey);
 
   // 직접 고르기 진입이 기존 초안을 빈 MANUAL 로 덮어쓰지 않게 한다(TRIP-601 가드 a · BR-U3-06). 판정 축은
   // `days.length>0` — slots 만 빈 정상 MANUAL 재진입도 보존해 재-POST 를 막는다.
@@ -251,15 +248,9 @@ export function ManualPlanPage({
             params: { tripId },
           });
         },
-        onError: (error) => {
+        onError: () => {
           inFlightRef.current = false;
           setConfirmError(CONFIRM_ERROR_NOTE);
-          // 409 만 재조회 — 서버 진실이 이미 확정일 수 있다. 500 은 상태가 안 바뀌었다(ItineraryPlanPage 선례).
-          if (isAlreadyRegistered(error)) {
-            void queryClient.invalidateQueries({
-              queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
-            });
-          }
         },
       }
     );
@@ -289,20 +280,12 @@ export function ManualPlanPage({
   const activeDate = loadedDays[activeDayIndex]?.date ?? '';
   const activeSlots = loadedDays[activeDayIndex]?.slots ?? [];
   const pins = buildDraftPins(activeSlots);
-  const center = resolveEditorMapCenter({
-    pins,
-    date: activeDate,
+  const center = resolvePlanMapCenter({
+    days: [{ date: activeDate, slots: activeSlots }],
+    selectedDate: activeDate,
     bases: bases.data,
     stays: savedStays.data,
   });
-
-  const editing = editingSlotKey === null ? null : parseSlotKey(editingSlotKey);
-  const editingSlot =
-    editing !== null && editing.kind === 'ok'
-      ? days
-          .find((day) => day.date === editing.date)
-          ?.slots.find((slot) => slot.poiId === editing.poiId)
-      : undefined;
 
   return (
     <View className="flex-1">

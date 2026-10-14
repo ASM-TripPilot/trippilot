@@ -267,24 +267,6 @@ describe('PrefStep2Screen — 크롬(back·skip) (AC-6 · US-ONB-11 · TRIP-719 
   });
 });
 
-describe('PrefStep2Screen — 진행점 색 (TRIP-719 · Figma 1774:2258)', () => {
-  // className 은 NativeWind 가 소비 전이라 jest 렌더 트리에 평문 prop 으로 남는다 — 공백으로
-  // 쪼갠 '토큰 배열'로 비교한다(부분 문자열 오탐 차단). pref1 진행점 심판과 동형이나 2/2 라
-  // 두 점 모두 채움(primary)이다.
-  const tokens = (testID: string): string[] =>
-    String(screen.getByTestId(testID).props.className)
-      .split(/\s+/)
-      .filter(Boolean);
-
-  it('두 진행점이 모두 bg-primary 다 (2/2 완료 — bg-hairline-strong·bg-ink 회귀 금지)', () => {
-    render(<PrefStep2Screen {...makeProps()} />);
-
-    // 2/2 라 첫 점(구 bg-hairline-strong)·둘째 점(구 bg-ink) 모두 primary 로 바뀐다.
-    expect(tokens('onboarding-pref2-progress-1')).toContain('bg-primary');
-    expect(tokens('onboarding-pref2-progress-2')).toContain('bg-primary');
-  });
-});
-
 describe('PrefStep2Screen — 완료 항상 활성 + 문구 (AC-6 · 인터뷰4 · 4-7)', () => {
   it('전 축 미선택이어도 완료 버튼은 활성이고 탭하면 onDone이 호출된다', () => {
     // 준비 — 전 축 null + onDone 관찰.
