@@ -313,6 +313,8 @@ _EXPECTED_MODES = {
         "llm_explain_alternatives", "template_rationale"),
     # 다시 짜기 하루 구성 — 실패면 고른 목록 없이 종전 재계획(점수 + 어셈블리 선택)
     LlmFeature.REPLAN_COMPOSITION: ("llm_compose_day", "scored_assembly"),
+    # 자연어 재계획 추출 — 실패면 추출 없이(칩·지시·구성은 원문을 읽는다)
+    LlmFeature.REPLAN_REQUEST_EXTRACTION: ("llm_request_extract", "no_extraction"),
 }
 
 
