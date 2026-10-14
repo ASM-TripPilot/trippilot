@@ -186,8 +186,12 @@ def index_bank(
     *,
     collection: str = BANK_COLLECTION,
     allow_unreviewed: bool = False,
+    vectors: Sequence[Sequence[float]] | None = None,
 ) -> int:
     """뱅크를 임베딩해 벡터 스토어에 적재하고 적재 건수를 반환한다.
+
+    `vectors` 를 주면 임베딩을 부르지 않고 그 벡터를 싣는다(미리 계산한 파일 — `BankVectors`). 개수·차원
+    검증은 같다.
 
     `allow_unreviewed=False`(기본)에서 미검수 항목을 만나면 UnreviewedBankError —
     한 건도 적재하지 않는다 (부분 적재로 인한 반쪽 뱅크 방지).
@@ -200,7 +204,8 @@ def index_bank(
                 f"(ai/data/README.md) — 대상 의도: {', '.join(pending)}. "
                 "평가·테스트 목적이면 allow_unreviewed=True로 명시할 것"
             )
-    vectors = embedding.embed_batch([e.question for e in entries])
+    if vectors is None:
+        vectors = embedding.embed_batch([e.question for e in entries])
     if len(vectors) != len(entries):
         raise BankLoadError("임베딩 개수가 질문 수와 불일치")
     for entry, vector in zip(entries, vectors):
@@ -208,3 +213,72 @@ def index_bank(
             raise BankLoadError(f"{entry.entry_id}: 임베딩 차원 {len(vector)} != {embedding.dim}")
         store.upsert(collection, entry.entry_id, vector, entry.payload())
     return len(entries)
+
+
+# ── 미리 계산한 뱅크 벡터 (기동 때 임베딩 서비스를 안 부르기 위해) ─────────────
+#
+# 질문뱅크 485문장을 기동마다 원격 임베딩으로 색인하면 DEV(CPU 2코어·레플리카 1)에서 새 AI 파드 워커마다
+# 2.5~5분씩 임베딩을 독점한다 — 배포 때, 그리고 HPA 증설 때(= 부하가 몰릴 때) 요청 경로 검색이 줄을 선다.
+# 같은 모델로 미리 계산해 이미지에 싣고, 기동 때는 파일만 읽는다. 파일이 지금 뱅크·모델과 다르면(뱅크를 고치고
+# 재생성을 잊음·모델 교체) 쓰지 않고 종전처럼 원격 색인한다 — 틀린 벡터를 싣는 일은 없다.
+
+
+@dataclass(frozen=True)
+class BankVectors:
+    model: str
+    dim: int
+    fingerprint: str
+    vectors: tuple[tuple[float, ...], ...]
+
+    def unusable_reason(self, entries: Sequence[BankEntry], model: str, dim: int) -> str | None:
+        """쓸 수 있으면 None, 아니면 그 이유."""
+        if self.model != model:
+            return f"모델 {self.model!r} != 현재 {model!r}"
+        if self.dim != dim:
+            return f"차원 {self.dim} != 현재 {dim}"
+        if self.fingerprint != bank_fingerprint(entries):
+            return "뱅크 내용이 파일과 다름(재생성 필요)"
+        return None
+
+
+def bank_fingerprint(entries: Sequence[BankEntry]) -> str:
+    """항목 id·문장을 순서까지 묶은 지문 — 한 글자만 바뀌어도 다르다(벡터가 그 문장의 것이어야 한다)."""
+    import hashlib
+
+    h = hashlib.sha256()
+    for e in entries:
+        h.update(f"{e.entry_id}\t{e.question}\n".encode())
+    return h.hexdigest()
+
+
+def dump_bank_vectors(path: Path, entries: Sequence[BankEntry], model: str, dim: int,
+                      vectors: Sequence[Sequence[float]]) -> None:
+    """반정밀도(fp16)로 저장 — 485×1024 가 약 1MB. 코사인 오차는 1e-4 수준(1차 임계 간격보다 훨씬 작다)."""
+    import base64
+    import gzip
+    import json
+    import struct
+
+    if len(vectors) != len(entries) or any(len(v) != dim for v in vectors):
+        raise BankLoadError("벡터 개수·차원이 뱅크와 맞지 않음")
+    flat = [x for v in vectors for x in v]
+    blob = base64.b64encode(struct.pack(f"<{len(flat)}e", *flat)).decode()
+    doc = {"model": model, "dim": dim, "count": len(entries),
+           "fingerprint": bank_fingerprint(entries), "f16_b64": blob}
+    path.write_bytes(gzip.compress(json.dumps(doc).encode(), mtime=0))
+
+
+def load_bank_vectors(path: Path) -> BankVectors | None:
+    """파일이 없으면 None(원격 색인으로). 깨진 파일은 예외 — 조용히 넘기지 않는다."""
+    import base64
+    import gzip
+    import json
+    import struct
+
+    if not path.exists():
+        return None
+    doc = json.loads(gzip.decompress(path.read_bytes()))
+    count, dim = int(doc["count"]), int(doc["dim"])
+    flat = struct.unpack(f"<{count * dim}e", base64.b64decode(doc["f16_b64"]))
+    vectors = tuple(tuple(flat[i * dim:(i + 1) * dim]) for i in range(count))
+    return BankVectors(model=doc["model"], dim=dim, fingerprint=doc["fingerprint"], vectors=vectors)
