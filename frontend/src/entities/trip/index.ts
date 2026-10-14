@@ -23,6 +23,7 @@ export type { MyTripBadge, MyTripCardVM, PastTripCardVM } from './model';
 export { COVER_GRADIENTS } from './config/coverGradients';
 export type { CoverTone } from './config/coverGradients';
 export { pickCoverCity } from './lib/coverCity';
+export { pickRegionCover } from './lib/regionCover';
 export { PastTripRow } from './ui/PastTripRow';
 export { TripCard } from './ui/TripCard';
 export { ChevronRightGlyph } from './ui/TripGlyphs';

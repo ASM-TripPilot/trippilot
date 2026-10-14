@@ -45,6 +45,19 @@ const BADGE_LABEL: Record<'done' | 'draft' | 'live', string> = {
   live: '여행 중',
 };
 
+const FILL = {
+  position: 'absolute',
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+} as const;
+
+/** 지역 커버 스크림 — 위에서 알파 0.6, 카드 높이 60% 지점에서 0. */
+const COVER_SCRIM_COLORS = ['rgba(0,0,0,0.6)', 'rgba(0,0,0,0)'] as const;
+const COVER_SCRIM_START = { x: 0, y: 0 } as const;
+const COVER_SCRIM_END = { x: 0, y: 0.6 } as const;
+
 const RESUME_LABEL = '일정 이어서 짜기';
 const MENU_DELETE_LABEL = '삭제';
 
@@ -82,6 +95,7 @@ export function TripCard({
     resume,
     imageUrl,
     coverCity,
+    coverSource,
     coverTone = 'upcoming',
   } = vm;
   const city = coverCity?.trim() ? coverCity.trim() : null;
@@ -101,7 +115,7 @@ export function TripCard({
     >
       {/* 사진 자리 — imageUrl(픽스처 전용, AC-6 G7) 있으면 Image, 없으면 톤별 그라데이션 + 도시 이름
           (Trip 에 사진 필드 없음, INV-1). 배지·resume 는 이 위에 얹는다. */}
-      <View className="h-[178px] w-full">
+      <View className="h-[178px] w-full overflow-hidden">
         {imageUrl ? (
           <Image
             testID={`${testIDPrefix}-photo-${tripId}`}
@@ -110,18 +124,31 @@ export function TripCard({
           />
         ) : (
           <>
-            <LinearGradient
-              colors={[...COVER_GRADIENTS[coverTone]]}
-              start={COVER_START}
-              end={COVER_END}
-              style={{
-                position: 'absolute',
-                top: 0,
-                right: 0,
-                bottom: 0,
-                left: 0,
-              }}
-            />
+            {coverSource ? (
+              <>
+                <Image
+                  testID={`${testIDPrefix}-cover-${tripId}`}
+                  source={coverSource}
+                  resizeMode="cover"
+                  className="h-[178px] w-full"
+                />
+                {/* 밝은 일러스트 위 흰 제목 대비 — 좌상단 검정 알파 0.6, 카드 높이 60% 까지 0 으로
+                    (0.5 는 46곳 중 9곳이 대비 3.0 미만, assets/region-covers/README). */}
+                <LinearGradient
+                  colors={COVER_SCRIM_COLORS}
+                  start={COVER_SCRIM_START}
+                  end={COVER_SCRIM_END}
+                  style={FILL}
+                />
+              </>
+            ) : (
+              <LinearGradient
+                colors={[...COVER_GRADIENTS[coverTone]]}
+                start={COVER_START}
+                end={COVER_END}
+                style={FILL}
+              />
+            )}
             {city !== null ? (
               <Text
                 testID={`${testIDPrefix}-city-${tripId}`}
