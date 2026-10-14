@@ -439,11 +439,14 @@ class OrToolsAssembler:
         if problem.required_in_order:
             # "시간만 당기기" — 필수 방문은 준 순서대로(둘 다 놓이면 앞 것이 먼저 끝난다). 모든 쌍에 건다 —
             # 이웃 쌍만 걸면 가운데가 빠졌을 때 양끝 순서가 풀린다. 재정렬(B)도 같은 모델이라 지킨다.
+            # 순서에 든 핀(재계획 "저녁은 그대로" 잠금)도 사슬에 든다 — 앞 방문은 그 전, 뒤 방문은 그 후.
             seq = {rv.poi_id: k for k, rv in enumerate(required)}
             chain = sorted((seq[n["poi"].poi_id], i) for i, n in enumerate(nodes)
-                           if n["required"] and n["poi"].poi_id in seq)
-            for x, (_, a) in enumerate(chain):
-                for _, b in chain[x + 1:]:
+                           if (n["required"] or n["pin"] is not None) and n["poi"].poi_id in seq)
+            for x, (ka, a) in enumerate(chain):
+                for kb, b in chain[x + 1:]:
+                    if kb == ka:
+                        continue  # 같은 곳 두 핀 — 서로는 시각이 정한다
                     m.Add(start[b] >= start[a] + nodes[a]["stay"]).OnlyEnforceIf([visit[a], visit[b]])
         if free_cap:  # 0 이면 자유 노드가 이미 빠졌다(위)
             m.Add(sum(visit[i] for i, n in enumerate(nodes)

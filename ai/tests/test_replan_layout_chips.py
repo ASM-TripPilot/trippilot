@@ -109,8 +109,21 @@ def test_저녁_잠금과_시간_당기기는_같이_간다() -> None:
     body, seen = _replan(directives=["EARLIER", "KEEP_DINNER"], reasons=["none"], current_slots=slots)
 
     req = seen["agent"][0]
-    assert [str(v.poi_id) for v in req.required_visits] == [_HALLA]  # 잠근 저녁은 필수 방문이 아니다
+    # 잠근 저녁은 원 자리의 자리표로 순서에 든다(조립이 같은 날 핀으로 읽는다 — 두 번 놓지 않는다)
+    assert [str(v.poi_id) for v in req.required_visits] == [_HALLA, _PORK]
     assert [str(b.poi_id) for b in req.fixed_blocks] == [_PORK]
+    assert req.max_visits_per_day == 2  # 자리표를 상한에 두 번 세지 않는다 — 새 장소가 끼지 않는다
+
+
+def test_저녁_잠금과_시간_당기기를_같이_고르면_저녁_뒤_방문은_저녁_뒤에_남는다() -> None:
+    """잠금이 순서 밖이면 원 일정에서 저녁 뒤였던 카페가 저녁 앞 빈 시간으로 당겨졌다."""
+    cafe = _SEED["월정리 카페거리"]
+    slots = [_slot(_PORK, "17:30", "18:30"), _slot(cafe, "19:00", "20:00")]
+    body, _ = _replan(directives=["EARLIER", "KEEP_DINNER"], reasons=["none"], current_slots=slots,
+                      time_window={"date": "2026-09-21", "start": "09:00", "end": "23:00"})
+
+    order = [s["poi_id"] for s in sorted(_placed(body), key=lambda s: s["start_at"])]
+    assert order == [_PORK, cafe], body["notes"]  # 종전: 카페 12:01 → 저녁 17:30
 
 
 def test_시간만_당기기는_사유가_암시한_회피로_원_일정을_빼지_않는다() -> None:
@@ -156,3 +169,12 @@ def test_칩이_없으면_숙소가_와도_끝점은_없다() -> None:
     _, seen = _replan(reasons=["none"], stay_anchor=_STAY)
 
     assert seen["agent"][0].end_near is None
+
+
+def test_저녁_식당이_점심에도_있으면_자리표는_저녁_자리다() -> None:
+    """첫 등장(점심)에 자리표를 두면 점심~저녁 사이 방문이 전부 저녁 뒤로 밀렸다(셀프 리뷰)."""
+    slots = [_slot(_PORK, "12:00", "13:00"), _slot(_HALLA, "14:00", "16:00"),
+             _slot(_PORK, "18:00", "19:00")]
+    _, seen = _replan(directives=["EARLIER", "KEEP_DINNER"], reasons=["none"], current_slots=slots)
+
+    assert [str(v.poi_id) for v in seen["agent"][0].required_visits] == [_HALLA, _PORK]

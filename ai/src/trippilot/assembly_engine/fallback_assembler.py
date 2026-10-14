@@ -170,10 +170,16 @@ class RuleFallbackAssembler:
             #    고정과 같다), 없으면 카테고리 기본(`stay_for`, pace 적용 — 자유 후보와 같다).
             # "시간만 당기기"(`required_in_order`)면 앞 필수 방문 끝이 하한이고 식사창을 먼저 돌지 않는다 —
             # 창 먼저면 식당이 저녁창으로 건너뛰어 그 뒤 순서의 방문이 앞에 못 들어간다.
+            # 순서 안에 든 고정(재계획 "저녁은 그대로" 잠금)은 자리표다 — 그 끝이 뒤 방문의 하한이고,
+            # 앞 방문은 그보다 먼저 시작해야 한다(못 들어가면 미배치 — 순서를 뒤집어 놓지 않는다).
             req_floor: datetime | None = None
-            for rv in required_by_day.get(day, []):
+            reqs = required_by_day.get(day, [])
+            for x, rv in enumerate(reqs):
                 poi = self._pois.get(rv.poi_id)
-                if poi is None or any(s.poi_id == rv.poi_id for s in slots):
+                pin = next((s for s in slots if s.poi_id == rv.poi_id), None)
+                if poi is None or pin is not None:
+                    if pin is not None and problem.required_in_order:
+                        req_floor = max(req_floor or pin.end_at, pin.end_at)
                     continue  # 좌표 미상은 못 놓고, 같은 날 핀이면 이미 간다 (OR 과 같은 규칙)
                 stay = (rv.dwell_min if rv.dwell_min is not None
                         else stay_for(poi.category, problem.pace))
@@ -183,6 +189,9 @@ class RuleFallbackAssembler:
                 if start is None:
                     continue
                 if problem.required_in_order:
+                    later = {r.poi_id for r in reqs[x + 1:]}
+                    if any(s.poi_id in later and s.start_at < start for s in slots):
+                        continue
                     req_floor = start + timedelta(minutes=stay)
                 sp = score_of.get(rv.poi_id)
                 slots.append(VisitSlot(
