@@ -78,9 +78,10 @@ class LocationAutomationService(
         if (report.at > clock.instant() + CLOCK_SKEW) {
             throw ValidationFailed(listOf(FieldError("at", "보고 시각이 서버 시각보다 앞서 있습니다.")))
         }
-        // 여행 구간(± 하루) 밖의 시각은 받지 않는다 — 옛 시각의 START 하나가 무장 판정을 여행 전체로 늘린다(SEC-U10-07 정신).
+        // 여행 구간(± 하루) 밖의 START 는 받지 않는다 — 옛 시각의 START 하나가 무장 판정을 여행 전체로 늘린다(SEC-U10-07 정신).
+        // END 는 거르지 않는다: 닫는 것은 언제나 안전하고, 막으면 그 구간은 스위퍼가 마감할 때까지 열린 채 남는다.
         val day = LocalDate.ofInstant(report.at, TRAVEL_ZONE)
-        if (day < period.startDate.minusDays(1) || day > period.endDate.plusDays(1)) {
+        if (report.phase == LocationIntervalPhase.START && (day < period.startDate.minusDays(1) || day > period.endDate.plusDays(1))) {
             throw ValidationFailed(listOf(FieldError("at", "보고 시각이 여행 기간 밖입니다.")))
         }
         val existing = intervals.find(report.intervalId)
@@ -142,11 +143,11 @@ class LocationAutomationService(
     @Transactional
     fun sweep(): Int {
         val now = clock.instant()
-        val today = LocalDate.ofInstant(now, TRAVEL_ZONE)
         return intervals.findOpen().count { open ->
             val period = owners.findOwnedPeriod(open.tripId)
                 // 여행이 지워졌다 — **소프트 삭제**라 행과 구간이 남고(CASCADE 가 닿지 않는다) 기기의 END 는 404 로 막힌다.
-                // 지금 닫지 않으면 영영 안 닫혀 법정 로그에 시작만 남는다.
+                // 지금 닫지 않으면 영영 안 닫혀 법정 로그에 시작만 남는다. 끝 시각은 훑은 시각이다 — 삭제 시각을 이 모듈이 모르고,
+                // 그 차이는 스위퍼 주기(기본 1시간) 이내다.
                 ?: return@count close(open, now, IntervalEndReason.SERVER_TIMEOUT, null, null)
             // 끝 시각은 그 하루의 끝(종료 + 2일 00:00)이다 — 훑은 시각으로 닫으면 스위퍼 주기만큼 이용이 늘어난 것으로 적힌다.
             val deadline = period.endDate.plusDays(2).atStartOfDay(TRAVEL_ZONE).toInstant()

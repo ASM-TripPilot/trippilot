@@ -180,6 +180,12 @@ class LocationAutomationIntervalIT : AbstractPostgresIntegrationTest() {
 
         intervals.find(armed)!!.endReason shouldBe IntervalEndReason.CONSENT_REVOKED
         intervalLogs(armed).size shouldBe 2
+        // 끝은 처리 시각이 아니라 **철회(이벤트) 시각**이다 — 릴레이 지연만큼 법정 로그가 이용을 늘려 적지 않는다
+        val revokedAt = jdbc.queryForObject(
+            "SELECT occurred_at FROM outbox_event WHERE event_type = 'auth.GpsRecordingOptOut' AND aggregate_id = ? ORDER BY occurred_at DESC LIMIT 1",
+            java.sql.Timestamp::class.java, accountId.toString(),
+        )!!.toInstant()
+        intervals.find(armed)!!.endedAt shouldBe revokedAt
     }
 
     /** 여행 삭제는 소프트 삭제라 CASCADE 가 닿지 않는다 — 실 여행 파사드로 스위퍼가 그것을 닫는지 본다. */

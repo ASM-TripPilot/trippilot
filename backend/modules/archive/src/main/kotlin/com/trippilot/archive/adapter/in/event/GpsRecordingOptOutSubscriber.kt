@@ -48,7 +48,7 @@ class GpsRecordingOptOutSubscriber(
         // 끊어 기기의 END 가 못 오므로, 안 닫으면 떠난 사용자의 무장이 여행 종료 + 1일까지 이어진 것으로 법정 로그에 남는다.
         val accountDeleted = mapper.readTree(envelope.payload)["reason"]?.asText() == GpsRecordingOptOut.REASON_ACCOUNT_DELETION
         val closed = automation.closeOnConsentRevoked(accountId, routeOnly = !accountDeleted, revokedAt = envelope.occurredAt)
-        if (closed > 0) log.info("u10.interval_closed reason=CONSENT_REVOKED scope=L3 count={}", closed)
+        if (closed > 0) log.info("u10.interval_closed reason=CONSENT_REVOKED scope={} count={}", if (accountDeleted) "ACCOUNT_DELETION" else "L3", closed)
     }
 
     private companion object {

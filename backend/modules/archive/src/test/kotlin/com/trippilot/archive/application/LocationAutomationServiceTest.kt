@@ -169,8 +169,13 @@ class LocationAutomationServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { svc.report(acc, UUID.randomUUID(), startOf(id)) } // 다른 여행의 같은 id
 
         svc.report(acc, tripId, startOf(UUID.randomUUID(), at = Instant.parse("2026-08-08T15:00:00Z"))) // 8/9 00:00 KST — 하루 전까지는 받는다
+        // END 는 창으로 거르지 않는다 — 닫는 것은 언제나 안전하다
+        val early = UUID.randomUUID()
+        svc.report(acc, tripId, startOf(early, at = Instant.parse("2026-08-08T15:00:00Z")))
+        svc.report(acc, tripId, endOf(early, at = Instant.parse("2026-08-08T15:00:00Z")).copy(at = Instant.parse("2026-08-07T00:00:00Z")))
+        w.intervals.rows[early]!!.isOpen shouldBe false
 
-        w.logs.rows.size shouldBe 2 // 경계에서 받은 START 둘
+        w.logs.rows.size shouldBe 4 // 경계에서 받은 START 둘 · 창 밖 END 를 받은 구간의 START·END
         w.intervals.rows[id]!!.isOpen shouldBe true
     }
 
