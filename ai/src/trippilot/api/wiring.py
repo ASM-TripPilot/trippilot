@@ -1211,13 +1211,17 @@ def _earlier_visits(
         return None
     # "저녁은 그대로" 잠금은 빼지 않고 원 자리에 둔다 — 조립이 그것을 순서의 자리표로 읽어 원 일정에서
     # 저녁 뒤였던 방문을 저녁 앞으로 당기지 않는다(`ItineraryProblem.required_in_order`).
+    # 같은 식당이 그날 앞에도 있으면(점심) 자리표는 잠근 시각의 슬롯에서만 — 앞 자리에 두면 그 사이
+    # 방문이 전부 저녁 뒤로 밀린다.
     held = {b.poi_id for b in blocks if b.reason != "keep_dinner"}
+    dinner = {b.poi_id: b.window.start.time() for b in blocks if b.reason == "keep_dinner"}
     excluded = {PoiId(p) for p in request.excluded_poi_ids}
     out: list[RequiredVisit] = []
     for s in sorted(request.current_slots,
                     key=lambda s: (s.start_at is None, s.start_at or datetime.min.time())):
         pid = PoiId(s.poi_id)
-        if pid in held or pid in excluded or any(v.poi_id == pid for v in out):
+        if (pid in held or pid in excluded or any(v.poi_id == pid for v in out)
+                or (pid in dinner and s.start_at != dinner[pid])):
             continue
         timed = s.start_at is not None and s.end_at is not None and not s.ends_next_day
         if (timed and not_before is not None and datetime.combine(

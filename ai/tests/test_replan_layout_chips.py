@@ -169,3 +169,12 @@ def test_칩이_없으면_숙소가_와도_끝점은_없다() -> None:
     _, seen = _replan(reasons=["none"], stay_anchor=_STAY)
 
     assert seen["agent"][0].end_near is None
+
+
+def test_저녁_식당이_점심에도_있으면_자리표는_저녁_자리다() -> None:
+    """첫 등장(점심)에 자리표를 두면 점심~저녁 사이 방문이 전부 저녁 뒤로 밀렸다(셀프 리뷰)."""
+    slots = [_slot(_PORK, "12:00", "13:00"), _slot(_HALLA, "14:00", "16:00"),
+             _slot(_PORK, "18:00", "19:00")]
+    _, seen = _replan(directives=["EARLIER", "KEEP_DINNER"], reasons=["none"], current_slots=slots)
+
+    assert [str(v.poi_id) for v in seen["agent"][0].required_visits] == [_HALLA, _PORK]
