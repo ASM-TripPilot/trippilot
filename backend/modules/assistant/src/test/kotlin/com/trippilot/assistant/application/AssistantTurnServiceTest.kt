@@ -18,6 +18,7 @@ import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.NextAction
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.RateLimited
 import com.trippilot.itinerarygeneration.api.EditProposal
 import com.trippilot.itinerarygeneration.api.EditProposalRequest
@@ -272,12 +273,15 @@ class AssistantTurnServiceTest : StringSpec({
             }
         }
         fun send(t: UUID) = service.send(acc, s.sessionId, t, TurnInput.Text("오늘 날씨"), AssistantSurface.ITINERARY)
+        // 공용 풀(ForkJoinPool.commonPool)을 쓰지 않는다 — CPU 2개면 병렬도가 1 이라 둘째가 첫째 뒤에 줄을 선다
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(AssistantTurnService.MAX_WAITERS_PER_TURN)
         val waiting = (1..AssistantTurnService.MAX_WAITERS_PER_TURN).map {
-            java.util.concurrent.CompletableFuture.supplyAsync { runCatching { send(turn) } }
+            java.util.concurrent.CompletableFuture.supplyAsync({ runCatching { send(turn) } }, pool)
         }
-        parked.await()
+        parked.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true // 둘이 대기에 들어가지 못했으면 매달리지 않고 실패한다
 
-        shouldThrow<RateLimited> { send(turn) }
+        // 분당 제한의 429 와 다른 코드다 — 앱은 이것을 "기록돼 처리 중, 같은 id 로 다시"로 읽어야 한다
+        shouldThrow<RateLimited> { send(turn) }.errorCode shouldBe ErrorCode.TURN_IN_PROGRESS
         // 다른 턴도 처리 중이면 기다린다 — 상한은 턴마다라 이 턴의 두 대기가 막지 않는다
         w.messages.appendUser(s.sessionId, acc, other, NewMessage(MessageRole.USER, MessageKind.TEXT, "오늘 날씨"), start)
         answeringOther.set(true)
@@ -289,6 +293,7 @@ class AssistantTurnServiceTest : StringSpec({
         release.countDown()
         waiting.forEach { it.get().getOrThrow().messages.size shouldBe 2 }
         service.waitingTurns shouldBe 0
+        pool.shutdown()
     }
 
     "기다리는 사이나 답하는 사이 대화가 지워지면 404 다 — 그래도 쓴 LLM 은 센다" {

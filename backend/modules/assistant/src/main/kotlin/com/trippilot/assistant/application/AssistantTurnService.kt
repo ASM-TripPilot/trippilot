@@ -20,6 +20,7 @@ import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.assistant.domain.QuickReplyAction
 import com.trippilot.assistant.domain.RecordedTurn
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.RateLimited
 import com.trippilot.core.error.ResourceNotFound
@@ -135,7 +136,10 @@ class AssistantTurnService(
      *
      * 기다리는 요청은 **턴마다 [MAX_WAITERS_PER_TURN] 개까지**다 — 같은 턴 id 를 N 번 겹쳐 보내면 요청 스레드 N 개가 앞선
      * 처리가 끝날 때까지(http 해석이면 십여 초) 서서 스레드 풀을 말린다. 정상 재전송은 한두 번이라 그 안에 든다. 넘친 요청은
-     * 429 — 기다려 봐야 같은 답이고, 잠시 뒤 다시 보내면 그때는 저장된 답(Replay)을 받는다.
+     * 429 `TURN_IN_PROGRESS` — 기다려 봐야 같은 답이고, 잠시 뒤 **같은 턴 id 로** 다시 보내면 저장된 답(Replay)을 받는다.
+     *
+     * 상한은 대기 수를 묶을 뿐 넘겨받기를 하나로 만들지는 않는다 — 앞선 처리가 죽어 대기가 시한을 넘기면 파드마다 최대 둘이
+     * 각자 넘겨받아 해석한다(드문 경로라 둔다).
      *
      * ponytail: 파드마다 센다(메모리). 겹친 요청이 여러 파드로 흩어지면 파드 수만큼 더 선다 — 요청 스레드를 지키는 것이
      * 목적이라 파드 단위로 충분하다.
@@ -144,7 +148,15 @@ class AssistantTurnService(
         val key = sessionId to clientTurnId
         val admitted = waiters.merge(key, 1, Int::plus)!! <= MAX_WAITERS_PER_TURN
         try {
-            if (!admitted) throw RateLimited(retryAfterSeconds = ((properties.turnBudgetMs + 999) / 1000).coerceAtLeast(1))
+            if (!admitted) {
+                // 분당 제한의 429 와 코드를 가른다 — 그쪽은 "기록되지 않았다(새로 보내라)", 이쪽은 "기록돼 처리 중이다(같은 id 로
+                // 다시)"라 앱의 처리가 반대다. 같은 코드면 앱이 새 턴 id 로 다시 보내 같은 말을 두 번 기록·해석한다.
+                throw RateLimited(
+                    retryAfterSeconds = ((properties.turnBudgetMs + 999) / 1000).coerceAtLeast(1),
+                    message = "같은 요청을 처리하고 있습니다. 잠시 후 같은 요청으로 다시 확인하세요.",
+                    errorCode = ErrorCode.TURN_IN_PROGRESS,
+                )
+            }
             return awaitFirst(pending, sessionId, clientTurnId)
         } finally {
             waiters.computeIfPresent(key) { _, n -> (n - 1).takeIf { it > 0 } }
