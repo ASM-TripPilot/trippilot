@@ -321,8 +321,11 @@ private fun ItineraryEditSource.revisionSummary(reason: String?): String = when 
     ItineraryEditSource.ASSISTANT -> "[도우미] ${reason ?: defaultReason}"
 }
 
-/** 편집안 → 재검증 입력(ScheduleAgentOutput). 시각·순서·고정은 슬롯 그대로. 거리/소요시간 없음(INV-3). */
-private fun EditItinerary.toOutput(solveMode: SolveMode, isFallback: Boolean, at: Instant): ScheduleAgentOutput =
+/**
+ * 편집안 → 재검증 입력(ScheduleAgentOutput). 시각·순서·고정은 슬롯 그대로. 거리/소요시간 없음(INV-3).
+ * 슬롯 후보 적합 판정([SlotCandidateService])도 이 변환을 쓴다 — 저장 때와 다른 일정으로 물으면 두 판정이 어긋난다.
+ */
+internal fun EditItinerary.toOutput(solveMode: SolveMode, isFallback: Boolean, at: Instant): ScheduleAgentOutput =
     ScheduleAgentOutput(
         days = days.map { d ->
             DaySchedule(
