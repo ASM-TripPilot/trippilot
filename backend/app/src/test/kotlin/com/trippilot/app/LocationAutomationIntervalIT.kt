@@ -1,0 +1,160 @@
+package com.trippilot.app
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.app.event.OutboxRelay
+import com.trippilot.archive.application.IntervalReport
+import com.trippilot.archive.application.LocationAutomationService
+import com.trippilot.archive.domain.IntervalEndReason
+import com.trippilot.archive.domain.IntervalKind
+import com.trippilot.archive.domain.LocationAutomationIntervalRepository
+import com.trippilot.auth.api.LocationIntervalPhase
+import com.trippilot.auth.application.LocationConsentService
+import com.trippilot.auth.domain.Account
+import com.trippilot.auth.domain.AccountId
+import com.trippilot.auth.domain.AgeMethod
+import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import com.trippilot.trip.domain.Trip
+import com.trippilot.trip.domain.TripDestination
+import com.trippilot.trip.domain.TripRepository
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.jdbc.core.JdbcTemplate
+import java.time.Instant
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
+import java.util.UUID
+
+/**
+ * 자동화 구간(V2.68 · TRIP-1404) 실 DB 검증.
+ *
+ * 대역이 원리적으로 못 보는 것:
+ * - **조건부 닫기** — 두 닫기가 겹쳐도 `ended_at IS NULL` 을 통과하는 쪽은 하나다. 대역은 그것을 흉내 낼 뿐이다
+ * - **법정 로그 행의 모양** — `detail` 에 무엇이 실리는가(좌표가 없어야 한다, LEGAL-U4-03)
+ * - **철회 → 릴레이 → 구독자 배선** — 이벤트 타입 문자열이 양쪽에 리터럴로 박혀 있어, 어긋나면 릴레이가 조용히 닫는다
+ * - **CHECK** — 끝과 사유는 함께 있거나 함께 없다
+ */
+@SpringBootTest
+class LocationAutomationIntervalIT : AbstractPostgresIntegrationTest() {
+
+    @Autowired private lateinit var automation: LocationAutomationService
+    @Autowired private lateinit var intervals: LocationAutomationIntervalRepository
+    @Autowired private lateinit var consents: LocationConsentService
+    @Autowired private lateinit var relay: OutboxRelay
+    @Autowired private lateinit var trips: TripRepository
+    @Autowired private lateinit var accounts: AccountRepository
+    @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var mapper: ObjectMapper
+
+    private val past = Instant.now().minus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS)
+
+    private fun newTrip(): Pair<UUID, UUID> {
+        val accountId = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, past)).id.value
+        val today = LocalDate.now()
+        val tripId = trips.save(
+            Trip.create(
+                accountId = accountId, title = null, startDate = today.minusDays(1), endDate = today.plusDays(1),
+                party = 2, companionType = null, budgetTotal = null, preferenceSnapshot = emptyMap(),
+                destinations = listOf(TripDestination(0, "제주", 2)), now = past,
+            ),
+        ).tripId
+        consents.update(AccountId(accountId), legalConsent = true, gpsRecordingOptIn = true)
+        return accountId to tripId
+    }
+
+    private fun intervalLogs(intervalId: UUID): List<Map<String, Any?>> = jdbc.queryForList(
+        "SELECT event_type, detail::text AS detail FROM location_legal_log WHERE detail ->> 'intervalId' = ? ORDER BY occurred_at, log_id",
+        intervalId.toString(),
+    )
+
+    @Test
+    fun `무장 구간의 시작과 끝이 좌표 없는 USE 로그 두 줄로 남고 재전송은 더하지 않는다`() {
+        val (accountId, tripId) = newTrip()
+        val id = UUID.randomUUID()
+        val start = IntervalReport(id, IntervalKind.GEOFENCE_ARMED, LocationIntervalPhase.START, past)
+        val end = IntervalReport(id, IntervalKind.GEOFENCE_ARMED, LocationIntervalPhase.END, past.plusSeconds(3600), IntervalEndReason.TRIP_ENDED, regionCount = 5)
+
+        automation.report(accountId, tripId, start)
+        automation.report(accountId, tripId, start)
+        automation.report(accountId, tripId, end)
+        automation.report(accountId, tripId, end)
+
+        val logs = intervalLogs(id)
+        logs.map { it["event_type"] } shouldBe listOf("USE", "USE")
+        val ended = mapper.readTree(logs[1]["detail"] as String)
+        ended["purpose"].asText() shouldBe "GEOFENCE_AUTO_VISIT"
+        ended["phase"].asText() shouldBe "END"
+        ended["endReason"].asText() shouldBe "TRIP_ENDED"
+        ended["regionCount"].asText() shouldBe "5"
+        ended["tripId"].asText() shouldBe tripId.toString()
+        // 좌표가 실리지 않는다 — 확인자료가 또 하나의 파기 대상이 되면 안 된다
+        ended.fieldNames().asSequence().toSet() shouldBe setOf("purpose", "intervalId", "tripId", "phase", "at", "endReason", "regionCount")
+        intervals.find(id)!!.let { (it.endReason to it.regionCount) shouldBe (IntervalEndReason.TRIP_ENDED to 5) }
+    }
+
+    @Test
+    fun `경로 기록 구간은 기기 안 수집 COLLECTION 으로 남는다`() {
+        val (accountId, tripId) = newTrip()
+        val id = UUID.randomUUID()
+        automation.report(accountId, tripId, IntervalReport(id, IntervalKind.ROUTE_RECORDING, LocationIntervalPhase.START, past))
+
+        val started = mapper.readTree(intervalLogs(id).single()["detail"] as String)
+        (started["source"].asText() to started["scope"].asText()) shouldBe ("ROUTE_TRACE" to "DEVICE")
+    }
+
+    /** 기기 END·철회·스위퍼가 같은 구간을 동시에 닫으려 해도 닫는 쪽은 하나다 — 법정 로그 END 가 두 줄이 되지 않는 근거. */
+    @Test
+    fun `닫기는 열려 있을 때만 통한다`() {
+        val (accountId, tripId) = newTrip()
+        val id = UUID.randomUUID()
+        automation.report(accountId, tripId, IntervalReport(id, IntervalKind.GEOFENCE_ARMED, LocationIntervalPhase.START, past))
+        val open = intervals.find(id)!!
+
+        intervals.closeIfOpen(open.close(past.plusSeconds(60), IntervalEndReason.CLIENT_STOP, null, 3)) shouldBe true
+        intervals.closeIfOpen(open.close(past.plusSeconds(120), IntervalEndReason.SERVER_TIMEOUT, null, null)) shouldBe false
+
+        intervals.find(id)!!.endReason shouldBe IntervalEndReason.CLIENT_STOP
+    }
+
+    @Test
+    fun `끝과 사유는 함께 있거나 함께 없다`() {
+        val (accountId, tripId) = newTrip()
+        val e = shouldThrow<DataIntegrityViolationException> {
+            jdbc.update(
+                "INSERT INTO location_automation_interval (interval_id, trip_id, account_id, kind, started_at, ended_at) VALUES (?, ?, ?, 'GEOFENCE_ARMED', now(), now())",
+                UUID.randomUUID(), tripId, accountId,
+            )
+        }
+        (e.message!!.contains("chk_location_automation_interval_end")) shouldBe true
+    }
+
+    /** 철회에서 출발한다 — 아웃박스 적재·릴레이 배달·구독자 배선이 전부 경로에 들어온다(LocationPurgeRelayIT 와 같은 이유). */
+    @Test
+    fun `GPS 기록 동의를 철회하면 릴레이를 지나 경로 기록만 닫히고, 위치 동의를 철회하면 무장도 닫힌다`() {
+        val (accountId, tripId) = newTrip()
+        val armed = UUID.randomUUID()
+        val route = UUID.randomUUID()
+        automation.report(accountId, tripId, IntervalReport(armed, IntervalKind.GEOFENCE_ARMED, LocationIntervalPhase.START, past))
+        automation.report(accountId, tripId, IntervalReport(route, IntervalKind.ROUTE_RECORDING, LocationIntervalPhase.START, past))
+
+        consents.update(AccountId(accountId), legalConsent = null, gpsRecordingOptIn = false)
+        repeat(RELAY_TRIES) { if (intervals.find(route)!!.isOpen) relay.relay() }
+
+        intervals.find(route)!!.endReason shouldBe IntervalEndReason.CONSENT_REVOKED
+        intervals.find(armed)!!.isOpen shouldBe true
+
+        consents.update(AccountId(accountId), legalConsent = false, gpsRecordingOptIn = null)
+        repeat(RELAY_TRIES) { if (intervals.find(armed)!!.isOpen) relay.relay() }
+
+        intervals.find(armed)!!.endReason shouldBe IntervalEndReason.CONSENT_REVOKED
+        intervalLogs(armed).size shouldBe 2
+    }
+
+    private companion object {
+        const val RELAY_TRIES = 20
+    }
+}

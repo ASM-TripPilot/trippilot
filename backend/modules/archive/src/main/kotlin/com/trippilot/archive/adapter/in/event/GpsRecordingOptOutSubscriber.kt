@@ -1,5 +1,6 @@
 package com.trippilot.archive.adapter.`in`.event
 
+import com.trippilot.archive.application.LocationAutomationService
 import com.trippilot.archive.application.VisitRecordService
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
@@ -26,6 +27,7 @@ import java.util.UUID
 @Component
 class GpsRecordingOptOutSubscriber(
     private val records: VisitRecordService,
+    private val automation: LocationAutomationService,
 ) : OutboxSubscriber {
 
     override val eventType: String = "auth.GpsRecordingOptOut"
@@ -38,6 +40,9 @@ class GpsRecordingOptOutSubscriber(
 
         val purged = records.purgeExifCoordinates(accountId)
         log.info("위치 동의 철회로 EXIF 좌표를 파기했습니다. accountId={} 건수={}", accountId, purged)
+        // 경로 기록 구간도 닫는다 — 경로 기록은 L3 위에 선다(D4). 멱등: 열린 것만 닫는다.
+        val closed = automation.closeOnConsentRevoked(accountId, routeOnly = true)
+        if (closed > 0) log.info("u10.interval_closed reason=CONSENT_REVOKED scope=L3 count={}", closed)
     }
 
     private companion object {

@@ -7,6 +7,8 @@ import com.trippilot.auth.api.LocationConsentFacade
 import com.trippilot.auth.api.LocationCollectionSource
 import com.trippilot.auth.api.LocationPurgeScope
 import com.trippilot.auth.api.LocationLegalLogFacade
+import com.trippilot.auth.api.LocationIntervalPhase
+import com.trippilot.auth.api.LocationUsePurpose
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.consent.ConsentAction
 import com.trippilot.auth.domain.consent.ConsentChannel
@@ -60,6 +62,34 @@ class LocationConsentService(
                 mapOf("scope" to scope.name, "purgedCount" to purgedCount.toString()), clock.instant(),
             ),
         )
+    }
+
+    /** 구간 법정 로그(BR-U10-47). 좌표는 없다 — 구간 id·목적·단계·여행·시각과 끝의 사유·개수뿐(LEGAL-U4-03). */
+    @Transactional
+    override fun recordUseInterval(
+        accountId: UUID, purpose: LocationUsePurpose, intervalId: UUID, tripId: UUID,
+        phase: LocationIntervalPhase, at: Instant, endReason: String?, regionCount: Int?,
+    ) = appendInterval(
+        accountId, LocationLegalEventType.USE, "purpose" to purpose.name, intervalId, tripId, phase, at, endReason,
+        regionCount?.let { "regionCount" to it.toString() },
+    )
+
+    @Transactional
+    override fun recordCollectionInterval(
+        accountId: UUID, source: LocationCollectionSource, intervalId: UUID, tripId: UUID,
+        phase: LocationIntervalPhase, at: Instant, endReason: String?, pointCount: Int?,
+    ) = appendInterval(
+        accountId, LocationLegalEventType.COLLECTION, "source" to source.name, intervalId, tripId, phase, at, endReason,
+        pointCount?.let { "pointCount" to it.toString() }, "scope" to "DEVICE",
+    )
+
+    private fun appendInterval(
+        accountId: UUID, type: LocationLegalEventType, what: Pair<String, String>, intervalId: UUID, tripId: UUID,
+        phase: LocationIntervalPhase, at: Instant, endReason: String?, vararg extra: Pair<String, String>?,
+    ) {
+        val detail = mapOf(what, "intervalId" to intervalId.toString(), "tripId" to tripId.toString(), "phase" to phase.name, "at" to at.toString()) +
+            listOfNotNull(endReason?.let { "endReason" to it }, *extra)
+        legalLog.append(LocationLegalEvent.of(AccountId(accountId), type, detail, clock.instant()))
     }
 
     @Transactional

@@ -107,6 +107,16 @@ class VisitRecordServiceTest : StringSpec({
         override fun recordPurge(accountId: UUID, scope: LocationPurgeScope, purgedCount: Int) {
             purged += Triple(accountId, scope, purgedCount)
         }
+
+        override fun recordUseInterval(
+            accountId: UUID, purpose: com.trippilot.auth.api.LocationUsePurpose, intervalId: UUID, tripId: UUID,
+            phase: com.trippilot.auth.api.LocationIntervalPhase, at: java.time.Instant, endReason: String?, regionCount: Int?,
+        ) = error("이 스펙은 구간 로그를 쓰지 않는다")
+
+        override fun recordCollectionInterval(
+            accountId: UUID, source: LocationCollectionSource, intervalId: UUID, tripId: UUID,
+            phase: com.trippilot.auth.api.LocationIntervalPhase, at: java.time.Instant, endReason: String?, pointCount: Int?,
+        ) = error("이 스펙은 구간 로그를 쓰지 않는다")
     }
 
     class Fixture(
