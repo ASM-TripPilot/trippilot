@@ -237,6 +237,9 @@ class PlanBRagRequest:
     user_request: str = ""
     # 풀을 거른 경계 카테고리 코드 — 선택 LLM 에 "이 종류로 바꾸려 한다"를 알린다.
     wanted_categories: tuple[str, ...] = ()
+    # False = 선택 LLM 을 부르지 않고 규칙 랭킹만. 다시 짜기는 구성 LLM(REPLAN_COMPOSITION)이
+    # 하루를 고르므로 대체지 선택 LLM 은 시한만 먹는다(2026-10-14 DEV 3/3 이 6s 타임아웃 → 구성 몫 부족).
+    use_llm: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -567,6 +570,8 @@ class PlanBAgent:
 
         if self._worker is None:
             return rule_ranked, {}, False, _why("alternative_worker_absent"), rule_ranked
+        if not request.use_llm:
+            return rule_ranked, {}, False, _why("alternative_llm_skipped"), rule_ranked
         # 재시도 몫이 실호출 바닥보다 짧으면 재시도 없음(`llm_retry_floor_sec`) — 못 맞출 시한에
         # 기다리는 시간이 뒤 단계의 시한을 밀었다(2026-10-13 DEV 504). 폴백 사유에 남긴다(침묵 금지).
         retry_sec = self._llm_timeout(request, self._cfg.llm_retry_share)

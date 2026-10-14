@@ -56,6 +56,9 @@ directives:
     label: 실내로
     enforced_by: PROMPT
     prefer_categories: [CULTURE, CAFE, SHOPPING]
+    # "실내로"는 실외를 빼 달라는 말이기도 하다 — 선호 가산만이면 원 일정의 공원이 남았다(2026-10-14
+    # DEV). 실외 집합은 AVOID_OUTDOOR·우천 보정(RAIN_OUTDOOR)과 같다. 재계획은 회피 카테고리를 후보에서 뺀다.
+    avoid_categories: [NATURE, NIGHT_VIEW, ACTIVITY]
     aliases: [비 피해서, 야외 말고, 실내에서, 안에서 할 수 있는, 우산 안 쓰고, 비 오니까 안으로]
 
   - key: OUTDOOR

@@ -1118,8 +1118,10 @@ _TRANSLATE_TIMEOUT_SEC = 4.0
 
 # 다시 짜기 구성 LLM(REPLAN_COMPOSITION) — 부를 최소 잔여와 상한. 최소는 fable 실호출 바닥(≈5s,
 # 2026-10-13 DEV 성공 중앙값 5.0s)이다 — 그보다 적으면 타임아웃만 기다리니 부르지 않는다.
+# 상한은 DEV 실측 꼬리(2026-10-14 8.1·9.1s 성공, 1건 13.0s 초과)에 여유를 준 값 — 구성이 돌 땐
+# 대체지 선택 LLM 을 안 부르므로(`use_llm`) 잔여가 ≈19s 라 바닥(어셈블리 5s)을 침범하지 않는다.
 _COMPOSE_MIN_MS = 5_000
-_COMPOSE_MAX_MS = 15_000
+_COMPOSE_MAX_MS = 18_000
 
 
 def _persona_line(persona: PersonaSummary | None) -> str:
@@ -1902,17 +1904,42 @@ class WiredItineraryOrchestrator:
         not_before = _replan_not_before(request, self._tz)
         blocks = _replan_fixed_blocks(request, self._tz)
         past = _past_blocks(blocks, not_before)
+        # 피할 카테고리(야외 피하기·실내로·힘든 건 빼고, 사유 암시 포함)는 **후보에서 뺀다** — 점수 감점만
+        # 두면 원 일정의 야외 공원이 그대로 남았다(2026-10-14 DEV "실내로" 3건). 원 일정의 그 곳도
+        # 고정·다녀온 곳이 아니면 교체 대상이다. 반대 칩을 같이 고른 카테고리는 빼지 않는다(상쇄 규약,
+        # `directive_fit`). 남는 후보가 없으면 빼지 않고 밝힌다(INV-4) — 빈 하루보다 낫다.
+        drop = avoid - prefer
+        held = {b.poi_id for b in blocks}
+        avoided = frozenset(p.poi_id for p in pool.pois if p.category in drop and p.poi_id not in held)
+        if avoided:
+            cats = ",".join(sorted(c.value for c in drop))
+            # "남은 후보" = 실제로 놓일 수 있는 곳 — 숙소·그날 휴무가 증명된 곳은 세지 않는다
+            # (그것만 남았는데 제외를 유지하면 잠금만 든 빈 하루가 된다).
+            weekday = request.target_date.weekday()
+            usable = {p.poi_id for p in pool.pois
+                      if p.poi_id not in held and p.poi_id not in set(request.excluded_poi_ids)
+                      and p.category is not PoiCategory.STAY
+                      and composition.hours_label(p, weekday) is not None}
+            if usable <= avoided:
+                # 감점도 같이 푼다 — 남은 후보가 그것뿐인데 감점만 남기면 잠금만 든 빈 하루가 된다.
+                notes.append(f"avoid_relaxed: {cats} only candidates")
+                avoided, avoid = frozenset(), avoid & prefer
+            else:
+                notes.append(f"avoid_excluded: {len(avoided)} {cats}")
 
         # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────
         # 다녀온 곳(지난 잠금)은 PlanB 에도 제외다 — 기준점이 "마지막 완료 방문"이면 그 POI 가
         # 거리 0 으로 규칙 1위가 되어 숏리스트·LLM 선택 한 자리를 헛되이 차지한다.
+        # 구성 LLM 이 있으면 대체지 선택 LLM 은 부르지 않는다(`use_llm`) — 하루는 구성이 고르고,
+        # 선택 LLM 은 재계획 시한에서 매번 6s 를 타임아웃으로 태워 구성 몫을 깎았다(2026-10-14 DEV 3/3).
         planb = self._rag.run(replace(
             _replan_rag_request(
                 request, pool, persona, daily_rain, trace_id, now, notes=notes,
                 deadline_ms=max(1, _deadline_budget(meta) - (self._clock.monotonic_ms() - t0)),
             ),
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
-            | {b.poi_id for b in past},
+            | {b.poi_id for b in past} | avoided,
+            use_llm=self._composer is None,
         ))
         notes += [f"planb: {n}" for n in planb.notes]
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
@@ -1939,9 +1966,10 @@ class WiredItineraryOrchestrator:
         # 사용자 지시(2026-10-14)로 재계획에 한해 "솔버 LLM 2차는 실패 시에만"(2026-08-23)을 개정한다.
         active = tuple(b for b in blocks if b not in past)
         try:
+            # 상황 추천 = PlanB 순서. 선택 LLM 을 안 불렀으면 규칙 랭킹(우천·저장 장소·거리)이 참고로 간다.
             composed = self._compose_day(
-                request, pool, persona, daily_rain, planb_rank, resolved, prefer, avoid,
-                active, past, not_before, visit_cap, budget_level, notes,
+                request, pool, persona, daily_rain, planb_rank or planb.ranked_poi_ids, resolved,
+                prefer, avoid, avoided, active, past, not_before, visit_cap, budget_level, notes,
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
@@ -1984,7 +2012,7 @@ class WiredItineraryOrchestrator:
             # 다녀온 곳이 새 방문으로 다시 들어오지 않게 제외에 더한다.
             fixed_blocks=tuple(b for b in blocks if b not in past),
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
-            | {b.poi_id for b in past},
+            | {b.poi_id for b in past} | avoided,
             rejections=_domain_rejections(request.rejections),
             include_explanations=False,  # 재계획 화면(i06)은 설명을 안 쓴다
             prefer_categories=prefer,
@@ -2078,6 +2106,7 @@ class WiredItineraryOrchestrator:
         resolved: Sequence[str],
         prefer: frozenset[PoiCategory],
         avoid: frozenset[PoiCategory],
+        avoided: frozenset[PoiId],
         active: tuple[FixedBlock, ...],
         past: tuple[FixedBlock, ...],
         not_before: datetime | None,
@@ -2118,7 +2147,7 @@ class WiredItineraryOrchestrator:
         index = {p.poi_id: p for p in pool.pois}
         past_ids = {b.poi_id for b in past}
         fixed_ids = {b.poi_id for b in active}
-        excluded = {PoiId(p) for p in request.excluded_poi_ids} | past_ids | fixed_ids
+        excluded = {PoiId(p) for p in request.excluded_poi_ids} | past_ids | fixed_ids | avoided
         # 사용자가 바꿔 뺀 곳 — 종전 경로는 점수 강등(TRIP-964)인데, 고른 곳은 필수 방문이라 점수를
         # 안 본다. 그래서 후보에서 뺀다. 지금 일정에 다시 들어 있으면 사용자가 되돌린 것이라 둔다.
         current_ids = {PoiId(s.poi_id) for s in request.current_slots}
@@ -2130,7 +2159,7 @@ class WiredItineraryOrchestrator:
                        key=lambda s: (s.start_at is None, s.start_at or datetime.min.time()))
         keep = [PoiId(s.poi_id) for s in slots] + list(planb_rank)
         shortlist = composition.shortlist(
-            pool, keep=keep, excluded=excluded, avoid=avoid, weekday=day.weekday(),
+            pool, keep=keep, excluded=excluded, weekday=day.weekday(),
             score=lambda p: build_rule_score(p, budget_level, anchor, seed,
                                              prefer=prefer, avoid=avoid))
         if not shortlist.pois:
@@ -2144,6 +2173,8 @@ class WiredItineraryOrchestrator:
                 return "다녀옴(유지)"
             if pid in fixed_ids:
                 return "고정(유지)"
+            if pid in avoided:
+                return "요청과 안 맞음(교체)"
             return "제외 요청" if pid in excluded else "남은 일정"
 
         labels = {spec.key: spec.label for spec in self._directives}
@@ -2181,8 +2212,11 @@ class WiredItineraryOrchestrator:
             notes.append(f"llm_compose_fallback: {result.error}")
             return ()
         picks = tuple(dict.fromkeys(pick.poi_id for pick in result.value))
+        # 남은 일정을 몇 곳 그대로 골랐나 — "다시 짰는데 안 바뀌었다"를 로그로 가른다.
+        remaining_ids = {PoiId(s.poi_id) for s in slots if status(s) == "남은 일정"}
         notes.append(f"llm_composed: {min(len(picks), limit)}/{len(picks)} "
-                     f"shortlist={len(shortlist.pois)} limit={limit}")
+                     f"shortlist={len(shortlist.pois)} limit={limit} "
+                     f"kept={len(remaining_ids & set(picks[:limit]))}/{len(remaining_ids)}")
         return picks[:limit]
 
     def _replan_directives(

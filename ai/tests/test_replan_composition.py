@@ -5,6 +5,7 @@
   ② 후보 밖 id 는 게이트가 버린다(INV-1)
   ③ 구성이 실패하면 종전 재계획으로 간다(INV-4) — 노트로 밝힌다
   ④ 사유 규칙이 살아 있다 — 피로 상한은 목록을 자르고, 회피 카테고리는 후보에서 빠진다
+     (실내로·야외 피하기 포함, 구성이 실패한 점수 경로에서도 — 2026-10-14 DEV)
   ⑤ 시한이 모자라면 부르지 않는다(#1102 — 504 교훈)
   ⑥ 프롬프트에 기존 일정·사유·요청이 실린다
 """
@@ -200,6 +201,62 @@ def test_바꿔_뺀_곳은_후보에_없다() -> None:
     assert _FOOD not in llm.compose_prompt().split("[후보 목록]")[1]
 
 
+_NATURE = {_MOUNTAIN, _SEED["성산일출봉"]}
+
+
+def test_실내로면_원_일정의_야외도_후보에서_빠지고_교체로_보인다() -> None:
+    """2026-10-14 DEV — "실내로"인데 원 일정의 공원이 남았다(선호 가산만 있었다). LLM 이 야외를
+    다시 골라도 후보 밖이라 게이트가 버린다(INV-1)."""
+    llm = _ScriptedLlm([_MOUNTAIN, _FOOD])
+    current = [{"poi_id": _FOOD, "start_at": "10:00", "end_at": "11:00"},
+               {"poi_id": _MOUNTAIN, "start_at": "12:00", "end_at": "14:00"}]
+    body = _replan(llm, directives=["INDOOR"], current_slots=current)
+
+    candidates = llm.compose_prompt().split("[후보 목록]")[1]
+    assert not any(n in candidates for n in _NATURE)
+    assert "한라산 | 요청과 안 맞음(교체)" in llm.compose_prompt()
+    assert _placed(body) == {_FOOD}, body["notes"]
+    assert any(n.startswith("avoid_excluded:") and "NATURE" in n for n in body["notes"]), body["notes"]
+
+
+def test_구성이_실패해도_실내로면_야외가_안_들어간다() -> None:
+    """f66f3fbf(2026-10-14 DEV) — 구성 타임아웃 → 점수 경로. 거기도 감점이 아니라 제외다."""
+    body = _replan(_ScriptedLlm(None), directives=["INDOOR"])
+    assert any(n.startswith("llm_compose_fallback:") for n in body["notes"])
+    assert _placed(body) and not _placed(body) & _NATURE, body["notes"]
+
+
+def test_피할_곳뿐이면_빼지_않고_밝힌다() -> None:
+    body = _replan(_ScriptedLlm([_MOUNTAIN]), directives=["INDOOR"],
+                   excluded_poi_ids=[_FOOD, _CAFE])
+    assert any(n.startswith("avoid_relaxed:") for n in body["notes"]), body["notes"]
+    assert _placed(body) == {_MOUNTAIN}, body["notes"]
+
+
+def test_반대_칩을_같이_고르면_그_카테고리는_빼지_않는다() -> None:
+    """실내로 + 자연 위주 — NATURE 는 상쇄(directive_fit 과 같은 규약), 후보에 남는다."""
+    llm = _ScriptedLlm([_MOUNTAIN])
+    body = _replan(llm, directives=["INDOOR", "NATURE_FOCUS"])
+    assert _MOUNTAIN in llm.compose_prompt().split("[후보 목록]")[1]
+    assert any(n.startswith("directives_conflict:") for n in body["notes"]), body["notes"]
+
+
+def test_구성이_있으면_대체지_선택_LLM은_부르지_않는다() -> None:
+    """DEV 3/3 이 6s 타임아웃으로 구성 몫을 깎았다 — 하루는 구성이 고른다."""
+    llm = _ScriptedLlm([_FOOD])
+    body = _replan(llm)
+    assert "ALTERNATIVE_SELECTION" not in llm.features()
+    assert any("alternative_llm_skipped" in n for n in body["notes"]), body["notes"]
+
+
+def test_남은_일정을_그대로_고른_수를_노트로_남긴다() -> None:
+    current = [{"poi_id": _FOOD, "start_at": "10:00", "end_at": "11:00"},
+               {"poi_id": _CAFE, "start_at": "12:00", "end_at": "13:00"}]
+    body = _replan(_ScriptedLlm([_FOOD, _MOUNTAIN]), current_slots=current)
+    assert any(n.startswith("llm_composed: 2/2") and n.endswith("kept=1/2")
+               for n in body["notes"]), body["notes"]
+
+
 # ── ⑤ 시한 ──────────────────────────────────────────────────────────
 
 
@@ -222,6 +279,14 @@ def test_프롬프트에_기존_일정과_사유와_요청이_실린다() -> Non
     assert "10:00~11:00 | CAFE | 월정리 카페거리 | 남은 일정" in prompt
     assert composition.REASON_LABELS["delay"] in prompt
     assert "바다 보고 싶어" in prompt
+    assert "기존 일정을 그대로 돌려주지 마세요" in prompt  # 0.2.0 — 바꾸려고 누른 것이 전제
+
+
+def test_사유_없음은_영문_토큰이_아니라_문장으로_실린다() -> None:
+    llm = _ScriptedLlm([_FOOD])
+    _replan(llm, reasons=["none"])
+    reasons = llm.compose_prompt().split("[다시 짜는 이유]")[1].split("[")[0]
+    assert composition.REASON_LABELS["none"] in reasons and "- none" not in reasons
 
 
 # ── 순수 함수 ────────────────────────────────────────────────────────
@@ -242,7 +307,7 @@ def test_후보는_카테고리마다_상위_N곳에_keep_은_먼저() -> None:
     foods = [_poi(i, PoiCategory.FOOD) for i in range(10)]
     cafe = _poi(50, PoiCategory.CAFE)
     out = composition.shortlist(
-        _pool(*foods, cafe), keep=[PoiId("p09")], excluded=set(), avoid=set(), weekday=0,
+        _pool(*foods, cafe), keep=[PoiId("p09")], excluded=set(), weekday=0,
         score=lambda p: -int(p.poi_id[1:]))
     ids = [p.poi_id for p in out.pois]
     assert ids[0] == "p09"  # keep 이 먼저 — 점수가 가장 낮아도
@@ -255,9 +320,9 @@ def test_후보에서_제외_회피_그날_휴무는_빠진다() -> None:
     pois = (_poi(1, PoiCategory.FOOD), _poi(2, PoiCategory.NATURE),
             _poi(3, PoiCategory.CAFE, monday_only), _poi(4, PoiCategory.SIGHT))
     out = composition.shortlist(
-        _pool(*pois), keep=[PoiId("p02")], excluded={PoiId("p04")},
-        avoid={PoiCategory.NATURE}, weekday=1, score=lambda p: 0.0)
-    assert {p.poi_id for p in out.pois} == {"p01"}  # keep 이어도 회피 카테고리는 뺀다
+        _pool(*pois), keep=[PoiId("p02")], excluded={PoiId("p04"), PoiId("p02")},
+        weekday=1, score=lambda p: 0.0)
+    assert {p.poi_id for p in out.pois} == {"p01"}  # keep 이어도 제외(피할 카테고리의 곳)는 뺀다
 
 
 def test_방문_수는_남은_시간과_상한으로_정한다() -> None:
