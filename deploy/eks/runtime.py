@@ -41,17 +41,22 @@ def parse_outputs(raw):
     return result
 
 
-def helm_values(outputs, image_tag, certificate_arn, hostname, embedding_enabled):
-    if not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", image_tag):
-        raise ValueError("Invalid image tag")
+def helm_values(outputs, image_tag, certificate_arn, hostname, embedding_enabled, embedding_image_tag=None):
+    """`embedding_image_tag` 는 임베딩 빌드 맥락의 내용 해시 태그(워크플로가 계산) — 주면 임베딩만 그 태그를 쓴다.
+    코드가 그대로면 태그도 그대로라 파드 템플릿이 안 바뀌고 롤아웃(= maxSurge 0 의 엔드포인트 공백)이 없다."""
+    for tag in (image_tag, embedding_image_tag or image_tag):
+        if not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", tag):
+            raise ValueError("Invalid image tag")
     if not re.fullmatch(r"arn:aws(?:-us-gov|-cn)?:acm:[a-z0-9-]+:\d{12}:certificate/[a-f0-9-]{36}", certificate_arn):
         raise ValueError("A valid ACM certificate ARN is required")
     if certificate_arn.split(":")[3] != outputs["aws_region"]:
         raise ValueError("ACM certificate must be in the EKS/NLB AWS region")
     if not re.fullmatch(HOST_PATTERN, hostname) or "." not in hostname:
         raise ValueError("hostname must be an API DNS hostname without a URL scheme or path")
+    tags = {"embedding": embedding_image_tag} if embedding_image_tag else {}
     return {
-        "images": {name: {"repository": repository, "tag": image_tag} for name, repository in outputs["ecr_repositories"].items()},
+        "images": {name: {"repository": repository, "tag": tags.get(name, image_tag)}
+                   for name, repository in outputs["ecr_repositories"].items()},
         "config": {"databaseHost": outputs["database_host"], "redisHost": outputs["redis_host"]},
         "gateway": {"certificateArn": certificate_arn, "hostname": hostname},
         "embedding": {"enabled": embedding_enabled},
@@ -90,6 +95,7 @@ def parser():
         if action == "render-values":
             for option in ("image-tag", "certificate-arn", "hostname", "output"):
                 sub.add_argument(f"--{option}", required=True)
+            sub.add_argument("--embedding-image-tag")
     return root
 
 
@@ -115,7 +121,8 @@ def main(argv=None):
         runtime_pois.run(args.namespace, command, close_missing=args.close_missing,
                          close_missing_dry_run=args.close_missing_dry_run)
     elif args.action == "render-values":
-        values = helm_values(outputs, args.image_tag, args.certificate_arn, args.hostname, args.embedding_enabled)
+        values = helm_values(outputs, args.image_tag, args.certificate_arn, args.hostname, args.embedding_enabled,
+                             args.embedding_image_tag)
         Path(args.output).write_text(json.dumps(values, indent=2) + "\n")
     print(f"{args.action}: complete")
 

@@ -43,6 +43,22 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('key=terraform.tfstate', init)
         self.assertIn('encrypt=true', init)
 
+    def test_embedding_image_is_content_addressed_and_reused(self):
+        """임베딩 이미지는 빌드 맥락(ai/embedding) 트리 해시 태그 — 있으면 빌드를 건너뛰고 같은 태그를 렌더한다.
+        런 태그였을 땐 매 배포 임베딩이 재시작돼 maxSurge 0 공백이 생겼다(10-14 하루 15회+)."""
+        steps = workflow('aws-deploy.yml')['jobs']['deploy']['steps']
+        names = [s.get('name', '') for s in steps]
+        resolve = steps[names.index('Resolve the embedding image tag')]
+        self.assertIn('git rev-parse HEAD:ai/embedding', resolve['run'])
+        build = steps[names.index('Build and publish embedding')]
+        self.assertEqual(build['with']['context'], './ai/embedding')  # 해시를 잰 맥락과 빌드 맥락이 같아야 한다
+        self.assertIn("steps.embedding-tag.outputs.exists != 'true'", build['if'])
+        self.assertIn('steps.embedding-tag.outputs.tag', build['with']['tags'])
+        render = steps[names.index('Synchronize runtime secrets and render nonsecret Helm values')]
+        self.assertEqual(render['env']['EMBEDDING_IMAGE_TAG'], '${{ steps.embedding-tag.outputs.tag }}')
+        self.assertIn('--embedding-image-tag', render['run'])
+        self.assertLess(names.index('Resolve the embedding image tag'), names.index('Build and publish embedding'))
+
     def test_plan_b_kb_is_on_by_default_and_loaded_on_every_deploy(self):
         """기본값 false 였을 때 기본값 배포 한 번(2026-10-03 13:38)이 KB 를 조용히 껐고,
         적재는 손으로 했다 — 재계획은 200 을 내며 규칙 랭킹으로만 돌았다."""
