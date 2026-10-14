@@ -99,8 +99,17 @@ jobs:
               comps = [os.environ["COMPONENT"]]
 
           def aws(*args):
-              return json.loads(subprocess.run(["aws", "logs", *args, "--output", "json"],
-                                               check=True, capture_output=True, text=True).stdout)
+              r = subprocess.run(["aws", "logs", *args, "--output", "json"], capture_output=True, text=True)
+              if r.returncode:
+                  sys.exit(f"aws logs {args[0]} 실패: {r.stderr.strip()[:500]}")  # 원인을 남기고 끝낸다
+              return json.loads(r.stdout)
+
+          # 로그 그룹이 생기기 전 시각을 넣으면 start-query 가 거부한다(10-14 실측, since=40h) — 생성 시각으로 당긴다.
+          created = aws("describe-log-groups", "--log-group-name-prefix", GROUP)["logGroups"]
+          created = next((g["creationTime"] // 1000 for g in created if g["logGroupName"] == GROUP), start)
+          if start < created:
+              print(f"since 가 로그 그룹 생성({datetime.fromtimestamp(created, timezone.utc):%m-%d %H:%M}Z) 전이라 그 시각부터 본다")
+              start = created
 
           out = Path("logs"); out.mkdir(exist_ok=True)
           truncated = []
