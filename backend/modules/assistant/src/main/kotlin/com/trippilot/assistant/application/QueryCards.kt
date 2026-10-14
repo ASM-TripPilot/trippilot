@@ -128,9 +128,14 @@ class QueryCards(
             "NEXT_SLOT", "다음 장소예요.", next.nameKo ?: "이름 미확인 장소", rows,
             if (ctx.inTrip) NextAction("OPEN_LIVE", "여행 중 화면 열기") else viewItinerary,
             // 버튼만으로 대체 후보까지 간다 — 해석이 꺼진 버튼 모드(운영 기본값)에서 "어느 장소"를 말로 가리킬 수 없다.
-            // 확정된 일정에는 주지 않는다 — 후보 경로가 확정 일정을 받지 않아, 눌러도 "바꿀 수 없다"만 돌아오는 버튼이 된다.
+            // 확정 일정은 여행이 시작돼야 바뀐다(편집·후보 경로가 시작 전 확정을 409 로 막는다) — 그 전에 주면 눌러도 "바꿀 수 없다"만 돌아온다.
         ).let { card ->
-            if (loadCurrent(ctx)?.value?.status != "PLANNED") card
+            val changeable = when (loadCurrent(ctx)?.value?.status) {
+                "PLANNED" -> true
+                "CONFIRMED" -> ctx.trip?.let { today >= it.startDate } == true
+                else -> false
+            }
+            if (!changeable) card
             else card.copy(quickReplies = listOf(ProposalCards.alternativesReply(next.slotKey)) + StartQuickReplies.of(hasTrip = true))
         }
     }

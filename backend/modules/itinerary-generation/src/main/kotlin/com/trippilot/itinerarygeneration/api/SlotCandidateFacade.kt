@@ -14,7 +14,7 @@ interface SlotCandidateFacade {
 
     /**
      * [slotKey](`"{date}#{poiId}"`) 슬롯을 대신할 후보. 판정은 REST 와 같다 — 형식 오류·반경 초과는 `ValidationFailed`,
-     * 없거나 타 계정·없는 슬롯은 `ResourceNotFound`, 확정 일정·생성 중 미도착 일자·같은 날 같은 장소 중복은
+     * 없거나 타 계정·없는 슬롯은 `ResourceNotFound`, 여행 시작 전 확정 일정·생성 중 미도착 일자·같은 날 같은 장소 중복은
      * `ConflictDetected`, 후보를 낼 수 없으면 `UpstreamUnavailable`(후보는 지어내지 않는다, INV-1).
      *
      * 후보는 **제안일 뿐**이다 — 시각도 순서도 없다(INV-2). 고른 뒤의 길은 [ItineraryEditProposalFacade] 다.
