@@ -22,7 +22,7 @@ _WIRED = object()
 
 @pytest.fixture(autouse=True)
 def _stub_assembly(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("_backend_poi_db", "_tmap_travel", "_event_store",
+    for name in ("_backend_poi_db", "_travel_chain", "_event_store",
                  "_place_existence", "_place_hours"):
         monkeypatch.setattr(main, name, lambda: None)
     monkeypatch.setattr(main, "build_dev_app", lambda **_: FastAPI())

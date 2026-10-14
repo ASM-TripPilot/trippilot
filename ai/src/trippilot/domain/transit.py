@@ -125,7 +125,7 @@ class TransitInfo:
     distance_range: str  # 표시용 문자열 ("약 1.2km")
     internal_minutes: int  # 내부용 — 화면·public 직렬화 금지 (INV-3)
     confidence: Confidence  # HIGH(실 API) / MID(보조) / LOW(추정)
-    source: str  # haversine_x_detour | tmap_car | tmap_pedestrian | tmap_transit
+    source: str  # haversine_x_detour | tmap_car | tmap_pedestrian | tmap_transit | odsay_transit
     delay_trigger: DelayTrigger | None  # 지연 판정 결과 (없으면 미판정)
     freshness: FreshnessMeta
 

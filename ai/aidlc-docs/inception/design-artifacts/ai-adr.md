@@ -41,6 +41,7 @@ LLM(C1)과 최적화 어셈블리(C2)를 분리해 역할을 나눈다.
 - **소요시간은 어떤 화면·DTO에도 표시하지 않는다** (INV-3, D25)
 - ~~어댑터 순서: 카카오모빌리티 → 네이버 → 직선거리 추정~~ → **정정 (2026-08-25)**: 실제 체인은 **TMAP(1차 실측) → 하버사인 직선거리 추정(2차 폴백)** 2단이다 (`assembly_engine/adapters/tmap.py` · `chained_travel.py`, TRIP-382·405·422·432). 카카오모빌리티·네이버는 **도입된 적이 없다** — 키 설정도 `TMAP_API_KEY` 하나뿐(`.env.example` · `docker-compose.yml`).
   결정의 취지(실시간 경로 API 미사용 → 도로 거리 + 안전계수 추정, INV-3)는 그대로다 — 바뀐 것은 벤더뿐이다.
+  → **추가 (2026-10-14)**: 대중교통 1차만 **ODsay**(`adapters/odsay.py`, `ODSAY_API_KEY`)로 받는다 — TMAP 대중교통 상품이 미구독(403)이고, 카카오모빌리티·네이버 지도는 대중교통 경로 API 를 공개하지 않는다(카카오 자동차만·도보는 제휴 전용, 네이버 Directions 5/15 자동차만 — 문서 확인). 수단별 1차 선택은 `chained_travel.ByModeTravelTime`, 자동차·보행은 TMAP 그대로.
 
 **결과**:
 - `VisitSlotDisplay`에 `internalDuration` 필드 부재를 컴파일 타임 보장
