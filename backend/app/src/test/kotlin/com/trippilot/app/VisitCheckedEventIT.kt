@@ -25,7 +25,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 /**
- * `archive.VisitChecked` 적재 실 DB 검증(TRIP-541).
+ * `archive.VisitChecked` 적재 실 DB 검증(TRIP-541 · U10 이후 도착에도 나간다 — TRIP-1402).
  *
  * 여기서만 드러나는 것 — 인메모리 대역으로는 **원리적으로** 못 본다:
  * - **트랜잭션 동거** — 방문 저장과 아웃박스 적재가 한 트랜잭션이다. 롤백하면 **둘 다 없다**.
@@ -84,10 +84,11 @@ class VisitCheckedEventIT : AbstractPostgresIntegrationTest() {
         val slot = "2026-08-11#$poi"
 
         val arrived = visits.arrive(accountId, tripId, slot, poi, CheckSource.AUTO_GEOFENCE)
-        rowsFor(arrived.visitCheckId) shouldBe emptyList() // 도착만으로는 안 남는다
+        // 도착도 남는다(U10 §12.6) — 완료 시각이 빈 채로
+        mapper.readTree(rowsFor(arrived.visitCheckId).single()["payload"] as String)["completedAt"].isNull shouldBe true
         visits.complete(accountId, tripId, arrived.visitCheckId)
 
-        val row = rowsFor(arrived.visitCheckId).single()
+        val row = rowsFor(arrived.visitCheckId).single { !mapper.readTree(it["payload"] as String)["completedAt"].isNull }
         row["event_type"] shouldBe "archive.VisitChecked"
         row["aggregate_type"] shouldBe "VisitCheck"
         // 값으로 비교한다 — jsonb 는 키 순서·공백을 정규화하므로 문자열 비교는 저장 형식에 대한 거짓 단정이다.
@@ -96,11 +97,14 @@ class VisitCheckedEventIT : AbstractPostgresIntegrationTest() {
         payload["slotKey"].asText() shouldBe slot
         payload["poiId"].asText() shouldBe poi.toString()
         payload["completedAt"].isNull shouldBe false
+        payload["accountId"].asText() shouldBe accountId.toString()
+        payload["arrivalSource"].asText() shouldBe "AUTO_GEOFENCE"
+        payload["completionSource"].asText() shouldBe "MANUAL"
         // 스칼라로 이스케이프돼 들어갔으면 object 가 아니라 string 이 된다.
-        jdbc.queryForObject(
+        jdbc.queryForList(
             "SELECT jsonb_typeof(payload) FROM outbox_event WHERE aggregate_id = ?",
             String::class.java, arrived.visitCheckId.toString(),
-        ) shouldBe "object"
+        ) shouldBe listOf("object", "object")
     }
 
     @Test
@@ -136,7 +140,7 @@ class VisitCheckedEventIT : AbstractPostgresIntegrationTest() {
 
         shouldThrow<ConflictDetected> { visits.complete(accountId, tripId, arrived.visitCheckId) }
 
-        rowsFor(arrived.visitCheckId).size shouldBe 1
+        rowsFor(arrived.visitCheckId).size shouldBe 2 // 도착 하나 · 완료 하나
     }
 
     @Test
@@ -146,13 +150,13 @@ class VisitCheckedEventIT : AbstractPostgresIntegrationTest() {
         val poi = UUID.randomUUID()
         val arrived = visits.arrive(accountId, tripId, "2026-08-11#$poi", poi, CheckSource.MANUAL)
         visits.complete(accountId, tripId, arrived.visitCheckId)
-        rowsFor(arrived.visitCheckId).single()["published_at"] shouldBe null
+        rowsFor(arrived.visitCheckId).map { it["published_at"] } shouldBe listOf(null, null)
 
         // 한 번에 집는 양이 배치 상한(100)이라, 같은 컨테이너를 쓰는 다른 IT 가 남긴 미발행 이벤트가
         // 앞에 있으면 한 번으로는 여기까지 못 온다. 전체 빌드에서만 깨지는 형태라 여유를 준다.
         repeat(3) { relay.relay() }
 
         // 구독자가 아직 없어 릴레이는 "닫기"로 처리한다(TRIP-539). 남겨 두면 나중에 과거가 한꺼번에 배달된다.
-        (rowsFor(arrived.visitCheckId).single()["published_at"] != null) shouldBe true
+        rowsFor(arrived.visitCheckId).all { it["published_at"] != null } shouldBe true
     }
 }
