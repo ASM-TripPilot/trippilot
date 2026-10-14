@@ -568,3 +568,25 @@ def test_adapter_satisfies_port_signature() -> None:
     assert used.verify((_q("a"),), deadline_ms=1_000)[0].status is (
         ExistenceStatus.NOT_FOUND
     )
+
+
+def test_concurrent_verify_does_not_reset_another_requests_budget() -> None:
+    """인스턴스를 요청 간 공유한다(main.py) — 끼어든 요청이 남의 사용량을 지우면 안 된다.
+
+    A 의 첫 HTTP 호출 도중 B 가 verify() 를 끝낸다(스레드풀 동시 실행의 결정론 재현).
+    인스턴스 카운터를 요청마다 0 으로 되돌리던 동안엔 A 가 상한 2 에 3회를 불렀다.
+    """
+    adapter: KakaoExistenceAdapter
+
+    class _Interleave(FakeHttpGetJson):
+        def get_json(self, url, headers, params):
+            if not self.calls:  # A 의 첫 호출 안에서 B 가 돈다
+                adapter.verify((), deadline_ms=100_000)
+            return super().get_json(url, headers, params)
+
+    http = _Interleave([], default=kakao_documents(1))
+    adapter = _adapter(http, max_calls=2)
+    out = adapter.verify(tuple(_q(f"p{i}") for i in range(4)), deadline_ms=100_000)
+
+    assert len(http.calls) == 2
+    assert [v.reason for v in out[2:]] == [_BUDGET_REASON] * 2
