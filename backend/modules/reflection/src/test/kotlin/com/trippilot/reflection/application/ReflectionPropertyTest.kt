@@ -463,6 +463,22 @@ class ReflectionPropertyTest : StringSpec({
         gen(emptyList(), 900).let { (it.visitCount to it.distanceKm to it.distanceSource) shouldBe (0 to 0.9 to DistanceSource.ROUTE) }
     }
 
+    /** 다시 만드는 동안(AI 를 기다리는 사이) 경로가 올라오면, 앞에서 센 근사값으로 덮지 않는다 — 잠근 뒤 다시 센다. */
+    "회고를 다시 만드는 사이 올라온 경로를 놓치지 않는다" {
+        val poi = UUID.randomUUID()
+        var calls = 0
+        val archive = object : com.trippilot.archive.api.ArchiveRecordFacade {
+            override fun findDailyVisits(tripId: UUID) = listOf(ArchiveDayView(day, listOf(visitOf(poi, false))))
+            // 첫 조회(초안을 만들 때)엔 경로가 없고, 그 뒤(잠근 뒤)엔 있다
+            override fun findRouteDistances(tripId: UUID) = if (calls++ == 0) emptyMap() else mapOf(day to 6_000)
+        }
+        val stats = ReflectionService(
+            trips, archive, surfacesOf(mapOf(poi to (33.4 to 126.5))), Reflections(),
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock,
+        ).generateDaily(acc, tripId, day).stats
+        (stats.distanceKm to stats.distanceSource) shouldBe (6.0 to DistanceSource.ROUTE)
+    }
+
     "경로가 올라오면 그날 회고의 통계만 다시 센다 — 카드는 그대로, 회고가 없으면 만들지 않는다" {
         val poi = UUID.randomUUID()
         val repo = Reflections()

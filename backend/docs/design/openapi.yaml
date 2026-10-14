@@ -3726,12 +3726,15 @@ components:
 
     DayHighlight:
       type: object
-      required: [date, dayOrder, visitCount, places]
+      required: [date, dayOrder, visitCount, places, distanceKm, distanceSource]
+      description: '하루 한 칸. 실적이 없어도 실제 경로가 있는 날은 한 칸이다(U10 FD §12.5). **소요시간 없음**(INV-3)'
       properties:
         date: { type: string, format: date }
         dayOrder: { type: integer }
         visitCount: { type: integer }
         places: { type: array, items: { type: string } }
+        distanceKm: { type: number, format: double, description: '그날 거리 — 실제 경로가 있으면 그것, 없으면 방문점 연결선' }
+        distanceSource: { type: string, enum: [ROUTE, VISIT_LINE] }
 
     TripSummaryStats:
       type: object

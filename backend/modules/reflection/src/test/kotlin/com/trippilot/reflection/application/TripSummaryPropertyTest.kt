@@ -61,6 +61,7 @@ class TripSummaryPropertyTest : StringSpec({
         val stored = mutableMapOf<UUID, TripSummary>()
         override fun upsert(summary: TripSummary) = summary.also { stored[it.tripId] = it }
         override fun find(tripId: UUID) = stored[tripId]
+        override fun findForUpdate(tripId: UUID) = stored[tripId]
     }
 
     class Sink : DomainEventPublisher {
@@ -165,6 +166,15 @@ class TripSummaryPropertyTest : StringSpec({
         gen(mapOf(day0 to 12_000, day0.plusDays(1) to 3_500, day0.plusDays(2) to 1_000)).let {
             (it.totalDistanceKm to it.distanceSource) shouldBe (16.5 to DistanceSource.ROUTE)
         }
+
+        // 날짜별 하이라이트에 그날 거리·출처(FD §12.5) — 경로만 있는 날도 한 칸이다
+        val highlights = TripSummaryService(trips, archiveOf(days, mapOf(day0.plusDays(1) to 3_500, day0.plusDays(2) to 1_000)), surfacesOf(known), Summaries(), Sink(), clock)
+            .generate(tripId).highlights
+        highlights.map { Triple(it.dayOrder, it.distanceSource, it.visitCount) } shouldBe listOf(
+            Triple(1, DistanceSource.VISIT_LINE, 2), Triple(2, DistanceSource.ROUTE, 1), Triple(3, DistanceSource.ROUTE, 0),
+        )
+        (highlights[0].distanceKm > 300.0) shouldBe true // 서울↔부산 근사
+        highlights.drop(1).map { it.distanceKm } shouldBe listOf(3.5, 1.0)
     }
 
     "경로가 올라오면 이미 만든 요약의 통계만 다시 센다 — 본문은 그대로, 요약이 없으면 만들지 않는다" {
@@ -183,7 +193,10 @@ class TripSummaryPropertyTest : StringSpec({
 
         val after = repo.find(tripId)!!
         (after.stats.totalDistanceKm to after.stats.distanceSource) shouldBe (7.0 to DistanceSource.ROUTE)
-        after.copy(stats = before.stats) shouldBe before
+        // 그날 하이라이트의 거리 칸도 따라온다(FD §12.5) — 날짜·장소·본문은 그대로
+        after.highlights.single().let { (it.distanceKm to it.distanceSource) shouldBe (7.0 to DistanceSource.ROUTE) }
+        after.copy(stats = before.stats, highlights = before.highlights) shouldBe before
+        after.highlights.single().copy(distanceKm = 0.0, distanceSource = DistanceSource.VISIT_LINE) shouldBe before.highlights.single()
     }
 
     "날이 바뀌는 사이는 이동이 아니다 — 하루 안에서만 잰다(BR-U5-43)" {

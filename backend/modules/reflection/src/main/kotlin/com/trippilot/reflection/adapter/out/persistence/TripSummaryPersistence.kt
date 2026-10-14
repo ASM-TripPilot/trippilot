@@ -32,7 +32,11 @@ class TripSummaryEntity(
     @Column(name = "generated_at") var generatedAt: Instant,
 )
 
-interface TripSummaryJpaRepository : JpaRepository<TripSummaryEntity, UUID>
+interface TripSummaryJpaRepository : JpaRepository<TripSummaryEntity, UUID> {
+    /** 트랜잭션 범위 권고 잠금 — 행이 없어도 잡힌다(첫 생성). FROM 절 형태인 이유는 `GenerationSessionJpaRepository.advisoryXactLock` 주석과 같다. */
+    @org.springframework.data.jpa.repository.Query(value = "SELECT 1 FROM pg_advisory_xact_lock(:namespace, :key)", nativeQuery = true)
+    fun advisoryXactLock(namespace: Int, key: Int): Int
+}
 
 @Component
 class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : TripSummaryRepository {
@@ -51,12 +55,19 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
 
     override fun find(tripId: UUID): TripSummary? = jpa.findById(tripId).orElse(null)?.toDomain()
 
+    override fun findForUpdate(tripId: UUID): TripSummary? {
+        jpa.advisoryXactLock(LOCK_NAMESPACE, tripId.hashCode())
+        return find(tripId)
+    }
+
     private fun TripSummary.toEntity() = TripSummaryEntity(
         tripId, narrative, highlights.map { it.toMap() }, stats.toMap(), source.name, generatedAt,
     )
 
-    private fun DayHighlight.toMap(): Map<String, Any?> =
-        mapOf("date" to date.toString(), "dayOrder" to dayOrder, "visitCount" to visitCount, "places" to places)
+    private fun DayHighlight.toMap(): Map<String, Any?> = mapOf(
+        "date" to date.toString(), "dayOrder" to dayOrder, "visitCount" to visitCount, "places" to places,
+        "distanceKm" to distanceKm, "distanceSource" to distanceSource.name,
+    )
 
     private fun TripSummaryStats.toMap(): Map<String, Any?> = mapOf(
         "totalVisits" to totalVisits,
@@ -84,6 +95,10 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
             dayOrder = (this["dayOrder"] as? Number)?.toInt() ?: 0,
             visitCount = (this["visitCount"] as? Number)?.toInt() ?: 0,
             places = (this["places"] as? List<String>).orEmpty(),
+            // U10 이전 행에는 없다 — 근사 0 으로 읽는다(그 요약은 다음 생성·경로 갱신 때 채워진다).
+            distanceKm = (this["distanceKm"] as? Number)?.toDouble() ?: 0.0,
+            distanceSource = (this["distanceSource"] as? String)
+                ?.let { runCatching { DistanceSource.valueOf(it) }.getOrNull() } ?: DistanceSource.VISIT_LINE,
         )
     }
 
@@ -95,4 +110,9 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
         totalPhotos = (this["totalPhotos"] as? Number)?.toInt() ?: 0,
         hasLocationData = this["hasLocationData"] as? Boolean ?: false,
     )
+
+    private companion object {
+        /** 회고(828)와 갈라 둔다 — 같은 여행 키가 겹쳐도 서로 기다리지 않게. */
+        const val LOCK_NAMESPACE = 829
+    }
 }

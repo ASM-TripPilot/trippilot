@@ -141,8 +141,11 @@ class ReflectionService(
         val source = if (aiCard != null) ReflectionSource.AI else ReflectionNarrator.sourceFor(stats)
         val now = clock.instant()
         // AI 호출이 끝난 **뒤에** 잠그고 읽는다 — 먼저 읽어 두면 생성 중에 들어온 기분·수정본을 옛 값으로 덮는다.
-        return reflections.findForUpdate(tripId, dayDate)?.regenerate(draft, source, stats, now)
-            ?: Reflection.of(tripId, dayDate, draft, source, stats, now)
+        val current = reflections.findForUpdate(tripId, dayDate)
+        // 통계는 잠근 **뒤에** 다시 센다 — AI 를 기다리는 사이 경로가 올라오면, 앞에서 센 근사값이 경로 갱신(refreshRouteStats)을
+        // 덮어쓴다. 잠근 뒤라면 그 갱신은 이 저장 뒤에 돌거나 이미 커밋돼 여기서 보인다.
+        val fresh = statsOf(visits, surfaces, archive.findRouteDistances(tripId)[dayDate])
+        return current?.regenerate(draft, source, fresh, now) ?: Reflection.of(tripId, dayDate, draft, source, fresh, now)
     }
 
     /**

@@ -28,6 +28,9 @@ data class DayHighlight(
     val dayOrder: Int,
     val visitCount: Int,
     val places: List<String>,
+    /** 그날 거리 — 실제 경로가 있으면 그 거리(`ROUTE`), 없으면 방문점 연결선(`VISIT_LINE`)(U10 FD §7.2·§12.5). 소요시간은 없다(INV-3). */
+    val distanceKm: Double = 0.0,
+    val distanceSource: DistanceSource = DistanceSource.VISIT_LINE,
 )
 
 /**
@@ -56,4 +59,10 @@ interface TripSummaryRepository {
     fun upsert(summary: TripSummary): TripSummary
 
     fun find(tripId: UUID): TripSummary?
+
+    /**
+     * 여행 단위로 잠그고 읽는다(트랜잭션 끝까지). 요약 생성과 경로 갱신이 겹치면 한쪽이 다른 쪽의 커밋 전 상태를 보고 덮는다 —
+     * 잠근 **뒤에** 실적·경로를 읽어야 한다. 행이 없어도 잠근다(첫 생성과 갱신이 겹치는 경우).
+     */
+    fun findForUpdate(tripId: UUID): TripSummary?
 }
