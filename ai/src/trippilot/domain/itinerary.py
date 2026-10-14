@@ -272,6 +272,8 @@ class ItineraryProblem:
 
     required_in_order: 필수 방문을 `required_visits` 순서대로 놓는다(재계획 "시간만 당기기" — 장소도
     순서도 원 일정 그대로, 시각만 다시). 하드다 — 둘 다 놓이면 앞 것이 먼저 끝난다. 기본 False = 무영향.
+    같은 날 고정 블록과 POI 가 같은 항목은 그 고정의 자리표다("저녁은 그대로" 잠금) — 앞 방문은 고정 전,
+    뒤 방문은 고정 후에 놓인다.
     """
 
     schedule_id: ScheduleId

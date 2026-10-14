@@ -1209,7 +1209,9 @@ def _earlier_visits(
     if others:
         notes.append(f"earlier_ignored: {','.join(others)}")
         return None
-    held = {b.poi_id for b in blocks}
+    # "저녁은 그대로" 잠금은 빼지 않고 원 자리에 둔다 — 조립이 그것을 순서의 자리표로 읽어 원 일정에서
+    # 저녁 뒤였던 방문을 저녁 앞으로 당기지 않는다(`ItineraryProblem.required_in_order`).
+    held = {b.poi_id for b in blocks if b.reason != "keep_dinner"}
     excluded = {PoiId(p) for p in request.excluded_poi_ids}
     out: list[RequiredVisit] = []
     for s in sorted(request.current_slots,
@@ -2204,7 +2206,8 @@ class WiredItineraryOrchestrator:
             prefer_near=near,
             pace=pace,
             travel_weight=_route_weight(request.reasons, resolved),
-            max_visits_per_day=(len(active) + len(composed) + len(add_one)
+            max_visits_per_day=(len(active) + len(set(composed) - {b.poi_id for b in active})
+                                + len(add_one)
                                 if composed or earlier is not None else visit_cap),
             not_before=not_before,
             required_visits=earlier if earlier is not None else tuple(
