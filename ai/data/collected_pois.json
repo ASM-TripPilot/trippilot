@@ -4482,7 +4482,7 @@
       "poi": {
         "poi_id": "tourapi-2738665",
         "name": "도두봉",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.5067925638,
           "lng": 126.4672362102
@@ -5245,7 +5245,7 @@
       "poi": {
         "poi_id": "tourapi-2940981",
         "name": "루나폴",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.2514073999,
           "lng": 126.3219962251
@@ -8066,7 +8066,7 @@
       "poi": {
         "poi_id": "tourapi-1069144",
         "name": "사라봉",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.5176259547,
           "lng": 126.5461513246
@@ -8224,7 +8224,7 @@
       "poi": {
         "poi_id": "tourapi-126454",
         "name": "사라봉공원",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.5160372422,
           "lng": 126.5462013564
@@ -9345,7 +9345,7 @@
       "poi": {
         "poi_id": "tourapi-879234",
         "name": "새연교",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.2378293118,
           "lng": 126.559612034
@@ -14033,7 +14033,7 @@
       "poi": {
         "poi_id": "tourapi-127052",
         "name": "엉또폭포",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.2672723157,
           "lng": 126.4984055673
@@ -15246,7 +15246,7 @@
       "poi": {
         "poi_id": "tourapi-228853",
         "name": "용두암",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.5147812884,
           "lng": 126.5125098697
@@ -15444,7 +15444,7 @@
       "poi": {
         "poi_id": "tourapi-127745",
         "name": "용연",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.5152118184,
           "lng": 126.5139125156
@@ -15522,7 +15522,7 @@
       "poi": {
         "poi_id": "tourapi-2738692",
         "name": "용연구름다리",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.5149285237,
           "lng": 126.5143124879
@@ -16859,7 +16859,7 @@
       "poi": {
         "poi_id": "tourapi-126448",
         "name": "이호테우해변",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.4974183784,
           "lng": 126.4531570913
@@ -19701,7 +19701,7 @@
       "poi": {
         "poi_id": "tourapi-128345",
         "name": "제주허브동산",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.3304565115,
           "lng": 126.8155933234
@@ -20764,7 +20764,7 @@
       "poi": {
         "poi_id": "tourapi-129395",
         "name": "천지연 걸매생태공원",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 33.2499640127,
           "lng": 126.5551177065
@@ -66234,7 +66234,7 @@
       "poi": {
         "poi_id": "tourapi-1603336",
         "name": "남산 팔각정",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 37.5516394747,
           "lng": 126.9876206116
@@ -67022,7 +67022,7 @@
       "poi": {
         "poi_id": "tourapi-2733971",
         "name": "노을공원(서울)",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 37.5740543063,
           "lng": 126.8755135312
@@ -69155,7 +69155,7 @@
       "poi": {
         "poi_id": "tourapi-2003909",
         "name": "롯데월드타워&롯데월드몰",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 37.5141653654,
           "lng": 127.1040749597
@@ -133661,7 +133661,7 @@
       "poi": {
         "poi_id": "tourapi-769761",
         "name": "다대포 꿈의 낙조분수",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 35.0463945293,
           "lng": 128.9680471374
@@ -139789,7 +139789,7 @@
       "poi": {
         "poi_id": "tourapi-3027700",
         "name": "청사포 기찻길",
-        "category": "ACTIVITY",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 35.1581969059,
           "lng": 129.172851279
@@ -141270,7 +141270,7 @@
       "poi": {
         "poi_id": "tourapi-128290",
         "name": "황령산",
-        "category": "NATURE",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 35.1579341561,
           "lng": 129.0827285679
@@ -141349,7 +141349,7 @@
       "poi": {
         "poi_id": "tourapi-2733472",
         "name": "황령산 전망대",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 35.1579341561,
           "lng": 129.0827285679
@@ -431579,7 +431579,7 @@
       "poi": {
         "poi_id": "tourapi-2495561",
         "name": "서울로 7017",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 37.5545193912,
           "lng": 126.9706609645
