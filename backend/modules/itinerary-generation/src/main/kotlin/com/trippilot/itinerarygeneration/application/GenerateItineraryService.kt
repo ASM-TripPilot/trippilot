@@ -32,6 +32,7 @@ import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.TodayWindow
 import com.trippilot.itinerarygeneration.domain.VisitRecordPort
 import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.profile.api.PreferenceFacade
@@ -335,24 +336,18 @@ class GenerateItineraryService(
         // 이미 시작한 여행을 **처음** 만드는 경우는 종전 그대로다 — 실 시계로 "어제 출발" 여행을 처음 만드는 통합
         // 테스트(재계획·트리거)가 오늘 슬롯을 쓰므로, 자르면 밤에 돈 CI 에서 결과가 시각에 따라 갈린다.
         if (date != cutDay) return start to end
-        val from = earliestToday()?.let { maxOf(start, it) } ?: return end to end
-        // 저녁에 만들어도 한두 곳은 넣는다 — 지금부터 [TODAY_EVENING_SPAN_MIN] 을 보장하도록 **기본 끝(21:00)만** 늘린다
-        // (밤 [TODAY_NIGHT_END_MIN] 까지). 종전엔 20시에 만들면 지금+30분이 21:00 이라 오늘이 닫혀 당일치기가 빈 일정으로
-        // 나갔다(DEV 10-14 팀원 실측). 사용자가 적은 끝(마지막 날 귀가)은 사실이라 늘리지 않는다.
-        val fromMin = from.toSecondOfDay() / 60
-        val endMin = end.toSecondOfDay() / 60
+        val from = TodayWindow.earliest(LocalTime.ofInstant(clock.instant(), TRAVEL_ZONE))?.let { maxOf(start, it) }
+            ?: return end to end
+        // 저녁에 만들어도 한두 곳은 넣는다 — 지금부터 2시간을 보장하도록 **기본 끝(21:00)만** 늘린다(하루 끝 23:59 까지,
+        // [TodayWindow]). 종전엔 20시에 만들면 지금+30분이 21:00 이라 오늘이 닫혀 당일치기가 빈 일정으로 나갔다
+        // (DEV 10-14 팀원 실측). 사용자가 적은 끝(마지막 날 귀가)은 사실이라 늘리지 않는다.
         val userEnd = date == ctx.endDate && ctx.lastDayEndAt != null
-        val untilMin = if (userEnd) endMin else maxOf(endMin, minOf(fromMin + TODAY_EVENING_SPAN_MIN, TODAY_NIGHT_END_MIN))
+        val until = if (userEnd) end else TodayWindow.eveningEnd(from, end)
         // 한 곳도 못 넣는 짧은 창은 보내지 않는다 — 조립이 빈 해를 내 폴백 표시가 붙는다.
-        return if (untilMin - fromMin >= TODAY_MIN_WINDOW_MIN) from to LocalTime.ofSecondOfDay(untilMin * 60L) else end to end
+        val minutes = (until.toSecondOfDay() - from.toSecondOfDay()) / 60
+        return if (minutes >= TodayWindow.MIN_WINDOW_MIN) from to until else end to end
     }
 
-    /** 오늘 조립을 열 수 있는 가장 이른 시각 — 지금 + 이동 여유를 30분 단위로 올린다. 자정을 넘으면 null(오늘은 끝났다). */
-    private fun earliestToday(): LocalTime? {
-        val nowMin = LocalTime.ofInstant(clock.instant(), TRAVEL_ZONE).toSecondOfDay() / 60 + TODAY_LEAD_MIN
-        val ceiled = (nowMin + TODAY_STEP_MIN - 1) / TODAY_STEP_MIN * TODAY_STEP_MIN
-        return if (ceiled >= MINUTES_PER_DAY) null else LocalTime.ofSecondOfDay(ceiled * 60L)
-    }
 
     /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
 
@@ -541,12 +536,6 @@ class GenerateItineraryService(
         private val DEFAULT_END = LocalTime.of(21, 0)
 
         /** 오늘 창을 지금에서 얼마나 띄울까 — 화면에서 일정을 보고 첫 장소로 출발할 여유. */
-        private const val TODAY_LEAD_MIN = 30
-        private const val TODAY_STEP_MIN = 30 // 오늘 창 시작을 정시·반에 맞춘다(19:07 같은 시작 시각을 만들지 않게)
-        private const val MINUTES_PER_DAY = 24 * 60
-        private const val TODAY_EVENING_SPAN_MIN = 120 // 저녁 생성에도 지금부터 이만큼은 연다(한두 곳)
-        private const val TODAY_NIGHT_END_MIN = 23 * 60 + 59 // 밤에도 야경 한두 곳 — 하루 안 표현이라 23:59 에서 멈춘다
-        private const val TODAY_MIN_WINDOW_MIN = 60 // 이보다 짧은 오늘 창은 닫는다
 
         /** 여행 "오늘"은 사용자가 있는 곳의 날짜다(서버 UTC 아님) — 재계획·감지와 같은 기준. */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
