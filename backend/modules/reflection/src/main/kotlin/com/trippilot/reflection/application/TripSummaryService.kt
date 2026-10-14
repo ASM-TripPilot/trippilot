@@ -17,6 +17,7 @@ import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -47,7 +48,7 @@ class TripSummaryService(
             tripId = tripId,
             narrative = narrativeOf(days, surfaces),
             highlights = highlightsOf(days, surfaces),
-            stats = statsOf(days, surfaces),
+            stats = statsOf(days, surfaces, archive.findRouteDistances(tripId)),
             source = if (days.isEmpty()) ReflectionSource.BASIC else ReflectionSource.RULE,
             generatedAt = clock.instant(),
         )
@@ -94,18 +95,32 @@ class TripSummaryService(
             )
         }
 
-    private fun statsOf(days: List<ArchiveDayView>, surfaces: Map<UUID, PoiSurfaceView>): TripSummaryStats {
+    /**
+     * 경로가 올라왔다 — 이미 만든 요약의 **통계만** 다시 센다(BR-U10-39). 요약이 아직 없으면 할 일이 없다(여행이 끝날 때 만든다).
+     */
+    @Transactional
+    fun refreshRouteStats(tripId: UUID) {
+        val current = summaries.find(tripId) ?: return
+        val days = archive.findDailyVisits(tripId)
+        val surfaces = poiSurfaces.findSurfaces(days.flatMap { d -> d.visits.map { it.poiId } })
+        summaries.upsert(current.copy(stats = statsOf(days, surfaces, archive.findRouteDistances(tripId))))
+    }
+
+    private fun statsOf(days: List<ArchiveDayView>, surfaces: Map<UUID, PoiSurfaceView>, routes: Map<LocalDate, Int>): TripSummaryStats {
         val visits = days.flatMap { it.visits }
         val done = visits.filter { !it.skipped }
-        // 날짜별로 이어 잰다 — 날이 바뀌는 사이는 이동이 아니라 숙박이다.
-        val km = days.sumOf { day ->
-            val pts = day.visits.filter { !it.skipped }.mapNotNull { surfaces[it.poiId] }
-            pts.zipWithNext { a, b -> haversineKm(a.lat, a.lng, b.lat, b.lng) }.sum()
+        // 날짜별로 잰다 — 날이 바뀌는 사이는 이동이 아니라 숙박이다. 실제 경로가 있는 날은 그 거리, 없는 날은 방문점 연결선(U10 §7.2).
+        val visitDays = days.associateBy { it.date }
+        val dates = visitDays.keys + routes.keys
+        val km = dates.sumOf { date ->
+            routes[date]?.let { it / 1000.0 } ?: visitDays[date]!!.visits.filter { !it.skipped }.mapNotNull { surfaces[it.poiId] }
+                .zipWithNext { a, b -> haversineKm(a.lat, a.lng, b.lat, b.lng) }.sum()
         }
         return TripSummaryStats(
             totalVisits = done.size,
             totalDistanceKm = km,
-            distanceSource = DistanceSource.VISIT_LINE,
+            // 여행 전체 출처는 **모든 날이 실제 경로일 때만** ROUTE 다(BR-U10-39) — 한 날이라도 근사면 합계도 근사다.
+            distanceSource = if (dates.isNotEmpty() && dates.all { it in routes }) DistanceSource.ROUTE else DistanceSource.VISIT_LINE,
             totalPhotos = visits.sumOf { it.photoCount },
             // 좌표를 하나도 못 찾으면 지도를 그릴 수 없다(BR-U5-39) — 화면이 방문 목록으로 갈아탄다.
             hasLocationData = done.any { surfaces[it.poiId] != null },
