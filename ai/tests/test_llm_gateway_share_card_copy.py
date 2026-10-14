@@ -156,6 +156,8 @@ def test_gate_accepts_every_placeholder_in_the_closed_vocabulary() -> None:
         ("TIME_EXPR", _raw("30분 만에 닿은 바다, 그 기억", _OK_TAGS, [])),
         # ① 시간 표현 — 해시태그도 같은 검사를 받는다
         ("TIME_EXPR", _raw("좋았던 이틀", ["#부산여행", "#2시간코스"], [])),
+        # ① 한글 수사로 쓴 소요시간도 같다 (리마인드 게이트 #591 과 같은 판정)
+        ("TIME_EXPR", _raw("한 시간 걸려 닿은 바다", _OK_TAGS, [])),
         # ② 어휘 밖 자리표시자 (숫자 환각 차단 — closed-set)
         ("PLACEHOLDER_OUT", _raw("{trip_days}일의 기록", _OK_TAGS, [])),
         # ③ 없는 장소 (INV-1 사영)

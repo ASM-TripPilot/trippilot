@@ -247,7 +247,7 @@ def test_h2_time_and_contact_tags_are_removed_individually(valid, bad) -> None:
     assert not _TIME_EXPR.search(text) and not has_contact_like(text)
 
 
-@pytest.mark.parametrize("bad", ["#30분", "#오후3시", "#24시편의점", "#Duration코스"])
+@pytest.mark.parametrize("bad", ["#30분", "#오후3시", "#24시편의점", "#Duration코스", "#한시간코스"])
 def test_h2_time_tag_examples(bad) -> None:
     assert _TIME_EXPR.search(bad)    # 공유 정규식이 잡는지 먼저
     assert _one(["#고궁산책", bad, "#야경"]) == "#고궁산책 #야경"
@@ -547,7 +547,8 @@ def test_h13_alternative_keeps_ordinary_sentence() -> None:
     assert out.error is None and out.value[0].text == "조용한 곳이라 잘 맞아요."
 
 
-@pytest.mark.parametrize("text", ["예약은 book-now.example.kr 에서 미리 하세요", "관람에 약 40분이면 충분합니다"])
+@pytest.mark.parametrize("text", ["예약은 book-now.example.kr 에서 미리 하세요", "관람에 약 40분이면 충분합니다",
+                                  "한 시간 걸려요"])
 def test_h13_alternative_blanks_contact_or_time_sentence_but_keeps_slot(text) -> None:
     """문장 경로는 종전 그대로 — `""` 로 **슬롯을 유지**한다(해시태그 경로의 '싣지 않고 센다'와 다른 자리)."""
     out = _alt(text)

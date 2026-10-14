@@ -549,6 +549,14 @@ def test_시간표현이_든_이유는_비우고_후보는_살린다() -> None:
     assert picks[1].reason == "실내 전시라 우천에 적합합니다"
 
 
+@pytest.mark.parametrize("reason", ["실내라 좋아요, 한 시간 걸려요", "삼십 분 정도면 둘러봐요"])
+def test_한글_수사로_쓴_소요시간도_이유를_비운다(reason: str) -> None:
+    """숫자 없이 쓴 소요시간도 INV-3 위반이다 (리마인드 게이트 #591 과 같은 판정)."""
+    outcome = _apply(_raw(("p1", reason), ("p2", "실내 전시라 우천에 적합합니다")))
+    assert outcome.error is None
+    assert [p.reason for p in outcome.value] == ["", "실내 전시라 우천에 적합합니다"]
+
+
 def test_시간표현_판정은_reflection_template_것과_같다() -> None:
     """판정을 두 벌 쓰면 한쪽만 고쳐져 조용히 갈라진다 — 같은 정규식인지 고정한다."""
     from trippilot.llm_gateway.gates.alternative_selection import _TIME_EXPR as here
