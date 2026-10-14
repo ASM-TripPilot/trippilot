@@ -16,8 +16,10 @@ from hypothesis import strategies as st
 from trippilot.assembly_engine.constraints import check_all
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.domain.itinerary import ItineraryProblem, RequiredVisit
+from trippilot.domain.common import GeoPoint
+from trippilot.domain.poi import PoiCategory
 
-from tests.test_assembly_engine_travel_weight import _CFG, _DAY, _EST, _or, _pool
+from tests.test_assembly_engine_travel_weight import _ANCHOR, _CFG, _DAY, _EST, _or, _pool
 
 
 def _ordered(problem, index, seed: int, k: int):
@@ -59,6 +61,24 @@ def test_순서를_끄면_거리로_섞일_수_있다() -> None:
         got = _placed_order(off, on.required_visits)
         swapped += got != [p for p in want if p in got]
     assert swapped > 0
+
+
+def test_폴백도_순서를_켜야_지킨다() -> None:
+    """대조(폴백) — 끄면 식당이 점심창(11시~)을 먼저 찾아, 순서상 뒤인 명소가 그 앞 아침 틈에 들어간다."""
+    problem, index = _pool(random.Random(3), 6, 18)
+    food, sight = sorted(index)[:2]
+    near = GeoPoint(_ANCHOR.lat + 0.002, _ANCHOR.lng)  # 앵커 옆 — 아침 틈에 넉넉히 들어가게
+    index = {**index, food: replace(index[food], category=PoiCategory.FOOD, coord=near),
+             sight: replace(index[sight], category=PoiCategory.SIGHT, coord=near)}
+    visits = tuple(RequiredVisit(poi_id=p, day=_DAY, dwell_min=60, reason="earlier_retime")
+                   for p in (food, sight))
+    base = replace(problem, required_visits=visits, max_visits_per_day=2)
+    fb = RuleFallbackAssembler(index, _EST, _CFG)
+
+    assert _placed_order(fb.solve(base), visits) == [sight, food]
+    on = fb.solve(replace(base, required_in_order=True))
+    assert _placed_order(on, visits) == [food, sight]
+    assert check_all(on, base, index, _EST) == []
 
 
 def test_직렬화_왕복과_키_없는_덤프() -> None:

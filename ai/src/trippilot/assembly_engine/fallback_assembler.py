@@ -170,8 +170,7 @@ class RuleFallbackAssembler:
             #    고정과 같다), 없으면 카테고리 기본(`stay_for`, pace 적용 — 자유 후보와 같다).
             # "시간만 당기기"(`required_in_order`)면 앞 필수 방문 끝이 하한이고 식사창을 먼저 돌지 않는다 —
             # 창 먼저면 식당이 저녁창으로 건너뛰어 그 뒤 순서의 방문이 앞에 못 들어간다.
-            # ponytail: 하한에 앵커 이동이 한 번 더 붙어 OR 보다 늦게 놓일 수 있다 — 폴백 빈도가 오르면 고친다.
-            req_floor = not_before
+            req_floor: datetime | None = None
             for rv in required_by_day.get(day, []):
                 poi = self._pois.get(rv.poi_id)
                 if poi is None or any(s.poi_id == rv.poi_id for s in slots):
@@ -179,8 +178,8 @@ class RuleFallbackAssembler:
                 stay = (rv.dwell_min if rv.dwell_min is not None
                         else stay_for(poi.category, problem.pace))
                 start = self._required_start(
-                    problem, day, poi, stay, slots, req_floor,
-                    () if problem.required_in_order else windows)
+                    problem, day, poi, stay, slots, not_before,
+                    () if problem.required_in_order else windows, after=req_floor)
                 if start is None:
                     continue
                 if problem.required_in_order:
@@ -376,14 +375,16 @@ class RuleFallbackAssembler:
 
     def _required_start(self, problem: ItineraryProblem, day, poi: Poi, stay: int,
                         slots: list[VisitSlot], not_before: datetime | None,
-                        windows: tuple[tuple[int, int], ...]) -> datetime | None:
+                        windows: tuple[tuple[int, int], ...],
+                        after: datetime | None = None) -> datetime | None:
         """①′ 필수 방문이 놓일 가장 이른 시각 (TRIP-1249) — 없으면 None.
 
         슬롯 사이 틈마다 본다: 앞 슬롯 끝 + 이동(없으면 창 시작 + 앵커 이동, 하한이 있으면
         하한 + 앵커 이동 — ② 와 같은 규칙) 이후, 뒤 슬롯 시작 − 이동 이전(HC2), 하루 창 안
         (HC4), 영업창 안(HC1). 식당(`counts_as_food`)은 점심창 → 저녁창 → 아무 때 순으로
         **창을 먼저** 돈다 — 같은 창 안에서는 이른 틈이 이긴다. 이웃 좌표를 모르면 그 틈은
-        건너뛴다(0분 이동 금지, TRIP-1177).
+        건너뛴다(0분 이동 금지, TRIP-1177). `after` 는 순서 하한(앞 필수 방문 끝) — 이동은 틈의 하한이
+        이미 더하므로 시각 그대로 건다(하한처럼 앵커 이동을 붙이지 않는다).
         """
         base = _at(day, problem.window_on(day).start).replace(hour=0, minute=0)
 
@@ -394,6 +395,8 @@ class RuleFallbackAssembler:
         we = mins(_at(day, problem.window_on(day).end))
         floor = (mins(not_before) + anchor_minutes(problem, poi, self._est)
                  if not_before is not None else None)
+        if after is not None:
+            floor = max(floor if floor is not None else 0, mins(after))
 
         def travel(a: Poi, b: Poi) -> int:
             return self._est.estimate(a.coord, b.coord, problem.transport).internal_minutes

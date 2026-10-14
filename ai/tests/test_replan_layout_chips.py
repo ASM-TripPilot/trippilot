@@ -57,6 +57,17 @@ def test_원_일정에_저녁이_없으면_잠글_것이_없다고_밝힌다() -
     assert any(n.startswith("keep_dinner_none") for n in body["notes"]), body["notes"]
 
 
+def test_저녁은_한_끼만_잠근다() -> None:
+    """창에 걸친 식당 둘을 다 잠그면 둘 사이 이동(흑돼지거리 → 월정리 28km)이 안 맞아 해 없음이었다."""
+    cafe_street = _SEED["월정리 카페거리"]
+    slots = [_slot(_PORK, "18:00", "19:00"), _slot(cafe_street, "19:30", "20:30")]
+    body, seen = _replan(directives=["KEEP_DINNER", "EARLIER"], reasons=["none"], current_slots=slots)
+
+    held = [str(b.poi_id) for b in seen["agent"][0].fixed_blocks if b.reason == "keep_dinner"]
+    assert held == [_PORK]
+    assert body["itinerary"] is not None, body["notes"]
+
+
 def test_이미_끝난_저녁은_잠그지_않는다() -> None:
     """되실으면 고정으로 나가 BE 가 영구히 잠근다 — 지난 저녁은 잠글 대상이 아니다."""
     slots = [_slot(_PORK, "18:00", "19:00")]
