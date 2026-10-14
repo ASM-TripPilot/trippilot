@@ -1895,16 +1895,30 @@ class WiredItineraryOrchestrator:
         # 시각·순서는 어셈블리가 정한다(INV-2). 실패·시한 부족이면 () 라 종전 경로 그대로(INV-4).
         # 사용자 지시(2026-10-14)로 재계획에 한해 "솔버 LLM 2차는 실패 시에만"(2026-08-23)을 개정한다.
         active = tuple(b for b in blocks if b not in past)
-        composed = self._compose_day(
-            request, pool, persona, daily_rain, planb_rank, resolved, prefer, avoid,
-            active, past, not_before, visit_cap, budget_level, notes,
-            trace_id=trace_id, now=now, started_ms=t0, budget=budget,
-        )
+        try:
+            composed = self._compose_day(
+                request, pool, persona, daily_rain, planb_rank, resolved, prefer, avoid,
+                active, past, not_before, visit_cap, budget_level, notes,
+                trace_id=trace_id, now=now, started_ms=t0, budget=budget,
+            )
+        except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
+            notes.append(f"llm_compose_error: {type(e).__name__}")
+            self._compose_event(meta, f"compose_error: {type(e).__name__}: {e}")
+            composed = ()
         add_one_asked = add_one
         if composed:
             # 고른 목록에 이미 든 종류의 "한 곳 추가"는 또 넣지 않는다(카페 두 곳).
             index = {p.poi_id: p for p in pool.pois}
             add_one = add_one - {index[p].category for p in composed if p in index}
+            # 남은 "한 곳 추가"도 필수 방문이라 상한이 빼지 못한다 — 피로·지연 상한 안에 들도록
+            # 고른 목록을 그만큼 줄인다(BR-U4-47 "한 곳 추가는 상한 안에서 센다").
+            if visit_cap is not None:
+                room = max(0, visit_cap - len(active) - len(add_one))
+                if room < len(composed):
+                    notes.append(f"llm_composed_trimmed: {len(composed)}->{room} add_one")
+                    composed = composed[:room]
+            if not composed:
+                add_one = add_one_asked
         domain_request = core.GenerateItineraryRequest(
             schedule_id=ScheduleId(request.trip_id),
             anchor=anchor,
@@ -1936,7 +1950,8 @@ class WiredItineraryOrchestrator:
             prefer_near=near,
             pace=pace,
             travel_weight=_route_weight(request.reasons, resolved),
-            max_visits_per_day=len(active) + len(composed) if composed else visit_cap,
+            max_visits_per_day=(len(active) + len(composed) + len(add_one)
+                                if composed else visit_cap),
             not_before=not_before,
             required_visits=tuple(
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
@@ -1977,23 +1992,38 @@ class WiredItineraryOrchestrator:
             if missed:
                 notes.append(f"llm_composed_unplaced: {len(missed)}/{len(composed)}")
             if len(missed) == len(composed):
-                # 고른 곳이 하나도 안 놓였다 — 빈 하루를 내지 않고 종전 경로로 한 번 더 푼다(INV-4).
+                # 고른 곳이 하나도 안 놓였다 — 빈 하루를 LLM 결과로 내지 않고 종전 경로로 한 번 더
+                # 푼다(INV-4). 어셈블리 바닥만큼 남았을 때만 — 에이전트는 잔여가 0 이어도 바닥을
+                # 주므로, 모자랄 때 다시 풀면 시한 + 바닥이 백스톱(504)에 닿는다.
                 composed = ()
-                outcome = self._schedule_agent.run(core.ScheduleTask(
-                    request=replace(domain_request, required_visits=(),
-                                    max_visits_per_day=visit_cap,
-                                    add_one_categories=add_one_asked),
-                    pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
-                    candidates_summary=core.candidates_report(
-                        pool, days=len(dates), persona=persona),
-                    budget=budget, started_ms=t0, trace_id=trace_id, now=now,
-                    planb_rank=planb_rank,
-                ))
+                left = budget.total_ms - (self._clock.monotonic_ms() - t0)
+                rerun = left >= budget.c2_reserved_ms
+                self._compose_event(meta, f"composed_unplaced: rerun={rerun} remaining={left}ms")
+                if rerun:
+                    outcome = self._schedule_agent.run(core.ScheduleTask(
+                        request=replace(domain_request, required_visits=(),
+                                        max_visits_per_day=visit_cap,
+                                        add_one_categories=add_one_asked),
+                        pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
+                        candidates_summary=core.candidates_report(
+                            pool, days=len(dates), persona=persona),
+                        budget=budget, started_ms=t0, trace_id=trace_id, now=now,
+                        planb_rank=planb_rank,
+                    ))
         return self._replan_projection(
             request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed),
         )
+
+    def _compose_event(self, meta: schemas.RequestMetaSchema, reason: str) -> None:
+        """구성을 못 탄 사실을 이벤트로 — 노트만 남기면 트레이스 집계에서 안 보인다(INV-4)."""
+        self._trace.emit(FallbackEvent(
+            trace_id=TraceId(meta.request_id),
+            occurred_at=_tz_aware(meta.requested_at, self._tz),
+            component="api.wiring", stage="llm",
+            from_mode="llm_compose_day", to_mode="scored_assembly", reason=reason,
+        ))
 
     def _compose_day(
         self,
@@ -2029,6 +2059,7 @@ class WiredItineraryOrchestrator:
                      - budget.c2_reserved_ms)
         if remaining < _COMPOSE_MIN_MS:
             notes.append(f"llm_compose_skipped: deadline remaining={remaining}ms")
+            self._compose_event(request.request_meta, f"deadline: remaining={remaining}ms")
             return ()
         day, window = request.target_date, request.time_window
         start = datetime.combine(window.date, window.start, tzinfo=self._tz)
@@ -2038,12 +2069,18 @@ class WiredItineraryOrchestrator:
         free_cap = None if visit_cap is None else visit_cap - len(active)
         if start >= end or (free_cap is not None and free_cap < 1):
             notes.append("llm_compose_skipped: no_room")
+            self._compose_event(request.request_meta, "no_room")
             return ()
 
         index = {p.poi_id: p for p in pool.pois}
         past_ids = {b.poi_id for b in past}
         fixed_ids = {b.poi_id for b in active}
         excluded = {PoiId(p) for p in request.excluded_poi_ids} | past_ids | fixed_ids
+        # 사용자가 바꿔 뺀 곳 — 종전 경로는 점수 강등(TRIP-964)인데, 고른 곳은 필수 방문이라 점수를
+        # 안 본다. 그래서 후보에서 뺀다. 지금 일정에 다시 들어 있으면 사용자가 되돌린 것이라 둔다.
+        current_ids = {PoiId(s.poi_id) for s in request.current_slots}
+        excluded |= {PoiId(r.poi_id) for r in request.rejections
+                     if r.kind == "SWAPPED_OUT"} - current_ids
         anchor = GeoPoint(request.anchor.lat, request.anchor.lng)
         seed = _seed_from(request.trip_id)
         slots = sorted(request.current_slots,
@@ -2055,6 +2092,7 @@ class WiredItineraryOrchestrator:
                                              prefer=prefer, avoid=avoid))
         if not shortlist.pois:
             notes.append("llm_compose_skipped: no_candidates")
+            self._compose_event(request.request_meta, "no_candidates")
             return ()
 
         def status(s: schemas.ReplanSlotSchema) -> str:
@@ -2412,7 +2450,9 @@ class WiredItineraryOrchestrator:
         anchors = {request.target_date: GeoPoint(request.anchor.lat, request.anchor.lng)}
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
-        # 구성 LLM 이 하루를 골랐으면 점수 단계가 규칙이어도 폴백이 아니다(점수를 안 부른 것이다).
+        # 구성 LLM 이 하루를 골랐으면 폴백이 아니다 — 점수는 부르지 않은 것이고, PlanB 랭킹은 구성
+        # 프롬프트의 참고 재료라 그 강등은 노트(`planb_rank_skipped`)로만 남는다. 구성이 없을 때만
+        # 아래 종전 규칙(점수든 PlanB 랭킹이든 규칙으로 내려갔으면 폴백)이다.
         llm_ok = composed or (
             outcome.scoring_mode is core.ScoringMode.LLM and not planb_fallback)
         # 두 순회 모두 1차 패스로 받아 적는다 — 좌표 미상 전파 규칙이 달라 구간 집합이

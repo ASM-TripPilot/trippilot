@@ -332,8 +332,8 @@ class ScheduleAgent:
         #    실측에서 점수 타임아웃 13.4s(=전체 잔여) + OR 5s 로 25s 시한을 넘겨 백스톱 504 가 났다.
         elapsed = self._clock.monotonic_ms() - t0
         if task.llm_composed:
-            # 강등이 아니다 — 판단은 구성 LLM 이 했다. 관측만 남긴다.
-            self._observe(trace_id, now, "llm", "llm_score", "rule_score", "llm_composed")
+            # 강등이 아니다 — 판단은 구성 LLM 이 했다(배선 노트 `llm_composed`). FallbackEvent 를
+            # 내지 않는다 — 내면 폴백 집계에 성공이 폴백으로 섞인다.
             candidates, mode = self._rule_scores(request, pool), ScoringMode.RULE
         else:
             candidates, mode = self._score(

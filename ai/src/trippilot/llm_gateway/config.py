@@ -95,7 +95,7 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # agents/planb/rag.py `_select`→`_rationale` — used_llm=False면 규칙 랭킹
             # ("llm_select_alternatives" / "rule_ranking"도 그 함수의 문자열 그대로).
             LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),
-            # agents/planb/composition.py `compose_day` — 실패면 고른 목록 없이 종전 재계획
+            # api/wiring.py `_compose_day` — 실패면 고른 목록 없이 종전 재계획
             # (PlanB 랭킹 가산 + 점수 + 어셈블리 선택)으로 진행한다.
             LlmFeature.REPLAN_COMPOSITION: ("llm_compose_day", "scored_assembly"),
             # agents/reflect/composer.py `compose` — 전 시도 실패면 고정 폴백 템플릿

@@ -179,6 +179,27 @@ def test_피로면_힘든_카테고리는_후보에서_빠진다() -> None:
     assert _MOUNTAIN not in candidates
 
 
+def test_한_곳_추가도_피로_상한_안에서_센다() -> None:
+    """피로 상한 1 + "카페 넣어줘" + LLM 이 맛집을 고름 → 카페(필수)가 남아 고른 목록을 0으로 줄인다.
+
+    줄이지 않으면 맛집 + 카페 2곳이 되어 상한을 넘는다(필수 방문은 상한이 빼지 못한다).
+    """
+    current = [{"poi_id": _FOOD, "start_at": "10:00", "end_at": "11:00"},
+               {"poi_id": _MOUNTAIN, "start_at": "12:00", "end_at": "14:00"}]
+    body = _replan(_ScriptedLlm([_FOOD]), reasons=["fatigue"], directives=["ADD_CAFE"],
+                   current_slots=current)
+    assert "planb_visit_cap: 1" in body["notes"]
+    assert "llm_composed_trimmed: 1->0 add_one" in body["notes"], body["notes"]
+    assert len(_placed(body)) <= 1, body["notes"]
+
+
+def test_바꿔_뺀_곳은_후보에_없다() -> None:
+    """종전 경로는 점수 강등(TRIP-964)인데 고른 곳은 점수를 안 본다 — 후보에서 뺀다."""
+    llm = _ScriptedLlm([_MOUNTAIN])
+    _replan(llm, rejections=[{"poi_id": _FOOD, "kind": "SWAPPED_OUT"}])
+    assert _FOOD not in llm.compose_prompt().split("[후보 목록]")[1]
+
+
 # ── ⑤ 시한 ──────────────────────────────────────────────────────────
 
 
