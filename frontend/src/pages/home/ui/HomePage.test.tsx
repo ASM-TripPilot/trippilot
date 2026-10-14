@@ -424,6 +424,28 @@ describe('여행 후 얼굴 — 종료 직후에만 뜬다 (TRIP-1369)', () => {
     expect(mockUseItinerary).not.toHaveBeenCalled();
   });
 
+  it('TRIP-1364 · 홈을 연 채 자정(KST)을 넘기면 "오늘"이 따라 바뀌어 7일 창을 벗어난 여행 후 얼굴이 사라진다', () => {
+    // 서울 2026-10-13 23:59 — 종료 7일째(창 마지막 날). 자정 뒤엔 8일째라 discovery 로 내려와야 한다.
+    jest.useFakeTimers({ now: new Date('2026-10-13T14:59:00Z') });
+    try {
+      mockUseGetTrips.mockReturnValue(tripsOk([endedTrip(7)]));
+
+      render(<HomePage />);
+      expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
+        '여행 완료'
+      );
+
+      act(() => {
+        jest.advanceTimersByTime(61_000);
+      });
+
+      expect(screen.queryByTestId('home-trip-hero')).toBeNull();
+      expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('회고 보기 CTA 는 가장 최근 종료 여행의 기록 화면으로 1회 push 한다', () => {
     mockUseGetTrips.mockReturnValue(
       tripsOk([

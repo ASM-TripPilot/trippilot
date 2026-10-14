@@ -259,7 +259,9 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   // ⚠️ 이 describe 의 `renderPage` 는 파일 최상위 것이다 — `refetchInterval` 은 **주지 않는다**(그것이 배선의 책임이고
@@ -759,7 +761,9 @@ describe('폴링 상한 기준점', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** `gcTime: Infinity` — 마운트 전에 채운 캐시가 관찰자 없이 다음 틱에 지워지면 카운터가 0부터
@@ -821,6 +825,40 @@ describe('폴링 상한 기준점', () => {
         await sleep(DRAFT_POLL_INTERVAL_MS + 400);
       });
       expect(getCalls).toBe(callsAtCap);
+    }, 20000);
+  });
+
+  describe('🟢 C3 · (TRIP-1364) 30회째에 상한 얼굴이 켜진다 — 횟수를 렌더 중 직접 읽지 않고 구독으로 읽는다', () => {
+    it('마운트 뒤 PARTIAL(장소 0곳)이 29회까진 그대로, 30회째에 실패 얼굴로 넘어간다', async () => {
+      // 준비 — 상한 얼굴(`pollExhausted`)은 도착한 장소가 0곳일 때 전면 실패 얼굴로 보인다(장소가 있으면 시트 셸이 그대로다).
+      const emptyPartial = () =>
+        itinerary({
+          itineraryId: 'itin-baseline',
+          generationMode: 'CO_PLAN',
+          generationState: 'PARTIAL',
+          days: [],
+        });
+      const client = newTestQueryClient();
+      renderDraft(client);
+      await screen.findByTestId('generation-progress-card');
+      await waitFor(() => expect(getCalls).toBeGreaterThanOrEqual(1));
+      const received =
+        client.getQueryState(ITINERARY_KEY)?.dataUpdateCount ?? 0;
+
+      // 실행 ① 상한 직전(마운트 뒤 총 29회)까지 — 아직 실패 얼굴이 아니다.
+      act(() => {
+        for (let i = received; i < 29; i += 1) {
+          client.setQueryData(ITINERARY_KEY, emptyPartial());
+        }
+      });
+      expect(client.getQueryState(ITINERARY_KEY)?.dataUpdateCount).toBe(29);
+      expect(screen.queryByTestId('itinerary-draft-failed')).toBeNull();
+
+      // 실행 ② 정확히 30회째 한 건 — 화면이 이 한 건에 반응해 상한 얼굴을 켠다.
+      act(() => {
+        client.setQueryData(ITINERARY_KEY, emptyPartial());
+      });
+      expect(screen.queryByTestId('itinerary-draft-failed')).not.toBeNull();
     }, 20000);
   });
 });
@@ -941,7 +979,9 @@ describe('다른 후보 시트 배선', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   // ─── 경로1: h08 셸(staleFailed) · 형제 마운트 (TRIP-1039 — 옛 DraftScreen 경로) ───────────
@@ -1205,7 +1245,9 @@ describe('h08 셸 기본 얼굴', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   describe('🔴 A1 · AC-1 — 깨끗한 COMPLETE 면 h08 셸 얼굴이 뜬다 (D1-R · 계약 플립)', () => {
@@ -1563,7 +1605,9 @@ describe('폴백·위반 라벨', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 네트워크 응답을 기다리는 첫 조회 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산. */
@@ -1869,7 +1913,9 @@ describe('폴백 셸', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 인터스티셜 「기본 일정 보기」 → 셸 도착까지. 폴백은 인터스티셜이 먼저 잡는다(02a ★7). */
@@ -2387,7 +2433,9 @@ describe('칸 상한 게이지 접기', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 게이지 칸 testID 를 화면 순서대로(트랙 testID 는 접두가 달라 안 잡힌다). */
@@ -2572,7 +2620,9 @@ describe('이 여행 생성 중 확인', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** "안 나갔다"는 나갈 시간을 준 뒤에야 의미가 있다(02a ★5). */
@@ -2753,7 +2803,9 @@ describe('직접 짠(MANUAL) 초안', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 누름 → mutate → fetch → msw 는 비동기다 — 흘려 보낸 뒤에 세야 "0건"이 뜻을 갖는다(02a ★4). */
@@ -3086,7 +3138,9 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   describe('🔴 A8-1 · AC-8 — PARTIAL 이면 h07 부분 결과(셸) 얼굴이 뜬다 (D1)', () => {
@@ -3451,7 +3505,9 @@ describe('다시 만들기 연타 잠금', () => {
   afterEach(() => {
     releaseGate?.();
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 생성 화면으로 간 라우터 호출 수 — replace 든 push 든(push 로 가도 여기서 잡힌다). */
@@ -3883,7 +3939,9 @@ describe('넣지 못한 꼭 갈 곳', () => {
     releaseSaved();
     releaseSaved = () => undefined;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   /** 정확한 testID 몇 개를 트리 전위 순서(부모→자식, 형→아우)로 뽑는다(fallbackShell 선례 · 02a ★11). */
@@ -4008,7 +4066,9 @@ describe('넣지 못한 꼭 갈 곳', () => {
         'D4 게스트(토큰 없음) — /saved-places 0회, 문구는 그대로 보인다',
         0,
         () => {
-          clearAccessToken();
+          act(() => {
+            clearAccessToken();
+          });
         },
       ],
     ])('%s', async (_label, savedCount, arrange) => {
@@ -4162,10 +4222,15 @@ describe('같은 날 같은 장소 두 번', () => {
   afterEach(async () => {
     // PARTIAL 은 폴링한다 — 조회를 끊고 캐시를 비워 다음 테스트로 새지 않게 한다.
     await activeClient?.cancelQueries();
-    activeClient?.clear();
+    // 마운트된 채로 캐시를 비우면 폴링 횟수 구독이 화면을 다시 그린다 — act 로 감싼다.
+    act(() => {
+      activeClient?.clear();
+    });
     activeClient = null;
     server.resetHandlers();
-    clearAccessToken();
+    act(() => {
+      clearAccessToken();
+    });
   });
 
   async function openDraft(

@@ -38,10 +38,10 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { getAccessToken } from '@/shared/api';
+import { useAccessToken } from '@/shared/api';
 import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
-import { seoulDate } from '@/shared/lib/seoulDate';
+import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { showToast } from '@/shared/ui/Toast';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
@@ -243,8 +243,15 @@ export function ItineraryPlanPage({
   // TRIP-1094 — 넣지 못한 꼭 갈 곳은 여행 전체 단위라 일차 탭과 무관하다. 이름 조회는 미배치가 있고
   // 로그인일 때만(AC-13), 대기·실패·게스트면 서버 문구만 먼저 보인다(Q4 · INV-4). 훅이라 아래 조기 반환 앞에 둔다.
   const unplaced = itinerary.data?.unplacedMustVisits;
+  // 구독으로 읽는다(TRIP-1364) — 렌더 중 `getAccessToken()` 은 컴파일러가 memo 해 로그인·로그아웃을 놓친다.
+  const accessToken = useAccessToken();
+  // 오늘(KST) — 상태로 들어 자정을 넘기면 바뀐다(TRIP-1364). 렌더 중 `seoulDate(new Date())` 는 마운트에 굳는다.
+  const today = useSeoulToday();
+  // 공유 카드 캡처 장전 여부 — 네이티브 모듈 유무라 이 프로세스 동안 안 바뀐다. 마운트 때 한 번만 읽는다
+  // (렌더 중 직접 호출은 React Compiler 가 "순수"로 보고 memo 하지만, 의도가 코드에 보이게 못 박는다 · TRIP-1364).
+  const [shareArmed] = useState(isShareCaptureArmed);
   const { savedPlaces } = useSavedPlaces({
-    isAuthed: getAccessToken() !== null && (unplaced?.length ?? 0) > 0,
+    isAuthed: accessToken !== null && (unplaced?.length ?? 0) > 0,
   });
   const unplacedRows = resolveUnplacedNames({ unplaced, savedPlaces });
 
@@ -323,7 +330,7 @@ export function ItineraryPlanPage({
     days: state.days,
   });
   const todayIndex = fromNotification
-    ? tabs.findIndex((tab) => tab.date === seoulDate(new Date()))
+    ? tabs.findIndex((tab) => tab.date === today)
     : -1;
   const wantedDayIndex = activeDayIndex ?? Math.max(todayIndex, 0);
   const selectedDayIndex =
@@ -400,7 +407,7 @@ export function ItineraryPlanPage({
       // 요약 ready 는 보지 않는다(TRIP-1071 결정 4c — 여행 전이면 j06 이 '여행이 끝나면' 안내로 막는다).
       cta={
         isConfirmed
-          ? isShareCaptureArmed()
+          ? shareArmed
             ? [
                 {
                   label: '일정 수정',
