@@ -248,6 +248,28 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn("secret", json.dumps(values).lower())
         self.assertNotIn("password", json.dumps(values).lower())
 
+    def test_embedding_uses_its_content_tag_so_unchanged_code_does_not_roll(self):
+        """임베딩만 빌드 맥락 내용 해시 태그 — 런 태그를 쓰면 코드가 그대로여도 매 배포 파드가 바뀌고,
+        maxSurge 0 이라 그때마다 엔드포인트가 빈다(10-14 하루 15회+). 다른 셋은 런 태그 그대로."""
+        arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc"
+        values = runtime.helm_values(outputs(), "sha-1-2-1", arn, "api-dev.example.com", True, "emb-abc123")
+        self.assertEqual(values["images"]["embedding"]["tag"], "emb-abc123")
+        self.assertEqual({values["images"][n]["tag"] for n in ("backend", "ai")}, {"sha-1-2-1"})
+        # 안 주면 종전 그대로(임베딩을 끈 배포 등)
+        self.assertEqual(runtime.helm_values(outputs(), "sha-1-2-1", arn, "api-dev.example.com", False)
+                         ["images"]["embedding"]["tag"], "sha-1-2-1")
+        with self.assertRaises(ValueError):
+            runtime.helm_values(outputs(), "sha-1-2-1", arn, "api-dev.example.com", True, "bad tag")
+
+    def test_only_embedding_template_skips_the_rollout_nonce(self):
+        """nonce 는 시크릿 env 를 다시 읽히려는 것 — 시크릿 env 가 있는 셋엔 남고, 없는 임베딩엔 없다."""
+        templates = Path(__file__).resolve().parents[1] / "chart" / "templates"
+        self.assertNotIn("rolloutNonce", (templates / "embedding.yaml").read_text(encoding="utf-8"))
+        self.assertNotIn("secretKeyRef", (templates / "embedding.yaml").read_text(encoding="utf-8"))
+        for name in ("ai.yaml", "backend.yaml", "gateway.yaml"):
+            with self.subTest(name=name):
+                self.assertIn("rolloutNonce", (templates / name).read_text(encoding="utf-8"))
+
     def test_rejects_invalid_image_tag_certificate_and_host(self):
         good_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc"
         for tag, cert, host in (("bad tag", good_arn, "api.example.com"), ("abc", "not-arn", "api.example.com"), ("abc", good_arn, "https://api.example.com")):
