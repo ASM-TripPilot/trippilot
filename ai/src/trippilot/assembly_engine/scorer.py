@@ -143,6 +143,25 @@ def directive_fit(
     return 0.0
 
 
+# ── 취향 — 페르소나가 고른 카테고리 (2026-10-14) ─────────────────────
+#
+# 지시와 같은 고정 +한 단으로는 **기본 가중이 낮은 카테고리의 취향이 묻힌다** — 카페
+# 0.6+0.3=0.9 < 명소 1.0 이라 "카페 위주" 사용자도 규칙 경로에선 카페가 거의 안 늘었다
+# (합성 풀 60 비중 0.03→0.23, 부산 c1 폴백 카페 0→1곳). 취향은 사용자가 고른 최우선 근거라
+# **그 카테고리를 기본 가중 최상위(명소) 위로** 끌어올린다: 최소 한 단, 낮은 카테고리는
+# 최상위와의 격차 + ε. 과잉은 조립기 기존 기구(식사 상한·식사창)가 막는다 — 점수가 아니다.
+_TOP_CATEGORY_WEIGHT = max(CATEGORY_WEIGHT.values())
+TASTE_EPSILON = 0.05
+
+
+def taste_fit(category: PoiCategory, taste: frozenset[PoiCategory] = frozenset()) -> float:
+    """취향 카테고리면 `max(한 단, 최상위 − 기본 가중 + ε)`, 아니면 0."""
+    if category not in taste:
+        return 0.0
+    return max(DIRECTIVE_STEP,
+               _TOP_CATEGORY_WEIGHT - CATEGORY_WEIGHT[category] + TASTE_EPSILON)
+
+
 # "가까운 데로"·"이동 줄여줘"(RANKING 지시 NEARBY·LESS_MOVE) — km 당 감점, 한 단에서 멈춘다.
 # 규칙 점수의 기본 거리 감점(0.02/km)과 별개로 **사용자가 말했을 때만** 더 민다. 0.05 면
 # 6km 에서 한 단(0.3)에 닿는다 — 대중교통 다일 반경(7km) 안에서 가까운 쪽이 이긴다.
@@ -172,6 +191,7 @@ def build_rule_score(
     fee_won: int | None = None,
     prefer: frozenset[PoiCategory] = frozenset(),
     avoid: frozenset[PoiCategory] = frozenset(),
+    taste: frozenset[PoiCategory] = frozenset(),
 ) -> float:
     """LLM 점수 부재 시의 결정론 점수 (동일 입력 → 동일 출력, U5-P3).
 
@@ -188,4 +208,5 @@ def build_rule_score(
     return (CATEGORY_WEIGHT[poi.category] + popularity_norm
             + admission_fit(fee_won, poi.category, budget)
             + directive_fit(poi.category, prefer, avoid)
+            + taste_fit(poi.category, taste)
             - dist_penalty + jitter)

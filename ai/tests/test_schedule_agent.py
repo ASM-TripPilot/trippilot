@@ -917,13 +917,15 @@ def test_미주입이면_종전과_완전히_같다() -> None:
 #
 # 취향은 LLM 점수 프롬프트에만 실려 c1 폴백·c1_partial 보충 청크에서 통째로 사라졌다
 # (10-13 DEV "취향 반영 안 됨"). 규칙 점수도 `_wanted_categories(persona)` 를 지시 선호와
-# 같은 기구(+DIRECTIVE_STEP)로 싣는다. 사용자가 카테고리 축을 정하면 그것만 쓴다.
+# 같은 크기(+DIRECTIVE_STEP)로 실었다가, 카페(0.6+0.3)가 명소(1.0)를 못 넘어 상대 가점으로
+# 바꿨다 — 취향 카테고리는 최소 한 단, 그리고 기본 가중 최상위보다 위. 사용자가 카테고리 축을
+# 정하면 그것만 쓴다.
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.agents.schedule.outcome import _wanted_categories
-from trippilot.assembly_engine.scorer import DIRECTIVE_STEP
+from trippilot.assembly_engine.scorer import CATEGORY_WEIGHT, DIRECTIVE_STEP
 from trippilot.domain.common import BudgetLevel
 from trippilot.domain.persona import ACTIVITY_LABELS, CUISINE_LABELS, PersonaSummary, TasteTag
 from trippilot.domain.poi import PoiCategory as _Cat
@@ -938,6 +940,16 @@ from tests.fakes.fake_llm import FailingLlm
 from trippilot.llm_gateway.prompts import PromptRegistry
 
 _ALL_CATS = tuple(c for c in _Cat if c is not _Cat.STAY)
+_TOP = max(CATEGORY_WEIGHT.values())
+
+
+def _assert_taste_lift(lift: float, cat: _Cat, wanted) -> None:
+    """취향 카테고리: 최소 한 단 + 기본 가중 최상위를 넘는다. 그 밖: 정확히 0."""
+    if cat in wanted:
+        assert lift >= DIRECTIVE_STEP - 1e-9
+        assert CATEGORY_WEIGHT[cat] + lift > _TOP  # 명소보다 위 — 카페 취향이 묻히지 않는다
+    else:
+        assert abs(lift) < 1e-9
 
 
 def _persona(taste=(), activities=(), cuisines=()) -> PersonaSummary:
@@ -982,9 +994,12 @@ def test_property_규칙_점수는_취향_카테고리를_한_단_올리고_사�
         assert tasted == plain  # 사용자 지시 우선 — 취향을 그 축에 얹지 않는다
         return
     wanted = _wanted_categories(persona)
+    lifts: dict[_Cat, set[float]] = {}
     for pid, score in tasted.items():
-        lift = DIRECTIVE_STEP if index[pid].category in wanted else 0.0
-        assert abs(score - plain[pid] - lift) < 1e-9  # 빈 취향 → 종전과 동일
+        cat, lift = index[pid].category, score - plain[pid]
+        _assert_taste_lift(lift, cat, wanted)  # 빈 취향 → 전부 0, 종전과 동일
+        lifts.setdefault(cat, set()).add(round(lift, 9))
+    assert all(len(v) == 1 for v in lifts.values())  # 카테고리 단위 가점 — 장소마다 다르지 않다
 
 
 def test_사용자_회피가_취향_선호를_이긴다() -> None:
@@ -1043,8 +1058,7 @@ def test_c1_partial_보충_청크에도_취향이_실린다() -> None:
     plain = backfilled(_persona())
     assert tasted.keys() == plain.keys() and tasted
     for pid, score in tasted.items():
-        lift = DIRECTIVE_STEP if by_id[pid].category is _Cat.CAFE else 0.0
-        assert abs(score - plain[pid] - lift) < 1e-9
+        _assert_taste_lift(score - plain[pid], by_id[pid].category, {_Cat.CAFE})
 
 
 def test_한_곳_추가_카테고리에는_취향_가점을_얹지_않는다() -> None:
@@ -1058,5 +1072,17 @@ def test_한_곳_추가_카테고리에는_취향_가점을_얹지_않는다() -
     tasted = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, cafe)}
 
     for pid, score in tasted.items():
-        lift = DIRECTIVE_STEP if index[pid].category is _Cat.NIGHT_VIEW else 0.0
-        assert abs(score - plain[pid] - lift) < 1e-9  # 카페는 "한 곳"만 — 종류 전체 가점 없음
+        # 카페는 "한 곳"만 — 종류 전체 가점 없음
+        _assert_taste_lift(score - plain[pid], index[pid].category, {_Cat.NIGHT_VIEW})
+
+
+def test_카페_취향이면_규칙_점수가_같은_조건의_명소를_넘는다() -> None:
+    """고정 +0.3 일 때 카페(0.6+0.3) < 명소(1.0) 라 "카페 위주"가 규칙 경로에서 묻혔다."""
+    pois = (_poi(1, 0.0005, _Cat.CAFE), _poi(2, 0.0005, _Cat.SIGHT))
+    pool = CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=_request().anchor, dates=_request().days,
+                             budget=_request().budget, transport=_request().transport), _NOW)
+    agent, _, _ = _agent()
+    by_cat = {next(p.category for p in pool.pois if p.poi_id == s.poi_id): s.score
+              for s in agent._rule_scores(_request(), pool, _persona(activities=("카페",)))}
+    assert by_cat[_Cat.CAFE] > by_cat[_Cat.SIGHT]
