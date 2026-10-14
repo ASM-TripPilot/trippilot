@@ -113,6 +113,11 @@ trippilot:
       # 상한을 받지 않는 개발자 계정 ID(쉼표 구분 UUID). 오타가 있으면 기동이 실패한다 — 조용히 빠지는 것보다 낫다.
       exempt-account-ids: ${ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS:}
   # AI 도우미(U8). 대화 보존 = 마지막 턴 후 이만큼(DATA-U8-01) — 잠정값이고 처리방침이 정해지면 여기만 바꾼다.
+  # U10 자동화 구간(TRIP-1404). enabled 는 서버 킬 스위치다(REL-U10-06) — 끄면 새 무장·경로 기록 START 를 409 로 거절하고
+  # 기기가 그것을 보고 강등한다. 기본 켜짐: 기기 쪽 기능 플래그가 꺼져 있는 동안은 아무도 START 를 보내지 않는다.
+  location-automation:
+    enabled: ${LOCATION_AUTOMATION_ENABLED:true}
+    sweep-ms: ${LOCATION_AUTOMATION_SWEEP_MS:3600000}
   assistant:
     retention-days: ${ASSISTANT_RETENTION_DAYS:90}
     # 한 턴의 서버 예산과 해석 한 번의 상한(PERF-U8-01·02). 앱은 15초를 기다린다.

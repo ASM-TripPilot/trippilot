@@ -1119,6 +1119,32 @@ paths:
         '400': { description: '장소·체크 방식 누락 · 자동 도착(AUTO_GEOFENCE)인데 slotKey 가 없음 — 자동 도착은 계획 슬롯에만 있다(INV-U10-5)' }
         '404': { description: 여행 없음/타 계정 }
         '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요)' }
+  /trips/{tripId}/location-automation/intervals:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 자동화 구간 보고 — 지오펜스 무장·경로 기록의 시작과 끝(U10 · TRIP-1404)
+      description: >
+        기기가 지오펜스 자동 기록을 무장하거나 경로 기록을 시작·종료할 때 알린다. **좌표는 받지 않는다** — 서버는 구간을 열고
+        닫으며 구간 단위 위치 법정 로그(무장 = `USE`, 경로 기록 = `COLLECTION`)를 남긴다(BR-U10-47).
+        **멱등**(`intervalId` + `phase`) — 오프라인 큐가 같은 보고를 다시 보내도 한 번만 반영되고 204 다.
+        START 는 위치 이용 동의(L2)가 있어야 하고, 경로 기록은 GPS 기록 동의(L3)도 있어야 한다. 서버 킬 스위치가 꺼져 있으면
+        START 는 409 다 — 기기는 강등한다. END 는 언제나 받는다. END 가 오지 않은 구간은 여행 종료 + 1일에 서버가
+        `SERVER_TIMEOUT` 으로 닫는다(여행을 지웠으면 다음 훑기에). 동의를 철회하면(계정 삭제 포함) 서버가 열린 구간을 철회 시각으로
+        `CONSENT_REVOKED` 닫는다 — L3 철회는 경로 기록만, L2 철회·계정 삭제는 전부.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IntervalReportRequest' } } }
+      responses:
+        '204': { description: 반영됨(재전송 포함) }
+        '400': { description: '필수 값 누락 · END 에 endReason 없음 · endReason=SERVER_TIMEOUT(서버 전용) · 보고 시각이 서버 시각 + 5분보다 뒤 · START 시각이 여행 기간 ± 1일(서울 날짜) 밖' }
+        '404': { description: 여행 없음/타 계정 }
+        '409':
+          description: >
+            `error.code` 로 가른다. **`AUTOMATION_DISABLED`**(서버 킬 스위치 꺼짐) · **`LOCATION_CONSENT_REQUIRED`**(무장은 L2, 경로 기록은
+            L2·L3 가 없음) — 둘 다 START 에서만 나고, 기기는 **무장을 풀고 강등한다**(안 풀면 서버엔 구간도 법정 로그도 없는데 기기는
+            무장한 채다). `CONFLICT` — 시작 보고가 없는 END · 그 구간 id 가 다른 여행·종류에 쓰였음(기기 결함, 강등 신호 아님).
   /trips/{tripId}/visits/days/{day}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2592,6 +2618,21 @@ components:
             이 편집이 딛고 선 서버 버전(BR-U5-22 · TRIP-546). 오프라인 큐를 재생할 때 실어 보내면,
             그 사이 서버가 앞서 나간 경우 **조용히 덮어쓰는 대신** `VISIT_CONFLICT`(409)로 갈린다.
             보내지 않으면 검사하지 않는다 — 온라인 단일 기기 편집 경로를 막지 않는다.
+    IntervalReportRequest:
+      type: object
+      required: [intervalId, kind, phase, at]
+      properties:
+        intervalId: { type: string, format: uuid, description: '기기가 짓는다 — START·END 의 멱등 키' }
+        kind: { type: string, enum: [GEOFENCE_ARMED, ROUTE_RECORDING] }
+        phase: { type: string, enum: [START, END] }
+        at: { type: string, format: date-time }
+        endReason:
+          type: string
+          nullable: true
+          enum: [CLIENT_STOP, PERMISSION_DOWNGRADE, ACCURACY_REDUCED, CONSENT_REVOKED, TRIP_ENDED]
+          description: 'END 에서만, 필수. SERVER_TIMEOUT 은 서버만 쓴다'
+        pointCount: { type: integer, minimum: 0, nullable: true, description: 'ROUTE_RECORDING END 의 표본 수' }
+        regionCount: { type: integer, minimum: 0, nullable: true, description: 'GEOFENCE_ARMED END 의 리전 수' }
     VisitCheckList:
       type: object
       required: [visits]

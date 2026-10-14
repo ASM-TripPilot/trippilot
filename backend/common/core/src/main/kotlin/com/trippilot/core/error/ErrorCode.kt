@@ -26,6 +26,8 @@ enum class ErrorCode {
     GENERATION_IN_PROGRESS,  // 다른 여행의 일정을 생성 중(409, TRIP-403)
     GENERATION_SUPERSEDED,   // 취소·대체된 생성 요청의 뒤늦은 1일차 — 반영 안 함(409, TRIP-1058)
     GENERATION_DAILY_LIMIT,  // 계정의 하루 AI 일정 생성 횟수 소진(429, TRIP-1314) — 내일 풀린다, 재시도로는 안 풀린다
+    AUTOMATION_DISABLED,     // 서버 킬 스위치로 자동 기록이 꺼져 있다(409, U10 REL-U10-06) — 기기는 무장을 풀고 강등한다
+    LOCATION_CONSENT_REQUIRED, // 위치 동의(L2, 경로 기록은 L3 까지)가 없다(409, U10 BR-U10-45) — 기기는 강등한다
     TURN_IN_PROGRESS,        // 도우미 턴이 **이미 기록돼 처리 중**이다(429, TRIP-1401) — 같은 clientTurnId 로 다시 보내면 그 답을 받는다
     MODERATION_UNAVAILABLE,  // 활성 금칙어 사전 미로드 — 검증 차단(503, fail-closed INV-B2)
     VISIT_ALREADY_RECORDED,  // 재생한 방문 기록이 **이미 서버에 같은 상태로 있다**(409, BR-U5-20)

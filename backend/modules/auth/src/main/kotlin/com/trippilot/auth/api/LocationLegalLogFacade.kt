@@ -1,5 +1,6 @@
 package com.trippilot.auth.api
 
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -38,7 +39,36 @@ interface LocationLegalLogFacade {
      * @param purgedCount 지운 건수. 0 이면 부르지 않는다 — 지울 것이 없었던 것과 지웠다는 기록은 다르다.
      */
     fun recordPurge(accountId: UUID, scope: LocationPurgeScope, purgedCount: Int)
+
+    /**
+     * 위치 **이용** 구간의 시작·끝(U10 지오펜스 무장, BR-U10-47) — `USE` 1건. 자동 도착 1건마다가 아니라 **구간 단위**다.
+     * 기기가 좌표를 서버로 보내지 않으므로(DEC-U10-8) 사실은 "언제부터 언제까지 무장했나"뿐이다.
+     *
+     * @param endReason END 일 때만. @param regionCount END 일 때만 — 무장했던 리전 수.
+     */
+    fun recordUseInterval(
+        accountId: UUID, purpose: LocationUsePurpose, intervalId: UUID, tripId: UUID,
+        phase: LocationIntervalPhase, at: Instant, endReason: String? = null, regionCount: Int? = null,
+    )
+
+    /**
+     * 기기 안에서의 위치 **수집** 구간(U10 경로 기록 세션)의 시작·끝 — `COLLECTION` 1건(`scope=DEVICE`). 표본은 기기에만
+     * 있고, 서버에 실제로 저장한 순간은 [recordCollection] 이 따로 남긴다.
+     */
+    fun recordCollectionInterval(
+        accountId: UUID, source: LocationCollectionSource, intervalId: UUID, tripId: UUID,
+        phase: LocationIntervalPhase, at: Instant, endReason: String? = null, pointCount: Int? = null,
+    )
 }
+
+/** 위치 이용 목적(U10). 닫힌 집합 — 법정 로그 조회가 문자열 매칭에 기대지 않는다. */
+enum class LocationUsePurpose {
+    /** 지오펜스로 일정 장소 도착·이탈을 판정해 방문 실적을 자동으로 남긴다. */
+    GEOFENCE_AUTO_VISIT,
+}
+
+/** 구간 보고의 단계. */
+enum class LocationIntervalPhase { START, END }
 
 /** 파기 대상 범위. `gps_track` 하나로 뭉치지 않는다 — 실제 지운 것과 기록이 어긋나면 안 된다. */
 enum class LocationPurgeScope {
@@ -50,10 +80,9 @@ enum class LocationPurgeScope {
 }
 
 /**
- * 이 파사드가 덮는 것은 **수집(`COLLECTION`)뿐이다.** `event_type` 에는 `USE`·`PROVISION` 도 있고
- * 법은 그 둘도 확인자료로 요구하지만, **아직 해당하는 동작이 없다** — 저장된 좌표를 읽는 곳은
- * 자기 응답으로 돌려주는 조회 하나뿐이고 외부(AI 등)로 나가는 경로는 없다(2026-09-14 실측).
- * 좌표를 쓰거나 내보내는 기능이 생기면 **그 기능과 같은 PR 에서** 이 파사드에 대응 메서드를 연다.
+ * 이 파사드가 덮는 것은 **수집(`COLLECTION`)과 이용(`USE`)이다.** `USE` 는 U10 지오펜스 무장 구간과 함께 열었다
+ * ([LocationLegalLogFacade.recordUseInterval]). `PROVISION`(외부 제공)은 **아직 해당하는 동작이 없다** — 좌표가
+ * 외부(AI 등)로 나가는 경로는 없다(2026-09-14 실측). 생기면 **그 기능과 같은 PR 에서** 대응 메서드를 연다.
  */
 
 /** 위치를 모은 경로. 닫힌 집합이라 로그 조회가 문자열 매칭에 기대지 않는다. */
@@ -63,4 +92,7 @@ enum class LocationCollectionSource {
 
     /** 재계획 요청에 실려 온 기준점 좌표 — GPS·수동 핀(V2.17 `replan_session`, TRIP-992). */
     REPLAN_ORIGIN,
+
+    /** U10 이동 경로 기록 — 기기 안 표본 수집 구간과, 하루치 경로의 서버 저장. */
+    ROUTE_TRACE,
 }

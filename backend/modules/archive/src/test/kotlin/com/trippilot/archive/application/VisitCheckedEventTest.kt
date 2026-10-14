@@ -62,7 +62,7 @@ class VisitCheckedEventTest : StringSpec({
     fun fixture(now: String = "2026-08-11T03:00:00Z"): Triple<VisitCheckService, Visits, CapturingEvents> {
         val visits = Visits()
         val events = CapturingEvents()
-        return Triple(VisitCheckService(trips, visits, events, clockAt(now)), visits, events)
+        return Triple(VisitCheckService(trips, visits, events, clockAt(now), FakeIntervals()), visits, events)
     }
 
     /** 체류 초과(DELAY)는 도착부터 재야 한다 — 완료만 알리면 "아직 안 떠난 사람"을 볼 수 없다(G-U10-2). */

@@ -33,6 +33,10 @@ trippilot:
   trip:
     end-sweep-ms: 3600000
     end-sweep-initial-delay-ms: 3600000
+  # 열린 자동화 구간 스위퍼도 같은 이유로 끈다(TRIP-1404). 동작은 sweep() 직접 호출로 잰다.
+  location-automation:
+    sweep-ms: 3600000
+    sweep-initial-delay-ms: 3600000
   # 리마인드 폴링도 같은 이유로 사실상 끈다(TRIP-547). 배경 폴링이 도래분을 먼저 집어 가면
   # `NotificationScheduleIT` 가 세운 예약이 테스트가 보기 전에 사라져 간헐 실패가 된다.
   notification:

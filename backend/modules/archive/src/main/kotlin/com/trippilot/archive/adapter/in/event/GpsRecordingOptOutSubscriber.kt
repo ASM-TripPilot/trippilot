@@ -1,5 +1,8 @@
 package com.trippilot.archive.adapter.`in`.event
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.archive.application.LocationAutomationService
+import com.trippilot.auth.api.event.GpsRecordingOptOut
 import com.trippilot.archive.application.VisitRecordService
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
@@ -26,6 +29,8 @@ import java.util.UUID
 @Component
 class GpsRecordingOptOutSubscriber(
     private val records: VisitRecordService,
+    private val automation: LocationAutomationService,
+    private val mapper: ObjectMapper,
 ) : OutboxSubscriber {
 
     override val eventType: String = "auth.GpsRecordingOptOut"
@@ -38,6 +43,12 @@ class GpsRecordingOptOutSubscriber(
 
         val purged = records.purgeExifCoordinates(accountId)
         log.info("위치 동의 철회로 EXIF 좌표를 파기했습니다. accountId={} 건수={}", accountId, purged)
+        // 경로 기록 구간도 닫는다 — 경로 기록은 L3 위에 선다(D4). 멱등: 열린 것만 닫는다.
+        // **계정 삭제**도 이 이벤트로 온다(L2 철회 이벤트는 오지 않는다) — 그때는 무장 구간까지 닫는다. 같은 요청이 세션을 모두
+        // 끊어 기기의 END 가 못 오므로, 안 닫으면 떠난 사용자의 무장이 여행 종료 + 1일까지 이어진 것으로 법정 로그에 남는다.
+        val accountDeleted = mapper.readTree(envelope.payload)["reason"]?.asText() == GpsRecordingOptOut.REASON_ACCOUNT_DELETION
+        val closed = automation.closeOnConsentRevoked(accountId, routeOnly = !accountDeleted, revokedAt = envelope.occurredAt)
+        if (closed > 0) log.info("u10.interval_closed reason=CONSENT_REVOKED scope={} count={}", if (accountDeleted) "ACCOUNT_DELETION" else "L3", closed)
     }
 
     private companion object {

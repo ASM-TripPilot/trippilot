@@ -9,6 +9,8 @@ import com.trippilot.archive.api.ArchiveFacade
 import com.trippilot.archive.api.event.VisitChecked
 import com.trippilot.archive.api.VisitConflictState
 import com.trippilot.archive.domain.CheckSource
+import com.trippilot.archive.domain.IntervalKind
+import com.trippilot.archive.domain.LocationAutomationIntervalRepository
 import com.trippilot.archive.domain.VisitCheck
 import com.trippilot.archive.domain.VisitCheckRepository
 import com.trippilot.archive.domain.inVisitOrder
@@ -38,6 +40,7 @@ class VisitCheckService(
     private val checks: VisitCheckRepository,
     private val events: DomainEventPublisher,
     private val clock: Clock,
+    private val intervals: LocationAutomationIntervalRepository,
 ) : ArchiveFacade {
 
     /**
@@ -170,6 +173,11 @@ class VisitCheckService(
     @Transactional(readOnly = true)
     override fun findLastCompletedPoi(tripId: UUID): UUID? =
         checks.findByTrip(tripId).filter { it.isCompleted }.maxByOrNull { it.completedAt!! }?.poiId
+
+    /** 그 시각을 덮는 무장 구간이 있나 — 열린 구간은 시작 이후 전부를 덮는다(END 가 아직 안 온 것). */
+    @Transactional(readOnly = true)
+    override fun isAutomationArmed(tripId: UUID, at: Instant): Boolean =
+        intervals.findByTrip(tripId, IntervalKind.GEOFENCE_ARMED).any { it.covers(at) }
 
     private fun owned(accountId: UUID, tripId: UUID, visitCheckId: UUID): VisitCheck {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()

@@ -52,7 +52,7 @@ class VisitCheckServiceTest : StringSpec({
     }
 
     fun service(visits: Visits, clock: Clock = clockAt("2026-08-11T03:00:00Z")) =
-        VisitCheckService(trips, visits, CapturingEvents(), clock)
+        VisitCheckService(trips, visits, CapturingEvents(), clock, FakeIntervals())
 
     "도착 전 건너뛰기 — 실적 없는 계획 슬롯이 SKIPPED 로 남는다(TRIP-1029)" {
         val visits = Visits()
@@ -128,9 +128,9 @@ class VisitCheckServiceTest : StringSpec({
         svc.complete(acc, tripId, first.visitCheckId)
 
         val laterPoi = UUID.randomUUID()
-        val second = VisitCheckService(trips, visits, CapturingEvents(), clockAt("2026-08-11T05:00:00Z"))
+        val second = VisitCheckService(trips, visits, CapturingEvents(), clockAt("2026-08-11T05:00:00Z"), FakeIntervals())
             .arrive(acc, tripId, "$day#$laterPoi", laterPoi, CheckSource.MANUAL)
-        VisitCheckService(trips, visits, CapturingEvents(), clockAt("2026-08-11T06:00:00Z"))
+        VisitCheckService(trips, visits, CapturingEvents(), clockAt("2026-08-11T06:00:00Z"), FakeIntervals())
             .complete(acc, tripId, second.visitCheckId)
 
         svc.findLastCompletedPoi(tripId) shouldBe laterPoi
@@ -139,7 +139,7 @@ class VisitCheckServiceTest : StringSpec({
     "하루 묶기는 여행지(KST) 날짜 — UTC 로 보면 자정 무렵이 어긋난다" {
         val visits = Visits()
         // KST 08-11 01:00 = UTC 08-10 16:00
-        VisitCheckService(trips, visits, CapturingEvents(), clockAt("2026-08-10T16:00:00Z"))
+        VisitCheckService(trips, visits, CapturingEvents(), clockAt("2026-08-10T16:00:00Z"), FakeIntervals())
             .arrive(acc, tripId, slot, poi, CheckSource.MANUAL)
 
         service(visits).listByDay(acc, tripId, day).size shouldBe 1
@@ -151,7 +151,7 @@ class VisitCheckServiceTest : StringSpec({
     "그 날의 방문은 지나온 순서로 나온다 — 도착 안 한 건너뛰기는 건너뛴 시각으로 사이에 끼어든다" {
         val visits = Visits()
         val (first, skipped, last) = List(3) { UUID.randomUUID() }
-        fun at(i: String) = VisitCheckService(trips, visits, CapturingEvents(), clockAt(i))
+        fun at(i: String) = VisitCheckService(trips, visits, CapturingEvents(), clockAt(i), FakeIntervals())
         // 일부러 지나온 순서와 다르게 넣는다 — 저장 순서를 그대로 내보내면 깨진다.
         at("2026-08-11T05:00:00Z").arrive(acc, tripId, "$day#$last", last, CheckSource.MANUAL)
         at("2026-08-11T01:00:00Z").arrive(acc, tripId, null, first, CheckSource.MANUAL) // 즉석 방문
