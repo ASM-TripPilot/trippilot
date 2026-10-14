@@ -147,7 +147,7 @@ def test_pbt_결과는_None_이거나_경계_8종이다(cat: str | None, name: s
 @settings(max_examples=200, deadline=None)
 @given(cat=st.sampled_from(_NIGHT_KEYS), name=astronomy_names())
 def test_pbt_천문_이름은_어떤_야경_카테고리로_와도_None(cat: str, name: str) -> None:
-    """**핵심** — `observatory`·`lookout`·`night_market` 어느 쪽으로 들어와도 드롭.
+    """**핵심** — 야경으로 매핑되는 어느 카테고리로 들어와도 드롭.
 
     카테고리를 표에서 유도하므로 야경 키가 늘어나도 자동으로 덮인다.
     """
@@ -188,8 +188,8 @@ def test_실측_전망대_회귀_고정(name: str) -> None:
 @settings(max_examples=200, deadline=None)
 @given(cat=st.sampled_from(_NIGHT_KEYS), name=plain_place_names())
 def test_pbt_야경_이름_규칙을_못_넘는_이름은_None(cat: str, name: str) -> None:
-    """카테고리만으로는 통과 못 한다 — `night_market`(44) 에 섞인 `전라도여행맛집`
-    같은 오분류가 여기서 걸린다. 야경은 **이름이 근거를 대야** 들어온다."""
+    """카테고리만으로는 통과 못 한다 — `전라도여행맛집`·`족발야시장 노량진점` 같은
+    것들이 여기서 걸린다. 야경은 **이름이 근거를 대야** 들어온다."""
     assert map_category(cat, name) is None
 
 
@@ -412,3 +412,25 @@ def test_앱_enum_과_DB_제약이_같은_집합이다() -> None:
     """한쪽만 늘리면 **저장 시점에** 터진다 — 컴파일도 테스트도 통과한다."""
     app, db = _backend_poi_source_values(), _db_poi_source_values()
     assert app == db, f"앱에만 {app - db} · DB에만 {db - app}"
+
+
+# ── 야시장은 야경이 아니다 (2026-10-14) ──────────────────────────────────
+def test_night_market_카테고리는_채택_목록에_없다() -> None:
+    """`야시장` 이름 규칙을 닫았으니 그 카테고리가 야경으로 갈 길이 없다 — 표에서도 뺐다.
+
+    남겨 두면 "카테고리는 채택인데 이름 규칙은 통과 못 함"으로 전량 드롭되어,
+    드롭 통계가 `카테고리·이름규칙` 한 칸에 섞여 왜 빠졌는지 안 보인다.
+    """
+    assert "night_market" not in _CATEGORY_MAP
+    assert map_category("night_market", "서문시장 야시장") is None
+
+
+@pytest.mark.parametrize(
+    "name",
+    # 공유본 실측 — 이름에 `야시장` 이 든 19곳 중 대표. 전부 식당이다.
+    ["족발야시장", "족발야시장 노량진점", "족발야시장(울진점)", "뉴욕야시장 소하점",
+     "상하이 야시장", "서문풍물야시장&서문시장삼겹살거리", "중문회포장센터 새벽야시장"],
+)
+def test_실측_야시장_상호는_야경이_아니다(name: str) -> None:
+    for cat in _NIGHT_KEYS:
+        assert map_category(cat, name) is None, f"{cat}×{name} 가 야경으로 샜다"

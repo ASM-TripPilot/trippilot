@@ -113,12 +113,18 @@ _CATEGORY_MAP: Mapping[str, PoiCategory] = {
     # NIGHT_VIEW — 아래 이름 규칙을 추가로 통과해야 한다.
     "observatory": PoiCategory.NIGHT_VIEW,
     "lookout": PoiCategory.NIGHT_VIEW,
-    "night_market": PoiCategory.NIGHT_VIEW,
+    # `night_market` 은 뺐다 — 아래 `야시장` 주석과 같은 이유다.
 }
 
 # 카테고리가 NIGHT_VIEW 로 왔을 때 **이름이 이걸 만족해야** 통과한다.
 # 실측 표본에서 확인한 진짜 야경: 솔오름 전망대·거린사슴전망대·국사봉전망대.
-_NIGHT_OK = re.compile(r"전망대|전망|야시장|야경|展望|lookout|observation\s*deck",
+#
+# **`야시장` 은 뺐다**(2026-10-14). 야시장은 야경이 아니라 시장이고, 그 낱말이 이름에
+# 들어간 것은 거의 전부 식당이다 — 공유본 19곳 중 `족발야시장` 7지점(전국 족발 체인)·
+# `뉴욕야시장 소하점`·`상하이 야시장` 처럼. 실제로 야경 축에 들어와 있던 유일한 `야시장`
+# 이 그 `뉴욕야시장 소하점`(경기 광명, 술집)이었다. `night_market` 카테고리도 같이
+# 걷어냈다 — 그 코드가 야경으로 갈 길이 이름 규칙뿐이었고 그 길을 닫았으므로.
+_NIGHT_OK = re.compile(r"전망대|전망|야경|展望|lookout|observation\s*deck",
                        re.IGNORECASE)
 # 이름이 이걸 만족하면 **카테고리와 무관하게 야경에서 뺀다.** `observatory` 가
 # 천문대를 함께 담고 있어서다 — 별을 보는 곳이지 야경을 보는 곳이 아니다.
