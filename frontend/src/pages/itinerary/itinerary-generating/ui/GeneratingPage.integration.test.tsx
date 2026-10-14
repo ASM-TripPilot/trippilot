@@ -1,6 +1,10 @@
 import type { ReactNode, ReactElement } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -1687,6 +1691,30 @@ describe('재계획 모드(replan)', () => {
       expect(screen.queryByTestId(FAILED)).toBeNull();
       expect(screen.getByTestId(PROGRESS)).toBeOnTheScreen();
       expect(generatePosts).toBe(0);
+    });
+
+    // 화면이 잠기거나 앱을 바꾼 사이 서버가 이미 끝냈는데, 상한 순간 조회를 꺼서 실패 얼굴이 뜨던 것(#1248 리뷰 W-A).
+    // 상한에 닿으면 실패로 판정하기 **전에 한 번 더** 묻는다 — 결과가 있으면 그대로 반영한다(바로 반영이 사용자 결정).
+    it('RC2 앱이 뒤로 간 사이 서버가 끝났으면, 상한 순간의 마지막 확인으로 실패 얼굴 없이 반영 1회 → 추천안', async () => {
+      jest.useFakeTimers();
+      const t0 = Date.now();
+      // 40초에 서버가 끝난다 — 그 전 조회는 SOLVING.
+      sessionScript = () => (Date.now() - t0 >= 40_000 ? 'DRAFT' : 'SOLVING');
+
+      renderReplan();
+      await advance(10_000);
+      // 앱이 뒤로 갔다 — 주기 조회가 선다(TanStack refetchInterval 은 포커스 없을 때 돌지 않는다, AppProviders 가 AppState 를 물린다).
+      act(() => focusManager.setFocused(false));
+      await advance(CAP_MS + 10_000);
+      act(() => focusManager.setFocused(true));
+      await advance(1_000);
+
+      expect(applied).toEqual([SESSION_ID]);
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.objectContaining({ pathname: '/trips/[tripId]/itinerary/draft' })
+      );
+      act(() => focusManager.setFocused(undefined));
     });
   });
 

@@ -395,8 +395,21 @@ function ReplanGeneration({
     }
   );
   const status = session.data?.status;
-  // 상한은 아직 짜는 중일 때만 실패다 — 결과(DRAFT·NO_SOLUTION 등)가 이미 왔으면 그 얼굴이 이긴다.
-  const capped = overCap && (status === 'COLLECTING' || status === 'SOLVING');
+  // 상한에 닿으면 실패로 판정하기 **전에 한 번 더** 묻는다 — 앱이 뒤로 간 사이(주기 조회가 선다) 서버가 이미 끝냈으면
+  // 실패 얼굴 대신 그대로 반영한다(바로 반영이 사용자 결정, #1248 리뷰 W-A). `refetch` 는 `enabled:false` 여도 나간다.
+  const finalCheckRef = useRef<string | null>(null);
+  const [finalChecked, setFinalChecked] = useState<string | null>(null);
+  useEffect(() => {
+    if (!overCap || sessionId === null || finalCheckRef.current === sessionId)
+      return;
+    finalCheckRef.current = sessionId;
+    void session.refetch().finally(() => setFinalChecked(sessionId));
+  }, [overCap, sessionId, session]);
+  // 상한은 마지막 확인 뒤에도 아직 짜는 중일 때만 실패다 — 결과(DRAFT·NO_SOLUTION 등)가 왔으면 그 얼굴이 이긴다.
+  const capped =
+    overCap &&
+    finalChecked === sessionId &&
+    (status === 'COLLECTING' || status === 'SOLVING');
 
   const begin = useCallback(() => {
     setSessionId(null);
