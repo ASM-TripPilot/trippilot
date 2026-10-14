@@ -646,6 +646,24 @@ def _warn_unwired(*, weather, embedding, feature_models: Mapping | None) -> None
         log.warning("WEATHER_API 미설정 — 날씨 보정 없이(no_adjust) 동작")
 
 
+_BANK_PATH = pathlib.Path(__file__).resolve().parent / "data" / "intent_question_bank.yaml"
+
+
+def _intent_bank() -> tuple:
+    """도우미 대화 해석(U8)의 1차 매칭 재료 — 질문뱅크. 여기서 읽는 이유는 `_replan_directives`
+    와 같다(yaml 파서는 src/ 밖). 못 읽으면 빈 뱅크로 기동한다 — 1차 없이 3차 LLM 으로 해석되고
+    그 사실이 로그에 남는다(조용히 무시하는 것과 다르다)."""
+    try:
+        import yaml
+
+        from trippilot.orchestrator.question_bank import load_bank_file
+
+        return load_bank_file(_BANK_PATH, yaml.safe_load)
+    except Exception as e:  # noqa: BLE001 — 기동을 막지 않는다
+        log.warning("질문뱅크 로드 실패 %s: %s — 도우미 해석이 1차 매칭 없이 기동", type(e).__name__, e)
+        return ()
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     configure_logging()  # 조립 로그부터 보이게 — 실패해도 기동 전에 드러난다 (TRIP-914)
@@ -664,7 +682,8 @@ def build_app_from_env() -> FastAPI:
         return build_dev_app(weather=weather, poi_db=poi_db, events=events,
                              vector_store=vector_store, embedding=embedding,
                              travel_port=travel, existence=existence,
-                             hours=hours, place_ids=place_ids)
+                             hours=hours, place_ids=place_ids,
+                             bank=_intent_bank())
     if provider == "openai":
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
@@ -696,7 +715,8 @@ def build_app_from_env() -> FastAPI:
                          # EXISTENCE_MAX_CALLS 와 같은 이유(TRIP-882 — compose 빈 값의 int('')).
                          # 0·음수는 C1Config 검증이 기동 시점에 거부한다.
                          score_max_parallel=int(_env("TRIPPILOT_SCORE_MAX_PARALLEL") or "10"),
-                         directives=_replan_directives())
+                         directives=_replan_directives(),
+                         bank=_intent_bank())
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.

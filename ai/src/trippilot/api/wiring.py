@@ -65,7 +65,9 @@ from typing import Callable, Mapping, Sequence
 
 from fastapi import FastAPI
 
+from trippilot.api import dialogue as dialogue_projection
 from trippilot.api import schemas
+from trippilot.api.errors import orchestrator_not_wired
 from trippilot.api.app import create_app
 from trippilot.api.cost import CostLedger
 from trippilot.api.route_budget import (
@@ -188,6 +190,12 @@ from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, base_radius_km, widened_radius_km
 from trippilot.orchestrator import schedule_coordinator as core
+from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
+from trippilot.llm_gateway.gates.intent import IntentGate
+from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
+from trippilot.orchestrator.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
+from trippilot.orchestrator.intent_router import IntentRouter
+from trippilot.orchestrator.question_bank import BankEntry
 from trippilot.ports.llm_port import LlmPort
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -1638,6 +1646,7 @@ class WiredItineraryOrchestrator:
         composer: ReplanCompositionWorker | None = None,
         request_extractor: ReplanRequestExtractionWorker | None = None,
         existence: object | None = None,  # PlaceExistencePort — 자연어 장소 주장 검증용
+        dialogue: DialogueInterpreter | None = None,
     ) -> None:
         self._orchestrator = orchestrator
         # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
@@ -1671,6 +1680,8 @@ class WiredItineraryOrchestrator:
         self._directives = directives
         self._embedding = embedding
         self._vector_store = vector_store
+        # U8 도우미 대화 해석(G-U8-4). 미주입이면 경계가 503(미배선)이다.
+        self._dialogue = dialogue
         # 임베딩이 못 잡은 자유 입력(부정문 포함)을 받는 2차 번역(A-3). 미주입 = 1차만.
         self._directive_translator = directive_translator
         # 다시 짜기 — 남은 하루의 방문 목록을 LLM 이 고른다. 미주입 = 종전 재계획(점수 + 어셈블리 선택).
@@ -3321,6 +3332,14 @@ class WiredItineraryOrchestrator:
         ))
         return schemas.ReflectionGenerateResponse(**template.to_dict())
 
+    def dialogue_interpret(
+        self, request: schemas.DialogueInterpretRequest
+    ) -> schemas.DialogueInterpretResponse:
+        """U8 도우미 — 발화 해석만(DEC-U8-1). 변환은 `api/dialogue.py`."""
+        if self._dialogue is None:
+            raise orchestrator_not_wired()
+        return dialogue_projection.interpret(self._dialogue, request, self._tz)
+
     def reflection_nudge(
         self, request: schemas.ReflectionNudgeRequest
     ) -> schemas.ReflectionNudgeResponse:
@@ -3467,6 +3486,7 @@ def build_orchestrator(
     embedding: object | None = None,
     tz: timezone = KST,
     directives: tuple[DirectiveSpec, ...] = (),
+    bank: tuple[BankEntry, ...] = (),
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
 
@@ -3601,8 +3621,24 @@ def build_orchestrator(
         # 빈 풀 1회 확대가 읽는 반경 규칙 — 풀 빌더에 준 것과 같은 설정(None 이면 양쪽 다 기본).
         pool_config=m7_config,
     )
+    # U8 도우미 대화 해석(G-U8-4) — 3단 IntentRouter 의 첫 프로덕션 호출자.
+    # 뱅크는 **메모리 스토어**에 첫 해석 때 현재 임베딩 모델로 색인한다(`BankIndex` docstring) —
+    # 실 DB 적재·컬렉션 슬러그가 필요 없다. 임베딩 미배선이면 1차를 건너뛰고 3차로 간다.
+    # LLM 은 `CountingLlm` 으로 감싼다: 백엔드 사용량 상한이 이 경계의 `llm_calls` 를 센다.
+    bank_store = InMemoryVectorStore()
+    counted = CountingLlm(llm)
+    dialogue = DialogueInterpreter(
+        IntentRouter(
+            embedding if embedding is not None else UnwiredEmbedding(),
+            bank_store,
+            intent_gateway=GatewayFacade(counted, renderer, IntentGate(), c1_config, trace),
+            paraphrase_gateway=GatewayFacade(counted, renderer, ParaphraseGate(), c1_config, trace),
+        ),
+        BankIndex(bank, embedding, bank_store),
+    )
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
+        dialogue=dialogue,
         diversity_jitter=(orchestrator_config or core.OrchestratorConfig()).diversity_jitter,
         info=info,
         pool_builder=pool_builder, rag=rag,
@@ -3789,6 +3825,7 @@ def build_dev_app(
     trace: TracePort | None = None,
     context_store: object | None = None,
     directives: tuple[DirectiveSpec, ...] = (),
+    bank: tuple[BankEntry, ...] = (),
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -3841,5 +3878,6 @@ def build_dev_app(
         embedding=embedding,
         trace=trace,
         directives=directives,
+        bank=bank,
     )
     return create_app(orchestrator)

@@ -32,9 +32,17 @@ class DialogueInterpretModeTest : StringSpec({
         }
     }
 
-    /** `http` 는 어댑터가 아직 없고, 오타는 어느 빈도 켜지 못한다 — 둘 다 조용히 버튼 모드가 되면 원인을 못 짚는다. */
-    "http 와 오타는 기동에서 실패한다" {
-        listOf("http", "on", "").forEach { mode ->
+    "http 는 실 어댑터로 뜬다 (TRIP-1410)" {
+        runner.withUserConfiguration(HttpDialogueInterpreterConfiguration::class.java)
+            .withPropertyValues("trippilot.assistant.interpret.mode=http").run { context ->
+                context.startupFailure shouldBe null
+                (context.getBeanProvider(DialogueInterpretPort::class.java).ifAvailable is HttpDialogueInterpreter) shouldBe true
+            }
+    }
+
+    /** 오타는 어느 빈도 켜지 못한다 — 조용히 버튼 모드가 되면 원인을 못 짚는다. */
+    "오타는 기동에서 실패한다" {
+        listOf("on", "").forEach { mode ->
             runner.withPropertyValues("trippilot.assistant.interpret.mode=$mode").run { context ->
                 (context.startupFailure != null) shouldBe true
                 generateSequence(context.startupFailure) { it.cause }.last().message!! shouldContain "지원하지 않습니다"
