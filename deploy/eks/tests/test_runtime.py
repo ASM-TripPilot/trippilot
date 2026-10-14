@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -226,6 +227,28 @@ class TargetTests(unittest.TestCase):
                 runtime.parse_outputs(self.raw(dev), "dev")
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             runtime.parser().parse_args(["smoke", "--target", "staging"])
+
+    def test_dev_outputs_wired_to_production_are_refused(self):
+        prod = outputs()
+        for dev in ({**self.DEV, "dev_target_database_host": prod["database_host"]},
+                    {**self.DEV, "dev_target_secret_arns": prod["app_secret_arns"]}):
+            with self.subTest(dev=dev), self.assertRaises(ValueError):
+                runtime.parse_outputs(self.raw(dev), "dev")
+
+    def test_main_hands_the_target_to_every_outputs_consumer(self):
+        """누출을 실제로 막는 줄은 main 이 대상을 parse_outputs 로 넘기는 곳이다 — 빠지면 개발 배포가 운영 값을 쓴다."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "outputs.json"
+            path.write_text(json.dumps(self.raw()))
+            prod_values = {outputs()["database_host"], outputs()["database_master_secret_arn"], *outputs()["app_secret_arns"].values()}
+            for action, patched, extra in (("sync-secrets", "runtime.runtime_secrets.sync", []),
+                                           ("bootstrap-db", "runtime.runtime_db.bootstrap", ["--run-id", "1-1"])):
+                with self.subTest(action=action), patch(patched) as consumer, patch("builtins.print"):
+                    runtime.main([action, "--target", "dev", "--outputs", str(path), *extra])
+                    seen, namespace = consumer.call_args.args[0], consumer.call_args.args[1]
+                    self.assertEqual(namespace, "trippilot-dev")
+                    self.assertEqual(seen["database_host"], self.DEV["dev_target_database_host"])
+                    self.assertFalse(prod_values & {seen["database_host"], seen["database_master_secret_arn"], *seen["app_secret_arns"].values()})
 
     def test_target_fixes_the_namespace(self):
         with patch("runtime.runtime_smoke.run") as smoke, patch("builtins.print"):

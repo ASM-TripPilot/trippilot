@@ -48,6 +48,9 @@ def parse_outputs(raw, target="prod"):
     for repository in result["ecr_repositories"].values():
         if not re.fullmatch(r"\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?/[a-z0-9/_-]+", repository):
             raise ValueError("Invalid ECR repository output")
+    if target != "prod" and (result["database_host"] == raw["database_host"]["value"]
+                             or set(result["app_secret_arns"].values()) & set(raw["app_secret_arns"]["value"].values())):
+        raise ValueError("Deploy target outputs must not point at production resources")
     if set(result["app_secret_arns"]) != set(runtime_secrets.GROUP_KEYS):
         raise ValueError("Expected backend, ai, database, shared Secrets Manager ARNs")
     for arn in [result["database_master_secret_arn"], *result["app_secret_arns"].values()]:
