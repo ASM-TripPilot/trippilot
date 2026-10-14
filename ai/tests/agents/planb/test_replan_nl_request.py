@@ -284,3 +284,14 @@ def test_rain_claim_reaches_the_solver_only_when_the_forecast_agrees(prob, expec
                            json=_body(reasons=[], free_text="비 온다던데")).json()
     assert seen
     assert (RAIN_OUTDOOR <= seen[0]) is expect_avoid, (seen[0], body["notes"])
+
+
+def test_named_place_across_the_island_is_found() -> None:
+    """DEV 실호출 회귀(2026-10-14) — 제주시 기준점에서 38.4km 인 성산일출봉이 반경 30 에 걸려
+    `not_registered` 로 탈락했다. 이름 대조 반경은 백엔드 조회 상한(50km)까지 본다."""
+    anchor = GeoPoint(33.4996, 126.5312)  # 제주시
+    seongsan = _poi("s1", "성산일출봉", 33.4587, 126.9427, cat=PoiCategory.NATURE)
+    from trippilot.assembly_engine.travel import haversine_km
+    assert 30 < haversine_km(anchor, seongsan.coord) <= v.NAME_SEARCH_RADIUS_KM  # 전제
+    poi, _ = v.match_place("성산일출봉", (seongsan,), anchor)
+    assert poi is seongsan
