@@ -1,7 +1,7 @@
 """수집 POI × LOCALDATA 인허가 데이터 → 영업상태·인허가일자 (TRIP-280).
 
 **pytest 대상이 아니다** — 원본 CSV(862MB)가 로컬에만 있고 리포에 없다. 순수 로직
-(`addr_key`·`norm_name`·`pick`)만 tests/test_match_business_status.py 가 검증한다.
+(`addr_key`·`norm_name`·`pick`)만 tests/scripts/test_match_business_status.py 가 검증한다.
 
 왜 필요한가: TourAPI 수집본에는 폐업 여부가 없다. 폐업한 가게를 일정에 넣으면
 사용자가 닫힌 문 앞에 선다. LOCALDATA(지자체 인허가) 는 그 정보를 가진 유일한

@@ -5,7 +5,7 @@
 **LLM 이 죽어도 사용자에게 뭔가는 나간다**(INV-4)는 계약을 실물로 확인한다.
 
 **pytest 대상이 아니다** — CI 실 호출 0건(D37)은 그대로다. 실 LLM·실 DB 호출은 사람이
-손으로 실행할 때만. 순수 로직은 tests/test_planb_rag.py·test_llm_gateway_alternative_selection.py
+손으로 실행할 때만. 순수 로직은 tests/agents/planb/test_planb_rag.py·test_llm_gateway_alternative_selection.py
 가 fake 로만 검증한다.
 
 시나리오 5종:

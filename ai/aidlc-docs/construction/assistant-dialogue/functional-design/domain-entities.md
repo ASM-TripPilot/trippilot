@@ -331,7 +331,7 @@ EXTRACTORS: dict[ArgumentKind, Extractor]
 
 ### 3.4 실제로 만든 것 (2026-09-19)
 
-`orchestrator/arguments.py` · 테스트 `tests/test_arguments.py`.
+`orchestrator/arguments.py` · 테스트 `tests/orchestrator/test_arguments.py`.
 
 | 종류 | 구현 | 비고 |
 |---|---|---|

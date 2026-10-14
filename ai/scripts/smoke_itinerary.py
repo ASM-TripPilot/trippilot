@@ -7,7 +7,7 @@
 **pytest 대상이 아니다** — CI 실 호출 0건(D37)은 그대로 유지되고, 실 LLM 호출은
 사람이 손으로 실행하거나 스케줄 워크플로(ai-llm-smoke.yml)가 실행할 때만.
 순수 선택 로직(지역·앵커·반경 샘플)은 import 가능한 함수로 분리되어
-tests/test_smoke_itinerary.py 가 fake 데이터로만 검증한다 (실 호출 0).
+tests/scripts/test_smoke_itinerary.py 가 fake 데이터로만 검증한다 (실 호출 0).
 
 랜덤이되 결정론: `random.Random(SMOKE_DATE + region)` 식 날짜 시드 — 날마다 다른
 선택, 같은 날 재실행은 같은 선택 (실패 재현·디버깅 가능).

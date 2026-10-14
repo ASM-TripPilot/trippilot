@@ -49,7 +49,7 @@
 - 앵커는 `origin: seed` 다. 증강 대상이 아니다 — 열린 집합을 불려 봐야 의미가 없다.
 
 **§6 CI 게이트 — 기록 재생 (TRIP-841)**
-- 게이트: `tests/test_intent_eval_gate.py` — 평가셋 정확도가 기준선 아래로 내려가면 **머지 불가**. 외부 호출 0(D37).
+- 게이트: `tests/orchestrator/test_intent_eval_gate.py` — 평가셋 정확도가 기준선 아래로 내려가면 **머지 불가**. 외부 호출 0(D37).
 - 픽스처: `tests/fixtures/intent_gate/` (임베딩 746 · LLM 70 · meta). 벡터는 fp16 base64 라 jsonl 한 줄 = 문장 하나 — diff 로 읽힌다.
 - **뱅크·평가셋·프롬프트·모델 중 무엇이든 바꾸면 기록을 다시 떠야 한다**:
   ```bash

@@ -118,7 +118,7 @@ uv run python scripts/finetune_reminder/build_dataset.py \
 
 ```bash
 cd ai
-uv run pytest tests/test_finetune_reminder_filter.py -v
+uv run pytest tests/scripts/test_finetune_reminder_filter.py -v
 ```
 
 필터 테스트는 실제 `ReminderCopyGate` 를 import 해서 동일한 규칙으로 검증한다.

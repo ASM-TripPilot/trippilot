@@ -2,7 +2,7 @@
 
 경계 라우트는 `trippilot.api.routes` 가 소유한다(itinerary·reflection 라우터 2개) —
 경로 목록을 여기 다시 나열하지 않는다(나열이 먼저 낡는다). 와이어 정본은
-`ai/docs/openapi.json` 이고, 앱과의 전수 일치는 `ai/tests/test_api_openapi_contract.py`
+`ai/docs/openapi.json` 이고, 앱과의 전수 일치는 `ai/tests/api/test_api_openapi_contract.py`
 가 강제한다. 경계 밖 `/`·`/health` 는 `trippilot.api.app` 소유.
 조립은 `trippilot.api.wiring` 소유 — main은 env 해석 + 얇은 스위치만 갖는다.
 

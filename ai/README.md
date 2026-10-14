@@ -277,7 +277,7 @@ LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 | RAG 프레임워크 | LangChain (부분 도입) | PlanBAgent + LLM 호출에만 (`ChatAnthropic`) |
 | 벡터 스토어 | pgvector (PostgreSQL) | 1차, 추후 OpenSearch 이전 가능 |
 | 임베딩 | **로컬 `nlpai-lab/KURE-v1` (MIT) 확정** | 1024차원 유지 → pgvector 스키마 무변경. Titan v2는 Bedrock 전용이라 대체 (AI-D06 부기 2026-08-23, TRIP-514 배선 완료). 종전 "잠정: multilingual-e5-large 또는 BGE-M3" 표기는 해소 |
-| 테스트 | pytest + Hypothesis (PBT) | 속성 수는 여기 박지 않는다 — 세려면 `grep -rc "@given" ai/tests/*.py` (`ai-ci.yml` 주석과 같은 규칙, TRIP-530). 종전 "19개(+신규 5)"·"170개/41개" 표기는 모두 스테일이었다 |
+| 테스트 | pytest + Hypothesis (PBT) | 속성 수는 여기 박지 않는다 — 세려면 `grep -rc --include="*.py" "@given" ai/tests` (`ai-ci.yml` 주석과 같은 규칙, TRIP-530). 종전 "19개(+신규 5)"·"170개/41개" 표기는 모두 스테일이었다 |
 | 패키지 관리 | uv | U1 FD에서 확정 |
 
 > **표기 규칙 (AI-D06)**: 본 저장소 문서의 기존 "Bedrock" 표기는 "LLM API(Anthropic)"로 읽는다. 점진 개정 중.
@@ -345,7 +345,7 @@ TripPilot_AI/
 │   │   └── units/
 │   └── construction/        ← 유닛별 기능 설계(FD). 실물 목록은 디렉토리를 볼 것
 ├── src/trippilot/           ← 서비스 구현 (api·agents·orchestrator·assembly_engine·llm_gateway)
-├── tests/                   ← pytest + Hypothesis
+├── tests/                   ← pytest + Hypothesis. src 패키지별 하위 폴더(api·agents/<에이전트>·assembly_engine·llm_gateway·…), scripts 테스트는 tests/scripts/
 └── docs/openapi.json        ← 와이어 정본 (ai-ci 가 실행 앱 스키마와 일치를 강제)
 ```
 
