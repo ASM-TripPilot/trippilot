@@ -182,18 +182,26 @@ class InfoCollector:
     def __init__(self, providers: Mapping[ProviderKind, Provider]) -> None:
         self._providers = dict(providers)
 
-    def collect(self, intent: Intent, params: dict) -> dict[ProviderKind, InfoPacket]:
+    def collect(
+        self, intent: Intent, params: dict, *, only: frozenset[ProviderKind] | None = None,
+    ) -> dict[ProviderKind, InfoPacket]:
         """요구표의 등록 Provider들을 호출 — 패킷 묶음 반환.
 
         **표에 없는 의도는 빈 묶음이 아니라 예외다.** 조용한 빈 묶음은 "Provider 가
         필요 없다"와 "아직 안 정했다"를 구분하지 못하고, 후자가 후보 0건으로만
         드러나 원인까지 3단을 거슬러야 한다(INV-4 침묵 금지). 필요 없는 의도는
         **빈 튜플을 명시**해 그 사실을 기록한다.
+
+        `only` 는 요구표의 **부분 재수집**용 — 빈 풀을 반경을 넓혀 한 번 더 찾을 때 PLACE 만
+        다시 부르고 페르소나·날씨·행사는 1차 패킷을 그대로 쓴다(그 셋은 반경과 무관한 재료라
+        다시 받으면 외부 HTTP 만 늘고 시한만 줄어든다). 요구표에 없는 종류는 걸러진다.
         """
         try:
             kinds = INFO_REQUIREMENTS[intent]
         except KeyError:
             raise UnknownIntentError(intent) from None
+        if only is not None:
+            kinds = tuple(k for k in kinds if k in only)
         packets: dict[ProviderKind, InfoPacket] = {}
         for kind in kinds:
             provider = self._providers.get(kind)

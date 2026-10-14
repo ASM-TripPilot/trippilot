@@ -268,6 +268,47 @@ def test_PlanB_순위에서_한_곳_추가_카테고리는_첫_1건만_남긴다
     assert trim_planb_rank_for_add_one(ranked, pool.pois, frozenset({PoiCategory.FOOD})) == (ranked, 0)
 
 
+# ── 빈 풀이면 반경을 한 단 넓혀 한 번 더 (2026-10-14 사용자 결정, BR-U3-25 개정) ──
+# 데모 풀(제주 4곳) 기준 — 이 앵커에서 가장 가까운 한라산이 ≈12.4km: PUBLIC 기본 10km 밖, 넓힌 15km 안.
+_RING_ANCHOR = {"lat": 33.25, "lng": 126.5292}
+
+
+def test_재계획_풀이_비면_반경을_한_단_넓혀_한_번_더_찾는다() -> None:
+    body, _ = _replan(anchor=_RING_ANCHOR)
+
+    assert (body.get("empty_reason") or {}).get("code") != "NO_CANDIDATE", body["notes"]
+    assert any(n.startswith("pool_widened: 10->15km, before=0, after=1") for n in body["notes"]), body["notes"]
+
+
+def test_가까운_데로를_말했으면_넓히지_않고_그_사실만_남긴다() -> None:
+    body, _ = _replan(anchor=_RING_ANCHOR, directives=["NEARBY"])
+
+    assert body["empty_reason"]["code"] == "NO_CANDIDATE", body["notes"]
+    assert "pool_widen_skipped: near" in body["notes"]
+    assert not any(n.startswith("pool_widened") for n in body["notes"])
+
+
+def test_원_일정이_실려_있어도_검색_결과가_비면_넓힌다() -> None:
+    """실 요청은 원 일정 슬롯이 늘 실린다 — 합류 뒤 풀로 판정하면 확대가 한 번도 안 돈다(리뷰 재현).
+    판정은 합류 **앞** 반경 풀이고, 합류는 넓힌 풀에 한 번만 한다(노트 중복 없음)."""
+    halla = "e0000000-0000-4000-8000-000000000004"  # 데모 풀의 한라산 — 링 앵커에서 ≈12.4km
+    body, _ = _replan(anchor=_RING_ANCHOR, current_slots=[{"poi_id": halla}])
+
+    assert (body.get("empty_reason") or {}).get("code") != "NO_CANDIDATE", body["notes"]
+    assert any(n.startswith("pool_widened: 10->15km, before=0, after=1") for n in body["notes"]), body["notes"]
+
+    body, _ = _replan(anchor=_RING_ANCHOR, current_slots=[{"poi_id": "ghost-unregistered"}])
+    assert any(n.startswith("pool_widened:") for n in body["notes"]), body["notes"]
+    assert sum(n.startswith("current_slots_unregistered") for n in body["notes"]) == 1, body["notes"]
+
+
+def test_자차는_이미_상한이라_넓히지_않고_그_사실만_남긴다() -> None:
+    body, _ = _replan(anchor={"lat": 30.0, "lng": 120.0}, transport_mode="CAR")  # 어디서도 20km 밖
+
+    assert body["empty_reason"]["code"] == "NO_CANDIDATE"
+    assert "pool_widen_skipped: at_cap" in body["notes"], body["notes"]
+
+
 # ── ② 가까운 데로 ─────────────────────────────────────────────────────
 
 

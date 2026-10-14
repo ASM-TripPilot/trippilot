@@ -180,6 +180,7 @@ M8.generate(tripId, mode)
 |---|---|---|
 | LLM 취향해석/설명 실패 → 솔버 결과 + 설명 생략 | C1 워커 실패 → 점수 기본값, `explanations` 부분 누락 | `explanations` 일부 키 부재 |
 | CandidatePool 실패 → 부분 결과 + "일부 추천 빠짐" | M7 풀 축소 | `candidatesSummary.level=LOW` (BR-U2-05) |
+| 풀 0건 → 반경 ×1.5 **1회** 확대 **[개정 · 2026-10-14]** (BR-U3-25 개정) | M7 PLACE 만 재수집 1회, 그래도 0건이면 종전 MINIMAL | `degradations` `pool:radius_widened` + DEGRADED(`isFallback` 은 조립 결과대로) |
 | TravelEstimate 실패 → 직선거리(추정 표기) | `TravelEstimator` basis 강등 | `distanceRange` 문자열에 "추정" 표기(BR-U2-08) |
 | Solver 전면 실패 → 최소 일정 + 재시도 | 규칙 폴백 → 그래도 실패 시 backend 바깥 겹 | `solveMode=MINIMAL`·`isFallback=true` |
 
