@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "source": "LOCALDATA",
+  "sources": [
+    "LOCALDATA",
+    "TOURAPI"
+  ],
   "collected_at": "2026-10-14T09:41:26.593210+00:00",
   "area_codes": [
     "1",
