@@ -34,8 +34,11 @@ from trippilot.poi_curation.sourcing.collection_gate import (
     _haversine_m,
 )
 from trippilot.poi_curation.sourcing.localdata import (
+    PER_ANCHOR,
+    PICK_RADIUS_KM,
     SOURCE,
     SOURCE_NAME,
+    fill_near,
     gap_anchors,
     gate_against_tourapi,
     pick_near,
@@ -299,3 +302,72 @@ def test_document_values_follow_the_contract() -> None:
 def test_document_source_is_accepted_by_backend() -> None:
     """모르는 `source` 는 백엔드가 문서째 400 으로 막는다 — 값 집합을 백엔드 enum 에서 직접 읽어 대조."""
     assert SOURCE_NAME in _backend_poi_source_values()
+
+
+# ── '기타' 빈자리 보충 (TRIP-1282) ────────────────────────────────────
+#
+# 업태 '기타' 10.3만은 상호로 72.9% 를 못 가려 통째로 뺀 칸이다. 그중 LLM 이 "확실한 식당"으로
+# 판정한 것만 **남은 자리에** 넣는다. 여기서 못 박는 것은 하나다: **밀어내지 않는다.**
+
+
+def test_보충은_기존_선정을_한_곳도_바꾸지_않는다() -> None:
+    """자리가 꽉 찬 앵커에는 '기타'가 못 들어간다 — 확실한 한식집이 밀리면 보충이 아니라 교체다."""
+    anchor = GeoPoint(*_JEJU)
+    # 상한만큼 채택 업태가 이미 반경 안에 있다 → 빈 자리 0
+    taken = [_ld(f"A{i:02d}", lat=_JEJU[0] + 0.0001 * i) for i in range(PER_ANCHOR)]
+    extra = [_ld("E01", name="수로밥상", lat=_JEJU[0])]
+
+    assert fill_near([anchor], taken, extra) == []
+
+    before = pick_near([anchor], taken)
+    after = pick_near([anchor], taken) + fill_near([anchor], taken, extra)
+    assert [c.source_ref for c in after] == [c.source_ref for c in before]
+
+
+def test_남은_자리만큼만_가까운_순으로_채운다() -> None:
+    anchor = GeoPoint(*_JEJU)
+    taken = [_ld(f"A{i:02d}", lat=_JEJU[0] + 0.0001 * i) for i in range(PER_ANCHOR - 2)]
+    # 가까운 순: E01 < E02 < E03 — 자리는 둘뿐이다
+    extra = [_ld(f"E{i:02d}", lat=_JEJU[0] + 0.001 * i) for i in (1, 2, 3)]
+
+    got = [c.source_ref for c in fill_near([anchor], taken, extra)]
+    assert got == ["E01", "E02"], "남은 자리 수를 넘겨 채웠거나 가까운 순이 아니다"
+
+
+def test_자리가_비어도_반경_밖은_안_가져온다() -> None:
+    """보충이 반경을 넓히는 장치가 되면 안 된다 — 공백 지역 설계가 무너진다."""
+    anchor = GeoPoint(*_JEJU)
+    far = GeoPoint(_JEJU[0] + PICK_RADIUS_KM / 110.574 * 2, _JEJU[1])
+    assert fill_near([anchor], [], [_ld("E01", lat=far.lat, lng=far.lng)]) == []
+
+
+def test_판정_파일이_없으면_보충이_0_이다() -> None:
+    """`collect_localdata` 는 accept 목록이 빈 집합이면 '기타'를 한 곳도 만들지 않는다."""
+    assert fill_near([GeoPoint(*_JEJU)], [], []) == []
+
+
+@settings(max_examples=100, deadline=None)
+@given(_points(12), _points(40), _points(40))
+def test_보충분은_언제나_기존_선정과_겹치지_않는다(
+    anchors: list[GeoPoint], a: list[GeoPoint], b: list[GeoPoint],
+) -> None:
+    """합쳐서 게이트에 넘기므로 겹치면 같은 가게가 두 번 샌다."""
+    taken = [_ld(f"A{i:03d}", lat=p.lat, lng=p.lng) for i, p in enumerate(a)]
+    extra = [_ld(f"E{i:03d}", lat=p.lat, lng=p.lng) for i, p in enumerate(b)]
+    picked = {c.source_ref for c in pick_near(anchors, taken)}
+    filled = {c.source_ref for c in fill_near(anchors, taken, extra)}
+    assert not (picked & filled)
+
+
+@settings(max_examples=100, deadline=None)
+@given(_points(12), _points(40), _points(40))
+def test_앵커당_상한을_넘지_않는다(
+    anchors: list[GeoPoint], a: list[GeoPoint], b: list[GeoPoint],
+) -> None:
+    """선정 + 보충이 앵커마다 K 를 넘으면 '보충'이 아니라 상한 완화다."""
+    taken = [_ld(f"A{i:03d}", lat=p.lat, lng=p.lng) for i, p in enumerate(a)]
+    extra = [_ld(f"E{i:03d}", lat=p.lat, lng=p.lng) for i, p in enumerate(b)]
+    got = pick_near(anchors, taken) + fill_near(anchors, taken, extra)
+    for anchor in anchors:
+        near = [c for c in got if _km(anchor, GeoPoint(c.lat, c.lng)) <= PICK_RADIUS_KM]
+        assert len(near) <= PER_ANCHOR

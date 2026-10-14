@@ -179,17 +179,23 @@ def not_a_meal_stop(name: str) -> str | None:
 def to_candidate(
     row: Mapping[str, str],
     to_wgs84: Callable[[float, float], tuple[float, float]],
+    *,
+    adopted: frozenset[str] = ADOPTED_TYPES,
 ) -> SourcingCandidate | str:
     """CSV 한 행 → 게이트 입력. 못 쓰는 행은 **드롭 사유 문자열**을 돌려준다(산출 통계 키).
 
     `to_wgs84(x, y) -> (경도, 위도)` — pyproj `Transformer.transform` 순서. 원본 좌표는
     EPSG:5174(중부원점 TM)라 변환 없이 쓰면 위도가 45만이 된다.
     판정 순서가 통계를 정한다: 영업상태 → 업태 → 이름 → 주소(없음·고속도로 휴게소) → 좌표 → 관리번호.
+
+    `adopted` 는 **같은 행을 다른 업태 집합으로 한 번 더 훑기 위한 것**이다(`{"기타"}` 로 주면
+    '기타' 풀만 나온다 — TRIP-1282 빈자리 보충). 기본값을 쓰는 호출은 종전과 완전히 같고,
+    위 판정 순서도 그대로라 `row_drops` 통계의 뜻이 변하지 않는다.
     """
     if _cell(row, "영업상태명") != OPEN_STATUS:
         return DROP_NOT_OPEN
     kind = _cell(row, "업태구분명")
-    if kind not in ADOPTED_TYPES:
+    if kind not in adopted:
         return DROP_TYPE_NOT_ADOPTED
     name = _cell(row, "사업장명")
     if not name:
@@ -315,6 +321,44 @@ def pick_near(
     for a in anchors:
         near = sorted(grid.within(a, radius_km), key=lambda t: (t[0], t[1].source_ref))
         for _, c in near[:per_anchor]:
+            picked.setdefault(c.source_ref, c)
+    return [picked[ref] for ref in sorted(picked)]
+
+
+def fill_near(
+    anchors: Sequence[GeoPoint],
+    taken: Sequence[SourcingCandidate],
+    extra: Sequence[SourcingCandidate],
+    *,
+    radius_km: float = PICK_RADIUS_KM,
+    per_anchor: int = PER_ANCHOR,
+) -> list[SourcingCandidate]:
+    """앵커마다 `taken` 이 채우고 **남은 자리에만** `extra` 를 가까운 순으로 — 밀어내지 않는다.
+
+    `pick_near` 와 짝이다. 같은 앵커·반경·상한을 쓰되, 그 앵커에서 `taken`(채택 업태 풀 전체)이
+    이미 몇 자리를 쓰는지 먼저 세고 남는 만큼만 가져온다. **기존 선정분은 한 곳도 바뀌지 않는다**
+    — 사용자 지시 "보충만"(2026-10-14). 자리가 꽉 찬 앵커는 건너뛰므로, 확신이 덜한 '기타'가
+    확실한 한식집을 밀어낼 길이 없다.
+
+    `taken` 은 선정 결과가 아니라 **후보 풀**을 넘긴다 — `pick_near` 가 반경 안에서 가까운 순
+    `per_anchor` 곳을 고르므로, 그 앵커가 실제로 쓰는 자리 수는 `min(반경 안 풀 크기, 상한)` 이다.
+    """
+    g_taken: _Grid[None] = _Grid(radius_km)
+    for c in taken:
+        if c.lat is not None and c.lng is not None:
+            g_taken.add(GeoPoint(c.lat, c.lng), None)
+    g_extra: _Grid[SourcingCandidate] = _Grid(radius_km)
+    for c in extra:
+        if c.lat is not None and c.lng is not None:
+            g_extra.add(GeoPoint(c.lat, c.lng), c)
+
+    picked: dict[str, SourcingCandidate] = {}
+    for a in anchors:
+        room = per_anchor - min(len(g_taken.within(a, radius_km)), per_anchor)
+        if room <= 0:
+            continue
+        near = sorted(g_extra.within(a, radius_km), key=lambda t: (t[0], t[1].source_ref))
+        for _, c in near[:room]:
             picked.setdefault(c.source_ref, c)
     return [picked[ref] for ref in sorted(picked)]
 
