@@ -11,7 +11,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -295,3 +297,123 @@ def test_named_place_across_the_island_is_found() -> None:
     assert 30 < haversine_km(anchor, seongsan.coord) <= v.NAME_SEARCH_RADIUS_KM  # 전제
     poi, _ = v.match_place("성산일출봉", (seongsan,), anchor)
     assert poi is seongsan
+
+
+# ── DEV 실호출 회귀 (2026-10-14) — 수락된 장소가 구성 LLM 에 밀려 조용히 빠지던 것 ─────────
+
+class _FullDayComposer:
+    """구성 LLM 이 숏리스트에서 **이름으로 집은 곳을 빼고** 하루를 꽉 채우는 경우를 재현한다."""
+
+    def __init__(self) -> None:
+        self.shortlists = []
+
+    def compose(self, pool, inp, trace_id, now, *, timeout_sec=None):
+        self.shortlists.append({str(p.poi_id) for p in pool.pois})
+        picks = tuple(SimpleNamespace(poi_id=p.poi_id, reason="r") for p in pool.pois
+                      if str(p.poi_id) != _WOLJEONG and p.category is not PoiCategory.STAY)
+        return TypedResult(value=picks, is_fallback=False, error=None, call_record=None)
+
+
+def _replan_with_composer(composer, schedule_wrap=None):
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(
+        ExtractedRequest(places=(ExtractedPlace("월정리 카페거리", "visit"),)))
+    orch._existence = FakeExistence()
+    orch._composer = composer
+    if schedule_wrap is not None:
+        orch._schedule_agent = schedule_wrap(orch._schedule_agent)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(free_text="월정리 카페거리 꼭 가고 싶어"))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_named_place_reaches_the_composer_and_survives_a_full_day() -> None:
+    """구성 숏리스트는 풀에서만 나온다 — 반경 밖 곳을 풀에 합류시키지 않으면 구성이 고를 수 없다.
+    구성이 다른 곳으로 하루를 채워도 이름으로 집은 곳이 맨 앞에 남아 실제로 배치된다."""
+    composer = _FullDayComposer()
+    body = _replan_with_composer(composer)
+    assert composer.shortlists and _WOLJEONG in composer.shortlists[0], "구성 숏리스트에 없다"
+    assert _WOLJEONG in _placed(body), body["notes"]
+    slot = next(s for d in body["itinerary"]["days"] for s in d["slots"] if s["poi_id"] == _WOLJEONG)
+    assert slot["is_fixed"] is False  # 사용자가 잠근 곳이 아니다 — 잠그면 다음 다시 짜기에서 못 바꾼다
+
+
+def test_named_place_that_cannot_be_placed_is_reported_not_dropped_silently() -> None:
+    """수락된 곳이 일정에 못 들어가면 노트로 남는다 — DEV 에서는 아무 표시 없이 사라졌다."""
+    def drop_it(inner):
+        class _Drop:
+            def run(self, task):
+                out = inner.run(task)
+                if out.solution is None:
+                    return out
+                days = tuple(replace(d, slots=tuple(s for s in d.slots if str(s.poi_id) != _WOLJEONG))
+                             for d in out.solution.days)
+                return replace(out, solution=replace(out.solution, days=days))
+        return _Drop()
+
+    body = _replan_with_composer(_FullDayComposer(), schedule_wrap=drop_it)
+    assert _WOLJEONG not in _placed(body)
+    assert f"nl_place_unplaced: {_WOLJEONG}" in body["notes"], body["notes"]
+
+
+def _crowded_app(composer):
+    """DEV 처럼 후보가 많은 풀 — 앵커 근처 카페 30곳이(PlanB 순위 상한 20 을 넘게) 반경 밖 월정리(카페)를 카테고리 상위 6에서 밀어낸다."""
+    from trippilot.api.wiring import StaticPoiDb
+    cafes = tuple(_poi(f"c{i:02d}", f"근처카페{i}", DEMO_ANCHOR.lat + 0.002 * i, DEMO_ANCHOR.lng,
+                       cat=PoiCategory.CAFE) for i in range(1, 31))
+    app = build_dev_app(directives=_DIRECTIVES, poi_db=StaticPoiDb(demo_poi_seed() + cafes))
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(
+        ExtractedRequest(places=(ExtractedPlace("월정리 카페거리", "visit"),)))
+    orch._existence = FakeExistence()
+    orch._composer = composer
+    return app, orch
+
+
+def test_named_place_is_kept_in_the_composer_shortlist_against_closer_rivals() -> None:
+    """숏리스트는 카테고리마다 점수 상위 6곳이다 — 먼 곳은 가까운 같은 종류에 밀린다. 이름으로 집은 곳은
+    `keep` 으로 먼저 넣어야 구성 LLM 에게 보인다."""
+    composer = _FullDayComposer()
+    app, _ = _crowded_app(composer)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/planb/replan", json=_body(free_text="월정리 카페거리 꼭"))
+    assert composer.shortlists and _WOLJEONG in composer.shortlists[0]
+
+
+def test_named_place_takes_a_composed_seat_instead_of_adding_one() -> None:
+    """구성이 정한 방문 수가 곧 남은 시간에 맞춘 수다. 이름으로 집은 곳을 **9번째로 얹으면** 솔버가 시간
+    부족으로 가장 먼 그 곳을 떨어뜨린다(DEV 실측). 구성 결과 맨 앞에 두고 뒤에서 하나를 뺀다."""
+    composer = _FullDayComposer()
+    app, orch = _crowded_app(composer)
+    seen = []
+    inner = orch._schedule_agent
+
+    class _Spy:
+        def run(self, task):
+            seen.append(task.request)
+            return inner.run(task)
+
+    orch._schedule_agent = _Spy()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/planb/replan", json=_body(free_text="월정리 카페거리 꼭"))
+    req = seen[0]
+    ids = [str(r.poi_id) for r in req.required_visits]
+    assert ids and ids[0] == _WOLJEONG, ids
+    assert len(ids) == len(set(ids))
+    assert req.max_visits_per_day is None or len(ids) <= req.max_visits_per_day
+
+
+def test_named_place_without_composer_is_not_locked() -> None:
+    """구성 LLM 이 없을 때(실패·미주입)는 필수 방문으로 따로 붙는다 — 그래도 잠그지 않는다."""
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(
+        ExtractedRequest(places=(ExtractedPlace("월정리 카페거리", "visit"),)))
+    orch._existence = FakeExistence()
+    orch._composer = None
+    with TestClient(app, raise_server_exceptions=False) as client:
+        body = client.post("/ai/v1/planb/replan", json=_body(free_text="월정리 카페거리 꼭")).json()
+    slot = next(s for d in body["itinerary"]["days"] for s in d["slots"] if s["poi_id"] == _WOLJEONG)
+    assert slot["is_fixed"] is False, body["notes"]

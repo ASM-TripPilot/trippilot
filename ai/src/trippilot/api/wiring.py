@@ -2243,8 +2243,17 @@ class WiredItineraryOrchestrator:
             request, anchor, not_before, daily_rain, notes,
             trace_id=trace_id, now=now,
             remaining_ms=_deadline_budget(meta) - (self._clock.monotonic_ms() - t0))
-        # 통과한 곳이 풀 반경 밖이어도 따로 합류시키지 않는다 — 필수 방문으로 넘기면 ScheduleAgent 가
-        # 풀 밖 필수 방문을 등록 POI 에서 찾아 인덱스에 붙인다(TRIP-1177). 같은 일을 두 곳에서 하지 않는다.
+        # 통과한 곳은 풀에 합류시킨다 — **구성 LLM 의 숏리스트가 풀에서만 나오기 때문이다.** 반경 밖이면
+        # 구성 LLM 이 그곳을 고를 수 없어 다른 곳으로 하루를 꽉 채우고, 이 곳은 9번째 필수 방문으로 붙었다가
+        # 솔버가 떨어뜨렸다(DEV 실호출 2026-10-14: 제주시 → 성산일출봉 38km, 보고도 없이 빠짐).
+        # 한때 "어셈블리가 풀 밖 필수 방문을 찾아 붙이니 중복"이라 지웠는데, 어셈블리만 보고 내린 판단이었다.
+        # 등록 POI 에서 검증된 곳이라 후보 자격이 있다(INV-1).
+        nl_ids = tuple(p.poi_id for p in nl.visit)
+        fresh = tuple(p for p in nl.visit if p.poi_id not in pool.poi_ids)
+        if fresh:
+            pool = CandidatePool(
+                poi_ids=pool.poi_ids | {p.poi_id for p in fresh}, pois=pool.pois + fresh,
+                generated_at=pool.generated_at, anchor=pool.anchor, radius_km=pool.radius_km)
         if nl.rain_confirmed and not (RAIN_OUTDOOR <= avoid):
             avoid = avoid | RAIN_OUTDOOR  # 말이 아니라 기상청이 확인한 비다
         drop = avoid - prefer
@@ -2309,7 +2318,8 @@ class WiredItineraryOrchestrator:
         try:
             # 상황 추천 = PlanB 순서. 선택 LLM 을 안 불렀으면 규칙 랭킹(우천·저장 장소·거리)이 참고로 간다.
             composed = tuple(v.poi_id for v in earlier) if earlier is not None else self._compose_day(
-                request, pool, persona, daily_rain, planb_rank or planb.ranked_poi_ids, resolved,
+                request, pool, persona, daily_rain,
+                (*nl_ids, *(planb_rank or planb.ranked_poi_ids)), resolved,  # 이름으로 집은 곳 먼저
                 prefer, avoid, avoided, active, past, not_before, visit_cap, budget_level, notes,
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
             )
@@ -2317,6 +2327,12 @@ class WiredItineraryOrchestrator:
             notes.append(f"llm_compose_error: {type(e).__name__}")
             self._compose_event(meta, f"compose_error: {type(e).__name__}: {e}")
             composed = ()
+        if composed and nl_ids and earlier is None:
+            # 사용자가 이름으로 집은 곳은 구성 결과 **맨 앞**에 둔다. 방문 수는 구성 LLM 이 정한 그대로 둔다 —
+            # 그 수가 남은 시간에 맞춘 값이라, 하나를 더 얹으면 솔버가 시간 부족으로 누군가를 떨어뜨리는데 그게
+            # 가장 먼 이 곳이었다. 대신 뒤에서 하나를 뺀다(뒤쪽 = 구성이 덜 중요하게 본 곳).
+            n = max(len(composed), len(nl_ids))
+            composed = tuple(dict.fromkeys((*nl_ids, *composed)))[:n]
         add_one_asked = add_one
         if composed:
             # 고른 목록에 이미 든 종류의 "한 곳 추가"는 또 넣지 않는다(카페 두 곳).
@@ -2398,11 +2414,11 @@ class WiredItineraryOrchestrator:
             planb_rank=planb_rank,
             llm_composed=bool(composed),
         ))
-        if (composed or in_progress) and outcome.solution is not None:
+        if (composed or in_progress or nl_ids) and outcome.solution is not None:
             # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
             # 구성 LLM 이 고른 곳·진행 중이라 둔 곳은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가
             # 잠가서 다음 다시 짜기·교체에서 못 바꾼다. 그 표시만 걷는다(시각·순서는 그대로).
-            picked = set(composed)
+            picked = set(composed) | set(nl_ids)  # 이름으로 집은 곳도 사용자가 잠근 곳은 아니다
             outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
                 replace(d, fixed_blocks=tuple(
                     fb for fb in d.fixed_blocks
@@ -2428,7 +2444,9 @@ class WiredItineraryOrchestrator:
                 self._compose_event(meta, f"composed_unplaced: rerun={rerun} remaining={left}ms")
                 if rerun:
                     outcome = self._schedule_agent.run(core.ScheduleTask(
-                        request=replace(domain_request, required_visits=(),
+                        request=replace(domain_request, required_visits=tuple(
+                            RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
+                                          reason="nl_request") for p in nl_ids),
                                         max_visits_per_day=visit_cap,
                                         add_one_categories=add_one_asked),
                         pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
@@ -2437,6 +2455,14 @@ class WiredItineraryOrchestrator:
                         budget=budget, started_ms=t0, trace_id=trace_id, now=now,
                         planb_rank=planb_rank,
                     ))
+        if nl_ids and earlier is None:
+            # 검증을 통과했는데 일정에 못 들어간 곳 — **조용히 빠지지 않는다**(INV-4). 지금까지는 구성이 고른
+            # 곳만 `llm_composed_unplaced` 로 셌고, 이름으로 집은 곳은 아무 표시 없이 사라졌다.
+            placed = {s.poi_id for d in (outcome.solution.days if outcome.solution else ())
+                      for s in d.slots}
+            for pid in nl_ids:
+                if pid not in placed:
+                    notes.append(f"nl_place_unplaced: {pid}")
         if outcome.solution is not None and any(b.reason == "keep_dinner" for b in blocks):
             # "저녁은 그대로" 잠금은 이번 재계획 한정이다 — 고정으로 내면 BE 가 영구히 잠근다. 다시 풀었어도
             # (위 재실행) 같은 블록이 실리므로 최종 해에서 걷는다(시각·순서는 그대로).
