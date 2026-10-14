@@ -219,7 +219,7 @@ def test_prompt_renders_deterministically_without_coordinates() -> None:
     p1, ref = reg.render(_FEAT, build_alternative_selection_vars(pool, _input()))
     p2, _ = reg.render(_FEAT, build_alternative_selection_vars(pool, _input()))
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/alternative_selection.yaml" and ref.version == "0.4.1"  # reason 장소 특징(0.4.0 바꿀 장소 종류 칸 (0.3.0 사용자 원문 칸 · 0.2.0 KB-5 장소 설명 칸)
+    assert ref.prompt_id == "prompts/alternative_selection.yaml" and ref.version == "0.5.0"  # 바로 고르기(0.4.1 reason 장소 특징(0.4.0 바꿀 장소 종류 칸 (0.3.0 사용자 원문 칸 · 0.2.0 KB-5 장소 설명 칸)
     assert ref.feature == "ALTERNATIVE_SELECTION"
     for poi in pool.pois:
         assert str(poi.poi_id) in p1 and poi.name in p1
@@ -235,6 +235,22 @@ def test_prompt_states_closed_set_and_no_duration_rules() -> None:
     assert "소요시간" in prompt and "시각은 어셈블리가 정합니다" in prompt
     assert "지어내기 금지" in prompt
     assert "최대 3개" in prompt  # max_alternatives 주입
+
+
+@pytest.mark.parametrize("reason", ["none", "fatigue", "weather"])
+def test_prompt_asks_to_pick_directly_for_every_reason(reason: str) -> None:
+    """사유 "none" 만 사고 토큰이 켜져 재계획 1차 몫(~6s)을 넘겼다 — 문구로 끈다.
+
+    2026-10-14 실측(claude-fable-5-1·effort=low, 같은 일정·같은 숏리스트 63곳): 입력은
+    none 5,677 · fatigue 5,842 토큰으로 같은데 사고 토큰이 none 214~361 · fatigue 0 →
+    지연 none 7.0~8.9s · fatigue 3.2~4.0s. KB-3 문서를 fatigue 것으로 바꿔도 none 은 사고했고
+    (사유 단어가 원인), "바로 고르세요" 한 줄로 none 사고 0·4.5s(3/3), fatigue 는 그대로였다.
+    사유와 무관한 한 줄이라 모든 사유에 같은 문구가 실린다(사유별 분기 없음).
+    """
+    prompt, _ = PromptRegistry(_PROMPTS).render(
+        _FEAT, build_alternative_selection_vars(_pool(), _input(reason=reason))
+    )
+    assert "바로 고르세요" in prompt and f"사유: {reason}" in prompt
 
 
 def test_build_vars_excludes_pois_and_stringifies_everything() -> None:
