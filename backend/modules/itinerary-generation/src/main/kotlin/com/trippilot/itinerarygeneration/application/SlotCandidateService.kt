@@ -425,7 +425,7 @@ class SlotCandidateService(
     private fun SlotCandidatesInput.withTripPreference(accountId: UUID, tripId: UUID): SlotCandidatesInput {
         val ctx = trips.findGenerationContext(accountId, tripId) ?: return this
         val profile = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
-            .toProfile(personalization.hintsFor(accountId))
+            .toProfile(personalization.hintsFor(accountId), ctx.preferenceSnapshot.keys)
         return copy(preferenceProfile = profile, companionType = ctx.companionType)
     }
     companion object {

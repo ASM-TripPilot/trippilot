@@ -217,7 +217,7 @@ class GenerateItineraryService(
                 isRegeneration = previous != null,
                 assemblyUnplaced = emptyList(),
                 sessionId = session.sessionId,
-                preference = prefs.toProfile(hints),
+                preference = prefs.toProfile(hints, ctx.preferenceSnapshot.keys),
                 companionType = ctx.companionType,
             )
         } else {
@@ -404,7 +404,7 @@ class GenerateItineraryService(
             // 회신 필드(`unplaced_must_visits`)가 계약에 생겨야 성립한다(경계 계약 확정 문서 M2). 그때까지는
             // 침묵 드롭 위치가 백엔드에서 AI 로 옮겨간 상태일 뿐이다.
             fixedBlocks = materialized.fixedBlocks,
-            preferenceProfile = prefs.toProfile(hints),                        // preference_snapshot 7축 + 기록 기반 개인화(TRIP-556)
+            preferenceProfile = prefs.toProfile(hints, ctx.preferenceSnapshot.keys),                        // preference_snapshot 7축 + 기록 기반 개인화(TRIP-556)
             recommendationStrength = null,
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs),
                 excludedPoiIds = excluded,
