@@ -1816,6 +1816,15 @@ class WiredItineraryOrchestrator:
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
         trace_id = TraceId(meta.request_id)
+        # 사유 관측 — http_request·llm_cost 어디에도 없다. 대표·트리거는 `_replan_rag_request` 와 같은 규칙
+        primary = min((r for r in request.reasons if r), key=lambda r: (
+            _REASON_PRIORITY.index(r) if r in _REASON_PRIORITY else len(_REASON_PRIORITY)),
+            default="none")
+        _logger.info("replan_reason %s", json.dumps({
+            "trace_id": str(trace_id), "reasons": list(request.reasons), "primary": primary,
+            "trigger": request.trigger.kind if request.trigger is not None
+            else _REASON_TO_TRIGGER.get(primary, TriggerKind.MANUAL).value,
+        }, ensure_ascii=False))
         notes: list[str] = []
         # PlanB·점수·어셈블리가 **한 시계 원점을 공유한다** — PlanB 가 쓴 시간이
         # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.

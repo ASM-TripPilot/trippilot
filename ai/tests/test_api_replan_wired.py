@@ -389,3 +389,18 @@ def test_잠금_블록의_dwell_미지정은_기본_체류로_돈다() -> None:
     locked = [s for s in slots
               if s["poi_id"] == "e0000000-0000-4000-8000-000000000003"]
     assert locked and locked[0]["start_at"] == "15:00:00"
+
+
+def test_재계획_사유가_trace_와_함께_로그에_남는다(caplog: pytest.LogCaptureFixture) -> None:
+    """DEV 로그에서 사유를 trace 별로 본다 — 원 사유 목록·대표·트리거가 한 줄에."""
+    import json
+
+    with caplog.at_level("INFO", logger="trippilot.wiring"):
+        _post(build_dev_app(directives=_DIRECTIVES), reasons=["fatigue", "closed"])
+
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("replan_reason ")]
+    assert len(lines) == 1, lines
+    assert json.loads(lines[0].removeprefix("replan_reason ")) == {
+        "trace_id": "replan-wired-test", "reasons": ["fatigue", "closed"],
+        "primary": "closed", "trigger": "CLOSURE",
+    }
