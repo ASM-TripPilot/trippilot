@@ -172,6 +172,11 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
             LlmFeature.SHARE_CARD_COPY: 2048,
             # 고른 곳 ≤ 8건 × 이유 1문장 + fable 사고 토큰 — 대체지 선택(≤ 3건)의 두 배 남짓
             LlmFeature.REPLAN_COMPOSITION: 2048,
+            # 청크 ≤ 25건 × 건당 ~34 토큰 ≈ 850 + fable 사고 토큰(effort 미지정 = high). 1024 에서는
+            # DEV 실측(2026-10-13) 45회 중 3회가 정확히 1024 에서 잘려 `parse_error: Unterminated string`
+            # → 청크째 규칙 점수로 내려갔다(성공분도 최대 1019 — 상한에 붙어 있었다). 청크 크기는 그대로다 —
+            # `score_chunk_cap` 이 사고 몫(`SCORE_THINKING_RESERVE_TOKENS`)을 빼고 역산한다.
+            LlmFeature.PREFERENCE_SCORING: 2048,
         }
     )
 

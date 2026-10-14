@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from typing import Mapping, Protocol, Sequence
@@ -116,8 +117,11 @@ class HybridAssemblyFacade:
 
         result = _repair_engine(solution, problem, self._pois, self._est, policy, departures)
         if result.repaired is None:
-            self._finish_repair(tid, solution, problem, t0, deadline_ms,
-                                repaired=False, reason="unrepairable")
+            # 어느 제약을 못 고쳤는지 사유에 싣는다 — 종전엔 건수만 남아(AssemblyRunRecord) 같이 짜기 교체가
+            # 왜 위반으로 저장됐는지 로그로 가를 수 없었다(2026-10-13 DEV 2건). 예: `unrepairable:HC1x1,HC2x2`.
+            codes = Counter(v.code for v in check_all(solution, problem, self._pois, self._est))
+            self._finish_repair(tid, solution, problem, t0, deadline_ms, repaired=False,
+                                reason="unrepairable:" + ",".join(f"{c}x{n}" for c, n in sorted(codes.items())))
             return RepairResult(repaired=None, changes=())
 
         violations = check_all(result.repaired, problem, self._pois, self._est)

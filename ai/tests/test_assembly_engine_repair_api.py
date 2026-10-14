@@ -176,7 +176,8 @@ def test_repair_returns_none_when_shift_breaks_day_window() -> None:
 
     assert result.repaired is None and result.changes == ()
     reasons = [e.reason for e in trace.of_type(FallbackEvent)]
-    assert "unrepairable" in reasons  # 침묵 실패 금지 (INV-4)
+    # 침묵 실패 금지 (INV-4) — 어느 제약을 못 고쳤는지까지 싣는다(2026-10-13 DEV: 건수만 남아 원인을 못 갈랐다)
+    assert [r for r in reasons if r.startswith("unrepairable:")] == ["unrepairable:HC2x1"]  # 입력의 위반(이동 간격) — 밀면 하루 창(HC4)을 넘어 못 고친다
     records = trace.of_type(AssemblyRunRecord)
     assert len(records) == 1
     assert records[0].repaired is False and records[0].violations_found > 0
@@ -192,7 +193,7 @@ def test_repair_with_unsupported_policy_returns_none() -> None:
                            policy=MinimalChangePolicy.ALLOW_REORDER)
 
     assert result.repaired is None  # 1차 미구현 정책 — 계약대로 수리 불가
-    assert "unrepairable" in [e.reason for e in trace.of_type(FallbackEvent)]
+    assert any(e.reason.startswith("unrepairable:") for e in trace.of_type(FallbackEvent))
 
 
 # ── ③ repair 시한 인지 (DL-2 · DL-5) ─────────────────────────
