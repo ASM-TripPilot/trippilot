@@ -418,7 +418,8 @@ def test_infrastructure_exception_never_escapes() -> None:
 
     match = IntentRouter(_ScriptedEmbedding({}), _ExplodingStore()).route("아무말", _TID, _NOW)
     assert match.match_route is MatchRoute.FALLBACK
-    assert "router_error" in match.reason and "pgvector down" in match.reason
+    # 1차가 못 돌면 3차로 넘어가고(bank_unavailable), 3차도 없으면 폴백한다 — 예외는 안 샌다.
+    assert "bank_unavailable" in match.reason and "pgvector down" in match.reason
 
 
 @pytest.mark.parametrize("utterance", ["", "   ", "\n\t", "🙂🙂", "​"])

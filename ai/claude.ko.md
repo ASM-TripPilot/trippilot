@@ -46,8 +46,10 @@ INFO_REQUIREMENTS 표에 따라 모아 **AgentTask 봉투에 실어** 넘긴다 
 Provider를 직접 부르지 않는다. 각 Provider는 `ProviderStatus`
 (`OK`/`LOW`/`NO_CANDIDATES`/`WEATHER_UNKNOWN`/`COLD_START`/`UNAVAILABLE`)를 함께 낸다.
 
-⚠️ `IntentRouter`(질문뱅크 매칭)는 **구현돼 있으나 미배선** — 위 Orchestrator의 의도
-파악은 설계이지 도는 코드가 아니다 (TRIP-529).
+`IntentRouter`(질문뱅크 매칭)는 **배선됐다**(2026-10-14) — 경계는 하나뿐이다:
+U8 도우미의 `POST /ai/v1/dialogue/interpret`(`orchestrator/dialogue_interpreter.py`).
+AI 는 해석만, 디스패치는 백엔드 `assistant` 모듈(U8 DEC-U8-1). 질문뱅크는 첫 해석 때 현재
+임베딩 모델로 메모리 스토어에 색인한다(실 DB 적재 없음).
 
 ## 핵심 설계 문서 (application-design/)
 

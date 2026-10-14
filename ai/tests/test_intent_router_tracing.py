@@ -151,6 +151,8 @@ def test_stage_exception_is_recorded_on_the_run_and_route_still_falls_back() -> 
     assert match.match_route is MatchRoute.FALLBACK
     assert "boom" in (match.reason or "")
     route = runs[0]
-    assert route.name == "intent.route" and "boom" in (route.error or "")
+    # 1차 실패는 라우트 안에서 받아 3차로 넘긴다(bank_unavailable) — 라우트 런 자체는 실패가
+    # 아니고, 실패는 **1차 자식 런에** 남는다. 그래야 트레이스에서 "임베딩이 죽었다"가 보인다.
+    assert route.name == "intent.route" and route.error is None
     assert route.child_runs[0].name == "intent.bank"
     assert "boom" in (route.child_runs[0].error or "")

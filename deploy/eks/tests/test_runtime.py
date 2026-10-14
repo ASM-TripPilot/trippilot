@@ -48,9 +48,10 @@ class SecretTests(unittest.TestCase):
 
     def test_seed_keeps_an_explicit_assistant_mode(self):
         groups = {name: {} for name in runtime_secrets.GROUP_KEYS}
-        groups["backend"] = {"ASSISTANT_INTERPRET_MODE": "fake"}
-        seeded = runtime_secrets.seed_groups(groups, lambda: "secret", lambda: "rsa")
-        self.assertEqual(seeded["backend"]["ASSISTANT_INTERPRET_MODE"], "fake")
+        for mode in ("fake", "http"):
+            groups["backend"] = {"ASSISTANT_INTERPRET_MODE": mode}
+            seeded = runtime_secrets.seed_groups(groups, lambda: "secret", lambda: "rsa")
+            self.assertEqual(seeded["backend"]["ASSISTANT_INTERPRET_MODE"], mode)
 
     def test_provider_credentials_fail_before_deployment(self):
         cases = [
@@ -64,8 +65,7 @@ class SecretTests(unittest.TestCase):
             {"backend": {"AFFILIATE_MODE": "tripcom"}},
             {"backend": {"AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s"}},
             {"backend": {"AFFILIATE_MODE": "typo"}},
-            # 도우미 해석 — http 는 어댑터가 없어 백엔드가 기동에서 죽는다. 오타도 같다.
-            {"backend": {"ASSISTANT_INTERPRET_MODE": "http"}},
+            # 도우미 해석 — 오타는 백엔드가 기동에서 죽는다(http 는 TRIP-1410 부터 정상 값).
             {"backend": {"ASSISTANT_INTERPRET_MODE": "on"}},
             # 생성 상한(TRIP-1314) — 있는데 틀리면 백엔드가 기동에서 죽는 값들.
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": ""}},
