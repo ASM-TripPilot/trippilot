@@ -81,15 +81,19 @@ const GAUGE_MAX_CELLS = 4;
 export function DraftPage({
   tripId,
   reveal = false,
+  day,
 }: {
   tripId: string;
   /** TRIP-1385 · 생성 화면에서 막 넘어왔다 — 완성 일정이 나타날 때 한 번 경로 그려지기·카드 등장을 건다.
    *  라우트가 `reveal=1` 파라미터로 내리고, 일차 칩을 바꾸면 꺼진다(다시 재생 안 함). 저장 상태는 없다. */
   reveal?: boolean;
+  /** 처음 선택할 날(`YYYY-MM-DD`). 재계획 자동 반영 뒤 생성 화면이 다시 짠 날을 싣는다(#1235 사후 리뷰 W2).
+   *  없거나 그 날에 데이터가 없으면 종전대로 데이터가 있는 첫 날이다(아래 `selectedDate`). */
+  day?: string;
 }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [pickedDate, setPickedDate] = useState<string | null>(null);
+  const [pickedDate, setPickedDate] = useState<string | null>(day ?? null);
   const [revealing, setRevealing] = useState(reveal);
   // 어느 슬롯의 교체 시트가 열렸나(=그 슬롯 slotKey). null 이면 닫힘. 컨테이너가 이제 바텀시트
   // (`SlotCandidateSheet`, TRIP-793 이 인라인 패널에서 되돌림)를 그린다. h08 셸 얼굴·DraftScreen
@@ -291,8 +295,11 @@ export function DraftPage({
     // 바로 다시 짜서 반영한다(2026-10-14 사용자 결정 · 원 일정은 서버가 반영 전 복원 지점을 남긴다). 재계획은 확정을
     // 풀지 않는다. 생성 실패(FAILED)는 서버가 재생성을 받으므로 종전대로 생성 POST 로 간다 — 다녀온 기록이 있어 409 면
     // 생성 화면이 재계획 모드로 넘긴다(GeneratingPage). 여행 기간을 모르면 아래 종전 길이다.
+    // 이 여행이 생성 중이면 재계획보다 아래 "진행 중" 확인(TRIP-1032 B)이 먼저다 — 1일차 전이면 재계획은 "오늘 일정이
+    // 없다" 409 막다른 얼굴이 된다(#1235 사후 리뷰 W1).
     if (
       settled.data !== undefined &&
+      !isGenerationRunning(settled.data) &&
       settled.data.generationMode !== 'MANUAL' &&
       settled.data.generationState !== 'FAILED' &&
       trip.data !== undefined &&
