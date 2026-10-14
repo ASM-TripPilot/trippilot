@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 
 from trippilot.domain.poi import OpenHour, PoiCategory
 
@@ -652,6 +653,56 @@ def join_opening_hours_raw(
     # 영업을 먼저 자르되 절반 아래로는 안 내린다 — 긴 휴무 원문이 영업시간을 통째로 밀어내지 않게.
     hours = _truncate(hours.rstrip(), max(limit - len(tail), limit // 2))
     return hours + _truncate(tail, limit - len(hours))
+
+
+_DAY_LABEL = "월화수목금토일"
+
+
+def render_open_hours(hours: Sequence[OpenHour]) -> str | None:
+    """주간 OpenHour → **우리 형식의 영업 원문.** `parse_open_hours` 의 역이다.
+
+    **왜 필요한가.** 수신 계약(`PoiProposalDtos.ProposalItem`)은 영업시간을
+    `opening_hours_raw` **한 칸으로만** 받는다 — `poi.open_hours` 는 `ProposalPoi` 가
+    name·category·coord 만 읽어 조용히 버려진다. 그래서 파싱값만 채우면 DB 에 아무것도
+    안 들어간다(2026-10-14 실측: 3,996곳이 적재돼도 런타임에 안 보였다).
+
+    **다른 데서 받은 글자를 그대로 넣지 않으려고 만든다.** 원문 칸은 우리가 읽어 다시
+    파싱하는 자리이므로, 남의 표기를 그대로 두면 그 표기의 버릇까지 우리 파서가 떠안는다.
+    파싱한 뒤 **우리 표기로 다시 적으면** 왕복이 보장되고(테스트가 고정) 칸의 뜻도 지켜진다.
+
+    같은 시간대가 이어지는 요일은 범위로 묶는다 — `월~금 09:30~23:30, 토~일 08:00~22:00`.
+
+    **자정 넘김은 되감아 적는다** — `close_min=1740` 은 `11:00~05:00` 이지 `11:00~29:00`
+    이 아니다. 파서의 시각 정규식은 `2[0-3]:[0-5]\\d` 까지만 읽으므로 29시를 적으면 그
+    줄을 통째로 다르게 읽는다(왕복 PBT 가 잡았다). 닫는 쪽이 여는 쪽보다 이르면 파서가
+    1440 을 더해 되살린다 — 그게 수집 때와 같은 해석이다.
+    """
+    if not hours:
+        return None
+    by_day = {h.day_of_week: (h.open_min, h.close_min) for h in hours}
+    parts: list[str] = []
+    start = None
+    for day in range(8):      # 8 번째 바퀴에서 마지막 묶음을 닫는다
+        cur = by_day.get(day)
+        if start is not None and cur == by_day.get(start):
+            continue
+        if start is not None:
+            o, c = by_day[start]
+            c %= 24 * 60      # 자정 넘김은 되감아 적는다 — 위 주석 참조
+            span = _DAY_LABEL[start] if day - 1 == start else f"{_DAY_LABEL[start]}~{_DAY_LABEL[day - 1]}"
+            parts.append(f"{span} {o // 60:02d}:{o % 60:02d}~{c // 60:02d}:{c % 60:02d}")
+        start = day if cur is not None else None
+    return ", ".join(parts) or None
+
+
+def rest_phrase(days: Iterable[int]) -> str:
+    """휴무 요일 → 파서가 읽는 정형 문구. `{0, 2}` → `매주 월요일, 수요일`.
+
+    `render_open_hours` 와 **짝이다** — 영업 원문만 쓰면 파서가 부분 주간을 7일로 펼쳐
+    쉬는 날이 사라진다(실데이터 3,991건 성립률 54% → 휴무를 붙이면 100%). 둘을 같은
+    모듈에 두는 이유다. 종전엔 `scripts/collect/backfill_rest_days.py` 에 있었다.
+    """
+    return "매주 " + ", ".join(f"{_DAY_LABEL[d]}요일" for d in sorted(days))
 
 
 def split_opening_hours_raw(text: str | None) -> tuple[str | None, str | None]:

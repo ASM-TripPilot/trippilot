@@ -15,13 +15,16 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from trippilot.domain.poi import OpenHour
 from trippilot.poi_curation.sourcing.mapping import (
     _REST_SEP_DEFUSED,
     OPENING_HOURS_MAX,
     REST_SEP,
-    join_opening_hours_raw,
     parse_open_hours,
+    join_opening_hours_raw,
     parse_opening_hours_raw,
+    render_open_hours,
+    rest_phrase,
     split_opening_hours_raw,
 )
 
@@ -139,3 +142,65 @@ def test_pbt_합치고_가르면_쓴_그대로고_런타임이_수집과_같게_
 @given(text=_hours.filter(lambda t: REST_SEP not in t))
 def test_pbt_구분자_없는_원문은_종전과_똑같이_읽힌다(text: str) -> None:
     assert parse_opening_hours_raw(text) == parse_open_hours(text, None)            # ④
+
+
+# ── 영업 원문 직렬화 (2026-10-14) ─────────────────────────────────────
+#
+# 수신 계약은 영업시간을 `opening_hours_raw` **한 칸으로만** 받는다 — `ProposalPoi` 가
+# name·category·coord 만 읽어 `poi.open_hours` 는 버려진다. 그래서 파싱값만 채우면
+# DB 에 아무것도 안 들어간다(실측: 3,996곳이 런타임에 안 보였다). 원문 칸에 쓰되
+# **우리 표기로 다시 적는다** — 남의 표기를 그대로 두면 그 버릇까지 파서가 떠안는다.
+
+
+@settings(max_examples=200, deadline=None)
+@given(hours=st.lists(
+    # 길이는 **2시간 초과**로 뽑는다 — 파서가 `_MIN_WINDOW_MIN`(120) 이하를 회차·교육
+    # 세션으로 보고 버리는 것이 설계다(실측으로 정한 값). 그보다 짧은 창을 넣고
+    # 왕복을 주장하면 파서의 계약이 아니라 테스트가 틀린 것이다.
+    st.tuples(st.integers(0, 6), st.integers(0, 20 * 60), st.integers(121, 180)),
+    min_size=1, max_size=7,
+))
+def test_pbt_직렬화한_원문은_휴무와_함께_쓰면_왕복한다(hours: list[tuple[int, int, int]]) -> None:
+    """**왕복이 이 함수의 존재 이유다.** 깨지면 원문 칸에 쓴 글자를 우리가 못 읽는다.
+
+    ⚠️ **휴무 칸이 반드시 함께 가야 한다.** 영업 원문만 쓰면 파서가 부분 주간을 7일로
+    펼쳐 쉬는 날이 사라진다 — 실데이터 3,991건에서 성립률이 54% 였고, 휴무를 붙이니
+    100% 가 됐다. 쉬는 날이 사라지면 HC1 이 휴무일에 배치를 허용하므로, 영업시간이
+    아예 없는 것만 못하다.
+    """
+    by_day = {d: (o, o + dur) for d, o, dur in hours}
+    src = tuple(OpenHour(d, o, c) for d, (o, c) in sorted(by_day.items()))
+    rendered = render_open_hours(src)
+    assert rendered is not None
+    closed = set(range(7)) - set(by_day)
+    raw = join_opening_hours_raw(rendered, rest_phrase(closed) if closed else None)
+    assert parse_opening_hours_raw(raw) == src
+
+
+def test_같은_시간대가_이어지면_범위로_묶는다() -> None:
+    week = tuple(OpenHour(d, 570, 1410) for d in range(5)) + \
+        tuple(OpenHour(d, 480, 1320) for d in (5, 6))
+    assert render_open_hours(week) == "월~금 09:30~23:30, 토~일 08:00~22:00"
+
+
+def test_하루뿐이면_범위로_적지_않는다() -> None:
+    assert render_open_hours((OpenHour(0, 780, 1140),)) == "월 13:00~19:00"
+
+
+def test_자정을_넘기면_되감아_적는다() -> None:
+    """`11:00~05:00` 이지 `11:00~29:00` 이 아니다 — 파서 시각 정규식이 23시까지만 읽는다."""
+    rendered = render_open_hours((OpenHour(0, 660, 1740),))
+    assert rendered == "월 11:00~05:00"
+    raw = join_opening_hours_raw(rendered, rest_phrase({1, 2, 3, 4, 5, 6}))
+    assert parse_opening_hours_raw(raw) == (OpenHour(0, 660, 1740),)
+
+
+def test_빈_입력은_원문도_없다() -> None:
+    """`None` 이어야 한다 — 빈 문자열을 쓰면 '영업시간을 모른다'가 '휴무'가 된다."""
+    assert render_open_hours(()) is None
+
+
+def test_쉬는_요일은_빠진다() -> None:
+    """월·수만 영업 — 사이가 끊기므로 범위로 묶이지 않는다."""
+    assert render_open_hours((OpenHour(0, 600, 1200), OpenHour(2, 600, 1200))) == \
+        "월 10:00~20:00, 수 10:00~20:00"
