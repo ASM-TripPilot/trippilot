@@ -11,6 +11,7 @@ import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.TimeWindow
+import com.trippilot.itinerarygeneration.domain.TodayWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
@@ -201,7 +202,7 @@ class HttpScheduleAgentAdapter(
                 input.companionType, input.budgetLevel,
             ),
             targetDate = input.targetDate,
-            timeWindow = AiTimeWindow(input.targetDate, DAY_START, DAY_END),
+            timeWindow = AiTimeWindow(input.targetDate, DAY_START, replanDayEnd(input)),
             anchor = AiCoord(lat, lng),
             stayAnchor = input.stayLat?.let { sLat -> input.stayLng?.let { sLng -> AiCoord(sLat, sLng) } },
             scope = input.scope.name,
@@ -267,6 +268,18 @@ class HttpScheduleAgentAdapter(
      * 상대가 지어낸 id 가 제안 카드를 거쳐 저장까지 간다. 하나라도 정본에 없으면 응답 전체를 버린다 —
      * 그 한 곳만 빼면 상대가 검증한 시각·순서가 더는 검증값이 아니다(INV-2).
      */
+    /**
+     * 재계획 창 끝 — 오늘을 다시 짜면 생성과 같은 규칙([TodayWindow])으로 **끝만** 늘린다. 종전엔 21:00 고정이라 밤 9시에
+     * [다시 짜기]를 누르면 남은 시간이 0 이어서 "대안 없음"이 됐다. 시작은 하루 전체 그대로(09:00 — 좁히면 오전에 잠긴
+     * 고정 블록이 창 밖이 되어 상대가 409 로 거부한다). 다른 날은 종전 그대로.
+     */
+    private fun replanDayEnd(input: ReplanInput): java.time.LocalTime {
+        val now = input.fromInstant.atZone(TRAVEL_ZONE)
+        if (now.toLocalDate() != input.targetDate) return DAY_END
+        val from = TodayWindow.earliest(now.toLocalTime()) ?: return DAY_END
+        return TodayWindow.eveningEnd(from, DAY_END)
+    }
+
     override fun proposeEdit(input: EditProposalInput): EditProposalOutput {
         val res = post(
             EDIT_PATH,
@@ -415,6 +428,7 @@ class HttpScheduleAgentAdapter(
 
         private val DAY_START: java.time.LocalTime = java.time.LocalTime.of(9, 0)
         private val DAY_END: java.time.LocalTime = java.time.LocalTime.of(21, 0)
+        private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
     }
 }
 

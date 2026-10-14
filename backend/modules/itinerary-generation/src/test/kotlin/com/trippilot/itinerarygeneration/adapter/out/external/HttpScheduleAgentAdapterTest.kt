@@ -268,6 +268,31 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 
+    // 오늘을 밤에 다시 짜면 창 끝(21:00)이 막아 "대안 없음"이 됐다 — 생성과 같은 규칙(TodayWindow)으로 끝만 늘린다.
+    // 시작은 하루 전체 그대로(09:00) — 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 409 로 거부한다.
+    "오늘을 밤 9시 반에 다시 짜면 창 끝이 23:59 다 — 야경 한두 곳이 들어갈 자리" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.time_window.start").value("09:00:00"))
+            .andExpect(jsonPath("$.time_window.end").value("23:59:00"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(scope = ReplanScope.PARTIAL_SLOTS, fromInstant = Instant.parse("2026-08-01T12:30:00Z")))
+
+        server.verify()
+    }
+
+    "다른 날을 다시 짜면 창은 그대로다 — 밤 규칙은 오늘에만" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.time_window.end").value("21:00:00"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(fromInstant = Instant.parse("2026-08-01T12:30:00Z"), targetDate = LocalDate.parse("2026-08-02")))
+
+        server.verify()
+    }
+
     /**
      * 거리는 **상대가 푼 값**이다(INV-2). 흘리면 i08 의 "이동 −6.9km" 를 만들 재료가 사라지는데,
      * 예외가 아니라 화면에서 그 줄만 안 보이는 형태라 아무도 눈치채지 못한다.
