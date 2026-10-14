@@ -194,9 +194,11 @@ variable "alerts_slack_channel_id" {
 
 variable "dev_target_enabled" {
   description = <<-EOT
-    이 스택 안에 **개발 대상**(네임스페이스 trippilot-dev)용 시크릿 그릇 한 벌을 더 만든다(2026-10-15 개발·운영 분리).
-    개발 대상은 클러스터·DB 장비·NAT 를 운영과 같이 쓰고 데이터·시크릿·DB 역할만 따로 갖는다 — 그 "따로"의 시크릿 절반이 이것이다.
-    이름은 `trippilot/<env>/dev-target/<그룹>` 이라 배포 역할의 기존 권한(`trippilot/<env>/*`) 안에 든다(bootstrap 불필요).
+    이 스택 안에 **개발 대상**(네임스페이스 trippilot-dev)을 둔다(2026-10-15 개발·운영 분리): 시크릿 그릇 한 벌,
+    작은 RDS 한 대(`aws_db_instance.dev_target`), 개발 네임스페이스 AI 파드의 Bedrock 연결.
+    클러스터·NAT·Redis 는 운영과 같이 쓴다.
+    시크릿 이름은 `trippilot/<env>/dev-target/<그룹>`, DB 는 `trippilot-<env>-target` 이라 만들기는 배포 역할 기존 권한 안이다.
+    단 배포가 **개발 DB 마스터 비밀번호를 읽으려면** bootstrap 템플릿 `ReadEnvironmentRdsMasterSecret` 조건에 이 DB 가 들어가야 한다(별도 PR).
   EOT
   type        = bool
   default     = false

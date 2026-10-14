@@ -64,6 +64,29 @@ run "dev_is_private_and_cost_conscious" {
     error_message = "The dev target needs its own four secret containers under trippilot/dev/dev-target/, never the production ones."
   }
 
+  # 개발 대상 DB 는 **운영과 다른 장비**다 — 같은 장비면 Flyway 의 app_user 하드코딩 권한이 개발 역할에 닿지 않는다(#1258).
+  # 이름이 trippilot-dev* 라 배포 역할 RDS 권한 안에 든다. 운영 데이터가 없으니 최소 사양·보호 없음.
+  assert {
+    condition = (
+      length(aws_db_instance.dev_target) == 1 &&
+      aws_db_instance.dev_target[0].identifier == "trippilot-dev-target" &&
+      aws_db_instance.dev_target[0].identifier != aws_db_instance.postgres.identifier &&
+      aws_db_instance.dev_target[0].instance_class == "db.t4g.micro" &&
+      !aws_db_instance.dev_target[0].multi_az && !aws_db_instance.dev_target[0].publicly_accessible &&
+      aws_db_instance.dev_target[0].storage_encrypted && aws_db_instance.dev_target[0].manage_master_user_password &&
+      aws_db_instance.dev_target[0].db_subnet_group_name == aws_db_subnet_group.postgres.name &&
+      aws_db_instance.dev_target[0].parameter_group_name == "trippilot-dev-target-postgres16" &&
+      aws_db_parameter_group.dev_target[0].parameter == toset([{ name = "rds.force_ssl", value = "1", apply_method = "pending-reboot" }]) &&
+      !aws_db_instance.dev_target[0].deletion_protection && aws_db_instance.dev_target[0].skip_final_snapshot
+    )
+    error_message = "The dev target needs its own small private encrypted PostgreSQL instance named trippilot-dev-target, inside the same private network as production."
+  }
+
+  assert {
+    condition     = length(aws_eks_pod_identity_association.ai_dev_target) == 1 && aws_eks_pod_identity_association.ai_dev_target[0].namespace == "trippilot-dev" && aws_eks_pod_identity_association.ai_dev_target[0].service_account == "ai" && aws_eks_pod_identity_association.ai_dev_target[0].role_arn == data.aws_iam_role.ai_pod.arn
+    error_message = "The dev-target AI pods need the same Bedrock pod identity in their own namespace."
+  }
+
   # 운영 알람(Q3=A) — 5xx·토큰 재사용·파드 재시작 셋·노드·DB 셋이 전부 같은 토픽으로 가고, 그 토픽을 Slack 이 구독한다.
   assert {
     condition = (
@@ -223,8 +246,8 @@ run "prd_has_high_availability_and_data_protection" {
   }
 
   assert {
-    condition     = length(aws_secretsmanager_secret.dev_target) == 0
-    error_message = "The dev target lives only inside the DEV stack; PRD must not grow its containers by default."
+    condition     = length(aws_secretsmanager_secret.dev_target) == 0 && length(aws_db_instance.dev_target) == 0 && length(aws_db_parameter_group.dev_target) == 0 && length(aws_eks_pod_identity_association.ai_dev_target) == 0
+    error_message = "The dev target lives only inside the DEV stack; PRD must not grow its containers, database or pod identity by default."
   }
 
   assert {
