@@ -127,7 +127,11 @@ class DialogueContext:
         버린 사실은 로그에 남긴다(INV-4)."""
         if not d:
             return cls()
-        turn = int(d.get("turn_index") or 0)
+        try:
+            turn = int(d.get("turn_index") or 0)
+        except (ValueError, TypeError) as e:
+            log.warning("dialogue_context turn_index 를 읽지 못해 0 으로 둔다: %s: %s", type(e).__name__, e)
+            turn = 0
         try:
             pending = PendingFrame.from_dict(d["pending"]) if d.get("pending") else None
             clarify = int(d.get("clarify_count") or 0)
