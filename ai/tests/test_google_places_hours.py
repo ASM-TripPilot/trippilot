@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -60,6 +61,16 @@ def test_close_가_없으면_24시간_영업이다() -> None:
     """빈 값으로 읽으면 **늘 열린 곳이 늘 닫힌 곳이 된다.**"""
     (oh,) = parse_regular_opening_hours(_payload(_period(1, 0, 0)))
     assert (oh.open_min, oh.close_min) == (0, 1440)
+
+
+def test_상시_영업은_7일_모두_연다() -> None:
+    """Google 의 **상시 영업(24/7) 표기**: period 하나·open=일요일 00:00·close 없음.
+
+    그 요일(일요일) 하루로만 읽으면 월~토가 전부 휴무가 되어 HC1 이 늘 열린 곳을
+    엿새 동안 닫힌 곳으로 판정한다(Codex 리뷰 재현)."""
+    got = parse_regular_opening_hours(_payload(_period(0, 0, 0)))
+    assert sorted((oh.day_of_week, oh.open_min, oh.close_min) for oh in got) == [
+        (d, 0, 1440) for d in range(7)]
 
 
 # ── 자정 넘김 ────────────────────────────────────────────────────
@@ -119,6 +130,34 @@ def test_호출_상한을_넘기면_더_부르지_않는다() -> None:
     assert http.calls == 3
     assert len(got) == 10
     assert all(v.reason == "call_budget_exhausted" for v in got[3:])
+
+
+def test_동시_요청이_서로의_호출_상한을_되돌리지_않는다() -> None:
+    """어댑터 인스턴스 하나를 요청 간 공유하고(`main.py` 조립) `/generate` 는 sync def
+    라 스레드풀에서 동시에 돈다. 요청당 카운터가 인스턴스에 있으면 B 가 A 의 카운터를
+    0 으로 되돌려 **A 가 상한을 넘겨 부른다**(재현: max_calls=3 인데 5회)."""
+    a_blocked, release = threading.Event(), threading.Event()
+    called: list[str] = []
+
+    class _Gate(_Http):
+        def get_json(self, url, headers):
+            called.append(url.rsplit("/", 1)[1])
+            if url.endswith("/A2"):        # A 의 3번째 호출에서 멈추고 B 를 끼워 넣는다
+                a_blocked.set()
+                release.wait(5)
+            return self.payload
+
+    ad = _adapter(_Gate(), max_calls=3)
+    a_queries = tuple(HoursQuery(PoiId(f"a{i}"), f"A{i}") for i in range(6))
+    a = threading.Thread(target=ad.fetch, args=(a_queries,),
+                         kwargs={"deadline_ms": 10_000})
+    a.start()
+    assert a_blocked.wait(5)
+    ad.fetch((HoursQuery(PoiId("b0"), "B0"),), deadline_ms=10_000)
+    release.set()
+    a.join(5)
+
+    assert [c for c in called if c.startswith("A")] == ["A0", "A1", "A2"]
 
 
 def test_월_상한은_인스턴스_수명_누적이다() -> None:
