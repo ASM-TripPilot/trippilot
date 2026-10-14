@@ -53,6 +53,7 @@ from trippilot.agents.schedule.outcome import (
     GenerationStatus,
     ScoringMode,
     SlotAlternative,
+    _wanted_categories,
     failed_outcome,
 )
 from trippilot.assembly_engine.constraints import open_hours_ok
@@ -338,7 +339,7 @@ class ScheduleAgent:
         if task.llm_composed:
             # 강등이 아니다 — 판단은 구성 LLM 이 했다(배선 노트 `llm_composed`). FallbackEvent 를
             # 내지 않는다 — 내면 폴백 집계에 성공이 폴백으로 섞인다.
-            candidates, mode = self._rule_scores(request, pool), ScoringMode.RULE
+            candidates, mode = self._rule_scores(request, pool, persona), ScoringMode.RULE
         else:
             candidates, mode = self._score(
                 request, pool, persona, budget,
@@ -610,14 +611,14 @@ class ScheduleAgent:
             # 끝났다(TRIP-333 fail-closed) — 남의 persona_ref는 여기 도달하지 못한다.
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           f"deadline:c1_budget={budget.c1_ms}ms,remaining={remaining_ms}ms")
-            return self._rule_scores(request, pool), ScoringMode.RULE
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         if persona is None:
             # 페르소나 비가용(COLD_START 등) — 취향 없이 LLM 점수는 의미가 없다.
             # 규칙 점수로 강등 (INV-4 침묵 금지 — 사유는 PERSONA 패킷이 이미 안다).
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           "persona_unavailable")
-            return self._rule_scores(request, pool), ScoringMode.RULE
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         llm_pool = pool
         capacity = self._scoring.capacity
@@ -625,7 +626,7 @@ class ScheduleAgent:
             # 워커가 한 번에 실을 수 있는 건수(병렬 상한 × 청크 상한)를 넘는 풀 — 청크를
             # 키우면 출력 상한에서 잘려 전량 폐기된다(풀 515 → 청크 ~52건, 0/10 성공).
             # LLM 엔 규칙 점수 상위만 보내고, 나머지는 아래 rule_backfill 이 채운다.
-            top = sorted(self._rule_scores(request, pool),
+            top = sorted(self._rule_scores(request, pool, persona),
                          key=lambda sp: (-sp.score, str(sp.poi_id)))[:capacity]
             keep = frozenset(sp.poi_id for sp in top)
             pois = tuple(p for p in pool.pois if p.poi_id in keep)
@@ -648,14 +649,14 @@ class ScheduleAgent:
             # ⓪과 수집 단계(PersonaProvider)에서 이미 예외로 승격됐다 — 여기 도달 불가.
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           f"score_error: {type(e).__name__}: {e}")
-            return self._rule_scores(request, pool), ScoringMode.RULE
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         if result.is_fallback:
             # 게이트웨이가 이미 FallbackEvent(to_mode=rule_score)를 발행했다.
             # 여기서는 실행만 — 같은 강등을 두 번 세지 않는다.
             steps.append(Degradation(stage="llm",
                                      reason=f"c1_fallback: {result.error}"))
-            return self._rule_scores(request, pool), ScoringMode.RULE
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         raw = tuple(result.value or ())
         scored = tuple(sp for sp in raw if pool.contains(sp.poi_id))
@@ -666,7 +667,7 @@ class ScheduleAgent:
         if not scored:
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           "c1_empty_after_closed_set")
-            return self._rule_scores(request, pool), ScoringMode.RULE
+            return self._rule_scores(request, pool, persona), ScoringMode.RULE
         if result.error is not None:
             # 부분 청크 실패 (TRIP-378) — 워커가 성공 청크만 병합해 error에 표기했다.
             # 실패 청크의 FallbackEvent는 게이트웨이가 청크별로 이미 발행했으므로
@@ -682,25 +683,39 @@ class ScheduleAgent:
             self._observe(trace_id, now, "llm", "llm_score", "llm_score",
                           f"rule_backfill:{len(missing)}")
             scored = scored + tuple(
-                sp for sp in self._rule_scores(request, pool)
+                sp for sp in self._rule_scores(request, pool, persona)
                 if sp.poi_id in missing
             )
         return scored, ScoringMode.LLM
 
     def _rule_scores(
-        self, request: GenerateItineraryRequest, pool: CandidatePool
+        self, request: GenerateItineraryRequest, pool: CandidatePool,
+        persona: PersonaSummary | None,
     ) -> tuple[ScoredPoi, ...]:
         """결정론 규칙 점수 (동일 입력 → 동일 출력, FR-1.4).
 
         **풀을 순회해서** 만든다 — 후보가 풀 밖일 수 없는 이유가 코드 모양 자체다(INV-1).
+
+        취향(페르소나 taste_tags·activities·cuisines → 카테고리)도 지시 선호와 **같은 기구**
+        (`directive_fit` +한 단)로 싣는다. 종전에는 취향이 LLM 점수 프롬프트에만 실려, c1 폴백
+        (규칙만)·c1_partial 보충 청크에서 "카페 위주" 같은 취향이 통째로 사라졌다(2026-10-13 DEV).
+        이번 요청이 카테고리 축(prefer/avoid — 칩·사유 암시)을 정했으면 그것만 쓴다 — 취향을 그 위에
+        얹지 않는다(BR-U4-47 사용자 우선; 회피한 카테고리에 취향 가점이 붙어 상쇄되는 일도 없다).
+        "한 곳 추가" 카테고리도 취향에서 뺀다 — 그 종류 전체가 오르면 "한 곳"이 여러 곳이 된다
+        (BR-U4-47, `trim_planb_rank_for_add_one` 과 같은 이유).
         """
+        if request.prefer_categories or request.avoid_categories:
+            prefer, avoid = request.prefer_categories, request.avoid_categories
+        else:
+            prefer = frozenset(_wanted_categories(persona)) - request.add_one_categories
+            avoid = frozenset()
         return tuple(
             ScoredPoi(
                 poi_id=poi.poi_id,
                 score=build_rule_score(
                     poi, request.budget, request.anchor, request.seed,
-                    prefer=request.prefer_categories,
-                    avoid=request.avoid_categories,
+                    prefer=prefer,
+                    avoid=avoid,
                     # 조인 키는 `source_ref` — KB-5 장소 설명과 같은 길이다.
                     # 없으면 None 이고 그건 '모름'이라 중립이다.
                     fee_won=self._fees.of(poi.source_ref),
