@@ -47,16 +47,20 @@ internal fun PreferenceSnapshot.overriddenBy(trip: Map<String, Any?>): Preferenc
  *
  * 동의가 없거나 근거가 모자라면 [view] 는 빈 값이라 이 함수는 아무것도 보태지 않는다.
  *
+ * [explicit] 은 여행 스냅숏에 **실린 축 키**(`ctx.preferenceSnapshot.keys`)다. 실린 축을 사용자가 **비웠으면**
+ * 개인화도 채우지 않는다(BR-U1-38) — 여행 화면에서 일부러 비운 축에 과거 기록이 되살아나면 [overriddenBy] 가
+ * 지킨 "고른 게 최종"이 여기서 다시 깨진다. 안 실린 축(구버전 여행·FE 가 안 보낸 축)만 종전대로 보충한다.
+ *
  * 수신자는 계정 스냅숏이 아니라 **여행 취향을 얹은 것**([overriddenBy])이어야 한다 — 계정 스냅숏에 바로
  * 부르면 여행에서 고른 취향이 빠진다(실제로 그랬다).
  */
-internal fun PreferenceSnapshot.toProfile(view: PersonalizationHints): PreferenceProfile =
+internal fun PreferenceSnapshot.toProfile(view: PersonalizationHints, explicit: Set<String>): PreferenceProfile =
     PreferenceProfile(
         styles = styles,
-        activities = (activities + view.activities).distinct(),
+        activities = if ("activities" in explicit && activities.isEmpty()) activities else (activities + view.activities).distinct(),
         foodTastes = foodTastes,
         transportModes = transportModes,
-        pace = pace ?: view.pace,
+        pace = if ("pace" in explicit) pace else pace ?: view.pace,
         companionTypes = companionTypes,
         petFriendly = petFriendly,
         budgetTier = budgetTier,

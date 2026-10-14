@@ -81,7 +81,7 @@ class ReplanFacadeService(
         // 취향의 budget_tier(경계 계약 어휘)로. 두 경로가 다른 취향으로 돌면 "원래 자리보다 나은 것만 바꾼다"(§4)
         // 비교가 성립하지 않는다.
         val prefs = preferences.findPreferences(command.accountId).overriddenBy(ctx.preferenceSnapshot)
-        val profile = prefs.toProfile(personalization.hintsFor(command.accountId))
+        val profile = prefs.toProfile(personalization.hintsFor(command.accountId), ctx.preferenceSnapshot.keys)
         val output = scheduleAgent.replan(
             ReplanInput(
                 tripId = command.tripId,
