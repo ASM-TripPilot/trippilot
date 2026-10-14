@@ -59,6 +59,7 @@ import time
 import zlib
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
+from datetime import time as clock_time
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
@@ -106,7 +107,7 @@ from trippilot.domain.reflection import (
     VisitRecord, VisitRef,
 )
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
-from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig
 from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
@@ -147,6 +148,7 @@ from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
 from trippilot.agents.edit.commands import EditStatus
 from trippilot.agents.planb import composition
+from trippilot.agents.planb import request_verification as nl_verify
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
 from trippilot.agents.planb.directives import (
@@ -165,6 +167,13 @@ from trippilot.llm_gateway.workers.replan_directive_translation import (
     DirectiveTranslationInput,
     ReplanDirectiveTranslationWorker,
     options_from,
+)
+from trippilot.llm_gateway.gates.replan_request_extraction import (
+    ExtractedRequest,
+    ReplanRequestExtractionGate,
+)
+from trippilot.llm_gateway.workers.replan_request_extraction import (
+    ReplanRequestExtractionWorker,
 )
 from trippilot.llm_gateway.workers.replan_composition import (
     ComposeDayInput,
@@ -1435,6 +1444,19 @@ def _replan_fixed_blocks(
     return tuple(blocks)
 
 
+def _with_nl_room(cap: int | None, extra: tuple[PoiId, ...]) -> int | None:
+    """하루 방문 상한에 사용자가 이름으로 집은 곳의 자리를 더한다 — 필수 방문은 상한이 빼지 못한다."""
+    return cap if cap is None or not extra else cap + len(extra)
+
+
+# 자연어 추출에 줄 시한 — 재계획 잔여의 이 몫까지, 그리고 이 절대값까지. 뒤에 PlanB·구성 LLM·
+# 어셈블리가 줄 서 있다. 짧은 구조화 출력이라 경량 모델 실측 1~2s 급이다.
+_NL_EXTRACT_SHARE = 0.15
+_NL_EXTRACT_MAX_S = 4.0
+# 지도 실재 확인에 줄 시한(ms) — 생성 ②′ 의 `existence_deadline_ms` 와 같은 급.
+_NL_EXISTENCE_MS = 1_500
+
+
 def _replan_not_before(request: schemas.ReplanRequest, tz: timezone) -> datetime | None:
     """`from_instant` → 비고정 방문 시작 하한 (TRIP-1182). 그 일자가 아니면 None.
 
@@ -1542,6 +1564,8 @@ class WiredItineraryOrchestrator:
         diversity_jitter: float = 0.0,
         directive_translator: ReplanDirectiveTranslationWorker | None = None,
         composer: ReplanCompositionWorker | None = None,
+        request_extractor: ReplanRequestExtractionWorker | None = None,
+        existence: object | None = None,  # PlaceExistencePort — 자연어 장소 주장 검증용
     ) -> None:
         self._orchestrator = orchestrator
         # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
@@ -1579,6 +1603,11 @@ class WiredItineraryOrchestrator:
         self._directive_translator = directive_translator
         # 다시 짜기 — 남은 하루의 방문 목록을 LLM 이 고른다. 미주입 = 종전 재계획(점수 + 어셈블리 선택).
         self._composer = composer
+        # 자연어 재계획 — 자유입력에서 장소명·시각·날씨 주장을 뽑는다. **쓰기 전에 검증한다**
+        # (`agents/planb/request_verification`): 등록 POI·지도 실재·영업시간·시간창·기상청.
+        # 미주입 = 추출 없이(칩·지시 번역·구성 LLM 은 원문을 그대로 읽는다).
+        self._request_extractor = request_extractor
+        self._existence = existence
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
@@ -2097,8 +2126,18 @@ class WiredItineraryOrchestrator:
         # 두면 원 일정의 야외 공원이 그대로 남았다(2026-10-14 DEV "실내로" 3건). 원 일정의 그 곳도
         # 고정·다녀온 곳이 아니면 교체 대상이다. 반대 칩을 같이 고른 카테고리는 빼지 않는다(상쇄 규약,
         # `directive_fit`). 남는 후보가 없으면 빼지 않고 밝힌다(INV-4) — 빈 하루보다 낫다.
+        # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
+        nl = self._verified_request(
+            request, anchor, not_before, daily_rain, notes,
+            trace_id=trace_id, now=now,
+            remaining_ms=_deadline_budget(meta) - (self._clock.monotonic_ms() - t0))
+        # 통과한 곳이 풀 반경 밖이어도 따로 합류시키지 않는다 — 필수 방문으로 넘기면 ScheduleAgent 가
+        # 풀 밖 필수 방문을 등록 POI 에서 찾아 인덱스에 붙인다(TRIP-1177). 같은 일을 두 곳에서 하지 않는다.
+        if nl.rain_confirmed and not (RAIN_OUTDOOR <= avoid):
+            avoid = avoid | RAIN_OUTDOOR  # 말이 아니라 기상청이 확인한 비다
         drop = avoid - prefer
-        held = {b.poi_id for b in blocks} | {v.poi_id for v in earlier or ()}
+        held = ({b.poi_id for b in blocks} | {v.poi_id for v in earlier or ()}
+                | {p.poi_id for p in nl.visit})
         avoided = frozenset(p.poi_id for p in pool.pois if p.category in drop and p.poi_id not in held)
         if avoided:
             cats = ",".join(sorted(c.value for c in drop))
@@ -2115,6 +2154,7 @@ class WiredItineraryOrchestrator:
                 avoided, avoid = frozenset(), avoid & prefer
             else:
                 notes.append(f"avoid_excluded: {len(avoided)} {cats}")
+        avoided = avoided | (nl.avoid - held)  # 사용자가 이름으로 뺀 곳(등록 POI 로 확인된 것만)
 
         # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────
         # 다녀온 곳(지난 잠금)은 PlanB 에도 제외다 — 기준점이 "마지막 완료 방문"이면 그 POI 가
@@ -2179,13 +2219,18 @@ class WiredItineraryOrchestrator:
                     composed = composed[:room]
             if not composed:
                 add_one = add_one_asked
+        # 사용자가 이름으로 집은 곳은 시각 없는 필수 방문 — 구성 LLM 이 이미 고른 곳·잠금은 겹쳐 세지 않는다.
+        # 시간만 당기기(earlier)는 장소를 안 바꾼다는 요청이라 더하지 않는다.
+        nl_extra = () if earlier is not None else tuple(
+            p.poi_id for p in nl.visit
+            if p.poi_id not in set(composed) and p.poi_id not in {b.poi_id for b in blocks})
         domain_request = core.GenerateItineraryRequest(
             schedule_id=ScheduleId(request.trip_id),
             anchor=anchor,
             days=dates,
             day_window=TimeWindow(
-                start=datetime.combine(window.date, window.start, tzinfo=self._tz),
-                end=datetime.combine(window.date, window.end, tzinfo=self._tz),
+                start=nl.window_start or datetime.combine(window.date, window.start, tzinfo=self._tz),
+                end=nl.window_end or datetime.combine(window.date, window.end, tzinfo=self._tz),
             ),
             budget=budget_level,
             transport=transport,
@@ -2210,13 +2255,16 @@ class WiredItineraryOrchestrator:
             prefer_near=near,
             pace=pace,
             travel_weight=_route_weight(request.reasons, resolved),
-            max_visits_per_day=(len(active) + len(set(composed) - {b.poi_id for b in active})
-                                + len(add_one)
-                                if composed or earlier is not None else visit_cap),
+            max_visits_per_day=_with_nl_room(
+                (len(active) + len(set(composed) - {b.poi_id for b in active}) + len(add_one)
+                 if composed or earlier is not None else visit_cap),
+                nl_extra),
             not_before=not_before,
             required_visits=earlier if earlier is not None else tuple(
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                              reason="llm_compose") for p in composed),
+                              reason="llm_compose") for p in composed) + tuple(
+                RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
+                              reason="nl_request") for p in nl_extra),
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
             required_in_order=earlier is not None,  # 시간만 당기기 — 원 일정 순서 그대로
         )
@@ -2297,6 +2345,63 @@ class WiredItineraryOrchestrator:
             component="api.wiring", stage="llm",
             from_mode="llm_compose_day", to_mode="scored_assembly", reason=reason,
         ))
+
+    def _verified_request(
+        self,
+        request: schemas.ReplanRequest,
+        anchor: GeoPoint,
+        not_before: datetime | None,
+        daily_rain: Mapping[date, int] | None,
+        notes: list[str],
+        *,
+        trace_id: TraceId,
+        now: datetime,
+        remaining_ms: int,
+    ) -> nl_verify.VerifiedRequest:
+        """자유입력 → LLM 추출 → **외부 출처 대조** → 통과분만. 예외를 던지지 않는다(INV-4).
+
+        자유입력이 없거나 워커 미주입이면 빈 결과다(종전과 동일). 대조 출처와 규칙은
+        `agents/planb/request_verification` 모듈 표에 있다.
+        """
+        empty = nl_verify.VerifiedRequest()
+        text = (request.free_text or "").strip()
+        if not text or self._request_extractor is None:
+            return empty
+        timeout = min(_NL_EXTRACT_MAX_S, max(0.0, remaining_ms * _NL_EXTRACT_SHARE / 1000))
+        if timeout < 0.5:
+            notes.append("nl_extract_skipped: deadline")
+            return empty
+        window = request.time_window
+        try:
+            result = self._request_extractor.extract(
+                text, composition.date_label(datetime.combine(request.target_date, clock_time())),
+                f"{window.start:%H:%M}~{window.end:%H:%M}", trace_id, now, timeout_sec=timeout)
+        except Exception as e:  # 설정 버그도 재계획을 죽이지 않는다
+            notes.append(f"nl_extract_error: {type(e).__name__}")
+            return empty
+        if result.is_fallback or not isinstance(result.value, ExtractedRequest):
+            notes.append(f"nl_extract_fallback: {result.error}")
+            return empty
+        extracted = result.value
+        if extracted.empty:
+            notes.append("nl_extract_empty")
+            return empty
+        verified = nl_verify.verify(
+            extracted,
+            on=request.target_date,
+            anchor=anchor,
+            window_start=datetime.combine(window.date, window.start, tzinfo=self._tz),
+            window_end=datetime.combine(window.date, window.end, tzinfo=self._tz),
+            not_before=not_before,
+            tz=self._tz,
+            registered=lambda: self._poi_db.find_by_radius(anchor, nl_verify.NAME_SEARCH_RADIUS_KM),
+            existence=self._existence,  # type: ignore[arg-type]
+            existence_deadline_ms=_NL_EXISTENCE_MS,
+            rain_by_date=daily_rain or {},
+            rain_threshold=AssemblyConfig().rain_threshold_pct,
+        )
+        notes.extend(verified.notes)
+        return verified
 
     def _compose_day(
         self,
@@ -3313,6 +3418,10 @@ def build_orchestrator(
     composer = ReplanCompositionWorker(
         GatewayFacade(llm, renderer, AlternativeSelectionGate(), c1_config, trace)
     )
+    # 자연어 재계획 추출 — 뽑은 주장은 배선이 등록 POI·지도·영업시간·시간창·기상청으로 검증한다.
+    request_extractor = ReplanRequestExtractionWorker(
+        GatewayFacade(llm, renderer, ReplanRequestExtractionGate(), c1_config, trace)
+    )
     # EditAgent — 번역 워커를 감싼다. 어셈블리 검증까지 에이전트가 소유(INV-2).
     edit_agent = EditAgent(
         EditTranslationWorker(
@@ -3394,6 +3503,8 @@ def build_orchestrator(
         explainer=explainer, alternative_explainer=alt_explainer, clock=clock,
         directive_translator=directive_translator,
         composer=composer,
+        request_extractor=request_extractor,
+        existence=existence,
         context_resolver=resolver,
         edit_agent=edit_agent,
         reflect_agent=reflect_agent,
