@@ -22,6 +22,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -34,15 +35,19 @@ from trippilot.poi_curation.sourcing.collection_gate import (
     _haversine_m,
 )
 from trippilot.poi_curation.sourcing.localdata import (
+    GAP_RADIUS_KM,
+    GAP_RADIUS_KM_URBAN,
     PER_ANCHOR,
     PICK_RADIUS_KM,
     SOURCE,
     SOURCE_NAME,
+    URBAN_SIDO,
     fill_near,
     gap_anchors,
     gate_against_tourapi,
     pick_near,
     shared_tourapi_candidates,
+    split_urban,
     to_output_document,
 )
 from trippilot.poi_curation.sourcing.mapping import extract_region
@@ -360,14 +365,92 @@ def test_보충분은_언제나_기존_선정과_겹치지_않는다(
 
 
 @settings(max_examples=100, deadline=None)
-@given(_points(12), _points(40), _points(40))
-def test_앵커당_상한을_넘지_않는다(
-    anchors: list[GeoPoint], a: list[GeoPoint], b: list[GeoPoint],
+@given(_points(40), _points(40))
+def test_앵커_하나가_가져가는_수는_상한을_넘지_않는다(
+    a: list[GeoPoint], b: list[GeoPoint],
 ) -> None:
-    """선정 + 보충이 앵커마다 K 를 넘으면 '보충'이 아니라 상한 완화다."""
+    """선정 + 보충이 **한 앵커**에서 K 를 넘으면 '보충'이 아니라 상한 완화다.
+
+    앵커를 하나만 둔다 — 합집합에 대고 주장하면 거짓이다. 앵커 둘의 반경이 겹치면
+    각자 K 곳씩 고른 결과가 한쪽 반경 안에서 K 를 넘는 것이 **정상**이고, 실제로
+    hypothesis 가 겹치는 배치로 반례를 냈다(13 > 12).
+    """
+    anchor = GeoPoint(*_JEJU)
     taken = [_ld(f"A{i:03d}", lat=p.lat, lng=p.lng) for i, p in enumerate(a)]
     extra = [_ld(f"E{i:03d}", lat=p.lat, lng=p.lng) for i, p in enumerate(b)]
-    got = pick_near(anchors, taken) + fill_near(anchors, taken, extra)
-    for anchor in anchors:
-        near = [c for c in got if _km(anchor, GeoPoint(c.lat, c.lng)) <= PICK_RADIUS_KM]
-        assert len(near) <= PER_ANCHOR
+    got = pick_near([anchor], taken) + fill_near([anchor], taken, extra)
+    near = [c for c in got if _km(anchor, GeoPoint(c.lat, c.lng)) <= PICK_RADIUS_KM]
+    assert len(near) <= PER_ANCHOR
+
+
+@settings(max_examples=60, deadline=None)
+@given(_points(12), _points(40), _points(40))
+def test_보충_총량은_앵커수_곱하기_상한을_넘지_않는다(
+    anchors: list[GeoPoint], a: list[GeoPoint], b: list[GeoPoint],
+) -> None:
+    """합집합에 대해 참인 경계 — 앵커마다 최대 K 곳을 가져오므로 총량은 그 곱 이하다."""
+    taken = [_ld(f"A{i:03d}", lat=p.lat, lng=p.lng) for i, p in enumerate(a)]
+    extra = [_ld(f"E{i:03d}", lat=p.lat, lng=p.lng) for i, p in enumerate(b)]
+    assert len(fill_near(anchors, taken, extra)) <= PER_ANCHOR * len(anchors)
+
+
+# ── 도시 공백은 걸어갈 거리로 잰다 (TRIP-1283) ────────────────────────
+#
+# 7km 는 시골 기준이다. 그 자로 재면 **서울·부산·제주 숙소 3,481곳 중 공백이 0곳**이라
+# LOCALDATA 가 도시에 한 곳도 들어가지 않았다(실측 2026-10-14). 여행자는 걸어간다.
+
+
+def _backend_sido_codes() -> dict[str, str]:
+    """`R__seed_region_catalog` 의 SIDO 행 → {코드: 이름}. 카탈로그가 정본이다."""
+    rel = "backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql"
+    for parent in Path(__file__).resolve().parents:
+        if (parent / rel).is_file():
+            rows = re.findall(r"\('(\d+)', '([^']+)', '\d+', '[^']+', 'SIDO'",
+                              (parent / rel).read_text(encoding="utf-8"))
+            assert rows, "카탈로그에서 SIDO 행을 찾지 못했습니다"
+            return dict(rows)
+    raise AssertionError(f"백엔드 정본을 찾지 못했습니다: {rel}")
+
+
+def test_도시_반경이_시골보다_좁다() -> None:
+    """이게 뒤집히면 '도시 보강'이 오히려 시골보다 헐거워진다."""
+    assert GAP_RADIUS_KM_URBAN < GAP_RADIUS_KM
+
+
+def test_도시_목록은_특별_광역시와_제주다() -> None:
+    """시도 코드는 `R__seed_region_catalog` 정본을 따른다 — 코드가 바뀌면 조용히 빗나간다."""
+    catalog = _backend_sido_codes()
+    assert URBAN_SIDO <= set(catalog), f"카탈로그에 없는 시도 코드: {URBAN_SIDO - set(catalog)}"
+    assert {catalog[c] for c in URBAN_SIDO} == {
+        "서울특별시", "부산광역시", "대구광역시", "인천광역시",
+        "대전광역시", "울산광역시", "제주특별자치도",
+    }
+
+
+@pytest.mark.parametrize("code,urban", [
+    ("11", True), ("11680", True),      # 서울 · 강남구
+    ("26", True), ("26350", True),      # 부산 · 해운대구
+    ("50", True), ("50110", True),      # 제주 · 제주시
+    ("41", False), ("41135", False),    # 경기 · 성남시
+    ("51", False), ("12", False),       # 강원 · 전남광주통합(농촌 섞임)
+    ("36", False),                      # 세종 (농촌 섞임)
+])
+def test_시도_코드_앞두자리로_도시를_가른다(code: str, urban: bool) -> None:
+    got_urban, got_rural = split_urban([(GeoPoint(*_JEJU), code)])
+    assert (len(got_urban), len(got_rural)) == ((1, 0) if urban else (0, 1))
+
+
+def test_도시_시골이_섞여도_한_곳도_잃지_않는다() -> None:
+    """앵커가 한 곳이라도 새면 그 숙소 둘레가 통째로 안 채워진다."""
+    stays = [(GeoPoint(*_JEJU), c) for c in ("11", "41", "26", "51", "50", "41135")]
+    urban, rural = split_urban(stays)
+    assert len(urban) + len(rural) == len(stays)
+
+
+def test_도시_반경에서는_더_많은_앵커가_공백이_된다() -> None:
+    """같은 식당 배치라도 자를 좁히면 공백이 늘어난다 — 이 단계의 존재 이유다."""
+    anchor = GeoPoint(*_JEJU)
+    # 1km 밖 · 7km 안에 식당 여섯 곳 → 시골 기준은 통과, 도시 기준은 공백
+    far = [GeoPoint(_JEJU[0] + 0.03 * (i + 1) / 6, _JEJU[1]) for i in range(6)]
+    assert gap_anchors([anchor], far) == []
+    assert gap_anchors([anchor], far, radius_km=GAP_RADIUS_KM_URBAN) == [anchor]

@@ -44,6 +44,7 @@ from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     DROP_TYPE_NOT_ADOPTED,
     GAP_MIN_FOOD,
     GAP_RADIUS_KM,
+    GAP_RADIUS_KM_URBAN,
     PER_ANCHOR,
     PICK_RADIUS_KM,
     SOURCE_NAME,
@@ -52,6 +53,7 @@ from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     gate_against_tourapi,
     pick_near,
     shared_tourapi_candidates,
+    split_urban,
     to_candidate,
     to_output_document,
 )
@@ -189,11 +191,20 @@ def main() -> int:
     stays = load_stays(_MIGRATION / "R__seed_stay.sql")
     regions = load_regions(_MIGRATION / "R__seed_region_catalog.sql")
     centers = region_centers(stays, regions)
-    gap_stays = gap_anchors([p for p, _ in stays], food_pts)
+    # 공백 판정은 **도시와 시골을 다른 자로 잰다** (TRIP-1283). 7km 는 시골 기준이라
+    # 도시에서는 모든 앵커가 "덮인" 것으로 나온다 — 실측으로 서울·부산·제주 숙소 3,481곳 중
+    # 공백 0곳이었다. 도시는 걸어갈 거리(1km)로 다시 잰다. 지역 중심 앵커는 시골 기준 그대로다
+    # (시도·시군구 중심점이라 "그 동네를 걸어다닌다"는 전제가 성립하지 않는다).
+    urban, rural = split_urban(stays)
+    gap_rural = gap_anchors(rural, food_pts)
+    gap_urban = gap_anchors(urban, food_pts, radius_km=GAP_RADIUS_KM_URBAN)
+    gap_stays = gap_rural + gap_urban
     gap_centers = gap_anchors(centers, food_pts)
     gaps = gap_stays + gap_centers
-    print(f"[localdata] 앵커 숙소 {len(stays):,} + 지역 중심 {len(centers)} → 공백 "
-          f"{len(gap_stays):,} + {len(gap_centers)} (TourAPI FOOD {len(food_pts):,})", file=sys.stderr)
+    print(f"[localdata] 앵커 숙소 {len(stays):,} (도시 {len(urban):,} · 시골 {len(rural):,}) "
+          f"+ 지역 중심 {len(centers)} → 공백 시골 {len(gap_rural):,} + "
+          f"도시 {len(gap_urban):,} + 중심 {len(gap_centers)} (TourAPI FOOD {len(food_pts):,})",
+          file=sys.stderr)
 
     # 3) 선별 → 게이트(TourAPI 와 같은 가게는 병합으로 빠진다 — 카페·캠핑장 등 다른 카테고리여도)
     picks = pick_near(gaps, candidates, per_anchor=args.per_anchor)

@@ -134,6 +134,23 @@ _SIDO_RENAMES: Mapping[str, str] = {
 # 공백 판정 반경 — 대중교통 다일 여행의 후보풀 반경(M7Config PUBLIC 10km × multi_day_factor 0.7).
 # 일정이 실제로 고르는 범위 안에서 식당이 모자란지를 본다.
 GAP_RADIUS_KM = 7.0
+# 도시는 **걸어갈 거리로 잰다** (TRIP-1283, 사용자 지시 2026-10-14 "데이터를 많이 모으는 쪽으로").
+# 7km 는 시골 기준이다 — 서울 숙소에서 7km 안에 식당 6곳이 있다고 "덮였다"고 할 수 없는데,
+# 그 기준으로는 **서울·부산·제주 숙소 3,481곳 중 공백이 0곳**이라 LOCALDATA 가 한 곳도 들어가지
+# 않았다(실측 2026-10-14). 1km 로 다시 재면 서울 275/1,200 · 부산 561/1,228 · 제주 678/1,053
+# 이 식당 6곳 미만이다. 여행자는 걸어가므로 이쪽이 실제 체감에 가깝다.
+GAP_RADIUS_KM_URBAN = 1.0
+# 특별·광역시와 제주 — 시가지 밀도가 높아 7km 가 의미를 잃는 곳. `R__seed_region_catalog` 시도 코드.
+# 전남광주통합특별시(12)·세종(36)은 농촌이 섞인 광역이라 뺐다 — 시골 기준이 맞다.
+URBAN_SIDO: frozenset[str] = frozenset({
+    "11",  # 서울특별시
+    "26",  # 부산광역시
+    "27",  # 대구광역시
+    "28",  # 인천광역시
+    "30",  # 대전광역시
+    "31",  # 울산광역시
+    "50",  # 제주특별자치도
+})
 # 공백 기준 — 2박3일 점심·저녁 6끼. 어셈블러는 쓴 POI 를 다음 날 후보에서 빼므로(ortools
 # `used`) 끼니마다 다른 식당이 필요하다. 실측: 숙소 2,961곳(22.9%)이 이 기준 미만이다.
 GAP_MIN_FOOD = 6
@@ -306,6 +323,20 @@ def gap_anchors(
     for f in tour_food:
         grid.add(f, None)
     return [a for a in anchors if len(grid.within(a, radius_km)) < min_food]
+
+
+def split_urban(
+    stays: Sequence[tuple[GeoPoint, str]],
+) -> tuple[list[GeoPoint], list[GeoPoint]]:
+    """숙소 앵커 → (도시, 시골). 지역 코드 앞 두 자리가 `URBAN_SIDO` 면 도시다.
+
+    도시·시골은 **공백을 재는 자가 다르다**(`GAP_RADIUS_KM_URBAN` 대 `GAP_RADIUS_KM`).
+    시군구 코드는 시도 코드로 시작하므로 앞 두 자리만 본다.
+    """
+    urban, rural = [], []
+    for point, code in stays:
+        (urban if code[:2] in URBAN_SIDO else rural).append(point)
+    return urban, rural
 
 
 def pick_near(
