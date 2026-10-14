@@ -699,19 +699,19 @@ class ScheduleAgent:
 
         **풀을 순회해서** 만든다 — 후보가 풀 밖일 수 없는 이유가 코드 모양 자체다(INV-1).
 
-        취향(페르소나 taste_tags·activities·cuisines → 카테고리)도 지시 선호와 **같은 기구**
-        (`directive_fit` +한 단)로 싣는다. 종전에는 취향이 LLM 점수 프롬프트에만 실려, c1 폴백
+        취향(페르소나 taste_tags·activities·cuisines → 카테고리)도 싣는다 — `taste_fit`: 그 카테고리를
+        최소 한 단, 기본 가중이 낮으면 최상위(명소) 위까지 올린다(카페 0.6 이 +0.3 으로는 명소를
+        못 넘었다, 2026-10-14). 종전에는 취향이 LLM 점수 프롬프트에만 실려, c1 폴백
         (규칙만)·c1_partial 보충 청크에서 "카페 위주" 같은 취향이 통째로 사라졌다(2026-10-13 DEV).
         이번 요청이 카테고리 축(prefer/avoid — 칩·사유 암시)을 정했으면 그것만 쓴다 — 취향을 그 위에
         얹지 않는다(BR-U4-47 사용자 우선; 회피한 카테고리에 취향 가점이 붙어 상쇄되는 일도 없다).
         "한 곳 추가" 카테고리도 취향에서 뺀다 — 그 종류 전체가 오르면 "한 곳"이 여러 곳이 된다
         (BR-U4-47, `trim_planb_rank_for_add_one` 과 같은 이유).
         """
-        if request.prefer_categories or request.avoid_categories:
-            prefer, avoid = request.prefer_categories, request.avoid_categories
-        else:
-            prefer = frozenset(_wanted_categories(persona)) - request.add_one_categories
-            avoid = frozenset()
+        prefer, avoid = request.prefer_categories, request.avoid_categories
+        taste: frozenset[PoiCategory] = frozenset()
+        if not (prefer or avoid):
+            taste = frozenset(_wanted_categories(persona)) - request.add_one_categories
         return tuple(
             ScoredPoi(
                 poi_id=poi.poi_id,
@@ -719,6 +719,7 @@ class ScheduleAgent:
                     poi, request.budget, request.anchor, request.seed,
                     prefer=prefer,
                     avoid=avoid,
+                    taste=taste,
                     # 조인 키는 `source_ref` — KB-5 장소 설명과 같은 길이다.
                     # 없으면 None 이고 그건 '모름'이라 중립이다.
                     fee_won=self._fees.of(poi.source_ref),
