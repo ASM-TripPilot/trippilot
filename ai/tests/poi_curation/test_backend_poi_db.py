@@ -444,7 +444,10 @@ def test_unknown_source_keeps_the_row_but_is_warned_once_per_value(
     응답에 같은 출처가 수백 행 오므로 경고는 값마다 첫 1회만 낸다(다음 요청도 조용하다).
     """
     _warn_unknown_source.cache_clear()
-    db, _ = _db([_row(poi_id="a", source="OVERTURE"), _row(poi_id="b", source="OVERTURE"),
+    # **아직 없는 값**을 써야 한다 — 종전엔 OVERTURE 를 썼는데 V2.71 에서 진짜 출처가 돼
+    # 이 테스트가 빨개졌다(2026-10-14). 안전망을 시험하는 자리이므로 실재하지 않는 값을 쓴다.
+    db, _ = _db([_row(poi_id="a", source="NOT_A_REAL_SOURCE"),
+                 _row(poi_id="b", source="NOT_A_REAL_SOURCE"),
                  _row(poi_id="c", source=None)])
     with caplog.at_level("WARNING"):
         pois = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
@@ -452,4 +455,4 @@ def test_unknown_source_keeps_the_row_but_is_warned_once_per_value(
     assert [p.source for p in pois] == [PoiSource.PLACES_API] * 3
     warned = [r.getMessage() for r in caplog.records if "모르는 POI 출처" in r.getMessage()]
     assert len(warned) == 2
-    assert any("'OVERTURE'" in w for w in warned) and any("None" in w for w in warned)
+    assert any("'NOT_A_REAL_SOURCE'" in w for w in warned) and any("None" in w for w in warned)
