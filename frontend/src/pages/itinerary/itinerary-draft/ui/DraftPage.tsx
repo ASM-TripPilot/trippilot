@@ -41,7 +41,6 @@ import { isDateInRange } from '@/shared/lib/monthGrid';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { useQueryDataUpdateCount } from '@/shared/lib/useQueryDataUpdateCount';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { showToast } from '@/shared/ui/Toast';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
 import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
@@ -61,9 +60,6 @@ const GENERATION_STATUS_LABEL: Record<GenerationDayState, string> = {
 
 /** 진행 카드 칸 상한 — 5일 이상 여행은 `…` 접기 칸 포함 4칸으로 접는다(TRIP-1040 결정 1). */
 const GAUGE_MAX_CELLS = 4;
-
-/** 여행 중 다시 짜기를 Plan-B 로 넘길 때의 안내 — GeneratingPage 의 409 넘김과 같은 문구. */
-const PLANB_HANDOFF_TOAST_MESSAGE = '여행 중이라 재계획으로 다시 짜요';
 
 /**
  * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성은 생성 화면으로 보낸다.
@@ -257,8 +253,8 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const shortfallNotice = resolveShortfallNotice(signals);
 
   /**
-   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. 여행 중인 확정 일정이면 Plan-B 로 보낸다.
-   * **확정 일정은 어떤 경로로도 생성 화면에 보내지 않는다.**
+   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. 여행 중이면 그 화면의 재계획 모드로 보낸다.
+   * **확정 일정은 생성 POST 경로로 보내지 않는다**(재계획 모드는 생성 POST 를 쏘지 않는다).
    *
    * ⚠️ 조회가 끝나기 전에는 `status` 를 모른다(`data` 가 `undefined`). 그 상태로 보내면
    * 확정 일정에도 POST 가 나가 확정이 풀리고 동결됐던 poi_snapshot 참조가 사라진다 —
@@ -281,18 +277,22 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     if (!mountedRef.current) return;
     const status = settled.data?.status;
 
-    // 여행 중 **확정 일정**의 다시 짜기는 Plan-B 의 몫이다 — 확정은 생성 화면에 보내지 않고(아래 stop), 재계획은
-    // 확정을 풀지 않는다. 초안은 생성 화면으로 보내 서버가 판정한다: BE #1183 이후 다녀온 기록이 없으면 여행 중에도
-    // 다시 만들고, 기록이 있으면 409 → 생성 화면이 Plan-B 로 넘긴다(GeneratingPage). 여행 기간을 모를 때도 같은 길이다.
-    const today = seoulDate(new Date());
+    // 여행 중 다시 짜기는 확정·초안 구분 없이 Plan-B(재계획)의 몫이다 — 모달 없이 생성 화면의 재계획 모드로 보내
+    // 바로 다시 짜서 반영한다(2026-10-14 사용자 결정 · 원 일정은 서버가 반영 전 복원 지점을 남긴다). 재계획은 확정을
+    // 풀지 않는다. 생성 실패(FAILED)는 서버가 재생성을 받으므로 종전대로 생성 POST 로 간다 — 다녀온 기록이 있어 409 면
+    // 생성 화면이 재계획 모드로 넘긴다(GeneratingPage). 여행 기간을 모르면 아래 종전 길이다.
     if (
       settled.data !== undefined &&
-      status === 'CONFIRMED' &&
       settled.data.generationMode !== 'MANUAL' &&
+      settled.data.generationState !== 'FAILED' &&
       trip.data !== undefined &&
-      isDateInRange(today, trip.data.startDate, trip.data.endDate)
+      isDateInRange(
+        seoulDate(new Date()),
+        trip.data.startDate,
+        trip.data.endDate
+      )
     ) {
-      goPlanB(today);
+      goGenerating(true);
       return;
     }
 
@@ -318,40 +318,21 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   }
 
   /**
-   * 허브를 깔고(replace) 재계획 요청(i04 모달)을 연다(push) — GeneratingPage 의 409 넘김과 같은 모양.
-   * 보고 있는 날이 오늘 뒤면 그 날을 다시 짠다(서버: 오늘이 아닌 날은 하루 전체). 오늘·지난 날이면 오늘.
-   */
-  function goPlanB(today: string): void {
-    const day = selectedDate > today ? selectedDate : undefined;
-    showToast({
-      message: PLANB_HANDOFF_TOAST_MESSAGE,
-      testID: 'itinerary-draft-planb-handoff-toast',
-    });
-    router.replace({
-      pathname: '/trips/[tripId]/live',
-      params: day === undefined ? { tripId } : { tripId, day },
-    });
-    router.push({
-      pathname: '/trips/[tripId]/planb',
-      params: day === undefined ? { tripId } : { tripId, targetDate: day },
-    });
-  }
-
-  /**
    * 생성 화면으로 replace 1회 — 409 안내·실패·재시도는 그 화면이 진다(TRIP-1037 결정 A).
-   * 오늘 뒤의 날을 보고 있으면 그 날을 싣는다 — 여행 중에 다녀온 기록이 있어 거절되면 생성 화면이 재계획을
-   * 그 날로 연다(goPlanB 와 같은 규칙). 빠지면 보던 날 대신 오늘이 다시 짜인다. 여행 전이면 쓰이지 않는다.
+   * `replan` 이면 그 화면의 재계획 모드(생성 POST 없음)로, 아니면 완전 AI 생성으로 연다.
+   * 오늘 뒤의 날을 보고 있으면 그 날을 싣는다 — 재계획은 그 날 하루를 다시 짜고(서버: 오늘이 아닌 날은 하루 전체),
+   * 생성이 여행 중 409 로 거절되면 재계획 모드도 그 날로 이어진다. 빠지면 보던 날 대신 오늘이 다시 짜인다.
    */
-  function goGenerating(): void {
+  function goGenerating(replan = false): void {
     leavingRef.current = true;
     const targetDate =
       selectedDate > seoulDate(new Date()) ? selectedDate : undefined;
+    const params = replan
+      ? { tripId, replan: '1' }
+      : { tripId, mode: 'FULLY_AI' };
     router.replace({
       pathname: '/trips/[tripId]/itinerary/generating',
-      params:
-        targetDate === undefined
-          ? { tripId, mode: 'FULLY_AI' }
-          : { tripId, mode: 'FULLY_AI', targetDate },
+      params: targetDate === undefined ? params : { ...params, targetDate },
     });
   }
 
