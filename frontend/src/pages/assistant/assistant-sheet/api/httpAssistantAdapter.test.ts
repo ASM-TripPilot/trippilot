@@ -41,11 +41,11 @@ describe('경로 — 포트 메서드 ↔ BE 엔드포인트', () => {
     // Arrange
     const { calls, adapter } = recorder();
     const signal = new AbortController().signal;
-    const turn = {
+    const turn: SendTurnRequest = {
       clientTurnId: 't1',
-      input: { kind: 'TEXT', text: '날씨 알려줘' },
+      input: { type: 'TEXT', text: '날씨 알려줘' },
       screen: { surface: 'HOME' },
-    } as unknown as SendTurnRequest;
+    };
 
     // Act
     await adapter.openSession({ tripId: 'trip-1' });

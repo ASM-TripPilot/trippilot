@@ -3,8 +3,8 @@
  *
  * 원천: `aidlc/.../u8-conversational-assistant/functional-design/frontend-components.md` §6(DTO)·
  * `domain-entities.md` §3.4(MessageKind·NextAction·QuickReply)·§3.5(제안 상태기계).
- * `backend/docs/design/openapi.yaml` 에 assistant 태그가 0건이라 orval 코드젠 대상이 아니다 — BE 가
- * 계약을 올리면 `shared/api/generated` 타입으로 갈아끼우고 이 파일을 지운다.
+ * `backend/docs/design/openapi.yaml` 에 assistant 태그 경로가 있지만 `orval.config.ts` 의 `filters.tags` 에
+ * 빠져 있어 생성 타입이 없다 — 태그를 넣으면 `shared/api/generated` 타입으로 갈아끼우고 이 파일을 지운다.
  *
  * INV-3: 어떤 타입에도 소요시간(`duration`) 필드가 없다. 시각·거리는 서버 문자열 그대로다(INV-2).
  */
