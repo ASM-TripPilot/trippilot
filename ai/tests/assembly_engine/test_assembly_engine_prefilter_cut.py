@@ -36,7 +36,9 @@ from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSou
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)
 # 해 자체는 이 테스트의 관심이 아니다 — 로그는 CP-SAT 전에 남는다. 짧게 끊는다.
-_CFG = AssemblyConfig(or_tools_limit_ms=100, or_tools_min_ms=50)
+# 카테고리 하루 상한은 끈다 — 프리필터의 카테고리별 몫이 절단 집합을 바꾼다(그쪽은 daily_cap 테스트)
+_CFG = AssemblyConfig(or_tools_limit_ms=100, or_tools_min_ms=50,
+                      cafe_daily_max=10_000, category_daily_max=10_000)
 
 
 def _poi(pid: str, cat: PoiCategory, k: int, hours=()) -> Poi:

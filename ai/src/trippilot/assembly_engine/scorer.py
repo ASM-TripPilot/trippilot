@@ -151,7 +151,7 @@ def directive_fit(
 # **그 카테고리를 기본 가중 최상위(명소) 위로** 끌어올린다: 최소 한 단, 낮은 카테고리는
 # 최상위와의 격차 + ε. 과잉은 점수가 아니라 조립기의 일별 카테고리 체감 감점
 # (`category_excess_penalty` — 허용치 초과 1곳당 −0.3, 카페 1.05 → 0.75 로 명소 아래)이 막는다.
-# 식사 상한(`food_daily_max`)은 FOOD 만 세고 CAFE 는 안 센다.
+# 하루 상한(`daily_caps` — FOOD 3·카페 2·그 밖 3)이 그 위에서 한 카테고리가 하루를 덮는 것을 막는다.
 _TOP_CATEGORY_WEIGHT = max(CATEGORY_WEIGHT.values())
 TASTE_EPSILON = 0.05
 

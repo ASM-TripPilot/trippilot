@@ -139,7 +139,9 @@ class RuleFallbackAssembler:
             slots: list[VisitSlot] = []
             # 일별 카테고리 배치 수 (TRIP-531) — 고정 블록 포함
             cat_count: Counter = Counter()
-            food_count = 0  # FOOD 하루 상한 — 고정 블록 포함 (OR 항의 핀 노드와 같은 기준)
+            # 하루 상한(FOOD·카테고리별, `daily_caps`) 묶음별 배치 수 — 고정 블록·필수 방문 포함
+            # (OR 항의 핀 노드와 같은 기준)
+            cap_count: Counter = Counter()
             # ① 고정 블록 — 시각 그대로 (HC3)
             for fb in sorted(fixed_by_day.get(day, []), key=lambda f: f.window.start):
                 if any(s.poi_id == fb.poi_id and s.start_at == fb.window.start
@@ -160,7 +162,7 @@ class RuleFallbackAssembler:
                 fb_poi = self._pois.get(fb.poi_id)
                 if fb_poi is not None:
                     cat_count[fb_poi.category] += 1
-                    food_count += counts_as_food(fb_poi)
+                    cap_count.update(k for k, _ in self._cfg.daily_caps(fb_poi))
             day_end = _at(day, problem.window_on(day).end)
             windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
             meal_done = [False] * len(windows)
@@ -203,7 +205,7 @@ class RuleFallbackAssembler:
                 slots.sort(key=lambda s: s.start_at)
                 used.add(rv.poi_id)
                 cat_count[poi.category] += 1
-                food_count += counts_as_food(poi)
+                cap_count.update(k for k, _ in self._cfg.daily_caps(poi))
                 if poi.category is PoiCategory.FOOD:  # ② 와 같은 창 점유 판정
                     s_mod = start.hour * 60 + start.minute
                     for w, (lo, hi) in enumerate(windows):
@@ -271,14 +273,13 @@ class RuleFallbackAssembler:
                             >= quota.get(p.category,
                                          self._cfg.category_free_count))
 
-                # FOOD 하루 상한 (config 주석) — 다 찼으면 FOOD 는 맨 뒤. 배제가 아니라
-                # 순서만이라 FOOD 만 남으면 그대로 배치된다. 첫 키인 것은 OR 감점(1.0)이
+                # 하루 상한 (FOOD·카테고리별, config 주석) — 다 찬 묶음의 후보는 맨 뒤. 배제가
+                # 아니라 순서만이라 그것만 남으면 그대로 배치된다. 첫 키인 것은 OR 감점(2.0)이
                 # 카테고리 감점(0.3)·식사 선호보다 커서다.
-                food_full = food_count >= self._cfg.food_daily_max
-
-                def _food_over(c) -> bool:
+                def _cap_over(c) -> bool:
                     p = self._pois.get(c.poi_id)
-                    return food_full and p is not None and counts_as_food(p)
+                    return p is not None and any(
+                        cap_count[k] >= cap for k, cap in self._cfg.daily_caps(p))
 
                 # 경로 길이 감점(BR-U4-47) — OR 의 아크 감점과 같은 의미의 그리디판: 지금 위치
                 # (말단 슬롯, 없으면 앵커)에서의 도로 km × travel_weight 를 점수에서 빼 다시 줄
@@ -296,9 +297,9 @@ class RuleFallbackAssembler:
                         - (problem.travel_weight * self._road_km(problem, here, c) if route_on else 0.0)
                         - (END_NEAR_WEIGHT * self._road_km(problem, end, c) if end is not None else 0.0)),
                         str(c.poi_id)))
-                # 안정 정렬 — FOOD 상한 → 쿼터 내 먼저 → 선호 클래스 → ranked 순서
+                # 안정 정렬 — 하루 상한 → 쿼터 내 먼저 → 선호 클래스 → ranked 순서
                 order = sorted(base, key=lambda c: (
-                    _food_over(c), _over_quota(c), _is_food(c) != food_first))
+                    _cap_over(c), _over_quota(c), _is_food(c) != food_first))
                 placed = False
                 for cand in order:
                     if not gap_fill:
@@ -352,7 +353,7 @@ class RuleFallbackAssembler:
                     if free_left is not None:
                         free_left -= 1
                     cat_count[poi.category] += 1  # TRIP-531
-                    food_count += counts_as_food(poi)
+                    cap_count.update(k for k, _ in self._cfg.daily_caps(poi))
                     slots.sort(key=lambda s: s.start_at)
                     if gap_fill:
                         k += 1  # 방금 놓은 슬롯 뒤로 — 같은 틈의 남은 자리를 이어서 본다

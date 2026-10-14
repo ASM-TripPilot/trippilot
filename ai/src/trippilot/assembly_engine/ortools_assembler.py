@@ -482,7 +482,7 @@ class OrToolsAssembler:
         obj_terms += self._rain_soft_terms(problem, day, nodes, visit)
         obj_terms += self._event_soft_terms(problem, nodes, visit)
         obj_terms += self._category_soft_terms(problem, day, m, nodes, visit)
-        obj_terms += self._food_cap_terms(m, nodes, visit)
+        obj_terms += self._daily_cap_terms(m, nodes, visit)
         obj_terms += self._end_near_terms(problem, arcs, coords)
         travel_terms = self._travel_terms(problem, arcs, coords)
         m.Maximize(sum(obj_terms) + sum(travel_terms))
@@ -780,20 +780,29 @@ class OrToolsAssembler:
             terms.append(-penalty * excess)
         return terms
 
-    def _food_cap_terms(self, m: cp_model.CpModel, nodes, visit) -> list:
-        """FOOD 하루 상한 — 초과 1곳당 -food_excess_penalty (목적함수만, config 주석).
+    def _daily_cap_terms(self, m: cp_model.CpModel, nodes, visit) -> list:
+        """하루 상한 — FOOD(`food_daily_max`)·카테고리별(`daily_caps`) 초과 1곳당
+        -food_excess_penalty (목적함수만, config 주석).
 
         위 카테고리 항과 같은 꼴이되 허용치에 공정 몫 바닥이 없다 — days=1 일자별 호출에서도
-        켜져 있어야 해서다. 핀(고정 블록) 노드도 센다(카테고리 항의 len(idxs) 와 같은 기준).
+        켜져 있어야 해서다. 핀(고정 블록)·필수 방문 노드도 센다(카테고리 항의 len(idxs) 와 같은
+        기준) — 고정(강제)·필수(지배 항)는 깎이지 않고, 상한은 남은 자유 몫만 줄인다.
         """
         penalty = int(self._cfg.food_excess_penalty * 1000)
-        cap = self._cfg.food_daily_max
-        idxs = [i for i, n in enumerate(nodes) if counts_as_food(n["poi"])]
-        if penalty == 0 or len(idxs) <= cap:
+        if penalty == 0:
             return []
-        excess = m.NewIntVar(0, len(idxs) - cap, "foodx")
-        m.Add(excess >= sum(visit[i] for i in idxs) - cap)
-        return [-penalty * excess]
+        groups: dict = {}
+        for i, n in enumerate(nodes):
+            for key, cap in self._cfg.daily_caps(n["poi"]):
+                groups.setdefault((str(key), cap), []).append(i)
+        terms: list = []
+        for (key, cap), idxs in sorted(groups.items()):
+            if len(idxs) <= cap:
+                continue
+            excess = m.NewIntVar(0, len(idxs) - cap, f"capx_{key}")
+            m.Add(excess >= sum(visit[i] for i in idxs) - cap)
+            terms.append(-penalty * excess)
+        return terms
 
     def _meal_soft_terms(self, m: cp_model.CpModel, nodes, visit, start,
                          arcs) -> tuple[list, dict[int, list]]:
@@ -951,22 +960,23 @@ class OrToolsAssembler:
         seats = {c.poi_id for c in list(filter(seat_ok, ranked))[:len(meal_slots)]}
         # 안정 정렬 — 고정 먼저, 다음 예약석, 그 안에서는 점수순
         head = sorted(ranked, key=lambda c: (c.poi_id not in fixed_ids, c.poi_id not in seats))
-        # FOOD 몫 상한 — 하루 상한(food_daily_max)을 넘는 FOOD 는 목적함수가 어차피 버리므로
-        # 노드를 그 이상 채우면 비FOOD 자리만 뺏는다. 미식 취향에서 상위 60 이 전부 FOOD 라
-        # 관광지 노드 0 → 상한 뒤 하루 3곳만 남던 것(2026-10-02 부산 미식 실측). 4배는 영업창·
-        # 동선 선택 여지. 비FOOD 가 모자라면 넘친 FOOD 로 다시 채워 60 을 유지한다(풀 손실 없음).
-        food_quota = max(len(seats), self._cfg.food_daily_max * 4)
+        # 하루 상한 묶음별 몫(`daily_caps` — FOOD·카테고리별) — 상한을 넘는 몫은 목적함수가 어차피
+        # 버리므로 노드를 그 이상 채우면 다른 카테고리 자리만 뺏는다. 미식 취향에서 상위 60 이 전부
+        # FOOD 라 관광지 노드 0 → 상한 뒤 하루 3곳만 남던 것(2026-10-02 부산 미식 실측), 문화 취향에서
+        # 상위 60 이 문화·맛집뿐이라 카테고리 상한 뒤 하루 5곳에 오후가 비던 것(2026-10-14 종로 실측).
+        # 4배는 영업창·동선 선택 여지(FOOD 는 예약석 수 이상). 다른 묶음이 모자라면 넘친 후보로 다시
+        # 채워 60 을 유지한다(풀 손실 없음). 고정 블록·필수 방문(`fixed_ids`)은 세지 않는다.
         kept: list[ScoredPoi] = []
         spill: list[ScoredPoi] = []
-        food_taken = 0
+        taken: Counter = Counter()
         for c in head:
             if len(kept) >= _PREFILTER_TOP_K:
                 break
-            food_like = c.poi_id not in fixed_ids and counts_as_food(self._pois[c.poi_id])
-            if food_like and food_taken >= food_quota:
+            caps = () if c.poi_id in fixed_ids else self._cfg.daily_caps(self._pois[c.poi_id])
+            if any(taken[k] >= max(len(seats) if k == "food" else 0, cap * 4) for k, cap in caps):
                 spill.append(c)
                 continue
-            food_taken += food_like
+            taken.update(k for k, _ in caps)
             kept.append(c)
         kept += spill[:_PREFILTER_TOP_K - len(kept)]
         return sorted(kept, key=rank)
