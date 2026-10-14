@@ -105,8 +105,8 @@ class StayContentModeParityTest : StringSpec({
      * 이 리포는 그 실패를 이미 겪었다(같은 키를 여러 이름으로 읽던 건). 그래서 문자열 일치가
      * 아니라 **빈 선택까지** 잰다. 선례는 `ScheduleAgentSwitchTest`.
      *
-     * 컨텍스트 전체를 띄우지 않는 이유: 테스트 리소스 `application.yml` 이 본 파일을 가려
-     * 플레이스홀더가 안 보인다. 러너에 그 한 줄만 그대로 심는다.
+     * 컨텍스트 전체를 띄우지 않는다 — 러너에 그 한 줄만 그대로 심는다. (처음엔 테스트 리소스 `application.yml` 이 본 파일을
+     * 가려 플레이스홀더가 안 보였기 때문이다. 2026-10-14 TEST-OPEN-IN-VIEW 로 가림은 없어졌지만 이 테스트는 키 하나만 재면 된다.)
      */
     "STAY_CONTENT_MODE 가 실제로 DB 어댑터를 고른다 — 이름이 틀리면 조용히 스텁이다" {
         // application.yml 의 `mode: ${STAY_CONTENT_MODE:stub}` 와 같은 표기를 그대로 쓴다.
