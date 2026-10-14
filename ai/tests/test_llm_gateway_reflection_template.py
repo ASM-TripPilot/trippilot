@@ -30,6 +30,7 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.reflection_template import (
     _CAPTION_MAX,
     _SCENE_MIN,
+    _TIME_EXPR,
     ReflectionTemplateContext,
     ReflectionTemplateGate,
 )
@@ -262,7 +263,8 @@ def test_gate_accepts_event_scene_when_source_event_exists() -> None:
 
 @pytest.mark.parametrize(
     "caption",
-    ["도보 30분 거리였어요", "2시간 코스 완주", "오전 9시의 바다", "Duration: short"],
+    ["도보 30분 거리였어요", "2시간 코스 완주", "오전 9시의 바다", "Duration: short",
+     "한 시간 걸려요"],
 )
 def test_gate_records_time_expr_in_caption(caption: str) -> None:
     out = _apply(_raw(_body(scenes=[{"layout": "MAP", "caption": caption}] * 3)))
@@ -286,6 +288,29 @@ def test_gate_checks_time_expr_in_subtitle_and_hashtags() -> None:
     time_violations = [v for v in out.value.violations if v.code is ViolationCode.TIME_EXPR]
     assert len(time_violations) == 2  # 부제 1 + 해시태그 1 (BR-U6R-04)
     assert all(v.scene_index is None for v in time_violations)
+
+
+# 한글 수사·서술형 소요시간 — 리마인드 게이트(#591)가 이미 INV-3 위반으로 막는 표현을
+# 공유 정규식(소비처 넷: 회고 템플릿·공유 카드·설명·Plan-B 대안 이유)도 막는다.
+@pytest.mark.parametrize(
+    "text",
+    ["한 시간 걸려요", "한시간 반", "두 시간 코스", "삼십 분 정도", "삼십분", "십오 분",
+     "반 시간", "이동시간이 짧아요", "시간이 걸리지 않아요", "#한시간코스",
+     "운전 시간이 길어요", "체류 시간 넉넉히"],
+)
+def test_time_expr_catches_korean_numeral_durations(text: str) -> None:
+    assert _TIME_EXPR.search(text), text
+
+
+# 소요시간을 표시하지 않는 말은 계속 통과 — 막히면 대안 이유·해시태그가 조용히 빈다.
+@pytest.mark.parametrize(
+    "text",
+    ["오후 세 시에 열어요", "09:00 오픈", "한적한 시간대에 좋아요", "시간 여행 테마 카페",
+     "#시간여행", "즐거운 시간을 보내요", "특별한 시간을 보내요", "식사 시간을 즐겨요",
+     "분위기 좋은 카페", "기분 좋은 하루", "충분히 둘러보세요", "#분위기카페"],
+)
+def test_time_expr_passes_non_duration_phrases(text: str) -> None:
+    assert _TIME_EXPR.search(text) is None, text
 
 
 def test_gate_records_placeholder_out_of_vocab_and_index_range() -> None:
