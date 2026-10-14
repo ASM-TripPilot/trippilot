@@ -23,6 +23,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { isDateInRange } from '@/shared/lib/monthGrid';
 import { seoulDate, seoulTime } from '@/shared/lib/seoulDate';
+import { useElapsedFlag } from '@/shared/lib/useElapsedFlag';
 import {
   isNotFound,
   isGenerationDailyLimit,
@@ -34,6 +35,14 @@ const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
 const PLANB_HANDOFF_TOAST_MESSAGE = '여행 중이라 재계획으로 다시 짜요';
 const NO_SOLUTION_MESSAGE =
   '지금 바꿀 수 있는 곳을 찾지 못했어요. 원래 일정을 그대로 둘게요.';
+const REPLAN_STOPPED_TOAST_MESSAGE =
+  '다시 짜기를 멈췄어요. 원래 일정을 그대로 둘게요.';
+/**
+ * 재계획 대기 상한 2분(#1235 사후 리뷰 B2). 서버엔 SOLVING 만료·스윕이 없어(`@Async` 메모리 실행 — 파드 재시작이면
+ * 세션이 SOLVING 에 남는다) 클라가 끊는다(INV-4). 값 = 재계획 AI 시한 25초 + 백엔드 수집·조립·큐 여유. i12 의 8분
+ * (`planb-draft/model/replanPollCap`)보다 짧은 이유: 이 화면은 생성 진행 얼굴이라 사용자가 붙잡혀 기다린다.
+ */
+const REPLAN_WAIT_CAP_MS = 2 * 60 * 1000;
 
 /** 429 의 Retry-After(초) → 풀리는 KST 시각. 헤더 없음·깨진 값이면 null(시각 없이 안내, INV-4). */
 function resolveRetryAt(error: unknown, now: Date): AiLimitRetryAt | null {
@@ -332,13 +341,20 @@ function startRefusal(error: unknown): string | null {
  *  1. 마운트 때 재계획 세션을 **1회** 연다. 사유·방향은 묻지 않는다(`JUST_CHANGE` 하나). 위치도 읽지 않는다 —
  *     `originKind: null` 이면 서버가 사다리로 정한다(openapi StartReplanRequest.originKind). 보던 날이 오면 그 날 하루
  *     전체(FULL_DAY — 오늘이 아닌 날은 서버가 FULL_DAY 만 받는다), 없으면 오늘 지금 이후(PARTIAL_SLOTS).
- *  2. 세션을 COLLECTING·SOLVING 동안 폴링한다(간격·오류 정지 규칙은 `planb-draft` 의 `useReplanSession` 과 같다 —
- *     pages 끼리 import 금지라 같은 판단을 이 칸에 둔다).
- *  3. DRAFT 가 되면 **확인 없이 바로** apply(세션당 1회) → 성공하면 추천안(draft)으로 replace. 원 일정은 서버가
- *     반영 전에 복원 지점을 남긴다(openapi apply — 되돌릴 지점을 먼저 남긴다). 반영 전에 화면을 떠나면(‹) 폴링이
- *     멈춰 아무것도 반영되지 않는다 — 원 일정 그대로다.
- *  4. 얼굴은 생성과 같은 화면이다. 시작 거절(400·409)·대안 없음 = 사유 + [닫기]. 실패(FAILED·끊긴 세션·네트워크·
- *     반영 실패) = 실패 얼굴 + [다시 시도](처음부터 새 세션 — 열린 세션은 새 요청이 닫는다, INV-U4-06). INV-4.
+ *  2. 세션을 COLLECTING·SOLVING 동안 폴링한다. 간격·오류 정지는 `planb-draft` 의 `useReplanSession` 과 같고,
+ *     상한은 i12 의 8분(`replanPollCap`) 대신 **2분**(`REPLAN_WAIT_CAP_MS`)이다 — 넘으면 조회를 끄고 실패 얼굴로
+ *     간다. 상한은 서버 `createdAt` 이 아니라 이 화면이 세션 id 를 받은 때부터 잰다(이 화면이 방금 연 세션이라 둘이
+ *     거의 같고, 2분 규모에선 기기·서버 시계 차이가 판정을 흔들 수 있다). 세션 id 를 받기 전·첫 조회는 axios 15초
+ *     timeout 이 끊어 실패 얼굴로 가므로 상한이 필요 없다. pages 끼리 import 금지라 이 칸에 둔다.
+ *  3. DRAFT 가 되면 **확인 없이 바로** apply(세션당 1회) → 성공하면 추천안(draft)을 **다시 짠 날**(`day` = 보던 날,
+ *     없으면 오늘)로 replace. 원 일정은 서버가 반영 전에 복원 지점을 남긴다(openapi apply). DRAFT 를 보기 전에 ‹ 로
+ *     떠나면 폴링이 멈춰 아무것도 반영되지 않는다(원 일정 그대로 — 토스트로 말한다). apply 요청이 이미 나간 뒤에
+ *     떠나면 서버엔 반영되고 화면 이동만 없다 — 그때는 "원래 일정 그대로" 토스트를 띄우지 않는다(거짓이 된다).
+ *  4. 얼굴은 생성과 같은 화면이다. 시작 거절(400·409)·대안 없음 = 사유 + [닫기]. 실패(FAILED·CANCELED·조회 오류·
+ *     시작 실패·반영 실패·대기 상한) = 실패 얼굴 + [다시 시도](처음부터 새 세션 — 열린 세션은 새 요청이 닫는다,
+ *     INV-U4-06). INV-4.
+ *  5. 시작 거절 판정(`startRefusal`)은 `shared/api` `resolveGenerationRefused` 의 근친이다. 따로 둔 이유: 재계획 409 엔
+ *     `GENERATION_IN_PROGRESS` 가 없고 400(지난 날·기간 밖)도 같은 막다른 얼굴이라 코드 필터 없이 400·409 를 본다.
  */
 function ReplanGeneration({
   tripId,
@@ -353,13 +369,20 @@ function ReplanGeneration({
   const start = useStartReplan();
   const apply = useApplyReplan();
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // 세션을 연 지 2분이 지나면 true — 재시도(새 세션)면 0부터 다시 잰다.
+  const overCap = useElapsedFlag(
+    sessionId !== null,
+    REPLAN_WAIT_CAP_MS,
+    sessionId
+  );
   const session = useGetTripsTripIdReplanSessionsSessionId(
     tripId,
     sessionId ?? '',
     {
       query: {
         // 생성 훅의 기본 enabled 는 빈 문자열도 통과시킨다 — 세션을 받기 전엔 묻지 않는다.
-        enabled: sessionId !== null,
+        // 상한에 닿으면 끈다 — 폴링도, 포커스 복귀 재조회(실패 얼굴 뒤 늦은 DRAFT 를 몰래 반영)도 멈춘다.
+        enabled: sessionId !== null && !overCap,
         refetchInterval: (query) => {
           // 오류로 떨어지면 선다 — 옛 SOLVING 이 남아 서버가 죽어 있는 동안 영구 폴링하지 않게(TRIP-1348 선례).
           if (query.state.status === 'error') return false;
@@ -372,6 +395,21 @@ function ReplanGeneration({
     }
   );
   const status = session.data?.status;
+  // 상한에 닿으면 실패로 판정하기 **전에 한 번 더** 묻는다 — 앱이 뒤로 간 사이(주기 조회가 선다) 서버가 이미 끝냈으면
+  // 실패 얼굴 대신 그대로 반영한다(바로 반영이 사용자 결정, #1248 리뷰 W-A). `refetch` 는 `enabled:false` 여도 나간다.
+  const finalCheckRef = useRef<string | null>(null);
+  const [finalChecked, setFinalChecked] = useState<string | null>(null);
+  useEffect(() => {
+    if (!overCap || sessionId === null || finalCheckRef.current === sessionId)
+      return;
+    finalCheckRef.current = sessionId;
+    void session.refetch().finally(() => setFinalChecked(sessionId));
+  }, [overCap, sessionId, session]);
+  // 상한은 마지막 확인 뒤에도 아직 짜는 중일 때만 실패다 — 결과(DRAFT·NO_SOLUTION 등)가 왔으면 그 얼굴이 이긴다.
+  const capped =
+    overCap &&
+    finalChecked === sessionId &&
+    (status === 'COLLECTING' || status === 'SOLVING');
 
   const begin = useCallback(() => {
     setSessionId(null);
@@ -408,14 +446,15 @@ function ReplanGeneration({
     apply.mutate(
       { tripId, sessionId },
       {
+        // 다시 짠 날로 연다 — 첫 날로 열리면 여행 2일차 이후엔 바뀐 게 안 보인다(#1235 사후 리뷰 W2).
         onSuccess: () =>
           router.replace({
             pathname: '/trips/[tripId]/itinerary/draft',
-            params: { tripId },
+            params: { tripId, day: targetDate ?? seoulDate(new Date()) },
           }),
       }
     );
-  }, [status, sessionId, apply, router, tripId]);
+  }, [status, sessionId, apply, router, tripId, targetDate]);
 
   const refusal = startRefusal(start.error);
   return (
@@ -433,10 +472,21 @@ function ReplanGeneration({
         status === 'FAILED' ||
         // 다른 요청이 이 세션을 닫았다(INV-U4-06) — 폴링이 멈춘 채 진행 얼굴로 남지 않게.
         status === 'CANCELED' ||
-        apply.isError
+        apply.isError ||
+        capped
       }
       onRetry={begin}
-      onBackground={onClose}
+      onBackground={() => {
+        // ‹ = 이 재계획을 버린다(생성의 ‹ 는 백그라운드로 계속) — 같은 얼굴이라 말해 준다(#1235 사후 리뷰 W5).
+        // 반영 요청이 이미 나갔으면 서버가 반영할 수 있어 "그대로 둘게요"가 거짓이 된다 — 그때는 말하지 않는다.
+        if (!apply.isPending) {
+          showToast({
+            message: REPLAN_STOPPED_TOAST_MESSAGE,
+            testID: 'itinerary-generating-replan-stopped-toast',
+          });
+        }
+        onClose();
+      }}
     />
   );
 }

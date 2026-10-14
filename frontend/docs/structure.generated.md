@@ -152,6 +152,7 @@
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
+- `src/__tests__/draftRouteDayPassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/eslintReleaseRules.test.ts`  →  (export 없음)
 - `src/__tests__/generatingEntryStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
@@ -1713,4 +1714,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1073개 파일
+합계 1074개 파일

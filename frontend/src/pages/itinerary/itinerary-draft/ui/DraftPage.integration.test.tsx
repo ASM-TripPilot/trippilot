@@ -618,6 +618,34 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       expect(log.hitsFor('POST', '/itinerary')).toBe(0);
     });
 
+    // #1235 사후 리뷰 W2 — 자동 반영 뒤 생성 화면이 `day` 를 실어 보낸다. 그 날로 열려야 바뀐 날이 바로 보인다.
+    it('P5 라우트가 준 날(day)로 처음 연다 — 없으면 종전대로 데이터가 있는 첫 날', async () => {
+      renderWithQueryClient(
+        <DraftPage tripId={TRIP_ID} day={tomorrow} />,
+        newTestQueryClient({ gcTime: 0 })
+      );
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '2일차'
+      );
+    });
+
+    it('P5b day 가 데이터 없는 날이면 데이터가 있는 첫 날로 연다 (빈 날에 갇히지 않는다)', async () => {
+      itineraryScript = () =>
+        itinerary({
+          days: daysOf([today], (date) => [
+            slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+          ]),
+          generationState: 'COMPLETE',
+        });
+      renderWithQueryClient(
+        <DraftPage tripId={TRIP_ID} day={tomorrow} />,
+        newTestQueryClient({ gcTime: 0 })
+      );
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '1일차'
+      );
+    });
+
     it('P4 생성 실패(FAILED) 일정은 여행 중이어도 종전대로 생성 화면(FULLY_AI)으로 간다 — 재계획 모드 아님', async () => {
       itineraryScript = () =>
         itinerary({ days: inTripDays, generationState: 'FAILED' });
@@ -2630,6 +2658,8 @@ describe('이 여행 생성 중 확인', () => {
   let eventLog: string[] = [];
   /** T1 일정 GET 응답(케이스가 정한다). */
   let ownItinerary: () => Itinerary;
+  /** T1 여행 GET 응답 — 기본은 지난 고정 기간(여행 중 아님). D5 만 오늘을 품게 바꾼다. */
+  let ownTrip: () => Trip;
 
   const count = (prefix: string): number =>
     eventLog.filter((line) => line.startsWith(prefix)).length;
@@ -2641,9 +2671,10 @@ describe('이 여행 생성 중 확인', () => {
     mockBack.mockClear();
     setAccessToken('valid-access');
     ownItinerary = completeThreeDays;
+    ownTrip = () => trip();
 
     serveItinerary(server, {
-      trip: () => trip(),
+      trip: () => ownTrip(),
       itinerary: () => ownItinerary(),
     });
     server.use(
@@ -2763,6 +2794,31 @@ describe('이 여행 생성 중 확인', () => {
         screen.queryByTestId('itinerary-draft-inprogress-confirm')
       ).toBeNull();
       await settle();
+      expect(count('POST')).toBe(0);
+    });
+  });
+
+  describe('🔴 D5 · #1235 사후 리뷰 W1 — 여행 중이어도 이 여행이 생성 중이면 재계획보다 확인이 먼저다', () => {
+    it('여행 중 + 생성 중 빈 얼굴 [다시 시도] → 확인부터(이동 0) → [계속]이면 생성 화면(FULLY_AI)으로 · 재계획 모드 아님', async () => {
+      // 준비 — 오늘이 여행 기간 안이고, 1일차도 아직 안 온 생성 중(★4). 재계획으로 보내면 "오늘 일정이 없다" 409 막다른 얼굴이다.
+      const today = seoulDate(new Date());
+      ownTrip = () => trip({ startDate: today, endDate: today });
+      ownItinerary = ownGenerating;
+
+      renderPage();
+      await pressDraftRetry();
+
+      expect(
+        await screen.findByTestId('itinerary-draft-inprogress-confirm')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      fireEvent.press(
+        screen.getByTestId('itinerary-draft-inprogress-confirm-continue')
+      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith(EXPECTED_ROUTE);
       expect(count('POST')).toBe(0);
     });
   });

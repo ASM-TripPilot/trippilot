@@ -1,7 +1,12 @@
 import type { ReactNode, ReactElement } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
+import {
+  act,
   fireEvent,
   render,
   screen,
@@ -24,7 +29,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resolveItineraryDestination } from '@/features/itinerary';
 import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
-import { resetToast } from '@/test-support/toastHarness';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { GeneratingPage } from './GeneratingPage';
 
@@ -1238,10 +1243,20 @@ describe('재계획 모드(replan)', () => {
    *  - 🔴 RP3 NO_SOLUTION → 원 일정 유지 안내 + [닫기](=홈). apply 0.
    *  - 🔴 RP4 시작 409 → 서버 사유 + [닫기]. 세션 조회·apply 0.
    *  - 🔴 RP5 FAILED → 실패 얼굴 + [다시 시도] = 시작 POST 를 처음부터 다시(새 세션).
+   *  - 🔴 RP2·RP2b 추천안은 **다시 짠 날**로 연다(`day` = 보던 날, 없으면 오늘 KST) — 2일차 이후에 첫 날로 열리면
+   *    바뀐 게 안 보여 "아무 일도 없었다"로 읽힌다(#1235 사후 리뷰 W2).
+   *  - 🔴 RF1~RF5 (#1235 사후 리뷰 B1) 실패 얼굴로 가는 나머지 네 갈래 — 시작 POST 500 · 세션 조회 오류 · CANCELED ·
+   *    자동 반영(apply) 409/500. 반영 실패 뒤 [다시 시도]면 새 세션 동안 실패 얼굴이 남지 않는다(apply 상태 리셋).
+   *  - 🔴 RS1·RF2 (W3) 폴링은 종료 상태(DRAFT·NO_SOLUTION·FAILED)와 조회 오류 뒤 멈춘다.
+   *  - 🔴 RC1 (B2) 세션이 COLLECTING·SOLVING 에 2분 머물면 폴링을 멈추고 실패 얼굴 + [다시 시도](INV-4).
+   *  - 🔴 RB1·RB2 (W5) ‹ 로 나가면 "다시 짜기를 멈췄어요…" 토스트 — 단 반영 요청이 이미 나갔으면 띄우지 않는다
+   *    (서버가 반영할 수 있는데 "원래 일정 그대로"라고 말하면 거짓이다).
    *  - 모든 케이스: 생성 POST(`POST /itinerary`) 0 — 재계획 모드는 일정을 새로 만들지 않는다.
    *
    * 왜 MSW 인가: 핵심 단언이 "apply 가 몇 번 나갔나·생성 POST 가 0 인가" 다. 훅을 목하면 그건 목의 가정이 된다.
-   * 폴링 간격(2초)은 실시간으로 기다린다 — 가짜 타이머는 MSW 응답 파이프라인과 엉킨다(DraftPage 통합 선례).
+   * 폴링 간격(2초)은 대개 실시간으로 기다린다. 2분 상한(RC1)과 "그 뒤로 더 안 묻는다"(RS)는 가짜 타이머 +
+   * `advanceTimersByTimeAsync` 를 `act` 안에서 흘린다 — 동기 `advanceTimersByTime` 은 MSW 응답(약속)을 못 풀어
+   * 엉킨다(SlotCandidatePanelContainer 통합 선례).
    *
    * 3동작: 준비 = 가짜 서버(시작·세션 차례·apply) → 실행 = replan 으로 화면을 연다(필요하면 버튼) → 단언 = 본문·요청 수·이동·얼굴.
    */
@@ -1279,9 +1294,22 @@ describe('재계획 모드(replan)', () => {
   /** 세션 GET 응답 — 세션 id·몇 번째 조회(0부터)로 케이스가 정한다. */
   let sessionScript: (sessionId: string, call: number) => ReplanSessionStatus;
   let sessionGets: Record<string, number> = {};
+  /** 세션 GET 을 서버 오류(500)로 답할 차례인가 — 기본은 늘 정상. */
+  let sessionFails: (sessionId: string, call: number) => boolean;
   /** apply 가 나간 세션 id(도착 순서). */
   let applied: string[] = [];
+  /** apply 응답 — 기본은 200 APPLIED. 케이스가 409·500·붙잡기(약속)로 바꾼다. */
+  let applyReply: (sessionId: string) => Response | Promise<Response>;
   let generatePosts = 0;
+
+  /** openapi ErrorResponse 봉투. */
+  const errorBody = (status: number, message = '잠시 후 다시 시도해 주세요.') =>
+    HttpResponse.json(
+      { error: { code: status === 409 ? 'CONFLICT' : 'INTERNAL', message } },
+      { status }
+    );
+  /** 오늘(KST) — 다시 짠 날이 없을 때 추천안이 열 날. */
+  const TODAY = seoulDate(new Date());
 
   beforeEach(() => {
     startBodies = [];
@@ -1290,6 +1318,8 @@ describe('재계획 모드(replan)', () => {
     applied = [];
     generatePosts = 0;
     sessionScript = () => 'SOLVING';
+    sessionFails = () => false;
+    applyReply = (id) => HttpResponse.json(replanSession(id, 'APPLIED'));
     setAccessToken('valid-access');
 
     server.use(
@@ -1311,6 +1341,7 @@ describe('재계획 모드(replan)', () => {
           const id = String(params.sessionId);
           const call = sessionGets[id] ?? 0;
           sessionGets[id] = call + 1;
+          if (sessionFails(id, call)) return errorBody(500);
           return HttpResponse.json(replanSession(id, sessionScript(id, call)));
         }
       ),
@@ -1318,9 +1349,7 @@ describe('재계획 모드(replan)', () => {
         `${BASE}/trips/:tripId/replan-sessions/:sessionId/apply`,
         ({ params }) => {
           applied.push(String(params.sessionId));
-          return HttpResponse.json(
-            replanSession(String(params.sessionId), 'APPLIED')
-          );
+          return applyReply(String(params.sessionId));
         }
       ),
       // 생성 POST — 나가면 안 된다. 핸들러는 "나갔다"를 세기 위해 둔다.
@@ -1332,6 +1361,8 @@ describe('재계획 모드(replan)', () => {
   });
 
   afterEach(() => {
+    // 가짜 타이머 케이스(RS·RC)가 다음 케이스로 새지 않게.
+    jest.useRealTimers();
     server.resetHandlers();
     clearAccessToken();
   });
@@ -1343,9 +1374,12 @@ describe('재계획 모드(replan)', () => {
         mutations: { gcTime: 0 },
       },
     });
+    // 토스트 호스트를 곁에 둔다 — ‹ 토스트(RB)를 "보였다"로 잰다(TRIP-990 하네스).
     function Wrapper({ children }: { children: ReactNode }) {
       return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        <QueryClientProvider client={client}>
+          <WithToastHost>{children}</WithToastHost>
+        </QueryClientProvider>
       );
     }
     // mode 는 주지 않는다 — 재계획 주소에는 mode 가 없다(DraftPage·409 넘김이 `replan:'1'` 만 싣는다).
@@ -1359,6 +1393,17 @@ describe('재계획 모드(replan)', () => {
   function settle(ms = 300): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+  /** 가짜 타이머 아래에서 시간을 흘리고 그 사이 약속(axios→MSW→TanStack)을 함께 푼다. */
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  const FAILED = 'itinerary-generating-failed';
+  const RETRY = 'itinerary-generating-retry';
+  const PROGRESS = 'itinerary-generating-progress';
 
   it('RP1 오늘(보던 날 없음)이면 PARTIAL_SLOTS·targetDate null 로 시작 POST 1회 · 진행 얼굴 · 생성 POST 0', async () => {
     renderReplan();
@@ -1406,14 +1451,14 @@ describe('재계획 모드(replan)', () => {
     expect(applied).toEqual([]);
     expect(mockReplace).not.toHaveBeenCalled();
 
-    // 단언 ② 초안이 오면 확인 없이 바로 반영 → 추천안.
+    // 단언 ② 초안이 오면 확인 없이 바로 반영 → 추천안. 다시 짠 날(보던 날 없음 = 오늘)로 연다(W2).
     await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1), {
       timeout: 6000,
     });
     expect(applied).toEqual([SESSION_ID]);
     expect(mockReplace).toHaveBeenCalledWith({
       pathname: '/trips/[tripId]/itinerary/draft',
-      params: { tripId: TRIP_ID },
+      params: { tripId: TRIP_ID, day: TODAY },
     });
 
     // 단언 ③ 리렌더·폴링으로 apply 가 두 번 나가지 않는다.
@@ -1421,6 +1466,18 @@ describe('재계획 모드(replan)', () => {
     expect(applied).toEqual([SESSION_ID]);
     expect(generatePosts).toBe(0);
   }, 15_000);
+
+  it('RP2b 보던 날을 다시 짰으면 추천안을 그 날로 연다 (W2)', async () => {
+    sessionScript = () => 'DRAFT';
+
+    renderReplan('2026-10-20');
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/draft',
+      params: { tripId: TRIP_ID, day: '2026-10-20' },
+    });
+  });
 
   it('RP3 NO_SOLUTION 이면 원 일정 유지 안내 + [닫기](=홈) · apply 0', async () => {
     sessionScript = () => 'NO_SOLUTION';
@@ -1489,10 +1546,210 @@ describe('재계획 모드(replan)', () => {
     expect(applied).toEqual([SESSION_ID_2]);
     expect(mockReplace).toHaveBeenCalledWith({
       pathname: '/trips/[tripId]/itinerary/draft',
-      params: { tripId: TRIP_ID },
+      params: { tripId: TRIP_ID, day: TODAY },
     });
     expect(generatePosts).toBe(0);
   }, 15_000);
+
+  describe('🔴 RF · 실패 얼굴로 가는 나머지 네 갈래 (#1235 사후 리뷰 B1 · INV-4)', () => {
+    it('RF1 시작 POST 가 500(사유 없는 실패)이면 실패 얼굴 + [다시 시도] → 다시 시작해 진행 얼굴로 돌아온다', async () => {
+      startQueue = [() => errorBody(500)];
+
+      renderReplan();
+
+      // 세션 id 를 못 받아 폴링이 시작조차 안 하는 갈래 — 진행 얼굴에 서면 침묵이다.
+      expect(await screen.findByTestId(FAILED)).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-generating-refused')).toBeNull();
+      expect(sessionGets).toEqual({});
+
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(sessionGets[SESSION_ID]).toBe(1));
+      expect(startBodies).toHaveLength(2);
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(screen.getByTestId(PROGRESS)).toBeOnTheScreen();
+      expect(generatePosts).toBe(0);
+    });
+
+    it('RF2 짜는 중에 세션 조회가 오류(500)면 실패 얼굴이고 그 뒤로 더 묻지 않는다 — 남은 SOLVING 으로 진행 얼굴에 머물지 않는다 (W3 겸)', async () => {
+      jest.useFakeTimers();
+      sessionFails = (_id, call) => call === 1;
+
+      renderReplan();
+      await advance(3_000);
+      expect(screen.getByTestId(FAILED)).toBeOnTheScreen();
+      expect(sessionGets[SESSION_ID]).toBe(2);
+
+      await advance(30_000);
+      expect(sessionGets[SESSION_ID]).toBe(2);
+      expect(applied).toEqual([]);
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it('RF3 세션이 CANCELED(다른 요청이 닫음)면 실패 얼굴이다', async () => {
+      sessionScript = () => 'CANCELED';
+
+      renderReplan();
+
+      expect(await screen.findByTestId(FAILED)).toBeOnTheScreen();
+      expect(applied).toEqual([]);
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it.each([409, 500])(
+      'RF4 자동 반영(apply)이 %i 면 실패 얼굴 + [다시 시도] · 추천안으로 가지 않는다',
+      async (status) => {
+        sessionScript = () => 'DRAFT';
+        applyReply = () => errorBody(status, '그 사이 일정이 바뀌었어요.');
+
+        renderReplan();
+
+        // 세션은 DRAFT 라 폴링이 이미 멈췄다 — 이 얼굴이 아니면 진행 얼굴에 영원히 선다.
+        expect(await screen.findByTestId(FAILED)).toBeOnTheScreen();
+        expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+        expect(applied).toEqual([SESSION_ID]);
+        await settle();
+        expect(mockReplace).not.toHaveBeenCalled();
+      }
+    );
+
+    it('RF5 반영 실패 뒤 [다시 시도]면 새 세션이 짜는 동안 진행 얼굴이다 — 지난 반영 실패가 남지 않는다', async () => {
+      startQueue = [
+        () =>
+          HttpResponse.json(replanSession(SESSION_ID, 'SOLVING'), {
+            status: 201,
+          }),
+        () =>
+          HttpResponse.json(replanSession(SESSION_ID_2, 'SOLVING'), {
+            status: 201,
+          }),
+      ];
+      sessionScript = (id) => (id === SESSION_ID ? 'DRAFT' : 'SOLVING');
+      applyReply = (id) =>
+        id === SESSION_ID
+          ? errorBody(409, '그 사이 일정이 바뀌었어요.')
+          : HttpResponse.json(replanSession(id, 'APPLIED'));
+
+      renderReplan();
+      fireEvent.press(await screen.findByTestId(RETRY));
+
+      await waitFor(() => expect(sessionGets[SESSION_ID_2]).toBe(1));
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(screen.getByTestId(PROGRESS)).toBeOnTheScreen();
+      expect(applied).toEqual([SESSION_ID]);
+    });
+  });
+
+  describe('🔴 RS · 폴링은 끝나면 멈춘다 (#1235 사후 리뷰 W3 — 가짜 타이머)', () => {
+    it.each<ReplanSessionStatus>(['DRAFT', 'NO_SOLUTION', 'FAILED'])(
+      'RS1 세션이 %s 로 끝나면 그 뒤로 세션을 더 묻지 않는다',
+      async (terminal) => {
+        jest.useFakeTimers();
+        sessionScript = (_id, call) => (call === 0 ? 'SOLVING' : terminal);
+
+        renderReplan();
+        await advance(3_000);
+        expect(sessionGets[SESSION_ID]).toBe(2);
+
+        await advance(30_000);
+        expect(sessionGets[SESSION_ID]).toBe(2);
+      }
+    );
+    // 조회 오류 뒤 멈춤은 RF2 가 같이 본다.
+  });
+
+  describe('🔴 RC · 대기 상한 2분 (#1235 사후 리뷰 B2 · INV-4 — 가짜 타이머)', () => {
+    // 재계획 AI 시한 25초 + 백엔드 여유. i12(PlanbSolvingPage)의 8분보다 짧다 — 생성 화면이라 기다리게 둘 수 없다.
+    const CAP_MS = 2 * 60 * 1000;
+
+    it('RC1 SOLVING 에 2분 머물면 폴링을 멈추고 실패 얼굴 + [다시 시도] — 직전까지는 진행 얼굴, [다시 시도]는 새 세션', async () => {
+      jest.useFakeTimers();
+
+      renderReplan();
+      await advance(CAP_MS - 10_000);
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(screen.getByTestId(PROGRESS)).toBeOnTheScreen();
+
+      await advance(20_000);
+      expect(screen.getByTestId(FAILED)).toBeOnTheScreen();
+      const gets = sessionGets[SESSION_ID];
+      await advance(60_000);
+      expect(sessionGets[SESSION_ID]).toBe(gets);
+      expect(applied).toEqual([]);
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      // [다시 시도] = 처음부터 새 세션(열린 세션은 새 요청이 닫는다, INV-U4-06) — 상한도 새로 잰다.
+      startQueue = [
+        () =>
+          HttpResponse.json(replanSession(SESSION_ID_2, 'SOLVING'), {
+            status: 201,
+          }),
+      ];
+      fireEvent.press(screen.getByTestId(RETRY));
+      await advance(1_000);
+      expect(startBodies).toHaveLength(2);
+      expect(sessionGets[SESSION_ID_2]).toBe(1);
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(screen.getByTestId(PROGRESS)).toBeOnTheScreen();
+      expect(generatePosts).toBe(0);
+    });
+
+    // 화면이 잠기거나 앱을 바꾼 사이 서버가 이미 끝냈는데, 상한 순간 조회를 꺼서 실패 얼굴이 뜨던 것(#1248 리뷰 W-A).
+    // 상한에 닿으면 실패로 판정하기 **전에 한 번 더** 묻는다 — 결과가 있으면 그대로 반영한다(바로 반영이 사용자 결정).
+    it('RC2 앱이 뒤로 간 사이 서버가 끝났으면, 상한 순간의 마지막 확인으로 실패 얼굴 없이 반영 1회 → 추천안', async () => {
+      jest.useFakeTimers();
+      const t0 = Date.now();
+      // 40초에 서버가 끝난다 — 그 전 조회는 SOLVING.
+      sessionScript = () => (Date.now() - t0 >= 40_000 ? 'DRAFT' : 'SOLVING');
+
+      renderReplan();
+      await advance(10_000);
+      // 앱이 뒤로 갔다 — 주기 조회가 선다(TanStack refetchInterval 은 포커스 없을 때 돌지 않는다, AppProviders 가 AppState 를 물린다).
+      act(() => focusManager.setFocused(false));
+      await advance(CAP_MS + 10_000);
+      act(() => focusManager.setFocused(true));
+      await advance(1_000);
+
+      expect(applied).toEqual([SESSION_ID]);
+      expect(screen.queryByTestId(FAILED)).toBeNull();
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.objectContaining({ pathname: '/trips/[tripId]/itinerary/draft' })
+      );
+      act(() => focusManager.setFocused(undefined));
+    });
+  });
+
+  describe('🔴 RB · ‹ 로 나가면 다시 짜기를 멈췄다고 말한다 (#1235 사후 리뷰 W5)', () => {
+    const TOAST = 'itinerary-generating-replan-stopped-toast';
+
+    afterEach(() => resetToast());
+
+    it('RB1 짜는 중 ‹ → 홈으로 + "다시 짜기를 멈췄어요. 원래 일정을 그대로 둘게요." 토스트 · 반영 0', async () => {
+      renderReplan();
+      await waitFor(() => expect(sessionGets[SESSION_ID]).toBe(1));
+
+      fireEvent.press(screen.getByTestId('itinerary-generating-back'));
+
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(screen.getByTestId(TOAST)).toHaveTextContent(
+        '다시 짜기를 멈췄어요. 원래 일정을 그대로 둘게요.'
+      );
+      expect(applied).toEqual([]);
+    });
+
+    it('RB2 반영 요청이 이미 나간 뒤의 ‹ 엔 "원래 일정 그대로" 토스트를 띄우지 않는다 — 서버가 반영할 수 있다', async () => {
+      sessionScript = () => 'DRAFT';
+      // apply 응답을 붙잡아 둔다 — 요청은 나갔고 아직 답이 없다.
+      applyReply = () => new Promise<Response>(() => undefined);
+
+      renderReplan();
+      await waitFor(() => expect(applied).toEqual([SESSION_ID]));
+
+      fireEvent.press(screen.getByTestId('itinerary-generating-back'));
+
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    });
+  });
 });
 
 // TRIP-1268 · AI 일정 생성 일일 한도 — 클라이언트 임시 장치(BE 일일 한도 + 429 처리 FE 칸이 배포되면 지운다).
