@@ -197,8 +197,8 @@ def validate_groups(groups):
 
 def runtime_manifests(groups, outputs, namespace, embedding_enabled):
     vector = {"TRIPPILOT_VECTOR_DB_URL": (
-        f"postgresql://ai_user:{quote(groups['database']['AI_DB_PASSWORD'], safe='')}"
-        f"@{outputs['database_host']}:5432/ai_kb?sslmode=require"
+        f"postgresql://{outputs['db']['ai_user']}:{quote(groups['database']['AI_DB_PASSWORD'], safe='')}"
+        f"@{outputs['database_host']}:5432/{outputs['db']['kb_db']}?sslmode=require"
     )} if embedding_enabled else {}
     values = {**groups, "ai": {**groups["ai"], **vector}}
     return [{"apiVersion": "v1", "kind": "Secret", "type": "Opaque",

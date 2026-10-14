@@ -23,6 +23,7 @@ def outputs():
         "redis_host": "redis.example.cache.amazonaws.com",
         "ecr_repositories": {name: f"123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/trippilot-dev/{name}" for name in ("backend", "ai", "embedding")},
         "app_secret_arns": {name: f"arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:{name}-abc" for name in ("backend", "ai", "database", "shared")},
+        "db": dict(runtime.TARGETS["prod"]["db"]),
     }
 
 
@@ -192,6 +193,54 @@ class SecretTests(unittest.TestCase):
             with self.assertRaises(ValueError) as raised:
                 runtime_secrets.get_secret(shell, "ap-northeast-2", "arn")
             self.assertNotIn(secret_string, str(raised.exception))
+
+
+class TargetTests(unittest.TestCase):
+    """개발·운영 분리(2026-10-15) — 대상이 시크릿 그릇·DB·역할을 통째로 바꾼다."""
+
+    def raw(self, with_dev=True):
+        values = {key: value for key, value in outputs().items() if key != "db"}
+        if with_dev:
+            values["dev_target_secret_arns"] = {name: f"arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:trippilot/dev/dev-target/{name}-x"
+                                                for name in ("backend", "ai", "database", "shared")}
+        return {key: {"value": value} for key, value in values.items()}
+
+    def test_dev_target_reads_only_its_own_secrets_and_names(self):
+        dev = runtime.parse_outputs(self.raw(), "dev")
+        self.assertTrue(all("/dev-target/" in arn for arn in dev["app_secret_arns"].values()))
+        prod = runtime.parse_outputs(self.raw(), "prod")
+        self.assertFalse(any("/dev-target/" in arn for arn in prod["app_secret_arns"].values()))
+        # 역할·DB 이름이 하나라도 겹치면 개발 파드가 운영 DB 에 접속할 수 있다
+        self.assertFalse(set(dev["db"].values()) & set(prod["db"].values()))
+
+    def test_dev_target_without_its_secrets_fails_instead_of_falling_back_to_prod(self):
+        with self.assertRaises(ValueError):
+            runtime.parse_outputs(self.raw(with_dev=False), "dev")
+        with self.assertRaises(ValueError):
+            runtime.parse_outputs(self.raw(), "staging")
+
+    def test_target_names_reach_bootstrap_vector_url_and_helm(self):
+        dev = runtime.parse_outputs(self.raw(), "dev")
+        manifests = runtime_db.bootstrap_manifests(dev, "trippilot-dev", "1-1", {"username": "m", "password": "p"},
+                                                   {"DB_PASSWORD": "a", "DB_MIGRATE_PASSWORD": "b", "AI_DB_PASSWORD": "c"})
+        env = {item["name"]: item.get("value") for item in next(m for m in manifests if m["kind"] == "Job")
+               ["spec"]["template"]["spec"]["containers"][0]["env"]}
+        self.assertEqual((env["APP_DB"], env["KB_DB"], env["APP_USER"], env["MIGRATE_USER"], env["AI_USER"]),
+                         ("trippilot_dev", "ai_kb_dev", "app_user_dev", "app_migrate_dev", "ai_user_dev"))
+        groups = {"backend": {}, "ai": {}, "database": {"AI_DB_PASSWORD": "pw"}, "shared": {}}
+        ai = next(m for m in runtime_secrets.runtime_manifests(groups, dev, "trippilot-dev", True) if m["metadata"]["name"] == "trippilot-ai")
+        self.assertIn("//ai_user_dev:pw@", ai["stringData"]["TRIPPILOT_VECTOR_DB_URL"])
+        self.assertTrue(ai["stringData"]["TRIPPILOT_VECTOR_DB_URL"].split("?")[0].endswith("/ai_kb_dev"))
+        arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+        config = runtime.helm_values(dev, "sha-1", arn, "dev-api.example.com", False)["config"]
+        self.assertEqual((config["databaseName"], config["databaseUser"], config["databaseMigrateUser"]),
+                         ("trippilot_dev", "app_user_dev", "app_migrate_dev"))
+
+    def test_bootstrap_sql_has_no_hardcoded_role_or_database(self):
+        sql = (Path(runtime_db.__file__).with_name("bootstrap.sql")).read_text()
+        body = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith(("--", "\\getenv")))
+        for name in ("app_user", "app_migrate", "ai_user", "trippilot", "ai_kb"):
+            self.assertNotRegex(body, rf"(?<![:'_a-z]){name}(?![_a-z])", name)
 
 
 class BootstrapTests(unittest.TestCase):

@@ -66,6 +66,11 @@ class EnvironmentTfvarsTests(unittest.TestCase):
         # 보존을 안 적으면 변수 기본값 7일로 떨어진다 — 결정은 90일이다.
         self.assertEqual(dev.get('container_logs_retention_days'), '90')
 
+    def test_dev_keeps_the_dev_target_secrets(self):
+        """개발 대상(trippilot-dev 네임스페이스)은 이 그릇들만 읽는다 — 줄이 빠지면 다음 apply 가 그릇을 지워
+        개발 대상의 값(DB 비밀번호 등)이 경고 없이 사라진다. tftest 는 스스로 변수를 주므로 이 줄을 못 본다."""
+        self.assertEqual(assignments('dev').get('dev_target_enabled'), 'true')
+
     def test_environment_field_matches_filename(self):
         """`environment` 값이 파일 이름과 같아야 한다 — 어긋나면 한 환경이 다른 환경의
         리소스 이름(`local.name`)을 들고 apply 된다."""

@@ -17,12 +17,31 @@ import runtime_smoke
 HOST_PATTERN = r"(?=.{1,253}$)[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?"
 
 
-def parse_outputs(raw):
+# 배포 대상(2026-10-15 개발·운영 분리). 같은 스택(클러스터·DB 장비)을 쓰고 **시크릿·DB·DB 역할**만 다르다.
+# Postgres 역할은 장비 단위라 이름까지 갈라야 한다 — 같은 역할이면 개발 파드가 운영 DB 비밀번호를 쥔다.
+# prod 이름은 출시 때 그대로다(바꾸면 기존 역할·DB 를 버리게 된다).
+TARGETS = {
+    "prod": {"secret_output": "app_secret_arns", "db": {
+        "app_db": "trippilot", "kb_db": "ai_kb",
+        "app_user": "app_user", "migrate_user": "app_migrate", "ai_user": "ai_user"}},
+    "dev": {"secret_output": "dev_target_secret_arns", "db": {
+        "app_db": "trippilot_dev", "kb_db": "ai_kb_dev",
+        "app_user": "app_user_dev", "migrate_user": "app_migrate_dev", "ai_user": "ai_user_dev"}},
+}
+
+
+def parse_outputs(raw, target="prod"):
+    """대상의 시크릿 그릇을 `app_secret_arns` 자리에 끼워 넣는다 — 소비자(sync·bootstrap)는 대상을 몰라도 된다."""
+    if target not in TARGETS:
+        raise ValueError("Unknown deploy target")
+    secret_output = TARGETS[target]["secret_output"]
     required = ("aws_region", "cluster_name", "database_host", "database_master_secret_arn",
-                "redis_host", "ecr_repositories", "app_secret_arns")
+                "redis_host", "ecr_repositories", secret_output)
     if any(key not in raw or not isinstance(raw[key], dict) or "value" not in raw[key] for key in required):
         raise ValueError("Missing required Terraform outputs; run terraform output -json")
-    result = {key: raw[key]["value"] for key in required}
+    result = {key: raw[key]["value"] for key in required if key != secret_output}
+    result["app_secret_arns"] = raw[secret_output]["value"]
+    result["db"] = dict(TARGETS[target]["db"])
     for key in ("database_host", "redis_host"):
         if not isinstance(result[key], str) or not re.fullmatch(HOST_PATTERN, result[key]):
             raise ValueError(f"Invalid Terraform output {key}")
@@ -57,7 +76,9 @@ def helm_values(outputs, image_tag, certificate_arn, hostname, embedding_enabled
     return {
         "images": {name: {"repository": repository, "tag": tags.get(name, image_tag)}
                    for name, repository in outputs["ecr_repositories"].items()},
-        "config": {"databaseHost": outputs["database_host"], "redisHost": outputs["redis_host"]},
+        "config": {"databaseHost": outputs["database_host"], "redisHost": outputs["redis_host"],
+                   "databaseName": outputs["db"]["app_db"], "databaseUser": outputs["db"]["app_user"],
+                   "databaseMigrateUser": outputs["db"]["migrate_user"]},
         "gateway": {"certificateArn": certificate_arn, "hostname": hostname},
         "embedding": {"enabled": embedding_enabled},
     }
@@ -78,6 +99,7 @@ def parser():
                    "load-pois"):
         sub = commands.add_parser(action)
         sub.add_argument("--namespace", default="trippilot")
+        sub.add_argument("--target", choices=tuple(TARGETS), default="prod")
         if action == "load-pois":
             # 기본은 upsert 만. 퇴출(LOST)은 입력으로만 켜고, 대량 정리 가드(409)는 여기서 넘길 수 없다.
             sub.add_argument("--close-missing", action="store_true")
@@ -103,7 +125,7 @@ def main(argv=None):
     args = parser().parse_args(argv)
     if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", args.namespace):
         raise ValueError("Invalid Kubernetes namespace")
-    outputs = parse_outputs(json.loads(args.outputs.read_text())) if hasattr(args, "outputs") else None
+    outputs = parse_outputs(json.loads(args.outputs.read_text()), args.target) if hasattr(args, "outputs") else None
     if args.action == "ensure-namespace":
         ensure_namespace(args.namespace, command)
     elif args.action == "sync-secrets":

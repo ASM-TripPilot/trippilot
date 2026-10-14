@@ -41,8 +41,12 @@ def bootstrap_manifests(outputs, namespace, run_id, master, database):
         "command": ["psql", "--no-psqlrc", "--no-password", "--file=/bootstrap/bootstrap.sql"],
         "securityContext": security,
         "env": [{"name": key, "value": value} for key, value in {
+            # 접속은 RDS 가 만든 기본 DB(trippilot)로 한다 — 대상 DB 는 스크립트가 만들고 \connect 로 옮겨 간다.
             "PGHOST": outputs["database_host"], "PGPORT": "5432", "PGDATABASE": "trippilot",
             "PGSSLMODE": "require", "PGCONNECT_TIMEOUT": "15", "HOME": "/tmp",
+            "APP_DB": outputs["db"]["app_db"], "KB_DB": outputs["db"]["kb_db"],
+            "APP_USER": outputs["db"]["app_user"], "MIGRATE_USER": outputs["db"]["migrate_user"],
+            "AI_USER": outputs["db"]["ai_user"],
         }.items()] + [{"name": key, "valueFrom": {"secretKeyRef": {"name": name, "key": key}}} for key in secret_values],
         "resources": {"requests": {"cpu": "100m", "memory": "128Mi"}, "limits": {"cpu": "500m", "memory": "256Mi"}},
         "volumeMounts": [{"name": "sql", "mountPath": "/bootstrap", "readOnly": True}, {"name": "tmp", "mountPath": "/tmp"}],
