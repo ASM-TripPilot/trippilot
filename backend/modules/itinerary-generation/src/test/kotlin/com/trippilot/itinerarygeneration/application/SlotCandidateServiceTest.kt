@@ -37,6 +37,7 @@ import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.property.Arb
@@ -143,7 +144,8 @@ class SlotCandidateServiceTest : StringSpec({
         scored: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(), // 기본 빈 풀 — 종전 경로 그대로
         candidates: CandidatePoolPort = pool,
         tripFacade: TripFacade = trips,
-    ) = SlotCandidateService(tripFacade, Repo(stored), agent, surfaces, candidates, scored, clock, accountPrefs, NoHints)
+        at: Clock = clock,
+    ) = SlotCandidateService(tripFacade, Repo(stored), agent, surfaces, candidates, scored, at, accountPrefs, NoHints)
 
     /**
      * 공개 퍼사드(U8 G-U8-2 · TRIP-1376) — 도우미가 보는 것은 이 계약뿐이다. **REST 와 같은 서비스**를 타는지가
@@ -325,13 +327,18 @@ class SlotCandidateServiceTest : StringSpec({
         }
     }
 
-    "확정된 일정에는 후보를 제안하지 않는다 — 골라도 편집이 막힌다" {
+    /** 잠금 범위는 편집(EditItineraryService)과 같다 — 확정 일정은 여행 시작 전만 잠긴다(TRIP-999 결정 (a)). */
+    "확정된 일정은 여행 시작 전에는 후보를 제안하지 않고, 시작한 날부터는 제안한다" {
         val confirmed = itinerary.confirm(
             itinerary.days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }, now,
         )
-        shouldThrow<ConflictDetected> {
-            service(CapturingAgent(), stored = confirmed).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
-        }
+        val request = RequestSlotCandidates(SlotKey.of(d1, target), null, null, null)
+        // 여행 첫날 00:00 KST 의 1초 전 — 잠금 경계는 서울 날짜로 잰다
+        val eve = Clock.fixed(Instant.parse("2026-07-31T14:59:59Z"), ZoneOffset.UTC)
+        val firstDay = Clock.fixed(Instant.parse("2026-07-31T15:00:00Z"), ZoneOffset.UTC)
+
+        shouldThrow<ConflictDetected> { service(CapturingAgent(), stored = confirmed, at = eve).propose(acc, tripId, request) }
+        service(CapturingAgent(), stored = confirmed, at = firstDay).propose(acc, tripId, request).candidates.shouldNotBeEmpty()
     }
 
     "같은 날 같은 장소가 둘이면 어느 슬롯인지 특정할 수 없어 409" {

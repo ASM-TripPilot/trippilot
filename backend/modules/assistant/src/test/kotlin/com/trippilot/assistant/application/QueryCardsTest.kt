@@ -92,12 +92,14 @@ class QueryCardsTest : StringSpec({
         rows(card.payload, "summary") shouldContainExactly listOf("여행" to "부산 당일", "숙소" to "미등록", "일정" to "1일 중 1일 채움")
     }
 
-    /** 후보 경로는 확정된 일정을 받지 않는다 — 그때 버튼을 주면 눌러도 "바꿀 수 없다"만 돌아온다. */
-    "다음 장소 — 다른 곳 추천은 확정되지 않은 일정에만 준다" {
+    /** 확정 일정은 여행이 시작돼야 바뀐다(편집·후보 경로의 잠금) — 그 전에 버튼을 주면 눌러도 "바꿀 수 없다"만 돌아온다. */
+    "다음 장소 — 다른 곳 추천은 확정 전 일정과 여행이 시작된 확정 일정에 준다" {
         val data = FakeTripData(acc, slots = listOf(plannedSlot(d2, 0, "14:00", "카페 모카")))
-
         cards(data).nextSlot(ctx()).quickReplies!!.first().let { it.label to it.params["slotKey"] } shouldBe ("다른 곳 추천" to data.slots.single().slotKey)
-        cards(data.apply { status = "CONFIRMED" }).nextSlot(ctx()).quickReplies shouldBe null
+        data.status = "CONFIRMED"
+        cards(data).nextSlot(ctx()).quickReplies?.first()?.label shouldBe "다른 곳 추천" // 여행 이틀째(d1 시작)
+        // 여행 첫날을 내일로 옮겨 "확정했지만 아직 시작 전"을 만든다
+        cards(data).nextSlot(ctx().let { it.copy(trip = it.trip!!.copy(startDate = d2.plusDays(1))) }).quickReplies shouldBe null
         // 확정 여부를 못 읽었으면 주지 않는다 — 카드 자체는 그대로 나간다
         cards(data.apply { status = "PLANNED"; failItinerary = true }).nextSlot(ctx()).let { it.kind to it.quickReplies } shouldBe (MessageKind.INFO to null)
     }

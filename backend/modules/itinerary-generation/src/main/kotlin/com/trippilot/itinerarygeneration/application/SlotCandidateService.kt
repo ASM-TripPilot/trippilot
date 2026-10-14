@@ -31,6 +31,8 @@ import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
 import org.springframework.stereotype.Service
 import java.time.Clock
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
 
@@ -91,12 +93,14 @@ class SlotCandidateService(
             throw ValidationFailed(listOf(FieldError("radiusM", "탐색 반경은 ${MAX_RADIUS_M / 1000}km 이하입니다.")))
         }
 
-        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
+        val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val itinerary = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
 
-        // 적용할 수 없는 일정에 후보를 제안하지 않는다 — 골라도 편집이 409 로 막힌다.
-        if (itinerary.status != ItineraryStatus.PLANNED) {
-            throw ConflictDetected(message = "확정된 일정은 슬롯을 교체할 수 없습니다.")
+        // 적용할 수 없는 일정에 후보를 제안하지 않는다 — 골라도 편집이 409 로 막힌다. 그래서 잠금 범위는 편집과
+        // **같아야 한다**: 확정 일정은 여행 시작 전만 잠긴다(TRIP-999 결정 (a), EditItineraryService). 여기만
+        // 확정 전체를 막아 두면 여행 중에는 고칠 수는 있는데 바꿀 곳을 고를 수가 없었다.
+        if (itinerary.status == ItineraryStatus.CONFIRMED && LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE) < period.startDate) {
+            throw ConflictDetected(message = "확정된 일정은 여행이 시작되기 전에는 슬롯을 교체할 수 없습니다.")
         }
 
         // 생성 중(PARTIAL) 일괄 409 를 없앴다(TRIP-1000) — day1 조기 노출의 취지가 "보고 고칠 수
@@ -347,6 +351,8 @@ class SlotCandidateService(
         return copy(preferenceProfile = profile, companionType = ctx.companionType)
     }
     companion object {
+        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+
         /**
          * 3s → 15s (2026-09-08, 팀 결정). 사용자가 화면에서 기다리는 동작이라 처음엔 생성(20s)보다
          * 훨씬 짧게 잡았는데, 그 예산에서는 AI 가 이 경로에 배정한 상위 티어 모델(`gpt-5.6-sol`)이
