@@ -81,6 +81,7 @@ class HttpEmbeddingAdapter:
         *,
         model: str,
         dim: int = 1024,
+        max_texts: int = 256,
     ) -> None:
         """`model` 은 **필수**다 — 기본값을 주면 대조가 형식적이 된다.
 
@@ -96,18 +97,22 @@ class HttpEmbeddingAdapter:
         self._model = model
         self.model_id = model  # collection 이름에 들어간다 (TRIP-519)
         self.dim = dim
+        # 서비스의 한 요청 건수 상한(`ai/embedding/app.py` MAX_TEXTS, 넘기면 413) — 기본을 서비스 기본과 맞춘다.
+        self._max_texts = max_texts
 
     def embed(self, text: str) -> tuple[float, ...]:
         return self.embed_batch([text])[0]
 
     def embed_batch(self, texts: Sequence[str]) -> tuple[tuple[float, ...], ...]:
-        if not texts:
-            return ()
-        payload = self._call(list(texts))
-        self._verify(payload, len(texts))
-        return tuple(
-            tuple(float(x) for x in vector) for vector in payload["vectors"]
-        )
+        # 상한 단위로 나눠 보내고 순서대로 잇는다 — 질문뱅크(485문장)를 한 번에 보내 DEV 가 413 을 냈다.
+        texts = list(texts)
+        out: list[tuple[float, ...]] = []
+        for start in range(0, len(texts), self._max_texts):
+            chunk = texts[start : start + self._max_texts]
+            payload = self._call(chunk)
+            self._verify(payload, len(chunk))
+            out.extend(tuple(float(x) for x in vector) for vector in payload["vectors"])
+        return tuple(out)
 
     # ── 내부 ────────────────────────────────────────────────────────────
     def _call(self, texts: list[str]) -> Mapping[str, Any]:

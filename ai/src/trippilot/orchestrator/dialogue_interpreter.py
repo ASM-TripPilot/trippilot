@@ -179,7 +179,7 @@ class TripView:
 
 
 class BankIndex:
-    """질문뱅크를 **현재 임베딩 모델로** 메모리 스토어에 색인한다 — 첫 해석 때 한 번.
+    """질문뱅크를 **현재 임베딩 모델로** 메모리 스토어에 색인한다 — 기동 때 백그라운드로 한 번(`warm`).
 
     실 DB 에 적재하지 않는 이유: 485문장이라 기동 뒤 한 번 임베딩하면 끝나고, 매번 현재 모델로
     새로 만드니 "모델을 바꿨는데 옛 벡터가 남아 엉터리 순위를 낸다"(TRIP-519 가 KB 에서 막은
@@ -212,9 +212,13 @@ class BankIndex:
         return self._indexed
 
     def ensure(self) -> None:
+        """색인을 한 번 시도한다. 다른 스레드가 색인 중이면 **기다리지 않고** 돌아간다 — 기다리면 그 요청이
+        색인 시간(원격 임베딩 485문장)만큼 서서 백엔드 해석 상한을 넘긴다."""
         if self._indexed or self._embedding is None:
             return
-        with self._lock:
+        if not self._lock.acquire(blocking=False):
+            return
+        try:
             if self._indexed or self._clock() < self._next_try:
                 return
             try:
@@ -226,6 +230,15 @@ class BankIndex:
                 return
             self._indexed = True
             log.info("질문뱅크 색인 완료 — %d문장", n)
+        finally:
+            self._lock.release()
+
+    def warm(self) -> None:
+        """색인을 백그라운드로 시작한다 — 기동 때 한 번, 그리고 아직 색인 전이면 해석마다(재시도 간격·중복은
+        `ensure` 가 거른다). 해석 요청은 색인을 직접 하지 않는다: 첫 요청이 색인 시간을 떠안으면 상한을 넘긴다."""
+        if self._indexed or self._embedding is None:
+            return
+        threading.Thread(target=self.ensure, name="bank-index", daemon=True).start()
 
 
 # ── 해석기 ──────────────────────────────────────────────────────────────────
@@ -248,7 +261,7 @@ class DialogueInterpreter:
         token = _llm_calls.set(counter)
         try:
             if self._bank is not None:
-                self._bank.ensure()
+                self._bank.warm()  # 색인 전이면 백그라운드로 — 이번 해석은 1차 없이 간다
             result = None
             if context.pending is not None:
                 result = self._answer(utterance, context, trip)
