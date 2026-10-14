@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import type { PlaceCardVM } from '../model';
 
@@ -53,7 +54,10 @@ export function PlaceRailCard({
           <Image
             testID={`explore-place-card-image-${card.poiId}`}
             source={{ uri: card.imageUrl }}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={card.poiId}
+            transition={120}
             className="h-[120px] w-full rounded-card bg-surface-strong"
           />
         ) : (

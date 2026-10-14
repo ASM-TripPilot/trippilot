@@ -9,7 +9,7 @@ import {
   act,
   within,
 } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { AccessibilityInfo, Text } from 'react-native';
 
 import { server } from '@/mocks/server';
 import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
@@ -491,11 +491,12 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
   });
 
   /**
-   * 여행 중 [다시 짜기]는 생성 화면을 거치지 않고 곧장 Plan-B 재계획 요청(i04)을 연다. 서버는 여행 중
-   * 재생성을 409 로 거절하므로(BE `guardTripPeriod` — 생성 실패 일정만 예외) 생성 화면으로 보내면 헛 POST 뒤에야
-   * 넘어갔다. 날짜는 실제 오늘(KST) 기준으로 짠다 — 페이지가 벽시계로 여행 중인지 판정한다.
+   * 여행 중 [다시 짜기] — 확정·초안 구분 없이 **모달 없이** 생성 화면을 재계획 모드(`replan:'1'`)로 연다(2026-10-14
+   * 사용자 결정). 그 화면이 재계획(Plan-B → ScheduleAgent)을 돌려 바로 반영하고 추천안으로 온다(GeneratingPage
+   * 「재계획 모드」). 보던 날이 오늘 뒤면 그 날을 싣는다. 생성 실패(FAILED)·MANUAL·여행 전후는 종전 그대로다.
+   * 날짜는 실제 오늘(KST) 기준 — 페이지가 벽시계로 판정한다.
    */
-  describe('🔴 P1~P4 — 여행 중 다시 짜기는 곧장 Plan-B 로 간다', () => {
+  describe('🔴 P1~P4 — 여행 중 다시 짜기: 확정·초안 모두 생성 화면 재계획 모드 (모달 없음)', () => {
     const today = seoulDate(new Date());
     const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000)
       .toISOString()
@@ -517,29 +518,46 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
     }
 
-    it('P1 오늘을 보며 누르면 허브 replace → 재계획 요청 push 를 이 순서로 한 번씩 · 생성 화면·POST 0', async () => {
+    it('P1 초안은 여행 중이면 생성 화면 재계획 모드로 replace 1회 · 모달 push 0 · 이 화면 POST 0', async () => {
       renderPage();
       await pressRetry();
 
-      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-      expect(mockReplace).toHaveBeenCalledTimes(1);
-      expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/live',
-        params: { tripId: TRIP_ID },
-      });
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/planb',
-        params: { tripId: TRIP_ID },
-      });
-      expect(mockReplace.mock.invocationCallOrder[0]).toBeLessThan(
-        mockPush.mock.invocationCallOrder[0]
-      );
+      // 이동이 일어날 때까지 기다린 뒤 **어디로** 갔는지 잰다.
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       await sleep(50);
-      expect(generatingMoves()).toBe(0);
+      expect(generatingMoves()).toBe(1);
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1' }, // 오늘을 보면 날짜를 싣지 않는다
+      });
+      expect(mockPush).not.toHaveBeenCalled();
       expect(log.hitsFor('POST', '/itinerary')).toBe(0);
     });
 
-    it('P2 내일 칩을 보며 누르면 그 날을 다시 짠다 — 허브도 그 날로 연다', async () => {
+    // 둘째 날 이후의 여행 초안은 1일차(지난 날)로 열린다 — 가장 흔한 모양이다. 지난 날은 싣지 않는다(재계획은 오늘).
+    it('P1c 어제 출발한 여행의 초안을 기본(1일차·지난 날)으로 보며 누르면 날짜를 싣지 않는다', async () => {
+      const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      tripScript = () => trip({ startDate: yesterday, endDate: tomorrow });
+      itineraryScript = () =>
+        itinerary({
+          days: daysOf([yesterday, today, tomorrow], (date) => [
+            slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+          ]),
+          generationState: 'COMPLETE',
+        });
+      renderPage();
+      await pressRetry();
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1' },
+      });
+    });
+
+    it('P1b 초안에서 내일 칩을 보며 누르면 그 날을 재계획 모드에 싣는다', async () => {
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
       fireEvent.press(screen.getByTestId('sheet-daychip-1'));
@@ -548,18 +566,38 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       );
       fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
 
-      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/live',
-        params: { tripId: TRIP_ID, day: tomorrow },
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1', targetDate: tomorrow },
       });
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/planb',
-        params: { tripId: TRIP_ID, targetDate: tomorrow },
-      });
+      expect(mockPush).not.toHaveBeenCalled();
     });
 
-    it('P3 확정 일정도 여행 중이면 Plan-B 로 간다 — 재계획은 확정을 풀지 않는다', async () => {
+    it('P2 확정 일정에서 내일 칩을 보며 누르면 그 날을 재계획 모드로 다시 짠다', async () => {
+      itineraryScript = () =>
+        itinerary({
+          days: inTripDays,
+          generationState: 'COMPLETE',
+          status: 'CONFIRMED',
+        });
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '2일차'
+      );
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1', targetDate: tomorrow },
+      });
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('P3 확정 일정도 여행 중이면 재계획 모드로 replace 1회 — 허브·모달로 가지 않는다 · 생성 POST 0', async () => {
       itineraryScript = () =>
         itinerary({
           days: inTripDays,
@@ -569,21 +607,56 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       renderPage();
       await pressRetry();
 
-      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/planb',
-        params: { tripId: TRIP_ID },
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, replan: '1' },
       });
-      expect(generatingMoves()).toBe(0);
+      await sleep(50);
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
     });
 
-    it('P4 생성 실패(FAILED) 일정은 여행 중이어도 서버가 재생성을 받으므로 생성 화면으로 간다', async () => {
+    // #1235 사후 리뷰 W2 — 자동 반영 뒤 생성 화면이 `day` 를 실어 보낸다. 그 날로 열려야 바뀐 날이 바로 보인다.
+    it('P5 라우트가 준 날(day)로 처음 연다 — 없으면 종전대로 데이터가 있는 첫 날', async () => {
+      renderWithQueryClient(
+        <DraftPage tripId={TRIP_ID} day={tomorrow} />,
+        newTestQueryClient({ gcTime: 0 })
+      );
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '2일차'
+      );
+    });
+
+    it('P5b day 가 데이터 없는 날이면 데이터가 있는 첫 날로 연다 (빈 날에 갇히지 않는다)', async () => {
+      itineraryScript = () =>
+        itinerary({
+          days: daysOf([today], (date) => [
+            slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+          ]),
+          generationState: 'COMPLETE',
+        });
+      renderWithQueryClient(
+        <DraftPage tripId={TRIP_ID} day={tomorrow} />,
+        newTestQueryClient({ gcTime: 0 })
+      );
+      expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
+        '1일차'
+      );
+    });
+
+    it('P4 생성 실패(FAILED) 일정은 여행 중이어도 종전대로 생성 화면(FULLY_AI)으로 간다 — 재계획 모드 아님', async () => {
       itineraryScript = () =>
         itinerary({ days: inTripDays, generationState: 'FAILED' });
       renderPage();
       await pressRetry();
 
       await waitFor(() => expect(generatingMoves()).toBe(1));
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+      });
       expect(mockPush).not.toHaveBeenCalled();
     });
   });
@@ -2585,6 +2658,8 @@ describe('이 여행 생성 중 확인', () => {
   let eventLog: string[] = [];
   /** T1 일정 GET 응답(케이스가 정한다). */
   let ownItinerary: () => Itinerary;
+  /** T1 여행 GET 응답 — 기본은 지난 고정 기간(여행 중 아님). D5 만 오늘을 품게 바꾼다. */
+  let ownTrip: () => Trip;
 
   const count = (prefix: string): number =>
     eventLog.filter((line) => line.startsWith(prefix)).length;
@@ -2596,9 +2671,10 @@ describe('이 여행 생성 중 확인', () => {
     mockBack.mockClear();
     setAccessToken('valid-access');
     ownItinerary = completeThreeDays;
+    ownTrip = () => trip();
 
     serveItinerary(server, {
-      trip: () => trip(),
+      trip: () => ownTrip(),
       itinerary: () => ownItinerary(),
     });
     server.use(
@@ -2718,6 +2794,31 @@ describe('이 여행 생성 중 확인', () => {
         screen.queryByTestId('itinerary-draft-inprogress-confirm')
       ).toBeNull();
       await settle();
+      expect(count('POST')).toBe(0);
+    });
+  });
+
+  describe('🔴 D5 · #1235 사후 리뷰 W1 — 여행 중이어도 이 여행이 생성 중이면 재계획보다 확인이 먼저다', () => {
+    it('여행 중 + 생성 중 빈 얼굴 [다시 시도] → 확인부터(이동 0) → [계속]이면 생성 화면(FULLY_AI)으로 · 재계획 모드 아님', async () => {
+      // 준비 — 오늘이 여행 기간 안이고, 1일차도 아직 안 온 생성 중(★4). 재계획으로 보내면 "오늘 일정이 없다" 409 막다른 얼굴이다.
+      const today = seoulDate(new Date());
+      ownTrip = () => trip({ startDate: today, endDate: today });
+      ownItinerary = ownGenerating;
+
+      renderPage();
+      await pressDraftRetry();
+
+      expect(
+        await screen.findByTestId('itinerary-draft-inprogress-confirm')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      fireEvent.press(
+        screen.getByTestId('itinerary-draft-inprogress-confirm-continue')
+      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith(EXPECTED_ROUTE);
       expect(count('POST')).toBe(0);
     });
   });
@@ -4305,4 +4406,99 @@ describe('같은 날 같은 장소 두 번', () => {
       ).toEqual([D1_KM, D2_KM]);
     }
   );
+});
+
+// TRIP-1385 · 완성 일정 공개 — 생성 직후 첫 진입에만 경로 그려지기 옵션과 카드 등장이 걸린다.
+describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
+  const reduceMotionMock = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
+
+  function renderRevealPage(reveal: boolean) {
+    return renderWithQueryClient(
+      <DraftPage tripId={TRIP_ID} reveal={reveal} />,
+      newTestQueryClient({ gcTime: 0 })
+    );
+  }
+
+  /** `entering`(reanimated 등장 애니메이션)이 걸린 노드 수 — 카드 + 거리 커넥터 묶음. */
+  function enteringCount(): number {
+    return screen.root.findAll((node) => node.props?.entering != null).length;
+  }
+
+  beforeEach(() => {
+    setAccessToken('valid-access');
+    reduceMotionMock.mockResolvedValue(false);
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () =>
+        itinerary({
+          days: daysOf([DAY1, DAY2], (date) => [
+            slot(`a-${date}`, { nameKo: `${date} 첫 장소` }),
+            slot(`b-${date}`, { nameKo: `${date} 둘째 장소` }),
+          ]),
+          generationState: 'COMPLETE',
+        }),
+    });
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+    act(() => {
+      clearAccessToken();
+    });
+  });
+
+  it('생성 직후 첫 진입이면 지도에 그려지기 옵션이 켜지고 카드에 등장 애니메이션이 걸린다', async () => {
+    renderRevealPage(true);
+
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(true);
+  });
+
+  it('다른 진입(목록·재진입)이면 옵션도 등장도 없다', async () => {
+    renderRevealPage(false);
+
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    expect(enteringCount()).toBe(0);
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
+  });
+
+  it('이미 재생된 뒤 일차 칩을 바꾸면 다시 재생하지 않는다', async () => {
+    renderRevealPage(true);
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차')
+    );
+    expect(enteringCount()).toBe(0);
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
+  });
+
+  it('동작 줄이기가 켜져 있으면 카드는 등장 애니메이션 없이 곧장 보인다', async () => {
+    reduceMotionMock.mockResolvedValue(true);
+    renderRevealPage(true);
+
+    const times = await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await act(async () => {});
+    expect(times.length).toBeGreaterThan(0);
+    expect(enteringCount()).toBe(0);
+  });
+
+  it('애니메이션이 걸린 카드의 시간 텍스트는 서버 값 그대로다(INV-2·INV-3)', async () => {
+    renderRevealPage(true);
+
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    const read = (): string[] =>
+      screen
+        .getAllByTestId(/^slot-stopcard-time-/)
+        .map((node) => String(node.props.children ?? ''));
+    const first = read();
+    expect(first).toHaveLength(2);
+    await act(async () => {});
+    expect(read()).toEqual(first);
+    first.forEach((text) => expect(text).toMatch(/^\d{2}:\d{2}.\d{2}:\d{2}$/));
+  });
 });

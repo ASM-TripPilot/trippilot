@@ -17,6 +17,7 @@ import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -41,13 +42,16 @@ class TripSummaryService(
     /** 이벤트 구독자가 부르는 경로 — 사용자 맥락이 없어 소유 검증을 하지 않는다. */
     @Transactional
     fun generate(tripId: UUID): TripSummary {
+        // 잠근 **뒤에** 읽는다 — 경로 갱신(refreshRouteStats)과 겹치면 커밋 전 상태를 보고 덮는다. 같은 잠금을 그쪽도 잡는다.
+        summaries.findForUpdate(tripId)
         val days = archive.findDailyVisits(tripId)
+        val routes = archive.findRouteDistances(tripId)
         val surfaces = poiSurfaces.findSurfaces(days.flatMap { d -> d.visits.map { it.poiId } })
         val summary = TripSummary(
             tripId = tripId,
             narrative = narrativeOf(days, surfaces),
-            highlights = highlightsOf(days, surfaces),
-            stats = statsOf(days, surfaces),
+            highlights = highlightsOf(days, surfaces, routes),
+            stats = statsOf(days, surfaces, routes),
             source = if (days.isEmpty()) ReflectionSource.BASIC else ReflectionSource.RULE,
             generatedAt = clock.instant(),
         )
@@ -82,8 +86,9 @@ class TripSummaryService(
         return "${days.size}일 동안 ${visits.size}곳을 다녀왔어요. $places 이(가) 기억에 남을 거예요."
     }
 
-    private fun highlightsOf(days: List<ArchiveDayView>, surfaces: Map<UUID, PoiSurfaceView>): List<DayHighlight> =
-        days.sortedBy { it.date }.mapIndexed { index, day ->
+    /** 날짜별 하이라이트. 실제 경로만 있고 들른 곳이 없는 날도 한 칸이다 — 걸었는데 들른 곳이 없던 날이다. */
+    private fun highlightsOf(days: List<ArchiveDayView>, surfaces: Map<UUID, PoiSurfaceView>, routes: Map<LocalDate, Int>): List<DayHighlight> =
+        withRouteOnlyDays(days, routes).mapIndexed { index, day ->
             val done = day.visits.filter { !it.skipped }
             DayHighlight(
                 date = day.date,
@@ -91,21 +96,48 @@ class TripSummaryService(
                 visitCount = done.size,
                 // 근거 안에서만 쓴다(BR-U5-31) — 이름을 못 찾은 방문은 넣지 않는다.
                 places = done.mapNotNull { surfaces[it.poiId]?.nameKo },
+                distanceKm = dayKm(day, surfaces, routes),
+                distanceSource = if (day.date in routes) DistanceSource.ROUTE else DistanceSource.VISIT_LINE,
             )
         }
 
-    private fun statsOf(days: List<ArchiveDayView>, surfaces: Map<UUID, PoiSurfaceView>): TripSummaryStats {
+    /** 실적이 있는 날 + 경로만 있는 날, 날짜순. */
+    private fun withRouteOnlyDays(days: List<ArchiveDayView>, routes: Map<LocalDate, Int>): List<ArchiveDayView> {
+        val seen = days.map { it.date }.toSet()
+        return (days + routes.keys.filter { it !in seen }.map { ArchiveDayView(it, emptyList()) }).sortedBy { it.date }
+    }
+
+    /** 그날 거리 — 실제 경로가 있으면 그것, 없으면 그날 방문점 연결선. */
+    private fun dayKm(day: ArchiveDayView, surfaces: Map<UUID, PoiSurfaceView>, routes: Map<LocalDate, Int>): Double =
+        routes[day.date]?.let { it / 1000.0 } ?: day.visits.filter { !it.skipped }.mapNotNull { surfaces[it.poiId] }
+            .zipWithNext { a, b -> haversineKm(a.lat, a.lng, b.lat, b.lng) }.sum()
+
+    /**
+     * 경로가 올라왔다 — 이미 만든 요약의 **통계만** 다시 센다(BR-U10-39). 요약이 아직 없으면 할 일이 없다(여행이 끝날 때 만든다).
+     */
+    @Transactional
+    fun refreshRouteStats(tripId: UUID) {
+        // 생성과 같은 잠금 — 생성이 커밋 전이면 여기서 기다렸다가 그 결과를 본다(안 기다리면 "요약 없음"으로 지나가고, 생성은 경로 전
+        // 값으로 커밋돼 굳는다). 하이라이트는 지금 실적·경로로 다시 짠다 — 경로만 있는 날이 새로 한 칸이 될 수 있다. 서사·출처는 그대로다.
+        val current = summaries.findForUpdate(tripId) ?: return
+        val days = archive.findDailyVisits(tripId)
+        val routes = archive.findRouteDistances(tripId)
+        val surfaces = poiSurfaces.findSurfaces(days.flatMap { d -> d.visits.map { it.poiId } })
+        summaries.upsert(current.copy(highlights = highlightsOf(days, surfaces, routes), stats = statsOf(days, surfaces, routes)))
+    }
+
+    private fun statsOf(days: List<ArchiveDayView>, surfaces: Map<UUID, PoiSurfaceView>, routes: Map<LocalDate, Int>): TripSummaryStats {
         val visits = days.flatMap { it.visits }
         val done = visits.filter { !it.skipped }
-        // 날짜별로 이어 잰다 — 날이 바뀌는 사이는 이동이 아니라 숙박이다.
-        val km = days.sumOf { day ->
-            val pts = day.visits.filter { !it.skipped }.mapNotNull { surfaces[it.poiId] }
-            pts.zipWithNext { a, b -> haversineKm(a.lat, a.lng, b.lat, b.lng) }.sum()
-        }
+        // 날짜별로 잰다 — 날이 바뀌는 사이는 이동이 아니라 숙박이다. 실제 경로가 있는 날은 그 거리, 없는 날은 방문점 연결선(U10 §7.2).
+        val all = withRouteOnlyDays(days, routes)
+        val dates = all.map { it.date }.toSet()
+        val km = all.sumOf { dayKm(it, surfaces, routes) }
         return TripSummaryStats(
             totalVisits = done.size,
             totalDistanceKm = km,
-            distanceSource = DistanceSource.VISIT_LINE,
+            // 여행 전체 출처는 **모든 날이 실제 경로일 때만** ROUTE 다(BR-U10-39) — 한 날이라도 근사면 합계도 근사다.
+            distanceSource = if (dates.isNotEmpty() && dates.all { it in routes }) DistanceSource.ROUTE else DistanceSource.VISIT_LINE,
             totalPhotos = visits.sumOf { it.photoCount },
             // 좌표를 하나도 못 찾으면 지도를 그릴 수 없다(BR-U5-39) — 화면이 방문 목록으로 갈아탄다.
             hasLocationData = done.any { surfaces[it.poiId] != null },

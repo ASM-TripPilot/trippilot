@@ -1035,7 +1035,7 @@ TourAPI 숙박 전국 **1,479** → 우리 정본과 매칭 **442** → 그중 �
 칸 1 진행 · 10~30% 면 "사진 있는 숙소 우선 정렬"을 같은 PR 에 동반 · 10% 미만이면 트랙을 접고
 제휴 콘텐츠 API 를 기다린다.
 
-**도구는 만들어 뒀다**(2026-09-21, PR #656) — `ai/scripts/measure_stay_coverage.py` +
+**도구는 만들어 뒀다**(2026-09-21, PR #656) — `ai/scripts/measure/measure_stay_coverage.py` +
 `.github/workflows/ai-stay-measure.yml`. 남은 것은 **한 번 돌리고 설계 §7 에 숫자를 적는 것**이다.
 
 ⚠ **main 에 워크플로가 있어야 열린다** — GitHub 은 기본 브랜치의 워크플로만 Run workflow 에
@@ -1817,8 +1817,8 @@ note = """
 [[nodes]]
 id = "QUIET-HOURS"
 ticket = ""
-title = "야간 조용시간 — 결정 대기(사용자가 2026-09-02 보류)"
-status = "todo"
+title = "야간 조용시간 — 만들지 않는다(2026-10-14 사용자 결정: 아무 때나 보낸다)"
+status = "dropped"
 migration = false
 touches = [
   "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/PushDispatchService.kt",
@@ -1857,6 +1857,8 @@ note = """
    (`frontend/src/shared/push/request.ts:21,25,29` · [[PUSH-ANDROID-CHANNEL]] 정정 참조)
 
 닫는 조건: 실발송이 한 주 돈 뒤 야간(21~08) 발송 건수를 세고, 0 에 가까우면 규칙을 만들지 않는다.
+
+**2026-10-14 접음** — 사용자 결정 "야간 조용시간 없이 아무 때나 푸시". 되살릴 조건: 사용자가 야간 알림 불만을 보고할 때.
 """
 
 [[nodes]]
@@ -3851,12 +3853,17 @@ note = """
 id = "TEST-OPEN-IN-VIEW"
 ticket = "TRIP-1387"
 title = "통합 테스트가 open-in-view 를 켠 채 돈다 — 테스트용 application.yml 이 본 설정을 가린다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
-  "backend/app/src/test/resources/application.yml",
+  "backend/app/src/test/resources/config/application.yml",
 ]
 note = """
+**닫힘(2026-10-14)** — 키 하나를 더 적는 대신 가림 자체를 없앴다: 테스트 설정을 `config/application.yml` 로 옮겨 본 설정 **위에**
+얹히게 했다. 이제 open-in-view=false 뿐 아니라 `ddl-auto=validate` 등 본 설정 전부가 테스트에 닿는다. 전체 빌드에서 숨은 지연 로딩
+예외는 **0건**이었고, 깨진 것은 마이그레이션 없는 순정 컨테이너를 쓰는 `DatabaseConnectivityIT` 하나(스키마 검증)뿐이라 그 테스트만
+검증을 끈다. #1117 IT 동시 요청 수는 8 로 되돌렸다(설정을 루트로 되돌리면 그 IT 가 다시 빨갛다 — 역검증).
+
 [[U8-CONTRACT]](PR #1117)의 동시 열기 IT 가 드러냈다: 8개 동시 요청이 전원 500(연결 풀 고갈), 같은 테스트에
 `spring.jpa.open-in-view=false` 를 주면 통과. 테스트가 운영과 다른 세션 수명으로 돌아 **지연 로딩 예외를 원리적으로 못 잡는다.**
 테스트 설정에 명시하고 전체 빌드를 돌려 숨은 예외가 드러나는지 본다 — 드러나면 운영에서 이미 나고 있는 결함이다.
@@ -3865,9 +3872,9 @@ note = """
 
 [[nodes]]
 id = "U8-AI-DIALOGUE"
-ticket = ""
+ticket = "TRIP-1410"
 title = "[AI] 대화 경계·dialogue_router — IntentRouter 의 프로덕션 호출자가 0이다 (G-U8-4)"
-status = "external"
+status = "done"
 owner = "ai"
 migration = false
 touches = []
@@ -3879,8 +3886,8 @@ note = """
 [[nodes]]
 id = "U10-BACKEND"
 ticket = ""
-title = "[U10] GPS·위치 자동화의 백엔드 몫 — 발생 시각 수용·실제 경로·이동 지연 신호원 (착수 시 쪼갠다)"
-status = "todo"
+title = "[U10] GPS·위치 자동화의 백엔드 몫 — 일곱으로 쪼갰다(U10-VISIT-SOURCE … U10-SOURCE-CHECK)"
+status = "dropped"
 migration = true
 touches = [
   "backend/modules/archive",
@@ -3914,6 +3921,22 @@ FD 갭 표에서 백엔드 몫으로 읽히는 것(착수 전 FD 를 다시 읽�
 
 **선행이 많다**(aidlc-state): Figma 4표면 · 법무 확인(O-U10-1) · EAS 재빌드. 가장 큰 미결은 O-U10-ND-1
 (토큰 1시간·백그라운드 미갱신). 백엔드 혼자 먼저 갈 수 있는 것은 G-U10-1 정도다.
+
+**2026-10-14 쪼갬** — 위 목록을 FD·NFR 과 코드에 대조해 PR 일곱으로 나눴다(아래 U10-* 노드). 위 선행은 **플래그를 켜는 것**을
+막지 서버 머지를 막지 않는다 — 프론트는 Fake 싱크·플래그 OFF 로 이미 머지돼 있어 서버를 먼저 열어도 깨지는 화면이 없다.
+대조에서 달라진 것: G-U10-3 의 전제("trip → 소유자 조회가 없다")는 낡았다 — `TripOwnerFacade.findOwnedPeriod` 가 이미 있다.
+백엔드 팀 결정(사용자 위임, 2026-10-14):
+- D1 소유자는 `TripOwnerFacade` 로 찾고 이벤트 경로는 이벤트의 accountId 를 쓴다 — `evaluateAsSystem` 은 만들지 않는다
+  (소유 검증을 건너뛰는 두 번째 진입점은 억제·상한 판정을 갈라 놓는다).
+- D2 기존 `POST /visits` 는 `slotKey` 없는 `AUTO_GEOFENCE` 를 거절한다(INV-U10-5).
+- D3 L3 철회 시 auth 가 지운 것이 없어도 무조건 남기는 `PURGE {scope: gps_track, reason: L3_REVOKED}`
+  (`LocationConsentService`)를 **멈추고**, 실제로 지운 쪽인 archive 가 지운 것이 있을 때만 `PURGE(ACTUAL_ROUTE)` 1건을 남긴다
+  (BR-U10-43 · PBT-U10-1 — auth 는 archive 를 볼 수 없어 지웠는지를 모른다, R1). 계정 삭제 때의 `gps_track` 로그는 범위 밖(그대로) —
+  다만 계정 삭제도 `GpsRecordingOptOut` 을 내므로, archive 구독자가 생기면 삭제 때는 auth 의 `gps_track` 와 archive 의 조건부
+  `PURGE(ACTUAL_ROUTE)` 가 함께 남는다.
+  **법무 공유 필요** — 법정 로그의 종류가 바뀐다.
+- D4 경로 업로드는 L2 ∧ L3.
+- D5(지연 판정 기준 `T_over`·다음 고정 슬롯 위협 근거)는 미정 — [[U10-DELAY]] 가 기다린다.
 """
 
 [[edges]]
@@ -3961,6 +3984,10 @@ status = "todo"
 migration = false
 touches = ["infra/terraform/stack/", "infra/bootstrap"]
 note = """
+**2026-10-14 진행**: 권한 #1157(bootstrap 템플릿 — SNS·알람·지표 필터·Chatbot 역할) · 알람 #1155(9개, us-east-2 Chatbot →
+Slack `C0C8W4UN7HR`) 머지, 사용자가 bootstrap 정책 재등록 완료. **남은 것**: bootstrap 재실행(첫 실행은 같은 동시성 그룹의
+배포에 밀려 취소됐다 — 대기 중 실행은 하나만 남는다) → #1159(dev.tfvars 의 Slack 값 주석 해제) 머지 → 배포 plan·apply → 테스트 알람 1회.
+
 인프라 결정 Q3=A(`aidlc/aidlc-docs/construction/shared-infrastructure.md` §12, 2026-10-12)는 로그 수집과
 **최소 알람**을 한 묶음으로 정했다: 5xx 비율 · RDS CPU·여유 스토리지·연결 수 · 파드 재시작/NotReady ·
 OBS-02 리프레시 재사용 감지 로그 메트릭 필터 → SNS → Slack, 담당자 지정. 로그 수집은 [[OBSERVABILITY-DEV]] 로
@@ -4189,9 +4216,9 @@ reason = "파기·청소·내보내기의 대상 테이블이 U8-CONTRACT 에서
 
 [[nodes]]
 id = "U8-INTERPRET-HTTP"
-ticket = ""
+ticket = "TRIP-1410"
 title = "[U8] 해석 경계 http 어댑터 — 상대가 /ai/v1/dialogue/interpret 를 열면 붙인다"
-status = "blocked"
+status = "done"
 migration = false
 touches = [
   "backend/modules/assistant",
@@ -4207,8 +4234,7 @@ note = """
 FALLBACK 메시지일 뿐 일정 폴백 신호가 아니다.
 
 **http 를 켜기 전에 함께 해야 하는 것**(2026-10-14, U8 백엔드 넷을 닫으며 모았다 — 지금은 fake/off 라 무해해서 미뤘다):
-- 같은 턴 id 를 겹쳐 보낸 요청은 앞선 처리를 기다리는데 **기다리는 수에 상한이 없다**(`AssistantTurnService.awaitFirst` 의
-  `ponytail:`). 해석이 십여 초 가면 요청 스레드가 그만큼 선다 — 상한(넘으면 429)을 둔다.
+- ~~겹친 턴 대기 수 상한~~ — [[U8-PREHTTP]] 가 한다.
 - ~~전역 월 상한 값~~ — 기본값을 20,000 턴으로 넣었다(2026-10-14 사용자 위임, 근거는 `application.yml` 주석). 기본값이라 배포 경로에
   키를 넣지 않아도 걸린다. 운영에서 바꾸려면 그때 `ASSISTANT_MONTHLY_LLM_CALL_LIMIT` 을 `deploy/eks/runtime_secrets.py` 의 `BACKEND_KEYS` 와
   차트 env 목록에 넣는다(시크릿에만 넣으면 "Unsupported key" 로 거절된다). 단가가 실측되면 값을 다시 본다.
@@ -4241,3 +4267,165 @@ to = "U8-OPS"
 kind = "계약선행"
 verified = false
 reason = "전역 월 상한(COST-U8-04)은 U8-TURN 이 쓰는 assistant_usage_daily 행과 그 강등 분기 위에 선다. 파기·청소·내보내기만이면 U8-CONTRACT 로 충분하지만 노드는 하나다."
+
+[[nodes]]
+id = "U8-PREHTTP"
+ticket = "TRIP-1401"
+title = "[U8] 해석을 켜기 전 손질 — 같은 턴을 겹쳐 기다리는 요청 수에 상한"
+status = "done"
+migration = false
+touches = ["backend/modules/assistant"]
+note = """
+**#1166 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
+[[U8-INTERPRET-HTTP]] 노트의 "http 를 켜기 전에 함께 해야 하는 것" 중 **상대 계약 없이 정할 수 있는 것은 대기 상한 하나뿐**이었다.
+날씨 날짜 인자와 되묻기 길이 상한은 **와이어 계약이 없어** 그 노드에 남긴다. ai 인자표(`ai/src/trippilot/domain/dialogue.py`)에는
+`GET_WEATHER` 의 `date`·`region` 이 있지만, 그 값을 실어 나를 `dialogue` 경로가 `ai/docs/openapi.json` 에 0건이라 값의 형태
+(날짜 정규화 등)를 알 수 없다. 되묻기도 같다 — ai 규칙은 되묻는 **횟수**와 보기 수(2~3)를 정하지 문안 길이는 정하지 않고,
+응답 계약이 정해져야 어댑터에서 자를 길이가 나온다.
+"""
+
+[[nodes]]
+id = "U10-VISIT-SOURCE"
+ticket = "TRIP-1402"
+title = "[U10] 방문 실적 출처 1단계 — completion_source·auto_suppressed_at, VisitChecked 에 계정·출처"
+status = "done"
+migration = true
+touches = ["backend/modules/archive", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
+note = """
+**#1164 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
+M-U10-a 의 **1단계**(컬럼 추가 + MANUAL 백필, CHECK 없음 — 롤링 배포 중 옛 파드가 출처 없이 쓰는 창이 있다, 인프라 U10.4).
+`complete()` 가 MANUAL 을 채우고, 응답에 `completionSource`, `VisitChecked` 에 accountId·arrivalSource·completionSource(G-U10-2·3).
+**행동 변화**: `VisitChecked` 를 완료 때만이 아니라 **도착 때도** 낸다(`completedAt = null`, FD §12.6) — 구독자가 둘을 가려야 한다.
+G-U10-12 집계 제외 필터도 여기 — 아직 그런 행이 생길 수 없지만 컬럼과 함께 넣어야 [[U10-AUTO-EVENTS]] 가 그 위에 선다.
+D2(`slotKey` 없는 `AUTO_GEOFENCE` 거절)도 이 노드다.
+"""
+
+[[nodes]]
+id = "U10-AUTO-EVENTS"
+ticket = "TRIP-1403"
+title = "[U10] 자동 도착·완료 배치 — 발생 시각 수용(G-U10-1)·자동 되돌리기·킬 스위치"
+status = "done"
+migration = false
+touches = ["backend/modules/archive", "backend/common/core", "backend/docs/design/openapi.yaml"]
+note = """
+**#1176 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
+`POST /trips/{tripId}/visits/auto-events`(항목별 트랜잭션·결과 6종·빈 배치 허용) · `POST …/{id}/revert-auto` · `VisitAutoReverted` ·
+`automationEnabled` 킬 스위치. 슬롯 소속·날짜는 `ItineraryPlanFacade` 로 본다. L2 가 없으면 전 항목 `REJECTED_CONSENT`.
+PBT-U10-3(오프라인 재전송, blocking 취급)·2·4 — 생성기에 자정 경계와 "서버 시각 + 5분" 경계를 넣는다.
+"""
+
+[[nodes]]
+id = "U10-INTERVALS"
+ticket = "TRIP-1404"
+title = "[U10] 자동화 구간 — location_automation_interval·이용 법정 로그·열린 구간 스위퍼"
+status = "done"
+migration = true
+touches = ["backend/modules/archive", "backend/modules/auth", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
+note = """
+**#1168 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
+`POST /trips/{tripId}/location-automation/intervals`(킬 스위치가 꺼져 있으면 START 409) · `LocationLegalLogFacade` 에 구간 메서드와
+`LocationUsePurpose` · 앱 강제 종료로 END 가 안 온 구간을 여행 종료 + 1일에 `SERVER_TIMEOUT` 으로 닫는 스위퍼(G-U10-11).
+무장 여부 조회는 정본대로 `ArchiveFacade.isAutomationArmed` 에 얹는다(FD domain-entities — 구현체는 서비스 하나와 대역 하나다).
+L3·L2 철회 양쪽에서 열린 구간을 닫는다.
+"""
+
+[[nodes]]
+id = "U10-ROUTES"
+ticket = "TRIP-1405"
+title = "[U10] 실제 경로 — actual_route_day·PUT/GET routes·L3 철회 즉시 파기 + PURGE(ACTUAL_ROUTE)"
+status = "done"
+migration = true
+touches = ["backend/modules/archive", "backend/modules/auth", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
+note = """
+**#1169 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
+**법적 무게가 가장 큰 노드다**(DEC-U10-7 · INV-U10-1·4). 저장과 같은 트랜잭션에 `COLLECTION(STORE)`, 철회 구독자에 경로 파기 +
+`PURGE(ACTUAL_ROUTE)` — EXIF 와 경로를 각각 멱등으로 지워 재배달이 로그를 부풀리지 않게. D3·D4 가 여기서 구현된다.
+폴리라인 디코더 상한(SEC-U10-07), 거리 클램프. 프론트 본문에 `recordedFrom/To` 가 없다 — 선택 필드로 받고 없으면 하루 길이 상한.
+`ActualRouteStored` 발행.
+"""
+
+[[nodes]]
+id = "U10-REFLECT-DISTANCE"
+ticket = "TRIP-1406"
+title = "[U10] 회고 거리 출처 — DayHighlight 의 거리를 실제 경로로, 저장되면 통계만 다시 센다"
+status = "done"
+migration = false
+touches = ["backend/modules/reflection", "backend/modules/archive", "backend/docs/design/openapi.yaml"]
+note = """
+**#1173 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
+`ReflectionService` 가 거리 출처를 `VISIT_LINE` 으로 고정한다(FD §7.2). 경로 거리 조회는 `ArchiveRecordFacade` 에 더한다
+(구현은 `TripRecordService` 하나, 대역은 reflection 테스트 셋). `ActualRouteStored` 구독으로 stats 만 재계산 — 본문 생성은 다시 돌리지 않는다.
+"""
+
+[[nodes]]
+id = "U10-DELAY"
+ticket = "TRIP-1407"
+title = "[U10] 이동 지연 신호원 — 체류 초과·자동 되돌림을 planb DELAY 로"
+status = "blocked"
+migration = false
+touches = ["backend/modules/planb-detection", "backend/modules/archive"]
+note = """
+**선행은 다 들어왔다(2026-10-14)** — `VisitChecked`(도착·완료, 계정·출처) · `VisitAutoReverted`(`revertedPart`) · `ArchiveFacade.isAutomationArmed`.
+남은 것은 D5 결정뿐이다. 구독자는 U10 배포 전 옛 파드가 쓴 `VisitChecked` 행에 `accountId`·`arrivalSource` 가 없을 수 있음을 다룬다(이벤트 KDoc).
+
+**D5 미정이라 막혔다**: 체류 초과 기준 `T_over`(O-U10-4, FD 제안 15분)와 "다음 고정 슬롯이 위협된다"의 판정 근거 — 서버에는
+이동시간 하한 원천이 없다(INV-3). 제안: 15분 초과만으로 신호, 위협 판정은 Plan-B 평가에 맡긴다. 정해지면
+`VisitChecked`·`VisitAutoReverted` 구독자 + 5분 스케줄러(ShedLock) · planb-detection → archive 의존 추가(순환 없음) · PBT-U10-5.
+"""
+
+[[nodes]]
+id = "U10-SOURCE-CHECK"
+ticket = "TRIP-1408"
+title = "[U10] 방문 실적 출처 2단계 — 재백필 + CHECK (1단계가 운영에 나간 뒤)"
+status = "done"
+migration = true
+touches = ["backend/app/src/main/resources/db/migration"]
+note = """
+**닫힘(2026-10-14) — V2.70.** 1단계를 실은 배포(develop `94fd896f`, 2026-10-14 성공)가 끝나 옛 파드가 없다. 같은 백필 문을 다시 돌리고
+`(completed_at IS NULL) = (completion_source IS NULL)` 를 건다. I-U10-2 확인: 완료를 쓰는 길은 도메인 `complete`·`adjustTimes`·`revertAuto` 셋뿐이고
+셋 다 출처를 함께 쓴다(SQL 직접 쓰기 0건). `VisitCheckCompletionSourceIT` 의 V2.67 백필 픽스처(출처 없는 완료)는 CHECK 뒤에는 만들 수 없어 V2.70 검증으로 바꿨다.
+
+M-U10-a 의 2단계. [[U10-VISIT-SOURCE]] 가 **운영에 배포되고 옛 파드가 사라진 뒤**에만 — 같은 배포에 실으면 롤링 창의 옛 파드가
+출처 없이 쓴 행이 CHECK 를 깬다. 확인 항목은 인프라 문서 I-U10-2.
+"""
+
+[[edges]]
+from = "U10-VISIT-SOURCE"
+to = "U10-AUTO-EVENTS"
+kind = "계약선행"
+verified = false
+reason = "자동 도착·완료는 completion_source·auto_suppressed_at 컬럼과 VisitChecked 의 출처 필드 위에 선다(M-U10-a 1단계)."
+
+[[edges]]
+from = "U10-ROUTES"
+to = "U10-REFLECT-DISTANCE"
+kind = "계약선행"
+verified = false
+reason = "회고 거리 출처는 actual_route_day 와 ActualRouteStored 이벤트를 읽는다."
+
+[[edges]]
+from = "U10-AUTO-EVENTS"
+to = "U10-DELAY"
+kind = "계약선행"
+verified = false
+reason = "지연 신호원은 자동 도착·완료와 VisitAutoReverted 를 구독한다(DEC-U10-9)."
+
+[[edges]]
+from = "U10-INTERVALS"
+to = "U10-DELAY"
+kind = "계약선행"
+verified = false
+reason = "스캔 대상은 자동화가 무장된 여행뿐이다 — 무장 여부 조회가 구간 노드에서 열린다."
+
+[[edges]]
+from = "U10-VISIT-SOURCE"
+to = "U10-SOURCE-CHECK"
+kind = "배포선행"
+verified = false
+reason = "M-U10-a 2단계 CHECK 는 1단계가 운영에 배포되고 옛 파드가 사라진 뒤에만 안전하다."

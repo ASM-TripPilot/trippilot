@@ -1,5 +1,6 @@
 import { Fragment, type ReactElement, type ReactNode } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import type { PastTripCardVM } from '../model';
 
@@ -38,6 +39,7 @@ export function PastTripRow({
   const { title, dateRangeLabel, nightsLabel } = vm;
   const photoLabel = vm.photoLabel ?? null;
   const imageUrl = vm.imageUrl ?? null;
+  const coverSource = vm.coverSource ?? null;
   // 부제 조각 — 날짜·박수·사진 수를 각각 별개 leaf 로, 사이에 " · " 를 끼운다.
   const subtitle = [dateRangeLabel, nightsLabel, photoLabel].filter(
     (label): label is string => label !== null
@@ -60,17 +62,26 @@ export function PastTripRow({
         className={
           compact
             ? 'h-[64px] w-[64px] overflow-hidden rounded-thumb bg-surface-soft'
-            : 'h-[72px] w-[72px] rounded-[10px] bg-surface-soft'
+            : 'h-[72px] w-[72px] overflow-hidden rounded-[10px] bg-surface-soft'
         }
       >
-        {imageUrl !== null && (
+        {imageUrl !== null ? (
           <Image
             testID={`${testID}-photo`}
             source={{ uri: imageUrl }}
             className="h-full w-full"
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
           />
-        )}
+        ) : coverSource !== null ? (
+          <Image
+            testID={`${testID}-cover`}
+            source={coverSource}
+            className="h-full w-full"
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+        ) : null}
       </View>
       <View className={compact ? 'flex-1 gap-xs' : 'flex-1 gap-[3px]'}>
         <Text className="font-noto-bold text-card-title font-bold text-ink">

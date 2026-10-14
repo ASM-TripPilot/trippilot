@@ -15,6 +15,7 @@ from trippilot.api.errors import install_error_handlers
 from trippilot.api.middleware import MiddlewareSettings, install_middlewares
 from trippilot.api.protocols import ItineraryOrchestrator
 from trippilot.api.routes import (
+    dialogue_router,
     notification_router,
     planb_router,
     reflection_router,
@@ -46,6 +47,7 @@ def create_app(
     app.include_router(planb_router)
     app.include_router(reflection_router)  # TRIP-429 — U6 Reflect 경계
     app.include_router(notification_router)  # 리마인드 알림 문구 경계
+    app.include_router(dialogue_router)  # U8 도우미 — 대화 해석 경계 (G-U8-4)
 
     # docker-compose·컨테이너 헬스체크가 쓰는 엔드포인트 — 응답 형태를 바꾸지 말 것.
     @app.get("/health")

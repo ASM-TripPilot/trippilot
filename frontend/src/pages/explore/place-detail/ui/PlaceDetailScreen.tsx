@@ -1,12 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
@@ -127,7 +121,8 @@ export function PlaceDetailScreen({
           {place.imageUrl ? (
             <Image
               source={{ uri: place.imageUrl }}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
               className="h-full w-full"
             />
           ) : null}

@@ -38,7 +38,54 @@ REASON_LABELS = {
     "fatigue": "체력이 떨어짐 — 덜 걷고 덜 움직이고 싶음",
 }
 
+# 다시 짜기에서 "얼마나 바꿀지" — 요청 종류마다 한 줄(TRIP-1394). 0.2.0 은 "그대로 돌려주지 마라"
+# 한 규칙이라 "카페 하나 추가"에도 하루를 다 갈았고(로컬 실측 유지 0/6), 0.1.0 은 반대로 "괜찮으면
+# 그대로"라 "실내로"에 아무것도 안 바뀌었다. 종류는 코드가 정하고 프롬프트엔 결론 한 줄만 싣는다.
+PLACE_REASONS = frozenset({"closed", "fully_booked", "canceled"})  # 특정 장소가 문제인 사유
+CHANGE_ADD = "요청은 한 곳을 더하는 것입니다 — 남은 일정은 그대로 두고 요청한 곳을 더하세요. 시간이 모자라면 가장 덜 중요한 한 곳만 바꾸세요"
+CHANGE_PLACE = "문제가 된 곳(제외 요청)만 비슷한 역할의 다른 곳으로 바꾸고, 나머지 남은 일정은 그대로 두세요"
+CHANGE_MATCH = "사유·요청에 맞지 않는 곳만 바꾸고, 맞는 곳은 그대로 두세요"
+CHANGE_REFRESH = "특별한 사유 없이 새로 짜 보고 싶어 합니다 — 남은 일정의 절반 이상을 새 곳으로 바꿔 다른 하루를 제안하세요"
+
+
+def change_rule(reasons: Collection[str], day_directives: bool, add_one: bool,
+                free_text: bool) -> str:
+    """요청 종류 → 바꿀 정도. `day_directives` = 하루 방향 지시(실내로 등), `add_one` = 한 곳 추가 지시."""
+    place = any(r in PLACE_REASONS for r in reasons)
+    other = any(r and r != "none" and r not in PLACE_REASONS for r in reasons)
+    if add_one and not (other or day_directives):
+        return CHANGE_ADD
+    if place and not (other or day_directives or free_text):
+        return CHANGE_PLACE
+    if other or day_directives or free_text or place:
+        return CHANGE_MATCH
+    return CHANGE_REFRESH
+
+
 _WEEKDAYS = "월화수목금토일"
+
+# 변경 이력 출처 — 프롬프트에 영문 enum 을 그대로 싣지 않는다(KB-3 reason 한국어 치환과 같은 이유).
+_CHANGE_SOURCE = {"PLAN_B": "다시 짜기", "MANUAL": "직접 편집", "COEDIT": "같이 편집", "ASSISTANT": "도우미"}
+
+
+def recent_change_lines(change_log, names: "dict[PoiId, str]") -> tuple[str, ...]:
+    """변경 이력 → "다시 짜기(비 예보): 성산일출봉 빠짐 / 제주민속촌 들어옴" 줄들 (TRIP-975).
+
+    이름은 풀에서 가져오고, 못 찾은 id 는 그 줄에서 빠진다(이름 없는 id 를 흘리면 모델이 장소로 읽는다).
+    양쪽 다 못 찾은 항목은 통째로 뺀다. 순서는 백엔드가 보낸 최신순 그대로, 시각은 싣지 않는다.
+    """
+    lines: list[str] = []
+    for ev in change_log:
+        out = [names[PoiId(p)] for p in ev.removed_poi_ids if PoiId(p) in names]
+        into = [names[PoiId(p)] for p in ev.added_poi_ids if PoiId(p) in names]
+        if not out and not into:
+            continue
+        head = _CHANGE_SOURCE.get(ev.source, ev.source)
+        if ev.reason:
+            head += f"({ev.reason})"
+        parts = ([f"{', '.join(out)} 빠짐"] if out else []) + ([f"{', '.join(into)} 들어옴"] if into else [])
+        lines.append(f"{head}: {' / '.join(parts)}")
+    return tuple(lines)
 
 
 def date_label(when: datetime) -> str:

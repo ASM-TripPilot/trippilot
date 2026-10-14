@@ -420,3 +420,132 @@ describe('단계 펄스', () => {
     });
   });
 });
+
+// TRIP-1384 · h07 진행 표면의 "빈 일정 카드 섞기" 일러스트. 가짜 타이머·JS 드라이버 강제는 이 describe 안에서만 켠다.
+describe('빈 일정 카드 섞기 일러스트', () => {
+  /**
+   * 생김새(색·픽셀)는 단언하지 않는다(README 판정 4) — 존재·글자 0·접근성 숨김·동작 줄이기 정지만 잠근다.
+   * 실제로 섞이는 모양은 6-b 실기 몫.
+   */
+  const probe = useAnimatedProbe();
+  const noop = () => {};
+  const ILLUSTRATION = 'itinerary-generating-illustration';
+  const TOP_CARD = 'itinerary-generating-illustration-card-top';
+
+  async function renderProgress(): Promise<void> {
+    render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
+    await act(async () => {});
+  }
+
+  function topFace(): string {
+    const card = screen.getByTestId(TOP_CARD, { includeHiddenElements: true });
+    return JSON.stringify(
+      hostNodes(card).map((node) => {
+        const style = StyleSheet.flatten(node.props.style) ?? {};
+        return style.transform;
+      })
+    );
+  }
+
+  /** 카드 컨테이너(Animated.View 래퍼)까지 올라가 transform 을 읽는다. */
+  function wrapperFace(): string {
+    let node = screen.getByTestId(TOP_CARD, { includeHiddenElements: true });
+    const faces: unknown[] = [];
+    for (let i = 0; i < 3 && node.parent; i += 1) {
+      node = node.parent;
+      const style = StyleSheet.flatten(node.props.style) ?? {};
+      faces.push(style.transform);
+    }
+    return JSON.stringify(faces);
+  }
+
+  it('진행 카드·3단계와 함께 일러스트가 뜬다 (긍정 짝)', async () => {
+    await renderProgress();
+
+    expect(
+      screen.getByTestId(ILLUSTRATION, { includeHiddenElements: true })
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId('itinerary-generating-progress')
+    ).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^itinerary-generating-step-/)).toHaveLength(
+      3
+    );
+    [1, 2, 3].forEach((n) =>
+      expect(
+        screen.getByTestId(`itinerary-generating-pulse-${n}`)
+      ).toBeOnTheScreen()
+    );
+  });
+
+  it('일러스트 안에는 글자가 하나도 없다 (INV-1/2/3)', async () => {
+    await renderProgress();
+
+    const illustration = screen.getByTestId(ILLUSTRATION, {
+      includeHiddenElements: true,
+    });
+    // 짝 — 카드 3장이 실제로 있다(없으면 "글자 0" 이 공허하게 통과한다).
+    expect(
+      within(illustration).queryAllByTestId(
+        /^itinerary-generating-illustration-card-/,
+        { includeHiddenElements: true }
+      )
+    ).toHaveLength(3);
+    expect(
+      within(illustration).queryAllByText(/.*/, { includeHiddenElements: true })
+    ).toHaveLength(0);
+  });
+
+  it('접근성 트리에서 숨겨져 스크린리더가 읽지 않는다', async () => {
+    await renderProgress();
+
+    const illustration = screen.getByTestId(ILLUSTRATION, {
+      includeHiddenElements: true,
+    });
+    expect(illustration.props.accessibilityElementsHidden).toBe(true);
+    expect(illustration.props.importantForAccessibility).toBe(
+      'no-hide-descendants'
+    );
+    // 기본 질의(숨김 제외)로는 보이지 않는다.
+    expect(screen.queryByTestId(ILLUSTRATION)).toBeNull();
+  });
+
+  it('동작 줄이기가 꺼져 있으면 카드가 움직이고 (긍정 짝)', async () => {
+    probe.setReduceMotion(false);
+    await renderProgress();
+
+    const faces = new Set([wrapperFace()]);
+    for (let t = 0; t < 3600; t += 100) {
+      act(() => {
+        jest.advanceTimersByTime(100);
+      });
+      faces.add(wrapperFace());
+    }
+    expect(faces.size).toBeGreaterThan(1);
+  });
+
+  it('동작 줄이기가 켜져 있으면 시간이 흘러도 정지 컷 그대로다', async () => {
+    probe.setReduceMotion(true);
+    await renderProgress();
+
+    // 짝 — 카드가 있다.
+    expect(topFace()).toBeTruthy();
+    const faces = new Set([wrapperFace()]);
+    for (let t = 0; t < 3600; t += 100) {
+      act(() => {
+        jest.advanceTimersByTime(100);
+      });
+      faces.add(wrapperFace());
+    }
+    expect(faces.size).toBe(1);
+  });
+
+  it('실패 얼굴에는 일러스트가 없다', async () => {
+    render(<GeneratingScreen onBackground={noop} onRetry={noop} failed />);
+    await act(async () => {});
+
+    expect(
+      screen.queryByTestId(ILLUSTRATION, { includeHiddenElements: true })
+    ).toBeNull();
+  });
+});

@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import {
@@ -129,7 +130,8 @@ export function TripCard({
                 <Image
                   testID={`${testIDPrefix}-cover-${tripId}`}
                   source={coverSource}
-                  resizeMode="cover"
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
                   className="h-[178px] w-full"
                 />
                 {/* 밝은 일러스트 위 흰 제목 대비 — 좌상단 검정 알파 0.6, 카드 높이 60% 까지 0 으로

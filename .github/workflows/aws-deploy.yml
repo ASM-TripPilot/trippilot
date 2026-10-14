@@ -10,6 +10,12 @@ on:
         options: [dev, prd]
         default: dev
         required: true
+      target:
+        description: 배포 대상 — prod 는 출시 앱이 보는 서버(네임스페이스 trippilot), dev 는 개발 서버(trippilot-dev · dev-api · 개발 DB · Terraform 안 건드림 · 임베딩·푸시 꺼짐)
+        type: choice
+        options: [prod, dev]
+        default: prod
+        required: true
       mode:
         description: plan은 미리보기, apply는 인프라 변경 및 선택한 앱 배포
         type: choice
@@ -68,6 +74,7 @@ jobs:
       id-token: write
     env:
       DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+      DEPLOY_TARGET: ${{ inputs.target }}
       DEPLOY_MODE: ${{ inputs.mode }}
       DEPLOY_APPLICATION: ${{ inputs.deploy_application }}
       EMBEDDING_ENABLED: ${{ inputs.embedding_enabled }}
@@ -78,8 +85,12 @@ jobs:
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-      ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
-      API_HOSTNAME: ${{ vars.API_HOSTNAME }}
+      # 주소·인증서는 대상별로 따로 받고 workflow_config 가 골라 ACM_CERTIFICATE_ARN·API_HOSTNAME 으로 내보낸다.
+      # 식(`a && b || c`)으로 고르면 개발 변수가 빌 때 조용히 운영 값으로 떨어진다(#1261 검수) — 고르기와 거절을 한 곳에서.
+      PROD_ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
+      PROD_API_HOSTNAME: ${{ vars.API_HOSTNAME }}
+      DEV_TARGET_ACM_CERTIFICATE_ARN: ${{ vars.DEV_TARGET_ACM_CERTIFICATE_ARN }}
+      DEV_TARGET_API_HOSTNAME: ${{ vars.DEV_TARGET_API_HOSTNAME }}
       TF_VAR_aws_account_id: ${{ vars.AWS_ACCOUNT_ID }}
       TF_VAR_aws_region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
       TF_VAR_deployment_role_arn: ${{ vars.AWS_ROLE_ARN }}
@@ -119,9 +130,11 @@ jobs:
           terraform validate
       - name: Terraform plan
         working-directory: infra/terraform/stack
+        # 개발 대상은 공유 인프라를 바꾸지 않는다 — 출력만 읽는다(아래 Read infrastructure outputs).
+        if: steps.config.outputs.terraform == 'true'
         run: terraform plan -lock-timeout=5m -var-file="../environments/$DEPLOY_ENVIRONMENT.tfvars" -out="$RUNNER_TEMP/trippilot.tfplan"
       - name: Apply the saved run plan
-        if: inputs.mode == 'apply'
+        if: inputs.mode == 'apply' && steps.config.outputs.terraform == 'true'
         working-directory: infra/terraform/stack
         run: terraform apply -lock-timeout=5m "$RUNNER_TEMP/trippilot.tfplan"
       - name: Read infrastructure outputs
@@ -160,14 +173,32 @@ jobs:
           tags: ${{ steps.infra.outputs.ai_repository }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=aws-ai
           cache-to: type=gha,mode=min,scope=aws-ai
+      # 임베딩 이미지 태그는 **빌드 맥락(ai/embedding)의 내용 해시**다 — 런마다 새 태그면 코드가 그대로여도
+      # 매 배포 파드가 바뀌고, maxSurge 0(chart embedding.yaml 주석)이라 그때마다 몇 분 엔드포인트가 빈다
+      # (10-14 하루 15회+, 재계획 KB 검색이 그 사이 Connection refused 로 강등). 같은 해시가 이미 올라가
+      # 있으면 빌드를 건너뛰고 같은 태그를 그대로 쓴다 → 파드 템플릿 무변 → 롤아웃 없음.
+      - name: Resolve the embedding image tag
+        id: embedding-tag
+        if: steps.config.outputs.deploy_application == 'true' && steps.config.outputs.embedding_enabled == 'true'
+        env:
+          REPOSITORY: ${{ steps.infra.outputs.embedding_repository }}
+        run: |
+          tag="emb-$(git rev-parse HEAD:ai/embedding)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "$REPOSITORY:$tag" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "embedding $tag 이미 있음 — 빌드 생략, 임베딩 롤아웃 없음"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build and publish embedding
-        if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled
+        if: steps.config.outputs.deploy_application == 'true' && steps.config.outputs.embedding_enabled == 'true' && steps.embedding-tag.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./ai/embedding
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.infra.outputs.embedding_repository }}:${{ env.IMAGE_TAG }}
+          tags: ${{ steps.infra.outputs.embedding_repository }}:${{ steps.embedding-tag.outputs.tag }}
           cache-from: type=gha,scope=aws-embedding
           cache-to: type=gha,mode=min,scope=aws-embedding
       - uses: azure/setup-kubectl@v4
@@ -184,42 +215,46 @@ jobs:
           CLUSTER_NAME: ${{ steps.infra.outputs.cluster_name }}
         run: |
           aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
-          python3 deploy/eks/runtime.py ensure-namespace --namespace trippilot
+          python3 deploy/eks/runtime.py ensure-namespace --target "$DEPLOY_TARGET"
       - name: Synchronize runtime secrets and render nonsecret Helm values
         if: steps.config.outputs.deploy_application == 'true'
+        env:
+          EMBEDDING_IMAGE_TAG: ${{ steps.embedding-tag.outputs.tag }}
         run: |
           embedding_args=()
-          if [ "$EMBEDDING_ENABLED" = true ]; then embedding_args+=(--embedding-enabled); fi
+          if [ "$EFFECTIVE_EMBEDDING" = true ]; then embedding_args+=(--embedding-enabled); fi
+          embedding_tag_args=()
+          if [ -n "$EMBEDDING_IMAGE_TAG" ]; then embedding_tag_args+=(--embedding-image-tag "$EMBEDDING_IMAGE_TAG"); fi
           push_args=()
-          if [ "$PUSH_MODE_INPUT" != keep ]; then push_args+=(--push-mode "$PUSH_MODE_INPUT"); fi
+          if [ "$EFFECTIVE_PUSH_MODE" != keep ]; then push_args+=(--push-mode "$EFFECTIVE_PUSH_MODE"); fi
           python3 deploy/eks/runtime.py sync-secrets \
-            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --namespace trippilot "${embedding_args[@]}" "${push_args[@]}"
-          python3 deploy/eks/runtime.py render-values \
+            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --target "$DEPLOY_TARGET" "${embedding_args[@]}" "${push_args[@]}"
+          python3 deploy/eks/runtime.py render-values --target "$DEPLOY_TARGET" \
             --outputs "$RUNNER_TEMP/trippilot-outputs.json" --image-tag "$IMAGE_TAG" \
             --certificate-arn "$ACM_CERTIFICATE_ARN" --hostname "$API_HOSTNAME" \
-            --output "$RUNNER_TEMP/trippilot-values.json" "${embedding_args[@]}"
+            --output "$RUNNER_TEMP/trippilot-values.json" "${embedding_args[@]}" "${embedding_tag_args[@]}"
       - name: Initialize database roles and pgvector before Flyway
         if: steps.config.outputs.deploy_application == 'true'
         run: |
           python3 deploy/eks/runtime.py bootstrap-db --outputs "$RUNNER_TEMP/trippilot-outputs.json" \
-            --namespace trippilot --run-id "$DEPLOY_RUN_ID"
+            --target "$DEPLOY_TARGET" --run-id "$DEPLOY_RUN_ID"
       - name: Deploy and wait for healthy workloads
         if: steps.config.outputs.deploy_application == 'true'
         run: |
-          helm upgrade --install trippilot deploy/eks/chart --namespace trippilot \
-            -f "deploy/eks/chart/values-$DEPLOY_ENVIRONMENT.yaml" \
+          helm upgrade --install trippilot deploy/eks/chart --namespace "$NAMESPACE" \
+            -f "deploy/eks/chart/$VALUES_FILE" \
             -f "$RUNNER_TEMP/trippilot-values.json" \
             --set-string "rolloutNonce=$DEPLOY_RUN_ID" \
             --atomic --wait --timeout 30m --history-max 10
       - name: Verify in-cluster API and AI connectivity
         if: steps.config.outputs.deploy_application == 'true'
-        run: python3 deploy/eks/runtime.py smoke --namespace trippilot
+        run: python3 deploy/eks/runtime.py smoke --target "$DEPLOY_TARGET"
       # 멱등 — 저장본과 같은 문서는 건너뛰므로 재배포마다 돌려도 새 문서·바뀐 문서만 임베딩한다.
       # 첫 적재(KB-5 1,470건)는 임베딩 파드 CPU 로 수 분 걸린다.
       - name: Load the Plan-B knowledge base
-        if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled
+        if: steps.config.outputs.deploy_application == 'true' && steps.config.outputs.embedding_enabled == 'true'
         timeout-minutes: 65  # Job 대기 3600s(runtime_kb.DEADLINE_SEC) + 정리
-        run: python3 deploy/eks/runtime.py load-kb --namespace trippilot
+        run: python3 deploy/eks/runtime.py load-kb --target "$DEPLOY_TARGET"
       # 공유본(ai/data/collected_pois.json)을 백엔드 DB 에 upsert — 리뷰·머지된 문서가 이미지에 들어간 뒤라
       # 가이드 §자동화하지 않은 이유의 완충(공유본 PR 리뷰)은 그대로다. 사람의 port-forward 단계만 대체한다.
       - name: Load the POI shared document into the backend
@@ -230,7 +265,7 @@ jobs:
           poi_args=()
           if [ "$POI_CLOSE_MISSING" = true ]; then poi_args+=(--close-missing); fi
           if [ "$POI_CLOSE_MISSING_DRY_RUN" = true ]; then poi_args+=(--close-missing-dry-run); fi
-          python3 deploy/eks/runtime.py load-pois --namespace trippilot "${poi_args[@]}"
+          python3 deploy/eks/runtime.py load-pois --target "$DEPLOY_TARGET" "${poi_args[@]}"
       - name: Deployment summary
         if: success()
         env:
@@ -239,7 +274,7 @@ jobs:
           POI_SUMMARY: ${{ steps.poi-load.outputs.summary }}
         run: |
           {
-            echo "### TripPilot AWS $DEPLOY_ENVIRONMENT"
+            echo "### TripPilot AWS $DEPLOY_ENVIRONMENT · target $DEPLOY_TARGET"
             echo "- Mode: $DEPLOY_MODE"
             echo "- State: $TF_STATE_BUCKET/terraform.tfstate"
             echo "- Commit: $GITHUB_SHA"
@@ -248,13 +283,13 @@ jobs:
               echo "- API: https://$API_HOSTNAME"
               echo "- POI load: ${POI_SUMMARY:-(skipped)}"
               echo "- Load balancer DNS (point API hostname here):"
-              kubectl -n trippilot get service gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+              kubectl -n "$NAMESPACE" get service gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
               echo
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove temporary database administrator credentials
         if: always() && steps.config.outputs.deploy_application == 'true' && steps.infra.outcome == 'success'
-        run: python3 deploy/eks/runtime.py cleanup-db --namespace trippilot --run-id "$DEPLOY_RUN_ID"
+        run: python3 deploy/eks/runtime.py cleanup-db --target "$DEPLOY_TARGET" --run-id "$DEPLOY_RUN_ID"
       - name: Remove local generated deployment files
         if: always()
         run: rm -f "$RUNNER_TEMP/trippilot.tfplan" "$RUNNER_TEMP/trippilot-outputs.json" "$RUNNER_TEMP/trippilot-values.json"

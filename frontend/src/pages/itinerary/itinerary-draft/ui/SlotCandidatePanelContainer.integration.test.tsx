@@ -1022,7 +1022,7 @@ describe('후보 이름·태그·사진', () => {
 
       expect(
         screen.getByTestId('itinerary-candidate-image-X').props.source
-      ).toEqual({ uri: X_IMG });
+      ).toEqual([{ uri: X_IMG }]);
       // 회색 자리도 testID 는 유지된다(존재) — 그리고 이미지 source 는 없다(부재). 둘을 짝으로 본다.
       for (const id of [RAW_ID, 'Z']) {
         const leaf = screen.getByTestId(`itinerary-candidate-image-${id}`);
@@ -1037,7 +1037,7 @@ describe('후보 이름·태그·사진', () => {
       await waitFor(() =>
         expect(
           screen.getByTestId('itinerary-candidate-image-current').props.source
-        ).toEqual({ uri: CURRENT_IMG })
+        ).toEqual([{ uri: CURRENT_IMG }])
       );
     });
 
@@ -1424,7 +1424,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       ).toHaveTextContent('#전망대 · 야경');
       expect(
         screen.getByTestId('itinerary-candidate-image-P').props.source
-      ).toEqual({ uri: P_IMG });
+      ).toEqual([{ uri: P_IMG }]);
       expect(
         screen.getByTestId('itinerary-candidate-distance-P')
       ).toHaveTextContent('약 1.2km · 도보 추정');

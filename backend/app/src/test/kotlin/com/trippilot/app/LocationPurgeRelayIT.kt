@@ -131,7 +131,7 @@ class LocationPurgeRelayIT : AbstractPostgresIntegrationTest() {
         "SELECT exif_lat FROM visit_photo_meta WHERE visit_photo_meta_id = ?", Double::class.java, photoId,
     )
 
-    /** `PHOTO_EXIF` scope 만 센다 — 철회는 `gps_track` 파기 로그도 함께 남기므로 총 건수로는 못 가른다. */
+    /** `PHOTO_EXIF` scope 만 센다 — 같은 철회에서 실제 경로 파기(`ACTUAL_ROUTE`)도 남을 수 있어 총 건수로는 못 가른다. */
     private fun purgeLogs(accountId: UUID): Int = jdbc.queryForObject(
         """
         SELECT count(*) FROM location_legal_log

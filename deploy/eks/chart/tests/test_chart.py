@@ -302,11 +302,30 @@ class ChartTests(unittest.TestCase):
                          # 카카오 앱 ID(TRIP-1317) — 빠지면 시크릿에 넣어도 발급 앱 대조가 조용히 꺼진 채 돈다.
                          "KAKAO_APP_ID",
                          # 도우미 해석 스위치(U8) — 빠지면 시크릿의 off 가 파드에 안 닿아 운영이 앱 기본값(fake)으로 뜬다.
-                         "ASSISTANT_INTERPRET_MODE"):
+                         "ASSISTANT_INTERPRET_MODE",
+                         # U10 킬 스위치 — 빠지면 시크릿에 false 를 넣어도 자동 기록이 안 꺼진다.
+                         "LOCATION_AUTOMATION_ENABLED"):
                 ref = env[name]["valueFrom"]["secretKeyRef"]
                 self.assertEqual(ref["name"], "trippilot-backend")
                 self.assertEqual(ref["key"], name)
                 self.assertTrue(ref["optional"])
+
+
+class DevTargetValuesTests(unittest.TestCase):
+    def test_dev_target_is_small_and_never_blocks_drains(self):
+        """개발 대상은 운영과 같은 노드에 올라간다 — 복제본 1·HPA·PDB 없음·임베딩 없음. 복제본 1 에 PDB 가 걸리면
+        드레인이 영구히 막혀 운영 노드 교체까지 멈춘다(values-dev.yaml 주석)."""
+        documents = render("dev-target")
+        kinds = [item["kind"] for item in documents]
+        self.assertNotIn("PodDisruptionBudget", kinds)
+        self.assertNotIn("HorizontalPodAutoscaler", kinds)
+        deployments = {item["metadata"]["name"]: item for item in documents if item["kind"] == "Deployment"}
+        self.assertEqual(set(deployments), {"backend", "ai", "gateway"})
+        for name, deployment in deployments.items():
+            with self.subTest(name=name):
+                self.assertEqual(deployment["spec"]["replicas"], 1)
+                for container in deployment["spec"]["template"]["spec"]["containers"]:
+                    self.assertIn("memory", container["resources"]["limits"])
 
 
 if __name__ == "__main__":

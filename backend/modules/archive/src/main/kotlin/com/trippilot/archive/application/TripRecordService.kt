@@ -1,6 +1,7 @@
 package com.trippilot.archive.application
 
 import com.trippilot.archive.domain.VisitCheck
+import com.trippilot.archive.domain.ActualRouteDayRepository
 import com.trippilot.archive.domain.VisitCheckRepository
 import com.trippilot.archive.domain.VisitMemoRepository
 import com.trippilot.archive.domain.VisitPhotoMetaRepository
@@ -40,7 +41,12 @@ class TripRecordService(
     private val memos: VisitMemoRepository,
     private val baseStays: TripBaseStayFacade,
     private val changeLog: ChangeLogFacade,
+    private val routes: ActualRouteDayRepository,
 ) : ArchiveRecordFacade {
+    @Transactional(readOnly = true)
+    override fun findRouteDistances(tripId: UUID): Map<LocalDate, Int> =
+        routes.findByTrip(tripId).associate { it.localDate to it.distanceM }
+
     @Transactional(readOnly = true)
     fun compare(accountId: UUID, tripId: UUID, changeLimit: Int = DEFAULT_CHANGE_LIMIT): TripRecord {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)

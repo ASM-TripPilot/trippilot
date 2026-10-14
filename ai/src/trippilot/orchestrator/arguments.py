@@ -23,7 +23,7 @@
 `rules_partial`** 이고 종류당 반례가 25~37건이었다. 초안이 "정규식·0회·결정론" 으로 적었던
 다섯 종류도 전부 깨졌다 — 한국어의 조사 결합·띄어쓰기 변이·한자어/고유어 수사 이중화·축약이
 규칙 하나로 수렴하지 않는다. 그 반례를 테스트로 옮기고, **못 잡는 것은 `None` 으로 두는 쪽**을
-골랐다(`tests/test_arguments.py`).
+골랐다(`tests/orchestrator/test_arguments.py`).
 """
 
 from __future__ import annotations

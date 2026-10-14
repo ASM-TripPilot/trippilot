@@ -842,7 +842,8 @@ describe('생성 중 알림 권한을 묻지 않는다', () => {
         <GeneratingPage key="a" tripId={TRIP_ID} mode="FULLY_AI" />,
         {
           pathname: '/trips/[tripId]/itinerary/draft',
-          params: { tripId: TRIP_ID },
+          // TRIP-1385 — 방금 만든 완성 일정을 처음 여는 착지에만 공개 모션 신호를 싣는다.
+          params: { tripId: TRIP_ID, reveal: '1' },
         },
       ],
       [

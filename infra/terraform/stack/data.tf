@@ -75,6 +75,57 @@ resource "aws_db_instance" "postgres" {
   # bootstrap Job creates application roles, ai_kb and required extensions.
 }
 
+# 개발 대상(trippilot-dev 네임스페이스)의 DB — 운영 장비와 **따로** 둔다(2026-10-15). 같은 장비 안에서 역할 이름만
+# 가르면 Flyway 마이그레이션이 `app_user` 에 권한을 하드코딩해(V1.7 등) 개발 역할이 자기 테이블을 못 읽는다(#1258 검수).
+# 장비를 나누면 역할·DB 이름을 운영과 같게 쓸 수 있고, 개발이 장비를 흔들어도 운영이 안 흔들린다.
+# 운영 데이터를 담지 않으므로 데이터 보호 축에 걸지 않는다 — 최소 사양·단일 AZ·백업 1일·최종 스냅숏 없음.
+# 서브넷·보안 그룹은 운영과 같이 쓴다(EKS 에서만 5432 로 들어온다). 파라미터 그룹은 따로 둔다 — 공유하면 운영의
+# 메이저 업그레이드(그룹 family 교체)가 엔진 16 에 머문 개발 장비까지 끌고 가 apply 가 깨진다.
+resource "aws_db_parameter_group" "dev_target" {
+  count = var.dev_target_enabled ? 1 : 0
+
+  name   = "${local.name}-target-postgres16"
+  family = "postgres16"
+
+  parameter {
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
+}
+
+resource "aws_db_instance" "dev_target" {
+  count = var.dev_target_enabled ? 1 : 0
+
+  identifier                      = "${local.name}-target"
+  engine                          = "postgres"
+  engine_version                  = "16"
+  instance_class                  = "db.t4g.micro"
+  allocated_storage               = 20
+  max_allocated_storage           = 50
+  storage_type                    = "gp3"
+  storage_encrypted               = true
+  db_name                         = "trippilot"
+  username                        = "trippilot_admin"
+  manage_master_user_password     = true
+  port                            = 5432
+  db_subnet_group_name            = aws_db_subnet_group.postgres.name
+  parameter_group_name            = aws_db_parameter_group.dev_target[0].name
+  vpc_security_group_ids          = [aws_security_group.postgres.id]
+  publicly_accessible             = false
+  multi_az                        = false
+  deletion_protection             = false
+  skip_final_snapshot             = true
+  delete_automated_backups        = true
+  backup_retention_period         = 1
+  backup_window                   = "17:00-18:00"
+  maintenance_window              = "sun:18:00-sun:19:00"
+  auto_minor_version_upgrade      = true
+  allow_major_version_upgrade     = false
+  apply_immediately               = true
+  enabled_cloudwatch_logs_exports = ["postgresql"]
+}
+
 resource "aws_security_group" "redis" {
   name        = "${local.name}-redis"
   description = "TLS Redis access only from this environment EKS nodes"

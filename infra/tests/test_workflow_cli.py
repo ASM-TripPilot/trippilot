@@ -19,6 +19,7 @@ class WorkflowCliTests(unittest.TestCase):
                 'AWS_ROLE_ARN': 'arn:aws:iam::123456789012:role/trippilot-dev-github-deploy',
                 'GITHUB_REF': 'refs/heads/develop', 'DEPLOY_APPLICATION': 'true',
                 'EMBEDDING_ENABLED': 'false', 'GITHUB_OUTPUT': str(output), 'DEPLOY_BRANCH': '',
+                'DEPLOY_TARGET': 'prod', 'GITHUB_ENV': str(Path(directory) / 'env'),
             }
             result = subprocess.run([sys.executable, str(SCRIPT)], env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)

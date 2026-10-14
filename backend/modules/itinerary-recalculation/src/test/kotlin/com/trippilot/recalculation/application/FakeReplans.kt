@@ -62,6 +62,7 @@ internal class FakeArchive(
 ) : ArchiveFacade {
     override fun getCompletedSlots(tripId: UUID) = completedSlots
     override fun findLastCompletedPoi(tripId: UUID) = lastCompletedPoi
+    override fun isAutomationArmed(tripId: UUID, at: java.time.Instant) = false
 }
 
 internal class CapturingReplanEvents : DomainEventPublisher {

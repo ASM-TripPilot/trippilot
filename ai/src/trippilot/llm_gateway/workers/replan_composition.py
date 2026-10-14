@@ -29,7 +29,7 @@ class ScheduleLine:
     time: str  # "09:19~10:34" (시각 미정이면 "시간 미정")
     category: str
     name: str
-    status: str  # 다녀옴(유지) · 고정(유지) · 남은 일정 · 제외 요청
+    status: str  # 다녀옴(유지) · 고정(유지) · 진행 중(유지) · 남은 일정 · 제외 요청 · 요청과 안 맞음(교체)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,8 +44,11 @@ class ComposeDayInput:
     planb_picks: tuple[str, ...]  # 상황 추천 상호명(순서 = PlanB 랭킹)
     persona: str
     max_visits: int
+    change_rule: str  # 얼마나 바꿀지 — `composition.change_rule` (TRIP-1394)
     distance_km: Mapping[PoiId, float] = field(default_factory=dict)
     hours: Mapping[PoiId, str] = field(default_factory=dict)  # 그날 영업시간 문구
+    # 이 날짜의 최근 변경(TRIP-975) — "같은 제안 반복 방지". 비면 "(없음)".
+    recent_changes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.max_visits < 1:
@@ -78,6 +81,8 @@ def build_compose_vars(pool: CandidatePool, inp: ComposeDayInput) -> dict[str, s
         "persona": inline(inp.persona).strip() or "(정보 없음)",
         "candidates": candidates or "(후보 없음)",
         "max_visits": str(inp.max_visits),
+        "change_rule": inp.change_rule,
+        "recent_changes": _bullets(inp.recent_changes, "(없음)"),
     }
 
 

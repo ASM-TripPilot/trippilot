@@ -220,7 +220,7 @@ describe('🔴 TC9 · 카드 사진(G7) — imageUrl 있으면 Image, 없으면 
     const photo = screen.getByTestId('my-trip-photo-t1');
     expect(photo).toBeOnTheScreen();
     // source uri 가 그 픽스처 값이어야 한다(엉뚱한 소스면 red).
-    expect(photo.props.source).toEqual({ uri: 'file://x.png' });
+    expect(photo.props.source).toEqual([{ uri: 'file://x.png' }]);
   });
 
   it('imageUrl 미전달(프로덕션 항상 null) → 사진 Image 부재, 회색 플레이스홀더', () => {

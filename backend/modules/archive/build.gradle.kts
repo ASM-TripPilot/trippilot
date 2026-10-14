@@ -20,6 +20,7 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.kotlin.reflect)
+    implementation(libs.jackson.module.kotlin)  // 이벤트 payload 읽기(GPS 옵트아웃 사유) — assistant·notification 과 같은 관례
 
     testImplementation(project(":common:test-support"))
 }

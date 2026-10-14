@@ -4,6 +4,11 @@ import com.trippilot.core.error.ConflictDetected
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.boolean
+import io.kotest.property.arbitrary.element
+import io.kotest.property.arbitrary.list
+import io.kotest.property.checkAll
 import java.time.Instant
 import java.util.UUID
 
@@ -101,5 +106,56 @@ class VisitCheckTest : StringSpec({
     "슬롯 키가 없으면 즉석 방문 — 계획에 없던 곳(US-REC-01)" {
         arrived(slotKey = null).isSpontaneous shouldBe true
         arrived().isSpontaneous shouldBe false
+    }
+    /** 체류 초과(DELAY)는 완료가 추정인지 알아야 한다(DEC-U10-6) — 완료 버튼은 사람이다, 도착이 자동이어도. */
+    "완료하면 출처가 남고, 시각을 고쳐도 출처는 그대로다" {
+        val auto = VisitCheck.arrive(trip, slot, poi, CheckSource.AUTO_GEOFENCE, t0)
+        auto.completionSource shouldBe null
+        val done = auto.complete(t1)
+        done.completionSource shouldBe CompletionSource.MANUAL
+    }
+
+    "자동 완료는 그 출처로 남고 보정해도 바뀌지 않는다" {
+        val exit = arrived().complete(t1, CompletionSource.AUTO_GEOFENCE_EXIT)
+        exit.completionSource shouldBe CompletionSource.AUTO_GEOFENCE_EXIT
+        exit.adjustTimes(arrivedAt = null, completedAt = t1.plusSeconds(60), at = t1).completionSource shouldBe CompletionSource.AUTO_GEOFENCE_EXIT
+    }
+
+    /** 보정으로 처음 생긴 완료는 사람이 적은 것이다 — 출처 없이 남기면 INV-U10-3 이 깨진다. */
+    "보정으로 처음 완료가 생기면 출처는 MANUAL 이다" {
+        arrived().adjustTimes(arrivedAt = null, completedAt = t1, at = t1).completionSource shouldBe CompletionSource.MANUAL
+        arrived().adjustTimes(arrivedAt = t0.plusSeconds(60), completedAt = null, at = t1).completionSource shouldBe null
+    }
+
+    /** 억제 표식만 남은 행(자동 도착을 되돌린 자리)은 방문이 아니다(G-U10-12). 건너뜀은 기록이다. */
+    "도착도 건너뜀도 없으면 기록으로 세지 않는다" {
+        val suppressed = VisitCheck.reconstitute(
+            UUID.randomUUID(), trip, slot, poi, null, null, null, CheckSource.AUTO_GEOFENCE, t0, t1, autoSuppressedAt = t1,
+        )
+        suppressed.isRecorded shouldBe false
+        arrived().isRecorded shouldBe true
+        suppressed.copy(skippedAt = t1).isRecorded shouldBe true
+    }
+
+    /** PBT-U10-2 의 출처 짝 — 어떤 도착·완료·건너뜀·보정 순서에서도 `completion_source IS NULL ⇔ completed_at IS NULL`. */
+    "어떤 순서로 기록해도 완료와 완료 출처는 함께 있거나 함께 없다(INV-U10-3)" {
+        val op = Arb.element("complete", "completeExit", "skip", "adjustArrive", "adjustComplete")
+        checkAll(Arb.list(op, 0..6), Arb.boolean()) { ops, autoArrival ->
+            var v = VisitCheck.arrive(trip, slot, poi, if (autoArrival) CheckSource.AUTO_GEOFENCE else CheckSource.MANUAL, t0)
+            var at = t0
+            for (o in ops) {
+                at = at.plusSeconds(60)
+                v = runCatching {
+                    when (o) {
+                        "complete" -> v.complete(at)
+                        "completeExit" -> v.complete(at, CompletionSource.AUTO_GEOFENCE_EXIT)
+                        "skip" -> v.skip(at)
+                        "adjustArrive" -> v.adjustTimes(arrivedAt = t0, completedAt = null, at = at)
+                        else -> v.adjustTimes(arrivedAt = null, completedAt = at, at = at)
+                    }
+                }.getOrDefault(v) // 거절된 전이는 상태를 바꾸지 않는다
+                (v.completionSource == null) shouldBe (v.completedAt == null)
+            }
+        }
     }
 })

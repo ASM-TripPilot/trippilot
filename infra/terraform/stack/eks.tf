@@ -93,6 +93,16 @@ resource "aws_eks_pod_identity_association" "ai" {
   role_arn        = data.aws_iam_role.ai_pod.arn
 }
 
+# 개발 대상 AI 파드도 같은 역할로 Bedrock 을 부른다 — 연결은 네임스페이스 단위라 따로 건다.
+resource "aws_eks_pod_identity_association" "ai_dev_target" {
+  count = var.dev_target_enabled ? 1 : 0
+
+  cluster_name    = aws_eks_cluster.this.name
+  namespace       = "trippilot-dev"
+  service_account = "ai"
+  role_arn        = data.aws_iam_role.ai_pod.arn
+}
+
 # Container stdout is otherwise reachable only through kubectl. The add-on's
 # Fluent Bit tails the node log files, so the application needs no change and
 # keeps OTEL_SDK_DISABLED=true - this stack provisions no OTLP collector.

@@ -31,6 +31,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # 자유 발화 → 닫힌 키 번역. EDIT_TRANSLATION 과 동급 과업이고, 1차
             # 임베딩 매칭이 걸러낸 나머지만 오므로 호출 빈도도 낮다.
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: ModelTier.LIGHT,
+            # 자유입력 → 장소명·시각·날씨 주장 추출. 번역과 같은 급의 짧은 구조화 과업.
+            LlmFeature.REPLAN_REQUEST_EXTRACTION: ModelTier.LIGHT,
             # 푸시 문구 1문장 — 저비용 모델로 충분 (TRIP-347)
             LlmFeature.REFLECTION_NUDGE: ModelTier.LIGHT,
             # 공유 카드 캡션 1문단 + 해시태그 — 후보 선택도 다단 구성도 없는 단발 변환이고
@@ -98,6 +100,8 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # api/wiring.py `_compose_day` — 실패면 고른 목록 없이 종전 재계획
             # (PlanB 랭킹 가산 + 점수 + 어셈블리 선택)으로 진행한다.
             LlmFeature.REPLAN_COMPOSITION: ("llm_compose_day", "scored_assembly"),
+            # api/wiring.py `_verified_request` — 실패면 추출 없이 진행(칩·지시·구성은 원문을 그대로 읽는다)
+            LlmFeature.REPLAN_REQUEST_EXTRACTION: ("llm_request_extract", "no_extraction"),
             # agents/reflect/composer.py `compose` — 전 시도 실패면 고정 폴백 템플릿
             # (그쪽이 직접 내는 FallbackEvent와 같은 모드 쌍).
             LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
@@ -120,7 +124,7 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
             # 오프라인 배치 — 실패하면 그 seed 의 변형을 못 만들 뿐, 런타임 경로가 아니라
             # 강등할 대상이 없다. 스크립트가 사유를 제안 파일의 rejected 에 남긴다
-            # (scripts/augment_bank.py).
+            # (scripts/intent/augment_bank.py).
             LlmFeature.BANK_AUGMENT: ("llm_augment", "(none)"),
             # api/wiring.py `edit` — 자연어 번역 실패는 TRANSLATION_FAILED 정직 보고.
             # 편집은 적용되지 않고, 구조화 진입은 무영향이다.
@@ -129,7 +133,7 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # 해석만 빠진다. 그래서 to_mode 가 "실패"가 아니라 "칩만"이다.
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: (
                 "llm_directive_translation", "chips_only"),
-            # scripts/collect_events.py `collect_region` — 추출 0건으로 그 회차를
+            # scripts/collect/collect_events.py `collect_region` — 추출 0건으로 그 회차를
             # 넘긴다(대체 추출 경로 없음).
             LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
             # agents/reflect/highlight_rule.py — 방문당 1장·시간 분산 결정론 선별.
@@ -182,7 +186,7 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
 
 
 def default_feature_effort() -> Mapping[LlmFeature, str]:
-    """기능별 사고 깊이(`output_config.effort`) — 여기 없는 기능은 안 싣는다(모델 기본값).
+    """기능별 사고 깊이(Claude `output_config.effort`·GPT `reasoning.effort`) — 여기 없는 기능은 안 싣는다(모델 기본값).
 
     claude-fable-5-1 은 사고를 끌 수 없고(항상 켜짐) 기본 effort 가 high 다. 사고 토큰은
     출력 상한 안에서 쓰이므로, 시한이 짧은 기능은 낮춰야 예산 안에 든다. 실측
@@ -197,6 +201,8 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
     위반(대체 장소를 영향 슬롯에 넣음·근거 없는 해시태그)으로 전량 드롭됐다 — high 에선 통과.
     시한 없는 경계(`/explanations` 등)는 high 그대로 둔다.
 
+    GPT(responses 표면)에도 `reasoning.effort` 로 같은 값이 실린다 — gpt-5.6-sol·terra·luna 는
+    low 를 받는다(2026-10-14 실호출).
     **effort 를 거부하는 모델(haiku-4-5 등)을 여기 있는 기능에 배정하면 400 → 폴백이다.**
     모델을 바꾸면 이 표부터 본다(temperature #472 와 같은 함정).
     """
@@ -207,6 +213,11 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.ALTERNATIVE_SELECTION: "low",
             # 같은 재계획 시한(25s) 안에서 PlanB 다음에 돈다 — 대체지 선택과 같은 이유
             LlmFeature.REPLAN_COMPOSITION: "low",
+            # 같은 재계획 시한 안에서 PlanB·구성보다 먼저 돈다 — 짧은 구조화라 사고가 필요 없다
+            LlmFeature.REPLAN_REQUEST_EXTRACTION: "low",
+            # 자유 발화 → 지시 키(닫힌 목록). 미지정(기본 추론)이라 DEV 에서 시한 3.75s 를 2/2 넘겼다
+            # (2026-10-14) — 같은 원문을 읽는 추출은 low 로 2/2 성공했다. 출력은 사전 키만 통과(게이트).
+            LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",
         }
     )
 

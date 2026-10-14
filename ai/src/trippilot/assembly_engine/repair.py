@@ -78,11 +78,11 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
     for fb in problem.fixed_blocks:
         pinned.setdefault((fb.window.start.date(), fb.poi_id), []).append(
             (fb.window.start, fb.window.end))
-    we_min = _mod(problem.day_window.end)
     changes: list[RepairChange] = []
     new_days: list[DaySolution] = []
 
     for day in solution.days:
+        we_min = _mod(problem.window_on(day.date).end)  # 일자별 창 (TRIP-1389)
         prev: VisitSlot | None = None
         new_slots: list[VisitSlot] = []
         for slot in day.slots:

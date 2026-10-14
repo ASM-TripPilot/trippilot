@@ -15,7 +15,7 @@
 아니면 호출은 **예외 없이 외부 벤더로 나간다.**
 
 **강제**: 차트 스키마 패턴 `^local[a-zA-Z0-9._-]*$` · 차트 렌더 테스트 ·
-`scripts/smoke_reminder_copy.py::assert_served_model`.
+`scripts/smoke/smoke_reminder_copy.py::assert_served_model`.
 
 ### BR-MLO-02 — 배정됐는데 전송로가 없으면 기동 실패
 
@@ -94,7 +94,7 @@ collection 이름 규칙(TRIP-519)도 이걸 못 잡는다.
 ### BR-MLO-13 — 되먹임 별칭은 회귀 게이트 뒤에서만 켠다
 
 별칭이 늘면 **과다선택이 먼저 오른다**(실측 2026-09-12: 임계 0.74 = 정확일치 18/23 ·
-과다선택 3). 켜기 전 `scripts/measure_directive_match.py` 를 돌려 **정확일치 ≥ 18/23 ∧
+과다선택 3). 켜기 전 `scripts/measure/measure_directive_match.py` 를 돌려 **정확일치 ≥ 18/23 ∧
 과다선택 ≤ 3** 을 확인한다. 적재분에는 `source: feedback` 표식과 멱등 doc_id 를 박아
 되돌리기를 DELETE 한 줄로 만든다.
 
@@ -173,11 +173,11 @@ KEDA 0 스케일·Karpenter 노드 반납은 매니페스트의 주장이다. �
 | 차트 렌더 — `reminderLlm` 값을 스키마가 거부 | BR-MLO-17(철회 상태 고정) | `deploy/eks/chart/tests/test_chart.py` |
 | 차트 렌더 — `embedding.autoscaling` 거부 | BR-MLO-14 | 같은 파일 |
 | 차트 렌더 — HPA 켜면 `replicas` 없음 | BR-MLO-15 | 같은 파일 |
-| 배선 — 임베딩이 캐시로 감싸짐 · `.inner` 로 provider 확인 | BR-MLO-10 | `tests/test_wiring_env.py` |
-| 캐시 — 정확일치·LRU·실패 미캐시·통과 필드 | BR-MLO-09·11 | `tests/test_caching_embedding.py` |
-| 되먹임 — 표식·멱등·실패 무전파 | BR-MLO-13 | `tests/test_directive_feedback_cache.py` |
-| 스모크 — 서빙 모델 동일성 | BR-MLO-01·20 | `tests/test_smoke_served_model.py` |
-| A/B — 동등성 미달이면 종료 코드 1 | BR-MLO-05 | `scripts/measure_triton_embedding.py` |
+| 배선 — 임베딩이 캐시로 감싸짐 · `.inner` 로 provider 확인 | BR-MLO-10 | `tests/api/test_wiring_env.py` |
+| 캐시 — 정확일치·LRU·실패 미캐시·통과 필드 | BR-MLO-09·11 | `tests/llm_gateway/test_caching_embedding.py` |
+| 되먹임 — 표식·멱등·실패 무전파 | BR-MLO-13 | `tests/agents/planb/test_directive_feedback_cache.py` |
+| 스모크 — 서빙 모델 동일성 | BR-MLO-01·20 | `tests/scripts/test_smoke_served_model.py` |
+| A/B — 동등성 미달이면 종료 코드 1 | BR-MLO-05 | `scripts/measure/measure_triton_embedding.py` |
 
 **PBT 후보(미작성)**: 캐시 래퍼가 임의 입력 순서·중복에 대해 안쪽 포트 호출 수를 **고유
 텍스트 수 이하**로 유지하는 성질. 지금은 예제 기반 테스트만 있다.

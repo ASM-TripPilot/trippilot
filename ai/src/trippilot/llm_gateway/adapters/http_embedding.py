@@ -81,6 +81,7 @@ class HttpEmbeddingAdapter:
         *,
         model: str,
         dim: int = 1024,
+        max_texts: int = 32,
     ) -> None:
         """`model` 은 **필수**다 — 기본값을 주면 대조가 형식적이 된다.
 
@@ -96,18 +97,24 @@ class HttpEmbeddingAdapter:
         self._model = model
         self.model_id = model  # collection 이름에 들어간다 (TRIP-519)
         self.dim = dim
+        # 한 요청 건수. 서비스 상한(`ai/embedding/app.py` MAX_TEXTS=256, 넘기면 413)보다 작아야 하고, 한 요청이
+        # 클라이언트 timeout(기본 5s) 안에 끝나야 한다 — DEV(CPU) 에서 256건은 5s 를 넘겼다. 서비스가 안에서
+        # 32건(TRITON_MAX_BATCH)씩 나눠 돌리므로 32 로 보내도 처리량 손해는 왕복 오버헤드뿐이다.
+        self._max_texts = max_texts
 
     def embed(self, text: str) -> tuple[float, ...]:
         return self.embed_batch([text])[0]
 
     def embed_batch(self, texts: Sequence[str]) -> tuple[tuple[float, ...], ...]:
-        if not texts:
-            return ()
-        payload = self._call(list(texts))
-        self._verify(payload, len(texts))
-        return tuple(
-            tuple(float(x) for x in vector) for vector in payload["vectors"]
-        )
+        # 상한 단위로 나눠 보내고 순서대로 잇는다 — 질문뱅크(485문장)를 한 번에 보내 DEV 가 413 을 냈다.
+        texts = list(texts)
+        out: list[tuple[float, ...]] = []
+        for start in range(0, len(texts), self._max_texts):
+            chunk = texts[start : start + self._max_texts]
+            payload = self._call(chunk)
+            self._verify(payload, len(chunk))
+            out.extend(tuple(float(x) for x in vector) for vector in payload["vectors"])
+        return tuple(out)
 
     # ── 내부 ────────────────────────────────────────────────────────────
     def _call(self, texts: list[str]) -> Mapping[str, Any]:

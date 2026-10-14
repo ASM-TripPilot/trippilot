@@ -5,7 +5,14 @@ import org.springframework.data.jpa.repository.Query
 import java.util.UUID
 
 /** location_consent_state — 계정당 1행 upsert. */
-interface LocationConsentStateJpaRepository : JpaRepository<LocationConsentStateJpaEntity, UUID>
+interface LocationConsentStateJpaRepository : JpaRepository<LocationConsentStateJpaEntity, UUID> {
+    /** L2 ∧ L3 를 읽으며 행을 공유 잠금한다 — 같은 행을 바꾸는 철회가 이 트랜잭션의 커밋을 기다린다. 행이 없으면 null(동의 없음). */
+    @Query(
+        value = "SELECT legal_consent AND gps_recording_opt_in FROM location_consent_state WHERE account_id = :accountId FOR SHARE",
+        nativeQuery = true,
+    )
+    fun lockRouteRecordingConsent(accountId: UUID): Boolean?
+}
 
 /** location_legal_log — append-only. INSERT 는 JpaRepository.save. */
 interface LocationLegalLogJpaRepository : JpaRepository<LocationLegalLogJpaEntity, Long> {

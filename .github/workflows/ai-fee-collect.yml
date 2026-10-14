@@ -53,7 +53,7 @@ jobs:
         run: |
           # `| tee` 가 파이프 앞 종료 코드를 삼킨다 — 실패율 가드가 안 닿는다(실측).
           set -o pipefail
-          uv run python scripts/collect_place_fees.py \
+          uv run python scripts/collect/collect_place_fees.py \
             --doc data/collected_pois.json \
             --out data/place_fees.json \
             --max-calls "${{ inputs.max_calls }}" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"

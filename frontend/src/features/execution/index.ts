@@ -2,4 +2,11 @@
 export * from './index.view';
 
 export { useLiveItinerary } from './model/useLiveItinerary';
-export { buildAppNavUrl, buildWebNavUrl, openNextNav, resolveNextDest, resolveSlotDests, type NavDest } from './model/nextNav';
+export {
+  buildAppNavUrl,
+  buildWebNavUrl,
+  openNextNav,
+  resolveNextDest,
+  resolveSlotDests,
+  type NavDest,
+} from './model/nextNav';

@@ -1,0 +1,2081 @@
+{
+  "generated_at": "2026-10-14T14:24:59.252487+00:00",
+  "verdicts": {
+    "44325f72-6b14-4ac6-b9d8-def8dea71b91": {
+      "verdict": "accept",
+      "guess": "생태공원",
+      "why": "외부인 방문 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "8ed2a3ab-0906-489f-8d30-56badaabd8aa": {
+      "verdict": "accept",
+      "guess": "기념공원",
+      "why": "역사 기념 명소",
+      "model": "gpt-5.6-sol"
+    },
+    "955e55d3-ddaf-4bac-9ad0-9f133ed97ff7": {
+      "verdict": "reject",
+      "guess": "입주자회의",
+      "why": "아파트 관리조직",
+      "model": "gpt-5.6-sol"
+    },
+    "7f97b51e-3709-478e-8137-2f7347211a84": {
+      "verdict": "accept",
+      "guess": "산정상",
+      "why": "등산 목적지",
+      "model": "gpt-5.6-sol"
+    },
+    "76502916-37a5-40e5-8cf1-0c09f784dd90": {
+      "verdict": "accept",
+      "guess": "온천시설",
+      "why": "방문형 온천시설",
+      "model": "gpt-5.6-sol"
+    },
+    "8e398fb3-3003-4994-8427-0b67924cb3e7": {
+      "verdict": "reject",
+      "guess": "미상상호",
+      "why": "판매점인지 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "3db8278b-aabb-4129-b2bd-07acee69d92b": {
+      "verdict": "reject",
+      "guess": "입주자회의",
+      "why": "아파트 관리조직",
+      "model": "gpt-5.6-sol"
+    },
+    "abd8099b-ef35-4270-a27d-9bc8df9e8057": {
+      "verdict": "accept",
+      "guess": "읍성문",
+      "why": "역사 유적",
+      "model": "gpt-5.6-sol"
+    },
+    "cac13e5a-0a0b-4574-848d-8eb4308ddd56": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 건물",
+      "model": "gpt-5.6-sol"
+    },
+    "9890b147-997f-4c20-a287-f6853e27ac99": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "98bb4ae3-baa6-4347-bab3-fef9a7016dd8": {
+      "verdict": "accept",
+      "guess": "포교당",
+      "why": "불교 예배시설",
+      "model": "gpt-5.6-sol"
+    },
+    "9232aa3a-f307-44fe-a4d3-9d66bfe7f895": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 건물",
+      "model": "gpt-5.6-sol"
+    },
+    "57b80b68-1935-479d-bbaa-a321bd9c7fec": {
+      "verdict": "accept",
+      "guess": "도자공방",
+      "why": "공예 체험 가능",
+      "model": "gpt-5.6-sol"
+    },
+    "7f3755e6-a233-48d7-a6c2-ba8320feef09": {
+      "verdict": "accept",
+      "guess": "전망대",
+      "why": "경관 조망 명소",
+      "model": "gpt-5.6-sol"
+    },
+    "b19c3c51-6c5b-42f5-9ca4-9192dd9cdab9": {
+      "verdict": "accept",
+      "guess": "해안공원",
+      "why": "외부인 방문 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "a87daeca-31ff-410a-8121-9f74aa2568ff": {
+      "verdict": "accept",
+      "guess": "예술센터",
+      "why": "문화예술 관람시설",
+      "model": "gpt-5.6-sol"
+    },
+    "e465caf7-0181-4f8b-b4b5-f3b3c6d008c8": {
+      "verdict": "accept",
+      "guess": "아울렛",
+      "why": "방문형 쇼핑시설",
+      "model": "gpt-5.6-sol"
+    },
+    "35bbb135-b19a-4709-a356-521583665010": {
+      "verdict": "reject",
+      "guess": "주거건물",
+      "why": "관광지 판단 불가",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "8b6418e0-af0f-4b65-bba0-1e73dcedfeb2": {
+      "verdict": "reject",
+      "guess": "체인매장",
+      "why": "전국 체인 지점",
+      "model": "gpt-5.6-sol"
+    },
+    "edbd39ec-d68b-4652-8033-d1b84187f97e": {
+      "verdict": "accept",
+      "guess": "문화센터",
+      "why": "문화 체험 강좌",
+      "model": "gpt-5.6-sol"
+    },
+    "27e9f4ac-d57f-4294-8722-3638c6dc6d71": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 건물",
+      "model": "gpt-5.6-sol"
+    },
+    "b1fa8a07-824a-46b4-ae01-a0ba1544d22b": {
+      "verdict": "accept",
+      "guess": "선원",
+      "why": "불교 수행시설",
+      "model": "gpt-5.6-sol"
+    },
+    "16b8d4be-e38a-4b5d-b915-85b45faa2349": {
+      "verdict": "reject",
+      "guess": "소방서",
+      "why": "관공서",
+      "model": "gpt-5.6-sol"
+    },
+    "1301a743-c0bc-415f-b34d-2a1e6b29ab20": {
+      "verdict": "reject",
+      "guess": "소매점",
+      "why": "관광쇼핑지 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "3354c1f9-31d7-4930-99ea-76afd5807c0a": {
+      "verdict": "accept",
+      "guess": "체육공원",
+      "why": "외부인 방문 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "14ee776c-7f6e-4391-b1ab-58a7973a1de4": {
+      "verdict": "reject",
+      "guess": "상업건물",
+      "why": "자연 분류 부적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5f21db22-6262-4308-b189-5c9438adc2d3": {
+      "verdict": "reject",
+      "guess": "주거단지",
+      "why": "주거단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "9ce20d80-4ece-46d2-96be-c9d116f63b5a": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 건물",
+      "model": "gpt-5.6-sol"
+    },
+    "c0201767-7700-4cb1-93ae-b48cb0d574c5": {
+      "verdict": "accept",
+      "guess": "산",
+      "why": "등산 목적지",
+      "model": "gpt-5.6-sol"
+    },
+    "b8e575e1-ca58-4a5e-a963-4a971017c1a9": {
+      "verdict": "reject",
+      "guess": "취미용품점",
+      "why": "관광 목적 불명",
+      "model": "gpt-5.6-sol"
+    },
+    "1a65b241-65b2-4ab0-90d6-c010e08a5334": {
+      "verdict": "accept",
+      "guess": "잠수체험장",
+      "why": "외부인 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "05cf2d7c-5799-4783-a322-736aaec22714": {
+      "verdict": "accept",
+      "guess": "산림공원",
+      "why": "공원 명칭 명확",
+      "model": "gpt-5.6-sol"
+    },
+    "602897e6-8b2e-4b71-abc6-db8dc69d6020": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명칭 명확",
+      "model": "gpt-5.6-sol"
+    },
+    "7cd5aabd-957f-4bad-934d-ef45f5c8bcbe": {
+      "verdict": "accept",
+      "guess": "반지공방",
+      "why": "공예 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "21ec39be-fec4-47ce-8b39-224e105a114c": {
+      "verdict": "accept",
+      "guess": "성곽유적",
+      "why": "역사 유적지",
+      "model": "gpt-5.6-sol"
+    },
+    "de080054-8da5-4cce-93b4-b2ac2eed3ad0": {
+      "verdict": "accept",
+      "guess": "생태공원",
+      "why": "공원 명칭 명확",
+      "model": "gpt-5.6-sol"
+    },
+    "bafaacb8-12e0-4414-8a94-dd6b58167c70": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명칭 명확",
+      "model": "gpt-5.6-sol"
+    },
+    "9e8ce3f9-3126-4bd6-be51-12d6b0be2b6f": {
+      "verdict": "accept",
+      "guess": "산림욕장",
+      "why": "자연 휴양시설",
+      "model": "gpt-5.6-sol"
+    },
+    "a7f3484b-8d4c-4571-b879-8a62a6c91b95": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "유명 사찰",
+      "model": "gpt-5.6-sol"
+    },
+    "93a2acca-dcbd-42dc-8bc3-3e17396581f1": {
+      "verdict": "accept",
+      "guess": "클라이밍장",
+      "why": "외부인 체육시설",
+      "model": "gpt-5.6-sol"
+    },
+    "b1086f0e-f274-47f0-bbfc-fc13df1fbdd5": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "아파트 단지",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "36e2a627-22ef-49ce-9cdd-3b7d6b7dbb20": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명칭 명확",
+      "model": "gpt-5.6-sol"
+    },
+    "c1cf6fd4-2c1e-432e-a770-c1b426fc2188": {
+      "verdict": "reject",
+      "guess": "종교단체",
+      "why": "단체명만 확인",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e7da4ff1-c7c1-4e11-ae90-4343a4e3ba14": {
+      "verdict": "accept",
+      "guess": "고분유적",
+      "why": "역사 유적지",
+      "model": "gpt-5.6-sol"
+    },
+    "835fba09-8b59-4fa7-b741-9f2354f9d006": {
+      "verdict": "accept",
+      "guess": "하천산책로",
+      "why": "자연 산책명소",
+      "model": "gpt-5.6-sol"
+    },
+    "805beda8-9244-4344-91a1-65abb2fe8a43": {
+      "verdict": "accept",
+      "guess": "미술갤러리",
+      "why": "전시 관람시설",
+      "model": "gpt-5.6-sol"
+    },
+    "f9c179ec-cf01-42da-9471-e41ad02312d2": {
+      "verdict": "accept",
+      "guess": "전시체험관",
+      "why": "관람형 문화시설",
+      "model": "gpt-5.6-sol"
+    },
+    "1904ee22-13e4-4fa7-9e93-6b851898fbe1": {
+      "verdict": "accept",
+      "guess": "미술갤러리",
+      "why": "전시 관람시설",
+      "model": "gpt-5.6-sol"
+    },
+    "6e625b71-7901-40de-a13a-2448dd14ea58": {
+      "verdict": "accept",
+      "guess": "봉수대",
+      "why": "역사 전망명소",
+      "model": "gpt-5.6-sol"
+    },
+    "b767ca1b-c385-4eeb-a839-effe6d4580cd": {
+      "verdict": "accept",
+      "guess": "레포츠공원",
+      "why": "공원 명칭 명확",
+      "model": "gpt-5.6-sol"
+    },
+    "7624b45d-4e56-4e1d-aff7-8deacb9e9364": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명칭 명확",
+      "model": "gpt-5.6-sol"
+    },
+    "24e7cd54-6ad4-44e3-b4b0-7cae3b717b59": {
+      "verdict": "accept",
+      "guess": "잠수풀장",
+      "why": "외부인 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "db95b2f6-b1b5-4097-9c2b-a3a526ba6297": {
+      "verdict": "accept",
+      "guess": "광장쉼터",
+      "why": "공공 광장시설",
+      "model": "gpt-5.6-sol"
+    },
+    "e15685f2-ce08-41e7-acda-45130bb040f7": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "아파트 단지",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "118fcd8a-37a3-473d-afb4-402f1c5d998a": {
+      "verdict": "accept",
+      "guess": "클라이밍장",
+      "why": "외부인 체육시설",
+      "model": "gpt-5.6-sol"
+    },
+    "5c258bc8-afcc-46ca-998b-bfbe1f68ecfb": {
+      "verdict": "accept",
+      "guess": "유리공방",
+      "why": "공예 체험공방",
+      "model": "gpt-5.6-sol"
+    },
+    "b4e38fc8-d8cf-4b0c-810b-b9d67dc3cded": {
+      "verdict": "reject",
+      "guess": "화장품점",
+      "why": "체인 매장 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "7d6ad1ec-7282-4a20-b1fe-fd12918d4d21": {
+      "verdict": "accept",
+      "guess": "도시공원",
+      "why": "공원 명칭 명확",
+      "model": "gpt-5.6-sol"
+    },
+    "283b7344-e76b-41b5-b771-484a76a18409": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "아파트 단지",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "f227cacd-c4e7-4e07-abda-e90947b68535": {
+      "verdict": "accept",
+      "guess": "온천시설",
+      "why": "외부인 이용시설",
+      "model": "gpt-5.6-sol"
+    },
+    "47d7a1a1-4927-42ea-b969-94bd75d8de39": {
+      "verdict": "accept",
+      "guess": "공원",
+      "why": "도심 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "d4915bca-49fa-41a7-af58-77f130f2c47c": {
+      "verdict": "accept",
+      "guess": "수변공원",
+      "why": "외부인 방문 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "9a626e45-9952-4f71-a309-380e9afa7358": {
+      "verdict": "accept",
+      "guess": "광장",
+      "why": "관광 광장",
+      "model": "gpt-5.6-sol"
+    },
+    "a320a3f8-53fb-4189-b670-8e7daaef2d0b": {
+      "verdict": "accept",
+      "guess": "문화광장",
+      "why": "대표 관광 명소",
+      "model": "gpt-5.6-sol"
+    },
+    "9be0ad4e-5c9b-48b4-8535-4ffbc31733f3": {
+      "verdict": "accept",
+      "guess": "공원",
+      "why": "도심 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "adaba430-b0f6-48bf-8b3c-d25af5c5a85c": {
+      "verdict": "accept",
+      "guess": "놀이시설",
+      "why": "어린이 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "dd1ee93d-b47f-4c41-bdee-e01cd4e065c9": {
+      "verdict": "accept",
+      "guess": "사진갤러리",
+      "why": "관람객 받는 갤러리",
+      "model": "gpt-5.6-sol"
+    },
+    "c2c67a2e-d4b1-404c-98a1-0388f7cea618": {
+      "verdict": "accept",
+      "guess": "아트센터",
+      "why": "문화예술 관람시설",
+      "model": "gpt-5.6-sol"
+    },
+    "4766a138-df16-4639-9e2d-9760f66ccdcc": {
+      "verdict": "reject",
+      "guess": "음식점",
+      "why": "공원 아닌 상업시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5c3c179b-a6f6-4d37-95de-b39aa6417166": {
+      "verdict": "accept",
+      "guess": "산책길",
+      "why": "관광 산책 명소",
+      "model": "gpt-5.6-sol"
+    },
+    "e0a95823-5044-4bea-8ccf-31cb10ece2ee": {
+      "verdict": "accept",
+      "guess": "생태공원",
+      "why": "자연 체험 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "9255bd3a-8c06-41e3-916b-3b2988044f55": {
+      "verdict": "reject",
+      "guess": "공예공방",
+      "why": "판매점인지 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "974804ac-7190-455f-bdcd-baf14e8f2626": {
+      "verdict": "accept",
+      "guess": "백화점",
+      "why": "외부인 쇼핑시설",
+      "model": "gpt-5.6-sol"
+    },
+    "10c270d1-d4ac-4ec7-9210-4649b56372ce": {
+      "verdict": "reject",
+      "guess": "액자점",
+      "why": "일반 소매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e2d1438a-e0f6-4e24-bf34-dba8605a3a0e": {
+      "verdict": "reject",
+      "guess": "입주자회의",
+      "why": "주거단지 관리조직",
+      "model": "gpt-5.6-sol"
+    },
+    "cfe4ead1-c488-49ae-963a-4ef182ee1f27": {
+      "verdict": "accept",
+      "guess": "산봉우리",
+      "why": "등산 자연명소",
+      "model": "gpt-5.6-sol"
+    },
+    "8bc31728-ff94-4c20-9af0-9a3458095b9e": {
+      "verdict": "accept",
+      "guess": "어린이박물관",
+      "why": "어린이 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "a01b831b-136d-41e3-9dab-76a5c2511f75": {
+      "verdict": "accept",
+      "guess": "쇼핑몰",
+      "why": "대형 쇼핑시설",
+      "model": "gpt-5.6-sol"
+    },
+    "a527bb0f-3bac-4293-9d47-3dcf2e1e0273": {
+      "verdict": "accept",
+      "guess": "테니스장",
+      "why": "외부인 체육시설",
+      "model": "gpt-5.6-sol"
+    },
+    "66b4bd4d-fbd4-4ebd-96fb-b3bf6a3b0a72": {
+      "verdict": "reject",
+      "guess": "상점",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "6311900d-88a6-45de-9ff1-a1f8222a73e9": {
+      "verdict": "accept",
+      "guess": "미술갤러리",
+      "why": "관람객 받는 갤러리",
+      "model": "gpt-5.6-sol"
+    },
+    "b9bd713d-a0a1-4af3-8f6e-889d42d58fb1": {
+      "verdict": "accept",
+      "guess": "섬공원",
+      "why": "대표 자연명소",
+      "model": "gpt-5.6-sol"
+    },
+    "7e1b98e6-4211-4035-a112-0f74410b21d3": {
+      "verdict": "reject",
+      "guess": "수영헬스장",
+      "why": "회원형 체육시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "cc7208c4-91ac-47e2-a1ab-d8427aed5ff2": {
+      "verdict": "reject",
+      "guess": "화장품매장",
+      "why": "체인 소매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "f7a7d485-2065-4980-beb7-0846296abe22": {
+      "verdict": "reject",
+      "guess": "살롱",
+      "why": "판매시설 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "ee201adb-91a6-4746-8598-b7dc6d905c67": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "방문 가능한 사찰",
+      "model": "gpt-5.6-sol"
+    },
+    "333501a7-1e30-4e2a-be74-961b3c2c3d1d": {
+      "verdict": "reject",
+      "guess": "주상복합",
+      "why": "주거단지",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "496e8721-33d5-43f6-8c77-9d85b0f652f3": {
+      "verdict": "reject",
+      "guess": "인쇄업체",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "27c50f2b-575f-46c5-942d-0b3cf6655169": {
+      "verdict": "reject",
+      "guess": "종교문화관",
+      "why": "종교단체 문화회관",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "da37a555-d875-4d62-9853-1f8a202e6628": {
+      "verdict": "accept",
+      "guess": "산",
+      "why": "등산 자연명소",
+      "model": "gpt-5.6-sol"
+    },
+    "163027f6-36f2-4821-b01b-2d0b0ff1fa54": {
+      "verdict": "accept",
+      "guess": "문화공간",
+      "why": "방문형 문화공간",
+      "model": "gpt-5.6-sol"
+    },
+    "d84fda03-10a1-4d8a-82b8-1d3a1675982b": {
+      "verdict": "reject",
+      "guess": "상점",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "124182ff-02bd-4177-acdf-614d783fcae6": {
+      "verdict": "reject",
+      "guess": "식물스튜디오",
+      "why": "자연명소 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "8980e260-f0c9-4806-a38c-308bc66ef7fa": {
+      "verdict": "accept",
+      "guess": "사적공원",
+      "why": "역사 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "29bba68b-0eba-4078-bfae-f581236c72f9": {
+      "verdict": "accept",
+      "guess": "기념비",
+      "why": "공원 내 역사유적",
+      "model": "gpt-5.6-sol"
+    },
+    "5ba19fb1-e676-462b-8df9-39bcad3ca21f": {
+      "verdict": "reject",
+      "guess": "주거단지",
+      "why": "아파트 단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "8cd436c0-790f-427c-a718-a1bf5f9d6cf4": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "미술 전시공간",
+      "model": "gpt-5.6-sol"
+    },
+    "f4014f77-fcbe-459b-a7fe-d33de30868df": {
+      "verdict": "reject",
+      "guess": "문구체인점",
+      "why": "전국체인 소매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "63d6e535-fffd-4ab4-869d-aef697f19d5f": {
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "작가 전시공간",
+      "model": "gpt-5.6-sol"
+    },
+    "87ba7653-236f-4fef-b306-709a4bcd46d5": {
+      "verdict": "reject",
+      "guess": "관리단",
+      "why": "건물 관리조직",
+      "model": "gpt-5.6-sol"
+    },
+    "24d690db-67fb-4112-9585-5f4982422f69": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 수행처",
+      "model": "gpt-5.6-sol"
+    },
+    "78ef4cbc-0acf-4650-b27d-c4f7ee8b01b5": {
+      "verdict": "reject",
+      "guess": "입주자회",
+      "why": "주거 관리조직",
+      "model": "gpt-5.6-sol"
+    },
+    "d592d2d2-a068-4532-8450-6012c991484b": {
+      "verdict": "accept",
+      "guess": "아트공간",
+      "why": "문화예술 전시공간",
+      "model": "gpt-5.6-sol"
+    },
+    "e6217f5c-5f1f-4aab-bc7b-1a501ba607fa": {
+      "verdict": "accept",
+      "guess": "광장",
+      "why": "방문형 도심광장",
+      "model": "gpt-5.6-sol"
+    },
+    "d39f5492-dcbf-40bd-bca7-acc0ca450555": {
+      "verdict": "accept",
+      "guess": "화랑",
+      "why": "미술 전시공간",
+      "model": "gpt-5.6-sol"
+    },
+    "532ad22b-5e66-4ad6-b563-f089911805a3": {
+      "verdict": "reject",
+      "guess": "불교용품점",
+      "why": "명소 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "9969776d-e753-4a09-9526-5b8ca2071e99": {
+      "verdict": "accept",
+      "guess": "산봉우리",
+      "why": "등산 명소",
+      "model": "gpt-5.6-sol"
+    },
+    "38d22983-5577-406a-b52c-a2efe06657da": {
+      "verdict": "accept",
+      "guess": "산림욕장",
+      "why": "자연 휴양시설",
+      "model": "gpt-5.6-sol"
+    },
+    "0f469c78-833d-4471-ba84-a5c9939e4f29": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 사찰",
+      "model": "gpt-5.6-sol"
+    },
+    "92af9628-3eca-4453-92e1-ded1fff5880f": {
+      "verdict": "reject",
+      "guess": "아파트단지",
+      "why": "주거단지",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "cc1de3fe-6adc-43c1-926a-9f910d172bcd": {
+      "verdict": "accept",
+      "guess": "목공예공방",
+      "why": "공방 판매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a3459a93-3219-4db0-9e7a-659e79ad12c3": {
+      "verdict": "reject",
+      "guess": "하천끝지점",
+      "why": "통과 지점에 가까움",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "3a81da71-979d-4a43-865b-e17cac6cad6d": {
+      "verdict": "accept",
+      "guess": "시민공원",
+      "why": "외부 방문 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "ca10218c-b6ef-4517-9f0a-b8262278948d": {
+      "verdict": "accept",
+      "guess": "충절사당",
+      "why": "역사문화 명소",
+      "model": "gpt-5.6-sol"
+    },
+    "bdc25bf0-682a-41f2-b569-1382d057c10c": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 사찰",
+      "model": "gpt-5.6-sol"
+    },
+    "8b2f88e8-af0a-42dd-b9b0-fffd61318228": {
+      "verdict": "accept",
+      "guess": "수목원",
+      "why": "자연 관람시설",
+      "model": "gpt-5.6-sol"
+    },
+    "fd625884-64cf-4f09-b2b6-c484d09d46b6": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a74f0bd1-8995-4d4f-a3e4-dd8b5f31b80a": {
+      "verdict": "accept",
+      "guess": "체육공원",
+      "why": "방문형 레저공원",
+      "model": "gpt-5.6-sol"
+    },
+    "96f3cd79-401f-495a-8eed-dc63ae6532ff": {
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "공공 미술관",
+      "model": "gpt-5.6-sol"
+    },
+    "c2720e36-28bf-4ee6-a6ba-7bef1509e597": {
+      "verdict": "accept",
+      "guess": "도시공원",
+      "why": "외부 방문 공원",
+      "model": "gpt-5.6-sol"
+    },
+    "294da3ad-7b30-44aa-a0cc-41937d1055a9": {
+      "verdict": "accept",
+      "guess": "다이빙센터",
+      "why": "스쿠버체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "a724ad94-baa4-4632-b03d-37a3562b0fe7": {
+      "verdict": "accept",
+      "guess": "테마공원",
+      "why": "관광공원명확",
+      "model": "gpt-5.6-sol"
+    },
+    "c5946169-67a2-4f7c-b403-728d16551a19": {
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "미술관명확",
+      "model": "gpt-5.6-sol"
+    },
+    "231145ab-20ed-4eae-8d0f-157603e14c18": {
+      "verdict": "reject",
+      "guess": "종교연수원",
+      "why": "종교단체연수원",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "749f8c6c-2d79-43c4-b59b-8be51fe57020": {
+      "verdict": "accept",
+      "guess": "스쿠버센터",
+      "why": "스쿠버체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "3ae57f92-f399-48a7-8751-d9b235d73184": {
+      "verdict": "accept",
+      "guess": "기념관",
+      "why": "문화관람시설",
+      "model": "gpt-5.6-sol"
+    },
+    "e4677fb1-0838-417d-a6b6-06c018a634a6": {
+      "verdict": "accept",
+      "guess": "예술공원",
+      "why": "문화예술공원",
+      "model": "gpt-5.6-sol"
+    },
+    "cc97e575-1570-476f-9478-2f3e2a02891d": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰명확",
+      "model": "gpt-5.6-sol"
+    },
+    "2b74c5bb-bf0e-42a5-99c1-248452937131": {
+      "verdict": "accept",
+      "guess": "주상절리",
+      "why": "대표자연명소",
+      "model": "gpt-5.6-sol"
+    },
+    "444bb60a-3c9c-4c5c-8ec2-d770daf12eab": {
+      "verdict": "accept",
+      "guess": "면세점",
+      "why": "관광객쇼핑시설",
+      "model": "gpt-5.6-sol"
+    },
+    "31c2c9e0-e236-4962-b727-f8333e34b034": {
+      "verdict": "accept",
+      "guess": "해양테마파크",
+      "why": "관광체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "c27ca7e3-afdd-49c0-b514-95bcdb6e716b": {
+      "verdict": "accept",
+      "guess": "상점",
+      "why": "외부인대상상점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "b68c8bd9-f9ed-4d8c-a653-3973f35d8f1c": {
+      "verdict": "reject",
+      "guess": "숙박시설",
+      "why": "명소인지 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5547e18c-3075-4208-9378-24a73c3fb51c": {
+      "verdict": "reject",
+      "guess": "농원",
+      "why": "판매점인지 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "28909f04-3e2a-4793-9324-b10171b49c71": {
+      "verdict": "accept",
+      "guess": "고지습지",
+      "why": "자연관광명소",
+      "model": "gpt-5.6-sol"
+    },
+    "280af38d-7ef7-4710-a124-e61e9b4925f0": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰명확",
+      "model": "gpt-5.6-sol"
+    },
+    "fcfc07ae-5e57-4500-943c-e0d1ac292be8": {
+      "verdict": "accept",
+      "guess": "수목원",
+      "why": "수목원명확",
+      "model": "gpt-5.6-sol"
+    },
+    "6e4b3434-2250-4a55-9553-e20acd5a08f6": {
+      "verdict": "accept",
+      "guess": "산악명소",
+      "why": "고지관광명소",
+      "model": "gpt-5.6-sol"
+    },
+    "ceac8652-f586-4513-bf8b-b4df43c8c00f": {
+      "verdict": "accept",
+      "guess": "고지명소",
+      "why": "자연관광명소",
+      "model": "gpt-5.6-sol"
+    },
+    "859b8ef1-02d7-4663-9fad-a2ec59f80890": {
+      "verdict": "accept",
+      "guess": "승마장",
+      "why": "승마체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "82c9e2f7-ae28-4f0a-9711-25ffec1cd59e": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰명확",
+      "model": "gpt-5.6-sol"
+    },
+    "f07e7dc8-54f1-435f-aae5-43228aff5746": {
+      "verdict": "accept",
+      "guess": "소품점",
+      "why": "쇼핑시설로 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a8c90b98-b321-42a0-a495-fa77ba09d5ad": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지로 판단",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "2ceb8532-aa7d-4286-83c1-ccf532ac07e6": {
+      "verdict": "accept",
+      "guess": "수목원",
+      "why": "수목원명확",
+      "model": "gpt-5.6-sol"
+    },
+    "5291f966-516f-496e-830d-f1125536b967": {
+      "verdict": "accept",
+      "guess": "공원",
+      "why": "공원명확",
+      "model": "gpt-5.6-sol"
+    },
+    "90ad0774-9b78-4f15-b9d7-71816eae2886": {
+      "verdict": "accept",
+      "guess": "공원",
+      "why": "공원명확",
+      "model": "gpt-5.6-sol"
+    },
+    "947a518e-9921-49d7-b203-29c6fa2c3d73": {
+      "verdict": "accept",
+      "guess": "근린공원",
+      "why": "공원명확",
+      "model": "gpt-5.6-sol"
+    },
+    "303d628a-cb6c-45e6-bba3-6a03d89f55ad": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "전시공간명확",
+      "model": "gpt-5.6-sol"
+    },
+    "55097f9a-503b-437d-8eab-0a15bf370317": {
+      "verdict": "reject",
+      "guess": "불명시설",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "7a6aa852-e8d7-4e2c-b16b-eed85dac8950": {
+      "verdict": "accept",
+      "guess": "숲길정원",
+      "why": "자연관람시설",
+      "model": "gpt-5.6-sol"
+    },
+    "5a382723-f99e-4e65-b6f2-32705c1dc0bc": {
+      "verdict": "reject",
+      "guess": "불명시설",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "eeae66d6-b468-4bd8-891a-65fea556164c": {
+      "verdict": "accept",
+      "guess": "스쿠버숍",
+      "why": "외부인 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "d965b77c-05ac-4fd4-9b2f-97c19802ccd5": {
+      "verdict": "accept",
+      "guess": "다이빙센터",
+      "why": "외부인 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "2509502b-6eb9-4ee8-8477-628fa46224a6": {
+      "verdict": "accept",
+      "guess": "식물원",
+      "why": "관람형 식물원",
+      "model": "gpt-5.6-sol"
+    },
+    "2819ffcc-7906-4858-b6ac-c23bb5749017": {
+      "verdict": "accept",
+      "guess": "클라이밍장",
+      "why": "방문형 체육시설",
+      "model": "gpt-5.6-sol"
+    },
+    "261b9907-7a85-4d92-8da7-25f170f944ba": {
+      "verdict": "reject",
+      "guess": "개인주택",
+      "why": "주택으로 보임",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5b187dff-fbde-4d03-b94e-25d8d9d5053b": {
+      "verdict": "reject",
+      "guess": "도로",
+      "why": "도로명에 해당",
+      "model": "gpt-5.6-sol"
+    },
+    "8357dc24-32d0-4608-8e46-6e8b786e0df7": {
+      "verdict": "reject",
+      "guess": "불명상점",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "47f7d26b-20ce-449d-bc3a-55a716268449": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "외부 관람 공간",
+      "model": "gpt-5.6-sol"
+    },
+    "10d5f75f-8459-4237-affe-1fab96e341f5": {
+      "verdict": "accept",
+      "guess": "기념품점",
+      "why": "관광객 대상 매장",
+      "model": "gpt-5.6-sol"
+    },
+    "ecce0f45-4582-48bf-bd2d-c46313050718": {
+      "verdict": "accept",
+      "guess": "체험목장",
+      "why": "관광형 목장",
+      "model": "gpt-5.6-sol"
+    },
+    "49a3aafc-0996-4286-845e-bd823ecb4edb": {
+      "verdict": "reject",
+      "guess": "불명시설",
+      "why": "문화시설 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "fec1bfa5-bfad-4908-b045-a387b731232e": {
+      "verdict": "reject",
+      "guess": "불명업체",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "bf950b05-7408-4ce8-a12d-79bfb004c62a": {
+      "verdict": "accept",
+      "guess": "공예공방",
+      "why": "방문 가능한 공방",
+      "model": "gpt-5.6-sol"
+    },
+    "59479e29-e2b4-49ac-97e7-1f562acde25c": {
+      "verdict": "accept",
+      "guess": "다이빙체험",
+      "why": "여행자 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "68f515ab-548e-4117-8da8-28516476737b": {
+      "verdict": "accept",
+      "guess": "공예공방",
+      "why": "방문 가능한 공방",
+      "model": "gpt-5.6-sol"
+    },
+    "f70894ce-184c-4455-a855-08c425d20d84": {
+      "verdict": "reject",
+      "guess": "불명상점",
+      "why": "판매점 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "fbbb735f-eddb-45e7-b78c-03cac29bd1c5": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰로 확인 가능",
+      "model": "gpt-5.6-sol"
+    },
+    "80e3ff9b-7b5c-47cb-a091-15fe8a25fc0b": {
+      "verdict": "accept",
+      "guess": "암자",
+      "why": "불교 암자",
+      "model": "gpt-5.6-sol"
+    },
+    "5f357ded-635e-45f1-9780-071be55fe25f": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 사찰로 판단",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e71e9333-6ca2-4221-a7f9-8eb080827fe8": {
+      "verdict": "reject",
+      "guess": "관리조직",
+      "why": "자치관리위원회",
+      "model": "gpt-5.6-sol"
+    },
+    "c1723732-8cb5-459f-a495-e6ac65bfec1d": {
+      "verdict": "accept",
+      "guess": "용암동굴",
+      "why": "대표 관광 동굴",
+      "model": "gpt-5.6-sol"
+    },
+    "9554dfd3-8b31-4634-be58-0877dc6ebcdc": {
+      "verdict": "accept",
+      "guess": "공방상점",
+      "why": "작업실형 판매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e8a973b2-ee7e-4b44-a903-ecea0ff2b7d5": {
+      "verdict": "accept",
+      "guess": "수목원",
+      "why": "관람 가능한 비자숲",
+      "model": "gpt-5.6-sol"
+    },
+    "eda412d2-43ab-467e-8c88-b01fe5b4bb90": {
+      "verdict": "accept",
+      "guess": "테마공원",
+      "why": "관광 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "07566ae8-ab3a-44a3-a857-0a79510fe576": {
+      "verdict": "accept",
+      "guess": "스쿠버체험",
+      "why": "다이빙 체험업체",
+      "model": "gpt-5.6-sol"
+    },
+    "0ff74a3a-da14-4daf-b858-401a46cc469e": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "외부인 관람 공간",
+      "model": "gpt-5.6-sol"
+    },
+    "2a5f716c-fe4d-445e-9648-6e4ea63f94ee": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰은 방문 대상",
+      "model": "gpt-5.6-sol"
+    },
+    "1d15acf7-a6b5-4034-9d9c-f3b72c0656c9": {
+      "verdict": "accept",
+      "guess": "다이빙숍",
+      "why": "다이빙 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "707783c3-9246-4e6e-a934-496af87b8dcd": {
+      "verdict": "reject",
+      "guess": "종교회관",
+      "why": "종교단체문화회관",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "862e05a5-4266-49bf-a5e2-88c414df70a4": {
+      "verdict": "accept",
+      "guess": "산",
+      "why": "대표 자연 명소",
+      "model": "gpt-5.6-sol"
+    },
+    "0b70f3f7-ee39-475a-92be-29081456fbd6": {
+      "verdict": "accept",
+      "guess": "전망대",
+      "why": "경관 조망시설",
+      "model": "gpt-5.6-sol"
+    },
+    "25798a11-f2d9-472e-8936-fa463151a962": {
+      "verdict": "accept",
+      "guess": "치유숲",
+      "why": "방문 가능한 산림시설",
+      "model": "gpt-5.6-sol"
+    },
+    "efbe2ba6-8ba2-4a10-9cef-e2df3a45e732": {
+      "verdict": "reject",
+      "guess": "해수온천",
+      "why": "자연 분류 부적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "31058072-4a05-40b6-a521-39fb383bc080": {
+      "verdict": "reject",
+      "guess": "상업점포",
+      "why": "업종 판단 불가",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "1a5a992c-b9ce-4ac3-b318-d717014eeeca": {
+      "verdict": "reject",
+      "guess": "VR오락실",
+      "why": "자연 분류 부적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "3fbac792-d1ed-4781-b25f-bcb09593d69b": {
+      "verdict": "accept",
+      "guess": "전망대",
+      "why": "관광 전망시설",
+      "model": "gpt-5.6-sol"
+    },
+    "69e174dc-6e15-492c-b840-d2aca588a39b": {
+      "verdict": "reject",
+      "guess": "감귤농장",
+      "why": "쇼핑시설 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "66a20489-c9d5-4527-b01d-1298178f6c4a": {
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "관람 문화시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "1ff5c89f-e409-42f5-b761-f9cd2e9500fa": {
+      "verdict": "reject",
+      "guess": "산",
+      "why": "산인데명소분류",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "4c256498-afae-430e-813c-9662fd539740": {
+      "verdict": "accept",
+      "guess": "오름",
+      "why": "자연 탐방 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5b017efb-d5ab-40f4-abd8-f1541d24ceb2": {
+      "verdict": "accept",
+      "guess": "선물가게",
+      "why": "쇼핑 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5fd24f0f-d6e1-4224-9f02-2cf0008233c8": {
+      "verdict": "reject",
+      "guess": "불명시설",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "ff2608da-7a6d-4fbc-bd49-2b2cf3a51089": {
+      "verdict": "reject",
+      "guess": "관광명소",
+      "why": "자연 분류 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "d8f2fdf9-dbcf-489f-b8d0-1badbb66675f": {
+      "verdict": "accept",
+      "guess": "전망대",
+      "why": "명소 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5f547e6f-9a8c-4d61-9804-094790d25b6a": {
+      "verdict": "reject",
+      "guess": "골프장",
+      "why": "자연 분류 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "ec24546a-7982-4566-ab42-de6ded4fa829": {
+      "verdict": "reject",
+      "guess": "추모시설",
+      "why": "자연공원 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "7f5c9755-7cdf-415d-aff5-4b01fddd243e": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "d230720e-aa0c-4107-829d-dae5378c958e": {
+      "verdict": "accept",
+      "guess": "생태공원",
+      "why": "자연 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "be59902e-9c56-412d-937e-91517fb0fb1c": {
+      "verdict": "reject",
+      "guess": "생태학습관",
+      "why": "자연 분류 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "9df46937-7c5b-44ca-a4b8-706f627ce55f": {
+      "verdict": "reject",
+      "guess": "제조업체",
+      "why": "공장으로 추정",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "56c5e48d-cccc-4ac1-b43d-5fb720b02071": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰로 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5f773a82-791e-4cdb-b1fe-f725262a367f": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰로 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a4ec4dbe-a2c0-4f9b-840c-6f343500404f": {
+      "verdict": "reject",
+      "guess": "공원묘원",
+      "why": "자연 관광지 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "d3e6adbd-301e-422d-97a7-2b51bb9aa2e3": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰로 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "c24ccad6-18c5-4b25-99ec-0f5d37a57a2c": {
+      "verdict": "reject",
+      "guess": "일반마을",
+      "why": "자연 분류 부적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "8322b3cc-5bba-4981-b2eb-2f3c322999b1": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰로 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "b5cded15-0436-4385-a27d-557c4a079d88": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰로 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "29d0f845-4f1a-4e87-92a9-49f6afbe067a": {
+      "verdict": "reject",
+      "guess": "전망유적",
+      "why": "자연 분류 부적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e96990e5-5b31-48f3-aeff-c446fad2d80f": {
+      "verdict": "reject",
+      "guess": "작업실",
+      "why": "문화시설인지 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "d15e630f-e027-4b46-94e8-ac8fcd99974b": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "문화시설 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "44ff4ef0-c584-4a00-8c3e-d4cf2d6314cc": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "유명 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e8b4b415-39f5-4592-b764-4caf8d43f4ce": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "방문 가능한 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "617271b0-cbe0-40ab-99bb-0c7822998e29": {
+      "verdict": "reject",
+      "guess": "도예공방",
+      "why": "문화시설 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "c035ff77-d9d8-49e4-ad7b-eadab61dd996": {
+      "verdict": "accept",
+      "guess": "수변공원",
+      "why": "공원 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "f6c4459c-438d-479a-8fe0-4be01ea71ad7": {
+      "verdict": "accept",
+      "guess": "근린공원",
+      "why": "공원 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "7cac75fa-8d27-4632-8e15-bf3badececff": {
+      "verdict": "reject",
+      "guess": "온천목욕탕",
+      "why": "자연 분류와 불일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "ca05796c-5a6d-42ed-9ad7-98c48f9ba630": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰로 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "62c324d9-55f1-47b6-a4d8-2211f9445f15": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰로 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "f7c1d876-713d-44ef-9e97-d1329ba83f6c": {
+      "verdict": "accept",
+      "guess": "기념품점",
+      "why": "제주 지역 상점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "8995a7d4-6da8-4423-a1e5-2546b6cbc4dd": {
+      "verdict": "accept",
+      "guess": "공방",
+      "why": "공방 판매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "bd08bfe0-6940-4046-b846-5c333e0c2902": {
+      "verdict": "reject",
+      "guess": "주택",
+      "why": "하우스형 주거시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5af37102-eb5c-4887-9482-76422642ab2e": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰명과 분류 일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e3d8400c-fd27-4342-9a87-721d2956c20d": {
+      "verdict": "accept",
+      "guess": "테마공원",
+      "why": "관광형 돌하르방공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "b5ccc90a-ac36-4e23-bf6d-f3b5b5af2bc5": {
+      "verdict": "accept",
+      "guess": "오름",
+      "why": "자연 명소와 분류 일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e1f0761b-1807-49fa-9c4b-cb746bf5d918": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰명과 분류 일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "480d8210-44f2-4b7f-abf6-877f393cf648": {
+      "verdict": "accept",
+      "guess": "유적지",
+      "why": "독립운동 기념 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "dec7d9a9-e17a-45e3-942e-52a7b2e0e3b9": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰명과 분류 일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "cf8be68c-1cea-40d8-a6b1-6bda80e9db6f": {
+      "verdict": "reject",
+      "guess": "상점불명",
+      "why": "상호만으로 판단 불가",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "6cabefea-fe25-4d00-a1bc-75173a6e31ec": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰명과 분류 일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "08dd2e28-2916-4a46-bf74-14137327db43": {
+      "verdict": "reject",
+      "guess": "문구점",
+      "why": "명소 분류가 부적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "ea647fc9-a0a0-4591-aaf3-6f4641cf135a": {
+      "verdict": "accept",
+      "guess": "오일시장",
+      "why": "관광객 방문 시장",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "854f1d9d-7a59-4d5a-87a4-535fe9d7a41d": {
+      "verdict": "reject",
+      "guess": "미로공원",
+      "why": "체험시설 분류오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a6f1b6eb-28bf-4913-acc5-4efa6c8e0a0b": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "방문 가능한 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "9fd01ab6-c81d-4f24-a67e-90b6f7278691": {
+      "verdict": "accept",
+      "guess": "등대",
+      "why": "우도 해안 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "869d256a-c7f4-4eef-bb38-4d5cfb920f1f": {
+      "verdict": "accept",
+      "guess": "다이빙숍",
+      "why": "해양 체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "8ceb762a-cb8d-4a84-b483-7dfc24724057": {
+      "verdict": "reject",
+      "guess": "농원",
+      "why": "판매시설인지 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "f5783c81-2774-4e0b-a28f-789f19ff97b0": {
+      "verdict": "reject",
+      "guess": "잡화점",
+      "why": "일반 소매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5e9f5791-3733-481a-be33-f497ef07adbf": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "방문 가능한 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "aad38681-1fa7-4e0a-8da6-a65d45312233": {
+      "verdict": "reject",
+      "guess": "대형마트",
+      "why": "전국 체인 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "b3c481fc-3a1e-4a12-9b23-f1049513b17e": {
+      "verdict": "accept",
+      "guess": "전시관",
+      "why": "관람 문화시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5cc61c4c-0b05-4df2-b100-bee83b15e882": {
+      "verdict": "accept",
+      "guess": "다이빙숍",
+      "why": "다이빙 체험시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "0e2c4253-9b54-4cbe-9b54-d4a1a8134555": {
+      "verdict": "reject",
+      "guess": "불명시설",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a4f7a90c-ab16-4f7b-9c50-2c91fcb4d538": {
+      "verdict": "accept",
+      "guess": "오름",
+      "why": "탐방 가능한 오름",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5fcc9d69-aff9-4a00-bbb9-f32bb27dccbc": {
+      "verdict": "accept",
+      "guess": "오름",
+      "why": "탐방 가능한 오름",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "2b2cc270-d777-41cf-9808-0c0658d33bc9": {
+      "verdict": "accept",
+      "guess": "본향당",
+      "why": "제주 전통 신당",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e55601a7-ffc9-428a-9b7b-1cd67eeed107": {
+      "verdict": "reject",
+      "guess": "테마파크",
+      "why": "자연 분류 부적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "f29bfff8-50df-4656-85a1-0a8adf7029df": {
+      "verdict": "accept",
+      "guess": "휴양림시설",
+      "why": "자연휴양림 시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "b878c830-482f-410d-aaba-1ce7ddcbf56c": {
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "관람 가능한 미술관",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "ecb71dc0-2d51-45a0-8aac-05ef31ab510c": {
+      "verdict": "reject",
+      "guess": "승마체험장",
+      "why": "체험 분류가 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "99bb6c9d-3719-4c11-bbe8-bb909fde789e": {
+      "verdict": "accept",
+      "guess": "자연공원",
+      "why": "관람형 자연공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "63056782-1ac8-4763-bf1b-165a5b54879e": {
+      "verdict": "accept",
+      "guess": "민속마을",
+      "why": "관광 민속마을",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "149d15bd-9878-4020-a783-46478a928c3c": {
+      "verdict": "accept",
+      "guess": "자연공원",
+      "why": "동굴·식물 관람지",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "059f6657-26bb-42f2-9b90-bb8cca0f8d01": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "방문 가능한 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "cc95952d-c836-4154-8537-b1d2b25fa3ca": {
+      "verdict": "reject",
+      "guess": "상점불명",
+      "why": "상호만으로 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "c27c4046-2976-4a11-ae05-b1675b6e73a7": {
+      "verdict": "reject",
+      "guess": "미술공방",
+      "why": "시설정체불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "6e0d2fa5-5754-479f-872c-bd4167c6b1d1": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "관광객방문사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "83bd5c42-1f55-42b9-b4af-ed8f1824b5fc": {
+      "verdict": "accept",
+      "guess": "다이빙센터",
+      "why": "해양체험시설",
+      "model": "gpt-5.6-sol"
+    },
+    "ce58078c-ab52-4448-9f8f-81fc5ec40630": {
+      "verdict": "accept",
+      "guess": "분화구",
+      "why": "대표 자연명소",
+      "model": "gpt-5.6-sol"
+    },
+    "3550933e-7a4f-41bd-9f18-e0f4d443250b": {
+      "verdict": "reject",
+      "guess": "예술가숙소",
+      "why": "관람시설불확실",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5984907a-a311-4dc5-9ca7-7bb0bfaaac00": {
+      "verdict": "reject",
+      "guess": "전시관",
+      "why": "전시관은문화시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "17a19ac5-c750-4948-a496-0d76c4586e64": {
+      "verdict": "accept",
+      "guess": "봉수유적",
+      "why": "역사유적명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "6d1933fa-021b-424a-a055-4ef40e9ba441": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "관광객방문사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "d9a29b04-b043-4b79-b4d1-8d708ae3cc50": {
+      "verdict": "reject",
+      "guess": "농업업체",
+      "why": "방문시설인지 불명",
+      "model": "gpt-5.6-sol"
+    },
+    "e4c9fc8f-908d-4b4d-ab88-17534279488f": {
+      "verdict": "reject",
+      "guess": "오름",
+      "why": "오름인데명소분류",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a8376daa-2b65-4c32-b15c-88890f9002cd": {
+      "verdict": "accept",
+      "guess": "공방판매점",
+      "why": "지역 상품 판매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "26a88216-1d55-4ceb-95d2-b8907078e134": {
+      "verdict": "reject",
+      "guess": "미상시설",
+      "why": "상호가 지나치게 모호",
+      "model": "gpt-5.6-sol"
+    },
+    "2ca4e6cb-a993-47a6-a624-02f32db2ae09": {
+      "verdict": "accept",
+      "guess": "조각공원",
+      "why": "관람 가능한 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "1fdd8473-9ea8-4cfc-8e97-845a81bf34c7": {
+      "verdict": "accept",
+      "guess": "아웃렛",
+      "why": "외부인 쇼핑 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "4e8f6d65-2e3f-489b-8a8d-36cd686b99bf": {
+      "verdict": "reject",
+      "guess": "미상시설",
+      "why": "자연명소인지 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "f0ef6908-9776-4f7d-8a66-dee269660924": {
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "관람 문화시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a892c65b-560f-436a-bfab-48ecd9a9c5c9": {
+      "verdict": "accept",
+      "guess": "관광목장",
+      "why": "방문하는 지역명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a43d007a-9868-4ffc-b6b2-8409cdca2452": {
+      "verdict": "reject",
+      "guess": "산악전망대",
+      "why": "야간 전망지 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "4a5955e3-8373-4696-bcd9-f4cc82930ca2": {
+      "verdict": "reject",
+      "guess": "산악대피소",
+      "why": "자연명소 아닌 시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5161593c-506a-4b0e-9936-dc8eefbc4801": {
+      "verdict": "reject",
+      "guess": "고산초원",
+      "why": "자연 분류가 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "d3922b44-2ca1-4f93-9eb2-dc14b54d04dd": {
+      "verdict": "reject",
+      "guess": "테마시설",
+      "why": "쇼핑 여부 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "3eed2575-5cfd-455f-94ea-9ab85ea367b9": {
+      "verdict": "reject",
+      "guess": "체험농장",
+      "why": "쇼핑 분류 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "1ed304e9-5ad4-4b5a-ae6c-785ac1bb2cdb": {
+      "verdict": "accept",
+      "guess": "항몽유적",
+      "why": "관람 유적지",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "3e3af7e2-5363-4df2-a7cd-f2b20ce5ca00": {
+      "verdict": "accept",
+      "guess": "사진명소",
+      "why": "관광객 방문시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "d8d05b31-737a-4459-9145-ed8d3bb89aeb": {
+      "verdict": "reject",
+      "guess": "승마장",
+      "why": "자연 분류가 틀림",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "31966472-2d29-4b07-a26e-04c257121b38": {
+      "verdict": "reject",
+      "guess": "외식시설",
+      "why": "자연 분류가 틀림",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "9c729355-be2f-4fa5-a02d-1dd002d70a1f": {
+      "verdict": "reject",
+      "guess": "동물목장",
+      "why": "체험시설로분류오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "ae7f7ac0-a981-4952-b2b2-b667185cfb31": {
+      "verdict": "accept",
+      "guess": "로컬상점",
+      "why": "쇼핑분류일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "6b5008ba-dc54-4ae5-96ee-c3b4877ba831": {
+      "verdict": "accept",
+      "guess": "분재정원",
+      "why": "자연분류일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "9987bd7b-e7e9-4535-b710-bf4b373429c8": {
+      "verdict": "accept",
+      "guess": "오름",
+      "why": "자연명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "af2843ab-e1d1-47a2-b3d3-a99e3a8e07cf": {
+      "verdict": "accept",
+      "guess": "로컬상점",
+      "why": "판매점명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5dfe0d43-bcd4-42be-8d4d-a89cf57ea1ac": {
+      "verdict": "reject",
+      "guess": "숙소",
+      "why": "명소분류오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "0c840000-8a0c-4806-806a-114dda7b1ced": {
+      "verdict": "accept",
+      "guess": "공예품점",
+      "why": "쇼핑분류일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "15b5cacc-fce4-4193-9b61-48475bf28616": {
+      "verdict": "accept",
+      "guess": "소품점",
+      "why": "쇼핑분류일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "865ff8b2-22e2-4a23-a872-327221e290cf": {
+      "verdict": "accept",
+      "guess": "공원",
+      "why": "자연분류일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "06db8d40-a68b-47e2-a146-2b3998f47c6f": {
+      "verdict": "accept",
+      "guess": "편집숍",
+      "why": "쇼핑분류일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "81cc556f-275f-4716-813b-7159d2632fa5": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "명소분류일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "e3aeba28-2051-45d4-a276-ceea9b4cd9ca": {
+      "verdict": "reject",
+      "guess": "게스트하우스",
+      "why": "숙소로명소아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "d2ddb026-085b-4af7-8c3e-5b3462ded1fc": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰·분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "407369c1-6a83-4bc3-ac8e-3e27ca4b29d8": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰·분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "f31d3689-be95-44b9-9678-5353d8a2ef63": {
+      "verdict": "accept",
+      "guess": "공원",
+      "why": "공원·분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "9158ae77-521e-4a00-8959-830160548350": {
+      "verdict": "reject",
+      "guess": "게스트하우스",
+      "why": "숙박업·분류오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "bd6674ec-c865-4152-a020-0d00c4016210": {
+      "verdict": "accept",
+      "guess": "카페소품샵",
+      "why": "판매점·분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "a8f525ed-860e-4dba-8ee3-1bf47893b663": {
+      "verdict": "accept",
+      "guess": "유적명소",
+      "why": "유적·분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "39cd6ed5-defc-4b5d-ade8-38318d3f349b": {
+      "verdict": "accept",
+      "guess": "정원",
+      "why": "정원·분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "ae359ad7-812f-43a3-b587-a575f9d0b12d": {
+      "verdict": "accept",
+      "guess": "관광공원",
+      "why": "공원·분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5934fc55-8b16-45ee-83ea-dcb7a4678ba2": {
+      "verdict": "accept",
+      "guess": "선인장군락",
+      "why": "자연명소·분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "340f85eb-528a-4492-a9e9-d2143cf45c38": {
+      "verdict": "reject",
+      "guess": "승마테마파크",
+      "why": "자연분류 부적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "1bb1f00c-629c-4fcf-b851-ba898abb7ca9": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "문화시설·분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "304a3a00-878a-465e-9c10-f7ddc86adef0": {
+      "verdict": "accept",
+      "guess": "곶자왈공원",
+      "why": "자연 탐방 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "b816c300-1a59-4e64-8525-71280d40eecc": {
+      "verdict": "accept",
+      "guess": "문화예술공간",
+      "why": "예술 전시 공간",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "9de7f92c-08a9-4a90-8442-bb32683c5497": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "50339b5f-b41d-4b9d-8240-fb364ef1b6d3": {
+      "verdict": "accept",
+      "guess": "스쿠버체험",
+      "why": "다이빙 체험시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "adb2d351-d4fa-4010-9c6b-e6929ebbf20a": {
+      "verdict": "accept",
+      "guess": "전통시장",
+      "why": "외부인 방문 시장",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "33cc95d8-523b-414d-b234-6cba0632a226": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "1a90f8e0-170b-4e95-92c9-2dfdf8365787": {
+      "verdict": "reject",
+      "guess": "미상상호",
+      "why": "정체 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "92977506-9d50-4af0-b7b1-7f8205629e60": {
+      "verdict": "reject",
+      "guess": "체육시설",
+      "why": "관광지 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "c1d49a69-a550-4f77-a53b-a14f3c3f6702": {
+      "verdict": "accept",
+      "guess": "산",
+      "why": "자연 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "9e4d4f52-907f-402c-be60-3126592e45fb": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "동호수 표기 주거",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "ef520333-7c1b-422d-9955-e0ffd9d95624": {
+      "verdict": "accept",
+      "guess": "다이빙숍",
+      "why": "다이빙체험시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "fcefcd57-3a87-4057-8ee5-af14620465d8": {
+      "verdict": "accept",
+      "guess": "전시관",
+      "why": "브릭 문화시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    },
+    "5b187dff-fbde-4d03-b94e-25f170f944ba": {
+      "verdict": "reject",
+      "guess": "도로",
+      "why": "도로명으로 보임",
+      "model": "gpt-5.6-sol",
+      "prompt": "2"
+    }
+  }
+}

@@ -2734,9 +2734,9 @@ describe('시각 조정 시트', () => {
       expect(screen.getByTestId(t('place-summary'))).toHaveTextContent(
         '해운대 블루라인파크'
       );
-      expect(screen.getByTestId(t('place-thumb-image')).props.source).toEqual({
-        uri: B_IMAGE,
-      });
+      expect(screen.getByTestId(t('place-thumb-image')).props.source).toEqual([
+        { uri: B_IMAGE },
+      ]);
     });
   });
 

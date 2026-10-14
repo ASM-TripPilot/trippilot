@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.changelog.api.AppendChangeLog
+import com.trippilot.changelog.api.ChangeLogEntryView
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
@@ -24,17 +25,20 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.ReplanChange
 import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
 import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.placedata.api.PoiSnapshotFacade
 import com.trippilot.placedata.api.SavedPlaceLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
+import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
@@ -71,12 +75,13 @@ class ReplanFacadeService(
         val ctx = trips.findGenerationContext(command.accountId, command.tripId) ?: throw ResourceNotFound()
         // 기준점이 없으면 상대가 후보 풀을 매달 곳이 없다 — 숙소 앵커로 채운다(BR-U4-19 사다리의 마지막 단).
         val origin = groundingPoint(command, ctx)
+        val stay = stayOf(command, ctx)
         // 취향은 생성 경로와 **같은 척도**로 만든다(PreferenceProfiles KDoc) — 원천은 §2 대로 trip.preference_snapshot
         // (안 실린 축만 계정 값 — overriddenBy). §2 이탈 1건은 의도다: 예산 등급을 trip.budget_total 변환 대신
         // 취향의 budget_tier(경계 계약 어휘)로. 두 경로가 다른 취향으로 돌면 "원래 자리보다 나은 것만 바꾼다"(§4)
         // 비교가 성립하지 않는다.
         val prefs = preferences.findPreferences(command.accountId).overriddenBy(ctx.preferenceSnapshot)
-        val profile = prefs.toProfile(personalization.hintsFor(command.accountId))
+        val profile = prefs.toProfile(personalization.hintsFor(command.accountId), ctx.preferenceSnapshot.keys)
         val output = scheduleAgent.replan(
             ReplanInput(
                 tripId = command.tripId,
@@ -87,6 +92,8 @@ class ReplanFacadeService(
                 targetDate = command.targetDate,
                 originLat = origin.first,
                 originLng = origin.second,
+                stayLat = stay?.lat,
+                stayLng = stay?.lng,
                 lockedBlocks = lockedBlocks(current, command),
                 reasons = command.reasons,
                 directives = command.directives,
@@ -104,6 +111,14 @@ class ReplanFacadeService(
                 // 방금 밀어낸 곳을 다시 제안하지 않게 하는 것이 저장의 목적이다.
                 rejections = rejectionStore.findByTrip(command.tripId),
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), REPLAN_DEADLINE_MS),
+                // 변경 이력(TRIP-975) — 이 날짜를 건드린 것만, diff 로. 조회 실패는 재계획을 막지 않는다:
+                // 이력은 "같은 제안 반복 방지"의 보조 재료라 없으면 종전과 같다.
+                changeLog = runCatching {
+                    changesOn(changeLogs.findTimeline(command.accountId, command.tripId, CHANGE_LOG_SCAN), command.targetDate)
+                }.getOrElse {
+                    log.warn("변경 이력 조회 실패 — 이력 없이 재계획합니다. tripId={}", command.tripId, it)
+                    emptyList()
+                },
             ),
         )
         // **요청한 날짜만** 받는다. 다른 날을 돌려줬을 때 그것을 오늘 초안으로 삼으면, 확정 순간
@@ -128,6 +143,17 @@ class ReplanFacadeService(
         // 빈 초안은 "해 없음"이다 — 빈 하루를 초안이라고 보여 주면 사용자가 그걸 확정한다.
         if (slots.isEmpty()) return null
         return ReplanProposal(current.itineraryId, command.targetDate, slots, output.totalDistanceKm)
+    }
+
+    /**
+     * '숙소 근처에서 끝내기'(END_NEAR_STAY)가 하루를 마칠 곳 — **그날 밤 숙소, 없으면 전날 숙소**.
+     * 체크아웃일은 숙박일이 아니라 앵커가 없다([BaseAnchorFacade]) — 그날은 전날 밤 숙소가 짐을 둔 곳이다.
+     * 둘 다 없으면 null(상대가 그 지시를 무효 노트로 밝힌다). 지시와 무관하게 싣는다 — 값의 뜻이 지시에 매이지 않는다.
+     */
+    private fun stayOf(command: ReplanCommand, ctx: TripGenerationContext): DayAnchorView? {
+        val stays = baseAnchors.findStayNightAnchors(command.tripId, ctx.startDate, ctx.endDate)
+        return stays.firstOrNull { it.date == command.targetDate }
+            ?: stays.firstOrNull { it.date == command.targetDate.minusDays(1) }
     }
 
     /**
@@ -278,5 +304,30 @@ class ReplanFacadeService(
         /** 여행 "지금"은 사용자가 있는 곳의 시각이다(서버 UTC 아님). */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
         private const val MINUTES_PER_DAY = 24 * 60L
+
+        /**
+         * 변경 이력을 몇 건까지 훑을까 — 그중 **이 날짜를 건드린 것**만 남는다(TRIP-975).
+         * 상대 계약 상한이 20건이라 남는 것도 20으로 자른다(`ChangeLogEntrySchema` max_length).
+         */
+        private const val CHANGE_LOG_SCAN = 50
+        private val log = org.slf4j.LoggerFactory.getLogger(ReplanFacadeService::class.java)
     }
 }
+
+/** 상대 계약(`ReplanRequest.change_log` max_length)과 같은 값 — 넘기면 422 다. */
+internal const val CHANGE_LOG_MAX = 20
+
+/**
+ * 변경 이력(최신순) → 이 날짜의 diff (TRIP-975). 전후 스냅숏 중 어느 쪽이든 그 날짜가 있으면 대상이고,
+ * 그날 빠진 곳·들어온 곳이 둘 다 없으면(시각만 옮긴 편집) 버린다 — "같은 곳을 또 제안하지 않게"에는
+ * 장소 변화만 쓸모가 있다. 시각·행위자는 싣지 않는다([ReplanChange] KDoc).
+ */
+internal fun changesOn(timeline: List<ChangeLogEntryView>, date: LocalDate): List<ReplanChange> =
+    timeline.mapNotNull { e ->
+        val before = e.before.days.filter { it.date == date }.flatMap { d -> d.slots.map { it.poiId } }.toSet()
+        val after = e.after.days.filter { it.date == date }.flatMap { d -> d.slots.map { it.poiId } }.toSet()
+        val removed = (before - after).sorted()
+        val added = (after - before).sorted()
+        if (removed.isEmpty() && added.isEmpty()) null
+        else ReplanChange(e.sourceType.name, e.reason, e.at, removed, added)
+    }.take(CHANGE_LOG_MAX)

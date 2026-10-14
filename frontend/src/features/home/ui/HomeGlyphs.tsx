@@ -1,5 +1,10 @@
 import Svg, { Circle, Path } from 'react-native-svg';
 // 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
+import {
+  HeartStrokeFilledGlyph,
+  HeartStrokeOutlineGlyph,
+} from '@/shared/ui/glyphs';
+
 export { SuitcaseGlyph, CloseGlyph } from '@/shared/ui/glyphs';
 
 // 홈 "발견·영감 피드" 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs 패턴 계승 · TRIP-316).
@@ -130,21 +135,7 @@ export function LocationPinGlyph({ size = 12, testID }: GlyphProps) {
 // 카드·hero 우상단 하트 — 전부 사진 위라 흰색(장식 · no-op). 저장 상태 토글은 아직 없다.
 export function HeartOutlineGlyph({ size = 22, testID }: GlyphProps) {
   return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 22 22"
-      fill="none"
-    >
-      <Path
-        d="M11 19C11 19 3 14 3 8.6C3 5.9 5.1 3.8 7.7 3.8C9.1 3.8 10.4 4.5 11 5.6C11.6 4.5 12.9 3.8 14.3 3.8C16.9 3.8 19 5.9 19 8.6C19 14 11 19 11 19Z"
-        stroke={WHITE}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    <HeartStrokeOutlineGlyph size={size} color="onPrimary" testID={testID} />
   );
 }
 
@@ -152,24 +143,7 @@ export function HeartOutlineGlyph({ size = 22, testID }: GlyphProps) {
 // 장식)와 경로는 같고 색만 다르다. features 간 글리프 공유가 금지(importBoundary)라
 // features/stay 의 같은 이름 글리프를 가져오지 않고 이 파일에 다시 적는다.
 export function HeartFilledGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 22 22"
-      fill="none"
-    >
-      <Path
-        d="M11 19C11 19 3 14 3 8.6C3 5.9 5.1 3.8 7.7 3.8C9.1 3.8 10.4 4.5 11 5.6C11.6 4.5 12.9 3.8 14.3 3.8C16.9 3.8 19 5.9 19 8.6C19 14 11 19 11 19Z"
-        fill={PRIMARY}
-        stroke={PRIMARY}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <HeartStrokeFilledGlyph size={size} testID={testID} />;
 }
 
 // FAB('여행 만들기') 앞 plus — bg-primary 위라 on-primary(흰색) 고정.

@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.VisitRecordPort
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
@@ -268,6 +269,7 @@ class GenerateItineraryServiceTest : StringSpec({
         dayStartAt: LocalTime? = null,
         firstDayStartAt: LocalTime? = null,
         lastDayEndAt: LocalTime? = null,
+        visits: VisitRecordPort = NoVisits,
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -292,7 +294,7 @@ class GenerateItineraryServiceTest : StringSpec({
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다 — 인스턴스를 나누면 취소가 사라진다.
         val sessions = genSessions(trips, sessionRepo, clock, defaultDeadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, scoredPools, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, rejectionStore, scoredPools, personalization, NOOP_TX, clock, defaultDeadlines)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, rejectionStore, scoredPools, personalization, visits, NOOP_TX, clock, defaultDeadlines)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -577,6 +579,45 @@ class GenerateItineraryServiceTest : StringSpec({
         agent.captures[1].timeWindows.forEach { it.start shouldBe LocalTime.parse("09:00") } // 내일부터는 종전 그대로
     }
 
+    // 기본 하루 끝(21:00)이 저녁 생성을 막았다 — 20:04 에 만들면 지금+30분이 21:00 이라 오늘이 닫혀,
+    // 당일치기는 AI 를 한 번도 안 부르고 빈 일정이 나갔다(DEV 10-14 팀원 실측, 생성 0.05초 · 연타).
+    // 오늘은 지금부터 **2시간**을 보장하되 하루 끝(23:59)을 넘기지 않는다 — 밤에도 야경 한두 곳. 사용자가 적은 끝은 늘리지 않는다.
+
+    "출발일 저녁 8시에 만들어도 오늘은 21:00~23:00 으로 연다 — 저녁에도 한두 곳은 넣는다" {
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T11:04:00Z"), ZoneOffset.UTC))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("21:00"), LocalTime.parse("23:00")))
+    }
+
+    "밤 9시 반에 만들어도 오늘은 22:00~23:59 로 연다 — 야경·늦게 여는 곳 한두 곳" {
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), end = start, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T12:30:00Z"), ZoneOffset.UTC))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.single().timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("22:00"), LocalTime.parse("23:59")))
+    }
+
+    "당일치기를 저녁 8시에 만들면 AI 를 불러 오늘을 채운다 — 빈 일정을 내지 않는다" {
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), end = start, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T11:04:00Z"), ZoneOffset.UTC))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.size shouldBe 1
+        agent.captures[0].timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("21:00"), LocalTime.parse("23:00")))
+    }
+
+    "사용자가 정한 귀가 시각은 늘리지 않는다 — 남은 시간이 없으면 오늘은 닫힌다" {
+        val agent = CapturingAgent(now)
+        service(
+            agent, fullPrefs, emptyList(), end = start, fixedVisits = emptyList(), lastDayEndAt = LocalTime.parse("21:00"),
+            clock = Clock.fixed(Instant.parse("2026-08-01T11:04:00Z"), ZoneOffset.UTC),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.size shouldBe 0
+    }
+
     "출발일이라도 아직 하루 시작 전이면 창은 그대로다" {
         val agent = CapturingAgent(now)
         service(agent, fullPrefs, emptyList(), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-07-31T23:00:00Z"), ZoneOffset.UTC))
@@ -588,8 +629,8 @@ class GenerateItineraryServiceTest : StringSpec({
     "오늘 남은 시간이 없으면 오늘은 빈 날로 두고 1차가 내일을 맡는다 — 보낼 창이 없는 1차를 만들지 않는다" {
         val agent = CapturingAgent(now)
         val repo = FakeItineraries()
-        // 20:40 → 21:10 → 21:30 — 하루 끝(21:00)을 넘는다.
-        service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T11:40:00Z"), ZoneOffset.UTC))
+        // 22:30 → 23:00 — 하루 끝(23:59)까지 59분, 한 곳도 못 넣는 창이라 닫는다.
+        service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T13:30:00Z"), ZoneOffset.UTC))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         agent.captures.flatMap { it.timeWindows }.none { it.date == start } shouldBe true
@@ -606,7 +647,7 @@ class GenerateItineraryServiceTest : StringSpec({
         val agent = CapturingAgent(now)
         service(
             agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(late, start, LocalTime.parse("22:00"), 60)),
-            clock = Clock.fixed(Instant.parse("2026-08-01T11:40:00Z"), ZoneOffset.UTC), // 20:40 KST
+            clock = Clock.fixed(Instant.parse("2026-08-01T13:30:00Z"), ZoneOffset.UTC), // 22:30 KST — 오늘은 닫힌다
         ).generate(acc, tripId, GenerationMode.FULLY_AI)
 
         // 오늘·내일이 한 요청에 실리면 내일까지 21:00~23:00 으로 짜인다.
@@ -616,7 +657,7 @@ class GenerateItineraryServiceTest : StringSpec({
     "하루 여행을 그날 밤에 만들면 AI 를 부르지 않고 빈 하루로 둔다 — 실패가 아니므로 폴백 표시도 없다" {
         val agent = CapturingAgent(now)
         val repo = FakeItineraries()
-        service(agent, fullPrefs, emptyList(), repo = repo, end = start, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T12:30:00Z"), ZoneOffset.UTC))
+        service(agent, fullPrefs, emptyList(), repo = repo, end = start, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T13:30:00Z"), ZoneOffset.UTC)) // 22:30 KST
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         agent.captures.size shouldBe 0
@@ -625,7 +666,9 @@ class GenerateItineraryServiceTest : StringSpec({
         saved.isFallback shouldBe false
     }
 
-    "어제 출발한 여행을 오늘 밤 처음 만들면 종전 그대로다 — 중간 날을 닫으면 2차가 그 날을 일정에서 뺀다" {
+    // 처음 만들기는 출발일만 자른다 — 실 시계로 "어제 출발" 여행을 처음 만드는 통합 테스트(재계획·트리거)가
+    // 오늘 슬롯을 쓰므로, 여기까지 자르면 밤에 돌린 CI 에서 오늘이 비어 결과가 시각에 따라 갈린다.
+    "어제 출발한 여행을 오늘 밤 처음 만들면 종전 그대로다 — 오늘 자르기는 출발일과 재생성에만" {
         val agent = CapturingAgent(now)
         val repo = FakeItineraries()
         service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T11:40:00Z"), ZoneOffset.UTC))
@@ -646,7 +689,10 @@ class GenerateItineraryServiceTest : StringSpec({
 
             withClue("now=$nowKst") {
                 agent.captures.flatMap { it.timeWindows }.forEach { it.start.isBefore(it.end) shouldBe true } // AI 는 빈 창을 422 로 거절한다
-                agent.captures.flatMap { it.timeWindows }.filter { it.date == start }.forEach { it.start.isAfter(nowKst) shouldBe true }
+                agent.captures.flatMap { it.timeWindows }.filter { it.date == start }.forEach {
+                    it.start.isAfter(nowKst) shouldBe true
+                    (java.time.Duration.between(it.start, it.end).toMinutes() >= 60) shouldBe true // 한 곳도 못 넣는 창은 보내지 않는다
+                }
                 repo.byTrip.getValue(tripId).days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
             }
         }
@@ -785,14 +831,13 @@ class GenerateItineraryServiceTest : StringSpec({
             it.isFixed shouldBe true
         }
     }
-    // ── 재생성 가드(여행 기간) ──────────────────────────────────────────────
+    // ── 재생성 가드(여행 기간 × 다녀온 기록) ─────────────────────────────────
     //
-    // 재생성은 기존 일정을 지우고 새로 만든다. 여행 중에 그러면 따라가던 계획이 통째로 갈리고
-    // **방문 실적이 유령이 된다** — visit_check 는 trip_id+slotKey 로 남아 삭제를 견딘다.
-    // 여행 중 변경은 재계획(Plan-B)의 몫이다.
+    // 재생성은 기존 일정을 지우고 새로 만든다. 다녀온 기록이 있는 여행에서 그러면 **방문 실적이 유령이
+    // 된다** — visit_check 는 trip_id+slotKey 로 남아 삭제를 견딘다. 그런 여행의 변경은 재계획(Plan-B)의 몫이다.
     //
-    // **첫 생성은 대상이 아니다** — 지울 계획이 없으면 이 피해가 성립하지 않는다. 그래서 아래 케이스들은
-    // 기존 일정을 미리 깔고 시작한다(그게 "재생성"의 정의다).
+    // **첫 생성과 기록 없는 재생성은 대상이 아니다** — 지울 계획이나 남을 기록이 없으면 이 피해가 성립하지
+    // 않는다. 그래서 아래 케이스들은 기존 일정을 미리 깔고 시작한다(그게 "재생성"의 정의다).
 
     fun clockAt(day: String): Clock = Clock.fixed(Instant.parse("${day}T00:00:00Z"), ZoneOffset.UTC)
 
@@ -869,32 +914,50 @@ class GenerateItineraryServiceTest : StringSpec({
         svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId
     }
 
-    // 경계값 — 시작 당일은 이미 "여행 중"이다. 첫날 아침에 통째로 다시 짜면 그날 일정이 사라진다.
-    "여행 시작 당일이면 409" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-01"))
+    // 경계값 — 시작 당일은 이미 "여행 중"이다. 다녀온 기록이 있으면 통째로 다시 짜지 않는다.
+    "다녀온 기록이 있으면 여행 시작 당일 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-01"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
             .message.orEmpty() shouldContain "재계획"
     }
 
-    "여행 중이면 409" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"))
+    "다녀온 기록이 있으면 여행 중 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
     }
 
     // 경계값 — 마지막 날도 여행 중이다(체크아웃일까지 계획일에 포함된다).
-    "여행 마지막 날이면 409" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-03"))
+    "다녀온 기록이 있으면 여행 마지막 날 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-03"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
     }
 
-    "끝난 여행이면 409 — 문구가 다르다" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-04"))
+    "다녀온 기록이 있으면 끝난 여행 409 — 문구가 다르다" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-04"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
             .message.orEmpty() shouldContain "끝난 여행"
+    }
+
+    /**
+     * 오늘 출발 여행을 만들고 추천안에서 바로 [다시 짜기] — 날짜만 보던 가드가 409 를 냈고, 옛 앱은 그것을
+     * "네트워크 확인"으로 접어 사용자가 연타했다(DEV 10-13 6회 · 10-14 7회). 지킬 기록이 없으니 다시 만든다.
+     */
+    "다녀온 기록이 없으면 여행 시작 당일에도 다시 만든다" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-01"))
+
+        svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId
+    }
+
+    "다녀온 기록이 없으면 여행 중·끝난 여행도 다시 만든다" {
+        listOf("2026-08-02", "2026-08-04").forEach { day ->
+            val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt(day))
+
+            withClue(day) { svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId }
+        }
     }
 
     // 직접 만들기도 같은 가드를 지난다 — AI 를 안 부를 뿐 기존 일정을 지우는 것은 똑같다.
@@ -910,16 +973,72 @@ class GenerateItineraryServiceTest : StringSpec({
                 now, GenerationState.FAILED,
             )
         }
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = failedRepo, clock = clockAt("2026-08-02"))
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = failedRepo, clock = clockAt("2026-08-02"), visits = Visited)
 
         svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId
     }
 
-    "직접 만들기도 여행 중이면 409" {
-        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"))
+    "직접 만들기도 다녀온 기록이 있으면 여행 중 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"), visits = Visited)
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.MANUAL) }
     }
+
+    // 여행 중 **재생성**(BE #1183 — 다녀온 기록이 없으면 허용)도 오늘을 지금부터 연다. 출발일이 아니어도.
+    // 시각은 KST, 여행은 08-01~08-03 이고 오늘은 둘째 날(08-02).
+
+    "여행 중에 다시 만들면 출발일이 아니어도 오늘은 지금부터 연다" {
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), repo = repoWithExisting(), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T09:10:00Z"), ZoneOffset.UTC))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val windows = agent.captures.flatMap { it.timeWindows }
+        windows.single { it.date == start.plusDays(1) } shouldBe TimeWindow(start.plusDays(1), LocalTime.parse("19:00"), LocalTime.parse("21:00")) // 18:10 KST
+        windows.filter { it.date != start.plusDays(1) }.forEach { it.start shouldBe LocalTime.parse("09:00") } // 다른 날은 그대로
+    }
+
+    "여행 중에 다시 만들 때 오늘 남은 시간이 없으면 오늘은 빈 날로 자리를 지킨다 — 2차가 그 날을 빼지 않는다" {
+        val agent = CapturingAgent(now)
+        val repo = repoWithExisting()
+        service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T13:30:00Z"), ZoneOffset.UTC))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.flatMap { it.timeWindows }.none { it.date == start.plusDays(1) } shouldBe true // 22:30 KST — 닫힌 오늘은 경계로 안 나간다
+        val days = repo.byTrip.getValue(tripId).days
+        days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
+        days[1].slots shouldBe emptyList()
+    }
+
+    "마지막 날 밤에 다시 만들면 남은 날이 모두 닫혀 2차는 AI 를 부르지 않는다 — 실패가 아니므로 폴백 표시도 없다" {
+        val agent = CapturingAgent(now)
+        val repo = repoWithExisting()
+        service(agent, fullPrefs, emptyList(), repo = repo, end = start.plusDays(1), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T13:30:00Z"), ZoneOffset.UTC)) // 22:30 KST
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.map { c -> c.timeWindows.map { it.date } } shouldContainExactly listOf(listOf(start)) // 1차(어제)만
+        val saved = repo.byTrip.getValue(tripId)
+        saved.days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1))
+        saved.isFallback shouldBe false
+    }
+
+    "여행 중 어느 시각에 다시 만들어도 오늘 창은 지금 뒤에 열리고, 일자는 하나도 빠지지 않는다 (PBT)" {
+        checkAll(Arb.int(0, 24 * 60 - 1)) { minuteOfDay ->
+            val agent = CapturingAgent(now)
+            val repo = repoWithExisting()
+            val today = start.plusDays(1)
+            val nowKst = LocalTime.ofSecondOfDay(minuteOfDay * 60L)
+            val at = today.atTime(nowKst).atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant()
+            service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(at, ZoneOffset.UTC))
+                .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+            withClue("now=$nowKst") {
+                agent.captures.flatMap { it.timeWindows }.forEach { it.start.isBefore(it.end) shouldBe true } // AI 는 빈 창을 422 로 거절한다
+                agent.captures.flatMap { it.timeWindows }.filter { it.date == today }.forEach { it.start.isAfter(nowKst) shouldBe true }
+                repo.byTrip.getValue(tripId).days.map { it.date } shouldContainExactly listOf(start, today, end)
+            }
+        }
+    }
+
     /**
      * **숙소를 하나도 등록하지 않아도 앵커가 생긴다**(TRIP-384).
      *
@@ -1079,7 +1198,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다.
         val sessions = genSessions(trips, sessionRepo, clock, deadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, scoredPools, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, FakeRejectionStore(), scoredPools, NoPersonalization, NOOP_TX, clock, deadlines)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, FakeRejectionStore(), scoredPools, NoPersonalization, NoVisits, NOOP_TX, clock, deadlines)
     }
 
     "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
@@ -1799,7 +1918,7 @@ class TwoPhaseDayCoverageTest : StringSpec({
                 override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
             }
             val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
-            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, FakeRejectionStore(), FakeScoredCandidatePoolStore(), NoPersonalization, NOOP_TX, clock, defaultDeadlines)
+            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, FakeRejectionStore(), FakeScoredCandidatePoolStore(), NoPersonalization, NoVisits, NOOP_TX, clock, defaultDeadlines)
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             // 두 호출이 요청한 일자의 합 = 여행 일자, 중복 없음
@@ -1825,6 +1944,10 @@ class TwoPhaseDayCoverageTest : StringSpec({
 private object NoPersonalization : PersonalizationPort {
     override fun hintsFor(accountId: java.util.UUID) = PersonalizationHints.NONE
 }
+
+/** 다녀온 기록 없음 — 생성 테스트 대부분의 전제. 기록이 있을 때의 재생성 가드는 [Visited] 로 본다. */
+private val NoVisits = VisitRecordPort { false }
+private val Visited = VisitRecordPort { true }
 
 private object StubRegions : com.trippilot.placedata.api.RegionLookupFacade {
     /** 코드 검증 — 이 테스트는 이름 경로만 쓴다. */

@@ -258,9 +258,37 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.time_window.start").value("09:00:00"))
             .andExpect(jsonPath("$.time_window.end").value("21:00:00"))
             .andExpect(jsonPath("$.anchor.lat").value(33.4))
+            // 숙소 근처에서 끝내기(END_NEAR_STAY)의 끝점 — 기준점(anchor)과 다른 값이 따로 실린다.
+            .andExpect(jsonPath("$.stay_anchor.lat").value(33.25))
+            .andExpect(jsonPath("$.stay_anchor.lng").value(126.41))
             .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
 
         adapter.replan(richReplanInput())
+
+        server.verify()
+    }
+
+    // 오늘을 밤에 다시 짜면 창 끝(21:00)이 막아 "대안 없음"이 됐다 — 생성과 같은 규칙(TodayWindow)으로 끝만 늘린다.
+    // 시작은 하루 전체 그대로(09:00) — 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 409 로 거부한다.
+    "오늘을 밤 9시 반에 다시 짜면 창 끝이 23:59 다 — 야경 한두 곳이 들어갈 자리" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.time_window.start").value("09:00:00"))
+            .andExpect(jsonPath("$.time_window.end").value("23:59:00"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(scope = ReplanScope.PARTIAL_SLOTS, fromInstant = Instant.parse("2026-08-01T12:30:00Z")))
+
+        server.verify()
+    }
+
+    "다른 날을 다시 짜면 창은 그대로다 — 밤 규칙은 오늘에만" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.time_window.end").value("21:00:00"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(fromInstant = Instant.parse("2026-08-01T12:30:00Z"), targetDate = LocalDate.parse("2026-08-02")))
 
         server.verify()
     }
@@ -992,6 +1020,8 @@ private val REJECTED_POI: UUID = UUID.randomUUID()
 /** 다섯 값을 전부 채운 표본. 비워 두면 "안 싣는다"와 "빈 값을 싣는다"가 구분되지 않는다. */
 private fun richReplanInput() = replanInput().copy(
     freeText = "비 와서 실내로",
+    stayLat = 33.25,
+    stayLng = 126.41,
     currentSlots = listOf(
         ReplanCurrentSlot(
             REPLAN_POI, LocalTime.of(10, 0), LocalTime.of(11, 0),
@@ -1012,6 +1042,8 @@ private fun replanInput() = ReplanInput(
     targetDate = LocalDate.parse("2026-08-01"),
     originLat = 33.4,
     originLng = 126.5,
+    stayLat = null,
+    stayLng = null,
     lockedBlocks = emptyList(),
     reasons = listOf("WEATHER"),
     directives = listOf("INDOOR"),

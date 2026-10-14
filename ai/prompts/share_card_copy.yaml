@@ -5,7 +5,7 @@
 #
 # **게이트가 검사하는 규칙은 전부 여기 있어야 한다** — 규칙을 프롬프트에서 빠뜨리면
 # 게이트가 매번 떨어뜨려 정적 폴백만 나간다(해시태그 규칙 누락 사고의 교훈).
-# 정합은 테스트가 고정한다(tests/test_llm_gateway_share_card_copy.py §프롬프트).
+# 정합은 테스트가 고정한다(tests/llm_gateway/test_llm_gateway_share_card_copy.py §프롬프트).
 # 캡션 150자·해시태그 10개는 FE `shareCard.ts` 의 CAPTION_MAX_LENGTH·HASHTAG_MAX_COUNT
 # 와 같은 값 — 잘린 문장이 나가지 않게 게이트가 미리 막는다.
 feature: SHARE_CARD_COPY

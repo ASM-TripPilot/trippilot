@@ -54,3 +54,13 @@ resource "aws_secretsmanager_secret" "app" {
   # 없고, 전 계정의 소셜 revoke 가 영구히 불가능해진다. 그래서 데이터 보호 축에 함께 건다.
   recovery_window_in_days = var.data_protection_enabled ? 30 : 7
 }
+
+# 개발 대상(trippilot-dev 네임스페이스)의 시크릿 그릇 — 그룹은 운영과 같고 값은 따로다(`var.dev_target_enabled`).
+# 운영 데이터를 담지 않으므로 데이터 보호 축에 걸지 않는다.
+resource "aws_secretsmanager_secret" "dev_target" {
+  for_each = var.dev_target_enabled ? local.app_secret_descriptions : {}
+
+  name                    = "trippilot/${var.environment}/dev-target/${each.key}"
+  description             = "[dev target] ${each.value}"
+  recovery_window_in_days = 7
+}

@@ -28,6 +28,7 @@ private class FakeLocationStateRepo : LocationConsentStateRepository {
     val stored = mutableMapOf<AccountId, LocationConsent>()
     override fun find(accountId: AccountId) = stored[accountId]
     override fun save(state: LocationConsent) = state.also { stored[it.accountId] = it }
+    override fun lockRouteRecordingConsent(accountId: AccountId) = stored[accountId]?.let { it.legalConsent && it.gpsRecordingOptIn } == true
 }
 
 private class FakeLegalLogRepo : LocationLegalLogRepository {
@@ -87,7 +88,8 @@ class LocationConsentServiceTest : StringSpec({
         log.events.map { it.eventType } shouldContainExactly listOf(LocationLegalEventType.CONSENT_GRANTED)
     }
 
-    "L3 철회 — GPS_RECORDING REVOKE 증적 + CONSENT_REVOKED + PURGE(INV-L4)" {
+    /** 파기 사실은 지운 쪽(archive)이 지운 건수가 있을 때만 남긴다(U10 BR-U10-43 · D3) — auth 는 지웠는지 모른다. */
+    "L3 철회 — GPS_RECORDING REVOKE 증적 + CONSENT_REVOKED, 파기 로그는 auth 가 남기지 않는다" {
         val (svc, log, records) = fixture()
         svc.update(account, legalConsent = true, gpsRecordingOptIn = true) // 선행 활성
         log.events.clear(); records.appended.clear()
@@ -95,8 +97,7 @@ class LocationConsentServiceTest : StringSpec({
         svc.update(account, legalConsent = null, gpsRecordingOptIn = false) // L3 철회
 
         records.appended.single().action shouldBe ConsentAction.REVOKE
-        log.events.map { it.eventType } shouldContainExactly
-            listOf(LocationLegalEventType.CONSENT_REVOKED, LocationLegalEventType.PURGE)
+        log.events.map { it.eventType } shouldContainExactly listOf(LocationLegalEventType.CONSENT_REVOKED)
     }
 
     "L2 철회 — 저장된 재계획 좌표를 지우라는 신호가 나간다(TRIP-992)" {

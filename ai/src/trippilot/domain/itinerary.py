@@ -12,7 +12,7 @@ INV-2(어셈블리 검증값만)의 U1 책임 (business-rules.md §1):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Mapping
 
@@ -128,6 +128,9 @@ class RequiredVisit:
     day: date
     dwell_min: int | None
     reason: str
+    # 사용자가 **이름으로 콕 집은** 곳 — 다른 필수 방문 여럿보다 무겁다(조립의 `_W_REQUIRED_PRIORITY`).
+    # 기본 False 라 종전 필수 방문(같이 짜기·구성 LLM·한 곳 추가)은 동작이 같다.
+    priority: bool = False
 
     def __post_init__(self) -> None:
         if self.dwell_min is not None and self.dwell_min <= 0:
@@ -139,6 +142,7 @@ class RequiredVisit:
             "day": self.day.isoformat(),
             "dwell_min": self.dwell_min,
             "reason": self.reason,
+            "priority": self.priority,
         }
 
     @classmethod
@@ -148,6 +152,7 @@ class RequiredVisit:
             day=date.fromisoformat(d["day"]),
             dwell_min=d["dwell_min"],
             reason=d["reason"],
+            priority=d.get("priority", False),  # 필드 이전 직렬화본
         )
 
 
@@ -265,6 +270,15 @@ class ItineraryProblem:
     무제한(기존 생성자 호출 전부 무영향). 재계획 사유(피로·지연)가 "원 일정 − 1" 로 켠다
     (BR-U4-47). pace 와 달리 **하드**다 — 조립의 재시도도 이것은 끄지 않는다(방문을 줄이는
     쪽이라 해 없음을 만들지 않는다).
+
+    end_near: 하루를 마칠 곳(재계획 "숙소 근처에서 끝내기" — 그날 밤 숙소). 마지막 방문지 →
+    이 점의 도로 km 를 감점한다(`END_NEAR_WEIGHT`). 목적식 항이라 가해 여부는 안 바꾼다.
+    기본 None = 항 없음(기존 생성자 호출 전부 무영향).
+
+    required_in_order: 필수 방문을 `required_visits` 순서대로 놓는다(재계획 "시간만 당기기" — 장소도
+    순서도 원 일정 그대로, 시각만 다시). 하드다 — 둘 다 놓이면 앞 것이 먼저 끝난다. 기본 False = 무영향.
+    같은 날 고정 블록과 POI 가 같은 항목은 그 고정의 자리표다("저녁은 그대로" 잠금) — 앞 방문은 고정 전,
+    뒤 방문은 고정 후에 놓인다.
     """
 
     schedule_id: ScheduleId
@@ -284,6 +298,19 @@ class ItineraryProblem:
     required_visits: tuple[RequiredVisit, ...] = ()  # 시각 없는 필수 방문 (TRIP-1249)
     travel_weight: float = 0.0  # 경로 길이 감점 — 점수/km (BR-U4-47)
     max_visits_per_day: int | None = None  # 하루 방문 상한 — 고정·필수 포함 (BR-U4-47)
+    end_near: GeoPoint | None = None  # 하루를 마칠 곳 — 마지막 방문지 거리 감점 (BR-U4-47)
+    # 일자별 창 (TRIP-1389) — 도착일 15시부터·출발일 12시까지처럼 날마다 다를 때. 없는 날은
+    # `day_window` 의 시각을 쓴다. 읽는 쪽은 `window_on(day)` 하나로만 읽는다.
+    day_windows: Mapping[date, TimeWindow] | None = None
+    required_in_order: bool = False  # 필수 방문을 준 순서대로 — "시간만 당기기" (BR-U4-47)
+
+    def window_on(self, day: date) -> TimeWindow:
+        """그 날의 창 — 일자별 창이 있으면 그것, 없으면 공용 창의 시각을 그 날짜에 얹는다."""
+        if self.day_windows and day in self.day_windows:
+            return self.day_windows[day]
+        start = datetime.combine(day, self.day_window.start.timetz())
+        end = datetime.combine(day, self.day_window.end.timetz())
+        return TimeWindow(start=start, end=end if end > start else end + timedelta(days=1))
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -319,6 +346,12 @@ class ItineraryProblem:
             "required_visits": [r.to_dict() for r in self.required_visits],
             "travel_weight": self.travel_weight,
             "max_visits_per_day": self.max_visits_per_day,
+            "end_near": self.end_near.to_dict() if self.end_near else None,
+            "day_windows": (
+                {d.isoformat(): self.day_windows[d].to_dict() for d in sorted(self.day_windows)}
+                if self.day_windows else None
+            ),
+            "required_in_order": self.required_in_order,
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -371,6 +404,13 @@ class ItineraryProblem:
             ),
             travel_weight=d.get("travel_weight", 0.0),
             max_visits_per_day=d.get("max_visits_per_day"),
+            end_near=GeoPoint.from_dict(d["end_near"]) if d.get("end_near") else None,
+            day_windows=(
+                {date.fromisoformat(k): TimeWindow.from_dict(v)
+                 for k, v in d["day_windows"].items()}
+                if d.get("day_windows") else None
+            ),
+            required_in_order=d.get("required_in_order", False),
         )
 
 

@@ -20,6 +20,8 @@ import {
   FullAiGlyph,
 } from '@/features/itinerary/index.view';
 
+import { GeneratingIllustration } from './GeneratingIllustration';
+
 /**
  * h07 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `4294:8516`. 프레젠테이션(props만, 재판정 금지).
  *
@@ -195,7 +197,8 @@ export interface GeneratingScreenProps {
     onClose: () => void;
   } | null;
   /** 서버가 이 재생성을 규칙으로 거절했고 Plan-B 로도 넘길 수 없다(끝난 여행·기간 모름) — 실패 표면 대신
-   * 서버 사유. 다시 보내도 같아 [다시 시도] 없음. 여행 중 거절은 배선이 Plan-B 로 넘겨 이 얼굴까지 안 온다. */
+   * 서버 사유. 다시 보내도 같아 [다시 시도] 없음. 여행 중 거절은 배선이 Plan-B 로 넘겨 이 얼굴까지 안 온다.
+   * 재계획 모드의 시작 거절(400·409)·대안 없음(NO_SOLUTION)도 이 얼굴이다. */
   refused?: {
     message: string;
     onClose: () => void;
@@ -327,6 +330,9 @@ export function GeneratingScreen({
                   {PROGRESS_NOTE}
                 </Text>
               </View>
+
+              {/* 지도 카드(TRIP-1352 가 걷음) 자리 — 장식 일러스트(TRIP-1384). 진척을 말하지 않는다. */}
+              <GeneratingIllustration />
 
               <View
                 style={cardShadow}

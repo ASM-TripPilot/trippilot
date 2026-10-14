@@ -43,7 +43,7 @@ skills:
 6. **워커**: `llm_gateway/workers/<feature_snake>.py` — build_*_vars(값 전부 str, 결정론 정렬, 좌표 미포함 G181)
    + 워커 클래스(gateway.call 위임, 폴백 TypedResult 그대로 반환 — BR-U4-09). 개인 컨텍스트가
    입력이면 ContextResolver 경유(D31) — preference.py 선례.
-7. **테스트**: `tests/test_llm_gateway_extended.py`에 추가 또는 신규 파일 — 게이트(정상/오염/파싱실패),
+7. **테스트**: `tests/llm_gateway/test_llm_gateway_extended.py`에 추가 또는 `tests/llm_gateway/` 에 신규 파일 — 게이트(정상/오염/파싱실패),
    직렬화 왕복, 워커 e2e(FakeLlm canned + 실물 게이트·레지스트리), 폴백 경로.
 8. **검증**: `uv run pytest tests/ -q` 전체 green + 아키텍처 테스트 통과 확인 후 종료.
 

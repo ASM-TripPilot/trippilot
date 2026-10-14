@@ -124,8 +124,12 @@ class BootstrapSecurityTests(unittest.TestCase):
 
     def test_rds_master_secret_read_requires_own_database_system_tag(self):
         read = self.statement("ReadEnvironmentRdsMasterSecret")
-        tag = read["Condition"]["StringEquals"]["secretsmanager:ResourceTag/aws:rds:primaryDBInstanceArn"]
-        self.assertTrue(tag["Fn::Sub"].endswith(":db:trippilot-${Environment}"))
+        tags = read["Condition"]["StringEquals"]["secretsmanager:ResourceTag/aws:rds:primaryDBInstanceArn"]
+        # 정확히 두 장비 — 운영 DB 와 개발 대상 DB(2026-10-15 개발·운영 분리, infra/terraform/stack/data.tf dev_target).
+        # 접두어 일치(StringLike `trippilot-${Environment}*`)로 넓히지 않는다: 같은 접두어의 어떤 장비든 마스터 비밀번호가 열린다.
+        self.assertEqual(sorted(tag["Fn::Sub"].split(":db:")[1] for tag in tags),
+                         ["trippilot-${Environment}", "trippilot-${Environment}-target"])
+        self.assertNotIn("StringLike", read["Condition"])
 
     def test_alert_grants_stay_inside_this_environment(self):
         """운영 알람(Q3=A) 권한 — Slack 채널이 쓰는 역할은 읽기뿐이고, 배포 역할의 쓰기는 이 환경의 이름 안이다.

@@ -348,6 +348,8 @@ internal data class AiReplanRequest(
     val timeWindow: AiTimeWindow,
     /** 기준점 — 현재 위치, 없으면 호출측이 숙소 앵커로 채운다(BR-U4-19 사다리). */
     val anchor: AiCoord,
+    /** 그날 밤 숙소(없으면 전날) — 상대 `stay_anchor`. '숙소 근처에서 끝내기'가 하루를 마칠 곳. 없으면 null. */
+    val stayAnchor: AiCoord? = null,
     val scope: String,
     val fromInstant: Instant,
     val preferenceProfile: PreferenceProfile,
@@ -377,6 +379,17 @@ internal data class AiReplanRequest(
      */
     val savedPlaces: List<AiSavedPlace> = emptyList(),
     val excludedPoiIds: List<UUID> = emptyList(),
+    /** 이 날짜를 건드린 변경 이력(TRIP-975) — 상대 `ChangeLogEntrySchema`. 비면 종전과 같다. */
+    val changeLog: List<AiChangeLogEntry> = emptyList(),
+)
+
+/** 변경 이력 한 건 — 그날 diff 만(시각·행위자 없음, [com.trippilot.itinerarygeneration.domain.ReplanChange]). */
+internal data class AiChangeLogEntry(
+    val source: String,
+    val reason: String?,
+    val at: Instant,
+    val removedPoiIds: List<String>,
+    val addedPoiIds: List<String>,
 )
 
 /** 하루 이용 시각. 창은 **하루 전체**다 — '지금 이후만' 은 잠금으로 표현한다(정본 §3.1). */
@@ -516,6 +529,8 @@ internal data class AiAlternativesRequest(
     val preferenceProfile: PreferenceProfile? = null,
     /** 그 여행의 동행 — 계정의 평소 동행보다 우선. */
     val companionType: String? = null,
+    /** 바꿀 슬롯의 장소 — 식사 칸이면 AI 가 식사 후보로만 고른다(사용자 컨셉이 없을 때). */
+    val targetPoiId: String? = null,
 )
 
 /**
@@ -566,6 +581,7 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         requestMeta = AiRequestMeta(requestMeta.requestId, requestMeta.requestedAt, requestMeta.deadlineMs),
         preferenceProfile = preferenceProfile,
         companionType = companionType,
+        targetPoiId = targetPoiId.toString(),
     )
 }
 

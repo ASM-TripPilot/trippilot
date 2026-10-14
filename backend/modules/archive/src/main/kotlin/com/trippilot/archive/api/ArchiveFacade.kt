@@ -1,5 +1,6 @@
 package com.trippilot.archive.api
 
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -26,4 +27,10 @@ interface ArchiveFacade {
      * 실적은 좌표를 들고 있지 않고, 정본은 POI(C7)에 있다.
      */
     fun findLastCompletedPoi(tripId: UUID): UUID?
+
+    /**
+     * 그 시각에 지오펜스 자동 기록이 **무장돼 있었나**(U10 FD §12.4) — 이동 지연·진행 중 체류 초과는 무장된 여행에만
+     * 켠다(DEC-U10-9). 수동으로만 쓰는 사용자에게 "늦었다"는 신호를 지어내지 않기 위해서다(BR-U6-11).
+     */
+    fun isAutomationArmed(tripId: UUID, at: Instant): Boolean
 }

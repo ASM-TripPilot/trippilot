@@ -1,4 +1,4 @@
-import { Image } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import type { ReactTestInstance } from 'react-test-renderer';
 import {
   fireEvent,

@@ -203,6 +203,7 @@ describe('buildPastTripCards — 지난 여행만(ENDED 또는 endDate<오늘), 
       title: '기록만',
       dateRangeLabel: null,
       nightsLabel: null,
+      coverSource: null,
     });
   });
 });

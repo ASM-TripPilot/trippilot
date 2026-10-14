@@ -45,7 +45,7 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var relay: OutboxRelay
 
     private companion object {
-        const val CONCURRENT_OPENS = 3
+        const val CONCURRENT_OPENS = 8
     }
 
     private val json = ObjectMapper()
@@ -147,10 +147,8 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         val (accountId, token) = newAccount()
         val trip = newTrip(token)
 
-        // **셋이다 — 풀 크기(4)보다 작아야 한다.** 테스트 컨텍스트는 open-in-view 가 켜져 있어(테스트용 application.yml 이
-        // 본 설정을 가린다) 요청 하나가 JPA 연결을 쥔 채 JdbcTemplate 용 연결을 하나 더 집는다. 동시 요청이 풀 크기
-        // 이상이면 전부 첫 연결을 쥐고 두 번째를 기다리다 말라붙는다(실측: 8개로 돌려 전원 500). 운영은
-        // open-in-view=false 라 요청당 연결이 하나다 — 그 설정으로는 8개도 통과함을 확인했다.
+        // **여덟 — 풀 크기(4)의 두 배다.** 테스트 컨텍스트도 본 설정의 open-in-view=false 를 받아 요청당 연결이 하나라
+        // 풀보다 많은 동시 요청이 차례를 기다릴 뿐 말라붙지 않는다. 테스트 설정이 본 설정을 가리던 동안은 8개로 전원 500 이었다.
         val results = Executors.newFixedThreadPool(CONCURRENT_OPENS).use { pool ->
             pool.invokeAll(List(CONCURRENT_OPENS) { Callable { open(token, trip) } }).map { it.get() }
         }

@@ -48,7 +48,7 @@ focusManager.setEventListener((handleFocus) => {
 onlineManager.setEventListener((setOnline) =>
   NetInfo.addEventListener((state) => {
     setOnline(state.isConnected !== false);
-  }),
+  })
 );
 
 // 네이티브 스플래시(OS 부팅 화면)를 첫 렌더가 끝날 때까지 자동으로 숨기지 않게 붙잡는다.

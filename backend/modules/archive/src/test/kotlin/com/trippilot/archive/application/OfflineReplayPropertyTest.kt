@@ -155,7 +155,7 @@ class OfflineReplayPropertyTest : StringSpec({
     "PBT-U5-3 같은 큐를 두 번 재생해도 서버 상태가 같다 (멱등)" {
         checkAll(30, wellFormedQueueArb) { queue ->
             val visits = Visits()
-            val svc = VisitCheckService(trips, visits, Sink(), ticking())
+            val svc = VisitCheckService(trips, visits, Sink(), ticking(), FakeIntervals())
 
             replay(svc, visits, queue)
             val afterFirst = outcome(visits)
@@ -168,7 +168,7 @@ class OfflineReplayPropertyTest : StringSpec({
     "PBT-U5-3 재생을 세 번 해도 두 번째 이후로는 아무것도 늘지 않는다" {
         checkAll(30, wellFormedQueueArb) { queue ->
             val visits = Visits()
-            val svc = VisitCheckService(trips, visits, Sink(), ticking())
+            val svc = VisitCheckService(trips, visits, Sink(), ticking(), FakeIntervals())
 
             replay(svc, visits, queue)
             val rows = visits.stored.size
@@ -184,7 +184,7 @@ class OfflineReplayPropertyTest : StringSpec({
     "PBT-U5-2 완료<도착 · 완료&건너뜀 동시는 어떤 조작 순서로도 만들어지지 않는다" {
         checkAll(50, Arb.list(opArb, 1..10), Arb.boolean()) { queue, reversed ->
             val visits = Visits()
-            val svc = VisitCheckService(trips, visits, Sink(), ticking())
+            val svc = VisitCheckService(trips, visits, Sink(), ticking(), FakeIntervals())
 
             replay(svc, visits, if (reversed) queue.reversed() else queue)
 

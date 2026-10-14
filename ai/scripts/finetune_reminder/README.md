@@ -53,7 +53,7 @@ uv run python scripts/finetune_reminder/build_dataset.py \
 | `--per-scenario` | | 3 | 시나리오당 생성 수 |
 | `--temperature` | | 1.0 | 다양성 확보용 — 학생이 배울 분포이므로 높게 |
 
-시나리오는 실제 수집 POI에서 뽑는다(`ai/collected_pois.db` — `scripts/collect_pois.py`
+시나리오는 실제 수집 POI에서 뽑는다(`ai/collected_pois.db` — `scripts/collect/collect_pois.py`
 계열로 만든 로컬 산출물, 저장소에 커밋되지 않는다). `scenarios.json` 구조:
 
 ```json
@@ -118,7 +118,7 @@ uv run python scripts/finetune_reminder/build_dataset.py \
 
 ```bash
 cd ai
-uv run pytest tests/test_finetune_reminder_filter.py -v
+uv run pytest tests/scripts/test_finetune_reminder_filter.py -v
 ```
 
 필터 테스트는 실제 `ReminderCopyGate` 를 import 해서 동일한 규칙으로 검증한다.
@@ -338,7 +338,7 @@ fail-fast 자체가 발동하지 않고, 로컬 라우트가 붙었는지 아닌
 export TRIPPILOT_LOCAL_LLM_BASE_URL=<OpenAI 호환 서버 주소>/v1
 export TRIPPILOT_LOCAL_LLM_MODEL=local-reminder-qwen3-4b-v1
 cd ai
-uv run python scripts/smoke_reminder_copy.py
+uv run python scripts/smoke/smoke_reminder_copy.py
 ```
 
 `[smoke] PASS title=... body=...` 가 나오면 통과. `TRIPPILOT_LOCAL_LLM_BASE_URL`·

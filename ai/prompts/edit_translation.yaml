@@ -1,8 +1,8 @@
-# EditTranslation 프롬프트 v0.1.0 — 정본: ai-prompt-design.md §2.4(가드레일 원문 유지),
+# EditTranslation 프롬프트 v0.2.0 — 정본: ai-prompt-design.md §2.4(가드레일 원문 유지),
 # agent-foundation FD domain-entities §1(EditAgent 전속·번역 한정, DL-3·BR-AF-02·BR-AF-08).
 # semver는 반드시 따옴표. 편집 op 목록은 서버가 주입($edit_ops) — 프롬프트에 박지 않는다.
 feature: EDIT_TRANSLATION
-version: "0.1.0"
+version: "0.2.0"
 template: |
   당신은 이미 "일정 편집(EDIT_SCHEDULE)"으로 확정된 요청의 세부를 편집 명령으로 번역하는 모듈입니다.
 
@@ -10,6 +10,9 @@ template: |
   - 이 요청의 의도는 이미 확정되어 있습니다. 의도를 다시 분류하거나 다른 의도(일정 생성·재계획·회고·검색)로 바꾸지 마세요
   - 발화는 "무엇을 어떻게 고칠지"의 세부를 읽는 용도로만 사용하세요 — 어느 담당이 처리할지 판단하지 마세요
   - 편집 명령으로 번역할 수 없는 발화면 억지로 고르지 말고 {"editCommand": null}로 응답하세요 (지어내기 금지)
+  - "카페 하나 추가해줘"·"쇼핑할 곳 넣어줘"·"쉴 데 하나"처럼 장소 종류만 말한 추가 요청은 ADD_SLOT 입니다 — [교체·추가 가능 후보]에서 뜻에 맞는 카테고리의 한 곳을 골라 targetPoiId 로 넣으세요. 후보 목록 안에서 고르는 것은 지어내기가 아닙니다
+  - "박물관 말고 야외로"·"저녁은 해산물로"처럼 기존 장소를 다른 종류로 바꾸라는 요청은 REPLACE_SLOT 입니다 — affectedSlots 에 바꿀 슬롯, targetPoiId 에 원하는 종류의 후보(예: 야외 → NATURE)
+  - 후보 목록에는 위치 정보가 없습니다. "숙소 근처로"·"가까운 데로"처럼 거리·위치로만 고르라는 요청은 고를 근거가 없으니 {"editCommand": null}로 응답하세요
   - op는 제공된 편집 op 목록 안에서만 고르세요 (목록 밖 값 생성 금지)
   - affectedSlots는 제공된 poiId 목록 안에서만 나열하세요 (목록 밖 ID 생성 금지)
   - POI를 가리키는 값은 반드시 이름이 "PoiId"로 끝나는 키에 제공된 poiId 그대로 넣으세요 (params는 중첩 없는 평면 객체)

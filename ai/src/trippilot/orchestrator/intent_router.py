@@ -26,7 +26,7 @@ closed-set 밖 라벨이 실린 엔트리는 매칭에서 제외한다 (뱅크 �
 **관측 (TRIP-653)**: 단계 함수마다 LangSmith `@traceable` — `LANGSMITH_TRACING=true` 일 때만
 발화 1건 = 트리 1개(1차 top-k 점수 · 2차 유사질문/득표율 · 3차 판정, 루트 metadata 에 임계값
 3종)가 전송된다. 미설정이면 데코레이터는 함수를 그대로 통과시킨다(CI 외부 호출 0). 라우터는
-아직 엔드포인트에 배선돼 있지 않으므로(TRIP-529) 발화는 `scripts/trace_intents.py` 가 넣어 준다.
+아직 엔드포인트에 배선돼 있지 않으므로(TRIP-529) 발화는 `scripts/intent/trace_intents.py` 가 넣어 준다.
 트리에는 발화 **원문**과 LLM 변형이 그대로 실린다 — langsmith 는 **dev 그룹**이라 운영
 이미지(`uv sync --no-dev`)에는 없고, 그 경우 아래 no-op 대역이 붙어 배포 환경에서는
 트레이싱이 구조적으로 불가능하다(TRIP-656 — 발화 유출 가드를 의존성 부재로 보장).
@@ -39,7 +39,7 @@ from __future__ import annotations
 import functools
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -69,7 +69,9 @@ except ImportError:  # 운영 이미지(uv sync --no-dev)에는 langsmith 가 �
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
 from trippilot.orchestrator.arguments import extract_arguments  # noqa: I001
-from trippilot.domain.dialogue import specs_of, tool_specs_json
+# 1·2차 추출도 3차 게이트와 **같은 표**(`asked_specs_of`)를 본다 — 묻지 않는 인자(주인이 핸들러인
+# `EDIT_SCHEDULE.op`, 받을 칸이 없는 것)가 1·2차로만 새어 나가지 않게 (실측 2026-10-14).
+from trippilot.domain.dialogue import asked_specs_of, tool_specs_json
 from trippilot.domain.intent import (
     ROUTABLE_INTENTS,
     Intent,
@@ -177,14 +179,36 @@ class IntentRouter:
         intent_gateway: GatewayFacade | None = None,
         paraphrase_gateway: GatewayFacade | None = None,
         config: IntentRouterConfig | None = None,
+        bank_ready: Callable[[], bool] | None = None,
     ) -> None:
         self._embedding = embedding
         self._store = store
         self._intent_gateway = intent_gateway
         self._paraphrase_gateway = paraphrase_gateway
         self._cfg = config or IntentRouterConfig()
+        # 뱅크가 아직 색인 전이면 1차를 **시도조차 안 한다** — 빈 스토어를 찾으려고 발화를 임베딩하면 그 왕복
+        # (DEV 에선 색인으로 포화된 임베딩 서비스, 죽어 있으면 timeout 5s)이 고스란히 해석 지연이 됐다(8.65s 실측).
+        self._bank_ready = bank_ready or (lambda: True)
 
     # ── 공개 API ────────────────────────────────────────────────────────
+
+    def confident_intent(self, utterance: str) -> Intent | None:
+        """1차만 돌려 **확정(CONFIDENT) 이면 그 의도**, 아니면 None — LLM 0회.
+
+        대화 해석기가 "되묻기의 답인가, 새 요청인가"를 가를 때 쓴다. 거부 앵커가 이기면
+        `OUT_OF_SCOPE` 를 돌려준다(그것도 "다른 요청"이다). 임베딩이 죽어 있으면 None —
+        판단 근거가 없으니 답으로 읽는 쪽에 맡긴다.
+        """
+        text = normalize(utterance)
+        if not text or not self._bank_ready():
+            return None
+        try:
+            hits = self._match_bank(text)
+        except Exception:
+            return None
+        if hits and hits[0].score >= self._cfg.t_high and _separated(hits, self._cfg.intent_margin):
+            return hits[0].intent
+        return None
 
     def route(self, utterance: str, trace_id: TraceId, now: datetime) -> IntentMatch:
         """자연어 → 의도·슬롯·신뢰도·매칭경로. 예외를 던지지 않는다 (INV-4)."""
@@ -217,7 +241,16 @@ class IntentRouter:
                 f"utterance_too_long({len(text)} > {self._cfg.max_utterance_chars})"
             )
 
-        hits = self._match_bank(text)
+        # 1차가 **못 도는 것**(임베딩 서비스 장애·색인 전)은 "뱅크에 없음"과 같게 다룬다 —
+        # 3차 LLM 이 남아 있는데 라우팅 전체를 폴백으로 내면 도우미가 모든 말에 "범위 밖"으로
+        # 답한다. 비용은 그 동안 LLM 호출이 늘어나는 것이고, 사유는 결과에 남는다(INV-4).
+        if not self._bank_ready():
+            return self._llm_direct(text, "bank_not_ready", trace_id, now)
+        try:
+            hits = self._match_bank(text)
+        except Exception as e:
+            return self._llm_direct(
+                text, f"bank_unavailable({type(e).__name__}: {e})", trace_id, now)
         if not hits:
             return self._llm_direct(text, "bank_miss", trace_id, now)
 
@@ -229,7 +262,7 @@ class IntentRouter:
                 return _fallback(f"out_of_scope_anchor({top.entry_id}, {top.score:.3f})")
             return IntentMatch(
                 intent=top.intent,
-                slots=extract_arguments(text, specs_of(top.intent)),
+                slots=extract_arguments(text, asked_specs_of(top.intent)),
                 confidence=_clamp(top.score),
                 match_route=MatchRoute.CONFIDENT,
             )
@@ -291,7 +324,7 @@ class IntentRouter:
         return (
             IntentMatch(
                 intent=winner,
-                slots=extract_arguments(text, specs_of(winner)),
+                slots=extract_arguments(text, asked_specs_of(winner)),
                 confidence=_clamp(ratio),
                 match_route=MatchRoute.VOTED,
             ),

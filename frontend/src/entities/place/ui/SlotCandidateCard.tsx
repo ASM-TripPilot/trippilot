@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 
@@ -145,7 +146,9 @@ export function SlotCandidateCard({
           <Image
             testID={leafId('image')}
             source={{ uri: imageUrl }}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={poiId}
             className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb bg-surface-soft`}
           />
         ) : (

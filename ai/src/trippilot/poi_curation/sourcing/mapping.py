@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 
 from trippilot.domain.poi import OpenHour, PoiCategory
 
@@ -160,7 +161,60 @@ _NON_TRAVEL: tuple[tuple[str, re.Pattern[str]], ...] = (
     # 아파트·오피스텔 — **이름 끝**일 때만. 처음엔 낱말 단위로 잡았다가
     # `아파트 카페`(카페 상호)가 걸려 좁혔다. 실측 26건 중 그 1건이 오탐이었다.
     ("apartment", re.compile(r"(아파트|오피스텔)$")),
+    # 단지 관리 주체 — 조직이지 가 볼 곳이 아니다. 아파트 규칙(위)이 이름 끝만 보기
+    # 때문에 `…아파트관리사무소`·`…입주자대표회의` 는 끝이 조직명이라 통째로 빠져나갔다.
+    # 공유본 57,002 에 돌려 걸린 5곳이 전부 그 모양이고 오탐 0 (2026-10-14).
+    ("complex_management",
+     re.compile(r"입주자\s*대표회의?|자치관리위원회|관리사무소|관리단$")),
+    # 소방·경찰 — 이름 끝 + **앞에 글자가 있을 때만**. 맨 이름이 그 낱말인 것은
+    # 상호다(`지구대` — 제천의 실제 카페. 이게 유일한 오탐이라 `지구대` 자체를 뺐다).
+    ("public_safety", re.compile(r"(?<=.)(소방서|소방센터|경찰서|파출소)$")),
 )
+
+
+# ── 이름: 전국 치킨·버거·피자 체인 ───────────────────────────────────
+# **왜 빼나.** 어디에나 있어 여행지에서 먹을 이유가 없고, 앵커당 12자리를 지역 음식점에서
+# 뺏는다. 사용자 결정 2026-10-14("노브랜드 버거나 bhc 같은 대규모 치킨버거집 프랜차이즈
+# 체인점은 빼자"). 결정 당시 산출 11,005곳 중 113곳이 여기 걸렸고, 그중 '기타' 보충분은
+# 7곳뿐이라 보충 경로가 아니라 **전 행에 거는 것이 맞다**.
+#
+# **범주어가 아니라 브랜드명만 적는다.** `_NOT_A_MEAL_STOP` 이 겪은 함정(`학교`·`CC` 를
+# 걸었다가 육식사관학교·씨씨엘치킨이 죽는 것)을 피하는 길은 추측하지 않는 것뿐이다. 아래
+# 목록은 실제 산출 11,005곳에 돌려 걸린 113곳을 **전수 눈검사**해 고정했고, 거기서 드러난
+# 오탐 두 종을 아래처럼 좁혔다:
+#   · `처갓집` → 처갓집상회·처갓집씨암탉(지역 한식당)이 죽어 `처갓집 (양념)치킨` 으로
+#   · `BBQ|비비큐` → 강촌비비큐하우스(BBQ house)·소노캄제주BBQ(숯불구이집)가 죽어
+#     **상호 맨 앞**이거나 `비비큐치킨` 일 때만
+#
+# **다른 가게와 한 상호로 묶인 것은 남긴다**(`&`·`,`). `무창포 먹거리식당&자담치킨`,
+# `청정횟집&비에이치씨치킨…`, `비에이치씨 완주대둔산점 & 연꽃메밀막국수` 는 체인이 곁다리인
+# 지역 식당이다. 체인끼리 묶인 몇 곳(`미스터피자&비비큐치킨밸리점`)이 같이 남지만,
+# 지역 식당을 죽이는 쪽이 더 비싸다 — 이 모듈의 "의심스러우면 통과" 원칙 그대로다.
+_FRANCHISE = re.compile(
+    r"(?:^(?:BBQ|비비큐)|비비큐\s*치킨|^BBQ)"
+    r"|(?<![A-Za-z])bhc(?![A-Za-z])|비에이치씨"
+    r"|교촌\s*치킨|굽네|네네치킨|페리카나|멕시카나|또래오래|자담치킨|푸라닭|노랑통닭"
+    r"|처갓집\s*(?:양념)?\s*치킨|호식이두마리|치킨플러스|지코바|60계\s*치킨|오븐에\s*빠진닭"
+    r"|맘스터치|롯데리아|맥도날드|McDonald|버거킹|노브랜드\s*버거|(?<![A-Za-z])KFC(?![A-Za-z])"
+    r"|써브웨이|Subway|미스터피자|도미노\s*피자|피자헛|파파존스|피자스쿨|피자마루|반올림피자",
+    re.IGNORECASE,
+)
+_JOINED = re.compile(r"[&,]")   # 한 상호에 두 가게가 묶인 표기
+
+
+def is_franchise(name: str) -> bool:
+    """전국 체인 지점이면 True — **단, 묶인 상호는 체인 아닌 쪽이 하나라도 있으면 남긴다.**
+
+    `무창포 먹거리식당&자담치킨` 은 체인이 곁다리인 지역 식당이라 지켜야 하고,
+    `미스터피자&비비큐치킨밸리점` 은 양쪽 다 체인이라 지킬 지역 식당이 없다. 그래서
+    묶음을 쪼개 **전부 체인일 때만** 뺀다.
+    """
+    n = (name or "").strip()
+    if not n:
+        return False
+    parts = [p for p in (s.strip() for s in _JOINED.split(n)) if p]
+    # 구분자만 있는 이름(`&`)은 조각이 0개다 — `all([])` 은 참이라 체인으로 빠졌다(PBT 반례).
+    return bool(parts) and all(_FRANCHISE.search(p) is not None for p in parts)
 
 
 def non_travel_reason(name: str | None) -> str | None:
@@ -175,6 +229,9 @@ def non_travel_reason(name: str | None) -> str | None:
     for reason, rx in _NON_TRAVEL:
         if rx.search(n):
             return reason
+    # 전국 체인은 정규식 하나로 안 끝난다(묶인 상호를 쪼개 본다) — 별도 함수로 둔다.
+    if is_franchise(n):
+        return "franchise"
     return None
 
 
@@ -606,6 +663,56 @@ def join_opening_hours_raw(
     return hours + _truncate(tail, limit - len(hours))
 
 
+_DAY_LABEL = "월화수목금토일"
+
+
+def render_open_hours(hours: Sequence[OpenHour]) -> str | None:
+    """주간 OpenHour → **우리 형식의 영업 원문.** `parse_open_hours` 의 역이다.
+
+    **왜 필요한가.** 수신 계약(`PoiProposalDtos.ProposalItem`)은 영업시간을
+    `opening_hours_raw` **한 칸으로만** 받는다 — `poi.open_hours` 는 `ProposalPoi` 가
+    name·category·coord 만 읽어 조용히 버려진다. 그래서 파싱값만 채우면 DB 에 아무것도
+    안 들어간다(2026-10-14 실측: 3,996곳이 적재돼도 런타임에 안 보였다).
+
+    **다른 데서 받은 글자를 그대로 넣지 않으려고 만든다.** 원문 칸은 우리가 읽어 다시
+    파싱하는 자리이므로, 남의 표기를 그대로 두면 그 표기의 버릇까지 우리 파서가 떠안는다.
+    파싱한 뒤 **우리 표기로 다시 적으면** 왕복이 보장되고(테스트가 고정) 칸의 뜻도 지켜진다.
+
+    같은 시간대가 이어지는 요일은 범위로 묶는다 — `월~금 09:30~23:30, 토~일 08:00~22:00`.
+
+    **자정 넘김은 되감아 적는다** — `close_min=1740` 은 `11:00~05:00` 이지 `11:00~29:00`
+    이 아니다. 파서의 시각 정규식은 `2[0-3]:[0-5]\\d` 까지만 읽으므로 29시를 적으면 그
+    줄을 통째로 다르게 읽는다(왕복 PBT 가 잡았다). 닫는 쪽이 여는 쪽보다 이르면 파서가
+    1440 을 더해 되살린다 — 그게 수집 때와 같은 해석이다.
+    """
+    if not hours:
+        return None
+    by_day = {h.day_of_week: (h.open_min, h.close_min) for h in hours}
+    parts: list[str] = []
+    start = None
+    for day in range(8):      # 8 번째 바퀴에서 마지막 묶음을 닫는다
+        cur = by_day.get(day)
+        if start is not None and cur == by_day.get(start):
+            continue
+        if start is not None:
+            o, c = by_day[start]
+            c %= 24 * 60      # 자정 넘김은 되감아 적는다 — 위 주석 참조
+            span = _DAY_LABEL[start] if day - 1 == start else f"{_DAY_LABEL[start]}~{_DAY_LABEL[day - 1]}"
+            parts.append(f"{span} {o // 60:02d}:{o % 60:02d}~{c // 60:02d}:{c % 60:02d}")
+        start = day if cur is not None else None
+    return ", ".join(parts) or None
+
+
+def rest_phrase(days: Iterable[int]) -> str:
+    """휴무 요일 → 파서가 읽는 정형 문구. `{0, 2}` → `매주 월요일, 수요일`.
+
+    `render_open_hours` 와 **짝이다** — 영업 원문만 쓰면 파서가 부분 주간을 7일로 펼쳐
+    쉬는 날이 사라진다(실데이터 3,991건 성립률 54% → 휴무를 붙이면 100%). 둘을 같은
+    모듈에 두는 이유다. 종전엔 `scripts/collect/backfill_rest_days.py` 에 있었다.
+    """
+    return "매주 " + ", ".join(f"{_DAY_LABEL[d]}요일" for d in sorted(days))
+
+
 def split_opening_hours_raw(text: str | None) -> tuple[str | None, str | None]:
     """원문 칸 → (영업 원문, 휴무 원문). 구분자가 없는 옛 원문은 (원문, None) — 종전 해석 그대로."""
     if not text:
@@ -634,7 +741,7 @@ def _truncate(text: str | None, limit: int) -> str | None:
 # 오차와 무관하므로 반경을 넓히는 대신 주소 키를 쓴다 (반경을 넓히면 옆 가게를
 # 병합한다).
 #
-# 규칙 자체는 `scripts/match_business_status.py` 의 폐업 대조에서 검증된 것과
+# 규칙 자체는 `scripts/classify/match_business_status.py` 의 폐업 대조에서 검증된 것과
 # 같다(주소 키 83.3%, 주소O이름X 는 붙이지 않음). 다만 **정의가 지금 두 곳에
 # 있다** — 그쪽은 stdlib 만으로 도는 독립 스크립트이고 자체 테스트가 물고 있어
 # 이번 변경에서 건드리지 않았다. 두 곳이 갈라지면 "폐업으로 붙인 가게"와

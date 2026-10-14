@@ -2,6 +2,9 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import {
   WarningTriangleGlyph as SharedWarningTriangleGlyph,
   MapPinGlyph as SharedMapPinGlyph,
+  SearchGlyph as SharedSearchGlyph,
+  HeartStrokeFilledGlyph,
+  HeartStrokeOutlineGlyph,
 } from '@/shared/ui/glyphs';
 // 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
 export { BackChevronGlyph } from '@/shared/ui/glyphs';
@@ -128,30 +131,13 @@ export function SearchGlyph({
   tone = 'onPrimary',
   testID,
 }: GlyphProps & { tone?: 'onPrimary' | 'mutedSoft' }) {
-  const stroke = tone === 'mutedSoft' ? MUTED_SOFT : ON_PRIMARY;
   return (
-    <Svg
+    <SharedSearchGlyph
+      size={size}
+      color={tone}
+      strokeWidth={1.8}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M9.16667 15C12.3883 15 15 12.3883 15 9.16667C15 5.94501 12.3883 3.33333 9.16667 3.33333C5.94501 3.33333 3.33333 5.94501 3.33333 9.16667C3.33333 12.3883 5.94501 15 9.16667 15Z"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M17.5 17.5L13.75 13.75"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -214,23 +200,7 @@ export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
 // 카드 저장 하트 — 미저장(외곽선). TRIP-181까지는 이 화면의 유일한 하트였다(AC-7 정직한 스텁).
 // ponytail: 회색 플레이스홀더 전제, 실사진 붙으면 흰색으로 되돌린다
 export function HeartOutlineGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 22 22"
-      fill="none"
-    >
-      <Path
-        d="M11 19C11 19 3 14 3 8.6C3 5.9 5.1 3.8 7.7 3.8C9.1 3.8 10.4 4.5 11 5.6C11.6 4.5 12.9 3.8 14.3 3.8C16.9 3.8 19 5.9 19 8.6C19 14 11 19 11 19Z"
-        stroke={MUTED}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <HeartStrokeOutlineGlyph size={size} color="muted" testID={testID} />;
 }
 
 // e03 hero 공유 아이콘(TRIP-457) — 표시만(공유 계약 미존재, 범위 밖 — FAB·탭바 등급의 정적
@@ -612,22 +582,5 @@ export function OceanViewGlyph({ size = 24, testID }: GlyphProps) {
 // 빈/찬을 색으로 재는 것은 jest 무심판(repo-trap: `*Glyphs.tsx` fill은 렌더 트리에 안 남는다)이라,
 // 상태는 이 별도 컴포넌트(=다른 testID) + Pressable의 accessibilityState.selected 두 신호로 잰다.
 export function HeartFilledGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 22 22"
-      fill="none"
-    >
-      <Path
-        d="M11 19C11 19 3 14 3 8.6C3 5.9 5.1 3.8 7.7 3.8C9.1 3.8 10.4 4.5 11 5.6C11.6 4.5 12.9 3.8 14.3 3.8C16.9 3.8 19 5.9 19 8.6C19 14 11 19 11 19Z"
-        fill={PRIMARY}
-        stroke={PRIMARY}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <HeartStrokeFilledGlyph size={size} testID={testID} />;
 }
