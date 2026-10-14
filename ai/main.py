@@ -655,6 +655,21 @@ def _warn_unwired(*, weather, embedding, feature_models: Mapping | None) -> None
 
 
 _BANK_PATH = pathlib.Path(__file__).resolve().parent / "data" / "intent_question_bank.yaml"
+# 질문뱅크 색인은 기동 뒤 백그라운드라 요청 예산(5s)과 무관하다. 5s 로 두면 DEV(CPU 임베딩, 파드 2 × 워커 2 =
+# 색인 4벌)에서 요청이 끝나기 전에 포기하고 다시 보내, 서비스가 버려진 일을 계속 처리하느라 포화됐다.
+_BANK_INDEX_TIMEOUT_SEC = 60.0
+
+
+def _bank_embedding():
+    """질문뱅크 색인 전용 임베딩(긴 timeout) — http 임베딩일 때만. 그 밖은 None = 요청 경로 임베딩을 쓴다
+    (프로세스 안 모델·외부 API 는 요청을 버려도 쌓이는 일이 없다). 같은 모델·같은 주소라 벡터 공간은 같다."""
+    if _env("TRIPPILOT_VECTOR_DB_URL") is None or _env("TRIPPILOT_EMBEDDING_PROVIDER") != "http":
+        return None
+    from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+    from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+
+    return http_embedding(RuntimeError, lambda t: UrllibJsonClient(timeout_sec=t),
+                          timeout_sec=_BANK_INDEX_TIMEOUT_SEC)
 
 
 def _intent_bank() -> tuple:
@@ -691,7 +706,7 @@ def build_app_from_env() -> FastAPI:
                              vector_store=vector_store, embedding=embedding,
                              travel_port=travel, existence=existence,
                              hours=hours, place_ids=place_ids,
-                             bank=_intent_bank())
+                             bank=_intent_bank(), bank_embedding=_bank_embedding())
     if provider == "openai":
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
@@ -724,7 +739,7 @@ def build_app_from_env() -> FastAPI:
                          # 0·음수는 C1Config 검증이 기동 시점에 거부한다.
                          score_max_parallel=int(_env("TRIPPILOT_SCORE_MAX_PARALLEL") or "10"),
                          directives=_replan_directives(),
-                         bank=_intent_bank())
+                         bank=_intent_bank(), bank_embedding=_bank_embedding())
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.
