@@ -99,6 +99,7 @@ solve(problem, deadline_ms):
 - 구성 휴리스틱(정본 §4.3 단계 1): 고정 블록 → 점수 내림차순 삽입 → HC 위반 스킵 → 빈 슬롯 허용. **항상 해 반환** (최악 = 고정 블록만 = MINIMAL).
 - 지역 탐색(2-opt/or-opt)은 잔여 ≥ `local_search_min_remaining_ms`일 때만 (정본 규칙 그대로 — 시한 인지의 원형).
 - > 이 규칙 점수는 **ML 후보 1순위(A-1)의 폴백** — AI-D05. 함수 삭제 금지.
+- 규칙 점수도 **취향 카테고리를 prefer 로 반영**한다(2026-10-14) — ScheduleAgent `_rule_scores` 가 페르소나 취향(`_wanted_categories`: taste_tags·activities·cuisines)을 지시 선호와 같은 `directive_fit`(+0.3)로 싣는다. c1 폴백·c1_partial 보충 청크 모두. 요청에 카테고리 지시(prefer/avoid)가 있으면 그것만 쓴다(사용자 우선, BR-U4-47). 빈 취향 → 종전과 동일.
 
 ### 2.6 TravelEstimator (travel.py)
 

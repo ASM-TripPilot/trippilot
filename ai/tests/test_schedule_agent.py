@@ -783,11 +783,11 @@ def test_요청의_지시_카테고리가_규칙_점수에_실린다() -> None:
     avoided = {p.category for p in pool.pois}  # 풀에 실제로 있는 카테고리를 피한다
     assert avoided, "풀이 비면 이 테스트가 아무것도 안 본다"
 
-    plain = {s.poi_id: s.score for s in agent._rule_scores(base_request, pool)}
+    plain = {s.poi_id: s.score for s in agent._rule_scores(base_request, pool, None)}
     steered = {
         s.poi_id: s.score
         for s in agent._rule_scores(
-            _replace(base_request, avoid_categories=frozenset(avoided)), pool
+            _replace(base_request, avoid_categories=frozenset(avoided)), pool, None
         )
     }
 
@@ -911,3 +911,152 @@ def test_미주입이면_종전과_완전히_같다() -> None:
     with_port = _placed(_agent_with_hours(FakeHours({}), {})[0].run(_task(pool, request=req)))
     without = _placed(_agent_with_hours(None, {})[0].run(_task(pool, request=req)))
     assert with_port == without
+
+
+# ── 규칙 점수에 취향 반영 (2026-10-14) ──────────────────────────────
+#
+# 취향은 LLM 점수 프롬프트에만 실려 c1 폴백·c1_partial 보충 청크에서 통째로 사라졌다
+# (10-13 DEV "취향 반영 안 됨"). 규칙 점수도 `_wanted_categories(persona)` 를 지시 선호와
+# 같은 기구(+DIRECTIVE_STEP)로 싣는다. 사용자가 카테고리 축을 정하면 그것만 쓴다.
+
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from trippilot.agents.schedule.outcome import _wanted_categories
+from trippilot.assembly_engine.scorer import DIRECTIVE_STEP
+from trippilot.domain.common import BudgetLevel
+from trippilot.domain.persona import ACTIVITY_LABELS, CUISINE_LABELS, PersonaSummary, TasteTag
+from trippilot.domain.poi import PoiCategory as _Cat
+
+from tests.test_schedule_coordinator import (
+    _PROMPTS_DIR,
+    _ChunkFailLlm,
+    _build,
+    _poi,
+)
+from tests.fakes.fake_llm import FailingLlm
+from trippilot.llm_gateway.prompts import PromptRegistry
+
+_ALL_CATS = tuple(c for c in _Cat if c is not _Cat.STAY)
+
+
+def _persona(taste=(), activities=(), cuisines=()) -> PersonaSummary:
+    return PersonaSummary(taste_tags=tuple(taste), companion=None, budget=BudgetLevel.MID,
+                          activities=tuple(activities), cuisines=tuple(cuisines))
+
+
+def _mixed_pool():
+    req = _request()
+    pois = tuple(_poi(i, 0.0005 * i, _ALL_CATS[i % len(_ALL_CATS)]) for i in range(1, 25))
+    return CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days,
+                             budget=req.budget, transport=req.transport), _NOW)
+
+
+_MIXED = _mixed_pool()
+
+_personas = st.builds(
+    _persona,
+    taste=st.lists(st.sampled_from(list(TasteTag)), unique=True, max_size=4),
+    activities=st.lists(st.sampled_from(ACTIVITY_LABELS), unique=True, max_size=4),
+    cuisines=st.lists(st.sampled_from(CUISINE_LABELS), unique=True, max_size=2),
+)
+_cat_sets = st.frozensets(st.sampled_from(_ALL_CATS), max_size=3)
+
+
+@settings(max_examples=60, deadline=None)
+@given(persona=_personas, prefer=_cat_sets, avoid=_cat_sets)
+def test_property_규칙_점수는_취향_카테고리를_한_단_올리고_사용자_축이_있으면_그것만(
+    persona, prefer, avoid,
+) -> None:
+    from dataclasses import replace as _replace
+
+    agent, _, _ = _agent()
+    request = _replace(_request(), prefer_categories=prefer, avoid_categories=avoid)
+    plain = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, None)}
+    tasted = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, persona)}
+    index = {p.poi_id: p for p in _MIXED.pois}
+
+    assert plain.keys() == tasted.keys() == _MIXED.poi_ids  # INV-1 — 풀 순회 그대로
+    if prefer or avoid:
+        assert tasted == plain  # 사용자 지시 우선 — 취향을 그 축에 얹지 않는다
+        return
+    wanted = _wanted_categories(persona)
+    for pid, score in tasted.items():
+        lift = DIRECTIVE_STEP if index[pid].category in wanted else 0.0
+        assert abs(score - plain[pid] - lift) < 1e-9  # 빈 취향 → 종전과 동일
+
+
+def test_사용자_회피가_취향_선호를_이긴다() -> None:
+    from dataclasses import replace as _replace
+
+    agent, _, _ = _agent()
+    cafe = _persona(activities=("카페",))
+    request = _replace(_request(), avoid_categories=frozenset({_Cat.CAFE}))
+    index = {p.poi_id: p for p in _MIXED.pois}
+    plain = {s.poi_id: s.score for s in agent._rule_scores(_request(), _MIXED, None)}
+    steered = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, cafe)}
+
+    for pid, score in steered.items():
+        if index[pid].category is _Cat.CAFE:
+            assert score < plain[pid]
+
+
+def _slot_categories(outcome, pois) -> list[_Cat]:
+    index = {p.poi_id: p for p in pois}
+    return [index[s.poi_id].category for d in outcome.solution.days for s in d.slots
+            if s.poi_id in index]
+
+
+def test_c1_폴백_일정에서_취향_카테고리_비중이_높아진다() -> None:
+    """LLM 점수 전량 실패(규칙만) — 같은 풀·시드에서 카페 취향이면 카페가 더 놓인다."""
+    pois = tuple(_poi(i, 0.0003 * i, _Cat.CAFE if i % 2 else _Cat.CULTURE)
+                 for i in range(1, 21))
+
+    def cafes(persona) -> int:
+        orchestrator, _, _ = _build(score_llm=FailingLlm(), pois=pois, store_value=persona)
+        outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+        assert outcome.scoring_mode is ScoringMode.RULE
+        cats = _slot_categories(outcome, pois)
+        assert cats  # 일정이 나왔다
+        return cats.count(_Cat.CAFE)
+
+    assert cafes(_persona(activities=("카페",))) > cafes(_persona())
+
+
+def test_c1_partial_보충_청크에도_취향이_실린다() -> None:
+    pois = tuple(_poi(i, 0.0001 * i, _Cat.CAFE if i % 2 else _Cat.CULTURE)
+                 for i in range(1, 41))
+    sorted_ids = sorted(str(p.poi_id) for p in pois)
+    by_id = {str(p.poi_id): p for p in pois}
+
+    def backfilled(persona) -> dict[str, float]:
+        orchestrator, _, sink = _build(
+            score_llm=_ChunkFailLlm(sorted_ids[0]), pois=pois, store_value=persona,
+            renderer=PromptRegistry(_PROMPTS_DIR))
+        outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+        assert any(d.reason.startswith("c1_partial") for d in outcome.degradations)
+        return {str(c.poi_id): c.score for c in sink.problems[0].candidates
+                if not c.is_llm_score}
+
+    tasted = backfilled(_persona(activities=("카페",)))
+    plain = backfilled(_persona())
+    assert tasted.keys() == plain.keys() and tasted
+    for pid, score in tasted.items():
+        lift = DIRECTIVE_STEP if by_id[pid].category is _Cat.CAFE else 0.0
+        assert abs(score - plain[pid] - lift) < 1e-9
+
+
+def test_한_곳_추가_카테고리에는_취향_가점을_얹지_않는다() -> None:
+    from dataclasses import replace as _replace
+
+    agent, _, _ = _agent()
+    cafe = _persona(activities=("카페", "야경"))
+    request = _replace(_request(), add_one_categories=frozenset({_Cat.CAFE}))
+    index = {p.poi_id: p for p in _MIXED.pois}
+    plain = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, None)}
+    tasted = {s.poi_id: s.score for s in agent._rule_scores(request, _MIXED, cafe)}
+
+    for pid, score in tasted.items():
+        lift = DIRECTIVE_STEP if index[pid].category is _Cat.NIGHT_VIEW else 0.0
+        assert abs(score - plain[pid] - lift) < 1e-9  # 카페는 "한 곳"만 — 종류 전체 가점 없음

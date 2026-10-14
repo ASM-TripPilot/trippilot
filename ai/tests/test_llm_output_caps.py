@@ -249,7 +249,7 @@ def test_agent_sends_only_rule_top_to_llm_and_backfills_rest() -> None:
                              allocate(20_000, OrchestratorConfig()), 20_000, [],
                              _TRACE, _COORD_NOW)
 
-    rule = sorted(agent._rule_scores(request, pool), key=lambda sp: (-sp.score, str(sp.poi_id)))
+    rule = sorted(agent._rule_scores(request, pool, _PERSONA), key=lambda sp: (-sp.score, str(sp.poi_id)))
     sent = scoring.pools[0]
     assert sent.poi_ids == frozenset(sp.poi_id for sp in rule[:2])  # 규칙 상위만 LLM 으로
     assert {sp.poi_id for sp in scored} == pool.poi_ids  # 나머지는 규칙 점수로 보충
