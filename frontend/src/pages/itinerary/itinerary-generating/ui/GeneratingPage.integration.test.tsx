@@ -1140,6 +1140,8 @@ describe('관찰 모드(mode 없음)', () => {
       expect(replacedTo()).toContain('/itinerary/draft');
       expect(replacedTo()).toContain(TRIP_ID);
       expect(mockPush).not.toHaveBeenCalled();
+      // TRIP-1385 — 다시 여는 진입(관찰)은 공개 모션 신호(reveal)를 싣지 않는다.
+      expect(replacedTo()).not.toContain('reveal');
 
       // 단언 ② 생성은 한 번도 쏘지 않았다(#083 — 재진입이 생성을 다시 돌리면 같이 짜기가 덮인다).
       await settle();

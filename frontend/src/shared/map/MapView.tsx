@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ImageSourcePropType } from 'react-native';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, {
@@ -24,6 +24,7 @@ import type {
 } from '@mj-studio/react-native-naver-map';
 
 import { buildCircleRegion, buildFitRegion } from './fitRegion';
+import { DRAW_PATH_DURATION_MS, DrawnPathOverlay } from './DrawnPathOverlay';
 
 /**
  * 공급자 중립 지도 래퍼(TRIP-863 S1). 카카오 WebView 브리지를 네이버 네이티브 지도로
@@ -127,6 +128,11 @@ export interface MapViewProps {
    * `camera` 대신 `region` 을 넘긴다(SDK 는 camera 가 있으면 region 을 버린다). 핀 0개·미전달이면
    * 기존 center 카메라 그대로(핀 1개는 최소 폭 region — TRIP-1363). */
   fitPins?: boolean;
+  /** TRIP-1385 · 경로선이 그려지며 나타난다. **옵트인** — 미전달·false 면 경로선 prop 이 지금과 같다(progress 미전달).
+   * 켜면 마운트 때 한 번, 경로선을 1번 핀에서 마지막 핀까지 `durationMs`(기본 650)에 걸쳐 그리고(지연 `delayMs`,
+   * 기본 0) 핀은 경로가 닿는 순서로 나타난다. 동작 줄이기면 곧장 완성 경로·전체 핀. 실제 경로(`actualRoute`)가
+   * 켜진 지도의 계획 연결선과 핀 1개 이하 지도엔 걸리지 않는다. `true` 는 기본값. */
+  drawPathOnMount?: boolean | { durationMs?: number; delayMs?: number };
 }
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
@@ -498,6 +504,7 @@ function MapViewImpl({
   radiusCircle,
   onTapMap,
   fitPins,
+  drawPathOnMount,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
   // (키가 없으면 회색 빈 지도 대신 안내 화면을 띄운다). 참조는 이 한 곳뿐(A-2 계승).
@@ -546,6 +553,9 @@ function MapViewImpl({
       mapRef.current?.animateRegionTo({ ...region, easing: 'None' });
   };
 
+  // TRIP-1385 — 경로가 닿은 핀 수(null=전부). 그려지기가 끝나면 null 이라 이후 좌표가 바뀌어도 핀이 숨지 않는다.
+  const [revealCount, setRevealCount] = useState<number | null>(1);
+
   if (!hasKey) {
     return (
       <View testID="map-root" className="flex-1">
@@ -575,6 +585,23 @@ function MapViewImpl({
   // (BR-U10-37). 켜졌을 때만 계획 연결선을 muted-soft 얇게 낮춘다(BR-U10-41 — 계획 흐림·실제 점선).
   const routeSegments = (actualRoute ?? []).filter((seg) => seg.length >= 2);
   const actualOn = routeSegments.length > 0;
+  // TRIP-1385 — 그려지기는 일반 경로선(실제 경로 꺼짐)에만 건다.
+  const drawOpts: { durationMs?: number; delayMs?: number } | null =
+    drawPathOnMount === true
+      ? {}
+      : typeof drawPathOnMount === 'object'
+        ? drawPathOnMount
+        : null;
+  const drawOn = drawOpts !== null && showPath && !actualOn;
+  // 경로 위 핀(방문·무-kind)의 경로 순번 — 그려지는 동안 아직 안 닿은 핀은 그리지 않는다.
+  let pathRank = 0;
+  const hiddenPins = new Set<number>();
+  (pins ?? []).forEach((pin, index) => {
+    if (pin.kind !== undefined && pin.kind !== 'visited') return;
+    if (drawOn && revealCount !== null && pathRank >= revealCount)
+      hiddenPins.add(index);
+    pathRank += 1;
+  });
 
   return (
     <View testID="map-root" className="flex-1">
@@ -619,6 +646,7 @@ function MapViewImpl({
           />
         ) : null}
         {pins?.map((pin, index) => {
+          if (hiddenPins.has(index)) return null;
           // 기록 마커족(kind 축)이 있으면 그것으로, 없으면 현행 state 물방울로 그린다(TRIP-768,
           // 무회귀). 래퍼(map-marker-pin-{n}·collapsable={false})는 두 갈래가 공유한다 — TRIP-876
           // 래스터 필수 조건이고 심판이 이 testID 를 물고 있다.
@@ -751,7 +779,15 @@ function MapViewImpl({
         {showPath ? (
           // 경로선 빨강(primary) + 흰 케이싱(Figma 4125:3958 route/route-casing). width 는 6-b 조정.
           // coords 는 visited(+무-kind) 구간만 — planned·stay 는 선에서 빠진다(위 lineCoords).
-          actualOn ? (
+          drawOn ? (
+            <DrawnPathOverlay
+              coords={lineCoords}
+              width={2.75}
+              durationMs={drawOpts?.durationMs ?? DRAW_PATH_DURATION_MS}
+              delayMs={drawOpts?.delayMs ?? 0}
+              onReveal={setRevealCount}
+            />
+          ) : actualOn ? (
             <NaverMapPathOverlay
               coords={lineCoords}
               color={PIN_MUTED_SOFT}
