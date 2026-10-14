@@ -3867,9 +3867,9 @@ note = """
 
 [[nodes]]
 id = "U8-AI-DIALOGUE"
-ticket = ""
+ticket = "TRIP-1410"
 title = "[AI] 대화 경계·dialogue_router — IntentRouter 의 프로덕션 호출자가 0이다 (G-U8-4)"
-status = "external"
+status = "done"
 owner = "ai"
 migration = false
 touches = []
@@ -4211,9 +4211,9 @@ reason = "파기·청소·내보내기의 대상 테이블이 U8-CONTRACT 에서
 
 [[nodes]]
 id = "U8-INTERPRET-HTTP"
-ticket = ""
+ticket = "TRIP-1410"
 title = "[U8] 해석 경계 http 어댑터 — 상대가 /ai/v1/dialogue/interpret 를 열면 붙인다"
-status = "blocked"
+status = "done"
 migration = false
 touches = [
   "backend/modules/assistant",

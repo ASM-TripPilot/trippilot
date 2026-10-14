@@ -18,6 +18,7 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.jackson.module.kotlin)
+    implementation(libs.jackson3.module.kotlin)   // AI 해석 경계 와이어(Jackson 3 = SB4 기본) — 없으면 데이터클래스가 조용히 기본값이 된다(anti-patterns)
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))
