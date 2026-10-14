@@ -1913,7 +1913,14 @@ class WiredItineraryOrchestrator:
         avoided = frozenset(p.poi_id for p in pool.pois if p.category in drop and p.poi_id not in held)
         if avoided:
             cats = ",".join(sorted(c.value for c in drop))
-            if pool.poi_ids - held - set(request.excluded_poi_ids) <= avoided:
+            # "남은 후보" = 실제로 놓일 수 있는 곳 — 숙소·그날 휴무가 증명된 곳은 세지 않는다
+            # (그것만 남았는데 제외를 유지하면 잠금만 든 빈 하루가 된다).
+            weekday = request.target_date.weekday()
+            usable = {p.poi_id for p in pool.pois
+                      if p.poi_id not in held and p.poi_id not in set(request.excluded_poi_ids)
+                      and p.category is not PoiCategory.STAY
+                      and composition.hours_label(p, weekday) is not None}
+            if usable <= avoided:
                 # 감점도 같이 푼다 — 남은 후보가 그것뿐인데 감점만 남기면 잠금만 든 빈 하루가 된다.
                 notes.append(f"avoid_relaxed: {cats} only candidates")
                 avoided, avoid = frozenset(), avoid & prefer

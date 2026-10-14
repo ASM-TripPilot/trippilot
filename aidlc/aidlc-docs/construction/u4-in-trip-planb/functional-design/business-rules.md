@@ -58,7 +58,7 @@
 >
 > | 사유(FE → AI) | 암시 지시 | 경로 감점 | 방문 상한 원−1 | 효과 |
 > |---|---|---|---|---|
-> | 체력 저하 `LOW_ENERGY` → `fatigue` | `LESS_MOVE` · `AVOID_STRENUOUS` · `RELAX` | 0.05 | ✓ | 앵커에서 먼 후보 감점 · 경로(연속 이동) 감점 · 액티비티·자연 회피 · 느긋한 속도(체류 ×1.4) · 방문 수 감소(상한) |
+> | 체력 저하 `LOW_ENERGY` → `fatigue` | `LESS_MOVE` · `AVOID_STRENUOUS` · `RELAX` | 0.05 | ✓ | 앵커에서 먼 후보 감점 · 경로(연속 이동) 감점 · 액티비티·자연 후보 제외 · 느긋한 속도(체류 ×1.4) · 방문 수 감소(상한) |
 > | 이동 지연 `SLOW_MOVE` → `delay` | `LESS_MOVE` · `RELAX` | 0.05 | ✓ | 먼 후보·경로 감점 · 느긋한 속도 · 방문 수 감소(상한) |
 > | 날씨 `WEATHER` → `weather` | `INDOOR` · `LESS_MOVE` | 0.02 | — | 문화·카페·쇼핑 선호 · 야외(자연·야경·액티비티) 후보 제외 · 먼 후보·경로 감점(약하게 — 실내 선호가 먼 대체지를 끌어오지 않게) |
 > | 휴무 `TEMP_CLOSED` → `closed` · 예약 마감 `FULLY_BOOKED` → `fully_booked` · `canceled` | `NEARBY` | — | — | 근처 새 스팟으로 대체. 대상 장소 제외는 `excluded_poi_ids` 가 한다 |
