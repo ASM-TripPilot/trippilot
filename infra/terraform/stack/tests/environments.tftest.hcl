@@ -48,6 +48,20 @@ run "dev_is_private_and_cost_conscious" {
     redis_node_type               = "cache.t4g.micro"
     alerts_slack_team_id          = "T0000000000"
     alerts_slack_channel_id       = "C0000000000"
+    dev_target_enabled            = true
+  }
+
+  # 개발 대상 시크릿은 운영 그릇과 **이름이 겹치지 않고**, 배포 역할 권한(trippilot/dev/*) 안에 든다.
+  assert {
+    condition = (
+      length(aws_secretsmanager_secret.dev_target) == 4 &&
+      alltrue([for name, secret in aws_secretsmanager_secret.dev_target : secret.name == "trippilot/dev/dev-target/${name}"]) &&
+      length(setintersection(
+        [for secret in aws_secretsmanager_secret.dev_target : secret.name],
+        [for secret in aws_secretsmanager_secret.app : secret.name],
+      )) == 0
+    )
+    error_message = "The dev target needs its own four secret containers under trippilot/dev/dev-target/, never the production ones."
   }
 
   # 운영 알람(Q3=A) — 5xx·토큰 재사용·파드 재시작 셋·노드·DB 셋이 전부 같은 토픽으로 가고, 그 토픽을 Slack 이 구독한다.
@@ -206,6 +220,11 @@ run "prd_has_high_availability_and_data_protection" {
   assert {
     condition     = aws_eks_cluster.this.name == "trippilot-prd" && alltrue([for repository in aws_ecr_repository.app : startswith(repository.name, "trippilot-prd/")]) && alltrue([for secret in aws_secretsmanager_secret.app : startswith(secret.name, "trippilot/prd/")])
     error_message = "PRD resource and secret names must be isolated from DEV."
+  }
+
+  assert {
+    condition     = length(aws_secretsmanager_secret.dev_target) == 0
+    error_message = "The dev target lives only inside the DEV stack; PRD must not grow its containers by default."
   }
 
   assert {
