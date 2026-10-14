@@ -26,6 +26,28 @@ from trippilot.domain.edit import EditOp
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.domain.poi import Poi
 
+# op 별 뜻과 채울 자리. 이름만 주입하던 동안(0.1.0) 모델은 "카페 하나 추가해줘" 를
+# ADD_SLOT 으로 잇지 못하고 전 모델이 번역 불가를 냈다(2026-10-14 실측 12발화 중
+# 추가·종류 교체 4건이 4개 조합 전부). 표가 EditOp 전원을 덮는지는 테스트가 고정한다.
+_OP_GUIDE: dict[EditOp, str] = {
+    EditOp.ADD_SLOT: "후보 1곳을 그 날에 추가 — params.targetPoiId=후보 poiId, affectedSlots=[]",
+    EditOp.REMOVE_SLOT: "기존 슬롯 삭제 — affectedSlots=[뺄 슬롯 poiId]",
+    EditOp.MOVE_SLOT: "기존 슬롯 1곳의 순서 이동 — affectedSlots=[옮길 슬롯 poiId]",
+    EditOp.REPLACE_SLOT: (
+        "기존 슬롯 1곳을 후보로 교체 — affectedSlots=[바꿀 슬롯 poiId], "
+        "params.targetPoiId=후보 poiId"),
+    EditOp.REORDER_DAY: "그 날 순서 재배열 — affectedSlots=그 날 슬롯 전부를 새 순서대로",
+    EditOp.CLEAR_DAY: "그 날 일정 전부 비우기 — affectedSlots=[]",
+    EditOp.REPLAN: "위 op 로 표현할 수 없는 일정 전반의 재구성 요청",
+}
+
+# 후보는 카테고리마다 풀 순위(영업시간 보유 → 인기) 앞에서 이만큼만 싣는다. 풀은 앵커
+# 반경 전량이라 큰 지역에선 1,300곳·74k자였고(2026-10-14 실측), 번역이 쓰는 건 그중
+# 한 곳이다. 상한 이하인 풀은 렌더가 그대로다(테스트 고정).
+# ponytail: 카테고리당 고정 상한 — 이름으로 찾는 요청("성심당 넣어줘")이 상한 밖 후보를
+# 가리키면 놓친다. 그런 실패가 보이면 발화의 이름과 맞는 후보를 상한과 별개로 싣는다.
+_CANDIDATES_PER_CATEGORY = 40
+
 
 @dataclass(frozen=True, slots=True)
 class EditTranslationInput:
@@ -61,16 +83,24 @@ def build_edit_translation_vars(
             else f"{order}. {pid} | (정보 없음)"
         )
     in_use = set(inp.current_slots)
+    kept: list[Poi] = []
+    per_category: dict = {}
+    for p in pool.pois:  # 풀 순서 = 순위
+        if p.poi_id in in_use:
+            continue
+        n = per_category.get(p.category, 0)
+        if n < _CANDIDATES_PER_CATEGORY:
+            per_category[p.category] = n + 1
+            kept.append(p)
     candidate_lines = [
         f"- {p.poi_id} | {p.category.value} | {inline(p.name)}"
-        for p in sorted(pool.pois, key=lambda p: str(p.poi_id))
-        if p.poi_id not in in_use
+        for p in sorted(kept, key=lambda p: str(p.poi_id))
     ]
     return {
         "utterance": inp.utterance.strip() or "(발화 없음)",
         "target_date": inp.target_date or "미지정",
         # 편집 op closed-set을 서버가 주입 (정본 §2.4) — enum 순서라 결정론
-        "edit_ops": ", ".join(op.value for op in EditOp),
+        "edit_ops": "\n".join(f"- {op.value}: {_OP_GUIDE[op]}" for op in EditOp),
         "slots": "\n".join(slot_lines) or "(슬롯 없음)",
         "candidates": "\n".join(candidate_lines) or "(후보 없음)",
     }
