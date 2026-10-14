@@ -134,7 +134,9 @@ def run(namespace, shell, *, close_missing=False, close_missing_dry_run=False, s
         target = f"pod/{succeeded}" if succeeded else f"job/{NAME}"
         retries = shell(["kubectl", "get", f"job/{NAME}", "--namespace", namespace,
                          "-o", "jsonpath={.status.failed}"]).strip()
-        logs = shell(["kubectl", "logs", "--namespace", namespace, target, "--tail=80"]).strip()
+        # 전부 읽는다 — 병합 공유본(#1202)은 묶음 줄만 84개라 꼬리 80줄이면 맨 앞의 "미포함 정리"(드라이런 닫을
+        # 수·실 LOST 수)가 요약에서 잘린다. 그 숫자를 보려고 켠 입력이니 잘리면 켠 의미가 없다.
+        logs = shell(["kubectl", "logs", "--namespace", namespace, target, "--tail=-1"]).strip()
         print(logs)
         if retries and retries != "0":
             print(f"poi load retried {retries} time(s) before succeeding — 백엔드 연결이 끊겼다 다시 됐다")

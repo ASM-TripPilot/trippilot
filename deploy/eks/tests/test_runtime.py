@@ -493,6 +493,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         out.assert_any_call(summary)
         logs_call = next(c for c in calls if c[:2] == ["kubectl", "logs"])
         self.assertIn("pod/trippilot-poi-load-k7x2q", logs_call)  # `job/…` 이면 실패한 1차 파드 로그를 집을 수 있다
+        self.assertIn("--tail=-1", logs_call)  # 꼬리만 읽으면 병합본(84묶음)의 맨 앞 "미포함 정리" 줄이 요약에서 잘린다
         printed = " ".join(str(c.args[0]) for c in out.call_args_list)
         self.assertIn("retried 1 time", printed)
         self.assertIn("job,configmap", calls[-1])  # 둘 다 치운다

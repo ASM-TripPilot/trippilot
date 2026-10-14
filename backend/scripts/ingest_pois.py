@@ -265,6 +265,13 @@ def main(argv=None):
         return 0
 
     totals = empty_totals()
+    if args.close_missing and len(documents) > 1:
+        # 출처가 둘 이상이면 **쓰기 전에** 전부의 가드를 먼저 묻는다 — 문서 순서대로 닫고 적재하다 둘째 출처가
+        # 409 면 첫째 출처는 이미 닫히고 부어진 뒤라 "닫힌 행도, 적재된 행도 없다"가 거짓이 된다(병합 공유본).
+        for _path, _doc, source, proposals in documents:
+            if request_close(args, token, source, proposals, dry_run=True) is None:
+                report(totals)
+                return 2
     for path, doc, source, proposals in documents:
         batches = chunked(proposals, args.chunk_size)
         print(f"{path}: source={source} 제안={len(proposals)}건 → 요청 {len(batches)}회")
@@ -373,7 +380,7 @@ def self_check_close_missing(write, item):
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    calls, status = [], {}
+    calls, status, refuse = [], {}, set()
 
     class FakeBackend(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -387,7 +394,8 @@ def self_check_close_missing(write, item):
                 reply = {"source": body["source"], "activeBefore": 3, "present": 2, "closed": 1,
                          "closedSourceRefs": ["O'1"]}
             data = json.dumps(reply).encode("utf-8")
-            self.send_response(status.get(self.path, 200))
+            refused = self.path == CLOSE_PATH and body.get("source") in refuse   # 출처 하나만 가드에 걸리는 경우
+            self.send_response(409 if refused else status.get(self.path, 200))
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
@@ -403,10 +411,12 @@ def self_check_close_missing(write, item):
     def undo_files():
         return sorted(Path(".").glob("close-missing-undo-*.sql"))
 
-    def run(*argv, ingest=200, close=200):
+    def run(*argv, ingest=200, close=200, refused=()):
         calls.clear()
         status.clear()
         status.update({INGEST_PATH: ingest, CLOSE_PATH: close})
+        refuse.clear()
+        refuse.update(refused)
         for f in undo_files():
             f.unlink()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -466,17 +476,35 @@ def self_check_close_missing(write, item):
         local = [dict(item, source="LOCALDATA", provenance={"content_id": f"L{i}"}) for i in range(3)]
         merged = write({"source": "LOCALDATA", "proposals": [tour[0], local[0], tour[1], local[1], local[2]]})
         code, paths = run(merged, "--close-missing", "--chunk-size", "2")
-        assert code == 0 and paths == [CLOSE_PATH, INGEST_PATH, CLOSE_PATH, INGEST_PATH, INGEST_PATH], (code, paths)
-        sent = [(body["source"], [p["provenance"]["content_id"] for p in body.get("proposals", [])]
+        assert code == 0 and paths == [CLOSE_PATH, CLOSE_PATH,                     # 쓰기 전 가드 확인(출처마다)
+                                       CLOSE_PATH, INGEST_PATH, CLOSE_PATH, INGEST_PATH, INGEST_PATH], (code, paths)
+        sent = [(body["source"], body.get("dry_run"), [p["provenance"]["content_id"] for p in body.get("proposals", [])]
                  or body.get("present_source_refs")) for _path, body in calls]
-        assert sent == [("TOURAPI", ["T0", "T1"]), ("TOURAPI", ["T0", "T1"]),
-                        ("LOCALDATA", ["L0", "L1", "L2"]), ("LOCALDATA", ["L0", "L1"]), ("LOCALDATA", ["L2"])], sent
+        assert sent == [("TOURAPI", True, ["T0", "T1"]), ("LOCALDATA", True, ["L0", "L1", "L2"]),
+                        ("TOURAPI", False, ["T0", "T1"]), ("TOURAPI", None, ["T0", "T1"]),
+                        ("LOCALDATA", False, ["L0", "L1", "L2"]), ("LOCALDATA", None, ["L0", "L1"]),
+                        ("LOCALDATA", None, ["L2"])], sent
+        # 둘째 출처만 가드에 걸려도 **아무것도 쓰지 않는다** — 첫째 출처를 이미 닫고 부은 뒤 멈추면
+        # "닫힌 행도, 적재된 행도 없다"는 안내가 거짓이 된다.
+        code, paths = run(merged, "--close-missing", refused={"LOCALDATA"})
+        assert code != 0 and paths == [CLOSE_PATH, CLOSE_PATH] and all(b["dry_run"] for _p, b in calls), (code, calls)
+        assert undo_files() == []
+        # 단일 출처 문서는 종전 그대로 — 사전 확인 없이 닫기 1회 → 적재.
+        code, paths = run(doc, "--close-missing")
+        assert code == 0 and paths == [CLOSE_PATH, INGEST_PATH] and calls[0][1]["dry_run"] is False, (code, paths)
         # 병합본과 같은 출처 문서를 함께 주면 겹친 출처로 거부한다(둘째가 첫째의 행을 닫는다).
         code, paths = run(merged, doc, "--close-missing")
         assert code != 0 and paths == [], (code, paths)
         # 항목에 source 가 없으면 최상단을 따른다 — 기존 단일 출처 문서는 그대로.
         assert split_by_source("p", {"source": "TOURAPI"}, "TOURAPI", [item])[0][1:3] == (
             {"source": "TOURAPI"}, "TOURAPI")
+        # 묶음이 하나여도 항목 출처가 최상단과 다르면 항목 출처로 보낸다(“묶음 하나면 종전대로” 단순화가 여기서 깨진다).
+        one = [dict(item, source="TOURAPI")]
+        assert split_by_source("p", {"source": "LOCALDATA"}, "LOCALDATA", one) == [
+            ("p", {"source": "TOURAPI"}, "TOURAPI", one)]
+        # 빈·문자열 아닌 source 는 최상단으로 떨어진다.
+        odd = [dict(item, source=""), dict(item, source=1)]
+        assert split_by_source("p", {"source": "TOURAPI"}, "TOURAPI", odd)[0][2:] == ("TOURAPI", odd)
 
         # 토큰이 없으면 적재만 보는 드라이런은 되고, 닫힐 수를 묻는 드라이런은 보내기 전에 멈춘다.
         os.environ.pop(TOKEN_ENV)
