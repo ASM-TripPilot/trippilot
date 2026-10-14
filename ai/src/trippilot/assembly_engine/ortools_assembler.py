@@ -83,6 +83,10 @@ _REORDER_DET_LIMIT = 0.5
 # 통째로 잃었다. 소프트면 놓을 수 있는 것만 놓이고 못 놓는 것만 빠진다 — 재풀이 없음, 그 사실은 배선이
 # 미배치로 보고한다. 그리디 힌트가 필수 방문을 품으므로 한도에 걸린 FEASIBLE 해도 그것을 잃지 않는다.
 _W_REQUIRED = 1_000_000
+# 사용자가 이름으로 콕 집은 필수 방문(`RequiredVisit.priority`) — 보통 필수 방문 **100곳**보다 무겁다.
+# 같은 1M 이면 먼 그 한 곳을 넣으려 가까운 두 곳을 빼느니 그 한 곳을 버린다(DEV 2026-10-14: "성산일출봉
+# 꼭" 이 2시간 넘는 빈칸이 있는데도 미배치). 구성 LLM 이 고른 곳은 사용자가 말한 곳이 아니다.
+_W_REQUIRED_PRIORITY = 100 * _W_REQUIRED
 _W_REQUIRED_MEAL = 100_000
 
 
@@ -401,11 +405,11 @@ class OrToolsAssembler:
             lo, hi = dom[0][0], max(b for _, b in dom)
             if existing is not None:
                 existing.update({"stay": stay, "lo": lo, "hi": hi, "required": True,
-                                 "dom": dom})
+                                 "dom": dom, "priority": rv.priority})
             else:
                 nodes.append({"poi": poi, "stay": stay, "lo": lo, "hi": hi,
                               "score": 0.0, "is_llm": False, "pin": None,
-                              "required": True, "dom": dom})
+                              "required": True, "dom": dom, "priority": rv.priority})
 
         # 하루 방문 상한 (BR-U4-47 — 피로·지연 재계획) — 자유 노드만 묶는다. 고정·필수는 상한에
         # 세되 빼지 않는다(`free_visit_cap`). 그리디 힌트도 같은 상한을 지켜 완전 힌트가 유지된다.
@@ -710,7 +714,7 @@ class OrToolsAssembler:
         for i, n in enumerate(nodes):
             if not n["required"]:
                 continue
-            terms.append(_W_REQUIRED * visit[i])
+            terms.append((_W_REQUIRED_PRIORITY if n.get("priority") else _W_REQUIRED) * visit[i])
             if not counts_as_food(n["poi"]):
                 continue
             bools = in_window.get(i)
