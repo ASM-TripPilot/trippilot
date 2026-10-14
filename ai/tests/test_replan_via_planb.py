@@ -589,6 +589,8 @@ def _post_replan(rag):
     app = build_dev_app(directives=_DIRECTIVES)
     orch = app.state.orchestrator
     orch._schedule_agent = _LlmScoredScheduleAgent(orch._schedule_agent)
+    # 구성 LLM 이 있으면 선택 LLM 을 안 부른다(`use_llm`) — 여기는 선택 LLM 결과의 사영 규칙을 본다
+    orch._composer = None
     if rag is not None:
         orch._rag = rag
     with TestClient(app, raise_server_exceptions=False) as client:

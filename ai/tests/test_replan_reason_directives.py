@@ -58,6 +58,8 @@ from tests.test_schedule_coordinator import (
 
 _INDOOR = frozenset({PoiCategory.CULTURE, PoiCategory.CAFE, PoiCategory.SHOPPING})
 _STRENUOUS = frozenset({PoiCategory.ACTIVITY, PoiCategory.NATURE})
+# "실내로"는 실외 회피도 싣는다(2026-10-14) — AVOID_OUTDOOR·RAIN_OUTDOOR 와 같은 집합
+_OUTDOOR = frozenset({PoiCategory.NATURE, PoiCategory.NIGHT_VIEW, PoiCategory.ACTIVITY})
 _APP = build_dev_app(directives=_DIRECTIVES)
 
 
@@ -94,7 +96,7 @@ def _spied_request(**over: object):
 @pytest.mark.parametrize("reason,near,avoid,prefer,pace,route,implied", [
     ("fatigue", True, _STRENUOUS, frozenset(), Pace.SLOW, 0.05, "LESS_MOVE,AVOID_STRENUOUS,RELAX"),
     ("delay", True, frozenset(), frozenset(), Pace.SLOW, 0.05, "LESS_MOVE,RELAX"),
-    ("weather", True, frozenset(), _INDOOR, None, 0.02, "INDOOR,LESS_MOVE"),
+    ("weather", True, _OUTDOOR, _INDOOR, None, 0.02, "INDOOR,LESS_MOVE"),
     ("closed", True, frozenset(), frozenset(), None, 0.0, "NEARBY"),
     ("fully_booked", True, frozenset(), frozenset(), None, 0.0, "NEARBY"),
     ("canceled", True, frozenset(), frozenset(), None, 0.0, "NEARBY"),

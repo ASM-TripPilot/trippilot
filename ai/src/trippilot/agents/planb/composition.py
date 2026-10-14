@@ -29,6 +29,7 @@ MAX_VISITS = 8
 _MINUTES_PER_VISIT = 90
 
 REASON_LABELS = {
+    "none": "특별한 사유 없음 — 지금 일정이 마음에 안 들어 새로 짜 보고 싶음",
     "weather": "비·날씨가 나쁨",
     "closed": "가려던 곳이 휴무",
     "fully_booked": "가려던 곳이 만석·예약 마감",
@@ -72,17 +73,16 @@ def shortlist(
     *,
     keep: Collection[PoiId],
     excluded: Collection[PoiId],
-    avoid: Collection[PoiCategory],
     weekday: int,
     score: Callable[[Poi], float],
 ) -> CandidatePool:
     """닫힌 집합 — `keep`(원 일정의 남은 곳·상황 추천)은 먼저, 나머지는 카테고리마다 점수 상위.
 
-    빼는 것: 제외(다녀온 곳·거절·휴무 사유 대상), 피할 카테고리, 그날 휴무가 증명된 곳.
+    빼는 것: 제외(다녀온 곳·거절·휴무 사유 대상·피할 카테고리의 곳), 숙소, 그날 휴무가 증명된 곳.
     `pool` 밖 id 는 `keep` 에 있어도 넣지 않는다 — 후보 자격은 풀이 정한다(INV-1).
     """
     def eligible(p: Poi) -> bool:
-        return (p.poi_id not in excluded and p.category not in avoid
+        return (p.poi_id not in excluded
                 and p.category is not PoiCategory.STAY
                 and hours_label(p, weekday) is not None)
 
