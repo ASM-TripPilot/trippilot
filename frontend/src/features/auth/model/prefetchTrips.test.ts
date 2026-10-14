@@ -33,7 +33,10 @@ describe('prefetchTrips — 홈 GET /trips 미리 받기 (TRIP-1362)', () => {
     });
 
     expect(() => prefetchTrips(client)).not.toThrow();
-    await client.getQueryCache().find({ queryKey: ['/trips'] })?.promise?.catch(() => {});
+    await client
+      .getQueryCache()
+      .find({ queryKey: ['/trips'] })
+      ?.promise?.catch(() => {});
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(queryFn).toHaveBeenCalledTimes(1);

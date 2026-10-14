@@ -4,12 +4,19 @@ export * from './index.view';
 export { readDevicePosition } from './readDevicePosition';
 export { useLocationConsent } from './useLocationConsent';
 export { useLocationAutomation } from './automation/useLocationAutomation';
-export type { LocationAutomationInput, LocationAutomationResult } from './automation/useLocationAutomation';
+export type {
+  LocationAutomationInput,
+  LocationAutomationResult,
+} from './automation/useLocationAutomation';
 export type { EngineStatus } from './automation/engine';
 export type { AutomationSlotRef, AutomationVisitRef } from './automation/store';
 export { useTripRoutes } from './automation/useTripRoutes';
 export { isLocationAutomationEnabled } from './automation/flag';
-export { createFakeAutomationSink, getAutomationSink, setAutomationSink } from './automation/sink';
+export {
+  createFakeAutomationSink,
+  getAutomationSink,
+  setAutomationSink,
+} from './automation/sink';
 export type { AutomationSinkPort } from './automation/sink';
 export { useAutomationStatus } from './automation/useAutomationStatus';
 export { distanceSourceByDate } from './automation/distanceSource';

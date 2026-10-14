@@ -9,6 +9,7 @@
     "ios": "expo run:ios",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "tsc": "tsc --noEmit",
     "test": "pnpm run test:node && pnpm run test:integration",
     "test:node": "NODE_OPTIONS=--experimental-vm-modules jest",
