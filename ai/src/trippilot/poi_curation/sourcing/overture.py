@@ -125,6 +125,35 @@ _NIGHT_OK = re.compile(r"전망대|전망|야시장|야경|展望|lookout|observ
 _NIGHT_NO = re.compile(r"천문|천체|과학관|플라네타|planetarium|astronom",
                        re.IGNORECASE)
 
+# ── 아파트 단지 — `landmark_and_historical_building` 이 실어 온다 ──────
+# **이 카테고리는 거칠다.** 서울 실측(2026-10-14): SIGHT 2,408곳 중 **1,061곳(44%)**이
+# 아파트 단지였다(`부천소사역푸르지오`·`일신주공아파트`·`항동하버라인 10단지`). `mapping`
+# 의 기존 `apartment` 규칙은 `(아파트|오피스텔)$` 라 브랜드명으로 끝나는 것을 못 잡는다.
+#
+# **이름이 브랜드로 끝날 때만 건다.** 처음엔 브랜드를 어디서든 잡았다가 공유본 41,362곳
+# 중 24곳을 죽였다 — 전부 **아파트 안의 가게**였다(`깐부치킨 용산푸르지오써밋점`,
+# `족발예찬(금천롯데캐슬점)`). 지점명은 브랜드 뒤에 말이 더 붙으므로 끝 고정이 가른다.
+# 보통명사로도 쓰이는 브랜드(`어울림`·`풍경채`·`하늘채`·`꿈에그린`)는 아예 뺐다 —
+# 어울림캠핑장·꿈에그린짜장·하늘채 황금수라가 죽었다. 지금 규칙은 **공유본 오탐 0** 이다.
+_APT_BRAND = (r"푸르지오|래미안|힐스테이트|롯데캐슬|센트레빌|수자인|리슈빌|엘크루|베르디움"
+              r"|해링턴플레이스|아크로리버|트레지움|파밀리에|베르데카운티|아이파크|위브|자이")
+_APARTMENT = re.compile(
+    rf"(?:{_APT_BRAND})\s*\d*\s*(?:차|동|단지)?$"
+    r"|타운하우스$|주상복합|\d+단지$|아파트$|오피스텔$|빌라트$|하이엔드\s*\d*차$",
+)
+
+# ── 공원 출입구·주차장 — 장소가 아니라 그 장소의 **문**이다 ───────────
+# `어린이대공원 정문`·`보라매공원 서문` 처럼 공원 이름을 달고 있어 NATURE 로 들어온다.
+# FE 가 네이버 매칭본에서 '정크'로 표시한 223곳을 우리 규칙에 돌렸더니 **0곳**이 걸려
+# 알았다 — 판별은 상호만으로 하므로 네이버 데이터는 쓰지 않는다.
+#
+# ⚠️ **방위문을 그냥 걸면 안 된다.** 처음엔 `(정|후|동|서|남|북)문$` 로 걸었다가 공유본에서
+# `창덕궁 인정문`·`북악산 숙정문`·`금정산성 동문`·`서흥김씨삼강정문` 을 죽였다 — 전부
+# 문화재다. 그래서 **공원 뒤에 올 때만** 건다. 같은 이유로 `사거리`·`삼거리`·`나들목`·
+# `정류장` 도 뺐다(`전포 삼거리`·`나들목 가족공원`이 공유본에 있다). `주차장` 도 끝 고정이
+# 아니면 `주차장식당`이 죽는다. 좁힌 결과 공유본 오탐 0.
+_GATEWAY = re.compile(r"공원\s*(?:정|후|동|서|남|북)문$|주차장$|\d+번\s*출구$")
+
 _HANGUL = re.compile(r"[가-힣]")
 
 
@@ -148,9 +177,16 @@ def map_category(overture_category: str | None, name: str | None) -> PoiCategory
     if not overture_category:
         return None
     cat = _CATEGORY_MAP.get(overture_category)
+    if cat is None:
+        return None
+    n = _norm(name)   # None 도 받는다 — 호출자마다 정규화를 다시 짜게 하지 않는다
+    # 아파트 단지와 출입구·주차장은 **카테고리와 무관하게** 뺀다. 거친 카테고리가
+    # 실어 오는 것이라(`landmark_and_historical_building` → SIGHT 의 44%가 아파트)
+    # 코드로는 못 가른다. 둘 다 공유본 41,362곳에 돌려 오탐 0 을 확인했다.
+    if _APARTMENT.search(n) or _GATEWAY.search(n):
+        return None
     if cat is not PoiCategory.NIGHT_VIEW:
         return cat
-    n = _norm(name)   # None 도 받는다 — 호출자마다 정규화를 다시 짜게 하지 않는다
     if _NIGHT_NO.search(n):
         return None
     return cat if _NIGHT_OK.search(n) else None

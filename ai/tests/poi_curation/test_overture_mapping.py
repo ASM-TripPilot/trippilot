@@ -298,3 +298,63 @@ def test_pbt_매핑은_결정론적이고_표를_바꾸지_않는다(
     assert map_category(cat, name) == map_category(cat, name)
     assert has_korean_name(name) == has_korean_name(name)
     assert dict(_CATEGORY_MAP) == before
+
+
+# ── 아파트 단지·공원 출입구 (2026-10-14) ──────────────────────────────
+#
+# `landmark_and_historical_building` → SIGHT 가 거칠다. 서울 실측: SIGHT 2,408곳 중
+# **1,061곳(44%)**이 아파트 단지였다. 아래 두 표는 실데이터에서 그대로 가져온 것이다 —
+# 공유본 41,362곳에 돌려 오탐 0 을 확인한 규칙만 둔다.
+
+# 빠져야 하는 것 — 아파트 단지와 공원 출입구
+_DROP = (
+    "일신주공아파트", "송내GS자이아파트", "부천소사역푸르지오", "동암신동아아파트",
+    "부평자이아파트", "항동 중흥 S-클래스 베르데카운티", "항동하버라인 10단지",
+    "하버라인3단지", "천왕타운하우스", "에이스하이엔드6차",
+    "어린이대공원 정문", "보라매공원 서문", "보라매공원 남문",
+    "중곡3동 마을공원 주차장", "우장산 근린공원 주차장",
+)
+
+# 남아야 하는 것 — 규칙이 넓어지면 이것들이 먼저 죽는다 (전부 공유본 실물)
+_KEEP = (
+    # 문화재 — 방위문을 그냥 걸면 이것들이 죽는다
+    "창덕궁 인정문", "북악산 숙정문", "금정산성 동문", "서흥김씨삼강정문",
+    # 아파트 **안의 가게** — 지점명이지 단지가 아니다
+    "깐부치킨 용산푸르지오써밋점", "족발예찬(금천롯데캐슬점)", "김가네용산푸르지오써밋점",
+    "디저트39 금천구청롯데캐슬점", "하삼동커피 용호데시앙점",
+    # 보통명사와 겹치는 브랜드어
+    "어울림캠핑장", "꿈에그린짜장함덕본점", "하늘채 황금수라", "풍경채",
+    # 끝 고정이 아니면 죽는 것들
+    "주차장식당", "한식당 남문", "나들목 가족공원", "전포 삼거리",
+)
+
+
+@pytest.mark.parametrize("name", _DROP)
+def test_아파트_단지와_공원_출입구는_뺀다(name: str) -> None:
+    assert map_category("landmark_and_historical_building", name) is None, (
+        f"단지·출입구인데 남았다: {name}")
+
+
+@pytest.mark.parametrize("name", _KEEP)
+def test_진짜_장소는_규칙에_걸리지_않는다(name: str) -> None:
+    assert map_category("landmark_and_historical_building", name) is not None, (
+        f"진짜 장소가 죽었다: {name}\n"
+        "규칙을 넓히면 궁·성의 문과 단지 안 가게가 먼저 죽는다 — 끝 고정을 풀지 마라."
+    )
+
+
+def test_빈_이름은_규칙이_건드리지_않는다() -> None:
+    """이름이 없으면 '단지가 아니다'가 아니라 '모른다' — 다른 단계가 판정한다."""
+    assert map_category("landmark_and_historical_building", None) is not None
+    assert map_category("landmark_and_historical_building", "") is not None
+
+
+def test_규칙은_부분적이다_브랜드가_끝이_아니면_남는다() -> None:
+    """**이 규칙은 아파트를 다 잡지 못한다.** 끝 고정이 그 대가다.
+
+    `한양수자인에듀힐즈` 는 브랜드(수자인) 뒤에 말이 더 붙어 안 걸린다. 끝 고정을 풀면
+    `깐부치킨 용산푸르지오써밋점` 같은 단지 **안의 가게**가 죽으므로(공유본 24건 실측)
+    남기는 쪽을 골랐다. 그래서 Overture SIGHT 는 아직 그대로 쓸 수 없고, 쓰려면
+    주소·좌표를 함께 보는 판정이 필요하다 — 이 테스트가 그 미결을 들고 있다.
+    """
+    assert map_category("landmark_and_historical_building", "한양수자인에듀힐즈") is not None
