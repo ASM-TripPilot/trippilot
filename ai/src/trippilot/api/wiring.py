@@ -111,6 +111,7 @@ from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConfl
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
+from trippilot.assembly_engine.scorer import build_rule_score
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import (
     BUDGET_TOKENS,
@@ -145,6 +146,7 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
 from trippilot.agents.edit.commands import EditStatus
+from trippilot.agents.planb import composition
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
 from trippilot.agents.planb.directives import (
@@ -163,6 +165,11 @@ from trippilot.llm_gateway.workers.replan_directive_translation import (
     DirectiveTranslationInput,
     ReplanDirectiveTranslationWorker,
     options_from,
+)
+from trippilot.llm_gateway.workers.replan_composition import (
+    ComposeDayInput,
+    ReplanCompositionWorker,
+    ScheduleLine,
 )
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.trigger import TriggerKind, TriggerParams
@@ -1109,6 +1116,21 @@ _PACE_KEYS: Mapping[str, Pace] = {"RELAX": Pace.SLOW, "FILL_MORE": Pace.PACKED}
 # 덜 깎으려고 짧게 둔다. 넘기면 지시 없이 진행하고 원문은 PlanB 가 읽는다(INV-4).
 _TRANSLATE_TIMEOUT_SEC = 4.0
 
+# 다시 짜기 구성 LLM(REPLAN_COMPOSITION) — 부를 최소 잔여와 상한. 최소는 fable 실호출 바닥(≈5s,
+# 2026-10-13 DEV 성공 중앙값 5.0s)이다 — 그보다 적으면 타임아웃만 기다리니 부르지 않는다.
+_COMPOSE_MIN_MS = 5_000
+_COMPOSE_MAX_MS = 15_000
+
+
+def _persona_line(persona: PersonaSummary | None) -> str:
+    """구성 프롬프트의 취향 한 줄 — 없으면 빈 문자열(워커가 "정보 없음"으로 렌더)."""
+    if persona is None:
+        return ""
+    parts = [", ".join(t.value for t in persona.taste_tags)]
+    if persona.companion is not None:
+        parts.append(f"동행 {persona.companion.value}")
+    return " · ".join(p for p in parts if p)
+
 
 # 요청 예산 중 PlanB(RAG + LLM 선택)에 줄 몫. 나머지가 페르소나 점수 + 어셈블리 몫이다.
 #
@@ -1352,6 +1374,7 @@ class WiredItineraryOrchestrator:
         vector_store: VectorStorePort | None = None,
         diversity_jitter: float = 0.0,
         directive_translator: ReplanDirectiveTranslationWorker | None = None,
+        composer: ReplanCompositionWorker | None = None,
     ) -> None:
         self._orchestrator = orchestrator
         # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
@@ -1385,6 +1408,8 @@ class WiredItineraryOrchestrator:
         self._vector_store = vector_store
         # 임베딩이 못 잡은 자유 입력(부정문 포함)을 받는 2차 번역(A-3). 미주입 = 1차만.
         self._directive_translator = directive_translator
+        # 다시 짜기 — 남은 하루의 방문 목록을 LLM 이 고른다. 미주입 = 종전 재계획(점수 + 어셈블리 선택).
+        self._composer = composer
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
@@ -1864,6 +1889,22 @@ class WiredItineraryOrchestrator:
         if visit_cap is not None:
             notes.append(f"planb_visit_cap: {visit_cap}")
         window = request.time_window
+        budget = core.allocate(_deadline_budget(meta), core.OrchestratorConfig())
+        # ── 다시 짜기 — 남은 하루의 방문 목록을 LLM 이 고른다 ─────────────
+        # 고른 곳은 시각 없는 필수 방문, 하루 상한은 `고정 + 고른 수` — 그날은 고른 곳만 들어가고
+        # 시각·순서는 어셈블리가 정한다(INV-2). 실패·시한 부족이면 () 라 종전 경로 그대로(INV-4).
+        # 사용자 지시(2026-10-14)로 재계획에 한해 "솔버 LLM 2차는 실패 시에만"(2026-08-23)을 개정한다.
+        active = tuple(b for b in blocks if b not in past)
+        composed = self._compose_day(
+            request, pool, persona, daily_rain, planb_rank, resolved, prefer, avoid,
+            active, past, not_before, visit_cap, budget_level, notes,
+            trace_id=trace_id, now=now, started_ms=t0, budget=budget,
+        )
+        add_one_asked = add_one
+        if composed:
+            # 고른 목록에 이미 든 종류의 "한 곳 추가"는 또 넣지 않는다(카페 두 곳).
+            index = {p.poi_id: p for p in pool.pois}
+            add_one = add_one - {index[p].category for p in composed if p in index}
         domain_request = core.GenerateItineraryRequest(
             schedule_id=ScheduleId(request.trip_id),
             anchor=anchor,
@@ -1895,8 +1936,11 @@ class WiredItineraryOrchestrator:
             prefer_near=near,
             pace=pace,
             travel_weight=_route_weight(request.reasons, resolved),
-            max_visits_per_day=visit_cap,
+            max_visits_per_day=len(active) + len(composed) if composed else visit_cap,
             not_before=not_before,
+            required_visits=tuple(
+                RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
+                              reason="llm_compose") for p in composed),
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
             request=domain_request,
@@ -1906,7 +1950,7 @@ class WiredItineraryOrchestrator:
             event_bonus=None,
             candidates_summary=core.candidates_report(
                 pool, days=len(dates), persona=persona),
-            budget=core.allocate(_deadline_budget(meta), core.OrchestratorConfig()),
+            budget=budget,
             # PlanB 가 쓴 시간이 잔여에서 빠지도록 **PlanB 이전** 원점을 넘긴다.
             # 여기서 시계를 다시 읽으면 PlanB 가 공짜가 되고, 두 LLM 호출 합이
             # 예산을 넘겨 백스톱(504)에 걸린다.
@@ -1914,11 +1958,151 @@ class WiredItineraryOrchestrator:
             trace_id=trace_id,
             now=now,
             planb_rank=planb_rank,
+            llm_composed=bool(composed),
         ))
+        if composed and outcome.solution is not None:
+            # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
+            # 구성 LLM 이 고른 곳은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가 잠가서
+            # 다음 다시 짜기·교체에서 못 바꾼다. 그 표시만 걷는다(시각·순서는 그대로).
+            picked = set(composed)
+            outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
+                replace(d, fixed_blocks=tuple(
+                    fb for fb in d.fixed_blocks
+                    if not (fb.reason == "required_visit" and fb.poi_id in picked)))
+                for d in outcome.solution.days)))
+        if composed:
+            placed = {s.poi_id for d in (outcome.solution.days if outcome.solution else ())
+                      for s in d.slots}
+            missed = [p for p in composed if p not in placed]
+            if missed:
+                notes.append(f"llm_composed_unplaced: {len(missed)}/{len(composed)}")
+            if len(missed) == len(composed):
+                # 고른 곳이 하나도 안 놓였다 — 빈 하루를 내지 않고 종전 경로로 한 번 더 푼다(INV-4).
+                composed = ()
+                outcome = self._schedule_agent.run(core.ScheduleTask(
+                    request=replace(domain_request, required_visits=(),
+                                    max_visits_per_day=visit_cap,
+                                    add_one_categories=add_one_asked),
+                    pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
+                    candidates_summary=core.candidates_report(
+                        pool, days=len(dates), persona=persona),
+                    budget=budget, started_ms=t0, trace_id=trace_id, now=now,
+                    planb_rank=planb_rank,
+                ))
         return self._replan_projection(
             request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
+            composed=bool(composed),
         )
+
+    def _compose_day(
+        self,
+        request: schemas.ReplanRequest,
+        pool: CandidatePool,
+        persona: PersonaSummary | None,
+        daily_rain: Mapping[date, int] | None,
+        planb_rank: tuple[PoiId, ...],
+        resolved: Sequence[str],
+        prefer: frozenset[PoiCategory],
+        avoid: frozenset[PoiCategory],
+        active: tuple[FixedBlock, ...],
+        past: tuple[FixedBlock, ...],
+        not_before: datetime | None,
+        visit_cap: int | None,
+        budget_level: BudgetLevel,
+        notes: list[str],
+        *,
+        trace_id: TraceId,
+        now: datetime,
+        started_ms: int,
+        budget: core.DeadlineBudget,
+    ) -> tuple[PoiId, ...]:
+        """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
+
+        반환은 고른 순서의 POI id(후보 ⊆ 풀, INV-1). 못 고르면 () + 노트 — 호출측이 종전 경로로
+        간다(INV-4). 시한은 PlanB 와 **같은 원점**에서 어셈블리 바닥을 뺀 잔여다 — 전체 잔여를 주면
+        구성 LLM 이 바닥까지 먹어 백스톱 504 가 난다(2026-10-13, #1102).
+        """
+        if self._composer is None:
+            return ()
+        remaining = (budget.total_ms - (self._clock.monotonic_ms() - started_ms)
+                     - budget.c2_reserved_ms)
+        if remaining < _COMPOSE_MIN_MS:
+            notes.append(f"llm_compose_skipped: deadline remaining={remaining}ms")
+            return ()
+        day, window = request.target_date, request.time_window
+        start = datetime.combine(window.date, window.start, tzinfo=self._tz)
+        if not_before is not None:
+            start = max(start, not_before)
+        end = datetime.combine(window.date, window.end, tzinfo=self._tz)
+        free_cap = None if visit_cap is None else visit_cap - len(active)
+        if start >= end or (free_cap is not None and free_cap < 1):
+            notes.append("llm_compose_skipped: no_room")
+            return ()
+
+        index = {p.poi_id: p for p in pool.pois}
+        past_ids = {b.poi_id for b in past}
+        fixed_ids = {b.poi_id for b in active}
+        excluded = {PoiId(p) for p in request.excluded_poi_ids} | past_ids | fixed_ids
+        anchor = GeoPoint(request.anchor.lat, request.anchor.lng)
+        seed = _seed_from(request.trip_id)
+        slots = sorted(request.current_slots,
+                       key=lambda s: (s.start_at is None, s.start_at or datetime.min.time()))
+        keep = [PoiId(s.poi_id) for s in slots] + list(planb_rank)
+        shortlist = composition.shortlist(
+            pool, keep=keep, excluded=excluded, avoid=avoid, weekday=day.weekday(),
+            score=lambda p: build_rule_score(p, budget_level, anchor, seed,
+                                             prefer=prefer, avoid=avoid))
+        if not shortlist.pois:
+            notes.append("llm_compose_skipped: no_candidates")
+            return ()
+
+        def status(s: schemas.ReplanSlotSchema) -> str:
+            pid = PoiId(s.poi_id)
+            if pid in past_ids:
+                return "다녀옴(유지)"
+            if pid in fixed_ids:
+                return "고정(유지)"
+            return "제외 요청" if pid in excluded else "남은 일정"
+
+        labels = {spec.key: spec.label for spec in self._directives}
+        rain = (daily_rain or {}).get(day)
+        limit = composition.max_visits(start, end, free_cap)
+        inp = ComposeDayInput(
+            date=composition.date_label(start),
+            window=f"{start:%H:%M}~{end:%H:%M}",
+            weather=f"강수확률 {rain}%" if rain is not None else "정보 없음",
+            reasons=tuple(composition.REASON_LABELS.get(r, r) for r in request.reasons if r),
+            directives=tuple(labels.get(k, k) for k in resolved),
+            user_request=request.free_text or "",
+            schedule=tuple(
+                ScheduleLine(
+                    time=(f"{s.start_at:%H:%M}~{s.end_at:%H:%M}"
+                          if s.start_at and s.end_at else "시간 미정"),
+                    category=index[PoiId(s.poi_id)].category.value
+                    if PoiId(s.poi_id) in index else "",
+                    name=index[PoiId(s.poi_id)].name if PoiId(s.poi_id) in index else s.poi_id,
+                    status=status(s),
+                )
+                for s in slots
+            ),
+            planb_picks=tuple(index[p].name for p in planb_rank if p in index)[:5],
+            persona=_persona_line(persona),
+            max_visits=limit,
+            distance_km={p.poi_id: haversine_km(anchor, p.coord) for p in shortlist.pois},
+            hours={p.poi_id: composition.hours_label(p, day.weekday()) or ""
+                   for p in shortlist.pois},
+        )
+        result = self._composer.compose(
+            shortlist, inp, trace_id, now,
+            timeout_sec=min(remaining, _COMPOSE_MAX_MS) / 1000.0)
+        if result.is_fallback:
+            notes.append(f"llm_compose_fallback: {result.error}")
+            return ()
+        picks = tuple(dict.fromkeys(pick.poi_id for pick in result.value))
+        notes.append(f"llm_composed: {min(len(picks), limit)}/{len(picks)} "
+                     f"shortlist={len(shortlist.pois)} limit={limit}")
+        return picks[:limit]
 
     def _replan_directives(
         self, request: schemas.ReplanRequest, notes: list[str], *,
@@ -2176,6 +2360,7 @@ class WiredItineraryOrchestrator:
         planb_fallback: bool = False,
         started_ms: int,
         past: tuple[FixedBlock, ...] = (),
+        composed: bool = False,
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
 
@@ -2227,7 +2412,9 @@ class WiredItineraryOrchestrator:
         anchors = {request.target_date: GeoPoint(request.anchor.lat, request.anchor.lng)}
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
-        llm_ok = outcome.scoring_mode is core.ScoringMode.LLM and not planb_fallback
+        # 구성 LLM 이 하루를 골랐으면 점수 단계가 규칙이어도 폴백이 아니다(점수를 안 부른 것이다).
+        llm_ok = composed or (
+            outcome.scoring_mode is core.ScoringMode.LLM and not planb_fallback)
         # 두 순회 모두 1차 패스로 받아 적는다 — 좌표 미상 전파 규칙이 달라 구간 집합이
         # 다르다(`_total_distance_km` 은 직전 유효점을 잇는다). 한 표를 같이 쓰면 같은
         # 구간을 두 번 실측하지 않는다 (TRIP-1179).
@@ -2800,6 +2987,10 @@ def build_orchestrator(
     directive_translator = ReplanDirectiveTranslationWorker(
         GatewayFacade(llm, renderer, ReplanDirectiveTranslationGate(), c1_config, trace)
     )
+    # 다시 짜기의 하루 구성 — 출구는 대체지 선택과 같은 게이트(poiId ⊆ 후보, INV-1).
+    composer = ReplanCompositionWorker(
+        GatewayFacade(llm, renderer, AlternativeSelectionGate(), c1_config, trace)
+    )
     # EditAgent — 번역 워커를 감싼다. 어셈블리 검증까지 에이전트가 소유(INV-2).
     edit_agent = EditAgent(
         EditTranslationWorker(
@@ -2878,6 +3069,7 @@ def build_orchestrator(
         pool_builder=pool_builder, rag=rag,
         explainer=explainer, alternative_explainer=alt_explainer, clock=clock,
         directive_translator=directive_translator,
+        composer=composer,
         context_resolver=resolver,
         edit_agent=edit_agent,
         reflect_agent=reflect_agent,

@@ -252,6 +252,10 @@ class ScheduleTask:
     # 기존 진입 임계(`c1_min_ms`)가 저절로 점수 단계를 규칙으로 내린다 — 여기서
     # 따로 분기하지 않는다.
     planb_rank: tuple[PoiId, ...] = ()
+    # 다시 짜기에서 LLM 이 갈 곳을 이미 골랐다(`request.required_visits` + 하루 상한) — **/replan 만**.
+    # 그러면 점수는 무엇을 넣을지를 정하지 않으므로 점수 LLM 을 부르지 않는다. 같은 재계획 시한
+    # (25s)에 PlanB·구성·점수 LLM 셋이 들어가면 넘친다(2026-10-13 504, #1102).
+    llm_composed: bool = False
 
 
 class ScheduleAgent:
@@ -327,10 +331,15 @@ class ScheduleAgent:
         #    시한을 넘는다: 재계획은 에이전트 앞에서 PlanB 가 예산의 절반을 쓰는데, 2026-10-13 DEV
         #    실측에서 점수 타임아웃 13.4s(=전체 잔여) + OR 5s 로 25s 시한을 넘겨 백스톱 504 가 났다.
         elapsed = self._clock.monotonic_ms() - t0
-        candidates, mode = self._score(
-            request, pool, persona, budget,
-            budget.total_ms - elapsed - budget.c2_reserved_ms, steps, trace_id, now,
-        )
+        if task.llm_composed:
+            # 강등이 아니다 — 판단은 구성 LLM 이 했다. 관측만 남긴다.
+            self._observe(trace_id, now, "llm", "llm_score", "rule_score", "llm_composed")
+            candidates, mode = self._rule_scores(request, pool), ScoringMode.RULE
+        else:
+            candidates, mode = self._score(
+                request, pool, persona, budget,
+                budget.total_ms - elapsed - budget.c2_reserved_ms, steps, trace_id, now,
+            )
         # LLM 모드인데 규칙 점수가 섞인 수(rule_backfill) — 가산·강등 전에 센다.
         backfilled = (sum(1 for c in candidates if not c.is_llm_score)
                       if mode is ScoringMode.LLM else 0)

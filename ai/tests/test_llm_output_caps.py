@@ -106,6 +106,8 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.REFLECTION_TEMPLATE: 2048,
         # fable(사고 토큰도 상한 안) 실측 출력 1000~1024 — 1024 에서 잘림
         LlmFeature.SHARE_CARD_COPY: 2048,
+        # 다시 짜기 하루 구성 — 고른 곳 ≤ 8건 × 이유 + fable 사고 토큰
+        LlmFeature.REPLAN_COMPOSITION: 2048,
     }.get(feature, 1024)
     assert [r.max_tokens for r in llm.requests] == [expected]
 
@@ -134,6 +136,7 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.REFLECTION_TEMPLATE: "low",
         LlmFeature.REMINDER_COPY: "low",
         LlmFeature.ALTERNATIVE_SELECTION: "low",
+        LlmFeature.REPLAN_COMPOSITION: "low",  # 같은 replan 25s 안에서 PlanB 다음에 돈다
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]
 
