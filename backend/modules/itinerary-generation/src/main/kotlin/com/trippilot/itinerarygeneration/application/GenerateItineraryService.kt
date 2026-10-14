@@ -9,6 +9,7 @@ import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
+import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
@@ -115,8 +116,14 @@ class GenerateItineraryService(
 
         // day1 조기 노출(TRIP-267 · PR #104 합의): 1차는 첫날만 짧은 시한으로 풀어 즉시 반환하고,
         // 나머지 일자는 배정된 POI 를 제외 목록으로 넘겨 백그라운드 2차 호출로 채운다(AI 는 동기 REST 유지).
-        val firstDates = planDates.take(1)
-        val remainingDates = planDates.drop(1)
+        // 1차는 **첫 열린 날까지** 맡는다 — 출발일 밤에 만들면 오늘은 닫혀(dayWindowOf) 경계로 나가지 않으므로,
+        // 1차가 오늘만 맡으면 보낼 창이 없다. 닫힌 날은 빈 일자로 자리를 지킨다(DayReconciliation).
+        // 열림은 **고정 블록으로 넓힌 창**으로 잰다 — 닫힌 오늘에 늦은 고정이 있으면 오늘이 열리는데, 그걸 놓치면
+        // 1차에 오늘·내일 두 창이 실리고 AI 는 요청당 창 하나(첫 날짜의 시각)를 전 일자에 쓴다(wiring).
+        val pinned = ctx.fixedVisits.filter { it.date != null && it.start != null }.map { FixedBlock(it.poiId, it.date, it.start, it.dwellMin) }
+        val firstOpen = planDates.indexOfFirst { d -> expandedWindow(d, pinned, ctx).let { it.start < it.end } }
+        val firstDates = planDates.take(firstOpen + 1).ifEmpty { planDates }
+        val remainingDates = planDates.drop(firstDates.size)
         // 2차가 고정 블록으로 배치할 must_visit 은 1차 후보에서 빼둔다 —
         // 안 그러면 1차가 그 POI 를 자유 슬롯으로 day1 에 넣고, 2차가 제 날짜에 또 넣어 같은 곳을 두 번 간다.
         val reservedForSecond = if (remainingDates.isEmpty()) {
@@ -155,7 +162,13 @@ class GenerateItineraryService(
 
             // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — DB 커넥션을 물지 않게.
             // INV-4: AI 실패 시 침묵 금지 — 결정론 최소 폴백(must_visit 고정블록)으로 대체하고 isFallback 로 표시.
-            val output = try {
+            val output = if (firstInput.timeWindows.isEmpty()) {
+                // 모든 날이 닫혔다(하루 여행을 그날 밤에 만듦) — 부를 것이 없다. 실패가 아니므로 폴백 표시도 없다.
+                ScheduleAgentOutput(
+                    days = emptyList(), day1ReadyAt = null, explanations = emptyMap(), solveMode = SolveMode.MINIMAL,
+                    isFallback = false, freshness = FreshnessMeta(clock.instant(), degraded = false),
+                )
+            } else try {
                 scheduleAgent.generate(firstInput)
             } catch (e: Exception) {
                 log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
@@ -304,7 +317,23 @@ class GenerateItineraryService(
                 listOf(FieldError("dayStartAt", "여행 설정의 하루 시작 시각($start)이 종료($end) 이후입니다.")),
             )
         }
-        return start to end
+        // 지난 시각에는 장소를 놓지 않는다 — 출발일 저녁에 만들면 오늘은 지금부터 남은 시간만큼만 채운다.
+        // 남은 시간이 없으면 오늘을 **닫는다**(end to end, 길이 0): 물질화가 그 날에 필수 방문지를 넣지 않고,
+        // 경계로도 나가지 않아(AI 는 빈 창을 422 로 거절한다) 빈 일자로 남는다. 위 검증 뒤에 자르므로 던지지 않는다.
+        //
+        // **출발일 당일만이다.** 이미 시작한 여행을 처음 만드는 경우(어제 출발)는 종전 그대로 둔다 — 2차는
+        // 보낸 창의 날짜로 일자를 맞추므로(SecondPhaseGenerator) 중간 날을 닫으면 그 날이 일정에서 빠진다.
+        // 첫날만 닫히게 두면 1차가 "첫 열린 날까지" 맡는 것으로 일자가 온전하다(generate).
+        if (date != ctx.startDate || date != LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE)) return start to end
+        val from = earliestToday()?.let { maxOf(start, it) }
+        return if (from != null && from < end) from to end else end to end
+    }
+
+    /** 오늘 조립을 열 수 있는 가장 이른 시각 — 지금 + 이동 여유를 30분 단위로 올린다. 자정을 넘으면 null(오늘은 끝났다). */
+    private fun earliestToday(): LocalTime? {
+        val nowMin = LocalTime.ofInstant(clock.instant(), TRAVEL_ZONE).toSecondOfDay() / 60 + TODAY_LEAD_MIN
+        val ceiled = (nowMin + TODAY_STEP_MIN - 1) / TODAY_STEP_MIN * TODAY_STEP_MIN
+        return if (ceiled >= MINUTES_PER_DAY) null else LocalTime.ofSecondOfDay(ceiled * 60L)
     }
 
     /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
@@ -358,7 +387,8 @@ class GenerateItineraryService(
             // 결정 (c), 2026-09-27). 안 넓히면 21:00 고정 하나가 HC4(day window)를 깨 그 날 전체가
             // "해 없음" → 409 → 2차 통째 최소 폴백이 된다(QA #045 실측). 물질화된 ANYTIME 은
             // 시각이 없어(start=null, TRIP-1249) 이 계산에 들어가지 않는다.
-            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks, ctx) },
+            // 닫힌 오늘(길이 0 창 — dayWindowOf)은 보내지 않는다. 그 날에 사용자 고정 블록이 있으면 창이 넓어져 열린다.
+            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks, ctx) }.filter { it.start < it.end },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
             // 하루짜리 1차에 전부 몰면 배치 공간이 없어 HC3 가 깨질 수 있고, 양쪽에 실으면 중복 배치된다.
@@ -489,6 +519,11 @@ class GenerateItineraryService(
         private val log = LoggerFactory.getLogger(GenerateItineraryService::class.java)
         private val DEFAULT_START = LocalTime.of(9, 0)
         private val DEFAULT_END = LocalTime.of(21, 0)
+
+        /** 오늘 창을 지금에서 얼마나 띄울까 — 화면에서 일정을 보고 첫 장소로 출발할 여유. */
+        private const val TODAY_LEAD_MIN = 30
+        private const val TODAY_STEP_MIN = 30 // 오늘 창 시작을 정시·반에 맞춘다(19:07 같은 시작 시각을 만들지 않게)
+        private const val MINUTES_PER_DAY = 24 * 60
 
         /** 여행 "오늘"은 사용자가 있는 곳의 날짜다(서버 UTC 아님) — 재계획·감지와 같은 기준. */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
