@@ -14,7 +14,7 @@ class WorkflowConfigTests(unittest.TestCase):
             'DEPLOY_ENVIRONMENT': 'dev', 'DEPLOY_MODE': 'plan',
             'AWS_ACCOUNT_ID': '123456789012', 'AWS_REGION': 'ap-northeast-2',
             'AWS_ROLE_ARN': 'arn:aws:iam::123456789012:role/trippilot-dev-github-deploy',
-            'GITHUB_REF': 'refs/heads/develop', 'DEPLOY_APPLICATION': 'true',
+            'GITHUB_REF': 'refs/heads/main', 'DEPLOY_APPLICATION': 'true',
             'EMBEDDING_ENABLED': 'false', 'DEPLOY_TARGET': 'prod', **overrides,
         }
 
@@ -39,7 +39,8 @@ class WorkflowConfigTests(unittest.TestCase):
                 config.settings(self.settings(AWS_ROLE_ARN=role))
 
     def test_prd_uses_main_branch(self):
-        inputs = self.settings(DEPLOY_ENVIRONMENT='prd', AWS_ROLE_ARN='arn:aws:iam::123456789012:role/trippilot-prd-github-deploy')
+        inputs = self.settings(DEPLOY_ENVIRONMENT='prd', AWS_ROLE_ARN='arn:aws:iam::123456789012:role/trippilot-prd-github-deploy',
+                               GITHUB_REF='refs/heads/develop')
         with self.assertRaisesRegex(ValueError, 'branch'):
             config.settings(inputs)
         self.assertEqual(config.settings({**inputs, 'GITHUB_REF': 'refs/heads/main'})['environment'], 'prd')
@@ -61,6 +62,15 @@ class WorkflowConfigTests(unittest.TestCase):
         self.assertTrue(actual['deploy_application'])
         self.assertTrue(actual['embedding_enabled'])
 
+    def test_production_ships_only_from_main_and_dev_only_from_develop(self):
+        """2026-10-15 분리 — develop 머지가 곧장 출시 앱 서버로 나가던 것(10/14 저녁 빈 일정 사고)을 끊는다."""
+        with self.assertRaisesRegex(ValueError, 'branch must be main'):
+            config.settings(self.settings(GITHUB_REF='refs/heads/develop'))
+        with self.assertRaisesRegex(ValueError, 'branch must be develop'):
+            config.settings(self.dev(GITHUB_REF='refs/heads/main'))
+        self.assertEqual(config.settings(self.settings())['target'], 'prod')
+        self.assertEqual(config.settings(self.dev())['target'], 'dev')
+
     def test_prod_target_is_unchanged(self):
         actual = config.settings(self.settings(EMBEDDING_ENABLED='true'))
         self.assertEqual((actual['target'], actual['terraform'], actual['namespace'], actual['values_file'], actual['embedding_enabled']),
@@ -77,7 +87,7 @@ class WorkflowConfigTests(unittest.TestCase):
     DEV_CERT = 'arn:aws:acm:ap-northeast-2:123456789012:certificate/87654321-4321-4321-4321-cba987654321'
 
     def dev(self, **overrides):
-        return self.settings(**{'DEPLOY_TARGET': 'dev', 'DEPLOY_MODE': 'apply',
+        return self.settings(**{'DEPLOY_TARGET': 'dev', 'DEPLOY_MODE': 'apply', 'GITHUB_REF': 'refs/heads/develop',
                                 'PROD_ACM_CERTIFICATE_ARN': self.PROD_CERT, 'PROD_API_HOSTNAME': 'api-dev.example.com',
                                 'DEV_TARGET_ACM_CERTIFICATE_ARN': self.DEV_CERT, 'DEV_TARGET_API_HOSTNAME': 'dev-api.example.com',
                                 **overrides})

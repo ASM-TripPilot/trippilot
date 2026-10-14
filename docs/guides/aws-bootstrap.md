@@ -35,7 +35,7 @@ Repository **Settings → Environments**에서 `dev`, `prd`를 각각 생성한�
 | `AWS_REGION` | 선택. 기본값 `ap-northeast-2` |
 | `AWS_BOOTSTRAP_ROLE_ARN` | 위에서 만든 해당 환경의 bootstrap Role ARN |
 | `AWS_GITHUB_OIDC_PROVIDER_ARN` | 선택. 생략 시 같은 계정의 기본 GitHub provider ARN 사용 |
-| `DEPLOY_BRANCH` | 선택. 기본값: DEV `develop`, PRD `main` |
+| `DEPLOY_BRANCH` | 선택. 기본값: 운영 대상(`target=prod`) `main`, DEV 스택의 개발 대상(`target=dev`) `develop` — 2026-10-15 개발·운영 분리 |
 
 Environment의 deployment branch를 위 값과 같게 제한한다. PRD에는 required reviewers와 prevent self-review를 설정하는 것을 권장한다. OIDC 토큰의 environment claim에는 branch가 포함되지 않으므로 Environment 자체의 branch restriction도 설정해야 한다.
 
@@ -61,7 +61,7 @@ CloudFormation은 Terraform backend가 준비되기 전에 실행할 수 있고,
 
 상태 bucket은 public access를 차단하고 bucket owner enforced, TLS 필수, SSE-S3 암호화, versioning을 적용한다. 배포 Role은 해당 환경의 `terraform.tfstate`만 읽고 쓸 수 있고, `DeleteObject`는 잠금 파일 `terraform.tfstate.tflock`에만 허용된다. 별도 Terraform workspace를 생성하지 않는다. S3 versioning은 과거 상태 복구를 위한 것이며 비밀 값은 state에 들어갈 수 있으므로 state/plan을 일반 artifact로 공개하지 않는다. [Terraform S3 backend 권한](https://developer.hashicorp.com/terraform/language/backend/s3)에 맞춘 구성이다.
 
-배포 Role은 자체 IAM 정책과 EKS 서비스 Role의 신뢰 정책을 수정할 수 없다. bootstrap이 `trippilot-<env>-cluster`, `trippilot-<env>-node`를 생성하고 각각 `eks.amazonaws.com`, `ec2.amazonaws.com`만 신뢰하도록 고정한다. Terraform은 이 Role을 조회하며, 배포 Role은 두 Role을 AWS EKS/EC2에 전달하는 `PassRole`만 가진다. 연결된 AWS 관리 정책은 EKS Auto Mode에 필요한 명시적 목록으로 제한한다. VPC 리소스는 `Project=trippilot`, `Environment=<env>` 태그를 요구하며 EKS, ECR, RDS, ElastiCache, Logs, 애플리케이션 Secret은 환경 이름으로 ARN 범위를 제한한다. RDS master secret은 AWS가 이름을 생성하므로 `aws:rds:primaryDBInstanceArn` 시스템 태그가 해당 환경 DB ARN과 일치할 때만 읽을 수 있다. [RDS의 Secrets Manager 연동](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html)에 필요한 secret 생성/태깅과 KMS DescribeKey 권한도 포함했다.
+배포 Role은 자체 IAM 정책과 EKS 서비스 Role의 신뢰 정책을 수정할 수 없다. bootstrap이 `trippilot-<env>-cluster`, `trippilot-<env>-node`를 생성하고 각각 `eks.amazonaws.com`, `ec2.amazonaws.com`만 신뢰하도록 고정한다. Terraform은 이 Role을 조회하며, 배포 Role은 두 Role을 AWS EKS/EC2에 전달하는 `PassRole`만 가진다. 연결된 AWS 관리 정책은 EKS Auto Mode에 필요한 명시적 목록으로 제한한다. VPC 리소스는 `Project=trippilot`, `Environment=<env>` 태그를 요구하며 EKS, ECR, RDS, ElastiCache, Logs, 애플리케이션 Secret은 환경 이름으로 ARN 범위를 제한한다. RDS master secret은 AWS가 이름을 생성하므로 `aws:rds:primaryDBInstanceArn` 시스템 태그가 해당 환경 DB ARN(`trippilot-<env>`) 또는 같은 스택의 개발 대상 DB ARN(`trippilot-<env>-target`)과 일치할 때만 읽을 수 있다. [RDS의 Secrets Manager 연동](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html)에 필요한 secret 생성/태깅과 KMS DescribeKey 권한도 포함했다.
 
 같은 AWS 계정의 DEV/PRD는 리소스·상태·접근 Role을 나누지만, 완전한 보안 격리를 제공하지 않는다. 예를 들어 account/region 단위 Describe API, AWS 서비스 연결 Role, RDS 자동 Secret 생성 권한, AWS 관리 EKS 정책 내부의 서비스 권한이 공유된다. PRD를 강하게 격리해야 한다면 두 GitHub Environment의 `AWS_ACCOUNT_ID`를 서로 다른 AWS 계정으로 설정하고 각 계정에서 bootstrap을 실행한다.
 

@@ -54,9 +54,13 @@ EKS 배포 대상은 Spring Boot backend, FastAPI AI, 선택형 임베딩이다.
 | `AWS_BOOTSTRAP_ROLE_ARN` | 최초 state/배포 역할 생성에 사용하는 기존 OIDC 역할 |
 | `AWS_GITHUB_OIDC_PROVIDER_ARN` | 선택, 기존 GitHub OIDC provider ARN |
 | `AWS_ROLE_ARN` | 부트스트랩 출력 `trippilot-<env>-github-deploy` 역할 ARN |
-| `DEPLOY_BRANCH` | 선택, DEV `develop` / PRD `main` 기본값을 변경할 때 |
+| `DEPLOY_BRANCH` | 선택, 기본값(운영 대상 `main` / 개발 대상 `develop`)을 변경할 때 |
 | `ACM_CERTIFICATE_ARN` | 앱 배포용, 검증 완료한 ACM 인증서 ARN |
 | `API_HOSTNAME` | 앱 배포용, 예: `api-dev.example.com` / `api.example.com` |
+| `DEV_TARGET_ACM_CERTIFICATE_ARN` | DEV 스택의 개발 대상(`target=dev`) 인증서 — 운영 값과 같거나 비면 개발 배포를 거절한다 |
+| `DEV_TARGET_API_HOSTNAME` | 개발 대상 주소, 예: `dev-api.trippilot.co.kr` |
+
+**배포 대상(2026-10-15)**: DEV 스택 안에 두 서버가 있다. `target=prod`(네임스페이스 `trippilot`, 출시 앱이 보는 서버)는 **main 에서만**, `target=dev`(네임스페이스 `trippilot-dev`, 개발 DB `trippilot-dev-target`, `dev-api`)는 **develop 에서만** 배포된다. 개발 대상은 Terraform 을 건드리지 않고 임베딩·실제 푸시가 늘 꺼진다. GitHub Environment `dev` 의 배포 브랜치 규칙에 `main`·`develop` 둘 다 있어야 한다.
 
 `dev`에는 develop만, `prd`에는 main만 허용하도록 **Deployment branches and tags**도 설정한다. 필요하면 PRD의 required reviewers를 설정한다. workflow의 브랜치 검사는 실수 방지이며, Environment 보호 설정이 OIDC 역할 사용을 제한하는 경계다. bootstrap 역할에 대한 운영자 접근도 별도로 제한한다.
 
