@@ -772,6 +772,7 @@
 - `src/pages/itinerary/itinerary-generating/index.ts`  →  GeneratingPage
 
 ## src/pages/itinerary/itinerary-generating/ui/
+- `src/pages/itinerary/itinerary-generating/ui/GeneratingIllustration.tsx`  →  GeneratingIllustration
 - `src/pages/itinerary/itinerary-generating/ui/GeneratingPage.tsx`  →  GeneratingPage
 - `src/pages/itinerary/itinerary-generating/ui/GeneratingScreen.tsx`  →  AiLimitRetryAt · GeneratingScreenProps · GeneratingScreen
 
@@ -1707,4 +1708,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1067개 파일
+합계 1068개 파일
