@@ -67,6 +67,7 @@ def test_openapi_snapshot_covers_boundary_routes() -> None:
         "/ai/v1/planb/alternatives",   # TRIP-428
         "/ai/v1/itinerary/explanations",   # TRIP-479
         "/ai/v1/itinerary/edit",           # TRIP-431
+        "/ai/v1/dialogue/interpret",       # U8 도우미 대화 해석 (G-U8-4)
         "/ai/v1/planb/replan",         # 재계획 연동 설계 A-4
         # 여행 중 경계 별칭 (TRIP-960 1단계) — 위 두 줄과 **같은 핸들러**다.
         # 구 경로(/ai/v1/itinerary/{replan,alternatives})는 백엔드 CALLED_PATHS 가

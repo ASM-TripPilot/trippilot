@@ -48,8 +48,10 @@ them per the INFO_REQUIREMENTS table and passes results **in the AgentTask envel
 — task agents do not call Providers directly. Each returns a `ProviderStatus`
 (`OK`/`LOW`/`NO_CANDIDATES`/`WEATHER_UNKNOWN`/`COLD_START`/`UNAVAILABLE`).
 
-⚠️ `IntentRouter` (question-bank matching) is **implemented but not wired** — the
-Orchestrator's intent detection above is design, not running code (TRIP-529).
+`IntentRouter` (question-bank matching) is **wired** (2026-10-14) through one boundary only —
+`POST /ai/v1/dialogue/interpret` for the U8 assistant (`orchestrator/dialogue_interpreter.py`).
+AI interprets; the backend `assistant` module dispatches (U8 DEC-U8-1). The question bank is
+indexed into an in-memory store with the current embedding model on first use (no DB load).
 
 ## Key Design Documents (application-design/)
 
