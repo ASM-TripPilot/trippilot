@@ -45,6 +45,32 @@ export function BackArrowGlyph({
   );
 }
 
+// 아래 쉐브론 — 소비처마다 stroke 굵기가 달라(1.83/2) strokeWidth 를 열어 둔다.
+export function ChevronDownGlyph({
+  size = 20,
+  color = 'mutedSoft',
+  strokeWidth = 1.83333,
+  testID,
+}: GlyphProps & { strokeWidth?: number }) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M5 7.5L10 12.5L15 7.5"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function ChevronRightGlyph({
   size = 20,
   color = 'mutedSoft',

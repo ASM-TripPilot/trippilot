@@ -4,6 +4,8 @@ import {
   CheckGlyph as SharedCheckGlyph,
   InfoCircleGlyph as SharedInfoCircleGlyph,
   FullAiGlyph as SharedFullAiGlyph,
+  AlertCircleGlyph as SharedAlertCircleGlyph,
+  ChevronDownGlyph as SharedChevronDownGlyph,
 } from '@/shared/ui/glyphs';
 // 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
 export {
@@ -338,23 +340,7 @@ export function CalendarGlyph({ size = 30, testID }: GlyphProps) {
 
 // h07 시작 시각 필드 chevron-down(20) — Figma `1904:1117`.
 export function ChevronDownGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M5 7.5L10 12.5L15 7.5"
-        stroke={MUTED_SOFT}
-        strokeWidth={1.83333}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <SharedChevronDownGlyph size={size} testID={testID} />;
 }
 
 // h15 `다른 숙소 둘러보기 ›` 링크 쉐브론(16) — Figma `4385:1784`. 링크 글자색(primary-text)과 한 쌍.
@@ -417,11 +403,6 @@ export function LocationOffGlyph({ size = 36, testID }: GlyphProps) {
 /** 원형 아이콘 두 종이 쓰는 색조. 빈 목록 얼굴은 배지 배경(primary-pale) 위라 primary-text 다. */
 export type CircleGlyphTone = 'muted' | 'primaryText';
 
-const CIRCLE_STROKE: Record<CircleGlyphTone, string> = {
-  muted: MUTED,
-  primaryText: PRIMARY_TEXT,
-};
-
 // h07 안내 박스 ⓘ(20) — Figma `1904:1131`. 빈 목록 얼굴의 배지도 같은 도형을 키워 쓴다.
 export function InfoCircleGlyph({
   size = 20,
@@ -438,38 +419,7 @@ export function AlertCircleGlyph({
   tone = 'primaryText',
   testID,
 }: GlyphProps & { tone?: CircleGlyphTone }) {
-  const stroke = CIRCLE_STROKE[tone];
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M10 17.5C14.1421 17.5 17.5 14.1421 17.5 10C17.5 5.85786 14.1421 2.5 10 2.5C5.85786 2.5 2.5 5.85786 2.5 10C2.5 14.1421 5.85786 17.5 10 17.5Z"
-        stroke={stroke}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 6.66667V10.8333"
-        stroke={stroke}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 13.75H10.0083"
-        stroke={stroke}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <SharedAlertCircleGlyph size={size} color={tone} testID={testID} />;
 }
 
 // h31 지도 폴백 경고 삼각형(24) — Figma `1912:1083`. 지도를 못 불러온 자리의 △! 표식. 회색
