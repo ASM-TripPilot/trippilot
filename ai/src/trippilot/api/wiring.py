@@ -3527,6 +3527,7 @@ def build_orchestrator(
     tz: timezone = KST,
     directives: tuple[DirectiveSpec, ...] = (),
     bank: tuple[BankEntry, ...] = (),
+    bank_embedding: EmbeddingPort | None = None,
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
 
@@ -3666,7 +3667,10 @@ def build_orchestrator(
     # 실 DB 적재·컬렉션 슬러그가 필요 없다. 임베딩 미배선이면 1차를 건너뛰고 3차로 간다.
     # LLM 은 `CountingLlm` 으로 감싼다: 백엔드 사용량 상한이 이 경계의 `llm_calls` 를 센다.
     bank_store = InMemoryVectorStore()
-    bank_index = BankIndex(bank, embedding, bank_store)
+    # 색인은 긴 timeout 의 전용 임베딩으로(있으면) — 요청 경로 5s 로 색인하면 DEV 에서 포기·재전송이 쌓였다(main.py).
+    # 같은 모델이라 질의(요청 경로 임베딩)와 벡터 공간이 같다. 없으면 요청 경로 임베딩을 그대로 쓴다.
+    bank_index = BankIndex(bank, bank_embedding if bank_embedding is not None and embedding is not None
+                           else embedding, bank_store)
     bank_index.warm()  # 기동 때 백그라운드 색인 — 첫 해석이 색인 시간을 떠안지 않게
     counted = CountingLlm(llm)
     dialogue = DialogueInterpreter(
@@ -3869,6 +3873,7 @@ def build_dev_app(
     context_store: object | None = None,
     directives: tuple[DirectiveSpec, ...] = (),
     bank: tuple[BankEntry, ...] = (),
+    bank_embedding: EmbeddingPort | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -3922,5 +3927,6 @@ def build_dev_app(
         trace=trace,
         directives=directives,
         bank=bank,
+        bank_embedding=bank_embedding,
     )
     return create_app(orchestrator)

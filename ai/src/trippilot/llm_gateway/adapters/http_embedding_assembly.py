@@ -29,7 +29,7 @@ _DEFAULT_MODEL = "nlpai-lab/KURE-v1"
 _DEFAULT_TIMEOUT_SEC = 5.0
 
 
-def http_embedding(fail: Callable[[str], BaseException], http_factory):
+def http_embedding(fail: Callable[[str], BaseException], http_factory, *, timeout_sec: float | None = None):
     """`fail` 은 실패 예외 팩토리 — main 은 RuntimeError, 스크립트는 SystemExit.
 
     호출 규모: 요청 경로는 임베딩을 **직렬 3회** 부른다(SCHEDULE·SITUATION·PERSONA,
@@ -47,7 +47,8 @@ def http_embedding(fail: Callable[[str], BaseException], http_factory):
             "silent fallback 금지: 기동 실패."
         )
     model = os.environ.get("TRIPPILOT_EMBEDDING_MODEL") or _DEFAULT_MODEL
-    timeout = float(
+    # `timeout_sec` 는 요청 경로가 아닌 호출자(백그라운드 색인)가 넘긴다 — 5초 상한은 요청 예산 때문이다.
+    timeout = timeout_sec if timeout_sec is not None else float(
         os.environ.get("TRIPPILOT_EMBEDDING_TIMEOUT_SEC") or _DEFAULT_TIMEOUT_SEC
     )
     return HttpEmbeddingAdapter(http_factory(timeout), base_url, model=model)

@@ -243,6 +243,38 @@ def test_warm_keeps_retrying_until_indexed_without_requests() -> None:
     assert emb.attempts == 4  # 실패 3 + 성공 1 — 스레드 하나가 간격마다 한 번씩
 
 
+class _BatchSpy:
+    """임베딩 대역 — 어느 쪽이 색인(embed_batch)에 쓰였는지 센다."""
+
+    dim = 2
+    model_id = "spy"
+
+    def __init__(self) -> None:
+        self.batches = 0
+
+    def embed(self, text):
+        return (1.0, 0.0)
+
+    def embed_batch(self, texts):
+        self.batches += 1
+        return tuple((1.0, 0.0) for _ in texts)
+
+
+def test_bank_is_indexed_with_dedicated_embedding_when_given() -> None:
+    """DEV: 요청 경로 임베딩(timeout 5s)으로 색인하다 포기·재전송이 쌓여 서비스가 포화됐다 — 색인 전용(긴
+    timeout) 임베딩이 주어지면 색인은 그쪽으로만, 요청 경로 임베딩은 색인에 안 쓴다."""
+    request_emb, index_emb = _BatchSpy(), _BatchSpy()
+    entry = BankEntry(entry_id="E1", intent=Intent.GET_WEATHER, question="날씨", reviewed=True,
+                      origin="seed", bank_version="t")
+    build_dev_app(vector_store=InMemoryVectorStore(), embedding=request_emb,
+                  bank=(entry,), bank_embedding=index_emb)
+    deadline = time.monotonic() + 5
+    while index_emb.batches == 0 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert index_emb.batches >= 1
+    assert request_emb.batches == 0
+
+
 def test_request_does_not_wait_for_bank_indexing() -> None:
     """DEV 에서 첫 해석이 색인 시간을 떠안아 백엔드 상한에 닿았다 — 색인은 백그라운드, 요청은 기다리지 않는다."""
     emb, store = _SlowEmbedding(), InMemoryVectorStore()
