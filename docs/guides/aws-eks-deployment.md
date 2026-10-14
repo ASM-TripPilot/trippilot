@@ -7,7 +7,7 @@
 | 구성 | DEV | PRD |
 | --- | --- | --- |
 | GitHub Environment | `dev` | `prd` |
-| 기본 배포 브랜치 | `develop` | `main` |
+| 기본 배포 브랜치 | 운영 대상 `main` · 개발 대상(`target=dev`) `develop` | `main` |
 | VPC / EKS / ECR / DB / Redis | `trippilot-dev-*` | `trippilot-prd-*` |
 | 가용 영역 | 2 | 3 |
 | NAT Gateway | 1개 | AZ별 1개 |
@@ -54,11 +54,17 @@ EKS 배포 대상은 Spring Boot backend, FastAPI AI, 선택형 임베딩이다.
 | `AWS_BOOTSTRAP_ROLE_ARN` | 최초 state/배포 역할 생성에 사용하는 기존 OIDC 역할 |
 | `AWS_GITHUB_OIDC_PROVIDER_ARN` | 선택, 기존 GitHub OIDC provider ARN |
 | `AWS_ROLE_ARN` | 부트스트랩 출력 `trippilot-<env>-github-deploy` 역할 ARN |
-| `DEPLOY_BRANCH` | 선택, DEV `develop` / PRD `main` 기본값을 변경할 때 |
+| `DEPLOY_BRANCH` | 선택, 기본값(운영 대상 `main` / 개발 대상 `develop`)을 변경할 때 |
 | `ACM_CERTIFICATE_ARN` | 앱 배포용, 검증 완료한 ACM 인증서 ARN |
 | `API_HOSTNAME` | 앱 배포용, 예: `api-dev.example.com` / `api.example.com` |
+| `DEV_TARGET_ACM_CERTIFICATE_ARN` | DEV 스택의 개발 대상(`target=dev`) 인증서 — 운영 값과 같거나 비면 개발 배포를 거절한다 |
+| `DEV_TARGET_API_HOSTNAME` | 개발 대상 주소, 예: `dev-api.trippilot.co.kr` |
 
-`dev`에는 develop만, `prd`에는 main만 허용하도록 **Deployment branches and tags**도 설정한다. 필요하면 PRD의 required reviewers를 설정한다. workflow의 브랜치 검사는 실수 방지이며, Environment 보호 설정이 OIDC 역할 사용을 제한하는 경계다. bootstrap 역할에 대한 운영자 접근도 별도로 제한한다.
+**배포 대상(2026-10-15)**: DEV 스택 안에 두 서버가 있다. `target=prod`(네임스페이스 `trippilot`, 출시 앱이 보는 서버)는 **main 에서만**, `target=dev`(네임스페이스 `trippilot-dev`, 개발 DB `trippilot-dev-target`, `dev-api`)는 **develop 에서만** 배포된다. 개발 대상은 Terraform 을 건드리지 않고 임베딩·실제 푸시가 늘 꺼진다. GitHub Environment `dev` 의 배포 브랜치 규칙에 `main`·`develop` 둘 다 있어야 한다.
+
+**전환 순서(2026-10-15, 한 번)**: 이 규칙(#1263)을 develop 에 머지하면 develop 으로는 운영 배포가 막히고, main 의 옛 워크플로에는 `target` 이 없어 **승격 전까지 운영 배포 경로가 없다.** 그래서 ① #1263 머지 → ② develop→main 승격(머지 커밋) → ③ Environment `dev` 브랜치 규칙에 `main` 추가 → ④ main 에서 `target=prod` 첫 배포를 연달아 한다. 그 사이를 `DEPLOY_BRANCH` 로 메우지 않는다(운영 대상에는 먹지도 않는다).
+
+`dev`에는 main·develop, `prd`에는 main만 허용하도록 **Deployment branches and tags**도 설정한다. 필요하면 PRD의 required reviewers를 설정한다. Environment 보호 설정이 OIDC 역할 사용을 제한하는 경계다. 단 `dev` 는 두 브랜치를 다 허용하므로 **운영 대상(main)·개발 대상(develop)의 구분은 workflow 검사(`infra/scripts/workflow_config.py`)가 유일한 경계**다 — 운영 대상은 `DEPLOY_BRANCH` 로도 main 에서 못 푼다. main 을 허용하면 `environment: dev` 를 쓰는 main 기준 예약 작업(ai-llm-fallback-watch·ai-serving-judge)도 같은 역할을 쓸 수 있다. bootstrap 역할에 대한 운영자 접근도 별도로 제한한다.
 
 저장소 기본 브랜치에 workflow 파일이 있어야 GitHub의 Run workflow 버튼이 나타난다. 브랜치 이름이 다르면 `DEPLOY_BRANCH`와 Environment 규칙을 함께 바꾼다. AWS 액세스 키를 저장소에 커밋하거나 일반 배포 workflow에 등록할 필요가 없다.
 

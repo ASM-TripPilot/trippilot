@@ -27,7 +27,17 @@ def settings(values: Mapping[str, str]) -> dict:
     role = f'arn:aws:iam::{account}:role/trippilot-{environment}-github-deploy'
     if values.get('AWS_ROLE_ARN') != role:
         raise ValueError('AWS_ROLE_ARN must match the bootstrap role for this account/environment')
-    branch = values.get('DEPLOY_BRANCH') or ('main' if environment == 'prd' else 'develop')
+    # 운영은 main 에서만 나간다(2026-10-15 개발·운영 분리) — dev 스택의 prod 대상이 출시 앱이 보는 서버다.
+    # develop 은 개발 대상(trippilot-dev · dev-api)으로만 간다. GitHub Environment 브랜치 규칙도 같게 둔다.
+    target = require(r'prod|dev', values.get('DEPLOY_TARGET', ''), 'DEPLOY_TARGET')
+    if target == 'dev' and environment != 'dev':
+        raise ValueError('The dev target lives inside the dev stack only')
+    if environment == 'dev' and target == 'prod':
+        # 출시 앱 서버는 main 고정 — DEPLOY_BRANCH 로 풀 수 없다. Environment 규칙이 main·develop 을 둘 다 허용하므로
+        # 대상 구분은 이 줄만 한다; 변수 하나로 develop 직배포(10/14 빈 일정 사고의 길)가 되살아나지 않게.
+        branch = 'main'
+    else:
+        branch = values.get('DEPLOY_BRANCH') or ('develop' if target == 'dev' else 'main')
     if values.get('GITHUB_REF') != f'refs/heads/{branch}':
         raise ValueError(f'Deployment branch must be {branch}; configure GitHub Environment branch protection too')
     requested_deploy = boolean(values, 'DEPLOY_APPLICATION')
@@ -35,12 +45,9 @@ def settings(values: Mapping[str, str]) -> dict:
     embedding = boolean(values, 'EMBEDDING_ENABLED')
     # 배포 대상(2026-10-15 개발·운영 분리). dev 는 같은 스택 안의 개발 서버다 — 공유 인프라(Terraform)를 바꾸지 않고,
     # 임베딩(큰 노드)과 실제 푸시 발송은 늘 끈다. 입력을 고쳐 받지 않고 여기서 내린다: 기본값 그대로 개발 배포를 눌러도 된다.
-    target = require(r'prod|dev', values.get('DEPLOY_TARGET', ''), 'DEPLOY_TARGET')
     push_mode = values.get('PUSH_MODE_INPUT') or 'keep'
     certificate, hostname = values.get('PROD_ACM_CERTIFICATE_ARN', ''), values.get('PROD_API_HOSTNAME', '')
     if target == 'dev':
-        if environment != 'dev':
-            raise ValueError('The dev target lives inside the dev stack only')
         if mode != 'apply':
             raise ValueError('The dev target never plans shared infrastructure; use apply to deploy it')
         if push_mode == 'expo':

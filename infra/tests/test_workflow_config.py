@@ -14,7 +14,7 @@ class WorkflowConfigTests(unittest.TestCase):
             'DEPLOY_ENVIRONMENT': 'dev', 'DEPLOY_MODE': 'plan',
             'AWS_ACCOUNT_ID': '123456789012', 'AWS_REGION': 'ap-northeast-2',
             'AWS_ROLE_ARN': 'arn:aws:iam::123456789012:role/trippilot-dev-github-deploy',
-            'GITHUB_REF': 'refs/heads/develop', 'DEPLOY_APPLICATION': 'true',
+            'GITHUB_REF': 'refs/heads/main', 'DEPLOY_APPLICATION': 'true',
             'EMBEDDING_ENABLED': 'false', 'DEPLOY_TARGET': 'prod', **overrides,
         }
 
@@ -39,7 +39,8 @@ class WorkflowConfigTests(unittest.TestCase):
                 config.settings(self.settings(AWS_ROLE_ARN=role))
 
     def test_prd_uses_main_branch(self):
-        inputs = self.settings(DEPLOY_ENVIRONMENT='prd', AWS_ROLE_ARN='arn:aws:iam::123456789012:role/trippilot-prd-github-deploy')
+        inputs = self.settings(DEPLOY_ENVIRONMENT='prd', AWS_ROLE_ARN='arn:aws:iam::123456789012:role/trippilot-prd-github-deploy',
+                               GITHUB_REF='refs/heads/develop')
         with self.assertRaisesRegex(ValueError, 'branch'):
             config.settings(inputs)
         self.assertEqual(config.settings({**inputs, 'GITHUB_REF': 'refs/heads/main'})['environment'], 'prd')
@@ -50,7 +51,8 @@ class WorkflowConfigTests(unittest.TestCase):
                 config.settings(self.settings(**{key: value}))
 
     def test_custom_protected_branch(self):
-        self.assertEqual(config.settings(self.settings(DEPLOY_BRANCH='release', GITHUB_REF='refs/heads/release'))['environment'], 'dev')
+        # 운영 대상은 main 고정이라 사용자 지정 브랜치는 개발 대상·prd 스택에만 먹는다
+        self.assertEqual(config.settings(self.dev(DEPLOY_BRANCH='release', GITHUB_REF='refs/heads/release'))['environment'], 'dev')
 
     def test_certificate_must_match_account_and_region(self):
         with self.assertRaisesRegex(ValueError, 'ACM_CERTIFICATE_ARN'):
@@ -60,6 +62,21 @@ class WorkflowConfigTests(unittest.TestCase):
         actual = config.settings(self.settings(DEPLOY_MODE='apply', PROD_ACM_CERTIFICATE_ARN='arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc', PROD_API_HOSTNAME='api-dev.example.com', EMBEDDING_ENABLED='true'))
         self.assertTrue(actual['deploy_application'])
         self.assertTrue(actual['embedding_enabled'])
+
+    def test_production_ships_only_from_main_and_dev_only_from_develop(self):
+        """2026-10-15 분리 — develop 머지가 곧장 출시 앱 서버로 나가던 것(10/14 저녁 빈 일정 사고)을 끊는다."""
+        with self.assertRaisesRegex(ValueError, 'branch must be main'):
+            config.settings(self.settings(GITHUB_REF='refs/heads/develop'))
+        with self.assertRaisesRegex(ValueError, 'branch must be develop'):
+            config.settings(self.dev(GITHUB_REF='refs/heads/main'))
+        self.assertEqual(config.settings(self.settings())['target'], 'prod')
+        self.assertEqual(config.settings(self.dev())['target'], 'dev')
+
+    def test_deploy_branch_override_cannot_send_develop_to_production(self):
+        with self.assertRaisesRegex(ValueError, 'branch must be main'):
+            config.settings(self.settings(DEPLOY_BRANCH='develop', GITHUB_REF='refs/heads/develop'))
+        # 개발 대상에는 여전히 먹는다
+        self.assertEqual(config.settings(self.dev(DEPLOY_BRANCH='feature', GITHUB_REF='refs/heads/feature'))['target'], 'dev')
 
     def test_prod_target_is_unchanged(self):
         actual = config.settings(self.settings(EMBEDDING_ENABLED='true'))
@@ -77,7 +94,7 @@ class WorkflowConfigTests(unittest.TestCase):
     DEV_CERT = 'arn:aws:acm:ap-northeast-2:123456789012:certificate/87654321-4321-4321-4321-cba987654321'
 
     def dev(self, **overrides):
-        return self.settings(**{'DEPLOY_TARGET': 'dev', 'DEPLOY_MODE': 'apply',
+        return self.settings(**{'DEPLOY_TARGET': 'dev', 'DEPLOY_MODE': 'apply', 'GITHUB_REF': 'refs/heads/develop',
                                 'PROD_ACM_CERTIFICATE_ARN': self.PROD_CERT, 'PROD_API_HOSTNAME': 'api-dev.example.com',
                                 'DEV_TARGET_ACM_CERTIFICATE_ARN': self.DEV_CERT, 'DEV_TARGET_API_HOSTNAME': 'dev-api.example.com',
                                 **overrides})
