@@ -4267,10 +4267,12 @@ reason = "전역 월 상한(COST-U8-04)은 U8-TURN 이 쓰는 assistant_usage_da
 id = "U8-PREHTTP"
 ticket = "TRIP-1401"
 title = "[U8] 해석을 켜기 전 손질 — 같은 턴을 겹쳐 기다리는 요청 수에 상한"
-status = "todo"
+status = "done"
 migration = false
 touches = ["backend/modules/assistant"]
 note = """
+**#1166 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
 [[U8-INTERPRET-HTTP]] 노트의 "http 를 켜기 전에 함께 해야 하는 것" 중 **상대 계약 없이 정할 수 있는 것은 대기 상한 하나뿐**이었다.
 날씨 날짜 인자와 되묻기 길이 상한은 **와이어 계약이 없어** 그 노드에 남긴다. ai 인자표(`ai/src/trippilot/domain/dialogue.py`)에는
 `GET_WEATHER` 의 `date`·`region` 이 있지만, 그 값을 실어 나를 `dialogue` 경로가 `ai/docs/openapi.json` 에 0건이라 값의 형태
@@ -4282,10 +4284,12 @@ note = """
 id = "U10-VISIT-SOURCE"
 ticket = "TRIP-1402"
 title = "[U10] 방문 실적 출처 1단계 — completion_source·auto_suppressed_at, VisitChecked 에 계정·출처"
-status = "todo"
+status = "done"
 migration = true
 touches = ["backend/modules/archive", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
 note = """
+**#1164 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
 M-U10-a 의 **1단계**(컬럼 추가 + MANUAL 백필, CHECK 없음 — 롤링 배포 중 옛 파드가 출처 없이 쓰는 창이 있다, 인프라 U10.4).
 `complete()` 가 MANUAL 을 채우고, 응답에 `completionSource`, `VisitChecked` 에 accountId·arrivalSource·completionSource(G-U10-2·3).
 **행동 변화**: `VisitChecked` 를 완료 때만이 아니라 **도착 때도** 낸다(`completedAt = null`, FD §12.6) — 구독자가 둘을 가려야 한다.
@@ -4297,10 +4301,12 @@ D2(`slotKey` 없는 `AUTO_GEOFENCE` 거절)도 이 노드다.
 id = "U10-AUTO-EVENTS"
 ticket = "TRIP-1403"
 title = "[U10] 자동 도착·완료 배치 — 발생 시각 수용(G-U10-1)·자동 되돌리기·킬 스위치"
-status = "todo"
+status = "done"
 migration = false
 touches = ["backend/modules/archive", "backend/common/core", "backend/docs/design/openapi.yaml"]
 note = """
+**#1176 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
 `POST /trips/{tripId}/visits/auto-events`(항목별 트랜잭션·결과 6종·빈 배치 허용) · `POST …/{id}/revert-auto` · `VisitAutoReverted` ·
 `automationEnabled` 킬 스위치. 슬롯 소속·날짜는 `ItineraryPlanFacade` 로 본다. L2 가 없으면 전 항목 `REJECTED_CONSENT`.
 PBT-U10-3(오프라인 재전송, blocking 취급)·2·4 — 생성기에 자정 경계와 "서버 시각 + 5분" 경계를 넣는다.
@@ -4310,10 +4316,12 @@ PBT-U10-3(오프라인 재전송, blocking 취급)·2·4 — 생성기에 자정
 id = "U10-INTERVALS"
 ticket = "TRIP-1404"
 title = "[U10] 자동화 구간 — location_automation_interval·이용 법정 로그·열린 구간 스위퍼"
-status = "todo"
+status = "done"
 migration = true
 touches = ["backend/modules/archive", "backend/modules/auth", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
 note = """
+**#1168 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
 `POST /trips/{tripId}/location-automation/intervals`(킬 스위치가 꺼져 있으면 START 409) · `LocationLegalLogFacade` 에 구간 메서드와
 `LocationUsePurpose` · 앱 강제 종료로 END 가 안 온 구간을 여행 종료 + 1일에 `SERVER_TIMEOUT` 으로 닫는 스위퍼(G-U10-11).
 무장 여부 조회는 정본대로 `ArchiveFacade.isAutomationArmed` 에 얹는다(FD domain-entities — 구현체는 서비스 하나와 대역 하나다).
@@ -4324,10 +4332,12 @@ L3·L2 철회 양쪽에서 열린 구간을 닫는다.
 id = "U10-ROUTES"
 ticket = "TRIP-1405"
 title = "[U10] 실제 경로 — actual_route_day·PUT/GET routes·L3 철회 즉시 파기 + PURGE(ACTUAL_ROUTE)"
-status = "todo"
+status = "done"
 migration = true
 touches = ["backend/modules/archive", "backend/modules/auth", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
 note = """
+**#1169 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
 **법적 무게가 가장 큰 노드다**(DEC-U10-7 · INV-U10-1·4). 저장과 같은 트랜잭션에 `COLLECTION(STORE)`, 철회 구독자에 경로 파기 +
 `PURGE(ACTUAL_ROUTE)` — EXIF 와 경로를 각각 멱등으로 지워 재배달이 로그를 부풀리지 않게. D3·D4 가 여기서 구현된다.
 폴리라인 디코더 상한(SEC-U10-07), 거리 클램프. 프론트 본문에 `recordedFrom/To` 가 없다 — 선택 필드로 받고 없으면 하루 길이 상한.
@@ -4338,10 +4348,12 @@ note = """
 id = "U10-REFLECT-DISTANCE"
 ticket = "TRIP-1406"
 title = "[U10] 회고 거리 출처 — DayHighlight 의 거리를 실제 경로로, 저장되면 통계만 다시 센다"
-status = "todo"
+status = "done"
 migration = false
 touches = ["backend/modules/reflection", "backend/modules/archive", "backend/docs/design/openapi.yaml"]
 note = """
+**#1173 머지(2026-10-14)** — 아래는 착수 전 노트다. 구현 중 정본과 달라진 것·남은 것은 PR 본문 "판단" 절이 정본이다.
+
 `ReflectionService` 가 거리 출처를 `VISIT_LINE` 으로 고정한다(FD §7.2). 경로 거리 조회는 `ArchiveRecordFacade` 에 더한다
 (구현은 `TripRecordService` 하나, 대역은 reflection 테스트 셋). `ActualRouteStored` 구독으로 stats 만 재계산 — 본문 생성은 다시 돌리지 않는다.
 """
@@ -4354,6 +4366,9 @@ status = "blocked"
 migration = false
 touches = ["backend/modules/planb-detection", "backend/modules/archive"]
 note = """
+**선행은 다 들어왔다(2026-10-14)** — `VisitChecked`(도착·완료, 계정·출처) · `VisitAutoReverted`(`revertedPart`) · `ArchiveFacade.isAutomationArmed`.
+남은 것은 D5 결정뿐이다. 구독자는 U10 배포 전 옛 파드가 쓴 `VisitChecked` 행에 `accountId`·`arrivalSource` 가 없을 수 있음을 다룬다(이벤트 KDoc).
+
 **D5 미정이라 막혔다**: 체류 초과 기준 `T_over`(O-U10-4, FD 제안 15분)와 "다음 고정 슬롯이 위협된다"의 판정 근거 — 서버에는
 이동시간 하한 원천이 없다(INV-3). 제안: 15분 초과만으로 신호, 위협 판정은 Plan-B 평가에 맡긴다. 정해지면
 `VisitChecked`·`VisitAutoReverted` 구독자 + 5분 스케줄러(ShedLock) · planb-detection → archive 의존 추가(순환 없음) · PBT-U10-5.
