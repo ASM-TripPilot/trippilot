@@ -18,7 +18,7 @@ APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
 AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
 ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS
-KAKAO_APP_ID ASSISTANT_INTERPRET_MODE
+KAKAO_APP_ID ASSISTANT_INTERPRET_MODE LOCATION_AUTOMATION_ENABLED
 """.split())
 AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
@@ -143,7 +143,9 @@ def validate_groups(groups):
              "PUSH_MODE": {"off", "expo"}, "AI_REMINDER_COPY_MODE": {"off", "http"},
              "AFFILIATE_MODE": {"fallback", "tripcom"},
              # http = 상대 AI 해석 경계(TRIP-1410). 오타는 백엔드가 기동에서 거부하므로 배포 전에 막는다.
-             "ASSISTANT_INTERPRET_MODE": {"off", "fake", "http"}}
+             "ASSISTANT_INTERPRET_MODE": {"off", "fake", "http"},
+             # U10 서버 킬 스위치(REL-U10-06). 없으면 켜짐이다. 끄려면 false 를 넣고 백엔드 파드를 다시 띄운다.
+             "LOCATION_AUTOMATION_ENABLED": {"true", "false"}}
     for key, allowed in modes.items():
         if key in backend and backend[key] not in allowed:
             raise ValueError(f"Unsupported {key} in backend secret")
