@@ -25,9 +25,11 @@ export const REPLAN_REASONS: ReplanChoice[] = [
 ];
 
 /**
- * '어떻게 바꿀까요' 11종(다중 선택). 순서 = Figma 칩 순서.
+ * '어떻게 바꿀까요' 10종(다중 선택). 순서 = Figma 칩 순서.
  * `EARLIER` 는 ai 지시 사전의 키 이름이다. `AVOID_OUTDOOR` 는 ai 사전에 아직 없어 서버가
  * 모르는 지시로 흘려보낸다(D5 — 400 아님).
+ * Figma 의 '예산 유지'(`KEEP_BUDGET`)는 뺐다 — 서버가 집행할 가격 데이터가 없어 골라도 일정이
+ * 그대로였다(ai `replan_directives.yaml` 미배선). 데이터가 생기면 되살린다.
  */
 export const REPLAN_DIRECTIVES: ReplanChoice[] = [
   { key: 'RELAX', label: '여유 있게' },
@@ -38,7 +40,6 @@ export const REPLAN_DIRECTIVES: ReplanChoice[] = [
   { key: 'ADD_FOOD', label: '맛집 추가' },
   { key: 'END_NEAR_STAY', label: '숙소 근처에서 끝내기' },
   { key: 'LESS_MOVE', label: '이동 짧게' },
-  { key: 'KEEP_BUDGET', label: '예산 유지' },
   { key: 'KEEP_DINNER', label: '저녁은 그대로' },
   { key: 'AVOID_OUTDOOR', label: '야외 피하기' },
 ];

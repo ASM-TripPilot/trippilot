@@ -37,7 +37,6 @@ const DIRECTIVES: [string, string][] = [
   ['ADD_FOOD', '맛집 추가'],
   ['END_NEAR_STAY', '숙소 근처에서 끝내기'],
   ['LESS_MOVE', '이동 짧게'],
-  ['KEEP_BUDGET', '예산 유지'],
   ['KEEP_DINNER', '저녁은 그대로'],
   ['AVOID_OUTDOOR', '야외 피하기'],
 ];
@@ -170,8 +169,8 @@ describe('🔴 S5 · 감지 트리거 CLOSURE — 매핑 key 칩도 숨긴다 (A
   });
 });
 
-describe('🔴 S6 · 방향 11칩 (AC-3 · D5 · Q1)', () => {
-  it('11종이 key·라벨·순서 그대로이고 야경 코스는 없으며, 야외 피하기를 누르면 AVOID_OUTDOOR 로 토글된다', () => {
+describe('🔴 S6 · 방향 10칩 (AC-3 · D5 · Q1)', () => {
+  it('10종이 key·라벨·순서 그대로이고 야경 코스·예산 유지는 없으며, 야외 피하기를 누르면 AVOID_OUTDOOR 로 토글된다', () => {
     const props = baseProps();
     render(<ReplanRequestSheet {...props} />);
 
@@ -187,6 +186,8 @@ describe('🔴 S6 · 방향 11칩 (AC-3 · D5 · Q1)', () => {
       ).toHaveTextContent(label)
     );
     expect(screen.queryByText('야경 코스')).toBeNull();
+    // 서버가 집행할 가격 데이터가 없다 — 골라도 아무 일이 없는 칩은 내지 않는다
+    expect(screen.queryByText('예산 유지')).toBeNull();
 
     fireEvent.press(
       screen.getByTestId('planb-request-directive-AVOID_OUTDOOR')
