@@ -38,7 +38,9 @@ r"""KB seed → 실 벡터 스토어 적재 (TRIP-427) — CI 밖 수동 실행 
 
 FakeEmbedding 적재는 지원하지 않는다 — 해시 벡터는 의미 유사도가 없어서
 "적재는 됐는데 검색이 엉터리"인 오염 상태를 만든다 (침묵 실패 금지).
-멱등: 같은 doc_id는 upsert로 갱신된다 — 몇 번 실행해도 행이 늘지 않는다.
+멱등: 저장된 payload(본문 포함)가 seed 와 같은 문서는 건너뛰고, 새 문서·바뀐 문서만
+임베딩해 upsert 한다 — 몇 번 실행해도 행이 늘지 않는다. seed 에서 지운 문서의 옛 행은
+지우지 않는다(남는다).
 """
 
 from __future__ import annotations
@@ -134,13 +136,20 @@ def _documents_of(path: Path):
 
 
 def _skip_already_indexed(documents, embedding, url: str):
-    """이미 들어간 문서는 빼고 돌려준다 — 재실행 때 임베딩을 다시 하지 않는다.
+    """저장본과 같은 문서는 빼고 돌려준다 — 재실행 때 임베딩을 다시 하지 않는다.
 
     `index_documents` 의 중복 검사는 **목록 안의 doc_id 중복**을 잡는 것이지 DB 존재
     확인이 아니다. upsert 가 멱등이라 데이터는 안 깨지지만 **임베딩 비용은 전부 다시
     든다** — KB-5 2천 건대에서 OOM 으로 중간에 죽고 재실행했더니 이미 넣은 640건을
     15분 들여 다시 임베딩했다(2026-09-19 실측). 포트에 존재 조회를 더하지 않고 여기서
     직접 본다: 적재는 오프라인 작업이라 스크립트가 DB 를 알아도 된다.
+
+    **같은지는 존재가 아니라 저장된 payload 로 본다.** 존재만 보던 때는 seed 에서 본문을
+    고쳐도 매 배포 적재가 "기적재" 로 건너뛰어 옛 벡터·payload 가 영영 남았다. payload 의
+    `text` 가 곧 임베딩 입력이라(`index_documents` 가 `d.text` 를 임베딩) 본문 변경이 여기서
+    잡힌다. `poi_ref`·metadata 만 바뀐 문서도 다시 넣는다 — 검색이 payload 의 그 값을
+    그대로 돌려주므로(`poi_ref` 는 closed-set 교차에 쓰인다) 낡으면 안 되고, 드문 일이라
+    재임베딩 비용은 작다.
     """
     import psycopg
 
@@ -149,17 +158,18 @@ def _skip_already_indexed(documents, embedding, url: str):
     wanted: dict[str, set[str]] = {}
     for d in documents:
         wanted.setdefault(collection_for(d.kb, embedding.model_id), set()).add(d.doc_id)
-    have: set[tuple[str, str]] = set()
+    stored: dict[tuple[str, str], dict] = {}
     with psycopg.connect(url) as conn:
         for collection, ids in wanted.items():
             rows = conn.execute(
-                "select item_id from kb_vectors where collection = %s and item_id = any(%s)",
+                "select item_id, payload from kb_vectors"
+                " where collection = %s and item_id = any(%s)",
                 (collection, list(ids)),
             ).fetchall()
-            have |= {(collection, r[0]) for r in rows}
+            stored |= {(collection, item_id): payload for item_id, payload in rows}
     return [
         d for d in documents
-        if (collection_for(d.kb, embedding.model_id), d.doc_id) not in have
+        if stored.get((collection_for(d.kb, embedding.model_id), d.doc_id)) != d.payload()
     ]
 
 

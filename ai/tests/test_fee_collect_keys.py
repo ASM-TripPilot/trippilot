@@ -126,6 +126,15 @@ def test_실패율이_높으면_산출물을_쓰지_않는다(tmp_path: Path, mo
     assert not out_p.exists(), "실패율이 임계를 넘었는데 산출물을 썼다"
 
 
+def test_키_재시도도_호출_상한을_넘지_않는다(tmp_path: Path, monkeypatch, capsys) -> None:
+    """상한 확인이 POI 루프 시작에만 있어 **키 재시도 루프가 상한을 넘겼다**
+    (재현: `--max-calls 1` 에 HTTP 3회). 못 받은 POI 는 처리로 세지 않는다 — 남김 숫자."""
+    code, used, got = _run(tmp_path, monkeypatch, n=5, max_calls=1, dead={"K0", "K1"})
+
+    assert sum(used.values()) == 1, f"상한 1 인데 {sum(used.values())}콜 — {dict(used)}"
+    assert code == 0 and got["fees"] == {}
+    assert "5건 남김" in capsys.readouterr().err
+
 @pytest.mark.parametrize("code", ["20", "22", "30", "31"])
 def test_키_관련_resultCode_도_퇴출_신호다(code: str, monkeypatch) -> None:
     """data.go.kr 은 HTTP 200 에 실패 코드를 실어 보낸다 — 403 만 보면 놓친다."""

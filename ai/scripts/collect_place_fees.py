@@ -244,7 +244,8 @@ def main() -> int:
         # 몰려** 일일 한도를 넘는다(실측: 403 이 898건, 실패율 32.4% 로 실행 전체가
         # 버려졌다). `TourApiAdapter` 가 같은 이유로 퇴출 방식을 쓴다 — 그쪽이 정본이다.
         items = None
-        while key_idx < len(keys):
+        # 상한도 여기서 본다 — 루프 시작에서만 보면 퇴출 재시도가 상한을 넘긴다(상한 1 에 3콜).
+        while key_idx < len(keys) and calls < args.max_calls:
             calls += 1
             try:
                 items = _get(endpoint, {"contentId": cid, "contentTypeId": kind},
@@ -260,9 +261,9 @@ def main() -> int:
                 fail_at.append(calls)
                 print(f"[fee] {endpoint} {cid}: {e}", file=sys.stderr)
                 break
-        if key_idx >= len(keys):
-            print(f"[fee] 키 전부 소진 — {len(todo) - done:,}건 남김 "
-                  f"(다음 실행이 이어간다)", file=sys.stderr)
+        else:  # break 없이 끝남 = 이 POI 를 못 받았다 — 처리로 세지 않는다
+            print(f"[fee] {'키 전부 소진' if key_idx >= len(keys) else '상한 도달'} — "
+                  f"{len(todo) - done:,}건 남김 (다음 실행이 이어간다)", file=sys.stderr)
             break
         done += 1
         if items is None:

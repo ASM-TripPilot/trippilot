@@ -43,9 +43,10 @@ def manifest(namespace, image):
     return {
         "apiVersion": "batch/v1", "kind": "Job",
         "metadata": {"name": NAME, "namespace": namespace},
-        # 멱등(이미 들어간 문서는 건너뜀)이라 재시도가 이어받는다 — 임베딩 파드 일시 장애 대비.
+        # 멱등(저장본과 같은 문서는 건너뜀)이라 재시도가 이어받는다 — 임베딩 파드 일시 장애 대비.
         # 마감 60분: DEV 임베딩(CPU 2)은 건당 ≈1.5초라 KB-5 전량(1,470건)이 ≈37분이다 — 30분이던
-        # 첫 적재가 끊겼다(2026-10-04). 전량 재적재는 모델·데이터가 바뀔 때뿐이고 평소엔 건너뛴다.
+        # 첫 적재가 끊겼다(2026-10-04). 전량 재적재는 모델이 바뀔 때뿐이고, 평소엔 본문·payload 가 바뀐
+        # 문서만 다시 임베딩한다(seed 에서 지운 문서의 옛 행은 지우지 않는다).
         "spec": {"backoffLimit": 2, "activeDeadlineSeconds": DEADLINE_SEC, "ttlSecondsAfterFinished": 3600,
                  "template": {"metadata": {"labels": {"app.kubernetes.io/name": NAME}},
                               "spec": {

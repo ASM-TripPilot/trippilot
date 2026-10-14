@@ -189,3 +189,45 @@ def test_적재는_파드의_요청_경로_마감을_쓰지_않는다() -> None:
     env = {"TRIPPILOT_EMBEDDING_TIMEOUT_SEC": "600"}  # 더 긴 값은 존중한다(느린 로컬 머신)
     load_kb._use_load_timeout(env)
     assert env["TRIPPILOT_EMBEDDING_TIMEOUT_SEC"] == "600"
+
+
+# ── 재적재 건너뛰기 — 존재가 아니라 내용으로 (Codex 리뷰) ───────────────────
+
+
+def test_본문이나_payload_가_바뀐_문서는_기적재로_건너뛰지_않는다(monkeypatch) -> None:
+    """종전엔 (collection, item_id) **존재**만 봐서, seed 에서 본문을 고쳐도 매 배포 적재가
+    "기적재" 로 건너뛰고 옛 벡터·payload 가 영영 남았다. 같은 것만 건너뛴다(재개 이점 유지)."""
+    import psycopg
+
+    from tests.fakes.fake_embedding import FakeEmbedding
+    from trippilot.agents.planb.kb_retrieval import collection_for
+    from trippilot.domain.kb import KbDocument
+
+    load_kb = _load_kb_module()
+    embedding = FakeEmbedding(dim=8)
+    same = KbDocument(KbKind.SITUATION, "same", "그대로인 본문", None, {"reasons": ["none"]})
+    edited = KbDocument(KbKind.SITUATION, "edited", "고친 본문", None, {})
+    relabeled = KbDocument(KbKind.SITUATION, "relabeled", "본문 그대로", None, {"reasons": ["delay"]})
+    new = KbDocument(KbKind.SITUATION, "new", "새 문서", None, {})
+    stored = {  # DB 에 jsonb 로 들어 있던 것 (psycopg 가 dict 로 돌려준다)
+        "same": same.payload(),
+        "edited": {**edited.payload(), "text": "고치기 전 본문"},
+        "relabeled": {**relabeled.payload(), "metadata": {"reasons": ["weather"]}},
+    }
+
+    class _Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, sql, params):
+            collection, ids = params
+            assert collection == collection_for(KbKind.SITUATION, embedding.model_id)
+            rows = [(i, stored[i]) for i in ids if i in stored]
+            return type("Rows", (), {"fetchall": lambda self: rows})()
+
+    monkeypatch.setattr(psycopg, "connect", lambda url: _Conn())
+    fresh = load_kb._skip_already_indexed([same, edited, relabeled, new], embedding, "fake")
+    assert [d.doc_id for d in fresh] == ["edited", "relabeled", "new"]

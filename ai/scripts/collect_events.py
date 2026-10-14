@@ -304,7 +304,7 @@ def collect_region(
     )
     extracted = tuple(result.value or ())
     stats = {"region": region, "snippets": len(pairs), "extracted": len(extracted),
-             "generic_dropped": 0, "geocoded": 0, "added": 0,
+             "generic_dropped": 0, "geocoded": 0, "added": 0, "backfilled": 0,
              "fallback": bool(result.is_fallback), "error": result.error}
     # 저품질 이름 필터 — 일반어뿐인 이름은 식별 불가 (게이트는 환각 방어 소유,
     # 품질 컷은 배치 규칙 소유)
@@ -322,7 +322,11 @@ def collect_region(
             event = dataclasses.replace(event, coord=coord)
         enriched.append(event)
 
-    stats["added"], stats["backfilled"] = store.upsert(region, enriched, now)
+    # 폴백(LLM 실패 — value 는 None)은 "긁었는데 0건" 이 아니다. upsert 는 빈 목록에도
+    # coverage 시각을 찍어서, 실패 지역이 정상 0건과 구분되지 않았다. 포인터는 main 이
+    # 그대로 넘긴다 — 계속 실패하는 지역 하나가 로테이션 전체를 막으면 안 된다.
+    if not result.is_fallback:
+        stats["added"], stats["backfilled"] = store.upsert(region, enriched, now)
     return stats
 
 
@@ -335,11 +339,12 @@ def main() -> int:
         print(f"- 호출 {run['calls_used']}/{run['max_calls']} (하드캡) · "
               f"만료 청소 {run['purged']}건 · 저장소 총 {run['store_events']}건")
         print()
-        print("| 지역 | 스니펫 | 추출 | 좌표 | 신규 | 좌표백필 |")
-        print("|---|---|---|---|---|---|")
+        print("| 지역 | 스니펫 | 추출 | 좌표 | 신규 | 좌표백필 | 폴백 |")
+        print("|---|---|---|---|---|---|---|")
         for r in run["regions"]:
+            fallback = f"⚠ {r.get('error')}" if r.get("fallback") else ""
             print(f"| {r['region']} | {r['snippets']} | {r['extracted']} "
-                  f"| {r['geocoded']} | {r['added']} | {r.get('backfilled', 0)} |")
+                  f"| {r['geocoded']} | {r['added']} | {r.get('backfilled', 0)} | {fallback} |")
         if run.get("budget_stopped"):
             print()
             print(f"- ⏸ 하드캡 도달로 조기 종료 — `{run['budget_stopped']}` 지역부터 내일 재개")

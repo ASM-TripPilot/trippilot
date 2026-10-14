@@ -520,3 +520,63 @@ def test_같은_입력이면_같은_순서_결정론(tmp_path) -> None:
 
     assert first == second
     assert [p[0] for p in first] == ["b 축제", "d 축제", "a 축제", "c 축제"]
+
+
+# ── LLM 폴백은 "수집 완료" 가 아니다 (Codex 리뷰) ─────────────────────
+
+
+def test_LLM_폴백_지역은_coverage_를_찍지_않고_성공_0건은_찍는다(tmp_path) -> None:
+    """폴백(실패)에도 `upsert(region, [])` 가 coverage 시각을 찍어, "안 긁었음" 이
+    "긁었는데 행사 없음" 으로 남았다 — coverage 가 존재하는 이유를 스스로 지운다."""
+    import sys
+    from pathlib import Path as _P
+    from types import SimpleNamespace
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import collect_region
+
+    class _Http:
+        def get_json(self, url, headers, params):
+            return {"items": [{"title": "축제 소식", "description": "9월 1일"}]}
+
+    class _Worker:
+        def __init__(self, result):
+            self.result = result
+
+        def extract(self, *args, **kwargs):
+            return self.result
+
+    store = JsonEventStore(tmp_path / "events.json")
+    failed = SimpleNamespace(value=None, is_fallback=True, error="timeout: 120s")
+    empty = SimpleNamespace(value=(), is_fallback=False, error=None)  # 게이트가 낸 성공·0건
+    for region, result in (("부산", failed), ("대전", empty)):
+        stats = collect_region(region, client=NaverSearchClient(_Http(), "i", "s", 30),
+                               worker=_Worker(result), store=store, today=_TODAY, now=_NOW)
+        assert stats["fallback"] is result.is_fallback and stats["added"] == 0
+
+    assert store.coverage("부산") is None, "실패한 지역을 수집 완료로 기록했다"
+    assert store.coverage("대전") is not None, "성공·0건은 지금처럼 수집 완료다"
+
+
+def test_잡_서머리가_폴백_지역을_정상_0건과_가른다(tmp_path, monkeypatch, capsys) -> None:
+    """서머리 표에 폴백 칸이 없어 실패 지역과 정상 0건 지역이 같은 줄로 보였다."""
+    import json
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    import collect_events as ce
+
+    zero = {"snippets": 40, "extracted": 0, "geocoded": 0, "added": 0, "backfilled": 0}
+    run = {"calls_used": 20, "max_calls": 300, "purged": 0, "store_events": 5,
+           "budget_stopped": None,
+           "regions": [{"region": "부산", **zero, "fallback": True, "error": "timeout: 120s"},
+                       {"region": "대전", **zero, "fallback": False, "error": None}]}
+    path = tmp_path / "collect_events_run.json"
+    path.write_text(json.dumps(run, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["collect_events.py", "--summary", str(path)])
+
+    assert ce.main() == 0
+    lines = capsys.readouterr().out.splitlines()
+    busan = next(line for line in lines if line.startswith("| 부산 "))
+    daejeon = next(line for line in lines if line.startswith("| 대전 "))
+    assert "timeout" in busan and "timeout" not in daejeon
+    assert busan.count("|") == daejeon.count("|") == lines[lines.index(busan) - 2].count("|")
