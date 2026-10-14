@@ -186,7 +186,8 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
         고정 템플릿 강등. low: ~10s·출력 ~900, 3/3 성공.
       - REMINDER_COPY — high: 항목당 ~8s(배치 시한 8s 에 1건도 빠듯). low: ~1.9s.
       - ALTERNATIVE_SELECTION — replan(시한 25s)에서 1차 몫이 ~4s 로 내려와 high(3.5~7s)가
-        타임아웃 → 규칙 랭킹. low: ~3.5s, 게이트 드롭 0.
+        타임아웃 → 규칙 랭킹. low: ~3.5s, 게이트 드롭 0. 단 low 에서도 사유 `none` 이면 사고가
+        켜져 7~9s 였다(2026-10-14) — 프롬프트 0.5.0 의 "바로 고르세요" 줄이 끈다(3.8~5.2s).
     low 를 전 기능에 쓰지 않는 이유: EDIT_TRANSLATION·SHARE_CARD_COPY 가 low 에서 게이트
     위반(대체 장소를 영향 슬롯에 넣음·근거 없는 해시태그)으로 전량 드롭됐다 — high 에선 통과.
     시한 없는 경계(`/explanations` 등)는 high 그대로 둔다.
