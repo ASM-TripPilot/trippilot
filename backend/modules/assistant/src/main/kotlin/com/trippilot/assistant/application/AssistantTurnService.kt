@@ -37,6 +37,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /** 한 턴의 입력 — 발화이거나, 서버가 발급한 빠른 답을 누른 것이다. */
 sealed interface TurnInput {
@@ -99,7 +100,7 @@ class AssistantTurnService(
             is Accepted.Replay -> return first.result
             is Accepted.New -> first
             // 같은 턴이 이미 들어와 있다 — 앞선 처리가 답을 남기기를 기다린다. 못 남기고 죽었으면 넘겨받는다.
-            is Accepted.Pending -> awaitFirst(first, sessionId, clientTurnId)?.let { return it } ?: first.resumed
+            is Accepted.Pending -> awaitAdmitted(first, sessionId, clientTurnId)?.let { return it } ?: first.resumed
         }
         val reply = runCatching { respond(accepted, surface, startedAt) }.getOrElse { e ->
             // 처리기·조회의 예상 못 한 실패도 턴을 죽이지 않는다 — 사용자 행은 이미 남았다.
@@ -132,10 +133,30 @@ class AssistantTurnService(
      * 턴 예산(+ 왕복 여유)이 지나도록 응답이 없으면 앞선 처리는 죽은 것이다(남기기 실패·파드 종료) — null 을 돌려
      * 넘겨받게 한다. 기다리는 동안 DB 연결은 쥐지 않는다.
      *
-     * ponytail: 기다리는 요청 수에 상한이 없다 — 같은 턴 id 를 N 번 겹쳐 보내면 요청 스레드 N 개가 앞선 처리가 끝날
-     * 때까지 선다. 해석이 꺼져 있거나 대역일 때는 그 시간이 밀리초라 무해하다. **http 해석을 켜기 전에** 기다리는 수에
-     * 상한(넘으면 429)을 둔다 — 그때는 한 턴이 십여 초를 간다.
+     * 기다리는 요청은 **턴마다 [MAX_WAITERS_PER_TURN] 개까지**다 — 같은 턴 id 를 N 번 겹쳐 보내면 요청 스레드 N 개가 앞선
+     * 처리가 끝날 때까지(http 해석이면 십여 초) 서서 스레드 풀을 말린다. 정상 재전송은 한두 번이라 그 안에 든다. 넘친 요청은
+     * 429 — 기다려 봐야 같은 답이고, 잠시 뒤 다시 보내면 그때는 저장된 답(Replay)을 받는다.
+     *
+     * ponytail: 파드마다 센다(메모리). 겹친 요청이 여러 파드로 흩어지면 파드 수만큼 더 선다 — 요청 스레드를 지키는 것이
+     * 목적이라 파드 단위로 충분하다.
      */
+    private fun awaitAdmitted(pending: Accepted.Pending, sessionId: UUID, clientTurnId: UUID): TurnResult? {
+        val key = sessionId to clientTurnId
+        val admitted = waiters.merge(key, 1, Int::plus)!! <= MAX_WAITERS_PER_TURN
+        try {
+            if (!admitted) throw RateLimited(retryAfterSeconds = ((properties.turnBudgetMs + 999) / 1000).coerceAtLeast(1))
+            return awaitFirst(pending, sessionId, clientTurnId)
+        } finally {
+            waiters.computeIfPresent(key) { _, n -> (n - 1).takeIf { it > 0 } }
+        }
+    }
+
+    /** 턴(대화 + 턴 id)마다 지금 기다리는 요청 수. 0 이 되면 지운다 — 쌓이지 않는다. */
+    private val waiters = ConcurrentHashMap<Pair<UUID, UUID>, Int>()
+
+    /** 지금 기다리는 요청이 있는 턴 수 — 대기가 끝나면 0 으로 돌아와야 한다(세는 칸이 새면 같은 턴의 다음 대기가 막힌다). */
+    internal val waitingTurns: Int get() = waiters.size
+
     private fun awaitFirst(pending: Accepted.Pending, sessionId: UUID, clientTurnId: UUID): TurnResult? {
         val giveUpAt = pending.resumed.user.createdAt + Duration.ofMillis(properties.turnBudgetMs + properties.readMarginMs)
         while (clock.instant() < giveUpAt) {
@@ -458,6 +479,7 @@ class AssistantTurnService(
         private const val REFUSALS_BEFORE_GUIDE = 2
         private val SERVER_ISSUED_ARGUMENTS = setOf(ProposalCards.ARG_SLOT_KEY, ProposalCards.ARG_POI_ID)
         private const val POLL_MS = 200L
+        internal const val MAX_WAITERS_PER_TURN = 2
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
         private val log = LoggerFactory.getLogger(AssistantTurnService::class.java)
     }

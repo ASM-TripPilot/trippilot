@@ -250,6 +250,47 @@ class AssistantTurnServiceTest : StringSpec({
         w.usage.turns[acc to today] shouldBe null // 턴과 사용량은 앞선 처리의 몫이다
     }
 
+    /** 같은 턴 id 를 N 번 겹쳐 보내면 기다리는 스레드가 N 개 선다 — 해석이 십여 초 가면 그만큼 요청 스레드가 마른다. */
+    "같은 턴을 기다리는 요청은 턴마다 둘까지다 — 넘치면 429, 다른 턴은 막지 않고, 대기가 끝나면 세는 칸이 비워진다" {
+        val w = world()
+        val s = w.session()
+        val turn = UUID.randomUUID()
+        val other = UUID.randomUUID()
+        w.messages.appendUser(s.sessionId, acc, turn, NewMessage(MessageRole.USER, MessageKind.TEXT, "오늘 날씨"), start)
+        val parked = java.util.concurrent.CountDownLatch(AssistantTurnService.MAX_WAITERS_PER_TURN)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val answeringOther = java.util.concurrent.atomic.AtomicBoolean(false)
+        val service = w.service()
+        service.pause = {
+            if (answeringOther.get()) {
+                // 다른 턴의 대기 — 앞선 처리가 곧 답을 남긴다
+                w.messages.appendAssistant(s.sessionId, acc, other, AssistantTemplates.capabilities(true), w.clock.now)
+            } else {
+                parked.countDown()
+                // 상한이 없으면 셋째도 여기 붙들린다 — 풀리지 않으면 매달리는 대신 실패로 끝낸다
+                if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) error("대기에 붙들렸다 — 429 여야 했다")
+            }
+        }
+        fun send(t: UUID) = service.send(acc, s.sessionId, t, TurnInput.Text("오늘 날씨"), AssistantSurface.ITINERARY)
+        val waiting = (1..AssistantTurnService.MAX_WAITERS_PER_TURN).map {
+            java.util.concurrent.CompletableFuture.supplyAsync { runCatching { send(turn) } }
+        }
+        parked.await()
+
+        shouldThrow<RateLimited> { send(turn) }
+        // 다른 턴도 처리 중이면 기다린다 — 상한은 턴마다라 이 턴의 두 대기가 막지 않는다
+        w.messages.appendUser(s.sessionId, acc, other, NewMessage(MessageRole.USER, MessageKind.TEXT, "오늘 날씨"), start)
+        answeringOther.set(true)
+        send(other).messages.size shouldBe 2
+        answeringOther.set(false)
+
+        // 앞선 처리가 답을 남기고 대기가 풀린다
+        w.messages.appendAssistant(s.sessionId, acc, turn, AssistantTemplates.capabilities(true), w.clock.now)
+        release.countDown()
+        waiting.forEach { it.get().getOrThrow().messages.size shouldBe 2 }
+        service.waitingTurns shouldBe 0
+    }
+
     "기다리는 사이나 답하는 사이 대화가 지워지면 404 다 — 그래도 쓴 LLM 은 센다" {
         // 기다리는 사이
         val waiting = world()
