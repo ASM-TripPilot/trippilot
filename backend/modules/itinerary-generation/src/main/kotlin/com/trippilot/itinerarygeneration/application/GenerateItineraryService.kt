@@ -545,7 +545,7 @@ class GenerateItineraryService(
         private const val TODAY_STEP_MIN = 30 // 오늘 창 시작을 정시·반에 맞춘다(19:07 같은 시작 시각을 만들지 않게)
         private const val MINUTES_PER_DAY = 24 * 60
         private const val TODAY_EVENING_SPAN_MIN = 120 // 저녁 생성에도 지금부터 이만큼은 연다(한두 곳)
-        private const val TODAY_NIGHT_END_MIN = 23 * 60 // 그래도 밤 23:00 은 넘기지 않는다
+        private const val TODAY_NIGHT_END_MIN = 23 * 60 + 59 // 밤에도 야경 한두 곳 — 하루 안 표현이라 23:59 에서 멈춘다
         private const val TODAY_MIN_WINDOW_MIN = 60 // 이보다 짧은 오늘 창은 닫는다
 
         /** 여행 "오늘"은 사용자가 있는 곳의 날짜다(서버 UTC 아님) — 재계획·감지와 같은 기준. */
