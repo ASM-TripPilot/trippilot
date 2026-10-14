@@ -84,7 +84,7 @@ class WorkflowContractTests(unittest.TestCase):
         steps = value['jobs']['deploy']['steps']
         sync = next(s for s in steps if s.get('name') == 'Synchronize runtime secrets and render nonsecret Helm values')
         self.assertIn('--push-mode', sync['run'])
-        self.assertIn('PUSH_MODE_INPUT', sync['run'])
+        self.assertIn('EFFECTIVE_PUSH_MODE', sync['run'])
 
     def test_deploy_target_drives_namespace_and_never_hardcodes_production(self):
         """개발 대상 런이 운영 네임스페이스를 건드리면 운영 파드 시크릿이 개발 값으로 덮인다(#1258 검수)."""
@@ -92,8 +92,14 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(value['on']['workflow_dispatch']['inputs']['target']['options'], ['prod', 'dev'])
         self.assertEqual(value['on']['workflow_dispatch']['inputs']['target']['default'], 'prod')
         env = value['jobs']['deploy']['env']
-        self.assertIn("vars.DEV_TARGET_ACM_CERTIFICATE_ARN", env['ACM_CERTIFICATE_ARN'])
-        self.assertIn("vars.DEV_TARGET_API_HOSTNAME", env['API_HOSTNAME'])
+        # 인증서·주소는 workflow_config 가 골라 내보낸다 — 잡 env 에서 식으로 고르면 빈 개발 변수가 운영 값으로 떨어진다
+        self.assertNotIn('ACM_CERTIFICATE_ARN', env)
+        self.assertNotIn('API_HOSTNAME', env)
+        self.assertEqual(env['DEV_TARGET_ACM_CERTIFICATE_ARN'], '${{ vars.DEV_TARGET_ACM_CERTIFICATE_ARN }}')
+        self.assertEqual(env['PROD_ACM_CERTIFICATE_ARN'], '${{ vars.ACM_CERTIFICATE_ARN }}')
+        sync = next(s for s in value['jobs']['deploy']['steps'] if s.get('name') == 'Synchronize runtime secrets and render nonsecret Helm values')
+        self.assertIn('EFFECTIVE_PUSH_MODE', sync['run'])
+        self.assertNotIn('PUSH_MODE_INPUT', sync['run'])
         text = (ROOT / '.github/workflows/aws-deploy.yml').read_text()
         self.assertNotIn('--namespace trippilot', text)
         self.assertNotIn('-n trippilot ', text)

@@ -85,9 +85,12 @@ jobs:
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-      # 개발 대상은 자기 주소·인증서를 쓴다(dev-api.) — 운영 값으로 떨어지면 개발 NLB 가 운영 인증서를 단다.
-      ACM_CERTIFICATE_ARN: ${{ inputs.target == 'dev' && vars.DEV_TARGET_ACM_CERTIFICATE_ARN || vars.ACM_CERTIFICATE_ARN }}
-      API_HOSTNAME: ${{ inputs.target == 'dev' && vars.DEV_TARGET_API_HOSTNAME || vars.API_HOSTNAME }}
+      # 주소·인증서는 대상별로 따로 받고 workflow_config 가 골라 ACM_CERTIFICATE_ARN·API_HOSTNAME 으로 내보낸다.
+      # 식(`a && b || c`)으로 고르면 개발 변수가 빌 때 조용히 운영 값으로 떨어진다(#1261 검수) — 고르기와 거절을 한 곳에서.
+      PROD_ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
+      PROD_API_HOSTNAME: ${{ vars.API_HOSTNAME }}
+      DEV_TARGET_ACM_CERTIFICATE_ARN: ${{ vars.DEV_TARGET_ACM_CERTIFICATE_ARN }}
+      DEV_TARGET_API_HOSTNAME: ${{ vars.DEV_TARGET_API_HOSTNAME }}
       TF_VAR_aws_account_id: ${{ vars.AWS_ACCOUNT_ID }}
       TF_VAR_aws_region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
       TF_VAR_deployment_role_arn: ${{ vars.AWS_ROLE_ARN }}
@@ -223,7 +226,7 @@ jobs:
           embedding_tag_args=()
           if [ -n "$EMBEDDING_IMAGE_TAG" ]; then embedding_tag_args+=(--embedding-image-tag "$EMBEDDING_IMAGE_TAG"); fi
           push_args=()
-          if [ "$PUSH_MODE_INPUT" != keep ]; then push_args+=(--push-mode "$PUSH_MODE_INPUT"); fi
+          if [ "$EFFECTIVE_PUSH_MODE" != keep ]; then push_args+=(--push-mode "$EFFECTIVE_PUSH_MODE"); fi
           python3 deploy/eks/runtime.py sync-secrets \
             --outputs "$RUNNER_TEMP/trippilot-outputs.json" --target "$DEPLOY_TARGET" "${embedding_args[@]}" "${push_args[@]}"
           python3 deploy/eks/runtime.py render-values --target "$DEPLOY_TARGET" \
