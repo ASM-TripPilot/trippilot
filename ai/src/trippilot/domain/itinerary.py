@@ -128,6 +128,9 @@ class RequiredVisit:
     day: date
     dwell_min: int | None
     reason: str
+    # 사용자가 **이름으로 콕 집은** 곳 — 다른 필수 방문 여럿보다 무겁다(조립의 `_W_REQUIRED_PRIORITY`).
+    # 기본 False 라 종전 필수 방문(같이 짜기·구성 LLM·한 곳 추가)은 동작이 같다.
+    priority: bool = False
 
     def __post_init__(self) -> None:
         if self.dwell_min is not None and self.dwell_min <= 0:
@@ -139,6 +142,7 @@ class RequiredVisit:
             "day": self.day.isoformat(),
             "dwell_min": self.dwell_min,
             "reason": self.reason,
+            "priority": self.priority,
         }
 
     @classmethod
@@ -148,6 +152,7 @@ class RequiredVisit:
             day=date.fromisoformat(d["day"]),
             dwell_min=d["dwell_min"],
             reason=d["reason"],
+            priority=d.get("priority", False),  # 필드 이전 직렬화본
         )
 
 

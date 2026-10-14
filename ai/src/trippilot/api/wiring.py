@@ -2263,6 +2263,26 @@ class WiredItineraryOrchestrator:
             pool = CandidatePool(
                 poi_ids=pool.poi_ids | {p.poi_id for p in fresh}, pois=pool.pois + fresh,
                 generated_at=pool.generated_at, anchor=pool.anchor, radius_km=pool.radius_km)
+        # 후보 반경 밖에서 집은 곳은 그 둘레의 등록 POI 도 후보로 — 없으면 구성 LLM 이 기준점 근처만 골라
+        # 그곳 하나 보러 왕복하는 동안 몇 시간이 빈다(DEV 2026-10-14 성산 38km, 12:00~16:00 공백). INV-1:
+        # 둘레도 등록 POI 조회다. 시간만 당기기는 장소를 안 바꾸니 넓히지 않는다.
+        far = () if earlier is not None or pool.radius_km is None else tuple(
+            p for p in nl.visit if haversine_km(anchor, p.coord) > pool.radius_km)
+        nl_near: list[PoiId] = []
+        for p in far:
+            try:
+                around = nl_verify.nearby(
+                    p, self._poi_db.find_by_radius(p.coord, nl_verify.NEARBY_RADIUS_KM),
+                    request.target_date.weekday())
+            except Exception as e:  # 둘레를 못 찾아도 집은 곳은 그대로 간다 — 밝히고 넘긴다(INV-4)
+                notes.append(f"nl_nearby_unavailable: {p.poi_id} {type(e).__name__}")
+                continue
+            add = tuple(q for q in around if q.poi_id not in pool.poi_ids)
+            pool = CandidatePool(
+                poi_ids=pool.poi_ids | {q.poi_id for q in add}, pois=pool.pois + add,
+                generated_at=pool.generated_at, anchor=pool.anchor, radius_km=pool.radius_km)
+            nl_near += [q.poi_id for q in around]
+            notes.append(f"nl_nearby_added: {p.poi_id} +{len(around)}")
         if nl.rain_confirmed and not (RAIN_OUTDOOR <= avoid):
             avoid = avoid | RAIN_OUTDOOR  # 말이 아니라 기상청이 확인한 비다
         drop = avoid - prefer
@@ -2331,6 +2351,7 @@ class WiredItineraryOrchestrator:
                 (*nl_ids, *(planb_rank or planb.ranked_poi_ids)), resolved,  # 이름으로 집은 곳 먼저
                 prefer, avoid, avoided, active, past, not_before, visit_cap, budget_level, notes,
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
+                nearby=tuple(nl_near), origins=tuple(p.coord for p in far),
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -2398,10 +2419,12 @@ class WiredItineraryOrchestrator:
                 nl_extra),
             not_before=not_before,
             required_visits=earlier if earlier is not None else tuple(
+                # 구성 결과 안에도 이름으로 집은 곳이 있다(맨 앞에 고정) — 그곳만 우선 가중.
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                              reason="llm_compose") for p in composed) + tuple(
+                              reason="nl_request" if p in nl_ids else "llm_compose",
+                              priority=p in nl_ids) for p in composed) + tuple(
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                              reason="nl_request") for p in nl_extra),
+                              reason="nl_request", priority=True) for p in nl_extra),
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
             required_in_order=earlier is not None,  # 시간만 당기기 — 원 일정 순서 그대로
         )
@@ -2455,7 +2478,7 @@ class WiredItineraryOrchestrator:
                     outcome = self._schedule_agent.run(core.ScheduleTask(
                         request=replace(domain_request, required_visits=tuple(
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                                          reason="nl_request") for p in nl_ids),
+                                          reason="nl_request", priority=True) for p in nl_ids),
                                         max_visits_per_day=visit_cap,
                                         add_one_categories=add_one_asked),
                         pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
@@ -2586,6 +2609,8 @@ class WiredItineraryOrchestrator:
         now: datetime,
         started_ms: int,
         budget: core.DeadlineBudget,
+        nearby: tuple[PoiId, ...] = (),
+        origins: tuple[GeoPoint, ...] = (),
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -2626,7 +2651,7 @@ class WiredItineraryOrchestrator:
         seed = _seed_from(request.trip_id)
         slots = sorted(request.current_slots,
                        key=lambda s: (s.start_at is None, s.start_at or datetime.min.time()))
-        keep = [PoiId(s.poi_id) for s in slots] + list(planb_rank)
+        keep = [PoiId(s.poi_id) for s in slots] + list(planb_rank) + list(nearby)
         shortlist = composition.shortlist(
             pool, keep=keep, excluded=excluded, weekday=day.weekday(),
             score=lambda p: build_rule_score(p, budget_level, anchor, seed,
@@ -2681,7 +2706,9 @@ class WiredItineraryOrchestrator:
                 day_directives=any(s.cardinality != "ONE" for s in chosen),
                 add_one=any(s.cardinality == "ONE" for s in chosen),
                 free_text=bool((request.free_text or "").strip())),
-            distance_km={p.poi_id: haversine_km(anchor, p.coord) for p in shortlist.pois},
+            # 기준점과 반경 밖에서 집은 곳 중 가까운 쪽 — 그 둘레 후보가 "38km"로 보이면 LLM 이 안 고른다.
+            distance_km={p.poi_id: min(haversine_km(o, p.coord) for o in (anchor, *origins))
+                         for p in shortlist.pois},
             hours={p.poi_id: composition.hours_label(p, day.weekday()) or ""
                    for p in shortlist.pois},
         )

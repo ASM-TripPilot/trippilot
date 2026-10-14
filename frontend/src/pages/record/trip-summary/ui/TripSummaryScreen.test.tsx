@@ -1,8 +1,15 @@
 import type { ReactElement } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { useAnimatedProbe } from '@/test-support/animatedProbe';
 
 import { DayHighlightCard } from './DayHighlightCard';
 import {
@@ -404,6 +411,74 @@ describe('Figma 정합 — 지도 캡션·2톤 카드·방문행 라벨·바텀�
 
       expect(onPressTab).toHaveBeenCalledTimes(1);
       expect(onPressTab).toHaveBeenCalledWith('home');
+    });
+  });
+});
+
+// TRIP-1386 · 숫자 카운트업 + 다녀온 길 다시 그리기. 실제 움직임·지도 위 그려짐은 jest 사각(6-b 실기) —
+// 여기서는 끝 값 = 서버 값(INV-2)·동작 줄이기 즉시 최종값·값 없는 칸이 숫자를 안 지어냄까지만 본다.
+describe('TRIP-1386 · 모션', () => {
+  const probe = useAnimatedProbe();
+
+  const statTexts = (): string[] => {
+    const stats = screen.getByTestId('reflection-summary-stats');
+    return within(stats)
+      .getAllByText(/^(\d+|\d+(\.\d)?km|—)$/)
+      .map((n) => String(n.props.children));
+  };
+
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      jest.advanceTimersByTime(ms);
+    });
+  }
+
+  it('카운트업이 끝나면 세 칸이 서버 값과 정확히 같고, 도중에는 최종값보다 작다(같은 형식)', async () => {
+    probe.setReduceMotion(false);
+    renderScreen({
+      stats: { totalVisits: 12, distanceText: '38km', totalPhotos: 24 },
+    });
+    await advance(0);
+    expect(statTexts()).toEqual(['0', '0km', '0']);
+    await advance(100);
+
+    const mid = statTexts();
+    expect(mid[1]).toMatch(/^\d+km$/);
+    expect(Number(mid[0])).toBeLessThan(12);
+    expect(Number.parseInt(mid[1], 10)).toBeLessThan(38);
+    expect(Number(mid[2])).toBeLessThan(24);
+
+    await advance(1000);
+    expect(statTexts()).toEqual(['12', '38km', '24']);
+  });
+
+  it('동작 줄이기면 처음부터 최종값이다', async () => {
+    probe.setReduceMotion(true);
+    renderScreen({
+      stats: { totalVisits: 12, distanceText: '38km', totalPhotos: 24 },
+    });
+    await advance(0);
+    expect(statTexts()).toEqual(['12', '38km', '24']);
+    await advance(100);
+    expect(statTexts()).toEqual(['12', '38km', '24']);
+  });
+
+  it('0·측정 못 함(—)인 칸은 숫자를 지어내지 않고 그대로다', async () => {
+    probe.setReduceMotion(false);
+    renderScreen({
+      stats: { totalVisits: 0, distanceText: '—', totalPhotos: 0 },
+    });
+    await advance(0);
+    expect(statTexts()).toEqual(['0', '—', '0']);
+    await advance(300);
+    expect(statTexts()).toEqual(['0', '—', '0']);
+  });
+
+  it('지도에 다녀온 길 다시 그리기 옵션(0.9초, 0.15초 뒤)이 전달된다', () => {
+    renderScreen({ view: 'MAP' });
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toEqual({
+      durationMs: 900,
+      delayMs: 150,
     });
   });
 });

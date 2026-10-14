@@ -10,6 +10,7 @@ PR #280 이 공유본에 반영되지 않은 채였다.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -323,3 +324,44 @@ def test_섞인_문서를_혼자_재병합해도_표식이_남는다() -> None:
         merge([mixed])
     out = merge([mixed], allow_mixed=True)
     assert out["sources"] == ["LOCALDATA", "TOURAPI"]
+
+
+def _backend_sources() -> tuple[set[str], set[str]]:
+    """(앱 enum, DB CHECK) — 둘 다 정본에서 직접 읽는다."""
+    root = next(p for p in Path(__file__).resolve().parents
+                if (p / "backend/modules/place-data").is_dir())
+    kt = root / "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/Poi.kt"
+    m = re.search(r"enum class PoiSource \{([^}]*)\}", kt.read_text(encoding="utf-8"))
+    assert m is not None
+    app = {v.strip() for v in m.group(1).split(",") if v.strip()}
+
+    mig = root / "backend/app/src/main/resources/db/migration"
+    best, best_key = None, ()
+    for f in mig.glob("V*.sql"):
+        if "poi_source_check" not in f.read_text(encoding="utf-8"):
+            continue
+        nums = tuple(int(x) for x in re.findall(r"\d+", f.name.split("__")[0]))
+        if nums > best_key:
+            best, best_key = f, nums
+    assert best is not None
+    m2 = re.search(r"source IN \(([^)]*)\)", best.read_text(encoding="utf-8"))
+    assert m2 is not None
+    return app, {v.strip().strip("'") for v in m2.group(1).split(",")}
+
+
+def test_공유본의_모든_출처를_백엔드가_받는다() -> None:
+    """**배포 순서 사고를 기계로 막는다.**
+
+    공유본에 백엔드가 모르는 출처가 섞인 채 배포되면 수신이 문서째 400 으로 거부하고,
+    적재 Job 이 실패해 **배포 전체가 실패**한다. 공유본과 enum·CHECK 는 같은 리포·같은
+    커밋에 있으므로, 한쪽만 앞서 나가는 것을 여기서 잡을 수 있다.
+
+    (2026-10-14 trippilot-f7 이 짚은 위험. OVERTURE 는 V2.71 에서 열었다.)
+    """
+    doc = json.loads((_DATA / "collected_pois.json").read_text(encoding="utf-8"))
+    used = {p.get("source") for p in doc["proposals"] if p.get("source")}
+    used |= {doc["source"]} if doc.get("source") else set()
+    used |= set(doc.get("sources") or [])
+    app, db = _backend_sources()
+    assert used <= app, f"백엔드 enum 에 없는 출처가 공유본에 있다: {sorted(used - app)}"
+    assert used <= db, f"DB CHECK 에 없는 출처가 공유본에 있다: {sorted(used - db)}"

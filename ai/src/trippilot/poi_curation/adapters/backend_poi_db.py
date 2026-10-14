@@ -60,6 +60,10 @@ _SOURCE_MAP: Mapping[str, PoiSource] = {
     "KAKAO_LOCAL": PoiSource.PLACES_API,
     "TOURAPI": PoiSource.PLACES_API,
     "LOCALDATA": PoiSource.PLACES_API,
+    # Overture Maps places (V2.71, TRIP-888/684) — 공공·벤더 데이터셋의 정형 수집분이라
+    # TourAPI·인허가와 같은 성격이다. WEB 이 아니다: 사람이 쓴 글에서 뽑은 것이 아니라
+    # 레코드로 배포되는 데이터고, confidence 를 요구하지 않는다.
+    "OVERTURE": PoiSource.PLACES_API,
     "MANUAL": PoiSource.SEED,
 }
 

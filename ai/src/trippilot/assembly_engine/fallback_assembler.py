@@ -176,6 +176,11 @@ class RuleFallbackAssembler:
             # 앞 방문은 그보다 먼저 시작해야 한다(못 들어가면 미배치 — 순서를 뒤집어 놓지 않는다).
             req_floor: datetime | None = None
             reqs = required_by_day.get(day, [])
+            if not problem.required_in_order:
+                # 사용자가 이름으로 집은 곳(`priority`)이 먼저 자리를 잡는다 — 앞 순서가 시간을 먼저 차지하는
+                # 그리디라 순서가 곧 우선순위다. OR 의 `_W_REQUIRED_PRIORITY` 와 같은 의미(두 경로 같은 판정).
+                # 안정 정렬이라 같은 급 안의 순서는 그대로다.
+                reqs = sorted(reqs, key=lambda r: not r.priority)
             for x, rv in enumerate(reqs):
                 poi = self._pois.get(rv.poi_id)
                 pin = next((s for s in slots if s.poi_id == rv.poi_id), None)

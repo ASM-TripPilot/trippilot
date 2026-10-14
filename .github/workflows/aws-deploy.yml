@@ -160,14 +160,32 @@ jobs:
           tags: ${{ steps.infra.outputs.ai_repository }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=aws-ai
           cache-to: type=gha,mode=min,scope=aws-ai
-      - name: Build and publish embedding
+      # 임베딩 이미지 태그는 **빌드 맥락(ai/embedding)의 내용 해시**다 — 런마다 새 태그면 코드가 그대로여도
+      # 매 배포 파드가 바뀌고, maxSurge 0(chart embedding.yaml 주석)이라 그때마다 몇 분 엔드포인트가 빈다
+      # (10-14 하루 15회+, 재계획 KB 검색이 그 사이 Connection refused 로 강등). 같은 해시가 이미 올라가
+      # 있으면 빌드를 건너뛰고 같은 태그를 그대로 쓴다 → 파드 템플릿 무변 → 롤아웃 없음.
+      - name: Resolve the embedding image tag
+        id: embedding-tag
         if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled
+        env:
+          REPOSITORY: ${{ steps.infra.outputs.embedding_repository }}
+        run: |
+          tag="emb-$(git rev-parse HEAD:ai/embedding)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "$REPOSITORY:$tag" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "embedding $tag 이미 있음 — 빌드 생략, 임베딩 롤아웃 없음"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build and publish embedding
+        if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled && steps.embedding-tag.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./ai/embedding
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.infra.outputs.embedding_repository }}:${{ env.IMAGE_TAG }}
+          tags: ${{ steps.infra.outputs.embedding_repository }}:${{ steps.embedding-tag.outputs.tag }}
           cache-from: type=gha,scope=aws-embedding
           cache-to: type=gha,mode=min,scope=aws-embedding
       - uses: azure/setup-kubectl@v4
@@ -187,9 +205,13 @@ jobs:
           python3 deploy/eks/runtime.py ensure-namespace --namespace trippilot
       - name: Synchronize runtime secrets and render nonsecret Helm values
         if: steps.config.outputs.deploy_application == 'true'
+        env:
+          EMBEDDING_IMAGE_TAG: ${{ steps.embedding-tag.outputs.tag }}
         run: |
           embedding_args=()
           if [ "$EMBEDDING_ENABLED" = true ]; then embedding_args+=(--embedding-enabled); fi
+          embedding_tag_args=()
+          if [ -n "$EMBEDDING_IMAGE_TAG" ]; then embedding_tag_args+=(--embedding-image-tag "$EMBEDDING_IMAGE_TAG"); fi
           push_args=()
           if [ "$PUSH_MODE_INPUT" != keep ]; then push_args+=(--push-mode "$PUSH_MODE_INPUT"); fi
           python3 deploy/eks/runtime.py sync-secrets \
@@ -197,7 +219,7 @@ jobs:
           python3 deploy/eks/runtime.py render-values \
             --outputs "$RUNNER_TEMP/trippilot-outputs.json" --image-tag "$IMAGE_TAG" \
             --certificate-arn "$ACM_CERTIFICATE_ARN" --hostname "$API_HOSTNAME" \
-            --output "$RUNNER_TEMP/trippilot-values.json" "${embedding_args[@]}"
+            --output "$RUNNER_TEMP/trippilot-values.json" "${embedding_args[@]}" "${embedding_tag_args[@]}"
       - name: Initialize database roles and pgvector before Flyway
         if: steps.config.outputs.deploy_application == 'true'
         run: |

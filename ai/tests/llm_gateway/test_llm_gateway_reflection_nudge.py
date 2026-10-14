@@ -25,10 +25,10 @@ from hypothesis import strategies as st
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like
 from trippilot.llm_gateway.gates.reflection_nudge import (
-    _FORBIDDEN_TOKENS,
     _MAX_LENGTH,
     ReflectionNudgeGate,
 )
+from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.reflection_nudge import (
@@ -87,10 +87,17 @@ def test_gate_passes_valid_message_stripped() -> None:
         "",  # 빈 문자열
         "   ",  # 공백뿐
         "가" * (_MAX_LENGTH + 1),  # 길이 상한 초과
-        "도착까지 30분이면 충분해요",  # 금지 토큰: 분
-        "이동시간이 짧았던 여행이었죠",  # 금지 토큰: 시간
-        "그 시각의 노을을 기록해보세요",  # 금지 토큰: 시각
-        "Duration was short but sweet",  # 금지 토큰: duration (대소문자 무시)
+        "도착까지 30분이면 충분해요",  # 수량+분
+        "몇 분 거리였던 그 바다, 기억나세요?",  # 몇+분
+        "30여 분 걸리는 바다를 남겨보세요",  # 수량+여+분
+        "한두 시간 걸린 등산, 한 줄로 남겨요",  # 어림수+시간
+        "수십 분 기다린 그 맛집",  # 어림수+분
+        "시간 걸린 등산을 떠올려요",  # 소요 연어(이 없는 꼴)
+        "삼십 분 산책했던 해변을 남겨보세요",  # 한글 수사+분
+        "두 시간 걸린 등산, 한 줄로 남겨요",  # 한글 수사+시간
+        "이동시간이 짧았던 여행이었죠",  # 소요 연어
+        "오후 3시의 노을을 기록해보세요",  # 시각 표기
+        "Duration was short but sweet",  # duration (대소문자 무시)
     ],
 )
 def test_gate_drops_unsafe_message_with_event(message: str) -> None:
@@ -102,6 +109,21 @@ def test_gate_drops_unsafe_message_with_event(message: str) -> None:
     assert out.drop_event.total_count == 1 and out.drop_event.dropped_count == 1
     assert out.drop_event.dropped_ids == ()  # 문구 드롭은 풀 ID가 아님
     assert out.drop_event.feature == "REFLECTION_NUDGE"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "오뚜기분식 떡볶이, 그 맛을 남겨볼까요?",  # 장소명 속 '분' (2026-10-14 실측 드롭)
+        "그때 기분, 한 줄로 남겨보세요",  # 낱말 속 '분'
+        "즐거운 시간이었나요? 기록해보세요",  # 수량 없는 '시간'
+        "부산의 분위기를 떠올려보세요",  # '분위기'
+    ],
+)
+def test_gate_passes_non_duration_words(message: str) -> None:
+    """INV-3 은 "소요시간이 화면에 뜨는가"다 — 장소명·낱말 속 '분'·'시간'은 통과."""
+    out = _apply(_raw(message))
+    assert out.error is None and out.value == message
 
 
 def test_gate_boundary_length_passes() -> None:
@@ -132,7 +154,7 @@ def test_pbt_gate_never_raises_and_survivors_inside_constraints(raw: str) -> Non
     elif out.value is not None:
         assert isinstance(out.value, str)
         assert 0 < len(out.value) <= _MAX_LENGTH
-        assert not any(t in out.value.lower() for t in _FORBIDDEN_TOKENS)
+        assert _TIME_EXPR.search(out.value) is None
     else:
         assert out.drop_event is not None  # 무결과는 반드시 드롭 계측
 
@@ -142,7 +164,7 @@ def test_pbt_gate_never_raises_and_survivors_inside_constraints(raw: str) -> Non
 _safe_messages = st.text(max_size=_MAX_LENGTH).filter(
     lambda s: s.strip()
     and len(s.strip()) <= _MAX_LENGTH
-    and not any(t in s.lower() for t in _FORBIDDEN_TOKENS)
+    and not _TIME_EXPR.search(s.strip())
     and not has_contact_like(s.strip())
 )
 
@@ -247,4 +269,4 @@ def test_pbt_worker_converges_for_any_llm_text(raw: str) -> None:
     else:
         assert isinstance(result.value, str)
         assert 0 < len(result.value) <= _MAX_LENGTH
-        assert not any(t in result.value.lower() for t in _FORBIDDEN_TOKENS)
+        assert _TIME_EXPR.search(result.value) is None

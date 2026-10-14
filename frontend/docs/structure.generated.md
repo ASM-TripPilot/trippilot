@@ -1066,6 +1066,8 @@
 - `src/pages/record/trip-summary/index.ts`  →  TripSummaryPage
 
 ## src/pages/record/trip-summary/ui/
+- `src/pages/record/trip-summary/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
+- `src/pages/record/trip-summary/ui/DayCardReveal.tsx`  →  DayCardReveal
 - `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/pages/record/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
 - `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
@@ -1520,6 +1522,7 @@
 ## src/shared/lib/
 - `src/shared/lib/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
 - `src/shared/lib/chunkPairs.ts`  →  chunkPairs
+- `src/shared/lib/countUp.ts`  →  easeOutCubic · countUpInt · isCountable · countUpText
 - `src/shared/lib/fontScale.ts`  →  isLargeText
 - `src/shared/lib/formatRelativeTime.ts`  →  formatRelativeTime
 - `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
@@ -1711,4 +1714,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1071개 파일
+합계 1074개 파일

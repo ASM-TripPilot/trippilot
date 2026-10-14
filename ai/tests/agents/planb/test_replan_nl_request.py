@@ -467,3 +467,123 @@ def test_extraction_overlaps_the_directive_translation_instead_of_following_it()
     with TestClient(app, raise_server_exceptions=False) as client:
         client.post("/ai/v1/planb/replan", json=_body(free_text="어디 조용한 데 없을까"))
     assert seen.get("overlapped") is True, seen
+
+
+def test_named_place_goes_to_the_solver_as_a_priority_visit() -> None:
+    """이름으로 집은 곳만 `priority` — 구성 LLM 이 고른 곳은 보통 필수 방문이다. 같은 무게면 솔버가
+    먼 그 한 곳을 버리고 가까운 둘을 지킨다(DEV 2026-10-14, 2시간 넘는 빈칸에도 미배치)."""
+    composer = _FullDayComposer()
+    app, orch = _crowded_app(composer)
+    seen = []
+    inner = orch._schedule_agent
+
+    class _Spy:
+        def run(self, task):
+            seen.append(task.request)
+            return inner.run(task)
+
+    orch._schedule_agent = _Spy()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/planb/replan", json=_body(free_text="월정리 카페거리 꼭"))
+    flags = {str(r.poi_id): r.priority for r in seen[0].required_visits}
+    assert flags.get(_WOLJEONG) is True, flags
+    assert sum(flags.values()) == 1, flags  # 나머지(구성 LLM 몫)는 보통 필수
+
+
+# ── 먼 곳을 집으면 그 둘레도 후보로 (DEV 2026-10-14: 성산 38km, 12:00~16:00 공백) ─────────
+
+def test_nearby_is_closest_first_capped_per_category_and_skips_unusable() -> None:
+    here = _poi("x", "집은 곳", 33.0, 126.0, cat=PoiCategory.NATURE)
+    reg = (here,
+           *(_poi(f"f{i}", f"식당{i}", 33.0 + 0.001 * i, 126.0) for i in range(1, 6)),
+           _poi("s1", "명소", 33.01, 126.0, cat=PoiCategory.SIGHT),
+           _poi("h1", "호텔", 33.0001, 126.0, cat=PoiCategory.STAY),
+           _poi("m1", "월휴", 33.0001, 126.0, cat=PoiCategory.CAFE,
+                hours=(OpenHour(day_of_week=1, open_min=600, close_min=1200),)))
+    got = [str(p.poi_id) for p in v.nearby(here, reg, DAY.weekday())]
+    assert got == ["f1", "f2", "s1"]  # 식당은 가까운 둘만, 숙소·그날 휴무·자기 자신은 빠진다
+    many = tuple(_poi(f"k{c.value}{i}", "x", 33.0 + 0.001 * i, 126.0, cat=c)
+                 for c in PoiCategory if c is not PoiCategory.STAY for i in range(2))
+    assert len(v.nearby(here, many, DAY.weekday())) == v.NEARBY_MAX
+
+
+class _RecordingComposer:
+    """숏리스트와 LLM 에 보여 준 거리를 적고, 집은 곳 + 그 둘레를 고른다."""
+
+    def __init__(self) -> None:
+        self.inputs = []
+
+    def compose(self, pool, inp, trace_id, now, *, timeout_sec=None):
+        self.inputs.append((pool, inp))
+        picks = tuple(SimpleNamespace(poi_id=p.poi_id, reason="r") for p in pool.pois
+                      if str(p.poi_id) == _WOLJEONG or str(p.poi_id).startswith("w"))
+        return TypedResult(value=picks, is_fallback=False, error=None, call_record=None)
+
+
+_W = demo_poi_seed()
+_WJ = next(p.coord for p in _W if str(p.poi_id) == _WOLJEONG)
+_AROUND = (_poi("w1", "월정 미술관", _WJ.lat + 0.005, _WJ.lng, cat=PoiCategory.CULTURE),
+           _poi("w2", "월정 식당", _WJ.lat, _WJ.lng + 0.005))
+
+
+# 앵커 근처 식당 30곳 — 카테고리 상위 6 에서 둘레 식당(w2)을 밀어낸다. `keep` 없이는 숏리스트에 못 든다.
+_CROWD = tuple(_poi(f"n{i:02d}", f"근처식당{i}", DEMO_ANCHOR.lat + 0.002 * i, DEMO_ANCHOR.lng)
+               for i in range(1, 31))
+
+
+def _far_app(name: str):
+    from trippilot.api.wiring import StaticPoiDb
+    composer = _RecordingComposer()
+    app = build_dev_app(directives=_DIRECTIVES, poi_db=StaticPoiDb(_W + _AROUND + _CROWD))
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(ExtractedRequest(places=(ExtractedPlace(name, "visit"),)))
+    orch._existence = FakeExistence()
+    orch._composer = composer
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(free_text=f"{name} 꼭 가고 싶어"))
+    assert r.status_code == 200, r.text
+    return r.json(), composer
+
+
+def test_far_named_place_brings_its_surroundings_into_the_composer() -> None:
+    """앵커 반경 밖 둘레 곳은 원래 풀에 없다 — 넣지 않으면 구성이 그 근처로 하루를 이을 수 없다.
+    LLM 에 보이는 거리도 집은 곳 기준이어야 한다(앵커 기준 ~28km 면 안 고른다)."""
+    body, composer = _far_app("월정리 카페거리")
+    pool, inp = composer.inputs[0]
+    shown = {str(p.poi_id) for p in pool.pois}
+    assert {"w1", "w2"} <= shown, "\n".join(body["notes"])
+    assert all(inp.distance_km[PoiId(w)] < 1.0 for w in ("w1", "w2"))
+    assert f"nl_nearby_added: {_WOLJEONG} +2" in body["notes"]
+    assert {"w1", "w2", _WOLJEONG} <= set(_placed(body)), body["notes"]
+
+
+def test_named_place_inside_the_pool_adds_nothing() -> None:
+    near = next(p for p in _W if str(p.poi_id).endswith("0002")
+)  # 흑돼지거리 8.3km — 풀 반경 안
+    body, composer = _far_app(near.name)
+    assert f"nl_place_accepted: visit {near.poi_id}" in body["notes"], body["notes"]
+    assert not any(n.startswith("nl_nearby_added") for n in body["notes"]), body["notes"]
+    assert not {"w1", "w2"} & {str(p.poi_id) for p in composer.inputs[0][0].pois}
+
+
+def test_surroundings_lookup_failure_keeps_the_named_place_and_says_so() -> None:
+    from trippilot.api.wiring import StaticPoiDb
+
+    class _NoNearby(StaticPoiDb):
+        def find_by_radius(self, center, radius_km):
+            if radius_km == v.NEARBY_RADIUS_KM:
+                raise TimeoutError("be down")
+            return super().find_by_radius(center, radius_km)
+
+    app = build_dev_app(directives=_DIRECTIVES, poi_db=_NoNearby(_W + _AROUND))
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(
+        ExtractedRequest(places=(ExtractedPlace("월정리 카페거리", "visit"),)))
+    orch._existence = FakeExistence()
+    orch._composer = _RecordingComposer()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(free_text="월정리 카페거리 꼭"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert f"nl_nearby_unavailable: {_WOLJEONG} TimeoutError" in body["notes"]
+    assert _WOLJEONG in _placed(body), body["notes"]
