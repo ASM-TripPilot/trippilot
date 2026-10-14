@@ -1384,6 +1384,37 @@ def _replan_rag_request(
     )
 
 
+def _in_progress_blocks(
+    request: schemas.ReplanRequest, not_before: datetime | None, tz: timezone,
+    blocks: Sequence[FixedBlock],
+) -> tuple[FixedBlock, ...]:
+    """진행 중인 방문(시작은 지났고 끝은 안 지남) → 그 시각 그대로의 블록 (TRIP-1394).
+
+    BE 는 진행 중 슬롯을 잠그지 않고 보낸다 — 휴무·만석이면 바로 그 곳을 바꿀 수 있게(`lockedSlots`).
+    그런데 AI 는 지금 이후만 채우므로 잠기지 않은 진행 중 슬롯이 결과에서 **사라졌다**. 그래서 그 곳이
+    제외 대상이 아니면 둔다. 장소 사유(휴무·만석·취소)인데 제외 대상을 안 보냈으면 어느 곳인지 모르니
+    잠그지 않는다(종전대로 바꿀 수 있게). 고정 표시는 사영 뒤에 걷는다 — 사용자가 고정한 곳이 아니다.
+    """
+    if not_before is None:
+        return ()
+    excluded = set(request.excluded_poi_ids)
+    if not excluded and any(r in composition.PLACE_REASONS for r in request.reasons):
+        return ()
+    taken = {(b.poi_id, b.window.start) for b in blocks}
+    out: list[FixedBlock] = []
+    for slot in request.current_slots:
+        if slot.is_fixed or slot.start_at is None or slot.end_at is None or slot.poi_id in excluded:
+            continue
+        start = datetime.combine(request.target_date, slot.start_at, tzinfo=tz)
+        end = datetime.combine(request.target_date, slot.end_at, tzinfo=tz)
+        if slot.ends_next_day or end <= start:
+            end += timedelta(days=1)
+        if start < not_before < end and (PoiId(slot.poi_id), start) not in taken:
+            out.append(FixedBlock(poi_id=PoiId(slot.poi_id),
+                                  window=TimeWindow(start=start, end=end), reason="in_progress"))
+    return tuple(out)
+
+
 def _replan_fixed_blocks(
     request: schemas.ReplanRequest, tz: timezone
 ) -> tuple[FixedBlock, ...]:
@@ -2088,6 +2119,10 @@ class WiredItineraryOrchestrator:
         not_before = _replan_not_before(request, self._tz)
         blocks = _replan_fixed_blocks(request, self._tz)
         blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes)  # 저녁은 그대로
+        in_progress = _in_progress_blocks(request, not_before, self._tz, blocks)  # 진행 중은 그대로
+        if in_progress:
+            blocks += in_progress
+            notes.append(f"in_progress_kept: {len(in_progress)}")
         past = _past_blocks(blocks, not_before)
         # 시간만 당기기 — 원 일정의 남은 방문이 그대로 필수 방문이다. 장소를 안 바꾸므로 구성 LLM 도,
         # 방문을 줄이는 상한도, 회피 카테고리 제외도 타지 않는다(사용자가 "시간만"이라 했다).
@@ -2238,15 +2273,16 @@ class WiredItineraryOrchestrator:
             planb_rank=planb_rank,
             llm_composed=bool(composed),
         ))
-        if composed and outcome.solution is not None:
+        if (composed or in_progress) and outcome.solution is not None:
             # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
-            # 구성 LLM 이 고른 곳은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가 잠가서
-            # 다음 다시 짜기·교체에서 못 바꾼다. 그 표시만 걷는다(시각·순서는 그대로).
+            # 구성 LLM 이 고른 곳·진행 중이라 둔 곳은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가
+            # 잠가서 다음 다시 짜기·교체에서 못 바꾼다. 그 표시만 걷는다(시각·순서는 그대로).
             picked = set(composed)
             outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
                 replace(d, fixed_blocks=tuple(
                     fb for fb in d.fixed_blocks
-                    if not (fb.reason == "required_visit" and fb.poi_id in picked)))
+                    if not ((fb.reason == "required_visit" and fb.poi_id in picked)
+                            or fb.reason == "in_progress")))
                 for d in outcome.solution.days)))
         if composed:
             placed = {s.poi_id for d in (outcome.solution.days if outcome.solution else ())
@@ -2349,6 +2385,7 @@ class WiredItineraryOrchestrator:
         index = {p.poi_id: p for p in pool.pois}
         past_ids = {b.poi_id for b in past}
         fixed_ids = {b.poi_id for b in active}
+        in_progress_ids = {b.poi_id for b in active if b.reason == "in_progress"}
         excluded = {PoiId(p) for p in request.excluded_poi_ids} | past_ids | fixed_ids | avoided
         # 사용자가 바꿔 뺀 곳 — 종전 경로는 점수 강등(TRIP-964)인데, 고른 곳은 필수 방문이라 점수를
         # 안 본다. 그래서 후보에서 뺀다. 지금 일정에 다시 들어 있으면 사용자가 되돌린 것이라 둔다.
@@ -2373,6 +2410,8 @@ class WiredItineraryOrchestrator:
             pid = PoiId(s.poi_id)
             if pid in past_ids:
                 return "다녀옴(유지)"
+            if pid in in_progress_ids:
+                return "진행 중(유지)"
             if pid in fixed_ids:
                 return "고정(유지)"
             if pid in avoided:
@@ -2380,6 +2419,8 @@ class WiredItineraryOrchestrator:
             return "제외 요청" if pid in excluded else "남은 일정"
 
         labels = {spec.key: spec.label for spec in self._directives}
+        specs = index_of(self._directives)
+        chosen = [specs[k] for k in resolved if k in specs]
         rain = (daily_rain or {}).get(day)
         limit = composition.max_visits(start, end, free_cap)
         inp = ComposeDayInput(
@@ -2403,6 +2444,11 @@ class WiredItineraryOrchestrator:
             planb_picks=tuple(index[p].name for p in planb_rank if p in index)[:5],
             persona=_persona_line(persona),
             max_visits=limit,
+            change_rule=composition.change_rule(
+                request.reasons,
+                day_directives=any(s.cardinality != "ONE" for s in chosen),
+                add_one=any(s.cardinality == "ONE" for s in chosen),
+                free_text=bool((request.free_text or "").strip())),
             distance_km={p.poi_id: haversine_km(anchor, p.coord) for p in shortlist.pois},
             hours={p.poi_id: composition.hours_label(p, day.weekday()) or ""
                    for p in shortlist.pois},
