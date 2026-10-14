@@ -1833,6 +1833,9 @@ paths:
         일정 변경은 **제안**으로만 온다. 저장은 제안의 [적용]이 한다(BR-U8-30).
         해석이 실패해도 200 이다 — 그 턴은 폴백 메시지(`kind: FALLBACK`) 한 건으로 끝난다(BR-U8-40).
         계정당 분당 20턴을 넘으면 429 이고 그 턴은 기록되지 않는다(`Retry-After` 초 뒤 다시).
+        **429 이지만 `error.code` = `TURN_IN_PROGRESS` 이면 반대다** — 그 턴은 이미 기록돼 처리 중이고, 같은 `clientTurnId` 를
+        겹쳐 보낸 요청이 턴마다 둘을 넘었다(TRIP-1401). 새 턴 id 로 다시 보내지 말고 **같은 id 로** `Retry-After` 초 뒤 다시
+        보내면 처음 응답을 받는다(새 id 로 보내면 같은 말이 두 번 기록되고 두 번 해석된다).
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/AssistantSendTurnRequest' } } }
