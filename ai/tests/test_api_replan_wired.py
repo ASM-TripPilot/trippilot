@@ -364,6 +364,34 @@ def test_자정을_넘는_고정_슬롯이_있어도_422가_아니고_그대로_
     assert night[0]["is_fixed"] is True and night[0]["ends_next_day"] is True
 
 
+_GHOST = "99999999-9999-4999-8999-999999999999"  # 풀에도 POI DB 에도 없는 장소
+
+
+@pytest.mark.parametrize("locks,echoed", [
+    ([{"poi_id": "e0000000-0000-4000-8000-000000000002", "date": "2026-09-21", "start": "12:00",
+       "dwell_min": 90},
+      {"poi_id": "e0000000-0000-4000-8000-000000000003", "date": "2026-09-21", "start": "12:30",
+       "dwell_min": 60}], "e0000000-0000-4000-8000-000000000003"),
+    ([{"poi_id": _GHOST, "date": "2026-09-21", "start": "13:00", "dwell_min": 60}], _GHOST),
+], ids=["overlapping_locks", "unregistered_lock"])
+def test_못_지키는_잠금_하나가_하루를_죽이지_않는다(locks: list, echoed: str) -> None:
+    """TRIP-1397 — 겹치는 잠금은 모든 조립 단계를 실패시키고, 미등록 잠금은 빠져서(TRIP-1177) 둘 다
+    하루 전체가 NO_FEASIBLE_SLOT 이었다. 이제 그 잠금을 원 시각 그대로 되싣고 나머지 하루를 낸다."""
+    body = _post(build_dev_app(directives=_DIRECTIVES), reasons=[], locked_blocks=locks).json()
+
+    assert body["empty_reason"] is None, body["notes"]
+    slots = body["itinerary"]["days"][0]["slots"]
+    for lock in locks:  # 사용자 잠금은 하나도 안 사라진다 — 원 시각 그대로, 고정으로
+        assert any(s["poi_id"] == lock["poi_id"] and s["start_at"].startswith(lock["start"])
+                   and s["is_fixed"] for s in slots), (lock, slots)
+    assert any(not s["is_fixed"] for s in slots), slots  # 나머지 하루가 있다
+    assert any(n == f"locked_block_echoed: {echoed}" for n in body["notes"]), body["notes"]
+    echo = next(s for s in slots if s["poi_id"] == echoed)
+    for s in slots:  # 새 방문은 되실은 잠금과 겹치지 않는다
+        if not s["is_fixed"]:
+            assert s["end_at"] <= echo["start_at"] or echo["end_at"] <= s["start_at"], (s, echo)
+
+
 def test_잠금_블록이_있어도_죽지_않고_그_시각에_고정된다() -> None:
     """`locked_blocks` 는 `FixedBlockSchema`(start·dwell_min)인데 변환이
     `start_at`·`end_at` 을 읽어 **한 건이라도 실리면 AttributeError 500** 이었다 —

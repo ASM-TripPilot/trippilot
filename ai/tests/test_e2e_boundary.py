@@ -389,6 +389,17 @@ def test_generate_names_what_it_silently_adjusted(body: dict, code: str) -> None
     assert code in response.json()["degradations"], response.json()["degradations"]
 
 
+def test_generate_warns_when_a_fixed_place_is_in_another_city() -> None:
+    """부산 장소를 서울 일정에 고정하면 그 1곳만 든 하루가 말없이 나갔다(329km, DEV 10-13)."""
+    far = Poi(poi_id="far", name="먼 곳", category=PoiCategory.SIGHT,
+              coord=GeoPoint(_ANCHOR.lat - 2.5, _ANCHOR.lng - 1.0), open_hours=(), avg_cost=None,
+              rating=4.0, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None)
+    body = _request(fixed_blocks=({"poi_id": "far", "date": _DAY1.isoformat(), "start": "12:00"},))
+    with make_client(pois=_POIS + (far,)) as client:
+        out = client.post("/ai/v1/itinerary/generate", json=body).json()
+    assert "request:fixed_far_from_anchor" in out["degradations"], out["degradations"]
+
+
 def test_generate_reads_jacha_as_car_and_reports_nothing_for_a_clean_request() -> None:
     with make_client() as client:
         clean = client.post("/ai/v1/itinerary/generate", json=_request()).json()
