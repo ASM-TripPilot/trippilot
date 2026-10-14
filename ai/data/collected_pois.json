@@ -138086,7 +138086,7 @@
       "poi": {
         "poi_id": "tourapi-2721157",
         "name": "영주하늘눈전망대",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 35.1146102693,
           "lng": 129.0307259427
@@ -139628,7 +139628,7 @@
       "poi": {
         "poi_id": "tourapi-2721158",
         "name": "천마산하늘전망대",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 35.093648481,
           "lng": 129.0173415667
@@ -140022,7 +140022,7 @@
       "poi": {
         "poi_id": "tourapi-2656194",
         "name": "친환경 스카이웨이 전망대(이바구길)",
-        "category": "SIGHT",
+        "category": "NIGHT_VIEW",
         "coord": {
           "lat": 35.1213095185,
           "lng": 129.0306535435
