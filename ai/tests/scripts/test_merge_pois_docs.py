@@ -13,6 +13,7 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -250,3 +251,57 @@ def test_근거_파일_갱신_절차는_공유본_병합을_같은_PR에_넣는�
     assert cmd in section
     reminder = _DATA.parents[1] / ".github" / "workflows" / "ai-business-status-reminder.yml"
     assert cmd in reminder.read_text(encoding="utf-8")
+
+
+# ── 교차 출처 병합 (2026-10-14) ───────────────────────────────────────
+#
+# 수신 계약 `PoiProposalDocument` 은 **문서 레벨 source 하나만** 읽는다(`ProposalItem` 에
+# source 칸이 없다). 유일키가 (source, content_id) 라, 출처가 다른 문서를 합치면 최상위
+# source 를 늦은 쪽이 가져가고 **전량이 그 출처로 한 벌 더** 들어간다.
+# 실측: 19,079(TOURAPI) + 22,283(LOCALDATA) 을 합쳤더니 최상위가 LOCALDATA 가 됐다.
+
+
+def _doc(source: str, cid: str, collected_at: str) -> dict:
+    return {
+        "schema_version": 1, "source": source, "collected_at": collected_at,
+        "area_codes": ["1"], "content_types": ["12"],
+        "proposals": [{"provenance": {"content_id": cid},
+                       "poi": {"name": "고집돌우럭"}, "source": source}],
+    }
+
+
+def test_출처가_섞이면_기본적으로_거부한다() -> None:
+    """조용히 합쳐 주면 중복 적재가 배포까지 간다 — 실제로 거기까지 갔다."""
+    with pytest.raises(SystemExit) as e:
+        merge([_doc("TOURAPI", "1", "2026-10-13T00:00:00Z"),
+               _doc("LOCALDATA", "2", "2026-10-14T00:00:00Z")])
+    assert "출처가 섞" in str(e.value)
+
+
+def test_같은_출처는_종전과_똑같다() -> None:
+    out = merge([_doc("TOURAPI", "1", "2026-10-13T00:00:00Z"),
+                 _doc("TOURAPI", "2", "2026-10-14T00:00:00Z")])
+    assert out["source"] == "TOURAPI"
+    assert "sources" not in out, "같은 출처인데 sources 를 붙이면 소비자가 갈라 보내려 한다"
+    assert len(out["proposals"]) == 2
+
+
+def test_허용하면_문서가_섞였다고_스스로_말한다() -> None:
+    """최상위 source 하나만 읽으면 틀린다는 것을 문서가 드러내야 한다."""
+    out = merge([_doc("TOURAPI", "1", "2026-10-13T00:00:00Z"),
+                 _doc("LOCALDATA", "2", "2026-10-14T00:00:00Z")], allow_mixed=True)
+    assert out["sources"] == ["LOCALDATA", "TOURAPI"]
+    assert len(out["proposals"]) == 2
+    # 항목별 source 가 정본이다 — 소비자가 이걸로 갈라 보낸다
+    assert {p["source"] for p in out["proposals"]} == {"TOURAPI", "LOCALDATA"}
+
+
+def test_공유본이_섞였으면_sources_가_있다() -> None:
+    """실제 공유본 회귀 — 섞인 채로 `sources` 가 없으면 소비자가 못 알아챈다."""
+    doc = json.loads((_DATA / "collected_pois.json").read_text(encoding="utf-8"))
+    item_sources = {p.get("source") for p in doc["proposals"]}
+    if len(item_sources) > 1:
+        assert sorted(s for s in item_sources if s) == doc.get("sources"), (
+            "공유본 항목 출처가 섞였는데 문서의 sources 와 다르다 — "
+            "수신이 최상위 source 하나만 읽어 전량 중복 적재된다"
+        )

@@ -32,8 +32,25 @@ from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
 )
 
 
-def merge(docs: list[dict]) -> dict:
-    """수집 시각 순으로 합친다 — 나중 문서가 같은 content_id 를 덮어쓴다."""
+def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
+    """수집 시각 순으로 합친다 — 나중 문서가 같은 content_id 를 덮어쓴다.
+
+    **출처가 다르면 `allow_mixed` 없이는 거부한다.** 이 도구는 원래 같은 출처의 실행
+    artifact 를 합치려고 만든 것인데, 교차 출처(TourAPI + LOCALDATA)로도 아무 말 없이
+    합쳐 줬다. 그러면 최상위 `source` 를 `collected_at` 이 늦은 쪽이 가져가는데, 수신 계약
+    `PoiProposalDocument` 은 **문서 레벨 source 하나만** 읽고(`ProposalItem` 에 source 칸이
+    없다) 유일키가 (source, content_id) 라 — 늦은 쪽 출처로 **전량이 한 벌 더** 들어간다.
+    2026-10-14 실측: 19,079 + 22,283 을 합쳤더니 최상위가 LOCALDATA 가 돼, 그대로 부었으면
+    TourAPI 19,079곳이 LOCALDATA 출처 새 행으로 중복될 뻔했다(배포 전 발견).
+    """
+    sources = {d.get("source") for d in docs}
+    if len(sources) > 1 and not allow_mixed:
+        raise SystemExit(
+            f"[merge] 출처가 섞였습니다: {sorted(s or '?' for s in sources)}\n"
+            "  문서 레벨 source 는 하나뿐이고 수신이 그것만 읽습니다 — 합치면 늦은 쪽 출처로\n"
+            "  전량이 중복 적재됩니다. 일부러 섞으려면 --allow-mixed 를 주세요. 그러면 문서에\n"
+            "  `sources` 를 적어 두므로, 소비자가 항목별 source 로 갈라 보내야 합니다."
+        )
     docs = sorted(docs, key=lambda d: d["collected_at"])
     proposals: dict[str, dict] = {}
     areas: list[str] = []
@@ -49,7 +66,10 @@ def merge(docs: list[dict]) -> dict:
             proposals[p["provenance"]["content_id"]] = p
     return {
         "schema_version": docs[-1]["schema_version"],
+        # 섞였으면 **항목별 source 가 정본**이다 — 최상위 하나만 읽으면 틀린다는 것을
+        # 문서가 스스로 드러내게 `sources` 를 같이 적는다(수신 DTO 는 ignoreUnknown).
         "source": docs[-1]["source"],
+        **({"sources": sorted(s for s in sources if s)} if len(sources) > 1 else {}),
         "collected_at": docs[-1]["collected_at"],
         "area_codes": sorted(areas, key=int),
         "content_types": sorted(types, key=int),
@@ -162,6 +182,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("files", nargs="*", help="collected_pois.json 경로들")
     parser.add_argument("-o", "--output", help="합본 저장 경로 (생략 시 표준출력)")
     parser.add_argument("--self-check", action="store_true", help="병합 규칙 자체 검증만")
+    parser.add_argument("--allow-mixed", action="store_true",
+                        help="출처가 다른 문서도 합친다. 소비자가 **항목별 source 로 갈라** 보내야 한다 — 문서 레벨 source 는 하나뿐이다")
     args = parser.parse_args(argv)
 
     if args.self_check:
@@ -178,7 +200,7 @@ def main(argv: list[str]) -> int:
         print("[merge] 읽은 문서가 없습니다", file=sys.stderr)
         return 1
 
-    out = merge(docs)
+    out = merge(docs, allow_mixed=args.allow_mixed)
     recovered = reparse_open_hours(out["proposals"])
     if recovered:
         print(f"[merge] 영업시간 재파싱 — {recovered}건 살림 (원문은 있었는데 파싱이 비어 있던 것)",
