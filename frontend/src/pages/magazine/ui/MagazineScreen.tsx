@@ -14,14 +14,8 @@
  * (HomeScreen §3-D 와 동형). SVG 글리프 색은 HomeGlyphs.tsx 안에서만 raw(D-3 필터 밖).
  */
 import { type ReactElement } from 'react';
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -178,7 +172,8 @@ function EditorialCard({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={editorial.imageUrl ? { uri: editorial.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
         style={ABSOLUTE_FILL}
       />
       <LinearGradient
@@ -255,7 +250,8 @@ function MasonryCard({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         source={card.imageUrl ? { uri: card.imageUrl } : undefined}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
         style={ABSOLUTE_FILL}
       />
       <LinearGradient

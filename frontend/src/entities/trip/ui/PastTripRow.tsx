@@ -1,5 +1,6 @@
 import { Fragment, type ReactElement, type ReactNode } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import type { PastTripCardVM } from '../model';
 
@@ -68,7 +69,8 @@ export function PastTripRow({
             testID={`${testID}-photo`}
             source={{ uri: imageUrl }}
             className="h-full w-full"
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
           />
         )}
       </View>

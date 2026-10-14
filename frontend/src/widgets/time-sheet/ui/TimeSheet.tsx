@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -215,7 +216,8 @@ export function TimeSheet({
                 <Image
                   testID={`${testIDPrefix}-place-thumb-image`}
                   source={{ uri: placeSummary.imageUrl }}
-                  resizeMode="cover"
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
                   className="h-full w-full"
                 />
               )}

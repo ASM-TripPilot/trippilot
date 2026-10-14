@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapPin } from '@/shared/map';
@@ -216,7 +217,8 @@ function MustVisitCard({
         {item.imageUrl === null ? null : (
           <Image
             source={{ uri: item.imageUrl }}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
             className="h-full w-full"
           />
         )}

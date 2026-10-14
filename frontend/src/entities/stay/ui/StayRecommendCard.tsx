@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import type { ImageSourcePropType } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -92,7 +93,8 @@ export function StayRecommendCard({
       {imageSource !== undefined ? (
         <Image
           source={imageSource}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
           className="h-[64px] w-[64px] rounded-[12px]"
         />
       ) : (

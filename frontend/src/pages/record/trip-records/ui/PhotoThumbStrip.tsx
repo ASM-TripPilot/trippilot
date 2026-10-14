@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import type { PhotoAvailability } from '../model/photoAvailability';
 import { PlusGlyph, WarningTriangleGlyph } from '@/features/record';
@@ -47,7 +48,8 @@ function PhotoCell({ vm }: { vm: PhotoThumbVM }): ReactElement {
           <Image
             testID={`record-photo-thumb-image-${id}`}
             source={{ uri }}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
             className="size-[66px]"
           />
         ) : null}

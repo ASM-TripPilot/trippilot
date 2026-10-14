@@ -206,7 +206,7 @@ describe('PlaceDetailScreen (i10)', () => {
       expect(
         within(gallery).getByTestId(`execution-place-gallery-${index}`).props
           .source
-      ).toEqual({ uri })
+      ).toEqual([{ uri }])
     );
     expect(screen.getByTestId('execution-place-photo-count')).toHaveTextContent(
       '1 / 42'
@@ -336,7 +336,7 @@ describe('PlaceDetailScreen (i10)', () => {
         expect(
           within(photos).getByTestId(`execution-place-photo-thumb-${index}`)
             .props.source
-        ).toEqual({ uri })
+        ).toEqual([{ uri }])
       );
       // 단언 ② — 보이는 3장 밖의 수(42 − 3).
       expect(

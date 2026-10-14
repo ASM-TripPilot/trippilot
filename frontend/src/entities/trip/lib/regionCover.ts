@@ -9,7 +9,8 @@ import type { TripDestination } from '../model';
  * null — 호출부가 지금처럼 그라데이션으로 폴백한다(이름만 받은 옛 여행·동명이지역 포함).
  */
 export function pickRegionCover(
-  destinations: readonly Pick<TripDestination, 'seq' | 'regionCode'>[] | undefined
+  destinations:
+    readonly Pick<TripDestination, 'seq' | 'regionCode'>[] | undefined
 ): ImageSourcePropType | null {
   if (!destinations || destinations.length === 0) return null;
   const first = destinations.reduce((a, b) => (b.seq < a.seq ? b : a));

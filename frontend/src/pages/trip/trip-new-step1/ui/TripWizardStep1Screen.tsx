@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -262,7 +263,8 @@ function MustVisitStrip({
                 <Image
                   testID={`trip-wizard-mustvisit-image-${item.sourcePoiId}`}
                   source={{ uri: item.imageUrl }}
-                  resizeMode="cover"
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
                   className="h-full w-full"
                 />
               )}

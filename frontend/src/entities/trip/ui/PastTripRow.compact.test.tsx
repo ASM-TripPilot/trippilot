@@ -78,7 +78,7 @@ describe('🔴 C2 · 썸네일 사진 — imageUrl 이 있으면 자리 안에 I
     const thumb = screen.getByTestId(`${ROOT}-thumb`);
     const photo = within(thumb).getByTestId(`${ROOT}-photo`);
     // 엉뚱한 소스면 red(TripCard TC9 선례).
-    expect(photo.props.source).toEqual({ uri: 'file://jeju.jpg' });
+    expect(photo.props.source).toEqual([{ uri: 'file://jeju.jpg' }]);
   });
 
   it.each([

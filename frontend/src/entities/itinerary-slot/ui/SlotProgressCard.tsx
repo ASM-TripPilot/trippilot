@@ -1,12 +1,12 @@
 import type { ReactElement } from 'react';
 import {
-  Image,
   Pressable,
   Text,
   useWindowDimensions,
   View,
   type ImageSourcePropType,
 } from 'react-native';
+import { Image } from '@/shared/ui/Image';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { isLargeText } from '@/shared/lib/fontScale';
@@ -335,7 +335,8 @@ export function SlotProgressCard({
                 key={index}
                 testID={`execution-live-slot-photo-${index}-${slotKey}`}
                 source={source}
-                resizeMode="cover"
+                contentFit="cover"
+                cachePolicy="memory-disk"
                 className="h-[88px] flex-1 rounded-thumb border border-hairline"
               />
             ))}
