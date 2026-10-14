@@ -83,7 +83,8 @@ def _top(cands):
 
 def test_open_food_keeps_meal_seats_and_is_not_zeroed(caplog) -> None:
     """종전엔 이 풀이 "잔존 0: FOOD" 였다(TRIP-908 관측의 대표 사례). 예약석(TRIP-1183)
-    뒤로는 식사창 수(2)만큼 식당이 남고, 로그도 그대로 말한다 — 잘린 것은 SIGHT 12·FOOD 3."""
+    뒤로는 식사창 수(2)만큼 식당이 남고, 그리디 힌트가 놓은 식당도 노드에 남는다(힌트 POI 보존) —
+    로그도 그대로 말한다: 잘린 것은 SIGHT 14·FOOD 1."""
     index, cands = _pool([(PoiCategory.SIGHT, 70, 0.9), (PoiCategory.FOOD, 5, 0.1)])
 
     records = _solve_logging(index, cands, caplog)
@@ -91,7 +92,7 @@ def test_open_food_keeps_meal_seats_and_is_not_zeroed(caplog) -> None:
     assert len(records) == 1 and records[0].levelno == logging.INFO
     msg = records[0].getMessage()
     assert "잔존 0" not in msg
-    assert "FOOD=3" in msg and "SIGHT=12" in msg
+    assert "FOOD=1" in msg and "SIGHT=14" in msg
 
 
 def test_food_closed_today_is_still_reported_as_zeroed(caplog) -> None:
@@ -110,14 +111,15 @@ def test_food_closed_today_is_still_reported_as_zeroed(caplog) -> None:
 
 def test_replan_floor_past_meal_windows_reserves_no_seat(caplog) -> None:
     """재계획 하한이 저녁창까지 지나면 석이 없다(폴백도 그 구간에선 food-first 를 끈다) —
-    하한이 `_solve_day` 에서 프리필터까지 실려 간다. 점심창만 지나면 저녁 1석."""
+    하한이 `_solve_day` 에서 프리필터까지 실려 간다. 점심창만 지나면 저녁 1석. 어느 쪽이든 그리디
+    힌트가 놓은 식당 1곳은 노드에 남는다(힌트 POI 보존) — 남는 식당 수 = 석 + 1."""
     index, cands = _pool([(PoiCategory.SIGHT, 70, 0.9), (PoiCategory.FOOD, 5, 0.1)])
 
     late = _solve_logging(index, cands, caplog, datetime(2026, 8, 5, 19, 30, tzinfo=_KST))
-    assert late[-1].levelno == logging.WARNING and "잔존 0: FOOD" in late[-1].getMessage()
+    assert "잔존 0" not in late[-1].getMessage() and "FOOD=4" in late[-1].getMessage()
     caplog.clear()
     mid = _solve_logging(index, cands, caplog, datetime(2026, 8, 5, 15, 0, tzinfo=_KST))
-    assert "FOOD=4" in mid[-1].getMessage()
+    assert "FOOD=3" in mid[-1].getMessage()
 
 
 # ── ② 식당이 원래 없었다 — ①과 갈린다 ────────────────────────────────
