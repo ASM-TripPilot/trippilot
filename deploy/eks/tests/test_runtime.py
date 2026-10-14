@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -192,6 +193,84 @@ class SecretTests(unittest.TestCase):
             with self.assertRaises(ValueError) as raised:
                 runtime_secrets.get_secret(shell, "ap-northeast-2", "arn")
             self.assertNotIn(secret_string, str(raised.exception))
+
+
+class TargetTests(unittest.TestCase):
+    """개발·운영 분리(2026-10-15) — 대상이 네임스페이스·시크릿 그릇·DB 장비를 통째로 바꾼다."""
+
+    DEV = {
+        "dev_target_secret_arns": {name: f"arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:trippilot/dev/dev-target/{name}-x"
+                                   for name in ("backend", "ai", "database", "shared")},
+        "dev_target_database_host": "dev-target.example.rds.amazonaws.com",
+        "dev_target_database_master_secret_arn": "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:rds!db-dev-target",
+    }
+
+    def raw(self, dev=None):
+        return {key: {"value": value} for key, value in {**outputs(), **(self.DEV if dev is None else dev)}.items()}
+
+    def test_dev_target_reads_only_its_own_secrets_and_database(self):
+        dev = runtime.parse_outputs(self.raw(), "dev")
+        prod = runtime.parse_outputs(self.raw(), "prod")
+        self.assertEqual(prod, outputs())
+        self.assertEqual(dev["app_secret_arns"], self.DEV["dev_target_secret_arns"])
+        self.assertEqual(dev["database_host"], "dev-target.example.rds.amazonaws.com")
+        self.assertIn("rds!db-dev-target", dev["database_master_secret_arn"])
+        # 공유 자원(리전·클러스터·Redis·이미지 저장소)은 같다
+        for key in ("aws_region", "cluster_name", "redis_host", "ecr_repositories"):
+            self.assertEqual(dev[key], prod[key])
+
+    def test_dev_target_never_falls_back_to_production(self):
+        # 스위치가 꺼진 스택은 개발 출력이 빈 값이다 — 운영 값으로 떨어지면 개발 배포가 운영 DB·시크릿을 쓴다
+        empty = {"dev_target_secret_arns": {}, "dev_target_database_host": "", "dev_target_database_master_secret_arn": ""}
+        for dev in ({}, empty):
+            with self.subTest(dev=dev), self.assertRaises(ValueError):
+                runtime.parse_outputs(self.raw(dev), "dev")
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            runtime.parser().parse_args(["smoke", "--target", "staging"])
+
+    def test_dev_outputs_wired_to_production_are_refused(self):
+        prod = outputs()
+        for dev in ({**self.DEV, "dev_target_database_host": prod["database_host"]},
+                    {**self.DEV, "dev_target_database_master_secret_arn": prod["database_master_secret_arn"]},
+                    {**self.DEV, "dev_target_secret_arns": prod["app_secret_arns"]}):
+            with self.subTest(dev=dev), self.assertRaises(ValueError):
+                runtime.parse_outputs(self.raw(dev), "dev")
+
+    def test_main_hands_the_target_to_every_outputs_consumer(self):
+        """누출을 실제로 막는 줄은 main 이 대상을 parse_outputs 로 넘기는 곳이다 — 빠지면 개발 배포가 운영 값을 쓴다."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "outputs.json"
+            path.write_text(json.dumps(self.raw()))
+            prod_values = {outputs()["database_host"], outputs()["database_master_secret_arn"], *outputs()["app_secret_arns"].values()}
+            for action, patched, extra in (("sync-secrets", "runtime.runtime_secrets.sync", []),
+                                           ("bootstrap-db", "runtime.runtime_db.bootstrap", ["--run-id", "1-1"])):
+                with self.subTest(action=action), patch(patched) as consumer, patch("builtins.print"):
+                    runtime.main([action, "--target", "dev", "--outputs", str(path), *extra])
+                    seen, namespace = consumer.call_args.args[0], consumer.call_args.args[1]
+                    self.assertEqual(namespace, "trippilot-dev")
+                    self.assertEqual(seen["database_host"], self.DEV["dev_target_database_host"])
+                    self.assertFalse(prod_values & {seen["database_host"], seen["database_master_secret_arn"], *seen["app_secret_arns"].values()})
+            values = Path(directory) / "values.json"
+            with patch("builtins.print"):
+                runtime.main(["render-values", "--target", "dev", "--outputs", str(path), "--image-tag", "sha-1",
+                              "--certificate-arn", "arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc",
+                              "--hostname", "dev-api.example.com", "--output", str(values)])
+            self.assertEqual(json.loads(values.read_text())["config"]["databaseHost"], self.DEV["dev_target_database_host"])
+
+    def test_target_fixes_the_namespace(self):
+        with patch("runtime.runtime_smoke.run") as smoke, patch("builtins.print"):
+            runtime.main(["smoke", "--target", "dev"])
+            self.assertEqual(smoke.call_args.args[0], "trippilot-dev")
+            runtime.main(["smoke"])
+            self.assertEqual(smoke.call_args.args[0], "trippilot")
+            runtime.main(["smoke", "--target", "dev", "--namespace", "trippilot-dev"])
+            self.assertEqual(smoke.call_args.args[0], "trippilot-dev")
+        # 어긋난 짝은 무엇도 실행하기 전에 거절 — 개발 값이 운영 네임스페이스 시크릿을 덮는 사고
+        for argv in (["smoke", "--target", "dev", "--namespace", "trippilot"],
+                     ["smoke", "--namespace", "trippilot-dev"]):
+            with self.subTest(argv=argv), patch("runtime.runtime_smoke.run") as smoke, self.assertRaises(ValueError):
+                runtime.main(argv)
+            smoke.assert_not_called()
 
 
 class BootstrapTests(unittest.TestCase):
