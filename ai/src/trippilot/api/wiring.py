@@ -1101,12 +1101,14 @@ _DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
 
 def _dinner_blocks(
     request: schemas.ReplanRequest, resolved: Sequence[str], pool: CandidatePool,
-    blocks: tuple[FixedBlock, ...], tz: timezone, notes: list[str],
+    blocks: tuple[FixedBlock, ...], tz: timezone, not_before: datetime | None, notes: list[str],
 ) -> tuple[FixedBlock, ...]:
     """KEEP_DINNER("저녁은 그대로") — 원 일정에서 저녁 식사창에 걸친 식당 슬롯을 원 시각 그대로 잠근다.
 
     잠금(HC3)이라 구성 LLM 도 점수·조립도 그 자리를 못 바꾼다. 이미 잠긴 것·제외 요청한 곳·시각 없는 것은
-    건너뛴다. 원 일정에 저녁 식당이 없으면 잠글 것이 없다 — 노트로 밝힌다(침묵 금지).
+    건너뛴다. 이미 끝난 것(되실으면 고정으로 나간다)·지금 영업시간 밖·다른 잠금과 겹치는 것도 잠그지
+    않는다 — 고정은 조립이 비킬 수 없어, 하나만 어긋나도 칩 없이는 됐을 재계획이 통째로 해 없음이 된다.
+    잠글 것이 없으면 노트로 밝힌다(침묵 금지).
     """
     if "KEEP_DINNER" not in resolved:
         return ()
@@ -1123,22 +1125,26 @@ def _dinner_blocks(
         s_min = slot.start_at.hour * 60 + slot.start_at.minute
         e_min = slot.end_at.hour * 60 + slot.end_at.minute
         start = datetime.combine(request.target_date, slot.start_at, tzinfo=tz)
+        end = datetime.combine(request.target_date, slot.end_at, tzinfo=tz)
         if not (s_min < hi and e_min > lo) or (slot.poi_id, start) in seen:
             continue
-        out.append(FixedBlock(
-            poi_id=PoiId(slot.poi_id),
-            window=TimeWindow(start=start,
-                              end=datetime.combine(request.target_date, slot.end_at, tzinfo=tz)),
-            reason="keep_dinner",
-        ))
+        dow = request.target_date.weekday()
+        if ((not_before is not None and end <= not_before)
+                or (poi.open_hours and not any(oh.day_of_week == dow and oh.open_min <= s_min
+                                               and e_min <= oh.close_min for oh in poi.open_hours))
+                or any(start < b.window.end and b.window.start < end for b in blocks)):
+            notes.append(f"keep_dinner_skipped: {slot.poi_id}")
+            continue
+        out.append(FixedBlock(poi_id=PoiId(slot.poi_id), window=TimeWindow(start=start, end=end),
+                              reason="keep_dinner"))
     notes.append(f"keep_dinner: {','.join(str(b.poi_id) for b in out)}" if out
-                 else "keep_dinner_none: 원 일정에 저녁 식사가 없다")
+                 else "keep_dinner_none: 원 일정에서 잠글 저녁 식당이 없다")
     return tuple(out)
 
 
 def _earlier_visits(
     request: schemas.ReplanRequest, resolved: Sequence[str], blocks: tuple[FixedBlock, ...],
-    not_before: datetime | None, notes: list[str],
+    not_before: datetime | None, notes: list[str], *, ineffective: frozenset[str] = frozenset(),
 ) -> tuple[RequiredVisit, ...] | None:
     """EARLIER("시간만 당기기") — 원 일정의 남은 방문을 **그대로**(장소·체류) 필수 방문으로. 아니면 None.
 
@@ -1148,7 +1154,9 @@ def _earlier_visits(
     """
     if "EARLIER" not in resolved:
         return None
-    others = sorted(k for k in resolved if k not in _LAYOUT_KEYS)
+    # 장소를 바꾸는 지시만 센다 — 미배선(효과 없음)·속도(체류는 원 일정 값을 그대로 쓴다)는 아니다.
+    others = sorted(k for k in resolved
+                    if k not in _LAYOUT_KEYS and k not in _PACE_KEYS and k not in ineffective)
     if others:
         notes.append(f"earlier_ignored: {','.join(others)}")
         return None
@@ -2003,14 +2011,18 @@ class WiredItineraryOrchestrator:
 
         not_before = _replan_not_before(request, self._tz)
         blocks = _replan_fixed_blocks(request, self._tz)
-        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, notes)  # 저녁은 그대로
+        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes)  # 저녁은 그대로
         past = _past_blocks(blocks, not_before)
+        # 시간만 당기기 — 원 일정의 남은 방문이 그대로 필수 방문이다. 장소를 안 바꾸므로 구성 LLM 도,
+        # 방문을 줄이는 상한도, 회피 카테고리 제외도 타지 않는다(사용자가 "시간만"이라 했다).
+        earlier = _earlier_visits(request, resolved, blocks, not_before, notes,
+                                  ineffective=frozenset(d.key for d in self._directives if d.unwired))
         # 피할 카테고리(야외 피하기·실내로·힘든 건 빼고, 사유 암시 포함)는 **후보에서 뺀다** — 점수 감점만
         # 두면 원 일정의 야외 공원이 그대로 남았다(2026-10-14 DEV "실내로" 3건). 원 일정의 그 곳도
         # 고정·다녀온 곳이 아니면 교체 대상이다. 반대 칩을 같이 고른 카테고리는 빼지 않는다(상쇄 규약,
         # `directive_fit`). 남는 후보가 없으면 빼지 않고 밝힌다(INV-4) — 빈 하루보다 낫다.
         drop = avoid - prefer
-        held = {b.poi_id for b in blocks}
+        held = {b.poi_id for b in blocks} | {v.poi_id for v in earlier or ()}
         avoided = frozenset(p.poi_id for p in pool.pois if p.category in drop and p.poi_id not in held)
         if avoided:
             cats = ",".join(sorted(c.value for c in drop))
@@ -2056,9 +2068,6 @@ class WiredItineraryOrchestrator:
             if dropped:
                 notes.append(f"planb_rank_trimmed: add_one dropped={dropped}")
 
-        # 시간만 당기기 — 원 일정의 남은 방문이 그대로 필수 방문이다. 장소를 안 바꾸므로 구성 LLM 도,
-        # 방문을 줄이는 상한도 타지 않는다(사용자가 "시간만"이라 했다).
-        earlier = _earlier_visits(request, resolved, blocks, not_before, notes)
         visit_cap = None if earlier is not None else _visit_cap(request, resolved, past, not_before)
         if visit_cap is not None:
             notes.append(f"planb_visit_cap: {visit_cap}")
@@ -2151,26 +2160,26 @@ class WiredItineraryOrchestrator:
             planb_rank=planb_rank,
             llm_composed=bool(composed),
         ))
-        dinner = any(b.reason == "keep_dinner" for b in blocks)
-        if (composed or dinner) and outcome.solution is not None:
+        if composed and outcome.solution is not None:
             # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
             # 구성 LLM 이 고른 곳은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가 잠가서
             # 다음 다시 짜기·교체에서 못 바꾼다. 그 표시만 걷는다(시각·순서는 그대로).
-            # "저녁은 그대로" 잠금도 이번 재계획 한정이라 같이 걷는다.
             picked = set(composed)
             outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
                 replace(d, fixed_blocks=tuple(
                     fb for fb in d.fixed_blocks
-                    if not (fb.reason == "keep_dinner"
-                            or (fb.reason == "required_visit" and fb.poi_id in picked))))
+                    if not (fb.reason == "required_visit" and fb.poi_id in picked)))
                 for d in outcome.solution.days)))
         if composed:
             placed = {s.poi_id for d in (outcome.solution.days if outcome.solution else ())
                       for s in d.slots}
             missed = [p for p in composed if p not in placed]
             if missed:
-                notes.append(f"llm_composed_unplaced: {len(missed)}/{len(composed)}")
-            if len(missed) == len(composed):
+                what = "earlier" if earlier is not None else "llm_composed"
+                notes.append(f"{what}_unplaced: {len(missed)}/{len(composed)}")
+            # 시간만 당기기는 다시 풀지 않는다 — 종전 경로는 장소를 바꾼다("시간만"이 깨진다). 원 일정이
+            # 하나도 안 들어가면 잠금만 남은 하루가 되고, 사영이 그것을 대안 없음으로 정직하게 낸다.
+            if len(missed) == len(composed) and earlier is None:
                 # 고른 곳이 하나도 안 놓였다 — 빈 하루를 LLM 결과로 내지 않고 종전 경로로 한 번 더
                 # 푼다(INV-4). 어셈블리 바닥만큼 남았을 때만 — 에이전트는 잔여가 0 이어도 바닥을
                 # 주므로, 모자랄 때 다시 풀면 시한 + 바닥이 백스톱(504)에 닿는다.
@@ -2189,6 +2198,13 @@ class WiredItineraryOrchestrator:
                         budget=budget, started_ms=t0, trace_id=trace_id, now=now,
                         planb_rank=planb_rank,
                     ))
+        if outcome.solution is not None and any(b.reason == "keep_dinner" for b in blocks):
+            # "저녁은 그대로" 잠금은 이번 재계획 한정이다 — 고정으로 내면 BE 가 영구히 잠근다. 다시 풀었어도
+            # (위 재실행) 같은 블록이 실리므로 최종 해에서 걷는다(시각·순서는 그대로).
+            outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
+                replace(d, fixed_blocks=tuple(
+                    fb for fb in d.fixed_blocks if fb.reason != "keep_dinner"))
+                for d in outcome.solution.days)))
         return self._replan_projection(
             request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,

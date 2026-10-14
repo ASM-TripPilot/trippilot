@@ -57,6 +57,16 @@ def test_원_일정에_저녁이_없으면_잠글_것이_없다고_밝힌다() -
     assert any(n.startswith("keep_dinner_none") for n in body["notes"]), body["notes"]
 
 
+def test_이미_끝난_저녁은_잠그지_않는다() -> None:
+    """되실으면 고정으로 나가 BE 가 영구히 잠근다 — 지난 저녁은 잠글 대상이 아니다."""
+    slots = [_slot(_PORK, "18:00", "19:00")]
+    body, seen = _replan(directives=["KEEP_DINNER"], reasons=["none"], current_slots=slots,
+                         from_instant="2026-09-21T20:00:00+09:00")
+
+    assert all(b.reason != "keep_dinner" for b in seen["agent"][0].fixed_blocks)
+    assert f"keep_dinner_skipped: {_PORK}" in body["notes"], body["notes"]
+
+
 # ── 시간만 당기기 ────────────────────────────────────────────────────
 
 
@@ -87,6 +97,26 @@ def test_저녁_잠금과_시간_당기기는_같이_간다() -> None:
     req = seen["agent"][0]
     assert [str(v.poi_id) for v in req.required_visits] == [_HALLA]  # 잠근 저녁은 필수 방문이 아니다
     assert [str(b.poi_id) for b in req.fixed_blocks] == [_PORK]
+
+
+def test_시간만_당기기는_사유가_암시한_회피로_원_일정을_빼지_않는다() -> None:
+    """우천은 야외 회피를 암시하지만 사용자는 "시간만"이라 했다 — 원 일정의 한라산(자연)은 남는다."""
+    slots = [_slot(_HALLA, "13:00", "15:00"), _slot(_PORK, "16:00", "17:00")]
+    body, seen = _replan(directives=["EARLIER"], reasons=["weather"], current_slots=slots)
+
+    req = seen["agent"][0]
+    assert _HALLA in {str(v.poi_id) for v in req.required_visits}
+    assert sorted(s["poi_id"] for s in _placed(body)) == sorted([_HALLA, _PORK])
+
+
+def test_효과_없는_지시는_시간만_당기기를_막지_않는다() -> None:
+    """예산 유지(미배선)·여유 있게(속도 — 체류는 원 일정 값)는 장소를 바꾸지 않는다."""
+    slots = [_slot(_HALLA, "13:00", "15:00")]
+    body, seen = _replan(directives=["EARLIER", "KEEP_BUDGET", "RELAX"], reasons=["none"],
+                         current_slots=slots)
+
+    assert [v.reason for v in seen["agent"][0].required_visits] == ["earlier_retime"]
+    assert not any(n.startswith("earlier_ignored") for n in body["notes"]), body["notes"]
 
 
 # ── 숙소 근처에서 끝내기 ──────────────────────────────────────────────
