@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from pathlib import Path
 
 import pytest
 from hypothesis import assume, given, settings
@@ -358,3 +359,52 @@ def test_규칙은_부분적이다_브랜드가_끝이_아니면_남는다() -> 
     주소·좌표를 함께 보는 판정이 필요하다 — 이 테스트가 그 미결을 들고 있다.
     """
     assert map_category("landmark_and_historical_building", "한양수자인에듀힐즈") is not None
+
+
+def _backend_poi_source_values() -> set[str]:
+    """백엔드 `PoiSource` enum 값 — 정본을 직접 읽는다(복사해 두면 드리프트한다)."""
+    rel = "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/Poi.kt"
+    for parent in Path(__file__).resolve().parents:
+        if (parent / rel).is_file():
+            m = re.search(r"enum class PoiSource \{([^}]*)\}",
+                          (parent / rel).read_text(encoding="utf-8"))
+            assert m is not None
+            return {v.strip() for v in m.group(1).split(",") if v.strip()}
+    raise AssertionError(f"백엔드 정본을 찾지 못했습니다: {rel}")
+
+
+def _db_poi_source_values() -> set[str]:
+    """DB `poi_source_check` 가 허용하는 값 — **가장 최근 마이그레이션**을 읽는다."""
+    rel = "backend/app/src/main/resources/db/migration"
+    for parent in Path(__file__).resolve().parents:
+        d = parent / rel
+        if d.is_dir():
+            best, best_key = None, ()
+            for f in d.glob("V*.sql"):
+                if "poi_source_check" not in f.read_text(encoding="utf-8"):
+                    continue
+                nums = tuple(int(x) for x in re.findall(r"\d+", f.name.split("__")[0]))
+                if nums > best_key:
+                    best, best_key = f, nums
+            assert best is not None, "poi_source_check 마이그레이션을 찾지 못했습니다"
+            m = re.search(r"source IN \(([^)]*)\)", best.read_text(encoding="utf-8"))
+            assert m is not None
+            return {v.strip().strip("'") for v in m.group(1).split(",")}
+    raise AssertionError(f"마이그레이션 폴더를 찾지 못했습니다: {rel}")
+
+
+def test_출처_이름을_백엔드가_받는다() -> None:
+    """**이게 없어서 Overture 가 0건이었다.**
+
+    수집기·매핑은 2026-09 에 다 있었는데 적재가 한 건도 안 됐다(TRIP-888). 원인은 주소
+    품질이 아니라 `source='OVERTURE'` 가 앱 enum 과 DB CHECK 양쪽에 없던 것이다 —
+    LOCALDATA 쪽에는 이 대조가 있었고 Overture 쪽에는 없었다(2026-10-14 확인).
+    """
+    assert SOURCE_NAME in _backend_poi_source_values(), (
+        f"{SOURCE_NAME} 이 백엔드 PoiSource 에 없다 — 수신이 문서째 거부한다")
+
+
+def test_앱_enum_과_DB_제약이_같은_집합이다() -> None:
+    """한쪽만 늘리면 **저장 시점에** 터진다 — 컴파일도 테스트도 통과한다."""
+    app, db = _backend_poi_source_values(), _db_poi_source_values()
+    assert app == db, f"앱에만 {app - db} · DB에만 {db - app}"
