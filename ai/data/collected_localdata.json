@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "source": "LOCALDATA",
-  "collected_at": "2026-10-14T05:58:05.825386+00:00",
+  "collected_at": "2026-10-14T07:25:27.154834+00:00",
   "stats": {
     "source_file": "식품_일반음식점.csv",
     "source_updated_max": "2026-09-07 22:47:52",
     "rows": 2295369,
     "row_drops": {
       "not_open": 1619793,
-      "type_not_adopted": 182654,
+      "type_not_adopted": 182630,
       "no_coord": 15145,
       "not_meal_stop:golf": 1148,
       "not_meal_stop:cafeteria": 636,
@@ -32,14 +32,14 @@
     },
     "picked": 11159,
     "etc_fill": {
-      "admitted": 48,
-      "picked": 48
+      "admitted": 72,
+      "picked": 72
     },
     "gate_merged": 223,
     "gate_drops": {
       "policy_non_travel:convenience_store": 3
     },
-    "passed": 10981,
+    "passed": 11005,
     "by_type": {
       "한식": 7637,
       "횟집": 839,
@@ -51,7 +51,7 @@
       "통닭(치킨)": 138,
       "탕류(보신용)": 113,
       "뷔페식": 75,
-      "기타": 46,
+      "기타": 70,
       "외국음식전문점(인도,태국등)": 36,
       "패스트푸드": 34,
       "김밥(도시락)": 29,
@@ -63,23 +63,23 @@
       "강원특별자치도": 2051,
       "경상북도": 1771,
       "경상남도": 1511,
-      "충청남도": 1385,
-      "전남광주통합특별시": 1349,
-      "전북특별자치도": 881,
-      "충청북도": 768,
+      "충청남도": 1391,
+      "전남광주통합특별시": 1363,
+      "전북특별자치도": 882,
+      "충청북도": 769,
       "경기도": 536,
-      "제주특별자치도": 322,
+      "제주특별자치도": 324,
       "인천광역시": 165,
       "울산광역시": 143,
       "대구광역시": 98,
       "세종특별자치시": 1
     },
     "region_check": {
-      "sigungu": 10980,
+      "sigungu": 11004,
       "sido_only": 1
     },
-    "gap_anchors_without_pick_2km": 88,
-    "gap_anchors_still_below_min_7km": 76
+    "gap_anchors_without_pick_2km": 86,
+    "gap_anchors_still_below_min_7km": 73
   },
   "proposals": [
     {
@@ -244083,6 +244083,454 @@
       }
     },
     {
+      "provisional_id": "localdata-5850000-101-1998-00038",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5850000-101-1998-00038",
+        "name": "조성우렁집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.80701726538056,
+          "lng": 127.24777362575756
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "보성군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5850000-101-1998-00038",
+        "address": "전남광주통합특별시 보성군 조성면 조성4길 10-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5850000-101-2026-00047",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5850000-101-2026-00047",
+        "name": "뽀치킨",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.80514795396248,
+          "lng": 127.24223782491893
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "보성군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5850000-101-2026-00047",
+        "address": "전남광주통합특별시 보성군 조성면 조성로 59",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5880000-101-2023-00081",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5880000-101-2023-00081",
+        "name": "신월가든",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.96340788824146,
+          "lng": 126.29966198612917
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "무안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5880000-101-2023-00081",
+        "address": "전남광주통합특별시 무안군 운남면 신월로 553",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5890000-101-1996-00004",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5890000-101-1996-00004",
+        "name": "백바위가든",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.2412230856979,
+          "lng": 126.30699797638802
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "영광군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5890000-101-1996-00004",
+        "address": "전남광주통합특별시 영광군 염산면 칠산로 892",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5890000-101-2017-00038",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5890000-101-2017-00038",
+        "name": "분등장어",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.21016399251758,
+          "lng": 126.53372127112712
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "영광군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5890000-101-2017-00038",
+        "address": "전남광주통합특별시 영광군 불갑면 불갑사로2길 5, 1동",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5910000-101-2021-00002",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5910000-101-2021-00002",
+        "name": "BBQ치킨 신안 안좌점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.71536591019116,
+          "lng": 126.11852587313244
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "신안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5910000-101-2021-00002",
+        "address": "전남광주통합특별시 신안군 안좌면 소곡두리길 319, 2층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5910000-101-2023-00029",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5910000-101-2023-00029",
+        "name": "비에이치씨 신안임자점 & 임자감성카페",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.102442577917174,
+          "lng": 126.0742050974386
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "신안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5910000-101-2023-00029",
+        "address": "전남광주통합특별시 신안군 임자면 대광해수욕장길 172-8",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5910000-101-2025-00041",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5910000-101-2025-00041",
+        "name": "12사도 카페&식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.93002114384375,
+          "lng": 126.20272065686451
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "신안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5910000-101-2025-00041",
+        "address": "전남광주통합특별시 신안군 증도면 소기점길 23-28",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5910000-101-2025-00042",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5910000-101-2025-00042",
+        "name": "선희네 밥집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.95942418595919,
+          "lng": 126.28870960743383
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "신안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5910000-101-2025-00042",
+        "address": "전남광주통합특별시 신안군 압해읍 고이길 14",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5910000-101-2025-00056",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5910000-101-2025-00056",
+        "name": "자담치킨 비금점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.754967640603915,
+          "lng": 125.9273109813942
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "신안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5910000-101-2025-00056",
+        "address": "전남광주통합특별시 신안군 비금면 읍동길 30-3, 102호",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5910000-101-2026-00026",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5910000-101-2026-00026",
+        "name": "양반집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.09330364569355,
+          "lng": 126.07902682869776
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "신안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5910000-101-2026-00026",
+        "address": "전남광주통합특별시 신안군 임자면 대광해수욕장길 55",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5910000-101-2026-00033",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5910000-101-2026-00033",
+        "name": "형제식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.71727421808323,
+          "lng": 126.11751004027698
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "신안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5910000-101-2026-00033",
+        "address": "전남광주통합특별시 신안군 안좌면 소곡두리길 285",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5910000-101-2026-00035",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5910000-101-2026-00035",
+        "name": "정성한방백숙",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.85166372305217,
+          "lng": 126.04172302142575
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "신안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5910000-101-2026-00035",
+        "address": "전남광주통합특별시 신안군 자은면 자은서부1길 163-87",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5910000-101-2026-00045",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5910000-101-2026-00045",
+        "name": "주도면밀 우동집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 34.99041615259508,
+          "lng": 126.13495359564027
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "신안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5910000-101-2026-00045",
+        "address": "전남광주통합특별시 신안군 증도면 대초리 1609-4",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4671000-101-1990-00069",
       "source": "LOCALDATA",
       "poi": {
@@ -272275,6 +272723,38 @@
       }
     },
     {
+      "provisional_id": "localdata-4761000-101-2014-00007",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4761000-101-2014-00007",
+        "name": "사선대풍천장어",
+        "category": "FOOD",
+        "coord": {
+          "lat": 35.67843642882084,
+          "lng": 127.26817210941991
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "임실군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4761000-101-2014-00007",
+        "address": "전북특별자치도 임실군 관촌면 사선1길 70-3",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-6510000-101-1991-10023",
       "source": "LOCALDATA",
       "poi": {
@@ -282575,6 +283055,70 @@
       "provenance": {
         "content_id": "6520000-101-2026-00313",
         "address": "제주특별자치도 서귀포시 표선면 표선동서로 115, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6510000-101-2020-00566",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6510000-101-2020-00566",
+        "name": "새별하노이",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.36309929722228,
+          "lng": 126.36372933197468
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6510000-101-2020-00566",
+        "address": "제주특별자치도 제주시 애월읍 평화로 1529, 1층 제2호",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-6520000-101-2010-00098",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-6520000-101-2010-00098",
+        "name": "도원횟집",
+        "category": "FOOD",
+        "coord": {
+          "lat": 33.27075880110496,
+          "lng": 126.17592363843198
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "6520000-101-2010-00098",
+        "address": "제주특별자치도 서귀포시 대정읍 노을해안로 638",
         "image_url": null
       }
     },
@@ -326899,6 +327443,198 @@
       }
     },
     {
+      "provisional_id": "localdata-4550000-101-2002-00033",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4550000-101-2002-00033",
+        "name": "이서방전통순대국밥",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.22551741633015,
+          "lng": 127.50294858047617
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "금산군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4550000-101-2002-00033",
+        "address": "충청남도 금산군 추부면 서대산로 519",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4620000-101-2017-00068",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4620000-101-2017-00068",
+        "name": "인생버거",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.738123223641836,
+          "lng": 126.1338314461302
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "태안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4620000-101-2017-00068",
+        "address": "충청남도 태안군 소원면 파도길 63-6",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4620000-101-2020-00068",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4620000-101-2020-00068",
+        "name": "청포대 조개구이",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.64176813699933,
+          "lng": 126.30240735602975
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "태안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4620000-101-2020-00068",
+        "address": "충청남도 태안군 남면 청포대길 86",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4620000-101-2025-00024",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4620000-101-2025-00024",
+        "name": "트리우드식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.96691577061881,
+          "lng": 126.30484726914074
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "태안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4620000-101-2025-00024",
+        "address": "충청남도 태안군 이원면 원이로 2976, 2층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-4620000-101-2025-00025",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-4620000-101-2025-00025",
+        "name": "피자스톰 청포대점",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.64094516684623,
+          "lng": 126.3022750991985
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "태안군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "4620000-101-2025-00025",
+        "address": "충청남도 태안군 남면 청포대길 77, 1동 2호",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5680000-101-2022-00283",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5680000-101-2022-00283",
+        "name": "아미성식당",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.85768714452945,
+          "lng": 126.68341742770683
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "당진시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5680000-101-2022-00283",
+        "address": "충청남도 당진시 순성면 남부로 816-5, 다동 1층",
+        "image_url": null
+      }
+    },
+    {
       "provisional_id": "localdata-4390000-101-1978-00013",
       "source": "LOCALDATA",
       "poi": {
@@ -351471,6 +352207,38 @@
       "provenance": {
         "content_id": "5720000-101-2023-00118",
         "address": "충청북도 청주시 상당구 문의면 남계1길 10-1, 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "localdata-5570000-101-2019-00021",
+      "source": "LOCALDATA",
+      "poi": {
+        "poi_id": "localdata-5570000-101-2019-00021",
+        "name": "카페율리, 율리중앙탑막국수",
+        "category": "FOOD",
+        "coord": {
+          "lat": 36.71684795756044,
+          "lng": 127.63744129040855
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "기타"
+      ],
+      "region": "증평군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "5570000-101-2019-00021",
+        "address": "충청북도 증평군 증평읍 율리휴양로 291, 2층",
         "image_url": null
       }
     }
