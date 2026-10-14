@@ -389,6 +389,17 @@ def test_generate_names_what_it_silently_adjusted(body: dict, code: str) -> None
     assert code in response.json()["degradations"], response.json()["degradations"]
 
 
+def test_generate_warns_when_a_fixed_place_is_in_another_city() -> None:
+    """부산 장소를 서울 일정에 고정하면 그 1곳만 든 하루가 말없이 나갔다(329km, DEV 10-13)."""
+    far = Poi(poi_id="far", name="먼 곳", category=PoiCategory.SIGHT,
+              coord=GeoPoint(_ANCHOR.lat - 2.5, _ANCHOR.lng - 1.0), open_hours=(), avg_cost=None,
+              rating=4.0, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None)
+    body = _request(fixed_blocks=({"poi_id": "far", "date": _DAY1.isoformat(), "start": "12:00"},))
+    with make_client(pois=_POIS + (far,)) as client:
+        out = client.post("/ai/v1/itinerary/generate", json=body).json()
+    assert "request:fixed_far_from_anchor" in out["degradations"], out["degradations"]
+
+
 def test_generate_reads_jacha_as_car_and_reports_nothing_for_a_clean_request() -> None:
     with make_client() as client:
         clean = client.post("/ai/v1/itinerary/generate", json=_request()).json()
@@ -421,6 +432,24 @@ def test_generate_keeps_each_day_inside_its_own_window(assembly_config) -> None:
         for d, (start, end) in _WINDOWS.items():
             for slot in days.get(d.isoformat(), []):
                 assert start <= slot["start_at"][:5] and slot["end_at"][:5] <= end, (d, slot)
+
+
+# ── ③‴ 영업시간 모르는 곳은 새벽에 안 놓는다 (TRIP-1397) ────────────────
+
+
+def test_unknown_hours_are_not_placed_overnight_but_user_pins_are_kept() -> None:
+    """창을 00:00~23:59 로 주면 정보 없음(=종일)이라 새벽 00:17·02:32 에 놓였다(DEV 10-13)."""
+    body = _request(window=("00:00", "23:59"),
+                    fixed_blocks=({"poi_id": "p1", "date": _DAY1.isoformat(),
+                                   "start": "01:00", "dwell_min": 60},))
+    with make_client(pois=_MANY_POIS) as client:
+        response = client.post("/ai/v1/itinerary/generate", json=body)
+    assert response.status_code == 200, response.text
+    slots = [s for d in response.json()["days"] for s in d["slots"]]
+    pinned = [s for s in slots if s["poi_id"] == "p1"]
+    assert pinned and pinned[0]["start_at"].startswith("01:00")  # 사용자가 고정한 곳은 추정을 안 건다
+    free = [s for s in slots if s["poi_id"] != "p1"]
+    assert free and all("07:00" <= s["start_at"][:5] and s["end_at"][:5] <= "23:00" for s in free), free
 
 
 # ── ④ validate · repair 관통 ─────────────────────────────────────────

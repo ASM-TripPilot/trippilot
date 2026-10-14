@@ -346,10 +346,11 @@ class _RaisingStatic:
 
 
 @pytest.mark.parametrize("case", ["unregistered", "lookup_error"])
-def test_replan_잠금_블록을_못_찾으면_잠금_빠진_일정을_내지_않는다(case) -> None:
-    """잠금은 '못 건드리는 것' — 조회 miss 로 블록을 뺀 일정이 empty_reason 없이 나가면
-    BE 는 잠금이 사라진 하루를 깨끗한 결과로 읽는다. IO-7 대로 itinerary=null + 사유
-    (`_replan_fixed_blocks` 가 시각 없는 고정을 422 로 막는 것과 같은 이유, INV-4)."""
+def test_replan_잠금_블록을_못_찾아도_잠금은_원_시각_그대로_남고_하루가_나온다(case) -> None:
+    """잠금은 '못 건드리는 것' — 조회 miss 로 블록을 뺀 일정이 그대로 나가면 BE 는 잠금이 사라진
+    하루를 깨끗한 결과로 읽는다(TRIP-1177). 종전엔 그래서 하루 전체를 비웠는데(itinerary=null),
+    잠금 하나로 하루를 잃었다(TRIP-1397). 이제 그 잠금을 **원 시각 그대로 되싣고** 나머지 하루를 낸다
+    — 잠금은 응답에 남으므로 TRIP-1177 의 걱정(잠금이 사라진 하루)은 그대로 막힌다."""
     from tests.test_api_replan_wired import _DIRECTIVES, _post
     from trippilot.api.wiring import build_dev_app, demo_poi_seed
 
@@ -366,10 +367,11 @@ def test_replan_잠금_블록을_못_찾으면_잠금_빠진_일정을_내지_�
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["itinerary"] is None, body["notes"]
-    assert body["empty_reason"]["code"] == "NO_FEASIBLE_SLOT"
-    assert body["is_fallback"] is True
-    assert any(n.startswith("locked_block_unplaced:") and pid in n
+    assert body["empty_reason"] is None, body["notes"]
+    slots = body["itinerary"]["days"][0]["slots"]
+    assert any(s["poi_id"] == pid and s["start_at"].startswith("12:00") and s["is_fixed"]
+               for s in slots), slots
+    assert any(n.startswith("locked_block_echoed:") and pid in n
                for n in body["notes"]), body["notes"]
 
 
