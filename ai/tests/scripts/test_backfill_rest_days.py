@@ -134,7 +134,8 @@ def test_표본이_충분하다() -> None:
        closed=st.sets(st.integers(min_value=0, max_value=6), min_size=1, max_size=6))
 def test_pbt_실제_공유본_원문에서_합성_왕복이_성립한다(hours: str, closed: set[int]) -> None:
     """수집 때 휴무를 반영한 저장본을 실제 원문으로 만들어 백필 — 붙였으면 반드시 왕복한다."""
-    stored = [h.to_dict() for h in parse_open_hours(hours, None) if h.day_of_week not in closed]
+    parsed = parse_open_hours(hours, None)
+    stored = [h.to_dict() for h in parsed if h.day_of_week not in closed]
     p = _prop(hours, stored)
     outcome = backfill_one(p)
     raw = p["opening_hours_raw"]
@@ -143,6 +144,14 @@ def test_pbt_실제_공유본_원문에서_합성_왕복이_성립한다(hours: 
         assert len(raw) <= OPENING_HOURS_MAX
         assert split_opening_hours_raw(raw)[1] == rest_phrase(closed)
         assert backfill_one(p) == "same"
+    elif outcome == "same":
+        # **원문이 휴무를 이미 글로 적고 있는 경우다.** `split_opening_hours_raw` 는 우리가
+        # 저장할 때 넣는 구분자로만 가르므로, `10:00~17:00<br>매주 월요일 휴관 …` 같은 원문은
+        # 통째로 '영업 원문'으로 온다. 그런데 파서는 그 문장을 읽어 월요일을 이미 뺀다 —
+        # 그래서 closed 를 또 빼도 저장본이 달라지지 않고, 백필할 것이 없다.
+        # (2026-10-14: 되감기 재조회가 이런 원문을 공유본에 들여오면서 드러났다.)
+        assert len(stored) == len(parsed), "실제로 요일이 빠졌는데 백필을 건너뛰었다"
+        assert raw == hours, "백필하지 않기로 했으면 원문에 손대지 않는다"
     else:
         # 못 맞추는 것은 200자 절단뿐이어야 하고, 그때는 원문에 손대지 않는다
         assert outcome == "verify_failed" and raw == hours
