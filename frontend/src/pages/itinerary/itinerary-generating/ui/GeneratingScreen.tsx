@@ -20,6 +20,8 @@ import {
   FullAiGlyph,
 } from '@/features/itinerary/index.view';
 
+import { GeneratingIllustration } from './GeneratingIllustration';
+
 /**
  * h07 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `4294:8516`. 프레젠테이션(props만, 재판정 금지).
  *
@@ -327,6 +329,9 @@ export function GeneratingScreen({
                   {PROGRESS_NOTE}
                 </Text>
               </View>
+
+              {/* 지도 카드(TRIP-1352 가 걷음) 자리 — 장식 일러스트(TRIP-1384). 진척을 말하지 않는다. */}
+              <GeneratingIllustration />
 
               <View
                 style={cardShadow}
