@@ -208,8 +208,8 @@ describe('SplashGate — 잠정→교정 재분기 (AC-W-06)', () => {
 });
 
 describe('SplashGate — 최소 노출 floor (TRIP-579)', () => {
-  it('SPLASH_MIN_VISIBLE_MS 는 900ms 다 (floor 하한 · 발명값 상수, export)', () => {
-    expect(SPLASH_MIN_VISIBLE_MS).toBe(900);
+  it('SPLASH_MIN_VISIBLE_MS 는 1300ms 다 (floor 하한 · 발명값 상수, export)', () => {
+    expect(SPLASH_MIN_VISIBLE_MS).toBe(1300);
   });
 
   it('floor 미경과 구간에서는 resolved(HOME)여도 스플래시를 유지하고 라우트를 마운트하지 않는다 (AC-1)', () => {
@@ -241,7 +241,7 @@ describe('SplashGate — 최소 노출 floor (TRIP-579)', () => {
     expect(screen.getByTestId('gate-route-(tabs)')).toBeOnTheScreen();
   });
 
-  it('로드 후 이미 900ms 를 넘겼으면 하한은 마운트 즉시 풀리되 0 으로 내려가진 않는다(한 프레임은 스플래시가 보인다) (TRIP-1362)', () => {
+  it('로드 후 이미 1300ms 를 넘겼으면 하한은 마운트 즉시 풀리되 0 으로 내려가진 않는다(한 프레임은 스플래시가 보인다) (TRIP-1362)', () => {
     mockBootAt = Date.now() - 5000;
     mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
 
@@ -254,7 +254,7 @@ describe('SplashGate — 최소 노출 floor (TRIP-579)', () => {
     expect(screen.getByTestId('gate-route-(tabs)')).toBeOnTheScreen();
   });
 
-  it('시계가 뒤로 가 경과가 음수여도 하한(900ms)보다 오래 기다리지 않는다 (TRIP-1362)', () => {
+  it('시계가 뒤로 가 경과가 음수여도 하한(1300ms)보다 오래 기다리지 않는다 (TRIP-1362)', () => {
     mockBootAt = Date.now() + 60_000;
     mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
 

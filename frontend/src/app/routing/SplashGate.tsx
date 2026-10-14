@@ -9,8 +9,8 @@ import { registerPushIfGranted } from '@/shared/push';
 
 import { BOOT_MODULE_LOADED_AT } from './bootClock';
 
-/** 스플래시 최소 노출 하한(ms). 정본 근거 없는 발명값 — 머지 후 실기 체감으로 조정. */
-export const SPLASH_MIN_VISIBLE_MS = 900;
+/** 스플래시 최소 노출 하한(ms). 정본 근거 없는 발명값 — 비행 모션 1.3초(SPLASH_FLIGHT_MS)가 끝까지 보이게 맞춘다(TRIP-1383). 실기 체감으로 조정. */
+export const SPLASH_MIN_VISIBLE_MS = 1300;
 
 /** HOME 진입 뒤 푸시 토큰 재등록까지 미루는 시간(ms) — exp.host 외부 호출이 홈 첫 요청들과 경쟁하지 않게 한다(TRIP-1362). */
 export const PUSH_REGISTER_DELAY_MS = 2500;
@@ -34,7 +34,10 @@ export function SplashGate() {
     const elapsed = Date.now() - BOOT_MODULE_LOADED_AT;
     const timer = setTimeout(
       () => setFloorElapsed(true),
-      Math.min(SPLASH_MIN_VISIBLE_MS, Math.max(0, SPLASH_MIN_VISIBLE_MS - elapsed))
+      Math.min(
+        SPLASH_MIN_VISIBLE_MS,
+        Math.max(0, SPLASH_MIN_VISIBLE_MS - elapsed)
+      )
     );
     return () => clearTimeout(timer);
   }, []);
