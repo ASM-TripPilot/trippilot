@@ -174,3 +174,20 @@ variable "data_protection_enabled" {
   type        = bool
   default     = true
 }
+
+variable "alerts_slack_team_id" {
+  description = "Slack workspace ID (T...) already authorized in AWS Chatbot. Alarms are created only when alerts_slack_channel_id is set."
+  type        = string
+  default     = ""
+}
+
+variable "alerts_slack_channel_id" {
+  description = "Slack channel ID (C...) that receives this environment's alarms. Empty means no alarms: an alarm nobody receives only bills."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.alerts_slack_channel_id == "" || (var.alerts_slack_team_id != "" && var.container_logs_enabled)
+    error_message = "alerts_slack_channel_id needs alerts_slack_team_id, and container_logs_enabled = true: the log and pod alarms read what the Container Insights add-on writes."
+  }
+}

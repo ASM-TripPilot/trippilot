@@ -30,6 +30,12 @@ run "dev_is_private_and_cost_conscious" {
     values = { arn = "arn:aws:iam::123456789012:role/trippilot-dev-node" }
   }
 
+  override_resource {
+    target          = aws_sns_topic.alerts
+    override_during = plan
+    values          = { arn = "arn:aws:sns:ap-northeast-2:123456789012:trippilot-dev-alerts" }
+  }
+
   variables {
     environment                   = "dev"
     availability_zone_count       = 2
@@ -40,6 +46,21 @@ run "dev_is_private_and_cost_conscious" {
     database_instance_class       = "db.t4g.small"
     database_allocated_storage    = 20
     redis_node_type               = "cache.t4g.micro"
+    alerts_slack_team_id          = "T0000000000"
+    alerts_slack_channel_id       = "C0000000000"
+  }
+
+  # 운영 알람(Q3=A) — 5xx·토큰 재사용·파드 재시작 셋·노드·DB 셋이 전부 같은 토픽으로 가고, 그 토픽을 Slack 이 구독한다.
+  assert {
+    condition = (
+      length(aws_cloudwatch_metric_alarm.pod_restarts) == 3 && length(aws_cloudwatch_metric_alarm.database) == 3 &&
+      alltrue([for alarm in concat(
+        [aws_cloudwatch_metric_alarm.gateway_5xx[0], aws_cloudwatch_metric_alarm.refresh_reuse[0], aws_cloudwatch_metric_alarm.failed_nodes[0]],
+        values(aws_cloudwatch_metric_alarm.pod_restarts), values(aws_cloudwatch_metric_alarm.database),
+      ) : alarm.alarm_actions == toset([aws_sns_topic.alerts[0].arn]) && startswith(alarm.alarm_name, "trippilot-dev-")]) &&
+      aws_chatbot_slack_channel_configuration.alerts[0].sns_topic_arns == toset([aws_sns_topic.alerts[0].arn])
+    )
+    error_message = "DEV alarms must all notify the alerts topic, be named for the deploy role's trippilot-dev-* grant, and reach Slack."
   }
 
   assert {
@@ -151,6 +172,12 @@ run "prd_has_high_availability_and_data_protection" {
     redis_node_type               = "cache.t4g.small"
   }
 
+  # 받을 채널이 없으면 알람도 없다 — 아무도 못 받는 알람은 요금만 낸다.
+  assert {
+    condition     = length(aws_sns_topic.alerts) == 0 && length(aws_cloudwatch_metric_alarm.database) == 0 && length(aws_cloudwatch_metric_alarm.pod_restarts) == 0
+    error_message = "Without a Slack channel no alarm or topic is created."
+  }
+
   assert {
     condition     = length(aws_subnet.private) == 3 && length(aws_nat_gateway.this) == 3
     error_message = "PRD must keep NAT egress independent across three AZs."
@@ -206,4 +233,29 @@ run "reject_wrong_account_role" {
   }
 
   expect_failures = [var.deployment_role_arn]
+}
+
+run "reject_alerts_without_container_logs" {
+  command = plan
+
+  variables {
+    environment             = "dev"
+    container_logs_enabled  = false
+    alerts_slack_team_id    = "T0000000000"
+    alerts_slack_channel_id = "C0000000000"
+  }
+
+  expect_failures = [var.alerts_slack_channel_id]
+}
+
+run "reject_alerts_without_slack_team" {
+  command = plan
+
+  variables {
+    environment             = "dev"
+    container_logs_enabled  = true
+    alerts_slack_channel_id = "C0000000000"
+  }
+
+  expect_failures = [var.alerts_slack_channel_id]
 }
