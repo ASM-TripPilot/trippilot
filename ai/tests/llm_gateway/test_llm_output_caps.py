@@ -140,6 +140,7 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.ALTERNATIVE_SELECTION: "low",
         LlmFeature.REPLAN_COMPOSITION: "low",  # 같은 replan 25s 안에서 PlanB 다음에 돈다
         LlmFeature.REPLAN_REQUEST_EXTRACTION: "low",  # 같은 replan 시한, 구성보다 먼저
+        LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",  # 기본 추론에서 DEV 3.75s 시한 2/2 초과
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]
 

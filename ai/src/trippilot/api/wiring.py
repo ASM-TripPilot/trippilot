@@ -56,6 +56,7 @@ import pathlib
 import os
 import re
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 import zlib
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
@@ -1507,6 +1508,10 @@ def _with_nl_room(cap: int | None, extra: tuple[PoiId, ...]) -> int | None:
 # 추출이 통째로 빠졌다 — 성공한 앞 두 회도 운이었다. 처음 값은 "경량 모델 1~2s" 가정이었는데 DEV 는
 # GPT sol·effort low 로 한 건 3~5s 가 흔하다. 5s 면 그 꼬리를 대부분 덮고, 실패해도 추출 없이 종전 경로다.
 _NL_EXTRACT_SHARE = 0.25
+# 추출 LLM 은 후보 풀이 필요 없어 재계획 **시작 시점에** 띄운다 — 지시 번역·후보 수집과 겹쳐 돌아
+# 순차 경로에서 빠진다(DEV 실측 2026-10-14: 번역 3.75s + 추출 ~5s 가 직렬로 쌓여 구성 LLM 이 굶었다).
+# 게이트웨이를 스레드에서 부르는 것은 이미 쓰는 패턴이다(`route_budget._POOL`·취향 점수 워커).
+_NL_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="nl-extract")
 _NL_EXTRACT_MAX_S = 5.0
 # 지도 실재 확인에 줄 시한(ms) — 생성 ②′ 의 `existence_deadline_ms` 와 같은 급.
 _NL_EXISTENCE_MS = 1_500
@@ -2153,6 +2158,8 @@ class WiredItineraryOrchestrator:
         # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.
         t0 = self._clock.monotonic_ms()
 
+        nl_pending = self._begin_extraction(
+            request, trace_id=trace_id, now=now, remaining_ms=_deadline_budget(meta))
         resolved, unknown, prefer, avoid, near, add_one, pace = self._replan_directives(
             request, notes, trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
 
@@ -2242,10 +2249,7 @@ class WiredItineraryOrchestrator:
         # 고정·다녀온 곳이 아니면 교체 대상이다. 반대 칩을 같이 고른 카테고리는 빼지 않는다(상쇄 규약,
         # `directive_fit`). 남는 후보가 없으면 빼지 않고 밝힌다(INV-4) — 빈 하루보다 낫다.
         # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
-        nl = self._verified_request(
-            request, anchor, not_before, daily_rain, notes,
-            trace_id=trace_id, now=now,
-            remaining_ms=_deadline_budget(meta) - (self._clock.monotonic_ms() - t0))
+        nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending)
         # 통과한 곳은 풀에 합류시킨다 — **구성 LLM 의 숏리스트가 풀에서만 나오기 때문이다.** 반경 밖이면
         # 구성 LLM 이 그곳을 고를 수 없어 다른 곳으로 하루를 꽉 채우고, 이 곳은 9번째 필수 방문으로 붙었다가
         # 솔버가 떨어뜨렸다(DEV 실호출 2026-10-14: 제주시 → 성산일출봉 38km, 보고도 없이 빠짐).
@@ -2488,6 +2492,25 @@ class WiredItineraryOrchestrator:
             from_mode="llm_compose_day", to_mode="scored_assembly", reason=reason,
         ))
 
+    def _begin_extraction(
+        self, request: schemas.ReplanRequest, *, trace_id: TraceId, now: datetime, remaining_ms: int,
+    ) -> "Future | str | None":
+        """추출 LLM 을 **배경에서** 띄운다 — 결과는 `_verified_request` 가 받는다.
+
+        반환: 띄웠으면 Future, 시한 부족이면 그 사유 문자열(노트는 본 스레드가 쓴다), 할 일이 없으면 None.
+        """
+        text = (request.free_text or "").strip()
+        if not text or self._request_extractor is None:
+            return None
+        timeout = min(_NL_EXTRACT_MAX_S, max(0.0, remaining_ms * _NL_EXTRACT_SHARE / 1000))
+        if timeout < 0.5:
+            return "nl_extract_skipped: deadline"
+        window = request.time_window
+        return _NL_POOL.submit(
+            self._request_extractor.extract,
+            text, composition.date_label(datetime.combine(request.target_date, clock_time())),
+            f"{window.start:%H:%M}~{window.end:%H:%M}", trace_id, now, timeout_sec=timeout)
+
     def _verified_request(
         self,
         request: schemas.ReplanRequest,
@@ -2495,30 +2518,23 @@ class WiredItineraryOrchestrator:
         not_before: datetime | None,
         daily_rain: Mapping[date, int] | None,
         notes: list[str],
-        *,
-        trace_id: TraceId,
-        now: datetime,
-        remaining_ms: int,
+        pending: "Future | str | None",
     ) -> nl_verify.VerifiedRequest:
-        """자유입력 → LLM 추출 → **외부 출처 대조** → 통과분만. 예외를 던지지 않는다(INV-4).
+        """배경 추출 결과 → **외부 출처 대조** → 통과분만. 예외를 던지지 않는다(INV-4).
 
         자유입력이 없거나 워커 미주입이면 빈 결과다(종전과 동일). 대조 출처와 규칙은
         `agents/planb/request_verification` 모듈 표에 있다.
         """
         empty = nl_verify.VerifiedRequest()
-        text = (request.free_text or "").strip()
-        if not text or self._request_extractor is None:
+        if pending is None:
             return empty
-        timeout = min(_NL_EXTRACT_MAX_S, max(0.0, remaining_ms * _NL_EXTRACT_SHARE / 1000))
-        if timeout < 0.5:
-            notes.append("nl_extract_skipped: deadline")
+        if isinstance(pending, str):
+            notes.append(pending)
             return empty
-        window = request.time_window
         try:
-            result = self._request_extractor.extract(
-                text, composition.date_label(datetime.combine(request.target_date, clock_time())),
-                f"{window.start:%H:%M}~{window.end:%H:%M}", trace_id, now, timeout_sec=timeout)
-        except Exception as e:  # 설정 버그도 재계획을 죽이지 않는다
+            # 워커 호출 자체가 시한(timeout_sec)을 지닌다 — 여기 상한은 그 위의 안전판일 뿐이다.
+            result = pending.result(timeout=_NL_EXTRACT_MAX_S + 1.0)
+        except Exception as e:  # 설정 버그·안전판 초과도 재계획을 죽이지 않는다
             notes.append(f"nl_extract_error: {type(e).__name__}")
             return empty
         if result.is_fallback or not isinstance(result.value, ExtractedRequest):
@@ -2528,6 +2544,7 @@ class WiredItineraryOrchestrator:
         if extracted.empty:
             notes.append("nl_extract_empty")
             return empty
+        window = request.time_window
         verified = nl_verify.verify(
             extracted,
             on=request.target_date,

@@ -215,6 +215,9 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.REPLAN_COMPOSITION: "low",
             # 같은 재계획 시한 안에서 PlanB·구성보다 먼저 돈다 — 짧은 구조화라 사고가 필요 없다
             LlmFeature.REPLAN_REQUEST_EXTRACTION: "low",
+            # 자유 발화 → 지시 키(닫힌 목록). 미지정(기본 추론)이라 DEV 에서 시한 3.75s 를 2/2 넘겼다
+            # (2026-10-14) — 같은 원문을 읽는 추출은 low 로 2/2 성공했다. 출력은 사전 키만 통과(게이트).
+            LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",
         }
     )
 
