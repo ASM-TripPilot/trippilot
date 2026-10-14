@@ -16,6 +16,7 @@ import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -73,10 +74,20 @@ class SecondPhaseGenerator(
         /** 그 여행의 취향·동행(BR-U1-38) — 근거 문장도 생성과 같은 취향으로 쓰이게. 하루 여행은 [secondInput] 이 없어 따로 받는다. */
         preference: PreferenceProfile? = null,
         companionType: String? = null,
+        /** 2차가 맡은 일자 — 창이 닫혀 경계로 안 나간 날(지난 오늘)도 빈 일자로 남긴다. 기본은 보낸 창의 날짜. */
+        dates: List<LocalDate> = secondInput?.timeWindows?.map { it.date }.orEmpty(),
     ) {
         // INV-4: 2차 실패도 1차와 **대칭**으로 결정론 최소 폴백(must_visit 고정블록)으로 채운다.
         // 실패를 이유로 나머지 일자를 비워두지 않되, solveMode=MINIMAL·isFallback 으로 저하를 드러낸다.
         val output = secondInput?.let { input ->
+            // 맡은 날이 모두 닫혔다(마지막 날 밤의 재생성) — 부를 것이 없다. 부르면 AI 가 빈 창을 422 로 거절해
+            // 실패가 아닌데 폴백 표시가 붙는다(1차와 같은 처리 — GenerateItineraryService).
+            if (input.timeWindows.isEmpty()) {
+                return@let ScheduleAgentOutput(
+                    days = emptyList(), day1ReadyAt = null, explanations = emptyMap(), solveMode = SolveMode.MINIMAL,
+                    isFallback = false, freshness = FreshnessMeta(clock.instant(), degraded = false),
+                )
+            }
             try {
                 scheduleAgent.generate(input)
             } catch (e: Exception) {
@@ -92,7 +103,7 @@ class SecondPhaseGenerator(
         }
 
         try {
-            val applied = applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced, sessionId, preference, companionType)
+            val applied = applyOrDiscard(tripId, itineraryId, dates, secondInput, output, isRegeneration, assemblyUnplaced, sessionId, preference, companionType)
             sessionId?.let { sessions.completed(it, applied?.isFallback ?: false, applied?.candidatesSummary?.level) }
         } catch (e: Exception) {
             // 폴백조차 반영하지 못한 경우 — 상태로 드러낸다(침묵 금지).
@@ -111,6 +122,7 @@ class SecondPhaseGenerator(
     private fun applyOrDiscard(
         tripId: UUID,
         itineraryId: UUID,
+        dates: List<LocalDate>,
         secondInput: ScheduleAgentInput?,
         output: ScheduleAgentOutput?,
         isRegeneration: Boolean,
@@ -124,7 +136,7 @@ class SecondPhaseGenerator(
         if (current == null || !current.isPendingSecondPhase(itineraryId, tripId)) return null
 
         val remaining = if (output != null && secondInput != null) {
-            output.toRemainingDays(current.days.size, secondInput.timeWindows.map { it.date })
+            output.toRemainingDays(current.days.size, dates)
         } else {
             emptyList() // 하루 여행 — 2차가 없다
         }

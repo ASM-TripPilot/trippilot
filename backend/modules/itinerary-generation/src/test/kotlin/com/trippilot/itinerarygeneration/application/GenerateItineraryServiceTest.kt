@@ -627,7 +627,9 @@ class GenerateItineraryServiceTest : StringSpec({
         saved.isFallback shouldBe false
     }
 
-    "어제 출발한 여행을 오늘 밤 처음 만들면 종전 그대로다 — 중간 날을 닫으면 2차가 그 날을 일정에서 뺀다" {
+    // 처음 만들기는 출발일만 자른다 — 실 시계로 "어제 출발" 여행을 처음 만드는 통합 테스트(재계획·트리거)가
+    // 오늘 슬롯을 쓰므로, 여기까지 자르면 밤에 돌린 CI 에서 오늘이 비어 결과가 시각에 따라 갈린다.
+    "어제 출발한 여행을 오늘 밤 처음 만들면 종전 그대로다 — 오늘 자르기는 출발일과 재생성에만" {
         val agent = CapturingAgent(now)
         val repo = FakeItineraries()
         service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T11:40:00Z"), ZoneOffset.UTC))
@@ -939,6 +941,62 @@ class GenerateItineraryServiceTest : StringSpec({
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.MANUAL) }
     }
+
+    // 여행 중 **재생성**(BE #1183 — 다녀온 기록이 없으면 허용)도 오늘을 지금부터 연다. 출발일이 아니어도.
+    // 시각은 KST, 여행은 08-01~08-03 이고 오늘은 둘째 날(08-02).
+
+    "여행 중에 다시 만들면 출발일이 아니어도 오늘은 지금부터 연다" {
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), repo = repoWithExisting(), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T09:10:00Z"), ZoneOffset.UTC))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val windows = agent.captures.flatMap { it.timeWindows }
+        windows.single { it.date == start.plusDays(1) } shouldBe TimeWindow(start.plusDays(1), LocalTime.parse("19:00"), LocalTime.parse("21:00")) // 18:10 KST
+        windows.filter { it.date != start.plusDays(1) }.forEach { it.start shouldBe LocalTime.parse("09:00") } // 다른 날은 그대로
+    }
+
+    "여행 중에 다시 만들 때 오늘 남은 시간이 없으면 오늘은 빈 날로 자리를 지킨다 — 2차가 그 날을 빼지 않는다" {
+        val agent = CapturingAgent(now)
+        val repo = repoWithExisting()
+        service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T11:40:00Z"), ZoneOffset.UTC))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.flatMap { it.timeWindows }.none { it.date == start.plusDays(1) } shouldBe true // 20:40 KST — 닫힌 오늘은 경계로 안 나간다
+        val days = repo.byTrip.getValue(tripId).days
+        days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
+        days[1].slots shouldBe emptyList()
+    }
+
+    "마지막 날 밤에 다시 만들면 남은 날이 모두 닫혀 2차는 AI 를 부르지 않는다 — 실패가 아니므로 폴백 표시도 없다" {
+        val agent = CapturingAgent(now)
+        val repo = repoWithExisting()
+        service(agent, fullPrefs, emptyList(), repo = repo, end = start.plusDays(1), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T11:40:00Z"), ZoneOffset.UTC))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.map { c -> c.timeWindows.map { it.date } } shouldContainExactly listOf(listOf(start)) // 1차(어제)만
+        val saved = repo.byTrip.getValue(tripId)
+        saved.days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1))
+        saved.isFallback shouldBe false
+    }
+
+    "여행 중 어느 시각에 다시 만들어도 오늘 창은 지금 뒤에 열리고, 일자는 하나도 빠지지 않는다 (PBT)" {
+        checkAll(Arb.int(0, 24 * 60 - 1)) { minuteOfDay ->
+            val agent = CapturingAgent(now)
+            val repo = repoWithExisting()
+            val today = start.plusDays(1)
+            val nowKst = LocalTime.ofSecondOfDay(minuteOfDay * 60L)
+            val at = today.atTime(nowKst).atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant()
+            service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(at, ZoneOffset.UTC))
+                .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+            withClue("now=$nowKst") {
+                agent.captures.flatMap { it.timeWindows }.forEach { it.start.isBefore(it.end) shouldBe true } // AI 는 빈 창을 422 로 거절한다
+                agent.captures.flatMap { it.timeWindows }.filter { it.date == today }.forEach { it.start.isAfter(nowKst) shouldBe true }
+                repo.byTrip.getValue(tripId).days.map { it.date } shouldContainExactly listOf(start, today, end)
+            }
+        }
+    }
+
     /**
      * **숙소를 하나도 등록하지 않아도 앵커가 생긴다**(TRIP-384).
      *
