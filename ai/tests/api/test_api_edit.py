@@ -91,7 +91,8 @@ def _client() -> TestClient:
 def test_move_slot_applies_with_assembly_passed_times() -> None:
     with _client() as client:
         response = _post(client, _body(command={
-            "op": "MOVE_SLOT", "params": {}, "affected_slots": [_HALLASAN]}))
+            "op": "MOVE_SLOT", "params": {"beforePoiId": _PORK},
+            "affected_slots": [_HALLASAN]}))
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "APPLIED" and body["apply_mode"] == "AUTO_APPLY"
@@ -165,9 +166,9 @@ def test_poi_ref_keys_are_not_time_keys() -> None:
     with _client() as client:
         response = _post(client, _body(command={
             "op": "MOVE_SLOT",
-            "params": {"afterPoiId": _PORK, "startPoiId": _HALLASAN,
+            "params": {"afterPoiId": _HALLASAN, "startPoiId": _HALLASAN,
                        "endPoiId": _PORK},
-            "affected_slots": [_HALLASAN]}))
+            "affected_slots": [_PORK]}))
     body = response.json()
     assert body["status"] == "APPLIED"
 
@@ -199,9 +200,10 @@ def test_utterance_with_unwired_llm_fails_honestly() -> None:
 _POOL_OUTSIDE_DAY = [_slot(_HALLASAN, "08:00:00", "09:00:00"),
                      _slot(_WOLJEONG, "12:30:00", "13:30:00")]
 # 자연어 진입이 번역해 낼 명령 — 아래 구조화 진입과 **같은 명령**이다 (수렴 비교용)
-_MOVE_WOLJEONG = {"op": "MOVE_SLOT", "params": {}, "affected_slots": [_WOLJEONG]}
+_MOVE_WOLJEONG = {"op": "MOVE_SLOT", "params": {"beforePoiId": _HALLASAN},
+                  "affected_slots": [_WOLJEONG]}
 _CANNED_MOVE = (
-    '{"editCommand": {"op": "MOVE_SLOT", "params": {},'
+    f'{{"editCommand": {{"op": "MOVE_SLOT", "params": {{"beforePoiId": "{_HALLASAN}"}},'
     f' "affectedSlots": ["{_WOLJEONG}"]}}}}'
 )
 
@@ -319,7 +321,8 @@ def test_free_slot_before_fixed_without_travel_room_is_hc2_not_hc3() -> None:
     조용히 맞추지 않는다(INV-2)."""
     with _client() as client:
         response = _post(client, _body(slots=_FIXED_DAY, command={
-            "op": "MOVE_SLOT", "params": {}, "affected_slots": [_HALLASAN]}))
+            "op": "MOVE_SLOT", "params": {"beforePoiId": _WOLJEONG},
+            "affected_slots": [_HALLASAN]}))
     body = response.json()
     assert body["status"] == "REJECTED"
     codes = {v["code"] for v in body["violations"]}
@@ -364,7 +367,9 @@ def test_unknown_coord_poi_alone_on_day_passes() -> None:
     with _client() as client:
         response = _post(client, _body(
             slots=[_slot(_UNKNOWN, "10:00:00", "11:00:00")],
-            command={"op": "MOVE_SLOT", "params": {}, "affected_slots": [_UNKNOWN]}))
+            # 슬롯 1개 하루의 재타이밍 — MOVE 는 기준 슬롯이 없어 성립 안 해 순열로 태운다
+            command={"op": "REORDER_DAY", "params": {}, "affected_slots": [_UNKNOWN]},
+            confirm=True))
     body = response.json()
     assert body["status"] == "APPLIED", body
     [slot] = body["itinerary"]["days"][0]["slots"]
@@ -388,7 +393,9 @@ def test_both_or_neither_entry_is_422() -> None:
 def test_no_duration_tokens_in_response() -> None:
     with _client() as client:
         response = _post(client, _body(command={
-            "op": "MOVE_SLOT", "params": {}, "affected_slots": [_HALLASAN]}))
+            "op": "MOVE_SLOT", "params": {"beforePoiId": _PORK},
+            "affected_slots": [_HALLASAN]}))
+    assert response.json()["status"] == "APPLIED"  # 시각이 실린 응답을 검사한다
     assert "duration" not in response.text.lower()  # INV-3
 
 
