@@ -146,7 +146,9 @@ class VisitCheckService(
                 errorCode = ErrorCode.VISIT_CONFLICT,
             )
         }
+        // 보정으로 **처음** 완료가 생기면 그것도 완료다(§12.6) — 알리지 않으면 체류 초과 판정이 끝난 방문을 계속 진행 중으로 본다.
         return checks.save(current.adjustTimes(arrivedAt, completedAt, clock.instant()))
+            .also { if (current.completedAt == null && it.completedAt != null) publish(accountId, it) }
     }
 
     @Transactional(readOnly = true)

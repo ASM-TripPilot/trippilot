@@ -107,6 +107,23 @@ class VisitCheckedEventTest : StringSpec({
         events.published shouldBe emptyList()
     }
 
+    /** 완료 버튼 대신 시각 보정으로 방문을 닫을 수도 있다 — 그것도 완료다. 이미 완료된 것의 시각 보정은 새 사건이 아니다. */
+    "보정으로 처음 완료가 생기면 완료로 알리고, 완료된 것을 다시 고치면 알리지 않는다" {
+        val (svc, _, events) = fixture()
+        val v = svc.arrive(acc, tripId, slot, poi, CheckSource.MANUAL)
+        events.published.clear()
+
+        svc.adjustTimes(acc, tripId, v.visitCheckId, arrivedAt = null, completedAt = Instant.parse("2026-08-11T04:00:00Z"))
+        (events.published.single() as VisitChecked).let {
+            it.completedAt shouldBe "2026-08-11T04:00:00Z"
+            it.completionSource shouldBe "MANUAL"
+        }
+
+        svc.adjustTimes(acc, tripId, v.visitCheckId, arrivedAt = null, completedAt = Instant.parse("2026-08-11T05:00:00Z"))
+        svc.adjustTimes(acc, tripId, v.visitCheckId, arrivedAt = Instant.parse("2026-08-11T02:00:00Z"), completedAt = null)
+        events.published.size shouldBe 1
+    }
+
     /** 자동 도착은 지오펜스가 걸린 계획 슬롯에서만 생긴다(INV-U10-5). 슬롯 없는 자동 도착을 받으면 즉석 방문이 사용자 손 없이 생긴다. */
     "슬롯 키 없는 자동 도착은 400 이고 아무것도 남기지 않는다" {
         val (svc, visits, events) = fixture()
