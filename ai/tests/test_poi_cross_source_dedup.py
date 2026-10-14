@@ -36,6 +36,7 @@ from trippilot.poi_curation.sourcing.collection_gate import (
 )
 from trippilot.poi_curation.sourcing.mapping import (
     addr_key,
+    non_travel_reason,
     normalize_business_name,
     same_business_name,
 )
@@ -605,3 +606,18 @@ def test_pbt_폐업_목록은_자기_출처에만_적용된다(ref: str) -> None
 # `normalize_business_name`(casefold 없음)으로 정규화가 갈린다 — 'STARBUCKS' 와
 # 'Starbucks' 는 같은 주소·50m 밖이면 안 붙는다. 보수적(미병합) 방향이라 오병합은
 # 아니지만 두 분기의 규칙이 다른 것은 사실이다.
+
+
+@settings(max_examples=60, deadline=None)
+@given(name=store_names())
+def test_pbt_생성기_상호는_게이트를_통과한다(name: str) -> None:
+    """**생성기 유효성.** 여기 쓰는 상호가 게이트에서 떨어지면 아래 중복 속성들이 공허해진다.
+
+    실제로 한 번 당했다 — 생성기 풀에 있던 `교촌치킨` 이 전국 체인 규칙(2026-10-14)에
+    걸리면서 이 파일의 PBT 15건이 동시에 깨졌다. 상호가 떨어지면 `report.passed` 가
+    비어 "병합이 안 됐다"는 주장이 참이 돼 버린다 — 틀린 이유로 통과하는 테스트다.
+    """
+    assert non_travel_reason(name) is None, (
+        f"생성기 상호가 게이트에 걸린다: {name!r} → {non_travel_reason(name)}\n"
+        "체인·편의점·대형마트 상호는 _STORE_NAMES 에 넣지 마라."
+    )
