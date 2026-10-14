@@ -847,3 +847,85 @@ class ReminderCopyResponse(BoundaryModel):
     copies: list[ReminderCopySchema]
     degraded: bool
     fallback_mode: str | None = None
+
+
+# ───────────────── 대화 해석 경계 (U8 FD §3 — G-U8-4) ─────────────────
+# 백엔드 `assistant` 모듈이 매 턴 부른다. **AI 는 해석만 한다**(DEC-U8-1) — 실행·문구는 백엔드.
+# 컨텍스트 필드는 백엔드 `ContextSnapshot` 화이트리스트(BR-U8-22)와 1:1 이다 — 칸이 없는 값
+# (가격·후보 풀·점수·위치)은 실을 자리 자체가 없다.
+
+
+class AssistantSurface(str, Enum):
+    HOME = "HOME"
+    STAY_SEARCH = "STAY_SEARCH"
+    ITINERARY = "ITINERARY"
+    LIVE = "LIVE"
+    STAY_DETAIL = "STAY_DETAIL"
+
+
+class DialogueSlotSchema(BoundaryModel):
+    """저장된(검증된) 계획 시각. 소요시간 필드는 없다(INV-3)."""
+
+    slot_key: str
+    name: str | None = None
+    start_at: dt.time
+    category: str | None = None
+
+
+class DialogueDaySchema(BoundaryModel):
+    date: dt.date
+    slots: list[DialogueSlotSchema] = Field(default_factory=list)
+
+
+class DialogueItinerarySchema(BoundaryModel):
+    status: str
+    days: list[DialogueDaySchema] = Field(default_factory=list)
+
+
+class DialogueTripSchema(BoundaryModel):
+    trip_id: str
+    regions: list[str] = Field(default_factory=list)
+    start_date: dt.date
+    end_date: dt.date
+    phase: str  # PLANNING | IN_TRIP | ENDED
+
+
+class DialogueContextSnapshot(BoundaryModel):
+    surface: AssistantSurface
+    trip: DialogueTripSchema | None = None
+    base_stays: list[str] = Field(default_factory=list)
+    itinerary: DialogueItinerarySchema | None = None
+
+
+class DialogueInterpretRequest(BoundaryModel):
+    request_meta: RequestMetaSchema
+    # 상한 500 — 라우터(`IntentRouterConfig.max_utterance_chars`)·`/edit` 와 같은 값.
+    utterance: str = Field(min_length=1, max_length=500)
+    # AI 소유 직렬형(`DialogueContext.to_dict`). 백엔드는 해석하지 않고 저장·반송만 한다
+    # (INV-U8-07). 첫 턴은 null 이다. 내용이 깨져 있으면 AI 가 버리고 새로 시작한다.
+    dialogue_context: dict | None = None
+    context: DialogueContextSnapshot
+
+
+class DialogueFrameSchema(BoundaryModel):
+    intent: str
+    # 값은 **요청**이지 확정값이 아니다 — 시각이 담겨도 화면에 그대로 내지 않는다(BR-DLG-05).
+    arguments: dict[str, str] = Field(default_factory=dict)
+    missing: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+    match_route: str  # CONFIDENT | VOTED | LLM_DIRECT | CLARIFY_ANSWER | FALLBACK
+
+
+class DialogueClarifySchema(BoundaryModel):
+    frame_index: int = Field(ge=0)
+    argument: str
+    question: str  # 인자표 고정 문안(`CLARIFY_QUESTIONS`) — LLM 이 짓지 않는다(DEC-U8-6)
+    options: list[str] | None = None
+
+
+class DialogueInterpretResponse(BoundaryModel):
+    outcome: str  # FRAME | ARGUMENT_CLARIFY | OUT_OF_SCOPE
+    frames: list[DialogueFrameSchema]
+    clarify: DialogueClarifySchema | None = None
+    dialogue_context: dict
+    llm_calls: int = Field(ge=0)  # 사용량 상한의 원천(COST-U8-02)

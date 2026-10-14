@@ -37,7 +37,8 @@ BACKEND_DEFAULTS = {
     "PUSH_MODE": "off", "AI_REMINDER_COPY_MODE": "http",
     "AFFILIATE_MODE": "fallback",
     # 도우미 발화 해석(U8 REL-U8-06). 앱 기본값은 fake(로컬용 낱말 표)라, 여기서 off 를 심지 않으면
-    # 운영이 대역으로 뜬다. off = 버튼 모드 — 켜는 것은 상대 경계와 지출 한도가 선 뒤의 결정이다.
+    # 운영이 대역으로 뜬다. off = 버튼 모드. 상대 경계(TRIP-1410)와 월 상한(20,000 턴)이 섰으므로 켜려면 시크릿 값만
+    # http 로 바꾼다 — 새로 까는 환경의 기본은 여전히 off 다(켜는 것은 환경마다의 결정).
     "ASSISTANT_INTERPRET_MODE": "off",
 }
 
@@ -141,8 +142,8 @@ def validate_groups(groups):
     modes = {"PLACE_GEOCODE_MODE": {"stub", "kakao"}, "WEATHER_MODE": {"fake", "kma"},
              "PUSH_MODE": {"off", "expo"}, "AI_REMINDER_COPY_MODE": {"off", "http"},
              "AFFILIATE_MODE": {"fallback", "tripcom"},
-             # http 는 아직 없다 — 백엔드가 기동에서 거부하는 값이라 배포 전에 막는다.
-             "ASSISTANT_INTERPRET_MODE": {"off", "fake"}}
+             # http = 상대 AI 해석 경계(TRIP-1410). 오타는 백엔드가 기동에서 거부하므로 배포 전에 막는다.
+             "ASSISTANT_INTERPRET_MODE": {"off", "fake", "http"}}
     for key, allowed in modes.items():
         if key in backend and backend[key] not in allowed:
             raise ValueError(f"Unsupported {key} in backend secret")

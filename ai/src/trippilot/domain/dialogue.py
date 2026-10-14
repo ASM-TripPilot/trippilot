@@ -319,6 +319,19 @@ def specs_of(intent: Intent) -> tuple[ArgumentSpec, ...]:
     return ARGUMENT_TABLE.get(intent, ())
 
 
+# 인자 되묻기 문안 — **필수 인자에만** 있다(되묻는 것은 필수뿐이다, `missing_arguments`).
+# 고정 문장이다: 사용자에게 보이는 문구를 LLM 이 짓지 않는다(U8 DEC-U8-6). 같은 이름이라도
+# 의도마다 묻는 말이 달라서(`target` = 바꿀 일정 / 대신할 곳) (의도, 인자) 로 키를 잡는다.
+# 필수 인자를 새로 만들면 여기도 채워야 한다 — 테스트가 빠진 칸을 잡는다.
+CLARIFY_QUESTIONS: dict[tuple[Intent, str], str] = {
+    (Intent.EDIT_SCHEDULE, "day"): "며칠째 일정을 바꿀까요?",
+    (Intent.EDIT_SCHEDULE, "target"): "어떤 일정을 바꿀까요?",
+    (Intent.SUGGEST_ALTERNATIVE, "target"): "어느 곳 대신 갈 곳을 찾아 드릴까요?",
+    (Intent.GET_DISTANCE, "destination"): "어디까지의 거리를 알려 드릴까요?",
+    (Intent.GET_POI_INFO, "place"): "어느 장소가 궁금하세요?",
+}
+
+
 def missing_arguments(intent: Intent, filled: frozenset[str]) -> tuple[str, ...]:
     """아직 못 채운 **필수** 인자 — `IntentFrame.missing` 의 재료.
 

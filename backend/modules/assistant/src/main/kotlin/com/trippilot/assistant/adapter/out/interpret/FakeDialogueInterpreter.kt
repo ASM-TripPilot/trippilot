@@ -56,7 +56,7 @@ class FakeDialogueInterpreter : DialogueInterpretPort {
 }
 
 /**
- * 해석 스위치의 값 확인. `off`·`fake` 만 지금 뜻이 있다 — `http` 는 어댑터가 없고, 오타는 어느 빈도 켜지 못해
+ * 해석 스위치의 값 확인(`off`·`fake`·`http`). 오타는 어느 빈도 켜지 못해
  * **조용히 버튼 모드**가 된다. 그 상태로 배포되면 "도우미가 말을 못 알아듣는다"로만 보여 원인을 못 짚는다.
  */
 @Configuration
@@ -65,7 +65,7 @@ class DialogueInterpretModeGuard {
     fun dialogueInterpretModeCheck(properties: AssistantProperties): Any {
         val mode = properties.interpret.mode
         check(mode in SUPPORTED) {
-            "trippilot.assistant.interpret.mode=$mode 는 지원하지 않습니다 — 지금은 $SUPPORTED 뿐입니다(http 어댑터는 상대 경계가 열리면 붙습니다)."
+            "trippilot.assistant.interpret.mode=$mode 는 지원하지 않습니다 — $SUPPORTED 중 하나여야 합니다."
         }
         // 꺼져 있는 것은 사건이 아니라 상태다 — 턴마다 경고하지 않고 기동 때 한 번 알린다.
         log.info("도우미 발화 해석 모드 = {}{}", mode, if (mode == "off") " (버튼 모드 — 말은 해석하지 않고 버튼으로만 돕는다)" else "")
@@ -73,7 +73,7 @@ class DialogueInterpretModeGuard {
     }
 
     private companion object {
-        val SUPPORTED = setOf("off", "fake")
+        val SUPPORTED = setOf("off", "fake", "http")
         private val log = LoggerFactory.getLogger(DialogueInterpretModeGuard::class.java)
     }
 }
