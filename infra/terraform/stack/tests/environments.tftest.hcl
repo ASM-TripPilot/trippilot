@@ -75,7 +75,9 @@ run "dev_is_private_and_cost_conscious" {
       !aws_db_instance.dev_target[0].multi_az && !aws_db_instance.dev_target[0].publicly_accessible &&
       aws_db_instance.dev_target[0].storage_encrypted && aws_db_instance.dev_target[0].manage_master_user_password &&
       aws_db_instance.dev_target[0].db_subnet_group_name == aws_db_subnet_group.postgres.name &&
-      aws_db_instance.dev_target[0].parameter_group_name == aws_db_parameter_group.postgres.name
+      aws_db_instance.dev_target[0].parameter_group_name == "trippilot-dev-target-postgres16" &&
+      aws_db_parameter_group.dev_target[0].parameter == toset([{ name = "rds.force_ssl", value = "1", apply_method = "pending-reboot" }]) &&
+      !aws_db_instance.dev_target[0].deletion_protection && aws_db_instance.dev_target[0].skip_final_snapshot
     )
     error_message = "The dev target needs its own small private encrypted PostgreSQL instance named trippilot-dev-target, inside the same private network as production."
   }
@@ -244,7 +246,7 @@ run "prd_has_high_availability_and_data_protection" {
   }
 
   assert {
-    condition     = length(aws_secretsmanager_secret.dev_target) == 0 && length(aws_db_instance.dev_target) == 0 && length(aws_eks_pod_identity_association.ai_dev_target) == 0
+    condition     = length(aws_secretsmanager_secret.dev_target) == 0 && length(aws_db_instance.dev_target) == 0 && length(aws_db_parameter_group.dev_target) == 0 && length(aws_eks_pod_identity_association.ai_dev_target) == 0
     error_message = "The dev target lives only inside the DEV stack; PRD must not grow its containers, database or pod identity by default."
   }
 
