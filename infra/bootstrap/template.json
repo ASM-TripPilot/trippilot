@@ -758,6 +758,13 @@
               "Resource": "*"
             },
             {
+              "Sid": "CreateChatbotServiceLinkedRole",
+              "Effect": "Allow",
+              "Action": ["iam:CreateServiceLinkedRole"],
+              "Resource": {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/management.chatbot.amazonaws.com/*"},
+              "Condition": {"StringEquals": {"iam:AWSServiceName": "management.chatbot.amazonaws.com"}}
+            },
+            {
               "Sid": "ReadChatbotRole",
               "Effect": "Allow",
               "Action": ["iam:GetRole", "iam:ListRoleTags", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:GetRolePolicy"],

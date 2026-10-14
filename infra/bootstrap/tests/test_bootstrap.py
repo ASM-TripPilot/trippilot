@@ -132,6 +132,8 @@ class BootstrapSecurityTests(unittest.TestCase):
 
         `chatbot:*` 는 `*` 범위다(Chatbot 리소스 단위 권한이 확실치 않아 좁히면 apply 가 막힐 수 있다). 그 넓이가
         무해한 이유는 넘길 수 있는 역할이 CloudWatch 읽기만 가진 chatbot 역할 하나뿐이라서다 — 이 테스트가 그 전제를 잡는다.
+        단 `chatbot:*` 자체는 환경을 가리지 않는다 — dev 와 prd 가 한 계정이면 dev 배포 역할이 prd 채널 설정을 바꿀 수 있다.
+        지금은 계정이 dev 하나뿐이다. prd 를 같은 계정에 세우면 쓰기 액션을 `chat-configuration/slack-channel/trippilot-${Environment}-*` 로 좁힌다.
         """
         chatbot = self.resources["ChatbotRole"]["Properties"]
         self.assertEqual(chatbot["AssumeRolePolicyDocument"]["Statement"][0]["Principal"], {"Service": "chatbot.amazonaws.com"})
@@ -143,11 +145,17 @@ class BootstrapSecurityTests(unittest.TestCase):
 
         attached = {item["Sid"]: item for item in
                     self.resources["DeploymentExtraPolicy"]["Properties"]["PolicyDocument"]["Statement"]}
-        passes = [item for item in attached.values() if "iam:PassRole" in item["Action"]]
         chatbot_pass = attached["PassChatbotRoleToSlackChannel"]
         self.assertEqual(chatbot_pass["Action"], ["iam:PassRole"])
         self.assertTrue(chatbot_pass["Resource"]["Fn::Sub"].endswith(":role/trippilot-${Environment}-chatbot"))
-        self.assertIn(chatbot_pass, passes)
+        # 그 전제는 "넘길 수 있는 역할이 chatbot 역할뿐"이다 — 다른 PassRole 문장이 와일드카드로 그 역할까지 덮으면 깨진다.
+        everywhere = self.statements + list(attached.values())
+        for item in everywhere:
+            if "iam:PassRole" in item["Action"] and item is not chatbot_pass:
+                resources = item["Resource"] if isinstance(item["Resource"], list) else [item["Resource"]]
+                for resource in resources:
+                    text = resource["Fn::Sub"] if isinstance(resource, dict) else resource
+                    self.assertNotIn("*", text.split(":role/")[-1], f"{item['Sid']}: PassRole 범위가 와일드카드다")
         self.assertTrue(attached["ManageAlarms"]["Resource"]["Fn::Sub"].endswith(":alarm:trippilot-${Environment}-*"))
         for resource in attached["ManageAlertsTopic"]["Resource"]:
             self.assertIn(":trippilot-${Environment}-alerts", resource["Fn::Sub"])
