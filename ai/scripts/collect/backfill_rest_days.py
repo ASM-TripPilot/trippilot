@@ -39,6 +39,7 @@ from trippilot.domain.poi import OpenHour  # noqa: E402
 from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     join_opening_hours_raw,
     parse_opening_hours_raw,
+    rest_phrase,
     split_opening_hours_raw,
 )
 
@@ -55,12 +56,7 @@ OUTCOMES: dict[str, str] = {
     "not_weekly": "차이가 요일 단위 휴무로 설명되지 않음",
     "verify_failed": "합성 후 재파싱이 저장본과 다름 (200자 절단 등)",
 }
-_DAY_NAMES = "월화수목금토일"  # OpenHour.day_of_week 0=월
-
-
-def rest_phrase(days: set[int]) -> str:
-    """휴무 요일 → 파서가 읽는 정형 문구. {0, 2} → `매주 월요일, 수요일`."""
-    return "매주 " + ", ".join(f"{_DAY_NAMES[d]}요일" for d in sorted(days))
+# `rest_phrase` 는 `mapping` 으로 옮겼다 — `render_open_hours` 와 짝이라 한곳에 둔다.
 
 
 def backfill_one(p: dict) -> str:
