@@ -338,4 +338,22 @@ describe('customInstance — AI 를 동기로 부르는 요청만 상한을 풀�
 
     expect(seen.map((config) => config.timeout)).toEqual([0, 0, 0, 0, 0, 0]);
   });
+
+  it('도우미 턴·제안 적용은 상한 없음(0), 같은 접두의 제안 닫기는 15초 (TRIP-1410)', async () => {
+    // 턴은 15초를 넘겨도 화면이 slow 로 기다리고 [대기 취소]가 끊는다 — 15초에 axios 가 먼저 끊으면 안 된다.
+    await customInstance({
+      url: '/assistant/sessions/s1/turns',
+      method: 'POST',
+    });
+    await customInstance({
+      url: '/assistant/proposals/p1/apply',
+      method: 'POST',
+    });
+    await customInstance({
+      url: '/assistant/proposals/p1/dismiss',
+      method: 'POST',
+    });
+
+    expect(seen.map((config) => config.timeout)).toEqual([0, 0, 15_000]);
+  });
 });

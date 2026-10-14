@@ -16,6 +16,9 @@ const AI_BOUND_REQUESTS: readonly RegExp[] = [
   /^POST \/trips\/[^/]+\/itinerary\/slot-candidates$/,
   /^POST \/trips\/[^/]+\/itinerary\/revisions\/[^/]+\/restore$/,
   /^(POST|PUT) \/trips\/[^/]+\/reflections\/[^/]+$/, // 회고 생성 · 수정(초안 없을 때 AI)
+  // 도우미 턴(해석 AI, 서버 턴 상한 13초 — 15초를 넘기면 화면이 slow 를 띄우고 끊는 건 [대기 취소]) · 제안 적용(편집 재검증)
+  /^POST \/assistant\/sessions\/[^/]+\/turns$/,
+  /^POST \/assistant\/proposals\/[^/]+\/apply$/,
 ];
 
 function isAiBound(config: AxiosRequestConfig): boolean {

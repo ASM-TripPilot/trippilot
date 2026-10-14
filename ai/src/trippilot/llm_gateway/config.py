@@ -31,6 +31,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # 자유 발화 → 닫힌 키 번역. EDIT_TRANSLATION 과 동급 과업이고, 1차
             # 임베딩 매칭이 걸러낸 나머지만 오므로 호출 빈도도 낮다.
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: ModelTier.LIGHT,
+            # 자유입력 → 장소명·시각·날씨 주장 추출. 번역과 같은 급의 짧은 구조화 과업.
+            LlmFeature.REPLAN_REQUEST_EXTRACTION: ModelTier.LIGHT,
             # 푸시 문구 1문장 — 저비용 모델로 충분 (TRIP-347)
             LlmFeature.REFLECTION_NUDGE: ModelTier.LIGHT,
             # 공유 카드 캡션 1문단 + 해시태그 — 후보 선택도 다단 구성도 없는 단발 변환이고
@@ -98,6 +100,8 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # api/wiring.py `_compose_day` — 실패면 고른 목록 없이 종전 재계획
             # (PlanB 랭킹 가산 + 점수 + 어셈블리 선택)으로 진행한다.
             LlmFeature.REPLAN_COMPOSITION: ("llm_compose_day", "scored_assembly"),
+            # api/wiring.py `_verified_request` — 실패면 추출 없이 진행(칩·지시·구성은 원문을 그대로 읽는다)
+            LlmFeature.REPLAN_REQUEST_EXTRACTION: ("llm_request_extract", "no_extraction"),
             # agents/reflect/composer.py `compose` — 전 시도 실패면 고정 폴백 템플릿
             # (그쪽이 직접 내는 FallbackEvent와 같은 모드 쌍).
             LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
@@ -209,6 +213,8 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.ALTERNATIVE_SELECTION: "low",
             # 같은 재계획 시한(25s) 안에서 PlanB 다음에 돈다 — 대체지 선택과 같은 이유
             LlmFeature.REPLAN_COMPOSITION: "low",
+            # 같은 재계획 시한 안에서 PlanB·구성보다 먼저 돈다 — 짧은 구조화라 사고가 필요 없다
+            LlmFeature.REPLAN_REQUEST_EXTRACTION: "low",
         }
     )
 
