@@ -12,18 +12,20 @@ import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.core.io.ClassPathResource
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
 /**
- * 방문 실적 완료 출처(V2.67 · M-U10-a 1단계 · TRIP-1402) 실 DB 검증.
+ * 방문 실적 완료 출처(V2.67 1단계 · TRIP-1402, V2.70 2단계 CHECK · TRIP-1408) 실 DB 검증.
  *
  * 대역이 원리적으로 못 보는 것:
  * - **백필** — Testcontainers 는 빈 DB 로 시작해 마이그레이션의 UPDATE 가 0행을 훑고 끝난다. 파일에서 그 문을 읽어
@@ -101,7 +103,22 @@ class VisitCheckCompletionSourceIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `백필은 완료된 행에만 MANUAL 을 채운다`() {
+    fun `완료와 출처는 함께 있거나 함께 없다 — DB 가 거절한다(V2_70)`() {
+        val (_, tripId) = newTrip()
+        val done = checks.save(VisitCheck.arrive(tripId, "2026-08-11#${UUID.randomUUID()}", UUID.randomUUID(), CheckSource.MANUAL, now).complete(now.plusSeconds(600)))
+        val open = checks.save(VisitCheck.arrive(tripId, "2026-08-11#${UUID.randomUUID()}", UUID.randomUUID(), CheckSource.MANUAL, now))
+
+        // 옛 코드가 쓰던 모양(출처 없는 완료)과 그 반대(완료 없는 출처) 둘 다
+        shouldThrow<DataIntegrityViolationException> {
+            jdbc.update("UPDATE visit_check SET completion_source = NULL WHERE visit_check_id = ?", done.visitCheckId)
+        }
+        shouldThrow<DataIntegrityViolationException> {
+            jdbc.update("UPDATE visit_check SET completion_source = 'MANUAL' WHERE visit_check_id = ?", open.visitCheckId)
+        }
+    }
+
+    @Test
+    fun `재백필은 이미 맞는 행을 건드리지 않는다`() {
         val (_, tripId) = newTrip()
         val done = checks.save(VisitCheck.arrive(tripId, "2026-08-11#${UUID.randomUUID()}", UUID.randomUUID(), CheckSource.MANUAL, now).complete(now.plusSeconds(600)))
         val open = checks.save(VisitCheck.arrive(tripId, "2026-08-11#${UUID.randomUUID()}", UUID.randomUUID(), CheckSource.MANUAL, now))
@@ -109,21 +126,22 @@ class VisitCheckCompletionSourceIT : AbstractPostgresIntegrationTest() {
             VisitCheck.arrive(tripId, "2026-08-11#${UUID.randomUUID()}", UUID.randomUUID(), CheckSource.AUTO_GEOFENCE, now)
                 .complete(now.plusSeconds(600), CompletionSource.AUTO_GEOFENCE_EXIT),
         )
-        // 마이그레이션 전 모양 — 옛 코드가 쓴 완료에는 출처가 없다
-        jdbc.update("UPDATE visit_check SET completion_source = NULL WHERE visit_check_id = ?", done.visitCheckId)
 
         jdbc.update(backfill())
 
         sourceOf(done.visitCheckId) shouldBe "MANUAL"
         sourceOf(open.visitCheckId) shouldBe null // 완료가 없으면 출처도 없다(INV-U10-3)
-        sourceOf(auto.visitCheckId) shouldBe "AUTO_GEOFENCE_EXIT" // 이미 있는 출처를 덮지 않는다(2단계 재백필도 같은 문을 쓴다)
+        sourceOf(auto.visitCheckId) shouldBe "AUTO_GEOFENCE_EXIT" // 이미 있는 출처를 덮지 않는다
     }
 
-    /** V2.67 이 실제로 싣고 있는 백필 UPDATE 문. 파일이 바뀌면 이 테스트도 함께 움직인다. */
+    /**
+     * V2.70 이 실제로 싣고 있는 재백필 UPDATE 문. 파일이 바뀌면 이 테스트도 함께 움직인다.
+     * 출처 없는 완료를 채우는 쪽은 CHECK 가 걸린 뒤에는 픽스처로 만들 수 없다 — 그 절반은 V2.67 머지 때 같은 문으로 검증했다.
+     */
     private fun backfill(): String {
-        val sql = ClassPathResource("db/migration/V2.67__visit_check_completion_source.sql").inputStream.bufferedReader().readText()
+        val sql = ClassPathResource("db/migration/V2.70__visit_check_completion_source_check.sql").inputStream.bufferedReader().readText()
         val start = sql.indexOf("UPDATE visit_check")
-        require(start >= 0) { "V2.67 에서 백필 UPDATE 를 찾지 못했다 — 문이 바뀌었으면 이 테스트도 고친다" }
+        require(start >= 0) { "V2.70 에서 재백필 UPDATE 를 찾지 못했다 — 문이 바뀌었으면 이 테스트도 고친다" }
         return sql.substring(start, sql.indexOf(';', start))
     }
 }

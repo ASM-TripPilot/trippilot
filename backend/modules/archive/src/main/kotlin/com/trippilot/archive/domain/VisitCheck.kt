@@ -132,7 +132,7 @@ data class VisitCheck(
      */
     fun revertAuto(at: Instant): Pair<VisitCheck, RevertedPart> = when {
         // 출처가 **자동일 때만** — null 은 롤링 배포 창에 옛 파드가 쓴 수동 완료다(V2.67 1단계, CHECK 없음). 비우면 사람이 남긴 완료와
-        // 재계획 잠금이 사라진다.
+        // 재계획 잠금이 사라진다. V2.70(CHECK) 이후로는 그런 행이 없지만, 조건은 그대로 자동 출처만 연다.
         completedAt != null && completionSource in AUTO_COMPLETIONS ->
             copy(completedAt = null, completionSource = null, updatedAt = at) to RevertedPart.COMPLETION
         completedAt == null && skippedAt == null && arrivedAt != null && source == CheckSource.AUTO_GEOFENCE ->

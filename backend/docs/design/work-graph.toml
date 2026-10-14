@@ -4378,10 +4378,14 @@ note = """
 id = "U10-SOURCE-CHECK"
 ticket = "TRIP-1408"
 title = "[U10] 방문 실적 출처 2단계 — 재백필 + CHECK (1단계가 운영에 나간 뒤)"
-status = "blocked"
+status = "done"
 migration = true
 touches = ["backend/app/src/main/resources/db/migration"]
 note = """
+**닫힘(2026-10-14) — V2.70.** 1단계를 실은 배포(develop `94fd896f`, 2026-10-14 성공)가 끝나 옛 파드가 없다. 같은 백필 문을 다시 돌리고
+`(completed_at IS NULL) = (completion_source IS NULL)` 를 건다. I-U10-2 확인: 완료를 쓰는 길은 도메인 `complete`·`adjustTimes`·`revertAuto` 셋뿐이고
+셋 다 출처를 함께 쓴다(SQL 직접 쓰기 0건). `VisitCheckCompletionSourceIT` 의 V2.67 백필 픽스처(출처 없는 완료)는 CHECK 뒤에는 만들 수 없어 V2.70 검증으로 바꿨다.
+
 M-U10-a 의 2단계. [[U10-VISIT-SOURCE]] 가 **운영에 배포되고 옛 파드가 사라진 뒤**에만 — 같은 배포에 실으면 롤링 창의 옛 파드가
 출처 없이 쓴 행이 CHECK 를 깬다. 확인 항목은 인프라 문서 I-U10-2.
 """
