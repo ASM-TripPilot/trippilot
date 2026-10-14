@@ -10,7 +10,7 @@ paths:
 | 파일 | 역할 |
 |---|---|
 | `src/shared/api/index.ts` | axios 인스턴스·인터셉터·토큰 갱신·손수 작성 서버 호출(orval 필터 밖 경로). `authedClient`가 온보딩·`fetchBootstrap`을 인증 경로로 보낸다. `SERVER_ERROR_CODE_TRANSLATIONS`는 서버 실코드→프론트 계약 코드 번역표(승인 테스트가 이 표를 겨냥하지 않아 미검증). `normalizeSocialError`는 서버 `fields`를 `NormalizedApiError`에 실어 나른다. `patchConsent`는 `PATCH /me/consents/{termsType}` — **termsType은 URL에만, body는 `{action, termsVersion}`**(`ConsentInput`을 재사용하면 body에 termsType 잉여가 실려 계약 위반). |
-| `src/shared/api/mutator.ts` | orval 생성 클라이언트가 쓰는 `customInstance` — `authedClient`를 얹고 `paramsSerializer: { indexes: null }`로 배열 쿼리를 브래킷 없이 직렬화(`amenity=A&amenity=B`, Spring `List<String>` 계약), `response.data`만 반환. 오류 정규화는 안 거친다. |
+| `src/shared/api/mutator.ts` | orval 생성 클라이언트가 쓰는 `customInstance` — `authedClient`를 얹고 `paramsSerializer: { indexes: null }`로 배열 쿼리를 브래킷 없이 직렬화(`amenity=A&amenity=B`, Spring `List<String>` 계약), `response.data`만 반환. 오류 정규화는 안 거친다. 손수 짠 어댑터(도우미 `/assistant/**`)는 공개 진입점 `index.client.ts`로 이것을 받는다(TRIP-1410). |
 | `src/shared/api/tokenManager.ts` | 동기 in-memory 액세스토큰 홀더(인터셉터가 동기로 읽는다, SecureStore와 공존). `subscribeAccessToken`은 값이 실제로 바뀔 때만 통지 |
 | `src/shared/api/isAlreadyRegistered.ts` | 409(이미 등록됨) 판정. `features/save-place/model/savedPlaces.ts`에는 인라인 409 판정이 따로 남아 있어 판정이 두 벌이다 |
 | `src/shared/api/isNotFound.ts` | `isNotFound(error)` — 네트워크 오류(응답 없음)는 `false`(모르면 "아니다"로 접는 fail-closed). `retryUnlessNotFound`는 react-query `retry`에 넣는 함수(3회, 404만 즉시 포기) — 같은 쿼리 키의 다른 관찰자가 먼저 요청을 시작하면 그쪽 retry가 이기므로 전역(`app/_layout.tsx`)과 페이지가 같은 함수를 참조한다. |

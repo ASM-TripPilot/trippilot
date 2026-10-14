@@ -360,6 +360,14 @@ def _transport_from(request: schemas.GenerateItineraryRequest) -> TransportMode:
 _FIXED_FAR_KM = 100.0
 
 
+# 생성의 경로 길이 감점(점수/도로 km, `ItineraryProblem.travel_weight`) — 하루가 한 동네에 모이게
+# (TRIP-1398). 종전 0 이라 광화문 하루 한가운데 북한산이 들어가고 실제 순서가 최단의 1.36배였다
+# (DEV 10-13). 실측(로컬 실 POI 풀 5곳 × 시드 3, 규칙 점수, OR 1일 09~21시): 0 → 0.02 에서 도로
+# 중앙값 19.8 → 10.2km, 방문 7 → 8, 점수 합 6.86 → 7.93 — 이동이 준 만큼 한 곳이 더 들어간다.
+# 0.05 는 10.3km 로 이득이 없어 재계획 우천 사유와 같은 0.02 를 쓴다.
+_GENERATE_ROUTE_WEIGHT = 0.02
+
+
 def _request_findings(request: schemas.GenerateItineraryRequest) -> list[str]:
     """요청이 **조용히 다르게** 처리되는 지점 — 거부하지 않고 `degradations` 로 밝힌다(TRIP-1392, INV-4).
 
@@ -474,6 +482,7 @@ def _domain_generate_request(
         budget=_budget_from(request),
         transport=_transport_from(request),
         pace=_pace_from(request),
+        travel_weight=_GENERATE_ROUTE_WEIGHT,
         persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         principal=Principal(user_id=owner),
         seed=_seed_from(request.trip_id),

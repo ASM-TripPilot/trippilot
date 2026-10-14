@@ -64,3 +64,33 @@ def test_fully_wired_emits_no_warning(monkeypatch, caplog):
                      provider="anthropic",
                      feature_models="ALTERNATIVE_SELECTION=claude-haiku-4-5")
     assert msgs == []
+
+
+def _infos(monkeypatch, caplog, *, feature_models: str) -> list[str]:
+    monkeypatch.setattr(main, "_kma_weather", lambda: _WIRED)
+    monkeypatch.setattr(main, "_vector_rag", lambda: (_WIRED, _WIRED))
+    monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", feature_models)
+    with caplog.at_level(logging.INFO, logger="trippilot"):
+        main.build_app_from_env()
+    return [r.getMessage() for r in caplog.records
+            if r.name == "trippilot.main" and "기능별 모델 배정" in r.getMessage()]
+
+
+def test_assignment_count_and_missing_features_are_logged_once(monkeypatch, caplog):
+    """새 feature 가 들어왔는데 시크릿 배정이 안 따라오면 미배정 목록에 이름이 보인다."""
+    from trippilot.domain.llm import LlmFeature
+
+    [line] = _infos(monkeypatch, caplog,
+                    feature_models="ALTERNATIVE_SELECTION=m1,INTENT=m2")
+    assert line.startswith(f"기능별 모델 배정 2종 / 미배정 {len(LlmFeature) - 2}종: ")
+    assert "ALTERNATIVE_SELECTION" not in line and "PREFERENCE_SCORING" in line
+
+
+def test_full_assignment_logs_no_missing_list(monkeypatch, caplog):
+    from trippilot.domain.llm import LlmFeature
+
+    everything = ",".join(f"{f.value}=m" for f in LlmFeature)
+    [line] = _infos(monkeypatch, caplog, feature_models=everything)
+    assert line == f"기능별 모델 배정 {len(LlmFeature)}종 / 미배정 0종"
