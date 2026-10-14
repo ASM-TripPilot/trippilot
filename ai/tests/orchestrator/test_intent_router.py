@@ -422,6 +422,25 @@ def test_infrastructure_exception_never_escapes() -> None:
     assert "bank_unavailable" in match.reason and "pgvector down" in match.reason
 
 
+def test_bank_not_ready_skips_stage1_without_embedding() -> None:
+    """DEV: 색인 전인데도 발화를 임베딩하러 가서(포화된 임베딩 서비스) 해석이 8.65s 걸렸다.
+    뱅크가 준비 전이면 1차를 시도하지 않고(임베딩 0회) 곧장 3차로 간다 — 확정 판정(`confident_intent`)도 None."""
+
+    class _NoEmbedding:
+        dim = 2
+
+        def embed(self, text):
+            raise AssertionError("뱅크 준비 전에는 발화를 임베딩하지 않는다")
+
+        def embed_batch(self, texts):
+            raise AssertionError("뱅크 준비 전에는 발화를 임베딩하지 않는다")
+
+    router = IntentRouter(_NoEmbedding(), InMemoryVectorStore(), bank_ready=lambda: False)
+    match = router.route("내일 날씨 어때", _TID, _NOW)
+    assert "bank_not_ready" in match.reason
+    assert router.confident_intent("내일 날씨 어때") is None
+
+
 @pytest.mark.parametrize("utterance", ["", "   ", "\n\t", "🙂🙂", "​"])
 def test_empty_after_normalization_falls_back(utterance: str) -> None:
     match = _scripted_router().route(utterance, _TID, _NOW)

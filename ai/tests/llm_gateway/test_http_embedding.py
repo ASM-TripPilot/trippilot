@@ -167,8 +167,10 @@ def test_batch_over_service_cap_is_split_and_reassembled_in_order() -> None:
     assert [v[0] for v in vectors] == [float(i) for i in range(485)]
 
 
-def test_default_cap_matches_service_default() -> None:
-    """기본값이 서비스 기본(256)을 넘으면 설정 없이 413 이 재발한다."""
+def test_default_chunk_fits_service_cap_and_client_timeout() -> None:
+    """서비스 상한(256)을 넘으면 413, 한 요청이 크면 클라이언트 timeout(5s) — DEV(CPU)에서 256건이 5s 를
+    넘겼다. 기본 조각은 서비스 내부 배치(TRITON_MAX_BATCH=32) 이하."""
     http = _CappedHttp(cap=256)
-    _adapter(http).embed_batch(["가"] * 300)
-    assert max(http.sizes) <= 256
+    vectors = _adapter(http).embed_batch(["가"] * 300)
+    assert len(vectors) == 300
+    assert max(http.sizes) <= 32

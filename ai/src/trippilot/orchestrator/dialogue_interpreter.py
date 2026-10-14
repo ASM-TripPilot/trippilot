@@ -197,8 +197,12 @@ class BankIndex:
         *,
         retry_after_s: float = 60.0,
         clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._entries = tuple(entries)
+        self._sleep = sleep
+        self._warm_lock = threading.Lock()
+        self._warming = False
         self._embedding = embedding
         self._store = store
         self._retry_after_s = retry_after_s
@@ -234,11 +238,28 @@ class BankIndex:
             self._lock.release()
 
     def warm(self) -> None:
-        """색인을 백그라운드로 시작한다 — 기동 때 한 번, 그리고 아직 색인 전이면 해석마다(재시도 간격·중복은
-        `ensure` 가 거른다). 해석 요청은 색인을 직접 하지 않는다: 첫 요청이 색인 시간을 떠안으면 상한을 넘긴다."""
+        """색인을 백그라운드로 시작한다 — 기동 때 한 번, 그리고 아직 색인 전이면 해석마다(중복은 `ensure` 가
+        거른다). 해석 요청은 색인을 직접 하지 않는다: 첫 요청이 색인 시간을 떠안으면 상한을 넘긴다.
+
+        스레드는 **색인될 때까지** 재시도 간격마다 다시 시도한다 — DEV 에서 AI 가 임베딩 서비스보다 먼저 떠
+        기동 시도가 연결 거부로 실패했고, 그 뒤엔 해석 요청이 와야만 재시도됐다."""
         if self._indexed or self._embedding is None:
             return
-        threading.Thread(target=self.ensure, name="bank-index", daemon=True).start()
+        with self._warm_lock:  # 재시도 스레드는 하나만 — 해석마다 부르므로 안 막으면 스레드가 쌓인다
+            if self._warming:
+                return
+            self._warming = True
+        threading.Thread(target=self._retry_until_indexed, name="bank-index", daemon=True).start()
+
+    def _retry_until_indexed(self) -> None:
+        try:
+            while not self._indexed:
+                self.ensure()
+                if not self._indexed:
+                    self._sleep(max(self._next_try - self._clock(), 0.0) + 0.01)
+        finally:
+            with self._warm_lock:
+                self._warming = False
 
 
 # ── 해석기 ──────────────────────────────────────────────────────────────────
