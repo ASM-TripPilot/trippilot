@@ -365,3 +365,65 @@ def test_공유본의_모든_출처를_백엔드가_받는다() -> None:
     app, db = _backend_sources()
     assert used <= app, f"백엔드 enum 에 없는 출처가 공유본에 있다: {sorted(used - app)}"
     assert used <= db, f"DB CHECK 에 없는 출처가 공유본에 있다: {sorted(used - db)}"
+
+
+# ── 병합 키는 (출처, content_id) — 백엔드 유일키와 같은 모양 (2026-10-15) ──
+# ai-e3 Codex 리뷰. `content_id` 만으로 잡으면 다른 출처의 같은 번호가 서로를 덮고,
+# 그 행이 `--close-missing` 에서 "목록 부재"로 읽혀 **살아 있는 POI 가 퇴출된다.**
+def _keyed_doc(source: str, *ids: str, at: str = "2026-10-15T00:00:00+00:00") -> dict:
+    return {
+        "schema_version": 1, "source": source, "collected_at": at,
+        "area_code": "1", "content_types": ["12"], "stats": {},
+        "proposals": [
+            {"provisional_id": f"{source.lower()}-{i}", "source": source,
+             "poi": {"poi_id": f"{source.lower()}-{i}", "name": f"{source}-{i}",
+                     "category": "SIGHT",
+                     "coord": {"lat": 37.5, "lng": 127.0}, "open_hours": [],
+                     "avg_cost": None, "rating": None, "saved_count": 0,
+                     "quality": "PARTIAL", "source": "PLACES_API", "confidence": None,
+                     "tags": [], "source_ref": None},
+             "tags": [], "region": "중구", "opening_hours_raw": None,
+             "provenance": {"content_id": i, "address": "서울특별시 중구 1", "image_url": None}}
+            for i in ids
+        ],
+    }
+
+
+def test_같은_번호가_다른_출처면_둘_다_남는다() -> None:
+    """실제 재현 — `merge([TOURAPI id=42, LOCALDATA id=42])` 가 1건이 되고 있었다."""
+    out = merge([_keyed_doc("TOURAPI", "42"), _keyed_doc("LOCALDATA", "42")], allow_mixed=True)
+    assert out["stats"]["unique_proposals"] == 2
+    assert {(p["source"], p["provenance"]["content_id"]) for p in out["proposals"]} == {
+        ("TOURAPI", "42"), ("LOCALDATA", "42")}
+
+
+def test_같은_출처_같은_번호는_나중_수집분이_이긴다() -> None:
+    """덮어쓰기 방향은 그대로다 — 재제안 = 변경 감지분."""
+    early = _keyed_doc("TOURAPI", "42", at="2026-10-01T00:00:00+00:00")
+    late = _keyed_doc("TOURAPI", "42", at="2026-10-15T00:00:00+00:00")
+    late["proposals"][0]["poi"]["name"] = "나중 것"
+    out = merge([late, early], allow_mixed=True)   # 입력 순서와 무관하게 수집 시각으로 정렬
+    assert out["stats"]["unique_proposals"] == 1
+    assert out["proposals"][0]["poi"]["name"] == "나중 것"
+
+
+def test_항목_source_가_없으면_문서_source_를_쓴다() -> None:
+    """수신도 그 순서로 읽는다 — 항목이 정본, 없으면 문서."""
+    doc = _keyed_doc("TOURAPI", "42")
+    del doc["proposals"][0]["source"]
+    out = merge([doc, _keyed_doc("LOCALDATA", "42")], allow_mixed=True)
+    assert out["stats"]["unique_proposals"] == 2
+
+
+def test_세_출처의_번호_꼴은_겹치지_않는다() -> None:
+    """실측 근거 고정 — 지금 충돌 0 인 이유는 **운이 아니라 꼴이 다르기** 때문이다.
+
+    공유본 실측(2026-10-15): TOURAPI 숫자만 19,079 · LOCALDATA 관리번호(하이픈) 36,931 ·
+    OVERTURE UUID 1,195, 쌍별 교집합 전부 0. 네 번째 출처가 숫자나 UUID 를 쓰면 깨진다.
+    """
+    import re
+    tourapi, localdata, overture = "1000981", "3000000-101-1967-03256", \
+        "00a0d0a8-7d8f-4786-843e-fe5ad0b3b501"
+    assert re.fullmatch(r"\d+", tourapi)
+    assert not re.fullmatch(r"\d+", localdata) and not re.fullmatch(r"\d+", overture)
+    assert len({tourapi, localdata, overture}) == 3
