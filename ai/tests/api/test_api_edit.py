@@ -317,11 +317,13 @@ def test_fixed_slot_cannot_be_edit_target(command: dict) -> None:
 def test_free_slot_before_fixed_without_travel_room_is_hc2_not_hc3() -> None:
     """일반 슬롯을 예약 앞으로 — 예약은 안 밀리고(HC3 무결) 도착 불가가 HC2 로 드러난다.
     조용히 맞추지 않는다(INV-2)."""
+    # 예약 13:30 — 한라산 08:00 → 월정리 → 흑돼지 도착 ~14:08(긴 구간 시외 속도)이라 못 댄다.
+    tight = [*_FIXED_DAY[:2], _slot(_PORK, "13:30:00", "14:30:00", fixed=True)]
     with _client() as client:
-        response = _post(client, _body(slots=_FIXED_DAY, command={
+        response = _post(client, _body(slots=tight, command={
             "op": "MOVE_SLOT", "params": {}, "affected_slots": [_HALLASAN]}))
     body = response.json()
-    assert body["status"] == "REJECTED"
+    assert body["status"] == "REJECTED", body
     codes = {v["code"] for v in body["violations"]}
     assert "HC2" in codes and "HC3" not in codes, body["violations"]
 

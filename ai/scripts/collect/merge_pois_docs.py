@@ -57,7 +57,15 @@ def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
             "  `sources` 를 적어 두므로, 소비자가 항목별 source 로 갈라 보내야 합니다."
         )
     docs = sorted(docs, key=lambda d: d["collected_at"])
-    proposals: dict[str, dict] = {}
+    # 키는 **(출처, content_id)** 다 — 백엔드 유일키와 같은 모양이다. `content_id` 만으로
+    # 잡으면 다른 출처의 같은 번호가 서로를 덮고, 그 행이 `--close-missing` 에서 "목록 부재"로
+    # 읽혀 **살아 있는 POI 가 퇴출된다.** `load_closed_refs`·`drop_closed` 가 이미 같은 이유로
+    # 출처를 붙여 키를 잡고 있었는데(그 주석 참조) 병합만 빠져 있었다.
+    #
+    # 지금 세 출처는 번호 꼴이 겹치지 않아(TOURAPI 숫자 `1000981` · LOCALDATA 관리번호
+    # `3000000-101-1967-03256` · OVERTURE UUID) 실측 충돌 0·유실 0 이다. 네 번째 출처가
+    # 숫자나 UUID 를 쓰면 그때 조용히 깨지므로 미리 막는다 (ai-e3 리뷰, 2026-10-15).
+    proposals: dict[tuple[str, str], dict] = {}
     areas: list[str] = []
     types: list[str] = []
     for d in docs:
@@ -68,7 +76,9 @@ def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
             if t not in types:
                 types.append(t)
         for p in d["proposals"]:
-            proposals[p["provenance"]["content_id"]] = p
+            # 항목 source 가 정본이고, 없으면 문서 source — 수신도 그 순서로 읽는다
+            src = str(p.get("source") or d.get("source") or "").upper()
+            proposals[(src, p["provenance"]["content_id"])] = p
     return {
         "schema_version": docs[-1]["schema_version"],
         # 섞였으면 **항목별 source 가 정본**이다 — 최상위 하나만 읽으면 틀린다는 것을

@@ -110,3 +110,32 @@ def test_거리에_대해_단조_증가한다() -> None:
     mins = [_est(km, TransportMode.PUBLIC).internal_minutes
             for km in (0.1, 0.5, 1.0, 2.0, 5.0, 10.0)]
     assert mins == sorted(mins)
+
+
+# ── 긴 구간은 시외 속도 (DEV 2026-10-14: 제주시 → 성산 38km 를 240분으로 재 오전이 통째로 비었다) ──
+
+def test_긴_구간은_시외_속도로_재서_도시_속도보다_짧다() -> None:
+    city_only = TravelEstimator(AssemblyConfig(long_speeds_kmph={
+        m: s for m, s in AssemblyConfig().speeds_kmph.items()}))
+    a, b = GeoPoint(35.0, 129.0), GeoPoint(35.0 + 38.4 / 111.19, 129.0)
+    new = TravelEstimator(AssemblyConfig()).estimate(a, b, TransportMode.PUBLIC).internal_minutes
+    old = city_only.estimate(a, b, TransportMode.PUBLIC).internal_minutes
+    assert new < 150 < old  # 2시간 반 안쪽 — 실제 1.5~2시간에 안전계수
+
+
+def test_도시_안_구간은_종전과_같다() -> None:
+    city_only = AssemblyConfig(long_speeds_kmph=dict(AssemblyConfig().speeds_kmph))
+    for km in (0.5, 2.0, 5.0, 11.0):  # 도로 ≤ 15km (직선 × 1.3)
+        for mode in TransportMode:
+            a, b = GeoPoint(35.0, 129.0), GeoPoint(35.0 + km / 111.19, 129.0)
+            assert (TravelEstimator(AssemblyConfig()).estimate(a, b, mode).internal_minutes
+                    == TravelEstimator(city_only).estimate(a, b, mode).internal_minutes)
+
+
+def test_긴_구간까지_거리에_대해_단조_증가한다() -> None:
+    """경계(도로 15km)에서 시간이 줄거나 튀지 않는다 — 구간별 합이라서."""
+    mins = [_est(km, mode).internal_minutes
+            for mode in (TransportMode.PUBLIC, TransportMode.CAR)
+            for km in (10.0, 11.5, 11.6, 12.0, 20.0, 40.0, 80.0)]
+    pub, car = mins[:7], mins[7:]
+    assert pub == sorted(pub) and car == sorted(car)
