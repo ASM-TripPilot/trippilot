@@ -76,6 +76,8 @@ export interface MapSheetShellProps<T = unknown> {
   selectedDayIndex?: number;
   onSelectDay?: (index: number) => void;
   onBack?: () => void;
+  /** true 면 기본 일차 칩 오버레이의 뒤로 버튼을 뺀다(`overlay` 를 주면 안 쓰인다). */
+  hideBack?: boolean;
   /** 좌상단 오버레이 교체 슬롯 — 주면 내부 `DayChipOverlay` 대신 이 노드를 그린다(D3). h07 은
    *  진행 카드(`GenerationProgressCard`)를 day-chip 자리에 얹으므로 이 슬롯을 쓴다. */
   overlay?: ReactNode;
@@ -150,6 +152,7 @@ export function MapSheetShell<T = unknown>({
   selectedDayIndex,
   onSelectDay,
   onBack,
+  hideBack,
   overlay,
   header,
   children,
@@ -236,7 +239,7 @@ export function MapSheetShell<T = unknown>({
             days={days ?? []}
             selectedIndex={selectedDayIndex ?? 0}
             onSelectDay={onSelectDay ?? (() => {})}
-            onBack={onBack ?? (() => {})}
+            onBack={hideBack ? undefined : (onBack ?? (() => {}))}
           />
         )}
         {/* 추가 카드 — day-chip 오버레이 **아래에** 추가로 그린다(교체 아닌 추가 · D3).
