@@ -43,6 +43,7 @@ export function leavePreviousTripDraft(): void {
   store.setBudgetText('500,000');
   store.setPrefStyleOverride(['힐링']);
   store.setPrefActivityOverride(['역사문화']);
+  store.setDayWindow({ dayStartAt: '11:00', lastDayEndAt: '16:00' });
   store.setCreatedTripId('trip-prev');
   store.keepCreatedTripIdOnce();
   store.seedMustVisitsFromD02([

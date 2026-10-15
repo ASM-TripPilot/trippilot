@@ -5,6 +5,7 @@ import type {
   TripDestination,
 } from '@/shared/api/index.schemas';
 
+import type { DayWindow } from './dayWindow';
 import { mergeMustVisitSeeds, type MustVisitSeedItem } from './mustVisitSeed';
 import { MAX_TRIP_NIGHTS, nightsSum } from './tripDraft';
 import { deriveEndDate, type PeriodPresetCode } from './tripWizardStep1';
@@ -50,6 +51,8 @@ export interface TripWizardDraft {
   /** 활동 축 오버라이드(TRIP-1092) — `prefStyleOverride`와 같은 규약이고 서로 독립이다(자연·쇼핑이
    * 두 축에 같은 라벨로 있어 한 필드로 합치면 "활동 자연만 끔"을 못 담는다). */
   prefActivityOverride?: string[];
+  /** 일과 시간(TRIP-1308) — 정한 값만 키가 있다(`{}`=기본 09:00~21:00). 위저드 단계를 오가도 유지된다. */
+  dayWindow: DayWindow;
   /** 아직 소비자가 없다(문구를 안 그리므로) — TRIP-206이 이 값을 읽어 오류 문구를 건다. */
   touched: TripWizardField[];
   /** 제출 성공 응답이 준 `tripId`(01b D7). 라우트(`/trips/new/step2`)가 id를 안 나르므로
@@ -103,6 +106,8 @@ export interface TripWizardDraft {
   setPrefStyleOverride(styles: string[]): void;
   /** 활동 축 오버라이드 커밋(TRIP-1092) — 규약은 `setPrefStyleOverride`와 같다. */
   setPrefActivityOverride(activities: string[]): void;
+  /** 일과 시간 시트 "적용" 커밋(TRIP-1308) — 통째로 교체한다. */
+  setDayWindow(next: DayWindow): void;
   setCreatedTripId(tripId: string): void;
   /** `preserveCreatedTripIdOnce`만 켠다 — 켜는 곳은 꼭 갈 곳 고르기 완료 한 곳이다(d02 새 진입의
    * `seedMustVisitsFromD02`에 합치면 새 여행이 옛 id를 물고 간다 — TRIP-601 가드 c). */
@@ -146,6 +151,7 @@ const INITIAL_DRAFT = {
   // `undefined`=오버라이드 없음. `INITIAL_DRAFT`에 이 키를 둬야 병합형 `reset()`이 지운다(SO-4).
   prefStyleOverride: undefined as string[] | undefined,
   prefActivityOverride: undefined as string[] | undefined,
+  dayWindow: {} as DayWindow,
   touched: [] as TripWizardField[],
   createdTripId: undefined as string | undefined,
   mustVisits: [] as MustVisitSeedItem[],
@@ -288,6 +294,7 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
   setPrefStyleOverride: (styles) => set({ prefStyleOverride: styles }),
   setPrefActivityOverride: (activities) =>
     set({ prefActivityOverride: activities }),
+  setDayWindow: (next) => set({ dayWindow: next }),
   setCreatedTripId: (tripId) => set({ createdTripId: tripId }),
   keepCreatedTripIdOnce: () => set({ preserveCreatedTripIdOnce: true }),
   initMustVisits: (items) =>

@@ -4971,3 +4971,135 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     expect(mustVisitPosts).toHaveLength(0);
   });
 });
+
+/**
+ * TRIP-1308 — 일과 시간(하루 시작 · 첫날 시작 · 마지막 날 종료) 배선.
+ *  - 안 정하면 요청에 세 키가 **없다**(빈 문자열·00:00 으로 채우지 않는다).
+ *  - 행 → 시트 → 적용이 행 요약에 반영되고, 정한 값만 POST 에 실린다. 다시 열면 값이 보인다.
+ *  - 이미 만든 여행의 PATCH(대체 의미)에도 같은 값이 실린다.
+ *  - 깨진 창(당일치기 역전)은 [다음]을 막고 행이 이유를 알린다.
+ * 시트 실제 개폐·휠 제스처는 jest 사각(6-b).
+ */
+describe('일과 시간 (TRIP-1308)', () => {
+  afterEach(expectNoExitWizard);
+
+  const {
+    tracker,
+    preferenceHandler,
+    createTripHandler,
+    renderPage,
+    next,
+    seedValidDraft,
+    waitForPrefill,
+    openSheet,
+  } = wizardStep1Harness();
+
+  let patched: Record<string, unknown>[] = [];
+
+  beforeEach(() => {
+    patched = [];
+    mockPush.mockReset();
+    useTripWizardStore.getState().reset();
+    server.use(
+      preferenceHandler(),
+      createTripHandler(),
+      http.patch(`${BASE}/trips/:tripId`, async ({ request }) => {
+        patched.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(TRIP);
+      }),
+      http.get(`${BASE}/trips/:tripId/must-visits`, () => HttpResponse.json([]))
+    );
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+  });
+
+  const KEYS = ['dayStartAt', 'firstDayStartAt', 'lastDayEndAt'];
+
+  it('안 건드리면 행은 "09:00 시작 · 기본"이고 POST 본문에 세 키가 없다', async () => {
+    seedValidDraft();
+    renderPage();
+    await waitForPrefill();
+
+    const row = screen.getByTestId('trip-wizard-summary-daywindow');
+    expect(within(row).getByText('09:00 시작')).toBeTruthy();
+    expect(
+      screen.getByTestId('trip-wizard-summary-daywindow-sub')
+    ).toHaveTextContent('기본');
+
+    fireEvent.press(next());
+    await waitFor(() => expect(tracker.postedBodies).toHaveLength(1));
+    for (const key of KEYS) {
+      expect(key in tracker.postedBodies[0]).toBe(false);
+    }
+  });
+
+  it('첫날 14:00 을 적용하면 행이 바뀌고 POST 에는 그 값만 실리며, 다시 열면 값이 보인다', async () => {
+    seedValidDraft();
+    renderPage();
+    await waitForPrefill();
+
+    await openSheet('daywindow');
+    fireEvent.press(screen.getByTestId('trip-wizard-daywindow-tab-first'));
+    fireEvent.press(screen.getByTestId('trip-wizard-daywindow-wheel-h-14'));
+    fireEvent.press(screen.getByTestId('trip-wizard-daywindow-apply'));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('trip-wizard-daywindow-sheet')).toBeNull()
+    );
+    expect(
+      screen.getByTestId('trip-wizard-summary-daywindow-sub')
+    ).toHaveTextContent('첫날 14:00부터');
+
+    // 왕복 — 다시 열면 입력한 값이 그대로 보인다.
+    await openSheet('daywindow');
+    expect(
+      screen.getByTestId('trip-wizard-daywindow-tab-first-value')
+    ).toHaveTextContent('14:00');
+    fireEvent.press(screen.getByTestId('trip-wizard-daywindow-apply'));
+
+    fireEvent.press(next());
+    await waitFor(() => expect(tracker.postedBodies).toHaveLength(1));
+    expect(tracker.postedBodies[0].firstDayStartAt).toBe('14:00');
+    expect('dayStartAt' in tracker.postedBodies[0]).toBe(false);
+    expect('lastDayEndAt' in tracker.postedBodies[0]).toBe(false);
+  });
+
+  it('이미 만든 여행의 PATCH 에도 정한 값이 실린다', async () => {
+    seedValidDraft();
+    useTripWizardStore.getState().setCreatedTripId(TRIP_ID);
+    useTripWizardStore
+      .getState()
+      .setDayWindow({ dayStartAt: '11:00', lastDayEndAt: '16:00' });
+    renderPage();
+    await waitForPrefill();
+
+    fireEvent.press(next());
+    await waitFor(() => expect(patched).toHaveLength(1));
+    expect(patched[0].dayStartAt).toBe('11:00');
+    expect(patched[0].lastDayEndAt).toBe('16:00');
+    expect('firstDayStartAt' in patched[0]).toBe(false);
+    expect(tracker.postedBodies).toHaveLength(0);
+  });
+
+  it('당일치기에서 끝 ≤ 시작이면 [다음]이 닫히고 행이 확인 안내를 단다', async () => {
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산', 0);
+    store.setPeriod(undefined, '2026-06-10', '2026-06-10');
+    store.setDayWindow({ firstDayStartAt: '18:00', lastDayEndAt: '10:00' });
+    renderPage();
+    await waitForPrefill();
+
+    expect(next()).toBeDisabled();
+    expect(
+      screen.getByTestId('trip-wizard-summary-daywindow-sub')
+    ).toHaveTextContent('시작·종료 시각을 확인해 주세요');
+
+    // 고치면 풀린다 — 시트에서 끝을 늦춘다.
+    await openSheet('daywindow');
+    fireEvent.press(screen.getByTestId('trip-wizard-daywindow-end-h-20'));
+    fireEvent.press(screen.getByTestId('trip-wizard-daywindow-apply'));
+    await waitFor(() => expect(next()).toBeEnabled());
+  });
+});

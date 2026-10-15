@@ -55,8 +55,11 @@ import { deriveEndDate } from '@/features/create-trip';
 import { mustVisitFailureNotice } from '@/features/create-trip';
 import { planMustVisitSync } from '../model/mustVisitSync';
 import {
+  dayWindowFields,
   summaryBudget,
   summaryCompanion,
+  summaryDayWindow,
+  validateDayWindow,
   summaryDestinations,
   summaryPeriod,
   summaryPreferences,
@@ -65,6 +68,7 @@ import { useTripWizardStore } from '@/features/create-trip';
 import { useCreateTrip } from '../model/useCreateTrip';
 import { usePreferencePrefill } from '../model/usePreferencePrefill';
 import { CompanionEditSheet } from './CompanionEditSheet';
+import { DayWindowEditSheet } from './DayWindowEditSheet';
 import { DestinationEditSheet } from './DestinationEditSheet';
 import { PeriodEditSheet } from './PeriodEditSheet';
 import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
@@ -300,6 +304,10 @@ export function TripNewStep1Page({
   // S1 이 인라인 예산 블록을 지우며 고아가 된 축을 S6 이 첫 소비한다.
   const storeBudgetText = useTripWizardStore((state) => state.budgetText);
   const setBudgetText = useTripWizardStore((state) => state.setBudgetText);
+  // 일과 시간(TRIP-1308) — 시트가 자체 드래프트를 쥐고 "적용"에서만 커밋한다(열 때마다 이 값으로 시드).
+  const dayWindow = useTripWizardStore((state) => state.dayWindow);
+  const setDayWindow = useTripWizardStore((state) => state.setDayWindow);
+  const [dayWindowSheetOpen, setDayWindowSheetOpen] = useState(false);
 
   const preference = usePreferencePrefill();
   // 계정 취향 프리필(GET /me/preferences)은 이미 한국어 도메인 값이다(slug 아님) — 그대로 요약·
@@ -344,6 +352,14 @@ export function TripNewStep1Page({
   // 요약 5행 도출 — 미선택은 셀렉터가 `null` 을 낸다(화면이 플레이스홀더로 그린다).
   const summaryDestinationsValue = summaryDestinations(destinations);
   const summaryPeriodValue = summaryPeriod(startDate, endDate, resolvedToday);
+  // 당일치기 = 박수 합 0(첫날=마지막 날). 기간을 줄여 창이 깨지면 [다음]을 막고 행이 이유를 알린다.
+  const sameDay = nightsSum(destinations) === 0;
+  const dayWindowInvalid = validateDayWindow(dayWindow, sameDay).length > 0;
+  const summaryDayWindowValue = summaryDayWindow(
+    dayWindow,
+    sameDay,
+    dayWindowInvalid
+  );
   const summaryCompanionValue = summaryCompanion(companionType, party);
   // 오버라이드가 있으면 "+ 온보딩" 접미를 뗀다(D4 — 바꿨는데 "온보딩" 표식이 남으면 거짓).
   const summaryPreferencesValue = summaryPreferences(
@@ -481,6 +497,7 @@ export function TripNewStep1Page({
     periodFilled &&
     violations.length === 0 &&
     parsedBudget.kind !== 'invalid' &&
+    !dayWindowInvalid &&
     !savedPlacesLoading;
 
   // 드래프트가 바뀌면 옛 제출 실패 배너를 걷는다(화면과 배너가 서로 다른 이야기를 하지 않게).
@@ -651,6 +668,8 @@ export function TripNewStep1Page({
       destinations,
       // 두 곳 이상이면 앱이 지은 제목, 아니면 `undefined`(키 빠짐 → 서버 기본 제목). 생성·수정 공통(TRIP-1210).
       title: tripTitle(destinations),
+      // 일과 시간은 정한 값만 키가 있다(생략=서버 기본 09:00~21:00). PATCH 는 대체 의미라 수정에도 그대로 싣는다.
+      ...dayWindowFields(dayWindow),
       // 예산은 effective(사용자 입력 우선, 미입력 시 프리필)로 나간다(TRIP-670 D3 복원). `empty`·
       // `invalid`·**0** 이면 `undefined` 라 키가 안 붙는다. `>0` 로 좁혀 요약(`summaryBudget` 은
       // `amount<=0`→null="예산 선택")과 제출을 같은 규칙에 맞춘다(S6D 표시=제출 대칭). 0 이 파싱
@@ -888,11 +907,13 @@ export function TripNewStep1Page({
       <TripWizardStep1Screen
         summaryDestinations={summaryDestinationsValue}
         summaryPeriod={summaryPeriodValue}
+        summaryDayWindow={summaryDayWindowValue}
         summaryCompanion={summaryCompanionValue}
         summaryPreferences={summaryPreferencesValue}
         summaryBudget={summaryBudgetValue}
         onPressSummaryDestination={() => setDestinationSheetOpen(true)}
         onPressSummaryPeriod={() => setPeriodSheetOpen(true)}
+        onPressSummaryDayWindow={() => setDayWindowSheetOpen(true)}
         onPressSummaryCompanion={openCompanionSheet}
         onPressSummaryPreference={openPrefSheet}
         onPressSummaryBudget={openBudgetSheet}
@@ -963,6 +984,18 @@ export function TripNewStep1Page({
           }
           onApply={applyPeriod}
           onClose={() => setPeriodSheetOpen(false)}
+        />
+      ) : null}
+      {/* 일과 시간 시트도 형제 조건부 마운트 — 드래프트는 시트가 쥐고 "적용"에서만 스토어에 커밋한다. */}
+      {dayWindowSheetOpen ? (
+        <DayWindowEditSheet
+          value={dayWindow}
+          sameDay={sameDay}
+          onApply={(next) => {
+            setDayWindow(next);
+            setDayWindowSheetOpen(false);
+          }}
+          onClose={() => setDayWindowSheetOpen(false)}
         />
       ) : null}
       {/* 동행 편집 시트도 화면의 형제로 조건부 마운트 — 스테퍼·칩 press 는 드래프트만 바꾸고
