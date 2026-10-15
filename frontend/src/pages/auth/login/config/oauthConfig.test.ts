@@ -2,9 +2,9 @@ import { getOAuthConfig } from './oauthConfig';
 import { sandboxEnv } from '@/test-support/envSandbox';
 
 /**
- * AC-S4 · getOAuthConfig — kakao·naver authorize 설정 (결함 C).
+ * AC-S4 · getOAuthConfig — kakao authorize 설정 (결함 C).
  *
- * 무엇을 보장하나: env 를 채우면 kakao·naver 도 google 처럼 인가 요청을 구성할 수 있는
+ * 무엇을 보장하나: env 를 채우면 kakao 도 google 처럼 인가 요청을 구성할 수 있는
  * clientId·discovery(authorize/token 엔드포인트)·usePKCE·requiresState 를 돌려준다.
  * naver 는 PKCE 를 지원하지 않으므로(가이드 §5) usePKCE:false + requiresState:true 가
  * naver 에서만 갈라져야 한다(AC-S4 대조쌍). apple 은 이번 범위 밖이라 빈 슬롯을 유지한다.
@@ -23,7 +23,6 @@ const ENV_KEYS = [
   'EXPO_PUBLIC_KAKAO_CLIENT_ID',
   'EXPO_PUBLIC_KAKAO_REDIRECT_URI',
   'EXPO_PUBLIC_NAVER_CLIENT_ID',
-  'EXPO_PUBLIC_NAVER_REDIRECT_URI',
 ] as const;
 
 sandboxEnv(ENV_KEYS);
@@ -52,24 +51,14 @@ describe('getOAuthConfig — kakao (AC-S4 · 결함 C · 케이스 15)', () => {
   });
 });
 
-describe('getOAuthConfig — naver (AC-S4 · 결함 C · naver PKCE 미지원 · 케이스 16)', () => {
-  it('env 주입 시 naver clientId·discovery(nid.naver.com) 를 채우고 PKCE 를 끈다', () => {
-    // 준비
+describe('getOAuthConfig — naver (TRIP-1371 · 브라우저 OAuth 설정 없음)', () => {
+  it('naver 는 빈 슬롯이다 — 서버가 code 경로를 닫아 브라우저 OAuth 로 보낼 설정이 없다', () => {
     process.env.EXPO_PUBLIC_NAVER_CLIENT_ID = 'test-naver-id';
 
-    // 실행
     const config = getOAuthConfig('naver');
 
-    // 단언 — naver 는 PKCE 미지원이라 usePKCE:false, state 필수라 requiresState:true 여야 한다.
-    expect(config.clientId).toBe('test-naver-id');
-    expect(config.discovery.authorizationEndpoint).toMatch(
-      /^https:\/\/nid\.naver\.com\//
-    );
-    expect(config.discovery.tokenEndpoint).toBe(
-      'https://nid.naver.com/oauth2.0/token'
-    );
-    expect(config.usePKCE).toBe(false);
-    expect(config.requiresState).toBe(true);
+    expect(config.clientId).toBe('');
+    expect(config.discovery.authorizationEndpoint).toBe('');
   });
 });
 
@@ -105,12 +94,11 @@ describe('getOAuthConfig — apple (AC-S4 · 범위 밖 유지 · 케이스 18)'
 });
 
 describe('getOAuthConfig — env 미주입 (AC-S4 · INV-4 근거 · 케이스 19)', () => {
-  it.each(['kakao', 'naver'] as const)(
+  it.each(['kakao'] as const)(
     '%s clientId 는 env 가 없으면 빈 문자열이다(빈 값으로 실 OAuth 시도 금지)',
     (provider) => {
       // 준비 — kakao/naver env 를 지운다.
       delete process.env.EXPO_PUBLIC_KAKAO_CLIENT_ID;
-      delete process.env.EXPO_PUBLIC_NAVER_CLIENT_ID;
 
       // 실행 + 단언 — 빈 값이면 makeAuthorize 가 throw 할 근거가 된다(INV-4).
       expect(getOAuthConfig(provider).clientId).toBe('');

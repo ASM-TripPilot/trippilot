@@ -26,6 +26,9 @@ export interface SocialLoginScreenProps {
   // (Android·판정 전·판정 실패) 애플 자리가 아예 없다. 화면이 SDK 를 직접 import 하지 않도록
   // 컴포넌트째 주입받는다(nativeSdkLazyBoundary 경계).
   AppleButton?: ComponentType<{ onPress: () => void }> | null;
+  // 네이버 SDK 키가 없는 빌드는 네이버 버튼을 그리지 않는다(TRIP-1371 — 서버가 네이버 code 경로를 닫았다).
+  // 기본은 보임 — 판정은 컨테이너(LoginPage)가 `isNaverLoginAvailable` 로 한다.
+  hideNaver?: boolean;
 }
 
 type BrandIcon = ComponentType<{ size?: number; testID?: string }>;
@@ -162,6 +165,7 @@ export function SocialLoginScreen({
   onAgeConfirm,
   onAgeCancel,
   AppleButton,
+  hideNaver = false,
 }: SocialLoginScreenProps) {
   const showCancelNotice = phase === 'cancelled';
   const showConflictSheet =
@@ -204,7 +208,9 @@ export function SocialLoginScreen({
       </View>
 
       <View className="gap-md">
-        {SOCIAL_BUTTONS.map(({ provider, label, Icon }) => (
+        {SOCIAL_BUTTONS.filter(
+          ({ provider }) => !(hideNaver && provider === 'naver')
+        ).map(({ provider, label, Icon }) => (
           <Fragment key={provider}>
             <Pressable
               testID={`auth-login-${provider}`}

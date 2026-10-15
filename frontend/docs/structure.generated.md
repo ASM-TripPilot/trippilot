@@ -628,6 +628,7 @@
 
 ## src/pages/auth/login/lib/
 - `src/pages/auth/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
+- `src/pages/auth/login/lib/isNaverLoginAvailable.ts`  →  isNaverLoginAvailable
 - `src/pages/auth/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
 - `src/pages/auth/login/lib/makeAuthorize.ts`  →  makeAuthorize
 - `src/pages/auth/login/lib/naverAuthorize.ts`  →  naverAuthorize
@@ -1731,4 +1732,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1091개 파일
+합계 1092개 파일
