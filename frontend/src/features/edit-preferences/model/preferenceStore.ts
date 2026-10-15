@@ -1,8 +1,8 @@
 /**
  * 취향 7축 세션 메모리 Zustand 스토어 (AC5 · AC4 · US-ONB-14).
  *
- * 7축 = 복수(styles·companions·foods·transports·activities) + 단일(pace·budget). 1/2 화면은
- * 이 중 styles·pace만 쓰지만, 2/2 화면(범위 밖 `PrefStep2Page`)이 나머지 5축을 셀렉터로 꺼내
+ * 6축 = 복수(styles·companions·foods·transports·activities) + 단일(pace). 1/2 화면은
+ * 이 중 styles·pace만 쓰지만, 2/2 화면(범위 밖 `PrefStep2Page`)이 나머지 4축을 셀렉터로 꺼내
  * 쓰므로 여기서 줄이면 안 된다. 토글 판단은 여기서 다시 쓰지 않고 전부
  * `preferenceSelection`의 `toggleMulti`/`toggleSingle`에 위임한다.
  *
@@ -24,14 +24,12 @@ import { toggleMulti, toggleSingle } from './preferenceSelection';
 export interface PreferenceDraft {
   styles: string[] | null;
   pace: string | null;
-  budget: string | null;
   companions: string[] | null;
   foods: string[] | null;
   transports: string[] | null;
   activities: string[] | null;
   toggleStyle: (id: string) => void;
   togglePace: (id: string) => void;
-  toggleBudget: (id: string) => void;
   toggleCompanion: (id: string) => void;
   toggleFood: (id: string) => void;
   toggleTransport: (id: string) => void;
@@ -42,7 +40,6 @@ export interface PreferenceDraft {
 const INITIAL_DRAFT = {
   styles: null,
   pace: null,
-  budget: null,
   companions: null,
   foods: null,
   transports: null,
@@ -54,8 +51,6 @@ const createPreferenceDraft: StateCreator<PreferenceDraft> = (set) => ({
   toggleStyle: (id) =>
     set((state) => ({ styles: toggleMulti(state.styles, id) })),
   togglePace: (id) => set((state) => ({ pace: toggleSingle(state.pace, id) })),
-  toggleBudget: (id) =>
-    set((state) => ({ budget: toggleSingle(state.budget, id) })),
   toggleCompanion: (id) =>
     set((state) => ({ companions: toggleMulti(state.companions, id) })),
   toggleFood: (id) => set((state) => ({ foods: toggleMulti(state.foods, id) })),

@@ -11,19 +11,25 @@ import { toPreferenceInput } from './preferenceInput';
 const EMPTY = {
   styles: null,
   pace: null,
-  budget: null,
   companions: null,
   foods: null,
   transports: null,
   activities: null,
 };
 
+describe('toPreferenceInput — 예산 키 생략(예산 입력 기능 제거)', () => {
+  it('온보딩 PUT 에는 budgetTier·budgetRawAmount 키가 없다 — 생략은 서버에서 변경 없음(Keep)이라 이미 저장된 등급을 지우지 않는다', () => {
+    const result = toPreferenceInput({ ...EMPTY, styles: ['rest'] });
+    expect(result).not.toHaveProperty('budgetTier');
+    expect(result).not.toHaveProperty('budgetRawAmount');
+  });
+});
+
 describe('toPreferenceInput — 축별 slug→서버값 번역(TRIP-471)', () => {
-  it('7축 대표 slug 가 서버 한국어 enum 값으로 번역된다', () => {
+  it('6축 대표 slug 가 서버 한국어 enum 값으로 번역된다', () => {
     const result = toPreferenceInput({
       styles: ['rest', 'art', 'shopping'],
       pace: 'relaxed',
-      budget: 'luxury',
       companions: ['solo', 'family'],
       foods: ['korean', 'asian'],
       transports: ['walk', 'transit'],
@@ -32,7 +38,6 @@ describe('toPreferenceInput — 축별 slug→서버값 번역(TRIP-471)', () =>
 
     expect(result.styles).toEqual(['휴양', '문화예술', '쇼핑']);
     expect(result.pace).toBe('느긋하게');
-    expect(result.budgetTier).toBe('럭셔리');
     expect(result.companionTypes).toEqual(['혼자', '가족']);
     expect(result.foodTastes).toEqual(['한식', '아시안']);
     expect(result.transportModes).toEqual(['도보', '대중교통']);
@@ -57,10 +62,8 @@ describe('toPreferenceInput — 축별 slug→서버값 번역(TRIP-471)', () =>
     const result = toPreferenceInput(EMPTY);
     expect(result.styles).toBeNull();
     expect(result.pace).toBeNull();
-    expect(result.budgetTier).toBeNull();
     expect(result.companionTypes).toBeNull();
     expect(result.petFlag).toBe(false); // 동행 축 미선택이면 반려동물도 아님
-    expect(result.budgetRawAmount).toBeNull();
   });
 
   it('알 수 없는 slug 는 조용히 버린다(가비지 전송 방지)', () => {

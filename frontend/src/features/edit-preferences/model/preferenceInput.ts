@@ -1,6 +1,5 @@
 import type { PreferenceInput } from '@/shared/api/index.schemas';
 import type { PreferenceInputActivitiesItem } from '@/shared/api/index.schemas';
-import type { PreferenceInputBudgetTier } from '@/shared/api/index.schemas';
 import type { PreferenceInputCompanionTypesItem } from '@/shared/api/index.schemas';
 import type { PreferenceInputFoodTastesItem } from '@/shared/api/index.schemas';
 import type { PreferenceInputPace } from '@/shared/api/index.schemas';
@@ -13,14 +12,14 @@ import type { PreferenceInputTransportModesItem } from '@/shared/api/index.schem
  * '느긋하게'…)을 받으므로 이 매핑이 없으면 그대로 보낼 수 없다(그래서 "배선만"이 아니었다).
  *
  * 특례: 동행 'pet' slug 는 companionTypes 항목이 아니라 별도 `petFlag: boolean` 으로 간다
- * (서버 companionTypes enum 에 반려동물이 없다). 미선택 축은 null(→ 서버 "미설정으로 초기화").
+ * (서버 companionTypes enum 에 반려동물이 없다). 미선택 축은 null(→ 서버 "미설정으로 초기화"). 예산(`budgetTier`·`budgetRawAmount`)은 입력 기능을 걷어내
+ * 키 자체를 보내지 않는다 — 생략은 서버에서 "변경 없음"이라 이미 저장된 등급은 그대로 남는다.
  */
 
 /** 스토어 PreferenceDraft 의 값 부분(토글 메서드 제외) — getState() 결과가 구조적으로 대입된다. */
 export interface PreferenceDraftValues {
   styles: string[] | null;
   pace: string | null;
-  budget: string | null;
   companions: string[] | null;
   foods: string[] | null;
   transports: string[] | null;
@@ -44,13 +43,6 @@ const PACE: Record<string, PreferenceInputPace> = {
   relaxed: '느긋하게',
   balanced: '균형있게',
   packed: '알차게',
-};
-
-const BUDGET: Record<string, PreferenceInputBudgetTier> = {
-  low: '저가',
-  mid: '중간',
-  high: '고급',
-  luxury: '럭셔리',
 };
 
 const COMPANION: Record<string, PreferenceInputCompanionTypesItem> = {
@@ -112,7 +104,5 @@ export function toPreferenceInput(
     companionTypes: mapAxis(draft.companions, COMPANION),
     petFlag: draft.companions?.includes('pet') ?? false,
     pace: draft.pace === null ? null : (PACE[draft.pace] ?? null),
-    budgetTier: draft.budget === null ? null : (BUDGET[draft.budget] ?? null),
-    budgetRawAmount: null,
   };
 }

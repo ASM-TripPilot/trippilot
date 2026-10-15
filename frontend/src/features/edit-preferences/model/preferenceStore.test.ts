@@ -3,8 +3,8 @@ import { usePreferenceStore } from './preferenceStore';
 /**
  * AC5 · AC4 · US-ONB-14 — Zustand 취향 스토어(preferenceStore).
  *
- * 무엇을 보장하나: 스토어가 세션 메모리 전용으로 7축(스타일·페이스·예산·동행·음식·이동·
- * 활동)을 들고, reset() 직후에는 항상 7축 전부 null이며, 액션이 model(preferenceSelection)의
+ * 무엇을 보장하나: 스토어가 세션 메모리 전용으로 6축(스타일·페이스·동행·음식·이동·
+ * 활동)을 들고, reset() 직후에는 항상 6축 전부 null이며, 액션이 model(preferenceSelection)의
  * 토글 규칙에 위임된 대로 상태를 바꾼다. 활동(activities)은 TRIP-254 신설 복수 축이다.
  *
  * *(개념)* Zustand 스토어: React 컴포넌트 밖 모듈 하나에 상태를 두는 라이브러리(§1 개념
@@ -21,15 +21,14 @@ beforeEach(() => {
 });
 
 describe('초기 상태 (AC-5 · US-ONB-14 · 2-1)', () => {
-  it('reset() 직후에는 7축 전부 null이다(어느 축도 []로 시작하지 않는다)', () => {
+  it('reset() 직후에는 6축 전부 null이다(어느 축도 []로 시작하지 않는다)', () => {
     // 실행 — 현재 상태를 읽는다.
     const state = usePreferenceStore.getState();
 
-    // 단언 — 복수 축(styles·companions·foods·transports·activities)과 단일 축(pace·budget)
-    // 전부 null. activities는 TRIP-254 신설 7번째 축.
+    // 단언 — 복수 축(styles·companions·foods·transports·activities)과 단일 축(pace)
+    // 전부 null.
     expect(state.styles).toBeNull();
     expect(state.pace).toBeNull();
-    expect(state.budget).toBeNull();
     expect(state.companions).toBeNull();
     expect(state.foods).toBeNull();
     expect(state.transports).toBeNull();
@@ -55,10 +54,9 @@ describe('액션 위임 (AC5 · 2-2)', () => {
 });
 
 describe('reset (AC-5 · 2-3)', () => {
-  it('여러 축을 선택한 뒤 reset()하면 7축 전부 null로 돌아간다', () => {
+  it('여러 축을 선택한 뒤 reset()하면 6축 전부 null로 돌아간다', () => {
     // 준비 — 여러 축에 값을 채운다(활동 포함).
     usePreferenceStore.getState().toggleStyle('rest');
-    usePreferenceStore.getState().toggleBudget('mid');
     usePreferenceStore.getState().toggleCompanion('solo');
     usePreferenceStore.getState().toggleFood('korean');
     usePreferenceStore.getState().toggleTransport('walk');
@@ -67,11 +65,10 @@ describe('reset (AC-5 · 2-3)', () => {
     // 실행 — reset.
     usePreferenceStore.getState().reset();
 
-    // 단언 — 7축 전부 null.
+    // 단언 — 6축 전부 null.
     const state = usePreferenceStore.getState();
     expect(state.styles).toBeNull();
     expect(state.pace).toBeNull();
-    expect(state.budget).toBeNull();
     expect(state.companions).toBeNull();
     expect(state.foods).toBeNull();
     expect(state.transports).toBeNull();

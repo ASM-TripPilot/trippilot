@@ -93,9 +93,8 @@ describe('PrefStep2Page — 완료 내비게이션 (AC3 · AC-done-1 · 5-5)', (
 
 describe('PrefStep2Page — 완료 시 서버에 취향 PUT (TRIP-471)', () => {
   it('완료를 탭하면 slug→서버값으로 번역한 취향을 PUT 하고, 홈으로도 이동한다', () => {
-    // 준비 — 3축 선택(단일 style·budget + 동행 pet 특례).
+    // 준비 — 2축 선택(style + 동행 pet 특례).
     usePreferenceStore.getState().toggleStyle('rest');
-    usePreferenceStore.getState().toggleBudget('low');
     usePreferenceStore.getState().toggleCompanion('pet');
     render(<PrefStep2Page />);
 
@@ -106,7 +105,9 @@ describe('PrefStep2Page — 완료 시 서버에 취향 PUT (TRIP-471)', () => {
     expect(mockPutMutate).toHaveBeenCalledTimes(1);
     const body = mockPutMutate.mock.calls[0][0].data;
     expect(body.styles).toEqual(['휴양']);
-    expect(body.budgetTier).toBe('저가');
+    // 예산 입력이 없어졌으니 키 자체를 보내지 않는다 — 생략은 서버에서 변경 없음(저장된 등급 유지).
+    expect(body).not.toHaveProperty('budgetTier');
+    expect(body).not.toHaveProperty('budgetRawAmount');
     expect(body.petFlag).toBe(true); // pet 은 companionTypes 가 아니라 petFlag
     expect(body.companionTypes).toEqual([]);
     expect(routerMock.replace).toHaveBeenCalledWith('/');
@@ -133,32 +134,15 @@ describe('PrefStep2Page — 일괄 탈출 (AC4 · 5-6)', () => {
 
     // 단언 — 홈으로 replace.
     expect(routerMock.replace).toHaveBeenCalledWith('/');
-    // 단언 — 나머지 6축은 null 유지, styles는 그대로(01b: 고른 값 폐기 안 함 — 관찰 가능
+    // 단언 — 나머지 5축은 null 유지, styles는 그대로(01b: 고른 값 폐기 안 함 — 관찰 가능
     // 차이 없음 결정의 표면). activities는 TRIP-254 신설 7번째 축 — 탈출이 이 축도 안 건드림.
     const state = usePreferenceStore.getState();
     expect(state.styles).toEqual(['rest']);
     expect(state.pace).toBeNull();
-    expect(state.budget).toBeNull();
     expect(state.companions).toBeNull();
     expect(state.foods).toBeNull();
     expect(state.transports).toBeNull();
     expect(state.activities).toBeNull();
-  });
-});
-
-describe('PrefStep2Page — 예산 축 탭↔스토어 왕복 (AC2 · US-ONB-06 · 5-7)', () => {
-  it('예산 구간을 탭하면 그 타일이 선택 표시되고 스토어 budget이 그 slug가 된다', () => {
-    // 준비 — 렌더(스토어는 beforeEach가 이미 reset해서 4축 모두 null).
-    render(<PrefStep2Page />);
-
-    // 실행 — 'low' 예산 타일을 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-budget-low'));
-
-    // 단언 ① — 읽기 경로: 스토어 값이 selectedBudget으로 내려가 화면이 다시 그려졌다.
-    expect(screen.getByTestId('onboarding-pref2-budget-low')).toBeSelected();
-    // 단언 ② — 쓰기 경로: 탭이 toggleBudget 액션에 연결돼 있다(budget은 단일 축이라
-    // toBe로 원시값 동일성을 본다 — 배열이 아니다).
-    expect(usePreferenceStore.getState().budget).toBe('low');
   });
 });
 
