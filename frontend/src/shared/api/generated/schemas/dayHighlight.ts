@@ -8,10 +8,18 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { DayHighlightDistanceSource } from './dayHighlightDistanceSource';
 
+/**
+ * 하루 한 칸. 실적이 없어도 실제 경로가 있는 날은 한 칸이다(U10 FD §12.5). **소요시간 없음**(INV-3)
+ */
 export interface DayHighlight {
   date: string;
   dayOrder: number;
   visitCount: number;
   places: string[];
+  /** 그날 거리 — 실제 경로가 있으면 그것, 없으면 방문점 연결선. **선택 필드** — U10 전에 만든 요약에는 없다(null) */
+  distanceKm?: number | null;
+  /** distanceKm 와 함께 있거나 함께 없다 */
+  distanceSource?: DayHighlightDistanceSource;
 }

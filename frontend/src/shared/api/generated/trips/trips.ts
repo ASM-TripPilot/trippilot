@@ -30,6 +30,8 @@ import type {
   AdjustTimesRequest,
   ArriveRequest,
   AssignBaseRequest,
+  AutoVisitBatch,
+  AutoVisitBatchResult,
   BaseAssignment,
   ChangeLog,
   Coverage,
@@ -43,13 +45,18 @@ import type {
   GetTripsTripIdChangeLogParams,
   GetTripsTripIdItineraryRevisionsParams,
   GetTripsTripIdRecordsParams,
+  IntervalReportRequest,
   Itinerary,
   MustVisit,
+  PostTripsTripIdVisitsVisitCheckIdRevertAutoParams,
   PutMemoRequest,
   ReorderPhotosRequest,
   ReplanSession,
   ResolveCoverageDayRequest,
   RevisionList,
+  RouteDay,
+  RouteDayList,
+  RouteDayUpload,
   SlotCandidates,
   SlotCandidatesRequest,
   StartReplanRequest,
@@ -1588,6 +1595,8 @@ export function useGetTripsTripIdItinerary<
  * ⏱ **응답까지, 그리고 폴링이 끝나기까지 수 분이 걸릴 수 있다.** 2026-08-21 팀 결정으로 생성 시간제약을 해제했다(TRIP-474) — AI 에 시한을 싣지 않으므로 후보 풀이 클수록 오래 걸린다. **짧은 폴링 상한을 두면 화면이 반쪽 일정에 머문 채 조용히 멈춘다.** 정말 멈춘 생성은 서버가 판정해 `FAILED` 로 내리므로(약 11분), 그보다 길게 버티면 반드시 종착 상태를 본다. 9월에 시간제약이 재도입되면 다시 수십 초대로 돌아온다(TRIP-475). 여행이 하루면 2차 없이 즉시 `COMPLETE`. PARTIAL 인 동안 확정·편집은 409. 재생성(이 POST)에는 상태 제한이 없다 — 중단된 생성(PARTIAL)에서 벗어나는 탈출구이자, **확정된 일정을 다시 짜는 유일한 경로**다(확정 해제 API 없음). 확정 일정에 호출하면 확정이 풀리고 PLANNED 새 일정으로 대체되며, 동결됐던 poi_snapshot 참조는 사라진다.
  *
  * **같은 여행**의 재생성에는 상태 제한이 없다(위 탈출구). 다만 **다른 여행의 생성이 진행 중이면 409** — 생성은 LLM·솔버를 쓰는 무거운 작업이라 동시 실행을 열어두면 비용·지연이 사용자 수가 아니라 연타 횟수에 비례한다(TRIP-403). 거절 응답의 `error.activeTripId` 에 진행 중인 여행이 실린다. 멈춘 생성(백그라운드 비정상 종료)은 일정 시간 뒤 제한에서 풀린다 — 규칙이 사용자를 가두지 않는다.
+ *
+ * **계정당 하루 AI 생성 횟수에 상한이 있다(429 · TRIP-1314).** 같은 여행의 재생성도 센다 — 위 탈출구가 연타를 그대로 LLM 비용에 곱하던 자리다. **실패한 생성과 폴백으로 끝난 생성(`isFallback`)은 세지 않아** 탈출구는 그대로 열려 있다 — AI 가 **실패로 답한** 동안의 재시도는 횟수를 태우지 않는다. **새 요청으로 갈아치운(취소·대체된) 생성은 센다** — 결과를 못 봤어도 AI 는 이미 불렸고, 막으려는 것이 바로 그 연타다. 그래서 AI 가 실패하지 않고 늘어지는 동안의 연타는 횟수를 쓴다. 직접 만들기(`MANUAL`)는 AI 를 부르지 않아 세지 않고, 슬롯 후보·여행 중 재계획도 이 상한 밖이다. 하루는 여행지 기준(KST) 자정에 바뀐다.
  * @summary AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
  */
 export const postTripsTripIdItinerary = (
@@ -2212,7 +2221,545 @@ export const usePostTripsTripIdVisits = <TError = void, TContext = unknown>(
   );
 };
 /**
+ * 기기가 올린 다운샘플 인코딩 폴리라인을 그대로 준다 — 지도는 추가 다운샘플 없이 그린다(PERF-U10-07). 세그먼트는 기록이 끊긴 곳에서 나뉘며 서로 잇지 않는다(INV-U10-9). **소요시간·속도·기록 구간은 싣지 않는다**(INV-3 · INV-U10-7).
+ * @summary 실제 경로 — 날짜별 하루치 경로 목록(U10 · TRIP-1405)
+ */
+export const getTripsTripIdRoutes = (tripId: string, signal?: AbortSignal) => {
+  return customInstance<RouteDayList>({
+    url: `/trips/${tripId}/routes`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetTripsTripIdRoutesQueryKey = (tripId: string) => {
+  return [`/trips/${tripId}/routes`] as const;
+};
+
+export const getGetTripsTripIdRoutesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTripsTripIdRoutesQueryKey(tripId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdRoutes>>
+  > = ({ signal }) => getTripsTripIdRoutes(tripId, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: tripId !== null && tripId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdRoutesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdRoutes>>
+>;
+export type GetTripsTripIdRoutesQueryError = void;
+
+export function useGetTripsTripIdRoutes<
+  TData = Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+  TError = void,
+>(
+  tripId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdRoutes>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdRoutes<
+  TData = Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdRoutes>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdRoutes<
+  TData = Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 실제 경로 — 날짜별 하루치 경로 목록(U10 · TRIP-1405)
+ */
+
+export function useGetTripsTripIdRoutes<
+  TData = Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRoutes>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdRoutesQueryOptions(tripId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * **원시 좌표는 받지 않는다** — 기기가 다운샘플한 인코딩 폴리라인(정밀도 1e-5)뿐이다(INV-U10-2). 위치 이용 동의(L2)와 GPS 기록 동의(L3)가 모두 있어야 저장한다. 저장할 때마다 위치 법정 로그 `COLLECTION(phase=STORE)` 1건이 남는다. 거리는 서버가 **폴리라인 길이 이상 · 기록 구간 × 시속 300km 이하**로 깎고 깎았으면 `distanceClamped` 다(BR-U10-38). L2 또는 L3 를 철회하면(계정 삭제 포함) 그 계정의 경로는 전부 즉시 지워진다(DEC-U10-7 · D4).
+ * @summary 실제 경로 — 하루치 경로 저장(전체 교체 · 멱등, U10 · TRIP-1405)
+ */
+export const putTripsTripIdRoutesDate = (
+  tripId: string,
+  date: string,
+  routeDayUpload: RouteDayUpload,
+  signal?: AbortSignal
+) => {
+  return customInstance<RouteDay>({
+    url: `/trips/${tripId}/routes/${date}`,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    data: routeDayUpload,
+    signal,
+  });
+};
+
+export const getPutTripsTripIdRoutesDateMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putTripsTripIdRoutesDate>>,
+    TError,
+    { tripId: string; date: string; data: RouteDayUpload },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putTripsTripIdRoutesDate>>,
+  TError,
+  { tripId: string; date: string; data: RouteDayUpload },
+  TContext
+> => {
+  const mutationKey = ['putTripsTripIdRoutesDate'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putTripsTripIdRoutesDate>>,
+    { tripId: string; date: string; data: RouteDayUpload }
+  > = (props) => {
+    const { tripId, date, data } = props ?? {};
+
+    return putTripsTripIdRoutesDate(tripId, date, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutTripsTripIdRoutesDateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putTripsTripIdRoutesDate>>
+>;
+export type PutTripsTripIdRoutesDateMutationBody = RouteDayUpload;
+export type PutTripsTripIdRoutesDateMutationError = void;
+
+/**
+ * @summary 실제 경로 — 하루치 경로 저장(전체 교체 · 멱등, U10 · TRIP-1405)
+ */
+export const usePutTripsTripIdRoutesDate = <TError = void, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putTripsTripIdRoutesDate>>,
+      TError,
+      { tripId: string; date: string; data: RouteDayUpload },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof putTripsTripIdRoutesDate>>,
+  TError,
+  { tripId: string; date: string; data: RouteDayUpload },
+  TContext
+> => {
+  return useMutation(
+    getPutTripsTripIdRoutesDateMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 기기가 지오펜스 자동 기록을 무장하거나 경로 기록을 시작·종료할 때 알린다. **좌표는 받지 않는다** — 서버는 구간을 열고 닫으며 구간 단위 위치 법정 로그(무장 = `USE`, 경로 기록 = `COLLECTION`)를 남긴다(BR-U10-47). **멱등**(`intervalId` + `phase`) — 오프라인 큐가 같은 보고를 다시 보내도 한 번만 반영되고 204 다. START 는 위치 이용 동의(L2)가 있어야 하고, 경로 기록은 GPS 기록 동의(L3)도 있어야 한다. 서버 킬 스위치가 꺼져 있으면 START 는 409 다 — 기기는 강등한다. END 는 언제나 받는다. END 가 오지 않은 구간은 여행 종료 + 1일에 서버가 `SERVER_TIMEOUT` 으로 닫는다(여행을 지웠으면 다음 훑기에). 동의를 철회하면(계정 삭제 포함) 서버가 열린 구간을 철회 시각으로 `CONSENT_REVOKED` 닫는다 — L3 철회는 경로 기록만, L2 철회·계정 삭제는 전부.
+ * @summary 자동화 구간 보고 — 지오펜스 무장·경로 기록의 시작과 끝(U10 · TRIP-1404)
+ */
+export const postTripsTripIdLocationAutomationIntervals = (
+  tripId: string,
+  intervalReportRequest: IntervalReportRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>({
+    url: `/trips/${tripId}/location-automation/intervals`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data: intervalReportRequest,
+    signal,
+  });
+};
+
+export const getPostTripsTripIdLocationAutomationIntervalsMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdLocationAutomationIntervals>>,
+    TError,
+    { tripId: string; data: IntervalReportRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdLocationAutomationIntervals>>,
+  TError,
+  { tripId: string; data: IntervalReportRequest },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdLocationAutomationIntervals'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdLocationAutomationIntervals>>,
+    { tripId: string; data: IntervalReportRequest }
+  > = (props) => {
+    const { tripId, data } = props ?? {};
+
+    return postTripsTripIdLocationAutomationIntervals(tripId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdLocationAutomationIntervalsMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof postTripsTripIdLocationAutomationIntervals>>
+  >;
+export type PostTripsTripIdLocationAutomationIntervalsMutationBody =
+  IntervalReportRequest;
+export type PostTripsTripIdLocationAutomationIntervalsMutationError = void;
+
+/**
+ * @summary 자동화 구간 보고 — 지오펜스 무장·경로 기록의 시작과 끝(U10 · TRIP-1404)
+ */
+export const usePostTripsTripIdLocationAutomationIntervals = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdLocationAutomationIntervals>>,
+      TError,
+      { tripId: string; data: IntervalReportRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdLocationAutomationIntervals>>,
+  TError,
+  { tripId: string; data: IntervalReportRequest },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdLocationAutomationIntervalsMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * **좌표가 없다**(INV-U10-2) — 기기가 지오펜스로 판정한 결과(슬롯·장소·발생 시각)만 온다. 발생 시각(`occurredAt`)을 그대로 기록한다(G-U10-1 — 서버 시각이 아니다). 순서대로 적용하고 **항목마다 결과**를 준다 — 409 로 배치 전체를 깨지 않는다(BR-U10-20). 멱등: 같은 배치를 몇 번 보내도 최종 상태가 같다 — 재전송은 `ALREADY_RECORDED` 로 수렴한다(PBT-U10-3). **서버 우선**: 이미 있는 기록은 바뀌지 않는다. 예외는 수동 도착 + 미완료에 자동 완료를 더하는 것 하나(§5.2). `outcome`: `APPLIED` · `ALREADY_RECORDED`(이미 그 상태 — 버린다) · `CONFLICT`(일정에 없는 슬롯 · 건너뛴 슬롯 · 도착 없는 완료 · 자동 출처 없는 완료) · `SUPPRESSED`(그날 자동 기록을 되돌린 슬롯) · `REJECTED_CONSENT`(위치 이용 동의 L2 없음 — 전 항목) · `OUT_OF_WINDOW`(여행 기간 밖 · 슬롯 날짜와 다른 날 · 서버 시각 + 5분보다 미래 · 도착보다 앞선 완료). `automationEnabled` 가 `false` 면 서버 킬 스위치가 꺼진 것이다 — 기기는 강등한다. 꺼져 있어도 온 항목은 정상 처리한다.
+ * @summary 자동 방문 결과 배치 — 기기가 판정한 도착·완료(U10 · TRIP-1403)
+ */
+export const postTripsTripIdVisitsAutoEvents = (
+  tripId: string,
+  autoVisitBatch: AutoVisitBatch,
+  signal?: AbortSignal
+) => {
+  return customInstance<AutoVisitBatchResult>({
+    url: `/trips/${tripId}/visits/auto-events`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data: autoVisitBatch,
+    signal,
+  });
+};
+
+export const getPostTripsTripIdVisitsAutoEventsMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsAutoEvents>>,
+    TError,
+    { tripId: string; data: AutoVisitBatch },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsAutoEvents>>,
+  TError,
+  { tripId: string; data: AutoVisitBatch },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdVisitsAutoEvents'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsAutoEvents>>,
+    { tripId: string; data: AutoVisitBatch }
+  > = (props) => {
+    const { tripId, data } = props ?? {};
+
+    return postTripsTripIdVisitsAutoEvents(tripId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdVisitsAutoEventsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsAutoEvents>>
+>;
+export type PostTripsTripIdVisitsAutoEventsMutationBody = AutoVisitBatch;
+export type PostTripsTripIdVisitsAutoEventsMutationError = void;
+
+/**
+ * @summary 자동 방문 결과 배치 — 기기가 판정한 도착·완료(U10 · TRIP-1403)
+ */
+export const usePostTripsTripIdVisitsAutoEvents = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdVisitsAutoEvents>>,
+      TError,
+      { tripId: string; data: AutoVisitBatch },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsAutoEvents>>,
+  TError,
+  { tripId: string; data: AutoVisitBatch },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdVisitsAutoEventsMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * **자동 출처 부분만** 되돌린다(BR-U10-31). 자동 완료면 완료만 비우고(도착은 남는다 — 그 슬롯의 재계획 잠금도 풀린다), 완료 없는 자동 도착이면 도착을 비우고 **그날 그 슬롯의 자동 기록을 막는다**(이후 자동 결과는 `SUPPRESSED`). 그 자리에 사람이 도착·건너뛰기를 남기면 같은 행을 쓴다(BR-U10-32).
+ * @summary 자동 기록 되돌리기(U10 · TRIP-1403)
+ */
+export const postTripsTripIdVisitsVisitCheckIdRevertAuto = (
+  tripId: string,
+  visitCheckId: string,
+  params?: PostTripsTripIdVisitsVisitCheckIdRevertAutoParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<VisitCheck>({
+    url: `/trips/${tripId}/visits/${visitCheckId}/revert-auto`,
+    method: 'POST',
+    params,
+    signal,
+  });
+};
+
+export const getPostTripsTripIdVisitsVisitCheckIdRevertAutoMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdRevertAuto>>,
+    TError,
+    {
+      tripId: string;
+      visitCheckId: string;
+      params?: PostTripsTripIdVisitsVisitCheckIdRevertAutoParams;
+    },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdRevertAuto>>,
+  TError,
+  {
+    tripId: string;
+    visitCheckId: string;
+    params?: PostTripsTripIdVisitsVisitCheckIdRevertAutoParams;
+  },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdVisitsVisitCheckIdRevertAuto'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdRevertAuto>>,
+    {
+      tripId: string;
+      visitCheckId: string;
+      params?: PostTripsTripIdVisitsVisitCheckIdRevertAutoParams;
+    }
+  > = (props) => {
+    const { tripId, visitCheckId, params } = props ?? {};
+
+    return postTripsTripIdVisitsVisitCheckIdRevertAuto(
+      tripId,
+      visitCheckId,
+      params
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdVisitsVisitCheckIdRevertAutoMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdRevertAuto>>
+  >;
+
+export type PostTripsTripIdVisitsVisitCheckIdRevertAutoMutationError = void;
+
+/**
+ * @summary 자동 기록 되돌리기(U10 · TRIP-1403)
+ */
+export const usePostTripsTripIdVisitsVisitCheckIdRevertAuto = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdRevertAuto>>,
+      TError,
+      {
+        tripId: string;
+        visitCheckId: string;
+        params?: PostTripsTripIdVisitsVisitCheckIdRevertAutoParams;
+      },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdRevertAuto>>,
+  TError,
+  {
+    tripId: string;
+    visitCheckId: string;
+    params?: PostTripsTripIdVisitsVisitCheckIdRevertAutoParams;
+  },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdVisitsVisitCheckIdRevertAutoMutationOptions(options),
+    queryClient
+  );
+};
+/**
  * 즉석 방문은 슬롯 키가 없어 **도착 시각(여행지 기준 날짜)** 으로 묶인다.
+ *
+ * **배열 순서가 곧 방문 순서다** — 도착 시각 오름차순이고, 도착한 적 없는 건너뛰기는 기록된 시각으로 끼어든다. 기록(`/trips/{tripId}/records` 의 `actual`)과 **같은 순서**라 화면은 `index + 1` 로 "몇 번째 방문"을 매기면 된다(TRIP-1315). 종전에는 최신이 먼저 나와 두 화면의 번호가 어긋났다.
  * @summary 그 날의 방문 기록
  */
 export const getTripsTripIdVisitsDaysDay = (

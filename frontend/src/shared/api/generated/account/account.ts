@@ -321,7 +321,9 @@ export const useDeleteMeDeletion = <
   return useMutation(getDeleteMeDeletionMutationOptions(options), queryClient);
 };
 /**
- * 계정이 소유한 것 전부 — 프로필·취향·여행·저장 숙소·방문 기록·동의 이력. **내보내기만**이고 계정 삭제는 별개다(U0 유예 삭제).
+ * 계정이 소유한 것 전부 — 프로필·취향·여행·저장 숙소·방문 기록·동의 이력·도우미 대화. **내보내기만**이고 계정 삭제는 별개다(U0 유예 삭제).
+ *
+ * 도우미 대화(`assistantMessages`)는 **메시지 한 건이 한 줄**이다 — 사용자가 한 말과 도우미의 답(`sessionId`·`tripId`· `role`·`kind`·`text`·`redacted`·`createdAt`). 정책 위반으로 가려진 입력은 원문이 서버에 없어 `redacted: true` 표지만 나간다. 보존 기간이 지난 대화는 싣지 않는다.
  *
  * ⚠ **사진 바이너리는 없다**(INV-U5-03) — 서버가 갖고 있지 않으므로 메타(기기 자산 식별자· 촬영 시각)만 나간다. append-only 로그(`consent_record`)는 **읽기만** 한다.
  *

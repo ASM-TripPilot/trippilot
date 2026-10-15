@@ -25,4 +25,11 @@ export interface Reflection {
   stats: ReflectionStats;
   generatedAt: string;
   updatedAt: string;
+  /** 그날의 기분 코드. 남기지 않았으면 null. **재생성해도 남는다** — 사용자가 쓴 값이다(TRIP-828). */
+  mood?: string | null;
+  /**
+   * 한 줄 메모. 남기지 않았으면 null. 재생성해도 남는다.
+   * @maxLength 60
+   */
+  shortMemo?: string | null;
 }

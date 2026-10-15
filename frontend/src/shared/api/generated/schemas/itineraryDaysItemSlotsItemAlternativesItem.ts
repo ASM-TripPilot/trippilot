@@ -19,4 +19,6 @@ export type ItineraryDaysItemSlotsItemAlternativesItem = {
   category?: string | null;
   tags?: string[];
   imageUrl?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 };
