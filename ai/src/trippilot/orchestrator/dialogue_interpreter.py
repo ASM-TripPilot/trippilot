@@ -105,9 +105,16 @@ class PendingFrame:
         intent = Intent(d["intent"])
         if intent not in ROUTABLE_INTENTS:
             raise ValueError(f"보류 프레임 의도가 위임 대상이 아니다: {intent.value}")
+        # 타입은 여기서 막는다 — `.items()` 의 AttributeError 는 `DialogueContext.from_dict` 의
+        # 복구 except 를 빠져나가 500 이 된다. `str()` 은 무엇이든 받아 줘서 리스트가 질문 이름이 됐다.
         args = d.get("arguments") or {}
+        if not isinstance(args, Mapping):
+            raise TypeError(f"보류 프레임 arguments 가 객체가 아니다: {type(args).__name__}")
+        asked = d["asked"]
+        if not isinstance(asked, str):
+            raise TypeError(f"보류 프레임 asked 가 문자열이 아니다: {type(asked).__name__}")
         return cls(intent=intent, arguments={str(k): str(v) for k, v in args.items()},
-                   asked=str(d["asked"]), confidence=float(d.get("confidence", 0.5)))
+                   asked=asked, confidence=float(d.get("confidence", 0.5)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,13 +136,13 @@ class DialogueContext:
             return cls()
         try:
             turn = int(d.get("turn_index") or 0)
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError, OverflowError) as e:
             log.warning("dialogue_context turn_index 를 읽지 못해 0 으로 둔다: %s: %s", type(e).__name__, e)
             turn = 0
         try:
             pending = PendingFrame.from_dict(d["pending"]) if d.get("pending") else None
             clarify = int(d.get("clarify_count") or 0)
-        except (KeyError, ValueError, TypeError) as e:
+        except (KeyError, ValueError, TypeError, OverflowError) as e:
             log.warning("dialogue_context 보류 프레임을 읽지 못해 버린다: %s: %s", type(e).__name__, e)
             return cls(turn_index=turn)
         return cls(pending=pending, turn_index=turn, clarify_count=clarify)
