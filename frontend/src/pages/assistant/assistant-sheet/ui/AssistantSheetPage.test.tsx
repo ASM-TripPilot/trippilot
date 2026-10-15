@@ -415,6 +415,36 @@ describe('AssistantSheetPage · 턴 흐름 (TRIP-1326)', () => {
     ).toEqual(expect.objectContaining({ disabled: true }));
   });
 
+  it('429 TURN_IN_PROGRESS → 말풍선·입력을 거두지 않고, Retry-After 뒤 [다시 보내기]는 같은 clientTurnId (TRIP-1409)', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-input');
+    const spy = jest.spyOn(fake, 'sendTurn');
+    fake.configure({ turnInProgressSeconds: 1 });
+    await typeAndSend('오늘 날씨');
+
+    expect(
+      await screen.findByTestId('assistant-rate-limited')
+    ).toBeOnTheScreen();
+    // 기록 안 된 429(RATE_LIMITED)와 반대: 말풍선은 남고 입력은 복원되지 않는다
+    expect(
+      screen.getByTestId('assistant-user-bubble-pending')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('assistant-input').props.value).toBe('');
+
+    const resend = await screen.findByTestId(
+      'assistant-resend',
+      {},
+      { timeout: 3000 }
+    );
+    await act(async () => {
+      fireEvent.press(resend);
+    });
+    expect(await screen.findByText('지금 날씨예요.')).toBeOnTheScreen();
+    const ids = spy.mock.calls.map(([, request]) => request.clientTurnId);
+    expect(ids).toHaveLength(2);
+    expect(ids[1]).toBe(ids[0]);
+  });
+
   it('금지 · 보내는 중 연타해도 턴 요청은 1회', async () => {
     renderPage();
     await screen.findByTestId('assistant-input');

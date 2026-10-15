@@ -92,6 +92,15 @@ describe('c02-social-login — 기본 화면 (AC-ONB-01-12 · §10 이메일 버
     expect(screen.queryByTestId('auth-login-terms')).toBeNull();
   });
 
+  it('hideNaver 면 네이버 버튼만 빠지고 나머지 둘은 그대로다 (TRIP-1371)', () => {
+    renderScreen({ hideNaver: true });
+
+    expect(socialButtonOrder()).toEqual([
+      'auth-login-google',
+      'auth-login-kakao',
+    ]);
+  });
+
   it('넘겨받은 애플 버튼을 누르면 onSignIn("apple") 이 한 번 호출된다 (TRIP-932 AC-11)', () => {
     // 준비
     const props = renderScreen({ AppleButton: StubAppleButton });

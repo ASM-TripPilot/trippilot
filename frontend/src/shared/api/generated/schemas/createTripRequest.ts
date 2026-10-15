@@ -9,8 +9,8 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 import type { CompanionType } from './companionType';
-import type { CreateTripRequestPreferenceSnapshot } from './createTripRequestPreferenceSnapshot';
 import type { TripDestination } from './tripDestination';
+import type { TripPreferenceSnapshot } from './tripPreferenceSnapshot';
 
 export interface CreateTripRequest {
   /** 미입력 시 목적지 기반 자동생성 */
@@ -20,6 +20,12 @@ export interface CreateTripRequest {
   party?: number;
   companionType?: CompanionType | null;
   budgetTotal?: number | null;
-  preferenceSnapshot?: CreateTripRequestPreferenceSnapshot;
+  preferenceSnapshot?: TripPreferenceSnapshot;
   destinations: TripDestination[];
+  /** 하루 일과 시작 시각(전 일자 공통). 생략하면 서버 기본 09:00. "9시는 이르다"는 **취향** 축이다 — 날짜별로 받지 않는다(대부분 기본값을 쓴다). */
+  dayStartAt?: string | null;
+  /** **첫날만** 다른 시작 시각(비행기·KTX 도착 후). 생략하면 첫날도 `dayStartAt` 을 따른다. 이게 없으면 도착 전 시간에 일정이 깔리는데 화면상으로는 정상으로 보인다 — 취향이 아니라 **사실 오류**다. */
+  firstDayStartAt?: string | null;
+  /** **마지막날만** 다른 종료 시각(출발·귀가 전). 생략하면 기본 21:00. 당일치기는 첫날이자 마지막날이라 둘 다 걸리고, 그때는 시작 < 종료여야 한다(아니면 400). */
+  lastDayEndAt?: string | null;
 }

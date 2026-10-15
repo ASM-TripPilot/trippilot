@@ -1526,6 +1526,14 @@ _NL_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="nl-extract")
 # 무시된 하루가 나왔다). 시작 시점에 배경으로 띄우므로 결과를 받는 지점(지시 번역·후보 수집 뒤)까지는 공짜고,
 # 그보다 늦을 때만 그만큼 기다린다. 운영 재계획 응답은 12~18s 라 시한(60s)에 여유가 있다.
 _NL_EXTRACT_MAX_S = 8.0
+def _category_rule_lines(nl: nl_verify.VerifiedRequest) -> tuple[str, ...]:
+    """검증된 종류 조건 → 구성 프롬프트 [사용자가 고른 요청] 줄. 코드가 결과를 맞추지만, LLM 이 처음부터
+    그 조건으로 하루를 짜야 채움 후보(기계적 순서)보다 나은 곳이 고른다."""
+    lines = [f"{c.value} 곳만" for c in sorted(nl.only, key=lambda c: c.value)]
+    lines += [f"{c.value} 정확히 {n}곳" for c, n in nl.counts]
+    return tuple(lines)
+
+
 # 지도 실재 확인에 줄 시한(ms) — 생성 ②′ 의 `existence_deadline_ms` 와 같은 급.
 _NL_EXISTENCE_MS = 1_500
 
@@ -2288,7 +2296,8 @@ class WiredItineraryOrchestrator:
         # 고정·다녀온 곳이 아니면 교체 대상이다. 반대 칩을 같이 고른 카테고리는 빼지 않는다(상쇄 규약,
         # `directive_fit`). 남는 후보가 없으면 빼지 않고 밝힌다(INV-4) — 빈 하루보다 낫다.
         # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
-        nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending)
+        nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending,
+                                    available=frozenset(p.category for p in pool.pois))
         # 통과한 곳은 풀에 합류시킨다 — **구성 LLM 의 숏리스트가 풀에서만 나오기 때문이다.** 반경 밖이면
         # 구성 LLM 이 그곳을 고를 수 없어 다른 곳으로 하루를 꽉 채우고, 이 곳은 9번째 필수 방문으로 붙었다가
         # 솔버가 떨어뜨렸다(DEV 실호출 2026-10-14: 제주시 → 성산일출봉 38km, 보고도 없이 빠짐).
@@ -2345,6 +2354,10 @@ class WiredItineraryOrchestrator:
             else:
                 notes.append(f"avoid_excluded: {len(avoided)} {cats}")
         avoided = avoided | (nl.avoid - held)  # 사용자가 이름으로 뺀 곳(등록 POI 로 확인된 것만)
+        if nl.only:
+            # "카페로만" — 다른 종류는 후보에서 뺀다. 잠금·이름으로 집은 곳은 둔다(말이 어긋나면 이름이 이긴다).
+            avoided = avoided | frozenset(
+                p.poi_id for p in pool.pois if p.category not in nl.only and p.poi_id not in held)
 
         # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────
         # 다녀온 곳(지난 잠금)은 PlanB 에도 제외다 — 기준점이 "마지막 완료 방문"이면 그 POI 가
@@ -2400,6 +2413,7 @@ class WiredItineraryOrchestrator:
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
                 window_end=day_end if night else None,
+                rules=_category_rule_lines(nl),
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -2416,6 +2430,27 @@ class WiredItineraryOrchestrator:
             # (방문 수는 구성이 남은 시간에 맞춘 값이다 — 이름으로 집은 곳과 같은 규칙).
             composed = (*composed[:-1], night[0]) if len(composed) > 1 else (*composed, night[0])
             notes.append("nightlife_forced: 1")
+        if composed and (nl.only or nl.counts) and earlier is None:
+            # 종류 조건은 **코드가 지킨다** — 구성 LLM 에게도 알리지만(`rules`), 안 따라도 결과가 맞게 여기서
+            # 덜고 채운다. 채움 순서 = PlanB 순서 → 기준점에서 가까운 순(구성이 안 고른 곳 중 자격 있는 것만).
+            index = {p.poi_id: p for p in pool.pois}
+            gone = ({PoiId(x) for x in request.excluded_poi_ids} | avoided
+                    | {b.poi_id for b in blocks})
+            weekday = request.target_date.weekday()
+            ok = [p for p in pool.pois if p.poi_id not in gone and p.category is not PoiCategory.STAY
+                  and composition.hours_label(p, weekday) is not None]
+            ranked = list(planb_rank or planb.ranked_poi_ids)
+            fill = [*(p for p in ranked if p in {q.poi_id for q in ok}),
+                    *(q.poi_id for q in sorted(ok, key=lambda q: haversine_km(anchor, q.coord)))]
+            before = len(composed)
+            composed, short = nl_verify.apply_counts(
+                composed, only=nl.only, counts=nl.counts,
+                category_of={p.poi_id: p.category for p in pool.pois},
+                fill=fill, keep=nl_ids)
+            notes.append(f"nl_category_applied: {before}->{len(composed)}")
+            notes += short
+        if nl.only:
+            add_one = add_one & nl.only  # "카페로만"에 "맛집 하나 추가"가 겹치면 종류 조건이 이긴다
         add_one_asked = add_one
         if composed:
             # 고른 목록에 이미 든 종류의 "한 곳 추가"는 또 넣지 않는다(카페 두 곳).
@@ -2604,6 +2639,8 @@ class WiredItineraryOrchestrator:
         daily_rain: Mapping[date, int] | None,
         notes: list[str],
         pending: "Future | str | None",
+        *,
+        available: frozenset[PoiCategory] = frozenset(),
     ) -> nl_verify.VerifiedRequest:
         """배경 추출 결과 → **외부 출처 대조** → 통과분만. 예외를 던지지 않는다(INV-4).
 
@@ -2643,6 +2680,7 @@ class WiredItineraryOrchestrator:
             existence_deadline_ms=_NL_EXISTENCE_MS,
             rain_by_date=daily_rain or {},
             rain_threshold=AssemblyConfig().rain_threshold_pct,
+            available=available,
         )
         notes.extend(verified.notes)
         return verified
@@ -2672,6 +2710,7 @@ class WiredItineraryOrchestrator:
         nearby: tuple[PoiId, ...] = (),
         origins: tuple[GeoPoint, ...] = (),
         window_end: datetime | None = None,
+        rules: tuple[str, ...] = (),
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -2744,7 +2783,7 @@ class WiredItineraryOrchestrator:
             window=f"{start:%H:%M}~{end:%H:%M}",
             weather=f"강수확률 {rain}%" if rain is not None else "정보 없음",
             reasons=tuple(composition.REASON_LABELS.get(r, r) for r in request.reasons if r),
-            directives=tuple(labels.get(k, k) for k in resolved),
+            directives=(*(labels.get(k, k) for k in resolved), *rules),
             user_request=request.free_text or "",
             schedule=tuple(
                 ScheduleLine(

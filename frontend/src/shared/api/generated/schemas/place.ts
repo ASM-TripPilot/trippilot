@@ -29,6 +29,6 @@ export interface Place {
   /** 표시용 태그(감성 골목·야경·카페 등). 열린 집합이며 미확보 시 빈 배열 */
   tags: string[];
   savedCount: number;
-  /** 탐색은 항상 ACTIVE, 담기 목록은 폐업(CLOSED)·미검증(UNVERIFIED)도 포함 — 클라 뱃지 */
+  /** 탐색 목록은 항상 ACTIVE. 단건은 폐업(CLOSED)·유실(LOST)도, 담기 목록은 미검증(UNVERIFIED)까지 포함 — 클라 뱃지 */
   dataStatus: PlaceDataStatus;
 }

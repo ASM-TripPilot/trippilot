@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { VisitCheckCompletionSource } from './visitCheckCompletionSource';
 import type { VisitCheckSource } from './visitCheckSource';
 
 export interface VisitCheck {
@@ -19,7 +20,10 @@ export interface VisitCheck {
   completedAt?: string | null;
   /** 건너뜀(취소). 완료와 동시에 참일 수 없다 */
   skippedAt?: string | null;
+  /** 도착 출처(DEC-U10-6). 완료 출처는 completionSource */
   source: VisitCheckSource;
+  /** 완료 출처 — 완료가 있을 때만 있다(INV-U10-3). 화면이 완료에도 "자동 기록"을 붙이는 근거 */
+  completionSource?: VisitCheckCompletionSource;
   /** 계획에 없던 곳인가 — 화면의 '즉석 방문' 배지 근거 */
   spontaneous: boolean;
   /** 오프라인 충돌 판정의 기준(BR-U5-22 · TRIP-546). 클라이언트는 이 값을 로컬 편집의 기준 버전으로 들고 있다가 재생 시 `expectedUpdatedAt` 으로 돌려보낸다. */

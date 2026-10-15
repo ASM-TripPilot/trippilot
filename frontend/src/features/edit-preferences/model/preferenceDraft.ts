@@ -8,6 +8,7 @@
  *  - PUT 은 **바뀐 축만** 담는다(omit). openapi 계약상 축을 생략하면 미변경, `null`을 보내면
  *    미설정으로 초기화(데이터 손실)라, 안 만진 축은 키 자체를 안 만든다. `null`은 사용자가
  *    한 축을 전부 해제한 "명시적 리셋"에만 정당하다.
+ *  - 예산(`budgetTier`)은 편집 대상이 아니다 — 키를 만들지 않으니 서버에 저장된 값은 그대로 남는다.
  */
 import type {
   PrefArrayAxis,
@@ -24,7 +25,6 @@ export interface PreferenceSelection {
   pace: string | null;
   companionTypes: string[] | null;
   petFlag: boolean;
-  budgetTier: string | null;
 }
 
 /** 배열 축: 미설정(축 부재·중립)이면 null, 아니면 서버값 그대로. */
@@ -47,14 +47,12 @@ function arrayEq(a: string[] | null, b: string[] | null): boolean {
 }
 
 /**
- * GET View → 초기 선택 상태. companion·budget 은 래퍼 구조를 평면 필드로 편다.
+ * GET View → 초기 선택 상태. companion 은 래퍼 구조를 평면 필드로 편다.
  * 미설정(중립·부재) 축은 배열·스칼라=null, petFlag=false.
  */
 export function initialSelection(view: PreferenceView): PreferenceSelection {
   const companion = view.companion;
   const companionUnset = !companion || companion.isNeutralDefault === true;
-  const budget = view.budget;
-  const budgetUnset = !budget || budget.isNeutralDefault === true;
 
   return {
     styles: arrayAxis(view.styles),
@@ -64,7 +62,6 @@ export function initialSelection(view: PreferenceView): PreferenceSelection {
     pace: scalarAxis(view.pace),
     companionTypes: companionUnset ? null : (companion.companionTypes ?? null),
     petFlag: companionUnset ? false : (companion.petFlag ?? false),
-    budgetTier: budgetUnset ? null : (budget.tier ?? null),
   };
 }
 
@@ -102,9 +99,6 @@ export function buildPreferenceInput(
   }
   if (selection.petFlag !== initial.petFlag) {
     input.petFlag = selection.petFlag;
-  }
-  if (selection.budgetTier !== initial.budgetTier) {
-    input.budgetTier = selection.budgetTier as PreferenceInput['budgetTier'];
   }
 
   return input;

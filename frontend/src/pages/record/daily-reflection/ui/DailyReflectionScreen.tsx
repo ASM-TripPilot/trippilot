@@ -45,8 +45,9 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  *  - pending            : (TRIP-1068) 조회·생성 중 안내 본문만 · 하단 CTA 없음(empty 로 접지 않는다, INV-4).
  *
  * ★ 신규 표면 prop(dayTabs·activeDay·onSelectDay·onPressTab)은 전부 **옵셔널** — 미주입 호출자(프리뷰·
- *   무회귀 테스트)가 그대로 컴파일된다. Figma 의 기분 3택·메모 입력은 그리지 않는다(TRIP-935 R7) —
- *   저장 계약이 없어 다시 들어오면 사라지는 입력이었다(통합 저장은 계약 확장 티켓 TRIP-823).
+ *   무회귀 테스트)가 그대로 컴파일된다. 기분 3택·한 줄 메모는
+ *   TRIP-935 R7 에서 저장 계약이 없어 걷었다가, 서버가 mood·shortMemo 를 받게 되어(TRIP-828) TRIP-1372 에서
+ *   되살렸다 — `onChangeMood`·`onSaveShortMemo` 가 둘 다 있을 때만 그린다(글리프 없는 글자 칩, Figma 확인 필요).
  *
  * ★ 편집 진입은 헤더 "편집"(`reflection-daily-edit`, 전 얼굴 · default 는 서술 카드 "수정"으로도 진입)이
  *   진다. empty/error 하단 CTA "직접 회고 작성"은 헤더와 같은 화면에 공존하므로 testID 를 분리한다
@@ -57,6 +58,21 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  * 지도 자리를 그리지 않고(TRIP-935 R7) data-insufficient 는 누락 사유를 표기한다(US-REC-06). 가짜 기본
  * 센터 지도 금지. 신규 지도 컴포넌트 금지 — `shared/map/MapView` 재사용, viewOnly.
  */
+
+/** TRIP-1372 · 기분 코드 3종 — 서버는 코드 모양만 보고 값 집합은 화면이 정한다. 순서가 곧 표시 순서. */
+const MOODS = [
+  { code: 'sad', label: '아쉬워요' },
+  { code: 'soso', label: '괜찮았어요' },
+  { code: 'good', label: '좋았어요' },
+] as const;
+
+/** TRIP-1372 · 한 줄 메모 상한 — 서버 계약(`shortMemo` maxLength 60)의 UX 사본, 권위는 서버. */
+const SHORT_MEMO_MAX = 60;
+
+/** 개행·탭 등 제어 문자를 공백으로 바꾼다(서버는 한 줄만 받는다 — 붙여넣기로 들어온 줄바꿈 방어). */
+function toSingleLine(raw: string): string {
+  return raw.replace(/[\u0000-\u001f\u007f]/g, ' ');
+}
 
 export type ReflectionFace =
   'default' | 'data-insufficient' | 'empty' | 'error' | 'pending';
@@ -100,6 +116,18 @@ export interface DailyReflectionScreenProps {
    * 먼저 가로채 편집만 닫는다(결정 2 b — 편집은 화면 안 하위 상태, onBack 0회).
    */
   onBack?: () => void;
+  /** TRIP-1372 · 서버가 돌려준 그날의 기분 코드(없으면 null). */
+  mood?: string | null;
+  /** TRIP-1372 · 서버가 돌려준 한 줄 메모(없으면 null). */
+  shortMemo?: string | null;
+  /**
+   * TRIP-1372 · 기분 저장(코드, 지우기는 ''). 성공 여부를 돌려준다 — 실패면 화면이 알린다(INV-4).
+   * 이 둘(`onChangeMood`·`onSaveShortMemo`)이 모두 있을 때만 기분·한 줄 입력을 그린다 — 저장할 곳 없는
+   * 입력은 다시 들어오면 사라지는 거짓말이었다(TRIP-935 R7).
+   */
+  onChangeMood?: (code: string) => Promise<boolean>;
+  /** TRIP-1372 · 한 줄 메모 저장(trim 한 값, 지우기는 ''). */
+  onSaveShortMemo?: (text: string) => Promise<boolean>;
   onEnterEdit: () => void;
   onConfirm: () => void;
   /**
@@ -127,6 +155,10 @@ export function DailyReflectionScreen({
   onPressTab,
   isToday = true,
   onBack,
+  mood,
+  shortMemo,
+  onChangeMood,
+  onSaveShortMemo,
   onEnterEdit,
   onConfirm,
   onSaveEdit,
@@ -154,6 +186,42 @@ export function DailyReflectionScreen({
     }
     onBack?.();
   };
+  // TRIP-1372 · 기분·한 줄. 한 줄 초안은 손대기 전(null)엔 서버 값을 그대로 보인다.
+  const extrasOn = onChangeMood !== undefined && onSaveShortMemo !== undefined;
+  const [memoDraft, setMemoDraft] = useState<string | null>(null);
+  const [extrasFailed, setExtrasFailed] = useState(false);
+  const memoShown = memoDraft ?? shortMemo ?? '';
+  const memoToSave = toSingleLine(memoShown).trim();
+  const memoDirty = memoToSave !== (shortMemo ?? '');
+
+  const handleMood = (code: string) => {
+    if (!onChangeMood) return;
+    setExtrasFailed(false);
+    // 선택한 칩을 다시 누르면 지운다(빈 문자열).
+    void onChangeMood(mood === code ? '' : code).then((saved) => {
+      if (!saved) setExtrasFailed(true);
+    });
+  };
+  /** 한 줄이 바뀌었으면 저장한다. 안 바뀌었으면 요청 없이 true. */
+  const flushMemo = async (): Promise<boolean> => {
+    if (!onSaveShortMemo || !memoDirty) return true;
+    setExtrasFailed(false);
+    const saved = await onSaveShortMemo(memoToSave);
+    if (saved) setMemoDraft(null);
+    else setExtrasFailed(true);
+    return saved;
+  };
+  // 「확인」은 쓴 한 줄이 저장돼야 닫는다 — 키보드가 떠 있어도 첫 탭이 버튼으로 가서(handled) blur 저장이 안 돈다.
+  const handleDataConfirm = () => {
+    if (!extrasOn || !memoDirty) {
+      onConfirm();
+      return;
+    }
+    void flushMemo().then((saved) => {
+      if (saved) onConfirm();
+    });
+  };
+
   const handleSave = () => {
     if (!canSave) return;
     setSaveFailed(false);
@@ -167,6 +235,60 @@ export function DailyReflectionScreen({
       else setSaveFailed(true);
     });
   };
+
+  const extrasBlock = extrasOn ? (
+    <View testID="reflection-daily-extras" className="w-full gap-md">
+      <Text className="font-noto-bold text-card-title font-bold text-ink">
+        오늘 어땠어요?
+      </Text>
+      <View className="w-full flex-row gap-sm">
+        {MOODS.map(({ code, label }) => {
+          const selected = mood === code;
+          return (
+            <Pressable
+              key={code}
+              testID={`reflection-daily-mood-${code}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              onPress={() => handleMood(code)}
+              className={`flex-1 items-center rounded-pill py-sm ${
+                selected
+                  ? 'bg-primary'
+                  : 'border border-hairline-strong bg-canvas'
+              }`}
+            >
+              <Text
+                className={`text-label ${
+                  selected ? 'font-noto-bold font-bold text-white' : 'text-ink'
+                }`}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <View className="w-full flex-row items-center gap-sm rounded-card border border-hairline-strong bg-canvas px-lg py-[10px]">
+        <TextInput
+          testID="reflection-daily-memo-input"
+          value={memoShown}
+          onChangeText={(next) => setMemoDraft(toSingleLine(next))}
+          onEndEditing={() => void flushMemo()}
+          maxLength={SHORT_MEMO_MAX}
+          placeholder="오늘 하루를 한 줄로 남겨보세요"
+          className="flex-1 font-noto text-body text-ink"
+        />
+        <Text className="font-noto text-label text-muted">
+          {`${memoShown.length}/${SHORT_MEMO_MAX}`}
+        </Text>
+      </View>
+      {extrasFailed ? (
+        <Text className="font-noto text-label text-primary-text">
+          저장하지 못했어요. 다시 시도해 주세요
+        </Text>
+      ) : null}
+    </View>
+  ) : null;
 
   const hasMap = mapCenter !== undefined && (mapPins?.length ?? 0) > 0;
   const mapArea = hasMap ? (
@@ -391,11 +513,13 @@ export function DailyReflectionScreen({
                 <ReflectionPhotoGrid photos={photos} />
               )}
 
+              {extrasBlock}
+
               {/* changeSummary 는 default 얼굴에서 그리지 않는다(prop 은 무회귀로 유지). */}
               {/* 하단 CTA — 저장할 입력이 없으니 "확인"(TRIP-935 R7). data-insufficient 와 같은 이름표. */}
               <Pressable
                 testID="reflection-daily-confirm"
-                onPress={onConfirm}
+                onPress={handleDataConfirm}
                 className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
               >
                 <Text className="font-noto-bold text-card-title font-bold text-on-primary">
@@ -422,6 +546,8 @@ export function DailyReflectionScreen({
               ) : (
                 <ReflectionPhotoGrid photos={photos} />
               )}
+
+              {extrasBlock}
 
               {changeSummary ? (
                 <ChangeSummaryRow changeSummary={changeSummary} />
@@ -474,7 +600,7 @@ export function DailyReflectionScreen({
               {isDataFace ? (
                 <Pressable
                   testID="reflection-daily-confirm"
-                  onPress={onConfirm}
+                  onPress={handleDataConfirm}
                   className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
                 >
                   <Text className="font-noto-bold text-card-title font-bold text-on-primary">

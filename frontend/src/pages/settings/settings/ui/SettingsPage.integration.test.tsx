@@ -139,7 +139,7 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
    * 무엇을 보장하나:
    *  - AC-4·5·6(배선): 서버 값(취향·위치 동의·개인화)이 페이지를 거쳐 화면의 행 값·칩으로 실제로 도착한다.
    *    화면 테스트는 props 를 직접 넣으므로, "페이지가 값을 안 넘긴다"는 이 층에서만 잡힌다.
-   *    취향은 TRIP-1051 로 한 행 `N/7 설정됨` 이다(W1). 취향 GET 이 실패하면 값을 비운다(W3 — 0/7 금지).
+   *    취향은 TRIP-1051 로 한 행 `N/6 설정됨` 이다(W1). 취향 GET 이 실패하면 값을 비운다(W3 — 0/6 금지).
    *  - AC-9: 제휴 토글 ↔ `/me/settings.affiliateNoticeDismissed` 서버 왕복. **토글 의미가 반대다** — 라벨이
    *    "다시 **보기**"라 ON = `dismissed:false` 다(01 맹점 ①). 그래서 누를 때 나가는 와이어 본문의 **값 방향을
    *    양쪽으로** 잠근다(T1 false→true, T2 true→false). 본문은 그 한 필드뿐이다("생략 = 변경 없음", 맹점 ③).
@@ -165,7 +165,7 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
   }/api/v1`;
 
   const ERROR_COPY = '설정을 바꾸지 못했어요. 다시 시도해 주세요.';
-  /** D5 픽스처 — 예산만 미설정(축 없음). */
+  /** D5 픽스처 — 여섯 축 전부 설정. */
   const PREFERENCES = {
     styles: { value: ['휴양', '자연'], isNeutralDefault: false },
     companion: {
@@ -297,8 +297,8 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
   });
 
   describe('TRIP-778 AC-4·5·6 · 서버 값이 행 값·칩으로 도착한다 (페이지 배선)', () => {
-    it('W1 취향 한 행 "6/7 설정됨"·위치 동의 칩·개인화 사용 중', async () => {
-      // 준비 — D5 픽스처(예산만 미설정 → 6/7).
+    it('W1 취향 한 행 "6/6 설정됨"·위치 동의 칩·개인화 사용 중', async () => {
+      // 준비 — D5 픽스처(여섯 축 전부 설정 → 6/6).
       installServer({ legalConsent: true, reason: 'APPLIED' });
 
       // 실행
@@ -312,7 +312,7 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
         () =>
           expect(
             within(screen.getByTestId('settings-nav-preferences')).getByText(
-              '6/7 설정됨'
+              '6/6 설정됨'
             )
           ).toBeOnTheScreen(),
         { timeout: 5000 }
@@ -357,13 +357,13 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
   });
 
   /**
-   * TRIP-1051 AC-3(실패) — 취향 GET 이 500 이면 행은 남고 "N/7"을 지어내지 않는다.
+   * TRIP-1051 AC-3(실패) — 취향 GET 이 500 이면 행은 남고 "N/6"을 지어내지 않는다.
    *
    * ★ 요청 카운터 앵커(02a ★7): "요청이 실제로 나갔고 실패했다"를 먼저 확인한다. 요청을 안 보내는 구현도
-   *   "/7 없음"은 통과하므로, 카운터 없이 부재만 보면 무엇을 쟀는지 모호해진다.
+   *   "/6 없음"은 통과하므로, 카운터 없이 부재만 보면 무엇을 쟀는지 모호해진다.
    */
   describe('TRIP-1051 AC-3 · 취향 조회 실패면 요약을 비운다', () => {
-    it('W3 /me/preferences 500 → 취향 행과 chevron 은 있고, 행 안에 "/7"이 없다', async () => {
+    it('W3 /me/preferences 500 → 취향 행과 chevron 은 있고, 행 안에 "/6"이 없다', async () => {
       // 준비 — 나머지 조회는 정상, 취향만 실패(나중에 넣은 핸들러가 이긴다).
       let preferenceGets = 0;
       installServer({ legalConsent: true, reason: 'APPLIED' });
@@ -384,8 +384,8 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
       expect(
         within(row).getByTestId('settings-nav-preferences-chevron')
       ).toBeOnTheScreen();
-      // 단언(부분포함): 어떤 숫자든 "/7" 이 없다 — 실패를 "0/7"로 위장하지 않는다.
-      expect(within(row).queryByText(/\/7/)).toBeNull();
+      // 단언(부분포함): 어떤 숫자든 "/6" 이 없다 — 실패를 "0/6"로 위장하지 않는다.
+      expect(within(row).queryByText(/\/6/)).toBeNull();
     });
   });
 

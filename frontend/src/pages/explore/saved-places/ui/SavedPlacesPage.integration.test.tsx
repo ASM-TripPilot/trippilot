@@ -795,7 +795,7 @@ describe('save', () => {
 
   /**
    * 무엇을 보장하나: 이 CTA 는 위저드 **밖**에서 새 여행을 시작한다. 그래서 이동 직전에 직전 여행의
-   * 드래프트(여행지·기간·인원·동반·예산·취향·만든 여행 id·뺀 곳 기억)를 전부 비우고, 그 **다음에**
+   * 드래프트(여행지·기간·인원·동반·취향·만든 여행 id·뺀 곳 기억)를 전부 비우고, 그 **다음에**
    * 지금 목록을 꼭 갈 곳으로 심는다. 여행지는 담은 곳에서 추정해 채우지 않는다(#031 현행 유지).
    *
    * ★ push 가 불리는 **그 순간**의 드래프트를 붙잡는다(`captureDraftAtNextCall`). 순서가 거꾸로(시드
@@ -804,7 +804,7 @@ describe('save', () => {
    *   GC-3 이 잠근다).
    */
   describe('🔴 TRIP-1012 C1 · 담은 장소 CTA 는 드래프트를 비운 뒤 지금 목록만 시드한다', () => {
-    it('직전 여행 드래프트가 있어도 push 시점엔 여행지·기간·예산 등이 초기값이고, 꼭 갈 곳은 지금 4곳이며 셸 통과 표시가 켜져 있다', async () => {
+    it('직전 여행 드래프트가 있어도 push 시점엔 여행지·기간 등이 초기값이고, 꼭 갈 곳은 지금 4곳이며 셸 통과 표시가 켜져 있다', async () => {
       leavePreviousTripDraft();
       // 앵커 — 아직 안 비었다(픽스처가 조용히 망가지면 아래 단언이 공짜로 통과한다).
       expect(wizardDraftData()).not.toEqual(freshWizardDraft());
@@ -1651,7 +1651,7 @@ describe('select › 위저드', () => {
    *    밖 항목은 **채운 체크로 보이고 부제에 세며**, 완료하면 확인 다이얼로그가 뜬다 — [그대로 넣기]면
    *    남는다(TRIP-1106 · 조용히 빼지도 조용히 넣지도 않는다, INV-4).
    *  - (옛 Q2 "지역 안 0건이면 폴백"은 TRIP-1042 로 폐지 — region-empty 는 아래 TRIP-1042 절.)
-   *  - B2 select 완료는 위저드 **안** 왕복이다 — 여행지·기간·인원·동반·예산을 비우지 않는다.
+   *  - B2 select 완료는 위저드 **안** 왕복이다 — 여행지·기간·인원·동반을 비우지 않는다.
    *
    * ★ 위저드 항목은 `initMustVisits` 로 심는다 — beforeEach 가 `reset()` 하므로 첫 호출이 반영된다.
    * ★ A6 은 "완료가 안 돌았는데 스토어엔 준비 때 심은 j1" 이 시드 단언을 공짜로 통과시킨다.
@@ -1927,13 +1927,12 @@ describe('select › 위저드', () => {
   });
 
   describe('TRIP-1012 B2 · select 완료는 위저드 안 왕복 — 손으로 채운 드래프트를 비우지 않는다 (#074 금지)', () => {
-    it('여행지·기간·인원·동반·예산이 완료 전과 같고, 꼭 갈 곳만 고른 것으로 바뀐다', async () => {
+    it('여행지·기간·인원·동반이 완료 전과 같고, 꼭 갈 곳만 고른 것으로 바뀐다', async () => {
       const store = useTripWizardStore.getState();
       store.addDestination('부산', 2);
       store.setPeriod('3n4d', '2026-10-10', '2026-10-13');
       store.setParty(2);
       store.selectCompanion('친구');
-      store.setBudgetText('300,000');
       const typedDraft = () => {
         const s = useTripWizardStore.getState();
         return {
@@ -1942,7 +1941,6 @@ describe('select › 위저드', () => {
           endDate: s.endDate,
           party: s.party,
           companionType: s.companionType,
-          budgetText: s.budgetText,
         };
       };
       const before = typedDraft();

@@ -1,4 +1,4 @@
-import type { AutoQueueItem } from './autoEventQueue';
+import type { AutoQueueItem, PendingReport } from './autoEventQueue';
 import type { RawSample } from './routeDistance';
 import type { JudgeState } from './visitJudge';
 
@@ -57,6 +57,8 @@ export interface AutomationState {
   ctx: AutomationContext | null;
   judge: { date: string; state: JudgeState } | null;
   queue: AutoQueueItem[];
+  /** 아직 서버가 받지 못한 구간 보고(START·END) — 순서대로 영속·재시도(TRIP-1409). */
+  pendingReports: PendingReport[];
   explainerAskedTrips: string[];
   intervals: OpenInterval[];
   notice: AutomationNotice | null;
@@ -71,6 +73,7 @@ export const EMPTY_STATE: AutomationState = {
   ctx: null,
   judge: null,
   queue: [],
+  pendingReports: [],
   explainerAskedTrips: [],
   intervals: [],
   notice: null,

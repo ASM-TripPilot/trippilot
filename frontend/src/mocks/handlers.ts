@@ -260,6 +260,14 @@ export const handlers = [
   ),
 
   http.post(`${BASE}/auth/social/:provider`, async ({ params, request }) => {
+    // 서버(#1072, TRIP-1317)는 네이버 code 교환을 닫았다 — PKCE 가 없어 가로챈 code 를 막을 수 없다.
+    // 401 과 갈린다(재시도로 풀리지 않는다). 네이버의 열린 길은 위 `/token` 핸들러(SDK 토큰)뿐이다.
+    if (params.provider === 'naver') {
+      return HttpResponse.json(
+        { error: { code: 'PROVIDER_NOT_SUPPORTED' } },
+        { status: 501 }
+      );
+    }
     const body = (await request.json().catch(() => ({}))) as {
       ageConfirmation?: unknown;
     };

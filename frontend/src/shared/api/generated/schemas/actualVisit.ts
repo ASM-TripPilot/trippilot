@@ -20,7 +20,13 @@ export interface ActualVisit {
   spontaneous: boolean;
   /** 사진 **개수**만 — 메타 목록은 방문별 표면이 낸다 */
   photoCount: number;
-  /** 있는지만 — 본문은 별도 표면 */
+  /**
+   * 메모 **본문**(BR-U5-13 — 한 방문에 한 개). 없으면 null.
+   * 종전에는 `hasMemo` 만 나갔고 *"본문은 별도 표면"* 이라 적었는데 **그 표면이 없었다** — 쓰기(`PUT .../memo`) 응답만 본문을 돌려줘서, 앱을 껐다 켜면 그 세션에 쓴 메모만 남고 나머지는 사라진 것처럼 보였다(TRIP-1236). 저장은 처음부터 되고 있었다(V2.34).
+   * @maxLength 2000
+   */
+  memo?: string | null;
+  /** `memo != null` 과 같다 — 기존 클라이언트 호환으로 남긴다. 새로 쓰는 쪽은 `memo` 를 본다. */
   hasMemo: boolean;
   /** 오프라인 충돌 판정 기준(BR-U5-22) */
   updatedAt: string;

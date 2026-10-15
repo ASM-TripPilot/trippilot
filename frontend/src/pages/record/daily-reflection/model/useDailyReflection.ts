@@ -6,7 +6,11 @@ import {
   usePostTripsTripIdReflectionsDayDate,
   usePutTripsTripIdReflectionsDayDate,
 } from '@/shared/api/index.hooks';
-import type { Reflection, ReflectionList } from '@/shared/api/index.schemas';
+import type {
+  EditReflectionRequest,
+  Reflection,
+  ReflectionList,
+} from '@/shared/api/index.schemas';
 
 import { buildEditCard } from './editCard';
 
@@ -38,6 +42,16 @@ export interface UseDailyReflectionResult {
    * 저장 성공이면 true, 실패면 false 로 풀린다 — 화면이 편집을 닫을지·실패를 알릴지 정한다(INV-4).
    */
   saveEdit: (text: string) => Promise<boolean>;
+  /**
+   * TRIP-1372 · 그날의 기분 코드 저장 — 바디는 `{ mood }` 뿐이다(card 를 실으면 카드가 갈아끼워진다).
+   * 빈 문자열이면 지운다. 성공이면 true, 실패면 false.
+   */
+  saveMood: (code: string) => Promise<boolean>;
+  /**
+   * TRIP-1372 · 한 줄 메모 저장 — 바디는 `{ shortMemo }` 뿐이다. 호출자가 trim·한 줄 정리를 마친 값을
+   * 넘긴다(빈 문자열이면 지운다). 겹친 저장은 서버가 직렬화하니 재시도는 만들지 않는다.
+   */
+  saveShortMemo: (text: string) => Promise<boolean>;
 }
 
 export function useDailyReflection(
@@ -75,6 +89,18 @@ export function useDailyReflection(
     mutation: { onSuccess: replaceDay },
   });
 
+  // PUT 한 갈래 — 보낼 필드만 담은 바디를 그대로 보낸다(없는 필드는 서버가 '그대로'로 읽는다).
+  // mutateAsync 라 호출마다 자기 결과로 풀린다(mutate 의 호출별 콜백은 마지막 호출만 불린다 — 기분 직후 한 줄처럼
+  // 겹쳐 저장해도 앞 호출이 영원히 안 풀리지 않는다).
+  const save = async (data: EditReflectionRequest): Promise<boolean> => {
+    try {
+      await put.mutateAsync({ tripId, dayDate: date, data });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // ?.items 까지 방어한다(?.data 만으론 부족) — 계약 위반 응답 {}/{items:null} 에서
   // undefined.find 크래시(5-b 경고-1, StaySearchPage W-3 동형).
   const reflection = list.data?.items?.find((item) => item.dayDate === date);
@@ -92,15 +118,8 @@ export function useDailyReflection(
     // 목 훅(`{ mutate }` 만)에선 undefined → false = 미실패로 읽는다.
     isCreateError: post.isError === true,
     saveEdit: (text: string) =>
-      new Promise<boolean>((resolve) => {
-        put.mutate(
-          {
-            tripId,
-            dayDate: date,
-            data: { card: buildEditCard(reflection?.card, text) },
-          },
-          { onSuccess: () => resolve(true), onError: () => resolve(false) }
-        );
-      }),
+      save({ card: buildEditCard(reflection?.card, text) }),
+    saveMood: (code: string) => save({ mood: code }),
+    saveShortMemo: (text: string) => save({ shortMemo: text }),
   };
 }

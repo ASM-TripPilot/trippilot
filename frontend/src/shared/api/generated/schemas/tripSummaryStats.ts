@@ -16,6 +16,7 @@ import type { TripSummaryStatsDistanceSource } from './tripSummaryStatsDistanceS
 export interface TripSummaryStats {
   totalVisits: number;
   totalDistanceKm: number;
+  /** **모든 날이 실제 경로일 때만** `ROUTE` 다 — 한 날이라도 근사면 합계도 근사다(BR-U10-39). 경로가 나중에 오면 통계만 다시 센다 */
   distanceSource: TripSummaryStatsDistanceSource;
   totalPhotos: number;
   /** false 면 좌표를 하나도 못 찾았다는 뜻이다 — 화면은 **지도 대신 방문 목록**을 그린다(BR-U5-39). 빈 지도를 띄우면 사용자는 기록이 없는 줄 안다. */
