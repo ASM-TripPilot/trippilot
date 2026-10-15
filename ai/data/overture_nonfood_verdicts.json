@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-14T14:24:59.252487+00:00",
+  "generated_at": "2026-10-15T04:50:52.818214+00:00",
   "verdicts": {
     "44325f72-6b14-4ac6-b9d8-def8dea71b91": {
       "verdict": "accept",
@@ -33,10 +33,10 @@
     },
     "8e398fb3-3003-4994-8427-0b67924cb3e7": {
       "verdict": "reject",
-      "guess": "미상상호",
+      "guess": "공예스튜디오",
       "why": "판매점인지 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "3db8278b-aabb-4129-b2bd-07acee69d92b": {
       "verdict": "reject",
@@ -61,7 +61,7 @@
       "guess": "아파트",
       "why": "주거단지",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "98bb4ae3-baa6-4347-bab3-fef9a7016dd8": {
       "verdict": "accept",
@@ -108,9 +108,9 @@
     "35bbb135-b19a-4709-a356-521583665010": {
       "verdict": "reject",
       "guess": "주거건물",
-      "why": "관광지 판단 불가",
+      "why": "주택형 상호",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "8b6418e0-af0f-4b65-bba0-1e73dcedfeb2": {
       "verdict": "reject",
@@ -144,10 +144,10 @@
     },
     "1301a743-c0bc-415f-b34d-2a1e6b29ab20": {
       "verdict": "reject",
-      "guess": "소매점",
-      "why": "관광쇼핑지 불명",
+      "guess": "동네상점",
+      "why": "관광 상점 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "3354c1f9-31d7-4930-99ea-76afd5807c0a": {
       "verdict": "accept",
@@ -157,17 +157,17 @@
     },
     "14ee776c-7f6e-4391-b1ab-58a7973a1de4": {
       "verdict": "reject",
-      "guess": "상업건물",
-      "why": "자연 분류 부적합",
+      "guess": "주거건물",
+      "why": "자연 장소 아님",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "5f21db22-6262-4308-b189-5c9438adc2d3": {
       "verdict": "reject",
       "guess": "주거단지",
-      "why": "주거단지명",
+      "why": "타운형 주거시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "9ce20d80-4ece-46d2-96be-c9d116f63b5a": {
       "verdict": "accept",
@@ -250,9 +250,9 @@
     "b1086f0e-f274-47f0-bbfc-fc13df1fbdd5": {
       "verdict": "reject",
       "guess": "아파트",
-      "why": "아파트 단지",
+      "why": "주거단지",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "36e2a627-22ef-49ce-9cdd-3b7d6b7dbb20": {
       "verdict": "accept",
@@ -263,9 +263,9 @@
     "c1cf6fd4-2c1e-432e-a770-c1b426fc2188": {
       "verdict": "reject",
       "guess": "종교단체",
-      "why": "단체명만 확인",
+      "why": "사찰 아닌 조직",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "e7da4ff1-c7c1-4e11-ae90-4343a4e3ba14": {
       "verdict": "accept",
@@ -330,9 +330,9 @@
     "e15685f2-ce08-41e7-acda-45130bb040f7": {
       "verdict": "reject",
       "guess": "아파트",
-      "why": "아파트 단지",
+      "why": "주거단지명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "118fcd8a-37a3-473d-afb4-402f1c5d998a": {
       "verdict": "accept",
@@ -349,9 +349,9 @@
     "b4e38fc8-d8cf-4b0c-810b-b9d67dc3cded": {
       "verdict": "reject",
       "guess": "화장품점",
-      "why": "체인 매장 지점",
+      "why": "백화점 내 체인점",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "7d6ad1ec-7282-4a20-b1fe-fd12918d4d21": {
       "verdict": "accept",
@@ -362,9 +362,9 @@
     "283b7344-e76b-41b5-b771-484a76a18409": {
       "verdict": "reject",
       "guess": "아파트",
-      "why": "아파트 단지",
+      "why": "주거단지",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "f227cacd-c4e7-4e07-abda-e90947b68535": {
       "verdict": "accept",
@@ -423,9 +423,9 @@
     "4766a138-df16-4639-9e2d-9760f66ccdcc": {
       "verdict": "reject",
       "guess": "음식점",
-      "why": "공원 아닌 상업시설",
+      "why": "공원이 아닌 업소",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "5c3c179b-a6f6-4d37-95de-b39aa6417166": {
       "verdict": "accept",
@@ -440,11 +440,11 @@
       "model": "gpt-5.6-sol"
     },
     "9255bd3a-8c06-41e3-916b-3b2988044f55": {
-      "verdict": "reject",
+      "verdict": "accept",
       "guess": "공예공방",
-      "why": "판매점인지 불명확",
+      "why": "포슬린 공예점",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "974804ac-7190-455f-bdcd-baf14e8f2626": {
       "verdict": "accept",
@@ -453,11 +453,11 @@
       "model": "gpt-5.6-sol"
     },
     "10c270d1-d4ac-4ec7-9210-4649b56372ce": {
-      "verdict": "reject",
-      "guess": "액자점",
-      "why": "일반 소매점",
+      "verdict": "accept",
+      "guess": "액자공방",
+      "why": "액자와 그림 판매",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "e2d1438a-e0f6-4e24-bf34-dba8605a3a0e": {
       "verdict": "reject",
@@ -490,11 +490,11 @@
       "model": "gpt-5.6-sol"
     },
     "66b4bd4d-fbd4-4ebd-96fb-b3bf6a3b0a72": {
-      "verdict": "reject",
-      "guess": "상점",
-      "why": "상호만으론 불명확",
+      "verdict": "accept",
+      "guess": "기념품점",
+      "why": "기념품 판매점",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "6311900d-88a6-45de-9ff1-a1f8222a73e9": {
       "verdict": "accept",
@@ -510,24 +510,24 @@
     },
     "7e1b98e6-4211-4035-a112-0f74410b21d3": {
       "verdict": "reject",
-      "guess": "수영헬스장",
+      "guess": "수영장헬스장",
       "why": "회원형 체육시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "cc7208c4-91ac-47e2-a1ab-d8427aed5ff2": {
       "verdict": "reject",
       "guess": "화장품매장",
-      "why": "체인 소매점",
+      "why": "브랜드 체인 지점",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "f7a7d485-2065-4980-beb7-0846296abe22": {
-      "verdict": "reject",
-      "guess": "살롱",
-      "why": "판매시설 불명확",
+      "verdict": "accept",
+      "guess": "골동품점",
+      "why": "외부인 쇼핑 장소",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "ee201adb-91a6-4746-8598-b7dc6d905c67": {
       "verdict": "accept",
@@ -537,10 +537,10 @@
     },
     "333501a7-1e30-4e2a-be74-961b3c2c3d1d": {
       "verdict": "reject",
-      "guess": "주상복합",
-      "why": "주거단지",
+      "guess": "주거단지",
+      "why": "아파트 단지",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "496e8721-33d5-43f6-8c77-9d85b0f652f3": {
       "verdict": "reject",
@@ -609,10 +609,10 @@
     },
     "f4014f77-fcbe-459b-a7fe-d33de30868df": {
       "verdict": "reject",
-      "guess": "문구체인점",
-      "why": "전국체인 소매점",
+      "guess": "문구점",
+      "why": "전국 체인 지점",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "63d6e535-fffd-4ab4-869d-aef697f19d5f": {
       "verdict": "accept",
@@ -657,11 +657,11 @@
       "model": "gpt-5.6-sol"
     },
     "532ad22b-5e66-4ad6-b563-f089911805a3": {
-      "verdict": "reject",
-      "guess": "불교용품점",
-      "why": "명소 여부 불명",
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 사찰",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "9969776d-e753-4a09-9526-5b8ca2071e99": {
       "verdict": "accept",
@@ -683,10 +683,10 @@
     },
     "92af9628-3eca-4453-92e1-ded1fff5880f": {
       "verdict": "reject",
-      "guess": "아파트단지",
+      "guess": "아파트",
       "why": "주거단지",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "cc1de3fe-6adc-43c1-926a-9f910d172bcd": {
       "verdict": "accept",
@@ -697,10 +697,10 @@
     },
     "a3459a93-3219-4db0-9e7a-659e79ad12c3": {
       "verdict": "reject",
-      "guess": "하천끝지점",
-      "why": "통과 지점에 가까움",
+      "guess": "하천지점",
+      "why": "관광지 여부 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "3a81da71-979d-4a43-865b-e17cac6cad6d": {
       "verdict": "accept",
@@ -729,9 +729,9 @@
     "fd625884-64cf-4f09-b2b6-c484d09d46b6": {
       "verdict": "reject",
       "guess": "아파트",
-      "why": "주거단지명",
+      "why": "주거단지",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "a74f0bd1-8995-4d4f-a3e4-dd8b5f31b80a": {
       "verdict": "accept",
@@ -772,9 +772,9 @@
     "231145ab-20ed-4eae-8d0f-157603e14c18": {
       "verdict": "reject",
       "guess": "종교연수원",
-      "why": "종교단체연수원",
+      "why": "종교단체 연수원",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "749f8c6c-2d79-43c4-b59b-8be51fe57020": {
       "verdict": "accept",
@@ -827,17 +827,17 @@
     },
     "b68c8bd9-f9ed-4d8c-a653-3973f35d8f1c": {
       "verdict": "reject",
-      "guess": "숙박시설",
-      "why": "명소인지 불명확",
+      "guess": "미상시설",
+      "why": "상호만으론 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "5547e18c-3075-4208-9378-24a73c3fb51c": {
       "verdict": "reject",
       "guess": "농원",
-      "why": "판매점인지 불명확",
+      "why": "시장 여부 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "28909f04-3e2a-4793-9324-b10171b49c71": {
       "verdict": "accept",
@@ -890,10 +890,10 @@
     },
     "a8c90b98-b321-42a0-a495-fa77ba09d5ad": {
       "verdict": "reject",
-      "guess": "아파트",
-      "why": "주거단지로 판단",
+      "guess": "주거단지",
+      "why": "아파트 단지명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "2ceb8532-aa7d-4286-83c1-ccf532ac07e6": {
       "verdict": "accept",
@@ -927,10 +927,10 @@
     },
     "55097f9a-503b-437d-8eab-0a15bf370317": {
       "verdict": "reject",
-      "guess": "불명시설",
-      "why": "상호만으론 불명확",
+      "guess": "미상상점",
+      "why": "상호만으론 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "7a6aa852-e8d7-4e2c-b16b-eed85dac8950": {
       "verdict": "accept",
@@ -939,11 +939,11 @@
       "model": "gpt-5.6-sol"
     },
     "5a382723-f99e-4e65-b6f2-32705c1dc0bc": {
-      "verdict": "reject",
-      "guess": "불명시설",
-      "why": "상호만으로 불명",
+      "verdict": "accept",
+      "guess": "자전거대여",
+      "why": "여행자 대여시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "eeae66d6-b468-4bd8-891a-65fea556164c": {
       "verdict": "accept",
@@ -972,22 +972,23 @@
     "261b9907-7a85-4d92-8da7-25f170f944ba": {
       "verdict": "reject",
       "guess": "개인주택",
-      "why": "주택으로 보임",
+      "why": "주택명으로 보임",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "5b187dff-fbde-4d03-b94e-25d8d9d5053b": {
       "verdict": "reject",
       "guess": "도로",
       "why": "도로명에 해당",
-      "model": "gpt-5.6-sol"
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
     },
     "8357dc24-32d0-4608-8e46-6e8b786e0df7": {
       "verdict": "reject",
-      "guess": "불명상점",
+      "guess": "불명업체",
       "why": "상호만으로 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "47f7d26b-20ce-449d-bc3a-55a716268449": {
       "verdict": "accept",
@@ -1008,18 +1009,18 @@
       "model": "gpt-5.6-sol"
     },
     "49a3aafc-0996-4286-845e-bd823ecb4edb": {
-      "verdict": "reject",
-      "guess": "불명시설",
-      "why": "문화시설 여부 불명",
+      "verdict": "accept",
+      "guess": "미술갤러리",
+      "why": "분류 맞는 갤러리",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "fec1bfa5-bfad-4908-b045-a387b731232e": {
       "verdict": "reject",
       "guess": "불명업체",
-      "why": "상호만으로 불명",
+      "why": "사무실형 주소",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "bf950b05-7408-4ce8-a12d-79bfb004c62a": {
       "verdict": "accept",
@@ -1040,11 +1041,11 @@
       "model": "gpt-5.6-sol"
     },
     "f70894ce-184c-4455-a855-08c425d20d84": {
-      "verdict": "reject",
-      "guess": "불명상점",
-      "why": "판매점 여부 불명",
+      "verdict": "accept",
+      "guess": "기념품점",
+      "why": "외부인 대상 상점",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "fbbb735f-eddb-45e7-b78c-03cac29bd1c5": {
       "verdict": "accept",
@@ -1123,9 +1124,9 @@
     "707783c3-9246-4e6e-a934-496af87b8dcd": {
       "verdict": "reject",
       "guess": "종교회관",
-      "why": "종교단체문화회관",
+      "why": "종교단체 문화회관",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "862e05a5-4266-49bf-a5e2-88c414df70a4": {
       "verdict": "accept",
@@ -1148,23 +1149,23 @@
     "efbe2ba6-8ba2-4a10-9cef-e2df3a45e732": {
       "verdict": "reject",
       "guess": "해수온천",
-      "why": "자연 분류 부적합",
+      "why": "자연 분류 오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "31058072-4a05-40b6-a521-39fb383bc080": {
-      "verdict": "reject",
-      "guess": "상업점포",
-      "why": "업종 판단 불가",
+      "verdict": "accept",
+      "guess": "공예상점",
+      "why": "공예품 쇼핑시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "1a5a992c-b9ce-4ac3-b318-d717014eeeca": {
       "verdict": "reject",
       "guess": "VR오락실",
-      "why": "자연 분류 부적합",
+      "why": "자연 분류 오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "3fbac792-d1ed-4781-b25f-bcb09593d69b": {
       "verdict": "accept",
@@ -1173,11 +1174,11 @@
       "model": "gpt-5.6-sol"
     },
     "69e174dc-6e15-492c-b840-d2aca588a39b": {
-      "verdict": "reject",
-      "guess": "감귤농장",
-      "why": "쇼핑시설 여부 불명",
+      "verdict": "accept",
+      "guess": "감귤직판장",
+      "why": "농산물 판매 장소",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "66a20489-c9d5-4527-b01d-1298178f6c4a": {
       "verdict": "accept",
@@ -1189,9 +1190,9 @@
     "1ff5c89f-e409-42f5-b761-f9cd2e9500fa": {
       "verdict": "reject",
       "guess": "산",
-      "why": "산인데명소분류",
+      "why": "자연 분류가 적합",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "4c256498-afae-430e-813c-9662fd539740": {
       "verdict": "accept",
@@ -1209,17 +1210,17 @@
     },
     "5fd24f0f-d6e1-4224-9f02-2cf0008233c8": {
       "verdict": "reject",
-      "guess": "불명시설",
-      "why": "상호만으론 불명확",
+      "guess": "미상시설",
+      "why": "정체 판단 불가",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "ff2608da-7a6d-4fbc-bd49-2b2cf3a51089": {
       "verdict": "reject",
-      "guess": "관광명소",
-      "why": "자연 분류 아님",
+      "guess": "인공성곽",
+      "why": "자연 분류 오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "d8f2fdf9-dbcf-489f-b8d0-1badbb66675f": {
       "verdict": "accept",
@@ -1231,23 +1232,23 @@
     "5f547e6f-9a8c-4d61-9804-094790d25b6a": {
       "verdict": "reject",
       "guess": "골프장",
-      "why": "자연 분류 아님",
+      "why": "자연 분류 오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "ec24546a-7982-4566-ab42-de6ded4fa829": {
       "verdict": "reject",
-      "guess": "추모시설",
-      "why": "자연공원 아님",
+      "guess": "추모공원",
+      "why": "관광 목적 아님",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "7f5c9755-7cdf-415d-aff5-4b01fddd243e": {
       "verdict": "reject",
-      "guess": "아파트",
+      "guess": "아파트단지",
       "why": "주거단지",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "d230720e-aa0c-4107-829d-dae5378c958e": {
       "verdict": "accept",
@@ -1257,18 +1258,18 @@
       "prompt": "2"
     },
     "be59902e-9c56-412d-937e-91517fb0fb1c": {
-      "verdict": "reject",
-      "guess": "생태학습관",
-      "why": "자연 분류 아님",
+      "verdict": "accept",
+      "guess": "습지학습관",
+      "why": "습지 생태명소",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "9df46937-7c5b-44ca-a4b8-706f627ce55f": {
       "verdict": "reject",
-      "guess": "제조업체",
-      "why": "공장으로 추정",
+      "guess": "정밀업체",
+      "why": "회사·공장",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "56c5e48d-cccc-4ac1-b43d-5fb720b02071": {
       "verdict": "accept",
@@ -1287,9 +1288,9 @@
     "a4ec4dbe-a2c0-4f9b-840c-6f343500404f": {
       "verdict": "reject",
       "guess": "공원묘원",
-      "why": "자연 관광지 아님",
+      "why": "관광 목적 아님",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "d3e6adbd-301e-422d-97a7-2b51bb9aa2e3": {
       "verdict": "accept",
@@ -1301,9 +1302,9 @@
     "c24ccad6-18c5-4b25-99ec-0f5d37a57a2c": {
       "verdict": "reject",
       "guess": "일반마을",
-      "why": "자연 분류 부적합",
+      "why": "자연 분류 불일치",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "8322b3cc-5bba-4981-b2eb-2f3c322999b1": {
       "verdict": "accept",
@@ -1321,17 +1322,17 @@
     },
     "29d0f845-4f1a-4e87-92a9-49f6afbe067a": {
       "verdict": "reject",
-      "guess": "전망유적",
-      "why": "자연 분류 부적합",
+      "guess": "누각명소",
+      "why": "자연분류 불일치",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "e96990e5-5b31-48f3-aeff-c446fad2d80f": {
-      "verdict": "reject",
-      "guess": "작업실",
-      "why": "문화시설인지 불명",
+      "verdict": "accept",
+      "guess": "미술갤러리",
+      "why": "갤러리 분류 적합",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "d15e630f-e027-4b46-94e8-ac8fcd99974b": {
       "verdict": "accept",
@@ -1355,11 +1356,11 @@
       "prompt": "2"
     },
     "617271b0-cbe0-40ab-99bb-0c7822998e29": {
-      "verdict": "reject",
-      "guess": "도예공방",
-      "why": "문화시설 여부 불명",
+      "verdict": "accept",
+      "guess": "도예갤러리",
+      "why": "도예 전시 공간",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "c035ff77-d9d8-49e4-ad7b-eadab61dd996": {
       "verdict": "accept",
@@ -1377,10 +1378,10 @@
     },
     "7cac75fa-8d27-4632-8e15-bf3badececff": {
       "verdict": "reject",
-      "guess": "온천목욕탕",
-      "why": "자연 분류와 불일치",
+      "guess": "온천시설",
+      "why": "자연 분류 부적합",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "ca05796c-5a6d-42ed-9ad7-98c48f9ba630": {
       "verdict": "accept",
@@ -1412,10 +1413,10 @@
     },
     "bd08bfe0-6940-4046-b846-5c333e0c2902": {
       "verdict": "reject",
-      "guess": "주택",
+      "guess": "숙소주택",
       "why": "하우스형 주거시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "5af37102-eb5c-4887-9482-76422642ab2e": {
       "verdict": "accept",
@@ -1460,11 +1461,11 @@
       "prompt": "2"
     },
     "cf8be68c-1cea-40d8-a6b1-6bda80e9db6f": {
-      "verdict": "reject",
-      "guess": "상점불명",
-      "why": "상호만으로 판단 불가",
+      "verdict": "accept",
+      "guess": "기념품점",
+      "why": "쇼핑 분류 적합",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "6cabefea-fe25-4d00-a1bc-75173a6e31ec": {
       "verdict": "accept",
@@ -1476,9 +1477,9 @@
     "08dd2e28-2916-4a46-bf74-14137327db43": {
       "verdict": "reject",
       "guess": "문구점",
-      "why": "명소 분류가 부적합",
+      "why": "명소 분류 오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "ea647fc9-a0a0-4591-aaf3-6f4641cf135a": {
       "verdict": "accept",
@@ -1489,10 +1490,10 @@
     },
     "854f1d9d-7a59-4d5a-87a4-535fe9d7a41d": {
       "verdict": "reject",
-      "guess": "미로공원",
-      "why": "체험시설 분류오류",
+      "guess": "테마파크",
+      "why": "자연 분류 오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "a6f1b6eb-28bf-4913-acc5-4efa6c8e0a0b": {
       "verdict": "accept",
@@ -1517,16 +1518,16 @@
     "8ceb762a-cb8d-4a84-b483-7dfc24724057": {
       "verdict": "reject",
       "guess": "농원",
-      "why": "판매시설인지 불명",
+      "why": "판매시설 불명확",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "f5783c81-2774-4e0b-a28f-789f19ff97b0": {
-      "verdict": "reject",
+      "verdict": "accept",
       "guess": "잡화점",
-      "why": "일반 소매점",
+      "why": "선물가게 분류 적합",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "5e9f5791-3733-481a-be33-f497ef07adbf": {
       "verdict": "accept",
@@ -1538,9 +1539,9 @@
     "aad38681-1fa7-4e0a-8da6-a65d45312233": {
       "verdict": "reject",
       "guess": "대형마트",
-      "why": "전국 체인 지점",
+      "why": "지역 마트 지점",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "b3c481fc-3a1e-4a12-9b23-f1049513b17e": {
       "verdict": "accept",
@@ -1557,11 +1558,11 @@
       "prompt": "2"
     },
     "0e2c4253-9b54-4cbe-9b54-d4a1a8134555": {
-      "verdict": "reject",
-      "guess": "불명시설",
-      "why": "상호만으로 불명",
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "갤러리 분류 적합",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "a4f7a90c-ab16-4f7b-9c50-2c91fcb4d538": {
       "verdict": "accept",
@@ -1587,9 +1588,9 @@
     "e55601a7-ffc9-428a-9b7b-1cd67eeed107": {
       "verdict": "reject",
       "guess": "테마파크",
-      "why": "자연 분류 부적합",
+      "why": "자연 분류 오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "f29bfff8-50df-4656-85a1-0a8adf7029df": {
       "verdict": "accept",
@@ -1608,9 +1609,9 @@
     "ecb71dc0-2d51-45a0-8aac-05ef31ab510c": {
       "verdict": "reject",
       "guess": "승마체험장",
-      "why": "체험 분류가 적합",
+      "why": "자연 분류 오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "99bb6c9d-3719-4c11-bbe8-bb909fde789e": {
       "verdict": "accept",
@@ -1641,18 +1642,18 @@
       "prompt": "2"
     },
     "cc95952d-c836-4154-8537-b1d2b25fa3ca": {
-      "verdict": "reject",
-      "guess": "상점불명",
-      "why": "상호만으로 불명확",
+      "verdict": "accept",
+      "guess": "기념품점",
+      "why": "쇼핑 분류 적합",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "c27c4046-2976-4a11-ae05-b1675b6e73a7": {
-      "verdict": "reject",
-      "guess": "미술공방",
-      "why": "시설정체불명",
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "문화 분류 적합",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "6e0d2fa5-5754-479f-872c-bd4167c6b1d1": {
       "verdict": "accept",
@@ -1674,18 +1675,18 @@
       "model": "gpt-5.6-sol"
     },
     "3550933e-7a4f-41bd-9f18-e0f4d443250b": {
-      "verdict": "reject",
-      "guess": "예술가숙소",
-      "why": "관람시설불확실",
+      "verdict": "accept",
+      "guess": "예술공간",
+      "why": "갤러리형 문화시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "5984907a-a311-4dc5-9ca7-7bb0bfaaac00": {
       "verdict": "reject",
-      "guess": "전시관",
-      "why": "전시관은문화시설",
+      "guess": "선박전시관",
+      "why": "전시관은 문화시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "17a19ac5-c750-4948-a496-0d76c4586e64": {
       "verdict": "accept",
@@ -1710,9 +1711,9 @@
     "e4c9fc8f-908d-4b4d-ab88-17534279488f": {
       "verdict": "reject",
       "guess": "오름",
-      "why": "오름인데명소분류",
+      "why": "오름은 자연 분류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "a8376daa-2b65-4c32-b15c-88890f9002cd": {
       "verdict": "accept",
@@ -1744,9 +1745,9 @@
     "4e8f6d65-2e3f-489b-8a8d-36cd686b99bf": {
       "verdict": "reject",
       "guess": "미상시설",
-      "why": "자연명소인지 불명",
+      "why": "공원인지 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "f0ef6908-9776-4f7d-8a66-dee269660924": {
       "verdict": "accept",
@@ -1765,37 +1766,37 @@
     "a43d007a-9868-4ffc-b6b2-8409cdca2452": {
       "verdict": "reject",
       "guess": "산악전망대",
-      "why": "야간 전망지 아님",
+      "why": "야간관람 부적합",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "4a5955e3-8373-4696-bcd9-f4cc82930ca2": {
       "verdict": "reject",
       "guess": "산악대피소",
       "why": "자연명소 아닌 시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "5161593c-506a-4b0e-9936-dc8eefbc4801": {
       "verdict": "reject",
-      "guess": "고산초원",
-      "why": "자연 분류가 적합",
+      "guess": "고산평원",
+      "why": "자연지형 분류오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "d3922b44-2ca1-4f93-9eb2-dc14b54d04dd": {
-      "verdict": "reject",
-      "guess": "테마시설",
-      "why": "쇼핑 여부 불명확",
+      "verdict": "accept",
+      "guess": "기념품점",
+      "why": "쇼핑시설로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "3eed2575-5cfd-455f-94ea-9ab85ea367b9": {
-      "verdict": "reject",
-      "guess": "체험농장",
-      "why": "쇼핑 분류 불명확",
+      "verdict": "accept",
+      "guess": "공예판매점",
+      "why": "공예품 쇼핑시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "1ed304e9-5ad4-4b5a-ae6c-785ac1bb2cdb": {
       "verdict": "accept",
@@ -1814,23 +1815,23 @@
     "d8d05b31-737a-4459-9145-ed8d3bb89aeb": {
       "verdict": "reject",
       "guess": "승마장",
-      "why": "자연 분류가 틀림",
+      "why": "자연 아닌 승마시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "31966472-2d29-4b07-a26e-04c257121b38": {
       "verdict": "reject",
-      "guess": "외식시설",
-      "why": "자연 분류가 틀림",
+      "guess": "외식공간",
+      "why": "자연공원 아님",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "9c729355-be2f-4fa5-a02d-1dd002d70a1f": {
       "verdict": "reject",
-      "guess": "동물목장",
-      "why": "체험시설로분류오류",
+      "guess": "알파카목장",
+      "why": "체험목장 분류 오류",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "ae7f7ac0-a981-4952-b2b2-b667185cfb31": {
       "verdict": "accept",
@@ -1862,10 +1863,10 @@
     },
     "5dfe0d43-bcd4-42be-8d4d-a89cf57ea1ac": {
       "verdict": "reject",
-      "guess": "숙소",
-      "why": "명소분류오류",
+      "guess": "숙박시설",
+      "why": "명소 여부 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "0c840000-8a0c-4806-806a-114dda7b1ced": {
       "verdict": "accept",
@@ -1905,9 +1906,9 @@
     "e3aeba28-2051-45d4-a276-ceea9b4cd9ca": {
       "verdict": "reject",
       "guess": "게스트하우스",
-      "why": "숙소로명소아님",
+      "why": "명소 아닌 숙박",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "d2ddb026-085b-4af7-8c3e-5b3462ded1fc": {
       "verdict": "accept",
@@ -1933,9 +1934,9 @@
     "9158ae77-521e-4a00-8959-830160548350": {
       "verdict": "reject",
       "guess": "게스트하우스",
-      "why": "숙박업·분류오류",
+      "why": "숙박업소명과 충돌",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "bd6674ec-c865-4152-a020-0d00c4016210": {
       "verdict": "accept",
@@ -1975,9 +1976,9 @@
     "340f85eb-528a-4492-a9e9-d2143cf45c38": {
       "verdict": "reject",
       "guess": "승마테마파크",
-      "why": "자연분류 부적합",
+      "why": "자연 아닌 테마파크",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "1bb1f00c-629c-4fcf-b851-ba898abb7ca9": {
       "verdict": "accept",
@@ -2030,17 +2031,17 @@
     },
     "1a90f8e0-170b-4e95-92c9-2dfdf8365787": {
       "verdict": "reject",
-      "guess": "미상상호",
-      "why": "정체 불명확",
+      "guess": "공예업체",
+      "why": "판매점인지 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "92977506-9d50-4af0-b7b1-7f8205629e60": {
       "verdict": "reject",
-      "guess": "체육시설",
-      "why": "관광지 아님",
+      "guess": "공공체육관",
+      "why": "일상 체육시설",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "c1d49a69-a550-4f77-a53b-a14f3c3f6702": {
       "verdict": "accept",
@@ -2052,9 +2053,9 @@
     "9e4d4f52-907f-402c-be60-3126592e45fb": {
       "verdict": "reject",
       "guess": "아파트",
-      "why": "동호수 표기 주거",
+      "why": "동호수 있는 주거지",
       "model": "gpt-5.6-sol",
-      "prompt": "2"
+      "prompt": "3"
     },
     "ef520333-7c1b-422d-9955-e0ffd9d95624": {
       "verdict": "accept",
@@ -2076,6 +2077,3660 @@
       "why": "도로명으로 보임",
       "model": "gpt-5.6-sol",
       "prompt": "2"
+    },
+    "1d7d4aec-19dc-42e4-b82e-7b52d5fe0d92": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6b70ef79-1905-4731-b534-b8f446de17e0": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c921c3ee-96e5-4e90-8261-f3d10c59afee": {
+      "verdict": "accept",
+      "guess": "창작갤러리",
+      "why": "공공 예술전시공간",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1ad4fa3d-0f77-450f-9505-03c206346d2f": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b97e0263-c74b-43c8-9534-e6aa5009b712": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ab33a028-e46f-4c14-a3b5-15e02d25f3c4": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b402787d-1743-4503-a5d4-e274f212feb3": {
+      "verdict": "accept",
+      "guess": "공공갤러리",
+      "why": "시청 내 전시공간",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4ff55f03-6c77-4daf-b872-2f8286085926": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지 명칭",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a68ff064-0485-45bf-a3ca-232530c0ca5a": {
+      "verdict": "accept",
+      "guess": "왕릉유적",
+      "why": "조선왕릉 관광지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "51e59316-f798-46d1-9584-4470536e75e3": {
+      "verdict": "accept",
+      "guess": "산",
+      "why": "자연 명소 산",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "197dfb9f-756e-4c49-a6f8-f6843a938ceb": {
+      "verdict": "accept",
+      "guess": "예술공원",
+      "why": "외부인 방문 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4b0a7bd3-484a-42d5-a6c6-df4d319ff440": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "92daf30e-74b8-4cb1-b64c-a7837eb67ba5": {
+      "verdict": "accept",
+      "guess": "성곽문",
+      "why": "남한산성 유적",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6b33babe-4916-4ab9-ab03-691686d9ca88": {
+      "verdict": "accept",
+      "guess": "성곽문",
+      "why": "남한산성 유적",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5fa568ba-e675-444e-9991-dc10b2202a15": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 사찰 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b76af8fe-0be5-4206-9e0c-95c2e79d5667": {
+      "verdict": "accept",
+      "guess": "클라이밍장",
+      "why": "체험형 암벽시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c880295f-d153-4e94-a887-9a16c2a03449": {
+      "verdict": "reject",
+      "guess": "운동시설",
+      "why": "자연 분류 오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a24adda7-d959-4558-8f92-36e7119441ef": {
+      "verdict": "accept",
+      "guess": "산성유적",
+      "why": "역사 유적지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3a835697-27e5-4c8c-b943-e9dd5bbff69e": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "방문 가능한 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2718157e-fb79-4883-9519-aa4969d77ae0": {
+      "verdict": "accept",
+      "guess": "공공수영장",
+      "why": "체육활동 시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b5036dbe-8f90-474f-aa42-8bf9db69e812": {
+      "verdict": "accept",
+      "guess": "미술갤러리",
+      "why": "갤러리 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1c045f2f-bb01-4b69-a9c3-3855eef6498a": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4002636b-5c4c-4be6-a5fe-76c6c0ad5dcd": {
+      "verdict": "reject",
+      "guess": "승마장",
+      "why": "자연분류 불일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "52e415d6-6203-4a3f-bc5e-aa153e7038bc": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fddc0b87-ea07-4afb-a407-d46f381e131e": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0601d944-a0ad-409c-b503-b2ebde2002de": {
+      "verdict": "accept",
+      "guess": "호수공원",
+      "why": "자연 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9306f4a0-714c-43ce-8e89-2e6624ddebef": {
+      "verdict": "reject",
+      "guess": "석불유적",
+      "why": "문화시설 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "abff8226-67ab-4c47-ac3c-61d9fac1a59b": {
+      "verdict": "reject",
+      "guess": "주거단지",
+      "why": "주거지로 판단",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e5dce366-53b9-4940-898d-f2dd5aaa8ec4": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d9fcd946-2d70-4427-bd77-af29cc8e4783": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "사찰 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f6a6b17b-183c-46e8-9ce0-016adc70beaf": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "754e05b3-c651-44fa-85de-7c3d09b5d48e": {
+      "verdict": "reject",
+      "guess": "아파트단지",
+      "why": "주거단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a2551c0f-0437-4781-9e0e-521d14eb7a13": {
+      "verdict": "reject",
+      "guess": "택지지구",
+      "why": "개발지구명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9fb7b333-e18f-44db-893c-1f9181dd1add": {
+      "verdict": "accept",
+      "guess": "불교선원",
+      "why": "방문 가능한 선원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d8924962-13af-4182-a347-55a1cb429c42": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "전통 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f595262c-0577-4e2c-b63d-7f16b8b00c1b": {
+      "verdict": "accept",
+      "guess": "공원",
+      "why": "관광형 호수공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "958c4e63-fc3a-4277-863d-2f3f42e09aeb": {
+      "verdict": "accept",
+      "guess": "유원지",
+      "why": "방문형 자연공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0960e21e-44e0-4c6e-b03e-df111d12d3ca": {
+      "verdict": "reject",
+      "guess": "대형마트",
+      "why": "전국 체인 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ad8e7966-5a86-48c9-b6b4-ea24c2540e07": {
+      "verdict": "accept",
+      "guess": "유적공원",
+      "why": "선사유적 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e10060bc-7c9b-43c4-b137-7bf01d7ae162": {
+      "verdict": "accept",
+      "guess": "전통마을",
+      "why": "역사문화 유적",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b449ee27-d55f-41a2-93ac-de99d7d43f2d": {
+      "verdict": "accept",
+      "guess": "산",
+      "why": "등산 가능한 산",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0c99c20a-f1a1-4060-a7dd-941e82165fee": {
+      "verdict": "accept",
+      "guess": "체육공원",
+      "why": "외부인 이용 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "af395367-fecf-489d-a039-9aaf9a77feab": {
+      "verdict": "reject",
+      "guess": "절단업체",
+      "why": "산업체로 추정",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a135c727-f6f9-466e-ac52-8da440f8ae4b": {
+      "verdict": "accept",
+      "guess": "비어가든",
+      "why": "여행형 맥주공간",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2445d76b-7fe6-458b-ac28-b84493a35ede": {
+      "verdict": "accept",
+      "guess": "역사공원",
+      "why": "방문 가능한 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c806e947-444d-4325-a904-92a897859868": {
+      "verdict": "reject",
+      "guess": "문화마을",
+      "why": "쇼핑 분류 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a1f293ab-73c6-492e-93b7-39f96cced826": {
+      "verdict": "accept",
+      "guess": "저수지",
+      "why": "방문 가능한 자연지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c81a30dc-aceb-4be1-a498-1a3b407ebde9": {
+      "verdict": "accept",
+      "guess": "산",
+      "why": "등산 가능한 산",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e4a64e67-6a88-4891-8e0b-d35c14e3bd7f": {
+      "verdict": "accept",
+      "guess": "산정상",
+      "why": "등산 목적지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2c10fc0e-36d8-4d36-b127-3742ce414fb4": {
+      "verdict": "accept",
+      "guess": "산",
+      "why": "등산 가능한 산",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b3949913-e0a4-4f02-9152-8d070ec73a03": {
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "관람 문화시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e640ee43-55b8-475a-8af7-2ce8999131ee": {
+      "verdict": "accept",
+      "guess": "아울렛",
+      "why": "외부인 쇼핑시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4d6ac5ac-6189-4053-8399-158c211ec2e7": {
+      "verdict": "accept",
+      "guess": "창작공간",
+      "why": "전시 문화시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "334cb02f-1637-4b41-8ac6-70a3a367bb82": {
+      "verdict": "reject",
+      "guess": "자동차업체",
+      "why": "명소가 아닌 영업점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "511bcf5b-8c46-4018-9ba5-fe86693868c1": {
+      "verdict": "accept",
+      "guess": "공원",
+      "why": "방문 가능한 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "35c5e233-5e13-410a-bc43-c4ed0cf40e27": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호만으로 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "242cebab-880c-403d-b497-f87380cffd51": {
+      "verdict": "accept",
+      "guess": "누각",
+      "why": "역사적 랜드마크",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "dc8db932-25a0-4804-9f38-7387bb98a8e0": {
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "관광형 클럽 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f8226b67-cb00-4394-b7f0-f238312b8025": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "단어 상호로 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7da6e601-1df6-4382-9c5b-1143c1b9652b": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 음주공간",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f2b226f3-0e5d-4616-aad4-c1960df4f462": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "단어 상호로 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ec263502-5b9b-4e85-a334-e1412394ce96": {
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "문화시설 분명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c815c62d-d73b-4e0d-b698-7ec1044852c5": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "유명 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "35adf4f2-0c86-4e77-aaad-b5f724e887a8": {
+      "verdict": "accept",
+      "guess": "공원",
+      "why": "도시공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0e7fc1b0-cfd0-44d8-8a2f-6a2d8361bd98": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "전시시설 분명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "db79f4f5-de51-4c70-ae5e-cf9dbb37982a": {
+      "verdict": "reject",
+      "guess": "유흥라운지",
+      "why": "유흥업소 가능",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b881fe6a-c6ef-431a-bc9c-6aa5ddece594": {
+      "verdict": "reject",
+      "guess": "주점",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8af41669-2dd8-4552-adbc-f85204853d42": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "번화가 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4cfdbac4-f6f9-44ae-b6a7-26cd9b62788a": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "클럽 성격 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b33ac82b-d3a8-4205-a124-01f4ff4e9859": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c16551a7-49cb-4c17-a03c-c95e3efd3961": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "번화가 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a1b53258-bf3c-4433-8f6c-4e98c136c7aa": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 분명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "91f9a6b0-ca7f-4b27-852c-85756fd5148b": {
+      "verdict": "reject",
+      "guess": "상점",
+      "why": "백화점 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "eb8fac26-3771-43ea-84c5-7fc9445ed77c": {
+      "verdict": "reject",
+      "guess": "주점",
+      "why": "한단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f6c1db43-4b3e-40a2-bb47-541865e49af8": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일바 분명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "914e0d0b-ab1d-4823-803c-2929730c436a": {
+      "verdict": "reject",
+      "guess": "문화공간",
+      "why": "갤러리 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c47655e8-ba42-45ad-a40e-fa264ac83207": {
+      "verdict": "reject",
+      "guess": "오피스텔",
+      "why": "주거시설로 판단",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5b9b071e-0dc3-4884-b4a1-1f725e3b9f16": {
+      "verdict": "accept",
+      "guess": "비어가든",
+      "why": "여행형 주점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3d7021dc-3a77-4c5a-8be4-2d956b55c3fd": {
+      "verdict": "accept",
+      "guess": "미술관",
+      "why": "갤러리 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0f4b13bd-9d04-4afa-9a84-6dcea89f8d97": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0ed18a94-b24a-4728-a6b8-c60f92077461": {
+      "verdict": "reject",
+      "guess": "스포츠업체",
+      "why": "시설 정체 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ac8aa690-3485-4719-83e5-38655a59c8d1": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3c528543-c0a4-4759-a6c9-550f801b0714": {
+      "verdict": "reject",
+      "guess": "대형마트",
+      "why": "체인 소매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c4949699-9f81-440c-b208-7a8158d08e47": {
+      "verdict": "accept",
+      "guess": "전망타워",
+      "why": "대표 랜드마크",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7028591b-c7f4-432a-a1a2-ba64f0e72556": {
+      "verdict": "accept",
+      "guess": "공예품점",
+      "why": "공예품 판매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "407ed3f0-5e91-4957-94cc-6298bc809287": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "전시공간 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "25789269-711a-44be-84d8-8f0c0435ff8f": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "affc0cdb-9e72-40ed-a513-70661da302e3": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "97b4aab8-1c3a-4a51-a3a2-759b6bf4325a": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4e040627-a6f9-4d5e-8fe0-4f67c4cbad7c": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f51f9f95-28e1-43c2-83e3-e75d70d1fd1b": {
+      "verdict": "accept",
+      "guess": "클라이밍장",
+      "why": "체험형 스포츠",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2c2957de-01b7-46ac-b42b-1503332c3460": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f51633df-72c4-4214-aa09-85b823d2ef90": {
+      "verdict": "accept",
+      "guess": "자전거대여",
+      "why": "레포츠 대여점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b1c81dfd-dc6d-4949-a51b-563fad2bd70a": {
+      "verdict": "accept",
+      "guess": "스쿠버풀",
+      "why": "다이빙 체험시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "54109a23-c48b-401e-acbc-bebd757335a4": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "클럽 성격 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "708ed4c7-53a5-4487-b16a-804a24730849": {
+      "verdict": "accept",
+      "guess": "도시공원",
+      "why": "방문 가능한 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a850639e-0682-46b9-aa52-90c033ffc658": {
+      "verdict": "accept",
+      "guess": "생태습지",
+      "why": "자연 탐방지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "02f78081-1717-408e-8fee-515747c2186d": {
+      "verdict": "reject",
+      "guess": "키즈카페",
+      "why": "자연 분류 오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "282ede7b-9b1e-48cc-9688-ea9d218b3dbd": {
+      "verdict": "reject",
+      "guess": "수영교습소",
+      "why": "관광 체험지 아님",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "52f9eed5-3780-4f4b-9944-0acdc1a7d363": {
+      "verdict": "reject",
+      "guess": "교육시설",
+      "why": "자연 분류 오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f8920919-ad89-4a5b-af87-9e8ba82efa5e": {
+      "verdict": "accept",
+      "guess": "호수공원",
+      "why": "대표 유원지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3698421d-0093-41e5-8b45-62e06832c704": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "방문 가능한 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "915608e4-cf2c-4c6e-bb7b-2695773053ff": {
+      "verdict": "accept",
+      "guess": "역사사당",
+      "why": "역사문화 명소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c63f079d-63dd-41d4-bfa7-95836112bee8": {
+      "verdict": "accept",
+      "guess": "가족공원",
+      "why": "방문 가능한 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "cee38f46-b8f5-4c79-a54c-d5eed5836b9b": {
+      "verdict": "accept",
+      "guess": "도시공원",
+      "why": "방문 가능한 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "bda207c2-4457-4919-9cdf-b3e7e2ee39fc": {
+      "verdict": "reject",
+      "guess": "아파트단지",
+      "why": "주거단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "724242a1-05c4-4ab9-b890-e723b0fa7a13": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1c00766c-cf31-45d5-94f9-353dcc878e24": {
+      "verdict": "accept",
+      "guess": "산성유적",
+      "why": "역사 유적",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8c9df573-0a43-4d56-8d7f-8545c9d6dfb6": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4cc04c5e-e7e2-47fa-b48c-b249ee829d6c": {
+      "verdict": "reject",
+      "guess": "공예공간",
+      "why": "판매점 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e13ea4dd-b2d4-40e1-96cf-351a78d02915": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "미술 전시공간",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b3a22bb2-fba9-4625-8c55-0a0fef3dc222": {
+      "verdict": "accept",
+      "guess": "근린공원",
+      "why": "공원 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "86410533-b00c-43f8-8352-9bc4c1347632": {
+      "verdict": "accept",
+      "guess": "근린공원",
+      "why": "공원 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "302ec792-d9db-4e91-af0f-4818f4e239f3": {
+      "verdict": "accept",
+      "guess": "근린공원",
+      "why": "공원 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "408ef458-4064-4263-b26c-c662e97d4ac1": {
+      "verdict": "reject",
+      "guess": "아파트",
+      "why": "주거단지명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f2ee5f08-8197-4378-a459-e1ae8ef232a6": {
+      "verdict": "reject",
+      "guess": "복합단지",
+      "why": "쇼핑시설 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9a8ad530-8e0c-431d-9412-917a1ffc2dbc": {
+      "verdict": "reject",
+      "guess": "꽃판매점",
+      "why": "수목원 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9ce2f767-d2dd-41f1-9b15-1911b624c2c5": {
+      "verdict": "accept",
+      "guess": "꽃공원",
+      "why": "공원 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "304558d3-70b7-4b29-9482-c844c2451436": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9eb6b29f-974f-4ed7-880d-a6c2e23ebac6": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5f76daa8-4576-4fef-a399-4393a10c1d20": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2292cbd6-267b-4b24-988f-c6b302b74a16": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "업종 판단 불가",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b749fac8-af02-4143-919a-1c3c34a4cffc": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2f9316ac-2275-4526-82a6-b7335fca0b53": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "해운대 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "11e59306-de9a-40bc-81c9-aab9595570f9": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "달맞이길 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1a2f5d92-2546-4de2-b8c9-6a1498f1ccc1": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "7080 유흥업소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6d23d7f3-4275-4d55-918a-486f07cb3d9b": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2b9dcab6-a56a-4948-bdcb-f67893096303": {
+      "verdict": "reject",
+      "guess": "흑염소식당",
+      "why": "와인바 분류 오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a0922317-152a-4ef4-ab54-b63a32370edb": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "cc7704b1-badc-4f2d-b300-234b638a0c40": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "서면 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "aa4db8dc-c232-4724-9db1-4f7703f22ad7": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "서면 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "819459d8-b425-42e5-a39f-4572f1c7ff3a": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "전통 유흥업소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "27bcb4e9-acef-4b69-9075-0db7b3b47a14": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e2e3249c-9900-47a7-b3a8-15b792672dbb": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "df8136d4-58b1-4873-bba7-4101cb6569ae": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8e652900-b9a8-44da-980b-546bef6874bb": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a95c7d4e-6e90-4e54-8fec-3d9abc0c2451": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "abf5da9d-1bc9-4a73-822f-824167adbac0": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "서면 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fd5e93e4-1a0d-413a-a83d-b0f3d29aa3ea": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5d205d40-b8e2-4ac5-b188-c79106533fb0": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "서면 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "64d72228-8ec5-4039-9ce5-192d949a83e0": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일 전문",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fc21ca0d-1444-44a9-93fc-4db3fd0ddfaa": {
+      "verdict": "accept",
+      "guess": "라운지클럽",
+      "why": "서면 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e71a43d2-f62b-4ff4-917e-12cc96bca108": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f780f35c-866e-44dc-8e83-37799323cfb8": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6a0a366b-009d-4156-b8b2-7f0c8fd4f9e4": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f1df1ce2-95a1-42f4-989b-e00ff68c2b46": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "번화가 유명 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "17730588-066a-40ea-afc7-d4bfb0b150f4": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "정체 불명 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ff16d9dc-0354-48a5-9ee3-31e3ed3df11d": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "시장 내 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "754bccc8-8389-4a42-b695-3ab6fe0a0a70": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "362b1a6a-9e09-44ec-80ba-c956a1d3eb5b": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "호텔 내 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fb4134f7-c105-4ffb-ae77-724ccc36baae": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "해운대 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "408a05f5-9a14-44e8-b3eb-32d2350e6434": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 주점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fbbe5e75-9bb6-484a-9e4d-6d494750dfec": {
+      "verdict": "reject",
+      "guess": "맥주체인점",
+      "why": "프랜차이즈 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9cf410bd-98b1-4cf8-937f-4d1960d8b2d5": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "40d5530f-6fe3-4df1-9d26-4d38f8a8c1a4": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 주점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7f7ffa83-9751-4e9b-99b2-a0389b7f6958": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행자용 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "096a8cb0-54d0-43ea-afed-02bb3de8f9ca": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "04a23886-1a68-4147-b5bf-3102802d2f88": {
+      "verdict": "accept",
+      "guess": "호텔바",
+      "why": "호텔 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "95be5043-6304-4ed9-a808-b5fc67a249f2": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d9675099-2e7a-4da5-9f16-bda451521226": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "전통 유흥업소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ce1a220d-4185-4e03-aac7-7869b4b140c3": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "56a5297a-d0f2-4723-913c-c3e726deaa93": {
+      "verdict": "reject",
+      "guess": "동네펍",
+      "why": "동네 체인 술집",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "86072bd3-7592-46ad-bcef-362a5cee9d15": {
+      "verdict": "reject",
+      "guess": "관리조직",
+      "why": "경영자 협의회",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "20a6c4f5-770b-440a-9402-835338e8d380": {
+      "verdict": "reject",
+      "guess": "불명술집",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "58981dc2-10e7-419f-91f8-620daa2c83ec": {
+      "verdict": "reject",
+      "guess": "신발매장",
+      "why": "일반 소매점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8c0e9797-ae35-4323-a507-e698202067c3": {
+      "verdict": "reject",
+      "guess": "불명술집",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "dd6ce0c2-1fa1-4edc-9f4a-646e4b79a666": {
+      "verdict": "reject",
+      "guess": "기독교서점",
+      "why": "일반 종교용품점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f5de98bb-fbd4-4da2-830a-e9e1cae8a200": {
+      "verdict": "accept",
+      "guess": "생태공원",
+      "why": "공원 분류 일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "60919739-bbfc-4b32-839a-a0d249b3a9cd": {
+      "verdict": "accept",
+      "guess": "어린이공원",
+      "why": "공원 분류 일치",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "93bb1fd1-5a4a-4bf5-8152-55d4642109ee": {
+      "verdict": "reject",
+      "guess": "레스토랑",
+      "why": "여행형 바 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8437113d-5ff0-4a3c-bcf2-36dda10590ee": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9d9f8329-cdf6-4138-b92f-0028190a621e": {
+      "verdict": "reject",
+      "guess": "불명술집",
+      "why": "한 단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "79ee2ea7-6847-4d73-9bda-8922433adf5d": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "라운지바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "79b810cb-6fdd-4dbf-a924-2be6ab1e08a2": {
+      "verdict": "reject",
+      "guess": "불명술집",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ca3a0f1d-61a9-44b2-9833-80eb74e55513": {
+      "verdict": "reject",
+      "guess": "노래빠",
+      "why": "유흥업소 유형",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fb7645c5-a26f-4e01-8f07-27ac25232672": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "클럽 정체 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a0f850bb-ace1-474b-9672-7c11ac54e096": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "바 상호 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "22c9b9a3-5355-4aca-8847-4b0bba4ad984": {
+      "verdict": "reject",
+      "guess": "불명술집",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7165ac8f-2ccf-4b11-b6e9-1f8279526ab1": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "밤에 찾는 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0856301f-8ba0-42b9-a3fd-3a1fd5aa3508": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호만으로 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "44519499-3fd6-409a-a189-8cded630f4ee": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호만으로 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "821ca430-02db-4ba8-94db-e7efb9d75d91": {
+      "verdict": "reject",
+      "guess": "호프집",
+      "why": "프랜차이즈 호프",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6563bb88-8157-4c06-bcc5-80ff6366bdaa": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "찾아갈 만한 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e9706706-4426-4804-ac7d-309447972877": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "찾아갈 만한 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c2e24984-7a7c-4fa5-86ea-027da3870c7d": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "전통 유흥업소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "123d6716-b509-4118-8c00-99deab1c21b7": {
+      "verdict": "accept",
+      "guess": "클라이밍장",
+      "why": "외부인 체험시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fb01ba84-1694-455a-a538-0bc0dd42f393": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "찾아갈 만한 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3b97a071-6c5f-4fc3-ab3e-9c833c2e6c07": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "찾아갈 만한 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "164710f2-b554-4737-be0f-7d9a8d2fb18f": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "홍대권 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "83eaa0a2-ec73-4abb-a18f-3249a8e66915": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "클럽 성격 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "208f34f2-9a53-4897-864b-3dca28832a58": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "찾아갈 만한 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7c7fcdd5-401b-4abd-a1b4-43f41e338596": {
+      "verdict": "accept",
+      "guess": "비스트로펍",
+      "why": "여행자용 펍",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0c02acf7-ff42-4216-ae58-58c8e7c933a9": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한 단어 상호 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "10161054-1e88-49be-bc15-e20258a74881": {
+      "verdict": "reject",
+      "guess": "체인치킨집",
+      "why": "프랜차이즈 식당",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d85a6c9f-ff60-4320-aace-80ca9ea59c20": {
+      "verdict": "accept",
+      "guess": "비어펍",
+      "why": "여행형 맥주펍",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4c7b6b48-d935-4126-9fd7-a862c44c2a8c": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a6f56727-d60c-4e77-9a29-df9bd2d08855": {
+      "verdict": "reject",
+      "guess": "유흥주점",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e9376335-5459-463c-9afa-5f4568dae8d4": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e5423ff3-134a-437e-829a-8cbd622ba242": {
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "클럽 성격 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "dde9d997-dffa-4481-b39f-e1f46b5458e1": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e6b55466-5fe9-4094-a923-b8fd41c29856": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일 전문 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "05c5cd66-3eb8-42e5-85df-6a814bbd82c5": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f258f5de-92d6-4d97-87bb-1da8d466b168": {
+      "verdict": "reject",
+      "guess": "유흥주점",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "56f29b91-0bfe-4ff9-a861-aa7ead802a06": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "이태원 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c370c6b9-07c7-42d4-9454-e28d27069a41": {
+      "verdict": "reject",
+      "guess": "유흥주점",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5603ddf8-7b96-4e5d-8974-36c025006d4d": {
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "클럽 성격 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c8910b8e-f4f9-4cda-9161-7e963cc31b70": {
+      "verdict": "reject",
+      "guess": "와인판매점",
+      "why": "쇼핑점 분류 오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c31eaa70-2f53-4a00-b068-f678ed74aa36": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 시음 전문",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0aa95d5f-ea6a-4ecb-9cfe-3f5a4cd4a745": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "합정 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "59667a37-259c-45d6-ad88-2d4cecb1e031": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "상수 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b0693ae8-18c1-44ae-aa3a-7d8952b9f75c": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "홍대 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ab1cc04b-41df-4289-a924-f6b7ed05897a": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "홍대 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "77b8944c-d1f6-4026-a672-8364fbe153bb": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "홍대 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0663696e-7046-4e09-a39f-993613f9e2f7": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "연남 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e0b19eed-5425-443a-aac4-15392b6f0e5f": {
+      "verdict": "accept",
+      "guess": "라운지클럽",
+      "why": "홍대 라운지클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d3aa67ae-32f3-4108-ab66-2f64081360e9": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "홍대 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c164d7d3-ce2c-4ace-a169-f33aa264e1a3": {
+      "verdict": "accept",
+      "guess": "재즈클럽",
+      "why": "홍대 재즈공연장",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c46a2aab-bcd6-41e7-a425-d242d5a39aa5": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "홍대 클럽가 소재",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b5ed685c-7e5d-40f9-a40a-38e72069065a": {
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "21fc2151-640b-4a1a-8191-70272e7174ad": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "홍대 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3adc1e0b-803c-4a8b-9a74-76561649dc80": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2b2150ed-2a99-4eec-ae05-7ec20c8c0f13": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "이태원 호텔클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0aaa95c6-6d04-499d-8aef-72a340afc39d": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "홍대 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "48b37535-145a-4b79-98d2-6ad1d748af21": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "홍대 유명 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ea13fc5f-661f-44a2-b6ae-c96395d1ddbb": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "홍대 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a0820fc1-5ddf-4f10-bd47-e3d8b3b4e102": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "라운지바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fb258f44-03a9-4873-88da-d6e992ca3a3d": {
+      "verdict": "accept",
+      "guess": "클라이밍장",
+      "why": "암벽체험 시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d7ad748b-c4ba-40e5-9799-95a00e4de12a": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "홍대 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ef3417fe-0af7-497f-8f6f-0b669ef0bede": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c36318e5-16c8-49f5-80f4-85ec3b2209ea": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 체험형 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "19ebbac9-09d7-4ca5-a760-eaa3379002d6": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a967d586-d0bd-4944-8a24-e55e5e976e32": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d6f8f1df-c347-41aa-a55f-250936e511ee": {
+      "verdict": "accept",
+      "guess": "살사클럽",
+      "why": "살사 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2e160fe5-894f-4955-a514-9812f95396d1": {
+      "verdict": "accept",
+      "guess": "탱고클럽",
+      "why": "탱고 체험 공간",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "91004724-dd21-448a-bfd4-e5079f443084": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "바와 와인바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4798b31c-3784-486d-b7bc-2fc111fcd0cf": {
+      "verdict": "accept",
+      "guess": "클라이밍장",
+      "why": "암벽체험 시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "eb5245e7-fa02-4106-86f4-ffc076ee10d7": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "278ffc9f-78cf-46b8-be86-f8500cf5822c": {
+      "verdict": "reject",
+      "guess": "유흥주점",
+      "why": "룸 상호로 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f2ab20b7-1e0b-4c8f-b24c-236c25a7edba": {
+      "verdict": "accept",
+      "guess": "전시관",
+      "why": "문화시설 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f65a8f0b-1c92-4ce5-a5fd-7f320e680c4a": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "950316bd-4f7e-4f6e-b79a-a6808407dad1": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일 전문 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "58da0553-df97-4cb7-8ad5-90ca24d084df": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "홍대 댄스 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9f0da707-1ef7-43d3-9025-f56a238e42a2": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일 전문 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "baea09aa-0c34-40d1-8cda-eb6cdd3e45c6": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "청담동 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "25627fb0-f029-4e85-8520-9e0d13b0ac72": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호와 주소 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "280ca3d2-f79f-4699-bb50-e921b63c9502": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1b114217-b2ca-440c-867c-5fd40c29ab22": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "60f0a657-cc72-47ed-9a63-974767719315": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일 전문 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "bcc7f35d-c078-43e2-b224-8f6279a352a0": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e523c854-9d45-4df4-8254-5eb0da2b3f5c": {
+      "verdict": "accept",
+      "guess": "수제맥주펍",
+      "why": "크래프트펍 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "bc6c8eed-0b94-4016-a994-d6f9ebeb8312": {
+      "verdict": "reject",
+      "guess": "동네맥주집",
+      "why": "생활형 맥주집",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3f1b5772-9d97-493b-9351-5a68691c52d1": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6f410181-a915-4878-8af1-fa92e69da025": {
+      "verdict": "accept",
+      "guess": "루프탑바",
+      "why": "루프탑 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5c621f90-1a91-4512-8741-bc4b3df535c0": {
+      "verdict": "accept",
+      "guess": "한강공원",
+      "why": "외부인 방문 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "714ab579-31f0-401a-a6ee-f7fae9ef35e8": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5664d0e5-dad7-4022-8133-778f331a312c": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "연남동 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e5b4486a-81c1-4c6a-87cd-3e9290b8be04": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "연남동 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c7184a49-cbce-45b8-9fe9-488b8267888a": {
+      "verdict": "reject",
+      "guess": "가정공방",
+      "why": "아파트 소재 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ee92ee28-0abd-48f5-a0d0-cb51e6741d3b": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "방문형 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f5df9bf7-12e0-4ab4-a7a9-70ca723f9f7f": {
+      "verdict": "accept",
+      "guess": "아트센터",
+      "why": "문화시설 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3ff70bb4-41c4-4031-ac4c-6a27764c76b1": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "11c52f99-e9da-4bf8-850e-e762d4a51578": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "연희동 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "459f74bd-02e6-4d14-a2c9-ed8de2bab6f5": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "연남동 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ad89389d-fddf-4252-9b0b-66428c164033": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "48dccecf-22bd-42af-a78c-f9fd15872886": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "연남동 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "dd4670fe-6963-489c-8183-f4e4117a5bcc": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "연남동 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f7fcb214-9263-4322-ad35-b70b9b4f3dd8": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "음악형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6d6c5acb-03cf-4e54-b546-3d189976a4d5": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "cb217f9f-b3d6-499d-aa18-ee3ee61f6c6f": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "여행형 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f59715cc-75dc-40cd-a0a6-cb8d9ee63001": {
+      "verdict": "accept",
+      "guess": "전시관",
+      "why": "문화시설 분류적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "81149a47-f467-4b2c-b528-bd59a86897b6": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d98446b3-ae06-423a-b526-4109cc9730d0": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "신촌 유흥형 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8acf6353-474a-4fc7-be63-ba6a34d78db9": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2d8969ff-93ed-4663-9d2c-b09054cc56bd": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2d72d36d-f76a-4fbf-abc6-013dd2a20c49": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "바 상호가 명확함",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8fe95dda-b9b3-4f6a-979d-0e49d5c019dc": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d3daeb26-10e6-4e89-b282-bead2af898aa": {
+      "verdict": "accept",
+      "guess": "미술전시",
+      "why": "아트센터 전시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2196b538-8b40-409f-9718-0c6c8bf253b1": {
+      "verdict": "reject",
+      "guess": "불명업소",
+      "why": "라운지바인지 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2605a017-5260-410a-befe-54cee82549fc": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "명동 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0fd83318-1df0-4f08-bd78-07a87632c8f6": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3aa345a6-195c-4fe3-a821-b0118a406c74": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d8a76d6f-ec9d-48cf-bf35-ec5ef6406c30": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "상가 내 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9d902b11-2cb8-46a2-8116-5ef3ccf7242c": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2fd4c31b-a50c-4cc7-bd2f-77aaf3d44f44": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "25ba97a4-5277-46cc-b705-bc716af0fec0": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "음악 칵테일 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a3d03639-48cb-4425-8bd9-42b4dc658a0d": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f38e04e0-876f-4573-873f-df65980aad9b": {
+      "verdict": "reject",
+      "guess": "주점",
+      "why": "업소 성격 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9cac14e3-9f80-401e-b767-d6da7475bf5a": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "특색 있는 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b1b05b81-ade9-4ce1-8a0d-bc6a4c3d97a3": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "aae4aa9d-78ff-464f-bf1c-a30533f0c51d": {
+      "verdict": "accept",
+      "guess": "갤러리",
+      "why": "미술 전시 갤러리",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "931d5786-e186-4c8c-acfd-32c010ba4c74": {
+      "verdict": "reject",
+      "guess": "호프집",
+      "why": "프랜차이즈 호프",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f195af15-9a53-40c7-a9c9-a15d8fd154f5": {
+      "verdict": "reject",
+      "guess": "와인주점",
+      "why": "프랜차이즈 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7db9c4f3-f25f-44e4-9a61-fd0e20422b4a": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 클럽 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "db7d711b-9a8f-423c-8c41-d95c8af14a9d": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "클럽 성격 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d10fd2ab-6fc3-4de9-9085-0966ac128b8b": {
+      "verdict": "accept",
+      "guess": "라틴클럽",
+      "why": "라틴댄스 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4bc454c9-f732-4c57-a0f9-ed51729515d4": {
+      "verdict": "reject",
+      "guess": "와인판매점",
+      "why": "판매점 여부 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b24d60bb-a8d3-4a58-a3a2-2a8b22da89c9": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ddd966e9-4ac5-48ce-b482-0a5b5f9f7a2c": {
+      "verdict": "reject",
+      "guess": "주점",
+      "why": "업소 성격 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "250d1914-4f4f-4978-b818-47ef96be0414": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fb9de846-6a49-47e4-b9c9-eb572e59b33e": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7e7bf43f-a180-447a-bb2e-93203fb3ee36": {
+      "verdict": "reject",
+      "guess": "산후조리원",
+      "why": "자연 분류 오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d31027db-cbd2-4a3a-b311-5fd7b9ce6d60": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1ce00c3c-9591-409d-9220-5036fcef6265": {
+      "verdict": "reject",
+      "guess": "체인펍",
+      "why": "프랜차이즈 주점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ed15e9a9-f19c-450a-a934-0d23eeac3234": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d523ae04-30d4-40e8-83f1-5c699ddf1dd5": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "호텔 유흥업소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c75bd63f-777f-4336-9b62-01c45886dbd3": {
+      "verdict": "accept",
+      "guess": "근린공원",
+      "why": "실외 공원",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d3f0bbf0-7c78-447d-9a6f-5c79924eaa43": {
+      "verdict": "accept",
+      "guess": "미술문구점",
+      "why": "전문용품 쇼핑",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "84625350-bdb3-421e-b21d-00641cc97c3b": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "방문형 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7c8b6654-9dec-45ff-ab7f-15c824b42c15": {
+      "verdict": "reject",
+      "guess": "파티업소",
+      "why": "업종이 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a31f2ba2-b0a0-4fe7-982b-5c14ca3e350c": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "호텔 유흥업소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4fc8a7c1-302d-4b84-ad4e-0be1ef2da032": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "스피크이지 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "92d96997-aca0-404c-a656-573c248c6091": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "비스트로 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0593f099-41e8-41d9-a253-32c8a36d63fb": {
+      "verdict": "reject",
+      "guess": "연습실",
+      "why": "클럽 분류 오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "19571c3a-8bfa-4e96-bfcf-b7b5166ab0e5": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "명시된 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a55ae682-5551-4fee-8b0e-6d071f7633a7": {
+      "verdict": "reject",
+      "guess": "불명업소",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "052a6236-4da5-441b-8f6c-57ad4688cdf6": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "가로수길 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "846800e6-9a2c-462e-8dc2-554abec5c16e": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "명시된 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a51b1401-bafa-4ae5-bc5f-e36b87ae427e": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "가로수길 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d797f1fb-7b58-4b06-b54e-8397695ec676": {
+      "verdict": "reject",
+      "guess": "불명업소",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d890dc6b-4dcc-4fb5-a8b7-3443b1978aec": {
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "유흥업소 가능성",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9f673b84-7aa5-4179-8356-d63b3ee732a4": {
+      "verdict": "reject",
+      "guess": "불명업소",
+      "why": "한단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "51b647a0-d16c-45e0-924b-04f9d7c1219a": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "라운지 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "023c0d0b-b606-4db0-a3e3-7afcf41dcaa1": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "명시된 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4b44fe28-2658-4878-a320-aacd2d4e8e0c": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "이태원 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "85321398-5359-46d2-96e5-1390024c249e": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "명시된 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b1a6b6e5-0298-4493-a4fd-1fb73c454e8c": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "명시된 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "84045f62-a7e3-4398-b870-dc1b749bae71": {
+      "verdict": "reject",
+      "guess": "불명업소",
+      "why": "한단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d5d0663c-a444-44f6-9bfa-a53835f07396": {
+      "verdict": "reject",
+      "guess": "주류회사",
+      "why": "법인 사무실명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ba192f62-6415-4ded-a25b-bada6b59c2fd": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "압구정 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "722aad4d-194e-4777-904b-94543d7da58d": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "강남 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ca90c644-b146-4ccc-bdeb-80b484726ce9": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c9ddb395-d9fe-42f5-8979-7ed0b00ac6e5": {
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "업종 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3cc92c7c-60d4-4bed-bc9e-c8e488dab06a": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "라운지바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "960e8f7f-f276-4113-8b21-767f92c037d7": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호로 판별불가",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a3cf105d-d9bd-4a65-902f-e1ef5493ae29": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "프렌치바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "50fae0a7-d2b8-4310-81cf-0fa85387d778": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 업종",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "cb65945e-95fe-447c-8a5c-b989a5ba9858": {
+      "verdict": "accept",
+      "guess": "호텔라운지",
+      "why": "호텔 내 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9962f1df-c348-46ba-a130-da8dcc51189b": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 업종",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b2f79e43-9b18-4202-a12c-29e82c95930b": {
+      "verdict": "reject",
+      "guess": "치킨호프",
+      "why": "동네 치킨호프",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "61bac77c-daf9-4f9f-ac40-299a1f32eea0": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "354a7619-6517-4ee2-b4e8-218b572c054d": {
+      "verdict": "reject",
+      "guess": "동네호프",
+      "why": "생활형 맥주집",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d80407ae-7bca-4b7f-a6ba-e9843487992b": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호로 판별불가",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "008805a6-05ec-4022-8305-aadcdd5303a7": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "지하 업소 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "20ca4266-b5f7-4f30-b9a6-ea5c2c3c8c7a": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "호텔 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8bc83887-f436-47ec-8052-3fbd15380202": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "강남 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "47df9968-dc9f-4132-9d4b-ec5cfdfd03b4": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "호텔 내 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "67a22a7e-2a48-452c-9230-d80b3e79ecce": {
+      "verdict": "accept",
+      "guess": "시가바",
+      "why": "칵테일 시가바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e7f42050-22e9-40ee-8e5b-eca8be444fc1": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "신사동 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3857b7a4-5941-44ef-b106-5c326465fa3a": {
+      "verdict": "reject",
+      "guess": "맥주호프",
+      "why": "동네 호프 성격",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "781640f1-a233-4f21-b7af-bdfef136d3c4": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "복고 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "088c10f4-c381-4034-a180-73cef651cefc": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "강남 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "86952c10-f58b-478f-80eb-71178beb42a4": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "명시된 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1113affe-d0c4-4ce2-9c1b-5aecf2cda47c": {
+      "verdict": "reject",
+      "guess": "주택전시관",
+      "why": "아파트 홍보시설",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0fc0e763-f0f3-4bb5-8672-089dfa9108fa": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b873705d-3a6d-4491-89d3-6ff68045018b": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "명시된 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1c1df521-b4cb-4dbf-a952-862d0c870137": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "명시된 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8a9e931e-030c-48cd-8d8f-9cf3e9786fbd": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한단어 상호 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d7336d03-7508-4a4c-b096-cfa22317c326": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "명시된 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7be282c1-86b6-4248-b5be-540ed2c24fcf": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0944d113-cfb3-49d9-b132-27a27ba7f572": {
+      "verdict": "reject",
+      "guess": "와인회사",
+      "why": "회사·판매점 추정",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8c89d30e-481a-44b8-ade0-1c9380ee4316": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5dcd53ec-be5a-410b-9401-923e1bb72b47": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "626ea4ff-934c-42e4-8099-566ede62dc66": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f6be7f2e-75b5-4def-a7e8-c46717477183": {
+      "verdict": "accept",
+      "guess": "호텔라운지",
+      "why": "호텔 내 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "869d1bf4-30d8-47c4-b013-629644d1d4cc": {
+      "verdict": "reject",
+      "guess": "업종불명",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "898fbd00-01a8-4139-97a8-2a6247957e3f": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "43ff5454-e003-4338-9d10-a51f42fd9674": {
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "한단어 클럽 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7a88e6f4-79c9-4596-a413-364f504761a9": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 태그 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3a5e44ac-70a3-4ea4-85f3-85116c6e5c42": {
+      "verdict": "accept",
+      "guess": "클라이밍장",
+      "why": "체험시설에 해당",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8006e1fe-5ea5-4249-b2cb-b604ef37ce79": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6137736b-6b45-472d-b53f-74d8efc4d8ca": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 태그 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0b4db3d4-a556-484d-8405-51b86a0cf462": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "한남동 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0545b215-443f-4a75-95e8-8cd8552f265b": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3de16090-4359-4321-a3f3-5b93c3c503e2": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "한남동 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8540563d-8946-4808-8ce7-0c97eeebf5a7": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "한남동 스피크이지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a0f38ea2-1bdb-42a9-a560-141f14175e36": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "한남동 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "daf5162f-8b98-43be-abea-c4c88339a9a9": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "로데오 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0f06db0c-b837-42b8-b38e-3bf3ab561710": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "호텔 내 유명 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f9ad3be6-e13c-4d13-9975-9400ddba435a": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "내추럴와인 전문",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6c1a3f05-b236-4a8a-ba42-3d0a17c8aaf3": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "한남동 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "352fbb44-991d-4e34-bded-55d3b867715f": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "한남동 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "911db973-a268-4f80-a94c-0a6aaf9b8ba9": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "한남동 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ae3e2548-9c0d-4d67-b67f-c740ecd140cf": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "현대식 음악 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "742af8fb-fbdd-4112-ad19-69d8bc35f755": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "39ebced4-c007-4284-a5fc-48344b0cb1b0": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "이태원 음악 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e93e19ac-dd87-4120-a314-b9a61600268d": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "이태원 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "db6d3fd4-1669-4a7c-a7f7-1c6a2487f822": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "이태원 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "66ce5517-c434-471d-8a1f-bf17dd934298": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "이태원 음악 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "131cc5cd-7fca-4af7-88ee-2820a4c6d100": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "이태원 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1aae5e1b-3348-4772-abc6-0c98711c9ef4": {
+      "verdict": "accept",
+      "guess": "힙합클럽",
+      "why": "여행객용 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "9195ff09-5f30-4def-95d0-d75cabd32d26": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "이태원 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "dcfa7db3-a7d6-4c0c-bfc1-5dc98aea9cfc": {
+      "verdict": "reject",
+      "guess": "유흥라운지",
+      "why": "전통유흥업소 의심",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3b2dff8b-2490-457d-8377-43db37df577b": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "호텔 내 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6aef7efd-eb70-438c-91a8-f237e6b7bbb3": {
+      "verdict": "reject",
+      "guess": "불명술집",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e4b0f64f-b67c-48da-9422-76402da9bba1": {
+      "verdict": "reject",
+      "guess": "불명술집",
+      "why": "한 단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e796b604-db4c-449a-a9df-5af1ac01c8b7": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "비스트로형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "68bb8426-d40d-43a7-a9d6-c034880eb169": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "이태원 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b4c9fa63-c8cd-4ae1-9625-d44c30bfab93": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "이태원 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f5f9431f-0bec-446b-8c5c-e695312016ef": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문점 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ba3868bc-b54c-4c56-aa42-22fa3dda8949": {
+      "verdict": "reject",
+      "guess": "불명클럽",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0c79edd8-c15d-4c61-9d08-9d04160bf42c": {
+      "verdict": "reject",
+      "guess": "불명술집",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4c38a8ff-9292-49f7-ac4a-fcfc548445eb": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 명시",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "22126b5d-6398-4042-b7df-2192fb77ee92": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "을지로 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4e889ac3-3a81-47b9-9372-1f4debb53cea": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "외부인용 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f3d776b3-6f60-4b4e-8529-b748feb78d5f": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "외부인용 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8dd8b466-6bb3-40c1-be73-929bb30ccda9": {
+      "verdict": "reject",
+      "guess": "술집",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f2ce2e8e-4d0e-4279-b560-666ad4de49d8": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "06a94954-86d6-4dd7-9021-f65853230ee7": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "외부인용 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f8191f12-33bb-4c70-b0fb-3a313f23ea6b": {
+      "verdict": "accept",
+      "guess": "복합쇼핑몰",
+      "why": "외부인 방문 쇼핑몰",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6d430e2e-e823-47b4-9808-1c73aa8e54d6": {
+      "verdict": "reject",
+      "guess": "호텔라운지",
+      "why": "투숙객 시설 추정",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2fa275b4-b868-4d8e-9e87-a6cb9f88282d": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "외부인용 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "08dd0932-fc0d-49ef-bb61-06ac2b058427": {
+      "verdict": "reject",
+      "guess": "술집",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b3a81796-8c4b-4a46-a7c8-96c1d17363e3": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "f6d41e0d-70b5-42ea-9314-faa81a4d3270": {
+      "verdict": "reject",
+      "guess": "입주자대표단",
+      "why": "주거단지 관리조직",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "dfbe3f84-8cb4-4fc2-b4e8-679053662306": {
+      "verdict": "reject",
+      "guess": "체인호프",
+      "why": "프랜차이즈 호프",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "034d98e8-592f-458b-b8ce-4d487169144e": {
+      "verdict": "reject",
+      "guess": "술집",
+      "why": "상호만으론 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "cb52bb30-386a-4611-9932-958e7a3d5952": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "외부인용 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "05ce209b-a397-4511-bde9-07046cb7254a": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "외부인용 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "10f2f9c1-6369-4e85-885f-ac22805d0e4e": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호로 판별 불가",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "be131cdd-9dd0-4604-8a80-bfeaab9eec19": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "전통 유흥업소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "be9a0145-4dcb-411b-a088-8175d65de53b": {
+      "verdict": "accept",
+      "guess": "재즈라운지",
+      "why": "공연형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "bcc613f7-6fc1-4b87-9981-971e7cc6af2a": {
+      "verdict": "reject",
+      "guess": "와인바체인",
+      "why": "프랜차이즈 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "801a6cb0-a28b-4928-80d8-b0716559f4f9": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a3d6f755-3cdc-4223-9758-7a78e06a720d": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호로 판별 불가",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fe58cabb-b42f-4c28-9f91-72354ec2ca16": {
+      "verdict": "reject",
+      "guess": "호프체인",
+      "why": "프랜차이즈 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "08475872-d1d7-4d38-8d66-0e6c4c29f670": {
+      "verdict": "reject",
+      "guess": "술집",
+      "why": "상호로 판별 불가",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e94b28ed-d594-4c6d-ab32-eb14ee7edd2b": {
+      "verdict": "reject",
+      "guess": "렌즈매장",
+      "why": "클럽 분류 오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a11c07bc-46fb-4193-bd63-070e2a561060": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0d411784-5bbe-4961-9b68-560275e7773e": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a7747469-b49f-4ff4-96ff-ea86f7456c5e": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "청담 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e42c05f4-bdd5-4a22-b6e6-0a7f11c41e49": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0ae12da0-e644-4e1f-a330-13b2f98b80b3": {
+      "verdict": "accept",
+      "guess": "와인라운지",
+      "why": "방문형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "440deee2-a713-44f2-b8d9-e962fba4d91e": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호와 주소 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "84d6c6ae-3938-4b4f-a08e-f2830b4e0d15": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "76c7054a-e922-46d6-ad6a-8c3e98f71caa": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "16e44030-b83b-46ad-a38d-8e3d6441f713": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인 전문 주점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fa25331f-0357-40ce-82e9-b7e8653471af": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "54f021a1-9389-44ba-8676-e6c767f67948": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7323369a-33c9-4442-bd85-a7876d391eb6": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "라운지바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "eb9ab0e0-42b6-495b-b282-94ffcb71d096": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3e6c8ec7-5b21-41c2-99d9-cd3be98d00b7": {
+      "verdict": "reject",
+      "guess": "주점불명",
+      "why": "업종 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5fa700d4-8113-489f-bd52-227514d81125": {
+      "verdict": "reject",
+      "guess": "주점불명",
+      "why": "한단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1c3c6f38-8c72-4766-b930-1dac9888dbe2": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "유흥업소 의심",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b8b55154-2e70-4b33-834b-b798fe9f22c3": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "댄스클럽 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "075b7e4b-af87-4797-96fe-11419abc8041": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "청담 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6e908a62-d602-4996-bd74-b266002d2843": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "청담 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "37196e92-ed61-4241-8605-c635b20e9198": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ffbef671-79cc-460d-bb61-2b15d0659da7": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "라운지바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fb13cfba-073c-484d-a4a9-86c40b8deb43": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "청담 유명 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7fa3cd48-b03b-48b4-bfb1-94cc67376232": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "청담 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "cefe9306-2d6b-4f67-9c45-9decf14f7455": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "파티형 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "db068b96-f7b3-43e5-8951-44102ecd299d": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 상호 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1b0a4bdd-c7f5-48a1-a09b-27efd74361fd": {
+      "verdict": "reject",
+      "guess": "공예점",
+      "why": "상호만으로 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "039d9c6f-dcbe-4644-abb8-3e8146814441": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "청담 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e3645928-502e-47be-a3fd-d7a1ce3f856d": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "유명 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fe8f09d4-8356-41d2-a61d-d165ca1d5110": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "호텔 유흥업소형",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3821046b-f862-4b08-bfcc-7d0f4151f577": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "클럽 상호 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "4554f6f5-319c-4e7b-a4aa-ca186d11c6af": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "유명 댄스클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c2fcafa7-a949-4e69-96fa-a5206d7cf12c": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "칵테일바 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "06ce2143-3d8e-42d0-9db8-9b6ebfb3ba4e": {
+      "verdict": "reject",
+      "guess": "주점",
+      "why": "상호만으로 불명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "d022a035-6ca8-4eb3-9339-bfd4a40e24c7": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "청담 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b6ffba1a-319b-450e-9722-623ab8f15bdd": {
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "한 단어 유흥 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "81e783bd-50cc-48ce-9546-66c38bfe8a7a": {
+      "verdict": "reject",
+      "guess": "바위유적",
+      "why": "분류와 태그 오류",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "54dd7fa3-d7d9-4c77-ab55-ba912fdfb416": {
+      "verdict": "accept",
+      "guess": "댄스클럽",
+      "why": "여행형 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "326bcca8-6cb7-4504-ab59-eea7df98483a": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5d85a5ce-fe16-40e7-b7dc-e0ba14ae77e1": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "dde64663-1771-42b3-8c85-cbaa92a37f7f": {
+      "verdict": "accept",
+      "guess": "사찰",
+      "why": "불교 사찰",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3e2fbc19-470a-4469-bcb7-3304b3f6934e": {
+      "verdict": "reject",
+      "guess": "불명클럽",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "79e34180-d705-4562-812a-f5afc0068d8f": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8d2e8856-920c-4e30-b752-3a68870b24a0": {
+      "verdict": "reject",
+      "guess": "주거단지",
+      "why": "주거지형 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "8360754b-b267-4a1c-becb-cc52f6e261ff": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e21dd944-f246-45b4-8b30-e57e940af103": {
+      "verdict": "reject",
+      "guess": "미술화실",
+      "why": "쇼핑시설 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7a4f274b-fcf7-43ec-86b3-5f4f6e4f28ce": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5a336719-8460-4502-8edc-eb472ec8d977": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5e82cb3b-c2ec-4ead-9330-ce2cf1aa2a7f": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "93ceba0e-e0e8-461b-93ed-2c12bfd4957f": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e9bf6fc3-e038-4bf2-a916-4c30559a03ab": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "호텔 유흥업소형",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "88ed191d-3ea3-4ac9-b168-672ee6d72c8f": {
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "전통 유흥업소형",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b6f12a06-5589-48b7-9a43-2e7c91f6f73a": {
+      "verdict": "reject",
+      "guess": "불명주점",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ad45a843-a54e-484d-821c-4880fccb5989": {
+      "verdict": "reject",
+      "guess": "체인주점",
+      "why": "프랜차이즈 주점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ac2d36c1-b886-426b-8c8e-9871a1ff2dba": {
+      "verdict": "accept",
+      "guess": "후카바",
+      "why": "후카·칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "611e1450-189d-4e5c-97e6-cadd6ddbddc0": {
+      "verdict": "reject",
+      "guess": "체인와인바",
+      "why": "프랜차이즈 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7189bbf5-92dc-4b04-9cc3-311d3f642a5d": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "송리단길 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "caad1a2d-a613-4432-baec-abc17ac03eb3": {
+      "verdict": "reject",
+      "guess": "교차로",
+      "why": "통과 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "1887c752-255a-4bc9-aa9b-329950ca006e": {
+      "verdict": "reject",
+      "guess": "불명주점",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e50b8961-307d-425e-9941-29bc28267ee9": {
+      "verdict": "reject",
+      "guess": "불명클럽",
+      "why": "업소 성격 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "684da81b-9476-4ffa-9fcd-26792dedfc75": {
+      "verdict": "reject",
+      "guess": "불명클럽",
+      "why": "한단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7680db49-5083-4e2b-9ba4-4ce4c7066830": {
+      "verdict": "reject",
+      "guess": "불명주점",
+      "why": "업소 성격 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "52b97c36-2552-4af8-a0d2-e2464047c173": {
+      "verdict": "reject",
+      "guess": "불명클럽",
+      "why": "한단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "6c583f9d-f3bc-4bf9-9cbf-36381f684de0": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바 상호 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "2164c8f1-cc2b-42f5-98e5-dbca3a5b36f5": {
+      "verdict": "accept",
+      "guess": "근린공원",
+      "why": "공원 분류 적합",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0a78ff01-7381-42b0-9854-54d0511b4fc5": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "방문형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "02ec3b60-5b30-44fd-949f-0e84a04cb209": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "건대 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "20ea0c24-a4d6-4caf-8555-55823d43bbeb": {
+      "verdict": "reject",
+      "guess": "노래주점",
+      "why": "노래주점 체인",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e2393d2e-cdbe-4ea0-bd47-62a92eaddd58": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "여행형 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ce8c25d6-e387-496c-a9b4-5cb028d5cdeb": {
+      "verdict": "reject",
+      "guess": "오피스텔",
+      "why": "주거시설로 추정",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5154b4b3-2a92-47ba-a83d-fdfb9b0352d2": {
+      "verdict": "accept",
+      "guess": "라이브클럽",
+      "why": "록 공연 클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "86a107a6-88df-40de-b7cb-c6cacd5a33cb": {
+      "verdict": "reject",
+      "guess": "체인호프",
+      "why": "호프 체인 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ae2b2faf-7e67-4b5c-8f1a-d23bf2f6c873": {
+      "verdict": "accept",
+      "guess": "힙합클럽",
+      "why": "명시된 힙합클럽",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "7c69c3ca-5ebb-4763-ba03-dad4c71a8f0a": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "상호만으론 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c483545f-bf89-47a3-871b-47bcf9ef1896": {
+      "verdict": "accept",
+      "guess": "라운지펍",
+      "why": "여행형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "09175dab-b19b-4b3e-9e06-477de1d47cb0": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "명시된 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "efd73b27-d776-4902-9b0f-ac8e7aa28850": {
+      "verdict": "reject",
+      "guess": "복지조직",
+      "why": "고령자 지원조직",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "e61db2c4-bb3b-4a98-a903-ef67e6a447c3": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "명시된 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "27ffc669-e8ce-49a4-a4e7-136f1ca9e32a": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한 단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "3ca88d97-dfd4-404e-9521-e5dbc460222e": {
+      "verdict": "reject",
+      "guess": "노래주점",
+      "why": "노래 유흥업소",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "b8d00b0d-c8f2-479f-a607-eb2a63dcfa01": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "명시된 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "dd9f921e-a8b4-44cc-97df-85ac7843b279": {
+      "verdict": "reject",
+      "guess": "유흥업소",
+      "why": "한 단어 상호",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "a39eb3f2-628f-459c-a095-3b91cfca5a3b": {
+      "verdict": "reject",
+      "guess": "와인바체인",
+      "why": "전국 체인 지점",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "0f3f644c-762a-48c8-a4df-4ff5d9eebab7": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 칵테일바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5381c253-fa1b-4df0-a429-02893fd82695": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ce3a4976-3d74-4561-8943-7813a98239bc": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "바 상호가 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "c56551d0-e144-4bfe-ba53-b30fba029f46": {
+      "verdict": "reject",
+      "guess": "동네술집",
+      "why": "여행형인지 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "842cfa27-4487-4b77-9469-5249c54752c2": {
+      "verdict": "accept",
+      "guess": "수제맥주펍",
+      "why": "펍 상호가 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "ff869f9b-018c-46cb-a29b-f26e7ae733fd": {
+      "verdict": "reject",
+      "guess": "불명상점",
+      "why": "상호만으로 불명",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "369c4e6b-3f79-4bc1-845d-13a8aad4cc1b": {
+      "verdict": "accept",
+      "guess": "칵테일바",
+      "why": "여행형 바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "834fd0aa-8dbe-4c77-864e-0bc42be910e6": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "여행형 라운지바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "5cd9d34e-a053-40c9-ba37-2a478bfb492a": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "관광지 내 와인바",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "79ec0e77-ddc8-492d-88ab-777c1f6def4b": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "fea846e2-ca4d-451a-8d70-0b2026a834d7": {
+      "verdict": "accept",
+      "guess": "비어펍",
+      "why": "펍으로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "23704f3f-feea-4d89-a672-f8ced1926925": {
+      "verdict": "accept",
+      "guess": "라운지바",
+      "why": "라운지바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
+    },
+    "bea3a699-f31a-4570-857d-adf101f8a8a0": {
+      "verdict": "accept",
+      "guess": "와인바",
+      "why": "와인바로 명확",
+      "model": "gpt-5.6-sol",
+      "prompt": "3"
     }
   }
 }

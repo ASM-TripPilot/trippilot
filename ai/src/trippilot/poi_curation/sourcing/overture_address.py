@@ -170,6 +170,11 @@ def resolve_address(
     if (tokens := raw.split()) and tokens[0] in _COUNTRY:
         raw = " ".join(tokens[1:])
     expanded = expand_sido(raw, abbrev).strip()
+    # **빈 문자열을 `region_check` 에 넘기지 않는다.** 그 함수는 백엔드 판정의 거울이라
+    # `tokens[0]` 을 그대로 읽고 IndexError 를 낸다 — 나라 이름만 있는 주소(`대한민국`)가
+    # 머리 정리 뒤 빈 문자열이 되어 실데이터에서 터졌다. 거울을 고치는 대신 여기서 막는다.
+    if not expanded:
+        return None
     if region_check(expanded, regions) == "sigungu":
         return expanded
 

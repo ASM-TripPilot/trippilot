@@ -40,10 +40,13 @@ REGIONS = [
 
 
 def region_check(address: str, regions) -> str:
-    """`collect_localdata.region_check` 와 같은 규칙 — 테스트는 스크립트를 import 하지 않는다."""
+    """`collect_localdata.region_check` 의 **정확한** 거울 — 방어 코드를 더하지 않는다.
+
+    처음엔 빈 입력에 `"unresolved"` 를 돌려주는 가드를 넣었는데, 실물엔 그게 없어서
+    `대한민국` 단독 주소가 `tokens[0]` 에서 IndexError 를 냈다(실데이터에서 터졌다).
+    **거울이 실물보다 관대하면 버그를 숨긴다** — 호출측에서 막는 것이 맞다.
+    """
     tokens = address.split()
-    if not tokens:
-        return "unresolved"
     sido = next((c for c, n, _, lvl, _ in regions if lvl == "SIDO" and n == tokens[0]), None)
     if sido is None:
         return "unresolved"

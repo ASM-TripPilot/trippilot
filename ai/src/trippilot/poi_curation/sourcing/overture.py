@@ -114,7 +114,78 @@ _CATEGORY_MAP: Mapping[str, PoiCategory] = {
     "observatory": PoiCategory.NIGHT_VIEW,
     "lookout": PoiCategory.NIGHT_VIEW,
     # `night_market` 은 뺐다 — 아래 `야시장` 주석과 같은 이유다.
+    # ── 나이트라이프 → ACTIVITY (사용자 결정 2026-10-15) ────────────────
+    # 우리 경계 8종에 나이트라이프 축이 없어 ACTIVITY 로 받고, **`tags` 의
+    # `나이트라이프`** 가 밤 장소라는 표지다(AI 가 그 태그로 밤 시간대를 다룬다).
+    #
+    # **왜 필요한가.** "클럽 가고 싶다"는 재계획이 엉뚱하게 나왔다 — 후보 데이터
+    # (공유본 57,205 + localdata 22,283)에 **댄스 클럽이 0곳**이었다. 이름에 `클럽`이
+    # 든 68곳은 전부 클럽케이서울(예식장)·대게클럽·타코사운즈클럽 같은 식당이다.
+    #
+    # **특정적인 축만 연다.** 실측(2026-08-19.0, 서울권·부산·제주·대구 bbox, 한글이름):
+    #   dance_club 250 · wine_bar 506 · cocktail_bar 185 · lounge 180 ·
+    #   beer_garden 40 · speakeasy 8  →  1,169곳
+    # `bar` 3,059 · `pub` 681 · `sake_bar` 553 · `beer_bar` 332 · `brewery` 96 은
+    # **뺐다** — 번화가 명소가 아니라 동네 술집이 주종이고, 그건 우리 LOCALDATA 판정이
+    # "술집·호프·바는 끼니가 아니다"로 이미 쫓아낸 부류다. 5,890곳을 넣으면 공유본의
+    # 10% 가 술집이 된다. 후보가 얇다고 드러나면 그때 연다.
+    #
+    # `jazz_club`·`rooftop_bar`·`whisky_bar`·`night_club` 은 **Overture 분류에 없다**
+    # (0건) — 재즈바·루프탑바는 이 경로로 안 들어온다.
+    "dance_club": PoiCategory.ACTIVITY,
+    "cocktail_bar": PoiCategory.ACTIVITY,
+    "wine_bar": PoiCategory.ACTIVITY,
+    "speakeasy": PoiCategory.ACTIVITY,
+    "beer_garden": PoiCategory.ACTIVITY,
+    "lounge": PoiCategory.ACTIVITY,
 }
+
+# ── 나이트라이프 태그 ──────────────────────────────────────────────────
+# 원천 카테고리 → 세부 태그. `나이트라이프` 는 이 표에 걸린 전건에 **반드시** 붙는다.
+NIGHTLIFE_TAG = "나이트라이프"
+NIGHTLIFE_DETAIL: dict[str, str] = {
+    "dance_club": "클럽",
+    "cocktail_bar": "칵테일바",
+    "wine_bar": "와인바",
+    "speakeasy": "스피크이지",
+    "beer_garden": "비어가든",
+    "lounge": "라운지바",
+}
+
+# 나이트라이프에서 **빼야 할 것** — 이름으로 거른다(사용자 결정의 제외 목록).
+# 유흥주점·성인업소는 여행 제안에 올릴 수 없고, `클럽`·`라운지` 는 엉뚱한 데 붙는 낱말이다
+# (골프/컨트리클럽·클럽하우스·스포츠클럽·독서클럽, 공항/호텔 라운지, 카페 라운지).
+_NOT_NIGHTLIFE = re.compile(
+    r"유흥|룸살롱|호스트바|호스트빠|단란주점|안마|마사지|성인|키스방|립카페"
+    # `피트니스`·`휘트니스` 는 같은 말의 다른 표기다 — 둘 다 실제로 쓰인다(테스트가 잡았다)
+    r"|골프|컨트리|클럽하우스|스포츠\s*클럽|헬스|[피휘핏]트니스|요가|독서\s*클럽|북\s*클럽"
+    r"|공항\s*라운지|비즈니스\s*라운지|라운지\s*카페|카페\s*&?\s*라운지"
+    r"|예식|웨딩|컨벤션|장례|병원|의원|약국|학원|교습"
+    # ── 아래는 실측으로 붙였다(2026-10-15, 419곳 전수 눈검사) ──────────
+    # Overture `dance_club` 이 한국에서 **노래주점·나이트클럽·호프집**에 많이 붙는다.
+    # 그건 여행 제안에 올릴 밤 장소가 아니다.
+    r"|노래주점|노래방|노래연습|코인노래|가라오케"
+    r"|나이트\s*크?클?럽|나이트$"                         # 샴푸나이트크럽·호박나이트
+    r"|주점$"                                            # 희주점 — 상호가 주점으로 끝난다
+    # 전국 호프·맥주 체인 — `is_franchise` 는 치킨·버거 목록이라 이쪽을 모른다
+    r"|투다리|생활맥주|봉구비어|역전할머니|압구정\s*몽키|치어스"
+    # 꼬치·포차는 끼니 쪽이고 FOOD 가 담당한다
+    r"|꼬치|포차|포장마차",
+    re.IGNORECASE)
+
+
+def nightlife_tags(overture_category: str | None, name: str | None) -> tuple[str, ...] | None:
+    """나이트라이프면 `(나이트라이프, 세부)`, 아니면 None. 제외 목록에 걸리면 None.
+
+    `map_category` 가 ACTIVITY 를 돌려줬어도 이 함수가 None 이면 **싣지 않는다** —
+    태그 없이 들어가면 AI 가 밤 장소로 다루지 못해 ACTIVITY 풀만 오염시킨다.
+    """
+    detail = NIGHTLIFE_DETAIL.get(overture_category or "")
+    if detail is None:
+        return None
+    if _NOT_NIGHTLIFE.search(_norm(name)):
+        return None
+    return (NIGHTLIFE_TAG, detail)
 
 # 카테고리가 NIGHT_VIEW 로 왔을 때 **이름이 이걸 만족해야** 통과한다.
 # 실측 표본에서 확인한 진짜 야경: 솔오름 전망대·거린사슴전망대·국사봉전망대.
