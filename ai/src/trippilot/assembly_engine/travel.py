@@ -61,6 +61,7 @@ class TravelEstimator:
         )
 
     def _minutes(self, road_km: float, mode: TransportMode) -> int:
-        return int(round(
-            road_km / self._cfg.speeds_kmph[mode] * 60 * self._cfg.safety[mode]
-        ))
+        near = min(road_km, self._cfg.long_leg_km)
+        hours = (near / self._cfg.speeds_kmph[mode]
+                 + (road_km - near) / self._cfg.long_speeds_kmph[mode])
+        return int(round(hours * 60 * self._cfg.safety[mode]))
