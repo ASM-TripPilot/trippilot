@@ -10,7 +10,6 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type * as ShareCaptureModule from '@/features/share-trip-card/model/shareCapture';
 import { server } from '@/mocks/server';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
@@ -76,8 +75,6 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  *  - 연타 가드 창(`pressGuard` 의 openedAt)은 모듈 전역이다. 옛날엔 파일마다 모듈이 새로 로드돼 깨끗했지만
  *    한 파일에선 앞 describe 의 확정 성공이 연 400ms 창이 뒤 describe 의 누름을 조용히 삼킨다 → 최상위
  *    beforeEach 에서 닫는다.
- *  - 공유 카드 캡처 판정(`isShareCaptureArmed`)은 스위치 `mockShareArmed.value` 로 고른다. 기본 null =
- *    실물(옛 열 파일이 실물을 탔다), 옛 「확정 셸」·「넣지 못한 꼭 갈 곳」 describe 만 false/true 로 켠다.
  *  - 토스트 스토어는 모듈 싱글턴이라 최상위 afterEach 에서 비운다.
  *
  * 3동작 뼈대: 준비 = MSW 핸들러·토큰 → 실행 = 화면 열기·뒤로/확정/수정 press → 단언 = 보이는 것·나간 요청·이동.
@@ -106,24 +103,6 @@ jest.mock('expo-router', () => ({
     canGoBack: mockCanGoBack,
   }),
 }));
-
-// [공유하기] 게이트 스위치 — null 이면 실물 판정(jest-expo 는 캡처 모듈 3종을 "있는 척"한다), boolean 이면 그 값.
-const mockShareArmed: { value: boolean | null; calls: number } = {
-  value: null,
-  calls: 0,
-};
-jest.mock('@/features/share-trip-card/model/shareCapture', () => {
-  const actual = jest.requireActual<typeof ShareCaptureModule>(
-    '@/features/share-trip-card/model/shareCapture'
-  );
-  return {
-    ...actual,
-    isShareCaptureArmed: () => {
-      mockShareArmed.calls += 1;
-      return mockShareArmed.value ?? actual.isShareCaptureArmed();
-    },
-  };
-});
 
 // TRIP-1296 — 이 파일의 모든 테스트에서 React key 경고(겹침·누락) 0. 누락 경고는 React 가 파일당 한 번만 내서
 // describe 하나로는 못 본다 — 그래서 최상위에 건다(02a 5-b 보강).
@@ -173,8 +152,6 @@ beforeEach(() => {
     (fn) => fn.mockClear()
   );
   mockCanGoBack.mockReturnValue(true);
-  mockShareArmed.value = null;
-  mockShareArmed.calls = 0;
 });
 
 // 토스트 스토어는 모듈 싱글턴이다 — describe 안이 아니라 파일 최상위에서 비운다.
@@ -649,8 +626,7 @@ describe('확정 셸(h16) 얼굴', () => {
    *  - 🔴 CONFIRMED 면 `ItineraryPlanPage` 가 옛 `TimelineScreen` 대신 공용 지도+시트 셸을 조립한다.
    *    옛 CONFIRMED 앵커는 사라진다(AC-1). TRIP-1047 로 지도 위 상주 성공 배너(`itinerary-confirmed-banner`)
    *    는 없어졌다 — 확정 알림은 확정한 순간의 토스트 1회로 옮겼다(그 심판은 「확정 CTA·재조회 배선」 describe).
-   *  - 🔴 하단 CTA — `일정 수정`→h12 은 항상, `공유하기`→j06 은 공유 카드 캡처 개통(armed) 시에만(TRIP-939
-   *    Q2 — 미장전이면 1버튼). 완전일치 push, 활성(AC-2).
+   *  - 🔴 하단 CTA — `일정 수정`→h12, `돌아가기`→내 여행 목록(일정 탭). 상단 뒤로 버튼은 없다. 완전일치 push, 활성(AC-2).
    *  - 🔴 헤더 meta 가 "확정됨 · " 접두를 단다(km null 이면 "확정됨 · N곳", AC-3).
    *  - 🔴 슬롯 `openingHoursKnown === false` 에만 휴관 경고 표면이 뜬다(true/null/undefined 부재, AC-4).
    *  - 🔴 읽기전용 — 다른 후보(alt) 링크가 없다(AC-5).
@@ -700,7 +676,6 @@ describe('확정 셸(h16) 얼굴', () => {
 
   beforeEach(() => {
     resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
-    mockShareArmed.value = false;
     mockPush.mockClear();
     mockBack.mockClear();
     mockReplace.mockClear();
@@ -780,47 +755,33 @@ describe('확정 셸(h16) 얼굴', () => {
       });
     });
 
-    it('C2b · TRIP-939: 캡처 미장전(armed:false)이면 [공유하기]가 없고 [일정 수정] 1버튼이다', async () => {
-      // 준비·실행: 확정 일정을 연다(캡처 미장전 = 오늘의 운영 빌드).
+    it('C2b · 확정 셸 CTA 는 [일정 수정]·[돌아가기] 2버튼이고 [공유하기]·상단 뒤로 버튼은 없다', async () => {
       useItinerary(() => HttpResponse.json(confirmedDefault()));
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
 
-      // 단언: 두 번째 버튼·'공유하기' 글자가 없다 + 짝 앵커([일정 수정]은 남는다).
-      expect(screen.queryByTestId('sheet-cta-button-1')).toBeNull();
-      expect(screen.queryByText('공유하기')).toBeNull();
       expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
         '일정 수정'
       );
+      expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+        '돌아가기'
+      );
+      expect(screen.queryByText('공유하기')).toBeNull();
+      expect(screen.queryByTestId('sheet-daychip-back')).toBeNull();
     });
 
-    it('TRIP-1364 · 캡처 장전 판정은 마운트 때 한 번만 읽는다 — 다시 그려져도 렌더 중에 다시 부르지 않는다', async () => {
-      mockShareArmed.value = true;
-      useItinerary(() => HttpResponse.json(confirmedDefault()));
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-      // 다시 그리게 한다(일차 칩 선택 = 로컬 상태 변경).
-      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
-
-      expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
-      expect(mockShareArmed.calls).toBe(1);
-    });
-
-    it('C2c · 캡처 개통(armed:true)이면 공유하기(button-1) press → j06 공유 push 1회, 활성(짝)', async () => {
-      mockShareArmed.value = true;
+    it('C2c · 돌아가기(button-1) press → 내 여행 목록 dismissTo 1회, 활성(짝)', async () => {
       useItinerary(() => HttpResponse.json(confirmedDefault()));
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
 
-      const share = screen.getByTestId('sheet-cta-button-1');
-      expect(share).toBeEnabled();
+      const back = screen.getByTestId('sheet-cta-button-1');
+      expect(back).toBeEnabled();
 
-      fireEvent.press(share);
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/trips/[tripId]/records/share',
-        params: { tripId: TRIP_ID },
-      });
-      expect(mockPush).toHaveBeenCalledTimes(1);
+      fireEvent.press(back);
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
     });
   });
 
@@ -911,12 +872,12 @@ describe('확정 셸(h16) 얼굴', () => {
   });
 
   describe('🔴 C6 · AC-6 — 뒤로가기는 내 여행 목록으로 dismissTo 한다', () => {
-    it('sheet-daychip-back press → dismissTo("/(tabs)/itinerary") 1회, back() 미호출', async () => {
+    it('돌아가기 CTA press → dismissTo("/(tabs)/itinerary") 1회, back() 미호출', async () => {
       useItinerary(() => HttpResponse.json(confirmedDefault()));
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
 
-      fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+      fireEvent.press(screen.getByTestId('sheet-cta-button-1'));
 
       // TRIP-1243 — replace 가 아니라 dismissTo(생성·확정 위저드 화면을 스택에서 걷어낸다).
       expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
@@ -1025,12 +986,12 @@ describe('확정 셸(h16) 얼굴', () => {
       expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
     });
 
-    it('from=notification 이면 뒤로가기는 목록 replace 가 아니라 back()(알림함)이다', async () => {
+    it('from=notification 이면 돌아가기는 목록 replace 가 아니라 back()(알림함)이다', async () => {
       useItinerary(() => HttpResponse.json(confirmedDefault()));
       renderPage('notification');
       await screen.findByTestId('map-sheet-shell-root');
 
-      fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+      fireEvent.press(screen.getByTestId('sheet-cta-button-1'));
 
       expect(mockBack).toHaveBeenCalledTimes(1);
       expect(mockReplace).not.toHaveBeenCalled();
@@ -2320,10 +2281,6 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=렌더(+칩·CTA press) → 단언=testID·글자·요청 수.
    */
 
-  // 옛 파일은 [공유하기] 게이트를 false 로 고정했다 — 스위치를 켠다(TRIP-1151 합치기).
-  beforeEach(() => {
-    mockShareArmed.value = false;
-  });
   const SAVED_PATH = '/api/v1/saved-places';
   const WAIT = { timeout: 4000 };
 

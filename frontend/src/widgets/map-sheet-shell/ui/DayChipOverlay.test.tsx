@@ -50,6 +50,19 @@ describe('🔴 DayChipOverlay · TRIP-991 접근성', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
+  it('onBack 을 안 주면 뒤로 버튼이 없고 일차 칩은 그대로다', () => {
+    render(
+      <DayChipOverlay
+        days={[{ label: '1일차' }, { label: '2일차' }]}
+        selectedIndex={0}
+        onSelectDay={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId('sheet-daychip-back')).toBeNull();
+    expect(screen.getByRole('button', { name: '1일차' })).toBeTruthy();
+  });
+
   it('일차 칩은 "N일차" 버튼으로 읽히고, 누르면 그 순번으로 onSelectDay 가 불린다', () => {
     const { onSelectDay } = renderOverlay();
 
