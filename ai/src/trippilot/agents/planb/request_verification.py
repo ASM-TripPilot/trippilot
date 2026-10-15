@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, tzinfo
 
@@ -68,6 +68,9 @@ class VerifiedRequest:
     window_start: datetime | None = None
     window_end: datetime | None = None
     rain_confirmed: bool = False
+    # 종류 조건 — 후보 풀에 그 종류가 있는 것만. `only` 가 비면 제한 없음, `counts` 는 그 종류를 정확히 몇 곳.
+    only: frozenset[PoiCategory] = frozenset()
+    counts: tuple[tuple[PoiCategory, int], ...] = ()
     notes: tuple[str, ...] = field(default=())
 
 
@@ -214,6 +217,69 @@ def verify_weather(claim: str | None, rain_prob: int | None, threshold: int) -> 
     return False, [f"nl_weather_rejected: rain {rain_prob}% < {threshold}%"]
 
 
+def verify_categories(
+    extracted: ExtractedRequest, available: frozenset[PoiCategory],
+) -> tuple[frozenset[PoiCategory], tuple[tuple[PoiCategory, int], ...], list[str]]:
+    """종류 조건 → (only, counts, 노트). 대조 출처 = **이번 후보 풀에 그 종류가 있는가**.
+
+    없는 종류는 버린다 — "카페로만"인데 카페가 0곳이면 따를 수 없는 조건이라, 제한을 걸면 빈 하루가 된다.
+    `only` 의 종류가 전부 버려지면 제한도 풀린다(노트로 밝힌다).
+    """
+    notes: list[str] = []
+    kept: list[tuple[PoiCategory, int | None]] = []
+    for c in extracted.categories:
+        cat = PoiCategory(c.category)
+        if cat not in available:
+            notes.append(f"nl_category_rejected: {cat.value} no_candidates")
+            continue
+        kept.append((cat, c.count))
+        notes.append(f"nl_category_accepted: {cat.value}"
+                     + (f" count={c.count}" if c.count is not None else "")
+                     + (" only" if extracted.only else ""))
+    only = frozenset(cat for cat, _ in kept) if extracted.only else frozenset()
+    counts = tuple((cat, n) for cat, n in kept if n is not None)
+    return only, counts, notes
+
+
+def apply_counts(
+    picks: Sequence[PoiId],
+    *,
+    only: frozenset[PoiCategory],
+    counts: Sequence[tuple[PoiCategory, int]],
+    category_of: Mapping[PoiId, PoiCategory],
+    fill: Sequence[PoiId],
+    keep: Collection[PoiId] = (),
+) -> tuple[tuple[PoiId, ...], list[str]]:
+    """구성 결과를 종류 조건에 맞춘다 — LLM 이 따르든 말든 결과가 조건을 지킨다.
+
+    `only` 밖 종류는 뺀다(`keep` = 사용자가 이름으로 집은 곳은 예외 — 말이 서로 어긋나면 이름이 이긴다).
+    `counts` 는 그 종류를 정확히 n 곳으로: 넘치면 뒤에서 덜고, 모자라면 `fill` 순서(우선순위)로 채운다.
+    채울 후보가 없으면 모자란 채로 두고 노트로 밝힌다(INV-4).
+    """
+    want = dict(counts)
+    out: list[PoiId] = []
+    seen: dict[PoiCategory, int] = {}
+    for p in dict.fromkeys(picks):
+        cat = category_of.get(p)
+        if p not in keep and only and cat not in only:
+            continue
+        if cat in want and seen.get(cat, 0) >= want[cat] and p not in keep:
+            continue
+        seen[cat] = seen.get(cat, 0) + 1
+        out.append(p)
+    notes: list[str] = []
+    for cat, n in want.items():
+        for p in fill:
+            if seen.get(cat, 0) >= n:
+                break
+            if category_of.get(p) is cat and p not in out:
+                out.append(p)
+                seen[cat] = seen.get(cat, 0) + 1
+        if seen.get(cat, 0) < n:
+            notes.append(f"nl_category_short: {cat.value} {seen.get(cat, 0)}/{n}")
+    return tuple(out), notes
+
+
 def verify(
     extracted: ExtractedRequest,
     *,
@@ -228,8 +294,10 @@ def verify(
     existence_deadline_ms: int,
     rain_by_date: Mapping[date, int],
     rain_threshold: int,
+    available: frozenset[PoiCategory] = frozenset(),
 ) -> VerifiedRequest:
-    """뽑은 주장 전부를 각자의 출처로 대조한다. 예외를 던지지 않는다(INV-4)."""
+    """뽑은 주장 전부를 각자의 출처로 대조한다. 예외를 던지지 않는다(INV-4).
+    `available` = 이번 후보 풀에 있는 종류(종류 조건의 대조 출처)."""
     notes: list[str] = []
     visit: tuple[Poi, ...] = ()
     avoid: frozenset[PoiId] = frozenset()
@@ -247,5 +315,7 @@ def verify(
     notes += n
     rain, n = verify_weather(extracted.weather, rain_by_date.get(on), rain_threshold)
     notes += n
+    only, counts, n = verify_categories(extracted, available)
+    notes += n
     return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end,
-                           rain_confirmed=rain, notes=tuple(notes))
+                           rain_confirmed=rain, only=only, counts=counts, notes=tuple(notes))
