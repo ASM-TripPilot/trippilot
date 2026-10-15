@@ -17,7 +17,10 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
+from hypothesis import given
+from hypothesis import strategies as st
 
 from tests.fakes.fake_llm import FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
@@ -153,6 +156,44 @@ def test_broken_context_is_dropped_not_fatal() -> None:
     ctx = DialogueContext.from_dict({"pending": {"intent": "NOPE"}, "turn_index": 3})
     assert ctx.pending is None and ctx.turn_index == 3
     assert DialogueContext.from_dict(None) == DialogueContext()
+
+
+_PENDING_OK = {"intent": "GET_DISTANCE", "arguments": {}, "asked": "destination", "confidence": 0.8}
+
+
+@pytest.mark.parametrize("broken", [
+    {"arguments": ["x"]}, {"arguments": "x"}, {"arguments": 3}, {"intent": "NOPE"},
+    {"intent": ["GET_DISTANCE"]}, {"asked": ["destination"]}, {"asked": None}, {"confidence": "높음"},
+    {"confidence": 10**400},  # float() OverflowError
+])
+def test_broken_pending_fields_drop_the_frame_not_500(broken: dict) -> None:
+    """`.items()`·`str()` 이 받아 주던 타입 오류도 보류를 버리는 쪽으로 — AttributeError 는 새면 500 이다."""
+    ctx = DialogueContext.from_dict({"pending": {**_PENDING_OK, **broken}, "turn_index": 2})
+    assert ctx == DialogueContext(turn_index=2)
+
+
+@pytest.mark.parametrize("field", ["turn_index", "clarify_count"])
+def test_infinite_counters_do_not_500(field: str) -> None:
+    """JSON `Infinity` 는 파싱된다 — int() 의 OverflowError 도 복구 경로로."""
+    assert DialogueContext.from_dict({field: float("inf")}) == DialogueContext()
+
+
+_json = st.recursive(
+    st.none() | st.booleans() | st.integers() | st.floats() | st.text(max_size=8),
+    lambda inner: st.lists(inner, max_size=3) | st.dictionaries(st.text(max_size=8), inner, max_size=3),
+    max_leaves=8)
+
+
+@given(pending=_json | st.fixed_dictionaries({}, optional={
+           **{k: _json for k in _PENDING_OK},
+           "intent": st.sampled_from(sorted(i.value for i in ROUTABLE_INTENTS)) | _json}),
+       turn=_json, clarify=_json)
+def test_any_json_context_recovers_without_raising(pending, turn, clarify) -> None:
+    """백엔드가 반송하는 상태는 아무 JSON 이나 될 수 있다 — 읽기는 절대 예외를 내지 않는다(INV-4)."""
+    ctx = DialogueContext.from_dict({"pending": pending, "turn_index": turn, "clarify_count": clarify})
+    if ctx.pending is not None:
+        assert isinstance(ctx.pending.asked, str)
+        assert all(isinstance(k, str) and isinstance(v, str) for k, v in ctx.pending.arguments.items())
 
 
 # ── LLM 호출 수 ─────────────────────────────────────────────────────────
