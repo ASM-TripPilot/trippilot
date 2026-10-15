@@ -27,7 +27,8 @@ export interface DayChipOverlayProps {
   days: DayChip[];
   selectedIndex: number;
   onSelectDay: (index: number) => void;
-  onBack: () => void;
+  /** 없으면 뒤로 버튼을 그리지 않는다(돌아가기를 CTA 로 대신하는 화면, h16). */
+  onBack?: () => void;
 }
 
 export function DayChipOverlay({
@@ -38,16 +39,18 @@ export function DayChipOverlay({
 }: DayChipOverlayProps): ReactElement {
   return (
     <View testID="sheet-daychip-root" className="flex-row items-center gap-sm">
-      <Pressable
-        testID="sheet-daychip-back"
-        accessibilityRole="button"
-        accessibilityLabel="뒤로"
-        onPress={onBack}
-        style={overlayShadow}
-        className="h-[36px] w-[36px] items-center justify-center rounded-pill bg-canvas"
-      >
-        <BackChevronGlyph size={20} />
-      </Pressable>
+      {onBack ? (
+        <Pressable
+          testID="sheet-daychip-back"
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
+          onPress={onBack}
+          style={overlayShadow}
+          className="h-[36px] w-[36px] items-center justify-center rounded-pill bg-canvas"
+        >
+          <BackChevronGlyph size={20} />
+        </Pressable>
+      ) : null}
       <DayChipScroller selectedIndex={selectedIndex}>
         {days.map((day, index) => {
           const selected = index === selectedIndex;

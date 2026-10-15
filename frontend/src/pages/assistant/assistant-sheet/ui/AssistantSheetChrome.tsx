@@ -115,6 +115,8 @@ export function QuickReplyBar({
       horizontal
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      // 세로 flex 컨테이너에서 ScrollView 기본 flexGrow:1 이 남는 높이를 먹어 칩이 늘어난다 — 내용 높이만.
+      className="flex-none grow-0"
       contentContainerClassName="gap-sm px-lg py-sm"
     >
       {replies.map((reply) => (

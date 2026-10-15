@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +7,7 @@ import { usePlaceDetail } from '../model/usePlaceDetail';
 import { BackArrowGlyph } from '@/features/execution';
 import { isNotFound } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { canOpenNaverPlace, openNaverPlace } from '@/shared/map';
 
 import {
   buildPlaceDetailView,
@@ -38,12 +40,16 @@ export interface LivePlacePageProps {
   poiId: string;
 }
 
+const OPEN_NAVER_ERROR =
+  '네이버 지도를 열 수 없어요. 잠시 후 다시 시도해 주세요.';
+
 const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
 );
 
 export function LivePlacePage({ tripId, poiId }: LivePlacePageProps) {
   const query = usePlaceDetail(tripId);
+  const [openNaverError, setOpenNaverError] = useState<string | null>(null);
 
   function handleBack(): void {
     if (router.canGoBack()) {
@@ -126,9 +132,24 @@ export function LivePlacePage({ tripId, poiId }: LivePlacePageProps) {
     );
   }
 
+  // 뷰의 name 은 결측 시 '미확인' 이라 검색어로 못 쓴다 — 슬롯의 실제 이름·좌표로 연다(INV-1).
+  const slot = slots.find((candidate) => candidate.poiId === poiId);
+  const naverTarget = { nameKo: slot?.nameKo, lat: view.lat, lng: view.lng };
+  async function handleOpenNaver(): Promise<void> {
+    setOpenNaverError(null);
+    const result = await openNaverPlace(naverTarget);
+    if (result === 'failed') setOpenNaverError(OPEN_NAVER_ERROR);
+  }
+
   return (
     <PlaceDetailScreen
       view={view}
+      onPressOpenNaver={
+        canOpenNaverPlace(naverTarget)
+          ? () => void handleOpenNaver()
+          : undefined
+      }
+      openNaverError={openNaverError}
       onPressBack={handleBack}
       onPressShare={() =>
         void Share.share({ message: buildPlaceShareMessage(view) })

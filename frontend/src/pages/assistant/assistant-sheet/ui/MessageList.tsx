@@ -87,6 +87,9 @@ function AssistantMessageBlock({
   const buttons = message.nextActions.filter(
     (action) => !consumed.includes(action.type)
   );
+  // "적용 전까지 일정은 그대로" 류 각주는 제안이 아직 열려 있을 때만 맞다 — 적용·취소·만료 뒤엔 숨긴다.
+  const proposalSettled =
+    !!message.proposal && message.proposal.status !== 'PROPOSED';
   return (
     <View testID={`assistant-message-${message.id}`} className="gap-sm">
       {message.text ? <AssistantBubble text={message.text} /> : null}
@@ -102,8 +105,11 @@ function AssistantMessageBlock({
           ))}
         </View>
       ) : null}
-      {message.footnote ? (
-        <Text className="font-noto text-micro text-muted">
+      {message.footnote && !proposalSettled ? (
+        <Text
+          testID={`assistant-footnote-${message.id}`}
+          className="font-noto text-micro text-muted"
+        >
           {message.footnote}
         </Text>
       ) : null}
