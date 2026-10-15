@@ -1052,7 +1052,6 @@
 - `src/pages/record/trip-records/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
 - `src/pages/record/trip-records/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
 - `src/pages/record/trip-records/model/useVisitAttachments.ts`  →  useVisitAttachments
-- `src/pages/record/trip-records/model/visitOrder.ts`  →  orderByArrival
 
 ## src/pages/record/trip-records/ui/
 - `src/pages/record/trip-records/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
@@ -1734,4 +1733,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1094개 파일
+합계 1093개 파일

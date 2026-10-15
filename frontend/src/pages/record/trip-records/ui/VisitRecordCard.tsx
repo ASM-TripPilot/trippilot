@@ -47,6 +47,8 @@ export interface VisitRecordCardVM {
   arrivedLabel?: string | null;
   /** TRIP-1340 — 서버 출처가 자동(AUTO_*)이면 true → `자동 기록` 칩(Figma u10b). */
   autoRecorded?: boolean;
+  /** TRIP-1372 — 몇 번째 방문인가(1-기반). 서버가 도착 순으로 준 배열 순서 그대로다. 없으면 미표시. */
+  order?: number;
 }
 
 export interface VisitRecordCardProps {
@@ -202,6 +204,14 @@ export function VisitRecordCard({
           >
             {card.nameKo}
           </Text>
+          {card.order != null ? (
+            <Text
+              testID={`record-visit-order-${card.visitCheckId}`}
+              className="text-label text-muted-soft"
+            >
+              {`${card.order}번째 방문`}
+            </Text>
+          ) : null}
           {card.autoRecorded ? (
             <View
               testID={`record-visit-auto-badge-${card.visitCheckId}`}
