@@ -20,7 +20,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrefChip } from '@/shared/ui/pref';
 import {
   PreferenceInputActivitiesItem,
-  PreferenceInputBudgetTier,
   PreferenceInputCompanionTypesItem,
   PreferenceInputFoodTastesItem,
   PreferenceInputPace,
@@ -33,7 +32,7 @@ import { ChevronLeftGlyph } from '@/features/settings';
 
 type MultiAxisKey =
   'styles' | 'activities' | 'transportModes' | 'foodTastes' | 'companionTypes';
-type SingleAxisKey = 'pace' | 'budgetTier';
+type SingleAxisKey = 'pace';
 export type EditableAxis = MultiAxisKey | SingleAxisKey;
 
 interface AxisConfig<K extends EditableAxis> {
@@ -84,12 +83,6 @@ const SINGLE_AXES: AxisConfig<SingleAxisKey>[] = [
     seg: 'pace',
     label: '일정 밀도·이동 선호',
     values: Object.values(PreferenceInputPace),
-  },
-  {
-    key: 'budgetTier',
-    seg: 'budget',
-    label: '예산',
-    values: Object.values(PreferenceInputBudgetTier),
   },
 ];
 

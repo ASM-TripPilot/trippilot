@@ -199,6 +199,28 @@ describe('GET 초기값 → 타일 → PUT 저장·400 (옛 .integration)', () =
       expect(putBody).toHaveProperty('foodTastes', ['한식']);
     });
 
+    it('I6 예산 섹션이 없고, 서버에 예산 등급이 저장돼 있어도 저장은 되며 PUT 에 budgetTier 키를 보내지 않는다', async () => {
+      // 준비 — 서버에 예전에 고른 예산 등급(중간)이 남아 있다. 이번엔 스타일만 바꾼다.
+      seedGet({
+        styles: { value: ['휴양'], isNeutralDefault: false },
+        budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
+      });
+      capturePut(200);
+
+      // 실행
+      renderScreen();
+      fireEvent.press(await screen.findByTestId('settings-pref-style-미식'));
+      // 단언(부재) — 앵커(스타일 타일)가 떠 있는 화면에 예산 타일은 없다.
+      expect(screen.queryByTestId('settings-pref-budget-중간')).toBeNull();
+      fireEvent.press(screen.getByTestId('settings-pref-save'));
+      await waitFor(() => expect(putBody).not.toBeNull());
+
+      // 단언 — 바꾼 축은 실리고, 예산 키는 없다(생략=서버 유지, null 이면 초기화라 달라진다).
+      expect(putBody).toHaveProperty('styles');
+      expect(putBody).not.toHaveProperty('budgetTier');
+      expect(putBody).not.toHaveProperty('budgetRawAmount');
+    });
+
     it('I4(AC-4·INV-4) PUT 400이면 저장되지 않고 인라인 오류가 뜬다(침묵 금지)', async () => {
       // 준비 — GET 정상, PUT 은 400.
       seedGet({ styles: { value: ['휴양'], isNeutralDefault: false } });

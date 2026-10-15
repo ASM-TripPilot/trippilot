@@ -17,7 +17,7 @@ import { summarizePreferences } from './preferenceSummary';
  * 무엇을 보장하나:
  *  - 설정된 축은 `value`, 미설정 축(축 없음 · `isNeutralDefault:true` · 빈 값)은 빈 문자열이 아니라 `unset` 표지다 —
  *    화면은 이것을 회색 `미설정` 칩으로 그린다. `isNeutralDefault:true`면 값이 있어도 미설정이다.
- *  - 동행은 반려동물만 있어도 값이고, 예산은 등급만 본다(`rawAmount` 무시, D6).
+ *  - 동행은 반려동물만 있어도 값이다. 예산 축은 입력 기능을 걷어내 요약에 없다(서버에 저장된 값이 있어도 세지 않는다).
  *  - 값 문자열(`text`)은 소비처가 없어 TRIP-1355 에서 지웠다 — 표·속성은 `kind` 만 잠근다.
  *
  * 3동작 뼈대: 준비=PreferenceView 픽스처 → 실행=summarizePreferences → 단언=행 key 별 요약.
@@ -96,18 +96,6 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
       'companions',
       { kind: 'unset' },
     ],
-    [
-      '예산은 등급만(rawAmount 무시)',
-      { budget: { tier: '중간', rawAmount: 500000, isNeutralDefault: false } },
-      'budget',
-      { kind: 'value' },
-    ],
-    [
-      '예산 등급이 없으면 금액이 있어도 미설정',
-      { budget: { tier: null, rawAmount: 500000, isNeutralDefault: false } },
-      'budget',
-      { kind: 'unset' },
-    ],
   ])('%s', (_title, view, key, expected) => {
     // 실행
     const summary = summarizePreferences(view);
@@ -116,8 +104,8 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
     expect(summary[key as keyof typeof summary]).toEqual(expected);
   });
 
-  it('D5 프리뷰 픽스처 한 벌이 7행 요약으로 정확히 바뀐다', () => {
-    // 준비 — 예산만 미설정(축 없음), 나머지는 서버 enum 원문.
+  it('D5 프리뷰 픽스처 한 벌이 6행 요약으로 정확히 바뀐다 — 서버에 저장된 예산이 있어도 예산 행은 없다', () => {
+    // 준비 — 여섯 축 전부 설정, 나머지는 서버 enum 원문. 서버에 남은 예산 등급은 요약에서 무시된다.
     const view: PreferenceView = {
       styles: { value: ['휴양', '자연'], isNeutralDefault: false },
       companion: {
@@ -129,15 +117,15 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
       transportModes: { value: ['대중교통'], isNeutralDefault: false },
       foodTastes: { value: ['일식'], isNeutralDefault: false },
       pace: { value: '느긋하게', isNeutralDefault: false },
+      budget: { tier: '중간', rawAmount: 500000, isNeutralDefault: false },
     };
 
     // 실행
     const summary = summarizePreferences(view);
 
-    // 단언(완전일치 · 7키 전부): 빠진 key·남는 key 도 red.
+    // 단언(완전일치 · 6키 전부): 빠진 key·남는 key 도 red.
     expect(summary).toEqual({
       style: { kind: 'value' },
-      budget: { kind: 'unset' },
       companions: { kind: 'value' },
       activities: { kind: 'value' },
       transport: { kind: 'value' },
@@ -146,7 +134,7 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
     });
   });
 
-  it('중립 기본값은 네 모양(배열·스칼라·동행·예산) 모두 미설정이다', () => {
+  it('중립 기본값은 세 모양(배열·스칼라·동행) 모두 미설정이다', () => {
     // 준비 — 값은 전부 있지만 서버가 "사용자가 고른 게 아니다"라고 표시했다.
     const view: PreferenceView = {
       styles: { value: ['휴양'], isNeutralDefault: true },
@@ -166,7 +154,6 @@ describe('TRIP-778 AC-1 · summarizePreferences — 표 기반', () => {
     expect(summary.style).toEqual({ kind: 'unset' });
     expect(summary.pace).toEqual({ kind: 'unset' });
     expect(summary.companions).toEqual({ kind: 'unset' });
-    expect(summary.budget).toEqual({ kind: 'unset' });
   });
 });
 
@@ -248,7 +235,7 @@ describe('TRIP-778 AC-1 · summarizePreferences — 속성', () => {
             budget: { tier: '고급', isNeutralDefault: true },
           });
 
-          expect(Object.values(summary)).toHaveLength(7);
+          expect(Object.values(summary)).toHaveLength(6);
           for (const row of Object.values(summary)) {
             expect(row).toEqual({ kind: 'unset' });
           }
