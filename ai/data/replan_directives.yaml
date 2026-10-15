@@ -142,6 +142,14 @@ directives:
     enforced_by: RANKING
     aliases: [이동 짧게, 동선 줄여줘, 많이 안 걷게, 왔다갔다 하기 싫어]
 
+  # 밤에 놀기 — 경계 8종에 칸이 없어 카테고리로 못 거른다(바는 FOOD, 클럽은 ACTIVITY 에 태그 "나이트라이프").
+  # 코드가 집행한다: 그날 창을 23:59 까지 넓히고, 태그 붙은 곳을 구성 후보에 올리고 한 곳은 넣는다.
+  # "클럽"은 이름으로 콕 집은 장소가 아니라 종류라 자연어 추출(#1186)이 비는 게 맞다 — 여기로 온다.
+  - key: NIGHTLIFE
+    label: 밤에 놀기 — 클럽·바
+    enforced_by: RANKING
+    aliases: [클럽 가고 싶어, 클럽, 나이트클럽, 클럽에서 놀고 싶어, 술 한잔, 바에 가고 싶어, 칵테일 바, 와인바, 펍, 밤에 놀 곳]
+
   - key: END_NEAR_STAY
     label: 숙소 근처에서 끝내기
     enforced_by: RANKING

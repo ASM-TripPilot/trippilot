@@ -58,7 +58,12 @@ from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     to_output_document,
 )
 from trippilot.poi_curation.sourcing.mapping import non_travel_reason  # noqa: E402
-from trippilot.poi_curation.sourcing.overture import SOURCE_NAME, map_category  # noqa: E402
+from trippilot.poi_curation.sourcing.overture import (  # noqa: E402
+    NIGHTLIFE_DETAIL,
+    SOURCE_NAME,
+    map_category,
+    nightlife_tags,
+)
 from trippilot.poi_curation.sourcing.overture_address import (  # noqa: E402
     SamePlaceIndex,
     SidoVeto,
@@ -123,9 +128,22 @@ def main(argv: list[str]) -> int:
                 stat["식당·카페(LOCALDATA 담당)"] += 1
                 continue
             name = poi["name"]
-            if map_category(_LANDMARK, name) is None:
+            kind = prov.get("category") or ""
+            # 이름 규칙은 **원천 카테고리로** 본다 — 아파트·출입구는 카테고리와 무관하게
+            # 걸리고(그 함수 주석), 나이트라이프는 자기 카테고리로 와야 ACTIVITY 가 된다.
+            # `kind` 가 비면 옛 산출물이라 거친 축으로 받는다(종전 동작).
+            if map_category(kind or _LANDMARK, name) is None:
                 stat["이름 규칙(아파트·출입구)"] += 1
                 continue
+            # 나이트라이프 축은 **태그를 못 붙이면 싣지 않는다** — 태그 없이 들어가면
+            # AI 가 밤 장소로 다루지 못해 ACTIVITY 풀만 오염시킨다(유흥업소·골프 제외 포함).
+            tags: tuple[str, ...] = (kind,)
+            if kind in NIGHTLIFE_DETAIL:
+                got = nightlife_tags(kind, name)
+                if got is None:
+                    stat["나이트라이프 제외(유흥·골프·라운지 오탐)"] += 1
+                    continue
+                tags = got
             if (why := non_travel_reason(name)):
                 stat[f"비여행지:{why}"] += 1
                 continue
@@ -141,11 +159,10 @@ def main(argv: list[str]) -> int:
             if same.has(name, lat, lng):
                 stat["이미 있음(이름+50m, 카테고리 무관)"] += 1
                 continue
-            kind = prov.get("category") or ""
             cands.append(SourcingCandidate(
                 source_ref=prov.get("overture_id") or prov["content_id"],
                 kind=kind, name=name, address=addr, lat=lat, lng=lng,
-                category=PoiCategory(poi["category"]), category_codes=(kind,),
+                category=PoiCategory(poi["category"]), category_codes=tags,
                 open_hours=(), hours_raw=None, image_url=None, modified_at=None,
                 source=SOURCE_NAME.lower()))
             stat["게이트로"] += 1

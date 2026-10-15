@@ -50,7 +50,10 @@ from trippilot.ports.llm_port import LlmRequest  # noqa: E402
 _OUT = _AI / "data" / "overture_nonfood_verdicts.json"
 # 프롬프트 판본. **올리면 기존 판정을 다시 묻는다** — 기준이 바뀌었으니 캐시는 무효다.
 # v2(2026-10-14): "분류가 맞는가"를 기준 ②로 추가. v1 은 "가 볼 곳인가"만 물었다.
-PROMPT_VERSION = "2"
+# v3(2026-10-15): 나이트라이프 기준 ③. Overture `dance_club` 이 한국에서 노래주점·
+#   나이트클럽·호프집에 많이 붙어, **이름만으로는 사람도 못 가른다**(`희주점`·`비밀`·
+#   `캔디`·`애플`). 규칙으로 간다던 판단을 실측으로 뒤집었다.
+PROMPT_VERSION = "3"
 
 # 프롬프트 — 기각 쪽으로 기운다. 넣어서 틀리면 사용자 일정에 아파트가 들어가고, 빼서
 # 틀리면 후보가 한 곳 준다. `classify_localdata_etc.py` 와 같은 비대칭이다.
@@ -85,6 +88,21 @@ accept: 관광지·명소·사찰·공원·산·전망대·해변·박물관·�
     건물 5층 해수온천이 NATURE 로 왔다
     골프장이 NATURE 로 왔다 (이용객만 들어간다 — 기준 ①로도 reject)
     문구점이 SIGHT 로 왔다
+
+**기준 ③ — 태그에 `나이트라이프` 가 있으면 "여행자가 밤에 갈 만한 곳인가?"**
+
+이 태그가 붙은 줄은 술집·클럽류다. 여행 일정에 넣을 만한 것만 accept 하라.
+
+accept: 댄스 클럽·칵테일바·와인바·루프탑바·재즈바·수제맥주 펍·비어가든처럼
+        **여행자가 찾아가 한잔하거나 노는 곳**. 호텔·번화가의 이름난 곳이면 더 좋다.
+
+reject: - **나이트클럽·노래주점·단란주점·룸살롱류** (한국의 전통 유흥업소 — 여행 제안 불가)
+        - **동네 호프집·소주방·실내포차** (여행지가 아니라 생활 술집)
+        - 프랜차이즈 맥주·호프 체인 지점
+        - **상호만으로는 어느 쪽인지 모르는 것** — 한 단어 상호(`비밀`·`캔디`·`애플`·
+          `사자평`)는 대개 유흥업소다. **모르면 reject 하라.**
+
+⚠️ 원천 데이터가 이 둘을 같은 분류로 보낸다. 분류를 믿지 말고 **상호와 주소로 판단하라.**
 
 **애매하면 reject** 가 정답이다. 분류를 고쳐 주려 하지 말고 기각하라 — 우리가 다시 본다.
 
@@ -125,8 +143,12 @@ def _rows(doc: dict) -> list[dict]:
         ref = prov.get("content_id") or prov.get("overture_id")
         if not ref:
             continue
-        out.append({"ref": ref, "name": p["poi"]["name"],
-                    "cat": p["poi"]["category"], "addr": prov.get("address") or ""})
+        row = {"ref": ref, "name": p["poi"]["name"],
+               "cat": p["poi"]["category"], "addr": prov.get("address") or ""}
+        # 태그를 같이 보낸다 — 기준 ③ 이 이걸 보고 나이트라이프 질문을 적용한다
+        if (tags := p.get("tags")):
+            row["tags"] = list(tags)
+        out.append(row)
     return out
 
 

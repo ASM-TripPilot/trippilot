@@ -62,7 +62,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as clock_time
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Collection, Mapping, Sequence
 
 from fastapi import FastAPI
 
@@ -148,7 +148,9 @@ from trippilot.domain.itinerary import (
 )
 from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource, counts_as_food
+from trippilot.domain.poi import (
+    NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource, counts_as_food,
+)
 from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
 from trippilot.agents.edit.commands import EditStatus
@@ -1302,6 +1304,12 @@ def _exact_alias(text: str, specs: Sequence[DirectiveSpec]) -> tuple[DirectiveSp
 # RANKING 지시 중 "가까운 데로" 로 집행하는 것. END_NEAR_STAY(숙소 근처 마무리)는 마지막
 # 슬롯만 당겨야 해서 거리 감점으로 못 푼다 — 끝점(`end_near`)으로 따로 집행한다(`_LAYOUT_KEYS`).
 _NEAR_KEYS = frozenset({"NEARBY", "LESS_MOVE"})
+# "밤에 놀기 — 클럽·바"(2026-10-15) — 경계 8종에 칸이 없어 replan 이 직접 집행한다(`_nightlife_candidates`).
+_NIGHT_KEYS = frozenset({"NIGHTLIFE"})
+_NIGHTLIFE_KEEP = 6  # 구성 후보에 올리는 나이트라이프 수(가까운 순)
+# 그날 창을 23:59 까지 넓힌다 — 클럽·바 추정 영업(20:00~04:00) 중 그날 안쪽. 자정을 넘기지 않는 이유: OR 모델이
+# 창 끝을 하루 안의 분으로 읽어(`_mod`) 자정을 넘는 창이면 자유 방문이 전부 놓일 수 없게 된다(로컬 재현).
+_NIGHT_END = timedelta(hours=23, minutes=59)
 
 # SOLVER 지시 중 배선된 것 — 여행 속도로 집행한다. "여유 있게"는 느긋하게(`Pace.SLOW`, 체류
 # ×1.4), "더 채워서"는 알차게(`Pace.PACKED`, 체류 ×0.9). 체류가 바뀌면 같은 창에 들어가는 방문
@@ -1543,6 +1551,32 @@ def _past_blocks(
     if not_before is None:
         return ()
     return tuple(b for b in blocks if b.window.end <= not_before)
+
+
+def _nightlife_candidates(
+    resolved: Sequence[str], pool: CandidatePool, request: schemas.ReplanRequest,
+    skip: Collection[PoiId], anchor: GeoPoint, notes: list[str],
+) -> tuple[PoiId, ...]:
+    """"밤에 놀기" 지시면 태그 붙은 곳(클럽·바)을 가까운 순으로 — 구성 후보에 올리고 한 곳은 넣는다.
+
+    "클럽"을 말해도 종전엔 아무 효과가 없었다(2026-10-14 DEV d3c6b39a: 지시 사전에 없음 → 미해석 → 규칙
+    점수만, 후보 데이터에 클럽 0곳). 경계 8종에 칸이 없어 카테고리 가산으로는 못 집는다 — 태그로 집는다.
+    후보에 하나도 없으면 지어내지 않고 밝힌다(INV-1·INV-4).
+    """
+    if not any(k in _NIGHT_KEYS for k in resolved):
+        return ()
+    excluded = set(request.excluded_poi_ids)
+    text = request.free_text or ""
+    # 말에 세부 종류(클럽·와인바·칵테일바…)가 있으면 그 종류를 먼저 — "클럽"에 와인바만 오르지 않게.
+    found = sorted((p for p in pool.pois
+                    if NIGHTLIFE_TAG in p.tags and p.poi_id not in skip and p.poi_id not in excluded),
+                   key=lambda p: (not any(t != NIGHTLIFE_TAG and t in text for t in p.tags),
+                                  haversine_km(anchor, p.coord), str(p.poi_id)))
+    if not found:
+        notes.append("nightlife_none_in_pool")
+        return ()
+    notes.append(f"nightlife_candidates: {len(found)}")
+    return tuple(p.poi_id for p in found[:_NIGHTLIFE_KEEP])
 
 
 _SOFT_LOCKS = frozenset({"in_progress", "keep_dinner"})  # AI 가 건 잠금 — 사용자 잠금에 양보한다
@@ -2288,7 +2322,10 @@ class WiredItineraryOrchestrator:
         drop = avoid - prefer
         held = ({b.poi_id for b in blocks} | {v.poi_id for v in earlier or ()}
                 | {p.poi_id for p in nl.visit})
-        avoided = frozenset(p.poi_id for p in pool.pois if p.category in drop and p.poi_id not in held)
+        # "밤에 놀기"를 말했으면 클럽·바(ACTIVITY 태그)는 실외 회피(우천·실내로)에 걸리지 않는다 — 실내다.
+        night_asked = any(k in _NIGHT_KEYS for k in resolved)
+        avoided = frozenset(p.poi_id for p in pool.pois if p.category in drop and p.poi_id not in held
+                            and not (night_asked and NIGHTLIFE_TAG in p.tags))
         if avoided:
             cats = ",".join(sorted(c.value for c in drop))
             # "남은 후보" = 실제로 놓일 수 있는 곳 — 숙소·그날 휴무가 증명된 곳은 세지 않는다
@@ -2339,6 +2376,13 @@ class WiredItineraryOrchestrator:
             notes.append(f"planb_visit_cap: {visit_cap}")
         window = request.time_window
         budget = core.allocate(_deadline_budget(meta), core.OrchestratorConfig())
+        # 밤에 놀기 — 태그 붙은 클럽·바를 후보에 올리고, 그날 창을 23:59 까지 넓힌다(사용자가 끝 시각을
+        # 말했으면 그 말이 이긴다). 넓힌 창은 이 요청에서만 — 클럽·바 말고는 추정 영업 07~23시가 막는다.
+        night = _nightlife_candidates(resolved, pool, request, held, anchor, notes)
+        window_end = datetime.combine(window.date, window.end, tzinfo=self._tz)
+        night_end = max(window_end, datetime.combine(window.date, datetime.min.time(),
+                                                     tzinfo=self._tz) + _NIGHT_END)
+        day_end = nl.window_end or (night_end if night else window_end)
         # ── 다시 짜기 — 남은 하루의 방문 목록을 LLM 이 고른다 ─────────────
         # 고른 곳은 시각 없는 필수 방문, 하루 상한은 `고정 + 고른 수` — 그날은 고른 곳만 들어가고
         # 시각·순서는 어셈블리가 정한다(INV-2). 실패·시한 부족이면 () 라 종전 경로 그대로(INV-4).
@@ -2351,7 +2395,8 @@ class WiredItineraryOrchestrator:
                 (*nl_ids, *(planb_rank or planb.ranked_poi_ids)), resolved,  # 이름으로 집은 곳 먼저
                 prefer, avoid, avoided, active, past, not_before, visit_cap, budget_level, notes,
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
-                nearby=tuple(nl_near), origins=tuple(p.coord for p in far),
+                nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
+                window_end=day_end if night else None,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -2363,6 +2408,11 @@ class WiredItineraryOrchestrator:
             # 가장 먼 이 곳이었다. 대신 뒤에서 하나를 뺀다(뒤쪽 = 구성이 덜 중요하게 본 곳).
             n = max(len(composed), len(nl_ids))
             composed = tuple(dict.fromkeys((*nl_ids, *composed)))[:n]
+        if composed and night and earlier is None and not set(composed) & set(night):
+            # "클럽 가고 싶다"인데 구성이 한 곳도 안 골랐다 — 가장 가까운 한 곳을 넣고 맨 뒤 한 곳을 뺀다
+            # (방문 수는 구성이 남은 시간에 맞춘 값이다 — 이름으로 집은 곳과 같은 규칙).
+            composed = (*composed[:-1], night[0]) if len(composed) > 1 else (*composed, night[0])
+            notes.append("nightlife_forced: 1")
         add_one_asked = add_one
         if composed:
             # 고른 목록에 이미 든 종류의 "한 곳 추가"는 또 넣지 않는다(카페 두 곳).
@@ -2388,7 +2438,7 @@ class WiredItineraryOrchestrator:
             days=dates,
             day_window=TimeWindow(
                 start=nl.window_start or datetime.combine(window.date, window.start, tzinfo=self._tz),
-                end=nl.window_end or datetime.combine(window.date, window.end, tzinfo=self._tz),
+                end=day_end,
             ),
             budget=budget_level,
             transport=transport,
@@ -2424,7 +2474,11 @@ class WiredItineraryOrchestrator:
                               reason="nl_request" if p in nl_ids else "llm_compose",
                               priority=p in nl_ids) for p in composed) + tuple(
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                              reason="nl_request", priority=True) for p in nl_extra),
+                              reason="nl_request", priority=True) for p in nl_extra) + tuple(
+                # 구성 없이 점수 경로로 가도 "클럽"을 말했으면 한 곳은 넣는다
+                RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
+                              reason="nightlife_request", priority=True)
+                for p in (night[:1] if night and not composed else ())),
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
             required_in_order=earlier is not None,  # 시간만 당기기 — 원 일정 순서 그대로
         )
@@ -2446,11 +2500,11 @@ class WiredItineraryOrchestrator:
             planb_rank=planb_rank,
             llm_composed=bool(composed),
         ))
-        if (composed or in_progress or nl_ids) and outcome.solution is not None:
+        if (composed or in_progress or nl_ids or night) and outcome.solution is not None:
             # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
             # 구성 LLM 이 고른 곳·진행 중이라 둔 곳은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가
             # 잠가서 다음 다시 짜기·교체에서 못 바꾼다. 그 표시만 걷는다(시각·순서는 그대로).
-            picked = set(composed) | set(nl_ids)  # 이름으로 집은 곳도 사용자가 잠근 곳은 아니다
+            picked = set(composed) | set(nl_ids) | set(night)  # 이름으로 집은 곳·클럽도 잠근 곳은 아니다
             outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
                 replace(d, fixed_blocks=tuple(
                     fb for fb in d.fixed_blocks
@@ -2478,7 +2532,10 @@ class WiredItineraryOrchestrator:
                     outcome = self._schedule_agent.run(core.ScheduleTask(
                         request=replace(domain_request, required_visits=tuple(
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                                          reason="nl_request", priority=True) for p in nl_ids),
+                                          reason="nl_request", priority=True) for p in nl_ids) + tuple(
+                            RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
+                                          reason="nightlife_request", priority=True)
+                            for p in night[:1]),
                                         max_visits_per_day=visit_cap,
                                         add_one_categories=add_one_asked),
                         pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
@@ -2611,6 +2668,7 @@ class WiredItineraryOrchestrator:
         budget: core.DeadlineBudget,
         nearby: tuple[PoiId, ...] = (),
         origins: tuple[GeoPoint, ...] = (),
+        window_end: datetime | None = None,
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -2630,7 +2688,7 @@ class WiredItineraryOrchestrator:
         start = datetime.combine(window.date, window.start, tzinfo=self._tz)
         if not_before is not None:
             start = max(start, not_before)
-        end = datetime.combine(window.date, window.end, tzinfo=self._tz)
+        end = window_end or datetime.combine(window.date, window.end, tzinfo=self._tz)
         free_cap = None if visit_cap is None else visit_cap - len(active)
         if start >= end or (free_cap is not None and free_cap < 1):
             notes.append("llm_compose_skipped: no_room")
@@ -2813,7 +2871,7 @@ class WiredItineraryOrchestrator:
                 # 종전엔 RANKING 셋이 인식만 되고 효과도 노트도 없었다(2026-10-05 실측).
                 if spec.key in _NEAR_KEYS:
                     near = True
-                else:
+                elif spec.key not in _NIGHT_KEYS:  # 밤에 놀기는 replan 이 직접 집행한다
                     ineffective.append(spec.key)
                 continue
             if spec.cardinality == "ONE":

@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 
 from trippilot.agents.planb import composition
 from trippilot.agents.planb.directives import load_directive_file
-from trippilot.api.wiring import DEMO_ANCHOR, build_dev_app, demo_poi_seed
+from trippilot.api.wiring import DEMO_ANCHOR, StaticPoiDb, build_dev_app, demo_poi_seed
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
@@ -86,8 +86,10 @@ def _body(**over: object) -> dict:
     return body
 
 
-def _replan(llm: _ScriptedLlm, **over: object) -> dict:
-    with TestClient(build_dev_app(llm=llm, model_id="m", directives=_DIRECTIVES), raise_server_exceptions=False) as c:
+def _replan(llm: _ScriptedLlm, *, pois: tuple[Poi, ...] | None = None, **over: object) -> dict:
+    app = build_dev_app(llm=llm, model_id="m", directives=_DIRECTIVES,
+                        poi_db=None if pois is None else StaticPoiDb(pois))
+    with TestClient(app, raise_server_exceptions=False) as c:
         response = c.post("/ai/v1/planb/replan", json=_body(**over))
     assert response.status_code == 200, response.text
     return response.json()
@@ -306,6 +308,70 @@ def test_진행_중인_곳이_휴무_대상이면_바꾼다() -> None:
                    excluded_poi_ids=[_FOOD], **_NOW_10)
     assert _FOOD not in _placed(body), body["notes"]
     assert not any(n.startswith("in_progress_kept") for n in body["notes"])
+
+
+# ── ④″ 밤에 놀기 — 클럽·바 (2026-10-15) ────────────────────────────────
+# DEV d3c6b39a: "클럽" → 지시 사전에 없어 미해석, 후보 데이터에 클럽 0곳 → 규칙 점수로 엉뚱한 하루.
+
+_CLUB = "e0000000-0000-4000-8000-0000000000c1"
+_WITH_CLUB = (*demo_poi_seed(), Poi(
+    poi_id=PoiId(_CLUB), name="테스트 클럽", category=PoiCategory.ACTIVITY,
+    coord=GeoPoint(DEMO_ANCHOR.lat + 0.002, DEMO_ANCHOR.lng + 0.002), open_hours=(),
+    avg_cost=None, rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
+    tags=("나이트라이프", "클럽")))
+
+
+def _club_slot(body: dict) -> dict:
+    return next(s for d in body["itinerary"]["days"] for s in d["slots"] if s["poi_id"] == _CLUB)
+
+
+def test_밤에_놀기면_클럽이_후보에_오르고_밤에_놓인다() -> None:
+    llm = _ScriptedLlm([_FOOD, _CLUB])
+    body = _replan(llm, pois=_WITH_CLUB, directives=["NIGHTLIFE"])
+
+    prompt = llm.compose_prompt()
+    assert "나이트라이프" in prompt.split("[후보 목록]")[1]  # 태그가 후보 줄에 보인다
+    assert "~23:59" in prompt  # 그날 창을 23:59 까지
+    club = _club_slot(body)
+    assert club["start_at"] >= "20:00" and club["is_fixed"] is False, body["notes"]  # 추정 영업 20~04시
+
+
+def test_구성이_클럽을_안_골라도_한_곳은_넣는다() -> None:
+    body = _replan(_ScriptedLlm([_FOOD]), pois=_WITH_CLUB, directives=["NIGHTLIFE"])
+    assert "nightlife_forced: 1" in body["notes"]
+    assert _club_slot(body)["start_at"] >= "20:00"
+
+
+def test_구성이_실패해도_클럽은_들어간다() -> None:
+    body = _replan(_ScriptedLlm(None), pois=_WITH_CLUB, directives=["NIGHTLIFE"])
+    assert any(n.startswith("llm_compose_fallback:") for n in body["notes"])
+    assert _club_slot(body)["start_at"] >= "20:00", body["notes"]
+
+
+def test_비가_와도_클럽은_실외로_빠지지_않는다() -> None:
+    """우천·실내로의 실외 회피는 ACTIVITY 를 뺀다 — 클럽은 ACTIVITY 지만 실내다."""
+    llm = _ScriptedLlm([_CLUB])
+    _replan(llm, pois=_WITH_CLUB, reasons=["weather"], directives=["NIGHTLIFE"])
+    assert _CLUB in llm.compose_prompt().split("[후보 목록]")[1]
+
+
+def test_말한_세부_종류가_먼저_오른다() -> None:
+    """"클럽"이라 했으면 더 가까운 와인바보다 클럽이 먼저 — 구성이 안 고르면 그 곳을 넣는다."""
+    wine = Poi(poi_id=PoiId("e0000000-0000-4000-8000-0000000000c2"), name="가까운 와인바",
+               category=PoiCategory.ACTIVITY, coord=DEMO_ANCHOR, open_hours=(), avg_cost=None,
+               rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
+               tags=("나이트라이프", "와인바"))
+    body = _replan(_ScriptedLlm([_FOOD]), pois=(*_WITH_CLUB, wine), directives=["NIGHTLIFE"],
+                   free_text="클럽 가고 싶어")
+    assert "nightlife_forced: 1" in body["notes"]
+    assert _club_slot(body)["start_at"] >= "20:00", body["notes"]
+
+
+def test_클럽이_후보에_없으면_지어내지_않고_밝힌다() -> None:
+    llm = _ScriptedLlm([_FOOD])
+    body = _replan(llm, directives=["NIGHTLIFE"])
+    assert "nightlife_none_in_pool" in body["notes"]
+    assert "~23:59" not in llm.compose_prompt()  # 갈 곳이 없으면 창도 안 넓힌다
 
 
 # ── ⑤ 시한 ──────────────────────────────────────────────────────────

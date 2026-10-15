@@ -13,6 +13,11 @@ from enum import Enum
 from trippilot.domain.common import GeoPoint, PoiId
 
 
+# 밤에 노는 곳(댄스 클럽·칵테일바·와인바·재즈바·루프탑바) — 경계 8종엔 칸이 없어 ACTIVITY 에 태그로 싣는다
+# (2026-10-15 사용자 결정 "클럽·바를 수집해 액티비티로"). 다시 짜기 "밤에 놀기" 지시와 추정 영업시간이 이 태그를 본다.
+NIGHTLIFE_TAG = "나이트라이프"
+
+
 class PoiCategory(Enum):
     """경계 카테고리 8종 + 내부 전용 STAY (TRIP-281).
 
