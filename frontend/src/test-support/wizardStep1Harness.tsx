@@ -69,11 +69,7 @@ export function makeTrip(over: Partial<Trip>): Trip {
 }
 
 type SheetKind =
-  | 'destination'
-  | 'period'
-  | 'daywindow'
-  | 'companion'
-  | 'preference';
+  'destination' | 'period' | 'daywindow' | 'companion' | 'preference';
 
 /** 요약 행 → 시트 testID. 취향 시트만 `pref` 접두다. */
 const SHEET_TEST_IDS: Record<SheetKind, string> = {
