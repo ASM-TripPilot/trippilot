@@ -24,6 +24,8 @@ import type {
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
+import { router } from 'expo-router';
+
 import { DailyReflectionPage } from './DailyReflectionPage';
 
 /**
@@ -1002,5 +1004,268 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
       ).toBeOnTheScreen();
       expect(screen.queryByText(SAVE_FAILED)).toBeNull();
     });
+  });
+});
+
+describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려준다 (TRIP-828 · V2.63)', () => {
+  /**
+   * 무엇을 보장하나:
+   *  - 서버가 돌려준 mood·shortMemo 가 화면에 복원된다(기분 칩 선택·한 줄 입력 값).
+   *  - 기분만 고치는 PUT 바디는 { mood } 뿐이다 — card 를 실으면 카드가 갈아끼워진다. 한 줄도 { shortMemo } 뿐.
+   *  - 선택한 기분을 다시 누르면 빈 문자열로 지운다. 한 줄을 비우면 빈 문자열(공백뿐 포함)로 지운다.
+   *  - 안 바뀐 한 줄은 요청을 쏘지 않는다. 개행·제어 문자는 입력에서 걷고 상한 60 을 건다.
+   *  - 저장이 실패하면 알리고 이탈하지 않는다(INV-4) — 「확인」은 쓴 한 줄이 저장돼야 닫힌다.
+   * 서버는 PUT 을 받아 mood·shortMemo 를 기억하고 목록 GET 에 돌려준다(상태 기억).
+   */
+  const TRIP_ID = 'trip-1372';
+  const TODAY = '2026-09-26';
+  const FAILED = '저장하지 못했어요. 다시 시도해 주세요';
+  const PUT_PATH = `/api/v1/trips/${TRIP_ID}/reflections/${DAY}`;
+
+  const TRIP: Trip = {
+    tripId: TRIP_ID,
+    title: '부산 여행',
+    startDate: '2026-09-24',
+    endDate: '2026-09-25',
+    party: 1,
+    preferenceSnapshot: {},
+    destinations: [],
+    status: 'PLANNED',
+    createdAt: '2026-09-20T00:00:00Z',
+    updatedAt: '2026-09-20T00:00:00Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
+  };
+
+  const CARD: ReflectionCard = {
+    templateId: 'backend.rule.daily.v1',
+    format: 'CARD',
+    title: '부산 첫날',
+    subtitle: '해운대에서 조개구이를 먹은 하루',
+    payload: '{}',
+  };
+
+  const BASE_REFLECTION: Reflection = {
+    dayDate: DAY,
+    card: CARD,
+    draftCard: CARD,
+    source: 'RULE',
+    stats: {
+      visitCount: 3,
+      distanceKm: 4.2,
+      distanceSource: 'VISIT_LINE',
+      photoCount: 2,
+    },
+    generatedAt: '2026-09-24T12:00:00Z',
+    updatedAt: '2026-09-24T12:00:00Z',
+  };
+
+  let serverItem: Reflection;
+  let putBodies: EditReflectionRequest[];
+  let putPaths: string[];
+  let putFails: boolean;
+
+  beforeEach(() => {
+    serverItem = BASE_REFLECTION;
+    putBodies = [];
+    putPaths = [];
+    putFails = false;
+    (router.back as jest.Mock).mockClear();
+    setAccessToken('a');
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(TRIP)),
+      http.get(`${BASE}/trips/:tripId/reflections`, () =>
+        HttpResponse.json({ items: [serverItem] })
+      ),
+      http.put(
+        `${BASE}/trips/:tripId/reflections/:dayDate`,
+        async ({ request }) => {
+          const body = (await request.json()) as EditReflectionRequest;
+          putBodies.push(body);
+          putPaths.push(new URL(request.url).pathname);
+          if (putFails) {
+            const error: ErrorResponse = {
+              error: { code: 'INTERNAL_ERROR', message: '저장 실패' },
+            };
+            return HttpResponse.json(error, { status: 500 });
+          }
+          // '' 는 지움, null/미전송은 그대로 — 서버 계약 그대로.
+          const pick = (
+            sent: string | null | undefined,
+            kept?: string | null
+          ) =>
+            sent === undefined || sent === null
+              ? kept
+              : sent === ''
+                ? null
+                : sent;
+          serverItem = {
+            ...serverItem,
+            mood: pick(body.mood, serverItem.mood),
+            shortMemo: pick(body.shortMemo?.trim(), serverItem.shortMemo),
+          };
+          return HttpResponse.json(serverItem);
+        }
+      )
+    );
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  function renderPage() {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} today={TODAY} />, {
+      wrapper: Wrapper,
+    });
+  }
+
+  const selected = (key: string) =>
+    screen.getByTestId(`reflection-daily-mood-${key}`).props.accessibilityState
+      .selected;
+
+  it('서버가 돌려준 기분·한 줄이 화면에 복원된다', async () => {
+    serverItem = {
+      ...BASE_REFLECTION,
+      mood: 'good',
+      shortMemo: '바다가 좋았다',
+    };
+
+    renderPage();
+    await screen.findByTestId('reflection-daily-mood-good');
+
+    expect(selected('good')).toBe(true);
+    expect(selected('soso')).toBe(false);
+    expect(selected('sad')).toBe(false);
+    expect(screen.getByTestId('reflection-daily-memo-input').props.value).toBe(
+      '바다가 좋았다'
+    );
+  });
+
+  it('기분을 고르면 PUT 바디는 { mood } 뿐이고(card 없음) 응답이 칩에 반영된다', async () => {
+    renderPage();
+    await screen.findByTestId('reflection-daily-mood-soso');
+
+    fireEvent.press(screen.getByTestId('reflection-daily-mood-soso'));
+
+    await waitFor(() => expect(selected('soso')).toBe(true));
+    expect(putBodies).toEqual([{ mood: 'soso' }]);
+    expect(putPaths).toEqual([PUT_PATH]);
+  });
+
+  it('선택한 기분을 다시 누르면 빈 문자열로 지운다', async () => {
+    serverItem = { ...BASE_REFLECTION, mood: 'good' };
+    renderPage();
+    await screen.findByTestId('reflection-daily-mood-good');
+
+    fireEvent.press(screen.getByTestId('reflection-daily-mood-good'));
+
+    await waitFor(() => expect(selected('good')).toBe(false));
+    expect(putBodies).toEqual([{ mood: '' }]);
+  });
+
+  it('기분 저장이 실패하면 알리고 선택은 서버 값 그대로다(INV-4)', async () => {
+    serverItem = { ...BASE_REFLECTION, mood: 'good' };
+    putFails = true;
+    renderPage();
+    await screen.findByTestId('reflection-daily-mood-good');
+
+    fireEvent.press(screen.getByTestId('reflection-daily-mood-sad'));
+
+    expect(await screen.findByText(FAILED)).toBeOnTheScreen();
+    expect(selected('good')).toBe(true);
+    expect(selected('sad')).toBe(false);
+  });
+
+  it('한 줄은 입력을 마치면 PUT 바디 { shortMemo } 뿐으로 저장된다', async () => {
+    renderPage();
+    const input = await screen.findByTestId('reflection-daily-memo-input');
+
+    fireEvent.changeText(input, '  바다가 좋았다  ');
+    fireEvent(input, 'endEditing');
+
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    expect(putBodies[0]).toEqual({ shortMemo: '바다가 좋았다' });
+  });
+
+  it('바뀌지 않은 한 줄은 요청을 쏘지 않는다', async () => {
+    serverItem = { ...BASE_REFLECTION, shortMemo: '바다가 좋았다' };
+    renderPage();
+    const input = await screen.findByTestId('reflection-daily-memo-input');
+
+    fireEvent(input, 'endEditing');
+    fireEvent.changeText(input, ' 바다가 좋았다 ');
+    fireEvent(input, 'endEditing');
+
+    expect(putBodies).toHaveLength(0);
+  });
+
+  it('한 줄을 모두 지우면 빈 문자열로 지운다', async () => {
+    serverItem = { ...BASE_REFLECTION, shortMemo: '바다가 좋았다' };
+    renderPage();
+    const input = await screen.findByTestId('reflection-daily-memo-input');
+
+    fireEvent.changeText(input, '   ');
+    fireEvent(input, 'endEditing');
+
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    expect(putBodies[0]).toEqual({ shortMemo: '' });
+  });
+
+  it('한 줄은 개행·제어 문자를 걷고 상한 60 을 건다', async () => {
+    renderPage();
+    const input = await screen.findByTestId('reflection-daily-memo-input');
+
+    expect(input.props.maxLength).toBe(60);
+    fireEvent.changeText(input, '첫째 줄\n둘째\t줄');
+
+    expect(screen.getByTestId('reflection-daily-memo-input').props.value).toBe(
+      '첫째 줄 둘째 줄'
+    );
+  });
+
+  it('쓰고 바로 「확인」을 눌러도 한 줄이 저장된 뒤에 닫힌다', async () => {
+    renderPage();
+    const input = await screen.findByTestId('reflection-daily-memo-input');
+
+    fireEvent.changeText(input, '바다가 좋았다');
+    fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+
+    await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+    expect(putBodies).toEqual([{ shortMemo: '바다가 좋았다' }]);
+  });
+
+  it('한 줄 저장이 실패하면 「확인」은 닫지 않고 알린다(INV-4)', async () => {
+    putFails = true;
+    renderPage();
+    const input = await screen.findByTestId('reflection-daily-memo-input');
+
+    fireEvent.changeText(input, '바다가 좋았다');
+    fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+
+    expect(await screen.findByText(FAILED)).toBeOnTheScreen();
+    expect(router.back).not.toHaveBeenCalled();
+  });
+
+  it('쓸 게 없으면 「확인」은 요청 없이 바로 닫는다', async () => {
+    renderPage();
+    await screen.findByTestId('reflection-daily-confirm');
+
+    fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+
+    await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+    expect(putBodies).toHaveLength(0);
   });
 });
