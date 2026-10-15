@@ -19,6 +19,8 @@ import {
   ShareGlyph,
 } from '@/features/execution/index.view';
 import { MapView } from '@/shared/map';
+import { NoticeBanner } from '@/shared/ui/NoticeBanner';
+import { OpenNaverMapButton } from '@/shared/ui/OpenNaverMapButton';
 
 import type { PlaceDetailView } from '../model/placeDetailView';
 
@@ -45,6 +47,10 @@ export interface PlaceDetailScreenProps {
   onPressShare?: () => void;
   /** "이곳의 사진 · 모두 보기 ›" — 사진 뷰어가 없어 미주입이면 그리지 않는다. */
   onPressSeeAll?: () => void;
+  /** "네이버 지도에서 보기" — 미지정이면 버튼을 그리지 않는다(열 이름·좌표가 없을 때). */
+  onPressOpenNaver?: () => void;
+  /** 네이버 지도를 못 열었을 때 안내 문구(INV-4). 미지정·null 이면 안 그린다. */
+  openNaverError?: string | null;
 }
 
 // 하단 스크림 — 흰 제목·부제를 사진 위에서 읽히게 한다. 반투명이라 raw(d06 SCRIM_COLORS 와 같은 값).
@@ -124,6 +130,8 @@ export function PlaceDetailScreen({
   onPressBack,
   onPressShare,
   onPressSeeAll,
+  onPressOpenNaver,
+  openNaverError,
 }: PlaceDetailScreenProps): ReactElement {
   const { width } = useWindowDimensions();
 
@@ -304,6 +312,14 @@ export function PlaceDetailScreen({
             </InfoRow>
           </View>
 
+          {/* Figma 에 없는 추가 버튼 — 우리가 가진 정보가 적어 네이버 지도에서 가게를 보게 한다. */}
+          {onPressOpenNaver ? (
+            <OpenNaverMapButton
+              testID="execution-place-open-naver"
+              onPress={onPressOpenNaver}
+            />
+          ) : null}
+
           {/* 미니맵 — 현재 장소 1핀 viewOnly(d06 동형). 단일 핀이라 경로선 없음. env 키 부재면 코어가
               map-failure 로 접는다(INV-4), 실타일은 네이티브 재빌드 뒤(6-b). */}
           {coords !== null ? (
@@ -368,6 +384,16 @@ export function PlaceDetailScreen({
           ) : null}
         </View>
       </ScrollView>
+      {openNaverError ? (
+        <NoticeBanner
+          testID="execution-place-opennaver-error"
+          notice={{ message: openNaverError, action: null }}
+          actionTestIDs={{
+            login: 'execution-place-opennaver-error-login',
+            retry: 'execution-place-opennaver-error-retry',
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
