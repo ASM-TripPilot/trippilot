@@ -7,7 +7,7 @@
  * `STYLE_OPTIONS`는 온보딩 화면 private이라 승격하지 않고(온보딩 파일 무변경), pages→features
  * 조합으로 무료 재사용한다.
  *
- * TRIP-1092: 「선호 활동」 8칩(`ACTIVITY` 카탈로그 순서, 글리프 없음)을 추가했다. 활동 축은
+ * TRIP-1092: 「선호 활동」 8칩(`ACTIVITY` 카탈로그 순서, 글리프는 `ACTIVITY_GLYPHS` 매핑)을 추가했다. 활동 축은
  * `selectedActivities`/`onToggleActivity`로 **따로** 받는다 — 자연·쇼핑이 두 축에 같은 라벨로 있어
  * 라벨 하나로는 어느 축인지 가를 수 없다. testID도 `…-pref-activity-chip-{slug}`로 접두를 나눴다.
  *
@@ -39,8 +39,12 @@ import {
   ActivityGlyph,
   ArtGlyph,
   CameraGlyph,
+  CoffeeCupGlyph,
+  FerrisWheelGlyph,
   ForkKnifeGlyph,
   type GlyphComponent,
+  LandmarkGlyph,
+  MoonGlyph,
   MountainGlyph,
   ShoppingBagGlyph,
   SunGlyph,
@@ -71,6 +75,18 @@ const CHIP_GLYPHS: Record<string, GlyphComponent> = {
   art: ArtGlyph,
   activity: ActivityGlyph,
   sightseeing: CameraGlyph,
+  shopping: ShoppingBagGlyph,
+};
+
+/** 활동 slug → 글리프. 전시=ArtGlyph·야경=MoonGlyph 재사용, 역사문화·테마파크·카페는 신설(Figma 근거 없음). */
+const ACTIVITY_GLYPHS: Record<string, GlyphComponent> = {
+  nature: MountainGlyph,
+  history: LandmarkGlyph,
+  themepark: FerrisWheelGlyph,
+  foodtour: ForkKnifeGlyph,
+  cafe: CoffeeCupGlyph,
+  exhibition: ArtGlyph,
+  nightview: MoonGlyph,
   shopping: ShoppingBagGlyph,
 };
 
@@ -149,9 +165,10 @@ export function PrefOverrideSheet({
           <Text className="font-noto-bold text-label font-bold text-muted">
             선호 활동
           </Text>
-          {/* 활동 8칩 — 글리프 없음이라 높이 36을 직접 준다(스타일 칩은 py+글리프 18로 36) */}
+          {/* 활동 8칩 — 스타일 칩과 같은 모양(py+글리프 18 = 36) */}
           <View className="flex-row flex-wrap gap-sm">
             {ACTIVITY_CHIPS.map(({ slug, label }) => {
+              const Glyph = ACTIVITY_GLYPHS[slug];
               const isSelected = selectedActivities.includes(label);
               return (
                 <Pressable
@@ -160,12 +177,18 @@ export function PrefOverrideSheet({
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected }}
                   onPress={() => onToggleActivity(label)}
-                  className={`h-[36px] items-center justify-center rounded-pill px-lg ${
+                  className={`flex-row items-center gap-[6px] rounded-pill py-[9px] pl-[14px] pr-[16px] ${
                     isSelected
                       ? 'bg-primary'
                       : 'border border-hairline-strong bg-canvas'
                   }`}
                 >
+                  <Glyph
+                    testID={`trip-wizard-pref-activity-glyph-${slug}`}
+                    size={18}
+                    selected={isSelected}
+                    onPrimary={isSelected}
+                  />
                   <Text
                     className={`font-noto-bold text-label font-bold ${
                       isSelected ? 'text-on-primary' : 'text-ink'

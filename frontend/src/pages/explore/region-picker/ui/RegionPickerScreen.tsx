@@ -107,6 +107,31 @@ const POPULAR_TAGLINE: Record<string, string> = {
   '43': '내륙 · 힐링',
 };
 
+/** 카드 윗면 — 번들 커버 그림(서울·부산·제주, 시군구 그림이 없으면 같은 시도 그림)이 있으면 그림을,
+ * 없으면 `regionTint` 그라데이션을 그린다(인기 카드와 같은 규칙). 글자는 그림 아래 흰 칸에 있어
+ * 스크림이 필요 없다. 선택 불가 카드의 흐림은 카드 전체 `opacity` 라 그림에도 똑같이 걸린다. */
+function RegionCardImage({ region }: { region: Region }): ReactElement {
+  const cover = pickRegionCover([{ seq: 1, regionCode: region.regionCode }]);
+  if (cover) {
+    return (
+      <Image
+        testID={`explore-region-cover-${region.regionCode}`}
+        source={cover}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        className="h-[116px] w-full"
+      />
+    );
+  }
+  const [from, to] = regionTint(region.regionCode);
+  return (
+    <LinearGradient
+      colors={[from, to]}
+      style={{ height: 116, width: '100%' }}
+    />
+  );
+}
+
 /** 선택 가능·후보풀 있음 지역 카드 — 누르면 선택된다. */
 function SelectableCard({
   region,
@@ -117,17 +142,13 @@ function SelectableCard({
   subtitle?: string;
   onPress(): void;
 }): ReactElement {
-  const [from, to] = regionTint(region.regionCode);
   return (
     <Pressable
       testID={`explore-region-${region.regionCode}`}
       onPress={onPress}
       className="mb-md w-[48%] overflow-hidden rounded-card bg-canvas"
     >
-      <LinearGradient
-        colors={[from, to]}
-        style={{ height: 116, width: '100%' }}
-      />
+      <RegionCardImage region={region} />
       <View className="px-sm py-sm">
         {/* 집계(숙소 수·최저가)는 계약이 없어 생략한다 — US-EXPL-02 예외항이
             "카드는 유지하고 집계 값만 생략한다"로 이 경우를 이미 정해 뒀다. */}
@@ -149,16 +170,12 @@ function ComingSoonCard({
   region: Region;
   subtitle?: string;
 }): ReactElement {
-  const [from, to] = regionTint(region.regionCode);
   return (
     <View
       testID={`explore-region-${region.regionCode}`}
       className="mb-md w-[48%] overflow-hidden rounded-card bg-canvas opacity-50"
     >
-      <LinearGradient
-        colors={[from, to]}
-        style={{ height: 116, width: '100%' }}
-      />
+      <RegionCardImage region={region} />
       <View className="px-sm py-sm">
         <Text className="font-noto-bold text-card-title font-bold text-ink">
           {region.name}

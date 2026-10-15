@@ -11,7 +11,7 @@ on:
         default: dev
         required: true
       target:
-        description: 배포 대상 — prod 는 출시 앱이 보는 서버(네임스페이스 trippilot), dev 는 개발 서버(trippilot-dev · dev-api · 개발 DB · Terraform 안 건드림 · 임베딩·푸시 꺼짐)
+        description: 배포 대상 — prod 는 출시 앱이 보는 서버(네임스페이스 trippilot), dev 는 개발 서버(trippilot-dev · dev-api · 개발 DB · Terraform 안 건드림 · 푸시 꺼짐)
         type: choice
         options: [prod, dev]
         default: prod

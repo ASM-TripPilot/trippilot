@@ -83,11 +83,12 @@ class WorkflowConfigTests(unittest.TestCase):
         self.assertEqual((actual['target'], actual['terraform'], actual['namespace'], actual['values_file'], actual['embedding_enabled']),
                          ('prod', True, 'trippilot', 'values-dev.yaml', True))
 
-    def test_dev_target_skips_terraform_and_forces_embedding_off(self):
-        """기본값(임베딩 켬)으로 개발 배포를 눌러도 큰 임베딩 노드가 뜨지 않고 공유 인프라를 안 바꾼다."""
+    def test_dev_target_skips_terraform_and_follows_embedding_input(self):
+        """공유 인프라(Terraform)는 안 바꾸고, 임베딩은 입력대로 — 강제로 끄면 개발 Plan-B 가 KB 없이 돌아 운영과 다르게 골랐다(10-15)."""
         actual = config.settings(self.dev(EMBEDDING_ENABLED='true'))
         self.assertEqual((actual['terraform'], actual['namespace'], actual['values_file'], actual['embedding_enabled'], actual['deploy_application']),
-                         (False, 'trippilot-dev', 'values-dev-target.yaml', False, True))
+                         (False, 'trippilot-dev', 'values-dev-target.yaml', True, True))
+        self.assertFalse(config.settings(self.dev(EMBEDDING_ENABLED='false'))['embedding_enabled'])
         self.assertEqual((actual['certificate_arn'], actual['hostname']), (self.DEV_CERT, 'dev-api.example.com'))
 
     PROD_CERT = 'arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc'
@@ -143,9 +144,9 @@ class WorkflowMainTests(unittest.TestCase):
                 config.main()
             self.assertIn('deploy_application=false\n', output.read_text())
             self.assertIn('terraform=false\n', output.read_text())
-            # 뒤 스텝 셸은 대상이 정한 값만 본다 — 입력(EMBEDDING_ENABLED=true)이 아니라
+            # 뒤 스텝 셸은 대상이 정한 값만 본다 — 푸시는 입력과 무관하게 off, 임베딩은 입력대로
             self.assertEqual(environment.read_text().splitlines(),
-                             ['NAMESPACE=trippilot-dev', 'VALUES_FILE=values-dev-target.yaml', 'EFFECTIVE_EMBEDDING=false',
+                             ['NAMESPACE=trippilot-dev', 'VALUES_FILE=values-dev-target.yaml', 'EFFECTIVE_EMBEDDING=true',
                               'EFFECTIVE_PUSH_MODE=off', f'ACM_CERTIFICATE_ARN={WorkflowConfigTests.DEV_CERT}',
                               'API_HOSTNAME=dev-api.example.com'])
 

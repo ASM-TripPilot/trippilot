@@ -2449,6 +2449,9 @@ class WiredItineraryOrchestrator:
                 fill=fill, keep=nl_ids)
             notes.append(f"nl_category_applied: {before}->{len(composed)}")
             notes += short
+        cat_of = {p.poi_id: p.category for p in pool.pois}
+        counted = frozenset() if earlier is not None else frozenset(
+            p for p in composed if cat_of.get(p) in dict(nl.counts))
         if nl.only:
             add_one = add_one & nl.only  # "카페로만"에 "맛집 하나 추가"가 겹치면 종류 조건이 이긴다
         add_one_asked = add_one
@@ -2507,10 +2510,12 @@ class WiredItineraryOrchestrator:
                 nl_extra),
             not_before=not_before,
             required_visits=earlier if earlier is not None else tuple(
-                # 구성 결과 안에도 이름으로 집은 곳이 있다(맨 앞에 고정) — 그곳만 우선 가중.
+                # 구성 결과 안에도 이름으로 집은 곳이 있다(맨 앞에 고정) — 그곳과, 사용자가 수를 정한 종류의
+                # 곳("카페는 한 곳만")만 우선 가중. 수를 맞춘 곳이 같은 무게면 솔버가 시간 부족에 그걸 뺐다
+                # (운영 2026-10-15: 카페 1곳을 구성에 넣었는데 최종 0곳).
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
                               reason="nl_request" if p in nl_ids else "llm_compose",
-                              priority=p in nl_ids) for p in composed) + tuple(
+                              priority=p in nl_ids or p in counted) for p in composed) + tuple(
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
                               reason="nl_request", priority=True) for p in nl_extra) + tuple(
                 # 구성 없이 점수 경로로 가도 "클럽"을 말했으면 한 곳은 넣는다
@@ -2590,6 +2595,13 @@ class WiredItineraryOrchestrator:
             for pid in nl_ids:
                 if pid not in placed:
                     notes.append(f"nl_place_unplaced: {pid}")
+        if nl.counts and earlier is None:
+            # 수를 정한 종류가 최종 일정에서 모자라면 밝힌다 — 구성은 맞췄어도 솔버가 못 넣을 수 있다(INV-4).
+            got = [cat_of.get(s.poi_id) for d in (outcome.solution.days if outcome.solution else ())
+                   for s in d.slots]
+            for cat, n in nl.counts:
+                if got.count(cat) < n:
+                    notes.append(f"nl_category_unplaced: {cat.value} {got.count(cat)}/{n}")
         if outcome.solution is not None and any(b.reason == "keep_dinner" for b in blocks):
             # "저녁은 그대로" 잠금은 이번 재계획 한정이다 — 고정으로 내면 BE 가 영구히 잠근다. 다시 풀었어도
             # (위 재실행) 같은 블록이 실리므로 최종 해에서 걷는다(시각·순서는 그대로).

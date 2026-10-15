@@ -29,7 +29,6 @@ import {
   InfoCircleGlyph,
 } from '@/features/itinerary';
 import { UnplacedMustVisitNotice } from '@/features/itinerary';
-import { isShareCaptureArmed } from '@/features/share-trip-card';
 import { useConfirmItinerary } from '@/features/edit-itinerary';
 import { useTripWizardStore } from '@/features/create-trip';
 import { AssistantFab, assistantHref } from '@/features/open-assistant';
@@ -190,15 +189,6 @@ export function ItineraryPlanPage({
     });
   });
 
-  // 확정(h16) 셸의 [공유하기] → j06 공유 카드 진입(TRIP-801 AC-2). `goEdit` 의 객체형 push 관용구
-  // 복제(pathname·params 완전일치가 심판, 02a ★2). j06 라우트(`records/share`)는 이미 실재한다.
-  function goShare(): void {
-    router.push({
-      pathname: '/trips/[tripId]/records/share',
-      params: { tripId },
-    });
-  }
-
   const trip = useGetTripsTripId(tripId);
   const itinerary = useGetTripsTripIdItinerary(tripId);
   // TError=unknown 으로 열어 onError 의 error 를 axios 판정(isNotFound)에 그대로 태운다.
@@ -247,9 +237,6 @@ export function ItineraryPlanPage({
   const accessToken = useAccessToken();
   // 오늘(KST) — 상태로 들어 자정을 넘기면 바뀐다(TRIP-1364). 렌더 중 `seoulDate(new Date())` 는 마운트에 굳는다.
   const today = useSeoulToday();
-  // 공유 카드 캡처 장전 여부 — 네이티브 모듈 유무라 이 프로세스 동안 안 바뀐다. 마운트 때 한 번만 읽는다
-  // (렌더 중 직접 호출은 React Compiler 가 "순수"로 보고 memo 하지만, 의도가 코드에 보이게 못 박는다 · TRIP-1364).
-  const [shareArmed] = useState(isShareCaptureArmed);
   const { savedPlaces } = useSavedPlaces({
     isAuthed: accessToken !== null && (unplaced?.length ?? 0) > 0,
   });
@@ -383,6 +370,8 @@ export function ItineraryPlanPage({
       selectedDayIndex={selectedDayIndex}
       onSelectDay={setActiveDayIndex}
       onBack={handleBack}
+      // 확정(h16)은 상단 뒤로 버튼 대신 하단 [돌아가기] CTA 로 일정 탭에 간다.
+      hideBack={isConfirmed}
       // TRIP-1321 — ✦ 도우미. 하단은 시트·CTA 바가 차지해(FD "하단 안전영역+24" 는 CTA 바와 겹친다) 지도
       // 우상단, 일차 칩 아래 카드 슬롯에 얹는다. 실제 위치·지도 제스처와의 간섭은 6-b 실기.
       mapCard={
@@ -401,28 +390,23 @@ export function ItineraryPlanPage({
           metaBelow={isConfirmed}
         />
       }
-      // 확정(h16)은 읽기전용이라 [일정 수정](h12)·[공유하기](j06) 2버튼(둘 다 활성 · AC-2). 미확정(h14)은
+      // 확정(h16)은 읽기전용이라 [일정 수정](h12)·[돌아가기](일정 탭) 2버튼. 미확정(h14)은
       // [일정 저장하기] 1버튼 — PARTIAL(생성 중)이면 확정을 예방 잠근다(계약 409 의 클라 사본 · 01b D6).
-      // [공유하기]는 공유 카드 캡처가 장전됐을 때만 싣는다(TRIP-939 Q2 — 미장전이면 j06 이 막다른 화면).
-      // 요약 ready 는 보지 않는다(TRIP-1071 결정 4c — 여행 전이면 j06 이 '여행이 끝나면' 안내로 막는다).
+      // 공유 카드(j06) 진입은 여기서 뺐다(사용자 결정) — 여행 요약(j04)에서 들어간다.
       cta={
         isConfirmed
-          ? shareArmed
-            ? [
-                {
-                  label: '일정 수정',
-                  variant: 'outline',
-                  onPress: () => goEdit(selectedDate),
-                },
-                { label: '공유하기', variant: 'primary', onPress: goShare },
-              ]
-            : [
-                {
-                  label: '일정 수정',
-                  variant: 'outline',
-                  onPress: () => goEdit(selectedDate),
-                },
-              ]
+          ? [
+              {
+                label: '일정 수정',
+                variant: 'outline',
+                onPress: () => goEdit(selectedDate),
+              },
+              {
+                label: '돌아가기',
+                variant: 'primary',
+                onPress: guardPress(handleBack),
+              },
+            ]
           : [
               {
                 label: '일정 저장하기',

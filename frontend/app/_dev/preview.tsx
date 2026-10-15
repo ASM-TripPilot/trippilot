@@ -4228,7 +4228,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 좌표 계약 공백이라 카드는 지도 없이 동선 목록·워터마크로 조립(TRIP-634 후속).
   // 저장/공유 버튼 줄은 캡처 모듈 3종이 든 재빌드 빌드에서만 보이고, 그 빌드에선 여기서 눌러 실제로 앨범 저장·
   // 공유 시트가 열린다(TRIP-1071). 재빌드 전 빌드에선 운영처럼 안 그려진다(TRIP-939). [편집]→해시태그 입력·한도
-  // 안내도 여기서 눌러 본다. 요약 미준비 안내는 페이지(`ShareCardPage`) 층이라 여기 없다 — h16 → j06 실경로로 본다.
+  // 안내도 여기서 눌러 본다. 요약 미준비 안내는 페이지(`ShareCardPage`) 층이라 여기 없다 — j04 → j06 실경로(또는 딥링크)로 본다.
   // 포맷 전환(aspect)·워터마크·그라디언트
   // 오버레이 정렬·no-photo 안내 레이아웃은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP, 이 2키가 유일한
   // 육안 대조 자리(포맷 세그를 눌러 9:16→1:1→4:5 종횡비가 바뀌는 것도 여기서 확인).
@@ -6257,7 +6257,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // h16 확정 일정(TRIP-801) — CONFIRMED 지도+시트 셸(옛 h34 TimelineScreen 읽기전용을 대체). 페이지
   // (ItineraryPlanPage)는 react-query·라우터가 필요해 프리뷰에서 직접 못 쓰므로 셸 조립을 축소해
-  // 그린다(h14 선례). 확정 얼굴의 요소(이름 옆 휴관 경고·[일정 수정]·[공유하기] 2버튼 — 성공 배너는
+  // 그린다(h14 선례). 확정 얼굴의 요소(이름 옆 휴관 경고·[일정 수정]·[돌아가기] 2버튼, 상단 뒤로 버튼 없음 — 성공 배너는
   // TRIP-1047 로 확정 직후 토스트가 됐다)를 한 화면에서 육안 대조한다. 슬롯은 h11 결과 픽스처를 재사용한다.
   {
     key: 'h16-plan-confirmed',
@@ -6277,6 +6277,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         selectedDayIndex={0}
         onSelectDay={noop}
         onBack={noop}
+        hideBack
         header={
           <SheetHeader
             title="부산 여행"
@@ -6287,7 +6288,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         cta={[
           { label: '일정 수정', variant: 'outline', onPress: noop },
-          { label: '공유하기', variant: 'primary', onPress: noop },
+          { label: '돌아가기', variant: 'primary', onPress: noop },
         ]}
       >
         <View className="gap-md px-lg pb-2xl pt-xs">

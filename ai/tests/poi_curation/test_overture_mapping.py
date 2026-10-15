@@ -564,3 +564,17 @@ def test_사교댄스_강습소와_7080체인은_제외(name: str) -> None:
 )
 def test_진짜_클럽은_그대로_통과(name: str) -> None:
     assert nightlife_tags("dance_club", name) is not None, name
+
+
+# ── 전국 와인바 체인 (2026-10-15, v4 판정에서 4곳 발견) ─────────────────
+@pytest.mark.parametrize(
+    "name",
+    ["오늘, 와인한잔", "오늘와인한잔", "오늘와인한잔 서면점", "오늘 와인 한잔 당산점"],
+)
+def test_오늘와인한잔_체인은_제외(name: str) -> None:
+    assert nightlife_tags("wine_bar", name) is None, name
+
+
+def test_체인_규칙이_평범한_와인바를_죽이지_않는다() -> None:
+    for name in ("와인당", "불란서와이너리 서울", "엉베흐 Un Verre", "와인싸롱뱅뱅"):
+        assert nightlife_tags("wine_bar", name) is not None, name
