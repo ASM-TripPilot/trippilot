@@ -327,6 +327,15 @@ class DevTargetValuesTests(unittest.TestCase):
                 for container in deployment["spec"]["template"]["spec"]["containers"]:
                     self.assertIn("memory", container["resources"]["limits"])
 
+    def test_dev_target_embedding_follows_the_deploy_input_with_one_replica(self):
+        """개발 서버도 Plan-B KB 를 쓴다(10-15) — 켜면 임베딩 1개, 드레인을 막는 PDB·HPA 는 여전히 없다."""
+        documents = render("dev-target", embedding=True)
+        deployments = {item["metadata"]["name"]: item for item in documents if item["kind"] == "Deployment"}
+        self.assertEqual(deployments["embedding"]["spec"]["replicas"], 1)
+        kinds = [item["kind"] for item in documents]
+        self.assertNotIn("PodDisruptionBudget", kinds)
+        self.assertNotIn("HorizontalPodAutoscaler", kinds)
+
 
 if __name__ == "__main__":
     unittest.main()

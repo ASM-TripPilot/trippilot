@@ -69,7 +69,7 @@ class WorkflowContractTests(unittest.TestCase):
         steps = value['jobs']['deploy']['steps']
         names = [s.get('name', '') for s in steps]
         load = steps[names.index('Load the Plan-B knowledge base')]
-        # 입력이 아니라 대상이 정한 값 — 개발 대상은 임베딩을 늘 끈다
+        # 입력을 그대로 보지 않고 workflow_config 가 정한 값(EFFECTIVE)을 본다 — 대상별 규칙이 한 곳에 모인다
         self.assertIn("steps.config.outputs.embedding_enabled == 'true'", load['if'])
         self.assertIn('runtime.py load-kb', load['run'])
         # 앱이 뜬 뒤여야 한다 — 적재는 ai 파드 안에서 돈다

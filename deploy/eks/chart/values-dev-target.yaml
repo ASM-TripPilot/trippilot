@@ -1,6 +1,7 @@
 # 개발 대상(네임스페이스 trippilot-dev · dev-api.) — 2026-10-15 개발·운영 분리.
 # 운영(values-dev.yaml)과 같은 클러스터에 올라가므로 **작게** 둔다: 복제본 1 · HPA 꺼짐 · PDB 꺼짐(복제본 1 에 PDB 를 걸면
-# 드레인이 영구히 막힌다 — values-dev.yaml 주석) · 임베딩 꺼짐(5Gi 노드가 하나 더 뜬다 — 규칙 랭킹으로 돈다).
+# 드레인이 영구히 막힌다 — values-dev.yaml 주석). 임베딩은 켜고 끄기를 배포 입력이 정한다(렌더 값이 이 파일을 덮는다) —
+# 켜면 5Gi 노드가 한 대 더 뜨고 KB 는 개발 DB 에 따로 쌓인다(첫 적재 ≈37분).
 # 자원 요청·상한은 values.yaml 기본값 그대로다 — 개발 파드가 운영 노드 자원을 무한정 먹지 않게 상한이 이미 걸려 있다.
 environment: dev
 config:
@@ -15,6 +16,6 @@ ai:
 gateway:
   replicas: 1
 embedding:
-  enabled: false
+  replicas: 1
 podDisruptionBudget:
   enabled: false
