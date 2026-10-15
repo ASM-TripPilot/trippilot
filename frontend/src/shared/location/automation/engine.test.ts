@@ -313,3 +313,65 @@ describe('engine — 경로 업로드 · 파기', () => {
     expect(t.n.calls).toContain('disarm');
   });
 });
+
+describe('engine — 구간 보고 영속·재시도 (TRIP-1409)', () => {
+  const reports = (t: ReturnType<typeof setup>, from = 0) =>
+    t.sink.calls
+      .slice(from)
+      .flatMap((c) =>
+        c.op === 'reportInterval' ? [`${c.report.kind}/${c.report.phase}`] : []
+      );
+
+  it('R1 네트워크로 START 가 못 갔으면 큐에 남고, 복구되면 START 가 END 보다 먼저 간다', async () => {
+    const t = setup({ offline: true });
+    await setContext(t.deps, ctx());
+    await run(t.deps);
+    expect(t.store.load().state.pendingReports).toHaveLength(2);
+
+    // 오프라인인 채로 강등 → END 도 큐 뒤에 쌓인다
+    await run(t.deps, { ...ARMED_SNAPSHOT, background: 'denied' });
+    const queued = t.store.load().state.pendingReports;
+    expect(queued.map((q) => q.report.phase)).toEqual([
+      'START',
+      'START',
+      'END',
+      'END',
+    ]);
+
+    t.sink.options.offline = false;
+    const mark = t.sink.calls.length;
+    await flushQueue(t.deps);
+
+    expect(reports(t, mark)).toEqual([
+      'GEOFENCE_ARMED/START',
+      'ROUTE_RECORDING/START',
+      'GEOFENCE_ARMED/END',
+      'ROUTE_RECORDING/END',
+    ]);
+    expect(t.store.load().state.pendingReports).toEqual([]);
+  });
+
+  it('R2 앞 건이 실패하면 뒤 건은 보내지 않는다(순서 보장)', async () => {
+    const t = setup({ offline: true });
+    await setContext(t.deps, ctx());
+    await run(t.deps);
+    const mark = t.sink.calls.length;
+    await flushQueue(t.deps);
+    expect(reports(t, mark)).toEqual(['GEOFENCE_ARMED/START']);
+  });
+
+  it('R3 큐는 저장소에 영속돼 새 엔진(앱 재시작)이 이어서 보낸다', async () => {
+    const t = setup({ offline: true });
+    await setContext(t.deps, ctx());
+    await run(t.deps);
+
+    const store2 = createAutomationStore(t.fs);
+    const sink2 = createFakeAutomationSink();
+    await flushQueue({ ...t.deps, store: store2, sink: sink2 });
+    expect(sink2.calls.map((c) => c.op)).toEqual([
+      'reportInterval',
+      'reportInterval',
+    ]);
+    expect(store2.load().state.pendingReports).toEqual([]);
+  });
+});

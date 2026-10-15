@@ -5,10 +5,14 @@ import {
   buildBatch,
   dropStale,
   enqueue,
+  enqueueReport,
   serializeIntervalReport,
+  settleHeadReport,
   toQueueItem,
   type AutoQueueItem,
   type BatchOutcome,
+  type PendingReport,
+  type ReportRejection,
 } from './autoEventQueue';
 
 /**
@@ -235,5 +239,83 @@ describe('autoEventQueue 직렬화 (PBT-U10-F6 — 좌표 0)', () => {
       ),
       { numRuns: 300 }
     );
+  });
+});
+
+describe('구간 보고 큐 (TRIP-1409)', () => {
+  const rep = (intervalId: string, phase: 'START' | 'END'): PendingReport => ({
+    tripId: 't1',
+    report: {
+      intervalId,
+      kind: 'GEOFENCE_ARMED',
+      phase,
+      at: '2026-08-20T01:00:00.000Z',
+    },
+  });
+  const reportArb = fc
+    .tuple(fc.constantFrom('i1', 'i2', 'i3'), fc.constantFrom('START', 'END'))
+    .map(([id, ph]) => rep(id, ph as 'START' | 'END'));
+
+  it('RQ1 (intervalId, phase) 중복은 싣지 않고 도착 순서를 지킨다', () => {
+    fc.assert(
+      fc.property(fc.array(reportArb, { maxLength: 12 }), (items) => {
+        const q = items.reduce<PendingReport[]>(
+          (acc, i) => enqueueReport(acc, i),
+          []
+        );
+        const keys = q.map((i) => `${i.report.intervalId}/${i.report.phase}`);
+        expect(new Set(keys).size).toBe(keys.length);
+        const firstSeen = [
+          ...new Map(
+            items.map((i) => [`${i.report.intervalId}/${i.report.phase}`, 1])
+          ).keys(),
+        ];
+        expect(keys).toEqual(firstSeen);
+      })
+    );
+  });
+
+  it('RQ2 성공·CONFLICT·REJECTED 는 맨 앞 한 건만 뺀다(강등 신호 없음)', () => {
+    fc.assert(
+      fc.property(
+        fc.array(reportArb, { minLength: 1, maxLength: 8 }),
+        fc.constantFrom<ReportRejection | 'OK'>('OK', 'CONFLICT', 'REJECTED'),
+        (items, o) => {
+          const q = items.reduce<PendingReport[]>(
+            (acc, i) => enqueueReport(acc, i),
+            []
+          );
+          const out = settleHeadReport(
+            q,
+            o === 'OK' ? { ok: true } : { ok: false, code: o }
+          );
+          expect(out.queue).toEqual(q.slice(1));
+          expect(out.demote).toBeNull();
+        }
+      )
+    );
+  });
+
+  it('RQ3 START 의 킬 스위치·동의 없음 409 는 그 구간 보고만 전부 빼고 강등 신호를 낸다', () => {
+    const q = [rep('i1', 'START'), rep('i2', 'START'), rep('i1', 'END')];
+    expect(
+      settleHeadReport(q, { ok: false, code: 'AUTOMATION_DISABLED' })
+    ).toEqual({
+      queue: [q[1]],
+      demote: 'server-disabled',
+      rejectedIntervalId: 'i1',
+    });
+    expect(
+      settleHeadReport(q, { ok: false, code: 'LOCATION_CONSENT_REQUIRED' })
+        .demote
+    ).toBe('consent-rejected');
+  });
+
+  it('RQ4 END 가 같은 코드로 거절돼도 강등하지 않는다(END 는 언제나 받는다)', () => {
+    const out = settleHeadReport([rep('i1', 'END')], {
+      ok: false,
+      code: 'AUTOMATION_DISABLED',
+    });
+    expect(out).toEqual({ queue: [], demote: null, rejectedIntervalId: null });
   });
 });

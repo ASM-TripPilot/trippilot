@@ -7,7 +7,9 @@ import {
   buildBatch,
   dropStale,
   enqueue,
+  enqueueReport,
   serializeIntervalReport,
+  settleHeadReport,
   toQueueItem,
   type IntervalReport,
 } from './autoEventQueue';
@@ -94,12 +96,41 @@ function endReasonOf(reason: string): NonNullable<IntervalReport['endReason']> {
   return 'PERMISSION_DOWNGRADE';
 }
 
-async function report(deps: EngineDeps, tripId: string, r: IntervalReport) {
-  try {
-    await deps.sink.reportInterval(tripId, serializeIntervalReport(r));
-  } catch {
-    // ponytail: 구간 보고 재시도 큐 없음 — 열린 구간은 서버 스위퍼가 여행 종료 + 1일에 닫는다(BR-U10-48).
+/** 보고를 영속 큐 끝에 얹는다(전송은 `flushReports`). 순서가 곧 START → END 순서다. */
+function queueReport(
+  state: AutomationState,
+  tripId: string,
+  r: IntervalReport
+): AutomationState {
+  return {
+    ...state,
+    pendingReports: enqueueReport(state.pendingReports, { tripId, report: r }),
+  };
+}
+
+/**
+ * 구간 보고 큐를 앞에서부터 한 건씩 보낸다 — 앞이 닿아야 다음(START 가 먼저 성공해야 END).
+ * 네트워크 실패면 거기서 멈추고 큐를 둔다(다음 wake·포그라운드·flush 에서 재시도).
+ */
+async function flushReports(
+  deps: EngineDeps,
+  input: AutomationState
+): Promise<{ state: AutomationState }> {
+  let queue = input.pendingReports;
+  while (queue.length > 0) {
+    const head = queue[0];
+    let outcome;
+    try {
+      outcome = await deps.sink.reportInterval(
+        head.tripId,
+        serializeIntervalReport(head.report)
+      );
+    } catch {
+      break;
+    }
+    queue = settleHeadReport(queue, outcome).queue;
   }
+  return { state: { ...input, pendingReports: queue } };
 }
 
 function ensureJudge(
@@ -166,7 +197,11 @@ async function arm(
       startedAt: iso(deps),
     };
     intervals.push(i);
-    await report(deps, ctx.tripId, { ...i, phase: 'START', at: i.startedAt });
+    state = queueReport(state, ctx.tripId, {
+      ...i,
+      phase: 'START',
+      at: i.startedAt,
+    });
   }
   const route = await deps.native.startRouteRecording();
   if (route.recording && !open('ROUTE_RECORDING')) {
@@ -176,8 +211,13 @@ async function arm(
       startedAt: iso(deps),
     };
     intervals.push(i);
-    await report(deps, ctx.tripId, { ...i, phase: 'START', at: i.startedAt });
+    state = queueReport(state, ctx.tripId, {
+      ...i,
+      phase: 'START',
+      at: i.startedAt,
+    });
   }
+  state = (await flushReports(deps, state)).state;
   const asked = state.explainerAskedTrips.includes(ctx.tripId)
     ? state.explainerAskedTrips
     : [...state.explainerAskedTrips, ctx.tripId];
@@ -202,7 +242,7 @@ async function degrade(
   const tripId = state.ctx?.tripId;
   if (tripId) {
     for (const i of state.intervals) {
-      await report(deps, tripId, {
+      state = queueReport(state, tripId, {
         intervalId: i.intervalId,
         kind: i.kind,
         phase: 'END',
@@ -210,6 +250,7 @@ async function degrade(
         endReason: endReasonOf(reason),
       });
     }
+    state = (await flushReports(deps, state)).state;
   }
   return {
     ...state,
@@ -232,8 +273,9 @@ async function flushInner(
   consentRejected: boolean;
 }> {
   const { queue, dropped } = dropStale(input.queue, today(deps));
+  const reported = (await flushReports(deps, input)).state;
   let state: AutomationState = {
-    ...input,
+    ...reported,
     queue,
     droppedCount: input.droppedCount + dropped,
   };

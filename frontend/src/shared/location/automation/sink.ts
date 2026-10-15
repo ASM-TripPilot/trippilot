@@ -2,6 +2,8 @@ import type {
   AutoVisitEventBatch,
   BatchItemResult,
   IntervalReport,
+  ReportOutcome,
+  ReportRejection,
 } from './autoEventQueue';
 import type { RouteDayBody } from './routeDownsample';
 
@@ -38,7 +40,14 @@ export interface AutomationSinkPort {
     body: RouteDayBody
   ): Promise<UploadResult>;
   fetchRoutes(tripId: string): Promise<RouteDay[]>;
-  reportInterval(tripId: string, report: IntervalReport): Promise<void>;
+  /**
+   * 서버가 답한 거절(409 등)은 값으로, 네트워크·5xx 는 throw 로 — 후자만 재시도 대상이다(TRIP-1409).
+   * 204(재전송 포함)는 `{ ok: true }`.
+   */
+  reportInterval(
+    tripId: string,
+    report: IntervalReport
+  ): Promise<ReportOutcome>;
 }
 
 export interface FakeSinkOptions {
@@ -52,7 +61,12 @@ export interface FakeSinkOptions {
   automationEnabled?: boolean;
   /** GET routes 초기값. */
   routes?: Record<string, RouteDay[]>;
-  /** 네트워크 실패 흉내. */
+  /** 구간 보고 START 를 이 사유로 거절(409). */
+  rejectIntervalStart?: Extract<
+    ReportRejection,
+    'AUTOMATION_DISABLED' | 'LOCATION_CONSENT_REQUIRED'
+  >;
+  /** 네트워크 실패 흉내(옵션 객체를 바꾸면 도중에 풀 수 있다). */
   offline?: boolean;
 }
 
@@ -118,6 +132,9 @@ export function createFakeAutomationSink(
     async reportInterval(tripId, report) {
       calls.push({ op: 'reportInterval', tripId, report });
       offline();
+      if (options.rejectIntervalStart && report.phase === 'START')
+        return { ok: false, code: options.rejectIntervalStart };
+      return { ok: true };
     },
   };
 }
