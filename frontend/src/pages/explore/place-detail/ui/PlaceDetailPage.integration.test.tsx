@@ -13,35 +13,28 @@ import {
 import { BASE } from '@/test-support/apiBase';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { getGetPlacesQueryKey } from '@/shared/api/index.hooks';
-import type {
-  GetPlacesParams,
-  Place,
-  SavedPlace,
-} from '@/shared/api/index.schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { PlaceDetailPage } from './PlaceDetailPage';
 
 /**
- * TRIP-501 · TRIP-456 · AC-4·5·6·7·8 — d06 장소 상세 배선(페이지 층).
+ * TRIP-1372(TRIP-824 단건 조회) · d06 장소 상세 배선(페이지 층).
  *
- * TRIP-501 이 바꾼 계약: 상세가 더 이상 `GET /places`(ACTIVE 전량 약 2MB)를 **새로 받지 않는다**.
- * 앞 화면(d04·d02)이 이미 채운 **캐시만** 읽는다 — 목록 캐시(`useGetPlaces` 가 심은 것) + 담은목록
- * 캐시. 그래서 이 스위트는 msw 로 목록을 내려주지 않고, QueryClient 캐시에 **직접 심는다**.
+ * 상세는 `GET /places/{poiId}` 단건으로 그린다 — 목록·담은목록 캐시를 훑지 않는다. 그래서 딥링크·도우미
+ * `next_action` 진입처럼 앞 화면 캐시가 하나도 없어도 그려진다. 이 스위트는 QueryClient 를 비워 둔 채 msw 로
+ * 단건만 내려준다.
  *
- * ★ 회귀 심판: `placesHandler`(GET /places) 가 **한 번도 안 불려야** 한다. 구현이 옛날처럼
- *   `useGetPlaces()` 로 되돌아가면 이 핸들러가 불려 `expect(...).not.toHaveBeenCalled()` 가 깨진다
- *   — "전량 수신을 멈췄다"는 보장을 이 단언 하나가 지킨다(02a ★TRIP-501).
+ * ★ 회귀 심판: 목록 `GET /places` 는 **한 번도 안 불려야** 한다(`placesHandler`) — 옛 캐시-전용 구현으로 되돌아가거나
+ *   목록 전량(약 2MB)을 받는 구현으로 가면 깨진다. 단건 요청은 `detailHits` 로 센다.
  *
  * 무엇을 보장하나:
- *  - **D1 (AC-4)** 목록 캐시에 심긴 장소를 poiId 로 찾아 상세 표면을 그린다 — 네트워크 호출 0.
- *  - **D2·D3·D4 (AC-5)** 하트가 `useSavedPlaces` 로 서버 토글된다(담김/미담김 글리프 testID, 색 아님).
- *  - **D5 (AC-6)** 계약에 없는 필드는 지어내지 않는다.
- *  - **D6 (AC-7)** 뒤로가기가 딥링크에서 갇히지 않는다(canGoBack 폴백).
- *  - **D7 (AC-8)** 공유가 Share.share 를 place.nameKo 로 부른다.
- *  - **D8** 어느 캐시에도 없으면 notFound(콜드 딥링크 천장 — cache-only 결정의 결과).
- *  - **D9** 담은목록이 아직 해소 중이면(authed) loading, 해소되면 담은목록 캐시로 상세를 그린다.
- *  - **D10·D11** code-critic 사각 봉합 — 필터-키 부분일치 · 게스트 로딩 게이트.
+ *  - **D1** 캐시가 비어 있어도 단건 응답으로 상세 표면을 그린다.
+ *  - **D2·D3·D4** 하트가 `useSavedPlaces` 로 서버 토글된다(담김/미담김 글리프 testID, 색 아님).
+ *  - **D5** 계약에 없는 필드(소개·입장료·관련사진)는 지어내지 않는다.
+ *  - **D6** 뒤로가기가 딥링크에서 갇히지 않는다(canGoBack 폴백). **D7** 공유는 Share.share 를 이름으로.
+ *  - **D8** 404(없음·UNVERIFIED)는 notFound 얼굴. **D9** 조회 중에는 loading(notFound 로 성급히 접지 않는다).
+ *  - **D10** 404 가 아닌 실패는 notFound 가 아니라 오류 얼굴 + 다시 시도(INV-4).
+ *  - **D11** 폐업(CLOSED)·유실(LOST)도 그려지되 상태 배지가 붙는다. ACTIVE 는 배지 없음.
  */
 
 jest.mock('@/shared/storage', () => ({
@@ -84,13 +77,19 @@ function makePlace(overrides: Partial<Place> = {}): Place {
   };
 }
 
-// GET /places 회귀 심판 — 상세는 이 핸들러를 절대 부르면 안 된다(캐시만 읽음).
+type DetailReply = Place | 404 | 500;
+
+// GET /places 회귀 심판 — 상세는 목록을 절대 부르면 안 된다(단건만).
 let placesHandler: jest.Mock;
+let detailHits: string[];
+let detailReply: DetailReply;
 let savedRows: SavedPlace[] = [];
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   savedRows = [];
+  detailHits = [];
+  detailReply = makePlace();
   mockBack.mockClear();
   mockReplace.mockClear();
   mockCanGoBack.mockReset();
@@ -103,6 +102,13 @@ beforeEach(() => {
   );
   server.use(
     http.get(`${BASE}/places`, placesHandler),
+    http.get(`${BASE}/places/:poiId`, ({ params }) => {
+      detailHits.push(String(params.poiId));
+      if (detailReply === 404 || detailReply === 500) {
+        return new HttpResponse(null, { status: detailReply });
+      }
+      return HttpResponse.json(detailReply);
+    }),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json(savedRows)),
     http.post(`${BASE}/saved-places`, async ({ request }) => {
       const body = (await request.json()) as { poiId: string };
@@ -128,37 +134,14 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
-// 앞 화면이 심어 놓은 목록 캐시를 흉내내 QueryClient 에 직접 심는다(fetch 아님).
-// `listCacheParams` 를 주면 base 키(`['/places']`)가 아니라 필터 조합 키(`['/places', {…}]`)로
-// 심어, d04 가 region·category 로 캐시한 실제 모양을 재현한다. `guest` 면 토큰을 지운다.
-function renderSeeded(
-  poiId: string,
-  opts: {
-    listCache?: Place[];
-    listCacheParams?: GetPlacesParams;
-    guest?: boolean;
-    /** true면 무한쿼리 모양(InfiniteData)으로 심는다 — d04(TRIP-502)가 심는 실제 캐시 모양. */
-    infinite?: boolean;
-  } = {}
-): void {
-  if (opts.guest) clearAccessToken();
+// 빈 QueryClient 로 그린다 — 앞 화면 캐시가 없는 딥링크 진입 그대로.
+function renderDetail(poiId: string): void {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
       mutations: { gcTime: 0 },
     },
   });
-  if (opts.listCache !== undefined) {
-    // 랜딩(TRIP-500)은 PlaceList(`{items, nextCursor}`), d04·수동추가(TRIP-502)는 무한쿼리라
-    // InfiniteData(`{pages, pageParams}`)를 담는다 — 앞 화면이 심는 두 모양을 그대로 재현한다.
-    const value = opts.infinite
-      ? {
-          pages: [{ items: opts.listCache, nextCursor: null }],
-          pageParams: [undefined],
-        }
-      : { items: opts.listCache, nextCursor: null };
-    client.setQueryData(getGetPlacesQueryKey(opts.listCacheParams), value);
-  }
   function wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -167,15 +150,14 @@ function renderSeeded(
   render(<PlaceDetailPage poiId={poiId} />, { wrapper });
 }
 
-describe('D1 · d06 상세 표면 렌더 (AC-4) — 캐시만 읽고 전량 수신 안 함', () => {
-  it('목록 캐시에서 장소를 찾아 그린다 — GET /places 는 부르지 않는다', async () => {
-    // 준비 — 목록 캐시에 p1 을 심는다(앞 화면이 심은 상황). 실행 — p1 진입.
-    renderSeeded('p1', { listCache: [makePlace()] });
+describe('D1 · d06 상세 표면 렌더 — 캐시 없이 단건으로', () => {
+  it('앞 화면 캐시가 비어 있어도 GET /places/{poiId} 로 그린다 — 목록은 부르지 않는다', async () => {
+    renderDetail('p1');
 
-    // 단언 — 상세 얼굴이 뜨고, 전량 목록 요청은 한 번도 안 나갔다(★TRIP-501).
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-detail')).toBeOnTheScreen()
     );
+    expect(detailHits).toEqual(['p1']);
     expect(placesHandler).not.toHaveBeenCalled();
 
     expect(screen.getByTestId('explore-place-hero')).toBeOnTheScreen();
@@ -199,9 +181,9 @@ describe('D1 · d06 상세 표면 렌더 (AC-4) — 캐시만 읽고 전량 수�
   });
 });
 
-describe('D2·D3·D4 · 저장 하트 서버 토글 (AC-5)', () => {
+describe('D2·D3·D4 · 저장 하트 서버 토글', () => {
   it('D2 미담김 하트를 누르면 save(place) 가 나가고 filled+selected 로 굳는다', async () => {
-    renderSeeded('p1', { listCache: [makePlace()] });
+    renderDetail('p1');
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-save-outline')).toBeOnTheScreen()
     );
@@ -223,7 +205,7 @@ describe('D2·D3·D4 · 저장 하트 서버 토글 (AC-5)', () => {
         place: makePlace(),
       },
     ];
-    renderSeeded('p1', { listCache: [makePlace()] });
+    renderDetail('p1');
 
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-save-filled')).toBeOnTheScreen()
@@ -239,7 +221,7 @@ describe('D2·D3·D4 · 저장 하트 서버 토글 (AC-5)', () => {
         () => new HttpResponse(null, { status: 500 })
       )
     );
-    renderSeeded('p1', { listCache: [makePlace()] });
+    renderDetail('p1');
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-save-outline')).toBeOnTheScreen()
     );
@@ -255,11 +237,10 @@ describe('D2·D3·D4 · 저장 하트 서버 토글 (AC-5)', () => {
   });
 });
 
-describe('D5 · 무발명 (AC-6 · INV-1)', () => {
+describe('D5 · 무발명 (INV-1)', () => {
   it('계약에 없는 필드는 지어내지 않는다 — 주소=미확인, 없는 블록의 testID 부재', async () => {
-    renderSeeded('p1', {
-      listCache: [makePlace({ region: null, openingHours: null, tags: [] })],
-    });
+    detailReply = makePlace({ region: null, openingHours: null, tags: [] });
+    renderDetail('p1');
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-detail')).toBeOnTheScreen()
     );
@@ -272,6 +253,7 @@ describe('D5 · 무발명 (AC-6 · INV-1)', () => {
     ).toBeOnTheScreen();
     expect(screen.queryByTestId('explore-place-openhours')).toBeNull();
 
+    // imageUrls·admissionFee·description 은 서버에 아직 없다(TRIP-824 잔여) — 그리지 않는다.
     expect(screen.queryByTestId('explore-place-intro')).toBeNull();
     expect(screen.queryByTestId('explore-place-fee')).toBeNull();
     expect(screen.queryByTestId('explore-place-relphotos')).toBeNull();
@@ -279,9 +261,9 @@ describe('D5 · 무발명 (AC-6 · INV-1)', () => {
   });
 });
 
-describe('D6 · 뒤로가기 딥링크 탈출 (AC-7)', () => {
+describe('D6 · 뒤로가기 딥링크 탈출', () => {
   it('히스토리가 있으면 back(), 딥링크면 홈으로 replace 한다', async () => {
-    renderSeeded('p1', { listCache: [makePlace()] });
+    renderDetail('p1');
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-back')).toBeOnTheScreen()
     );
@@ -291,7 +273,7 @@ describe('D6 · 뒤로가기 딥링크 탈출 (AC-7)', () => {
 
     mockBack.mockClear();
     mockCanGoBack.mockReturnValue(false);
-    renderSeeded('p1', { listCache: [makePlace()] });
+    renderDetail('p1');
     const backs = await screen.findAllByTestId('explore-place-back');
     fireEvent.press(backs[backs.length - 1]);
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
@@ -299,13 +281,13 @@ describe('D6 · 뒤로가기 딥링크 탈출 (AC-7)', () => {
   });
 });
 
-describe('D7 · 공유 실동작 (AC-8)', () => {
+describe('D7 · 공유 실동작', () => {
   it('공유를 누르면 Share.share 가 place.nameKo 로 불린다', async () => {
     const spy = jest
       .spyOn(Share, 'share')
       .mockResolvedValue({ action: 'sharedAction' } as never);
 
-    renderSeeded('p1', { listCache: [makePlace()] });
+    renderDetail('p1');
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-share')).toBeOnTheScreen()
     );
@@ -318,90 +300,89 @@ describe('D7 · 공유 실동작 (AC-8)', () => {
   });
 });
 
-describe('D8·D9 · 얼굴 판정', () => {
-  it('D8 poiId 가 어느 캐시에도 없으면 notFound 얼굴이다', async () => {
-    // 준비 — 목록 캐시 비어 있고 담은목록도 비어 해소된다.
-    renderSeeded('ghost', { listCache: [] });
+describe('D8·D9·D10 · 얼굴 판정', () => {
+  it('D8 단건이 404(없음·UNVERIFIED)면 notFound 얼굴이다', async () => {
+    detailReply = 404;
+    renderDetail('ghost');
 
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-notfound')).toBeOnTheScreen()
     );
+    expect(detailHits).toEqual(['ghost']);
     expect(screen.queryByTestId('explore-place-detail')).toBeNull();
+    expect(screen.queryByTestId('explore-place-error')).toBeNull();
     expect(placesHandler).not.toHaveBeenCalled();
   });
 
-  it('D9 담은목록 해소 전엔 loading, 해소되면 담은목록 캐시로 상세를 그린다', async () => {
-    // 준비 — 목록 캐시엔 없고, 담은목록에만 p1 이 있다(d02→d06 콜드 담은캐시).
-    savedRows = [
-      {
-        savedPlaceId: 'saved-p1',
-        savedAt: '2026-08-01T00:00:00Z',
-        place: makePlace(),
-      },
-    ];
-    // 실행 — 목록 캐시 비움, 담은목록 조회는 아직 pending.
-    renderSeeded('p1', { listCache: [] });
+  it('D9 응답 전에는 loading 만 그린다(notFound·상세로 성급히 접지 않는다)', async () => {
+    renderDetail('p1');
 
-    // 단언 — 담은목록이 pending 인 동안 loading 만(notFound 로 성급히 접지 않는다).
     expect(screen.getByTestId('explore-place-loading')).toBeOnTheScreen();
     expect(screen.queryByTestId('explore-place-notfound')).toBeNull();
     expect(screen.queryByTestId('explore-place-detail')).toBeNull();
 
-    // 해소되면 담은목록 캐시에서 찾아 상세를 그린다.
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-detail')).toBeOnTheScreen()
     );
-    expect(placesHandler).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('explore-place-loading')).toBeNull();
+  });
+
+  it('D10 404 가 아닌 실패는 notFound 가 아니라 오류 얼굴이고, 다시 시도하면 다시 묻는다 (INV-4)', async () => {
+    detailReply = 500;
+    renderDetail('p1');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-error')).toBeOnTheScreen()
+    );
+    expect(screen.queryByTestId('explore-place-notfound')).toBeNull();
+    expect(detailHits).toHaveLength(1);
+
+    detailReply = makePlace();
+    fireEvent.press(screen.getByTestId('explore-place-retry'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-detail')).toBeOnTheScreen()
+    );
+    expect(detailHits).toHaveLength(2);
+  });
+
+  it('D10 오류 얼굴에도 뒤로가 있다(딥링크에서 갇히지 않는다)', async () => {
+    detailReply = 500;
+    mockCanGoBack.mockReturnValue(false);
+    renderDetail('p1');
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-error')).toBeOnTheScreen()
+    );
+
+    fireEvent.press(screen.getByTestId('explore-place-error-back'));
+
+    expect(mockReplace.mock.calls).toEqual([['/(tabs)']]);
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });
 
-describe('D10·D11 · code-critic 사각 봉합 (TRIP-501)', () => {
-  it('D10 필터 조합 키(region·category)로 캐시된 목록에서도 찾는다 (getQueriesData 부분일치)', async () => {
-    // 준비 — d04 가 필터를 켜고 온 실제 캐시 모양: base 키가 아니라 ['/places', {region,category}].
-    //  이 케이스가 없으면 읽기를 base 키 정확일치로 바꿔도 green 이라(getQueriesData→getQueryData),
-    //  필터를 켠 d04 에서 온 모든 장소가 상세에서 notFound 로 깨지는 회귀를 못 잡는다.
-    renderSeeded('p1', {
-      listCache: [makePlace()],
-      listCacheParams: { region: '부산', category: '문화' },
-    });
+describe('D11 · 폐업·유실 장소도 그리되 상태를 알린다', () => {
+  it.each([
+    ['CLOSED', '폐업'],
+    ['LOST', '미확인'],
+  ] as const)('%s → "%s" 배지', async (dataStatus, label) => {
+    detailReply = makePlace({ dataStatus });
+    renderDetail('p1');
 
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-detail')).toBeOnTheScreen()
     );
-    expect(screen.getByTestId('explore-place-title')).toHaveTextContent(
-      '부산시립미술관'
+    expect(screen.getByTestId('explore-place-status-badge')).toHaveTextContent(
+      label
     );
-    expect(placesHandler).not.toHaveBeenCalled();
   });
 
-  it('D11 게스트(미인증)는 캐시 없어도 무한 로딩이 아니라 notFound 다', async () => {
-    // 준비 — 토큰 없음. 게스트는 담은목록 쿼리가 enabled:false 라 isPending 이 영원히 true 다.
-    //  로딩 게이트의 `isAuthed &&` 서브조건이 없으면 이 사용자는 끝나지 않는 로딩에 갇힌다.
-    renderSeeded('ghost', { listCache: [], guest: true });
-
-    await waitFor(() =>
-      expect(screen.getByTestId('explore-place-notfound')).toBeOnTheScreen()
-    );
-    expect(screen.queryByTestId('explore-place-loading')).toBeNull();
-    expect(placesHandler).not.toHaveBeenCalled();
-  });
-
-  it('D12 d04 무한쿼리 캐시(InfiniteData)에서도 장소를 찾는다 (TRIP-502 크로스티켓)', async () => {
-    // 준비 — d04 가 심는 실제 캐시 모양(InfiniteData). 상세가 PlaceList 만 읽으면 못 찾아 notFound 로
-    //  깨진다(d04→d06 웜 경로) — placesFromCache 가 pages 도 훑는지 잠근다(뮤테이션 심판).
-    renderSeeded('p1', {
-      listCache: [makePlace()],
-      listCacheParams: { region: '부산', category: '문화' },
-      infinite: true,
-    });
-
+  it('ACTIVE 는 배지가 없다', async () => {
+    renderDetail('p1');
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-detail')).toBeOnTheScreen()
     );
-    expect(screen.getByTestId('explore-place-title')).toHaveTextContent(
-      '부산시립미술관'
-    );
-    expect(placesHandler).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('explore-place-status-badge')).toBeNull();
   });
 });
 
@@ -410,7 +391,8 @@ describe('D10·D11 · code-critic 사각 봉합 (TRIP-501)', () => {
 // testID 는 따로 둔다. 안내(StateNotice)엔 행동 버튼을 두지 않는다(결정 3).
 describe('🔴 1015-D · d06 장소 없음 얼굴의 뒤로 (explore-place-notfound-back)', () => {
   async function renderNotFound(): Promise<void> {
-    renderSeeded('ghost', { listCache: [] });
+    detailReply = 404;
+    renderDetail('ghost');
     await waitFor(() =>
       expect(screen.getByTestId('explore-place-notfound')).toBeOnTheScreen()
     );

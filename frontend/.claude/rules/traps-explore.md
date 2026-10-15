@@ -36,5 +36,5 @@ paths:
 
 ## 장소 상세 (explore, d06)
 
-- **d06은 캐시 전용이라 오류 얼굴이 없다** → `PlaceDetailPage.tsx`는 `GET /places`를 부르지 않고 목록·담은목록 캐시에서만 장소를 찾아, 어느 캐시에도 없으면(콜드 딥링크·담은목록 조회 실패 포함) "장소를 찾을 수 없어요"(notFound)로 접는다. 웜 캐시 주 동선(d04→d06·d02→d06)은 무해. 오류 얼굴을 붙일 땐 `LivePlacePage`·`LiveItineraryPage`의 `resolveLiveState`(error/notFound 분리) 선례를 복제한다.
+- **d06 상세는 `GET /places/{poiId}` 단건이다(TRIP-1372) — 캐시 전용이 아니다.** 404(없음·UNVERIFIED)만 notFound, 그 밖의 실패는 오류 얼굴(`explore-place-error`·`-retry`)이다. 단건은 CLOSED·LOST 도 주므로 `dataStatus` 배지(`explore-place-status-badge`)를 화면이 그린다 — `SAVED_PLACE_BADGE`(d02)와 같은 문구표가 두 군데 따로 있다. `imageUrls`·`admissionFee`·`description` 은 서버에 아직 없어 그리지 않는다(TRIP-824 잔여).
 - **d06 하트 해제(un-save) 경로에 회귀 심판이 없다** → `PlaceDetailPage.tsx`의 `remove(poiId)` 분기(이미 담긴 하트 press)를 누르는 통합테스트가 0이라(목 서버에 DELETE 핸들러는 있다), `remove` 인자를 잘못 바꾸거나 조건을 반전해도 green. 코드는 현재 옳다(`remove(poiId)`가 내부에서 `findSavedPlaceId`로 역인덱스, d02와 같은 함수).
