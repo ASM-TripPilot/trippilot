@@ -23,7 +23,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collec
 
 import merge_pois_docs as M  # noqa: E402
 from collect_pois import load_closed_refs  # noqa: E402
-from merge_pois_docs import drop_closed, drop_non_travel, merge, reparse_open_hours  # noqa: E402
+from merge_pois_docs import (  # noqa: E402
+    drop_closed,
+    drop_non_travel,
+    drop_rejected_verdicts,
+    merge,
+    reparse_open_hours,
+)
 
 _DATA = Path(__file__).resolve().parents[2] / "data"
 
@@ -427,3 +433,46 @@ def test_세_출처의_번호_꼴은_겹치지_않는다() -> None:
     assert re.fullmatch(r"\d+", tourapi)
     assert not re.fullmatch(r"\d+", localdata) and not re.fullmatch(r"\d+", overture)
     assert len({tourapi, localdata, overture}) == 3
+
+
+# ── 판정 reject 소급 (2026-10-15) ──────────────────────────────────────
+# 불변식: **공유본에는 reject 판정을 받은 행이 없다.** 기준을 조이면(프롬프트 판본 상승)
+# 이미 적재된 행에도 소급돼야 한다 — 종전엔 손으로 지워야 했고 다음 수집에 다시 들어왔다.
+def _verdict_file(tmp_path, verdicts: dict):
+    p = tmp_path / "v.json"
+    p.write_text(json.dumps({"verdicts": verdicts}, ensure_ascii=False), encoding="utf-8")
+    return p
+
+
+def test_reject_판정은_빠지고_accept_와_미판정은_남는다(tmp_path) -> None:
+    props = (_keyed_doc("OVERTURE", "a")["proposals"]
+             + _keyed_doc("OVERTURE", "b")["proposals"]
+             + _keyed_doc("TOURAPI", "c")["proposals"])
+    path = _verdict_file(tmp_path, {
+        "a": {"verdict": "reject", "prompt": "4"},
+        "b": {"verdict": "accept", "prompt": "4"},
+    })                                      # "c" 는 판정 없음(TourAPI — 판정 대상이 아니다)
+    assert drop_rejected_verdicts(props, path) == 1
+    assert [p["provenance"]["content_id"] for p in props] == ["b", "c"]
+
+
+def test_판정_파일이_없으면_아무것도_빼지_않는다(tmp_path) -> None:
+    props = _keyed_doc("OVERTURE", "a")["proposals"]
+    assert drop_rejected_verdicts(props, tmp_path / "없는파일.json") == 0
+    assert len(props) == 1
+
+
+def test_판정_파일이_깨져도_배치를_죽이지_않는다(tmp_path) -> None:
+    """근거를 못 읽으면 판정하지 않는 것이 맞다 — 수집 본업은 돌아야 한다(INV-4 정신)."""
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    props = _keyed_doc("OVERTURE", "a")["proposals"]
+    assert drop_rejected_verdicts(props, bad) == 0
+    assert len(props) == 1
+
+
+def test_reject_가_없으면_목록을_건드리지_않는다(tmp_path) -> None:
+    props = _keyed_doc("OVERTURE", "a")["proposals"]
+    path = _verdict_file(tmp_path, {"a": {"verdict": "accept", "prompt": "4"}})
+    assert drop_rejected_verdicts(props, path) == 0
+    assert len(props) == 1
