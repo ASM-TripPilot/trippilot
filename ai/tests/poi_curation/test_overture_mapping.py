@@ -33,9 +33,12 @@ from hypothesis import strategies as st
 from trippilot.domain.poi import PoiCategory
 from trippilot.poi_curation.sourcing.overture import (
     _CATEGORY_MAP,
+    NIGHTLIFE_DETAIL,
+    NIGHTLIFE_TAG,
     SOURCE_NAME,
     has_korean_name,
     map_category,
+    nightlife_tags,
 )
 
 from tests.generators.poi_curation import (
@@ -434,3 +437,108 @@ def test_night_market_카테고리는_채택_목록에_없다() -> None:
 def test_실측_야시장_상호는_야경이_아니다(name: str) -> None:
     for cat in _NIGHT_KEYS:
         assert map_category(cat, name) is None, f"{cat}×{name} 가 야경으로 샜다"
+
+
+# ── 나이트라이프 → ACTIVITY + 태그 (사용자 결정 2026-10-15) ─────────────
+# 우리 경계에 나이트라이프 축이 없어 ACTIVITY 로 받고 `tags` 의 `나이트라이프` 가 표지다.
+# **태그를 못 붙이면 싣지 않는다** — 태그 없이 들어가면 AI 가 밤 장소로 못 다루고
+# ACTIVITY 풀만 오염시킨다.
+_NIGHT_KINDS = tuple(NIGHTLIFE_DETAIL)
+
+
+def test_나이트라이프_축은_ACTIVITY_로_온다() -> None:
+    for kind in _NIGHT_KINDS:
+        assert map_category(kind, "흑심") is PoiCategory.ACTIVITY, kind
+
+
+def test_세부_태그는_원천_카테고리에서_나온다() -> None:
+    assert NIGHTLIFE_DETAIL == {
+        "dance_club": "클럽", "cocktail_bar": "칵테일바", "wine_bar": "와인바",
+        "speakeasy": "스피크이지", "beer_garden": "비어가든", "lounge": "라운지바",
+    }
+
+
+def test_태그는_나이트라이프가_먼저_붙는다() -> None:
+    """AI 가 `나이트라이프` 로 밤 장소를 가린다 — 그 문자열이 반드시 들어가야 한다."""
+    for kind, detail in NIGHTLIFE_DETAIL.items():
+        got = nightlife_tags(kind, "흑심")
+        assert got == (NIGHTLIFE_TAG, detail), (kind, got)
+        assert NIGHTLIFE_TAG in got
+
+
+def test_나이트라이프_아닌_축은_None() -> None:
+    """ACTIVITY 로 오는 다른 축(수영장·클라이밍)에 나이트라이프 태그가 붙으면 안 된다."""
+    for kind in ("swimming_pool", "rock_climbing_spot", "park", "art_gallery", ""):
+        assert nightlife_tags(kind, "아무개") is None, kind
+    assert nightlife_tags(None, "아무개") is None
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        # 유흥업소·성인업소 — 여행 제안에 올릴 수 없다
+        "유흥주점 블루", "강남 룸살롱", "호스트바 제왕", "단란주점 소라",
+        "성인나이트", "24시 안마", "스웨디시 마사지",
+        # `클럽`·`라운지` 가 엉뚱한 데 붙는 낱말이다
+        "레이크사이드 컨트리클럽", "남서울 골프클럽", "제일 클럽하우스",
+        "강남 스포츠클럽", "휘트니스 클럽", "독서클럽 모임공간",
+        "인천공항 비즈니스 라운지", "라운지 카페 모카", "카페&라운지 블랑",
+        # 예식·의료·학원이 `클럽`·`라운지` 를 쓴다
+        "클럽케이 웨딩", "그랜드 컨벤션 클럽", "미소 의원 라운지",
+    ],
+)
+def test_제외_목록에_걸리면_싣지_않는다(name: str) -> None:
+    for kind in _NIGHT_KINDS:
+        assert nightlife_tags(kind, name) is None, f"{kind}×{name}"
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["흑심", "케이크샵 와인바", "루프탑 더 뷰", "메이드 인 서울", "옥상달빛",
+     "비어가든 한강", "스피크이지 로우", "자리", "을지로 노가리"],
+)
+def test_평범한_상호는_통과한다(name: str) -> None:
+    """제외가 과하면 축이 비어 버린다 — 반대 방향도 건다."""
+    assert nightlife_tags("dance_club", name) is not None
+
+
+def test_아파트_규칙은_나이트라이프에도_걸린다() -> None:
+    """`map_category` 의 아파트·출입구 규칙은 카테고리와 무관하다 — 그대로여야 한다."""
+    assert map_category("dance_club", "래미안 아파트") is None
+    assert map_category("wine_bar", "자이 2단지") is None
+
+
+@settings(max_examples=200, deadline=None)
+@given(kind=st.sampled_from(_NIGHT_KINDS), name=st.text(max_size=30))
+def test_pbt_나이트라이프_태그는_None_이거나_두_칸이다(kind: str, name: str) -> None:
+    """치역 고정 — 첫 칸은 항상 `나이트라이프`, 둘째 칸은 표의 세부다."""
+    got = nightlife_tags(kind, name)
+    if got is None:
+        return
+    assert len(got) == 2
+    assert got[0] == NIGHTLIFE_TAG
+    assert got[1] == NIGHTLIFE_DETAIL[kind]
+
+
+# ── 실측 제외 (2026-10-15, 419곳 전수 눈검사) ─────────────────────────
+# Overture `dance_club` 이 한국에서 노래주점·나이트클럽·호프집에 많이 붙는다.
+@pytest.mark.parametrize(
+    "name",
+    ["쥬얼리노래주점", "첼로노래주점", "서강코인노래연습장", "가라오케 수",
+     "샴푸나이트크럽", "뉴캐슬나이트클럽", "호박나이트", "그랑프리나이트클럽",
+     "희주점",
+     "투다리능곡점", "생활맥주 김해삼계점", "봉구비어", "역전할머니맥주",
+     "일산꼬치box", "종로실내포차", "달밤포차", "한남포차"],
+)
+def test_실측_노래주점_나이트_호프체인_포차는_제외(name: str) -> None:
+    assert nightlife_tags("dance_club", name) is None, name
+
+
+@pytest.mark.parametrize(
+    "name",
+    # 같은 실측에서 **진짜**로 확인한 것들 — 제외가 이들을 죽이면 축이 비어 버린다
+    ["클럽그리드", "빌리진 서면", "클럽 바이브 라운지", "클럽베뉴 부산",
+     "말리 말리 - Mali Mali", "에이유클럽", "서면런투유", "몰트꽁띠", "와인당"],
+)
+def test_실측_진짜_나이트라이프는_통과(name: str) -> None:
+    assert nightlife_tags("dance_club", name) is not None, name
