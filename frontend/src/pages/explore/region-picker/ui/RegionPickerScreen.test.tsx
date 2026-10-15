@@ -624,3 +624,64 @@ describe('검색 결과 표면', () => {
     });
   });
 });
+
+describe('지역 카드의 번들 커버 그림 (검색 결과·드릴다운)', () => {
+  const SEOUL = region({
+    regionCode: '11',
+    name: '서울특별시',
+    level: RegionLevel.SIDO,
+    sidoName: '서울특별시',
+    poiCount: 80,
+  });
+  const JONGNO = region({
+    regionCode: '11110',
+    name: '종로구',
+    sidoName: '서울특별시',
+    poiCount: 10,
+  });
+  const GANGWON_HONGCHEON = region({
+    regionCode: '51720',
+    name: '홍천군',
+    sidoName: '강원특별자치도',
+    poiCount: 4,
+  });
+
+  it('검색 결과: 서울 카드엔 커버 그림이 있고 강원 카드엔 없다', () => {
+    render(
+      <RegionPickerScreen
+        {...props({
+          query: '서',
+          regions: [SEOUL, JONGNO, GANGWON_HONGCHEON],
+        })}
+      />
+    );
+    expect(screen.getByTestId('explore-region-cover-11')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-region-cover-11110')).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-region-cover-51720')).toBeNull();
+  });
+
+  it('검색 결과: 추천 장소 없음(선택 불가) 서울 카드도 그림을 그린다', () => {
+    render(
+      <RegionPickerScreen
+        {...props({
+          query: '종',
+          regions: [{ ...JONGNO, poiCount: 0 }],
+        })}
+      />
+    );
+    expect(screen.getByTestId('explore-region-cover-11110')).toBeOnTheScreen();
+  });
+
+  it('드릴다운: 서울 구 카드엔 그림이, 인천 구 카드엔 없다', () => {
+    render(
+      <RegionPickerScreen
+        {...props({ regions: [SEOUL, JONGNO, INCHEON, MICHUHOL] })}
+      />
+    );
+    fireEvent.press(screen.getByTestId('explore-region-sido-11'));
+    expect(screen.getByTestId('explore-region-cover-11110')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('explore-region-drilldown-back'));
+    fireEvent.press(screen.getByTestId('explore-region-sido-28'));
+    expect(screen.queryByTestId('explore-region-cover-28177')).toBeNull();
+  });
+});
