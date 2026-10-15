@@ -197,7 +197,6 @@ import {
   type LiveHubSlot,
   type LiveHubViewProps,
 } from '@/pages/live/live-itinerary/ui/LiveHubView';
-import { BudgetEditSheet } from '@/pages/trip/trip-new-step1/ui/BudgetEditSheet';
 import { PrefOverrideSheet } from '@/pages/trip/trip-new-step1/ui/PrefOverrideSheet';
 import {
   TripWizardStep2Screen,
@@ -1315,13 +1314,11 @@ const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
   summaryDayWindow: { main: '09:00 시작', sub: '기본' },
   summaryCompanion: { main: '친구 2명' },
   summaryPreferences: { main: '미식 · 전시 · 야경', onboarding: true },
-  summaryBudget: { main: '120만원', sub: '1인 총액 · 중간' },
   onPressSummaryDestination: noop,
   onPressSummaryPeriod: noop,
   onPressSummaryDayWindow: noop,
   onPressSummaryCompanion: noop,
   onPressSummaryPreference: noop,
-  onPressSummaryBudget: noop,
   mustVisits: [],
   onPressMore: noop,
   onPressSeeAll: noop,
@@ -2409,7 +2406,6 @@ const SETTINGS_PREF_PREVIEW_SELECTION: PreferenceSelection = {
   pace: '균형있게',
   companionTypes: ['커플'],
   petFlag: true,
-  budgetTier: '중간',
 };
 
 // l01 알림함(TRIP-576) — Figma 1598:2389 의 5행(오늘 3·이전 2). 화면은 VM 만 받는 순수 뷰라
@@ -2910,15 +2906,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'c09b · 기본',
     login: null,
     render: () => (
-      // TRIP-719 픽스처 — Figma 1774:2258 선택 상태(예산 중간·동행 친구·음식 2종·이동 대중교통).
+      // TRIP-719 픽스처 — Figma 1774:2258 선택 상태(동행 친구·음식 2종·이동 대중교통).
       // 값 도메인은 서버 enum 유지(G3)라 slug 는 코드 계약값(friends·korean·japanese·transit).
       <PrefStep2Screen
-        selectedBudget="mid"
         selectedCompanions={['friends']}
         selectedActivities={null}
         selectedFoods={['korean', 'japanese']}
         selectedTransports={['transit']}
-        onToggleBudget={noop}
         onToggleCompanion={noop}
         onToggleActivity={noop}
         onToggleFood={noop}
@@ -4741,8 +4735,8 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // g01 empty·loading 두 상태 얼굴(TRIP-671, Figma empty `3652:2068`·loading `3712:2068`). empty 는
-  // fresh 진입(여행지·기간 null → 신 카피/빈 줄, 동행·취향·예산은 프리필 채움, [다음] 비활성),
-  // loading 은 `isLoading=true`(요약 5행·꼭 갈 곳 스켈레톤 + 로딩 부제 + [다음] 비활성). jest 는 회색바
+  // fresh 진입(여행지·기간 null → 신 카피/빈 줄, 동행·취향은 프리필 채움, [다음] 비활성),
+  // loading 은 `isLoading=true`(요약 4행·꼭 갈 곳 스켈레톤 + 로딩 부제 + [다음] 비활성). jest 는 회색바
   // 색·크기·"어디로 갈까요?" 진한 톤을 못 봐 이 두 키가 3652:2068·3712:2068 육안 대조 자리다.
   {
     key: 'trip-new-step1-empty',
@@ -4754,11 +4748,9 @@ export const PREVIEW_STATES: PreviewState[] = [
         {...TRIP_WIZARD_BASE}
         summaryDestinations={null}
         summaryPeriod={null}
-        // empty 얼굴(Figma `3652:2068`) — 동행·취향은 프리필로 채워지고, 예산은 금액 없이 프리필
-        // tier 만 있는 **tier-only**(TRIP-732: main=tier, sub="1인 총액 · 온보딩").
+        // empty 얼굴(Figma `3652:2068`) — 동행·취향은 프리필로 채워진다.
         summaryCompanion={{ main: '혼자' }}
         summaryPreferences={{ main: '휴양 · 미식', onboarding: true }}
-        summaryBudget={{ main: '중간', sub: '1인 총액 · 온보딩' }}
         mustVisits={[]}
         canProceed={false}
       />
@@ -4936,27 +4928,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         onApply={noop}
         onClose={noop}
         fromOnboarding
-      />
-    ),
-  },
-  // g01 예산 편집 시트(TRIP-670, Figma `3647:2068`) — 중간 tier 선택·1,000,000(온보딩 범위 가운데값, TRIP-1067) 열린 상태.
-  // `BudgetEditSheet`은 props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이
-  // 그대로 태운다. jest 는 활성 칩 분홍 배경·흰 글자·금액/원 정렬·필드 패딩·시트 딤/개폐를 못 봐
-  // (바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다.
-  {
-    key: 'trip-new-step1-budget-sheet',
-    band: 'g',
-    label: 'g01 · 예산 편집 시트',
-    login: null,
-    render: () => (
-      <BudgetEditSheet
-        amountText="1,000,000"
-        tier="중간"
-        onChangeAmount={noop}
-        onSelectTier={noop}
-        onApply={noop}
-        onClose={noop}
-        applyDisabled={false}
       />
     ),
   },
