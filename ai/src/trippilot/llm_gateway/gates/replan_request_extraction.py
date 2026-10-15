@@ -25,6 +25,12 @@ class ExtractedPlace:
 
 
 @dataclass(frozen=True, slots=True)
+class ExtractedCategory:
+    category: str  # 경계 카테고리 코드 8종 중 하나 (`_CATEGORIES`)
+    count: int | None = None  # "두 군데" → 2. 수를 말하지 않았으면 None
+
+
+@dataclass(frozen=True, slots=True)
 class ExtractedRequest:
     """자유입력에서 뽑은 것 — 이 게이트가 **형태만** 보장한 주장. 참·거짓은 호출측 검증 몫."""
 
@@ -32,16 +38,24 @@ class ExtractedRequest:
     start_after: time | None = None
     end_by: time | None = None
     weather: str | None = None  # "rain" | "clear" | None
+    # 종류 조건 — "카페는 두 군데만"·"카페로만". `only` 는 categories 가 있을 때만 참이다.
+    categories: tuple[ExtractedCategory, ...] = ()
+    only: bool = False
 
     @property
     def empty(self) -> bool:
-        return not (self.places or self.start_after or self.end_by or self.weather)
+        return not (self.places or self.start_after or self.end_by or self.weather
+                    or self.categories)
 
 
 
 _HHMM = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 _MAX_PLACES = 5
 _MAX_NAME = 40
+# 경계 카테고리 8종(`domain.poi.PoiCategory` 의 STAY 제외) — 게이트는 도메인을 몰라 문자열로 둔다.
+_CATEGORIES = frozenset({"FOOD", "CAFE", "SIGHT", "NIGHT_VIEW", "NATURE", "CULTURE", "ACTIVITY", "SHOPPING"})
+_MAX_CATEGORIES = 4
+_MAX_COUNT = 8  # 재계획 하루 방문 상한과 같은 급
 
 
 def _hhmm(value: object) -> time | None:
@@ -52,7 +66,8 @@ def _hhmm(value: object) -> time | None:
 
 
 class ReplanRequestExtractionGate:
-    """`{"places": [{"name", "want"}], "start_after", "end_by", "weather"}` 강제."""
+    """`{"places": [{"name", "want"}], "start_after", "end_by", "weather",
+    "categories": [{"category", "count"}], "only"}` 강제."""
 
     def apply(
         self,
@@ -80,12 +95,23 @@ class ReplanRequestExtractionGate:
                     and want in ("visit", "avoid")):
                 places.append(ExtractedPlace(name=name.strip(), want=want))
         weather = data.get("weather") if data.get("weather") in ("rain", "clear") else None
+        cats: dict[str, ExtractedCategory] = {}  # 같은 종류가 두 번 오면 앞의 것
+        raw_cats = data.get("categories", [])
+        for item in (raw_cats if isinstance(raw_cats, list) else [])[:_MAX_CATEGORIES]:
+            if not isinstance(item, dict) or item.get("category") not in _CATEGORIES:
+                continue
+            count = item.get("count")
+            if count is not None and not (type(count) is int and 1 <= count <= _MAX_COUNT):
+                continue  # 수가 이상하면 그 항목만 버린다 — 수 없이 살리면 "두 곳만"이 "무제한"이 된다
+            cats.setdefault(item["category"], ExtractedCategory(item["category"], count))
         return GateOutcome(
             value=ExtractedRequest(
                 places=tuple(places),
                 start_after=_hhmm(data.get("start_after")),
                 end_by=_hhmm(data.get("end_by")),
                 weather=weather,
+                categories=tuple(cats.values()),
+                only=bool(cats) and data.get("only") is True,
             ),
             drop_event=None,
             error=None,
