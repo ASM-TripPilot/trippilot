@@ -1522,7 +1522,10 @@ _NL_EXTRACT_SHARE = 0.25
 # 순차 경로에서 빠진다(DEV 실측 2026-10-14: 번역 3.75s + 추출 ~5s 가 직렬로 쌓여 구성 LLM 이 굶었다).
 # 게이트웨이를 스레드에서 부르는 것은 이미 쓰는 패턴이다(`route_budget._POOL`·취향 점수 워커).
 _NL_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="nl-extract")
-_NL_EXTRACT_MAX_S = 5.0
+# 5s → 8s (2026-10-15 운영 실호출 2회 중 1회 `timeout > 5.0s` — 추출이 빠지자 "성산 꼭"·"6시까지"가 통째로
+# 무시된 하루가 나왔다). 시작 시점에 배경으로 띄우므로 결과를 받는 지점(지시 번역·후보 수집 뒤)까지는 공짜고,
+# 그보다 늦을 때만 그만큼 기다린다. 운영 재계획 응답은 12~18s 라 시한(60s)에 여유가 있다.
+_NL_EXTRACT_MAX_S = 8.0
 # 지도 실재 확인에 줄 시한(ms) — 생성 ②′ 의 `existence_deadline_ms` 와 같은 급.
 _NL_EXISTENCE_MS = 1_500
 
