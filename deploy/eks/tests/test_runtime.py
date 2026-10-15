@@ -512,7 +512,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
                          "trippilot-kb-load")
 
     def test_load_kb_reads_the_serving_image_prints_logs_and_cleans_up(self):
-        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "총 1470건", ""])
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "0", "trippilot-kb-load-ok", "총 1470건", ""])
         with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-kb"])
         calls = [c.args[0] for c in shell.call_args_list]
@@ -520,8 +520,23 @@ class RuntimeIntegrationTests(unittest.TestCase):
         applied = json.loads(shell.call_args_list[2].args[1])
         self.assertEqual(applied["spec"]["template"]["spec"]["containers"][0]["image"], "123.dkr.ecr/ai:sha-1")
         self.assertIn("job/trippilot-kb-load", calls[3])
+        self.assertIn("pod/trippilot-kb-load-ok", calls[6])
         out.assert_any_call("총 1470건")
+        self.assertFalse(any("재시도" in str(c.args[0]) for c in out.call_args_list))
         self.assertIn("delete", calls[-1])
+
+    def test_load_kb_after_retries_shows_the_succeeded_attempt_not_the_failed_one(self):
+        """재시도로 완료된 Job 에서 `logs job/…` 이 실패한 첫 시도의 EmbeddingUnreachable 트레이스를 찍고
+        바로 'complete' 가 나왔다(10-15 개발 첫 적재) — 적재가 됐는지 로그로 판정할 수 없었다."""
+        shell = Mock(side_effect=["", "img", "", "", "1", "trippilot-kb-load-2nd", "place_docs.json: 1470건 적재", ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out:
+            runtime.main(["load-kb"])
+        calls = [c.args[0] for c in shell.call_args_list]
+        self.assertIn("status.phase=Succeeded", calls[5])
+        self.assertIn("pod/trippilot-kb-load-2nd", calls[6])
+        shown = "\n".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("1회 실패한 뒤 재시도로 완료", shown)
+        self.assertIn("place_docs.json: 1470건 적재", shown)
 
     def test_load_kb_failure_shows_the_cause_without_credentials(self):
         """실패가 'kubectl command failed' 한 줄뿐이라 원인을 몰랐다(2026-10-04 첫 적재). 적재
