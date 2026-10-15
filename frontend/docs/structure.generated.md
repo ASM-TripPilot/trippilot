@@ -1562,7 +1562,7 @@
 
 ## src/shared/location/automation/
 - `src/shared/location/automation/arming.ts`  →  OsPermission · ArmingInput · ArmingState · ArmingReason · ArmingResult · resolveArming
-- `src/shared/location/automation/autoEventQueue.ts`  →  AutoQueueItem · AutoVisitEventBody · AutoVisitEventBatch · BatchOutcome · BatchItemResult · MAX_BATCH_EVENTS · toQueueItem · enqueue · dropStale · buildBatch · applyBatchResults · IntervalReport · serializeIntervalReport
+- `src/shared/location/automation/autoEventQueue.ts`  →  AutoQueueItem · AutoVisitEventBody · AutoVisitEventBatch · BatchOutcome · BatchItemResult · MAX_BATCH_EVENTS · toQueueItem · enqueue · dropStale · buildBatch · applyBatchResults · IntervalReport · serializeIntervalReport · PendingReport · ReportRejection · ReportOutcome · ReportDemote · enqueueReport · settleHeadReport
 - `src/shared/location/automation/config.ts`  →  AUTOMATION_CONFIG · AutomationConfig
 - `src/shared/location/automation/deps.ts`  →  getEngineDeps · overrideEngineDeps
 - `src/shared/location/automation/distanceSource.ts`  →  DistanceSource · distanceSourceByDate

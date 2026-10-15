@@ -94,6 +94,15 @@ export function useTurnFlow(
             setRateLimitedUntil(at + (error.retryAfterSeconds ?? 1) * 1000);
             return;
           }
+          if (isAssistantApiError(error) && error.code === 'TURN_IN_PROGRESS') {
+            // 서버가 이미 기록해 처리 중이다 — 말풍선·입력을 그대로 두고(복원하면 같은 말이 두 번 나간다)
+            // Retry-After 뒤 **같은 clientTurnId** 로만 다시 보내게 막는다.
+            setPending({ ...turn, status: 'FAILED' });
+            const at = Date.now();
+            setNow(at);
+            setRateLimitedUntil(at + (error.retryAfterSeconds ?? 1) * 1000);
+            return;
+          }
           setPending({ ...turn, status: 'FAILED' });
         },
         onSettled: () => {

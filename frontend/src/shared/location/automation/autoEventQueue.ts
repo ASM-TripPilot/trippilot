@@ -158,3 +158,67 @@ export function serializeIntervalReport(
   if (report.regionCount != null) body.regionCount = report.regionCount;
   return body;
 }
+
+// ── 구간 보고 큐 (TRIP-1409) ──────────────────────────────────────
+// 자동 결과 큐와 같은 모양 — 순수 함수, 저장은 store, 전송은 engine. 단 순서가 의미다:
+// START 가 서버에 닿기 전에 END 를 보내면 409 CONFLICT(시작 없는 끝)로 그 구간이 법정 로그에서 사라진다.
+
+export interface PendingReport {
+  tripId: string;
+  report: IntervalReport;
+}
+
+/** 서버가 구간 보고를 거절한 사유. 네트워크·5xx 는 거절이 아니라 throw 다(= 재시도). */
+export type ReportRejection =
+  'AUTOMATION_DISABLED' | 'LOCATION_CONSENT_REQUIRED' | 'CONFLICT' | 'REJECTED';
+
+export type ReportOutcome = { ok: true } | { ok: false; code: ReportRejection };
+
+export type ReportDemote = 'server-disabled' | 'consent-rejected';
+
+/** 같은 (intervalId, phase) 는 한 번만 싣는다 — 서버도 멱등이지만 큐가 불어나지 않게. */
+export function enqueueReport(
+  queue: readonly PendingReport[],
+  item: PendingReport
+): PendingReport[] {
+  const dup = queue.some(
+    (q) =>
+      q.report.intervalId === item.report.intervalId &&
+      q.report.phase === item.report.phase
+  );
+  return dup ? [...queue] : [...queue, item];
+}
+
+/**
+ * 맨 앞 보고의 결과를 반영한다. 앞이 성공해야 다음으로 간다(호출자가 한 건씩 부른다).
+ * - 성공·CONFLICT·REJECTED: 재시도해도 소용없으므로 뺀다.
+ * - START 의 AUTOMATION_DISABLED·LOCATION_CONSENT_REQUIRED: 서버에 구간이 없다 → 그 구간 보고를 전부 빼고 강등 신호.
+ */
+export function settleHeadReport(
+  queue: readonly PendingReport[],
+  outcome: ReportOutcome
+): {
+  queue: PendingReport[];
+  demote: ReportDemote | null;
+  rejectedIntervalId: string | null;
+} {
+  const [head, ...rest] = queue;
+  if (!head) return { queue: [], demote: null, rejectedIntervalId: null };
+  if (!outcome.ok && head.report.phase === 'START') {
+    const demote: ReportDemote | null =
+      outcome.code === 'AUTOMATION_DISABLED'
+        ? 'server-disabled'
+        : outcome.code === 'LOCATION_CONSENT_REQUIRED'
+          ? 'consent-rejected'
+          : null;
+    if (demote) {
+      const id = head.report.intervalId;
+      return {
+        queue: rest.filter((q) => q.report.intervalId !== id),
+        demote,
+        rejectedIntervalId: id,
+      };
+    }
+  }
+  return { queue: rest, demote: null, rejectedIntervalId: null };
+}

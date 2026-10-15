@@ -123,7 +123,7 @@ describe('실패 정규화 — toAssistantError', () => {
     expect(toAssistantError(raw).code).toBe(code);
   });
 
-  it('429 TURN_IN_PROGRESS 는 RATE_LIMITED 가 아니다 — 같은 턴 id 로 다시 보내는 SERVER 다', () => {
+  it('429 TURN_IN_PROGRESS 는 RATE_LIMITED 가 아니다 — 같은 턴 id 로 Retry-After 뒤 다시 보내는 별도 코드다', () => {
     const inProgress = httpError(
       429,
       { error: { code: 'TURN_IN_PROGRESS' } },
@@ -131,7 +131,9 @@ describe('실패 정규화 — toAssistantError', () => {
         'Retry-After': '13',
       }
     );
-    expect(toAssistantError(inProgress).code).toBe('SERVER');
+    const mapped = toAssistantError(inProgress);
+    expect(mapped.code).toBe('TURN_IN_PROGRESS');
+    expect(mapped.retryAfterSeconds).toBe(13);
     // 분당 한도(코드 RATE_LIMITED)는 그대로 막는다
     expect(
       toAssistantError(httpError(429, { error: { code: 'RATE_LIMITED' } })).code
