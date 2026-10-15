@@ -88,12 +88,18 @@ export function makeTrip(over: Partial<Trip>): Trip {
 }
 
 type SheetKind =
-  'destination' | 'period' | 'companion' | 'preference' | 'budget';
+  | 'destination'
+  | 'period'
+  | 'daywindow'
+  | 'companion'
+  | 'preference'
+  | 'budget';
 
 /** 요약 행 → 시트 testID. 취향 시트만 `pref` 접두다. */
 const SHEET_TEST_IDS: Record<SheetKind, string> = {
   destination: 'trip-wizard-destination-sheet',
   period: 'trip-wizard-period-sheet',
+  daywindow: 'trip-wizard-daywindow-sheet',
   companion: 'trip-wizard-companion-sheet',
   preference: 'trip-wizard-pref-sheet',
   budget: 'trip-wizard-budget-sheet',

@@ -1312,11 +1312,13 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
 const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
   summaryDestinations: { main: '부산', sub: '2박 · 경주 1박' },
   summaryPeriod: { main: '6월 10일(수) – 13일(토)', sub: '3박 4일' },
+  summaryDayWindow: { main: '09:00 시작', sub: '기본' },
   summaryCompanion: { main: '친구 2명' },
   summaryPreferences: { main: '미식 · 전시 · 야경', onboarding: true },
   summaryBudget: { main: '120만원', sub: '1인 총액 · 중간' },
   onPressSummaryDestination: noop,
   onPressSummaryPeriod: noop,
+  onPressSummaryDayWindow: noop,
   onPressSummaryCompanion: noop,
   onPressSummaryPreference: noop,
   onPressSummaryBudget: noop,

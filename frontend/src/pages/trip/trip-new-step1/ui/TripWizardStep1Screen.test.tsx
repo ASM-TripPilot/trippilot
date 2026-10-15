@@ -45,11 +45,13 @@ function props(
   return {
     summaryDestinations: null,
     summaryPeriod: null,
+    summaryDayWindow: { main: '09:00 시작', sub: '기본' },
     summaryCompanion: null,
     summaryPreferences: null,
     summaryBudget: null,
     onPressSummaryDestination: jest.fn(),
     onPressSummaryPeriod: jest.fn(),
+    onPressSummaryDayWindow: jest.fn(),
     onPressSummaryCompanion: jest.fn(),
     onPressSummaryPreference: jest.fn(),
     onPressSummaryBudget: jest.fn(),
@@ -1185,4 +1187,32 @@ describe('지역 밖 꼭 갈 곳 안내', () => {
       expect(screen.getByTestId('trip-wizard-step1-next')).toBeOnTheScreen();
     }
   );
+});
+
+describe('일과 시간 행 (TRIP-1308)', () => {
+  it('값(09:00 시작)과 보조(기본)를 그리고, 누르면 시트 오픈 신호를 올린다', () => {
+    const onPressSummaryDayWindow = jest.fn();
+    render(<TripWizardStep1Screen {...props({ onPressSummaryDayWindow })} />);
+
+    const row = screen.getByTestId('trip-wizard-summary-daywindow');
+    expect(within(row).getByText('일과 시간')).toBeTruthy();
+    expect(within(row).getByText('09:00 시작')).toBeTruthy();
+    expect(
+      screen.getByTestId('trip-wizard-summary-daywindow-sub')
+    ).toHaveTextContent('기본');
+
+    fireEvent.press(row);
+    expect(onPressSummaryDayWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('보조가 없는 값은 보조 요소를 안 만든다', () => {
+    render(
+      <TripWizardStep1Screen
+        {...props({ summaryDayWindow: { main: '11:00 시작' } })}
+      />
+    );
+    expect(
+      screen.queryByTestId('trip-wizard-summary-daywindow-sub')
+    ).toBeNull();
+  });
 });

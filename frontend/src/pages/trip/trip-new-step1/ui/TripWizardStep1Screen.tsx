@@ -46,12 +46,15 @@ export interface TripWizardStep1ScreenProps {
    * (플레이스홀더). 취향만 `{main; onboarding}`(온보딩 배지용). TRIP-732: 문자열 → 객체. */
   summaryDestinations: SummaryLine | null;
   summaryPeriod: SummaryLine | null;
+  /** 일과 시간 행(TRIP-1308) — 기본도 값이 있는 행이라 `null`(미선택)이 없다. */
+  summaryDayWindow: SummaryLine;
   summaryCompanion: SummaryLine | null;
   summaryPreferences: PreferenceSummary | null;
   summaryBudget: SummaryLine | null;
   /** 각 요약 행 탭 → 해당 필드 편집 시트 오픈(S2~S6 스텁). 화면은 신호만 위로 올린다. */
   onPressSummaryDestination(): void;
   onPressSummaryPeriod(): void;
+  onPressSummaryDayWindow(): void;
   onPressSummaryCompanion(): void;
   onPressSummaryPreference(): void;
   onPressSummaryBudget(): void;
@@ -327,11 +330,13 @@ function MustVisitSkeleton(): ReactElement {
 export function TripWizardStep1Screen({
   summaryDestinations,
   summaryPeriod,
+  summaryDayWindow,
   summaryCompanion,
   summaryPreferences,
   summaryBudget,
   onPressSummaryDestination,
   onPressSummaryPeriod,
+  onPressSummaryDayWindow,
   onPressSummaryCompanion,
   onPressSummaryPreference,
   onPressSummaryBudget,
@@ -403,7 +408,7 @@ export function TripWizardStep1Screen({
               </Text>
             </View>
 
-            {/* 요약 카드 5행 (여행지→기간→동행→취향→예산) */}
+            {/* 요약 카드 6행 (여행지→기간→일과 시간→동행→취향→예산) */}
             <View
               className="rounded-card border border-hairline bg-canvas"
               style={SUMMARY_CARD_SHADOW}
@@ -430,6 +435,18 @@ export function TripWizardStep1Screen({
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-2"
                 skeletonWidths={[140, 40]}
+              />
+              <View className="h-[1px] bg-hairline" />
+              <SummaryRow
+                testID="trip-wizard-summary-daywindow"
+                label="일과 시간"
+                value={summaryDayWindow}
+                placeholder=""
+                placeholderTone="muted"
+                onPress={onPressSummaryDayWindow}
+                isLoading={isLoading}
+                skeletonTestID="trip-wizard-summary-skeleton-daywindow"
+                skeletonWidths={[72, 36]}
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
