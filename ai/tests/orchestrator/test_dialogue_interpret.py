@@ -164,11 +164,18 @@ _PENDING_OK = {"intent": "GET_DISTANCE", "arguments": {}, "asked": "destination"
 @pytest.mark.parametrize("broken", [
     {"arguments": ["x"]}, {"arguments": "x"}, {"arguments": 3}, {"intent": "NOPE"},
     {"intent": ["GET_DISTANCE"]}, {"asked": ["destination"]}, {"asked": None}, {"confidence": "높음"},
+    {"confidence": 10**400},  # float() OverflowError
 ])
 def test_broken_pending_fields_drop_the_frame_not_500(broken: dict) -> None:
     """`.items()`·`str()` 이 받아 주던 타입 오류도 보류를 버리는 쪽으로 — AttributeError 는 새면 500 이다."""
     ctx = DialogueContext.from_dict({"pending": {**_PENDING_OK, **broken}, "turn_index": 2})
     assert ctx == DialogueContext(turn_index=2)
+
+
+@pytest.mark.parametrize("field", ["turn_index", "clarify_count"])
+def test_infinite_counters_do_not_500(field: str) -> None:
+    """JSON `Infinity` 는 파싱된다 — int() 의 OverflowError 도 복구 경로로."""
+    assert DialogueContext.from_dict({field: float("inf")}) == DialogueContext()
 
 
 _json = st.recursive(
