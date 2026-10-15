@@ -30,6 +30,11 @@ from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     non_travel_reason,
     parse_opening_hours_raw,
 )
+from trippilot.poi_curation.sourcing.overture import (  # noqa: E402
+    NIGHTLIFE_DETAIL,
+    NIGHTLIFE_TAG,
+    nightlife_tags,
+)
 
 
 def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
@@ -158,6 +163,31 @@ def drop_non_travel(proposals: list[dict]) -> dict[str, int]:
     return dropped
 
 
+def drop_bad_nightlife(proposals: list[dict]) -> int:
+    """나이트라이프 규칙이 **지금** 거르는 제안을 뺀다. 지운 건수를 돌려준다.
+
+    `drop_non_travel` 과 같은 자리·같은 이유의 소급이다. 나이트라이프 규칙은 수집 시점에만
+    돌아서, 규칙을 조여도 이미 들어간 행에는 소급되지 않는다 — 실측(2026-10-15): 사교댄스
+    강습소 4곳(`보니따 살사클럽`·`Luz Tango`·`살사&바차타 댄스 클럽`·`강남홍대 스카이라틴`)과
+    7080 체인 1곳(`밤과음악사이`)이 `클럽` 으로 들어가 있었다. 사용자가 품질을 지적한 건이다.
+
+    원천 카테고리(`kind`)는 제안에 없다 — `tags` 가 나이트라이프 태그로 바뀌어 있다. 그래서
+    **세부 태그에서 되찾는다**(`클럽` → `dance_club`). 세부는 `NIGHTLIFE_DETAIL` 의 값이고
+    1:1 이므로 역인덱스가 유일하다.
+    """
+    by_detail = {v: k for k, v in NIGHTLIFE_DETAIL.items()}
+    kept: list[dict] = []
+    for p in proposals:
+        tags = p.get("tags") or []
+        kind = by_detail.get(tags[1]) if (len(tags) == 2 and tags[0] == NIGHTLIFE_TAG) else None
+        if kind is not None and nightlife_tags(kind, p["poi"]["name"]) is None:
+            continue
+        kept.append(p)
+    n = len(proposals) - len(kept)
+    proposals[:] = kept
+    return n
+
+
 def drop_closed(proposals: list[dict], closed_refs: frozenset[tuple[str, str]]) -> int:
     """폐업 확인된 제안을 뺀다. 지운 건수를 돌려준다.
 
@@ -229,6 +259,11 @@ def main(argv: list[str]) -> int:
         # "합본 < 공유본이면 실패"로 조용한 유실을 막는데, 의도한 제거도 수를
         # 줄이므로 그 값을 빼고 비교해야 한다. 안 남기면 내일 배치가 빨개진다.
         out["stats"]["non_travel_dropped"] = sum(dropped.values())
+    # 나이트라이프 규칙 소급 — 위 `drop_non_travel` 과 같은 규약(축소를 stats 에 남긴다).
+    if (bad_night := drop_bad_nightlife(out["proposals"])):
+        print(f"[merge] 나이트라이프 규칙 제거 — {bad_night}건", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        out["stats"]["bad_nightlife_dropped"] = bad_night
     # 폐업 소급 제거 — 근거 파일이 없으면 빈 집합(= 판정 없음), 위와 같은 축소 가드 규약.
     if (closed := drop_closed(out["proposals"], load_closed_refs())):
         print(f"[merge] 폐업 제거 — {closed}건", file=sys.stderr)

@@ -34,57 +34,18 @@
     "39"
   ],
   "stats": {
-    "merged_runs": 2,
-    "unique_proposals": 57575
+    "merged_runs": 1,
+    "unique_proposals": 57568,
+    "bad_nightlife_dropped": 5,
+    "closed_dropped": 2
   },
   "merged_from": [
     {
-      "collected_at": "2026-10-14T22:25:13.163139+00:00",
-      "proposals": 57205,
-      "stats": {
-        "merged_runs": 3,
-        "unique_proposals": 57205
-      }
-    },
-    {
       "collected_at": "2026-10-15T05:00:51.395984+00:00",
-      "proposals": 370,
+      "proposals": 57575,
       "stats": {
-        "areas": [
-          "서울",
-          "부산",
-          "제주",
-          "대구"
-        ],
-        "selection": "비식당 + 지역이 이름 대조로 풀리는 것만 (최근접 이웃은 거부권만)",
-        "row_drops": {
-          "식당·카페(LOCALDATA 담당)": 86871,
-          "지역 못 붙임": 5421,
-          "이미 있음(이름+50m, 카테고리 무관)": 1146,
-          "게이트로": 627,
-          "좌표와 시도 불일치": 71,
-          "나이트라이프 제외(유흥·골프·라운지 오탐)": 71,
-          "비여행지:complex_management": 51,
-          "비여행지:hypermarket": 4,
-          "비여행지:convenience_store": 3,
-          "비여행지:public_safety": 2,
-          "비여행지:franchise": 1,
-          "비여행지:dealership": 1
-        },
-        "gate_merged": 14,
-        "gate_drops": {},
-        "llm_triage": {
-          "accept": 370,
-          "reject": 243
-        },
-        "passed": 370,
-        "by_category": {
-          "ACTIVITY": 278,
-          "NATURE": 29,
-          "SIGHT": 26,
-          "CULTURE": 21,
-          "SHOPPING": 16
-        }
+        "merged_runs": 2,
+        "unique_proposals": 57575
       }
     }
   ],
@@ -2671607,39 +2671568,6 @@
       }
     },
     {
-      "provisional_id": "overture-164710f2-b554-4737-be0f-7d9a8d2fb18f",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-164710f2-b554-4737-be0f-7d9a8d2fb18f",
-        "name": "클럽트랙",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5266762,
-          "lng": 126.898262
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "164710f2-b554-4737-be0f-7d9a8d2fb18f",
-        "address": "서울특별시 마포구 잔다리로 20-5 OHOO빌딩 B1 Club Track",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-208f34f2-9a53-4897-864b-3dca28832a58",
       "source": "OVERTURE",
       "poi": {
@@ -2672728,72 +2672656,6 @@
       }
     },
     {
-      "provisional_id": "overture-d6f8f1df-c347-41aa-a55f-250936e511ee",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-d6f8f1df-c347-41aa-a55f-250936e511ee",
-        "name": "보니따 살사클럽",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5565033,
-          "lng": 126.9223862
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "d6f8f1df-c347-41aa-a55f-250936e511ee",
-        "address": "서울특별시 마포구 동교로 191 디비엠빌딩 B1(동교동 200-30)",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-2e160fe5-894f-4955-a514-9812f95396d1",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-2e160fe5-894f-4955-a514-9812f95396d1",
-        "name": "Luz Tango - 루쓰땅고",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5571442,
-          "lng": 126.9224777
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "2e160fe5-894f-4955-a514-9812f95396d1",
-        "address": "서울특별시 마포구 동교로 190",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-91004724-dd21-448a-bfd4-e5079f443084",
       "source": "OVERTURE",
       "poi": {
@@ -2673780,39 +2673642,6 @@
       }
     },
     {
-      "provisional_id": "overture-cb217f9f-b3d6-499d-aa18-ee3ee61f6c6f",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-cb217f9f-b3d6-499d-aa18-ee3ee61f6c6f",
-        "name": "살사&바차타 댄스 클럽",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5584869,
-          "lng": 126.9232483
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "cb217f9f-b3d6-499d-aa18-ee3ee61f6c6f",
-        "address": "서울특별시 마포구 동교동 199-1 B1F",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-f59715cc-75dc-40cd-a0a6-cb8d9ee63001",
       "source": "OVERTURE",
       "poi": {
@@ -2674235,39 +2674064,6 @@
       "provenance": {
         "content_id": "aae4aa9d-78ff-464f-bf1c-a30533f0c51d",
         "address": "서울특별시 종로구 인사동길 35-6 1F B1F 마루아트센터 3F",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-d10fd2ab-6fc3-4de9-9085-0966ac128b8b",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-d10fd2ab-6fc3-4de9-9085-0966ac128b8b",
-        "name": "강남홍대 스카이라틴",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.4944763,
-          "lng": 127.0310593
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "d10fd2ab-6fc3-4de9-9085-0966ac128b8b",
-        "address": "서울특별시 강남구 역삼동 831-36",
         "image_url": null
       }
     },
@@ -2675322,39 +2675118,6 @@
       "provenance": {
         "content_id": "e7f42050-22e9-40ee-8e5b-eca8be444fc1",
         "address": "서울특별시 강남구 강남대로152길 46",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-781640f1-a233-4f21-b7af-bdfef136d3c4",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-781640f1-a233-4f21-b7af-bdfef136d3c4",
-        "name": "밤과음악사이",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5004425,
-          "lng": 127.0259476
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "서초구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "781640f1-a233-4f21-b7af-bdfef136d3c4",
-        "address": "서울특별시 서초구 서초동 1306-1",
         "image_url": null
       }
     },
@@ -2677894,39 +2677657,6 @@
       "provenance": {
         "content_id": "3821046b-f862-4b08-bfcc-7d0f4151f577",
         "address": "서울특별시 강남구 청담동 124-5",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-4554f6f5-319c-4e7b-a4aa-ca186d11c6af",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-4554f6f5-319c-4e7b-a4aa-ca186d11c6af",
-        "name": "클럽 버닝썬 CLUB BurningSun",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5250893,
-          "lng": 127.051796
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4554f6f5-319c-4e7b-a4aa-ca186d11c6af",
-        "address": "서울특별시 강남구 역삼동 봉은사로 120",
         "image_url": null
       }
     },
