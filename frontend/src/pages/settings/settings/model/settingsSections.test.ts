@@ -23,10 +23,10 @@ import { buildSettingsSections } from './settingsSections';
  *  (5) TRIP-937 AC-3: 앱 정보 그룹의 약관 3행(문서 제목·rowKey·ready:true).
  *  (2) 계정 그룹 닉네임 행 요약값 = 닉네임(Q6 확정 — 닉네임만 표기).
  *  (3) email 이 null(소셜 MVP)이어도 요약이 안 깨진다 — 'null'/'undefined' 문자열이 새지 않는다.
- *  (4) TRIP-778 AC-2: 모든 행이 ready:true 다(취향 7·제휴·개인화 개통) — 그룹·행 key·label·ready 를
+ *  (4) TRIP-778 AC-2: 모든 행이 ready:true 다(취향·제휴·개인화 개통) — 그룹·행 key·label·ready 를
  *      완전일치 표로 잠근다. 구 "취향·제휴 ready:false" 단언은 계약 변경(01b 사용자 결정)으로 재작성.
  *  (7) TRIP-778 AC-5·6(모델 몫): 위치 동의 칩, 개인화 '사용 중' 값.
- *  (8) TRIP-1051: 여행 취향은 머리글 없는 그룹(label null)에 한 행 `N/7 설정됨` — 아래 describe.
+ *  (8) TRIP-1051: 여행 취향은 머리글 없는 그룹(label null)에 한 행 `N/6 설정됨` — 아래 describe.
  *  (6) TRIP-938 AC-6: 계정 그룹 마지막 행 = 로그아웃(ready:true). 그룹 수(7)는 그대로다.
  *
  * 3동작 뼈대: 준비=닉네임/이메일 입력 → 실행=buildSettingsSections → 단언=그룹/행 VM.
@@ -192,7 +192,7 @@ const CANON = [
   ['danger', '위험 영역', [['delete-account', '계정 삭제', true]]],
 ];
 
-/** D5 프리뷰 픽스처 — 예산만 미설정(축 없음). */
+/** D5 프리뷰 픽스처 — 여섯 축 전부 설정. */
 const PREFERENCES = {
   styles: { value: ['휴양', '자연'], isNeutralDefault: false },
   companion: {
@@ -233,25 +233,25 @@ describe('TRIP-778 AC-2 · 그룹·행 정본 표 완전일치', () => {
 });
 
 /**
- * TRIP-1051 — 여행 취향 7행을 한 행 `여행 취향 · N/7 설정됨 ›` 으로(사용자 결정 A · 결정 (a)).
+ * TRIP-1051 — 여행 취향 7행을 한 행 `여행 취향 · N/6 설정됨 ›`(예산 축 제거 뒤 6축) 으로(사용자 결정 A · 결정 (a)).
  *
  * 무엇을 보장하나:
  *  - AC-1·2: N = 서버가 "사용자가 고른 값"이라고 준 축의 수. 미설정 모양(축 없음·중립 기본값·빈 값)은
  *    전부 세지 않는다. 행은 하나뿐이고 `미설정` 칩은 없다.
- *  - AC-3: 취향을 아직 모르면(응답 전·실패) 값을 비운다 — `0/7` 로 채우면 모르는 것을 아는 척하는 것(D4).
+ *  - AC-3: 취향을 아직 모르면(응답 전·실패) 값을 비운다 — `0/6` 로 채우면 모르는 것을 아는 척하는 것(D4).
  *  - AC-5: 옛 7행 key 는 모델에서 사라진다.
  *
  * 3동작 뼈대: 준비=취향 픽스처 → 실행=buildSettingsSections → 단언=취향 그룹의 한 행.
  */
 
-/** 7축 중 3축(스타일·밀도·예산)만 설정 → 3/7. */
+/** 6축 중 2축(스타일·밀도)만 설정 → 2/6. 서버에 예산 등급이 남아 있어도 세지 않는다. */
 const THREE_SET: PreferenceView = {
   styles: { value: ['휴양'], isNeutralDefault: false },
   pace: { value: '느긋하게', isNeutralDefault: false },
   budget: { tier: '중간', isNeutralDefault: false },
 };
 
-/** 7축 모두 미설정 — 모양이 전부 다르다(축 없음·중립 기본값·빈 배열·value 없음·null). */
+/** 6축 모두 미설정(서버 예산은 무시) — 모양이 전부 다르다(축 없음·중립 기본값·빈 배열·value 없음·null). */
 const ALL_UNSET_MIXED: PreferenceView = {
   styles: { value: ['휴양'], isNeutralDefault: true },
   activities: { value: [], isNeutralDefault: false },
@@ -270,7 +270,7 @@ function preferenceGroup(groups: ReturnType<typeof buildSettingsSections>) {
 }
 
 describe('TRIP-1051 · 여행 취향 한 행 요약 (모델)', () => {
-  it('M1 AC-1: 3축만 설정이면 취향 그룹에 행 하나, 값 "3/7 설정됨", 칩 없음', () => {
+  it('M1 AC-1: 2축만 설정이면(서버 예산이 있어도) 취향 그룹에 행 하나, 값 "2/6 설정됨", 칩 없음', () => {
     // 준비·실행
     const groups = buildSettingsSections({
       nickname: '여행자123',
@@ -281,11 +281,11 @@ describe('TRIP-1051 · 여행 취향 한 행 요약 (모델)', () => {
     // 단언
     const group = preferenceGroup(groups);
     expect(group.rows).toHaveLength(1);
-    expect(group.rows[0].value).toBe('3/7 설정됨');
+    expect(group.rows[0].value).toBe('2/6 설정됨');
     expect(group.rows[0].chip ?? null).toBeNull();
   });
 
-  it('M2 AC-2: 7축 모두 미설정이면(모양이 제각각이어도) "0/7 설정됨"', () => {
+  it('M2 AC-2: 6축 모두 미설정이면(모양이 제각각이어도) "0/6 설정됨"', () => {
     const groups = buildSettingsSections({
       nickname: '여행자123',
       email: null,
@@ -293,11 +293,11 @@ describe('TRIP-1051 · 여행 취향 한 행 요약 (모델)', () => {
     });
 
     const row = rowOf(groups, 'preferences');
-    expect(row.value).toBe('0/7 설정됨');
+    expect(row.value).toBe('0/6 설정됨');
     expect(row.chip ?? null).toBeNull();
   });
 
-  it('M3 AC-3: 취향을 아직 모르면(응답 전·실패) 행은 있지만 값도 칩도 없다 — 0/7 로 채우지 않는다', () => {
+  it('M3 AC-3: 취향을 아직 모르면(응답 전·실패) 행은 있지만 값도 칩도 없다 — 0/6 로 채우지 않는다', () => {
     // 준비·실행 — preferences 입력 없음.
     const groups = buildSettingsSections({
       nickname: '여행자123',
@@ -309,19 +309,19 @@ describe('TRIP-1051 · 여행 취향 한 행 요약 (모델)', () => {
     expect(row.chip ?? null).toBeNull();
   });
 
-  it('M4 AC-1: D5 프리뷰 픽스처(예산만 미설정)는 "6/7 설정됨" — Figma 4664:3279 와 같은 숫자', () => {
+  it('M4 AC-1: D5 프리뷰 픽스처(여섯 축 전부 설정)는 "6/6 설정됨"', () => {
     const groups = buildSettingsSections({
       nickname: '여행자123',
       email: null,
       preferences: PREFERENCES,
     });
 
-    expect(rowOf(groups, 'preferences').value).toBe('6/7 설정됨');
+    expect(rowOf(groups, 'preferences').value).toBe('6/6 설정됨');
   });
 });
 
 /**
- * TRIP-1051 AC-7 — 속성: 어떤 취향이 와도 값은 `${N}/7 설정됨` 이고 N 은 "설정된 축의 수"다.
+ * TRIP-1051 AC-7 — 속성: 어떤 취향이 와도 값은 `${N}/6 설정됨` 이고 N 은 "설정된 축의 수"다.
  *
  * ★ 기대값 N 은 생성기가 센다(02a ★4): 축마다 먼저 "설정/미설정" 동전을 던지고, 설정이면 고른 값을,
  *   미설정이면 미설정 모양 중 하나를 넣는다. 그러면 N = 앞면 수다. 구현이 쓰는 `summarizePreferences` 로
@@ -477,14 +477,15 @@ const preferencesWithCount = fc
     const view: Record<string, unknown> = {};
     let setCount = 0;
     for (const [name, { set, axis }] of Object.entries(axes)) {
-      if (set) setCount += 1;
+      // 예산은 입력 기능을 걷어낸 축이다 — 서버 응답에 섞여 와도 세지 않는다(소음으로만 넣는다).
+      if (set && name !== 'budget') setCount += 1;
       if (axis !== undefined) view[name] = axis;
     }
     return { view: view as PreferenceView, setCount };
   });
 
 describe('TRIP-1051 AC-7 · 취향 요약 — 속성', () => {
-  it('P1 어떤 취향이든 행은 하나, 값은 "{설정된 축 수}/7 설정됨"(0~7), 칩은 없다', () => {
+  it('P1 어떤 취향이든 행은 하나, 값은 "{설정된 축 수}/6 설정됨"(0~6), 칩은 없다', () => {
     fc.assert(
       fc.property(preferencesWithCount, ({ view, setCount }) => {
         // 준비·실행
@@ -497,7 +498,7 @@ describe('TRIP-1051 AC-7 · 취향 요약 — 속성', () => {
         // 단언
         const group = preferenceGroup(groups);
         expect(group.rows).toHaveLength(1);
-        expect(group.rows[0].value).toBe(`${setCount}/7 설정됨`);
+        expect(group.rows[0].value).toBe(`${setCount}/6 설정됨`);
         expect(group.rows[0].chip ?? null).toBeNull();
       })
     );

@@ -2,6 +2,7 @@ import type { SocialProvider } from '@/shared/api';
 
 import type { Authorize, AuthorizeResult } from '../model/useSocialLogin';
 import { getOAuthConfig } from '../config/oauthConfig';
+import { isNaverLoginAvailable } from './isNaverLoginAvailable';
 
 /**
  * dev fake OAuth provider 팩토리(DI 씨앗). `signIn(provider, makeAuthorize(provider))` 로 주입되어,
@@ -99,9 +100,8 @@ function resolveRoute(provider: SocialProvider): Route {
     return 'kakao-sdk';
   }
   if (provider === 'naver') {
-    return process.env.EXPO_PUBLIC_NAVER_URL_SCHEME
-      ? 'naver-sdk'
-      : 'naver-unavailable';
+    // 버튼 노출 판정(LoginPage)과 같은 함수 — 숨겨진 버튼이 어떻게든 불렸을 때의 방어선이 이 갈래다.
+    return isNaverLoginAvailable() ? 'naver-sdk' : 'naver-unavailable';
   }
   return 'browser';
 }

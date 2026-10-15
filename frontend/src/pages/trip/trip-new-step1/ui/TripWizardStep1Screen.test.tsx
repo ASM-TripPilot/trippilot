@@ -26,7 +26,6 @@ const DESTINATION_VALUE = { main: '부산', sub: '2박 · 경주 1박' };
 const PERIOD_VALUE = { main: '6월 10일(수) – 13일(토)', sub: '3박 4일' };
 const COMPANION_VALUE = { main: '친구 2명' }; // sub 없음
 const PREFERENCE_VALUE = { main: '미식 · 전시 · 야경', onboarding: true };
-const BUDGET_VALUE = { main: '120만원', sub: '1인 총액 · 중간' };
 
 function seed(
   sourcePoiId: string,
@@ -37,7 +36,7 @@ function seed(
   return { sourcePoiId, name, imageUrl, region };
 }
 
-/** 초기(빈) 상태 — 요약 5행이 전부 null(플레이스홀더), 스트립 0곳, 게이트 닫힘. (TRIP-732: 요약을 안 보는 describe 는 null 이
+/** 초기(빈) 상태 — 요약 4행이 전부 null(플레이스홀더), 스트립 0곳, 게이트 닫힘. (TRIP-732: 요약을 안 보는 describe 는 null 이
  * 구·신 shape 모두 안전하다 — 2톤 객체를 넣으면 구 화면이 render throw, 02a §4-★E.) */
 function props(
   over: Partial<TripWizardStep1ScreenProps> = {}
@@ -45,14 +44,14 @@ function props(
   return {
     summaryDestinations: null,
     summaryPeriod: null,
+    summaryDayWindow: { main: '09:00 시작', sub: '기본' },
     summaryCompanion: null,
     summaryPreferences: null,
-    summaryBudget: null,
     onPressSummaryDestination: jest.fn(),
     onPressSummaryPeriod: jest.fn(),
+    onPressSummaryDayWindow: jest.fn(),
     onPressSummaryCompanion: jest.fn(),
     onPressSummaryPreference: jest.fn(),
-    onPressSummaryBudget: jest.fn(),
     mustVisits: [],
     onPressMore: jest.fn(),
     onPressSeeAll: jest.fn(),
@@ -63,7 +62,7 @@ function props(
   };
 }
 
-/** 5행 값이 다 채워진 상태 — 5행 값 present, 게이트 열림(loading 이 실값을 가리는지 보려면 값을 줘야 한다). */
+/** 4행 값이 다 채워진 상태 — 4행 값 present, 게이트 열림(loading 이 실값을 가리는지 보려면 값을 줘야 한다). */
 function filledProps(
   over: Partial<TripWizardStep1ScreenProps> = {}
 ): TripWizardStep1ScreenProps {
@@ -72,7 +71,6 @@ function filledProps(
     summaryPeriod: PERIOD_VALUE,
     summaryCompanion: COMPANION_VALUE,
     summaryPreferences: PREFERENCE_VALUE,
-    summaryBudget: BUDGET_VALUE,
     canProceed: true,
     ...over,
   });
@@ -82,8 +80,8 @@ function filledProps(
  * TRIP-665 g01 여행 만들기 default 재작성 — **props만 받는 프레젠테이션 화면**(Figma `3742:2068`).
  *
  * 무엇을 보장하나: 신 default 골격이 정본대로 선다 — 앱바(back + 진행바 4칸 + "1 / 4") · 타이틀/부제 ·
- * **요약 카드 5행**(여행지→기간→동행→취향→예산, 각 값 or muted 플레이스홀더 + chevron, 탭 시 오픈 콜백) ·
- * 꼭 갈 곳 스트립 · 하단 [다음](canProceed 게이트). 그리고 **옛 인라인 컨트롤(프리셋·스테퍼·칩·예산 입력·
+ * **요약 카드 4행**(여행지→기간→동행→취향, 각 값 or muted 플레이스홀더 + chevron, 탭 시 오픈 콜백) ·
+ * 꼭 갈 곳 스트립 · 하단 [다음](canProceed 게이트). 그리고 **옛 인라인 컨트롤(프리셋·스테퍼·칩·
  * 날짜 카드·등록숙소 행·취향 카드·여행지 시트)이 default 에서 전량 사라졌다**(AC-5).
  *
  * 왜 재작성인가: 옛 default 는 인라인 전개 폼이었고, 신 default 는 온보딩 요약 + 편집 시트 오픈 신호까지다
@@ -162,13 +160,12 @@ describe('default 프레젠테이션', () => {
    * (`summaryPreferences.onboarding === true`)일 때만. 아니면 뒤쪽 절 "행을 누르면 바꿀 수 있어요" 만.
    */
   describe('AC-D1·D2 · 부제 "온보딩에서" 는 취향이 온보딩 상속일 때만', () => {
-    it('D1 · 여행지는 있고 동행·취향·예산이 비었으면 "온보딩에서" 없이 뒤쪽 절만 보인다', () => {
+    it('D1 · 여행지는 있고 동행·취향이 비었으면 "온보딩에서" 없이 뒤쪽 절만 보인다', () => {
       render(
         <TripWizardStep1Screen
           {...filledProps({
             summaryCompanion: null,
             summaryPreferences: null,
-            summaryBudget: null,
           })}
         />
       );
@@ -203,7 +200,7 @@ describe('default 프레젠테이션', () => {
     });
   });
 
-  describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
+  describe('AC-2 · 요약 카드 4행 (값 present + 순서)', () => {
     it('다섯 행이 대응 값을 그린다', () => {
       render(<TripWizardStep1Screen {...filledProps()} />);
 
@@ -235,12 +232,9 @@ describe('default 프레젠테이션', () => {
       expect(
         screen.getByTestId('trip-wizard-preference-sparkle')
       ).toBeOnTheScreen();
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).toHaveTextContent(/120만원/);
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget-sub')
-      ).toHaveTextContent(BUDGET_VALUE.sub);
+      // 예산 행은 걷어냈다 — 4행이 떠 있는 같은 화면에서 예산 행이 없다(긍정 앵커 위의 부재 단언).
+      expect(screen.queryByTestId('trip-wizard-summary-budget')).toBeNull();
+      expect(screen.queryByText('예산')).toBeNull();
     });
 
     it('값이 null 일 때 행별 카피 — 여행지 신 카피, 나머지 "{라벨} 선택"(기간 포함, TRIP-671·TRIP-1045)', () => {
@@ -257,11 +251,10 @@ describe('default 프레젠테이션', () => {
       expect(within(period).getByText('기간 선택')).toBeOnTheScreen();
       expect(within(period).getByText('기간')).toBeOnTheScreen();
 
-      // 나머지 3행은 "{라벨} 선택" 유지.
+      // 나머지 2행은 "{라벨} 선택" 유지.
       const kept: [string, string][] = [
         ['trip-wizard-summary-companion', '동행 선택'],
         ['trip-wizard-summary-preference', '취향 선택'],
-        ['trip-wizard-summary-budget', '예산 선택'],
       ];
       kept.forEach(([testID, placeholder]) => {
         expect(
@@ -286,7 +279,6 @@ describe('default 프레젠테이션', () => {
         onPressSummaryPeriod: jest.fn(),
         onPressSummaryCompanion: jest.fn(),
         onPressSummaryPreference: jest.fn(),
-        onPressSummaryBudget: jest.fn(),
       };
       render(<TripWizardStep1Screen {...filledProps(handlers)} />);
 
@@ -295,16 +287,14 @@ describe('default 프레젠테이션', () => {
         ['trip-wizard-summary-period', handlers.onPressSummaryPeriod],
         ['trip-wizard-summary-companion', handlers.onPressSummaryCompanion],
         ['trip-wizard-summary-preference', handlers.onPressSummaryPreference],
-        ['trip-wizard-summary-budget', handlers.onPressSummaryBudget],
       ];
       cases.forEach(([testID, handler]) => {
         fireEvent.press(screen.getByTestId(testID));
         expect(handler).toHaveBeenCalledTimes(1);
       });
 
-      // 짝(부정) — 여행지 행을 눌렀다고 예산 오픈이 딸려 불리지 않는다(각 1회씩만 위에서 확인).
+      // 짝(부정) — 여행지 행을 눌렀다고 다른 오픈이 딸려 불리지 않는다(각 1회씩만 위에서 확인).
       expect(handlers.onPressSummaryDestination).toHaveBeenCalledTimes(1);
-      expect(handlers.onPressSummaryBudget).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -366,7 +356,7 @@ describe('default 프레젠테이션', () => {
  *  - **empty**(fresh 진입) — 여행지 null → 신 카피 "어디로 갈까요?" · 기간 null → muted "기간 선택"
  *    (TRIP-1045 복귀 — 값 줄이 없으면 선택 전후 행 높이가 달라진다) · 나머지 행은 prefill 값 · 다음
  *    비활성 · 꼭 갈 곳 0 = "+더 담기"만(카드 0).
- *  - **loading**(`isLoading=true`) — 요약 5행 스켈레톤 + 꼭 갈 곳 스켈레톤 카드 4장 + 로딩 부제 +
+ *  - **loading**(`isLoading=true`) — 요약 4행 스켈레톤 + 꼭 갈 곳 스켈레톤 카드 4장 + 로딩 부제 +
  *    실값 부재(값을 줘도 안 뜸) + 다음 비활성(canProceed 가 참이라도). `isLoading` 미지정이면 default.
  *
  * 커버하지 않는 것: 스켈레톤 회색바의 색·폭/높이/반경(실화면 몫, TRIP-1367), "어디로 갈까요?"의 진한 톤(픽셀 — 6-b/스크린샷 대조,
@@ -385,27 +375,22 @@ describe('default 프레젠테이션', () => {
 describe('두 상태 얼굴 (empty · loading)', () => {
   type StatesProps = TripWizardStep1ScreenProps & { isLoading?: boolean };
 
-  /** empty 얼굴 예산은 **tier-only**(금액 없이 프리필 tier "중간"만, Figma empty `3652:2068`). */
-  const BUDGET_EMPTY = { main: '중간', sub: '1인 총액 · 온보딩' };
-
   /** 행별 loading 스켈레톤 바 폭 px (Figma `3712:2068` 실측, TRIP-733 01b 확정). 인덱스+1 =
-   * skeleton-{n}(여행지·기간·동행·취향·예산 순). 동행만 1바 — 개수 분기를 배열 길이로 표현. */
+   * skeleton-{n}(여행지·기간·동행·취향 순). 동행만 1바 — 개수 분기를 배열 길이로 표현. */
   const SUMMARY_SKELETON_WIDTHS: number[][] = [
     [56, 74], // skeleton-1 여행지
     [140, 40], // skeleton-2 기간
     [78], // skeleton-3 동행
     [110, 48], // skeleton-4 취향
-    [64, 78], // skeleton-5 예산
   ];
 
-  /** empty 얼굴 — fresh 진입: 여행지·기간 null, 동행·취향·예산은 prefill 로 채워짐(01b D1 픽스처). */
+  /** empty 얼굴 — fresh 진입: 여행지·기간 null, 동행·취향은 prefill 로 채워짐(01b D1 픽스처). */
   function emptyProps(over: Partial<StatesProps> = {}): StatesProps {
     return props({
       summaryDestinations: null,
       summaryPeriod: null,
       summaryCompanion: COMPANION_VALUE,
       summaryPreferences: PREFERENCE_VALUE,
-      summaryBudget: BUDGET_EMPTY,
       mustVisits: [],
       canProceed: false,
       ...over,
@@ -443,7 +428,7 @@ describe('두 상태 얼굴 (empty · loading)', () => {
       expect(within(period).getByText('기간')).toBeOnTheScreen();
     });
 
-    it('E3 · 채워진 동행·취향·예산 행은 prefill 값을 그린다 (empty ≠ 전부 빈 화면, 긍정 앵커)', () => {
+    it('E3 · 채워진 동행·취향 행은 prefill 값을 그린다 (empty ≠ 전부 빈 화면, 긍정 앵커)', () => {
       render(<TripWizardStep1Screen {...emptyProps()} />);
 
       expect(
@@ -454,8 +439,6 @@ describe('두 상태 얼굴 (empty · loading)', () => {
       expect(row('trip-wizard-summary-preference')).toHaveTextContent(
         /미식 · 전시 · 야경/
       );
-      // empty 예산은 tier-only — main 이 "중간"이다(120만원 아님).
-      expect(row('trip-wizard-summary-budget')).toHaveTextContent(/중간/);
     });
 
     it('E4 · 꼭 갈 곳 0 → "+더 담기"만, 카드 0 (부재 + 긍정 앵커 짝, ★7)', () => {
@@ -483,15 +466,15 @@ describe('두 상태 얼굴 (empty · loading)', () => {
   });
 
   describe('AC-2 · loading 얼굴 (isLoading=true — 값을 줘도 스켈레톤이 가린다)', () => {
-    it('L1 · 요약 5행 스켈레톤 — 컨테이너 5개(끝-앵커) + 행별 바 [2,2,1,2,2]', () => {
+    it('L1 · 요약 4행 스켈레톤 — 컨테이너 4개(끝-앵커) + 행별 바 [2,2,1,2]', () => {
       render(<TripWizardStep1Screen {...filledProps({ isLoading: true })} />);
 
       // 컨테이너 카운트는 끝-앵커 `\d+$` 로 좁힌다(★1). 접두 일치 `/^…-skeleton-/` 는 바
       // testID(`…-bar-{i}`)까지 세어 5→14 로 부풀어(실측 §5-1), *올바른 구현*에서 이 단언이
-      // 오히려 red 가 된다. 끝-앵커는 컨테이너 5만 센다. (queryAllByTestId=0개면 throw 안 하고 [])
+      // 오히려 red 가 된다. 끝-앵커는 컨테이너 4만 센다. (queryAllByTestId=0개면 throw 안 하고 [])
       expect(
         screen.queryAllByTestId(/^trip-wizard-summary-skeleton-\d+$/)
-      ).toHaveLength(5);
+      ).toHaveLength(4);
 
       // 행별 바 개수. within(컨테이너) 는 쿼리를 그 행 subtree 로 좁혀(★2) 다른 행 바를 안
       // 센다. queryAllByTestId(/-bar-/) 는 testID 에 `-bar-` 를 포함하는 노드만(부분 일치).
@@ -902,7 +885,7 @@ describe('실패 표면', () => {
 });
 
 /**
- * TRIP-732 g01 요약 5행 2톤 — **신규 시각 계약 전담**(Figma default `3742:2068`·empty `3652:2068`).
+ * TRIP-732 g01 요약 4행 2톤 — **신규 시각 계약 전담**(Figma default `3742:2068`·empty `3652:2068`).
  *
  * 무엇을 보장하나:
  *  - **AC-4 sub caption**: 요약 행이 `{main, sub?}`를 받으면 값(main) 뒤 **같은 줄**에 회색 sub caption
@@ -926,7 +909,7 @@ describe('실패 표면', () => {
  *
  * 3동작 뼈대: 준비=props(객체) → 실행=render(+press) → 단언=보이는 것 / 불린 콜백.
  */
-describe('요약 5행 2톤', () => {
+describe('요약 4행 2톤', () => {
   const PREF_OFF = { ...PREFERENCE_VALUE, onboarding: false };
   function root() {
     return screen.getByTestId('trip-wizard-step1-root');
@@ -941,11 +924,6 @@ describe('요약 5행 2톤', () => {
       expect(within(dest).getByText('부산')).toBeOnTheScreen();
       const destSub = screen.getByTestId('trip-wizard-summary-destination-sub');
       expect(destSub).toHaveTextContent('2박 · 경주 1박'); // 완전 일치
-
-      // 예산 — sub 도 회색 caption.
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget-sub')
-      ).toHaveTextContent('1인 총액 · 중간');
 
       // 짝(부재) — 동행은 sub 가 없어 caption 요소를 안 만든다.
       expect(
@@ -1185,4 +1163,32 @@ describe('지역 밖 꼭 갈 곳 안내', () => {
       expect(screen.getByTestId('trip-wizard-step1-next')).toBeOnTheScreen();
     }
   );
+});
+
+describe('일과 시간 행 (TRIP-1308)', () => {
+  it('값(09:00 시작)과 보조(기본)를 그리고, 누르면 시트 오픈 신호를 올린다', () => {
+    const onPressSummaryDayWindow = jest.fn();
+    render(<TripWizardStep1Screen {...props({ onPressSummaryDayWindow })} />);
+
+    const row = screen.getByTestId('trip-wizard-summary-daywindow');
+    expect(within(row).getByText('일과 시간')).toBeTruthy();
+    expect(within(row).getByText('09:00 시작')).toBeTruthy();
+    expect(
+      screen.getByTestId('trip-wizard-summary-daywindow-sub')
+    ).toHaveTextContent('기본');
+
+    fireEvent.press(row);
+    expect(onPressSummaryDayWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('보조가 없는 값은 보조 요소를 안 만든다', () => {
+    render(
+      <TripWizardStep1Screen
+        {...props({ summaryDayWindow: { main: '11:00 시작' } })}
+      />
+    );
+    expect(
+      screen.queryByTestId('trip-wizard-summary-daywindow-sub')
+    ).toBeNull();
+  });
 });

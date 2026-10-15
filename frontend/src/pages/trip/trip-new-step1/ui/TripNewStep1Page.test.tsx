@@ -166,8 +166,8 @@ afterEach(() => {
 /**
  * TRIP-665 g01 default 재작성 — **스토어 → 요약 행 도출 배선**(node 버킷).
  *
- * 무엇을 보장하나: 페이지가 `tripSummary.ts` 셀렉터로 스토어 드래프트를 요약 5행 문자열로 도출해 화면에
- * 내리고(스토어 선상태 → 요약 행 렌더), `[다음]` 게이트가 `validateTripDraft` 결과 + 예산 유효 + 담은목록
+ * 무엇을 보장하나: 페이지가 `tripSummary.ts` 셀렉터로 스토어 드래프트를 요약 4행 문자열로 도출해 화면에
+ * 내리고(스토어 선상태 → 요약 행 렌더), `[다음]` 게이트가 `validateTripDraft` 결과 + 담은목록
  * 도착으로 갈리며(맹점① — 편집 시트가 S2~S6 스텁이라 게이트는 **스토어 선상태에서만** 참이 될 수 있다),
  * 떠났다 돌아와도 입력이 남고, 배선을 통과한 화면에도 위반 코드가 새지 않는다.
  *
@@ -260,7 +260,7 @@ describe('스토어 → 요약 행 도출 배선', () => {
   });
 
   describe('스토어 선상태 → 요약 행이 셀렉터 파생값을 그린다', () => {
-    it('여행지·기간·동행·취향·예산 행이 스토어/프리필에서 도출된다', () => {
+    it('여행지·기간·동행·취향 행이 스토어/프리필에서 도출되고, 서버에 예산이 있어도 예산 행은 없다', () => {
       // 준비 — 스토어를 직접 선상태로 채운다(옛 인라인 press 대체).
       const store = useTripWizardStore.getState();
       store.addDestination('부산', 2);
@@ -289,10 +289,8 @@ describe('스토어 → 요약 행 도출 배선', () => {
       const pref = screen.getByTestId('trip-wizard-summary-preference');
       expect(pref).toHaveTextContent(/미식 · 전시 · 야경/);
       expect(pref).toHaveTextContent(/온보딩/);
-      // 예산 — 프리필 러프값(1,200,000) → summaryBudget(1200000,'중간') = "120만원 · 1인 총액 · 중간".
-      const budget = screen.getByTestId('trip-wizard-summary-budget');
-      expect(budget).toHaveTextContent(/120만원/);
-      expect(budget).toHaveTextContent(/중간/);
+      // 예산 행은 걷어냈다 — 프리필 응답에 예산(mockPreference.budget)이 있어도 행이 없다.
+      expect(screen.queryByTestId('trip-wizard-summary-budget')).toBeNull();
     });
   });
 

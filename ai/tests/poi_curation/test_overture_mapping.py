@@ -542,3 +542,25 @@ def test_실측_노래주점_나이트_호프체인_포차는_제외(name: str) 
 )
 def test_실측_진짜_나이트라이프는_통과(name: str) -> None:
     assert nightlife_tags("dance_club", name) is not None, name
+
+
+# ── 사교댄스 강습소·7080 체인 (2026-10-15, 사용자 품질 지적) ──────────────
+# 여행자가 "클럽"이라 할 때 탱고 수업이나 7080 체인을 뜻하지 않는다.
+@pytest.mark.parametrize(
+    "name",
+    ["보니따 살사클럽", "Luz Tango - 루쓰땅고", "살사&바차타 댄스 클럽",
+     "강남홍대 스카이라틴", "라틴댄스 아카데미", "사교댄스 교습소", "댄스스포츠 클럽",
+     "밤과음악사이"],
+)
+def test_사교댄스_강습소와_7080체인은_제외(name: str) -> None:
+    assert nightlife_tags("dance_club", name) is None, name
+
+
+@pytest.mark.parametrize(
+    "name",
+    # 제외가 과하면 축이 빈다 — 라틴 음악을 트는 **진짜 클럽**은 남아야 한다
+    ["클럽 엔비 홍대", "이태원 클럽 매시브", "클럽베뉴 부산", "홍대 클럽 마마",
+     "클럽 사운드 - Sound Club", "뮤트", "코쿤"],
+)
+def test_진짜_클럽은_그대로_통과(name: str) -> None:
+    assert nightlife_tags("dance_club", name) is not None, name

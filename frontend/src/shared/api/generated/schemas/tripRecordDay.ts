@@ -17,6 +17,7 @@ export interface TripRecordDay {
   /** 그날의 기준 숙소. **파생값이라 저장돼 있지 않다** — 숙소를 바꾸면 같은 기록의 귀속이 따라 바뀐다. 등록 숙소가 없거나 겹침이 미해결이면 null 이고, 그 날은 날짜만으로 묶인다(BR-U5-27). */
   baseStayName?: string | null;
   planned: PlannedSlot[];
+  /** 그 날의 실적. **배열 순서가 곧 방문 순서다**(도착 시각 오름차순, 도착한 적 없는 건너뛰기는 기록된 시각) — 건너뛴 곳·즉석 방문도 번호를 받는다. `/trips/{tripId}/visits/days/{day}` 와 같은 순서다(TRIP-1315). */
   actual: ActualVisit[];
   /** 계획엔 있는데 실적이 없는 슬롯(BR-U5-28). **저장되지 않는 판정**이다. */
   unvisitedSlotKeys: string[];

@@ -10,7 +10,7 @@
  */
 
 /**
- * 탐색은 항상 ACTIVE, 담기 목록은 폐업(CLOSED)·미검증(UNVERIFIED)도 포함 — 클라 뱃지
+ * 탐색 목록은 항상 ACTIVE. 단건은 폐업(CLOSED)·유실(LOST)도, 담기 목록은 미검증(UNVERIFIED)까지 포함 — 클라 뱃지
  */
 export type PlaceDataStatus =
   (typeof PlaceDataStatus)[keyof typeof PlaceDataStatus];

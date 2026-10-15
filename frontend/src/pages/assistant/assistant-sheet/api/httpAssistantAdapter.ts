@@ -47,10 +47,12 @@ export function toAssistantError(error: unknown): AssistantApiError {
   const status = error.response.status;
   if (status === 401) return new AssistantApiError('UNAUTHORIZED');
   if (status === 429) {
-    // `TURN_IN_PROGRESS` 는 "기록돼 처리 중 — **같은 턴 id 로** 다시"다. RATE_LIMITED 로 접으면 화면이 말풍선을
-    // 거두고 새 id 로 다시 보내 같은 말이 두 번 기록·해석된다 → SERVER(같은 id 를 쓰는 [다시 보내기])로 둔다.
+    // `TURN_IN_PROGRESS` 는 "기록돼 처리 중 — **같은 턴 id 로** Retry-After 뒤 다시"다. RATE_LIMITED 로 접으면 화면이
+    // 말풍선을 거두고 새 id 로 다시 보내 같은 말이 두 번 기록·해석된다 → 별도 코드로 가른다.
     if (errorCode(error) === 'TURN_IN_PROGRESS') {
-      return new AssistantApiError('SERVER', { message: 'TURN_IN_PROGRESS' });
+      return new AssistantApiError('TURN_IN_PROGRESS', {
+        retryAfterSeconds: retryAfterSeconds(error),
+      });
     }
     return new AssistantApiError('RATE_LIMITED', {
       retryAfterSeconds: retryAfterSeconds(error),

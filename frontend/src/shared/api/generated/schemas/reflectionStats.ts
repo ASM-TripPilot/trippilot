@@ -16,7 +16,7 @@ import type { ReflectionStatsDistanceSource } from './reflectionStatsDistanceSou
 export interface ReflectionStats {
   visitCount: number;
   distanceKm: number;
-  /** `VISIT_LINE` 은 **방문점을 이은 직선 합**이지 도로 거리가 아니다(BR-U5-43). `actual_route_point` 가 미실장이라 서버가 실제 이동 경로를 모른다 — 밝히지 않으면 사용자가 근사값을 실측으로 읽는다. */
+  /** `ROUTE` 는 그날 기기가 올린 **실제 경로 거리**(서버가 클램프한 값)다(U10 FD §7.2). 경로가 없는 날은 `VISIT_LINE` — **방문점을 이은 직선 합**이지 도로 거리가 아니다(BR-U5-43). 밝히지 않으면 사용자가 근사값을 실측으로 읽는다. 경로가 나중에 올라오면 이미 만든 회고의 이 값만 바뀐다(본문은 그대로, BR-U10-39). */
   distanceSource: ReflectionStatsDistanceSource;
   photoCount: number;
 }

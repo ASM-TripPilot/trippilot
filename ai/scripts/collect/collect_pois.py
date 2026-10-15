@@ -120,6 +120,8 @@ def _print_summary(json_path: str) -> int:
 
 
 _BIZ_STATUS = Path(__file__).resolve().parents[2] / "data" / "poi_business_status.json"
+# 사람이 적는 제외 목록 — 인허가 대장이 모르는 것만. 아래 `load_closed_refs` 주석 참조.
+_EXCLUDED = Path(__file__).resolve().parents[2] / "data" / "poi_excluded_manual.json"
 
 
 def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
@@ -134,6 +136,15 @@ def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
     다운로드는 로그인 필요). **없다고 실패시키지 않는다**: 근거가 없으면 판정을
     안 하는 것이 맞고, 이 배치의 본업(수집)은 그와 무관하게 돌아야 한다.
     다만 조용히 지나가지는 않는다 — 없으면 notice 를 남긴다(INV-4 정신).
+
+    **항목별 `source` 를 읽는다**(없으면 `tourapi`). 생성기가 TourAPI 만 대조하던 때는
+    출처가 하나라 박아 둘 수 있었는데, 출처가 셋(TOURAPI·LOCALDATA·OVERTURE)이 된 뒤에는
+    그러면 다른 출처의 폐업을 적을 수 없다.
+
+    **수동 제외 목록(`poi_excluded_manual.json`)을 합친다** — 인허가 대장이 모르는 것만
+    적는다. 대장은 `일반음식점`·`휴게음식점` 이라 유흥주점으로 허가된 업소(클럽 등)가
+    아예 없고, 좌표가 주소와 어긋난 불량 레코드도 대장으로는 못 가린다. 생성기가
+    `poi_business_status.json` 을 다시 만들면 손으로 적은 것이 지워지므로 파일을 따로 둔다.
     """
     if not path.exists():
         print(f"[collect] NOTICE 폐업 목록 없음({path.name}) — 폐업 필터 없이 진행",
@@ -142,7 +153,8 @@ def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
         closed = frozenset(
-            ("tourapi", ref) for ref, v in doc.get("status", {}).items()
+            (str(v.get("source") or "tourapi").lower(), ref)
+            for ref, v in doc.get("status", {}).items()
             if v.get("state") == "CLOSED"
         )
     except (OSError, json.JSONDecodeError, AttributeError) as e:
@@ -151,7 +163,22 @@ def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
         return frozenset()
     print(f"[collect] 폐업 필터 {len(closed):,}건 (기준 {doc.get('generated_at', '?')})",
           file=sys.stderr)
-    return closed
+    return closed | _load_excluded()
+
+
+def _load_excluded(path: Path = _EXCLUDED) -> frozenset[tuple[str, str]]:
+    """사람이 적은 제외 `(출처, ref)` — 없으면 빈 집합. 사유는 파일이 들고 있다."""
+    if not path.exists():
+        return frozenset()
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        out = frozenset((str(e["source"]).lower(), str(e["ref"]))
+                        for e in doc.get("excluded", ()))
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:  # noqa: BLE001
+        print(f"[collect] WARNING 수동 제외 목록을 못 읽었다({type(e).__name__})", file=sys.stderr)
+        return frozenset()
+    print(f"[collect] 수동 제외 {len(out)}건", file=sys.stderr)
+    return out
 
 
 def write_seen_refs(

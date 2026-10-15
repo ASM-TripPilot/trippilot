@@ -7,7 +7,10 @@ import {
   buildBatch,
   dropStale,
   enqueue,
+  enqueueReport,
   serializeIntervalReport,
+  settleHeadReport,
+  type ReportDemote,
   toQueueItem,
   type IntervalReport,
 } from './autoEventQueue';
@@ -51,7 +54,7 @@ export interface EngineDeps {
 }
 
 export type EngineReason =
-  ArmingReason | 'no-context' | 'native-register-failed';
+  ArmingReason | 'no-context' | 'native-register-failed' | 'consent-rejected';
 
 export interface EngineStatus {
   state: ArmingState;
@@ -94,12 +97,71 @@ function endReasonOf(reason: string): NonNullable<IntervalReport['endReason']> {
   return 'PERMISSION_DOWNGRADE';
 }
 
-async function report(deps: EngineDeps, tripId: string, r: IntervalReport) {
-  try {
-    await deps.sink.reportInterval(tripId, serializeIntervalReport(r));
-  } catch {
-    // ponytail: 구간 보고 재시도 큐 없음 — 열린 구간은 서버 스위퍼가 여행 종료 + 1일에 닫는다(BR-U10-48).
+/** 보고를 영속 큐 끝에 얹는다(전송은 `flushReports`). 순서가 곧 START → END 순서다. */
+function queueReport(
+  state: AutomationState,
+  tripId: string,
+  r: IntervalReport
+): AutomationState {
+  return {
+    ...state,
+    pendingReports: enqueueReport(state.pendingReports, { tripId, report: r }),
+  };
+}
+
+/**
+ * 구간 보고 큐를 앞에서부터 한 건씩 보낸다 — 앞이 닿아야 다음(START 가 먼저 성공해야 END).
+ * 네트워크 실패면 거기서 멈추고 큐를 둔다(다음 wake·포그라운드·flush 에서 재시도).
+ */
+async function flushReports(
+  deps: EngineDeps,
+  input: AutomationState
+): Promise<{
+  state: AutomationState;
+  demote: ReportDemote | null;
+  rejected: string[];
+}> {
+  let queue = input.pendingReports;
+  let demote: ReportDemote | null = null;
+  const rejected: string[] = [];
+  while (queue.length > 0) {
+    let outcome;
+    try {
+      outcome = await deps.sink.reportInterval(
+        queue[0].tripId,
+        serializeIntervalReport(queue[0].report)
+      );
+    } catch {
+      break;
+    }
+    const settled = settleHeadReport(queue, outcome);
+    queue = settled.queue;
+    if (settled.demote) {
+      // 동의 없음이 킬 스위치보다 앞선다 — 로컬 데이터를 지워야 하는 쪽이다.
+      demote = demote === 'consent-rejected' ? demote : settled.demote;
+      if (settled.rejectedIntervalId) rejected.push(settled.rejectedIntervalId);
+    }
   }
+  return { state: { ...input, pendingReports: queue }, demote, rejected };
+}
+
+/**
+ * START 가 서버에서 거절됐다(킬 스위치·동의 없음) — 서버엔 구간도 법정 로그도 없으니 기기도 무장을 풀고 수동으로 내린다.
+ * 거절된 구간은 열린 구간에서 뺀다(그 END 는 서버가 CONFLICT 로 돌려줄 것이므로 보내지 않는다).
+ */
+async function demoteOnRejectedStart(
+  deps: EngineDeps,
+  input: AutomationState,
+  demote: ReportDemote,
+  rejected: readonly string[]
+): Promise<AutomationState> {
+  let state: AutomationState = {
+    ...input,
+    intervals: input.intervals.filter((i) => !rejected.includes(i.intervalId)),
+    serverEnabled: demote === 'server-disabled' ? false : input.serverEnabled,
+  };
+  if (demote === 'consent-rejected') state = wipeLocal(deps, state);
+  return degrade(deps, state, demote, true);
 }
 
 function ensureJudge(
@@ -144,45 +206,53 @@ async function arm(
   deps: EngineDeps,
   input: AutomationState,
   ctx: AutomationContext
-): Promise<{ state: AutomationState; ok: boolean }> {
+): Promise<{ state: AutomationState; ok: boolean; reason?: EngineReason }> {
   let state = ensureJudge(input, ctx);
-  const geo = await deps.native.armGeofences(regionsFor(state, ctx));
-  if (!geo.armed) {
-    state = await degrade(
-      deps,
-      state,
-      geo.reason ?? 'native-register-failed',
-      true
-    );
-    return { state, ok: false };
-  }
-  const intervals = [...state.intervals];
   const open = (kind: 'GEOFENCE_ARMED' | 'ROUTE_RECORDING') =>
-    intervals.some((i) => i.kind === kind);
-  if (!open('GEOFENCE_ARMED')) {
+    state.intervals.some((i) => i.kind === kind);
+  const startInterval = (kind: 'GEOFENCE_ARMED' | 'ROUTE_RECORDING') => {
     const i = {
       intervalId: deps.newId(),
-      kind: 'GEOFENCE_ARMED' as const,
+      kind,
       startedAt: iso(deps),
     };
-    intervals.push(i);
-    await report(deps, ctx.tripId, { ...i, phase: 'START', at: i.startedAt });
+    state = queueReport(
+      { ...state, intervals: [...state.intervals, i] },
+      ctx.tripId,
+      { ...i, phase: 'START', at: i.startedAt }
+    );
+  };
+  // START 보고가 OS 등록보다 먼저다 — 서버가 거절(킬 스위치·동의 없음)하면 아무것도 무장하지 않는다.
+  const settle = async () => {
+    const f = await flushReports(deps, state);
+    state = f.state;
+    if (!f.demote) return null;
+    state = await demoteOnRejectedStart(deps, state, f.demote, f.rejected);
+    return f.demote;
+  };
+
+  if (!open('GEOFENCE_ARMED')) {
+    startInterval('GEOFENCE_ARMED');
+    const demoted = await settle();
+    if (demoted) return { state, ok: false, reason: demoted };
+  }
+  const geo = await deps.native.armGeofences(regionsFor(state, ctx));
+  if (!geo.armed) {
+    const reason = geo.reason ?? 'native-register-failed';
+    state = await degrade(deps, state, reason, true);
+    return { state, ok: false, reason: 'native-register-failed' };
   }
   const route = await deps.native.startRouteRecording();
   if (route.recording && !open('ROUTE_RECORDING')) {
-    const i = {
-      intervalId: deps.newId(),
-      kind: 'ROUTE_RECORDING' as const,
-      startedAt: iso(deps),
-    };
-    intervals.push(i);
-    await report(deps, ctx.tripId, { ...i, phase: 'START', at: i.startedAt });
+    startInterval('ROUTE_RECORDING');
+    const demoted = await settle();
+    if (demoted) return { state, ok: false, reason: demoted };
   }
   const asked = state.explainerAskedTrips.includes(ctx.tripId)
     ? state.explainerAskedTrips
     : [...state.explainerAskedTrips, ctx.tripId];
   return {
-    state: { ...state, intervals, explainerAskedTrips: asked, notice: null },
+    state: { ...state, explainerAskedTrips: asked, notice: null },
     ok: true,
   };
 }
@@ -202,7 +272,7 @@ async function degrade(
   const tripId = state.ctx?.tripId;
   if (tripId) {
     for (const i of state.intervals) {
-      await report(deps, tripId, {
+      state = queueReport(state, tripId, {
         intervalId: i.intervalId,
         kind: i.kind,
         phase: 'END',
@@ -210,6 +280,7 @@ async function degrade(
         endReason: endReasonOf(reason),
       });
     }
+    state = (await flushReports(deps, state)).state;
   }
   return {
     ...state,
@@ -232,11 +303,23 @@ async function flushInner(
   consentRejected: boolean;
 }> {
   const { queue, dropped } = dropStale(input.queue, today(deps));
+  const reported = await flushReports(deps, input);
   let state: AutomationState = {
-    ...input,
+    ...reported.state,
     queue,
     droppedCount: input.droppedCount + dropped,
   };
+  if (reported.demote) {
+    // 재시도 끝에 늦게 거절된 START — 이미 무장한 기기를 내린다.
+    const consent = reported.demote === 'consent-rejected';
+    state = await demoteOnRejectedStart(
+      deps,
+      state,
+      reported.demote,
+      reported.rejected
+    );
+    return { state, dropped, consentRejected: consent };
+  }
   const tripId = state.ctx?.tripId;
   if (!tripId || state.queue.length === 0)
     return { state, dropped, consentRejected: false };
@@ -344,7 +427,7 @@ export function evaluate(
       state = out.state;
       if (!out.ok) {
         armingState = 'MANUAL';
-        reason = 'native-register-failed';
+        reason = out.reason ?? 'native-register-failed';
       }
     } else if (state.intervals.length > 0) {
       state = await degrade(deps, state, arming.reason);

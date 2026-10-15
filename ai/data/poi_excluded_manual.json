@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "why": "인허가 대장이 모르는 제외만 적는다. 대장은 '일반음식점·휴게음식점' 이라 유흥주점으로 허가된 업소(클럽)가 아예 없고, 좌표가 주소와 어긋난 불량 레코드도 대장으로는 못 가린다. 규칙으로 표현할 수 있는 것은 여기 적지 않고 `_NON_TRAVEL`·`_NOT_NIGHTLIFE` 에 넣는다 — 이 파일은 사람이 들고 있어야 하므로 짧게 유지한다.",
+  "how": "`collect_pois.load_closed_refs` 가 폐업 목록과 합쳐 읽고, `merge_pois_docs.drop_closed` 가 병합마다 소급 적용한다. 그래서 재수집·재병합에도 다시 들어오지 않는다. ref 는 `provenance.content_id`, source 는 소문자 출처명.",
+  "excluded": [
+    {
+      "source": "overture",
+      "ref": "4554f6f5-319c-4e7b-a4aa-ca186d11c6af",
+      "name": "클럽 버닝썬 CLUB BurningSun",
+      "address": "서울특별시 강남구 역삼동 봉은사로 120",
+      "reason": "closed",
+      "note": "2019년 폐업. 여행 제안에 올릴 수 없는 업소다. Overture 가 아직 들고 있어 2026-10-15 수집분에 들어왔다. 인허가 대장(일반음식점)에는 유흥주점 허가라 애초에 없어 폐업 필터로는 못 걸린다.",
+      "noted_at": "2026-10-15"
+    },
+    {
+      "source": "overture",
+      "ref": "164710f2-b554-4737-be0f-7d9a8d2fb18f",
+      "name": "클럽트랙",
+      "address": "서울특별시 마포구 잔다리로 20-5 OHOO빌딩 B1 Club Track",
+      "reason": "bad_record",
+      "note": "좌표(37.52668,126.89826)가 주소(서교동)와 4.1km 어긋난다. 같은 이름의 정상 레코드가 따로 있다(58da0553…, 37.55553,126.92763). 좌표 거부권은 시도만 보므로 서울 안 4km 오차는 통과한다 — 그 한계가 드러난 자리다.",
+      "noted_at": "2026-10-15"
+    }
+  ]
+}

@@ -32,16 +32,6 @@ import { toggleMulti } from '@/features/edit-preferences';
 import { showToast } from '@/shared/ui/Toast';
 
 import {
-  budgetForTier,
-  formatBudgetAmount,
-  isBudgetTier,
-  MAX_BUDGET_AMOUNT,
-  parseBudgetAmount,
-  tierForAmount,
-  tripDayCount,
-  type BudgetTier,
-} from '../model/budgetAmount';
-import {
   buildCreateTripRequest,
   tripTitle,
   type CreateTripInput,
@@ -55,8 +45,10 @@ import { deriveEndDate } from '@/features/create-trip';
 import { mustVisitFailureNotice } from '@/features/create-trip';
 import { planMustVisitSync } from '../model/mustVisitSync';
 import {
-  summaryBudget,
+  dayWindowFields,
   summaryCompanion,
+  summaryDayWindow,
+  validateDayWindow,
   summaryDestinations,
   summaryPeriod,
   summaryPreferences,
@@ -65,28 +57,28 @@ import { useTripWizardStore } from '@/features/create-trip';
 import { useCreateTrip } from '../model/useCreateTrip';
 import { usePreferencePrefill } from '../model/usePreferencePrefill';
 import { CompanionEditSheet } from './CompanionEditSheet';
+import { DayWindowEditSheet } from './DayWindowEditSheet';
 import { DestinationEditSheet } from './DestinationEditSheet';
 import { PeriodEditSheet } from './PeriodEditSheet';
 import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 
-import { BudgetEditSheet } from './BudgetEditSheet';
 import { PrefOverrideSheet } from './PrefOverrideSheet';
 
 /**
  * TRIP-665 g01 1/2 배선(신 default) — 스토어 ↔ 요약 셀렉터 ↔ 화면 ↔ 라우터 ↔ 서버를 잇는다.
  *
- * 왜 이 설계인가: 신 default 는 온보딩 요약 카드 5행 + 꼭 갈 곳 스트립까지고, 편집 시트(여행지·
- * 기간·동행·취향·예산)는 S2~S6 후속이다. 그래서 옛 인라인 컨트롤(프리셋·스테퍼·칩·예산 입력·
+ * 왜 이 설계인가: 신 default 는 온보딩 요약 카드 4행 + 꼭 갈 곳 스트립까지고, 편집 시트(여행지·
+ * 기간·동행·취향)는 S2~S6 후속이다. 그래서 옛 인라인 컨트롤(프리셋·스테퍼·칩·
  * 날짜 카드·등록숙소 행·인라인 여행지 시트)을 배선째 걷어냈다 — 그것들이 물던 `useRegions`·
  * `useSavedStays` 도 함께 드롭한다(여행지 편집은 S2, 날짜 편집은 S3). 남기면 node 페이지 테스트가
  * 그 훅을 목하지 않아 provider 부재/`onUnhandledRequest:'error'` 로 크래시한다 — 즉 드롭이 강제된다.
  *
  * 데이터 흐름:
- *  1. **요약 5행** — `tripSummary.ts` 셀렉터(순수)가 스토어 드래프트 + 프리필을 완성형 문자열로
+ *  1. **요약 4행** — `tripSummary.ts` 셀렉터(순수)가 스토어 드래프트 + 프리필을 완성형 문자열로
  *     도출한다. 화면은 그 문자열을 받아 그릴 뿐, 조립하지 않는다(값이 `null` 이면 미선택 →
- *     화면이 플레이스홀더를 그린다). 취향·예산 두 행은 스토어에 없는 파생 데이터(프리필 라벨·예산
- *     tier)를 페이지만 갖고 있어, 통일성을 위해 5행 전부 페이지가 도출한다.
+ *     화면이 플레이스홀더를 그린다). 취향 행은 스토어에 없는 파생 데이터(프리필 라벨)를
+ *     페이지만 갖고 있어, 통일성을 위해 4행 전부 페이지가 도출한다.
  *  2. **`[다음]` 게이트** — `validateTripDraft`(TRIP-204 동결)를 여기서만 부른다. 편집 시트가
  *     스텁이라 사용자는 UI 로 드래프트를 바꿀 수 없다 → `canProceed` 는 **스토어 선상태에서만**
  *     참이 될 수 있다(맹점① — "다음 비활성"은 이 슬라이스의 구조적 귀결이지 결함이 아니다).
@@ -102,7 +94,7 @@ import { PrefOverrideSheet } from './PrefOverrideSheet';
  *     PATCH 는 대체 의미라 본문은 생성과 같은 전체 값이고, 취향 스냅숏은 계약에 없어 싣지 않는다 —
  *     그래서 그 여행의 취향 행은 잠근다(토스트로 이유를 알린다).
  *
- * 의심할 지점: 요약 5행 문자열 도출·게이트·제출 바디는 이 파일의 조립 로직이라 렌더 테스트가
+ * 의심할 지점: 요약 4행 문자열 도출·게이트·제출 바디는 이 파일의 조립 로직이라 렌더 테스트가
  * 왕복으로 잡는다. 반면 편집 시트 오픈 콜백은 스텁(S2~S6)이라 지금은 신호만 위로 올린다.
  */
 
@@ -132,29 +124,6 @@ function classifyServerFailure(error: unknown): ServerSubmitFailure {
     return 'overseas';
   }
   return 'banner';
-}
-
-/** 프리필 신뢰 경계 — `rawAmount` 는 서버 응답이고 계약(`integer, nullable`)에 `minimum` 이 없다.
- * 예산으로 성립하는 값(0 이상 정수)일 때만 요약 예산 행·제출 바디에 태운다. `0` 도 포함한다
- * (truthy 가 아니라 `Number.isInteger` 판정이라 걸리지 않는다). */
-function isPrefillableBudget(
-  value: number | null | undefined
-): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
-}
-
-/** 요약 행·시트 재오픈 칩의 등급(TRIP-1091) — 스토어에 커밋된 금액이 > 0 이면 그 금액을 `days`(그 시점
- * 일수 — 두 호출처가 같은 값을 넘긴다, TRIP-1256)로 역산한 등급, 아니면(미적용·0·invalid) 프리필 tier. 프리필 금액은 역산하지 않는다 — 한 번도 안 건드린 여행은
- * 온보딩 등급 그대로다(서버는 rawAmount·tier 정합을 검사하지 않는다). */
-function appliedBudgetTier(
-  storeText: string,
-  prefillTier: string | undefined,
-  days: number
-): string | undefined {
-  const applied = parseBudgetAmount(storeText);
-  return applied.kind === 'amount' && applied.amount > 0
-    ? tierForAmount(applied.amount, days)
-    : prefillTier;
 }
 
 /** 위저드를 나간 뒤 뒤로 갈 곳이 없을 때(딥링크 진입) 가는 곳 — `ItineraryPlanPage` 선례. */
@@ -296,10 +265,10 @@ export function TripNewStep1Page({
   const setPrefActivityOverride = useTripWizardStore(
     (state) => state.setPrefActivityOverride
   );
-  // 예산 편집 시트(TRIP-670)가 "적용"에서 쓰는 커밋 액션 + 사용자 입력 원문(제출 복원의 재료).
-  // S1 이 인라인 예산 블록을 지우며 고아가 된 축을 S6 이 첫 소비한다.
-  const storeBudgetText = useTripWizardStore((state) => state.budgetText);
-  const setBudgetText = useTripWizardStore((state) => state.setBudgetText);
+  // 일과 시간(TRIP-1308) — 시트가 자체 드래프트를 쥐고 "적용"에서만 커밋한다(열 때마다 이 값으로 시드).
+  const dayWindow = useTripWizardStore((state) => state.dayWindow);
+  const setDayWindow = useTripWizardStore((state) => state.setDayWindow);
+  const [dayWindowSheetOpen, setDayWindowSheetOpen] = useState(false);
 
   const preference = usePreferencePrefill();
   // 계정 취향 프리필(GET /me/preferences)은 이미 한국어 도메인 값이다(slug 아님) — 그대로 요약·
@@ -320,50 +289,23 @@ export function TripNewStep1Page({
   const prefFromOnboarding =
     prefillStyles.length > 0 || prefillActivities.length > 0;
 
-  // 예산은 프리필에서만 온다(인라인 입력은 S6 으로 이연). 신뢰 경계(0 이상 정수)를 통과한 값만
-  // 콤마 포맷 → 파싱해 제출 바디의 `budgetTotal` 로 쓴다(`budgetAmount` 순수 함수, 로케일 API 미사용).
-  const rawAmount = preference.data?.budget?.rawAmount;
-  const tierLabel = preference.data?.budget?.tier ?? undefined;
-  const canPrefillBudget = isPrefillableBudget(rawAmount);
-  const prefillBudgetText = canPrefillBudget
-    ? formatBudgetAmount(rawAmount)
-    : '';
-  // 제출 복원(TRIP-670 D3) — 사용자가 시트에서 편집한 스토어 값이 유효하면 그것, 아니면 프리필.
-  // TRIP-207 "사용자 입력 우선"을 S1(프리필-only)이 되돌린 것을 S6 이 되살린다.
-  const effectiveBudgetText =
-    parseBudgetAmount(storeBudgetText).kind === 'amount'
-      ? storeBudgetText
-      : prefillBudgetText;
-  const parsedBudget = parseBudgetAmount(effectiveBudgetText);
-  const budgetTierLabel = appliedBudgetTier(
-    storeBudgetText,
-    tierLabel,
-    tripDayCount(destinations)
-  );
-
-  // 요약 5행 도출 — 미선택은 셀렉터가 `null` 을 낸다(화면이 플레이스홀더로 그린다).
+  // 요약 4행 도출 — 미선택은 셀렉터가 `null` 을 낸다(화면이 플레이스홀더로 그린다).
   const summaryDestinationsValue = summaryDestinations(destinations);
   const summaryPeriodValue = summaryPeriod(startDate, endDate, resolvedToday);
+  // 당일치기 = 박수 합 0(첫날=마지막 날). 기간을 줄여 창이 깨지면 [다음]을 막고 행이 이유를 알린다.
+  const sameDay = nightsSum(destinations) === 0;
+  const dayWindowInvalid = validateDayWindow(dayWindow, sameDay).length > 0;
+  const summaryDayWindowValue = summaryDayWindow(
+    dayWindow,
+    sameDay,
+    dayWindowInvalid
+  );
   const summaryCompanionValue = summaryCompanion(companionType, party);
   // 오버라이드가 있으면 "+ 온보딩" 접미를 뗀다(D4 — 바꿨는데 "온보딩" 표식이 남으면 거짓).
   const summaryPreferencesValue = summaryPreferences(
     preferenceChips,
     !hasOverride
   );
-  // 요약 예산 행은 effective(편집값 우선, 아니면 프리필)를 쓴다 — 자매 4행과 정합.
-  // rawAmount(프리필)만 쓰면 시트에서 바꿔도 요약이 안 바뀌어 "편집이 안 먹는" 것처럼 보인다(TRIP-670 5-c).
-  // 세 갈래(TRIP-732):
-  //  · 금액 > 0 → 금액 2톤("120만원 · 1인 총액 · {tier}").
-  //  · 프리필 금액이 **아예 없고**(kind==='empty') tier 만 있으면 → tier-only(empty 얼굴
-  //    "중간 · 1인 총액 · 온보딩"). 금액도 tier 도 없으면 셀렉터가 null 을 낸다.
-  //  · 명시적 0(kind==='amount' && amount===0)·invalid → null="예산 선택". rawAmount=0 은 "미선택"이라
-  //    표시=제출 대칭이 유지된다(budgetSheet AC-S6D-1 — 0 이면 요약도 "예산 선택", 제출도 미전송).
-  const summaryBudgetValue =
-    parsedBudget.kind === 'amount' && parsedBudget.amount > 0
-      ? summaryBudget(parsedBudget.amount, budgetTierLabel)
-      : parsedBudget.kind === 'empty'
-        ? summaryBudget(0, tierLabel)
-        : null;
 
   const [submitError, setSubmitError] = useState<string>();
   const [overseasBlocked, setOverseasBlocked] = useState(false);
@@ -392,18 +334,6 @@ export function TripNewStep1Page({
   const [prefSheetOpen, setPrefSheetOpen] = useState(false);
   const [prefDraftStyles, setPrefDraftStyles] = useState<string[]>([]);
   const [prefDraftActivities, setPrefDraftActivities] = useState<string[]>([]);
-  // 예산 편집 시트(TRIP-670) — 시트가 무상태(D4)라 개폐·편집 드래프트를 배선이 소유한다.
-  // 열 때 effective 예산 문자열·`appliedBudgetTier`(커밋 금액 역산 ?? 프리필 tier)에서 초기화하고, 금액/tier press 는 이 드래프트만
-  // 갱신한다(적용 전 store 불변) — "적용"에서만 `setBudgetText` 로 커밋한다(tier 는 커밋 안 함).
-  const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
-  const [draftAmountText, setDraftAmountText] = useState('');
-  const [draftTier, setDraftTier] = useState<string>();
-  const draftBudget = parseBudgetAmount(draftAmountText);
-  const draftBudgetKind = draftBudget.kind;
-  // TRIP-1219 b — 빈 금액 오류는 사용자가 입력을 만진 뒤에만 보인다(열자마자 빨간 안내 금지).
-  const [draftBudgetTouched, setDraftBudgetTouched] = useState(false);
-  const draftBudgetOverCap =
-    draftBudget.kind === 'amount' && draftBudget.amount > MAX_BUDGET_AMOUNT;
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 요청(등록·PATCH·동기화)이 날아가는 동안만 켜진다 — 성공 뒤에는 풀어 둬야 step2 에서
@@ -480,7 +410,7 @@ export function TripNewStep1Page({
     destinations.length > 0 &&
     periodFilled &&
     violations.length === 0 &&
-    parsedBudget.kind !== 'invalid' &&
+    !dayWindowInvalid &&
     !savedPlacesLoading;
 
   // 드래프트가 바뀌면 옛 제출 실패 배너를 걷는다(화면과 배너가 서로 다른 이야기를 하지 않게).
@@ -651,14 +581,8 @@ export function TripNewStep1Page({
       destinations,
       // 두 곳 이상이면 앱이 지은 제목, 아니면 `undefined`(키 빠짐 → 서버 기본 제목). 생성·수정 공통(TRIP-1210).
       title: tripTitle(destinations),
-      // 예산은 effective(사용자 입력 우선, 미입력 시 프리필)로 나간다(TRIP-670 D3 복원). `empty`·
-      // `invalid`·**0** 이면 `undefined` 라 키가 안 붙는다. `>0` 로 좁혀 요약(`summaryBudget` 은
-      // `amount<=0`→null="예산 선택")과 제출을 같은 규칙에 맞춘다(S6D 표시=제출 대칭). 0 이 파싱
-      // 성질로는 유효값이라도 표시가 미선택이면 제출도 미전송이어야 둘이 안 갈라진다.
-      budgetTotal:
-        parsedBudget.kind === 'amount' && parsedBudget.amount > 0
-          ? parsedBudget.amount
-          : undefined,
+      // 일과 시간은 정한 값만 키가 있다(생략=서버 기본 09:00~21:00). PATCH 는 대체 의미라 수정에도 그대로 싣는다.
+      ...dayWindowFields(dayWindow),
     };
   }
 
@@ -731,59 +655,6 @@ export function TripNewStep1Page({
     );
   }
 
-  /** 예산 시트 열기 — 드래프트를 effective 예산 문자열(스토어 유효 ? 스토어 : 프리필)·등급(커밋 금액 > 0
-   * 이면 역산, 아니면 프리필 tier — TRIP-1091, 요약 행과 같은 출처)에서 초기화한다(D3). 스토어는 `getState()`로 여는 순간 값을 읽고(`openCompanionSheet` 선례), 프리필은
-   * render 클로저값(react-query 라 store 를 안 타 클로저가 곧 최신값). */
-  function openBudgetSheet(): void {
-    // 프리필 미도착이면 열지 않는다(S6G) — 빈 드래프트로 열리는 것을 막아 취향 시트와 결을 맞춘다.
-    // 신호는 preference.isPending(≠isLoading — 담은목록 축이 섞이면 게스트를 오차단, ★3).
-    if (preference.isPending) return;
-    const { budgetText: currentBudgetText, destinations: currentDestinations } =
-      useTripWizardStore.getState();
-    const days = tripDayCount(currentDestinations);
-    // 등급만 있고 금액이 없는 온보딩(TRIP-1107)이면 칩 press 와 같은 대표 금액으로 연다 — 드래프트만
-    // 채우고 요약 행·제출은 그대로다(결정 1 A: 적용 전엔 budgetTotal 을 싣지 않는다).
-    const tierAmountText = isBudgetTier(tierLabel)
-      ? formatBudgetAmount(budgetForTier(tierLabel, days))
-      : '';
-    setDraftAmountText(
-      parseBudgetAmount(currentBudgetText).kind === 'amount'
-        ? currentBudgetText
-        : prefillBudgetText !== ''
-          ? prefillBudgetText
-          : tierAmountText
-    );
-    setDraftTier(appliedBudgetTier(currentBudgetText, tierLabel, days));
-    setDraftBudgetTouched(false);
-    setBudgetSheetOpen(true);
-  }
-
-  /** "적용" — 드래프트 금액을 store 에 커밋(`setBudgetText`) + 닫기. tier 는 커밋 대상이 아니다
-   * (honest — 스토어·요청 어디에도 안 감, 표시·프리필 축 전용). 금액이 아니면(invalid·empty) 커밋·닫기를
-   * 건너뛴다 — invalid 는 S6E(잘못된 입력의 조용한 소멸 방지), empty 는 TRIP-984 D8(빈 적용이 이미
-   * 커밋된 금액을 지우거나 시트만 닫히는 침묵 실패 방지, 버튼도 비활성). */
-  function applyBudget(): void {
-    if (parseBudgetAmount(draftAmountText).kind !== 'amount') return;
-    if (draftBudgetOverCap) return;
-    setBudgetText(draftAmountText);
-    setBudgetSheetOpen(false);
-  }
-
-  /** tier 칩 — 드래프트 tier 와 함께 대표 금액(1인 하루 단가 × 누르는 순간의 일수 — TRIP-1256)을 금액 칸에 채운다.
-   * press 핸들러에서 직접 쓴다 — tier 변화에 매달면 이미 켜진 칩 재press 때 채움이 안 일어난다.
-   * press 할 때만 계산하므로 인원·여행지가 바뀌어도, 시트를 다시 열어도 재계산하지 않는다. */
-  function selectBudgetTier(tier: BudgetTier): void {
-    setDraftTier(tier);
-    setDraftAmountText(
-      formatBudgetAmount(
-        budgetForTier(
-          tier,
-          tripDayCount(useTripWizardStore.getState().destinations)
-        )
-      )
-    );
-  }
-
   /** 동행 시트 열기 — 드래프트를 store 현재값에서 초기화한다(D3 프리필). 렌더 클로저가 아니라
    * `getState()`로 **여는 순간의** store 값을 읽는다(구독 재렌더 타이밍과 무관, `submit()`과 동형). */
   function openCompanionSheet(): void {
@@ -822,7 +693,7 @@ export function TripNewStep1Page({
     }
     // 프리필 미도착이면 열지 않는다(S5G — 데이터 손실 봉합). GET /me/preferences 도착 전 열면
     // 드래프트가 빈 []로 열리고, 적용 시 `[] ?? prefill`(빈 배열은 값이라 ?? 폴백 안 함)로 온보딩
-    // 취향이 영구 유실된다. 신호는 preference.isPending(예산 시트와 동일, ★3).
+    // 취향이 영구 유실된다. 신호는 preference.isPending(★3).
     if (preference.isPending) return;
     // 두 축 모두 이 가드 안에서 초기화한다 — 밖에서 따로 하면 같은 유실이 활동 축에 생긴다.
     const {
@@ -888,14 +759,14 @@ export function TripNewStep1Page({
       <TripWizardStep1Screen
         summaryDestinations={summaryDestinationsValue}
         summaryPeriod={summaryPeriodValue}
+        summaryDayWindow={summaryDayWindowValue}
         summaryCompanion={summaryCompanionValue}
         summaryPreferences={summaryPreferencesValue}
-        summaryBudget={summaryBudgetValue}
         onPressSummaryDestination={() => setDestinationSheetOpen(true)}
         onPressSummaryPeriod={() => setPeriodSheetOpen(true)}
+        onPressSummaryDayWindow={() => setDayWindowSheetOpen(true)}
         onPressSummaryCompanion={openCompanionSheet}
         onPressSummaryPreference={openPrefSheet}
-        onPressSummaryBudget={openBudgetSheet}
         mustVisits={mustVisits}
         onPressMore={() =>
           // 담은 곳 수와 무관하게 늘 d02 select 로 보낸다(TRIP-1093 결정 2) — 새로 담기는 d02 의
@@ -965,6 +836,18 @@ export function TripNewStep1Page({
           onClose={() => setPeriodSheetOpen(false)}
         />
       ) : null}
+      {/* 일과 시간 시트도 형제 조건부 마운트 — 드래프트는 시트가 쥐고 "적용"에서만 스토어에 커밋한다. */}
+      {dayWindowSheetOpen ? (
+        <DayWindowEditSheet
+          value={dayWindow}
+          sameDay={sameDay}
+          onApply={(next) => {
+            setDayWindow(next);
+            setDayWindowSheetOpen(false);
+          }}
+          onClose={() => setDayWindowSheetOpen(false)}
+        />
+      ) : null}
       {/* 동행 편집 시트도 화면의 형제로 조건부 마운트 — 스테퍼·칩 press 는 드래프트만 바꾸고
           (적용 전 store 불변), "적용"에서만 커밋한다(기간 시트와 같은 커밋-온-어플라이, D1). */}
       {companionSheetOpen ? (
@@ -988,38 +871,6 @@ export function TripNewStep1Page({
           onApply={applyPrefSheet}
           onClose={() => setPrefSheetOpen(false)}
           fromOnboarding={prefFromOnboarding}
-        />
-      ) : null}
-      {/* 예산 편집 시트도 화면의 형제로 조건부 마운트 — tier·금액 press 는 드래프트만 바꾸고
-          (적용 전 store 불변), "적용"에서만 `setBudgetText` 로 커밋한다(커밋-온-어플라이). tier 는
-          어디에도 커밋/전송 안 한다(honest — 표시·프리필 축 전용). */}
-      {budgetSheetOpen ? (
-        <BudgetEditSheet
-          amountText={draftAmountText}
-          tier={draftTier}
-          budgetError={
-            // 페이지가 드래프트 금액 오류(파싱 실패·빈 금액)를 도출해 시트 슬롯에 내린다(S6E — 시트는 props-only 라
-            // amountText 로 스스로 오류를 도출하지 않는다). 카피는 오케 확정값.
-            draftBudgetKind === 'invalid'
-              ? '숫자만 입력해 주세요'
-              : draftBudgetOverCap
-                ? '10억원 이하로 입력해 주세요'
-                : draftBudgetKind === 'empty' && draftBudgetTouched
-                  ? '금액을 입력해 주세요'
-                  : undefined
-          }
-          onChangeAmount={(next) => {
-            setDraftBudgetTouched(true);
-            setDraftAmountText(next);
-          }}
-          onSelectTier={selectBudgetTier}
-          onApply={applyBudget}
-          onClose={() => setBudgetSheetOpen(false)}
-          applyDisabled={
-            draftBudgetKind === 'empty' ||
-            draftBudgetKind === 'invalid' ||
-            draftBudgetOverCap
-          }
         />
       ) : null}
       {/* 이탈 확인은 맨 위에 겹친다. 삭제가 성공해 id 가 비면 저절로 내려간다. */}

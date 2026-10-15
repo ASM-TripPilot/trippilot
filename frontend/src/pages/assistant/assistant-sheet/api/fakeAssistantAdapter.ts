@@ -38,6 +38,8 @@ export interface FakeAssistantOptions {
   turn?: 'OK' | 'SERVER_ERROR';
   /** 값이 있으면 다음 턴이 429 + Retry-After(초). */
   rateLimitSeconds?: number | null;
+  /** 값이 있으면 다음 턴이 429 TURN_IN_PROGRESS + Retry-After(초) — 이미 기록돼 처리 중(같은 id 로 다시). */
+  turnInProgressSeconds?: number | null;
   /** 응답 지연(ms). 0 이면 즉시. 앱 기본값은 체감용 약간의 지연. */
   latencyMs?: number;
   /** 세션을 열 때 이미 있는 대화(이어 열기 시연). */
@@ -238,6 +240,13 @@ export class FakeAssistantAdapter implements AssistantPort {
       const seconds = this.options.rateLimitSeconds;
       this.options.rateLimitSeconds = null;
       throw new AssistantApiError('RATE_LIMITED', {
+        retryAfterSeconds: seconds,
+      });
+    }
+    if (this.options.turnInProgressSeconds) {
+      const seconds = this.options.turnInProgressSeconds;
+      this.options.turnInProgressSeconds = null;
+      throw new AssistantApiError('TURN_IN_PROGRESS', {
         retryAfterSeconds: seconds,
       });
     }

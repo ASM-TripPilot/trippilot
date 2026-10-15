@@ -25,8 +25,8 @@ import { usePreferencePrefill } from './usePreferencePrefill';
  * 무엇을 보장하나:
  *  - **D-1 (AC-2)** 여행을 만들면 ① "내 여행 목록" 캐시가 무효화되어 실제로 다시 받아 오고
  *    ② 서버가 준 `Trip`이 가공 없이 호출자에게 돌아온다.
- *  - **D-2·D-3 (TRIP-207 AC-2·AC-3 + TRIP-484 정책 A)** 사용자가 넣은 예산이 **나가는 실제 요청
- *    바디**에 실리거나(넣었을 때) 키가 아예 없다(안 넣었을 때 — **취향에 러프값이 있어도**).
+ *  - **D-2·D-3 (TRIP-484 정책 A + 예산 입력 제거)** **나가는 실제 요청 바디**에 `budgetTotal` 키가
+ *    아예 없다(**서버 취향에 예산 러프값이 있어도** — 예산 입력 기능을 걷어냈다).
  *    그리고 **`preferenceSnapshot`은 입력이 실었을 때만 wire까지 그대로 나가고**(D-2), 입력이
  *    안 실었으면 wire에도 없다(D-3 — 훅이 스냅숏을 지어내지 않는다).
  *
@@ -229,7 +229,7 @@ describe('AC-2 · 여행 생성 성공 경로 (D-1)', () => {
 });
 
 describe('TRIP-207 AC-2 · AC-3 · 나가는 요청 바디 (D-2 · D-3)', () => {
-  it('입력이 실은 예산과 preferenceSnapshot이 wire까지 그대로 나간다 (D-2)', async () => {
+  it('입력이 실은 preferenceSnapshot이 wire까지 그대로 나간다 (D-2)', async () => {
     // 준비 — 취향 조회는 그대로 돈다(프리필의 출처). 조립에 넘어가는 스냅숏은 **입력이 실은 값**이다.
     setAccessToken('valid-access');
     const { result } = renderHook(() => useTripProbe(), {
@@ -237,12 +237,11 @@ describe('TRIP-207 AC-2 · AC-3 · 나가는 요청 바디 (D-2 · D-3)', () => 
     });
     await waitFor(() => expect(result.current.prefill.isSuccess).toBe(true));
 
-    // 실행 — 예산과 override 스냅숏이 **입력에서** 온다(화면의 예산 필드·취향 시트가 넘긴 값).
+    // 실행 — override 스냅숏이 **입력에서** 온다(취향 시트가 넘긴 값).
     // `CreateTripRequest`(변수)로 타이핑해야 `preferenceSnapshot`을 실을 수 있다(★8, 리터럴
     // 이면 excess-property 검사에 걸린다).
     const input: CreateTripRequest = {
       ...BASE_INPUT,
-      budgetTotal: 1200000,
       preferenceSnapshot: { styles: ['휴양'] },
     };
     await act(async () => {
@@ -258,7 +257,6 @@ describe('TRIP-207 AC-2 · AC-3 · 나가는 요청 바디 (D-2 · D-3)', () => 
     expect(capturedBody).toMatchObject({
       startDate: '2026-09-01',
       endDate: '2026-09-03',
-      budgetTotal: 1200000,
     });
 
     // 단언 — 스냅숏이 wire까지 그대로 나간다(TRIP-484 정책 A — 뮤테이션 훅이 우회로 지우지 않는다).
@@ -267,7 +265,7 @@ describe('TRIP-207 AC-2 · AC-3 · 나가는 요청 바디 (D-2 · D-3)', () => 
     });
   });
 
-  it('예산을 안 넣으면 취향에 러프값이 있어도 budgetTotal 키가 아예 나가지 않는다 (D-3)', async () => {
+  it('서버 취향에 예산 러프값이 있어도 budgetTotal 키가 아예 나가지 않는다 (D-3)', async () => {
     // 준비 — 취향 응답을 **덮지 않는다**. 기본 핸들러가 `rawAmount: 1200000`을 주고 있고,
     // 프리필이 성공한 것도 아래에서 기다려 확인한다. 그 상태에서 예산 없이 보낸다 —
     // TRIP-206까지의 구현이라면 여기서 1200000이 자동으로 붙었다(TRIP-207 AC-2가 뒤집은

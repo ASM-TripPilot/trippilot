@@ -37,6 +37,11 @@ export type AssistantErrorCode =
   | 'UNAUTHORIZED'
   /** 429 — `retryAfterSeconds` 동안 보내기 비활성(BR-U8-24). */
   | 'RATE_LIMITED'
+  /**
+   * 429 + `error.code=TURN_IN_PROGRESS` — RATE_LIMITED 와 **반대**다. 그 턴은 이미 기록돼 처리 중이므로
+   * 말풍선을 거두지 말고 **같은 clientTurnId 로** `retryAfterSeconds` 뒤 다시 보낸다(새 id 면 같은 말이 두 번 기록·해석된다).
+   */
+  | 'TURN_IN_PROGRESS'
   /** 409 — 제안 기준 지문 불일치(BR-U8-32). */
   | 'STALE'
   | 'EXPIRED'

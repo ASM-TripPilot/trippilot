@@ -9,7 +9,13 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
-/**
- * 생성 시점 취향 동결(jsonb)
- */
-export type TripPreferenceSnapshot = { [key: string]: unknown };
+export interface TripPreferenceSnapshot {
+  styles?: string[];
+  activities?: string[];
+  foodTastes?: string[];
+  transportModes?: string[];
+  companionTypes?: string[];
+  pace?: string;
+  budgetTier?: string;
+  petFriendly?: boolean;
+}

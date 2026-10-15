@@ -971,14 +971,14 @@ describe('시각·건너뛰기·메모 정비 — 서울 시계(기기 LA)', () 
     });
   });
 
-  describe('AC-20 · 카드는 도착 이른 순, 도착 없는 카드는 끝', () => {
-    it('서버가 [13:44, 13:42, 도착 없는 건너뜀] 으로 주면 화면은 [13:42, 13:44, 건너뜀] 이다', async () => {
+  describe('TRIP-1372 · 카드 순서는 서버가 준 그대로(도착 순), 앱이 다시 세우지 않는다', () => {
+    it('서버가 [13:42, 13:44, 도착 없는 건너뜀] 으로 주면 화면도 그 순서이고 1·2·3번째 방문 번호가 붙는다', async () => {
       serverVisits = [
-        visit('v2', 'p2', { arrivedAt: '2026-08-20T13:44:00Z' }),
         visit('v1', 'p1', {
           arrivedAt: '2026-08-20T13:42:00Z',
           completedAt: '2026-08-20T14:00:00Z',
         }),
+        visit('v2', 'p2', { arrivedAt: '2026-08-20T13:44:00Z' }),
         visit('v3', 'p3', { skippedAt: '2026-08-20T13:50:00Z' }),
       ];
 
@@ -993,6 +993,25 @@ describe('시각·건너뛰기·메모 정비 — 서울 시계(기기 LA)', () 
         'record-trip-visit-card-v2',
         'record-trip-visit-card-v3',
       ]);
+      expect(within(cardOf('v1')).getByText('1번째 방문')).toBeOnTheScreen();
+      expect(within(cardOf('v2')).getByText('2번째 방문')).toBeOnTheScreen();
+      expect(within(cardOf('v3')).getByText('3번째 방문')).toBeOnTheScreen();
+    });
+
+    it('서버 순서가 도착 시각과 어긋나 있어도 재정렬하지 않는다(서버가 권위)', async () => {
+      serverVisits = [
+        visit('v2', 'p2', { arrivedAt: '2026-08-20T13:44:00Z' }),
+        visit('v1', 'p1', { arrivedAt: '2026-08-20T13:42:00Z' }),
+      ];
+
+      renderPage();
+      await screen.findByTestId('record-trip-visit-card-v1');
+
+      expect(
+        screen
+          .getAllByTestId(/^record-trip-visit-card-/)
+          .map((node) => node.props.testID)
+      ).toEqual(['record-trip-visit-card-v2', 'record-trip-visit-card-v1']);
     });
   });
 

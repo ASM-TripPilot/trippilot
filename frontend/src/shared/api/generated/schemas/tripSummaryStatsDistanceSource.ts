@@ -9,6 +9,9 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
+/**
+ * **모든 날이 실제 경로일 때만** `ROUTE` 다 — 한 날이라도 근사면 합계도 근사다(BR-U10-39). 경로가 나중에 오면 통계만 다시 센다
+ */
 export type TripSummaryStatsDistanceSource =
   (typeof TripSummaryStatsDistanceSource)[keyof typeof TripSummaryStatsDistanceSource];
 

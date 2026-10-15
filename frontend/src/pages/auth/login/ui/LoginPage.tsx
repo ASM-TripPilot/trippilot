@@ -5,6 +5,7 @@ import type { SocialProvider } from '@/shared/api';
 
 import { useAppleButton } from '../model/useAppleButton';
 import { useSocialLogin } from '../model/useSocialLogin';
+import { isNaverLoginAvailable } from '../lib/isNaverLoginAvailable';
 import { makeAuthorize } from '../lib/makeAuthorize';
 import { SocialLoginScreen } from './SocialLoginScreen';
 
@@ -54,6 +55,7 @@ export function LoginPage() {
       onAgeConfirm={confirmAge}
       onAgeCancel={dismissSheet}
       AppleButton={AppleButton}
+      hideNaver={!isNaverLoginAvailable()}
     />
   );
 }

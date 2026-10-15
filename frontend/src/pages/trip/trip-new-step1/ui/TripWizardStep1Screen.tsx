@@ -21,14 +21,14 @@ import {
  * TRIP-665 g01 '여행 만들기' default 재작성 — **props만 받는 프레젠테이션 화면**(Figma `3742:2068`).
  *
  * 무엇을 보장하나: 신 default 골격 — 앱바(back + 세그먼트 진행바 4칸 + "1 / 4") · 타이틀/부제 ·
- * **온보딩 요약 카드 5행**(여행지→기간→동행→취향→예산, 각 값 or muted 플레이스홀더 + chevron,
+ * **온보딩 요약 카드 4행**(여행지→기간→동행→취향, 각 값 or muted 플레이스홀더 + chevron,
  * 탭하면 편집 시트 오픈 콜백) · **꼭 갈 곳 가로 스트립**(더 담기 + 전체 보기 + 담은 곳 카드) ·
  * 하단 [다음](받은 `canProceed` 하나로만 갈림). 실패 표면(제출/등록 배너·국내 차단 다이얼로그)은
  * 완성된 문자열/불리언을 받았을 때만 그린다 — 화면은 판정하지 않는다.
  *
- * 왜 이 설계인가: 옛 default 는 인라인 전개 폼(프리셋·스테퍼·칩·예산 입력·날짜 카드·등록숙소
+ * 왜 이 설계인가: 옛 default 는 인라인 전개 폼(프리셋·스테퍼·칩·날짜 카드·등록숙소
  * 행·여행지 시트)이었고, 신 default 는 **온보딩 반영 요약 + 편집 시트 오픈 신호까지**다(편집 시트
- * 본체는 S2~S6 후속). 요약 5행 값은 페이지가 `tripSummary` 셀렉터로 도출한 **완성형 문자열**로
+ * 본체는 S2~S6 후속). 요약 4행 값은 페이지가 `tripSummary` 셀렉터로 도출한 **완성형 문자열**로
  * 내려온다 — 화면은 문자열을 조립하지 않는다(값이 `null`이면 미선택이라 플레이스홀더를 그린다).
  *
  * 왜 props만 받는가: 이 화면이 쿼리 훅·라우터·`expo-location`을 전이 의존으로라도 물면 dev
@@ -42,19 +42,20 @@ import {
  */
 
 export interface TripWizardStep1ScreenProps {
-  /** 요약 5행 — 페이지가 `tripSummary` 셀렉터로 도출한 2톤 객체(`{main; sub?}`). `null` = 미선택
+  /** 요약 4행 — 페이지가 `tripSummary` 셀렉터로 도출한 2톤 객체(`{main; sub?}`). `null` = 미선택
    * (플레이스홀더). 취향만 `{main; onboarding}`(온보딩 배지용). TRIP-732: 문자열 → 객체. */
   summaryDestinations: SummaryLine | null;
   summaryPeriod: SummaryLine | null;
+  /** 일과 시간 행(TRIP-1308) — 기본도 값이 있는 행이라 `null`(미선택)이 없다. */
+  summaryDayWindow: SummaryLine;
   summaryCompanion: SummaryLine | null;
   summaryPreferences: PreferenceSummary | null;
-  summaryBudget: SummaryLine | null;
   /** 각 요약 행 탭 → 해당 필드 편집 시트 오픈(S2~S6 스텁). 화면은 신호만 위로 올린다. */
   onPressSummaryDestination(): void;
   onPressSummaryPeriod(): void;
+  onPressSummaryDayWindow(): void;
   onPressSummaryCompanion(): void;
   onPressSummaryPreference(): void;
-  onPressSummaryBudget(): void;
 
   /** 꼭 갈 곳 스트립 — 담은 곳 시드(0곳도 스트립을 감추지 않는다, empty 일러스트는 S7). */
   mustVisits: MustVisitSeedItem[];
@@ -327,14 +328,14 @@ function MustVisitSkeleton(): ReactElement {
 export function TripWizardStep1Screen({
   summaryDestinations,
   summaryPeriod,
+  summaryDayWindow,
   summaryCompanion,
   summaryPreferences,
-  summaryBudget,
   onPressSummaryDestination,
   onPressSummaryPeriod,
+  onPressSummaryDayWindow,
   onPressSummaryCompanion,
   onPressSummaryPreference,
-  onPressSummaryBudget,
   mustVisits,
   onPressMore,
   onPressSeeAll,
@@ -355,17 +356,15 @@ export function TripWizardStep1Screen({
 }: TripWizardStep1ScreenProps): ReactElement {
   // loading 이면 게이트가 참이어도 [다음]을 막는다(TRIP-671 D4) — 화면이 isLoading 을 next 에 물린다.
   const nextDisabled = !canProceed || Boolean(isLoading);
-  // empty 얼굴(Figma 3652) 판정 — 여행지·기간만 미선택이고 나머지(동행·취향·예산)는 프리필로 채워진
-  // 상태. 다섯 행이 전부 null 인 퇴화 상태(프리필 미도착)는 "나머지는 채워둘게요" 문구가 거짓이라
+  // empty 얼굴(Figma 3652) 판정 — 여행지·기간만 미선택이고 나머지(동행·취향)는 프리필로 채워진
+  // 상태. 네 행이 전부 null 인 퇴화 상태(프리필 미도착)는 "나머지는 채워둘게요" 문구가 거짓이라
   // empty 로 치지 않는다. 승인 테스트 두 축이 이 경계를 함께 고정한다(TRIP-732 AC-6): summary2tone
-  // empty(여행지·기간 null + 3행 채움) → empty, test.tsx AC-1(전부 null) → default.
+  // empty(여행지·기간 null + 2행 채움) → empty, test.tsx AC-1(전부 null) → default.
   const isEmptyFace =
     !isLoading &&
     summaryDestinations === null &&
     summaryPeriod === null &&
-    (summaryCompanion !== null ||
-      summaryPreferences !== null ||
-      summaryBudget !== null);
+    (summaryCompanion !== null || summaryPreferences !== null);
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="trip-wizard-step1-root" className="flex-1 bg-canvas">
@@ -403,7 +402,7 @@ export function TripWizardStep1Screen({
               </Text>
             </View>
 
-            {/* 요약 카드 5행 (여행지→기간→동행→취향→예산) */}
+            {/* 요약 카드 5행 (여행지→기간→일과 시간→동행→취향) */}
             <View
               className="rounded-card border border-hairline bg-canvas"
               style={SUMMARY_CARD_SHADOW}
@@ -430,6 +429,18 @@ export function TripWizardStep1Screen({
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-2"
                 skeletonWidths={[140, 40]}
+              />
+              <View className="h-[1px] bg-hairline" />
+              <SummaryRow
+                testID="trip-wizard-summary-daywindow"
+                label="일과 시간"
+                value={summaryDayWindow}
+                placeholder=""
+                placeholderTone="muted"
+                onPress={onPressSummaryDayWindow}
+                isLoading={isLoading}
+                skeletonTestID="trip-wizard-summary-skeleton-daywindow"
+                skeletonWidths={[72, 36]}
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
@@ -474,18 +485,6 @@ export function TripWizardStep1Screen({
                     </View>
                   ) : null
                 }
-              />
-              <View className="h-[1px] bg-hairline" />
-              <SummaryRow
-                testID="trip-wizard-summary-budget"
-                label="예산"
-                value={summaryBudget}
-                placeholder="예산 선택"
-                placeholderTone="muted"
-                onPress={onPressSummaryBudget}
-                isLoading={isLoading}
-                skeletonTestID="trip-wizard-summary-skeleton-5"
-                skeletonWidths={[64, 78]}
               />
             </View>
 

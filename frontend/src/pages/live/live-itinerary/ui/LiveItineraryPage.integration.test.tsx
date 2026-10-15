@@ -384,7 +384,13 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       server.use(
         itineraryOk(),
         tripHandler(),
-        visitsHandler([{ ...completedVisit(), source: 'AUTO_GEOFENCE' }]),
+        visitsHandler([
+          {
+            ...completedVisit(),
+            source: 'AUTO_GEOFENCE',
+            completionSource: 'AUTO_GEOFENCE_EXIT',
+          },
+        ]),
         consentOk()
       );
       await renderActive();

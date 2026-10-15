@@ -51,6 +51,15 @@ export interface PlaceDetailScreenProps {
 
 // 하단→상단 스크림(from-transparent 30% → to-black/50) — 흰 제목·부제를 사진 위에서 읽히게 한다.
 // rgba 는 토큰이 아니라 불투명도라 raw 로 둔다(token-snapper MISS=반투명, HomeScreen 스크림 선례).
+// dataStatus → 상태 배지 문구. ACTIVE 는 배지 없음. `Record` 라 enum 이 늘면 tsc 가 먼저 깨진다
+// (담은 장소 d02 의 `SAVED_PLACE_BADGE` 와 같은 문구 — 형제 page 라 import 하지 않고 같은 표를 따로 둔다).
+const STATUS_BADGE: Record<Place['dataStatus'], string | null> = {
+  ACTIVE: null,
+  CLOSED: '폐업',
+  UNVERIFIED: '미확인',
+  LOST: '미확인',
+};
+
 const SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)'] as const;
 const SCRIM_LOCATIONS = [0.3, 1] as const;
 
@@ -207,6 +216,17 @@ export function PlaceDetailScreen({
         {/* 콘텐츠 — 태그칩 · 정보카드(영업시간·주소만) · 미니맵. 소개·입장료·관련사진은 데이터원이
             없어 자리 자체를 안 만든다(위 주석). */}
         <View className="gap-[14px] px-lg pb-[22px] pt-lg">
+          {/* TRIP-1372 — 단건은 폐업·유실도 준다. 상태를 숨기면 닫은 가게를 열려 있다고 말하는 셈이다. */}
+          {STATUS_BADGE[place.dataStatus] ? (
+            <View
+              testID="explore-place-status-badge"
+              className="self-start rounded-[12px] bg-primary-pale px-sm py-[3px]"
+            >
+              <Text className="font-noto-bold text-[11px] font-bold text-primary">
+                {STATUS_BADGE[place.dataStatus]}
+              </Text>
+            </View>
+          ) : null}
           {place.tags.length > 0 ? (
             <View className="flex-row flex-wrap items-center gap-x-sm gap-y-xs">
               {place.tags.map((tag) => (

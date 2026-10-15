@@ -73,12 +73,11 @@ describe('initialSelection — GET View를 초기 선택으로', () => {
       pace: null,
       companionTypes: null,
       petFlag: false,
-      budgetTier: null,
     });
   });
 
-  it('A4(필드 대응) companion→companionTypes·petFlag, budget→budgetTier로 분해된다', () => {
-    // 준비 — 래퍼 구조(companion.companionTypes / companion.petFlag / budget.tier)를 평면으로 편다.
+  it('A4(필드 대응) companion→companionTypes·petFlag로 분해된다 — 서버에 예산이 있어도 선택 상태에 싣지 않는다', () => {
+    // 준비 — 래퍼 구조(companion.companionTypes / companion.petFlag)를 평면으로 편다. 예산(budget)은 편집 대상이 아니다.
     const view: PreferenceView = {
       companion: {
         companionTypes: ['혼자', '커플'],
@@ -94,7 +93,7 @@ describe('initialSelection — GET View를 초기 선택으로', () => {
     // 단언 — GET 래퍼 필드가 PUT 평면 필드로 대응된다.
     expect(sel.companionTypes).toEqual(['혼자', '커플']);
     expect(sel.petFlag).toBe(true);
-    expect(sel.budgetTier).toBe('중간');
+    expect(sel).not.toHaveProperty('budgetTier');
   });
 });
 
@@ -174,8 +173,8 @@ describe('buildPreferenceInput — 바뀐 축만 PUT 바디로', () => {
     expect(body).toHaveProperty('styles', null);
   });
 
-  it('B5(스칼라 변경) pace·petFlag·budgetTier 변경은 그 축만 담고, 안 바꾼 companionTypes는 omit', () => {
-    // 준비 — 세 스칼라를 바꾸되 companionTypes(배열)는 그대로 둔다.
+  it('B5(스칼라 변경) pace·petFlag 변경은 그 축만 담고, 안 바꾼 companionTypes는 omit · 서버에 예산이 있어도 budgetTier 키를 보내지 않는다', () => {
+    // 준비 — 두 스칼라를 바꾸되 companionTypes(배열)는 그대로 둔다.
     const view: PreferenceView = {
       pace: { value: '균형있게', isNeutralDefault: false },
       companion: {
@@ -189,16 +188,16 @@ describe('buildPreferenceInput — 바뀐 축만 PUT 바디로', () => {
       ...initialSelection(view),
       pace: '알차게',
       petFlag: true,
-      budgetTier: '고급',
     };
 
     // 실행
     const body = buildPreferenceInput(view, sel);
 
-    // 단언 — 바뀐 스칼라 세 축만.
+    // 단언 — 바뀐 스칼라 두 축만. 서버 View 에 저장된 예산(중간)이 있어도 키를 만들지 않는다(생략=서버 유지).
     expect(body).toHaveProperty('pace', '알차게');
     expect(body).toHaveProperty('petFlag', true);
-    expect(body).toHaveProperty('budgetTier', '고급');
+    expect(body).not.toHaveProperty('budgetTier');
+    expect(body).not.toHaveProperty('budgetRawAmount');
     // petFlag만 바뀌었고 companionTypes(빈 배열)는 그대로 → 담지 않는다.
     expect(body).not.toHaveProperty('companionTypes');
   });

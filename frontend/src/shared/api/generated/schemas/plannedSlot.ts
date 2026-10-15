@@ -19,4 +19,17 @@ export interface PlannedSlot {
   endAt: string;
   /** 자정 넘김(HC4). true 면 endAt < startAt */
   endsNextDay: boolean;
+  /** 사용자가 시각을 못 박은 슬롯 */
+  isFixed: boolean;
+  /** 일정 화면의 슬롯 위반 표시와 같은 값 */
+  hasViolation: boolean;
+  nameKo?: string | null;
+  category?: string | null;
+  imageUrl?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  /** 위반 사유 문구. 없으면 null */
+  violationReason?: string | null;
+  /** 직전 지점에서 이 슬롯까지의 거리 표시 문자열. 모르면 null (소요시간 없음 — INV-3) */
+  distanceRange?: string | null;
 }
