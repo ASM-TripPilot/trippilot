@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import type { ProposalStatus } from '../api/assistantContract';
 import { assistantSample, sampleTranscript } from '../api/assistantSamples';
 import {
   AssistantSheetView,
@@ -131,7 +132,7 @@ describe('AssistantSheetView (TRIP-1322)', () => {
 });
 
 describe('제안 각주 (적용 뒤 거짓말 방지)', () => {
-  function proposalMessage(status: 'PROPOSED' | 'APPLIED' | 'DISMISSED') {
+  function proposalMessage(status: ProposalStatus) {
     const base = assistantSample('proposal', { id: 'mf' });
     if (!base.proposal) throw new Error('샘플에 제안 없음');
     return { ...base, proposal: { ...base.proposal, status } };
@@ -145,7 +146,7 @@ describe('제안 각주 (적용 뒤 거짓말 방지)', () => {
     );
   });
 
-  it.each(['APPLIED', 'DISMISSED'] as const)(
+  it.each(['APPLIED', 'DISMISSED', 'STALE', 'EXPIRED', 'FAILED'] as const)(
     '%s 이면 각주를 숨긴다',
     (status) => {
       renderView({ messages: [proposalMessage(status)] });
