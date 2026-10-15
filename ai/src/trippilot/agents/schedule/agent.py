@@ -88,7 +88,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import OpenHour, Poi, PoiCategory
+from trippilot.domain.poi import NIGHTLIFE_TAG, OpenHour, Poi, PoiCategory
 from trippilot.llm_gateway.workers.alternative_explanation import (
     AlternativeExplanationWorker,
 )
@@ -272,14 +272,20 @@ class ScheduleTask:
 # 자유 후보에만 건다: 사용자가 고정한 곳·검증(validate) 경로는 정보 없음을 그대로 막지 않는다.
 PRESUMED_OPEN_MIN, PRESUMED_CLOSE_MIN = 7 * 60, 23 * 60
 PRESUMED_NIGHT = (16 * 60, 26 * 60)  # 야경 16:00~익일 02:00
+PRESUMED_NIGHTLIFE = (20 * 60, 28 * 60)  # 클럽·바 20:00~익일 04:00 (tags 에 NIGHTLIFE_TAG)
 
 
 def presume_hours(pool: CandidatePool, keep: Collection[PoiId] = ()) -> CandidatePool:
-    """영업시간 없는 후보에 추정 창(요일 전부)을 채운다. 있는 곳·숙소·`keep`(사용자가 고른 곳)은 그대로."""
+    """영업시간 없는 후보에 추정 창(요일 전부)을 채운다. 있는 곳·숙소·`keep`(사용자가 고른 곳)은 그대로.
+
+    나이트라이프는 `keep` 이어도 밤 창을 건다 — 사용자가 고른 클럽이라도 "정보 없음 = 종일"이면 오전에 놓인다.
+    """
     def presumed(p: Poi) -> Poi:
-        if p.open_hours or p.category is PoiCategory.STAY or p.poi_id in keep:
+        night = NIGHTLIFE_TAG in p.tags
+        if p.open_hours or p.category is PoiCategory.STAY or (p.poi_id in keep and not night):
             return p
-        lo, hi = (PRESUMED_NIGHT if p.category is PoiCategory.NIGHT_VIEW
+        lo, hi = (PRESUMED_NIGHTLIFE if night
+                  else PRESUMED_NIGHT if p.category is PoiCategory.NIGHT_VIEW
                   else (PRESUMED_OPEN_MIN, PRESUMED_CLOSE_MIN))
         return replace(p, open_hours=tuple(OpenHour(day_of_week=d, open_min=lo, close_min=hi)
                                            for d in range(7)))
