@@ -45,9 +45,8 @@ REGIONS = [
 
 
 def region_check(address: str, regions) -> str:
+    """`collect_localdata.region_check` 의 **정확한** 거울 — 방어 코드를 더하지 않는다."""
     tokens = address.split()
-    if not tokens:
-        return "unresolved"
     sido = next((c for c, n, _, lvl, _ in regions if lvl == "SIDO" and n == tokens[0]), None)
     if sido is None:
         return "unresolved"
