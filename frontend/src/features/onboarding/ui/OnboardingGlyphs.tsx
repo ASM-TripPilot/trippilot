@@ -471,9 +471,10 @@ export function CoffeeCupGlyph({
 export function MoonGlyph({
   size = 24,
   selected,
+  onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected);
+  const stroke = selectableStroke(selected, onPrimary);
   return (
     <Svg
       testID={testID}
