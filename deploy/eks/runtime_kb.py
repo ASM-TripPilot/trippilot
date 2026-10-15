@@ -78,6 +78,15 @@ def run(namespace, shell):
             for line in logs.strip().splitlines()[-5:]:
                 print(_CREDENTIAL.sub(lambda m: (m.group(1) or m.group(2)) + "***", line))
             raise
-        print(shell(["kubectl", "logs", "--namespace", namespace, f"job/{NAME}", "--tail=20"]).strip())
+        # `logs job/…` 는 시도 중 아무 파드나 고른다 — 재시도로 완료된 런에서 실패한 첫 시도의 트레이스가
+        # 찍히고 바로 'load-kb: complete' 가 나와, 적재가 됐는지 로그로 판정할 수 없었다(10-15 개발 첫 적재).
+        failed = shell(["kubectl", "get", f"job/{NAME}", "--namespace", namespace,
+                        "-o", "jsonpath={.status.failed}"]).strip()
+        if failed not in ("", "0"):
+            print(f"적재 Job 이 {failed}회 실패한 뒤 재시도로 완료했다(멱등 — 이어받음). 아래는 성공한 시도의 로그다.")
+        pod = shell(["kubectl", "get", "pods", "--namespace", namespace, "--selector", f"job-name={NAME}",
+                     "--field-selector", "status.phase=Succeeded", "-o", "jsonpath={.items[0].metadata.name}"]).strip()
+        print(shell(["kubectl", "logs", "--namespace", namespace, f"pod/{pod}" if pod else f"job/{NAME}",
+                     "--tail=20"]).strip())
     finally:
         shell(delete)
