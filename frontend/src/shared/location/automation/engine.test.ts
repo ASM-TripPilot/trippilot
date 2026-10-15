@@ -375,3 +375,69 @@ describe('engine — 구간 보고 영속·재시도 (TRIP-1409)', () => {
     expect(store2.load().state.pendingReports).toEqual([]);
   });
 });
+
+describe('engine — START 409 강등 (TRIP-1409)', () => {
+  it('D1 킬 스위치 409: OS 지오펜스를 등록하지 않고 MANUAL·server-disabled 로 내린다', async () => {
+    const t = setup({ rejectIntervalStart: 'AUTOMATION_DISABLED' });
+    await setContext(t.deps, ctx());
+    const status = await run(t.deps);
+
+    expect(status).toMatchObject({
+      state: 'MANUAL',
+      reason: 'server-disabled',
+    });
+    expect(t.n.calls).not.toContain('arm');
+    expect(t.n.calls).not.toContain('route-start');
+    const s = t.store.load().state;
+    expect(s.intervals).toEqual([]);
+    expect(s.pendingReports).toEqual([]);
+    expect(s.serverEnabled).toBe(false);
+    expect(s.notice).toEqual({ kind: 'degraded', reason: 'server-disabled' });
+    // 서버엔 구간이 없으니 END 도 보내지 않는다.
+    expect(
+      t.sink.calls.some(
+        (c) => c.op === 'reportInterval' && c.report.phase === 'END'
+      )
+    ).toBe(false);
+  });
+
+  it('D2 동의 없음 409: 무장하지 않고 원시 표본·자동 결과 큐를 지운다', async () => {
+    const t = setup({ rejectIntervalStart: 'LOCATION_CONSENT_REQUIRED' });
+    await setContext(t.deps, ctx());
+    t.store.writeRaw(TODAY, [{ t: T0, lat: 37.5, lng: 127, acc: 10 }]);
+    t.store.save({ ...t.store.load().state, rawDates: [TODAY] });
+    const status = await run(t.deps);
+
+    expect(status).toMatchObject({
+      state: 'MANUAL',
+      reason: 'consent-rejected',
+    });
+    expect(t.n.calls).not.toContain('arm');
+    expect(t.store.readRaw(TODAY)).toEqual([]);
+    expect(t.store.load().state.intervals).toEqual([]);
+  });
+
+  it('D3 오프라인이면 강등하지 않는다 — 무장은 하고 START 는 큐에 남는다', async () => {
+    const t = setup({ offline: true });
+    await setContext(t.deps, ctx());
+    const status = await run(t.deps);
+    expect(status.state).toBe('ARMED');
+    expect(t.n.calls).toContain('arm');
+  });
+
+  it('D4 무장한 뒤 재시도에서 늦게 409 를 받으면 그때 내린다', async () => {
+    const t = setup({ offline: true });
+    await setContext(t.deps, ctx());
+    await run(t.deps);
+
+    t.sink.options.offline = false;
+    t.sink.options.rejectIntervalStart = 'AUTOMATION_DISABLED';
+    await flushQueue(t.deps);
+
+    const s = t.store.load().state;
+    expect(s.intervals).toEqual([]);
+    expect(s.pendingReports).toEqual([]);
+    expect(t.n.calls).toContain('disarm');
+    expect(s.serverEnabled).toBe(false);
+  });
+});
