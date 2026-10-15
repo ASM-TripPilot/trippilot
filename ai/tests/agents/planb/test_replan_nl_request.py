@@ -435,7 +435,11 @@ def test_extraction_gets_enough_time_for_a_real_model_call() -> None:
     body["request_meta"]["deadline_ms"] = 25_000
     with TestClient(app, raise_server_exceptions=False) as client:
         client.post("/ai/v1/planb/replan", json=body)
-    assert seen and seen[0] >= 4.5, seen
+        assert seen and seen[0] >= 4.5, seen
+        # 운영 시한(60s) — 운영 실호출(2026-10-15)에서 5s 를 넘긴 꼬리가 2회 중 1회였다.
+        body["request_meta"]["deadline_ms"] = 60_000
+        client.post("/ai/v1/planb/replan", json=body)
+    assert seen[-1] >= 7.5, seen
 
 
 def test_extraction_overlaps_the_directive_translation_instead_of_following_it() -> None:
