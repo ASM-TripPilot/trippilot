@@ -616,7 +616,7 @@ describe('확정 CTA·재조회 배선', () => {
   });
 });
 
-// TRIP-801 · TRIP-939 · 옛 ItineraryPlanPage.confirmed.integration.test.tsx — 공유 게이트 스위치는 이 describe beforeEach 가 false 로 켠다.
+// TRIP-801 · TRIP-939 · 옛 ItineraryPlanPage.confirmed.integration.test.tsx — 확정(h16) 셸 얼굴.
 describe('확정 셸(h16) 얼굴', () => {
   /**
    * TRIP-801 · h16 확정 일정(CONFIRMED)의 **지도+시트 셸 얼굴**을 실 HTTP 로 태우는 심판
@@ -630,7 +630,7 @@ describe('확정 셸(h16) 얼굴', () => {
    *  - 🔴 헤더 meta 가 "확정됨 · " 접두를 단다(km null 이면 "확정됨 · N곳", AC-3).
    *  - 🔴 슬롯 `openingHoursKnown === false` 에만 휴관 경고 표면이 뜬다(true/null/undefined 부재, AC-4).
    *  - 🔴 읽기전용 — 다른 후보(alt) 링크가 없다(AC-5).
-   *  - 🔴 뒤로가기는 내 여행 목록으로 replace(AC-6).
+   *  - 🔴 돌아가기는 내 여행 목록으로 dismissTo(AC-6 — C2c 가 진다).
    *  - 🔴 셸 얼굴 어디에도 소요시간·% 가 없다(INV-3, 배너·경고 신규 표면 포함).
    *
    * 왜 통합 버킷인가: 얼굴 판정(CONFIRMED vs PLANNED vs notFound)이 심판의 핵심이라 훅을 목하면
@@ -717,7 +717,7 @@ describe('확정 셸(h16) 얼굴', () => {
     });
   });
 
-  describe('🔴 C2 · AC-2 — CTA 가 h12(항상)·j06(캡처 개통 시)으로 push 하고 활성이다', () => {
+  describe('🔴 C2 · AC-2 — CTA 는 h12 편집 push·일정 탭 복귀로 이어지고 활성이다', () => {
     it('C2a · 일정 수정(button-0) press → h12 편집 push 1회, 활성', async () => {
       useItinerary(() => HttpResponse.json(confirmedDefault()));
       renderPage();
@@ -782,6 +782,9 @@ describe('확정 셸(h16) 얼굴', () => {
       expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
       expect(mockDismissTo).toHaveBeenCalledTimes(1);
       expect(mockPush).not.toHaveBeenCalled();
+      // TRIP-1243 — replace 가 아니라 dismissTo(생성·확정 위저드 화면을 스택에서 걷어낸다).
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockBack).not.toHaveBeenCalled();
     });
   });
 
@@ -868,22 +871,6 @@ describe('확정 셸(h16) 얼굴', () => {
       await screen.findByTestId('map-sheet-shell-root');
 
       expect(screen.queryAllByTestId(/^slot-stopcard-alt-/)).toHaveLength(0);
-    });
-  });
-
-  describe('🔴 C6 · AC-6 — 뒤로가기는 내 여행 목록으로 dismissTo 한다', () => {
-    it('돌아가기 CTA press → dismissTo("/(tabs)/itinerary") 1회, back() 미호출', async () => {
-      useItinerary(() => HttpResponse.json(confirmedDefault()));
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      fireEvent.press(screen.getByTestId('sheet-cta-button-1'));
-
-      // TRIP-1243 — replace 가 아니라 dismissTo(생성·확정 위저드 화면을 스택에서 걷어낸다).
-      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
-      expect(mockDismissTo).toHaveBeenCalledTimes(1);
-      expect(mockReplace).not.toHaveBeenCalled();
-      expect(mockBack).not.toHaveBeenCalled();
     });
   });
 
@@ -1639,6 +1626,24 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
       expect(mockPush).toHaveBeenCalledTimes(0);
       // 무회귀 — 창이 지난 뒤의 한 번은 정상 동작한다.
       expectEditWorksAfterWindow();
+    });
+
+    it('창 안의 "돌아가기"는 일정 탭으로 가지 않고(0회), 창이 지난 뒤 한 번 누르면 정확히 1회다', async () => {
+      await openPlanned();
+
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      await waitForEditCta();
+      expect(confirmPostCalls).toBe(1);
+
+      // 같은 자리 오른쪽에 새로 뜬 '돌아가기'에 떨어진 두 번째 탭.
+      fireEvent.press(screen.getByTestId('sheet-cta-button-1'));
+      expect(mockDismissTo).toHaveBeenCalledTimes(0);
+
+      // 창이 지난 뒤(=사람이 다시 누름)는 정상 — 앞의 0회가 공짜 통과가 아니라는 짝.
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('sheet-cta-button-1'));
+      expect(mockDismissTo).toHaveBeenCalledTimes(1);
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/itinerary');
     });
 
     it('01b Q2 · 확정 응답이 창(400ms)보다 늦어도, CTA 가 바뀌는 순간 창이 다시 열려 무시된다', async () => {
