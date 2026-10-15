@@ -17,7 +17,7 @@ from datetime import datetime
 
 from trippilot.domain.common import PoiId
 from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.domain.poi import NIGHTLIFE_TAG, Poi, PoiCategory
 
 # 카테고리마다 점수 상위 몇 곳을 후보로 줄까 — 맛집·카페·명소가 고루 보여야 식사창을 채운다.
 PER_CATEGORY = 6
@@ -95,7 +95,7 @@ def date_label(when: datetime) -> str:
 def hours_label(poi: Poi, weekday: int) -> str | None:
     """그날 영업시간 문구. 휴무가 **증명**되면 None(HC1 과 같은 판정 — 정보 없음은 막지 않는다)."""
     if not poi.open_hours:
-        return "영업시간 정보 없음"
+        return "밤 영업(추정 20:00~04:00)" if NIGHTLIFE_TAG in poi.tags else "영업시간 정보 없음"
     ranges = [h for h in poi.open_hours if h.day_of_week == weekday]
     if not ranges:
         return None
