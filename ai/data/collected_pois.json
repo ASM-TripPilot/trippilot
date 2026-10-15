@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "source": "OVERTURE",
+  "source": "TOURAPI",
   "sources": [
     "LOCALDATA",
     "OVERTURE",
     "TOURAPI"
   ],
-  "collected_at": "2026-10-15T05:00:51.395984+00:00",
+  "collected_at": "2026-10-15T22:03:27.970283+00:00",
   "area_codes": [
     "1",
     "2",
@@ -34,20 +34,143 @@
     "39"
   ],
   "stats": {
-    "merged_runs": 1,
-    "unique_proposals": 57526,
-    "bad_nightlife_dropped": 7,
-    "rejected_dropped": 35
+    "merged_runs": 3,
+    "unique_proposals": 57526
   },
   "merged_from": [
     {
       "collected_at": "2026-10-15T05:00:51.395984+00:00",
-      "proposals": 57568,
+      "proposals": 57526,
       "stats": {
         "merged_runs": 1,
-        "unique_proposals": 57568,
-        "bad_nightlife_dropped": 5,
-        "closed_dropped": 2
+        "unique_proposals": 57526,
+        "bad_nightlife_dropped": 7,
+        "rejected_dropped": 35
+      }
+    },
+    {
+      "collected_at": "2026-10-15T22:03:24.384741+00:00",
+      "proposals": 0,
+      "stats": {
+        "http_calls": 240,
+        "listed": 30,
+        "page_failures": 0,
+        "detail_failures": 0,
+        "category_unmapped": 0,
+        "address_missing": 2,
+        "merged": 0,
+        "passed": 0,
+        "skipped_unchanged": 15732,
+        "rest_unparsed": 0,
+        "raw_reparse_mismatch": 0,
+        "gate_drops": {
+          "existence_out_of_service_region": 26,
+          "policy_non_travel:convenience_store": 2
+        },
+        "budget_exhausted": false,
+        "per_area": {
+          "1": {
+            "calls": 25,
+            "passed": 0,
+            "skipped": 1442
+          },
+          "2": {
+            "calls": 10,
+            "passed": 0,
+            "skipped": 478
+          },
+          "3": {
+            "calls": 6,
+            "passed": 0,
+            "skipped": 177
+          },
+          "4": {
+            "calls": 7,
+            "passed": 0,
+            "skipped": 409
+          },
+          "5": {
+            "calls": 5,
+            "passed": 0,
+            "skipped": 142
+          },
+          "6": {
+            "calls": 10,
+            "passed": 0,
+            "skipped": 507
+          },
+          "7": {
+            "calls": 6,
+            "passed": 0,
+            "skipped": 213
+          },
+          "8": {
+            "calls": 5,
+            "passed": 0,
+            "skipped": 76
+          },
+          "31": {
+            "calls": 41,
+            "passed": 0,
+            "skipped": 3559
+          },
+          "32": {
+            "calls": 24,
+            "passed": 0,
+            "skipped": 1723
+          },
+          "33": {
+            "calls": 13,
+            "passed": 0,
+            "skipped": 827
+          },
+          "34": {
+            "calls": 15,
+            "passed": 0,
+            "skipped": 1066
+          },
+          "35": {
+            "calls": 16,
+            "passed": 0,
+            "skipped": 1194
+          },
+          "36": {
+            "calls": 16,
+            "passed": 0,
+            "skipped": 1275
+          },
+          "37": {
+            "calls": 14,
+            "passed": 0,
+            "skipped": 916
+          },
+          "38": {
+            "calls": 16,
+            "passed": 0,
+            "skipped": 1021
+          },
+          "39": {
+            "calls": 11,
+            "passed": 0,
+            "skipped": 707
+          }
+        }
+      }
+    },
+    {
+      "collected_at": "2026-10-15T22:03:27.970283+00:00",
+      "proposals": 7,
+      "stats": {
+        "pending": 7,
+        "attempted": {
+          "TOUR_API_KEY3": 7
+        },
+        "emitted": 7,
+        "kept_stored_hours": 0,
+        "gate_dropped": 0,
+        "failures": {},
+        "remaining": 0,
+        "halted": null
       }
     }
   ],
@@ -1150717,7 +1150840,9 @@
         "saved_count": 0,
         "quality": "PARTIAL",
         "source": "PLACES_API",
-        "confidence": null
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
       },
       "tags": [
         "육상 레포츠"
@@ -1150728,8 +1150853,9 @@
         "content_id": "2732134",
         "content_type_id": "28",
         "address": "경상남도 의령군 궁류면 청정로5길 57",
-        "image_url": "http://tong.visitkorea.or.kr/cms/resource/23/2732223_image2_1.JPG",
-        "modified_time": "20250902103249"
+        "image_url": "https://tong.visitkorea.or.kr/cms/resource/23/2732223_image2_1.JPG",
+        "modified_time": "20250902103249",
+        "detail_fetched_on": "2026-10-15"
       }
     },
     {
@@ -1196885,7 +1197011,9 @@
         "saved_count": 0,
         "quality": "PARTIAL",
         "source": "PLACES_API",
-        "confidence": null
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
       },
       "tags": [
         "육상 레포츠"
@@ -1196896,8 +1197024,9 @@
         "content_id": "2727179",
         "content_type_id": "28",
         "address": "경기도 양주시 백석읍 기산로 413",
-        "image_url": "http://tong.visitkorea.or.kr/cms/resource/05/2727305_image2_1.JPG",
-        "modified_time": "20250620115256"
+        "image_url": "https://tong.visitkorea.or.kr/cms/resource/05/2727305_image2_1.JPG",
+        "modified_time": "20250620115256",
+        "detail_fetched_on": "2026-10-15"
       }
     },
     {
@@ -1197154,7 +1197283,9 @@
         "saved_count": 0,
         "quality": "PARTIAL",
         "source": "PLACES_API",
-        "confidence": null
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
       },
       "tags": [
         "육상 레포츠"
@@ -1197165,8 +1197296,9 @@
         "content_id": "2734826",
         "content_type_id": "28",
         "address": "경기도 김포시 월곶면 용강로 325",
-        "image_url": "http://tong.visitkorea.or.kr/cms/resource/25/2736025_image2_1.JPG",
-        "modified_time": "20250327162426"
+        "image_url": "https://tong.visitkorea.or.kr/cms/resource/25/2736025_image2_1.JPG",
+        "modified_time": "20250327162426",
+        "detail_fetched_on": "2026-10-15"
       }
     },
     {
@@ -1206914,7 +1207046,9 @@
         "saved_count": 0,
         "quality": "PARTIAL",
         "source": "PLACES_API",
-        "confidence": null
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
       },
       "tags": [
         "육상 레포츠"
@@ -1206925,8 +1207059,9 @@
         "content_id": "2734824",
         "content_type_id": "28",
         "address": "경기도 안산시 단원구 대부황금로 976 (대부동동)",
-        "image_url": "http://tong.visitkorea.or.kr/cms/resource/08/2735908_image2_1.JPG",
-        "modified_time": "20250613111439"
+        "image_url": "https://tong.visitkorea.or.kr/cms/resource/08/2735908_image2_1.JPG",
+        "modified_time": "20250613111439",
+        "detail_fetched_on": "2026-10-15"
       }
     },
     {
@@ -1212349,7 +1212484,9 @@
         "saved_count": 0,
         "quality": "PARTIAL",
         "source": "PLACES_API",
-        "confidence": null
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
       },
       "tags": [
         "수상 레포츠"
@@ -1212360,8 +1212497,9 @@
         "content_id": "2753820",
         "content_type_id": "28",
         "address": "경기도 포천시 군내면 진구자리1길 14",
-        "image_url": "http://tong.visitkorea.or.kr/cms/resource/82/2753782_image2_1.jpg",
-        "modified_time": "20250819102320"
+        "image_url": "https://tong.visitkorea.or.kr/cms/resource/82/2753782_image2_1.jpg",
+        "modified_time": "20250819102320",
+        "detail_fetched_on": "2026-10-15"
       }
     },
     {
@@ -1232628,7 +1232766,9 @@
         "saved_count": 0,
         "quality": "PARTIAL",
         "source": "PLACES_API",
-        "confidence": null
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
       },
       "tags": [
         "육상 레포츠"
@@ -1232639,8 +1232779,9 @@
         "content_id": "2791953",
         "content_type_id": "28",
         "address": "강원특별자치도 인제군 북면 냇강효자길 366",
-        "image_url": "http://tong.visitkorea.or.kr/cms/resource/16/3516016_image2_1.jpg",
-        "modified_time": "20250801094242"
+        "image_url": "https://tong.visitkorea.or.kr/cms/resource/16/3516016_image2_1.jpg",
+        "modified_time": "20250801094242",
+        "detail_fetched_on": "2026-10-15"
       }
     },
     {
@@ -1243446,7 +1243587,9 @@
         "saved_count": 0,
         "quality": "PARTIAL",
         "source": "PLACES_API",
-        "confidence": null
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
       },
       "tags": [
         "육상 레포츠"
@@ -1243457,8 +1243600,9 @@
         "content_id": "2743877",
         "content_type_id": "28",
         "address": "충청북도 괴산군 장연면 충민로 1183",
-        "image_url": "http://tong.visitkorea.or.kr/cms/resource/01/2744601_image2_1.jpg",
-        "modified_time": "20251126154323"
+        "image_url": "https://tong.visitkorea.or.kr/cms/resource/01/2744601_image2_1.jpg",
+        "modified_time": "20251126154323",
+        "detail_fetched_on": "2026-10-15"
       }
     },
     {
