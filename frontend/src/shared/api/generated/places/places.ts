@@ -27,6 +27,7 @@ import type {
 import type {
   GetPlacesParams,
   GetRegionsParams,
+  Place,
   PlaceList,
   Region,
   SavePlaceRequest,
@@ -312,6 +313,148 @@ export function useGetPlaces<
   queryKey: DataTag<QueryKey, TData, TError>;
 } {
   const queryOptions = getGetPlacesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 목록(`/places`)과 **같은 `Place` 모양**이다. 상세 화면이 앞 화면의 캐시에서 장소를 골라 쓰던 것을 대신한다 — 캐시가 없으면(딥링크·콜드 스타트) 열 길이 없었다(TRIP-824).
+ *
+ * **ACTIVE 만으로 거르지 않는다.** 목록은 ACTIVE 만 내지만, 상세는 이미 알고 있는 장소를 다시 여는 화면이다 — 담아 둔 곳이 폐업(`CLOSED`)하거나 원본에서 빠져도(`LOST`) 404 가 아니라 그 상태를 실어 돌려준다. 화면이 상태를 말한다. 수집 게이트를 통과한 적 없는 `UNVERIFIED` 는 **404** 다(INV-1).
+ *
+ * 갤러리(`imageUrls`)·입장료·소개는 아직 없다 — 값이 수집돼야 붙일 수 있다(컬럼만 만들면 전부 null).
+ * @summary 장소(POI) 단건 — 상세 화면이 목록을 거치지 않고 여는 길
+ */
+export const getPlacesPoiId = (poiId: string, signal?: AbortSignal) => {
+  return customInstance<Place>({
+    url: `/places/${poiId}`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetPlacesPoiIdQueryKey = (poiId: string) => {
+  return [`/places/${poiId}`] as const;
+};
+
+export const getGetPlacesPoiIdQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPlacesPoiId>>,
+  TError = void,
+>(
+  poiId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getPlacesPoiId>>, TError, TData>
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPlacesPoiIdQueryKey(poiId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlacesPoiId>>> = ({
+    signal,
+  }) => getPlacesPoiId(poiId, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: poiId !== null && poiId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPlacesPoiId>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetPlacesPoiIdQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPlacesPoiId>>
+>;
+export type GetPlacesPoiIdQueryError = void;
+
+export function useGetPlacesPoiId<
+  TData = Awaited<ReturnType<typeof getPlacesPoiId>>,
+  TError = void,
+>(
+  poiId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getPlacesPoiId>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPlacesPoiId>>,
+          TError,
+          Awaited<ReturnType<typeof getPlacesPoiId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetPlacesPoiId<
+  TData = Awaited<ReturnType<typeof getPlacesPoiId>>,
+  TError = void,
+>(
+  poiId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getPlacesPoiId>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPlacesPoiId>>,
+          TError,
+          Awaited<ReturnType<typeof getPlacesPoiId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetPlacesPoiId<
+  TData = Awaited<ReturnType<typeof getPlacesPoiId>>,
+  TError = void,
+>(
+  poiId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getPlacesPoiId>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 장소(POI) 단건 — 상세 화면이 목록을 거치지 않고 여는 길
+ */
+
+export function useGetPlacesPoiId<
+  TData = Awaited<ReturnType<typeof getPlacesPoiId>>,
+  TError = void,
+>(
+  poiId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getPlacesPoiId>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetPlacesPoiIdQueryOptions(poiId, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<
     TData,

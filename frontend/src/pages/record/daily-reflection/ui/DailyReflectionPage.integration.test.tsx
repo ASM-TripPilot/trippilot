@@ -428,14 +428,14 @@ describe('생성 — 레코드가 없는 지난 날·오늘은 한 번 만들어
           async ({ request, params }) => {
             const body = (await request.json()) as EditReflectionRequest;
             const cover = (
-              JSON.parse(body.card) as { cover: { title: string } }
+              JSON.parse(body.card as string) as { cover: { title: string } }
             ).cover;
             const edited: ReflectionCard = {
               templateId: 'user.edit.v1',
               format: 'CARD',
               title: cover.title,
               subtitle: written,
-              payload: body.card,
+              payload: body.card as string,
             };
             const saved: Reflection = {
               dayDate: String(params.dayDate),
@@ -742,7 +742,7 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
           const dayDate = String(params.dayDate);
           const saved = reflectionFromPut(
             dayDate,
-            body.card,
+            body.card as string,
             serverItems.find((item) => item.dayDate === dayDate)
           );
           serverItems = [
@@ -808,7 +808,9 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
       expect(postCount).toBe(1);
       await waitFor(() => expect(putCount()).toBe(1));
       expect(putPaths).toEqual([PUT_PATH]);
-      expect(JSON.parse(putBodies[0].card).cover.subtitle).toBe(WRITTEN);
+      expect(JSON.parse(putBodies[0].card as string).cover.subtitle).toBe(
+        WRITTEN
+      );
       await waitForNarrative(WRITTEN);
       expect(screen.queryByTestId('reflection-daily-empty')).toBeNull();
       expect(screen.queryByText(SAVE_FAILED)).toBeNull();
@@ -881,7 +883,7 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
       await waitFor(() => expect(putCount()).toBe(1));
       expect(putPaths).toEqual([PUT_PATH]);
       expect(Object.keys(putBodies[0])).toEqual(['card']);
-      const parsed = JSON.parse(putBodies[0].card);
+      const parsed = JSON.parse(putBodies[0].card as string);
       expect(parsed.cover.subtitle).toBe('바다가 좋았다');
       expect(parsed.cover.title).toBe(CARD_TITLE);
       expect(parsed.scenes).toEqual(CARD_SCENES);
@@ -967,7 +969,9 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
 
       // (b) 앵커 — PUT 한 번, 고친 글이 실렸다.
       await waitFor(() => expect(putCount()).toBe(1));
-      expect(JSON.parse(putBodies[0].card).cover.subtitle).toBe(EDITED_TEXT);
+      expect(JSON.parse(putBodies[0].card as string).cover.subtitle).toBe(
+        EDITED_TEXT
+      );
       // (c) 본문이 새 글이고 옛 글은 화면에 없다.
       await waitForNarrative(EDITED_TEXT);
       expect(screen.queryByText(EXISTING_TEXT)).toBeNull();

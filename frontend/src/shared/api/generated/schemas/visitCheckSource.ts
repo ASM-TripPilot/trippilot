@@ -9,6 +9,9 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
+/**
+ * 도착 출처(DEC-U10-6). 완료 출처는 completionSource
+ */
 export type VisitCheckSource =
   (typeof VisitCheckSource)[keyof typeof VisitCheckSource];
 
