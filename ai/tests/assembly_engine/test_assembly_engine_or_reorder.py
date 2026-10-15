@@ -43,7 +43,10 @@ from trippilot.domain.llm import ScoredPoi
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
-_CFG = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
+# 도시 속도만 — 부산 픽스처는 "B 가 순서를 실제로 바꾼다"가 전제인데, 긴 구간 시외 속도에선 A 가 이미
+# 최적이라 그 전제가 사라진다. 이 파일은 재정렬 기계를 보는 것이지 속도를 보는 게 아니다.
+_CFG = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50,
+                      long_speeds_kmph=dict(AssemblyConfig().speeds_kmph))
 _CFG_A = replace(_CFG, or_tools_reorder_ms=0)  # B 끔 = A 해
 _EST = TravelEstimator(_CFG)
 _DAY = date(2026, 10, 10)

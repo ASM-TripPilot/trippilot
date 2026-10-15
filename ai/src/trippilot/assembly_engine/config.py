@@ -16,6 +16,12 @@ def _default_speeds() -> dict[TransportMode, float]:
     return {TransportMode.WALK: 4.0, TransportMode.PUBLIC: 20.0, TransportMode.CAR: 30.0}
 
 
+def _default_long_speeds() -> dict[TransportMode, float]:
+    # `long_leg_km` 을 넘는 도로 구간의 속도 — 도시 정차·신호가 없는 시외 구간이다. 대중교통 50 은
+    # 제주 간선·급행(번영로·일주동로) 감각값이고, ODsay 실측이 쌓이면 갈아 끼운다. 도보는 그대로.
+    return {TransportMode.WALK: 4.0, TransportMode.PUBLIC: 50.0, TransportMode.CAR: 60.0}
+
+
 def _default_safety() -> dict[TransportMode, float]:
     # G106
     return {TransportMode.WALK: 1.4, TransportMode.PUBLIC: 1.5, TransportMode.CAR: 1.5}
@@ -137,6 +143,11 @@ class AssemblyConfig:
     # 안쪽이라 지금은 min() 과 결론이 같지만, 속도 상수가 바뀌어도 이 바닥은 유지된다.
     public_walk_max_km: float = 0.6
     speeds_kmph: dict[TransportMode, float] = field(default_factory=_default_speeds)
+    # 긴 구간은 앞 `long_leg_km` 만 도시 속도, 나머지는 `long_speeds_kmph` 로 잰다(구간별 합 — 경계에서
+    # 시간이 튀지 않는다). 도시 속도로만 재면 제주시 → 성산 38km 가 240분(실제 약 1.5~2시간)이라 이동
+    # 한 번이 오전을 다 먹었다(DEV 2026-10-14, 09:00~12:55 공백). 도시 안 구간(≤15km 도로)은 종전과 같다.
+    long_leg_km: float = 15.0
+    long_speeds_kmph: dict[TransportMode, float] = field(default_factory=_default_long_speeds)
     safety: dict[TransportMode, float] = field(default_factory=_default_safety)
     # ── 식사 시간대 소프트 보정 (TRIP-379 신설 — 정본에 기존 규칙 없음:
     # ai-data-design.md §2.2는 RESTAURANT 기본 체류 60분만 정의하고, 카테고리-시간대
@@ -230,6 +241,10 @@ class AssemblyConfig:
             raise ValueError("detour_factor 양수 필요")
         if self.public_walk_max_km < 0:
             raise ValueError("public_walk_max_km 음수 불가")
+        if self.long_leg_km < 0:
+            raise ValueError("long_leg_km 음수 불가")
+        if any(self.long_speeds_kmph.get(m, 0) <= 0 for m in TransportMode):
+            raise ValueError("long_speeds_kmph 는 모든 수단에 양수 필요")
         for name in ("lunch_window_min", "dinner_window_min"):
             lo, hi = getattr(self, name)
             if not (0 <= lo < hi <= 1440):
