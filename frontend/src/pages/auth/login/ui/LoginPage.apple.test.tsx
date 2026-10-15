@@ -74,12 +74,18 @@ const mockPostSocialTokenLogin = postSocialTokenLogin as jest.MockedFunction<
   typeof postSocialTokenLogin
 >;
 
-const ENV_KEYS = ['EXPO_PUBLIC_AUTH_FAKE', 'EXPO_PUBLIC_AUTH_FAKE_OUTCOME'];
+const ENV_KEYS = [
+  'EXPO_PUBLIC_AUTH_FAKE',
+  'EXPO_PUBLIC_AUTH_FAKE_OUTCOME',
+  'EXPO_PUBLIC_NAVER_URL_SCHEME',
+];
 sandboxEnv(ENV_KEYS);
 
 beforeEach(() => {
   // fake 토글을 끈다 — 켜져 있으면 apple 이 dev 전용 success-code 로 빠져 SDK 를 타지 않는다.
   process.env.EXPO_PUBLIC_AUTH_FAKE = '';
+  // 네이버 버튼은 SDK 키(URL 스킴)가 있는 빌드에만 보인다(TRIP-1371) — 기본은 키 있는 출시 빌드.
+  process.env.EXPO_PUBLIC_NAVER_URL_SCHEME = 'test-naver-url-scheme';
   mockReplace.mockClear();
   mockPostSocialLogin.mockReset();
   mockPostSocialTokenLogin.mockReset();
@@ -246,6 +252,26 @@ describe('AC-13 · 가용성 판정대로 애플 버튼을 넣고 뺀다', () =>
       'auth-login-naver',
     ]);
     expect(screen.queryByTestId('auth-login-apple')).toBeNull();
+  });
+});
+
+describe('TRIP-1371 · 네이버 SDK 키가 없는 빌드는 네이버 버튼을 그리지 않는다', () => {
+  it('URL 스킴이 비면 네이버 없이 구글·애플·카카오만 보인다(서버가 네이버 code 경로를 닫았다)', async () => {
+    // 준비
+    process.env.EXPO_PUBLIC_NAVER_URL_SCHEME = '';
+    appleIsAvailableAsyncSpy.mockResolvedValue(true);
+
+    // 실행
+    render(<LoginPage />);
+    await screen.findByTestId('auth-login-apple-label');
+
+    // 단언
+    expect(socialButtonOrder()).toEqual([
+      'auth-login-google',
+      'auth-login-apple',
+      'auth-login-kakao',
+    ]);
+    expect(screen.queryByTestId('auth-login-naver')).toBeNull();
   });
 });
 

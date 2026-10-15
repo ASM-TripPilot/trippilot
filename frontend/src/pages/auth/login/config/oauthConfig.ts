@@ -7,7 +7,7 @@ import type { SocialProvider } from '@/shared/api';
  * 되게 두고, discovery(authorize/token 엔드포인트 주소록)는 정적 하드코딩한다 — 네트워크 의존
  * 0 으로 테스트를 결정론으로 유지하기 위함이다(D3). clientId 가 비면 그 사실을 빈 문자열로
  * 드러내고, 실 시도 여부는 호출부(makeAuthorize)가 판단한다(빈 값 실 OAuth 금지 · INV-4).
- * google·kakao·naver 는 채워지고, apple 은 이번 범위 밖이라 빈 슬롯이다(Seed §8 Q7).
+ * google·kakao 만 채워진다. apple(네이티브 SDK)·naver(서버가 code 경로를 닫아 SDK 토큰 경로뿐, TRIP-1371)는 빈 슬롯이다.
  */
 export interface OAuthDiscovery {
   authorizationEndpoint: string;
@@ -19,9 +19,7 @@ export interface OAuthProviderConfig {
   redirectUri: string;
   scopes: string[];
   discovery: OAuthDiscovery;
-  // TRIP-172 계약(02 §3-4) — naver 는 PKCE 미지원이라 usePKCE:false·requiresState:true 로
-  // 갈라진다(realAuthorize.ts 가 이 값으로 AuthRequest 를 구성한다). 선택 필드로 유지한다
-  // (게이트①에서 확정) — apple 등 범위 밖 provider 는 이 필드를 채우지 않고 undefined 로 둔다.
+  // realAuthorize.ts 가 이 값으로 AuthRequest 를 구성한다. 선택 필드 — 빈 슬롯 provider(apple·naver)는 채우지 않는다.
   usePKCE?: boolean;
   requiresState?: boolean;
 }
@@ -35,11 +33,6 @@ const GOOGLE_DISCOVERY: OAuthDiscovery = {
 const KAKAO_DISCOVERY: OAuthDiscovery = {
   authorizationEndpoint: 'https://kauth.kakao.com/oauth/authorize',
   tokenEndpoint: 'https://kauth.kakao.com/oauth/token',
-};
-
-const NAVER_DISCOVERY: OAuthDiscovery = {
-  authorizationEndpoint: 'https://nid.naver.com/oauth2.0/authorize',
-  tokenEndpoint: 'https://nid.naver.com/oauth2.0/token',
 };
 
 const DEFAULT_GOOGLE_SCOPES = ['openid', 'profile', 'email'];
@@ -73,17 +66,6 @@ export function getOAuthConfig(provider: SocialProvider): OAuthProviderConfig {
       discovery: KAKAO_DISCOVERY,
       usePKCE: true,
       requiresState: false,
-    };
-  }
-  if (provider === 'naver') {
-    return {
-      clientId: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID ?? '',
-      redirectUri: process.env.EXPO_PUBLIC_NAVER_REDIRECT_URI ?? '',
-      scopes: [],
-      discovery: NAVER_DISCOVERY,
-      // naver 는 PKCE 미지원 — state 로 CSRF 방어를 대신한다(realAuthorize.ts 가 채운다).
-      usePKCE: false,
-      requiresState: true,
     };
   }
   return {
