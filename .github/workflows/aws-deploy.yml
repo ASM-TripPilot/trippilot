@@ -68,7 +68,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     environment: ${{ inputs.environment }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 선언된 스텝 상한 합: helm 대기 30 + KB 적재 95 + POI 적재 25 = 150분 + 빌드·terraform·smoke.
+    # 120 이면 KB 마감(90분, 2026-10-16)보다 잡이 먼저 끊겨 정리 스텝 없이 취소된다 — 180 으로 둔다.
+    timeout-minutes: 180
     permissions:
       contents: read
       id-token: write
