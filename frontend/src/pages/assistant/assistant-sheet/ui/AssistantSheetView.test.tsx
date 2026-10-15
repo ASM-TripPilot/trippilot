@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { sampleTranscript } from '../api/assistantSamples';
+import { assistantSample, sampleTranscript } from '../api/assistantSamples';
 import {
   AssistantSheetView,
   type AssistantSheetViewProps,
@@ -128,4 +128,28 @@ describe('AssistantSheetView (TRIP-1322)', () => {
       expect.objectContaining({ type: 'OPEN_ITINERARY' })
     );
   });
+});
+
+describe('제안 각주 (적용 뒤 거짓말 방지)', () => {
+  function proposalMessage(status: 'PROPOSED' | 'APPLIED' | 'DISMISSED') {
+    const base = assistantSample('proposal', { id: 'mf' });
+    if (!base.proposal) throw new Error('샘플에 제안 없음');
+    return { ...base, proposal: { ...base.proposal, status } };
+  }
+
+  it('열린 제안(PROPOSED)은 "적용 전까지" 각주를 그린다', () => {
+    renderView({ messages: [proposalMessage('PROPOSED')] });
+    expect(screen.getByTestId('assistant-footnote-mf')).toHaveTextContent(
+      '적용 전까지',
+      { exact: false }
+    );
+  });
+
+  it.each(['APPLIED', 'DISMISSED'] as const)(
+    '%s 이면 각주를 숨긴다',
+    (status) => {
+      renderView({ messages: [proposalMessage(status)] });
+      expect(screen.queryByTestId('assistant-footnote-mf')).toBeNull();
+    }
+  );
 });
