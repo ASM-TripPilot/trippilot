@@ -30,8 +30,12 @@ config:
   scheduleDeadlineTotalMs: 60000
 backend:
   replicas: 1
+  # 요청값은 **스케줄러가 노드를 고르는 값**이다(EKS Auto 의 Karpenter 가 요청 합으로 장비를 산다). 실사용에 맞춘다 —
+  # 2026-10-16 Container Insights 3일 실측(시간 최대): CPU 평균 15m·정점 1.4코어(기동 순간), 메모리 정점 1,076Mi.
+  # 종전 500m/1Gi 는 CPU 는 30배 넘게 크고 메모리는 정점보다 작았다 → CPU 형 노드(c5a)가 골라지고 메모리는 빠듯했다.
+  # 상한(2코어)은 그대로라 기동·급증 순간은 종전처럼 쓴다.
   resources:
-    requests: { cpu: 500m, memory: 1Gi }
+    requests: { cpu: 200m, memory: 1280Mi }
     limits: { cpu: "2", memory: 2Gi }
 ai:
   replicas: 1
@@ -41,15 +45,21 @@ ai:
     minReplicas: 1
     maxReplicas: 4
     targetCPUUtilizationPercentage: 70
+  # 실측(위와 같은 창): CPU 평균 7m·정점 1.8코어, 메모리 정점 481Mi. HPA 목표치(요청의 70%)는 요청이 작아진 만큼
+  # 일찍 반응한다 — 평균이 140m 를 넘을 때다(실측 평균의 20배).
   resources:
-    requests: { cpu: 500m, memory: 512Mi }
+    requests: { cpu: 200m, memory: 640Mi }
     limits: { cpu: "2", memory: 2Gi }
 embedding:
   # Optional CPU KURE service. Requires the vector database bootstrap and vector data ingestion.
   enabled: false
   replicas: 1
   resources:
-    requests: { cpu: "2", memory: 5Gi }
+    # 메모리는 AI 팀 실측(모델 프로세스 4.2~4.4GiB, ai/docs/임베딩-사이징-근거.md)대로 둔다. CPU 는 평균 12m 이고
+    # 2코어를 쓰는 것은 KB 적재·배치 인코딩 순간뿐이라 요청만 1코어로 — 상한 2코어는 그대로다.
+    # 붐비는 노드에서 첫 전량 적재가 느려질 수 있어 적재 마감을 90분으로 늘렸다(runtime_kb.DEADLINE_SEC).
+    # 이 값은 values-prd.yaml 도 그대로 받는다(override 없음).
+    requests: { cpu: "1", memory: 5Gi }
     limits: { cpu: "2", memory: 6Gi }
 gateway:
   certificateArn: ""
