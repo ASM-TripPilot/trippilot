@@ -3,7 +3,7 @@ import json
 import re
 
 NAME = "trippilot-kb-load"
-DEADLINE_SEC = 3600
+DEADLINE_SEC = 5400
 
 # `scheme://user:pass@` 와 `KEY=value` 꼴의 비밀을 가린다(실패 출력용).
 _CREDENTIAL = re.compile(r"(://)[^\s/@]+@|((?:KEY|TOKEN|SECRET|PASSWORD)[A-Z_]*=)\S+", re.IGNORECASE)
@@ -44,8 +44,9 @@ def manifest(namespace, image):
         "apiVersion": "batch/v1", "kind": "Job",
         "metadata": {"name": NAME, "namespace": namespace},
         # 멱등(저장본과 같은 문서는 건너뜀)이라 재시도가 이어받는다 — 임베딩 파드 일시 장애 대비.
-        # 마감 60분: DEV 임베딩(CPU 2)은 건당 ≈1.5초라 KB-5 전량(1,470건)이 ≈37분이다 — 30분이던
-        # 첫 적재가 끊겼다(2026-10-04). 전량 재적재는 모델이 바뀔 때뿐이고, 평소엔 본문·payload 가 바뀐
+        # 마감 90분: DEV 임베딩(CPU 2)은 건당 ≈1.5초라 KB-5 전량(1,470건)이 ≈37분이다 — 30분이던
+        # 첫 적재가 끊겼다(2026-10-04). 임베딩 CPU 요청을 1코어로 낮춘 뒤(2026-10-16, 상한은 2) 노드가 붐비면
+        # 실효 1코어 ≈3초/건 ≈74분까지 갈 수 있어 60분에서 늘렸다. 전량 재적재는 모델이 바뀔 때뿐이고, 평소엔 본문·payload 가 바뀐
         # 문서만 다시 임베딩한다(seed 에서 지운 문서의 옛 행은 지우지 않는다).
         "spec": {"backoffLimit": 2, "activeDeadlineSeconds": DEADLINE_SEC, "ttlSecondsAfterFinished": 3600,
                  "template": {"metadata": {"labels": {"app.kubernetes.io/name": NAME}},

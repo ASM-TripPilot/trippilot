@@ -311,6 +311,19 @@ class ChartTests(unittest.TestCase):
                 self.assertTrue(ref["optional"])
 
 
+class RequestSizingTests(unittest.TestCase):
+    def test_requests_follow_measured_usage(self):
+        """2026-10-16 실측으로 요청을 맞췄다 — CPU 요청이 커지면 Karpenter 가 다시 CPU 형 노드를 산다,
+        메모리 요청이 정점보다 작으면 노드 메모리가 빠듯할 때 먼저 쫓겨난다. 상한은 정점을 덮어야 한다."""
+        deployments = {item["metadata"]["name"]: item for item in render("dev", embedding=True) if item["kind"] == "Deployment"}
+        expected = {"backend": ("200m", "1280Mi", "2"), "ai": ("200m", "640Mi", "2"), "embedding": ("1", "5Gi", "2")}
+        for name, (cpu, memory, cpu_limit) in expected.items():
+            with self.subTest(name=name):
+                resources = deployments[name]["spec"]["template"]["spec"]["containers"][0]["resources"]
+                self.assertEqual((resources["requests"]["cpu"], resources["requests"]["memory"], resources["limits"]["cpu"]),
+                                 (cpu, memory, cpu_limit))
+
+
 class DevTargetValuesTests(unittest.TestCase):
     def test_dev_target_is_small_and_never_blocks_drains(self):
         """개발 대상은 운영과 같은 노드에 올라간다 — 복제본 1·HPA·PDB 없음·임베딩 없음. 복제본 1 에 PDB 가 걸리면

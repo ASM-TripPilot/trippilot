@@ -107,6 +107,18 @@ class WorkflowContractTests(unittest.TestCase):
         # 모든 runtime.py 호출이 대상을 넘긴다(여러 줄 명령이라 횟수로 맞춘다)
         self.assertEqual(text.count('python3 deploy/eks/runtime.py'), text.count('--target "$DEPLOY_TARGET"'))
 
+    def test_credentials_are_refreshed_before_the_long_loads(self):
+        """첫 자격 증명(2시간)은 잡 시작 직후에 받는다 — KB(최대 95분)·POI(25분) 적재 뒤 cleanup-db 가 만료로
+        실패하면 RDS 관리자 비밀번호 Secret 이 클러스터에 남는다(#1296 재검수)."""
+        steps = workflow('aws-deploy.yml')['jobs']['deploy']['steps']
+        names = [s.get('name', '') for s in steps]
+        for load in ('Load the Plan-B knowledge base', 'Load the POI shared document into the backend'):
+            with self.subTest(load=load):
+                before = steps[names.index(load) - 1]
+                self.assertTrue(before['name'].startswith('Refresh AWS credentials'))
+                self.assertIn('configure-aws-credentials', before['uses'])
+                self.assertEqual(before['with']['role-duration-seconds'], '7200')
+
     def test_infra_changes_are_validated_on_pull_requests_without_credentials(self):
         """Terraform PR 에는 체크가 없었고 차트 PR 은 gradle 초록만 받았다 — 깨진 변경이 머지 뒤
         다음 배포에서야 드러났다(#887). PR 에서 도는 잡이라 자격 증명에 닿으면 안 된다."""

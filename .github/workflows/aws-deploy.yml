@@ -68,7 +68,10 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     environment: ${{ inputs.environment }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 선언된 스텝 상한 합: helm 대기 30 + KB 적재 95 + POI 적재 25 = 150분 + 빌드·terraform·smoke.
+    # 120 이면 KB 마감(90분, 2026-10-16)보다 잡이 먼저 끊겨 정리 스텝 없이 취소된다 — 180 으로 둔다.
+    # 자격 증명은 2시간짜리라 KB·POI 적재 앞에서 다시 받는다(아래 Refresh AWS credentials 두 스텝).
+    timeout-minutes: 180
     permissions:
       contents: read
       id-token: write
@@ -249,12 +252,34 @@ jobs:
       - name: Verify in-cluster API and AI connectivity
         if: steps.config.outputs.deploy_application == 'true'
         run: python3 deploy/eks/runtime.py smoke --target "$DEPLOY_TARGET"
+      # 자격 증명 재획득 — 첫 획득(OIDC, 2시간)은 잡 시작 직후라 긴 KB·POI 적재 뒤에는 만료돼 kubectl·aws 가
+      # 401 이 되고 cleanup-db 가 RDS 관리자 비밀번호 Secret 을 못 지운다. OIDC 재발급이라 역할 연쇄 1시간 제한이 없다.
+      - name: Refresh AWS credentials before the knowledge base load
+        if: steps.config.outputs.deploy_application == 'true'
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-${{ github.run_id }}
+          role-duration-seconds: 7200
       # 멱등 — 저장본과 같은 문서는 건너뛰므로 재배포마다 돌려도 새 문서·바뀐 문서만 임베딩한다.
       # 첫 적재(KB-5 1,470건)는 임베딩 파드 CPU 로 수 분 걸린다.
       - name: Load the Plan-B knowledge base
         if: steps.config.outputs.deploy_application == 'true' && steps.config.outputs.embedding_enabled == 'true'
-        timeout-minutes: 65  # Job 대기 3600s(runtime_kb.DEADLINE_SEC) + 정리
+        timeout-minutes: 95  # Job 대기 5400s(runtime_kb.DEADLINE_SEC) + 정리
         run: python3 deploy/eks/runtime.py load-kb --target "$DEPLOY_TARGET"
+      # 자격 증명 재획득 — 첫 획득(OIDC, 2시간)은 잡 시작 직후라 긴 KB·POI 적재 뒤에는 만료돼 kubectl·aws 가
+      # 401 이 되고 cleanup-db 가 RDS 관리자 비밀번호 Secret 을 못 지운다. OIDC 재발급이라 역할 연쇄 1시간 제한이 없다.
+      - name: Refresh AWS credentials before the POI load
+        if: steps.config.outputs.deploy_application == 'true'
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-${{ github.run_id }}
+          role-duration-seconds: 7200
       # 공유본(ai/data/collected_pois.json)을 백엔드 DB 에 upsert — 리뷰·머지된 문서가 이미지에 들어간 뒤라
       # 가이드 §자동화하지 않은 이유의 완충(공유본 PR 리뷰)은 그대로다. 사람의 port-forward 단계만 대체한다.
       - name: Load the POI shared document into the backend
