@@ -565,6 +565,51 @@ describe('I11 · 네이버 지도에서 보기', () => {
     ).toBeOnTheScreen();
   });
 
+  it('좌표 있는 슬롯은 앱 URL(위도·경도 순서 그대로)을 먼저 연다 — 좌표를 빼거나 뒤바꾸면 웹으로 샌다', async () => {
+    mockOpenURL.mockResolvedValue(undefined);
+    const withCoords = itinerary();
+    const first = withCoords.days[0].slots[0] as unknown as Record<
+      string,
+      unknown
+    >;
+    first.lat = 35.153;
+    first.lng = 129.118;
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(withCoords)
+      )
+    );
+    render(<LivePlacePage tripId={TRIP_ID} poiId="p1" />, { wrapper });
+    await waitFor(() =>
+      expect(screen.getByTestId('execution-place-open-naver')).toBeTruthy()
+    );
+
+    fireEvent.press(screen.getByTestId('execution-place-open-naver'));
+
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
+    expect(mockOpenURL).toHaveBeenCalledWith(
+      `nmap://place?lat=35.153&lng=129.118&name=${encodeURIComponent('광안리 해수욕장')}&appname=com.trippilot.travel`
+    );
+  });
+
+  it('한 번 실패해 배너가 뜬 뒤 다시 눌러 성공하면 배너가 사라진다', async () => {
+    mockOpenURL.mockRejectedValueOnce(new Error('x'));
+    mockOpenURL.mockRejectedValueOnce(new Error('x'));
+    mockOpenURL.mockResolvedValue(undefined);
+    await renderP1();
+
+    fireEvent.press(screen.getByTestId('execution-place-open-naver'));
+    expect(
+      await screen.findByTestId('execution-place-opennaver-error')
+    ).toBeOnTheScreen();
+
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('execution-place-open-naver'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('execution-place-opennaver-error')).toBeNull()
+    );
+  });
+
   it('이름도 좌표도 없는 슬롯은 버튼을 그리지 않는다', async () => {
     const noInfo = itinerary();
     const first = noInfo.days[0].slots[0] as unknown as Record<string, unknown>;

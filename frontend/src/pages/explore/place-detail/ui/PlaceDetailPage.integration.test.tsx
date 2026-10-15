@@ -334,6 +334,22 @@ describe('D12 · 네이버 지도에서 보기', () => {
     expect(screen.queryByTestId('explore-place-opennaver-error')).toBeNull();
   });
 
+  it('한 번 실패해 배너가 뜬 뒤 다시 눌러 성공하면 배너가 사라진다', async () => {
+    mockOpenURL.mockRejectedValueOnce(new Error('x'));
+    mockOpenURL.mockRejectedValueOnce(new Error('x'));
+    mockOpenURL.mockResolvedValue(undefined);
+    await renderAndPress();
+    expect(
+      await screen.findByTestId('explore-place-opennaver-error')
+    ).toBeOnTheScreen();
+
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('explore-place-open-naver'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('explore-place-opennaver-error')).toBeNull()
+    );
+  });
+
   it('앱이 없어 reject 되면 웹 URL 로 강등한다', async () => {
     mockOpenURL.mockRejectedValueOnce(new Error('no app'));
     mockOpenURL.mockResolvedValueOnce(undefined);
