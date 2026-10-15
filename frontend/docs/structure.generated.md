@@ -455,7 +455,7 @@
 - `src/features/notification/ui/NotificationGlyphs.tsx`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
 
 ## src/features/onboarding/
-- `src/features/onboarding/index.ts`  →  resolveOnboardingStep · termsDocumentTitle · useOnboardingProgress · ActivityGlyph · ArtGlyph · BackChevronGlyph · BalanceGlyph · BikeGlyph · CameraGlyph · CarGlyph · CheckGlyph · FamilyGlyph · ForkKnifeGlyph · FriendsGlyph · HeartGlyph · InfoCircleGlyph · LightningGlyph · MoonGlyph · MountainGlyph · ParentsGlyph · PetGlyph · PositiveCheckGlyph · RegenerateGlyph · ShoppingBagGlyph · SkipChevronGlyph · SoloPersonGlyph · SunGlyph · TaxiGlyph · TransitGlyph · ViewChevronGlyph · WalkGlyph
+- `src/features/onboarding/index.ts`  →  resolveOnboardingStep · termsDocumentTitle · useOnboardingProgress · ActivityGlyph · ArtGlyph · BackChevronGlyph · BalanceGlyph · BikeGlyph · CameraGlyph · CarGlyph · CheckGlyph · CoffeeCupGlyph · FamilyGlyph · FerrisWheelGlyph · ForkKnifeGlyph · FriendsGlyph · HeartGlyph · InfoCircleGlyph · LandmarkGlyph · LightningGlyph · MoonGlyph · MountainGlyph · ParentsGlyph · PetGlyph · PositiveCheckGlyph · RegenerateGlyph · ShoppingBagGlyph · SkipChevronGlyph · SoloPersonGlyph · SunGlyph · TaxiGlyph · TransitGlyph · ViewChevronGlyph · WalkGlyph
 
 ## src/features/onboarding/model/
 - `src/features/onboarding/model/resolveOnboardingStep.ts`  →  OnboardingStep · OnboardingProgress · resolveOnboardingStep
@@ -463,7 +463,7 @@
 - `src/features/onboarding/model/useOnboardingProgress.ts`  →  useOnboardingProgress
 
 ## src/features/onboarding/ui/
-- `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  CheckGlyph · ViewChevronGlyph · RegenerateGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · ForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · ShoppingBagGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · ParentsGlyph · PetGlyph · WalkGlyph · TransitGlyph · CarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · InfoCircleGlyph · BackChevronGlyph
+- `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  CheckGlyph · ViewChevronGlyph · RegenerateGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · ForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · ShoppingBagGlyph · LandmarkGlyph · FerrisWheelGlyph · CoffeeCupGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · ParentsGlyph · PetGlyph · WalkGlyph · TransitGlyph · CarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · InfoCircleGlyph · BackChevronGlyph
 
 ## src/features/open-assistant/
 - `src/features/open-assistant/index.ts`  →  ASSISTANT_FAB_SIZE · FAB_STACK_GAP · TAB_FAB_BASE · TAB_TWO_STACK · assistantFabBottom · stackTop · toastBottomWith · type FabStack · assistantHref · type AssistantHref · type AssistantSurface · AssistantFab · type AssistantFabProps · SparkleGlyph

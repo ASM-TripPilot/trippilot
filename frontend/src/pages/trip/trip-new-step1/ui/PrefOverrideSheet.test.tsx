@@ -209,6 +209,12 @@ describe('PS-8 · TRIP-1092 AC-9 — 「여행 스타일」「선호 활동」 �
     );
     for (const { slug, label } of ACTIVITY_CHIPS) {
       expect(within(activityChip(slug)).getByText(label)).toBeOnTheScreen();
+      // 활동 칩마다 글리프가 있다(모양·색은 jest 사각 — 실화면 QA 몫)
+      expect(
+        within(activityChip(slug)).getByTestId(
+          `trip-wizard-pref-activity-glyph-${slug}`
+        )
+      ).toBeOnTheScreen();
     }
 
     // 스타일 묶음 무변경 — 접두 `trip-wizard-pref-chip-` 은 활동 칩(`…-activity-chip-`)과 안 겹친다.

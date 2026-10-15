@@ -11,4 +11,4 @@ paths:
 |---|---|
 | `src/features/onboarding/model/useOnboardingProgress.ts` | 온보딩 진행 상태 훅 seam. ⚠️ **`{false,false}` 하드코딩**. 취향 스텝은 이 모델을 확장하지 않음(1회성 통과 흐름) |
 | `src/features/onboarding/model/resolveOnboardingStep.ts` | **순수 함수** — 진행 상태 → 잔여 단계(`terms`/`nickname`/`done`) |
-| `src/features/onboarding/ui/OnboardingGlyphs.tsx` | 인라인 SVG — 약관·닉네임·취향 화면 글리프(raw hex 직박). |
+| `src/features/onboarding/ui/OnboardingGlyphs.tsx` | 인라인 SVG — 약관·닉네임·취향 화면 글리프(raw hex 직박). 활동 칩용 `LandmarkGlyph`·`FerrisWheelGlyph`·`CoffeeCupGlyph` 포함(g01 시트 소비). |

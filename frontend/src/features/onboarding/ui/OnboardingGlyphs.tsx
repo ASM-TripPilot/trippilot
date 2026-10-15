@@ -372,6 +372,101 @@ export function ShoppingBagGlyph({
   );
 }
 
+// 활동 — 역사문화(기둥 있는 건물). Figma 근거 프레임 없음(TRIP-1092 활동 칩은 글리프 없이 그려졌다).
+export function LandmarkGlyph({
+  size = 24,
+  selected,
+  onPrimary,
+  testID,
+}: SelectableGlyphProps) {
+  const stroke = selectableStroke(selected, onPrimary);
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M3 9.5L12 3.5L21 9.5H3Z M5.5 9.5V17.5 M10 9.5V17.5 M14 9.5V17.5 M18.5 9.5V17.5 M3 20.5H21 M3.5 17.5H20.5"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 활동 — 테마파크(관람차). Figma 근거 프레임 없음.
+export function FerrisWheelGlyph({
+  size = 24,
+  selected,
+  onPrimary,
+  testID,
+}: SelectableGlyphProps) {
+  const stroke = selectableStroke(selected, onPrimary);
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 15.5C14.4853 15.5 16.5 13.4853 16.5 11C16.5 8.51472 14.4853 6.5 12 6.5C9.51472 6.5 7.5 8.51472 7.5 11C7.5 13.4853 9.51472 15.5 12 15.5Z"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 6.5V15.5M7.5 11H16.5 M12 15.5L7 21.5 M12 15.5L17 21.5 M5 21.5H19"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 활동 — 카페(컵). Figma 근거 프레임 없음.
+export function CoffeeCupGlyph({
+  size = 24,
+  selected,
+  onPrimary,
+  testID,
+}: SelectableGlyphProps) {
+  const stroke = selectableStroke(selected, onPrimary);
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M4.5 9.5H17V15C17 17.4853 14.9853 19.5 12.5 19.5H9C6.51472 19.5 4.5 17.4853 4.5 15V9.5Z"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M17 11H18.5C19.8807 11 21 12.1193 21 13.5C21 14.8807 19.8807 16 18.5 16H16.5 M8 3.5V6 M12 3.5V6"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // 페이스 — 느긋(moon).
 export function MoonGlyph({
   size = 24,
