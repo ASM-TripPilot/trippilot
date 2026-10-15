@@ -155,3 +155,55 @@ def test_kind_missing_from_the_pool_is_noted_and_the_day_still_comes_back() -> N
                         _MixComposer(lambda p: True))
     assert "nl_category_rejected: SHOPPING no_candidates" in body["notes"]
     assert placed  # 따를 수 없는 조건이 빈 하루를 만들지 않는다
+
+
+# ── ⑤ 운영 회귀(2026-10-15) — 구성엔 카페 1곳을 넣었는데 솔버가 시간 부족에 빼서 최종 0곳 ──────
+
+def _run_with_agent(extracted, composer, wrap):
+    from dataclasses import replace as _replace  # noqa: F401
+    app = build_dev_app(directives=_DIRECTIVES, poi_db=StaticPoiDb(demo_poi_seed() + _NEAR))
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(extracted)
+    orch._composer = composer
+    orch._schedule_agent = wrap(orch._schedule_agent)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(free_text="카페는 한 곳만"))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_counted_kind_goes_to_the_solver_as_a_priority_visit() -> None:
+    seen = []
+
+    def spy(inner):
+        class _Spy:
+            def run(self, task):
+                seen.append(task.request.required_visits)
+                return inner.run(task)
+        return _Spy()
+
+    _run_with_agent(ExtractedRequest(categories=(ExtractedCategory("CAFE", 1),)),
+                    _MixComposer(lambda p: True), spy)
+    cafes = [rv for rv in seen[0] if rv.poi_id.startswith("cafe")]
+    others = [rv for rv in seen[0] if not rv.poi_id.startswith("cafe")]
+    assert len(cafes) == 1 and cafes[0].priority, seen[0]
+    assert others and not any(rv.priority for rv in others)  # 수를 정하지 않은 종류는 그대로
+
+
+def test_counted_kind_dropped_by_the_solver_is_reported() -> None:
+    from dataclasses import replace as _replace
+
+    def drop_cafes(inner):
+        class _Drop:
+            def run(self, task):
+                out = inner.run(task)
+                if out.solution is None:
+                    return out
+                days = tuple(_replace(d, slots=tuple(s for s in d.slots if not s.poi_id.startswith("cafe")))
+                             for d in out.solution.days)
+                return _replace(out, solution=_replace(out.solution, days=days))
+        return _Drop()
+
+    body = _run_with_agent(ExtractedRequest(categories=(ExtractedCategory("CAFE", 1),)),
+                           _MixComposer(lambda p: True), drop_cafes)
+    assert "nl_category_unplaced: CAFE 0/1" in body["notes"], body["notes"]
