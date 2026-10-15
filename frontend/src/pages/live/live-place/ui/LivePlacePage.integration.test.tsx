@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { Share } from 'react-native';
+import * as Linking from 'expo-linking';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -14,6 +15,8 @@ import {
 import { server } from '@/mocks/server';
 import type { Itinerary } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { LivePlacePage } from './LivePlacePage';
 
@@ -60,6 +63,9 @@ jest.mock('expo-router', () => {
   };
   return { router: routerMock, useRouter: () => routerMock };
 });
+
+jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
+const mockOpenURL = Linking.openURL as jest.Mock;
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 'trip-1';
@@ -527,5 +533,52 @@ describe('🔴 1015-D · 여행 중 장소 없음 얼굴의 뒤로 (execution-pl
     fireEvent.press(screen.getByTestId('execution-place-notfound-back'));
 
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('I11 · 네이버 지도에서 보기', () => {
+  beforeEach(() => {
+    mockOpenURL.mockReset();
+    resetPressGuard();
+  });
+
+  const WEB_URL = `https://map.naver.com/p/search/${encodeURIComponent('광안리 해수욕장')}`;
+
+  it('좌표 없는 슬롯(p1)은 이름만으로 웹 검색 URL 을 연다 — 앱 URL 은 시도하지 않는다', async () => {
+    mockOpenURL.mockResolvedValue(undefined);
+    await renderP1();
+
+    fireEvent.press(screen.getByTestId('execution-place-open-naver'));
+
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
+    expect(mockOpenURL).toHaveBeenCalledWith(WEB_URL);
+  });
+
+  it('열기에 모두 실패하면 안내 배너를 띄운다(INV-4)', async () => {
+    mockOpenURL.mockRejectedValue(new Error('x'));
+    await renderP1();
+
+    fireEvent.press(screen.getByTestId('execution-place-open-naver'));
+
+    expect(
+      await screen.findByTestId('execution-place-opennaver-error')
+    ).toBeOnTheScreen();
+  });
+
+  it('이름도 좌표도 없는 슬롯은 버튼을 그리지 않는다', async () => {
+    const noInfo = itinerary();
+    const first = noInfo.days[0].slots[0] as unknown as Record<string, unknown>;
+    first.nameKo = null;
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(noInfo)
+      )
+    );
+    render(<LivePlacePage tripId={TRIP_ID} poiId="p1" />, { wrapper });
+    await waitFor(() =>
+      expect(screen.getByTestId('execution-place-detail')).toBeTruthy()
+    );
+
+    expect(screen.queryByTestId('execution-place-open-naver')).toBeNull();
   });
 });

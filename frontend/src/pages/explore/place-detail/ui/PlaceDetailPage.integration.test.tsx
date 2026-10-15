@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Share } from 'react-native';
+import * as Linking from 'expo-linking';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -14,6 +15,8 @@ import { BASE } from '@/test-support/apiBase';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
+
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { PlaceDetailPage } from './PlaceDetailPage';
 
@@ -46,6 +49,9 @@ jest.mock('@/shared/storage', () => ({
   clearTokens: jest.fn().mockResolvedValue(undefined),
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
+
+jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
+const mockOpenURL = Linking.openURL as jest.Mock;
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
@@ -91,6 +97,8 @@ beforeEach(() => {
   detailHits = [];
   detailReply = makePlace();
   mockBack.mockClear();
+  mockOpenURL.mockReset();
+  resetPressGuard();
   mockReplace.mockClear();
   mockCanGoBack.mockReset();
   mockCanGoBack.mockReturnValue(true);
@@ -297,6 +305,52 @@ describe('D7 · 공유 실동작', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0][0].message).toBe('부산시립미술관');
     spy.mockRestore();
+  });
+});
+
+describe('D12 · 네이버 지도에서 보기', () => {
+  const APP_URL = `nmap://place?lat=35.1&lng=129.1&name=${encodeURIComponent('부산시립미술관')}&appname=com.trippilot.travel`;
+  const WEB_URL = `https://map.naver.com/p/search/${encodeURIComponent('부산시립미술관')}`;
+
+  async function renderAndPress(): Promise<void> {
+    renderDetail('p1');
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-open-naver')).toBeOnTheScreen()
+    );
+    fireEvent.press(screen.getByTestId('explore-place-open-naver'));
+  }
+
+  it('누르면 앱 URL 을 연다 — 같은 틱 두 번 눌러도 한 번이다', async () => {
+    mockOpenURL.mockResolvedValue(undefined);
+    renderDetail('p1');
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-open-naver')).toBeOnTheScreen()
+    );
+    fireEvent.press(screen.getByTestId('explore-place-open-naver'));
+    fireEvent.press(screen.getByTestId('explore-place-open-naver'));
+
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
+    expect(mockOpenURL).toHaveBeenCalledWith(APP_URL);
+    expect(screen.queryByTestId('explore-place-opennaver-error')).toBeNull();
+  });
+
+  it('앱이 없어 reject 되면 웹 URL 로 강등한다', async () => {
+    mockOpenURL.mockRejectedValueOnce(new Error('no app'));
+    mockOpenURL.mockResolvedValueOnce(undefined);
+    await renderAndPress();
+
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(2));
+    expect(mockOpenURL).toHaveBeenLastCalledWith(WEB_URL);
+    expect(screen.queryByTestId('explore-place-opennaver-error')).toBeNull();
+  });
+
+  it('앱·웹 모두 실패하면 안내 배너를 띄운다(INV-4)', async () => {
+    mockOpenURL.mockRejectedValue(new Error('x'));
+    await renderAndPress();
+
+    expect(
+      await screen.findByTestId('explore-place-opennaver-error')
+    ).toBeOnTheScreen();
   });
 });
 

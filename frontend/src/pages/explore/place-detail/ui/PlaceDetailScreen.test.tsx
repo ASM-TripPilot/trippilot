@@ -240,3 +240,23 @@ describe('상세 히어로 원 버튼 접근성 라벨 (AC-3·5·6·7)', () => {
     expect(onPressShare).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('네이버 지도에서 보기 버튼', () => {
+  it('콜백이 없으면 그리지 않고, 있으면 누른 만큼 부른다', () => {
+    const { rerender } = render(
+      <PlaceDetailScreen place={makePlace()} saved={false} />
+    );
+    expect(screen.queryByTestId('explore-place-open-naver')).toBeNull();
+
+    const onPressOpenNaver = jest.fn();
+    rerender(
+      <PlaceDetailScreen
+        place={makePlace()}
+        saved={false}
+        onPressOpenNaver={onPressOpenNaver}
+      />
+    );
+    fireEvent.press(screen.getByTestId('explore-place-open-naver'));
+    expect(onPressOpenNaver).toHaveBeenCalledTimes(1);
+  });
+});

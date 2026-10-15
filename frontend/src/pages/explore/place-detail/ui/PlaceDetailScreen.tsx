@@ -18,6 +18,7 @@ import {
   ShareGlyph,
 } from '@/features/explore/index.view';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
+import { OpenNaverMapButton } from '@/shared/ui/OpenNaverMapButton';
 
 /**
  * d06 장소 상세(Figma `1907:1083`) — **무상태 프레젠테이션 화면**. props만 받는다. 조회·라우팅·
@@ -46,6 +47,10 @@ export interface PlaceDetailScreenProps {
   onPressBack?: () => void;
   onPressShare?: () => void;
   onToggleSave?: () => void;
+  /** "네이버 지도에서 보기" — 미지정이면 버튼을 그리지 않는다(열 이름·좌표가 없을 때). */
+  onPressOpenNaver?: () => void;
+  /** 네이버 지도를 못 열었을 때 안내 문구(INV-4). 미지정·null 이면 안 그린다. */
+  openNaverError?: string | null;
   onPressSaveErrorAction?: () => void;
 }
 
@@ -112,6 +117,8 @@ export function PlaceDetailScreen({
   onPressBack,
   onPressShare,
   onToggleSave,
+  onPressOpenNaver,
+  openNaverError,
   onPressSaveErrorAction,
 }: PlaceDetailScreenProps): ReactElement {
   const subtitleParts = place.region
@@ -272,6 +279,14 @@ export function PlaceDetailScreen({
             </InfoRow>
           </View>
 
+          {/* Figma 에 없는 추가 버튼 — 우리가 가진 정보가 적어 네이버 지도에서 가게를 보게 한다. */}
+          {onPressOpenNaver ? (
+            <OpenNaverMapButton
+              testID="explore-place-open-naver"
+              onPress={onPressOpenNaver}
+            />
+          ) : null}
+
           {/* 미니맵(Figma d06map 1907:1124) — 단일 핀 viewOnly 지도(place.lat/lng). connectPins
               미전달(핀 1개라 경로선 없음). 네이버 네이티브라 타일·제스처 잠금은 6-b 실기(코드만
               머지 시 재빌드 전 회색). env 키 부재 시 코어가 map-failure 로 접는다(INV-4). */}
@@ -296,6 +311,17 @@ export function PlaceDetailScreen({
         </View>
       </ScrollView>
 
+      {openNaverError ? (
+        <NoticeBanner
+          testID="explore-place-opennaver-error"
+          notice={{ message: openNaverError, action: null }}
+          actionTestIDs={{
+            login: 'explore-place-opennaver-error-login',
+            retry: 'explore-place-opennaver-error-retry',
+          }}
+          icon={<InfoGlyph size={18} />}
+        />
+      ) : null}
       {saveError ? (
         <SaveErrorBanner
           notice={saveError}

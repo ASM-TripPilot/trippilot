@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGetPlacesPoiId } from '@/shared/api/index.hooks';
 import { getAccessToken, isNotFound } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { canOpenNaverPlace, openNaverPlace } from '@/shared/map';
 
 import {
   SAVE_FAILURE_NOTICE,
@@ -35,6 +36,9 @@ import { PlaceDetailScreen } from './PlaceDetailScreen';
 // replace 해 탈출구를 준다(개념 [[router.canGoBack() — 딥링크 히스토리 없음 폴백]]).
 const HOME_FALLBACK = '/(tabs)';
 
+const OPEN_NAVER_ERROR =
+  '네이버 지도를 열 수 없어요. 잠시 후 다시 시도해 주세요.';
+
 // notFound 삽화 — 회색 중립 배지(LivePlacePage 선례, 없는 사진을 지어내지 않는다).
 const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
@@ -47,6 +51,7 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
   const { savedPoiIds, save, remove } = useSavedPlaces({ isAuthed });
   const [saveError, setSaveError] = useState<PlaceSaveNotice | null>(null);
   const [saving, setSaving] = useState(false);
+  const [openNaverError, setOpenNaverError] = useState<string | null>(null);
   const place = detail.data ?? null;
 
   function handleBack(): void {
@@ -144,6 +149,12 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
     }
   }
 
+  async function handleOpenNaver(): Promise<void> {
+    setOpenNaverError(null);
+    const result = await openNaverPlace(resolvedPlace);
+    if (result === 'failed') setOpenNaverError(OPEN_NAVER_ERROR);
+  }
+
   function handlePressSaveErrorAction(): void {
     if (saveError?.action === 'login') {
       router.push('/(auth)/login');
@@ -163,6 +174,10 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
       onPressBack={handleBack}
       onPressShare={() => void Share.share({ message: place.nameKo })}
       onToggleSave={() => void attemptToggle()}
+      onPressOpenNaver={
+        canOpenNaverPlace(place) ? () => void handleOpenNaver() : undefined
+      }
+      openNaverError={openNaverError}
       onPressSaveErrorAction={handlePressSaveErrorAction}
     />
   );
