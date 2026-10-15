@@ -35,17 +35,19 @@
   ],
   "stats": {
     "merged_runs": 1,
-    "unique_proposals": 57568,
-    "bad_nightlife_dropped": 5,
-    "closed_dropped": 2
+    "unique_proposals": 57526,
+    "bad_nightlife_dropped": 7,
+    "rejected_dropped": 35
   },
   "merged_from": [
     {
       "collected_at": "2026-10-15T05:00:51.395984+00:00",
-      "proposals": 57575,
+      "proposals": 57568,
       "stats": {
-        "merged_runs": 2,
-        "unique_proposals": 57575
+        "merged_runs": 1,
+        "unique_proposals": 57568,
+        "bad_nightlife_dropped": 5,
+        "closed_dropped": 2
       }
     }
   ],
@@ -2668800,39 +2668802,6 @@
       }
     },
     {
-      "provisional_id": "overture-7da6e601-1df6-4382-9c5b-1143c1b9652b",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-7da6e601-1df6-4382-9c5b-1143c1b9652b",
-        "name": "콜라비",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.8710938,
-          "lng": 128.6022949
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "중구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "7da6e601-1df6-4382-9c5b-1143c1b9652b",
-        "address": "대구광역시 중구 동인동 1가 234-5",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-ec263502-5b9b-4e85-a334-e1412394ce96",
       "source": "OVERTURE",
       "poi": {
@@ -2669027,39 +2668996,6 @@
       }
     },
     {
-      "provisional_id": "overture-a1b53258-bf3c-4433-8f6c-4e98c136c7aa",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-a1b53258-bf3c-4433-8f6c-4e98c136c7aa",
-        "name": "오늘와인한잔",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.8665886,
-          "lng": 128.5986481
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "수성구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "a1b53258-bf3c-4433-8f6c-4e98c136c7aa",
-        "address": "대구광역시 수성구 39 Dongseong-ro 4-gil, 삼덕동",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-f6c1db43-4b3e-40a2-bb47-541865e49af8",
       "source": "OVERTURE",
       "poi": {
@@ -2669089,39 +2669025,6 @@
       "provenance": {
         "content_id": "f6c1db43-4b3e-40a2-bb47-541865e49af8",
         "address": "대구광역시 수성구 삼덕동1가 51-5",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-5b9b071e-0dc3-4884-b4a1-1f725e3b9f16",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-5b9b071e-0dc3-4884-b4a1-1f725e3b9f16",
-        "name": "고이",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.8602371,
-          "lng": 128.6009521
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "비어가든"
-      ],
-      "region": "중구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5b9b071e-0dc3-4884-b4a1-1f725e3b9f16",
-        "address": "대구광역시 중구 대봉동 55-68",
         "image_url": null
       }
     },
@@ -2669961,39 +2669864,6 @@
       }
     },
     {
-      "provisional_id": "overture-5f76daa8-4576-4fef-a399-4393a10c1d20",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-5f76daa8-4576-4fef-a399-4393a10c1d20",
-        "name": "어나더another",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1750069,
-          "lng": 128.9896088
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "라운지바"
-      ],
-      "region": "부산진구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5f76daa8-4576-4fef-a399-4393a10c1d20",
-        "address": "부산광역시 부산진구 중앙대로692번길 46",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-b749fac8-af02-4143-919a-1c3c34a4cffc",
       "source": "OVERTURE",
       "poi": {
@@ -2670191,39 +2670061,6 @@
       }
     },
     {
-      "provisional_id": "overture-cc7704b1-badc-4f2d-b300-234b638a0c40",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-cc7704b1-badc-4f2d-b300-234b638a0c40",
-        "name": "부산 아지트",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1543236,
-          "lng": 129.0554047
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "부산진구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "cc7704b1-badc-4f2d-b300-234b638a0c40",
-        "address": "부산광역시 부산진구 중앙대로680번가길 12-6 3층 아지트 클럽",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-aa4db8dc-c232-4724-9db1-4f7703f22ad7",
       "source": "OVERTURE",
       "poi": {
@@ -2670319,39 +2670156,6 @@
       "provenance": {
         "content_id": "df8136d4-58b1-4873-bba7-4101cb6569ae",
         "address": "부산광역시 부산진구 부전동 240-4번지 오라빌딩4F",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-8e652900-b9a8-44da-980b-546bef6874bb",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-8e652900-b9a8-44da-980b-546bef6874bb",
-        "name": "오늘와인한잔 서면점",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1568375,
-          "lng": 129.0602417
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "부산진구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "8e652900-b9a8-44da-980b-546bef6874bb",
-        "address": "부산광역시 부산진구 서전로 10번길 22-3번지 오늘,와인한잔 서면점",
         "image_url": null
       }
     },
@@ -2670881,39 +2670685,6 @@
       }
     },
     {
-      "provisional_id": "overture-fb4134f7-c105-4ffb-ae77-724ccc36baae",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-fb4134f7-c105-4ffb-ae77-724ccc36baae",
-        "name": "해운대 뱅뱅",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1596909,
-          "lng": 129.1595001
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "해운대구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "fb4134f7-c105-4ffb-ae77-724ccc36baae",
-        "address": "부산광역시 해운대구 해운대해변로 257 401호, 402호",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-408a05f5-9a14-44e8-b3eb-32d2350e6434",
       "source": "OVERTURE",
       "poi": {
@@ -2671012,39 +2670783,6 @@
       }
     },
     {
-      "provisional_id": "overture-7f7ffa83-9751-4e9b-99b2-a0389b7f6958",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-7f7ffa83-9751-4e9b-99b2-a0389b7f6958",
-        "name": "비움",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1737747,
-          "lng": 129.1288452
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "해운대구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "7f7ffa83-9751-4e9b-99b2-a0389b7f6958",
-        "address": "부산광역시 해운대구 우동 1459",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-04a23886-1a68-4147-b5bf-3102802d2f88",
       "source": "OVERTURE",
       "poi": {
@@ -2671074,39 +2670812,6 @@
       "provenance": {
         "content_id": "04a23886-1a68-4147-b5bf-3102802d2f88",
         "address": "부산광역시 해운대구 해운대해변로 292",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-95be5043-6304-4ed9-a808-b5fc67a249f2",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-95be5043-6304-4ed9-a808-b5fc67a249f2",
-        "name": "아벨",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1695213,
-          "lng": 129.1710968
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "해운대구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "95be5043-6304-4ed9-a808-b5fc67a249f2",
-        "address": "부산광역시 해운대구 좌동순환로 8번길 78 상가13호 아벨",
         "image_url": null
       }
     },
@@ -2671301,39 +2671006,6 @@
       "provenance": {
         "content_id": "79ee2ea7-6847-4d73-9bda-8922433adf5d",
         "address": "서울특별시 구로구 신도림동 360-51",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-fb7645c5-a26f-4e01-8f07-27ac25232672",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-fb7645c5-a26f-4e01-8f07-27ac25232672",
-        "name": "클럽 신림 모트 - Club Mott",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.4840469,
-          "lng": 126.9299622
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "관악구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "fb7645c5-a26f-4e01-8f07-27ac25232672",
-        "address": "서울특별시 관악구 신림동 1422-10 B1",
         "image_url": null
       }
     },
@@ -2671733,39 +2671405,6 @@
       }
     },
     {
-      "provisional_id": "overture-dde9d997-dffa-4481-b39f-e1f46b5458e1",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-dde9d997-dffa-4481-b39f-e1f46b5458e1",
-        "name": "오늘, 와인한잔",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5327492,
-          "lng": 126.9008255
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "영등포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "dde9d997-dffa-4481-b39f-e1f46b5458e1",
-        "address": "서울특별시 영등포구 당산로 205 효성헤링턴타워 1층 105호",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-e6b55466-5fe9-4094-a923-b8fd41c29856",
       "source": "OVERTURE",
       "poi": {
@@ -2672096,39 +2671735,6 @@
       }
     },
     {
-      "provisional_id": "overture-e0b19eed-5425-443a-aac4-15392b6f0e5f",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-e0b19eed-5425-443a-aac4-15392b6f0e5f",
-        "name": "라운지클럽인썸",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5510216,
-          "lng": 126.9215851
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "라운지바"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "e0b19eed-5425-443a-aac4-15392b6f0e5f",
-        "address": "서울특별시 마포구 서교동 363-14",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-d3aa67ae-32f3-4108-ab66-2f64081360e9",
       "source": "OVERTURE",
       "poi": {
@@ -2672257,39 +2671863,6 @@
       "provenance": {
         "content_id": "21fc2151-640b-4a1a-8191-70272e7174ad",
         "address": "서울특별시 마포구 서교동 360-18",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-3adc1e0b-803c-4a8b-9a74-76561649dc80",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-3adc1e0b-803c-4a8b-9a74-76561649dc80",
-        "name": "오늘, 와인한잔",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.550705,
-          "lng": 126.9229813
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "3adc1e0b-803c-4a8b-9a74-76561649dc80",
-        "address": "서울특별시 마포구 와우산로17길 25",
         "image_url": null
       }
     },
@@ -2672520,39 +2672093,6 @@
       "provenance": {
         "content_id": "d7ad748b-c4ba-40e5-9799-95a00e4de12a",
         "address": "서울특별시 마포구 서교동 366-7",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-ef3417fe-0af7-497f-8f6f-0b669ef0bede",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-ef3417fe-0af7-497f-8f6f-0b669ef0bede",
-        "name": "오늘와인한잔 합정역점",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5518837,
-          "lng": 126.9209518
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "ef3417fe-0af7-497f-8f6f-0b669ef0bede",
-        "address": "서울특별시 마포구 독막로 3길 6",
         "image_url": null
       }
     },
@@ -2672918,39 +2672458,6 @@
       }
     },
     {
-      "provisional_id": "overture-baea09aa-0c34-40d1-8cda-eb6cdd3e45c6",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-baea09aa-0c34-40d1-8cda-eb6cdd3e45c6",
-        "name": "바플라이",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5571899,
-          "lng": 126.9370193
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "baea09aa-0c34-40d1-8cda-eb6cdd3e45c6",
-        "address": "서울특별시 강남구 청담동 50-0",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-280ca3d2-f79f-4699-bb50-e921b63c9502",
       "source": "OVERTURE",
       "poi": {
@@ -2673214,39 +2672721,6 @@
       }
     },
     {
-      "provisional_id": "overture-714ab579-31f0-401a-a6ee-f7fae9ef35e8",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-714ab579-31f0-401a-a6ee-f7fae9ef35e8",
-        "name": "묘프 마곡",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5609093,
-          "lng": 126.8324203
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "라운지바"
-      ],
-      "region": "강서구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "714ab579-31f0-401a-a6ee-f7fae9ef35e8",
-        "address": "서울특별시 강서구 마곡중앙6로 45 A동 303호",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-5664d0e5-dad7-4022-8133-778f331a312c",
       "source": "OVERTURE",
       "poi": {
@@ -2673276,39 +2672750,6 @@
       "provenance": {
         "content_id": "5664d0e5-dad7-4022-8133-778f331a312c",
         "address": "서울특별시 마포구 454-12 연남동",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-e5b4486a-81c1-4c6a-87cd-3e9290b8be04",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-e5b4486a-81c1-4c6a-87cd-3e9290b8be04",
-        "name": "연남마실",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5664558,
-          "lng": 126.919899
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "라운지바"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "e5b4486a-81c1-4c6a-87cd-3e9290b8be04",
-        "address": "서울특별시 마포구 연남동 454-11",
         "image_url": null
       }
     },
@@ -2673374,39 +2672815,6 @@
       "provenance": {
         "content_id": "f5df9bf7-12e0-4ab4-a7a9-70ca723f9f7f",
         "address": "서울특별시 종로구 삼청로 121",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-3ff70bb4-41c4-4031-ac4c-6a27764c76b1",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-3ff70bb4-41c4-4031-ac4c-6a27764c76b1",
-        "name": "브릭",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.572113,
-          "lng": 126.9804688
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "종로구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "3ff70bb4-41c4-4031-ac4c-6a27764c76b1",
-        "address": "서울특별시 종로구 청진동 3-2",
         "image_url": null
       }
     },
@@ -2673703,39 +2673111,6 @@
       "provenance": {
         "content_id": "81149a47-f467-4b2c-b528-bd59a86897b6",
         "address": "서울특별시 서대문구 창천동 52-69",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-d98446b3-ae06-423a-b526-4109cc9730d0",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-d98446b3-ae06-423a-b526-4109cc9730d0",
-        "name": "클럽이스케이프",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5574188,
-          "lng": 126.9359207
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "서대문구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "d98446b3-ae06-423a-b526-4109cc9730d0",
-        "address": "서울특별시 서대문구 창천동 57-52",
         "image_url": null
       }
     },
@@ -2674264,39 +2673639,6 @@
       }
     },
     {
-      "provisional_id": "overture-84625350-bdb3-421e-b21d-00641cc97c3b",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-84625350-bdb3-421e-b21d-00641cc97c3b",
-        "name": "클럽 스티브 - Club Steeve",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5050049,
-          "lng": 127.0250473
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "84625350-bdb3-421e-b21d-00641cc97c3b",
-        "address": "서울특별시 강남구 강남대로 478 제우빌딩 B1",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-4fc8a7c1-302d-4b84-ad4e-0be1ef2da032",
       "source": "OVERTURE",
       "poi": {
@@ -2674392,39 +2673734,6 @@
       "provenance": {
         "content_id": "19571c3a-8bfa-4e96-bfcf-b7b5166ab0e5",
         "address": "서울특별시 강남구 강남대로 152길 69 지하1층",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-052a6236-4da5-441b-8f6c-57ad4688cdf6",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-052a6236-4da5-441b-8f6c-57ad4688cdf6",
-        "name": "에프앤비 가로수점",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5189552,
-          "lng": 127.0226288
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "라운지바"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "052a6236-4da5-441b-8f6c-57ad4688cdf6",
-        "address": "서울특별시 강남구 신사동 536번지(가로수길), B1 에프앤비 가로수점",
         "image_url": null
       }
     },
@@ -2674656,39 +2673965,6 @@
       "provenance": {
         "content_id": "b1a6b6e5-0298-4493-a4fd-1fb73c454e8c",
         "address": "서울특별시 강남구 언주로157길 15",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-ba192f62-6415-4ded-a25b-bada6b59c2fd",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-ba192f62-6415-4ded-a25b-bada6b59c2fd",
-        "name": "몽키 테라스 압구정 Monkey Terrace",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5149994,
-          "lng": 127.0159988
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "ba192f62-6415-4ded-a25b-bada6b59c2fd",
-        "address": "서울특별시 강남구 압구정로 50길 25 2층",
         "image_url": null
       }
     },
@@ -2674990,72 +2674266,6 @@
       }
     },
     {
-      "provisional_id": "overture-8bc83887-f436-47ec-8052-3fbd15380202",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-8bc83887-f436-47ec-8052-3fbd15380202",
-        "name": "레이스클럽 - Club Race",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5083084,
-          "lng": 127.0364227
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "8bc83887-f436-47ec-8052-3fbd15380202",
-        "address": "서울특별시 강남구 논현동 236-9",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-47df9968-dc9f-4132-9d4b-ec5cfdfd03b4",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-47df9968-dc9f-4132-9d4b-ec5cfdfd03b4",
-        "name": "클럽 텐션 _ Club Tension",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5089073,
-          "lng": 127.0259781
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "서초구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "47df9968-dc9f-4132-9d4b-ec5cfdfd03b4",
-        "address": "서울특별시 서초구 잠원동 6-1 리버사이드호텔 지하 (B1 Riverside Hotel)",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-67a22a7e-2a48-452c-9230-d80b3e79ecce",
       "source": "OVERTURE",
       "poi": {
@@ -2675085,39 +2674295,6 @@
       "provenance": {
         "content_id": "67a22a7e-2a48-452c-9230-d80b3e79ecce",
         "address": "서울특별시 강남구 역삼동 690-10",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-e7f42050-22e9-40ee-8e5b-eca8be444fc1",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-e7f42050-22e9-40ee-8e5b-eca8be444fc1",
-        "name": "클럽블랙홀 신사",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5009995,
-          "lng": 127.0252914
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "e7f42050-22e9-40ee-8e5b-eca8be444fc1",
-        "address": "서울특별시 강남구 강남대로152길 46",
         "image_url": null
       }
     },
@@ -2675419,72 +2674596,6 @@
       }
     },
     {
-      "provisional_id": "overture-f6be7f2e-75b5-4def-a7e8-c46717477183",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-f6be7f2e-75b5-4def-a7e8-c46717477183",
-        "name": "클럽 밀레짐 Club Millésime",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.51334,
-          "lng": 127.1062088
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "라운지바"
-      ],
-      "region": "송파구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "f6be7f2e-75b5-4def-a7e8-c46717477183",
-        "address": "서울특별시 송파구 잠실로 209",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-898fbd00-01a8-4139-97a8-2a6247957e3f",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-898fbd00-01a8-4139-97a8-2a6247957e3f",
-        "name": "오늘, 와인한잔",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5146637,
-          "lng": 127.1102982
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "송파구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "898fbd00-01a8-4139-97a8-2a6247957e3f",
-        "address": "서울특별시 송파구 올림픽로32길 19-19",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-7a88e6f4-79c9-4596-a413-364f504761a9",
       "source": "OVERTURE",
       "poi": {
@@ -2675682,39 +2674793,6 @@
       }
     },
     {
-      "provisional_id": "overture-3de16090-4359-4321-a3f3-5b93c3c503e2",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-3de16090-4359-4321-a3f3-5b93c3c503e2",
-        "name": "불래",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5346146,
-          "lng": 127.0089264
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "3de16090-4359-4321-a3f3-5b93c3c503e2",
-        "address": "서울특별시 용산구 한남대로 18길 28 2층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-8540563d-8946-4808-8ce7-0c97eeebf5a7",
       "source": "OVERTURE",
       "poi": {
@@ -2675744,39 +2674822,6 @@
       "provenance": {
         "content_id": "8540563d-8946-4808-8ce7-0c97eeebf5a7",
         "address": "서울특별시 용산구 한남동 68-20",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-a0f38ea2-1bdb-42a9-a560-141f14175e36",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-a0f38ea2-1bdb-42a9-a560-141f14175e36",
-        "name": "에타",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5373535,
-          "lng": 127.0115738
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "라운지바"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "a0f38ea2-1bdb-42a9-a560-141f14175e36",
-        "address": "서울특별시 용산구 한남동 50-1",
         "image_url": null
       }
     },
@@ -2675847,72 +2674892,6 @@
       }
     },
     {
-      "provisional_id": "overture-f9ad3be6-e13c-4d13-9975-9400ddba435a",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-f9ad3be6-e13c-4d13-9975-9400ddba435a",
-        "name": "네츄럴와인",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5332985,
-          "lng": 127.0064697
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "f9ad3be6-e13c-4d13-9975-9400ddba435a",
-        "address": "서울특별시 용산구 78-10 한남동",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-6c1a3f05-b236-4a8a-ba42-3d0a17c8aaf3",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-6c1a3f05-b236-4a8a-ba42-3d0a17c8aaf3",
-        "name": "소하",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5334778,
-          "lng": 127.0015717
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "칵테일바"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "6c1a3f05-b236-4a8a-ba42-3d0a17c8aaf3",
-        "address": "서울특별시 용산구 한남동 653-94",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-352fbb44-991d-4e34-bded-55d3b867715f",
       "source": "OVERTURE",
       "poi": {
@@ -2675942,72 +2674921,6 @@
       "provenance": {
         "content_id": "352fbb44-991d-4e34-bded-55d3b867715f",
         "address": "서울특별시 용산구 한남동 736-9",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-911db973-a268-4f80-a94c-0a6aaf9b8ba9",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-911db973-a268-4f80-a94c-0a6aaf9b8ba9",
-        "name": "블루브릿지",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5345345,
-          "lng": 126.9970551
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "911db973-a268-4f80-a94c-0a6aaf9b8ba9",
-        "address": "서울특별시 용산구 한남동 736-11",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-ae3e2548-9c0d-4d67-b67f-c740ecd140cf",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-ae3e2548-9c0d-4d67-b67f-c740ecd140cf",
-        "name": "클럽 사운드 - Sound Club",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.53545,
-          "lng": 126.9985352
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "ae3e2548-9c0d-4d67-b67f-c740ecd140cf",
-        "address": "서울특별시 강남구 도산대로 114 지하 1층",
         "image_url": null
       }
     },
@@ -2676573,39 +2675486,6 @@
       }
     },
     {
-      "provisional_id": "overture-f2ce2e8e-4d0e-4279-b560-666ad4de49d8",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-f2ce2e8e-4d0e-4279-b560-666ad4de49d8",
-        "name": "믹스드테이블",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.558857,
-          "lng": 126.9998779
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "라운지바"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "f2ce2e8e-4d0e-4279-b560-666ad4de49d8",
-        "address": "서울특별시 강남구 논현동 166-2",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-06a94954-86d6-4dd7-9021-f65853230ee7",
       "source": "OVERTURE",
       "poi": {
@@ -2676968,39 +2675848,6 @@
       }
     },
     {
-      "provisional_id": "overture-e42c05f4-bdd5-4a22-b6e6-0a7f11c41e49",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-e42c05f4-bdd5-4a22-b6e6-0a7f11c41e49",
-        "name": "와인타임",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5264015,
-          "lng": 127.0339813
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "e42c05f4-bdd5-4a22-b6e6-0a7f11c41e49",
-        "address": "서울특별시 강남구 신사동 634-1",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-0ae12da0-e644-4e1f-a330-13b2f98b80b3",
       "source": "OVERTURE",
       "poi": {
@@ -2677166,39 +2676013,6 @@
       }
     },
     {
-      "provisional_id": "overture-54f021a1-9389-44ba-8676-e6c767f67948",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-54f021a1-9389-44ba-8676-e6c767f67948",
-        "name": "압집",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5256615,
-          "lng": 127.0383301
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "54f021a1-9389-44ba-8676-e6c767f67948",
-        "address": "서울특별시 강남구 신사동 657-30 2층압집",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-7323369a-33c9-4442-bd85-a7876d391eb6",
       "source": "OVERTURE",
       "poi": {
@@ -2677261,39 +2676075,6 @@
       "provenance": {
         "content_id": "eb9ab0e0-42b6-495b-b282-94ffcb71d096",
         "address": "서울특별시 강남구 신사동 657-13",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-b8b55154-2e70-4b33-834b-b798fe9f22c3",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-b8b55154-2e70-4b33-834b-b798fe9f22c3",
-        "name": "강남 클럽 디스타",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5222168,
-          "lng": 127.0346832
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "b8b55154-2e70-4b33-834b-b798fe9f22c3",
-        "address": "서울특별시 강남구 논현동  디맨선 지하 1층 디스타",
         "image_url": null
       }
     },
@@ -2677496,39 +2676277,6 @@
       }
     },
     {
-      "provisional_id": "overture-cefe9306-2d6b-4f67-9c45-9decf14f7455",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-cefe9306-2d6b-4f67-9c45-9decf14f7455",
-        "name": "청담 파티피플 : Party People Lounge",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.523922,
-          "lng": 127.0428085
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "라운지바"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "cefe9306-2d6b-4f67-9c45-9decf14f7455",
-        "address": "서울특별시 강남구 청담동 91-8, 1층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-db068b96-f7b3-43e5-8951-44102ecd299d",
       "source": "OVERTURE",
       "poi": {
@@ -2677595,72 +2676343,6 @@
       }
     },
     {
-      "provisional_id": "overture-e3645928-502e-47be-a3fd-d7a1ce3f856d",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-e3645928-502e-47be-a3fd-d7a1ce3f856d",
-        "name": "앤써",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5251198,
-          "lng": 127.052063
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "e3645928-502e-47be-a3fd-d7a1ce3f856d",
-        "address": "서울특별시 강남구 청담동 125-16",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-3821046b-f862-4b08-bfcc-7d0f4151f577",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-3821046b-f862-4b08-bfcc-7d0f4151f577",
-        "name": "클럽레이저",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5247574,
-          "lng": 127.0493546
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "강남구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "3821046b-f862-4b08-bfcc-7d0f4151f577",
-        "address": "서울특별시 강남구 청담동 124-5",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-c2fcafa7-a949-4e69-96fa-a5206d7cf12c",
       "source": "OVERTURE",
       "poi": {
@@ -2677723,39 +2676405,6 @@
       "provenance": {
         "content_id": "d022a035-6ca8-4eb3-9339-bfd4a40e24c7",
         "address": "서울특별시 강남구 청담동 128-3",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-54dd7fa3-d7d9-4c77-ab55-ba912fdfb416",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-54dd7fa3-d7d9-4c77-ab55-ba912fdfb416",
-        "name": "블러드.지",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5720177,
-          "lng": 126.9888
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "종로구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "54dd7fa3-d7d9-4c77-ab55-ba912fdfb416",
-        "address": "서울특별시 종로구 낙원동 218-1",
         "image_url": null
       }
     },
@@ -2677854,39 +2676503,6 @@
       "provenance": {
         "content_id": "dde64663-1771-42b3-8c85-cbaa92a37f7f",
         "address": "서울특별시 성북구 정릉3동 1",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-79e34180-d705-4562-812a-f5afc0068d8f",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-79e34180-d705-4562-812a-f5afc0068d8f",
-        "name": "오늘, 와인한잔",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5826302,
-          "lng": 126.9991608
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "와인바"
-      ],
-      "region": "종로구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "79e34180-d705-4562-812a-f5afc0068d8f",
-        "address": "서울특별시 종로구 창경궁로 240-7",
         "image_url": null
       }
     },

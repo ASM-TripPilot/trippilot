@@ -163,6 +163,41 @@ def drop_non_travel(proposals: list[dict]) -> dict[str, int]:
     return dropped
 
 
+_VERDICTS = Path(__file__).resolve().parents[2] / "data" / "overture_nonfood_verdicts.json"
+
+
+def drop_rejected_verdicts(proposals: list[dict],
+                           path: Path = _VERDICTS) -> int:
+    """LLM 판정이 **reject** 인 제안을 뺀다. 지운 건수를 돌려준다.
+
+    불변식: **공유본에는 reject 판정을 받은 행이 없다.** 판정 기준을 조이면(프롬프트 판본이
+    올라가면) 이미 들어간 행에도 소급돼야 하는데, 종전에는 수집 시점에만 걸러서 적재된 뒤에는
+    손으로 지워야 했다 — 그러면 다음 수집에 다시 들어온다.
+
+    `drop_non_travel`·`drop_bad_nightlife` 와 같은 자리·같은 이유의 소급이다. 다만 이쪽은
+    규칙이 아니라 **판정 파일**이 근거다(`overture_nonfood_verdicts.json`, 항목마다 `prompt`
+    판본과 사유가 적혀 있다). 파일이 없으면 0 — 판정이 없으면 판정하지 않는 것이 맞다.
+
+    `accept` 와 **미판정은 건드리지 않는다.** 미판정을 빼면 판정 대상이 아니었던 TourAPI·
+    LOCALDATA 행까지 사라진다 — 이 파일은 Overture 비식당만 담는다.
+    """
+    if not path.exists():
+        return 0
+    try:
+        verdicts = json.loads(path.read_text(encoding="utf-8")).get("verdicts") or {}
+    except (OSError, json.JSONDecodeError) as e:                      # noqa: BLE001
+        print(f"[merge] WARNING 판정 파일을 못 읽었다({type(e).__name__})", file=sys.stderr)
+        return 0
+    rejected = {ref for ref, v in verdicts.items() if v.get("verdict") == "reject"}
+    if not rejected:
+        return 0
+    kept = [p for p in proposals
+            if p["provenance"]["content_id"] not in rejected]
+    n = len(proposals) - len(kept)
+    proposals[:] = kept
+    return n
+
+
 def drop_bad_nightlife(proposals: list[dict]) -> int:
     """나이트라이프 규칙이 **지금** 거르는 제안을 뺀다. 지운 건수를 돌려준다.
 
@@ -264,6 +299,11 @@ def main(argv: list[str]) -> int:
         print(f"[merge] 나이트라이프 규칙 제거 — {bad_night}건", file=sys.stderr)
         out["stats"]["unique_proposals"] = len(out["proposals"])
         out["stats"]["bad_nightlife_dropped"] = bad_night
+    # LLM 판정 소급 — 기준을 조이면(프롬프트 판본 상승) 적재된 행에도 소급된다.
+    if (rejected := drop_rejected_verdicts(out["proposals"])):
+        print(f"[merge] 판정 reject 제거 — {rejected}건", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        out["stats"]["rejected_dropped"] = rejected
     # 폐업 소급 제거 — 근거 파일이 없으면 빈 집합(= 판정 없음), 위와 같은 축소 가드 규약.
     if (closed := drop_closed(out["proposals"], load_closed_refs())):
         print(f"[merge] 폐업 제거 — {closed}건", file=sys.stderr)
