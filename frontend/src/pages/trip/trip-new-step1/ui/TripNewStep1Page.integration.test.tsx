@@ -17,10 +17,8 @@ import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import {
   BASE,
-  budgetPreference,
   makePreference,
   makeTrip,
-  NO_BUDGET,
   TRIP,
   TRIP_ID,
   wizardStep1Harness,
@@ -186,8 +184,9 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
         endDate: '2026-06-13',
         party: 1,
         destinations: [{ seq: 1, region: '부산', nights: 3 }],
-        budgetTotal: 800000,
       });
+      // 예산 입력 기능을 걷어냈다 — 프리필 취향에 예산 러프값(800000)이 있어도 키 자체를 안 보낸다.
+      expect(Object.keys(tracker.postedBodies[0])).not.toContain('budgetTotal');
       // 취향 스냅숏(정책 A) — override 없이도 프리필 스냅숏이 실린다.
       expect(Object.keys(tracker.postedBodies[0])).toContain(
         'preferenceSnapshot'
@@ -1082,8 +1081,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
     waitForPrefill,
   } = wizardStep1Harness();
 
-  /** 프리필 — styles 2종은 전부 7칩 안의 값(미식·자연), activities 는 야경(TRIP-1092 전엔 시트 밖 값).
-   *  budget rawAmount 800000 → 요약 예산 "80만원"이 프리필 도착의 눈금(override 무관, 항상 뜬다). */
+  /** 프리필 — styles 2종은 전부 7칩 안의 값(미식·자연), activities 는 야경(TRIP-1092 전엔 시트 밖 값). */
   const PREF_NATURE = makePreference({ styles: { value: ['미식', '자연'] } });
 
   function createHits(): number {
@@ -1709,1399 +1707,6 @@ describe('취향 편집 시트 (PI·PA)', () => {
 });
 
 /**
- * TRIP-670 g01 예산 편집 시트 — **배선 승인 테스트**(요약 "예산" 행 → 시트 오픈 → 드래프트 전이 → 적용 → 스토어/제출).
- *
- * 무엇을 보장하나: S1 이 남긴 예산 행 오픈 콜백(현 `openEditSheet` no-op)에 이 시트가 배선돼
- *  ① 예산 행 탭 → 시트 마운트(트리 존재, B-1) ② 금액 입력 → 드래프트 전이, **적용 전엔 스토어 불변**,
- *  적용에서만 `setBudgetText` 커밋 + 닫힘(★ 드래프트 계약, B-apply) ③ 금액을 편집·적용하면 제출
- *  `budgetTotal` 이 **사용자 입력값**으로 나간다(★회귀 복원, B-restore) ④ 칩으로 채워 적용해도 제출
- *  바디에 **budgetTier/tier 키가 없고** 칩이 채운 금액만 budgetTotal 로 나간다(★ tier 전송 0, B-tier0)
- *  ⑤ 칩 press 가 대표 금액(tier 고정 금액, 박수·인원 무관)을 금액 칸에 채운다(TRIP-1045 → TRIP-1067, D 블록).
- *
- * ★ tier 전송 0 계약: tier 는 스토어·요청 어디에도 안 간다(`CreateTripRequest` 에 budgetTier 없음 —
- * openapi 실측). tier 를 제출에 실으면 B-tier0 의 키 부재 단언이 red. TRIP-1045 부터 tier 칩은 금액을
- * **채운다** — 옛 "tier 는 금액을 안 건드린다"(01b D1)는 폐기됐다. 채운 금액은 사용자 금액과 똑같이
- * 드래프트 → 적용 → store `budgetText` 경로를 탄다.
- *
- * ★회귀 복원(01b D3): `budgetTotal = parseBudgetAmount(effectiveBudgetText)`, effective = 스토어 budgetText
- * 유효하면 그것, 아니면 프리필. 이 파일의 B-restore 가 "항상 프리필" 뮤턴트를, 기존
- * `TripNewStep1Page.integration.test.tsx` I-1(예산 미편집 → budgetTotal 800000)이 "항상 budgetText"
- * 뮤턴트를 각각 red 로 잡는다(양방향, 02a §4-3).
- *
- * 왜 통합 버킷인가: 시트는 props-only 무상태라 "탭→값 전이"·"적용→스토어/제출"은 배선이 드래프트를
- * 소유·커밋할 때만 일어난다 — 스토어·실제 나간 요청을 함께 관측해야 한다. 컴포넌트 단위(표식·콜백)는
- * `BudgetEditSheet.test.tsx`, 대표 금액 산식은 `budgetAmount.tier.test.ts`(PBT)가 잠근다.
- *
- * ⚠️ 회원(토큰 목 주입)으로 돈다 — S3~S5 harness 계승. 무조건 발화하는 `useGetMePreferences`(프리필)만
- * `/me/preferences` 핸들러로 받고, 제출 케이스만 `POST /trips` 핸들러(바디 캡처)를 준다. `/regions`·
- * `/saved-*` 핸들러는 **일부러 안 준다**(남기면 신 배선이 그 훅을 물었다는 증거로 크래시 red).
- *
- * ⚠️ 바텀시트 통과형 목: 마운트하면 children 무조건 렌더 — "시트 오픈"은 **조건부 마운트 트리 존재/부재**
- * 뿐이다. 실제 슬라이드업·딤·터치 차단은 jest 사각(6-b 실기).
- */
-describe('예산 편집 시트 (B·S6·D)', () => {
-  afterEach(expectNoExitWizard);
-
-  const {
-    tracker,
-    preferenceHandler,
-    createTripHandler,
-    serveBudget,
-    renderPage,
-    next,
-    seedValidDraft,
-    openSheet,
-    waitForPrefill,
-  } = wizardStep1Harness();
-
-  function createHits(): number {
-    return tracker.hits.filter((hit) => hit === 'POST /api/v1/trips').length;
-  }
-
-  beforeEach(() => {
-    mockPush.mockClear();
-    mockBack.mockClear();
-    useTripWizardStore.getState().reset();
-
-    server.use(
-      preferenceHandler({ styles: { value: ['미식'] } }),
-      createTripHandler()
-    );
-  });
-
-  afterEach(() => {
-    server.resetHandlers();
-  });
-
-  describe('B-1 · 예산 행 탭이 시트를 연다', () => {
-    it('탭 전엔 시트가 없고, 탭하면 마운트된다', async () => {
-      renderPage();
-      await waitForPrefill();
-      expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull();
-
-      fireEvent.press(screen.getByTestId('trip-wizard-summary-budget'));
-
-      expect(
-        await screen.findByTestId('trip-wizard-budget-sheet')
-      ).toBeOnTheScreen();
-    });
-  });
-
-  describe('B-apply · ★ 드래프트 계약 — 적용 전 store 불변, 적용에서만 setBudgetText 커밋 + 닫힘', () => {
-    it('시트는 effective 문자열로 열리고, 금액 전이는 store 를 안 건드리며 적용에서만 커밋된다', async () => {
-      renderPage();
-      await waitForPrefill();
-      await openSheet('budget');
-
-      // D3 프리필 — 열자마자 입력에 effective(프리필 포맷) 값이 시드된다.
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '800,000'
-      );
-
-      // 금액 편집 → 드래프트 전이(입력 표시값 변화). store budgetText 는 아직 초기값.
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        '500000'
-      );
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '500000'
-      );
-
-      // 적용 전 — 즉시반영이 아니라 드래프트다(즉시커밋 뮤턴트가 이걸로 red).
-      expect(useTripWizardStore.getState().budgetText).toBe('');
-
-      // 적용 → 커밋 + 닫힘.
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
-
-      await waitFor(() =>
-        expect(useTripWizardStore.getState().budgetText).toBe('500000')
-      );
-      await waitFor(() =>
-        expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull()
-      );
-    });
-  });
-
-  describe('B-restore · ★회귀 제출 budgetTotal = 사용자 입력(프리필 아님)', () => {
-    it('금액을 편집·적용하면 POST 바디 budgetTotal 이 사용자 값으로 나간다', async () => {
-      seedValidDraft();
-      renderPage();
-      await waitForPrefill();
-      await openSheet('budget');
-
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        '500000'
-      );
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
-      await waitFor(() =>
-        expect(useTripWizardStore.getState().budgetText).toBe('500000')
-      );
-
-      fireEvent.press(next());
-
-      await waitFor(() => expect(createHits()).toBe(1));
-      // "항상 프리필" 뮤턴트면 800000 으로 red.
-      expect(tracker.postedBodies[0]).toMatchObject({ budgetTotal: 500000 });
-    });
-  });
-
-  describe('B-tier0 · ★ D9 tier 전송 0 — 칩이 채운 대표 금액만 budgetTotal 로 나간다 (TRIP-1045)', () => {
-    it('럭셔리 칩으로 채워 적용하면 바디에 budgetTier/tier 가 없고 budgetTotal 은 럭셔리 대표 금액 1600000 이다', async () => {
-      // 준비 — 부산 3박(4일), 프리필 중간·800,000.
-      // TRIP-1256: 4일 고급(200,000 × 4)은 800,000 이라 프리필과 같아 "프리필이 남으면 red"를 못 가른다 → 럭셔리.
-      seedValidDraft();
-      renderPage();
-      await waitForPrefill();
-      await openSheet('budget');
-
-      // 실행 — 럭셔리 칩(하루 400,000 × 4일) → 적용 → 제출.
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,600,000'
-      );
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
-      await waitFor(() =>
-        expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull()
-      );
-
-      fireEvent.press(next());
-
-      // 단언 — tier 는 어디에도 안 간다(CreateTripRequest 에 budgetTier 없음). 실으면 red.
-      await waitFor(() => expect(createHits()).toBe(1));
-      const body = tracker.postedBodies[0];
-      expect(Object.keys(body)).not.toContain('budgetTier');
-      expect(Object.keys(body)).not.toContain('tier');
-      // 칩이 채운 금액이 곧 사용자 금액이다 — 프리필(800000)이 남으면 red.
-      expect(body).toMatchObject({ budgetTotal: 1600000 });
-    });
-  });
-
-  describe('B-summary · ★ 편집이 요약 "예산" 행에 반영된다(자매 4행과 정합, 5-c)', () => {
-    it('금액을 50만원으로 편집·적용하면 요약 행이 프리필(80만원)이 아니라 편집값(50만원)을 보인다', async () => {
-      // Arrange: 프리필 80만원이 요약 행까지 도착한 상태에서 시트를 연다.
-      seedValidDraft();
-      renderPage();
-      await waitForPrefill();
-      await openSheet('budget');
-
-      // Act: 금액을 500000 으로 바꿔 적용.
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        '500000'
-      );
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
-
-      // Assert: 요약 행이 편집값을 반영한다. summaryBudget 에 프리필 rawAmount 를
-      // 넘기는 뮤턴트(=버그)면 여전히 80만원이라 red(편집이 화면에 안 먹는 것을 잡는다).
-      await waitFor(() =>
-        expect(
-          screen.getByTestId('trip-wizard-summary-budget')
-        ).toHaveTextContent(/50만원/)
-      );
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).not.toHaveTextContent(/80만원/);
-    });
-  });
-
-  /**
-   * TRIP-677 · S6G — 프리필 async 갭(예산). 취향(S5G)과 대칭 — `openBudgetSheet` 진입 가드
-   * `if (preference.isPending) return;`. 예산은 자가치유(빈 적용→프리필 재도출)라 손실은 없으나,
-   * 빈 드래프트로 여는 것을 막아 결을 맞춘다(01b 구현). 신호는 preference.isPending(★3).
-   * deferred(비해결) 프리필로 pending 재현(★1, 02a §5-A).
-   */
-  describe('B-guard · ★ AC-S6G-1 프리필 미해결 중 예산 행 탭은 시트를 안 연다', () => {
-    it('preference 쿼리가 pending 이면 예산 요약 행을 눌러도 BudgetEditSheet 가 안 열린다', () => {
-      server.use(
-        http.get(`${BASE}/me/preferences`, () => new Promise(() => {}))
-      );
-
-      renderPage();
-
-      // pending 확증 — 예산 값 자리가 스켈레톤(가드 신호 활성).
-      expect(
-        screen.getByTestId('trip-wizard-summary-skeleton-5')
-      ).toBeOnTheScreen();
-
-      fireEvent.press(screen.getByTestId('trip-wizard-summary-budget'));
-
-      // 현행(결함): 가드 부재 → 빈 드래프트로 시트가 열린다. 가드 후엔 안 열린다.
-      expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull();
-    });
-  });
-
-  /**
-   * TRIP-677 · S6D — 예산 표시↔제출 대칭(★4·★6). 현행은 프리필 rawAmount=0 이면 요약은 "예산 선택"
-   * (summaryBudget(0)=null)인데 제출은 `budgetTotal:0` 을 보낸다 — **표시=미선택, 제출=0** 의 비대칭.
-   * 봉합: 제출 삼항을 `kind==='amount' && amount>0 ? amount : undefined` 로 좁혀 요약 규칙과 맞춘다.
-   * AC-S6D-1(0=키 부재)과 AC-S6D-2(양수=전송)를 짝으로 둬 방향이 뒤집히는 뮤턴트를 잡는다.
-   */
-  describe('S6D · ★ 표시=제출 대칭 (예산 0 / 양수)', () => {
-    it('AC-S6D-1 · rawAmount=0·미입력이면 제출 바디에 budgetTotal 키가 없고 요약은 "예산 선택"이다', async () => {
-      // rawAmount=0 프리필. 예산 요약이 안 바뀌므로 프리필 도착은 취향(미식)으로 잰다.
-      server.use(
-        http.get(`${BASE}/me/preferences`, () =>
-          HttpResponse.json({
-            pace: { value: '균형있게', isNeutralDefault: false },
-            budget: { tier: '저가', rawAmount: 0, isNeutralDefault: false },
-            styles: { value: ['미식'] },
-            activities: { value: [] },
-          })
-        )
-      );
-      seedValidDraft();
-      renderPage();
-      await waitFor(() =>
-        expect(
-          screen.getByTestId('trip-wizard-summary-preference')
-        ).toHaveTextContent(/미식/)
-      );
-
-      // 요약은 미선택 — summaryBudget(0)=null → "예산 선택"(표시축은 이미 맞다).
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).toHaveTextContent(/예산 선택/);
-
-      fireEvent.press(next());
-
-      await waitFor(() => expect(createHits()).toBe(1));
-      // 현행(결함): budgetTotal:0 을 보낸다 → 키가 있어 red. `>0` 가드 후엔 키 자체가 없다.
-      expect(Object.keys(tracker.postedBodies[0])).not.toContain('budgetTotal');
-    });
-
-    it('AC-S6D-2 · 양수 프리필(1,200,000)은 budgetTotal:1200000 을 보내고 요약에 표시한다 (무회귀)', async () => {
-      server.use(
-        http.get(`${BASE}/me/preferences`, () =>
-          HttpResponse.json({
-            pace: { value: '균형있게', isNeutralDefault: false },
-            budget: {
-              tier: '고급',
-              rawAmount: 1200000,
-              isNeutralDefault: false,
-            },
-            styles: { value: ['미식'] },
-            activities: { value: [] },
-          })
-        )
-      );
-      seedValidDraft();
-      renderPage();
-      await waitFor(() =>
-        expect(
-          screen.getByTestId('trip-wizard-summary-budget')
-        ).toHaveTextContent(/120만원/)
-      );
-
-      fireEvent.press(next());
-
-      await waitFor(() => expect(createHits()).toBe(1));
-      // 양수는 여전히 전송 — `>0` 가드가 정상 경로를 막지 않는다(★8 회귀 방어).
-      expect(tracker.postedBodies[0]).toMatchObject({ budgetTotal: 1200000 });
-    });
-  });
-
-  /**
-   * TRIP-677 · S6E — budgetError 배선(신규 생산자) + applyBudget invalid 무커밋. `BudgetEditSheet` 는
-   * `budgetError` 슬롯을 이미 가졌으나(props-only) 페이지가 이 prop 을 안 내려준다(생산자 부재). 봉합:
-   * 페이지가 `parseBudgetAmount(draftAmountText).kind==='invalid'` 를 도출해 시트에 내리고, applyBudget 이
-   * invalid 면 커밋·닫기를 건너뛴다(조용한 소멸 방지). 카피는 오케 확정값 '숫자만 입력해 주세요'.
-   */
-  describe('S6E · ★ budgetError 배선 + applyBudget invalid 무커밋', () => {
-    it('AC-S6E-1 · 시트에 invalid("abc")를 입력하면 오류 노드(trip-wizard-error-budget)가 렌더된다', async () => {
-      renderPage();
-      await waitForPrefill();
-      await openSheet('budget');
-
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        'abc'
-      );
-
-      // 현행(결함): 페이지가 budgetError 를 도출·전달 안 해 오류 노드가 없다 → red.
-      // 가드(page 도출→시트 슬롯) 후엔 렌더된다.
-      expect(screen.getByTestId('trip-wizard-error-budget')).toBeOnTheScreen();
-    });
-
-    it('AC-S6E-2 · invalid 상태에서 "적용"을 눌러도 커밋되지 않고 시트가 닫히지 않는다 (조용한 소멸 방지)', async () => {
-      renderPage();
-      await waitForPrefill();
-      await openSheet('budget');
-
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        'abc'
-      );
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
-
-      // 현행(결함): applyBudget 이 무조건 setBudgetText+닫기 → 시트 닫힘 & store 'abc' 커밋 → red.
-      // 가드(invalid 면 커밋·닫기 skip) 후엔 시트 유지 + store 불변.
-      expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
-      expect(useTripWizardStore.getState().budgetText).toBe('');
-    });
-  });
-
-  /**
-   * TRIP-1285(QA B-01) — 음수·소수·문자(invalid)도 10억 초과와 같은 얼굴로 적용을 죽인다: 진짜 `disabled` +
-   * `opacity-40`. 오류 문구는 뜨는데 버튼이 진한 분홍(활성처럼)으로 남던 것이 결함이다.
-   *
-   * ⚠️ 동작은 이미 막혀 있다 — applyBudget 이 invalid 를 거르므로 "눌러도 커밋 안 됨·시트 유지"는 수정 전에도
-   * green 이다(위 AC-S6E-2). red 는 `toBeDisabled()` 에서만 난다(02a ★1). 동작 단언은 "비활성처럼 보이는데
-   * 사실 눌리는" 가짜를 막는 짝으로 남긴다. 끝에서 올바른 금액으로 고치면 다시 열리는지도 본다(★2 — 시트 전체를
-   * 죽이는 엉뚱한 구현 차단).
-   */
-  describe('B-01 · ★ invalid(음수·소수·문자)도 적용 비활성 — 10억 초과와 같은 얼굴 (TRIP-1285)', () => {
-    /** 적용 버튼 className 토큰 — 부분 문자열 비교면 다른 토큰에 걸린다. */
-    function applyTokens(): string[] {
-      return String(
-        screen.getByTestId('trip-wizard-budget-apply').props.className ?? ''
-      ).split(/\s+/);
-    }
-
-    it.each(['-5000', '1.5', 'abc가😀'])(
-      '"%s" 를 넣으면 "숫자만 입력해 주세요" + 적용 disabled·opacity-40, 눌러도 그대로이고 고치면 다시 열린다',
-      async (badInput) => {
-        // 준비 — 프리필(80만원) 도착 후 시트를 연다.
-        renderPage();
-        await waitForPrefill();
-        await openSheet('budget');
-
-        // 실행 ① — 잘못된 금액 입력.
-        fireEvent.changeText(
-          screen.getByTestId('trip-wizard-budget-input'),
-          badInput
-        );
-
-        // 단언 ① — 문구와 비활성 얼굴.
-        expect(
-          screen.getByTestId('trip-wizard-error-budget')
-        ).toHaveTextContent('숫자만 입력해 주세요');
-        const apply = screen.getByTestId('trip-wizard-budget-apply');
-        expect(apply).toBeDisabled();
-        expect(applyTokens()).toContain('opacity-40');
-
-        // 실행 ② — 그래도 눌러 본다.
-        fireEvent.press(apply);
-
-        // 단언 ② — 커밋도 닫힘도 없다.
-        expect(
-          screen.getByTestId('trip-wizard-budget-sheet')
-        ).toBeOnTheScreen();
-        expect(useTripWizardStore.getState().budgetText).toBe('');
-        expect(
-          screen.getByTestId('trip-wizard-summary-budget')
-        ).toHaveTextContent(/80만원/);
-
-        // 실행 ③ · 단언 ③(짝) — 올바른 금액으로 고치면 오류가 사라지고 적용이 다시 열린다.
-        fireEvent.changeText(
-          screen.getByTestId('trip-wizard-budget-input'),
-          '120000'
-        );
-        expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
-        expect(screen.getByTestId('trip-wizard-budget-apply')).toBeEnabled();
-        expect(applyTokens()).not.toContain('opacity-40');
-      }
-    );
-  });
-
-  const NO_BUDGET = { tier: null, rawAmount: null, isNeutralDefault: true };
-
-  /**
-   * TRIP-984 D8 · 금액이 비어 있으면 "적용"은 비활성이고 "금액을 입력해 주세요"를 보인다(INV-4 — 눌렀는데
-   * 조용히 닫히며 아무것도 안 바뀌는 것 금지). `toBeDisabled` 는 accessibilityState 만 보므로 press 뒤
-   * 시트 존재·스토어로 "진짜 막혔는지"를 함께 본다.
-   */
-  describe('AC-A · ★ 금액 빈칸이면 적용 비활성 (D8)', () => {
-    it('A1 · 온보딩 예산이 없고 칩도 안 누르면 열자마자 비활성이라, 적용을 눌러도 시트가 남고 안내가 보인다', async () => {
-      // TRIP-1045 이전엔 "tier 만 고르면 비활성"이었다 — 이제 칩이 금액을 채우므로 빈칸은 칩을 안 눌렀을 때뿐이다.
-      serveBudget(NO_BUDGET);
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-
-      // 짝(전제) — 칩이 하나도 안 켜졌고 입력이 비어 있다.
-      expect(
-        screen.queryAllByTestId(/^trip-wizard-budget-tier-active-/)
-      ).toHaveLength(0);
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        ''
-      );
-
-      const apply = screen.getByTestId('trip-wizard-budget-apply');
-      expect(apply).toBeDisabled();
-
-      fireEvent.press(apply);
-
-      expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
-      // TRIP-1219 b — 만지기 전엔 오류 문구가 없다(열자마자 빨간 안내 금지). 비활성 적용이 막는 것은 그대로.
-      expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
-      // 입력했다 지우면(만졌다) 그때부터 보인다.
-      fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '1');
-      fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '');
-      expect(screen.getByTestId('trip-wizard-error-budget')).toHaveTextContent(
-        '금액을 입력해 주세요'
-      );
-      expect(useTripWizardStore.getState().budgetText).toBe('');
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).toHaveTextContent(/예산 선택/);
-    });
-
-    it('A3 · tier 는 안 건드리고 금액만 비워도 비활성이라, 적용이 이미 커밋된 금액을 지우지 않는다', async () => {
-      // 이미 50만원을 적용해 둔 상태 — 옛 코드는 빈 적용으로 이 값을 '' 로 덮어쓴다.
-      useTripWizardStore.getState().setBudgetText('500000');
-      renderPage();
-      // 요약 예산이 스토어값(50만원)이라 80만원 눈금은 안 뜬다 — 프리필 도착은 취향 행으로 잰다.
-      await waitForPrefill('preference');
-      await openSheet('budget');
-
-      fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '');
-      const apply = screen.getByTestId('trip-wizard-budget-apply');
-      expect(apply).toBeDisabled();
-
-      fireEvent.press(apply);
-
-      expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
-      expect(screen.getByTestId('trip-wizard-error-budget')).toHaveTextContent(
-        '금액을 입력해 주세요'
-      );
-      expect(useTripWizardStore.getState().budgetText).toBe('500000');
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).toHaveTextContent(/50만원/);
-    });
-
-    it('TRIP-1219 b · 상한 — 10억원 초과(14자리)는 안내가 보이고 적용이 막힌다, 10억원 정각은 통과', async () => {
-      serveBudget(NO_BUDGET);
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        '99999999999999'
-      );
-      const apply = screen.getByTestId('trip-wizard-budget-apply');
-      expect(apply).toBeDisabled();
-      fireEvent.press(apply);
-      expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
-      expect(screen.getByTestId('trip-wizard-error-budget')).toHaveTextContent(
-        '10억원 이하로 입력해 주세요'
-      );
-      expect(useTripWizardStore.getState().budgetText).toBe('');
-
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        '1000000000'
-      );
-      expect(screen.getByTestId('trip-wizard-budget-apply')).not.toBeDisabled();
-      expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
-    });
-
-    it('A2 · 금액을 넣으면 활성이고, 적용하면 요약 "12만원"·제출 budgetTotal 120000 (무회귀)', async () => {
-      serveBudget(NO_BUDGET);
-      seedValidDraft();
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        '120000'
-      );
-      const apply = screen.getByTestId('trip-wizard-budget-apply');
-      expect(apply).not.toBeDisabled();
-      expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
-
-      fireEvent.press(apply);
-
-      await waitFor(() =>
-        expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull()
-      );
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).toHaveTextContent(/12만원/);
-
-      fireEvent.press(next());
-
-      await waitFor(() => expect(createHits()).toBe(1));
-      expect(tracker.postedBodies[0]).toMatchObject({ budgetTotal: 120000 });
-    });
-  });
-
-  /**
-   * TRIP-1045 AC-D7 · 안내 노트와 칩 range 문자열은 없다(Figma `3647:2068`, 정본 c2bda113 "range 안내 문구는 두지
-   * 않는다"). 옛 D10 노트가 뜨던 유일한 얼굴(온보딩 tier + 금액 > 0)로 열어야 "사라졌다"가 red 로 갈린다.
-   * ⚠️ `/온보딩에서 고른/`으로 재면 안 된다 — 시트 뒤 화면 부제("온보딩에서 고른 취향을 …")에 같은 구절이 있다.
-   * 노트 고유 구절 `/범위로 채웠어요/`와 testID 로만 잰다.
-   */
-  describe('D7 · ★ 노트·range 문자열 없음 — 옛 노트 얼굴(온보딩 중간 + 120만원)에서도', () => {
-    const RANGE_TEXT = /50만 미만|50~150만|150~300만|300만 이상/;
-
-    function expectNoNote(): void {
-      expect(screen.queryByTestId('trip-wizard-budget-note')).toBeNull();
-      expect(screen.queryAllByText(RANGE_TEXT)).toHaveLength(0);
-      expect(screen.queryAllByText(/범위로 채웠어요/)).toHaveLength(0);
-    }
-
-    it('열자마자 노트가 없고, 칩 4종을 차례로 눌러도 끝까지 없다', async () => {
-      serveBudget({
-        tier: '중간',
-        rawAmount: 1200000,
-        isNeutralDefault: false,
-      });
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-
-      // 짝(전제) — 온보딩 tier·금액이 실제로 시트까지 왔다(옛 코드라면 노트가 뜨는 얼굴).
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-mid')
-      ).toBeOnTheScreen();
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,200,000'
-      );
-      expectNoNote();
-
-      for (const code of ['low', 'mid', 'high', 'luxury']) {
-        fireEvent.press(screen.getByTestId(`trip-wizard-budget-tier-${code}`));
-        // 짝 — press 가 먹었다.
-        expect(
-          screen.getByTestId(`trip-wizard-budget-tier-active-${code}`)
-        ).toBeOnTheScreen();
-        expectNoNote();
-      }
-    });
-  });
-
-  /**
-   * TRIP-1256 AC-6·AC-7 · 칩을 누르면 대표 금액 = **1인 하루 단가 × 그 순간의 여행 일수**가 금액 칸에
-   * 채워진다. 하루 단가 저가 50,000 · 중간 100,000 · 고급 200,000 · 럭셔리 400,000, 일수 = 박수 합 + 1
-   * (여행지 0곳·당일치기 1일, 시작일 유무와 무관 — 01b Q2). 인원은 곱하지 않는다(1인 총액).
-   * 칩 press 마다 덮어쓰고(이미 켜진 칩 포함), 인원·기간이 바뀌어도 이미 채운 금액은 재계산하지 않는다.
-   * 채운 금액은 사람이 고칠 수 있다. 입력칸 단언은 콤마 포함 완전 일치(`toHaveDisplayValue`) —
-   * `formatBudgetAmount` 로 채워야 한다. (이력: TRIP-1045 1박 단가 × 박수 → TRIP-1067 고정 가운데값 → 이번)
-   */
-  describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020 → TRIP-1256 하루 단가 × 일수)', () => {
-    it('D2 · 3박 4일·2명에서 중간을 누르면 400,000 이 채워지고 적용이 열린다', async () => {
-      // 준비 — 부산 3박 + 친구 2명, 온보딩 예산 없음(빈칸으로 열린다).
-      seedValidDraft();
-      useTripWizardStore.getState().selectCompanion('친구');
-      useTripWizardStore.getState().setParty(2);
-      serveBudget(NO_BUDGET);
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-      expect(screen.getByTestId('trip-wizard-budget-apply')).toBeDisabled();
-
-      // 실행
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
-
-      // 단언 — 100,000 × 4일. 일수 대신 박수(3)를 곱하면 300,000, 인원(2)까지 곱하면 800,000, 옛 고정
-      // 가운데값이면 1,000,000 으로 red.
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '400,000'
-      );
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-mid')
-      ).toBeOnTheScreen();
-      expect(screen.getByTestId('trip-wizard-budget-apply')).not.toBeDisabled();
-      expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
-    });
-
-    it('D3a · 여행지가 없으면(기간 미정) 1일 기준 — 저가는 50,000', async () => {
-      serveBudget(NO_BUDGET);
-      renderPage();
-      // 짝(전제) — 여행지 0곳(beforeEach reset).
-      expect(useTripWizardStore.getState().destinations).toHaveLength(0);
-      await waitForPrefill('preference');
-      await openSheet('budget');
-
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
-
-      // 일수 0 을 곱하면 0, 옛 고정값이면 300,000 으로 red.
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '50,000'
-      );
-    });
-
-    it('D3b · 여행지 3박이면 시작일을 안 골라도 4일 기준 — 저가는 200,000 (01b Q2)', async () => {
-      // 준비 — 여행지만 담고 기간(시작일)은 안 골랐다.
-      useTripWizardStore.getState().addDestination('부산', 3);
-      serveBudget(NO_BUDGET);
-      renderPage();
-      expect(useTripWizardStore.getState().startDate).toBeUndefined();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
-
-      // 시작일이 없다고 1일로 보면 50,000, 박수(3)만 곱하면 150,000, 옛 고정값이면 300,000 으로 red.
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '200,000'
-      );
-    });
-
-    it.each([
-      ['당일치기(서울 0박)', '저가', '50,000', '서울', 0, 'low'],
-      ['2박 3일(부산 2박)', '중간', '300,000', '부산', 2, 'mid'],
-    ] as const)(
-      'D8 · 티켓 예제 — %s 에서 %s 칩을 누르면 %s',
-      async (_label, _tierName, expected, region, nights, code) => {
-        // 준비 — "아직 없다" 앵커 뒤 여행지와 시작일을 고른다(기간이 정해진 상태).
-        expect(useTripWizardStore.getState().destinations).toHaveLength(0);
-        const store = useTripWizardStore.getState();
-        store.addDestination(region, nights);
-        store.setStartDate('2026-06-10');
-        expect(useTripWizardStore.getState().destinations[0]?.nights).toBe(
-          nights
-        );
-        serveBudget(NO_BUDGET);
-        renderPage();
-        await waitForPrefill('preference');
-        await openSheet('budget');
-
-        // 실행
-        fireEvent.press(screen.getByTestId(`trip-wizard-budget-tier-${code}`));
-
-        // 단언 — 하루 단가 × (박수 + 1).
-        expect(
-          screen.getByTestId('trip-wizard-budget-input')
-        ).toHaveDisplayValue(expected);
-      }
-    );
-
-    it('D4 · 채운 금액을 250,000 으로 고쳐 적용하면 고친 값이 store 와 제출 budgetTotal 로 간다', async () => {
-      seedValidDraft();
-      renderPage();
-      await waitForPrefill();
-      await openSheet('budget');
-      // 짝(전제) — 프리필 800,000 으로 열렸다(칩이 이것을 덮어쓴다).
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '800,000'
-      );
-
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
-      // 중간 하루 100,000 × 4일.
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '400,000'
-      );
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        '250,000'
-      );
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
-
-      await waitFor(() =>
-        expect(useTripWizardStore.getState().budgetText).toBe('250,000')
-      );
-
-      fireEvent.press(next());
-
-      await waitFor(() => expect(createHits()).toBe(1));
-      expect(tracker.postedBodies[0]).toMatchObject({ budgetTotal: 250000 });
-    });
-
-    it('D5 · 이미 켜진 칩을 다시 눌러도 채우고, 손으로 고친 뒤에도 마지막 칩이 이긴다', async () => {
-      // 준비 — 운영 모양: 온보딩 tier 는 중간인데 금액은 없다. TRIP-1107 부터 시트는 "중간 활성 +
-      // 1,000,000"(대표 금액 프리필)으로 열린다 — 옛 "빈칸으로 열린다" 전제는 폐기.
-      seedValidDraft();
-      serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-mid')
-      ).toBeOnTheScreen();
-      // 3박 4일 — 중간 하루 100,000 × 4일.
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '400,000'
-      );
-
-      // 실행 ① — 금액을 비운 뒤 이미 켜진 중간을 누른다(tier 값이 안 바뀌어도 채워야 한다 — QA #020 원형).
-      // 비우지 않으면 press 전후 값이 같아 press 가 먹었는지 못 가른다.
-      fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '');
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '400,000'
-      );
-
-      // 실행 ② — 손으로 고친 뒤 럭셔리 → 럭셔리 대표 금액(400,000 × 4일)으로 덮어쓴다.
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        '999'
-      );
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,600,000'
-      );
-
-      // 실행 ③ — 다시 중간.
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '400,000'
-      );
-    });
-
-    it('D6 · 고쳐 적용한 금액은 인원·여행지를 바꾸고 다시 열어도 그대로고, 그 뒤 칩은 새 일수(5박 6일)로 계산한다', async () => {
-      // 준비 — 3박에서 중간으로 채운 뒤 칩 값과 다른 1,100,000 으로 고쳐 적용한다. 칩 값 그대로 두면
-      // "다시 계산" 뮤턴트와 구분이 안 된다.
-      seedValidDraft();
-      serveBudget(NO_BUDGET);
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
-      fireEvent.changeText(
-        screen.getByTestId('trip-wizard-budget-input'),
-        '1,100,000'
-      );
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
-      await waitFor(() =>
-        expect(useTripWizardStore.getState().budgetText).toBe('1,100,000')
-      );
-
-      // 실행 — 인원과 박수(3 → 5)를 바꾼다. 렌더 밖 store 갱신이라 act 로 감싼다.
-      act(() => {
-        const store = useTripWizardStore.getState();
-        store.selectCompanion('친구');
-        store.setParty(4);
-        store.addDestination('경주', 2);
-      });
-
-      // 단언 — store·요약은 그대로(AC-4 재계산 없음).
-      expect(useTripWizardStore.getState().budgetText).toBe('1,100,000');
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).toHaveTextContent(/110만원/);
-      // 다시 열어도 칩 금액으로 되돌리지 않는다 — 여는 순간 재계산하는 뮤턴트면 600,000 으로 red.
-      await openSheet('budget');
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '1,100,000'
-      );
-      // TRIP-1256 AC-7 — 5박 6일이 된 **뒤에** 누른 칩은 새 일수로 계산한다. 럭셔리를 먼저 눌러 press 가
-      // 실제로 먹는 것을 확인한 뒤 중간으로 돌아온다. 적용 때의 4일을 쓰면 1,600,000 / 400,000, 박수(5)만
-      // 곱하면 2,000,000 / 500,000, 옛 고정값이면 4,000,000 / 1,000,000 으로 red.
-      // (저가는 6일이면 300,000 = 옛 고정 저가라 옛 코드도 통과해 쓰지 않는다)
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '2,400,000'
-      );
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '600,000'
-      );
-    });
-  });
-});
-
-/**
- * TRIP-1107 g01 1/4 예산 시트 — 온보딩에서 **등급만** 고른 계정(금액 없음)은 시트를 처음 열 때
- * 그 등급의 대표 금액이 금액 칸에 채워진다(칩을 눌렀을 때와 같은 값).
- *
- * 무엇을 보장하나(QA 5회차 #9 — 저가 칩은 켜졌는데 금액이 비어 「적용」이 비활성):
- *  ① 등급만 있으면 첫 열림 금액 = 칩 대표 금액이고 「적용」이 열린다(AC-1·2), 적용하면 그 금액이 커밋된다(AC-3).
- *     TRIP-1256 부터 대표 금액은 하루 단가 × **여는 순간의** 일수다 — 여행지가 없으면 1일(AC-1b 는 4일).
- *  ② 온보딩 금액·이미 적용한 금액이 있으면 그 금액이 이긴다(AC-4·5).
- *  ③ 등급이 4값 밖이거나 없으면 지금처럼 빈칸이다(AC-6).
- *  ④ 채움은 시트 드래프트뿐이다 — 적용 전엔 요약 행·제출 바디·계정 취향이 안 바뀐다(AC-7·8, 결정 1=A).
- *
- * 판별력: 등급 대표 금액과 비교 금액을 **다르게** 둔다(1일 고급 200,000 vs 1,200,000·1,800,000) — 같으면
- * "등급 금액이 덮는다" 뮤턴트도 통과한다. AC-7·8 은 열자마자 금액이 차 있음을 먼저 확인해야
- * "새어 나갈 값이 실제로 있는 상태에서 안 샜다"가 된다.
- *
- * ⚠️ 바텀시트 목은 통과형 — "열림/닫힘"은 조건부 마운트 트리 존재뿐이고, 칩 색·정렬은 6-b 실기.
- */
-describe('예산 시트 등급 프리필 (AC-1~AC-8)', () => {
-  afterEach(expectNoExitWizard);
-
-  const {
-    tracker,
-    createTripHandler,
-    serveBudget,
-    renderPage,
-    seedValidDraft,
-    openSheet,
-    waitForPrefill,
-  } = wizardStep1Harness();
-
-  const PREFERENCES_PATH = '/api/v1/me/preferences';
-
-  /** 등급만 있는 온보딩 계정(운영 모양 — budget_raw_amount NULL). */
-  function serveTierOnly(tier: string | null): void {
-    serveBudget({ tier, rawAmount: null, isNeutralDefault: false });
-  }
-
-  beforeEach(() => {
-    useTripWizardStore.getState().reset();
-
-    server.use(
-      createTripHandler(makeTrip({ budgetTotal: null })),
-      // 계정 취향 쓰기 — 불리면 안 되지만, 불렸을 때 흔적이 확실히 남도록 받아 준다.
-      http.put(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(budgetPreference(NO_BUDGET))
-      ),
-      http.patch(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(budgetPreference(NO_BUDGET))
-      )
-    );
-  });
-
-  // 스토어는 모듈 싱글턴 — 적용한 budgetText 가 다음 케이스의 "스토어 금액 있음" 갈래로 새지 않게 끝에서도 비운다.
-  afterEach(() => {
-    useTripWizardStore.getState().reset();
-    server.resetHandlers();
-  });
-
-  const row = () => screen.getByTestId('trip-wizard-summary-budget');
-  const rowSub = () => screen.getByTestId('trip-wizard-summary-budget-sub');
-  const input = () => screen.getByTestId('trip-wizard-budget-input');
-  const apply = () => screen.getByTestId('trip-wizard-budget-apply');
-  const activeChips = () =>
-    screen.queryAllByTestId(/^trip-wizard-budget-tier-active-/);
-
-  /** 적용 없이 닫기 — 딤 탭·아래로 끌기가 부르는 라이브러리 `onClose` 를 대신 부른다(StayPriceSheet 선례). */
-  function closeSheetWithoutApply(): void {
-    const panNodes = screen.UNSAFE_root.findAll(
-      (node) => node.props?.enablePanDownToClose === true
-    );
-    expect(panNodes.length).toBeGreaterThan(0);
-    act(() => {
-      (panNodes[panNodes.length - 1].props.onClose as () => void)();
-    });
-    // 짝 — 정말 예산 시트가 닫혔다(엉뚱한 노드의 onClose 를 불렀다면 여기서 red).
-    expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull();
-  }
-
-  describe('AC-1 · 등급만 있는 저가 계정 — 첫 열림에 50,000(1일)이 채워지고 적용이 열린다', () => {
-    it('저가·금액 없음으로 시트를 열면 50,000 · 저가 칩 · 적용 활성 · 빈칸 안내 없음', async () => {
-      // 준비
-      serveTierOnly('저가');
-      renderPage();
-      await waitForPrefill('preference');
-
-      // 실행
-      await openSheet('budget');
-
-      // 단언 — 여행지가 없으니 1일 × 저가 하루 50,000.
-      expect(input()).toHaveDisplayValue('50,000');
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-low')
-      ).toBeOnTheScreen();
-      expect(activeChips()).toHaveLength(1);
-      expect(apply()).not.toBeDisabled();
-      expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
-    });
-  });
-
-  describe('AC-1b · TRIP-1256 AC-8 — 첫 열림 금액은 여는 순간의 일수로 그 칩을 누른 값이다', () => {
-    it('부산 3박(4일)·등급만 고급으로 열면 800,000 이고, 저가→고급을 눌러 돌아와도 같은 800,000 이다', async () => {
-      // 준비 — 부산 3박 + 기간 3박 4일(일수는 박수 + 1 = 4일).
-      seedValidDraft();
-      serveTierOnly('고급');
-      renderPage();
-      await waitForPrefill('preference');
-
-      // 실행
-      await openSheet('budget');
-
-      // 단언 — 200,000 × 4일. 1일로 계산하면 200,000, 박수(3)만 곱하면 600,000, 옛 고정값이면
-      // 2,000,000 으로 red.
-      expect(input()).toHaveDisplayValue('800,000');
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-high')
-      ).toBeOnTheScreen();
-      expect(apply()).not.toBeDisabled();
-
-      // 칩 경로와 같은 값인지 — 다른 칩으로 값을 바꾼 뒤 고급으로 돌아와 비교한다(같은 칩 재누름은 값이
-      // 이미 차 있어 판별력이 없다).
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
-      expect(input()).toHaveDisplayValue('200,000');
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-high'));
-      expect(input()).toHaveDisplayValue('800,000');
-    });
-  });
-
-  describe('AC-2 · 중간·고급·럭셔리 — 첫 열림 금액 = 그 칩을 눌렀을 때의 금액', () => {
-    it.each([
-      ['중간', 'mid', '100,000'],
-      ['고급', 'high', '200,000'],
-      ['럭셔리', 'luxury', '400,000'],
-    ] as const)(
-      '%s 로 열면 %s 칩이 켜지고 %s 이다',
-      async (tier, code, expected) => {
-        serveTierOnly(tier);
-        renderPage();
-        await waitForPrefill('preference');
-
-        await openSheet('budget');
-
-        expect(input()).toHaveDisplayValue(expected);
-        expect(
-          screen.getByTestId(`trip-wizard-budget-tier-active-${code}`)
-        ).toBeOnTheScreen();
-        expect(apply()).not.toBeDisabled();
-        // (TRIP-1353) "같은 칩을 눌러도 값이 같다" 단언은 지웠다 — 이미 채워진 칸에서 같은 칩 재누름은 값이 안 바뀌어 판별력이 0 이다.
-        // "칩 경로와 같은 출처"는 「예산 편집 시트」 describe D(칩 = 대표 금액)가 지킨다.
-      }
-    );
-  });
-
-  describe('AC-3 · 프리필로 연 시트를 그대로 적용하면 커밋되고 행이 역산 등급을 보인다', () => {
-    it('저가 프리필 50,000 을 적용하면 store 에 커밋되고 행은 "5만원 · 1인 총액 · 저가"', async () => {
-      serveTierOnly('저가');
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-
-      fireEvent.press(apply());
-
-      await waitFor(() =>
-        expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull()
-      );
-      expect(useTripWizardStore.getState().budgetText).toBe('50,000');
-      // 앞에 숫자가 붙은 "15만원"·"25만원"에 걸리지 않게 lookbehind 로 막는다.
-      expect(row()).toHaveTextContent(/(?<!\d)5만원/);
-      expect(rowSub()).toHaveTextContent('1인 총액 · 저가');
-    });
-  });
-
-  describe('AC-4 · 무회귀 — 온보딩 금액이 있으면 등급 대표 금액으로 덮지 않는다', () => {
-    it('고급 + 1,200,000 으로 열면 1,200,000 이다 (고급 대표 200,000 아님)', async () => {
-      serveBudget({
-        tier: '고급',
-        rawAmount: 1200000,
-        isNeutralDefault: false,
-      });
-      renderPage();
-      await waitFor(() => expect(row()).toHaveTextContent(/120만원/));
-
-      await openSheet('budget');
-
-      expect(input()).toHaveDisplayValue('1,200,000');
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-high')
-      ).toBeOnTheScreen();
-    });
-  });
-
-  describe('AC-5 · 무회귀 — 이미 적용한 금액은 다시 열어도 그 금액', () => {
-    it('고급(금액 없음)에서 1,800,000 을 적용한 뒤 다시 열면 1,800,000 이다 (200,000 으로 되돌리지 않는다)', async () => {
-      serveTierOnly('고급');
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-      fireEvent.changeText(input(), '1,800,000');
-      fireEvent.press(apply());
-      await waitFor(() =>
-        expect(useTripWizardStore.getState().budgetText).toBe('1,800,000')
-      );
-
-      await openSheet('budget');
-
-      expect(input()).toHaveDisplayValue('1,800,000');
-    });
-  });
-
-  describe('AC-6 · 경계 — 등급이 4값 밖이거나 없으면 지금처럼 빈칸', () => {
-    it.each([['LOW'], [null]] as const)(
-      '등급 %j · 금액 없음으로 열면 빈칸 · 켜진 칩 0 · 적용 비활성이고 시트는 정상으로 열린다',
-      async (tier) => {
-        serveTierOnly(tier);
-        renderPage();
-        await waitForPrefill('preference');
-
-        await openSheet('budget');
-
-        expect(
-          screen.getByTestId('trip-wizard-budget-sheet')
-        ).toBeOnTheScreen();
-        expect(input()).toHaveDisplayValue('');
-        expect(activeChips()).toHaveLength(0);
-        expect(apply()).toBeDisabled();
-      }
-    );
-  });
-
-  describe('AC-7 · 결정 1=A — 적용 전엔 요약 행·제출 바디가 그대로', () => {
-    it('중간(금액 없음)으로 연 시트를 적용 없이 닫으면 행은 "중간 · 1인 총액 · 온보딩" 이고 바디에 budgetTotal 이 없다', async () => {
-      // 준비
-      seedValidDraft();
-      serveTierOnly('중간');
-      renderPage();
-      await waitForPrefill('preference');
-      expect(useTripWizardStore.getState().budgetText).toBe('');
-
-      // 실행 — 열어서 프리필(중간 100,000 × 4일)을 확인(새어 나갈 값이 실제로 있다)하고 적용 없이 닫은 뒤 [다음].
-      await openSheet('budget');
-      expect(input()).toHaveDisplayValue('400,000');
-      closeSheetWithoutApply();
-
-      // 단언 — 요약 행은 tier-only 얼굴, 스토어는 비어 있다.
-      expect(row()).toHaveTextContent(/중간/);
-      expect(rowSub()).toHaveTextContent('1인 총액 · 온보딩');
-      expect(useTripWizardStore.getState().budgetText).toBe('');
-
-      fireEvent.press(screen.getByTestId('trip-wizard-step1-next'));
-
-      await waitFor(() => expect(tracker.postedBodies).toHaveLength(1));
-      expect(Object.keys(tracker.postedBodies[0])).not.toContain('budgetTotal');
-    });
-  });
-
-  describe('AC-8 · 금지 — 시트를 열고 닫아도 계정 취향을 쓰지 않는다', () => {
-    it('저가 프리필로 열고 닫고, 다시 열어 럭셔리를 누르고 닫아도 /me/preferences 쓰기는 0회다', async () => {
-      serveTierOnly('저가');
-      renderPage();
-      await waitForPrefill('preference');
-      expect(useTripWizardStore.getState().budgetText).toBe('');
-
-      await openSheet('budget');
-      expect(input()).toHaveDisplayValue('50,000');
-      closeSheetWithoutApply();
-      await openSheet('budget');
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
-      closeSheetWithoutApply();
-
-      // 관측기 짝 — 같은 기록기가 프리필 GET 은 봤다(리스너가 죽어 0 이 된 게 아니다).
-      expect(tracker.hits).toContain(`GET ${PREFERENCES_PATH}`);
-      const preferenceWrites = tracker.hits.filter(
-        (hit) => hit.endsWith(` ${PREFERENCES_PATH}`) && !hit.startsWith('GET ')
-      );
-      expect(preferenceWrites).toEqual([]);
-      expect(useTripWizardStore.getState().budgetText).toBe('');
-    });
-  });
-});
-
-/**
- * TRIP-1091 g01 1/4 예산 행 — **적용한 금액에서 역산한 등급**이 요약 행과 시트 재오픈 칩에 붙는다.
- *
- * 무엇을 보장하나(QA A12 — 저가 30만원을 적용했는데 행이 "30만원 · 1인 총액 · 고급"):
- *  ① 스토어에 커밋된 금액이 0보다 크면 행 sub 의 등급은 `tierForAmount(금액, 일수)` 이다(온보딩 등급 아님).
- *     TRIP-1256 부터 하루 금액(금액 ÷ 일수) 기준 — 75,000 · 150,000 · 300,000 경계, 일수 = 박수 + 1.
- *     여행지 시드가 없는 케이스는 1일이라 하루 금액 = 총액이다.
- *  ② 시트를 다시 열면 **같은 일수로** 역산한 같은 등급 칩이 켜진다(행과 칩이 다른 말을 안 한다, AC-9a).
- *  ③ 한 번도 적용하지 않았거나 0 을 적용했으면 지금처럼 온보딩 등급이다(01b Q1·맹점② (a)).
- *  ④ 역산 등급은 요청 어디에도 안 싣고, 계정 취향(`/me/preferences`)을 쓰지 않는다(BR-U1-38).
- *
- * 판별력: 프리필 등급을 기대 등급과 **다르게** 둔다 — 같으면 "항상 온보딩 등급"인 옛 코드도 통과한다.
- * 경계 판정은 sub 완전 일치로만 한다 — main 은 만원 반올림이라 499,999 가 "50만원"으로 보인다.
- *
- * ⚠️ 바텀시트 목은 통과형 — "열림"은 조건부 마운트 트리 존재뿐이고, 칩 색·한 줄 들어감은 6-b 실기.
- */
-describe('예산 행 역산 등급 (AC4~AC13)', () => {
-  afterEach(expectNoExitWizard);
-
-  const {
-    tracker,
-    createTripHandler,
-    serveBudget,
-    renderPage,
-    openSheet,
-    waitForPrefill,
-  } = wizardStep1Harness();
-
-  const PREFERENCES_PATH = '/api/v1/me/preferences';
-
-  beforeEach(() => {
-    useTripWizardStore.getState().reset();
-
-    server.use(
-      createTripHandler(makeTrip({ budgetTotal: 1800000 })),
-      // 계정 취향 쓰기 — 불리면 안 되지만, 불렸을 때 흔적이 확실히 남도록 받아 준다.
-      http.put(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(budgetPreference(NO_BUDGET))
-      ),
-      http.patch(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(budgetPreference(NO_BUDGET))
-      )
-    );
-  });
-
-  // 스토어는 모듈 싱글턴 — 앞 테스트의 budgetText 가 "적용 안 함" 케이스로 새지 않게 끝에서도 비운다.
-  afterEach(() => {
-    useTripWizardStore.getState().reset();
-    server.resetHandlers();
-  });
-
-  const row = () => screen.getByTestId('trip-wizard-summary-budget');
-  const rowSub = () => screen.getByTestId('trip-wizard-summary-budget-sub');
-
-  async function applyAndClose(): Promise<void> {
-    fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
-    await waitFor(() =>
-      expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull()
-    );
-  }
-
-  /** 시트를 열어 금액을 손으로 넣고 적용한다(칩 안 누름). */
-  async function applyTyped(text: string): Promise<void> {
-    await openSheet('budget');
-    fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), text);
-    await applyAndClose();
-  }
-
-  describe('AC4 · A12 — 저가 칩을 적용하면 행 등급도 저가다', () => {
-    it('온보딩 고급 계정에서 저가(5만원)를 적용하면 행은 "5만원 · 1인 총액 · 저가"이고 고급은 없다', async () => {
-      // 준비 — 운영 모양: 온보딩 등급만 있고 금액은 없다(행은 tier-only 얼굴).
-      serveBudget({ tier: '고급', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-      // 앵커 — 적용 전엔 아직 온보딩 얼굴이다(역산 결과가 미리 보이면 안 된다).
-      expect(rowSub()).toHaveTextContent('1인 총액 · 온보딩');
-
-      // 실행
-      await openSheet('budget');
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
-      await applyAndClose();
-
-      // 단언 — 1일 저가 50,000. "15만원"·"25만원"에 걸리지 않게 앞 숫자를 막는다.
-      expect(row()).toHaveTextContent(/(?<!\d)5만원/);
-      expect(rowSub()).toHaveTextContent('1인 총액 · 저가');
-      expect(row()).not.toHaveTextContent(/고급/);
-    });
-  });
-
-  describe('AC5 · 칩 없이 손으로 넣은 금액도 역산한다', () => {
-    it('온보딩 중간에서 180,000(1일)을 적용하면 행 등급은 고급이다', async () => {
-      serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-
-      // 하루 180,000 — 150,000 ≤ 180,000 < 300,000 이라 고급. 옛 총액 경계면 저가로 red.
-      await applyTyped('180,000');
-
-      expect(row()).toHaveTextContent(/(?<!\d)18만원/);
-      expect(rowSub()).toHaveTextContent('1인 총액 · 고급');
-    });
-  });
-
-  describe('AC6 · 경계 배선 — 하한은 자기 구간 (1일 = 하루 금액이 곧 총액)', () => {
-    it('온보딩 저가에서 75,000 · 150,000 · 300,000 을 차례로 적용하면 중간 · 고급 · 럭셔리다', async () => {
-      serveBudget({ tier: '저가', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-
-      await applyTyped('75000');
-      expect(rowSub()).toHaveTextContent('1인 총액 · 중간');
-
-      await applyTyped('150000');
-      expect(rowSub()).toHaveTextContent('1인 총액 · 고급');
-
-      await applyTyped('300000');
-      expect(rowSub()).toHaveTextContent('1인 총액 · 럭셔리');
-    });
-
-    it('온보딩 럭셔리에서 74,999 를 적용하면 저가다', async () => {
-      serveBudget({ tier: '럭셔리', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-
-      await applyTyped('74999');
-
-      expect(rowSub()).toHaveTextContent('1인 총액 · 저가');
-    });
-  });
-
-  describe('AC7 · 한 번도 적용하지 않으면 지금처럼 온보딩 등급 (무회귀)', () => {
-    it('프리필 고급 + 1,200,000 이면 행은 "120만원 · 1인 총액 · 고급" 이다 — 프리필 금액은 역산하지 않는다', async () => {
-      // 1,200,000 을 1일로 역산하면 럭셔리다 — 프리필 금액까지 역산하면 여기서 갈린다(01b 맹점② (a)).
-      serveBudget({
-        tier: '고급',
-        rawAmount: 1200000,
-        isNeutralDefault: false,
-      });
-      renderPage();
-      await waitFor(() => expect(row()).toHaveTextContent(/120만원/));
-
-      expect(rowSub()).toHaveTextContent('1인 총액 · 고급');
-
-      // 시트 쪽도 같은 출처여야 한다(결정 2) — 적용 없이 열면 역산 럭셔리가 아니라 프리필 고급 칩(5-b 경고 1).
-      await openSheet('budget');
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-high')
-      ).toBeTruthy();
-      expect(
-        screen.queryByTestId('trip-wizard-budget-tier-active-luxury')
-      ).toBeNull();
-    });
-
-    it('금액 없이 등급만 있으면 tier-only 얼굴 "중간 · 1인 총액 · 온보딩" 그대로다', async () => {
-      serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-
-      expect(row()).toHaveTextContent(/중간/);
-      expect(rowSub()).toHaveTextContent('1인 총액 · 온보딩');
-    });
-  });
-
-  describe('AC8 · 0 을 적용하면 행은 "예산 선택", 재오픈 칩은 온보딩 등급 (01b Q1)', () => {
-    it('0 을 적용하면 행에 등급이 없고, 다시 열면 저가가 아니라 온보딩 고급 칩이 켜진다', async () => {
-      serveBudget({ tier: '고급', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-
-      await applyTyped('0');
-
-      expect(row()).toHaveTextContent(/예산 선택/);
-      expect(screen.queryByTestId('trip-wizard-summary-budget-sub')).toBeNull();
-
-      // 0 에 역산을 태우면 저가가 켜져 "예산 선택" 행과 다른 말을 한다.
-      await openSheet('budget');
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-high')
-      ).toBeOnTheScreen();
-      expect(
-        screen.queryByTestId('trip-wizard-budget-tier-active-low')
-      ).toBeNull();
-    });
-  });
-
-  describe('AC9 · 결정 2 — 저가를 적용하고 다시 열면 저가 칩이 켜진다', () => {
-    it('온보딩 고급에서 저가를 적용한 뒤 다시 열면 active-low 하나만 켜진다', async () => {
-      serveBudget({ tier: '고급', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-      await openSheet('budget');
-      // 앵커 — 첫 오픈은 온보딩 등급(고급)이다.
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-high')
-      ).toBeOnTheScreen();
-      expect(
-        screen.queryByTestId('trip-wizard-budget-tier-active-low')
-      ).toBeNull();
-
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
-      await applyAndClose();
-      await openSheet('budget');
-
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-low')
-      ).toBeOnTheScreen();
-      expect(
-        screen.queryByTestId('trip-wizard-budget-tier-active-high')
-      ).toBeNull();
-      expect(
-        screen.queryAllByTestId(/^trip-wizard-budget-tier-active-/)
-      ).toHaveLength(1);
-    });
-  });
-
-  describe('AC10 · 결정 2 — 손으로 넣은 금액도 재오픈 칩은 역산 등급', () => {
-    it('온보딩 중간에서 180,000(1일)을 적용한 뒤 다시 열면 고급 칩이 켜지고 중간은 꺼져 있다', async () => {
-      serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-
-      await applyTyped('180,000');
-      await openSheet('budget');
-
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-high')
-      ).toBeOnTheScreen();
-      expect(
-        screen.queryByTestId('trip-wizard-budget-tier-active-mid')
-      ).toBeNull();
-    });
-  });
-
-  describe('AC-9 · TRIP-1256 — 요약 행과 재오픈 칩은 같은 일수(박수 + 1)로 역산한다', () => {
-    /** 부산 2박 = 3일. 1일로 나누는 뮤턴트와 갈리려면 일수가 1보다 커야 한다. */
-    function seedThreeDays(): void {
-      useTripWizardStore.getState().addDestination('부산', 2);
-    }
-
-    it('AC-9a · 3일에서 중간 칩을 적용하면 행은 "30만원 · 1인 총액 · 중간"이고, 다시 열면 중간 칩 하나만 켜진다', async () => {
-      // 준비 — "아직 없다" 앵커 뒤 3일. 온보딩 등급(럭셔리)을 기대 등급(중간)과 다르게 둔다 — 같으면
-      // "항상 온보딩 등급" 옛 코드도 통과한다.
-      expect(useTripWizardStore.getState().destinations).toHaveLength(0);
-      seedThreeDays();
-      serveBudget({ tier: '럭셔리', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-
-      // 실행 — 중간 칩(100,000 × 3일) → 적용.
-      await openSheet('budget');
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
-      expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-        '300,000'
-      );
-      await applyAndClose();
-
-      // 단언 ① — 행: 300,000 ÷ 3일 = 하루 100,000 → 중간. 일수 없이 총액으로 역산하면 럭셔리로 red.
-      expect(row()).toHaveTextContent(/(?<!\d)30만원/);
-      expect(rowSub()).toHaveTextContent('1인 총액 · 중간');
-
-      // 단언 ② — 재오픈 칩도 같은 일수로 역산한 중간 하나뿐. 칩 쪽만 1일로 나누면 럭셔리가 켜져 red.
-      await openSheet('budget');
-      expect(
-        screen.getByTestId('trip-wizard-budget-tier-active-mid')
-      ).toBeOnTheScreen();
-      expect(
-        screen.queryAllByTestId(/^trip-wizard-budget-tier-active-/)
-      ).toHaveLength(1);
-    });
-
-    it('AC-9b · 3일 경계 — 손으로 넣은 224,999 는 저가, 225,000 은 중간이다 (반올림하지 않는다)', async () => {
-      expect(useTripWizardStore.getState().destinations).toHaveLength(0);
-      seedThreeDays();
-      serveBudget({ tier: '럭셔리', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-
-      // 224,999 ÷ 3 = 74,999.67 — 반올림하면 75,000 이라 중간으로 red, 1일로 나누면 럭셔리로 red.
-      await applyTyped('224999');
-      expect(rowSub()).toHaveTextContent('1인 총액 · 저가');
-
-      await applyTyped('225000');
-      expect(rowSub()).toHaveTextContent('1인 총액 · 중간');
-    });
-  });
-
-  describe('AC12 · AC13 · 금지 — 역산 등급은 요청에 안 싣고 계정 취향을 안 쓴다', () => {
-    it('칩·손 입력·재오픈을 거쳐 제출해도 바디·스냅숏에 등급이 없고 /me/preferences 쓰기는 0회다', async () => {
-      // 준비 — 제출 가능한 부산 3박, 온보딩 고급.
-      const store = useTripWizardStore.getState();
-      store.addDestination('부산', 3);
-      store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
-      serveBudget({ tier: '고급', rawAmount: null, isNeutralDefault: false });
-      renderPage();
-      await waitForPrefill('preference');
-
-      // 실행 — 저가 칩 적용 → 다시 열어 손으로 1,800,000 → 적용 → [다음].
-      await openSheet('budget');
-      fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
-      await applyAndClose();
-      await applyTyped('1,800,000');
-      fireEvent.press(screen.getByTestId('trip-wizard-step1-next'));
-
-      // 단언 — 등록은 1회, 바디 최상위와 스냅숏 안 어디에도 등급이 없다.
-      await waitFor(() => expect(tracker.postedBodies).toHaveLength(1));
-      const body = tracker.postedBodies[0];
-      expect(Object.keys(body)).not.toContain('tier');
-      expect(Object.keys(body)).not.toContain('budgetTier');
-      expect(body).toMatchObject({ budgetTotal: 1800000 });
-      const snapshot = (body.preferenceSnapshot ?? {}) as Record<
-        string,
-        unknown
-      >;
-      ['tier', 'budgetTier', 'budget'].forEach((key) => {
-        expect(Object.keys(snapshot)).not.toContain(key);
-      });
-
-      // 관측기 짝 — 같은 기록기가 프리필 GET 은 봤다(리스너가 죽어 0 이 된 게 아니다).
-      expect(tracker.hits).toContain(`GET ${PREFERENCES_PATH}`);
-      const preferenceWrites = tracker.hits.filter(
-        (hit) => hit.endsWith(` ${PREFERENCES_PATH}`) && !hit.startsWith('GET ')
-      );
-      expect(preferenceWrites).toEqual([]);
-    });
-  });
-});
-
-/**
  * TRIP-1113 결정 1 — 이미 만든 여행은 취향을 바꿀 수 없다(PATCH 계약에 취향 스냅숏이 없다).
  *
  * 무엇을 보장하나: `createdTripId` 가 있으면 요약 취향 행을 눌러도 시트가 열리지 않고, 그 이유를
@@ -3138,7 +1743,7 @@ describe('만든 여행의 취향 잠금 (AC-10)', () => {
         .getState()
         .setCreatedTripId('11111111-1111-1111-1111-111111111111');
       renderPage();
-      await waitForPrefill('preference');
+      await waitForPrefill();
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
       fireEvent.press(preferenceRow());
@@ -3152,7 +1757,7 @@ describe('만든 여행의 취향 잠금 (AC-10)', () => {
 
     it('🟢 L-2 createdTripId 가 없으면 지금처럼 시트가 열리고 토스트는 없다', async () => {
       renderPage();
-      await waitForPrefill('preference');
+      await waitForPrefill();
       expect(screen.queryByTestId(TOAST)).toBeNull();
 
       fireEvent.press(preferenceRow());
@@ -3312,7 +1917,7 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
   }
 
   async function pressNextAfterPrefill(): Promise<void> {
-    await waitForPrefill('preference');
+    await waitForPrefill();
     fireEvent.press(next());
   }
 
@@ -3351,12 +1956,11 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
   });
 
   describe('🔴 AC-2 · PATCH 본문은 화면 값 전체다(대체 의미)', () => {
-    it('R-3 인원·동반·예산을 바꾼 재진입이면 본문이 정확히 그 6개 키이고 취향 스냅숏·제목은 없다', async () => {
+    it('R-3 인원·동반을 바꾼 재진입이면 본문이 정확히 그 5개 키이고 예산·취향 스냅숏·제목은 없다', async () => {
       seedReentry();
       const store = useTripWizardStore.getState();
       store.setParty(3);
       store.selectCompanion('가족');
-      store.setBudgetText('1,200,000');
       renderPage();
 
       await pressNextAfterPrefill();
@@ -3369,26 +1973,6 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
           destinations: [{ seq: 1, region: '부산', nights: 3 }],
           party: 3,
           companionType: '가족',
-          budgetTotal: 1200000,
-        },
-      ]);
-    });
-
-    it('R-4 예산이 0 이면 POST 와 같이 budgetTotal 키를 싣지 않는다', async () => {
-      seedReentry();
-      useTripWizardStore.getState().setBudgetText('0');
-      renderPage();
-
-      await pressNextAfterPrefill();
-
-      await waitFor(() => expect(hits(PATCH)).toBe(1));
-      expect(patchedBodies).toEqual([
-        {
-          startDate: '2026-06-10',
-          endDate: '2026-06-13',
-          destinations: [{ seq: 1, region: '부산', nights: 3 }],
-          party: 1,
-          companionType: '혼자',
         },
       ]);
     });
@@ -4713,7 +3297,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
 
     // 실행
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
 
     // 단언 — 지역 밖이 보인다. 조용히 빠지지도 않는다(카드 둘 다).
     expectNotice(1);
@@ -4753,7 +3337,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
       setup();
 
       renderPage();
-      await waitForPrefill('preference');
+      await waitForPrefill();
 
       expect(card(anchor)).toBeOnTheScreen();
       expect(notice()).toBeNull();
@@ -4764,7 +3348,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
   it('P-3 · 아무것도 안 고르고 [다음]을 누르면 막지 않고 두 곳 다 등록되며, 안내는 계속 보인다', async () => {
     seedSeoulWithNamwon();
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
 
     pressNext();
 
@@ -4781,7 +3365,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
   it('P-4 · [빼기]를 누르면 남원 장소가 시드·스트립에서 빠지고, [다음] 뒤 등록 요청은 경복궁 하나뿐이다', async () => {
     seedSeoulWithNamwon();
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
     expectNotice(1);
 
     // 실행 — [빼기]
@@ -4809,7 +3393,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
   it('P-5 · [그대로 두기]를 누르면 안내만 걷히고 두 카드가 남으며, [다음] 뒤 두 곳 다 등록된다', async () => {
     seedSeoulWithNamwon();
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
     expectNotice(1);
 
     fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-keep'));
@@ -4833,7 +3417,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     // 준비 — 목적지 0곳 + 남원 시드. 판정 불가라 처음엔 안내 없음.
     seedFromSaved([GWANGHALLU]);
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
     expect(card(GWANGHALLU)).toBeOnTheScreen();
     expect(notice()).toBeNull();
 
@@ -4856,7 +3440,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     addCity('서울특별시', '11');
     seedFromSaved([GWANGHALLU, HAEUNDAE, GYEONGBOK]);
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
     expectNotice(2);
 
     act(() => useTripWizardStore.getState().removeMustVisit(HAEUNDAE));
@@ -4872,7 +3456,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     addCity('서울특별시', '11');
     seedFromSaved([GWANGHALLU]);
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
     expectNotice(1);
 
     fireEvent.press(screen.getByTestId('trip-wizard-outside-notice-keep'));
@@ -4896,7 +3480,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     addCity('전북특별자치도', '52');
     seedFromSaved([GWANGHALLU, GYEONGBOK]);
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
     expect(notice()).toBeNull();
 
     fireEvent.press(screen.getByTestId('trip-wizard-summary-destination'));
@@ -4922,7 +3506,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     seedSeoulWithNamwon();
     holdCreate = { release: () => {}, started: false };
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
 
     // 실행 — [다음], 생성 요청이 출발했지만 응답은 붙잡혀 있다.
     pressNext();
@@ -4953,7 +3537,7 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     seedSeoulWithNamwon();
     useTripWizardStore.getState().setCreatedTripId(TRIP_ID);
     renderPage();
-    await waitForPrefill('preference');
+    await waitForPrefill();
     expectNotice(1);
 
     // 실행

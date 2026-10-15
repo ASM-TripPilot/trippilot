@@ -258,7 +258,6 @@ describe('FW · 위저드 셸 진입이 시드를 초기화한다 (AC-1 · 01b D
     store().setPeriod('3n4d', '2026-06-10', '2026-06-13');
     store().setParty(3);
     store().selectCompanion('가족');
-    store().setBudgetText('1,200,000');
 
     // 준비 ② — 앱을 끄지 않고 **이전 여행을 하나 만든 뒤**의 흔적: 시드 2건과, 그중 한 곳을
     // x 로 뺀 기억.
@@ -284,7 +283,6 @@ describe('FW · 위저드 셸 진입이 시드를 초기화한다 (AC-1 · 01b D
       presetCode: store().presetCode,
       party: store().party,
       companionType: store().companionType,
-      budgetText: store().budgetText,
       touched: store().touched,
     }).toEqual({
       destinations: [{ seq: 1, region: '부산', nights: 2 }],
@@ -293,8 +291,7 @@ describe('FW · 위저드 셸 진입이 시드를 초기화한다 (AC-1 · 01b D
       presetCode: '3n4d',
       party: 3,
       companionType: '가족',
-      budgetText: '1,200,000',
-      touched: ['destinations', 'period', 'party', 'companion', 'budget'],
+      touched: ['destinations', 'period', 'party', 'companion'],
     });
 
     // 단언 ② (부정 짝) — 그렇다고 초기화를 **아예 안 하는** 구현이 통과하면 안 된다.

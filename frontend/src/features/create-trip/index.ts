@@ -8,7 +8,6 @@ export {
 export type { TripDraft } from './model/tripDraft';
 export {
   formatWizardStep,
-  summaryBudget,
   summaryCompanion,
   summaryDestinations,
   summaryPeriod,

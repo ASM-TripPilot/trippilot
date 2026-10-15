@@ -28,8 +28,7 @@ import { deriveEndDate, type PeriodPresetCode } from './tripWizardStep1';
  * `StateCreator` 변수로 먼저 확정하고 `create(그변수)` 형태로 호출한다.
  */
 
-export type TripWizardField =
-  'destinations' | 'period' | 'party' | 'companion' | 'budget';
+export type TripWizardField = 'destinations' | 'period' | 'party' | 'companion';
 
 export interface TripWizardDraft {
   destinations: TripDestination[];
@@ -38,11 +37,6 @@ export interface TripWizardDraft {
   presetCode?: PeriodPresetCode;
   party: number;
   companionType?: CompanionType;
-  /** 예산 입력 원문(콤마 포함 가능) — 사람이 친 그대로 담긴다. 파싱은 순수 함수
-   * (`budgetAmount.ts`) 몫이다. 프리필은 여기 쓰지 않는다 — 파생값이라 쓰는 경로 자체가
-   * 없다(01b 불변식 — 프리필이 `setBudgetText`를 타면 touched가 켜져 자기 자신을 잠근다,
-   * TRIP-207 02a §2-2). */
-  budgetText: string;
   /** 여행 단위 취향 오버라이드(TRIP-669 D1) — `undefined`=오버라이드 없음(프리필 사용),
    * 배열(빈 `[]` 포함)=오버라이드. 전해제도 `[]`로 담아 프리필로 되돌아가지 않게 한다
    * (null-vs-empty — 배선이 `toggleMulti`의 `null`을 `[]`로 매핑). 계정 취향은 안 건드린다
@@ -98,9 +92,6 @@ export interface TripWizardDraft {
   /** 1 미만은 1로 접는다(BR-U1-39 하한) — 화면의 `−` 비활성과 별개로 여기서도 방어한다. */
   setParty(next: number): void;
   selectCompanion(type: CompanionType): void;
-  /** 사람 경로 — 원문을 판단 없이 담고 `touched`에 `'budget'`을 켠다. **빈 문자열을 넣는
-   * 것도 "건드린 것"이다**(01b D6 ③) — 그래야 지운 상태가 재진입에도 보존된다(AC-1c). */
-  setBudgetText(next: string): void;
   /** 여행 단위 취향 오버라이드 커밋(TRIP-669) — 빈 배열도 그대로 저장한다(최소 0 허용).
    * `undefined`(오버라이드 없음)와 `[]`(전해제한 오버라이드)를 서로 다른 상태로 남긴다. */
   setPrefStyleOverride(styles: string[]): void;
@@ -126,7 +117,7 @@ export interface TripWizardDraft {
   removeMustVisit(sourcePoiId: string): void;
   /** 진입 초기화(TRIP-288 D1) — **시드 3필드만** 되돌린다. `reset()`과 문을 나눈 이유는
    * 범위다: 위저드에 새로 들어오는 것은 "새 여행을 시작한다"지 "지금까지 친 것을 버린다"가
-   * 아니라, 사용자가 손으로 채운 축(여행지·기간·인원·동반·예산·`touched`)은 재진입에도
+   * 아니라, 사용자가 손으로 채운 축(여행지·기간·인원·동반·`touched`)은 재진입에도
    * 남아야 한다(BR-U1-33 · AC-1은 초기화 대상으로 시드 3개만 열거한다).
    * `createdTripId`도 남긴다 — 정본이 수명을 정하지 않았다. 비우는 것은 셸 마운트(TRIP-601 가드 c)와
    * `reset()`이고, 남아 있으면 step1은 그 여행을 새로 만들지 않고 고친다(TRIP-1113). */
@@ -147,7 +138,6 @@ const INITIAL_DRAFT = {
   party: 1,
   // 동반 기본값 '혼자'(TRIP-1045, `PartyPicker`) — 기본값이라 `touched`는 켜지 않는다.
   companionType: '혼자' as CompanionType | undefined,
-  budgetText: '',
   // `undefined`=오버라이드 없음. `INITIAL_DRAFT`에 이 키를 둬야 병합형 `reset()`이 지운다(SO-4).
   prefStyleOverride: undefined as string[] | undefined,
   prefActivityOverride: undefined as string[] | undefined,
@@ -285,11 +275,6 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
     set((state) => ({
       companionType: type,
       touched: withTouched(state.touched, 'companion'),
-    })),
-  setBudgetText: (next) =>
-    set((state) => ({
-      budgetText: next,
-      touched: withTouched(state.touched, 'budget'),
     })),
   setPrefStyleOverride: (styles) => set({ prefStyleOverride: styles }),
   setPrefActivityOverride: (activities) =>
