@@ -40,7 +40,6 @@ export function leavePreviousTripDraft(): void {
   store.setPeriod('1n2d', '2026-10-10', '2026-10-11');
   store.setParty(3);
   store.selectCompanion('가족');
-  store.setBudgetText('500,000');
   store.setPrefStyleOverride(['힐링']);
   store.setPrefActivityOverride(['역사문화']);
   store.setDayWindow({ dayStartAt: '11:00', lastDayEndAt: '16:00' });

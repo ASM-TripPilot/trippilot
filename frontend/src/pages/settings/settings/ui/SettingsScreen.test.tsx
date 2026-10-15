@@ -220,13 +220,13 @@ describe('행·그룹·다이얼로그 (옛 .test)', () => {
    * ★ 우연 통과 차단(02a ★1): 옛 "그룹 안에 '여행 취향'이 있다"는 머리글을 지워도 행 라벨에 걸려 green 이었다.
    *   그래서 ① 그룹 안 '여행 취향'이 **정확히 1개** ② 그 1개가 행 안 ③ 그룹 안 모든 글자(host Text)가 행 안
    *   — 세 겹으로 본다. ③은 "머리글 자리에 빈 Text 를 남긴 것"(카드가 아래로 밀린다)까지 잡는다.
-   * ★ 부재 단언은 칩이 실제로 뜰 입력(예산 미설정)으로, 새 행이 있다는 앵커를 먼저 본다(02a ★2·★3).
+   * ★ 부재 단언은 칩이 실제로 뜰 입력(취향 설정)으로, 새 행이 있다는 앵커를 먼저 본다(02a ★2·★3).
    *
    * (개념) host Text — 화면에 실제로 그려지는 글자 노드. `node.type === 'Text'`(문자열)로 고른다.
    * (개념) 조상 판정 — 노드에서 `.parent` 를 따라 올라가다 행을 만나면 그 행 안이다.
    */
 
-  /** 예산만 미설정 — 옛 구현이면 `settings-chip-budget` 이 실제로 뜨는 입력(02a ★3). */
+  /** 여섯 축 전부 설정 — 옛 구현이면 `settings-chip-budget` 이 실제로 뜨는 입력(02a ★3). */
   const PREFERENCES_BUDGET_UNSET = {
     styles: { value: ['휴양', '자연'], isNeutralDefault: false },
     companion: {
@@ -437,8 +437,8 @@ describe('Figma 행 표면 (옛 .l05parity)', () => {
    * TRIP-778 AC-5·6·7 · TRIP-1051 — l05 설정 default(라이브 Figma 4664:3279) 행 표면(프레젠테이션).
    *
    * 무엇을 보장하나:
-   *  - TRIP-1051: 취향은 한 행 `여행 취향 · N/7 설정됨 ›`(반원 아이콘). N 은 설정된 축 수, 모르면 값을
-   *    비운다(0/7 금지). 누르면 진입 콜백(`onPressPreferences`)이 1번 나간다. (구 TRIP-778 AC-4 7행 값·
+   *  - TRIP-1051: 취향은 한 행 `여행 취향 · N/6 설정됨 ›`(반원 아이콘). N 은 설정된 축 수, 모르면 값을
+   *    비운다(0/6 금지). 누르면 진입 콜백(`onPressPreferences`)이 1번 나간다. (구 TRIP-778 AC-4 7행 값·
    *    `미설정` 칩은 사용자 결정 A 로 폐기.)
    *  - AC-5: 위치정보 수집 동의 행에 `동의`(분홍)/`미동의`(회색) 칩, 모르면 칩 없음(D4).
    *  - AC-6: 위치정보 그룹의 개인화 행 — 리딩 글리프 + 동의면 `사용 중` + chevron, 누르면 진입 콜백.
@@ -459,14 +459,14 @@ describe('Figma 행 표면 (옛 .l05parity)', () => {
 
   type Preferences = NonNullable<SettingsInput['preferences']>;
 
-  /** 7축 중 3축(스타일·밀도·예산)만 설정 → 3/7. */
+  /** 6축 중 2축(스타일·밀도)만 설정 → 2/6 (서버 예산은 세지 않는다). */
   const THREE_SET: Preferences = {
     styles: { value: ['휴양'], isNeutralDefault: false },
     pace: { value: '느긋하게', isNeutralDefault: false },
     budget: { tier: '중간', isNeutralDefault: false },
   };
 
-  /** 7축 모두 미설정 — 모양이 전부 다르다(중립 기본값·빈 배열·축 없음·value 없음·null). */
+  /** 6축 모두 미설정 — 모양이 전부 다르다(중립 기본값·빈 배열·축 없음·value 없음·null). */
   const ALL_UNSET_MIXED: Preferences = {
     styles: { value: ['휴양'], isNeutralDefault: true },
     activities: { value: [], isNeutralDefault: false },
@@ -529,36 +529,36 @@ describe('Figma 행 표면 (옛 .l05parity)', () => {
 
   /**
    * ★ 행 안에서만 찾는다(`within(row)`) — '설정됨' 같은 글자가 다른 곳에 생겨도 헷갈리지 않게.
-   * ★ AC-3 은 정규식 `/\/7/` 로 "숫자/7" 모양 전부를 막는다 — 문자열 인자는 완전일치라 `'0/7 설정됨'` 하나만
+   * ★ AC-3 은 정규식 `/\/6/` 로 "숫자/6" 모양 전부를 막는다 — 문자열 인자는 완전일치라 `'0/6 설정됨'` 하나만
    *   막게 된다(02a ★6).
    */
-  describe('TRIP-1051 · 여행 취향 한 행 — N/7 설정됨·진입', () => {
-    it('A1 AC-1: 3축만 설정이면 행 안에 "3/7 설정됨"(완전일치)·chevron, 칩은 없다', () => {
+  describe('TRIP-1051 · 여행 취향 한 행 — N/6 설정됨·진입', () => {
+    it('A1 AC-1: 2축만 설정이면 행 안에 "2/6 설정됨"(완전일치)·chevron, 칩은 없다', () => {
       renderScreen({ preferences: THREE_SET });
 
       const row = screen.getByTestId(PREF_ROW);
-      expect(within(row).getByText('3/7 설정됨')).toBeOnTheScreen();
+      expect(within(row).getByText('2/6 설정됨')).toBeOnTheScreen();
       expect(within(row).getByTestId(`${PREF_ROW}-chevron`)).toBeOnTheScreen();
       expect(within(row).queryAllByTestId(/^settings-chip-/)).toHaveLength(0);
     });
 
-    it('A2 AC-2: 7축 모두 미설정이면 "0/7 설정됨" — "미설정" 칩·글자는 없다', () => {
+    it('A2 AC-2: 6축 모두 미설정이면 "0/6 설정됨" — "미설정" 칩·글자는 없다', () => {
       renderScreen({ preferences: ALL_UNSET_MIXED });
 
       const row = screen.getByTestId(PREF_ROW);
-      expect(within(row).getByText('0/7 설정됨')).toBeOnTheScreen();
+      expect(within(row).getByText('0/6 설정됨')).toBeOnTheScreen();
       expect(within(row).queryByText('미설정')).toBeNull();
       expect(within(row).queryAllByTestId(/^settings-chip-/)).toHaveLength(0);
     });
 
-    it('A3 AC-3: 취향을 모르면(응답 전·실패) 행과 chevron 은 있지만 "N/7"·"설정됨"을 지어내지 않는다', () => {
+    it('A3 AC-3: 취향을 모르면(응답 전·실패) 행과 chevron 은 있지만 "N/6"·"설정됨"을 지어내지 않는다', () => {
       renderScreen();
 
       // 긍정 앵커: 행과 chevron 은 있다(누르면 편집 화면으로 갈 수 있다).
       const row = screen.getByTestId(PREF_ROW);
       expect(within(row).getByTestId(`${PREF_ROW}-chevron`)).toBeOnTheScreen();
-      // 단언(부분포함): 어떤 숫자든 "/7" 이 없고, "설정됨"도 없다.
-      expect(within(row).queryByText(/\/7/)).toBeNull();
+      // 단언(부분포함): 어떤 숫자든 "/6" 이 없고, "설정됨"도 없다.
+      expect(within(row).queryByText(/\/6/)).toBeNull();
       expect(within(row).queryByText(/설정됨/)).toBeNull();
       expect(within(row).queryAllByTestId(/^settings-chip-/)).toHaveLength(0);
     });

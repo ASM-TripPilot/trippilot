@@ -6,7 +6,7 @@ import { PrefStep2Screen, type PrefStep2ScreenProps } from './PrefStep2Screen';
  * AC-1(동행 6종)·AC-2(이동 5종)·AC-3(음식 5종)·AC-4(활동 8종 신설)·AC-6(완료 항상 활성)·
  * AC-8(스포츠 부재) — 취향 2/2 화면 프레젠테이션(TRIP-254 정본 정합).
  *
- * 무엇을 보장하나: 예산 4구간(단일, 무변경)은 그대로 두고, 동행·이동·음식 세 축을 정본 값
+ * 무엇을 보장하나: 예산 블록은 걷어냈고(없음), 동행·이동·음식 세 축을 정본 값
  * 도메인(US-ONB-07/09/10)으로 교체하고 활동(US-ONB-08) 8종 블록을 신설한다. 라벨(한글)로
  * 존재/부재를 잰다 — 슬러그는 구현 세부다. 부재 단언은 반드시 "새 라벨/블록 존재" 긍정과
  * 같은 it에서 짝지어(대상이 통째로 비어도 초록 통과하는 함정 차단).
@@ -17,8 +17,6 @@ import { PrefStep2Screen, type PrefStep2ScreenProps } from './PrefStep2Screen';
  * (getByText는 없으면 예외) — "없어야 한다"를 검사하는 데 쓴다. 문자열 매처는 기본이
  * 완전 일치(exact)라 "커플"을 물어도 "연인"에는 안 걸린다(02a §5-A 실검증).
  */
-
-const BUDGET_SLUGS = ['low', 'mid', 'high', 'luxury'] as const;
 
 // 정본 슬러그·라벨 계약(02a §2). couple slug는 유지하되 라벨만 연인→커플, walk 라벨은
 // 도보 위주→도보, rental 라벨은 차량→렌터카. 활동 testID는 food와 다른 별도 prefix.
@@ -70,12 +68,10 @@ function makeProps(
   overrides: Partial<PrefStep2ScreenProps> = {}
 ): PrefStep2ScreenProps {
   return {
-    selectedBudget: null,
     selectedCompanions: null,
     selectedFoods: null,
     selectedTransports: null,
     selectedActivities: null,
-    onToggleBudget: jest.fn(),
     onToggleCompanion: jest.fn(),
     onToggleFood: jest.fn(),
     onToggleTransport: jest.fn(),
@@ -86,26 +82,26 @@ function makeProps(
   };
 }
 
-describe('PrefStep2Screen — 예산 (무회귀 · US-ONB-06 · 4-1)', () => {
-  it('4구간이 렌더되고 단일 선택만 표시되며 탭하면 그 slug로 콜백이 호출된다', () => {
-    // 준비 — 'mid'가 이미 선택된 상태.
-    const props = makeProps({ selectedBudget: 'mid' });
+describe('PrefStep2Screen — 예산 블록 없음 (예산 입력 기능 제거)', () => {
+  it('예산 타일·질문은 없고 나머지 4블록은 그대로 있으며, 예산 없이도 완료할 수 있다', () => {
+    const props = makeProps();
     render(<PrefStep2Screen {...props} />);
 
-    // 단언(존재) — 4구간 전부.
-    BUDGET_SLUGS.forEach((slug) => {
+    // 단언(긍정 앵커) — 동행 블록이 떠 있다. 부재 단언이 빈 화면에서 초록이 되는 함정 차단.
+    expect(
+      screen.getByTestId('onboarding-pref2-companion-solo')
+    ).toBeOnTheScreen();
+    // 단언(부재) — 예산 4구간 타일과 질문.
+    ['low', 'mid', 'high', 'luxury'].forEach((slug) => {
       expect(
-        screen.getByTestId(`onboarding-pref2-budget-${slug}`)
-      ).toBeOnTheScreen();
+        screen.queryByTestId(`onboarding-pref2-budget-${slug}`)
+      ).toBeNull();
     });
-    // 단언(선택 표시) — mid만 selected(단일 선택 증명).
-    expect(screen.getByTestId('onboarding-pref2-budget-mid')).toBeSelected();
+    expect(screen.queryByText('여행 예산은 어느 정도?')).toBeNull();
 
-    // 실행 — 'low' 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-budget-low'));
-
-    // 단언(콜백) — onToggleBudget('low').
-    expect(props.onToggleBudget).toHaveBeenCalledWith('low');
+    // 단언(완료 가능) — 아무것도 안 골라도 [완료]가 눌려 콜백이 간다.
+    fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
+    expect(props.onDone).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -22,7 +22,7 @@ import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
  *
  * 쓰는 법: describe 본문에서 `wizardStep1Harness(옵션)` 를 한 번 부른다. 이 호출이 `beforeAll`(관찰자 켜기)·`afterAll`
  * (관찰자 떼기)·`beforeEach`(관찰 기록 비우기) 를 그 describe 에 건다 — 그러니 **describe 본문에서만** 부른다.
- * describe 마다 미세하게 다른 것(오늘 날짜 `baseDate`, 예산 프리필 GET 의 응답, 생성 응답 `Trip`)은 옵션/인자로 받는다.
+ * describe 마다 미세하게 다른 것(오늘 날짜 `baseDate`, 생성 응답 `Trip`)은 옵션/인자로 받는다.
  *
  * jest.mock 팩토리 안에서는 쓰지 않는다 — 이 모듈은 JSX 를 가지므로 NativeWind babel 이 주입하는
  * `_ReactNativeCSSInterop` 참조가 팩토리 스코프로 걸리지 않게 **별도 모듈 파일**이어야 한다(`queryRender` 와 같은 이유).
@@ -30,7 +30,7 @@ import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
 
 export const BASE = 'http://localhost:8080/api/v1';
 
-/** 프리필이 요약 예산·취향 행 + 제출 바디로 흐른다(예산 칩 `80만원`·취향 칩 `미식` 이 프리필 도착의 눈금). rawAmount 800000. */
+/** 프리필이 요약 취향 행 + 제출 바디로 흐른다(취향 칩 `미식` 이 프리필 도착의 눈금). `budget` 은 서버에 남은 옛 값 — 예산 입력 기능을 걷어냈으니 화면·요청 어디에도 안 흐르는 것이 정상이다. */
 export const PREFERENCE: PreferenceView = {
   pace: { value: '균형있게', isNeutralDefault: false },
   budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
@@ -63,37 +63,13 @@ export function makePreference(over: Partial<PreferenceView>): PreferenceView {
   return { ...PREFERENCE, ...over };
 }
 
-/** 예산 축이 비어 있는 프리필(온보딩에서 예산을 안 고른 계정). */
-export const NO_BUDGET = {
-  tier: null,
-  rawAmount: null,
-  isNeutralDefault: true,
-};
-
-/** 프리필의 예산 축만 바꾼다 — 취향 styles 는 미식 하나(요약 취향 행 `미식` 이 도착 눈금). */
-export function budgetPreference(
-  budget: NonNullable<PreferenceView['budget']>
-): PreferenceView {
-  return {
-    pace: { value: '균형있게', isNeutralDefault: false },
-    budget,
-    styles: { value: ['미식'] },
-    activities: { value: [] },
-  };
-}
-
 /** 기본 생성 응답에서 일부 필드만 바꾼다. */
 export function makeTrip(over: Partial<Trip>): Trip {
   return { ...TRIP, ...over };
 }
 
 type SheetKind =
-  | 'destination'
-  | 'period'
-  | 'daywindow'
-  | 'companion'
-  | 'preference'
-  | 'budget';
+  'destination' | 'period' | 'daywindow' | 'companion' | 'preference';
 
 /** 요약 행 → 시트 testID. 취향 시트만 `pref` 접두다. */
 const SHEET_TEST_IDS: Record<SheetKind, string> = {
@@ -102,7 +78,6 @@ const SHEET_TEST_IDS: Record<SheetKind, string> = {
   daywindow: 'trip-wizard-daywindow-sheet',
   companion: 'trip-wizard-companion-sheet',
   preference: 'trip-wizard-pref-sheet',
-  budget: 'trip-wizard-budget-sheet',
 };
 
 export interface WizardStep1HarnessOptions {
@@ -111,9 +86,6 @@ export interface WizardStep1HarnessOptions {
   /** `QueryClientProvider` 안쪽에 한 겹 더 씌운다(토스트 호스트·"내 여행" 목록 관찰자). */
   Inner?: ComponentType<{ children: ReactNode }>;
 }
-
-/** 프리필 도착의 눈금 — `budget`: 요약 예산 행 `80만원`, `preference`: 요약 취향 행 `미식`. */
-type PrefillMark = 'budget' | 'preference';
 
 export function wizardStep1Harness({
   baseDate = '2026-06-10',
@@ -148,15 +120,6 @@ export function wizardStep1Harness({
   function preferenceHandler(over: Partial<PreferenceView> = {}) {
     return http.get(`${BASE}/me/preferences`, () =>
       HttpResponse.json(makePreference(over))
-    );
-  }
-
-  /** `/me/preferences` 를 주어진 예산 축으로 덮어쓴다(예산 프리필 GET 이 describe 마다 다른 자리). */
-  function serveBudget(budget: NonNullable<PreferenceView['budget']>): void {
-    server.use(
-      http.get(`${BASE}/me/preferences`, () =>
-        HttpResponse.json(budgetPreference(budget))
-      )
     );
   }
 
@@ -213,13 +176,14 @@ export function wizardStep1Harness({
    * 프리필이 도착해 요약 행에 흘러온 것을 기다린다. 첫 테스트가 냉시작(모듈 첫 로드)을 흡수한다 — CI 에서
    * 기본 1000ms 를 넘겨 red 였던 적이 있어(PR #857 CI 2회) 5000ms 로 기다린다(대기 상한일 뿐 결과는 안 바뀐다).
    */
-  async function waitForPrefill(mark: PrefillMark = 'budget'): Promise<void> {
-    const [testID, text] =
-      mark === 'budget'
-        ? (['trip-wizard-summary-budget', /80만원/] as const)
-        : (['trip-wizard-summary-preference', /미식/] as const);
+  async function waitForPrefill(): Promise<void> {
+    // 로딩 얼굴(요약 스켈레톤)이 걷히는 것이 도착의 눈금이다 — 프리필 내용(취향 값)에 기대면 취향을 비우거나
+    // 덮는 케이스에서 영영 안 온다.
     await waitFor(
-      () => expect(screen.getByTestId(testID)).toHaveTextContent(text),
+      () =>
+        expect(
+          screen.queryByTestId('trip-wizard-summary-skeleton-1')
+        ).toBeNull(),
       { timeout: 5000 }
     );
   }
@@ -227,7 +191,6 @@ export function wizardStep1Harness({
   return {
     tracker,
     preferenceHandler,
-    serveBudget,
     createTripHandler,
     renderPage,
     next,

@@ -89,7 +89,7 @@ describe('PrefStep1Page — 다음 내비게이션 (AC3 · AC-nav-1 · 5-2)', ()
 describe('PrefStep1Page — 일괄 탈출 (AC4 · AC-11-1·2 · AC-14-1 · 5-3)', () => {
   // TRIP-718: Figma 1643:1183 에 하단 링크가 없어 제거 — 탈출구는 상단 하나(US-ONB-11 충족).
   it.each([['상단', 'onboarding-pref1-skip-top']])(
-    '%s skip을 탭하면 홈으로 replace하고 6축이 전부 null로 유지된다',
+    '%s skip을 탭하면 홈으로 replace하고 5축이 전부 null로 유지된다',
     (_label, testId) => {
       // 준비 — 아무 것도 고르지 않은 채 렌더(reset 직후).
       render(<PrefStep1Page />);
@@ -99,11 +99,10 @@ describe('PrefStep1Page — 일괄 탈출 (AC4 · AC-11-1·2 · AC-14-1 · 5-3)'
 
       // 단언 — 홈으로 replace.
       expect(routerMock.replace).toHaveBeenCalledWith('/');
-      // 단언 — 6축 전부 null 유지(빈 배열로 바뀌지 않는다 — US-ONB-14).
+      // 단언 — 5축 전부 null 유지(빈 배열로 바뀌지 않는다 — US-ONB-14).
       const state = usePreferenceStore.getState();
       expect(state.styles).toBeNull();
       expect(state.pace).toBeNull();
-      expect(state.budget).toBeNull();
       expect(state.companions).toBeNull();
       expect(state.foods).toBeNull();
       expect(state.transports).toBeNull();

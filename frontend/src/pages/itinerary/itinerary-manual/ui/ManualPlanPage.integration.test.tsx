@@ -301,7 +301,7 @@ describe('저장하고 확정하기', () => {
   describe('🔴 B2 · 결정 1(ii) — 저장 성공 뒤에만 확정하고, 확정되면 확정 화면(h16)으로 바꿔 간다 (US-SCHED-12)', () => {
     it('PUT → 확정 순서 · replace h16 1회 · 캐시가 CONFIRMED · 위저드가 비워진다 · push/back 0', async () => {
       // 준비 — 위저드에 이 여행의 흔적을 남겨 둔다(원래 빈 값이면 "비웠다"가 공허 — 02a ★12).
-      useTripWizardStore.setState({ budgetText: '50만원' });
+      useTripWizardStore.setState({ party: 4 });
       const { client } = renderPage();
       await ready();
 
@@ -315,7 +315,7 @@ describe('저장하고 확정하기', () => {
           getGetTripsTripIdItineraryQueryKey(TRIP_ID)
         )?.status
       ).toBe('CONFIRMED');
-      expect(useTripWizardStore.getState().budgetText).toBe('');
+      expect(useTripWizardStore.getState().party).toBe(1);
       expect(mockPush).not.toHaveBeenCalled();
       expect(mockBack).not.toHaveBeenCalled();
     });

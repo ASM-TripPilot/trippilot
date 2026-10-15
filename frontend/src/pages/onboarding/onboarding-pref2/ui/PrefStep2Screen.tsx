@@ -1,6 +1,6 @@
 /**
  * c09b-pref(통합 취향 2/2) 프레젠테이션 (TRIP-163 · TRIP-254 정본 정합).
- * props 만 받고 스토어·네트워크를 모른다. 예산(단일)+동행·활동·음식·이동(복수) 5블록.
+ * props 만 받고 스토어·네트워크를 모른다. 동행·활동·음식·이동(복수) 4블록.
  * 동행·이동·음식·활동 값 도메인은 요구사항 정본(US-ONB-07~10 + §PreferenceSet + openapi)이
  * 쥐며, 라이브 Figma(1774:2258)는 옛 세트를 그린 낡은 사본이라 근거가 아니다(TRIP-254 §드리프트).
  * TRIP-719: Q4 번복 — Figma 1774:2258 에 back chevron 이 없어 제거(1/2·2/2 둘 다 back 없음).
@@ -37,12 +37,10 @@ import {
 } from '@/features/onboarding';
 
 export interface PrefStep2ScreenProps {
-  selectedBudget: string | null;
   selectedCompanions: readonly string[] | null;
   selectedActivities: readonly string[] | null;
   selectedFoods: readonly string[] | null;
   selectedTransports: readonly string[] | null;
-  onToggleBudget: (id: string) => void;
   onToggleCompanion: (id: string) => void;
   onToggleActivity: (id: string) => void;
   onToggleFood: (id: string) => void;
@@ -58,13 +56,6 @@ const ctaShadow = {
   shadowRadius: 10,
   elevation: 2,
 } as const;
-
-const BUDGET_OPTIONS = [
-  { slug: 'low', label: '저가', amount: '~50만원' },
-  { slug: 'mid', label: '중간', amount: '50~150만원' },
-  { slug: 'high', label: '고급', amount: '150~300만원' },
-  { slug: 'luxury', label: '럭셔리', amount: '300만원+' },
-];
 
 // 동행 6종(US-ONB-07). couple slug는 유지하고 라벨만 "커플"(HeartGlyph 재사용 — 미래 PUT
 // enum 매핑 안정성). 반려동물은 화면상 칩 하나지만 계약에선 companionTypes가 아니라 별개
@@ -120,65 +111,11 @@ const TRANSPORT_OPTIONS: {
   { slug: 'bike', label: '자전거', Icon: BikeGlyph },
 ];
 
-interface BudgetTileProps {
-  slug: string;
-  label: string;
-  amount: string;
-  selected: boolean;
-  onPress: () => void;
-}
-
-function BudgetTile({
-  slug,
-  label,
-  amount,
-  selected,
-  onPress,
-}: BudgetTileProps): ReactElement {
-  return (
-    <Pressable
-      testID={`onboarding-pref2-budget-${slug}`}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className={`relative flex-1 items-center justify-center gap-[5px] rounded-card bg-canvas px-sm py-lg ${
-        selected ? 'border-[1.5px] border-primary' : 'border border-hairline'
-      }`}
-    >
-      <Text
-        className={
-          selected
-            ? 'font-noto-bold text-card-title font-bold text-primary-text'
-            : 'font-noto-bold text-card-title font-bold text-ink'
-        }
-      >
-        {label}
-      </Text>
-      <Text
-        className={
-          selected
-            ? 'font-noto text-[12.5px] text-primary-text'
-            : 'font-noto text-[12.5px] text-muted'
-        }
-      >
-        {amount}
-      </Text>
-      {selected ? (
-        <View className="absolute right-[6.5px] top-[6.5px] h-5 w-5 items-center justify-center rounded-pill border-[1.5px] border-canvas bg-primary">
-          <CheckGlyph size={12} />
-        </View>
-      ) : null}
-    </Pressable>
-  );
-}
-
 export function PrefStep2Screen({
-  selectedBudget,
   selectedCompanions,
   selectedActivities,
   selectedFoods,
   selectedTransports,
-  onToggleBudget,
   onToggleCompanion,
   onToggleActivity,
   onToggleFood,
@@ -211,34 +148,6 @@ export function PrefStep2Screen({
           </View>
 
           <View className="gap-md px-lg pb-xs pt-xl">
-            <View className="gap-xs">
-              <Text className="font-noto-bold text-section font-bold text-ink">
-                여행 예산은 어느 정도?
-              </Text>
-              <Text className="font-noto text-label text-muted">
-                1인 전체 예산 기준
-              </Text>
-            </View>
-            {chunkPairs(BUDGET_OPTIONS).map((row) => (
-              <View
-                key={row.map((item) => item.slug).join('-')}
-                className="flex-row gap-md"
-              >
-                {row.map(({ slug, label, amount }) => (
-                  <BudgetTile
-                    key={slug}
-                    slug={slug}
-                    label={label}
-                    amount={amount}
-                    selected={selectedBudget === slug}
-                    onPress={() => onToggleBudget(slug)}
-                  />
-                ))}
-              </View>
-            ))}
-          </View>
-
-          <View className="gap-md px-lg pb-xs pt-2xl">
             <Text className="font-noto-bold text-section font-bold text-ink">
               주로 누구와 여행하세요?
             </Text>

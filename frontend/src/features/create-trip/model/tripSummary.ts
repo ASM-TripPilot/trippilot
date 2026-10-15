@@ -118,26 +118,3 @@ export function summaryPreferences(
   if (labels.length === 0) return null;
   return { main: labels.join(DOT), onboarding: fromOnboarding };
 }
-
-/** 만원 단위 반올림 — 1,234,567 → "123만원"(`Math.round`). export하지 않고 summaryBudget으로만
- *  관찰한다(내부 포맷터, D5). */
-function formatManwon(amount: number): string {
-  return `${Math.round(amount / 10000)}만원`;
-}
-
-/** 예산 요약(2톤) — 금액이 있으면 main=금액("120만원") · sub="1인 총액[ · {tier}]". 금액이 없고
- *  (0 이하) tier 만 있으면 **tier-only**: main=tier("중간") · sub="1인 총액 · 온보딩"(empty 얼굴,
- *  프리필 tier 만 아는 상태). 금액도 tier 도 없으면 null(D4·D5, "0만원"으로 새지 않게 한다).
- *  TRIP-732: 문자열 하나 → 2톤 객체 + tier-only 분기(옛 amount<=0→null 계약 반전). */
-export function summaryBudget(
-  amount: number,
-  tierLabel?: string
-): SummaryLine | null {
-  if (amount <= 0) {
-    if (tierLabel === undefined) return null;
-    return { main: tierLabel, sub: `1인 총액${DOT}온보딩` };
-  }
-  const sub =
-    tierLabel === undefined ? '1인 총액' : `1인 총액${DOT}${tierLabel}`;
-  return { main: formatManwon(amount), sub };
-}

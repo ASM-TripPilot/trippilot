@@ -7,7 +7,6 @@ import type {
 
 import {
   formatWizardStep,
-  summaryBudget,
   summaryCompanion,
   summaryDestinations,
   summaryPeriod,
@@ -21,19 +20,18 @@ import {
  * 무엇을 보장하나:
  *  - **진행 모델(AC-1)**: 총 4단계 고정, 현재 단계를 [1,4]로 클램프해 `"N / 4"`로 표시.
  *    옛 하드코딩 `"1 / 2"`·`"2 / 2"`를 대체할 단일 소스라, 범위 밖 입력도 안전한 값으로 접힌다.
- *  - **요약 5행(AC-1·2, TRIP-732 2톤)**: 여행지·기간·동행·취향·예산 각각을 `{main; sub?}` 객체로
- *    분리 도출한다(취향은 `{main; onboarding}`, 예산은 tier-only 분기). 화면이 굵은 main + 회색 sub
+ *  - **요약 4행(AC-1·2, TRIP-732 2톤)**: 여행지·기간·동행·취향 각각을 `{main; sub?}` 객체로
+ *    분리 도출한다(취향은 `{main; onboarding}`). 화면이 굵은 main + 회색 sub
  *    2톤으로 그리고, "미선택/미입력"은 객체가 아니라 `null`로 구분한다(화면이 빈 얼굴을 그릴 수 있게).
  *
  * 커버 경계:
  *  - 기간 행의 요일은 **실제 달력의 요일**을 잠근다(아래 EXPECTED_PERIODS 주석 참조). 시드/브리프
  *    예시의 (화)(금)은 2026-06-10/13의 실제 요일(수/토)과 다른 오기다 — 예시 글자를 베끼지 않는다.
- *  - 내부 포맷터(만원·요일삽입)는 export하지 않으므로 `summaryBudget`·`summaryPeriod`를 통해서만
+ *  - 내부 포맷터(만원·요일삽입)는 export하지 않으므로 `summaryPeriod`를 통해서만
  *    관찰한다(구현이 아니라 동작을 잠근다).
  *
  * 커버하지 않는 것:
  *  - 취향 라벨이 styles만인지 styles+activities인지 — 셀렉터는 라벨 불가지(D3), 호출부(S1 배선) 결정.
- *  - 예산 tier가 어디서 오는지(프리필 vs 파생) — tierLabel은 인자로 받을 뿐이다(D4).
  *  - 달을 넘는 기간의 둘째 월 표기 — 계약 예시(같은 달)에 없어 잠그지 않는다.
  *
  * 3동작 뼈대: 준비(인자 구성) → 실행(셀렉터 1회 호출) → 단언(반환 문자열/객체/null).
@@ -481,55 +479,5 @@ describe('summaryPreferences — 취향 요약 행 (AC-1·5, onboarding 플래�
   it('라벨이 0개면 fromOnboarding과 무관하게 null이다 (AC-2)', () => {
     expect(summaryPreferences([], true)).toBeNull();
     expect(summaryPreferences([], false)).toBeNull();
-  });
-});
-
-// ── AC-2 예산 ──────────────────────────────────────────────────────────────────
-
-describe('summaryBudget — 예산 요약 행 (AC-1, 금액형·tier-only 분기)', () => {
-  it('금액+tier면 main=금액 · sub="1인 총액 · {tier}"', () => {
-    expect(summaryBudget(1200000, '중간')).toEqual({
-      main: '120만원',
-      sub: `1인 총액${DOT}중간`,
-    });
-  });
-
-  it('금액만(tier 없음)이면 sub 에서 tier 절을 생략한다', () => {
-    expect(summaryBudget(1200000)).toEqual({
-      main: '120만원',
-      sub: '1인 총액',
-    });
-  });
-
-  it('만원 미만 단위는 반올림한다 — 1,234,567원 → "123만원"', () => {
-    // 1234567 / 10000 = 123.4567 → 소수부 < 0.5 이므로 round·floor·trunc 모두 123.
-    // 이 값만으로는 반올림 방향을 못 가른다.
-    expect(summaryBudget(1234567)).toEqual({
-      main: '123만원',
-      sub: '1인 총액',
-    });
-    expect(summaryBudget(1234567, '고급')).toEqual({
-      main: '123만원',
-      sub: `1인 총액${DOT}고급`,
-    });
-    // 1235000 / 10000 = 123.5 → 소수부 ≥ 0.5. round=124, floor/trunc=123.
-    // 이 케이스가 반올림 방향을 실제로 잠근다(뮤테이션: round→floor 시 red).
-    expect(summaryBudget(1235000)).toEqual({
-      main: '124만원',
-      sub: '1인 총액',
-    });
-  });
-
-  it('★ 금액 없고 tier 만 있으면 tier-only — main=tier · sub="1인 총액 · 온보딩" (empty)', () => {
-    // TRIP-732: empty 얼굴 예산은 금액이 없고 프리필 tier 만 있다. 옛 계약은 amount<=0 → null 이라
-    // 이 형태를 못 냈다(정본 공백). 이제 tier 를 main 으로 내는 분기를 셀렉터가 소유한다.
-    expect(summaryBudget(0, '중간')).toEqual({
-      main: '중간',
-      sub: `1인 총액${DOT}온보딩`,
-    });
-  });
-
-  it('금액도 tier 도 없으면 null이다 (0이 "0만원"으로 새지 않는다, AC-2)', () => {
-    expect(summaryBudget(0)).toBeNull();
   });
 });
