@@ -533,3 +533,19 @@ describe('🔴 TRIP-761 · AC-6 · ★manual 모드도 complete 아님(무회귀
     expect(onPressComplete).not.toHaveBeenCalled();
   });
 });
+
+describe('TRIP-1372 · 몇 번째 방문인지', () => {
+  it('order 가 오면 "N번째 방문" 을 그리고, 없으면 그리지 않는다', () => {
+    const { rerender } = render(
+      <VisitRecordCard
+        card={baseCard({ visitCheckId: 'v1', poiId: 'p1', order: 2 })}
+      />
+    );
+    expect(screen.getByText('2번째 방문')).toBeOnTheScreen();
+
+    rerender(
+      <VisitRecordCard card={baseCard({ visitCheckId: 'v1', poiId: 'p1' })} />
+    );
+    expect(screen.queryByText(/번째 방문/)).toBeNull();
+  });
+});

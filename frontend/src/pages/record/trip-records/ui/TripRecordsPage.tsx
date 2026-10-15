@@ -16,7 +16,6 @@ import {
 import { useAdjustVisitTimes } from '../model/useAdjustVisitTimes';
 import { useSpontaneousNames } from '@/features/check-visit';
 import { useVisitCheck } from '@/features/check-visit';
-import { orderByArrival } from '../model/visitOrder';
 import { isOptimisticVisit } from '@/features/check-visit';
 import {
   AutoRevertDialog,
@@ -227,23 +226,27 @@ export function TripRecordsPage({
       }
     : undefined;
 
-  const cards: VisitRecordCardVM[] = orderByArrival(
-    records.data?.visits ?? []
-  ).map((visit) => ({
-    visitCheckId: visit.visitCheckId,
-    slotKey: visit.slotKey ?? null,
-    poiId: visit.poiId,
-    nameKo:
-      nameByPoi.get(visit.poiId) ??
-      spontaneousNames[visit.poiId] ??
-      visit.poiId,
-    arrivedAt: visit.arrivedAt ?? null,
-    completedAt: visit.completedAt ?? null,
-    skippedAt: visit.skippedAt ?? null,
-    arrivedLabel: visit.arrivedAt ? seoulTime(new Date(visit.arrivedAt)) : null,
-    // TRIP-1340 — 서버 출처에서 파생(플래그 OFF 빌드는 자동 기록 자체가 없다).
-    autoRecorded: automationOn && autoRecordPart(visit) !== null,
-  }));
+  // TRIP-1372 — 순서는 서버가 도착 순으로 준다(TRIP-1315). 앱이 다시 세우지 않고 배열 순서가 곧 방문 순서다.
+  const cards: VisitRecordCardVM[] = (records.data?.visits ?? []).map(
+    (visit, index) => ({
+      order: index + 1,
+      visitCheckId: visit.visitCheckId,
+      slotKey: visit.slotKey ?? null,
+      poiId: visit.poiId,
+      nameKo:
+        nameByPoi.get(visit.poiId) ??
+        spontaneousNames[visit.poiId] ??
+        visit.poiId,
+      arrivedAt: visit.arrivedAt ?? null,
+      completedAt: visit.completedAt ?? null,
+      skippedAt: visit.skippedAt ?? null,
+      arrivedLabel: visit.arrivedAt
+        ? seoulTime(new Date(visit.arrivedAt))
+        : null,
+      // TRIP-1340 — 서버 출처에서 파생(플래그 OFF 빌드는 자동 기록 자체가 없다).
+      autoRecorded: automationOn && autoRecordPart(visit) !== null,
+    })
+  );
 
   // TRIP-1021 계획 행 — 그날 계획 슬롯 중 방문 레코드(슬롯 키 기준)가 없는 것. 방문이 있어도 남는다
   // (Q4 — 첫 체크 뒤에도 다음 곳을 여기서 체크할 수 있게). 도착하면 낙관 레코드가 그 키를 채워 행이 빠진다.
