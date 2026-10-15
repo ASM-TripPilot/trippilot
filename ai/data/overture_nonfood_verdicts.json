@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-15T04:50:52.818214+00:00",
+  "generated_at": "2026-10-15T14:01:39.664703+00:00",
   "verdicts": {
     "44325f72-6b14-4ac6-b9d8-def8dea71b91": {
       "verdict": "accept",
@@ -2083,14 +2083,14 @@
       "guess": "칵테일바",
       "why": "여행형 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "6b70ef79-1905-4731-b534-b8f446de17e0": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "외부인 방문 가능",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "c921c3ee-96e5-4e90-8261-f3d10c59afee": {
       "verdict": "accept",
@@ -2102,16 +2102,16 @@
     "1ad4fa3d-0f77-450f-9505-03c206346d2f": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "외부인 방문 가능",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "b97e0263-c74b-43c8-9534-e6aa5009b712": {
       "verdict": "accept",
       "guess": "라운지바",
       "why": "여행형 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ab33a028-e46f-4c14-a3b5-15e02d25f3c4": {
       "verdict": "reject",
@@ -2158,9 +2158,9 @@
     "4b0a7bd3-484a-42d5-a6c6-df4d319ff440": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "외부인 방문 가능",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "92daf30e-74b8-4cb1-b64c-a7837eb67ba5": {
       "verdict": "accept",
@@ -2384,7 +2384,7 @@
       "guess": "비어가든",
       "why": "여행형 맥주공간",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "2445d76b-7fe6-458b-ac28-b84493a35ede": {
       "verdict": "accept",
@@ -2492,11 +2492,11 @@
       "prompt": "3"
     },
     "7da6e601-1df6-4382-9c5b-1143c1b9652b": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "여행형 음주공간",
+      "verdict": "reject",
+      "guess": "업종불명",
+      "why": "단어상호로 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f2b226f3-0e5d-4616-aad4-c1960df4f462": {
       "verdict": "reject",
@@ -2552,7 +2552,7 @@
       "guess": "댄스클럽",
       "why": "번화가 클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "4cfdbac4-f6f9-44ae-b6a7-26cd9b62788a": {
       "verdict": "reject",
@@ -2571,16 +2571,16 @@
     "c16551a7-49cb-4c17-a03c-c95e3efd3961": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "번화가 라운지",
+      "why": "번화가 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a1b53258-bf3c-4433-8f6c-4e98c136c7aa": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "와인바 분명",
+      "verdict": "reject",
+      "guess": "와인체인",
+      "why": "전국 프랜차이즈",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "91f9a6b0-ca7f-4b27-852c-85756fd5148b": {
       "verdict": "reject",
@@ -2599,9 +2599,9 @@
     "f6c1db43-4b3e-40a2-bb47-541865e49af8": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "칵테일바 분명",
+      "why": "여행형 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "914e0d0b-ab1d-4823-803c-2929730c436a": {
       "verdict": "reject",
@@ -2618,11 +2618,11 @@
       "prompt": "3"
     },
     "5b9b071e-0dc3-4884-b4a1-1f725e3b9f16": {
-      "verdict": "accept",
-      "guess": "비어가든",
-      "why": "여행형 주점",
+      "verdict": "reject",
+      "guess": "업종불명",
+      "why": "단어상호로 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "3d7021dc-3a77-4c5a-8be4-2d956b55c3fd": {
       "verdict": "accept",
@@ -2634,9 +2634,9 @@
     "0f4b13bd-9d04-4afa-9a84-6dcea89f8d97": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 명시",
+      "why": "와인바 정체 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0ed18a94-b24a-4728-a6b8-c60f92077461": {
       "verdict": "reject",
@@ -2683,9 +2683,9 @@
     "25789269-711a-44be-84d8-8f0c0435ff8f": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 명시",
+      "why": "와인바 정체 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "affc0cdb-9e72-40ed-a513-70661da302e3": {
       "verdict": "reject",
@@ -2697,9 +2697,9 @@
     "97b4aab8-1c3a-4a51-a3a2-759b6bf4325a": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "칵테일바 명시",
+      "why": "여행형 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "4e040627-a6f9-4d5e-8fe0-4f67c4cbad7c": {
       "verdict": "reject",
@@ -2919,11 +2919,11 @@
       "prompt": "3"
     },
     "5f76daa8-4576-4fef-a399-4393a10c1d20": {
-      "verdict": "accept",
-      "guess": "라운지바",
-      "why": "여행형 라운지바",
+      "verdict": "reject",
+      "guess": "라운지불명",
+      "why": "한단어 상호로 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "2292cbd6-267b-4b24-988f-c6b302b74a16": {
       "verdict": "reject",
@@ -2935,23 +2935,23 @@
     "b749fac8-af02-4143-919a-1c3c34a4cffc": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "외부인 이용 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "2f9316ac-2275-4526-82a6-b7335fca0b53": {
       "verdict": "accept",
       "guess": "칵테일바",
       "why": "해운대 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "11e59306-de9a-40bc-81c9-aab9595570f9": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "달맞이길 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "1a2f5d92-2546-4de2-b8c9-6a1498f1ccc1": {
       "verdict": "reject",
@@ -2963,9 +2963,9 @@
     "6d23d7f3-4275-4d55-918a-486f07cb3d9b": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "전포 지역 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "2b9dcab6-a56a-4948-bdcb-f67893096303": {
       "verdict": "reject",
@@ -2977,23 +2977,23 @@
     "a0922317-152a-4ef4-ab54-b63a32370edb": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "여행형 바",
+      "why": "서면 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "cc7704b1-badc-4f2d-b300-234b638a0c40": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "서면 클럽",
+      "verdict": "reject",
+      "guess": "클럽불명",
+      "why": "영업 형태 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "aa4db8dc-c232-4724-9db1-4f7703f22ad7": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "서면 클럽",
+      "why": "서면의 댄스클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "819459d8-b425-42e5-a39f-4572f1c7ff3a": {
       "verdict": "reject",
@@ -3005,9 +3005,9 @@
     "27bcb4e9-acef-4b69-9075-0db7b3b47a14": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "여행형 바",
+      "why": "외부인 이용 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e2e3249c-9900-47a7-b3a8-15b792672dbb": {
       "verdict": "reject",
@@ -3019,86 +3019,86 @@
     "df8136d4-58b1-4873-bba7-4101cb6569ae": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "여행형 바",
+      "why": "유명 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "8e652900-b9a8-44da-980b-546bef6874bb": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "와인 전문점",
+      "verdict": "reject",
+      "guess": "체인와인바",
+      "why": "전국 프랜차이즈",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a95c7d4e-6e90-4e54-8fec-3d9abc0c2451": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인 전문점",
+      "why": "서면 지역 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "abf5da9d-1bc9-4a73-822f-824167adbac0": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "서면 클럽",
+      "why": "서면의 댄스클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fd5e93e4-1a0d-413a-a83d-b0f3d29aa3ea": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "여행형 바",
+      "why": "서면 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "5d205d40-b8e2-4ac5-b188-c79106533fb0": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "서면 클럽",
+      "why": "서면의 댄스클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "64d72228-8ec5-4039-9ce5-192d949a83e0": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "칵테일 전문",
+      "why": "여행형 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fc21ca0d-1444-44a9-93fc-4db3fd0ddfaa": {
       "verdict": "accept",
-      "guess": "라운지클럽",
-      "why": "서면 클럽",
+      "guess": "댄스클럽",
+      "why": "서면 댄스클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e71a43d2-f62b-4ff4-917e-12cc96bca108": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "여행형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f780f35c-866e-44dc-8e83-37799323cfb8": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "전포 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "6a0a366b-009d-4156-b8b2-7f0c8fd4f9e4": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "전포 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f1df1ce2-95a1-42f4-989b-e00ff68c2b46": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "번화가 유명 바",
+      "why": "관광가 상설 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "17730588-066a-40ea-afc7-d4bfb0b150f4": {
       "verdict": "reject",
@@ -3110,37 +3110,37 @@
     "ff16d9dc-0354-48a5-9ee3-31e3ed3df11d": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "시장 내 칵테일바",
+      "why": "칵테일 전문점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "754bccc8-8389-4a42-b695-3ab6fe0a0a70": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "와인 전문점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "362b1a6a-9e09-44ec-80ba-c956a1d3eb5b": {
       "verdict": "accept",
       "guess": "댄스클럽",
       "why": "호텔 내 클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fb4134f7-c105-4ffb-ae77-724ccc36baae": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "해운대 와인바",
+      "verdict": "reject",
+      "guess": "불명업소",
+      "why": "업소 성격 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "408a05f5-9a14-44e8-b3eb-32d2350e6434": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "여행형 주점",
+      "why": "해운대 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fbbe5e75-9bb6-484a-9e4d-6d494750dfec": {
       "verdict": "reject",
@@ -3159,16 +3159,16 @@
     "40d5530f-6fe3-4df1-9d26-4d38f8a8c1a4": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 주점",
+      "why": "광안리권 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "7f7ffa83-9751-4e9b-99b2-a0389b7f6958": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "여행자용 와인바",
+      "verdict": "reject",
+      "guess": "불명업소",
+      "why": "한 단어 상호",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "096a8cb0-54d0-43ea-afed-02bb3de8f9ca": {
       "verdict": "reject",
@@ -3180,16 +3180,16 @@
     "04a23886-1a68-4147-b5bf-3102802d2f88": {
       "verdict": "accept",
       "guess": "호텔바",
-      "why": "호텔 라운지바",
+      "why": "특급호텔 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "95be5043-6304-4ed9-a808-b5fc67a249f2": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "와인바로 명확",
+      "verdict": "reject",
+      "guess": "불명업소",
+      "why": "한 단어 상호",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "d9675099-2e7a-4da5-9f16-bda451521226": {
       "verdict": "reject",
@@ -3271,9 +3271,9 @@
     "8437113d-5ff0-4a3c-bcf2-36dda10590ee": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 명확",
+      "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "9d9f8329-cdf6-4138-b92f-0028190a621e": {
       "verdict": "reject",
@@ -3285,9 +3285,9 @@
     "79ee2ea7-6847-4d73-9bda-8922433adf5d": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "라운지바 명확",
+      "why": "여행형 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "79b810cb-6fdd-4dbf-a924-2be6ab1e08a2": {
       "verdict": "reject",
@@ -3304,18 +3304,18 @@
       "prompt": "3"
     },
     "fb7645c5-a26f-4e01-8f07-27ac25232672": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "클럽 정체 명확",
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "클럽 성격 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a0f850bb-ace1-474b-9672-7c11ac54e096": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "바 상호 명확",
+      "why": "칵테일 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "22c9b9a3-5355-4aca-8847-4b0bba4ad984": {
       "verdict": "reject",
@@ -3327,9 +3327,9 @@
     "7165ac8f-2ccf-4b11-b6e9-1f8279526ab1": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "밤에 찾는 라운지",
+      "why": "라운지형 술집",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0856301f-8ba0-42b9-a3fd-3a1fd5aa3508": {
       "verdict": "reject",
@@ -3355,16 +3355,16 @@
     "6563bb88-8157-4c06-bcc5-80ff6366bdaa": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "찾아갈 만한 와인바",
+      "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e9706706-4426-4804-ac7d-309447972877": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "찾아갈 만한 와인바",
+      "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "c2e24984-7a7c-4fa5-86ea-027da3870c7d": {
       "verdict": "reject",
@@ -3383,16 +3383,16 @@
     "fb01ba84-1694-455a-a538-0bc0dd42f393": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "찾아갈 만한 와인바",
+      "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "3b97a071-6c5f-4fc3-ab3e-9c833c2e6c07": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "찾아갈 만한 와인바",
+      "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "164710f2-b554-4737-be0f-7d9a8d2fb18f": {
       "verdict": "accept",
@@ -3411,16 +3411,16 @@
     "208f34f2-9a53-4897-864b-3dca28832a58": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "찾아갈 만한 와인바",
+      "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "7c7fcdd5-401b-4abd-a1b4-43f41e338596": {
       "verdict": "accept",
       "guess": "비스트로펍",
-      "why": "여행자용 펍",
+      "why": "특색 있는 펍",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0c02acf7-ff42-4216-ae58-58c8e7c933a9": {
       "verdict": "reject",
@@ -3438,17 +3438,17 @@
     },
     "d85a6c9f-ff60-4320-aace-80ca9ea59c20": {
       "verdict": "accept",
-      "guess": "비어펍",
-      "why": "여행형 맥주펍",
+      "guess": "아이리시펍",
+      "why": "특색 있는 펍",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "4c7b6b48-d935-4126-9fd7-a862c44c2a8c": {
       "verdict": "accept",
-      "guess": "와인바",
+      "guess": "탭와인바",
       "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a6f56727-d60c-4e77-9a29-df9bd2d08855": {
       "verdict": "reject",
@@ -3462,7 +3462,7 @@
       "guess": "와인바",
       "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e5423ff3-134a-437e-829a-8cbd622ba242": {
       "verdict": "reject",
@@ -3472,25 +3472,25 @@
       "prompt": "3"
     },
     "dde9d997-dffa-4481-b39f-e1f46b5458e1": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "와인 전문 바",
+      "verdict": "reject",
+      "guess": "체인와인바",
+      "why": "생활형 체인 술집",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e6b55466-5fe9-4094-a923-b8fd41c29856": {
       "verdict": "accept",
       "guess": "칵테일바",
       "why": "칵테일 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "05c5cd66-3eb8-42e5-85df-6a814bbd82c5": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f258f5de-92d6-4d97-87bb-1da8d466b168": {
       "verdict": "reject",
@@ -3504,7 +3504,7 @@
       "guess": "댄스클럽",
       "why": "이태원 댄스클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "c370c6b9-07c7-42d4-9454-e28d27069a41": {
       "verdict": "reject",
@@ -3530,79 +3530,79 @@
     "c31eaa70-2f53-4a00-b068-f678ed74aa36": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인 시음 전문",
+      "why": "와인 시음 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0aa95d5f-ea6a-4ecb-9cfe-3f5a4cd4a745": {
       "verdict": "accept",
       "guess": "칵테일바",
       "why": "합정 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "59667a37-259c-45d6-ad88-2d4cecb1e031": {
       "verdict": "accept",
       "guess": "라운지바",
       "why": "상수 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "b0693ae8-18c1-44ae-aa3a-7d8952b9f75c": {
       "verdict": "accept",
       "guess": "칵테일바",
       "why": "홍대 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ab1cc04b-41df-4289-a924-f6b7ed05897a": {
       "verdict": "accept",
       "guess": "라운지바",
       "why": "홍대 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "77b8944c-d1f6-4026-a672-8364fbe153bb": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "홍대 칵테일바",
+      "why": "칵테일 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0663696e-7046-4e09-a39f-993613f9e2f7": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "연남 칵테일바",
+      "why": "연남동 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e0b19eed-5425-443a-aac4-15392b6f0e5f": {
-      "verdict": "accept",
+      "verdict": "reject",
       "guess": "라운지클럽",
-      "why": "홍대 라운지클럽",
+      "why": "영업방식 불명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "d3aa67ae-32f3-4108-ab66-2f64081360e9": {
       "verdict": "accept",
       "guess": "댄스클럽",
       "why": "홍대 댄스클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "c164d7d3-ce2c-4ace-a169-f33aa264e1a3": {
       "verdict": "accept",
       "guess": "재즈클럽",
-      "why": "홍대 재즈공연장",
+      "why": "홍대 재즈 공연장",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "c46a2aab-bcd6-41e7-a425-d242d5a39aa5": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "홍대 클럽가 소재",
+      "why": "홍대 클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "b5ed685c-7e5d-40f9-a40a-38e72069065a": {
       "verdict": "reject",
@@ -3614,51 +3614,51 @@
     "21fc2151-640b-4a1a-8191-70272e7174ad": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "홍대 댄스클럽",
+      "why": "홍대 클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "3adc1e0b-803c-4a8b-9a74-76561649dc80": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "홍대 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "2b2150ed-2a99-4eec-ae05-7ec20c8c0f13": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "이태원 호텔클럽",
+      "why": "이태원 스탠딩클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0aaa95c6-6d04-499d-8aef-72a340afc39d": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "홍대 댄스클럽",
+      "why": "홍대 스탠딩클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "48b37535-145a-4b79-98d2-6ad1d748af21": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "홍대 유명 클럽",
+      "why": "홍대 유명클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ea13fc5f-661f-44a2-b6ae-c96395d1ddbb": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "홍대 댄스클럽",
+      "why": "홍대 스탠딩클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a0820fc1-5ddf-4f10-bd47-e3d8b3b4e102": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "라운지바 명시",
+      "why": "홍대 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fb258f44-03a9-4873-88da-d6e992ca3a3d": {
       "verdict": "accept",
@@ -3670,37 +3670,37 @@
     "d7ad748b-c4ba-40e5-9799-95a00e4de12a": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "홍대 댄스클럽",
+      "why": "홍대 클럽업소",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ef3417fe-0af7-497f-8f6f-0b669ef0bede": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 명시",
+      "why": "합정 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "c36318e5-16c8-49f5-80f4-85ec3b2209ea": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인 체험형 바",
+      "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "19ebbac9-09d7-4ca5-a760-eaa3379002d6": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 명시",
+      "why": "홍대 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a967d586-d0bd-4944-8a24-e55e5e976e32": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "칵테일바 명시",
+      "why": "홍대 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "d6f8f1df-c347-41aa-a55f-250936e511ee": {
       "verdict": "accept",
@@ -3719,9 +3719,9 @@
     "91004724-dd21-448a-bfd4-e5079f443084": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "바와 와인바 명시",
+      "why": "홍대 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "4798b31c-3784-486d-b7bc-2fc111fcd0cf": {
       "verdict": "accept",
@@ -3733,9 +3733,9 @@
     "eb5245e7-fa02-4106-86f4-ffc076ee10d7": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "칵테일바 명시",
+      "why": "홍대 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "278ffc9f-78cf-46b8-be86-f8500cf5822c": {
       "verdict": "reject",
@@ -3754,37 +3754,37 @@
     "f65a8f0b-1c92-4ce5-a5fd-7f320e680c4a": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "방문형 와인바",
+      "why": "서교동 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "950316bd-4f7e-4f6e-b79a-a6808407dad1": {
       "verdict": "accept",
       "guess": "칵테일바",
       "why": "칵테일 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "58da0553-df97-4cb7-8ad5-90ca24d084df": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "홍대 댄스 클럽",
+      "why": "홍대 스탠딩클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "9f0da707-1ef7-43d3-9025-f56a238e42a2": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "칵테일 전문 바",
+      "why": "홍대 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "baea09aa-0c34-40d1-8cda-eb6cdd3e45c6": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "청담동 클럽",
+      "verdict": "reject",
+      "guess": "부킹클럽",
+      "why": "청담 클럽 불명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "25627fb0-f029-4e85-8520-9e0d13b0ac72": {
       "verdict": "reject",
@@ -3796,37 +3796,37 @@
     "280ca3d2-f79f-4699-bb50-e921b63c9502": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "방문형 와인바",
+      "why": "상수권 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "1b114217-b2ca-440c-867c-5fd40c29ab22": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "방문형 와인바",
+      "why": "합정권 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "60f0a657-cc72-47ed-9a63-974767719315": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "칵테일 전문 바",
+      "why": "전문 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "bcc7f35d-c078-43e2-b224-8f6279a352a0": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "방문형 와인바",
+      "why": "전문 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e523c854-9d45-4df4-8254-5eb0da2b3f5c": {
       "verdict": "accept",
       "guess": "수제맥주펍",
       "why": "크래프트펍 명시",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "bc6c8eed-0b94-4016-a994-d6f9ebeb8312": {
       "verdict": "reject",
@@ -3838,16 +3838,16 @@
     "3f1b5772-9d97-493b-9351-5a68691c52d1": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "방문형 와인바",
+      "why": "전문 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "6f410181-a915-4878-8af1-fa92e69da025": {
       "verdict": "accept",
       "guess": "루프탑바",
       "why": "루프탑 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "5c621f90-1a91-4512-8741-bc4b3df535c0": {
       "verdict": "accept",
@@ -3857,25 +3857,25 @@
       "prompt": "3"
     },
     "714ab579-31f0-401a-a6ee-f7fae9ef35e8": {
-      "verdict": "accept",
+      "verdict": "reject",
       "guess": "라운지바",
-      "why": "여행형 라운지바",
+      "why": "업소 성격 불명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "5664d0e5-dad7-4022-8133-778f331a312c": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "연남동 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e5b4486a-81c1-4c6a-87cd-3e9290b8be04": {
-      "verdict": "accept",
-      "guess": "라운지바",
-      "why": "연남동 라운지바",
+      "verdict": "reject",
+      "guess": "동네술집",
+      "why": "생활권 술집 의심",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "c7184a49-cbce-45b8-9fe9-488b8267888a": {
       "verdict": "reject",
@@ -3887,9 +3887,9 @@
     "ee92ee28-0abd-48f5-a0d0-cb51e6741d3b": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "방문형 칵테일바",
+      "why": "전문 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f5df9bf7-12e0-4ab4-a7a9-70ca723f9f7f": {
       "verdict": "accept",
@@ -3899,60 +3899,60 @@
       "prompt": "3"
     },
     "3ff70bb4-41c4-4031-ac4c-6a27764c76b1": {
-      "verdict": "accept",
+      "verdict": "reject",
       "guess": "와인바",
-      "why": "방문형 와인바",
+      "why": "한단어 상호 모호",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "11c52f99-e9da-4bf8-850e-e762d4a51578": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "연희동 와인바",
+      "why": "여행형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "459f74bd-02e6-4d14-a2c9-ed8de2bab6f5": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "연남동 라운지바",
+      "why": "연남 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ad89389d-fddf-4252-9b0b-66428c164033": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "48dccecf-22bd-42af-a78c-f9fd15872886": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "연남동 와인바",
+      "why": "연남 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "dd4670fe-6963-489c-8183-f4e4117a5bcc": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "연남동 와인바",
+      "why": "연남 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f7fcb214-9263-4322-ad35-b70b9b4f3dd8": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "음악형 와인바",
+      "why": "연남 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "6d6c5acb-03cf-4e54-b546-3d189976a4d5": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "cb217f9f-b3d6-499d-aa18-ee3ee61f6c6f": {
       "verdict": "accept",
@@ -3971,16 +3971,16 @@
     "81149a47-f467-4b2c-b528-bd59a86897b6": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "신촌 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "d98446b3-ae06-423a-b526-4109cc9730d0": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "신촌 유흥형 클럽",
+      "verdict": "reject",
+      "guess": "클럽",
+      "why": "클럽 성격 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "8acf6353-474a-4fc7-be63-ba6a34d78db9": {
       "verdict": "reject",
@@ -3994,14 +3994,14 @@
       "guess": "칵테일바",
       "why": "여행형 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "2d72d36d-f76a-4fbf-abc6-013dd2a20c49": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "바 상호가 명확함",
+      "why": "여행형 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "8fe95dda-b9b3-4f6a-979d-0e49d5c019dc": {
       "verdict": "reject",
@@ -4029,14 +4029,14 @@
       "guess": "와인바",
       "why": "명동 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0fd83318-1df0-4f08-bd78-07a87632c8f6": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "3aa345a6-195c-4fe3-a821-b0118a406c74": {
       "verdict": "reject",
@@ -4048,16 +4048,16 @@
     "d8a76d6f-ec9d-48cf-bf35-ec5ef6406c30": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "상가 내 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "9d902b11-2cb8-46a2-8116-5ef3ccf7242c": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "2fd4c31b-a50c-4cc7-bd2f-77aaf3d44f44": {
       "verdict": "reject",
@@ -4069,9 +4069,9 @@
     "25ba97a4-5277-46cc-b705-bc716af0fec0": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "음악 칵테일 클럽",
+      "why": "칵테일바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a3d03639-48cb-4425-8bd9-42b4dc658a0d": {
       "verdict": "reject",
@@ -4090,9 +4090,9 @@
     "9cac14e3-9f80-401e-b767-d6da7475bf5a": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "특색 있는 와인바",
+      "why": "와인바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "b1b05b81-ade9-4ce1-8a0d-bc6a4c3d97a3": {
       "verdict": "reject",
@@ -4153,9 +4153,9 @@
     "b24d60bb-a8d3-4a58-a3a2-2a8b22da89c9": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "여행형 라운지바",
+      "why": "라운지바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ddd966e9-4ac5-48ce-b482-0a5b5f9f7a2c": {
       "verdict": "reject",
@@ -4167,9 +4167,9 @@
     "250d1914-4f4f-4978-b818-47ef96be0414": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인 전문 바",
+      "why": "와인바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fb9de846-6a49-47e4-b9c9-eb572e59b33e": {
       "verdict": "reject",
@@ -4188,9 +4188,9 @@
     "d31027db-cbd2-4a3a-b311-5fd7b9ce6d60": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 상호",
+      "why": "와인바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "1ce00c3c-9591-409d-9220-5036fcef6265": {
       "verdict": "reject",
@@ -4202,9 +4202,9 @@
     "ed15e9a9-f19c-450a-a934-0d23eeac3234": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "방문형 와인바",
+      "why": "와인바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "d523ae04-30d4-40e8-83f1-5c699ddf1dd5": {
       "verdict": "reject",
@@ -4228,11 +4228,11 @@
       "prompt": "3"
     },
     "84625350-bdb3-421e-b21d-00641cc97c3b": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "방문형 클럽",
+      "verdict": "reject",
+      "guess": "강남클럽",
+      "why": "부킹형 여부 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "7c8b6654-9dec-45ff-ab7f-15c824b42c15": {
       "verdict": "reject",
@@ -4250,17 +4250,17 @@
     },
     "4fc8a7c1-302d-4b84-ad4e-0be1ef2da032": {
       "verdict": "accept",
-      "guess": "칵테일바",
-      "why": "스피크이지 바",
+      "guess": "스피크이지",
+      "why": "목적형 비밀술집",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "92d96997-aca0-404c-a656-573c248c6091": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "비스트로 와인바",
+      "why": "와인바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0593f099-41e8-41d9-a253-32c8a36d63fb": {
       "verdict": "reject",
@@ -4272,9 +4272,9 @@
     "19571c3a-8bfa-4e96-bfcf-b7b5166ab0e5": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "명시된 칵테일바",
+      "why": "칵테일바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a55ae682-5551-4fee-8b0e-6d071f7633a7": {
       "verdict": "reject",
@@ -4284,25 +4284,25 @@
       "prompt": "3"
     },
     "052a6236-4da5-441b-8f6c-57ad4688cdf6": {
-      "verdict": "accept",
-      "guess": "라운지바",
-      "why": "가로수길 라운지",
+      "verdict": "reject",
+      "guess": "라운지업소",
+      "why": "업소 성격 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "846800e6-9a2c-462e-8dc2-554abec5c16e": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "명시된 칵테일바",
+      "why": "스피크이지 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a51b1401-bafa-4ae5-bc5f-e36b87ae427e": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "가로수길 와인바",
+      "why": "와인바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "d797f1fb-7b58-4b06-b54e-8397695ec676": {
       "verdict": "reject",
@@ -4328,37 +4328,37 @@
     "51b647a0-d16c-45e0-924b-04f9d7c1219a": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "라운지 명시",
+      "why": "라운지바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "023c0d0b-b606-4db0-a3e3-7afcf41dcaa1": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "명시된 와인바",
+      "why": "와인바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "4b44fe28-2658-4878-a320-aacd2d4e8e0c": {
       "verdict": "accept",
       "guess": "칵테일바",
       "why": "이태원 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "85321398-5359-46d2-96e5-1390024c249e": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "명시된 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "b1a6b6e5-0298-4493-a4fd-1fb73c454e8c": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "명시된 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "84045f62-a7e3-4398-b870-dc1b749bae71": {
       "verdict": "reject",
@@ -4375,25 +4375,25 @@
       "prompt": "3"
     },
     "ba192f62-6415-4ded-a25b-bada6b59c2fd": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "압구정 클럽",
+      "verdict": "reject",
+      "guess": "라운지클럽",
+      "why": "부킹형 여부 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "722aad4d-194e-4777-904b-94543d7da58d": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "강남 클럽",
+      "why": "대형 댄스클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ca90c644-b146-4ccc-bdeb-80b484726ce9": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 명확",
+      "why": "성수동 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "c9ddb395-d9fe-42f5-8979-7ed0b00ac6e5": {
       "verdict": "reject",
@@ -4405,9 +4405,9 @@
     "3cc92c7c-60d4-4bed-bc9e-c8e488dab06a": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "라운지바 명확",
+      "why": "방문형 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "960e8f7f-f276-4113-8b21-767f92c037d7": {
       "verdict": "reject",
@@ -4419,30 +4419,30 @@
     "a3cf105d-d9bd-4a65-902f-e1ef5493ae29": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "프렌치바 명확",
+      "why": "프렌치 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "50fae0a7-d2b8-4310-81cf-0fa85387d778": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 업종",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "cb65945e-95fe-447c-8a5c-b989a5ba9858": {
       "verdict": "accept",
       "guess": "호텔라운지",
       "why": "호텔 내 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "9962f1df-c348-46ba-a130-da8dcc51189b": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 업종",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "b2f79e43-9b18-4202-a12c-29e82c95930b": {
       "verdict": "reject",
@@ -4454,9 +4454,9 @@
     "61bac77c-daf9-4f9f-ac40-299a1f32eea0": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 명확",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "354a7619-6517-4ee2-b4e8-218b572c054d": {
       "verdict": "reject",
@@ -4481,38 +4481,38 @@
     },
     "20ca4266-b5f7-4f30-b9a6-ea5c2c3c8c7a": {
       "verdict": "accept",
-      "guess": "라운지바",
-      "why": "호텔 라운지바",
+      "guess": "호텔라운지",
+      "why": "호텔 내 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "8bc83887-f436-47ec-8052-3fbd15380202": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "강남 댄스클럽",
+      "verdict": "reject",
+      "guess": "강남클럽",
+      "why": "영업 방식 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "47df9968-dc9f-4132-9d4b-ec5cfdfd03b4": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "호텔 내 클럽",
+      "verdict": "reject",
+      "guess": "나이트클럽",
+      "why": "부킹형 유흥업소",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "67a22a7e-2a48-452c-9230-d80b3e79ecce": {
       "verdict": "accept",
       "guess": "시가바",
-      "why": "칵테일 시가바",
+      "why": "칵테일·시가 전문",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e7f42050-22e9-40ee-8e5b-eca8be444fc1": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "신사동 클럽",
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "영업방식 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "3857b7a4-5941-44ef-b106-5c326465fa3a": {
       "verdict": "reject",
@@ -4531,16 +4531,16 @@
     "088c10f4-c381-4034-a180-73cef651cefc": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "강남 댄스클럽",
+      "why": "유명 EDM 클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "86952c10-f58b-478f-80eb-71178beb42a4": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "명시된 와인바",
+      "why": "와인 전문 주점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "1113affe-d0c4-4ce2-9c1b-5aecf2cda47c": {
       "verdict": "reject",
@@ -4559,16 +4559,16 @@
     "b873705d-3a6d-4491-89d3-6ff68045018b": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "명시된 칵테일바",
+      "why": "칵테일 전문점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "1c1df521-b4cb-4dbf-a952-862d0c870137": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "명시된 와인바",
+      "why": "와인 전문 주점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "8a9e931e-030c-48cd-8d8f-9cf3e9786fbd": {
       "verdict": "reject",
@@ -4580,16 +4580,16 @@
     "d7336d03-7508-4a4c-b096-cfa22317c326": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "명시된 라운지바",
+      "why": "외부인 이용 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "7be282c1-86b6-4248-b5be-540ed2c24fcf": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "와인 전문 주점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0944d113-cfb3-49d9-b132-27a27ba7f572": {
       "verdict": "reject",
@@ -4601,30 +4601,30 @@
     "8c89d30e-481a-44b8-ade0-1c9380ee4316": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "와인 전문 주점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "5dcd53ec-be5a-410b-9401-923e1bb72b47": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "와인 전문 주점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "626ea4ff-934c-42e4-8099-566ede62dc66": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "와인 전문 주점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f6be7f2e-75b5-4def-a7e8-c46717477183": {
-      "verdict": "accept",
+      "verdict": "reject",
       "guess": "호텔라운지",
-      "why": "호텔 내 라운지",
+      "why": "투숙객 전용 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "869d1bf4-30d8-47c4-b013-629644d1d4cc": {
       "verdict": "reject",
@@ -4636,9 +4636,9 @@
     "898fbd00-01a8-4139-97a8-2a6247957e3f": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "와인 전문 주점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "43ff5454-e003-4338-9d10-a51f42fd9674": {
       "verdict": "reject",
@@ -4650,9 +4650,9 @@
     "7a88e6f4-79c9-4596-a413-364f504761a9": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 태그 명확",
+      "why": "와인 다이닝",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "3a5e44ac-70a3-4ea4-85f3-85116c6e5c42": {
       "verdict": "accept",
@@ -4664,156 +4664,156 @@
     "8006e1fe-5ea5-4249-b2cb-b604ef37ce79": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "와인 전문 주점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "6137736b-6b45-472d-b53f-74d8efc4d8ca": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 태그 명확",
+      "why": "신사동 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0b4db3d4-a556-484d-8405-51b86a0cf462": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "한남동 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0545b215-443f-4a75-95e8-8cd8552f265b": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "칵테일바로 명확",
+      "why": "한남동 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "3de16090-4359-4321-a3f3-5b93c3c503e2": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "한남동 와인바",
+      "verdict": "reject",
+      "guess": "술집불명",
+      "why": "상호만으론 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "8540563d-8946-4808-8ce7-0c97eeebf5a7": {
       "verdict": "accept",
-      "guess": "칵테일바",
-      "why": "한남동 스피크이지",
+      "guess": "스피크이지",
+      "why": "한남동 비밀바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a0f38ea2-1bdb-42a9-a560-141f14175e36": {
-      "verdict": "accept",
-      "guess": "라운지바",
-      "why": "한남동 라운지",
+      "verdict": "reject",
+      "guess": "술집불명",
+      "why": "한단어 상호 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "daf5162f-8b98-43be-abea-c4c88339a9a9": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "로데오 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0f06db0c-b837-42b8-b38e-3bf3ab561710": {
       "verdict": "accept",
-      "guess": "칵테일바",
-      "why": "호텔 내 유명 바",
+      "guess": "호텔바",
+      "why": "하얏트 유명 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f9ad3be6-e13c-4d13-9975-9400ddba435a": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "내추럴와인 전문",
+      "verdict": "reject",
+      "guess": "와인점",
+      "why": "판매점 여부 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "6c1a3f05-b236-4a8a-ba42-3d0a17c8aaf3": {
-      "verdict": "accept",
-      "guess": "칵테일바",
-      "why": "한남동 칵테일바",
+      "verdict": "reject",
+      "guess": "술집불명",
+      "why": "한단어 상호 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "352fbb44-991d-4e34-bded-55d3b867715f": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "한남동 라운지",
+      "why": "한남동 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "911db973-a268-4f80-a94c-0a6aaf9b8ba9": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "한남동 와인바",
+      "verdict": "reject",
+      "guess": "술집불명",
+      "why": "상호만으론 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ae3e2548-9c0d-4d67-b67f-c740ecd140cf": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "현대식 음악 클럽",
+      "verdict": "reject",
+      "guess": "강남클럽",
+      "why": "테이블업소 우려",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "742af8fb-fbdd-4112-ad19-69d8bc35f755": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인 전문점",
+      "why": "와인 업종 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "39ebced4-c007-4284-a5fc-48344b0cb1b0": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "이태원 음악 클럽",
+      "why": "이태원 지하 클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e93e19ac-dd87-4120-a314-b9a61600268d": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "이태원 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "db6d3fd4-1669-4a7c-a7f7-1c6a2487f822": {
       "verdict": "accept",
       "guess": "라운지바",
       "why": "이태원 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "66ce5517-c434-471d-8a1f-bf17dd934298": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "이태원 음악 클럽",
+      "why": "이태원 클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "131cc5cd-7fca-4af7-88ee-2820a4c6d100": {
       "verdict": "accept",
       "guess": "칵테일바",
       "why": "이태원 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "1aae5e1b-3348-4772-abc6-0c98711c9ef4": {
       "verdict": "accept",
       "guess": "힙합클럽",
-      "why": "여행객용 댄스클럽",
+      "why": "이태원 댄스클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "9195ff09-5f30-4def-95d0-d75cabd32d26": {
       "verdict": "accept",
       "guess": "댄스클럽",
-      "why": "이태원 댄스클럽",
+      "why": "이태원 클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "dcfa7db3-a7d6-4c0c-bfc1-5dc98aea9cfc": {
       "verdict": "reject",
@@ -4825,9 +4825,9 @@
     "3b2dff8b-2490-457d-8377-43db37df577b": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "호텔 내 라운지바",
+      "why": "호텔 내 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "6aef7efd-eb70-438c-91a8-f237e6b7bbb3": {
       "verdict": "reject",
@@ -4846,30 +4846,30 @@
     "e796b604-db4c-449a-a9df-5af1ac01c8b7": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "비스트로형 와인바",
+      "why": "이태원 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "68bb8426-d40d-43a7-a9d6-c034880eb169": {
       "verdict": "accept",
       "guess": "칵테일바",
       "why": "이태원 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "b4c9fa63-c8cd-4ae1-9625-d44c30bfab93": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "이태원 라운지바",
+      "why": "이태원 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f5f9431f-0bec-446b-8c5c-e695312016ef": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인 전문점 명확",
+      "why": "이태원 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ba3868bc-b54c-4c56-aa42-22fa3dda8949": {
       "verdict": "reject",
@@ -4890,28 +4890,28 @@
       "guess": "와인바",
       "why": "와인바 명시",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "22126b5d-6398-4042-b7df-2192fb77ee92": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "을지로 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "4e889ac3-3a81-47b9-9372-1f4debb53cea": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "외부인용 와인바",
+      "why": "북촌 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f3d776b3-6f60-4b4e-8529-b748feb78d5f": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "외부인용 와인바",
+      "why": "와인바 지점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "8dd8b466-6bb3-40c1-be73-929bb30ccda9": {
       "verdict": "reject",
@@ -4921,18 +4921,18 @@
       "prompt": "3"
     },
     "f2ce2e8e-4d0e-4279-b560-666ad4de49d8": {
-      "verdict": "accept",
-      "guess": "라운지바",
-      "why": "여행형 라운지바",
+      "verdict": "reject",
+      "guess": "라운지업소",
+      "why": "테이블업소 의심",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "06a94954-86d6-4dd7-9021-f65853230ee7": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "외부인용 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f8191f12-33bb-4c70-b0fb-3a313f23ea6b": {
       "verdict": "accept",
@@ -4951,9 +4951,9 @@
     "2fa275b4-b868-4d8e-9e87-a6cb9f88282d": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "외부인용 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "08dd0932-fc0d-49ef-bb61-06ac2b058427": {
       "verdict": "reject",
@@ -4965,9 +4965,9 @@
     "b3a81796-8c4b-4a46-a7c8-96c1d17363e3": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "여행형 칵테일바",
+      "why": "방문형 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "f6d41e0d-70b5-42ea-9314-faa81a4d3270": {
       "verdict": "reject",
@@ -4993,16 +4993,16 @@
     "cb52bb30-386a-4611-9932-958e7a3d5952": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "외부인용 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "05ce209b-a397-4511-bde9-07046cb7254a": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "외부인용 와인바",
+      "why": "서울숲 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "10f2f9c1-6369-4e85-885f-ac22805d0e4e": {
       "verdict": "reject",
@@ -5021,9 +5021,9 @@
     "be9a0145-4dcb-411b-a088-8175d65de53b": {
       "verdict": "accept",
       "guess": "재즈라운지",
-      "why": "공연형 라운지바",
+      "why": "공연형 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "bcc613f7-6fc1-4b87-9981-971e7cc6af2a": {
       "verdict": "reject",
@@ -5035,9 +5035,9 @@
     "801a6cb0-a28b-4928-80d8-b0716559f4f9": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "여행형 칵테일바",
+      "why": "방문형 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a3d6f755-3cdc-4223-9758-7a78e06a720d": {
       "verdict": "reject",
@@ -5070,37 +5070,37 @@
     "a11c07bc-46fb-4193-bd63-070e2a561060": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "여행형 라운지바",
+      "why": "성수 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0d411784-5bbe-4961-9b68-560275e7773e": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "a7747469-b49f-4ff4-96ff-ea86f7456c5e": {
       "verdict": "accept",
       "guess": "칵테일바",
       "why": "청담 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e42c05f4-bdd5-4a22-b6e6-0a7f11c41e49": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "방문형 와인바",
+      "verdict": "reject",
+      "guess": "불명업소",
+      "why": "상호만으로 불명",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "0ae12da0-e644-4e1f-a330-13b2f98b80b3": {
       "verdict": "accept",
       "guess": "와인라운지",
-      "why": "방문형 라운지바",
+      "why": "유명 와인라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "440deee2-a713-44f2-b8d9-e962fba4d91e": {
       "verdict": "reject",
@@ -5112,51 +5112,51 @@
     "84d6c6ae-3938-4b4f-a08e-f2830b4e0d15": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "76c7054a-e922-46d6-ad6a-8c3e98f71caa": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "압구정 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "16e44030-b83b-46ad-a38d-8e3d6441f713": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인 전문 주점",
+      "why": "외부인 방문 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fa25331f-0357-40ce-82e9-b7e8653471af": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 명확",
+      "why": "외부인 방문 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "54f021a1-9389-44ba-8676-e6c767f67948": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "여행형 와인바",
+      "verdict": "reject",
+      "guess": "불명술집",
+      "why": "상호만으로 불명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "7323369a-33c9-4442-bd85-a7876d391eb6": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "라운지바 명확",
+      "why": "음악형 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "eb9ab0e0-42b6-495b-b282-94ffcb71d096": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "외부인 방문 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "3e6c8ec7-5b21-41c2-99d9-cd3be98d00b7": {
       "verdict": "reject",
@@ -5180,67 +5180,67 @@
       "prompt": "3"
     },
     "b8b55154-2e70-4b33-834b-b798fe9f22c3": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "댄스클럽 명확",
+      "verdict": "reject",
+      "guess": "강남클럽",
+      "why": "부킹형 가능성",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "075b7e4b-af87-4797-96fe-11419abc8041": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "청담 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "6e908a62-d602-4996-bd74-b266002d2843": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "청담 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "37196e92-ed61-4241-8605-c635b20e9198": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "외부인 방문 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ffbef671-79cc-460d-bb61-2b15d0659da7": {
       "verdict": "accept",
-      "guess": "라운지바",
-      "why": "라운지바 명확",
+      "guess": "음악라운지",
+      "why": "음악형 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fb13cfba-073c-484d-a4a9-86c40b8deb43": {
       "verdict": "accept",
       "guess": "라운지바",
       "why": "청담 유명 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "7fa3cd48-b03b-48b4-bfb1-94cc67376232": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "청담 라운지바",
+      "why": "청담 다이닝라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "cefe9306-2d6b-4f67-9c45-9decf14f7455": {
-      "verdict": "accept",
-      "guess": "라운지바",
-      "why": "파티형 라운지",
+      "verdict": "reject",
+      "guess": "불명라운지",
+      "why": "영업방식 불명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "db068b96-f7b3-43e5-8951-44102ecd299d": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 상호 명확",
+      "why": "청담 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "1b0a4bdd-c7f5-48a1-a09b-27efd74361fd": {
       "verdict": "reject",
@@ -5254,14 +5254,14 @@
       "guess": "와인바",
       "why": "청담 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e3645928-502e-47be-a3fd-d7a1ce3f856d": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "유명 댄스클럽",
+      "verdict": "reject",
+      "guess": "테이블클럽",
+      "why": "부킹형 강남클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fe8f09d4-8356-41d2-a61d-d165ca1d5110": {
       "verdict": "reject",
@@ -5271,11 +5271,11 @@
       "prompt": "3"
     },
     "3821046b-f862-4b08-bfcc-7d0f4151f577": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "클럽 상호 명확",
+      "verdict": "reject",
+      "guess": "테이블클럽",
+      "why": "청담 클럽 불명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "4554f6f5-319c-4e7b-a4aa-ca186d11c6af": {
       "verdict": "accept",
@@ -5287,9 +5287,9 @@
     "c2fcafa7-a949-4e69-96fa-a5206d7cf12c": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "칵테일바 명확",
+      "why": "청담 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "06ce2143-3d8e-42d0-9db8-9b6ebfb3ba4e": {
       "verdict": "reject",
@@ -5303,7 +5303,7 @@
       "guess": "칵테일바",
       "why": "청담 칵테일바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "b6ffba1a-319b-450e-9722-623ab8f15bdd": {
       "verdict": "reject",
@@ -5320,25 +5320,25 @@
       "prompt": "3"
     },
     "54dd7fa3-d7d9-4c77-ab55-ba912fdfb416": {
-      "verdict": "accept",
-      "guess": "댄스클럽",
-      "why": "여행형 클럽",
+      "verdict": "reject",
+      "guess": "유흥클럽",
+      "why": "클럽 성격 불명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "326bcca8-6cb7-4504-ab59-eea7df98483a": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "여행형 라운지",
+      "why": "종로 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "5d85a5ce-fe16-40e7-b7dc-e0ba14ae77e1": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "여행형 라운지",
+      "why": "종로 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "dde64663-1771-42b3-8c85-cbaa92a37f7f": {
       "verdict": "accept",
@@ -5355,11 +5355,11 @@
       "prompt": "3"
     },
     "79e34180-d705-4562-812a-f5afc0068d8f": {
-      "verdict": "accept",
-      "guess": "와인바",
-      "why": "여행형 와인바",
+      "verdict": "reject",
+      "guess": "체인와인바",
+      "why": "프랜차이즈 주점",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "8d2e8856-920c-4e30-b752-3a68870b24a0": {
       "verdict": "reject",
@@ -5371,9 +5371,9 @@
     "8360754b-b267-4a1c-becb-cc52f6e261ff": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "대학로 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e21dd944-f246-45b4-8b30-e57e940af103": {
       "verdict": "reject",
@@ -5385,30 +5385,30 @@
     "7a4f274b-fcf7-43ec-86b3-5f4f6e4f28ce": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "5a336719-8460-4502-8edc-eb472ec8d977": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "여행형 칵테일바",
+      "why": "칵테일 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "5e82cb3b-c2ec-4ead-9330-ce2cf1aa2a7f": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "방문형 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "93ceba0e-e0e8-461b-93ed-2c12bfd4957f": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "와인 전문 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "e9bf6fc3-e038-4bf2-a916-4c30559a03ab": {
       "verdict": "reject",
@@ -5441,9 +5441,9 @@
     "ac2d36c1-b886-426b-8c8e-9871a1ff2dba": {
       "verdict": "accept",
       "guess": "후카바",
-      "why": "후카·칵테일바",
+      "why": "여행객용 후카바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "611e1450-189d-4e5c-97e6-cadd6ddbddc0": {
       "verdict": "reject",
@@ -5457,7 +5457,7 @@
       "guess": "와인바",
       "why": "송리단길 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "caad1a2d-a613-4432-baec-abc17ac03eb3": {
       "verdict": "reject",
@@ -5504,9 +5504,9 @@
     "6c583f9d-f3bc-4bf9-9cbf-36381f684de0": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바 상호 명확",
+      "why": "와인바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "2164c8f1-cc2b-42f5-98e5-dbca3a5b36f5": {
       "verdict": "accept",
@@ -5518,16 +5518,16 @@
     "0a78ff01-7381-42b0-9854-54d0511b4fc5": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "방문형 와인바",
+      "why": "와인바로 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "02ec3b60-5b30-44fd-949f-0e84a04cb209": {
       "verdict": "accept",
       "guess": "라운지바",
       "why": "건대 라운지바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "20ea0c24-a4d6-4caf-8555-55823d43bbeb": {
       "verdict": "reject",
@@ -5539,9 +5539,9 @@
     "e2393d2e-cdbe-4ea0-bd47-62a92eaddd58": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "여행형 와인바",
+      "why": "와인바로 분류",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ce8c25d6-e387-496c-a9b4-5cb028d5cdeb": {
       "verdict": "reject",
@@ -5553,9 +5553,9 @@
     "5154b4b3-2a92-47ba-a83d-fdfb9b0352d2": {
       "verdict": "accept",
       "guess": "라이브클럽",
-      "why": "록 공연 클럽",
+      "why": "공연형 클럽",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "86a107a6-88df-40de-b7cb-c6cacd5a33cb": {
       "verdict": "reject",
@@ -5567,9 +5567,9 @@
     "ae2b2faf-7e67-4b5c-8f1a-d23bf2f6c873": {
       "verdict": "accept",
       "guess": "힙합클럽",
-      "why": "명시된 힙합클럽",
+      "why": "힙합클럽 명시",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "7c69c3ca-5ebb-4763-ba03-dad4c71a8f0a": {
       "verdict": "reject",
@@ -5581,16 +5581,16 @@
     "c483545f-bf89-47a3-871b-47bcf9ef1896": {
       "verdict": "accept",
       "guess": "라운지펍",
-      "why": "여행형 라운지바",
+      "why": "라운지펍 명시",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "09175dab-b19b-4b3e-9e06-477de1d47cb0": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "명시된 칵테일바",
+      "why": "칵테일바 명시",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "efd73b27-d776-4902-9b0f-ac8e7aa28850": {
       "verdict": "reject",
@@ -5602,9 +5602,9 @@
     "e61db2c4-bb3b-4a98-a903-ef67e6a447c3": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "명시된 칵테일바",
+      "why": "칵테일바로 분류",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "27ffc669-e8ce-49a4-a4e7-136f1ca9e32a": {
       "verdict": "reject",
@@ -5623,9 +5623,9 @@
     "b8d00b0d-c8f2-479f-a607-eb2a63dcfa01": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "명시된 와인바",
+      "why": "와인바로 분류",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "dd9f921e-a8b4-44cc-97df-85ac7843b279": {
       "verdict": "reject",
@@ -5644,23 +5644,23 @@
     "0f3f644c-762a-48c8-a4df-4ff5d9eebab7": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "여행형 칵테일바",
+      "why": "칵테일바로 분류",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "5381c253-fa1b-4df0-a429-02893fd82695": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "여행형 라운지바",
+      "why": "라운지바로 분류",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ce3a4976-3d74-4561-8943-7813a98239bc": {
       "verdict": "accept",
       "guess": "칵테일바",
-      "why": "바 상호가 명확",
+      "why": "바 상호와 태그 명확",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "c56551d0-e144-4bfe-ba53-b30fba029f46": {
       "verdict": "reject",
@@ -5671,10 +5671,10 @@
     },
     "842cfa27-4487-4b77-9469-5249c54752c2": {
       "verdict": "accept",
-      "guess": "수제맥주펍",
-      "why": "펍 상호가 명확",
+      "guess": "칵테일펍",
+      "why": "함덕 소재 펍",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "ff869f9b-018c-46cb-a29b-f26e7ae733fd": {
       "verdict": "reject",
@@ -5685,52 +5685,52 @@
     },
     "369c4e6b-3f79-4bc1-845d-13a8aad4cc1b": {
       "verdict": "accept",
-      "guess": "칵테일바",
-      "why": "여행형 바",
+      "guess": "호텔바",
+      "why": "호텔 소재 바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "834fd0aa-8dbe-4c77-864e-0bc42be910e6": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "여행형 라운지바",
+      "why": "여행자용 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "5cd9d34e-a053-40c9-ba37-2a478bfb492a": {
       "verdict": "accept",
       "guess": "와인바",
       "why": "관광지 내 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "79ec0e77-ddc8-492d-88ab-777c1f6def4b": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "여행자용 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "fea846e2-ca4d-451a-8d70-0b2026a834d7": {
       "verdict": "accept",
-      "guess": "비어펍",
-      "why": "펍으로 명확",
+      "guess": "맥주펍",
+      "why": "비어가든형 펍",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "23704f3f-feea-4d89-a672-f8ced1926925": {
       "verdict": "accept",
       "guess": "라운지바",
-      "why": "라운지바로 명확",
+      "why": "여행자용 라운지",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     },
     "bea3a699-f31a-4570-857d-adf101f8a8a0": {
       "verdict": "accept",
       "guess": "와인바",
-      "why": "와인바로 명확",
+      "why": "여행자용 와인바",
       "model": "gpt-5.6-sol",
-      "prompt": "3"
+      "prompt": "4"
     }
   }
 }
