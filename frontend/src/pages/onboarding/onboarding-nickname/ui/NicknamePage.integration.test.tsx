@@ -16,8 +16,8 @@ import { NicknamePage } from './NicknamePage';
  * AC B1 · B2 · B5 · B7 · B8 · B9 — 닉네임 설정 배선 통합테스트.
  *
  * 무엇을 보장하나: (1) 진입하자마자 서버가 준 **중복 없는 후보**가 기본값으로 채워지고,
- * (2) 한 글자도 고치지 않아도 통과하며, (3) 저장은 `PATCH → complete` **순서**로만 일어나고,
- * (4) 저장이 실패하면 완료 처리를 **부르지 않는다**.
+ * (2) 한 글자도 고치지 않아도 통과하며, (3) 저장(PATCH)만 하고 온보딩 완료는 **부르지 않는다**
+ * — 완료는 취향 단계의 출구로 옮겨졌다(TRIP-1421 AC1), (4) 저장이 실패하면 다음 화면으로 가지 않는다.
  *
  * 권한 경계: 중복·금칙어는 서버가 판정한다. 이 스위트는 그 판정을 MSW 시나리오로 주입할 뿐,
  * 클라이언트에 같은 규칙이 있는지는 검사하지 않는다(그 구조 가드 onboardingStructure 는 TRIP-1145 로 지웠다).
@@ -105,36 +105,34 @@ describe('NicknamePage — 기본값 프리필 (AC B1 · BR-U0-16)', () => {
   });
 });
 
-describe('NicknamePage — 수정 없이 통과 (AC B2 · B8)', () => {
-  it('한 글자도 고치지 않고 다음을 누르면 그대로 저장되고 완료 처리까지 이어진다', async () => {
+describe('NicknamePage — 수정 없이 통과 (AC B2 · B8 · TRIP-1421 AC1)', () => {
+  it('한 글자도 고치지 않고 다음을 누르면 그대로 저장되고, 온보딩 완료는 부르지 않는다', async () => {
+    // 준비 — 후보가 프리필된 화면.
     await renderPrefilled();
 
+    // 실행 — 다음 탭.
     fireEvent.press(screen.getByTestId('onboarding-nickname-next'));
 
-    await waitFor(() =>
-      expect(requestLog).toContain('POST /api/v1/onboarding/complete')
-    );
-
-    const patchIndex = requestLog.indexOf('PATCH /api/v1/me/profile/nickname');
-    const completeIndex = requestLog.indexOf(
-      'POST /api/v1/onboarding/complete'
-    );
-
-    // 클라 형식 검증을 통과했더라도 서버 저장을 건너뛰면 안 된다(판정 정본은 서버).
-    expect(patchIndex).toBeGreaterThanOrEqual(0);
-    // D3 — 완료 처리는 닉네임 저장이 **성공한 뒤**에만 온다.
-    expect(completeIndex).toBeGreaterThan(patchIndex);
-  });
-
-  it('완료되면 위치 프리프롬프트(c08)로 이동한다(TRIP-459 — 체인에 c08 삽입)', async () => {
-    await renderPrefilled();
-
-    fireEvent.press(screen.getByTestId('onboarding-nickname-next'));
-
-    // AC-1 — nickname 저장·완료 성공 시 목적지가 pref1 → c08(위치). c08 이 pref1 앞에 끼어든다.
+    // 앵커 — 저장 흐름이 끝까지 돌아 c08 로 넘어갔다(아래 "0회"가 공허하지 않게).
     await waitFor(() =>
       expect(routerMock.replace).toHaveBeenCalledWith('/(onboarding)/location')
     );
+    // 단언 — 클라 형식 검증을 통과했더라도 서버 저장은 한다(판정 정본은 서버).
+    expect(requestLog).toContain('PATCH /api/v1/me/profile/nickname');
+    // 단언 — 완료는 취향 단계 몫이다(TRIP-1421 결정 ①). 여기서 부르면 취향 전에 끝난 계정이 된다.
+    expect(requestLog).not.toContain('POST /api/v1/onboarding/complete');
+  });
+
+  it('저장되면 위치 프리프롬프트(c08)로 한 번만 이동한다(TRIP-459 — 체인에 c08 삽입)', async () => {
+    await renderPrefilled();
+
+    fireEvent.press(screen.getByTestId('onboarding-nickname-next'));
+
+    // AC-1 — nickname 저장 성공 시 목적지는 c08(위치). c08 이 pref1 앞에 끼어든다.
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith('/(onboarding)/location')
+    );
+    expect(routerMock.replace.mock.calls).toEqual([['/(onboarding)/location']]);
   });
 });
 

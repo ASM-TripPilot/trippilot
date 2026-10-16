@@ -2922,6 +2922,45 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1421 — 온보딩 완료 요청 실패(CTA 위 오류 한 줄). Figma 프레임 없음 — 문구·자리는 발명값.
+  {
+    key: 'pref1-complete-error',
+    band: 'c',
+    label: 'c09 · 완료 실패',
+    login: null,
+    render: () => (
+      <PrefStep1Screen
+        selectedStyles={null}
+        selectedPace={null}
+        onToggleStyle={noop}
+        onTogglePace={noop}
+        onNext={noop}
+        onSkipAll={noop}
+        completeFailed
+      />
+    ),
+  },
+  {
+    key: 'pref2-complete-error',
+    band: 'c',
+    label: 'c09b · 완료 실패',
+    login: null,
+    render: () => (
+      <PrefStep2Screen
+        selectedCompanions={null}
+        selectedActivities={null}
+        selectedFoods={null}
+        selectedTransports={null}
+        onToggleCompanion={noop}
+        onToggleActivity={noop}
+        onToggleFood={noop}
+        onToggleTransport={noop}
+        onDone={noop}
+        onSkipAll={noop}
+        completeFailed
+      />
+    ),
+  },
   {
     // l05 취향 전체 수정(TRIP-610) — 화면이 자족 컨테이너(GET/PUT)라 QueryClient 없는 이 프리뷰에선
     // 순수 뷰(PreferencesEditView)에 선택 픽스처를 얹어 태운다(pref1/pref2 정적 패턴과 동형).
