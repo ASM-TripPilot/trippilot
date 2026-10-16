@@ -99,6 +99,7 @@ paths:
 | `src/pages/settings/my-page/ui/StyleSummaryCard.test.tsx` | 스타일 카드 — 채움/빈 점을 서로 다른 testID로 세어 SVG fill 함정 차단 · 상세 진입 disabled degrade(INV-4) |
 | `src/pages/settings/my-page/ui/MyPage.test.tsx` | 마이 페이지 배선+배치(`layer-pages.md` `my-page` 행) — 옛 `.counts`·`.l03empty`·`.l03parity`·`.integration`·`.styleDetail.integration`을 describe 5개로 합침(TRIP-1154, MSW 0이라 node 버킷) |
 | `src/pages/settings/settings-notifications/ui/NotificationSettingsScreen.test.tsx` | 알림 설정 화면 — 행·토글·Figma 정합 + 계약 밖 kind(COMMUNITY·SYSTEM)를 주입받아도 렌더하지 않는지(`VISIBLE_ROWS` 자체 소유, 옛 `__tests__/notificationKindGuard` 흡수 — TRIP-1154) |
+| `src/pages/settings/settings-notifications/ui/NotificationSettingsPage.integration.test.tsx` | (TRIP-1442) 권한 읽는 중·미결정·거부·허용 4얼굴 + 배너 동작(OS 창/설정 앱) + AppState 복귀 재조회 + 토큰 등록 1회. `AppState.addEventListener`를 spy로 모아 직접 `background→active`를 보낸다, 전역 알림 목 기본 권한은 denied라 `primeOsPermission`으로 덮고, `@/shared/storage` 목으로 등록 중복 생략 기억을 끈다 |
 | `src/features/edit-preferences/model/preferenceDraft.test.ts` | 취향 역변환 — 안 만진 축은 omit(`toStrictEqual`로 여분 `undefined` 키까지) |
 | `src/pages/settings/settings-preferences/ui/SettingsPreferencesPage.integration.test.tsx` | 취향 편집 MSW 통합 — 시드·한 축 PUT 바디·400 인라인(INV-4) + 저장 diff 기준선이 시드 시점으로 얼어 있는지(lost update 방지, 옛 `.baseline` 흡수 — 스위치 `mockFakePreferences`로 그 describe만 가짜 훅) |
 | `src/pages/settings/settings-personalization/model/personalizationCopy.test.ts` | 개인화 문구표 전수 + `NOT_ENOUGH_RECORDS`에 동의 유도 문구 없음(BR-U5-44) |
