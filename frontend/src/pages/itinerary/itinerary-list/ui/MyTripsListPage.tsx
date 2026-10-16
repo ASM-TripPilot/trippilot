@@ -20,8 +20,8 @@ import {
 import { isNotFound } from '@/shared/api';
 import { isLargeText } from '@/shared/lib/fontScale';
 import { seoulDate } from '@/shared/lib/seoulDate';
-import { readIdSet, writeIdSet } from '@/shared/storage';
 import { readStringValue, writeStringValue } from '@/shared/storage';
+import { readDoneBarSeen, writeDoneBarSeen } from '@/entities/trip';
 import { pickDoneBar, type DoneBarEntry } from '../model/doneBar';
 import {
   byLatest,
@@ -65,13 +65,15 @@ import { TripCardContainer } from './TripCardContainer';
  * TRIP-1286 · 탭 화면은 탭을 옮겨도 언마운트되지 않으므로 판정·쓰기는 목록이 보일 때(포커스)만 한다 —
  * 안 보이는 동안 판정하면 본 적 없는 배너가 seen 에 들어간다. 떠나면(blur) 배너와 닫음을 함께 비우고,
  * 돌아오면 그 사이 쓴 seen 기준으로 새로 완성된 여행만 띄운다.
+ * TRIP-1428 · seen 은 포커스마다 다시 읽는다 — 떠나 있는 사이 확정 훅이 더한 여행(앱에서 확정 = 토스트가 이미
+ * 알림)을 따라잡는다. 떠날 때 비워 다시 읽기 전엔 판정하지 않고, 이 마운트에서 쓴 값(`seenWrittenRef`)은 다시
+ * 읽은 값에 합친다 — 쓰기가 실패·대기 중이어도 이미 띄운 배너를 또 띄우지 않게.
  * 배너는 list 분기에서 화면의 형제로 붙는다 — 위젯의 `absolute bottom-[108px]` 가 탭 씬 바닥
  * 기준이 되어 BottomTab 위 12px 에 앉는다(Figma 3911:2327). TRIP-1297 · 큰 글자(`isLargeText`)에선 떠 있으면
  * 꺾인 문장만큼 목록을 덮으므로, 목록 스크롤 맨 위(`listHeader`)에 일반 흐름 카드로 놓는다(Figma 근거 없음).
  */
 
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`) · 토큰 키와 다른 이름. */
-const DONE_BAR_SEEN_KEY = 'itinerary.doneBar.seen';
 const SORT_KEY = 'itinerary.myTrips.sort';
 
 export function MyTripsListPage(): ReactElement {
@@ -105,12 +107,26 @@ export function MyTripsListPage(): ReactElement {
   const [barDismissed, setBarDismissed] = useState(false);
   // TRIP-1286 — 목록이 보이는 동안만 판정. 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
   const [focused, setFocused] = useState(false);
+  // TRIP-1428 — 이 마운트에서 seen 에 쓴(쓰려 한) 값. 다시 읽은 값에 합친다.
+  const seenWrittenRef = useRef<readonly string[]>([]);
   const largeText = isLargeText(useWindowDimensions().fontScale);
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
+      // 실패하면 seen 이 null 로 남아 배너가 안 뜬다(닫힌 쪽 실패). 떠난 뒤 도착한 읽기는 버린다.
+      let active = true;
+      readDoneBarSeen().then(
+        (ids) => {
+          if (active) {
+            setSeen([...new Set([...ids, ...seenWrittenRef.current])]);
+          }
+        },
+        () => {}
+      );
       return () => {
+        active = false;
         setFocused(false);
+        setSeen(null);
         setShown(null);
         setBarDismissed(false);
       };
@@ -165,8 +181,6 @@ export function MyTripsListPage(): ReactElement {
   const sortPickedRef = useRef(false);
 
   useEffect(() => {
-    // 실패하면 seen 이 null 로 남아 배너가 안 뜬다(닫힌 쪽 실패).
-    readIdSet(DONE_BAR_SEEN_KEY).then(setSeen, () => {});
     // 읽기 실패는 최신순 그대로(INV-4 — 목록은 이미 최신순으로 서 있다).
     readStringValue(SORT_KEY).then(
       (raw) => {
@@ -196,9 +210,10 @@ export function MyTripsListPage(): ReactElement {
   useEffect(() => {
     if (!pick) return;
     setShown(pick.target);
-    // 쓴 값을 상태에도 둔다 — 재포커스 때 옛 seen 으로 판정하면 같은 여행을 또 띄운다.
+    // 쓴 값을 상태(이 포커스)와 ref(다음 포커스의 다시 읽기)에 둔다 — 옛 seen 으로 판정하면 같은 여행을 또 띄운다.
     setSeen(pick.seenNext);
-    writeIdSet(DONE_BAR_SEEN_KEY, pick.seenNext).catch(() => {});
+    seenWrittenRef.current = pick.seenNext;
+    writeDoneBarSeen(pick.seenNext).catch(() => {});
   }, [pick]);
 
   // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
