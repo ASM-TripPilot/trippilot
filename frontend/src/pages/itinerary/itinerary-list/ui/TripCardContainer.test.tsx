@@ -596,7 +596,10 @@ describe('⋯ 삭제 진입점', () => {
    *  - 생성을 취소해 PARTIAL 로 남은 여행(세션 없음)은 지울 수 있다(Q2).
    *  - 생성 중·재생성 직후(진행 중 세션 있음)도 지울 수 있다 — TRIP-1271 결정 1=A 가 TRIP-1055 Q1("생성 중 ⋯
    *    숨김")을 뒤집었다. 서버 DELETE 에는 상태 가드가 없다(BR-U1-57 개정).
-   *  - 확정(여행 중·끝남 포함)·아직 모름(로딩·404 아닌 실패)은 ⋯ 자체가 없다.
+   *  - TRIP-1441 · 확정이어도 아직 시작 전(서울 오늘 < 시작일)이면 지울 수 있다 — 판정은 `today` 로
+   *    `classifyTripPhase` 가 'upcoming' 을 낼 때뿐이다. 여행 첫날·여행 중·끝난 뒤, 그리고 `today` 를 못 받은
+   *    컨테이너(시계를 읽지 않는다)는 닫힌 쪽이다.
+   *  - 아직 모름(로딩·404 아닌 실패)은 today 가 있어도 ⋯ 자체가 없다.
    *
    * 그리고 메뉴 열림을 컨테이너가 쥔다 — ⋯ 로 토글, '삭제' 항목을 누르면 닫고 `onPressDelete` 를 올린다.
    *
@@ -727,30 +730,80 @@ describe('⋯ 삭제 진입점', () => {
       // 단언 — ⋯ 가 있다.
       expect(screen.getByTestId('my-trip-menu-t1')).toBeOnTheScreen();
     });
+
+    // TRIP-1441 · 여행 기간은 2026-06-10 ~ 06-13, 오늘은 그 하루 전.
+    it('확정 + 서울 오늘 < 시작일이면 ⋯ 가 있고, 메뉴의 "삭제"가 삭제 요청을 1번 올린다', () => {
+      // 준비 — 확정 일정, 오늘은 시작 하루 전.
+      mockUseItinerary.mockReturnValue(ok(itin('COMPLETE', 'CONFIRMED')));
+      const onPressDelete = jest.fn();
+      render(
+        <TripCardContainer
+          trip={trip()}
+          today="2026-06-09"
+          onPressDelete={onPressDelete}
+        />
+      );
+      // 앵커 — 카드 얼굴은 확정 그대로('완성'). 배지를 '작성중'으로 바꿔 여는 우회가 아니다(02a ★3).
+      expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('완성');
+
+      // 실행 — ⋯ → '삭제'.
+      fireEvent.press(screen.getByTestId('my-trip-menu-t1'));
+      fireEvent.press(screen.getByTestId('my-trip-menu-delete-t1'));
+
+      // 단언 — 삭제 요청 1번, 화면 이동은 없다.
+      expect(onPressDelete).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
+    });
   });
 
   describe('TRIP-1055 AC-1 · 삭제할 수 없는 카드에는 ⋯ 가 없다 (금지 단언)', () => {
-    it.each<[string, Partial<Trip>, ItineraryHookResult]>([
-      ['확정(CONFIRMED)', {}, ok(itin('COMPLETE', 'CONFIRMED'))],
+    // TRIP-1441 · 확정 행은 today 를 줘서 경계를 잰다(기간 2026-06-10 ~ 06-13). today 없음 행만 먼 미래
+    // 여행이다 — 컨테이너가 몰래 시계를 읽거나 빈 문자열로 메우면 2099 여행이 '시작 전'이 돼 열린다(02a ★1).
+    it.each<[string, Partial<Trip>, ItineraryHookResult, string | undefined]>([
       [
-        '여행 중(ACTIVE + CONFIRMED)',
+        '확정 · 오늘 == 시작일(여행 첫날, 경계)',
+        {},
+        ok(itin('COMPLETE', 'CONFIRMED')),
+        '2026-06-10',
+      ],
+      [
+        '확정 · 오늘이 기간 안(ACTIVE)',
         { status: 'ACTIVE' },
         ok(itin('COMPLETE', 'CONFIRMED')),
+        '2026-06-11',
       ],
       [
-        '끝난 여행(ENDED + CONFIRMED)',
+        '확정 · 오늘 == 종료일(마지막 날, 경계)',
+        { status: 'ACTIVE' },
+        ok(itin('COMPLETE', 'CONFIRMED')),
+        '2026-06-13',
+      ],
+      [
+        '확정 · 오늘 > 종료일(ENDED)',
         { status: 'ENDED' },
         ok(itin('COMPLETE', 'CONFIRMED')),
+        '2026-06-14',
       ],
-      ['아직 모름(조회 중)', {}, pending],
-      ['아직 모름(404 아닌 조회 실패)', {}, serverError],
-    ])('%s', (_label, tripOver, hook) => {
+      [
+        '확정 · today 를 못 받음 — 먼 미래 여행이어도 닫힌 쪽',
+        { startDate: '2099-06-10', endDate: '2099-06-13' },
+        ok(itin('COMPLETE', 'CONFIRMED')),
+        undefined,
+      ],
+      // today 가 시작 전이어도 일정을 모르면 닫힌 쪽(02a ★4).
+      ['아직 모름(조회 중)', {}, pending, '2026-06-09'],
+      ['아직 모름(404 아닌 조회 실패)', {}, serverError, '2026-06-09'],
+    ])('%s', (_label, tripOver, hook, today) => {
       // 준비
       mockUseItinerary.mockReturnValue(hook);
 
       // 실행 — 삭제 콜백을 줘도.
       render(
-        <TripCardContainer trip={trip(tripOver)} onPressDelete={jest.fn()} />
+        <TripCardContainer
+          trip={trip(tripOver)}
+          today={today}
+          onPressDelete={jest.fn()}
+        />
       );
 
       // 단언 — 카드는 뜨지만(앵커) ⋯ 는 없다.
