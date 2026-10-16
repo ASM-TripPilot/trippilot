@@ -33,7 +33,9 @@ class SavedStayMigrationDedupIT {
                 .dataSource(c.jdbcUrl, "app_migrate", "app_migrate")
                 .schemas("app").defaultSchema("app").createSchemas(false)
                 .locations("classpath:db/migration")
-                .also { cfg -> target?.let { cfg.target(it) } }
+                // 중간 버전까지만 올릴 땐 R__ 반복 시드를 빼야 한다 — Flyway 는 target 과 무관하게 집합 끝에 붙이고,
+                // 그 시드가 target 이후에 생긴 테이블(curated_stay 등)을 쓰면 여기서 죽는다(GenerationSessionBackfillIT 선례).
+                .also { cfg -> target?.let { cfg.target(it).repeatableSqlMigrationPrefix("__NONE__") } }
                 .load()
 
             flyway("2.56").migrate()
