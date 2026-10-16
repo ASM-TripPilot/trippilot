@@ -184,3 +184,39 @@ describe('비주얼 구조', () => {
     });
   });
 });
+
+// TRIP-1427 (Q-016 · 결정 3) — 거부 본문에서 내부 용어 '온보딩'을 빼고, 숙소를 등록한 적 없는 신규 사용자 기준으로 쓴다.
+describe('LocationPreprompt — 거부 본문 문구 (AC-L4)', () => {
+  const DENIED_BODY =
+    '위치 없이도 계속 쓸 수 있어요.\n숙소를 등록하면 그 위치를 기준으로 탐색·동선을 안내해 드릴게요.';
+
+  /** `toHaveTextContent` 는 공백을 정규화해 `\n` 이 빠져도 통과한다 — 원문 비교용(PushPreprompt.test 선례). */
+  function rawText(node: { props: { children?: unknown } }): string {
+    const { children } = node.props;
+    if (typeof children === 'string') return children;
+    if (Array.isArray(children)) {
+      return children.filter((c) => typeof c === 'string').join('');
+    }
+    return '';
+  }
+
+  it('본문은 새 문구 원문(개행 포함) 그대로이고, 거부 프레임 어디에도 "온보딩"이 없다', () => {
+    // 준비·실행
+    render(
+      <LocationPreprompt
+        purposeContext={PURPOSE}
+        state="permission-denied"
+        onProceed={jest.fn()}
+        onOpenSettings={jest.fn()}
+      />
+    );
+
+    // 단언 — 본문 원문
+    expect(rawText(screen.getByTestId('onboarding-location-denied-body'))).toBe(
+      DENIED_BODY
+    );
+    // 단언 — 프레임이 그려진 상태에서 '온보딩' 글자 0건
+    expect(screen.getByTestId('onboarding-location-root')).toBeOnTheScreen();
+    expect(screen.queryAllByText(/온보딩/)).toHaveLength(0);
+  });
+});

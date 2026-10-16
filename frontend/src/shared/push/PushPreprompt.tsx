@@ -20,9 +20,6 @@ export function PushPreprompt({ onProceed }: PushPrepromptProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="onboarding-push-root" className="flex-1 bg-canvas">
-        {/* 위치 카드와 같은 빈 머리 바 — Figma 의 뒤로 chevron 은 따르지 않는다(온보딩은 앞으로만, TRIP-1023 #005). */}
-        <View className="h-[56px] flex-row items-center border-b border-hairline px-lg" />
-
         <View className="flex-1 gap-lg px-2xl pt-xl">
           <PushBellHero testID="onboarding-push-hero" />
           <Text className="font-noto-bold text-[24px] font-bold text-ink">
