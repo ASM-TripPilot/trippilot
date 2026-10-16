@@ -6,7 +6,7 @@
     "OVERTURE",
     "TOURAPI"
   ],
-  "collected_at": "2026-10-15T22:03:27.970283+00:00",
+  "collected_at": "2026-10-16T22:00:21.159809+00:00",
   "area_codes": [
     "1",
     "2",
@@ -39,28 +39,26 @@
   },
   "merged_from": [
     {
-      "collected_at": "2026-10-15T05:00:51.395984+00:00",
+      "collected_at": "2026-10-15T22:03:27.970283+00:00",
       "proposals": 57526,
       "stats": {
-        "merged_runs": 1,
-        "unique_proposals": 57526,
-        "bad_nightlife_dropped": 7,
-        "rejected_dropped": 35
+        "merged_runs": 3,
+        "unique_proposals": 57526
       }
     },
     {
-      "collected_at": "2026-10-15T22:03:24.384741+00:00",
+      "collected_at": "2026-10-16T22:00:17.017551+00:00",
       "proposals": 0,
       "stats": {
-        "http_calls": 240,
+        "http_calls": 235,
         "listed": 30,
-        "page_failures": 0,
+        "page_failures": 3,
         "detail_failures": 0,
         "category_unmapped": 0,
         "address_missing": 2,
         "merged": 0,
         "passed": 0,
-        "skipped_unchanged": 15732,
+        "skipped_unchanged": 14968,
         "rest_unparsed": 0,
         "raw_reparse_mismatch": 0,
         "gate_drops": {
@@ -72,37 +70,37 @@
           "1": {
             "calls": 25,
             "passed": 0,
-            "skipped": 1442
+            "skipped": 1404
           },
           "2": {
             "calls": 10,
             "passed": 0,
-            "skipped": 478
+            "skipped": 474
           },
           "3": {
             "calls": 6,
             "passed": 0,
-            "skipped": 177
+            "skipped": 174
           },
           "4": {
             "calls": 7,
             "passed": 0,
-            "skipped": 409
+            "skipped": 399
           },
           "5": {
             "calls": 5,
             "passed": 0,
-            "skipped": 142
+            "skipped": 133
           },
           "6": {
             "calls": 10,
             "passed": 0,
-            "skipped": 507
+            "skipped": 493
           },
           "7": {
             "calls": 6,
             "passed": 0,
-            "skipped": 213
+            "skipped": 208
           },
           "8": {
             "calls": 5,
@@ -112,60 +110,58 @@
           "31": {
             "calls": 41,
             "passed": 0,
-            "skipped": 3559
+            "skipped": 3535
           },
           "32": {
             "calls": 24,
             "passed": 0,
-            "skipped": 1723
+            "skipped": 1703
           },
           "33": {
             "calls": 13,
             "passed": 0,
-            "skipped": 827
+            "skipped": 784
           },
           "34": {
             "calls": 15,
             "passed": 0,
-            "skipped": 1066
+            "skipped": 1058
           },
           "35": {
             "calls": 16,
             "passed": 0,
-            "skipped": 1194
+            "skipped": 1171
           },
           "36": {
-            "calls": 16,
+            "calls": 11,
             "passed": 0,
-            "skipped": 1275
+            "skipped": 752
           },
           "37": {
             "calls": 14,
             "passed": 0,
-            "skipped": 916
+            "skipped": 898
           },
           "38": {
             "calls": 16,
             "passed": 0,
-            "skipped": 1021
+            "skipped": 1010
           },
           "39": {
             "calls": 11,
             "passed": 0,
-            "skipped": 707
+            "skipped": 696
           }
         }
       }
     },
     {
-      "collected_at": "2026-10-15T22:03:27.970283+00:00",
-      "proposals": 7,
+      "collected_at": "2026-10-16T22:00:21.159809+00:00",
+      "proposals": 0,
       "stats": {
-        "pending": 7,
-        "attempted": {
-          "TOUR_API_KEY3": 7
-        },
-        "emitted": 7,
+        "pending": 0,
+        "attempted": {},
+        "emitted": 0,
         "kept_stored_hours": 0,
         "gate_dropped": 0,
         "failures": {},
