@@ -1512,6 +1512,20 @@ describe('여행 중 직접 수정(i07)', () => {
     });
   });
 
+  // TRIP-1424 AC-21 — 여행 중 편집에서도 "장소를 추가하면 바로 저장돼요"가 [저장] 전부터 보인다(결정 2=A).
+  describe('🔴 TRIP-1424 · 장소 추가 즉시 저장 안내', () => {
+    it('i07 편집기가 뜨면 저장을 누르기 전에도 안내 한 줄이 보이고 PUT 은 0이다', async () => {
+      renderPage();
+      // 앵커 — 방문 기록까지 도착해 i07 얼굴이 다 섰다.
+      await waitForLocked();
+
+      expect(
+        screen.getByTestId('itinerary-edit-add-saved-hint')
+      ).toHaveTextContent('장소를 추가하면 바로 저장돼요');
+      expect(putCalls).toBe(0);
+    });
+  });
+
   // TRIP-1233 · AC-2d — 허브(i01)에서 2일차를 보다가 [직접 수정]으로 오면 i07 도 2일차로 열린다.
   describe('🔴 i07 진입 일차 (TRIP-1233)', () => {
     it('inTrip + initialDate=2일차 → 2일차 칩 선택 · 2일차 카드 · 말미 장소 추가가 2일차 date 를 싣는다', async () => {
