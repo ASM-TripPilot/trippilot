@@ -116,7 +116,7 @@ export interface LiveHubSlot {
   state: SlotProgressState;
   photos?: ImageSourcePropType[];
   memo?: string | null;
-  /** TRIP-1220 done 전용 — 실제 방문 시각 'HH:mm'. */
+  /** TRIP-1220 done · TRIP-1419 active — 실제 도착 시각 'HH:mm'. */
   visitedLabel?: string | null;
 }
 
