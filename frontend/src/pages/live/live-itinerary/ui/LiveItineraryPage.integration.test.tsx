@@ -2136,7 +2136,8 @@ describe('메모 시트', () => {
     liveVisit({
       visitCheckId,
       poiId,
-      arrivedAt: '2026-08-20T13:00:00',
+      // KST 13:00. TRIP-1419 부터 관람 중 상태줄이 이 값을 그린다 — Z 없이 쓰면 기기 시간대 따라 글자가 갈린다(02a ★2).
+      arrivedAt: '2026-08-20T04:00:00Z',
       completedAt,
       updatedAt: '2026-08-20T13:00:05Z',
     });
@@ -2544,12 +2545,18 @@ describe('메모 시트', () => {
         await client.invalidateQueries();
       });
 
-      // 앵커 — p2 가 관람 중 얼굴로 바뀌었다(관람 중 문구 완전 일치로 기다린다).
+      // 앵커 — p2 가 관람 중 얼굴로 바뀌었다([방문 완료]가 p2 카드 안으로 옮겨 왔다).
       await waitFor(() =>
         expect(
-          screen.getByTestId(`execution-live-slot-time-${TODAY}#p2`)
-        ).toHaveTextContent('15:00 도착 · 지금 관람 중')
+          within(
+            screen.getByTestId(`execution-live-slot-${TODAY}#p2`)
+          ).getByTestId('execution-arrive-complete')
+        ).toBeOnTheScreen()
       );
+      // 상태줄 시각은 계획 15:00 이 아니라 v2 의 실제 도착 13:00 이다(TRIP-1419).
+      expect(
+        screen.getByTestId(`execution-live-slot-time-${TODAY}#p2`)
+      ).toHaveTextContent('13:00 도착 · 지금 관람 중');
       // 단언 — 시트는 그 방문(감천문화마을)에 남는다.
       expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
       expect(screen.getByTestId('live-memo-title')).toHaveTextContent(
@@ -4558,6 +4565,8 @@ describe('i02 트리거 표면', () => {
  *    가로채지 않고(AC-1·AC-4), 혼자서 계획 카드를 관람 중·완료로 칠하지도 않는다(AC-3·AC-5).
  *  - **W20 (TRIP-1079 5-c 경고-1)** 계획 도착 후보가 둘이면 페이지가 planOrder 를 **순서대로**
  *    넘겨야 앞 슬롯이 관람 중이 된다(AC-6) — W16~W19 는 후보가 하나라 순서 배선을 못 본다.
+ *  - **W21~W23 (TRIP-1419)** 관람 중 상태줄 시각은 서버 실제 도착(arrivedAt → KST)이고 완료 카드와 같은 값이다.
+ *    응답 전 낙관 구간엔 시각 없이 "지금 관람 중" 만, 같은 슬롯 도착 레코드가 둘이면 [방문 완료]가 닫을 그 레코드의 시각.
  *
  * 왜 통합 버킷인가: 심판 대상이 "조회 상태 → 사영 → 카드"의 배선과 "실제로 나간 경로·바디"다 —
  * 훅을 목킹하면 그 사영이 테스트의 가정이 되어 버린다(위 「허브」 선례).
@@ -4709,13 +4718,15 @@ describe('방문 체크', () => {
     it('W3 기록이 없는 오늘 탭 예정 카드의 [도착] press → POST /visits {slotKey, poiId, MANUAL} 1회 → active (TRIP-1021 AC-1·AC-4)', async () => {
       // TRIP-746 이 지운 수동 [도착]을 되살린 자리다(옛 W3 = 부재 짝 → 반전). 자동 도착(TRIP-1018)이
       // 보류라 이 버튼이 유일한 도착 경로다.
+      // TRIP-1419 — 서버가 기록한 실제 도착은 KST 12:52(계획 13:00 보다 이르다). 같은 값이면 시각 단언이 아무것도 못 가른다.
+      const ARRIVED = '2026-08-20T03:52:00Z';
       let arrived = false;
       server.use(
         ...baseHandlers(),
         http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
           HttpResponse.json({
             visits: arrived
-              ? [vc({ visitCheckId: 'v9', poiId: 'p1', arrivedAt: T })]
+              ? [vc({ visitCheckId: 'v9', poiId: 'p1', arrivedAt: ARRIVED })]
               : [],
           })
         ),
@@ -4723,7 +4734,7 @@ describe('방문 체크', () => {
           arriveBodies.push(await request.json());
           arrived = true;
           return HttpResponse.json(
-            vc({ visitCheckId: 'v9', poiId: 'p1', arrivedAt: T }),
+            vc({ visitCheckId: 'v9', poiId: 'p1', arrivedAt: ARRIVED }),
             { status: 201 }
           );
         })
@@ -4746,16 +4757,26 @@ describe('방문 체크', () => {
         poiId: 'p1',
         source: 'MANUAL',
       });
-      // 단언 ② — 그 카드가 active 로: [방문 완료]가 서고 [도착]은 사라진다. 시각은 계획 startAt 그대로(AC-4).
+      // 단언 ② — 그 카드가 active 로: [방문 완료]가 서고 [도착]은 사라진다.
       await waitFor(() =>
         expect(
           screen.getByTestId('execution-arrive-complete')
         ).toBeOnTheScreen()
       );
       expect(screen.queryByTestId(arriveId(TODAY, 'p1'))).toBeNull();
+      // 단언 ③ — 상태줄 시각은 서버 실제 도착 12:52(TRIP-1419 Q-086 — 옛 TRIP-1021 AC-4 "계획 startAt 그대로"를 뒤집었다).
+      // 응답 전 낙관 구간엔 시각이 없으므로("지금 관람 중", W22) 서버 레코드가 캐시에 든 뒤 한 틱 흘려 읽는다(02a ★6).
+      await waitFor(() =>
+        expect(
+          client.getQueryData<VisitCheckList>(
+            getGetTripsTripIdVisitsDaysDayQueryKey(TRIP_ID, TODAY)
+          )?.visits[0]?.visitCheckId
+        ).toBe('v9')
+      );
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
       expect(
         screen.getByTestId(`execution-live-slot-time-${TODAY}#p1`)
-      ).toHaveTextContent('13:00 도착 · 지금 관람 중');
+      ).toHaveTextContent('12:52 도착 · 지금 관람 중');
     });
 
     it('W4 도착 → 재조회 → [방문 완료] 사슬: 완료 요청은 서버 id(v9)로 나가고 카드가 done 이 된다 (AC-2)', async () => {
@@ -5352,10 +5373,11 @@ describe('방문 체크', () => {
           HttpResponse.json({
             visits: [
               vc({ visitCheckId: 'vS', poiId: 'p1', arrivedAt: T }),
+              // KST 12:00 — 계획 레코드(T=13:00)와 다른 시각이라 상태줄이 즉석 레코드 시각을 빌려 오면 red(TRIP-1419).
               spontaneous({
                 visitCheckId: 'vX',
                 poiId: 'px',
-                arrivedAt: '2026-08-20T12:00:00',
+                arrivedAt: '2026-08-20T03:00:00Z',
               }),
             ],
           })
@@ -5374,7 +5396,7 @@ describe('방문 체크', () => {
 
       render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
 
-      // 단언 ① — p1 카드 **안에** [방문 완료]가 있고 상태줄이 관람 중이다.
+      // 단언 ① — p1 카드 **안에** [방문 완료]가 있고 상태줄이 관람 중이다. 시각은 계획 레코드 vS 의 실제 도착(13:00).
       await waitFor(() =>
         expect(
           within(
@@ -5653,5 +5675,195 @@ describe('방문 체크', () => {
         0
       );
     });
+  });
+
+  // TRIP-1419 — 관람 중 카드의 '도착' 시각이 계획(startAt)이었다(QA Q-086: 14:07 에 [도착]했는데 "14:44 도착").
+  // 허브가 관람 중 방문 레코드의 서버 arrivedAt 을 KST 'HH:mm' 으로 접어 카드에 내린다 — 완료 카드(TRIP-1220)와 같은 값.
+  // 실제(14:07) ≠ 계획(14:44)로 일부러 어긋나게 둔다 — 같으면 "계획을 그리는 구현"도 통과한다(02a ★1).
+  // 3동작: 준비(계획·방문 기록) → 실행(렌더·[도착]·[방문 완료]) → 단언(상태줄·완료 시각 완전 일치 · 나간 요청).
+  describe('LiveItineraryPage · 관람 중·완료 카드 시각은 서버 실제 도착이다 (TRIP-1419)', () => {
+    /** KST 14:07 — 서버가 기록한 실제 도착(계획 14:44 보다 37분 이르다). */
+    const ARRIVED_1407 = '2026-08-20T05:07:00Z';
+    const plan = (): Itinerary =>
+      liveItinerary([
+        {
+          date: TODAY,
+          slots: [
+            liveSlot('p1', '부산시립미술관', '14:44:00'),
+            liveSlot('p2', '광안리 해변', '16:00:00'),
+          ],
+        },
+      ]);
+    const timeOf = (poiId: string) =>
+      screen.getByTestId(`execution-live-slot-time-${TODAY}#${poiId}`);
+
+    it('W21 관람 중 카드는 "14:07 도착 · 지금 관람 중"(계획 14:44 아님)이고, [방문 완료] 뒤 완료 카드도 "14:07"+"방문"이다 (AC-1·2·6·7 · Q-086·Q-093)', async () => {
+      let completed = false;
+      server.use(
+        ...baseHandlers(plan()),
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+          HttpResponse.json({
+            visits: [
+              vc({
+                visitCheckId: 'v1',
+                poiId: 'p1',
+                arrivedAt: ARRIVED_1407,
+                completedAt: completed ? '2026-08-20T05:50:00Z' : null,
+              }),
+            ],
+          })
+        ),
+        http.post(`${BASE}/trips/:tripId/visits/:visitCheckId/complete`, () => {
+          completed = true;
+          return HttpResponse.json(
+            vc({
+              visitCheckId: 'v1',
+              poiId: 'p1',
+              arrivedAt: ARRIVED_1407,
+              completedAt: '2026-08-20T05:50:00Z',
+            })
+          );
+        })
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+
+      // 단언 ① — p1 이 관람 중 얼굴이 된 뒤, 상태줄은 실제 도착 시각.
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('execution-arrive-complete')
+        ).toBeOnTheScreen()
+      );
+      expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 관람 중');
+      // 단언 ② — 예정 카드는 계획 시각 그대로(BR-U4-34 · AC-7).
+      expect(timeOf('p2')).toHaveTextContent('16:00 도착 예정');
+      // 단언 ③ — 관람 중 카드 어디에도 체류·경과 시간이 없다(INV-3 · BR-U4-37). 짝 앵커: 14:07 은 있다.
+      const activeCard = screen.getByTestId(`execution-live-slot-${TODAY}#p1`);
+      expect(activeCard).toHaveTextContent(/14:07/);
+      expect(activeCard).not.toHaveTextContent(/\d+\s*분|\d+\s*시간|소요|경과/);
+
+      // 실행 — [방문 완료].
+      fireEvent.press(screen.getByTestId('execution-arrive-complete'));
+
+      // 단언 ④ — 완료 카드도 같은 14:07(화면 안에서 시각이 14:44 → 14:07 로 바뀌지 않는다, Q-093).
+      await waitFor(() =>
+        expect(screen.queryByTestId('execution-arrive-complete')).toBeNull()
+      );
+      expect(
+        screen.getByTestId(`execution-live-slot-visit-time-${TODAY}#p1`)
+      ).toHaveTextContent('14:07');
+      expect(
+        screen.getByTestId(`execution-live-slot-visit-label-${TODAY}#p1`)
+      ).toHaveTextContent('방문');
+    });
+
+    it('W22 [도착] 직후 응답 전(낙관 구간)엔 "지금 관람 중" 만 — 계획 14:44 를 "도착"이라 쓰지 않고, 응답이 오면 "14:07 도착 · 지금 관람 중" (AC-3 · Q1)', async () => {
+      // 응답을 gate 로 붙잡아 낙관 레코드(optimistic:p1 — 시각은 자리표시자)만 캐시에 있는 창을 연다(02a ★5).
+      const gate = createGate();
+      server.use(
+        ...baseHandlers(plan()),
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+          HttpResponse.json({ visits: [] })
+        ),
+        http.post(`${BASE}/trips/:tripId/visits`, async () => {
+          await gate.opened;
+          return HttpResponse.json(
+            vc({ visitCheckId: 'v9', poiId: 'p1', arrivedAt: ARRIVED_1407 }),
+            { status: 201 }
+          );
+        })
+      );
+
+      try {
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p1')));
+
+        // 단언 ① — 요청이 나가 대기 중이고, 카드는 낙관 레코드로 관람 중 얼굴이다. 상태줄엔 시각이 없다.
+        await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+        await waitFor(() =>
+          expect(
+            screen.getByTestId('execution-arrive-complete')
+          ).toBeOnTheScreen()
+        );
+        expect(timeOf('p1')).toHaveTextContent('지금 관람 중');
+
+        // 실행 — 서버 응답을 풀어 준다(낙관 레코드가 서버 레코드로 교체된다).
+        gate.release();
+
+        // 단언 ② — 서버 레코드(v9)가 캐시에 든 뒤 한 틱 흘려 읽으면, 실제 도착 시각이 붙어 있다.
+        await waitFor(() =>
+          expect(
+            client.getQueryData<VisitCheckList>(
+              getGetTripsTripIdVisitsDaysDayQueryKey(TRIP_ID, TODAY)
+            )?.visits[0]?.visitCheckId
+          ).toBe('v9')
+        );
+        await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 관람 중');
+      } finally {
+        // 단언이 먼저 실패해도 붙잡힌 핸들러를 푼다.
+        gate.release();
+      }
+    });
+
+    it.each([
+      ['v1a 가 앞', ['v1a', 'v1b']],
+      ['v1b 가 앞', ['v1b', 'v1a']],
+    ] as const)(
+      'W23 같은 슬롯 도착 레코드가 둘이어도(%s) 시각은 [방문 완료]가 닫을 그 레코드(id 사전순 첫째 v1a)의 실제 도착이다 (AC-10)',
+      async (_label, order) => {
+        // 비정상 상태 — 같은 p1 에 도착·미완료 레코드가 둘. 목록 순서는 계약이 아니라 두 순서를 다 본다(02a ★7).
+        const records = {
+          v1a: vc({
+            visitCheckId: 'v1a',
+            poiId: 'p1',
+            arrivedAt: ARRIVED_1407,
+          }),
+          // KST 14:20
+          v1b: vc({
+            visitCheckId: 'v1b',
+            poiId: 'p1',
+            arrivedAt: '2026-08-20T05:20:00Z',
+          }),
+        };
+        server.use(
+          ...baseHandlers(plan()),
+          http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+            HttpResponse.json({ visits: order.map((id) => records[id]) })
+          ),
+          http.post(`${BASE}/trips/:tripId/visits/:visitCheckId/complete`, () =>
+            HttpResponse.json({
+              ...records.v1a,
+              completedAt: '2026-08-20T05:50:00Z',
+            })
+          )
+        );
+
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+
+        // 단언 ① — 관람 중 얼굴이 된 뒤, 시각은 v1a 의 14:07(v1b 의 14:20·계획 14:44 아님).
+        await waitFor(() =>
+          expect(
+            screen.getByTestId('execution-arrive-complete')
+          ).toBeOnTheScreen()
+        );
+        expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 관람 중');
+
+        // 실행 · 단언 ② — [방문 완료]도 같은 레코드 v1a 를 닫는다(보이는 시각의 주인 = 닫는 방문).
+        fireEvent.press(screen.getByTestId('execution-arrive-complete'));
+        await waitFor(() =>
+          expect(
+            hitCount(`POST /api/v1/trips/${TRIP_ID}/visits/v1a/complete`)
+          ).toBe(1)
+        );
+        expect(
+          hitCount(`POST /api/v1/trips/${TRIP_ID}/visits/v1b/complete`)
+        ).toBe(0);
+      }
+    );
   });
 });

@@ -2108,6 +2108,7 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
       129.137,
       '10:00 - 18:00'
     ),
+    visitedLabel: '13:00',
   },
   {
     state: 'upcoming',
