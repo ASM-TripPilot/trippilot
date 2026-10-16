@@ -1914,6 +1914,169 @@ describe('i08 변경 반영 시트', () => {
       indices.forEach((index) => expect(index).toBe(1));
     });
   });
+
+  /**
+   * TRIP-1418 · QA Q-106 — 재계획 [적용하기]가 `dismissTo` 로 **스택의 원래 허브**에 돌아온다. 허브를 새로 만들지 않고
+   * 같은 인스턴스에 params(=props)만 새로 준다. 그래서 그 허브가 쥐고 있던 로컬 상태(골라 둔 일차·시트 칸)를
+   * 새 적용에 맞춰 다시 맞춰야 한다 — 종전(새 마운트)이 저절로 하던 일이다.
+   *
+   * 계약: `appliedSessionId` 가 이전 렌더와 **다른, 비어 있지 않은 값**이 되는 순간 ① 골라 둔 일차를 비워 적용한 날
+   * (없으면 오늘)이 이기게 하고 ② 시트 칸을 펼침(2)으로 올린다. 값이 지워질 때(i08 [확인])는 둘 다 건드리지 않는다.
+   *
+   * 3동작: 준비 = applied 없이 그린 허브(+ 사용자가 다른 일차를 골라 둠) → 실행 = 같은 인스턴스에 새 props(`rerender`)
+   * → 단언 = 선택된 일차 칩 · i08 시트 · 시트 칸.
+   *
+   * *(개념)* `screen.rerender(<… 새 props />)` = 화면을 새로 만들지 않고 같은 컴포넌트에 props 만 바꿔 준다 —
+   *   라우트(`app/trips/[tripId]/live/index.tsx`)가 params 를 props 로 그대로 넘기므로 dismissTo 재사용과 같은 모양이다.
+   *   실제 스택이 허브 한 장인지는 `src/__tests__/planbApplyStack.integration.test.tsx` 가 본다.
+   * ★ 테스트마다 QueryClient 를 한 번만 만든다 — `rerender` 는 wrapper 로 다시 감싸므로 wrapper 안에서 client 를
+   *   만들면 다시 그릴 때 캐시가 바뀔 수 있다(02a ★6).
+   * ★ 3일 일정이어야 갈린다 — 오늘=1일차 · 골라 둔 날=3일차 · 적용한 날=2일차(02a ★8).
+   */
+  describe('🔴 재사용 허브 — dismissTo 로 돌아온 같은 허브가 새 적용을 받는다', () => {
+    const DAY2 = '2026-08-21';
+    const DAY3 = '2026-08-22';
+
+    function threeDayItinerary(): Itinerary {
+      return liveItinerary([
+        { date: TODAY, slots: [liveSlot('p0', '감천문화마을', '09:30:00')] },
+        { date: DAY2, slots: [liveSlot('p1', '해운대 시장', '10:00:00')] },
+        { date: DAY3, slots: [liveSlot('p2', '광안리 해변', '11:00:00')] },
+      ]);
+    }
+
+    const chip = (index: number) =>
+      screen.getByTestId(`execution-live-daychip-${index}`);
+
+    /** 준비 — applied 없이 허브를 그린다(재계획을 떠나기 전의 원래 허브). */
+    async function renderReusedHub(): Promise<void> {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(threeDayItinerary())
+        ),
+        http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip())),
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+          HttpResponse.json({ visits: [] })
+        ),
+        http.get(`${BASE}/trips/:tripId/triggers`, () =>
+          HttpResponse.json({ triggers: [] })
+        )
+      );
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, gcTime: Infinity },
+          mutations: { gcTime: 0 },
+        },
+      });
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      });
+      await waitFor(() => expect(screen.getByTestId(HUB)).toBeTruthy());
+    }
+
+    /** 실행 — dismissTo 가 원래 허브의 params 를 바꾼 것과 같다(같은 인스턴스에 새 props). */
+    function hubReceives(applied?: string, day?: string): void {
+      screen.rerender(
+        <LiveItineraryPage
+          tripId={TRIP_ID}
+          today={TODAY}
+          appliedSessionId={applied}
+          initialDate={day}
+        />
+      );
+    }
+
+    it('R1 같은 허브가 applied 를 새로 받으면 i08 반영 시트가 뜬다 (TRIP-754 무회귀)', async () => {
+      await renderReusedHub();
+      expect(screen.queryByTestId(SHEET)).toBeNull();
+
+      hubReceives(SESSION_ID);
+
+      expect(screen.getByTestId(SHEET)).toBeTruthy();
+    });
+
+    it('R2 3일차를 골라 둔 허브가 2일차 적용을 받으면 2일차 칩이 선택된다 — 옛 선택이 이기면 위반 (TRIP-1195)', async () => {
+      await renderReusedHub();
+      fireEvent.press(chip(2));
+      expect(chip(2)).toBeSelected();
+
+      hubReceives(SESSION_ID, DAY2);
+
+      expect(chip(1)).toBeSelected();
+      expect(chip(2)).not.toBeSelected();
+    });
+
+    it('R3 day 없이(오늘) 적용을 받으면 골라 둔 3일차가 아니라 오늘(1일차) 칩이 선택된다', async () => {
+      await renderReusedHub();
+      fireEvent.press(chip(2));
+      expect(chip(2)).toBeSelected();
+
+      hubReceives(SESSION_ID);
+
+      expect(chip(0)).toBeSelected();
+      expect(chip(2)).not.toBeSelected();
+    });
+
+    it('R4 적용한 날로 맞춘 뒤 사용자가 칩을 고르면 그 선택이 남는다 — 같은 params 로 다시 그려도 리셋하지 않는다', async () => {
+      await renderReusedHub();
+      fireEvent.press(chip(2));
+      hubReceives(SESSION_ID, DAY2);
+      // 앵커 — 새 적용이 일차를 맞췄다(R2).
+      expect(chip(1)).toBeSelected();
+
+      fireEvent.press(chip(2));
+      hubReceives(SESSION_ID, DAY2);
+
+      expect(chip(2)).toBeSelected();
+      expect(chip(1)).not.toBeSelected();
+    });
+
+    it('R5 새 적용을 받으면 시트 칸이 펼침(2)으로 오르고, [확인]으로 applied 가 지워져도 2 를 유지한다 (Q5)', async () => {
+      await renderReusedHub();
+      // 앵커 — 원래 허브는 applied 없이 마운트돼 기본 칸 1 이다.
+      expect(hubSnapIndices().length).toBeGreaterThan(0);
+      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
+
+      hubReceives(SESSION_ID, DAY2);
+
+      expect(hubSnapIndices().every((index) => index === 2)).toBe(true);
+
+      // i08 [확인] = setParams({ applied: undefined }) — 병합이라 day 는 남는다(02a ★7).
+      hubReceives(undefined, DAY2);
+
+      expect(screen.queryByTestId(SHEET)).toBeNull();
+      expect(hubSnapIndices().length).toBeGreaterThan(0);
+      expect(hubSnapIndices().every((index) => index === 2)).toBe(true);
+      expect(chip(1)).toBeSelected();
+    });
+
+    it('R6 applied 가 지워질 때는 사용자가 고른 일차를 건드리지 않는다', async () => {
+      await renderReusedHub();
+      hubReceives(SESSION_ID, DAY2);
+      fireEvent.press(chip(0));
+      expect(chip(0)).toBeSelected();
+
+      hubReceives(undefined, DAY2);
+
+      expect(chip(0)).toBeSelected();
+      expect(chip(1)).not.toBeSelected();
+    });
+
+    it('R7 두 번째 적용(새 세션)도 다시 맞춘다 — 처음 한 번만 맞추면 위반', async () => {
+      await renderReusedHub();
+      hubReceives(SESSION_ID, DAY2);
+      hubReceives(undefined, DAY2);
+      fireEvent.press(chip(2));
+      expect(chip(2)).toBeSelected();
+
+      hubReceives('s2', DAY2);
+
+      expect(chip(1)).toBeSelected();
+      expect(chip(2)).not.toBeSelected();
+    });
+  });
 });
 
 /**

@@ -33,7 +33,8 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  * `useReplanSession`(폴링) → `resolveReplanState(status)`:
  *  - 'draft'      → variant 'draft'. [적용하기]는 **바로 확정**한다(E1 — 확정 지점이 i06 페이지로
  *                    옮겨졌다. 쓰기는 여전히 seam `useApplyReplan` 하나만 통과한다, BR-U4-28).
- *                    성공하면 허브로 `replace`(뒤로가기로 초안에 돌아와 409 를 맞는 길을 없앤다) +
+ *                    성공하면 허브로 `dismissTo`(TRIP-1418 — 스택의 원래 허브로 돌아가 허브가 두 장 쌓이지 않고,
+ *                    뒤로가기로 초안에 돌아와 409 를 맞는 길도 없다. 허브가 없으면 이 자리를 허브로 바꿔 끼운다) +
  *                    `applied=sessionId`(i08 시트 신호, 소비는 754).
  *  - 'noSolution' → variant 'noSolution'. 서버가 사유를 주지 않으므로 부제는 뒤 절만(Seed Q4).
  *                    오늘(KST) 세션이고 내일이 일정에 있으면 [내일 일정 다시 짜기] — 같은 조건 · targetDate=내일 ·
@@ -59,8 +60,8 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  * 한 번 묻는다. [나가기]는 apply·cancel 을 부르지 않는다(세션은 DRAFT 로 남고 다음 요청이 닫는다, INV-U4-05·06).
  *  - 가로채기는 `usePreventRemove`(useItineraryTabBack 선례 — gestureEnabled·raw beforeRemove 기각 근거 거기).
  *    켜는 조건 = 초안 얼굴 또는 요청 대기 중. 대안 없음·실패 얼굴은 잃을 초안이 없어 그대로 뒤로 간다.
- *  - 뒤로 계열(GO_BACK·POP)만 붙잡는다. 대기 중이면 삼킨다(대기 중 언마운트 → onSuccess 의 허브 replace·applied
- *    신호가 사라지는 창을 닫는다). 그 밖(적용 성공 REPLACE 등)은 받은 액션 객체를 **그대로** 다시 보낸다 —
+ *  - 뒤로 계열(GO_BACK·POP)만 붙잡는다. 대기 중이면 삼킨다(대기 중 언마운트 → onSuccess 의 허브 dismissTo·applied
+ *    신호가 사라지는 창을 닫는다). 그 밖(적용 성공 dismissTo 의 POP_TO 등)은 받은 액션 객체를 **그대로** 다시 보낸다 —
  *    처음부터 새로 만든 액션은 또 붙잡혀 무한 반복이다. 직접 수정 PUSH 는 화면을 스택에서 빼지 않아 애초에 붙잡히지 않는다.
  *  - [나가기](오류 얼굴·이탈 확인 공통 `leave()`)는 `leavingRef` 를 세운 뒤 뒤가 있으면 `router.back()`, 없으면
  *    (딥링크 착지) 허브로 replace — 그 back 이 다시 콜백으로 오면 ref 를 보고 통과시킨다.
@@ -313,7 +314,7 @@ export function PlanbDraftPage({
             { tripId, sessionId },
             {
               onSuccess: () =>
-                router.replace({
+                router.dismissTo({
                   pathname: '/trips/[tripId]/live',
                   // TRIP-1195 — 오늘이 아닌 날을 확정했으면 허브가 그 일차로 열리게 날짜를 싣는다(오늘이면 종전과 같은 params).
                   params:
