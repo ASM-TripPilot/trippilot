@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
@@ -64,8 +64,8 @@ import { NoBaseNoticeCard } from './NoBaseNoticeCard';
  *     나갈 길 대신 "일정 만들기" 다음 행동도 준다.
  */
 
-/** 딥링크로 뒤로 갈 히스토리 없이 열렸을 때의 홈 폴백 목적지. `/(tabs)/itinerary` 는 `trips[0]`
- * 로 다시 리다이렉트해 딥링크로 들어온 여행이 아닌 옛 일정에 착지하므로 쓰지 않는다(홈 탭). */
+/** 딥링크로 뒤로 갈 히스토리 없이 열렸을 때의 홈 폴백 목적지(홈 탭). 확정 얼굴의 [돌아가기]만 일정 탭
+ * 목록(`/(tabs)/itinerary`)으로 간다(`handleBack`). */
 const HOME_FALLBACK = '/(tabs)';
 
 /** 탈출구 앱바 — loading·notFound·failed 얼굴 위에 얹는 뒤로가기 한 줄. `TimelineScreen`(listed)
@@ -476,15 +476,8 @@ export function ItineraryPlanPage({
           }
           return items;
         })}
-        {/* 거점 없음 안내 카드(01b D4) — 시트 children 말미. 링크는 h15("동선 기준 추천")로 항법한다.
-            h15 라우트는 아직 없어(TRIP-800) `as Href` 캐스트로 tsc 를 통과시킨다(planb-request 선례). */}
-        {hasBase ? null : (
-          <NoBaseNoticeCard
-            onPress={() =>
-              router.push(`/trips/${tripId}/itinerary/stay-recommend` as Href)
-            }
-          />
-        )}
+        {/* 거점 없음 안내 카드(01b D4) — 시트 children 말미. h15 링크는 숨겼다(TRIP-1428 · 카드 머리 주석). */}
+        {hasBase ? null : <NoBaseNoticeCard />}
       </View>
     </MapSheetShell>
   );

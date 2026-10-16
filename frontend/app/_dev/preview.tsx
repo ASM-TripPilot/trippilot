@@ -1001,7 +1001,7 @@ function foldedPreviewCells(
 }
 
 // h11 같이 결과(CoPick 완료, TRIP-796) — 비고정 4 + 고정 숙소 1(21:00). 고정 슬롯은 단일 시각·부제·
-// 고정 배지, 비고정은 시각 범위 칩만(다른 후보 링크 없음). meta 는 비고정 4 → `4/4 골랐어요`.
+// 고정 배지, 비고정은 시각 범위 칩만(다른 후보 링크 없음). meta 는 고정 숙소만 뺀 4 → `4곳`(TRIP-1428).
 const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   {
     poiId: 'copick-gwangalli',
@@ -1305,7 +1305,7 @@ function renderH14PlanSheet(options: {
           }
           return items;
         })}
-        {noBase ? <NoBaseNoticeCard onPress={noop} /> : null}
+        {noBase ? <NoBaseNoticeCard /> : null}
       </View>
     </MapSheetShell>
   );
@@ -5728,7 +5728,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // h11 같이 결과(CoPick 완료, TRIP-796) — Figma `4257:2148` 대조용. 공용 지도+시트 셸에 CoPick 5슬롯
   // (비고정 4 + 고정 숙소 1)을 얹는다. 고정 숙소는 단일 시각 `21:00`+부제+고정 배지, 비고정은 시각
-  // 범위 칩만(다른 후보 링크 없음 · h08 과 차이). meta 는 비고정 4 → `4/4 골랐어요`. 배열에서 fallback
+  // 범위 칩만(다른 후보 링크 없음 · h08 과 차이). meta 는 고정 숙소만 뺀 4 → `4곳`(TRIP-1428). 배열에서 fallback
   // 3키 **직전**(h11 그룹 첫 자리)에 둬 안정 정렬이 copick→fallback 순서를 내게 한다
   // (02a ★13). 3스냅 실개폐·딤은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
   {
@@ -5754,7 +5754,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             title="부산 여행"
             dayLabel="1일차"
             dateLabel="6월 10일(수)"
-            meta="4/4 골랐어요"
+            meta="4곳"
           />
         }
         cta={[{ label: '확정하기', variant: 'primary', onPress: noop }]}

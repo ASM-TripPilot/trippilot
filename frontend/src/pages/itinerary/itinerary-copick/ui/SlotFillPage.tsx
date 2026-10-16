@@ -379,8 +379,8 @@ export function SlotFillPage({
 
   if (!inFill) {
     // TRIP-1006 (B) · 컨셉 얼굴 ‹ 는 `router.back()` 이 아니다 — 스택상 뒤는 필수 방문지(h02)라, 거기서
-    // CTA 를 누르면 생성이 다시 돌아 고른 슬롯이 사라졌다(#072). 대신 홈으로 나가고(Q2, 생성 중 화면의
-    // 백그라운드 이탈과 같은 결), 앞에서 1곳 이상 골랐으면 확인부터 띄운다(D3). 고른 곳 수는 일자를
+    // CTA 를 누르면 생성이 다시 돌아 고른 슬롯이 사라졌다(#072). 대신 일정 탭 목록으로 나가고(TRIP-1428 —
+    // 나가도 고른 곳은 남으니 그 여행을 다시 열 자리로), 앞에서 1곳 이상 골랐으면 확인부터 띄운다(D3). 고른 곳 수는 일자를
     // 건너 센다 — `coPickContext().index` 는 그날 안 순번이라 2일차 첫 슬롯에서 0이 된다.
     const pickedCount = countPickedCoPickSlots(
       itinerary.data?.days ?? [],
@@ -389,7 +389,7 @@ export function SlotFillPage({
     const leave = (): void => {
       // TRIP-1243 — replace 는 현재 화면 하나만 바꿔 끼워 아래 위저드 화면(3/4 등)이 스택에 남는다.
       // dismissTo 는 스택의 그 경로까지 사이 화면을 걷어낸다(없으면 현재 화면을 그 경로로 replace).
-      router.dismissTo('/(tabs)');
+      router.dismissTo('/(tabs)/itinerary');
     };
     return (
       <View className="flex-1">
