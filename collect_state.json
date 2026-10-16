@@ -196,7 +196,7 @@
       },
       "39": {
         "next_page": 1,
-        "completed": true
+        "completed": false
       }
     },
     "37": {
@@ -298,7 +298,7 @@
       },
       "28": {
         "next_page": 1,
-        "completed": true
+        "completed": false
       },
       "38": {
         "next_page": 1,
@@ -19641,9 +19641,9 @@
     "999012": "20251120110453",
     "999751": "20250424161924"
   },
-  "next_area": "8",
+  "next_area": "31",
   "last_run": {
-    "at": "2026-10-15T22:03:24.384741+00:00",
+    "at": "2026-10-16T22:00:17.017551+00:00",
     "area_codes": [
       "1",
       "2",
@@ -19670,44 +19670,44 @@
       "38",
       "39"
     ],
-    "http_calls": 240,
+    "http_calls": 235,
     "passed": 0,
-    "skipped_unchanged": 15732,
+    "skipped_unchanged": 14968,
     "per_area": {
       "1": {
         "calls": 25,
         "passed": 0,
-        "skipped": 1442
+        "skipped": 1404
       },
       "2": {
         "calls": 10,
         "passed": 0,
-        "skipped": 478
+        "skipped": 474
       },
       "3": {
         "calls": 6,
         "passed": 0,
-        "skipped": 177
+        "skipped": 174
       },
       "4": {
         "calls": 7,
         "passed": 0,
-        "skipped": 409
+        "skipped": 399
       },
       "5": {
         "calls": 5,
         "passed": 0,
-        "skipped": 142
+        "skipped": 133
       },
       "6": {
         "calls": 10,
         "passed": 0,
-        "skipped": 507
+        "skipped": 493
       },
       "7": {
         "calls": 6,
         "passed": 0,
-        "skipped": 213
+        "skipped": 208
       },
       "8": {
         "calls": 5,
@@ -19717,47 +19717,47 @@
       "31": {
         "calls": 41,
         "passed": 0,
-        "skipped": 3559
+        "skipped": 3535
       },
       "32": {
         "calls": 24,
         "passed": 0,
-        "skipped": 1723
+        "skipped": 1703
       },
       "33": {
         "calls": 13,
         "passed": 0,
-        "skipped": 827
+        "skipped": 784
       },
       "34": {
         "calls": 15,
         "passed": 0,
-        "skipped": 1066
+        "skipped": 1058
       },
       "35": {
         "calls": 16,
         "passed": 0,
-        "skipped": 1194
+        "skipped": 1171
       },
       "36": {
-        "calls": 16,
+        "calls": 11,
         "passed": 0,
-        "skipped": 1275
+        "skipped": 752
       },
       "37": {
         "calls": 14,
         "passed": 0,
-        "skipped": 916
+        "skipped": 898
       },
       "38": {
         "calls": 16,
         "passed": 0,
-        "skipped": 1021
+        "skipped": 1010
       },
       "39": {
         "calls": 11,
         "passed": 0,
-        "skipped": 707
+        "skipped": 696
       }
     }
   }
