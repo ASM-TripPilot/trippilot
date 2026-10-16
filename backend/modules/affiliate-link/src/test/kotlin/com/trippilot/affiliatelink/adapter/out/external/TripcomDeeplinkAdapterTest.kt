@@ -1,6 +1,7 @@
 package com.trippilot.affiliatelink.adapter.out.external
 
 import com.trippilot.affiliatelink.domain.OutboundQuery
+import com.trippilot.affiliatelink.domain.OutboundRegion
 import com.trippilot.affiliatelink.domain.OutboundStay
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -69,5 +70,28 @@ class TripcomDeeplinkAdapterTest : StringSpec({
     "정본 숙소는 여전히 키워드 검색 — 출처 접두사만 같은 다른 문자열에 속지 않는다" {
         adapter.buildOutbound(OutboundStay("TRIPCOMX:1", "가"), OutboundQuery(), clickId).url shouldBe
             "https://kr.trip.com/global-search/searchlist/search/?keyword=%EA%B0%80" + tracking
+    }
+    val trip = OutboundQuery(LocalDate.parse("2026-11-12"), LocalDate.parse("2026-11-13"), adults = 2)
+
+    "지역 전체 보기 — 매핑된 지역은 트립닷컴 도시 목록, 날짜는 소문자 파라미터로" {
+        adapter.buildRegionOutbound(OutboundRegion("47110", "포항"), trip, clickId).url shouldBe
+            "https://kr.trip.com/hotels/list?city=3369&checkin=2026-11-12&checkout=2026-11-13&adult=2&crn=1" + tracking
+    }
+
+    "구 코드도 시의 도시로 간다 — 앞 4자리를 공유한다" {
+        adapter.buildRegionOutbound(OutboundRegion("47113", "포항시 북구"), OutboundQuery(), clickId).url shouldBe
+            "https://kr.trip.com/hotels/list?city=3369&crn=1" + tracking
+    }
+
+    "가장 긴 접두사가 이긴다 — 서귀포는 제주(도)가 아니라 서귀포로" {
+        TripcomDeeplinkAdapter.cityIdOf("50130") shouldBe 35796
+        TripcomDeeplinkAdapter.cityIdOf("50") shouldBe 737
+        TripcomDeeplinkAdapter.cityIdOf("11680") shouldBe 274
+    }
+
+    "매핑 없는 지역·코드 없는 지역은 이름 키워드 검색 — 날짜는 못 싣는다" {
+        val keyword = "https://kr.trip.com/global-search/searchlist/search/?keyword=%EC%84%B8%EC%A2%85" + tracking
+        adapter.buildRegionOutbound(OutboundRegion("36110", "세종"), trip, clickId).url shouldBe keyword
+        adapter.buildRegionOutbound(OutboundRegion(null, "세종"), trip, clickId).url shouldBe keyword
     }
 })

@@ -124,4 +124,21 @@ class OutboundApiIT : AbstractPostgresIntegrationTest() {
         val (_, token) = newAccount()
         get("/api/v1/stays/search", token).statusCode.value() shouldBe 200
     }
+
+    @Test
+    fun `지역 전체 보기 — 무토큰 302 + REGION 클릭`() {
+        val before = clicks.findAll().count { it.stayId == "REGION:47110" }
+
+        val res = get("/api/v1/stays/browse/outbound?region=포항&regionCode=47110&checkin=2026-11-12&checkout=2026-11-13&adults=2", null)
+
+        res.statusCode.value() shouldBe 302
+        res.headers.location.toString() shouldBe "https://www.google.com/search?q=" +
+            URLEncoder.encode("포항 숙소 예약", StandardCharsets.UTF_8)
+        clicks.findAll().count { it.stayId == "REGION:47110" } shouldBe before + 1
+    }
+
+    @Test
+    fun `지역 이름이 없으면 400`() {
+        get("/api/v1/stays/browse/outbound?regionCode=47110", null).statusCode.value() shouldBe 400
+    }
 }

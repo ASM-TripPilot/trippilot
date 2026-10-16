@@ -6,6 +6,7 @@ import com.trippilot.affiliatelink.domain.OutboundClick
 import com.trippilot.affiliatelink.domain.OutboundClickPort
 import com.trippilot.affiliatelink.domain.OutboundQuery
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.ValidationFailed
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -96,5 +97,30 @@ class OutboundServiceTest : StringSpec({
             svc(clicks).outbound(account, "STUB:no-such", OutboundQuery())
         }
         clicks.recorded shouldBe emptyList()
+    }
+    "지역 전체 보기도 클릭을 남긴다 — stay_id 자리에 REGION:{코드}" {
+        val clicks = RecordingClicks()
+        val link = svc(clicks).regionOutbound(account, "47110", " 포항 ", OutboundQuery())
+
+        link.url shouldBe "https://www.google.com/search?q=" + URLEncoder.encode("포항 숙소 예약", StandardCharsets.UTF_8)
+        clicks.recorded.single().stayId shouldBe "REGION:47110"
+    }
+
+    "코드가 없으면 이름으로 남긴다" {
+        val clicks = RecordingClicks()
+        svc(clicks).regionOutbound(null, null, "세종", OutboundQuery())
+        clicks.recorded.single().stayId shouldBe "REGION:세종"
+    }
+
+    "빈 이름·너무 긴 이름·숫자 아닌 코드는 400 — 클릭도 안 남는다" {
+        val clicks = RecordingClicks()
+        shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, null, "  ", OutboundQuery()) }
+        shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, null, "가".repeat(41), OutboundQuery()) }
+        shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, "47110' or 1=1", "포항", OutboundQuery()) }
+        clicks.recorded shouldBe emptyList()
+    }
+
+    "지역 이동도 기록 실패가 이동을 막지 않는다" {
+        svc(BrokenClicks()).regionOutbound(null, "11", "서울", OutboundQuery()).url shouldStartWith "https://www.google.com/"
     }
 })

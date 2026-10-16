@@ -3,6 +3,7 @@ package com.trippilot.affiliatelink.adapter.out.external
 import com.trippilot.affiliatelink.domain.OtaDeeplinkPort
 import com.trippilot.affiliatelink.domain.OutboundLink
 import com.trippilot.affiliatelink.domain.OutboundQuery
+import com.trippilot.affiliatelink.domain.OutboundRegion
 import com.trippilot.affiliatelink.domain.OutboundStay
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
@@ -23,6 +24,13 @@ class WebSearchFallbackAdapter : OtaDeeplinkPort {
         OutboundLink(
             url = "https://www.google.com/search?q=" +
                 URLEncoder.encode("${stay.name} 예약", StandardCharsets.UTF_8),
+            vendor = VENDOR,
+        )
+
+    override fun buildRegionOutbound(region: OutboundRegion, query: OutboundQuery, clickId: UUID): OutboundLink =
+        OutboundLink(
+            url = "https://www.google.com/search?q=" +
+                URLEncoder.encode("${region.name} 숙소 예약", StandardCharsets.UTF_8),
             vendor = VENDOR,
         )
 
