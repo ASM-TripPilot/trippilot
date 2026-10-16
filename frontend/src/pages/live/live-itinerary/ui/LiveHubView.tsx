@@ -398,6 +398,8 @@ export function LiveHubView({
         overlay={overlay}
         snapPoints={snapPoints}
         initialIndex={initialSnapIndex}
+        // TRIP-1416 · 그날 핀 전부를 시트 중간(55%) 칸 위 띠에 맞춘다(Q-088 — 첫 핀 중심 고정 줌이면 나머지가 시트 뒤).
+        fitPins
         mapCard={
           routeToggle ? (
             <View className="gap-sm">

@@ -18,6 +18,11 @@ import {
 
 import * as probe from '@/test-support/fabAnchorProbe';
 import {
+  expectHeightLimited,
+  expectPinsInBand,
+  type NativeRegion,
+} from '@/test-support/fitBandAsserts';
+import {
   closestScrollView,
   fireChipLayout,
   stubScrollTo,
@@ -1310,5 +1315,96 @@ describe('🔴 LiveHubView · 일자 칩 줄 가로 스크롤 (TRIP-1260)', () =
     const target = scrollTo.mock.lastCall?.[0] as { x: number };
     expect(target.x).toBeGreaterThan(0);
     expect(target.x).toBeLessThanOrEqual(400);
+  });
+});
+
+/* ──── TRIP-1416 · 허브 지도도 "시트가 안 가린 띠"에 그날 핀을 맞춘다 (Q-088) ────
+ * 지금 허브는 첫 핀을 화면 한가운데에 두는 고정 줌 카메라라, 55% 시트 윗변 바로 아래에 첫 핀만 걸리고
+ * 나머지는 시트 뒤로 숨는다. 셸의 핀 맞춤(`fitPins`)을 켜면 셸이 스냅 배열의 '55%' 를 아래 가림으로 삼아
+ * 맞춘다(Seed Q4 — 펼침으로 진입해도 55% 기준).
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 HB1 (AC-4) region 으로 열리고 camera 는 없다 · 5핀이 아래 55% 위 · 오버레이 줄(8+40) 아래 · 상자가 세로로 꽉 참.
+ *  - 🔴 HB2 (AC-4·Q4) 펼침(2) 진입도 중간(1) 진입과 같은 맞춤.
+ *  - 🔴 HB3 (AC-10) 알약 숨김(지도 탭)·시트 칸 이동으로 다시 그려져도 region 은 처음 그 객체(카메라가 안 튄다).
+ * ⚠️ 실제 화면 맞춤·펼침 시트 위 104pt 띠는 jest 사각 → 6-b(AC-11).
+ *
+ * 3동작 뼈대: 준비=키 + 5곳 픽스처 → 실행=렌더·지도 탭·시트 onChange → 단언=map-native region.
+ */
+
+const HUB_WINDOW = Dimensions.get('window');
+// 허브 오버레이 줄 바닥 = 셸 pt-sm 8 + 뒤로 버튼 40(02a ★6).
+const HUB_OVERLAY_ROW_BOTTOM = 8 + 40;
+const HUB_PINS = SLOTS.map(({ slot }) => ({
+  lat: slot.lat as number,
+  lng: slot.lng as number,
+}));
+
+function hubRegion(): NativeRegion | undefined {
+  return screen.getByTestId('map-native').props.region as
+    NativeRegion | undefined;
+}
+
+describe('LiveHubView · 지도 핀 맞춤 (AC-4·AC-10 · Q-088)', () => {
+  // TRIP-1416
+  const KEY_NAME = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
+  let original: string | undefined;
+  original = process.env[KEY_NAME];
+  beforeEach(() => {
+    process.env[KEY_NAME] = 'test-naver-client-id';
+  });
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY_NAME];
+    else process.env[KEY_NAME] = original;
+  });
+
+  it('HB1 그날 5핀이 아래 55% 위·오버레이 줄 아래 띠에 들고 상자가 세로로 꽉 찬다 — 첫 핀 중심 고정 줌 camera 가 아니다', () => {
+    renderHub({ initialSnapIndex: 1 });
+
+    expect(screen.getByTestId('map-native').props.camera).toBeUndefined();
+    expectPinsInBand(hubRegion(), HUB_PINS, {
+      bottom: 0.55,
+      topPx: HUB_OVERLAY_ROW_BOTTOM,
+      screenHeight: HUB_WINDOW.height,
+    });
+    expectHeightLimited(
+      hubRegion(),
+      HUB_PINS,
+      HUB_WINDOW.height / HUB_WINDOW.width
+    );
+  });
+
+  it('HB2 펼침(2)으로 진입해도 중간(1) 진입과 같은 맞춤이다 (재계획 적용 직후)', () => {
+    renderHub({ initialSnapIndex: 1 });
+    const atHalf = hubRegion();
+    expect(atHalf).toBeDefined();
+    screen.unmount();
+
+    renderHub({ initialSnapIndex: 2 });
+
+    expect(hubRegion()).toEqual(atHalf);
+  });
+
+  it('HB3 (금지) 알약 숨김(지도 탭)·시트 칸 이동으로 다시 그려져도 region 은 처음 그 객체다', () => {
+    // 준비 — 알약이 있는 허브. 앵커: region 이 있다(지금 camera 모드면 여기서 red).
+    renderWithPill({ initialSnapIndex: 1 });
+    const first = hubRegion();
+    expect(first).toBeDefined();
+
+    // 실행 ① — 지도 탭 → 알약 로컬 숨김(허브 상태가 바뀌어 다시 그려진다, 핀 좌표는 그대로).
+    fireMapTap();
+    expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
+
+    // 단언 ①
+    expect(hubRegion()).toBe(first);
+
+    // 실행 ② — 시트가 닫힘(0)에 멈춤.
+    const onChange = sheetHost().props.onChange as
+      ((index: number, position: number, type: number) => void) | undefined;
+    expect(onChange).toBeDefined();
+    act(() => onChange?.(0, 0, 0));
+
+    // 단언 ②
+    expect(hubRegion()).toBe(first);
   });
 });
