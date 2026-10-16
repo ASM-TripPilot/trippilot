@@ -6,6 +6,7 @@ import type { Region } from '@/shared/api/index.schemas';
 import { filterRegions, useRegions } from '@/features/explore/index.view';
 import type { RegionPickerPurpose } from '@/features/explore/index.view';
 import { useTripWizardStore } from '@/features/create-trip';
+import { SERVICE_REGIONS } from '@/entities/trip';
 import { RegionPickerScreen } from './RegionPickerScreen';
 import type { RegionPurpose } from './RegionPickerScreen';
 
@@ -38,7 +39,13 @@ export function RegionPickerPage(): ReactElement {
   const regions = useRegions();
   // 전체 카탈로그를 화면에 내린다 — 빈 검색어 6개 상한(구 `limitRegionsWhenEmpty`)은 화면의
   // 시/도→구/군 드릴다운 그룹 접기가 대체한다(TRIP-597). 검색어가 있으면 클라 필터로 좁힌다.
-  const visible = filterRegions(regions.data ?? [], query);
+  // TRIP-1443 — 서비스 지역(서울·부산·제주) 밖 시·도와 그 시군구는 화면에 내리기 전에 뺀다(사용자 결정
+  // 2026-10-16). 판정 키는 regionCode 앞 2자리(시도 코드) — 서버 순서는 그대로 둔다. 훅(`useRegions`)
+  // 자체는 거르지 않는다: SavedPlacesPage·ExploreLandingPage 가 전체 카탈로그를 판정 재료로 쓴다.
+  const serviceRegions = (regions.data ?? []).filter((region) =>
+    SERVICE_REGIONS.some(({ code }) => region.regionCode.startsWith(code))
+  );
+  const visible = filterRegions(serviceRegions, query);
 
   function handleSelectRegion(region: Region): void {
     if (purpose === 'trip') {
