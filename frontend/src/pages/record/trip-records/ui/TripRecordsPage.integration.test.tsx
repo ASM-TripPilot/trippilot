@@ -25,6 +25,7 @@ import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { createGate } from '@/test-support/mswHookHarness';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { isInsideSheet, renderedText } from '@/test-support/sheetTree';
 import {
   actualVisit,
@@ -158,6 +159,8 @@ afterEach(() => {
   jest.mocked(router.push).mockClear();
   mockGetForeground.mockReset();
   mockPhotoSeam = false;
+  // TRIP-1426 — 토스트 스토어는 모듈 싱글턴이라 describe 안이 아니라 여기서 비운다(toastHarness).
+  resetToast();
 });
 
 /**
@@ -170,6 +173,12 @@ async function openedMemoInput(
   await waitFor(() => expect(find()).toBeEnabled());
   return find();
 }
+
+/**
+ * TRIP-1426 — 저장 안내(토스트) 대기 상한. 이 버킷의 기본 상한(5초, integrationSetup)은 jest 테스트 상한(5초)과 같아서
+ * 토스트가 끝내 안 뜨면 "Unable to find" 대신 "Exceeded timeout" 으로 죽어 원인이 가려진다(02a ★18).
+ */
+const TOAST_WAIT = { timeout: 2000 };
 
 afterAll(() => server.close());
 
@@ -2311,10 +2320,13 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
     });
   }
 
+  // TRIP-1426 — 루트 토스트 호스트를 함께 그린다(없으면 저장 안내 부재 단언이 공짜 green).
   function renderPage(client: QueryClient) {
     function Wrapper({ children }: { children: ReactNode }) {
       return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        <QueryClientProvider client={client}>
+          <WithToastHost>{children}</WithToastHost>
+        </QueryClientProvider>
       );
     }
     return render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, {
@@ -2486,6 +2498,146 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
         { text: '바람이 좋았다' },
         { text: '노을도 좋았다' },
       ]);
+    });
+  });
+
+  // TRIP-1426 · Q-110 — return·포커스 해제로 저장돼도 표시가 없었다. PUT 이 실제로 나가 성공했을 때만 공용 토스트로 알린다.
+  describe('🔴 TRIP-1426 · 실제로 저장했을 때만 "메모를 저장했어요" 안내', () => {
+    /**
+     * 무엇을 보장하나: 저장 안내는 PUT 이 나가 성공했고 그 시도가 최신일 때만 뜬다 — 공백·저장본과 같은 글(요청 0)·실패·
+     *   늦게 끝난 옛 성공에는 뜨지 않는다. j01 의 저장 경로(포커스가 빠질 때)는 그대로다.
+     * (개념) `createGate()` = 테스트가 열 때까지 응답을 붙잡는 문 · `resetToast()` 는 파일 최상위 afterEach 몫.
+     */
+    const TOAST = 'record-trip-memo-saved-toast';
+    const COPY = '메모를 저장했어요';
+    const MEMO_URL = `${BASE}/trips/:tripId/visits/:visitCheckId/memo`;
+
+    it('JT1 글을 바꾸고 return(제출 → 포커스 빠짐)으로 PUT 이 성공하면 안내가 뜬다 (AC-12)', async () => {
+      // 준비
+      renderPage(newClient());
+      const input = await memoInput();
+      // 앵커 — 저장 전엔 안내가 없다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 — 실기 return 순서.
+      fireEvent.changeText(input, '파도 소리가 좋았다');
+      fireEvent(input, 'submitEditing');
+      fireEvent(input, 'blur');
+
+      // 단언
+      expect(
+        await screen.findByTestId(TOAST, {}, TOAST_WAIT)
+      ).toHaveTextContent(COPY);
+      expect(memoBodies).toEqual([{ text: '파도 소리가 좋았다' }]);
+      expect(within(cardOf()).queryByTestId(NOTICE)).toBeNull();
+    });
+
+    it('JT2 공백이거나 저장본과 같은 글로 포커스가 빠지면 요청도 안내도 없다 — 다른 글은 저장되고 안내가 뜬다 (AC-13)', async () => {
+      // 준비 — 이 세션 저장본(gcTime 0 client 라 기본값부터 푼다, 02a ★10).
+      const client = newClient();
+      client.setQueryDefaults(['visit-memo'], { gcTime: Infinity });
+      client.setQueryData(['visit-memo', TRIP_ID, 'v-in'], '바람이 좋았다');
+      renderPage(client);
+      const input = await memoInput();
+      expect(input.props.value).toBe('바람이 좋았다');
+
+      // 실행 ① — 공백만 → 포커스 빠짐, 저장본과 같은 글 → 포커스 빠짐.
+      fireEvent.changeText(input, '   ');
+      fireEvent(input, 'blur');
+      fireEvent.changeText(input, '바람이 좋았다');
+      fireEvent(input, 'blur');
+      await settleMemoResponses(0);
+
+      // 단언 ① — 요청 0 · 안내 0.
+      expect(memoBodies).toEqual([]);
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ② — 짝: 다른 글(센티널).
+      fireEvent.changeText(input, '노을도 좋았다');
+      fireEvent(input, 'blur');
+
+      // 단언 ② — 센티널만 나갔고 이번엔 안내가 뜬다.
+      expect(
+        await screen.findByTestId(TOAST, {}, TOAST_WAIT)
+      ).toHaveTextContent(COPY);
+      expect(memoBodies).toEqual([{ text: '노을도 좋았다' }]);
+    });
+
+    it.each<[string, MemoReply]>([
+      ['404', 'not-found'],
+      ['네트워크 실패', 'network'],
+    ])(
+      'JT3 PUT %s → 카드 안 기존 실패 안내만 뜨고 저장 안내는 없다 (AC-14)',
+      async (_label, reply) => {
+        // 준비
+        memoReply = reply;
+        renderPage(newClient());
+        const input = await memoInput();
+
+        // 실행
+        fireEvent.changeText(input, '저장 안 될 메모');
+        fireEvent(input, 'blur');
+
+        // 단언
+        await waitFor(() =>
+          expect(within(cardOf()).getByTestId(NOTICE)).toHaveTextContent(
+            NOTICE_COPY
+          )
+        );
+        await settleMemoResponses(1);
+        expect(screen.queryByTestId(TOAST)).toBeNull();
+      }
+    );
+
+    it('JT4 같은 카드에서 연달아 저장할 때 늦게 끝난 옛 성공은 최신 실패 뒤에 안내를 띄우지 않는다 (AC-15)', async () => {
+      // 준비 — 첫 PUT 은 문 뒤에서 성공, 둘째는 바로 404.
+      const gate = createGate();
+      server.use(
+        http.put(MEMO_URL, async ({ request }) => {
+          const body = (await request.json()) as { text: string };
+          memoBodies.push(body);
+          if (memoBodies.length === 1) {
+            await gate.opened;
+            return HttpResponse.json({
+              text: body.text,
+              updatedAt: '2026-08-20T08:00:00.000Z',
+            });
+          }
+          return HttpResponse.json({ error: 'not found' }, { status: 404 });
+        })
+      );
+      const client = newClient();
+      renderPage(client);
+      const input = await memoInput();
+
+      // 실행 ① — 첫 글(응답 보류) → 둘째 글(실패).
+      fireEvent.changeText(input, '첫 글');
+      fireEvent(input, 'blur');
+      await waitFor(() => expect(memoBodies).toHaveLength(1));
+      fireEvent.changeText(input, '둘째 글');
+      fireEvent(input, 'blur');
+      await waitFor(() =>
+        expect(within(cardOf()).getByTestId(NOTICE)).toHaveTextContent(
+          NOTICE_COPY
+        )
+      );
+
+      // 실행 ② — 늦게 첫 응답(성공)이 돌아온다.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 — 앵커: 첫 성공이 실제로 처리됐다(성공 뒤에만 세션 저장본이 적힌다, 02a ★9).
+      await waitFor(() =>
+        expect(client.getQueryData(['visit-memo', TRIP_ID, 'v-in'])).toBe(
+          '첫 글'
+        )
+      );
+      await settleMemoResponses(2);
+      expect(within(cardOf()).getByTestId(NOTICE)).toHaveTextContent(
+        NOTICE_COPY
+      );
+      expect(screen.queryByTestId(TOAST)).toBeNull();
     });
   });
 

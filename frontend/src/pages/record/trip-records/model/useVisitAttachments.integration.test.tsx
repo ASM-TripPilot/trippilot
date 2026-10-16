@@ -287,7 +287,8 @@ describe('🔴 AC-4 · 업로드 실패 노출 + 재시도 재호출(POST 2회 �
  */
 interface MemoCacheApi {
   savedMemo: string | null;
-  saveMemo: (text: string) => Promise<void>;
+  // TRIP-1426 Q5 — true = PUT 이 나가 성공, false = 건너뜀(공백·같은 값).
+  saveMemo: (text: string) => Promise<boolean>;
 }
 
 describe('🔴 TRIP-1078 · saveMemo 성공값 캐시 + 같은 값 PUT 0', () => {
