@@ -754,6 +754,9 @@
 ## src/pages/itinerary/itinerary-draft/
 - `src/pages/itinerary/itinerary-draft/index.ts`  →  DraftPage
 
+## src/pages/itinerary/itinerary-draft/model/
+- `src/pages/itinerary/itinerary-draft/model/regenerateRoute.ts`  →  RegenerateRoute · RegenerateRouteInput · resolveRegenerateRoute
+
 ## src/pages/itinerary/itinerary-draft/ui/
 - `src/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner.tsx`  →  DraftFallbackBanner
 - `src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx`  →  DraftPage
@@ -800,6 +803,7 @@
 - `src/pages/itinerary/itinerary-manual/index.ts`  →  ManualPlanPage · PlaceAddPage
 
 ## src/pages/itinerary/itinerary-manual/model/
+- `src/pages/itinerary/itinerary-manual/model/placeAddNotice.ts`  →  PlaceAddSlotLike · PlaceAddShift · comparePlaceAdd · placeAddToastMessage
 - `src/pages/itinerary/itinerary-manual/model/useItineraryTabBack.ts`  →  useItineraryTabBack
 
 ## src/pages/itinerary/itinerary-manual/ui/
@@ -1734,4 +1738,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1094개 파일
+합계 1096개 파일
