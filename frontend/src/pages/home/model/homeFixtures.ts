@@ -22,15 +22,6 @@ import type {
 const toUri = (source: number): string | null =>
   Image.resolveAssetSource?.(source)?.uri ?? null;
 
-// 히어로 캐러셀 5페이지 사진(부산 야경·해안·카페·시장·전망 순). page0 은 신·구 공통 픽셀 정본.
-const HERO_IMAGES = [
-  PLACEHOLDER_PHOTOS.heroNight,
-  PLACEHOLDER_PHOTOS.heroCoast,
-  PLACEHOLDER_PHOTOS.heroCafe,
-  PLACEHOLDER_PHOTOS.heroMarket,
-  PLACEHOLDER_PHOTOS.heroView,
-].map(toUri);
-
 const COLLECTION_IMAGES = [
   PLACEHOLDER_PHOTOS.collectionGamcheon,
   PLACEHOLDER_PHOTOS.collectionHaeundae,
@@ -44,43 +35,33 @@ const SPOT_IMAGES = [
   PLACEHOLDER_PHOTOS.spotHwangnyeong,
 ].map(toUri);
 
-// 히어로 5장 페이징 캐러셀(TRIP-694). page0 은 TRIP-316 정본 그대로, page1~4 는 부산 테마
-// 영감 카드(문구가 인사·섹션 헤더·소요시간과 겹치지 않게 발명 — within 단일매치·INV-3 안전).
-const MAGAZINE_HEROES: readonly HomeMagazineHero[] = [
+// 히어로 도시 카드 3장(TRIP-1432) — 서비스 지역 서울·부산·제주. 누르면 그 도시로 거른 탐색 탭이 열린다
+// (regionCode = 탐색 탭 URL region). 배경은 번들 hero/ 그림(6:7 세로, 히어로 칸용 — 여행 카드의 covers/ 아님).
+// 문구는 Figma 에 3도시 카드가 없어 정했다(브리프 Q3) — 섹션 제목·스팟 태그와 같은 텍스트가 되지 않게.
+const CITY_HEROES: readonly HomeMagazineHero[] = [
+  {
+    eyebrow: '오늘의 여행 영감',
+    title: '서울 · 남산과 한옥',
+    subtitle: '기와지붕 너머로 남산 타워가 보이는 도시',
+    chips: ['도심', '감성'],
+    regionCode: '11',
+    coverSource: require('../../../../assets/region-covers/hero/11.webp'),
+  },
   {
     eyebrow: '오늘의 여행 영감',
     title: '부산 · 광안리의 밤',
     subtitle: '다리 위로 번지는 불빛, 상상만으로 설레는 야경',
-    chips: ['당일치기로 충분', '야경 명소'],
-    imageUrl: HERO_IMAGES[0],
+    chips: ['바다', '야경'],
+    regionCode: '26',
+    coverSource: require('../../../../assets/region-covers/hero/26.webp'),
   },
   {
-    eyebrow: '이번 주 뜨는 코스',
-    title: '해운대 · 바다 곁 산책',
-    subtitle: '파도 소리와 함께 걷는 해변 산책로',
-    chips: ['드라이브 코스', '바다 전망'],
-    imageUrl: HERO_IMAGES[1],
-  },
-  {
-    eyebrow: '로컬 감성 한 스푼',
-    title: '전포 · 골목 카페 순례',
-    subtitle: '오래된 골목에 스며든 커피 향',
-    chips: ['카페 투어', '골목 산책'],
-    imageUrl: HERO_IMAGES[2],
-  },
-  {
-    eyebrow: '맛으로 떠나는 여행',
-    title: '자갈치 · 시장의 아침',
-    subtitle: '갓 잡은 해산물과 활기찬 좌판',
-    chips: ['먹거리 천국', '로컬 시장'],
-    imageUrl: HERO_IMAGES[3],
-  },
-  {
-    eyebrow: '노을이 머무는 곳',
-    title: '황령산 · 도시의 파노라마',
-    subtitle: '발아래 펼쳐지는 부산의 불빛',
-    chips: ['전망 명소', '노을 스팟'],
-    imageUrl: HERO_IMAGES[4],
+    eyebrow: '오늘의 여행 영감',
+    title: '제주 · 오름과 돌담',
+    subtitle: '검은 돌담 너머로 오름이 이어지는 섬',
+    chips: ['섬', '자연'],
+    regionCode: '50',
+    coverSource: require('../../../../assets/region-covers/hero/50.webp'),
   },
 ];
 
@@ -120,13 +101,13 @@ const READY_SECTIONS: HomeSections = {
 
 /** AC-1 · 정상(ready) — 인사·검색·영감 hero·섹션 2종·온램프 전부. */
 export const HOME_DEFAULT_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HEROES,
+  hero: CITY_HEROES,
   sections: READY_SECTIONS,
 };
 
 /** AC-5 · 로딩(loading) — 섹션 자리에 스켈레톤, 고정 블록(인사·검색·hero·온램프)은 정상. */
 export const HOME_LOADING_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HEROES,
+  hero: CITY_HEROES,
   sections: { kind: 'loading' },
 };
 
@@ -203,21 +184,21 @@ const POST_TRIP_PHASE: HomePhase = {
 
 /** planning 얼굴 — 일정 미완성 여행(계획 중 배지·일정 이어서 짜기·브릿지행). */
 export const HOME_PLANNING_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HEROES,
+  hero: CITY_HEROES,
   sections: READY_SECTIONS,
   phase: PLANNING_PHASE,
 };
 
 /** planning '여행 중' 얼굴(TRIP-697) — 여행 중 배지·N일차·이름줄 인사·2섹션(컬렉션+스팟). */
 export const HOME_TRAVELING_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HEROES,
+  hero: CITY_HEROES,
   sections: READY_SECTIONS,
   phase: TRAVELING_PHASE,
 };
 
 /** postTrip 얼굴 — 종료된 여행(통합 히어로 회고 보기·지난 여행·다음 추천). */
 export const HOME_POST_TRIP_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HEROES,
+  hero: CITY_HEROES,
   sections: READY_SECTIONS,
   phase: POST_TRIP_PHASE,
 };

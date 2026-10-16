@@ -332,25 +332,18 @@ describe('숙소 하트 — 담기·롤백·연타', () => {
       price,
     };
   }
-  const ITEM_A = stayItem(
-    's1',
-    '해운대',
-    '해운대 그랜드 호텔',
-    35.1587,
-    129.1604,
-    {
+  // 주소가 있어야 전국 d01 의 서비스 지역 거르기(TRIP-1432 — 주소 없으면 뺀다)를 통과한다.
+  const ITEM_A: StayItem = {
+    ...stayItem('s1', '해운대', '해운대 그랜드 호텔', 35.1587, 129.1604, {
       amount: 145000,
       currency: 'KRW',
-    }
-  );
-  const ITEM_B = stayItem(
-    's2',
-    '서면',
-    '서면 시티 호텔',
-    35.1577,
-    129.0594,
-    null
-  );
+    }),
+    address: '부산광역시 해운대구 해운대해변로 296',
+  };
+  const ITEM_B: StayItem = {
+    ...stayItem('s2', '서면', '서면 시티 호텔', 35.1577, 129.0594, null),
+    address: '부산광역시 부산진구 중앙대로 692',
+  };
   const KEY_A = stayKey(ITEM_A); // 'NAVER:s1'
   const KEY_B = stayKey(ITEM_B); // 'NAVER:s2'
   const SAVED_ID_A = 'aaaaaaaa-1111-1111-1111-111111111111';
@@ -495,5 +488,114 @@ describe('숙소 하트 — 담기·롤백·연타', () => {
       ).not.toBeDisabled()
     );
     expect(hitCount('POST /api/v1/saved-stays')).toBe(1);
+  });
+});
+
+// TRIP-1432 — 전국 d01 장소 레인은 실제 다지역 훅으로 서울·부산·제주를 지역당 200곳씩 따로 묻는다. 지역 없는
+// 전국 조회는 안 나가고, 한두 곳이 실패해도 남은 지역 카드로 레인을 채운다(전부 실패만 재시도).
+describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
+  function lanePlace(poiId: string, regionCode: string, photo: boolean): Place {
+    return {
+      poiId,
+      nameKo: poiId,
+      category: '명소',
+      lat: 37.5,
+      lng: 127.0,
+      region: null,
+      regionCode,
+      openingHours: null,
+      imageUrl: photo ? `https://img.example/${poiId}.jpg` : null,
+      tags: [],
+      savedCount: 0,
+      dataStatus: 'ACTIVE',
+    };
+  }
+  const BY_REGION: Record<string, Place[]> = {
+    서울: Array.from({ length: 9 }, (_, i) =>
+      lanePlace(`s${i}`, '11110', true)
+    ),
+    부산: [lanePlace('b0', '26350', true)],
+    제주: [lanePlace('j0', '50110', false)],
+  };
+
+  let placesQueries: { region: string | null; limit: string | null }[] = [];
+
+  /** 지역별로 응답한다. `failing` 에 든 지역은 500. */
+  function servePlaces(failing: string[] = []): void {
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const url = new URL(request.url);
+        const region = url.searchParams.get('region');
+        placesQueries.push({ region, limit: url.searchParams.get('limit') });
+        if (region !== null && failing.includes(region)) {
+          return new HttpResponse(null, { status: 500 });
+        }
+        return HttpResponse.json({
+          items: region === null ? [] : (BY_REGION[region] ?? []),
+          nextCursor: null,
+        });
+      })
+    );
+  }
+
+  beforeEach(() => {
+    placesQueries = [];
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+    server.use(
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+
+  it('지역마다 200곳씩 3번 묻고 지역 없는 조회는 0건 — 레인 8장은 사진 먼저·지역 번갈아다', async () => {
+    servePlaces();
+    renderPage();
+
+    await waitFor(
+      () =>
+        expect(screen.getByTestId('explore-place-card-b0')).toBeOnTheScreen(),
+      WAIT
+    );
+
+    expect(placesQueries.map((q) => q.region).sort()).toEqual(
+      ['부산', '서울', '제주'].sort()
+    );
+    expect(placesQueries.every((q) => q.limit === '200')).toBe(true);
+    for (const id of ['s0', 's1', 's2', 's3', 's4', 's5', 's6']) {
+      expect(screen.getByTestId(`explore-place-card-${id}`)).toBeOnTheScreen();
+    }
+    for (const id of ['s7', 's8', 'j0']) {
+      expect(screen.queryByTestId(`explore-place-card-${id}`)).toBeNull();
+    }
+  });
+
+  it('서울만 실패해도 성공한 지역 카드로 레인을 채우고 재시도는 없다', async () => {
+    servePlaces(['서울']);
+    renderPage();
+
+    // 서울이 실패해도 살아남은 부산·제주가 한 레인에 같이 합쳐진다(첫 지역만 남기는 고장을 잡는다).
+    await waitFor(
+      () =>
+        expect(screen.getByTestId('explore-place-card-b0')).toBeOnTheScreen(),
+      WAIT
+    );
+
+    expect(screen.getByTestId('explore-place-card-j0')).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-place-card-s0')).toBeNull();
+    expect(screen.queryByTestId('explore-lane-place-retry')).toBeNull();
+  });
+
+  it('세 곳이 다 실패하면 장소 레인 자리에 재시도를 띄운다(빈 목록으로 위장하지 않는다)', async () => {
+    servePlaces(['서울', '부산', '제주']);
+    renderPage();
+
+    await waitFor(
+      () =>
+        expect(
+          screen.getByTestId('explore-lane-place-retry')
+        ).toBeOnTheScreen(),
+      WAIT
+    );
+    expect(screen.queryByTestId('explore-lane-place-empty')).toBeNull();
   });
 });

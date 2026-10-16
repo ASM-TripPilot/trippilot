@@ -11,10 +11,11 @@ import { guardPress } from '@/shared/lib/pressGuard';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange } from '@/entities/trip';
-import { pickTrendingPlaces } from '@/entities/place';
+import { SERVICE_REGIONS } from '@/entities/trip';
+import { orderLanePlaces, pickTrendingPlaces } from '@/entities/place';
 import { usePlaceSaveToggle } from '@/features/save-place';
 import { useSavedPlaces } from '@/features/save-place';
-import { regionPickerHref } from '@/features/explore';
+import { regionPickerHref, useMultiRegionPlaces } from '@/features/explore';
 import { useSavedStays } from '@/features/save-stay';
 import {
   itineraryDestinationHref,
@@ -44,6 +45,7 @@ interface HomeNav {
   onPressSpotsMore: () => void;
   onPressPastTripsMore: () => void;
   onPressSearch: () => void;
+  onPressHeroCity: (regionCode: string) => void;
   onPressBell: () => void;
   savedPlacesCount: number;
   savedStaysCount: number;
@@ -56,6 +58,10 @@ interface HomeNav {
 
 /** 컬렉션 레인 장수 — 이만큼 못 채우면 레인을 숨긴다(TRIP-1209). */
 const COLLECTION_COUNT = 3;
+
+// 여행 중이 아닐 때 장소 레인이 묻는 지역(TRIP-1432) — 탐색 탭 전국 갈래와 같은 배열·순서라 같은 쿼리 키(응답 캐시 공유).
+const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
+const NO_REGIONS: string[] = [];
 
 // 지배 planning 여행이 있을 때만 마운트되는 자식 — 여기서만 지배 여행의 itinerary GET 을 문다.
 // 지배 여행이 없는 렌더(discovery·빈 목록·로딩·오류)는 이 자식을 안 그려 훅이 아예 호출되지
@@ -152,22 +158,40 @@ export function HomePage() {
       )} · ${trip.party}명`,
   });
 
-  // '지금 뜨는 장소'(TRIP-1049) — 여행 중이면 지배 여행 첫 목적지 지역, 아니면 전국에서 200곳을
-  // 받아 담긴 수 순 4장. 서버엔 인기순 정렬이 없어 클라가 고른다(pickTrendingPlaces).
+  // '지금 뜨는 장소'(TRIP-1049) — 여행 중이면 지배 여행 첫 목적지 지역 200곳, 아니면 서비스 지역 3곳
+  // (TRIP-1432, 지역당 200곳)을 받아 고른다. 서버엔 인기순 정렬이 없어 클라가 고른다(pickTrendingPlaces).
   const spotsRegion =
     phase?.kind === 'planning' && phase.showSpots
       ? trips.data?.find((t) => t.tripId === phase.dominantTripId)
           ?.destinations[0]?.region
       : undefined;
-  // 여행 조회 대기 중엔 지역을 모르므로 보내지 않는다(여행 중 사용자에게 전국 200행 낭비 방지).
-  // 실패면 발견 얼굴로 폴백하므로 전국 조회를 켠다(끄면 스팟이 영원히 스켈레톤).
-  const places = useGetPlaces(
+  // 여행 조회 대기 중엔 어느 쪽인지 모르므로 둘 다 끈다(여행 중 사용자에게 3지역 600행 낭비 방지).
+  // 실패면 발견 얼굴로 폴백하므로 3지역 조회를 켠다(끄면 스팟이 영원히 스켈레톤).
+  // 훅 규칙상 둘 다 늘 부르고 켜짐으로만 고른다 — 꺼진 쪽은 isPending 이 계속 true 라 그 상태를 읽지 않는다.
+  const tripsSettled = !trips.isPending;
+  const inTrip = Boolean(spotsRegion);
+  const regionPlaces = useGetPlaces(
     { ...(spotsRegion ? { region: spotsRegion } : {}), limit: 200 },
-    { query: { enabled: !trips.isPending } }
+    { query: { enabled: tripsSettled && inTrip } }
   );
-  // 같은 정렬로 7곳을 줄 세워 앞 4장은 '지금 뜨는 장소', 다음 3장은 컬렉션 레인 — 두 레인이 겹치지
-  // 않는다(TRIP-1209). 3곳을 못 채우면 컬렉션은 빈 배열 → 화면이 레인을 숨긴다.
-  const ranked = pickTrendingPlaces(places.data?.items ?? [], 7);
+  const servicePlaces = useMultiRegionPlaces(
+    tripsSettled && !inTrip ? SERVICE_REGION_NAMES : NO_REGIONS
+  );
+  // 3지역은 한 곳만 실패해도 받은 곳으로 채운다(degraded) — 셋 다 실패해야 오류다(훅이 판정).
+  const places = inTrip
+    ? {
+        items: regionPlaces.data?.items ?? [],
+        isPending: regionPlaces.isPending,
+        isError: regionPlaces.isError,
+        refetch: regionPlaces.refetch,
+      }
+    : servicePlaces;
+  // 담긴 수 순으로 세운 뒤 사진 있는 곳을 앞으로, 그 안에서 지역을 번갈아(TRIP-1432) 7곳 — 앞 4장은
+  // '지금 뜨는 장소', 다음 3장은 컬렉션 레인이라 두 레인이 겹치지 않는다(TRIP-1209). 3곳을 못
+  // 채우면 컬렉션은 빈 배열 → 화면이 레인을 숨긴다.
+  const ranked = orderLanePlaces(
+    pickTrendingPlaces(places.items, places.items.length)
+  ).slice(0, 7);
   const trending = ranked.slice(0, 4);
   const collectionPlaces = ranked.slice(4);
   const placeSave = usePlaceSaveToggle({
@@ -228,8 +252,11 @@ export function HomePage() {
     // TRIP-1369 — 여행 후 얼굴 "지난 여행 · 전체 보기" → 기록 탭(마이페이지 캘린더 진입과 같은 /records).
     onPressPastTripsMore: guardPress(() => router.push('/records')),
     onPressSearch: () => router.push(regionPickerHref('explore')),
-    // TRIP-935 R1 — 매거진(a02) 진입을 막는다: onPressMagazine 을 넘기지 않아 page0 은 버튼이 아니다.
-    // 매거진 화면은 고정 샘플에 무반응 요소뿐이라(심사 2.1) 실데이터가 생기면 여기서 다시 잇는다.
+    // TRIP-1432 — 히어로 도시 카드 → 그 도시로 거른 탐색 탭(URL region 은 이름이 아니라 코드, 지역 피커
+    // explore 갈래와 같은 목적지). 매거진(a02) 진입은 계속 막혀 있다(TRIP-935 R1).
+    onPressHeroCity: guardPress((region: string) =>
+      router.push({ pathname: '/explore', params: { region } })
+    ),
     // TRIP-939 AC-9 — 인사 헤더 종 press → l01 알림함(/notifications, U6 "어디서든 종 아이콘으로 진입").
     onPressBell: () => router.push('/notifications'),
     savedPlacesCount: savedPoiIds.length,

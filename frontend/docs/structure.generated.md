@@ -227,10 +227,11 @@
 - `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  UNSPECIFIED_CHIP_LABEL · SlotStopCardProps · SlotStopCard
 
 ## src/entities/place/
-- `src/entities/place/index.ts`  →  formatDistance · legDistance · pickTrendingPlaces · PlaceGridCard · PlaceRailCard · PlaceRowCard · PlaceSubtitle · SlotCandidateCard
+- `src/entities/place/index.ts`  →  formatDistance · orderLanePlaces · legDistance · pickTrendingPlaces · PlaceGridCard · PlaceRailCard · PlaceRowCard · PlaceSubtitle · SlotCandidateCard
 
 ## src/entities/place/lib/
 - `src/entities/place/lib/formatDistance.ts`  →  formatDistance
+- `src/entities/place/lib/laneOrder.ts`  →  orderLanePlaces
 - `src/entities/place/lib/legDistance.ts`  →  legDistance
 - `src/entities/place/lib/trendingPlaces.ts`  →  pickTrendingPlaces
 
@@ -271,9 +272,10 @@
 ## src/entities/trip/config/
 - `src/entities/trip/config/coverGradients.ts`  →  CoverTone · COVER_GRADIENTS · COVER_START · COVER_END
 - `src/entities/trip/config/regionCovers.ts`  →  REGION_COVERS
+- `src/entities/trip/config/serviceRegions.ts`  →  SERVICE_REGIONS
 
 ## src/entities/trip/
-- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · regionForDay · tripDayNumber · classifyTripPhase · isTripOngoing · COVER_GRADIENTS · pickCoverCity · pickRegionCover · PastTripRow · TripCard · ChevronRightGlyph
+- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · regionForDay · tripDayNumber · classifyTripPhase · isTripOngoing · COVER_GRADIENTS · pickCoverCity · pickRegionCover · SERVICE_REGIONS · PastTripRow · TripCard · ChevronRightGlyph
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/coverCity.ts`  →  pickCoverCity
@@ -1733,4 +1735,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1093개 파일
+합계 1095개 파일
