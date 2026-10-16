@@ -1160,9 +1160,11 @@
 ## src/pages/settings/settings/model/
 - `src/pages/settings/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
 - `src/pages/settings/settings/model/deletionScope.ts`  →  DELETION_SCOPE
-- `src/pages/settings/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
+- `src/pages/settings/settings/model/exportShareNative.ts`  →  shareAsync
+- `src/pages/settings/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary · buildExportFile
 - `src/pages/settings/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
 - `src/pages/settings/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
+- `src/pages/settings/settings/model/shareExportFile.ts`  →  ShareExportFileResult · shareExportFile
 
 ## src/pages/settings/settings/ui/
 - `src/pages/settings/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
@@ -1683,6 +1685,7 @@
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
 - `src/test-support/fabAnchorProbe.ts`  →  FRAME_MS · sheetHost · sheetPosition · flushFrames · moveSheet · layoutOverlay · anchorStyle · anchorTop
+- `src/test-support/fakeExpoFileSystem.ts`  →  fakeExpoFileSystemModule · resetFakeFs · seedCacheFile · cacheFilesIn · cacheFileCount · failFileWrites
 - `src/test-support/fakePreventRemoveNavigator.tsx`  →  MockNavAction · MockPreventCallback · mockExits · mockRemove · mockNavigation · useNavigation · usePreventRemove · resetFakeNavigator
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
 - `src/test-support/freezeDate.ts`  →  REAL_TIMER_APIS · freezeDate
@@ -1743,4 +1746,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1097개 파일
+합계 1100개 파일
