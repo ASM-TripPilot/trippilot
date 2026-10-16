@@ -295,10 +295,10 @@
 - `src/entities/trip/ui/TripGlyphs.tsx`  →  MoreDotsGlyph · TrashGlyph · ChevronRightGlyph
 
 ## src/features/add-must-visit/
-- `src/features/add-must-visit/index.ts`  →  DEFAULT_DWELL_KEY · DWELL_OPTIONS · buildAnytimeMustVisitRequest · buildFixedMustVisitRequest · canSubmitMustVisitTime · mustVisitTimeBlockReason · startTimeLabel · startTimeOptions · tripDayChips
+- `src/features/add-must-visit/index.ts`  →  DEFAULT_DWELL_KEY · DWELL_OPTIONS · buildAnytimeMustVisitRequest · buildFixedMustVisitRequest · canSubmitMustVisitTime · mustVisitTimeBlockReason · startTimeOptions · startWheelAnchor · tripDayChips
 
 ## src/features/add-must-visit/model/
-- `src/features/add-must-visit/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
+- `src/features/add-must-visit/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startWheelAnchor · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
 
 ## src/features/apply-replan/
 - `src/features/apply-replan/index.ts`  →  useApplyReplan
@@ -1629,6 +1629,7 @@
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
+- `src/shared/ui/HourMinuteWheel.tsx`  →  HourMinuteWheelProps · HourMinuteWheel
 - `src/shared/ui/Image.tsx`  →  Image
 - `src/shared/ui/NoticeBanner.tsx`  →  NoticeBannerNotice · NoticeBanner · DismissNotice
 - `src/shared/ui/OpenNaverMapButton.tsx`  →  OpenNaverMapButton
@@ -1733,4 +1734,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1093개 파일
+합계 1094개 파일
