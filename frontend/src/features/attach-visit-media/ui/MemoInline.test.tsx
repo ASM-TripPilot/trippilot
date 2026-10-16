@@ -82,6 +82,27 @@ describe('🔴 TRIP-1078 AC-1·AC-3 · blur 저장 — 공백만이면 저장 �
   });
 });
 
+// TRIP-1415 AC-5 · D8 — 첫 서버 메모 조회가 끝나기 전엔 입력을 잠근다(빈칸에 써서 서버 메모를 덮는 upsert 차단).
+// RNTL 은 editable=false 입력의 changeText·blur 를 버린다 — 실제 TextInput 과 같은 동작을 본다(02a ★2).
+describe('잠금 — editable={false} 면 글자도 저장도 받지 않는다', () => {
+  it('L1 잠긴 입력에 글을 넣고 포커스를 빼도 값은 시드 그대로이고 onSubmit 0회', () => {
+    // 준비
+    const onSubmit = jest.fn();
+    render(<MemoInline text="서버 글" editable={false} onSubmit={onSubmit} />);
+
+    // 실행
+    const input = screen.getByTestId('record-trip-memo-input');
+    fireEvent.changeText(input, '바꾼 글');
+    fireEvent(input, 'blur');
+
+    // 단언
+    expect(screen.getByTestId('record-trip-memo-input').props.value).toBe(
+      '서버 글'
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
 describe('🔴 TRIP-1078 AC-2 · return = 제출→blur, 한 번에 저장 1회', () => {
   it('입력칸의 submitBehavior 가 blurAndSubmit 이다', () => {
     render(<MemoInline />);

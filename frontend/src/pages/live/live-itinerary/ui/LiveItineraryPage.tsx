@@ -565,6 +565,7 @@ export function LiveItineraryPage({
           ''
         }
         text={visitMemo.savedMemo}
+        editable={visitMemo.memoReady}
         notice={memoFailedFor === memoSheetFor ? MEMO_SAVE_FAILED : null}
         onSubmit={(text) => submitMemo(memoSheetFor, text)}
         onClose={() => setMemoSheetFor(null)}

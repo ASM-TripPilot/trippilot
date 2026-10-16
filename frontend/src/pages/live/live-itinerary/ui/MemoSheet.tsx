@@ -22,6 +22,8 @@ export interface MemoSheetProps {
   placeName: string;
   /** 세션 저장본(없으면 빈 입력). */
   text?: string | null;
+  /** TRIP-1415 — false 면 입력 잠금(첫 서버 메모 조회 중). 열리는 순간 입력·글자 수를 `text` 로 다시 심는다. 기본 true. */
+  editable?: boolean;
   /** 저장 실패 안내 한 줄(INV-4). 비면 안 그린다. */
   notice?: string | null;
   onSubmit: (text: string) => void;
@@ -47,12 +49,20 @@ const MEMO_MAX = 2000;
 export function MemoSheet({
   placeName,
   text,
+  editable = true,
   notice,
   onSubmit,
   onClose,
 }: MemoSheetProps): ReactElement {
   // 글자 수 — MemoInline 이 초안을 쥐므로 바뀔 때마다 길이만 받아 둔다. 시작값 = 시드(저장본) 길이.
   const [count, setCount] = useState((text ?? '').length);
+  // 잠금이 풀리면 입력은 key 로 다시 마운트돼 `text` 로 심기고, 글자 수도 같은 시드로 맞춘다(0/2000 금지).
+  // 시트 전체를 key 로 다시 그리면 바텀시트가 다시 올라오므로 입력만 다시 심는다.
+  const [seededEditable, setSeededEditable] = useState(editable);
+  if (seededEditable !== editable) {
+    setSeededEditable(editable);
+    setCount((text ?? '').length);
+  }
 
   return (
     <BottomSheet
@@ -104,6 +114,8 @@ export function MemoSheet({
         {/* 입력 상자 — 배경·테두리는 감싸는 View 에(MemoInline 입력 className 에 bg 를 넣지 않는다). */}
         <View className="h-[140px] justify-between rounded-input border border-hairline-strong bg-surface-soft px-lg py-md">
           <MemoInline
+            key={editable ? 'open' : 'locked'}
+            editable={editable}
             text={text}
             onSubmit={onSubmit}
             onChangeDraft={(draft) => setCount(draft.length)}

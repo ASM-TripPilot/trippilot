@@ -37,6 +37,12 @@ import {
   liveTrip,
   liveVisit,
 } from '@/test-support/liveHubFixtures';
+import { createGate } from '@/test-support/mswHookHarness';
+import {
+  actualVisit,
+  recordsHandler,
+  tripRecord,
+} from '@/test-support/tripRecordsFixtures';
 import {
   createFakeAutomationSink,
   getAutomationSink,
@@ -165,6 +171,17 @@ async function settle() {
   });
 }
 
+/**
+ * TRIP-1415 — 메모 입력이 열릴 때까지(첫 records 조회 끝) 기다린 뒤 **다시 찾은** 노드를 돌려준다. 잠긴 입력은 RNTL 이
+ * 이벤트를 버리고, 열릴 때 다시 마운트되면 그 전 노드도 이벤트를 버린다(02a ★2·★3).
+ */
+async function openedMemoInput(): Promise<ReactTestInstance> {
+  await waitFor(() =>
+    expect(screen.getByTestId('record-trip-memo-input')).toBeEnabled()
+  );
+  return screen.getByTestId('record-trip-memo-input');
+}
+
 /** 옛 좁은 router 목에 없던 메서드 — 불리면 그 관점의 옛 파일은 TypeError 로 red 였다. */
 function expectNotCalled(...fns: jest.Mock[]): void {
   fns.forEach((fn) => expect(fn).not.toHaveBeenCalled());
@@ -180,6 +197,9 @@ beforeEach(() => {
   observedHits = [];
   setAccessToken('a');
   mockCanGoBack.mockReturnValue(true);
+  // TRIP-1415 — 메모 대상 방문(관람 중·완료)이 있는 모든 관점에서 서버 메모(records)를 조회한다. 관점 핸들러가 아니라
+  // 허브 공통 GET 이라 여기 한 벌(기본 실적 0건). 요청 수는 관찰자가 세므로 0회 단언은 가려지지 않는다.
+  server.use(recordsHandler(() => HttpResponse.json(tripRecord([], TRIP_ID))));
 });
 afterEach(() => {
   server.resetHandlers();
@@ -2027,7 +2047,7 @@ describe('메모 시트', () => {
   /** [메모]를 눌러 시트를 연다 — 입력칸을 돌려준다. */
   async function openSheet() {
     fireEvent.press(await screen.findByTestId('execution-arrive-memo'));
-    return screen.findByTestId(INPUT);
+    return openedMemoInput();
   }
 
   /** 입력하고 포커스를 뺀다(= 키보드 "완료"). */
@@ -3111,7 +3131,7 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
       await renderHub();
 
       fireEvent.press(screen.getByTestId(done('memo')));
-      const input = await screen.findByTestId(INPUT);
+      const input = await openedMemoInput();
 
       expect(mockPush).not.toHaveBeenCalled();
       expect(screen.getByTestId('live-memo-title')).toHaveTextContent(
@@ -3175,7 +3195,7 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
       await renderHub();
       fireEvent.press(screen.getByTestId(done('memo')));
 
-      typeAndBlur(await screen.findByTestId(INPUT), '실패할 메모');
+      typeAndBlur(await openedMemoInput(), '실패할 메모');
 
       expect(await screen.findByTestId('live-memo-notice')).toHaveTextContent(
         COPY_MEMO_FAILED
@@ -3189,7 +3209,7 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
       holdMemo();
       await renderHub();
       fireEvent.press(screen.getByTestId(done('memo')));
-      typeAndBlur(await screen.findByTestId(INPUT), '닫고 나서 실패');
+      typeAndBlur(await openedMemoInput(), '닫고 나서 실패');
       await waitFor(() => expect(hitCount(MEMO_PUT_V1)).toBe(1));
 
       fireEvent.press(screen.getByTestId('live-memo-close'));
@@ -3218,7 +3238,7 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
 
       // 실행 — 완료 카드 [메모]로 시트를 연다.
       fireEvent.press(screen.getByTestId(done('memo')));
-      const input = await screen.findByTestId(INPUT);
+      const input = await openedMemoInput();
 
       // 단언 — 열린 동안: 시드는 완료 방문 것(빈 값), 관람 중 박스는 그대로(02a ★3).
       expect(input.props.value).toBe('');
@@ -3239,7 +3259,7 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
 
       // 실행 — 관람 중 [메모]: 시드는 관람 중 저장본, 저장은 v2.
       fireEvent.press(screen.getByTestId('execution-arrive-memo'));
-      const activeInput = await screen.findByTestId(INPUT);
+      const activeInput = await openedMemoInput();
       expect(activeInput.props.value).toBe('관람 중 메모');
       typeAndBlur(activeInput, '관람 중 새 메모');
       await waitFor(() => expect(hitCount(MEMO_PUT_V2)).toBe(1));
@@ -3252,6 +3272,257 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
         '관람 중 새 메모'
       );
       expect(screen.getByTestId(doneBox)).toHaveTextContent('완료 메모');
+    });
+  });
+
+  // TRIP-1415 · AC-2·3·5~9·12 — 허브 카드 메모 박스·[메모] 시트가 서버 메모(GET /trips/{id}/records 의 memo)를 본다.
+  describe('서버 메모 시드 — records 의 memo', () => {
+    /**
+     * 무엇을 보장하나: 앱을 다시 켜도 서버에 남은 메모가 완료·관람 중 카드 박스와 [메모] 시트(입력·글자 수)에 보인다.
+     *   세션 저장본이 서버 memo 를 이기고, 첫 조회 중 시트 입력은 글자를 받지 않으며, 열린 뒤엔 재조회가 초안·글자 수를
+     *   건드리지 않는다. 메모 대상 방문이 없으면 records 를 부르지도 않는다.
+     * ★ 글자 수(`live-memo-count`)도 입력처럼 첫 마운트에만 심긴다 — 입력만 다시 심으면 본문은 보이는데 0/2000 이 된다.
+     */
+    const RECORDS_GET = `GET /api/v1/trips/${TRIP_ID}/records`;
+    const DONE_BOX = `execution-live-slot-memo-${DONE_KEY}`;
+    const ACTIVE_BOX = `execution-live-slot-memo-${ACTIVE_KEY}`;
+    const COUNT = 'live-memo-count';
+    let recordsReply: (call: number) => Response | Promise<Response>;
+    let recordsCalls = 0;
+
+    const recordsOf = (actual: ReturnType<typeof actualVisit>[]) =>
+      HttpResponse.json(tripRecord([{ date: TODAY, actual }], TRIP_ID));
+    const field = () => screen.getByTestId(INPUT);
+
+    beforeEach(() => {
+      recordsCalls = 0;
+      recordsReply = () => recordsOf([]);
+      server.use(
+        recordsHandler(() => {
+          recordsCalls += 1;
+          return recordsReply(recordsCalls);
+        })
+      );
+    });
+
+    it('H1 완료·관람 중 카드 박스에 서버 memo 가 보이고, 완료 [메모] 시트 입력·글자 수도 그 본문이다 — records GET 1회 (AC-2·AC-9)', async () => {
+      // 준비
+      recordsReply = () =>
+        recordsOf([
+          actualVisit('v1', '대구탕 국물이 시원했다'),
+          actualVisit('v2', '광안리 밤바다'),
+        ]);
+
+      // 실행 ① — 허브를 그린다.
+      await renderHub();
+
+      // 단언 ① — 두 카드 박스(완전 일치), 방문 둘에 조회는 한 번.
+      await waitFor(() =>
+        expect(screen.getByTestId(DONE_BOX)).toHaveTextContent(
+          '대구탕 국물이 시원했다'
+        )
+      );
+      expect(screen.getByTestId(ACTIVE_BOX)).toHaveTextContent('광안리 밤바다');
+      await settle();
+      expect(hitCount(RECORDS_GET)).toBe(1);
+
+      // 실행 ② — 완료 [메모].
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await openedMemoInput();
+
+      // 단언 ② — 시트 입력과 글자 수(12자)가 본문이다(0/2000 이면 위반).
+      expect(input.props.value).toBe('대구탕 국물이 시원했다');
+      expect(screen.getByTestId(COUNT)).toHaveTextContent('12/2000');
+    });
+
+    it('H2 memo 가 null 이면(hasMemo 가 true 여도) 박스가 없고 시트는 빈 입력 0/2000 이다 (AC-8)', async () => {
+      // 준비
+      recordsReply = () =>
+        recordsOf([actualVisit('v1', null, { hasMemo: true })]);
+
+      // 실행
+      await renderHub();
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(1));
+      await settle();
+
+      // 단언 ① — 완료 카드는 있고 박스는 없다.
+      expect(card(DONE_KEY)).toBeOnTheScreen();
+      expect(screen.queryByTestId(DONE_BOX)).toBeNull();
+
+      // 단언 ② — 시트도 비어 있다.
+      fireEvent.press(screen.getByTestId(done('memo')));
+      expect((await openedMemoInput()).props.value).toBe('');
+      expect(screen.getByTestId(COUNT)).toHaveTextContent('0/2000');
+    });
+
+    it('H3 이 세션에 저장한 값이 서버 memo 를 이긴다 — 박스·시트 입력·글자 수 모두 세션 값 (AC-3)', async () => {
+      // 준비 — 세션 '새 글' · 서버 '옛 글'.
+      seedMemo('v1', '새 글');
+      recordsReply = () => recordsOf([actualVisit('v1', '옛 글')]);
+
+      // 실행
+      await renderHub();
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(1));
+      await settle();
+
+      // 단언 ① — 박스.
+      expect(screen.getByTestId(DONE_BOX)).toHaveTextContent('새 글');
+
+      // 단언 ② — 시트.
+      fireEvent.press(screen.getByTestId(done('memo')));
+      expect((await openedMemoInput()).props.value).toBe('새 글');
+      expect(screen.getByTestId(COUNT)).toHaveTextContent('3/2000');
+    });
+
+    it('H4 첫 조회 중 시트 입력은 글자를 받지 않고 PUT 0회 — 도착하면 서버 memo·글자 수로 심긴다 (AC-5·AC-4)', async () => {
+      // 준비 — records 는 문 뒤에.
+      const gate = createGate();
+      recordsReply = async () => {
+        await gate.opened;
+        return recordsOf([actualVisit('v1', '대구탕 국물이 시원했다')]);
+      };
+      await renderHub();
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(1));
+
+      // 실행 ① — 조회 중에 시트를 열고 쓰려 한다.
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const locked = await screen.findByTestId(INPUT);
+      fireEvent.changeText(locked, '몰래');
+      fireEvent(locked, 'blur');
+      await settle();
+
+      // 단언 ① — 입력·글자 수 그대로, PUT 0, 시트는 열려 있다.
+      expect(field().props.value).toBe('');
+      expect(screen.getByTestId(COUNT)).toHaveTextContent('0/2000');
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+
+      // 실행 ② — 응답 도착.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 ② — 서버 글과 그 글자 수로 열린다.
+      await waitFor(() =>
+        expect(field().props.value).toBe('대구탕 국물이 시원했다')
+      );
+      expect(screen.getByTestId(COUNT)).toHaveTextContent('12/2000');
+    });
+
+    it('H5 시트가 열린 뒤 records 가 다시 와 값이 바뀌어도 초안과 글자 수는 그대로다 (AC-6)', async () => {
+      // 준비 — 1차 '서버 글', 2차부터는 문 뒤의 '다른 기기 글'.
+      const gate = createGate();
+      recordsReply = async (call) => {
+        if (call === 1) return recordsOf([actualVisit('v1', '서버 글')]);
+        await gate.opened;
+        return recordsOf([actualVisit('v1', '다른 기기 글')]);
+      };
+      await renderHub();
+      await waitFor(() =>
+        expect(screen.getByTestId(DONE_BOX)).toHaveTextContent('서버 글')
+      );
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await openedMemoInput();
+      expect(input.props.value).toBe('서버 글');
+      fireEvent.changeText(input, '초안');
+
+      // 실행 ① — 다시 조회(앱 복귀 재조회 흉내).
+      await act(async () => {
+        void client.invalidateQueries();
+      });
+      await waitFor(() =>
+        expect(hitCount(RECORDS_GET)).toBeGreaterThanOrEqual(2)
+      );
+
+      // 단언 ① — 재조회 중에도 계속 쓸 수 있다.
+      fireEvent.changeText(field(), '초안 메모');
+      expect(field().props.value).toBe('초안 메모');
+
+      // 실행 ② — 바뀐 값이 도착한다.
+      await act(async () => {
+        gate.release();
+      });
+      await settle();
+
+      // 단언 ② — 초안과 글자 수(5자)가 그대로다.
+      expect(field().props.value).toBe('초안 메모');
+      expect(screen.getByTestId(COUNT)).toHaveTextContent('5/2000');
+    });
+
+    it('H6 서버 memo 로 심긴 시트에서 그대로, 또는 고쳤다 되돌려 포커스를 빼면 PUT 0회다 (AC-7)', async () => {
+      // 준비
+      recordsReply = () => recordsOf([actualVisit('v1', '서버 글')]);
+      await renderHub();
+      await waitFor(() =>
+        expect(screen.getByTestId(DONE_BOX)).toHaveTextContent('서버 글')
+      );
+
+      // 실행 ① — 열자마자 그대로 포커스를 뺀다.
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const first = await openedMemoInput();
+      expect(first.props.value).toBe('서버 글');
+      fireEvent(first, 'blur');
+      await settle();
+
+      // 단언 ①
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
+
+      // 실행 ② — 다시 열어 한 글자 고쳤다 되돌리고 포커스를 뺀다.
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const again = await openedMemoInput();
+      fireEvent.changeText(again, '서버 글!');
+      fireEvent.changeText(again, '서버 글');
+      fireEvent(again, 'blur');
+      await settle();
+
+      // 단언 ②
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
+    });
+
+    it('H7 메모 대상 방문이 없으면 records 를 부르지 않는다 (AC-9)', async () => {
+      // 준비 — 그날 방문 0건.
+      visitsResponse = () => [];
+
+      // 실행
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper,
+      });
+      await screen.findByTestId(`execution-live-slot-${DONE_KEY}`);
+      // 앵커 — 방문 조회가 실제로 끝났다(빈 목록을 보고 판정할 기회가 있었다).
+      await waitFor(() =>
+        expect(
+          hitCount(`GET /api/v1/trips/${TRIP_ID}/visits/days/${TODAY}`)
+        ).toBeGreaterThanOrEqual(1)
+      );
+      await settle();
+
+      // 단언
+      expect(hitCount(RECORDS_GET)).toBe(0);
+    });
+
+    it('H8 records 가 500 이어도 허브·카드는 그대로이고, 시트 입력은 빈칸으로 열려 저장된다 (AC-12)', async () => {
+      // 준비
+      recordsReply = () =>
+        HttpResponse.json(
+          { error: { code: 'INTERNAL', message: 'boom' } },
+          { status: 500 }
+        );
+
+      // 실행 ①
+      await renderHub();
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await openedMemoInput();
+
+      // 단언 ①
+      expect(card(DONE_KEY)).toBeOnTheScreen();
+      expect(input.props.value).toBe('');
+
+      // 실행 ② — 쓴다.
+      typeAndBlur(input, '조회 실패 뒤 메모');
+
+      // 단언 ② — 저장이 나간다.
+      await waitFor(() => expect(hitCount(MEMO_PUT_V1)).toBe(1));
+      expect(memoBodies).toEqual([{ text: '조회 실패 뒤 메모' }]);
     });
   });
 });

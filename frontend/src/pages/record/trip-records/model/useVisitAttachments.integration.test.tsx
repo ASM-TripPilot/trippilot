@@ -10,6 +10,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { createHitLog, createWrapper } from '@/test-support/mswHookHarness';
 import { flushNotifications } from '@/test-support/flushNotifications';
+import { recordsHandler } from '@/test-support/tripRecordsFixtures';
 
 import type { PhotoAssetMeta } from '@/features/attach-visit-media';
 import { useVisitAttachments } from './useVisitAttachments';
@@ -67,6 +68,8 @@ beforeEach(() => {
   capturedPhotoBody = null;
   capturedMemoBody = null;
   setAccessToken('a');
+  // TRIP-1415 — 메모 훅이 서버 메모(records)를 조회한다. 기본은 실적 0건(서버 메모 없음 = 세션 값만 비교).
+  server.use(recordsHandler());
 });
 
 afterEach(() => {
