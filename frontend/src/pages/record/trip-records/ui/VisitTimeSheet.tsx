@@ -8,14 +8,14 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 
 import { seoulDate, seoulInstant, seoulTime } from '@/shared/lib/seoulDate';
-import { WheelPicker } from '@/shared/ui/WheelPicker';
+import { HourMinuteWheel } from '@/shared/ui/HourMinuteWheel';
 
 import { adjustTimesDraft } from '../model/adjustTimesDraft';
 
 /**
  * TRIP-613 · j01 방문 시각 편집 시트 — 도착·완료 시각을 휠로 골라 저장한다.
  *
- * TRIP-1080 — 시·분은 공용 `shared/ui/WheelPicker` 4열(도착 시·분, 완료 시·분)이다. 휠은 셀 press 와
+ * TRIP-1080 — 시·분은 공용 휠 4열(도착 시·분, 완료 시·분)이다 — TRIP-1437 부터 칸마다 `shared/ui/HourMinuteWheel` 한 쌍. 휠은 셀 press 와
  * 스크롤 정지 두 길로 값을 확정한다. 바텀시트 본문 끌기가 휠 제스처를 삼키지 않도록 바깥 시트에
  * `enableContentPanningGesture={false}` 를 준다(jest 목은 이 prop 을 렌더로 구분 못 한다 — repo-traps
  * 바텀시트 절, 실제 분리는 6-b 실기). 딤으로 닫히면 `onClose` 가 `onCancel` 을 불러 부모 열림 상태를 푼다.
@@ -28,6 +28,7 @@ import { adjustTimesDraft } from '../model/adjustTimesDraft';
  * 미호출(서버 재검증이 최종 — INV-2), 통과면 **바뀐 필드만** onSave 한다("안 보내면 유지").
  * 완료 칸은 원본 완료가 있을 때만 고친다(01b D1 — PATCH 로 새로 완료하면 `complete()` 의 건너뜀 검사·
  * VisitChecked 발행을 우회한다). 새 완료는 카드의 체크서클(POST /complete)이 유일한 경로다.
+ * 완료가 없으면 휠 대신 "아직 완료 전" 자리 표시만 둔다(TRIP-1437 Q-116 — 닫힌 휠의 흐린 '00:00' 폐기).
  */
 
 const SHEET_TITLE = '방문 시각 수정';
@@ -36,12 +37,7 @@ const COMPLETED_LABEL = '완료';
 const SAVE_LABEL = '저장';
 const CANCEL_LABEL = '취소';
 const ERROR_MESSAGE = '입력한 시각이 올바르지 않아요';
-
-/** 시(00~23)·분(00~59) 라벨을 zero-pad 2자리로 미리 만든다 — 셀 testID·표시가 같은 형태다. */
-const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-const MINUTES = Array.from({ length: 60 }, (_, i) =>
-  String(i).padStart(2, '0')
-);
+const COMPLETED_PENDING = '아직 완료 전이에요';
 
 /** 원본 순간 → 서울 'HH:mm'(없으면 '00:00' — 셀은 그려지되 합성은 원본이 있을 때만 값을 낸다). */
 const clockOf = (iso: string | null): string =>
@@ -75,36 +71,26 @@ function renderTimeSheetBackdrop(
   );
 }
 
-/** 한 휠(시 또는 분) — 값 셀 testID 는 셀 컬럼 시절 그대로 주입한다. 폭은 휠 루트가 w-full 이라 래퍼가 정한다. */
-function TimeWheel({
+/** 한 칸(도착 또는 완료)의 시·분 휠 — testID 는 셀 컬럼 시절 모양 그대로 주입한다. */
+function FieldWheel({
   field,
-  unit,
-  values,
-  selected,
-  disabled = false,
-  onSelect,
+  value,
+  onChange,
 }: {
   field: 'arrived' | 'completed';
-  unit: 'h' | 'm';
-  values: string[];
-  selected: string;
-  /** 닫힌 칸 — 굴리지도 누르지도 못하고 선택 표시도 없다(가짜 00:00 시드를 강조하지 않게). */
-  disabled?: boolean;
-  onSelect: (value: string) => void;
+  value: string;
+  onChange: (next: string) => void;
 }): ReactElement {
+  const id = `record-trip-visit-time-${field}`;
   return (
-    <View className="w-[60px]">
-      <WheelPicker
-        testID={`record-trip-visit-time-${field}-${unit}-wheel`}
-        values={values}
-        selected={selected}
-        disabled={disabled}
-        onSelect={onSelect}
-        testIDForValue={(value) =>
-          `record-trip-visit-time-${field}-${unit}-${value}`
-        }
-      />
-    </View>
+    <HourMinuteWheel
+      value={value}
+      onChange={onChange}
+      hourWheelTestID={`${id}-h-wheel`}
+      minuteWheelTestID={`${id}-m-wheel`}
+      hourCellTestID={(hour) => `${id}-h-${hour}`}
+      minuteCellTestID={(minute) => `${id}-m-${minute}`}
+    />
   );
 }
 
@@ -117,32 +103,16 @@ export function VisitTimeSheet({
   onSave,
   onCancel,
 }: VisitTimeSheetProps): ReactElement {
-  const [arrivedHour, setArrivedHour] = useState(
-    clockOf(arrivedAt).slice(0, 2)
-  );
-  const [arrivedMinute, setArrivedMinute] = useState(
-    clockOf(arrivedAt).slice(3, 5)
-  );
-  const [completedHour, setCompletedHour] = useState(
-    clockOf(completedAt).slice(0, 2)
-  );
-  const [completedMinute, setCompletedMinute] = useState(
-    clockOf(completedAt).slice(3, 5)
-  );
+  const [arrived, setArrived] = useState(clockOf(arrivedAt));
+  const [completed, setCompleted] = useState(clockOf(completedAt));
   const [showError, setShowError] = useState(false);
 
-  // 원본 완료가 없으면 완료 칸을 닫는다(D1) — 휠이 안 굴러가고 안 눌려 버려질 입력이 생기지 않는다(INV-4).
+  // 원본 완료가 없으면 완료 칸을 닫는다(D1) — 휠 자체가 없어 버려질 입력이 생기지 않는다(INV-4).
   const completedDisabled = completedAt == null;
 
   function handleSave(): void {
-    const arrivedEdited = editedInstant(
-      arrivedAt,
-      `${arrivedHour}:${arrivedMinute}`
-    );
-    const completedEdited = editedInstant(
-      completedAt,
-      `${completedHour}:${completedMinute}`
-    );
+    const arrivedEdited = editedInstant(arrivedAt, arrived);
+    const completedEdited = editedInstant(completedAt, completed);
 
     // 검증은 서버가 저장 뒤 갖게 될 값으로 — 안 바꾼 필드는 원본 그대로(초 포함) 남는다.
     const check = adjustTimesDraft({
@@ -196,56 +166,34 @@ export function VisitTimeSheet({
             <Text className="font-noto text-label text-muted">
               {ARRIVED_LABEL}
             </Text>
-            <View className="w-full flex-row items-center justify-center gap-sm">
-              <TimeWheel
-                field="arrived"
-                unit="h"
-                values={HOURS}
-                selected={arrivedHour}
-                onSelect={setArrivedHour}
-              />
-              <Text className="font-noto-bold text-section font-bold text-ink">
-                :
-              </Text>
-              <TimeWheel
-                field="arrived"
-                unit="m"
-                values={MINUTES}
-                selected={arrivedMinute}
-                onSelect={setArrivedMinute}
-              />
-            </View>
+            <FieldWheel field="arrived" value={arrived} onChange={setArrived} />
           </View>
 
           <View
             testID="record-trip-visit-time-completed"
             accessibilityState={{ disabled: completedDisabled }}
-            className={`flex-1 gap-sm ${completedDisabled ? 'opacity-40' : ''}`}
+            className="flex-1 gap-sm"
           >
             <Text className="font-noto text-label text-muted">
               {COMPLETED_LABEL}
             </Text>
-            <View className="w-full flex-row items-center justify-center gap-sm">
-              <TimeWheel
+            {completedDisabled ? (
+              // 휠 높이(5칸 × 44)를 비워 두어 도착 칸과 높이를 맞춘다.
+              <View className="h-[220px] w-full items-center justify-center">
+                <Text
+                  testID="record-trip-visit-time-completed-pending"
+                  className="font-noto text-label text-muted-soft"
+                >
+                  {COMPLETED_PENDING}
+                </Text>
+              </View>
+            ) : (
+              <FieldWheel
                 field="completed"
-                unit="h"
-                values={HOURS}
-                selected={completedHour}
-                disabled={completedDisabled}
-                onSelect={setCompletedHour}
+                value={completed}
+                onChange={setCompleted}
               />
-              <Text className="font-noto-bold text-section font-bold text-ink">
-                :
-              </Text>
-              <TimeWheel
-                field="completed"
-                unit="m"
-                values={MINUTES}
-                selected={completedMinute}
-                disabled={completedDisabled}
-                onSelect={setCompletedMinute}
-              />
-            </View>
+            )}
           </View>
         </View>
 

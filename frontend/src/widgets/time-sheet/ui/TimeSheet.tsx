@@ -12,15 +12,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { deriveEndsNextDay, isValidTimeRange } from '@/entities/itinerary-slot';
 import { CloseGlyph } from '@/shared/ui/glyphs';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
-import { WheelPicker } from '@/shared/ui/WheelPicker';
+import { HourMinuteWheel } from '@/shared/ui/HourMinuteWheel';
 
 /**
  * TRIP-805 · 공용 시각 조정 시트 위젯 — h24 `SlotTimeSheet`·i15/i22 `ManualTimeSheet` 쌍둥이를
  * 하나로 접었다. 접두(`testIDPrefix`)·섹션 라벨(`labels`)·제목(`title`)·장소 요약 행(`placeSummary`)만
  * 소비처가 주입한다.
  *
- * TRIP-1196 — 입력은 한 구현이다: 시작/종료 세그먼트 + 시간 표시 줄(readout) + 오전/오후·시·분 공용
- * `WheelPicker` 3열 + [적용]. 머리 오른쪽 X(`{prefix}-close`)는 `onCancel` 이다(TRIP-1417 Q-101).
+ * TRIP-1196 — 입력은 한 구현이다: 시작/종료 세그먼트 + 시간 표시 줄(readout) + 시·분 공용
+ * `HourMinuteWheel` 2열(24시간, TRIP-1437 — 옛 오전/오후 열 폐기) + [적용]. 머리 오른쪽 X(`{prefix}-close`)는 `onCancel` 이다(TRIP-1417 Q-101).
  * 휠은 셀 탭 또는 스크롤 정지로 활성 탭(시작/종료) 값을 바꾼다(TRIP-990 D21).
  * 소비처 간 차이는 제목과 장소 요약 행뿐이다(h04 편집기만 '시간대 조정'+요약 행을 넘긴다).
  *
@@ -31,7 +31,7 @@ import { WheelPicker } from '@/shared/ui/WheelPicker';
  * TRIP-1215 — (시작, 실제로 실릴 종료) 쌍이 `isValidTimeRange` 를 어기면 오류 문구를 띄우고 [적용]을
  * 잠근다(숨은 종료에도 같은 규칙). 매 렌더 판정이라 휠을 굴리면 바로 따라온다. UX 사본일 뿐 최종 판정은
  * 저장 시 서버 재검증 몫이다(INV-2).
- * 휠 값·readout 의 분은 bare 숫자("30")다 — "30분" 으로 그리면 소요시간 가드가 시계 분을 오탐한다(INV-3).
+ * 휠 값·readout 은 `HH:mm`(24시간) 이고 분은 bare 숫자("30")다 — "30분" 으로 그리면 소요시간 가드가 시계 분을 오탐한다(INV-3).
  *
  * ★ 시트 실제 열림·`enableContentPanningGesture`·휠 제스처·페이드는 `@gorhom/bottom-sheet` 통과형 목이
  *   원리적으로 못 본다 — 6-b 실기가 유일 그물(repo-traps 바텀시트 절).
@@ -40,11 +40,6 @@ import { WheelPicker } from '@/shared/ui/WheelPicker';
 const DEFAULT_TITLE = '시각 조정';
 const APPLY_LABEL = '적용';
 const RANGE_ERROR = '종료 시각은 시작보다 늦어야 해요';
-
-/** 분(00~59) 라벨 — zero-pad 2자리. */
-const MINUTES = Array.from({ length: 60 }, (_, i) =>
-  String(i).padStart(2, '0')
-);
 
 /**
  * 장소 요약 행 데이터(TRIP-787) — 편집기(h04)만 넘긴다.
@@ -94,36 +89,8 @@ function renderTimeSheetBackdrop(
 const SHEET_SUBTITLE = '시작·종료를 돌려서 맞춰요';
 const SHEET_PLACE_SUFFIX = '꼭 갈 곳';
 
-/** 12시간제 휠 열 값. 오전/오후 2개 · 1~12(zero-pad 안 함, 표시 그대로). 분 열은 위 MINUTES 재사용. */
-const MERIDIEMS = ['오전', '오후'];
-const HOURS_12 = Array.from({ length: 12 }, (_, i) => String(i + 1));
-
-/** WheelPicker 내부 눈금(WHEEL_CELL_HEIGHT 44 · PAD 88)에 맞춰 손으로 맞춘 h04 selband·페이드
- *  좌표. 세 열의 가운데 셀을 잇는 회색 밴드와 위아래 흰 페이드가 이 값에 정렬한다(정렬 실측은 6-b). */
-const SHEET_BAND_TOP = 88;
-const SHEET_BAND_HEIGHT = 44;
+/** 위아래 흰 페이드 높이 — WheelPicker 눈금(셀 44 · 위 패딩 88)에 맞춘 손값(정렬 실측은 6-b). */
 const SHEET_FADE_HEIGHT = 78;
-
-/** "HH"(24시간·zero-pad) → 12시간제 조각. 오전(0~11)·오후(12~23), 12시는 0으로 안 접고 12로 표시. */
-function decompose12(hour24Str: string): { meridiem: string; hour12: string } {
-  const hour24 = Number(hour24Str);
-  const meridiem = hour24 < 12 ? '오전' : '오후';
-  const mod = hour24 % 12;
-  return { meridiem, hour12: String(mod === 0 ? 12 : mod) };
-}
-
-/** 12시간제 조각 → "HH"(24시간·zero-pad). 오전 12→00, 오후 12→12, 오후 1→13. */
-function compose24(meridiem: string, hour12Str: string): string {
-  const mod = Number(hour12Str) % 12; // 12 -> 0
-  const hour24 = meridiem === '오전' ? mod : mod + 12;
-  return String(hour24).padStart(2, '0');
-}
-
-/** readout 표시용 "오전/오후 h:mm" (24시간 HH·MM 입력, 분은 bare 숫자 — INV-3). */
-function timeLabel12(hourStr: string, minuteStr: string): string {
-  const { meridiem, hour12 } = decompose12(hourStr);
-  return `${meridiem} ${hour12}:${minuteStr}`;
-}
 
 export function TimeSheet({
   startAt,
@@ -146,7 +113,7 @@ export function TimeSheet({
 
   const nextStart = `${startHour}:${startMinute}:00`;
 
-  // 휠은 활성 탭(시작/종료)의 시·분을 편집한다. 12시간제로 보여주되 저장은 24시간 HH 상태에 되쓴다.
+  // 휠은 활성 탭(시작/종료)의 시·분을 편집한다.
   // 종료를 손대지 않았으면 현재 endAt 을 그대로 싣고 endsNextDay 만 새 시작 기준으로 다시 유도한다.
   const nextEnd = endConfigured ? `${endHour}:${endMinute}:00` : endAt;
   const rangeInvalid = !isValidTimeRange(nextStart, nextEnd);
@@ -158,29 +125,20 @@ export function TimeSheet({
       endsNextDay: deriveEndsNextDay(nextStart, nextEnd),
     });
   }
-  const activeHour = activeField === 'start' ? startHour : endHour;
-  const activeMinute = activeField === 'start' ? startMinute : endMinute;
-  const { meridiem, hour12 } = decompose12(activeHour);
+  const startLabel = `${startHour}:${startMinute}`;
+  const endLabel = `${endHour}:${endMinute}`;
 
-  const setActiveHour = (next: string): void => {
+  // next = 'HH:mm'. 종료를 바꾸면 "설정됨" 이 켜져 적용에 그 값이 실린다.
+  const setActiveTime = (next: string): void => {
     if (activeField === 'start') {
-      setStartHour(next);
+      setStartHour(next.slice(0, 2));
+      setStartMinute(next.slice(3, 5));
     } else {
-      setEndHour(next);
+      setEndHour(next.slice(0, 2));
+      setEndMinute(next.slice(3, 5));
       setEndConfigured(true);
     }
   };
-  const setActiveMinute = (next: string): void => {
-    if (activeField === 'start') {
-      setStartMinute(next);
-    } else {
-      setEndMinute(next);
-      setEndConfigured(true);
-    }
-  };
-
-  const startLabel = timeLabel12(startHour, startMinute);
-  const endLabel = timeLabel12(endHour, endMinute);
 
   return (
     // 머리 X 말고도 스와이프·딤 탭 닫힘을 onCancel 로 알린다 — 안 그러면 시트만 사라지고
@@ -298,40 +256,15 @@ export function TimeSheet({
           </Text>
         </View>
 
-        <View className="relative w-full flex-row">
-          {/* 세 열의 가운데 셀을 잇는 회색 selband(WheelPicker 자신은 위아래 hairline 만 그린다). */}
-          <View
-            pointerEvents="none"
-            className="absolute left-0 right-0 rounded-[10px] bg-surface-strong"
-            style={{ top: SHEET_BAND_TOP, height: SHEET_BAND_HEIGHT }}
+        <View className="relative w-full">
+          <HourMinuteWheel
+            value={activeField === 'start' ? startLabel : endLabel}
+            onChange={setActiveTime}
+            hourWheelTestID={`${testIDPrefix}-wheel-h`}
+            minuteWheelTestID={`${testIDPrefix}-wheel-m`}
+            hourCellTestID={(hour) => `${testIDPrefix}-wheel-h-${hour}`}
+            minuteCellTestID={(minute) => `${testIDPrefix}-wheel-m-${minute}`}
           />
-          <View className="flex-1">
-            <WheelPicker
-              testID={`${testIDPrefix}-wheel-ap`}
-              values={MERIDIEMS}
-              selected={meridiem}
-              onSelect={(value) => setActiveHour(compose24(value, hour12))}
-              testIDForValue={(value) => `${testIDPrefix}-wheel-ap-${value}`}
-            />
-          </View>
-          <View className="flex-1">
-            <WheelPicker
-              testID={`${testIDPrefix}-wheel-h`}
-              values={HOURS_12}
-              selected={hour12}
-              onSelect={(value) => setActiveHour(compose24(meridiem, value))}
-              testIDForValue={(value) => `${testIDPrefix}-wheel-h-${value}`}
-            />
-          </View>
-          <View className="flex-1">
-            <WheelPicker
-              testID={`${testIDPrefix}-wheel-m`}
-              values={MINUTES}
-              selected={activeMinute}
-              onSelect={setActiveMinute}
-              testIDForValue={(value) => `${testIDPrefix}-wheel-m-${value}`}
-            />
-          </View>
           {/* 위·아래 흰 페이드 — 가장자리 값이 옅어져 가운데로 시선을 모은다(pointerEvents none). */}
           <LinearGradient
             pointerEvents="none"

@@ -1571,10 +1571,10 @@ describe('여행 중 직접 수정(i07)', () => {
         screen.queryAllByTestId(/^itinerary-edit-time-start-h-/)
       ).toHaveLength(0);
 
-      // 시작 탭: 오후 1시 → 2시. 종료 탭: 오후 2시 → 3시(분은 시드 유지).
-      fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-2'));
+      // 시작 탭: 13시 → 14시. 종료 탭: 14시 → 15시(분은 시드 유지). TRIP-1437 — 24시간 시 셀.
+      fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-14'));
       fireEvent.press(screen.getByTestId('itinerary-edit-time-seg-end'));
-      fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-3'));
+      fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-15'));
       fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
@@ -1601,7 +1601,7 @@ describe('여행 중 직접 수정(i07)', () => {
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('p3')}`));
       await screen.findByTestId(SHEET);
-      fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-3'));
+      fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-15'));
 
       expect(screen.getByTestId('itinerary-edit-time-error')).toHaveTextContent(
         '종료 시각은 시작보다 늦어야 해요'
@@ -2510,7 +2510,8 @@ describe('시각 조정 시트', () => {
    * ⚠️ 옛 IT4 [취소]는 h04 에 취소 버튼이 없어(Figma 3974:2574) 닫힘 경로(onClose)로 대체했다(02a §6).
    * ⚠️ 슬롯 a 의 endAt 은 일부러 `11:45:30` — 위젯은 초를 `:00` 으로 만들므로, "null 대신 시드 endAt 방출"
    *    과 "페이지가 null 을 드래프트 원값으로 풀기"가 여기서 갈린다(02a ★3).
-   * ⚠️ 휠은 12시간제·활성 탭 한 벌 — 10:15(오전)→23시는 `ap-오후` 다음 `h-11` 두 번이다(02a ★4).
+   * ⚠️ 휠은 활성 탭 한 벌 — TRIP-1437 부터 24시간 시 셀(`h-23`) 한 번이다(옛 12시간은 `ap-오후`+`h-11` 두 번).
+   *    시 셀은 zero-pad(`h-09`) — 같은 이름 `h-11`·`h-12` 는 이제 11시·12시다(오전/오후 무관).
    * 시트 실개폐·스와이프 실동작은 `@gorhom/bottom-sheet` 통과형 목이 원리적으로 못 본다(6-b 실기).
    *
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=시각칩/탭/휠/적용·닫힘·저장 → 단언=시트 개폐·카드·PUT.
@@ -2745,7 +2746,7 @@ describe('시각 조정 시트', () => {
       renderPage();
       await openSheetFor('poi-a');
 
-      press('wheel-h-11'); // 오전 11시 — 적용 전이라 드래프트엔 안 들어가야 한다.
+      press('wheel-h-11'); // 11시 — 적용 전이라 드래프트엔 안 들어가야 한다.
       fireEvent(screen.getByTestId(SHEET), 'close');
 
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
@@ -2758,21 +2759,25 @@ describe('시각 조정 시트', () => {
       // 상태 고착 없음 — 닫힘이 편집 중 슬롯을 풀어야 같은 칩이 다시 시트를 연다(브리프 §9①).
       fireEvent.press(screen.getByTestId(timeChip('poi-a')));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
-      expect(screen.getByTestId(t('readout'))).toHaveTextContent(/오전 10:15/);
+      // TRIP-1437 — 24시간 완전 일치(옛 `/오전 10:15/`). 다시 연 시트가 원래 시각으로 시드된다.
+      expect(screen.getByTestId(t('readout'))).toHaveTextContent(
+        '시작 10:15 · 종료 11:45'
+      );
     });
   });
 
   // TRIP-1417 (Q-100·101) — 이 페이지에서 QA 가 본 두 결함. 초가 붙은 실제 endAt(11:45:30)이 readout 에
   // 시각으로 보이고, 머리 X 로 닫아도 IT4(딤 닫힘)와 결과가 같다.
   describe('🔴 IT4x · readout 은 종료 시각을 보이고, 머리 X 로 닫으면 카드 무변경·PUT 0·다시 열린다', () => {
-    it('a 시트를 열면 "시작 오전 10:15 · 종료 오전 11:45" 이고, 시작을 바꿔 둔 채 X 를 눌러도 카드는 10:15 그대로다', async () => {
+    it('a 시트를 열면 "시작 10:15 · 종료 11:45" 이고, 시작을 바꿔 둔 채 X 를 눌러도 카드는 10:15 그대로다', async () => {
       renderPage();
       await openSheetFor('poi-a');
+      // TRIP-1437 — 24시간 완전 일치(옛 "시작 오전 10:15 · 종료 오전 11:45").
       expect(screen.getByTestId(t('readout'))).toHaveTextContent(
-        '시작 오전 10:15 · 종료 오전 11:45'
+        '시작 10:15 · 종료 11:45'
       );
 
-      press('wheel-h-11'); // 오전 11시 — 적용 전이라 드래프트엔 안 들어가야 한다.
+      press('wheel-h-11'); // 11시 — 적용 전이라 드래프트엔 안 들어가야 한다.
       press('close');
 
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
@@ -2794,7 +2799,7 @@ describe('시각 조정 시트', () => {
       renderPage();
       await openSheetFor('poi-a');
 
-      press('wheel-ap-오후', 'wheel-h-11');
+      press('wheel-h-23');
       expect(screen.getByTestId(t('error'))).toHaveTextContent(
         '종료 시각은 시작보다 늦어야 해요'
       );
@@ -2805,7 +2810,7 @@ describe('시각 조정 시트', () => {
       expect(putCalls).toBe(0);
     });
 
-    it('IT5b · 시작만 오전 11:15 로 적용하면 저장 PUT 의 a 는 endAt 원값 11:45:30(초 보존) · endsNextDay false', async () => {
+    it('IT5b · 시작만 11:15 로 적용하면 저장 PUT 의 a 는 endAt 원값 11:45:30(초 보존) · endsNextDay false', async () => {
       renderPage();
       await openSheetFor('poi-a');
 
@@ -2826,15 +2831,15 @@ describe('시각 조정 시트', () => {
     it('IT5c · 종료를 먼저 23:45 로 적용한 뒤 다시 열어 시작만 바꾸면 endAt 은 드래프트 23:45:00 이다(서버 원값 아님)', async () => {
       renderPage();
 
-      // 1차 — 종료를 오후 11:45 로 설정해 적용한다.
+      // 1차 — 종료를 23:45 로 설정해 적용한다.
       await openSheetFor('poi-a');
-      press('seg-end', 'wheel-ap-오후');
+      press('seg-end', 'wheel-h-23');
       await applyAndWaitClosed();
 
-      // 2차 — 다시 열어 시작만 오전 9시로 바꾼다(종료 미설정).
+      // 2차 — 다시 열어 시작만 9시로 바꾼다(종료 미설정).
       fireEvent.press(screen.getByTestId(timeChip('poi-a')));
       await screen.findByTestId(SHEET);
-      press('wheel-h-9');
+      press('wheel-h-09');
       await applyAndWaitClosed();
 
       const slotA = await saveAndGetSlot('poi-a');
@@ -2846,12 +2851,12 @@ describe('시각 조정 시트', () => {
 
   // TRIP-1215 — 시트가 허용한 정상 자정 넘김(밤 시작 + 새벽 종료)은 페이지를 지나 endsNextDay true 로 저장된다.
   describe('🔴 IT5d · 정상 자정 넘김은 막히지 않고 endsNextDay true 로 저장된다', () => {
-    it('시작 오후 11:15 · 종료 오전 12:45 로 적용하면 저장 PUT 의 a 는 23:15:00–00:45:00 · endsNextDay true', async () => {
+    it('시작 23:15 · 종료 00:45 로 적용하면 저장 PUT 의 a 는 23:15:00–00:45:00 · endsNextDay true', async () => {
       renderPage();
       await openSheetFor('poi-a');
 
-      // 시작 10:15 → 오후 → 22:15 → 11 → 23:15. 종료 11:45 → 12(오전 12 = 00시) → 00:45.
-      press('wheel-ap-오후', 'wheel-h-11', 'seg-end', 'wheel-h-12');
+      // 시작 10:15 → 23:15. 종료 11:45 → 00:45(시 셀 `00` — 옛 12시간의 "오전 12").
+      press('wheel-h-23', 'seg-end', 'wheel-h-00');
       await applyAndWaitClosed();
       const slotA = await saveAndGetSlot('poi-a');
 
@@ -2862,11 +2867,11 @@ describe('시각 조정 시트', () => {
   });
 
   describe('🔴 IT6 · AC-11 — 종료를 설정하고 적용하면 저장 PUT 의 endAt 이 그 값이다', () => {
-    it('종료를 오후 1:45 로 설정해 저장하면 a 는 10:15:00–13:45:00 · endsNextDay false', async () => {
+    it('종료를 13:45 로 설정해 저장하면 a 는 10:15:00–13:45:00 · endsNextDay false', async () => {
       renderPage();
       await openSheetFor('poi-a');
 
-      press('seg-end', 'wheel-ap-오후', 'wheel-h-1');
+      press('seg-end', 'wheel-h-13');
       await applyAndWaitClosed();
       expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(
         /10:15–13:45/

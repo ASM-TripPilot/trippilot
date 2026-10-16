@@ -442,6 +442,34 @@ const VIEW_ONLY_HANDLERS = {
   onAgeCancel: noop,
 };
 
+// h03 시작 시각 비어 있음 — 칸 값을 상태로 쥐고 onPickStart 로 갱신한다. 시트를 열고 아무것도 안 만진
+// 채 닫았을 때 칸이 '시각 선택' 그대로인지(AC-8) 이 상태 배선이 있어야 6-b 에서 보인다.
+function MustVisitEmptyStartPreview() {
+  const [fixedStart, setFixedStart] = useState<string | null>(null);
+  return (
+    <MustVisitTimeScreen
+      sourcePoiId="poi-a"
+      placeName="부산시립미술관"
+      region="부산 부산진구"
+      imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
+      dayChips={tripDayChips({
+        startDate: '2026-06-10',
+        endDate: '2026-06-13',
+      })}
+      startOptions={startTimeOptions()}
+      startAnchor="10:30"
+      form={{
+        fixed: true,
+        fixedDate: '2026-06-11',
+        fixedStart,
+        dwellKey: 'NORMAL',
+      }}
+      blockReason={null}
+      onPickStart={setFixedStart}
+    />
+  );
+}
+
 // 로그인 화면의 조건부 UI 5개는 전부 이 세 값의 파생이다 → 값을 넣으면 그 상태가 그대로 나온다.
 type LoginState = Pick<
   SocialLoginScreenProps,
@@ -3927,6 +3955,27 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
+  // j01 방문 시각 수정 · 완료 전(TRIP-1437 · Q-116) — 도착만 있는 방문. 완료 칸은 휠 없이 "아직 완료 전이에요"
+  // 회색 자리 표시만 선다(옛 흐린 '00:00' 휠 폐기). Figma 에 완료 전 프레임이 없다(알려진 차이) — 6-b 육안.
+  {
+    key: 'records-visit-time-sheet-pending',
+    band: 'j',
+    label: 'j01 · 방문 시각 수정 · 완료 전',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <VisitTimeSheet
+          visitCheckId="r3"
+          placeName="○○ 카페"
+          arrivedAt="2026-08-21T08:10:00Z"
+          completedAt={null}
+          now="2026-08-21T12:00:00Z"
+          onSave={noop}
+          onCancel={noop}
+        />
+      </View>
+    ),
+  },
   // j01 방문 기록 empty 얼굴(TRIP-1085 · Figma 4705:4054) — 방문 0건인 오늘 탭. 빈 안내 + 계획 행 4(오늘 탭이라
   // 행마다 "방문 체크") + [방문 추가], 지도는 번호 핀만. 귀속 행은 코드상 방문에서 파생돼(BR-U5-25) 0건인 날엔
   // 숙소명이 없다 → 귀속 줄 없음(TRIP-1097, 헤더가 날짜 귀속 · Figma 의 숙소명 줄과 다름, 드리프트). 빈 안내 문구도 코드 정본 유지(Q7).
@@ -5359,6 +5408,16 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // h03 시작 시각 비어 있음(TRIP-1437 · Q-066) — 필드를 누르면 시트의 시·분 두 열이 일과 시작(10:30)에 서고
+  // 선택 강조는 없다. 열고 닫아도 칸이 '시각 선택' 그대로인지(Android 프로그램 스크롤 정지 이벤트)는 6-b 육안.
+  // Figma 에 시트 프레임이 없어 j01 `4707:2808` 두 열 모양을 빌렸다.
+  {
+    key: 'h03-mustvisit-time-empty-start',
+    band: 'h',
+    label: 'h03 · 방문 시각 지정 · 시작 시각 비어 있음',
+    login: null,
+    render: () => <MustVisitEmptyStartPreview />,
+  },
   // h08 지도+시트 셸 접힘(TRIP-783) — Figma `4221:2448` 대조용. 셸(전면 지도+3스냅 시트+오버레이+
   // CTA) 부품을 h08 default 4슬롯으로 조립한다. 3스냅 실개폐·딤은 통과형 목 사각이라 기본 진입 peek
   // 얼굴만 고정된다 — 6-b 실기가 유일한 개폐 그물. 지도 태그는 셸이 소유하므로 여기엔 없다.
@@ -6235,7 +6294,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // h04 오류 상태(TRIP-1215) — QA Q-29 모양(11:00–08:00)을 그대로 심어 열자마자 문구·회색 [적용]이
-  // 보인다(readout 종료 "오전 8:00"과 문구 동시 표시를 육안 대조). Figma 프레임 없음.
+  // 보인다(readout 종료 "08:00"과 문구 동시 표시를 육안 대조). Figma 프레임 없음.
   {
     key: 'h04-time-adjust-sheet-error',
     band: 'h',
@@ -6255,8 +6314,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
-  // h04 휠 정렬(TRIP-1417 Q-100) — 15:50–17:14 는 세 열 모두 0 이 아닌 칸이라 휠이 밴드에서 어긋나면 바로
-  // 보인다. [종료] 탭 전환 뒤 오후·5·14 정렬도 여기서 본다. 재활용 재현은 실제 흐름에서만 된다(6-b).
+  // h04 휠 정렬(TRIP-1417 Q-100) — 15:50–17:14 는 두 열 모두 0 이 아닌 칸이라 휠이 밴드에서 어긋나면 바로
+  // 보인다. [종료] 탭 전환 뒤 17·14 정렬도 여기서 본다(TRIP-1437 — 24시간 두 열). 재활용 재현은 실제 흐름에서만 된다(6-b).
   {
     key: 'h04-time-adjust-sheet-q100',
     band: 'h',
