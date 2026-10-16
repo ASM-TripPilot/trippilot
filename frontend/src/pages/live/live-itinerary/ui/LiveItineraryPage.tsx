@@ -147,8 +147,23 @@ export function LiveItineraryPage({
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   // i03 위험 상세 시트 열림 = 그 트리거 id(TRIP-749). 재조회로 트리거가 사라지면 시트도 사라진다.
   const [riskTriggerId, setRiskTriggerId] = useState<string | null>(null);
-  // 허브 초기 스냅은 마운트 때 한 번만 정한다 — 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
-  const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
+  // 허브 시트 스냅. gorhom 은 이 값이 바뀔 때마다 그 칸으로 스냅하므로 한 번 2 로 올리면 내리지 않는다 —
+  // 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
+  const [initialSnapIndex, setInitialSnapIndex] = useState(
+    appliedSessionId ? 2 : undefined
+  );
+  // TRIP-1418 — 적용 성공은 `dismissTo` 로 스택의 이 인스턴스에 돌아온다(새로 마운트되지 않는다). 그래서 새 applied 가
+  // 도착한 렌더에서 상태를 다시 맞춘다(렌더 중 조정 — 옛 일차로 한 번 그렸다가 바뀌지 않게): 고른 일차를 비워 `day`(없으면
+  // 오늘)가 이기게 하고 시트를 펼친다. applied 가 지워질 때(i08 [확인])는 아무것도 바꾸지 않는다.
+  const [seenAppliedSessionId, setSeenAppliedSessionId] =
+    useState(appliedSessionId);
+  if (appliedSessionId !== seenAppliedSessionId) {
+    setSeenAppliedSessionId(appliedSessionId);
+    if (appliedSessionId) {
+      setSelectedDay(null);
+      setInitialSnapIndex(2);
+    }
+  }
   // [사진] 안내 한 줄(TRIP-1070) — 누른 그 카드(poiId, TRIP-1203)에만. 어느 카드든 다음 [사진] 누름에 지운다.
   // settings(TRIP-1216) = 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
   const [photoNotice, setPhotoNotice] = useState<{

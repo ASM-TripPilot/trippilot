@@ -28,7 +28,8 @@ import { PlanbDraftPage } from './PlanbDraftPage';
  *  - DRAFT → 초안(`after`) 순서대로 행을 그리고 [직접 수정]/[적용하기]. 초안이 아직 없거나(로딩·
  *    ready=false) 조회가 실패하면 안내를 띄우고 [적용하기]를 잠근다(TRIP-1007 — 옛 "제목만" 계약 반전).
  *  - [적용하기] → 확정 seam `useApplyReplan().mutate({tripId, sessionId}, { onSuccess })` 1회(E1 — diff
- *    확인 페이지를 거치지 않는다). onSuccess → 허브로 `router.replace` + `applied=sessionId`(Q7).
+ *    확인 페이지를 거치지 않는다). onSuccess → 허브로 `router.dismissTo` + `applied=sessionId`(Q7 · TRIP-1418 —
+ *    replace 면 스택 밑의 원래 허브 위에 허브가 한 장 더 쌓인다. 스택 모양 자체는 `planbApplyStack.integration`).
  *  - 확정 요청 중이면 [적용하기] 잠금, 실패면 같은 안내 자리에 "변경을 반영하지 못했어요"(Q6).
  *  - NO_SOLUTION·FAILED → 같은 뷰의 안내 상태. FAILED 에서 옛 manual?variant=error push 는 없다(E3).
  *    [조건 바꿔 다시 짜기]/[다시 시도] → i04(`/trips/{id}/planb`), [직접 수정] → planb/manual.
@@ -155,6 +156,11 @@ const mockPush = jest.fn();
 // ‹ 의 `router.back()` 도 실물처럼 가로채기를 거친다 — 켜진 채 부르면 콜백으로 되돌아온다.
 const mockBack = jest.fn(() => mockRemove({ type: 'GO_BACK' }, 'back'));
 const mockReplace = jest.fn();
+// TRIP-1418 — 적용 성공의 허브 복귀. 실물 dismissTo 는 POP_TO 액션이라 가로채기를 거친다 — 맨 jest.fn() 이면
+// "확인창 없이 나간다"(G1)가 공허하게 참이 된다(02a ★1).
+const mockDismissTo = jest.fn((href: unknown) =>
+  mockRemove({ type: 'POP_TO', payload: href }, 'dismissTo')
+);
 // 5-b 차단-1 — 뒤로 갈 화면이 있는가(false = 딥링크 착지). 가짜 back 은 이 값을 보지 않으므로
 // false 케이스는 나감(mockExits)이 아니라 back·replace 호출 수로 판정한다(02a ★14).
 let mockCanGoBack = true;
@@ -163,6 +169,7 @@ jest.mock('expo-router', () => ({
     push: mockPush,
     back: mockBack,
     replace: mockReplace,
+    dismissTo: mockDismissTo,
     canGoBack: () => mockCanGoBack,
   }),
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -366,6 +373,7 @@ beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockCanGoBack = true;
   mockMutate.mockClear();
   mockApply.isPending = false;
@@ -775,7 +783,8 @@ describe('🔴 D6 · TRIP-1007 AC-1 · 5-b 차단-1 — 초안 얼굴은 이 세
   });
 });
 
-describe('🔴 P2·P3 · AC-9(b)(c) · E1·Q7 — [적용하기]는 바로 확정하고 성공하면 허브로 바꿔 끼운다', () => {
+// TRIP-1418 — 성공 뒤 이동이 replace 에서 dismissTo 로 바뀌었다(스택의 원래 허브로 돌아간다, QA Q-106).
+describe('🔴 P2·P3 · AC-9(b)(c) · E1·Q7 — [적용하기]는 바로 확정하고 성공하면 원래 허브로 돌아간다', () => {
   it('누르면 seam mutate 가 {tripId, sessionId} + onSuccess 로 1회, diff 로 가는 push 는 없다', () => {
     mockSession.data = session('DRAFT');
     renderPage();
@@ -788,11 +797,12 @@ describe('🔴 P2·P3 · AC-9(b)(c) · E1·Q7 — [적용하기]는 바로 확�
       expect.objectContaining({ onSuccess: expect.any(Function) })
     );
     expect(mockPush).not.toHaveBeenCalled();
-    // 5-b 차단-1 — 성공 콜백 전에는 이동하지 않는다(P3 와 짝: "성공 뒤에만" replace).
+    // 5-b 차단-1 — 성공 콜백 전에는 이동하지 않는다(P3 와 짝: "성공 뒤에만" 이동). 이동 수단 둘 다 본다(02a ★3).
     expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
   });
 
-  it('onSuccess 가 불리면 router.replace 가 허브 + applied=sessionId 로 1회', () => {
+  it('onSuccess 가 불리면 router.dismissTo 가 허브 + applied=sessionId 로 1회 — replace·push 0', () => {
     mockSession.data = session('DRAFT');
     renderPage();
     fireEvent.press(screen.getByText('적용하기'));
@@ -800,12 +810,30 @@ describe('🔴 P2·P3 · AC-9(b)(c) · E1·Q7 — [적용하기]는 바로 확�
     const options = mockMutate.mock.calls[0]?.[1] as { onSuccess: () => void };
     act(() => options.onSuccess());
 
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith({
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledWith({
       pathname: '/trips/[tripId]/live',
       params: { tripId: TRIP_ID, applied: SESSION_ID },
     });
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('G1 적용 성공의 허브 복귀(POP_TO)는 이탈 확인 없이 1회 나간다 — 가로채기가 켜진 초안 얼굴에서도 (TRIP-1418 AC-3)', () => {
+    renderDraft();
+    // 앵커 — 이 얼굴은 가로채기가 켜져 있다(뒤로는 확인으로 붙잡힌다). 없으면 아래 "확인 0"이 공허하다(02a ★2).
+    attemptRemove({ type: 'GO_BACK' });
+    expect(screen.getByTestId(DRAFT_LEAVE)).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId(`${DRAFT_LEAVE}-stay`));
+    expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+
+    fireEvent.press(screen.getByText('적용하기'));
+    const options = mockMutate.mock.calls[0]?.[1] as { onSuccess: () => void };
+    act(() => options.onSuccess());
+
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+    expect(mockExits).toHaveLength(1);
   });
 });
 
@@ -817,24 +845,29 @@ describe('🔴 TRIP-1195 결정 5 · 확정 뒤 허브는 확정한 날로 돌�
     act(() => options.onSuccess());
   }
 
+  // TRIP-1418 — dismissTo 는 원래 허브의 params 를 통째로 바꾼다(병합 없음) — day 를 다시 실어야 그 일차로 열린다.
   it('C1 오늘이 아닌 날 세션을 확정하면 허브 params 에 day=그 날짜가 실린다', () => {
     mockSession.data = session('DRAFT', { targetDate: '2999-01-02' });
     applyAndSucceed();
 
-    expect(mockReplace).toHaveBeenCalledWith({
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledWith({
       pathname: '/trips/[tripId]/live',
       params: { tripId: TRIP_ID, applied: SESSION_ID, day: '2999-01-02' },
     });
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('C2 무회귀 — 오늘 세션을 확정하면 종전과 같은 params(day 없음)다', () => {
     mockSession.data = session('DRAFT', { targetDate: seoulDate(new Date()) });
     applyAndSucceed();
 
-    expect(mockReplace).toHaveBeenCalledWith({
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledWith({
       pathname: '/trips/[tripId]/live',
       params: { tripId: TRIP_ID, applied: SESSION_ID },
     });
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });
 
@@ -881,11 +914,13 @@ describe('🔴 P5 · AC-9(e) · Q6 — 확정 실패는 같은 안내 자리에'
       '원래 일정은 그대로 있어요. 잠시 후 다시 시도해 주세요.'
     );
     expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
 
     fireEvent.press(screen.getByText('적용하기'));
     expect(mockMutate).toHaveBeenCalledTimes(1);
     // 5-b 차단-1 — 재시도를 눌러도 성공 전에는 이동하지 않는다.
     expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
   });
 });
 
@@ -1391,8 +1426,9 @@ describe('🔴 TRIP-1277 AC9 · Q9 — 스와이프·하드웨어 뒤로도 같�
     }
   );
 
-  it.each([['REPLACE'], ['NAVIGATE'], ['PUSH']])(
-    'L4 %s 액션(적용 성공의 허브 replace·내일 재계획의 solving replace·직접 수정 push)은 확인 없이 받은 그 객체로 통과한다',
+  // TRIP-1418 — 적용 성공의 허브 복귀가 replace 에서 dismissTo(POP_TO)로 바뀌어 목록에 POP_TO 를 더했다.
+  it.each([['POP_TO'], ['REPLACE'], ['NAVIGATE'], ['PUSH']])(
+    'L4 %s 액션(적용 성공의 허브 dismissTo·내일 재계획의 solving replace·직접 수정 push)은 확인 없이 받은 그 객체로 통과한다',
     (type) => {
       renderDraft();
       // 앵커 — 이 얼굴은 가로채기가 켜져 있다(뒤로는 확인으로 붙잡힌다). 이게 없으면 아래 통과가 공허하다.
@@ -1472,6 +1508,24 @@ describe('🔴 TRIP-1277 AC11 — 요청 대기 중엔 확인도 이동도 없�
 
     attemptRemove(action);
 
+    expect(mockExits).toHaveLength(1);
+    for (const [sent] of mockNavigation.dispatch.mock.calls) {
+      expect(sent).toBe(action);
+    }
+  });
+
+  // TRIP-1418 AC-3 — 적용 성공의 허브 복귀는 이제 dismissTo(POP_TO)다. 대기 중에도 뒤로(GO_BACK·POP)만 삼킨다.
+  it('L9b [적용하기] 대기 중에도 POP_TO(적용 성공의 허브 복귀)는 막지 않는다 — 받은 객체로 1회 통과', () => {
+    mockApply.isPending = true;
+    renderDraft();
+    // 앵커 — 같은 상태에서 뒤로는 삼켜진다(L8).
+    attemptRemove({ type: 'GO_BACK' });
+    expect(mockExits).toEqual([]);
+    const action = { type: 'POP_TO', payload: { name: 'live' } };
+
+    attemptRemove(action);
+
+    expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
     expect(mockExits).toHaveLength(1);
     for (const [sent] of mockNavigation.dispatch.mock.calls) {
       expect(sent).toBe(action);
