@@ -359,3 +359,59 @@ describe('TRIP-1210·TRIP-1219 a · 박수 합이 30박이면 도시 추가와 [
     expect(spies.onChangeNights).toHaveBeenCalledWith(2, 10);
   });
 });
+
+// TRIP-1423 (Q-055) — 도시가 0곳이면 [적용]을 눌러 빈 여행지로 닫을 수 없다. 닫기(딤 탭·아래로 끌기)는 그대로 열려 있다.
+describe('TRIP-1423 · 0곳이면 [적용] 진짜 disabled — 닫기는 그대로', () => {
+  it('0곳 — [적용] disabled 매처 + press 해도 onApply 0회, 시트 닫힘 신호는 onClose 로 간다', () => {
+    const spies = renderSheet([]);
+    const apply = screen.getByTestId('trip-wizard-destination-apply');
+
+    expect(apply).toBeDisabled();
+    fireEvent.press(apply);
+    expect(spies.onApply).not.toHaveBeenCalled();
+
+    // 딤 탭·아래로 끌기의 배선 — 실제 딤·끌기 제스처는 jest 사각(6-b), 여기선 onClose 연결만 본다.
+    fireEvent(screen.getByTestId('trip-wizard-destination-sheet'), 'close');
+    expect(spies.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('짝 — 1곳이면 [적용]이 살아 있고 누르면 onApply 1회', () => {
+    const spies = renderSheet([{ seq: 1, region: '부산광역시', nights: 1 }]);
+    const apply = screen.getByTestId('trip-wizard-destination-apply');
+
+    expect(apply).not.toBeDisabled();
+    fireEvent.press(apply);
+    expect(spies.onApply).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1423 (UX-05) — −·+·× 는 아이콘뿐이라 라벨이 없으면 화면 낭독기가 testID 나 "버튼"만 읽는다(QA 실측).
+describe('TRIP-1423 · 여행지 행 접근성 라벨 — "{도시} 1박 줄이기" · "{도시} 1박 늘리기" · "{도시} 빼기"', () => {
+  it('행마다 라벨로 찾은 버튼이 그 행의 −·+·× testID 버튼이고, disabled 인 − 도 라벨이 있다', () => {
+    renderSheet([
+      { seq: 1, region: '부산광역시', nights: 2 },
+      { seq: 2, region: '경주시', nights: 1 },
+    ]);
+
+    // 경주시 − 는 다도시 1박이라 disabled — 꺼진 버튼도 이름은 읽혀야 한다.
+    expect(
+      screen.getByTestId('trip-wizard-destination-nights-dec-2')
+    ).toBeDisabled();
+
+    const cases: [string, string][] = [
+      ['trip-wizard-destination-nights-dec-1', '부산광역시 1박 줄이기'],
+      ['trip-wizard-destination-nights-inc-1', '부산광역시 1박 늘리기'],
+      ['trip-wizard-destination-remove-1', '부산광역시 빼기'],
+      ['trip-wizard-destination-nights-dec-2', '경주시 1박 줄이기'],
+      ['trip-wizard-destination-nights-inc-2', '경주시 1박 늘리기'],
+      ['trip-wizard-destination-remove-2', '경주시 빼기'],
+    ];
+    for (const [testID, label] of cases) {
+      const button = screen.getByTestId(testID);
+      // 같은 요소 — 라벨을 다른 View 에 붙이면 여기서 red
+      expect(screen.getByRole('button', { name: label })).toBe(button);
+      // 문자열 — role 이름은 자식 글자로도 맞춰지므로 prop 을 직접 본다
+      expect(button.props.accessibilityLabel).toBe(label);
+    }
+  });
+});

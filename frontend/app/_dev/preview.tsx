@@ -184,6 +184,7 @@ import {
   type TripWizardStep1ScreenProps,
 } from '@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen';
 import { CompanionEditSheet } from '@/pages/trip/trip-new-step1/ui/CompanionEditSheet';
+import { DayWindowEditSheet } from '@/pages/trip/trip-new-step1/ui/DayWindowEditSheet';
 import { DestinationEditSheet } from '@/pages/trip/trip-new-step1/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/pages/trip/trip-new-step1/ui/PeriodEditSheet';
 import {
@@ -4994,6 +4995,53 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1423 — 0곳 엣지: [적용]이 진짜 disabled(opacity-40)다. 딤 탭·아래로 끌어 닫기는 열려 있어야 한다 —
+  // 바텀시트 통과형 목이라 jest 사각, 이 키가 6-b 육안 자리다. 행 −·+·× 접근성 라벨은 위 두 키에서 본다.
+  {
+    key: 'trip-new-step1-destination-sheet-empty',
+    band: 'g',
+    label: 'g01 · 여행지 편집 시트 (0곳 · 적용 비활성)',
+    login: null,
+    render: () => (
+      <DestinationEditSheet
+        destinations={[]}
+        onChangeNights={noop}
+        onRemove={noop}
+        onAddCity={noop}
+        onApply={noop}
+        onClose={noop}
+      />
+    ),
+  },
+  // g01 일과 시간 편집 시트(TRIP-1308 · TRIP-1423, Figma `4936:3098`) — 빈 값으로 연 여러 날 변형. 드래프트가
+  // 시트 안에 살아 탭·휠을 실제로 만질 수 있다: [첫날]·[마지막 날] 탭을 눌러도 값이 안 생기고("따로 안
+  // 정해요") 휠이 12:00·18:00 칸에 서 있기만 하는지, 휠을 돌려야 값·링크가 생기는지가 6-b 자리다(anchor
+  // 실위치·Android 누수는 jest 사각).
+  {
+    key: 'trip-new-step1-daywindow-sheet',
+    band: 'g',
+    label: 'g01 · 일과 시간 시트 (여러 날 · 빈 값)',
+    login: null,
+    render: () => (
+      <DayWindowEditSheet
+        value={{}}
+        sameDay={false}
+        onApply={noop}
+        onClose={noop}
+      />
+    ),
+  },
+  // 같은 시트의 당일치기 변형 — 시작·끝 휠 두 개가 나란히(반폭) 서고 부제가 "당일치기라 …"다. 두 휠을 동시에
+  // 굴려 멈춰도 두 값이 다 남는지(TRIP-1423 SF2)는 실기 손가락으로만 재현된다.
+  {
+    key: 'trip-new-step1-daywindow-sheet-sameday',
+    band: 'g',
+    label: 'g01 · 일과 시간 시트 (당일치기)',
+    login: null,
+    render: () => (
+      <DayWindowEditSheet value={{}} sameDay onApply={noop} onClose={noop} />
+    ),
+  },
   // g01 기간 편집 시트(TRIP-667, Figma `3627:2068`) — 완성 범위(6/10~6/13) 열린 상태. `PeriodEditSheet`은
   // props-only 순수 뷰(스토어·라우터·시계 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다. jest 는
   // 시작/종료 분홍 원·사이 연장 배경·요일 색·시트 딤/개폐를 못 봐(바텀시트 통과형 목) 이 키가 유일한
@@ -5039,8 +5087,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   // g01 동행 편집 시트(TRIP-668, Figma `3642:2068`) — 친구 선택·인원 2명 열린 상태.
   // `CompanionEditSheet`은 props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정
   // 없이 그대로 태운다. jest 는 칩 활성 분홍 배경·글리프 흰색·스테퍼 원·시트 딤/개폐를 못 봐
-  // (바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다. 혼자를 골랐을 때의 스테퍼 회색·
-  // 값 1명 고정은 배선(TripNewStep1Page)이 지는 값 고정이라 이 정적 프리뷰로는 안 보인다.
+  // (바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다. 친구 2명이라 − 가 흐리다(TRIP-1423 — 친구·가족
+  // 2명 이상). 칩을 고를 때 인원이 맞춰지는 것은 배선(TripNewStep1Page) 몫이라 이 정적 프리뷰로는 안 보인다.
   {
     key: 'trip-new-step1-companion-sheet',
     band: 'g',
