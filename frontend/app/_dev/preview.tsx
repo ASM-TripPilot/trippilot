@@ -7053,6 +7053,24 @@ export const PREVIEW_STATES: PreviewState[] = [
       </>
     ),
   },
+  // i01 메모 시트 잠금(TRIP-1415) — 첫 서버 메모 조회 중. 모양은 빈 시트와 같고, 탭해도 키보드가 안 떠야 한다(6-b).
+  {
+    key: 'live-hub-memo-sheet-locked',
+    band: 'i',
+    label: 'i01 · 여행중 허브 메모 시트 (조회 중 잠금)',
+    login: null,
+    render: () => (
+      <>
+        {renderLiveHubPreview(1, { fabHidden: true })}
+        <MemoSheet
+          placeName="부산시립미술관"
+          editable={false}
+          onSubmit={noop}
+          onClose={noop}
+        />
+      </>
+    ),
+  },
   // i01 메모 저장됨(TRIP-1117, Figma 4741:4650) — 시트 없이 관람 중 카드 버튼 줄 아래 메모 박스.
   {
     key: 'live-hub-memo-saved',

@@ -21,7 +21,7 @@ import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
  * 1개 렌더해 훅을 **카드당 1회** 부르고, 그 결과를 VisitRecordCard 의 photoSlot/memoSlot 으로 넘긴다.
  * 뷰(pages `TripRecordsView`)의 시트 리스트가 `visitCheckId` 를 key 로 쓰므로, 방문이 바뀌면 이 컴포넌트가
  * 리마운트돼 MemoInline 초안이 다시 심긴다(seed-once, traps-record) — TRIP-1078 부터는 '' 가 아니라 이 세션에
- * 저장에 성공한 메모(`savedMemo`, 없으면 '').
+ * 저장에 성공한 메모(`savedMemo`) — TRIP-1415 부터는 그다음 서버 memo(records), 없으면 ''.
  *
  * TRIP-1070 · 사진:
  *  - `+` → 앨범에서 1장 → `attachPhoto`(POST → 재조회). 못 고른 사유는 카드 안 안내 한 줄
@@ -57,6 +57,7 @@ export function VisitRecordCardContainer({
     retryUpload,
     saveMemo,
     savedMemo,
+    memoReady,
   } = useVisitAttachments({
     tripId,
     visitCheckId: card.visitCheckId,
@@ -176,7 +177,13 @@ export function VisitRecordCardContainer({
       }
       memoSlot={
         <>
-          <MemoInline text={savedMemo} onSubmit={onSubmitMemo} />
+          {/* TRIP-1415 — 첫 서버 메모 조회 중엔 잠그고, 열리는 순간 key 로 한 번 다시 심는다(seed-once). */}
+          <MemoInline
+            key={memoReady ? 'open' : 'locked'}
+            editable={memoReady}
+            text={savedMemo}
+            onSubmit={onSubmitMemo}
+          />
           {memoFailed ? (
             <Text
               testID={`record-trip-memo-notice-${card.visitCheckId}`}

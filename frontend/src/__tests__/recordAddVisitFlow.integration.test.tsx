@@ -18,6 +18,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place } from '@/shared/api/index.schemas';
 import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
 import { TripRecordsPage } from '@/pages/record/trip-records';
+import { recordsHandler } from '@/test-support/tripRecordsFixtures';
 
 /**
  * 🔴 TRIP-1072 · AC-5~12·AC-14 — j01 [방문 추가] 장소 피커(즉석 방문 = 계획에 없던 곳의 도착 기록).
@@ -262,6 +263,8 @@ beforeEach(() => {
     http.get(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, () =>
       HttpResponse.json({ items: [], count: 0 })
     ),
+    // TRIP-1415 — 방문 카드가 서버 메모(records)를 조회한다(기본 실적 0건).
+    recordsHandler(),
     http.post(`${BASE}/trips/:tripId/visits`, async ({ request }) => {
       const body = (await request.json()) as PostBody;
       postBodies.push(body);

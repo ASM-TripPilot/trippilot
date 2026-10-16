@@ -29,6 +29,8 @@ export interface MemoInlineProps {
   onChangeDraft?: (draft: string) => void;
   /** TRIP-1117 — 입력 모양 덮어쓰기(허브 시트는 Figma 14px·상자 안). 미지정이면 j01 모양 그대로. */
   className?: string;
+  /** TRIP-1415 — false 면 글자·blur 를 받지 않는다(첫 서버 메모 조회 중 잠금). 기본 true = 지금 동작. */
+  editable?: boolean;
 }
 
 export function MemoInline({
@@ -36,6 +38,7 @@ export function MemoInline({
   onSubmit,
   onChangeDraft,
   className = 'min-h-[44px] py-sm font-noto text-label text-ink',
+  editable = true,
 }: MemoInlineProps): ReactElement {
   const [draft, setDraft] = useState(text ?? '');
 
@@ -49,6 +52,7 @@ export function MemoInline({
     <BottomSheetTextInput
       testID="record-trip-memo-input"
       value={draft}
+      editable={editable}
       onChangeText={(next) => {
         setDraft(next);
         onChangeDraft?.(next);
