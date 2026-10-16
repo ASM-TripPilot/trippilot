@@ -5,6 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SavedStayCardVM } from '@/entities/stay';
 import { SavedStayCard } from '@/entities/stay';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
+import { heartSaveLabel } from '@/shared/ui/HeartButton';
+import {
+  NoticeBanner,
+  type NoticeBannerNotice,
+} from '@/shared/ui/NoticeBanner';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
@@ -51,6 +56,12 @@ export interface SavedStayListScreenProps {
   isGuest?: boolean;
   /** 카드 press → 페이지가 합성·push. 화면은 id 만 올린다(합성이 stayKey 를 쓰므로 페이지 몫). */
   onPressCard?: (savedStayId: string) => void;
+  /** 하트 press → 페이지가 저장을 푼다(TRIP-1429). 화면은 id 만 올린다. */
+  onPressHeart?: (savedStayId: string) => void;
+  /** 저장 풀기 실패 안내(TRIP-1429 · INV-4) — 문구·다시 시도 여부는 페이지가 정한다. 미지정 = 없음. */
+  removeNotice?: NoticeBannerNotice | null;
+  /** 실패 안내의 [다시 시도]. */
+  onRetryRemove?: () => void;
   /** 하단 "숙소 직접 등록" → e05 등록. */
   onPressRegister?: () => void;
   /** empty CTA "숙소 둘러보기" → 숙소 탐색. */
@@ -111,15 +122,17 @@ function keyOfSavedStay(vm: SavedStayCardVM): string {
 const SavedStayRow = memo(function SavedStayRow({
   vm,
   onPressCard,
+  onPressHeart,
 }: {
   vm: SavedStayCardVM;
   onPressCard?: (savedStayId: string) => void;
+  onPressHeart?: (savedStayId: string) => void;
 }): ReactElement {
   return (
-    // 저장 목록이라 항상 담김(selected 고정). 담김 하트는 표시용이라 카드가 소유하지 않고
-    // trailing 으로 주입한다(카드는 하트 불가지) — 담김은 색이 아니라 accessibilityState +
-    // 별도 글리프 testID 로 잰다(★4·★5). 거점·지역·가격은 계약 공백이라 VM 값 그대로 흘리고
-    // (실앱은 미설정 → 카드가 이름만), 날짜라벨은 e04 에서 뗀다(F-10 — subtitle 미전달).
+    // 저장 목록이라 항상 담김(selected 고정). 하트는 카드가 소유하지 않고 trailing 으로 주입한다
+    // (카드는 하트 불가지) — 담김은 색이 아니라 accessibilityState + 별도 글리프 testID 로 잰다(★4·★5).
+    // 거점·지역·가격은 계약 공백이라 VM 값 그대로 흘리고(실앱은 미설정 → 카드가 이름만), 날짜라벨은
+    // e04 에서 뗀다(F-10 — subtitle 미전달).
     <SavedStayCard
       testID={`saved-stay-card-${vm.savedStayId}`}
       name={vm.name}
@@ -129,10 +142,22 @@ const SavedStayRow = memo(function SavedStayRow({
       region={vm.region}
       priceLabel={vm.priceLabel}
       trailing={
-        <HeartFilledGlyph
-          size={27}
-          testID={`saved-stay-heart-filled-${vm.savedStayId}`}
-        />
+        // TRIP-1429 — 하트는 저장 풀기 버튼이다(Q-040). 자기 onPress 가 있어야 누름이 카드(상세 이동)로
+        // 새지 않는다. 화살표로 id 만 올린다(직결하면 눌림 이벤트가 id 자리로 간다). 글리프는 Figma 27 그대로
+        // 두고 hitSlop 으로 손가락 영역만 44 이상으로 넓힌다(UX-05).
+        <Pressable
+          testID={`saved-stay-heart-${vm.savedStayId}`}
+          accessibilityRole="button"
+          accessibilityLabel={heartSaveLabel(vm.name)}
+          accessibilityState={{ selected: true }}
+          hitSlop={9}
+          onPress={() => onPressHeart?.(vm.savedStayId)}
+        >
+          <HeartFilledGlyph
+            size={27}
+            testID={`saved-stay-heart-filled-${vm.savedStayId}`}
+          />
+        </Pressable>
       }
       onPress={() => onPressCard?.(vm.savedStayId)}
     />
@@ -142,10 +167,12 @@ const SavedStayRow = memo(function SavedStayRow({
 function ResultsFace({
   savedStays,
   onPressCard,
+  onPressHeart,
   onPressRegister,
 }: {
   savedStays: SavedStayCardVM[];
   onPressCard?: (savedStayId: string) => void;
+  onPressHeart?: (savedStayId: string) => void;
   onPressRegister?: () => void;
 }): ReactElement {
   return (
@@ -157,7 +184,11 @@ function ResultsFace({
         data={savedStays}
         keyExtractor={keyOfSavedStay}
         renderItem={({ item }) => (
-          <SavedStayRow vm={item} onPressCard={onPressCard} />
+          <SavedStayRow
+            vm={item}
+            onPressCard={onPressCard}
+            onPressHeart={onPressHeart}
+          />
         )}
         contentContainerStyle={RESULTS_CONTENT_STYLE}
       />
@@ -267,6 +298,9 @@ export function SavedStayListScreen({
   face = 'results',
   isGuest = false,
   onPressCard,
+  onPressHeart,
+  removeNotice,
+  onRetryRemove,
   onPressRegister,
   onPressBrowse,
   onRetry,
@@ -283,6 +317,17 @@ export function SavedStayListScreen({
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
       <View testID="saved-stay-root" className="flex-1 bg-canvas">
         <AppBar subtitle={subtitle} onBack={onBack} />
+        {removeNotice ? (
+          <NoticeBanner
+            testID="saved-stay-remove-error"
+            notice={removeNotice}
+            actionTestIDs={{
+              login: 'saved-stay-remove-error-login',
+              retry: 'saved-stay-remove-error-retry',
+            }}
+            onPressAction={onRetryRemove}
+          />
+        ) : null}
 
         {screenFace === 'guest' ? (
           <GuestFace onPressLogin={onPressLogin} />
@@ -296,6 +341,7 @@ export function SavedStayListScreen({
           <ResultsFace
             savedStays={savedStays}
             onPressCard={onPressCard}
+            onPressHeart={onPressHeart}
             onPressRegister={onPressRegister}
           />
         ) : null}

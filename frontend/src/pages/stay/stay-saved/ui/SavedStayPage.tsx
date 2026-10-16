@@ -8,14 +8,21 @@
  * 정본 공백).
  *
  * 조회는 **읽기전용 재수출**(`features/trip/model/useSavedStays`)을 쓴다 — 토글 훅
- * (`features/stay/model/savedStays`)의 `remove` 는 외부키 역인덱스라 핀·수동 숙소를 못 지워
- * 목록 화면에 부적합하다(d02 선례). 게스트는 `enabled: isAuthed=false` 로 조회를 아예 안
+ * (`features/save-stay/model/savedStays`)의 `remove` 는 외부키 역인덱스라 핀·수동 숙소를 못 지워
+ * 목록 화면에 부적합하다(d02 선례). 하트 해제는 그래서 이 파일이 `savedStayId` 로 직접 지운다(TRIP-1429). 게스트는 `enabled: isAuthed=false` 로 조회를 아예 안
  * 내보내고, `isGuest` 를 상태 판정보다 먼저 화면에 내려 끝나지 않는 로딩을 피한다(d02 ★1).
  */
-import { useCallback, useMemo, type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 
-import { getAccessToken } from '@/shared/api';
+import { getAccessToken, isNotFound } from '@/shared/api';
+import {
+  deleteSavedStaysSavedStayId,
+  getGetSavedStaysQueryKey,
+} from '@/shared/api/index.hooks';
+import type { NoticeBannerNotice } from '@/shared/ui/NoticeBanner';
 
 import { resolvePlaceListState } from '@/features/explore';
 import { stayKey } from '@/features/save-stay';
@@ -26,12 +33,48 @@ import {
 } from './SavedStayListScreen';
 import { useSavedStays } from '@/features/trip';
 
+type RemoveFailure = {
+  savedStayId: string;
+  reason: 'base-in-use' | 'network';
+};
+
+// TRIP-1429 · 01b Q5 — 서버 문장은 그대로 내보이지 않는다. 409 는 다시 해도 같은 409 라 [다시 시도]가 없다.
+const REMOVE_FAILURE_NOTICE: Record<
+  RemoveFailure['reason'],
+  NoticeBannerNotice
+> = {
+  'base-in-use': {
+    message:
+      '여행의 거점으로 쓰는 숙소라 지울 수 없어요\n여행에서 거점을 먼저 바꿔 주세요',
+    action: null,
+  },
+  network: { message: '저장을 풀지 못했어요', action: 'retry' },
+};
+
 export function SavedStayPage(): ReactElement {
   // isAuthed 는 렌더 시점 1회 동기 판정(d02·StayDetailPage 선례 — "판정 대기" 제3 상태가 안 생긴다).
   const isAuthed = getAccessToken() !== null;
   const query = useSavedStays({ enabled: isAuthed });
+  const queryClient = useQueryClient();
+
+  // TRIP-1429 하트 해제(결정 ⑥) — 캐시를 고치지 않고 "이번 방문에서 지운 id" 집합으로 행을 가린다(d02
+  // releasedPoiIds 선례). 실패하면 그 id 하나만 집합에서 빼므로 행이 서버 순서 그대로 제자리에 돌아오고,
+  // 다른 행의 진행 중 해제는 건드리지 않는다 — 호출 전 목록 통째 복원은 이미 지운 다른 행을 되살린다
+  // (traps-stay 「동시 토글 스냅숏 롤백」). 성공한 id 는 집합에 남긴다: 재조회가 아직 옛 목록을 줘도
+  // 가려지고, savedStayId 는 다시 담으면 새로 생기므로 남겨도 다른 행을 가리지 않는다.
+  const [removedIds, setRemovedIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const [removeFailure, setRemoveFailure] = useState<RemoveFailure | null>(
+    null
+  );
+
   // TRIP-1363 — 행(memo)에 내려가는 cards·handlePressCard 참조를 데이터가 같은 동안 고정한다.
-  const savedStays = useMemo(() => query.data ?? [], [query.data]);
+  const savedStays = useMemo(
+    () =>
+      (query.data ?? []).filter((stay) => !removedIds.has(stay.savedStayId)),
+    [query.data, removedIds]
+  );
 
   // 장소 축(d02)과 같은 판정 함수 재사용(숙소 수로, hasQuery/hasCategory 는 늘 false).
   const listState = resolvePlaceListState({
@@ -79,12 +122,58 @@ export function SavedStayPage(): ReactElement {
     [savedStays]
   );
 
+  const removeSavedStay = useCallback(
+    async (savedStayId: string): Promise<void> => {
+      // 실패 안내는 다음 조작에서 지운다(d02 선례).
+      setRemoveFailure(null);
+      setRemovedIds((prev) => new Set(prev).add(savedStayId));
+      try {
+        await deleteSavedStaysSavedStayId(savedStayId);
+      } catch (error) {
+        // 404 = 이미 없음 — 목표 상태라 되돌리지 않는다(되돌리면 지울 수 없는 유령 행, 01b Q3).
+        if (!isNotFound(error)) {
+          setRemovedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(savedStayId);
+            return next;
+          });
+          // 409 = 거점으로 쓰는 숙소(서버 SavedStayService — openapi 미기재). 그 밖은 다시 시도로.
+          setRemoveFailure({
+            savedStayId,
+            reason:
+              isAxiosError(error) && error.response?.status === 409
+                ? 'base-in-use'
+                : 'network',
+          });
+          return;
+        }
+      }
+      // 같은 키를 보는 e02 하트·홈 배지·g02 거점 시트도 서버 목록으로 맞춘다.
+      void queryClient.invalidateQueries({
+        queryKey: getGetSavedStaysQueryKey(),
+      });
+    },
+    [queryClient]
+  );
+  // 행(memo)에 내려가는 참조라 고정한다(TRIP-1363).
+  const handlePressHeart = useCallback(
+    (savedStayId: string): void => void removeSavedStay(savedStayId),
+    [removeSavedStay]
+  );
+
   return (
     <SavedStayListScreen
       savedStays={cards}
       face={face}
       isGuest={!isAuthed}
       onPressCard={handlePressCard}
+      onPressHeart={handlePressHeart}
+      removeNotice={
+        removeFailure ? REMOVE_FAILURE_NOTICE[removeFailure.reason] : null
+      }
+      onRetryRemove={() => {
+        if (removeFailure) handlePressHeart(removeFailure.savedStayId);
+      }}
       onPressRegister={() => router.push('/stays/register')}
       onPressBrowse={() => router.push('/stays')}
       onRetry={() => void query.refetch()}
