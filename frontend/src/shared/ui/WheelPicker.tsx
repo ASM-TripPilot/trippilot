@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useRef } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -56,10 +57,12 @@ export function WheelPicker({
   disabled = false,
 }: WheelPickerProps): ReactElement {
   // 선택값을 가운데로 — 위 패딩이 PAD 라 인덱스*셀높이만큼 밀면 그 셀이 가운데 밴드에 온다(없으면
-  // 맨 위). contentOffset 은 처음 한 번만이 아니라 **값이 바뀔 때마다** 네이티브가 그 위치로 옮긴다
-  // (RN 0.81 iOS Fabric·Android 모두). 그래서 selected 가 바뀌면 휠도 따라 움직인다. 관성은 6-b.
+  // 맨 위). contentOffset 은 iOS Fabric 에서 **prop 값이 달라질 때만** 다시 적용된다. 그리고 재활용된
+  // 네이티브 스크롤뷰는 옛 크기를 들고 마운트돼 첫 오프셋이 잘릴 수 있다(TRIP-1417 Q-100). 그래서
+  // 크기가 확정된 뒤(onLayout) 같은 위치로 한 번 더 scrollTo 한다. 실제로 맞는지는 6-b 실기.
   const selectedIndex = selected === null ? -1 : values.indexOf(selected);
   const selectedOffset = selectedIndex < 0 ? 0 : selectedIndex * CELL_HEIGHT;
+  const scrollRef = useRef<ScrollView>(null);
 
   // 멈춘 위치 y 는 selectedOffset 과 같은 좌표계라 y / 셀높이 를 반올림하면 가운데 칸이다. 양 끝을
   // 넘은 값(바운스)은 첫/마지막 값으로 자른다. contentOffset 만 쓴다(다른 측정값은 jest 에 없다).
@@ -78,7 +81,11 @@ export function WheelPicker({
     <View className="w-full items-center">
       <View className="relative w-full" style={{ height: COLUMN_HEIGHT }}>
         <ScrollView
+          ref={scrollRef}
           testID={testID}
+          onLayout={() =>
+            scrollRef.current?.scrollTo({ y: selectedOffset, animated: false })
+          }
           scrollEnabled={!disabled}
           onMomentumScrollEnd={handleSettle}
           showsVerticalScrollIndicator={false}

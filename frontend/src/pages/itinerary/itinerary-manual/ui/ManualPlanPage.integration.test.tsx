@@ -730,11 +730,11 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
-      // 종료 탭을 열기만 한다(휠은 안 누른다) — 미설정 표기가 남는다.
+      // 종료 탭을 열기만 한다(휠은 안 누른다) — readout 은 현재 종료 시각을 보인다(TRIP-1417, 옛 "설정 안 됨" 뒤집음).
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-end'));
       expect(
         screen.getByTestId('itinerary-manual-time-readout')
-      ).toHaveTextContent(/설정 안 됨/);
+      ).toHaveTextContent('시작 오후 1:00 · 종료 오후 2:30');
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-start'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-2'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
@@ -767,6 +767,27 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
 
       fireEvent(screen.getByTestId(SHEET), 'close');
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+      const body = await save();
+      const c = body.days[0].slots.find((s) => s.poiId === 'c');
+      expect(c?.startAt).toBe('13:00:00');
+      expect(c?.endAt).toBe('14:30:00');
+      expect(c?.endsNextDay).toBe(false);
+    });
+  });
+
+  // TRIP-1417 (Q-101) — 시트 머리 X 도 딤 닫힘과 같은 길(onCancel)이다. 바꿔 둔 휠 값은 드래프트에 안 들어간다.
+  describe('🔴 MX · 시각 시트 머리 X 로 닫으면 시트가 빠지고 드래프트는 그대로다', () => {
+    it('c 시작을 오후 2시로 굴려 둔 채 X 를 누르면 시트가 사라지고, 저장하면 c 는 13:00–14:30 그대로다', async () => {
+      renderPage();
+      await ready();
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
+      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-2'));
+
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-close'));
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       const body = await save();

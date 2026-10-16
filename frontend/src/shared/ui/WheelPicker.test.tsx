@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { closestScrollView, stubScrollTo } from '@/test-support/sheetTree';
+
 import { WHEEL_CELL_HEIGHT, WheelPicker } from './WheelPicker';
 
 /**
@@ -240,5 +242,58 @@ describe('🔴 D · disabled 휠은 값을 받지 않는다 (TRIP-1080 · TRIP-1
     renderWheel(undefined);
     // 미지정은 undefined(=RN 기본 true)도 허용한다 — "꺼지지 않았다"만 본다(02a ★4).
     expect(screen.getByTestId(WHEEL).props.scrollEnabled).not.toBe(false);
+  });
+});
+
+/**
+ * TRIP-1417 · L (Q-100 · 01b D1) — 레이아웃이 끝나면 선택 셀을 가운데 밴드로 **다시** 맞춘다.
+ *
+ * 실기에서 `contentOffset` 값은 맞는데 휠이 엉뚱한 칸에 서 있었다 — 재활용된 네이티브 스크롤뷰의 옛 크기로
+ * 마운트 때 오프셋이 잘린다(브리프 ①). 그래서 크기가 확정된 뒤(`onLayout`) `scrollTo` 로 한 번 더 맞춘다.
+ *
+ * 무엇을 보장하나: layout 이벤트가 오면 그 열의 `scrollTo` 가 `{ y: 선택 인덱스 × 셀 높이, animated: false }` 로
+ * 1회 불린다. 선택이 없거나 목록에 없으면 y 0.
+ *
+ * 커버하지 않는 것(02a ★5): 실제로 밴드 안에 오는지(재활용 재현)는 jest 가 모른다 — 6-b 실기.
+ *
+ * *(개념)* RN jest 목의 `scrollTo` 는 모든 ScrollView 가 함께 쓰는 가짜라, 이 열의 인스턴스에 새 가짜를 꽂아
+ *   이 열의 호출만 센다(`stubScrollTo`, 02a ★1).
+ *
+ * 3동작 뼈대: 준비=선택값으로 렌더·가짜 꽂기 → 실행=layout 이벤트 → 단언=scrollTo 인자·횟수.
+ */
+describe('🔴 L · 레이아웃이 끝나면 선택 셀 위치로 다시 스크롤한다', () => {
+  const WHEEL = 'wheel-scroll';
+
+  it.each<[string | null, number, string]>([
+    ['10:00', 2, '세 번째 값 → 2칸'],
+    [null, 0, '선택 없음 → 맨 위'],
+    ['11:00', 0, '목록에 없는 값 → 맨 위'],
+  ])('selected=%s → y = %i칸 (%s)', (selected, cells) => {
+    // 준비: 휠을 렌더하고, 그 열 ScrollView 의 scrollTo 를 새 가짜로 바꾼다.
+    render(
+      <WheelPicker
+        testID={WHEEL}
+        values={VALUES}
+        selected={selected}
+        onSelect={jest.fn()}
+        testIDForValue={cellTestID}
+      />
+    );
+    const scroll = closestScrollView(screen.getByTestId(cellTestID('09:00')));
+    expect(scroll).not.toBeNull();
+    const scrollTo = stubScrollTo(scroll!);
+    // 앵커 — layout 전에는 아무도 부르지 않았다(02a ★2).
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // 실행: 크기가 확정됐다는 layout 이벤트(열 높이 220 = 5행 × 44).
+    fireEvent(screen.getByTestId(WHEEL), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 100, height: 220 } },
+    });
+
+    // 단언: 선택 칸 위치로, 애니메이션 없이, 한 번.
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith(
+      expect.objectContaining({ y: cells * WHEEL_CELL_HEIGHT, animated: false })
+    );
   });
 });

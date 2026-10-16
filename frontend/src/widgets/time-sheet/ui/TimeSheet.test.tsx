@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import { closestScrollView, stubScrollTo } from '@/test-support/sheetTree';
 
 import { TimeSheet, type TimeSheetPlaceSummary } from './TimeSheet';
 
@@ -18,6 +19,8 @@ import { TimeSheet, type TimeSheetPlaceSummary } from './TimeSheet';
  *    새 시작 기준으로 다시 유도된다(null 은 나가지 않는다). 종료를 건드리면 그 값이 실린다.
  *  - INV-3 소요시간 표기 0건 · `endsNextDay` 는 `end<=start` 기계 유도(INV-2).
  *  - D1 시트 close(딤·스와이프)도 `onCancel` 로 알린다 — 안 알리면 소비처의 "열림" 상태가 남아 다시 못 연다.
+ *  - TRIP-1417 (Q-100·101): readout 종료 칸은 처음부터 `endAt` 시각이다(R1·R2, "설정 안 됨" 없음) · 세 열이
+ *    레이아웃 뒤 선택 칸으로 다시 스크롤한다(R3) · 머리 X `{prefix}-close` 가 `onCancel` 을 부른다(X1).
  *
  * ★ jest 사각 — 통과형 목이라 시트 실제 열림·`enableContentPanningGesture`·끌어 닫기·휠 제스처·페이드·딤은 못 본다.
  *   그 prop 유지(옛 D1 의 D2 단언)는 TRIP-1367 에서 지웠다 — 실화면 QA 몫.
@@ -156,13 +159,16 @@ describe.each(CONFIGS)(
     });
 
     // TRIP-1215 계약 변경 — 옛 E2 는 23:15/숨은 11:45 를 익일로 적용했다. 이제 막히고, 재유도 의도는 E2b 로 옮겼다.
-    it('E2 · 시작만 오후 11시로 → 숨은 종료 11:45 가 새벽이 아니라 막힌다 (readout 은 "설정 안 됨" 그대로)', () => {
+    // TRIP-1417 — readout 은 숨은 종료를 "설정 안 됨" 이 아니라 그 시각으로 보인다(옛 단언 뒤집음).
+    it('E2 · 시작만 오후 11시로 → 숨은 종료 11:45 가 새벽이 아니라 막힌다 (readout 은 종료 오전 11:45 를 보인다)', () => {
       renderSheet(config, '10:15:00', '11:45:00');
 
       // 시작 탭 활성 — 오후로 바꾼 뒤 시 11 → 23시.
       press('wheel-ap-오후', 'wheel-h-11');
 
-      expect(screen.getByTestId(id('readout'))).toHaveTextContent(/설정 안 됨/);
+      expect(screen.getByTestId(id('readout'))).toHaveTextContent(
+        `${labels.start} 오후 11:15 · ${labels.end} 오전 11:45`
+      );
       expectBlocked();
     });
 
@@ -223,11 +229,16 @@ describe.each(CONFIGS)(
       }
     );
 
-    it('E5 · 종료 탭을 열기만 하면 미설정 표기("설정 안 됨")가 남고 종료 값은 유지된다', () => {
+    // TRIP-1417 — 옛 E5 는 이 자리에서 "설정 안 됨" 을 잠갔다(뒤집음). 적용 결과 단언은 그대로다.
+    it('E5 · 종료 탭을 열기만 하면 readout 은 현재 종료 시각을 보이고 종료 값은 유지된다', () => {
       renderSheet(config, '10:15:00', '11:45:00');
 
       press('seg-end');
-      expect(screen.getByTestId(id('readout'))).toHaveTextContent(/설정 안 됨/);
+      const readout = screen.getByTestId(id('readout'));
+      expect(readout).toHaveTextContent(
+        `${labels.start} 오전 10:15 · ${labels.end} 오전 11:45`
+      );
+      expect(readout).not.toHaveTextContent(/설정 안 됨/);
       press('apply');
 
       expect(appliedPatch()).toStrictEqual({
@@ -256,6 +267,91 @@ describe.each(CONFIGS)(
       expect(onCancel).toHaveBeenCalledTimes(1);
       expect(onApply).not.toHaveBeenCalled();
     });
+
+    // ── TRIP-1417 (QA Q-100·101) — 15:50–17:14 로 연다. 세 열 모두 인덱스가 0 이 아닌 표본(02a ★7). ──
+
+    it('R1 · 종료 시각이 있는 슬롯을 열면 readout 이 종료 시각을 그대로 보인다 — "설정 안 됨" 없음 (Q-100)', () => {
+      // 준비·실행: 열기만 한다.
+      renderSheet(config, '15:50:00', '17:14:00');
+
+      // 단언: 네 조각(라벨·시작·구분점·종료)을 완전 일치로(02a ★9).
+      const readout = screen.getByTestId(id('readout'));
+      expect(readout).toHaveTextContent(
+        `${labels.start} 오후 3:50 · ${labels.end} 오후 5:14`
+      );
+      expect(readout).not.toHaveTextContent(/설정 안 됨/);
+    });
+
+    it('R2 · [종료] 탭으로 바꾸면 휠을 안 건드려도 세 열이 오후·5·14 를 고른다 (선제 green 잠금)', () => {
+      renderSheet(config, '15:50:00', '17:14:00');
+      // 앵커 — 시작 탭에선 오후·3·50 이 선택돼 있다.
+      expect(screen.getByTestId(id('wheel-h-3'))).toBeSelected();
+      expect(screen.getByTestId(id('wheel-m-50'))).toBeSelected();
+
+      // 실행: 종료 탭으로만 바꾼다.
+      press('seg-end');
+
+      // 단언: 종료 값(17:14 = 오후 5:14)이 세 열에 걸리고, 시작 값 칸은 풀린다.
+      expect(screen.getByTestId(id('wheel-ap-오후'))).toBeSelected();
+      expect(screen.getByTestId(id('wheel-h-5'))).toBeSelected();
+      expect(screen.getByTestId(id('wheel-m-14'))).toBeSelected();
+      expect(screen.getByTestId(id('wheel-h-3'))).not.toBeSelected();
+      expect(screen.getByTestId(id('wheel-m-50'))).not.toBeSelected();
+      expect(screen.getByTestId(id('readout'))).toHaveTextContent(
+        `${labels.start} 오후 3:50 · ${labels.end} 오후 5:14`
+      );
+    });
+
+    it('R3 · 세 열에 레이아웃이 오면 각 열이 오후(1칸)·3(2칸)·50(50칸) 위치로 다시 스크롤한다 (Q-100 · AC-3)', () => {
+      renderSheet(config, '15:50:00', '17:14:00');
+      // 준비: 열마다 그 ScrollView 의 scrollTo 를 따로 가짜로 바꾼다(02a ★1).
+      const columns = [
+        { column: 'ap', cell: 'wheel-ap-오후', cells: 1 },
+        { column: 'h', cell: 'wheel-h-3', cells: 2 },
+        { column: 'm', cell: 'wheel-m-50', cells: 50 },
+      ].map((entry) => {
+        const scroll = closestScrollView(screen.getByTestId(id(entry.cell)));
+        expect(scroll).not.toBeNull();
+        return { ...entry, scrollTo: stubScrollTo(scroll!) };
+      });
+      columns.forEach(({ scrollTo }) =>
+        expect(scrollTo).not.toHaveBeenCalled()
+      );
+
+      // 실행: 각 열에 layout 이벤트.
+      columns.forEach(({ column }) =>
+        fireEvent(screen.getByTestId(id(`wheel-${column}`)), 'layout', {
+          nativeEvent: { layout: { x: 0, y: 0, width: 100, height: 220 } },
+        })
+      );
+
+      // 단언: 열마다 자기 선택 칸 위치로, 애니메이션 없이.
+      columns.forEach(({ scrollTo, cells }) =>
+        expect(scrollTo).toHaveBeenCalledWith(
+          expect.objectContaining({
+            y: cells * WHEEL_CELL_HEIGHT,
+            animated: false,
+          })
+        )
+      );
+    });
+
+    it('X1 · 머리 X(닫기)를 누르면 onCancel 1회·onApply 0회 — 휠로 바꿔 둔 값은 안 나간다 (Q-101)', () => {
+      renderSheet(config, '15:50:00', '17:14:00');
+      // 준비: 시트 안에서 시작 시를 바꿔 둔다(닫으면 버려져야 할 값, 02a ★11).
+      press('wheel-h-4'); // 시작 15:50 → 16:50 (허용 범위 — 적용하면 실릴 값)
+      // X 는 스크린리더에도 "닫기" 버튼이다(02a ★13).
+      const close = screen.getByTestId(id('close'));
+      expect(screen.getByRole('button', { name: '닫기' })).toBe(close);
+      expect(onCancel).not.toHaveBeenCalled();
+
+      // 실행
+      fireEvent.press(close);
+
+      // 단언
+      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(onApply).not.toHaveBeenCalled();
+    });
   }
 );
 
@@ -266,7 +362,7 @@ describe.each(CONFIGS)(
  * 무엇을 보장하나:
  *  - title·placeSummary 를 주면 헤더 '시간대 조정'+부제·장소 요약 행·시작/종료 2탭 세그·readout·3열 휠·
  *    단일 '적용' CTA(취소 부재)를 낸다(AC-1~AC-6).
- *  - 종료는 **내부 optional 상태**로만 표현 — 미설정이면 readout '설정 안 됨'(seed Q1, onApply 계약 불변).
+ *  - readout 종료 칸은 처음부터 `endAt` 시각이다(TRIP-1417 — 옛 '설정 안 됨' 얼굴은 폐기, onApply 계약 불변).
  *  - INV-3 — h04 분 열/readout 이 bare 숫자, 소요시간 표기 0건(AC-INV3).
  *
  * *(개념)* **통과형 목** — `@gorhom/bottom-sheet` 는 `__mocks__`가 children 을 무조건 렌더한다(node_modules
@@ -401,17 +497,15 @@ describe('🔴 widgets/time-sheet · 편집기 형태(title+placeSummary) — �
     expect(screen.getByTestId(hid('seg-start'))).not.toBeSelected();
   });
 
-  it('CH3r · readout 이 "시작 …"과 종료 "설정 안 됨"을 반영한다 (AC-3·AC-6)', () => {
+  // TRIP-1417 — 옛 CH3r 는 종료 칸 "설정 안 됨"(TRIP-927 seed Q1)을 잠갔다. 이제 종료도 처음부터 시각이다.
+  it('CH3r · readout 이 시작 "오후 1:00"·종료 "오후 2:30"을 반영한다 (AC-3·AC-6)', () => {
     renderH04(FIXTURE);
 
-    // 다중 Text 이어붙임 → 부분 포함은 정규식(02a §5-A). 종료는 내부 optional 미설정(seed Q1).
+    // 다중 Text 이어붙임을 완전 일치로 — seed 13:00–14:30 이 12시간제로 접혀 보이는가(decompose12→timeLabel12).
+    // 오전/오후 스왑·시 오프셋 뮤턴트와 종료 칸 회귀를 한 줄로 잡는다(02a ★9).
     const readout = screen.getByTestId(hid('readout'));
-    expect(readout).toHaveTextContent(/시작/);
-    expect(readout).toHaveTextContent(/설정 안 됨/);
-    // ▸ 값 심판(5-b 경고-1 봉합) — seed startAt "13:00" 이 12시간제로 "오후 1:00" 으로 변환돼
-    //   보이는가. 이 줄이 decompose12→timeLabel12(오전/오후·시 접기) 출력을 잠근다. 없으면
-    //   오전/오후 스왑·시 오프셋 뮤턴트가 readout 라벨만 보는 위 두 줄을 통과한다.
-    expect(readout).toHaveTextContent(/오후 1:00/);
+    expect(readout).toHaveTextContent('시작 오후 1:00 · 종료 오후 2:30');
+    expect(readout).not.toHaveTextContent(/설정 안 됨/);
   });
 
   it('CH4 · 3열 휠 — 오전/오후·1~12·00~59 세 열이 트리에 실재한다 (AC-4)', () => {
@@ -477,11 +571,14 @@ describe('🔴 widgets/time-sheet · 편집기 형태(title+placeSummary) — �
 
 // TRIP-1215 계약 변경 — H1d 는 옛 "숨은 종료로 익일 적용"을 잠갔다. 이제 숨은 종료에도 같은 판정이 걸려 막힌다.
 describe('🔴 AC-1 · 종료를 손대지 않고 적용하면 종료는 현재 값 유지 — endAt 은 문자열 (TRIP-1196)', () => {
-  it('H1c · 종료 탭만 열어 보고 휠을 안 누르면 여전히 미설정이고 종료 값은 유지된다', () => {
+  // TRIP-1417 — 옛 H1c 는 이 자리에서 "설정 안 됨" 을 잠갔다(뒤집음). 적용 결과 단언은 그대로다.
+  it('H1c · 종료 탭만 열어 보고 휠을 안 누르면 readout 은 현재 종료(오후 2:30)이고 종료 값은 유지된다', () => {
     renderH04();
 
     hpress('seg-end');
-    expect(screen.getByTestId(hid('readout'))).toHaveTextContent(/설정 안 됨/);
+    expect(screen.getByTestId(hid('readout'))).toHaveTextContent(
+      '시작 오후 1:00 · 종료 오후 2:30'
+    );
     hpress('apply');
 
     expect(appliedPatch()).toStrictEqual({
