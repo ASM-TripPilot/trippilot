@@ -10,6 +10,7 @@ import BottomSheet, {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { deriveEndsNextDay, isValidTimeRange } from '@/entities/itinerary-slot';
+import { CloseGlyph } from '@/shared/ui/glyphs';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { WheelPicker } from '@/shared/ui/WheelPicker';
 
@@ -19,9 +20,11 @@ import { WheelPicker } from '@/shared/ui/WheelPicker';
  * 소비처가 주입한다.
  *
  * TRIP-1196 — 입력은 한 구현이다: 시작/종료 세그먼트 + 시간 표시 줄(readout) + 오전/오후·시·분 공용
- * `WheelPicker` 3열 + [적용]. 휠은 셀 탭 또는 스크롤 정지로 활성 탭(시작/종료) 값을 바꾼다(TRIP-990 D21).
+ * `WheelPicker` 3열 + [적용]. 머리 오른쪽 X(`{prefix}-close`)는 `onCancel` 이다(TRIP-1417 Q-101).
+ * 휠은 셀 탭 또는 스크롤 정지로 활성 탭(시작/종료) 값을 바꾼다(TRIP-990 D21).
  * 소비처 간 차이는 제목과 장소 요약 행뿐이다(h04 편집기만 '시간대 조정'+요약 행을 넘긴다).
  *
+ * readout 종료 칸은 처음부터 `endAt` 시각이다(TRIP-1417 Q-100 — 옛 '설정 안 됨' 얼굴 폐기).
  * 종료를 손대지 않고 [적용]하면 종료는 **현재 값(`endAt` prop) 유지**이고 `endsNextDay` 만 새 시작 기준으로
  * 다시 유도한다 — 서버 계약상 endAt 은 필수 문자열이라 null 은 밖으로 나가지 않는다.
  * `endsNextDay` 는 `end ≤ start`(HH:mm 사전식 비교)의 **기계적 유도**다(HC4).
@@ -87,10 +90,9 @@ function renderTimeSheetBackdrop(
   );
 }
 
-/** 부제·요약 행 꼬리·종료 미설정 표기. */
+/** 부제·요약 행 꼬리. */
 const SHEET_SUBTITLE = '시작·종료를 돌려서 맞춰요';
 const SHEET_PLACE_SUFFIX = '꼭 갈 곳';
-const SHEET_END_UNSET = '설정 안 됨';
 
 /** 12시간제 휠 열 값. 오전/오후 2개 · 1~12(zero-pad 안 함, 표시 그대로). 분 열은 위 MINUTES 재사용. */
 const MERIDIEMS = ['오전', '오후'];
@@ -178,15 +180,13 @@ export function TimeSheet({
   };
 
   const startLabel = timeLabel12(startHour, startMinute);
-  const endLabel = endConfigured
-    ? timeLabel12(endHour, endMinute)
-    : SHEET_END_UNSET;
+  const endLabel = timeLabel12(endHour, endMinute);
 
   return (
-    // 취소 버튼이 없는 얼굴이라 스와이프·딤 탭 닫힘도 onCancel 로 알린다 — 안 그러면 시트만 사라지고
+    // 머리 X 말고도 스와이프·딤 탭 닫힘을 onCancel 로 알린다 — 안 그러면 시트만 사라지고
     // 소비처의 "열림" 상태가 남아 같은 칩을 다시 눌러도 안 열린다(TRIP-927 AC-7).
     // `enableContentPanningGesture={false}` — 본문 pan 이 휠 드래그를 삼켜 시트 끌기로 새는 것을 막는다.
-    // 닫기는 핸들·딤으로 남는다(선례 MustVisitTimeScreen · repo-traps 바텀시트 절, jest 사각·6-b 실기).
+    // 닫기는 머리 X·핸들·딤으로 남는다(선례 MustVisitTimeScreen · repo-traps 바텀시트 절, jest 사각·6-b 실기).
     <BottomSheet
       backdropComponent={renderTimeSheetBackdrop}
       enablePanDownToClose
@@ -197,13 +197,25 @@ export function TimeSheet({
         testID={`${testIDPrefix}-sheet`}
         className="w-full gap-lg px-xl pb-[28px] pt-[10px]"
       >
-        <View className="w-full gap-xs">
-          <Text className="font-noto-bold text-[20px] font-bold text-ink">
-            {title}
-          </Text>
-          <Text className="font-noto text-label text-muted">
-            {SHEET_SUBTITLE}
-          </Text>
+        <View className="w-full flex-row items-start justify-between">
+          <View className="flex-1 gap-xs">
+            <Text className="font-noto-bold text-[20px] font-bold text-ink">
+              {title}
+            </Text>
+            <Text className="font-noto text-label text-muted">
+              {SHEET_SUBTITLE}
+            </Text>
+          </View>
+          {/* 44 터치 타깃 · 아이콘 24(i01 메모 시트 X 선례 Figma 4741:2993). */}
+          <Pressable
+            testID={`${testIDPrefix}-close`}
+            accessibilityRole="button"
+            accessibilityLabel="닫기"
+            onPress={onCancel}
+            className="h-[44px] w-[44px] items-center justify-center"
+          >
+            <CloseGlyph size={24} color="ink" />
+          </Pressable>
         </View>
 
         {placeSummary === undefined ? null : (
@@ -281,11 +293,7 @@ export function TimeSheet({
           <Text className="font-noto text-label text-muted">
             {` · ${labels.end} `}
           </Text>
-          <Text
-            className={`font-noto-bold text-label font-bold ${
-              endConfigured ? 'text-ink' : 'text-muted-soft'
-            }`}
-          >
+          <Text className="font-noto-bold text-label font-bold text-ink">
             {endLabel}
           </Text>
         </View>

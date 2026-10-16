@@ -2762,6 +2762,31 @@ describe('시각 조정 시트', () => {
     });
   });
 
+  // TRIP-1417 (Q-100·101) — 이 페이지에서 QA 가 본 두 결함. 초가 붙은 실제 endAt(11:45:30)이 readout 에
+  // 시각으로 보이고, 머리 X 로 닫아도 IT4(딤 닫힘)와 결과가 같다.
+  describe('🔴 IT4x · readout 은 종료 시각을 보이고, 머리 X 로 닫으면 카드 무변경·PUT 0·다시 열린다', () => {
+    it('a 시트를 열면 "시작 오전 10:15 · 종료 오전 11:45" 이고, 시작을 바꿔 둔 채 X 를 눌러도 카드는 10:15 그대로다', async () => {
+      renderPage();
+      await openSheetFor('poi-a');
+      expect(screen.getByTestId(t('readout'))).toHaveTextContent(
+        '시작 오전 10:15 · 종료 오전 11:45'
+      );
+
+      press('wheel-h-11'); // 오전 11시 — 적용 전이라 드래프트엔 안 들어가야 한다.
+      press('close');
+
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+      expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(/10:15/);
+      expect(screen.getByTestId(timeChip('poi-a'))).not.toHaveTextContent(
+        /11:15/
+      );
+      expect(putCalls).toBe(0);
+
+      fireEvent.press(screen.getByTestId(timeChip('poi-a')));
+      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    });
+  });
+
   describe('🔴 IT5 · AC-10 — 종료를 안 건드리면 기존 endAt 유지 + endsNextDay 재유도', () => {
     // TRIP-1215 계약 변경 — 옛 IT5a·IT5b 는 시작 23:15/숨은 종료 11:45:30 을 카드 '23:15–11:45'·PUT true 로 잠갔다.
     // 그 조합은 이제 시트가 막는다(IT5a). 초 보존 의도는 허용 조합(IT5b), 익일 true 배선은 IT5d 가 잰다.

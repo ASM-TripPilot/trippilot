@@ -6312,7 +6312,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // h04 오류 상태(TRIP-1215) — QA Q-29 모양(11:00–08:00)을 그대로 심어 열자마자 문구·회색 [적용]이
-  // 보인다(종료 미설정 + 숨은 종료 오류 — readout "설정 안 됨"과 문구 동시 표시를 육안 대조). Figma 프레임 없음.
+  // 보인다(readout 종료 "오전 8:00"과 문구 동시 표시를 육안 대조). Figma 프레임 없음.
   {
     key: 'h04-time-adjust-sheet-error',
     band: 'h',
@@ -6326,6 +6326,27 @@ export const PREVIEW_STATES: PreviewState[] = [
           labels={{ start: '시작', end: '종료' }}
           startAt="11:00:00"
           endAt="08:00:00"
+          onApply={noop}
+          onCancel={noop}
+        />
+      </View>
+    ),
+  },
+  // h04 휠 정렬(TRIP-1417 Q-100) — 15:50–17:14 는 세 열 모두 0 이 아닌 칸이라 휠이 밴드에서 어긋나면 바로
+  // 보인다. [종료] 탭 전환 뒤 오후·5·14 정렬도 여기서 본다. 재활용 재현은 실제 흐름에서만 된다(6-b).
+  {
+    key: 'h04-time-adjust-sheet-q100',
+    band: 'h',
+    label: 'h04 · 시각 조정 시트 · 15:50–17:14',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TimeSheet
+          title="시간대 조정"
+          testIDPrefix="itinerary-edit-time"
+          labels={{ start: '시작', end: '종료' }}
+          startAt="15:50:00"
+          endAt="17:14:00"
           onApply={noop}
           onCancel={noop}
         />
