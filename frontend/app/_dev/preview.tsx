@@ -1480,7 +1480,7 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
   },
 ];
 
-// h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음) 순서, Figma 4682:2573.
+// h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음 — 지난 여행 가정) 순서, Figma 4682:2573. TRIP-1441 · 확정이어도 시작 전(upcoming)이면 ⋯ 가 열린다(실앱 판정은 TripCardContainer).
 // TRIP-1271 · `generating` — 생성 중 '제주 여행'에도 ⋯ 를 연다(결정 1=A, 세션이 돌아도 작성중이면 삭제 가능).
 function renderH06DeleteList({
   menuOpen,
