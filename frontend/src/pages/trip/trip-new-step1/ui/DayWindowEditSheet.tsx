@@ -5,10 +5,12 @@
  * 현재 스토어 값에서 시드) "적용"에서만 `onApply` 로 커밋한다. 정한 값만 키가 있는 `DayWindow` 를 돌려주며
  * 기본(09:00)과 같은 하루 시작은 지워진다(요청에 안 실림).
  *
- * 여러 날: 세그먼트 탭 3개(하루 시작 / 첫날 / 마지막 날) + 선택 탭의 값을 휠 하나(시·분 2열, 24시간제,
- * 분은 30분 단위)로 고른다. 안 정한 첫날·마지막 날 탭을 누르면 **그 값이 바로 켜지고**(12:00 · 18:00),
- * `따로 정하지 않기` 링크로 끈다. 당일치기: 첫날=마지막 날이라 탭 없이 `시작`/`끝` 두 칸(= 첫날 시작 ·
- * 마지막 날 종료)을 나란히 둔다 — 이 변형은 Figma 에 휠 버전이 없어 같은 재료로 구성한 것이다.
+ * 여러 날: 세그먼트 탭 3개(하루 시작 / 첫날 / 마지막 날) + 선택 탭의 값을 휠 하나(공용 `HourMinuteWheel`,
+ * 24시간제, 분은 30분 단위)로 고른다. 탭 누름은 **보기만** 한다(TRIP-1423 Q-058) — 안 정한 첫날·마지막 날
+ * 탭이면 휠이 제안 자리(12:00 · 18:00, `anchor`)에 서 있기만 하고, 휠을 돌리거나 칸을 눌러야 값이 생긴다.
+ * 값이 생긴 탭에만 `따로 정하지 않기` 링크가 보이고 그것으로 끈다. 당일치기: 첫날=마지막 날이라 탭 없이
+ * `시작`/`끝` 두 칸(= 첫날 시작 · 마지막 날 종료)을 나란히 둔다 — 이 변형은 Figma 에 휠 버전이 없어 같은
+ * 재료로 구성한 것이다. 두 칸이 같은 프레임에 멈춰도 둘 다 남게 드래프트는 함수형 갱신으로 쓴다.
  *
  * ⚠️ 실제 개폐·딤·휠 제스처 분리(`enableContentPanningGesture={false}`)는 gorhom 통과형 목이라 jest 사각 —
  * 6-b 실기 몫이다(`repo-traps.md` 바텀시트 절).
@@ -34,7 +36,7 @@ import {
   type DayWindow,
 } from '@/features/create-trip';
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/shared/lib/sheetHandle';
-import { WheelPicker } from '@/shared/ui/WheelPicker';
+import { HourMinuteWheel } from '@/shared/ui/HourMinuteWheel';
 
 export interface DayWindowEditSheetProps {
   /** 지금 스토어에 커밋된 값 — 시트가 열릴 때 드래프트로 복사한다. */
@@ -62,42 +64,31 @@ function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
   );
 }
 
-/** 시·분 두 열 휠 한 쌍 — 값은 `HH:mm`. 분 휠은 30분 단위 두 칸이라 값이 눈금 밖이면 선택 표시가 없다. */
+/** 공용 휠에 이 시트의 눈금(시 24 · 분 00·30)과 testID 접두(`{prefix}-h-wheel`·`{prefix}-h-{HH}` …)를 입힌다.
+ * 분 눈금은 30분이라 값이 눈금 밖이면 선택 표시가 없다. */
 function ClockWheel({
-  testID,
+  prefix,
   value,
+  anchor,
   onChange,
 }: {
-  testID: string;
-  value: string;
+  prefix: string;
+  value: string | null;
+  anchor?: string;
   onChange: (next: string) => void;
 }): ReactElement {
-  const [hour, minute] = value.split(':');
   return (
-    <View
-      testID={testID}
-      className="w-full flex-row items-center justify-center gap-sm"
-    >
-      <View className="w-[72px]">
-        <WheelPicker
-          testID={`${testID}-h-wheel`}
-          values={WHEEL_HOURS}
-          selected={hour}
-          onSelect={(next) => onChange(`${next}:${minute}`)}
-          testIDForValue={(next) => `${testID}-h-${next}`}
-        />
-      </View>
-      <Text className="font-noto-bold text-section font-bold text-ink">:</Text>
-      <View className="w-[72px]">
-        <WheelPicker
-          testID={`${testID}-m-wheel`}
-          values={WHEEL_MINUTES}
-          selected={minute}
-          onSelect={(next) => onChange(`${hour}:${next}`)}
-          testIDForValue={(next) => `${testID}-m-${next}`}
-        />
-      </View>
-    </View>
+    <HourMinuteWheel
+      value={value}
+      anchor={anchor}
+      onChange={onChange}
+      hours={WHEEL_HOURS}
+      minutes={WHEEL_MINUTES}
+      hourWheelTestID={`${prefix}-h-wheel`}
+      minuteWheelTestID={`${prefix}-m-wheel`}
+      hourCellTestID={(hour) => `${prefix}-h-${hour}`}
+      minuteCellTestID={(minute) => `${prefix}-m-${minute}`}
+    />
   );
 }
 
@@ -133,16 +124,12 @@ export function DayWindowEditSheet({
     last: draft.lastDayEndAt,
   };
 
-  function pickTab(next: Tab): void {
-    // 안 정한 칸을 누르면 그 값이 바로 켜진다 — 휠이 비어 보이지 않게.
-    if (next === 'first' && draft.firstDayStartAt === undefined) {
-      setDraft({ ...draft, firstDayStartAt: DEFAULT_FIRST_DAY_START });
-    }
-    if (next === 'last' && draft.lastDayEndAt === undefined) {
-      setDraft({ ...draft, lastDayEndAt: DEFAULT_LAST_DAY_END });
-    }
-    setTab(next);
-  }
+  // 안 정한 탭의 휠이 서 있을 제안 자리 — 위치만, 값은 사용자가 휠을 고를 때 생긴다(TRIP-1423).
+  const tabAnchor: Record<Tab, string | undefined> = {
+    day: undefined,
+    first: DEFAULT_FIRST_DAY_START,
+    last: DEFAULT_LAST_DAY_END,
+  };
 
   function setTabValue(field: Tab, next: string): void {
     const key =
@@ -151,7 +138,8 @@ export function DayWindowEditSheet({
         : field === 'first'
           ? 'firstDayStartAt'
           : 'lastDayEndAt';
-    setDraft({ ...draft, [key]: next });
+    // 함수형 갱신 — 당일치기 시작·끝 휠이 같은 프레임에 멈추면 렌더 때 본 draft 는 앞 칸 변경을 모른다.
+    setDraft((prev) => ({ ...prev, [key]: next }));
   }
 
   function turnOff(field: 'first' | 'last'): void {
@@ -195,7 +183,9 @@ export function DayWindowEditSheet({
             일과 시간
           </Text>
           <Text className="font-noto text-label text-muted">
-            AI가 이 시간 안에서 하루를 짜요
+            {sameDay
+              ? '당일치기라 시작과 종료를 함께 정해요'
+              : '하루는 21시까지예요 · 시작 시각을 정해요'}
           </Text>
         </View>
 
@@ -206,7 +196,7 @@ export function DayWindowEditSheet({
                 시작
               </Text>
               <ClockWheel
-                testID="trip-wizard-daywindow-start"
+                prefix="trip-wizard-daywindow-start"
                 value={sameDayStart}
                 onChange={(next) => setTabValue('first', next)}
               />
@@ -216,7 +206,7 @@ export function DayWindowEditSheet({
                 끝
               </Text>
               <ClockWheel
-                testID="trip-wizard-daywindow-end"
+                prefix="trip-wizard-daywindow-end"
                 value={sameDayEnd}
                 onChange={(next) => setTabValue('last', next)}
               />
@@ -241,7 +231,7 @@ export function DayWindowEditSheet({
                     testID={`trip-wizard-daywindow-tab-${one.key}`}
                     accessibilityRole="button"
                     accessibilityState={{ selected: isActive }}
-                    onPress={() => pickTab(one.key)}
+                    onPress={() => setTab(one.key)}
                     className={`flex-1 items-center rounded-button px-xs py-sm ${
                       isActive ? 'bg-canvas' : ''
                     }`}
@@ -276,11 +266,12 @@ export function DayWindowEditSheet({
               {activeHint}
             </Text>
             <ClockWheel
-              testID="trip-wizard-daywindow-wheel"
-              value={tabValue[tab] ?? DEFAULT_DAY_START}
+              prefix="trip-wizard-daywindow-wheel"
+              value={tabValue[tab] ?? null}
+              anchor={tabAnchor[tab]}
               onChange={(next) => setTabValue(tab, next)}
             />
-            {tab === 'day' ? null : (
+            {tab === 'day' || tabValue[tab] === undefined ? null : (
               <Pressable
                 testID="trip-wizard-daywindow-off"
                 accessibilityRole="button"

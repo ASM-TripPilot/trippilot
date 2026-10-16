@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
+import fc from 'fast-check';
 import {
   act,
   fireEvent,
@@ -25,6 +26,7 @@ import {
 } from '@/test-support/wizardStep1Harness';
 import { server } from '@/mocks/server';
 import type {
+  CompanionType,
   PreferenceView,
   Trip,
   Place,
@@ -900,12 +902,13 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
  * ⚠️ 바텀시트 통과형 목: 마운트하면 children 을 무조건 렌더한다 — 여기서 관측하는 "시트 오픈"은 **조건부
  * 마운트 트리 존재/부재**뿐이다. 실제 슬라이드업·딤·터치 차단은 jest 사각(6-b 실기).
  */
-describe('동행 편집 시트 (C-1~C-5)', () => {
+describe('동행 편집 시트 (C-1~C-6)', () => {
   afterEach(expectNoExitWizard);
 
-  const { preferenceHandler, renderPage, openSheet } = wizardStep1Harness({
-    baseDate: '2026-06-01',
-  });
+  const { preferenceHandler, renderPage, openSheet, waitForPrefill } =
+    wizardStep1Harness({
+      baseDate: '2026-06-01',
+    });
 
   beforeEach(() => {
     mockPush.mockClear();
@@ -943,10 +946,13 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
       expect(
         await screen.findByTestId('trip-wizard-companion-chip-active-friend')
       ).toBeOnTheScreen();
+      // TRIP-1423 — 친구는 2명 이상이라 칩을 고르는 순간 드래프트가 "2명"이 된다. store 는 아직 party 1.
+      expect(screen.getByText('2명')).toBeOnTheScreen();
+      expect(useTripWizardStore.getState().party).toBe(1);
 
-      // 인원 + → 드래프트 값 전이("2명"). store 는 아직 party 1.
+      // 인원 + → 드래프트 값 전이("3명"). store 는 아직 party 1.
       fireEvent.press(screen.getByTestId('trip-wizard-companion-party-inc'));
-      expect(await screen.findByText('2명')).toBeOnTheScreen();
+      expect(screen.getByText('3명')).toBeOnTheScreen();
 
       // 적용 전 — 즉시반영이 아니라 드래프트다(즉시커밋 뮤턴트가 이 둘로 red).
       expect(useTripWizardStore.getState().party).toBe(1);
@@ -955,7 +961,7 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
       // 적용 → 커밋(각 1회 반영) + 닫힘.
       fireEvent.press(screen.getByTestId('trip-wizard-companion-apply'));
 
-      await waitFor(() => expect(useTripWizardStore.getState().party).toBe(2));
+      await waitFor(() => expect(useTripWizardStore.getState().party).toBe(3));
       expect(useTripWizardStore.getState().companionType).toBe('친구');
       await waitFor(() =>
         expect(screen.queryByTestId('trip-wizard-companion-sheet')).toBeNull()
@@ -968,11 +974,12 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
       renderPage();
       await openSheet('companion');
 
-      // 기본 '혼자'로 열려 스테퍼가 잠겨 있다(TRIP-1045) — 친구로 풀고 + 두 번 → 드래프트 "3명".
+      // 기본 '혼자'로 열려 스테퍼가 잠겨 있다(TRIP-1045) — 친구로 풀면 "2명"(TRIP-1423), + 두 번 → "4명".
       fireEvent.press(screen.getByTestId('trip-wizard-companion-chip-friend'));
+      expect(screen.getByText('2명')).toBeOnTheScreen();
       fireEvent.press(screen.getByTestId('trip-wizard-companion-party-inc'));
       fireEvent.press(screen.getByTestId('trip-wizard-companion-party-inc'));
-      expect(await screen.findByText('3명')).toBeOnTheScreen();
+      expect(screen.getByText('4명')).toBeOnTheScreen();
 
       // 혼자 선택 → 배선이 draftParty 를 1 로 고정("1명") + 스테퍼 진짜 disabled.
       fireEvent.press(screen.getByTestId('trip-wizard-companion-chip-alone'));
@@ -984,7 +991,7 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
         screen.getByTestId('trip-wizard-companion-party-inc')
       ).toBeDisabled();
 
-      // 적용 → party 1 커밋(배선이 고정을 안 하면 3 이 남아 red).
+      // 적용 → party 1 커밋(배선이 고정을 안 하면 4 가 남아 red).
       fireEvent.press(screen.getByTestId('trip-wizard-companion-apply'));
       await waitFor(() => expect(useTripWizardStore.getState().party).toBe(1));
       expect(useTripWizardStore.getState().companionType).toBe('혼자');
@@ -1033,6 +1040,160 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
       expect(screen.getByText('1명')).toBeOnTheScreen();
       expect(screen.queryByText('2명')).toBeNull();
     });
+  });
+
+  /**
+   * TRIP-1423 (Q-059) — 칩을 고르는 순간 인원이 유형에 맞춰진다: 혼자 1 · 연인 2 고정, 친구·가족 2명 이상.
+   * 값을 맞추는 것은 배선(`pickCompanion`), −·+ 를 잠그는 것은 시트(disabled 파생)다 — 두 층을 실제 칩 누름으로 함께 탄다.
+   */
+  describe('C-6 · TRIP-1423 동행 유형에 인원이 맞춰진다', () => {
+    const DEC = 'trip-wizard-companion-party-dec';
+    const INC = 'trip-wizard-companion-party-inc';
+    const chip = (code: string) => `trip-wizard-companion-chip-${code}`;
+
+    it('C-6a · 혼자에서 연인을 고르면 2명 · −·+ 잠김, 적용하면 store 연인 2 · 요약 "연인 2명"', async () => {
+      renderPage();
+      await openSheet('companion');
+
+      fireEvent.press(screen.getByTestId(chip('partner')));
+
+      expect(screen.getByText('2명')).toBeOnTheScreen();
+      expect(screen.getByTestId(DEC)).toBeDisabled();
+      expect(screen.getByTestId(INC)).toBeDisabled();
+      // 진짜 disabled — + 를 눌러도 3명이 안 된다.
+      fireEvent.press(screen.getByTestId(INC));
+      expect(screen.queryByText('3명')).toBeNull();
+
+      fireEvent.press(screen.getByTestId('trip-wizard-companion-apply'));
+
+      await waitFor(() =>
+        expect(useTripWizardStore.getState().companionType).toBe('연인')
+      );
+      expect(useTripWizardStore.getState().party).toBe(2);
+      expect(
+        within(screen.getByTestId('trip-wizard-summary-companion')).getByText(
+          '연인 2명'
+        )
+      ).toBeOnTheScreen();
+    });
+
+    it('C-6b · 연인 2명에서 친구를 고르면 2명 그대로 · − 잠김 · + 살아 있음, + 로 3명이 되면 − 가 풀린다', async () => {
+      renderPage();
+      useTripWizardStore.getState().setParty(2);
+      useTripWizardStore.getState().selectCompanion('연인');
+      await openSheet('companion');
+
+      fireEvent.press(screen.getByTestId(chip('friend')));
+
+      expect(
+        await screen.findByTestId('trip-wizard-companion-chip-active-friend')
+      ).toBeOnTheScreen();
+      expect(screen.getByText('2명')).toBeOnTheScreen();
+      expect(screen.getByTestId(DEC)).toBeDisabled();
+      expect(screen.getByTestId(INC)).not.toBeDisabled();
+
+      fireEvent.press(screen.getByTestId(INC));
+
+      expect(screen.getByText('3명')).toBeOnTheScreen();
+      expect(screen.getByTestId(DEC)).not.toBeDisabled();
+
+      fireEvent.press(screen.getByTestId('trip-wizard-companion-apply'));
+      await waitFor(() => expect(useTripWizardStore.getState().party).toBe(3));
+      expect(useTripWizardStore.getState().companionType).toBe('친구');
+    });
+
+    it.each([
+      ['가족 4명 → 연인 (위에서도 2로 맞춘다)', '가족', 4, 'partner', '연인'],
+      ['혼자 1명 → 가족 (아래에서 2로 올린다)', '혼자', 1, 'family', '가족'],
+    ] as [string, CompanionType, number, string, CompanionType][])(
+      'C-6c · %s — 칩을 고르면 2명, 적용하면 store 2',
+      async (_label, fromType, fromParty, toCode, toType) => {
+        renderPage();
+        useTripWizardStore.getState().setParty(fromParty);
+        useTripWizardStore.getState().selectCompanion(fromType);
+        await openSheet('companion');
+
+        fireEvent.press(screen.getByTestId(chip(toCode)));
+
+        expect(screen.getByText('2명')).toBeOnTheScreen();
+        fireEvent.press(screen.getByTestId('trip-wizard-companion-apply'));
+        await waitFor(() =>
+          expect(useTripWizardStore.getState().companionType).toBe(toType)
+        );
+        expect(useTripWizardStore.getState().party).toBe(2);
+      }
+    );
+
+    /**
+     * > *(개념)* **속성 테스트** — 무작위로 만든 누름 순서를 여러 번 돌려, 매번 [적용] 뒤 store 가 규칙을 지키는지 본다.
+     * 페이지는 한 번만 그린다(회마다 그리면 프리필 대기가 회마다 붙는다). 회마다 store 를 규칙에 맞는 시작값으로 되돌리고
+     * 시트를 다시 연다 — 시트는 열 때 store 에서 드래프트를 다시 채운다(C-4).
+     * 오라클은 여기 손으로 적은 규칙이다(구현의 규칙 함수를 import 하지 않는다).
+     */
+    it('C-6p · 칩·−·+ 를 어떤 순서로 눌러도 [적용] 뒤 store 는 "혼자 1 · 연인 2 · 친구·가족 ≥2" 를 지킨다', async () => {
+      renderPage();
+      await waitForPrefill();
+
+      type Start = { type: CompanionType; party: number };
+      const startArb: fc.Arbitrary<Start> = fc.oneof(
+        fc.constant<Start>({ type: '혼자', party: 1 }),
+        fc.constant<Start>({ type: '연인', party: 2 }),
+        fc.record({
+          type: fc.constantFrom<CompanionType>('친구', '가족'),
+          party: fc.integer({ min: 2, max: 5 }),
+        })
+      );
+      const pressArb = fc.constantFrom(
+        chip('alone'),
+        chip('friend'),
+        chip('partner'),
+        chip('family'),
+        DEC,
+        INC
+      );
+
+      function expectFits(type: CompanionType | undefined, party: number) {
+        if (type === '혼자') expect(party).toBe(1);
+        else if (type === '연인') expect(party).toBe(2);
+        else expect(party).toBeGreaterThanOrEqual(2);
+      }
+
+      fc.assert(
+        fc.property(
+          startArb,
+          fc.array(pressArb, { maxLength: 8 }),
+          (start, presses) => {
+            resetPressGuard();
+            act(() => {
+              const store = useTripWizardStore.getState();
+              store.reset();
+              store.setParty(start.party);
+              store.selectCompanion(start.type);
+            });
+
+            fireEvent.press(
+              screen.getByTestId('trip-wizard-summary-companion')
+            );
+            // 시트가 실제로 열렸다 — 안 열려서 통과하는 길을 막는다.
+            expect(
+              screen.getByTestId('trip-wizard-companion-sheet')
+            ).toBeOnTheScreen();
+
+            for (const testID of presses) {
+              fireEvent.press(screen.getByTestId(testID));
+            }
+            fireEvent.press(screen.getByTestId('trip-wizard-companion-apply'));
+
+            expect(
+              screen.queryByTestId('trip-wizard-companion-sheet')
+            ).toBeNull();
+            const { companionType, party } = useTripWizardStore.getState();
+            expectFits(companionType, party);
+          }
+        ),
+        { numRuns: 40 }
+      );
+    }, 30000);
   });
 });
 
