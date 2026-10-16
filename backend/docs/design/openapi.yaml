@@ -574,6 +574,34 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
 
+  /stays/curated:
+    get:
+      tags: [stays]
+      summary: 도시별 큐레이션 숙소(트립닷컴 Promotion Center 인기 목록)
+      description: >
+        트립닷컴 제휴 Promotion Center 의 도시별 인기 목록(Hot Sellers)을 순위대로 돌려준다. 행은 반복 시드가
+        채운다(시범: 서울 15곳). 각 항목의 `stayId`(`"TRIPCOM:{트립닷컴 hotelId}"`)를 그대로
+        `/stays/{stayId}/outbound` 에 넘기면 트립닷컴 호텔 상세로 간다. 상세(`/stays/{stayId}`)는 이 출처를
+        모른다(404) — 목록 항목이 곧 카드다.
+
+
+        **평점·가격이 없는 것은 의도다** — 평점은 앱 안에 두지 않고(BR-U1-18), Promotion Center 가격은 실시간
+        값이 아니다(INV-U1-05). 모르는 도시는 빈 목록 200 이다.
+
+
+        ⚠ 출시 조건: 트립닷컴 제휴 계약 3.2.2·3.2.4 — 트립닷컴 이미지·홍보 콘텐츠를 자체 콘텐츠와 함께
+        노출하려면 **사전 서면 승인**이 필요하다. 승인 전에는 화면이 이 목록을 띄우지 않는다.
+      parameters:
+        - { name: city, in: query, required: true, schema: { type: string }, example: '서울', description: 표시용 도시명 }
+      responses:
+        '200':
+          description: 큐레이션 목록(순위 오름차순)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CuratedStayList' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
   /stays/{stayId}/outbound:
     get:
       tags: [stays]
@@ -585,6 +613,10 @@ paths:
 
         OTA 계약 전에는 웹검색 폴백(`"{숙소명} 예약"`, BR-U1-31 이 명시 허용하는 우회)으로 보낸다.
         날짜·인원은 지금 목적지에 실리지 않지만 클릭에 남는다 — 계약 협상 근거 데이터다.
+
+
+        예외: 큐레이션 숙소(`TRIPCOM:{hotelId}`, `/stays/curated`)는 트립닷컴 모드에서 **호텔 상세로 직행**하고,
+        checkin·checkout 이 둘 다 있고 순서가 맞으면 날짜를, adults 가 양수면 인원을 싣는다.
 
 
         응답 본문은 없다. 클릭·전환 지표는 내부 전용이라 사용자 대면 응답에 싣지 않는다(BR-U1-32).
@@ -2184,6 +2216,24 @@ components:
         degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
         filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
 
+    CuratedStayList:
+      type: object
+      required: [city, items]
+      properties:
+        city: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CuratedStay' }
+    CuratedStay:
+      type: object
+      required: [rank, stayId, name, imageUrl]
+      description: 큐레이션 숙소 한 칸. 평점·가격 필드는 의도적으로 없다(BR-U1-18 · INV-U1-05).
+      properties:
+        rank: { type: integer, minimum: 1 }
+        stayId: { type: string, example: 'TRIPCOM:4645968', description: '"TRIPCOM:{트립닷컴 hotelId}" — 아웃바운드에 그대로 쓴다' }
+        name: { type: string, example: 호텔 베뉴지 }
+        address: { type: string, nullable: true, description: null = 모름 }
+        imageUrl: { type: string, description: 트립닷컴 CDN https URL(앱은 저장하지 않는다) }
     StayDetail:
       type: object
       required: [stayId, externalSource, externalId, name, lat, lng, region, amenities, stayType]

@@ -1,5 +1,6 @@
 package com.trippilot.affiliatelink.adapter.out.external
 
+import com.trippilot.accommodationsearch.api.TRIPCOM_STAY_SOURCE
 import com.trippilot.affiliatelink.domain.OtaDeeplinkPort
 import com.trippilot.affiliatelink.domain.OutboundLink
 import com.trippilot.affiliatelink.domain.OutboundQuery
@@ -21,6 +22,7 @@ import java.util.UUID
  * 매핑을 건너뛰고, 이름 키워드 검색결과 페이지(`/global-search/searchlist/search/`)에 착지한다 —
  * 생성기 실링크를 풀어 실측한 구조다(2026-09-29, Allianceid·SID·trip_sub1 이 URL 파라미터로
  * 관통하고 페이지 이동에도 살아남는 것 확인). 호텔 페이지 직행은 매핑이 생기는 칸 3 본편의 몫이다.
+ * 예외: 트립닷컴 큐레이션 숙소(`TRIPCOM:{hotelId}`)는 매핑이 이미 있으므로 호텔 상세로 직행한다.
  *
  * [clickId] 는 `trip_sub1` 에 관통한다 — 전환 리포트가 이 값을 되돌려 줘 클릭↔예약을 잇는
  * 자리다(칸 2 포스트백의 전제). 날짜·인원은 이 페이지가 받지 않아 URL 에 싣지 않는다 —
@@ -48,16 +50,24 @@ class TripcomDeeplinkAdapter(
         }
     }
 
-    override fun buildOutbound(stay: OutboundStay, query: OutboundQuery, clickId: UUID): OutboundLink =
-        OutboundLink(
-            url = "https://kr.trip.com/global-search/searchlist/search/" +
+    override fun buildOutbound(stay: OutboundStay, query: OutboundQuery, clickId: UUID): OutboundLink {
+        val tracking = "&allianceid=" + allianceId + "&sid=" + sid + "&trip_sub1=" + clickId + "&trip_sub3=" + adId
+        val hotelId = stay.stayId.removePrefix("$TRIPCOM_STAY_SOURCE:").takeIf { it != stay.stayId }
+        val url = if (hotelId != null) {
+            // 큐레이션 숙소 — 식별자가 곧 트립닷컴 hotelId 라 호텔 상세로 직행한다. 이 페이지는 날짜·인원을
+            // 받는다(2026-10-16 실측: 리다이렉트 없이 반영, 제휴 파라미터 유지). 날짜는 둘 다 있고 순서가 맞을 때만
+            // 싣는다 — 한쪽만·역전이면 트립닷컴이 임의로 고친 날짜를 사용자가 자기 일정으로 믿는다.
+            "https://kr.trip.com/hotels/detail/?hotelId=" + URLEncoder.encode(hotelId, StandardCharsets.UTF_8) +
+                (if (query.checkIn != null && query.checkOut != null && query.checkOut > query.checkIn) "&checkIn=${query.checkIn}&checkOut=${query.checkOut}" else "") +
+                (query.adults?.takeIf { it > 0 }?.let { "&adult=$it" } ?: "") +
+                tracking
+        } else {
+            "https://kr.trip.com/global-search/searchlist/search/" +
                 "?keyword=" + URLEncoder.encode(stay.name, StandardCharsets.UTF_8) +
-                "&allianceid=" + allianceId +
-                "&sid=" + sid +
-                "&trip_sub1=" + clickId +
-                "&trip_sub3=" + adId,
-            vendor = VENDOR,
-        )
+                tracking
+        }
+        return OutboundLink(url = url, vendor = VENDOR)
+    }
 
     companion object {
         const val VENDOR = "TRIPCOM"
