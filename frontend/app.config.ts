@@ -23,11 +23,11 @@ const naverMapClientId = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID ?? '';
 // App Store Connect App Privacy 답변과 대조한다(둘 중 하나를 바꾸면 다른 쪽도).
 const locationAutomation = process.env.TRIPPILOT_LOCATION_AUTOMATION === '1';
 const LOCATION_ALWAYS_PERMISSION =
-  'TripPilot가 여행 날짜 동안 앱을 닫아도 일정 장소 도착·방문 완료와 이동 경로를 자동으로 기록하기 위해 위치를 사용합니다.';
+  'TripPilot이 여행 날짜 동안 앱을 닫아도 일정 장소 도착·방문 완료와 이동 경로를 자동으로 기록하기 위해 위치를 사용합니다.';
 
 // TRIP-1070 — 사진 앨범 권한 문구(expo-image-picker·expo-media-library 공용).
 const PHOTOS_PERMISSION =
-  'TripPilot가 방문한 곳의 사진을 기록에 보여 주기 위해 사진 보관함에 접근합니다.';
+  'TripPilot이 방문한 곳의 사진을 기록에 보여 주기 위해 사진 보관함에 접근합니다.';
 
 const config: ExpoConfig = {
   name: 'TripPilot',
@@ -124,7 +124,7 @@ const config: ExpoConfig = {
       'expo-location',
       {
         locationWhenInUsePermission:
-          'TripPilot가 주변 여행지와 동선을 추천하기 위해 위치를 사용합니다.',
+          'TripPilot이 주변 여행지와 동선을 추천하기 위해 위치를 사용합니다.',
         ...(locationAutomation
           ? {
               locationAlwaysPermission: LOCATION_ALWAYS_PERMISSION,
@@ -157,9 +157,11 @@ const config: ExpoConfig = {
       {
         photosPermission: PHOTOS_PERMISSION,
         savePhotosPermission:
-          'TripPilot가 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.',
+          'TripPilot이 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.',
         granularPermissions: ['photo'],
         isAccessMediaLocationEnabled: false,
+        // TRIP-1431 — '선택한 사진만'이면 iOS 가 앱 실행마다 "Select More Photos…" 창을 자동으로 띄운다. 끈다.
+        preventAutomaticLimitedAccessAlert: true,
       },
     ],
     // TRIP-1361 — 폰트를 JS 런타임 로드(useFonts)가 아니라 네이티브 번들에 임베드한다(Info.plist UIAppFonts · Android assets).
