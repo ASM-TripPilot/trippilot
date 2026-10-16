@@ -8,15 +8,18 @@ import { PlaceRowCard } from '@/entities/place';
 import { PlaceSubtitle } from '@/entities/place';
 import { useMultiRegionPlaces } from '@/features/explore';
 import { usePlacesInfinite } from '@/features/explore';
-import { PlaceAddHeader } from '@/features/itinerary';
+import { buildDraftPins, PlaceAddHeader } from '@/features/itinerary';
 import { rememberSpontaneousName } from '@/features/check-visit';
 import { useVisitCheck } from '@/features/check-visit';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
-import { useGetTripsTripId } from '@/shared/api/index.hooks';
+import {
+  useGetTripsTripId,
+  useGetTripsTripIdItinerary,
+} from '@/shared/api/index.hooks';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
-// 후보가 없을 때 지도 중심 — 서울 시청(PlaceAddPage 선례).
+// 그날 좌표 핀도 후보도 없을 때 지도 중심 — 서울 시청(PlaceAddPage 선례).
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
 
 const PICK_FAILED = '방문을 기록하지 못했어요. 다시 시도해 주세요.';
@@ -32,6 +35,11 @@ const PICK_FAILED = '방문을 기록하지 못했어요. 다시 시도해 주�
  * 끼우고 응답으로 교체하므로 돌아가면 재조회 없이 카드가 서 있다. 이름은 arrive **전에** 세션 캐시에
  * 남긴다(낙관 카드부터 이름이 보이게). 진행 중엔 어떤 행도 받지 않는다(훅 가드는 같은 poi 만 막는다).
  * 실패(404·네트워크)는 문구로 알리고 머문다 — 다음 누름 때 지운다(pages 층 타이머 금지).
+ *
+ * 지도(TRIP-1416)는 그날(`day`) 일정 슬롯 중 좌표 있는 곳에 번호 핀을 세우고 셸의 핀 맞춤을 켠다(h13 선례).
+ * 일정은 j01 과 같은 캐시 키라 보통 즉시 있다. 그날이 일정에 없거나·좌표가 없거나·조회가 실패하면 핀 없이
+ * 첫 후보 → 서울 기본 중심(첫 날로 폴백하지 않는다 — 다른 날 핀은 오늘 기록과 무관하다). 일정이 늦게 오면
+ * 지도가 camera→region 으로 한 번 다시 마운트된다(다른 셸 화면 첫 로드와 같음).
  */
 export function RecordAddVisitPage({
   tripId,
@@ -73,8 +81,16 @@ export function RecordAddVisitPage({
     ? !multi.isPending && !multi.isError
     : infinite.isSuccess;
 
+  const itinerary = useGetTripsTripIdItinerary(tripId);
+  const pins = buildDraftPins(
+    itinerary.data?.days.find((d) => d.date === day)?.slots ?? []
+  );
   const first = items[0];
-  const center = first ? { lat: first.lat, lng: first.lng } : FALLBACK_CENTER;
+  const center = pins[0]
+    ? { lat: pins[0].lat, lng: pins[0].lng }
+    : first
+      ? { lat: first.lat, lng: first.lng }
+      : FALLBACK_CENTER;
 
   async function handlePick(place: Place): Promise<void> {
     if (picking.current) return;
@@ -103,6 +119,8 @@ export function RecordAddVisitPage({
     <View testID="record-add-visit-screen" className="flex-1">
       <MapSheetShell
         center={center}
+        pins={pins}
+        fitPins
         onBack={() => router.back()}
         // TRIP-1204 — 시트가 열린 채로도 손가락 확대·이동(셸 기본은 열림=잠금). 6-b 실기 전용.
         mapViewOnly={false}

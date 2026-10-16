@@ -14,6 +14,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { router } from 'expo-router';
 
 import { server } from '@/mocks/server';
+import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place } from '@/shared/api/index.schemas';
 import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
@@ -663,5 +664,181 @@ describe('🔴 AC-14 · 검색칸은 바텀시트 안에 있다', () => {
       .UNSAFE_getAllByType(BottomSheetTextInput)
       .map((node) => node.props.testID);
     expect(inputIds).toContain('record-add-visit-search');
+  });
+});
+
+/* ──── TRIP-1416 · 방문 추가 피커 지도는 그날 일정 핀으로 연다 (Q-115 후반) ────
+ * 지금 피커는 장소 조회 첫 항목(이름순) 좌표를 중심으로, 핀 없이 연다 — 해운대 날에 부산 연산동이 뜬다.
+ * 고친 뒤: 라우트 `day` 의 일정 슬롯 중 좌표 있는 곳으로 번호 핀을 세우고(h13 `buildDraftPins` 선례, Seed Q5)
+ * 셸의 핀 맞춤(`fitPins`)을 켠다. 일정 조회는 j01 과 같은 캐시 키다.
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 PM1 (AC-6) 그날 좌표 있는 슬롯 2곳만 핀이 되고(좌표 없는 슬롯·다른 날 슬롯은 빠짐) fitPins 가 켜진다.
+ *  - 🟢 PM2 (AC-7) 그날 슬롯에 좌표가 없으면 핀 0 · 지금처럼 첫 후보 중심.
+ *  - 🟢 PM3 (AC-7) 일정에 그날이 없으면 핀 0 · 첫 후보 중심(첫 날로 폴백하지 않는다 — PlaceAddPage 와 다르다).
+ *  - 🟢 PM4 (AC-7·INV-4) 일정 조회가 실패해도 후보 목록·고르기가 그대로 된다 · 첫 후보 중심.
+ *  - 🟢 PM5 (AC-7) 후보도 없고 그날 좌표도 없으면 서울 기본 중심.
+ * ⚠️ 이 파일은 지도를 관찰 목(`map-root`)으로 바꾼다 → region 을 못 본다. 여기선 **페이지가 넘기는 핀·fitPins**
+ *   까지만 보고, 띠 맞춤 자체는 같은 셸을 실물 지도로 태우는 `MapSheetShell.test.tsx` FB1 이 지킨다(02a §3-5).
+ *   실제 화면에 핀이 보이는지는 6-b(AC-11).
+ *
+ * 3동작 뼈대: 준비=일정 응답/캐시 선적재 → 실행=피커 렌더(·고르기) → 단언=map-root 의 pins·fitPins·중심 텍스트.
+ */
+
+const NEXT_DAY = '2026-08-21';
+const FIRST_CANDIDATE_TEXT = '35.1587,129.1604';
+const SEOUL_TEXT = '37.5665,126.978';
+
+function slotAt(poiId: string, lat: number | null, lng: number | null) {
+  return {
+    poiId,
+    nameKo: poiId,
+    startAt: '10:00:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    tags: [] as string[],
+    alternatives: [] as never[],
+    lat,
+    lng,
+  };
+}
+
+function itineraryOf(
+  days: { date: string; slots: ReturnType<typeof slotAt>[] }[]
+) {
+  return { ...itinerary(), days };
+}
+
+/** 그날 = 해운대(좌표) · 좌표 없음 · 광안리(좌표), 다음 날 = 감천(좌표). */
+const DAY_WITH_COORDS = itineraryOf([
+  {
+    date: DAY,
+    slots: [
+      slotAt('haeundae', 35.1631, 129.1635),
+      slotAt('nocoord', null, null),
+      slotAt('gwangalli', 35.1532, 129.1186),
+    ],
+  },
+  { date: NEXT_DAY, slots: [slotAt('gamcheon', 35.0975, 129.0106)] },
+]);
+
+function mapPins(): { lat: number; lng: number }[] {
+  return (
+    (screen.getByTestId('map-root').props.pins as
+      { lat: number; lng: number }[] | undefined) ?? []
+  );
+}
+
+/** 일정을 캐시에 먼저 넣고 피커를 그린다 — j01 에서 들어오는 실제 경로와 같고, "핀 0" 단언의 시점을 고정한다(02a ★9). */
+async function renderPickerWithCachedItinerary(
+  data: ReturnType<typeof itineraryOf>
+): Promise<void> {
+  server.use(
+    http.get(`${BASE}/trips/:tripId/itinerary`, () => HttpResponse.json(data))
+  );
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+      mutations: { gcTime: 0 },
+    },
+  });
+  client.setQueryData(getGetTripsTripIdItineraryQueryKey(TRIP_ID), data);
+  render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+    wrapper: wrapperFor(client),
+  });
+  await screen.findByTestId(rowId('p1'));
+}
+
+describe('방문 추가 피커 · 그날 일정 핀 (AC-6·AC-7 · Q-115)', () => {
+  // TRIP-1416
+  it('PM1 그날 좌표 있는 슬롯 2곳(해운대·광안리)만 핀이 되고 fitPins 가 켜진다 — 좌표 없는 슬롯·다음 날 슬롯은 빠진다', async () => {
+    // 준비
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(DAY_WITH_COORDS)
+      )
+    );
+
+    // 실행
+    await renderPicker();
+
+    // 단언 — 일정이 늦게 와도 도착하면 그날 핀으로 바뀐다(Seed Q6).
+    await waitFor(() =>
+      expect(mapPins().map((pin) => [pin.lat, pin.lng])).toEqual([
+        [35.1631, 129.1635],
+        [35.1532, 129.1186],
+      ])
+    );
+    expect(screen.getByTestId('map-root').props.fitPins).toBe(true);
+  });
+
+  it('PM2 그날 슬롯에 좌표가 없으면 핀이 없고 지금처럼 첫 후보 좌표가 중심이다', async () => {
+    await renderPickerWithCachedItinerary(
+      itineraryOf([
+        { date: DAY, slots: [slotAt('nocoord', null, null)] },
+        { date: NEXT_DAY, slots: [slotAt('gamcheon', 35.0975, 129.0106)] },
+      ])
+    );
+
+    expect(mapPins()).toHaveLength(0);
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      FIRST_CANDIDATE_TEXT
+    );
+  });
+
+  it('PM3 일정에 그날이 없으면 첫 날로 폴백하지 않는다 — 핀 없이 첫 후보 좌표가 중심이다', async () => {
+    await renderPickerWithCachedItinerary(
+      itineraryOf([
+        { date: NEXT_DAY, slots: [slotAt('gamcheon', 35.0975, 129.0106)] },
+      ])
+    );
+
+    expect(mapPins()).toHaveLength(0);
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      FIRST_CANDIDATE_TEXT
+    );
+  });
+
+  it('PM4 일정 조회가 실패해도 후보가 뜨고 고를 수 있으며, 지도는 첫 후보 중심이다 (INV-4)', async () => {
+    // 준비
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({ message: 'boom' }, { status: 500 })
+      )
+    );
+    await renderPicker();
+    await flush();
+
+    // 실행
+    fireEvent.press(screen.getByTestId(pickId('p2')));
+
+    // 단언
+    await waitFor(() => expect(postHits()).toHaveLength(1));
+    expect(mapPins()).toHaveLength(0);
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      FIRST_CANDIDATE_TEXT
+    );
+  });
+
+  it('PM5 후보도 없고 그날 좌표도 없으면 서울 기본 중심이다', async () => {
+    // 준비 — 장소 0건.
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
+
+    // 실행
+    render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+      wrapper: wrapperFor(makeClient()),
+    });
+    await waitFor(() => expect(placeHits().length).toBeGreaterThan(0));
+    await flush();
+
+    // 단언
+    expect(mapPins()).toHaveLength(0);
+    expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
   });
 });

@@ -24,6 +24,7 @@ import type {
 } from '@mj-studio/react-native-naver-map';
 
 import { buildCircleRegion, buildFitRegion } from './fitRegion';
+import type { FitBand } from './fitRegion';
 import { DRAW_PATH_DURATION_MS, DrawnPathOverlay } from './DrawnPathOverlay';
 
 /**
@@ -128,6 +129,9 @@ export interface MapViewProps {
    * `camera` 대신 `region` 을 넘긴다(SDK 는 camera 가 있으면 region 을 버린다). 핀 0개·미전달이면
    * 기존 center 카메라 그대로(핀 1개는 최소 폭 region — TRIP-1363). */
   fitPins?: boolean;
+  /** TRIP-1416 · 보이는 띠(시트·오버레이 줄이 안 가린 부분) 기준 맞춤. `fitPins` 가 켜졌을 때만 의미가 있다.
+   * 미전달이면 지금과 같다(셸 밖 카드 지도). 소비처는 `MapSheetShell` 뿐이고, 렌더마다 새 객체를 넘기지 않는다(memo). */
+  fitBand?: FitBand;
   /** TRIP-1385 · 경로선이 그려지며 나타난다. **옵트인** — 미전달·false 면 경로선 prop 이 지금과 같다(progress 미전달).
    * 켜면 마운트 때 한 번, 경로선을 1번 핀에서 마지막 핀까지 `durationMs`(기본 650)에 걸쳐 그리고(지연 `delayMs`,
    * 기본 0) 핀은 경로가 닿는 순서로 나타난다. 동작 줄이기면 곧장 완성 경로·전체 핀. 실제 경로(`actualRoute`)가
@@ -504,6 +508,7 @@ function MapViewImpl({
   radiusCircle,
   onTapMap,
   fitPins,
+  fitBand,
   drawPathOnMount,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
@@ -534,7 +539,8 @@ function MapViewImpl({
   // region 도 같은 이유로 값 memo — 소비처가 렌더마다 새 핀 배열을 만들어도 값이 같으면 같은 객체다.
   // 네 숫자를 문자열 키로 삼는다(JS 숫자 → JSON 은 정확히 왕복한다).
   // 핀 맞춤이 없고 반경 원이 있으면 원 전체를 담는 영역으로 연다(TRIP-1043 — 줌 고정이면 원이 카드 밖).
-  const pinRegion = fitPins === true ? buildFitRegion(pins ?? []) : null;
+  const pinRegion =
+    fitPins === true ? buildFitRegion(pins ?? [], fitBand) : null;
   const regionKey = JSON.stringify(
     pinRegion ??
       (radiusCircle

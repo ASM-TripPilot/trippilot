@@ -6,12 +6,24 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { Dimensions, Text } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { MapPin } from '@/shared/map';
+import { buildFitRegion } from '@/shared/map/fitRegion';
+import {
+  expectHeightLimited,
+  expectPinsInBand,
+} from '@/test-support/fitBandAsserts';
 
 import { MapSheetShell } from './MapSheetShell';
+
+// TRIP-1416 FB5 — 셸 지도가 맞춤을 다시 계산했는지 센다(MapView 는 memo 라 같은 props 면 본문이 안 돈다).
+// 동작은 실물 그대로 감싸기만 한다 → 이 파일의 다른 케이스는 무영향. jest.mock 은 파일 맨 위로 끌어올려진다.
+jest.mock('@/shared/map/fitRegion', () => {
+  const actual = jest.requireActual('@/shared/map/fitRegion');
+  return { ...actual, buildFitRegion: jest.fn(actual.buildFitRegion) };
+});
 
 /**
  * TRIP-783 · 셸 조립 계약(widgets). 전면 지도(`<MapView viewOnly>`) + 바텀시트 +
@@ -1166,5 +1178,187 @@ describe('MapSheetShell · SH18 — body 비스크롤·콘텐츠 pan 정적 off 
     const list = screen.getByTestId('shell-list');
     expect(within(list).getByTestId('list-item-a')).toBeOnTheScreen();
     expect(within(list).getByTestId('fake-body')).toBeOnTheScreen();
+  });
+});
+
+/* ──── TRIP-1416 · 셸이 "시트가 안 가린 띠"에 핀을 맞춘다 ────
+ * 지도는 화면 전체에 깔리고 시트가 아래를 덮는다. `fitPins` 를 켠 셸은 스냅 배열의 첫 `'%'` 칸(기본 45%,
+ * 허브 55%)을 아래 가림으로, 세이프에어리어 top + 오버레이 줄을 위 가림으로, 창 세로/가로를 화면 비율로 삼아
+ * 맞춤을 계산한다(Seed Q1~Q4). 시트가 지금 멈춘 칸에서는 띠를 뽑지 않는다 — 시트를 끌 때마다 카메라가
+ * 처음 맞춤으로 튀면 사용자 제스처를 되돌린다(AC-10).
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 FB1 (AC-3) 기본 스냅 → 세 핀이 아래 45% 위 · 오버레이 줄(8+36) 아래 · 상자가 세로로 꽉 참.
+ *  - 🔴 FB2 (AC-3·Q3) 세이프에어리어 top 200(과장값)이면 위 띠가 200+44 아래로 내려간다.
+ *  - 🔴 FB3 (AC-4·Q4) 스냅 [닫힘,'55%',펼침] → 55% 기준, 펼침(2)으로 진입해도 같은 맞춤.
+ *  - 🔴 FB4 (AC-5) 다른 날 핀으로 바뀌면 새로 맞추고 새 핀도 띠 안.
+ *  - 🔴 FB5 (AC-10) 시트 칸이 바뀌어도 region 은 같은 객체, 1→2 에선 맞춤 재계산 0회(띠 객체 memo).
+ *  - FB6 (AC-8) 핀 1개 → 띠 안 region(55% 스냅으로 잰다 — 가운데 50% 는 45% 띠를 우연히 통과) · 0개 → camera.
+ * ⚠️ 실제 화면 맞춤(onLayout 재맞춤·시트 실제 높이·물방울 머리)은 jest 사각 → 6-b(AC-11).
+ *
+ * 3동작 뼈대: 준비=키 + 핀 + (Provider/스냅) → 실행=렌더·rerender·changeSnap → 단언=map-native region.
+ */
+
+const WINDOW = Dimensions.get('window');
+const WINDOW_ASPECT = WINDOW.height / WINDOW.width;
+// 셸 기본 오버레이 줄 바닥 = pt-sm 8 + 뒤로 버튼 36 — 위 예약값은 구현 재량이지만 이보다 작으면 핀이 칩 밑이다(02a ★6).
+const SHELL_OVERLAY_ROW_BOTTOM = 8 + 36;
+// 다른 날 — 해운대·기장(남북으로 긴 동선).
+const OTHER_DAY_PINS: MapPin[] = [
+  { number: 1, lat: 35.1631, lng: 129.1635 },
+  { number: 2, lat: 35.2445, lng: 129.2222 },
+];
+
+function bandRegion(): NativeRegion | undefined {
+  return fitNativeProps().region as NativeRegion | undefined;
+}
+
+function shellWithPins(
+  pins: MapPin[],
+  extra: Partial<Parameters<typeof MapSheetShell>[0]> = {}
+): ReactElement {
+  return (
+    <MapSheetShell
+      center={FIT_CENTER}
+      pins={pins}
+      onBack={jest.fn()}
+      header={<Text>헤더</Text>}
+      fitPins
+      {...extra}
+    >
+      <Text>본문</Text>
+    </MapSheetShell>
+  );
+}
+
+const fitCalls = (): number => jest.mocked(buildFitRegion).mock.calls.length;
+
+describe('MapSheetShell · 보이는 띠 맞춤 (AC-3·AC-4·AC-5·AC-8·AC-10)', () => {
+  // TRIP-1416
+  beforeEach(() => {
+    withMapKey();
+    jest.mocked(buildFitRegion).mockClear();
+  });
+  afterEach(restoreMapKey);
+
+  it('FB1 기본 스냅이면 세 핀이 아래 45% 위·오버레이 줄 아래 띠에 들고 상자가 세로로 꽉 찬다, camera 는 없다', () => {
+    render(shellWithPins(FIT_PINS));
+
+    expectPinsInBand(bandRegion(), FIT_PINS, {
+      bottom: 0.45,
+      topPx: SHELL_OVERLAY_ROW_BOTTOM,
+      screenHeight: WINDOW.height,
+    });
+    expectHeightLimited(bandRegion(), FIT_PINS, WINDOW_ASPECT);
+    expect(fitNativeProps().camera).toBeUndefined();
+  });
+
+  it('FB2 세이프에어리어 top 이 크면(200) 위 띠가 상태바+오버레이 줄(200+44) 아래로 내려간다', () => {
+    // 준비 — 남북으로 긴 동선 + 과장된 상단 인셋. 1.4 여백이 47pt 정도의 누락은 흡수해 버려서(02a ★6),
+    // 인셋을 무시하는 구현이 바닥값을 넘도록 키웠다(인셋 무시 시 위 핀 ≈149px · 바닥 244px).
+    render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 200, bottom: 34, left: 0, right: 0 }}
+      >
+        {shellWithPins(OTHER_DAY_PINS)}
+      </SafeAreaInsetsContext.Provider>
+    );
+
+    expectPinsInBand(bandRegion(), OTHER_DAY_PINS, {
+      bottom: 0.45,
+      topPx: 200 + SHELL_OVERLAY_ROW_BOTTOM,
+      screenHeight: WINDOW.height,
+    });
+  });
+
+  it("FB3 스냅이 [닫힘, '55%', 펼침] 이면 55% 기준이고, 펼침(2)으로 진입해도 중간(1) 진입과 같은 맞춤이다", () => {
+    // 남북으로 긴 동선 — 동서 동선은 세로 맞춤으로 띠 가운데에 떠서 45% 를 그대로 써도 55% 를 우연히 넘는다.
+    const hubSnaps = [28, '55%', 700];
+    const { unmount } = render(
+      shellWithPins(OTHER_DAY_PINS, {
+        snapPoints: hubSnaps,
+        initialIndex: 1,
+      })
+    );
+    const atHalf = bandRegion();
+    expectPinsInBand(atHalf, OTHER_DAY_PINS, {
+      bottom: 0.55,
+      topPx: SHELL_OVERLAY_ROW_BOTTOM,
+      screenHeight: WINDOW.height,
+    });
+    unmount();
+
+    render(
+      shellWithPins(OTHER_DAY_PINS, {
+        snapPoints: hubSnaps,
+        initialIndex: 2,
+      })
+    );
+
+    expect(bandRegion()).toEqual(atHalf);
+  });
+
+  it('FB4 다른 날 핀으로 바뀌면 새로 맞추고 새 핀도 아래 45% 위 띠에 든다', () => {
+    const { rerender } = render(shellWithPins(FIT_PINS));
+    const first = bandRegion();
+    expectPinsInBand(first, FIT_PINS, {
+      bottom: 0.45,
+      topPx: SHELL_OVERLAY_ROW_BOTTOM,
+      screenHeight: WINDOW.height,
+    });
+
+    rerender(shellWithPins(OTHER_DAY_PINS));
+
+    expect(bandRegion()).not.toBe(first);
+    expectPinsInBand(bandRegion(), OTHER_DAY_PINS, {
+      bottom: 0.45,
+      topPx: SHELL_OVERLAY_ROW_BOTTOM,
+      screenHeight: WINDOW.height,
+    });
+  });
+
+  it('FB5 (금지) 시트가 펼침·닫힘으로 옮겨도 region 은 처음 그 객체다 — 펼침 도착엔 맞춤을 다시 계산하지도 않는다', () => {
+    // 준비 — 기본 스냅(peek)으로 연다. 앵커: 지금 region 이 띠를 지킨다(띠를 안 지키는 region 의 공허 통과 차단).
+    render(shellWithPins(FIT_PINS));
+    const first = bandRegion();
+    expectPinsInBand(first, FIT_PINS, {
+      bottom: 0.45,
+      topPx: SHELL_OVERLAY_ROW_BOTTOM,
+      screenHeight: WINDOW.height,
+    });
+    const callsBefore = fitCalls();
+
+    // 실행 ① — 펼침(88%)에 멈춤. 지도 잠금·center·핀은 그대로라 MapView 가 다시 그려질 이유가 없다.
+    changeSnap(2);
+
+    // 단언 ① — 띠 객체가 렌더마다 새로 만들어지면 호출 수가 는다 · 띠를 지금 칸에서 뽑으면 region 이 바뀐다.
+    expect(fitCalls()).toBe(callsBefore);
+    expect(bandRegion()).toBe(first);
+
+    // 실행 ② — 닫힘에 멈춤(지도 잠금이 풀려 MapView 는 다시 그려진다).
+    changeSnap(0);
+
+    // 단언 ② — 다시 그려져도 값이 같아 같은 객체(카메라가 처음 맞춤으로 튀지 않는다).
+    expect(bandRegion()).toBe(first);
+  });
+
+  it("FB6 핀 1개면 그 핀이 아래 55%('55%' 스냅) 위 띠에 든 region 이고, 핀 0개면 region 없이 camera 다 (TRIP-1363 무회귀)", () => {
+    // 55% 로 잰다 — 핀 1개를 가운데(50%)에 두는 지금 모양은 45% 띠는 우연히 통과한다.
+    const one = [FIT_PINS[0]];
+    const { unmount } = render(
+      shellWithPins(one, { snapPoints: [28, '55%', 700] })
+    );
+    expectPinsInBand(bandRegion(), one, {
+      bottom: 0.55,
+      topPx: SHELL_OVERLAY_ROW_BOTTOM,
+      screenHeight: WINDOW.height,
+    });
+    expect(fitNativeProps().camera).toBeUndefined();
+    unmount();
+
+    render(shellWithPins([]));
+
+    expect(fitNativeProps().region).toBeUndefined();
+    expect(fitNativeProps().camera).toBeDefined();
   });
 });
