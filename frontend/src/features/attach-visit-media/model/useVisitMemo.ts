@@ -79,9 +79,10 @@ export function useVisitMemo({
   const [latchedFor, setLatchedFor] = useState<string | null>(null);
   if (openNow && latchedFor !== visitCheckId) setLatchedFor(visitCheckId);
 
-  async function saveMemo(text: string): Promise<void> {
+  // TRIP-1426 — true = PUT 이 나가 성공, false = 건너뜀(공백·같은 값). 실패는 reject 그대로(호출자가 안내).
+  async function saveMemo(text: string): Promise<boolean> {
     const trimmed = text.trim();
-    if (trimmed === '') return;
+    if (trimmed === '') return false;
     // 렌더 값이 아니라 캐시에서 읽는다 — 한 act 안 연속 호출도 직전 저장을 본다.
     const current =
       queryClient.getQueryData<string | null>(memoKey) ??
@@ -91,11 +92,12 @@ export function useVisitMemo({
         ),
         visitCheckId
       );
-    if (current === trimmed) return;
+    if (current === trimmed) return false;
     await putTripsTripIdVisitsVisitCheckIdMemo(tripId, visitCheckId, {
       text: trimmed,
     });
     queryClient.setQueryData(memoKey, trimmed);
+    return true;
   }
 
   return {

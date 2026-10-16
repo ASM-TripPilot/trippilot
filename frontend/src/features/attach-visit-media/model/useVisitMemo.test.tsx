@@ -495,3 +495,49 @@ describe('memoReady — 첫 records 조회 동안만 false', () => {
     expect(result.current.memoReady).toBe(true);
   });
 });
+
+// TRIP-1426 Q5 — 호출자(허브 시트·j01 카드)가 "저장했다"와 "건너뛰었다"를 가르게 saveMemo 가 boolean 을 돌려준다.
+// 저장 안내(토스트)는 true 일 때만 뜬다 — 공백·같은 값(요청 0)에 "저장했어요"가 뜨면 위반이다.
+// (개념) `resolves.toBe(x)` = 약속이 x 로 끝났다(완전 일치) · `rejects` = 약속이 실패로 끝났다.
+describe('🔴 TRIP-1426 · saveMemo 는 PUT 이 나가 성공했을 때만 true 다', () => {
+  it('B1 공백·저장본과 같은 글은 false(PUT 0), 다른 글은 true, 그 글을 다시 보내면 false — PUT 은 1회', async () => {
+    // 준비 — 서버 memo '서버 글'.
+    mockGetRecords.mockResolvedValue(
+      record([{ date: '2026-08-20', actual: [visit('v1', '서버 글')] }])
+    );
+    const { result } = renderHook(
+      () => useVisitMemo({ tripId: 't1', visitCheckId: 'v1' }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.savedMemo).toBe('서버 글'));
+
+    // 실행·단언 — 같은 saveMemo 참조로 한 act 안에서 연달아(02a ★16 — undefined 는 false 가 아니다).
+    await act(async () => {
+      const save = result.current.saveMemo;
+      await expect(save('   ')).resolves.toBe(false);
+      await expect(save('  서버 글 ')).resolves.toBe(false);
+      await expect(save('다른 글')).resolves.toBe(true);
+      await expect(save('다른 글')).resolves.toBe(false);
+    });
+
+    // 단언 — 실제로 나간 것은 한 번.
+    expect(mockPut.mock.calls).toEqual([[MEMO_URL, { text: '다른 글' }]]);
+  });
+
+  it('B2 PUT 이 실패하면 false 로 삼키지 않고 실패(reject)로 끝난다 — 호출자가 실패 안내를 띄운다', async () => {
+    // 준비
+    mockPut.mockRejectedValueOnce(new Error('boom'));
+    const { result } = renderHook(
+      () => useVisitMemo({ tripId: 't1', visitCheckId: 'v1' }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.memoReady).toBe(true));
+
+    // 실행·단언
+    await act(async () => {
+      await expect(result.current.saveMemo('실패할 글')).rejects.toThrow(
+        'boom'
+      );
+    });
+  });
+});

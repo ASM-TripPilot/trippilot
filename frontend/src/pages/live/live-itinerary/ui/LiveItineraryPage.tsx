@@ -49,6 +49,7 @@ import {
 import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { showToast } from '@/shared/ui/Toast';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
 import {
@@ -109,6 +110,10 @@ const PHOTO_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해
 
 /** 허브 메모 저장 실패 안내(INV-4) — j01 `VisitRecordCardContainer` 와 같은 문장(TRIP-1117). */
 const MEMO_SAVE_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+
+/** TRIP-1426 저장 안내(공용 토스트) — 요청이 실제로 나가 성공했을 때만. j01 과 같은 메모 문장. */
+const MEMO_SAVED_TOAST = '메모를 저장했어요';
+const PHOTO_SAVED_TOAST = '사진을 기록했어요';
 
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
 const HOME_FALLBACK = '/(tabs)';
@@ -245,6 +250,10 @@ export function LiveItineraryPage({
   });
   // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
   const memoAttempt = useRef(0);
+  // TRIP-1426 [저장] 잠금 — ref 는 같은 틱 두 번째 누름을 막고(렌더 전이라 disabled 가 아직 안 섰다), state 는
+  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsBusy 선례).
+  const memoSaving = useRef(false);
+  const [memoSavingShown, setMemoSavingShown] = useState(false);
 
   // TRIP-1339 · U10 위치 자동화 — 오늘(KST) 일정·실적으로 문맥을 만들고 판정은 훅이 한다(페이지 1회).
   // 플래그 OFF 면 동의 조회도 하지 않고 훅은 효과가 없다(BR-U10-07). 훅 규칙상 조기 반환 위에 둔다.
@@ -535,6 +544,10 @@ export function LiveItineraryPage({
         visitCheckId,
         photoAttach(picked.asset, picked.gpsConsent)
       );
+      showToast({
+        message: PHOTO_SAVED_TOAST,
+        testID: 'live-photo-saved-toast',
+      });
     } catch {
       setPhotoNotice({ poiId, text: PHOTO_SAVE_FAILED, settings: false });
     }
@@ -544,14 +557,29 @@ export function LiveItineraryPage({
   const memoSheetPoiId = poiOfVisit(memoSheetFor);
   const memoSheetOpen = memoSheetPoiId !== undefined;
   const submitMemo = (visitCheckId: string, text: string) => {
+    if (memoSaving.current) return;
+    memoSaving.current = true;
+    setMemoSavingShown(true);
     const attempt = ++memoAttempt.current;
     setMemoFailedFor(null);
+    const unlock = () => {
+      memoSaving.current = false;
+      setMemoSavingShown(false);
+    };
     visitMemo.saveMemo(text).then(
-      () => {
-        if (attempt === memoAttempt.current)
-          setMemoSheetFor((open) => (open === visitCheckId ? null : open));
+      (saved) => {
+        unlock();
+        if (attempt !== memoAttempt.current) return;
+        setMemoSheetFor((open) => (open === visitCheckId ? null : open));
+        // 같은 글(요청 0)은 닫기만 한다(Q2).
+        if (saved)
+          showToast({
+            message: MEMO_SAVED_TOAST,
+            testID: 'live-memo-saved-toast',
+          });
       },
       () => {
+        unlock();
         if (attempt === memoAttempt.current) setMemoFailedFor(visitCheckId);
       }
     );
@@ -567,6 +595,7 @@ export function LiveItineraryPage({
         text={visitMemo.savedMemo}
         editable={visitMemo.memoReady}
         notice={memoFailedFor === memoSheetFor ? MEMO_SAVE_FAILED : null}
+        saving={memoSavingShown}
         onSubmit={(text) => submitMemo(memoSheetFor, text)}
         onClose={() => setMemoSheetFor(null)}
       />

@@ -7071,6 +7071,25 @@ export const PREVIEW_STATES: PreviewState[] = [
       </>
     ),
   },
+  // i01 메모 시트 저장 중(TRIP-1426) — 응답을 기다리는 동안 [저장]이 비활성(opacity-40)이다.
+  {
+    key: 'live-hub-memo-sheet-saving',
+    band: 'i',
+    label: 'i01 · 여행중 허브 메모 시트 (저장 중)',
+    login: null,
+    render: () => (
+      <>
+        {renderLiveHubPreview(1, { fabHidden: true })}
+        <MemoSheet
+          placeName="부산시립미술관"
+          text={LIVE_HUB_PREVIEW_MEMO}
+          saving
+          onSubmit={noop}
+          onClose={noop}
+        />
+      </>
+    ),
+  },
   // i01 메모 저장됨(TRIP-1117, Figma 4741:4650) — 시트 없이 관람 중 카드 버튼 줄 아래 메모 박스.
   {
     key: 'live-hub-memo-saved',

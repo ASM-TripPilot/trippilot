@@ -136,3 +136,18 @@ describe('🔴 TRIP-1078 AC-2 · return = 제출→blur, 한 번에 저장 1회'
     expect(onSubmit).toHaveBeenCalledWith('파도 소리가 좋았다');
   });
 });
+
+// TRIP-1426 AC-8 · UX-05 — 스크린리더가 읽을 이름. j01·허브 메모 시트가 같은 입력을 쓴다. 접근성 트리에 실제로 잡히는지는
+// 통과형 시트 목 아래라 jest 가 못 본다(6-b 실기 — agent-device 수정 전/후 대조).
+// (개념) `toHaveAccessibleName` = 접근성 이름(라벨 → 없으면 글자) 완전 일치 — placeholder 는 이름이 되지 않는다.
+describe('🔴 TRIP-1426 AC-8 · 메모 입력칸의 접근성 이름은 "메모 입력"이다', () => {
+  it('A1 입력칸을 "메모 입력" 이름으로 찾을 수 있다', () => {
+    // 준비·실행
+    render(<MemoInline />);
+
+    // 단언
+    const input = screen.getByTestId('record-trip-memo-input');
+    expect(input).toHaveAccessibleName('메모 입력');
+    expect(screen.getByLabelText('메모 입력')).toBe(input);
+  });
+});
