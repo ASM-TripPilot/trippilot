@@ -52,7 +52,8 @@ export interface NotificationSection {
 export interface NotificationInboxScreenProps {
   sections: NotificationSection[];
   isEmpty: boolean;
-  onNavigate: (route: string) => void;
+  /** 둘째 인자 = 누른 행의 알림 id. 읽음 요청 여부는 페이지가 판정한다. */
+  onNavigate: (route: string, notificationId: string) => void;
   onPressBack?: () => void;
   onMarkAllRead: () => void;
   /** '모두 읽음' 처리 중 — 버튼 비활성. */
