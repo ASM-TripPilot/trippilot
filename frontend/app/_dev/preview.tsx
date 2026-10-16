@@ -3195,6 +3195,28 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1429 — 가격 있는 숙소가 하나도 없는 목록이면 [가격대] 칩이 빠진다(판정은 page, 화면은 값만).
+  {
+    key: 'stay-search-no-price',
+    band: 'e',
+    label: 'e02 · 검색 결과(가격 미확인뿐)',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={STAY_SEARCH_PREVIEW_ITEMS.map((item) => ({
+          ...item,
+          price: null,
+        }))}
+        showPriceFilter={false}
+        nameQuery=""
+        onChangeNameQuery={noop}
+        onToggleSave={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
   // e02 상태 5종(TRIP-726) — loading·empty·filter-zero·partial-failure·error 를 눈으로 대조.
   // 상태 프레임은 검색바를 안 그린다(Figma 정합) → `onChangeNameQuery` 미지정. jest 는 스켈레톤
   // 방향·카드 그림자·disabled 룩·배너 딤·FAB 오버랩을 못 봐 이 5키가 유일한 육안 확인 자리(6-b/831).
@@ -7161,6 +7183,29 @@ export const PREVIEW_STATES: PreviewState[] = [
         savedStays={SAVED_STAY_PREVIEW_CARDS}
         face="results"
         onPressCard={noop}
+        onPressHeart={noop}
+        onPressRegister={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // TRIP-1429 — 하트 해제가 409(거점으로 쓰는 숙소)로 막혀 되돌아온 얼굴. 배너 자리·줄바꿈은 jest 사각.
+  {
+    key: 'saved-stays-remove-error',
+    band: 'e',
+    label: 'e04 · 저장 풀기 실패(거점 숙소)',
+    login: null,
+    render: () => (
+      <SavedStayListScreen
+        savedStays={SAVED_STAY_PREVIEW_CARDS}
+        face="results"
+        removeNotice={{
+          message:
+            '여행의 거점으로 쓰는 숙소라 지울 수 없어요\n여행에서 거점을 먼저 바꿔 주세요',
+          action: null,
+        }}
+        onPressCard={noop}
+        onPressHeart={noop}
         onPressRegister={noop}
         onBack={noop}
       />

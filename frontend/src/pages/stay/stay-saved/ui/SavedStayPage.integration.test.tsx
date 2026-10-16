@@ -1,12 +1,13 @@
 import { http, HttpResponse } from 'msw';
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import { createGcZeroWrapper, settle } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -228,5 +229,327 @@ describe('AC-11 · 실앱 degrade — 페이지가 거점/지역/가격을 발�
     expect(screen.queryByTestId('saved-stay-card-ss-1-base-badge')).toBeNull();
     expect(screen.queryByText('거점')).toBeNull();
     expect(card).not.toHaveTextContent(/원~|₩/);
+  });
+});
+
+// TRIP-1429 결정 ⑥ — e04 하트는 저장을 푸는 버튼이다(Q-040). 누르면 그 행이 응답 전에 목록에서 빠지고(낙관 갱신),
+// 실패·409 면 같은 자리로 돌아오며 안내가 뜬다(INV-4). 해제는 savedStayId 로 지운다 — 토글 훅의 remove 는
+// 외부키 역인덱스라 핀·수동 숙소를 못 지운다. 서버는 거점으로 쓰는 숙소를 409 로 막는다(openapi 미기재, 서버 코드 기준).
+describe('RM · 하트로 저장을 푼다 (D1~D5 · 01b Q3·Q5 · INV-4)', () => {
+  const THIRD: SavedStay = {
+    ...HEARTED,
+    savedStayId: 'ss-3',
+    name: '광안리 바다 스테이',
+    externalId: 'n-77',
+  };
+
+  /** 서버 문구 그대로 — 화면은 이 문장을 노출하지 않는다(01b Q5). */
+  const SERVER_409_MESSAGE =
+    '거점으로 사용 중인 숙소는 삭제할 수 없습니다. 거점 배정을 먼저 해제하세요.';
+
+  type DeleteResult = 204 | 404 | 409 | 'network';
+  interface Gate {
+    promise: Promise<void>;
+    open: () => void;
+  }
+  function gate(): Gate {
+    let open: () => void = () => {};
+    const promise = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return { promise, open };
+  }
+
+  // 서버 상태는 가변이다 — 204·404 면 목록에서도 빠져야 무효화 재조회가 지운 행을 되살리지 않는다.
+  let serverList: SavedStay[];
+  let plans: Record<string, { result: DeleteResult; gate?: Gate }>;
+  let deleteHits: string[];
+  let deleteDone: string[];
+  let getHits: number;
+  // 첫 GET 뒤의 재조회를 붙잡는다 — 롤백이 남긴 유령 행이 재조회에 덮여 사라지기 전에 보려고(RM-6).
+  let refetchGate: Gate | null;
+
+  beforeEach(() => {
+    serverList = [];
+    plans = {};
+    deleteHits = [];
+    deleteDone = [];
+    getHits = 0;
+    refetchGate = null;
+    server.use(
+      http.get(`${BASE}/saved-stays`, async () => {
+        getHits += 1;
+        if (getHits > 1 && refetchGate) await refetchGate.promise;
+        return HttpResponse.json(serverList);
+      }),
+      http.delete(`${BASE}/saved-stays/:savedStayId`, async ({ params }) => {
+        const id = String(params.savedStayId);
+        deleteHits.push(id);
+        const plan = plans[id] ?? { result: 204 };
+        if (plan.gate) await plan.gate.promise;
+        deleteDone.push(id);
+        if (plan.result === 'network') return HttpResponse.error();
+        if (plan.result === 409) {
+          return HttpResponse.json(
+            { error: { code: 'CONFLICT', message: SERVER_409_MESSAGE } },
+            { status: 409 }
+          );
+        }
+        serverList = serverList.filter((stay) => stay.savedStayId !== id);
+        if (plan.result === 404) {
+          return HttpResponse.json(
+            { error: { code: 'NOT_FOUND', message: '찾을 수 없습니다.' } },
+            { status: 404 }
+          );
+        }
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+  });
+
+  // 실패한 it 이 붙잡아 둔 응답을 풀어 준다(다음 it 으로 열린 요청이 새지 않게).
+  afterEach(() => {
+    Object.values(plans).forEach((plan) => plan.gate?.open());
+    refetchGate?.open();
+  });
+
+  async function renderWith(list: SavedStay[]): Promise<void> {
+    serverList = list;
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
+    await screen.findByTestId(`saved-stay-card-${list[0].savedStayId}`);
+  }
+
+  /** 눌림 이벤트를 함께 넘긴다 — 콜백 직결 회귀는 인자 없는 press 로 안 잡힌다(traps-stay). */
+  function pressHeart(id: string): void {
+    fireEvent.press(screen.getByTestId(`saved-stay-heart-${id}`), {
+      nativeEvent: {},
+    });
+  }
+
+  /** 화면에 그려진 카드 순서(하위 testID `-base-badge` 등은 `$` 로 뺀다). */
+  function cardIds(): string[] {
+    return screen
+      .getAllByTestId(/^saved-stay-card-ss-\d+$/)
+      .map((node) => String(node.props.testID));
+  }
+
+  async function waitGone(id: string): Promise<void> {
+    await waitFor(() =>
+      expect(screen.queryByTestId(`saved-stay-card-${id}`)).toBeNull()
+    );
+  }
+
+  /** 붙잡은 DELETE 를 풀고, 그 응답이 서버를 떠나 클라이언트 처리까지 흘러가게 한다. */
+  async function release(id: string): Promise<void> {
+    await act(async () => plans[id].gate?.open());
+    await waitFor(() => expect(deleteDone).toContain(id));
+    await settle();
+  }
+
+  const BANNER = 'saved-stay-remove-error';
+  const RETRY = 'saved-stay-remove-error-retry';
+
+  describe('RM-1 · 하트 → DELETE 1회 · 응답 전에 행이 빠진다 · 상세 이동 없음 (D1)', () => {
+    it.each([
+      { kind: '하트 저장 숙소', id: 'ss-1', other: 'ss-2' },
+      { kind: '핀·수동 숙소(외부키 null)', id: 'ss-2', other: 'ss-1' },
+    ])('$kind', async ({ id, other }) => {
+      // 준비 — 두 건, 대상 DELETE 는 응답을 붙잡아 둔다.
+      plans[id] = { result: 204, gate: gate() };
+      await renderWith([HEARTED, PINNED]);
+
+      // 실행.
+      pressHeart(id);
+
+      // 단언 — 응답 전에 그 행만 빠졌다(낙관 갱신). DELETE 는 savedStayId 로 한 번.
+      await waitGone(id);
+      expect(deleteHits).toEqual([id]);
+      expect(screen.getByTestId(`saved-stay-card-${other}`)).toBeOnTheScreen();
+      expect(screen.getByTestId('saved-stay-subtitle')).toHaveTextContent(
+        /1곳/
+      );
+      // 하트 누름이 카드 누름(상세 push)으로 새지 않았다.
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // 응답 뒤 목록을 다시 받아도(무효화 재조회) 그대로 빠져 있고, 실패 안내는 없다.
+      await release(id);
+      await waitFor(() => expect(getHits).toBeGreaterThanOrEqual(2));
+      await settle();
+      expect(screen.queryByTestId(`saved-stay-card-${id}`)).toBeNull();
+      expect(screen.queryByTestId(BANNER)).toBeNull();
+    });
+  });
+
+  describe('RM-2 · 409(거점으로 쓰는 숙소) → 같은 자리로 되돌리고 거점 사유를 알린다 (D2 · BR-U1-19 · Q5)', () => {
+    it('행이 원래 순서로 돌아오고, 배너가 사유를 우리 문구로 말하며 다시 시도는 없다', async () => {
+      plans['ss-1'] = { result: 409, gate: gate() };
+      await renderWith([HEARTED, PINNED]);
+
+      pressHeart('ss-1');
+      // 앵커 — 낙관 제거가 실제로 일어났다(처음부터 안 빠져서 "돌아왔다"가 공짜로 통과하는 것 방지).
+      await waitGone('ss-1');
+      await release('ss-1');
+
+      await waitFor(() =>
+        expect(screen.getByTestId('saved-stay-card-ss-1')).toBeOnTheScreen()
+      );
+      expect(cardIds()).toEqual([
+        'saved-stay-card-ss-1',
+        'saved-stay-card-ss-2',
+      ]);
+      const banner = screen.getByTestId(BANNER);
+      expect(banner).toHaveTextContent(
+        /여행의 거점으로 쓰는 숙소라 지울 수 없어요/
+      );
+      expect(banner).toHaveTextContent(/여행에서 거점을 먼저 바꿔 주세요/);
+      // 서버 문장은 그대로 노출하지 않는다.
+      expect(banner).not.toHaveTextContent(/삭제할 수 없습니다/);
+      // 다시 해도 같은 409 라 다시 시도 버튼을 두지 않는다.
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+    });
+  });
+
+  describe('RM-3 · 네트워크 실패 → 되돌림 + 안내 + 다시 시도가 실제로 다시 지운다 (D2 · Q5 · INV-4)', () => {
+    it('실패하면 행이 돌아오고 "저장을 풀지 못했어요"가 뜨며, 다시 시도를 누르면 DELETE 가 한 번 더 나가 행이 빠진다', async () => {
+      plans['ss-1'] = { result: 'network' };
+      await renderWith([HEARTED, PINNED]);
+
+      pressHeart('ss-1');
+
+      await waitFor(() =>
+        expect(screen.getByTestId(BANNER)).toHaveTextContent(
+          /저장을 풀지 못했어요/
+        )
+      );
+      expect(screen.getByTestId('saved-stay-card-ss-1')).toBeOnTheScreen();
+      expect(cardIds()).toEqual([
+        'saved-stay-card-ss-1',
+        'saved-stay-card-ss-2',
+      ]);
+
+      // 다시 시도 — 이번엔 서버가 받아 준다.
+      plans['ss-1'] = { result: 204 };
+      fireEvent.press(screen.getByTestId(RETRY), { nativeEvent: {} });
+
+      await waitGone('ss-1');
+      expect(deleteHits).toEqual(['ss-1', 'ss-1']);
+      expect(screen.queryByTestId(BANNER)).toBeNull();
+    });
+  });
+
+  describe('RM-4 · 실패 안내는 다음 하트 조작에서 지운다 (01b Q5 · d02 선례)', () => {
+    it('409 배너가 떠 있는 채 다른 숙소 하트를 누르면 배너가 사라진다', async () => {
+      plans['ss-1'] = { result: 409 };
+      await renderWith([HEARTED, PINNED]);
+      pressHeart('ss-1');
+      await screen.findByTestId(BANNER);
+
+      pressHeart('ss-2');
+
+      await waitGone('ss-2');
+      expect(screen.queryByTestId(BANNER)).toBeNull();
+    });
+  });
+
+  describe('RM-5 · 404 는 "이미 없음" — 되돌리지 않고 목록을 다시 받는다 (01b Q3)', () => {
+    it('행이 돌아오지 않고 실패 안내도 없으며, 목록을 다시 조회한다', async () => {
+      plans['ss-1'] = { result: 404 };
+      await renderWith([HEARTED, PINNED]);
+
+      pressHeart('ss-1');
+
+      await waitFor(() => expect(getHits).toBeGreaterThanOrEqual(2));
+      await settle();
+      expect(screen.queryByTestId('saved-stay-card-ss-1')).toBeNull();
+      expect(screen.getByTestId('saved-stay-card-ss-2')).toBeOnTheScreen();
+      expect(screen.queryByTestId(BANNER)).toBeNull();
+    });
+  });
+
+  // 문제로그 2026-08-03 · traps-stay 「동시 토글 스냅숏 롤백」과 같은 뿌리. 호출 전 목록을 통째로 되돌리면 A 의 실패가
+  // 이미 지운 B 를 되살린다(유령 — 누르면 404). 실패한 행만 제자리로 돌린다. 두 응답 순서를 다 돈다.
+  describe('RM-6 · 두 하트를 잇달아 눌러 한쪽만 실패하면 실패한 행만 돌아온다 (D3)', () => {
+    it.each([
+      {
+        order: '성공(ss-2) 먼저 → 실패(ss-1) 나중',
+        first: 'ss-2',
+        second: 'ss-1',
+      },
+      {
+        order: '실패(ss-1) 먼저 → 성공(ss-2) 나중',
+        first: 'ss-1',
+        second: 'ss-2',
+      },
+    ])('$order', async ({ first, second }) => {
+      plans['ss-1'] = { result: 409, gate: gate() };
+      plans['ss-2'] = { result: 204, gate: gate() };
+      await renderWith([HEARTED, PINNED, THIRD]);
+      refetchGate = gate();
+
+      pressHeart('ss-1');
+      await waitGone('ss-1');
+      pressHeart('ss-2');
+      await waitGone('ss-2');
+
+      await release(first);
+      await release(second);
+
+      // 재조회가 붙잡혀 있는 동안 — 캐시가 낸 결과 그대로를 본다.
+      await waitFor(() =>
+        expect(screen.getByTestId('saved-stay-card-ss-1')).toBeOnTheScreen()
+      );
+      expect(screen.queryByTestId('saved-stay-card-ss-2')).toBeNull();
+      expect(cardIds()).toEqual([
+        'saved-stay-card-ss-1',
+        'saved-stay-card-ss-3',
+      ]);
+      expect(screen.getByTestId(BANNER)).toHaveTextContent(
+        /여행의 거점으로 쓰는 숙소라 지울 수 없어요/
+      );
+
+      // 재조회를 풀어도 서버 상태(ss-1·ss-3)와 같다.
+      await act(async () => refetchGate?.open());
+      await settle();
+      expect(screen.queryByTestId('saved-stay-card-ss-2')).toBeNull();
+      expect(cardIds()).toEqual([
+        'saved-stay-card-ss-1',
+        'saved-stay-card-ss-3',
+      ]);
+    });
+  });
+
+  describe('RM-7 · 마지막 한 곳을 풀면 빈 얼굴, 실패하면 목록으로 돌아온다 (D5)', () => {
+    it('성공 — 응답 전부터 빈 얼굴이고 응답 뒤에도 그대로다', async () => {
+      plans['ss-1'] = { result: 204, gate: gate() };
+      await renderWith([HEARTED]);
+
+      pressHeart('ss-1');
+
+      await screen.findByTestId('saved-stay-empty');
+      await release('ss-1');
+      await waitFor(() => expect(getHits).toBeGreaterThanOrEqual(2));
+      await settle();
+      expect(screen.getByTestId('saved-stay-empty')).toBeOnTheScreen();
+      expect(screen.queryByTestId('saved-stay-card-ss-1')).toBeNull();
+    });
+
+    it('실패 — 빈 얼굴이 목록 얼굴로 돌아오고 카드와 안내가 보인다', async () => {
+      plans['ss-1'] = { result: 'network', gate: gate() };
+      await renderWith([HEARTED]);
+
+      pressHeart('ss-1');
+      // 앵커 — 낙관 제거로 빈 얼굴까지 갔다.
+      await screen.findByTestId('saved-stay-empty');
+      await release('ss-1');
+
+      await waitFor(() =>
+        expect(screen.getByTestId('saved-stay-card-ss-1')).toBeOnTheScreen()
+      );
+      expect(screen.queryByTestId('saved-stay-empty')).toBeNull();
+      expect(screen.getByTestId('saved-stay-subtitle')).toHaveTextContent(
+        /1곳/
+      );
+      expect(screen.getByTestId(BANNER)).toBeOnTheScreen();
+    });
   });
 });
