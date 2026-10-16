@@ -1510,7 +1510,7 @@ describe('장소 추가 시트 — 종료가 시작보다 이르면 막는다', 
   const SHEET = 'itinerary-edit-time-sheet';
   const t = (suffix: string): string => `itinerary-edit-time-${suffix}`;
 
-  it('🔴 QA1 · 11:00–08:00 은 [적용]해도 PUT 이 안 나가고, 종료를 오후 8:00 으로 고치면 그 값으로 담긴다', async () => {
+  it('🔴 QA1 · 11:00–08:00 은 [적용]해도 PUT 이 안 나가고, 종료를 20:00 으로 고치면 그 값으로 담긴다', async () => {
     const client = makeClient();
     renderPageWith(client);
     // 일정 도착 전 "+ 추가"는 조용히 무시된다(W-2) — 캐시 성공 + 한 틱 뒤에 누른다(1009 선례).
@@ -1525,8 +1525,8 @@ describe('장소 추가 시트 — 종료가 시작보다 이르면 막는다', 
 
     fireEvent.press(await screen.findByTestId('itinerary-place-add-p1'));
     await screen.findByTestId(SHEET);
-    // 기본 10:00–11:00 → 시작 오전 11 → 11:00 · 종료 오전 8 · 00분 → 08:00.
-    ['wheel-h-11', 'seg-end', 'wheel-h-8', 'wheel-m-00'].forEach((suffix) =>
+    // 기본 10:00–11:00 → 시작 11 → 11:00 · 종료 08 · 00 → 08:00(TRIP-1437 — 24시간 zero-pad 시 셀).
+    ['wheel-h-11', 'seg-end', 'wheel-h-08', 'wheel-m-00'].forEach((suffix) =>
       fireEvent.press(screen.getByTestId(t(suffix)))
     );
 
@@ -1537,7 +1537,7 @@ describe('장소 추가 시트 — 종료가 시작보다 이르면 막는다', 
     expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
     expect(putBodies).toHaveLength(0);
 
-    fireEvent.press(screen.getByTestId(t('wheel-ap-오후'))); // 08:00 → 20:00
+    fireEvent.press(screen.getByTestId(t('wheel-h-20'))); // 08:00 → 20:00
     expect(screen.queryByTestId(t('error'))).toBeNull();
     fireEvent.press(screen.getByTestId(t('apply')));
 
