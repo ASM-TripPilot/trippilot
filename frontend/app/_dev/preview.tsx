@@ -95,7 +95,10 @@ import { MustVisitTimeScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/Mu
 import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary/index.view';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet';
 import { SlotFillScreen } from '@/pages/itinerary/itinerary-copick/ui/SlotFillScreen';
-import { UnplacedMustVisitNotice } from '@/features/itinerary/index.view';
+import {
+  AlertCircleGlyph,
+  UnplacedMustVisitNotice,
+} from '@/features/itinerary/index.view';
 import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMustVisits';
 import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary/itinerary-stay-recommend/model/stayRecommend';
 import { CoPickStepper } from '@/pages/itinerary/itinerary-copick/ui/CoPickStepper';
@@ -231,6 +234,7 @@ import {
 import { AutoRevertDialog } from '@/features/check-visit/index.view';
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
  * expo-router 의 `useLocalSearchParams` 를 모듈 로드 시점에 딱 한 번 안전하게 구해온다.
@@ -786,6 +790,39 @@ const PREVIEW_UNPLACED_ROWS: UnplacedMustVisitRow[] = [
       '다른 필수 방문지와 시간이 겹쳐 넣지 못했어요. 한쪽 시각을 옮겨 주세요.',
   },
 ];
+
+/**
+ * TRIP-1424 — 셸 [다시 짜기] 확인 얼굴. DraftPage 안 인라인 얼굴이라(컨테이너가 조회를 물어 프리뷰가 못 그린다)
+ * 같은 꼴을 픽스처로 조립한다. 문구는 DraftPage 와 같은 글자 — 생성 길·재계획 길 두 설명을 6-b 육안으로 대조한다.
+ */
+function renderRegenerateConfirm(description: string): ReactElement {
+  return (
+    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View className="flex-1 justify-center bg-canvas px-lg">
+        <StateNotice
+          testID="itinerary-regenerate-confirm"
+          icon={<AlertCircleGlyph />}
+          title="일정을 다시 짤까요?"
+          description={description}
+          actions={[
+            {
+              testID: 'itinerary-regenerate-proceed',
+              label: '다시 짜기',
+              variant: 'filled',
+              onPress: noop,
+            },
+            {
+              testID: 'itinerary-regenerate-cancel',
+              label: '취소',
+              variant: 'outline',
+              onPress: noop,
+            },
+          ]}
+        />
+      </View>
+    </SafeAreaView>
+  );
+}
 
 // TRIP-1039 h08 셸 폴백·일부 실패 얼굴 — Figma 전용 프레임이 없어 `4221:2448` 셸 + NoticeBar `4466:1794`
 // 자리로 합성한다. 안내는 시트 맨 위(헤더 뒤·첫 카드 앞), peek 에서 보이는지는 6-b 실기 몫(바텀시트 목 사각).
@@ -5689,6 +5726,26 @@ export const PREVIEW_STATES: PreviewState[] = [
       renderH08DraftNoticeShell({ fallback: false, staleFailed: true }),
   },
   {
+    key: 'h08-regenerate-confirm',
+    band: 'h',
+    label: 'h08 · 다시 짜기 확인(생성)',
+    login: null,
+    render: () =>
+      renderRegenerateConfirm(
+        '다시 짜면 직접 바꾼 내용은 사라질 수 있어요 · 오늘 AI 생성 횟수를 1회 써요'
+      ),
+  },
+  {
+    key: 'h08-regenerate-confirm-replan',
+    band: 'h',
+    label: 'h08 · 다시 짜기 확인(여행 중 재계획)',
+    login: null,
+    render: () =>
+      renderRegenerateConfirm(
+        '다시 짜면 직접 바꾼 내용은 사라질 수 있어요 · 새로 짠 일정이 바로 반영돼요'
+      ),
+  },
+  {
     key: 'h08-draft-unplaced',
     band: 'h',
     label: 'h08 · 못 넣은 꼭 갈 곳',
@@ -6925,10 +6982,11 @@ export const PREVIEW_STATES: PreviewState[] = [
   // header 로 조립한다(페이지 PlaceAddPage 와 같은 형태, 단 조회 훅 대신 픽스처 — 프리뷰는 api import 0).
   // 실화면 딥링크로는 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈 확인
   // 자리다. 거리줄은 픽스처로만 렌더한다(실 GET 엔 거리 필드 없음 — 6-b 육안). 3스냅 실개폐·핀 위치는 실기.
-  {
-    key: 'h13-place-add',
-    band: 'h',
-    label: 'h13 · 장소 추가',
+  // TRIP-1424 — `-error` 키는 추가 저장 실패 안내(시트 머리 아래 인라인 줄). 성공 토스트는 루트 호스트라 6-b 실기로 본다.
+  ...[false, true].map((failed) => ({
+    key: failed ? 'h13-place-add-error' : 'h13-place-add',
+    band: 'h' as const,
+    label: failed ? 'h13 · 장소 추가 저장 실패' : 'h13 · 장소 추가',
     login: null,
     render: () => (
       <MapSheetShell
@@ -6936,9 +6994,21 @@ export const PREVIEW_STATES: PreviewState[] = [
         pins={buildDraftPins(H11_COPICK_PREVIEW_SLOTS)}
         onBack={noop}
         header={
-          <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
-            장소 추가 · 1일차
-          </Text>
+          <View>
+            <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
+              장소 추가 · 1일차
+            </Text>
+            {failed ? (
+              <View
+                testID="itinerary-place-add-error"
+                className="mx-lg mb-xs rounded-card bg-primary-pale px-md py-sm"
+              >
+                <Text className="font-noto text-caption text-primary-text">
+                  장소를 담지 못했어요. 잠시 후 다시 시도해 주세요
+                </Text>
+              </View>
+            ) : null}
+          </View>
         }
         list={{
           data: PREVIEW_PLACES,
@@ -6968,7 +7038,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
       </MapSheetShell>
     ),
-  },
+  })),
   // i10 현재 장소 상세(TRIP-755) — props-only 화면. 옛 default·unknown 2키를 1키로 합쳤다(결측
   // 얼굴은 Figma 에 없고 결측 처리는 model·화면 테스트가 잠근다). 뒤로·공유·모두 보기는 Figma 에
   // 있으니 빈 핸들러로 켠다. 하트 '준비 중' 안내는 누르면 뜬다(6-b).

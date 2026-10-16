@@ -673,6 +673,19 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
     });
   });
 
+  // TRIP-1424 AC-21 — 직접 짜기 편집기에서도 "장소를 추가하면 바로 저장돼요"가 [저장] 전부터 보인다(결정 2=A).
+  describe('🔴 M9 · TRIP-1424 — 장소 추가 즉시 저장 안내 한 줄', () => {
+    it('편집기가 뜨면 저장을 누르기 전에도 안내 한 줄이 보이고 PUT 은 0이다', async () => {
+      renderPage();
+      await ready();
+
+      expect(
+        screen.getByTestId('itinerary-edit-add-saved-hint')
+      ).toHaveTextContent('장소를 추가하면 바로 저장돼요');
+      expect(putCalls).toBe(0);
+    });
+  });
+
   describe('🔴 M2 · AC-9 — 끌어서 바꾼 순서가 저장 PUT 순서가 된다 (INV-U3-02)', () => {
     it('c 를 맨 앞으로(2→0) 끌고 저장하면 PUT 순서가 [c,a,b] 다', async () => {
       renderPage();
