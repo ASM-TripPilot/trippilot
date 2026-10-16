@@ -1695,7 +1695,7 @@
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
 - `src/test-support/storageMock.ts`  →  saveTokens · getTokens · clearTokens · hasStoredToken
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
-- `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn
+- `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn · actualVisit · tripRecord · recordsHandler
 - `src/test-support/tripRecordsTrip.ts`  →  tripRecordsTrip
 - `src/test-support/wizardDraftFixture.ts`  →  WizardDraftData · wizardDraftData · freshWizardDraft · withoutSeedFields · leavePreviousTripDraft · captureDraftAtNextCall · resetWizardDraft
 - `src/test-support/wizardStep1Harness.tsx`  →  BASE · PREFERENCE · TRIP_ID · TRIP · makePreference · makeTrip · WizardStep1HarnessOptions · wizardStep1Harness
