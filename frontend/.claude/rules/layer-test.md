@@ -84,7 +84,7 @@ paths:
 | `src/pages/itinerary/itinerary-plan/ui/ItineraryPlanPage.integration.test.tsx` | 「탈출구 — 뒤로·일정 만들기」 describe: h25 4얼굴 탈출구 — msw로 얼굴 강제(훅 목 금지) + `useRouter` 4메서드 목. 딥링크(`canGoBack()===false`)는 `replace('/(tabs)')` 완전일치(`/(tabs)/itinerary`는 리다이렉트 함정) |
 | `src/features/edit-itinerary/model/itineraryEditStore.addSlot.test.ts` | `addSlot` 순수함수 — 비파괴 append + 읽기전용 5필드 키 완전일치(여분 키 누출 차단) |
 | `src/pages/itinerary/itinerary-manual/ui/ManualPlanPage.integration.test.tsx` | (TRIP-1352 — 옛 `.hookMock` 의 배선 관점을 이 파일 맨 아래 「진입 POST 가드 · 알림 권한 · 뒤로 가로채기」로 이사하고 hookMock 파일은 지웠다) 조회 중 POST 보류·404 면 `{generationMode:'MANUAL'}` 한 건, 생성 성공/실패에도 `promptAndRegisterPush` 0회, 스와이프·하드웨어 뒤로 콜백(GO_BACK·POP→일정 탭 `dismissTo`, 나머지는 받은 **그 액션 객체**로 `dispatch`). 폴백 배너 부재(I2)·지도 중심(C1~C5)은 지웠다 — 앞은 공허 통과, 뒤는 `editorMapCenter.test` PBT 와 위 E3 가 진다 |
-| `src/pages/itinerary/itinerary-manual/ui/PlaceAddPage.integration.test.tsx` | h20 배선 — 검색·클라 필터·카테고리 재조회. **add→PUT 전체 플로우는 범위 밖**(캐시 무효화 회귀 심판 없음) |
+| `src/pages/itinerary/itinerary-manual/ui/PlaceAddPage.integration.test.tsx` | h20 배선 — 검색·클라 필터·카테고리 재조회. add→PUT 플로우는 A6b(캐시 `setQueryData`)·N 시리즈(토스트 문구 행렬·실패 줄·저장 중 차단·N9 떠난 뒤 성공)가 잠근다(TRIP-1424). 같은 틱 [적용] 연타·화면 재진입 잠금은 심판 없음 |
 | `src/entities/itinerary-slot/lib/categoryPlaceholder.test.ts` | `resolveCategoryPlaceholder` 매핑 — 7종 `tintClass` 완전일치·폴백·iconKey distinct. 프로토타입 키 입력은 다루지 않는다 |
 | `src/entities/trip/ui/TripCard.test.tsx` | h37 카드 렌더(TRIP-1357 — 옛 MyTripCard.test 이관, ⋯ 메뉴 블록 포함) — 제목·메타·부가정보 완전일치 + 배지/resume 유무 짝. `metaLine` 조립 로직은 컨테이너 소관이라 여기서 안 돈다 |
 | `src/__tests__/planbManualRoute.test.tsx` | i07 라우트가 `ItineraryEditPage`를 `tripId`+`inTrip=true`로 부르고 `variant`가 새지 않는지 |

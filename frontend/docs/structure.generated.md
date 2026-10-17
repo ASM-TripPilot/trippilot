@@ -273,7 +273,7 @@
 - `src/entities/trip/config/regionCovers.ts`  →  REGION_COVERS
 
 ## src/entities/trip/
-- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · regionForDay · tripDayNumber · classifyTripPhase · isTripOngoing · COVER_GRADIENTS · pickCoverCity · pickRegionCover · PastTripRow · TripCard · ChevronRightGlyph
+- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · regionForDay · tripDayNumber · classifyTripPhase · isTripOngoing · markDoneBarSeen · readDoneBarSeen · writeDoneBarSeen · COVER_GRADIENTS · pickCoverCity · pickRegionCover · PastTripRow · TripCard · ChevronRightGlyph
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/coverCity.ts`  →  pickCoverCity
@@ -287,6 +287,7 @@
 - `src/entities/trip/lib/tripPhase.ts`  →  TripPhase · classifyTripPhase · isTripOngoing
 
 ## src/entities/trip/model/
+- `src/entities/trip/model/doneBarSeen.ts`  →  readDoneBarSeen · writeDoneBarSeen · markDoneBarSeen
 - `src/entities/trip/model/index.ts`  →  MyTripBadge · MyTripCardVM · PastTripCardVM
 
 ## src/entities/trip/ui/
@@ -295,10 +296,10 @@
 - `src/entities/trip/ui/TripGlyphs.tsx`  →  MoreDotsGlyph · TrashGlyph · ChevronRightGlyph
 
 ## src/features/add-must-visit/
-- `src/features/add-must-visit/index.ts`  →  DEFAULT_DWELL_KEY · DWELL_OPTIONS · buildAnytimeMustVisitRequest · buildFixedMustVisitRequest · canSubmitMustVisitTime · mustVisitTimeBlockReason · startTimeLabel · startTimeOptions · tripDayChips
+- `src/features/add-must-visit/index.ts`  →  DEFAULT_DWELL_KEY · DWELL_OPTIONS · buildAnytimeMustVisitRequest · buildFixedMustVisitRequest · canSubmitMustVisitTime · mustVisitTimeBlockReason · startTimeOptions · startWheelAnchor · tripDayChips
 
 ## src/features/add-must-visit/model/
-- `src/features/add-must-visit/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
+- `src/features/add-must-visit/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startWheelAnchor · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
 
 ## src/features/apply-replan/
 - `src/features/apply-replan/index.ts`  →  useApplyReplan
@@ -754,6 +755,9 @@
 ## src/pages/itinerary/itinerary-draft/
 - `src/pages/itinerary/itinerary-draft/index.ts`  →  DraftPage
 
+## src/pages/itinerary/itinerary-draft/model/
+- `src/pages/itinerary/itinerary-draft/model/regenerateRoute.ts`  →  RegenerateRoute · RegenerateRouteInput · resolveRegenerateRoute
+
 ## src/pages/itinerary/itinerary-draft/ui/
 - `src/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner.tsx`  →  DraftFallbackBanner
 - `src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx`  →  DraftPage
@@ -800,6 +804,7 @@
 - `src/pages/itinerary/itinerary-manual/index.ts`  →  ManualPlanPage · PlaceAddPage
 
 ## src/pages/itinerary/itinerary-manual/model/
+- `src/pages/itinerary/itinerary-manual/model/placeAddNotice.ts`  →  PlaceAddSlotLike · PlaceAddShift · comparePlaceAdd · placeAddToastMessage
 - `src/pages/itinerary/itinerary-manual/model/useItineraryTabBack.ts`  →  useItineraryTabBack
 
 ## src/pages/itinerary/itinerary-manual/ui/
@@ -1230,6 +1235,7 @@
 ## src/pages/trip/trip-new-step1/model/
 - `src/pages/trip/trip-new-step1/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest · tripTitle
 - `src/pages/trip/trip-new-step1/model/mustVisitSync.ts`  →  MustVisitSyncPlan · planMustVisitSync
+- `src/pages/trip/trip-new-step1/model/partyRange.ts`  →  partyRangeFor
 - `src/pages/trip/trip-new-step1/model/tripDatePicker.ts`  →  dateCell · TripDateRange
 - `src/pages/trip/trip-new-step1/model/useCreateTrip.ts`  →  useCreateTrip
 - `src/pages/trip/trip-new-step1/model/usePreferencePrefill.ts`  →  usePreferencePrefill
@@ -1629,6 +1635,7 @@
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
+- `src/shared/ui/HourMinuteWheel.tsx`  →  HourMinuteWheelProps · HourMinuteWheel
 - `src/shared/ui/Image.tsx`  →  Image
 - `src/shared/ui/NoticeBanner.tsx`  →  NoticeBannerNotice · NoticeBanner · DismissNotice
 - `src/shared/ui/OpenNaverMapButton.tsx`  →  OpenNaverMapButton
@@ -1733,4 +1740,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1093개 파일
+합계 1098개 파일

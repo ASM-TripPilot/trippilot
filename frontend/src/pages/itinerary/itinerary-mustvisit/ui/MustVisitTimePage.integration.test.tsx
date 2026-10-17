@@ -18,7 +18,6 @@ import type {
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
-import { startTimeOptions } from '@/features/add-must-visit';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
@@ -216,15 +215,20 @@ function ensureFixed(on: boolean): void {
   if (checked !== on) fireEvent.press(toggle);
 }
 
-/** 날짜 6.11 + 시작 시각 13:00 을 고르는 3동작 묶음. */
+/** 시작 시각 시트의 시 열 셀(TRIP-1437 — 시·분 두 열). */
+const START_HOUR_CELL = (hh: string): string =>
+  `itinerary-mustvisit-time-start-option-h-${hh}`;
+
+/**
+ * 날짜 6.11 + 시작 시각 13:00 을 고르는 3동작 묶음. TRIP-1437 — 시 열 13 만 누른다. 값이 비어 있으므로
+ * 분은 휠이 서 있던 일과 시작(TRIP 픽스처는 dayStartAt 없음 → 09:00)의 00 이다(01b Q3).
+ */
 function pickDateAndStart(): void {
   fireEvent.press(
     screen.getByTestId('itinerary-mustvisit-time-date-2026-06-11')
   );
   fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
-  fireEvent.press(
-    screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
-  );
+  fireEvent.press(screen.getByTestId(START_HOUR_CELL('13')));
 }
 
 function submit(): void {
@@ -389,9 +393,7 @@ describe('🔴 TRIP-1237 b — 당일치기(날짜 하루)는 날짜를 안 골�
     ensureFixed(true);
     // 실행 — 날짜 칩은 누르지 않고 시각만 고른다.
     fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
-    );
+    fireEvent.press(screen.getByTestId(START_HOUR_CELL('13')));
     expect(screen.queryByTestId('itinerary-mustvisit-time-error')).toBeNull();
     submit();
 
@@ -409,9 +411,7 @@ describe('🔴 TRIP-1237 b — 당일치기(날짜 하루)는 날짜를 안 골�
     await ready();
     ensureFixed(true);
     fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
-    );
+    fireEvent.press(screen.getByTestId(START_HOUR_CELL('13')));
     submit();
 
     await act(async () => {
@@ -554,7 +554,7 @@ describe('🔴 I13 · AC-a4 · BR-U1-48 — 토글 OFF 저장은 ANYTIME 본문�
  * 남았다 — 화면 가운데 보인 값과 저장될 값이 어긋났다(INV-2). 이제 스크롤이 멈추면 그 값이 폼에
  * 들어간다.
  *
- * 무엇을 보장하나: 휠 정지 → 닫기 뒤에 필드가 12:00 을 보이고, 시작 시각 누락 안내가 사라지고, 저장
+ * 무엇을 보장하나: 시 휠 정지 → 닫기 뒤에 필드가 12:00 을 보이고, 시작 시각 누락 안내가 사라지고, 저장
  * 버튼이 열린다. 짝으로, 정지 전에는 누락 안내가 실제로 떠 있었다(날짜를 만져 touched 상태).
  *
  * 3동작 뼈대: 준비=날짜 고르고 시트 열기 → 실행=휠 12:00 정지 → "닫기" → 단언=필드·안내·저장 버튼.
@@ -574,15 +574,13 @@ describe('🔴 W3 · 휠을 굴려 멈춘 값이 폼에 들어간다 (#049 · D2
     // 짝 — 정지 전에는 누락 안내가 떠 있다(여기가 비면 아래 "사라졌다"가 공허해진다).
     expect(screen.getByText(START_MISSING_TEXT)).toBeOnTheScreen();
 
+    // TRIP-1437 — 시 열이 12칸에서 멈춘다(시 열은 00~23 이라 칸 번호 = 시). 분은 서 있던 00.
     fireEvent(
-      screen.getByTestId('itinerary-mustvisit-time-start-wheel'),
+      screen.getByTestId('itinerary-mustvisit-time-start-wheel-h'),
       'momentumScrollEnd',
       {
         nativeEvent: {
-          contentOffset: {
-            x: 0,
-            y: startTimeOptions().indexOf('12:00') * WHEEL_CELL_HEIGHT,
-          },
+          contentOffset: { x: 0, y: 12 * WHEEL_CELL_HEIGHT },
         },
       }
     );
@@ -591,11 +589,96 @@ describe('🔴 W3 · 휠을 굴려 멈춘 값이 폼에 들어간다 (#049 · D2
     expect(
       screen.queryAllByTestId('itinerary-mustvisit-time-start-sheet')
     ).toEqual([]);
+    // TRIP-1437 — 24시간 한 가지 표기, 완전 일치.
     expect(
       screen.getByTestId('itinerary-mustvisit-time-start-field')
-    ).toHaveTextContent(/오후 12:00/);
+    ).toHaveTextContent('12:00');
     expect(screen.queryByText(START_MISSING_TEXT)).toBeNull();
     expect(screen.getByTestId('itinerary-mustvisit-time-submit')).toBeEnabled();
+  });
+});
+
+/**
+ * TRIP-1437 · Q-066 (01b Q2) — 시작 시각 휠은 그 여행의 **일과 시작**에 서고, 보기만으로는 값이 안 생긴다.
+ *
+ * 무엇을 보장하나(배선 — 계산 규칙 표는 `mustVisitTimeForm.test` C16 이 잰다):
+ *  - 여행 조회 값(`dayStartAt`·첫날이면 `firstDayStartAt`, 없으면 09:00)이 실제로 휠 첫 위치까지 흘러온다.
+ *    고른 날짜가 바뀌면 위치도 따라간다(첫날 6.10 ↔ 둘째 날 6.11).
+ *  - 그렇게 여러 번 열고 닫아도 시작 시각은 비어 있고, 저장을 누르면 쓰기 0건 + "시작 시각을 골라 주세요"
+ *    (BR-U1-49 — FIXED 저장 게이트는 사용자가 고른 값만 받는다).
+ *
+ * 위치는 휠 스크롤뷰의 `contentOffset.y` 로만 본다(위에서 k칸 = k × 셀 높이). 실제로 그 칸에 서 보이는지는
+ * 6-b 실기다.
+ *
+ * 3동작 뼈대: 준비=여행 응답에 일과 값 → 실행=토글 켜기·날짜 고르기·시트 열고 닫기·저장 → 단언=휠 위치·선택·요청.
+ */
+describe('🔴 TRIP-1437 · 시작 시각 휠은 여행 일과 시작에 서고 값은 비어 있다 (Q-066 · BR-U1-49)', () => {
+  const FIELD = 'itinerary-mustvisit-time-start-field';
+  const H_WHEEL = 'itinerary-mustvisit-time-start-wheel-h';
+  const M_WHEEL = 'itinerary-mustvisit-time-start-wheel-m';
+  const START_MISSING_TEXT = '시작 시각을 골라 주세요';
+
+  const offsetY = (wheel: string): unknown =>
+    screen.getByTestId(wheel).props.contentOffset?.y;
+  const selectedStartCells = (): number =>
+    screen
+      .queryAllByTestId(/^itinerary-mustvisit-time-start-option-/)
+      .filter((node) => node.props.accessibilityState?.selected === true)
+      .length;
+
+  function openThenClose(expectedHour: number): void {
+    fireEvent.press(screen.getByTestId(FIELD));
+    expect(offsetY(H_WHEEL)).toBe(expectedHour * WHEEL_CELL_HEIGHT);
+    expect(offsetY(M_WHEEL)).toBe(0);
+    expect(selectedStartCells()).toBe(0);
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-close'));
+  }
+
+  it('AC-7·AC-8 · 하루 10:00·첫날 14:00 여행 — 날짜 없음 10시, 첫날 14시, 둘째 날 10시에 서고, 저장하면 쓰기 0건·시각 누락 사유', async () => {
+    // 준비 — 서버가 일과 값을 초까지 붙여 준다(`format: time`).
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json({
+          ...TRIP,
+          dayStartAt: '10:00:00',
+          firstDayStartAt: '14:00:00',
+        })
+      )
+    );
+    renderPage();
+    await ready();
+    ensureFixed(true);
+
+    // 실행·단언 — 날짜를 아직 안 골랐으면 첫날이 아니다 → 하루 시작 10시.
+    openThenClose(10);
+    // 첫날(여행 시작일)을 고르면 첫날 시작 14시.
+    fireEvent.press(
+      screen.getByTestId('itinerary-mustvisit-time-date-2026-06-10')
+    );
+    openThenClose(14);
+    // 둘째 날이면 다시 하루 시작 10시.
+    fireEvent.press(
+      screen.getByTestId('itinerary-mustvisit-time-date-2026-06-11')
+    );
+    openThenClose(10);
+
+    // AC-8 — 세 번 열고 닫았어도 값은 비어 있다.
+    expect(screen.getByTestId(FIELD)).toHaveTextContent('시각 선택');
+    submit();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(mustVisitWrites()).toEqual([]);
+    expect(screen.getByText(START_MISSING_TEXT)).toBeOnTheScreen();
+  });
+
+  it('AC-7 · 일과 값이 없는 여행(서버 기본 창)은 09시에 선다', async () => {
+    renderPage();
+    await ready();
+    ensureFixed(true);
+
+    openThenClose(9);
+    expect(screen.getByTestId(FIELD)).toHaveTextContent('시각 선택');
   });
 });
 
@@ -678,9 +761,10 @@ describe('🔴 TRIP-1098 · 스위치 초기값 = 저장된 유형', () => {
       expect(
         screen.getByTestId('itinerary-mustvisit-time-date-2026-06-11')
       ).toBeSelected();
+      // 서버 `13:00:00` → 칸은 24시간 `13:00` 완전 일치(TRIP-1437 — 옛 "오후 1:00 (13:00)").
       expect(
         screen.getByTestId('itinerary-mustvisit-time-start-field')
-      ).toHaveTextContent(/오후 1:00/);
+      ).toHaveTextContent('13:00');
       // 체류가 저장값 칸이다 — 세 칸 중 그 칸만 선택(늘 「보통」으로 돌아가면 위반).
       for (const key of ['SHORT', 'NORMAL', 'LONG'] as const) {
         const segment = screen.getByTestId(

@@ -31,14 +31,14 @@ import { CoPickCompletePage } from './CoPickCompletePage';
  *  - 🔴 **전 슬롯 검증 시각 칩**(AC-2, BR-U3-07 개정) — 옛 "비고정 시각 렌더 0"의 **정반대**.
  *    비고정=`HH:mm–HH:mm`(en-dash), 고정 숙소=단일 `21:00`+부제+고정 배지(AC-3).
  *  - 🔴 "다른 후보 ›" 링크가 **전 슬롯 0개**(h08과 다름 · AC-5) · INV-3 소요시간 0(AC-4).
- *  - 🔴 헤더 "부산 여행 · 1일차 · 6월 10일…" + meta "4/4 골랐어요"(N=비고정 4 · AC-6).
+ *  - 🔴 헤더 "부산 여행 · 1일차 · 6월 10일…" + meta "4곳"(N=고정 숙소만 뺀 수 · AC-6 · TRIP-1428 "골랐어요" 폐기).
  *  - 🔴 단일 CTA "확정하기" → h14 push 완전일치 1회 · "다시 짜기" 부재(AC-7).
  *  - 🔴 GET 500 → error 얼굴·셸 부재 / 로딩 → 셸 부재(AC-8 · INV-4).
  *
  * ⚠️ 함정(02a §4):
  *  - ★2 en-dash `–`(U+2013): 비고정 시각칩 완전일치가 이 구분자를 강제. 고정은 단일 `21:00`
  *    (완전일치라 `21:00–21:00` 오구현이 red).
- *  - ★5 meta 카운트는 비고정만(4/4). coPickProgress(고정 포함 5/5) 재사용 시 red.
+ *  - ★5 meta 카운트는 고정 숙소만 뺀다("4곳" — TRIP-1428). coPickProgress(고정 포함 5) 재사용 시 red.
  *  - ★7 "1일차"는 day-chip·헤더 dayLabel 둘 다 그린다 → getByText('1일차') 금지, testID 로만.
  *
  * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=화면을 열고/누른다 → 단언=보이는 얼굴·testID·나간 요청.
@@ -97,7 +97,7 @@ function trip(): Trip {
  * 선택일(day 1) 5슬롯 — 비고정 4 + 고정 1(숙소). AC-2·3·5·6 을 한 픽스처로 잰다.
  *  - poi-hotel 은 isFixed=true(고정) → 시각칩은 **단일 21:00**(범위 아님) + 부제 + 고정 배지(AC-3).
  *  - 비고정 4개는 전부 시각 range 칩(AC-2, 옛 "비고정 시각 0"의 정반대).
- *  - N(비고정)=4 → meta "4/4 골랐어요"(AC-6 · coPickProgress 5/5 재사용이면 red).
+ *  - 고정 숙소만 뺀 N=4 → meta "4곳"(AC-6 · TRIP-1428 · coPickProgress 5 재사용이면 red).
  *  - lat/lng 를 실어 셸 지도(map-root)가 마운트되고 페이지가 center 를 계산하게 한다.
  */
 function daySlots(): ItineraryDaysItemSlotsItem[] {
@@ -347,8 +347,10 @@ describe('🔴 A5 · AC-5 — "다른 후보 ›" 링크가 전 슬롯 0개다 (
   });
 });
 
-describe('🔴 A6 · AC-6 — 시트 헤더 3세그 + meta "4/4 골랐어요"(비고정 카운트)', () => {
-  it('제목=부산 여행·일차=1일차·날짜=6월 10일, meta=4/4 골랐어요(고정 제외)', async () => {
+// TRIP-1428 — meta 를 "{N}/{N} 골랐어요"에서 사실만 "{N}곳"으로 바꿨다(결정 1=A). 응답에 "누가 골랐나"가 없어
+// 하나도 안 고른 날에도 "7/7 골랐어요"가 나왔다. N = 그날 슬롯 중 **고정 숙소만** 뺀 수(h14 와 같은 셈, 01b Q1).
+describe('🔴 A6 · AC-6 — 시트 헤더 3세그 + meta "{N}곳"(고정 숙소만 뺀 수 · 골랐어요 없음)', () => {
+  it('제목=부산 여행·일차=1일차·날짜=6월 10일, meta=4곳(고정 숙소 제외) · "골랐어요" 는 화면 어디에도 없다', async () => {
     renderPage();
     await screen.findByTestId('map-sheet-shell-root');
 
@@ -361,10 +363,102 @@ describe('🔴 A6 · AC-6 — 시트 헤더 3세그 + meta "4/4 골랐어요"(�
     expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
       /6월 10일/
     );
-    // ★5 meta = 비고정 4 → "4/4". coPickProgress(고정 포함 5/5) 재사용이면 완전일치라 red.
-    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
-      '4/4 골랐어요'
-    );
+    // meta = 비고정 4 + 고정 숙소 1 → "4곳". 완전 일치라 "4/4 골랐어요"·"5곳"·"4곳 · …km" 전부 red.
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('4곳');
+    // 문구를 다른 자리로 옮겨 남기는 것도 막는다(헤더 밖 어디에도 없다).
+    expect(screen.queryByText(/골랐어요/)).toBeNull();
+  });
+
+  /** 슬롯 하나를 만든다 — 시각·좌표는 이 표의 관심사가 아니라 고정값. */
+  function s(
+    poiId: string,
+    isFixed: boolean,
+    category: string
+  ): ItineraryDaysItemSlotsItem {
+    return {
+      poiId,
+      startAt: '10:00:00',
+      endAt: '11:00:00',
+      isFixed,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: [],
+      nameKo: `장소-${poiId}`,
+      category,
+      imageUrl: null,
+      distanceRange: null,
+      lat: 35.15,
+      lng: 129.1,
+    };
+  }
+
+  // 표 — (설명, 기대 meta, 1일차 슬롯). 셈 규칙의 갈래를 한 줄씩 가른다(02a ★3).
+  it.each<[string, string, ItineraryDaysItemSlotsItem[]]>([
+    [
+      '시각을 지정한 꼭 갈 곳(isFixed · 숙소 아님)은 센다 — `!isFixed` 셈이면 "2곳"',
+      '3곳',
+      [
+        s('p1', false, '자연'),
+        s('p2', false, '카페'),
+        s('must', true, '관광'),
+        s('hotel', true, '숙소'),
+      ],
+    ],
+    [
+      '하나도 안 고른 날(비고정 7·숙소 없음)도 사실만 — "7/7 골랐어요" 가 아니다',
+      '7곳',
+      ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => s(id, false, '자연')),
+    ],
+    ['고정 숙소뿐인 날은 0곳', '0곳', [s('hotel', true, '숙소')]],
+    [
+      '숙소 카테고리여도 고정이 아니면 센다(뺄 것은 "고정 숙소"뿐)',
+      '2곳',
+      [s('stay', false, '숙소'), s('p1', false, '자연')],
+    ],
+  ])('%s → meta "%s"', async (_label, expected, slots) => {
+    // 준비
+    itineraryHandler = () =>
+      HttpResponse.json({
+        ...itinerary(),
+        days: [{ date: DAY1, slots }],
+      });
+
+    // 실행
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // 단언 — 완전 일치(02a §5).
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(expected);
+  });
+
+  it('고른 날짜를 따라 다시 센다 — 2일차 칩을 누르면 2일차 기준 "{N}곳"', async () => {
+    // 준비 — 1일차는 기본 4곳, 2일차는 비고정 1 + 꼭 갈 곳(고정) 1 + 고정 숙소 1 → 2곳.
+    itineraryHandler = () =>
+      HttpResponse.json({
+        ...itinerary(),
+        days: [
+          { date: DAY1, slots: daySlots() },
+          {
+            date: '2026-06-11',
+            slots: [
+              s('q1', false, '자연'),
+              s('q-must', true, '전시'),
+              s('q-hotel', true, '숙소'),
+            ],
+          },
+        ],
+      });
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+    // 앵커 — 1일차 값으로 시작한다.
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('4곳');
+
+    // 실행
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+    // 단언
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('2곳');
   });
 });
 

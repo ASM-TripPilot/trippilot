@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { Keyboard } from 'react-native';
+import { Keyboard, Text } from 'react-native';
 import {
   act,
   fireEvent,
@@ -14,12 +14,17 @@ import {
 
 import { server } from '@/mocks/server';
 import { setAccessToken, clearAccessToken } from '@/shared/api/tokenManager';
-import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
+import {
+  getGetTripsTripIdItineraryQueryKey,
+  useGetTripsTripIdItinerary,
+} from '@/shared/api/index.hooks';
 import type {
   EditItineraryRequest,
+  Itinerary,
   ItineraryDaysItemSlotsItem,
   Place,
 } from '@/shared/api/index.schemas';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 import { PlaceAddPage } from './PlaceAddPage';
 
@@ -69,6 +74,12 @@ import { PlaceAddPage } from './PlaceAddPage';
  * TRIP-1233 추가 — 말미 「장소 추가」도 date 를 싣는다(보내는 쪽은 편집기 두 페이지):
  *  - 🟢선제 **D5** date 만 있고 insertAfter 가 없으면 그 날 말미에 붙는다.
  *  - 🔴 **B2a·B2b·B2c·B4** 다지역 여행의 후보는 담을 날의 지역만 조회한다(옛 두 지역 병합을 뒤집음).
+ *
+ * TRIP-1424 추가 — 장소 추가 결과 안내(즉시 저장은 그대로, 서버가 시각을 밀었으면 말한다):
+ *  - 🔴 **N1~N5** PUT 요청·응답의 **추가한 자리** 슬롯 시작을 견줘 토스트 문구를 고른다(밀림·그대로·뒤 N곳·특정 실패).
+ *  - 🔴 **N6·N7** 저장이 실패하면 "추가됨"이 되지 않고 시트 머리 아래 실패 안내가 뜬다(INV-4).
+ *  - 🔴 **N9** 응답 전에 화면을 떠나도 성공이면 캐시가 바뀌고 토스트가 뜬다. **N10** 저장 중엔 다른 추가를 안 받는다.
+ *  - 토스트는 모듈 싱글턴이라 리셋을 **파일 최상위** `afterEach` 에 건다(toastHarness 머리말).
  *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
@@ -237,6 +248,9 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
+  // TRIP-1424 — 토스트 스토어는 모듈 싱글턴이다. 기존 테스트의 추가 성공도 토스트를 띄우므로 describe 안이 아니라
+  // 여기서 비운다 — 안 그러면 앞 테스트의 토스트가 뒤 "토스트가 뜬다" 단언을 거짓 green 으로 만든다(02a ★8).
+  resetToast();
 });
 
 afterAll(() => server.close());
@@ -1510,7 +1524,7 @@ describe('장소 추가 시트 — 종료가 시작보다 이르면 막는다', 
   const SHEET = 'itinerary-edit-time-sheet';
   const t = (suffix: string): string => `itinerary-edit-time-${suffix}`;
 
-  it('🔴 QA1 · 11:00–08:00 은 [적용]해도 PUT 이 안 나가고, 종료를 오후 8:00 으로 고치면 그 값으로 담긴다', async () => {
+  it('🔴 QA1 · 11:00–08:00 은 [적용]해도 PUT 이 안 나가고, 종료를 20:00 으로 고치면 그 값으로 담긴다', async () => {
     const client = makeClient();
     renderPageWith(client);
     // 일정 도착 전 "+ 추가"는 조용히 무시된다(W-2) — 캐시 성공 + 한 틱 뒤에 누른다(1009 선례).
@@ -1525,8 +1539,8 @@ describe('장소 추가 시트 — 종료가 시작보다 이르면 막는다', 
 
     fireEvent.press(await screen.findByTestId('itinerary-place-add-p1'));
     await screen.findByTestId(SHEET);
-    // 기본 10:00–11:00 → 시작 오전 11 → 11:00 · 종료 오전 8 · 00분 → 08:00.
-    ['wheel-h-11', 'seg-end', 'wheel-h-8', 'wheel-m-00'].forEach((suffix) =>
+    // 기본 10:00–11:00 → 시작 11 → 11:00 · 종료 08 · 00 → 08:00(TRIP-1437 — 24시간 zero-pad 시 셀).
+    ['wheel-h-11', 'seg-end', 'wheel-h-08', 'wheel-m-00'].forEach((suffix) =>
       fireEvent.press(screen.getByTestId(t(suffix)))
     );
 
@@ -1537,7 +1551,7 @@ describe('장소 추가 시트 — 종료가 시작보다 이르면 막는다', 
     expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
     expect(putBodies).toHaveLength(0);
 
-    fireEvent.press(screen.getByTestId(t('wheel-ap-오후'))); // 08:00 → 20:00
+    fireEvent.press(screen.getByTestId(t('wheel-h-20'))); // 08:00 → 20:00
     expect(screen.queryByTestId(t('error'))).toBeNull();
     fireEvent.press(screen.getByTestId(t('apply')));
 
@@ -1549,5 +1563,473 @@ describe('장소 추가 시트 — 종료가 시작보다 이르면 막는다', 
       endAt: added?.endAt,
       endsNextDay: added?.endsNextDay,
     }).toEqual({ startAt: '11:00:00', endAt: '20:00:00', endsNextDay: false });
+  });
+});
+
+/**
+ * TRIP-1424 — 장소 추가 결과 안내. 시각 시트 [적용]은 지금처럼 곧장 저장(PUT)하고, 그 결과를 사용자에게 말한다.
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 N1~N5 서버가 추가한 곳의 시작을 밀었으면(이동 시간 반영) 토스트가 **응답 시각 그대로** 말한다(INV-2).
+ *    비교 대상은 (날짜, poiId) 검색이 아니라 **요청에서 끼운 자리**의 슬롯이다(같은 날 같은 장소가 둘이어도 N4).
+ *    뒤 슬롯이 밀린 수도 덧붙이고(결정 3=A, N3), 자리를 못 집으면 시각을 말하지 않는다(N5).
+ *  - 🔴 N6·N7 저장이 실패하면 그 행이 "추가됨"이 되지 않고, 시트 머리 아래에 실패 안내가 뜬다(INV-4 · 01b Q7).
+ *  - 🟢 N8 성공이면 "추가됨"(성공 뒤로 옮겨도 남아야 하는 짝).
+ *  - 🔴 N9 응답 전에 이 화면을 떠나도 성공이면 일정 캐시가 바뀌고 토스트가 뜬다(01b Q2 — 호출별 콜백은 언마운트 뒤 안 불린다).
+ *  - 🔴 N10 저장 중엔 다른 행 「+ 추가」를 받지 않고, 끝난 뒤 둘째 추가는 첫 추가를 잃지 않는다(01b Q3).
+ *
+ * 장치(02a ★):
+ *  - PUT 핸들러는 **요청을 서버 일정 모양으로 되돌려 주고 `startAt` 만 덮어쓴다**(echo) — 파일 최상위 기본 PUT 은 그날
+ *    슬롯을 비워 돌려줘 "특정 실패" 길(N5)만 밟는다(★9).
+ *  - 17:14 는 앞 장소 16:00–17:00(기본 제안 17:00–18:00) 에서 분 셀 14 를 눌러 만든다 — 종료 18:00 이 시작보다 늦어
+ *    [적용]이 막히지 않는다(★11, TRIP-1437 셀 testID).
+ *  - 트리는 QueryClient + 토스트 호스트 + **편집기 대역**(같은 일정 키를 구독하는 형제) + 페이지다. 실기에선 장소 추가
+ *    아래에 편집기가 그 키를 들고 있다 — 대역이 없으면 페이지를 뺀 순간 캐시가 지워져(gcTime 0) "떠나도 캐시가 바뀐다"를
+ *    잴 수 없다(02a §5 V4). 떠남은 페이지만 트리에서 빼서 재현한다(★14).
+ *
+ * 3동작 뼈대: 준비 = 그날 슬롯 · 응답 덮어쓰기(· 문) → 실행 = 「+ 추가」 → 시각 → [적용] (→ 떠남 · 문 열기) →
+ * 단언 = 나간 PUT 바디(앵커) · 토스트 문구 · 행 상태 · 실패 안내 · 캐시.
+ */
+describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안내 · 저장 중 잠금', () => {
+  const D1 = '2026-06-10';
+  const D2 = '2026-06-11';
+  const TOAST = 'itinerary-place-added-toast';
+  const ERROR = 'itinerary-place-add-error';
+  const ERROR_TEXT = '장소를 담지 못했어요. 잠시 후 다시 시도해 주세요';
+  const SHEET = 'itinerary-edit-time-sheet';
+  const EDITOR = 'editor-itinerary-poi-ids';
+  const DURATION_TEXT = /\d+\s*(분|초|시간)|소요/;
+  /**
+   * 한 테스트 한도 — 통합 버킷의 `findBy*` 기본 대기(5초, integrationSetup)와 jest 테스트 한도(5초)가 같아서, 지금처럼
+   * 토스트·실패 안내가 아직 없으면 "요소를 못 찾음" 대신 "테스트 시간 초과"로 죽어 red 이유가 가려진다. 한도를 넉넉히 둔다.
+   */
+  const SLOW = 15000;
+
+  function slotAt(
+    poiId: string,
+    startAt: string,
+    endAt: string
+  ): ItineraryDaysItemSlotsItem {
+    return { ...makeSlot(poiId), startAt, endAt };
+  }
+
+  function serveDays(
+    days: { date: string; slots: ItineraryDaysItemSlotsItem[] }[]
+  ): void {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({ ...ITINERARY_ENVELOPE, days })
+      )
+    );
+  }
+
+  /**
+   * 요청 바디를 서버 일정 모양으로 되돌려 준다 — `shifts[날짜][자리]` 가 있으면 그 슬롯의 `startAt` 만 바꾼다
+   * (서버의 TIME_SHIFT_ONLY repair 흉내 — 장소·순서는 요청 그대로, BR-U3-13·14 §3 개정).
+   */
+  function echo(
+    body: EditItineraryRequest,
+    shifts: Record<string, Record<number, string>> = {}
+  ): Itinerary {
+    return {
+      ...ITINERARY_ENVELOPE,
+      days: body.days.map((day) => ({
+        date: day.date,
+        slots: day.slots.map((one, index) => ({
+          ...one,
+          startAt: shifts[day.date]?.[index] ?? one.startAt,
+          endsNextDay: one.endsNextDay ?? false,
+          hasViolation: false,
+          tags: [],
+          alternatives: [],
+        })),
+      })),
+    } as Itinerary;
+  }
+
+  /** PUT 응답을 케이스가 정한다. 기본 = 그대로 되돌려 줌(밀림 없음). */
+  let respond: (body: EditItineraryRequest) => Response;
+  /** PUT 을 붙잡는 문. null 이면 곧장 응답한다. */
+  let putGate: Promise<void> | null = null;
+  let openPutGate: (() => void) | null = null;
+
+  function holdPut(): void {
+    putGate = new Promise<void>((resolve) => {
+      openPutGate = resolve;
+    });
+  }
+
+  beforeEach(() => {
+    respond = (body) => HttpResponse.json(echo(body));
+    putGate = null;
+    openPutGate = null;
+    server.use(
+      http.put(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
+        const body = (await request.json()) as EditItineraryRequest;
+        putBodies.push(body);
+        if (putGate !== null) await putGate;
+        return respond(body);
+      })
+    );
+  });
+
+  // 문을 안 열고 끝나면 붙잡힌 요청이 열린 핸들로 남는다 — 이 describe 의 afterEach 가 최상위 것보다 먼저 돈다.
+  afterEach(() => {
+    act(() => {
+      openPutGate?.();
+    });
+  });
+
+  /** 편집기 대역 — 장소 추가 아래에서 같은 일정 키를 구독하는 화면. 그날 poiId 를 글자로 드러낸다. */
+  function EditorStandIn(): ReactNode {
+    const query = useGetTripsTripIdItinerary('t1');
+    const ids = (query.data?.days?.[0]?.slots ?? []).map((one) => one.poiId);
+    return <Text testID={EDITOR}>{ids.join(',')}</Text>;
+  }
+
+  /** QueryClient + 토스트 호스트 + 편집기 대역 + 페이지. `leave()` = 페이지만 트리에서 뺀다(호스트·대역은 남음). */
+  function renderTree() {
+    const client = makeClient();
+    function Tree({ show }: { show: boolean }) {
+      return (
+        <QueryClientProvider client={client}>
+          <WithToastHost>
+            <EditorStandIn />
+            {show ? <PlaceAddPage tripId="t1" /> : null}
+          </WithToastHost>
+        </QueryClientProvider>
+      );
+    }
+    const view = render(<Tree show />);
+    return { client, leave: () => view.rerender(<Tree show={false} />) };
+  }
+
+  /** 일정 도착 전 「+ 추가」는 조용히 무시된다(W-2) — 캐시 성공 + 한 틱 뒤에 누른다(1009 선례). */
+  async function ready(client: QueryClient): Promise<void> {
+    await waitFor(() =>
+      expect(
+        client.getQueryState(getGetTripsTripIdItineraryQueryKey('t1'))?.status
+      ).toBe('success')
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  /** 「+ 추가」 → 시트 → (시작 17:14) → [적용]. */
+  async function add(poiId: string, at1714 = false): Promise<void> {
+    fireEvent.press(await screen.findByTestId(`itinerary-place-add-${poiId}`));
+    await screen.findByTestId(SHEET);
+    if (at1714) {
+      fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-17'));
+      fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-m-14'));
+    }
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+  }
+
+  /** 나간 PUT 의 그날 슬롯을 `[poiId, startAt]` 쌍으로. */
+  function sent(index: number, date: string): [string, string][] {
+    const day = putBodies[index]?.days.find((one) => one.date === date);
+    return (day?.slots ?? []).map((one) => [one.poiId, one.startAt]);
+  }
+
+  /** 화면에 그려진 글자 전부(호스트 노드만) — 소요시간 부정 검사의 모집단. */
+  function renderedTexts(): string[] {
+    const out: string[] = [];
+    screen.root
+      .findAll((node) => typeof node.type === 'string')
+      .forEach((node) => {
+        const children = node.props?.children as unknown;
+        const list = Array.isArray(children) ? children : [children];
+        list.forEach((child) => {
+          if (typeof child === 'string') out.push(child);
+        });
+      });
+    return out;
+  }
+
+  it(
+    '🔴 N1 · AC-10·20 — 17:14 로 담았는데 서버가 17:40 으로 밀었으면 토스트가 응답 시각으로 말한다',
+    async () => {
+      serveDays([{ date: D1, slots: [slotAt('sA', '16:00:00', '17:00:00')] }]);
+      respond = (body) =>
+        HttpResponse.json(echo(body, { [D1]: { 1: '17:40:00' } }));
+      const { client } = renderTree();
+      await ready(client);
+      // 앵커 — 담기 전엔 토스트가 없다(앞 테스트의 토스트가 새지 않았다, 02a ★8).
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      await add('p1', true);
+
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+      // 앵커 — 요청은 사용자가 고른 17:14 다(밀린 것은 서버 응답).
+      expect(sent(0, D1)).toEqual([
+        ['sA', '16:00:00'],
+        ['p1', '17:14:00'],
+      ]);
+      expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+        '추가했어요 · 이동 시간을 반영해 17:40으로 맞췄어요'
+      );
+      // 모집단 긍정 짝 — 토스트 문구가 실제로 스캔 대상에 있다. 그리고 소요시간 꼴은 하나도 없다(INV-3).
+      const texts = renderedTexts();
+      expect(texts).toContain(
+        '추가했어요 · 이동 시간을 반영해 17:40으로 맞췄어요'
+      );
+      expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
+    },
+    SLOW
+  );
+
+  it(
+    '🔴 N2 · AC-11 — 응답 시작이 고른 시각과 같으면 "일정에 바로 저장됐어요"',
+    async () => {
+      serveDays([{ date: D1, slots: [slotAt('sA', '16:00:00', '17:00:00')] }]);
+      const { client } = renderTree();
+      await ready(client);
+
+      await add('p1', true);
+
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+      expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+        '추가했어요 · 일정에 바로 저장됐어요'
+      );
+    },
+    SLOW
+  );
+
+  it(
+    '🔴 N3 · AC-12 — 추가한 자리 뒤에서 밀린 곳만 센다 (앞 슬롯·다른 날은 안 센다)',
+    async () => {
+      mockParams = { tripId: 't1', insertAfter: '0' };
+      serveDays([
+        {
+          date: D1,
+          slots: [
+            slotAt('sA', '16:00:00', '17:00:00'),
+            slotAt('sB', '18:00:00', '19:00:00'),
+            slotAt('sC', '20:00:00', '21:00:00'),
+          ],
+        },
+        { date: D2, slots: [slotAt('tA', '10:00:00', '11:00:00')] },
+      ]);
+      // 앞(sA)·다른 날(tA)도 일부러 바꾼다 — 이걸 세면 "뒤 3곳"이 된다. 뒤 둘 중 sC 는 그대로 — 뒤 전부를 세면 "2곳"(02a ★13).
+      respond = (body) =>
+        HttpResponse.json(
+          echo(body, {
+            [D1]: { 0: '16:10:00', 1: '17:40:00', 2: '18:30:00' },
+            [D2]: { 0: '10:30:00' },
+          })
+        );
+      const { client } = renderTree();
+      await ready(client);
+
+      await add('p1', true);
+
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+      // 앵커 — 선행 index 0 다음 자리(index 1)에 끼웠다.
+      expect(sent(0, D1)).toEqual([
+        ['sA', '16:00:00'],
+        ['p1', '17:14:00'],
+        ['sB', '18:00:00'],
+        ['sC', '20:00:00'],
+      ]);
+      expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+        '추가했어요 · 이동 시간을 반영해 17:40으로 맞췄어요 · 뒤 1곳도 시간이 밀렸어요'
+      );
+    },
+    SLOW
+  );
+
+  it(
+    '🔴 N4 · AC-13 — 같은 날 같은 장소가 이미 있어도 추가한 자리(말미)의 시각으로 말한다',
+    async () => {
+      serveDays([
+        {
+          date: D1,
+          slots: [
+            slotAt('sA', '09:00:00', '10:00:00'),
+            slotAt('p1', '12:00:00', '13:00:00'),
+            slotAt('sB', '16:00:00', '17:00:00'),
+          ],
+        },
+      ]);
+      // 먼저 있던 p1(12:00)은 그대로, 말미에 끼운 p1 만 17:40 — (날짜, poiId) 첫 일치로 찾으면 "저장됐어요"가 된다(02a ★12).
+      respond = (body) =>
+        HttpResponse.json(echo(body, { [D1]: { 3: '17:40:00' } }));
+      const { client } = renderTree();
+      await ready(client);
+
+      await add('p1', true);
+
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+      expect(sent(0, D1).map(([poiId]) => poiId)).toEqual([
+        'sA',
+        'p1',
+        'sB',
+        'p1',
+      ]);
+      expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+        '추가했어요 · 이동 시간을 반영해 17:40으로 맞췄어요'
+      );
+    },
+    SLOW
+  );
+
+  it(
+    '🔴 N5 · AC-14 — 응답에서 추가한 자리를 못 집으면 시각을 말하지 않는다',
+    async () => {
+      serveDays([{ date: D1, slots: [slotAt('sA', '16:00:00', '17:00:00')] }]);
+      respond = (body) =>
+        HttpResponse.json({
+          ...ITINERARY_ENVELOPE,
+          days: body.days.map((day) => ({ date: day.date, slots: [] })),
+        });
+      const { client } = renderTree();
+      await ready(client);
+
+      await add('p1', true);
+
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+      expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+        '추가했어요 · 일정에 바로 저장됐어요'
+      );
+    },
+    SLOW
+  );
+
+  it.each<[string, () => Response]>([
+    [
+      '409(확정된 일정)',
+      () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'ITINERARY_CONFIRMED',
+              message: '확정된 일정이에요',
+            },
+          },
+          { status: 409 }
+        ),
+    ],
+    [
+      '500',
+      () => HttpResponse.json({ error: { code: 'INTERNAL' } }, { status: 500 }),
+    ],
+    ['네트워크 끊김', () => HttpResponse.error()],
+  ])(
+    '🔴 N6 · AC-15 — 저장이 %s 로 실패하면 "추가됨"이 되지 않고 실패 안내가 뜬다 · 토스트 0',
+    async (_name, failure) => {
+      respond = () => failure();
+      const { client } = renderTree();
+      await ready(client);
+
+      await add('p1');
+
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+      expect(await screen.findByTestId(ERROR)).toHaveTextContent(ERROR_TEXT);
+      expect(screen.getByTestId('itinerary-place-add-p1')).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-place-added-p1')).toBeNull();
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    },
+    SLOW
+  );
+
+  it(
+    '🔴 N7 · AC-15 — 실패 안내는 다음 추가가 성공하면 사라진다',
+    async () => {
+      let calls = 0;
+      respond = (body) => {
+        calls += 1;
+        return calls === 1
+          ? HttpResponse.json({ error: { code: 'INTERNAL' } }, { status: 500 })
+          : HttpResponse.json(echo(body));
+      };
+      const { client } = renderTree();
+      await ready(client);
+      await add('p1');
+      // 앵커 — 첫 추가는 실패 안내까지 갔다.
+      await screen.findByTestId(ERROR);
+
+      await add('p2');
+
+      await waitFor(() => expect(putBodies).toHaveLength(2));
+      await screen.findByTestId(TOAST);
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.getByTestId('itinerary-place-added-p2')).toBeOnTheScreen();
+    },
+    SLOW
+  );
+
+  it(
+    '🟢 N8 · AC-16 — 저장이 성공하면 그 행이 "추가됨"이 된다 (선제 green)',
+    async () => {
+      const { client } = renderTree();
+      await ready(client);
+
+      await add('p1');
+
+      expect(
+        await screen.findByTestId('itinerary-place-added-p1')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-place-add-p1')).toBeNull();
+    },
+    SLOW
+  );
+
+  it(
+    '🔴 N9 · AC-17 — 응답 전에 화면을 떠나도 성공이면 편집기 캐시가 바뀌고 토스트가 뜬다',
+    async () => {
+      serveDays([{ date: D1, slots: [slotAt('sA', '16:00:00', '17:00:00')] }]);
+      respond = (body) =>
+        HttpResponse.json(echo(body, { [D1]: { 1: '17:40:00' } }));
+      holdPut();
+      const { client, leave } = renderTree();
+      await ready(client);
+      // 앵커 — 편집기 대역이 지금 일정(sA 하나)을 본다.
+      expect(screen.getByTestId(EDITOR)).toHaveTextContent('sA');
+
+      await add('p1', true);
+      // 앵커 — PUT 이 서버에 도착했다(응답만 붙잡혀 있다). 이 틈이 "응답 전 이탈"이다(02a ★14).
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+
+      leave();
+      expect(screen.queryByTestId('itinerary-place-list')).toBeNull();
+      await act(async () => {
+        openPutGate?.();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByTestId(EDITOR)).toHaveTextContent('sA,p1')
+      );
+      expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+        '추가했어요 · 이동 시간을 반영해 17:40으로 맞췄어요'
+      );
+    },
+    SLOW
+  );
+
+  it('🔴 N10 · AC-18 — 저장 중엔 다른 행 「+ 추가」가 시트를 열지 않고, 끝난 뒤 둘째 추가는 첫 추가를 싣는다', async () => {
+    holdPut();
+    const { client } = renderTree();
+    await ready(client);
+
+    await add('p1');
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+
+    // 실행 — 첫 저장 응답을 기다리는 동안 다른 행을 누른다.
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p2'));
+    expect(screen.queryByTestId(SHEET)).toBeNull();
+
+    await act(async () => {
+      openPutGate?.();
+    });
+    // 앵커 — 첫 추가가 끝났다.
+    await screen.findByTestId('itinerary-place-added-p1');
+
+    await add('p2');
+
+    await waitFor(() => expect(putBodies).toHaveLength(2));
+    // 둘째 PUT 은 첫 응답으로 바뀐 캐시에서 만든다 — p1 을 잃지 않았다(02a ★15).
+    expect(sent(1, D1).map(([poiId]) => poiId)).toEqual(['p1', 'p2']);
   });
 });
