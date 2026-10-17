@@ -207,3 +207,30 @@ def test_counted_kind_dropped_by_the_solver_is_reported() -> None:
     body = _run_with_agent(ExtractedRequest(categories=(ExtractedCategory("CAFE", 1),)),
                            _MixComposer(lambda p: True), drop_cafes)
     assert "nl_category_unplaced: CAFE 0/1" in body["notes"], body["notes"]
+
+
+# ── ⑥ 운영 회귀(2026-10-15) — 성산을 집고 "카페는 한 곳만"인데 제주시 카페가 들어가 밤에 되돌아왔다 ──────
+
+_SEONGSAN = "e0000000-0000-4000-8000-000000000001"
+
+
+def test_counted_kind_prefers_the_far_named_place_surroundings() -> None:
+    from trippilot.llm_gateway.gates.replan_request_extraction import ExtractedPlace
+    from tests.fakes.fake_existence import FakeExistence
+
+    ss = next(p for p in demo_poi_seed() if str(p.poi_id) == _SEONGSAN)
+    near_ss = Poi(poi_id=PoiId("sscafe"), name="성산카페", category=PoiCategory.CAFE,
+                  coord=GeoPoint(ss.coord.lat + 0.005, ss.coord.lng), open_hours=(), avg_cost=None,
+                  rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None)
+    app = build_dev_app(directives=_DIRECTIVES, poi_db=StaticPoiDb(demo_poi_seed() + _NEAR + (near_ss,)))
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(ExtractedRequest(
+        places=(ExtractedPlace("성산일출봉", "visit"),), categories=(ExtractedCategory("CAFE", 1),)))
+    orch._existence = FakeExistence()
+    # 구성 LLM 은 기준점 근처 카페를 고른다(운영과 같은 선택)
+    orch._composer = _MixComposer(lambda p: str(p.poi_id) in {_SEONGSAN, "cafe1", "food1"})
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(free_text="성산일출봉 꼭, 카페는 한 곳만"))
+    body = r.json()
+    placed = [s["poi_id"] for d in body["itinerary"]["days"] for s in d["slots"]]
+    assert "sscafe" in placed and "cafe1" not in placed, body["notes"]
