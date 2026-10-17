@@ -842,3 +842,118 @@ describe('방문 추가 피커 · 그날 일정 핀 (AC-6·AC-7 · Q-115)', () =
     expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
   });
 });
+
+/**
+ * TRIP-1433 · Q-142 — 즉석 방문 피커도 장소 추가와 같은 규칙으로 같은 이름 장소를 지역·주소로 가른다.
+ *
+ * 1줄 = [지역(있을 때만), #태그…, 카테고리] · 2줄 = 주소(있을 때만, testID `record-add-visit-address-{poiId}`).
+ * null·키 없음·빈 문자열·공백뿐은 없음 — 지금 부제 그대로. 이름은 원문 그대로. 고르기 동작은 그대로.
+ *
+ * ⚠️ 이 파일의 기본 장소 핸들러는 쿼리 `region`(목적지 '부산')과 `Place.region` 이 같은 것만 남긴다. 시군구
+ *   '종로구' 같은 표시명은 거기서 지워지므로, 이 묶음은 `/places` 를 쿼리를 보지 않는 고정 응답으로 덮는다.
+ * 생김새(줄 수·색·말줄임)는 재지 않는다(README 판정 4 — 6-b 실기 몫).
+ *
+ * 3동작 뼈대: 준비=고정 응답 → 실행=피커 렌더(·기록) → 단언=행 안의 1줄 문자열·주소 줄 testID·나간 POST.
+ */
+describe('방문 추가 피커 행 부제 — 같은 이름 장소를 지역·주소로 가른다', () => {
+  const ADDRESS_K1 = '서울특별시 종로구 사직로 161';
+  const ADDRESS_K5 = '서울특별시 마포구 월드컵북로 400';
+
+  function samePlace(
+    poiId: string,
+    nameKo: string,
+    category: Place['category'],
+    tags: string[],
+    region: string | null | undefined,
+    address: string | null
+  ): Place {
+    return {
+      ...makePlace(poiId, nameKo, category, '부산'),
+      tags,
+      region,
+      address,
+    };
+  }
+
+  // k5 의 region undefined 는 JSON 으로 나갈 때 키째 빠진다(생성 타입 `region?` 경로).
+  const SAME_NAME: Place[] = [
+    samePlace('k1', '경복궁', '명소', ['고궁'], '종로구', ADDRESS_K1),
+    samePlace('k2', '경복궁', '맛집', ['한식'], '중구', null),
+    samePlace('k3', '경복궁', '맛집', ['한식'], null, null),
+    samePlace('k4', '경복궁', '맛집', ['한식'], '   ', '  '),
+    samePlace('k5', '경복궁', '맛집', ['한식'], undefined, ADDRESS_K5),
+    samePlace('k6', '[백년가게]옥미아구찜', '맛집', [], '마산합포구', null),
+  ];
+
+  const row = (poiId: string) => screen.getByTestId(rowId(poiId));
+  const addressId = (poiId: string) => `record-add-visit-address-${poiId}`;
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: SAME_NAME, nextCursor: null })
+      )
+    );
+  });
+
+  // 피커만 그린다 — j01 글자가 섞이면 행 밖 글자까지 모집단이 흐려진다.
+  async function renderSameNamePicker(): Promise<void> {
+    render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+      wrapper: wrapperFor(makeClient()),
+    });
+    await screen.findByTestId(rowId('k1'));
+  }
+
+  it('🔴 R1 · 이름이 같은 두 행은 1줄 맨 앞의 지역이 달라 서로 구분된다', async () => {
+    await renderSameNamePicker();
+
+    expect(within(row('k1')).getByText('경복궁')).toBeTruthy();
+    expect(within(row('k2')).getByText('경복궁')).toBeTruthy();
+    expect(within(row('k1')).getByText('종로구 · #고궁 · 명소')).toBeTruthy();
+    expect(within(row('k2')).getByText('중구 · #한식 · 맛집')).toBeTruthy();
+  });
+
+  it('🔴 R2 · 주소가 있는 행만 그 행 안에 주소 줄이 원문으로 뜬다', async () => {
+    await renderSameNamePicker();
+
+    expect(within(row('k1')).getByTestId(addressId('k1'))).toHaveTextContent(
+      ADDRESS_K1
+    );
+    expect(within(row('k5')).getByText('#한식 · 맛집')).toBeTruthy();
+    expect(within(row('k5')).getByTestId(addressId('k5'))).toHaveTextContent(
+      ADDRESS_K5
+    );
+    expect(screen.queryByTestId(addressId('k2'))).toBeNull();
+  });
+
+  it('🔴 R3 · 지역·주소가 null·빈 문자열·공백뿐이면 지금 부제 그대로고 주소 줄·"null"·"미확인" 글자가 없다', async () => {
+    await renderSameNamePicker();
+    // 앵커 — 주소 줄을 그리는 화면에서만 "없다"가 의미 있다.
+    expect(within(row('k1')).getByTestId(addressId('k1'))).toBeTruthy();
+
+    for (const poiId of ['k3', 'k4']) {
+      expect(within(row(poiId)).getByText('#한식 · 맛집')).toBeTruthy();
+      expect(screen.queryByTestId(addressId(poiId))).toBeNull();
+      expect(
+        within(row(poiId)).queryAllByText(/null|undefined|미확인/)
+      ).toEqual([]);
+    }
+  });
+
+  it('R4 · 이름 접두([백년가게])는 원문 그대로다 (사용자 결정 · 선제 green)', async () => {
+    await renderSameNamePicker();
+
+    expect(within(row('k6')).getByText('[백년가게]옥미아구찜')).toBeTruthy();
+  });
+
+  it('R5 · 같은 이름 중 둘째 행(k2)을 고르면 k2 로 도착 1회를 기록하고 뒤로 간다 (무회귀 · 선제 green)', async () => {
+    await renderSameNamePicker();
+
+    fireEvent.press(screen.getByTestId(pickId('k2')));
+
+    await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+    expect(postBodies).toEqual([
+      { slotKey: null, poiId: 'k2', source: 'MANUAL' },
+    ]);
+  });
+});

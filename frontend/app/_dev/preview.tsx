@@ -6813,6 +6813,49 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
+  // TRIP-1433 — 같은 이름 장소를 지역(1줄 맨 앞)·주소(2줄)로 가른다. 지역·주소 둘 다 / 지역만 / 둘 다 없음
+  // (지금 부제 그대로) 세 얼굴. 말줄임 때 지역이 보이는지·주소 줄 위계는 jest 가 못 봐서 여기서 눈으로 본다.
+  {
+    key: 'h13-place-add-same-name',
+    band: 'h',
+    label: 'h13 · 장소 추가 · 같은 이름',
+    login: null,
+    render: () => (
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={[]}
+        onBack={noop}
+        header={
+          <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
+            장소 추가 · 1일차
+          </Text>
+        }
+        list={{
+          data: [
+            {
+              ...PREVIEW_PLACES[0],
+              poiId: 'same-1',
+              address: '부산광역시 사하구 감내2로 203',
+            },
+            { ...PREVIEW_PLACES[0], poiId: 'same-2', region: '중구' },
+            { ...PREVIEW_PLACES[0], poiId: 'same-3', region: null },
+          ],
+          renderItem: ({ item }) => (
+            <PlaceAddRow place={item} added={false} onPressAdd={noop} />
+          ),
+          keyExtractor: (place) => place.poiId,
+          testID: 'itinerary-place-list',
+        }}
+      >
+        <PlaceAddHeader
+          searchText="감천문화마을"
+          selectedCategory={null}
+          onChangeSearchText={noop}
+          onSelectCategory={noop}
+        />
+      </MapSheetShell>
+    ),
+  },
   // i10 현재 장소 상세(TRIP-755) — props-only 화면. 옛 default·unknown 2키를 1키로 합쳤다(결측
   // 얼굴은 Figma 에 없고 결측 처리는 model·화면 테스트가 잠근다). 뒤로·공유·모두 보기는 Figma 에
   // 있으니 빈 핸들러로 켠다. 하트 '준비 중' 안내는 누르면 뜬다(6-b).

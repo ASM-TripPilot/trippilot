@@ -8,7 +8,11 @@ import { PlaceRowCard } from '@/entities/place';
 import { PlaceSubtitle } from '@/entities/place';
 import { useMultiRegionPlaces } from '@/features/explore';
 import { usePlacesInfinite } from '@/features/explore';
-import { buildDraftPins, PlaceAddHeader } from '@/features/itinerary';
+import {
+  buildDraftPins,
+  PlaceAddHeader,
+  placeAddSubtitle,
+} from '@/features/itinerary';
 import { rememberSpontaneousName } from '@/features/check-visit';
 import { useVisitCheck } from '@/features/check-visit';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
@@ -143,35 +147,49 @@ export function RecordAddVisitPage({
         }
         list={{
           data: items,
-          renderItem: ({ item }) => (
-            <PlaceRowCard
-              testIDPrefix="record-add-visit-row"
-              id={item.poiId}
-              name={item.nameKo}
-              imageUrl={item.imageUrl}
-              subtitle={
-                <PlaceSubtitle
-                  parts={[...item.tags.map((tag) => `#${tag}`), item.category]}
-                  className="font-noto text-[12.5px] text-muted"
-                  numberOfLines={1}
-                />
-              }
-              trailing={
-                <Pressable
-                  testID={`record-add-visit-pick-${item.poiId}`}
-                  accessibilityRole="button"
-                  onPress={() => {
-                    void handlePick(item);
-                  }}
-                  className="items-center justify-center rounded-button border border-primary px-md py-sm"
-                >
-                  <Text className="font-noto-bold text-label font-bold text-primary">
-                    기록
-                  </Text>
-                </Pressable>
-              }
-            />
-          ),
+          renderItem: ({ item }) => {
+            const subtitle = placeAddSubtitle(item);
+            return (
+              <PlaceRowCard
+                testIDPrefix="record-add-visit-row"
+                id={item.poiId}
+                name={item.nameKo}
+                imageUrl={item.imageUrl}
+                subtitle={
+                  <View className="gap-[2px]">
+                    <PlaceSubtitle
+                      parts={subtitle.parts}
+                      className="font-noto text-[12.5px] text-muted"
+                      numberOfLines={1}
+                    />
+                    {subtitle.address !== null ? (
+                      <Text
+                        testID={`record-add-visit-address-${item.poiId}`}
+                        className="font-noto text-[12px] text-muted-soft"
+                        numberOfLines={1}
+                      >
+                        {subtitle.address}
+                      </Text>
+                    ) : null}
+                  </View>
+                }
+                trailing={
+                  <Pressable
+                    testID={`record-add-visit-pick-${item.poiId}`}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      void handlePick(item);
+                    }}
+                    className="items-center justify-center rounded-button border border-primary px-md py-sm"
+                  >
+                    <Text className="font-noto-bold text-label font-bold text-primary">
+                      기록
+                    </Text>
+                  </Pressable>
+                }
+              />
+            );
+          },
           keyExtractor: (place) => place.poiId,
           onEndReached: () => {
             if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
