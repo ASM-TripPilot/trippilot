@@ -73,10 +73,17 @@ function buildSections(
 }
 
 export function NotificationInboxPage(): ReactElement {
-  const { items, markAllRead } = useNotificationInbox();
+  const { items, markAllRead, markRead } = useNotificationInbox();
   const [markAllPending, setMarkAllPending] = useState(false);
   const [markAllError, setMarkAllError] = useState<string | null>(null);
   const now = new Date();
+
+  function handleNavigate(route: string, notificationId: string): void {
+    // 이동이 먼저 — 읽음 응답을 기다리지 않는다. 미읽음 판정은 서버 원본(readAt)으로 여기서 한 번.
+    router.push(route as Href);
+    const item = items.find((it) => it.notificationId === notificationId);
+    if (item != null && item.readAt == null) void markRead(notificationId);
+  }
 
   async function handleMarkAllRead(): Promise<void> {
     setMarkAllError(null);
@@ -90,7 +97,7 @@ export function NotificationInboxPage(): ReactElement {
     <NotificationInboxScreen
       sections={buildSections(items, now)}
       isEmpty={items.length === 0}
-      onNavigate={(route) => router.push(route as Href)}
+      onNavigate={handleNavigate}
       onPressBack={() => router.back()}
       onMarkAllRead={() => void handleMarkAllRead()}
       markAllPending={markAllPending}

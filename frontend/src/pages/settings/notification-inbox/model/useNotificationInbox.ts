@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import {
   getGetMeNotificationsQueryKey,
+  postMeNotificationsNotificationIdRead,
   postMeNotificationsReadAll,
   useGetMeNotifications,
 } from '@/shared/api/index.hooks';
@@ -18,6 +19,8 @@ export interface UseNotificationInboxResult {
   isError: boolean;
   /** 미읽음 전부 읽음 처리(`POST /me/notifications/read-all` 1회). 실패하면 false. */
   markAllRead: () => Promise<boolean>;
+  /** 알림 1건 읽음(`POST /me/notifications/{id}/read`). 응답이 끝나면 성공·실패 무관 재조회. */
+  markRead: (notificationId: string) => Promise<void>;
 }
 
 export function useNotificationInbox(): UseNotificationInboxResult {
@@ -42,10 +45,25 @@ export function useNotificationInbox(): UseNotificationInboxResult {
     return ok;
   }
 
+  async function markRead(notificationId: string): Promise<void> {
+    // 실패는 안내 없이 삼킨다 — 재조회한 서버 정본이 점을 그대로 남겨 정직하게 드러낸다(INV-4).
+    // 컴포넌트 콜백(onSettled)이 아니라 이 함수가 끝까지 기다려 무효화하므로, 이동으로 알림함이
+    // 내려가도 앱 공용 queryClient 캐시는 낡음 처리된다.
+    try {
+      await postMeNotificationsNotificationIdRead(notificationId);
+    } catch {
+      // 의도적으로 비움.
+    }
+    await queryClient.invalidateQueries({
+      queryKey: getGetMeNotificationsQueryKey(),
+    });
+  }
+
   return {
     items,
     isLoading: query.isLoading,
     isError: query.isError,
     markAllRead,
+    markRead,
   };
 }

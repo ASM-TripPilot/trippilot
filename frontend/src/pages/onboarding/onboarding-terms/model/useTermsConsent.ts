@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { ONBOARDING_TERMS_TYPES } from '@/features/onboarding';
 import { fetchTerms, submitConsents, type ConsentInput } from '@/shared/api';
 
 import type { TermsItemView } from '../ui/TermsScreen';
@@ -13,17 +14,6 @@ import type { TermsItemView } from '../ui/TermsScreen';
  * 별도로 저장하지 않는다. 제출은 체크된 항목만 **서버가 준 버전 그대로** GRANT 로 담아 1회 호출한다
  * (BR-U0-12 · D8).
  */
-
-/**
- * BR-U0-11 — U0 온보딩에서 노출하는 필수 약관 3종(표시 순서 = 이 배열 순서, 법정 고지라 결정론적으로 고정).
- * 서버가 이 셋 밖의 종을 줘도(6종) 걸러내므로, 노출 안 하는 약관을 사용자가 선언하지 않은 증적으로 담는
- * 일이 구조적으로 불가능해진다(BR-U0-12). 세 종 모두 필수다(BR-U0-10).
- */
-const ONBOARDING_TERMS_TYPES = [
-  'TERMS_OF_SERVICE',
-  'PRIVACY_POLICY',
-  'LOCATION_TERMS',
-];
 
 /**
  * 화면 표시용 라벨(BR-U0-10 정본 문구). 서버 body 는 약관 전문(+ [플레이스홀더] 임시값)이라 짧은 라벨은

@@ -3,12 +3,13 @@ import { isAxiosError } from 'axios';
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { type ReactElement, useRef, useState } from 'react';
-import { Keyboard, Share } from 'react-native';
+import { Keyboard } from 'react-native';
 
 import { waitForGateDestination } from '@/features/auth';
 import { usePreferenceStore } from '@/features/edit-preferences';
 import { OSM_COPYRIGHT_URL } from '../model/dataAttribution';
 import { resolveExportSummary } from '../model/exportSummary';
+import { shareExportFile } from '../model/shareExportFile';
 import {
   buildSettingsSections,
   filterReadySettingsSections,
@@ -216,25 +217,40 @@ export function SettingsPage(): ReactElement {
     return false;
   };
 
+  // TRIP-1422 — 내보내기 잠금. 공유 시트가 닫힐 때까지 쥔다(iOS 는 시트가 떠 있을 때 또 부르면 reject 해
+  // "시트는 떠 있는데 오류 문구"가 된다). ref 라 같은 렌더 안 연타도 막고, 어떤 끝에서든 finally 로 푼다.
+  const exportInFlightRef = useRef(false);
   const runExport = async (): Promise<void> => {
-    // refetch 는 실패해도 throw 하지 않고 { data, error } 를 resolve 한다(react-query) — data 가
-    // 없으면 조용히 삼키지 않고 인라인 오류로 표면화한다(INV-4).
-    const { data } = await exportQuery.refetch();
-    if (!data) {
-      // 실패 시 직전 성공의 잘림 고지를 함께 비운다 — 오류 옆에 낡은 "일부 잘림" 이 남으면
-      // 인접 거짓 표면이 된다(5-b 경고-1, INV-4).
-      setTruncatedLabel(null);
-      setExportError('내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요.');
-      return;
-    }
-    setExportError(null);
-    const summary = resolveExportSummary(data);
-    setTruncatedLabel(summary.truncatedLabel);
+    if (exportInFlightRef.current) return;
+    exportInFlightRef.current = true;
+    try {
+      // refetch 는 실패해도 throw 하지 않고 { data, error } 를 resolve 한다(react-query) — data 가
+      // 없으면 조용히 삼키지 않고 인라인 오류로 표면화한다(INV-4).
+      const { data } = await exportQuery.refetch();
+      if (!data) {
+        // 실패 시 직전 성공의 잘림 고지를 함께 비운다 — 오류 옆에 낡은 "일부 잘림" 이 남으면
+        // 인접 거짓 표면이 된다(5-b 경고-1, INV-4).
+        setTruncatedLabel(null);
+        setExportError(
+          '내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요.'
+        );
+        return;
+      }
+      setExportError(null);
+      // 조회는 성공했으니 잘림 고지는 공유가 실패해도 남긴다(사실이다).
+      setTruncatedLabel(resolveExportSummary(data).truncatedLabel);
 
-    const parts = [`TripPilot 내보내기 (${summary.sectionCount}개 섹션)`];
-    if (summary.truncatedLabel) parts.push(summary.truncatedLabel);
-    parts.push(JSON.stringify(data));
-    await Share.share({ message: parts.join('\n\n') });
+      const { status } = await shareExportFile(data);
+      if (status === 'unavailable') {
+        setExportError(
+          '이 앱 버전에서는 파일로 내보낼 수 없어요. 앱을 업데이트해 주세요.'
+        );
+      } else if (status === 'failed') {
+        setExportError('내보내기 파일을 만들지 못했어요. 다시 시도해 주세요.');
+      }
+    } finally {
+      exportInFlightRef.current = false;
+    }
   };
 
   // 로그아웃(TRIP-938·1034): 토큰 삭제 → 게이트가 LOGIN 을 공개할 때까지 대기 → 이전 계정 캐시 비우기 →

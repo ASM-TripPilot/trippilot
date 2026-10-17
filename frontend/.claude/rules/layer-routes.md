@@ -15,8 +15,8 @@ paths:
 | `app/_dev/preview.tsx` | **개발 전용 정적 프리뷰** — 네트워크 없이 시각 상태 전환. 진입은 딥링크 `trippilot://_dev/preview?state=<키>` 하나뿐. 키 목록의 정본은 `PREVIEW_STATES`다 — 키 개수 가드는 없고, 스모크(`src/__tests__/devPreviewReleaseGate.test.tsx`)가 키 중복 0·없는 키 splash 폴백만 본다(TRIP-1145). 계약: ① `useLocalSearchParams`를 지연 초기화자로 **최초 마운트 1회만** 읽는다 — 이미 열린 프리뷰에서 딥링크만 바꾸면 전환되지 않으니 **키마다 앱을 재기동**한다(실측 오캡처 있음). 부재·오타 키는 splash 폴백. ② 렌더하는 화면은 `@/shared/api` 값 import 0인 순수 뷰여야 한다 — 컨테이너를 import하면 네트워크 계층을 전이 로드한다(스모크의 지뢰 목이 잡는다). ③ 밴드 2단 UI는 비선택 밴드를 `display:'none'`이 아니라 `{width:0,height:0,overflow:'hidden'}`로 **시각적으로만** 접는다(show-not-mount — RNTL이 findable에서 빼는 것은 `display:none`·`aria-hidden`뿐이라 다른 밴드 칩을 누르는 테스트가 산다). ④ `@gorhom/bottom-sheet` 통과형 목 계열 키는 실제 개폐·딤을 못 보고, `Tabs` 밖 단독 렌더라 탭바 오버레이도 검증 못 한다. ⑤ `_dev/preview` 라우트 파일은 릴리스 번들에도 들어가지만, 운영 번들(`__DEV__ === false`)에서 진입하면 프리뷰를 그리지 않고 홈(`/`)으로 한 번 리다이렉트한다(TRIP-939 — `src/__tests__/devPreviewReleaseGate.test.tsx`가 잠근다). `__DEV__`는 렌더 안에서 읽는다(모듈 상수로 굳히면 테스트가 운영 분기를 못 탄다). `require`된 픽스처 에셋은 여전히 무조건 번들에 실린다(`CREDITS.md`). |
 | `app/(auth)/_layout.tsx` | 미인증 스택 |
 | `app/(auth)/login.tsx` | 소셜 로그인 화면 진입점 |
-| `app/(onboarding)/_layout.tsx` | 온보딩 스택 + **완료자만 홈으로 방어** — ⚠️ 진행 상태 훅이 스텁이라 완료자 방어는 현재 미도달(TRIP-1142 3-a 확인, 훅이 실데이터가 되기 전엔 이 분기가 실행되지 않는다) |
-| `app/(onboarding)/index.tsx` | **진입 단계 리다이렉트** (미완 → terms) |
+| `app/(onboarding)/_layout.tsx` | 온보딩 `<Stack>`만 — 진행 판정은 TRIP-1421에서 뗐다(완료자 방어는 루트 게이트 몫) |
+| `app/(onboarding)/index.tsx` | `OnboardingEntryPage`를 그리는 얇은 래퍼 — 서버 GET 3개로 남은 첫 단계(terms→nickname→location→pref2)에 Redirect (TRIP-1421) |
 | `app/(onboarding)/terms.tsx` | 약관 라우트 — 컨테이너를 꽂는 얇은 래퍼 |
 | `app/(onboarding)/nickname.tsx` | 닉네임 라우트 — 얇은 래퍼 |
 | `app/(onboarding)/location.tsx` | c08 위치 권한 프리프롬프트 라우트 — `LocationPage` 얇은 래퍼. 체인상 nickname과 push 사이 |
