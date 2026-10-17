@@ -437,12 +437,13 @@
 
 ## src/features/itinerary/
 - `src/features/itinerary/index.ts`  →  isGenerationRunning · useGenerationBusy
-- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · resolveUnplacedNames · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
+- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · placeAddSubtitle · resolveUnplacedNames · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DRAFT_POLL_SLOW_INTERVAL_MS · DRAFT_POLL_FAST_COUNT · pollIntervalMs · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · GenerationGaugeFold · FoldedGenerationGaugeCell · foldGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveShortfallNotice · resolveDraftView
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · fixedTimeLabel · buildMustVisitPins · resolveMustVisitListView
+- `src/features/itinerary/model/placeAddSubtitle.ts`  →  PlaceAddSubtitleInput · PlaceAddSubtitle · placeAddSubtitle
 - `src/features/itinerary/model/planMapCenter.ts`  →  resolvePlanMapCenter
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
 - `src/features/itinerary/model/slotEmptyFace.ts`  →  SlotEmptyFace · ALL_IN_ITINERARY_TITLE · ALL_IN_ITINERARY_HINT · resolveSlotEmptyFace
@@ -1758,4 +1759,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1110개 파일
+합계 1111개 파일
