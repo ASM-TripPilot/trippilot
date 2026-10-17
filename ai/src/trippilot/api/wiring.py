@@ -2439,12 +2439,18 @@ class WiredItineraryOrchestrator:
             weekday = request.target_date.weekday()
             ok = [p for p in pool.pois if p.poi_id not in gone and p.category is not PoiCategory.STAY
                   and composition.hours_label(p, weekday) is not None]
+            ok_ids = {q.poi_id for q in ok}
             ranked = list(planb_rank or planb.ranked_poi_ids)
-            fill = [*(p for p in ranked if p in {q.poi_id for q in ok}),
+            # 반경 밖에서 집은 곳이 있으면 수를 정한 종류는 **그 둘레 후보가 먼저**다 — 구성이 기준점 근처 카페를
+            # 고르면 집은 곳을 다 보고 38km 를 되돌아와 밤에 그 카페에 갔다(운영 2026-10-15: 성산 일정 뒤
+            # 19:58 제주시 카페, 성산 1.0km 에 카페가 있었다). `nl_near` 는 집은 곳에서 가까운 순이다.
+            near_first = [p for p in nl_near if p in ok_ids and index[p].category in dict(nl.counts)]
+            fill = [*near_first, *(p for p in ranked if p in ok_ids),
                     *(q.poi_id for q in sorted(ok, key=lambda q: haversine_km(anchor, q.coord)))]
             before = len(composed)
             composed, short = nl_verify.apply_counts(
-                composed, only=nl.only, counts=nl.counts,
+                (*(p for p in composed if p in nl_ids), *near_first, *composed),
+                only=nl.only, counts=nl.counts,
                 category_of={p.poi_id: p.category for p in pool.pois},
                 fill=fill, keep=nl_ids)
             notes.append(f"nl_category_applied: {before}->{len(composed)}")
