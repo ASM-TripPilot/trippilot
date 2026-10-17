@@ -48,6 +48,16 @@ jest.mock('@/shared/api/generated/places/places', () => ({
     refetch: () => {},
   }),
 }));
+// TRIP-1432 — 여행 없는 홈 장소 레인은 서비스 지역 3곳 병렬 조회 훅(useQuery 직접)을 문다. 빈 목록 무해 스텁.
+jest.mock('@/features/explore/model/useMultiRegionPlaces', () => ({
+  useMultiRegionPlaces: () => ({
+    items: [],
+    degraded: false,
+    isPending: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 // TRIP-695 — (tabs)/index.tsx 가 useSavedStays().savedCount 를 물게 되면서 SC-1 이 QueryClient
 // 부재로 크래시한다 — 저장 숙소 0(배지 미표시)로 목킹해 무해 스텁만 둔다(위 useGetTrips·
 // useSavedPlaces 스텁과 동일 계열, 단언 무변경).

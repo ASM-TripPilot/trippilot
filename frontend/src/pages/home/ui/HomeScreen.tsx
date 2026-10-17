@@ -213,12 +213,14 @@ function TripsLoadError({
 // 무관하게 Image 를 무조건 렌더한다 — jest 에선 uri 가 null(사진 없는 카드)이지만 Image 엘리먼트
 // 자체는 그려져 AC-5 렌더 계약을 만족한다. TRIP-696 이후 두 캐러셀 모두 showDots={false}로 넘겨
 // 기본 true(내부 3-dot) 경로는 미소비다 — 리팩토링(5-c) 정리 후보.
+// TRIP-1432 — 카드는 서울·부산·제주 도시 카드다. 도시 코드(regionCode)가 있으면 콜백 유무와 무관하게
+// 구조로 버튼이고(버튼-집합 테스트는 콜백 없이 렌더), press 는 그 코드로 onPressCity 를 부른다.
+// 코드를 붙이는 함수는 memo 안쪽에서 만든다 — 바깥에서 카드마다 새 함수를 넘기면 memo 가 깨진다.
 function MagazineHeroImpl({
   hero,
   testID = 'home-magazine-hero',
   showDots = true,
-  asButton = false,
-  onPress,
+  onPressCity,
   priority = 'low',
 }: {
   hero: HomeMagazineHero;
@@ -226,19 +228,16 @@ function MagazineHeroImpl({
   priority?: 'high' | 'low';
   testID?: string;
   showDots?: boolean;
-  // TRIP-700 — discovery 캐러셀 page0 만 a02 매거진 목록으로 가는 배선 CTA. TRIP-935 R1 — 운영
-  // 라우트가 콜백을 안 넘겨 진입을 막으므로, page0 도 onPressMagazine 이 있을 때만 asButton 이다.
-  // page1~4 슬라이드·planning/postTrip 슬라이드는 asButton 기본 false 라 비버튼 유지(집합 초과 방지).
-  asButton?: boolean;
-  onPress?: () => void;
+  onPressCity?: (regionCode: string) => void;
 }): ReactElement {
   const rootClassName = 'h-[470px] w-full overflow-hidden';
+  const regionCode = hero.regionCode;
   const content = (
     <>
-      {/* 사진 자리 — 토큰색 tint 위에 생성 사진(스크림 아래), uri 없으면 tint 노출 */}
+      {/* 그림 자리 — 토큰색 tint 위에 번들 도시 그림(스크림 아래), 그림 없으면 tint 노출 */}
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
-        source={hero.imageUrl ? { uri: hero.imageUrl } : undefined}
+        source={hero.coverSource ?? undefined}
         contentFit="cover"
         cachePolicy="memory-disk"
         priority={priority}
@@ -293,11 +292,11 @@ function MagazineHeroImpl({
       </View>
     </>
   );
-  return asButton ? (
+  return regionCode !== undefined ? (
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={() => onPressCity?.(regionCode)}
       className={rootClassName}
     >
       {content}
@@ -313,17 +312,16 @@ function MagazineHeroImpl({
 // 막는다. props(hero·testID·onPress…)가 같으면 bail-out, 하나라도 바뀌면 다시 그린다(얕은 비교).
 const MagazineHero = memo(MagazineHeroImpl);
 
-// ── discovery 히어로 캐러셀(TRIP-694 · 5페이지 페이징) ─────────────────────
-// discovery 얼굴의 단일 MagazineHero 를 5장 페이징 캐러셀로 바꾼다. 페이지 래퍼는 N당 정확히
-// 1노드(home-hero-page-N), page0 안의 MagazineHero 만 home-magazine-hero(단일성 유지), 도트는
-// 캐러셀이 고정 오버레이 1벌(home-hero-dot-N)로 소유한다. 실 스와이프·페이지 전환·활성 도트
-// 하이라이트는 jest 원리적 사각(6-b 실기) — 구조(페이지 5·도트 5)만 잠긴다.
+// ── discovery 히어로 캐러셀(TRIP-694 페이징 · TRIP-1432 도시 카드 3장) ─────────────
+// 히어로 데이터 한 장 = 한 페이지. 페이지 래퍼는 N당 정확히 1노드(home-hero-page-N), page0 안의
+// MagazineHero 만 home-magazine-hero(단일성 유지), 도트는 캐러셀이 고정 오버레이 1벌(home-hero-dot-N)로
+// 소유한다. 실 스와이프·페이지 전환·활성 도트 하이라이트는 jest 원리적 사각(6-b 실기) — 구조만 잠긴다.
 function DiscoveryHeroCarousel({
   heroes,
-  onPressMagazine,
+  onPressHeroCity,
 }: {
   heroes: readonly HomeMagazineHero[];
-  onPressMagazine?: () => void;
+  onPressHeroCity?: (regionCode: string) => void;
 }): ReactElement {
   const { width } = useWindowDimensions();
   const [page, setPage] = useState(0);
@@ -344,8 +342,7 @@ function DiscoveryHeroCarousel({
               testID={i === 0 ? 'home-magazine-hero' : `home-hero-slide-${i}`}
               showDots={false}
               priority={i === 0 ? 'high' : 'low'}
-              asButton={i === 0 && onPressMagazine !== undefined}
-              onPress={i === 0 ? onPressMagazine : undefined}
+              onPressCity={onPressHeroCity}
             />
           </View>
         ))}
@@ -702,13 +699,12 @@ function SpotsSection({
 // 카드 본체(home-trip-hero)와 알약(home-trip-hero-cta)이 같은 onPress 를 공유하고 둘 다
 // role="button"(콜백 미주입 렌더의 버튼-집합 테스트가 구조적 role 을 요구, ★D4). 중첩 Pressable 이라
 // 알약 press 는 알약에서 멈춘다.
+// 여행 지역 그림이 없으면 tint 그대로 — 도시 카드 그림을 대신 깔지 않는다(TRIP-1432 Q4, 강릉 여행에 서울 그림 금지).
 function IntegratedTripHero({
   trip,
-  imageUrl,
   onPress,
 }: {
   trip: TripHeroData;
-  imageUrl?: string | null;
   onPress?: () => void;
 }): ReactElement {
   return (
@@ -721,7 +717,7 @@ function IntegratedTripHero({
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
         testID="home-trip-hero-cover"
-        source={trip.coverSource ?? (imageUrl ? { uri: imageUrl } : undefined)}
+        source={trip.coverSource ?? undefined}
         contentFit="cover"
         cachePolicy="memory-disk"
         priority="high"
@@ -1021,7 +1017,7 @@ function DiscoveryBody({
   tripsError,
   onPressSpotsMore,
   onPressSearch,
-  onPressMagazine,
+  onPressHeroCity,
   onPressBell,
 }: {
   hero: readonly HomeMagazineHero[];
@@ -1031,7 +1027,7 @@ function DiscoveryBody({
   tripsError?: HomeScreenProps['tripsError'];
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
-  onPressMagazine?: () => void;
+  onPressHeroCity?: (regionCode: string) => void;
   onPressBell?: () => void;
 }): ReactElement {
   return (
@@ -1057,7 +1053,7 @@ function DiscoveryBody({
       ) : (
         <DiscoveryHeroCarousel
           heroes={hero}
-          onPressMagazine={onPressMagazine}
+          onPressHeroCity={onPressHeroCity}
         />
       )}
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
@@ -1072,10 +1068,10 @@ function DiscoveryBody({
   );
 }
 
-// ── planning 통합 히어로 캐러셀(TRIP-696 · 5페이지) ──────────────────────────
+// ── planning 통합 히어로 캐러셀(TRIP-696 · TRIP-1432 여행 카드 + 도시 카드) ──────────────
 // 구 2페이지 HeroCarousel(TripHero 카드 ↔ Magazine·2도트)을 폐기하고 discovery 캐러셀
-// (DiscoveryHeroCarousel)과 동형 5페이지로 통일한다: page0 = 통합 트립 히어로, page1~4 = 매거진
-// 히어로 4장(hero[0..3]). 페이지 수의 진짜 앵커는 home-hero-page-N 컨테이너다 — 도트는 정적
+// (DiscoveryHeroCarousel)과 동형으로 통일한다: page0 = 통합 트립 히어로, page1~ = discovery 와 같은
+// 도시 카드(hero 전부, 같은 동작). 페이지 수의 진짜 앵커는 home-hero-page-N 컨테이너다 — 도트는 정적
 // View 나열이라 위조 가능(traps-home)하므로 도트 오버레이는 **실제 페이지 수에서 파생**해 1벌만
 // 그린다. 매거진 페이지 testID 는 home-hero-slide-N(page0 만 home-trip-hero — home-magazine-hero
 // 다중매치 회피, ★D2). 실 스와이프·활성 도트 하이라이트는 jest 원리적 사각(6-b 실기).
@@ -1083,15 +1079,16 @@ function PlanningHeroCarousel({
   trip,
   heroes,
   onPressTripCta,
+  onPressHeroCity,
 }: {
   trip: TripHeroData;
   heroes: readonly HomeMagazineHero[];
   onPressTripCta?: () => void;
+  onPressHeroCity?: (regionCode: string) => void;
 }): ReactElement {
   const { width } = useWindowDimensions();
   const [page, setPage] = useState(0);
-  const magazineSlides = heroes.slice(0, 4); // page1~4 = hero[0..3]
-  const pageCount = 1 + magazineSlides.length; // page0(트립) + 매거진 4 = 5
+  const pageCount = 1 + heroes.length; // page0(트립) + 도시 카드
   return (
     <View className="w-full">
       <ScrollView
@@ -1103,18 +1100,15 @@ function PlanningHeroCarousel({
         }
       >
         <View testID="home-hero-page-0" style={{ width }}>
-          <IntegratedTripHero
-            trip={trip}
-            imageUrl={heroes[0]?.imageUrl}
-            onPress={onPressTripCta}
-          />
+          <IntegratedTripHero trip={trip} onPress={onPressTripCta} />
         </View>
-        {magazineSlides.map((hero, i) => (
+        {heroes.map((hero, i) => (
           <View key={i} testID={`home-hero-page-${i + 1}`} style={{ width }}>
             <MagazineHero
               hero={hero}
               testID={`home-hero-slide-${i + 1}`}
               showDots={false}
+              onPressCity={onPressHeroCity}
             />
           </View>
         ))}
@@ -1136,7 +1130,7 @@ function PlanningHeroCarousel({
 }
 
 // ── planning 얼굴(계획 중 · 여행 중 · TRIP-696 풀블리드 통합 히어로 재작성) ────────────────
-// 인사 2~3줄(이름? + 타이틀 + 서브?) · 통합 히어로 5페이지 캐러셀(page0 트립·page1~4 매거진) ·
+// 인사 2~3줄(이름? + 타이틀 + 서브?) · 통합 히어로 캐러셀(page0 트립·page1~3 도시 카드) ·
 // 본문은 컬렉션 1섹션(계획 중), phase.showSpots 면 "지금 뜨는 장소"까지 2섹션(TRIP-697 여행 중).
 // SpotsSection 정의는 discovery 도 써서 공유한다. 인사 이름줄(greetName)은 여행 중 픽스처 전용
 // (라이브 resolveHomePhase 는 이름 소스가 없어 미주입 → 이름줄 없이 타이틀만, 맹점③).
@@ -1149,6 +1143,7 @@ function PlanningBody({
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
+  onPressHeroCity,
   onPressBell,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
@@ -1159,6 +1154,7 @@ function PlanningBody({
   onPressSpotsMore?: () => void;
   onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
+  onPressHeroCity?: (regionCode: string) => void;
   onPressBell?: () => void;
 }): ReactElement {
   return (
@@ -1174,6 +1170,7 @@ function PlanningBody({
         trip={phase.trip}
         heroes={hero}
         onPressTripCta={onPressTripHeroCta}
+        onPressHeroCity={onPressHeroCity}
       />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionsSection
@@ -1194,8 +1191,8 @@ function PlanningBody({
 }
 
 // ── postTrip 얼굴(다녀옴 · TRIP-698 통합 히어로 재작성) ───────────────────
-// 인사 2줄(잘 다녀오셨어요 + 서브) · 통합 히어로 5페이지 캐러셀(page0 트립="여행 완료"·page1~4
-// 매거진, 도트5 — planning 과 부품 공유) · 섹션 순서 반전(지난 여행 가로 사진 카드 → "다음엔 여기
+// 인사 2줄(잘 다녀오셨어요 + 서브) · 통합 히어로 캐러셀(page0 트립="여행 완료"·page1~3
+// 도시 카드 — planning 과 부품 공유) · 섹션 순서 반전(지난 여행 가로 사진 카드 → "다음엔 여기
 // 어때요" 추천 스트립). 구 회색 회고 카드(MiniMapCard)·공유행은 제거됐다(01b). 회고 CTA 콜백은
 // onPressTripHeroCta 재사용(라이브 미도달이라 프리뷰에선 undefined).
 function PostTripBody({
@@ -1206,6 +1203,7 @@ function PostTripBody({
   onPressPastTripsMore,
   onPressTripHeroCta,
   onPressSearch,
+  onPressHeroCity,
   onPressBell,
 }: {
   phase: Extract<HomePhase, { kind: 'postTrip' }>;
@@ -1215,6 +1213,7 @@ function PostTripBody({
   onPressPastTripsMore?: () => void;
   onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
+  onPressHeroCity?: (regionCode: string) => void;
   onPressBell?: () => void;
 }): ReactElement {
   return (
@@ -1229,6 +1228,7 @@ function PostTripBody({
         trip={phase.trip}
         heroes={hero}
         onPressTripCta={onPressTripHeroCta}
+        onPressHeroCity={onPressHeroCity}
       />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         {/* 라이브는 지난 여행이 없을 수 있다 — 빈 섹션 헤더만 남기지 않는다(TRIP-1369). */}
@@ -1268,7 +1268,7 @@ function PhaseBody({
   onPressPastTripsMore,
   onPressTripHeroCta,
   onPressSearch,
-  onPressMagazine,
+  onPressHeroCity,
   onPressBell,
 }: HomeScreenProps): ReactElement {
   if (phase === undefined || phase.kind === 'discovery') {
@@ -1281,7 +1281,7 @@ function PhaseBody({
         tripsError={tripsError}
         onPressSpotsMore={onPressSpotsMore}
         onPressSearch={onPressSearch}
-        onPressMagazine={onPressMagazine}
+        onPressHeroCity={onPressHeroCity}
         onPressBell={onPressBell}
       />
     );
@@ -1298,6 +1298,7 @@ function PhaseBody({
           onPressSpotsMore={onPressSpotsMore}
           onPressTripHeroCta={onPressTripHeroCta}
           onPressSearch={onPressSearch}
+          onPressHeroCity={onPressHeroCity}
           onPressBell={onPressBell}
         />
       );
@@ -1311,6 +1312,7 @@ function PhaseBody({
           onPressPastTripsMore={onPressPastTripsMore}
           onPressTripHeroCta={onPressTripHeroCta}
           onPressSearch={onPressSearch}
+          onPressHeroCity={onPressHeroCity}
           onPressBell={onPressBell}
         />
       );
@@ -1331,7 +1333,7 @@ export function HomeScreen({
   onPressPastTripsMore,
   onPressTripHeroCta,
   onPressSearch,
-  onPressMagazine,
+  onPressHeroCity,
   onPressBell,
   savedPlacesCount,
   savedStaysCount,
@@ -1359,7 +1361,7 @@ export function HomeScreen({
             onPressPastTripsMore={onPressPastTripsMore}
             onPressTripHeroCta={onPressTripHeroCta}
             onPressSearch={onPressSearch}
-            onPressMagazine={onPressMagazine}
+            onPressHeroCity={onPressHeroCity}
             onPressBell={onPressBell}
           />
         </ScrollView>

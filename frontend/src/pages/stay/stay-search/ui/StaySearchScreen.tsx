@@ -104,6 +104,9 @@ export interface StaySearchScreenProps {
   /** 적용된 가격대(TRIP-989 E) — `all`·미지정이 아니면 가격대 칩이 그 버킷 이름·선택됨·연핑크가
    * 된다. 필터링 자체는 페이지 몫(화면은 받은 `items`를 그린다). */
   priceBucket?: PriceBucketId;
+  /** 가격대 칩을 그릴지(TRIP-1429) — 판정(가격 있는 숙소가 있나)은 페이지 몫이고 화면은 받은 값대로 뺀다.
+   * 미지정 = 그린다(기존 호출·화면 단위 테스트가 칩을 누른다). */
+  showPriceFilter?: boolean;
   /**
    * ✦ AI 도우미 FAB 슬롯(TRIP-1321) — page 가 조립해 넣고, 시트가 열린 동안은 넣지 않는다(BR-U8-53).
    * 있으면 2단 FAB 위(바닥 220)에 뜨고 목록 끝 여백을 ✦ 윗변(276)까지 늘린다.
@@ -242,6 +245,7 @@ function ListHeader({
   showCount,
   activeFilterCount,
   priceBucket,
+  showPriceFilter,
   onPressFilter,
 }: {
   region: string;
@@ -249,6 +253,7 @@ function ListHeader({
   showCount: boolean;
   activeFilterCount?: number;
   priceBucket?: PriceBucketId;
+  showPriceFilter: boolean;
   onPressFilter?: (axis: 'price' | 'region' | 'more') => void;
 }): ReactElement {
   // 가격대가 걸리면 칩 라벨을 시트와 같은 출처(PRICE_BUCKETS)의 버킷 이름으로 바꾼다(01b Q2).
@@ -265,7 +270,10 @@ function ListHeader({
         {region} · 날짜 미정{showCount ? ` · ${count}곳` : ''}
       </Text>
       <View className="flex-row gap-sm">
-        {FILTER_CHIPS.map(({ axis, label }) => (
+        {(showPriceFilter
+          ? FILTER_CHIPS
+          : FILTER_CHIPS.filter(({ axis }) => axis !== 'price')
+        ).map(({ axis, label }) => (
           <FilterChip
             key={axis}
             axis={axis}
@@ -564,6 +572,7 @@ export function StaySearchScreen({
   nameQuery,
   onChangeNameQuery,
   priceBucket,
+  showPriceFilter = true,
   assistantFab,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
@@ -620,6 +629,7 @@ export function StaySearchScreen({
                 showCount={showCount}
                 activeFilterCount={activeFilterCount}
                 priceBucket={priceBucket}
+                showPriceFilter={showPriceFilter}
                 onPressFilter={onPressFilter}
               />
               {degraded ? (

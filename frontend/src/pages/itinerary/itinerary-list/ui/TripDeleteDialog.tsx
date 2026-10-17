@@ -13,10 +13,13 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
  */
 export function TripDeleteDialog({
   failed,
+  confirmed = false,
   onCancel,
   onConfirm,
 }: {
   failed: boolean;
+  /** TRIP-1441 · 지울 여행이 확정 일정이면 본문을 확정 기준으로 가른다(작성중 문구는 Figma 원문 그대로). */
+  confirmed?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }): ReactElement {
@@ -27,7 +30,11 @@ export function TripDeleteDialog({
       title="이 여행을 삭제할까요?"
       // Figma 는 '지워지고' 뒤 강제 줄바꿈이지만 본문은 한 문자열 계약(완전 일치) — 어절 단위 줄바꿈으로
       // '요.' 한 글자 고아 줄만 막는다.
-      description="작성 중인 일정도 함께 지워지고 되돌릴 수 없어요."
+      description={
+        confirmed
+          ? '확정한 일정과 예정 알림도 함께 지워지고 되돌릴 수 없어요.'
+          : '작성 중인 일정도 함께 지워지고 되돌릴 수 없어요.'
+      }
       hangulBreak
       errorText={failed ? '삭제하지 못했어요. 다시 시도해 주세요.' : undefined}
       errorTestID="my-trip-delete-error"

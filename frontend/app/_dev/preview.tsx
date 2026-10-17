@@ -1480,7 +1480,7 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
   },
 ];
 
-// h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음) 순서, Figma 4682:2573.
+// h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음 — 지난 여행 가정) 순서, Figma 4682:2573. TRIP-1441 · 확정이어도 시작 전(upcoming)이면 ⋯ 가 열린다(실앱 판정은 TripCardContainer).
 // TRIP-1271 · `generating` — 생성 중 '제주 여행'에도 ⋯ 를 연다(결정 1=A, 세션이 돌아도 작성중이면 삭제 가능).
 function renderH06DeleteList({
   menuOpen,
@@ -3150,6 +3150,28 @@ export const PREVIEW_STATES: PreviewState[] = [
         nameQuery=""
         onChangeNameQuery={noop}
         savedKeys={['AGODA:s3']}
+        onToggleSave={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  // TRIP-1429 — 가격 있는 숙소가 하나도 없는 목록이면 [가격대] 칩이 빠진다(판정은 page, 화면은 값만).
+  {
+    key: 'stay-search-no-price',
+    band: 'e',
+    label: 'e02 · 검색 결과(가격 미확인뿐)',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={STAY_SEARCH_PREVIEW_ITEMS.map((item) => ({
+          ...item,
+          price: null,
+        }))}
+        showPriceFilter={false}
+        nameQuery=""
+        onChangeNameQuery={noop}
         onToggleSave={noop}
         onPressSaved={noop}
         onPressRegister={noop}
@@ -7106,6 +7128,29 @@ export const PREVIEW_STATES: PreviewState[] = [
         savedStays={SAVED_STAY_PREVIEW_CARDS}
         face="results"
         onPressCard={noop}
+        onPressHeart={noop}
+        onPressRegister={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // TRIP-1429 — 하트 해제가 409(거점으로 쓰는 숙소)로 막혀 되돌아온 얼굴. 배너 자리·줄바꿈은 jest 사각.
+  {
+    key: 'saved-stays-remove-error',
+    band: 'e',
+    label: 'e04 · 저장 풀기 실패(거점 숙소)',
+    login: null,
+    render: () => (
+      <SavedStayListScreen
+        savedStays={SAVED_STAY_PREVIEW_CARDS}
+        face="results"
+        removeNotice={{
+          message:
+            '여행의 거점으로 쓰는 숙소라 지울 수 없어요\n여행에서 거점을 먼저 바꿔 주세요',
+          action: null,
+        }}
+        onPressCard={noop}
+        onPressHeart={noop}
         onPressRegister={noop}
         onBack={noop}
       />

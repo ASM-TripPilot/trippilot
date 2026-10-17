@@ -94,6 +94,17 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   }),
 }));
 
+// TRIP-1432 — 전국 d01 장소 레인은 서비스 지역 3곳 병렬 조회 훅(useQuery 직접)을 문다. 빈 목록 무해 스텁.
+jest.mock('@/features/explore/model/useMultiRegionPlaces', () => ({
+  useMultiRegionPlaces: () => ({
+    items: [],
+    degraded: false,
+    isPending: false,
+    isError: false,
+    refetch: jest.fn(),
+  }),
+}));
+
 jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: [] }),
 }));

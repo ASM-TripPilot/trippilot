@@ -23,8 +23,9 @@ export type PriceBucketId = 'all' | 'under-100k' | '100k-200k' | 'over-200k';
 
 export const PRICE_BUCKETS: { id: PriceBucketId; label: string }[] = [
   { id: 'all', label: '전체' },
-  { id: 'under-100k', label: '10만원 이하' },
-  { id: '100k-200k', label: '10만~20만원' },
+  // TRIP-1429 결정 ③ — 이름이 반개구간 판정과 글자로 맞는다(10만·20만이 두 이름에 함께 들지 않는다).
+  { id: 'under-100k', label: '10만원 미만' },
+  { id: '100k-200k', label: '10만~20만원 미만' },
   { id: 'over-200k', label: '20만원 이상' },
 ];
 

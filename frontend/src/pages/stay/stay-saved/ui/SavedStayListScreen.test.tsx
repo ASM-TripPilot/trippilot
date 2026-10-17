@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
+import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import {
   SavedStayListScreen,
   type SavedStayCardVM,
@@ -237,6 +243,65 @@ describe('얼굴·카드·콜라주 (옛 본 파일)', () => {
       // testID 단언은 green이다(5-c 강화, code-critic 경고-1). 그래서 실제 날짜 문자열 부재로도 잠근다.
       expect(screen.queryByTestId('saved-stay-date-ss-1')).toBeNull();
       expect(screen.queryByText('6.10~6.13')).toBeNull();
+    });
+  });
+
+  // TRIP-1429 결정 ⑥ — 하트가 장식이라 눌러도 상세로 갔다(Q-040). 하트는 카드 안의 별도 버튼이 되어 저장을 푼다.
+  // 하트 press 는 카드 press(상세 이동)로 새면 안 되고, 카드의 나머지 자리는 여전히 상세로 간다.
+  describe('S8 · 하트는 저장 풀기 버튼이다 (D1·D4 · UX-05)', () => {
+    it('하트는 "{숙소 이름} 저장" 이름의 선택된 버튼이고, 채운 하트 글리프를 품는다', () => {
+      render(<SavedStayListScreen savedStays={STAYS} face="results" />);
+
+      const heart = screen.getByTestId('saved-stay-heart-ss-1');
+      const name = heartSaveLabel('해운대 오션뷰 호텔');
+      // 이름은 heartSaveLabel 출력과 완전 일치, 담김은 selected 로 읽힌다(색이 아니다).
+      expect(heart).toHaveAccessibleName(name);
+      expect(heart).toBeSelected();
+      // 역할은 버튼이다. getByRole 의 name 은 "자손 중 그 글자·라벨이 있으면" 맞아 하트를 품은 카드도 걸린다 —
+      // 하나로 집지 않고 목록에 하트가 들었는지로 본다.
+      expect(screen.getAllByRole('button', { name })).toContain(heart);
+      expect(
+        within(heart).getByTestId('saved-stay-heart-filled-ss-1')
+      ).toBeOnTheScreen();
+    });
+
+    it('하트를 누르면 onPressHeart 가 그 savedStayId 로 불리고, 카드 이동은 없다', () => {
+      const onPressHeart = jest.fn();
+      const onPressCard = jest.fn();
+      render(
+        <SavedStayListScreen
+          savedStays={STAYS}
+          face="results"
+          onPressHeart={onPressHeart}
+          onPressCard={onPressCard}
+        />
+      );
+
+      // 눌림 이벤트를 함께 넘긴다 — 콜백을 바로 이으면 실기에서 이벤트가 id 자리로 들어간다(traps-stay).
+      fireEvent.press(screen.getByTestId('saved-stay-heart-ss-1'), {
+        nativeEvent: {},
+      });
+
+      expect(onPressHeart.mock.calls).toEqual([['ss-1']]);
+      expect(onPressCard).not.toHaveBeenCalled();
+    });
+
+    it('카드의 나머지 자리를 누르면 상세로 가고, 저장은 풀리지 않는다', () => {
+      const onPressHeart = jest.fn();
+      const onPressCard = jest.fn();
+      render(
+        <SavedStayListScreen
+          savedStays={STAYS}
+          face="results"
+          onPressHeart={onPressHeart}
+          onPressCard={onPressCard}
+        />
+      );
+
+      fireEvent.press(screen.getByTestId('saved-stay-card-ss-1'));
+
+      expect(onPressCard.mock.calls).toEqual([['ss-1']]);
+      expect(onPressHeart).not.toHaveBeenCalled();
     });
   });
 
