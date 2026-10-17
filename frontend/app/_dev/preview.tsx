@@ -4037,7 +4037,12 @@ export const PREVIEW_STATES: PreviewState[] = [
           mapNotice={parts.mapNotice}
           hidePhotoGrid={parts.hidePhotoGrid}
           photos={[]}
-          dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+          // TRIP-1425 · 오늘(2일차) 다음 날인 3일차는 비활성 — 흐린 칩 모양은 여기서 육안(6-b).
+          dayTabs={[
+            { day: 1 },
+            { day: 2, today: true },
+            { day: 3, disabled: true },
+          ]}
           activeDay={2}
           onSelectDay={noop}
           onPressTab={noop}

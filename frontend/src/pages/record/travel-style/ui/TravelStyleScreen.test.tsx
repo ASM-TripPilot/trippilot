@@ -388,3 +388,62 @@ describe('🔴 TRIP-1222 · 통계 타일 표기', () => {
     expect(screen.getByText(/^4곳$/)).toBeOnTheScreen();
   });
 });
+
+// TRIP-1425 · Q-130 — 서버가 descriptor 에 `#` 을 붙여 보내(openapi StylePreview 예시 '#바다') 칩이 "##미식"으로 보였다.
+describe('TRIP-1425 · 칩의 # 은 한 번만 · 진행 문구 한 줄 삭제', () => {
+  function renderInsufficient(descriptors: string[]) {
+    render(
+      <TravelStyleScreen
+        face="insufficient"
+        progress={{ current: 6, required: 10 }}
+        analysis={null}
+        preview={{ descriptors }}
+      />
+    );
+  }
+
+  it.each<[string, string]>([
+    ['#미식', '#미식'],
+    ['한식', '#한식'],
+  ])(
+    'descriptor %j 는 칩에 %j 로 보이고 ## 은 어디에도 없다 (AC-18)',
+    (descriptor, shown) => {
+      renderInsufficient([descriptor]);
+
+      expect(screen.getByText(shown)).toBeOnTheScreen();
+      expect(screen.queryByText(/##/)).toBeNull();
+      expect(
+        screen.getAllByTestId('reflection-style-preview-chip')
+      ).toHaveLength(1);
+    }
+  );
+
+  it('#가 붙은 것·안 붙은 것이 섞여 와도 칩마다 # 하나다 (AC-18 · AC-19)', () => {
+    renderInsufficient(['#미식', '한식', '바다']);
+
+    expect(screen.getByText('#미식')).toBeOnTheScreen();
+    expect(screen.getByText('#한식')).toBeOnTheScreen();
+    expect(screen.getByText('#바다')).toBeOnTheScreen();
+    expect(screen.queryByText(/##/)).toBeNull();
+    expect(screen.getAllByTestId('reflection-style-preview-chip')).toHaveLength(
+      3
+    );
+  });
+
+  it('"10곳을 채우면…" 줄만 없고, 진행 수치·게이지·"정식 아님"은 남는다 (AC-20 · BR-U5-40)', () => {
+    renderInsufficient(['바다']);
+
+    // 지운 줄.
+    expect(screen.queryByText(/채우면/)).toBeNull();
+    // 남는 세 요소 — 현재 N곳/필요 10곳 · 게이지 · 정식 아님(+ 잔여 행).
+    const progress = screen.getByTestId('reflection-style-progress');
+    expect(within(progress).getByText(/부족합니다/)).toBeOnTheScreen();
+    expect(within(progress).getByText(/현재 6곳/)).toBeOnTheScreen();
+    expect(screen.getByText(/필요 10곳/)).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('reflection-style-progress-gauge')
+    ).toBeOnTheScreen();
+    expect(screen.getByText('아직 정식 분석이 아니에요')).toBeOnTheScreen();
+    expect(screen.getByText(/4곳 더 필요/)).toBeOnTheScreen();
+  });
+});
