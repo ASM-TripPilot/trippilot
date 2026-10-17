@@ -11,6 +11,7 @@ import { buildStatePins } from '@/entities/itinerary-slot';
 import { projectSlotProgress } from '@/entities/itinerary-slot';
 import { useLiveItinerary } from '@/features/execution';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
+import { visitedLabelByPoiId } from '@/entities/itinerary-slot';
 import { formatCoPickDayHeader } from '@/features/itinerary';
 import { readFromInstant } from '../model/replanFromInstant';
 import { replanCapDeadlineMs } from '../model/replanPollCap';
@@ -248,6 +249,12 @@ function PlanbSolvingBody({
     doneIndexes.length +
     projected.filter((entry) => entry.state === 'active').length;
 
+  // TRIP-1419 — 완료 행 시각은 허브 완료 카드와 같은 실제 도착 시각. 없으면 계획 시각 + "계획".
+  const visitedLabels = visitedLabelByPoiId(
+    visits.data ?? { visits: [] },
+    day?.date ?? ''
+  );
+
   const slotKeyAt = (index: number) =>
     buildSlotKey(day?.date ?? '', projected[index].slot.poiId);
   // 원 일정에서 바로 앞 슬롯이 완료 행이 아니면 그 앞 커넥터를 뺀다(거리는 바로 앞 슬롯 기준).
@@ -263,8 +270,11 @@ function PlanbSolvingBody({
       tone: 'visited',
       photo: slot.imageUrl ? { uri: slot.imageUrl } : null,
       category: slot.category ?? null,
-      // 서버 검증 시각을 자르기만 한다(INV-2).
-      timeLabel: `${slot.startAt.slice(0, 5)} 방문`,
+      // 서버 값을 읽기만 한다 — 실제 도착(arrivedAt) 또는 검증된 계획 시각(INV-2).
+      timeLabel:
+        visitedLabels[slot.poiId] !== undefined
+          ? `${visitedLabels[slot.poiId]} 방문`
+          : `${slot.startAt.slice(0, 5)} 계획`,
       // 서버 category 는 코드값이라 Figma 의 한글 부제(`마을 · 벽화`)를 만들 재료가 없다.
       categoryLabel: null,
       distanceRange: slot.distanceRange ?? null,

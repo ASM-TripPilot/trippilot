@@ -1,11 +1,9 @@
 import type { VisitCheck, VisitCheckList } from '@/shared/api/index.schemas';
 
-import { doneVisitCheckIdByPoiId, visitedLabelByPoiId } from './visitedLabels';
+import { doneVisitCheckIdByPoiId } from './visitedLabels';
 
-/**
- * TRIP-1220 — 허브 방문 완료 카드의 시각은 기록 j01 과 같은 값(서버 arrivedAt 을 KST 'HH:mm')이다.
- * 실제 시각이 없는 방문은 맵에서 빠져 카드가 "계획" 시각으로 표시한다.
- */
+// TRIP-1419 — 완료 카드 시각(visitedLabelByPoiId)은 재계획 진행 화면과 함께 쓰려고 entities/itinerary-slot/lib 로
+// 옮겼고, 그 테스트도 함께 옮겼다(entities/itinerary-slot/lib/visitedLabels.test.ts).
 const DAY = '2026-08-20';
 const vc = (
   over: Partial<VisitCheck> & Pick<VisitCheck, 'poiId'>
@@ -21,77 +19,6 @@ const vc = (
   ...over,
 });
 const list = (...visits: VisitCheck[]): VisitCheckList => ({ visits });
-
-describe('visitedLabelByPoiId (TRIP-1220)', () => {
-  it('완료한 방문의 arrivedAt(UTC)을 KST HH:mm 으로 — 기록 j01 의 seoulTime 과 같은 값', () => {
-    const result = visitedLabelByPoiId(
-      list(
-        vc({
-          poiId: 'p1',
-          arrivedAt: '2026-08-19T22:04:00Z',
-          completedAt: '2026-08-19T23:00:00Z',
-        })
-      ),
-      DAY
-    );
-
-    expect(result).toEqual({ p1: '07:04' });
-  });
-
-  it('실제 시각이 없으면 키가 없다 — 카드가 계획 시각으로 폴백한다', () => {
-    const result = visitedLabelByPoiId(
-      list(vc({ poiId: 'p1', completedAt: '2026-08-20T01:00:00Z' })),
-      DAY
-    );
-
-    expect(result).toEqual({});
-  });
-
-  it('낙관 레코드(optimistic:)의 자리표시자 시각은 실제 시각이 아니라 담지 않는다', () => {
-    const result = visitedLabelByPoiId(
-      list(
-        vc({
-          poiId: 'p1',
-          visitCheckId: 'optimistic:p1',
-          arrivedAt: '2026-08-20T00:00:00',
-          completedAt: '2026-08-20T00:00:00',
-        })
-      ),
-      DAY
-    );
-
-    expect(result).toEqual({});
-  });
-
-  it('완료 전(도착만)·건너뜀·즉석·다른 날 레코드는 담지 않는다', () => {
-    const result = visitedLabelByPoiId(
-      list(
-        vc({ poiId: 'p1', arrivedAt: '2026-08-20T01:00:00Z' }),
-        vc({
-          poiId: 'p2',
-          arrivedAt: '2026-08-20T01:00:00Z',
-          completedAt: '2026-08-20T02:00:00Z',
-          skippedAt: '2026-08-20T02:00:00Z',
-        }),
-        vc({
-          poiId: 'p3',
-          slotKey: null,
-          arrivedAt: '2026-08-20T01:00:00Z',
-          completedAt: '2026-08-20T02:00:00Z',
-        }),
-        vc({
-          poiId: 'p4',
-          slotKey: '2026-08-21#p4',
-          arrivedAt: '2026-08-20T01:00:00Z',
-          completedAt: '2026-08-20T02:00:00Z',
-        })
-      ),
-      DAY
-    );
-
-    expect(result).toEqual({});
-  });
-});
 
 /**
  * TRIP-1203 — 허브 방문 완료 카드의 [사진]·[메모]가 POST/PUT 할 방문 id. 페이지가 이 맵에 든 poi 의 완료 카드에만

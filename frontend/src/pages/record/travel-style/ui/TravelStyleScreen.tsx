@@ -135,7 +135,10 @@ export function TravelStyleScreen({
             </Text>
 
             {/* 진행 게이지 — 코랄 채움(current/required). */}
-            <View className="h-[8px] w-full overflow-hidden rounded-pill bg-hairline">
+            <View
+              testID="reflection-style-progress-gauge"
+              className="h-[8px] w-full overflow-hidden rounded-pill bg-hairline"
+            >
               <View
                 className="h-full rounded-pill bg-primary"
                 style={{
@@ -165,11 +168,9 @@ export function TravelStyleScreen({
             <Text className="font-noto text-label text-muted">
               아직 정식 분석이 아니에요
             </Text>
-            <Text className="font-noto text-label text-muted-soft">
-              10곳을 채우면 여행 스타일을 분석해 드려요
-            </Text>
 
-            {/* 온보딩 취향 기반 임시 미리보기 칩(BR-U5-40·StylePreview). `#`은 컴포넌트가 붙인다(프레젠테이션). */}
+            {/* 온보딩 취향 기반 임시 미리보기 칩(BR-U5-40·StylePreview). `#`은 컴포넌트가 붙인다(프레젠테이션) —
+                TRIP-1425 · 서버가 이미 `#미식`으로 보내면 그대로(openapi 예시), 한 문자열이라야 `##`가 안 생긴다. */}
             <View className="flex-row flex-wrap gap-sm pt-[4px]">
               {(preview?.descriptors ?? []).map((descriptor, index) => (
                 <View
@@ -178,7 +179,7 @@ export function TravelStyleScreen({
                   className="rounded-[12px] bg-primary-pale px-[12px] py-[6px]"
                 >
                   <Text className="font-noto-bold text-caption font-bold text-primary">
-                    #{descriptor}
+                    {descriptor.startsWith('#') ? descriptor : `#${descriptor}`}
                   </Text>
                 </View>
               ))}

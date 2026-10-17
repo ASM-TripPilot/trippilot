@@ -1725,3 +1725,62 @@ describe('🔴 TRIP-1363 · 재계획 세션 8분 상한 — 늦어지고 있어
     expect(screen.getByTestId('planb-solving-error')).toBeOnTheScreen();
   });
 });
+
+// TRIP-1419 — 진행 화면 완료 행 시각이 계획(startAt)이었다(QA Q-093: 허브는 "14:07 방문", 여기는 "14:44 방문").
+// 허브 완료 카드와 같은 함수(entities visitedLabelByPoiId — 서버 arrivedAt → KST)로 읽는다. 실제 시각이 없으면(arrivedAt null ·
+// 낙관 레코드) 계획 시각을 "방문"이라 단정하지 않고 허브 완료 카드와 같은 말 "계획"을 붙인다(01b Q2).
+// 실제(14:07) ≠ 계획(14:44)로 일부러 어긋나게 둔다 — 기본 픽스처(P1)는 둘이 같아 이 차이를 못 가른다(02a ★1).
+// 3동작: 준비(계획·방문 기록) → 실행(렌더) → 단언(행 시각 leaf 완전 일치 · 경과 표현 없음).
+describe('🔴 TRIP-1419 · AC-2·AC-4 — 완료 행 시각은 서버 실제 도착이고, 없으면 "{계획} 계획"이다', () => {
+  it('Q1 실측 있는 완료 "14:07 방문" · arrivedAt 없는 완료 "15:30 계획" · 낙관 완료 "16:20 계획" — 관람 중(p4)은 행이 아니다', () => {
+    mockItinerary = {
+      data: {
+        ...ITINERARY,
+        days: [
+          {
+            date: DAY,
+            slots: [
+              slot('p1', '감천문화마을', '14:44:00', null, P1),
+              slot('p2', '광안리 해변', '15:30:00', '1.4km', P2),
+              slot('p3', '부산시립미술관', '16:20:00', '3.2km', P3),
+              slot('p4', '전포 카페거리', '17:00:00', '600m', P4),
+            ],
+          },
+        ],
+      } as unknown as Itinerary,
+      isPending: false,
+    };
+    mockVisitsByDay = {
+      [DAY]: {
+        visits: [
+          // KST 14:07 도착 · 14:50 완료.
+          visit('p1', {
+            arrivedAt: '2026-06-11T05:07:00Z',
+            completedAt: '2026-06-11T05:50:00Z',
+          }),
+          visit('p2', { completedAt: '2026-06-11T06:40:00Z' }),
+          {
+            ...visit('p3', {
+              arrivedAt: '2026-06-11T00:00:00',
+              completedAt: '2026-06-11T00:00:00',
+            }),
+            visitCheckId: 'optimistic:p3',
+          },
+          visit('p4', { arrivedAt: '2026-06-11T07:58:00Z' }),
+        ],
+      } as unknown as VisitCheckList,
+    };
+
+    renderPage();
+
+    const times = screen.getAllByTestId(/^planb-draft-slot-time-/);
+    expect(times).toHaveLength(3);
+    expect(times[0]).toHaveTextContent('14:07 방문');
+    expect(times[1]).toHaveTextContent('15:30 계획');
+    expect(times[2]).toHaveTextContent('16:20 계획');
+    // 체류·경과 시간 없음(INV-3 · BR-U4-37) — 짝 앵커는 위 세 단언.
+    times.forEach((node) =>
+      expect(node).not.toHaveTextContent(/\d+\s*분|\d+\s*시간|소요|경과/)
+    );
+  });
+});

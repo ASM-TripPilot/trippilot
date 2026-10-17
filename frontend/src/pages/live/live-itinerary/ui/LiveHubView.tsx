@@ -116,7 +116,7 @@ export interface LiveHubSlot {
   state: SlotProgressState;
   photos?: ImageSourcePropType[];
   memo?: string | null;
-  /** TRIP-1220 done 전용 — 실제 방문 시각 'HH:mm'. */
+  /** TRIP-1220 done · TRIP-1419 active — 실제 도착 시각 'HH:mm'. */
   visitedLabel?: string | null;
 }
 
@@ -398,6 +398,8 @@ export function LiveHubView({
         overlay={overlay}
         snapPoints={snapPoints}
         initialIndex={initialSnapIndex}
+        // TRIP-1416 · 그날 핀 전부를 시트 중간(55%) 칸 위 띠에 맞춘다(Q-088 — 첫 핀 중심 고정 줌이면 나머지가 시트 뒤).
+        fitPins
         mapCard={
           routeToggle ? (
             <View className="gap-sm">

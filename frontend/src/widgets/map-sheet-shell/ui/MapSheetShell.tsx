@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { useCallback, useContext, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import {
   SafeAreaInsetsContext,
@@ -45,6 +45,10 @@ export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot';
 // 시트를 다시 올릴 수 없다(`closedSnap` 테스트). 기본 진입은 peek(1) — 실 전환은 6-b 실기 몫.
 const CLOSED_HANDLE_HEIGHT = 28;
 const DEFAULT_INDEX = 1;
+// TRIP-1416 · 핀 맞춤에서 위쪽 오버레이 줄(일차 칩·뒤로·허브 알약 줄)이 가리는 높이 예약값(pt) — 세이프에어리어 top 에 더한다.
+// pt-sm 8 + 칩/뒤로 36~40 + 여유. 측정(onLayout)하지 않는다: 허브 알약이 숨으면 높이가 바뀌어 카메라가 처음 맞춤으로 튄다.
+// ponytail: 고정 대략값 — 물방울 핀 머리가 칩 줄 밑으로 숨으면 6-b 실기에서 조정한다.
+const OVERLAY_ROW_RESERVE = 52;
 
 /**
  * 시트 body 리스트 슬롯(TRIP-798 묶음 C 가산) — 주면 셸이 body 를 `<BottomSheetScrollView>` 대신
@@ -124,8 +128,10 @@ export interface MapSheetShellProps<T = unknown> {
   /** 반경 원(TRIP-800 가산, h15) — `<MapView radiusCircle>` 로 흘린다. 미전달=원 없음(기존 소비처
    *  무변경). */
   radiusCircle?: MapViewProps['radiusCircle'];
-  /** 핀 전부 맞추기(TRIP-1076 가산, h07·h08·h11·h14·h16 결과) — `<MapView fitPins>` 로 흘린다.
-   *  미전달=center 카메라(기존 소비처 무변경). 시트가 가리는 아래 영역은 맞춤에 반영하지 않는다. */
+  /** 핀 전부 맞추기(TRIP-1076 가산, h07·h08·h11·h14·h16 결과·i01 허브) — `<MapView fitPins>` 로 흘린다.
+   *  미전달=center 카메라(기존 소비처 무변경). 켜면 시트·오버레이 줄이 안 가린 **보이는 띠**에 맞춘다(TRIP-1416):
+   *  아래 가림 = 스냅 배열의 첫 `'%'` 칸, 위 가림 = 세이프에어리어 top + 오버레이 줄 예약값. 시트가 지금 멈춘 칸은
+   *  쓰지 않으므로 시트를 88% 로 끌어 올리면 핀이 가릴 수 있다(끌 때마다 다시 맞추면 제스처를 되돌린다). */
   fitPins?: boolean;
   /** TRIP-1385 · 경로 그려지기(h14 완성 일정 공개) — `<MapView drawPathOnMount>` 로 흘린다. 미전달=현행. */
   drawPathOnMount?: MapViewProps['drawPathOnMount'];
@@ -202,6 +208,25 @@ export function MapSheetShell<T = unknown>({
     () => [CLOSED_HANDLE_HEIGHT + bottomInset, '45%', '88%'],
     [bottomInset]
   );
+  const sheetSnapPoints = snapPoints ?? defaultSnapPoints;
+  // TRIP-1416 · 핀 맞춤의 보이는 띠. 아래 가림 = 배열의 첫 '%' 칸(진입 칸·지금 멈춘 칸이 아니다 — 시트를 끌 때마다
+  // 카메라가 튀지 않게, 허브가 펼침으로 진입해도 중간 칸 기준). gorhom '%' 는 (화면 − topInset) 기준이라 실제 가림은
+  // 조금 작다 — 보수적이다. 화면 비율은 창 크기로만 정한다(측정 없음). 원시값으로 memo 해 같은 띠면 같은 객체다
+  // (MapView 가 memo 라 새 객체면 시트 칸이 바뀔 때마다 다시 그려진다).
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const firstPercent = sheetSnapPoints.find(
+    (p): p is string => typeof p === 'string' && p.endsWith('%')
+  );
+  const coveredBottom =
+    firstPercent === undefined ? 0 : parseFloat(firstPercent) / 100;
+  const fitBand = useMemo(
+    () => ({
+      top: (topInset + OVERLAY_ROW_RESERVE) / windowHeight,
+      bottom: coveredBottom,
+      aspect: windowHeight / windowWidth,
+    }),
+    [topInset, coveredBottom, windowHeight, windowWidth]
+  );
 
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -221,6 +246,7 @@ export function MapSheetShell<T = unknown>({
               onTapMap={onMapTap}
               radiusCircle={radiusCircle}
               fitPins={fitPins}
+              fitBand={fitBand}
               drawPathOnMount={drawPathOnMount}
               actualRoute={actualRoute}
               onLoadFailed={handleMapLoadFailed}
@@ -254,7 +280,7 @@ export function MapSheetShell<T = unknown>({
           ListHeaderComponent 한 자리에 얹힌다(TRIP-798 묶음 C). 미전달이면 현행 스크롤 경로(6 소비처 무변경). */}
       <BottomSheet
         index={startIndex}
-        snapPoints={snapPoints ?? defaultSnapPoints}
+        snapPoints={sheetSnapPoints}
         // v5 기본 true 는 콘텐츠 높이 칸을 배열에 몰래 끼워 index·onChange 번호가 어긋난다(03b 경고-1).
         enableDynamicSizing={false}
         // 라이브러리 기본값과 같지만 명시한다 — 시트 안 입력(h13 검색)의 키보드 회피 계약(TRIP-990 D9).

@@ -19,13 +19,27 @@ export function isGuideText(text: string): boolean {
   return GUIDE_TEXTS.includes(text.trim());
 }
 
+/** TRIP-1425 · 자리표시자 `{…}`·구분자 `·` `~`·공백을 걷으면 아무것도 안 남는 문장인가(템플릿뿐). */
+export function isTemplateOnly(text: string): boolean {
+  const rest = text.replace(/\{[^{}]*\}/g, '');
+  return rest !== text && rest.replace(/[\s·~]/g, '') === '';
+}
+
 export function fillTemplate(text: string, ctx: TemplateContext): string {
   const known: Record<string, string | undefined> = {
     region: ctx.region,
     start_date: ctx.startDate,
     end_date: ctx.endDate,
   };
-  return text
+  // TRIP-1425 · 하루 회고는 시작=끝=그날 — `X~X` 대신 날짜 하나로 접는다.
+  const folded =
+    ctx.startDate !== undefined && ctx.startDate === ctx.endDate
+      ? text.replace(
+          /\{\s*start_date\s*\}\s*~\s*\{\s*end_date\s*\}/g,
+          '{start_date}'
+        )
+      : text;
+  return folded
     .replace(/\{([^{}]*)\}/g, (_, key: string) => known[key.trim()] ?? '')
     .replace(/\s*[·~]\s*(?=[·~]|$)/g, '') // 값이 빠져 매달린 구분자
     .replace(/^\s*[·~]\s*/, '')

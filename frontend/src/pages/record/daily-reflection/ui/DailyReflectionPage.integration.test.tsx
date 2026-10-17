@@ -23,6 +23,7 @@ import type {
   Trip,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { router } from 'expo-router';
 
@@ -63,6 +64,9 @@ beforeAll(() => {
 });
 
 afterAll(() => server.close());
+
+// TRIP-1425 — 토스트 스토어는 모듈 싱글턴이라 describe 안이 아니라 파일 최상위에서 비운다(toastHarness).
+afterEach(() => resetToast());
 
 describe('생성 — 레코드가 없는 지난 날·오늘은 한 번 만들어 보여준다', () => {
   // TRIP-1068 (옛 DailyReflectionPage.generate.integration.test.tsx)
@@ -1124,7 +1128,9 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
     });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        <QueryClientProvider client={client}>
+          <WithToastHost>{children}</WithToastHost>
+        </QueryClientProvider>
       );
     }
     render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} today={TODAY} />, {
@@ -1267,5 +1273,127 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
 
     await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
     expect(putBodies).toHaveLength(0);
+  });
+  // TRIP-1425 · Q-112 — 입력을 마치면 조용히 저장돼 됐는지 알 수 없었다. PUT 이 나가 성공했을 때만 공용 토스트로 알린다.
+  describe('TRIP-1425 · 한 줄을 실제로 저장했을 때만 "한 줄 메모를 저장했어요"', () => {
+    const TOAST = 'reflection-daily-memo-saved-toast';
+    const COPY = '한 줄 메모를 저장했어요';
+    const TOAST_WAIT = { timeout: 2000 };
+
+    it('한 줄을 바꿔 입력을 마치고 저장이 성공하면 안내가 뜬다 (AC-13)', async () => {
+      // 준비
+      renderPage();
+      const input = await screen.findByTestId('reflection-daily-memo-input');
+      // 앵커 — 저장 전엔 안내가 없다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행
+      fireEvent.changeText(input, '바다가 좋았다');
+      fireEvent(input, 'endEditing');
+
+      // 단언
+      expect(
+        await screen.findByTestId(TOAST, {}, TOAST_WAIT)
+      ).toHaveTextContent(COPY);
+      expect(putBodies).toEqual([{ shortMemo: '바다가 좋았다' }]);
+    });
+
+    it('기록이 적은 날(하단 「확인」) 쓰고 바로 「확인」을 눌러도 저장 뒤 안내가 뜨고 닫힌다 (AC-14)', async () => {
+      // 준비 — 방문 1·사진 0 = data-insufficient(하단 바의 「확인」, 02a ★12).
+      serverItem = {
+        ...BASE_REFLECTION,
+        stats: { ...BASE_REFLECTION.stats, visitCount: 1, photoCount: 0 },
+      };
+      renderPage();
+      const input = await screen.findByTestId('reflection-daily-memo-input');
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행
+      fireEvent.changeText(input, '바다가 좋았다');
+      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+
+      // 단언
+      await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+      expect(
+        await screen.findByTestId(TOAST, {}, TOAST_WAIT)
+      ).toHaveTextContent(COPY);
+      expect(putBodies).toEqual([{ shortMemo: '바다가 좋았다' }]);
+    });
+
+    it('안 바뀐 한 줄은 입력을 마치거나 「확인」을 눌러도 요청·안내가 없다 — 바뀐 글은 뜬다 (AC-15)', async () => {
+      // 준비
+      serverItem = { ...BASE_REFLECTION, shortMemo: '바다가 좋았다' };
+      renderPage();
+      const input = await screen.findByTestId('reflection-daily-memo-input');
+
+      // 실행 ① — 그대로 마침 · 같은 글(앞뒤 공백만 다름)로 마침 · 「확인」.
+      fireEvent(input, 'endEditing');
+      fireEvent.changeText(input, ' 바다가 좋았다 ');
+      fireEvent(input, 'endEditing');
+      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+      await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+      // "안 바뀜"도 Promise 로 끝난다 — 한 바퀴 흘려야 잘못 건 안내가 보인다(02a ★11).
+      await act(async () => {});
+
+      // 단언 ①
+      expect(putBodies).toHaveLength(0);
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ② — 짝: 다른 글(센티널).
+      const again = screen.getByTestId('reflection-daily-memo-input');
+      fireEvent.changeText(again, '노을도 좋았다');
+      fireEvent(again, 'endEditing');
+
+      // 단언 ② — 이번엔 저장되고 안내가 뜬다.
+      expect(
+        await screen.findByTestId(TOAST, {}, TOAST_WAIT)
+      ).toHaveTextContent(COPY);
+      expect(putBodies).toEqual([{ shortMemo: '노을도 좋았다' }]);
+    });
+
+    it('저장이 실패하면 안내는 없고 실패 줄이 남으며 「확인」은 닫지 않는다 (AC-16 · INV-4)', async () => {
+      // 준비
+      putFails = true;
+      renderPage();
+      const input = await screen.findByTestId('reflection-daily-memo-input');
+
+      // 실행
+      fireEvent.changeText(input, '바다가 좋았다');
+      fireEvent(input, 'endEditing');
+      expect(await screen.findByText(FAILED)).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+      await waitFor(() => expect(putBodies).toHaveLength(2));
+      await act(async () => {});
+
+      // 단언
+      expect(screen.getByText(FAILED)).toBeOnTheScreen();
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+      expect(router.back).not.toHaveBeenCalled();
+    });
+
+    it('기분을 고를 때는 안내가 없다 — 한 줄을 저장하면 뜬다 (AC-17)', async () => {
+      // 준비
+      renderPage();
+      await screen.findByTestId('reflection-daily-mood-soso');
+
+      // 실행 ① — 기분만 저장.
+      fireEvent.press(screen.getByTestId('reflection-daily-mood-soso'));
+      await waitFor(() => expect(selected('soso')).toBe(true));
+      await act(async () => {});
+
+      // 단언 ①
+      expect(putBodies).toEqual([{ mood: 'soso' }]);
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ② — 짝: 한 줄 저장.
+      const input = screen.getByTestId('reflection-daily-memo-input');
+      fireEvent.changeText(input, '바다가 좋았다');
+      fireEvent(input, 'endEditing');
+
+      // 단언 ②
+      expect(
+        await screen.findByTestId(TOAST, {}, TOAST_WAIT)
+      ).toHaveTextContent(COPY);
+    });
   });
 });
