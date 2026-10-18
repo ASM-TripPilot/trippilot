@@ -54,6 +54,7 @@ import json
 import logging
 import pathlib
 import os
+import random
 import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -196,15 +197,19 @@ from trippilot.poi_curation.place_fees import load_fee_table
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, base_radius_km, widened_radius_km
 from trippilot.orchestrator import schedule_coordinator as core
 from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
+from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.orchestrator.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
+from trippilot.orchestrator.dialogue_orchestrator import DialogueOrchestrator
 from trippilot.orchestrator.intent_router import IntentRouter
 from trippilot.orchestrator.question_bank import BankEntry, BankVectors
+from trippilot.providers.poi_info import PoiInfoProvider
 from trippilot.ports.llm_port import LlmPort
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
+from trippilot.ports.memory_store_port import MemoryStorePort
 from trippilot.ports.trace_port import TracePort
 from trippilot.ports.travel_port import TravelPort
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
@@ -1711,6 +1716,8 @@ class WiredItineraryOrchestrator:
         request_extractor: ReplanRequestExtractionWorker | None = None,
         existence: object | None = None,  # PlaceExistencePort — 자연어 장소 주장 검증용
         dialogue: DialogueInterpreter | None = None,
+        memory_store: MemoryStorePort | None = None,
+        dialogue_orchestrator: DialogueOrchestrator | None = None,
     ) -> None:
         self._orchestrator = orchestrator
         # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
@@ -1746,6 +1753,10 @@ class WiredItineraryOrchestrator:
         self._vector_store = vector_store
         # U8 도우미 대화 해석(G-U8-4). 미주입이면 경계가 503(미배선)이다.
         self._dialogue = dialogue
+        # 도우미 장기 기억 저장소 — 메모리 경계(DELETE/GET /ai/v1/dialogue/memory)가 읽고 지운다. 미주입이면 그 경계가 503.
+        self._memory_store = memory_store
+        # 도우미 오케스트레이터(assistant-orchestrator) — 있으면 해석 경계가 턴을 AI 안에서 끝낸다(ANSWER). None = 종전 해석 경로.
+        self._dialogue_orchestrator = dialogue_orchestrator
         # 임베딩이 못 잡은 자유 입력(부정문 포함)을 받는 2차 번역(A-3). 미주입 = 1차만.
         self._directive_translator = directive_translator
         # 다시 짜기 — 남은 하루의 방문 목록을 LLM 이 고른다. 미주입 = 종전 재계획(점수 + 어셈블리 선택).
@@ -3539,10 +3550,26 @@ class WiredItineraryOrchestrator:
     def dialogue_interpret(
         self, request: schemas.DialogueInterpretRequest
     ) -> schemas.DialogueInterpretResponse:
-        """U8 도우미 — 발화 해석만(DEC-U8-1). 변환은 `api/dialogue.py`."""
+        """U8 도우미 — 발화 해석(DEC-U8-1), 오케스트레이터가 있으면 한 턴 전체(ANSWER). 변환은 `api/dialogue.py`."""
         if self._dialogue is None:
             raise orchestrator_not_wired()
-        return dialogue_projection.interpret(self._dialogue, request, self._tz)
+        return dialogue_projection.interpret(self._dialogue, request, self._tz,
+                                             orchestrator=self._dialogue_orchestrator, clock=self._clock)
+
+    def dialogue_memory_delete(
+        self, *, session_id: str | None = None, trip_id: str | None = None, account_ref: str | None = None,
+    ) -> schemas.DialogueMemoryDeleteResponse:
+        """장기 기억 파기(BR-AO-10) — 셋 중 정확히 하나. 검사·사영은 `api/dialogue.py`."""
+        if self._memory_store is None:
+            raise orchestrator_not_wired()
+        return dialogue_projection.memory_delete(
+            self._memory_store, session_id=session_id, trip_id=trip_id, account_ref=account_ref)
+
+    def dialogue_memory_export(self, account_ref: str) -> schemas.DialogueMemoryExportResponse:
+        """장기 기억 내보내기(DATA-U8-06) — 사영은 `api/dialogue.py`."""
+        if self._memory_store is None:
+            raise orchestrator_not_wired()
+        return dialogue_projection.memory_export(self._memory_store, account_ref)
 
     def reflection_nudge(
         self, request: schemas.ReflectionNudgeRequest
@@ -3693,6 +3720,10 @@ def build_orchestrator(
     bank: tuple[BankEntry, ...] = (),
     bank_embedding: EmbeddingPort | None = None,
     bank_vectors: BankVectors | None = None,
+    memory_store: MemoryStorePort | None = None,
+    dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다(ANSWER) — env 해석은 main.py
+    shadow_rate: float = 1.0,  # 3단 라우터 섀도 표본율 (DEV 1.0 · 운영 0.2)
+    shadow_rng: random.Random | None = None,  # 테스트 결정론용, None 이면 SystemRandom
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
 
@@ -3733,6 +3764,10 @@ def build_orchestrator(
     # 미주입이면 하버사인 estimator가 포트 역할)
     from trippilot.providers.transit import TransitProvider
     providers[ProviderKind.TRANSIT] = TransitProvider(port=travel)
+    # 입장료 파생 지식 (2026-09-24 결정 — AI 소유). 파일이 없으면 빈 표 = 전 POI '모름'(중립) — 아래 두 소비자가 한 표를 본다.
+    fees = load_fee_table()
+    # 장소 id 배치 조회 Provider (assistant-orchestrator DE §2.9) — 도우미 GET_POI_INFO·날씨 앵커·대안 풀 앵커의 재료. LLM 0회.
+    providers[ProviderKind.POI_INFO] = PoiInfoProvider(poi_db, fees=fees)
     if events is not None:  # 행사 저장소 주입 시에만 등록 (TRIP-421)
         providers[ProviderKind.EVENT] = EventProvider(events)
     explainer = ExplanationWorker(
@@ -3818,7 +3853,7 @@ def build_orchestrator(
         # 입장료 파생 지식 (2026-09-24 결정 — AI 소유). 파일이 없으면 빈 표이고
         # 그때 점수는 종전과 **완전히 같다**(전 POI '모름' → 중립). 즉 데이터가
         # 배포되기 전에도 이 배선이 동작을 안 바꾼다.
-        fees=load_fee_table(),
+        fees=fees,
         # 풀 밖 고정 블록 POI 조회 (TRIP-1177) — 없으면 이동을 0분으로 놓은 해가 나갔다.
         poi_db=poi_db,
     )
@@ -3849,19 +3884,30 @@ def build_orchestrator(
                            else embedding, bank_store, precomputed=bank_vectors)
     bank_index.warm()  # 기동 때 백그라운드 색인 — 첫 해석이 색인 시간을 떠안지 않게
     counted = CountingLlm(llm)
-    dialogue = DialogueInterpreter(
-        IntentRouter(
-            embedding if embedding is not None else UnwiredEmbedding(),
-            bank_store,
-            intent_gateway=GatewayFacade(counted, renderer, IntentGate(), c1_config, trace),
-            paraphrase_gateway=GatewayFacade(counted, renderer, ParaphraseGate(), c1_config, trace),
-            bank_ready=lambda: bank_index.indexed,
-        ),
-        bank_index,
+    router = IntentRouter(
+        embedding if embedding is not None else UnwiredEmbedding(),
+        bank_store,
+        intent_gateway=GatewayFacade(counted, renderer, IntentGate(), c1_config, trace),
+        paraphrase_gateway=GatewayFacade(counted, renderer, ParaphraseGate(), c1_config, trace),
+        bank_ready=lambda: bank_index.indexed,
     )
+    dialogue = DialogueInterpreter(router, bank_index)
+    # 도우미 장기 기억 — DSN 없는 로컬·테스트는 InMemory(프로세스 수명). 운영 Pg 는 main.py 가 넣는다(TRIPPILOT_VECTOR_DB_URL).
+    memory_store = memory_store if memory_store is not None else InMemoryDialogueMemoryStore()
+    # 도우미 오케스트레이터 (assistant-orchestrator FD BLM §3·§9.1) — off(기본) 면 위 해석기 경로 그대로, 되돌리기는 시크릿 한 줄.
+    # 조립 본체는 `api/dialogue.build_dialogue_orchestrator`(BR-AO-13 — 이 파일은 위에서 만든 인스턴스를 건네기만 한다).
+    dialogue_orchestrator = dialogue_projection.build_dialogue_orchestrator(
+        llm=llm, counted=counted, renderer=renderer, c1_config=c1_config, trace=trace,
+        embedding=embedding if embedding is not None else UnwiredEmbedding(), bank_store=bank_store,
+        bank_ready=lambda: bank_index.indexed, bank=bank, confident_intent=router.confident_intent,
+        providers=providers, pool_builder=pool_builder, rag=rag, memory_store=memory_store, clock=clock, tz=tz,
+        shadow_rate=shadow_rate, shadow_rng=shadow_rng,
+    ) if dialogue_orchestrator_enabled else None
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
         dialogue=dialogue,
+        memory_store=memory_store,
+        dialogue_orchestrator=dialogue_orchestrator,
         diversity_jitter=(orchestrator_config or core.OrchestratorConfig()).diversity_jitter,
         info=info,
         pool_builder=pool_builder, rag=rag,
@@ -4051,6 +4097,10 @@ def build_dev_app(
     bank: tuple[BankEntry, ...] = (),
     bank_embedding: EmbeddingPort | None = None,
     bank_vectors: BankVectors | None = None,
+    memory_store: MemoryStorePort | None = None,  # 도우미 장기 기억 스토어 — None 이면 InMemory
+    dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다 — env 해석은 main.py, 기본 off(종전 해석 경로)
+    shadow_rate: float = 1.0,
+    shadow_rng: random.Random | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -4106,5 +4156,9 @@ def build_dev_app(
         bank=bank,
         bank_embedding=bank_embedding,
         bank_vectors=bank_vectors,
+        memory_store=memory_store,
+        dialogue_orchestrator_enabled=dialogue_orchestrator_enabled,
+        shadow_rate=shadow_rate,
+        shadow_rng=shadow_rng,
     )
     return create_app(orchestrator)

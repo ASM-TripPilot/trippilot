@@ -68,7 +68,7 @@ class AssistantSessionServiceTest : StringSpec({
         messages: FakeMessages = FakeMessages(),
         trips: TripFacade = trips(),
         stays: TripBaseStayFacade = stays("서면 호텔", "해운대 호텔"),
-    ) = AssistantSessionService(sessions, messages, TripContextReader(trips, stays), tripList, AssistantProperties(retentionDays = 90), clock)
+    ) = AssistantSessionService(sessions, messages, TripContextReader(trips, stays), tripList, AssistantProperties(retentionDays = 90), FakeDialogueMemory(), clock)
 
     "여행 대화를 열면 컨텍스트 칩과 시작 빠른 답이 온다 — 칩은 첫 숙박일의 숙소를 말한다" {
         val opened = service().open(acc, tripId)

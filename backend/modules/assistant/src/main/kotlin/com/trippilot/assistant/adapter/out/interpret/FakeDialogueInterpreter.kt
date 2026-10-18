@@ -1,12 +1,17 @@
 package com.trippilot.assistant.adapter.out.interpret
 
 import com.trippilot.assistant.application.AssistantProperties
+import com.trippilot.assistant.application.AssistantTemplates
+import com.trippilot.assistant.domain.AnswerKind
 import com.trippilot.assistant.domain.DialogueInterpretPort
 import com.trippilot.assistant.domain.Intent
 import com.trippilot.assistant.domain.IntentFrame
 import com.trippilot.assistant.domain.InterpretOutcome
 import com.trippilot.assistant.domain.InterpretRequest
 import com.trippilot.assistant.domain.Interpretation
+import com.trippilot.assistant.domain.InterpretedAnswer
+import com.trippilot.assistant.domain.InterpretedQuickReply
+import com.trippilot.assistant.domain.QuickReplyAction
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
@@ -19,12 +24,26 @@ import org.springframework.stereotype.Component
  * **말을 알아듣는 척하지 않는다.** 낱말 몇 개를 의도에 맞추는 표일 뿐이고, 표에 없으면 범위 밖이다 —
  * 그럴듯한 해석을 지어내면 기본 모드에서 "되는 것처럼" 보이다가 실 연동에서야 처음 틀린다.
  * LLM 을 쓰지 않으므로 `llmCalls` 는 0 이고, 맥락은 받은 그대로 돌려준다(INV-U8-07).
+ *
+ * 인사말 하나만 상대처럼 **답을 완성한 `ANSWER`** 로 낸다(assistant-orchestrator 1단계) — 로컬 기본 모드·IT 가 새 모양(문장·빠른 답
+ * 발급·프레임 없는 답)을 연습하게. 사실을 지어내지 않는 문장이라 대역에 둘 수 있다.
  */
 @Component
 @ConditionalOnProperty(name = ["trippilot.assistant.interpret.mode"], havingValue = "fake", matchIfMissing = true)
 class FakeDialogueInterpreter : DialogueInterpretPort {
 
     override fun interpret(request: InterpretRequest): Interpretation {
+        if (GREETINGS.any { it in request.utterance }) {
+            return Interpretation(
+                outcome = InterpretOutcome.ANSWER, frames = emptyList(), clarify = null, dialogueContext = request.dialogueContext, llmCalls = 0,
+                answer = InterpretedAnswer(
+                    AnswerKind.TEXT, "안녕하세요! ${AssistantTemplates.CAPABILITIES_LINE}", payload = null,
+                    nextActions = listOf(AssistantTemplates.CAPABILITIES_ACTION),
+                    quickReplies = listOf(InterpretedQuickReply("오늘 날씨", QuickReplyAction.SEND_TEXT, emptyMap())),
+                    footnote = null,
+                ),
+            )
+        }
         val intent = KEYWORDS.firstOrNull { (words, _) -> words.any { it in request.utterance } }?.second ?: Intent.OUT_OF_SCOPE
         return Interpretation(
             outcome = if (intent == Intent.OUT_OF_SCOPE) InterpretOutcome.OUT_OF_SCOPE else InterpretOutcome.FRAME,
@@ -36,6 +55,8 @@ class FakeDialogueInterpreter : DialogueInterpretPort {
     }
 
     private companion object {
+        val GREETINGS = listOf("안녕", "고마워", "고맙")
+
         /** 앞에서부터 맞춘다 — "다시 짜"가 "짜"보다 먼저 걸려야 한다. */
         val KEYWORDS: List<Pair<List<String>, Intent>> = listOf(
             listOf("검토", "점검") to Intent.SHOW_SCHEDULE,

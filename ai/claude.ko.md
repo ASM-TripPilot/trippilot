@@ -52,6 +52,18 @@ AI 는 해석만, 디스패치는 백엔드 `assistant` 모듈(U8 DEC-U8-1). 질
 벡터(`data/intent_question_bank.vectors.json.gz`)로 메모리 스토어에 색인한다(실 DB 적재 없음). 뱅크를 고치면
 `scripts/intent/build_bank_vectors.py` 로 재생성 — 옛 파일은 싣지 않고 원격 색인으로 넘어간다.
 
+> **Orchestrator 갱신 (2026-10-17 — `assistant-orchestrator` FD)**: 이 경계의 호출자는 여전히
+> `POST /ai/v1/dialogue/interpret`(TRIP-1410, 2026-10-14)다. 이 PR 로 그 뒤에 `orchestrator/dialogue_orchestrator.py`
+> `DialogueOrchestrator.turn(TurnInput) -> TurnOutcome` 이 선다: LLM 직접 분류(`DIALOGUE_INTENT`, IntentGate closed-set)
+> → Provider(Weather·Transit·신규 PoiInfo)·인프로세스 PlanBAgent 를 공유 풀에 **병렬** 팬아웃(`request_meta.deadline_ms`
+> 9,000ms 안) → LLM 답변 조합(`DIALOGUE_ANSWER`, 출구 게이트 ≤400자·INV-3·연락처 패턴, 결정론 템플릿 폴백)을
+> `outcome=ANSWER` 로 → 10턴마다 20줄 요약을 자체 DB `ai_kb.dialogue_memory` 에 저장(90일 TTL,
+> `DELETE /ai/v1/dialogue/memory` 로 파기). 3단 `IntentRouter` 는 **서비스 경로에서 빠진다** — `ShadowIntentProbe` 가
+> 샘플(DEV 1.0·운영 0.2)로 배경에서 돌려 `intent_shadow` 로그 1줄/턴으로 일치율만 재고, 섀도 LLM 호출은 `llm_calls` 에
+> 넣지 않는다. `EDIT_SCHEDULE` 은 1단계에서 `FRAME`(백엔드 제안 경로) 유지. env `TRIPPILOT_DIALOGUE_ORCHESTRATOR`(기본 off) ·
+> `TRIPPILOT_DIALOGUE_SHADOW_RATE`. 왜: 사용자 결정(2026-10-17) — LLM 이 바로 분류하고 병렬 결과를 AI 안에서 답변으로
+> 조합한다. FD: `aidlc-docs/construction/assistant-orchestrator/functional-design/`.
+
 ## 핵심 설계 문서 (application-design/)
 
 - 위임 프로토콜: `orchestrator-delegation-design.md` (AgentTask/AgentResult, deadline 상속, trace_id)

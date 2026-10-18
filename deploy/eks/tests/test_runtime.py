@@ -150,7 +150,7 @@ class SecretTests(unittest.TestCase):
 
     def test_runtime_secret_does_not_expose_master_or_cross_service_keys(self):
         groups = runtime_secrets.seed_groups({name: {} for name in runtime_secrets.GROUP_KEYS}, lambda: "pass/@'word", lambda: "rsa")
-        manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot", True)
+        manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot")
         by_name = {item["metadata"]["name"]: item["stringData"] for item in manifests}
         ai = by_name["trippilot-ai"]
         self.assertIn("pass%2F%40%27word", ai["TRIPPILOT_VECTOR_DB_URL"])
@@ -160,10 +160,63 @@ class SecretTests(unittest.TestCase):
         self.assertNotIn("DB_PASSWORD", by_name["trippilot-backend"])
         self.assertTrue(all("data" not in item for item in manifests))
 
-    def test_disabled_embedding_omits_vector_connection(self):
-        groups = {name: {} for name in runtime_secrets.GROUP_KEYS}
-        manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot", False)
-        self.assertNotIn("TRIPPILOT_VECTOR_DB_URL", manifests[1]["stringData"])
+    def test_vector_connection_is_synthesized_regardless_of_embedding(self):
+        """ai_kb 는 더는 임베딩 전용 DB 가 아니다 — 도우미 세션 메모리(dialogue_memory)가 거기 산다.
+        종전에는 embedding_enabled 일 때만 DSN 을 합성했고, 그러면 임베딩을 끈 배포에서 메모리 저장소가
+        조용히 InMemory(워커 2×파드 N 이라 '기억' 불성립)로 떨어진다. sync 의 embedding_enabled 인자는
+        runtime.py CLI 계약으로 남지만 DSN 합성에는 더 쓰이지 않는다."""
+        groups = runtime_secrets.seed_groups({name: {} for name in runtime_secrets.GROUP_KEYS}, lambda: "pw", lambda: "rsa")
+        manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot")
+        ai = next(item["stringData"] for item in manifests if item["metadata"]["name"] == "trippilot-ai")
+        self.assertEqual(ai["TRIPPILOT_VECTOR_DB_URL"],
+                         "postgresql://ai_user:pw@db.example.rds.amazonaws.com:5432/ai_kb?sslmode=require")
+
+    def test_dialogue_orchestrator_switches_are_allowlisted_and_validated(self):
+        """도우미 오케스트레이터 스위치 2종(assistant-orchestrator 1단계)은 ai 시크릿으로만 켠다.
+        allowlist 에 없으면 시크릿에 넣는 순간 배포 전체가 거부되고, 값이 틀리면 AI 가 기동에서 죽는다
+        (main.py: on|off 외 오타·0~1 밖 비율 = 기동 실패) — 파드가 뜨다 죽기 전에 여기서 막는다."""
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ({"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "on"}, {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "off"},
+                   {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": ""},
+                   {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "0"}, {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "1"},
+                   {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "0.2"}, {"TRIPPILOT_DIALOGUE_SHADOW_RATE": ""},
+                   {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "on", "TRIPPILOT_DIALOGUE_SHADOW_RATE": "1.0"}):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "ai": ok})
+        for bad in ({"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "true"}, {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "ON"},
+                    {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "yes"},
+                    {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "1.5"}, {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "-0.1"},
+                    {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "abc"}, {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "nan"},
+                    {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "inf"}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "ai": bad})
+
+    def test_dialogue_memory_ddl_is_identical_in_both_canons(self):
+        """`dialogue_memory` DDL 정본은 둘이다(FD DE §4) — EKS 는 bootstrap.sql(마스터 Job, 매 배포 멱등),
+        로컬 compose 는 ai/docker/vector-init/02-dialogue-memory.sql(initdb 1회). 어댑터는 DML 만 하므로
+        두 파일이 갈리면 로컬에서 통과한 SQL 이 배포에서 깨진다. 주석·공백을 걷어 문장 단위로 비교한다.
+
+        GRANT 는 bootstrap 에만 있다 — compose 의 ai-vectordb 는 POSTGRES_USER=ai_kb(소유자)로 붙고 `ai_user`
+        롤이 없어, initdb 에서 GRANT … TO ai_user 는 ON_ERROR_STOP 으로 컨테이너 초기화를 통째로 죽인다."""
+        import re
+
+        def statements(path):
+            text = re.sub(r"--[^\n]*", "", path.read_text(encoding="utf-8"))
+            return {" ".join(stmt.split()) for stmt in text.split(";") if "dialogue_memory" in stmt}
+
+        bootstrap = Path(runtime_db.__file__).with_name("bootstrap.sql")
+        compose = Path(__file__).resolve().parents[3] / "ai" / "docker" / "vector-init" / "02-dialogue-memory.sql"
+        eks, local = statements(bootstrap), statements(compose)
+        grants = {stmt for stmt in eks if stmt.startswith("GRANT")}
+        self.assertEqual(grants, {"GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user"})
+        self.assertEqual(eks - grants, local)
+        self.assertEqual({stmt.split(" (")[0] for stmt in local}, {
+            "CREATE TABLE IF NOT EXISTS public.dialogue_memory",
+            "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_account ON public.dialogue_memory",
+            "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory"})
+        # ai_kb 데이터베이스 안에서만 — \connect 뒤에 있어야 trippilot DB 에 잘못 만들지 않는다.
+        sql = bootstrap.read_text(encoding="utf-8")
+        self.assertLess(sql.index("\\connect ai_kb"), sql.index("dialogue_memory"))
 
     def test_aws_put_keeps_secret_out_of_argv_and_removes_payload_file(self):
         observed = {}
@@ -451,6 +504,134 @@ class RuntimeIntegrationTests(unittest.TestCase):
             runtime_secrets.sync(outputs(), "trippilot", False, execute)
             self.assertEqual(saved[backend_arn]["PUSH_MODE"], "expo")  # 유지는 덮지 않는다
 
+    def _saved_secrets(self, ai=None, running=None):
+        """`running` = 지금 떠 있는 AI 이미지가 아는 기능 이름들(None 이면 AI Deployment 가 없는 첫 설치)."""
+        saved = {arn: {} for arn in outputs()["app_secret_arns"].values()}
+        saved[outputs()["app_secret_arns"]["ai"]] = dict(ai or {})
+        self.writes = []
+
+        def execute(argv, payload=None):
+            if argv[:3] == ["kubectl", "get", "deployment"]:
+                return "" if running is None else "deployment.apps/ai\n"
+            if argv[:2] == ["kubectl", "exec"]:
+                return " ".join(sorted(running or ())) + "\n"
+            if argv[:2] == ["kubectl", "apply"]:
+                self.writes.append("apply")
+                return "{}"
+            if "get-secret-value" in argv:
+                arn = argv[argv.index("--secret-id") + 1]
+                return json.dumps({"SecretString": json.dumps(saved[arn])})
+            if "put-secret-value" in argv:
+                path = next(a for a in argv if a.startswith("file://"))[len("file://"):]
+                with open(path, encoding="utf-8") as stream:
+                    request = json.load(stream)
+                saved[request["SecretId"]] = json.loads(request["SecretString"])
+                self.writes.append(request["SecretId"])
+            return "{}"
+        return saved, execute
+
+    def test_sync_writes_dialogue_inputs_and_keeps_them_on_later_deploys(self):
+        """도우미 스위치·모델 배정도 로컬 자격 없이 켤 수 있어야 한다(2026-10-18 샌드박스 토큰 만료) — 배포 입력이 시크릿에 쓰고,
+        입력 없는 다음 배포(다른 세션의 평소 배포)는 저장값을 그대로 둔다. 다른 기능의 배정·키는 건드리지 않는다."""
+        ai_arn = outputs()["app_secret_arns"]["ai"]
+        saved, execute = self._saved_secrets({"OPENAI_API_KEY": "sk-x", "TRIPPILOT_LLM_FEATURE_MODELS": "INTENT=gpt-5.6-sol,PARAPHRASE=gpt-5.6-luna"},
+                                             running=runtime_secrets.known_llm_features())
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), \
+                patch("builtins.print") as printed:
+            runtime_secrets.sync(outputs(), "trippilot-dev", False, execute, target="dev", dialogue_orchestrator="on",
+                                 llm_feature_models="DIALOGUE_INTENT=gpt-5.6-luna, intent=gpt-5.6-terra")
+            ai = saved[ai_arn]
+            self.assertEqual(ai["TRIPPILOT_DIALOGUE_ORCHESTRATOR"], "on")
+            # 같은 기능은 자리 그대로 바뀌고(소문자도 같은 기능), 새 기능은 뒤에 붙고, 나머지는 그대로다
+            self.assertEqual(ai["TRIPPILOT_LLM_FEATURE_MODELS"],
+                             "INTENT=gpt-5.6-terra,PARAPHRASE=gpt-5.6-luna,DIALOGUE_INTENT=gpt-5.6-luna")
+            self.assertEqual(ai["OPENAI_API_KEY"], "sk-x")
+            self.assertNotIn("TRIPPILOT_DIALOGUE_SHADOW_RATE", ai)  # 개발 대상은 AI 기본값(1.0)을 쓴다
+            lines = " ".join(str(call.args[0]) for call in printed.call_args_list)
+            self.assertIn("TRIPPILOT_DIALOGUE_ORCHESTRATOR", lines)
+            self.assertNotIn("sk-x", lines)  # 이름만 찍는다
+            runtime_secrets.sync(outputs(), "trippilot-dev", False, execute, target="dev")
+            self.assertEqual(saved[ai_arn], ai)  # 유지는 덮지 않는다
+            runtime_secrets.sync(outputs(), "trippilot-dev", False, execute, target="dev", dialogue_orchestrator="off")
+            self.assertEqual(saved[ai_arn]["TRIPPILOT_DIALOGUE_ORCHESTRATOR"], "off")
+
+    def test_sync_seeds_production_shadow_rate_only_when_absent(self):
+        """섀도 비율은 사용자 결정(개발 1.0 · 운영 0.2) — 운영 대상에서 비어 있을 때만 0.2 를 심고, 저장값은 이긴다."""
+        ai_arn = outputs()["app_secret_arns"]["ai"]
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), patch("builtins.print"):
+            saved, execute = self._saved_secrets()
+            runtime_secrets.sync(outputs(), "trippilot", False, execute, target="prod")
+            self.assertEqual(saved[ai_arn]["TRIPPILOT_DIALOGUE_SHADOW_RATE"], "0.2")
+            saved, execute = self._saved_secrets({"TRIPPILOT_DIALOGUE_SHADOW_RATE": "0.5"})
+            runtime_secrets.sync(outputs(), "trippilot", False, execute, target="prod")
+            self.assertEqual(saved[ai_arn]["TRIPPILOT_DIALOGUE_SHADOW_RATE"], "0.5")
+            for blank in ("", "  "):  # 빈 값은 "없음" — AI 의 `_env` 도 빈 값을 미설정(1.0)으로 읽는다
+                saved, execute = self._saved_secrets({"TRIPPILOT_DIALOGUE_SHADOW_RATE": blank})
+                runtime_secrets.sync(outputs(), "trippilot", False, execute, target="prod")
+                self.assertEqual(saved[ai_arn]["TRIPPILOT_DIALOGUE_SHADOW_RATE"], "0.2")
+            saved, execute = self._saved_secrets()
+            runtime_secrets.sync(outputs(), "trippilot-dev", False, execute, target="dev")
+            self.assertEqual(saved[ai_arn], {})
+
+    def test_feature_model_overrides_reject_unknown_features_and_malformed_pairs_before_writing(self):
+        """모르는 기능 이름이 배정에 들어가면 AI 가 기동에서 죽는다(`feature_models_from_env`) — 쓰기 전에 거절한다."""
+        known = runtime_secrets.known_llm_features()
+        for bad in ("DIALOGUE_INTNET=gpt-5.6-luna", "DIALOGUE_INTENT=", "DIALOGUE_INTENT", "DIALOGUE_INTENT=a b"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.merge_feature_models("", bad, known)
+        saved, execute = self._saved_secrets({"TRIPPILOT_LLM_FEATURE_MODELS": "INTENT=gpt-5.6-sol"}, running=known)
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), \
+                self.assertRaises(ValueError):
+            runtime_secrets.sync(outputs(), "trippilot", False, execute, target="prod", llm_feature_models="NOPE=gpt-5.6-luna")
+        self.assertEqual(saved[outputs()["app_secret_arns"]["ai"]], {"TRIPPILOT_LLM_FEATURE_MODELS": "INTENT=gpt-5.6-sol"})
+        self.assertEqual(self.writes, [])  # 시크릿·k8s Secret 어느 쪽도 쓰지 않았다
+        # 저장값에 이 커밋이 모르는 낡은 이름이 있으면 덧씌우기도 거절한다(그대로 다시 쓰면 새 AI 가 기동에서 죽는다)
+        with self.assertRaisesRegex(ValueError, "OLD_FEATURE"):
+            runtime_secrets.merge_feature_models("OLD_FEATURE=gpt-5.6-sol", "INTENT=gpt-5.6-luna", known)
+
+    def test_new_feature_names_wait_until_the_running_ai_image_knows_them(self):
+        """sync 는 helm 보다 먼저 시크릿과 k8s Secret 을 덮고, helm --atomic 롤백은 그 Secret 을 되돌리지 않는다(차트 밖 리소스).
+        그래서 새 기능 이름은 그 이름을 아는 이미지가 이미 떠 있을 때만 받는다 — 아니면 롤백된 옛 이미지가 재시작 때 기동에서
+        죽는다(2026-10-18 리뷰 확정, origin/main 파서로 재현). 첫 설치(Deployment 없음)는 대조할 이미지가 없어 통과한다."""
+        known = runtime_secrets.known_llm_features()
+        old_image = known - {"DIALOGUE_INTENT", "DIALOGUE_ANSWER", "DIALOGUE_MEMORY"}
+        ai_arn = outputs()["app_secret_arns"]["ai"]
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), patch("builtins.print"):
+            saved, execute = self._saved_secrets({"TRIPPILOT_LLM_FEATURE_MODELS": "INTENT=gpt-5.6-sol"}, running=old_image)
+            with self.assertRaisesRegex(ValueError, "running AI image does not know DIALOGUE_INTENT"):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute, target="prod",
+                                     llm_feature_models="DIALOGUE_INTENT=gpt-5.6-luna")
+            self.assertEqual(self.writes, [])
+            # 옛 이미지가 아는 이름만 바꾸는 것은 된다
+            runtime_secrets.sync(outputs(), "trippilot", False, execute, target="prod", llm_feature_models="INTENT=gpt-5.6-luna")
+            self.assertEqual(saved[ai_arn]["TRIPPILOT_LLM_FEATURE_MODELS"], "INTENT=gpt-5.6-luna")
+            saved, execute = self._saved_secrets(running=None)  # 첫 설치
+            runtime_secrets.sync(outputs(), "trippilot-dev", False, execute, target="dev",
+                                 llm_feature_models="DIALOGUE_INTENT=gpt-5.6-luna")
+            self.assertEqual(saved[ai_arn]["TRIPPILOT_LLM_FEATURE_MODELS"], "DIALOGUE_INTENT=gpt-5.6-luna")
+
+    def test_known_features_are_read_from_the_same_commits_ai_enum(self):
+        known = runtime_secrets.known_llm_features()
+        self.assertTrue({"INTENT", "PARAPHRASE", "DIALOGUE_INTENT", "DIALOGUE_ANSWER", "DIALOGUE_MEMORY"} <= known)
+        self.assertGreaterEqual(len(known), 20)  # 정규식이 조용히 빈 집합이 되면 모든 배정을 거절한다 — 그 고장을 여기서 본다
+
+    def test_sync_secrets_cli_passes_dialogue_inputs_and_target(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "outputs.json"
+            source.write_text(json.dumps({key: {"value": value} for key, value in outputs().items()}))
+            with patch("runtime.runtime_secrets.sync") as sync, patch("builtins.print"):
+                runtime.main(["sync-secrets", "--outputs", str(source), "--dialogue-orchestrator", "on",
+                              "--llm-feature-models", "DIALOGUE_INTENT=gpt-5.6-luna"])
+                self.assertEqual(sync.call_args.kwargs["dialogue_orchestrator"], "on")
+                self.assertEqual(sync.call_args.kwargs["llm_feature_models"], "DIALOGUE_INTENT=gpt-5.6-luna")
+                self.assertEqual(sync.call_args.kwargs["target"], "prod")
+                runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertIsNone(sync.call_args.kwargs["dialogue_orchestrator"])
+                self.assertIsNone(sync.call_args.kwargs["llm_feature_models"])
+            with self.assertRaises(SystemExit), patch("sys.stderr"):
+                runtime.main(["sync-secrets", "--outputs", str(source), "--dialogue-orchestrator", "true"])
+
     def test_sync_secrets_cli_passes_push_mode_and_rejects_unknown(self):
         import tempfile
         with tempfile.TemporaryDirectory() as folder:
@@ -701,7 +882,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         """
         import runtime_smoke
         table = "NAME   TARGETS   CURRENT   MIN   MAX   REPLICAS\nai     70        <none>    1     3     1\n"
-        shell = Mock(side_effect=["", "", "", "", table, ""])
+        shell = Mock(side_effect=["", "", "", "", table, "", ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
@@ -713,7 +894,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
 
     def test_smoke_says_nothing_when_no_autoscaler_is_enabled(self):
         import runtime_smoke
-        shell = Mock(side_effect=["", "", "", "", "", ""])
+        shell = Mock(side_effect=["", "", "", "", "", "", ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         output.assert_not_called()
@@ -731,7 +912,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0 (키 파라미터 serviceKey)\n"
                 "INFO trippilot.api.middleware GET /health 200\n"
                 "WARNING trippilot.main 임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — 규칙 랭킹으로 강등된다\n")
-        shell = Mock(side_effect=["", "", "", "", "", logs])
+        shell = Mock(side_effect=["", "", "", "", "", "", logs])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
@@ -743,10 +924,101 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual(logs_call[:2], ["kubectl", "logs"])
         self.assertIn("deployment/ai", logs_call)
 
+    def test_smoke_reports_one_dialogue_turn_without_gating_the_deploy(self):
+        """도우미 한 턴을 AI 파드 안에서 돌려 결과 모양만 배포 로그에 남긴다 — 실패해도 배포는 성공한다.
+        배선 줄은 "켜졌다"까지만 말한다: 실 LLM 배정·ai_kb 권한·섀도는 실제 턴으로만 드러난다."""
+        import runtime_smoke
+        probe = 'ai-dialogue-probe {"http": 200, "outcome": "ANSWER", "kind": "INFO", "llm_calls": 3, "memory_deleted": 1}\n'
+        shell = Mock(side_effect=["", "", "", "", "", probe, ""])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", shell)
+        printed = " ".join(str(call.args[0]) for call in output.call_args_list)
+        self.assertIn('ai-dialogue: {"http": 200, "outcome": "ANSWER"', printed)
+        exec_call = next(call for call in shell.call_args_list if call.args[0][:2] == ["kubectl", "exec"])
+        argv = exec_call.args[0]
+        for part in ("-i", "deployment/ai", "/app/.venv/bin/python"):
+            self.assertIn(part, argv)
+        self.assertEqual(argv[argv.index("-c") + 1], "ai")
+        script = exec_call.args[1]
+        sent = self._run_probe(script)
+        self.assertEqual([method for method, _, _ in sent], ["POST", "DELETE"])  # 쓴 기억은 지운다
+        self.assertTrue(sent[1][1].endswith(sent[0][2]["session_id"]))
+        self._assert_matches_contract(sent[0][2], "DialogueInterpretRequest")
+        failing = Mock(side_effect=["", "", "", "", "", runtime.CommandError("kubectl", "exec denied"), ""])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", failing)
+        self.assertIn("ai-dialogue: 확인 못 함", " ".join(str(call.args[0]) for call in output.call_args_list))
+
+    def _run_probe(self, script, fail_post=False):
+        """파드 안 스크립트를 urlopen 대역으로 돌려 보낸 요청을 잡는다 — (method, path, body)."""
+        import types
+        import urllib.request
+        sent = []
+
+        class _Response(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def urlopen(request, timeout=None):
+            body = json.loads(request.data) if request.data else None
+            sent.append((request.get_method(), request.full_url.replace("http://127.0.0.1:8000", ""), body))
+            if fail_post and request.get_method() == "POST":
+                raise ConnectionRefusedError("refused")
+            if request.get_method() == "POST":
+                return _Response(json.dumps({"outcome": "ANSWER", "llm_calls": 3, "answer": {"kind": "INFO"}}).encode())
+            return _Response(b'{"deleted": 1}')
+
+        with patch.object(urllib.request, "urlopen", urlopen), patch("builtins.print") as printed:
+            exec(compile(script, "probe", "exec"), {"__name__": "probe"})
+        self.probe_line = " ".join(str(call.args[0]) for call in printed.call_args_list)
+        return sent
+
+    def _assert_matches_contract(self, body, schema_name):
+        """본문이 `ai/docs/openapi.json` 계약을 따르는가 — required ⊆ keys ⊆ properties(모든 층 extra=forbid)."""
+        contract = json.loads((Path(__file__).resolve().parents[3] / "ai" / "docs" / "openapi.json").read_text())
+        schemas = contract["components"]["schemas"]
+
+        def resolve(schema):
+            while "$ref" in schema:
+                schema = schemas[schema["$ref"].rsplit("/", 1)[-1]]
+            return schema
+
+        def check(value, schema, where):
+            schema = resolve(schema)
+            if "anyOf" in schema:
+                options = [resolve(s) for s in schema["anyOf"] if resolve(s).get("type") != "null" or value is None]
+                if value is None:
+                    return
+                schema = next((s for s in options if s.get("type") == "object" or "properties" in s), options[0])
+            if isinstance(value, dict) and "properties" in schema:
+                props = schema["properties"]
+                self.assertLessEqual(set(value), set(props), where)
+                self.assertLessEqual(set(schema.get("required", ())), set(value), where)
+                for key, item in value.items():
+                    check(item, props[key], f"{where}.{key}")
+            elif isinstance(value, list) and "items" in schema:
+                for index, item in enumerate(value):
+                    check(item, schema["items"], f"{where}[{index}]")
+
+        check(body, {"$ref": f"#/components/schemas/{schema_name}"}, schema_name)
+
+    def test_smoke_probe_always_deletes_its_memory_and_reports_errors_by_type(self):
+        """POST 가 접속 거부로 죽어도 DELETE 는 돌고, 결과 줄에는 예외 **종류**만 실린다(값·본문 없음)."""
+        import runtime_smoke
+        sent = self._run_probe(runtime_smoke._DIALOGUE_PROBE, fail_post=True)
+        self.assertEqual([method for method, _, _ in sent], ["POST", "DELETE"])
+        self.assertIn('"http": "ConnectionRefusedError"', self.probe_line)
+        self.assertIn('"memory_deleted": 1', self.probe_line)
+
     def test_smoke_survives_unreadable_ai_logs(self):
         """로그를 못 읽어도 배포는 성공한다 — 기록 수단이 게이트가 되면 안 된다."""
         import runtime_smoke
-        shell = Mock(side_effect=["", "", "", "", "", runtime.CommandError("kubectl", "failed")])
+        shell = Mock(side_effect=["", "", "", "", "", "", runtime.CommandError("kubectl", "failed")])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)

@@ -86,6 +86,21 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('--push-mode', sync['run'])
         self.assertIn('EFFECTIVE_PUSH_MODE', sync['run'])
 
+    def test_dialogue_inputs_keep_stored_values_unless_the_deployer_chooses(self):
+        """스위치·배정의 기본값은 '유지'여야 다른 세션의 평소 배포가 켜고 끄지 않는다. 셸은 검증된 EFFECTIVE_* 만 읽는다."""
+        value = workflow('aws-deploy.yml')
+        inputs = value['on']['workflow_dispatch']['inputs']
+        self.assertEqual(inputs['dialogue_orchestrator']['default'], 'keep')
+        self.assertEqual(inputs['dialogue_orchestrator']['options'], ['keep', 'on', 'off'])
+        self.assertEqual(inputs['llm_feature_models']['default'], '')
+        sync = next(s for s in value['jobs']['deploy']['steps'] if s.get('name') == 'Synchronize runtime secrets and render nonsecret Helm values')
+        for flag, name in (('--dialogue-orchestrator', 'EFFECTIVE_DIALOGUE_ORCHESTRATOR'), ('--llm-feature-models', 'EFFECTIVE_LLM_FEATURE_MODELS')):
+            self.assertIn(flag, sync['run'])
+            self.assertIn(name, sync['run'])
+        self.assertNotIn('DIALOGUE_ORCHESTRATOR_INPUT', sync['run'])
+        self.assertNotIn('LLM_FEATURE_MODELS_INPUT', sync['run'])
+        self.assertNotIn('inputs.', sync['run'])  # 입력을 셸에 직접 끼우지 않는다(주입 방지)
+
     def test_deploy_target_drives_namespace_and_never_hardcodes_production(self):
         """개발 대상 런이 운영 네임스페이스를 건드리면 운영 파드 시크릿이 개발 값으로 덮인다(#1258 검수)."""
         value = workflow('aws-deploy.yml')

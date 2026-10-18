@@ -40,6 +40,16 @@
 | **DEC-U8-14** | **"진행 검토"(US-ASSIST-03)는 `SHOW_SCHEDULE`의 backend 핸들러로 구현한다.** 새 의도 라벨을 만들지 않는다. quick reply `검토해줘`는 발화가 아니라 구조화 액션(`REVIEW`)으로 보내 LLM 0회로 같은 핸들러에 닿는다 | ai 뱅크에 "검토" 계열 문장이 0건이고(`data/intent_question_bank.yaml` grep) 13종 어디에도 검토 라벨이 없다. 라벨 추가는 ai 세트 작업 — 그 전에는 뱅크 문장 보강(SHOW_SCHEDULE)을 ai에 상신(G-U8-6) |
 | **DEC-U8-15** | 산출물은 **FD 4종**. NFR은 FD 종료 시 판정(Q15=A) — 새 축은 backend 리미터 위치·세션 보존·턴 지연 3개뿐이고 수치(분당 20·3s/15s)는 ai 문서(A-6·A-7)를 승계한다 | 중복 서술 방지 |
 
+> **[개정 · 2026-10-17 · assistant-orchestrator FD] DEC-U8-1·4·5·6·8·11.** 사용자 결정(2026-10-17: "의도파악 3단계 말고 바로 LLM · AI 오케스트레이터가 병렬로 일 시켜 답변 조합 · 장단기 메모리 · 질문뱅크는 병렬 측정만")을 반영한다. 원문 행은 이력으로 보존하며, 상세 설계는 `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`.
+>
+> **DEC-U8-1** — "AI는 해석만"을 **좁힌다**. AI `DialogueOrchestrator`(안 A — 기존 `POST /ai/v1/dialogue/interpret` 확장)가 **조회·대안·안내** 의도는 Provider·PlanBAgent 를 병렬로 불러 AI 안에서 끝내고 `outcome=ANSWER` 로 답변까지 돌려준다. **저장을 수반하는 변경**(EDIT_SCHEDULE·[적용])은 여전히 backend 제안·[적용] 경로다 — 1단계 EDIT_SCHEDULE 은 `FRAME` 그대로(DEC-U8-2/3 유지). D-U8-5 "수명주기 우회"에 대한 답: **저장 지점은 바뀌지 않는다**(BR-U8-30·33). 왜: 조회·대안은 저장이 없어 우회할 수명주기가 없고, 병렬 수집 결과를 한 턴에 조합하려면 분류·답변이 한 곳(AI)에 있어야 한다.
+>
+> **DEC-U8-4·5** — 대화 기록(`assistant_message`)·`DialogueContext`·세션 모델(계정×여행 1 + 일반 1)은 backend 소유 그대로. AI 는 **요약 20줄**(줄 ≤120자, 10턴마다 `DIALOGUE_MEMORY` 로 갱신, 실패 시 결정론 압축)만 자체 DB `ai_kb.dialogue_memory` 에 `session_id` 키로 보관한다(보존 90일 = DATA-U8-01 과 같은 값, 쓸 때 연장). 단기 기억은 backend 가 요청에 싣는 `recent_turns`(최근 10턴 ≤20건, text ≤300) — AI 는 **원문을 저장하지 않는다**. backend 파기 경로(이력 지우기·여행 삭제·계정 삭제)가 `DELETE /ai/v1/dialogue/memory` 를 부르고, 만료는 AI 쪽 90일 TTL 이 같은 값으로 따라간다. 왜: "같은 사용자가 다시 쓰면 로드"의 키가 backend 세션 id 이므로 요약만 AI 에 두면 되고, 원문 장소는 늘리지 않는다(SEC-U8-06).
+>
+> **DEC-U8-6** — LLM 문장을 **허용**한다(`DIALOGUE_ANSWER`). 단 출구 게이트(≤400자 · 줄 ≤6 · 소요시간 표현 금지(INV-3) · 연락처 패턴 금지) 통과분만 화면에 내고, 게이트 실패·시한 부족(잔여 <1.5s)이면 의도별 **결정론 템플릿**(backend 문구 이식)으로 폴백한다. OUT_OF_SCOPE·거절·되묻기·강등·FALLBACK 문구는 여전히 backend 고정 문안. 왜: 병렬 수집 결과를 조합한 답변은 템플릿으로 못 만들고, 허용 blast radius 는 "보이는 문장 오염"까지로 이미 판정했다 — 후보 선택·저장은 facts 닫힌 집합(INV-1)이고, 문장 속 장소명은 프롬프트 규칙만이라 게이트가 검사하지 못한다(수용된 blast radius).
+>
+> **DEC-U8-8·11** — 첫 응답 정의 개정: 오케스트레이터 on 이면 **모든 TEXT 턴이 LLM ≥1회**(분류 1 + 답변 ≤1 + 10턴마다 요약 1)라 "LLM 0회 경로 3s" 집합이 빈다 → 해석 상한 **9,000ms**(backend `interpret-stage-max-ms` 5000→9000, read 14s), 턴 예산 13s 유지(PERF-U8-02/05 개정). 단일 의도(`frames ≤1`)는 **유지** — 다중 의도는 후속. 3단 질문뱅크는 서비스에서 빼고 **섀도**(DEV 1.0 · 운영 0.2 샘플링)로만 돌려 일치율을 잰다.
+
 ---
 
 ## 2. 한 턴의 흐름 (backend `assistant` 모듈)
@@ -74,6 +84,8 @@
 - **5 다음 실패**해도 사용자 메시지는 남는다 — 침묵 실패 금지(INV-4). 7·8 실패는 반드시 FALLBACK 메시지 1건으로 끝난다(BR-U8-40).
 - **금칙어 위반 입력은 원문을 저장하지 않는다** — `[정책 위반 입력]` 표지만 남긴다(BR-U8-23). 위반 텍스트를 계정 기록에 쌓을 이유가 없다.
 - **멱등 키**: 앱 재시도·네트워크 재전송이 턴을 두 번 만들지 않는다(INV-U8-05).
+
+> **[개정 · 2026-10-17 · assistant-orchestrator FD] 7·8 단계.** 7 의 해석 호출은 `request_meta.deadline_ms` **9,000**(backend `interpret-stage-max-ms` 5000→9000, read timeout 14s)에 `session_id`·`account_ref`·`recent_turns`(최근 10턴 ≤20건, text ≤300, `redacted` 입력 제외)를 더 싣고, 응답 갈래에 **`ANSWER`** 가 생긴다 — AI 가 Provider·PlanBAgent 를 병렬로 불러 조합한 답변(kind TEXT|INFO|CANDIDATES, `next_actions ≥1`, quick reply)을 backend 가 검증(text ≤2000 · `NextAction.TYPES` · kind · CANDIDATES poiId 정본 대조 · quick reply 서버 id `qr-ai-*` 발급)한 뒤 **8 을 거치지 않고 9 로** 저장한다. `FRAME` 은 종전대로 8(1단계 EDIT_SCHEDULE, 오케스트레이터 off 면 전부). 검증 실패·모르는 outcome 은 여전히 FALLBACK 1건(BR-U8-40). 왜: 병렬 수집 결과를 한 턴에 조합하려면 응답이 "의도 라벨"에서 "답변"으로 넓어져야 한다. 상세 `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`.
 
 ### 2.1 [적용] 흐름 (US-ASSIST-04)
 
@@ -166,6 +178,8 @@
 - 오류: 4xx/5xx·타임아웃은 backend가 FALLBACK 메시지로 바꾼다. **이 경계의 실패를 일정 폴백 신호로 쓰지 않는다** — 생성 경로의 "4xx = 최소일정 폴백" 관례(ai FD §3.1)는 여기 적용되지 않는다.
 - **소요시간 필드 없음**(INV-3). 인자에 담기는 시각은 요청이지 확정값이 아니다(BR-DLG-05).
 
+> **[개정 · 2026-10-17 · assistant-orchestrator FD] §3.1·§3.2 계약 확장.** 요청 += `session_id: str|null` · `account_ref: str|null` · `recent_turns: [{role: USER|ASSISTANT, text ≤300}] (≤20)`; `request_meta.deadline_ms`(9,000 기준, 없으면 AI 기본 9,000)는 AI 가 **반드시 읽어** 모든 LLM·Provider 호출에 시한을 내린다(종전 경로는 읽지 않았다). 응답 `outcome` += **`ANSWER`**, `answer: {kind: TEXT|INFO|CANDIDATES, text ≤600, payload, next_actions ≥1 [{type,label,params}], quick_replies[{label,action,params}]|null, footnote|null}`(ANSWER 가 아니면 null). 메모리 경계 신설: `DELETE /ai/v1/dialogue/memory?session_id=|trip_id=|account_ref=`(셋 중 정확히 하나, 200 `{deleted: n}` — 멱등) · `GET /ai/v1/dialogue/memory?account_ref=`(내보내기). `dialogue_context` 모양·반송 규칙은 그대로(INV-U8-07). 왜: backend `HttpDialogueInterpreterTest` 가 응답 키 집합을 **정확 동등**으로 단언하고 요청 스키마는 `extra=forbid` 라 AI·backend 변경은 **한 PR** 이어야 하며, FE 변경은 0(kind 10종·NextAction 17종·서버 발급 quick reply 그대로). 상세 `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`.
+
 ### 3.3 기존 경계 재사용 (새로 열지 않는다)
 
 | 경계 | 어시스턴트 용도 | 현 상태 |
@@ -199,6 +213,8 @@
 **`next_action`은 화면 이동 의도이지 실행이 아니다.** 앱이 라우트로 옮기고, 그 화면의 기존 확인·확정 절차가 그대로 돈다(재계획 확정은 여전히 `planb/diff`의 [확정]).
 
 **바꾼 조건 요약**(PRD 02-2 "예산 ↓ · 도보 10분 이내로"): 넘기기 행은 `frames[0].arguments`를 사람이 읽는 칩으로 바꿔 메시지에 싣는다. **목적 화면의 입력값으로 미리 채우는 것은 1차 밖**(G-U8-7) — 대화 ↔ 화면 상태 일관 AC는 일정 편집(제안 적용)에서만 성립한다.
+
+> **[개정 · 2026-10-17 · assistant-orchestrator FD] 표의 1차 처리자가 둘로 갈린다.** 오케스트레이터 on 이면 **AI 가 `ANSWER` 로 끝내는 의도**: `SHOW_SCHEDULE`(스냅샷 계산 → TEXT 요약) · `GET_NEXT_SLOT`(INFO NEXT_SLOT + "다른 곳 추천" quick reply) · `GET_WEATHER`(PoiInfo 좌표 → WeatherProvider → INFO WEATHER) · `GET_DISTANCE`(TransitProvider, 거리만 — INV-3) · `GET_POI_INFO`(신규 `PoiInfoProvider` = `/internal/pois/batch-get`, INFO PLACE) · `SUGGEST_ALTERNATIVE`(PlanBAgent `use_llm=False` 인프로세스 → CANDIDATES ≤5, PICK_CANDIDATE 는 종전 backend ReplaceSlot 제안 경로로) · 넘기기 행(REPLAN·REGENERATE·GENERATE_SCHEDULE·회고 3종 = TEXT 한 줄 + 종전 `next_action`). **`FRAME` 유지**: `EDIT_SCHEDULE`(1단계 — `ProposalCards` `/edit` 경로 그대로, 2단계에 EditAgent 인프로세스 + PROPOSAL). **backend 그대로**: `OUT_OF_SCOPE`(LLM 문장 없음 — SCOPE 카드·거절 스트릭) · ACTION 턴 · `REVIEW` 검토 카드 · [적용]. "보이는 값은 검증값만"(INV-2)과 "저장은 [적용]만" 원칙은 변하지 않는다. 왜: 저장이 없는 조회·대안은 AI 가 병렬 수집해 한 턴에 조합하는 편이 9,000ms 안에 들고, 저장이 있는 변경은 backend 수명주기(제안·지문·적용)를 그대로 타야 한다. 상세 `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`.
 
 ---
 

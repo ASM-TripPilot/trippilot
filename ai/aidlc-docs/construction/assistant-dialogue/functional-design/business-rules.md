@@ -13,7 +13,7 @@
 | BR-DLG-04 | **인자는 평면 스칼라만 담는다**(`str`·`int`·`float`·`bool`). 중첩 객체·배열 금지 | `IntentGate._parse_slots` 가 이미 강제하는 규칙을 타입으로 올린 것 — 게이트와 타입이 어긋나면 게이트가 통과시킨 값이 생성 불가가 된다 |
 | BR-DLG-05 | **인자에 사용자에게 보일 시각을 담지 않는다.** "3시에 넣어줘"의 3시는 요청이지 확정 시각이 아니다 | INV-2 |
 | BR-DLG-06 | **도구 호출을 쓰더라도 closed-set 보증은 `IntentGate` 가 한다.** 벤더 스키마는 파싱 실패율을 낮추는 최적화일 뿐 권위가 아니다 | INV-1 · NFR-6.3 벤더 중립. 모델·벤더 교체 시 보증이 사라지면 안 된다 |
-| BR-DLG-07 | **도구 호출은 3차에서만 쓴다.** 1·2차에 LLM 을 넣지 않는다 | CONFIDENT 의 존재 이유가 "LLM 0회"다(실측 87발화 중 28건). 여기가 무너지면 3단 구조를 둘 이유가 없다 |
+| BR-DLG-07 | **도구 호출은 3차에서만 쓴다.** 1·2차에 LLM 을 넣지 않는다 | CONFIDENT 의 존재 이유가 "LLM 0회"다(실측 87발화 중 28건). 여기가 무너지면 3단 구조를 둘 이유가 없다 **개정(2026-10-17)**: 서비스 판정 경로는 **`DIALOGUE_INTENT`(LLM 직접, 새 feature·`prompts/dialogue_intent.yaml`, `IntentGate` 재사용)** 로 바뀐다 — 3단(1·2차 LLM 0회 포함)은 **섀도 측정 전용**으로 그대로 남긴다(`prompts/intent.yaml` 0.2.0·`intent_gate` 픽스처 무변경). 왜: 사용자 결정(2026-10-17) — 지연보다 history·memory·trip 문맥을 분류에 넣는 쪽을 택했고, 0회 경로의 가치는 섀도 일치율·경로 비중으로 계속 잰다 — `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/` |
 | BR-DLG-08 | 도구 미지원 어댑터에 `tools` 를 실으면 **`LlmUnsupportedError`** — 게이트웨이가 폴백 신호로 바꾸고 호출측이 기존 JSON 프롬프트 경로로 강등한다. **조용히 떨구지 않는다** | INV-4 · `LlmRequest.images` 선례(TRIP-595)와 같은 자리 |
 | BR-DLG-08b | **추출기는 정밀도를 택한다 — 애매하면 `None` 을 낸다.** 재현율을 위해 패턴을 넓히지 않는다 | 필수 인자가 4개 의도뿐이라 추출기 일의 대부분이 **선택 인자**다. 선택 인자는 못 뽑으면 그냥 비지만(BR-DLG-33), **잘못 뽑으면 처리자가 틀린 값으로 일한다** — 사용자가 말하지 않은 조건이 걸린 결과를 받는다. 두 실패의 대가가 대칭이 아니다 |
 | BR-DLG-09 | 규칙 추출기는 **결정론**이다 — 같은 발화에 같은 인자. 실패는 `None` 이고 예외가 아니다. 인자 추출 실패가 라우팅을 죽이지 않는다 | 의도는 이미 확정됐다(`_extract_slots` 현행 방침) |
@@ -33,8 +33,8 @@
 
 | # | 규칙 | 근거 |
 |---|---|---|
-| BR-DLG-20 | **대화 상태의 정본은 백엔드다. AI 서비스는 무상태로 남는다.** 경계가 매 턴 `DialogueContext` 를 받고 갱신본을 돌려준다 | AI 경계는 요청/응답 HTTP 이고 수평 확장 대상이라 상태를 두면 고정 세션이 필요하다. 개인 발화의 보존·삭제 책임은 이미 백엔드에 있다. `CONFIRM_REQUIRED` 왕복이 같은 모양으로 이미 돌아간다 |
-| BR-DLG-21 | **넘기는 것은 보류 프레임이지 대화 기록이 아니다.** 직전 발화 전문·턴 목록을 싣지 않는다 | D31 참조 원칙 · 토큰 비용 · 개인 발화 최소 수집. **보관 정책 자체가 미결이다**(제품 O3) — 결정 전에 AI 서비스가 발화를 들고 있으면 안 된다 |
+| BR-DLG-20 | **대화 상태의 정본은 백엔드다. AI 서비스는 무상태로 남는다.** 경계가 매 턴 `DialogueContext` 를 받고 갱신본을 돌려준다 | AI 경계는 요청/응답 HTTP 이고 수평 확장 대상이라 상태를 두면 고정 세션이 필요하다. 개인 발화의 보존·삭제 책임은 이미 백엔드에 있다. `CONFIRM_REQUIRED` 왕복이 같은 모양으로 이미 돌아간다 **개정(2026-10-17)**: 대화 상태 정본은 백엔드 그대로. 다만 AI 는 **요약 20줄**(`session_id` 키, 자체 DB `ai_kb.dialogue_memory`, 90일 TTL, 10턴마다 갱신)을 보유한다 — 무상태 원칙의 명시적 예외이고 턴 처리 자체는 여전히 요청 스코프다. 고정 세션은 필요 없다(키가 백엔드 세션 id 라 어느 파드든 DB 에서 읽는다). 왜: 장단기 메모리 결정(2026-10-17) — assistant-orchestrator FD |
+| BR-DLG-21 | **넘기는 것은 보류 프레임이지 대화 기록이 아니다.** 직전 발화 전문·턴 목록을 싣지 않는다 | D31 참조 원칙 · 토큰 비용 · 개인 발화 최소 수집. **보관 정책 자체가 미결이다**(제품 O3) — 결정 전에 AI 서비스가 발화를 들고 있으면 안 된다 **개정(2026-10-17)**: 요청에 `recent_turns`(최근 10턴 ≤20건, text ≤300, `redacted` 제외)를 싣는다 — "턴 목록을 싣지 않는다"를 개정. AI 는 원문을 저장하지 않고(요약은 파생물 — 단 결정론 압축 `compress_fallback` 산출은 절단된 발화 조각을 담을 수 있다, 파생물 판정은 assistant-orchestrator FD 미결 #10), 보관 정책은 90일(DATA-U8-01)로 잠정 확정됐다. 왜: 단기 기억 없이 "그거 말고"류 지시를 해석할 수 없다 — assistant-orchestrator FD |
 | BR-DLG-22 | **보류 프레임이 있으면 라우팅보다 인자 채우기를 먼저 시도한다.** 채워지면 그 턴은 라우팅을 돌리지 않는다 | "여수"·"3박 4일" 같은 조각은 뱅크에 영원히 안 맞는다. 먼저 채우면 **LLM 0회**로 끝나고, 라우팅을 먼저 돌리면 조각이 엉뚱한 의도에 붙는다 |
 | BR-DLG-23 | **되묻기는 프레임당 최대 1회.** 초과하면 결정론 폴백 | INV-4. BR-AF-05(재수집 1회)와 같은 취지의 상한이고 **층이 다르다** — 이쪽은 사람에게, 저쪽은 Provider 에게 묻는다 |
 | BR-DLG-24 | 보류 프레임은 셋 중 먼저 오는 것에서 버린다 — ① 다음 턴이 **다른 의도로 CONFIDENT 확정** ② 턴 2회 경과 ③ 만료 시각 초과 | 되묻기를 무한히 끌지 않는다. ①이 핵심이다 — 사용자가 화제를 바꿨는데 옛 질문에 답으로 읽으면 엉뚱한 일을 한다 |
@@ -106,6 +106,10 @@
 | `ai/docs/openapi.json` (자동 생성 — 손대지 않는다) | 자연어 진입 경계가 열리면 `scripts/export_openapi.py` 로 재생성. 경계 신설 자체는 §5 미결 #2 |
 | `ai/claude.md` · `ai/README.md` | `IntentRouter` "미배선" 표기의 해소 조건을 이 FD 로 연결 (현행 문구는 "자연어 진입점이 열릴 때 배선된다") |
 | `aidlc/.../unit-of-work.md` (모노레포) | U8 Conversational Assistant 의 ai 측 대응 산출물로 본 FD 를 연결. **유닛 번호는 붙이지 않는다**(번호 충돌 안티패턴) |
+| **[개정 · 2026-10-17 · assistant-orchestrator FD]** aidlc U8 `business-logic-model.md` · `business-rules.md` · `nfr-requirements.md` | DEC-U8-1·4·5·6·8·11 · BR-U8-22·26(BR-U8-45 유지 확인) · SEC-U8-03/05/06 · COST-U8-02/06 · PERF-U8-02/05 · DATA-U8-02/05/06/07 · OBS-U8-02 — 개정 블록으로 반영됨(원문 보존). 위 BR-DLG-07·20·21 행의 개정도 같은 FD(`ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`) |
+| 〃 `intent-matching-design.md` 머리말 · §6 | 배선 註 갱신 — 3단은 **섀도 측정 전용**, 서비스 판정은 `DIALOGUE_INTENT`; §6 지표에 섀도 **일치율** 열 예정(라벨 없는 실사용 발화라 accuracy 가 아니다) |
+| 〃 `agent-structure-v2.md` §1·§3 · `orchestrator-delegation-design.md` §5 | Orchestrator "판단 최소" → LLM 분류·답변 조합·요약은 오케스트레이터 몫; FAST_PATH "DB 조회" = 요청 스냅샷 계산 + `/internal/pois/batch-get`(AI 는 BE DB 직접 접근 없음) |
+| 〃 `ai/CLAUDE.md` · `claude.ko.md` · `README.md` | IntentRouter 배선 註 — 호출자는 `/dialogue/interpret`(TRIP-1410), 이 PR 로 `DialogueOrchestrator` 가 분류·팬아웃·답변·메모리를 맡고 3단은 섀도 |
 
 ---
 
@@ -113,8 +117,8 @@
 
 | # | 내용 | 해소 시점 |
 |---|---|---|
-| 미결 #1 | **대화 상태 소유 합의** — BR-DLG-20 은 "백엔드 소유"를 제안일 뿐 합의가 아니다. 백엔드에는 assistant/chat 모듈도 테이블도 없고(`ChangeSource.ASSISTANT` enum 값만 있다) 저장 위치·보존 기간·삭제 요구 대응이 전부 미정 | 백엔드 트랙 합의 + 제품 O3("대화 이력 보관 정책") |
-| 미결 #2 | **자연어 진입 경계가 없다.** 9개 경계 중 발화를 받는 것은 `/ai/v1/itinerary/edit` 의 `utterance` 하나뿐이고 그나마 백엔드가 안 부른다. 새 경계(`POST /ai/v1/dialogue/*`)를 열지, `/edit` 를 확장할지 미정 | 제품 결정 선행 — `backend/docs/design/work-graph.toml` `AI-NL-EDIT` ("우리 openapi 에 대응 표면이 없다. 화면·문구·확인 흐름이 정해져야 계약을 열 수 있다") |
+| 미결 #1 | **대화 상태 소유 합의** — BR-DLG-20 은 "백엔드 소유"를 제안일 뿐 합의가 아니다. 백엔드에는 assistant/chat 모듈도 테이블도 없고(`ChangeSource.ASSISTANT` enum 값만 있다) 저장 위치·보존 기간·삭제 요구 대응이 전부 미정 | 백엔드 트랙 합의 + 제품 O3("대화 이력 보관 정책") **assistant-orchestrator FD 로 재개(2026-10-17)**: 소유는 백엔드로 합의·구현됐다(`assistant` 모듈·`assistant_session`·보존 90일). AI 는 요약 20줄만 자체 DB 에 두고, 백엔드 파기 경로(이력 지우기·여행 삭제·계정 삭제)가 `DELETE /ai/v1/dialogue/memory` 를 부른다 |
+| 미결 #2 | **자연어 진입 경계가 없다.** 9개 경계 중 발화를 받는 것은 `/ai/v1/itinerary/edit` 의 `utterance` 하나뿐이고 그나마 백엔드가 안 부른다. 새 경계(`POST /ai/v1/dialogue/*`)를 열지, `/edit` 를 확장할지 미정 | 제품 결정 선행 — `backend/docs/design/work-graph.toml` `AI-NL-EDIT` ("우리 openapi 에 대응 표면이 없다. 화면·문구·확인 흐름이 정해져야 계약을 열 수 있다") **assistant-orchestrator FD 로 재개(2026-10-17)**: 경계는 `POST /ai/v1/dialogue/interpret`(TRIP-1410, 2026-10-14 개통)을 확장(outcome `ANSWER`·`answer`·`session_id`·`account_ref`·`recent_turns`)하고 `/ai/v1/dialogue/memory` DELETE·GET 을 신설한다 |
 | 미결 #3 | **봉투 이관과의 순서.** 다중 의도는 프레임마다 봉투 1개를 요구하는데, 에이전트 4종이 아직 `AgentTask` 밖 전용 타입(`ScheduleTask` 등)으로 호출된다 | agent-foundation 미결 #8 (AgentTask 이관). **그 작업이 보류 중이면 ④는 착수할 수 없다** |
 | 미결 #4 | **`INFO_REQUIREMENTS` 가 2종뿐이다** — `GENERATE_SCHEDULE`·`REPLAN` 만 있고 나머지 11종의 수집 요구표가 없다. 프레임이 실행 가능해도 수집이 안 된다 | U5·U6 Provider FD |
 | 미결 #5 | **도구 호출을 위한 신규 `LlmFeature` 필요 여부.** `INTENT` 를 재사용하면 프롬프트 하나가 도구/JSON 두 형태를 겸하게 되고, 분리하면 BR-AF-07 5종 세트가 든다 | 4.2 포트 확장 실장 시 |
@@ -122,7 +126,7 @@
 | 미결 #7 | **`ExecutionPlan` 의 표현력 부족 가능성.** `AgentCall.task: str` + `params: dict` 라 프레임의 `intent`·`confidence`·`match_route` 가 컴파일에서 소실된다. 관측(LangSmith)에서 경로별 비중을 프레임 단위로 보려면 계측을 어디에 붙일지 정해야 한다 | ④ 실장 시 |
 | 미결 #11 | **`⌀` 인자 7칸 — 뽑아도 받을 칸이 없다.** `GENERATE_SCHEDULE.region`(`destinations` 소비자 0) · `REGENERATE.reason` · `REPLAN.from_slot` · `SUGGEST_ALTERNATIVE.count`·`constraint` · `STYLE_ANALYSIS.focus_axis` · `SHOW_SCHEDULE.scope`. 칸을 만들든지 인자를 빼든지 정해야 한다 — 그대로 두면 모델이 채우고 우리가 버린다 | 경계 계약 개정 |
 | 미결 #12 | **`multiple` 인자를 규칙으로 뽑을 방법이 없다.** `_extract_slots` 가 슬롯당 문자열 하나(`re.search(...).group(0)`)라 `REPLAN.reason`(와이어는 `reasons: list[str]`)을 표현하지 못한다. 추출기 계약을 넓히든지 그 인자를 3차에 맡긴다 | ① 착수 시 |
-| 미결 #13 | **핸들러가 없는 의도 4종**(`STYLE_ANALYSIS`·`GET_NEXT_SLOT`·`SHOW_SCHEDULE`·`GET_POI_INFO`) + Provider 대행 2종. 인자표는 이들에 대해 "AI 가 처리한다"가 아니라 "라우터가 백엔드에 넘길 봉투"다 — 백엔드와 그 봉투 모양을 합의해야 실효가 생긴다 | 백엔드 트랙 합의 |
+| 미결 #13 | **핸들러가 없는 의도 4종**(`STYLE_ANALYSIS`·`GET_NEXT_SLOT`·`SHOW_SCHEDULE`·`GET_POI_INFO`) + Provider 대행 2종. 인자표는 이들에 대해 "AI 가 처리한다"가 아니라 "라우터가 백엔드에 넘길 봉투"다 — 백엔드와 그 봉투 모양을 합의해야 실효가 생긴다 | 백엔드 트랙 합의 **assistant-orchestrator FD 로 재개(2026-10-17)**: 봉투 합의 대신 **AI 안에서 처리**한다 — 4종 + Provider 대행 2종은 `orchestrator/dialogue_handlers.py::HANDLERS`(스냅샷 계산 · PoiInfo/Weather/Transit Provider · `/internal/pois/batch-get`)가 맡고 결과를 응답 `answer` 로 백엔드에 넘긴다(AI 는 BE DB 직접 접근 없음) |
 | 미결 #9 | **`OUT_OF_SCOPE` 거부 앵커 뱅크 부재.** 평가 발화 87건 중 25건이 `t_mid` 아래인데 그중 9건이 범위 밖이고 전부 엉뚱한 의도에 top1 이 붙는다(뱅크가 `ROUTABLE_INTENTS` 13종만 덮는다). 범위 밖은 **열린 집합**이라 전수 커버가 불가능하니 흔한 갈래(금융·계정·기기제어·잡담)만 덮는 것이 현실적이다. 이득은 정확도가 아니라 **비용**(3차가 이미 대부분 맞힌다) | 별도 티켓 |
 | 미결 #10 | **의도 되묻기의 후보 선정 규칙이 미정.** `FALLBACK` 로 떨어진 발화에서 후보 2~3종을 무엇으로 뽑나 — 1차 top-k 의 상위 의도인가, 3차가 낮은 신뢰도로 낸 것과 그 경쟁자인가. 후보에 정답이 없으면 되묻기가 폴백보다 나쁘다 | DoD 실측 후 |
 | 미결 #8 | **복합 의심 신호의 실측 근거가 없다.** BR-DLG-12 의 "접속 표지 + top1 < T_high" 는 가설이다. 복합 발화가 평가셋에 **0건**이라 현재로선 측정할 수 없다 | 평가셋에 복합 발화 항목 추가 (§6 확장) |

@@ -110,6 +110,10 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         # 다시 짜기 하루 구성 — 고른 곳 ≤ 8건 × 이유 + fable 사고 토큰
         LlmFeature.REPLAN_COMPOSITION: 2048,
         LlmFeature.PREFERENCE_SCORING: 2048,
+        # 도우미 턴 — 분류 JSON 한 줄 · 답변 ≤400자 · 요약 ≤20줄×120자(1024 면 꽉 찬 요약이 잘린다)
+        LlmFeature.DIALOGUE_INTENT: 1024,  # DEV 실측 출력 239/256 — 사고 토큰이 상한에 붙었다
+        LlmFeature.DIALOGUE_ANSWER: 512,
+        LlmFeature.DIALOGUE_MEMORY: 2048,
     }.get(feature, 1024)
     assert [r.max_tokens for r in llm.requests] == [expected]
 
@@ -141,6 +145,10 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.REPLAN_COMPOSITION: "low",  # 같은 replan 25s 안에서 PlanB 다음에 돈다
         LlmFeature.REPLAN_REQUEST_EXTRACTION: "low",  # 같은 replan 시한, 구성보다 먼저
         LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",  # 기본 추론에서 DEV 3.75s 시한 2/2 초과
+        # 도우미 턴 — 해석 시한 9s 안에서 분류 ≤2.5s·답변 ≤2.5s·요약 ≤2.0s (assistant-orchestrator FD §2.10)
+        LlmFeature.DIALOGUE_INTENT: "low",
+        LlmFeature.DIALOGUE_ANSWER: "low",
+        LlmFeature.DIALOGUE_MEMORY: "low",
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]
 

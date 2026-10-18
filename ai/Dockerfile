@@ -41,4 +41,7 @@ EXPOSE 8000
 # venv 바이너리 직행 — `uv run` 은 읽기 전용 루트 파일시스템에서 캐시·동기화를 쓰려다 넘어진다.
 # 차트가 이 이유로 command 를 덮어쓰고 있었는데(ai.yaml), 그러면 이미지 단독 실행과
 # 배포가 다른 것을 돌리게 된다. 기본값을 차트가 실제로 쓰는 것과 같게 맞춘다.
-CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# `--no-access-log`: uvicorn 기본 access log 는 쿼리 문자열까지 찍는다 — 메모리 경계
+# (`/ai/v1/dialogue/memory?account_ref=…`)의 계정 참조가 stdout → 로그 그룹으로 나간다(SEC-U8-06).
+# 요청 관측은 TraceMiddleware 의 `http_request`(path 만)가 한다. 차트 args 와 같은 플래그(chart 테스트가 대조).
+CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

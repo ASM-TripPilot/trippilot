@@ -39,3 +39,18 @@ CREATE TABLE IF NOT EXISTS public.kb_vectors (
 );
 GRANT USAGE ON SCHEMA public TO ai_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.kb_vectors TO ai_user;
+-- Assistant session memory (assistant-orchestrator FD DE §4). Same statements as the compose
+-- canon ai/docker/vector-init/02-dialogue-memory.sql (deploy/eks/tests compares them); the
+-- adapter does DML only, so this Job is the only place the table is created on EKS.
+CREATE TABLE IF NOT EXISTS public.dialogue_memory (
+  session_id            text PRIMARY KEY,      -- backend assistant_session.session_id
+  account_ref           text,                  -- backend account id (opaque string, never logged)
+  trip_id               text,
+  summary               jsonb NOT NULL DEFAULT '[]',   -- <= 20 lines of <= 120 chars (LLM summary or deterministic compress)
+  summarized_turn_index integer NOT NULL DEFAULT 0,    -- last turn_index this summary covers
+  updated_at            timestamptz NOT NULL,
+  expires_at            timestamptz NOT NULL           -- updated_at + 90 days (same as backend DATA-U8-01, extended on write)
+);
+CREATE INDEX IF NOT EXISTS ix_dialogue_memory_account ON public.dialogue_memory (account_ref, updated_at DESC);
+CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory (trip_id);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user;

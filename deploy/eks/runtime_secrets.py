@@ -1,7 +1,10 @@
 """Allowlisted Secrets Manager JSON -> service-scoped Kubernetes Secrets."""
+import ast
 import base64
 import json
 import os
+from pathlib import Path
+import re
 import secrets
 import shutil
 import subprocess
@@ -26,6 +29,7 @@ ANTHROPIC_API_KEY ANTHROPIC_MODEL TRIPPILOT_LLM_FEATURE_MODELS TRIPPILOT_LLM_RET
 TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API_BASE KAKAO_REST_API_KEY
 EXISTENCE_MAX_CALLS TMAP_API_KEY ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
+TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE
 """.split())
 GROUP_KEYS = {
     "backend": BACKEND_KEYS, "ai": AI_KEYS,
@@ -114,6 +118,71 @@ def validate_rsa_key(value):
         raise ValueError("JWT_SIGNING_KEY must be base64 PKCS#8 RSA")
 
 
+# 대상별 AI 기본값 — 저장값이 **없을 때만** 깔고(그 런에서 시크릿에 써서 남긴다) 저장값이 있으면 그대로 둔다.
+# 섀도 분류 측정 비율은 사용자 결정(2026-10-17)이 개발 1.0 · 운영 0.2 다. AI 기본값이 1.0 이라 운영만 여기서 내린다.
+AI_TARGET_DEFAULTS = {"prod": {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "0.2"}}
+# 같은 커밋 AI 의 기능 enum. 배포 러너는 AI 패키지를 설치하지 않으므로 소스를 읽는다(runtime_pois 의 SCRIPT 와 같은 방식).
+FEATURE_SOURCE = Path(__file__).resolve().parents[2] / "ai" / "src" / "trippilot" / "domain" / "llm.py"
+_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]*")
+
+
+def known_llm_features(source=FEATURE_SOURCE):
+    """같은 커밋 `LlmFeature` 의 **값**들(AI 는 `LlmFeature(name)` 으로 값을 찾는다). 정규식 대신 AST — 접두가 같은 다른
+    클래스나 모듈 상수를 잘못 집지 않게. 모르는 이름이 배정에 들어가면 AI 가 기동에서 죽는다(`feature_models_from_env`)."""
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    enum = next((node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "LlmFeature"), None)
+    if enum is None:
+        raise ValueError(f"LlmFeature enum not found in {source}")
+    return frozenset(stmt.value.value for stmt in enum.body
+                     if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Constant)
+                     and isinstance(stmt.value.value, str))
+
+
+_RUNNING_FEATURES = "from trippilot.domain.llm import LlmFeature; print(' '.join(f.value for f in LlmFeature))"
+
+
+def running_llm_features(namespace, shell):
+    """**지금 떠 있는** AI 이미지의 기능 이름 — AI Deployment 가 없으면(첫 설치) None.
+
+    왜: sync 는 helm 보다 먼저 시크릿과 k8s Secret 을 덮고, helm --atomic 롤백은 그 Secret 을 되돌리지 않는다(차트 밖 리소스).
+    새 이름을 넣은 런이 롤백되면 옛 이미지 파드가 다음 재시작 때 그 이름을 읽고 기동에서 죽는다. 그래서 새 이름은 그 이름을
+    아는 이미지가 이미 떠 있을 때만 받는다. exec 가 실패하면 그대로 올려 배포를 멈춘다(쓰기 전 — 닫힌 쪽으로 실패).
+    """
+    found = shell(["kubectl", "get", "deployment", "ai", "--namespace", namespace, "--ignore-not-found", "--output", "name"])
+    if not found.strip():
+        return None
+    output = shell(["kubectl", "exec", "--namespace", namespace, "deployment/ai", "-c", "ai", "--",
+                    "env", "PYTHONPATH=/app/src", "/app/.venv/bin/python", "-c", _RUNNING_FEATURES])
+    return frozenset(output.split())
+
+
+def merge_feature_models(stored, overrides, known, running=None):
+    """`FEATURE=model,…` 를 저장된 배정 위에 덧씌운다 — 같은 기능은 자리 그대로 바꾸고, 새 기능은 뒤에 붙이고, 나머지는 둔다.
+    결과 전체가 이 커밋(`known`)과 지금 떠 있는 이미지(`running`, None 이면 생략) 양쪽이 아는 이름이어야 한다. 지우는 문법은
+    두지 않는다 — 항목을 빼는 것은 시크릿 손편집 몫이다(덧씌우기만으로 롤아웃은 끝난다)."""
+    pairs = {}
+    for pair in (stored or "").split(","):
+        name, sep, model = pair.partition("=")
+        if sep and name.strip():
+            pairs[name.strip().upper()] = model.strip()  # AI 도 이름을 대문자로 읽는다
+    for pair in overrides.split(","):
+        if not pair.strip():
+            continue
+        name, sep, model = (part.strip() for part in pair.partition("="))
+        if not sep or not _MODEL_ID.fullmatch(model):
+            raise ValueError("llm feature models must be FEATURE=model pairs separated by commas")
+        pairs[name.upper()] = model
+    unknown = sorted(name for name in pairs if name not in known)
+    if unknown:
+        raise ValueError(f"Unknown LlmFeature in llm feature models: {', '.join(unknown)}")
+    if running is not None:
+        not_running = sorted(name for name in pairs if name not in running)
+        if not_running:
+            raise ValueError(f"The running AI image does not know {', '.join(not_running)} — deploy this commit once with "
+                             "llm_feature_models empty, then rerun with it")
+    return ",".join(f"{name}={model}" for name, model in pairs.items())
+
+
 def seed_groups(groups, password_factory=None, key_factory=None):
     password_factory = password_factory or (lambda: secrets.token_urlsafe(36))
     key_factory = key_factory or rsa_key
@@ -193,13 +262,28 @@ def validate_groups(groups):
         require(ai, ("OPENAI_API_KEY",), "OpenAI LLM")
     if provider in ("anthropic", "mixed"):
         require(ai, ("ANTHROPIC_API_KEY",), "Anthropic LLM")
+    # 도우미 오케스트레이터(assistant-orchestrator 1단계). 없으면 off = 종전 DialogueInterpreter 경로다. 오타는 AI 가
+    # 기동에서 거부하므로(main.py) 파드가 뜨다 죽기 전에 여기서 막는다 — LOCATION_AUTOMATION_ENABLED 처럼 두 값만 받는다.
+    if ai.get("TRIPPILOT_DIALOGUE_ORCHESTRATOR", "") not in ("", "on", "off"):
+        raise ValueError("Unsupported TRIPPILOT_DIALOGUE_ORCHESTRATOR in ai secret; use on or off")
+    # 섀도 분류 측정의 샘플링 비율 0~1(없으면 1.0 — DEV 전부 · 운영 0.2 권고). 범위 밖·숫자 아님은 기동 실패다.
+    rate = ai.get("TRIPPILOT_DIALOGUE_SHADOW_RATE", "")
+    if rate:
+        try:
+            parsed = float(rate)
+        except ValueError:
+            parsed = -1.0
+        if not 0.0 <= parsed <= 1.0:  # nan 도 여기서 걸린다(비교가 전부 False)
+            raise ValueError("TRIPPILOT_DIALOGUE_SHADOW_RATE must be a number from 0 to 1; remove the key to use the default")
 
 
-def runtime_manifests(groups, outputs, namespace, embedding_enabled):
+def runtime_manifests(groups, outputs, namespace):
+    # ai_kb DSN 은 임베딩과 무관하게 항상 — 도우미 세션 메모리(dialogue_memory, assistant-orchestrator FD DE §4)가
+    # 그 DB 에 산다. 차트(ai.yaml)도 같은 조건(무조건)으로 꽂는다; 둘이 어긋나면 optional 아닌 secretKeyRef 라 파드가 멈춘다.
     vector = {"TRIPPILOT_VECTOR_DB_URL": (
         f"postgresql://ai_user:{quote(groups['database']['AI_DB_PASSWORD'], safe='')}"
         f"@{outputs['database_host']}:5432/ai_kb?sslmode=require"
-    )} if embedding_enabled else {}
+    )}
     values = {**groups, "ai": {**groups["ai"], **vector}}
     return [{"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
              "metadata": {"name": f"trippilot-{name}", "namespace": namespace},
@@ -218,13 +302,27 @@ def open_gaps(groups):
                "our app, so tokens issued to other Kakao apps can sign up (TRIP-1317)")
 
 
-def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None):
+def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialogue_orchestrator=None,
+         llm_feature_models=None, target=None):
+    # embedding_enabled 는 runtime.py CLI 계약으로 남는다 — DSN 합성은 더 이상 이 값을 보지 않는다(runtime_manifests).
     region = outputs["aws_region"]
     groups = {name: get_secret(shell, region, arn) for name, arn in outputs["app_secret_arns"].items()}
-    validate_groups(groups)
+    # AI 그룹은 입력·대상 기본값을 먼저 얹고 검증한다 — 저장값이 틀려도 입력으로 고칠 수 있게. 나머지 그룹은 저장값 그대로 검증
+    # (seed_groups 가 database·shared 의 낯선 키를 조용히 버리고 다시 쓰는 것을 이 검증이 막는다).
+    ai = dict(groups["ai"])
+    for key, value in AI_TARGET_DEFAULTS.get(target, {}).items():
+        if not (ai.get(key) or "").strip():  # 빈 값도 "없음" — AI 의 `_env` 도 빈 값을 미설정으로 읽는다
+            ai[key] = value
+    if dialogue_orchestrator is not None:
+        ai["TRIPPILOT_DIALOGUE_ORCHESTRATOR"] = dialogue_orchestrator
+    if llm_feature_models:
+        ai["TRIPPILOT_LLM_FEATURE_MODELS"] = merge_feature_models(
+            ai.get("TRIPPILOT_LLM_FEATURE_MODELS", ""), llm_feature_models, known_llm_features(),
+            running_llm_features(namespace, shell))
+    validate_groups({**groups, "ai": ai})
     for gap in open_gaps(groups):
         print(f"::warning title=Open security gap::{gap}")  # 실행 요약 맨 위에 주석으로 뜬다
-    seeded = seed_groups(groups)
+    seeded = seed_groups({**groups, "ai": ai})
     if push_mode is not None:
         # 배포 입력이 고른 값으로 덮는다 — 시크릿 손편집만이 켜는 길이면 로컬 자격이 만료된 날엔 못 켠다.
         # None(유지)이면 저장된 값을 건드리지 않는다(보존 규칙 그대로).
@@ -234,5 +332,10 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None):
     for name, values in seeded.items():
         if values != groups[name]:
             put_secret(shell, region, outputs["app_secret_arns"][name], values)
-    for manifest in runtime_manifests(seeded, outputs, namespace, embedding_enabled):
+    written = sorted(key for key in ai if ai[key] != groups["ai"].get(key))
+    if written:
+        print(f"ai secret keys written by this deploy: {', '.join(written)}")  # 이름만 — 값은 찍지 않는다
+    # 도우미 경로의 백엔드 스위치(off|fake|http — 비밀 아님). AI 를 켜도 이것이 http 가 아니면 사용자는 버튼 모드다.
+    print(f"backend ASSISTANT_INTERPRET_MODE={seeded['backend'].get('ASSISTANT_INTERPRET_MODE')}")
+    for manifest in runtime_manifests(seeded, outputs, namespace):
         shell(["kubectl", "apply", "--server-side", "--field-manager=trippilot-runtime", "-f", "-"], json.dumps(manifest))
