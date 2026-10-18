@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
 
-from collect_curated_popups import to_events  # noqa: E402
+from collect_curated_popups import region_of, to_events  # noqa: E402
 
 from trippilot.background.event_store import JsonEventStore  # noqa: E402
 from trippilot.domain.event import EventType  # noqa: E402
@@ -35,6 +35,13 @@ def test_팝업_등록은_지역_수집_시각을_건드리지_않고_두_번_�
     assert store.upsert("서울", to_events(_POPUPS, _TODAY), now, covered=False) == (1, 0)
     assert store.upsert("서울", to_events(_POPUPS, _TODAY), now, covered=False) == (0, 0)
     assert store.coverage("서울") is None      # "서울을 긁었다"는 부족 신호가 아니다
+
+
+def test_지역은_주소_첫_낱말이다() -> None:
+    busan = to_events([{"name": "라리가", "address": "부산 부산진구 가야대로 772",
+                        "start": "2026-10-30", "end": "2026-11-19"}], _TODAY)[0]
+    assert region_of(busan) == "부산"
+    assert region_of(to_events(_POPUPS, _TODAY)[0]) == "서울"
 
 
 def test_팝업은_쇼핑_도시_문화_취향에_가산점() -> None:

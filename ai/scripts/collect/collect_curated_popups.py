@@ -33,7 +33,11 @@ from trippilot.background.naver_search import UrllibHttpClient  # noqa: E402
 from trippilot.domain.event import EventInfo, EventType  # noqa: E402
 
 KST = dt.timezone(dt.timedelta(hours=9))
-_REGION = "서울"   # ponytail: 지금 목록은 성수뿐 — 다른 시도가 들어오면 항목에 region 칸을 둔다
+
+
+def region_of(event: EventInfo) -> str:
+    """주소 첫 낱말 = 행사 저장소의 지역 이름("서울 성동구 …" → 서울). 목록은 그 꼴로만 적는다."""
+    return (event.address or "").split()[0]
 
 
 def to_events(popups: list[dict], today: dt.date) -> list[EventInfo]:
@@ -68,7 +72,10 @@ def main(argv: list[str]) -> int:
         print("[popups] 카카오 키 없음 — 좌표 없이 싣는다(근처 가산점은 빠진다)", file=sys.stderr)
 
     store = JsonEventStore(args.store)
-    added, backfilled = store.upsert(_REGION, events, now, covered=False)
+    added = backfilled = 0
+    for region in sorted({region_of(e) for e in events}):
+        a, b = store.upsert(region, [e for e in events if region_of(e) == region], now, covered=False)
+        added, backfilled = added + a, backfilled + b
     store.save()
     print(f"[popups] 진행 중 {len(events)}건 · 좌표 {sum(e.coord is not None for e in events)} · "
           f"신규 {added} · 좌표백필 {backfilled} → {args.store}", file=sys.stderr)
