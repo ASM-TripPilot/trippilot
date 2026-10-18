@@ -222,6 +222,13 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.DELETE, "/api/v1/assistant/sessions/$session", token).first shouldBe 204
         call(HttpMethod.DELETE, "/api/v1/assistant/sessions/$session", token).first shouldBe 204
 
+        // 상대(AI) 기억 파기는 대화 삭제와 같은 트랜잭션의 아웃박스로 맡긴다 — 한 번만(두 번째 삭제는 지운 것이 없다).
+        // 릴레이가 구독자에 배달하면 발행으로 닫힌다(상대가 불통이면 열린 채 재시도된다, 미결 #13).
+        val forget = "SELECT count(*) FROM outbox_event WHERE event_type = 'assistant.DialogueForgetRequested' AND aggregate_id = ?"
+        jdbc.queryForObject(forget, Int::class.java, session) shouldBe 1
+        repeat(3) { relay.relay() }
+        jdbc.queryForObject("$forget AND published_at IS NOT NULL", Int::class.java, session) shouldBe 1
+
         count("assistant_message", session) shouldBe 0
         count("assistant_proposal", session) shouldBe 0
         call(HttpMethod.GET, "/api/v1/assistant/sessions", token).second.size() shouldBe 0
