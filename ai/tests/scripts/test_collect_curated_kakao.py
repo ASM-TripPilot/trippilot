@@ -58,3 +58,9 @@ def test_요즘_인기는_인기_항의_바닥이고_저장_수가_넘으면_저
     assert _popularity_norm(0) == 0.0
     assert _popularity_norm(0, (TRENDING_TAG,)) == 0.25
     assert _popularity_norm(1000, (TRENDING_TAG,)) == _popularity_norm(1000) == 0.5
+
+
+def test_출처_주소가_있으면_카카오_주소에도_있어야_고른다() -> None:
+    docs = [_doc("문구센터", "서울 용산구 이태원로27길 60"), _doc("문", "서울 용산구 이태원로27길 6")]
+    assert pick(docs, "문", "서울", "이태원로27길 6")["road_address_name"].endswith("27길 6")
+    assert pick([docs[0]], "문", "서울", "이태원로27길 6") is None   # 6 ≠ 60

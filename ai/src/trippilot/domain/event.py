@@ -22,6 +22,7 @@ class EventType(Enum):
     FESTIVAL = "FESTIVAL"      # 축제
     PERFORMANCE = "PERFORMANCE"  # 공연
     EXHIBITION = "EXHIBITION"  # 전시
+    POPUP = "POPUP"            # 팝업스토어 — 웹 큐레이션(`curated_popups.json`), 기간 한정 매장·전시
     OTHER = "OTHER"
 
 

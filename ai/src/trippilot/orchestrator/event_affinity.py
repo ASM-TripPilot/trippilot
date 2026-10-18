@@ -41,6 +41,8 @@ _AFFINITY_TAGS: Mapping[EventType, frozenset[TasteTag]] = {
     EventType.FESTIVAL: frozenset({TasteTag.ACTIVITY, TasteTag.CULTURE}),
     EventType.PERFORMANCE: frozenset({TasteTag.CULTURE}),
     EventType.EXHIBITION: frozenset({TasteTag.CULTURE}),
+    # 팝업은 쇼핑·도시 산책·전시가 섞인다(성수 연무장길 — 브랜드 스토어와 캐릭터 전시가 반반)
+    EventType.POPUP: frozenset({TasteTag.SHOPPING, TasteTag.CITY, TasteTag.CULTURE}),
     EventType.OTHER: frozenset(),
 }
 
