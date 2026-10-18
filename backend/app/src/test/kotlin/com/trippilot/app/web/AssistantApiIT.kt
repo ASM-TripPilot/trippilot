@@ -9,6 +9,7 @@ import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -43,6 +44,7 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
     @Autowired private lateinit var relay: OutboxRelay
+    @Autowired private lateinit var subscribers: List<com.trippilot.core.event.OutboxSubscriber>
 
     private companion object {
         const val CONCURRENT_OPENS = 8
@@ -228,6 +230,8 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         jdbc.queryForObject(forget, Int::class.java, session) shouldBe 1
         repeat(3) { relay.relay() }
         jdbc.queryForObject("$forget AND published_at IS NOT NULL", Int::class.java, session) shouldBe 1
+        // 구독자 없는 이벤트도 릴레이는 닫는다 — 위 단언만으로는 구독자가 붙었는지 모른다
+        subscribers.map { it.eventType } shouldContain "assistant.DialogueForgetRequested"
 
         count("assistant_message", session) shouldBe 0
         count("assistant_proposal", session) shouldBe 0
