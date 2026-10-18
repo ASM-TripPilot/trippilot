@@ -86,7 +86,8 @@ def test_fetch_page_sends_common_params_once_per_call() -> None:
     assert params["serviceKey"] == "test-key"
     assert params["MobileOS"] == "ETC" and params["MobileApp"] == "TripPilot"
     assert params["_type"] == "json"
-    assert params["areaCode"] == "39" and params["contentTypeId"] == "39"
+    # 법정동 코드로 부른다 — areaCode 로 거르면 일부만 온다(10-18 실측, `LDONG_BY_AREA`)
+    assert params["lDongRegnCd"] == "50" and "areaCode" not in params and params["contentTypeId"] == "39"
     assert params["numOfRows"] == "50" and params["pageNo"] == "2"
 
 
