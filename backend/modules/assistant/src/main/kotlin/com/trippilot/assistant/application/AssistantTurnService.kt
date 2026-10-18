@@ -11,6 +11,7 @@ import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.AssistantUsageRepository
 import com.trippilot.assistant.domain.DialogueInterpretPort
+import com.trippilot.assistant.domain.DialogueMemoryPort
 import com.trippilot.assistant.domain.Intent
 import com.trippilot.assistant.domain.IntentFrame
 import com.trippilot.assistant.domain.InterpretOutcome
@@ -96,6 +97,8 @@ class AssistantTurnService(
     /** 상대가 완성한 답의 2차 검증 재료 — 고르기 버튼의 슬롯 실재([plans])와 후보 장소의 실존·정본 이름([poiSurfaces], INV-1). */
     private val plans: ItineraryPlanFacade,
     private val poiSurfaces: PoiSurfaceFacade,
+    /** 답하는 사이 지워진 대화의 상대 기억을 한 번 더 지우는 데만 쓴다 — 아래 `send` 의 "대화가 없다" 갈래. */
+    private val memory: DialogueMemoryPort,
     private val properties: AssistantProperties,
     private val mapper: ObjectMapper,
     private val clock: Clock,
@@ -131,6 +134,12 @@ class AssistantTurnService(
             // 답하는 사이 대화가 지워졌다(이력 지우기·여행 삭제) — 남길 곳이 없다. 500 이 아니라 "그 대화는 없다"다.
             // 그래도 **쓴 LLM 은 센다**: 안 세면 "보내고 지우기"를 되풀이해 하루 상한을 비켜 간다(사용량은 계정에 묶여 남는다).
             if (reply.llm) tx.execute { usage.record(accountId, today(startedAt), llm = true, turn = false) }
+            // 상대 기억도 한 번 더 지운다 — 상대는 답하기 **전에** 요약을 써서, 이력 지우기·여행 삭제·계정 삭제의 파기가 이 턴보다
+            // 먼저 끝났어도 진행 중이던 이 턴이 그 세션의 요약을 되살린다(2026-10-18 리뷰 재현: 같은 계정의 다른 대화가 "지난 여행
+            // 기억"으로 읽었다). 세 파기 경로가 전부 여기로 온다. 실패는 WARN — 90일 TTL 이 마지막 그물이다.
+            runCatching { memory.deleteBySession(sessionId) }.onFailure { e ->
+                log.warn("지워진 대화의 상대 기억을 다시 지우지 못했습니다. sessionId={} type={}", sessionId, e.javaClass.simpleName)
+            }
             throw ResourceNotFound()
         }
         return TurnResult(listOf(accepted.user) + replies, replies.last().quickReplies ?: StartQuickReplies.of(accepted.session.tripId != null))

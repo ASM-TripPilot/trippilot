@@ -768,6 +768,18 @@ def test_alternatives_infrastructure_failure_is_unavailable_text(make) -> None:
     assert facts.template_text == fallback_answer_text(Intent.SUGGEST_ALTERNATIVE, {"status": "UNAVAILABLE"})
 
 
+def test_alternatives_planb_pipeline_error_is_unavailable_not_empty() -> None:
+    """KB·DB 장애(PlanB `empty_reason="pipeline_error"`)는 "대안이 없다"(EMPTY)가 아니라 "확인할 수 없다"다 — 그래야 팬아웃이
+    상태값으로 보고하고(2026-10-18 리뷰: 이벤트 0·로그 0 이었다) 사용자 문장도 정직하다. 사유는 코드만(예외 메시지 없음)."""
+    failed = PlanBRagResult(alternatives=(), is_fallback=True, fallback_level=2, notes=("pipeline_error: OperationalError: x",),
+                            retrieved={}, dropped_out_of_pool=(), empty_reason="pipeline_error")
+    ports, _, _ = _alt_ports(result=failed)
+    (task,) = HANDLERS[Intent.SUGGEST_ALTERNATIVE].plan(_ctx(arguments={"target": "우도"}, ports=ports))
+    assert task.fn() == {"status": "UNAVAILABLE", "reason": "planb_pipeline_error"}
+    facts = _run(HANDLERS[Intent.SUGGEST_ALTERNATIVE], _ctx(arguments={"target": "우도"}, ports=ports))
+    assert facts.status is FactStatus.UNAVAILABLE
+
+
 def test_alternatives_timeout_is_unavailable_text() -> None:
     ports, _, _ = _alt_ports()
     facts = _run(HANDLERS[Intent.SUGGEST_ALTERNATIVE], _ctx(arguments={"target": "우도"}, ports=ports), fail={"alternatives": "TIMEOUT"})

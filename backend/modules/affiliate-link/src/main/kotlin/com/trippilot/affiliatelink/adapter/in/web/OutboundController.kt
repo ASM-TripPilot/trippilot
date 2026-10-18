@@ -50,6 +50,32 @@ class OutboundController(
         )
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(link.url)).build()
     }
+
+    /**
+     * 지역 숙소 전체 보기 — `GET /api/v1/stays/browse/outbound?region=포항&regionCode=47110`.
+     *
+     * 앱은 숙소 목록을 갖지 않고 OTA 의 지역 목록으로 보낸다(사진·가격·평점은 OTA 몫). 숙소 이동과 같은
+     * 규약이다: 클릭을 남기고 302, 인증 선택(같은 `stays/{x}/outbound` permitAll 패턴에 들어간다).
+     * 리터럴 `browse` 가 `{stayId}` 템플릿보다 구체적이라 Spring 이 이쪽을 고른다 — 숙소 ID 는 콜론을
+     * 품으므로(`"{출처}:{식별자}"`) `browse` 라는 숙소와 겹칠 일도 없다.
+     */
+    @GetMapping("/browse/outbound")
+    fun regionOutbound(
+        principal: Principal?,
+        @RequestParam region: String,
+        @RequestParam(required = false) regionCode: String?,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) checkin: LocalDate?,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) checkout: LocalDate?,
+        @RequestParam(required = false) adults: Int?,
+    ): ResponseEntity<Void> {
+        val link = service.regionOutbound(
+            principal?.accountId(),
+            regionCode,
+            region,
+            OutboundQuery(checkIn = checkin, checkOut = checkout, adults = adults),
+        )
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(link.url)).build()
+    }
 }
 
 /** 토큰 sub → 계정 id. UUID 가 아니면 인증 실패로 다룬다(형식 오류를 500 으로 흘리지 않는다). */

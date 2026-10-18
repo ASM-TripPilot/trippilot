@@ -47,6 +47,8 @@ export interface PrefStep2ScreenProps {
   onToggleTransport: (id: string) => void;
   onDone: () => void;
   onSkipAll: () => void;
+  /** 온보딩 완료 요청이 실패했다 — CTA 위에 오류 한 줄(TRIP-1421). */
+  completeFailed?: boolean;
 }
 
 const ctaShadow = {
@@ -122,6 +124,7 @@ export function PrefStep2Screen({
   onToggleTransport,
   onDone,
   onSkipAll,
+  completeFailed = false,
 }: PrefStep2ScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -256,6 +259,14 @@ export function PrefStep2Screen({
         </ScrollView>
 
         <View className="px-lg pb-[26px] pt-[22px]">
+          {completeFailed ? (
+            <Text
+              testID="onboarding-pref2-complete-error"
+              className="mb-sm font-noto text-label text-primary-text"
+            >
+              시작하지 못했어요. 다시 시도해 주세요
+            </Text>
+          ) : null}
           <Pressable
             testID="onboarding-pref2-done"
             accessibilityRole="button"
