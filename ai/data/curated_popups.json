@@ -1,8 +1,14 @@
 {
-  "_doc": "성수동 팝업스토어(기간 한정) — 웹 팝업 정리 사이트에서 고른 것(2026-10-18). 장소(POI)가 아니라 행사로 싣는다: 후보 풀에 들어가지 않고, 근처 1km 장소에 가산점만 준다(event_affinity, INV-1). 좌표는 collect_curated_popups.py 가 카카오 주소검색으로 채우고, 끝난 지 7일이 지나면 행사 저장소가 지운다. 새 팝업은 여기 근거 URL 과 함께 추가한다.",
+  "_doc": "팝업스토어(기간 한정, 서울·부산 — 제주는 11월 공개분이 아직 없다) — 웹 팝업 정리 사이트·보도에서 고른 것(2026-10-18). 주소 첫 낱말이 행사 저장소의 지역 이름이다(\"서울 …\", \"부산 …\"). 장소(POI)가 아니라 행사로 싣는다: 후보 풀에 들어가지 않고, 근처 1km 장소에 가산점만 준다(event_affinity, INV-1). 좌표는 collect_curated_popups.py 가 카카오 주소검색으로 채우고, 끝난 지 7일이 지나면 행사 저장소가 지운다. 새 팝업은 여기 근거 URL 과 함께 추가한다.",
   "evidence": {
     "popga_2610": "https://popga.co.kr/content/magazine/429",
-    "khan_2610": "https://www.khan.co.kr/article/202610020700021"
+    "khan_2610": "https://www.khan.co.kr/article/202610020700021",
+    "popga_shinramyun": "https://popga.co.kr/popup/7511",
+    "popga_stellive": "https://popga.co.kr/popup/11771",
+    "gukje_chelof": "https://www.gukjenews.com/news/articleView.html?idxno=3714060",
+    "etoday_laliga": "https://www.etoday.co.kr/news/view/2628223",
+    "popga_maple_busan": "https://popga.co.kr/popup/8492",
+    "popga_pjsekai_busan": "https://popga.co.kr/popup/12056"
   },
   "popups": [
     {"name": "클리오 풍년다방 팝업", "address": "서울 성동구 뚝섬로 273", "start": "2026-09-22", "end": "2026-10-27", "evidence": "popga_2610"},
@@ -11,6 +17,12 @@
     {"name": "카카오페이 팝업 - 오래오래 함께가게", "address": "서울 성동구 연무장3길 8-27", "start": "2026-09-01", "end": "2026-10-31", "evidence": "popga_2610"},
     {"name": "스킨앤랩 링거팩토리 팝업", "address": "서울 성동구 연무장7길 16", "start": "2026-10-02", "end": "2026-10-19", "evidence": "popga_2610"},
     {"name": "킥둥쓰 팝업", "address": "서울 성동구 아차산로5길 24-14", "start": "2026-10-09", "end": "2026-10-18", "evidence": "popga_2610"},
-    {"name": "어반 웰니스 페어 X 미니록스", "address": "서울 성동구 연무장길 50", "start": "2026-10-18", "end": "2026-10-18", "evidence": "popga_2610"}
+    {"name": "어반 웰니스 페어 X 미니록스", "address": "서울 성동구 연무장길 50", "start": "2026-10-18", "end": "2026-10-18", "evidence": "popga_2610"},
+    {"name": "신라면 분식 더 팩토리", "address": "서울 성동구 성수일로4길 52", "start": "2026-06-16", "end": "2026-11-30", "evidence": "popga_shinramyun"},
+    {"name": "2026 스텔라이브 팝업 STELLA MODE:ON", "address": "서울 광진구 광나루로 441", "start": "2026-10-23", "end": "2026-11-01", "evidence": "popga_stellive"},
+    {"name": "체로프 애착인형 팝업 (몽모월드)", "address": "부산 해운대구 센텀남대로 35", "start": "2026-10-06", "end": "2026-11-18", "evidence": "gukje_chelof"},
+    {"name": "라리가 웹툰 팝업스토어", "address": "부산 부산진구 가야대로 772", "start": "2026-10-30", "end": "2026-11-19", "evidence": "etoday_laliga"},
+    {"name": "메이플스토리 in 롯데월드 부산", "address": "부산 기장군 기장읍 동부산관광로 42", "start": "2026-08-29", "end": "2026-11-22", "evidence": "popga_maple_busan"},
+    {"name": "프로세카 × 애니플러스 콜라보 카페 부산", "address": "부산 부산진구 중앙대로 672", "start": "2026-10-08", "end": "2026-11-22", "evidence": "popga_pjsekai_busan"}
   ]
 }
