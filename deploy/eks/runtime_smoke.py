@@ -1,7 +1,7 @@
 """In-cluster smoke checks, including the public gateway's route deny boundary."""
 import json
 
-from runtime_io import CommandError
+from runtime_io import CommandError, wait_job
 
 SMOKE_SCRIPT = """set -eu
 for url in http://gateway:443/healthz http://backend:8080/actuator/health/readiness http://ai:8000/health; do
@@ -163,7 +163,7 @@ def run(namespace, shell):
     shell(delete)
     try:
         shell(["kubectl", "apply", "--server-side", "--field-manager=trippilot-runtime", "-f", "-"], json.dumps(manifest(namespace)))
-        shell(["kubectl", "wait", "--namespace", namespace, "--for=condition=complete", "job/trippilot-smoke", "--timeout=330s"])
+        wait_job(shell, namespace, "trippilot-smoke", 330)
     finally:
         shell(delete)
     report_autoscalers(namespace, shell)

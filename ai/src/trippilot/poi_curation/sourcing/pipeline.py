@@ -417,7 +417,9 @@ def to_output_document(
 def refresh_proposal(
     stored: Mapping, detail: SourcedDetail, *, fetched_on: str,
 ) -> dict | None:
-    """공유본 제안 1건 + 새로 받은 상세 → 정상 수집이 냈을 제안 (상세 되감기 — scripts/collect/refetch_intro.py).
+    """공유본 제안 1건 + 새로 받은 상세 → 정상 수집이 냈을 제안 (상세 되감기).
+
+    10-05~10-15 에 돈 되감기 스크립트가 썼다. 스크립트는 끝나서 지웠고 이 함수는 다음 되감기용으로 남긴다.
 
     목록 유래 칸(이름·좌표·분류·주소·사진·수정시각)은 저장본에서, 상세 유래 칸(영업·휴무 원문·표시용
     원문)은 새 응답에서 와서 **같은 게이트**를 지나고 같은 함수로 나간다 — 같은 목록 레코드 + 같은 상세면

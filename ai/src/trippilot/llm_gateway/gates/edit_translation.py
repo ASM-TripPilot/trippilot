@@ -9,7 +9,10 @@ affectedSlots 일부만 살리면 명령의 의미가 바뀌므로, 대조 집�
   ② POI 참조 교차 — **대조 집합이 둘이다** (TRIP-527):
      · params의 `*PoiId`(= 새로 넣는 POI) ⊆ 후보 풀 — INV-1 그대로. REPLACE_SLOT의
        대상 POI가 params로 새는 경로를 여기서 막는다.
-     · affectedSlots(= 이미 일정에 있는 슬롯 지목) ⊆ 현재 슬롯. 고르는 행위가 아니라
+     · affectedSlots(= 이미 일정에 있는 슬롯 지목) ⊆ 현재 슬롯. MOVE_SLOT 의 기준점
+       `afterPoiId`·`beforePoiId` 도 **지목**이라 같은 쪽 — 옮길 자리의 이웃은 이미
+       일정에 있는 슬롯이고, 풀과 교차하던 동안 풀 밖 이웃을 기준으로 삼은 명령이
+       통째로 드롭됐다. 고르는 행위가 아니라
        가리키는 행위라 풀 자격을 다시 물을 대상이 아니다 — 그 POI는 생성 시 이미 풀을
        통과했고, 편집 경로가 백엔드 find_by_ids로 실물을 받아온 등록 POI다.
      풀은 요청마다 앵커 반경·예산·품질로 잘리는 조각이라(poi_curation.pool_builder),
@@ -63,6 +66,8 @@ _TIME_KEY_EXACT = frozenset({"eta", "start", "end"})
 
 # POI를 가리키는 params 키 — 값은 반드시 후보 풀 안의 poiId (INV-1).
 _POI_REF_TOKEN = "poiid"
+# 그중 **현재 슬롯을 가리키는** 기준점 키 — 풀이 아니라 현재 슬롯과 교차한다 (②).
+_ANCHOR_KEYS = frozenset({"afterpoiid", "beforepoiid"})
 
 
 def _normalize(key: str) -> str:
@@ -80,6 +85,12 @@ def is_time_param_key(key: str) -> bool:
     return normalized in _TIME_KEY_EXACT or any(
         token in normalized for token in _TIME_KEY_TOKENS
     )
+
+
+def is_anchor_param_key(key: str) -> bool:
+    """MOVE_SLOT 기준점 키 판정 — 게이트 ②와 `validate_command` 가 같이 부른다
+    (is_time_param_key 와 같은 이유: 목록을 두 곳에 두면 어긋난다)."""
+    return _normalize(key) in _ANCHOR_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +128,7 @@ class EditTranslationGate:
             )
         ctx = pool
         try:
-            op, params, slot_ids, param_refs = self._parse(raw_text)
+            op, params, slot_ids, param_refs, anchor_refs = self._parse(raw_text)
         except ValueError as e:
             return GateOutcome(value=None, drop_event=None, error=f"parse_error: {e}")
 
@@ -127,7 +138,8 @@ class EditTranslationGate:
         for pid in slot_ids:
             if pid not in unique:
                 unique.append(pid)
-        unknown = tuple(pid for pid in unique if pid not in ctx.current_slots)
+        unknown = tuple(
+            pid for pid in (*unique, *anchor_refs) if pid not in ctx.current_slots)
         outside = tuple(pid for pid in param_refs if not ctx.pool.contains(pid))
         if unknown or outside:
             reasons = []
@@ -143,7 +155,7 @@ class EditTranslationGate:
                     component="c1.gate",
                     feature=feature.value,
                     dropped_ids=unknown + outside,
-                    total_count=len(unique) + len(param_refs),
+                    total_count=len(unique) + len(anchor_refs) + len(param_refs),
                     dropped_count=len(unknown) + len(outside),
                 ),
                 error=" / ".join(reasons) + " — 명령 전체 드롭",
@@ -158,7 +170,9 @@ class EditTranslationGate:
         )
 
     @staticmethod
-    def _parse(raw_text: str) -> tuple[EditOp, dict, tuple[PoiId, ...], tuple[PoiId, ...]]:
+    def _parse(raw_text: str) -> tuple[
+        EditOp, dict, tuple[PoiId, ...], tuple[PoiId, ...], tuple[PoiId, ...]
+    ]:
         node = _load_json_object(raw_text, "editCommand")
         if node is None:
             # 번역 불가를 성공으로 위장하지 않는다 — 폴백 신호 (INV-4)
@@ -170,7 +184,8 @@ class EditTranslationGate:
             op = EditOp(node.get("op"))
         except (ValueError, TypeError):
             raise ValueError(f"op가 EditOp 밖: {node.get('op')!r}") from None
-        params, param_refs = EditTranslationGate._parse_params(node.get("params"))
+        params, param_refs, anchor_refs = EditTranslationGate._parse_params(
+            node.get("params"))
         raw_slots = node.get("affectedSlots")
         if raw_slots is None:
             raw_slots = []
@@ -181,16 +196,19 @@ class EditTranslationGate:
             if not isinstance(value, str) or not value:
                 raise ValueError(f"affectedSlots[{i}] 비정상")
             slot_ids.append(PoiId(value))
-        return op, params, tuple(slot_ids), param_refs
+        return op, params, tuple(slot_ids), param_refs, anchor_refs
 
     @staticmethod
-    def _parse_params(raw: object) -> tuple[dict, tuple[PoiId, ...]]:
-        """params 검사 — ③ 시각 키 거부 · ④ 평면 강제 · ② POI 참조 수집."""
+    def _parse_params(
+        raw: object,
+    ) -> tuple[dict, tuple[PoiId, ...], tuple[PoiId, ...]]:
+        """params 검사 — ③ 시각 키 거부 · ④ 평면 강제 · ② POI 참조 수집(풀용·기준점용)."""
         if raw is None:
-            return {}, ()
+            return {}, (), ()
         if not isinstance(raw, dict):
             raise ValueError("params가 객체가 아님")
         refs: list[PoiId] = []
+        anchors: list[PoiId] = []
         for key, value in raw.items():  # JSON 객체 키는 항상 str
             normalized = _normalize(key)
             if is_time_param_key(key):
@@ -201,5 +219,5 @@ class EditTranslationGate:
             if _POI_REF_TOKEN in normalized:
                 if not isinstance(value, str) or not value:
                     raise ValueError(f"params의 POI 참조 {key!r}가 비정상")
-                refs.append(PoiId(value))
-        return raw, tuple(refs)
+                (anchors if is_anchor_param_key(key) else refs).append(PoiId(value))
+        return raw, tuple(refs), tuple(anchors)

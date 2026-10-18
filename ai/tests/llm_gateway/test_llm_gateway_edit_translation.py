@@ -344,7 +344,7 @@ def test_prompt_renders_deterministically_without_coordinates() -> None:
     p1, ref = reg.render(_FEAT, _vars(pool))
     p2, _ = reg.render(_FEAT, _vars(pool))
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/edit_translation.yaml" and ref.version == "0.2.0"
+    assert ref.prompt_id == "prompts/edit_translation.yaml" and ref.version == "0.3.0"
     assert ref.feature == "EDIT_TRANSLATION"
     for poi in pool.pois:
         assert str(poi.poi_id) in p1  # 슬롯·후보 전원 포함
@@ -490,3 +490,30 @@ def test_worker_falls_back_when_new_poi_is_outside_pool() -> None:
     result = _worker(FakeLlm(canned=canned)).translate(_pool(), _input(), _TID, _NOW)
     assert result.is_fallback is True and result.value is None
     assert "closed_set_violation" in result.error
+
+
+def test_gate_crosses_move_anchor_with_current_slots_not_pool() -> None:
+    """② MOVE_SLOT 기준점(afterPoiId·beforePoiId)은 기존 슬롯 지목 — 풀 밖 현재 슬롯을
+    기준으로 삼아도 통과한다. 풀과 교차하던 동안 "점심 더 늦게"가 통째로 드롭됐다."""
+    outside = PoiId("p3-풀밖-현재슬롯")
+    current = {*_pool().poi_ids, outside}
+    for key in ("afterPoiId", "beforePoiId"):
+        out = _apply(_raw("MOVE_SLOT", ["p1"], params={key: str(outside)}), current=current)
+        assert out.error is None, (key, out.error)
+        assert out.value.command.params[key] == str(outside)
+
+
+def test_gate_drops_move_anchor_not_in_current_slots() -> None:
+    """기준점이 현재 일정에 없으면 풀 안이어도 드롭 — 기준은 고르는 게 아니라 가리키는 것."""
+    out = _apply(_raw("MOVE_SLOT", ["p1"], params={"afterPoiId": "p2"}), current={PoiId("p1")})
+    assert out.value is None and out.error.startswith("unknown_slot:")
+    assert out.drop_event.dropped_ids == (PoiId("p2"),)
+
+
+def test_op_guide_tells_move_slot_to_fill_an_anchor() -> None:
+    """번역이 기준점을 비우면 명령이 거부된다 — op 안내가 두 기준 키를 다 말해야 한다."""
+    guide = build_edit_translation_vars(
+        _pool(), EditTranslationInput(utterance="점심 더 늦게", target_date="2026-08-06",
+                                      current_slots=(PoiId("p1"),)))["edit_ops"]
+    move_line = next(line for line in guide.splitlines() if line.startswith("- MOVE_SLOT"))
+    assert "afterPoiId" in move_line and "beforePoiId" in move_line

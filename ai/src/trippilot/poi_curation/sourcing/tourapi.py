@@ -214,6 +214,25 @@ class TourApiAdapter:
             total_count=total if isinstance(total, int) else len(records),
         )
 
+    def search_festivals(
+        self, area_code: str, start_from: str, page_no: int, rows: int
+    ) -> tuple[list[dict], int]:
+        """`searchFestival2` — 시작일이 `start_from`(YYYYMMDD) 이후인 공식 축제·행사 원문과 총 건수.
+
+        장소가 아니라 행사라서 `SourcedPlaceRecord` 로 바꾸지 않는다 — 원문 그대로 넘기고
+        행사 쪽(`collect_tourapi_festivals.py`)이 기간·좌표를 읽는다. 키링·봉투 규약은 같다.
+        """
+        body = self._call("searchFestival2", {
+            **self._common_params(),
+            "areaCode": area_code,
+            "eventStartDate": start_from,
+            "numOfRows": str(rows),
+            "pageNo": str(page_no),
+        })
+        items = [i for i in self._items(body) if isinstance(i, dict)]
+        total = body.get("totalCount")
+        return items, total if isinstance(total, int) else len(items)
+
     def fetch_detail(self, source_ref: str, kind: str) -> SourcedDetail:
         fields = _INTRO_FIELDS.get(kind)
         if fields is None:  # 매핑 없는 타입 — 없는 정보를 지어내지 않는다

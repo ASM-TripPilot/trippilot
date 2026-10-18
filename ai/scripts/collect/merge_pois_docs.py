@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from collect_pois import load_closed_refs  # noqa: E402  (같은 디렉토리 — refetch_intro 와 같은 방식)
+from collect_pois import load_closed_refs  # noqa: E402  (같은 디렉토리)
 from trippilot.domain.poi import TRENDING_TAG  # noqa: E402
 from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     non_travel_reason,

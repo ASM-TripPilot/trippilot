@@ -16,6 +16,8 @@ import os
 import re
 from pathlib import Path
 
+from runtime_io import wait_job
+
 NAME = "trippilot-poi-load"
 DEADLINE_SEC = 1200
 SCRIPT = Path(__file__).resolve().parents[2] / "backend" / "scripts" / "ingest_pois.py"
@@ -118,8 +120,7 @@ def run(namespace, shell, *, close_missing=False, close_missing_dry_run=False, s
               json.dumps(manifest(namespace, image, source, close_missing=close_missing,
                                   close_missing_dry_run=close_missing_dry_run)))
         try:
-            shell(["kubectl", "wait", "--namespace", namespace, "--for=condition=complete",
-                   f"job/{NAME}", f"--timeout={DEADLINE_SEC}s"])
+            wait_job(shell, namespace, NAME, DEADLINE_SEC)
         except Exception:
             logs = shell(["kubectl", "logs", "--namespace", namespace, f"job/{NAME}", "--tail=40"])
             for line in logs.strip().splitlines()[-12:]:
