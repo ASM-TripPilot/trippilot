@@ -1,8 +1,8 @@
 package com.trippilot.accommodationsearch.application
 
 import com.trippilot.accommodationsearch.api.StayLookupFacade
+import com.trippilot.accommodationsearch.api.TRIPCOM_STAY_SOURCE
 import com.trippilot.accommodationsearch.domain.AccommodationContentPort
-import com.trippilot.accommodationsearch.domain.CuratedStay
 import com.trippilot.accommodationsearch.domain.CuratedStayPort
 import com.trippilot.accommodationsearch.domain.StayKey
 import org.springframework.stereotype.Service
@@ -18,7 +18,7 @@ class StayLookupService(
 ) : StayLookupFacade {
     override fun findName(stayId: String): String? {
         val key = StayKey.parse(stayId)
-        if (key.externalSource == CuratedStay.SOURCE) return curated.findByHotelId(key.externalId)?.name
+        if (key.externalSource == TRIPCOM_STAY_SOURCE) return curated.findByHotelId(key.externalId)?.name
         return content.findOne(key)?.name
     }
 }

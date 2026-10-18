@@ -11,6 +11,7 @@ import com.trippilot.affiliatelink.domain.OutboundStay
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.placedata.api.RegionLookupFacade
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Clock
@@ -27,6 +28,7 @@ class OutboundService(
     private val stays: StayLookupFacade,
     private val deeplink: OtaDeeplinkPort,
     private val clicks: OutboundClickPort,
+    private val regions: RegionLookupFacade,
     private val clock: Clock,
 ) {
     fun outbound(accountId: UUID?, stayId: String, query: OutboundQuery): OutboundLink {
@@ -44,8 +46,15 @@ class OutboundService(
     fun regionOutbound(accountId: UUID?, regionCode: String?, regionName: String, query: OutboundQuery): OutboundLink {
         val name = regionName.trim()
         val code = regionCode?.trim()?.takeIf { it.isNotEmpty() }
-        if (name.isEmpty() || name.length > MAX_REGION_NAME || (code != null && !CODE.matches(code))) {
-            throw ValidationFailed(listOf(FieldError("region", "지역 이름(1~${MAX_REGION_NAME}자)과 숫자 지역 코드를 확인하세요.")))
+        // 지역 카탈로그에 있는 것만 받는다 — 익명·무제한 경로라 자유 문자열을 그대로 받으면 클릭 지표가 오염된다.
+        // 코드가 오면 코드로(동명이지역이 없다), 없으면 이름이 카탈로그에 있어야 한다.
+        val known = if (code != null) {
+            CODE.matches(code) && regions.isSelectableCode(code)
+        } else {
+            name.length <= MAX_REGION_NAME && regions.codesOf(name).isNotEmpty()
+        }
+        if (name.isEmpty() || name.length > MAX_REGION_NAME || !known) {
+            throw ValidationFailed(listOf(FieldError("region", "지역 카탈로그에 있는 지역 이름·코드로 요청하세요.")))
         }
         val clickId = UUID.randomUUID()
         val link = deeplink.buildRegionOutbound(OutboundRegion(code, name), query, clickId)

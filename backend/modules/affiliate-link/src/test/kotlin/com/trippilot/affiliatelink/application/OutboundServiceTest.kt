@@ -7,6 +7,8 @@ import com.trippilot.affiliatelink.domain.OutboundClickPort
 import com.trippilot.affiliatelink.domain.OutboundQuery
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.placedata.api.RegionCenter
+import com.trippilot.placedata.api.RegionLookupFacade
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -21,6 +23,15 @@ import java.util.UUID
 
 private class FakeLookup(private val names: Map<String, String>) : StayLookupFacade {
     override fun findName(stayId: String): String? = names[stayId]
+}
+
+/** 카탈로그 대역 — 포항(47110)·서울(11)·세종(36110)만 안다. */
+private class FakeRegions : RegionLookupFacade {
+    private val byName = mapOf("포항" to listOf("47110"), "서울" to listOf("11"), "세종" to listOf("36110"))
+    override fun codesOf(regionName: String) = byName[regionName] ?: emptyList()
+    override fun isSelectableCode(regionCode: String) = regionCode in byName.values.flatten()
+    override fun centerOf(regionName: String): RegionCenter? = null
+    override fun centerOfCode(regionCode: String): RegionCenter? = null
 }
 
 private class RecordingClicks : OutboundClickPort {
@@ -54,6 +65,7 @@ class OutboundServiceTest : StringSpec({
         stays = FakeLookup(mapOf(stayId to "제주 오션 리조트")),
         deeplink = WebSearchFallbackAdapter(),
         clicks = clicks,
+        regions = FakeRegions(),
         clock = Clock.fixed(now, ZoneOffset.UTC),
     )
 
@@ -117,6 +129,13 @@ class OutboundServiceTest : StringSpec({
         shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, null, "  ", OutboundQuery()) }
         shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, null, "가".repeat(41), OutboundQuery()) }
         shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, "47110' or 1=1", "포항", OutboundQuery()) }
+        clicks.recorded shouldBe emptyList()
+    }
+
+    "카탈로그에 없는 코드·이름은 400 — 익명 경로가 자유 문자열로 클릭 지표를 오염시키지 않는다" {
+        val clicks = RecordingClicks()
+        shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, "9999999", "포항", OutboundQuery()) }
+        shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, null, "아무말", OutboundQuery()) }
         clicks.recorded shouldBe emptyList()
     }
 

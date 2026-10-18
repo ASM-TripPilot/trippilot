@@ -141,4 +141,9 @@ class OutboundApiIT : AbstractPostgresIntegrationTest() {
     fun `지역 이름이 없으면 400`() {
         get("/api/v1/stays/browse/outbound?regionCode=47110", null).statusCode.value() shouldBe 400
     }
+
+    @Test
+    fun `카탈로그에 없는 지역 코드는 400 — 실 카탈로그 시드 기준`() {
+        get("/api/v1/stays/browse/outbound?region=포항&regionCode=99999", null).statusCode.value() shouldBe 400
+    }
 }

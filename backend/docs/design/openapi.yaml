@@ -608,11 +608,12 @@ paths:
       summary: 지역 숙소 전체 보기 302(OTA 지역 목록으로 이동)
       description: >
         앱은 숙소 목록을 갖지 않고 OTA 의 지역 숙소 목록으로 보낸다 — 사진·가격·평점은 OTA 가 보여준다.
+        `region`·`regionCode` 는 지역 카탈로그에 있어야 한다(코드는 선택 가능 지역, 코드가 없으면 이름 일치) — 아니면 400.
         숙소 아웃바운드와 같은 규약이다: 클릭을 남기고(stay_id 자리에 `REGION:{regionCode 또는 region}`) 302,
         본문 없음, Bearer 선택.
 
 
-        트립닷컴 모드에서 `regionCode` 가 도시 매핑(주요 여행지 31곳, 가장 긴 접두사 일치)에 걸리면
+        트립닷컴 모드에서 `regionCode` 가 도시 매핑(주요 여행지 — 정본은 `TripcomDeeplinkAdapter.CITY_IDS`, 가장 긴 접두사 일치)에 걸리면
         날짜·인원이 채워진 트립닷컴 도시 목록으로, 아니면 `region` 이름 키워드 검색으로 간다.
         날짜는 checkin·checkout 이 둘 다 있고 순서가 맞을 때만, 인원은 양수일 때만 싣는다.
         폴백 모드는 웹검색(`"{region} 숙소 예약"`)이다.

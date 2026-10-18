@@ -17,12 +17,8 @@ data class CuratedStay(
     val address: String?,  // null = 모름
     val imageUrl: String,
 ) {
-    fun key(): StayKey = StayKey(SOURCE, tripcomHotelId)
-
-    companion object {
-        /** 합성 stayId 의 출처 코드. 트립닷컴 호텔 ID 가 곧 식별자다. */
-        const val SOURCE = TRIPCOM_STAY_SOURCE
-    }
+    /** 합성 키 — 출처는 트립닷컴, 식별자는 트립닷컴 호텔 ID 다. */
+    fun key(): StayKey = StayKey(TRIPCOM_STAY_SOURCE, tripcomHotelId)
 }
 
 /** 큐레이션 숙소 조회 포트. 반복 시드가 채운 테이블을 읽기만 한다. */
