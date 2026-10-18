@@ -103,6 +103,16 @@ jobs:
           uv run python scripts/collect/collect_events.py
           # 웹 큐레이션 팝업(data/curated_popups.json) — 저장소가 중복을 거르므로 매일 돌려도 같다
           uv run python scripts/collect/collect_curated_popups.py --store collected_events.json
+      # TourAPI 공식 축제(searchFestival2) — 기간·좌표가 원천에서 온다. 지역 17곳 × 1~3쪽 ≈ 하루 20~50호출,
+      # POI 수집과 같은 키링을 뒤 키부터 쓴다. 실패해도 위 수집분은 영속한다(continue-on-error).
+      - name: TourAPI 공식 축제 (searchFestival2 → 저장소)
+        if: steps.collect.outputs.skipped != 'true'
+        continue-on-error: true
+        env:
+          TOUR_API_KEY: ${{ secrets.TOUR_API_KEY }}
+          TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
+          TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
+        run: uv run python scripts/collect/collect_tourapi_festivals.py --store collected_events.json
       - name: 잡 서머리 (지역별 추출·신규 통계)
         if: steps.collect.outputs.skipped != 'true'
         run: uv run python scripts/collect/collect_events.py --summary collect_events_run.json >> "$GITHUB_STEP_SUMMARY"

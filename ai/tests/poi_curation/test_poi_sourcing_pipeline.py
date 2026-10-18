@@ -539,7 +539,7 @@ def test_zero_coordinate_record_is_dropped_as_schema_not_existence() -> None:
 # ── 상세 조회 표지 · 되감기 재조회 (TRIP-1230 후속) ──────────────────────
 # 일일 수집은 기제안·변경 없음 항목의 상세를 다시 받지 않는다 — #949(휴무 원문 동봉) 이전
 # 수집분에는 벤더가 고치지 않는 한 휴무가 영영 안 붙는다. 그래서 상세를 받은 제안에 조회일
-# 표지(`provenance.detail_fetched_on`)를 달고, 표지 없는 공유본 제안은 scripts/collect/refetch_intro.py
+# 표지(`provenance.detail_fetched_on`)를 달고, 표지 없는 공유본 제안은 되감기 스크립트(10-15 끝나 지움)
 # 가 content_id 로 상세만 다시 받아 `refresh_proposal` 로 정상 수집과 같은 제안을 다시 낸다.
 
 _TODAY = _NOW.date().isoformat()
