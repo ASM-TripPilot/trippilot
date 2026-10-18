@@ -28,10 +28,8 @@ import { riskAffectedRow } from '../model/riskAffectedRow';
 import { triggerLabel } from '@/features/planb';
 import { triggerPillCopy } from '@/features/planb';
 import { triggerWatchlist } from '../model/triggerWatchlist';
-import {
-  doneVisitCheckIdByPoiId,
-  visitedLabelByPoiId,
-} from '../model/visitedLabels';
+import { doneVisitCheckIdByPoiId } from '../model/visitedLabels';
+import { arrivedLabel, visitedLabelByPoiId } from '@/entities/itinerary-slot';
 import {
   appliedSummaryBadges,
   appliedSummaryInputFromDiff,
@@ -49,6 +47,7 @@ import {
 import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { showToast } from '@/shared/ui/Toast';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
 import {
@@ -110,6 +109,10 @@ const PHOTO_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해
 /** 허브 메모 저장 실패 안내(INV-4) — j01 `VisitRecordCardContainer` 와 같은 문장(TRIP-1117). */
 const MEMO_SAVE_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
 
+/** TRIP-1426 저장 안내(공용 토스트) — 요청이 실제로 나가 성공했을 때만. j01 과 같은 메모 문장. */
+const MEMO_SAVED_TOAST = '메모를 저장했어요';
+const PHOTO_SAVED_TOAST = '사진을 기록했어요';
+
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
 const HOME_FALLBACK = '/(tabs)';
 
@@ -142,8 +145,23 @@ export function LiveItineraryPage({
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   // i03 위험 상세 시트 열림 = 그 트리거 id(TRIP-749). 재조회로 트리거가 사라지면 시트도 사라진다.
   const [riskTriggerId, setRiskTriggerId] = useState<string | null>(null);
-  // 허브 초기 스냅은 마운트 때 한 번만 정한다 — 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
-  const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
+  // 허브 시트 스냅. gorhom 은 이 값이 바뀔 때마다 그 칸으로 스냅하므로 한 번 2 로 올리면 내리지 않는다 —
+  // 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
+  const [initialSnapIndex, setInitialSnapIndex] = useState(
+    appliedSessionId ? 2 : undefined
+  );
+  // TRIP-1418 — 적용 성공은 `dismissTo` 로 스택의 이 인스턴스에 돌아온다(새로 마운트되지 않는다). 그래서 새 applied 가
+  // 도착한 렌더에서 상태를 다시 맞춘다(렌더 중 조정 — 옛 일차로 한 번 그렸다가 바뀌지 않게): 고른 일차를 비워 `day`(없으면
+  // 오늘)가 이기게 하고 시트를 펼친다. applied 가 지워질 때(i08 [확인])는 아무것도 바꾸지 않는다.
+  const [seenAppliedSessionId, setSeenAppliedSessionId] =
+    useState(appliedSessionId);
+  if (appliedSessionId !== seenAppliedSessionId) {
+    setSeenAppliedSessionId(appliedSessionId);
+    if (appliedSessionId) {
+      setSelectedDay(null);
+      setInitialSnapIndex(2);
+    }
+  }
   // [사진] 안내 한 줄(TRIP-1070) — 누른 그 카드(poiId, TRIP-1203)에만. 어느 카드든 다음 [사진] 누름에 지운다.
   // settings(TRIP-1216) = 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
   const [photoNotice, setPhotoNotice] = useState<{
@@ -245,6 +263,10 @@ export function LiveItineraryPage({
   });
   // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
   const memoAttempt = useRef(0);
+  // TRIP-1426 [저장] 잠금 — ref 는 같은 틱 두 번째 누름을 막고(렌더 전이라 disabled 가 아직 안 섰다), state 는
+  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsBusy 선례).
+  const memoSaving = useRef(false);
+  const [memoSavingShown, setMemoSavingShown] = useState(false);
 
   // TRIP-1339 · U10 위치 자동화 — 오늘(KST) 일정·실적으로 문맥을 만들고 판정은 훅이 한다(페이지 1회).
   // 플래그 OFF 면 동의 조회도 하지 않고 훅은 효과가 없다(BR-U10-07). 훅 규칙상 조기 반환 위에 둔다.
@@ -472,6 +494,12 @@ export function LiveItineraryPage({
     visits.data ?? { visits: [] },
     activeDate
   );
+  // TRIP-1419 — 관람 중 카드 시각은 카드를 관람 중으로 만든 바로 그 기록(activeVisitCheckId)의 실제 도착 시각.
+  // 낙관 구간(응답 전)이면 null → 카드는 시각 없이 "지금 관람 중".
+  const activeVisit = visits.data?.visits.find(
+    (v) => v.visitCheckId === activeVisitCheckId
+  );
+  const activeArrivedLabel = activeVisit ? arrivedLabel(activeVisit) : null;
   const memoOf = (poiId: string): string | null => {
     const visitCheckId = mediaVisitIdByPoiId[poiId];
     return visitCheckId === undefined
@@ -480,7 +508,11 @@ export function LiveItineraryPage({
   };
   const hubSlots = projected.map((entry) =>
     entry.state === 'active'
-      ? { ...entry, memo: memoOf(entry.slot.poiId) }
+      ? {
+          ...entry,
+          memo: memoOf(entry.slot.poiId),
+          visitedLabel: activeArrivedLabel,
+        }
       : entry.state === 'done'
         ? {
             ...entry,
@@ -535,6 +567,10 @@ export function LiveItineraryPage({
         visitCheckId,
         photoAttach(picked.asset, picked.gpsConsent)
       );
+      showToast({
+        message: PHOTO_SAVED_TOAST,
+        testID: 'live-photo-saved-toast',
+      });
     } catch {
       setPhotoNotice({ poiId, text: PHOTO_SAVE_FAILED, settings: false });
     }
@@ -544,14 +580,29 @@ export function LiveItineraryPage({
   const memoSheetPoiId = poiOfVisit(memoSheetFor);
   const memoSheetOpen = memoSheetPoiId !== undefined;
   const submitMemo = (visitCheckId: string, text: string) => {
+    if (memoSaving.current) return;
+    memoSaving.current = true;
+    setMemoSavingShown(true);
     const attempt = ++memoAttempt.current;
     setMemoFailedFor(null);
+    const unlock = () => {
+      memoSaving.current = false;
+      setMemoSavingShown(false);
+    };
     visitMemo.saveMemo(text).then(
-      () => {
-        if (attempt === memoAttempt.current)
-          setMemoSheetFor((open) => (open === visitCheckId ? null : open));
+      (saved) => {
+        unlock();
+        if (attempt !== memoAttempt.current) return;
+        setMemoSheetFor((open) => (open === visitCheckId ? null : open));
+        // 같은 글(요청 0)은 닫기만 한다(Q2).
+        if (saved)
+          showToast({
+            message: MEMO_SAVED_TOAST,
+            testID: 'live-memo-saved-toast',
+          });
       },
       () => {
+        unlock();
         if (attempt === memoAttempt.current) setMemoFailedFor(visitCheckId);
       }
     );
@@ -565,7 +616,9 @@ export function LiveItineraryPage({
           ''
         }
         text={visitMemo.savedMemo}
+        editable={visitMemo.memoReady}
         notice={memoFailedFor === memoSheetFor ? MEMO_SAVE_FAILED : null}
+        saving={memoSavingShown}
         onSubmit={(text) => submitMemo(memoSheetFor, text)}
         onClose={() => setMemoSheetFor(null)}
       />

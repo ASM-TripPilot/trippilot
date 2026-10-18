@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from collect_pois import load_closed_refs  # noqa: E402  (같은 디렉토리 — refetch_intro 와 같은 방식)
+from trippilot.domain.poi import TRENDING_TAG  # noqa: E402
 from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     non_travel_reason,
     parse_opening_hours_raw,
@@ -164,6 +165,32 @@ def drop_non_travel(proposals: list[dict]) -> dict[str, int]:
 
 
 _VERDICTS = Path(__file__).resolve().parents[2] / "data" / "overture_nonfood_verdicts.json"
+_TRENDING = Path(__file__).resolve().parents[2] / "data" / "curated_trending_refs.json"
+
+
+def mark_trending(proposals: list[dict], path: Path = _TRENDING) -> int:
+    """웹 큐레이션이 "이미 있음"으로 맞춘 **기존 행**에 `요즘 인기` 태그를 붙인다. 붙인 건수를 돌려준다.
+
+    유명한 곳은 대개 TourAPI 에 이미 있어 큐레이션이 새 행을 못 만든다 — 그 행에 표지를 붙여야
+    인기 가산(`scorer._popularity_norm`)이 닿는다. 병합마다 소급하는 이유는 `drop_closed` 와 같다:
+    TourAPI 매일 재수집이 같은 키를 덮어 태그를 지운다. 근거는 `collect_curated_kakao.py` 가 쓰는
+    파일이고, 없거나 깨지면 0(판정 파일과 같은 규약).
+    """
+    if not path.exists():
+        return 0
+    try:
+        refs = {(r["source"], r["content_id"])
+                for r in json.loads(path.read_text(encoding="utf-8"))["refs"]}
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:   # noqa: BLE001
+        print(f"[merge] WARNING 인기 표지 파일을 못 읽었다({type(e).__name__})", file=sys.stderr)
+        return 0
+    n = 0
+    for p in proposals:
+        tags = p.get("tags") or []
+        if (p.get("source"), p["provenance"]["content_id"]) in refs and TRENDING_TAG not in tags:
+            p["tags"] = [*tags, TRENDING_TAG]
+            n += 1
+    return n
 
 
 def drop_rejected_verdicts(proposals: list[dict],
@@ -218,7 +245,7 @@ def drop_bad_nightlife(proposals: list[dict]) -> int:
     kept: list[dict] = []
     for p in proposals:
         tags = p.get("tags") or []
-        kind = by_detail.get(tags[1]) if (len(tags) == 2 and tags[0] == NIGHTLIFE_TAG) else None
+        kind = by_detail.get(tags[1]) if (len(tags) >= 2 and tags[0] == NIGHTLIFE_TAG) else None
         if kind is not None and nightlife_tags(kind, p["poi"]["name"]) is None:
             continue
         if kind == "dance_club" and p.get("source") != "KAKAO_LOCAL":
@@ -315,6 +342,8 @@ def main(argv: list[str]) -> int:
         print(f"[merge] 폐업 제거 — {closed}건", file=sys.stderr)
         out["stats"]["unique_proposals"] = len(out["proposals"])
         out["stats"]["closed_dropped"] = closed
+    if (trending := mark_trending(out["proposals"])):
+        print(f"[merge] 요즘 인기 표지 — 기존 행 {trending}건", file=sys.stderr)
     text = json.dumps(out, ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")

@@ -7,7 +7,7 @@ import {
   missingParts,
   type LocationPermissionState,
 } from '../model/missingParts';
-import { fillTemplate } from '../model/fillTemplate';
+import { fillTemplate, isTemplateOnly } from '../model/fillTemplate';
 import {
   basicNarrative,
   resolveDisplayNarrative,
@@ -19,10 +19,12 @@ import {
   type ReflectionDayTab,
   type ReflectionFace,
 } from './DailyReflectionScreen';
+import { regionForDay } from '@/entities/trip';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import { showToast } from '@/shared/ui/Toast';
 
 /**
  * TRIP-571 · daily-reflection 페이지 — 조회·표시본 조립·배선의 단일 출처(FSD).
@@ -106,7 +108,13 @@ export function DailyReflectionPage({
           { length: Math.max(0, dayNumberFor(startDate, endDate)) },
           (_, index) => {
             const day = index + 1;
-            return { day, today: dateForDayNumber(startDate, day) === today };
+            const dayDate = dateForDayNumber(startDate, day);
+            // TRIP-1425 · 아직 오지 않은 날은 회고를 만들지 않으므로(TRIP-1068) 칩도 누를 수 없다. 오늘은 누를 수 있다.
+            return {
+              day,
+              today: dayDate === today,
+              disabled: dayDate > today,
+            };
           }
         )
       : [];
@@ -127,23 +135,26 @@ export function DailyReflectionPage({
 
   const stats = statsCard(res?.stats);
   const missing = missingParts(stats, permission);
-  // TRIP-1212 · 서버·AI 가 미치환 템플릿(`{region} · {start_date}~{end_date}`)을 내려줘도 값을 주입하고,
-  // 값이 없어 비면 중괄호 없는 stats 문장으로 폴백한다(편집 시드는 '' — 글자로 채우지 않는다).
+  // TRIP-1212 · TRIP-1425 · 서버·AI 가 미치환 템플릿을 내려줄 때 — 템플릿뿐인 문장(`{region} · {start_date}~{end_date}`)은
+  // 회고가 아니라 빈 양식이라 stats 문장으로 바꾸고 편집 시드는 ''. 다른 글과 섞이면 하루 회고이므로
+  // **그날** 지역·날짜로 채운다(BR-U5-27·31 — 여행 전체 기간·여러 지역이 아니다). 값이 없어 비면 stats 문장.
   const templateCtx = {
     region:
-      trip.data?.destinations
-        ?.map((d) => d.region)
-        .filter(Boolean)
-        .join(', ') || undefined,
-    startDate,
-    endDate,
+      activeDay !== undefined
+        ? (regionForDay(trip.data?.destinations ?? [], activeDay) ?? undefined)
+        : undefined,
+    startDate: date,
+    endDate: date,
   };
-  const resolvedNarrative = fillTemplate(
-    resolveDisplayNarrative(res),
-    templateCtx
-  );
-  const narrative = resolvedNarrative || basicNarrative(stats);
-  const editableText = fillTemplate(res?.card?.subtitle ?? '', templateCtx);
+  const rawNarrative = resolveDisplayNarrative(res);
+  const narrative =
+    (isTemplateOnly(rawNarrative)
+      ? ''
+      : fillTemplate(rawNarrative, templateCtx)) || basicNarrative(stats);
+  const subtitle = res?.card?.subtitle ?? '';
+  const editableText = isTemplateOnly(subtitle)
+    ? ''
+    : fillTemplate(subtitle, templateCtx);
   // ISO 'YYYY-MM-DD' 는 사전순 = 시간순(monthGrid.isDateInRange 선례).
   const notFuture = date <= today;
 
@@ -215,7 +226,16 @@ export function DailyReflectionPage({
       mood={res?.mood}
       shortMemo={res?.shortMemo}
       onChangeMood={daily.saveMood}
-      onSaveShortMemo={daily.saveShortMemo}
+      onSaveShortMemo={async (text) => {
+        // TRIP-1425 · 화면은 바뀐 한 줄만 넘기므로 여기서 성공이면 곧 "바뀜 + 저장 성공"이다(기분 저장엔 안 건다).
+        const saved = await daily.saveShortMemo(text);
+        if (saved)
+          showToast({
+            message: '한 줄 메모를 저장했어요',
+            testID: 'reflection-daily-memo-saved-toast',
+          });
+        return saved;
+      }}
       // eslint-disable-next-line no-restricted-syntax -- 편집 진입은 화면이 로컬로 연다(BR-U5-36) — 페이지가 할 일이 없는 알림 콜백
       onEnterEdit={() => {
         // 편집 열림은 화면이 로컬로 진다. 생성 없이 PUT 경로(BR-U5-36)라 여기서 별도 조치 없음.

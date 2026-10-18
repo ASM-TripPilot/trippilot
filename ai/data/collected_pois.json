@@ -7,7 +7,7 @@
     "OVERTURE",
     "TOURAPI"
   ],
-  "collected_at": "2026-10-18T09:18:09.949950+00:00",
+  "collected_at": "2026-10-18T11:24:22.939749+00:00",
   "area_codes": [
     "1",
     "2",
@@ -36,27 +36,27 @@
   ],
   "stats": {
     "merged_runs": 2,
-    "unique_proposals": 57536,
-    "bad_nightlife_dropped": 26
+    "unique_proposals": 57571
   },
   "merged_from": [
     {
-      "collected_at": "2026-10-17T21:21:56.604885+00:00",
-      "proposals": 57526,
+      "collected_at": "2026-10-18T09:18:09.949950+00:00",
+      "proposals": 57536,
       "stats": {
-        "merged_runs": 3,
-        "unique_proposals": 57526
+        "merged_runs": 2,
+        "unique_proposals": 57536,
+        "bad_nightlife_dropped": 26
       }
     },
     {
-      "collected_at": "2026-10-18T09:18:09.949950+00:00",
-      "proposals": 36,
+      "collected_at": "2026-10-18T11:24:22.939749+00:00",
+      "proposals": 71,
       "stats": {
-        "seed": 54,
+        "seed": 109,
         "row_drops": {
-          "게이트로": 38,
-          "이미 있음(이름 포함+300m)": 9,
-          "카카오 매칭 없음": 7
+          "게이트로": 72,
+          "이미 있음(이름 포함+300m) → 요즘 인기 표지": 28,
+          "카카오 매칭 없음": 9
         },
         "kakao_misses": [
           "홍대 서커스 클럽",
@@ -65,11 +65,13 @@
           "이태원 메이드 클럽",
           "강남 옥타곤 클럽",
           "청담 클럽사운드",
-          "서면 그루브 클럽"
+          "서면 그루브 클럽",
+          "버뮤다제주 혼술바",
+          "지문인식 제주혼술바"
         ],
-        "gate_merged": 2,
+        "gate_merged": 1,
         "gate_drops": {},
-        "passed": 36
+        "passed": 71
       }
     }
   ],
@@ -5288,7 +5290,8 @@
       },
       "tags": [
         "휴양관광지",
-        "테마공원"
+        "테마공원",
+        "요즘 인기"
       ],
       "region": "서귀포시",
       "opening_hours_raw": "20:00~24:00 (입장 마감 23:00)<br>\n※ 계절별 운영시간 변동될 수 있으므로 전화문의 요망\n휴무: 연중무휴",
@@ -9388,7 +9391,8 @@
       },
       "tags": [
         "건축/조형물",
-        "다리/대교"
+        "다리/대교",
+        "요즘 인기"
       ],
       "region": "서귀포시",
       "opening_hours_raw": "상시 개방<br>※ 점등시간이 있으므로 자세한 사항은 전화문의 요망\n휴무: 연중무휴",
@@ -16902,7 +16906,8 @@
       },
       "tags": [
         "자연관광지",
-        "해수욕장"
+        "해수욕장",
+        "요즘 인기"
       ],
       "region": "제주시",
       "opening_hours_raw": "상시 개방\n휴무: 연중무휴",
@@ -19116,7 +19121,8 @@
       },
       "tags": [
         "자연관광지",
-        "수목원"
+        "수목원",
+        "요즘 인기"
       ],
       "region": "제주시",
       "opening_hours_raw": "17:00~24:00 (입장 마감 23:00)<br>\n※ 악천후 시 조기폐장 가능\n휴무: 연중무휴",
@@ -22692,7 +22698,8 @@
       },
       "tags": [
         "자연관광지",
-        "해수욕장"
+        "해수욕장",
+        "요즘 인기"
       ],
       "region": "제주시",
       "opening_hours_raw": "상시 개방<br>\n※ 해수욕장 개장기간에는 변동 가능성 있음\n휴무: 연중무휴",
@@ -23002,7 +23009,8 @@
       },
       "tags": [
         "자연관광지",
-        "해수욕장"
+        "해수욕장",
+        "요즘 인기"
       ],
       "region": "제주시",
       "opening_hours_raw": "상시 개방\n휴무: 연중무휴",
@@ -68652,7 +68660,8 @@
         "source_ref": null
       },
       "tags": [
-        "산업관광지"
+        "산업관광지",
+        "요즘 인기"
       ],
       "region": "중구",
       "opening_hours_raw": "10:00~20:00<br>\n※ 프로그램에 따라 일부공간 탄력운영\n휴무: 1월 1일 / 설·추석 당일<br>※ 시설 별로 상이하므로 자세한 사항은 홈페이지 참조",
@@ -72711,7 +72720,8 @@
       },
       "tags": [
         "휴양관광지",
-        "공원"
+        "공원",
+        "요즘 인기"
       ],
       "region": "종로구",
       "opening_hours_raw": "상시 개방\n휴무: 연중무휴",
@@ -72946,7 +72956,8 @@
       },
       "tags": [
         "역사관광지",
-        "민속마을"
+        "민속마을",
+        "요즘 인기"
       ],
       "region": "종로구",
       "opening_hours_raw": "10:00~17:00<br>\n※ 방문 제한시간(특별관리지역(레드존) 방문 금지) : 17:00~익일 10:00\n휴무: 연중무휴",
@@ -109179,7 +109190,8 @@
         "source_ref": null
       },
       "tags": [
-        "산업관광지"
+        "산업관광지",
+        "요즘 인기"
       ],
       "region": "달성군",
       "opening_hours_raw": "[B1-2F 전시실]- 10:00~17:30[3F카페&전망대]- 10:00~23:00 (4월~11월)- 10:00~22:00 (12월~3월)[B1 자전거종주인증]- 10:00~22:00\n휴무: 1월 1일 / 매주 월요일 (단, 공휴일 제외)",
@@ -112445,7 +112457,8 @@
       },
       "tags": [
         "휴양관광지",
-        "공원"
+        "공원",
+        "요즘 인기"
       ],
       "region": "수성구",
       "opening_hours_raw": "상시 개방※ 수성 미디어아트 음악분수 운영 시간은 홈페이지 참조 요망\n휴무: [수성못 유원지] 연중무휴 [음악분수] 매주 월요일 ※ 운영 기간 홈페이지 참조",
@@ -112799,7 +112812,8 @@
       },
       "tags": [
         "휴양관광지",
-        "테마공원"
+        "테마공원",
+        "요즘 인기"
       ],
       "region": "수성구",
       "opening_hours_raw": "시설별 상이하므로 홈페이지 참조 요망\n휴무: 매주 월요일 (월요일이 공휴일인 경우 그 다음 평일에 휴장)",
@@ -115100,7 +115114,8 @@
       },
       "tags": [
         "휴양관광지",
-        "테마공원"
+        "테마공원",
+        "요즘 인기"
       ],
       "region": "달서구",
       "opening_hours_raw": "- 종일권 10:00~21:00 - 야간권 17:00~21:00\n휴무: 연중무휴",
@@ -137587,7 +137602,8 @@
       },
       "tags": [
         "휴양관광지",
-        "테마공원"
+        "테마공원",
+        "요즘 인기"
       ],
       "region": "해운대구",
       "opening_hours_raw": "[평일]<br>\n10:00~19:00 (입장 마감 18:00)<br>\n[주말]<br>\n10:00~20:00 (입장 마감 19:00)",
@@ -141313,7 +141329,8 @@
       },
       "tags": [
         "자연관광지",
-        "산"
+        "산",
+        "요즘 인기"
       ],
       "region": "남구",
       "opening_hours_raw": "상시 개방\n휴무: 연중무휴",
@@ -443390,7 +443407,8 @@
       },
       "tags": [
         "휴양관광지",
-        "테마공원"
+        "테마공원",
+        "요즘 인기"
       ],
       "region": "강남구",
       "opening_hours_raw": "10:00~20:00 (입장 마감 19:00)",
@@ -578614,7 +578632,8 @@
       },
       "tags": [
         "역사관광지",
-        "유적지/사적지"
+        "유적지/사적지",
+        "요즘 인기"
       ],
       "region": "경주시",
       "opening_hours_raw": "- 정문 09:00~22:00 (입장 마감 21:30)<br>\n- 후문·천마총 09:00~21:30\n휴무: 연중무휴",
@@ -653966,7 +653985,8 @@
       },
       "tags": [
         "문화시설",
-        "미술관/화랑"
+        "미술관/화랑",
+        "요즘 인기"
       ],
       "region": "종로구",
       "opening_hours_raw": "10:00~18:00<br>\n수,토 10:00~21:00<br>\n※ 발권시간 : 관람종료 1시간 전까지 가능\n휴무: 1월1일 / 설날 / 추석",
@@ -656857,7 +656877,8 @@
       },
       "tags": [
         "문화시설",
-        "도서관"
+        "도서관",
+        "요즘 인기"
       ],
       "region": "강남구",
       "opening_hours_raw": "10:30~22:00\n휴무: 연중무휴",
@@ -657069,7 +657090,8 @@
       },
       "tags": [
         "문화시설",
-        "전시관"
+        "전시관",
+        "요즘 인기"
       ],
       "region": "광진구",
       "opening_hours_raw": "10:00~19:10 (입장 마감 18:15)\n휴무: 법정공휴일",
@@ -1169277,7 +1169299,8 @@
         "source_ref": null
       },
       "tags": [
-        "육상 레포츠"
+        "육상 레포츠",
+        "요즘 인기"
       ],
       "region": "제주시",
       "opening_hours_raw": null,
@@ -1171827,7 +1171850,8 @@
         "source_ref": null
       },
       "tags": [
-        "육상 레포츠"
+        "육상 레포츠",
+        "요즘 인기"
       ],
       "region": "중구",
       "opening_hours_raw": null,
@@ -1206111,7 +1206135,8 @@
         "source_ref": null
       },
       "tags": [
-        "육상 레포츠"
+        "육상 레포츠",
+        "요즘 인기"
       ],
       "region": "하남시",
       "opening_hours_raw": null,
@@ -2638972,7 +2638997,8 @@
         "source_ref": null
       },
       "tags": [
-        "park"
+        "park",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2640380,7 +2640406,8 @@
         "source_ref": null
       },
       "tags": [
-        "park"
+        "park",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2643740,7 +2643767,8 @@
         "source_ref": null
       },
       "tags": [
-        "landmark_and_historical_building"
+        "landmark_and_historical_building",
+        "요즘 인기"
       ],
       "region": "종로구",
       "opening_hours_raw": null,
@@ -2655996,7 +2656024,8 @@
         "source_ref": null
       },
       "tags": [
-        "park"
+        "park",
+        "요즘 인기"
       ],
       "region": "종로구",
       "opening_hours_raw": null,
@@ -2669125,7 +2669154,8 @@
         "source_ref": null
       },
       "tags": [
-        "landmark_and_historical_building"
+        "landmark_and_historical_building",
+        "요즘 인기"
       ],
       "region": "달서구",
       "opening_hours_raw": null,
@@ -2677054,7 +2677084,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "부산진구",
       "opening_hours_raw": null,
@@ -2677087,7 +2677118,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "해운대구",
       "opening_hours_raw": null,
@@ -2677120,7 +2677152,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "부산진구",
       "opening_hours_raw": null,
@@ -2677152,7 +2677185,8 @@
         "source_ref": null
       },
       "tags": [
-        "테마파크"
+        "테마파크",
+        "요즘 인기"
       ],
       "region": "해운대구",
       "opening_hours_raw": null,
@@ -2677184,7 +2677218,8 @@
         "source_ref": null
       },
       "tags": [
-        "테마파크"
+        "테마파크",
+        "요즘 인기"
       ],
       "region": "기장군",
       "opening_hours_raw": null,
@@ -2677216,7 +2677251,8 @@
         "source_ref": null
       },
       "tags": [
-        "전시관"
+        "전시관",
+        "요즘 인기"
       ],
       "region": "영도구",
       "opening_hours_raw": null,
@@ -2677248,7 +2677284,8 @@
         "source_ref": null
       },
       "tags": [
-        "관광,명소"
+        "관광,명소",
+        "요즘 인기"
       ],
       "region": "사하구",
       "opening_hours_raw": null,
@@ -2677280,7 +2677317,8 @@
         "source_ref": null
       },
       "tags": [
-        "항구,포구"
+        "항구,포구",
+        "요즘 인기"
       ],
       "region": "사하구",
       "opening_hours_raw": null,
@@ -2677313,7 +2677351,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2677346,7 +2677385,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2677379,7 +2677419,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2677412,7 +2677453,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2677445,7 +2677487,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2677478,7 +2677521,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2677511,7 +2677555,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2677544,7 +2677589,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2677577,7 +2677623,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "용산구",
       "opening_hours_raw": null,
@@ -2677610,7 +2677657,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "용산구",
       "opening_hours_raw": null,
@@ -2677643,7 +2677691,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "용산구",
       "opening_hours_raw": null,
@@ -2677676,7 +2677725,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "용산구",
       "opening_hours_raw": null,
@@ -2677709,7 +2677759,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "용산구",
       "opening_hours_raw": null,
@@ -2677742,7 +2677793,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "용산구",
       "opening_hours_raw": null,
@@ -2677775,7 +2677827,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "용산구",
       "opening_hours_raw": null,
@@ -2677808,7 +2677861,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "용산구",
       "opening_hours_raw": null,
@@ -2677841,7 +2677895,8 @@
       },
       "tags": [
         "나이트라이프",
-        "클럽"
+        "클럽",
+        "요즘 인기"
       ],
       "region": "서초구",
       "opening_hours_raw": null,
@@ -2677873,7 +2677928,8 @@
         "source_ref": null
       },
       "tags": [
-        "공연장,연극극장"
+        "공연장,연극극장",
+        "요즘 인기"
       ],
       "region": "중구",
       "opening_hours_raw": null,
@@ -2677905,7 +2677961,8 @@
         "source_ref": null
       },
       "tags": [
-        "공연장,연극극장"
+        "공연장,연극극장",
+        "요즘 인기"
       ],
       "region": "중구",
       "opening_hours_raw": null,
@@ -2677937,7 +2677994,8 @@
         "source_ref": null
       },
       "tags": [
-        "테마파크"
+        "테마파크",
+        "요즘 인기"
       ],
       "region": "송파구",
       "opening_hours_raw": null,
@@ -2677969,7 +2678027,8 @@
         "source_ref": null
       },
       "tags": [
-        "전망대"
+        "전망대",
+        "요즘 인기"
       ],
       "region": "송파구",
       "opening_hours_raw": null,
@@ -2678001,7 +2678060,8 @@
         "source_ref": null
       },
       "tags": [
-        "클라이밍"
+        "클라이밍",
+        "요즘 인기"
       ],
       "region": "마포구",
       "opening_hours_raw": null,
@@ -2678033,7 +2678093,8 @@
         "source_ref": null
       },
       "tags": [
-        "도시근린공원"
+        "도시근린공원",
+        "요즘 인기"
       ],
       "region": "성동구",
       "opening_hours_raw": null,
@@ -2678065,7 +2678126,8 @@
         "source_ref": null
       },
       "tags": [
-        "테마거리"
+        "테마거리",
+        "요즘 인기"
       ],
       "region": "종로구",
       "opening_hours_raw": null,
@@ -2678097,7 +2678159,8 @@
         "source_ref": null
       },
       "tags": [
-        "미술관"
+        "미술관",
+        "요즘 인기"
       ],
       "region": "제주시",
       "opening_hours_raw": null,
@@ -2678129,7 +2678192,8 @@
         "source_ref": null
       },
       "tags": [
-        "전시관"
+        "전시관",
+        "요즘 인기"
       ],
       "region": "서귀포시",
       "opening_hours_raw": null,
@@ -2678161,7 +2678225,8 @@
         "source_ref": null
       },
       "tags": [
-        "수목원,식물원"
+        "수목원,식물원",
+        "요즘 인기"
       ],
       "region": "서귀포시",
       "opening_hours_raw": null,
@@ -2678193,13 +2678258,1182 @@
         "source_ref": null
       },
       "tags": [
-        "체험여행"
+        "체험여행",
+        "요즘 인기"
       ],
       "region": "서귀포시",
       "opening_hours_raw": null,
       "provenance": {
         "content_id": "7940952",
         "address": "제주특별자치도 서귀포시 남성중로 40",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-7987002",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-7987002",
+        "name": "안목해변",
+        "category": "NATURE",
+        "coord": {
+          "lat": 37.7722617595376,
+          "lng": 128.948275405137
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "해수욕장,해변",
+        "요즘 인기"
+      ],
+      "region": "강릉시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "7987002",
+        "address": "강원특별자치도 강릉시 창해로14번길 51-26",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-8654759",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-8654759",
+        "name": "경포호",
+        "category": "NATURE",
+        "coord": {
+          "lat": 37.79555514873209,
+          "lng": 128.90233728167775
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "호수",
+        "요즘 인기"
+      ],
+      "region": "강릉시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8654759",
+        "address": "강원특별자치도 강릉시 운정동 984",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-25323416",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-25323416",
+        "name": "오죽헌",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 37.77924783956944,
+          "lng": 128.8775431442553
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "유적지",
+        "요즘 인기"
+      ],
+      "region": "강릉시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "25323416",
+        "address": "강원특별자치도 강릉시 율곡로3139번길 24",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-8398420",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-8398420",
+        "name": "사근진해변",
+        "category": "NATURE",
+        "coord": {
+          "lat": 37.8136129609739,
+          "lng": 128.897555797396
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "해수욕장,해변",
+        "요즘 인기"
+      ],
+      "region": "강릉시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8398420",
+        "address": "강원특별자치도 강릉시 해안로604번길 14",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-8143646",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-8143646",
+        "name": "하슬라아트월드",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 37.7058296552942,
+          "lng": 129.009485518837
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "테마파크",
+        "요즘 인기"
+      ],
+      "region": "강릉시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8143646",
+        "address": "강원특별자치도 강릉시 강동면 율곡로 1441",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-8089382",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-8089382",
+        "name": "첨성대",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.83471481233599,
+          "lng": 129.21900018259583
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "문화유적",
+        "요즘 인기"
+      ],
+      "region": "경주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8089382",
+        "address": "경상북도 경주시 인왕동 839-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-8068553",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-8068553",
+        "name": "앞산전망대",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 35.82465846202498,
+          "lng": 128.57948589622362
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "전망대",
+        "요즘 인기"
+      ],
+      "region": "남구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8068553",
+        "address": "대구광역시 남구 대명동 산 227-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-22875776",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-22875776",
+        "name": "흰여울문화마을",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.07944374604049,
+          "lng": 129.0437540909888
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "관광,명소",
+        "요즘 인기"
+      ],
+      "region": "영도구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "22875776",
+        "address": "부산광역시 영도구 영선동4가 605-3",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-8202423",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-8202423",
+        "name": "광안리해수욕장",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 35.1531932736837,
+          "lng": 129.118976093583
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "해수욕장,해변",
+        "요즘 인기"
+      ],
+      "region": "수영구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8202423",
+        "address": "부산광역시 수영구 광안해변로 219",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-7887457",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-7887457",
+        "name": "민락수변공원",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 35.154940897926885,
+          "lng": 129.13399667057104
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "도시근린공원",
+        "요즘 인기"
+      ],
+      "region": "수영구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "7887457",
+        "address": "부산광역시 수영구 민락동 110-19",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-27457865",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-27457865",
+        "name": "더베이101",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 35.1565648156251,
+          "lng": 129.152021092751
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "문화시설",
+        "요즘 인기"
+      ],
+      "region": "해운대구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "27457865",
+        "address": "부산광역시 해운대구 동백로 52",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1431820215",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1431820215",
+        "name": "부산엑스더스카이",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 35.15958657405275,
+          "lng": 129.1697343615961
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "전망대",
+        "요즘 인기"
+      ],
+      "region": "해운대구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1431820215",
+        "address": "부산광역시 해운대구 달맞이길 30",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1534486834",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1534486834",
+        "name": "부산타워",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 35.10121449509689,
+          "lng": 129.03232871480225
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "전망대",
+        "요즘 인기"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1534486834",
+        "address": "부산광역시 중구 용두산길 37-30",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-2101481584",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-2101481584",
+        "name": "해리단길",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.1651110146752,
+          "lng": 129.157908776659
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "테마거리",
+        "요즘 인기"
+      ],
+      "region": "해운대구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2101481584",
+        "address": "부산광역시 해운대구 우동 517-14",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-7913306",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-7913306",
+        "name": "해운대해수욕장",
+        "category": "NATURE",
+        "coord": {
+          "lat": 35.1585232170784,
+          "lng": 129.159854668484
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "해수욕장,해변",
+        "요즘 인기"
+      ],
+      "region": "해운대구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "7913306",
+        "address": "부산광역시 해운대구 우동",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-24876765",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-24876765",
+        "name": "응봉산 팔각정",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 37.54782031066968,
+          "lng": 127.02990867046951
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "관광,명소",
+        "요즘 인기"
+      ],
+      "region": "성동구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "24876765",
+        "address": "서울특별시 성동구 금호동4가 1540",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-8142957",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-8142957",
+        "name": "반포한강공원",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 37.51081992690844,
+          "lng": 126.99716104081192
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "도시근린공원",
+        "요즘 인기"
+      ],
+      "region": "서초구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8142957",
+        "address": "서울특별시 서초구 반포동 115-5",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-12322745",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-12322745",
+        "name": "세빛섬",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 37.51233177478449,
+          "lng": 126.99588851601666
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "문화시설",
+        "요즘 인기"
+      ],
+      "region": "서초구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "12322745",
+        "address": "서울특별시 서초구 올림픽대로 2085-14",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1662602781",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1662602781",
+        "name": "더현대 서울",
+        "category": "SHOPPING",
+        "coord": {
+          "lat": 37.525872071029134,
+          "lng": 126.92844612411159
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "현대백화점",
+        "요즘 인기"
+      ],
+      "region": "영등포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1662602781",
+        "address": "서울특별시 영등포구 여의대로 108",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-10507051",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-10507051",
+        "name": "서울시립미술관 서소문본관",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 37.56410579887691,
+          "lng": 126.9736988634857
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "미술관",
+        "요즘 인기"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "10507051",
+        "address": "서울특별시 중구 덕수궁길 61",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-8100102",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-8100102",
+        "name": "천지연폭포",
+        "category": "NIGHT_VIEW",
+        "coord": {
+          "lat": 33.24474223913716,
+          "lng": 126.55969606852058
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "폭포",
+        "요즘 인기"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "8100102",
+        "address": "제주특별자치도 서귀포시 남성중로 2-15",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-17754603",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-17754603",
+        "name": "청굴물",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.5582918680451,
+          "lng": 126.751157460293
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "관광,명소",
+        "요즘 인기"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "17754603",
+        "address": "제주특별자치도 제주시 구좌읍 김녕리 1296",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-640502637",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-640502637",
+        "name": "앙리17",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.1569900341932,
+          "lng": 129.121383257043
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "수영구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "640502637",
+        "address": "부산광역시 수영구 민락로27번길 17",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-205845742",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-205845742",
+        "name": "표류",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.1559028866542,
+          "lng": 129.121609587523
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "수영구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "205845742",
+        "address": "부산광역시 수영구 광안해변로255번길 20-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-979007278",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-979007278",
+        "name": "베이스먼트",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.15572352858757,
+          "lng": 129.12150837010927
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "수영구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "979007278",
+        "address": "부산광역시 수영구 광안해변로255번길 17",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1852320367",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1852320367",
+        "name": "라운지180",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.1557715201464,
+          "lng": 129.122626627732
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "수영구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1852320367",
+        "address": "부산광역시 수영구 광안해변로 263",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1591530600",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1591530600",
+        "name": "아일드블루",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.146080027995204,
+          "lng": 129.11451609694663
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "수영구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1591530600",
+        "address": "부산광역시 수영구 광안해변로 125",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-25050970",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-25050970",
+        "name": "퍼지네이블 광안점",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.15045879516558,
+          "lng": 129.11580231598072
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "수영구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "25050970",
+        "address": "부산광역시 수영구 광안해변로 177",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1746911605",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1746911605",
+        "name": "마콘도",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.556200700537,
+          "lng": 126.924240996598
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1746911605",
+        "address": "서울특별시 마포구 홍익로6길 48",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1339393367",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1339393367",
+        "name": "로프트",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5350477036533,
+          "lng": 126.992827895391
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1339393367",
+        "address": "서울특별시 용산구 이태원로27가길 42",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1061369176",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1061369176",
+        "name": "헌집제주혼술바",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 33.486657988175274,
+          "lng": 126.48534974092034
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "혼술바",
+        "요즘 인기"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1061369176",
+        "address": "제주특별자치도 제주시 원노형3길 6",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-2044992296",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-2044992296",
+        "name": "단지 제주혼술바",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 33.485035623120666,
+          "lng": 126.48590484954812
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "혼술바",
+        "요즘 인기"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2044992296",
+        "address": "제주특별자치도 제주시 원노형로 35-2",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1774010579",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1774010579",
+        "name": "졔주주택 제주혼술바",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 33.4879972479982,
+          "lng": 126.484360507794
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "혼술바",
+        "요즘 인기"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1774010579",
+        "address": "제주특별자치도 제주시 원노형5길 7",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-843842285",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-843842285",
+        "name": "자유의지2 제주혼술바 서귀포점",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 33.2497081806112,
+          "lng": 126.561670304916
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "혼술바",
+        "요즘 인기"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "843842285",
+        "address": "제주특별자치도 서귀포시 중앙로 56",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-345612098",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-345612098",
+        "name": "자작 제주혼술바 본점",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 33.48617073639416,
+          "lng": 126.4913694869511
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "혼술바",
+        "요즘 인기"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "345612098",
+        "address": "제주특별자치도 제주시 노연로 103",
         "image_url": null
       }
     }

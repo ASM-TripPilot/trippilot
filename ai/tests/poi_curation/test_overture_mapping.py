@@ -443,7 +443,7 @@ def test_실측_야시장_상호는_야경이_아니다(name: str) -> None:
 # 우리 경계에 나이트라이프 축이 없어 ACTIVITY 로 받고 `tags` 의 `나이트라이프` 가 표지다.
 # **태그를 못 붙이면 싣지 않는다** — 태그 없이 들어가면 AI 가 밤 장소로 못 다루고
 # ACTIVITY 풀만 오염시킨다.
-_NIGHT_KINDS = tuple(NIGHTLIFE_DETAIL)
+_NIGHT_KINDS = tuple(k for k in NIGHTLIFE_DETAIL if k != "solo_bar")  # solo_bar 는 Overture 에 없다(큐레이션 전용)
 
 
 def test_나이트라이프_축은_ACTIVITY_로_온다() -> None:
@@ -455,6 +455,7 @@ def test_세부_태그는_원천_카테고리에서_나온다() -> None:
     assert NIGHTLIFE_DETAIL == {
         "dance_club": "클럽", "cocktail_bar": "칵테일바", "wine_bar": "와인바",
         "speakeasy": "스피크이지", "beer_garden": "비어가든", "lounge": "라운지바",
+        "solo_bar": "혼술바",
     }
 
 

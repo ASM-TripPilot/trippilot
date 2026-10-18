@@ -2091,11 +2091,12 @@ describe('‹ 떠나기 확인', () => {
    * 누르면 생성이 다시 돌아 **이미 고른 슬롯이 사라졌다**(확인 없는 재생성).
    *
    * 무엇을 보장하나:
-   *  - 🔴 B5 앞에서 고른 곳이 0곳이면 ‹ 는 확인 없이 **홈으로** 나간다(`replace('/(tabs)')`, Q2).
+   *  - 🔴 B5 앞에서 고른 곳이 0곳이면 ‹ 는 확인 없이 **일정 탭 목록으로** 나간다(`dismissTo('/(tabs)/itinerary')`,
+   *    TRIP-1428 — 옛 목적지는 홈 탭 `'/(tabs)'`였다).
    *  - 🔴 B2 1곳 이상 골랐으면 ‹ 는 이탈 확인을 먼저 띄운다. 문구는 고른 수를 **일자를 건너** 세고,
    *    "저장돼 있다"는 사실대로 말한다(사라진다고 겁주지 않는다, Q2). 확인 전엔 이동·요청 0.
    *  - 🔴 B3 [머무르기] → 확인만 닫히고 같은 슬롯의 컨셉 얼굴 그대로. 이동·요청 0.
-   *  - 🔴 B4 [나가기] → 홈으로 dismissTo 1회. h02(must-visits)·뒤로가기 아님.
+   *  - 🔴 B4 [나가기] → 일정 탭 목록으로 dismissTo 1회(TRIP-1428). h02(must-visits)·뒤로가기 아님.
    *  - 🟢 B1 후보 얼굴의 ‹ 는 같은 슬롯의 컨셉 얼굴로 돌아간다(이미 되는 동작을 잠근다, 02a ★10).
    *
    * "고른 곳 수" = 지금 슬롯 **앞에 있는 비고정 슬롯 수**(고정 숙소 제외, 일자 횡단). 같이 짜기는 비고정
@@ -2270,18 +2271,19 @@ describe('‹ 떠나기 확인', () => {
     expect(mockPush).not.toHaveBeenCalled();
   }
 
-  describe('🔴 B5 · 고른 곳이 0곳이면 ‹ 는 확인 없이 홈으로 (D3 · Q2)', () => {
-    it('첫 비고정 슬롯(앞엔 고정 숙소뿐)에서 ‹ → 확인 창 없이 홈으로 dismissTo 1회, 뒤로가기·push 0', async () => {
+  describe('🔴 B5 · 고른 곳이 0곳이면 ‹ 는 확인 없이 일정 탭 목록으로 (D3 · TRIP-1428)', () => {
+    it('첫 비고정 슬롯(앞엔 고정 숙소뿐)에서 ‹ → 확인 창 없이 일정 탭 목록으로 dismissTo 1회, 홈 탭·뒤로가기·push 0', async () => {
       // 준비
       await openConceptFace(KEY_A);
 
       // 실행
       pressBack();
 
-      // 단언 ① 홈으로 나갔다(긍정 사건 — 아래 부재 단언의 짝).
+      // 단언 ① 일정 탭 목록으로 나갔다(긍정 사건 — 아래 부재 단언의 짝).
       // TRIP-1243 — replace 가 아니라 dismissTo(위저드 화면을 스택에서 걷어낸다).
-      expect(mockDismissTo).toHaveBeenCalledTimes(1);
-      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      // 호출 목록 전체를 완전 일치로 본다 — 1회 · 인자 하나 · 홈 탭('/(tabs)')으로는 0회가 한 줄에 잠긴다.
+      expect(mockDismissTo.mock.calls).toEqual([['/(tabs)/itinerary']]);
+      expect(mockDismissTo).not.toHaveBeenCalledWith('/(tabs)');
       expect(mockReplace).not.toHaveBeenCalled();
       // 단언 ② h02 로 돌아가는 뒤로가기가 아니고, 확인 창도 없었다(고른 게 없으니 잃을 것도 없다).
       expect(mockBack).not.toHaveBeenCalled();
@@ -2309,9 +2311,26 @@ describe('‹ 떠나기 확인', () => {
         // 단언 ② 사실대로 말한다 — 고른 곳은 확정마다 저장돼 있어 사라지지 않는다(Q2).
         expect(dialog).toHaveTextContent(/저장/);
         expect(dialog).not.toHaveTextContent(/사라/);
+        // TRIP-1428 AC-3 — 목적지만 바뀌고 확인 문구는 한 글자도 안 바뀐다(BR-U3-06 진행분 보존).
+        // getByText(문자열)은 한 Text 의 글자 전체와 완전 일치해야 잡힌다(02a §5).
+        expect(
+          within(dialog).getByText(
+            `고른 ${picked}곳은 저장돼 있어요. 나머지는 AI가 고른 그대로 남아요.`
+          )
+        ).toBeOnTheScreen();
+        expect(
+          within(dialog).getByText('같이 짜기를 멈출까요?')
+        ).toBeOnTheScreen();
+        expect(
+          within(screen.getByTestId(`${LEAVE}-stay`)).getByText('머무르기')
+        ).toBeOnTheScreen();
+        expect(
+          within(screen.getByTestId(`${LEAVE}-leave`)).getByText('나가기')
+        ).toBeOnTheScreen();
         // 단언 ③ 확인 전에는 아무 데도 안 가고, 아무것도 안 쏜다.
         await settle();
         noRouting();
+        expect(mockDismissTo).not.toHaveBeenCalled();
         expect(generatePosts).toBe(0);
         expect(candidatePosts).toBe(0);
         expect(puts).toBe(0);
@@ -2336,27 +2355,30 @@ describe('‹ 떠나기 확인', () => {
       expect(
         screen.getByTestId('itinerary-copick-concept-progress-day')
       ).toHaveTextContent(/^2일차/);
-      // 단언 ③ 이동·요청 0.
+      // 단언 ③ 이동·요청 0 — 나가기 목적지(dismissTo)도 0회(TRIP-1428).
       await settle();
       noRouting();
+      expect(mockDismissTo).not.toHaveBeenCalled();
       expect(generatePosts).toBe(0);
       expect(candidatePosts).toBe(0);
       expect(puts).toBe(0);
     });
   });
 
-  describe('🔴 B4 · [나가기] → 홈으로, 필수 방문지(h02)로는 가지 않는다', () => {
-    it('홈으로 dismissTo 1회, 뒤로가기 0, 어느 목적지에도 must-visits 없음, 생성 POST 0', async () => {
+  describe('🔴 B4 · [나가기] → 일정 탭 목록으로, 필수 방문지(h02)로는 가지 않는다 (TRIP-1428)', () => {
+    it('일정 탭 목록으로 dismissTo 1회, 홈 탭·뒤로가기 0, 어느 목적지에도 must-visits 없음, 생성 POST 0', async () => {
       await openConceptFace(KEY_C);
       pressBack();
+      // 앵커 — 확인 창이 떠 있는 동안은 아직 아무 데도 안 갔다(아래 1회가 [나가기] 몫임을 가른다).
+      expect(mockDismissTo).not.toHaveBeenCalled();
 
       // 실행
       fireEvent.press(screen.getByTestId(`${LEAVE}-leave`));
 
-      // 단언 ① 홈으로 나간다(BR-U3-05 개정의 백그라운드 이탈과 같은 결).
+      // 단언 ① 일정 탭 목록으로 나간다 — ‹(0곳, B5)와 같은 목적지다.
       // TRIP-1243 — replace 가 아니라 dismissTo(위저드 화면을 스택에서 걷어낸다).
-      expect(mockDismissTo).toHaveBeenCalledTimes(1);
-      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+      expect(mockDismissTo.mock.calls).toEqual([['/(tabs)/itinerary']]);
+      expect(mockDismissTo).not.toHaveBeenCalledWith('/(tabs)');
       expect(mockReplace).not.toHaveBeenCalled();
       // 단언 ② h02 로 새지 않는다 — 뒤로가기도, must-visits 로의 전진도 없다.
       expect(mockBack).not.toHaveBeenCalled();

@@ -71,7 +71,8 @@ export interface TripWizardDraft {
    * 않고 고친다(PATCH). `INITIAL_DRAFT`에 있어 새 진입의 `reset()`이 함께 끈다. */
   preserveCreatedTripIdOnce: boolean;
   /** `regionCode` — 지역 피커가 쥔 행정구역 코드(TRIP-1042 AC-12). 꼭 갈 곳 고르기가 이 코드로 지역을
-   * 가르고, 생성 요청에도 그대로 실린다. 안 주면 비어 있다(서버가 이름으로 찾는다). */
+   * 가르고, 생성 요청에도 그대로 실린다. 안 주면 비어 있다(서버가 이름으로 찾는다).
+   * 바로 앞 행과 같은 도시면 새 행 대신 그 행 박수에 더한다(TRIP-1423 — A→A 합침, A→B→A 는 새 행). */
   addDestination(regionName: string, nights: number, regionCode?: string): void;
   removeDestination(seq: number): void;
   /** 해당 seq destination 의 nights 를 교체(하한 `minNightsFor` — 도시 하나면 0, 여럿이면 1). seq 미일치면 no-op. add/remove 는
@@ -179,6 +180,18 @@ export function minNightsFor(destinationCount: number): number {
 
 /** 목록 순서대로 1..N을 다시 매긴다 — 제거 뒤에도 `seq`에 구멍이 나면 서버가 방문 순서를
  * 읽을 수 없다. */
+/** 같은 도시인가(TRIP-1423) — 둘 다 코드가 있으면 코드 완전 일치, 하나라도 없으면 이름. `regionCodeInTrip` 은
+ * 접두 매칭이라(시도 26 ↔ 해운대구 26350 을 같다고 본다) 여기 쓰지 않는다. */
+function isSameCity(
+  row: TripDestination,
+  regionName: string,
+  regionCode: string | undefined
+): boolean {
+  return row.regionCode !== undefined && regionCode !== undefined
+    ? row.regionCode === regionCode
+    : row.region === regionName;
+}
+
 function renumberSeq(destinations: TripDestination[]): TripDestination[] {
   return destinations.map((destination, index) => ({
     ...destination,
@@ -190,6 +203,19 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
   ...INITIAL_DRAFT,
   addDestination: (regionName, nights, regionCode) =>
     set((state) => {
+      const last = state.destinations[state.destinations.length - 1];
+      if (last !== undefined && isSameCity(last, regionName, regionCode)) {
+        // 바로 앞 행에 합친다 — 행 수가 그대로라 하한 올림은 타지 않는다(0박 + 1박 = 1박). 이름·코드는 앞 행 그대로.
+        const merged = state.destinations.map((one) =>
+          one === last ? { ...one, nights: one.nights + nights } : one
+        );
+        if (nightsSum(merged) > MAX_TRIP_NIGHTS) return state;
+        return {
+          destinations: merged,
+          endDate: endAfter(state, merged),
+          touched: withTouched(state.touched, 'destinations'),
+        };
+      }
       // 두 번째 도시를 담으면 하한이 1 로 올라간다 — 기존 도시가 0박이었다면 1박으로 올린다.
       const raised =
         state.destinations.length + 1 >= 2

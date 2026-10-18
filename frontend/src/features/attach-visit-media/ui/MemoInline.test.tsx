@@ -82,6 +82,27 @@ describe('🔴 TRIP-1078 AC-1·AC-3 · blur 저장 — 공백만이면 저장 �
   });
 });
 
+// TRIP-1415 AC-5 · D8 — 첫 서버 메모 조회가 끝나기 전엔 입력을 잠근다(빈칸에 써서 서버 메모를 덮는 upsert 차단).
+// RNTL 은 editable=false 입력의 changeText·blur 를 버린다 — 실제 TextInput 과 같은 동작을 본다(02a ★2).
+describe('잠금 — editable={false} 면 글자도 저장도 받지 않는다', () => {
+  it('L1 잠긴 입력에 글을 넣고 포커스를 빼도 값은 시드 그대로이고 onSubmit 0회', () => {
+    // 준비
+    const onSubmit = jest.fn();
+    render(<MemoInline text="서버 글" editable={false} onSubmit={onSubmit} />);
+
+    // 실행
+    const input = screen.getByTestId('record-trip-memo-input');
+    fireEvent.changeText(input, '바꾼 글');
+    fireEvent(input, 'blur');
+
+    // 단언
+    expect(screen.getByTestId('record-trip-memo-input').props.value).toBe(
+      '서버 글'
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
 describe('🔴 TRIP-1078 AC-2 · return = 제출→blur, 한 번에 저장 1회', () => {
   it('입력칸의 submitBehavior 가 blurAndSubmit 이다', () => {
     render(<MemoInline />);
@@ -113,5 +134,20 @@ describe('🔴 TRIP-1078 AC-2 · return = 제출→blur, 한 번에 저장 1회'
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalledWith('파도 소리가 좋았다');
+  });
+});
+
+// TRIP-1426 AC-8 · UX-05 — 스크린리더가 읽을 이름. j01·허브 메모 시트가 같은 입력을 쓴다. 접근성 트리에 실제로 잡히는지는
+// 통과형 시트 목 아래라 jest 가 못 본다(6-b 실기 — agent-device 수정 전/후 대조).
+// (개념) `toHaveAccessibleName` = 접근성 이름(라벨 → 없으면 글자) 완전 일치 — placeholder 는 이름이 되지 않는다.
+describe('🔴 TRIP-1426 AC-8 · 메모 입력칸의 접근성 이름은 "메모 입력"이다', () => {
+  it('A1 입력칸을 "메모 입력" 이름으로 찾을 수 있다', () => {
+    // 준비·실행
+    render(<MemoInline />);
+
+    // 단언
+    const input = screen.getByTestId('record-trip-memo-input');
+    expect(input).toHaveAccessibleName('메모 입력');
+    expect(screen.getByLabelText('메모 입력')).toBe(input);
   });
 });

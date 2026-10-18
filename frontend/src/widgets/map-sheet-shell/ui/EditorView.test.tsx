@@ -1170,3 +1170,26 @@ describe('🔴 EditorView · 일차 칩 줄 가로 스크롤', () => {
     expect(screen.queryAllByTestId(/^itinerary-edit-day-/)).toHaveLength(0);
   });
 });
+
+// TRIP-1424 · AC-21·AC-22 — 장소 추가는 [저장]과 따로 곧장 서버에 저장된다(PlaceAddPage 의 PUT). 그 사실을 편집기가
+// 늘 한 줄로 말한다(결정 2=A). 두 편집기 페이지가 이 뷰를 함께 쓰므로 여기 한 곳에 있으면 두 화면에 다 뜬다.
+// 기존 안내줄(`itinerary-edit-guide`)과는 다른 줄이다 — 그 안에 넣으면 V6·V7 의 완전 일치가 깨진다.
+// 3동작: 준비 = h12 빈 얼굴 / i07 얼굴 → 실행 = 렌더(저장 누름 없음) → 단언 = 안내 한 줄 · 옛 안내줄 그대로.
+describe('🔴 EditorView · H1 — 장소 추가 즉시 저장 안내 한 줄 (TRIP-1424)', () => {
+  it.each<[string, () => void, string]>([
+    ['h12 빈 편집기', () => renderView({ slots: [] }), H12_GUIDE],
+    ['i07 여행 중 편집', () => renderI07({ inTrip: true }), I07_GUIDE],
+  ])(
+    '%s — [저장] 전에도 "장소를 추가하면 바로 저장돼요"가 보이고, 옛 안내줄 문구는 그대로다',
+    (_name, renderFace, guide) => {
+      renderFace();
+
+      expect(
+        screen.getByTestId('itinerary-edit-add-saved-hint')
+      ).toHaveTextContent('장소를 추가하면 바로 저장돼요');
+      expect(screen.getByTestId('itinerary-edit-guide')).toHaveTextContent(
+        guide
+      );
+    }
+  );
+});

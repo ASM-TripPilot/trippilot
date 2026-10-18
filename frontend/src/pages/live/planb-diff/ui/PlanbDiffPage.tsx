@@ -12,7 +12,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * TRIP-441 · AC-1·2·3·4 — planb-diff 배선(확정·취소·성공전이·실패·pending 을 잇는 유일한 자리).
  *
  * 두 얼굴을 조건부로 그린다. apply 성공은 얼굴이 아니라 이동이다 — `mutate` 의 onSuccess 에서 허브로
- * `replace(...applied=sessionId)`, 허브가 그 신호로 i08 반영 시트를 띄운다(TRIP-754, i06 [적용하기]와 같은 모양).
+ * `dismissTo(...applied=sessionId)`(TRIP-1418 — 스택의 원래 허브로 돌아간다), 허브가 그 신호로 i08 반영 시트를 띄운다(TRIP-754, i06 [적용하기]와 같은 모양).
  *  - apply·cancel 실패 → 공용 `StateNotice`(error) — "원래 일정은 그대로"를 정직하게 알리고
  *    [다시 시도]로 회복 가능(BR-U4-32 부분 반영 금지 · INV-4 침묵 금지).
  *  - 그 외(pre-apply) → 정직한 한 줄 안내 + [확정]/[취소]. 지표·전후 배지는 draft 부재로 이번에
@@ -44,11 +44,12 @@ export function PlanbDiffPage({
 
   const vars = { tripId, sessionId };
   const goToLive = () => router.push(`/trips/${tripId}/live`);
-  // 확정 성공 → 허브로 replace(뒤로가기로 이미 반영된 diff 에 돌아오지 않게). 재시도도 같은 콜백.
+  // 확정 성공 → 허브로 dismissTo(스택의 원래 허브로 돌아가 허브가 두 장 쌓이지 않고, 뒤로가기로 이미 반영된 diff 에
+  // 돌아오지도 않는다 — TRIP-1418). 재시도도 같은 콜백.
   const apply = () =>
     applyMutation.mutate(vars, {
       onSuccess: () =>
-        router.replace({
+        router.dismissTo({
           pathname: '/trips/[tripId]/live',
           params: { tripId, applied: sessionId },
         }),

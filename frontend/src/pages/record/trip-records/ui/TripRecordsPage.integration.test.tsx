@@ -13,6 +13,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 import { router } from 'expo-router';
 
 import { PlusGlyph } from '@/features/record';
@@ -23,12 +24,17 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { flushNotifications } from '@/test-support/flushNotifications';
+import { createGate } from '@/test-support/mswHookHarness';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { isInsideSheet, renderedText } from '@/test-support/sheetTree';
 import {
+  actualVisit,
   completedVisitOn,
   daySlot,
   daySlotAt,
+  recordsHandler,
   tripItinerary,
+  tripRecord,
 } from '@/test-support/tripRecordsFixtures';
 import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
@@ -47,6 +53,9 @@ import { TripRecordsPage } from './TripRecordsPage';
  *    받던 jest-expo 기본과 같다 → 페이지가 catch 로 떨어져 일반 모드. 권한을 정하는 묶음은 자기 beforeEach 에서 정한다.
  *  - 사진·설치 식별자 목은 사진 묶음만 `mockPhotoSeam = true` 로 켠다. 끄면 실물 모듈로 넘긴다.
  *  - guardPress 창·push 기록·위치 권한·사진 스위치는 모듈 전역이라 최상위 afterEach 에서 되돌린다.
+ *  - TRIP-1415 — 카드가 서버 메모(records)를 조회하므로 records 기본 핸들러(실적 0건)를 최상위 beforeEach 에서 건다.
+ *    메모 입력은 그 응답이 와야 열리고 열릴 때 한 번 다시 마운트된다 → 입력을 쓰는 테스트는 `openedMemoInput` 으로
+ *    열린 뒤의 노드를 받는다(옛 노드에 쏜 이벤트는 조용히 버려진다).
  */
 
 // 스토리지·라우터는 페이지 마운트가 건드리므로 목킹(visitCheck 통합 선례). push 는 [방문 추가] 이동 관측용.
@@ -142,12 +151,34 @@ beforeAll(() => {
     observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
   });
 });
+beforeEach(() => {
+  server.use(recordsHandler());
+});
 afterEach(() => {
   resetPressGuard();
   jest.mocked(router.push).mockClear();
   mockGetForeground.mockReset();
   mockPhotoSeam = false;
+  // TRIP-1426 — 토스트 스토어는 모듈 싱글턴이라 describe 안이 아니라 여기서 비운다(toastHarness).
+  resetToast();
 });
+
+/**
+ * TRIP-1415 — 메모 입력이 열릴 때까지(첫 records 조회 끝) 기다린 뒤 **다시 찾은** 노드를 돌려준다. 잠긴 입력은 RNTL 이
+ * 이벤트를 버리고, 열릴 때 다시 마운트되면 그 전 노드도 이벤트를 버린다(02a ★2·★3).
+ */
+async function openedMemoInput(
+  find: () => ReactTestInstance
+): Promise<ReactTestInstance> {
+  await waitFor(() => expect(find()).toBeEnabled());
+  return find();
+}
+
+/**
+ * TRIP-1426 — 저장 안내(토스트) 대기 상한. 이 버킷의 기본 상한(5초, integrationSetup)은 jest 테스트 상한(5초)과 같아서
+ * 토스트가 끝내 안 뜨면 "Unable to find" 대신 "Exceeded timeout" 으로 죽어 원인이 가려진다(02a ★18).
+ */
+const TOAST_WAIT = { timeout: 2000 };
 
 afterAll(() => server.close());
 
@@ -351,7 +382,13 @@ describe('기본 — 일자 탭·사진/메모 슬롯·[방문 추가]·메모 �
       // 준비 — 첫날(광안리) 완료 카드의 메모에 초안을 타이핑한다.
       await screen.findByText('광안리 해변');
       fireEvent.changeText(
-        screen.getByTestId('record-trip-memo-input'),
+        await openedMemoInput(() =>
+          screen.getByTestId('record-trip-memo-input')
+        ),
+        '초안 텍스트'
+      );
+      // 앵커 — 초안이 실제로 들어갔다(잠금에 버려지면 아래 '' 단언이 공허해진다, 02a ★4).
+      expect(screen.getByTestId('record-trip-memo-input').props.value).toBe(
         '초안 텍스트'
       );
 
@@ -1253,7 +1290,7 @@ describe('시각·건너뛰기·메모 정비 — 서울 시계(기기 LA)', () 
 
       renderPage();
       await screen.findByTestId('record-trip-visit-card-v-in');
-      const memo = await waitFor(() =>
+      const memo = await openedMemoInput(() =>
         within(cardOf('v-in')).getByTestId('record-trip-memo-input')
       );
 
@@ -2283,10 +2320,13 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
     });
   }
 
+  // TRIP-1426 — 루트 토스트 호스트를 함께 그린다(없으면 저장 안내 부재 단언이 공짜 green).
   function renderPage(client: QueryClient) {
     function Wrapper({ children }: { children: ReactNode }) {
       return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        <QueryClientProvider client={client}>
+          <WithToastHost>{children}</WithToastHost>
+        </QueryClientProvider>
       );
     }
     return render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, {
@@ -2311,7 +2351,9 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
   const cardOf = () => screen.getByTestId('record-trip-visit-card-v-in');
 
   const memoInput = () =>
-    waitFor(() => within(cardOf()).getByTestId('record-trip-memo-input'));
+    openedMemoInput(() =>
+      within(cardOf()).getByTestId('record-trip-memo-input')
+    );
 
   beforeEach(() => {
     setAccessToken('a');
@@ -2457,6 +2499,424 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
         { text: '노을도 좋았다' },
       ]);
     });
+  });
+
+  // TRIP-1426 · Q-110 — return·포커스 해제로 저장돼도 표시가 없었다. PUT 이 실제로 나가 성공했을 때만 공용 토스트로 알린다.
+  describe('🔴 TRIP-1426 · 실제로 저장했을 때만 "메모를 저장했어요" 안내', () => {
+    /**
+     * 무엇을 보장하나: 저장 안내는 PUT 이 나가 성공했고 그 시도가 최신일 때만 뜬다 — 공백·저장본과 같은 글(요청 0)·실패·
+     *   늦게 끝난 옛 성공에는 뜨지 않는다. j01 의 저장 경로(포커스가 빠질 때)는 그대로다.
+     * (개념) `createGate()` = 테스트가 열 때까지 응답을 붙잡는 문 · `resetToast()` 는 파일 최상위 afterEach 몫.
+     */
+    const TOAST = 'record-trip-memo-saved-toast';
+    const COPY = '메모를 저장했어요';
+    const MEMO_URL = `${BASE}/trips/:tripId/visits/:visitCheckId/memo`;
+
+    it('JT1 글을 바꾸고 return(제출 → 포커스 빠짐)으로 PUT 이 성공하면 안내가 뜬다 (AC-12)', async () => {
+      // 준비
+      renderPage(newClient());
+      const input = await memoInput();
+      // 앵커 — 저장 전엔 안내가 없다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 — 실기 return 순서.
+      fireEvent.changeText(input, '파도 소리가 좋았다');
+      fireEvent(input, 'submitEditing');
+      fireEvent(input, 'blur');
+
+      // 단언
+      expect(
+        await screen.findByTestId(TOAST, {}, TOAST_WAIT)
+      ).toHaveTextContent(COPY);
+      expect(memoBodies).toEqual([{ text: '파도 소리가 좋았다' }]);
+      expect(within(cardOf()).queryByTestId(NOTICE)).toBeNull();
+    });
+
+    it('JT2 공백이거나 저장본과 같은 글로 포커스가 빠지면 요청도 안내도 없다 — 다른 글은 저장되고 안내가 뜬다 (AC-13)', async () => {
+      // 준비 — 이 세션 저장본(gcTime 0 client 라 기본값부터 푼다, 02a ★10).
+      const client = newClient();
+      client.setQueryDefaults(['visit-memo'], { gcTime: Infinity });
+      client.setQueryData(['visit-memo', TRIP_ID, 'v-in'], '바람이 좋았다');
+      renderPage(client);
+      const input = await memoInput();
+      expect(input.props.value).toBe('바람이 좋았다');
+
+      // 실행 ① — 공백만 → 포커스 빠짐, 저장본과 같은 글 → 포커스 빠짐.
+      fireEvent.changeText(input, '   ');
+      fireEvent(input, 'blur');
+      fireEvent.changeText(input, '바람이 좋았다');
+      fireEvent(input, 'blur');
+      await settleMemoResponses(0);
+
+      // 단언 ① — 요청 0 · 안내 0.
+      expect(memoBodies).toEqual([]);
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ② — 짝: 다른 글(센티널).
+      fireEvent.changeText(input, '노을도 좋았다');
+      fireEvent(input, 'blur');
+
+      // 단언 ② — 센티널만 나갔고 이번엔 안내가 뜬다.
+      expect(
+        await screen.findByTestId(TOAST, {}, TOAST_WAIT)
+      ).toHaveTextContent(COPY);
+      expect(memoBodies).toEqual([{ text: '노을도 좋았다' }]);
+    });
+
+    it.each<[string, MemoReply]>([
+      ['404', 'not-found'],
+      ['네트워크 실패', 'network'],
+    ])(
+      'JT3 PUT %s → 카드 안 기존 실패 안내만 뜨고 저장 안내는 없다 (AC-14)',
+      async (_label, reply) => {
+        // 준비
+        memoReply = reply;
+        renderPage(newClient());
+        const input = await memoInput();
+
+        // 실행
+        fireEvent.changeText(input, '저장 안 될 메모');
+        fireEvent(input, 'blur');
+
+        // 단언
+        await waitFor(() =>
+          expect(within(cardOf()).getByTestId(NOTICE)).toHaveTextContent(
+            NOTICE_COPY
+          )
+        );
+        await settleMemoResponses(1);
+        expect(screen.queryByTestId(TOAST)).toBeNull();
+      }
+    );
+
+    it('JT4 같은 카드에서 연달아 저장할 때 늦게 끝난 옛 성공은 최신 실패 뒤에 안내를 띄우지 않는다 (AC-15)', async () => {
+      // 준비 — 첫 PUT 은 문 뒤에서 성공, 둘째는 바로 404.
+      const gate = createGate();
+      server.use(
+        http.put(MEMO_URL, async ({ request }) => {
+          const body = (await request.json()) as { text: string };
+          memoBodies.push(body);
+          if (memoBodies.length === 1) {
+            await gate.opened;
+            return HttpResponse.json({
+              text: body.text,
+              updatedAt: '2026-08-20T08:00:00.000Z',
+            });
+          }
+          return HttpResponse.json({ error: 'not found' }, { status: 404 });
+        })
+      );
+      const client = newClient();
+      renderPage(client);
+      const input = await memoInput();
+
+      // 실행 ① — 첫 글(응답 보류) → 둘째 글(실패).
+      fireEvent.changeText(input, '첫 글');
+      fireEvent(input, 'blur');
+      await waitFor(() => expect(memoBodies).toHaveLength(1));
+      fireEvent.changeText(input, '둘째 글');
+      fireEvent(input, 'blur');
+      await waitFor(() =>
+        expect(within(cardOf()).getByTestId(NOTICE)).toHaveTextContent(
+          NOTICE_COPY
+        )
+      );
+
+      // 실행 ② — 늦게 첫 응답(성공)이 돌아온다.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 — 앵커: 첫 성공이 실제로 처리됐다(성공 뒤에만 세션 저장본이 적힌다, 02a ★9).
+      await waitFor(() =>
+        expect(client.getQueryData(['visit-memo', TRIP_ID, 'v-in'])).toBe(
+          '첫 글'
+        )
+      );
+      await settleMemoResponses(2);
+      expect(within(cardOf()).getByTestId(NOTICE)).toHaveTextContent(
+        NOTICE_COPY
+      );
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    });
+  });
+
+  // TRIP-1415 · AC-1·3~10·12 — 서버 메모(GET /trips/{id}/records 의 memo)로 카드 입력을 시드한다.
+  describe('서버 메모 시드 — records 의 memo', () => {
+    /**
+     * 무엇을 보장하나: 앱을 다시 켜도(세션 저장본 없음) 서버에 남은 메모가 그 방문 카드 입력칸에 보인다. 순위는
+     *   세션 저장본 → 서버 memo → 빈칸이고, 방문 id 로만 찾는다(날짜 묶음 무관). 첫 조회가 끝나기 전엔 입력이 글자를
+     *   받지 않고(빈칸에 써서 서버 메모를 덮는 upsert 차단), 한 번 열리면 재조회가 와도 쓰던 초안을 지키며, 조회가
+     *   실패해도 막히지 않는다. 시드된 값 그대로 포커스를 빼면 PUT 은 나가지 않는다.
+     * (개념) `createGate()` = 테스트가 열 때까지 응답을 붙잡는 문(시간 대신 신호) · `client.invalidateQueries()` =
+     *   캐시를 낡음으로 표시해 보고 있는 조회를 다시 부르기(앱 복귀 재조회 흉내).
+     */
+    const RECORDS_GET = `GET /api/v1/trips/${TRIP_ID}/records`;
+    const INPUT = 'record-trip-memo-input';
+    let recordsReply: (call: number) => Response | Promise<Response>;
+    let recordsCalls = 0;
+
+    const recordsOf = (actual: ReturnType<typeof actualVisit>[]) =>
+      HttpResponse.json(tripRecord([{ date: DAY, actual }], TRIP_ID));
+    const field = () => within(cardOf()).getByTestId(INPUT);
+    const valueOf = () => field().props.value;
+
+    beforeEach(() => {
+      observedHits = [];
+      recordsCalls = 0;
+      recordsReply = () => recordsOf([]);
+      server.use(
+        recordsHandler(() => {
+          recordsCalls += 1;
+          return recordsReply(recordsCalls);
+        })
+      );
+    });
+
+    it('J1 서버 memo 가 그 방문 카드 입력칸에 심기고, memo 가 null 인 카드(hasMemo true)는 자리표시다 — 카드 2장에 records GET 1회 (AC-1·AC-8·AC-9)', async () => {
+      // 준비 — 같은 날 카드 둘(광안리 도착·미술관 완료). 미술관은 "있다고는 하는데 본문 없음".
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: DAY,
+                  slots: [
+                    daySlot('p1', '광안리 해변'),
+                    daySlot('p2', '부산시립미술관'),
+                  ],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        ),
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+          HttpResponse.json({
+            visits: [V_IN, completedVisitOn('v-2', DAY, 'p2')],
+          })
+        )
+      );
+      recordsReply = () =>
+        recordsOf([
+          actualVisit('v-in', '대구탕 국물이 시원했다'),
+          actualVisit('v-2', null, { hasMemo: true }),
+        ]);
+
+      // 실행
+      renderPage(newClient());
+
+      // 단언 ① — 서버 메모가 그 카드에.
+      await waitFor(() => expect(valueOf()).toBe('대구탕 국물이 시원했다'));
+      // 단언 ② — 본문 없는 방문은 빈 입력 + 자리표시(hasMemo 로 지어내지 않는다).
+      const other = within(screen.getByTestId('record-trip-visit-card-v-2'));
+      expect(other.getByTestId(INPUT).props.value).toBe('');
+      expect(other.getByPlaceholderText('메모를 남겨보세요')).toBeOnTheScreen();
+      // 단언 ③ — 카드마다가 아니라 여행당 한 번.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(hitCount(RECORDS_GET)).toBe(1);
+    });
+
+    it('J2 records 의 다른 날 묶음에 있어도 방문 id 로 찾아 심는다 (AC-10)', async () => {
+      // 준비 — v-in 이 활성 탭(08-20)이 아니라 전날 묶음에 실려 온다.
+      recordsReply = () =>
+        HttpResponse.json(
+          tripRecord(
+            [
+              {
+                date: '2026-08-19',
+                actual: [actualVisit('v-in', '어제 묶음에 실린 메모')],
+              },
+              { date: DAY, actual: [] },
+            ],
+            TRIP_ID
+          )
+        );
+
+      // 실행
+      renderPage(newClient());
+
+      // 단언
+      await waitFor(() => expect(valueOf()).toBe('어제 묶음에 실린 메모'));
+    });
+
+    it('J3 이 세션에 저장한 값이 서버 memo 를 이기고, 조회가 끝나기 전에도 입력이 열려 있다 (AC-3)', async () => {
+      // 준비 — 세션 '새 글'(gcTime 0 client 라 기본값부터 푼다) · 서버 '옛 글'은 문 뒤에.
+      const client = newClient();
+      client.setQueryDefaults(['visit-memo'], { gcTime: Infinity });
+      client.setQueryData(['visit-memo', TRIP_ID, 'v-in'], '새 글');
+      const gate = createGate();
+      recordsReply = async () => {
+        await gate.opened;
+        return recordsOf([actualVisit('v-in', '옛 글')]);
+      };
+
+      // 실행 ① — 조회가 나가 있는 동안.
+      renderPage(client);
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(1));
+
+      // 단언 ① — 세션 값으로 시드되고 바로 쓸 수 있다.
+      expect(valueOf()).toBe('새 글');
+      fireEvent.changeText(field(), '새 글 더');
+      expect(valueOf()).toBe('새 글 더');
+
+      // 실행 ② — 서버 응답이 도착한다.
+      await act(async () => {
+        gate.release();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      await flushNotifications();
+
+      // 단언 ② — 도착이 쓰던 글을 덮지 않는다.
+      expect(valueOf()).toBe('새 글 더');
+    });
+
+    it('J4 응답이 늦게 와도 그 사이 건드리지 않았으면 도착 뒤 서버 memo 로 채워진다 (AC-4)', async () => {
+      // 준비
+      const gate = createGate();
+      recordsReply = async () => {
+        await gate.opened;
+        return recordsOf([actualVisit('v-in', '늦게 온 메모')]);
+      };
+
+      // 실행 ① — 카드가 먼저 뜬다.
+      renderPage(newClient());
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(1));
+      // 앵커 — 도착 전 입력칸은 있고 비어 있다.
+      expect(valueOf()).toBe('');
+
+      // 실행 ② — 응답 도착.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언
+      await waitFor(() => expect(valueOf()).toBe('늦게 온 메모'));
+    });
+
+    it('J5 첫 조회 중엔 입력이 글자를 받지 않고 PUT 도 없다 — 도착하면 서버 memo 로 심긴다 (AC-5)', async () => {
+      // 준비
+      const gate = createGate();
+      recordsReply = async () => {
+        await gate.opened;
+        return recordsOf([actualVisit('v-in', '서버 글')]);
+      };
+      renderPage(newClient());
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(1));
+
+      // 실행 ① — 조회 중에 글을 넣고 포커스를 뺀다.
+      const locked = field();
+      fireEvent.changeText(locked, '몰래 쓴 글');
+      fireEvent(locked, 'blur');
+
+      // 단언 ① — 입력이 바뀌지 않았다.
+      expect(valueOf()).toBe('');
+
+      // 실행 ② — 응답 도착.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 ② — 조회 중에 넣으려던 글이 아니라 서버 글로 열린다.
+      await waitFor(() => expect(valueOf()).toBe('서버 글'));
+      const opened = await memoInput();
+
+      // 실행 ③ — 센티널 저장(조회 중 PUT 이 있었다면 그 앞에 낀다).
+      fireEvent.changeText(opened, '센티널');
+      fireEvent(opened, 'blur');
+
+      // 단언 ③
+      await waitFor(() => expect(memoBodies).toHaveLength(1));
+      expect(memoBodies).toEqual([{ text: '센티널' }]);
+    });
+
+    it('J6 열린 뒤 records 가 다시 조회돼 값이 바뀌어도 쓰던 초안은 그대로다 — 재조회 중에도 계속 쓸 수 있다 (AC-6)', async () => {
+      // 준비 — 1차 '서버 글', 2차부터는 문 뒤의 '다른 기기 글'.
+      const gate = createGate();
+      recordsReply = async (call) => {
+        if (call === 1) return recordsOf([actualVisit('v-in', '서버 글')]);
+        await gate.opened;
+        return recordsOf([actualVisit('v-in', '다른 기기 글')]);
+      };
+      const client = newClient();
+      renderPage(client);
+      await waitFor(() => expect(valueOf()).toBe('서버 글'));
+      fireEvent.changeText(await memoInput(), '초안');
+
+      // 실행 ① — 다시 조회(앱 복귀 재조회 흉내).
+      await act(async () => {
+        void client.invalidateQueries();
+      });
+      await waitFor(() =>
+        expect(hitCount(RECORDS_GET)).toBeGreaterThanOrEqual(2)
+      );
+
+      // 단언 ① — 재조회 중에 다시 잠기지 않는다.
+      fireEvent.changeText(field(), '초안 더');
+      expect(valueOf()).toBe('초안 더');
+
+      // 실행 ② — 바뀐 값이 도착한다.
+      await act(async () => {
+        gate.release();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      await flushNotifications();
+
+      // 단언 ② — 다시 심지도(재마운트·리셋) 않는다.
+      expect(valueOf()).toBe('초안 더');
+    });
+
+    it('J7 서버 memo 로 심긴 입력은 그대로 포커스를 빼거나 고쳤다 되돌려도 PUT 0회다 (AC-7)', async () => {
+      // 준비
+      recordsReply = () => recordsOf([actualVisit('v-in', '서버 글')]);
+      renderPage(newClient());
+      await waitFor(() => expect(valueOf()).toBe('서버 글'));
+      await memoInput();
+
+      // 실행 — 그대로 blur → 고쳤다 되돌리고 blur → 다른 글(센티널) blur.
+      fireEvent(field(), 'blur');
+      fireEvent.changeText(field(), '서버 글!');
+      fireEvent.changeText(field(), '서버 글');
+      fireEvent(field(), 'blur');
+      fireEvent.changeText(field(), '다른 글');
+      fireEvent(field(), 'blur');
+
+      // 단언 — 센티널만 나갔다(같은 값 PUT 이 있었다면 그 앞에 낀다).
+      await waitFor(() =>
+        expect(memoBodies).toContainEqual({ text: '다른 글' })
+      );
+      expect(memoBodies).toEqual([{ text: '다른 글' }]);
+    });
+
+    it.each<[string, number]>([
+      ['500', 500],
+      ['404', 404],
+    ])(
+      'J8 records %s 여도 카드·입력은 막히지 않고 빈칸으로 열려 저장된다 (AC-12)',
+      async (_label, status) => {
+        // 준비
+        recordsReply = () => HttpResponse.json({ error: 'boom' }, { status });
+
+        // 실행
+        renderPage(newClient());
+        const input = await memoInput();
+
+        // 단언 ① — 카드와 빈 입력.
+        expect(cardOf()).toBeOnTheScreen();
+        expect(input.props.value).toBe('');
+
+        // 실행 ② — 쓴다.
+        fireEvent.changeText(input, '조회 실패 뒤 메모');
+        fireEvent(input, 'blur');
+
+        // 단언 ② — 저장이 나간다.
+        await waitFor(() => expect(memoBodies).toHaveLength(1));
+        expect(memoBodies).toEqual([{ text: '조회 실패 뒤 메모' }]);
+      }
+    );
   });
 });
 

@@ -1,7 +1,7 @@
 import type { AddMustVisitRequest } from '@/shared/api/index.schemas';
 
 /**
- * h07 방문 시각 지정의 순수 판정 — 날짜 칩 · 시각 목록 · FIXED 폼 검증 · 요청 본문.
+ * h07 방문 시각 지정의 순수 판정 — 날짜 칩 · 시각 휠 열 · 휠 위치 · FIXED 폼 검증 · 요청 본문.
  *
  * 고를 수 있는 날짜를 여행 기간으로만 만들어 INV-U1-17(`fixedDate` 는 여행 기간 안)을 사후
  * 검증이 아니라 **입력 위젯 자체로** 강제한다. 시계는 읽지 않는다 — 요일은 `Date.UTC` 산술이다.
@@ -75,21 +75,34 @@ export function tripDayChips(period: {
   return chips;
 }
 
-/** 30분 간격 하루치 48개(01b D2). `AddMustVisitRequest.fixedStart` 형식이 `HH:mm[:ss]` 다. */
-export function startTimeOptions(): string[] {
-  return Array.from({ length: 48 }, (_, index) => {
-    const hour = String(Math.floor(index / 2)).padStart(2, '0');
-    const minute = index % 2 === 0 ? '00' : '30';
-    return `${hour}:${minute}`;
-  });
+/** 시작 시각 휠의 두 열 — 시 00~23 · 분 00~59(1분 간격, TRIP-1437). 시+분을 이으면 `HH:mm` 이고
+ * `AddMustVisitRequest.fixedStart` 형식이 `HH:mm[:ss]` 다. */
+export function startTimeOptions(): { hours: string[]; minutes: string[] } {
+  const pad2 = (n: number): string => String(n).padStart(2, '0');
+  return {
+    hours: Array.from({ length: 24 }, (_, hour) => pad2(hour)),
+    minutes: Array.from({ length: 60 }, (_, minute) => pad2(minute)),
+  };
 }
 
-/** `13:00` → `오후 1:00 (13:00)` — Figma h07 의 시작 시각 표기다(12시간제·24시간제 병기). */
-export function startTimeLabel(value: string): string {
-  const [hour, minute] = value.split(':').map(Number);
-  const meridiem = hour < 12 ? '오전' : '오후';
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${meridiem} ${hour12}:${String(minute).padStart(2, '0')} (${value})`;
+/** 서버 기본 창(일과 값이 null 일 때)의 시작 — 정본 `Trip.dayStartAt` 설명. */
+const DEFAULT_DAY_START = '09:00';
+
+/**
+ * TRIP-1437 · Q-066 — 시작 시각을 아직 안 골랐을 때 휠을 **세울 자리**('HH:mm'). 값이 아니라 위치다
+ * (BR-U1-49 — 폼에 넣지 않는다). 고른 날짜가 여행 첫날이면 첫날 시작, 아니면(날짜 미선택 포함) 하루 시작,
+ * 둘 다 없으면 09:00. 서버 값은 `HH:mm[:ss]` 라 앞 5글자만 쓴다.
+ */
+export function startWheelAnchor(input: {
+  fixedDate: string | null;
+  startDate: string | undefined;
+  dayStartAt?: string | null;
+  firstDayStartAt?: string | null;
+}): string {
+  const { fixedDate, startDate, dayStartAt, firstDayStartAt } = input;
+  const dayStart =
+    fixedDate === startDate ? (firstDayStartAt ?? dayStartAt) : dayStartAt;
+  return (dayStart ?? DEFAULT_DAY_START).slice(0, 5);
 }
 
 type CompleteFixedForm = MustVisitTimeForm & {

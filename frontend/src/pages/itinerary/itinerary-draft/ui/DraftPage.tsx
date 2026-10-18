@@ -22,7 +22,6 @@ import {
 import type { GenerationDayState } from '@/features/itinerary';
 import { legDistance } from '@/entities/place';
 import { resolveUnplacedNames } from '@/features/itinerary';
-import { isGenerationRunning } from '@/features/itinerary';
 import { DraftScreen } from './DraftScreen';
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
 import { AlertCircleGlyph } from '@/features/itinerary';
@@ -37,7 +36,6 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
 import { useAccessToken } from '@/shared/api';
-import { isDateInRange } from '@/shared/lib/monthGrid';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { useQueryDataUpdateCount } from '@/shared/lib/useQueryDataUpdateCount';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -47,6 +45,8 @@ import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 
+import { resolveRegenerateRoute } from '../model/regenerateRoute';
+import type { RegenerateRoute } from '../model/regenerateRoute';
 import { DraftFallbackBanner } from './DraftFallbackBanner';
 import { RevealItem } from './RevealItem';
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
@@ -107,6 +107,10 @@ export function DraftPage({
   const [confirmingInProgress, setConfirmingInProgress] = useState(false);
   // TRIP-1038 C — 셸 폴백 안내 「처음부터 직접 짜기」의 비우기 확인이 떠 있나.
   const [confirmingReset, setConfirmingReset] = useState(false);
+  // TRIP-1424 — 셸 [다시 짜기]의 확인이 떠 있으면 연 순간 판정한 갈 길(null = 닫힘, BR-U3-18 · 결정 1=A).
+  // 문구와 [다시 짜기] 이동이 이 한 값을 같이 쓴다 — 각자 오늘을 읽으면 자정을 넘길 때 둘이 갈린다.
+  const [regenerateConfirmRoute, setRegenerateConfirmRoute] =
+    useState<RegenerateRoute | null>(null);
   // MANUAL 빈 일정 → 편집기 replace 를 한 번만(라우터 객체가 렌더마다 새로 와도 다시 부르지 않는다).
   const manualRedirectedRef = useRef(false);
   // TRIP-1037 — 재생성으로 생성 화면에 떠나는 중인가. `useState` 가 아니라 ref 인 이유: 같은 틱의 두 번째
@@ -279,7 +283,7 @@ export function DraftPage({
    * 만들어도 안전하고(빈 화면에서 생성을 시작하는 길을 막으면 사용자가 나갈 곳이 없다),
    * 그 밖의 실패(5xx · 네트워크 끊김)는 "모른다" 라서 확정 일정일 수도 있다.
    */
-  async function handleRetry(): Promise<void> {
+  async function handleRetry(decided?: RegenerateRoute): Promise<void> {
     // 잠금은 await **앞**에서 — 조회를 기다리는 동안 들어온 누름도 막는다.
     if (leavingRef.current) return;
     leavingRef.current = true;
@@ -289,49 +293,48 @@ export function DraftPage({
         ? itinerary
         : await itinerary.refetch({ cancelRefetch: false });
     if (!mountedRef.current) return;
-    const status = settled.data?.status;
 
-    // 여행 중 다시 짜기는 확정·초안 구분 없이 Plan-B(재계획)의 몫이다 — 모달 없이 생성 화면의 재계획 모드로 보내
-    // 바로 다시 짜서 반영한다(2026-10-14 사용자 결정 · 원 일정은 서버가 반영 전 복원 지점을 남긴다). 재계획은 확정을
-    // 풀지 않는다. 생성 실패(FAILED)는 서버가 재생성을 받으므로 종전대로 생성 POST 로 간다 — 다녀온 기록이 있어 409 면
-    // 생성 화면이 재계획 모드로 넘긴다(GeneratingPage). 여행 기간을 모르면 아래 종전 길이다.
-    // 이 여행이 생성 중이면 재계획보다 아래 "진행 중" 확인(TRIP-1032 B)이 먼저다 — 1일차 전이면 재계획은 "오늘 일정이
-    // 없다" 409 막다른 얼굴이 된다(#1235 사후 리뷰 W1).
-    if (
-      settled.data !== undefined &&
-      !isGenerationRunning(settled.data) &&
-      settled.data.generationMode !== 'MANUAL' &&
-      settled.data.generationState !== 'FAILED' &&
-      trip.data !== undefined &&
-      isDateInRange(
-        seoulDate(new Date()),
-        trip.data.startDate,
-        trip.data.endDate
-      )
-    ) {
-      goGenerating(true);
+    // 조회로도 일정을 못 얻으면 404 일 때만 만든다 — 그 밖의 실패는 "모른다" 라서 확정 일정일 수도 있다.
+    if (settled.data === undefined) {
+      if (isNotFound(settled.error)) {
+        goGenerating();
+      } else {
+        leavingRef.current = false;
+      }
       return;
     }
 
-    const stop =
-      (status === undefined && !isNotFound(settled.error)) ||
-      status === 'CONFIRMED' ||
-      // TRIP-1038 — 직접 짠 일정을 AI 생성으로 덮지 않는다(방어 한 줄 — 셸·빈 얼굴은 이미 이 길을 안 준다).
-      settled.data?.generationMode === 'MANUAL';
-    if (stop) {
-      leavingRef.current = false;
-      return;
+    // 갈 길 판정은 확인 얼굴 문구와 같은 함수다(TRIP-1424 — 두 벌이면 "횟수를 쓴다"고 말하고 재계획으로 갈 수 있다).
+    // 여행 중이면 확정·초안 구분 없이 재계획(2026-10-14 사용자 결정 · 확정을 풀지 않는다), FAILED 는 생성 POST,
+    // 확정·MANUAL 은 생성 POST 로 보내지 않는다. 생성 중이면 재계획보다 "진행 중" 확인(TRIP-1032 B)이 먼저다 —
+    // 1일차 전이면 재계획은 "오늘 일정이 없다" 409 막다른 얼굴이 된다(#1235 사후 리뷰 W1).
+    // `decided` 는 확인 얼굴이 연 순간 판정해 넘긴 값 — 문구와 같은 값으로 간다.
+    switch (decided ?? regenerateRouteOf(settled.data)) {
+      case 'replan':
+        goGenerating(true);
+        return;
+      case 'stop':
+        leavingRef.current = false;
+        return;
+      case 'inProgress':
+        // 확인 뒤엔 cancel 을 따로 부르지 않는다 — 같은 여행 POST 가 서버에서 이전 세션을 닫는다(01b Q4).
+        leavingRef.current = false;
+        setConfirmingInProgress(true);
+        return;
+      case 'generate':
+        goGenerating();
     }
+  }
 
-    // TRIP-1032 B — 이 여행이 생성 중이면 확인부터. 확인 뒤엔 cancel 을 따로 부르지 않는다 — 같은 여행
-    // POST 가 서버에서 이전 세션을 닫는다(01b Q4).
-    if (isGenerationRunning(settled.data)) {
-      leavingRef.current = false;
-      setConfirmingInProgress(true);
-      return;
-    }
-
-    goGenerating();
+  /** 셸 [다시 짜기]의 갈 길 — 확인을 열 때 한 번, 판정값 없이 온 `handleRetry`(실패 얼굴)가 쓴다. 오늘은 KST 벽시계. */
+  function regenerateRouteOf(
+    data: NonNullable<typeof itinerary.data>
+  ): RegenerateRoute {
+    return resolveRegenerateRoute({
+      itinerary: data,
+      trip: trip.data,
+      today: seoulDate(new Date()),
+    });
   }
 
   /**
@@ -446,6 +449,47 @@ export function DraftPage({
                 label: '취소',
                 variant: 'outline',
                 onPress: () => setConfirmingReset(false),
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // TRIP-1424 — 셸 [다시 짜기] 확인(같은 얼굴 교체형). 문구는 실제로 갈 길을 따른다 — 생성 POST 면 하루 AI 생성
+  // 횟수를 쓴다고 말하고, 여행 중 재계획이면 바로 반영된다고 말한다(남은 횟수 숫자는 계약에 없다). 생성 중(드문
+  // 서버 상태)은 결국 생성 POST 길이라 생성 문구다. [다시 짜기]는 연 순간의 판정값을 들고 `handleRetry` 로 간다.
+  if (regenerateConfirmRoute !== null) {
+    const replan = regenerateConfirmRoute === 'replan';
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View className="flex-1 justify-center bg-canvas px-lg">
+          <StateNotice
+            testID="itinerary-regenerate-confirm"
+            icon={<AlertCircleGlyph />}
+            title="일정을 다시 짤까요?"
+            description={
+              replan
+                ? '다시 짜면 직접 바꾼 내용은 사라질 수 있어요 · 새로 짠 일정이 바로 반영돼요'
+                : '다시 짜면 직접 바꾼 내용은 사라질 수 있어요 · 오늘 AI 생성 횟수를 1회 써요'
+            }
+            actions={[
+              {
+                testID: 'itinerary-regenerate-proceed',
+                label: '다시 짜기',
+                variant: 'filled',
+                onPress: () => {
+                  setRegenerateConfirmRoute(null);
+                  // 셸엔 일정이 이미 손에 있어 await 없이 곧바로 이동한다. 같은 순간 두 탭은 `leavingRef` 가 막는다.
+                  void handleRetry(regenerateConfirmRoute);
+                },
+              },
+              {
+                testID: 'itinerary-regenerate-cancel',
+                label: '취소',
+                variant: 'outline',
+                onPress: () => setRegenerateConfirmRoute(null),
               },
             ]}
           />
@@ -682,7 +726,16 @@ export function DraftPage({
               : {
                   label: '다시 짜기',
                   variant: 'outline',
-                  onPress: () => void handleRetry(),
+                  onPress: () => {
+                    // 확정 + 여행 기간 밖은 갈 길이 없다 — 눌러도 아무 일 없는 확인을 얹지 않는다(TRIP-1424 Q1=A).
+                    // 셸(listed)은 일정이 있어야 그려진다 — 없으면 갈 길을 판정할 수 없으니 아무것도 열지 않는다.
+                    if (itinerary.data === undefined) return;
+                    const route = regenerateRouteOf(itinerary.data);
+                    if (route === 'stop') return;
+                    // 확인 얼굴이 셸을 내렸다 올리므로 [취소] 뒤 경로 그려지기·카드 등장을 다시 재생하지 않게 끈다.
+                    setRevealing(false);
+                    setRegenerateConfirmRoute(route);
+                  },
                 },
             {
               label: '확정하기',

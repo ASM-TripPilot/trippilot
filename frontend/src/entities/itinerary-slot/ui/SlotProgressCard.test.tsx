@@ -18,7 +18,8 @@ import { SlotProgressCard } from './SlotProgressCard';
  * 무엇을 보장하나:
  *  - done  = 이름 › + 우측 "09:30"(계획 startAt, BR-U4-34) + "방문" / 사진 N장 / 후기 박스.
  *            사진·후기가 없으면 그 칸을 통째로 안 그린다(G6 — 실앱은 계약 공백이라 늘 없음).
- *  - active = 상태줄 "13:00 도착 · 지금 관람 중"(D4 고정) + [방문 완료]·[사진]·[메모].
+ *  - active = 상태줄 "{실제 도착} 도착 · 지금 관람 중"(D4 · TRIP-1419 — 시각은 `visitedLabel`, 없으면 "지금 관람 중")
+ *            + [방문 완료]·[사진]·[메모].
  *            "진행 중" 배지·영업시간 줄은 없다. [사진]·[메모]는 각자 제 콜백만 부른다(TRIP-1070 —
  *            "준비 중" 힌트 폐기). 콜백을 안 받은 버튼은 그리지 않는다(TRIP-939).
  *  - upcoming = "예정" 알약 + 상태줄 "15:00 도착 예정 · 11:00–22:00 영업" 한 줄 + 누를 수 없는 아이콘 3개.
@@ -160,18 +161,20 @@ describe('SlotProgressCard · active (AC-4)', () => {
     openingHours: '10:00 - 18:00',
   });
 
-  it('C4 상태줄은 "13:00 도착 · 지금 관람 중" 이고, 진행 중 배지·영업시간 줄은 없다 (D4)', () => {
+  // TRIP-1419 — 옛 C4 는 계획 startAt(13:00)을 상태줄 시각으로 굳혔다. 이제 시각은 실제 도착(visitedLabel)이다.
+  it('C4 상태줄은 "{실제 도착} 도착 · 지금 관람 중" 이고, 진행 중 배지·영업시간 줄은 없다 (D4)', () => {
     render(
       <SlotProgressCard
         slot={activeSlot}
         date={DATE}
         state="active"
+        visitedLabel="12:52"
         onPressName={jest.fn()}
       />
     );
 
     expect(screen.getByTestId(id('time'))).toHaveTextContent(
-      '13:00 도착 · 지금 관람 중'
+      '12:52 도착 · 지금 관람 중'
     );
     expect(screen.getByTestId(id('chevron'))).toBeOnTheScreen();
     // 부재 — 배지(옛 "진행 중")·예정 알약·영업시간(openingHours 를 줘도 안 나온다).
@@ -468,6 +471,95 @@ describe('SlotProgressCard · INV-3 (C9)', () => {
   });
 });
 
+// ── TRIP-1419 · 관람 중 상태줄의 시각은 실제 도착 시각 (Q-086) ─────────────────────────────
+//
+// 카드는 시각을 계산하지 않는다 — 허브가 서버 arrivedAt 을 KST 'HH:mm' 으로 접어 `visitedLabel` 로 내린다(완료 카드와
+// 같은 prop · 같은 뜻). 실제 시각이 없으면(낙관 구간) 계획 시각을 "도착" 이라 단정하지 않고 "지금 관람 중" 만 쓴다(Q1).
+// 예정 카드는 받아도 무시하고 계획 시각 그대로다(BR-U4-34). 시각은 실제(14:07) ≠ 계획(14:44)로 일부러 어긋나게 둔다 —
+// 같으면 "계획을 그리는 구현"도 통과한다(02a ★1).
+// 3동작: 준비(슬롯·상태·visitedLabel) → 실행(렌더) → 단언(상태줄 leaf 완전 일치 · 카드 텍스트에 없는 것).
+
+describe('SlotProgressCard · 관람 중 시각 (TRIP-1419)', () => {
+  const planned1444 = mkSlot({
+    startAt: '14:44:00',
+    endAt: '15:30:00',
+    nameKo: '부산시립미술관',
+    openingHours: '10:00 - 18:00',
+  });
+
+  it('AV1 visitedLabel 이 있으면 상태줄은 "{실제} 도착 · 지금 관람 중" — 계획 14:44 는 어디에도 없다 (AC-1)', () => {
+    render(
+      <SlotProgressCard
+        slot={planned1444}
+        date={DATE}
+        state="active"
+        visitedLabel="14:07"
+      />
+    );
+
+    expect(screen.getByTestId(id('time'))).toHaveTextContent(
+      '14:07 도착 · 지금 관람 중'
+    );
+    expect(screen.queryByText(/14:44/)).toBeNull();
+  });
+
+  it.each([
+    ['null', null],
+    ['미전달', undefined],
+  ] as const)(
+    'AV2 visitedLabel 이 %s 이면 상태줄은 "지금 관람 중" 뿐 — 계획 시각도 "도착" 도 쓰지 않는다 (AC-3 · Q1)',
+    (_label, visitedLabel) => {
+      const { toJSON } = render(
+        <SlotProgressCard
+          slot={planned1444}
+          date={DATE}
+          state="active"
+          visitedLabel={visitedLabel}
+        />
+      );
+
+      expect(screen.getByTestId(id('time'))).toHaveTextContent('지금 관람 중');
+      const text = JSON.stringify(toJSON());
+      expect(text).not.toContain('14:44');
+      expect(text).not.toContain('도착');
+    }
+  );
+
+  it('AV3 예정 카드는 visitedLabel 을 받아도 계획 시각 "14:44 도착 예정" 그대로다 (AC-7 · BR-U4-34)', () => {
+    render(
+      <SlotProgressCard
+        slot={{ ...planned1444, openingHours: null }}
+        date={DATE}
+        state="upcoming"
+        visitedLabel="14:07"
+      />
+    );
+
+    expect(screen.getByTestId(id('time'))).toHaveTextContent('14:44 도착 예정');
+    expect(screen.queryByText(/14:07/)).toBeNull();
+  });
+
+  it.each(['active', 'done'] as const)(
+    'AV4 %s 카드에 실제 시각을 줘도 체류·경과 시간은 없다 (AC-6 · INV-3 · BR-U4-37)',
+    (state) => {
+      const { toJSON } = render(
+        <SlotProgressCard
+          slot={planned1444}
+          date={DATE}
+          state={state}
+          visitedLabel="14:07"
+          memo="좋았다"
+        />
+      );
+
+      const text = JSON.stringify(toJSON());
+      // 짝 — 실제 시각은 그려졌다(빈 렌더 공허 통과 차단, 02a ★11).
+      expect(text).toContain('14:07');
+      expect(text).not.toMatch(/\d+\s*분|\d+\s*시간|소요|경과/);
+    }
+  );
+});
+
 // ── TRIP-748 · 영향 카드 배지 (AC-5 · Seed Q1) ──────────────────────────────
 //
 // 트리거가 가리키는 **예정** 카드는 "예정" 알약 대신 트리거 라벨(비 예보·이동 지연·휴무)을 분홍으로
@@ -630,6 +722,7 @@ describe('SlotProgressCard · 이름 진입 (TRIP-987 A-1·A-2·A-4)', () => {
         slot={mkSlot({ startAt: '13:00:00', nameKo: '부산시립미술관' })}
         date={DATE}
         state="active"
+        visitedLabel="13:00"
         onPressName={onPressName}
         onPressComplete={onPressComplete}
       />

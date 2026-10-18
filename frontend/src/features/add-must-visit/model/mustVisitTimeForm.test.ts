@@ -6,12 +6,13 @@ import {
   canSubmitMustVisitTime,
   mustVisitTimeBlockReason,
   startTimeOptions,
+  startWheelAnchor,
   tripDayChips,
   type MustVisitTimeForm,
 } from './mustVisitTimeForm';
 
 /**
- * h07 방문 시각 지정의 **순수 판정** — 날짜 칩 · 시각 목록 · FIXED 폼 검증 · 요청 본문.
+ * h07 방문 시각 지정의 **순수 판정** — 날짜 칩 · 시각 목록(시·분 두 열) · 휠 위치 · FIXED 폼 검증 · 요청 본문.
  *
  * 무엇을 보장하나:
  *  - 고를 수 있는 날짜가 **여행 기간뿐**이다(AC-6). INV-U1-17("`fixedDate` 는 여행 기간 안")을
@@ -78,20 +79,96 @@ describe('C8 · AC-6 짝 — 경계와 달 넘김', () => {
   });
 });
 
-describe('C9 · D2 — 시작 시각 목록이 30분 간격 하루치다', () => {
-  it('48개이고 00:00 에서 23:30 까지 빈틈·중복이 없다', () => {
-    const options = startTimeOptions();
+// TRIP-1437 — 옛 C9 는 30분 간격 한 줄 48개(01b D2)를 잠갔다. 결정 1=A 로 시·분 두 열 · 1분 간격이 됐다.
+describe('🔴 C9 · TRIP-1437 결정 1=A — 시작 시각 휠은 시(00~23)·분(00~59) 두 열이다', () => {
+  it('시 24칸 · 분 60칸이 zero-pad 두 자리로 빈틈·중복 없이 나온다', () => {
+    const hours = Array.from({ length: 24 }, (_, hour) =>
+      String(hour).padStart(2, '0')
+    );
+    const minutes = Array.from({ length: 60 }, (_, minute) =>
+      String(minute).padStart(2, '0')
+    );
 
-    expect(options).toHaveLength(48);
-    expect(options[0]).toBe('00:00');
-    expect(options[1]).toBe('00:30');
-    expect(options[47]).toBe('23:30');
-    // 중복이 있으면 시트에서 같은 시각이 두 번 보이고 testID 가 충돌한다.
-    expect(new Set(options).size).toBe(48);
-    // 형식 — `AddMustVisitRequest.fixedStart` 가 `HH:mm[:ss]` 다.
+    // 완전 일치 한 줄이 개수·순서·zero-pad 를 함께 잠근다. 시+분을 이으면 `HH:mm`
+    // (`AddMustVisitRequest.fixedStart` 는 `HH:mm[:ss]` — 1분 간격이 계약상 허용된다).
+    expect(startTimeOptions()).toEqual({ hours, minutes });
+  });
+});
+
+/**
+ * TRIP-1437 · Q-066 (01b Q2) — 시작 시각을 아직 안 골랐을 때 휠을 **세울 자리**.
+ *
+ * 값이 아니라 위치다 — 이 함수의 결과는 폼에 들어가지 않는다(BR-U1-49). 서버 `Trip.dayStartAt`·
+ * `firstDayStartAt` 은 `format: time`(초가 붙어 올 수 있다)이고 null 이면 서버 기본 창 09:00 이다.
+ * 첫날을 고른 경우에만 첫날 시작을 쓴다 — 날짜를 아직 안 골랐으면 첫날이 아니다.
+ *
+ * 3동작 뼈대: 준비=고른 날짜·여행 일과 값 → 실행=startWheelAnchor → 단언=돌아온 'HH:mm'.
+ */
+describe('🔴 C16 · TRIP-1437 Q-066 — 비어 있는 시작 시각 휠의 위치는 그 여행 일과 시작이다', () => {
+  const START = '2026-06-10';
+
+  it.each<
+    [
+      string,
+      string | null,
+      string | null | undefined,
+      string | null | undefined,
+      string,
+    ]
+  >([
+    [
+      '날짜 미선택 · 하루 시작 10:00:00 → 초를 떼고 10:00',
+      null,
+      '10:00:00',
+      undefined,
+      '10:00',
+    ],
+    ['날짜 미선택 · 둘 다 null → 서버 기본 09:00', null, null, null, '09:00'],
+    [
+      '날짜 미선택이면 첫날 시작이 있어도 하루 시작',
+      null,
+      '10:00:00',
+      '14:00:00',
+      '10:00',
+    ],
+    [
+      '첫날을 고르면 첫날 시작이 이긴다',
+      START,
+      '10:00:00',
+      '14:00:00',
+      '14:00',
+    ],
+    [
+      '첫날이어도 첫날 시작이 없으면 하루 시작(분 보존)',
+      START,
+      '10:30:00',
+      null,
+      '10:30',
+    ],
+    ['첫날 · 둘 다 없으면 09:00', START, undefined, undefined, '09:00'],
+    [
+      '둘째 날이면 첫날 시작은 안 쓴다',
+      '2026-06-11',
+      '10:00:00',
+      '14:00:00',
+      '10:00',
+    ],
+    ['초 없이 온 값도 그대로 HH:mm', '2026-06-11', '08:30', null, '08:30'],
+  ])('%s', (_label, fixedDate, dayStartAt, firstDayStartAt, expected) => {
     expect(
-      options.every((value) => /^([01]\d|2[0-3]):(00|30)$/.test(value))
-    ).toBe(true);
+      startWheelAnchor({
+        fixedDate,
+        startDate: START,
+        dayStartAt,
+        firstDayStartAt,
+      })
+    ).toBe(expected);
+  });
+
+  it('C16-b 여행이 아직 안 왔으면(startDate 없음) 09:00', () => {
+    expect(startWheelAnchor({ fixedDate: null, startDate: undefined })).toBe(
+      '09:00'
+    );
   });
 });
 

@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { closestScrollView, stubScrollTo } from '@/test-support/sheetTree';
+
 import { WHEEL_CELL_HEIGHT, WheelPicker } from './WheelPicker';
 
 /**
@@ -160,85 +162,126 @@ describe('🔴 W1 · 스크롤 정지 → 가운데 값 자동 확정 (D21 · IN
 });
 
 /**
- * TRIP-1080 · D — 닫힌 휠(`disabled`). j01 방문 시각 시트의 완료 칸(원본 완료 없음, TRIP-1069 D1)이 첫 소비처다.
+ * TRIP-1417 · L (Q-100 · 01b D1) — 레이아웃이 끝나면 선택 셀을 가운데 밴드로 **다시** 맞춘다.
  *
- * 무엇을 보장하나: disabled 면 값을 **받지 않는다** — 셀을 눌러도, 스크롤이 멈춰도 `onSelect` 가 안 불리고,
- * 선택 표시도 없고, 스크롤 자체가 꺼진다(`scrollEnabled` false). 기본값(미지정)은 지금과 같다.
+ * 실기에서 `contentOffset` 값은 맞는데 휠이 엉뚱한 칸에 서 있었다 — 재활용된 네이티브 스크롤뷰의 옛 크기로
+ * 마운트 때 오프셋이 잘린다(브리프 ①). 그래서 크기가 확정된 뒤(`onLayout`) `scrollTo` 로 한 번 더 맞춘다.
  *
- * *(개념)* jest 의 스크롤 정지 이벤트는 `scrollEnabled={false}` 로 막히지 않는다(02a §5-②) — 그래서
- *   "스크롤을 껐다"(D4)와 "이벤트가 와도 무시한다"(D3)를 따로 본다. 실기에선 손가락이 못 굴리고(D4),
- *   코드 경로로는 값이 안 들어간다(D3).
+ * 무엇을 보장하나: layout 이벤트가 오면 그 열의 `scrollTo` 가 `{ y: 선택 인덱스 × 셀 높이, animated: false }` 로
+ * 1회 불린다. 선택이 없거나 목록에 없으면 y 0.
  *
- * 3동작 뼈대: 준비=disabled 휠 렌더 → 실행=셀 press·스크롤 정지 → 단언=onSelect 횟수·선택 표식·prop.
+ * 커버하지 않는 것(02a ★5): 실제로 밴드 안에 오는지(재활용 재현)는 jest 가 모른다 — 6-b 실기.
+ *
+ * *(개념)* RN jest 목의 `scrollTo` 는 모든 ScrollView 가 함께 쓰는 가짜라, 이 열의 인스턴스에 새 가짜를 꽂아
+ *   이 열의 호출만 센다(`stubScrollTo`, 02a ★1).
+ *
+ * 3동작 뼈대: 준비=선택값으로 렌더·가짜 꽂기 → 실행=layout 이벤트 → 단언=scrollTo 인자·횟수.
  */
-describe('🔴 D · disabled 휠은 값을 받지 않는다 (TRIP-1080 · TRIP-1069 D1 · INV-4)', () => {
+describe('🔴 L · 레이아웃이 끝나면 선택 셀 위치로 다시 스크롤한다', () => {
   const WHEEL = 'wheel-scroll';
 
-  function renderWheel(disabled: boolean | undefined) {
-    const onSelect = jest.fn();
+  it.each<[string | null, number, string]>([
+    ['10:00', 2, '세 번째 값 → 2칸'],
+    [null, 0, '선택 없음 → 맨 위'],
+    ['11:00', 0, '목록에 없는 값 → 맨 위'],
+  ])('selected=%s → y = %i칸 (%s)', (selected, cells) => {
+    // 준비: 휠을 렌더하고, 그 열 ScrollView 의 scrollTo 를 새 가짜로 바꾼다.
     render(
       <WheelPicker
         testID={WHEEL}
         values={VALUES}
-        selected="09:30"
-        onSelect={onSelect}
+        selected={selected}
+        onSelect={jest.fn()}
         testIDForValue={cellTestID}
-        {...(disabled === undefined ? {} : { disabled })}
       />
     );
-    return onSelect;
-  }
+    const scroll = closestScrollView(screen.getByTestId(cellTestID('09:00')));
+    expect(scroll).not.toBeNull();
+    const scrollTo = stubScrollTo(scroll!);
+    // 앵커 — layout 전에는 아무도 부르지 않았다(02a ★2).
+    expect(scrollTo).not.toHaveBeenCalled();
 
-  it('D1 · disabled 면 selected 가 있어도 어떤 셀도 선택 표시가 없다 — 짝: disabled={false} 면 09:30 이 선택', () => {
-    renderWheel(true);
-    VALUES.forEach((value) =>
-      expect(screen.getByTestId(cellTestID(value))).not.toBeSelected()
+    // 실행: 크기가 확정됐다는 layout 이벤트(열 높이 220 = 5행 × 44).
+    fireEvent(screen.getByTestId(WHEEL), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 100, height: 220 } },
+    });
+
+    // 단언: 선택 칸 위치로, 애니메이션 없이, 한 번.
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith(
+      expect.objectContaining({ y: cells * WHEEL_CELL_HEIGHT, animated: false })
     );
-
-    screen.unmount();
-    renderWheel(false);
-    expect(screen.getByTestId(cellTestID('09:30'))).toBeSelected();
   });
+});
 
-  it('D2 · disabled 면 셀을 눌러도 onSelect 가 불리지 않는다 — 짝: disabled={false} 면 1회', () => {
-    const onSelect = renderWheel(true);
+/**
+ * TRIP-1437 · A (Q-066 · 01b Q2) — 고른 값이 없을 때 휠을 **세울 자리**(`anchor`)를 따로 받는다.
+ *
+ * 지금은 "선택 없음 = 맨 위"라 방문 시각 휠이 자정(00:00)에서 시작했다. 선택(`selected`, 저장될 값)과
+ * 위치(`anchor`, 눈이 머무는 칸)를 떼어, 값은 비운 채 위치만 일과 시작으로 옮긴다(BR-U1-49 — 보기만으로
+ * 값이 정해지면 안 된다).
+ *
+ * 무엇을 보장하나:
+ *  - 선택이 없고 `anchor` 가 목록에 있으면 첫 위치(`contentOffset`)와 레이아웃 뒤 `scrollTo` 가 그 칸이다.
+ *  - 그래도 어떤 셀도 selected 가 아니고, 렌더·레이아웃만으로 `onSelect` 가 불리지 않는다.
+ *  - 선택이 있으면 `anchor` 는 무시된다(선택이 이긴다). 목록에 없는 `anchor` 는 맨 위.
+ *  - `anchor` 를 안 주면 위 L 표 그대로다(1417 계약 — `[null → 0]` 행이 산다).
+ *
+ * 커버하지 않는 것(6-b): 프로그램이 굴린 `scrollTo` 가 실기에서 정지 이벤트(`onMomentumScrollEnd`)를
+ *   쏴서 값이 확정되는 길이 있는지 — jest 의 `scrollTo` 는 가짜라 그 이벤트를 절대 내지 않는다(브리프 §8①).
+ *
+ * 3동작 뼈대: 준비=selected·anchor 로 렌더·가짜 꽂기 → 실행=layout 이벤트 → 단언=위치·선택 표식·onSelect.
+ */
+describe('🔴 A · 선택 없이 위치만 세운다 — anchor (TRIP-1437)', () => {
+  const WHEEL = 'wheel-scroll';
 
-    fireEvent.press(screen.getByTestId(cellTestID('10:00')));
+  it.each<[string | null, string, number, string | null, string]>([
+    [null, '10:00', 2, null, '선택 없음 → anchor 칸(2칸), 선택 표식 없음'],
+    ['09:30', '10:00', 1, '09:30', '선택이 있으면 anchor 무시 → 선택 칸(1칸)'],
+    [null, '11:00', 0, null, '목록에 없는 anchor → 맨 위'],
+  ])(
+    'selected=%s · anchor=%s → y = %i칸, 선택 셀 %s (%s)',
+    (selected, anchor, cells, selectedCell) => {
+      // 준비: 휠을 렌더하고 그 열 ScrollView 의 scrollTo 를 새 가짜로 바꾼다(L 과 같은 도구).
+      const onSelect = jest.fn();
+      render(
+        <WheelPicker
+          testID={WHEEL}
+          values={VALUES}
+          selected={selected}
+          anchor={anchor}
+          onSelect={onSelect}
+          testIDForValue={cellTestID}
+        />
+      );
+      const scroll = closestScrollView(screen.getByTestId(cellTestID('09:00')));
+      expect(scroll).not.toBeNull();
+      const scrollTo = stubScrollTo(scroll!);
+      expect(scrollTo).not.toHaveBeenCalled();
+      // 첫 프레임 위치도 같은 칸이어야 00 에서 튀었다 오지 않는다(1417 승계 — contentOffset 유지).
+      expect(screen.getByTestId(WHEEL).props.contentOffset?.y).toBe(
+        cells * WHEEL_CELL_HEIGHT
+      );
 
-    expect(onSelect).not.toHaveBeenCalled();
-
-    screen.unmount();
-    const enabled = renderWheel(false);
-    fireEvent.press(screen.getByTestId(cellTestID('10:00')));
-    expect(enabled).toHaveBeenCalledWith('10:00');
-    expect(enabled).toHaveBeenCalledTimes(1);
-  });
-
-  it('D3 · disabled 면 스크롤이 멈춰도 onSelect 가 불리지 않는다 — 짝: 미지정이면 가운데 값으로 1회', () => {
-    const settleAt2 = () =>
-      fireEvent(screen.getByTestId(WHEEL), 'momentumScrollEnd', {
-        nativeEvent: { contentOffset: { x: 0, y: 2 * WHEEL_CELL_HEIGHT } },
+      // 실행: 크기가 확정됐다는 layout 이벤트.
+      fireEvent(screen.getByTestId(WHEEL), 'layout', {
+        nativeEvent: { layout: { x: 0, y: 0, width: 100, height: 220 } },
       });
-    const onSelect = renderWheel(true);
 
-    settleAt2();
-
-    expect(onSelect).not.toHaveBeenCalled();
-
-    screen.unmount();
-    const enabled = renderWheel(undefined);
-    settleAt2();
-    expect(enabled).toHaveBeenCalledWith('10:00');
-    expect(enabled).toHaveBeenCalledTimes(1);
-  });
-
-  it('D4 · disabled 면 스크롤이 꺼진다(scrollEnabled false) — 짝: 미지정이면 꺼지지 않는다', () => {
-    renderWheel(true);
-    expect(screen.getByTestId(WHEEL).props.scrollEnabled).toBe(false);
-
-    screen.unmount();
-    renderWheel(undefined);
-    // 미지정은 undefined(=RN 기본 true)도 허용한다 — "꺼지지 않았다"만 본다(02a ★4).
-    expect(screen.getByTestId(WHEEL).props.scrollEnabled).not.toBe(false);
-  });
+      // 단언: 그 칸으로 한 번 · 선택 표식은 selected 에만 · 보기만으로는 값이 안 나간다.
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+      expect(scrollTo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          y: cells * WHEEL_CELL_HEIGHT,
+          animated: false,
+        })
+      );
+      VALUES.forEach((value) => {
+        const cell = screen.getByTestId(cellTestID(value));
+        if (value === selectedCell) expect(cell).toBeSelected();
+        else expect(cell).not.toBeSelected();
+      });
+      expect(onSelect).not.toHaveBeenCalled();
+    }
+  );
 });

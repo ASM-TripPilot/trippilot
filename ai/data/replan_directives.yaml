@@ -148,7 +148,7 @@ directives:
   - key: NIGHTLIFE
     label: 밤에 놀기 — 클럽·바
     enforced_by: RANKING
-    aliases: [클럽 가고 싶어, 클럽, 나이트클럽, 클럽에서 놀고 싶어, 술 한잔, 바에 가고 싶어, 칵테일 바, 와인바, 펍, 밤에 놀 곳]
+    aliases: [클럽 가고 싶어, 클럽, 나이트클럽, 클럽에서 놀고 싶어, 술 한잔, 바에 가고 싶어, 칵테일 바, 와인바, 펍, 밤에 놀 곳, 혼술, 혼술바, 혼자 한잔]
 
   - key: END_NEAR_STAY
     label: 숙소 근처에서 끝내기

@@ -1482,6 +1482,164 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
     });
   });
 
+  // TRIP-1428 — 앱에서 확정에 성공한 여행은 확정 토스트가 이미 알렸다. 일정 탭으로 돌아와 "…일정이 완성됐어요"를
+  // 또 띄우지 않는다(결정 2=A). 확정 쪽(useConfirmItinerary)이 seen 에 그 여행을 더하고, 목록은 **포커스마다** seen 을
+  // 다시 읽는다 — 일정 탭은 탭 화면이라 다른 화면에 갔다 와도 다시 마운트되지 않는다(01 맹점 ①).
+  describe('TRIP-1428 · 떠나 있는 사이 확정된 여행 — 포커스 때 seen 을 다시 읽는다', () => {
+    /**
+     * 무엇을 보장하나:
+     *  - 🔴 목록이 이미 떠 있는 채로 떠났다가, 그 사이 seen 에 A 가 기록되고 A 가 확정되면, 돌아왔을 때 A 배너가 없다.
+     *  - 🔴 같은 포커스에서 seen 밖의 다른 완성 여행 B(다른 기기 확정 등)는 지금처럼 1건 뜨고 [보기]가 된다(🟢 [닫기]).
+     *    seen 은 A 를 지우지 않고 B 를 더한다.
+     *  - 🟢 목록이 직접 띄운 배너는 seen 쓰기가 실패해도, 떠났다 돌아왔을 때 다시 뜨지 않는다(TRIP-1286 무회귀 —
+     *    "다시 읽기"가 이 화면이 아는 값을 버리면 red).
+     *
+     * ⚠️ 순서가 심판이다(02a ★1): 마운트 → 떠남 → **그 사이** 저장소에 A 추가 → 돌아옴. "저장소에 A 를 먼저 넣고
+     * 새로 그리기"는 마운트 때 한 번 읽는 지금 코드에서도 통과해 결함을 못 잡는다.
+     *
+     * 3동작: 준비(목록을 띄우고 떠난다 · 그 사이 seen·일정이 바뀐다) → 실행(돌아온다) → 단언(배너·seen 쓰기).
+     */
+    // A 가 B 보다 최근이다 — 낡은 seen 으로 판정하는 구현은 B 가 아니라 A 를 띄워 red 가 갈린다.
+    const RA = mk('trip-a', '제주 여행', {
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    });
+    const RB = mk('trip-b', '부산 여행', {
+      updatedAt: '2026-08-20T00:00:00.000Z',
+    });
+
+    /**
+     * 탭으로 돌아온 뒤 탭 복귀 재조회(TRIP-1271)가 끝날 때까지 기다린다 — 안 기다리면 그 응답 알림이 테스트 밖(act 밖)에
+     * 도착해 다음 테스트에 act 경고를 흘린다(02a ★17 실측).
+     */
+    async function returnAndSettle(): Promise<void> {
+      returnToTab();
+      await waitFor(() => expect(lastClient?.isFetching()).toBe(0));
+      await settle();
+    }
+
+    /** 떠나 있는 사이 확정된 여행 — 서버 대본과 캐시(확정 응답이 캐시에 쓴 것과 같은 자리)를 함께 바꾼다. */
+    async function confirmedWhileAway(ids: string[]): Promise<void> {
+      await act(async () => {
+        ids.forEach((id) => {
+          script[id] = done(id);
+          lastClient?.setQueryData(
+            getGetTripsTripIdItineraryQueryKey(id),
+            done(id)
+          );
+        });
+      });
+    }
+
+    it('🔴 목록을 본 뒤 A 를 확정하고 돌아오면(그 사이 seen 에 A 기록) A 배너가 뜨지 않고 seen 을 다시 쓰지도 않는다', async () => {
+      // 준비 ① 목록이 떠 있다 — A 는 아직 초안이라 배너가 없다(앵커).
+      serve([RA], { 'trip-a': planned('trip-a') });
+      renderPage();
+      expect(
+        await screen.findByTestId('my-trip-card-trip-a')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(bar()).toBeNull();
+      expect(readIdSet).toHaveBeenCalled();
+
+      // 준비 ② 탭을 떠난다 → 그 사이 확정 쪽이 seen 에 A 를 쓰고(useConfirmItinerary), A 가 확정된다.
+      leaveTab();
+      mockSeen = ['trip-a'];
+      await confirmedWhileAway(['trip-a']);
+      await settle();
+
+      // 실행 — 탭으로 돌아온다.
+      await returnAndSettle();
+
+      // 단언 — 카드는 있고(짝), A 배너는 없고, 목록이 seen 을 쓰지도 않았다.
+      expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+      expect(bar()).toBeNull();
+      expect(writeIdSet).not.toHaveBeenCalled();
+    });
+
+    it('🔴 같은 포커스에서 seen 밖의 완성 여행 B 는 지금처럼 한 건 뜨고, seen 은 A 를 남긴 채 B 를 더한다 · [보기]는 B 로 간다', async () => {
+      // 준비 — 둘 다 초안인 목록을 본 뒤 떠난다. 그 사이 A 는 이 기기에서 확정(seen 기록), B 는 다른 곳에서 확정.
+      serve([RA, RB], {
+        'trip-a': planned('trip-a'),
+        'trip-b': planned('trip-b'),
+      });
+      renderPage();
+      expect(
+        await screen.findByTestId('my-trip-card-trip-b')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(bar()).toBeNull();
+
+      leaveTab();
+      mockSeen = ['trip-a'];
+      await confirmedWhileAway(['trip-a', 'trip-b']);
+      await settle();
+
+      // 실행
+      await returnAndSettle();
+
+      // 단언 ① 배너는 B 한 건 — A(더 최근)가 아니다.
+      expect(screen.getAllByTestId('generation-done-bar')).toHaveLength(1);
+      expect(barText()).toHaveTextContent('부산 여행 일정이 완성됐어요');
+      // 단언 ② seen 은 A 를 지우지 않고 B 를 더한다(같은 키).
+      expect(seenWrites()).toEqual([[SEEN_KEY, ['trip-a', 'trip-b']]]);
+      // 단언 ③ [보기]는 B 의 목적지로 한 번.
+      fireEvent.press(screen.getByTestId('generation-done-bar-view'));
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-b/live');
+    });
+
+    it('🟢 B 배너의 [닫기]는 배너만 걷는다 — 이동 0 · 카드 그대로 (선제 green · AC-7 무회귀)', async () => {
+      serve([RA, RB], {
+        'trip-a': planned('trip-a'),
+        'trip-b': planned('trip-b'),
+      });
+      renderPage();
+      expect(
+        await screen.findByTestId('my-trip-card-trip-b')
+      ).toBeOnTheScreen();
+      await settle();
+
+      leaveTab();
+      mockSeen = ['trip-a'];
+      await confirmedWhileAway(['trip-a', 'trip-b']);
+      await returnAndSettle();
+      // 앵커 — B 배너가 떠 있다(아래 "없음"이 닫기 몫임을 가른다).
+      expect(
+        await screen.findByTestId('generation-done-bar')
+      ).toBeOnTheScreen();
+
+      // 실행
+      fireEvent.press(screen.getByTestId('generation-done-bar-close'));
+      await settle();
+
+      // 단언
+      expect(bar()).toBeNull();
+      expect(screen.getByTestId('my-trip-card-trip-b')).toBeOnTheScreen();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('🟢 목록이 띄운 배너는 seen 쓰기가 실패해도, 떠났다 돌아왔을 때 다시 뜨지 않는다 (TRIP-1286 무회귀 · 선제 green)', async () => {
+      // 준비 — 쓰기가 실패해 저장소엔 A 가 안 남는다(다시 읽으면 빈 집합).
+      (writeIdSet as jest.Mock).mockRejectedValue(new Error('keychain'));
+      serve([RA], { 'trip-a': done('trip-a') });
+      renderPage();
+      expect(
+        await screen.findByTestId('generation-done-bar')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(mockSeen).toEqual([]);
+
+      // 실행 — 떠났다 돌아온다.
+      leaveTab();
+      await settle();
+      await returnAndSettle();
+
+      // 단언 — 이 화면은 A 를 이미 알렸다는 걸 안다.
+      expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+      expect(bar()).toBeNull();
+    });
+  });
+
   describe('여행 중 고정', () => {
     // 시계는 흉내 내지 않는다: 기간 안 = 2020~2099, 과거 = 2026-06, 미래 = 2099-06.
     const DURING = { startDate: '2020-01-01', endDate: '2099-12-31' };
