@@ -392,6 +392,20 @@ def test_vision_clean_first_try_short_circuits_at_one_template_call() -> None:
     assert len(template.scenes) == 3
 
 
+def test_vision_path_judges_photoless_visit_too() -> None:
+    """vision 판도 사진 0장 방문(poi-2)의 사진 자리를 위반으로 보고 사진 있는 방문으로
+    갈아끼운다 — 텍스트판과 같은 게이트 컨텍스트(PHOTO_SLOT_EMPTY)."""
+    body = {**_CLEAN_BODY, "scenes": [
+        {"layout": "PHOTO_FULL",
+         "photo_slot": {"visit_ref": {"date": "2026-08-02", "poi_id": "poi-2"}},
+         "caption": "둘째 날 바다"},
+        *_CLEAN_BODY["scenes"][1:],
+    ]}
+    template, _ = _run_vision(ScriptedVisionLlm(_raw(body)), ScriptedVisionLlm(_HL_RAW))
+    assert template.is_fallback is False
+    assert template.scenes[0].photo_slot.visit_ref == _REF1
+
+
 # ── 결정론 — 성공·강등·전실패 세 경로 전부 재실행 동일 ─────────────────
 
 
