@@ -17,6 +17,12 @@ data class OutboundQuery(
     val adults: Int? = null,
 )
 
+/**
+ * 지역 단위 이동 대상 — "이 지역 숙소 전체 보기". [regionCode] 는 지역 카탈로그 코드(시도 2자리·시군구 5자리),
+ * 모르면 null(이름 키워드로만 간다). [name] 은 표시·키워드용 이름이다.
+ */
+data class OutboundRegion(val regionCode: String?, val name: String)
+
 /** 이동 목적지. [vendor] 는 클릭 행에 남아 "어느 공급자로 보냈나"를 말한다. */
 data class OutboundLink(val url: String, val vendor: String)
 
@@ -27,6 +33,9 @@ data class OutboundLink(val url: String, val vendor: String)
  */
 interface OtaDeeplinkPort {
     fun buildOutbound(stay: OutboundStay, query: OutboundQuery, clickId: UUID): OutboundLink
+
+    /** 지역 숙소 목록으로 이동. 숙소 단위 이동과 같은 트래킹·클릭 규약을 따른다. */
+    fun buildRegionOutbound(region: OutboundRegion, query: OutboundQuery, clickId: UUID): OutboundLink
 }
 
 /**

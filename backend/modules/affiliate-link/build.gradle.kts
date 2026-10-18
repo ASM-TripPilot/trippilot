@@ -13,6 +13,7 @@ dependencies {
 
     implementation(project(":common:core"))
     implementation(project(":modules:accommodation-search"))   // R1: 숙소 이름 조회만 — api(StayLookupFacade)
+    implementation(project(":modules:place-data"))             // R1: 지역 전체 보기 입력 검증 — api(RegionLookupFacade)만
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.kotlin.reflect)

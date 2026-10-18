@@ -13,3 +13,9 @@ interface StayLookupFacade {
      */
     fun findName(stayId: String): String?
 }
+
+/**
+ * 트립닷컴 큐레이션 숙소의 합성 stayId 출처 코드 — `"TRIPCOM:{트립닷컴 호텔 ID}"`.
+ * 아웃바운드 딥링크가 이 출처면 키워드 검색 대신 호텔 상세로 보낸다(식별자가 곧 hotelId).
+ */
+const val TRIPCOM_STAY_SOURCE = "TRIPCOM"
