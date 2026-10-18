@@ -31,12 +31,26 @@ MAX_CHARS = 280
 OVERLAP_SENTENCES = 1
 MAX_CHUNKS_PER_DOC = 40
 
-# 문장 끝: 마침표·물음표·느낌표(+닫는 따옴표·괄호) 뒤 공백. "3.5km" 처럼 공백 없는 점은 안 끊는다.
-_SENTENCE_END = re.compile(r"(?<=[.!?。])[\"'”’)\]]*\s+")
+# 문장 끝: 마침표·물음표·느낌표 뒤(닫는 따옴표·괄호가 붙으면 그 뒤) 공백. 닫는 부호는 **문장에 남긴다** —
+# 분리자에 넣으면 `"…했다."` 의 `"` 가 지워졌다(리뷰 실측). "3.5km" 처럼 공백 없는 점은 안 끊는다.
+_SENTENCE_END = re.compile(r"(?<=[.!?。][\"'”’)\]])\s+|(?<=[.!?。])\s+")
+
+
+# 끝 부호 뒤에 이어 붙는 말 — 인용·제목 안의 마침표였다는 뜻이라 앞 문장에 다시 붙인다
+# (`그는 "좋다." 라고 말했다` · `"…이다." 라는 평`).
+_CONTINUATIONS = ("라고", "이라고", "라는", "이라는", "라며", "이라며", "등")
 
 
 def split_sentences(text: str) -> list[str]:
-    return [s.strip() for s in _SENTENCE_END.split(" ".join(text.split())) if s.strip()]
+    out: list[str] = []
+    for s in (p.strip() for p in _SENTENCE_END.split(" ".join(text.split()))):
+        if not s:
+            continue
+        if out and s.startswith(_CONTINUATIONS):
+            out[-1] = f"{out[-1]} {s}"
+        else:
+            out.append(s)
+    return out
 
 
 def _hard_split(sentence: str) -> list[str]:
@@ -110,3 +124,57 @@ def chunk_corpus(rows: Iterable[Mapping]) -> tuple[KbDocument, ...]:
 def base_ids(docs: Sequence[KbDocument]) -> frozenset[str]:
     """조각들의 원문 id — 적재가 같은 id 로 남은 **청킹 전 통문서** 행을 지울 때 쓴다."""
     return frozenset(d.doc_id.split("#", 1)[0] for d in docs)
+
+
+# ── 미리 계산한 조각 벡터 — 배포 적재가 임베딩 파드를 수 시간 잡지 않게 ───────────────────────────────
+#
+# 운영 임베딩 파드는 문서당 1.5~3초다(runtime_kb 주석 — DEV 2코어에서 1,470건 ≈ 37분). 조각 1만여 개를 배포
+# 적재마다 임베딩하면 6~12시간이고, 그동안 같은 파드가 실시간 질의도 받는다. 그래서 질문뱅크(#1226)와 같은
+# 방식으로 **같은 모델·같은 연산 경로**로 미리 계산해 이미지에 싣고, 적재는 그 벡터를 넣기만 한다.
+# 조각마다 본문 지문을 같이 둔다 — 원천·청킹 규칙이 바뀐 조각만 지문이 달라져 그것만 원격 임베딩으로 간다.
+
+def text_hash(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def dump_chunk_vectors(path, docs: Sequence[KbDocument], model: str, vectors, *, provenance=None) -> None:
+    """fp16 로 저장(질문뱅크와 같은 형식) — 조각 id·본문 지문·벡터를 같은 순서로."""
+    import base64
+    import gzip
+    import json
+    import struct
+
+    if len(vectors) != len(docs):
+        raise ValueError("벡터 개수가 조각 수와 다르다")
+    dim = len(vectors[0]) if vectors else 0
+    if any(len(v) != dim for v in vectors):
+        raise ValueError("벡터 차원이 섞였다")
+    flat = [x for v in vectors for x in v]
+    doc = {"model": model, "dim": dim, "count": len(docs), "provenance": dict(provenance or {}),
+           "ids": [d.doc_id for d in docs], "hashes": [text_hash(d.text) for d in docs],
+           "f16_b64": base64.b64encode(struct.pack(f"<{len(flat)}e", *flat)).decode()}
+    path.write_bytes(gzip.compress(json.dumps(doc).encode(), mtime=0))
+
+
+def load_chunk_vectors(path) -> tuple[str, int, dict[str, tuple[str, tuple[float, ...]]]] | None:
+    """(모델, 차원, {조각 id: (본문 지문, 벡터)}). 파일이 없으면 None — 적재가 원격 임베딩으로 간다."""
+    import base64
+    import gzip
+    import json
+    import struct
+
+    if not path.exists():
+        return None
+    doc = json.loads(gzip.decompress(path.read_bytes()))
+    count, dim = int(doc["count"]), int(doc["dim"])
+    flat = struct.unpack(f"<{count * dim}e", base64.b64decode(doc["f16_b64"]))
+    vecs = {doc["ids"][i]: (doc["hashes"][i], tuple(flat[i * dim:(i + 1) * dim])) for i in range(count)}
+    return doc["model"], dim, vecs
+
+
+def vectors_path(corpus_path):
+    """코퍼스 옆 벡터 파일 경로 — `x.jsonl.gz` → `x.vectors.json.gz`."""
+    return corpus_path.with_name(corpus_path.name.replace(".jsonl.gz", ".vectors.json.gz"))
+

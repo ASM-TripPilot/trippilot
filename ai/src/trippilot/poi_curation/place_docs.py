@@ -130,13 +130,64 @@ def is_disambiguation(text: str) -> bool:
 
 
 def mentions_region(text: str, region: str, address: str) -> bool:
-    """문서가 그 장소의 소재지를 언급하나. 검증 못 하면 **버린다**(빈 것이 낫다)."""
-    tokens = [t for t in f"{region} {address}".split() if len(t) >= 2][:3]
+    """문서가 그 장소의 **시군구**를 언급하나. 검증 못 하면 **버린다**(빈 것이 낫다).
+
+    광역(도·특별시) 토큰은 보지 않는다(2026-10-18 리뷰 실측): 회사·브랜드 문서 도입부는 본사 주소를 흔히 적어
+    '서울특별시'만으로 통과했다 — 천호동 '현대백화점' POI 에 "주식회사 현대백화점은 1968년에 설립된 회사"가
+    붙었다. 시군구는 지점·소재지를 가리키는 단위라 그 오매칭을 대부분 막는다.
+    """
+    parts = address.split()
+    tokens = [t for t in (region, *parts[1:3]) if len(t) >= 2]
     for token in tokens:
         stem = token.rstrip("시군구")  # '제주시' → '제주' — 본문 표기가 달라도 걸린다
         if len(stem) >= 2 and stem in text:
             return True
     return False
+
+
+# 정의문이 회사·브랜드인 문서 — 지점 POI 에 붙으면 **회사 연혁·다른 지점 목록**이 그 장소 설명으로 실린다.
+# 본문 전문을 실으면서 피해가 커졌다(한 문서 40조각 — 다른 지점 절이 최고 점수로 붙을 수 있다).
+_COMPANY_WORDS = ("회사", "기업", "브랜드", "프랜차이즈", "법인", "체인")
+
+
+def is_company_intro(text: str) -> bool:
+    """첫 문장이 회사·브랜드를 정의하나 — 그러면 그 이름의 지점 POI 를 설명하는 문서가 아니다."""
+    m = _FIRST_SENTENCE.match(text.strip())
+    first = m.group(0) if m else text[:120]
+    return any(w in first for w in _COMPANY_WORDS)
+
+
+# 본문이 아닌 꼬리 절 — 링크 목록·각주라 상황 판단 근거가 없다. 접두로 본다("각주와 참고 문헌"·"참고 자료").
+_SKIP_SECTION_PREFIXES = ("각주", "주석", "참고", "같이 보기", "함께 보기", "외부 링크", "외부 고리",
+                          "출처", "갤러리", "사진", "관련 항목", "읽을거리", "더 읽어보기")
+_HEADING = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$")
+
+
+def wiki_sections(text: str) -> list[dict]:
+    """위키 plaintext(`exsectionformat=wiki`) → 절 목록 `[{heading, text}]`. 도입부는 제목 "개요".
+
+    꼬리 절은 **그 하위 절까지** 버린다 — `== 참고 문헌 ==` 아래 `=== 단행본 ===` 은 제목만 보면 꼬리가
+    아니지만 인용 목록이다(리뷰 실측: 수집본에 서지 목록 조각이 들어갔다). 같거나 높은 단계 제목이 나오면 풀린다.
+    """
+    out: list[dict] = []
+    heading, buf = "개요", []
+    skip_level = 0  # 0 = 안 버림. 아니면 버리기 시작한 절의 단계(= 개수)
+    for line in text.splitlines():
+        m = _HEADING.match(line.strip())
+        if m:
+            if buf and not skip_level:
+                out.append({"heading": heading, "text": " ".join(" ".join(buf).split())})
+            level, heading, buf = len(m.group(1)), m.group(2), []
+            if skip_level and level <= skip_level:
+                skip_level = 0
+            if not skip_level and heading.startswith(_SKIP_SECTION_PREFIXES):
+                skip_level = level
+            continue
+        if line.strip():
+            buf.append(line.strip())
+    if buf and not skip_level:
+        out.append({"heading": heading, "text": " ".join(" ".join(buf).split())})
+    return [s for s in out if len(s["text"]) >= MIN_DOC_CHARS]
 
 
 # ── ② detailIntro2 잔여 필드 → 문장 ────────────────────────────────

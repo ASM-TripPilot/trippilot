@@ -88,12 +88,31 @@ def test_the_chunk_that_matches_the_situation_is_shown_not_the_opening() -> None
     assert got["123"].startswith("개요: ")
 
 
-def test_legacy_whole_document_rows_are_not_candidates_once_the_source_is_chunked() -> None:
+def test_legacy_whole_document_still_serves_until_its_chunks_arrive() -> None:
+    """배포 롤아웃 직후·적재 예산에 밀린 문서 — 조각이 아직 없으면 옛 통문서가 붙는다(리뷰: 빼면 KB-5 가 빈다).
+    조각이 들어오면 더 맞는 쪽이 이긴다(적재가 끝난 문서의 통문서는 `load_kb` 가 지운다)."""
     from trippilot.poi_curation.place_docs import make_doc
     embedding, store = _RainEmbedding(), InMemoryVectorStore()
-    legacy = make_doc("wiki", "123", "비 오는 날 옛 통문서 — 적재가 지우지만 남아 있어도 후보가 아니다.")
-    index_documents([legacy, *c.chunk_document(
-        {"doc_id": "wiki:123", "poi_ref": "123", "sections": [{"heading": "개요", "text": _S}]})],
-        embedding, store)
+    index_documents([make_doc("wiki", "123", "맑은 날 옛 통문서다. 성산일출봉은 화산이다.")], embedding, store)
     got, _ = fetch_place_knowledge([_poi("123")], "비 오는 날", embedding, store)
-    assert got["123"].startswith("개요: ")
+    assert got["123"].startswith("맑은 날 옛 통문서다")
+    index_documents(c.chunk_document({"doc_id": "wiki:123", "poi_ref": "123",
+                                      "sections": [{"heading": "관람", "text": _RAIN}]}), embedding, store)
+    got, _ = fetch_place_knowledge([_poi("123")], "비 오는 날", embedding, store)
+    assert got["123"].startswith("관람: 비가 오면")
+
+
+def test_closing_quotes_stay_and_quoted_periods_do_not_split() -> None:
+    assert c.split_sentences('그는 "좋다." 라고 말했다. 이곳은 "작은 섬." 이라는 별명이 있다. 끝.') == [
+        '그는 "좋다." 라고 말했다.', '이곳은 "작은 섬." 이라는 별명이 있다.', "끝."]
+    assert c.split_sentences("(1990년 지정.) 다음 문장이다.") == ["(1990년 지정.)", "다음 문장이다."]
+
+
+def test_chunk_vectors_round_trip_and_hash_changes_with_text(tmp_path) -> None:
+    docs = c.chunk_document({"doc_id": "wiki:1", "poi_ref": "1", "sections": [{"heading": "개요", "text": _S}]})
+    p = tmp_path / "x.vectors.json.gz"
+    c.dump_chunk_vectors(p, docs, "m", [(0.5, -0.25)], provenance={"engine": "t"})
+    model, dim, vecs = c.load_chunk_vectors(p)
+    assert (model, dim) == ("m", 2) and vecs[docs[0].doc_id] == (c.text_hash(docs[0].text), (0.5, -0.25))
+    assert c.text_hash(docs[0].text) != c.text_hash(docs[0].text + " ")
+    assert c.vectors_path(tmp_path / "place_corpus_wiki.jsonl.gz").name == "place_corpus_wiki.vectors.json.gz"

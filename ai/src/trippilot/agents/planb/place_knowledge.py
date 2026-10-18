@@ -97,10 +97,14 @@ def fetch_place_knowledge(
     # 공존하기 때문이다. 그래서 조인 키만으로는 못 거르고 **출처 × 조인키**로 편다.
     # SOURCES 가 닫힌 목록(넷)이라 추측이 아니라 전개다.
     # 청킹된 출처는 **조각 id 범위**로 편다(`{출처}:{ref}#0..`) — 장소마다 조각 수가 달라 미리 모르므로
-    # 적재 상한(`MAX_CHUNKS_PER_DOC`)까지 펼친다. 없는 id 는 그냥 안 맞는다.
+    # 적재 상한(`MAX_CHUNKS_PER_DOC`)까지 펼친다. 없는 id 는 그냥 안 맞는다. **청킹 전 통문서 id 도 같이 둔다** —
+    # 조각이 아직 안 들어온 장소(배포 롤아웃 직후·적재 예산에 밀린 문서·코퍼스에 없는 옛 문서)는 그 통문서가
+    # 대신 붙는다. 조각이 다 들어간 문서의 통문서는 적재가 지우므로(`load_kb`) 둘이 오래 겹치지 않고,
+    # 겹쳐도 아래 장소별 중복 제거가 점수 높은 하나만 남긴다(리뷰: 빼면 KB-5 가 배포 창 동안 통째로 빈다).
     doc_ids = frozenset(
         i for source in SOURCES for ref in refs
-        for i in (chunk_ids(f"{source}:{ref}") if source in CHUNKED_SOURCES else (f"{source}:{ref}",)))
+        for i in ((f"{source}:{ref}", *chunk_ids(f"{source}:{ref}")) if source in CHUNKED_SOURCES
+                  else (f"{source}:{ref}",)))
     try:
         hits = retrieve(
             KbKind.POI_DESC,

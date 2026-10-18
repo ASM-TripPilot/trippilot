@@ -125,3 +125,30 @@ def test_위키_묶음이_TextExtracts_상한을_넘지_않는다() -> None:
         f"_WIKI_BATCH={module._WIKI_BATCH} 가 TextExtracts 상한 20 을 넘는다 — "
         "초과분은 경고 없이 버려진다"
     )
+
+
+# ── 2026-10-18 본문 전문 청킹 리뷰에서 나온 오매칭 ──────────────────────────────
+
+def test_광역_주소만_맞는_회사_문서는_통과하지_않는다() -> None:
+    """천호동 '현대백화점' POI ← "주식회사 현대백화점은 … 서울특별시 강남구 …" — 광역 토큰만으로 통과했다."""
+    from trippilot.poi_curation.place_docs import is_company_intro
+
+    text = "주식회사 현대백화점은 1968년에 설립된 회사이다. 본사는 서울특별시 강남구에 있다."
+    assert mentions_region(text, "강동구", "서울특별시 강동구 천호동 455") is False
+    assert is_company_intro(text)
+    assert not is_company_intro("성산일출봉은 제주특별자치도 서귀포시 성산읍에 있는 화산이다.")
+
+
+def test_시군구가_맞으면_통과한다() -> None:
+    assert mentions_region("천호동 일대의 시장으로 강동구에서 가장 오래됐다.", "강동구", "서울특별시 강동구 천호동")
+
+
+def test_꼬리_절은_하위_절까지_버리고_다음_같은_단계에서_풀린다() -> None:
+    from trippilot.poi_curation.place_docs import wiki_sections
+
+    text = ("도입부 설명이 여기에 있다.\n== 역사 ==\n오래된 역사가 있는 곳이다.\n"
+            "== 참고 문헌 ==\n누군가 (2001), 책 제목.\n=== 단행본 ===\n또 다른 책 목록 항목.\n"
+            "== 교통 ==\n버스 정류장에서 가깝다고 한다.\n== 각주와 참고 자료 ==\n각주 1.")
+    got = [(s["heading"], s["text"]) for s in wiki_sections(text)]
+    assert got == [("개요", "도입부 설명이 여기에 있다."), ("역사", "오래된 역사가 있는 곳이다."),
+                   ("교통", "버스 정류장에서 가깝다고 한다.")]

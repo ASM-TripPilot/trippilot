@@ -233,30 +233,168 @@ def test_본문이나_payload_가_바뀐_문서는_기적재로_건너뛰지_않
     assert [d.doc_id for d in fresh] == ["edited", "relabeled", "new"]
 
 
-# ── KB-5 원천 조각 적재 — 시간 예산에서 **문서 단위로** 끊는다 (2026-10-18 청킹) ──────────
+# ── KB-5 원천 조각 적재 (2026-10-18 청킹) ─────────────────────────────────────────
 
-def test_corpus_load_stops_at_document_boundaries_and_reports_what_is_done(monkeypatch) -> None:
-    import itertools
+def _rows(n_docs: int, sentences: int = 30):
+    return [{"doc_id": f"wiki:{i}", "poi_ref": str(i), "license": "CC BY-SA 4.0",
+             "sections": [{"heading": "개요", "text": " ".join(f"{i}번 장소 문장 {k}이다." for k in range(sentences))}]}
+            for i in range(n_docs)]
 
-    from tests.fakes.fake_embedding import FakeEmbedding
+
+class _CountingEmbedding:
+    """FakeEmbedding + 호출 수 세기 + 호출마다 가짜 시계를 민다(예산이 **실제 일**로 닳게)."""
+
+    def __init__(self, clock=None, per_call: float = 0.0) -> None:
+        from tests.fakes.fake_embedding import FakeEmbedding
+
+        self._inner, self.calls, self.texts = FakeEmbedding(dim=8), 0, 0
+        self.model_id, self.dim = self._inner.model_id, 8
+        self._clock, self._per_call = clock, per_call
+
+    def embed(self, text):
+        return self._inner.embed(text)
+
+    def embed_batch(self, texts):
+        self.calls += 1
+        self.texts += len(texts)
+        if self._clock is not None:
+            self._clock[0] += self._per_call
+        return self._inner.embed_batch(texts)
+
+
+def test_corpus_load_stops_on_real_work_at_document_boundaries(monkeypatch) -> None:
     from tests.fakes.in_memory_vector_store import InMemoryVectorStore
-    from trippilot.poi_curation.chunking import chunk_document
+    from trippilot.poi_curation.chunking import chunk_corpus
 
     load_kb = _load_kb_module()
-    rows = [{"doc_id": f"wiki:{i}", "poi_ref": str(i),
-             "sections": [{"heading": "개요", "text": " ".join(f"{i}번 장소 문장 {k}이다." for k in range(30))}]}
-            for i in range(3)]
-    docs = [d for r in rows for d in chunk_document(r)]
-    clock = itertools.count(0, 10)  # 문서 하나 볼 때마다 10초씩 흐른다
-    monkeypatch.setattr("time.monotonic", lambda: next(clock))
-    monkeypatch.setattr("trippilot.agents.planb.kb_retrieval.INDEX_BATCH", 1)
+    docs = chunk_corpus(_rows(6))
+    clock = [0.0]
+    monkeypatch.setattr("time.monotonic", lambda: clock[0])
+    # 임베딩 요청은 문서 경계에서 INDEX_BATCH 를 채울 때 나간다 — 문서 하나(조각 3)마다 나가게 맞춘다
+    monkeypatch.setattr("trippilot.agents.planb.kb_retrieval.INDEX_BATCH", 3)
+    emb = _CountingEmbedding(clock, per_call=10.0)  # 임베딩 한 번에 10초
+    count, done, embedded = load_kb._index_corpus(docs, emb, InMemoryVectorStore(), budget_sec=25)
+    per_doc = len(docs) // 6
+    assert embedded == count and emb.texts == count
+    assert count % per_doc == 0 and 0 < count < len(docs)  # 일부만 — 그리고 문서가 반쯤 들어간 게 없다
+    assert len(done) == count // per_doc
+
+
+def _corpus_file(tmp_path, rows, *, vectors_for=None, emb=None):
+    import gzip
+    import json
+
+    from trippilot.poi_curation.chunking import chunk_corpus, dump_chunk_vectors, vectors_path
+
+    p = tmp_path / "place_corpus_wiki.jsonl.gz"
+    with gzip.open(p, "wt", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    if vectors_for is not None:
+        docs = chunk_corpus(vectors_for)
+        dump_chunk_vectors(vectors_path(p), docs, emb.model_id, [emb.embed(d.text) for d in docs])
+    return p
+
+
+def test_precomputed_vectors_are_used_and_only_changed_chunks_are_embedded(tmp_path) -> None:
+    from tests.fakes.in_memory_vector_store import InMemoryVectorStore
+    from trippilot.agents.planb.kb_retrieval import collection_for
+    from trippilot.domain.kb import KbKind
+
+    load_kb = _load_kb_module()
+    emb = _CountingEmbedding()
+    rows = _rows(3)
+    edited = [*rows[:2], {**rows[2], "sections": [{"heading": "개요", "text": "바뀐 본문이다. 새 문장이다."}]}]
+    p = _corpus_file(tmp_path, edited, vectors_for=rows, emb=emb)  # 벡터는 바뀌기 전 원천으로 만들었다
+    docs = load_kb._documents_of(p)
     store = InMemoryVectorStore()
-    count, done = load_kb._index_corpus(docs, FakeEmbedding(), store, budget_sec=25)
-    assert done == {"wiki:0", "wiki:1"}  # 세 번째 문서는 손대지 않았다 — 반쯤 들어간 문서가 없다
-    assert count == sum(1 for d in docs if not d.doc_id.startswith("wiki:2#"))
+    line = load_kb.load_corpus(p, docs, list(docs), emb, store)
+    changed = [d for d in docs if d.doc_id.startswith("wiki:2#")]
+    assert emb.texts == len(changed), line  # 바뀐 문서의 조각만 원격 임베딩
+    assert f"원격 임베딩 {len(changed)}건" in line
+    coll = collection_for(KbKind.POI_DESC, emb.model_id)
+    assert {h.item_id for h in store.search(coll, emb.embed("x"), 10_000)} == {d.doc_id for d in docs}
 
 
-def test_default_seeds_load_the_chunk_corpus_not_the_old_whole_documents() -> None:
+def test_vectors_from_another_model_are_not_used(tmp_path) -> None:
+    from tests.fakes.in_memory_vector_store import InMemoryVectorStore
+
     load_kb = _load_kb_module()
+    emb = _CountingEmbedding()
+    other = _CountingEmbedding()
+    other.model_id = "other-model"
+    p = _corpus_file(tmp_path, _rows(1), vectors_for=_rows(1), emb=other)
+    docs = load_kb._documents_of(p)
+    line = load_kb.load_corpus(p, docs, list(docs), emb, InMemoryVectorStore())
+    assert emb.texts == len(docs) and "미리 계산 벡터 미사용" in line
+
+
+def test_reload_removes_legacy_rows_stale_tail_chunks_and_rows_outside_the_corpus(tmp_path) -> None:
+    from tests.fakes.in_memory_vector_store import InMemoryVectorStore
+    from trippilot.agents.planb.kb_retrieval import collection_for
+    from trippilot.domain.kb import KbKind
+
+    load_kb = _load_kb_module()
+    emb = _CountingEmbedding()
+    store = InMemoryVectorStore()
+    coll = collection_for(KbKind.POI_DESC, emb.model_id)
+    for legacy in ("wiki:0", "wiki:9", "wiki:9#0", "wiki:0#39"):  # 옛 통문서 · 코퍼스 밖 장소 · 낡은 꼬리 조각
+        store.upsert(coll, legacy, emb.embed(legacy), {"kb": "POI_DESC", "text": legacy})
+    store.upsert(coll, "intro:5", emb.embed("i"), {"kb": "POI_DESC", "text": "i"})  # 다른 출처는 손대지 않는다
+    p = _corpus_file(tmp_path, _rows(2))
+    docs = load_kb._documents_of(p)
+    load_kb.load_corpus(p, docs, list(docs), emb, store)
+    left = {h.item_id for h in store.search(coll, emb.embed("x"), 10_000)}
+    assert left == {d.doc_id for d in docs} | {"intro:5"}
+
+
+def test_partial_load_keeps_the_legacy_row_of_pending_documents(tmp_path, monkeypatch) -> None:
+    from tests.fakes.in_memory_vector_store import InMemoryVectorStore
+    from trippilot.agents.planb.kb_retrieval import collection_for
+    from trippilot.domain.kb import KbKind
+
+    load_kb = _load_kb_module()
+    clock = [0.0]
+    monkeypatch.setattr("time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("trippilot.agents.planb.kb_retrieval.INDEX_BATCH", 3)
+    emb = _CountingEmbedding(clock, per_call=10.0)
+    store = InMemoryVectorStore()
+    coll = collection_for(KbKind.POI_DESC, emb.model_id)
+    for i in range(6):
+        store.upsert(coll, f"wiki:{i}", emb.embed(str(i)), {"kb": "POI_DESC", "text": str(i)})
+    p = _corpus_file(tmp_path, _rows(6))
+    docs = load_kb._documents_of(p)
+    line = load_kb.load_corpus(p, docs, list(docs), emb, store, budget_sec=15)
+    left = {h.item_id for h in store.search(coll, emb.embed("x"), 10_000)}
+    loaded = {d.doc_id.split("#")[0] for d in docs if d.doc_id in left}
+    assert loaded and len(loaded) < 6 and "다음 배포로" in line
+    assert all(f"wiki:{i}" in left for i in range(6) if f"wiki:{i}" not in loaded)  # 아직 조각 없는 곳은 통문서 유지
+    assert not any(b in left for b in loaded)  # 조각이 다 들어간 곳의 통문서는 지웠다
+
+
+def test_default_seeds_exist_in_the_repo_and_load_the_chunk_corpus() -> None:
+    from pathlib import Path
+
+    load_kb = _load_kb_module()
+    root = Path(__file__).resolve().parents[3]
     assert "data/place_corpus_wiki.jsonl.gz" in load_kb._DEFAULT_SEEDS
-    assert "data/place_docs.json" not in load_kb._DEFAULT_SEEDS
+    missing = [s for s in load_kb._DEFAULT_SEEDS if not (root / s).is_file()]
+    assert missing == [], "기본 seed 가 리포에 없다 — 배포 KB 적재 Job 이 매번 죽는다"
+    assert len(load_kb._documents_of(root / "data/place_corpus_wiki.jsonl.gz")) > 5_000
+
+
+def test_committed_place_vectors_cover_the_corpus() -> None:
+    """코퍼스·청킹 규칙을 바꾸고 벡터를 다시 안 만들면 배포 적재가 그 조각을 운영 임베딩 파드로 돌린다(수 시간)."""
+    from pathlib import Path
+
+    from trippilot.poi_curation.chunking import load_chunk_vectors, text_hash, vectors_path
+
+    load_kb = _load_kb_module()
+    corpus = Path(__file__).resolve().parents[3] / "data/place_corpus_wiki.jsonl.gz"
+    loaded = load_chunk_vectors(vectors_path(corpus))
+    assert loaded is not None, "scripts/collect/build_place_vectors.py 로 만든다"
+    model, dim, vecs = loaded
+    assert model == "nlpai-lab/KURE-v1" and dim == 1024
+    stale = [d.doc_id for d in load_kb._documents_of(corpus)
+             if vecs.get(d.doc_id, ("",))[0] != text_hash(d.text)]
+    assert stale == [], f"벡터가 낡은 조각 {len(stale)}개 — build_place_vectors.py 를 다시 돌려라"
