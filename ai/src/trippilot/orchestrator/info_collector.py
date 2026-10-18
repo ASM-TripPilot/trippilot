@@ -18,9 +18,9 @@ intent별 **정보 요구표**를 보고 등록된 Provider들을 호출해 Info
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from trippilot.domain.common import GeoPoint, TransportMode
+from trippilot.domain.common import GeoPoint, PoiId, TransportMode
 from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
 from trippilot.domain.intent import Intent
@@ -125,6 +125,10 @@ INFO_REQUIREMENTS: Mapping[Intent, tuple[ProviderKind, ...]] = {
     # 친다(`/tmap/routes` · `/routes/pedestrian` · `/transit/routes`). 수단을 잘못
     # 가정하면 거리 자체가 달라진다.
     Intent.GET_DISTANCE: (ProviderKind.TRANSIT,),
+    # 종전엔 일부러 무행이었다 — PLACE 는 후보풀 조립기라 단건 조회에 안 맞는다(날짜·예산을
+    # 지어내면 영업일 필터가 물어본 그 장소를 떨어뜨린다). `PoiDbPort.lookup_by_ids` 를
+    # 감싸는 POI_INFO Provider 가 생겨 행을 채운다 (assistant-orchestrator FD DE §2.9).
+    Intent.GET_POI_INFO: (ProviderKind.POI_INFO,),
 }
 
 
@@ -178,6 +182,23 @@ def _build_transit_request(params: dict) -> TransitRequest:
     )
 
 
+def _build_poi_info_params(params: dict) -> dict:
+    """params dict → PoiInfoProvider 입력 (InfoCollector 전용). 와이어 형(str id·ISO 날짜)도 받는다.
+
+    params keys: poi_ids(필수), on(선택 — date 또는 ISO 문자열), now(선택 — 없으면 현재 시각, TRANSIT 과 같다)
+    """
+    on = params.get("on")
+    if isinstance(on, str):
+        on = date.fromisoformat(on)
+    now = params.get("now")
+    if now is None:
+        now = datetime.now(timezone.utc)
+    elif isinstance(now, str):
+        from trippilot.domain.serialization import from_iso
+        now = from_iso(now)
+    return {"poi_ids": frozenset(PoiId(p) for p in params["poi_ids"]), "on": on, "now": now}
+
+
 class InfoCollector:
     def __init__(self, providers: Mapping[ProviderKind, Provider]) -> None:
         self._providers = dict(providers)
@@ -226,11 +247,14 @@ class InfoCollector:
         """Provider 종류별 타입 안전 호출 분기 (TRIP-423).
 
         TRANSIT: params → TransitRequest 조립 → fetch_typed() 호출.
+        POI_INFO: params → {poi_ids, on, now} 정규화 → fetch().
         나머지: 기존대로 fetch(params: dict).
         """
         if kind is ProviderKind.TRANSIT and hasattr(provider, "fetch_typed"):
             request = _build_transit_request(params)
             return provider.fetch_typed(request)  # type: ignore[union-attr]
+        if kind is ProviderKind.POI_INFO:
+            return provider.fetch(_build_poi_info_params(params))
         return provider.fetch(params)
 
     def resolve_pool(self, pool_ref: str) -> CandidatePool | None:

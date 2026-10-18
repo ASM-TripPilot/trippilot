@@ -9,6 +9,8 @@
 > 자연어 진입점(도우미 대화 경계)이 열릴 때 배선된다. `agents/planb/kb_retrieval.py`·`agents/planb/rag.py`
 > 의 `IntentRouter`·`question_bank` 언급은 **구조를 본떴다는 주석 인용**이지 호출이 아니다.
 
+> **배선 상태 갱신 (2026-10-17 · assistant-orchestrator FD)**: 위 2026-08-25 註는 낡았다. 호출자는 2026-10-14 TRIP-1410 으로 열린 `POST /ai/v1/dialogue/interpret`(`orchestrator/dialogue_interpreter.py`) 하나였고, 이 PR 로 **서비스 판정은 `DialogueOrchestrator` 의 `DIALOGUE_INTENT`**(LLM 직접 분류 — 새 feature·`prompts/dialogue_intent.yaml`, `IntentGate` closed-set 재사용, history·memory·trip 요약을 변수로)가 맡는다. 아래 3단 파이프라인(1차 뱅크 → 2차 투표 → 3차 `intent.yaml` 0.2.0)은 **섀도 측정 전용**으로 그대로 돈다 — `ShadowIntentProbe` 가 샘플링(`TRIPPILOT_DIALOGUE_SHADOW_RATE`, DEV 1.0 · 운영 0.2)으로 같은 발화를 `IntentRouter.route` 에 흘려 `intent_shadow` 로그 1줄(일치 여부·경로·지연·refused, 발화 원문 없음)을 남기고, 섀도 LLM 호출은 응답 `llm_calls`·사용량 상한에 넣지 않는다. §6 지표에 **섀도 일치율**(서비스 의도 vs 3단 의도 — 라벨이 없어 accuracy 가 아니다) 열이 추가될 예정이며 `intent_eval.score` 를 라벨=서비스 의도로 재사용한다. 왜(사용자 결정 2026-10-17): 분류에 대화 문맥을 넣으려면 LLM 직접이 필요하고, 0회 경로의 가치는 계속 재서 되돌릴 근거를 남긴다. 상세 `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`.
+
 > 사용자가 AI 도우미에 자연어를 입력했을 때, **의도별 대표 질문 뱅크와의 유사도 매칭(1차)** + **저신뢰 시 LLM 유사 질문 생성·투표(2차)** 로 의도 파악 정확도를 높인다.
 > Orchestrator의 "의도 파악" 단계(`orchestrator-delegation-design.md` §4.1의 1번)를 구체화하는 설계.
 
@@ -73,6 +75,8 @@
       v
 AgentTask 발행 (intent + slots + confidence + match_route)
 ```
+
+> **[개정 · 2026-10-17 · assistant-orchestrator FD]** 위 1차→2차→3차 경로는 **섀도 측정 전용**이다 — 서비스 판정은 `DIALOGUE_INTENT`(LLM 직접). 머리말 註 참조.
 
 ### 경로별 특성
 
@@ -184,3 +188,5 @@ class IntentBankEntry:
 | Fast Path | CONFIDENT로 확정된 단순 의도는 그대로 Fast Path 진입 — 오히려 Fast Path 판정이 빨라짐 |
 | D31 | 매칭은 의도만 결정 — 데이터는 여전히 context_refs 재조회 |
 | M16(AI 도우미) 부재 | 현재 자연어 진입점은 EditAgent 자연어 편집뿐. 본 설계는 진입점과 무관하게 Orchestrator 앞단에 위치하므로, M16(타 팀) 합류 시 그대로 적용 |
+
+> **[개정 · 2026-10-17 · assistant-orchestrator FD]** 위 Fast Path 행의 "CONFIDENT 로 확정" 경로는 **섀도 측정 전용**이다 — 서비스 경로에는 CONFIDENT 가 없고 판정은 `DIALOGUE_INTENT`(LLM 직접). 머리말 註 참조.

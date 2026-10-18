@@ -5,10 +5,14 @@ FakeLlm  : seed 기반 결정론 응답. 토큰 수는 문자열 길이 비례�
 FailingLlm: 항상 실패 (폴백 경로·FallbackEvent 발행 테스트용).
 SlowLlm  : 항상 타임아웃 유발 (LlmTimeoutError).
 TimeoutForModelsLlm: 지정 모델만 타임아웃, 나머지는 canned 응답 — 2단 폴백(모델 전환) 테스트용.
+FeatureRoutingLlm: feature 별 canned|예외, 미지정은 echo — 한 턴에 여러 feature 를 부르는 오케스트레이터 테스트용.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
+from trippilot.domain.llm import LlmFeature
 from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmUnsupportedError, LlmTimeoutError
 
 
@@ -58,6 +62,37 @@ class TimeoutForModelsLlm:
             raw_text=self._canned, input_tokens=1, output_tokens=1, latency_ms=0,
             model_id=request.model_id,
         )
+
+
+class FeatureRoutingLlm:
+    """feature 별로 canned(str) 또는 예외(Exception 인스턴스)를 내는 LlmPort — `request.prompt_ref.feature` 로 분기.
+
+    한 턴에 분류·답변·요약 세 feature 를 부르는 도우미 오케스트레이터 테스트 공용(assistant-orchestrator FD §8).
+    `FakeLlm` 은 feature 무관 canned 1개라 부족했다. 미지정 feature 는 FakeLlm 과 같은 `echo:` 응답(결정론, D37).
+    받은 요청을 `requests` 에 기록한다 — "어느 feature 가 몇 번, 어떤 timeout 으로 나갔나"를 단언하는 창구.
+    """
+
+    def __init__(self, by_feature: Mapping[LlmFeature, str | Exception]) -> None:
+        self._by_feature = {feature.value: step for feature, step in by_feature.items()}
+        self.requests: list[LlmRequest] = []
+
+    def invoke(self, request: LlmRequest) -> LlmResponse:
+        self.requests.append(request)
+        step = self._by_feature.get(request.prompt_ref.feature)
+        if isinstance(step, Exception):
+            raise step
+        text = step if step is not None else f"echo:{request.prompt}"
+        return LlmResponse(
+            raw_text=text,
+            input_tokens=len(request.prompt),
+            output_tokens=len(text),
+            latency_ms=0,
+            model_id=request.model_id,
+        )
+
+    def features(self) -> list[str]:
+        """호출 순서대로의 feature 값 — 서비스·섀도 호출 분리 단언용."""
+        return [r.prompt_ref.feature for r in self.requests]
 
 
 class VisionSpyLlm:

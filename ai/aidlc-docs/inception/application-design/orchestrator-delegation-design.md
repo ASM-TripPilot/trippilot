@@ -181,6 +181,8 @@ AgentTask(
 
 복합 intent(예: "일정 바꾸고 회고도 써줘")는 Execution Plan에서 step 1개에 EditAgent+ReflectAgent 병렬 배치 — 기존 규칙 그대로.
 
+> **[개정 · 2026-10-17 · assistant-orchestrator FD] 도우미 대화 경로의 실제 처리자.** `GET_NEXT_SLOT`·`SHOW_SCHEDULE` 의 "DB 조회"는 **요청 `context` 스냅샷 계산**이다(일정은 backend 가 요청에 싣는 스냅샷으로만 온다 — AI 에 BE DB 직접 접근 경로가 없고 열린 길은 `/internal/pois` 둘뿐). `GET_POI_INFO`·`GET_WEATHER`·`GET_DISTANCE` 의 "에이전트 직접"은 **Provider**(신규 `PoiInfoProvider` = `POST /internal/pois/batch-get` 배치 조회 · Weather · Transit)다 — 표의 `WeatherAgent`·`TransitAgent`·`PlaceScoutAgent` 는 클래스가 없다. `SUGGEST_ALTERNATIVE` 는 `PlanBAgent.run(use_llm=False)` 인프로세스, `EDIT_SCHEDULE` 은 1단계에서 backend 제안 경로(`FRAME`)로 넘긴다. 처리자 표의 정본은 `orchestrator/dialogue_handlers.py::HANDLERS`(의도별 `plan`·`assemble`). 왜: 라우팅 유일 기준(표)은 유지하되 처리자 이름을 실물에 맞춘다. 상세 `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`.
+
 ---
 
 ## 6. 실패·재시도 정책

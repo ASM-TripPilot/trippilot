@@ -6,7 +6,7 @@
     "OVERTURE",
     "TOURAPI"
   ],
-  "collected_at": "2026-10-16T22:00:21.159809+00:00",
+  "collected_at": "2026-10-17T21:21:56.604885+00:00",
   "area_codes": [
     "1",
     "2",
@@ -39,7 +39,7 @@
   },
   "merged_from": [
     {
-      "collected_at": "2026-10-15T22:03:27.970283+00:00",
+      "collected_at": "2026-10-16T22:00:21.159809+00:00",
       "proposals": 57526,
       "stats": {
         "merged_runs": 3,
@@ -47,18 +47,18 @@
       }
     },
     {
-      "collected_at": "2026-10-16T22:00:17.017551+00:00",
+      "collected_at": "2026-10-17T21:21:52.618859+00:00",
       "proposals": 0,
       "stats": {
-        "http_calls": 235,
+        "http_calls": 240,
         "listed": 30,
-        "page_failures": 3,
+        "page_failures": 1,
         "detail_failures": 0,
         "category_unmapped": 0,
         "address_missing": 2,
         "merged": 0,
         "passed": 0,
-        "skipped_unchanged": 14968,
+        "skipped_unchanged": 15397,
         "rest_unparsed": 0,
         "raw_reparse_mismatch": 0,
         "gate_drops": {
@@ -70,7 +70,7 @@
           "1": {
             "calls": 25,
             "passed": 0,
-            "skipped": 1404
+            "skipped": 1402
           },
           "2": {
             "calls": 10,
@@ -85,12 +85,12 @@
           "4": {
             "calls": 7,
             "passed": 0,
-            "skipped": 399
+            "skipped": 398
           },
           "5": {
             "calls": 5,
             "passed": 0,
-            "skipped": 133
+            "skipped": 138
           },
           "6": {
             "calls": 10,
@@ -110,17 +110,17 @@
           "31": {
             "calls": 41,
             "passed": 0,
-            "skipped": 3535
+            "skipped": 3534
           },
           "32": {
             "calls": 24,
             "passed": 0,
-            "skipped": 1703
+            "skipped": 1600
           },
           "33": {
             "calls": 13,
             "passed": 0,
-            "skipped": 784
+            "skipped": 810
           },
           "34": {
             "calls": 15,
@@ -130,12 +130,12 @@
           "35": {
             "calls": 16,
             "passed": 0,
-            "skipped": 1171
+            "skipped": 1168
           },
           "36": {
-            "calls": 11,
+            "calls": 16,
             "passed": 0,
-            "skipped": 752
+            "skipped": 1260
           },
           "37": {
             "calls": 14,
@@ -156,7 +156,7 @@
       }
     },
     {
-      "collected_at": "2026-10-16T22:00:21.159809+00:00",
+      "collected_at": "2026-10-17T21:21:56.604885+00:00",
       "proposals": 0,
       "stats": {
         "pending": 0,

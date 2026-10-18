@@ -80,6 +80,10 @@ Actions → **AWS / Terraform and EKS deploy** → Run workflow:
 | `deploy_application=true` | apply 후 ECR 이미지 빌드 → 비밀값 동기화 → DB 초기화 → Helm → 연결 확인 |
 | `deploy_application=false` | 인프라만 적용. 인증서·도메인 준비나 외부 서비스 설정 전 사용할 수 있음 |
 | `embedding_enabled=true` | 임베딩 이미지 빌드·서비스 배포·AI pgvector RAG 연결. 메모리 비용 증가 |
+| `dialogue_orchestrator=on\|off` | 도우미 오케스트레이터 켜기·끄기. 배포 역할이 AI 시크릿 `TRIPPILOT_DIALOGUE_ORCHESTRATOR` 에 써서 다음 배포에도 남는다. `keep`(기본)은 저장값 유지 |
+| `llm_feature_models=FEATURE=model,…` | 기능별 모델 배정(`TRIPPILOT_LLM_FEATURE_MODELS`)에 덧씌울 항목. 같은 기능은 바꾸고 나머지는 그대로 시크릿에 쓴다. 같은 커밋 `LlmFeature` 에 없는 이름은 쓰기 전에 거절. 비우면 유지 |
+
+두 입력은 `push_mode` 와 같은 이유로 있다 — 로컬 AWS 자격이 만료된 날에도 배포 역할이 시크릿을 고칠 수 있게. **새 기능 이름은 두 번에 나눠 넣는다**: 그 이름을 아는 이미지를 입력 없이 한 번 배포한 다음 런에서 `llm_feature_models` 를 준다. 비밀값 동기화는 Helm 보다 먼저 시크릿과 k8s Secret 을 덮고 Helm 롤백은 그 Secret 을 되돌리지 않으므로, 한 런에 넣었다가 롤백되면 옛 이미지가 재시작 때 모르는 이름으로 기동에서 죽는다. 그래서 동기화 단계는 지금 떠 있는 AI 이미지(`kubectl exec`)가 모르는 이름을 쓰기 전에 거절한다(첫 설치는 대조할 이미지가 없어 통과). 항목을 지우는 문법은 없다 — 빼기는 Secrets Manager 손편집이다. 운영 대상(`target=prod`)은 `TRIPPILOT_DIALOGUE_SHADOW_RATE` 가 비어 있으면 0.2 를 심는다(섀도 분류 측정 비율 — 개발은 AI 기본 1.0). 연결 확인 단계의 `ai-dialogue:` 줄은 AI 파드 안에서 돌린 도우미 한 턴의 결과 모양이다(실 LLM 2~3회, 쓴 기억 행은 곧바로 지운다 — 기록만 하고 배포를 막지 않는다).
 
 처음에는 `apply` + `deploy_application=false`로 인프라를 만든 후, 필요한 외부 API 키를 Secrets Manager에 입력하고 앱을 배포할 수 있다. 외부 API 없이 시작하려면 인증서·도메인을 준비하고 바로 `apply` + `deploy_application=true`를 실행해도 된다. 외부 LLM·기상·지오코딩은 설정한 경우에만 활성화하며, 기본값으로 배포했다고 실제 외부 API 연동까지 활성화되지는 않는다.
 
@@ -116,7 +120,7 @@ Pod 로그는 클러스터 접근 없이 CloudWatch Logs 에서 본다. `amazon-
 
 긴 일정 생성 요청을 위해 backend/AI Pod 종료 유예를 660초, HTTP 및 backend 비동기 실행기의 종료 대기를 630초로 설정했다. 로컬 backend 비동기 대기는 기존 30초 기본값을 유지한다. 이 대기는 무제한 큐 처리 보장이 아니며, 노드 강제 종료·시간 초과 작업은 기존 앱 복구 로직의 대상이다.
 
-앱 코드를 되돌리려면 배포 브랜치에 revert commit을 만든 뒤 수동 배포한다. 인프라 변경과 DB migration은 Helm rollback으로 되돌아가지 않는다. destructive DB migration은 별도 복구 계획·백업을 준비한다. PRD RDS는 삭제 보호가 켜져 있고, 전체 destroy나 state 삭제 workflow는 제공하지 않는다.
+앱 코드를 되돌리려면 배포 브랜치에 revert commit을 만든 뒤 수동 배포한다. 인프라 변경과 DB migration은 Helm rollback으로 되돌아가지 않는다. 런타임 Secret(`trippilot-ai` 등 — 비밀값 동기화 단계가 Helm 밖에서 쓴다)도 되돌아가지 않는다. destructive DB migration은 별도 복구 계획·백업을 준비한다. PRD RDS는 삭제 보호가 켜져 있고, 전체 destroy나 state 삭제 workflow는 제공하지 않는다.
 
 NLB·RDS·Redis 준비, EKS 노드 생성, 임베딩 모델 빌드는 첫 실행에서 오래 걸릴 수 있다. 테스트 환경이라도 EKS·NAT·RDS 등은 생성 후 계속 과금된다. 임베딩 활성화 시 Pod당 약 5GiB 이상의 메모리를 확보해야 한다. AI KB 테이블 생성과 외부 데이터/벡터 적재는 별개이며 실제 KB 내용은 프로젝트의 기존 AI 데이터 적재 절차를 적용한다.
 

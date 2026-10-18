@@ -315,6 +315,11 @@ _EXPECTED_MODES = {
     LlmFeature.REPLAN_COMPOSITION: ("llm_compose_day", "scored_assembly"),
     # 자연어 재계획 추출 — 실패면 추출 없이(칩·지시·구성은 원문을 읽는다)
     LlmFeature.REPLAN_REQUEST_EXTRACTION: ("llm_request_extract", "no_extraction"),
+    # 도우미 오케스트레이터(assistant-orchestrator FD domain-entities §2.10) — 분류 실패는
+    # OUT_OF_SCOPE 로 수렴, 답변 실패는 결정론 템플릿 문장, 요약 실패는 결정론 압축(최근 턴 줄 자르기)
+    LlmFeature.DIALOGUE_INTENT: ("llm_dialogue_intent", "out_of_scope"),
+    LlmFeature.DIALOGUE_ANSWER: ("llm_dialogue_answer", "template_text"),
+    LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "deterministic_compress"),
 }
 
 

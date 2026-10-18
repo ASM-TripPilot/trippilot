@@ -55,6 +55,20 @@ indexed into an in-memory store at startup from precomputed vectors
 (`data/intent_question_bank.vectors.json.gz` — regenerate with `scripts/intent/build_bank_vectors.py`
 after editing the bank; a stale file falls back to remote indexing, never loads wrong vectors). No DB load.
 
+> **Orchestrator update (2026-10-17 — `assistant-orchestrator` FD)**: the boundary's caller is still
+> `POST /ai/v1/dialogue/interpret` (TRIP-1410, 2026-10-14). This PR puts `orchestrator/dialogue_orchestrator.py`
+> `DialogueOrchestrator.turn(TurnInput) -> TurnOutcome` behind it: LLM-direct intent classification
+> (`DIALOGUE_INTENT`, IntentGate closed-set) → parallel fan-out to Providers (Weather · Transit · new PoiInfo) and the
+> in-process PlanBAgent on a shared pool within `request_meta.deadline_ms` (9,000 ms) → an LLM-composed answer
+> (`DIALOGUE_ANSWER`; exit gate ≤400 chars · INV-3 · contact patterns · deterministic template fallback) returned as
+> `outcome=ANSWER` → session memory: a 20-line summary every 10 turns in the AI's own `ai_kb.dialogue_memory`
+> (90-day TTL, purged through `DELETE /ai/v1/dialogue/memory`). The 3-stage `IntentRouter` is **off the service
+> path**: `ShadowIntentProbe` runs it in the background on a sample (dev 1.0 · prod 0.2) and logs one `intent_shadow`
+> line per turn for agreement measurement; shadow LLM calls are not counted in `llm_calls`. `EDIT_SCHEDULE` still
+> returns `FRAME` (backend proposal path) in phase 1. Env: `TRIPPILOT_DIALOGUE_ORCHESTRATOR` (default off) ·
+> `TRIPPILOT_DIALOGUE_SHADOW_RATE`. Why: the user decided (2026-10-17) to classify with the LLM directly and to
+> compose answers from parallel results inside the AI. FD: `aidlc-docs/construction/assistant-orchestrator/functional-design/`.
+
 ## Key Design Documents (application-design/)
 
 - Delegation protocol: `orchestrator-delegation-design.md` (AgentTask/AgentResult, deadline inheritance, trace_id)

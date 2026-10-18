@@ -3,6 +3,7 @@ package com.trippilot.assistant.application
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.trippilot.assistant.domain.AccountTurnLock
+import com.trippilot.assistant.domain.AnswerKind
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantMessageRepository
 import com.trippilot.assistant.domain.AssistantSession
@@ -11,21 +12,26 @@ import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.AssistantUsageRepository
 import com.trippilot.assistant.domain.DialogueInterpretPort
 import com.trippilot.assistant.domain.Intent
+import com.trippilot.assistant.domain.IntentFrame
 import com.trippilot.assistant.domain.InterpretOutcome
 import com.trippilot.assistant.domain.InterpretRequest
 import com.trippilot.assistant.domain.Interpretation
+import com.trippilot.assistant.domain.InterpretedAnswer
 import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.assistant.domain.QuickReplyAction
+import com.trippilot.assistant.domain.RecentTurn
 import com.trippilot.assistant.domain.RecordedTurn
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.RateLimited
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.moderation.api.TextModerationFacade
+import com.trippilot.placedata.api.PoiSurfaceFacade
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.dao.DataIntegrityViolationException
@@ -87,6 +93,9 @@ class AssistantTurnService(
     private val dispatcher: IntentDispatcher,
     private val tripContexts: TripContextReader,
     private val snapshots: ContextSnapshotBuilder,
+    /** 상대가 완성한 답의 2차 검증 재료 — 고르기 버튼의 슬롯 실재([plans])와 후보 장소의 실존·정본 이름([poiSurfaces], INV-1). */
+    private val plans: ItineraryPlanFacade,
+    private val poiSurfaces: PoiSurfaceFacade,
     private val properties: AssistantProperties,
     private val mapper: ObjectMapper,
     private val clock: Clock,
@@ -366,6 +375,8 @@ class AssistantTurnService(
                     context = snapshot,
                     dialogueContext = bumpTurnIndex(session.dialogueContext),
                     requestedAt = startedAt, deadlineMs = deadlineMs,
+                    sessionId = session.sessionId, accountRef = session.accountId.toString(),
+                    recentTurns = recentTurns(session, beforeSeq = turn.user.seq),
                 ),
             )
         }.getOrElse { e ->
@@ -397,6 +408,13 @@ class AssistantTurnService(
             }
             // 프레임이 여럿이면 실행하지 않는다(DEC-U8-11) — 여러 요청 중 하나를 골라 하면 반드시 틀린다.
             if (result.frames.size > 1) return@runCatching reply(AssistantTemplates.oneAtATime(hasTrip), Streak.KEEP)
+            if (result.outcome == InterpretOutcome.ANSWER) {
+                // 상대가 답까지 완성했다 — 프레임은 분류 기록일 뿐이라 없어도 받는다(리터럴 능력 안내, 미결 #19 A).
+                val answer = result.answer ?: return@runCatching broken("ANSWER 인데 answer 가 없다")
+                val message = answered(answer, result.frames.firstOrNull(), session)
+                    ?: return@runCatching reply(AssistantTemplates.fallback(FallbackCause.SOURCE_UNAVAILABLE), Streak.KEEP) // 후보가 전부 정본에 없다
+                return@runCatching reply(message)
+            }
             val frame = result.frames.singleOrNull() ?: return@runCatching broken("frames 가 비었다")
             when (result.outcome) {
                 InterpretOutcome.ARGUMENT_CLARIFY -> {
@@ -411,6 +429,57 @@ class AssistantTurnService(
             reply(AssistantTemplates.fallback(FallbackCause.SOURCE_UNAVAILABLE), Streak.KEEP)
         }
     }
+
+    /**
+     * 상대가 완성한 답(ANSWER, assistant-orchestrator FD BLM §10)을 저장할 메시지로. 문장은 그대로 내고(상대 게이트 + 어댑터 길이 검사),
+     * 여기서는 **서버만 아는 것**을 검증한다 — 후보 장소의 실존·정본 이름(INV-1), 고르기 버튼의 슬롯 실재, 빠른 답 id 발급.
+     * FE 가 받는 모양은 종전 `NewMessage` 그대로다.
+     *
+     * @return null 이면 낼 것이 없다(후보가 전부 정본에 없다) — 호출측이 폴백한다. 지어내지 않는다.
+     */
+    private fun answered(answer: InterpretedAnswer, frame: IntentFrame?, session: AssistantSession): NewMessage? {
+        var payload = answer.payload
+        var shownPoiIds = emptySet<String>()
+        if (answer.kind == AnswerKind.CANDIDATES) {
+            // 상대가 준 후보는 장소 정본과 대조한다 — 없는 장소는 빼고, 이름은 정본값으로 덮는다(상대 문장은 못 고쳐도 카드 값은 고친다).
+            val given = (payload?.get("candidates") as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
+            val ids = given.mapNotNull { (it["poiId"] as? String)?.let { id -> runCatching { UUID.fromString(id) }.getOrNull() } }
+            val names = runCatching { poiSurfaces.findSurfaces(ids) }
+                .onFailure { log.warn("도우미 답의 후보 대조 실패 — 후보를 내지 않는다. type={}", it.javaClass.simpleName) }
+                .getOrDefault(emptyMap()).mapKeys { it.key.toString() }.mapValues { it.value.nameKo }
+            val grounded = given.filter { it["poiId"] in names }.map { c -> c.mapKeys { it.key.toString() } + ("name" to names.getValue(c["poiId"] as String)) }
+            if (grounded.isEmpty()) return null
+            payload = payload.orEmpty() + ("candidates" to grounded)
+            shownPoiIds = grounded.map { it["poiId"] as String }.toSet()
+        }
+        // 고르기 버튼은 **지금 일정에 있는 슬롯**과 **남은 후보**의 짝에만 발급한다 — 지어낸 슬롯·장소로 교체를 시키지 못하게(SEC-U8-03).
+        val picks = answer.quickReplies.orEmpty().filter { it.action == QuickReplyAction.PICK_CANDIDATE }
+        val slotKeys = if (picks.isEmpty() || session.tripId == null) emptySet() else runCatching { plans.findPlanSlots(session.accountId, session.tripId) }
+            .onFailure { log.warn("도우미 답의 슬롯 대조 실패 — 고르기 버튼을 내지 않는다. type={}", it.javaClass.simpleName) }
+            .getOrDefault(emptyList()).map { it.slotKey }.toSet()
+        val stamp = UUID.randomUUID().toString().take(8) // 되묻기 보기처럼 답마다 새 id — 옛 카드의 버튼이 새 카드로 읽히지 않게
+        val quickReplies = answer.quickReplies
+            ?.filter { it.action != QuickReplyAction.PICK_CANDIDATE || (it.params[ProposalCards.ARG_SLOT_KEY] in slotKeys && it.params[ProposalCards.ARG_POI_ID] in shownPoiIds) }
+            ?.mapIndexed { i, q -> QuickReply("qr-ai-$stamp-$i", q.label, q.action, q.params) }
+        return NewMessage(
+            role = MessageRole.ASSISTANT,
+            kind = when (answer.kind) {
+                AnswerKind.TEXT -> MessageKind.TEXT
+                AnswerKind.INFO -> MessageKind.INFO
+                AnswerKind.CANDIDATES -> MessageKind.CANDIDATES
+            },
+            text = answer.text, payload = payload,
+            nextActions = answer.nextActions.ifEmpty { listOf(AssistantTemplates.CAPABILITIES_ACTION) }, // 막다른 답은 없다(INV-U8-03)
+            quickReplies = quickReplies, footnote = answer.footnote,
+            intent = frame?.intent?.name, matchRoute = frame?.matchRoute ?: "NONE", outcome = "ANSWER",
+        )
+    }
+
+    /** 단기 기억(BR-AO-11) — 이번 발화 앞의 메시지 중 원문이 있는 것만(가려진 입력은 원문이 없다), 오래된 것부터, 300자까지. 상대는 저장하지 않는다. */
+    private fun recentTurns(session: AssistantSession, beforeSeq: Long): List<RecentTurn> =
+        messages.findPage(session.sessionId, beforeSeq, RECENT_TURNS).mapNotNull { m ->
+            m.text?.takeIf { it.isNotBlank() }?.let { RecentTurn(m.role, it.take(RECENT_TURN_CHARS)) }
+        }
 
     private fun dispatched(
         intent: Intent, matchRoute: String?, session: AssistantSession, surface: AssistantSurface, startedAt: Instant,
@@ -487,6 +556,10 @@ class AssistantTurnService(
     companion object {
         /** 상대 계약의 발화 상한과 같다(FD §3.1). */
         const val MAX_UTTERANCE_LENGTH = 500
+
+        /** 상대 계약 `recent_turns` 의 상한(건·자) — 넘기면 422 다. */
+        private const val RECENT_TURNS = 20
+        private const val RECENT_TURN_CHARS = 300
         private val WINDOW: Duration = Duration.ofSeconds(60)
         private const val REFUSALS_BEFORE_GUIDE = 2
         private val SERVER_ISSUED_ARGUMENTS = setOf(ProposalCards.ARG_SLOT_KEY, ProposalCards.ARG_POI_ID)

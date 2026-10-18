@@ -1,0 +1,177 @@
+"""DialogueAnswerWorker — 도우미 답변 문장 생성, 경량 티어 (assistant-orchestrator FD DE §2.3·§2.10·§6).
+
+오케스트레이터가 모은 Facts(확인된 사실) 로 사용자에게 보일 2~4문장을 쓴다. 시각·거리·장소명은 전부
+Facts 에서 복사된 값이고 LLM 이 만드는 것은 문장(text·footnote)뿐이다 — 입력 조립(Facts·여행 요약·기억
+렌더)은 호출측(orchestrator/dialogue_handlers·dialogue_orchestrator) 몫, 워커는 받은 것을 str 로 눌러
+프롬프트에 싣는 것까지만 (reflection_nudge 워커와 같은 전제).
+
+실패·게이트 드롭·시한 부족이면 폴백 TypedResult 를 그대로 반환 (BR-U4-09). 답이 비는 침묵 실패는
+금지(INV-4) — 폴백 문장의 **사용**은 호출측 소유지만, 결정론 문장은 여기서 정의한다:
+`fallback_answer_text(intent, facts)` (백엔드 AssistantTemplates·QueryCards·ProposalCards·IntentDispatcher
+문구 이식). 전 의도 × 어떤 facts 에서도 게이트 규칙을 스스로 만족한다 (테스트가 고정).
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping, Sequence
+from datetime import datetime
+from typing import Protocol
+
+from trippilot.domain.common import TraceId
+from trippilot.domain.intent import Intent
+from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.llm_gateway.gates.base import has_contact_like
+from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
+from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.prompts import inline
+from trippilot.llm_gateway.workers.dialogue_intent import NO_TRIP, NONE, render_history
+
+# `$style` — 워커 모듈 상수, 설정화하지 않는다 (FD DE §6). 게이트 규칙을 말로 풀어 모델에 준다.
+ANSWER_STYLE = (
+    "2~4문장, 존댓말, 평문, 줄바꿈만 사용, 마크다운·링크·연락처 금지, "
+    "소요시간·시각 추정 금지, 확인된 사실에 없는 장소·수치 금지"
+)
+
+# 여행이 없는데 여행이 필요한 의도 — BE AssistantTemplates.needTrip 과 같은 문구 (BR-U8-05)
+NEED_TRIP_TEXT = "먼저 여행을 만들거나 숙소를 등록하면 일정을 함께 볼 수 있어요."
+
+# 의도별 결정론 문장 — BE 화면 문장 이식(IntentDispatcher handoff·QueryCards info·AssistantTemplates);
+# SHOW_SCHEDULE 의 OK 문구만 BE 에 없어 이 FD 가 신설(BLM §5 ★). 정본은 이 파일이다.
+# SUGGEST_ALTERNATIVE 는 대상 이름이 들어가 함수에서 만든다 (ProposalCards.alternatives 문구).
+_ANSWER_TEXT: dict[Intent, str] = {
+    Intent.GET_NEXT_SLOT: "다음 장소예요.",
+    Intent.GET_WEATHER: "오늘 예보예요.",
+    Intent.GET_DISTANCE: "일정에 적힌 거리예요.",
+    Intent.GET_POI_INFO: "일정에 있는 장소예요.",
+    # TEXT 종류라 카드가 없다 — 요약 문장 없이 "정리했어요"라 할 수 없어 일정 화면 넘기기로 (QueryCards 넘기기 꼴)
+    Intent.SHOW_SCHEDULE: "일정은 일정 화면에서 확인할 수 있어요.",
+    Intent.EDIT_SCHEDULE: "일정은 편집 화면에서 바꿀 수 있어요.",
+    Intent.GENERATE_SCHEDULE: "일정 만들기 화면으로 안내할게요.",
+    Intent.REGENERATE: "일정은 만들기 화면에서 다시 만들 수 있어요.",
+    Intent.REPLAN: "남은 일정은 다시 짜기에서 바꿀 수 있어요.",
+    Intent.GENERATE_REFLECTION: "회고는 기록 화면에서 만들 수 있어요.",
+    Intent.TRIP_SUMMARY: "여행 요약은 기록 화면에 있어요.",
+    Intent.STYLE_ANALYSIS: "여행 스타일은 기록에서 볼 수 있어요.",
+    Intent.OUT_OF_SCOPE: "그건 제가 도와드리기 어려워요.",
+}
+
+# status EMPTY — 결과가 없는데 "예보예요"라 하지 않는다 (BE QueryCards·ProposalCards 의 빈 결과 넘기기 문구).
+# 표에 없는 의도(넘기기 계열)는 결과라는 것이 없어 _ANSWER_TEXT 그대로.
+_EMPTY_TEXT: dict[Intent, str] = {
+    Intent.GET_NEXT_SLOT: "남은 일정이 없어요.",
+    Intent.SHOW_SCHEDULE: "아직 일정에 장소가 없어요.",
+    Intent.GET_WEATHER: "지금 날씨를 확인할 수 없어요.",
+    Intent.GET_DISTANCE: "구간 거리는 일정에서 확인할 수 있어요.",
+    Intent.GET_POI_INFO: "장소 정보는 일정에서 장소를 눌러 볼 수 있어요.",
+    Intent.SUGGEST_ALTERNATIVE: "근처에서 대신할 곳을 찾지 못했어요.",
+}
+# status UNAVAILABLE — 출처 불통 (BE FallbackCause.SOURCE_UNAVAILABLE 문구)
+_UNAVAILABLE_TEXT = "지금 일부 정보를 확인할 수 없어요."
+
+_FALLBACK_TARGET = "그 장소"  # ProposalCards: `slot.nameKo ?: "그 장소"`
+_MAX_TARGET_CHARS = 40  # 대상 이름 상한 — 긴 이름은 BE 도 카드 제목에서 자른다
+
+
+class _Turn(Protocol):
+    """recent_turns 항목 — FD DE §2.1 RecentTurn·api DialogueTurnSchema 가 둘 다 이 모양이다."""
+
+    @property
+    def role(self) -> str: ...
+    @property
+    def text(self) -> str: ...
+
+
+def _lines(items: Sequence[str], empty: str) -> str:
+    rendered = [f"- {inline(s)}" for s in items if inline(s)]
+    return "\n".join(rendered) or empty
+
+
+def build_dialogue_answer_vars(
+    intent: Intent,
+    facts: Mapping[str, object],
+    utterance: str,
+    recent_turns: Sequence[_Turn],
+    memory_lines: Sequence[str],
+    trip_summary: str,
+    style: str = ANSWER_STYLE,
+) -> dict[str, str]:
+    """값 전부 str·결정론(facts 는 키 정렬)·좌표 미포함(호출측이 넣지 않는다 — FD DE §2.5).
+
+    제3자 문자열(발화·최근 대화·기억·facts 의 장소명)은 `inline()` 으로 한 줄로 — 프롬프트 골격 위조 차단
+    (test_prompt_structure_forgery 계약). facts 는 JSON 이라 줄바꿈은 이미 이스케이프되지만 U+2028 같은
+    유니코드 줄 구분자는 json 이 그대로 두므로 inline() 이 필요하다.
+    """
+    return {
+        "intent": intent.value,
+        # default=str: date·Decimal 같은 값은 그 문자열 표기가 곧 사실의 올바른 렌더다
+        "facts": inline(json.dumps(facts, ensure_ascii=False, sort_keys=True, default=str)),
+        "utterance": inline(utterance) or NONE,
+        "history": render_history(recent_turns),  # 분류 워커와 같은 줄 — 사전·렌더러는 그쪽 한 곳
+        "memory": _lines(memory_lines, NONE),
+        "trip": inline(trip_summary) or NO_TRIP,
+        "style": inline(style),
+    }
+
+
+def _safe_target(raw: object) -> str:
+    """대상 장소 이름 — 웹 수집분이라 게이트(시간 표현·연락처·길이)를 못 넘는 이름이면 BE 와 같은 대명사로."""
+    name = inline(str(raw)) if raw else ""
+    if (
+        not name
+        or len(name) > _MAX_TARGET_CHARS
+        or _TIME_EXPR.search(name) is not None
+        or has_contact_like(name)
+    ):
+        return _FALLBACK_TARGET
+    return name
+
+
+def fallback_answer_text(intent: Intent, facts: Mapping[str, object]) -> str:
+    """INV-4 마지막 계단 — LLM 실패·게이트 드롭·시한 부족 시 그대로 보일 결정론 문장.
+
+    읽는 facts 키(전부 선택): `needs_trip`(참이면 여행 없음 안내) · `status`("EMPTY"|"UNAVAILABLE" 만 분기)
+    · `target`(SUGGEST_ALTERNATIVE 의 대상 장소 표시명). 나머지 키는 보지 않는다 — 문장에 사실을 섞으면
+    게이트 자가 만족을 보장할 수 없다(INFO 카드의 값은 payload 로 간다).
+    """
+    if facts.get("needs_trip"):
+        return NEED_TRIP_TEXT
+    status = facts.get("status")
+    if status == "UNAVAILABLE":
+        return _UNAVAILABLE_TEXT
+    if status == "EMPTY" and intent in _EMPTY_TEXT:
+        return _EMPTY_TEXT[intent]
+    if intent is Intent.SUGGEST_ALTERNATIVE:
+        return f"{_safe_target(facts.get('target'))} 대신 갈 만한 곳이에요."
+    return _ANSWER_TEXT[intent]
+
+
+class DialogueAnswerWorker:
+    def __init__(self, gateway: GatewayFacade) -> None:
+        self._gateway = gateway
+
+    def compose(
+        self,
+        intent: Intent,
+        facts: Mapping[str, object],
+        utterance: str,
+        recent_turns: Sequence[_Turn],
+        memory_lines: Sequence[str],
+        trip_summary: str,
+        trace_id: TraceId,
+        now: datetime,
+        *,
+        timeout_sec: float,
+        style: str = ANSWER_STYLE,
+    ) -> TypedResult:
+        """`timeout_sec` 은 오케스트레이터가 내린 잔여 시한 (DL-4) — 벤더 요청까지 그대로 간다."""
+        return self._gateway.call(
+            LlmFeature.DIALOGUE_ANSWER,
+            build_dialogue_answer_vars(
+                intent, facts, utterance, recent_turns, memory_lines, trip_summary, style
+            ),
+            None,  # 후보 선택 없음 — 풀 불필요 (사실은 Facts 가 닫힌 목록으로 든다)
+            trace_id,
+            now,
+            timeout_sec=timeout_sec,
+        )

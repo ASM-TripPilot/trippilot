@@ -109,6 +109,33 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
+     * 상대가 답까지 완성한 턴(`ANSWER`, assistant-orchestrator 1단계) — 대역의 인사말이 그 모양이다. jsonb 로 쓴 카드와
+     * 서버가 발급한 빠른 답(`qr-ai-*`)이 실 DB 제약(다음 행동 ≥1·kind CHECK)을 지나 그대로 돌아오고, 누르면 다음 턴이 되는지.
+     */
+    @Test
+    fun `완성된 답(ANSWER)은 그대로 저장되고 발급한 빠른 답을 누르면 다음 턴이 된다`() {
+        val (_, token) = newAccount()
+        val session = open(token, newTrip(token))
+
+        val turn = say(token, session, "안녕")
+
+        turn.status shouldBe 200
+        turn.body["messages"][1]["kind"].asText() shouldBe "TEXT"
+        turn.body["messages"][1]["nextActions"][0]["type"].asText() shouldBe "SHOW_CAPABILITIES"
+        val issued = turn.body["quickReplies"].single()
+        issued["id"].asText().startsWith("qr-ai-") shouldBe true
+        // 프레임 없는 답 — intent 는 비고 match_route 는 NONE(OBS-U8-01 어휘)
+        jdbc.queryForMap("SELECT intent, match_route, outcome, llm_calls FROM assistant_message WHERE session_id = ?::uuid AND role = 'ASSISTANT'", session)
+            .let { listOf(it["intent"], it["match_route"], it["outcome"], it["llm_calls"]) shouldContainExactly listOf(null, "NONE", "ANSWER", 0) }
+
+        // 발급된 빠른 답은 jsonb 포함 조회로 찾아 받는다 — 라벨("오늘 날씨")이 다음 턴의 말이 되어 해석으로 간다
+        val pressed = press(token, session, issued["id"].asText())
+        pressed.status shouldBe 200
+        pressed.body["messages"][0]["text"].asText() shouldBe "오늘 날씨"
+        pressed.body["messages"][1]["nextActions"][0]["type"].asText() shouldBe "OPEN_ITINERARY"
+    }
+
+    /**
      * 진행 검토가 **실제 일정**을 읽는다 — 일정 생성 API 로 만든 일정, 실 퍼사드, jsonb 로 저장된 카드.
      * 카드의 값은 저장된 사실이고, 각주까지 다시 열었을 때 그대로 읽힌다.
      */
