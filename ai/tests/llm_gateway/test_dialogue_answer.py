@@ -260,7 +260,7 @@ def test_prompt_renders_deterministically_with_ref() -> None:
     p1, ref = reg.render(_FEAT, _vars())
     p2, _ = reg.render(_FEAT, _vars())
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.1.0"
+    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.2.0"
     assert ref.feature == "DIALOGUE_ANSWER"
     assert "GET_WEATHER" in p1 and "최대 강수확률" in p1
     assert "- 사용자: 내일 비 와?" in p1 and "- 도우미: 내일 제주 예보예요." in p1
