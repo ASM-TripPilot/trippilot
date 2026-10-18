@@ -101,6 +101,8 @@ jobs:
             exit 0
           fi
           uv run python scripts/collect/collect_events.py
+          # 웹 큐레이션 팝업(data/curated_popups.json) — 저장소가 중복을 거르므로 매일 돌려도 같다
+          uv run python scripts/collect/collect_curated_popups.py --store collected_events.json
       - name: 잡 서머리 (지역별 추출·신규 통계)
         if: steps.collect.outputs.skipped != 'true'
         run: uv run python scripts/collect/collect_events.py --summary collect_events_run.json >> "$GITHUB_STEP_SUMMARY"

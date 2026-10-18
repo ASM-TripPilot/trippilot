@@ -944,10 +944,40 @@ def test_summary_material_includes_the_current_turn() -> None:
     ("오늘은 우도 09:00, 해녀의집 12:00, 카페 모카 15:00 이에요.", True),  # Facts 짝 그대로
     ("오늘은 09:00 우도, 12:00 해녀의집 순서예요.", True),  # 시각이 앞에 와도 가장 가까운 이름으로 짝을 본다
     ("오늘은 우도 09:00, 해녀의집 15:00, 카페 모카 12:00 순서예요.", False),  # 시각은 다 있지만 장소끼리 바꿔 붙였다
+    ("오늘은 09:00에 첫 일정, 12:00에 다음 일정이에요.", True),  # 이름 없이 시각만 — 스냅샷 순서 그대로면 통과
+    ("오늘은 12:00에 첫 일정, 09:00에 다음 일정이에요.", False),  # 이름 없이 순서만 뒤집었다 — 짝 검사가 못 본다
+    ("오늘은 12:00에 첫 일정이고 09:00에 다음 일정이에요.", False),  # 같은 문장을 구획 하나로
+    # 이름에 붙은 시각은 짝 검사가 맞췄으니 언급 순서는 따지지 않는다 — 일정 템플릿은 날짜·개수뿐이라 막으면 답을 잃는다
+    ("카페 모카 15:00 전에 해녀의집 12:00 이 있어요.", True),
+    ("오늘 마지막은 15:00 카페 모카예요. 점심은 12:00 해녀의집에서 드세요.", True),  # 초점 질문의 답(리뷰 재현 꼴)
+    ("오늘 일정은 09:00 우도부터 15:00 카페 모카까지예요.\n중간에 12:00 해녀의집이 있어요.", True),  # 범위 답(실 모델 출력 꼴)
 ])
 def test_schedule_answer_times_must_stay_with_their_places(text: str, kept: bool) -> None:
-    """INV-2 는 시각·순서다 — 시각 집합만 맞고 장소와의 짝이 바뀐 문장도 템플릿으로 보낸다(2026-10-18 리뷰 재현 문장)."""
+    """INV-2 는 시각·순서다 — 시각 집합만 맞고 장소와의 짝이 바뀐 문장도, 이름 없이 순서만 뒤집은 문장도 템플릿으로
+    보낸다(2026-10-18 리뷰 1·2차 재현 문장). 짝이 맞는 이름 붙은 시각은 거슬러 말해도 통과한다."""
     b = _build(_canned(Intent.SHOW_SCHEDULE, answer=json.dumps({"text": text, "footnote": None}, ensure_ascii=False)))
     out = b.orch.turn(_input("오늘 일정 알려줘"))
     events = [e.reason for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_answer"]
     assert (out.answer.text == text) is kept and (events == []) is kept
+
+
+_NAMELESS = TurnSnapshot("ITINERARY", _TRIP, ("숙소",), "PLANNED", (
+    DayView(_D2, (_slot("우도", "09:00", "자연", _D2),
+                  SlotView.from_wire(f"{_D2.isoformat()}#{uuid.uuid5(uuid.NAMESPACE_DNS, '무명')}", None, time(12, 0), "맛집"),
+                  _slot("카페 모카", "15:00", "카페", _D2))),
+))
+
+
+@pytest.mark.parametrize(("text", "footnote", "snapshot", "kept"), [
+    ("오늘은 12:00에 첫 일정이에요.", "09:00에 다음 일정이 있어요.", _SNAP, False),  # 본문·각주에 나눠 쓴 역순
+    ("오늘은 09:00에 첫 일정이에요.", "12:00에 다음 일정이 있어요.", _SNAP, True),
+    ("오늘은 15:00에 한 곳, 그다음 12:00에 한 곳이 있어요.", None, _NAMELESS, False),  # 이름 없는 슬롯도 순서에 든다
+    ("오늘은 09:00에 한 곳, 12:00에 한 곳이 더 있어요.", None, _NAMELESS, True),
+])
+def test_unanchored_times_follow_snapshot_order_across_fields(text, footnote, snapshot, kept) -> None:
+    """이름 없이 떠 있는 시각끼리의 순서는 본문·각주를 이어서 보고, 이름 없는 슬롯(BE 가 nameKo null 로 보낼 수 있다)도
+    순서 목록에 넣는다 — 같은 역순이 칸 배치나 이름 유무로 갈리지 않게(2026-10-18 2차 리뷰 검증)."""
+    b = _build(_canned(Intent.SHOW_SCHEDULE, answer=json.dumps({"text": text, "footnote": footnote}, ensure_ascii=False)))
+    out = b.orch.turn(_input("오늘 일정 알려줘", snapshot=snapshot))
+    events = [e.reason for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_answer"]
+    assert (out.answer.text == text) is kept and events == ([] if kept else ["time_not_in_facts"])

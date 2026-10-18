@@ -361,6 +361,10 @@ git fetch origin collect-state
 git show origin/collect-state:collected_events.json > ai/data/collected_events.json
 ```
 
+**배포는 이 갱신을 자동으로 한다**(10-18~) — `aws-deploy.yml` 이 AI 이미지를 굽기 직전에 collect-state 정본으로
+갈아 끼운다(`deploy/eks/refresh_events.py`). 동봉본에만 있는 행사(PR 로 손으로 넣은 것)는 종료 + 7일 전이면 남는다.
+그래서 여기 커밋된 사본이 낡아도 배포된 AI 는 배포 시점의 정본을 읽는다.
+
 ### 알아둘 것
 
 - **기동 시 1회 읽는다**(`JsonEventStore.__init__`). 파일을 갈아끼웠으면 컨테이너를 다시 띄운다.
