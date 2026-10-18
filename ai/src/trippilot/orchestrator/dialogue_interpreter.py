@@ -23,11 +23,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import logging
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -82,6 +83,17 @@ class CountingLlm:
         if counter is not None:
             counter[0] += 1
         return self._inner.invoke(request)
+
+
+@contextlib.contextmanager
+def llm_call_counter() -> Iterator[list[int]]:
+    """이 블록 안에서 `CountingLlm` 을 지난 호출을 센다 — `interpret` 와 `DialogueOrchestrator.turn` 이 같은 카운터를 쓴다."""
+    counter = [0]
+    token = _llm_calls.set(counter)
+    try:
+        yield counter
+    finally:
+        _llm_calls.reset(token)
 
 
 # ── 대화 상태 (백엔드가 저장·반송하는 직렬형) ───────────────────────────────
@@ -303,101 +315,108 @@ class DialogueInterpreter:
         trace_id: TraceId,
         now: datetime,
     ) -> Interpretation:
-        counter = [0]
-        token = _llm_calls.set(counter)
-        try:
+        with llm_call_counter() as counter:
             if self._bank is not None:
                 self._bank.warm()  # 색인 전이면 백그라운드로 — 이번 해석은 1차 없이 간다
             result = None
             if context.pending is not None:
-                result = self._answer(utterance, context, trip)
+                result = answer_pending(utterance, context, trip, self._router.confident_intent)
             if result is None:
                 match = self._router.route(utterance, trace_id, now)
                 # 새 요청이다 — 되묻기 횟수는 요청마다 새로 센다.
-                result = self._from_match(match, context, trip)
+                result = from_match(match, context, trip)
             return _with_calls(result, counter[0])
-        finally:
-            _llm_calls.reset(token)
 
-    # 되묻기에 대한 답
-    def _answer(
-        self, utterance: str, context: DialogueContext, trip: TripView,
-    ) -> Interpretation | None:
-        pending = context.pending
-        assert pending is not None
-        text = normalize(utterance)
-        spec = _spec_of(pending.intent, pending.asked)
-        value: str | None = None
-        if spec is not None:  # 인자표 밖(예: 입력 필드)은 추출기를 돌리지 않는다
-            value = extract_argument(text, spec)
-            if value is None and _reference_like(spec) and 0 < len(text) <= SHORT_ANSWER_CHARS:
-                # 짧은 답이라도 **다른 요청이 확실하면** 답으로 삼키지 않는다 — "날씨 알려줘"를
-                # 목적지로 받으면 안 된다. 1차 매칭만 본다(LLM 0회).
-                other = self._router.confident_intent(text)
-                if other is None or other is pending.intent:
-                    value = text
-        if value is None:
-            return None
-        arguments = {**pending.arguments, pending.asked: value}
-        return self._finish(
-            pending.intent, arguments, pending.confidence, "CLARIFY_ANSWER",
-            context, trip, asked_already=context.clarify_count,
-        )
 
-    def _from_match(
-        self, match: IntentMatch, context: DialogueContext, trip: TripView,
-    ) -> Interpretation:
-        if match.match_route is MatchRoute.FALLBACK or match.intent not in ROUTABLE_INTENTS:
-            return Interpretation(
-                outcome="OUT_OF_SCOPE",
-                frames=(Frame(Intent.OUT_OF_SCOPE, {}, (), 0.0, MatchRoute.FALLBACK.value),),
-                clarify=None,
-                context=DialogueContext(turn_index=context.turn_index),
-                llm_calls=0,
-                reason=match.reason,
-            )
-        return self._finish(
-            match.intent, _stringify(match.slots), match.confidence, match.match_route.value,
-            context, trip, asked_already=0, reason=match.reason,
-        )
+# 아래 둘은 해석기와 도우미 오케스트레이터(`dialogue_orchestrator`)가 **같은 로직**을 쓰도록 모듈 함수다
+# (assistant-orchestrator FD BLM §3 1·3단 "기존 재사용", BR §5 미결 #17 — 로직 무변경, 공개 승격만).
 
-    def _finish(
-        self,
-        intent: Intent,
-        arguments: Mapping[str, str],
-        confidence: float,
-        route: str,
-        context: DialogueContext,
-        trip: TripView,
-        *,
-        asked_already: int,
-        reason: str | None = None,
-    ) -> Interpretation:
-        missing = missing_arguments(intent, frozenset(arguments))
-        frame = Frame(intent, dict(arguments), missing, confidence, route)
-        if missing and asked_already < MAX_CLARIFY_PER_REQUEST:
-            asked = missing[0]
-            return Interpretation(
-                outcome="ARGUMENT_CLARIFY",
-                frames=(frame,),
-                clarify=Clarify(
-                    frame_index=0, argument=asked,
-                    question=CLARIFY_QUESTIONS[(intent, asked)],
-                    options=_options(_spec_of(intent, asked), trip),
-                ),
-                context=DialogueContext(
-                    pending=PendingFrame(intent, dict(arguments), asked, confidence),
-                    turn_index=context.turn_index,
-                    clarify_count=asked_already + 1,
-                ),
-                llm_calls=0,
-                reason=reason,
-            )
+
+def answer_pending(
+    utterance: str,
+    context: DialogueContext,
+    trip: TripView,
+    confident_intent: Callable[[str], Intent | None],
+) -> Interpretation | None:
+    """되묻기에 대한 답 — 물은 인자의 추출기만 돌린다. 답이 아니면 None(호출측이 보류를 버리고 새 요청으로).
+
+    `confident_intent` 는 "짧은 답이 다른 요청인가"를 LLM 0회로 가르는 1차 매칭(`IntentRouter.confident_intent`)이다.
+    """
+    pending = context.pending
+    assert pending is not None
+    text = normalize(utterance)
+    spec = _spec_of(pending.intent, pending.asked)
+    value: str | None = None
+    if spec is not None:  # 인자표 밖(예: 입력 필드)은 추출기를 돌리지 않는다
+        value = extract_argument(text, spec)
+        if value is None and _reference_like(spec) and 0 < len(text) <= SHORT_ANSWER_CHARS:
+            # 짧은 답이라도 **다른 요청이 확실하면** 답으로 삼키지 않는다 — "날씨 알려줘"를
+            # 목적지로 받으면 안 된다. 1차 매칭만 본다(LLM 0회).
+            other = confident_intent(text)
+            if other is None or other is pending.intent:
+                value = text
+    if value is None:
+        return None
+    arguments = {**pending.arguments, pending.asked: value}
+    return _finish(
+        pending.intent, arguments, pending.confidence, "CLARIFY_ANSWER",
+        context, trip, asked_already=context.clarify_count,
+    )
+
+
+def from_match(match: IntentMatch, context: DialogueContext, trip: TripView) -> Interpretation:
+    """매칭 결과 → 해석 — 필수 인자가 비면 요청당 1회 되묻는다(DEC-U8-11)."""
+    if match.match_route is MatchRoute.FALLBACK or match.intent not in ROUTABLE_INTENTS:
         return Interpretation(
-            outcome="FRAME", frames=(frame,), clarify=None,
+            outcome="OUT_OF_SCOPE",
+            frames=(Frame(Intent.OUT_OF_SCOPE, {}, (), 0.0, MatchRoute.FALLBACK.value),),
+            clarify=None,
             context=DialogueContext(turn_index=context.turn_index),
-            llm_calls=0, reason=reason,
+            llm_calls=0,
+            reason=match.reason,
         )
+    return _finish(
+        match.intent, _stringify(match.slots), match.confidence, match.match_route.value,
+        context, trip, asked_already=0, reason=match.reason,
+    )
+
+
+def _finish(
+    intent: Intent,
+    arguments: Mapping[str, str],
+    confidence: float,
+    route: str,
+    context: DialogueContext,
+    trip: TripView,
+    *,
+    asked_already: int,
+    reason: str | None = None,
+) -> Interpretation:
+    missing = missing_arguments(intent, frozenset(arguments))
+    frame = Frame(intent, dict(arguments), missing, confidence, route)
+    if missing and asked_already < MAX_CLARIFY_PER_REQUEST:
+        asked = missing[0]
+        return Interpretation(
+            outcome="ARGUMENT_CLARIFY",
+            frames=(frame,),
+            clarify=Clarify(
+                frame_index=0, argument=asked,
+                question=CLARIFY_QUESTIONS[(intent, asked)],
+                options=_options(_spec_of(intent, asked), trip),
+            ),
+            context=DialogueContext(
+                pending=PendingFrame(intent, dict(arguments), asked, confidence),
+                turn_index=context.turn_index,
+                clarify_count=asked_already + 1,
+            ),
+            llm_calls=0,
+            reason=reason,
+        )
+    return Interpretation(
+        outcome="FRAME", frames=(frame,), clarify=None,
+        context=DialogueContext(turn_index=context.turn_index),
+        llm_calls=0, reason=reason,
+    )
 
 
 def _with_calls(result: Interpretation, calls: int) -> Interpretation:
@@ -438,5 +457,5 @@ def _stringify(slots: Mapping[str, object]) -> dict[str, str]:
 
 __all__ = [
     "BankIndex", "Clarify", "CountingLlm", "DialogueContext", "DialogueInterpreter", "Frame",
-    "Interpretation", "PendingFrame", "TripView",
+    "Interpretation", "PendingFrame", "TripView", "answer_pending", "from_match", "llm_call_counter",
 ]

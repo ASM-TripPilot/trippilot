@@ -45,6 +45,11 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # 알림 문구 2줄 — 넛지와 동급 과업이라 LIGHT. 실제로는 feature_models
             # 오버라이드로 로컬 파인튜닝 모델이 배정된다(티어 해석보다 우선).
             LlmFeature.REMINDER_COPY: ModelTier.LIGHT,
+            # 도우미 턴 3종 — 분류(INTENT 와 동급)·답변 2~4문장·요약 ≤20줄. 전부 백엔드 해석 시한 9s
+            # 안의 짧은 과업이라 LIGHT (assistant-orchestrator FD domain-entities §2.10).
+            LlmFeature.DIALOGUE_INTENT: ModelTier.LIGHT,
+            LlmFeature.DIALOGUE_ANSWER: ModelTier.LIGHT,
+            LlmFeature.DIALOGUE_MEMORY: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             # 차선책 근거 문장 — 설명(EXPLANATION)과 같은 급의 취향 그라운딩 문장 (TRIP-887)
             LlmFeature.ALTERNATIVE_EXPLANATION: ModelTier.HEAVY,
@@ -119,6 +124,16 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # orchestrator/intent_router.py `_classify` → `_fallback()` —
             # Intent.OUT_OF_SCOPE + MatchRoute.FALLBACK로 수렴한다.
             LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
+            # orchestrator/dialogue_orchestrator.py(assistant-orchestrator tasks T013, 같은 PR) —
+            # 분류 실패(null·게이트 드롭·시한)는 IntentRouter 와 같이 OUT_OF_SCOPE 로 수렴한다
+            # (문장 없음 — 백엔드 SCOPE 카드). from_mode 는 INTENT 와 갈라 섀도·서비스를 구분한다.
+            LlmFeature.DIALOGUE_INTENT: ("llm_dialogue_intent", "out_of_scope"),
+            # 같은 곳 — 답변 문장을 못 만들면(게이트 드롭·시한 부족) 의도별 결정론 템플릿
+            # (workers/dialogue_answer.fallback_answer_text, T003) 문장으로 보낸다.
+            LlmFeature.DIALOGUE_ANSWER: ("llm_dialogue_answer", "template_text"),
+            # 같은 곳 — 요약 실패면 최근 턴을 줄로 잘라 붙이는 결정론 압축
+            # (orchestrator/dialogue_memory.compress_fallback, T007)으로 전진하고 다음 턴에 다시 시도한다.
+            LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "deterministic_compress"),
             # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
             # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
@@ -181,6 +196,14 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
             # → 청크째 규칙 점수로 내려갔다(성공분도 최대 1019 — 상한에 붙어 있었다). 청크 크기는 그대로다 —
             # `score_chunk_cap` 이 사고 몫(`SCORE_THINKING_RESERVE_TOKENS`)을 빼고 역산한다.
             LlmFeature.PREFERENCE_SCORING: 2048,
+            # 도우미 턴(assistant-orchestrator tasks T001) — 분류는 JSON 한 줄, 답변은 ≤400자, 요약은
+            # ≤20줄×120자. effort low 와 짝. 사고 토큰도 이 상한 안이라(위 SHARE_CARD_COPY 실측) 분류 256 은
+            # DEV 실측으로 확정할 값이다 — 잘리면 폴백 사유가 `truncated:` 접두로 남아 보인다.
+            # 요약 2048: 20줄×120자 한국어 ≈ 1,000~1,500 토큰 + JSON — 1024 면 꽉 찬 요약이 잘려 압축 폴백으로
+            # 떨어진다. 상한은 잘림 방지용이고 과금은 실 출력만이다(FD BR 미결 #11 → 해소).
+            LlmFeature.DIALOGUE_INTENT: 256,
+            LlmFeature.DIALOGUE_ANSWER: 512,
+            LlmFeature.DIALOGUE_MEMORY: 2048,
         }
     )
 
@@ -218,6 +241,11 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             # 자유 발화 → 지시 키(닫힌 목록). 미지정(기본 추론)이라 DEV 에서 시한 3.75s 를 2/2 넘겼다
             # (2026-10-14) — 같은 원문을 읽는 추출은 low 로 2/2 성공했다. 출력은 사전 키만 통과(게이트).
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",
+            # 도우미 턴 — 백엔드 해석 시한 9s 안에서 분류 ≤2.5s·답변 ≤2.5s·요약 ≤2.0s 라 사고를 낮춘다
+            # (assistant-orchestrator FD domain-entities §2.10 · BLM 시한표)
+            LlmFeature.DIALOGUE_INTENT: "low",
+            LlmFeature.DIALOGUE_ANSWER: "low",
+            LlmFeature.DIALOGUE_MEMORY: "low",
         }
     )
 

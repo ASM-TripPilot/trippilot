@@ -53,6 +53,19 @@ class ChartTests(unittest.TestCase):
         ai = deployments["ai"]["spec"]["template"]["spec"]["containers"][0]
         flag = ai["args"].index("--timeout-graceful-shutdown")
         self.assertEqual(ai["args"][flag + 1], "630")
+
+    def test_ai_disables_uvicorn_access_log_everywhere_it_is_launched(self):
+        """메모리 경계(`DELETE|GET /ai/v1/dialogue/memory?account_ref=…`)는 계정 참조를 **쿼리 문자열**로 받는다. uvicorn 기본
+        access log 는 쿼리까지 포함한 request_line 을 stdout 에 찍어 CloudWatch 로 나간다(SEC-U8-06·BR-AO-08③ 위반).
+        요청 관측은 TraceMiddleware 의 `http_request`(path 만)가 이미 한다 — 차트 args 와 이미지 CMD(compose·단독 실행)가
+        같은 플래그를 가져야 한다(Dockerfile 머리말의 "이미지 단독 실행과 배포가 다른 것을 돌리지 않는다")."""
+        for environment in ("dev", "prd"):
+            documents = render(environment)
+            ai = next(item for item in documents if item["kind"] == "Deployment" and item["metadata"]["name"] == "ai")
+            self.assertIn("--no-access-log", ai["spec"]["template"]["spec"]["containers"][0]["args"])
+        dockerfile = (CHART.parents[2] / "ai" / "Dockerfile").read_text(encoding="utf-8")
+        cmd = next(line for line in dockerfile.splitlines() if line.startswith("CMD "))
+        self.assertIn('"--no-access-log"', cmd)
         nginx = next(item for item in documents if item["kind"] == "ConfigMap")["data"]["nginx.conf"]
         self.assertIn("worker_shutdown_timeout 630s;", nginx)
         gateway = next(item for item in documents if item["kind"] == "Service" and item["metadata"]["name"] == "gateway")
@@ -154,14 +167,22 @@ class ChartTests(unittest.TestCase):
             self.assertEqual(len(pdbs), 3)
             self.assert_pdb_floors(documents, environment)
 
-    def test_embedding_and_vector_wiring_are_opt_in(self):
+    def test_embedding_is_opt_in_but_the_vector_dsn_is_always_wired(self):
+        """임베딩(파드·PROVIDER·BASE_URL)은 배포 입력이 켜고 끄지만, ai_kb DSN 은 **항상** 꽂힌다 —
+        도우미 세션 메모리(dialogue_memory, assistant-orchestrator FD DE §4)가 그 DB 에 살아서다. 종전처럼
+        embedding.enabled 안에 두면 임베딩을 끈 배포에서 메모리가 조용히 프로세스 안(InMemory)으로 떨어진다.
+        시크릿 값은 runtime_secrets.runtime_manifests 가 같은 조건(무조건)으로 합성한다 — 둘이 어긋나면
+        optional 아닌 secretKeyRef 라 파드가 CreateContainerConfigError 로 멈춘다."""
         for enabled in (False, True):
             documents = render("prd", enabled)
             deployments = {item["metadata"]["name"]: item for item in documents if item["kind"] == "Deployment"}
             self.assertEqual("embedding" in deployments, enabled)
             ai_container = deployments["ai"]["spec"]["template"]["spec"]["containers"][0]
             env = {item["name"]: item for item in ai_container["env"]}
-            self.assertEqual("TRIPPILOT_VECTOR_DB_URL" in env, enabled)
+            self.assertEqual(env["TRIPPILOT_VECTOR_DB_URL"]["valueFrom"]["secretKeyRef"],
+                             {"name": "trippilot-ai", "key": "TRIPPILOT_VECTOR_DB_URL", "optional": False})
+            self.assertEqual("TRIPPILOT_EMBEDDING_PROVIDER" in env, enabled)
+            self.assertEqual("TRIPPILOT_EMBEDDING_BASE_URL" in env, enabled)
             self.assertEqual(ai_container["command"][0], "/app/.venv/bin/uvicorn")
             if enabled:
                 embedding = deployments["embedding"]
@@ -309,6 +330,21 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(ref["name"], "trippilot-backend")
                 self.assertEqual(ref["key"], name)
                 self.assertTrue(ref["optional"])
+
+
+    def test_ai_receives_dialogue_orchestrator_switches_from_secret(self):
+        """도우미 오케스트레이터 스위치 2종(assistant-orchestrator 1단계)은 ai Secret 에서 와야 한다 —
+        runtime_secrets allowlist 에 넣어도 차트가 env 로 안 실어 주면 시크릿의 on 이 파드에 닿지 않아
+        종전 DialogueInterpreter 경로로 조용히 돈다(AFFILIATE_MODE 가 겪은 것과 같은 구멍, TRIP-850).
+        optional 이라 값이 없어도 기동은 안 막는다(기본 off · 섀도 1.0 은 main.py 가 정한다)."""
+        for environment in ("dev", "prd"):
+            documents = render(environment)
+            ai = next(item for item in documents
+                      if item["kind"] == "Deployment" and item["metadata"]["name"] == "ai")
+            env = {item["name"]: item for item in ai["spec"]["template"]["spec"]["containers"][0]["env"]}
+            for name in ("TRIPPILOT_DIALOGUE_ORCHESTRATOR", "TRIPPILOT_DIALOGUE_SHADOW_RATE"):
+                self.assertEqual(env[name]["valueFrom"]["secretKeyRef"],
+                                 {"name": "trippilot-ai", "key": name, "optional": True})
 
 
 class RequestSizingTests(unittest.TestCase):

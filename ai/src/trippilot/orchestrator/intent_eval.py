@@ -30,7 +30,8 @@ _REFUSAL_MARKERS = ("not_classifiable", "intent_not_routable", "out_of_scope_anc
 # 따로 센다(unrefused_fallbacks) — 장애를 정답으로 세면 OUT_OF_SCOPE 정확도가 부풀려진다.
 
 
-def _is_refusal(match: IntentMatch) -> bool:
+def is_refusal(match: IntentMatch) -> bool:
+    """라우터가 **판단해서 거절한** 폴백인가 — 채점(`score`)과 섀도 기록(`shadow_probe`)·집계가 같은 표지를 본다."""
     reason = match.reason or ""
     return any(marker in reason for marker in _REFUSAL_MARKERS)
 
@@ -75,7 +76,7 @@ def score(samples: Iterable[Sample]) -> EvalReport:
         bucket = per_intent.setdefault(s.label, [0, 0])
         bucket[1] += 1
         routes[s.match.match_route] += 1
-        if s.match.match_route is MatchRoute.FALLBACK and not _is_refusal(s.match):
+        if s.match.match_route is MatchRoute.FALLBACK and not is_refusal(s.match):
             infra += 1  # 인프라 실패 — 정답도 아니고 의미 혼동도 아니다
             continue
         if s.match.intent is s.label:

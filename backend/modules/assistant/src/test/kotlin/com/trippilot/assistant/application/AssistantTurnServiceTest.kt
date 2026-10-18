@@ -1,7 +1,15 @@
 package com.trippilot.assistant.application
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.assistant.adapter.out.interpret.HttpDialogueInterpreter
+import com.trippilot.assistant.adapter.out.interpret.WireAnswer
+import com.trippilot.assistant.adapter.out.interpret.WireFrame
+import com.trippilot.assistant.adapter.out.interpret.WireNextAction
+import com.trippilot.assistant.adapter.out.interpret.WireQuickReply
+import com.trippilot.assistant.adapter.out.interpret.WireResponse
+import com.trippilot.assistant.adapter.out.interpret.toDomain
 import com.trippilot.assistant.domain.AccountTurnLock
+import com.trippilot.assistant.domain.AnswerKind
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantMessageRepository
 import com.trippilot.assistant.domain.AssistantSession
@@ -14,10 +22,13 @@ import com.trippilot.assistant.domain.IntentFrame
 import com.trippilot.assistant.domain.InterpretOutcome
 import com.trippilot.assistant.domain.InterpretRequest
 import com.trippilot.assistant.domain.Interpretation
+import com.trippilot.assistant.domain.InterpretedAnswer
+import com.trippilot.assistant.domain.InterpretedQuickReply
 import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.NextAction
+import com.trippilot.assistant.domain.QuickReplyAction
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.RateLimited
 import com.trippilot.itinerarygeneration.api.EditProposal
@@ -43,8 +54,11 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
+import io.kotest.property.arbitrary.Codepoint
+import io.kotest.property.arbitrary.alphanumeric
 import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.enum
+import io.kotest.property.arbitrary.filter
 import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.map
@@ -136,7 +150,7 @@ class AssistantTurnServiceTest : StringSpec({
         store: AssistantMessageRepository = messages,
     ) = AssistantTurnService(
         sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), dispatcher(data, editing, properties),
-        TripContextReader(trips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), data, data, properties), properties, json, clock, NOOP_TX,
+        TripContextReader(trips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), data, data, properties), data, data, properties, json, clock, NOOP_TX,
     ).also { it.pause = { ms -> clock.now = clock.now.plusMillis(ms); onPause() } } // 기다림은 시계를 민다
 
     fun World.session(withTrip: Boolean = true): AssistantSession =
@@ -171,6 +185,10 @@ class AssistantTurnServiceTest : StringSpec({
         sent.context.trip!!.regions shouldContainExactly listOf("부산")
         sent.context.itinerary!!.days.single().slots.single().name shouldBe "카페 모카"
         json.readTree(sent.dialogueContext)["turn_index"].asInt() shouldBe 1
+        // 상대 메모리의 키와 단기 기억 — 첫 턴이라 앞선 대화는 없다(이번 발화는 `utterance` 로 가고 여기엔 안 실린다)
+        sent.sessionId shouldBe s.sessionId
+        sent.accountRef shouldBe acc.toString()
+        sent.recentTurns shouldBe emptyList()
 
         // 관측 칸(OBS-U8-01)과 세션·사용량
         val saved = w.row(2).saved
@@ -572,11 +590,11 @@ class AssistantTurnServiceTest : StringSpec({
 
         val capped = world()
         val s2 = capped.session()
-        capped.usage.llm[acc to today] = 30
+        capped.usage.llm[acc to today] = AssistantProperties().dailyLlmTurnLimit
         capped.say(s2, "오늘 날씨")
         capped.row(2).saved.outcome shouldBe "DOWNGRADED"
         capped.interpreter!!.requests shouldBe emptyList()
-        capped.usage.llm[acc to today] = 29
+        capped.usage.llm[acc to today] = AssistantProperties().dailyLlmTurnLimit - 1
         capped.say(s2, "오늘 날씨")
         capped.interpreter.requests.size shouldBe 1
     }
@@ -709,7 +727,7 @@ class AssistantTurnServiceTest : StringSpec({
         val service = AssistantTurnService(
             w.sessions, w.messages, w.usage, AccountTurnLock { }, clean, provider(w.interpreter), throwing,
             TripContextReader(brokenTrips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), w.data, w.data, AssistantProperties()),
-            AssistantProperties(), json, w.clock, NOOP_TX,
+            w.data, w.data, AssistantProperties(), json, w.clock, NOOP_TX,
         )
 
         val pressed = service.send(acc, s.sessionId, UUID.randomUUID(), TurnInput.Action("qr-review"), AssistantSurface.ITINERARY)
@@ -799,6 +817,201 @@ class AssistantTurnServiceTest : StringSpec({
             }
         }
         shouldThrow<IllegalArgumentException> { Intent.valueOf("DELETE_EVERYTHING") } // 표 밖 값은 만들 수 없다
+    }
+
+
+    // ── ANSWER — 상대(오케스트레이터)가 완성한 답(assistant-orchestrator FD BLM §10). FE 가 받는 모양은 종전 NewMessage 그대로다 ──
+
+    fun answering(
+        answer: InterpretedAnswer, frames: List<IntentFrame> = listOf(IntentFrame(Intent.GET_WEATHER, emptyMap(), "LLM_DIRECT")), llmCalls: Int = 2,
+    ) = Interpreter { r -> Interpretation(InterpretOutcome.ANSWER, frames, null, r.dialogueContext, llmCalls, answer) }
+
+    val openItinerary = NextAction("OPEN_ITINERARY", "일정 보기")
+
+    "상대가 완성한 답은 그대로 저장되고 빠른 답은 서버가 id 를 발급한다 — 관측 칸은 ANSWER·분류 프레임·LLM 합" {
+        val w = world(
+            interpreter = answering(
+                InterpretedAnswer(
+                    AnswerKind.INFO, "오늘 부산은 맑아요.",
+                    mapOf("infoKind" to "WEATHER", "title" to "오늘 날씨", "rows" to listOf(mapOf("label" to "강수확률", "value" to "10%"))),
+                    listOf(openItinerary),
+                    listOf(
+                        InterpretedQuickReply("다음 장소", QuickReplyAction.SEND_TEXT, mapOf(StartQuickReplies.INTENT to "GET_NEXT_SLOT")),
+                        InterpretedQuickReply("고마워", QuickReplyAction.SEND_TEXT, emptyMap()),
+                    ),
+                    footnote = "* 기상청 예보 기준",
+                ),
+            ),
+        )
+        val s = w.session()
+
+        val result = w.say(s, "오늘 날씨 어때")
+
+        val card = result.messages[1]
+        card.kind shouldBe MessageKind.INFO
+        card.text shouldBe "오늘 부산은 맑아요."
+        card.footnote shouldBe "* 기상청 예보 기준"
+        card.payload!!["infoKind"] shouldBe "WEATHER"
+        card.nextActions shouldContainExactly listOf(openItinerary)
+        // 빠른 답은 서버가 발급한 id 로만 받는다 — 상대가 준 보기에 id 를 붙여 저장하고, 누르면 그 라벨이 다음 턴이 된다
+        result.quickReplies.forEach { it.id.matches(Regex("qr-ai-[0-9a-f]{8}-\\d")) shouldBe true }
+        result.quickReplies.map { it.label } shouldContainExactly listOf("다음 장소", "고마워")
+        val saved = w.row(2).saved
+        saved.outcome shouldBe "ANSWER"
+        saved.intent shouldBe "GET_WEATHER"
+        saved.matchRoute shouldBe "LLM_DIRECT"
+        saved.llmCalls shouldBe 2
+        w.usage.llm[acc to today] shouldBe 1
+        w.sessions.rows.single().refusalStreak shouldBe 0
+
+        // params.intent 가 실린 빠른 답은 해석 없이 곧장 그 의도로 간다(서버 발급 취급 — 상대가 준 값이지만 서버가 id 를 붙여 발급했다)
+        w.press(s, result.quickReplies[0].id).messages[1].nextActions.single().type shouldBe "OPEN_LIVE"
+        w.row(4).saved.intent shouldBe "GET_NEXT_SLOT"
+        w.interpreter!!.requests.size shouldBe 1
+        // 라벨만 있는 빠른 답은 그 말을 해석으로 태운다
+        w.press(s, result.quickReplies[1].id)
+        w.interpreter.requests.last().utterance shouldBe "고마워"
+    }
+
+    /** 리터럴 "내가 할 수 있는 것 보기"는 상대가 분류 없이 답한다(BR-AO-18) — 프레임이 없어도 받는다(미결 #19 A). */
+    "분류 프레임 없는 ANSWER 도 받는다 — intent 는 비고 match_route 는 NONE, 빠른 답 null 은 시작 칩이다" {
+        val w = world(interpreter = answering(InterpretedAnswer(AnswerKind.TEXT, "이런 걸 도와드릴 수 있어요.", null, listOf(openItinerary), null, null), frames = emptyList(), llmCalls = 0))
+        val s = w.session()
+
+        val result = w.say(s, "내가 할 수 있는 것 보기")
+
+        result.messages[1].kind shouldBe MessageKind.TEXT
+        result.quickReplies.map { it.id } shouldContainExactly StartQuickReplies.of(true).map { it.id }
+        w.row(2).saved.intent shouldBe null
+        w.row(2).saved.matchRoute shouldBe "NONE"
+        w.row(2).saved.outcome shouldBe "ANSWER"
+        w.usage.llm[acc to today] shouldBe null
+    }
+
+    /** 후보는 지어낼 수 없다(INV-1) — 상대가 준 poiId 를 장소 정본과 대조하고, 이름은 정본값으로 덮는다. */
+    "ANSWER 의 후보는 장소 정본에 있는 것만 남고 이름은 정본값이다 — 고르기 버튼은 실재 슬롯·후보에만, 전부 없으면 폴백" {
+        val w = world()
+        val s = w.session()
+        val slot = w.data.slots.single()
+        val real = UUID.randomUUID()
+        val ghost = UUID.randomUUID()
+        w.data.surfaces = mapOf(real to surface(real, "책방카페"))
+        fun candidate(id: UUID, name: String) = mapOf("poiId" to id.toString(), "name" to name, "distanceRange" to "600m", "reason" to "조용해요")
+        fun pick(id: UUID, slotKey: String) = InterpretedQuickReply("고르기", QuickReplyAction.PICK_CANDIDATE, mapOf("poiId" to id.toString(), "slotKey" to slotKey))
+        w.interpreter!!.answer = { r ->
+            Interpretation(
+                InterpretOutcome.ANSWER, listOf(IntentFrame(Intent.SUGGEST_ALTERNATIVE, emptyMap(), "LLM_DIRECT")), null, r.dialogueContext, 1,
+                InterpretedAnswer(
+                    AnswerKind.CANDIDATES, "대신 갈 만한 곳이에요.", mapOf("candidates" to listOf(candidate(real, "지어낸 이름"), candidate(ghost, "유령 카페"))),
+                    listOf(openItinerary), listOf(pick(real, slot.slotKey), pick(ghost, slot.slotKey), pick(real, "$today#${UUID.randomUUID()}")), null,
+                ),
+            )
+        }
+
+        val result = w.say(s, "카페 대신 갈 곳")
+
+        val card = result.messages[1]
+        card.kind shouldBe MessageKind.CANDIDATES
+        @Suppress("UNCHECKED_CAST")
+        val shown = card.payload!!["candidates"] as List<Map<String, Any?>>
+        shown.map { it["poiId"] } shouldContainExactly listOf(real.toString())
+        shown.single()["name"] shouldBe "책방카페" // 상대가 쓴 이름이 아니라 정본 이름
+        shown.single()["reason"] shouldBe "조용해요"
+        // 고르기는 실재 슬롯 × 남은 후보 짝 하나만 — 유령 후보·지어낸 슬롯의 버튼은 발급하지 않는다
+        result.quickReplies.map { it.params } shouldContainExactly listOf(mapOf("poiId" to real.toString(), "slotKey" to slot.slotKey))
+        // 누르면 그 슬롯을 그 장소로 바꾸는 **제안** 경로다(LLM 0회) — 저장은 [적용]만(BR-U8-30)
+        w.editing.proposal = {
+            EditProposal.Proposed(listOf(ProposedDay(today, listOf(proposedSlot(slot.poiId, "18:00")))), listOf(ProposedDay(today, listOf(proposedSlot(real, "18:00")))), null)
+        }
+        w.press(s, result.quickReplies.single().id).messages[1].kind shouldBe MessageKind.PROPOSAL
+        w.editing.proposed.single().request shouldBe EditProposalRequest.ReplaceSlot(slot.slotKey, real)
+        w.editing.edits shouldBe emptyList()
+
+        // 남는 후보가 없으면 지어내지 않고 폴백한다 — 쓴 LLM 은 센다
+        w.data.surfaces = emptyMap()
+        val none = w.say(s, "카페 대신 갈 곳")
+        none.messages[1].kind shouldBe MessageKind.FALLBACK
+        none.messages[1].payload!!["cause"] shouldBe "SOURCE_UNAVAILABLE"
+        w.messages.rows.last().saved.llmCalls shouldBe 1
+    }
+
+    "ANSWER 인데 답이 없으면 계약이 어긋난 것이다 — 지어내지 않고 폴백하되 쓴 LLM 은 센다" {
+        val w = world(interpreter = Interpreter { r -> Interpretation(InterpretOutcome.ANSWER, listOf(IntentFrame(Intent.GET_WEATHER, emptyMap(), "LLM_DIRECT")), null, r.dialogueContext, 1) })
+        val s = w.session()
+
+        val card = w.say(s, "오늘 날씨").messages[1]
+
+        card.kind shouldBe MessageKind.FALLBACK
+        card.payload!!["cause"] shouldBe "AI_UNAVAILABLE"
+        w.usage.llm[acc to today] shouldBe 1
+    }
+
+    /** BR-AO-11 — 단기 기억은 백엔드가 싣는다. 가려진 입력은 원문이 없어 빠지고, 이번 발화는 `utterance` 로 가므로 겹쳐 싣지 않는다. */
+    "최근 대화는 원문이 있는 메시지만 300자로 잘라 오래된 것부터 싣는다 — 가려진 입력과 이번 발화는 빠지고 20건까지다" {
+        val w = world()
+        val s = w.session()
+        w.say(s, "a".repeat(400)) // 1·2
+        w.say(s, "금칙 문장") // 3(가려짐)·4(거절)
+        w.press(s, "qr-capabilities") // 5·6
+
+        w.say(s, "오늘 날씨") // 7·8
+
+        val sent = w.interpreter!!.requests.last()
+        sent.recentTurns.map { it.role } shouldContainExactly listOf(MessageRole.USER, MessageRole.ASSISTANT, MessageRole.ASSISTANT, MessageRole.USER, MessageRole.ASSISTANT)
+        sent.recentTurns.first().text shouldBe "a".repeat(300)
+        sent.recentTurns.none { "금칙" in it.text } shouldBe true
+        sent.recentTurns.none { it.text == "오늘 날씨" } shouldBe true
+
+        repeat(12) { w.clock.now = w.clock.now.plusSeconds(5); w.say(s, "또 날씨") }
+        w.say(s, "마지막")
+        w.interpreter.requests.last().recentTurns.size shouldBe 20
+    }
+
+    /**
+     * PBT — 상대가 어떤 모양의 ANSWER 를 보내도(와이어 그대로 → 어댑터 → 턴), 저장되는 응답은 막다르지 않고(다음 행동 ≥1),
+     * 전부 앱이 아는 값이며(TYPES · QuickReplyAction), 빠른 답 id 는 서버 발급이고, 소요시간 문구를 **우리가 더하지 않는다**(INV-3 —
+     * 상대 게이트가 거른 문장을 그대로 낸다).
+     */
+    "임의의 와이어 ANSWER 에서 저장되는 응답은 다음 행동 ≥1·closed-set 이고 빠른 답은 서버 발급이며 소요시간 문구가 없다" {
+        val boundary = HttpDialogueInterpreter.boundaryMapper()
+        val text = Arb.string(1..60, Codepoint.alphanumeric()).filter { it.isNotBlank() }
+        val types = Arb.element(NextAction.TYPES.toList() + listOf("OPEN_SETTINGS", "", "DELETE_ALL"))
+        val actions = Arb.element(QuickReplyAction.entries.map { it.name } + listOf("TELEPORT", ""))
+        checkAll(60, Arb.enum<AnswerKind>(), text, Arb.list(types, 1..4), Arb.list(actions, 0..3), Arb.element(true, false)) { kind, said, typeList, actionList, withFootnote ->
+            val w = world()
+            val s = w.session()
+            val slot = w.data.slots.single()
+            val real = UUID.randomUUID()
+            w.data.surfaces = mapOf(real to surface(real, "책방카페"))
+            val payload = when (kind) {
+                AnswerKind.TEXT -> null
+                AnswerKind.INFO -> mapOf("infoKind" to "WEATHER", "title" to "날씨", "rows" to listOf(mapOf("label" to "강수", "value" to "10%")))
+                AnswerKind.CANDIDATES -> mapOf("candidates" to listOf(mapOf("poiId" to real.toString(), "name" to "x", "reason" to "y")))
+            }
+            val wire = WireResponse(
+                outcome = "ANSWER", frames = listOf(WireFrame("GET_WEATHER", matchRoute = "LLM_DIRECT")),
+                answer = WireAnswer(
+                    kind.name, said, payload, typeList.map { WireNextAction(it, "라벨") },
+                    actionList.map { WireQuickReply("보기", it, if (it == "PICK_CANDIDATE") mapOf("poiId" to real.toString(), "slotKey" to slot.slotKey) else emptyMap()) },
+                    footnote = "* 각주".takeIf { withFootnote },
+                ),
+                dialogueContext = boundary.createObjectNode(), llmCalls = 1,
+            )
+            w.interpreter!!.answer = { wire.toDomain(boundary) }
+
+            val message = w.say(s, "아무 말").messages[1]
+
+            (message.nextActions.isNotEmpty()) shouldBe true
+            message.nextActions.forEach { (it.type in NextAction.TYPES) shouldBe true }
+            val replies = message.quickReplies.orEmpty()
+            replies.forEach { reply ->
+                (reply.action in QuickReplyAction.entries.map { it.name }) shouldBe true
+                reply.id.startsWith("qr-ai-") shouldBe true
+            }
+            replies.map { it.id }.distinct().size shouldBe replies.size
+            (message.text.orEmpty() + message.payload.toString()).let { out -> listOf("분 소요", "duration", "시간 걸").forEach { (it in out) shouldBe false } }
+            w.row(2).saved.outcome shouldBe "ANSWER"
+        }
     }
 
     /** 제안의 재료 — 오늘 저녁의 카페 모카를 책방카페로 바꾸는 안과, 그 자리의 후보 하나. */

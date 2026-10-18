@@ -150,7 +150,7 @@ class SecretTests(unittest.TestCase):
 
     def test_runtime_secret_does_not_expose_master_or_cross_service_keys(self):
         groups = runtime_secrets.seed_groups({name: {} for name in runtime_secrets.GROUP_KEYS}, lambda: "pass/@'word", lambda: "rsa")
-        manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot", True)
+        manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot")
         by_name = {item["metadata"]["name"]: item["stringData"] for item in manifests}
         ai = by_name["trippilot-ai"]
         self.assertIn("pass%2F%40%27word", ai["TRIPPILOT_VECTOR_DB_URL"])
@@ -160,10 +160,63 @@ class SecretTests(unittest.TestCase):
         self.assertNotIn("DB_PASSWORD", by_name["trippilot-backend"])
         self.assertTrue(all("data" not in item for item in manifests))
 
-    def test_disabled_embedding_omits_vector_connection(self):
-        groups = {name: {} for name in runtime_secrets.GROUP_KEYS}
-        manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot", False)
-        self.assertNotIn("TRIPPILOT_VECTOR_DB_URL", manifests[1]["stringData"])
+    def test_vector_connection_is_synthesized_regardless_of_embedding(self):
+        """ai_kb 는 더는 임베딩 전용 DB 가 아니다 — 도우미 세션 메모리(dialogue_memory)가 거기 산다.
+        종전에는 embedding_enabled 일 때만 DSN 을 합성했고, 그러면 임베딩을 끈 배포에서 메모리 저장소가
+        조용히 InMemory(워커 2×파드 N 이라 '기억' 불성립)로 떨어진다. sync 의 embedding_enabled 인자는
+        runtime.py CLI 계약으로 남지만 DSN 합성에는 더 쓰이지 않는다."""
+        groups = runtime_secrets.seed_groups({name: {} for name in runtime_secrets.GROUP_KEYS}, lambda: "pw", lambda: "rsa")
+        manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot")
+        ai = next(item["stringData"] for item in manifests if item["metadata"]["name"] == "trippilot-ai")
+        self.assertEqual(ai["TRIPPILOT_VECTOR_DB_URL"],
+                         "postgresql://ai_user:pw@db.example.rds.amazonaws.com:5432/ai_kb?sslmode=require")
+
+    def test_dialogue_orchestrator_switches_are_allowlisted_and_validated(self):
+        """도우미 오케스트레이터 스위치 2종(assistant-orchestrator 1단계)은 ai 시크릿으로만 켠다.
+        allowlist 에 없으면 시크릿에 넣는 순간 배포 전체가 거부되고, 값이 틀리면 AI 가 기동에서 죽는다
+        (main.py: on|off 외 오타·0~1 밖 비율 = 기동 실패) — 파드가 뜨다 죽기 전에 여기서 막는다."""
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ({"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "on"}, {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "off"},
+                   {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": ""},
+                   {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "0"}, {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "1"},
+                   {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "0.2"}, {"TRIPPILOT_DIALOGUE_SHADOW_RATE": ""},
+                   {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "on", "TRIPPILOT_DIALOGUE_SHADOW_RATE": "1.0"}):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "ai": ok})
+        for bad in ({"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "true"}, {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "ON"},
+                    {"TRIPPILOT_DIALOGUE_ORCHESTRATOR": "yes"},
+                    {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "1.5"}, {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "-0.1"},
+                    {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "abc"}, {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "nan"},
+                    {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "inf"}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "ai": bad})
+
+    def test_dialogue_memory_ddl_is_identical_in_both_canons(self):
+        """`dialogue_memory` DDL 정본은 둘이다(FD DE §4) — EKS 는 bootstrap.sql(마스터 Job, 매 배포 멱등),
+        로컬 compose 는 ai/docker/vector-init/02-dialogue-memory.sql(initdb 1회). 어댑터는 DML 만 하므로
+        두 파일이 갈리면 로컬에서 통과한 SQL 이 배포에서 깨진다. 주석·공백을 걷어 문장 단위로 비교한다.
+
+        GRANT 는 bootstrap 에만 있다 — compose 의 ai-vectordb 는 POSTGRES_USER=ai_kb(소유자)로 붙고 `ai_user`
+        롤이 없어, initdb 에서 GRANT … TO ai_user 는 ON_ERROR_STOP 으로 컨테이너 초기화를 통째로 죽인다."""
+        import re
+
+        def statements(path):
+            text = re.sub(r"--[^\n]*", "", path.read_text(encoding="utf-8"))
+            return {" ".join(stmt.split()) for stmt in text.split(";") if "dialogue_memory" in stmt}
+
+        bootstrap = Path(runtime_db.__file__).with_name("bootstrap.sql")
+        compose = Path(__file__).resolve().parents[3] / "ai" / "docker" / "vector-init" / "02-dialogue-memory.sql"
+        eks, local = statements(bootstrap), statements(compose)
+        grants = {stmt for stmt in eks if stmt.startswith("GRANT")}
+        self.assertEqual(grants, {"GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user"})
+        self.assertEqual(eks - grants, local)
+        self.assertEqual({stmt.split(" (")[0] for stmt in local}, {
+            "CREATE TABLE IF NOT EXISTS public.dialogue_memory",
+            "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_account ON public.dialogue_memory",
+            "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory"})
+        # ai_kb 데이터베이스 안에서만 — \connect 뒤에 있어야 trippilot DB 에 잘못 만들지 않는다.
+        sql = bootstrap.read_text(encoding="utf-8")
+        self.assertLess(sql.index("\\connect ai_kb"), sql.index("dialogue_memory"))
 
     def test_aws_put_keeps_secret_out_of_argv_and_removes_payload_file(self):
         observed = {}

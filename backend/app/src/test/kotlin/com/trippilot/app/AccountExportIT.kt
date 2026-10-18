@@ -81,12 +81,12 @@ class AccountExportIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `여섯 몫이 이름순으로 모두 나온다 — 기여자가 빠지면 그 모듈 데이터가 조용히 사라진다`() {
+    fun `일곱 몫이 이름순으로 모두 나온다 — 기여자가 빠지면 그 모듈 데이터가 조용히 사라진다`() {
         val accountId = newAccount()
 
         val sections = export.export(accountId).sections.map { it.section }
 
-        sections shouldBe listOf("assistantMessages", "consents", "profile", "savedStays", "trips", "visits")
+        sections shouldBe listOf("assistantMemory", "assistantMessages", "consents", "profile", "savedStays", "trips", "visits")
     }
 
     @Test

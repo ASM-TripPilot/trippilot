@@ -171,6 +171,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 
 - **위임 프로토콜**: 모든 위임은 `AgentTask`/`AgentResult` 표준 봉투로 — 데이터 대신 참조(`context_refs`) 전달, deadline 상속, trace_id 전파. 상세 → `aidlc-docs/inception/application-design/orchestrator-delegation-design.md`
 - **의도 파악 하이브리드** **(미배선 — 2026-08-25 기준 프로덕션 호출자 0)**: 의도별 질문뱅크 임베딩 매칭(1차, LLM 0회) → 저신뢰 시 LLM 유사질문 생성·투표(2차) → LLM 직접 분류(3차). `IntentRouter`·질문뱅크는 구현·테스트 완료지만 `api/wiring.py` 가 import 하지 않아 어느 요청 경로에서도 실행되지 않는다 — 자연어 진입점이 열릴 때 배선된다. 상세 → `aidlc-docs/inception/application-design/intent-matching-design.md`
+- **개정 (2026-10-17 — `assistant-orchestrator` FD)**: 위 "미배선" 표기는 낡았다 — 호출자는 `POST /ai/v1/dialogue/interpret`(TRIP-1410, 2026-10-14)였고, 이 PR 로 `orchestrator/dialogue_orchestrator.py` 의 `DialogueOrchestrator` 가 그 경계를 맡는다: LLM 직접 분류(`DIALOGUE_INTENT`) → Provider(Weather·Transit·PoiInfo)·PlanBAgent 를 공유 풀에 **병렬** 팬아웃(`deadline_ms` 9,000ms 안) → LLM 답변 조합(`DIALOGUE_ANSWER`, 출구 게이트 ≤400자·INV-3·연락처, 결정론 템플릿 폴백) → `outcome=ANSWER` → 10턴마다 20줄 요약을 자체 DB `ai_kb.dialogue_memory` 에 저장(90일 TTL, `DELETE /ai/v1/dialogue/memory` 로 파기). 3단 질문뱅크 라우터는 **서비스 경로에서 빠지고 섀도**(`ShadowIntentProbe`, DEV 1.0·운영 0.2 샘플링, `intent_shadow` 로그 1줄, `llm_calls` 비포함)로 일치율만 잰다. `EDIT_SCHEDULE` 은 1단계에서 `FRAME`(백엔드 제안 경로) 유지. 왜: 사용자 결정(2026-10-17) — LLM 이 바로 분류하고 병렬 결과를 AI 안에서 답변으로 조합한다. 상세 → `aidlc-docs/construction/assistant-orchestrator/functional-design/`
 
 ---
 

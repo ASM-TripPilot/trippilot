@@ -25,6 +25,11 @@ env 스위치 (TRIP-344):
   기존 StaticPoiDb(제주 시드 4곳) 그대로.
 - 미들웨어 한도·타임아웃 env(`TRIPPILOT_RATE_LIMIT_*` · `TRIPPILOT_TIMEOUT_*`,
   TRIP-240)는 `create_app` 내부에서 해석된다 — `trippilot/api/middleware.py` 참조.
+- `TRIPPILOT_DIALOGUE_ORCHESTRATOR`(on|off, 기본 off — assistant-orchestrator) — on 이면 도우미 턴을
+  AI 안에서 끝낸다(LLM 직접 분류·답변·세션 기억). 그 밖의 값은 **기동 실패**(오타가 조용히 off 로
+  떨어지면 "켰다"가 거짓이 된다). `TRIPPILOT_DIALOGUE_SHADOW_RATE`(0~1, 기본 1.0) — 종전 3단 라우터
+  섀도 표본율, 범위 밖은 기동 실패. 도우미 장기 기억은 `TRIPPILOT_VECTOR_DB_URL` 이 있으면 그 DB
+  (`dialogue_memory` 테이블), 없으면 프로세스 안 InMemory + WARN 1줄.
 
 `/health`는 기존 스텁과 동일한 `{"status": "UP", "service": "ai"}`를 유지한다
 (docker-compose 헬스체크 의존).
@@ -407,6 +412,55 @@ def _vector_rag():
     return store, CachingEmbedding(_embedding_adapter(_env("TRIPPILOT_EMBEDDING_PROVIDER")))
 
 
+def _memory_store():
+    """`TRIPPILOT_VECTOR_DB_URL` 설정 시 도우미 장기 기억 저장소(`ai_kb.dialogue_memory`) 조립 (assistant-orchestrator).
+
+    미설정(빈 문자열 포함) = None — wiring 이 프로세스 안 InMemory 로 대신한다(`_warn_unwired` 가 알린다).
+    `PgVectorStore` 와 같은 DSN·같은 connect 주입 패턴 — 호출마다 connect, 풀 없음, 조립 시점에 연결하지 않는다.
+    """
+    url = _env("TRIPPILOT_VECTOR_DB_URL")
+    if url is None:
+        return None
+    import psycopg
+
+    from trippilot.agents.adapters.pg_memory_store import PgDialogueMemoryStore
+
+    return PgDialogueMemoryStore(lambda: psycopg.connect(url))
+
+
+def _dialogue_orchestrator_enabled() -> bool:
+    """`TRIPPILOT_DIALOGUE_ORCHESTRATOR` — on|off, 미설정(빈 값 포함) = off. 그 밖은 **기동 실패**.
+
+    배포 allowlist(`deploy/eks/runtime_secrets.py`)가 받는 값과 같은 집합이다. 대소문자도 맞춰야 한다 —
+    `On`·`true` 가 조용히 off 로 떨어지면 시크릿을 고치고도 종전 경로가 도는데 아무 표식이 없다.
+    """
+    raw = _env("TRIPPILOT_DIALOGUE_ORCHESTRATOR")
+    if raw is None or raw == "off":
+        return False
+    if raw == "on":
+        return True
+    raise RuntimeError(
+        f"TRIPPILOT_DIALOGUE_ORCHESTRATOR 미지원 값: {raw!r} — on|off (미설정 = off). "
+        "오타가 조용히 off 로 떨어지지 않게 기동 실패."
+    )
+
+
+def _dialogue_shadow_rate() -> float:
+    """`TRIPPILOT_DIALOGUE_SHADOW_RATE` — 0~1, 미설정 = 1.0(DEV 전수). 숫자가 아니거나 범위 밖이면 **기동 실패**."""
+    raw = _env("TRIPPILOT_DIALOGUE_SHADOW_RATE")
+    if raw is None:
+        return 1.0
+    try:
+        rate = float(raw)
+    except ValueError:
+        rate = float("nan")
+    if not 0.0 <= rate <= 1.0:  # nan 도 여기서 걸린다
+        raise RuntimeError(
+            f"TRIPPILOT_DIALOGUE_SHADOW_RATE 미지원 값: {raw!r} — 0~1 사이 숫자(미설정 = 1.0)"
+        )
+    return rate
+
+
 def _embedding_adapter(configured: str | None):
     """provider 이름 → EmbeddingPort 구현. 미지원 값과 자격 미비는 **기동 실패**다."""
     provider = configured or "openai"
@@ -630,16 +684,20 @@ def _replan_directives() -> tuple:
         return ()
 
 
-def _warn_unwired(*, weather, embedding, feature_models: Mapping | None) -> None:
+def _warn_unwired(*, weather, embedding, feature_models: Mapping | None, memory=None) -> None:
     """기동은 되고 품질만 조용히 떨어지는 외부 배선 공백을 1회씩 WARN.
 
     값을 지어내 채우지 않는다 — 알리기만 한다. `feature_models is None` 은 실 LLM
-    미배선(fake 조립)이라 모델 배정 자체가 무의미한 경우다.
+    미배선(fake 조립)이라 모델 배정 자체가 무의미한 경우다. `memory is None` 은 도우미 장기 기억이
+    프로세스 안 InMemory 로 도는 경우 — 재기동·워커(uvicorn --workers 2) 사이에 공유되지 않는다.
     """
     log = logging.getLogger("trippilot.main")
     if embedding is None:
         log.warning("임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — Plan-B KB 검색 없이 "
                     "규칙 랭킹으로 강등된다")
+    if memory is None:
+        log.warning("도우미 메모리 미설정(TRIPPILOT_VECTOR_DB_URL 미설정) — 세션 기억 없이 동작"
+                    "(프로세스 안 InMemory, 재기동·워커 간 비공유)")
     if feature_models is not None and not feature_models:
         log.warning("TRIPPILOT_LLM_FEATURE_MODELS 비어 있음 — 전 기능이 단일 기본 모델로 동작")
     elif feature_models:
@@ -712,15 +770,20 @@ def build_app_from_env() -> FastAPI:
     existence = _place_existence()
     hours, place_ids = _place_hours(), _place_ids()
     vector_store, embedding = _vector_rag()
+    # 도우미 오케스트레이터 설정은 LLM 분기 전에 읽는다 — 오타는 fake 조립에서도 기동 실패여야 한다.
+    memory_store = _memory_store()
+    dialogue_on, shadow_rate = _dialogue_orchestrator_enabled(), _dialogue_shadow_rate()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
-        _warn_unwired(weather=weather, embedding=embedding, feature_models=None)
+        _warn_unwired(weather=weather, embedding=embedding, feature_models=None, memory=memory_store)
         return build_dev_app(weather=weather, poi_db=poi_db, events=events,
                              vector_store=vector_store, embedding=embedding,
                              travel_port=travel, existence=existence,
                              hours=hours, place_ids=place_ids,
                              bank=_intent_bank(), bank_embedding=_bank_embedding(),
-                             bank_vectors=_bank_vectors())
+                             bank_vectors=_bank_vectors(),
+                             memory_store=memory_store,
+                             dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate)
     if provider == "openai":
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
@@ -733,7 +796,7 @@ def build_app_from_env() -> FastAPI:
             "미설정(fake 조립) 또는 openai|anthropic|mixed 만 지원"
         )
     feature_models = _feature_models_from_env()
-    _warn_unwired(weather=weather, embedding=embedding, feature_models=feature_models)
+    _warn_unwired(weather=weather, embedding=embedding, feature_models=feature_models, memory=memory_store)
     local_routes = _local_route(feature_models)
     if local_routes:
         from trippilot.llm_gateway.adapters.routing import RoutingLlm
@@ -754,7 +817,9 @@ def build_app_from_env() -> FastAPI:
                          score_max_parallel=int(_env("TRIPPILOT_SCORE_MAX_PARALLEL") or "10"),
                          directives=_replan_directives(),
                          bank=_intent_bank(), bank_embedding=_bank_embedding(),
-                         bank_vectors=_bank_vectors())
+                         bank_vectors=_bank_vectors(),
+                         memory_store=memory_store,
+                         dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate)
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.

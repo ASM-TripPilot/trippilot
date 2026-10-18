@@ -26,6 +26,7 @@ ANTHROPIC_API_KEY ANTHROPIC_MODEL TRIPPILOT_LLM_FEATURE_MODELS TRIPPILOT_LLM_RET
 TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API_BASE KAKAO_REST_API_KEY
 EXISTENCE_MAX_CALLS TMAP_API_KEY ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
+TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE
 """.split())
 GROUP_KEYS = {
     "backend": BACKEND_KEYS, "ai": AI_KEYS,
@@ -193,13 +194,28 @@ def validate_groups(groups):
         require(ai, ("OPENAI_API_KEY",), "OpenAI LLM")
     if provider in ("anthropic", "mixed"):
         require(ai, ("ANTHROPIC_API_KEY",), "Anthropic LLM")
+    # 도우미 오케스트레이터(assistant-orchestrator 1단계). 없으면 off = 종전 DialogueInterpreter 경로다. 오타는 AI 가
+    # 기동에서 거부하므로(main.py) 파드가 뜨다 죽기 전에 여기서 막는다 — LOCATION_AUTOMATION_ENABLED 처럼 두 값만 받는다.
+    if ai.get("TRIPPILOT_DIALOGUE_ORCHESTRATOR", "") not in ("", "on", "off"):
+        raise ValueError("Unsupported TRIPPILOT_DIALOGUE_ORCHESTRATOR in ai secret; use on or off")
+    # 섀도 분류 측정의 샘플링 비율 0~1(없으면 1.0 — DEV 전부 · 운영 0.2 권고). 범위 밖·숫자 아님은 기동 실패다.
+    rate = ai.get("TRIPPILOT_DIALOGUE_SHADOW_RATE", "")
+    if rate:
+        try:
+            parsed = float(rate)
+        except ValueError:
+            parsed = -1.0
+        if not 0.0 <= parsed <= 1.0:  # nan 도 여기서 걸린다(비교가 전부 False)
+            raise ValueError("TRIPPILOT_DIALOGUE_SHADOW_RATE must be a number from 0 to 1; remove the key to use the default")
 
 
-def runtime_manifests(groups, outputs, namespace, embedding_enabled):
+def runtime_manifests(groups, outputs, namespace):
+    # ai_kb DSN 은 임베딩과 무관하게 항상 — 도우미 세션 메모리(dialogue_memory, assistant-orchestrator FD DE §4)가
+    # 그 DB 에 산다. 차트(ai.yaml)도 같은 조건(무조건)으로 꽂는다; 둘이 어긋나면 optional 아닌 secretKeyRef 라 파드가 멈춘다.
     vector = {"TRIPPILOT_VECTOR_DB_URL": (
         f"postgresql://ai_user:{quote(groups['database']['AI_DB_PASSWORD'], safe='')}"
         f"@{outputs['database_host']}:5432/ai_kb?sslmode=require"
-    )} if embedding_enabled else {}
+    )}
     values = {**groups, "ai": {**groups["ai"], **vector}}
     return [{"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
              "metadata": {"name": f"trippilot-{name}", "namespace": namespace},
@@ -219,6 +235,7 @@ def open_gaps(groups):
 
 
 def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None):
+    # embedding_enabled 는 runtime.py CLI 계약으로 남는다 — DSN 합성은 더 이상 이 값을 보지 않는다(runtime_manifests).
     region = outputs["aws_region"]
     groups = {name: get_secret(shell, region, arn) for name, arn in outputs["app_secret_arns"].items()}
     validate_groups(groups)
@@ -234,5 +251,5 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None):
     for name, values in seeded.items():
         if values != groups[name]:
             put_secret(shell, region, outputs["app_secret_arns"][name], values)
-    for manifest in runtime_manifests(seeded, outputs, namespace, embedding_enabled):
+    for manifest in runtime_manifests(seeded, outputs, namespace):
         shell(["kubectl", "apply", "--server-side", "--field-manager=trippilot-runtime", "-f", "-"], json.dumps(manifest))

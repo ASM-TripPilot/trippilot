@@ -94,6 +94,18 @@ class LlmFeature(Enum):
     # 1차 미달의 실제 원인 — TRIP-840 실측). **오프라인 전용**: 런타임 요청 경로에서 부르지
     # 않는다(scripts/intent/augment_bank.py).
     BANK_AUGMENT = "BANK_AUGMENT"  # intent-matching-design §3.2 ②
+    # 도우미(assistant) 오케스트레이터 3종 — assistant-orchestrator FD domain-entities §2.10 (BR-AF-07 세트).
+    # INTENT 와 **별개 feature** 인 이유: 서비스 경로는 LLM 직접 분류로 가고 기존 3단 라우터(뱅크→투표→LLM)는
+    # 섀도 측정 전용으로 남는다 — 측정 대상인 prompts/intent.yaml 과 재생 픽스처(tests/fixtures/intent_gate,
+    # 키 = 렌더 전문 해시)를 건드리지 않으려면 최근 대화·기억·여행 상황 변수를 싣는 분류는 새 프롬프트
+    # 파일이어야 한다. 출력은 INTENT 와 동형이라 출구 게이트는 IntentGate 를 재사용한다.
+    DIALOGUE_INTENT = "DIALOGUE_INTENT"
+    # 의도별 조회 결과(facts)만으로 사용자에게 보일 답변 문장을 짓는다 — 출구 게이트(길이·INV-3·연락처) +
+    # 결정론 템플릿 폴백 필수(U8 DEC-U8-6 개정). 시각·순서는 facts 에 실린 스냅샷 값만 인용한다(INV-2).
+    DIALOGUE_ANSWER = "DIALOGUE_ANSWER"
+    # 세션 10턴마다 최근 대화를 ≤20줄로 요약 — AI 자체 DB(ai_kb.dialogue_memory)에 저장되는 장기 기억.
+    # 실패·시한 부족이면 결정론 압축(compress_fallback)으로 전진한다(INV-4).
+    DIALOGUE_MEMORY = "DIALOGUE_MEMORY"
 
 
 class ModelTier(Enum):
