@@ -152,6 +152,7 @@
 
 ## 테스트
 
+- **실패 경로 테스트의 대역은 실물이 실패를 "말하는 방식"대로 실패시킬 것 → 실물이 상태값으로 돌려주면 대역도 상태값을, 예외면 예외를.** 도우미 오케스트레이터의 팬아웃은 "작업 예외 → FallbackEvent" 갈래를 예외를 던지는 날씨 대역으로 시험해 초록이었는데, 실 `WeatherProvider`·`PoiInfoProvider` 는 장애를 예외가 아니라 `WEATHER_UNKNOWN`·`UNAVAILABLE` 상태값으로 돌려줘 그 갈래에 **실물로는 닿지 않았다** — 기상청·POI 장애가 운영에서 이벤트 0·로그 0 이었다(2026-10-18 Codex 리뷰 재현, #1314 에서 상태값 대역 추가). 대역을 만들 때 "실물의 실패 모양"을 실물 코드에서 먼저 확인한다(대역이 실물보다 관대하면 거짓 초록이 된다는 같은 뿌리).
 - **생산자 출력 모양의 픽스처를 손으로 쓰지 말 것 → 생산자의 `to_dict()` 로 만든다.** `resolve_place_ids` 테스트가 평평한 `lat` 픽스처를 써서, 실제 수집본(`coord.lat` 중첩) 19,084건에서 대상이 0건인 결함을 가렸다 — 테스트는 초록, 스크립트는 "할 일 없음"으로 조용히 끝났다. (#1130, Codex 리뷰)
 - **통합 테스트의 공용 픽스처를 모듈 상수(객체)로 두지 말 것 → 호출마다 새로 만드는 함수로 둔다.** 케이스가 응답 객체를 고쳐 쓴다(`it.days[0].slots[0].violationReason = …`) — 상수 하나를 여러 케이스가 공유하면 앞 케이스의 변형이 뒤 케이스로 샌다. 케이스 단독 실행은 green 이고 describe 통째 실행에서만 뒤 케이스가 red 라(순서 의존) 픽스처를 공용화하다 처음 드러났다. (TRIP-1351 DraftPage `VIOLATION_DAYS`)
 - **`node_modules` 를 심볼릭 링크한 스냅샷 디렉토리에서 `pnpm` 을 부르지 말 것 → `node_modules/.bin/jest` 를 직접 부른다.** `pnpm exec` 의 deps 상태 확인이 `pnpm install` 을 돌려 링크가 가리키는 **원본 node_modules 를 지우려 든다**(TTY 가 없어 중단됐지만 원본 `.modules.yaml` 이 바뀌어 이후 `pnpm tsc` 가 같은 이유로 죽었고 `CI=true pnpm install --frozen-lockfile` 로 복구했다). 전/후 비교용 HEAD 스냅샷(`git archive`)이 필요하면 jest 바이너리를 절대 경로로 부른다. (TRIP-1350~1356 배치)

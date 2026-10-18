@@ -28,6 +28,11 @@ _KST = timezone(timedelta(hours=9))
 _T0 = datetime(2026, 10, 18, 9, 0, tzinfo=_KST)
 
 
+def _long_ago() -> datetime:
+    """읽기 만료와 무관한 테스트의 "지금" — 모든 행보다 이르다(벽시계면 날짜가 지나며 깨진다)."""
+    return _T0 - timedelta(days=3650)
+
+
 def _memory(session_id: str = "s-1", *, account_ref: str | None = "acct-a", trip_id: str | None = "trip-1",
             summary: tuple[str, ...] = ("제주 2박",), idx: int = 10, at: datetime = _T0,
             ttl_days: int = 90) -> DialogueMemory:
@@ -46,7 +51,7 @@ def _memory(session_id: str = "s-1", *, account_ref: str | None = "acct-a", trip
 
 
 def test_inmemory_put_get_roundtrip_and_missing_is_none() -> None:
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=_long_ago)
     assert store.get("s-1") is None
     memory = _memory()
     store.put(memory)
@@ -54,7 +59,7 @@ def test_inmemory_put_get_roundtrip_and_missing_is_none() -> None:
 
 
 def test_inmemory_put_is_upsert_latest_wins() -> None:
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=_long_ago)
     store.put(_memory(summary=("첫 요약",), idx=10))
     later = _memory(summary=("둘째 요약",), idx=20, at=_T0 + timedelta(minutes=5))
     store.put(later)
@@ -63,7 +68,7 @@ def test_inmemory_put_is_upsert_latest_wins() -> None:
 
 
 def test_inmemory_recent_for_account_orders_desc_excludes_session_and_limits() -> None:
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=_long_ago)
     old = _memory("s-old", at=_T0 - timedelta(days=3))
     mid = _memory("s-mid", at=_T0 - timedelta(days=1))
     new = _memory("s-new", at=_T0)
@@ -78,7 +83,7 @@ def test_inmemory_recent_for_account_orders_desc_excludes_session_and_limits() -
 
 
 def test_inmemory_recent_for_account_ties_break_by_session_id() -> None:
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=_long_ago)
     for sid in ("s-b", "s-a", "s-c"):
         store.put(_memory(sid))  # 같은 updated_at
     got = store.recent_for_account("acct-a", exclude_session="x", limit=3)
@@ -90,7 +95,7 @@ def test_inmemory_recent_for_account_ties_break_by_session_id() -> None:
     [{}, {"session_id": "s-1", "trip_id": "trip-1"}, {"session_id": "s-1", "trip_id": "trip-1", "account_ref": "acct-a"}],
 )
 def test_inmemory_delete_requires_exactly_one_selector(kwargs: dict) -> None:
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=_long_ago)
     store.put(_memory())
     with pytest.raises(ValueError, match="정확히 하나"):
         store.delete(**kwargs)
@@ -98,7 +103,7 @@ def test_inmemory_delete_requires_exactly_one_selector(kwargs: dict) -> None:
 
 
 def test_inmemory_delete_by_each_selector_counts_and_is_idempotent() -> None:
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=_long_ago)
     store.put(_memory("s-1", trip_id="trip-1"))
     store.put(_memory("s-2", trip_id="trip-1"))
     store.put(_memory("s-3", trip_id="trip-2"))
@@ -112,7 +117,7 @@ def test_inmemory_delete_by_each_selector_counts_and_is_idempotent() -> None:
 
 
 def test_inmemory_purge_expired_removes_only_rows_at_or_before_now() -> None:
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=_long_ago)
     store.put(_memory("s-dead", at=_T0 - timedelta(days=91)))  # expires = T0 - 1일
     store.put(_memory("s-edge", at=_T0 - timedelta(days=90)))  # expires = T0 정확히 → 만료
     store.put(_memory("s-live", at=_T0 - timedelta(days=89)))  # expires = T0 + 1일
@@ -124,7 +129,7 @@ def test_inmemory_purge_expired_removes_only_rows_at_or_before_now() -> None:
 
 def test_inmemory_put_purges_rows_expired_as_of_its_updated_at() -> None:
     """TTL 백스톱 (FD DE §4) — 쓰기마다 만료 행을 같이 치운다. Pg 와 동형."""
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=_long_ago)
     store.put(_memory("s-dead", at=_T0 - timedelta(days=100)))
     store.put(_memory("s-live", at=_T0 - timedelta(days=1)))
     store.put(_memory("s-now", at=_T0))
@@ -142,7 +147,7 @@ _puts = st.lists(
 
 
 def _apply(puts: list[tuple[str, str | None, int]]) -> tuple[InMemoryDialogueMemoryStore, dict[str, DialogueMemory]]:
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=_long_ago)
     expected: dict[str, DialogueMemory] = {}
     for sid, acct, offset_days in puts:
         memory = _memory(sid, account_ref=acct, at=_T0 + timedelta(days=offset_days))
@@ -262,7 +267,7 @@ def test_pg_get_selects_by_session_and_maps_row() -> None:
     store, cursor, opened = _store(rows=[_row(memory)])
     assert store.get("s-1") == memory
     sql, params = cursor.executed[0]
-    assert sql == f"SELECT {_COLUMNS} FROM dialogue_memory WHERE session_id = %s"
+    assert sql == f"SELECT {_COLUMNS} FROM dialogue_memory WHERE session_id = %s AND expires_at > now()"
     assert params == ("s-1",)
     assert len(opened) == 1
 
@@ -299,7 +304,7 @@ def test_pg_recent_for_account_orders_desc_then_session_id_with_limit() -> None:
     assert store.recent_for_account("acct-a", exclude_session="s-1", limit=2) == (newer, older)
     sql, params = cursor.executed[0]
     assert sql == (
-        f"SELECT {_COLUMNS} FROM dialogue_memory WHERE account_ref = %s AND session_id <> %s "
+        f"SELECT {_COLUMNS} FROM dialogue_memory WHERE account_ref = %s AND session_id <> %s AND expires_at > now() "
         "ORDER BY updated_at DESC, session_id LIMIT %s"
     )
     assert params == ("acct-a", "s-1", 2)
@@ -353,3 +358,14 @@ def test_pg_adapter_issues_dml_only() -> None:
     store.purge_expired(_T0)
     for sql, _ in cursor.executed:
         assert sql.split()[0] in {"SELECT", "INSERT", "DELETE"}
+
+
+def test_inmemory_reads_treat_expired_rows_as_absent() -> None:
+    """만료 행은 없는 것과 같다 — 정리(put 안의 DELETE)는 쓰기가 있어야 돈다. 오케스트레이터가 꺼진 동안 쓰기가 멈추면
+    만료 행이 무기한 읽히고 내보내기에도 나왔다(2026-10-18 리뷰 재현). Pg 는 같은 조건을 SQL `expires_at > now()` 로 건다."""
+    now = _T0 + timedelta(days=91)
+    store = InMemoryDialogueMemoryStore(now=lambda: now)
+    store.put(_memory("old", at=_T0))  # 만료 = _T0 + 90일 < now
+    store.put(_memory("fresh", at=_T0 + timedelta(days=60)))
+    assert store.get("old") is None and store.get("fresh") is not None
+    assert [m.session_id for m in store.recent_for_account("acct-a", exclude_session="", limit=5)] == ["fresh"]

@@ -944,7 +944,7 @@ def _plan_alternatives(ctx: TurnContext) -> tuple[HandlerTask, ...]:
             pool = builder.build(CandidatePoolRequest(anchor=anchor, dates=(on,), budget=BudgetLevel.MID,
                                                       transport=TransportMode.PUBLIC), ctx.now)
         except Exception as e:  # 풀 조립은 Provider 가 아니라 상태값 계약이 없다 — 여기서 수렴 (DL-5)
-            return {"status": "UNAVAILABLE", "reason": f"pool: {type(e).__name__}: {e}"}
+            return {"status": "UNAVAILABLE", "reason": f"pool_error:{type(e).__name__}"}  # 메시지는 싣지 않는다(키 든 URL)
         pool = _same_role(pool, target.poi_id, excluded)
         rain: dict[date, int] = {}
         if weather is not None:
@@ -957,6 +957,8 @@ def _plan_alternatives(ctx: TurnContext) -> tuple[HandlerTask, ...]:
             reason=reason, pool=pool, trace_id=ctx.trace_id, now=ctx.now, excluded_poi_ids=excluded,
             deadline_ms=max(ctx.remaining_ms(), 0) or None, rain_prob_by_date=rain, use_llm=False,
         ))
+        if result.empty_reason == "pipeline_error":  # KB·DB 장애 — "대안이 없다"(EMPTY)가 아니라 "확인할 수 없다"다
+            return {"status": "UNAVAILABLE", "reason": "planb_pipeline_error"}
         by_id = {str(p.poi_id): p for p in pool.pois}
         candidates: list[dict] = []
         for alt in result.alternatives:  # 풀 안의 것만 — PlanB 가 이미 그렇게 고르지만 이름·좌표도 풀에서 읽는다

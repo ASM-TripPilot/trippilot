@@ -35,7 +35,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Executor, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
@@ -46,7 +48,7 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
 from trippilot.domain.observability import FallbackEvent
-from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE
+from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
@@ -125,6 +127,8 @@ _ANSWER_RESERVE_MS = 400  # 게이트·사영·직렬화 몫
 _ANSWER_MIN_REMAINING_MS = 1_500  # 미만이면 답변 LLM 을 부르지 않고 템플릿 (> _ANSWER_RESERVE_MS — 아니면 시한이 0 이하)
 _MEMORY_MIN_REMAINING_MS = 2_500  # 미만이면 결정론 압축
 _MEMORY_CAP_MS = 2_000
+_HEALTHY_STATUSES = frozenset({"OK", "LOW"})  # 작업 값의 status 중 강등이 아닌 것 (ProviderStatus OK·LOW)
+_REASON_CODE = re.compile(r"[a-z_]{1,40}(?::[A-Za-z_]{1,60})?")  # 이벤트 사유는 코드만 — 예외 메시지(키 든 URL)는 싣지 않는다
 _OTHER_SESSIONS_LIMIT = 2  # "지난 여행 기억" — 같은 계정의 다른 세션 ≤2
 
 # 0단계 — FE 상시 칩이 서버 발급 SHOW_CAPABILITIES 가 없을 때 이 문자열을 TEXT 턴으로 보낸다(BR-AO-18).
@@ -142,7 +146,9 @@ _MEMORY_MODES = ("llm_dialogue_memory", "deterministic_compress")
 _INFRA_PREFIXES = ("timeout", "llm_error", "unsupported", "intent_error")
 
 # 팬아웃 풀 — 프로세스에 하나(BLM §6 "요청마다 만들지 않는다"). 스레드는 첫 submit 때 생긴다.
-_DLG_POOL = ThreadPoolExecutor(8, thread_name_prefix="dialogue")
+# 32: 시한을 넘긴 작업도 소켓 시한(BackendPoiDb 10s·기상청 4s)까지 스레드를 쥔다 — 8 이면 느린 작업 8개가 다음 턴들을
+# 풀 대기만으로 TIMEOUT 시켰다(2026-10-18 리뷰 재현). 프로세스당 I/O 대기 스레드라 값싸다.
+_DLG_POOL = ThreadPoolExecutor(32, thread_name_prefix="dialogue")
 
 
 # ── 입력 (DE §2.1) ───────────────────────────────────────────────────────────
@@ -319,6 +325,45 @@ def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemor
     return tuple(lines)
 
 
+def _slot_times(value: object) -> frozenset[tuple[str, str]]:
+    """Facts 안의 (장소 이름, 계획 시각) 짝 — `{"name", "start_at"}` 를 가진 dict 전부(일정 슬롯·다음 장소)."""
+    found: set[tuple[str, str]] = set()
+    if isinstance(value, Mapping):
+        if isinstance(value.get("name"), str) and isinstance(value.get("start_at"), str):
+            found.add((value["name"], value["start_at"]))
+        for item in value.values():
+            found |= _slot_times(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            found |= _slot_times(item)
+    return frozenset(found)
+
+
+_SEGMENT = re.compile(r"[,，·/;→\n]|\s그리고\s")
+
+
+def _misplaced_time(text: str, pairs: frozenset[tuple[str, str]]) -> bool:
+    """구획(쉼표·줄 등) 안에서 시각에 가장 가까운 장소 이름이 Facts 에서 그 시각과 짝이 아니면 참. 이름이 없으면 판정하지 않는다."""
+    names = sorted({name for name, _ in pairs if name}, key=len, reverse=True)
+    for segment in _SEGMENT.split(text):
+        times = clock_spans(segment)
+        if not times:
+            continue
+        spots: list[tuple[int, int, str]] = []
+        for name in names:  # 긴 이름부터 — "카페 모카" 안의 "카페" 를 따로 세지 않는다
+            start = segment.find(name)
+            while start >= 0:
+                end = start + len(name)
+                if not any(s <= start and end <= e for s, e, _ in spots):
+                    spots.append((start, end, name))
+                start = segment.find(name, end)
+        for t_start, t_end, hm in times:
+            near = [(t_start - e if e <= t_start else s - t_end, n) for s, e, n in spots if e <= t_start or s >= t_end]
+            if near and (min(near)[1], hm) not in pairs:
+                return True
+    return False
+
+
 def _refusal_reason(error: str) -> str:
     """분류 폴백 사유 — `intent_eval.is_refusal` 이 "판단해서 거절"과 인프라 실패를 가를 수 있게.
 
@@ -389,7 +434,7 @@ class DialogueOrchestrator:
                 raise
             except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 A안)
                 outcome = self._crashed(inp, e)
-            self._remember(inp, current)  # outcome 과 무관하게 돈다(BLM §3 註) — 안에서 전부 수렴
+            self._remember(inp, current, outcome.answer.text if outcome.answer is not None else None)  # outcome 과 무관(BLM §3 註)
             return replace(outcome, llm_calls=counter[0])
 
     def _core(
@@ -540,6 +585,13 @@ class DialogueOrchestrator:
                     continue
                 if isinstance(value, Mapping):
                     results[name] = TaskResult.ok(name, value)
+                    # Provider 는 장애를 예외가 아니라 상태값(WEATHER_UNKNOWN·UNAVAILABLE…)으로 돌려준다 — 전송은 OK 라도
+                    # 그 상태가 강등이면 여기서 보고한다(아니면 기상청·POI 장애가 이벤트 0·로그 0, 2026-10-18 리뷰 재현).
+                    status = value.get("status")
+                    if isinstance(status, str) and status not in _HEALTHY_STATUSES:
+                        code = value.get("reason")
+                        self._fallback(inp, "fanout", name, status,
+                                       code if isinstance(code, str) and _REASON_CODE.fullmatch(code) else "provider_status")
                 else:
                     results[name] = self._failed_task(inp, name, "UNAVAILABLE", "bad_shape")
         return results
@@ -578,6 +630,17 @@ class DialogueOrchestrator:
         draft = result.value
         if result.is_fallback or draft is None:  # FallbackEvent 는 게이트웨이가 냈다
             return DialogueAnswer.from_facts(facts)
+        # INV-2 — 문장 속 시각은 Facts 값이어야 하고, 장소와 붙어 있으면 그 장소의 시각이어야 한다(시각은 다 맞는데 장소끼리
+        # 바꿔 붙인 "해녀의집 15:00, 카페 모카 12:00" 도 순서·시각 위반이다). 대조는 Facts 로만 한다 — 프롬프트에는 발화
+        # "16:30에 가도 돼?" 가 들어간다(2026-10-18 리뷰).
+        prompt_facts = facts.to_prompt_dict()
+        allowed, _ = clock_times(json.dumps(prompt_facts, ensure_ascii=False, default=str))
+        pairs = _slot_times(prompt_facts)
+        for part in (draft.text, draft.footnote or ""):
+            times, unverifiable = clock_times(part)
+            if unverifiable or not times <= allowed or _misplaced_time(part, pairs):
+                self._fallback(inp, "llm", *_ANSWER_MODES, "time_not_in_facts")
+                return DialogueAnswer.from_facts(facts)
         try:
             return DialogueAnswer.from_facts(facts, text=draft.text, footnote=draft.footnote)
         except ValueError as e:  # 게이트와 같은 검사라 여기 오면 게이트가 어긋난 것 — 그래도 템플릿
@@ -604,25 +667,29 @@ class DialogueOrchestrator:
                 log.warning("지난 여행 기억 읽기 실패(%s) — 현재 세션 기억만 (trace_id=%s)", type(e).__name__, inp.trace_id)
         return current, others
 
-    def _remember(self, inp: TurnInput, current: DialogueMemory | None) -> None:
+    def _remember(self, inp: TurnInput, current: DialogueMemory | None, answer_text: str | None = None) -> None:
         if self._store is None or not inp.session_id:
             return
         summarized = current.summarized_turn_index if current is not None else 0
         if not due(inp.context.turn_index, summarized, every=SUMMARY_EVERY_TURNS):
             return
         try:
-            self._summarize_and_put(inp, current)
+            self._summarize_and_put(inp, current, answer_text)
         except Exception as e:  # noqa: BLE001 — 기억은 응답 품질과 무관하다: 어떤 실패도 턴을 막지 않는다
             self._fallback(inp, "memory", _MEMORY_MODES[0], "skipped", f"memory_error: {type(e).__name__}: {e}")
 
-    def _summarize_and_put(self, inp: TurnInput, current: DialogueMemory | None) -> None:
+    def _summarize_and_put(self, inp: TurnInput, current: DialogueMemory | None, answer_text: str | None = None) -> None:
         """BLM §8 — 잔여 ≥2.5s 면 LLM 요약, 미만이면 결정론 압축, ≤0 이면 압축·put 없이 미룬다(due 유지). 실패는 전부 압축."""
         remaining = self._remaining(inp)
         previous = current.summary if current is not None else ()
         if remaining <= 0:
             self._fallback(inp, "memory", _MEMORY_MODES[0], "deferred", f"budget_exhausted(remaining_ms={remaining})")
             return
-        turns = inp.recent_turns
+        # 이번 턴(발화·답)도 재료에 넣는다 — summarized_turn_index 를 이번 턴으로 적으면서 백엔드가 싣는 recent_turns(이번 발화
+        # **앞** 메시지)만 요약하면 이번 턴이 장기 기억에서 영영 빠진다(2026-10-18 리뷰 재현).
+        turns = inp.recent_turns + tuple(
+            RecentTurn(role, text[:RECENT_TURN_CHARS])
+            for role, text in (("USER", inp.utterance.strip()), ("ASSISTANT", (answer_text or "").strip())) if text)
         today = inp.now.astimezone(self._tz).date()
         if not turns:  # 재료 없이 LLM 을 부르지 않는다 — 의도된 결정론, 폴백 아님 (BR-AO-25)
             lines = compress_fallback((), previous)

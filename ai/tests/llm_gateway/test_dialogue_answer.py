@@ -36,6 +36,8 @@ from trippilot.llm_gateway.gates.dialogue_answer import (
     _MAX_LINES,
     DialogueAnswerDraft,
     DialogueAnswerGate,
+    _violates,
+    clock_times,
 )
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.gateway import GatewayFacade
@@ -421,3 +423,25 @@ def test_pbt_worker_converges_for_any_llm_text(raw: str) -> None:
         # 이 시점의 표시 문장은 fallback_answer_text — 항상 게이트 규칙 안 (⑤가 고정)
     else:
         _assert_inside(result.value.text)
+
+
+@pytest.mark.parametrize("text", ["차로 20min 이면 가요", "1h 걸려요", "20 mins by car", "2 hours", "half an hour 정도"])
+def test_english_duration_units_are_dropped(text: str) -> None:
+    """INV-3 — `_TIME_EXPR` 는 한글 단위만 본다("차로 20min 이면 가요"가 통과했다, 2026-10-18 리뷰 재현)."""
+    assert _violates(text, _MAX_LENGTH)
+
+
+@pytest.mark.parametrize("text", ["거리는 약 1.8km 예요", "15h45 출발", "500m 앞이에요", "12:00 에 가요"])
+def test_distances_and_clock_times_are_not_durations(text: str) -> None:
+    assert not _violates(text, _MAX_LENGTH)  # 시계 시각은 Facts 대조(오케스트레이터)가 맡는다
+
+
+def test_clock_times_normalises_numeric_forms_and_flags_korean_clock_words() -> None:
+    assert clock_times("12:00 에 가고 9:30 에도") == (frozenset({"12:00", "09:30"}), False)
+    assert clock_times("3:45pm 에 와요") == (frozenset({"15:45"}), False)
+    assert clock_times("12:30 AM") == (frozenset({"00:30"}), False)
+    assert clock_times("15h45 출발")[0] == frozenset({"15:45"})
+    for words in ("오후 세 시에 가요", "정오에 점심", "자정까지 열어요", "세 시 반쯤", "열두 시 반에"):
+        assert clock_times(words)[1], words  # 대조할 수 없는 시각 — 있는 것만으로 템플릿 사유
+    for plain in ("네 시작할게요", "한 시간 걸려요", "거리 1.8km", "11월 1일", "2026-11-01"):
+        assert clock_times(plain) == (frozenset(), False), plain

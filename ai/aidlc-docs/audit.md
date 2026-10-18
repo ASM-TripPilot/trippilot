@@ -403,3 +403,9 @@
 - **무엇**: 개발 서버(target=dev)와 운영 서버(target=prod, 출시 앱이 보는 서버)에 각각 두 번 배포 — ① 입력 없이 새 코드(오케스트레이터 꺼짐, 운영은 섀도 비율 0.2 시드) ② `dialogue_orchestrator=on` + `llm_feature_models=DIALOGUE_INTENT/ANSWER/MEMORY=gpt-5.6-luna`. 운영 run 39109665486 → 39110593286, 개발 run 39104094998 → 39107006208 → 39108391074(상한 수정 재배포, 입력 유지 — 저장값 보존 확인)
 - **확인한 것(배포 로그)**: `ai secret keys written: TRIPPILOT_DIALOGUE_ORCHESTRATOR, TRIPPILOT_LLM_FEATURE_MODELS` · `backend ASSISTANT_INTERPRET_MODE=http` · `기능별 모델 배정 23종 / 미배정 0종` · `ai-dialogue: {"http": 200, "outcome": "ANSWER", "llm_calls": 3, "memory_deleted": 1}`(운영 6,698ms) · Terraform 변경 0
 - **함께 고친 것**: 분류 출력 상한 256 → 1024(#1311, 개발 서버 실측 출력 239/256) · main 등록용 사본 `ai-business-status-reminder.yml` 동기화(#1312 — #1295·#1302 때부터 main 대상 PR 의 ai-ci 를 빨갛게 하던 테스트)
+
+## 2026-10-18 — 도우미 오케스트레이터 Codex 리뷰 반영 (확정 결함 8건)
+**Timestamp**: 2026-10-18 · 브랜치 `fix/assistant-orchestrator-review`(develop 012a7413) · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: 사용자가 다른 세션에 "챗봇 관련해서 codex code review 진행해. 그리고 챗봇 다루는 세션한테 알려줘." — 그 세션이 재현 스크립트로 검증한 확정분(medium 3·low 5)을 넘겼다.
+- **무엇을 했나**: FD business-rules §6 표의 8건을 고쳤다 — ① 파기 뒤 되살아난 요약을 BE 가 "대화가 지워졌다" 갈래에서 한 번 더 지움 ② Provider 상태값 장애도 팬아웃 이벤트로 보고 ③ 답변 문장 시각을 Facts 와 대조(집합·장소 짝·대조 불가 한글 시각) + 영문 소요시간 단위 ④ BE 메모리 클라이언트를 해석 모드와 분리 ⑤ 만료 행 읽기 제외 ⑥ 이번 턴을 요약 재료에 ⑦ 결정론 압축에 게이트 술어 ⑧ 팬아웃 풀 32·메모리 DB 시한. BR-AO-05 의 "별도 시각 검사 없음"(미결 #18) 결정은 ③ 으로 뒤집었다(원문 취소선 보존).
+- **지키는 것**: 이벤트 사유는 코드만(예외 메시지 미기록) · 대조 기준은 Facts 만(발화는 사실이 아님) · 재현 스크립트의 음성 사례가 수정 전 코드에서 실패함을 확인(10건 중 9건 실패, 1건은 정상 복사 통제군)
