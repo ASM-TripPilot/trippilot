@@ -397,3 +397,9 @@
 - **무엇을 했나**: ① 실 모델 실측(gpt-5.6-luna 20턴 — 끝난 턴 기준 분류 p90 1.9s·답변 p90 2.4s, 2.5s 상한에서 분류 1/20·답변 2/17 이 잘림)으로 FD 시한 상한을 분류 `min(4.0s, 잔여×0.45)`·답변 `min(3.5s, 잔여−0.4s)` 로 개정(BLM §4 註·DE §2.8·BR 미결 #21 완화) ② 로컬 AWS 샌드박스 토큰 만료(`ExpiredToken`)로 시크릿 손편집이 막혀, `push_mode` 선례대로 배포 입력 `dialogue_orchestrator`·`llm_feature_models` 를 더함(BLM §11 註) — 기능 이름은 이 커밋과 **지금 떠 있는 AI 이미지** 양쪽이 알아야 쓴다(리뷰 확정 결함: 새 이름이 든 런이 helm 롤백되면 옛 이미지가 재시작 때 기동에서 죽는다) ③ 운영 대상 섀도 비율 0.2 를 배포 도구가 비어 있을 때 심음(사용자 결정 2026-10-17) ④ 배포 smoke 에 도우미 한 턴(기록만). U8 NFR PERF-U8-02 에 재개정 문장 덧붙임(원문 보존).
 - **지키는 것**: 최악 합 9s 안(비율·예약 몫이 지키고 PBT 가 그 항을 단언) · 새 기능 이름은 두 번에 나눠 넣는다(입력 없는 배포 → 다음 런에서 배정) · 시크릿 값은 로그에 찍지 않는다(쓴 키 이름만, 백엔드 `ASSISTANT_INTERPRET_MODE` 모드 값만)
 - **대신 적지 않은 것**: 기동 직후 첫 턴 지연은 따로 재지 않았다 — 개발·운영 배포 smoke 의 `ai-dialogue:` 줄이 그 표본이고 미결 #21 을 닫는 조건이다
+
+## 2026-10-18 — 도우미 오케스트레이터 개발·운영 서버 켜짐 (FD DoD 배포 항목 · 미결 #21 해소)
+**Timestamp**: 2026-10-18 · main `db78a7e8`(#1310 승격 — #1307·#1308·#1309·#1311) · **사실 기록**(결정 변경 없음)
+- **무엇**: 개발 서버(target=dev)와 운영 서버(target=prod, 출시 앱이 보는 서버)에 각각 두 번 배포 — ① 입력 없이 새 코드(오케스트레이터 꺼짐, 운영은 섀도 비율 0.2 시드) ② `dialogue_orchestrator=on` + `llm_feature_models=DIALOGUE_INTENT/ANSWER/MEMORY=gpt-5.6-luna`. 운영 run 39109665486 → 39110593286, 개발 run 39104094998 → 39107006208 → 39108391074(상한 수정 재배포, 입력 유지 — 저장값 보존 확인)
+- **확인한 것(배포 로그)**: `ai secret keys written: TRIPPILOT_DIALOGUE_ORCHESTRATOR, TRIPPILOT_LLM_FEATURE_MODELS` · `backend ASSISTANT_INTERPRET_MODE=http` · `기능별 모델 배정 23종 / 미배정 0종` · `ai-dialogue: {"http": 200, "outcome": "ANSWER", "llm_calls": 3, "memory_deleted": 1}`(운영 6,698ms) · Terraform 변경 0
+- **함께 고친 것**: 분류 출력 상한 256 → 1024(#1311, 개발 서버 실측 출력 239/256) · main 등록용 사본 `ai-business-status-reminder.yml` 동기화(#1312 — #1295·#1302 때부터 main 대상 PR 의 ai-ci 를 빨갛게 하던 테스트)
