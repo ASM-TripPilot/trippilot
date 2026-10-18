@@ -544,6 +544,8 @@ export function DailyReflectionScreen({
 
               <NarrativeBlock narrative={narrative} />
 
+              {scenesBlock}
+
               {hidePhotoGrid ? (
                 <View
                   testID="reflection-daily-photo-empty"
