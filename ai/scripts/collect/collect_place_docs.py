@@ -3,6 +3,7 @@ r"""KB-5 장소 지식 수집 — 출처별로 문서를 모아 `data/place_docs
 실행:
     uv run python scripts/collect/collect_place_docs.py wiki          # ③ 위키백과 (키 불필요)
     uv run python scripts/collect/collect_place_docs.py intro         # ② 수집 제안의 detail 조립
+    uv run python scripts/collect/collect_place_docs.py wikifull      # ③′ 위키백과 **본문 전문** → 청킹 원천
 
 **멱등 병합이다.** 기존 파일을 읽어 `doc_id` 로 덮어쓰므로 출처를 나눠 여러 번 돌려도
 서로를 지우지 않는다 — 넷이 한 장소에 공존하는 것이 설계다.
@@ -21,8 +22,10 @@ CC BY-SA 라 `metadata.license`·`metadata.url` 을 같이 남긴다.
 
 from __future__ import annotations
 
+import gzip
 import json
 import pathlib
+import re
 import sys
 import time
 import urllib.parse
@@ -33,6 +36,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "src"))
 
 from trippilot.domain.kb import KbDocument  # noqa: E402
 from trippilot.poi_curation.place_docs import (  # noqa: E402
+    MIN_DOC_CHARS,
     SOURCE_WIKI,
     intro_docs,
     is_disambiguation,
@@ -58,7 +62,7 @@ _WIKI_SLEEP = 0.4  # 예의상 간격 — 전량 18,607건이면 약 470요청
 
 
 def main() -> None:
-    if len(sys.argv) < 2 or sys.argv[1] not in {"wiki", "intro"}:
+    if len(sys.argv) < 2 or sys.argv[1] not in {"wiki", "intro", "wikifull"}:
         raise SystemExit(__doc__)
     source = sys.argv[1]
     limit = int(sys.argv[2]) if len(sys.argv) > 2 else 0
@@ -66,6 +70,10 @@ def main() -> None:
     proposals = json.loads(_POIS.read_text(encoding="utf-8"))["proposals"]
     if limit:
         proposals = proposals[:limit]
+    if source == "wikifull":
+        n = _wiki_corpus(proposals)
+        print(f"wikifull: 본문 {n}건 → {_CORPUS.name}")
+        return
 
     docs = _wiki_docs(proposals) if source == "wiki" else intro_docs(proposals)
     merged = _merge(docs)
@@ -142,6 +150,109 @@ def _wiki_fetch(titles: Sequence[str]) -> dict[str, str]:
         for page in pages.values()
         if page.get("title")
     }
+
+
+# ── ③′ 위키백과 본문 전문 (청킹 원천) ─────────────────────────────────────
+#
+# ③ 은 **도입부만** 받았다(`exintro`) — 중앙값 106자, 그중 LLM 이 읽는 건 앞 160자. 본문에는
+# 시설·관람·교통·계절 같은 상황 판단 근거가 더 많다. 그래서 본문 전체를 **원천 그대로** 남기고
+# (`place_corpus_wiki.jsonl.gz`), 문서로 쓰는 것은 `poi_curation/chunking` 이 거기서 만든다 —
+# 청킹 규칙을 바꿔도 다시 수집하지 않는다.
+#
+# 장소 판정은 ③ 과 같다(정확 일치 + **도입부**가 지역을 언급). 본문 전체로 지역을 보면 긴 문서일수록
+# 아무 지명이나 걸려 오매칭이 는다 — 그래서 판정은 도입부로, 수집은 전문으로 나눈다.
+_CORPUS = _DATA / "place_corpus_wiki.jsonl.gz"
+# 본문이 아닌 꼬리 절 — 링크 목록·각주라 상황 판단 근거가 없다.
+_SKIP_SECTIONS = frozenset({
+    "각주", "주석", "참고 문헌", "참고문헌", "같이 보기", "함께 보기", "외부 링크", "출처",
+    "각주 및 참고 문헌", "참고 자료", "갤러리", "사진", "관련 항목",
+})
+_HEADING = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$")
+
+
+def _wiki_corpus(proposals: Sequence[dict]) -> int:
+    """도입부로 장소를 판정하고, 통과한 제목만 **본문 전문**을 받아 절 단위로 저장한다."""
+    accepted: list[tuple[str, str]] = []  # (제목, 조인 키)
+    by_title: dict[str, dict] = {}
+    for item in proposals:
+        ref = (item.get("provenance") or {}).get("content_id") or item.get("provisional_id")
+        name = ((item.get("poi") or {}).get("name") or "").strip()
+        if ref and name and name not in by_title:
+            by_title[name] = item
+    titles = list(by_title)
+    for i in range(0, len(titles), _WIKI_BATCH):
+        batch = titles[i : i + _WIKI_BATCH]
+        try:
+            pages = _wiki_fetch(batch)
+        except Exception as e:  # 한 묶음 실패가 전체를 죽이지 않는다
+            print(f"  ! 판정 묶음 {i // _WIKI_BATCH} 실패 — {type(e).__name__}: {e}")
+            continue
+        for title, intro in pages.items():
+            item = by_title.get(title)
+            if not item or not intro.strip():
+                continue
+            prov = item.get("provenance") or {}
+            if is_disambiguation(intro) or not mentions_region(
+                    intro, item.get("region") or "", str(prov.get("address") or "")):
+                continue
+            accepted.append((title, str(prov.get("content_id") or item.get("provisional_id"))))
+        if (i // _WIKI_BATCH) % 50 == 0:
+            print(f"  판정 {i + len(batch):6d}/{len(titles)} · 장소 문서 {len(accepted)}건")
+        time.sleep(_WIKI_SLEEP)
+
+    rows = 0
+    with gzip.open(_CORPUS, "wt", encoding="utf-8") as out:
+        for n, (title, ref) in enumerate(accepted, 1):
+            try:
+                text = _wiki_full(title)
+            except Exception as e:
+                print(f"  ! 본문 {title} 실패 — {type(e).__name__}: {e}")
+                continue
+            sections = _sections(text)
+            if not sections:
+                continue
+            out.write(json.dumps({
+                "doc_id": f"{SOURCE_WIKI}:{ref}", "poi_ref": ref, "title": title,
+                "license": "CC BY-SA 4.0",
+                "url": f"https://ko.wikipedia.org/wiki/{urllib.parse.quote(title)}",
+                "sections": sections,
+            }, ensure_ascii=False) + "\n")
+            rows += 1
+            if n % 200 == 0:
+                print(f"  본문 {n:5d}/{len(accepted)}")
+            time.sleep(_WIKI_SLEEP)
+    return rows
+
+
+def _wiki_full(title: str) -> str:
+    """본문 전문(plain, 절 제목은 `== 제목 ==`). 전문은 요청당 한 문서만 준다(TextExtracts 제약)."""
+    query = urllib.parse.urlencode({
+        "action": "query", "format": "json", "redirects": "1",
+        "prop": "extracts", "explaintext": "1", "exsectionformat": "wiki", "titles": title,
+    })
+    req = urllib.request.Request(f"{_WIKI_API}?{query}", headers={"User-Agent": _UA})
+    with urllib.request.urlopen(req, timeout=30) as response:
+        pages = json.load(response)["query"]["pages"]
+    return next((p.get("extract") or "" for p in pages.values()), "")
+
+
+def _sections(text: str) -> list[dict]:
+    """`== 제목 ==` 으로 절을 나눈다. 도입부는 제목 "개요". 꼬리 절(각주·링크)과 빈 절은 버린다."""
+    out: list[dict] = []
+    heading, buf, skip = "개요", [], False
+    for line in text.splitlines():
+        m = _HEADING.match(line.strip())
+        if m:
+            if buf and not skip:
+                out.append({"heading": heading, "text": " ".join(" ".join(buf).split())})
+            heading, buf = m.group(2), []
+            skip = heading in _SKIP_SECTIONS
+            continue
+        if line.strip():
+            buf.append(line.strip())
+    if buf and not skip:
+        out.append({"heading": heading, "text": " ".join(" ".join(buf).split())})
+    return [s for s in out if len(s["text"]) >= MIN_DOC_CHARS]
 
 
 def _merge(docs: Iterable[KbDocument]) -> dict[str, dict]:

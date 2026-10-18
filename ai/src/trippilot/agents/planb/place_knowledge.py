@@ -35,7 +35,8 @@ from collections.abc import Mapping, Sequence
 from trippilot.agents.planb.kb_retrieval import retrieve
 from trippilot.domain.kb import KbKind
 from trippilot.domain.poi import Poi
-from trippilot.poi_curation.place_docs import SOURCES
+from trippilot.poi_curation.chunking import chunk_ids
+from trippilot.poi_curation.place_docs import SOURCE_WIKI, SOURCES
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 
@@ -44,7 +45,12 @@ _logger = logging.getLogger("trippilot.planb.place_knowledge")
 # 후보 한 건에 붙일 문서 길이 상한. 원천이 긴 산문을 주기도 해서(위키백과 실측 최대
 # 433자, TourAPI overview 는 그보다 길다) 자르지 않으면 후보 30개에서 프롬프트가 터진다.
 # 앞부분을 남기는 이유: 도입부가 "무엇인가"를 말하고 뒤로 갈수록 연혁·부가정보다.
-MAX_DOC_CHARS = 160
+# 160 → 300 (2026-10-18 청킹): 이제 붙는 것은 문서 앞부분이 아니라 **질의에 맞은 조각 하나**다.
+# 조각은 절 제목 + 최대 280자(`chunking.MAX_CHARS`)라 자르지 않고 통째로 들어가게 잡는다 —
+# 맞은 조각을 다시 자르면 검색이 고른 근거가 잘려 나간다.
+MAX_DOC_CHARS = 300
+# 조각으로 적재되는 출처 — 이 출처는 통문서 id 대신 조각 id 범위로 펼쳐 찾는다.
+CHUNKED_SOURCES = frozenset({SOURCE_WIKI})
 
 # 문서를 받는 **장소** 수 상한 — 예산 방어. 40 × 160자 ≈ 6,400자가 프롬프트 증가분이다.
 #
@@ -90,18 +96,20 @@ def fetch_place_knowledge(
     # 스토어의 `item_id` 는 `doc_id`(`{출처}:{source_ref}`)다 — 한 장소에 출처가 여럿
     # 공존하기 때문이다. 그래서 조인 키만으로는 못 거르고 **출처 × 조인키**로 편다.
     # SOURCES 가 닫힌 목록(넷)이라 추측이 아니라 전개다.
-    doc_ids = frozenset(f"{source}:{ref}" for source in SOURCES for ref in refs)
+    # 청킹된 출처는 **조각 id 범위**로 편다(`{출처}:{ref}#0..`) — 장소마다 조각 수가 달라 미리 모르므로
+    # 적재 상한(`MAX_CHUNKS_PER_DOC`)까지 펼친다. 없는 id 는 그냥 안 맞는다.
+    doc_ids = frozenset(
+        i for source in SOURCES for ref in refs
+        for i in (chunk_ids(f"{source}:{ref}") if source in CHUNKED_SOURCES else (f"{source}:{ref}",)))
     try:
         hits = retrieve(
             KbKind.POI_DESC,
             query,
             embedding,
             store,
-            # 장소당 문서가 최대 `len(SOURCES)` 건이므로, 서로 다른 장소 MAX_DOCS 개를
-            # 확보하려면 문서는 그 배수까지 받아야 한다(최악: 한 장소가 넷을 다 가짐).
-            # 장소 수 상한은 여기가 아니라 아래 dedupe 루프가 건다 — top_k 만으로는
-            # "문서 몇 건"이 걸릴 뿐 "장소 몇 곳"은 안 걸린다.
-            top_k=min(len(doc_ids), MAX_DOCS * len(SOURCES)),
+            # 장소 수 상한은 여기가 아니라 아래 dedupe 루프가 건다. 장소마다 **가장 맞는 조각 하나**를 골라야 하므로 후보 장소의 조각 전부를 점수순으로
+            # 받는다(필터가 검색 전에 걸려 행 수는 후보 장소의 조각 수뿐이다).
+            top_k=len(doc_ids),
             item_ids=doc_ids,
             vector=vector,  # 상황 질의와 같은 문자열이라 호출측이 이미 임베딩했다
         )

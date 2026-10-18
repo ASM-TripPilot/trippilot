@@ -53,8 +53,8 @@ def test_documents_outside_the_pool_never_come_back() -> None:
     게이트가 뒤에서 잡긴 하지만, 잡히기 전에 **프롬프트에 실린다**는 게 문제다 —
     모델이 그걸 읽고 그쪽으로 기운 다음 드롭되면 호출 한 번이 통째로 버려진다.
     """
-    inside = make_doc("wiki", "ref-in", "수원 화성은 경기도 수원시에 있는 성곽이다.")
-    outside = make_doc("wiki", "ref-out", "풀 밖 장소에 대한 아주 긴 설명 문서입니다.")
+    inside = make_doc("overview", "ref-in", "수원 화성은 경기도 수원시에 있는 성곽이다.")
+    outside = make_doc("overview", "ref-out", "풀 밖 장소에 대한 아주 긴 설명 문서입니다.")
     embedding, store = _wired(inside, outside)
 
     got, note = fetch_place_knowledge(
@@ -98,7 +98,7 @@ def test_pois_without_source_ref_just_get_no_documents() -> None:
 
     백엔드가 그 필드를 안 실어 보내던 시절의 캐시 항목이 TTL(24시간) 동안 섞인다.
     """
-    embedding, store = _wired(make_doc("wiki", "ref-in", "긴 설명 문서가 여기 있습니다."))
+    embedding, store = _wired(make_doc("overview", "ref-in", "긴 설명 문서가 여기 있습니다."))
 
     got, note = fetch_place_knowledge(
         [_poi("p1", "옛 캐시", None)], "우천 상황", embedding, store
@@ -152,7 +152,7 @@ def test_상한을_넘으면_절단을_노트로_남긴다() -> None:
     from trippilot.agents.planb.place_knowledge import MAX_DOCS
 
     n = MAX_DOCS + 5
-    docs = [make_doc("wiki", f"ref-{i}", f"{i}번 장소는 경기도 수원시에 있는 곳이다.")
+    docs = [make_doc("overview", f"ref-{i}", f"{i}번 장소는 경기도 수원시에 있는 곳이다.")
             for i in range(n)]
     embedding, store = _wired(*docs)
     pois = tuple(_poi(f"p{i}", f"장소{i}", f"ref-{i}") for i in range(n))
@@ -169,7 +169,7 @@ def test_상한을_넘으면_절단을_노트로_남긴다() -> None:
 
 def test_상한_이내면_노트가_없다() -> None:
     """정상 경로에 노트가 붙으면 소비 측이 장애로 읽는다 (`_cut` 과 같은 규율)."""
-    docs = [make_doc("wiki", f"ref-{i}", f"{i}번 장소는 경기도 수원시에 있는 곳이다.")
+    docs = [make_doc("overview", f"ref-{i}", f"{i}번 장소는 경기도 수원시에 있는 곳이다.")
             for i in range(3)]
     embedding, store = _wired(*docs)
     pois = tuple(_poi(f"p{i}", f"장소{i}", f"ref-{i}") for i in range(3))
@@ -203,7 +203,7 @@ class _CountingEmbedding:
 
 def test_벡터를_받으면_질의를_다시_임베딩하지_않는다() -> None:
     """단건 임베딩 실측 168ms — KB 넷이 각자 부르면 0.67초가 예산에서 그냥 나간다."""
-    doc = make_doc("wiki", "ref-1", "수원 화성은 경기도 수원시에 있는 성곽이다.")
+    doc = make_doc("overview", "ref-1", "수원 화성은 경기도 수원시에 있는 성곽이다.")
     embedding, store = _wired(doc)
     spy = _CountingEmbedding(embedding)
     pois = (_poi("p1", "수원화성", "ref-1"),)
@@ -217,7 +217,7 @@ def test_벡터를_받으면_질의를_다시_임베딩하지_않는다() -> Non
 
 def test_벡터를_안_주면_스스로_임베딩한다() -> None:
     """생략 가능한 인자라 기존 호출이 깨지면 안 된다 — 옛 경로가 그대로 도는지."""
-    doc = make_doc("wiki", "ref-1", "수원 화성은 경기도 수원시에 있는 성곽이다.")
+    doc = make_doc("overview", "ref-1", "수원 화성은 경기도 수원시에 있는 성곽이다.")
     embedding, store = _wired(doc)
     spy = _CountingEmbedding(embedding)
 

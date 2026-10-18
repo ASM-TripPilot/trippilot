@@ -63,7 +63,10 @@ from trippilot.agents.planb.directives import (  # noqa: E402
 # KB-5(장소 지식)도 기본이다 — 빠져 있어 DEV 에는 상황·지시어만 적재돼 있었고, 재계획
 # 프롬프트의 후보 줄에 장소 설명이 한 건도 붙지 않았다(로컬은 손으로 넣어 1,470건).
 _DEFAULT_SEEDS = (
-    "data/planb_situation_kb.yaml", "data/replan_directives.yaml", "data/place_docs.json",
+    "data/planb_situation_kb.yaml", "data/replan_directives.yaml",
+    # KB-5 는 이제 **본문 전문 원천**에서 조각을 만든다(`poi_curation/chunking`). 종전의
+    # 도입부 통문서 `place_docs.json` 은 이 원천이 대체했다 — 적재가 그 옛 행을 지운다.
+    "data/place_corpus_wiki.jsonl.gz",
 )
 # 지시 사전(KB-4)은 문서 형식이 다르다 — 루트가 `directives` 고 한 지시가 alias 만큼의
 # 문서로 펼쳐진다. 파일 이름으로 가르지 않고 **루트 키를 보고** 고른다: 이름 규칙에
@@ -129,6 +132,14 @@ def _documents_of(path: Path):
     라벨 + alias 수만큼의 문서로 펼쳐진다 — 합쳐 한 문서로 넣으면 개별 표현의 신호가
     희석돼 자유 입력 매칭이 나빠진다.
     """
+    if path.name.endswith(".jsonl.gz"):
+        import gzip
+        import json
+
+        from trippilot.poi_curation.chunking import chunk_corpus
+
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            return chunk_corpus(json.loads(line) for line in f if line.strip())
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if isinstance(raw, dict) and "directives" in raw:
         return directive_documents(load_directive_file(path, yaml.safe_load))
@@ -215,6 +226,16 @@ def main(argv: list[str]) -> int:
             print(f"{path.name}: 기적재 {len(documents) - len(fresh)}건 건너뜀")
         count = index_documents(fresh, embedding, store)
         print(f"{path.name}: {count}건 적재 (KB: {', '.join(kinds)})")
+        if path.name.endswith(".jsonl.gz"):
+            # 청킹 전 통문서(`wiki:{ref}`)가 같은 collection 에 남아 있으면 검색 후보로 섞인다 —
+            # 이 스크립트는 seed 에서 빠진 행을 안 지우므로(docstring) 여기서만 명시적으로 지운다.
+            from trippilot.agents.planb.kb_retrieval import collection_for
+            from trippilot.poi_curation.chunking import base_ids
+
+            stale = base_ids(documents)
+            for doc_id in stale:
+                store.delete(collection_for(documents[0].kb, embedding.model_id), doc_id)
+            print(f"{path.name}: 청킹 전 통문서 {len(stale)}건 정리")
         total += count
     provider = os.environ.get("TRIPPILOT_EMBEDDING_PROVIDER") or "openai"
     print(f"총 {total}건 (dim={embedding.dim}, provider={provider}, 멱등 upsert)")
