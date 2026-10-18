@@ -1,12 +1,13 @@
 {
   "schema_version": 1,
-  "source": "TOURAPI",
+  "source": "KAKAO_LOCAL",
   "sources": [
+    "KAKAO_LOCAL",
     "LOCALDATA",
     "OVERTURE",
     "TOURAPI"
   ],
-  "collected_at": "2026-10-17T21:21:56.604885+00:00",
+  "collected_at": "2026-10-18T09:18:09.949950+00:00",
   "area_codes": [
     "1",
     "2",
@@ -34,12 +35,13 @@
     "39"
   ],
   "stats": {
-    "merged_runs": 3,
-    "unique_proposals": 57526
+    "merged_runs": 2,
+    "unique_proposals": 57536,
+    "bad_nightlife_dropped": 26
   },
   "merged_from": [
     {
-      "collected_at": "2026-10-16T22:00:21.159809+00:00",
+      "collected_at": "2026-10-17T21:21:56.604885+00:00",
       "proposals": 57526,
       "stats": {
         "merged_runs": 3,
@@ -47,126 +49,27 @@
       }
     },
     {
-      "collected_at": "2026-10-17T21:21:52.618859+00:00",
-      "proposals": 0,
+      "collected_at": "2026-10-18T09:18:09.949950+00:00",
+      "proposals": 36,
       "stats": {
-        "http_calls": 240,
-        "listed": 30,
-        "page_failures": 1,
-        "detail_failures": 0,
-        "category_unmapped": 0,
-        "address_missing": 2,
-        "merged": 0,
-        "passed": 0,
-        "skipped_unchanged": 15397,
-        "rest_unparsed": 0,
-        "raw_reparse_mismatch": 0,
-        "gate_drops": {
-          "existence_out_of_service_region": 26,
-          "policy_non_travel:convenience_store": 2
+        "seed": 54,
+        "row_drops": {
+          "게이트로": 38,
+          "이미 있음(이름 포함+300m)": 9,
+          "카카오 매칭 없음": 7
         },
-        "budget_exhausted": false,
-        "per_area": {
-          "1": {
-            "calls": 25,
-            "passed": 0,
-            "skipped": 1402
-          },
-          "2": {
-            "calls": 10,
-            "passed": 0,
-            "skipped": 474
-          },
-          "3": {
-            "calls": 6,
-            "passed": 0,
-            "skipped": 174
-          },
-          "4": {
-            "calls": 7,
-            "passed": 0,
-            "skipped": 398
-          },
-          "5": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 138
-          },
-          "6": {
-            "calls": 10,
-            "passed": 0,
-            "skipped": 493
-          },
-          "7": {
-            "calls": 6,
-            "passed": 0,
-            "skipped": 208
-          },
-          "8": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 76
-          },
-          "31": {
-            "calls": 41,
-            "passed": 0,
-            "skipped": 3534
-          },
-          "32": {
-            "calls": 24,
-            "passed": 0,
-            "skipped": 1600
-          },
-          "33": {
-            "calls": 13,
-            "passed": 0,
-            "skipped": 810
-          },
-          "34": {
-            "calls": 15,
-            "passed": 0,
-            "skipped": 1058
-          },
-          "35": {
-            "calls": 16,
-            "passed": 0,
-            "skipped": 1168
-          },
-          "36": {
-            "calls": 16,
-            "passed": 0,
-            "skipped": 1260
-          },
-          "37": {
-            "calls": 14,
-            "passed": 0,
-            "skipped": 898
-          },
-          "38": {
-            "calls": 16,
-            "passed": 0,
-            "skipped": 1010
-          },
-          "39": {
-            "calls": 11,
-            "passed": 0,
-            "skipped": 696
-          }
-        }
-      }
-    },
-    {
-      "collected_at": "2026-10-17T21:21:56.604885+00:00",
-      "proposals": 0,
-      "stats": {
-        "pending": 0,
-        "attempted": {},
-        "emitted": 0,
-        "kept_stored_hours": 0,
-        "gate_dropped": 0,
-        "failures": {},
-        "remaining": 0,
-        "halted": null
+        "kakao_misses": [
+          "홍대 서커스 클럽",
+          "홍대 M2 클럽",
+          "이태원 디퍼",
+          "이태원 메이드 클럽",
+          "강남 옥타곤 클럽",
+          "청담 클럽사운드",
+          "서면 그루브 클럽"
+        ],
+        "gate_merged": 2,
+        "gate_drops": {},
+        "passed": 36
       }
     }
   ],
@@ -2669070,39 +2668973,6 @@
       }
     },
     {
-      "provisional_id": "overture-8af41669-2dd8-4552-adbc-f85204853d42",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-8af41669-2dd8-4552-adbc-f85204853d42",
-        "name": "에이유클럽",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.8673134,
-          "lng": 128.598938
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "중구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "8af41669-2dd8-4552-adbc-f85204853d42",
-        "address": "대구광역시 중구 동성로4길 61",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-c16551a7-49cb-4c17-a03c-c95e3efd3961",
       "source": "OVERTURE",
       "poi": {
@@ -2670201,39 +2670071,6 @@
       }
     },
     {
-      "provisional_id": "overture-aa4db8dc-c232-4724-9db1-4f7703f22ad7",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-aa4db8dc-c232-4724-9db1-4f7703f22ad7",
-        "name": "클럽그리드",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1516304,
-          "lng": 129.0580597
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "부산진구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "aa4db8dc-c232-4724-9db1-4f7703f22ad7",
-        "address": "부산광역시 부산진구 부전동 534-2",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-27bcb4e9-acef-4b69-9075-0db7b3b47a14",
       "source": "OVERTURE",
       "poi": {
@@ -2670333,39 +2670170,6 @@
       }
     },
     {
-      "provisional_id": "overture-abf5da9d-1bc9-4a73-822f-824167adbac0",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-abf5da9d-1bc9-4a73-822f-824167adbac0",
-        "name": "말리 말리 - Mali Mali",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1564903,
-          "lng": 129.0605774
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "부산진구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "abf5da9d-1bc9-4a73-822f-824167adbac0",
-        "address": "부산광역시 부산진구 동천로85번길 34 2층, 3층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-fd5e93e4-1a0d-413a-a83d-b0f3d29aa3ea",
       "source": "OVERTURE",
       "poi": {
@@ -2670399,39 +2670203,6 @@
       }
     },
     {
-      "provisional_id": "overture-5d205d40-b8e2-4ac5-b188-c79106533fb0",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-5d205d40-b8e2-4ac5-b188-c79106533fb0",
-        "name": "빌리진 서면",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1552086,
-          "lng": 129.0601349
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "부산진구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5d205d40-b8e2-4ac5-b188-c79106533fb0",
-        "address": "부산광역시 부산진구 서전로10번길 61 쥬디스태화신관 2층 203호",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-64d72228-8ec5-4039-9ce5-192d949a83e0",
       "source": "OVERTURE",
       "poi": {
@@ -2670461,39 +2670232,6 @@
       "provenance": {
         "content_id": "64d72228-8ec5-4039-9ce5-192d949a83e0",
         "address": "부산광역시 부산진구 부전동 188-2",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-fc21ca0d-1444-44a9-93fc-4db3fd0ddfaa",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-fc21ca0d-1444-44a9-93fc-4db3fd0ddfaa",
-        "name": "클럽 바이브 라운지",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.1544113,
-          "lng": 129.0612335
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "부산진구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "fc21ca0d-1444-44a9-93fc-4db3fd0ddfaa",
-        "address": "부산광역시 부산진구 부산시 부산진구 부전동 218 은아빌딩 지하1층",
         "image_url": null
       }
     },
@@ -2670593,39 +2670331,6 @@
       "provenance": {
         "content_id": "6a0a366b-009d-4156-b8b2-7f0c8fd4f9e4",
         "address": "부산광역시 부산진구 전포대로210번길 37",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-f1df1ce2-95a1-42f4-989b-e00ff68c2b46",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-f1df1ce2-95a1-42f4-989b-e00ff68c2b46",
-        "name": "퍼지네이블광복",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.0993767,
-          "lng": 129.0345306
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "중구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "f1df1ce2-95a1-42f4-989b-e00ff68c2b46",
-        "address": "부산광역시 중구 광복동1가 5-2",
         "image_url": null
       }
     },
@@ -2670788,39 +2670493,6 @@
       "provenance": {
         "content_id": "66b4bd4d-fbd4-4ebd-96fb-b3bf6a3b0a72",
         "address": "부산광역시 해운대구 송정중앙로 35-2",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-362b1a6a-9e09-44ec-80ba-c956a1d3eb5b",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-362b1a6a-9e09-44ec-80ba-c956a1d3eb5b",
-        "name": "클럽베뉴 부산",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 35.159893,
-          "lng": 129.1656494
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "해운대구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "362b1a6a-9e09-44ec-80ba-c956a1d3eb5b",
-        "address": "부산광역시 해운대구 해운대해변로 296 파라다이스호텔본관 지하1층",
         "image_url": null
       }
     },
@@ -2671611,39 +2671283,6 @@
       }
     },
     {
-      "provisional_id": "overture-56f29b91-0bfe-4ff9-a861-aa7ead802a06",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-56f29b91-0bfe-4ff9-a861-aa7ead802a06",
-        "name": "이태원 클럽 매시브 - Club Massive",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5552101,
-          "lng": 126.9069748
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "56f29b91-0bfe-4ff9-a861-aa7ead802a06",
-        "address": "서울특별시 용산구 이태원로 211 B1",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-c31eaa70-2f53-4a00-b068-f678ed74aa36",
       "source": "OVERTURE",
       "poi": {
@@ -2671875,270 +2671514,6 @@
       }
     },
     {
-      "provisional_id": "overture-d3aa67ae-32f3-4108-ab66-2f64081360e9",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-d3aa67ae-32f3-4108-ab66-2f64081360e9",
-        "name": "홍대 클럽 마마 Hongdae Club Mama",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5508995,
-          "lng": 126.9216537
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "d3aa67ae-32f3-4108-ab66-2f64081360e9",
-        "address": "서울특별시 마포구 서교동 363-15",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-c164d7d3-ce2c-4ace-a169-f33aa264e1a3",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-c164d7d3-ce2c-4ace-a169-f33aa264e1a3",
-        "name": "에반스",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5503006,
-          "lng": 126.9222565
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "c164d7d3-ce2c-4ace-a169-f33aa264e1a3",
-        "address": "서울특별시 마포구 서교동 407-8",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-c46a2aab-bcd6-41e7-a425-d242d5a39aa5",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-c46a2aab-bcd6-41e7-a425-d242d5a39aa5",
-        "name": "블루스피릿",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5510178,
-          "lng": 126.9240265
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "c46a2aab-bcd6-41e7-a425-d242d5a39aa5",
-        "address": "서울특별시 마포구 서교동 360-18",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-21fc2151-640b-4a1a-8191-70272e7174ad",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-21fc2151-640b-4a1a-8191-70272e7174ad",
-        "name": "공공일 클럽",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5509071,
-          "lng": 126.9239197
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "21fc2151-640b-4a1a-8191-70272e7174ad",
-        "address": "서울특별시 마포구 서교동 360-18",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-2b2150ed-2a99-4eec-ae05-7ec20c8c0f13",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-2b2150ed-2a99-4eec-ae05-7ec20c8c0f13",
-        "name": "이태원메이드-Made CLUB",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5507774,
-          "lng": 126.922493
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "2b2150ed-2a99-4eec-ae05-7ec20c8c0f13",
-        "address": "서울특별시 용산구 한남동 737-32 부티크호텔 B1",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-0aaa95c6-6d04-499d-8aef-72a340afc39d",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-0aaa95c6-6d04-499d-8aef-72a340afc39d",
-        "name": "클럽 엔비 홍대",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5515289,
-          "lng": 126.923111
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "0aaa95c6-6d04-499d-8aef-72a340afc39d",
-        "address": "서울특별시 마포구 서교동 362-4",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-48b37535-145a-4b79-98d2-6ad1d748af21",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-48b37535-145a-4b79-98d2-6ad1d748af21",
-        "name": "코쿤",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5522003,
-          "lng": 126.922142
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "48b37535-145a-4b79-98d2-6ad1d748af21",
-        "address": "서울특별시 마포구 서교동 364-26",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-ea13fc5f-661f-44a2-b6ae-c96395d1ddbb",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-ea13fc5f-661f-44a2-b6ae-c96395d1ddbb",
-        "name": "홍대클럽아우라",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5523643,
-          "lng": 126.9217911
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "ea13fc5f-661f-44a2-b6ae-c96395d1ddbb",
-        "address": "서울특별시 마포구 서교동 364-24",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-a0820fc1-5ddf-4f10-bd47-e3d8b3b4e102",
       "source": "OVERTURE",
       "poi": {
@@ -2672200,39 +2671575,6 @@
       "provenance": {
         "content_id": "fb258f44-03a9-4873-88da-d6e992ca3a3d",
         "address": "서울특별시 마포구 잔다리로 31 B1층",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-d7ad748b-c4ba-40e5-9799-95a00e4de12a",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-d7ad748b-c4ba-40e5-9799-95a00e4de12a",
-        "name": "홍대 하이브 홍대에이콘",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5518456,
-          "lng": 126.920723
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "d7ad748b-c4ba-40e5-9799-95a00e4de12a",
-        "address": "서울특별시 마포구 서교동 366-7",
         "image_url": null
       }
     },
@@ -2672528,39 +2671870,6 @@
       "provenance": {
         "content_id": "950316bd-4f7e-4f6e-b79a-a6808407dad1",
         "address": "서울특별시 마포구 서교동 328-24",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-58da0553-df97-4cb7-8ad5-90ca24d084df",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-58da0553-df97-4cb7-8ad5-90ca24d084df",
-        "name": "클럽트랙",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5555344,
-          "lng": 126.9276276
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "마포구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "58da0553-df97-4cb7-8ad5-90ca24d084df",
-        "address": "서울특별시 마포구 서교동 367-11 오후빌딩 B1 Club M2",
         "image_url": null
       }
     },
@@ -2674109,39 +2673418,6 @@
       }
     },
     {
-      "provisional_id": "overture-722aad4d-194e-4777-904b-94543d7da58d",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-722aad4d-194e-4777-904b-94543d7da58d",
-        "name": "강남페이스클럽",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5149994,
-          "lng": 127.0159988
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "서초구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "722aad4d-194e-4777-904b-94543d7da58d",
-        "address": "서울특별시 서초구 강남대로69길8",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-ca90c644-b146-4ccc-bdeb-80b484726ce9",
       "source": "OVERTURE",
       "poi": {
@@ -2674435,39 +2673711,6 @@
       "provenance": {
         "content_id": "67a22a7e-2a48-452c-9230-d80b3e79ecce",
         "address": "서울특별시 강남구 역삼동 690-10",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-088c10f4-c381-4034-a180-73cef651cefc",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-088c10f4-c381-4034-a180-73cef651cefc",
-        "name": "클럽 매스",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.4995079,
-          "lng": 127.0263977
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "서초구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "088c10f4-c381-4034-a180-73cef651cefc",
-        "address": "서울특별시 서초구 서초동 1306-8",
         "image_url": null
       }
     },
@@ -2675098,39 +2674341,6 @@
       }
     },
     {
-      "provisional_id": "overture-39ebced4-c007-4284-a5fc-48344b0cb1b0",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-39ebced4-c007-4284-a5fc-48344b0cb1b0",
-        "name": "미드나잇 라운지 클럽",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5358849,
-          "lng": 126.9994125
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "39ebced4-c007-4284-a5fc-48344b0cb1b0",
-        "address": "서울특별시 용산구 이태원동 127-21 B1",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-e93e19ac-dd87-4120-a314-b9a61600268d",
       "source": "OVERTURE",
       "poi": {
@@ -2675197,39 +2674407,6 @@
       }
     },
     {
-      "provisional_id": "overture-66ce5517-c434-471d-8a1f-bf17dd934298",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-66ce5517-c434-471d-8a1f-bf17dd934298",
-        "name": "뮤트",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5351257,
-          "lng": 126.9939423
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "66ce5517-c434-471d-8a1f-bf17dd934298",
-        "address": "서울특별시 용산구 이태원동 116-1",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-131cc5cd-7fca-4af7-88ee-2820a4c6d100",
       "source": "OVERTURE",
       "poi": {
@@ -2675259,72 +2674436,6 @@
       "provenance": {
         "content_id": "131cc5cd-7fca-4af7-88ee-2820a4c6d100",
         "address": "서울특별시 용산구 이태원동 112-3",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-1aae5e1b-3348-4772-abc6-0c98711c9ef4",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-1aae5e1b-3348-4772-abc6-0c98711c9ef4",
-        "name": "이태원 힙합클럽 페이더",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5343704,
-          "lng": 126.995697
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "1aae5e1b-3348-4772-abc6-0c98711c9ef4",
-        "address": "서울특별시 용산구 이태원동 127-24",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-9195ff09-5f30-4def-95d0-d75cabd32d26",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-9195ff09-5f30-4def-95d0-d75cabd32d26",
-        "name": "이태원클럽 프리즘 - club Prizm",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5343628,
-          "lng": 126.9953918
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "용산구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "9195ff09-5f30-4def-95d0-d75cabd32d26",
-        "address": "서울특별시 용산구 이태원로 192",
         "image_url": null
       }
     },
@@ -2677042,72 +2676153,6 @@
       }
     },
     {
-      "provisional_id": "overture-5154b4b3-2a92-47ba-a83d-fdfb9b0352d2",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-5154b4b3-2a92-47ba-a83d-fdfb9b0352d2",
-        "name": "락캠프",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5074654,
-          "lng": 126.7229843
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "부평구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5154b4b3-2a92-47ba-a83d-fdfb9b0352d2",
-        "address": "인천광역시 부평구 신트리로6번길 6",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "overture-ae2b2faf-7e67-4b5c-8f1a-d23bf2f6c873",
-      "source": "OVERTURE",
-      "poi": {
-        "poi_id": "overture-ae2b2faf-7e67-4b5c-8f1a-d23bf2f6c873",
-        "name": "부평행오버",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.4937782,
-          "lng": 126.7262344
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "나이트라이프",
-        "클럽"
-      ],
-      "region": "부평구",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "ae2b2faf-7e67-4b5c-8f1a-d23bf2f6c873",
-        "address": "인천광역시 부평구 152-17 명지빌딩 B1 행오버힙합클럽",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "overture-c483545f-bf89-47a3-871b-47bcf9ef1896",
       "source": "OVERTURE",
       "poi": {
@@ -2677983,6 +2677028,1178 @@
       "provenance": {
         "content_id": "bea3a699-f31a-4570-857d-adf101f8a8a0",
         "address": "제주특별자치도 서귀포시 대정읍 상모로290번길 12-3 1층",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1112184773",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1112184773",
+        "name": "아웃풋",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.1563495403404,
+          "lng": 129.059717279969
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "부산진구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1112184773",
+        "address": "부산광역시 부산진구 서전로10번길 36",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1033496753",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1033496753",
+        "name": "멜트",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.1605734526236,
+          "lng": 129.154839286818
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "해운대구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1033496753",
+        "address": "부산광역시 해운대구 해운대로570번길 8",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-449569885",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-449569885",
+        "name": "제제",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.1555569157294,
+          "lng": 129.061071078745
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "부산진구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "449569885",
+        "address": "부산광역시 부산진구 중앙대로702번길 33",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-321220117",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-321220117",
+        "name": "해운대블루라인파크 청사포정거장",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.16122444597384,
+          "lng": 129.1913753203648
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "테마파크"
+      ],
+      "region": "해운대구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "321220117",
+        "address": "부산광역시 해운대구 청사포로 116",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-404134034",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-404134034",
+        "name": "스카이라인 루지 부산",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.19421507890638,
+          "lng": 129.21960754383272
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "테마파크"
+      ],
+      "region": "기장군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "404134034",
+        "address": "부산광역시 기장군 기장읍 기장해안로 205",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1596443792",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1596443792",
+        "name": "아르떼뮤지엄 부산",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 35.086479711108055,
+          "lng": 129.07591442192535
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "전시관"
+      ],
+      "region": "영도구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1596443792",
+        "address": "부산광역시 영도구 해양로247번길 29",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-21362956",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-21362956",
+        "name": "감천문화마을",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.09740872250286,
+          "lng": 129.01056080474402
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "관광,명소"
+      ],
+      "region": "사하구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "21362956",
+        "address": "부산광역시 사하구 감천동 1-17",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1728865012",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1728865012",
+        "name": "장림포구",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 35.0807395922834,
+          "lng": 128.956921447089
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "항구,포구"
+      ],
+      "region": "사하구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1728865012",
+        "address": "부산광역시 사하구 장림로93번길 72",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1261433818",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1261433818",
+        "name": "어텐션",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5500727172522,
+          "lng": 126.922395816667
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1261433818",
+        "address": "서울특별시 마포구 와우산로17길 11",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-27417898",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-27417898",
+        "name": "사보타지",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.55027594924282,
+          "lng": 126.92179922370765
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "27417898",
+        "address": "서울특별시 마포구 와우산로17길 22",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1600511760",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1600511760",
+        "name": "클럽nb2",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5508734636933,
+          "lng": 126.9234066942
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1600511760",
+        "address": "서울특별시 마포구 와우산로 72",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-13494735",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-13494735",
+        "name": "클럽FF",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5502708801726,
+          "lng": 126.922309605428
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "13494735",
+        "address": "서울특별시 마포구 와우산로17길 12",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-211673211",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-211673211",
+        "name": "아우라2",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5509552016121,
+          "lng": 126.921648002534
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "211673211",
+        "address": "서울특별시 마포구 잔다리로 14",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-804788904",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-804788904",
+        "name": "싱크홀 홍대점",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5509085984606,
+          "lng": 126.922023763994
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "804788904",
+        "address": "서울특별시 마포구 잔다리로 10",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-24065724",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-24065724",
+        "name": "마익스케빈",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.553096541845605,
+          "lng": 126.92251037791323
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "24065724",
+        "address": "서울특별시 마포구 어울마당로 94-13",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-2069407891",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-2069407891",
+        "name": "어썸",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5508799336703,
+          "lng": 126.92227728665
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2069407891",
+        "address": "서울특별시 마포구 잔다리로 8",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1791330114",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1791330114",
+        "name": "유토피아",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5348143960739,
+          "lng": 126.993735317951
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1791330114",
+        "address": "서울특별시 용산구 이태원로 179",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-25401003",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-25401003",
+        "name": "케이크샵",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5339085281868,
+          "lng": 126.988830739917
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "25401003",
+        "address": "서울특별시 용산구 이태원로 134",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1370707722",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1370707722",
+        "name": "파우스트",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.53402065415381,
+          "lng": 126.99453755384123
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1370707722",
+        "address": "서울특별시 용산구 보광로60길 7",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1160599308",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1160599308",
+        "name": "볼노스트",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.534046450481604,
+          "lng": 126.98958763271291
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1160599308",
+        "address": "서울특별시 용산구 이태원로 142",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-546470794",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-546470794",
+        "name": "소프 서울",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.535082142451465,
+          "lng": 126.99799511354811
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "546470794",
+        "address": "서울특별시 용산구 이태원로 217",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-892725499",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-892725499",
+        "name": "세비지",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5347369617902,
+          "lng": 126.994802254004
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "892725499",
+        "address": "서울특별시 용산구 이태원로 187",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-209730316",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-209730316",
+        "name": "프리즘",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5348495915168,
+          "lng": 126.994908599878
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "209730316",
+        "address": "서울특별시 용산구 이태원로 189",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1738529121",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1738529121",
+        "name": "클럽개더링",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5349396770003,
+          "lng": 126.994580480907
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1738529121",
+        "address": "서울특별시 용산구 이태원로27가길 13",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-113135378",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-113135378",
+        "name": "클럽레이스",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.51507560520138,
+          "lng": 127.01944401562663
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽"
+      ],
+      "region": "서초구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "113135378",
+        "address": "서울특별시 서초구 강남대로 597",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-23772673",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-23772673",
+        "name": "페인터즈 광화문전용관 경향아트힐",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.56815390855725,
+          "lng": 126.96967004827121
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "공연장,연극극장"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "23772673",
+        "address": "서울특별시 중구 정동길 3",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-12526895",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-12526895",
+        "name": "명동난타극장",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5634679028825,
+          "lng": 126.983751090997
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "공연장,연극극장"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "12526895",
+        "address": "서울특별시 중구 명동길 26",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-27560699",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-27560699",
+        "name": "롯데월드 어드벤처",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.51113059993883,
+          "lng": 127.09811980036908
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "테마파크"
+      ],
+      "region": "송파구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "27560699",
+        "address": "서울특별시 송파구 올림픽로 240",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-680691609",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-680691609",
+        "name": "서울스카이",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.512509075161674,
+          "lng": 127.10243669217601
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "전망대"
+      ],
+      "region": "송파구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "680691609",
+        "address": "서울특별시 송파구 올림픽로 300",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-78694546",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-78694546",
+        "name": "더클라임 연남점",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5576667697525,
+          "lng": 126.925891892022
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "클라이밍"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "78694546",
+        "address": "서울특별시 마포구 양화로 186",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-11331488",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-11331488",
+        "name": "서울숲",
+        "category": "NATURE",
+        "coord": {
+          "lat": 37.5443222301513,
+          "lng": 127.037617759165
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "도시근린공원"
+      ],
+      "region": "성동구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "11331488",
+        "address": "서울특별시 성동구 성수동1가 678-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-467710256",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-467710256",
+        "name": "익선동한옥거리",
+        "category": "SIGHT",
+        "coord": {
+          "lat": 37.5734371942191,
+          "lng": 126.989775723896
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "테마거리"
+      ],
+      "region": "종로구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "467710256",
+        "address": "서울특별시 종로구 익선동",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1508345156",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1508345156",
+        "name": "아르떼뮤지엄 제주",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 33.39670048068425,
+          "lng": 126.34501060259869
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "미술관"
+      ],
+      "region": "제주시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1508345156",
+        "address": "제주특별자치도 제주시 애월읍 어림비로 478",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1682547680",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1682547680",
+        "name": "빛의 벙커",
+        "category": "CULTURE",
+        "coord": {
+          "lat": 33.439875092199955,
+          "lng": 126.8992114483271
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "전시관"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1682547680",
+        "address": "제주특별자치도 서귀포시 성산읍 서성일로1168번길 89-17",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-9461977",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-9461977",
+        "name": "카멜리아힐",
+        "category": "NATURE",
+        "coord": {
+          "lat": 33.290336568694215,
+          "lng": 126.36819010853146
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "수목원,식물원"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "9461977",
+        "address": "제주특별자치도 서귀포시 안덕면 병악로 166",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-7940952",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-7940952",
+        "name": "서귀포잠수함",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 33.23920081033737,
+          "lng": 126.55842343781634
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "체험여행"
+      ],
+      "region": "서귀포시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "7940952",
+        "address": "제주특별자치도 서귀포시 남성중로 40",
         "image_url": null
       }
     }
