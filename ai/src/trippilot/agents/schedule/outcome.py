@@ -18,7 +18,7 @@ from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import ItinerarySolution
 from trippilot.domain.llm import CandidatePool, PoiExplanation
 from trippilot.domain.persona import PersonaSummary, TasteTag
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi import Poi, PoiCategory
 
 
 class ScoringMode(Enum):
@@ -148,6 +148,24 @@ def candidates_report(
 
 
 @dataclass(frozen=True, slots=True)
+class RepairHints:
+    """다시 짜기 1회 수리의 재료 (/replan 의 `llm_composed` 만) — **와이어로 안 나간다.**
+
+    - `why`: 못 놓인 필수 방문 → closed|hours|far|full|fits (`fallback_assembler.explain_unplaced`)
+    - `fits`: 지금 해의 빈 틈에 그대로 들어가는 후보 → 가장 이른 시작(내부 전용 — LLM 에 시각을 안 준다)
+    - `pool`: ②⁗ 보강 **뒤**·추정 영업시간(`presume_hours`) **앞**의 풀 — 2차가 보강을 다시 사지 않는다
+    - `fixed_pois`: ⓪ 가 풀 밖에서 찾은 POI — 2차가 다시 묻지 않는다(잔여 ≈0 에서 물으면 잠금이 빠진다)
+    - `probed`: 틈 검사를 돌린 후보 수
+    """
+
+    why: Mapping[PoiId, str]
+    fits: Mapping[PoiId, datetime]
+    pool: CandidatePool
+    fixed_pois: Mapping[PoiId, Poi]
+    probed: int
+
+
+@dataclass(frozen=True, slots=True)
 class GenerationOutcome:
     """조립 결과. FAILED ⇔ solution=None ⇔ error 존재 (셋이 서로 거짓말할 수 없다).
 
@@ -173,6 +191,9 @@ class GenerationOutcome:
     # LLM 점수 모드에서 점수가 빠져 규칙 점수로 보충한 후보 수 — 와이어 MIXED 의 근거.
     # 기본값 없음: 생성 지점이 잊으면 TypeError 로 드러난다(위 두 필드와 같은 이유).
     rule_backfill_count: int
+    # 다시 짜기 1회 수리 재료(배선 `_repair_day`) — 해가 있고 구성 LLM 이 고른 곳이 빠졌을 때만.
+    # 기본값 없음(위 필드들과 같은 이유).
+    repair_hints: RepairHints | None
     error: str | None = None
 
     def __post_init__(self) -> None:
@@ -189,6 +210,8 @@ class GenerationOutcome:
             raise ValueError("해가 없는데 solved_at 존재 — 검증 시각을 지어낼 수 없다")
         if self.solution is None and self.slot_alternatives:
             raise ValueError("해가 없는데 차선책 존재 — 슬롯 없이 슬롯별 제안을 지어낼 수 없다")
+        if self.solution is None and self.repair_hints is not None:
+            raise ValueError("해가 없는데 수리 재료 존재 — 빈 틈은 해에서만 읽는다")
 
     @property
     def is_fallback(self) -> bool:
@@ -220,5 +243,6 @@ def failed_outcome(
         solved_at=None,  # 해가 없다 — 검증 시각을 지어내지 않는다
         slot_alternatives={},  # 슬롯이 없다 — 슬롯별 제안도 없다
         rule_backfill_count=0,
+        repair_hints=None,  # 해가 없다 — 빈 틈도 없다
         error=error,
     )

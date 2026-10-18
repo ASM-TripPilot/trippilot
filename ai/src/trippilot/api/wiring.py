@@ -3862,6 +3862,8 @@ def build_orchestrator(
         fees=fees,
         # 풀 밖 고정 블록 POI 조회 (TRIP-1177) — 없으면 이동을 0분으로 놓은 해가 나갔다.
         poi_db=poi_db,
+        # 다시 짜기 1회 수리의 틈 판정 — 위 체인(`provider`)과 같은 설정이라야 판정이 솔버와 맞는다.
+        assembly_config=acfg,
     )
     # 수집기는 하나를 공유한다 — 코디네이터(generate)와 경계(replan·edit)가 같은
     # 요구표·같은 Provider 를 쓴다. 경로마다 따로 만들면 표가 갈라진다.

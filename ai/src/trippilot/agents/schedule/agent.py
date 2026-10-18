@@ -51,13 +51,16 @@ from trippilot.agents.schedule.outcome import (
     Degradation,
     GenerationOutcome,
     GenerationStatus,
+    RepairHints,
     ScoringMode,
     SlotAlternative,
     _wanted_categories,
     failed_outcome,
 )
+from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.assembly_engine.facade import AssemblyConflictError
+from trippilot.assembly_engine.fallback_assembler import explain_unplaced
 from trippilot.assembly_engine.scorer import (
     DIRECTIVE_STEP,
     build_rule_score,
@@ -65,7 +68,7 @@ from trippilot.assembly_engine.scorer import (
     near_fit,
 )
 from trippilot.poi_curation.place_fees import EMPTY as FEES_EMPTY, FeeTable
-from trippilot.assembly_engine.travel import haversine_km
+from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -263,6 +266,10 @@ class ScheduleTask:
     # 그러면 점수는 무엇을 넣을지를 정하지 않으므로 점수 LLM 을 부르지 않는다. 같은 재계획 시한
     # (25s)에 PlanB·구성·점수 LLM 셋이 들어가면 넘친다(2026-10-13 504, #1102).
     llm_composed: bool = False
+    # 다시 짜기 1회 수리의 2차 풀이(배선 `_repair_day`) — 1차가 남긴 재료. 있으면 ⓪ 풀 밖 조회와
+    # ②⁗ 영업시간 보강을 다시 하지 않고(1차 값 그대로 — 2차는 잔여 ≈0 에서 시작해 다시 물으면 시한
+    # 강등으로 빠지고, 영업시간은 건마다 돈이 든다) 수리 재료도 다시 만들지 않는다(수리는 한 번).
+    reuse: RepairHints | None = None
 
 
 
@@ -273,6 +280,10 @@ class ScheduleTask:
 PRESUMED_OPEN_MIN, PRESUMED_CLOSE_MIN = 7 * 60, 23 * 60
 PRESUMED_NIGHT = (16 * 60, 26 * 60)  # 야경 16:00~익일 02:00
 PRESUMED_NIGHTLIFE = (20 * 60, 28 * 60)  # 클럽·바 20:00~익일 04:00 (tags 에 NIGHTLIFE_TAG)
+
+# 1회 수리의 틈 검사 후보 상한(점수 순) — 순수 계산(하버사인·I/O 0)이라 싸지만 풀 전체를 돌 이유가 없다.
+# 배선은 이 중 빈 틈에 드는 곳에서 20곳만 2차 후보로 싣는다(`_repair_day`).
+_FIT_PROBE_MAX = 120
 
 
 def presume_hours(pool: CandidatePool, keep: Collection[PoiId] = ()) -> CandidatePool:
@@ -309,6 +320,7 @@ class ScheduleAgent:
         hours: PlaceHoursPort | None = None,
         place_ids: Mapping[str, str] | None = None,
         poi_db: PoiDbPort | None = None,
+        assembly_config: AssemblyConfig | None = None,
     ) -> None:
         self._scoring = scoring_worker
         self._assembly_provider = assembly_provider
@@ -330,6 +342,9 @@ class ScheduleAgent:
         # 풀 밖 고정 블록 POI 조회 (TRIP-1177). 미주입이면 ⓪ 을 건너뛰고, 풀 밖 블록은
         # 인덱스에 없어 체인이 그 인접 이동을 위반으로 본다(0분 배치가 나가지 않는다).
         self._poi_db = poi_db
+        # 수리 재료(`RepairHints`)의 틈 판정 — 어셈블리 체인과 **같은 설정**이어야 판정이 솔버와 맞는다.
+        # 미주입이면 재료를 만들지 않는다(기능 부재 — 배선이 1회 수리를 건너뛰고 노트로 남긴다).
+        self._acfg = assembly_config
 
     # ── 공개 API ────────────────────────────────────────────────────
 
@@ -358,7 +373,7 @@ class ScheduleAgent:
         # ⓪ 풀 밖 고정 블록·필수 방문 POI — 점수 **앞**에서 묻는다. 어셈블리 직전이면 점수
         #    단계가 상한을 다 쓴 날 시한이 바닥나 필수방문이 시한 탓에 빠진다. 합류는 ④ 의 인덱스.
         fixed_blocks, required_visits, fixed_pois = self._resolve_fixed_pois(
-            request, pool, budget, t0, steps, trace_id, now)
+            request, pool, budget, t0, steps, trace_id, now, task.reuse)
 
         # ② 게이트웨이 선호 점수 (전 일자 공용 1회) — 실패·스킵이면 규칙 점수 (INV-4)
         #    잔여는 어셈블리 바닥(`c2_reserved_ms`)을 **뺀** 값이다 — 다른 단계(⓪·②′·②⁗)와 같은
@@ -493,7 +508,11 @@ class ScheduleAgent:
         #    `Poi` 본체가 없어(poi_id·score·is_llm_score) 영업시간을 담을 자리가 없고,
         #    HC1 이 읽는 것은 바로 아래 `for_pool(pool.pois)` 이다. 이 교체가 그보다
         #    아래면 조립은 옛 POI 를 본다 — 이 리포가 같은 모양으로 네 번 당했다.
-        pool = self._enrich_hours(pool, candidates, budget, t0, steps, trace_id, now)
+        if task.reuse is None:
+            pool = self._enrich_hours(pool, candidates, budget, t0, steps, trace_id, now)
+        else:  # 1회 수리의 2차 — 풀이 이미 1차 보강본이다(`RepairHints.pool`). 강등이 아니다.
+            self._observe(trace_id, now, "hours", "enrich", "enrich", "hours_reused")
+        enriched = pool  # 추정 전 — 수리 재료가 이 풀을 2차로 넘긴다
         # 그래도 없는 곳은 새벽에 놓지 않는다 (TRIP-1397) — 사용자가 고정·필수로 고른 곳은 빼고.
         pool = presume_hours(pool, keep={fb.poi_id for fb in request.fixed_blocks}
                              | {rv.poi_id for rv in request.required_visits
@@ -582,6 +601,13 @@ class ScheduleAgent:
         if missed:
             self._degrade(steps, trace_id, now, "directives", "add_one", "(unplaced)",
                           "add_one_unplaced: " + ",".join(str(p) for p in missed))
+        # 다시 짜기 1회 수리 재료 — 구성 LLM 이 고른 곳이 빠졌을 때만(배선 `_repair_day` 가 읽는다).
+        hints = None
+        if (task.llm_composed and task.reuse is None and self._acfg is not None
+                and any(rv.reason == "llm_compose" and rv.poi_id not in placed_ids
+                        for rv in required_visits)):
+            hints = self._repair_hints(problem, solution, index, enriched, fixed_pois, candidates,
+                                       placed_ids, trace_id, now)
 
         # ⑤ (선택) 설명 부착 — 실패해도 일정은 그대로 나간다
         explanations = self._explain(
@@ -611,6 +637,7 @@ class ScheduleAgent:
             solved_at=solved_at,
             slot_alternatives=alternatives,
             rule_backfill_count=backfilled,
+            repair_hints=hints,
         )
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────
@@ -1119,6 +1146,7 @@ class ScheduleAgent:
         steps: list[Degradation],
         trace_id: TraceId,
         now: datetime,
+        reuse: RepairHints | None = None,
     ) -> tuple[tuple[FixedBlock, ...], tuple[RequiredVisit, ...], dict[PoiId, Poi]]:
         """(남길 고정 블록, 남길 필수 방문, 인덱스에 합류할 POI). 못 찾은 것은 **빼고 강등을 남긴다.**
 
@@ -1131,6 +1159,9 @@ class ScheduleAgent:
         포트는 시한을 받지 않는다 — 진입 전에 어셈블리 바닥을 침범하지 않는지 보고, 호출이
         남은 시한을 넘겼으면 `overrun` 으로 남긴다(찾은 값은 정본이라 쓴다 — 버리면
         필수방문이 빠진다). 호출 자체의 상한은 어댑터의 HTTP 타임아웃이다.
+
+        `reuse`(1회 수리의 2차)면 묻지 않고 1차가 찾은 것을 쓴다 — 2차는 잔여 ≈0 에서 시작해 물으면
+        시한 강등으로 1차엔 있던 풀 밖 잠금이 빠진다. 1차도 못 찾은 것은 같은 강등으로 뺀다.
         """
         want = (frozenset(b.poi_id for b in request.fixed_blocks)
                 | frozenset(r.poi_id for r in request.required_visits)) - pool.poi_ids
@@ -1142,7 +1173,13 @@ class ScheduleAgent:
         found: dict[PoiId, Poi] = {}
         available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
                      - budget.c2_reserved_ms)
-        if available <= 0:
+        if reuse is not None:
+            found = {k: v for k, v in reuse.fixed_pois.items() if k in want}
+            lost = sorted(want - found.keys(), key=str)
+            if lost:
+                self._degrade(steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
+                              "fixed_poi_unresolved: " + ",".join(f"{pid}(not_reused)" for pid in lost))
+        elif available <= 0:
             self._degrade(steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
                           f"deadline:available={available}ms")
         else:
@@ -1171,6 +1208,45 @@ class ScheduleAgent:
         kept_required = tuple(r for r in request.required_visits
                               if r.poi_id not in want or r.poi_id in found)
         return kept, kept_required, found
+
+    # ── 다시 짜기 1회 수리 재료 ─────────────────────────────────────
+
+    def _repair_hints(
+        self,
+        problem: ItineraryProblem,
+        solution: ItinerarySolution,
+        index: Mapping[PoiId, Poi],
+        enriched: CandidatePool,
+        fixed_pois: Mapping[PoiId, Poi],
+        candidates: tuple[ScoredPoi, ...],
+        placed: Collection[PoiId],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> RepairHints | None:
+        """못 놓인 필수 방문의 까닭 + 지금 해의 빈 틈에 드는 후보. 실패하면 None(해·status 는 그대로).
+
+        판정 인덱스는 ④ 가 푼 것과 같다(보강·추정 뒤 + 풀 밖 고정 POI) — 솔버가 본 영업시간으로 말한다.
+        """
+        reserved = ({fb.poi_id for fb in problem.fixed_blocks}
+                    | {rv.poi_id for rv in problem.required_visits})
+        probe = tuple(
+            c.poi_id for c in sorted(candidates, key=lambda c: (-c.score, str(c.poi_id)))
+            if c.poi_id not in placed and c.poi_id not in reserved
+            and c.poi_id not in problem.excluded_poi_ids and c.poi_id not in fixed_pois
+            and (p := index.get(c.poi_id)) is not None and p.category is not PoiCategory.STAY
+        )[:_FIT_PROBE_MAX]
+        try:
+            why, fits = explain_unplaced(problem, solution, index, TravelEstimator(self._acfg),
+                                         self._acfg, probe)
+        except Exception as e:  # noqa: BLE001 — 부가 단계가 생성을 깨면 안 된다(⑥ 와 같은 규약)
+            self._observe(trace_id, now, "repair", "repair_hints", "(none)",
+                          f"repair_hints_error: {type(e).__name__}: {e}")
+            return None
+        self._observe(trace_id, now, "repair", "repair_hints", "repair_hints",
+                      f"repair_hints: unplaced={len(why)} fits={len(fits)} "
+                      f"probed={len(probe)}/{len(candidates)}")
+        return RepairHints(why=why, fits=fits, pool=enriched, fixed_pois=dict(fixed_pois),
+                           probed=len(probe))
 
     # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────
 
