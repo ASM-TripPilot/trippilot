@@ -29,6 +29,13 @@ import {
 } from '@/shared/api/index.hooks';
 import { useGetMePersonalization } from '@/shared/api/index.hooks';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
+import {
+  cacheFileCount,
+  cacheFilesIn,
+  failFileWrites,
+  resetFakeFs,
+  seedCacheFile,
+} from '@/test-support/fakeExpoFileSystem';
 import { SettingsPage } from '..';
 import {
   promptAndRegisterPush,
@@ -90,6 +97,34 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   router: { push: (...args: unknown[]) => mockPush(...args), back: jest.fn() },
 }));
+// TRIP-1422 — 내보내기 파일 공유의 네이티브 경계 셋만 바꾼다(페이지·실행 함수·어댑터 파일은 진짜다).
+//  ① 'expo' 는 "이 빌드에 모듈이 있나" 조회만 가로챈다 — jest-expo 는 ExpoSharing 을 늘 "있다"고 답해서(실측)
+//     모듈 없는 빌드는 이 집합에 이름을 넣어야만 재현된다. 나머지 export 는 진짜를 그대로 비춘다(Proxy).
+//  ② expo-file-system 은 메모리 대역 — jest-expo 목에는 File·Paths 가 아예 없다(실측: undefined).
+//  ③ expo-sharing 은 공유 시트 대신 인자만 기록한다.
+const mockMissingNativeModules = new Set<string>();
+jest.mock('expo', () => {
+  const actual = jest.requireActual('expo');
+  return new Proxy(actual, {
+    get(target, key) {
+      if (key !== 'requireOptionalNativeModule') return target[key];
+      return (name: string) =>
+        mockMissingNativeModules.has(name)
+          ? null
+          : target.requireOptionalNativeModule(name);
+    },
+  });
+});
+jest.mock(
+  'expo-file-system',
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  () => require('@/test-support/fakeExpoFileSystem').fakeExpoFileSystemModule
+);
+const mockShareAsync = jest.fn();
+jest.mock('expo-sharing', () => ({
+  __esModule: true,
+  shareAsync: (...args: unknown[]) => mockShareAsync(...args),
+}));
 
 beforeEach(() => {
   mockExpoConfig = null;
@@ -115,6 +150,9 @@ beforeEach(() => {
 // 토스트 스토어는 모듈 싱글턴이라 관점 사이로 샌다 — 모든 테스트 뒤에 비운다(짝 앵커: S3 "제출 전엔 토스트가 없다").
 afterEach(() => {
   resetToast();
+  // 메모리 파일 시스템·"모듈 없음" 집합도 모듈 싱글턴이다 — 앞 테스트가 쓴 파일이 뒤 테스트의 "파일 1개" 단언으로 새지 않게.
+  resetFakeFs();
+  mockMissingNativeModules.clear();
 });
 
 /** 뮤테이션 목이 부르는 콜백 모양(react-query 의 훅 옵션 `mutation` 과 `mutate` 호출별 옵션이 같다). */
@@ -163,7 +201,7 @@ function primeL05Hooks(): void {
   });
 }
 
-// TRIP-608 · TRIP-935 · TRIP-990
+// TRIP-608 · TRIP-935 · TRIP-990 · TRIP-1422
 describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () => {
   /**
    * TRIP-608 — l05 설정 배선 승인 테스트(딥 경로 목 seam).
@@ -511,80 +549,327 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
     });
   });
 
-  describe('TRIP-608 · 내보내기 (AC-5 · INV-4)', () => {
-    it('내보내기 누르면 잘린 목록을 표면화하고 Share 로 넘긴다', async () => {
-      const shareSpy = jest.spyOn(Share, 'share').mockResolvedValue({
-        action: 'sharedAction',
-      } as never);
-      mockUseGetMeExport.mockReturnValue({
-        refetch: jest.fn().mockResolvedValue({
-          data: makeExport({
-            truncatedSections: ['photos'],
-            sections: ['trips', 'photos'],
-          }),
-        }),
+  /**
+   * TRIP-608(잘림 고지·조회 실패) · TRIP-1422(텍스트 공유 → .json 파일 공유) — 설정 > 데이터 내보내기.
+   *
+   * 무엇을 보장하나: 누르면 `GET /me/export` 응답을 **그대로** `.json` 파일 하나로 캐시 전용 폴더에 써서
+   * OS 공유 시트에 **파일로** 넘긴다(처리방침 §5 "파일로"). 옛 `Share.share({ message })` 텍스트 공유는 0회다.
+   * 실패(조회 실패·공유 모듈 없는 빌드·쓰기/공유 실패)는 `settings-export-error` 한 자리에 문구로 알린다(INV-4).
+   * 잘림 고지는 조회가 성공했으면 공유가 실패해도 남는다(01 Q5). 진행 중 다시 누르면 무시한다(01 Q6).
+   *
+   * 목: 페이지가 부르는 훅(조회)과 네이티브 경계 셋(파일 시스템·공유·모듈 조회 — 파일 위 jest.mock)만 바꾼다.
+   * 파일을 쓰고 공유하는 실행 함수와 어댑터 파일은 진짜가 돈다.
+   *
+   * jest 사각(6-b 실기 iOS): 실제 파일이 생기는가 · 공유 시트가 실제로 뜨는가 · 파일 앱 저장/메일 첨부로 열리는가 ·
+   *   캐시 폴더에 실제로 1개만 남는가 · 재빌드 전 빌드에서 크래시 없이 안내가 뜨는가. Android 는 미확인(01 Q8).
+   *
+   * 3동작 뼈대: 준비=조회 응답·파일 시스템 상태 → 실행=내보내기 행 누르기 → 단언=쓴 파일·공유 인자·화면 문구.
+   */
+  describe('내보내기 — 응답 JSON 을 파일로 공유한다 (INV-4)', () => {
+    const EXPORT_DIR = 'trippilot-export';
+    const EXPORT_FILE_NAME = 'trippilot-export-2026-08-30.json'; // makeExport 의 exportedAt 2026-08-30T00:00:00Z
+    const FETCH_FAILED =
+      '내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요.';
+    const FILE_FAILED = '내보내기 파일을 만들지 못했어요. 다시 시도해 주세요.';
+    const NO_SHARE_MODULE =
+      '이 앱 버전에서는 파일로 내보낼 수 없어요. 앱을 업데이트해 주세요.';
+
+    let textShareSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      mockShareAsync.mockReset();
+      mockShareAsync.mockResolvedValue(undefined);
+      // 옛 텍스트 공유 — 이제는 한 번도 불리면 안 된다.
+      textShareSpy = jest
+        .spyOn(Share, 'share')
+        .mockResolvedValue({ action: 'sharedAction' } as never);
+    });
+
+    afterEach(() => {
+      textShareSpy.mockRestore();
+    });
+
+    /** 조회가 이 응답을 돌려주게 한다. 돌려준 refetch 목으로 조회 횟수를 잰다. */
+    function primeExport(data: AccountExport | undefined): jest.Mock {
+      const refetch = jest.fn().mockResolvedValue({ data });
+      mockUseGetMeExport.mockReturnValue({ refetch });
+      return refetch;
+    }
+
+    /** 바깥에서 끝낼 때까지 붙잡아 두는 Promise — "아직 진행 중"을 만든다. */
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      let reject!: (error: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
       });
+      return { promise, resolve, reject };
+    }
+
+    function pressExport(): void {
+      fireEvent.press(screen.getByTestId('settings-export-row'));
+    }
+
+    it('누르면 응답을 .json 파일 하나로 써서 그 파일을 공유 시트에 넘긴다 — 텍스트 공유는 없다', async () => {
+      // 준비: 잘린 섹션이 있는 응답(파일 안에도 truncatedSections 가 남아야 한다).
+      const data = makeExport({
+        truncatedSections: ['photos'],
+        sections: ['trips', 'photos'],
+      });
+      primeExport(data);
+      renderPage();
+      // 앵커: 누르기 전엔 쓴 파일이 하나도 없다.
+      expect(cacheFileCount()).toBe(0);
+
+      // 실행
+      pressExport();
+
+      // 단언: 공유 1회 — 인자는 방금 쓴 그 파일의 경로와 JSON 꼬리표.
+      await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(1));
+      const files = cacheFilesIn(EXPORT_DIR);
+      expect(files.map((file) => file.name)).toEqual([EXPORT_FILE_NAME]);
+      expect(JSON.parse(files[0].text)).toEqual(data);
+      expect(mockShareAsync).toHaveBeenCalledWith(
+        files[0].uri,
+        expect.objectContaining({
+          mimeType: 'application/json',
+          UTI: 'public.json',
+        })
+      );
+      expect(textShareSpy).not.toHaveBeenCalled();
+    });
+
+    it('잘린 섹션이 있으면 파일을 공유하면서 설정 행의 잘림 고지도 지금 문구 그대로 띄운다', async () => {
+      primeExport(
+        makeExport({
+          truncatedSections: ['photos'],
+          sections: ['trips', 'photos'],
+        })
+      );
       renderPage();
 
-      // 실행: 내보내기 행을 누른다(지연 조회 → 요약·Share).
-      fireEvent.press(screen.getByTestId('settings-export-row'));
+      pressExport();
 
-      // 단언: Share 로 핸드오프(메시지 문자열).
-      await waitFor(() => expect(shareSpy).toHaveBeenCalledTimes(1));
-      expect(shareSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.any(String) })
-      );
-      // 단언(부분포함): 잘린 몫을 조용히 삼키지 않고 표면화한다(INV-4).
+      await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(1));
       expect(screen.getByTestId('settings-export-truncated')).toHaveTextContent(
-        /photos/
+        '일부 항목이 잘렸어요: photos'
       );
-
-      shareSpy.mockRestore();
     });
 
-    it('TRIP-620 [608]: 조회 실패(refetch data undefined)면 인라인 오류를 띄우고 Share 로 안 넘긴다', async () => {
-      // 준비: refetch 는 실패해도 throw 하지 않고 { data: undefined } 를 resolve 한다(react-query) —
-      // 그래서 페이지의 `if(!data)` 분기가 실행 경로다(목도 reject 아닌 mockResolvedValue).
-      const shareSpy = jest.spyOn(Share, 'share').mockResolvedValue({
-        action: 'sharedAction',
-      } as never);
-      mockUseGetMeExport.mockReturnValue({
-        refetch: jest.fn().mockResolvedValue({ data: undefined }),
-      });
+    it('잘린 섹션이 없으면 잘림 고지는 없다', async () => {
+      primeExport(makeExport({ truncatedSections: [], sections: ['trips'] }));
       renderPage();
 
-      // 실행: 내보내기 행을 누른다(지연 조회 → 실패 분기).
-      fireEvent.press(screen.getByTestId('settings-export-row'));
+      pressExport();
 
-      // 단언(급소): 조용히 삼키지 않고 인라인 오류를 표면화한다(INV-4).
+      await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(1));
+      expect(screen.queryByTestId('settings-export-truncated')).toBeNull();
+    });
+
+    it('조회가 실패하면(data 없음) 조회 실패 문구만 띄우고 파일도 공유도 만들지 않는다', async () => {
+      // 준비: react-query refetch 는 실패해도 throw 하지 않고 { data: undefined } 를 resolve 한다.
+      primeExport(undefined);
+      renderPage();
+
+      pressExport();
+
       await waitFor(() =>
-        expect(screen.getByTestId('settings-export-error')).toBeOnTheScreen()
+        expect(screen.getByTestId('settings-export-error')).toHaveTextContent(
+          FETCH_FAILED
+        )
       );
-      // 짝: 실패라 잘림 고지도 없고 Share 핸드오프도 없다(쓰레기 데이터 미전달).
       expect(screen.queryByTestId('settings-export-truncated')).toBeNull();
-      expect(shareSpy).not.toHaveBeenCalled();
-
-      shareSpy.mockRestore();
+      expect(cacheFileCount()).toBe(0);
+      expect(mockShareAsync).not.toHaveBeenCalled();
+      expect(textShareSpy).not.toHaveBeenCalled();
     });
 
-    it('잘린 항목이 없으면 잘림 고지 미표시(성공만)', async () => {
-      const shareSpy = jest.spyOn(Share, 'share').mockResolvedValue({
-        action: 'sharedAction',
-      } as never);
-      mockUseGetMeExport.mockReturnValue({
-        refetch: jest.fn().mockResolvedValue({
-          data: makeExport({ truncatedSections: [], sections: ['trips'] }),
-        }),
-      });
+    it('이 빌드에 공유 모듈이 없으면 앱 업데이트 안내를 띄우고, 파일도 쓰지 않고 공유도 부르지 않는다', async () => {
+      // 준비: 재빌드 전 dev build — ExpoSharing 조회가 null.
+      mockMissingNativeModules.add('ExpoSharing');
+      primeExport(makeExport({ truncatedSections: [], sections: ['trips'] }));
       renderPage();
 
-      fireEvent.press(screen.getByTestId('settings-export-row'));
+      pressExport();
 
-      await waitFor(() => expect(shareSpy).toHaveBeenCalledTimes(1));
-      // 단언(없어야 한다): 잘린 게 없으면 고지가 안 뜬다.
-      expect(screen.queryByTestId('settings-export-truncated')).toBeNull();
+      await waitFor(() =>
+        expect(screen.getByTestId('settings-export-error')).toHaveTextContent(
+          NO_SHARE_MODULE
+        )
+      );
+      // 모듈을 먼저 확인한다 — 못 보낼 파일(개인 데이터)을 기기에 남기지 않는다.
+      expect(cacheFileCount()).toBe(0);
+      expect(mockShareAsync).not.toHaveBeenCalled();
+      // 텍스트 공유로 몰래 되돌아가지도 않는다.
+      expect(textShareSpy).not.toHaveBeenCalled();
+    });
 
-      shareSpy.mockRestore();
+    it('파일 쓰기가 실패하면 파일 실패 문구를 띄우고 공유는 부르지 않는다 — 잘림 고지는 남는다', async () => {
+      failFileWrites();
+      primeExport(
+        makeExport({
+          truncatedSections: ['photos'],
+          sections: ['trips', 'photos'],
+        })
+      );
+      renderPage();
+
+      pressExport();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('settings-export-error')).toHaveTextContent(
+          FILE_FAILED
+        )
+      );
+      expect(mockShareAsync).not.toHaveBeenCalled();
+      // 조회는 성공했으니 "일부 잘림"은 여전히 사실이다(01 Q5).
+      expect(screen.getByTestId('settings-export-truncated')).toHaveTextContent(
+        '일부 항목이 잘렸어요: photos'
+      );
+    });
+
+    it('공유 시트가 실패해도 파일 실패 문구를 띄운다 — 잘림 고지는 남는다', async () => {
+      mockShareAsync.mockRejectedValueOnce(
+        new Error('Another share request is being processed now.')
+      );
+      primeExport(
+        makeExport({
+          truncatedSections: ['photos'],
+          sections: ['trips', 'photos'],
+        })
+      );
+      renderPage();
+
+      pressExport();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('settings-export-error')).toHaveTextContent(
+          FILE_FAILED
+        )
+      );
+      expect(screen.getByTestId('settings-export-truncated')).toHaveTextContent(
+        '일부 항목이 잘렸어요: photos'
+      );
+    });
+
+    it('공유가 실패한 뒤 다시 눌러 성공하면 실패 문구가 사라진다', async () => {
+      mockShareAsync.mockRejectedValueOnce(new Error('share failed'));
+      primeExport(makeExport({ truncatedSections: [], sections: ['trips'] }));
+      renderPage();
+      pressExport();
+      await waitFor(() =>
+        expect(screen.getByTestId('settings-export-error')).toHaveTextContent(
+          FILE_FAILED
+        )
+      );
+
+      // 실행: 다시 누른다(이번엔 공유 성공).
+      pressExport();
+
+      await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(screen.queryByTestId('settings-export-error')).toBeNull()
+      );
+    });
+
+    it('이전 내보내기 파일이 남아 있어도 전용 폴더를 비우고 이번 파일 하나만 남긴다 — 다른 폴더는 건드리지 않는다', async () => {
+      // 준비: 지난 내보내기 2개(다른 날 · 같은 날 이름의 낡은 내용) + 다른 기능의 캐시 파일.
+      seedCacheFile(
+        EXPORT_DIR,
+        'trippilot-export-2026-08-01.json',
+        '{"old":1}'
+      );
+      seedCacheFile(EXPORT_DIR, EXPORT_FILE_NAME, '{"stale":true}');
+      seedCacheFile('trippilot-u10', 'state.json', 'keep');
+      const data = makeExport({ truncatedSections: [], sections: ['trips'] });
+      primeExport(data);
+      renderPage();
+
+      pressExport();
+
+      await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(1));
+      const files = cacheFilesIn(EXPORT_DIR);
+      expect(files.map((file) => file.name)).toEqual([EXPORT_FILE_NAME]);
+      expect(JSON.parse(files[0].text)).toEqual(data);
+      expect(cacheFilesIn('trippilot-u10').map((file) => file.text)).toEqual([
+        'keep',
+      ]);
+    });
+
+    it('같은 순간 두 번 눌러도 조회와 공유는 한 번씩만 일어난다', async () => {
+      // 준비: 조회를 붙잡아 첫 내보내기가 끝나지 않은 상태를 만든다.
+      const fetch = deferred<{ data: AccountExport }>();
+      const refetch = jest.fn(() => fetch.promise);
+      mockUseGetMeExport.mockReturnValue({ refetch });
+      renderPage();
+
+      // 실행: act 하나 안에서 두 번 — 두 번째 누름은 다시 그리기 전의 같은 화면을 누른다(실기 더블탭).
+      act(() => {
+        pressExport();
+        pressExport();
+      });
+
+      expect(refetch).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        fetch.resolve({
+          data: makeExport({ truncatedSections: [], sections: ['trips'] }),
+        });
+      });
+      await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(1));
+      expect(refetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('공유 시트가 떠 있는 동안 다시 눌러도 무시되고, 시트가 닫힌 뒤에는 다시 내보낸다', async () => {
+      // 준비: 공유를 붙잡아 "시트가 떠 있는" 상태를 만든다(iOS 는 이때 또 부르면 reject 한다).
+      const sheet = deferred<void>();
+      mockShareAsync.mockReturnValueOnce(sheet.promise);
+      const refetch = primeExport(
+        makeExport({ truncatedSections: [], sections: ['trips'] })
+      );
+      renderPage();
+      pressExport();
+      await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(1));
+
+      // 실행 1: 시트가 떠 있는 동안 다시 누른다.
+      await act(async () => {
+        pressExport();
+      });
+
+      expect(refetch).toHaveBeenCalledTimes(1);
+      expect(mockShareAsync).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('settings-export-error')).toBeNull();
+
+      // 실행 2: 시트가 닫힌 뒤(공유 resolve) 다시 누른다 — 잠금이 풀려 다시 동작한다(반대 짝).
+      await act(async () => {
+        sheet.resolve();
+      });
+      pressExport();
+
+      await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(2));
+      expect(refetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('조회가 실패한 뒤에도 잠금이 풀려, 다시 누르면 다시 조회해 파일을 공유한다', async () => {
+      const refetch = jest
+        .fn()
+        .mockResolvedValueOnce({ data: undefined })
+        .mockResolvedValueOnce({
+          data: makeExport({ truncatedSections: [], sections: ['trips'] }),
+        });
+      mockUseGetMeExport.mockReturnValue({ refetch });
+      renderPage();
+      pressExport();
+      await waitFor(() =>
+        expect(screen.getByTestId('settings-export-error')).toHaveTextContent(
+          FETCH_FAILED
+        )
+      );
+
+      pressExport();
+
+      await waitFor(() => expect(mockShareAsync).toHaveBeenCalledTimes(1));
+      expect(refetch).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -1,17 +1,10 @@
-import { Redirect, Stack } from 'expo-router';
-
-import { useOnboardingProgress } from '@/features/onboarding';
-import { resolveOnboardingStep } from '@/features/onboarding';
+import { Stack } from 'expo-router';
 
 /**
- * 온보딩 그룹 레이아웃 — 완료자만 홈으로 되돌리고(온보딩에 갇히지 않게), 미완자는 되돌리지 않고
- * 자식 화면을 그대로 그린다. 단계 진입 판정은 index 가 맡고 _layout 은 완료자 방어만 한다:
- * _layout 이 미완자까지 특정 단계로 매번 Redirect 하면 terms↔nickname 무한루프가 되기 때문이다.
+ * 온보딩 그룹 레이아웃 — 진행 판정 없이 스택만 그린다(TRIP-1421). 완료자 방어는 루트 게이트(SplashGate 의
+ * Stack.Protected)가 하고, 진입 단계 판정은 index 가 한다. 여기서 `'/'`로 보내면 그룹 안의 `'/'`가 온보딩
+ * index 로 되풀려 루프가 되고, 미완자를 매번 특정 단계로 보내면 하위 화면에서 튕긴다.
  */
 export default function OnboardingLayout() {
-  const progress = useOnboardingProgress();
-  if (resolveOnboardingStep(progress) === 'done') {
-    return <Redirect href="/" />;
-  }
   return <Stack screenOptions={{ headerShown: false }} />;
 }

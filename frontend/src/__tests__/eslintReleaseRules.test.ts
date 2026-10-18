@@ -73,6 +73,10 @@ const SETTINGS_UI_PROBE =
 const DEV_PREVIEW_PROBE = 'app/_dev/__release_probe__.tsx';
 const SETTINGS_UI_PROBE_TS =
   'src/pages/settings/settings/ui/__release_probe__.ts';
+// TRIP-1422 — 설정 내보내기의 expo-sharing 어댑터(캡처 어댑터와 같은 예외 블록에 얹힌다)와 그 옆 탐침 자리.
+const EXPORT_ADAPTER = 'src/pages/settings/settings/model/exportShareNative.ts';
+const SETTINGS_MODEL_PROBE =
+  'src/pages/settings/settings/model/__release_probe__.ts';
 
 describe('msw·목은 앱 코드에 들어오지 않는다 (noMswInStaticGraph 이관)', () => {
   it.each([
@@ -222,6 +226,55 @@ describe('네이티브 사진·캡처 모듈은 정적으로 끌지 않는다 (�
     expect(ruleIds).toContain(RESTRICTED_IMPORTS);
   });
 
+  // TRIP-1422 — 설정 내보내기는 .json 파일을 expo-sharing 으로 넘긴다. 정적 import 는 어댑터 파일 하나만,
+  // 소비처는 그 어댑터를 동적 import() 로만 부른다(재빌드 전 빌드의 부팅 크래시 방지 — 캡처 어댑터와 같은 이음새).
+  it('내보내기 어댑터 파일은 expo-sharing 을 정적으로 다시 내보내도 error 0', async () => {
+    const ruleIds = await lint(
+      "export { shareAsync } from 'expo-sharing';\n",
+      EXPORT_ADAPTER
+    );
+
+    expect(ruleIds).toEqual([]);
+  });
+
+  it('어댑터가 아닌 설정 파일이 expo-sharing 을 정적 import 하면 error (예외는 어댑터 한 파일뿐)', async () => {
+    const ruleIds = await lint(
+      "import { shareAsync } from 'expo-sharing';\nexport const probe = shareAsync;\n",
+      SETTINGS_MODEL_PROBE
+    );
+
+    expect(ruleIds).toContain(RESTRICTED_IMPORTS);
+  });
+
+  it.each([
+    ['같은 폴더 상대경로', SETTINGS_MODEL_PROBE, './exportShareNative'],
+    ['상위 상대경로', SETTINGS_UI_PROBE_TS, '../model/exportShareNative'],
+    [
+      '@ 별칭',
+      SETTINGS_UI_PROBE_TS,
+      '@/pages/settings/settings/model/exportShareNative',
+    ],
+  ])(
+    '내보내기 어댑터를 %s 로 정적 import 하면 error',
+    async (_label, filePath, spec) => {
+      const ruleIds = await lint(
+        `import { shareAsync } from '${spec}';\nexport const probe = shareAsync;\n`,
+        filePath
+      );
+
+      expect(ruleIds).toContain(RESTRICTED_IMPORTS);
+    }
+  );
+
+  it('내보내기 어댑터를 동적 import() 로 부르는 것은 error 0', async () => {
+    const ruleIds = await lint(
+      "export const probe = () => import('./exportShareNative');\n",
+      SETTINGS_MODEL_PROBE
+    );
+
+    expect(ruleIds).toEqual([]);
+  });
+
   // 5-b W4 — 원 스캔은 하위 경로 import 도 잡았다(패키지 루트 이름만 막으면 `pkg/build/X` 로 샌다).
   it.each([
     ['expo-image-picker/build/ImagePicker'],
@@ -252,6 +305,7 @@ describe('★ 덮어쓰기 함정 — 예외 블록이 있는 파일에서도 �
   it.each([
     ['StateNotice.tsx', STATE_NOTICE],
     ['캡처 어댑터', CAPTURE_ADAPTER],
+    ['내보내기 어댑터', EXPORT_ADAPTER],
   ])('%s 에서도 공통 금지(msw)가 error', async (_label, filePath) => {
     const ruleIds = await lint(
       "import { http } from 'msw';\nexport const probe = http;\n",
@@ -269,6 +323,11 @@ describe('★ 덮어쓰기 함정 — 예외 블록이 있는 파일에서도 �
     [
       '캡처 어댑터(사진 피커 하위 경로)',
       CAPTURE_ADAPTER,
+      'expo-image-picker/build/ImagePicker',
+    ],
+    [
+      '내보내기 어댑터(사진 피커 하위 경로)',
+      EXPORT_ADAPTER,
       'expo-image-picker/build/ImagePicker',
     ],
   ])('%s 의 하위 경로 import 는 error', async (_label, filePath, spec) => {

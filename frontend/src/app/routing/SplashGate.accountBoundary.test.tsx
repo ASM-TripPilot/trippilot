@@ -13,12 +13,12 @@ import { SplashGate, SPLASH_MIN_VISIBLE_MS } from './SplashGate';
  * (`dismissAll` → `replace('/login')`) 이전 계정의 서버 캐시와 취향 세션 스토어를 비운다.
  *
  * 무엇을 보장하나:
- *  - A: 스택을 그린 뒤의 비LOGIN → LOGIN 전이마다 정리한다. 걷을 화면이 있을 때만 dismissAll 을 부르고,
- *    그 **뒤에** replace 한다. 두 호출은 `(auth)` 가 이미 마운트된 커밋 뒤에 일어난다.
+ *  - A: 스택을 그린 뒤의 비LOGIN → LOGIN 전이마다 정리한다. 가드 반영 뒤 실제 스택에 걷을 화면이 있을 때만
+ *    (`canGoBack`) dismissAll 을 부르고, 그 **뒤에** replace 한다. 두 호출은 `(auth)` 가 이미 마운트된 커밋 뒤에 일어난다.
  *  - N: 첫 부트·스플래시 중 전이·LOGIN→HOME·같은 계정 전이·같은 값 재렌더에서는 아무것도 하지 않는다.
  *
  * 이 트리엔 설정 화면(runLogout)이 없다 — 여기서 정리가 일어났다면 게이트 혼자 한 것이다(세션 만료 경로).
- * 실제 스택 모양·액션 큐 dispatch 는 목이 흉내 내지 않는다(6-b 실기 전용, 02a ★12).
+ * 실제 스택 모양·액션 큐 dispatch 는 목이 흉내 내지 않는다 — 진짜 라우터 쪽은 `SplashGate.integration.test` 가 본다.
  *
  * 3동작 뼈대: 준비=캐시 1건·취향 값·게이트 목적지로 스택 그림 → 실행=목적지 교체 후 rerender → 단언.
  */
@@ -36,6 +36,7 @@ jest.mock('expo-router', () => ({
   ...require('@/test-support/expoRouterStackMock'),
   router: {
     canDismiss: jest.fn(),
+    canGoBack: jest.fn(),
     dismissAll: jest.fn(),
     replace: jest.fn(),
   },
@@ -60,6 +61,7 @@ const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
   typeof useBootstrapGate
 >;
 const mockCanDismiss = router.canDismiss as jest.Mock;
+const mockCanGoBack = router.canGoBack as jest.Mock;
 const mockDismissAll = router.dismissAll as jest.Mock;
 const mockReplace = router.replace as jest.Mock;
 
@@ -136,6 +138,7 @@ beforeEach(() => {
   queryClient = new QueryClient();
   authMountedAt = { dismissAll: null, replace: null };
   mockCanDismiss.mockReturnValue(true);
+  mockCanGoBack.mockReturnValue(true);
   mockDismissAll.mockImplementation(() => {
     authMountedAt.dismissAll = authRouteMounted();
   });
@@ -196,8 +199,10 @@ describe('TRIP-1077 A · 비LOGIN → LOGIN 전이에서 계정 경계를 정리
     }
   );
 
-  it('A3 걷을 화면이 없으면(canDismiss 거짓) dismissAll 은 부르지 않고 replace 만 1회 한다', () => {
-    mockCanDismiss.mockReturnValue(false);
+  // TRIP-1431 — 가드 반영 전 사본(canDismiss)은 걷을 게 있다 하고 실제 스택(canGoBack)은 없다 하는 QA Q-001 의 모양.
+  it('A3 가드 반영 뒤 실제 스택에 걷을 화면이 없으면(canGoBack 거짓) — 반영 전 사본(canDismiss)이 참이어도 — dismissAll 은 부르지 않고 replace 만 1회 한다', () => {
+    mockCanDismiss.mockReturnValue(true);
+    mockCanGoBack.mockReturnValue(false);
     const view = mountDrawn('HOME');
 
     switchTo(view, 'LOGIN');

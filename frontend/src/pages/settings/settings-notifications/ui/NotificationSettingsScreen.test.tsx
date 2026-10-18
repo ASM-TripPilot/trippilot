@@ -5,7 +5,6 @@ import {
   type NotificationSettingsScreenProps,
   type ToggleValueMap,
 } from './NotificationSettingsScreen';
-import { PermissionBanner } from './PermissionBanner';
 
 /**
  * l02 알림 설정 화면 단위 테스트.
@@ -14,36 +13,20 @@ import { PermissionBanner } from './PermissionBanner';
  * .test.tsx`(이 화면만 그리는 렌더 가드)를 각자의 바깥 describe 로 옮겼다. 목이 없어 머리에 걸 것이 없다.
  */
 
-// TRIP-607 · TRIP-939
+// TRIP-607 · TRIP-939 · TRIP-1442
 describe('행·토글 (옛 .test)', () => {
   /**
-   * TRIP-607 · l02 알림 설정 화면(순수 프레젠테이션).
-   *
-   * TRIP-939 AC-11(심사 2.1 · TRIP-835 푸시 미배선): 푸시 채널은 기기 토큰 등록이 없어 켜도 아무 알림이
-   *  오지 않는다 → 운영 화면에서 **푸시 열·"푸시"/"권한 필요" 헤더·권한 배너를 그리지 않는다**. 인앱 6종만
-   *  남고, 문구는 푸시를 언급하지 않는 쪽(Q6)을 권한 유무와 무관하게 쓴다. 구 "6행×2열"·"권한 거부 시 푸시
-   *  disabled + 배너" 단언은 전부 "푸시 부재"로 뒤집었다. props(`pushColumnAvailable`·`onOpenSettings`)는
-   *  되살림 대비로 그대로 넘긴다(02a ★17 — 되살림 짝 테스트는 새 플래그 이름을 박제하지 않으려 두지 않음).
+   * TRIP-607 · l02 알림 설정 화면(순수 프레젠테이션). TRIP-1442 가 TRIP-939 의 "푸시 부재" 단언을 Figma l02 두 상태
+   * (default 1600:2388 · permission-denied 1601:2388) 기준으로 다시 뒤집었다 — 푸시 수신 배선(TRIP-835)이 끝났다.
    *
    * 무엇을 보장하나:
-   *  - **정상-1**: 6종(STAY·TRIP_PRE·TRIP_DAY·SLOT_PRE·PLAN_B·REFLECTION)의 **인앱** 토글만 testID 로
-   *    렌더되고, checked 가 주입 값 그대로다. 푸시 토글은 권한 유무와 무관하게 0개.
-   *  - **문구**: 상단 "변경한 알림 설정은 다음 알림부터 바로 반영됩니다", 하단 "모든 알림을 꺼도 보안·계정
-   *    관련 알림은 알림함에 표시됩니다", 열 헤더 "인앱"만 — "푸시"·"권한 필요"는 없다.
-   *  - **금지-1(렌더 절반)**: OS 거부(`pushColumnAvailable=false`)여도 권한 배너가 없고, **인앱 열은 disabled
-   *    가 아니며 press 하면 onToggle 이 발화**한다(repo-trap 금지-1 유지).
-   *  - **콜백 배선**: 인앱 토글 press → `onToggle(kind, 'inapp', !현재값)`.
-   *
-   * 왜 화면 층인가: 토글 배선의 UI 성질(어느 testID·checked·disabled·press→콜백)은 콜백 jest.fn() 으로
-   * 잰다. 실제 픽셀 회색/thumb 위치/실차단은 jest 원리적 사각(LocationConsentScreen 선례와 동형) →
-   * 6-b 실기 전용(repo-traps). PBT-U6-F2 순수 함수 반환은 channelAvailability.test.ts 가 잠근다.
+   *  - 6종(STAY·TRIP_PRE·TRIP_DAY·SLOT_PRE·PLAN_B·REFLECTION) 행마다 푸시·인앱 스위치가 하나씩 있다.
+   *  - 권한 있음: 푸시·인앱 checked 가 주입 값 그대로, 상단 반영 안내·머리 "푸시"·"인앱"·하단 SYSTEM 문구.
+   *  - 권한 거부: 서버 값이 켜짐이어도 푸시는 꺼짐·잠김(화면 읽기 값 기준 — 색은 disabled 가 이겨 구분 못 함),
+   *    권한 배너·"권한 필요" 칩·푸시-누적 문구, 배너 press → onOpenSettings. 인앱은 그대로 조작 가능(BR-U6-16).
    *
    * (개념) 매처 — `toBeChecked()` 는 role="switch" 요소의 accessibilityState.checked 를 읽고,
-   *  `toBeDisabled()` 는 real `disabled` prop 을 본다. `queryByTestId(...)===null` 은 부재 확인.
-   *  (02a §5-A·§5-B, node_modules 확인 근거 남김).
-   *
-   * 라벨 카피(숙소 등록·저장 완료 등)·배너 문구·배지 색은 화면 정본(Figma) 소관이라 여기서 문자열로
-   * 잠그지 않는다 — testID·상태로만 잠그고 카피 충실도는 6-b/figma-screen-impl.
+   *  `toBeDisabled()` 는 accessibilityState.disabled 를 본다. press 차단(real `disabled`)은 press 단언으로 따로 잰다.
    */
 
   /** 실물 l02 기본값(BR-U6-18): SLOT_PRE·PLAN_B 는 푸시 OFF·인앱 ON, 나머지 5종은 둘 다 ON. */
@@ -69,6 +52,7 @@ describe('행·토글 (옛 .test)', () => {
   const pushId = (kind: string) => `notification-settings-toggle-push-${kind}`;
   const inAppId = (kind: string) =>
     `notification-settings-toggle-inapp-${kind}`;
+  const BANNER_ID = 'notification-settings-permission-banner';
 
   function renderScreen(
     overrides: Partial<NotificationSettingsScreenProps> = {}
@@ -87,21 +71,36 @@ describe('행·토글 (옛 .test)', () => {
   const TOP_COPY = '변경한 알림 설정은 다음 알림부터 바로 반영됩니다';
   const BOTTOM_COPY =
     '모든 알림을 꺼도 보안·계정 관련 알림은 알림함에 표시됩니다';
+  const DENIED_TOP_COPY = '기기 설정에서 알림 권한을 허용하세요';
+  const DENIED_BOTTOM_COPY = '푸시를 꺼도 인앱 알림은 알림함에 계속 누적됩니다';
 
-  describe('TRIP-607 · NotificationSettingsScreen — 6행 인앱 토글 값대로 렌더 (정상-1 · TRIP-939 AC-11)', () => {
+  describe('6종 행마다 푸시·인앱 두 스위치 (US-NOTIF-05)', () => {
     it.each([true, false])(
-      '권한 %s 여도 6종 인앱 토글만 렌더되고 푸시 토글은 0개다',
+      '권한 %s 여도 6종 행마다 푸시·인앱 스위치가 하나씩 있다',
       (pushColumnAvailable) => {
-        // 준비·실행
         renderScreen({ pushColumnAvailable });
 
-        // 단언: 인앱 6개 존재(앵커) + 푸시 6개 부재.
         VISIBLE_KINDS.forEach((kind) => {
+          expect(screen.getByTestId(pushId(kind))).toBeOnTheScreen();
           expect(screen.getByTestId(inAppId(kind))).toBeOnTheScreen();
-          expect(screen.queryByTestId(pushId(kind))).toBeNull();
         });
       }
     );
+
+    it('권한이 있으면 푸시 스위치 checked 가 주입 값 그대로고 잠기지 않는다', () => {
+      renderScreen({ pushColumnAvailable: true });
+
+      // DEFAULT_VALUES: SLOT_PRE·PLAN_B 만 푸시 OFF.
+      expect(screen.getByTestId(pushId('STAY'))).toBeChecked();
+      expect(screen.getByTestId(pushId('TRIP_PRE'))).toBeChecked();
+      expect(screen.getByTestId(pushId('TRIP_DAY'))).toBeChecked();
+      expect(screen.getByTestId(pushId('REFLECTION'))).toBeChecked();
+      expect(screen.getByTestId(pushId('SLOT_PRE'))).not.toBeChecked();
+      expect(screen.getByTestId(pushId('PLAN_B'))).not.toBeChecked();
+      VISIBLE_KINDS.forEach((kind) => {
+        expect(screen.getByTestId(pushId(kind))).not.toBeDisabled();
+      });
+    });
 
     it('각 인앱 스위치 checked 가 주입 값 그대로다', () => {
       // 준비: STAY 인앱 ON, SLOT_PRE 인앱 OFF 로 덮는다.
@@ -121,34 +120,45 @@ describe('행·토글 (옛 .test)', () => {
     it('권한 있으면 권한 배너가 없고 인앱 토글이 비활성이 아니다 (짝)', () => {
       renderScreen({ pushColumnAvailable: true });
 
-      expect(
-        screen.queryByTestId('notification-settings-permission-banner')
-      ).toBeNull();
+      expect(screen.queryByTestId(BANNER_ID)).toBeNull();
       VISIBLE_KINDS.forEach((kind) => {
         expect(screen.getByTestId(inAppId(kind))).not.toBeDisabled();
       });
     });
   });
 
-  describe('TRIP-939 AC-11 · 문구 — 푸시를 언급하지 않는다 (Q6)', () => {
-    it.each([true, false])(
-      '권한 %s 여도 상·하단 문구가 같고 열 헤더는 "인앱"뿐이다',
-      (pushColumnAvailable) => {
-        // 준비·실행
-        renderScreen({ pushColumnAvailable });
+  describe('문구 — 권한 상태별 얼굴 (Figma l02 두 상태)', () => {
+    it('권한이 있으면 상단 반영 안내 · 머리 "푸시"·"인앱" · 하단 SYSTEM 문구가 보이고 권한 표면은 없다', () => {
+      renderScreen({ pushColumnAvailable: true });
 
-        // 단언: 상·하단 문구 완전일치 + "인앱" 헤더(앵커).
-        expect(screen.getByText(TOP_COPY)).toBeOnTheScreen();
-        expect(screen.getByText(BOTTOM_COPY)).toBeOnTheScreen();
-        expect(screen.getByText('인앱')).toBeOnTheScreen();
-        // 부재: 푸시 헤더·권한 칩·푸시 언급 문구.
-        expect(screen.queryByText(/푸시/)).toBeNull();
-        expect(screen.queryByText('권한 필요')).toBeNull();
-      }
-    );
+      // 문자열 쿼리는 글자 전체가 같아야 맞는다 — "푸시" 는 머리 이름표 하나만 고른다.
+      expect(screen.getByText(TOP_COPY)).toBeOnTheScreen();
+      expect(screen.getByText('푸시')).toBeOnTheScreen();
+      expect(screen.getByText('인앱')).toBeOnTheScreen();
+      expect(screen.getByText(BOTTOM_COPY)).toBeOnTheScreen();
+
+      expect(screen.queryByTestId(BANNER_ID)).toBeNull();
+      expect(screen.queryByText('권한 필요')).toBeNull();
+      expect(screen.queryByText(DENIED_BOTTOM_COPY)).toBeNull();
+    });
+
+    it('권한 거부면 권한 배너 · "권한 필요" 칩 · 하단 푸시-누적 문구가 보이고 반영 안내·"푸시" 머리는 없다', () => {
+      renderScreen({ pushColumnAvailable: false });
+
+      expect(screen.getByTestId(BANNER_ID)).toBeOnTheScreen();
+      expect(screen.getByText(DENIED_TOP_COPY)).toBeOnTheScreen();
+      expect(screen.getByText('설정 이동')).toBeOnTheScreen();
+      expect(screen.getByText('권한 필요')).toBeOnTheScreen();
+      expect(screen.getByText('인앱')).toBeOnTheScreen();
+      expect(screen.getByText(DENIED_BOTTOM_COPY)).toBeOnTheScreen();
+
+      expect(screen.queryByText(TOP_COPY)).toBeNull();
+      expect(screen.queryByText('푸시')).toBeNull();
+      expect(screen.queryByText(BOTTOM_COPY)).toBeNull();
+    });
   });
 
-  describe('TRIP-607 · NotificationSettingsScreen — 콜백 배선 (인앱)', () => {
+  describe('TRIP-607 · NotificationSettingsScreen — 콜백 배선', () => {
     it('켜진 인앱 토글을 press 하면 onToggle(kind, "inapp", false) 가 1회 나간다', () => {
       const props = renderScreen();
 
@@ -180,22 +190,49 @@ describe('행·토글 (옛 .test)', () => {
         (props.onToggle as jest.Mock).mock.calls.map((call) => call[1])
       ).toEqual(['inapp']);
     });
+
+    it('권한이 있으면 켜진 푸시를 누를 때 onToggle(kind, "push", false), 꺼진 푸시는 true 로 나간다', () => {
+      const props = renderScreen({ pushColumnAvailable: true });
+
+      fireEvent.press(screen.getByTestId(pushId('STAY'))); // 현재 true → 끄기
+      fireEvent.press(screen.getByTestId(pushId('SLOT_PRE'))); // 현재 false → 켜기
+
+      expect((props.onToggle as jest.Mock).mock.calls).toEqual([
+        ['STAY', 'push', false],
+        ['SLOT_PRE', 'push', true],
+      ]);
+    });
   });
 
-  describe('TRIP-607 · NotificationSettingsScreen — 권한 거부 (금지-1 렌더 절반 · TRIP-939 AC-11)', () => {
-    it('권한 거부여도 푸시 열·권한 배너가 없다 — [설정 이동]으로 갈 길 자체가 없다', () => {
-      // 준비·실행: OS 권한 거부.
+  describe('권한 거부 — 푸시는 꺼짐·잠김, 인앱은 정상 (BR-U6-16 · PBT-U6-F2)', () => {
+    it('권한 거부면 서버 값이 켜짐이어도 6종 푸시 스위치가 전부 꺼짐·잠김으로 읽힌다 (거짓 켜짐 금지)', () => {
+      // DEFAULT_VALUES 상 STAY·TRIP_PRE·TRIP_DAY·REFLECTION 은 푸시가 켜져 있다.
+      renderScreen({ pushColumnAvailable: false });
+
+      VISIBLE_KINDS.forEach((kind) => {
+        expect(screen.getByTestId(pushId(kind))).not.toBeChecked();
+        expect(screen.getByTestId(pushId(kind))).toBeDisabled();
+      });
+    });
+
+    it('권한 거부면 푸시 스위치를 눌러도 onToggle 이 나가지 않는다 (인앱은 눌린다)', () => {
       const props = renderScreen({ pushColumnAvailable: false });
 
-      // 단언: 배너·푸시 토글 부재 + 짝 앵커(인앱 6개는 있다).
+      fireEvent.press(screen.getByTestId(pushId('STAY')));
+      fireEvent.press(screen.getByTestId(inAppId('STAY'))); // 앵커
+
       expect(
-        screen.queryByTestId('notification-settings-permission-banner')
-      ).toBeNull();
-      VISIBLE_KINDS.forEach((kind) => {
-        expect(screen.queryByTestId(pushId(kind))).toBeNull();
-        expect(screen.getByTestId(inAppId(kind))).toBeOnTheScreen();
-      });
+        (props.onToggle as jest.Mock).mock.calls.map((call) => call[1])
+      ).toEqual(['inapp']);
+    });
+
+    it('권한 배너를 누르면 onOpenSettings 가 1회 나간다', () => {
+      const props = renderScreen({ pushColumnAvailable: false });
       expect(props.onOpenSettings).not.toHaveBeenCalled();
+
+      fireEvent.press(screen.getByTestId(BANNER_ID));
+
+      expect(props.onOpenSettings).toHaveBeenCalledTimes(1);
     });
 
     it('인앱 열은 DENIED 에서도 비활성이 아니고 press 하면 onToggle 이 발화한다 (repo-trap 금지-1)', () => {
@@ -219,32 +256,15 @@ describe('행·토글 (옛 .test)', () => {
     });
   });
 
-  describe('🔴 TRIP-991 · 인앱 스위치 이름 (AC-3)', () => {
-    it('인앱 스위치 6개가 모두 "{행 라벨} 인앱" 이름으로 읽힌다', () => {
+  // TRIP-991
+  describe('🔴 스위치 이름 (AC-3)', () => {
+    it('푸시·인앱 스위치 6개씩이 "{행 라벨} 푸시" / "{행 라벨} 인앱" 이름으로 읽힌다', () => {
       renderScreen();
 
-      // 정규식(부분 일치) — 행 라벨 카피 자체는 잠그지 않고 " 인앱" 접미만 센다.
+      // 정규식(부분 일치) — 행 라벨 카피 자체는 잠그지 않고 접미만 센다.
+      expect(screen.getAllByRole('switch', { name: / 푸시$/ })).toHaveLength(6);
       expect(screen.getAllByRole('switch', { name: / 인앱$/ })).toHaveLength(6);
     });
-  });
-});
-
-// TRIP-774
-describe('숨은 권한 배너 (옛 .parity)', () => {
-  /**
-   * TRIP-774 · AC-4b — 숨은 푸시 분기의 권한 배너. 운영·프리뷰 어디에도 안 보여(비공개 상수 뒤) 배너를
-   * 단독으로 렌더한다. 열 정렬·반경·글자 크기 같은 Figma 정합 단언은 TRIP-1367 로 지웠다 — 실화면 몫.
-   */
-  it('안내 문구와 [설정 이동] 버튼을 그린다', () => {
-    render(<PermissionBanner onOpenSettings={jest.fn()} />);
-
-    expect(
-      screen.getByTestId('notification-settings-permission-banner')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByText('기기 설정에서 알림 권한을 허용하세요')
-    ).toBeOnTheScreen();
-    expect(screen.getByText('설정 이동')).toBeOnTheScreen();
   });
 });
 
@@ -264,8 +284,7 @@ describe('COMMUNITY·SYSTEM 미렌더 (옛 __tests__/notificationKindGuard)', ()
    * 가짜 통과 방지(리포 관례): 모든 "없어야 한다" 단언은 "있어야 한다" 짝과 같은 it 에 둔다 — 화면이
    * 통째로 비어도(빈 스캔) 6종 존재 단언이 함께 red 를 낸다.
    *
-   * TRIP-939 AC-11: 푸시 열이 운영 화면에서 사라져(TRIP-835 미배선) 존재 앵커를 **인앱** testID 로 옮기고,
-   * 푸시 testID 는 6종·COMMUNITY·SYSTEM 모두 부재로 잰다.
+   * TRIP-1442: 푸시 열이 다시 열려 푸시 testID 는 6종엔 있고 COMMUNITY·SYSTEM 에는 없다로 잰다.
    */
 
   const pushId = (kind: string) => `notification-settings-toggle-push-${kind}`;
@@ -308,7 +327,7 @@ describe('COMMUNITY·SYSTEM 미렌더 (옛 __tests__/notificationKindGuard)', ()
         ] as const
       ).forEach((kind) => {
         expect(screen.getByTestId(inAppId(kind))).toBeOnTheScreen();
-        expect(screen.queryByTestId(pushId(kind))).toBeNull();
+        expect(screen.getByTestId(pushId(kind))).toBeOnTheScreen();
       });
 
       // 없어야 한다 — COMMUNITY 는 숨김.
@@ -328,6 +347,7 @@ describe('COMMUNITY·SYSTEM 미렌더 (옛 __tests__/notificationKindGuard)', ()
 
       // 있어야 한다 — 대표 STAY 행(빈 렌더면 이 줄이 red).
       expect(screen.getByTestId(inAppId('STAY'))).toBeOnTheScreen();
+      expect(screen.getByTestId(pushId('STAY'))).toBeOnTheScreen();
       // 없어야 한다 — SYSTEM 은 토글 목록에 없다.
       expect(screen.queryByTestId(pushId('SYSTEM'))).toBeNull();
       expect(screen.queryByTestId(inAppId('SYSTEM'))).toBeNull();

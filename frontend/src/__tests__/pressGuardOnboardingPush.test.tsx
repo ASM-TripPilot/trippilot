@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 
 import { LocationPage } from '@/pages/onboarding/onboarding-location';
 import { PushPage } from '@/pages/onboarding/onboarding-push';
@@ -173,5 +174,79 @@ describe('🔴 TRIP-1108 5-b 경고-1 · 위치 권한이 이미 허용됨 — �
     expect(mockPrompt).toHaveBeenCalledTimes(1);
     expect(routerMock.replace).toHaveBeenCalledTimes(2);
     expect(routerMock.replace).toHaveBeenLastCalledWith(PREF1_ROUTE);
+  });
+});
+
+describe('🔴 TRIP-1427 AC-L3 · 설정에서 돌아와 다시 조회 → 푸시 카드로 넘어간 순간의 두 번째 탭은 무시된다', () => {
+  // 재조회 이동은 탭이 아니라 앱 활성화(AppState)가 일으킨다 — 그 순간 사용자가 같은 자리를 누르면 그 탭이 새로 뜬 푸시
+  // 카드 "계속"에 떨어진다. 이동 분기를 추가했으니 그 분기도 가드 창을 열어야 한다(traps-onboarding-auth 가드 항목).
+  // RN jest 목은 활성화 핸들러를 부르지 않으므로 스파이로 붙잡아 직접 부른다(LocationPage.integration 과 같은 장치).
+  let handlers: ((next: string) => void)[] = [];
+  let appStateSpy: jest.SpyInstance;
+  beforeEach(() => {
+    handlers = [];
+    appStateSpy = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((type, handler) => {
+        if (type === 'change') handlers.push(handler as (next: string) => void);
+        return { remove: () => undefined };
+      });
+  });
+  afterEach(() => appStateSpy.mockRestore());
+
+  it('X4 두 번째 탭은 푸시 권한 루틴을 부르지 못하고, 창이 지난 뒤 한 번 누르면 루틴 1회 + 취향 1/2', async () => {
+    // 준비 — 위치 "계속" → OS 거부 → 거부 프레임 → 설정 앱에서 허용
+    mockRequestForeground.mockResolvedValue({
+      status: 'denied',
+      granted: false,
+      canAskAgain: false,
+    });
+    const location = render(<LocationPage />);
+    fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('onboarding-location-continue')
+      ).toBeOnTheScreen()
+    );
+    resetPressGuard();
+    mockGetForeground.mockResolvedValue({
+      status: 'granted',
+      granted: true,
+      canAskAgain: true,
+    });
+    // 비동기 대기는 끝났다 — 이제 시계를 멈춘다(waitFor 앞에서 멈추면 실패 시 무한 대기).
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+    try {
+      // 실행 ① — 앱으로 돌아온다 → 재조회 결과(허용)를 흘린다
+      act(() => {
+        handlers.forEach((handler) => handler('background'));
+        handlers.forEach((handler) => handler('active'));
+      });
+      for (let i = 0; i < 5; i += 1) {
+        await act(async () => {});
+      }
+      // 앵커 — 재조회가 푸시 카드로 넘겼다
+      expect(routerMock.replace).toHaveBeenCalledTimes(1);
+      expect(routerMock.replace).toHaveBeenLastCalledWith(PUSH_ROUTE);
+      location.unmount();
+
+      // 실행 ② — 같은 자리(위 칸)에 떨어진 탭(푸시 "계속")
+      render(<PushPage />);
+      fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+
+      // 단언 — 사용자가 보지 못한 카드의 "계속"은 OS 창을 띄우지도, 카드를 넘기지도 않는다
+      expect(mockPrompt).toHaveBeenCalledTimes(0);
+      expect(routerMock.replace).toHaveBeenCalledTimes(1);
+
+      // 무회귀 — 창 밖에서 누르면 루틴 1회 + 취향 1/2
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+      expect(mockPrompt).toHaveBeenCalledTimes(1);
+      expect(routerMock.replace).toHaveBeenCalledTimes(2);
+      expect(routerMock.replace).toHaveBeenLastCalledWith(PREF1_ROUTE);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });

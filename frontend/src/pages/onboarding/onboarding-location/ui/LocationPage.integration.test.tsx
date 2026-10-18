@@ -1,9 +1,11 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 
 import { server } from '@/mocks/server';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
@@ -95,6 +97,46 @@ const DENIED = {
 /** c08 이 서버로 무엇이든 보내면 여기 쌓인다 — AC-8("진행 플래그 미생성") 트립와이어. */
 const requestLog: string[] = [];
 
+/**
+ * TRIP-1427 — 앱 활성화(AppState) 구독을 붙잡는 장치. RN jest 목의 `addEventListener` 는 구독 객체만 돌려주고
+ * 핸들러를 절대 부르지 않는다 — 그래서 스파이로 핸들러를 모아 두고 테스트가 직접 상태를 보낸다(useSeoulToday.test 선례).
+ * `remove()` 된 구독에는 보내지 않는다(진짜 RN 과 같다).
+ */
+type AppStateSub = { handler: (next: string) => void; removed: boolean };
+let appStateSubs: AppStateSub[] = [];
+let appStateSpy: jest.SpyInstance | undefined;
+
+/** 살아 있는 'change' 구독에 상태를 차례로 보낸다. 목의 currentState 는 문자열이 아니라
+ * 'active' 하나만 보내면 "직전 상태" 를 보는 구현이 못 알아챈다 — 실제 흐름(나감 → 돌아옴)대로 보낸다. */
+function emitAppState(...states: string[]) {
+  act(() => {
+    for (const next of states) {
+      appStateSubs
+        .filter((sub) => !sub.removed)
+        .forEach((sub) => sub.handler(next));
+    }
+  });
+}
+
+/** 목 Promise 의 후속 처리(조회 결과 → 상태·이동)를 흘린다. 멈춘 시계 아래에서도 쓸 수 있다(waitFor 와 달리 타이머 불필요). */
+async function flushAsync() {
+  for (let i = 0; i < 5; i += 1) {
+    await act(async () => {});
+  }
+}
+
+/** 기다리던 일이 끝내 안 오면 테스트 상한(5초)보다 먼저 단언 메시지로 실패하게 한다. */
+const RED_WAIT = 3000;
+
+/** 밖에서 끝낼 수 있는 Promise — "조회가 아직 진행 중"인 순간을 테스트가 붙잡는다. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
@@ -118,11 +160,27 @@ beforeEach(() => {
   routerMock.replace.mockClear();
   routerMock.push.mockClear();
   requestLog.length = 0;
+  appStateSubs = [];
+  appStateSpy = jest
+    .spyOn(AppState, 'addEventListener')
+    .mockImplementation((type, handler) => {
+      const sub: AppStateSub = {
+        handler: handler as (next: string) => void,
+        removed: type !== 'change',
+      };
+      appStateSubs.push(sub);
+      return {
+        remove: () => {
+          sub.removed = true;
+        },
+      };
+    });
 });
 
 afterEach(() => {
   server.resetHandlers();
   resetPressGuard();
+  appStateSpy?.mockRestore();
 });
 
 afterAll(() => {
@@ -251,5 +309,254 @@ describe('🔴 TRIP-1108 R6 · 즉시 넘어가는 버튼은 연타해도 1회',
     } finally {
       clock.mockRestore();
     }
+  });
+});
+
+// TRIP-1427 — 마운트 조회(재진입 시 "다시 물을 수 없게" 거부된 상태 감지)는 지금까지 무심판이었다(traps-onboarding-auth).
+// 재조회를 더하면서 같은 조회 조건을 건드리므로 두 갈래 심판을 함께 세운다(AC-R2).
+describe('LocationPage — 마운트 권한 감지 (AC-R2)', () => {
+  it('M1 이미 "다시 묻지 않음"으로 거부돼 있으면 누르지 않아도 곧장 거부 프레임이다', async () => {
+    // 준비
+    mockGetForeground.mockResolvedValue(DENIED);
+
+    // 실행
+    render(<LocationPage />);
+
+    // 단언
+    expect(
+      await screen.findByTestId('onboarding-location-continue')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('onboarding-location-allow')).toBeNull();
+    expect(mockRequestForeground).toHaveBeenCalledTimes(0);
+    expect(routerMock.replace).toHaveBeenCalledTimes(0);
+  });
+
+  it.each([
+    [
+      '거부됐지만 다시 물을 수 있음(안드로이드)',
+      { status: 'denied', granted: false, canAskAgain: true },
+    ],
+    ['이미 허용됨', GRANTED],
+  ])(
+    'M2 마운트 조회가 "%s"이면 default 를 유지한다',
+    async (_label, answer) => {
+      // 준비
+      mockGetForeground.mockResolvedValue(answer);
+
+      // 실행 — 조회가 끝날 때까지 흘린다(결과가 오기 전에 단언하면 아무 구현이나 통과한다)
+      render(<LocationPage />);
+      await waitFor(() => expect(mockGetForeground).toHaveBeenCalledTimes(1));
+      await flushAsync();
+
+      // 단언
+      expect(screen.getByTestId('onboarding-location-allow')).toBeOnTheScreen();
+      expect(screen.queryByTestId('onboarding-location-continue')).toBeNull();
+      expect(mockRequestForeground).toHaveBeenCalledTimes(0);
+      expect(routerMock.replace).toHaveBeenCalledTimes(0);
+    }
+  );
+});
+
+/**
+ * TRIP-1427 (Q-018 · 결정 1=A) — 거부 프레임에서 설정 앱으로 나가 위치를 켜고 돌아오면(AppState active) 권한을 **조회만**
+ * 다시 하고, 허용됐으면 곧장 푸시 안내로 넘어간다. 여전히 거부면 그대로 둔다(request 0 — BR-U0-30 개정).
+ * 재조회는 거부 프레임에서만 한다(Q1) — default 에선 OS 창이 닫히며 생기는 active 가 허용 이동과 겹친다.
+ */
+describe('LocationPage — 설정에서 돌아오면 다시 조회 (AC-L1 · AC-L1b · AC-L2 · AC-L2b)', () => {
+  /** 마운트 감지로 거부 프레임에 들어간다(재진입 사용자 경로). */
+  async function reachDeniedOnMount() {
+    mockGetForeground.mockResolvedValue(DENIED);
+    render(<LocationPage />);
+    await screen.findByTestId('onboarding-location-continue');
+  }
+
+  it.each([
+    ['OS 창에서 거부한 직후', reachDenied, 1],
+    ['재진입 시 마운트 감지', reachDeniedOnMount, 0],
+  ])(
+    'R1 [%s] 설정에서 허용하고 돌아오면 다시 조회해 푸시 안내로 1회 넘어가고, 권한 요청은 더 하지 않는다',
+    async (_label, enterDenied, requestsOnEntry) => {
+      // 준비 — 거부 프레임, 그 사이 설정 앱에서 허용됨
+      await enterDenied();
+      mockGetForeground.mockResolvedValue(GRANTED);
+      const getCalls = mockGetForeground.mock.calls.length;
+      expect(routerMock.replace).toHaveBeenCalledTimes(0);
+
+      // 실행 — 설정 앱으로 나갔다가 돌아온다
+      emitAppState('background', 'active');
+
+      // 단언
+      await waitFor(
+        () => expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE),
+        { timeout: RED_WAIT }
+      );
+      await flushAsync();
+      expect(routerMock.replace.mock.calls).toEqual([[PUSH_ROUTE]]);
+      expect(mockGetForeground.mock.calls.length).toBeGreaterThan(getCalls);
+      expect(mockRequestForeground).toHaveBeenCalledTimes(requestsOnEntry);
+    }
+  );
+
+  it.each([
+    [
+      '다시 물을 수 없는 거부',
+      () => mockGetForeground.mockResolvedValue(DENIED),
+    ],
+    [
+      '다시 물을 수 있는 거부',
+      () =>
+        mockGetForeground.mockResolvedValue({
+          status: 'denied',
+          granted: false,
+          canAskAgain: true,
+        }),
+    ],
+    [
+      '미결정',
+      () =>
+        mockGetForeground.mockResolvedValue({
+          status: 'undetermined',
+          granted: false,
+          canAskAgain: true,
+        }),
+    ],
+    [
+      '조회 실패(throw)',
+      () => mockGetForeground.mockRejectedValue(new Error('permission api')),
+    ],
+  ])(
+    'R2 돌아왔는데 [%s]이면 거부 프레임 그대로이고 권한 요청도 이동도 없다 — [계속]은 살아 있다',
+    async (_label, answerAfterReturn) => {
+      // 준비
+      await reachDenied();
+      answerAfterReturn();
+      const getCalls = mockGetForeground.mock.calls.length;
+
+      // 실행
+      emitAppState('background', 'active');
+
+      // 단언 — 다시 조회는 했다(아무것도 안 하는 구현이 통과하지 않게)
+      await waitFor(
+        () => expect(mockGetForeground).toHaveBeenCalledTimes(getCalls + 1),
+        { timeout: RED_WAIT }
+      );
+      await flushAsync();
+      // 단언 — 화면은 그대로, OS 창은 다시 띄우지 않는다
+      expect(routerMock.replace).toHaveBeenCalledTimes(0);
+      expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByTestId('onboarding-location-continue')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('onboarding-location-allow')).toBeNull();
+
+      // 무회귀 — 거부는 온보딩을 막지 않는다(INV-4): [계속]으로 넘어간다
+      fireEvent.press(screen.getByTestId('onboarding-location-continue'));
+      expect(routerMock.replace).toHaveBeenCalledTimes(1);
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE);
+    }
+  );
+
+  it('R3 활성화 신호가 연달아 두 번 와도 푸시 안내로는 1회만 넘어간다', async () => {
+    // 준비
+    await reachDenied();
+    mockGetForeground.mockResolvedValue(GRANTED);
+
+    // 실행 — iOS 는 active 가 겹쳐 올 수 있다
+    emitAppState('background', 'active', 'active');
+
+    // 단언
+    await waitFor(
+      () => expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE),
+      { timeout: RED_WAIT }
+    );
+    await flushAsync();
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it('R4 다시 조회하는 사이 [계속]을 누르고, 조회 결과(허용)가 뒤에 와도 푸시 안내로는 1회만 넘어간다', async () => {
+    // 준비 — 조회를 진행 중으로 붙잡아 둔다
+    await reachDenied();
+    const query = deferred<typeof GRANTED>();
+    mockGetForeground.mockReturnValue(query.promise);
+    const getCalls = mockGetForeground.mock.calls.length;
+    // 비동기 대기는 끝났다 — 연타 가드 창을 실시간에 맡기지 않도록 시계를 멈춘다
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+    try {
+      // 실행 ① — 돌아옴(조회 시작, 아직 결과 없음)
+      emitAppState('background', 'active');
+      expect(mockGetForeground).toHaveBeenCalledTimes(getCalls + 1);
+      expect(routerMock.replace).toHaveBeenCalledTimes(0);
+
+      // 실행 ② — 그 사이 [계속] 탭, 그 뒤 조회 결과 도착
+      fireEvent.press(screen.getByTestId('onboarding-location-continue'));
+      expect(routerMock.replace).toHaveBeenCalledTimes(1);
+      query.resolve(GRANTED);
+      await flushAsync();
+
+      // 단언
+      expect(routerMock.replace).toHaveBeenCalledTimes(1);
+      expect(routerMock.replace).toHaveBeenLastCalledWith(PUSH_ROUTE);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('R5 조회 결과가 화면을 떠난 뒤에 도착하면 이동하지 않는다', async () => {
+    // 준비
+    await reachDenied();
+    const query = deferred<typeof GRANTED>();
+    mockGetForeground.mockReturnValue(query.promise);
+    const getCalls = mockGetForeground.mock.calls.length;
+    emitAppState('background', 'active');
+    expect(mockGetForeground).toHaveBeenCalledTimes(getCalls + 1);
+
+    // 실행 — 화면이 사라진 뒤 결과가 온다
+    screen.unmount();
+    query.resolve(GRANTED);
+    await flushAsync();
+
+    // 단언
+    expect(routerMock.replace).toHaveBeenCalledTimes(0);
+  });
+
+  it('R6 default 프레임에서는 활성화 신호가 와도 넘어가지 않고 권한도 묻지 않는다', async () => {
+    // 준비 — default(미결정) 로 뜬 뒤 마운트 조회가 끝났다
+    render(<LocationPage />);
+    await waitFor(() => expect(mockGetForeground).toHaveBeenCalledTimes(1));
+    await flushAsync();
+    mockGetForeground.mockResolvedValue(GRANTED);
+
+    // 실행
+    emitAppState('background', 'active');
+    await flushAsync();
+
+    // 단언
+    expect(routerMock.replace).toHaveBeenCalledTimes(0);
+    expect(mockRequestForeground).toHaveBeenCalledTimes(0);
+    expect(screen.getByTestId('onboarding-location-allow')).toBeOnTheScreen();
+  });
+
+  it('R7 OS 권한 창이 닫히며 생긴 활성화 신호가 허용 이동과 겹쳐도 푸시 안내로는 1회만 넘어간다', async () => {
+    // 준비 — OS 창이 떠 있는 상태(요청 진행 중)
+    const request = deferred<typeof GRANTED>();
+    mockRequestForeground.mockReturnValue(request.promise);
+    render(<LocationPage />);
+    await waitFor(() => expect(mockGetForeground).toHaveBeenCalledTimes(1));
+    fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+    mockGetForeground.mockResolvedValue(GRANTED);
+
+    // 실행 — 창이 닫히며 inactive → active, 그리고 요청 결과(허용) 도착
+    emitAppState('inactive', 'active');
+    await flushAsync();
+    request.resolve(GRANTED);
+
+    // 단언
+    await waitFor(
+      () => expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE),
+      { timeout: RED_WAIT }
+    );
+    await flushAsync();
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
   });
 });

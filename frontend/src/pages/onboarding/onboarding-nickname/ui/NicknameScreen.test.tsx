@@ -150,6 +150,47 @@ describe('NicknameScreen — 탈출구 없음 (AC C6 · BR-U0-20)', () => {
   });
 });
 
+// TRIP-1427 (Q-013) — 키보드 return 키도 [다음]과 같은 입구다. 형식이 맞을 때만 제출한다(Q4).
+// `fireEvent(input, 'submitEditing')` = 입력칸에서 return 키를 누른 것과 같다(onSubmitEditing 호출).
+describe('NicknameScreen — 키보드 return 제출 (AC-N1 · AC-N2)', () => {
+  it('형식이 맞으면 return 키가 [다음]과 같은 onNext 를 1회 부른다', () => {
+    // 준비
+    const onNext = jest.fn();
+    render(<NicknameScreen {...makeProps({ canProceed: true, onNext })} />);
+
+    // 실행
+    fireEvent(screen.getByTestId('onboarding-nickname-input'), 'submitEditing');
+
+    // 단언
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('형식 미달(다음 잠김)이면 return 키는 onNext 를 부르지 않는다', () => {
+    // 준비 — 1자, 다음이 잠긴 상태
+    const onNext = jest.fn();
+    render(
+      <NicknameScreen
+        {...makeProps({
+          value: '가',
+          canProceed: false,
+          errorReason: 'TOO_SHORT',
+          onNext,
+        })}
+      />
+    );
+    // 앵커 — 입력칸이 그려졌고 그 값이 1자다(빈 화면이 통과하지 않게).
+    expect(screen.getByTestId('onboarding-nickname-input')).toHaveDisplayValue(
+      '가'
+    );
+
+    // 실행
+    fireEvent(screen.getByTestId('onboarding-nickname-input'), 'submitEditing');
+
+    // 단언
+    expect(onNext).toHaveBeenCalledTimes(0);
+  });
+});
+
 /**
  * TRIP-1023 #005 (결정1 · Q1) — 닉네임도 온보딩이라 앞으로만. 약관→닉네임→위치가 모두 replace 라
  * 되돌아갈 곳이 없으므로 눌리지 않는 뒤로 셰브론을 뺀다. 글리프는 이름으로 찾는다(02a ★5).
