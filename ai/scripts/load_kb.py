@@ -201,6 +201,40 @@ def _use_load_timeout(environ) -> None:
         environ["TRIPPILOT_EMBEDDING_TIMEOUT_SEC"] = str(LOAD_TIMEOUT_SEC)
 
 
+# 원천 조각 적재의 시간 예산(초). 배포의 KB 적재 Job 은 90분 제한(`runtime_kb.DEADLINE_SEC`)이고 같은
+# 임베딩 파드가 실시간 질의도 받는다. 첫 적재(조각 수만 건)가 그 안에 다 안 들어갈 수 있어 **문서 단위로
+# 끊고 정상 종료**한다 — upsert 가 멱등이고 저장본과 같은 조각은 건너뛰므로 다음 배포가 이어받는다.
+# 실패로 끝내면 배포 전체가 빨강이 되고, 끊지 않으면 Job 이 죽어 마지막 묶음이 반쯤 남는다.
+KB_LOAD_BUDGET_SEC = float(os.environ.get("TRIPPILOT_KB_LOAD_BUDGET_SEC") or 3600)
+
+
+def _index_corpus(documents, embedding, store, budget_sec: float = KB_LOAD_BUDGET_SEC):
+    """조각을 **원문 문서 단위**로 적재한다 — 예산을 넘기면 다음 문서부터 멈춘다. (적재 수, 끝난 원문 id)."""
+    import time
+
+    groups: dict[str, list] = {}
+    for d in documents:
+        groups.setdefault(d.doc_id.split("#", 1)[0], []).append(d)
+    from trippilot.agents.planb.kb_retrieval import INDEX_BATCH
+
+    start, count, done = time.monotonic(), 0, set()
+    batch: list = []
+    bases: list[str] = []
+    for base, docs in groups.items():
+        if time.monotonic() - start > budget_sec:
+            break
+        batch += docs
+        bases.append(base)
+        if len(batch) >= INDEX_BATCH:  # 문서 경계에서만 끊되 임베딩 요청은 꽉 채운다
+            count += index_documents(batch, embedding, store)
+            done.update(bases)
+            batch, bases = [], []
+    if batch:
+        count += index_documents(batch, embedding, store)
+        done.update(bases)
+    return count, frozenset(done)
+
+
 def main(argv: list[str]) -> int:
     # 대량 적재는 런타임 질의와 마감이 다르다. 어댑터 기본 5초는 **질의 1건** 기준이고,
     # 여기서는 한 요청에 수십 건을 태운다(로컬 KURE-v1 실측 건당 ~1.4초 — 기본 배치
@@ -224,18 +258,23 @@ def main(argv: list[str]) -> int:
         fresh = _skip_already_indexed(documents, embedding, url)
         if len(fresh) != len(documents):
             print(f"{path.name}: 기적재 {len(documents) - len(fresh)}건 건너뜀")
-        count = index_documents(fresh, embedding, store)
-        print(f"{path.name}: {count}건 적재 (KB: {', '.join(kinds)})")
         if path.name.endswith(".jsonl.gz"):
-            # 청킹 전 통문서(`wiki:{ref}`)가 같은 collection 에 남아 있으면 검색 후보로 섞인다 —
-            # 이 스크립트는 seed 에서 빠진 행을 안 지우므로(docstring) 여기서만 명시적으로 지운다.
+            count, done = _index_corpus(fresh, embedding, store)
+            # 청킹 전 통문서(`wiki:{ref}`)가 같은 collection 에 남아 있으면 지운다 — 이 스크립트는 seed 에서
+            # 빠진 행을 안 지우므로(docstring) 여기서만 명시적으로. **조각이 다 들어간 문서만** 지운다:
+            # 시간 예산에 걸려 멈춘 문서의 통문서를 먼저 지우면 그 장소는 다음 배포까지 아무 설명도 없다.
             from trippilot.agents.planb.kb_retrieval import collection_for
             from trippilot.poi_curation.chunking import base_ids
 
-            stale = base_ids(documents)
+            pending = base_ids(fresh) - done
+            stale = base_ids(documents) - pending
             for doc_id in stale:
                 store.delete(collection_for(documents[0].kb, embedding.model_id), doc_id)
-            print(f"{path.name}: 청킹 전 통문서 {len(stale)}건 정리")
+            print(f"{path.name}: {count}건 적재 · 청킹 전 통문서 {len(stale)}건 정리"
+                  + (f" · 시간 예산으로 {len(pending)}건 다음 배포로" if pending else ""))
+        else:
+            count = index_documents(fresh, embedding, store)
+            print(f"{path.name}: {count}건 적재 (KB: {', '.join(kinds)})")
         total += count
     provider = os.environ.get("TRIPPILOT_EMBEDDING_PROVIDER") or "openai"
     print(f"총 {total}건 (dim={embedding.dim}, provider={provider}, 멱등 upsert)")

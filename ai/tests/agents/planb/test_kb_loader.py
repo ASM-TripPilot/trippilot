@@ -231,3 +231,32 @@ def test_본문이나_payload_가_바뀐_문서는_기적재로_건너뛰지_않
     monkeypatch.setattr(psycopg, "connect", lambda url: _Conn())
     fresh = load_kb._skip_already_indexed([same, edited, relabeled, new], embedding, "fake")
     assert [d.doc_id for d in fresh] == ["edited", "relabeled", "new"]
+
+
+# ── KB-5 원천 조각 적재 — 시간 예산에서 **문서 단위로** 끊는다 (2026-10-18 청킹) ──────────
+
+def test_corpus_load_stops_at_document_boundaries_and_reports_what_is_done(monkeypatch) -> None:
+    import itertools
+
+    from tests.fakes.fake_embedding import FakeEmbedding
+    from tests.fakes.in_memory_vector_store import InMemoryVectorStore
+    from trippilot.poi_curation.chunking import chunk_document
+
+    load_kb = _load_kb_module()
+    rows = [{"doc_id": f"wiki:{i}", "poi_ref": str(i),
+             "sections": [{"heading": "개요", "text": " ".join(f"{i}번 장소 문장 {k}이다." for k in range(30))}]}
+            for i in range(3)]
+    docs = [d for r in rows for d in chunk_document(r)]
+    clock = itertools.count(0, 10)  # 문서 하나 볼 때마다 10초씩 흐른다
+    monkeypatch.setattr("time.monotonic", lambda: next(clock))
+    monkeypatch.setattr("trippilot.agents.planb.kb_retrieval.INDEX_BATCH", 1)
+    store = InMemoryVectorStore()
+    count, done = load_kb._index_corpus(docs, FakeEmbedding(), store, budget_sec=25)
+    assert done == {"wiki:0", "wiki:1"}  # 세 번째 문서는 손대지 않았다 — 반쯤 들어간 문서가 없다
+    assert count == sum(1 for d in docs if not d.doc_id.startswith("wiki:2#"))
+
+
+def test_default_seeds_load_the_chunk_corpus_not_the_old_whole_documents() -> None:
+    load_kb = _load_kb_module()
+    assert "data/place_corpus_wiki.jsonl.gz" in load_kb._DEFAULT_SEEDS
+    assert "data/place_docs.json" not in load_kb._DEFAULT_SEEDS
