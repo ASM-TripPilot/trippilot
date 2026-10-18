@@ -49,6 +49,10 @@ jest.mock('../model/useDailyReflection', () => ({
   useDailyReflection: jest.fn(),
 }));
 
+jest.mock('../model/useReflectionPhotos', () => ({
+  useReflectionPhotos: jest.fn(() => []),
+}));
+
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTripsTripId: jest.fn(),
 }));
