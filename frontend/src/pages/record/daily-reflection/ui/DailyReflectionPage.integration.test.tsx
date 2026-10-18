@@ -47,6 +47,11 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
+// 사진 배선(TRIP-1444)은 useReflectionPhotos.test 가 본다 — 여기선 사진 요청이 가짜 서버로 새지 않게 비운다.
+jest.mock('../model/useReflectionPhotos', () => ({
+  useReflectionPhotos: () => [],
+}));
+
 jest.mock('expo-router', () => ({
   router: {
     push: jest.fn(),
