@@ -303,3 +303,9 @@ internal class FakeDialogueMemory(var items: List<MemoryItem> = emptyList()) : D
         return 1
     }
 }
+
+/** 발행한 이벤트를 적는다 — 아웃박스 적재 대역. */
+internal class CapturingEvents : com.trippilot.core.event.DomainEventPublisher {
+    val published = mutableListOf<com.trippilot.core.event.DomainEvent>()
+    override fun publish(event: com.trippilot.core.event.DomainEvent) { published += event }
+}

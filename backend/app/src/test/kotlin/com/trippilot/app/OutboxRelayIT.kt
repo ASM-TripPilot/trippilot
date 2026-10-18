@@ -48,8 +48,18 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         }
     }
 
+    /** 같은 타입의 두 번째 구독자 — [Recording] 보다 **먼저** 등록해 "앞 구독자의 실패"를 만든다. */
+    class Failing : OutboxSubscriber {
+        override val eventType = "test.RelayProbe"
+        var failing = false
+        override fun handle(envelope: EventEnvelope) {
+            if (failing) error("의도된 앞 구독자 실패")
+        }
+    }
+
     @TestConfiguration
     class Probes {
+        @Bean fun failingSubscriber() = Failing()
         @Bean fun recordingSubscriber() = Recording()
     }
 
@@ -57,6 +67,8 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var relay: OutboxRelay
     @Autowired private lateinit var jdbc: JdbcTemplate
     @Autowired private lateinit var subscriber: Recording
+    @Autowired private lateinit var failing: Failing
+    @Autowired private lateinit var subscribers: List<OutboxSubscriber>
     @Autowired private lateinit var txManager: PlatformTransactionManager
 
     private val tx by lazy { TransactionTemplate(txManager) }
@@ -84,6 +96,7 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         // 실패 플래그도 되돌린다 — 설정해 둔 이벤트가 (백오프 등으로) 안 집히면 그대로 남아
         // **다음 테스트의 첫 배달을 엉뚱하게 실패시킨다**. 백오프 도입으로 "안 집히는 경로"가 생겼다.
         subscriber.failNext = false
+        failing.failing = false
     }
 
     private fun unpublished(note: String) = jdbc.queryForObject(
@@ -141,6 +154,23 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         relay.relay() // 재시도하면 이번엔 간다
         subscriber.received.map { it.aggregateId } shouldContain "실패"
         unpublished("실패") shouldBe 0
+    }
+
+    @Test
+    fun `한 구독자가 실패해도 같은 이벤트의 다른 구독자는 돌고, 이벤트는 재시도로 남는다`() {
+        // 등록 순서가 정말 "실패하는 쪽이 앞"인지부터 — 아니면 이 테스트는 아무것도 증명하지 못한다
+        subscribers.filter { it.eventType == "test.RelayProbe" }.map { it::class } shouldBe listOf(Failing::class, Recording::class)
+        tx.execute { publisher.publish(Probe("독립")) }
+        failing.failing = true
+
+        relay.relay()
+
+        subscriber.received.map { it.aggregateId } shouldContain "독립" // 앞이 실패해도 뒤는 받았다
+        unpublished("독립") shouldBe 1 // 실패가 있었으니 이벤트째 재시도로 남는다
+        failing.failing = false
+        dueNow("독립")
+        relay.relay()
+        unpublished("독립") shouldBe 0
     }
 
     /**
