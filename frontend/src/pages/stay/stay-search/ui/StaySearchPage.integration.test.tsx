@@ -830,24 +830,9 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
       expectPriceCleared();
     });
 
-    it('filter-zero "필터 초기화"도 가격대까지 푼다', async () => {
-      mockSearchParams = { region: '부산', amenity: '오션뷰' };
-      server.use(
-        http.get(`${BASE}/stays/search`, () =>
-          HttpResponse.json(FILTER_ZERO_RESPONSE)
-        )
-      );
-      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
-      await waitFor(() =>
-        expect(screen.getByTestId('stay-search-filterzero')).toBeOnTheScreen()
-      );
-      applyPrice('over-200k');
-      expect(priceChip()).toBeSelected();
-
-      fireEvent.press(screen.getByTestId('stay-search-filterzero-reset'));
-
-      expectPriceCleared();
-    });
+    // TRIP-1429 — 옛 둘째 it("filter-zero '필터 초기화'도 가격대까지 푼다")은 지웠다. 0곳이면 가격대 칩이 숨어
+    // filter-zero 얼굴에서 구간을 고를 길이 없다(도달 불가). filter-zero 를 거치며 구간이 풀리는지는 아래 PH-4 가,
+    // onRelaxFilters 가 구간을 푸는지는 위 it(같은 콜백)이 본다.
   });
 
   // Q4 — 지역 선택이 dismissTo 로 **같은 결과 화면 인스턴스**에 돌아오므로(F), 로컬 state 인 가격대·
@@ -869,6 +854,10 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
 
       mockSearchParams = { region: '무주' };
       rerender(<StaySearchPage />);
+      // TRIP-1429 — 재조회 로딩 중엔 가격대 칩이 빠질 수 있다(01b Q2). 결과가 온 뒤 본다.
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+      );
 
       expectPriceCleared();
       expect(screen.getByTestId('stay-search-name-input')).toHaveDisplayValue(
@@ -876,7 +865,9 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
       );
     });
 
-    it('짝: 지역은 그대로이고 다른 조건만 바뀌면 가격대·검색어가 남는다', async () => {
+    // TRIP-1429 B4 — 조건만 바꾼 rerender 가 곧 [필터] 적용 재조회다. 재조회 로딩 동안 목록이 비어(sidoItems=[])
+    // "가격 있는 숙소 0곳"처럼 보여도 구간을 지우면 안 된다 — 리셋은 조회가 끝난 결과에서만(01b Q2).
+    it('짝: 지역은 그대로이고 다른 조건만 바뀌면 재조회 로딩을 거쳐도 가격대·검색어가 남는다', async () => {
       const { rerender } = render(<StaySearchPage />, {
         wrapper: createGcZeroWrapper(),
       });
@@ -892,11 +883,17 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
 
       mockSearchParams = { region: '부산', amenity: '오션뷰' };
       rerender(<StaySearchPage />);
+      // 앵커 — 재조회 로딩 창을 실제로 지난다.
+      expect(screen.getByTestId('stay-search-loading')).toBeOnTheScreen();
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+      );
 
       expect(priceChip()).toBeSelected();
       expect(
         within(priceChip()).getByText(bucketLabel('over-200k'))
       ).toBeOnTheScreen();
+      expect(screen.queryByTestId(`stay-card-${KEY_CHEAP}`)).toBeNull();
       expect(screen.getByTestId('stay-search-name-input')).toHaveDisplayValue(
         '오션'
       );
@@ -930,11 +927,205 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
         sido: '부산광역시',
       };
       rerender(<StaySearchPage />);
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+      );
 
       expectPriceCleared();
       expect(screen.getByTestId('stay-search-name-input')).toHaveDisplayValue(
         ''
       );
+    });
+  });
+
+  // TRIP-1429 결정 ① — 가격은 클라에서만 거른다(계약에 가격 파라미터 없음). 지금 목록(시도 후처리 뒤)에 가격 있는
+  // 숙소가 하나도 없으면 가격대 필터는 "전부 제외"만 하므로 칩을 숨긴다(BR-U1-14 · Q-031). 숨길 때 고른 구간이
+  // 남아 있으면 안 보이는 필터가 목록을 0곳으로 만든다 — 조회가 끝난 결과에서 'all' 로 되돌린다(01b Q2).
+  describe('PH · 가격 있는 숙소가 없으면 가격대 칩을 숨긴다 (B1~B4 · BR-U1-14 · 01b Q2)', () => {
+    const NULL_A: StayItem = {
+      ...CHEAP,
+      externalId: 'null-a',
+      name: '가격 미확인 한옥',
+      price: null,
+    };
+    const NULL_B: StayItem = {
+      ...LUX,
+      externalId: 'null-b',
+      name: '가격 미확인 펜션',
+      price: null,
+    };
+    // amount 0 은 "가격 있음"이다(formatPrice 와 같은 `== null` 존재 판정 — falsy 로 접지 않는다).
+    const ZERO: StayItem = {
+      ...CHEAP,
+      externalId: 'zero',
+      name: '무료 체험 스테이',
+      price: { amount: 0, currency: 'KRW' },
+    };
+    const KEY_NULL_A = `${NULL_A.externalSource}:${NULL_A.externalId}`;
+    const KEY_NULL_B = `${NULL_B.externalSource}:${NULL_B.externalId}`;
+    const KEY_ZERO = `${ZERO.externalSource}:${ZERO.externalId}`;
+
+    /** 요청 URL 의 amenity 유무로 응답을 가른다 — [필터] 적용(조건만 바뀐 재조회)을 흉내 낸다. */
+    function respondByAmenity(
+      withoutAmenity: StayItem[],
+      withAmenity: () => Response
+    ): void {
+      server.use(
+        http.get(`${BASE}/stays/search`, ({ request }) =>
+          new URL(request.url).searchParams.getAll('amenity').length > 0
+            ? withAmenity()
+            : HttpResponse.json({
+                items: withoutAmenity,
+                degraded: false,
+                filterZeroReasons: [],
+              })
+        )
+      );
+    }
+
+    /** 조건이 바뀐 재조회가 끝날 때까지 기다린다 — 로딩 창을 지난 것을 먼저 보고(앵커), 끝난 뒤 얼굴을 단언한다.
+     * 결과 카드를 기다리면 구현이 틀렸을 때 상한까지 기다리다 시간 초과로만 죽어 무엇이 틀렸는지 안 보인다. */
+    async function waitRefetched(): Promise<void> {
+      expect(screen.getByTestId('stay-search-loading')).toBeOnTheScreen();
+      await waitFor(() =>
+        expect(screen.queryByTestId('stay-search-loading')).toBeNull()
+      );
+    }
+
+    function itemsResponse(items: StayItem[]): Response {
+      return HttpResponse.json({
+        items,
+        degraded: false,
+        filterZeroReasons: [],
+      });
+    }
+
+    it('PH-1 · 목록이 전부 가격 미확인이면 가격대 칩이 없고, 지역·필터 칩은 그대로다', async () => {
+      server.use(
+        http.get(`${BASE}/stays/search`, () => itemsResponse([NULL_A, NULL_B]))
+      );
+
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+      // 앵커 — 결과가 도착했다(로딩 중이라 칩이 없는 것과 구분).
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_NULL_A}`)).toBeOnTheScreen()
+      );
+
+      expect(screen.queryByTestId('stay-search-filter-price')).toBeNull();
+      expect(screen.getByTestId('stay-search-filter-region')).toBeOnTheScreen();
+      expect(screen.getByTestId('stay-search-filter-more')).toBeOnTheScreen();
+    });
+
+    it('PH-2 · 가격 있는 숙소가 하나라도 있으면(0원 포함) 칩이 있고 구간 필터가 지금처럼 걸린다', async () => {
+      server.use(
+        http.get(`${BASE}/stays/search`, () => itemsResponse([ZERO, NULL_A]))
+      );
+      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_ZERO}`)).toBeOnTheScreen()
+      );
+
+      applyPrice('under-100k');
+
+      expect(priceChip()).toBeSelected();
+      expect(screen.getByTestId(`stay-card-${KEY_ZERO}`)).toBeOnTheScreen();
+      expect(screen.queryByTestId(`stay-card-${KEY_NULL_A}`)).toBeNull();
+    });
+
+    it('PH-3 · 구간을 고른 뒤 목록이 가격 미확인만으로 바뀌면 칩이 숨고 구간이 "전체"로 돌아간다', async () => {
+      respondByAmenity([CHEAP, LUX], () => itemsResponse([NULL_A, NULL_B]));
+      const { rerender } = render(<StaySearchPage />, {
+        wrapper: createGcZeroWrapper(),
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+      );
+      applyPrice('over-200k');
+      expect(priceChip()).toBeSelected();
+
+      // 실행 — [필터] 적용으로 조건이 바뀐다 → 가격 미확인 두 곳이 온다.
+      mockSearchParams = { region: '부산', amenity: '오션뷰' };
+      rerender(<StaySearchPage />);
+
+      await waitRefetched();
+
+      // 안 보이는 구간이 목록을 0곳으로 만들지 않는다 — 두 곳이 다 보이고 헤더도 전체 수다.
+      expect(screen.getByTestId(`stay-card-${KEY_NULL_A}`)).toBeOnTheScreen();
+      expect(screen.getByTestId(`stay-card-${KEY_NULL_B}`)).toBeOnTheScreen();
+      expect(screen.queryByTestId('stay-search-filter-price')).toBeNull();
+      expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
+        /· 2곳/
+      );
+
+      // 칩이 다시 나타날 때 옛 구간이 되살아나지 않는다 — 숨김은 '전체'로의 리셋이었다.
+      mockSearchParams = { region: '부산' };
+      rerender(<StaySearchPage />);
+      await waitRefetched();
+      expectPriceCleared();
+      expect(screen.getByTestId(`stay-card-${KEY_CHEAP}`)).toBeOnTheScreen();
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen();
+    });
+
+    it('PH-4 · filter-zero(0곳)를 거치면 구간이 풀린다 — [필터 초기화]를 누르지 않아도', async () => {
+      respondByAmenity([CHEAP, LUX], () =>
+        HttpResponse.json(FILTER_ZERO_RESPONSE)
+      );
+      const { rerender } = render(<StaySearchPage />, {
+        wrapper: createGcZeroWrapper(),
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+      );
+      applyPrice('over-200k');
+      expect(priceChip()).toBeSelected();
+
+      mockSearchParams = { region: '부산', amenity: '오션뷰' };
+      rerender(<StaySearchPage />);
+      await waitRefetched();
+      expect(screen.getByTestId('stay-search-filterzero')).toBeOnTheScreen();
+      expect(screen.queryByTestId('stay-search-filter-price')).toBeNull();
+
+      // 필터 시트에서 조건을 뺀 것과 같다(초기화 버튼은 스스로 구간을 풀어 리셋 규칙을 가리므로 쓰지 않는다).
+      mockSearchParams = { region: '부산' };
+      rerender(<StaySearchPage />);
+      await waitRefetched();
+      expectPriceCleared();
+      expect(screen.getByTestId(`stay-card-${KEY_CHEAP}`)).toBeOnTheScreen();
+    });
+
+    it('PH-5 · 재조회가 오류 얼굴을 거쳐도 고른 구간은 남는다 — 오류는 "가격 없음"이 아니다', async () => {
+      let failWithAmenity = true;
+      respondByAmenity([CHEAP, LUX], () =>
+        failWithAmenity
+          ? new HttpResponse(null, { status: 500 })
+          : itemsResponse([CHEAP, LUX])
+      );
+      const { rerender } = render(<StaySearchPage />, {
+        wrapper: createGcZeroWrapper(),
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+      );
+      applyPrice('over-200k');
+      expect(priceChip()).toBeSelected();
+
+      mockSearchParams = { region: '부산', amenity: '오션뷰' };
+      rerender(<StaySearchPage />);
+      await waitFor(() =>
+        expect(screen.getByTestId('stay-search-error')).toBeOnTheScreen()
+      );
+
+      failWithAmenity = false;
+      fireEvent.press(screen.getByTestId('stay-search-error-retry'));
+      await waitFor(() =>
+        expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+      );
+
+      expect(priceChip()).toBeSelected();
+      expect(
+        within(priceChip()).getByText(bucketLabel('over-200k'))
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(`stay-card-${KEY_CHEAP}`)).toBeNull();
     });
   });
 });

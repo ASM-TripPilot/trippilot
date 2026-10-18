@@ -133,7 +133,15 @@ export function TripCardContainer({
   // TRIP-1055 · 삭제 진입점(UX 사본 — 판정 정본은 서버 BR-U1-57, 상태 가드 TRIP-1061 전까진 이게 유일한
   // 방어). 보이는 배지가 '작성중'이면(Q3 — 날짜 지난 초안 포함) 생성 세션이 돌아도 연다(TRIP-1271 결정 1=A).
   // 배지가 null 인 "모른다"(조회 중·404 아닌 실패)는 draft 가 아니라 닫힌 쪽으로 빠진다.
-  const deletable = onPressDelete !== undefined && badge === 'draft';
+  // TRIP-1441 — 확정했지만 아직 시작 전인 여행('upcoming', 서울 날짜 기준)에도 연다(사용자 결정 2026-10-16,
+  // US-TRIP-10 2026-10-01 개정 — 노출 제한은 FE 화면 정책). 여행 중·지난 여행은 닫힌 채. today 가 없으면
+  // (컨테이너는 시계를 읽지 않는다) 확정 카드는 닫힌 쪽이다. 배지 null("모른다")은 식 안의 badge !== null 가드가 거른다.
+  const deletable =
+    onPressDelete !== undefined &&
+    (badge === 'draft' ||
+      (badge !== null &&
+        today !== undefined &&
+        classifyTripPhase(trip, itinerary.data?.status, today) === 'upcoming'));
 
   return (
     <TripCard

@@ -209,6 +209,10 @@ def drop_bad_nightlife(proposals: list[dict]) -> int:
     원천 카테고리(`kind`)는 제안에 없다 — `tags` 가 나이트라이프 태그로 바뀌어 있다. 그래서
     **세부 태그에서 되찾는다**(`클럽` → `dance_club`). 세부는 `NIGHTLIFE_DETAIL` 의 값이고
     1:1 이므로 역인덱스가 유일하다.
+
+    **클럽은 웹 큐레이션(`KAKAO_LOCAL`, `collect_curated_kakao.py`) 것만 남긴다**(2026-10-18).
+    Overture 클럽은 판정 v4 뒤에도 사용자가 품질을 지적했고, 별점·리뷰 수는 카카오·네이버
+    API 어디에도 없어 "많이 가는 곳"을 데이터로 가를 수 없다 — 사람이 웹에서 고른 목록이 대역이다.
     """
     by_detail = {v: k for k, v in NIGHTLIFE_DETAIL.items()}
     kept: list[dict] = []
@@ -216,6 +220,8 @@ def drop_bad_nightlife(proposals: list[dict]) -> int:
         tags = p.get("tags") or []
         kind = by_detail.get(tags[1]) if (len(tags) == 2 and tags[0] == NIGHTLIFE_TAG) else None
         if kind is not None and nightlife_tags(kind, p["poi"]["name"]) is None:
+            continue
+        if kind == "dance_club" and p.get("source") != "KAKAO_LOCAL":
             continue
         kept.append(p)
     n = len(proposals) - len(kept)
