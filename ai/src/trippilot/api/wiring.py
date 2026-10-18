@@ -1313,7 +1313,7 @@ _NEAR_KEYS = frozenset({"NEARBY", "LESS_MOVE"})
 _NIGHT_KEYS = frozenset({"NIGHTLIFE"})
 _NIGHTLIFE_KEEP = 6  # 구성 후보에 올리는 나이트라이프 수(가까운 순)
 # 나이트라이프 세부 태그(수집 계약 — tags=["나이트라이프", 세부]). 말에 있는데 근처에 없으면 노트로 밝힌다.
-_NIGHTLIFE_SUBTYPES = ("클럽", "칵테일바", "와인바", "라운지바", "비어가든", "스피크이지")
+_NIGHTLIFE_SUBTYPES = ("클럽", "칵테일바", "와인바", "라운지바", "비어가든", "스피크이지", "혼술바")
 # 그날 창을 23:59 까지 넓힌다 — 클럽·바 추정 영업(20:00~04:00) 중 그날 안쪽. 자정을 넘기지 않는 이유: OR 모델이
 # 창 끝을 하루 안의 분으로 읽어(`_mod`) 자정을 넘는 창이면 자유 방문이 전부 놓일 수 없게 된다(로컬 재현).
 _NIGHT_END = timedelta(hours=23, minutes=59)
