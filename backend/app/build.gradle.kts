@@ -3,6 +3,9 @@ plugins {
     alias(libs.plugins.kotlin.spring)
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.spring.dependencyManagement)
+    // 전 모듈 커버리지 합산 — `implementation(project(...))` 로 조립한 모듈의 test 실행 데이터를 모아
+    // `:app:testCodeCoverageReport` 하나로 낸다. 하한선 검사는 scripts/coverage_gate.py(CI).
+    `jacoco-report-aggregation`
 }
 
 dependencies {
@@ -92,3 +95,6 @@ tasks.named<Test>("test") {
         rootProject.file("scripts/ingest_pois.py"),
     ).withPropertyName("배선통로파일").withPathSensitivity(PathSensitivity.RELATIVE)
 }
+
+// 합산 리포트는 기본이 HTML 뿐이다 — 하한선 스크립트(scripts/coverage_gate.py)가 읽을 XML 을 켠다.
+tasks.withType<JacocoReport>().configureEach { reports.xml.required = true }

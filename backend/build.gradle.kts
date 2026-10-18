@@ -8,9 +8,15 @@ plugins {
     alias(libs.plugins.spring.dependencyManagement) apply false
 }
 
+// `subprojects {}` 안의 `libs` 는 하위 프로젝트 확장으로 찾아 실패한다 — 루트에서 꺼내 넘긴다.
+val jacocoVersion = libs.versions.jacoco.get()
+
 // 전 모듈 공통 컴파일/테스트 규약. 모듈별 build.gradle.kts는 의존성만 선언한다.
 subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
+    // 커버리지 측정 — 각 모듈 test 가 실행 데이터를 남기고, 합산 리포트는 app 이 만든다(app/build.gradle.kts).
+    apply(plugin = "jacoco")
+    extensions.configure<JacocoPluginExtension> { toolVersion = jacocoVersion }
 
     group = "com.trippilot"
     version = "0.0.1-SNAPSHOT"
