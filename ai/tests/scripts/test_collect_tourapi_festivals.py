@@ -77,7 +77,7 @@ class _Flaky:
         return [_item()], 1
 
 
-def test_한_번_끊기면_다시_받고_두_번_끊기면_그_쪽만_건너뛴다() -> None:
+def test_끊기면_간격을_두고_다시_받고_세_번_끊기면_그_쪽만_건너뛴다() -> None:
     from collect_tourapi_festivals import fetch_page
-    assert fetch_page(_Flaky(1), "20261018", 1) == ([_item()], 1)
-    assert fetch_page(_Flaky(2), "20261018", 1) is None
+    assert fetch_page(_Flaky(2), "20261018", 1, pause_sec=0) == ([_item()], 1)   # 두 번 끊겨도 세 번째에
+    assert fetch_page(_Flaky(3), "20261018", 1, pause_sec=0) is None
