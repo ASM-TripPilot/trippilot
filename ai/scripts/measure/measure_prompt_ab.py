@@ -16,6 +16,14 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
 - `answer`  DIALOGUE_ANSWER — Facts 9종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
   같은 함수)·지연. 문장은 끝에 전부 찍는다 — 지어낸 사실은 사람이 읽어서 본다.
+- `scoring` PREFERENCE_SCORING — `data/collected_pois.json` 해운대구 실데이터 53곳 × 페르소나 3종. 세 번째 인자는
+  반복이 아니라 **청크 구성 수**다: 구성마다 poiId(uuid5)의 소금만 바꿔 워커의 `plan_chunks`(poi_id 정렬 균등 분할)가
+  다른 묶음을 만들게 한다. 청크는 서로를 못 보고 따로 채점되므로, 같은 장소가 묶음에 따라 점수가 흔들리는지(POI별
+  표준편차 평균·구성 간 스피어만)와 페르소나마다 미리 정한 명백한 상·하위 쌍의 순서 정합을 잰다. 프롬프트에 예시를
+  넣는 판본을 잴 때는 해운대구 밖 POI 로 쓴다(겹치면 측정이 오염된다). 모델 기본 gpt-5.6-sol(운영 배정)·시한 14s
+  (ScheduleAgent c1_max_ms). 같은 구성을 되풀이한 값(EVAL_SCORE_SAME_SPLIT=1, 샘플링 노이즈 바닥)과 견줘야 묶음 효과가
+  보인다 — 2026-10-18 실측은 preference_scoring.yaml 머리 주석.
+      uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py scoring /tmp/base/ai/prompts 3
 
 모델·시한은 운영 배정(.env.example 의 DIALOGUE_* = gpt-5.6-luna, BLM 시한표 분류 4.0s·답변 3.5s)이 기본이다.
 sol 배정 기능은 `EVAL_MODEL=gpt-5.6-sol` 로 돌린다.
@@ -35,20 +43,31 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+import itertools  # noqa: E402
+import uuid  # noqa: E402
+from collections import defaultdict  # noqa: E402
+from dataclasses import replace  # noqa: E402
+
 import openai  # noqa: E402
 import yaml  # noqa: E402
 
-from trippilot.domain.common import TraceId  # noqa: E402
+from trippilot.domain.common import BudgetLevel, PoiId, TraceId  # noqa: E402
 from trippilot.domain.intent import Intent  # noqa: E402
-from trippilot.domain.llm import LlmFeature, ModelTier  # noqa: E402
+from trippilot.domain.llm import CandidatePool, LlmFeature, ModelTier  # noqa: E402
+from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag  # noqa: E402
+from trippilot.domain.poi import Poi  # noqa: E402
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate  # noqa: E402
 from trippilot.llm_gateway.gates.intent import IntentGate  # noqa: E402
+from trippilot.llm_gateway.gates.scoring import ClosedSetGate  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker  # noqa: E402
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker  # noqa: E402
+from trippilot.llm_gateway.workers.preference import (  # noqa: E402
+    adaptive_chunk_size, build_prompt_vars, plan_chunks, score_chunk_cap,
+)
 from trippilot.orchestrator import dialogue_orchestrator as orch  # noqa: E402
 
 MODEL = os.environ.get("EVAL_MODEL", "gpt-5.6-luna")
@@ -63,10 +82,10 @@ class _NullTrace:
         pass
 
 
-def _gateway(prompts: Path, feature: LlmFeature, gate) -> GatewayFacade:
+def _gateway(prompts: Path, feature: LlmFeature, gate, model: str = MODEL) -> GatewayFacade:
     # SDK 재시도 0 — 운영 어댑터와 같은 정책이라야 지연이 왜곡되지 않는다(TRIP-381)
     llm = OpenAIAdapter(openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=0), api="responses")
-    cfg = C1Config(model_ids={t: MODEL for t in ModelTier}, feature_models={feature: MODEL})
+    cfg = C1Config(model_ids={t: model for t in ModelTier}, feature_models={feature: model})
     return GatewayFacade(llm, PromptRegistry(prompts), gate, cfg, _NullTrace())
 
 
@@ -262,7 +281,152 @@ def run_directive(prompts: Path, repeat: int) -> None:
                   f" {r['err'] or ''}")
 
 
-RUNNERS = {"intent": run_intent, "answer": run_answer, "directive": run_directive}
+# ───────── scoring ─────────
+
+SCORE_MODEL = os.environ.get("EVAL_SCORE_MODEL", "gpt-5.6-sol")
+SCORE_TIMEOUT = float(os.environ.get("EVAL_SCORE_TIMEOUT", "14.0"))
+_SCORE_REGION = "해운대구"
+_SCORE_NAMES = (
+    "해운대 동백섬", "장산 (부산 국가지질공원)", "해운대 그린레일웨이 (미포~송정 구간)", "미포항", "해운대 수목원",
+    "장산산림욕장", "해운대해수욕장",
+    "달맞이동산", "동백공원", "부산광안대교", "씨라이프부산아쿠아리움", "해운대리버크루즈", "해운대온천센터", "옥천사",
+    "해리단길",
+    "문탠로드", "센텀시티 아이스링크", "송정서핑학교", "멜트", "오버플로우", "펫낫", "해운대블루라인파크 청사포정거장",
+    "청사포 기찻길", "더베이101", "부산엑스더스카이",
+    "부산시립미술관", "조현화랑", "이우환 공간", "누리마루 APEC하우스", "책방봄봄", "해운대문화회관", "갤러리이알디 부산",
+    "반송187", "수월경화", "스노잉클라우드", "아델라7", "엣지993", "원시학", "프루터리포레스트",
+    "거대갈비", "구로마쯔", "류센소 본점", "라꽁띠", "송정물총칼국수", "양산국밥", "싱싱뽈락회 해운대본점", "솔내음한정식",
+    "문토스트", "부우사안",
+    "신세계백화점 센텀시티점", "해운대 로데오거리", "좌동재래시장", "그라핀",
+)
+_PERSONAS = {
+    "자연·조용·부모님": PersonaSummary(
+        taste_tags=(TasteTag.NATURE, TasteTag.REST), companion=CompanionType.PARENTS, budget=BudgetLevel.MID,
+        activities=("자연", "역사문화"), cuisines=("한식",)),
+    "카페·전시·커플": PersonaSummary(
+        taste_tags=(TasteTag.CITY,), companion=CompanionType.COUPLE, budget=BudgetLevel.MID,
+        activities=("카페", "전시"), cuisines=("양식",)),
+    "맛집·야경·친구": PersonaSummary(
+        taste_tags=(TasteTag.FOOD, TasteTag.ACTIVITY), companion=CompanionType.FRIENDS, budget=BudgetLevel.MID,
+        activities=("맛집투어", "야경"), cuisines=("한식", "일식")),
+}
+# 사람이 봐도 명백한 상위·하위 — 상위 4곳 × 하위 4곳 = 16쌍이 전부 상위 > 하위여야 한다(동점은 0.5).
+_ANCHORS = {
+    "자연·조용·부모님": (("해운대 동백섬", "해운대 수목원", "해운대 그린레일웨이 (미포~송정 구간)", "장산산림욕장"),
+                       ("멜트", "오버플로우", "펫낫", "송정서핑학교")),
+    "카페·전시·커플": (("엣지993", "스노잉클라우드", "이우환 공간", "부산시립미술관"),
+                     ("장산 (부산 국가지질공원)", "좌동재래시장", "양산국밥", "옥천사")),
+    "맛집·야경·친구": (("더베이101", "부산엑스더스카이", "거대갈비", "류센소 본점"),
+                     ("조현화랑", "책방봄봄", "갤러리이알디 부산", "옥천사")),
+}
+
+
+def _score_pois() -> list[Poi]:
+    data = json.loads((_AI_ROOT / "data/collected_pois.json").read_text(encoding="utf-8"))
+    found: dict[str, Poi] = {}
+    for prop in data["proposals"]:
+        name = prop["poi"]["name"]
+        if prop.get("region") == _SCORE_REGION and name in _SCORE_NAMES and name not in found:
+            found[name] = Poi.from_dict(prop["poi"])
+    missing = set(_SCORE_NAMES) - found.keys()
+    assert not missing, f"collected_pois.json 에 없음: {missing}"
+    return [found[n] for n in _SCORE_NAMES]
+
+
+def _salted_pool(pois: list[Poi], salt: int) -> tuple[CandidatePool, dict[str, str]]:
+    # 운영 poiId 는 백엔드 uuid — 출력 토큰(건당 ~34)이 같으려면 모양도 같아야 한다. 소금이 정렬 순서를 바꿔
+    # plan_chunks 가 다른 묶음을 만든다.
+    ided = [replace(p, poi_id=PoiId(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{salt}:{p.name}")))) for p in pois]
+    pool = CandidatePool(poi_ids=frozenset(p.poi_id for p in ided), pois=tuple(ided),
+                         generated_at=datetime.now(timezone.utc))
+    return pool, {str(p.poi_id): p.name for p in ided}
+
+
+def _spearman(a: list[float], b: list[float]) -> float | None:
+    def ranks(xs):
+        order = sorted(range(len(xs)), key=lambda i: xs[i])
+        r = [0.0] * len(xs)
+        i = 0
+        while i < len(order):  # 동점은 평균 순위
+            j = i
+            while j + 1 < len(order) and xs[order[j + 1]] == xs[order[i]]:
+                j += 1
+            for k in range(i, j + 1):
+                r[order[k]] = (i + j) / 2
+            i = j + 1
+        return r
+    try:
+        return statistics.correlation(ranks(a), ranks(b))
+    except statistics.StatisticsError:  # 한쪽이 전부 같은 값
+        return None
+
+
+def _avg(xs) -> float | None:
+    xs = list(xs)
+    return round(statistics.mean(xs), 4) if xs else None
+
+
+def run_scoring(prompts: Path, compositions: int) -> None:
+    assert compositions >= 2, "청크 구성이 2가지 이상이라야 흔들림을 잰다"
+    gw = _gateway(prompts, LlmFeature.PREFERENCE_SCORING, ClosedSetGate(), model=SCORE_MODEL)
+    cfg = gw.config
+    # 워커와 같은 분할 — 단계 예산 → 청크 크기(adaptive_chunk_size) → poi_id 정렬 균등 분할(plan_chunks)
+    size = adaptive_chunk_size(SCORE_TIMEOUT * 1000.0, cfg)
+    pois = _score_pois()
+    cases = []
+    for comp in range(compositions):
+        # EVAL_SCORE_SAME_SPLIT=1 — 같은 구성을 되풀이한다(샘플링 노이즈 바닥). 이 값보다 큰 흔들림만 묶음 탓이다.
+        pool, back = _salted_pool(pois, 0 if os.environ.get("EVAL_SCORE_SAME_SPLIT") else comp)
+        for chunk in plan_chunks(pool, size, cfg.score_max_parallel, chunk_max=score_chunk_cap(cfg)):
+            cases += [(key, comp, chunk, back) for key in _PERSONAS]
+
+    def one(item):
+        i, (key, comp, chunk, back) = item
+        t0 = time.monotonic()
+        r = gw.call(LlmFeature.PREFERENCE_SCORING, build_prompt_vars(chunk, _PERSONAS[key]), chunk,
+                    TraceId(f"ab-{i}"), datetime.now(timezone.utc), timeout_sec=SCORE_TIMEOUT)
+        wall = int((time.monotonic() - t0) * 1000)
+        scores = {} if r.is_fallback else {back[str(sp.poi_id)]: sp.score for sp in r.value or ()}
+        return dict(key=key, comp=comp, n=len(chunk.pois), scores=scores, err=r.error, wall=wall, **_usage(r))
+
+    rows = _run(one, cases)
+    table: dict[tuple[str, int], dict[str, float]] = defaultdict(dict)
+    for r in rows:
+        table[(r["key"], r["comp"])].update(r["scores"])
+
+    stds, rhos, pairs, lines = [], [], [], []
+    for key in _PERSONAS:
+        comps = [table[(key, c)] for c in range(compositions)]
+        spread = {n: statistics.pstdev(v) for n in _SCORE_NAMES
+                  if len(v := [c[n] for c in comps if n in c]) > 1}
+        rho = [x for a, b in itertools.combinations(comps, 2)
+               if (common := sorted(a.keys() & b.keys()))
+               and (x := _spearman([a[n] for n in common], [b[n] for n in common])) is not None]
+        top, bottom = _ANCHORS[key]
+        pair = [1.0 if c[t] > c[b] else 0.5 if c[t] == c[b] else 0.0
+                for c in comps for t in top for b in bottom if t in c and b in c]
+        stds += spread.values()
+        rhos += rho
+        pairs += pair
+        worst = sorted(spread, key=spread.get, reverse=True)[:4]
+        lines.append(f"  [{key}] std={_avg(spread.values())} rho={_avg(rho)} pair={_avg(pair)} 흔들림 상위: "
+                     + ", ".join(f"{n}={[c.get(n) for c in comps]}" for n in worst))
+
+    print(json.dumps(dict(
+        prompts=str(prompts), model=SCORE_MODEL, calls=len(rows), chunk_size=size,
+        std_mean=_avg(stds), spearman_mean=_avg(rhos), pair_acc=_avg(pairs),
+        gate_pass=round(sum(1 for r in rows if r["scores"]) / len(rows), 4),
+        complete=round(sum(1 for r in rows if len(r["scores"]) == r["n"]) / len(rows), 4),
+        over_budget=sum(1 for r in rows if r["wall"] > SCORE_TIMEOUT * 1000), **_timing(rows)), ensure_ascii=False))
+    print("\n".join(lines))
+    for r in rows:
+        if r["err"]:
+            print(f"  ✗ [{r['key']}] 구성{r['comp']} {r['n']}건 → {r['err']}")
+    # 원자료 — 지표를 다시 셀 때 실 호출을 되풀이하지 않도록
+    print("RAW " + json.dumps({f"{k}|{c}": v for (k, c), v in table.items()}, ensure_ascii=False))
+
+
+RUNNERS = {"intent": run_intent, "answer": run_answer, "directive": run_directive, "scoring": run_scoring}
 
 if __name__ == "__main__":
     kind, prompts = sys.argv[1], Path(sys.argv[2])
