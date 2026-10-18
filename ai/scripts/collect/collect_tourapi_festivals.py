@@ -27,6 +27,7 @@ from trippilot.domain.common import GeoPoint  # noqa: E402
 from trippilot.domain.event import EventInfo, EventType  # noqa: E402
 from trippilot.poi_curation.sourcing.pipeline import AREA_NAMES  # noqa: E402
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter, UrllibHttpClient  # noqa: E402
+from trippilot.ports.poi_sourcing_port import SourcingError  # noqa: E402
 
 KST = dt.timezone(dt.timedelta(hours=9))
 LOOKBACK_DAYS = 120
@@ -61,6 +62,22 @@ def to_event(item: dict, today: dt.date) -> EventInfo | None:
                      address=str(item.get("addr1") or "").strip() or None)
 
 
+def fetch_page(adapter: TourApiAdapter, code: str, since: str, page: int,
+               attempts: int = 2) -> tuple[list[dict], int] | None:
+    """한 쪽을 받는다 — 실패하면 한 번 더, 그래도 실패면 None(경고 로그).
+
+    data.go.kr 은 GitHub 러너에서 SSL 핸드셰이크가 가끔 끊긴다 — POI 수집도 같은 오류로 쪽을
+    건너뛴다(10-17 런). 첫 실행이 첫 호출에서 이걸 맞아 17개 지역이 통째로 날아갔다(10-18).
+    """
+    for n in range(1, attempts + 1):
+        try:
+            return adapter.search_festivals(code, since, page, ROWS)
+        except SourcingError as e:
+            print(f"[festivals] WARNING {AREA_NAMES[code]} {page}쪽 실패({n}/{attempts}): {e}",
+                  file=sys.stderr)
+    return None
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--store", type=Path,
@@ -79,11 +96,16 @@ def main(argv: list[str]) -> int:
     since = (now.date() - dt.timedelta(days=LOOKBACK_DAYS)).strftime("%Y%m%d")
 
     store = JsonEventStore(args.store)
-    totals = {"items": 0, "kept": 0, "coord": 0, "added": 0, "backfilled": 0, "truncated": []}
+    totals = {"items": 0, "kept": 0, "coord": 0, "added": 0, "backfilled": 0,
+              "truncated": [], "failed": []}
     for code, region in AREA_NAMES.items():
         events: list[EventInfo] = []
         for page in range(1, _MAX_PAGES + 1):
-            items, total = adapter.search_festivals(code, since, page, ROWS)
+            got = fetch_page(adapter, code, since, page)
+            if got is None:
+                totals["failed"].append(region)
+                break   # 이 지역 나머지 쪽은 건너뛴다 — 받은 만큼은 싣는다
+            items, total = got
             totals["items"] += len(items)
             events += [e for i in items if (e := to_event(i, now.date())) is not None]
             if page * ROWS >= total:
@@ -98,7 +120,8 @@ def main(argv: list[str]) -> int:
     store.save()
     print(f"[festivals] 원문 {totals['items']} → 진행·예정 {totals['kept']}(좌표 {totals['coord']}) · "
           f"신규 {totals['added']} · 좌표백필 {totals['backfilled']}"
-          + (f" · ⚠ {_MAX_PAGES}쪽에서 잘림: {totals['truncated']}" if totals["truncated"] else ""),
+          + (f" · ⚠ {_MAX_PAGES}쪽에서 잘림: {totals['truncated']}" if totals["truncated"] else "")
+          + (f" · ⚠ 호출 실패로 건너뜀: {totals['failed']}" if totals["failed"] else ""),
           file=sys.stderr)
     return 0
 

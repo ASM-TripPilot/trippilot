@@ -51,3 +51,23 @@ def test_축제_목록은_searchFestival2_를_키와_함께_부른다() -> None:
     url, params = http.calls[0]
     assert url.endswith("/searchFestival2")
     assert params["serviceKey"] == "K" and params["eventStartDate"] == "20260620"
+
+
+class _Flaky:
+    """처음 `fails` 번은 끊기고 그 뒤로 응답한다 — data.go.kr SSL 핸드셰이크 시간 초과 재현."""
+
+    def __init__(self, fails: int) -> None:
+        self.fails = fails
+
+    def search_festivals(self, code, since, page, rows):
+        from trippilot.ports.poi_sourcing_port import SourcingError
+        if self.fails:
+            self.fails -= 1
+            raise SourcingError("searchFestival2 호출 실패: URLError: handshake timed out")
+        return [_item()], 1
+
+
+def test_한_번_끊기면_다시_받고_두_번_끊기면_그_쪽만_건너뛴다() -> None:
+    from collect_tourapi_festivals import fetch_page
+    assert fetch_page(_Flaky(1), "1", "20260620", 1) == ([_item()], 1)
+    assert fetch_page(_Flaky(2), "1", "20260620", 1) is None
