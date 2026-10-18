@@ -31,7 +31,12 @@ const photo = (localAssetId: string, deviceId: string) => ({
 
 it('그 날 방문의 내 기기 사진만, 앨범에서 찾은 것만 주소로 돌려준다', async () => {
   mockVisits.mockReturnValue({
-    data: { visits: [{ visitCheckId: 'v1' }, { visitCheckId: 'v2' }] },
+    data: {
+      visits: [
+        { visitCheckId: 'v1', poiId: 'p1' },
+        { visitCheckId: 'v2', poiId: 'p2' },
+      ],
+    },
   });
   mockPhotos.mockImplementation(async (id: string) => ({
     count: 2,
@@ -47,5 +52,7 @@ it('그 날 방문의 내 기기 사진만, 앨범에서 찾은 것만 주소로
   const { result } = renderHook(() => useReflectionPhotos('t', '2026-09-24'), {
     wrapper,
   });
-  await waitFor(() => expect(result.current).toEqual([{ uri: 'file://a' }]));
+  await waitFor(() =>
+    expect(result.current).toEqual([{ uri: 'file://a', poiId: 'p1' }])
+  );
 });

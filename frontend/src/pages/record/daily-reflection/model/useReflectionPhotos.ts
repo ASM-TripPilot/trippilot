@@ -17,7 +17,7 @@ import { getInstallId } from '@/shared/storage';
 export function useReflectionPhotos(
   tripId: string,
   date: string
-): { uri: string }[] {
+): { uri: string; poiId: string }[] {
   const visits = useGetTripsTripIdVisitsDaysDay(tripId, date, {
     query: { enabled: tripId !== '' && date !== '' },
   });
@@ -43,9 +43,14 @@ export function useReflectionPhotos(
       )
     ),
   });
-  const mine = lists
-    .flatMap((q) => q.data?.items ?? [])
-    .filter((p) => installId !== null && p.deviceId === installId);
+  // 방문 순서 → 방문 안에서는 sortOrder 순. 같은 장소를 두 번 가면 먼저 간 방문의 사진이 앞선다(TRIP-1445).
+  const visitList = visits.data?.visits ?? [];
+  const mine = lists.flatMap((q, i) =>
+    [...(q.data?.items ?? [])]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .filter((p) => installId !== null && p.deviceId === installId)
+      .map((p) => ({ ...p, poiId: visitList[i].poiId }))
+  );
   const uris = useQueries({
     queries: mine.map((p) => ({
       queryKey: ['photo-uri', p.localAssetId],
@@ -53,5 +58,7 @@ export function useReflectionPhotos(
       staleTime: Infinity,
     })),
   });
-  return uris.flatMap((q) => (q.data ? [{ uri: q.data }] : []));
+  return uris.flatMap((q, i) =>
+    q.data ? [{ uri: q.data, poiId: mine[i].poiId }] : []
+  );
 }

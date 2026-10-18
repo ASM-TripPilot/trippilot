@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -97,6 +97,8 @@ export interface DailyReflectionScreenProps {
   hidePhotoGrid: boolean;
   // photos 는 읽기만 하므로 readonly — 호출자가 `[] as const` 로 넘겨도 받는다(가변 배열도 그대로 할당됨).
   photos: readonly { uri: string }[];
+  /** TRIP-1445 · AI 장면 블록(없으면 안 그린다). */
+  scenesBlock?: ReactNode;
   changeSummary?: string | null;
   mapCenter?: MapCenter;
   mapPins?: MapPin[];
@@ -148,6 +150,7 @@ export function DailyReflectionScreen({
   mapNotice,
   hidePhotoGrid,
   photos,
+  scenesBlock,
   changeSummary,
   mapCenter,
   mapPins,
@@ -504,6 +507,8 @@ export function DailyReflectionScreen({
                 </View>
                 <NarrativeBlock narrative={narrative} />
               </View>
+
+              {scenesBlock}
 
               {hidePhotoGrid ? (
                 <View

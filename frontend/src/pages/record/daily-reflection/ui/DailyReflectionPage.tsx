@@ -14,7 +14,9 @@ import {
 } from '../model/reflectionFallback';
 import { statsCard } from '../model/statsCard';
 import { useDailyReflection } from '../model/useDailyReflection';
+import { parseScenes } from '../model/reflectionScenes';
 import { useReflectionPhotos } from '../model/useReflectionPhotos';
+import { ReflectionScenes } from './ReflectionScenes';
 import {
   DailyReflectionScreen,
   type ReflectionDayTab,
@@ -214,6 +216,13 @@ export function DailyReflectionPage({
       mapNotice={missing.mapNotice}
       hidePhotoGrid={missing.hidePhotoGrid}
       photos={photos}
+      scenesBlock={
+        <ReflectionScenes
+          scenes={parseScenes(res?.card?.payload)}
+          date={date}
+          photos={photos}
+        />
+      }
       dayTabs={dayTabs}
       activeDay={activeDay}
       isToday={date === today}
