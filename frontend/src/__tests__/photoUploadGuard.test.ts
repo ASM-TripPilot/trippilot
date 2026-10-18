@@ -107,6 +107,7 @@ describe('🔴 G2 · 사진 바이너리 업로드 심볼 0 + 메타 실참조 (
     'pages/live/live-itinerary',
     'pages/record/trip-records',
     'pages/record/records-calendar',
+    'pages/record/daily-reflection',
     'features/check-visit',
     'features/attach-visit-media',
   ];
