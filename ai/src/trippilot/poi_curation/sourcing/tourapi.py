@@ -215,17 +215,19 @@ class TourApiAdapter:
         )
 
     def search_festivals(
-        self, area_code: str, start_from: str, page_no: int, rows: int
+        self, open_from: str, page_no: int, rows: int
     ) -> tuple[list[dict], int]:
-        """`searchFestival2` — 시작일이 `start_from`(YYYYMMDD) 이후인 공식 축제·행사 원문과 총 건수.
+        """`searchFestival2` — `open_from`(YYYYMMDD) 이후에도 열려 있는 공식 축제·행사 원문과 총 건수(전국).
 
-        장소가 아니라 행사라서 `SourcedPlaceRecord` 로 바꾸지 않는다 — 원문 그대로 넘기고
-        행사 쪽(`collect_tourapi_festivals.py`)이 기간·좌표를 읽는다. 키링·봉투 규약은 같다.
+        **지역 필터를 걸지 않는다** — KorService2 가 지역을 법정동 코드(`lDongRegnCd`)로 옮기면서
+        `areaCode` 로 거르면 0건이 온다(실측 2026-10-18: 17개 지역 전부 0). 지역은 응답 항목의
+        `lDongRegnCd` 로 읽는다(`collect_tourapi_festivals.py`).
+
+        장소가 아니라 행사라서 `SourcedPlaceRecord` 로 바꾸지 않는다 — 원문 그대로 넘긴다.
         """
         body = self._call("searchFestival2", {
             **self._common_params(),
-            "areaCode": area_code,
-            "eventStartDate": start_from,
+            "eventStartDate": open_from,
             "numOfRows": str(rows),
             "pageNo": str(page_no),
         })

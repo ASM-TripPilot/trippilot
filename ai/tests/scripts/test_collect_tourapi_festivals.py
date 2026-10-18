@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
 
-from collect_tourapi_festivals import to_event  # noqa: E402
+from collect_tourapi_festivals import region_of, to_event  # noqa: E402
 
 from trippilot.domain.event import EventType  # noqa: E402
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter  # noqa: E402
@@ -18,7 +18,8 @@ _TODAY = dt.date(2026, 10, 18)
 
 def _item(**kw) -> dict:
     base = {"contentid": "3500001", "title": "서울세계불꽃축제", "addr1": "서울특별시 영등포구 여의동로 330",
-            "eventstartdate": "20261003", "eventenddate": "20261025", "mapx": "126.93", "mapy": "37.52"}
+            "eventstartdate": "20261003", "eventenddate": "20261025", "mapx": "126.93", "mapy": "37.52",
+            "lDongRegnCd": "11"}
     return {**base, **kw}
 
 
@@ -46,11 +47,18 @@ class _Http:
 
 def test_축제_목록은_searchFestival2_를_키와_함께_부른다() -> None:
     http = _Http()
-    items, total = TourApiAdapter(http, "K").search_festivals("1", "20260620", 1, 100)
+    items, total = TourApiAdapter(http, "K").search_festivals("20261018", 1, 100)
     assert (len(items), total) == (1, 1)
     url, params = http.calls[0]
     assert url.endswith("/searchFestival2")
-    assert params["serviceKey"] == "K" and params["eventStartDate"] == "20260620"
+    assert params["serviceKey"] == "K" and params["eventStartDate"] == "20261018"
+    assert "areaCode" not in params    # KorService2 에서 areaCode 로 거르면 0건(10-18 실측)
+
+
+def test_지역은_법정동_시도_코드로_읽고_모르는_코드는_지어내지_않는다() -> None:
+    assert region_of(_item(lDongRegnCd="50")) == "제주"
+    assert region_of(_item(lDongRegnCd="51")) == region_of(_item(lDongRegnCd="42")) == "강원"
+    assert region_of(_item(lDongRegnCd="")) is None
 
 
 class _Flaky:
@@ -59,7 +67,7 @@ class _Flaky:
     def __init__(self, fails: int) -> None:
         self.fails = fails
 
-    def search_festivals(self, code, since, page, rows):
+    def search_festivals(self, open_from, page, rows):
         from trippilot.ports.poi_sourcing_port import SourcingError
         if self.fails:
             self.fails -= 1
@@ -69,5 +77,5 @@ class _Flaky:
 
 def test_한_번_끊기면_다시_받고_두_번_끊기면_그_쪽만_건너뛴다() -> None:
     from collect_tourapi_festivals import fetch_page
-    assert fetch_page(_Flaky(1), "1", "20260620", 1) == ([_item()], 1)
-    assert fetch_page(_Flaky(2), "1", "20260620", 1) is None
+    assert fetch_page(_Flaky(1), "20261018", 1) == ([_item()], 1)
+    assert fetch_page(_Flaky(2), "20261018", 1) is None
