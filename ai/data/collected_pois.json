@@ -7,7 +7,7 @@
     "OVERTURE",
     "TOURAPI"
   ],
-  "collected_at": "2026-10-18T11:24:22.939749+00:00",
+  "collected_at": "2026-10-18T13:08:28.433891+00:00",
   "area_codes": [
     "1",
     "2",
@@ -36,27 +36,27 @@
   ],
   "stats": {
     "merged_runs": 2,
-    "unique_proposals": 57571
+    "unique_proposals": 57608
   },
   "merged_from": [
     {
-      "collected_at": "2026-10-18T09:18:09.949950+00:00",
-      "proposals": 57536,
+      "collected_at": "2026-10-18T11:24:22.939749+00:00",
+      "proposals": 57571,
       "stats": {
         "merged_runs": 2,
-        "unique_proposals": 57536,
-        "bad_nightlife_dropped": 26
+        "unique_proposals": 57571
       }
     },
     {
-      "collected_at": "2026-10-18T11:24:22.939749+00:00",
-      "proposals": 71,
+      "collected_at": "2026-10-18T13:08:28.433891+00:00",
+      "proposals": 108,
       "stats": {
-        "seed": 109,
+        "seed": 159,
         "row_drops": {
-          "게이트로": 72,
+          "게이트로": 109,
           "이미 있음(이름 포함+300m) → 요즘 인기 표지": 28,
-          "카카오 매칭 없음": 9
+          "카카오 매칭 없음": 21,
+          "나이트라이프 제외": 1
         },
         "kakao_misses": [
           "홍대 서커스 클럽",
@@ -67,11 +67,23 @@
           "청담 클럽사운드",
           "서면 그루브 클럽",
           "버뮤다제주 혼술바",
-          "지문인식 제주혼술바"
+          "지문인식 제주혼술바",
+          "이태원 오피움",
+          "이태원 아가베",
+          "이태원 피에스타",
+          "이태원 디퍼 이태원로27가길",
+          "이태원 펌킨",
+          "이태원 무인",
+          "이태원 다이브인투더딥",
+          "이태원 헬리오스",
+          "페이더 우사단로",
+          "평균율 을지로",
+          "찰스H 을지로",
+          "슈퍼노바 합정"
         ],
         "gate_merged": 1,
         "gate_drops": {},
-        "passed": 71
+        "passed": 108
       }
     }
   ],
@@ -2679434,6 +2679446,1264 @@
       "provenance": {
         "content_id": "345612098",
         "address": "제주특별자치도 제주시 노연로 103",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-395377959",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-395377959",
+        "name": "풍월관",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5728182146118,
+          "lng": 126.989821088373
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "종로구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "395377959",
+        "address": "서울특별시 종로구 돈화문로11길 28-5",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-461924481",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-461924481",
+        "name": "와이키키 비치펍",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5348756358332,
+          "lng": 126.993222778372
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "461924481",
+        "address": "서울특별시 용산구 이태원로 173-7",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1034930834",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1034930834",
+        "name": "도파민",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5348549977653,
+          "lng": 126.994914256622
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1034930834",
+        "address": "서울특별시 용산구 이태원로 189",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-658332772",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-658332772",
+        "name": "핑서울",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.53480547289253,
+          "lng": 126.99567118102384
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "658332772",
+        "address": "서울특별시 용산구 이태원로 195",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-19293971",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-19293971",
+        "name": "OWL라운지",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5349541014825,
+          "lng": 126.994768296218
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "19293971",
+        "address": "서울특별시 용산구 이태원로27가길 9",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-902006609",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-902006609",
+        "name": "포즈디제이바",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.53507482804834,
+          "lng": 126.9946008367884
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "902006609",
+        "address": "서울특별시 용산구 이태원로27가길 12",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-16681282",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-16681282",
+        "name": "베드럼",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.53512890126757,
+          "lng": 126.99489726662475
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "16681282",
+        "address": "서울특별시 용산구 이태원로27가길 8",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1411179459",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1411179459",
+        "name": "솔",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5349847456934,
+          "lng": 126.99500363033
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1411179459",
+        "address": "서울특별시 용산구 이태원로27가길 5",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1977378517",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1977378517",
+        "name": "플랙",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5349847456934,
+          "lng": 126.99500363033
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1977378517",
+        "address": "서울특별시 용산구 이태원로27가길 5",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1828979437",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1828979437",
+        "name": "카바나소셜클럽",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5348756358266,
+          "lng": 126.993222778372
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1828979437",
+        "address": "서울특별시 용산구 이태원로 173-7",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1017191898",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1017191898",
+        "name": "하이브 이태원",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5349414453709,
+          "lng": 126.993891443785
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1017191898",
+        "address": "서울특별시 용산구 이태원로 179",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1459525287",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1459525287",
+        "name": "와이키키 유토피아",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5348756358266,
+          "lng": 126.993222778372
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1459525287",
+        "address": "서울특별시 용산구 이태원로 173-7",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-983673218",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-983673218",
+        "name": "미유펍",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5347512563142,
+          "lng": 126.992536017225
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "983673218",
+        "address": "서울특별시 용산구 이태원로 165-6",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-3342807",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-3342807",
+        "name": "던라운지펍",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5350549213746,
+          "lng": 126.992989688525
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "3342807",
+        "address": "서울특별시 용산구 이태원로27가길 40",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1836815668",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1836815668",
+        "name": "배드애스",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.534831467509065,
+          "lng": 126.99289466999609
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1836815668",
+        "address": "서울특별시 용산구 이태원로27가길 43",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-121556798",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-121556798",
+        "name": "페이퍼",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5348675196183,
+          "lng": 126.993098322629
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "121556798",
+        "address": "서울특별시 용산구 이태원로27가길 37",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-324801578",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-324801578",
+        "name": "뮤라운지",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5348675140257,
+          "lng": 126.993003283138
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "324801578",
+        "address": "서울특별시 용산구 이태원로27가길 41",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1413069249",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1413069249",
+        "name": "쉘터",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.534876529626125,
+          "lng": 126.99309832179863
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1413069249",
+        "address": "서울특별시 용산구 이태원로27가길 37",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-18324577",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-18324577",
+        "name": "프로스트펍앤그릴",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5350837941701,
+          "lng": 126.993713798325
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "18324577",
+        "address": "서울특별시 용산구 이태원로27가길 26",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-2013052902",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-2013052902",
+        "name": "데이앤나잇",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.53510632319972,
+          "lng": 126.99378960198489
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2013052902",
+        "address": "서울특별시 용산구 이태원로27가길 26",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1710994348",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1710994348",
+        "name": "232",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.535628164819464,
+          "lng": 126.99949198612852
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1710994348",
+        "address": "서울특별시 용산구 이태원로 232",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1703012884",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1703012884",
+        "name": "더파운틴",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.535202684966,
+          "lng": 126.992980623273
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "클럽",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1703012884",
+        "address": "서울특별시 용산구 이태원로23길 16-5",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1974912405",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1974912405",
+        "name": "카사코로나 서울",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5340999420247,
+          "lng": 126.994533022415
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "용산구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1974912405",
+        "address": "서울특별시 용산구 보광로60길 7",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1899316781",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1899316781",
+        "name": "선셋레코드",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.565643700931346,
+          "lng": 126.99123918822534
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1899316781",
+        "address": "서울특별시 중구 을지로12길 11",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1037095795",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1037095795",
+        "name": "을지로작은바",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.565169054093,
+          "lng": 126.994109693122
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1037095795",
+        "address": "서울특별시 중구 충무로4길 19-4",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-211641681",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-211641681",
+        "name": "을지로브이",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.565798758087,
+          "lng": 126.992484249254
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "211641681",
+        "address": "서울특별시 중구 충무로 51",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1691201808",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1691201808",
+        "name": "인현골방",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.56409678272983,
+          "lng": 126.99258628803845
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1691201808",
+        "address": "서울특별시 중구 마른내로2길 3",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-2081061251",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-2081061251",
+        "name": "을지FM",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5655013527294,
+          "lng": 126.991363712319
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2081061251",
+        "address": "서울특별시 중구 충무로5길 26",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1438433905",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1438433905",
+        "name": "마이크로바이닐하우스",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.56798661080051,
+          "lng": 126.99896429019972
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1438433905",
+        "address": "서울특별시 중구 을지로27길 27",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-2102346140",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-2102346140",
+        "name": "코블러",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5752828921167,
+          "lng": 126.97090220587
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "종로구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2102346140",
+        "address": "서울특별시 종로구 사직로12길 16",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1524560987",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1524560987",
+        "name": "필로소피라운지",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5633029626553,
+          "lng": 126.991941210829
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "중구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1524560987",
+        "address": "서울특별시 중구 충무로 21-21",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1427323184",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1427323184",
+        "name": "오무사",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.582180030713985,
+          "lng": 126.9675574500662
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "종로구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1427323184",
+        "address": "서울특별시 종로구 필운대로9길 1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-741016129",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-741016129",
+        "name": "법원",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5792681969302,
+          "lng": 126.987365830498
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "종로구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "741016129",
+        "address": "서울특별시 종로구 창덕궁1길 33",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-901728226",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-901728226",
+        "name": "조디악",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.5419027091258,
+          "lng": 127.054629077911
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "성동구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "901728226",
+        "address": "서울특별시 성동구 성수일로4가길 7",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1167924540",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1167924540",
+        "name": "무근본",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.54541386780092,
+          "lng": 127.05470632437883
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "성동구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1167924540",
+        "address": "서울특별시 성동구 성수일로8길 40-1",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-1424950736",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-1424950736",
+        "name": "루프탑어반비치",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.54989781700859,
+          "lng": 126.92060912359968
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "라운지바",
+        "요즘 인기"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "1424950736",
+        "address": "서울특별시 마포구 독막로9길 38",
+        "image_url": null
+      }
+    },
+    {
+      "provisional_id": "kakao_local-485216607",
+      "source": "KAKAO_LOCAL",
+      "poi": {
+        "poi_id": "kakao_local-485216607",
+        "name": "연남마실",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 37.566370082351,
+          "lng": 126.91989439550824
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null,
+        "tags": [],
+        "source_ref": null
+      },
+      "tags": [
+        "나이트라이프",
+        "칵테일바",
+        "요즘 인기"
+      ],
+      "region": "마포구",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "485216607",
+        "address": "서울특별시 마포구 동교로51길 129-2",
         "image_url": null
       }
     }

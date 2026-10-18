@@ -1,0 +1,16 @@
+{
+  "_doc": "성수동 팝업스토어(기간 한정) — 웹 팝업 정리 사이트에서 고른 것(2026-10-18). 장소(POI)가 아니라 행사로 싣는다: 후보 풀에 들어가지 않고, 근처 1km 장소에 가산점만 준다(event_affinity, INV-1). 좌표는 collect_curated_popups.py 가 카카오 주소검색으로 채우고, 끝난 지 7일이 지나면 행사 저장소가 지운다. 새 팝업은 여기 근거 URL 과 함께 추가한다.",
+  "evidence": {
+    "popga_2610": "https://popga.co.kr/content/magazine/429",
+    "khan_2610": "https://www.khan.co.kr/article/202610020700021"
+  },
+  "popups": [
+    {"name": "클리오 풍년다방 팝업", "address": "서울 성동구 뚝섬로 273", "start": "2026-09-22", "end": "2026-10-27", "evidence": "popga_2610"},
+    {"name": "짱구는 못말려 전시 - 놀자! 시공간 대모험", "address": "서울 성동구 연무장5길 9-29", "start": "2026-10-17", "end": "2027-01-24", "evidence": "popga_2610"},
+    {"name": "메이드바이 X 맘마햄 스토어 팝업", "address": "서울 성동구 서울숲길 38", "start": "2026-09-08", "end": "2026-11-04", "evidence": "popga_2610"},
+    {"name": "카카오페이 팝업 - 오래오래 함께가게", "address": "서울 성동구 연무장3길 8-27", "start": "2026-09-01", "end": "2026-10-31", "evidence": "popga_2610"},
+    {"name": "스킨앤랩 링거팩토리 팝업", "address": "서울 성동구 연무장7길 16", "start": "2026-10-02", "end": "2026-10-19", "evidence": "popga_2610"},
+    {"name": "킥둥쓰 팝업", "address": "서울 성동구 아차산로5길 24-14", "start": "2026-10-09", "end": "2026-10-18", "evidence": "popga_2610"},
+    {"name": "어반 웰니스 페어 X 미니록스", "address": "서울 성동구 연무장길 50", "start": "2026-10-18", "end": "2026-10-18", "evidence": "popga_2610"}
+  ]
+}
