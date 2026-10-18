@@ -440,7 +440,7 @@ def test_KB_적재가_정상이면_3종_모두_히트하고_에러노트가_없�
     pool = _pool()
     result = pipeline(_indexed_store(pool), HashEmbedding(), None, None).run(_request(pool))
     # KB-2 는 더 이상 적재하지 않는다 — 저장 장소는 봉투로 온다 (TRIP-512)
-    assert result.retrieved == {"PERSONA": 0, "SITUATION": 1}
+    assert result.retrieved == {"PERSONA": 0, "SITUATION": 1, "POI_DESC": 0}
     assert not [n for n in result.notes if n.startswith("retrieve_")]
     # note 는 폴백 사유 + 규칙 랭킹 조정 기록의 합성("… · rule_ranking: …", TRIP-532) — 부분 일치
     assert any("alternative_worker_absent" in n for n in result.notes)
@@ -462,7 +462,7 @@ def test_KB_검색이_전멸해도_저장장소는_살아남는다():
     """
     pool = _pool()
     result = pipeline(_DeadStore(), HashEmbedding(), None, None).run(_request(pool))
-    assert result.retrieved == {"PERSONA": 0, "SITUATION": 0}
+    assert result.retrieved == {"PERSONA": 0, "SITUATION": 0, "POI_DESC": 0}
     assert sorted(n.split(":")[0] for n in result.notes if n.startswith("retrieve_")) == [
         "retrieve_persona_error",
         "retrieve_situation_error",

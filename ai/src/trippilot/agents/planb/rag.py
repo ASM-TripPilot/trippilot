@@ -314,9 +314,12 @@ class RagContext:
     def counts(self) -> dict:
         # SCHEDULE 키가 없다 — 검색하지 않으므로 0 을 싣는 것도 거짓이다(TRIP-972).
         # 0 은 "찾았는데 없었다"로 읽히고, 사실은 "찾지 않는다"다.
+        # POI_DESC = 장소 지식이 붙은 후보 수(KB-5). 이것 없이는 운영에서 KB-5 가 비었는지(적재 전·장애) 볼 길이
+        # 없었다(2026-10-18 청킹). 백엔드는 이 맵을 키 그대로 로그에 남긴다(`Map<String, Int>`).
         return {
             KbKind.PERSONA.value: len(self.persona),
             KbKind.SITUATION.value: len(self.situation),
+            KbKind.POI_DESC.value: len(self.place_knowledge),
         }
 
 
