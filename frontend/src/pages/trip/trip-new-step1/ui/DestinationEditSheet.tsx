@@ -90,6 +90,7 @@ function DestinationRow({
         <View className="flex-row items-center gap-[10px]">
           <StepperButton
             testID={`trip-wizard-destination-nights-dec-${seq}`}
+            accessibilityLabel={`${region} 1박 줄이기`}
             disabled={nights <= minNights}
             onPress={() => onChangeNights(seq, nights - 1)}
           >
@@ -100,6 +101,7 @@ function DestinationRow({
           </Text>
           <StepperButton
             testID={`trip-wizard-destination-nights-inc-${seq}`}
+            accessibilityLabel={`${region} 1박 늘리기`}
             disabled={atMaxNights}
             onPress={() => onChangeNights(seq, nights + 1)}
           >
@@ -109,6 +111,7 @@ function DestinationRow({
         <Pressable
           testID={`trip-wizard-destination-remove-${seq}`}
           accessibilityRole="button"
+          accessibilityLabel={`${region} 빼기`}
           onPress={() => onRemove(seq)}
           className="h-8 w-8 items-center justify-center"
           hitSlop={6}
@@ -142,6 +145,8 @@ export function DestinationEditSheet({
       apply={{
         testID: 'trip-wizard-destination-apply',
         onPress: onApply,
+        // 0곳이면 빈 여행지로 닫지 못하게 진짜 disabled(TRIP-1423) — 딤 탭·끌어 닫기는 그대로.
+        disabled: destinations.length === 0,
       }}
     >
       {/* body */}

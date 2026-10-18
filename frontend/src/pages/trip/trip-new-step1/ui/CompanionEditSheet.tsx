@@ -9,12 +9,13 @@
  *
  * 이 시트는 **상태를 안 가진다**(무상태 D4) — 편집 드래프트(party·companionType 중간값)는
  * 배선(`TripNewStep1Page`)이 소유·갱신하고, 시트는 완성형 props 를 받아 그린 뒤 press 를
- * 콜백으로 올린다. 그래서 "혼자→인원 1 고정"도 두 층으로 갈린다: 시트는 인원 스테퍼의
- * `disabled` 파생(`companionType==='혼자'`)만 그리고, 값을 1 로 고정하는 것은 배선이다
+ * 콜백으로 올린다. 그래서 유형별 인원 범위(TRIP-1423 — 혼자 1 · 연인 2 고정, 친구·가족 2 이상,
+ * `partyRangeFor`)도 두 층으로 갈린다: 시트는 범위 끝에서 인원 스테퍼의 `disabled` 만 그리고,
+ * 칩을 고를 때 값을 범위 안으로 옮기는 것은 배선이다
  * (store `selectCompanion`·`setParty` 계약은 party 를 안 건드리므로 시트/배선 몫, D2).
  *
  * 인원 스테퍼는 절대값을 콜백에 넘긴다(`+`→`onChangeParty(party+1)`) — 증분이 아니라 현재±1 을
- * 계산해 넘기고, store `setParty` 가 하한 1 을 다시 클램프한다(이중 방어). 하한·혼자 잠금은 전부
+ * 계산해 넘기고, store `setParty` 가 하한 1 을 다시 클램프한다(이중 방어). 범위 끝 잠금은 전부
  * **진짜 `disabled` prop**이다(accessibilityState 만 세운 가짜는 press 가 그대로 발화한다 —
  * [[disabled prop과 accessibilityState]]).
  *
@@ -45,6 +46,7 @@ import {
   StepperPlusGlyph,
 } from '@/features/trip/index.view';
 
+import { partyRangeFor } from '../model/partyRange';
 import { StepperButton } from './StepperButton';
 
 export interface CompanionEditSheetProps {
@@ -78,10 +80,10 @@ export function CompanionEditSheet({
   onApply,
   onClose,
 }: CompanionEditSheetProps): ReactElement {
-  // 혼자면 인원이 1 로 고정돼 −·+ 둘 다 잠긴다(값 고정은 배선). 그 외에는 하한 1 에서 − 만 잠긴다.
-  const isSolo = companionType === '혼자';
-  const decDisabled = isSolo || party <= 1;
-  const incDisabled = isSolo;
+  // 범위 끝에서 잠근다 — 혼자·연인은 고정이라 −·+ 둘 다, 친구·가족은 2명에서 −(값을 범위로 옮기는 것은 배선).
+  const { min, max } = partyRangeFor(companionType);
+  const decDisabled = party <= min;
+  const incDisabled = party >= max;
 
   return (
     <SheetShell
@@ -105,6 +107,7 @@ export function CompanionEditSheet({
           <View className="flex-row items-center gap-[10px]">
             <StepperButton
               testID="trip-wizard-companion-party-dec"
+              accessibilityLabel="인원 줄이기"
               disabled={decDisabled}
               onPress={() => onChangeParty(party - 1)}
             >
@@ -118,6 +121,7 @@ export function CompanionEditSheet({
             </Text>
             <StepperButton
               testID="trip-wizard-companion-party-inc"
+              accessibilityLabel="인원 늘리기"
               disabled={incDisabled}
               onPress={() => onChangeParty(party + 1)}
             >

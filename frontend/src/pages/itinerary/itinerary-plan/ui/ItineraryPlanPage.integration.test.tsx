@@ -23,6 +23,7 @@ import type {
   BaseAssignment,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { readIdSet, writeIdSet } from '@/shared/storage';
 import { showToast } from '@/shared/ui/Toast';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -85,8 +86,18 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
+// TRIP-1428 — 확정 성공이 완료 배너 seen(id 집합 저장소)에 그 여행을 더한다. 모듈 경로를 목으로 바꾸고 배럴 목에도
+// 같은 가짜를 펼친다 — 구현이 배럴로 import 하든 모듈 경로로 import 하든 같은 jest.fn 을 본다(02a ★7).
+jest.mock('@/shared/storage/idSet', () => ({
+  readIdSet: jest.fn(),
+  writeIdSet: jest.fn(),
+}));
+/* eslint-disable @typescript-eslint/no-require-imports */
+jest.mock('@/shared/storage', () => ({
+  ...require('@/test-support/storageMock'),
+  ...require('@/shared/storage/idSet'),
+}));
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려져 바깥 변수를 못 본다 — `mock` 접두 변수만 예외.
 const mockPush = jest.fn();
@@ -152,6 +163,9 @@ beforeEach(() => {
     (fn) => fn.mockClear()
   );
   mockCanGoBack.mockReturnValue(true);
+  // TRIP-1428 — seen 저장소 기본: 비어 있고 쓰기는 성공한다(확정 성공 테스트가 어디서든 seen 을 쓸 수 있다).
+  (readIdSet as jest.Mock).mockReset().mockResolvedValue([]);
+  (writeIdSet as jest.Mock).mockReset().mockResolvedValue(undefined);
 });
 
 // 토스트 스토어는 모듈 싱글턴이다 — describe 안이 아니라 파일 최상위에서 비운다.
@@ -1204,7 +1218,7 @@ describe('탈출구 — 뒤로·일정 만들기', () => {
       // 실행.
       fireEvent.press(screen.getByTestId('itinerary-view-back'));
 
-      // 단언 — 홈 목적지 자체를 잠근다('/(tabs)/itinerary'는 trips[0] 리다이렉트 함정이라 금지).
+      // 단언 — 딥링크 폴백 목적지(홈 탭) 자체를 잠근다(확정 얼굴의 [돌아가기]만 일정 탭 목록으로 간다).
       expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
       // 침묵 no-op도, back+replace 이중 호출도 아님 — replace만.
       expect(mockBack).not.toHaveBeenCalled();
@@ -1957,23 +1971,30 @@ describe('완성 셸(h14) 얼굴', () => {
     });
   });
 
-  describe('🔴 T7 · AC-7 — 거점 없음: 안내 카드 + 링크 push / 숙소 있으면 카드 부재', () => {
-    it('T7a · 고정 숙소 슬롯이 없으면 거점없음 안내 카드가 뜨고 링크 press 로 이동한다', async () => {
+  // TRIP-1428 (Q-154) — 링크가 가는 h15 는 추천 요청(POST stay-recommendations)이 FE 미배선이라 "추천을 만들 수
+  // 없어요"로 끝났다(INV-4 — 안 되는 링크). 배선 칸이 설 때까지 링크만 뺀다. 안내 줄은 남긴다(BR-U1-40 미등록 표시).
+  describe('🔴 T7 · AC-7 — 거점 없음: 안내 줄만(링크 없음) / 숙소 있으면 카드 부재', () => {
+    it('T7a · 고정 숙소 슬롯이 없으면 "거점 숙소가 없어요" 줄만 뜨고, 추천 링크는 없으며 카드를 눌러도 어디로도 안 간다', async () => {
       useItinerary(() => HttpResponse.json(plannedNoBase()));
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
 
+      // 단언 ① 안내 줄은 남는다 — 카드 글자 전체가 이 한 줄과 완전 일치(링크 글자가 남으면 red, 02a §5).
       const card = screen.getByTestId('itinerary-plan-no-base');
-      // ⚠️ 한 카드가 두 카피(제목+링크)를 담으므로 exact(문자열 인자)는 둘 다 통과 불가 —
-      // toHaveTextContent 는 이 RNTL 버전에서 문자열 인자를 exact(자손 join 전체 일치)로 본다.
-      // 의도는 "포함"(02a §6)이라 regex(부분 일치)로 각 카피 존재를 잠근다.
-      expect(card).toHaveTextContent(/거점 숙소가 없어요/);
-      expect(card).toHaveTextContent(/동선 기준 추천 보기/);
+      expect(card).toHaveTextContent('거점 숙소가 없어요');
+      // 단언 ② 링크는 트리에 없다 — testID 와 글자 둘 다(testID 만 떼고 글자를 남기는 구현도 막는다).
+      expect(screen.queryByTestId('itinerary-plan-no-base-link')).toBeNull();
+      expect(screen.queryByText(/동선 기준 추천/)).toBeNull();
 
-      // 링크 press → 항법(침묵 no-op 아님). h15 라우트는 TRIP-800 밖이라 목적지 리터럴은 강요 안 하고
-      // (as Href 캐스트·planb-request 선례) push 가 한 번 나갔는지만 잠근다(02a §8).
-      fireEvent.press(screen.getByTestId('itinerary-plan-no-base-link'));
-      expect(mockPush).toHaveBeenCalledTimes(1);
+      // 실행 — 카드와 안내 글자를 눌러 본다(누를 손잡이가 없으면 조용히 끝난다, 02a §5).
+      fireEvent.press(card);
+      fireEvent.press(within(card).getByText('거점 숙소가 없어요'));
+
+      // 단언 ③ 어디로도 안 간다.
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockDismissTo).not.toHaveBeenCalled();
+      expect(mockBack).not.toHaveBeenCalled();
     });
 
     it('T7b · 고정 숙소 슬롯이 있으면 거점없음 안내 카드가 없다 (짝)', async () => {
@@ -3108,4 +3129,73 @@ describe('같은 날 같은 장소 두 번', () => {
       ).toEqual([D1_KM, D2_KM]);
     }
   );
+});
+
+// TRIP-1428 (결정 2=A) — 앱에서 확정에 성공한 여행은 일정 탭 완료 배너로 다시 알리지 않는다. 그 표시(seen 기록)는
+// 확정 공용 훅(useConfirmItinerary)의 **훅 옵션** 성공 콜백이 한다 — 이 페이지는 고치지 않는다.
+describe('TRIP-1428 · 확정 성공은 완료 배너 seen 에 그 여행을 남긴다 — 확정 대기 중 화면을 떠나도', () => {
+  /**
+   * 무엇을 보장하나:
+   *  - 🔴 [일정 저장하기] 뒤 응답이 오기 전에 화면이 사라져도(뒤로 가기 등), 성공 응답이 오면 그 여행 id 가
+   *    seen(키 `itinerary.doneBar.seen`)에 더해지고 이미 있던 id 는 남는다.
+   *    페이지의 호출별 콜백(`mutate(…, { onSuccess })`)에 두면 화면이 사라진 뒤엔 안 불려 red 다(02a ★6).
+   *  - 확정 응답 전엔 seen 을 쓰지 않는다(앵커).
+   *
+   * 3동작: 준비(확정 POST 를 문으로 붙잡는다) → 실행(누름 → 화면 내림 → 문 열기) → 단언(seen 쓰기).
+   */
+  /** 붙잡힌 확정 POST 를 풀어 주는 문 — 요청이 서버에 도착해야 생긴다. */
+  let openConfirm: (() => void) | null = null;
+
+  beforeEach(() => {
+    openConfirm = null;
+    setAccessToken('valid-access');
+    serveItinerary(server, {
+      trip: () => planTrip(),
+      itinerary: () => twoDayItinerary({ status: 'PLANNED' }),
+      confirm: async () => {
+        await new Promise<void>((resolve) => {
+          openConfirm = resolve;
+        });
+        return HttpResponse.json(twoDayItinerary({ status: 'CONFIRMED' }));
+      },
+    });
+  });
+
+  afterEach(() => {
+    // 단언이 문을 열기 전에 실패해도 붙잡힌 요청을 남기지 않는다(안 풀면 jest 가 red 대신 멈춘다).
+    openConfirm?.();
+    server.resetHandlers();
+    act(() => {
+      clearAccessToken();
+    });
+  });
+
+  it('🔴 [일정 저장하기] → 응답 전에 화면이 사라져도, 성공 응답이 오면 그 여행 id 가 seen 에 더해진다 (기존 id 보존)', async () => {
+    // 준비 — 다른 여행 하나를 이미 알렸다.
+    (readIdSet as jest.Mock).mockResolvedValue(['trip-old']);
+    const view = renderPage();
+    const cta = await screen.findByTestId('sheet-cta-button-0');
+    expect(cta).toHaveTextContent('일정 저장하기');
+
+    // 실행 ① 누르고, 확정 POST 가 서버에 도착할 때까지 기다린다.
+    fireEvent.press(cta);
+    await waitFor(() => expect(openConfirm).not.toBeNull());
+    // 앵커 — 응답 전엔 아직 아무것도 안 썼다.
+    expect(writeIdSet).not.toHaveBeenCalled();
+
+    // 실행 ② 응답 전에 화면이 사라진다 → 그 뒤 서버가 성공으로 답한다.
+    view.unmount();
+    await act(async () => {
+      openConfirm?.();
+    });
+
+    // 단언 — seen 키에 그 여행이 더해졌고 이미 있던 id 는 남았다.
+    await waitFor(() => expect(writeIdSet).toHaveBeenCalled());
+    const writes = (writeIdSet as jest.Mock).mock.calls as [string, string[]][];
+    const [key, ids] = writes[writes.length - 1];
+    expect(key).toBe('itinerary.doneBar.seen');
+    expect([...ids].sort()).toEqual([TRIP_ID, 'trip-old'].sort());
+    // 한도 15초 — 통합 버킷 waitFor 기본 대기(5초)가 jest 한 테스트 한도(5초)와 같아, 구현 전엔 "쓰기 없음" 대신
+    // "시간 초과"로 죽어 red 이유가 가려진다(1424 ★19 선례 · 02a ★15).
+  }, 15000);
 });
