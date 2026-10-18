@@ -123,6 +123,15 @@ export function StaySearchPage(): ReactElement {
   // TRIP-1273(F3) — 그 앞에 시도 후처리 필터(동명 구의 다른 시도 숙소 제외)를 거친다.
   // 필터 시트 칩도 이 결과에서 만든다 — 다른 시도에만 있는 유형 칩은 고르면 0곳이다(03b 경고-1).
   const sidoItems = filterBySido(data?.items ?? [], rawSido);
+
+  // TRIP-1429 결정 ① — 가격 있는 숙소(`!= null` — 0원도 있음, formatPrice 규약)가 하나도 없으면 가격대는
+  // "전부 제외"만 하므로 칩을 숨긴다(BR-U1-14). 숨긴 채 고른 구간이 남으면 안 보이는 필터가 0곳을 만든다 →
+  // 'all' 로 되돌린다. 단 조회가 끝난 결과에서만이다: 재조회 로딩·오류 중엔 목록이 잠깐 비어 "가격 0곳"처럼
+  // 보일 뿐이라 고른 구간을 지우면 안 된다(01b Q2). 위 seenRegion 과 같은 렌더 중 조정.
+  const hasPricedItem = sidoItems.some((item) => item.price != null);
+  if (!isPending && !isError && !hasPricedItem && priceBucket !== 'all') {
+    setPriceBucket('all');
+  }
   const visibleItems = filterByPriceRange(sidoItems, priceBucket);
 
   const state = resolveStaySearchState({
@@ -196,6 +205,7 @@ export function StaySearchPage(): ReactElement {
         onPressFilter={handlePressFilter}
         activeFilterCount={countActiveFilters(amenityList, stayTypeList)}
         priceBucket={priceBucket}
+        showPriceFilter={hasPricedItem}
         // 빈 상태 카드 CTA(TRIP-416) — 화면은 라우터를 모른다(구조 가드), 배선은 이 페이지 몫.
         // 지역 바꾸기는 필터 칩과 같은 목적지(/explore/region?purpose=stay, 여행지 선택)로 진입한다(TRIP-499).
         onPressChangeRegion={() => router.push(regionPickerHref('stay'))}

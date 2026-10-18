@@ -251,6 +251,11 @@ export function MyTripsListPage(): ReactElement {
     // 목록은 항상 다시 받고(지워진 건 사실), 다이얼로그는 보낸 여행의 것일 때만 닫는다.
     const done = (): void => {
       setDeleteTargetId((current) => (current === tripId ? null : current));
+      // TRIP-1441 — 완료 배너가 지운 여행을 가리키면 내린다(확정 여행에도 ⋯ 가 열려 도달 가능해졌다).
+      // 함수형 갱신 — 응답이 늦게 와도 그 시점의 shown 이 지운 여행일 때만 비운다. 닫힘 플래그(barDismissed)는
+      // 건드리지 않는다: 지운 여행은 seen 에 이미 있어 다시 안 뜨고, 플래그를 세우면 새로 고른 다른 여행의
+      // 배너까지 삼킨다(5-b 경고-1).
+      setShown((current) => (current?.tripId === tripId ? null : current));
       queryClient.invalidateQueries({ queryKey: getGetTripsQueryKey() });
     };
     deleteTrip.mutate(
@@ -321,6 +326,10 @@ export function MyTripsListPage(): ReactElement {
       {deleteTargetId !== null ? (
         <TripDeleteDialog
           failed={deleteFailedId === deleteTargetId}
+          confirmed={
+            itineraries[list.findIndex((t) => t.tripId === deleteTargetId)]
+              ?.data?.status === 'CONFIRMED'
+          }
           onCancel={() => setDeleteTargetId(null)}
           onConfirm={onConfirmDelete}
         />
