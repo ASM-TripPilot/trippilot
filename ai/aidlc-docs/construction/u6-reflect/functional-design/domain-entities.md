@@ -35,7 +35,7 @@ POI 정본(백엔드 C7 단일 소유 — 정합성 점검 P1 합의)에 대한 
 | `SceneLayout` | `PHOTO_FULL / PHOTO_CAPTION / STATS / MAP / EVENT` | **닫힌 enum** (계약 §3.2) — 밖 layout = 하드 위반. 픽셀 배치는 FE 렌더러 소유 |
 | `SourceEventKind` | `PLAN_B / SKIPPED` | EVENT 장면은 입력 이벤트에 **실재할 때만** 유효 (계약 §3.2) |
 | `ViolationGrade` | `HARD / SOFT` | 계약 §4.1 등급 |
-| `ViolationCode` | `TIME_EXPR / PLACEHOLDER_OUT / VISIT_REF_OUT / EVENT_NOT_FOUND`(이상 HARD) · `HASHTAG_OUT / CAPTION_LEN / SCENE_COUNT / DUP_VISIT_REF`(이상 SOFT — HASHTAG_OUT은 2026-08-25 강등, 미결 #5) | 위반 코드도 closed-set — 게이트가 이 코드만 산출 |
+| `ViolationCode` | `TIME_EXPR / PLACEHOLDER_OUT / VISIT_REF_OUT / EVENT_NOT_FOUND / PHOTO_SLOT_EMPTY`(이상 HARD — PHOTO_SLOT_EMPTY는 2026-10-18 추가, 사진 0장 방문의 사진 자리) · `HASHTAG_OUT / CAPTION_LEN / SCENE_COUNT / DUP_VISIT_REF`(이상 SOFT — HASHTAG_OUT은 2026-08-25 강등, 미결 #5) | 위반 코드도 closed-set — 게이트가 이 코드만 산출 |
 
 ## 2. 입력 — 경계 요청 (domain/reflection.py)
 

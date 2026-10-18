@@ -16,7 +16,9 @@ enum 밖 · PHOTO_* 장면에 photo_slot 없음 · EVENT 장면에 source_event 
   하드 — TIME_EXPR(캡션·부제·해시태그의 시간 표현, INV-3) ·
          PLACEHOLDER_OUT(자리표시자 어휘 밖·{poi:i} 인덱스 범위 밖 — closed-set) ·
          VISIT_REF_OUT(방문 기록 밖 참조, INV-1 사영 — GateDropEvent로 계측) ·
-         EVENT_NOT_FOUND(source_event 미실재)
+         EVENT_NOT_FOUND(source_event 미실재) ·
+         PHOTO_SLOT_EMPTY(사진 0장 방문에 사진 자리 — 방문 기록 안일 때만, 밖이면
+         VISIT_REF_OUT 하나로 끝난다)
   소프트 — CAPTION_LEN(40자 초과) · SCENE_COUNT(3~8 밖) · DUP_VISIT_REF(장면 간 중복) ·
          HASHTAG_OUT(지역·방문지·브랜드 파생 아님 — TRIP-558로 하드에서 강등)
 해시태그도 TIME_EXPR·PLACEHOLDER_OUT 검사는 받고, 그쪽은 하드다 (BR-U6R-04).
@@ -105,6 +107,8 @@ class ReflectionTemplateContext:
     # 해시태그 허용 판정 소스 (TRIP-558) — 지역명·방문지명. 빈 값이면 그 축은 판정 생략
     region: str = ""
     poi_names: tuple[str, ...] = ()
+    # PHOTO_SLOT_EMPTY 판정 소스 — 사진 0장인 방문 (ReflectionRequest.photoless_refs). 빈 값이면 판정 생략
+    photoless_refs: frozenset[VisitRef] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.visit_refs:
@@ -328,6 +332,15 @@ class ReflectionTemplateGate:
                         code=ViolationCode.VISIT_REF_OUT,
                         scene_index=scene_index,
                         detail=f"{label}: 방문 기록 밖 참조 ({ref.date.isoformat()}, {ref.poi_id})",
+                    )
+                )
+            elif ref in ctx.photoless_refs:  # 목록 밖이면 위에서 끝 — 이중 계상 없음
+                violations.append(
+                    TemplateViolation(
+                        grade=ViolationGrade.HARD,
+                        code=ViolationCode.PHOTO_SLOT_EMPTY,
+                        scene_index=scene_index,
+                        detail=f"{label}: 사진 0장 방문에 사진 자리 ({ref.date.isoformat()}, {ref.poi_id})",
                     )
                 )
 

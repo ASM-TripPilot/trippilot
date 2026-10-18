@@ -409,3 +409,9 @@
 - **입력**: 사용자가 다른 세션에 "챗봇 관련해서 codex code review 진행해. 그리고 챗봇 다루는 세션한테 알려줘." — 그 세션이 재현 스크립트로 검증한 확정분(medium 3·low 5)을 넘겼다.
 - **무엇을 했나**: FD business-rules §6 표의 8건을 고쳤다 — ① 파기 뒤 되살아난 요약을 BE 가 "대화가 지워졌다" 갈래에서 한 번 더 지움 ② Provider 상태값 장애도 팬아웃 이벤트로 보고 ③ 답변 문장 시각을 Facts 와 대조(집합·장소 짝·대조 불가 한글 시각) + 영문 소요시간 단위 ④ BE 메모리 클라이언트를 해석 모드와 분리 ⑤ 만료 행 읽기 제외 ⑥ 이번 턴을 요약 재료에 ⑦ 결정론 압축에 게이트 술어 ⑧ 팬아웃 풀 32·메모리 DB 시한. BR-AO-05 의 "별도 시각 검사 없음"(미결 #18) 결정은 ③ 으로 뒤집었다(원문 취소선 보존).
 - **지키는 것**: 이벤트 사유는 코드만(예외 메시지 미기록) · 대조 기준은 Facts 만(발화는 사실이 아님) · 재현 스크립트의 음성 사례가 수정 전 코드에서 실패함을 확인(10건 중 9건 실패, 1건은 정상 복사 통제군)
+
+## 2026-10-18 — U6 Reflect 위반 코드 `PHOTO_SLOT_EMPTY` 추가 (하드)
+**Timestamp**: 2026-10-18 · 유닛 `construction/u6-reflect/` · 브랜치 `fix/reflect-empty-photo-slot`(origin/develop a21c6b1a) · **승인 대기**(같은 PR 머지 = 승인)
+- **무엇**: 사진 0장 방문(`photo_count == 0`)을 가리키는 `photo_slot`(장면·표지)을 하드 위반으로 판정하고, 사진 있는 방문으로 교체·없으면 슬롯 제거(PHOTO_* → STATS). 목록 밖 참조는 `VISIT_REF_OUT` 하나로 끝(이중 계상 없음). FD 개정: business-logic-model §4 교체 맵 · domain-entities §1 `ViolationCode` · business-rules BR-U6R-16, 계약 `reflection-template-design.md` §4.1 개정 블록. 프롬프트 `reflection_template.yaml`·`reflection_template_vision.yaml` v0.2.0 에 같은 규칙
+- **왜**: FE 가 그 방문의 기기 사진으로 슬롯을 채우기로 했다(사진 바이너리는 서버로 오지 않는다) — 0장 방문 슬롯은 빈 칸이 된다
+- **지키는 것**: 와이어 스키마 무변 · 장면 생략 없음(TRIP-558 카드 보존) · 교체 캡션 인덱스는 전체 방문 목록 기준

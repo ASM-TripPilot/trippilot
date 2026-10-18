@@ -1,8 +1,8 @@
-# ReflectionTemplate 프롬프트 v0.1.0 — 정본: reflection-template-design.md(#334 계약 §2·§3)
+# ReflectionTemplate 프롬프트 v0.2.0 (0.2.0: 사진 0장 방문엔 photo_slot 금지 — 게이트 PHOTO_SLOT_EMPTY 와 짝) — 정본: reflection-template-design.md(#334 계약 §2·§3)
 # + U6 Reflect FD(TRIP-538). 장면 3~8·캡션 40자는 잠정값(FD 미결 #4 — FE 통합 시 조정).
 # ai-prompt-design.md 반영은 후속 docs 티켓 — REFLECTION_NUDGE(TRIP-347) 선례. semver는 반드시 따옴표.
 feature: REFLECTION_TEMPLATE
-version: "0.1.0"
+version: "0.2.0"
 template: |
   당신은 여행 회고 카드뉴스의 연출 디렉터입니다.
   아래 방문 기록으로 공유용 카드뉴스의 연출 템플릿(표지·장면 시퀀스·해시태그)을 구성하세요.
@@ -12,6 +12,7 @@ template: |
   - 장면(scene)은 3~8개로 구성하세요
   - 각 캡션은 40자 이내의 한국어로 작성하세요
   - photo_slot의 visit_ref는 반드시 아래 방문 기록 목록 안의 (일자, poiId) 조합만 사용하세요 (목록 밖 참조 생성 금지)
+  - 사진 수가 0장인 방문에는 photo_slot을 두지 마세요 (표지 포함 — 사진 칸이 비게 됩니다). 사진 있는 방문이 없으면 표지 photo_slot은 null, 장면은 STATS·MAP·EVENT로 구성하세요
   - 숫자·통계는 직접 쓰지 말고 자리표시자만 사용하세요:
     {visit_count} {distance_km} {photo_count} {region} {start_date} {end_date} {poi:i.name}
     — 이 어휘 밖의 자리표시자 금지. {poi:i.name}의 i는 아래 방문 기록의 poi 인덱스입니다
