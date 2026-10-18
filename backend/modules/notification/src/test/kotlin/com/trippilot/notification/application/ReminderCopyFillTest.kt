@@ -10,6 +10,7 @@ import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -55,12 +56,13 @@ class ReminderCopyFillTest : StringSpec({
     fun serviceWith(
         port: ReminderCopyPort,
         names: Map<LocalDate, List<PlannedPlaceView>> = plannedNames,
+        retries: ReminderCopyRetries = ReminderCopyRetries(RETRY_DELAY_MS),
     ): Pair<NotificationScheduleService, FakeSchedules> {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply {
             put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12"))
         }
-        return NotificationScheduleService(trips, schedules, port, FakePlans(names), clock) to schedules
+        return NotificationScheduleService(trips, schedules, port, FakePlans(names), clock, retries) to schedules
     }
 
     "받은 문구가 예약에 붙고, 발화가 그것을 쓴다" {
@@ -206,6 +208,70 @@ class ReminderCopyFillTest : StringSpec({
         day1.slots.mapNotNull { it.category }.none { it.any { c -> c.code in 0xAC00..0xD7A3 } } shouldBe true
     }
 
+    /**
+     * **콜드스타트 재시도.** 학생 모델(Bedrock)은 5분 무호출이면 내려가 첫 호출이 곧바로 실패한다.
+     * 하나도 못 받은 적재는 몇 분 뒤 한 번 더 묻고, 그때 받은 문구가 예약에 붙어야 한다 — 안 그러면
+     * 트래픽이 드문 환경에서 문구가 거의 늘 상수로 굳는다.
+     */
+    "하나도 못 받으면 잠시 뒤 한 번 더 묻고, 그때 받은 문구가 붙는다" {
+        val coldThenWarm = object : ReminderCopyPort {
+            override val enabled = true
+            var calls = 0
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
+                calls++
+                return if (calls == 1) emptyMap() else items.associate { it.scheduleKey to ReminderCopy("AI 제목", "AI 본문") }
+            }
+        }
+        val retries = ReminderCopyRetries(RETRY_DELAY_MS)
+        val (svc, schedules) = serviceWith(coldThenWarm, retries = retries)
+
+        svc.reload(tripId)
+        schedules.findPendingByTrip(tripId).shouldSurviveWithoutCopy()
+
+        // 때가 되기 전에는 꺼내지 않는다 — 모델이 올라오기 전에 다시 두드리면 또 실패한다.
+        retries.takeDue(clock.instant().plusMillis(RETRY_DELAY_MS - 1)) shouldBe emptyList()
+        ReminderCopyRetryPoller(retries, svc, Clock.offset(clock, Duration.ofMillis(RETRY_DELAY_MS))).retryDue()
+
+        coldThenWarm.calls shouldBe 2
+        schedules.findPendingByTrip(tripId).forEach { it.title shouldBe "AI 제목" }
+    }
+
+    "재시도도 못 받으면 더 묻지 않는다 — 상수 문구로 둔다" {
+        val alwaysCold = object : ReminderCopyPort {
+            override val enabled = true
+            var calls = 0
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
+                calls++
+                return emptyMap()
+            }
+        }
+        val retries = ReminderCopyRetries(RETRY_DELAY_MS)
+        val (svc, schedules) = serviceWith(alwaysCold, retries = retries)
+
+        svc.reload(tripId)
+        ReminderCopyRetryPoller(retries, svc, Clock.offset(clock, Duration.ofMillis(RETRY_DELAY_MS))).retryDue()
+        ReminderCopyRetryPoller(retries, svc, Clock.offset(clock, Duration.ofMillis(RETRY_DELAY_MS * 10))).retryDue()
+
+        // 상대가 아예 죽었을 때 계속 두드리지 않는다 — 처음 1번 + 재시도 1번이 전부다.
+        alwaysCold.calls shouldBe 2
+        schedules.findPendingByTrip(tripId).shouldSurviveWithoutCopy()
+    }
+
+    "받았거나 물을 재료가 없었으면 다시 묻지 않는다" {
+        val retries = ReminderCopyRetries(RETRY_DELAY_MS)
+        val nothing = object : ReminderCopyPort {
+            override val enabled = true
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>) =
+                emptyMap<String, ReminderCopy>()
+        }
+
+        serviceWith(Echo(), retries = retries).first.reload(tripId)
+        // 재료가 없으면 어댑터가 애초에 안 묻는다 — 못 받은 것이 아니니 재시도할 이유도 없다.
+        serviceWith(nothing, names = emptyMap(), retries = retries).first.reload(tripId)
+
+        retries.takeDue(clock.instant().plusMillis(RETRY_DELAY_MS * 10)) shouldBe emptyList()
+    }
+
 })
 
 /**
@@ -216,3 +282,5 @@ private fun List<com.trippilot.notification.domain.NotificationSchedule>.shouldS
     shouldNotBeEmpty()
     forEach { it.title.shouldBeNull() }
 }
+
+private const val RETRY_DELAY_MS = 180_000L
