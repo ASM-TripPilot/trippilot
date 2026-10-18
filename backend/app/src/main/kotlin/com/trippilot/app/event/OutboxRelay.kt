@@ -119,7 +119,15 @@ class OutboxRelay(
                 dropped++
                 return@forEach
             }
-            runCatching { targets.forEach { it.handle(envelope) }; markPublished(envelope.eventId) }
+            // 구독자는 **서로 독립으로** 돌린다 — 앞 구독자가 실패해도 뒤가 돈다. 처음 실패에서 멈추면 한 상대의 장애가
+            // 같은 이벤트의 다른 처리를 막는다(여행 삭제: 도우미 AI 기억 파기가 실패하면 알림 예약 정리가 영영 안 돌아
+            // 지운 여행의 알림이 울린다 — #1348 검수). 하나라도 실패하면 이벤트째 재시도한다(성공한 쪽도 다시 돈다 —
+            // at-least-once·멱등 계약 안이다).
+            runCatching {
+                val failures = targets.mapNotNull { target -> runCatching { target.handle(envelope) }.exceptionOrNull() }
+                failures.firstOrNull()?.let { first -> failures.drop(1).forEach(first::addSuppressed); throw first }
+                markPublished(envelope.eventId)
+            }
                 .onSuccess { published ->
                     // OBS-U6-01 — 적재(occurred_at)에서 배달까지. **구독자 없어 닫은 건은 빼고**
                     // 실제로 배달된 것만 잰다. 그쪽을 섞으면 즉시 닫히는 값이 p95 를 끌어내려

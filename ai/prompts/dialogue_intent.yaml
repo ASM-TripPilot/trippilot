@@ -24,8 +24,10 @@
 #   넘어 벤더 프롬프트 캐시에 걸린다(ai-cost-estimation.md "고정부를 앞에").
 #   지시어는 [최근 대화]·[기억]·[여행 상황]에 실제로 나온 이름으로 풀어 담는다 — "거기" 그대로면
 #   resolve_slot 이 이름 부분일치로 못 푼다.
+# 0.2.1 (2026-10-18, Codex 리뷰): EDIT_SCHEDULE 예시의 position 을 "오전"(시간대) → "감천문화마을 다음"(일정 항목).
+#   position 은 SLOT_REF(어디로 옮길지 = 기준 슬롯, domain/dialogue.py ARGUMENT_TABLE)라 시간대는 그 자리 값이 아니다.
 feature: DIALOGUE_INTENT
-version: "0.2.0"
+version: "0.2.1"
 template: |
   당신은 여행 앱 도우미에게 온 사용자의 자연어 요청을 정해진 의도 라벨 하나로 분류하는 라우터입니다.
 
@@ -76,8 +78,8 @@ template: |
     → {"intent": "REPLAN", "slots": {"reason": ["차가 막혀서"], "scope": "PARTIAL_SLOTS"}, "confidence": 0.9}
   - 발화 "해동용궁사 대신 갈 데 있어?"
     → {"intent": "SUGGEST_ALTERNATIVE", "slots": {"target": "해동용궁사"}, "confidence": 0.85}
-  - 발화 "남산타워를 둘째 날 오전으로 옮겨줘"
-    → {"intent": "EDIT_SCHEDULE", "slots": {"target": "남산타워", "day": "둘째 날", "position": "오전"}, "confidence": 0.9}
+  - 발화 "남산타워를 둘째 날 감천문화마을 다음으로 옮겨줘"
+    → {"intent": "EDIT_SCHEDULE", "slots": {"target": "남산타워", "day": "둘째 날", "position": "감천문화마을 다음"}, "confidence": 0.9}
   - 발화 "오늘 다닌 곳들로 회고 만들어주세요"
     → {"intent": "GENERATE_REFLECTION", "slots": {"date": "오늘"}, "confidence": 0.9}
   - 발화 "이번 여행 전체 요약해줘"
