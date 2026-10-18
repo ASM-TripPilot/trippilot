@@ -170,15 +170,30 @@ _SKIP_SECTIONS = frozenset({
 _HEADING = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$")
 
 
+# 위키 판정에서 빼는 출처 — 인허가 식당(LOCALDATA 3.7만)은 동네 가게라 위키 문서가 거의 없고(실측 2026-10-18:
+# 이 구간 2만여 이름에서 채택 1건), 맞으면 오히려 동명 회사·체인 문서다.
+_WIKI_SKIP_SOURCES = frozenset({"LOCALDATA"})
+# 같은 이름이 이만큼 이상이면 체인·일반명사로 본다("골목식당"·"장미공원"·"하늘정원"). 제목 정확 일치가 **지점이
+# 아니라 회사·개념 문서**를 붙이고, 그 문서는 서울 같은 지명을 흔히 적어 지역 판정까지 통과한다.
+_CHAIN_MIN = 3
+
+
 def _wiki_corpus(proposals: Sequence[dict]) -> int:
     """도입부로 장소를 판정하고, 통과한 제목만 **본문 전문**을 받아 절 단위로 저장한다."""
     accepted: list[tuple[str, str]] = []  # (제목, 조인 키)
     by_title: dict[str, dict] = {}
+    counts: dict[str, int] = {}
+    for item in proposals:
+        name = ((item.get("poi") or {}).get("name") or "").strip()
+        counts[name] = counts.get(name, 0) + 1
     for item in proposals:
         ref = (item.get("provenance") or {}).get("content_id") or item.get("provisional_id")
         name = ((item.get("poi") or {}).get("name") or "").strip()
+        if item.get("source") in _WIKI_SKIP_SOURCES or counts.get(name, 0) >= _CHAIN_MIN:
+            continue
         if ref and name and name not in by_title:
             by_title[name] = item
+    print(f"  판정 대상 {len(by_title)}개 이름 (인허가 식당·체인 {len(proposals) - len(by_title)}건 제외)")
     titles = list(by_title)
     for i in range(0, len(titles), _WIKI_BATCH):
         batch = titles[i : i + _WIKI_BATCH]
@@ -196,7 +211,7 @@ def _wiki_corpus(proposals: Sequence[dict]) -> int:
                     intro, item.get("region") or "", str(prov.get("address") or "")):
                 continue
             accepted.append((title, str(prov.get("content_id") or item.get("provisional_id"))))
-        if (i // _WIKI_BATCH) % 50 == 0:
+        if (i // _WIKI_BATCH) % 25 == 0:
             print(f"  판정 {i + len(batch):6d}/{len(titles)} · 장소 문서 {len(accepted)}건")
         time.sleep(_WIKI_SLEEP)
 
