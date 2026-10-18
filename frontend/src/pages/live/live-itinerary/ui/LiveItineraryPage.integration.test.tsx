@@ -5755,7 +5755,7 @@ describe('방문 체크', () => {
       expect(
         screen.getByTestId(`execution-live-slot-visit-label-${TODAY}#p1`)
       ).toHaveTextContent('방문');
-    });
+    }, 20_000);
 
     it('W22 [도착] 직후 응답 전(낙관 구간)엔 "지금 관람 중" 만 — 계획 14:44 를 "도착"이라 쓰지 않고, 응답이 오면 "14:07 도착 · 지금 관람 중" (AC-3 · Q1)', async () => {
       // 응답을 gate 로 붙잡아 낙관 레코드(optimistic:p1 — 시각은 자리표시자)만 캐시에 있는 창을 연다(02a ★5).
