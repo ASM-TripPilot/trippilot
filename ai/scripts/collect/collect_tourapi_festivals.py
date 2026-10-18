@@ -4,8 +4,9 @@
 등록한 축제는 기간·주소·좌표가 원천에서 오므로 지오코딩 없이 근처 가산점(1km)에 바로 쓰인다.
 Plan-B "동선 근처 오늘 행사" 판정도 같은 저장소를 읽는다.
 
-    지역 17곳 × 목록 1~2쪽(100건) ≈ 하루 20~35호출 — POI 수집과 같은 키링·같은 키당 상한을 나눠 쓴다
-    시작일이 오늘 −120일 이후인 것만 받는다(그 전에 시작해 아직 하는 축제는 드물다) · 끝난 것은 싣지 않는다
+    전국을 한 번에 쪽(100건) 단위로 받는다 — 오늘 이후에도 열려 있는 것만(`eventStartDate`=오늘)
+    지역은 항목의 법정동 시도 코드(`lDongRegnCd`)로 읽는다. `areaCode` 로 거르면 0건이다(KorService2 이관)
+    POI 수집과 같은 키링을 뒤 키부터 쓴다 · 하루 5~15호출
 
 키: TOUR_API_KEY(필수) · TOUR_API_KEY2 · TOUR_API_KEY3 — `collect_pois.py` 와 같다.
 매일 행사 수집(`ai-event-collect.yml`) 뒤에 돈다. 저장소가 중복을 거르므로 몇 번 돌려도 같다.
@@ -17,6 +18,7 @@ import argparse
 import datetime as dt
 import os
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 _AI = Path(__file__).resolve().parents[2]
@@ -25,14 +27,20 @@ sys.path.insert(0, str(_AI / "src"))
 from trippilot.background.event_store import JsonEventStore  # noqa: E402
 from trippilot.domain.common import GeoPoint  # noqa: E402
 from trippilot.domain.event import EventInfo, EventType  # noqa: E402
-from trippilot.poi_curation.sourcing.pipeline import AREA_NAMES  # noqa: E402
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter, UrllibHttpClient  # noqa: E402
 from trippilot.ports.poi_sourcing_port import SourcingError  # noqa: E402
 
 KST = dt.timezone(dt.timedelta(hours=9))
-LOOKBACK_DAYS = 120
 ROWS = 100
-_MAX_PAGES = 3   # ponytail: 지역당 300건 상한 — 서울·경기도 실측 전엔 모른다, 잘리면 로그에 남긴다
+_MAX_PAGES = 15   # ponytail: 전국 1,500건 상한 — 잘리면 로그에 남긴다, 넘치면 올린다
+
+# 법정동 시도 코드 → 행사 저장소 지역 이름(`collect_events.DEFAULT_REGIONS` 와 같은 낱말).
+# 강원·전북은 특별자치도 전환으로 코드가 바뀌었다(42→51, 45→52) — 둘 다 받는다.
+LDONG_REGION = {
+    "11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "광주", "30": "대전",
+    "31": "울산", "36": "세종", "41": "경기", "42": "강원", "51": "강원", "43": "충북",
+    "44": "충남", "45": "전북", "52": "전북", "46": "전남", "47": "경북", "48": "경남", "50": "제주",
+}
 
 
 def _date(v: object) -> dt.date | None:
@@ -51,6 +59,11 @@ def _coord(item: dict) -> GeoPoint | None:
     return GeoPoint(lat, lng) if lat and lng else None
 
 
+def region_of(item: dict) -> str | None:
+    """`lDongRegnCd`(앞 두 자리)로 지역. 모르는 코드는 None — 지역을 지어내지 않는다."""
+    return LDONG_REGION.get(str(item.get("lDongRegnCd") or "")[:2])
+
+
 def to_event(item: dict, today: dt.date) -> EventInfo | None:
     """끝나지 않았고 기간·이름이 온전한 것만. id 는 contentid 라 재실행해도 같다."""
     start, end = _date(item.get("eventstartdate")), _date(item.get("eventenddate"))
@@ -62,19 +75,18 @@ def to_event(item: dict, today: dt.date) -> EventInfo | None:
                      address=str(item.get("addr1") or "").strip() or None)
 
 
-def fetch_page(adapter: TourApiAdapter, code: str, since: str, page: int,
+def fetch_page(adapter: TourApiAdapter, open_from: str, page: int,
                attempts: int = 2) -> tuple[list[dict], int] | None:
     """한 쪽을 받는다 — 실패하면 한 번 더, 그래도 실패면 None(경고 로그).
 
     data.go.kr 은 GitHub 러너에서 SSL 핸드셰이크가 가끔 끊긴다 — POI 수집도 같은 오류로 쪽을
-    건너뛴다(10-17 런). 첫 실행이 첫 호출에서 이걸 맞아 17개 지역이 통째로 날아갔다(10-18).
+    건너뛴다(10-17 런). 첫 실행이 첫 호출에서 이걸 맞아 통째로 날아갔다(10-18, #1336).
     """
     for n in range(1, attempts + 1):
         try:
-            return adapter.search_festivals(code, since, page, ROWS)
+            return adapter.search_festivals(open_from, page, ROWS)
         except SourcingError as e:
-            print(f"[festivals] WARNING {AREA_NAMES[code]} {page}쪽 실패({n}/{attempts}): {e}",
-                  file=sys.stderr)
+            print(f"[festivals] WARNING {page}쪽 실패({n}/{attempts}): {e}", file=sys.stderr)
     return None
 
 
@@ -93,36 +105,40 @@ def main(argv: list[str]) -> int:
     adapter = TourApiAdapter(UrllibHttpClient(), keys[0], extra_keys=keys[1:],
                              calls_per_key=per_key if len(keys) > 1 else None)
     now = dt.datetime.now(KST)
-    since = (now.date() - dt.timedelta(days=LOOKBACK_DAYS)).strftime("%Y%m%d")
+    open_from = now.date().strftime("%Y%m%d")
+
+    by_region: dict[str, list[EventInfo]] = defaultdict(list)
+    stat: Counter[str] = Counter()
+    page, total = 0, 1
+    while page * ROWS < total:
+        page += 1
+        if page > _MAX_PAGES:
+            stat["잘림(쪽 상한)"] += 1
+            break
+        got = fetch_page(adapter, open_from, page)
+        if got is None:
+            stat["쪽 실패"] += 1
+            continue
+        items, total = got
+        stat["원문"] += len(items)
+        for item in items:
+            if (event := to_event(item, now.date())) is None:
+                stat["끝남·결측"] += 1
+            elif (region := region_of(item)) is None:
+                stat["지역 불명"] += 1
+            else:
+                by_region[region].append(event)
 
     store = JsonEventStore(args.store)
-    totals = {"items": 0, "kept": 0, "coord": 0, "added": 0, "backfilled": 0,
-              "truncated": [], "failed": []}
-    for code, region in AREA_NAMES.items():
-        events: list[EventInfo] = []
-        for page in range(1, _MAX_PAGES + 1):
-            got = fetch_page(adapter, code, since, page)
-            if got is None:
-                totals["failed"].append(region)
-                break   # 이 지역 나머지 쪽은 건너뛴다 — 받은 만큼은 싣는다
-            items, total = got
-            totals["items"] += len(items)
-            events += [e for i in items if (e := to_event(i, now.date())) is not None]
-            if page * ROWS >= total:
-                break
-        else:
-            totals["truncated"].append(region)
-        added, backfilled = store.upsert(region, events, now, covered=False)
-        totals["kept"] += len(events)
-        totals["coord"] += sum(e.coord is not None for e in events)
-        totals["added"] += added
-        totals["backfilled"] += backfilled
+    added = backfilled = 0
+    for region, events in sorted(by_region.items()):
+        a, b = store.upsert(region, events, now, covered=False)
+        added, backfilled = added + a, backfilled + b
     store.save()
-    print(f"[festivals] 원문 {totals['items']} → 진행·예정 {totals['kept']}(좌표 {totals['coord']}) · "
-          f"신규 {totals['added']} · 좌표백필 {totals['backfilled']}"
-          + (f" · ⚠ {_MAX_PAGES}쪽에서 잘림: {totals['truncated']}" if totals["truncated"] else "")
-          + (f" · ⚠ 호출 실패로 건너뜀: {totals['failed']}" if totals["failed"] else ""),
-          file=sys.stderr)
+    kept = [e for es in by_region.values() for e in es]
+    print(f"[festivals] {dict(stat)} → 진행·예정 {len(kept)}(좌표 {sum(e.coord is not None for e in kept)}) · "
+          f"지역 {dict(Counter({r: len(es) for r, es in by_region.items()}).most_common())} · "
+          f"신규 {added} · 좌표백필 {backfilled}", file=sys.stderr)
     return 0
 
 
