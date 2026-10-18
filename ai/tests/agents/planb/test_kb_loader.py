@@ -396,8 +396,6 @@ def test_committed_place_vectors_cover_the_corpus() -> None:
     corpus = Path(__file__).resolve().parents[3] / "data/place_corpus_wiki.jsonl.gz"
     loaded = load_chunk_vectors(vectors_path(corpus))
     assert loaded is not None, "scripts/collect/build_place_vectors.py 로 만든다"
-    model, dim, vecs = loaded
-    assert model == "nlpai-lab/KURE-v1" and dim == 1024
-    stale = [d.doc_id for d in load_kb._documents_of(corpus)
-             if vecs.get(d.doc_id, ("",))[0] != text_hash(d.text)]
+    assert loaded.model == "nlpai-lab/KURE-v1" and loaded.dim == 1024
+    stale = [d.doc_id for d in load_kb._documents_of(corpus) if loaded.hash_of(d.doc_id) != text_hash(d.text)]
     assert stale == [], f"벡터가 낡은 조각 {len(stale)}개 — build_place_vectors.py 를 다시 돌려라"

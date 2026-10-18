@@ -241,16 +241,16 @@ def _index_corpus(documents, embedding, store, budget_sec: float = KB_LOAD_BUDGE
 
     ready, rest = [], []
     for d in documents:
-        hit = (precomputed or {}).get(d.doc_id)
-        (ready if hit and hit[0] == text_hash(d.text) else rest).append((d, hit[1] if hit else None))
+        ok = precomputed is not None and precomputed.hash_of(d.doc_id) == text_hash(d.text)
+        (ready if ok else rest).append(d)
     if ready:
-        coll = collection_for(ready[0][0].kb, embedding.model_id)
-        if any(len(v) != embedding.dim for _, v in ready):
-            raise SystemExit("미리 계산한 조각 벡터의 차원이 임베딩과 다르다 — 파일을 다시 만들어라")
-        _upsert_rows(store, coll, [(d.doc_id, v, d.payload()) for d, v in ready])
-    pending_bases = {d.doc_id.split("#", 1)[0] for d, _ in rest}
+        coll = collection_for(ready[0].kb, embedding.model_id)
+        for i in range(0, len(ready), _BULK_ROWS):  # 벡터는 묶음마다 펼친다(Job 메모리 512Mi)
+            _upsert_rows(store, coll, [(d.doc_id, precomputed.vector(d.doc_id), d.payload())
+                                       for d in ready[i:i + _BULK_ROWS]])
+    pending_bases = {d.doc_id.split("#", 1)[0] for d in rest}
     groups: dict[str, list] = {}
-    for d, _ in rest:
+    for d in rest:
         groups.setdefault(d.doc_id.split("#", 1)[0], []).append(d)
 
     start, count, done = time.monotonic(), len(ready), set()
@@ -290,11 +290,10 @@ def load_corpus(path: Path, documents, fresh, embedding, store, budget_sec: floa
     loaded = load_chunk_vectors(vectors_path(path))
     precomputed, why = None, "벡터 파일 없음"
     if loaded is not None:
-        model, dim, vecs = loaded
-        if model != embedding.model_id or dim != embedding.dim:
-            why = f"벡터 파일 모델·차원 {model}/{dim} != 현재 {embedding.model_id}/{embedding.dim}"
+        if loaded.model != embedding.model_id or loaded.dim != embedding.dim:
+            why = f"벡터 파일 모델·차원 {loaded.model}/{loaded.dim} != 현재 {embedding.model_id}/{embedding.dim}"
         else:
-            precomputed, why = vecs, ""
+            precomputed, why = loaded, ""
     count, done, embedded = _index_corpus(fresh, embedding, store, budget_sec, precomputed)
     fresh_bases = base_ids(fresh)
     pending = fresh_bases - done

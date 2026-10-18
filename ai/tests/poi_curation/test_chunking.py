@@ -112,7 +112,9 @@ def test_chunk_vectors_round_trip_and_hash_changes_with_text(tmp_path) -> None:
     docs = c.chunk_document({"doc_id": "wiki:1", "poi_ref": "1", "sections": [{"heading": "개요", "text": _S}]})
     p = tmp_path / "x.vectors.json.gz"
     c.dump_chunk_vectors(p, docs, "m", [(0.5, -0.25)], provenance={"engine": "t"})
-    model, dim, vecs = c.load_chunk_vectors(p)
-    assert (model, dim) == ("m", 2) and vecs[docs[0].doc_id] == (c.text_hash(docs[0].text), (0.5, -0.25))
+    v = c.load_chunk_vectors(p)
+    assert (v.model, v.dim, len(v)) == ("m", 2, 1)
+    assert v.hash_of(docs[0].doc_id) == c.text_hash(docs[0].text) and v.vector(docs[0].doc_id) == (0.5, -0.25)
+    assert v.hash_of("wiki:404#0") is None
     assert c.text_hash(docs[0].text) != c.text_hash(docs[0].text + " ")
     assert c.vectors_path(tmp_path / "place_corpus_wiki.jsonl.gz").name == "place_corpus_wiki.vectors.json.gz"

@@ -158,20 +158,43 @@ def dump_chunk_vectors(path, docs: Sequence[KbDocument], model: str, vectors, *,
     path.write_bytes(gzip.compress(json.dumps(doc).encode(), mtime=0))
 
 
-def load_chunk_vectors(path) -> tuple[str, int, dict[str, tuple[str, tuple[float, ...]]]] | None:
-    """(모델, 차원, {조각 id: (본문 지문, 벡터)}). 파일이 없으면 None — 적재가 원격 임베딩으로 간다."""
+class ChunkVectors:
+    """미리 계산한 조각 벡터 — **필요할 때만** 펼친다. 적재 Job 은 512Mi 라 1만여 개 × 1024차원을 파이썬
+    튜플로 한꺼번에 펼치면(약 400MB) 그것만으로 넘친다. fp16 원본 바이트를 들고 조각 하나씩 꺼낸다."""
+
+    def __init__(self, model: str, dim: int, ids, hashes, raw: bytes) -> None:
+        self.model, self.dim = model, dim
+        self._at = {i: (h, n) for n, (i, h) in enumerate(zip(ids, hashes))}
+        self._raw = raw
+
+    def __len__(self) -> int:
+        return len(self._at)
+
+    def hash_of(self, doc_id: str) -> str | None:
+        hit = self._at.get(doc_id)
+        return hit[0] if hit else None
+
+    def vector(self, doc_id: str) -> tuple[float, ...]:
+        import struct
+
+        n = self._at[doc_id][1]
+        return struct.unpack_from(f"<{self.dim}e", self._raw, n * self.dim * 2)
+
+
+def load_chunk_vectors(path) -> ChunkVectors | None:
+    """파일이 없으면 None — 적재가 원격 임베딩으로 간다. 깨진 파일은 예외(조용히 넘기지 않는다)."""
     import base64
     import gzip
     import json
-    import struct
 
     if not path.exists():
         return None
     doc = json.loads(gzip.decompress(path.read_bytes()))
+    raw = base64.b64decode(doc.pop("f16_b64"))
     count, dim = int(doc["count"]), int(doc["dim"])
-    flat = struct.unpack(f"<{count * dim}e", base64.b64decode(doc["f16_b64"]))
-    vecs = {doc["ids"][i]: (doc["hashes"][i], tuple(flat[i * dim:(i + 1) * dim])) for i in range(count)}
-    return doc["model"], dim, vecs
+    if len(raw) != count * dim * 2 or len(doc["ids"]) != count or len(doc["hashes"]) != count:
+        raise ValueError(f"{path.name}: 벡터 파일 크기·개수가 머리와 다르다")
+    return ChunkVectors(doc["model"], dim, doc["ids"], doc["hashes"], raw)
 
 
 def vectors_path(corpus_path):
