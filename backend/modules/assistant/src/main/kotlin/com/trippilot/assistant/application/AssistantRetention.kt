@@ -2,6 +2,7 @@ package com.trippilot.assistant.application
 
 import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantUsageRepository
+import com.trippilot.assistant.domain.DialogueMemoryPort
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -24,6 +25,7 @@ class AssistantRetention(
     private val sessions: AssistantSessionRepository,
     private val usage: AssistantUsageRepository,
     private val properties: AssistantProperties,
+    private val memory: DialogueMemoryPort,
     private val clock: Clock,
 ) {
     @Scheduled(
@@ -48,11 +50,15 @@ class AssistantRetention(
      * 지운다. 파기 순간에 돌던 턴이 LLM 을 썼으면 사용량 한 행이 다시 생길 수 있다(발화 없는 카운터, 40일 뒤 청소).
      *
      * 사용량까지 지우는 것은 여기뿐이다 — 이력 지우기는 사용량을 남긴다(COST-U8-01: 지우기가 상한 우회가 되지 않게).
+     *
+     * 상대 세션 메모리(요약)도 여기서 지운다(DE §4.1 · BR-AO-10). **실패는 올린다** — 이력 지우기와 달리 TTL 백스톱에 맡기지 않는다
+     * (DATA-U8-02 즉시 파기): 예외가 트랜잭션을 되감고 아웃박스가 재시도한다. 파기는 멱등이라 재시도가 두 번 지울 것은 없다.
      */
     @Transactional
     fun purgeAccount(accountId: UUID): Int {
         val purged = sessions.deleteByAccount(accountId)
         usage.deleteByAccount(accountId)
+        memory.deleteByAccount(accountId.toString())
         return purged
     }
 

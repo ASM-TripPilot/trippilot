@@ -19,7 +19,8 @@ enum class Intent {
     OUT_OF_SCOPE,
 }
 
-enum class InterpretOutcome { FRAME, ARGUMENT_CLARIFY, OUT_OF_SCOPE }
+/** `ANSWER` 는 상대 오케스트레이터가 답까지 완성한 턴이다(assistant-orchestrator FD DE §3.2) — [Interpretation.answer] 가 함께 온다. */
+enum class InterpretOutcome { FRAME, ARGUMENT_CLARIFY, OUT_OF_SCOPE, ANSWER }
 
 /** 의도 하나와 그 인자. [arguments] 의 값은 요청이지 확정값이 아니다 — 시각이 담겨도 화면에 그대로 내지 않는다(BR-DLG-05). */
 data class IntentFrame(val intent: Intent, val arguments: Map<String, String>, val matchRoute: String?)
@@ -27,11 +28,34 @@ data class IntentFrame(val intent: Intent, val arguments: Map<String, String>, v
 /** 인자 되묻기 — 문안은 상대가 인자 이름으로 고른 고정 문장이다(BR-U8-11). */
 data class Clarify(val argument: String, val question: String, val options: List<String>)
 
+/** 상대가 낼 수 있는 카드 종류(1단계, DE §2.3). 2단계의 `PROPOSAL` 은 아직 없다 — 표 밖 값은 계약 위반이다. */
+enum class AnswerKind { TEXT, INFO, CANDIDATES }
+
+/** 상대가 제안한 빠른 답 — **id 가 없다.** 서버가 발급해야(`qr-ai-{8자}-{i}`) 다음 턴에 받아진다(앱은 발급분만 보낸다). */
+data class InterpretedQuickReply(val label: String, val action: QuickReplyAction, val params: Map<String, String>)
+
+/**
+ * 상대가 완성한 답(DE §3.2). [text] 는 상대 출구 게이트를 지난 LLM 문장(또는 상대 템플릿)이고 kind·payload·nextActions·quickReplies 는
+ * 상대 핸들러의 결정론 산출이다 — 그래도 백엔드가 **다시 검증한다**(BLM §10): 길이·행동 집합은 어댑터가, 후보 실존·슬롯 실재는 턴 서비스가.
+ * 소요시간 칸은 없다(INV-3).
+ */
+data class InterpretedAnswer(
+    val kind: AnswerKind,
+    val text: String,
+    /** INFO: `{infoKind, title, rows[{label, value}]}` · CANDIDATES: `{candidates[{poiId, name, distanceRange?, reason}]}` · TEXT: null. 저장된 그대로 앱에 간다. */
+    val payload: Map<String, Any?>?,
+    val nextActions: List<NextAction>,
+    /** null 과 빈 목록은 뜻이 다르다 — null 은 "정하지 않았다"(앱이 시작 빠른 답을 보인다). */
+    val quickReplies: List<InterpretedQuickReply>?,
+    val footnote: String?,
+)
+
 /**
  * 해석 결과(FD §3.2).
  *
  * @property dialogueContext 상대 `DialogueContext` 직렬형 **그대로**. 백엔드는 읽지도 고치지도 않고 저장·반송한다(INV-U8-07).
  * @property llmCalls 이 해석이 쓴 LLM 호출 수 — 사용량 상한의 원천이다. 빠지면 상한이 0으로 센다(COST-U8-02).
+ * @property answer [outcome] 이 `ANSWER` 일 때의 답. 그 밖에는 null.
  */
 data class Interpretation(
     val outcome: InterpretOutcome,
@@ -39,6 +63,7 @@ data class Interpretation(
     val clarify: Clarify?,
     val dialogueContext: String,
     val llmCalls: Int,
+    val answer: InterpretedAnswer? = null,
 )
 
 /**
@@ -64,6 +89,9 @@ data class ContextSnapshot(
     data class SlotBlock(val slotKey: String, val name: String?, val startAt: LocalTime, val category: String?)
 }
 
+/** 단기 기억 한 줄(BR-AO-11) — 원문이 있는 저장 메시지만, 300자까지. 상대는 저장하지 않는다. */
+data class RecentTurn(val role: MessageRole, val text: String)
+
 data class InterpretRequest(
     val utterance: String,
     val surface: AssistantSurface,
@@ -73,10 +101,16 @@ data class InterpretRequest(
     val dialogueContext: String,
     val requestedAt: Instant,
     val deadlineMs: Long,
+    /** 상대 세션 메모리의 키(DE §3.1). */
+    val sessionId: UUID,
+    /** 계정 식별자 — 상대 메모리의 묶음 키이자 파기·내보내기 키. **로그에 싣지 않는다**(SEC-U8-06). */
+    val accountRef: String,
+    /** 이번 발화 앞의 대화, 오래된 것부터 ≤20건(BR-U8-22 화이트리스트 확장). 이번 발화는 [utterance] 로 가므로 여기 없다. */
+    val recentTurns: List<RecentTurn>,
 )
 
 /**
- * 발화 해석 경계(FD §3) — 상대의 `POST /ai/v1/dialogue/interpret`. 지금 구현은 대역뿐이다(상대 미구현, G-U8-4).
+ * 발화 해석 경계(FD §3) — 상대의 `POST /ai/v1/dialogue/interpret`.
  *
  * 실패는 [DialogueInterpretFailed] 로 올린다. **이 경계의 실패는 일정 폴백 신호가 아니다**(BR-U8-45) —
  * 그 턴이 폴백 메시지 한 건으로 끝날 뿐이다.
@@ -86,3 +120,21 @@ interface DialogueInterpretPort {
 }
 
 class DialogueInterpretFailed(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+
+/**
+ * 상대 세션 메모리의 파기·내보내기(`/ai/v1/dialogue/memory`, DE §3.3·§4.1 · BR-AO-10). 백엔드 대화가 사라지는 길마다
+ * 상대 요약도 같이 가야 한다 — 안 가면 "지웠는데 기억한다"가 상대 TTL(90일)만큼 남는다.
+ *
+ * 파기는 **멱등**이고 지울 것이 없으면 0 이다(오류 아님). 실패는 예외로 올린다(종류 불문) — 호출측이 정한다:
+ * 이력 지우기·여행 삭제는 WARN 으로 접고(TTL 백스톱), 계정 삭제는 올려서 아웃박스가 재시도한다.
+ * `http` 모드가 아니면(fake·off) no-op 이다 — 상대 메모리가 생기지 않으니 지울 것도 없다.
+ */
+interface DialogueMemoryPort {
+    fun deleteBySession(sessionId: UUID): Int
+    fun deleteByTrip(tripId: UUID): Int
+    fun deleteByAccount(accountRef: String): Int
+    fun export(accountRef: String): List<MemoryItem>
+}
+
+/** 상대 요약 한 묶음 — 세션 하나의 줄들(≤20줄). 내보내기는 줄 단위로 푼다(DATA-U8-06). */
+data class MemoryItem(val sessionId: String, val tripId: String?, val summary: List<String>, val updatedAt: Instant)

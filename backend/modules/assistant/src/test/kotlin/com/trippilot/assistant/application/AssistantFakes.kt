@@ -9,6 +9,8 @@ import com.trippilot.assistant.domain.ProposalStatus
 import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantUsageRepository
+import com.trippilot.assistant.domain.DialogueMemoryPort
+import com.trippilot.assistant.domain.MemoryItem
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.QuickReply
@@ -276,3 +278,28 @@ internal fun plannedSlot(
     startAt = LocalTime.parse(start), endAt = LocalTime.parse(start).plusHours(1), isFixed = false, endsNextDay = false,
     hasViolation = hasViolation, nameKo = name, category = "카페", violationReason = violation, distanceRange = distance,
 )
+
+/**
+ * 상대 세션 메모리 경계의 대역 — 무엇을 지우라고 했는지([deleted])와 내보내기를 물었는지([exported])를 적는다.
+ * [fail] 이면 실 클라이언트처럼 예외로 올린다(5xx·불통).
+ */
+internal class FakeDialogueMemory(var items: List<MemoryItem> = emptyList()) : DialogueMemoryPort {
+    val deleted = mutableListOf<String>()
+    val exported = mutableListOf<String>()
+    var fail = false
+
+    override fun deleteBySession(sessionId: UUID) = record("session:$sessionId")
+    override fun deleteByTrip(tripId: UUID) = record("trip:$tripId")
+    override fun deleteByAccount(accountRef: String) = record("account:$accountRef")
+    override fun export(accountRef: String): List<MemoryItem> {
+        if (fail) throw IllegalStateException("memory down")
+        exported += accountRef
+        return items
+    }
+
+    private fun record(key: String): Int {
+        if (fail) throw IllegalStateException("memory down")
+        deleted += key
+        return 1
+    }
+}

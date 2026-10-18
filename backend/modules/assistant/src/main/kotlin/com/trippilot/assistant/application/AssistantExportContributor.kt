@@ -2,9 +2,11 @@ package com.trippilot.assistant.application
 
 import com.trippilot.assistant.domain.AssistantMessageRepository
 import com.trippilot.assistant.domain.AssistantSessionRepository
+import com.trippilot.assistant.domain.DialogueMemoryPort
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.core.export.AccountDataContributor
 import com.trippilot.core.export.ExportSection
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.time.Clock
 import java.util.UUID
@@ -48,5 +50,33 @@ class AssistantExportContributor(
     private companion object {
         /** 훑을 대화 수 — 여행마다 하나이고 보존 기간이 지나면 사라지므로 이 수를 넘기 어렵다. */
         private const val SESSION_SCAN_LIMIT = 500
+    }
+}
+
+/**
+ * 상대가 쥔 대화 요약 몫(DATA-U8-06 · assistant-orchestrator DE §4.1) — 사용자 발화의 **파생물**도 열람 대상이다.
+ * 한 줄이 요약 한 줄이다(위 몫과 같은 이유 — 상한과 "잘렸음"이 줄 수로 센다).
+ *
+ * 상대를 못 읽으면 **비우고 잘렸다고 표시한다** — 받은 것이 전부인 줄 알게 두지 않는다(INV-4). 통째로 실패시키면 다른 몫까지
+ * 내려받지 못한다. ponytail: 정본(DE §4.1)은 "섹션 누락"이라 적었지만 조립(`AccountExportService`)에 몫을 빼는 수단이 없어
+ * 기존 `truncated` 표지를 빌린다 — 미결 #13 묶음. 조립이 "읽지 못함"을 따로 알리게 되면 그쪽으로 옮긴다.
+ */
+@Component
+class AssistantMemoryExportContributor(private val memory: DialogueMemoryPort) : AccountDataContributor {
+    override val section = "assistantMemory"
+
+    override fun export(accountId: UUID, limit: Int): ExportSection {
+        val items = runCatching { memory.export(accountId.toString()) }.getOrElse { e ->
+            log.warn("도우미 상대 메모리 내보내기 실패 — 이 몫은 비우고 잘림으로 표시합니다. type={}", e.javaClass.simpleName)
+            return ExportSection(section, emptyList(), truncated = true)
+        }
+        val rows = items.flatMap { m ->
+            m.summary.map { line -> mapOf("sessionId" to m.sessionId, "tripId" to m.tripId, "line" to line, "updatedAt" to m.updatedAt.toString()) }
+        }
+        return ExportSection.of(section, rows, limit)
+    }
+
+    private companion object {
+        private val log = LoggerFactory.getLogger(AssistantMemoryExportContributor::class.java)
     }
 }

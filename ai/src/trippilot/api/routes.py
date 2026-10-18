@@ -20,7 +20,7 @@ from __future__ import annotations
 from datetime import date as date_type
 from typing import Callable, Sequence, TypeVar
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from trippilot.api.errors import map_exception, orchestrator_not_wired
 from trippilot.api.protocols import (
@@ -32,6 +32,8 @@ from trippilot.api.protocols import (
 from trippilot.api.schemas import (
     DialogueInterpretRequest,
     DialogueInterpretResponse,
+    DialogueMemoryDeleteResponse,
+    DialogueMemoryExportResponse,
     AlternativesRequest,
     AlternativesResponse,
     EditItineraryRequest,
@@ -469,3 +471,43 @@ def dialogue_interpret(
     if handler is None:
         raise orchestrator_not_wired()
     return _guarded(lambda: handler(request))
+
+
+# ───── 장기 기억 파기·내보내기 (assistant-orchestrator FD DE §3.3·§4.1 · BR-AO-10) — 쿼리 전용, 본문 없음 ─────
+# 백엔드 3호출(이력 지우기=session_id · 여행 삭제=trip_id · 계정 삭제=account_ref) + 내보내기(섹션 `assistantMemory`).
+# `request_meta` 가 없는 첫 경계 — trace_id 는 `x-trace-id` 헤더 또는 uuid4(미들웨어 기존 규약). 스토어 예외는 500 으로
+# 그대로 나가 백엔드가 재시도한다(DATA-U8-02). account_ref 값은 로그·오류 본문에 싣지 않는다.
+
+
+@dialogue_router.delete("/memory", response_model=DialogueMemoryDeleteResponse)
+def dialogue_memory_delete(
+    session_id: str | None = Query(default=None, min_length=1, max_length=64),
+    trip_id: str | None = Query(default=None, min_length=1, max_length=64),
+    account_ref: str | None = Query(default=None, min_length=1, max_length=64),
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> DialogueMemoryDeleteResponse:
+    """세션·여행·계정 중 **정확히 하나**로 장기 기억을 지운다 — 둘 이상·없음은 422.
+
+    200 `{deleted: n}`, 멱등(지울 것이 없으면 0 — 오류 아님, DEC-AO-8). 구형 조립은 503 명시 실패.
+    """
+    handler = getattr(orchestrator, "dialogue_memory_delete", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(
+        lambda: handler(session_id=session_id, trip_id=trip_id, account_ref=account_ref)
+    )
+
+
+@dialogue_router.get("/memory", response_model=DialogueMemoryExportResponse)
+def dialogue_memory_export(
+    account_ref: str = Query(..., min_length=1, max_length=64),
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> DialogueMemoryExportResponse:
+    """계정의 세션 기억 전부(updated_at DESC) — 백엔드 내보내기 섹션 `assistantMemory`(DATA-U8-06).
+
+    모르는 계정은 200 + 빈 목록(오류 아님). 구형 조립은 503 명시 실패.
+    """
+    handler = getattr(orchestrator, "dialogue_memory_export", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(account_ref))

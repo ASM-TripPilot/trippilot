@@ -129,20 +129,16 @@ def test_every_requirement_key_is_a_real_intent_label() -> None:
 
 # 아직 요구표 행이 없는 의도 — 여기 있는 동안 `collect()` 는 UnknownIntentError 다.
 #
-# **둘은 성질이 다르다.** "아직 안 정했다"와 "정할 수가 없다"를 뭉치면 다음 사람이
-# 전자인 줄 알고 아무 행이나 적는다.
+# "아직 안 정했다"와 "정할 수가 없다"를 뭉치면 다음 사람이 전자인 줄 알고 아무 행이나
+# 적는다 — 남은 한 줄은 후자다.
 #
-# - `GET_POI_INFO`: PLACE Provider 가 **안 맞는다.** `PlaceProvider.fetch` 는
-#   `pool_request`(앵커·날짜·예산·교통 전부 필수, 날짜는 비면 예외)를 요구하는
-#   **후보풀 조립기**다. "이 장소 정보 알려줘"에는 날짜도 예산도 없고, 지어내면
-#   **영업일 필터가 물어본 그 장소를 떨어뜨릴 수 있다.** 단건 조회 능력은 포트에
-#   있지만(`PoiDbPort.find_by_ids`) Provider 가 안 내놓는다 — 그 경로를 여는 것이
-#   선행이다.
 # - `STYLE_ANALYSIS`: **처리자가 없다.** 라우팅 표는 `ReflectAgent` 를 가리키는데
 #   `ReflectionKind` 에 그 종류가 없다(DAILY·TRIP_SUMMARY 둘뿐). 인자표도 "AI 에
 #   처리 경로가 없다"고 적어 뒀다. 행을 적으면 처리 경로가 있다고 암시하게 된다.
+# - `GET_POI_INFO` 는 여기 있다가 빠졌다 — PLACE 가 후보풀 조립기라 안 맞던 것을
+#   `PoiDbPort.lookup_by_ids` 를 감싼 POI_INFO Provider 가 채웠다
+#   (tests/providers/test_poi_info_provider.py).
 _REQUIREMENTS_UNDEFINED = frozenset({
-    Intent.GET_POI_INFO,   # Provider 가 안 맞는다 (단건 조회 경로 선행)
     Intent.STYLE_ANALYSIS,  # 처리자가 없다 (ReflectionKind 에 종류 없음)
 })
 

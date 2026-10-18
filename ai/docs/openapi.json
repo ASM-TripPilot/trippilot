@@ -430,6 +430,79 @@
         "title": "DayScheduleSchema",
         "type": "object"
       },
+      "DialogueAnswerSchema": {
+        "additionalProperties": false,
+        "description": "오케스트레이터가 AI 안에서 끝낸 답 (outcome `ANSWER`, assistant-orchestrator FD DE §2.3·§3.2).\n\n문장의 시각·거리는 facts(Provider·스냅샷 검증값)에서만 온다(INV-2) — 소요시간 필드는 없다(INV-3).\n`text` 상한 600 은 게이트 상한(400) + 와이어 여유다.",
+        "properties": {
+          "footnote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footnote"
+          },
+          "kind": {
+            "enum": [
+              "TEXT",
+              "INFO",
+              "CANDIDATES"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_actions": {
+            "items": {
+              "$ref": "#/components/schemas/DialogueNextActionSchema"
+            },
+            "minItems": 1,
+            "title": "Next Actions",
+            "type": "array"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "quick_replies": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DialogueQuickReplySchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quick Replies"
+          },
+          "text": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text",
+          "next_actions"
+        ],
+        "title": "DialogueAnswerSchema",
+        "type": "object"
+      },
       "DialogueClarifySchema": {
         "additionalProperties": false,
         "properties": {
@@ -574,6 +647,19 @@
       "DialogueInterpretRequest": {
         "additionalProperties": false,
         "properties": {
+          "account_ref": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Ref"
+          },
           "context": {
             "$ref": "#/components/schemas/DialogueContextSnapshot"
           },
@@ -589,8 +675,29 @@
             ],
             "title": "Dialogue Context"
           },
+          "recent_turns": {
+            "items": {
+              "$ref": "#/components/schemas/DialogueTurnSchema"
+            },
+            "maxItems": 20,
+            "title": "Recent Turns",
+            "type": "array"
+          },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
           },
           "utterance": {
             "maxLength": 500,
@@ -610,6 +717,16 @@
       "DialogueInterpretResponse": {
         "additionalProperties": false,
         "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DialogueAnswerSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "clarify": {
             "anyOf": [
               {
@@ -670,6 +787,142 @@
           "status"
         ],
         "title": "DialogueItinerarySchema",
+        "type": "object"
+      },
+      "DialogueMemoryDeleteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "minimum": 0.0,
+            "title": "Deleted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "DialogueMemoryDeleteResponse",
+        "type": "object"
+      },
+      "DialogueMemoryExportResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/DialogueMemoryItemSchema"
+            },
+            "title": "Memories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memories"
+        ],
+        "title": "DialogueMemoryExportResponse",
+        "type": "object"
+      },
+      "DialogueMemoryItemSchema": {
+        "additionalProperties": false,
+        "description": "세션 1건의 장기 기억 — 내보내기 항목. `summary` 는 파생물(원문 아님, SEC-U8-06).",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "summarized_turn_index": {
+            "minimum": 0.0,
+            "title": "Summarized Turn Index",
+            "type": "integer"
+          },
+          "summary": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Summary",
+            "type": "array"
+          },
+          "trip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "summary",
+          "summarized_turn_index",
+          "updated_at",
+          "expires_at"
+        ],
+        "title": "DialogueMemoryItemSchema",
+        "type": "object"
+      },
+      "DialogueNextActionSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Params",
+            "type": "object"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "label"
+        ],
+        "title": "DialogueNextActionSchema",
+        "type": "object"
+      },
+      "DialogueQuickReplySchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "label",
+          "action"
+        ],
+        "title": "DialogueQuickReplySchema",
         "type": "object"
       },
       "DialogueSlotSchema": {
@@ -751,6 +1004,32 @@
           "phase"
         ],
         "title": "DialogueTripSchema",
+        "type": "object"
+      },
+      "DialogueTurnSchema": {
+        "additionalProperties": false,
+        "description": "최근 턴 1건 — 단기 기억 (assistant-orchestrator FD DE §3.1).\n\n백엔드가 `text != null` 인 메시지만(가려진 입력 제외) 300자로 잘라 오래된 → 최신 순으로 싣는다.\n대화 기록은 백엔드 소유(DEC-U8-4) — AI 는 이것을 저장하지 않는다.",
+        "properties": {
+          "role": {
+            "enum": [
+              "USER",
+              "ASSISTANT"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "text"
+        ],
+        "title": "DialogueTurnSchema",
         "type": "object"
       },
       "EditCommandSchema": {
@@ -2825,6 +3104,137 @@
           }
         },
         "summary": "Dialogue Interpret",
+        "tags": [
+          "dialogue"
+        ]
+      }
+    },
+    "/ai/v1/dialogue/memory": {
+      "delete": {
+        "description": "세션·여행·계정 중 **정확히 하나**로 장기 기억을 지운다 — 둘 이상·없음은 422.\n\n200 `{deleted: n}`, 멱등(지울 것이 없으면 0 — 오류 아님, DEC-AO-8). 구형 조립은 503 명시 실패.",
+        "operationId": "dialogue_memory_delete_ai_v1_dialogue_memory_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trip_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trip Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Ref"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DialogueMemoryDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dialogue Memory Delete",
+        "tags": [
+          "dialogue"
+        ]
+      },
+      "get": {
+        "description": "계정의 세션 기억 전부(updated_at DESC) — 백엔드 내보내기 섹션 `assistantMemory`(DATA-U8-06).\n\n모르는 계정은 200 + 빈 목록(오류 아님). 구형 조립은 503 명시 실패.",
+        "operationId": "dialogue_memory_export_ai_v1_dialogue_memory_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account_ref",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Account Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DialogueMemoryExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dialogue Memory Export",
         "tags": [
           "dialogue"
         ]

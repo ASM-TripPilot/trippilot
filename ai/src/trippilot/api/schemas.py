@@ -919,6 +919,17 @@ class DialogueContextSnapshot(BoundaryModel):
     itinerary: DialogueItinerarySchema | None = None
 
 
+class DialogueTurnSchema(BoundaryModel):
+    """최근 턴 1건 — 단기 기억 (assistant-orchestrator FD DE §3.1).
+
+    백엔드가 `text != null` 인 메시지만(가려진 입력 제외) 300자로 잘라 오래된 → 최신 순으로 싣는다.
+    대화 기록은 백엔드 소유(DEC-U8-4) — AI 는 이것을 저장하지 않는다.
+    """
+
+    role: Literal["USER", "ASSISTANT"]
+    text: str = Field(min_length=1, max_length=300)
+
+
 class DialogueInterpretRequest(BoundaryModel):
     request_meta: RequestMetaSchema
     # 상한 500 — 라우터(`IntentRouterConfig.max_utterance_chars`)·`/edit` 와 같은 값.
@@ -927,6 +938,15 @@ class DialogueInterpretRequest(BoundaryModel):
     # (INV-U8-07). 첫 턴은 null 이다. 내용이 깨져 있으면 AI 가 버리고 새로 시작한다.
     dialogue_context: dict | None = None
     context: DialogueContextSnapshot
+    # ── assistant-orchestrator (FD DE §3.1) — 셋 다 선택: `extra=forbid` 라 AI 가 먼저 배포되고
+    # 백엔드가 뒤따라 보낸다(BR-AO-24). 구 백엔드 요청은 그대로 통과한다.
+    # 메모리 PK(백엔드 `assistant_session.session_id`). None 이면 메모리 단계 전체 생략.
+    session_id: str | None = Field(default=None, min_length=1, max_length=64)
+    # AI 경계를 처음 넘는 사용자 식별자 — 불투명 문자열. **로그·프롬프트 금지**, 저장 칸과
+    # "지난 여행 기억"(같은 계정의 다른 세션) 조회 키로만 쓴다.
+    account_ref: str | None = Field(default=None, min_length=1, max_length=64)
+    # 단기 기억. 오래된 → 최신 순. 상한 20 은 오케스트레이터 `max_recent_turns` 와 같은 값.
+    recent_turns: list[DialogueTurnSchema] = Field(default_factory=list, max_length=20)
 
 
 class DialogueFrameSchema(BoundaryModel):
@@ -945,9 +965,62 @@ class DialogueClarifySchema(BoundaryModel):
     options: list[str] | None = None
 
 
+class DialogueNextActionSchema(BoundaryModel):
+    # `type` 은 백엔드 `NextAction.TYPES`(17종) 안의 값 — 밖이면 백엔드가 SHOW_CAPABILITIES 로 대체한다(BR-U8-40)
+    type: str
+    label: str
+    params: dict[str, str] = Field(default_factory=dict)
+
+
+class DialogueQuickReplySchema(BoundaryModel):
+    label: str
+    action: str  # 백엔드 `QuickReplyAction` — id 는 백엔드가 발급한다(서버 발급 id 만 유효)
+    params: dict[str, str] = Field(default_factory=dict)
+
+
+class DialogueAnswerSchema(BoundaryModel):
+    """오케스트레이터가 AI 안에서 끝낸 답 (outcome `ANSWER`, assistant-orchestrator FD DE §2.3·§3.2).
+
+    문장의 시각·거리는 facts(Provider·스냅샷 검증값)에서만 온다(INV-2) — 소요시간 필드는 없다(INV-3).
+    `text` 상한 600 은 게이트 상한(400) + 와이어 여유다.
+    """
+
+    kind: Literal["TEXT", "INFO", "CANDIDATES"]
+    text: str = Field(min_length=1, max_length=600)
+    payload: dict | None = None
+    next_actions: list[DialogueNextActionSchema] = Field(min_length=1)
+    quick_replies: list[DialogueQuickReplySchema] | None = None
+    footnote: str | None = None
+
+
 class DialogueInterpretResponse(BoundaryModel):
-    outcome: str  # FRAME | ARGUMENT_CLARIFY | OUT_OF_SCOPE
+    outcome: str  # FRAME | ARGUMENT_CLARIFY | OUT_OF_SCOPE | ANSWER(assistant-orchestrator — 백엔드 `InterpretOutcome` 동시 추가)
     frames: list[DialogueFrameSchema]
     clarify: DialogueClarifySchema | None = None
     dialogue_context: dict
     llm_calls: int = Field(ge=0)  # 사용량 상한의 원천(COST-U8-02)
+    # ANSWER 일 때만 채운다(그때 frames 는 분류 프레임 1개, clarify 는 null). FRAME/CLARIFY/OOS 는 종전 모양 그대로.
+    answer: DialogueAnswerSchema | None = None
+
+
+# ───────── 장기 기억 파기·내보내기 (`/ai/v1/dialogue/memory` — FD DE §3.3·§4.1, BR-AO-10) ─────────
+# 쿼리 전용(본문 없음) — `request_meta` 가 없는 첫 경계다. 응답 어디에도 account_ref 를 되돌려 싣지 않는다.
+
+
+class DialogueMemoryDeleteResponse(BoundaryModel):
+    deleted: int = Field(ge=0)  # 멱등 — 지울 것이 없으면 0(오류 아님, DEC-AO-8)
+
+
+class DialogueMemoryItemSchema(BoundaryModel):
+    """세션 1건의 장기 기억 — 내보내기 항목. `summary` 는 파생물(원문 아님, SEC-U8-06)."""
+
+    session_id: str
+    trip_id: str | None = None
+    summary: list[str]
+    summarized_turn_index: int = Field(ge=0)
+    updated_at: dt.datetime
+    expires_at: dt.datetime  # = updated_at + 90일 (BE DATA-U8-01 과 같은 값)
+
+
+class DialogueMemoryExportResponse(BoundaryModel):
+    memories: list[DialogueMemoryItemSchema]  # updated_at DESC

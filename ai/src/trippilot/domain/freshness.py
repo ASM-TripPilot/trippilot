@@ -23,6 +23,7 @@ class ProviderKind(Enum):
     TRANSIT = "TRANSIT"
     PERSONA = "PERSONA"
     EVENT = "EVENT"
+    POI_INFO = "POI_INFO"  # id 배치 조회(영업시간·입장료·좌표) — assistant-orchestrator FD DE §2.9
 
 
 class ProviderStatus(Enum):

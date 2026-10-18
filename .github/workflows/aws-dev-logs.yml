@@ -8,6 +8,10 @@
 #                롤아웃 전 구간까지 본다. 줄 모양을 kubectl 과 같게(`[pod/<pod>/<container>] <RFC3339> <log>`)
 #                맞춰 같은 분석이 그대로 돈다. /health 줄은 질의에서 뺀다(AI 파드는 2시간에 4천 줄).
 #
+# 네임스페이스(`namespace`): 같은 클러스터에 출시 앱 서버(trippilot)와 개발 서버(trippilot-dev)가 함께 산다(10-15 분리,
+#   deploy/eks/runtime.py TARGETS). 종전엔 trippilot 하드코딩이라 개발 서버 로그는 이 길로 못 꺼냈다 — 섀도 측정
+#   (`intent_shadow`)이 거기 쌓인다. 두 출처 모두 같은 입력을 본다(kubectl -n · Logs Insights namespace 필터).
+#
 # 읽기만 한다 — 클러스터·DB 를 바꾸지 않으므로 `aws-dev` 동시성 그룹에 넣지 않는다(배포와 겹쳐도 무해,
 # 넣으면 서로 뒤에 줄을 선다). 자격 패턴은 deploy/eks/runtime_kb.py 의 _CREDENTIAL 하나로 가린다 —
 # 규칙이 둘이면 한쪽만 고쳐진다. 아티팩트는 리포 협업자만 받고 3일 뒤 사라진다.
@@ -25,6 +29,11 @@ on:
         description: 얼마 전부터 (예 6h · 90m · 2d)
         type: string
         default: 6h
+      namespace:
+        description: 어느 서버 — trippilot(출시 앱이 보는 서버) · trippilot-dev(개발 서버)
+        type: choice
+        options: [trippilot, trippilot-dev]
+        default: trippilot
       component:
         description: 어느 파드
         type: choice
@@ -47,6 +56,7 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
       SOURCE: ${{ inputs.source }}
       SINCE: ${{ inputs.since }}
+      NAMESPACE: ${{ inputs.namespace }}
       COMPONENT: ${{ inputs.component }}
       PATTERN: ${{ inputs.pattern }}
     steps:
@@ -63,15 +73,15 @@ jobs:
           set -o pipefail
           aws eks update-kubeconfig --name trippilot-dev --region "$AWS_REGION" > /dev/null
           mkdir -p logs
-          kubectl -n trippilot get pods -o wide > logs/pods.txt
-          kubectl -n trippilot get events --sort-by=.lastTimestamp 2>/dev/null | tail -300 > logs/events.txt || true
+          kubectl -n "$NAMESPACE" get pods -o wide > logs/pods.txt
+          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp 2>/dev/null | tail -300 > logs/events.txt || true
           comps="ai backend gateway embedding"
           [ "$COMPONENT" = all ] || comps="$COMPONENT"
           for c in $comps; do
             # 파드가 여럿이라(HPA) 줄마다 [pod/container] 머리를 붙인다
-            kubectl -n trippilot logs -l "app.kubernetes.io/component=$c" --all-containers --prefix \
+            kubectl -n "$NAMESPACE" logs -l "app.kubernetes.io/component=$c" --all-containers --prefix \
               --timestamps --since="$SINCE" --tail=-1 > "logs/$c.log" 2> "logs/$c.err" || true
-            kubectl -n trippilot logs -l "app.kubernetes.io/component=$c" --all-containers --prefix \
+            kubectl -n "$NAMESPACE" logs -l "app.kubernetes.io/component=$c" --all-containers --prefix \
               --timestamps --previous --tail=-1 > "logs/$c.previous.log" 2>/dev/null || true
             [ -s "logs/$c.previous.log" ] || rm -f "logs/$c.previous.log"
             [ -s "logs/$c.err" ] || rm -f "logs/$c.err"
@@ -85,7 +95,8 @@ jobs:
           from datetime import datetime, timezone
           from pathlib import Path
 
-          GROUP = "/aws/containerinsights/trippilot-dev/application"
+          GROUP = "/aws/containerinsights/trippilot-dev/application"   # 클러스터 이름이다 — 네임스페이스는 아래 필터로 가른다
+          NAMESPACE = os.environ["NAMESPACE"]
           LIMIT = 10_000                       # Logs Insights 한 질의의 결과 상한
           WINDOW = 2 * 3600                    # 상한에 덜 닿게 시간 창을 나눈다
 
@@ -118,7 +129,7 @@ jobs:
               for w0 in range(start, end, WINDOW):
                   w1 = min(end, w0 + WINDOW)
                   query = ("fields @timestamp, kubernetes.pod_name, kubernetes.container_name, log"
-                           f' | filter kubernetes.namespace_name = "trippilot" and kubernetes.container_name = "{c}"'
+                           f' | filter kubernetes.namespace_name = "{NAMESPACE}" and kubernetes.container_name = "{c}"'
                            " | filter log not like /GET \\/health/"
                            f" | sort @timestamp asc | limit {LIMIT}")
                   qid = aws("start-query", "--log-group-name", GROUP, "--start-time", str(w0),
@@ -142,7 +153,7 @@ jobs:
               print(f"{c}: {len(lines)} 줄")
           # 상한에 닿은 창이 있으면 그 사실을 남긴다(조용한 절단 금지) — since 를 줄이거나 창을 나눠 다시.
           (out / "pods.txt").write_text(
-              f"source=cloudwatch group={GROUP} since={os.environ['SINCE']}\n"
+              f"source=cloudwatch group={GROUP} namespace={NAMESPACE} since={os.environ['SINCE']}\n"
               + ("".join(f"TRUNCATED {t}\n" for t in truncated) if truncated else "truncated: none\n"),
               encoding="utf-8")
           if truncated:
@@ -171,7 +182,7 @@ jobs:
                   rows.append((path.name, len(scrubbed), hits, len(kept)))
               else:
                   rows.append((path.name, len(scrubbed), hits, None))
-          out = [f"### dev 파드 로그 (source={os.environ.get('SOURCE')}, `since={os.environ.get('SINCE')}`, component={os.environ.get('COMPONENT')})", "",
+          out = [f"### dev 파드 로그 (source={os.environ.get('SOURCE')}, namespace={os.environ.get('NAMESPACE')}, `since={os.environ.get('SINCE')}`, component={os.environ.get('COMPONENT')})", "",
                  "| 파일 | 줄 | 신호 줄(ERROR·WARN·5xx·409·degrad…) | pattern 일치 |", "|---|---|---|---|"]
           for name, n, hits, kept in rows:
               out.append(f"| {name} | {n} | {hits} | {'' if kept is None else kept} |")

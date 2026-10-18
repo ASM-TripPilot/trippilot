@@ -286,6 +286,11 @@ services:
       # PlanB RAG 벡터 스토어(TRIP-426) — 미설정 = 미배선(경계 개통은 TRIP-428).
       # 컨테이너 안에서는 ai-vectordb 호스트로 해석된다.
       TRIPPILOT_VECTOR_DB_URL: ${AI_VECTOR_DB_URL:-}
+      # 도우미 오케스트레이터(assistant-orchestrator 1단계) — on|off, 비우면 off(종전 DialogueInterpreter 경로).
+      # 세션 메모리는 위 VECTOR_DB_URL 의 ai_kb(dialogue_memory)에 산다 — 비우면 InMemory + 기동 WARN 한 줄.
+      TRIPPILOT_DIALOGUE_ORCHESTRATOR: ${AI_DIALOGUE_ORCHESTRATOR:-}
+      # 섀도 분류 측정(기존 IntentRouter 를 그늘에서 같이 돌려 일치율을 `intent_shadow` 로 남김) 샘플링 0~1 — 비우면 1.0.
+      TRIPPILOT_DIALOGUE_SHADOW_RATE: ${AI_DIALOGUE_SHADOW_RATE:-}
       # 임베딩 공급자 — openai(기본) | titan | local. **이 통로가 없어서** 컨테이너가
       # 늘 openai 로 떨어졌고, 멘토 Azure 엔드포인트에는 임베딩 배포가 없어 KB 검색
       # 3종이 전부 404(DeploymentNotFound)로 죽었다(2026-09-01 실측). 규칙 폴백이
