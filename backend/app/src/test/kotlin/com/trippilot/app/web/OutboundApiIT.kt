@@ -143,6 +143,12 @@ class OutboundApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `여행에 저장된 선택 불가 코드(도·구)도 302 — 실 카탈로그 시드 기준`() {
+        get("/api/v1/stays/browse/outbound?region=경기도&regionCode=41", null).statusCode.value() shouldBe 302
+        get("/api/v1/stays/browse/outbound?region=포항시 북구&regionCode=47113", null).statusCode.value() shouldBe 302
+    }
+
+    @Test
     fun `카탈로그에 없는 지역 코드는 400 — 실 카탈로그 시드 기준`() {
         get("/api/v1/stays/browse/outbound?region=포항&regionCode=99999", null).statusCode.value() shouldBe 400
     }

@@ -25,11 +25,15 @@ private class FakeLookup(private val names: Map<String, String>) : StayLookupFac
     override fun findName(stayId: String): String? = names[stayId]
 }
 
-/** 카탈로그 대역 — 포항(47110)·서울(11)·세종(36110)만 안다. */
+/** 카탈로그 대역 — 선택 가능: 포항(47110)·서울(11)·세종(36110) / 선택 불가: 경기도(41)·포항시 북구(47113). */
 private class FakeRegions : RegionLookupFacade {
-    private val byName = mapOf("포항" to listOf("47110"), "서울" to listOf("11"), "세종" to listOf("36110"))
+    private val byName = mapOf(
+        "포항" to listOf("47110"), "서울" to listOf("11"), "세종" to listOf("36110"),
+        "경기도" to listOf("41"), "포항시 북구" to listOf("47113"),
+    )
+    private val selectable = setOf("47110", "11", "36110")
     override fun codesOf(regionName: String) = byName[regionName] ?: emptyList()
-    override fun isSelectableCode(regionCode: String) = regionCode in byName.values.flatten()
+    override fun isSelectableCode(regionCode: String) = regionCode in selectable
     override fun centerOf(regionName: String): RegionCenter? = null
     override fun centerOfCode(regionCode: String): RegionCenter? = null
 }
@@ -130,6 +134,17 @@ class OutboundServiceTest : StringSpec({
         shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, null, "가".repeat(41), OutboundQuery()) }
         shouldThrow<ValidationFailed> { svc(clicks).regionOutbound(null, "47110' or 1=1", "포항", OutboundQuery()) }
         clicks.recorded shouldBe emptyList()
+    }
+
+    "선택 불가 코드도 이름이 그 코드를 가리키면 통과 — 이름으로 만든 여행에 저장된 도·구 코드" {
+        val clicks = RecordingClicks()
+        svc(clicks).regionOutbound(null, "41", "경기도", OutboundQuery())
+        svc(clicks).regionOutbound(null, "47113", "포항시 북구", OutboundQuery())
+        clicks.recorded.map { it.stayId } shouldBe listOf("REGION:41", "REGION:47113")
+    }
+
+    "선택 불가 코드에 다른 이름을 붙이면 400 — 짝이 안 맞는 요청" {
+        shouldThrow<ValidationFailed> { svc(RecordingClicks()).regionOutbound(null, "41", "포항", OutboundQuery()) }
     }
 
     "카탈로그에 없는 코드·이름은 400 — 익명 경로가 자유 문자열로 클릭 지표를 오염시키지 않는다" {

@@ -608,7 +608,7 @@ paths:
       summary: 지역 숙소 전체 보기 302(OTA 지역 목록으로 이동)
       description: >
         앱은 숙소 목록을 갖지 않고 OTA 의 지역 숙소 목록으로 보낸다 — 사진·가격·평점은 OTA 가 보여준다.
-        `region`·`regionCode` 는 지역 카탈로그에 있어야 한다(코드는 선택 가능 지역, 코드가 없으면 이름 일치) — 아니면 400.
+        `region`·`regionCode` 는 지역 카탈로그에 있어야 한다(코드는 선택 가능 지역이거나 `region` 이름이 가리키는 코드, 코드가 없으면 이름 일치) — 아니면 400.
         숙소 아웃바운드와 같은 규약이다: 클릭을 남기고(stay_id 자리에 `REGION:{regionCode 또는 region}`) 302,
         본문 없음, Bearer 선택.
 

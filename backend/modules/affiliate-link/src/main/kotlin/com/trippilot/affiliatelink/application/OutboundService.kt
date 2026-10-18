@@ -47,9 +47,11 @@ class OutboundService(
         val name = regionName.trim()
         val code = regionCode?.trim()?.takeIf { it.isNotEmpty() }
         // 지역 카탈로그에 있는 것만 받는다 — 익명·무제한 경로라 자유 문자열을 그대로 받으면 클릭 지표가 오염된다.
-        // 코드가 오면 코드로(동명이지역이 없다), 없으면 이름이 카탈로그에 있어야 한다.
+        // 코드는 "선택 가능"만으로 거르지 않는다 — 이름으로 만든 여행에는 도(41 경기도)·일반시의 구(47113 포항시
+        // 북구) 같은 선택 불가 코드가 저장돼 화면으로 내려온다. 그래서 선택 가능하거나, 함께 온 이름이 그 코드를
+        // 가리키면 통과다(여행 목적지의 이름·코드 짝). 코드가 없으면 이름이 카탈로그에 있어야 한다.
         val known = if (code != null) {
-            CODE.matches(code) && regions.isSelectableCode(code)
+            CODE.matches(code) && (regions.isSelectableCode(code) || code in regions.codesOf(name))
         } else {
             name.length <= MAX_REGION_NAME && regions.codesOf(name).isNotEmpty()
         }
