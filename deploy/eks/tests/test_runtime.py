@@ -652,7 +652,8 @@ class RuntimeIntegrationTests(unittest.TestCase):
             target = Path(folder) / "values.json"
             source.write_text(json.dumps({key: {"value": value} for key, value in outputs().items()}))
             common = ["--outputs", str(source)]
-            with patch("runtime.command", return_value="{}") as shell, patch("builtins.print"):
+            with patch("runtime.command", return_value="{}") as shell, patch("builtins.print"), \
+                    patch("runtime_smoke.wait_job"):
                 runtime.main(["ensure-namespace"])
                 manifest = json.loads(shell.call_args.args[1])
                 self.assertEqual(manifest["metadata"]["labels"]["pod-security.kubernetes.io/enforce"], "restricted")
@@ -693,7 +694,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
                          "trippilot-kb-load")
 
     def test_load_kb_reads_the_serving_image_prints_logs_and_cleans_up(self):
-        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "0", "trippilot-kb-load-ok", "총 1470건", ""])
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "Complete", "0", "trippilot-kb-load-ok", "총 1470건", ""])
         with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-kb"])
         calls = [c.args[0] for c in shell.call_args_list]
@@ -709,7 +710,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
     def test_load_kb_after_retries_shows_the_succeeded_attempt_not_the_failed_one(self):
         """재시도로 완료된 Job 에서 `logs job/…` 이 실패한 첫 시도의 EmbeddingUnreachable 트레이스를 찍고
         바로 'complete' 가 나왔다(10-15 개발 첫 적재) — 적재가 됐는지 로그로 판정할 수 없었다."""
-        shell = Mock(side_effect=["", "img", "", "", "1", "trippilot-kb-load-2nd", "place_docs.json: 1470건 적재", ""])
+        shell = Mock(side_effect=["", "img", "", "SuccessCriteriaMet Complete", "1", "trippilot-kb-load-2nd", "place_docs.json: 1470건 적재", ""])
         with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-kb"])
         calls = [c.args[0] for c in shell.call_args_list]
@@ -784,7 +785,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
     def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
         summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"
         # 재시도가 있었던 Job: 성공한 파드 이름·실패 횟수 1 → 그 파드의 로그를 읽고 요약에 재시도를 남긴다
-        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "trippilot-poi-load-k7x2q", "1", summary, ""])
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "Complete", "trippilot-poi-load-k7x2q", "1", summary, ""])
         with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-pois"])
         calls = [c.args[0] for c in shell.call_args_list]
@@ -822,7 +823,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
             " · 합계 — 접수=19084 신규=0 갱신=19080 지역코드미상=3 · 탈락(사유별): · gate.category_unmapped: 4")
         with tempfile.TemporaryDirectory() as folder:
             output = os.path.join(folder, "out")
-            shell = Mock(side_effect=["", "img", "", "", "trippilot-poi-load-abc12", "0", logs, ""])
+            shell = Mock(side_effect=["", "img", "", "Complete", "trippilot-poi-load-abc12", "0", logs, ""])
             with patch("runtime.command", shell), patch("builtins.print"), \
                     patch.dict(os.environ, {"GITHUB_OUTPUT": output}):
                 runtime.main(["load-pois", "--close-missing-dry-run"])
@@ -835,7 +836,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
 
     def test_load_pois_with_no_effect_is_a_failure(self):
         """적재가 '성공'인데 신규·갱신이 0 이면 아무것도 안 들어간 것이다 — 조용히 지나가면 "효과 없음"이 또 온다."""
-        shell = Mock(side_effect=["", "img", "", "", "", "0", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
+        shell = Mock(side_effect=["", "img", "", "Complete", "", "0", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
         with patch("runtime.command", shell), patch("builtins.print"), self.assertRaises(RuntimeError):
             runtime.main(["load-pois"])
         self.assertIn("delete", shell.call_args_list[-1].args[0])
@@ -882,7 +883,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         """
         import runtime_smoke
         table = "NAME   TARGETS   CURRENT   MIN   MAX   REPLICAS\nai     70        <none>    1     3     1\n"
-        shell = Mock(side_effect=["", "", "", "", table, "", ""])
+        shell = Mock(side_effect=["", "", "Complete", "", table, "", ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
@@ -894,7 +895,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
 
     def test_smoke_says_nothing_when_no_autoscaler_is_enabled(self):
         import runtime_smoke
-        shell = Mock(side_effect=["", "", "", "", "", "", ""])
+        shell = Mock(side_effect=["", "", "Complete", "", "", "", ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         output.assert_not_called()
@@ -912,7 +913,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0 (키 파라미터 serviceKey)\n"
                 "INFO trippilot.api.middleware GET /health 200\n"
                 "WARNING trippilot.main 임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — 규칙 랭킹으로 강등된다\n")
-        shell = Mock(side_effect=["", "", "", "", "", "", logs])
+        shell = Mock(side_effect=["", "", "Complete", "", "", "", logs])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
@@ -929,7 +930,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         배선 줄은 "켜졌다"까지만 말한다: 실 LLM 배정·ai_kb 권한·섀도는 실제 턴으로만 드러난다."""
         import runtime_smoke
         probe = 'ai-dialogue-probe {"http": 200, "outcome": "ANSWER", "kind": "INFO", "llm_calls": 3, "memory_deleted": 1}\n'
-        shell = Mock(side_effect=["", "", "", "", "", probe, ""])
+        shell = Mock(side_effect=["", "", "Complete", "", "", probe, ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
@@ -944,7 +945,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual([method for method, _, _ in sent], ["POST", "DELETE"])  # 쓴 기억은 지운다
         self.assertTrue(sent[1][1].endswith(sent[0][2]["session_id"]))
         self._assert_matches_contract(sent[0][2], "DialogueInterpretRequest")
-        failing = Mock(side_effect=["", "", "", "", "", runtime.CommandError("kubectl", "exec denied"), ""])
+        failing = Mock(side_effect=["", "", "Complete", "", "", runtime.CommandError("kubectl", "exec denied"), ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", failing)
         self.assertIn("ai-dialogue: 확인 못 함", " ".join(str(call.args[0]) for call in output.call_args_list))
@@ -1018,7 +1019,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
     def test_smoke_survives_unreadable_ai_logs(self):
         """로그를 못 읽어도 배포는 성공한다 — 기록 수단이 게이트가 되면 안 된다."""
         import runtime_smoke
-        shell = Mock(side_effect=["", "", "", "", "", "", runtime.CommandError("kubectl", "failed")])
+        shell = Mock(side_effect=["", "", "Complete", "", "", "", runtime.CommandError("kubectl", "failed")])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
@@ -1045,6 +1046,39 @@ class RuntimeIntegrationTests(unittest.TestCase):
             runtime.parse_outputs({})
         with self.assertRaises(ValueError):
             runtime.helm_values(outputs(), "tag", "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789abc", "api.example.com", False)
+
+
+class JobWaitTests(unittest.TestCase):
+    """실패한 Job 을 시한까지 기다리지 않는다 — `--for=condition=complete` 는 Failed 를 못 봐서 KB 적재가 90분을 태웠다(10-18)."""
+
+    def test_waits_for_any_true_condition_and_reads_it_in_the_same_call(self):
+        from runtime_io import wait_job
+        shell = Mock(return_value="SuccessCriteriaMet Complete")
+        wait_job(shell, "trippilot", "trippilot-kb-load", 5400)
+        argv = shell.call_args.args[0]
+        self.assertEqual(argv[:2], ["kubectl", "wait"])
+        self.assertIn('--for=jsonpath={.status.conditions[?(@.status=="True")].type}', argv)
+        self.assertIn("-o", argv)
+        self.assertIn("job/trippilot-kb-load", argv)
+        self.assertIn("--timeout=5400s", argv)
+        self.assertNotIn("--for=condition=complete", argv)
+
+    def test_failed_or_unknown_end_raises_right_away(self):
+        from runtime_io import wait_job
+        for states in ("FailureTarget Failed", "Failed", "", "Suspended"):
+            with self.subTest(states=states), self.assertRaises(runtime.CommandError) as raised:
+                wait_job(Mock(return_value=states), "trippilot", "trippilot-smoke", 330)
+            self.assertIn("did not succeed", raised.exception.detail)
+
+    def test_failed_kb_load_shows_its_logs_instead_of_burning_the_deadline(self):
+        logs = "Traceback (most recent call last):\nEmbeddingUnreachable: Connection refused\n"
+        shell = Mock(side_effect=["", "img", "", "FailureTarget Failed", logs, ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out, \
+                self.assertRaises(runtime.CommandError):
+            runtime.main(["load-kb"])
+        shown = "\n".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("EmbeddingUnreachable", shown)
+        self.assertIn("delete", shell.call_args_list[-1].args[0])
 
 
 class RefreshEventsTests(unittest.TestCase):

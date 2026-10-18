@@ -7,6 +7,7 @@ import secrets
 from pathlib import Path
 import re
 
+from runtime_io import wait_job
 from runtime_secrets import get_secret, require
 
 
@@ -83,7 +84,6 @@ def bootstrap(outputs, namespace, run_id, shell):
     try:
         for manifest in bootstrap_manifests(outputs, namespace, run_id, master, database):
             shell(["kubectl", "apply", "--server-side", "--field-manager=trippilot-runtime", "-f", "-"], json.dumps(manifest))
-        shell(["kubectl", "wait", "--namespace", namespace, "--for=condition=complete",
-               f"job/{resource_name(run_id)}", "--timeout=660s"])
+        wait_job(shell, namespace, resource_name(run_id), 660)
     finally:
         cleanup(namespace, run_id, shell)
