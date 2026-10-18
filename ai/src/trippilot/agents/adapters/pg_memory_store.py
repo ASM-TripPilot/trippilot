@@ -57,7 +57,8 @@ class PgDialogueMemoryStore:
 
     def get(self, session_id: str) -> DialogueMemory | None:
         with self._connect() as conn, conn.cursor() as cur:
-            cur.execute(f"SELECT {_COLUMNS} FROM {_TABLE} WHERE session_id = %s", (session_id,))
+            # 만료 행은 없는 것과 같다 — 정리(put 안의 DELETE)는 쓰기가 있어야 돈다(오케스트레이터 off 동안 무기한 남았다)
+            cur.execute(f"SELECT {_COLUMNS} FROM {_TABLE} WHERE session_id = %s AND expires_at > now()", (session_id,))
             row = cur.fetchone()
         return _to_memory(row) if row else None
 
@@ -88,7 +89,7 @@ class PgDialogueMemoryStore:
             return ()
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
-                f"SELECT {_COLUMNS} FROM {_TABLE} WHERE account_ref = %s AND session_id <> %s "
+                f"SELECT {_COLUMNS} FROM {_TABLE} WHERE account_ref = %s AND session_id <> %s AND expires_at > now() "
                 "ORDER BY updated_at DESC, session_id LIMIT %s",
                 (account_ref, exclude_session, limit),
             )

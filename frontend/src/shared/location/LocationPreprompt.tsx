@@ -41,9 +41,6 @@ export function LocationPreprompt({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="onboarding-location-root" className="flex-1 bg-canvas">
-        {/* 머리 바는 남기고 눌리지 않던 뒤로 글리프만 뺐다(TRIP-1023 #005 · Q2 — 온보딩은 앞으로만). */}
-        <View className="h-[56px] flex-row items-center border-b border-hairline px-lg" />
-
         {denied ? (
           <View className="flex-1 items-center justify-center gap-lg px-2xl">
             <View className="h-[80px] w-[80px] items-center justify-center rounded-[22px] bg-surface-strong">
@@ -52,9 +49,12 @@ export function LocationPreprompt({
             <Text className="font-noto-bold text-center text-hero font-bold text-ink">
               위치 권한이 꺼져 있어요
             </Text>
-            <Text className="font-noto text-center text-body text-muted">
+            <Text
+              testID="onboarding-location-denied-body"
+              className="font-noto text-center text-body text-muted"
+            >
               {
-                '등록한 숙소를 기준으로 탐색·동선을 안내해 드릴게요.\n온보딩은 그대로 계속할 수 있어요.'
+                '위치 없이도 계속 쓸 수 있어요.\n숙소를 등록하면 그 위치를 기준으로 탐색·동선을 안내해 드릴게요.'
               }
             </Text>
             {/* TRIP-717: TRIP-592 인라인 줄(상하 hairline·뉴트럴·닫기 ×) → Figma 1297:1208

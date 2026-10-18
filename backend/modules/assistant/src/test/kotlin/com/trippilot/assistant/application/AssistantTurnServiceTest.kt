@@ -124,6 +124,7 @@ class AssistantTurnServiceTest : StringSpec({
 
     class World(
         val sessions: FakeSessions = FakeSessions(),
+        val memory: FakeDialogueMemory = FakeDialogueMemory(),
         val messages: FakeMessages = FakeMessages(),
         val usage: FakeUsage = FakeUsage(),
         val clock: MovingClock,
@@ -150,7 +151,7 @@ class AssistantTurnServiceTest : StringSpec({
         store: AssistantMessageRepository = messages,
     ) = AssistantTurnService(
         sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), dispatcher(data, editing, properties),
-        TripContextReader(trips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), data, data, properties), data, data, properties, json, clock, NOOP_TX,
+        TripContextReader(trips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), data, data, properties), data, data, memory, properties, json, clock, NOOP_TX,
     ).also { it.pause = { ms -> clock.now = clock.now.plusMillis(ms); onPause() } } // 기다림은 시계를 민다
 
     fun World.session(withTrip: Boolean = true): AssistantSession =
@@ -336,6 +337,9 @@ class AssistantTurnServiceTest : StringSpec({
         answering.messages.rows shouldBe emptyList()
         answering.usage.llm[acc to today] shouldBe 1
         answering.usage.turns[acc to today] shouldBe null
+        // 상대는 답하기 전에 그 세션의 요약을 썼다 — 파기가 먼저 끝났어도 되살아난 행을 한 번 더 지운다(2026-10-18 리뷰)
+        answering.memory.deleted shouldContainExactly listOf("session:${s2.sessionId}")
+        waiting.memory.deleted shouldBe emptyList() // 기다리던 쪽은 상대를 부르지 않았다 — 되살릴 것이 없다
     }
 
     /**
@@ -727,7 +731,7 @@ class AssistantTurnServiceTest : StringSpec({
         val service = AssistantTurnService(
             w.sessions, w.messages, w.usage, AccountTurnLock { }, clean, provider(w.interpreter), throwing,
             TripContextReader(brokenTrips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), w.data, w.data, AssistantProperties()),
-            w.data, w.data, AssistantProperties(), json, w.clock, NOOP_TX,
+            w.data, w.data, w.memory, AssistantProperties(), json, w.clock, NOOP_TX,
         )
 
         val pressed = service.send(acc, s.sessionId, UUID.randomUUID(), TurnInput.Action("qr-review"), AssistantSurface.ITINERARY)

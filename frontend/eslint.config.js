@@ -243,8 +243,9 @@ const nativePaths = (names) =>
 const nativeSubpaths = (names) =>
   names.map((name) => ({ group: [`${name}/*`], message: NATIVE_MESSAGE }));
 const CAPTURE_ADAPTER_PATTERN = {
-  group: ['**/shareCaptureNative'],
-  message: '캡처 어댑터는 동적 import() 로만 — 정적으로 끌면 부팅 크래시.',
+  group: ['**/shareCaptureNative', '**/exportShareNative'],
+  message:
+    '캡처·내보내기 어댑터는 동적 import() 로만 — 정적으로 끌면 부팅 크래시.',
 };
 const STATE_NOTICE_PATHS = [
   {
@@ -360,7 +361,11 @@ module.exports = defineConfig([
   },
   {
     // 캡처 어댑터만 캡처 3종을 정적으로 문다(사진 피커·공통 금지는 그대로).
-    files: ['src/features/share-trip-card/model/shareCaptureNative.ts'],
+    // TRIP-1422 내보내기 어댑터도 여기 얹는다(새 블록은 공통 금지를 덮는다) — 그 파일은 expo-sharing 만 쓴다.
+    files: [
+      'src/features/share-trip-card/model/shareCaptureNative.ts',
+      'src/pages/settings/settings/model/exportShareNative.ts',
+    ],
     rules: {
       // 루트·하위 경로 모두 사진 피커만 다시 건다 — 캡처 3종의 하위 경로 패턴이 여기 실려 오면 안 된다.
       'no-restricted-imports': restrictedImports(

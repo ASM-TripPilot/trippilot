@@ -138,12 +138,14 @@ describe('행·헤더·빈 화면 (옛 .test)', () => {
     });
   });
 
-  describe('AC-4 · PLAN_B 인라인 액션 press → onNavigate(route)', () => {
-    it('inlineActionLabel 있는 행에 action 이 있고 press 하면 route 로 1회 이동', () => {
+  // TRIP-1420: 콜백이 알림 id 를 함께 넘긴다 — 페이지가 그 id 로 읽음 요청을 낸다.
+  describe('AC-4 · PLAN_B 인라인 액션 press → onNavigate(route, id)', () => {
+    it('inlineActionLabel 있는 행에 action 이 있고 press 하면 route·알림 id 로 1회 이동', () => {
       const props = renderScreen({
         sections: [
           section('today', '오늘', [
             row({
+              id: 'planb-1',
               inlineActionLabel: '대안 일정 보기 ›',
               route: '/trips/t1/planb',
             }),
@@ -158,16 +160,20 @@ describe('행·헤더·빈 화면 (옛 .test)', () => {
       fireEvent.press(action);
 
       expect(props.onNavigate).toHaveBeenCalledTimes(1);
-      expect(props.onNavigate).toHaveBeenCalledWith('/trips/t1/planb');
+      expect(props.onNavigate).toHaveBeenCalledWith(
+        '/trips/t1/planb',
+        'planb-1'
+      );
     });
   });
 
-  describe('AC-5 · REFLECTION 행 press → onNavigate(route) (인라인 액션 없음)', () => {
-    it('인라인 액션 없이 행 자체 press 로 route 로 1회 이동', () => {
+  describe('AC-5 · REFLECTION 행 press → onNavigate(route, id) (인라인 액션 없음)', () => {
+    it('인라인 액션 없이 행 자체 press 로 route·알림 id 로 1회 이동', () => {
       const props = renderScreen({
         sections: [
           section('earlier', '이전', [
             row({
+              id: 'reflect-1',
               inlineActionLabel: null,
               route: '/trips/t1/records/reflection/2026-08-29',
             }),
@@ -185,7 +191,8 @@ describe('행·헤더·빈 화면 (옛 .test)', () => {
 
       expect(props.onNavigate).toHaveBeenCalledTimes(1);
       expect(props.onNavigate).toHaveBeenCalledWith(
-        '/trips/t1/records/reflection/2026-08-29'
+        '/trips/t1/records/reflection/2026-08-29',
+        'reflect-1'
       );
     });
   });
@@ -528,10 +535,11 @@ describe('본문 줄 (옛 .body)', () => {
   });
 
   describe('🔴 B5 · AC-9 — 본문을 눌러도 행 press 로 이어진다 (route 있고 인라인 액션 없음)', () => {
-    it('회고 행의 본문을 누르면 onNavigate(route) 가 1회 불린다', () => {
+    it('회고 행의 본문을 누르면 onNavigate(route, id) 가 1회 불린다', () => {
       // 준비 — 인라인 액션 없는 회고 행.
       const props = renderRows([
         row({
+          id: 'reflect-2',
           body: '어제 여행을 돌아봐요',
           route: '/trips/t1/records/reflection/2026-08-29',
         }),
@@ -543,7 +551,8 @@ describe('본문 줄 (옛 .body)', () => {
       // 단언.
       expect(props.onNavigate).toHaveBeenCalledTimes(1);
       expect(props.onNavigate).toHaveBeenCalledWith(
-        '/trips/t1/records/reflection/2026-08-29'
+        '/trips/t1/records/reflection/2026-08-29',
+        'reflect-2'
       );
     });
   });
@@ -553,6 +562,7 @@ describe('본문 줄 (옛 .body)', () => {
       // 준비 — PLAN_B 행(행 자체 press 없음).
       const props = renderRows([
         row({
+          id: 'planb-2',
           body: '대안을 확인해 주세요',
           inlineActionLabel: PLAN_B_LABEL,
           route: '/trips/t1/planb',
@@ -568,7 +578,10 @@ describe('본문 줄 (옛 .body)', () => {
       fireEvent.press(screen.getByTestId(ACTION));
       // 단언 2.
       expect(props.onNavigate).toHaveBeenCalledTimes(1);
-      expect(props.onNavigate).toHaveBeenCalledWith('/trips/t1/planb');
+      expect(props.onNavigate).toHaveBeenCalledWith(
+        '/trips/t1/planb',
+        'planb-2'
+      );
     });
   });
 });

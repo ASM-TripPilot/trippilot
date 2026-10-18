@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 
 import {
   checkNickname,
-  completeOnboarding,
   fetchNicknameSuggestions,
   updateNickname,
 } from '@/shared/api';
@@ -13,9 +12,9 @@ import { validateNicknameFormat } from './validateNicknameFormat';
 /**
  * 닉네임 상태·서버 호출 (US-ONB-03 · AC B1·B2·B5~B9).
  *
- * 진입 시 서버가 준 중복 없는 후보로 프리필하고(B1), 저장은 서버 검사(check) → PATCH → complete
- * **순서**로만 진행한다(D3). 중복·금칙어는 서버 check 가 판정하고(권한 경계), 저장이 실패하면
- * complete 를 부르지 않는다(INV-4). 클라 검증은 길이(형식)만 본다.
+ * 진입 시 서버가 준 중복 없는 후보로 프리필하고(B1), 저장은 서버 검사(check) → PATCH **순서**로만
+ * 진행한다(D3). 중복·금칙어는 서버 check 가 판정한다(권한 경계). 클라 검증은 길이(형식)만 본다.
+ * 온보딩 완료는 여기서 부르지 않는다 — 취향 단계 출구의 몫이다(TRIP-1421 결정 ①).
  */
 
 export interface UseNickname {
@@ -99,15 +98,8 @@ export function useNickname(): UseNickname {
       setErrorReason('SAVE_FAILED');
       return false;
     }
-    // 저장 성공 뒤에만 완료 처리를 부른다(D3 · INV-4).
     try {
       await updateNickname(value);
-    } catch {
-      setErrorReason('SAVE_FAILED');
-      return false;
-    }
-    try {
-      await completeOnboarding();
     } catch {
       setErrorReason('SAVE_FAILED');
       return false;

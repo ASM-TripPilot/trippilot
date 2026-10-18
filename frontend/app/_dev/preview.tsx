@@ -2922,6 +2922,45 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1421 — 온보딩 완료 요청 실패(CTA 위 오류 한 줄). Figma 프레임 없음 — 문구·자리는 발명값.
+  {
+    key: 'pref1-complete-error',
+    band: 'c',
+    label: 'c09 · 완료 실패',
+    login: null,
+    render: () => (
+      <PrefStep1Screen
+        selectedStyles={null}
+        selectedPace={null}
+        onToggleStyle={noop}
+        onTogglePace={noop}
+        onNext={noop}
+        onSkipAll={noop}
+        completeFailed
+      />
+    ),
+  },
+  {
+    key: 'pref2-complete-error',
+    band: 'c',
+    label: 'c09b · 완료 실패',
+    login: null,
+    render: () => (
+      <PrefStep2Screen
+        selectedCompanions={null}
+        selectedActivities={null}
+        selectedFoods={null}
+        selectedTransports={null}
+        onToggleCompanion={noop}
+        onToggleActivity={noop}
+        onToggleFood={noop}
+        onToggleTransport={noop}
+        onDone={noop}
+        onSkipAll={noop}
+        completeFailed
+      />
+    ),
+  },
   {
     // l05 취향 전체 수정(TRIP-610) — 화면이 자족 컨테이너(GET/PUT)라 QueryClient 없는 이 프리뷰에선
     // 순수 뷰(PreferencesEditView)에 선택 픽스처를 얹어 태운다(pref1/pref2 정적 패턴과 동형).
@@ -6173,7 +6212,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // l02 알림 설정 default(1600:2388) — 6행×인앱 1열(COMMUNITY 숨김, 푸시 열은 TRIP-939 개통 전 숨김)·
+  // l02 알림 설정 default(1600:2388) — 6행×푸시·인앱 2열(COMMUNITY 숨김)·
   // 상단 정보 배너·하단 SYSTEM 줄. 토글
   // 빨강/회색·thumb 위치·정보 배너 틴트는 jest 사각이라 이 키가 육안 대조 자리다.
   {
@@ -6192,8 +6231,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // l02 permission-denied(1601:2388) — 상단 대시 배너+[설정 이동]·열 헤더 "권한 필요" 칩·푸시 열
-  // 전부 회색 비활성·인앱은 정상·하단 푸시-누적 줄. ⚠️ TRIP-939: 푸시 열 개통 전(PUSH_COLUMN_READY=false)
-  // 에는 권한 거부 표면도 함께 숨어 default 와 같게 그려진다 — 개통하면 이 키가 다시 그 얼굴을 보인다.
+  // 전부 회색 비활성·인앱은 정상·하단 푸시-누적 줄.
   {
     key: 'l02-notification-denied',
     band: 'l',
@@ -6203,6 +6241,23 @@ export const PREVIEW_STATES: PreviewState[] = [
       <NotificationSettingsScreen
         values={NOTIF_PREVIEW_VALUES}
         pushColumnAvailable={false}
+        onToggle={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l02 권한 읽는 중(Figma 프레임 없음, TRIP-1442) — 푸시 열은 회색 잠김이되 거부 배너·칩·누적 줄은 없다.
+  {
+    key: 'l02-notification-checking',
+    band: 'l',
+    label: 'l02 · 알림 설정 권한 읽는 중',
+    login: null,
+    render: () => (
+      <NotificationSettingsScreen
+        values={NOTIF_PREVIEW_VALUES}
+        pushColumnAvailable={false}
+        permissionChecking
         onToggle={noop}
         onOpenSettings={noop}
         onPressBack={noop}

@@ -85,7 +85,8 @@ const PLAN_B = notification({
   body: '대안을 확인해 주세요',
   actionType: 'PLANB_REPLAN',
   actionPayload: { tripId: 't1', triggerId: 'tr1' },
-  readAt: null,
+  // TRIP-1420: 읽음으로 둔다 — 미읽음이면 인라인 액션 press 가 읽음 요청을 실제 네트워크로 낸다(이 파일엔
+  // msw 가 없다). 읽음 요청의 개수·순서는 NotificationInboxPage.integration.test.tsx 가 센다.
 });
 
 const REFLECTION = notification({

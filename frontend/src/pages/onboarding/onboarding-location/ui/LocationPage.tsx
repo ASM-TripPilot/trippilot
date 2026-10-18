@@ -7,6 +7,7 @@
  */
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -47,6 +48,34 @@ export function LocationPage(): ReactElement {
       }
     })();
   }, []);
+
+  // 거부 프레임에 있는 동안만: 설정 앱에서 위치를 켜고 돌아오면(active) **조회만** 다시 하고(OS 창 재요청 없음 —
+  // BR-U0-30 개정), 허용됐으면 곧장 푸시 안내로 간다(TRIP-1427 결정 1=A). default 에선 구독하지 않는다 — OS 권한 창이
+  // 닫힐 때도 active 가 와서 허용 이동과 겹친다. 화면을 떠난 뒤 도착한 결과로는 움직이지 않는다(alive).
+  // 이동은 [계속]과 같은 가드로 감싼다 — 탭 없이 표면이 바뀌는 순간의 탭이 푸시 카드 `계속`에 떨어지지 않고,
+  // active 중복·[계속] 탭과 겹쳐도 400ms 창 안의 두 번째 이동은 무시된다.
+  useEffect(() => {
+    if (state !== 'permission-denied') return undefined;
+    let alive = true;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      void (async () => {
+        try {
+          const current = await Location.getForegroundPermissionsAsync();
+          if (alive && current.granted) goToPushGuarded();
+        } catch {
+          // 조회 실패는 거부 프레임 유지 — [계속]으로 진행할 수 있다(INV-4).
+        }
+      })();
+    });
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+    // goToPushGuarded 는 매 렌더 새 함수다 — 의존성에 넣으면 렌더마다 재구독해 진행 중 조회의 alive 를 끊는다.
+    // 안에서 쓰는 것은 router 와 모듈 전역 가드 창뿐이라 옛 클로저여도 같은 동작이다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   // 허용 → OS 포그라운드 권한 요청 1회. granted 면 다음 단계, 아니면 denied 프레임으로 전환(무중단).
   const handleAllow = () => {

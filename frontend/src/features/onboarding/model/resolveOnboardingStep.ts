@@ -1,15 +1,17 @@
 /**
- * 온보딩 잔여 단계 계산 (BR-U0-26 '온보딩 잔여' · AC C1~C3) — 순수 함수.
+ * 온보딩 남은 첫 단계 계산 (BR-U0-26 '온보딩 잔여' · frontend-components §7 · TRIP-1421) — 순수 함수.
  *
- * 약관이 우선이다: 약관 미완료면 닉네임 상태와 무관하게 terms. 약관이 끝났으면 닉네임만 보고
- * nickname/done 을 가른다 — 재진입 사용자가 이미 동의한 약관을 다시 보지 않게 한다.
+ * 약관 > 닉네임 > 취향 순으로 첫 미완 단계를 고른다. 결과에 홈은 없다 — 온보딩 그룹이 열려 있다는 것
+ * 자체가 서버 기준 미완이고, 그룹 안의 `'/'`는 온보딩 index 로 되풀린다. 셋 다 끝났으면 완료를 다시
+ * 시도하는 취향 2/2(pref2)로 보낸다.
  */
 
-export type OnboardingStep = 'terms' | 'nickname' | 'done';
+export type OnboardingStep = 'terms' | 'nickname' | 'location' | 'pref2';
 
 export interface OnboardingProgress {
   termsCompleted: boolean;
   nicknameCompleted: boolean;
+  preferencesSaved: boolean;
 }
 
 export function resolveOnboardingStep(
@@ -21,5 +23,5 @@ export function resolveOnboardingStep(
   if (!progress.nicknameCompleted) {
     return 'nickname';
   }
-  return 'done';
+  return progress.preferencesSaved ? 'pref2' : 'location';
 }

@@ -3,7 +3,14 @@
  * props 만 받고 네트워크를 모른다. 판정(중복·금칙어)은 서버가 하고 이 화면은 표시만 한다.
  */
 import type { ReactElement } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PositiveCheckGlyph, RegenerateGlyph } from '@/features/onboarding';
@@ -56,107 +63,119 @@ export function NicknameScreen({
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-      <View testID="onboarding-nickname-root" className="flex-1 bg-canvas">
-        <View className="h-[56px] flex-row items-center gap-sm border-b border-hairline px-lg">
-          <Text className="font-noto-bold text-[16px] font-bold text-ink">
-            닉네임 설정
-          </Text>
-        </View>
-
-        <View className="flex-1 px-2xl pt-xl">
-          <View className="gap-[7px]">
-            <Text className="font-noto-bold text-display font-bold text-ink">
-              닉네임을 정해 주세요
-            </Text>
-            <Text className="font-noto text-body text-muted">
-              2~20자로 입력할 수 있어요
+      {/* TRIP-1427 · 키보드가 올라오면 아래를 그 높이만큼 밀어 올려 하단 고정 [다음]이 키보드 위에 남는다
+          (DailyReflectionScreen 선례). jest 목은 이것을 그냥 View 로 그린다 — 실제 위치는 6-b 실기 몫. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View testID="onboarding-nickname-root" className="flex-1 bg-canvas">
+          <View className="h-[56px] flex-row items-center gap-sm border-b border-hairline px-lg">
+            <Text className="font-noto-bold text-[16px] font-bold text-ink">
+              닉네임 설정
             </Text>
           </View>
 
-          <View className="gap-sm pt-[26px]">
-            <Text className="font-noto-bold text-label font-bold text-muted">
-              닉네임
-            </Text>
-
-            <View className="h-[52px] flex-row items-center justify-between rounded-input border-[1.5px] border-hairline-strong px-lg">
-              <TextInput
-                testID="onboarding-nickname-input"
-                value={value}
-                onChangeText={onChange}
-                className="flex-1 font-noto text-card-title text-ink"
-              />
-              <Pressable
-                testID="onboarding-nickname-regenerate"
-                onPress={onRegenerate}
-                hitSlop={8}
-              >
-                <RegenerateGlyph size={22} />
-              </Pressable>
+          <View className="flex-1 px-2xl pt-xl">
+            <View className="gap-[7px]">
+              <Text className="font-noto-bold text-display font-bold text-ink">
+                닉네임을 정해 주세요
+              </Text>
+              <Text className="font-noto text-body text-muted">
+                2~20자로 입력할 수 있어요
+              </Text>
             </View>
 
-            {errorReason ? (
-              <Text
-                testID="onboarding-nickname-error"
-                className="font-noto text-label text-primary-text"
-              >
-                {ERROR_MESSAGES[errorReason]}
+            <View className="gap-sm pt-[26px]">
+              <Text className="font-noto-bold text-label font-bold text-muted">
+                닉네임
               </Text>
-            ) : showAvailable ? (
-              <View className="flex-row items-center gap-[6px]">
-                <PositiveCheckGlyph size={16} />
-                <Text
-                  testID="onboarding-nickname-available"
-                  className="font-noto text-label text-info"
-                >
-                  사용 가능한 닉네임이에요
-                </Text>
-              </View>
-            ) : null}
 
-            {suggestions.length > 0 ? (
-              <View
-                testID="onboarding-nickname-suggestions"
-                className="flex-row flex-wrap gap-sm"
-              >
-                {suggestions.map((suggestion, index) => (
-                  <Pressable
-                    key={`${index}-${suggestion}`}
-                    testID={`onboarding-nickname-suggest-${index}`}
-                    onPress={() => onSelectSuggestion(suggestion)}
-                    className="rounded-pill border-[1.5px] border-hairline-strong px-lg py-sm"
-                  >
-                    <Text className="font-noto text-body text-ink">
-                      {suggestion}
-                    </Text>
-                  </Pressable>
-                ))}
+              <View className="h-[52px] flex-row items-center justify-between rounded-input border-[1.5px] border-hairline-strong px-lg">
+                <TextInput
+                  testID="onboarding-nickname-input"
+                  value={value}
+                  onChangeText={onChange}
+                  // return 키 = [다음]과 같은 제출. 형식 미달(다음 잠김)이면 아무것도 하지 않는다.
+                  returnKeyType="next"
+                  onSubmitEditing={() => {
+                    if (canProceed) onNext();
+                  }}
+                  className="flex-1 font-noto text-card-title text-ink"
+                />
+                <Pressable
+                  testID="onboarding-nickname-regenerate"
+                  onPress={onRegenerate}
+                  hitSlop={8}
+                >
+                  <RegenerateGlyph size={22} />
+                </Pressable>
               </View>
-            ) : null}
+
+              {errorReason ? (
+                <Text
+                  testID="onboarding-nickname-error"
+                  className="font-noto text-label text-primary-text"
+                >
+                  {ERROR_MESSAGES[errorReason]}
+                </Text>
+              ) : showAvailable ? (
+                <View className="flex-row items-center gap-[6px]">
+                  <PositiveCheckGlyph size={16} />
+                  <Text
+                    testID="onboarding-nickname-available"
+                    className="font-noto text-label text-info"
+                  >
+                    사용 가능한 닉네임이에요
+                  </Text>
+                </View>
+              ) : null}
+
+              {suggestions.length > 0 ? (
+                <View
+                  testID="onboarding-nickname-suggestions"
+                  className="flex-row flex-wrap gap-sm"
+                >
+                  {suggestions.map((suggestion, index) => (
+                    <Pressable
+                      key={`${index}-${suggestion}`}
+                      testID={`onboarding-nickname-suggest-${index}`}
+                      onPress={() => onSelectSuggestion(suggestion)}
+                      className="rounded-pill border-[1.5px] border-hairline-strong px-lg py-sm"
+                    >
+                      <Text className="font-noto text-body text-ink">
+                        {suggestion}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+
+            <Text
+              testID="onboarding-nickname-helper"
+              className="font-noto pt-md text-label text-muted"
+            >
+              나중에 설정에서 바꿀 수 있어요
+            </Text>
           </View>
 
-          <Text
-            testID="onboarding-nickname-helper"
-            className="font-noto pt-md text-label text-muted"
-          >
-            나중에 설정에서 바꿀 수 있어요
-          </Text>
+          <View className="border-t border-hairline px-2xl pb-[30px] pt-md">
+            <Pressable
+              testID="onboarding-nickname-next"
+              disabled={!canProceed}
+              onPress={onNext}
+              className={`h-[52px] items-center justify-center rounded-button bg-primary ${
+                canProceed ? '' : 'opacity-40'
+              }`}
+            >
+              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+                다음
+              </Text>
+            </Pressable>
+          </View>
         </View>
-
-        <View className="border-t border-hairline px-2xl pb-[30px] pt-md">
-          <Pressable
-            testID="onboarding-nickname-next"
-            disabled={!canProceed}
-            onPress={onNext}
-            className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-              canProceed ? '' : 'opacity-40'
-            }`}
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-              다음
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

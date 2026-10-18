@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -53,12 +54,41 @@ class DialogueAnswerDraft:
     footnote: str | None = None
 
 
+# ③′ 영문 소요시간 단위(INV-3) — `_TIME_EXPR` 는 한글 단위만 본다("차로 20min 이면 가요"가 통과했다, 2026-10-18 리뷰 재현).
+# reflection·nudge 게이트가 같은 `_TIME_EXPR` 를 쓰므로 그쪽을 넓히지 않고 여기에만 둔다.
+_DURATION_EN = re.compile(r"\d+\s*(?:min(?:ute)?s?|hrs?|hours?|h)\b|\b(?:half an|an|one) hour\b", re.IGNORECASE)
+# 시계 시각(INV-2) — 문장 속 시각은 Facts 에 실린 값이어야 한다. `_TIME_EXPR` 는 `HH:MM` 을 일부러 통과시키므로("10:00" 복사),
+# 오케스트레이터가 `clock_times` 로 꺼내 Facts 와 대조한다. 숫자 꼴은 정규화해 대조하고, 대조할 수 없는 한글 시각
+# ("오후 세 시"·"정오"·"자정"·"세 시 반")은 있는 것만으로 템플릿 사유다.
+_CLOCK = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*(?::|h)\s*([0-5]\d)(?!\d)(\s*[AaPp]\.?\s?[Mm]\.?)?")
+_KO_HOUR = r"(?:열한|열두|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)"
+_UNVERIFIABLE_CLOCK = re.compile(
+    rf"정오|자정|(?:오전|오후|새벽|아침|저녁|밤|낮)\s*{_KO_HOUR}\s*시|{_KO_HOUR}\s*시\s*(?:반|정각|쯤|에|부터|까지|경)"
+)
+
+
+def clock_spans(text: str) -> list[tuple[int, int, str]]:
+    """문장 속 숫자 꼴 시계 시각의 (시작, 끝, 정규화 `HH:MM`) — am/pm 은 24시로 접는다."""
+    spans = []
+    for m in _CLOCK.finditer(text):
+        hour, minute, meridiem = m.group(1), m.group(2), (m.group(3) or "").strip()
+        h = int(hour) % 12 + (12 if meridiem.lower().startswith("p") else 0) if meridiem else int(hour)
+        spans.append((m.start(), m.end(), f"{h:02d}:{minute}"))
+    return spans
+
+
+def clock_times(text: str) -> tuple[frozenset[str], bool]:
+    """문장 속 시계 시각 → (정규화한 `HH:MM` 집합, 대조할 수 없는 한글 시각이 있는가)."""
+    return frozenset(t for _, _, t in clock_spans(text)), _UNVERIFIABLE_CLOCK.search(text) is not None
+
+
 def _violates(text: str, max_length: int) -> bool:
     return (
         not text  # ①
         or len(text) > max_length  # ②
         or len(text.splitlines()) > _MAX_LINES  # ②
         or _TIME_EXPR.search(text) is not None  # ③ (INV-3)
+        or _DURATION_EN.search(text) is not None  # ③′ (INV-3 영문 단위)
         or has_contact_like(text)  # ④
     )
 

@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import json
+import re
 import logging
 import random
 import threading
@@ -198,7 +199,7 @@ def _build(by_feature: dict, *, clock: FakeClock | None = None, store=None, port
     advancing = _AdvancingLlm(llm, clock, advance) if advance is not None else None
     counted = CountingLlm(advancing if advancing is not None else llm)
     trace = InMemoryTrace()
-    store = store if store is not None else InMemoryDialogueMemoryStore()
+    store = store if store is not None else InMemoryDialogueMemoryStore(now=lambda: _NOW)
 
     def gw(gate) -> GatewayFacade:
         return GatewayFacade(counted, _REGISTRY, gate, _CFG, trace)
@@ -584,7 +585,8 @@ def test_slow_classification_skips_the_answer_llm_and_compresses_memory_with_fal
     ]
     mem = b.store.get("s-1")
     assert mem.summarized_turn_index == 10
-    assert mem.summary == ("- 사용자: 오늘 비 와?", "- 도우미: 오늘 제주 예보예요.")
+    # 이번 턴(발화·답)도 재료다 — recent_turns 는 이번 발화 **앞**까지라 빼면 이번 턴이 장기 기억에서 빠진다
+    assert mem.summary == ("- 사용자: 오늘 비 와?", "- 도우미: 오늘 제주 예보예요.", "- 사용자: 오늘 날씨 어때", "- 도우미: 오늘 예보예요.")
 
 
 def test_exhausted_budget_defers_memory_without_writing_but_still_answers() -> None:
@@ -696,13 +698,14 @@ def test_memory_llm_failure_falls_back_to_deterministic_compression(memory_step)
     out = b.orch.turn(_input(turn_index=10, recent_turns=turns))
     assert out.outcome == "ANSWER"
     mem = b.store.get("s-1")
-    assert mem.summary == ("- 사용자: 비 와?", "- 도우미: 예보예요.") and mem.summarized_turn_index == 10
+    assert mem.summary == ("- 사용자: 비 와?", "- 도우미: 예보예요.", "- 사용자: 오늘 날씨 어때", f"- 도우미: {out.answer.text}")
+    assert mem.summarized_turn_index == 10
     # 게이트웨이가 낸 짝은 stage="llm", 오케스트레이터가 낸 짝(모양 위반)은 stage="memory" — from/to 는 같다
     assert any(m[1:] == ("llm_dialogue_memory", "deterministic_compress") for m in _modes(b.trace))
 
 
 def test_second_summary_reads_previous_lines_and_other_sessions_feed_the_prompt() -> None:
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=lambda: _NOW)
     earlier = _NOW - timedelta(days=1)
     for sid, acct, trip, lines, idx in (
         ("s-1", _ACCOUNT, "trip-1", ("사용자는 카페를 선호한다",), 10),
@@ -877,3 +880,74 @@ def test_recent_turn_rejects_bad_role_and_length(role: str, text: str) -> None:
     with pytest.raises(ValueError):
         RecentTurn(role, text)
 
+
+
+
+# ── 2026-10-18 Codex 리뷰 반영 ────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(("text", "kept"), [
+    ("다음은 해녀의집이에요. 12:00 에 가요.", True),  # Facts 의 계획 시각 복사 — 통과
+    ("다음은 해녀의집이에요. 15:45에 방문하세요.", False),  # Facts 밖 시각 — 카드(12:00)와 엇갈린다 (INV-2)
+    ("다음은 해녀의집이에요. 3:45pm 에 가요.", False),
+    ("다음은 해녀의집이에요. 오후 세 시에 가요.", False),  # 대조할 수 없는 한글 시각
+])
+def test_answer_clock_times_must_come_from_facts(text: str, kept: bool) -> None:
+    """문장 속 시각은 Facts 값이어야 한다 — 대조는 Facts 로만 한다(발화 "16:30에 가도 돼?" 는 프롬프트에 있지만 사실이 아니다)."""
+    b = _build(_canned(Intent.GET_NEXT_SLOT, answer=json.dumps({"text": text, "footnote": None}, ensure_ascii=False)))
+    out = b.orch.turn(_input("16:30에 다음 장소 가도 돼?"))
+    assert out.outcome == "ANSWER" and out.answer.payload["rows"][-1]["value"] == "12:00"
+    events = [e for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_answer"]
+    if kept:
+        assert out.answer.text == text and not events
+    else:
+        assert out.answer.text != text and [e.reason for e in events] == ["time_not_in_facts"]
+
+
+class _StatusWeather(_Weather):
+    """실 WeatherProvider 처럼 장애를 예외가 아니라 상태값으로 돌려준다(예외 대역만 쓰면 거짓 초록 — 2026-10-18 리뷰)."""
+
+    def fetch(self, params: dict) -> InfoPacket:
+        self.calls.append(params)
+        return InfoPacket(ProviderKind.WEATHER, ProviderStatus.WEATHER_UNKNOWN, {}, _fresh(params["now"]))
+
+
+class _DownPoiInfo(_PoiInfo):
+    def fetch(self, params: dict) -> InfoPacket:
+        return InfoPacket(ProviderKind.POI_INFO, ProviderStatus.UNAVAILABLE, {}, _fresh(params["now"]))
+
+
+@pytest.mark.parametrize(("intent", "ports", "expected"), [
+    (Intent.GET_WEATHER, HandlerPorts(poi_info=_PoiInfo(), weather=_StatusWeather()), ("fanout", "weather", "WEATHER_UNKNOWN")),
+    (Intent.GET_POI_INFO, HandlerPorts(poi_info=_DownPoiInfo()), ("fanout", "poi_info", "UNAVAILABLE")),
+    (Intent.GET_WEATHER, HandlerPorts(poi_info=_DownPoiInfo(), weather=_Weather()), ("fanout", "weather", "UNAVAILABLE")),
+])
+def test_provider_status_degradation_is_reported_not_only_exceptions(intent, ports, expected) -> None:
+    b = _build(_canned(intent, place="우도"), ports=ports)
+    out = b.orch.turn(_input("아무 말"))
+    assert out.outcome == "ANSWER"
+    assert expected in _modes(b.trace)
+    reasons = [e.reason for e in _fallbacks(b.trace) if e.stage == "fanout"]
+    assert all(re.fullmatch(r"[a-z_]{1,40}(?::[A-Za-z_]{1,60})?", r) for r in reasons)  # 사유는 코드만
+
+
+def test_summary_material_includes_the_current_turn() -> None:
+    """recent_turns 는 이번 발화 **앞**까지다 — summarized_turn_index 를 이번 턴으로 적으면서 이번 턴을 빼면 영영 빠진다."""
+    b = _build(_canned(Intent.GET_WEATHER))
+    b.orch.turn(_input("둘째 날 비 오면 실내로 바꿔줘", turn_index=10, recent_turns=_TURNS))
+    (memory_request,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_MEMORY"]
+    assert "둘째 날 비 오면 실내로 바꿔줘" in memory_request.prompt
+
+
+
+@pytest.mark.parametrize(("text", "kept"), [
+    ("오늘은 우도 09:00, 해녀의집 12:00, 카페 모카 15:00 이에요.", True),  # Facts 짝 그대로
+    ("오늘은 09:00 우도, 12:00 해녀의집 순서예요.", True),  # 시각이 앞에 와도 가장 가까운 이름으로 짝을 본다
+    ("오늘은 우도 09:00, 해녀의집 15:00, 카페 모카 12:00 순서예요.", False),  # 시각은 다 있지만 장소끼리 바꿔 붙였다
+])
+def test_schedule_answer_times_must_stay_with_their_places(text: str, kept: bool) -> None:
+    """INV-2 는 시각·순서다 — 시각 집합만 맞고 장소와의 짝이 바뀐 문장도 템플릿으로 보낸다(2026-10-18 리뷰 재현 문장)."""
+    b = _build(_canned(Intent.SHOW_SCHEDULE, answer=json.dumps({"text": text, "footnote": None}, ensure_ascii=False)))
+    out = b.orch.turn(_input("오늘 일정 알려줘"))
+    events = [e.reason for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_answer"]
+    assert (out.answer.text == text) is kept and (events == []) is kept

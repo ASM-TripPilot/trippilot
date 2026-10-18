@@ -33,6 +33,8 @@ export interface PrefStep1ScreenProps {
   onTogglePace: (id: string) => void;
   onNext: () => void;
   onSkipAll: () => void;
+  /** 온보딩 완료 요청이 실패했다 — CTA 위에 오류 한 줄(TRIP-1421). */
+  completeFailed?: boolean;
 }
 
 // CTA 그림자(Figma 0 2px 10px rgba(0,0,0,.06)) — 반투명은 토큰이 아니라 RN shadow prop로.
@@ -67,6 +69,7 @@ export function PrefStep1Screen({
   onTogglePace,
   onNext,
   onSkipAll,
+  completeFailed = false,
 }: PrefStep1ScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -151,6 +154,14 @@ export function PrefStep1Screen({
         </ScrollView>
 
         <View className="px-lg pb-[26px] pt-[22px]">
+          {completeFailed ? (
+            <Text
+              testID="onboarding-pref1-complete-error"
+              className="mb-sm font-noto text-label text-primary-text"
+            >
+              시작하지 못했어요. 다시 시도해 주세요
+            </Text>
+          ) : null}
           <Pressable
             testID="onboarding-pref1-next"
             accessibilityRole="button"
