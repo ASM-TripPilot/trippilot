@@ -12,10 +12,13 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
 종류:
 - `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건. OUT_OF_SCOPE 의
   정답은 거절({"intent": null})이다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
+- `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
+  6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
 - `answer`  DIALOGUE_ANSWER — Facts 9종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
   같은 함수)·지연. 문장은 끝에 전부 찍는다 — 지어낸 사실은 사람이 읽어서 본다.
 
 모델·시한은 운영 배정(.env.example 의 DIALOGUE_* = gpt-5.6-luna, BLM 시한표 분류 4.0s·답변 3.5s)이 기본이다.
+sol 배정 기능은 `EVAL_MODEL=gpt-5.6-sol` 로 돌린다.
 """
 
 from __future__ import annotations
@@ -209,7 +212,57 @@ def run_answer(prompts: Path, repeat: int) -> None:
         print(f" {mark} [{r['intent']}] {r['utt']} → {r['text'] or r['err']}")
 
 
-RUNNERS = {"intent": run_intent, "answer": run_answer}
+# ───────── directive ─────────
+
+# (발화, 정답, 고르면 안 되는 지시) — 평가 문장은 프롬프트 예시와 겹치지 않는다
+DIRECTIVE_EXTRA = [
+    ("쇼핑은 이제 됐고 바다 보러 가자", {"NATURE_FOCUS"}, {"SHOPPING_FOCUS"}),
+    ("야경은 별로야, 일찍 들어갈래", {"SHORTER_DAY"}, {"NIGHT_VIEW"}),
+    ("박물관 같은 실내는 지겨워, 바깥으로", {"OUTDOOR"}, {"INDOOR", "CULTURE_FOCUS"}),
+    ("배는 안 고파, 커피나 한잔", {"ADD_CAFE"}, {"ADD_FOOD"}),
+    ("오늘 너무 많이 걸었어", {"LESS_MOVE"}, set()),
+    ("체험은 됐고 그냥 쉬고 싶어", {"RELAX"}, {"ACTIVITY_FOCUS"}),
+]
+
+
+def run_directive(prompts: Path, repeat: int) -> None:
+    import measure_directive_match as mdm  # 같은 디렉토리 — 라벨 한 벌을 두 측정이 같이 쓴다
+
+    from trippilot.agents.planb.directives import load_directive_file
+    from trippilot.llm_gateway.gates.replan_directive_translation import ReplanDirectiveTranslationGate
+    from trippilot.llm_gateway.workers.replan_directive_translation import (
+        DirectiveTranslationInput, ReplanDirectiveTranslationWorker, options_from)
+
+    options = options_from(load_directive_file(_AI_ROOT / "data/replan_directives.yaml", yaml.safe_load))
+    worker = ReplanDirectiveTranslationWorker(
+        _gateway(prompts, LlmFeature.REPLAN_DIRECTIVE_TRANSLATION, ReplanDirectiveTranslationGate()))
+    cases = ([(t, w, set()) for t, w in mdm.POSITIVES] + [(t, set(), None) for t in mdm.NEGATIVES]
+             + DIRECTIVE_EXTRA)
+
+    def one(item):
+        i, (utt, want, forbid) = item
+        t0 = time.monotonic()
+        r = worker.translate(DirectiveTranslationInput(utt, options), TraceId(f"ab-{i}"),
+                             datetime.now(timezone.utc), timeout_sec=3.75)
+        wall = int((time.monotonic() - t0) * 1000)
+        got = set() if (r.is_fallback or r.value is None) else set(r.value.keys)
+        infra = bool(r.error) and "timeout" in r.error
+        lenient = (not got if forbid is None else want <= got and not got & forbid) and not infra
+        return dict(utt=utt, want=want, got=got, exact=got == want and not infra, lenient=lenient,
+                    err=r.error, wall=wall, **_usage(r))
+
+    rows = _run(one, cases * repeat)
+    print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows),
+                          exact=round(sum(r["exact"] for r in rows) / len(rows), 4),
+                          lenient=round(sum(r["lenient"] for r in rows) / len(rows), 4), **_timing(rows)),
+                     ensure_ascii=False))
+    for r in rows:
+        if not r["exact"]:
+            print(f"  {'~' if r['lenient'] else '✗'} {r['utt']}  want={sorted(r['want'])} got={sorted(r['got'])}"
+                  f" {r['err'] or ''}")
+
+
+RUNNERS = {"intent": run_intent, "answer": run_answer, "directive": run_directive}
 
 if __name__ == "__main__":
     kind, prompts = sys.argv[1], Path(sys.argv[2])
