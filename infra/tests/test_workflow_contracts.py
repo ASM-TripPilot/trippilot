@@ -61,6 +61,18 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('--embedding-image-tag', render['run'])
         self.assertLess(names.index('Resolve the embedding image tag'), names.index('Build and publish embedding'))
 
+    def test_events_store_is_refreshed_from_collect_state_before_the_ai_image(self):
+        """행사 수집은 collect-state 에만 쌓이는데 운영 AI 는 이미지 동봉본을 읽어서, 동봉본이 8-22 이후 멈춰 있었다(10-18)."""
+        steps = workflow('aws-deploy.yml')['jobs']['deploy']['steps']
+        names = [s.get('name', '') for s in steps]
+        refresh = steps[names.index('Refresh the bundled events store from collect-state')]
+        self.assertIn('origin collect-state', refresh['run'])
+        self.assertIn('deploy/eks/refresh_events.py', refresh['run'])
+        self.assertIn('ai/data/collected_events.json', refresh['run'])
+        self.assertIn("steps.config.outputs.deploy_application == 'true'", refresh['if'])
+        # 이미지를 굽기 **전**이어야 한다 — 빌드 맥락(./ai)이 갈아 끼운 파일을 담는다
+        self.assertLess(names.index('Refresh the bundled events store from collect-state'), names.index('Build and publish AI'))
+
     def test_plan_b_kb_is_on_by_default_and_loaded_on_every_deploy(self):
         """기본값 false 였을 때 기본값 배포 한 번(2026-10-03 13:38)이 KB 를 조용히 껐고,
         적재는 손으로 했다 — 재계획은 200 을 내며 규칙 랭킹으로만 돌았다."""

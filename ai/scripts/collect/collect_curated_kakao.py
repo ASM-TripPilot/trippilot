@@ -69,13 +69,22 @@ def _norm(s: str) -> str:
     return re.sub(r"[\s·.\-_()]", "", s).lower()
 
 
-def pick(docs: list[dict], name: str, sido: str) -> dict | None:
-    """이름이 상호에 들어 있고 시도가 맞는 첫 건. 없으면 None — 비슷한 것을 고르지 않는다."""
+def pick(docs: list[dict], name: str, sido: str, addr: str | None = None) -> dict | None:
+    """이름이 상호에 들어 있고 시도가 맞는 첫 건. 없으면 None — 비슷한 것을 고르지 않는다.
+
+    `addr`(출처에 적힌 도로명·지번, 예: "이태원로27가길 8")가 있으면 카카오 주소에도 그게 있어야 한다 —
+    `문`·`솔`·`법원` 처럼 짧은 상호는 이름만으로는 엉뚱한 가게가 잡힌다. 번지 뒤 숫자는 막는다(8 ≠ 80).
+    """
     want = _norm(name)
+    at = re.compile(re.escape(_norm(addr)) + r"(?!\d)") if addr else None
     for d in docs:
-        addr = d.get("road_address_name") or d.get("address_name") or ""
-        if want in _norm(d.get("place_name", "")) and addr.startswith(sido):
-            return d
+        road = d.get("road_address_name") or d.get("address_name") or ""
+        if want not in _norm(d.get("place_name", "")) or not road.startswith(sido):
+            continue
+        if at and not any(at.search(_norm(d.get(k) or ""))
+                          for k in ("road_address_name", "address_name")):
+            continue
+        return d
     return None
 
 
@@ -153,7 +162,7 @@ def main(argv: list[str]) -> int:
     misses: list[str] = []
     for s in seed:
         kind = s["kind"]
-        doc = pick(_search(key, s["query"]), s["name"], s["sido"])
+        doc = pick(_search(key, s["query"]), s["name"], s["sido"], s.get("addr"))
         if doc is None:
             stat["카카오 매칭 없음"] += 1
             misses.append(s["query"])

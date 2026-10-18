@@ -1047,5 +1047,57 @@ class RuntimeIntegrationTests(unittest.TestCase):
             runtime.helm_values(outputs(), "tag", "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789abc", "api.example.com", False)
 
 
+class RefreshEventsTests(unittest.TestCase):
+    """동봉 행사 저장소를 collect-state 정본으로 갈아 끼운다 — 동봉본이 8-22 이후 멈춰 있었다(10-18)."""
+
+    @staticmethod
+    def event(event_id, end):
+        return {"event_id": event_id, "name": event_id, "start": "2026-10-01", "end": end}
+
+    def run_refresh(self, state, bundled, today):
+        import datetime
+        import refresh_events
+        with tempfile.TemporaryDirectory() as folder:
+            state_path, bundled_path = Path(folder) / "state.json", Path(folder) / "bundled.json"
+            state_path.write_text(state if isinstance(state, str) else json.dumps(state), encoding="utf-8")
+            bundled_path.write_text(json.dumps(bundled), encoding="utf-8")
+            with patch("builtins.print") as out:
+                self.assertEqual(refresh_events.main([str(state_path), str(bundled_path)],
+                                                     today=datetime.date.fromisoformat(today)), 0)
+            return json.loads(bundled_path.read_text(encoding="utf-8")), "\n".join(str(c.args[0]) for c in out.call_args_list)
+
+    def test_state_replaces_bundled_and_keeps_only_unexpired_manual_events(self):
+        state = {"events": [self.event("a", "2026-10-20"), self.event("b", "2026-12-01")], "coverage": {"서울": "x"}}
+        bundled = {"events": [self.event("a", "2026-01-01"),            # 정본에도 있다 — 정본이 이긴다
+                              self.event("manual", "2026-10-25"),       # 동봉본에만, 미만료 — 남긴다
+                              self.event("old", "2026-10-10")],         # 동봉본에만, 종료+7일 지남 — 버린다
+                   "coverage": {}}
+        merged, shown = self.run_refresh(state, bundled, "2026-10-18")
+        self.assertEqual([e["event_id"] for e in merged["events"]], ["a", "b", "manual"])
+        self.assertEqual(merged["events"][0]["end"], "2026-10-20")
+        self.assertEqual(merged["coverage"], {"서울": "x"})
+        self.assertIn("= 3건", shown)
+
+    def test_grace_boundary_matches_the_collector(self):
+        # 종료 + 7일 당일까지는 남는다(JsonEventStore.purge_expired 와 같은 경계)
+        merged, _ = self.run_refresh({"events": [self.event("a", "2026-12-01")]},
+                                     {"events": [self.event("edge", "2026-10-11")]}, "2026-10-18")
+        self.assertEqual([e["event_id"] for e in merged["events"]], ["a", "edge"])
+
+    def test_unreadable_or_empty_state_leaves_the_bundled_copy_with_a_warning(self):
+        bundled = {"events": [self.event("keep", "2026-10-25")]}
+        for state in ("{not json", {"events": []}, {"items": []}):
+            with self.subTest(state=state):
+                merged, shown = self.run_refresh(state, bundled, "2026-10-18")
+                self.assertEqual(merged, bundled)
+                self.assertIn("::warning::", shown)
+
+    def test_expiry_grace_matches_the_event_store_constant(self):
+        import refresh_events
+        source = (Path(__file__).resolve().parents[3] / "ai" / "src" / "trippilot" / "background"
+                  / "event_store.py").read_text(encoding="utf-8")
+        self.assertIn(f"EXPIRE_GRACE_DAYS = {refresh_events.EXPIRE_GRACE_DAYS}", source)
+
+
 if __name__ == "__main__":
     unittest.main()
