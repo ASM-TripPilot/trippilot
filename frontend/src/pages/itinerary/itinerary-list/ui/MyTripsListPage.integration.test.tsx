@@ -35,7 +35,9 @@ import { readIdSet, writeIdSet } from '@/shared/storage';
  *    구독)을 다시 받아 카드가 사라진다. 연타해도 두 번째 DELETE 는 없다.
  *  - 500·네트워크 실패면 다이얼로그 안에 실패 문구를 띄우고 카드를 남기며, 다시 누를 수 있다(INV-4).
  *  - 404 는 "이미 없다"로 보고 목록만 다시 받는다(01b Q5 — 실패 문구 없음).
- *  - 완료 배너 여행(확정)에는 ⋯ 가 없다 — 그래서 "배너 여행을 지운다"(AC-9)가 화면에서 생기지 않는다.
+ *  - TRIP-1441 · 확정이어도 시작 전(B)이면 같은 흐름으로 지운다 — 확인 창은 확정 문구를 쓰고("작성 중인
+ *    일정" 없음), 완료 배너가 그 여행을 가리키고 있었으면 삭제 성공 뒤 배너를 내린다(옛 AC-9 "배너 여행엔 ⋯
+ *    없음"을 뒤집었다). 다른 여행을 지우거나 실패하면 배너는 남는다.
  *  - 다이얼로그는 카드·목록 스크롤 밖에서 그려진다(딤·카드·버튼 토큰은 실화면 몫 — TRIP-1367).
  *
  * 왜 통합 버킷인가: 심판 대상이 "실제로 나간 요청의 수와 경로"다(msw 만 관찰 가능). 훅 목 대신 실제
@@ -155,6 +157,9 @@ const CONFIRMED_B: Itinerary = {
 
 const TITLE = '이 여행을 삭제할까요?';
 const BODY = '작성 중인 일정도 함께 지워지고 되돌릴 수 없어요.';
+/** TRIP-1441 결정 1=A — 확정 여행의 확인 창 본문. */
+const CONFIRMED_BODY =
+  '확정한 일정과 예정 알림도 함께 지워지고 되돌릴 수 없어요.';
 const ERROR_TEXT = '삭제하지 못했어요. 다시 시도해 주세요.';
 
 /** 서버가 지금 가진 여행 — DELETE 가 204/404 면 여기서 빠진다(목록 재요청이 그걸 본다). */
@@ -335,6 +340,20 @@ function openDialogForA(): Promise<ReactTestInstance> {
   return openDialogFor(A);
 }
 
+/**
+ * TRIP-1441 · 확정 B 의 ⋯ → '삭제' 까지 눌러 다이얼로그를 연다. B 의 일정이 도착해 배지 '완성'이 선 뒤에 ⋯ 를
+ * 바로(get) 찾는다 — ⋯ 판정은 일정이 와야 의미가 있고, ⋯ 가 없으면 기다림 시간 초과가 아니라 "못 찾음"으로 바로
+ * 실패한다(02a ★11).
+ */
+async function openDialogForB(): Promise<ReactTestInstance> {
+  expect(await screen.findByTestId(`my-trip-badge-${B}`)).toHaveTextContent(
+    '완성'
+  );
+  fireEvent.press(screen.getByTestId(`my-trip-menu-${B}`));
+  fireEvent.press(screen.getByTestId(`my-trip-menu-delete-${B}`));
+  return screen.getByTestId('my-trip-delete-dialog');
+}
+
 describe('🔴 TRIP-1055 AC-2·3 · 확인 전에는 아무것도 지우지 않는다', () => {
   it('⋯ 와 "삭제" 항목을 눌러도 DELETE 0번 · 화면 이동 0번, 다이얼로그가 제목·본문과 함께 뜬다', async () => {
     // 준비 — 목록이 뜨고 A 카드의 ⋯ 가 보인다.
@@ -406,7 +425,7 @@ describe('🔴 TRIP-1055 AC-5·8 · 확인하면 그 여행만 지우고 목록�
 });
 
 describe('🔴 TRIP-1055 AC-5 · 누른 카드의 여행을 지운다 — 맨 위 카드가 아니어도 (5-b 경고-1)', () => {
-  it('지울 수 있는 카드가 A(맨 위)·C(맨 아래) 둘일 때 C 를 지우면 DELETE /trips/{C} 1번, A 는 남는다', async () => {
+  it('작성중 카드가 A(맨 위)·C(맨 아래) 둘일 때 C 를 지우면 DELETE /trips/{C} 1번, A 는 남는다', async () => {
     // 준비 — 작성중 카드 둘. C 가 맨 위가 아니고 A 에도 ⋯ 가 있음을 먼저 확인한다(앵커).
     serverTrips = [TRIP_A, TRIP_B, TRIP_C];
     renderPage();
@@ -606,19 +625,125 @@ describe('🔴 TRIP-1055 Q5 · 404 는 "이미 없다" — 목록만 다시 받�
   });
 });
 
-describe('TRIP-1055 AC-9 · 완료 배너 여행에는 ⋯ 가 없다 (도달 불가의 전제 잠금, 02a ★6)', () => {
-  it('확정 여행 B 가 배너로 떠 있을 때 B 카드엔 ⋯ 가 없고, 작성중 A 에는 있다', async () => {
-    // 준비·실행 — 목록과 배너가 뜰 때까지 기다린다.
+// TRIP-1441 · 확정했지만 아직 시작 전인 여행(B — 2099-06-10 시작, 실시계 오늘보다 미래)도 지운다.
+describe('🔴 확정·시작 전 여행도 ⋯ → 삭제 → 확인 창으로 지운다', () => {
+  it('B 의 확인 창은 확정 문구이고 확인 전엔 DELETE 0번, 확인하면 DELETE /trips/{B} 1번 → 목록을 다시 받아 B 가 사라진다', async () => {
+    // 준비 — B 의 ⋯ → '삭제'.
     renderPage();
-    expect(await screen.findByTestId('generation-done-bar')).toBeOnTheScreen();
-    await screen.findByTestId(`my-trip-card-${B}`);
+    const dialog = await openDialogForB();
+    await settle();
 
-    // 단언 — 배너가 가리키는 여행(B)은 지울 수 없다 → 지운 여행을 배너가 붙잡는 상황이 안 생긴다.
+    // 단언 ① — 확정 문구(완전 일치)이고 "작성 중인 일정"은 없다. 아직 아무 요청도 이동도 없다.
+    expect(within(dialog).getByText(TITLE)).toBeOnTheScreen();
+    expect(within(dialog).getByText(CONFIRMED_BODY)).toBeOnTheScreen();
+    expect(within(dialog).queryByText(/작성 중인 일정/)).toBeNull();
+    expect(deletes()).toEqual([]);
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // 실행 — 확인.
+    fireEvent.press(screen.getByTestId('my-trip-delete-confirm'));
+    await settle();
+
+    // 단언 ② — B 의 DELETE 한 줄, 목록을 다시 받아 B 카드·확인 창이 사라지고 A 는 남는다.
+    expect(deletes()).toEqual([`DELETE /api/v1/trips/${B}`]);
+    await waitFor(() =>
+      expect(screen.queryByTestId(`my-trip-card-${B}`)).toBeNull()
+    );
+    expect(screen.queryByTestId('my-trip-delete-dialog')).toBeNull();
+    expect(count('GET /api/v1/trips')).toBe(2);
+    expect(screen.getByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
+  });
+
+  it('문구는 대상마다 갈린다 — B(확정) 창을 닫고 A(작성중) 창을 열면 작성중 문구만 나온다', async () => {
+    // 준비·실행 ① — B 창을 열었다 닫는다(B → A 순서라야 문구가 앞 대상에 들러붙는 것을 잡는다, 02a ★5).
+    renderPage();
+    const bDialog = await openDialogForB();
+    expect(within(bDialog).getByText(CONFIRMED_BODY)).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('my-trip-delete-cancel'));
+    expect(screen.queryByTestId('my-trip-delete-dialog')).toBeNull();
+
+    // 실행 ② — A 창을 연다.
+    const aDialog = await openDialogFor(A);
+
+    // 단언 — 작성중 문구 그대로(완전 일치), 확정 문구는 없다. 지운 것도 없다.
+    expect(within(aDialog).getByText(BODY)).toBeOnTheScreen();
+    expect(within(aDialog).queryByText(CONFIRMED_BODY)).toBeNull();
+    await settle();
+    expect(deletes()).toEqual([]);
+  });
+});
+
+// TRIP-1441 · 옛 TRIP-1055 AC-9("완료 배너 여행에는 ⋯ 가 없다 — 도달 불가의 전제 잠금")를 뒤집었다. 배너 상태는
+// Trip 객체를 쥐고 있어 목록에서 빠져도 스스로 사라지지 않는다 — 지운 여행으로 가는 [보기]가 남으면 안 된다.
+describe('🔴 완료 배너가 가리키는 여행을 지우면 배너가 내려간다', () => {
+  /** 기본 픽스처에선 확정 B 가 배너로 뜬다(seen 비어 있음) — 그것부터 확인한다(앵커). */
+  async function expectBannerOnB(): Promise<void> {
+    expect(await screen.findByTestId('generation-done-bar')).toBeOnTheScreen();
     expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
       new RegExp(TRIP_B.title)
     );
-    expect(screen.queryByTestId(`my-trip-menu-${B}`)).toBeNull();
-    expect(await screen.findByTestId(`my-trip-menu-${A}`)).toBeOnTheScreen();
+  }
+
+  it('B 를 지우는 데 성공하면 B 카드가 빠진 뒤 배너·[보기]가 없고, 다시 뜨지도 않는다', async () => {
+    // 준비
+    renderPage();
+    await expectBannerOnB();
+
+    // 실행 — B 를 지운다.
+    await openDialogForB();
+    fireEvent.press(screen.getByTestId('my-trip-delete-confirm'));
+    await waitFor(() =>
+      expect(screen.queryByTestId(`my-trip-card-${B}`)).toBeNull()
+    );
+
+    // 단언 — 카드가 빠진 뒤에 본다(배너는 목록과 따로 남는다, 02a ★6). 한 번 더 기다려도 다시 안 뜬다.
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+    expect(screen.queryByTestId('generation-done-bar-view')).toBeNull();
+    await settle();
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+  });
+
+  it('다른 여행(작성중 A)을 지우면 배너는 B 를 그대로 가리킨다', async () => {
+    // 준비
+    renderPage();
+    await expectBannerOnB();
+
+    // 실행 — A 를 지운다.
+    await openDialogFor(A);
+    fireEvent.press(screen.getByTestId('my-trip-delete-confirm'));
+    await waitFor(() =>
+      expect(screen.queryByTestId(`my-trip-card-${A}`)).toBeNull()
+    );
+
+    // 단언 — 아무 삭제나 배너를 내리지 않는다(02a ★7).
+    expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+      new RegExp(TRIP_B.title)
+    );
+  });
+
+  it('B 삭제가 서버 오류(500)면 확인 창 안에 실패 문구 · B 카드와 배너는 그대로 남는다 (INV-4)', async () => {
+    // 준비 — DELETE 가 실패한다.
+    deleteMode = 500;
+    renderPage();
+    await expectBannerOnB();
+
+    // 실행 — B 를 지우려 확인한다.
+    await openDialogForB();
+    fireEvent.press(screen.getByTestId('my-trip-delete-confirm'));
+
+    // 단언 — 실패 문구(완전 일치)가 창 안에 뜨고, 카드·배너는 남는다. 요청은 1번.
+    const error = await screen.findByTestId('my-trip-delete-error');
+    expect(error).toHaveTextContent(ERROR_TEXT);
+    expect(
+      within(screen.getByTestId('my-trip-delete-dialog')).getByTestId(
+        'my-trip-delete-error'
+      )
+    ).toBe(error);
+    expect(screen.getByTestId(`my-trip-card-${B}`)).toBeOnTheScreen();
+    expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+      new RegExp(TRIP_B.title)
+    );
+    expect(deletes()).toEqual([`DELETE /api/v1/trips/${B}`]);
   });
 });
 

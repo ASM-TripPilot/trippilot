@@ -112,31 +112,23 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
     coordConfirmed: true,
   };
 
-  describe('R-1 · 3탭 셸과 몰입 화면 (AC-7 · 브리프 AC-11)', () => {
-    it('탭 3개가 모두 존재하되 링크 붙여넣기는 잠겨 있고, 하단 탭바는 없다', () => {
-      const handlers = renderScreen(IDLE_FLOW);
+  // TRIP-1429 결정 ④ — 링크 파싱 계약(/stays/parse-link)이 없어 동작하지 않는 [링크 붙여넣기] 탭을 그리지 않는다.
+  // 화면은 2경로(지도 검색·핀 지정)다. BR-U1-21(3경로) 문면과는 갈라진다 — 계약이 생기면 탭을 되살린다.
+  describe('R-1 · 2탭 셸과 몰입 화면 (AC-7 · 브리프 AC-11)', () => {
+    it('지도 검색·핀 지정 두 탭만 있고 링크 붙여넣기 탭은 없으며, 하단 탭바는 없다', () => {
+      renderScreen(IDLE_FLOW);
 
-      // 긍정 — 등록 경로가 3가지임이 화면에서 사라지지 않는다(BR-U1-21).
+      // 앵커 — 남는 두 탭은 그려져 있고 고를 수 있다(세그먼트 자체가 없어서 통과하는 부재 단언 방지).
       expect(
         screen.getByTestId('stay-register-tab-mapsearch')
       ).toBeOnTheScreen();
-      expect(
-        screen.getByTestId('stay-register-tab-linkpaste')
-      ).toBeOnTheScreen();
       expect(screen.getByTestId('stay-register-tab-pin')).toBeOnTheScreen();
-
-      // TRIP-199 계약 변경: 핀 탭의 `toBeDisabled()`를 뺀다 — 이번 티켓이 그 탭을 여는 것
-      // 자체다(AC-1 · BR-U1-23). 핀 탭이 실제로 열린다는 증명은
-      // `StayRegisterScreen.pin.test.tsx` P-1이 진다. 링크 붙여넣기는 계약 미존재라
-      // 그대로 잠긴다(확정 2 · D6).
       expect(screen.getByTestId('stay-register-tab-mapsearch')).toBeEnabled();
-      expect(screen.getByTestId('stay-register-tab-linkpaste')).toBeDisabled();
+      expect(screen.getByTestId('stay-register-tab-pin')).toBeEnabled();
 
-      // 잠긴 탭을 눌러도 아무 일이 없다 — "보이기만 하는 탭"이 아니라 진짜로 잠겼다.
-      fireEvent.press(screen.getByTestId('stay-register-tab-linkpaste'));
-      Object.values(handlers).forEach((fn) =>
-        expect(fn).not.toHaveBeenCalled()
-      );
+      // 금지 — 링크 붙여넣기는 testID 로도 글자로도 없다.
+      expect(screen.queryByTestId('stay-register-tab-linkpaste')).toBeNull();
+      expect(screen.queryByText('링크 붙여넣기')).toBeNull();
 
       // 몰입 화면 — 하단 탭바를 숨긴다(브리프 AC-11 · U0 BR-U0-29 상속).
       expect(screen.queryAllByTestId('shell-tabbar-root')).toHaveLength(0);
@@ -144,7 +136,9 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
     });
   });
 
-  describe('R-2 · 검색은 키보드 검색 키로만 (§3-1)', () => {
+  // TRIP-1429 — 키보드 검색 키만 입구라 "결과가 안 나온다"로 보였다(Q-042). 입력칸 옆 [검색] 버튼이 같은
+  // onSubmitQuery 를 같은 가드로 부른다. 지오코드는 외부 API 라 타이핑만으로는 여전히 나가지 않는다.
+  describe('R-2 · 검색은 검색 키 또는 [검색] 버튼으로만 — 타이핑은 검색이 아니다 (§3-1)', () => {
     it('타이핑만으로는 검색이 나가지 않고, 검색 키를 눌러야 나간다', () => {
       const handlers = renderScreen(IDLE_FLOW);
       const input = screen.getByTestId('stay-register-search-input');
@@ -179,6 +173,50 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
       );
       expect(handlers.onSubmitQuery).not.toHaveBeenCalled();
     });
+
+    it('[검색] 버튼을 누르면 검색 키와 같은 onSubmitQuery 가 1회 불린다', () => {
+      const handlers = renderScreen({ ...IDLE_FLOW, query: '해운대' });
+      const button = screen.getByTestId('stay-register-search-submit');
+
+      // 스크린리더가 읽는 이름이 "검색"인 버튼이다.
+      expect(button).toHaveAccessibleName('검색');
+      expect(screen.getAllByRole('button', { name: '검색' })).toContain(button);
+
+      fireEvent.press(button, { nativeEvent: {} });
+
+      expect(handlers.onSubmitQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it('검색 중에는 [검색] 버튼을 눌러도 무시한다 (중복 요청 방지)', () => {
+      const handlers = renderScreen({
+        ...IDLE_FLOW,
+        query: '해운대',
+        searchStatus: 'loading',
+      });
+
+      fireEvent.press(screen.getByTestId('stay-register-search-submit'), {
+        nativeEvent: {},
+      });
+
+      expect(handlers.onSubmitQuery).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { name: '빈 검색어', query: '' },
+      { name: '공백뿐인 검색어', query: '   ' },
+    ])(
+      '$name 이면 [검색] 버튼이 잠기고 눌러도 검색이 나가지 않는다',
+      ({ query }) => {
+        const handlers = renderScreen({ ...IDLE_FLOW, query });
+        const button = screen.getByTestId('stay-register-search-submit');
+
+        // 버튼은 있다(없어서 0회가 되는 공허 통과 방지) — 그리고 잠겨 있다.
+        expect(button).toBeDisabled();
+        fireEvent.press(button, { nativeEvent: {} });
+
+        expect(handlers.onSubmitQuery).not.toHaveBeenCalled();
+      }
+    );
   });
 
   describe('R-3 · 다중 후보는 라디오로 (AC-2)', () => {
@@ -603,10 +641,10 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
       // green이라, 이 사이클의 핵심 신규 콘텐츠인 선택 카드에 심판이 0개였다(5-c code-critic 경고-1).
       renderScreen(READY_FLOW);
 
-      // 캡션(카드의 형제) — 확정 콘텐츠 표면 보호. getByText(문자열)은 완전일치라 문구를 잠근다.
-      expect(
-        screen.getByText('📍 지도에서 핀 위치를 확인하세요')
-      ).toBeOnTheScreen();
+      // TRIP-1429 결정 ⑤ — 후보를 고르면 좌표는 이미 확정이다. "핀 위치를 확인하세요"는 확인이 남은 것처럼
+      // 읽혀 지운다(Q-043). 이모지 없는 변형도 잡도록 정규식 부분 포함으로 본다. CTA 전환은 R-16 이,
+      // 미확정 안내("지도에서 위치를 확인해 주세요", BR-U1-22)는 R-4·P-6 이 그대로 잠근다.
+      expect(screen.queryByText(/핀 위치를 확인하세요/)).toBeNull();
 
       // 선택 카드 존재 + 그 안에 고른 숙소 이름·주소(픽스처 CANDIDATE_A). within 으로 카드 안을 본다
       // — 카드 블록이 사라지면 getByTestId 가 던져 red 다(무심판 봉합).
@@ -802,13 +840,12 @@ describe('핀 지정 탭 (옛 .pin)', () => {
     });
   });
 
-  describe('P-7 · 잠긴 탭은 잠긴 채다 (TRIP-730 · INV-4)', () => {
-    it('링크 붙여넣기 탭은 비활성 유지이고, 핀 탭은 눌러 고를 수 있다', () => {
+  // TRIP-1429 결정 ④ — 잠긴 탭을 보여 두던 계약(TRIP-730)을 "그리지 않는다"로 바꿨다.
+  describe('P-7 · 링크 붙여넣기 탭은 없고 핀 탭은 고를 수 있다 (TRIP-1429 · INV-4)', () => {
+    it('링크 붙여넣기 탭이 없고, 핀 탭은 눌러 고를 수 있다', () => {
       const handlers = renderScreen(IDLE_FLOW);
 
-      const linkTab = screen.getByTestId('stay-register-tab-linkpaste');
-      // disabled 는 그대로 유지(계약 미존재 · Seed §1) — 개봉 안 함.
-      expect(linkTab).toBeDisabled();
+      expect(screen.queryByTestId('stay-register-tab-linkpaste')).toBeNull();
       fireEvent.press(screen.getByTestId('stay-register-tab-pin'));
       expect(handlers.onSelectTab).toHaveBeenCalledTimes(1);
       expect(handlers.onSelectTab).toHaveBeenCalledWith('pin');

@@ -72,14 +72,14 @@ const WIRED_CTA_TEST_IDS = [
   // 대체(장소→d02·숙소→e04)해 중복이라 discovery 버튼셋에서 빠진다(370-AC-4 재동결).
   'home-spots-more',
   'home-search-bar',
-  // TRIP-935 AC-1(R1) — 매거진 히어로(home-magazine-hero)는 이 집합에서 빠졌다. TRIP-700 은 page0 을
-  // "구조로 버튼"(콜백 없어도 role=button)으로 굳혔지만, 심사 2.1 대응으로 매거진 진입을 막으면서
-  // **onPressMagazine 이 있을 때만 버튼**으로 바꿨다(이 집합 테스트는 콜백 없이 렌더한다). 벨·검색바·
-  // FAB 는 여전히 구조로 버튼이라 남는다 — 한 상수에 두 규칙이 공존한다(02a ★4). 콜백을 줬을 때
-  // page0 만 버튼이 되는지는 파일 아래 TRIP-935 AC-1 짝 describe 가 잰다.
   // TRIP-939 AC-9 — 종이 알림함(/notifications)으로 배선돼 버튼 집합에 든다. role 은 콜백 유무가 아니라
   // 구조로 굳힌다(이 집합 테스트는 콜백 없이 렌더 — 검색바·FAB 선례, 02a ★D4).
   'home-dashboard-bell',
+  // TRIP-1432 — 히어로 3도시 카드(서울·부산·제주)는 탐색 탭으로 가는 버튼이다. 매거진(a02) 진입이던
+  // page0 도 서울 카드가 됐다. 카드에 도시 코드가 있으면 구조로 버튼이다(콜백 없이 렌더해도).
+  'home-magazine-hero',
+  'home-hero-slide-1',
+  'home-hero-slide-2',
 ] as const;
 
 describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
@@ -98,16 +98,8 @@ describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
       within(search).getByText('가고 싶은 도시·장소를 검색해보세요')
     ).toBeOnTheScreen();
 
-    // 영감 hero — eyebrow/title/subtitle/chip 2. within으로 스코프(chip `야경 명소`가 스팟
-    // tag `#야경명소`와 헷갈리지 않게).
-    const hero = screen.getByTestId('home-magazine-hero');
-    expect(within(hero).getByText('오늘의 여행 영감')).toBeOnTheScreen();
-    expect(within(hero).getByText('부산 · 광안리의 밤')).toBeOnTheScreen();
-    expect(
-      within(hero).getByText('다리 위로 번지는 불빛, 상상만으로 설레는 야경')
-    ).toBeOnTheScreen();
-    expect(within(hero).getByText('당일치기로 충분')).toBeOnTheScreen();
-    expect(within(hero).getByText('야경 명소')).toBeOnTheScreen();
+    // 히어로 첫 장은 서울 도시 카드(TRIP-1432). 카드 문구는 Figma 에 없어 도시 이름만 본다.
+    expect(screen.getByTestId('home-magazine-hero')).toHaveTextContent(/서울/);
 
     // 발견 섹션 2종 헤더 + 더보기 1(뜨는 장소만) — 여행자 일정은 TRIP-694로 discovery에서
     // 제거(전용 describe가 부재를 잠근다). TRIP-939 B-5: 컬렉션 "더 보기"는 목적지가 없어 숨긴다.
@@ -420,13 +412,12 @@ describe('HomeScreen — saved-menu z-order 회귀 앵커 (TRIP-695 AC-3)', () =
 });
 
 describe('HomeScreen — 버튼 역할 집합 == 배선된 CTA 집합 (370-AC-4 · 회귀)', () => {
-  it('discovery 접근성 트리에서 버튼으로 읽히는 것은 배선된 CTA 집합뿐이다(콜백 없는 매거진 히어로는 제외)', () => {
+  it('discovery 접근성 트리에서 버튼으로 읽히는 것은 배선된 CTA 집합뿐이다(히어로 3도시 카드 포함)', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
 
     // 실제 onPress 목적지가 있는 요소만 버튼이어야 한다 — 집합 동치라 (a)비배선이 안 벗겨짐
     // (b)배선 CTA 가 벗겨짐 (c)공유 SectionHeader 를 전부 벗겨 spots-more 도 사라짐 (d)새 버튼
-    // 유입, 넷 다 red 로 잡힌다. TRIP-935 — 콜백 없는 렌더라 매거진 히어로(page0)도 슬라이드도
-    // 버튼이 아니다(콜백이 없는데 버튼이면 (d)로 red).
+    // 유입, 넷 다 red 로 잡힌다.
     const buttonIds = screen
       .queryAllByRole('button')
       .map((node) => node.props.testID)
@@ -436,54 +427,60 @@ describe('HomeScreen — 버튼 역할 집합 == 배선된 CTA 집합 (370-AC-4 
   });
 });
 
-// TRIP-700 — a02 매거진 목록 진입 배선(화면측). discovery 캐러셀 page0(home-magazine-hero)이
-// onPressMagazine 을 발화하는 배선 CTA 가 된다. 라우터 왕복(→ push('/magazine'))은 화면이 아니라
-// `(tabs)/index.tsx` seam 이 지므로 이 테스트는 **화면이 넘겨받은 콜백만 정확히 발화**하는지만
-// 잰다(오배선·이중발화 없음, 검색바 배선 describe 와 동형). "page0 이 실제 버튼인가"라는 구조는
-// 위 370-AC-4 버튼-집합 동치가 판정하고(★D4 — 합성 컴포넌트 press 는 role 미부여여도 climb 로
-// 콜백이 발화할 수 있어 press 단독으론 '진짜 버튼'을 증명 못 함, HomeScreen.test L1068 선례),
-// 여기 press 는 **스레딩(어느 콜백이 오는가)**을 잠근다. 둘이 협공해야 완전하다.
-describe('🔴 HomeScreen — 매거진 히어로 진입 배선 (TRIP-700 AC-10 · 화면측)', () => {
-  it('discovery 매거진 히어로(page0) press 는 onPressMagazine 만 정확히 1회 발화한다', () => {
-    const onPressMagazine = jest.fn();
-    const onPressSearch = jest.fn();
-    const onPressCreateTrip = jest.fn();
-    const onPressSpotsMore = jest.fn();
-    render(
-      <HomeScreen
-        {...HOME_DEFAULT_PROPS}
-        onPressMagazine={onPressMagazine}
-        onPressSearch={onPressSearch}
-        onPressCreateTrip={onPressCreateTrip}
-        onPressSpotsMore={onPressSpotsMore}
-      />
-    );
+// TRIP-1432 — 히어로는 서울·부산·제주 도시 카드 3장이다. 누르면 화면은 그 카드의 도시 코드로 콜백만
+// 부른다(탐색 탭 이동은 page 몫). "버튼인가"는 위 집합 동치가, "어느 콜백이 오나"는 여기가 잰다 —
+// press 는 role 없는 자식에서도 조상 onPress 로 올라가므로 둘이 짝이다.
+describe('히어로 도시 카드 — discovery', () => {
+  it.each([
+    ['home-magazine-hero', '11'],
+    ['home-hero-slide-1', '26'],
+    ['home-hero-slide-2', '50'],
+  ])(
+    '%s 를 누르면 onPressHeroCity 가 %s 로 1회, 다른 콜백은 0회다',
+    (testID, code) => {
+      const onPressHeroCity = jest.fn();
+      const onPressSearch = jest.fn();
+      const onPressCreateTrip = jest.fn();
+      const onPressSpotsMore = jest.fn();
+      render(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          onPressHeroCity={onPressHeroCity}
+          onPressSearch={onPressSearch}
+          onPressCreateTrip={onPressCreateTrip}
+          onPressSpotsMore={onPressSpotsMore}
+        />
+      );
 
-    // 현행 HomeScreen 은 onPressMagazine 을 캐러셀 page0 으로 스레딩하지 않아 press 가 아무 콜백도
-    // 발화하지 않는다 → 첫 단언 red. 오배선(다른 콜백 발화)이면 격리 단언이 red 로 잡는다.
-    fireEvent.press(screen.getByTestId('home-magazine-hero'));
-    expect(onPressMagazine).toHaveBeenCalledTimes(1);
-    expect(onPressSearch).not.toHaveBeenCalled();
-    expect(onPressCreateTrip).not.toHaveBeenCalled();
-    expect(onPressSpotsMore).not.toHaveBeenCalled();
-  });
-});
+      fireEvent.press(screen.getByTestId(testID));
 
-// TRIP-935 AC-1(R1) 짝 — 매거진 히어로는 콜백이 **주입됐을 때만** 버튼이다. 라우트는 이제 콜백을
-// 넘기지 않아 운영 홈에서는 버튼이 아니고(tabsHomeRoute), 화면의 배선 능력 자체는 남는다(숨김은
-// 조건부 — 화면·라우트 파일 삭제 아님). 콜백을 줘도 page1~4 슬라이드는 버튼이 아니다(02a ★5).
-describe('TRIP-935 AC-1 · 매거진 히어로는 onPressMagazine 이 있을 때만 버튼 (짝)', () => {
-  it('콜백을 주면 page0 은 버튼이고 page1~4 슬라이드는 여전히 버튼이 아니다', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} onPressMagazine={jest.fn()} />);
+      expect(onPressHeroCity.mock.calls).toEqual([[code]]);
+      expect(onPressSearch).not.toHaveBeenCalled();
+      expect(onPressCreateTrip).not.toHaveBeenCalled();
+      expect(onPressSpotsMore).not.toHaveBeenCalled();
+    }
+  );
 
-    const buttonIds = screen
-      .queryAllByRole('button')
-      .map((node) => node.props.testID);
+  // 배경 그림 연결은 화면 생김새가 아니라 히어로 데이터로 잠근다 — hero/(세로 6:7, 히어로 칸용) 그림이고
+  // 여행 카드용 covers/(가로 3:2) 그림이 아니다. jest 의 에셋 require 는 같은 파일이면 같은 객체다.
+  it('히어로 데이터는 서울 11 · 부산 26 · 제주 50 순서이고, 각 카드는 그 도시 hero/ 그림을 싣는다', () => {
+    const heroCovers = [
+      require('../../../../assets/region-covers/hero/11.webp'),
+      require('../../../../assets/region-covers/hero/26.webp'),
+      require('../../../../assets/region-covers/hero/50.webp'),
+    ];
+    const tripCovers = [
+      require('../../../../assets/region-covers/covers/11.webp'),
+      require('../../../../assets/region-covers/covers/26.webp'),
+      require('../../../../assets/region-covers/covers/50.webp'),
+    ];
 
-    expect(buttonIds).toContain('home-magazine-hero');
-    [1, 2, 3, 4].forEach((i) => {
-      expect(screen.getByTestId(`home-hero-slide-${i}`)).toBeOnTheScreen();
-      expect(buttonIds).not.toContain(`home-hero-slide-${i}`);
+    const hero = HOME_DEFAULT_PROPS.hero;
+
+    expect(hero.map((card) => card.regionCode)).toEqual(['11', '26', '50']);
+    hero.forEach((card, i) => {
+      expect(card.coverSource).toBe(heroCovers[i]);
+      expect(card.coverSource).not.toBe(tripCovers[i]);
     });
   });
 });
@@ -812,11 +809,15 @@ const PLANNING_WIRED_CTA_TEST_IDS = [
   'home-trip-hero',
   'home-dashboard-bell', // TRIP-939 AC-9 — 모든 얼굴 공용 인사 헤더의 종(구조 role)
   // TRIP-696 — home-spots-more 제거: 계획 중 본문이 컬렉션 1섹션이라 스팟 섹션(및 그 더보기 버튼)이
-  // 사라진다. 현 planning 은 아직 6버튼(spots-more 포함)이라 이 5집합과 불일치 → red.
+  // 사라진다.
+  // TRIP-1432 Q4 — 여행 카드 뒤 도시 카드 3장도 discovery 와 같은 버튼이다.
+  'home-hero-slide-1',
+  'home-hero-slide-2',
+  'home-hero-slide-3',
 ] as const;
 
 describe('🔴 HomeScreen — planning 버튼 역할 집합 == 배선 CTA 집합 (TRIP-696 AC-696-5)', () => {
-  it('planning 접근성 트리에서 버튼으로 읽히는 것은 여행 카드 CTA·검색바·FAB 5개 뿐이다(home-spots-more 제외)', () => {
+  it('planning 접근성 트리에서 버튼으로 읽히는 것은 여행 카드 CTA·검색바·FAB·종·도시 카드 뿐이다(home-spots-more 제외)', () => {
     // 콜백을 주입하지 않는다 — role 이 콜백 유무 파생이 아니라 구조여야 함을 강제한다(★D4).
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
 
@@ -839,6 +840,9 @@ const POST_TRIP_WIRED_CTA_TEST_IDS = [
   'home-search-bar',
   'home-trip-hero',
   'home-dashboard-bell',
+  'home-hero-slide-1', // TRIP-1432 Q4 — 도시 카드
+  'home-hero-slide-2',
+  'home-hero-slide-3',
 ] as const;
 
 describe('🔴 HomeScreen — postTrip 버튼 역할 집합 == 배선 CTA 집합 (TRIP-1369 · 370-AC-4)', () => {
@@ -1055,33 +1059,117 @@ describe('🔴 TRIP-939 AC-9 · B-5 · 모든 얼굴에서 종은 버튼, 빨간
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRIP-694 AC-2 · TRIP-696 AC-696-2 · TRIP-698 AC-6 — 영감 캐러셀은 어느 얼굴에서나 실 5페이지 + 5도트다.
-// 옛 세 describe(discovery·planning·postTrip)를 합쳤다(TRIP-1355). 진짜 앵커는 **페이지 컨테이너**다 — 도트 5개는
-// 정적 View 라 위조 가능(traps-home). home-hero-page-N 은 N당 정확히 1노드, 6번째는 없다. planning 의 "구 우상단 D-day·
-// 2페이지 캐러셀 소멸" 부정 단언은 판정 3(옛 요소 없음)으로 지웠다.
-describe('🔴 HomeScreen — 모든 얼굴의 실 5페이지 캐러셀 + 5도트', () => {
+// TRIP-694 AC-2 · TRIP-696 AC-696-2 · TRIP-698 AC-6 · TRIP-1432 — 히어로 캐러셀 페이지 수. 진짜 앵커는
+// **페이지 컨테이너**다 — 도트는 정적 View 라 위조 가능(traps-home). discovery 는 도시 3장, 여행 얼굴은
+// 여행 카드 + 도시 3장이다.
+describe('히어로 캐러셀 페이지 수 — 얼굴별', () => {
   it.each([
-    ['discovery', undefined, 'home-magazine-hero'],
-    ['planning', PLANNING_PHASE, 'home-trip-hero'],
-    ['postTrip', POST_TRIP_PHASE, 'home-trip-hero'],
+    ['discovery', 'home-magazine-hero', 3, undefined],
+    ['planning', 'home-trip-hero', 4, PLANNING_PHASE],
+    ['postTrip', 'home-trip-hero', 4, POST_TRIP_PHASE],
   ] as const)(
-    '%s: page0 앵커(%s 계열)와 home-hero-page-0..4·도트 5개가 있고 6번째는 없다',
-    (_face, phase, anchor) => {
+    '%s: page0 앵커(%s)와 페이지·도트가 %i 개씩이고 그다음은 없다',
+    (_face, anchor, count, phase) => {
       render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={phase} />);
 
-      // 앵커 — page0 의 얼굴별 요소(discovery 는 단일 home-magazine-hero 유지 ★F-2, 나머지는 통합 트립 히어로).
       expect(screen.getByTestId(anchor)).toBeOnTheScreen();
 
-      [0, 1, 2, 3, 4].forEach((i) => {
+      for (let i = 0; i < count; i += 1) {
         expect(screen.getByTestId(`home-hero-page-${i}`)).toBeOnTheScreen();
         expect(screen.getByTestId(`home-hero-dot-${i}`)).toBeOnTheScreen();
-      });
-      expect(screen.queryByTestId('home-hero-page-5')).toBeNull();
-      expect(screen.queryByTestId('home-hero-dot-5')).toBeNull();
+      }
+      expect(screen.queryByTestId(`home-hero-page-${count}`)).toBeNull();
+      expect(screen.queryByTestId(`home-hero-dot-${count}`)).toBeNull();
 
       // 6-b: 실 좌우 스와이프·페이지 전환·활성 도트 하이라이트는 jest 원리적 사각.
     }
   );
+});
+
+// TRIP-1432 Q4 — 여행 얼굴의 도시 카드(page1~3)도 discovery 와 같은 동작이다. 여행 카드(page0)와 서로의
+// 콜백을 부르지 않는다.
+describe('히어로 도시 카드 — 여행 얼굴', () => {
+  it.each([
+    ['home-hero-slide-1', '11'],
+    ['home-hero-slide-2', '26'],
+    ['home-hero-slide-3', '50'],
+  ])(
+    'planning: %s 를 누르면 onPressHeroCity 가 %s 로 1회, 여행 카드 콜백은 0회다',
+    (testID, code) => {
+      const onPressHeroCity = jest.fn();
+      const onPressTripHeroCta = jest.fn();
+      render(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          phase={PLANNING_PHASE}
+          onPressHeroCity={onPressHeroCity}
+          onPressTripHeroCta={onPressTripHeroCta}
+        />
+      );
+
+      fireEvent.press(screen.getByTestId(testID));
+
+      expect(onPressHeroCity.mock.calls).toEqual([[code]]);
+      expect(onPressTripHeroCta).not.toHaveBeenCalled();
+    }
+  );
+
+  it('planning: 여행 카드를 누르면 여행 카드 콜백만 1회다(도시 콜백 0회)', () => {
+    const onPressHeroCity = jest.fn();
+    const onPressTripHeroCta = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        phase={PLANNING_PHASE}
+        onPressHeroCity={onPressHeroCity}
+        onPressTripHeroCta={onPressTripHeroCta}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('home-trip-hero'));
+
+    expect(onPressTripHeroCta).toHaveBeenCalledTimes(1);
+    expect(onPressHeroCity).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-1432 AC 12·17 — 어느 그림 데이터를 어느 카드에 묶었나(생김새가 아니라 결선). 공용 Image 로 찾은
+// 노드의 source 는 화면이 넘긴 값 그대로다(호스트 노드는 expo-image 가 배열로 바꿔 쓰지 않는다).
+describe('히어로 그림 결선', () => {
+  const CITY_COVERS = [
+    require('../../../../assets/region-covers/hero/11.webp'),
+    require('../../../../assets/region-covers/hero/26.webp'),
+    require('../../../../assets/region-covers/hero/50.webp'),
+  ];
+  const sourcesIn = (testID: string): unknown[] =>
+    within(screen.getByTestId(testID))
+      .UNSAFE_getAllByType(Image)
+      .map((node) => node.props.source);
+
+  it('discovery 서울 카드의 배경은 그 카드 데이터의 그림이다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    expect(sourcesIn('home-magazine-hero')).toContain(CITY_COVERS[0]);
+  });
+
+  it('여행 카드에 지역 그림이 없으면 도시 카드 그림(서울)을 대신 깔지 않는다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
+
+    const sources = sourcesIn('home-trip-hero');
+    for (const cover of CITY_COVERS) expect(sources).not.toContain(cover);
+  });
+
+  it('앵커 — 여행 카드에 지역 그림을 주면 그 그림이 여행 카드 배경이다', () => {
+    const tripCover = require('../../../../assets/region-covers/covers/26.webp');
+    const planning = PLANNING_PHASE as Extract<HomePhase, { kind: 'planning' }>;
+    const phase: HomePhase = {
+      ...planning,
+      trip: { ...planning.trip, coverSource: tripCover },
+    };
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={phase} />);
+
+    expect(sourcesIn('home-trip-hero')).toContain(tripCover);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

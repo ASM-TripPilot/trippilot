@@ -3,9 +3,6 @@
 // 값은 require 의 번들 에셋 번호(number)다 — 문자열 URI 가 필요한 자리는 Image.resolveAssetSource(...).uri 로 푼다.
 export const PLACEHOLDER_PHOTOS = {
   heroNight: require('./home/hero-night.jpg') as number,
-  heroCoast: require('./home/hero-coast.jpg') as number,
-  heroCafe: require('./home/hero-cafe.jpg') as number,
-  heroMarket: require('./home/hero-market.jpg') as number,
   heroView: require('./home/hero-view.jpg') as number,
   collectionGamcheon: require('./home/collection-gamcheon.jpg') as number,
   collectionHaeundae: require('./home/collection-haeundae.jpg') as number,

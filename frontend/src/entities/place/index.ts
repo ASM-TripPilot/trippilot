@@ -1,4 +1,5 @@
 export { formatDistance } from './lib/formatDistance';
+export { orderLanePlaces } from './lib/laneOrder';
 export { legDistance } from './lib/legDistance';
 export { pickTrendingPlaces } from './lib/trendingPlaces';
 export type { PlaceCardVM } from './model';
