@@ -197,11 +197,12 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
             # `score_chunk_cap` 이 사고 몫(`SCORE_THINKING_RESERVE_TOKENS`)을 빼고 역산한다.
             LlmFeature.PREFERENCE_SCORING: 2048,
             # 도우미 턴(assistant-orchestrator tasks T001) — 분류는 JSON 한 줄, 답변은 ≤400자, 요약은
-            # ≤20줄×120자. effort low 와 짝. 사고 토큰도 이 상한 안이라(위 SHARE_CARD_COPY 실측) 분류 256 은
-            # DEV 실측으로 확정할 값이다 — 잘리면 폴백 사유가 `truncated:` 접두로 남아 보인다.
+            # ≤20줄×120자. effort low 와 짝. 사고 토큰도 이 상한 안이다(위 SHARE_CARD_COPY 실측). 분류 1024: 초판 256 은
+            # DEV 실측(2026-10-18 배포 smoke, gpt-5.6-luna)에서 출력 239/256(사고 포함, 입력 2,004)으로 상한에 붙었다 — 로컬
+            # 평균은 39 였다. 잘리면 `truncated:` → 범위 밖 카드(BE 거절 스트릭)라 답변 512 보다 넉넉히 둔다. 과금은 실 출력만이다.
             # 요약 2048: 20줄×120자 한국어 ≈ 1,000~1,500 토큰 + JSON — 1024 면 꽉 찬 요약이 잘려 압축 폴백으로
             # 떨어진다. 상한은 잘림 방지용이고 과금은 실 출력만이다(FD BR 미결 #11 → 해소).
-            LlmFeature.DIALOGUE_INTENT: 256,
+            LlmFeature.DIALOGUE_INTENT: 1024,
             LlmFeature.DIALOGUE_ANSWER: 512,
             LlmFeature.DIALOGUE_MEMORY: 2048,
         }

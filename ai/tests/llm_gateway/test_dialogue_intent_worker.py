@@ -248,7 +248,7 @@ def test_worker_sends_timeout_cap_and_effort_to_the_vendor() -> None:
     worker, _ = _worker(llm)
     assert _classify(worker, timeout_sec=2.5).is_fallback is False
     (request,) = llm.requests
-    assert (request.timeout_sec, request.max_tokens, request.effort) == (2.5, 256, "low")
+    assert (request.timeout_sec, request.max_tokens, request.effort) == (2.5, 1024, "low")
     assert llm.features() == ["DIALOGUE_INTENT"]
 
 
@@ -260,7 +260,7 @@ def test_feature_is_registered_in_every_config_table() -> None:
     assert default_tier_map()[_FEAT] is ModelTier.LIGHT
     assert default_fallback_modes()[_FEAT] == ("llm_dialogue_intent", "out_of_scope")
     assert default_feature_effort()[_FEAT] == "low"
-    assert default_feature_max_tokens()[_FEAT] == 256
+    assert default_feature_max_tokens()[_FEAT] == 1024  # DEV 실측 출력 239/256 — 상향
 
 
 # ── FeatureRoutingLlm 자기 검증 (T005) ──────────────────────────────────
