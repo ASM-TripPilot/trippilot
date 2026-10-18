@@ -72,6 +72,7 @@ class ReflectionTemplateWorker:
             # 해시태그 허용 판정 소스 (TRIP-558)
             region=request.region,
             poi_names=tuple(v.poi_name for v in request.visits),
+            photoless_refs=request.photoless_refs(),
         )
         return self._gateway.call(
             LlmFeature.REFLECTION_TEMPLATE,
@@ -108,6 +109,7 @@ class ReflectionTemplateWorker:
             event_kinds=frozenset(e.kind for e in request.events),
             region=request.region,
             poi_names=tuple(v.poi_name for v in request.visits),
+            photoless_refs=request.photoless_refs(),
         )
         # images 키 = vision.photos id 집합 — photo_highlight 워커와 같은 계약.
         # 조용한 필터링은 두 가지를 숨긴다: 동의 밖 바이트 유입(BR-U6R-09)과

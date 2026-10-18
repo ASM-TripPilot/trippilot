@@ -150,6 +150,9 @@ NIGHTLIFE_DETAIL: dict[str, str] = {
     "speakeasy": "스피크이지",
     "beer_garden": "비어가든",
     "lounge": "라운지바",
+    # Overture 에 없는 칸 — 웹 큐레이션 전용(`collect_curated_kakao.py`, 2026-10-18). 제주는 혼술바가
+    # 여행 코스로 따로 꼽힌다(사용자). 세부 태그 표를 한 곳에 두어야 병합 소급이 같은 이름 규칙을 건다.
+    "solo_bar": "혼술바",
 }
 
 # 나이트라이프에서 **빼야 할 것** — 이름으로 거른다(사용자 결정의 제외 목록).

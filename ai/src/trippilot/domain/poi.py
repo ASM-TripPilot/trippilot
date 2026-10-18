@@ -16,6 +16,9 @@ from trippilot.domain.common import GeoPoint, PoiId
 # 밤에 노는 곳(댄스 클럽·칵테일바·와인바·재즈바·루프탑바) — 경계 8종엔 칸이 없어 ACTIVITY 에 태그로 싣는다
 # (2026-10-15 사용자 결정 "클럽·바를 수집해 액티비티로"). 다시 짜기 "밤에 놀기" 지시와 추정 영업시간이 이 태그를 본다.
 NIGHTLIFE_TAG = "나이트라이프"
+# 웹 검색으로 "요즘 많이 가는 곳"이라 확인한 장소(`data/curated_popular_places.json`, 항목마다 근거 URL).
+# 규칙 점수의 인기 항 바닥을 올린다(`scorer._popularity_norm`) — 인앱 저장 수가 아직 전부 0이라 대역이다.
+TRENDING_TAG = "요즘 인기"
 
 
 class PoiCategory(Enum):

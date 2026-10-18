@@ -81,6 +81,8 @@ export type ReflectionFace =
 export interface ReflectionDayTab {
   day: number;
   today?: boolean;
+  /** TRIP-1425 · 아직 오지 않은 날 — 누를 수 없고 흐리게 보인다(판정은 페이지). */
+  disabled?: boolean;
 }
 
 export interface DailyReflectionScreenProps {
@@ -370,13 +372,15 @@ export function DailyReflectionScreen({
               <Pressable
                 key={tab.day}
                 testID={`reflection-daily-day-tab-${tab.day}`}
+                // disabled 는 누름을 막고 RN 이 accessibilityState.disabled 로도 합쳐 싣는다.
+                disabled={tab.disabled}
                 accessibilityState={{ selected: active }}
                 onPress={() => onSelectDay?.(tab.day)}
                 className={`rounded-pill px-lg py-sm ${
                   active
                     ? 'bg-primary'
                     : 'border border-hairline-strong bg-canvas'
-                }`}
+                }${tab.disabled ? ' opacity-40' : ''}`}
               >
                 <Text
                   className={`text-label ${
@@ -587,44 +591,42 @@ export function DailyReflectionScreen({
               </Pressable>
             </View>
           </View>
+        ) : face !== 'default' && face !== 'pending' ? (
+          // 하단 CTA(data-insufficient: "확인" · empty/error: "직접 회고 작성"=편집 진입). TRIP-1425 · 편집 푸터처럼
+          // 회피 컨테이너 안·스크롤 뒤에 둬야 한 줄 입력 중 키보드에 밀려 올라와 [확인]이 안 가린다(실기 6-b).
+          // pb-[104px] 는 탭바(96) 위에 앉히는 여백 — 키보드가 떠도 남는 빈 띠는 그대로 둔다(Seed Q4).
+          <View className="w-full bg-canvas px-lg pb-[104px] pt-[8px]">
+            {isDataFace ? (
+              <Pressable
+                testID="reflection-daily-confirm"
+                onPress={handleDataConfirm}
+                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+              >
+                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+                  확인
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                testID="reflection-daily-compose"
+                onPress={handleEnterEdit}
+                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+              >
+                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+                  직접 회고 작성
+                </Text>
+              </Pressable>
+            )}
+          </View>
         ) : null}
       </KeyboardAvoidingView>
 
-      {/* 하단 — 탭바(기록 활성)는 전 얼굴 공통 오버레이. default·pending 외 얼굴은 그 위에 CTA 를 함께 얹는다
-          (data-insufficient: "확인" · empty/error: "직접 회고 작성"=편집 진입). CTA 는 탭바 높이(96)만큼
-          아래 여백을 둬 탭바 위에 앉는다(세로 순서 자체는 6-b 육안). 편집 중엔 모두 숨김. */}
+      {/* 하단 탭바(기록 활성) — 전 얼굴 공통 오버레이, 편집 중엔 숨김. CTA 는 위 회피 컨테이너 안에 있다. */}
       {editing ? null : (
-        <>
-          {face !== 'default' && face !== 'pending' ? (
-            <View className="w-full bg-canvas px-lg pb-[104px] pt-[8px]">
-              {isDataFace ? (
-                <Pressable
-                  testID="reflection-daily-confirm"
-                  onPress={handleDataConfirm}
-                  className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
-                >
-                  <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                    확인
-                  </Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  testID="reflection-daily-compose"
-                  onPress={handleEnterEdit}
-                  className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
-                >
-                  <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                    직접 회고 작성
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          ) : null}
-          <BottomTabBar
-            activeKey="records"
-            onPressTab={onPressTab ?? (() => {})}
-          />
-        </>
+        <BottomTabBar
+          activeKey="records"
+          onPressTab={onPressTab ?? (() => {})}
+        />
       )}
     </SafeAreaView>
   );

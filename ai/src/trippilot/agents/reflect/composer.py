@@ -111,6 +111,7 @@ def apply_hard_replacements(
     candidate: TemplateCandidate,
     valid_refs: tuple,
     valid_events: frozenset,
+    photoless_refs: frozenset = frozenset(),
 ) -> ReflectionTemplate:
     """⑤ 잔존 하드 위반만 계약 §4.1 교체 맵으로 결정론 교체.
 
@@ -118,6 +119,10 @@ def apply_hard_replacements(
     유효한 값으로 갈아끼우고 캡션을 안전 문구로 바꿔 카드를 보존한다. 캡션을
     함께 바꾸는 이유 — 원 캡션이 다른 장소를 서술하면 갈아끼운 사진과 어긋나
     거짓이 된다. 소프트 위반은 교체하지 않는다(랭킹 감점만). 순수 함수.
+
+    갈아끼우는 참조는 **사진 있는 방문**(valid_refs − photoless_refs)에서만 고른다 —
+    사진 0장 방문으로 바꾸면 재게이트에서 PHOTO_SLOT_EMPTY 가 다시 난다. 그런
+    방문이 없으면 슬롯을 비운다(PHOTO_* 장면은 STATS 로 전환, 표지는 None).
     """
     if not valid_refs:
         # 공개 함수 — 조용한 IndexError 대신 계약 위반을 명시한다
@@ -127,17 +132,20 @@ def apply_hard_replacements(
     hard = [v for v in candidate.violations if v.grade is ViolationGrade.HARD]
     if not hard:
         return template
-    pick_ref = _valid_ref_picker(template, valid_refs)
+    photo_refs = tuple(r for r in valid_refs if r not in photoless_refs)
+    pick_ref = _valid_ref_picker(template, photo_refs)
 
     # ── 표지 (scene_index None, detail "cover.…") ──
     cover = template.cover
     for v in hard:
         if v.scene_index is not None or not v.detail.startswith("cover."):
             continue
-        if v.code is ViolationCode.VISIT_REF_OUT:
-            # 슬롯 제거 대신 유효 방문으로 교체 — 표지 사진을 잃지 않는다
-            ref, _ = pick_ref()  # 표지 부제는 장소명을 부르지 않아 인덱스 불요
-            cover = replace(cover, photo_slot=PhotoSlot(visit_ref=ref))
+        if v.code in (ViolationCode.VISIT_REF_OUT, ViolationCode.PHOTO_SLOT_EMPTY):
+            # 슬롯 제거 대신 사진 있는 방문으로 교체 — 표지 사진을 잃지 않는다.
+            # 그런 방문이 없을 때만 제거 (표지 슬롯은 선택 필드).
+            # 표지 부제는 장소명을 부르지 않아 인덱스 불요
+            cover = replace(cover, photo_slot=(
+                PhotoSlot(visit_ref=pick_ref()[0]) if photo_refs else None))
         elif v.detail.startswith("cover.title"):
             cover = replace(
                 cover,
@@ -187,15 +195,27 @@ def apply_hard_replacements(
                         scene, layout=layout, source_event=None,
                         caption=safe_caption(layout, idx),
                     )
-            elif v.code is ViolationCode.VISIT_REF_OUT:
-                # 슬롯 제거·장면 생략 대신 유효 방문으로 교체. 캡션도 함께 —
-                # 원 캡션이 다른 장소를 서술하면 갈아끼운 사진과 어긋난다
-                ref, idx = pick_ref()
-                scene = replace(
-                    scene,
-                    photo_slot=PhotoSlot(visit_ref=ref),
-                    caption=safe_caption(scene.layout, idx),
-                )
+            elif v.code in (ViolationCode.VISIT_REF_OUT, ViolationCode.PHOTO_SLOT_EMPTY):
+                if photo_refs:
+                    # 슬롯 제거·장면 생략 대신 사진 있는 방문으로 교체. 캡션도 함께 —
+                    # 원 캡션이 다른 장소를 서술하면 갈아끼운 사진과 어긋난다.
+                    # 인덱스는 valid_refs 기준이어야 {poi:i.name} 과 짝이 맞는다
+                    # (공급기 인덱스는 photo_refs 기준이라 쓰면 다른 방문을 부른다)
+                    ref, _ = pick_ref()
+                    scene = replace(
+                        scene,
+                        photo_slot=PhotoSlot(visit_ref=ref),
+                        caption=safe_caption(scene.layout, valid_refs.index(ref)),
+                    )
+                else:
+                    # 사진 있는 방문이 하나도 없다 — 슬롯을 비운다. PHOTO_* 는 슬롯
+                    # 필수(post-init)라 레이아웃을 같이 바꾼다 (EVENT_NOT_FOUND 0건 선례)
+                    layout = (SceneLayout.STATS
+                              if scene.layout in (SceneLayout.PHOTO_FULL,
+                                                  SceneLayout.PHOTO_CAPTION)
+                              else scene.layout)
+                    scene = replace(scene, layout=layout, photo_slot=None,
+                                    caption=safe_caption(layout))
             elif v.code is ViolationCode.TIME_EXPR:
                 scene = replace(
                     scene,
@@ -248,4 +268,5 @@ def finalize(
         best,
         tuple(v.ref for v in request.visits),
         frozenset(e.kind for e in request.events),
+        request.photoless_refs(),
     )

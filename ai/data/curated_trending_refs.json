@@ -1,0 +1,145 @@
+{
+ "_doc": "웹 큐레이션이 공유본의 기존 행과 맞춘 것 — 병합이 `요즘 인기` 태그를 붙인다(mark_trending).",
+ "refs": [
+  {
+   "source": "OVERTURE",
+   "content_id": "2f667446-b7d7-4f99-995c-91b1d2c148e6",
+   "query": "하늘공원 상암"
+  },
+  {
+   "source": "OVERTURE",
+   "content_id": "c4949699-9f81-440c-b208-7a8158d08e47",
+   "query": "대구 83타워"
+  },
+  {
+   "source": "OVERTURE",
+   "content_id": "d711c9bd-84ba-4be3-bfc8-1458e38b6a13",
+   "query": "경복궁"
+  },
+  {
+   "source": "OVERTURE",
+   "content_id": "ee9e19ce-b49d-49d1-9a6a-805c3cc51708",
+   "query": "낙산공원"
+  },
+  {
+   "source": "OVERTURE",
+   "content_id": "f066a3f5-c10e-4bde-bfda-cc68fae95773",
+   "query": "경의선숲길 연남동"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "1115613",
+   "query": "수성못"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126214",
+   "query": "대릉원"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126448",
+   "query": "이호테우해변"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126451",
+   "query": "함덕해수욕장"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126537",
+   "query": "북촌한옥마을"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126943",
+   "query": "북악팔각정"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "127490",
+   "query": "협재해수욕장"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "128290",
+   "query": "황령산 봉수대"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "128627",
+   "query": "이월드"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "130284",
+   "query": "코엑스 아쿠아리움"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "131901",
+   "query": "명동 실탄사격장"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "1934593",
+   "query": "국립현대미술관 서울관"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "229912",
+   "query": "씨라이프 부산아쿠아리움"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2432831",
+   "query": "스몹"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2470006",
+   "query": "동대문디자인플라자"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2470053",
+   "query": "디아크 문화관"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2479639",
+   "query": "제주불빛정원"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2507822",
+   "query": "별마당도서관"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2609373",
+   "query": "9.81파크 제주"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2756657",
+   "query": "아르떼수성랜드"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2940981",
+   "query": "루나폴"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "3085292",
+   "query": "빛의 시어터"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "879234",
+   "query": "새연교"
+  }
+ ]
+}

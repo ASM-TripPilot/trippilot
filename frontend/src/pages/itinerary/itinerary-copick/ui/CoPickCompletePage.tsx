@@ -32,8 +32,8 @@ import { SheetHeader } from '@/widgets/map-sheet-shell';
  * 무엇을 보장하나:
  *  - **전 슬롯 검증 시각**(BR-U3-07 개정 · INV-2): 비고정 슬롯은 시각 범위(`HH:mm–HH:mm`, en-dash),
  *    고정 숙소는 단일 시각(`HH:mm`)+부제+고정 배지. 옛 "비고정 시각 0" 계약의 정반대다.
- *  - **카운트는 비고정만**: 헤더 meta `{N}/{N} 골랐어요`(N=선택일 비고정 슬롯 수) — 고정(숙소)은
- *    "고른" 대상이 아니라 세지 않는다.
+ *  - **카운트는 사실만**: 헤더 meta `{N}곳`(N=선택일 슬롯 중 고정 숙소만 뺀 수 — h14 `ItineraryPlanPage` 와 같은 셈).
+ *    서버 슬롯엔 "누가 골랐나"가 없어 고른 수를 말하지 않는다(TRIP-1428 결정 1=A).
  *  - **읽기 전용**: "다른 후보 ›" 링크는 어느 슬롯에도 안 건다(onPressAlt 미주입, h08 과 차이).
  *  - **INV-4 narrow**: 데이터 도착 얼굴만 셸. error/loading 은 셸이 아니라 기존 얼굴(testID 보존).
  */
@@ -114,8 +114,10 @@ export function CoPickCompletePage({
     stays: undefined,
   });
 
-  // meta 는 **비고정만** 센다 — 고정(숙소)은 "고른" 대상이 아니다(D2 · coPickProgress 재사용 금지).
-  const pickedCount = slots.filter((slot) => !slot.isFixed).length;
+  // meta 는 고정 **숙소**만 뺀다 — 시각을 정한 꼭 갈 곳도 `isFixed` 라 그것까지 빼면 h14 와 숫자가 갈린다.
+  const placeCount = slots.filter(
+    (slot) => !(slot.isFixed && slot.category === '숙소')
+  ).length;
 
   return (
     <MapSheetShell
@@ -131,7 +133,7 @@ export function CoPickCompletePage({
           title={trip.data.title}
           dayLabel={`${selectedDayNumber}일차`}
           dateLabel={formatDraftDayHeader(selectedDate)}
-          meta={`${pickedCount}/${pickedCount} 골랐어요`}
+          meta={`${placeCount}곳`}
         />
       }
       cta={[

@@ -74,6 +74,8 @@ class ViolationCode(Enum):
     PLACEHOLDER_OUT = "PLACEHOLDER_OUT"  # 어휘 밖·poi 인덱스 범위 밖 자리표시자
     VISIT_REF_OUT = "VISIT_REF_OUT"  # 방문 기록 밖 참조 (INV-1 사영)
     EVENT_NOT_FOUND = "EVENT_NOT_FOUND"  # source_event 미실재
+    # 사진 0장 방문에 사진 자리 — FE 가 기기 사진으로 채우면 빈 칸이 된다
+    PHOTO_SLOT_EMPTY = "PHOTO_SLOT_EMPTY"
     # SOFT
     HASHTAG_OUT = "HASHTAG_OUT"  # 허용 집합 밖 (지역·방문지·브랜드 파생 아님, TRIP-558)
     CAPTION_LEN = "CAPTION_LEN"
@@ -87,6 +89,7 @@ _GRADE_BY_CODE: dict[ViolationCode, ViolationGrade] = {
     ViolationCode.PLACEHOLDER_OUT: ViolationGrade.HARD,
     ViolationCode.VISIT_REF_OUT: ViolationGrade.HARD,
     ViolationCode.EVENT_NOT_FOUND: ViolationGrade.HARD,
+    ViolationCode.PHOTO_SLOT_EMPTY: ViolationGrade.HARD,
     # 소프트 — 하드로 두면 '#제주여행' 같은 정당한 합성어까지 지운다 (TRIP-558).
     # 랭킹 감점만: 더 나은 후보가 있으면 그쪽이 뽑히고, 없으면 그대로 나간다.
     ViolationCode.HASHTAG_OUT: ViolationGrade.SOFT,
@@ -207,6 +210,12 @@ class ReflectionRequest:
             raise ValueError("visits ≥ 1 — 방문 0건은 생성 진입 불가 (BR-U6R-15)")
         if self.end_date < self.start_date:
             raise ValueError(f"기간 역전: {self.start_date} > {self.end_date}")
+
+    def photoless_refs(self) -> frozenset[VisitRef]:
+        """사진 0장인 방문 참조 — 여기에 사진 자리를 두면 빈 칸이 된다 (PHOTO_SLOT_EMPTY).
+        같은 참조의 방문이 여럿이면 하나라도 사진이 있으면 사진 있음으로 본다."""
+        with_photos = {v.ref for v in self.visits if v.photo_count > 0}
+        return frozenset(v.ref for v in self.visits) - with_photos
 
     def to_dict(self) -> dict:
         return {

@@ -673,6 +673,19 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
     });
   });
 
+  // TRIP-1424 AC-21 — 직접 짜기 편집기에서도 "장소를 추가하면 바로 저장돼요"가 [저장] 전부터 보인다(결정 2=A).
+  describe('🔴 M9 · TRIP-1424 — 장소 추가 즉시 저장 안내 한 줄', () => {
+    it('편집기가 뜨면 저장을 누르기 전에도 안내 한 줄이 보이고 PUT 은 0이다', async () => {
+      renderPage();
+      await ready();
+
+      expect(
+        screen.getByTestId('itinerary-edit-add-saved-hint')
+      ).toHaveTextContent('장소를 추가하면 바로 저장돼요');
+      expect(putCalls).toBe(0);
+    });
+  });
+
   describe('🔴 M2 · AC-9 — 끌어서 바꾼 순서가 저장 PUT 순서가 된다 (INV-U3-02)', () => {
     it('c 를 맨 앞으로(2→0) 끌고 저장하면 PUT 순서가 [c,a,b] 다', async () => {
       renderPage();
@@ -705,10 +718,10 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
 
-      // 원통 휠 — 시작 탭에서 오후 2시, 종료 탭에서 오후 3시(분 30 유지).
-      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-2'));
+      // 원통 휠 — 시작 탭에서 14시, 종료 탭에서 15시(분 30 유지). TRIP-1437 — 24시간 시 셀.
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-14'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-end'));
-      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-3'));
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-15'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
@@ -724,19 +737,19 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
   // TRIP-1215 계약 변경 — 옛 M4b 는 시작 15:00/숨은 종료 14:30 을 익일(true)로 저장했다. 그 조합은 이제 시트가
   // 막으므로(M4c), "종료 미설정 = 현재 값 문자열" 의도는 허용 조합(시작 14:00)으로 잰다.
   describe('🔴 M4b · TRIP-1196 — 종료를 안 건드리고 적용해도 PUT 의 endAt 은 현재 값 문자열이다', () => {
-    it('c 시작만 오후 2시로 바꿔 적용 → c endAt 은 원래 값(14:30:00) 그대로, endsNextDay false 이고 null 은 안 나간다', async () => {
+    it('c 시작만 14시로 바꿔 적용 → c endAt 은 원래 값(14:30:00) 그대로, endsNextDay false 이고 null 은 안 나간다', async () => {
       renderPage();
       await ready();
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
-      // 종료 탭을 열기만 한다(휠은 안 누른다) — 미설정 표기가 남는다.
+      // 종료 탭을 열기만 한다(휠은 안 누른다) — readout 은 현재 종료 시각을 보인다(TRIP-1417, 옛 "설정 안 됨" 뒤집음).
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-end'));
       expect(
         screen.getByTestId('itinerary-manual-time-readout')
-      ).toHaveTextContent(/설정 안 됨/);
+      ).toHaveTextContent('시작 13:00 · 종료 14:30'); // TRIP-1437 — 24시간 완전 일치
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-start'));
-      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-2'));
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-14'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
@@ -752,13 +765,13 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
   // TRIP-1215 — 페이지는 onApply 를 재판정 없이 스토어에 덮어쓰고 그 안에서 시트를 동기로 닫는다.
   // 그래서 [적용]을 누른 뒤에도 시트가 남아 있다 = onApply 가 안 나갔다(02a ★3).
   describe('🔴 M4c · 종료보다 늦은 시작은 시트가 막고 드래프트는 그대로다', () => {
-    it('c 시작만 오후 3시(숨은 종료 14:30 뒤)로 옮기면 문구가 뜨고 [적용]해도 시트가 남으며, 닫고 저장하면 c 는 13:00–14:30 그대로다', async () => {
+    it('c 시작만 15시(숨은 종료 14:30 뒤)로 옮기면 문구가 뜨고 [적용]해도 시트가 남으며, 닫고 저장하면 c 는 13:00–14:30 그대로다', async () => {
       renderPage();
       await ready();
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
-      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-3'));
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-15'));
 
       expect(
         screen.getByTestId('itinerary-manual-time-error')
@@ -767,6 +780,27 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
 
       fireEvent(screen.getByTestId(SHEET), 'close');
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+      const body = await save();
+      const c = body.days[0].slots.find((s) => s.poiId === 'c');
+      expect(c?.startAt).toBe('13:00:00');
+      expect(c?.endAt).toBe('14:30:00');
+      expect(c?.endsNextDay).toBe(false);
+    });
+  });
+
+  // TRIP-1417 (Q-101) — 시트 머리 X 도 딤 닫힘과 같은 길(onCancel)이다. 바꿔 둔 휠 값은 드래프트에 안 들어간다.
+  describe('🔴 MX · 시각 시트 머리 X 로 닫으면 시트가 빠지고 드래프트는 그대로다', () => {
+    it('c 시작을 14시로 굴려 둔 채 X 를 누르면 시트가 사라지고, 저장하면 c 는 13:00–14:30 그대로다', async () => {
+      renderPage();
+      await ready();
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
+      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-14'));
+
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-close'));
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       const body = await save();
@@ -1159,9 +1193,10 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
       const sheet = await screen.findByTestId(SHEET);
+      // TRIP-1437 — 24시간 표기(옛 `/오후 1:00/`). 시작 칸만 본다.
       expect(
         screen.getByTestId('itinerary-manual-time-readout')
-      ).toHaveTextContent(/오후 1:00/);
+      ).toHaveTextContent(/^시작 13:00 · /);
 
       // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
       fireEvent(sheet, 'close');
@@ -1170,8 +1205,8 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('a')}`));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
       const readout = screen.getByTestId('itinerary-manual-time-readout');
-      expect(readout).toHaveTextContent(/오전 9:00/);
-      expect(readout).not.toHaveTextContent(/오후 1:00/);
+      expect(readout).toHaveTextContent(/^시작 09:00 · /);
+      expect(readout).not.toHaveTextContent(/^시작 13:00/);
     });
   });
 });

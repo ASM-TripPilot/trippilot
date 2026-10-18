@@ -258,6 +258,70 @@ def test_gate_accepts_event_scene_when_source_event_exists() -> None:
     assert _codes(_apply(_raw(body))) == []
 
 
+# ── 게이트: 사진 0장 방문의 사진 자리 (PHOTO_SLOT_EMPTY) ─────
+# FE 가 그 방문의 기기 사진으로 슬롯을 채운다 — 0장이면 빈 칸이 된다.
+
+_PHOTO_CTX = ReflectionTemplateContext(
+    kind=ReflectionKind.TRIP_SUMMARY,
+    visit_refs=(_REF1, _REF2),
+    event_kinds=frozenset({SourceEventKind.PLAN_B}),
+    photoless_refs=frozenset({_REF2}),  # _REF2 = 사진 0장
+)
+
+
+def test_gate_flags_scene_photo_slot_on_photoless_visit() -> None:
+    body = _body(scenes=[
+        {"layout": "PHOTO_FULL", "photo_slot": _slot(_REF2), "caption": "둘째 날"},
+        {"layout": "STATS", "caption": "{visit_count}곳"},
+        {"layout": "MAP", "caption": "동선"},
+    ])
+    out = _apply(_raw(body), _PHOTO_CTX)
+    assert out.error is None and out.value is not None  # 드롭 아님 — 후보 생존
+    assert _codes(out) == [ViolationCode.PHOTO_SLOT_EMPTY]
+    v = out.value.violations[0]
+    assert v.grade is ViolationGrade.HARD and v.scene_index == 0
+    assert out.drop_event is None  # 방문 기록 안 참조 — INV-1 계측 대상 아님
+
+
+def test_gate_flags_cover_photo_slot_on_photoless_visit() -> None:
+    cover = {"title": "기록", "subtitle": "{region}", "photo_slot": _slot(_REF2)}
+    out = _apply(_raw(_body(cover=cover)), _PHOTO_CTX)
+    assert _codes(out) == [ViolationCode.PHOTO_SLOT_EMPTY]
+    v = out.value.violations[0]
+    assert v.scene_index is None and v.detail.startswith("cover.photo_slot")
+
+
+def test_gate_outside_ref_is_visit_ref_out_only_never_double_counted() -> None:
+    """목록 밖 참조는 VISIT_REF_OUT 하나로 끝난다 — 사진 0장 판정까지 가지 않는다.
+    (판정 순서를 고정하려고 밖 참조를 photoless 에도 넣는다)"""
+    ctx = ReflectionTemplateContext(
+        kind=ReflectionKind.TRIP_SUMMARY,
+        visit_refs=(_REF1, _REF2),
+        event_kinds=frozenset({SourceEventKind.PLAN_B}),
+        photoless_refs=frozenset({_REF2, _OUT_REF}),
+    )
+    cover = {"title": "기록", "subtitle": "{region}", "photo_slot": _slot(_OUT_REF)}
+    body = _body(cover=cover, scenes=[
+        {"layout": "PHOTO_CAPTION", "photo_slot": _slot(_OUT_REF), "caption": "환각"},
+        {"layout": "STATS", "caption": "{visit_count}곳"},
+        {"layout": "MAP", "caption": "동선"},
+    ])
+    assert _codes(_apply(_raw(body), ctx)) == [ViolationCode.VISIT_REF_OUT] * 2
+
+
+def test_gate_passes_photo_slots_on_visits_with_photos() -> None:
+    assert _codes(_apply(_raw(_body()), _PHOTO_CTX)) == []  # _body() 는 _REF1 만 쓴다
+
+
+def test_photoless_refs_counts_a_ref_with_any_photo_as_having_photos() -> None:
+    request = _request(visits=(
+        _visit(_REF1, "감천문화마을", photos=0),
+        _visit(_REF1, "감천문화마을", order=2, photos=3),  # 같은 참조 재방문 — 사진 있음
+        _visit(_REF2, "해운대", photos=0),
+    ))
+    assert request.photoless_refs() == frozenset({_REF2})
+
+
 # ── 게이트: 금칙·자리표시자 (④, INV-3·closed-set) ───────────
 
 
@@ -513,9 +577,12 @@ def test_prompt_renders_deterministically() -> None:
     p1, ref = reg.render(_FEAT, build_reflection_template_vars(_request()))
     p2, _ = reg.render(_FEAT, build_reflection_template_vars(_request()))
     assert p1 == p2
-    assert ref.prompt_id == "prompts/reflection_template.yaml" and ref.version == "0.1.0"
+    assert ref.prompt_id == "prompts/reflection_template.yaml" and ref.version == "0.2.0"
     assert ref.feature == "REFLECTION_TEMPLATE"
     assert "부산" in p1 and "감천문화마을" in p1 and "poi:0" in p1 and "PLAN_B" in p1
+
+
+_PHOTOLESS_RULE = "사진 수가 0장인 방문에는 photo_slot을 두지 마세요"
 
 
 def test_prompt_states_contract_rules() -> None:
@@ -534,6 +601,16 @@ def test_prompt_states_contract_rules() -> None:
     # 해시태그 허용 규칙(TRIP-558) — 프롬프트에 없으면 모델이 계속 위반해
     # 위반 0 조기 종료가 사라지고 HEAVY 호출이 3배가 된다 (리뷰 실측)
     assert "해시태그는 지역명이나 방문한 장소명에서 만드세요" in prompt
+    # 사진 0장 방문엔 사진 자리 금지 — 게이트 PHOTO_SLOT_EMPTY 와 짝 (위 해시태그와 같은 이유)
+    assert _PHOTOLESS_RULE in prompt
+
+
+def test_vision_prompt_states_photoless_rule() -> None:
+    """vision 판도 같은 게이트를 지난다 — 규칙이 빠지면 그쪽만 매번 위반·교체된다."""
+    variables = {**build_reflection_template_vars(_request()), "highlights": "(대표 사진 없음)"}
+    prompt, ref = PromptRegistry(_PROMPTS).render(
+        LlmFeature.REFLECTION_TEMPLATE_VISION, variables)
+    assert _PHOTOLESS_RULE in prompt and ref.version == "0.2.0"
 
 
 def test_build_vars_stringifies_with_defaults_and_no_time_fields() -> None:
@@ -585,6 +662,19 @@ def test_worker_keeps_violating_candidate_and_meters_drop() -> None:
     assert any(v.code is ViolationCode.VISIT_REF_OUT for v in result.value.violations)
     drops = trace.of_type(GateDropEvent)
     assert len(drops) == 1 and drops[0].dropped_ids == (PoiId("poi-999"),)
+
+
+def test_worker_judges_photoless_visit_from_request_photo_count() -> None:
+    """워커가 요청의 photo_count 로 판정 소스를 채운다 — 사진 0장 방문 참조는 위반."""
+    body = _body(scenes=[
+        {"layout": "PHOTO_FULL", "photo_slot": _slot(_REF2), "caption": "둘째 날"},
+        {"layout": "STATS", "caption": "{visit_count}곳"},
+        {"layout": "MAP", "caption": "동선"},
+    ])
+    request = _request(visits=(_visit(_REF1, "감천문화마을"), _visit(_REF2, "해운대", photos=0)))
+    worker, _ = _worker(FakeLlm(canned=_raw(body)))
+    result = worker.generate(request, _TID, _NOW)
+    assert [v.code for v in result.value.violations] == [ViolationCode.PHOTO_SLOT_EMPTY]
 
 
 def test_worker_falls_back_loudly_on_llm_failure() -> None:

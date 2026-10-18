@@ -15,7 +15,7 @@ import zlib
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import BudgetLevel, GeoPoint
-from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.domain.poi import TRENDING_TAG, Poi, PoiCategory
 
 # 축은 "그 카테고리가 일정의 주 목적지가 되는 정도" — 명소 최상, 식음은 중간,
 # 쇼핑은 보조, STAY는 앵커라 0(선택 대상 아님). PoiCategory 전 값 커버 필수(직접 조회).
@@ -180,9 +180,16 @@ def near_fit(distance_km: float) -> float:
 _POPULARITY_FULL = 1000
 
 
-def _popularity_norm(saved_count: int) -> float:
+# "요즘 인기"(웹 큐레이션) 장소의 인기 항 바닥 — 저장 30곳쯤과 같은 값(폭 0.5 의 절반).
+# 저장 수가 쌓여 이 값을 넘으면 저장 수가 이긴다(max). 만점을 주지 않는 이유: 사람이 고른 목록이라
+# 실사용 신호보다 약하게 둔다(2026-10-18 사용자 지시 "웹에 자주 나오면 점수 높게").
+_TRENDING_FLOOR = 0.25
+
+
+def _popularity_norm(saved_count: int, tags: tuple[str, ...] = ()) -> float:
     """인앱 저장 수 → 0~0.5. 상한 없는 카운트라 log 로 눌러 상위 소수가 독식하지 않게."""
-    return min(math.log1p(saved_count) / math.log1p(_POPULARITY_FULL), 1.0) * 0.5
+    saved = min(math.log1p(saved_count) / math.log1p(_POPULARITY_FULL), 1.0) * 0.5
+    return max(saved, _TRENDING_FLOOR) if TRENDING_TAG in tags else saved
 
 
 def build_rule_score(
@@ -201,7 +208,7 @@ def build_rule_score(
     것만 담는다(정본 단일 소유, PR #76). 호출측이 `place_fees.FeeTable.of()` 로
     뽑아 넘긴다. 기본 `None` 이라 기존 호출은 전부 무영향(전 POI 중립).
     """
-    popularity_norm = _popularity_norm(poi.saved_count)
+    popularity_norm = _popularity_norm(poi.saved_count, poi.tags)
     dist_penalty = 0.0
     if anchor is not None:
         dist_penalty = min(haversine_km(anchor, poi.coord) * 0.02, 0.5)
