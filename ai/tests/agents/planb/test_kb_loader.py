@@ -362,6 +362,8 @@ def test_partial_load_keeps_the_legacy_row_of_pending_documents(tmp_path, monkey
     coll = collection_for(KbKind.POI_DESC, emb.model_id)
     for i in range(6):
         store.upsert(coll, f"wiki:{i}", emb.embed(str(i)), {"kb": "POI_DESC", "text": str(i)})
+    # 예산에 걸린 적재에서도 **끝난 문서**의 낡은 꼬리 조각은 지운다(코퍼스 밖 정리는 미완료라 안 돈다)
+    store.upsert(coll, "wiki:0#39", emb.embed("old"), {"kb": "POI_DESC", "text": "old"})
     p = _corpus_file(tmp_path, _rows(6))
     docs = load_kb._documents_of(p)
     line = load_kb.load_corpus(p, docs, list(docs), emb, store, budget_sec=15)
@@ -370,6 +372,7 @@ def test_partial_load_keeps_the_legacy_row_of_pending_documents(tmp_path, monkey
     assert loaded and len(loaded) < 6 and "다음 배포로" in line
     assert all(f"wiki:{i}" in left for i in range(6) if f"wiki:{i}" not in loaded)  # 아직 조각 없는 곳은 통문서 유지
     assert not any(b in left for b in loaded)  # 조각이 다 들어간 곳의 통문서는 지웠다
+    assert "wiki:0" in loaded and "wiki:0#39" not in left
 
 
 def test_default_seeds_exist_in_the_repo_and_load_the_chunk_corpus() -> None:
