@@ -2430,7 +2430,7 @@ class WiredItineraryOrchestrator:
                 prefer, avoid, avoided, active, past, not_before, visit_cap, budget_level, notes,
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
-                window_end=day_end if night else None,
+                window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
                 rules=_category_rule_lines(nl),
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
@@ -2549,6 +2549,7 @@ class WiredItineraryOrchestrator:
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
             required_in_order=earlier is not None,  # 시간만 당기기 — 원 일정 순서 그대로
         )
+        composed_r1 = composed  # 아래 다시 풀기가 composed 를 비운다 — 고정 표시를 걷을 때 1차 목록도 본다
         outcome = self._schedule_agent.run(core.ScheduleTask(
             request=domain_request,
             pool=pool,
@@ -2567,17 +2568,6 @@ class WiredItineraryOrchestrator:
             planb_rank=planb_rank,
             llm_composed=bool(composed),
         ))
-        if (composed or in_progress or nl_ids or night) and outcome.solution is not None:
-            # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
-            # 구성 LLM 이 고른 곳·진행 중이라 둔 곳은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가
-            # 잠가서 다음 다시 짜기·교체에서 못 바꾼다. 그 표시만 걷는다(시각·순서는 그대로).
-            picked = set(composed) | set(nl_ids) | set(night)  # 이름으로 집은 곳·클럽도 잠근 곳은 아니다
-            outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
-                replace(d, fixed_blocks=tuple(
-                    fb for fb in d.fixed_blocks
-                    if not ((fb.reason == "required_visit" and fb.poi_id in picked)
-                            or fb.reason == "in_progress")))
-                for d in outcome.solution.days)))
         if composed:
             placed = {s.poi_id for d in (outcome.solution.days if outcome.solution else ())
                       for s in d.slots}
@@ -2626,12 +2616,18 @@ class WiredItineraryOrchestrator:
             for cat, n in nl.counts:
                 if got.count(cat) < n:
                     notes.append(f"nl_category_unplaced: {cat.value} {got.count(cat)}/{n}")
-        if outcome.solution is not None and any(b.reason == "keep_dinner" for b in blocks):
-            # "저녁은 그대로" 잠금은 이번 재계획 한정이다 — 고정으로 내면 BE 가 영구히 잠근다. 다시 풀었어도
-            # (위 재실행) 같은 블록이 실리므로 최종 해에서 걷는다(시각·순서는 그대로).
+        if outcome.solution is not None:
+            # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
+            # 구성 LLM 이 고른 곳·이름으로 집은 곳·클럽·진행 중이라 둔 곳·"저녁은 그대로" 잠금(이번 재계획
+            # 한정)은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가 잠가서 다음 다시 짜기·교체에서 못
+            # 바꾼다. 그 표시만 걷는다(시각·순서는 그대로). **최종 해에서 한 번** — 다시 풀기(위) 앞에서 걷던
+            # 동안 다시 푼 해는 같은 블록이 다시 실려 이름으로 집은 곳·클럽·진행 중이 고정으로 나갔다.
+            picked = set(composed_r1) | set(composed) | set(nl_ids) | set(night)
             outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
                 replace(d, fixed_blocks=tuple(
-                    fb for fb in d.fixed_blocks if fb.reason != "keep_dinner"))
+                    fb for fb in d.fixed_blocks
+                    if not ((fb.reason == "required_visit" and fb.poi_id in picked)
+                            or fb.reason in ("in_progress", "keep_dinner"))))
                 for d in outcome.solution.days)))
         return self._replan_projection(
             request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
@@ -2745,6 +2741,7 @@ class WiredItineraryOrchestrator:
         budget: core.DeadlineBudget,
         nearby: tuple[PoiId, ...] = (),
         origins: tuple[GeoPoint, ...] = (),
+        window_start: datetime | None = None,
         window_end: datetime | None = None,
         rules: tuple[str, ...] = (),
     ) -> tuple[PoiId, ...]:
@@ -2763,7 +2760,9 @@ class WiredItineraryOrchestrator:
             self._compose_event(request.request_meta, f"deadline: remaining={remaining}ms")
             return ()
         day, window = request.target_date, request.time_window
-        start = datetime.combine(window.date, window.start, tzinfo=self._tz)
+        # 창은 솔버와 같아야 한다 — 자유입력 시각("6시까지")을 솔버만 읽던 동안 구성은 21시까지로 보고
+        # 방문 수를 정해, 솔버의 18시 창에 다 안 들어가 몇 곳이 빠졌다.
+        start = window_start or datetime.combine(window.date, window.start, tzinfo=self._tz)
         if not_before is not None:
             start = max(start, not_before)
         end = window_end or datetime.combine(window.date, window.end, tzinfo=self._tz)
