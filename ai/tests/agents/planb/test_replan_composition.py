@@ -367,6 +367,18 @@ def test_말한_세부_종류가_먼저_오른다() -> None:
     assert _club_slot(body)["start_at"] >= "20:00", body["notes"]
 
 
+def test_클럽이_근처에_없으면_다른_밤_장소로_대신하고_밝힌다() -> None:
+    """제주처럼 클럽 0곳·와인바만 있는 곳 — 와인바가 들어가되 "클럽은 없어 대신"을 노트로(INV-4)."""
+    wine = Poi(poi_id=PoiId("e0000000-0000-4000-8000-0000000000c3"), name="제주 와인바",
+               category=PoiCategory.ACTIVITY, coord=DEMO_ANCHOR, open_hours=(), avg_cost=None,
+               rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
+               tags=("나이트라이프", "와인바"))
+    body = _replan(_ScriptedLlm([_FOOD]), pois=(*demo_poi_seed(), wine), directives=["NIGHTLIFE"],
+                   free_text="클럽 가고 싶어")
+    assert "nightlife_subtype_missing: 클럽" in body["notes"], body["notes"]
+    assert any(s["poi_id"] == str(wine.poi_id) for d in body["itinerary"]["days"] for s in d["slots"])
+
+
 def test_클럽이_후보에_없으면_지어내지_않고_밝힌다() -> None:
     llm = _ScriptedLlm([_FOOD])
     body = _replan(llm, directives=["NIGHTLIFE"])

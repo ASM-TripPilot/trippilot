@@ -66,6 +66,13 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   useGetPlaces: (...args: unknown[]) => mockUseGetPlaces(...args),
 }));
 
+// TRIP-1432 — 전국 d01 장소 레인은 서비스 지역 3곳 병렬 조회다(`useQuery` 직접 — QueryClient 없는 버킷이라 목).
+const mockUseMultiRegionPlaces = jest.fn();
+jest.mock('@/features/explore/model/useMultiRegionPlaces', () => ({
+  useMultiRegionPlaces: (...args: unknown[]) =>
+    mockUseMultiRegionPlaces(...args),
+}));
+
 const mockUseSavedPlaces = jest.fn();
 jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: (...args: unknown[]) => mockUseSavedPlaces(...args),
@@ -133,6 +140,59 @@ function placesOk(items: unknown[]) {
   };
 }
 
+const SERVICE_REGION_NAMES = ['서울', '부산', '제주'];
+/** 다지역 훅은 지역 2곳 미만이면 꺼진다 — 꺼진 조회는 데이터 없음 · 영원히 대기. */
+const MULTI_DISABLED = {
+  items: [],
+  degraded: false,
+  isPending: true,
+  isError: false,
+  refetch: jest.fn(),
+};
+let multiResult: Record<string, unknown>;
+function multiOk(items: unknown[], degraded = false) {
+  return {
+    items,
+    degraded,
+    isPending: false,
+    isError: false,
+    refetch: mockPlacesRefetch,
+  };
+}
+
+type MultiCall = [
+  readonly string[],
+  { category?: unknown; q?: unknown } | undefined,
+];
+/** 요청이 실제로 나가는 다지역 조회 호출만(지역 2곳 이상). `from` 이후 호출만 볼 수 있다. */
+function enabledMultiCalls(from = 0): MultiCall[] {
+  return (
+    mockUseMultiRegionPlaces.mock.calls.slice(from) as MultiCall[]
+  ).filter(([regions]) => regions.length >= 2);
+}
+/** 요청이 실제로 나가는 지역 없는 장소 조회 — 전국 이름순 목록이라 서비스 지역 밖이 섞인다. */
+function enabledRegionlessPlacesCalls(from = 0): unknown[] {
+  return mockUseGetPlaces.mock.calls
+    .slice(from)
+    .filter(
+      ([params, options]) =>
+        (options as { query?: { enabled?: boolean } } | undefined)?.query
+          ?.enabled !== false &&
+        !(params as { region?: string } | undefined)?.region
+    );
+}
+/** 장소 레인 = 서비스 지역 3곳(홈과 같은 순서·필터 없음 → 같은 쿼리 키), 지역 없는 조회 0. */
+function expectServiceRegionQuery(from = 0): void {
+  const calls = enabledMultiCalls(from);
+  expect(calls.length).toBeGreaterThan(0);
+  for (const [regions, filters] of calls) {
+    expect(regions).toEqual(SERVICE_REGION_NAMES);
+    expect(filters?.category ?? null).toBeNull();
+    expect(filters?.q ?? '').toBe('');
+  }
+  expect(enabledRegionlessPlacesCalls(from)).toHaveLength(0);
+}
+
 beforeEach(() => {
   // 모듈 싱글턴 — 앞 테스트가 연 400ms 연타 창이 이 테스트의 첫 press 를 먹지 않게.
   resetPressGuard();
@@ -141,6 +201,7 @@ beforeEach(() => {
     mockSetParams,
     mockUseStaySearch,
     mockUseGetPlaces,
+    mockUseMultiRegionPlaces,
     mockUseSavedPlaces,
     mockUseSavedStays,
     mockStayRefetch,
@@ -154,6 +215,10 @@ beforeEach(() => {
   mockParams = {};
   mockUseStaySearch.mockReturnValue(stayOk([CARD_A, CARD_B]));
   mockUseGetPlaces.mockReturnValue(placesOk([]));
+  multiResult = multiOk([]);
+  mockUseMultiRegionPlaces.mockImplementation((regions: readonly string[]) =>
+    regions.length < 2 ? MULTI_DISABLED : multiResult
+  );
   mockUseSavedPlaces.mockReturnValue({ savedPoiIds: ['p1'] });
   mockUseSavedStays.mockReturnValue({
     isSaved: () => false,
@@ -255,12 +320,10 @@ describe('전국 d01 — 구획·검색·레인', () => {
   });
 
   it('장소가 있으면 카드를 그리고, 카드를 누르면 장소 상세로 간다', () => {
-    mockUseGetPlaces.mockReturnValue(
-      placesOk([
-        { poiId: 'poi-1', nameKo: '감천문화마을', region: '사하구' },
-        { poiId: 'poi-2', nameKo: '광안리 해변', region: '수영구' },
-      ])
-    );
+    multiResult = multiOk([
+      { poiId: 'poi-1', nameKo: '감천문화마을', region: '사하구' },
+      { poiId: 'poi-2', nameKo: '광안리 해변', region: '수영구' },
+    ]);
     render(<ExploreLandingPage />);
 
     expect(screen.getByTestId('explore-place-card-poi-1')).toBeOnTheScreen();
@@ -270,23 +333,26 @@ describe('전국 d01 — 구획·검색·레인', () => {
     expect(String(mockPush.mock.calls[0][0])).toBe('/explore/places/poi-2');
   });
 
-  it('장소 조회 오류면 장소 레인 자리에 재시도를 그린다', () => {
-    mockUseGetPlaces.mockReturnValue({
-      data: undefined,
+  it('장소 조회가 전부 실패하면 장소 레인 자리에 재시도를 그리고, 누르면 그 조회를 다시 부른다', () => {
+    multiResult = {
+      items: [],
+      degraded: false,
       isPending: false,
       isError: true,
-      refetch: jest.fn(),
-    });
+      refetch: mockPlacesRefetch,
+    };
     render(<ExploreLandingPage />);
 
-    expect(screen.getByTestId('explore-lane-place-retry')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('explore-lane-place-retry'));
+
+    expect(mockPlacesRefetch).toHaveBeenCalledTimes(1);
   });
 
-  // 전량(약 2MB)을 받아 8장만 쓰던 것을 서버에 limit 을 실어 필요한 개수만 받는다(TRIP-500).
-  it('장소 레인은 서버에 개수 제한(limit 8)을 실어 묻는다', () => {
+  // TRIP-1432 — 전국 이름순 8곳은 서비스 지역 밖(밀양·대구…)이었다. 서울·부산·제주를 홈과 같은 인자로 묻는다.
+  it('장소 레인은 서울·부산·제주 3곳을 묻고, 지역 없는 전국 조회는 나가지 않는다', () => {
     render(<ExploreLandingPage />);
 
-    expect(mockUseGetPlaces).toHaveBeenCalledWith({ limit: 8 });
+    expectServiceRegionQuery();
   });
 
   it('숙소 조회 대기 중이면 두 레인 로딩 스켈레톤을 그린다', () => {
@@ -307,17 +373,107 @@ describe('전국 d01 — 구획·검색·레인', () => {
   });
 
   it('장소 조회만 대기여도 로딩 스켈레톤을 그린다(두 조회 중 하나라도)', () => {
-    mockUseGetPlaces.mockReturnValue({
-      data: undefined,
-      isPending: true,
-      isError: false,
-      refetch: jest.fn(),
-    });
+    multiResult = { ...MULTI_DISABLED };
     render(<ExploreLandingPage />);
 
     expect(
       screen.getByTestId('explore-landing-skeleton-place-0')
     ).toBeOnTheScreen();
+  });
+});
+
+// TRIP-1432 — 전국 d01 은 서비스 지역(서울·부산·제주)만 보인다. 장소는 사진 있는 곳 먼저·지역 번갈아 8장,
+// 숙소는 요청은 그대로(전국 1회) 두고 주소로 3지역만 남긴다(주소 없으면 뺀다).
+describe('전국 d01 — 서비스 지역 3곳', () => {
+  function lanePlace(poiId: string, regionCode: string, photo: boolean) {
+    return {
+      poiId,
+      nameKo: poiId,
+      category: '명소',
+      lat: 37.5,
+      lng: 127.0,
+      region: null,
+      regionCode,
+      openingHours: null,
+      imageUrl: photo ? `https://img.example/${poiId}.jpg` : null,
+      tags: [],
+      savedCount: 0,
+      dataStatus: 'ACTIVE',
+    } as Place;
+  }
+
+  // 합본은 지역 순서대로 이어 붙인 목록이다(서울 → 부산 → 제주). 섞지 않고 앞 8장을 자르면 서울만 남는다.
+  it('장소 레인 8장은 사진 있는 곳을 먼저, 지역을 번갈아 고른다 — 부산 사진 카드는 들고 제주 사진 없는 카드는 빠진다', () => {
+    const seoul = Array.from({ length: 9 }, (_, i) =>
+      lanePlace(`s${i}`, '11110', true)
+    );
+    multiResult = multiOk([
+      ...seoul,
+      lanePlace('b0', '26350', true),
+      lanePlace('j0', '50110', false),
+    ]);
+
+    render(<ExploreLandingPage />);
+
+    const shown = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 'b0'];
+    const hidden = ['s7', 's8', 'j0'];
+    for (const id of shown) {
+      expect(screen.getByTestId(`explore-place-card-${id}`)).toBeOnTheScreen();
+    }
+    for (const id of hidden) {
+      expect(screen.queryByTestId(`explore-place-card-${id}`)).toBeNull();
+    }
+  });
+
+  it('3곳 중 일부만 실패해도 받은 장소로 레인을 채우고 재시도를 띄우지 않는다', () => {
+    multiResult = multiOk([lanePlace('s0', '11110', true)], true);
+
+    render(<ExploreLandingPage />);
+
+    expect(screen.getByTestId('explore-place-card-s0')).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-lane-place-retry')).toBeNull();
+  });
+
+  it('숙소는 주소가 서울·부산·제주인 것만 남기고, 주소를 모르면 뺀다 — 요청은 지역 없이 그대로다', () => {
+    const busanShort: StayItem = {
+      ...stayItem('NAVER', 'b', '해운대', '해운대 호텔', null),
+      address: '부산 해운대구 해운대해변로 296',
+    };
+    const miryang: StayItem = {
+      ...stayItem('NAVER', 'm', '밀양', '밀양 호텔', null),
+      address: '경상남도 밀양시 삼문동 1',
+    };
+    const nullAddress: StayItem = {
+      ...stayItem('NAVER', 'n', '어딘가', '주소 없는 호텔', null),
+      address: null,
+    };
+    const noAddressKey = stayItem(
+      'NAVER',
+      'k',
+      '어딘가',
+      '주소 키 없는 호텔',
+      null
+    );
+    mockUseStaySearch.mockReturnValue(
+      stayOk([CARD_A, CARD_B, busanShort, miryang, nullAddress, noAddressKey])
+    );
+
+    render(<ExploreLandingPage />);
+
+    for (const item of [CARD_A, CARD_B, busanShort]) {
+      expect(
+        screen.getByTestId(`explore-stay-card-${stayKey(item)}`)
+      ).toBeOnTheScreen();
+    }
+    for (const item of [miryang, nullAddress, noAddressKey]) {
+      expect(
+        screen.queryByTestId(`explore-stay-card-${stayKey(item)}`)
+      ).toBeNull();
+    }
+    const [stayParams] = mockUseStaySearch.mock.calls.at(-1) ?? [];
+    expect((stayParams as { region?: string } | undefined)?.region).toBe(
+      undefined
+    );
   });
 });
 
@@ -554,6 +710,13 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(screen.queryAllByTestId(/^destination-detail-/)).toHaveLength(0);
     });
 
+    // TRIP-1432 Q8 — 지역 필터 갈래엔 서비스 지역 3곳 조회·사진 우선을 덧씌우지 않는다.
+    it('지역 필터 중엔 서비스 지역 3곳 조회가 켜지지 않는다', () => {
+      render(<ExploreLandingPage />);
+
+      expect(enabledMultiCalls()).toHaveLength(0);
+    });
+
     it('두 조회에 코드가 아니라 카탈로그 이름을 싣고 둘 다 켠다', () => {
       render(<ExploreLandingPage />);
 
@@ -575,7 +738,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(screen.queryByText('도시 · 장소 · 숙소 검색')).toBeNull();
     });
 
-    it('칩 ✕ 는 region 키를 비우는 setParams 1회이고, 다시 그리면 칩이 없고 두 조회가 region 없이 나간다', () => {
+    it('칩 ✕ 는 region 키를 비우는 setParams 1회이고, 다시 그리면 칩이 없고 전국 d01 조회(숙소 region 없음·장소 서비스 지역 3곳)로 돌아간다', () => {
       const { rerender } = render(<ExploreLandingPage />);
 
       fireEvent.press(screen.getByTestId('explore-region-chip-clear'));
@@ -589,12 +752,18 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       // 중첩 Pressable — ✕ 가 바깥 검색바(피커 진입)로 새지 않는다.
       expect(mockPush).not.toHaveBeenCalled();
 
+      const placesFrom = mockUseGetPlaces.mock.calls.length;
+      const multiFrom = mockUseMultiRegionPlaces.mock.calls.length;
       rerender(<ExploreLandingPage />);
 
       expect(screen.queryByTestId('explore-region-chip')).toBeNull();
       expect(screen.getByText('도시 · 장소 · 숙소 검색')).toBeOnTheScreen();
-      // 전국 d01 과 같은 호출 — 장소는 인자 **하나**, 숙소는 region 없이 켜져 있다.
-      expect(mockUseGetPlaces).toHaveBeenLastCalledWith({ limit: 8 });
+      // 전국 d01 과 같은 호출 — 장소는 서비스 지역 3곳, 숙소는 region 없이 켜져 있다.
+      expect(enabledMultiCalls(multiFrom).length).toBeGreaterThan(0);
+      for (const [regions] of enabledMultiCalls(multiFrom)) {
+        expect(regions).toEqual(SERVICE_REGION_NAMES);
+      }
+      expect(enabledRegionlessPlacesCalls(placesFrom)).toHaveLength(0);
       const [stayParams, stayOpts] = mockUseStaySearch.mock.calls.at(-1) ?? [];
       expect((stayParams as { region?: string } | undefined)?.region).toBe(
         undefined

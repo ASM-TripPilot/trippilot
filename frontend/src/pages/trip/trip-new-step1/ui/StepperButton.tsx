@@ -7,11 +7,14 @@ import { Pressable } from 'react-native';
  */
 export function StepperButton({
   testID,
+  accessibilityLabel,
   disabled,
   onPress,
   children,
 }: {
   testID: string;
+  /** 화면 낭독기가 읽는 이름 — 아이콘뿐인 버튼이라 필수다(UX-05, `Toggle` 선례). */
+  accessibilityLabel: string;
   disabled?: boolean;
   onPress: () => void;
   children: ReactElement;
@@ -20,6 +23,7 @@ export function StepperButton({
     <Pressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       disabled={disabled}
       onPress={onPress}
       className={`h-9 w-9 items-center justify-center rounded-pill border border-hairline-strong bg-canvas ${

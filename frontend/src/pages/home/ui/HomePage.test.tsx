@@ -64,6 +64,14 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   useGetPlaces: (...args: unknown[]) => mockUseGetPlaces(...args),
 }));
 
+// TRIP-1432 — 여행 중이 아닐 때 장소 레인은 서비스 지역 3곳 병렬 조회다. 이 훅은 `useQuery` 를 직접 써서
+// QueryClient 없는 이 버킷에선 실훅이 죽는다 — 깊은 경로로 목한다(묶음째 목하면 regionPickerHref 도 사라진다).
+const mockUseMultiRegionPlaces = jest.fn();
+jest.mock('@/features/explore/model/useMultiRegionPlaces', () => ({
+  useMultiRegionPlaces: (...args: unknown[]) =>
+    mockUseMultiRegionPlaces(...args),
+}));
+
 const mockUseSavedPlaces = jest.fn();
 const mockSave = jest.fn();
 const mockRemove = jest.fn();
@@ -175,6 +183,91 @@ function placesOk(items: Place[]) {
   };
 }
 
+function multiOk(items: Place[], degraded = false) {
+  return {
+    items,
+    degraded,
+    isPending: false,
+    isError: false,
+    refetch: jest.fn(),
+  };
+}
+
+const SERVICE_REGION_NAMES = ['서울', '부산', '제주'];
+
+// 두 조회 목은 react-query 처럼 꺼진 조회에 "데이터 없음 · 영원히 대기"를 돌려준다 — 고정 반환값이면
+// 꺼진 조회의 상태를 레인에 그리는 구현을 못 본다. 다지역 훅은 지역 2곳 미만이면 꺼진다(훅 내부 규칙).
+const PLACES_DISABLED = {
+  data: undefined,
+  isPending: true,
+  isError: false,
+  refetch: jest.fn(),
+};
+const MULTI_DISABLED = {
+  items: [],
+  degraded: false,
+  isPending: true,
+  isError: false,
+  refetch: jest.fn(),
+};
+let placesResult: Record<string, unknown>;
+let multiResult: Record<string, unknown>;
+
+/** 지역 1곳 조회(여행 중)·3지역 조회(그 밖) 어느 쪽이든 같은 장소를 받는다 — 레인 그리기만 볼 때. */
+function lanePlaces(items: Place[]): void {
+  placesResult = placesOk(items);
+  multiResult = multiOk(items);
+}
+function lanePending(): void {
+  placesResult = { ...PLACES_DISABLED };
+  multiResult = { ...MULTI_DISABLED };
+}
+function laneError(refetch: jest.Mock): void {
+  placesResult = { data: undefined, isPending: false, isError: true, refetch };
+  multiResult = {
+    items: [],
+    degraded: false,
+    isPending: false,
+    isError: true,
+    refetch,
+  };
+}
+
+type PlacesCall = [unknown, { query?: { enabled?: boolean } } | undefined];
+type MultiCall = [
+  readonly string[],
+  { category?: unknown; q?: unknown } | undefined,
+];
+
+/** 요청이 실제로 나가는 단일 지역 조회 호출만 — enabled 미지정은 켜짐(react-query 기본). */
+function enabledPlacesCalls(): PlacesCall[] {
+  return (mockUseGetPlaces.mock.calls as PlacesCall[]).filter(
+    ([, options]) => options?.query?.enabled !== false
+  );
+}
+function enabledRegionlessPlacesCalls(): PlacesCall[] {
+  return enabledPlacesCalls().filter(
+    ([params]) => !(params as { region?: string } | undefined)?.region
+  );
+}
+/** 요청이 실제로 나가는 다지역 조회 호출만 — 지역 2곳 이상. */
+function enabledMultiCalls(): MultiCall[] {
+  return (mockUseMultiRegionPlaces.mock.calls as MultiCall[]).filter(
+    ([regions]) => regions.length >= 2
+  );
+}
+/** 장소 레인 = 서비스 지역 3곳(이 순서·필터 없음 → 탐색 탭과 같은 쿼리 키), 지역 없는 전국 조회는 0. */
+function expectServiceRegionQuery(): void {
+  const calls = enabledMultiCalls();
+  expect(calls.length).toBeGreaterThan(0);
+  for (const [regions, filters] of calls) {
+    expect(regions).toEqual(SERVICE_REGION_NAMES);
+    expect(filters?.category ?? null).toBeNull();
+    expect(filters?.q ?? '').toBe('');
+  }
+  expect(enabledRegionlessPlacesCalls()).toHaveLength(0);
+}
+
 function savedPlacesReturns(savedPoiIds: string[]): void {
   mockUseSavedPlaces.mockReturnValue({
     savedPoiIds,
@@ -239,6 +332,7 @@ beforeEach(() => {
     mockUseGetTrips,
     mockUseItinerary,
     mockUseGetPlaces,
+    mockUseMultiRegionPlaces,
     mockUseSavedPlaces,
     mockUseSavedStays,
     mockSave,
@@ -250,7 +344,14 @@ beforeEach(() => {
   mockUseItinerary.mockReturnValue(
     itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
   );
-  mockUseGetPlaces.mockReturnValue(placesOk([place('poi-stub', '스텁 장소')]));
+  lanePlaces([place('poi-stub', '스텁 장소')]);
+  mockUseGetPlaces.mockImplementation(
+    (_params: unknown, options?: { query?: { enabled?: boolean } }) =>
+      options?.query?.enabled === false ? PLACES_DISABLED : placesResult
+  );
+  mockUseMultiRegionPlaces.mockImplementation((regions: readonly string[]) =>
+    regions.length < 2 ? MULTI_DISABLED : multiResult
+  );
   savedPlacesReturns([]);
   mockUseSavedStays.mockReturnValue({ savedCount: 0 });
 });
@@ -383,7 +484,7 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
       ])
     );
 
-    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(7)));
+    lanePlaces(rankedPlaces(7));
 
     render(<HomePage />);
 
@@ -499,7 +600,7 @@ describe('여행 후 얼굴 — 종료 직후에만 뜬다 (TRIP-1369)', () => {
 
   it('"다음엔 여기 어때요" 추천은 서버 장소 레인이다(고정 부산 카드 아님)', () => {
     mockUseGetTrips.mockReturnValue(tripsOk([endedTrip(1)]));
-    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(7)));
+    lanePlaces(rankedPlaces(7));
 
     render(<HomePage />);
 
@@ -610,19 +711,37 @@ describe('진입점 — 누르면 어디로 가나', () => {
     expect(String(mockPush.mock.calls[0][0]).includes('tab=')).toBe(false);
   });
 
-  // "버튼 아님"과 "이동 없음"을 따로 잰다 — press 는 조상 onPress 로 올라갈 수 있어 하나로는 증명이 안 된다.
-  it('매거진 히어로는 버튼이 아니고, 눌러도 이동하지 않는다(진입 차단)', () => {
+  // TRIP-1432 — 히어로는 서울·부산·제주 도시 카드다. 누르면 그 도시로 거른 탐색 탭이 열린다(탐색 탭 URL 의
+  // region 은 이름이 아니라 코드). 매거진(/magazine) 진입은 계속 막혀 있다 — 호출 목록 전체 일치라 함께 잡힌다.
+  it.each([
+    ['home-magazine-hero', '11'],
+    ['home-hero-slide-1', '26'],
+    ['home-hero-slide-2', '50'],
+  ])(
+    '히어로 %s 를 누르면 탐색 탭이 region=%s 로 1회 열린다',
+    (testID, code) => {
+      render(<HomePage />);
+
+      fireEvent.press(screen.getByTestId(testID));
+
+      expect(mockPush.mock.calls).toEqual([
+        [{ pathname: '/explore', params: { region: code } }],
+      ]);
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+    }
+  );
+
+  it('계획 중 얼굴의 도시 카드(부산)도 탐색 탭을 region=26 으로 1회 연다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
     render(<HomePage />);
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
 
-    const hero = screen.getByTestId('home-magazine-hero');
-    const buttonIds = screen
-      .queryAllByRole('button')
-      .map((node) => node.props.testID);
-    expect(buttonIds).not.toContain('home-magazine-hero');
+    fireEvent.press(screen.getByTestId('home-hero-slide-2'));
 
-    fireEvent.press(hero);
-
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/explore', params: { region: '26' } }],
+    ]);
   });
 
   it('discovery 얼굴에서 종을 누르면 알림함으로 1회 간다', () => {
@@ -658,7 +777,7 @@ describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
     });
 
   beforeEach(() => {
-    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(10)));
+    lanePlaces(rankedPlaces(10));
   });
 
   it('서울 여행 중에 부산 고정 카드가 없고, 서버 장소 3장이 담긴 수 순(상위 4곳 다음)으로 나온다', () => {
@@ -726,12 +845,7 @@ describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
   });
 
   it('장소 조회 대기 중이면 컬렉션 스켈레톤이다(고정 카드를 대신 깔지 않는다)', () => {
-    mockUseGetPlaces.mockReturnValue({
-      data: undefined,
-      isPending: true,
-      isError: false,
-      refetch: jest.fn(),
-    });
+    lanePending();
 
     render(<HomePage />);
 
@@ -742,12 +856,7 @@ describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
 
   it('장소 조회 실패면 한 줄 재시도이고, 누르면 그 조회를 다시 부른다(침묵 금지)', () => {
     const refetch = jest.fn();
-    mockUseGetPlaces.mockReturnValue({
-      data: undefined,
-      isPending: false,
-      isError: true,
-      refetch,
-    });
+    laneError(refetch);
 
     render(<HomePage />);
     fireEvent.press(screen.getByTestId('home-collections-error'));
@@ -758,7 +867,7 @@ describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
   });
 
   it('뜨는 장소 4곳을 빼고 3곳이 안 남으면(6곳) 컬렉션 레인을 통째로 숨긴다', () => {
-    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(6)));
+    lanePlaces(rankedPlaces(6));
 
     render(<HomePage />);
 
@@ -772,7 +881,7 @@ describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
   });
 
   it('딱 7곳이면 3장이 찬다(경계)', () => {
-    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(7)));
+    lanePlaces(rankedPlaces(7));
 
     render(<HomePage />);
 
@@ -799,16 +908,24 @@ describe('지금 뜨는 장소', () => {
   }
 
   beforeEach(() => {
-    mockUseGetPlaces.mockReturnValue(placesOk(SIX));
+    lanePlaces(SIX);
     mockSave.mockResolvedValue({ kind: 'saved' });
     mockRemove.mockResolvedValue({ kind: 'removed' });
   });
 
   describe('조회 인자·고르기', () => {
-    it('여행이 없으면(discovery) 지역 없이 전국 200곳을 묻는다', () => {
+    // TRIP-1432 — 신규 사용자 레인은 서비스 지역(서울·부산·제주) 장소만. 지역 밖 장소를 주는 전국 조회는 안 쓴다.
+    it('여행이 없으면 서울·부산·제주 3곳을 묻고, 지역 없는 전국 조회는 나가지 않는다', () => {
+      placesResult = placesOk([place('out', '밀양 장소', 99)]);
+      multiResult = multiOk([place('in', '해운대 해변', 1)]);
+
       render(<HomePage />);
 
-      expect(lastPlacesParams()).toEqual({ limit: 200 });
+      expectServiceRegionQuery();
+      expect(
+        within(screen.getByTestId('home-spot-card-0')).getByText('해운대 해변')
+      ).toBeOnTheScreen();
+      expect(screen.queryByText('밀양 장소')).toBeNull();
     });
 
     it('여행 중이면 그 여행의 지역으로 200곳을 묻는다', () => {
@@ -842,12 +959,7 @@ describe('지금 뜨는 장소', () => {
   // TRIP-1049 AC-13
   describe('대기·실패·0건', () => {
     it('장소 조회 대기 중이면 스팟 스켈레톤을 보인다', () => {
-      mockUseGetPlaces.mockReturnValue({
-        data: undefined,
-        isPending: true,
-        isError: false,
-        refetch: jest.fn(),
-      });
+      lanePending();
 
       render(<HomePage />);
 
@@ -857,12 +969,7 @@ describe('지금 뜨는 장소', () => {
 
     it('장소 조회 실패면 한 줄 재시도이고, 누르면 그 조회를 다시 부른다', () => {
       const refetch = jest.fn();
-      mockUseGetPlaces.mockReturnValue({
-        data: undefined,
-        isPending: false,
-        isError: true,
-        refetch,
-      });
+      laneError(refetch);
 
       render(<HomePage />);
       fireEvent.press(screen.getByTestId('home-spots-error'));
@@ -872,7 +979,7 @@ describe('지금 뜨는 장소', () => {
     });
 
     it('0건이면 섹션을 숨긴다(더 보기 없음)', () => {
-      mockUseGetPlaces.mockReturnValue(placesOk([]));
+      lanePlaces([]);
 
       render(<HomePage />);
 
@@ -941,31 +1048,21 @@ describe('지금 뜨는 장소', () => {
   // 안 쓰일 전국 200행을 받는다. 두 번째 인자의 `query.enabled` 가 false 면 요청이 안 나가는 호출이다
   // (react-query 규칙) — 훅을 아예 안 부르는 구현도 통과한다(요청 0 이라는 결과가 같다).
   describe('여행 정보가 확정되기 전엔 장소 조회를 켜지 않는다', () => {
-    type PlacesCall = [unknown, { query?: { enabled?: boolean } } | undefined];
-
-    /** 요청이 실제로 나가는 호출만 — enabled 미지정은 켜짐(react-query 기본). */
-    function enabledPlacesCalls(): PlacesCall[] {
-      return (mockUseGetPlaces.mock.calls as PlacesCall[]).filter(
-        ([, options]) => options?.query?.enabled !== false
-      );
-    }
-
-    it('대기 중엔 켜진 조회 0건 · 여행 없음으로 확정되면 전국 조회가 켜진다', () => {
+    it('대기 중엔 켜진 조회 0건 · 여행 없음으로 확정되면 3지역 조회가 켜진다', () => {
       mockUseGetTrips.mockReturnValue(TRIPS_PENDING);
       const { rerender } = render(<HomePage />);
 
       expect(screen.getByTestId('home-collections-skeleton')).toBeOnTheScreen();
       expect(enabledPlacesCalls()).toHaveLength(0);
+      expect(enabledMultiCalls()).toHaveLength(0);
 
       mockUseGetTrips.mockReturnValue(tripsOk([]));
       rerender(<HomePage />);
 
-      const enabled = enabledPlacesCalls();
-      expect(enabled.length).toBeGreaterThan(0);
-      for (const [params] of enabled) expect(params).toEqual({ limit: 200 });
+      expectServiceRegionQuery();
     });
 
-    it('여행 중 사용자는 대기 → 도착 전 과정에서 전국 조회가 한 번도 켜지지 않는다', () => {
+    it('여행 중 사용자는 대기 → 도착 전 과정에서 전국·3지역 조회가 한 번도 켜지지 않는다', () => {
       mockUseGetTrips.mockReturnValue(TRIPS_PENDING);
       const { rerender } = render(<HomePage />);
       expect(enabledPlacesCalls()).toHaveLength(0);
@@ -979,18 +1076,159 @@ describe('지금 뜨는 장소', () => {
       for (const [params] of enabled) {
         expect(params).toEqual({ region: '부산', limit: 200 });
       }
+      expect(enabledMultiCalls()).toHaveLength(0);
     });
 
-    it('여행 조회가 실패해도(발견 얼굴 폴백) 전국 조회는 켜진다 — 스팟이 영원히 스켈레톤이 되지 않게', () => {
+    it('여행 조회가 실패해도(발견 얼굴 폴백) 3지역 조회는 켜진다 — 스팟이 영원히 스켈레톤이 되지 않게', () => {
       mockUseGetTrips.mockReturnValue(TRIPS_ERROR);
 
       render(<HomePage />);
 
-      const enabled = enabledPlacesCalls();
-      expect(enabled.length).toBeGreaterThan(0);
-      expect(enabled[enabled.length - 1][0]).toEqual({ limit: 200 });
+      expectServiceRegionQuery();
       expect(screen.getByTestId('home-spot-card-0')).toBeOnTheScreen();
     });
+  });
+});
+
+// TRIP-1432 — 여행 중이 아닌 얼굴(여행 없음·여행 전·여행 후)의 장소 레인은 서비스 지역 3곳 조회이고, 사진 있는
+// 곳을 먼저, 그 안에서 지역을 번갈아 세운다(각 지역 안은 담긴 수 순). 여행 중은 그 여행 지역 1곳 조회 그대로다.
+describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
+  /** 담긴 수·사진·시도 코드를 정한 장소. 이름이 곧 poiId 다. */
+  function lanePlace(
+    nameKo: string,
+    regionCode: string,
+    savedCount: number,
+    photo: boolean
+  ): Place {
+    return {
+      ...place(nameKo, nameKo, savedCount),
+      regionCode,
+      imageUrl: photo ? `https://img.example/${nameKo}.jpg` : null,
+    };
+  }
+
+  /** 레인 카드 i 의 장소 이름(카드 안에 이름이 있는지로 가린다). */
+  function cardNames(prefix: string, names: string[], count: number) {
+    return Array.from({ length: count }, (_, i) => {
+      const card = within(screen.getByTestId(`${prefix}-${i}`));
+      return names.find((name) => card.queryByText(name) !== null);
+    });
+  }
+
+  it('여행 전 얼굴의 컬렉션도 3지역 조회 결과다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
+    placesResult = placesOk(rankedPlaces(7));
+    multiResult = multiOk(
+      rankedPlaces(7).map((p, i) => ({ ...p, nameKo: `지역장소${i}` }))
+    );
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expectServiceRegionQuery();
+    expect(
+      within(screen.getByTestId('home-collection-card-0')).getByText(
+        '지역장소4'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('실장소4')).toBeNull();
+  });
+
+  it('여행 후 얼굴의 추천도 3지역 조회 결과다', () => {
+    const end = addDays(seoulDate(new Date()), -1);
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([
+        trip({
+          tripId: TRIP_ID,
+          status: 'ENDED',
+          startDate: addDays(end, -2),
+          endDate: end,
+        }),
+      ])
+    );
+    placesResult = placesOk(rankedPlaces(7));
+    multiResult = multiOk(
+      rankedPlaces(7).map((p, i) => ({ ...p, nameKo: `지역장소${i}` }))
+    );
+
+    render(<HomePage />);
+
+    expect(screen.getByText('다음엔 여기 어때요')).toBeOnTheScreen();
+    expectServiceRegionQuery();
+    expect(
+      within(screen.getByTestId('home-collection-card-0')).getByText(
+        '지역장소4'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('여행 중이면 그 여행 지역 1곳만 묻고 3지역 조회는 켜지지 않는다 — 카드는 그 지역 장소다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([travelingTrip()]));
+    placesResult = placesOk([place('busan', '부산 장소', 3)]);
+    multiResult = multiOk([place('seoul', '서울 장소', 9)]);
+
+    render(<HomePage />);
+
+    for (const [params] of enabledPlacesCalls()) {
+      expect(params).toEqual({ region: '부산', limit: 200 });
+    }
+    expect(enabledMultiCalls()).toHaveLength(0);
+    expect(
+      within(screen.getByTestId('home-spot-card-0')).getByText('부산 장소')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-spots-skeleton')).toBeNull();
+  });
+
+  // 서버 순서(지역 안 이름순)와 담긴 수 순서를 일부러 다르게 둔다 — 담긴 수 정렬을 빼먹으면 서울2 가 먼저 온다.
+  it('사진 있는 곳이 먼저, 그 안에서 지역을 번갈아, 지역 안은 담긴 수 순 — 앞 4장은 뜨는 장소, 다음 3장은 컬렉션', () => {
+    const names = [
+      '서울1',
+      '서울2',
+      '서울3',
+      '부산1',
+      '부산2',
+      '제주1',
+      '제주2',
+    ];
+    multiResult = multiOk([
+      lanePlace('서울2', '11110', 80, true),
+      lanePlace('서울3', '11140', 85, false),
+      lanePlace('서울1', '11680', 90, true),
+      lanePlace('부산1', '26350', 70, true),
+      lanePlace('부산2', '26110', 60, false),
+      lanePlace('제주1', '50110', 50, true),
+      lanePlace('제주2', '50130', 40, true),
+    ]);
+
+    render(<HomePage />);
+
+    expect(cardNames('home-spot-card', names, 4)).toEqual([
+      '서울1',
+      '부산1',
+      '제주1',
+      '서울2',
+    ]);
+    expect(cardNames('home-collection-card', names, 3)).toEqual([
+      '제주2',
+      '서울3',
+      '부산2',
+    ]);
+  });
+
+  it('3곳 중 일부만 실패(부분 실패)해도 받은 장소로 레인을 채우고 오류를 띄우지 않는다', () => {
+    placesResult = { ...PLACES_DISABLED };
+    multiResult = multiOk(
+      [place('a', '해운대 해변', 2), place('b', '성산일출봉', 1)],
+      true
+    );
+
+    render(<HomePage />);
+
+    expect(
+      within(screen.getByTestId('home-spot-card-0')).getByText('해운대 해변')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-spots-error')).toBeNull();
+    expect(screen.queryByTestId('home-collections-error')).toBeNull();
   });
 });
 
@@ -1010,7 +1248,7 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
   }
 
   beforeEach(() => {
-    mockUseGetPlaces.mockReturnValue(placesOk([]));
+    lanePlaces([]);
   });
 
   describe('일정이 정착하면 그 상태의 화면으로 1회 간다', () => {

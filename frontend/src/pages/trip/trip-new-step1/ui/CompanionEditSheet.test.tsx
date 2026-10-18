@@ -85,14 +85,15 @@ describe('AC-1 · 스테퍼·유형 칩 4종 렌더', () => {
 });
 
 describe('AC-2 · 스테퍼 증감 → onChangeParty(절대값)', () => {
-  it('+/− 가 현재±1 의 절대 인원으로 콜백한다 (비-혼자, party>1)', () => {
-    const spies = renderSheet({ party: 2, companionType: '친구' });
+  // TRIP-1423 — 친구는 2명 이상이라 2명에서는 − 가 잠긴다. 양쪽이 다 눌리는 3명으로 잰다.
+  it('+/− 가 현재±1 의 절대 인원으로 콜백한다 (친구 3명)', () => {
+    const spies = renderSheet({ party: 3, companionType: '친구' });
 
     fireEvent.press(screen.getByTestId('trip-wizard-companion-party-inc'));
-    expect(spies.onChangeParty).toHaveBeenLastCalledWith(3);
+    expect(spies.onChangeParty).toHaveBeenLastCalledWith(4);
 
     fireEvent.press(screen.getByTestId('trip-wizard-companion-party-dec'));
-    expect(spies.onChangeParty).toHaveBeenLastCalledWith(1);
+    expect(spies.onChangeParty).toHaveBeenLastCalledWith(2);
   });
 });
 
@@ -131,8 +132,8 @@ describe('AC-2 · ★ 혼자 → party 1 고정 + 스테퍼(−·+) 둘 다 진�
     expect(spies.onChangeParty).not.toHaveBeenCalled();
   });
 
-  it('짝(재활성) — 혼자가 아니면(친구) −·+ 둘 다 활성이라 눌린다', () => {
-    const spies = renderSheet({ party: 2, companionType: '친구' });
+  it('짝(재활성) — 혼자가 아니면(친구 3명) −·+ 둘 다 활성이라 눌린다', () => {
+    const spies = renderSheet({ party: 3, companionType: '친구' });
 
     const dec = screen.getByTestId('trip-wizard-companion-party-dec');
     const inc = screen.getByTestId('trip-wizard-companion-party-inc');
@@ -215,4 +216,63 @@ describe('AC-4 · 적용 → onApply 만 (편집 콜백 없음)', () => {
     expect(spies.onChangeParty).not.toHaveBeenCalled();
     expect(spies.onSelectCompanion).not.toHaveBeenCalled();
   });
+});
+
+// TRIP-1423 (Q-059) — 유형마다 인원 범위가 있다: 혼자 1 · 연인 2 고정, 친구·가족 2명 이상, 미선택은 1명 이상.
+// 인원을 범위 안으로 옮기는 것은 배선(TripNewStep1Page)이고, 시트는 범위 끝에서 −·+ 를 진짜 disabled 로 그리기만 한다.
+// 기대값은 손으로 적은 표다(규칙 함수를 import 하지 않는다 — 같이 틀리면 같이 green 이 된다).
+describe('TRIP-1423 · 유형별 인원 범위 — 범위 끝의 −·+ 는 진짜 disabled', () => {
+  it.each([
+    ['연인', 2, true, true, []],
+    ['친구', 2, true, false, [[3]]],
+    ['가족', 2, true, false, [[3]]],
+    ['친구', 3, false, false, [[2], [4]]],
+    ['가족', 5, false, false, [[4], [6]]],
+    ['혼자', 1, true, true, []],
+    [undefined, 1, true, false, [[2]]],
+    [undefined, 2, false, false, [[1], [3]]],
+  ] as [CompanionType | undefined, number, boolean, boolean, number[][]][])(
+    '%s %i명 — − disabled=%s · + disabled=%s, 둘 다 누르면 활성 쪽 콜백만 온다',
+    (companionType, party, decDisabled, incDisabled, expectedCalls) => {
+      const spies = renderSheet({ party, companionType });
+      const dec = screen.getByTestId('trip-wizard-companion-party-dec');
+      const inc = screen.getByTestId('trip-wizard-companion-party-inc');
+
+      // 매처 — disabled 표시
+      if (decDisabled) expect(dec).toBeDisabled();
+      else expect(dec).not.toBeDisabled();
+      if (incDisabled) expect(inc).toBeDisabled();
+      else expect(inc).not.toBeDisabled();
+
+      // press — 늘 − 먼저, + 다음
+      fireEvent.press(dec);
+      fireEvent.press(inc);
+
+      // 콜백 — 진짜 disabled 면 안 온다(accessibilityState 만 세운 가짜는 여기서 red)
+      expect(spies.onChangeParty.mock.calls).toEqual(expectedCalls);
+    }
+  );
+});
+
+// TRIP-1423 (UX-05) — 아이콘만 있는 −·+ 는 라벨이 없으면 화면 낭독기가 "버튼"이라고만 읽는다.
+describe('TRIP-1423 · 인원 스테퍼 접근성 라벨 — "인원 줄이기" · "인원 늘리기"', () => {
+  it.each([
+    ['친구 3명(둘 다 활성)', 3, '친구'],
+    ['혼자 1명(둘 다 disabled)', 1, '혼자'],
+  ] as [string, number, CompanionType][])(
+    '%s — 라벨로 찾은 버튼이 −·+ testID 의 그 버튼이고, 라벨 문자열이 정확하다',
+    (_label, party, companionType) => {
+      renderSheet({ party, companionType });
+
+      const dec = screen.getByTestId('trip-wizard-companion-party-dec');
+      const inc = screen.getByTestId('trip-wizard-companion-party-inc');
+
+      // 같은 요소 — 라벨을 다른 View 에 붙이면 여기서 red
+      expect(screen.getByRole('button', { name: '인원 줄이기' })).toBe(dec);
+      expect(screen.getByRole('button', { name: '인원 늘리기' })).toBe(inc);
+      // 문자열 — role 이름은 자식 글자로도 맞춰지므로 prop 을 직접 본다
+      expect(dec.props.accessibilityLabel).toBe('인원 줄이기');
+      expect(inc.props.accessibilityLabel).toBe('인원 늘리기');
+    }
+  );
 });

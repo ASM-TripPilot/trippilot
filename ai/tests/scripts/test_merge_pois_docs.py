@@ -476,3 +476,24 @@ def test_reject_가_없으면_목록을_건드리지_않는다(tmp_path) -> None
     path = _verdict_file(tmp_path, {"a": {"verdict": "accept", "prompt": "4"}})
     assert drop_rejected_verdicts(props, path) == 0
     assert len(props) == 1
+
+
+# ── 클럽은 웹 큐레이션(KAKAO_LOCAL) 것만 (2026-10-18) ─────────────────────
+def _tagged(source: str, cid: str, tags: list[str]) -> dict:
+    p = _keyed_doc(source, cid)["proposals"][0]
+    p["tags"] = tags
+    return p
+
+
+def test_클럽은_큐레이션_출처만_남고_다른_나이트라이프는_그대로다() -> None:
+    props = [_tagged("OVERTURE", "a", ["나이트라이프", "클럽"]),
+             _tagged("KAKAO_LOCAL", "1", ["나이트라이프", "클럽"]),
+             _tagged("OVERTURE", "b", ["나이트라이프", "와인바"])]
+    assert M.drop_bad_nightlife(props) == 1
+    assert [p["provenance"]["content_id"] for p in props] == ["1", "b"]
+
+
+def test_큐레이션_목록은_항목마다_근거가_있다() -> None:
+    """이름은 사람이 웹에서 골랐다 — 근거 없는 항목은 '인기'라는 주장의 출처가 없다."""
+    seed = json.loads((_DATA / "curated_popular_places.json").read_text(encoding="utf-8"))
+    assert all(s["evidence"] in seed["evidence"] for s in seed["places"])

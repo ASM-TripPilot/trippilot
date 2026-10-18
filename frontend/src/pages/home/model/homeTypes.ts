@@ -56,7 +56,7 @@ export interface HomeSpotsLane {
   onDismissSaveError?: () => void;
 }
 
-/** 상단 영감 카드(magazineHero) — 상태와 무관한 고정 블록(3상태 모두 렌더). */
+/** 상단 히어로 도시 카드 1장(TRIP-1432 서울·부산·제주) — 상태와 무관한 고정 블록(3상태 모두 렌더). */
 export interface HomeMagazineHero {
   /** '오늘의 여행 영감' — eyebrow pill 라벨 */
   eyebrow: string;
@@ -66,8 +66,10 @@ export interface HomeMagazineHero {
   subtitle: string;
   /** ['당일치기로 충분', '야경 명소'] — 반투명 흰 메타칩 */
   chips: readonly string[];
-  /** 히어로 배경 사진 URI(TRIP-694). jest·웹에선 null(사진 자리 토큰 tint). */
-  imageUrl?: string | null;
+  /** 도시 카드의 시도 코드(TRIP-1432) — 있으면 카드는 구조로 버튼이고, press 는 이 코드로 탐색 탭을 연다. */
+  regionCode?: string;
+  /** 도시 카드 배경 번들 그림(TRIP-1432) — `assets/region-covers/hero/{code}.webp`. */
+  coverSource?: ImageSourcePropType | null;
 }
 
 /**
@@ -246,12 +248,8 @@ export interface HomeScreenProps {
   onPressTripHeroCta?: () => void;
   /** 검색바 press → 통합 검색(d05, `/explore/search`, TRIP-453) */
   onPressSearch?: () => void;
-  /**
-   * discovery 캐러셀 page0(매거진 히어로) press → a02 매거진 목록(`/magazine`, TRIP-700). 옵셔널
-   * additive(test-designer 컴파일용 타입 선언 선반영, TRIP-695 선례) — 콜백 미주입 호출부
-   * (`_dev/preview.tsx`·버튼-집합 테스트)도 깨지지 않는다. 라우팅은 `(tabs)/index.tsx` 가 진다.
-   */
-  onPressMagazine?: () => void;
+  /** 히어로 도시 카드 press → 그 카드의 `regionCode` 로 1회(TRIP-1432). 라우팅은 page 가 진다. */
+  onPressHeroCity?: (regionCode: string) => void;
   /** 인사 헤더 종 press → 알림함(TRIP-939). 라우팅은 `(tabs)/index.tsx` 가 진다. */
   onPressBell?: () => void;
   /**

@@ -281,7 +281,7 @@ describe('🔴 RT-2 · TRIP-1263 AC-2·AC-3 — 생성 성공 착지와 다시 �
     expect(landing()).toEqual(HOME_LANDING);
   });
 
-  it('초안의 "다시 짜기"(확인창 없이 replace 1회)로 다시 연 생성 화면도 (tabs) 바로 위다', async () => {
+  it('초안의 "다시 짜기"(확인 뒤 replace 1회)로 다시 연 생성 화면도 (tabs) 바로 위다', async () => {
     // 준비 — 완전 AI 로 생성 → 초안 착지.
     await openMustVisits();
     fireEvent.press(screen.getByTestId(PROCEED));

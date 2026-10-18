@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useRef } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -30,44 +31,49 @@ const COLUMN_HEIGHT = CELL_HEIGHT * VISIBLE_ROWS;
 const PAD = CELL_HEIGHT * PAD_ROWS;
 
 export interface WheelPickerProps {
-  /** 표시할 값들(h07: `startTimeOptions()`, 48개 HH:mm). */
+  /** 표시할 값들(예: 시 열 00~23). */
   values: string[];
-  /** 현재 선택값(h07: `form.fixedStart`). null 이면 선택 셀 없음. */
+  /** 현재 선택값. null 이면 선택 셀 없음. */
   selected: string | null;
-  /** 셀 press 또는 스크롤 정지 시 가운데 값(h07: `onPickStart`). */
+  /** 선택값이 없을 때 휠을 세울 값(TRIP-1437) — 위치만 옮기고 선택 표시·onSelect 는 없다. 없으면 맨 위. */
+  anchor?: string;
+  /** 셀 press 또는 스크롤 정지 시 가운데 값. */
   onSelect: (value: string) => void;
-  /** 값 → 표시 문자열. 없으면 값 그대로(h07: `startTimeLabel`). */
+  /** 값 → 표시 문자열. 없으면 값 그대로. */
   renderLabel?: (value: string) => string;
-  /** 값 → 셀 testID. 없으면 testID 없음(h07: `itinerary-mustvisit-time-start-option-${v}`). */
+  /** 값 → 셀 testID. 없으면 testID 없음. */
   testIDForValue?: (value: string) => string;
   /** 휠 ScrollView 의 testID(스크롤 정지 이벤트를 쏠 손잡이). */
   testID?: string;
-  /** 닫힌 휠 — 스크롤·셀 press·정지 확정이 모두 꺼지고 선택 표시가 없다. 기본 false(TRIP-1080). */
-  disabled?: boolean;
 }
 
 export function WheelPicker({
   values,
   selected,
+  anchor,
   onSelect,
   renderLabel,
   testIDForValue,
   testID,
-  disabled = false,
 }: WheelPickerProps): ReactElement {
-  // 선택값을 가운데로 — 위 패딩이 PAD 라 인덱스*셀높이만큼 밀면 그 셀이 가운데 밴드에 온다(없으면
-  // 맨 위). contentOffset 은 처음 한 번만이 아니라 **값이 바뀔 때마다** 네이티브가 그 위치로 옮긴다
-  // (RN 0.81 iOS Fabric·Android 모두). 그래서 selected 가 바뀌면 휠도 따라 움직인다. 관성은 6-b.
+  // 선택값(없으면 anchor)을 가운데로 — 위 패딩이 PAD 라 인덱스*셀높이만큼 밀면 그 셀이 가운데 밴드에
+  // 온다(둘 다 목록에 없으면 맨 위). anchor 는 위치만 옮긴다 — 선택 표시·onSelect 는 selected 몫이다(TRIP-1437).
+  // contentOffset 은 iOS Fabric 에서 **prop 값이 달라질 때만** 다시 적용된다. 그리고 재활용된
+  // 네이티브 스크롤뷰는 옛 크기를 들고 마운트돼 첫 오프셋이 잘릴 수 있다(TRIP-1417 Q-100). 그래서
+  // 크기가 확정된 뒤(onLayout) 같은 위치로 한 번 더 scrollTo 한다. 실제로 맞는지는 6-b 실기.
   const selectedIndex = selected === null ? -1 : values.indexOf(selected);
-  const selectedOffset = selectedIndex < 0 ? 0 : selectedIndex * CELL_HEIGHT;
+  const restIndex =
+    selectedIndex >= 0 || anchor === undefined
+      ? selectedIndex
+      : values.indexOf(anchor);
+  const selectedOffset = restIndex < 0 ? 0 : restIndex * CELL_HEIGHT;
+  const scrollRef = useRef<ScrollView>(null);
 
   // 멈춘 위치 y 는 selectedOffset 과 같은 좌표계라 y / 셀높이 를 반올림하면 가운데 칸이다. 양 끝을
   // 넘은 값(바운스)은 첫/마지막 값으로 자른다. contentOffset 만 쓴다(다른 측정값은 jest 에 없다).
   const handleSettle = (
     event: NativeSyntheticEvent<NativeScrollEvent>
   ): void => {
-    // 스크롤 이벤트는 scrollEnabled 와 무관하게 올 수 있어(jest 는 항상 쏜다) 핸들러에서 버린다.
-    if (disabled) return;
     const raw = Math.round(event.nativeEvent.contentOffset.y / CELL_HEIGHT);
     const index = Math.min(Math.max(raw, 0), values.length - 1);
     const value = values[index];
@@ -78,8 +84,11 @@ export function WheelPicker({
     <View className="w-full items-center">
       <View className="relative w-full" style={{ height: COLUMN_HEIGHT }}>
         <ScrollView
+          ref={scrollRef}
           testID={testID}
-          scrollEnabled={!disabled}
+          onLayout={() =>
+            scrollRef.current?.scrollTo({ y: selectedOffset, animated: false })
+          }
           onMomentumScrollEnd={handleSettle}
           showsVerticalScrollIndicator={false}
           snapToInterval={CELL_HEIGHT}
@@ -88,14 +97,13 @@ export function WheelPicker({
           contentContainerStyle={{ paddingVertical: PAD }}
         >
           {values.map((value) => {
-            const isSelected = !disabled && value === selected;
+            const isSelected = value === selected;
             return (
               <Pressable
                 key={value}
                 testID={testIDForValue?.(value)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
-                disabled={disabled}
                 onPress={() => onSelect(value)}
                 style={{ height: CELL_HEIGHT }}
                 className="w-full items-center justify-center"

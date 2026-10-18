@@ -132,6 +132,34 @@ function renderedText(): string {
   return out.join(' ');
 }
 
+/**
+ * 한 노드 아래 **호스트**(`Text` 등) 노드의 문자열 자식을 트리 순서대로 모은다(TRIP-1424 — 확인 얼굴 글자 전부 대조).
+ * 호스트만 보는 이유: 합성 컴포넌트(`Text` 래퍼)도 같은 children 을 들고 있어 전부 보면 글자가 두 번씩 잡힌다(02a §5 V5).
+ */
+function textsIn(node: ReturnType<typeof screen.getByTestId>): string[] {
+  const out: string[] = [];
+  node
+    .findAll((child) => typeof child.type === 'string')
+    .forEach((child) => {
+      const children = child.props?.children as unknown;
+      const list = Array.isArray(children) ? children : [children];
+      list.forEach((one) => {
+        if (typeof one === 'string') out.push(one);
+      });
+    });
+  return out;
+}
+
+/** TRIP-1424 · 셸 [다시 짜기] 확인 얼굴 계약(02a §3-2). */
+const REGEN_CONFIRM = 'itinerary-regenerate-confirm';
+const REGEN_PROCEED = 'itinerary-regenerate-proceed';
+const REGEN_CANCEL = 'itinerary-regenerate-cancel';
+const REGEN_TITLE = '일정을 다시 짤까요?';
+const REGEN_DESC_GENERATE =
+  '다시 짜면 직접 바꾼 내용은 사라질 수 있어요 · 오늘 AI 생성 횟수를 1회 써요';
+const REGEN_DESC_REPLAN =
+  '다시 짜면 직접 바꾼 내용은 사라질 수 있어요 · 새로 짠 일정이 바로 반영돼요';
+
 /** 초안 페이지를 `retry:false`·`gcTime:0` 클라이언트 아래에 그린다 — 폴링 타이머가 종료 뒤에도 프로세스를 붙잡지 않게. */
 function renderPage(tripId: string = TRIP_ID) {
   return renderWithQueryClient(
@@ -487,6 +515,8 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       // TRIP-1037 — 초안 화면은 이제 어떤 경우에도 POST 를 안 보내 위 단언만으론 공허하다. 확정 가드의
       // 실체는 "생성 화면으로 보내지 않는다" 다(생성 화면이 마운트되면 POST 가 나가 확정이 풀린다).
       expect(generatingMoves()).toBe(0);
+      // TRIP-1424 01b Q1=A — 확정 + 여행 기간 밖은 갈 길이 없다. 눌러도 아무 일 없는 확인 화면을 얹지 않는다.
+      expect(screen.queryByTestId('itinerary-regenerate-confirm')).toBeNull();
     });
   });
 
@@ -495,6 +525,9 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
    * 사용자 결정). 그 화면이 재계획(Plan-B → ScheduleAgent)을 돌려 바로 반영하고 추천안으로 온다(GeneratingPage
    * 「재계획 모드」). 보던 날이 오늘 뒤면 그 날을 싣는다. 생성 실패(FAILED)·MANUAL·여행 전후는 종전 그대로다.
    * 날짜는 실제 오늘(KST) 기준 — 페이지가 벽시계로 판정한다.
+   *
+   * TRIP-1424 — 셸 [다시 짜기]는 이제 확인 얼굴을 먼저 띄운다. 그 얼굴의 [다시 짜기]를 눌러야 아래 기대값의
+   * 이동이 일어난다(기대값은 그대로 — "확인을 거쳐도 지금의 이동과 같다", AC-3). 그래서 누르는 동작만 하나 늘었다.
    */
   describe('🔴 P1~P4 — 여행 중 다시 짜기: 확정·초안 모두 생성 화면 재계획 모드 (모달 없음)', () => {
     const today = seoulDate(new Date());
@@ -513,9 +546,15 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
 
     afterEach(() => resetToast());
 
+    /** 셸 [다시 짜기] → 확인 얼굴의 [다시 짜기](TRIP-1424). 셸 CTA 만 누르면 이제 확인이 뜰 뿐 이동하지 않는다. */
+    function proceedRegenerate(): void {
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      fireEvent.press(screen.getByTestId('itinerary-regenerate-proceed'));
+    }
+
     async function pressRetry(): Promise<void> {
       await screen.findByTestId('map-sheet-shell-root');
-      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      proceedRegenerate();
     }
 
     it('P1 초안은 여행 중이면 생성 화면 재계획 모드로 replace 1회 · 모달 push 0 · 이 화면 POST 0', async () => {
@@ -564,7 +603,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
         '2일차'
       );
-      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      proceedRegenerate();
 
       await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       expect(mockReplace).toHaveBeenCalledWith({
@@ -587,7 +626,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       expect(await screen.findByTestId('sheet-header-day')).toHaveTextContent(
         '2일차'
       );
-      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      proceedRegenerate();
 
       await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
       expect(mockReplace).toHaveBeenCalledWith({
@@ -659,6 +698,129 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       });
       expect(mockPush).not.toHaveBeenCalled();
     });
+  });
+
+  /**
+   * TRIP-1424 · 셸 [다시 짜기]는 곧장 다시 짜지 않고 **확인 얼굴**을 먼저 띄운다(BR-U3-18 · 결정 1=A — 두 길 모두).
+   *
+   * 무엇을 보장하나:
+   *  - 🔴 RG1 확인 얼굴이 셸을 **갈아 끼운다**(오버레이가 아니라 얼굴 교체 — jest 가 실제 트리로 잴 수 있다, 01b Q4).
+   *    확인 전엔 생성 화면 이동·생성 POST 가 0이다.
+   *  - 🔴 RG2 [취소]면 셸로 돌아오고, 다시 누르면 확인이 또 뜬다(잠금이 남지 않는다).
+   *  - 🔴 RG3 확인 문구가 **실제로 갈 길과 같다** — 생성 길이면 "오늘 AI 생성 횟수를 1회 써요", 재계획 길이면 "새로 짠
+   *    일정이 바로 반영돼요". 문구와 이동을 한 `it` 에서 재서, 판정이 두 벌로 갈리면 바로 red 다(02a ★2).
+   *    확인 얼굴의 글자는 네 줄뿐이다 — 남은 횟수 숫자·소요시간이 끼면 red(AC-4 · AC-9, 02a ★3).
+   *
+   * 3동작 뼈대: 준비 = 여행 기간·일정 상태 → 실행 = 셸 [다시 짜기] → (확인 얼굴 읽기) → [다시 짜기]/[취소]
+   * → 단언 = 보이는 얼굴·글자·라우터 호출·나간 POST.
+   */
+  describe('🔴 RG1~RG3 · TRIP-1424 — 셸 [다시 짜기]는 확인 얼굴을 먼저 띄운다', () => {
+    const today = seoulDate(new Date());
+    const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const inTripDays = daysOf([today, tomorrow], (date) => [
+      slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+    ]);
+
+    it('RG1 깨끗한 COMPLETE 셸에서 [다시 짜기] → 확인 얼굴이 셸을 갈아 끼우고, 이동·POST 는 0', async () => {
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      expect(screen.getByTestId(REGEN_CONFIRM)).toBeOnTheScreen();
+      expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+      await sleep(50);
+      expect(generatingMoves()).toBe(0);
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+    });
+
+    it('RG2 [취소] → 셸로 돌아오고 이동 0 · 다시 [다시 짜기]를 누르면 확인이 또 뜬다', async () => {
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      fireEvent.press(screen.getByTestId(REGEN_CANCEL));
+
+      expect(
+        await screen.findByTestId('map-sheet-shell-root')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(REGEN_CONFIRM)).toBeNull();
+
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      expect(screen.getByTestId(REGEN_CONFIRM)).toBeOnTheScreen();
+      await sleep(50);
+      expect(generatingMoves()).toBe(0);
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+    });
+
+    it.each<{
+      name: string;
+      period: () => Trip;
+      plan: () => Itinerary;
+      description: string;
+      params: Record<string, string>;
+    }>([
+      {
+        name: '여행 기간 밖 → 생성 길',
+        period: () => trip(),
+        plan: () =>
+          itinerary({ days: daysUpTo(3), generationState: 'COMPLETE' }),
+        description: REGEN_DESC_GENERATE,
+        params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+      },
+      {
+        name: '여행 중 → 재계획 길',
+        period: () => trip({ startDate: today, endDate: tomorrow }),
+        plan: () =>
+          itinerary({ days: inTripDays, generationState: 'COMPLETE' }),
+        description: REGEN_DESC_REPLAN,
+        params: { tripId: TRIP_ID, replan: '1' },
+      },
+      {
+        name: '여행 중이어도 생성 실패(FAILED) → 생성 길',
+        period: () => trip({ startDate: today, endDate: tomorrow }),
+        plan: () => itinerary({ days: inTripDays, generationState: 'FAILED' }),
+        description: REGEN_DESC_GENERATE,
+        params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+      },
+    ])(
+      'RG3 $name — 확인 글자가 그 길의 문구 네 줄뿐이고, [다시 짜기]면 그 길로 replace 1회',
+      async ({ period, plan, description, params }) => {
+        tripScript = period;
+        itineraryScript = plan;
+        renderPage();
+        await screen.findByTestId('map-sheet-shell-root');
+
+        fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+        // 확인 얼굴의 글자 전부 — 제목 · 그 길의 설명 · 버튼 둘. 남은 횟수·소요시간이 끼면 여기서 red(AC-4 · AC-9).
+        expect(textsIn(screen.getByTestId(REGEN_CONFIRM))).toEqual([
+          REGEN_TITLE,
+          description,
+          '다시 짜기',
+          '취소',
+        ]);
+        expect(screen.getByTestId(REGEN_PROCEED)).toHaveTextContent(
+          '다시 짜기'
+        );
+        expect(screen.getByTestId(REGEN_CANCEL)).toHaveTextContent('취소');
+
+        fireEvent.press(screen.getByTestId(REGEN_PROCEED));
+
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+        expect(mockReplace).toHaveBeenCalledWith({
+          pathname: '/trips/[tripId]/itinerary/generating',
+          params,
+        });
+        await sleep(50);
+        expect(generatingMoves()).toBe(1);
+        expect(mockPush).not.toHaveBeenCalled();
+        expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+      }
+    );
   });
 
   describe('🔴 I11 · TRIP-790 D9 — 생성 중(PARTIAL)엔 확정/완성 CTA 가 없다 (계약 플립)', () => {
@@ -2218,6 +2380,30 @@ describe('폴백 셸', () => {
     });
   });
 
+  // TRIP-1424 AC-1 — 폴백 셸(「기본 일정」)의 [다시 짜기]도 깨끗한 셸과 같은 확인을 먼저 띄운다.
+  describe('🔴 RG5 · 폴백 셸 「기본 일정」의 [다시 짜기]도 확인 얼굴을 먼저 띄운다', () => {
+    it('기본 일정 보기 → 셸 [다시 짜기] → 확인 얼굴 · 이동 0', async () => {
+      itineraryScript = () =>
+        itinerary({ solveMode: 'DETERMINISTIC', isFallback: true });
+      mockReplace.mockClear();
+
+      await openFallbackShell();
+      // 앵커 — 폴백 셸에 닿았다(제목 「기본 일정」).
+      expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+        FALLBACK_TITLE
+      );
+
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      expect(screen.getByTestId(REGEN_CONFIRM)).toBeOnTheScreen();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+  });
+
   /* ───────────── TRIP-1174 · 후보 부족(LOW)은 "AI 가 쉬었다"가 아니다 ─────────────
    * 후보 요약 `level` 이 조용한 값(OK·HIGH)이 아닌데 AI 는 정상으로 끝난(FULL_AI·isFallback=false) 응답.
    * 옛 화면은 이걸 폴백과 같은 얼굴(인터스티셜 → 「기본 일정」 + 「취향 반영 없이 만든 기본 일정이에요」)로
@@ -3534,6 +3720,29 @@ describe('다시 만들기 연타 잠금', () => {
   const HEADER_RETRY = 'itinerary-draft-retry';
   const CONFIRM = 'itinerary-draft-inprogress-confirm';
 
+  /** TRIP-1424 — 셸 [다시 짜기]는 확인 얼굴을 연다. 그 얼굴이 뜰 때까지(동기) 누른다. */
+  function openRegenerateConfirm(): void {
+    fireEvent.press(screen.getByTestId(CTA0));
+    expect(screen.getByTestId(REGEN_CONFIRM)).toBeOnTheScreen();
+  }
+
+  /**
+   * TRIP-1424 · L2 — 진행을 누른 **뒤**의 다시 누름. jest 라우터 목은 화면을 안 내려서 진행 뒤에도 무엇인가 남는다.
+   * 확인 얼굴이 남았으면 그 [다시 짜기]를, 셸로 돌아왔으면 셸 [다시 짜기]를 누르고 확인이 다시 뜨면 그것까지 누른다.
+   * 어느 쪽이 남는지·셸이 확인을 다시 여는지는 잠금 방식에 따라 다르고 둘 다 정답이다(실기에선 replace 가 화면을
+   * 내려 이 누름이 없다). 분기는 **동작에만** 있고, 단언은 "이동 1회" 하나다(02a ★5).
+   */
+  function pressRegenerateAgain(): void {
+    const stillOpen = screen.queryByTestId(REGEN_PROCEED);
+    if (stillOpen !== null) {
+      fireEvent.press(stillOpen);
+      return;
+    }
+    fireEvent.press(screen.getByTestId(CTA0));
+    const reopened = screen.queryByTestId(REGEN_PROCEED);
+    if (reopened !== null) fireEvent.press(reopened);
+  }
+
   /** 기본 — 깨끗한 COMPLETE 3일(각 날 슬롯 하나), 세션 없음. 케이스가 정하는 것은 분기 신호뿐이다. */
   function planned(over: Partial<Itinerary> = {}): Itinerary {
     return itinerary({
@@ -3628,18 +3837,21 @@ describe('다시 만들기 연타 잠금', () => {
     });
   }
 
+  // TRIP-1424 — L1·L2·L3·L11 은 셸 [다시 짜기] 뒤에 확인 얼굴의 [다시 짜기]를 한 번 더 누른다(기대값은 그대로).
   describe('🔴 L1 · AC-1 — 누르면 그 자리에서 생성 화면으로 replace 하고, 초안 화면은 POST 하지 않는다', () => {
     it.each<ItineraryGenerationMode>(['FULLY_AI', 'CO_PLAN'])(
-      '%s 초안 — 다시 짜기 press 직후 replace 1회(mode=FULLY_AI) · POST 0',
+      '%s 초안 — 다시 짜기 → 확인 [다시 짜기] press 직후 replace 1회(mode=FULLY_AI) · POST 0',
       async (generationMode) => {
         itineraryScript = () => planned({ generationMode });
         renderPage();
         const retry = await screen.findByTestId(CTA0, {}, WAIT);
         expect(retry).toHaveTextContent('다시 짜기');
 
-        fireEvent.press(retry);
+        openRegenerateConfirm();
+        fireEvent.press(screen.getByTestId(REGEN_PROCEED));
 
         // ★ 기다리지 않고 곧바로 — 응답을 기다린 뒤 이동하면 그동안 화면이 아무 말도 안 한다(INV-4 · 02a ★9).
+        //   확인 버튼 뒤에도 같다 — 셸엔 일정이 이미 손에 있어 기다릴 것이 없다(TRIP-1424 02a ★4).
         expect(mockReplace).toHaveBeenCalledTimes(1);
         expect(mockReplace).toHaveBeenCalledWith(EXPECTED_ROUTE);
 
@@ -3651,14 +3863,15 @@ describe('다시 만들기 연타 잠금', () => {
   });
 
   describe('🔴 L2 · AC-2 — 1초 넘는 간격을 두고 세 번 눌러도 생성 화면 이동은 1회', () => {
-    it('press → 1.1초 → press → press 뒤 이동 1 · POST 0 (400ms 공용 가드로는 못 막는 간격)', async () => {
+    it('다시 짜기 → 확인 [다시 짜기] → 1.1초 → 다시 누름 두 번 뒤 이동 1 · POST 0 (400ms 공용 가드로는 못 막는 간격)', async () => {
       renderPage();
-      const retry = await screen.findByTestId(CTA0, {}, WAIT);
+      await screen.findByTestId(CTA0, {}, WAIT);
 
-      fireEvent.press(retry);
+      openRegenerateConfirm();
+      fireEvent.press(screen.getByTestId(REGEN_PROCEED));
       await settle(1100);
-      fireEvent.press(retry);
-      fireEvent.press(retry);
+      pressRegenerateAgain();
+      pressRegenerateAgain();
       await settle();
 
       expect(toGenerating()).toBe(1);
@@ -3667,14 +3880,17 @@ describe('다시 만들기 연타 잠금', () => {
   });
 
   describe('🔴 L3 · AC-2 — 같은 순간 두 탭(한 렌더 사본)에도 이동은 1회', () => {
-    it('바깥 act 하나 안의 press 두 번 → 이동 1 · POST 0', async () => {
+    it('확인 얼굴의 [다시 짜기]를 바깥 act 하나 안에서 두 번 → 이동 1 · POST 0', async () => {
       renderPage();
-      const retry = await screen.findByTestId(CTA0, {}, WAIT);
+      await screen.findByTestId(CTA0, {}, WAIT);
+      // TRIP-1424 — 셸 CTA 연타는 이제 확인 얼굴만 다시 연다. 같은 순간 두 탭의 위험은 확인 버튼으로 옮겨 갔다.
+      openRegenerateConfirm();
+      const proceed = screen.getByTestId(REGEN_PROCEED);
 
       // ★ 바깥 act 가 끝날 때까지 다시 그리지 않는다 — 두 누름이 같은 핸들러를 본다(02a ★3).
       await act(async () => {
-        fireEvent.press(retry);
-        fireEvent.press(retry);
+        fireEvent.press(proceed);
+        fireEvent.press(proceed);
       });
       await settle();
 
@@ -3845,8 +4061,10 @@ describe('다시 만들기 연타 잠금', () => {
           { status: 409 }
         );
       renderPage();
+      await screen.findByTestId(CTA0, {}, WAIT);
 
-      fireEvent.press(await screen.findByTestId(CTA0, {}, WAIT));
+      openRegenerateConfirm();
+      fireEvent.press(screen.getByTestId(REGEN_PROCEED));
       await settle();
 
       expect(toGenerating()).toBe(1);
@@ -4472,6 +4690,26 @@ describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
     await waitFor(() =>
       expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차')
     );
+    expect(enteringCount()).toBe(0);
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
+  });
+
+  // TRIP-1424 AC-8 · 01b Q4 — 확인 얼굴은 셸을 트리에서 뺐다가 다시 붙인다. 그래서 막 넘어온(reveal) 상태면
+  // [취소] 뒤 셸이 처음부터 다시 그려지며 경로 그려지기·카드 등장이 한 번 더 재생될 수 있다 — 그걸 막는다.
+  it('🔴 RG6 [다시 짜기] 확인을 열었다가 [취소]로 돌아와도 경로 그려지기·카드 등장을 다시 재생하지 않는다', async () => {
+    renderRevealPage(true);
+    // 앵커 — 처음엔 재생 중이었다.
+    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(true);
+
+    fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+    fireEvent.press(screen.getByTestId(REGEN_CANCEL));
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // ★ 동작 줄이기 답(비동기)이 오기 전엔 등장 껍데기가 비어 있어 "0"이 공허하다 — 한 틱 흘린 뒤에 잰다(02a ★7).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
     expect(enteringCount()).toBe(0);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
   });
