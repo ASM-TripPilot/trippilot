@@ -123,7 +123,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user;
 
 | 단계 | 상한 | 비고 |
 |---|---|---|
-| 분류 LLM | min(2.5s, 잔여×0.35) → **2026-10-18 실측으로 min(4.0s, 잔여×0.45)**(FD BLM §4 註) | effort low, max_tokens 256 |
+| 분류 LLM | min(2.5s, 잔여×0.35) → **2026-10-18 실측으로 min(4.0s, 잔여×0.45)**(FD BLM §4 註) | effort low, max_tokens 256 → **1024**(DEV 실측 출력 239) |
 | 팬아웃 | min(3.0s, 잔여×0.4) | submit 전 마감 고정, wait, pending cancel → PARTIAL |
 | 답변 LLM | min(2.5s → **3.5s**, 잔여−0.4s), 잔여 <1.5s 면 템플릿 | effort low, max_tokens 512 |
 | 메모리 LLM | 잔여 ≥2.5s 일 때만, 상한 2.0s | 아니면 결정론 압축 |

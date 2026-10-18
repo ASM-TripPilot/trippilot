@@ -111,7 +111,7 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.REPLAN_COMPOSITION: 2048,
         LlmFeature.PREFERENCE_SCORING: 2048,
         # 도우미 턴 — 분류 JSON 한 줄 · 답변 ≤400자 · 요약 ≤20줄×120자(1024 면 꽉 찬 요약이 잘린다)
-        LlmFeature.DIALOGUE_INTENT: 256,
+        LlmFeature.DIALOGUE_INTENT: 1024,  # DEV 실측 출력 239/256 — 사고 토큰이 상한에 붙었다
         LlmFeature.DIALOGUE_ANSWER: 512,
         LlmFeature.DIALOGUE_MEMORY: 2048,
     }.get(feature, 1024)
