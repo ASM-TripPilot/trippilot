@@ -19,6 +19,11 @@ def boolean(values: Mapping[str, str], name: str) -> bool:
     return require(r'true|false', values.get(name, ''), name) == 'true'
 
 
+# 기능별 모델 배정 한 항목 — 이 값은 GITHUB_ENV 한 줄로 넘어가므로 줄바꿈·공백류가 끼면 뒤 스텝 env 를 위조한다.
+# 그래서 구분자도 쉼표와 스페이스만 받는다. 기능 이름이 AI 에 실재하는지는 runtime_secrets 가 같은 커밋 소스로 본다.
+_FEATURE_MODEL = r'[A-Za-z][A-Za-z0-9_]*=[A-Za-z0-9][A-Za-z0-9._:/@+-]*'
+
+
 def settings(values: Mapping[str, str]) -> dict:
     environment = require(r'dev|prd', values.get('DEPLOY_ENVIRONMENT', ''), 'DEPLOY_ENVIRONMENT')
     mode = require(r'plan|apply', values.get('DEPLOY_MODE', ''), 'DEPLOY_MODE')
@@ -48,6 +53,12 @@ def settings(values: Mapping[str, str]) -> dict:
     # 임베딩은 입력을 따른다(10-15 사용자 "모든 곳에서 진짜" — 끄면 개발 Plan-B 가 KB 없이 돌아 운영과 다르게 고른다).
     # 개발 KB 는 개발 DB 에 쌓이고 임베딩 파드는 개발 네임스페이스에 따로 뜬다(5Gi 노드 한 대 — EKS 자동 모드가 띄운다).
     push_mode = values.get('PUSH_MODE_INPUT') or 'keep'
+    # 도우미 오케스트레이터 스위치·모델 배정(2026-10-18) — 로컬 자격이 만료된 날에도 배포 역할이 시크릿에 쓴다(push_mode 와 같은 이유).
+    dialogue_orchestrator = require(r'keep|on|off', values.get('DIALOGUE_ORCHESTRATOR_INPUT') or 'keep',
+                                    'DIALOGUE_ORCHESTRATOR_INPUT')
+    llm_feature_models = (values.get('LLM_FEATURE_MODELS_INPUT') or '').strip(' ')
+    if llm_feature_models:
+        require(rf'{_FEATURE_MODEL}(?: *, *{_FEATURE_MODEL})*', llm_feature_models, 'LLM_FEATURE_MODELS_INPUT')
     certificate, hostname = values.get('PROD_ACM_CERTIFICATE_ARN', ''), values.get('PROD_API_HOSTNAME', '')
     if target == 'dev':
         if mode != 'apply':
@@ -75,6 +86,8 @@ def settings(values: Mapping[str, str]) -> dict:
         'namespace': 'trippilot-dev' if target == 'dev' else 'trippilot',
         'values_file': 'values-dev-target.yaml' if target == 'dev' else f'values-{environment}.yaml',
         'push_mode': push_mode,
+        'dialogue_orchestrator': dialogue_orchestrator,
+        'llm_feature_models': llm_feature_models,
         'certificate_arn': certificate,
         'hostname': hostname,
     }
@@ -96,6 +109,8 @@ def main() -> None:
         stream.write(f"VALUES_FILE={result['values_file']}\n")
         stream.write(f"EFFECTIVE_EMBEDDING={json.dumps(result['embedding_enabled'])}\n")
         stream.write(f"EFFECTIVE_PUSH_MODE={result['push_mode']}\n")
+        stream.write(f"EFFECTIVE_DIALOGUE_ORCHESTRATOR={result['dialogue_orchestrator']}\n")
+        stream.write(f"EFFECTIVE_LLM_FEATURE_MODELS={result['llm_feature_models']}\n")
         stream.write(f"ACM_CERTIFICATE_ARN={result['certificate_arn']}\n")
         stream.write(f"API_HOSTNAME={result['hostname']}\n")
 

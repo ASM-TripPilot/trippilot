@@ -24,7 +24,7 @@
 
 **Project Type**: web-service(AI) + 모노레포 동반 변경(BE·deploy·docs)
 
-**Performance Goals**: BE 해석 단계 9,000ms 안 응답(분류 ≤2.5s · 팬아웃 ≤3s · 답변 ≤2.5s · 요약은 잔여 ≥2.5s 일 때만), 턴 전체 13s, 앱 15s. 섀도는 응답 경로 밖.
+**Performance Goals**: BE 해석 단계 9,000ms 안 응답(분류 ≤4.0s · 팬아웃 ≤3s · 답변 ≤3.5s · 요약은 잔여 ≥2.5s 일 때만 — 초판 2.5s/2.5s 는 2026-10-18 실측으로 개정, FD BLM §4 註), 턴 전체 13s, 앱 15s. 섀도는 응답 경로 밖.
 
 **Constraints**: INV-1~4 · DL-5(경계 예외 금지) · L-규칙(agents ↛ orchestrator/providers/LlmPort) · `wiring.py` 최소 줄 · yaml 은 `main.py` 로드 · CI 실 외부 호출 0 · 응답 키 집합 BE 정확 일치 게이트(한 PR) · 발화 원문 로그 금지 · 모델 문자열 하드코딩 금지
 

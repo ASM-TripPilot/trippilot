@@ -30,12 +30,18 @@ _SKIPPED = "intent_shadow_skipped {"
 _ERROR = "intent_shadow_error {"
 
 
+# 배포 smoke 의 도우미 한 턴(deploy/eks/runtime_smoke.report_ai_dialogue — request_id·trace_id 가 `smoke-…`)은 같은 발화를
+# 배포마다 되풀이하므로 측정에서 뺀다. 뺀 수는 `smoke_skipped` 로 따로 보인다.
+_SMOKE_TRACE_PREFIX = "smoke-"
+
+
 @dataclass
 class Parsed:
     records: list[ShadowRecord] = field(default_factory=list)
     skips: Counter = field(default_factory=Counter)  # why → 건수
     errors: int = 0
     malformed: int = 0
+    smoke_skipped: int = 0
 
 
 def _json_after(line: str, marker: str) -> dict:
@@ -57,6 +63,9 @@ def parse(lines: Iterable[str]) -> Parsed:
             elif _RECORD in line:
                 record = ShadowRecord.from_dict(_json_after(line, _RECORD))
                 _match(record.shadow)  # 변환 불가(enum 밖 값 등)면 여기서 던져 깨진 줄로 센다
+                if str(record.trace_id).startswith(_SMOKE_TRACE_PREFIX):
+                    out.smoke_skipped += 1
+                    continue
                 out.records.append(record)
         except Exception:  # noqa: BLE001 — 한 줄이 깨졌다고 집계가 죽지 않는다
             out.malformed += 1
@@ -82,7 +91,8 @@ def render(parsed: Parsed) -> str:
         "> 라벨이 없다 — 아래 '정확도'는 서비스 판정을 라벨 자리에 놓은 **일치율**이고, 불일치가 곧 섀도의 오답은 아니다. "
         "**최소 2회 측정** 뒤에만 좋다/나쁘다를 말한다(ai/data/README.md — 실행마다 ±1 흔들린다).",
         "",
-        f"intent_shadow 줄 {n} · skip {skips}{skip_detail} · 섀도 실패 {parsed.errors} · 깨진 줄 {parsed.malformed}",
+        f"intent_shadow 줄 {n} · skip {skips}{skip_detail} · 섀도 실패 {parsed.errors} · 깨진 줄 {parsed.malformed}"
+        f" · 배포 smoke 제외 {parsed.smoke_skipped}",
         f"일치율 {report.correct}/{n} = {report.accuracy:.1%} · 섀도 LLM 호출 합 {sum(r.shadow.llm_calls for r in parsed.records)}"
         " (풀 겹침 시 상한값 — 건별 귀속은 llm_cost 의 `:shadow` 접미로)",
         "",

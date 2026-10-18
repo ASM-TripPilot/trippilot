@@ -115,6 +115,23 @@ class WorkflowConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'apply'):
             config.settings(self.dev(DEPLOY_MODE='plan'))
 
+    def test_dialogue_inputs_are_validated_before_aws_access(self):
+        """도우미 스위치·모델 배정 입력은 자격을 받기 전에 거른다 — 모델 배정은 GITHUB_ENV 한 줄로 넘어가므로 줄바꿈이 끼면
+        뒤 스텝 env 를 위조한다. 기능 이름의 실재 여부는 runtime_secrets 가 같은 커밋 소스로 본다."""
+        result = config.settings(self.dev())
+        self.assertEqual((result['dialogue_orchestrator'], result['llm_feature_models']), ('keep', ''))
+        ok = config.settings(self.dev(DIALOGUE_ORCHESTRATOR_INPUT='on',
+                                      LLM_FEATURE_MODELS_INPUT='DIALOGUE_INTENT=gpt-5.6-luna, DIALOGUE_ANSWER=gpt-5.6-luna'))
+        self.assertEqual(ok['dialogue_orchestrator'], 'on')
+        self.assertEqual(ok['llm_feature_models'], 'DIALOGUE_INTENT=gpt-5.6-luna, DIALOGUE_ANSWER=gpt-5.6-luna')
+        for value in ('true', 'ON', 'keep;off'):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'DIALOGUE_ORCHESTRATOR_INPUT'):
+                config.settings(self.dev(DIALOGUE_ORCHESTRATOR_INPUT=value))
+        for value in ('DIALOGUE_INTENT=gpt\nEFFECTIVE_PUSH_MODE=expo', 'DIALOGUE_INTENT=', '=gpt-5.6-luna',
+                      'DIALOGUE_INTENT=gpt-5.6-luna,', 'DIALOGUE_INTENT=a b', 'DIALOGUE_INTENT=gpt;rm'):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'LLM_FEATURE_MODELS_INPUT'):
+                config.settings(self.dev(LLM_FEATURE_MODELS_INPUT=value))
+
     def test_dev_target_refuses_real_push_and_other_stacks(self):
         with self.assertRaisesRegex(ValueError, 'push'):
             config.settings(self.dev(PUSH_MODE_INPUT='expo'))
@@ -147,7 +164,8 @@ class WorkflowMainTests(unittest.TestCase):
             # 뒤 스텝 셸은 대상이 정한 값만 본다 — 푸시는 입력과 무관하게 off, 임베딩은 입력대로
             self.assertEqual(environment.read_text().splitlines(),
                              ['NAMESPACE=trippilot-dev', 'VALUES_FILE=values-dev-target.yaml', 'EFFECTIVE_EMBEDDING=true',
-                              'EFFECTIVE_PUSH_MODE=off', f'ACM_CERTIFICATE_ARN={WorkflowConfigTests.DEV_CERT}',
+                              'EFFECTIVE_PUSH_MODE=off', 'EFFECTIVE_DIALOGUE_ORCHESTRATOR=keep', 'EFFECTIVE_LLM_FEATURE_MODELS=',
+                              f'ACM_CERTIFICATE_ARN={WorkflowConfigTests.DEV_CERT}',
                               'API_HOSTNAME=dev-api.example.com'])
 
     def test_main_fails_before_writing_for_bad_environment(self):

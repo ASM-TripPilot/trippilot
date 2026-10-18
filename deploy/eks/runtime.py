@@ -115,6 +115,9 @@ def parser():
         if action == "sync-secrets":
             # 미지정 = 시크릿에 저장된 푸시 모드 유지. 값은 백엔드가 아는 두 가지뿐이다.
             sub.add_argument("--push-mode", choices=("off", "expo"))
+            # 미지정 = 저장값 유지. 도우미 오케스트레이터 스위치와 기능별 모델 배정 덧씌우기(2026-10-18) — push-mode 와 같은 이유.
+            sub.add_argument("--dialogue-orchestrator", choices=("on", "off"))
+            sub.add_argument("--llm-feature-models")
         if action in ("bootstrap-db", "cleanup-db"):
             sub.add_argument("--run-id", required=True)
         if action == "render-values":
@@ -135,7 +138,8 @@ def main(argv=None):
         ensure_namespace(args.namespace, command)
     elif args.action == "sync-secrets":
         runtime_secrets.sync(outputs, args.namespace, args.embedding_enabled, command,
-                             push_mode=args.push_mode)
+                             push_mode=args.push_mode, dialogue_orchestrator=args.dialogue_orchestrator,
+                             llm_feature_models=args.llm_feature_models, target=args.target)
     elif args.action == "bootstrap-db":
         runtime_db.bootstrap(outputs, args.namespace, args.run_id, command)
     elif args.action == "cleanup-db":

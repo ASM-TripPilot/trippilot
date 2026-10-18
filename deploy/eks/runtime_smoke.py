@@ -96,6 +96,67 @@ def report_ai_wiring(namespace, shell):
             print(f"  {line}")
 
 
+# AI 파드 안에서 도는 표준 라이브러리 스크립트 — 발화·답변 문장·토큰은 찍지 않고 결과 모양만 한 줄로 낸다.
+# 10번째 턴이라 요약이 due 다: 실 LLM 2~3회 + ai_kb.dialogue_memory 1행 쓰기 → 곧바로 DELETE 로 지운다(지운 수가 DB 왕복 증거).
+_DIALOGUE_PROBE = r'''
+import json, os, time, urllib.error, urllib.request, uuid
+from datetime import datetime, timezone
+token = os.environ.get("SERVICE_AUTH_TOKEN") or ""
+headers = {"Content-Type": "application/json", **({"X-Service-Token": token} if token else {})}
+session = "smoke-" + uuid.uuid4().hex[:12]
+slot = {"slot_key": "2099-01-01#" + str(uuid.uuid4()), "name": "배포 확인 카페", "start_at": "10:00", "category": "CAFE"}
+body = {"request_meta": {"request_id": session, "requested_at": datetime.now(timezone.utc).isoformat(), "deadline_ms": 9000},
+        "utterance": "다음 일정 뭐야", "session_id": session,
+        "recent_turns": [{"role": "USER", "text": "첫날 일정 알려줘"}, {"role": "ASSISTANT", "text": "첫날은 카페 한 곳이에요."}],
+        "dialogue_context": {"pending": None, "turn_index": 10, "clarify_count": 0},
+        "context": {"surface": "ITINERARY", "base_stays": [],
+                    "trip": {"trip_id": session, "regions": ["제주"], "start_date": "2099-01-01", "end_date": "2099-01-02",
+                             "phase": "PLANNING"},
+                    "itinerary": {"status": "PLANNED", "days": [{"date": "2099-01-01", "slots": [slot]}]}}}
+def call(method, path, payload=None):
+    data = None if payload is None else json.dumps(payload).encode()
+    request = urllib.request.Request("http://127.0.0.1:8000" + path, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return response.status, json.loads(response.read() or b"null")
+    except urllib.error.HTTPError as error:
+        return error.code, None
+    except Exception as error:  # 접속 거부·시한·깨진 JSON — 종류만 싣는다(값·본문은 싣지 않는다)
+        return type(error).__name__, None
+started = time.monotonic()
+result = {}
+try:
+    status, out = call("POST", "/ai/v1/dialogue/interpret", body)
+    result.update(http=status, elapsed_ms=int((time.monotonic() - started) * 1000))
+    if isinstance(out, dict):
+        result.update(outcome=out.get("outcome"), kind=(out.get("answer") or {}).get("kind"), llm_calls=out.get("llm_calls"))
+finally:
+    status, out = call("DELETE", "/ai/v1/dialogue/memory?session_id=" + session)  # 쓴 기억은 무슨 일이 있어도 지운다
+    result["memory_deleted"] = out.get("deleted") if status == 200 and isinstance(out, dict) else f"http {status}"
+    print("ai-dialogue-probe " + json.dumps(result))
+'''
+
+
+def report_ai_dialogue(namespace, shell):
+    """도우미 한 턴을 AI 파드 안에서 실제로 돌려 결과 **모양만** 적는다 — 기록만 한다(report_ai_wiring 과 같은 이유).
+
+    **왜 필요한가**: 기동 배선 줄은 "켜졌다"까지만 말한다. 오케스트레이터는 실 LLM 배정·ai_kb 권한·섀도까지 붙어야
+    한 턴이 되는데, 그것은 실제 턴으로만 드러난다 — 개발·운영 서버 둘 다 사용자 토큰 없이 부를 길이 없다. 섀도 비교는
+    AI 로그(`intent_shadow`, trace_id `smoke-…` — 집계 스크립트가 거른다)에만 남는다.
+    꺼진 환경이면 종전 경로 모양(FRAME·memory_deleted 0)이 찍힌다. 결과 줄이 없으면 아무것도 출력하지 않는다.
+    """
+    try:
+        output = shell(["kubectl", "exec", "--namespace", namespace, "-i", "deployment/ai", "-c", "ai", "--",
+                        "/app/.venv/bin/python", "-"], _DIALOGUE_PROBE)
+    except CommandError as error:
+        print(f"ai-dialogue: 확인 못 함 — {error}")
+        return
+    marker = "ai-dialogue-probe "
+    line = next((line for line in output.splitlines() if line.startswith(marker)), None)
+    if line:
+        print(f"ai-dialogue: {line[len(marker):]}")
+
+
 def run(namespace, shell):
     delete = ["kubectl", "delete", "job", "trippilot-smoke", "--namespace", namespace,
               "--ignore-not-found", "--cascade=foreground", "--wait=true", "--timeout=90s"]
@@ -106,4 +167,5 @@ def run(namespace, shell):
     finally:
         shell(delete)
     report_autoscalers(namespace, shell)
+    report_ai_dialogue(namespace, shell)
     report_ai_wiring(namespace, shell)

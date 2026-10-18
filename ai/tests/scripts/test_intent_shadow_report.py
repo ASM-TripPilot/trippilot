@@ -99,3 +99,12 @@ def test_samples_mirror_the_eval_shape() -> None:
     assert sample.label is Intent.GET_WEATHER and sample.match.match_route is MatchRoute.CONFIDENT
     assert sample.latency_ms == 38 and sample.utterance == ""  # 원문은 로그에 없다 — 빈 문자열(SEC-U8-06)
     assert json.loads(_LINES[0].split("intent_shadow ", 1)[1])["agree"] is True
+
+
+def test_deploy_smoke_turns_are_left_out_of_the_measurement() -> None:
+    """배포 smoke 의 도우미 한 턴(trace_id `smoke-…`)은 배포마다 같은 발화라 측정에서 빼고, 뺀 수는 따로 보인다."""
+    smoke = _line("smoke-0123456789ab", _NEXT, _W, shadow_calls=1, shadow_ms=900)
+    parsed = report.parse([*_LINES, smoke])
+    assert [r.trace_id for r in parsed.records] == ["r-1", "r-2", "r-3"]
+    assert parsed.smoke_skipped == 1
+    assert "배포 smoke 제외 1" in report.render(parsed)
