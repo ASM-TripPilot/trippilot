@@ -1312,6 +1312,8 @@ _NEAR_KEYS = frozenset({"NEARBY", "LESS_MOVE"})
 # "밤에 놀기 — 클럽·바"(2026-10-15) — 경계 8종에 칸이 없어 replan 이 직접 집행한다(`_nightlife_candidates`).
 _NIGHT_KEYS = frozenset({"NIGHTLIFE"})
 _NIGHTLIFE_KEEP = 6  # 구성 후보에 올리는 나이트라이프 수(가까운 순)
+# 나이트라이프 세부 태그(수집 계약 — tags=["나이트라이프", 세부]). 말에 있는데 근처에 없으면 노트로 밝힌다.
+_NIGHTLIFE_SUBTYPES = ("클럽", "칵테일바", "와인바", "라운지바", "비어가든", "스피크이지")
 # 그날 창을 23:59 까지 넓힌다 — 클럽·바 추정 영업(20:00~04:00) 중 그날 안쪽. 자정을 넘기지 않는 이유: OR 모델이
 # 창 끝을 하루 안의 분으로 읽어(`_mod`) 자정을 넘는 창이면 자유 방문이 전부 놓일 수 없게 된다(로컬 재현).
 _NIGHT_END = timedelta(hours=23, minutes=59)
@@ -1582,7 +1584,7 @@ def _nightlife_candidates(
     if not any(k in _NIGHT_KEYS for k in resolved):
         return ()
     excluded = set(request.excluded_poi_ids)
-    text = request.free_text or ""
+    text = (request.free_text or "").replace(" ", "")  # "칵테일 바" 도 칵테일바로
     # 말에 세부 종류(클럽·와인바·칵테일바…)가 있으면 그 종류를 먼저 — "클럽"에 와인바만 오르지 않게.
     found = sorted((p for p in pool.pois
                     if NIGHTLIFE_TAG in p.tags and p.poi_id not in skip and p.poi_id not in excluded),
@@ -1592,6 +1594,11 @@ def _nightlife_candidates(
         notes.append("nightlife_none_in_pool")
         return ()
     notes.append(f"nightlife_candidates: {len(found)}")
+    # 말한 세부가 근처에 없으면 다른 밤 장소로 대신한다 — 그 사실을 밝힌다. "클럽"인데 와인바가 말없이
+    # 들어가면 클럽을 잘못 분류한 것처럼 보인다(INV-4). 클럽은 홍대·이태원·강남·부산에만 있다(2026-10-18).
+    missing = [t for t in _NIGHTLIFE_SUBTYPES if t in text and not any(t in p.tags for p in found)]
+    if missing:
+        notes.append(f"nightlife_subtype_missing: {','.join(missing)}")
     return tuple(p.poi_id for p in found[:_NIGHTLIFE_KEEP])
 
 
