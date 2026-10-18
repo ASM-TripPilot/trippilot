@@ -12,19 +12,23 @@ FD DE §8: 별도 fake 를 두지 않고 이걸 그대로 쓴다.
 from __future__ import annotations
 
 import threading
-from datetime import datetime
+from collections.abc import Callable
+from datetime import datetime, timezone
 
 from trippilot.ports.memory_store_port import DialogueMemory, delete_selector
 
 
 class InMemoryDialogueMemoryStore:
-    def __init__(self) -> None:
+    def __init__(self, now: Callable[[], datetime] | None = None) -> None:
         self._rows: dict[str, DialogueMemory] = {}  # session_id → 기억
         self._lock = threading.Lock()  # 경계 스레드풀에서 턴이 동시에 들어온다
+        # 읽기의 "지금" — Pg 의 now() 자리. 테스트는 고정 시각을 넘긴다(벽시계면 날짜가 지나며 깨진다)
+        self._now = now or (lambda: datetime.now(timezone.utc))
 
     def get(self, session_id: str) -> DialogueMemory | None:
         with self._lock:
-            return self._rows.get(session_id)
+            memory = self._rows.get(session_id)
+        return memory if memory is not None and memory.expires_at > self._now() else None  # 만료 행은 없는 것과 같다
 
     def put(self, memory: DialogueMemory) -> None:
         with self._lock:
@@ -37,10 +41,11 @@ class InMemoryDialogueMemoryStore:
         if limit < 1:
             return ()
         with self._lock:
+            now = self._now()
             rows = [
                 m
                 for m in self._rows.values()
-                if m.account_ref == account_ref and m.session_id != exclude_session
+                if m.account_ref == account_ref and m.session_id != exclude_session and m.expires_at > now
             ]
         rows.sort(key=lambda m: (-m.updated_at.timestamp(), m.session_id))
         return tuple(rows[:limit])

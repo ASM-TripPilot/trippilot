@@ -425,7 +425,9 @@ def _memory_store():
 
     from trippilot.agents.adapters.pg_memory_store import PgDialogueMemoryStore
 
-    return PgDialogueMemoryStore(lambda: psycopg.connect(url))
+    # 턴 시작의 기억 읽기가 요청 스레드에서 돈다 — DB 가 멈추면 무기한 막히지 않게 연결 3s·문장 2s 로 묶는다.
+    return PgDialogueMemoryStore(
+        lambda: psycopg.connect(url, connect_timeout=3, options="-c statement_timeout=2000"))
 
 
 def _dialogue_orchestrator_enabled() -> bool:

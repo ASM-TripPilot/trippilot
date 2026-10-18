@@ -14,6 +14,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta
 
+from trippilot.llm_gateway.gates.base import has_contact_like
+from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.workers.dialogue_intent import history_lines
 from trippilot.ports.memory_store_port import (
@@ -72,7 +74,9 @@ def compress_fallback(
     seen: set[str] = set()
     for raw in reversed(lines):
         line = inline(raw)[:line_chars].rstrip()
-        if not line or line in seen:
+        # 요약 LLM 게이트(DialogueMemoryGate ③④)와 같은 술어 — 게이트가 줄을 전부 버리면 바로 이 압축이 돌기 때문에,
+        # 여기서 거르지 않으면 게이트가 막은 연락처·링크·시간 표현이 원문으로 저장된다(2026-10-18 리뷰 재현).
+        if not line or line in seen or _TIME_EXPR.search(line) is not None or has_contact_like(line):
             continue
         seen.add(line)
         kept.append(line)
