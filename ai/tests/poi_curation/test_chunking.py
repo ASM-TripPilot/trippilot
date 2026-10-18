@@ -12,6 +12,10 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation import chunking as c
 
 _S = "성산일출봉은 제주도 동쪽 끝의 화산이다."
+# 160자를 넘는 한 조각 — 표시 상한이 조각을 자르지 않는지 본다.
+_RAIN = ("비가 오면 정상까지 오르는 나무 계단이 미끄러워 탐방로 일부가 통제되고, 강풍 특보가 내려지면 정상부 출입이 전면 "
+         "금지된다. 이런 날에는 우뭇개 해안 쪽 해녀의 집이나 매표소 옆 성산일출봉 홍보관을 먼저 둘러보는 편이 낫다고 "
+         "관리소는 안내한다.")
 
 
 def test_sentences_split_on_end_marks_not_on_decimals() -> None:
@@ -73,13 +77,13 @@ def _poi(ref: str) -> Poi:
 def test_the_chunk_that_matches_the_situation_is_shown_not_the_opening() -> None:
     row = {"doc_id": "wiki:123", "poi_ref": "123",
            "sections": [{"heading": "개요", "text": _S + " 높이는 182m 이다."},
-                        {"heading": "관람", "text": "비가 오면 정상 계단이 미끄러워 탐방로가 통제된다."}]}
+                        {"heading": "관람", "text": _RAIN}]}
     embedding, store = _RainEmbedding(), InMemoryVectorStore()
     index_documents(c.chunk_document(row), embedding, store)
     got, note = fetch_place_knowledge([_poi("123")], "비 오는 날 상황", embedding, store)
     assert note == ""
-    assert got["123"].startswith("관람: 비가 오면"), got  # 종전엔 앞 160자(개요)가 붙었다
-    assert len(got["123"]) <= MAX_DOC_CHARS
+    assert got["123"] == f"관람: {_RAIN}", got  # 종전엔 앞 160자(개요)가 붙었다 — 맞은 조각은 **통째로**
+    assert 160 < len(got["123"]) <= MAX_DOC_CHARS
     got, _ = fetch_place_knowledge([_poi("123")], "맑은 날 상황", embedding, store)
     assert got["123"].startswith("개요: ")
 
