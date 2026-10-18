@@ -2,6 +2,12 @@ import { render, screen } from '@testing-library/react-native';
 
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
+import {
+  expectHeightLimited,
+  expectPinsInBand,
+} from '@/test-support/fitBandAsserts';
+
+import { buildFitRegion } from './fitRegion';
 
 /**
  * TRIP-1022 #040 — `MapView` 옵트인 `fitPins`: 켜고 핀이 2개 이상이면 모든 핀이 한 화면에 들어오는
@@ -182,5 +188,70 @@ describe('F4 · TRIP-1363 — fitPins + 핀 1개도 region 이다 (2핀↔1핀 �
 
     expect(nativeProps().region).toBeUndefined();
     expect(nativeProps().camera).toBeDefined();
+  });
+});
+
+/* ──── TRIP-1416 · 보이는 띠(fitBand) 배선 ────
+ * `fitBand` 는 셸이 계산해 넘기는 "시트·오버레이 줄이 안 가린 띠"다. MapView 는 그것을 `buildFitRegion` 에
+ * 흘리기만 하고, 값 memo(같은 값이면 같은 region 객체)는 그대로다.
+ *
+ * 무엇을 보장하나:
+ *  - 🟢 F6 (AC-9) `fitBand` 가 없으면 region 은 `buildFitRegion(핀)` 그대로 — 셸 밖 카드 지도(꼭 갈 곳·같이 짜기
+ *    후보)는 가리는 시트가 없으니 보정하면 안 된다.
+ *  - 🟢 F7 `fitBand` 만 있고 `fitPins` 가 없으면 지금처럼 camera(띠는 맞춤에만 쓰인다).
+ *  - 🔴 F8 (AC-3) `fitPins` + `fitBand` → 핀이 띠 안이고 상자가 세로로 꽉 찬다, camera 없음.
+ *  - 🟢 F9 (AC-10) 값이 같은 새 `fitBand`·새 핀 배열로 다시 그려도 region 은 같은 객체(카메라가 안 튄다).
+ *
+ * 3동작 뼈대: 준비=핀·fitPins·fitBand → 실행=렌더/rerender → 단언=map-native 의 region.
+ */
+
+const SCREEN_ASPECT = 1334 / 750;
+const BAND = { top: 0.05, bottom: 0.45, aspect: SCREEN_ASPECT };
+
+describe('MapView · 보이는 띠 fitBand (AC-3·AC-9·AC-10)', () => {
+  // TRIP-1416
+  it('F6 fitBand 가 없으면 region 이 buildFitRegion(핀) 그대로다 (셸 밖 카드 지도 무회귀)', () => {
+    render(<MapView center={CENTER} pins={PINS} fitPins />);
+
+    expect(nativeProps().region).toEqual(buildFitRegion(PINS));
+  });
+
+  it('F7 fitBand 만 있고 fitPins 가 없으면 region 없이 camera 다', () => {
+    render(<MapView center={CENTER} pins={PINS} fitBand={BAND} />);
+
+    expect(nativeProps().region).toBeUndefined();
+    expect(nativeProps().camera).toBeDefined();
+  });
+
+  it('F8 fitPins + fitBand 면 세 핀이 아래 45%·위 5% 를 뺀 띠 안에 있고 상자가 세로로 꽉 찬다, camera 는 없다', () => {
+    render(<MapView center={CENTER} pins={PINS} fitPins fitBand={BAND} />);
+
+    const region = nativeProps().region as NativeRegion | undefined;
+    expectPinsInBand(region, PINS, {
+      bottom: 0.45,
+      topPx: 0.05 * 1334,
+      screenHeight: 1334,
+    });
+    expectHeightLimited(region, PINS, SCREEN_ASPECT);
+    expect(nativeProps().camera).toBeUndefined();
+  });
+
+  it('F9 값이 같은 새 fitBand·새 핀 배열로 다시 그려도 region 은 같은 객체다', () => {
+    const { rerender } = render(
+      <MapView center={CENTER} pins={PINS} fitPins fitBand={BAND} />
+    );
+    const first = nativeProps().region;
+    expect(first).toBeDefined();
+
+    rerender(
+      <MapView
+        center={{ ...CENTER }}
+        pins={PINS.map((pin) => ({ ...pin }))}
+        fitPins
+        fitBand={{ ...BAND }}
+      />
+    );
+
+    expect(nativeProps().region).toBe(first);
   });
 });

@@ -2033,3 +2033,131 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
     expect(sent(1, D1).map(([poiId]) => poiId)).toEqual(['p1', 'p2']);
   });
 });
+
+/**
+ * TRIP-1433 · Q-142 — 같은 이름 장소(경복궁 여럿)를 행 부제의 지역·주소로 가른다.
+ *
+ * 1줄 = [지역(있을 때만), #태그…, 카테고리] · 2줄 = 주소(있을 때만, testID `itinerary-place-address-{poiId}`).
+ * null·키 없음·빈 문자열·공백뿐은 전부 없음 — 지금 부제 그대로, 값을 지어내지 않는다. 이름은 원문 그대로.
+ * 조합 전체는 `features/itinerary/model/placeAddSubtitle.test.ts` 가 표·속성으로 재고, 여기서는 페이지가
+ * 서버 응답을 행으로 그리는 배선을 잰다.
+ *
+ * ⚠️ `/places` 를 쿼리를 보지 않는 고정 응답으로 덮는다 — 쿼리 `region`(목적지 '부산')과 `Place.region`(시군구
+ *   '종로구')은 다른 값이라, 지역으로 거르는 가짜 서버를 쓰면 이 행들이 지워져 안 뜬다.
+ * 생김새(줄 수·색·말줄임)는 재지 않는다(README 판정 4 — 6-b 실기 몫).
+ *
+ * 3동작 뼈대: 준비=고정 응답 → 실행=페이지 렌더(·추가) → 단언=행 안의 1줄 문자열·주소 줄 testID·나간 PUT.
+ */
+describe('장소 추가 행 부제 — 같은 이름 장소를 지역·주소로 가른다', () => {
+  const ADDRESS_K1 = '서울특별시 종로구 사직로 161';
+  const ADDRESS_K5 = '서울특별시 마포구 월드컵북로 400';
+
+  function samePlace(
+    poiId: string,
+    nameKo: string,
+    category: Place['category'],
+    tags: string[],
+    region: string | null | undefined,
+    address: string | null
+  ): Place {
+    return { ...makePlace(poiId, nameKo, category, 0), tags, region, address };
+  }
+
+  // k5 의 region undefined 는 JSON 으로 나갈 때 키째 빠진다(생성 타입 `region?` 경로).
+  const SAME_NAME: Place[] = [
+    samePlace('k1', '경복궁', '명소', ['고궁'], '종로구', ADDRESS_K1),
+    samePlace('k2', '경복궁', '맛집', ['한식'], '중구', null),
+    samePlace('k3', '경복궁', '맛집', ['한식'], null, null),
+    samePlace('k4', '경복궁', '맛집', ['한식'], '   ', '  '),
+    samePlace('k5', '경복궁', '맛집', ['한식'], undefined, ADDRESS_K5),
+    samePlace('k6', '[백년가게]옥미아구찜', '맛집', [], '마산합포구', null),
+  ];
+
+  const card = (poiId: string) =>
+    screen.getByTestId(`itinerary-place-card-${poiId}`);
+  const addressId = (poiId: string) => `itinerary-place-address-${poiId}`;
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: SAME_NAME, nextCursor: null })
+      )
+    );
+  });
+
+  async function renderSameName() {
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await screen.findByTestId('itinerary-place-card-k1');
+  }
+
+  it('🔴 N1 · 이름이 같은 두 행은 1줄 맨 앞의 지역이 달라 서로 구분된다', async () => {
+    await renderSameName();
+
+    expect(within(card('k1')).getByText('경복궁')).toBeOnTheScreen();
+    expect(within(card('k2')).getByText('경복궁')).toBeOnTheScreen();
+    expect(
+      within(card('k1')).getByText('종로구 · #고궁 · 명소')
+    ).toBeOnTheScreen();
+    expect(
+      within(card('k2')).getByText('중구 · #한식 · 맛집')
+    ).toBeOnTheScreen();
+  });
+
+  it('🔴 N2 · 주소가 있으면 그 행 안에 주소 줄이 원문으로 뜬다', async () => {
+    await renderSameName();
+
+    expect(within(card('k1')).getByTestId(addressId('k1'))).toHaveTextContent(
+      ADDRESS_K1
+    );
+  });
+
+  it('🔴 N3 · 지역만 있으면 주소 줄이 없고, 주소만 있으면 1줄은 그대로에 주소 줄만 생긴다', async () => {
+    await renderSameName();
+
+    expect(screen.queryByTestId(addressId('k2'))).toBeNull();
+    expect(within(card('k5')).getByText('#한식 · 맛집')).toBeOnTheScreen();
+    expect(within(card('k5')).getByTestId(addressId('k5'))).toHaveTextContent(
+      ADDRESS_K5
+    );
+  });
+
+  it('🔴 N4 · 지역·주소가 둘 다 null 이면 지금 부제 그대로고 주소 줄·"null"·"미확인" 글자가 없다', async () => {
+    await renderSameName();
+    // 앵커 — 주소 줄을 그리는 화면에서만 "없다"가 의미 있다.
+    expect(within(card('k1')).getByTestId(addressId('k1'))).toBeOnTheScreen();
+
+    const row = card('k3');
+    expect(within(row).getByText('#한식 · 맛집')).toBeOnTheScreen();
+    expect(screen.queryByTestId(addressId('k3'))).toBeNull();
+    expect(within(row).queryAllByText(/null|undefined|미확인/)).toEqual([]);
+  });
+
+  it('🔴 N5 · 빈 문자열·공백뿐인 지역·주소는 없음과 같다 (빈 조각·빈 줄 없음)', async () => {
+    await renderSameName();
+    // 앵커 — 주소 줄을 그리는 화면에서만 "없다"가 의미 있다.
+    expect(within(card('k1')).getByTestId(addressId('k1'))).toBeOnTheScreen();
+
+    expect(within(card('k4')).getByText('#한식 · 맛집')).toBeOnTheScreen();
+    expect(screen.queryByTestId(addressId('k4'))).toBeNull();
+  });
+
+  it('N6 · 이름 접두([백년가게])는 원문 그대로다 (사용자 결정 · 선제 green)', async () => {
+    await renderSameName();
+
+    expect(
+      within(card('k6')).getByText('[백년가게]옥미아구찜')
+    ).toBeOnTheScreen();
+  });
+
+  it('N7 · 같은 이름 중 둘째 행(k2)을 담으면 PUT 에 k2 가 실리고 k1 은 안 실린다 (무회귀 · 선제 green)', async () => {
+    await renderSameName();
+
+    await addPlaceAndApply('k2');
+
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    const day = putBodies[0].days.find((d) => d.date === '2026-06-10');
+    const ids = day?.slots.map((slot) => slot.poiId);
+    expect(ids).toContain('k2');
+    expect(ids).not.toContain('k1');
+  });
+});

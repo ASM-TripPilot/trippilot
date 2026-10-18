@@ -29,6 +29,10 @@ export interface MemoInlineProps {
   onChangeDraft?: (draft: string) => void;
   /** TRIP-1117 — 입력 모양 덮어쓰기(허브 시트는 Figma 14px·상자 안). 미지정이면 j01 모양 그대로. */
   className?: string;
+  /** TRIP-1415 — false 면 글자·blur 를 받지 않는다(첫 서버 메모 조회 중 잠금). 기본 true = 지금 동작. */
+  editable?: boolean;
+  /** TRIP-1426 — false 면 포커스가 빠져도 저장하지 않는다(허브 메모 시트는 [저장] 하나로 저장). 기본 true = j01 지금 동작. */
+  submitOnBlur?: boolean;
 }
 
 export function MemoInline({
@@ -36,6 +40,8 @@ export function MemoInline({
   onSubmit,
   onChangeDraft,
   className = 'min-h-[44px] py-sm font-noto text-label text-ink',
+  editable = true,
+  submitOnBlur = true,
 }: MemoInlineProps): ReactElement {
   const [draft, setDraft] = useState(text ?? '');
 
@@ -48,12 +54,14 @@ export function MemoInline({
   return (
     <BottomSheetTextInput
       testID="record-trip-memo-input"
+      accessibilityLabel="메모 입력"
       value={draft}
+      editable={editable}
       onChangeText={(next) => {
         setDraft(next);
         onChangeDraft?.(next);
       }}
-      onBlur={handleSubmit}
+      onBlur={submitOnBlur ? handleSubmit : undefined}
       submitBehavior="blurAndSubmit"
       placeholder="메모를 남겨보세요"
       placeholderTextColor="#9AA1AB"

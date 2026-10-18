@@ -167,6 +167,7 @@
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
 - `src/__tests__/photoUploadGuard.test.ts`  →  (export 없음)
+- `src/__tests__/planbApplyStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardMustVisit.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardOnboardingPref.test.tsx`  →  (export 없음)
@@ -202,7 +203,7 @@
 - `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
 
 ## src/entities/itinerary-slot/
-- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · buildSlotKey · parseSlotKey · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · VIOLATION_NOTICE · violationNotice · deriveVisitProgress · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · SlotProgressCard · SlotStopCard
+- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · buildSlotKey · parseSlotKey · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · VIOLATION_NOTICE · violationNotice · deriveVisitProgress · arrivedLabel · visitedLabelByPoiId · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · SlotProgressCard · SlotStopCard
 
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
@@ -216,6 +217,7 @@
 - `src/entities/itinerary-slot/lib/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
 - `src/entities/itinerary-slot/lib/violationLabel.ts`  →  VIOLATION_NOTICE · violationNotice
 - `src/entities/itinerary-slot/lib/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
+- `src/entities/itinerary-slot/lib/visitedLabels.ts`  →  arrivedLabel · visitedLabelByPoiId
 
 ## src/entities/itinerary-slot/model/
 - `src/entities/itinerary-slot/model/index.ts`  →  ReplanSlotTone · ReplanSlotVM · PoiCategory
@@ -435,12 +437,13 @@
 
 ## src/features/itinerary/
 - `src/features/itinerary/index.ts`  →  isGenerationRunning · useGenerationBusy
-- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · resolveUnplacedNames · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
+- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · placeAddSubtitle · resolveUnplacedNames · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DRAFT_POLL_SLOW_INTERVAL_MS · DRAFT_POLL_FAST_COUNT · pollIntervalMs · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · GenerationGaugeFold · FoldedGenerationGaugeCell · foldGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveShortfallNotice · resolveDraftView
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · fixedTimeLabel · buildMustVisitPins · resolveMustVisitListView
+- `src/features/itinerary/model/placeAddSubtitle.ts`  →  PlaceAddSubtitleInput · PlaceAddSubtitle · placeAddSubtitle
 - `src/features/itinerary/model/planMapCenter.ts`  →  resolvePlanMapCenter
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
 - `src/features/itinerary/model/slotEmptyFace.ts`  →  SlotEmptyFace · ALL_IN_ITINERARY_TITLE · ALL_IN_ITINERARY_HINT · resolveSlotEmptyFace
@@ -862,7 +865,7 @@
 - `src/pages/live/live-itinerary/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
 - `src/pages/live/live-itinerary/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
 - `src/pages/live/live-itinerary/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
-- `src/pages/live/live-itinerary/model/visitedLabels.ts`  →  visitedLabelByPoiId · doneVisitCheckIdByPoiId
+- `src/pages/live/live-itinerary/model/visitedLabels.ts`  →  doneVisitCheckIdByPoiId
 
 ## src/pages/live/live-itinerary/ui/
 - `src/pages/live/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView
@@ -1003,7 +1006,7 @@
 
 ## src/pages/record/daily-reflection/model/
 - `src/pages/record/daily-reflection/model/editCard.ts`  →  buildEditCard
-- `src/pages/record/daily-reflection/model/fillTemplate.ts`  →  TemplateContext · GUIDE_TEXTS · isGuideText · fillTemplate
+- `src/pages/record/daily-reflection/model/fillTemplate.ts`  →  TemplateContext · GUIDE_TEXTS · isGuideText · isTemplateOnly · fillTemplate
 - `src/pages/record/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
 - `src/pages/record/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative · basicNarrative
 - `src/pages/record/daily-reflection/model/statsCard.ts`  →  statsCard
@@ -1619,7 +1622,7 @@
 - `src/shared/map/DrawnPathOverlay.tsx`  →  DRAW_PATH_DURATION_MS · DrawnPathOverlay
 - `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPinKind · MapPin · MapViewProps · MapView
 - `src/shared/map/RouteToggle.tsx`  →  RouteToggleProps · RouteToggle · actualDistanceLabel
-- `src/shared/map/fitRegion.ts`  →  buildFitRegion · buildCircleRegion
+- `src/shared/map/fitRegion.ts`  →  FitBand · buildFitRegion · buildCircleRegion
 - `src/shared/map/index.ts`  →  MapView · CenterPinPicker · RouteToggle · actualDistanceLabel · buildNaverPlaceAppUrl · buildNaverPlaceWebUrl · canOpenNaverPlace · openNaverPlace
 - `src/shared/map/naverPlaceLink.ts`  →  NaverPlaceTarget · canOpenNaverPlace · buildNaverPlaceAppUrl · buildNaverPlaceWebUrl · openNaverPlace
 
@@ -1696,6 +1699,7 @@
 - `src/test-support/fabAnchorProbe.ts`  →  FRAME_MS · sheetHost · sheetPosition · flushFrames · moveSheet · layoutOverlay · anchorStyle · anchorTop
 - `src/test-support/fakeExpoFileSystem.ts`  →  fakeExpoFileSystemModule · resetFakeFs · seedCacheFile · cacheFilesIn · cacheFileCount · failFileWrites
 - `src/test-support/fakePreventRemoveNavigator.tsx`  →  MockNavAction · MockPreventCallback · mockExits · mockRemove · mockNavigation · useNavigation · usePreventRemove · resetFakeNavigator
+- `src/test-support/fitBandAsserts.ts`  →  NativeRegion · LatLng · expectPinsInBand · expectHeightLimited
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
 - `src/test-support/freezeDate.ts`  →  REAL_TIMER_APIS · freezeDate
 - `src/test-support/integrationSetup.ts`  →  (export 없음)
@@ -1717,7 +1721,7 @@
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
 - `src/test-support/storageMock.ts`  →  saveTokens · getTokens · clearTokens · hasStoredToken
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
-- `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn
+- `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn · actualVisit · tripRecord · recordsHandler
 - `src/test-support/tripRecordsTrip.ts`  →  tripRecordsTrip
 - `src/test-support/wizardDraftFixture.ts`  →  WizardDraftData · wizardDraftData · freshWizardDraft · withoutSeedFields · leavePreviousTripDraft · captureDraftAtNextCall · resetWizardDraft
 - `src/test-support/wizardStep1Harness.tsx`  →  BASE · PREFERENCE · TRIP_ID · TRIP · makePreference · makeTrip · WizardStep1HarnessOptions · wizardStep1Harness
@@ -1755,4 +1759,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1107개 파일
+합계 1111개 파일

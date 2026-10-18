@@ -8,6 +8,7 @@ import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
 import { PlusGlyph, SearchGlyph } from './ItineraryGlyphs';
 import { PLACE_CATEGORY_CHIPS } from '../config/placeCategoryChips';
+import { placeAddSubtitle } from '../model/placeAddSubtitle';
 
 /**
  * TRIP-798 묶음 C · h13 장소 추가 시트 콘텐츠 순수 뷰 — Figma `4337:1923`. **props-only**.
@@ -131,6 +132,7 @@ export function PlaceAddRow({
   distanceLine,
   onPressAdd,
 }: PlaceAddRowProps): ReactElement {
+  const subtitle = placeAddSubtitle(place);
   return (
     <PlaceRowCard
       testIDPrefix="itinerary-place-card"
@@ -140,10 +142,19 @@ export function PlaceAddRow({
       subtitle={
         <View className="gap-[2px]">
           <PlaceSubtitle
-            parts={[...place.tags.map((tag) => `#${tag}`), place.category]}
+            parts={subtitle.parts}
             className="font-noto text-[12.5px] text-muted"
             numberOfLines={1}
           />
+          {subtitle.address !== null ? (
+            <Text
+              testID={`itinerary-place-address-${place.poiId}`}
+              className="font-noto text-[12px] text-muted-soft"
+              numberOfLines={1}
+            >
+              {subtitle.address}
+            </Text>
+          ) : null}
           {distanceLine ? (
             <Text
               testID={`itinerary-place-distance-${place.poiId}`}

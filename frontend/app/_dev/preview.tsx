@@ -2108,6 +2108,7 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
       129.137,
       '10:00 - 18:00'
     ),
+    visitedLabel: '13:00',
   },
   {
     state: 'upcoming',
@@ -4184,7 +4185,12 @@ export const PREVIEW_STATES: PreviewState[] = [
           mapNotice={parts.mapNotice}
           hidePhotoGrid={parts.hidePhotoGrid}
           photos={[]}
-          dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+          // TRIP-1425 · 오늘(2일차) 다음 날인 3일차는 비활성 — 흐린 칩 모양은 여기서 육안(6-b).
+          dayTabs={[
+            { day: 1 },
+            { day: 2, today: true },
+            { day: 3, disabled: true },
+          ]}
           activeDay={2}
           onSelectDay={noop}
           onPressTab={noop}
@@ -7087,6 +7093,49 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   })),
+  // TRIP-1433 — 같은 이름 장소를 지역(1줄 맨 앞)·주소(2줄)로 가른다. 지역·주소 둘 다 / 지역만 / 둘 다 없음
+  // (지금 부제 그대로) 세 얼굴. 말줄임 때 지역이 보이는지·주소 줄 위계는 jest 가 못 봐서 여기서 눈으로 본다.
+  {
+    key: 'h13-place-add-same-name',
+    band: 'h',
+    label: 'h13 · 장소 추가 · 같은 이름',
+    login: null,
+    render: () => (
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={[]}
+        onBack={noop}
+        header={
+          <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
+            장소 추가 · 1일차
+          </Text>
+        }
+        list={{
+          data: [
+            {
+              ...PREVIEW_PLACES[0],
+              poiId: 'same-1',
+              address: '부산광역시 사하구 감내2로 203',
+            },
+            { ...PREVIEW_PLACES[0], poiId: 'same-2', region: '중구' },
+            { ...PREVIEW_PLACES[0], poiId: 'same-3', region: null },
+          ],
+          renderItem: ({ item }) => (
+            <PlaceAddRow place={item} added={false} onPressAdd={noop} />
+          ),
+          keyExtractor: (place) => place.poiId,
+          testID: 'itinerary-place-list',
+        }}
+      >
+        <PlaceAddHeader
+          searchText="감천문화마을"
+          selectedCategory={null}
+          onChangeSearchText={noop}
+          onSelectCategory={noop}
+        />
+      </MapSheetShell>
+    ),
+  },
   // i10 현재 장소 상세(TRIP-755) — props-only 화면. 옛 default·unknown 2키를 1키로 합쳤다(결측
   // 얼굴은 Figma 에 없고 결측 처리는 model·화면 테스트가 잠근다). 뒤로·공유·모두 보기는 Figma 에
   // 있으니 빈 핸들러로 켠다. 하트 '준비 중' 안내는 누르면 뜬다(6-b).
@@ -7322,6 +7371,43 @@ export const PREVIEW_STATES: PreviewState[] = [
         <MemoSheet
           placeName="부산시립미술관"
           text={LIVE_HUB_PREVIEW_MEMO}
+          onSubmit={noop}
+          onClose={noop}
+        />
+      </>
+    ),
+  },
+  // i01 메모 시트 잠금(TRIP-1415) — 첫 서버 메모 조회 중. 모양은 빈 시트와 같고, 탭해도 키보드가 안 떠야 한다(6-b).
+  {
+    key: 'live-hub-memo-sheet-locked',
+    band: 'i',
+    label: 'i01 · 여행중 허브 메모 시트 (조회 중 잠금)',
+    login: null,
+    render: () => (
+      <>
+        {renderLiveHubPreview(1, { fabHidden: true })}
+        <MemoSheet
+          placeName="부산시립미술관"
+          editable={false}
+          onSubmit={noop}
+          onClose={noop}
+        />
+      </>
+    ),
+  },
+  // i01 메모 시트 저장 중(TRIP-1426) — 응답을 기다리는 동안 [저장]이 비활성(opacity-40)이다.
+  {
+    key: 'live-hub-memo-sheet-saving',
+    band: 'i',
+    label: 'i01 · 여행중 허브 메모 시트 (저장 중)',
+    login: null,
+    render: () => (
+      <>
+        {renderLiveHubPreview(1, { fabHidden: true })}
+        <MemoSheet
+          placeName="부산시립미술관"
+          text={LIVE_HUB_PREVIEW_MEMO}
+          saving
           onSubmit={noop}
           onClose={noop}
         />
