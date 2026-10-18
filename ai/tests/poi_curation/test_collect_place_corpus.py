@@ -47,7 +47,7 @@ def test_accept_judges_with_the_requested_poi_and_rejects_company_and_region_mis
                 "다른곳": _p("다른곳", ref="r3", region="해운대구", address="부산광역시 해운대구 우동")}
     pages = {"더현대 서울": ("현대백화점", "주식회사 현대백화점은 1968년에 설립된 회사이다. 영등포구 여의도에 점포가 있다."),
              "천호시장": ("천호시장", "천호시장은 서울 강동구 천호동에 있는 전통 시장이다."),
-             "다른곳": ("다른곳", "다른곳은 서울 종로구에 있는 건물이다.")}
+             "다른곳": ("다른곳", "다른곳은 경기도 성남시에 있는 건물이다.")}
     assert m.accept(pages, by_title) == [("천호시장", "r2")]
 
 
@@ -64,5 +64,5 @@ def test_redirected_page_is_judged_against_the_poi_that_asked_not_the_target_tit
     m = _mod()
     by_title = {"더현대 서울": _p("더현대 서울", ref="r1", region="영등포구", address="서울특별시 영등포구 여의도동"),
                 "현대백화점": _p("현대백화점", ref="r4")}
-    pages = {"더현대 서울": ("현대백화점", "현대백화점 천호점은 서울 강동구 천호동에 있는 백화점이다.")}
+    pages = {"더현대 서울": ("현대백화점", "현대백화점 천호점은 강동구 천호동에 있는 백화점이다.")}
     assert m.accept(pages, by_title) == []

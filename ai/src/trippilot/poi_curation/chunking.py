@@ -54,9 +54,11 @@ def split_sentences(text: str) -> list[str]:
 
 
 def _hard_split(sentence: str) -> list[str]:
-    """`MAX_CHARS` 를 넘는 한 문장 — 공백에서 자른다(목록·표가 문장 부호 없이 이어진 경우)."""
+    """`MAX_CHARS` 를 넘는 한 문장 — 공백에서 자른다(목록·표가 문장 부호 없이 이어진 경우). 공백 없이 쉼표로만
+    이어진 목록("불곰,퓨마,붉은여우,…" 400자)은 한 낱말이라 글자 수로 자른다 — 상한을 넘는 조각이 없게."""
     out, cur = [], ""
-    for word in sentence.split(" "):
+    words = [w[i:i + MAX_CHARS] for w in sentence.split(" ") for i in range(0, max(len(w), 1), MAX_CHARS)]
+    for word in words:
         if cur and len(cur) + 1 + len(word) > MAX_CHARS:
             out.append(cur)
             cur = word

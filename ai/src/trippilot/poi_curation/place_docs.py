@@ -130,14 +130,13 @@ def is_disambiguation(text: str) -> bool:
 
 
 def mentions_region(text: str, region: str, address: str) -> bool:
-    """문서가 그 장소의 **시군구**를 언급하나. 검증 못 하면 **버린다**(빈 것이 낫다).
+    """문서가 그 장소의 소재지를 언급하나. 검증 못 하면 **버린다**(빈 것이 낫다).
 
-    광역(도·특별시) 토큰은 보지 않는다(2026-10-18 리뷰 실측): 회사·브랜드 문서 도입부는 본사 주소를 흔히 적어
-    '서울특별시'만으로 통과했다 — 천호동 '현대백화점' POI 에 "주식회사 현대백화점은 1968년에 설립된 회사"가
-    붙었다. 시군구는 지점·소재지를 가리키는 단위라 그 오매칭을 대부분 막는다.
+    광역 토큰('서울특별시')도 본다. 시군구만 보게 좁혀 봤더니(2026-10-18) 옛 문서 1,470건 중 92건의 **진짜 장소**가
+    떨어졌다 — 뚝섬·망원 한강공원, 대전선사박물관처럼 백과 도입부는 광역만 적는 일이 흔하다. 광역만 맞는 회사·
+    브랜드 문서('주식회사 현대백화점은 … 설립된 회사이다')는 `is_company_intro` 가 따로 거른다.
     """
-    parts = address.split()
-    tokens = [t for t in (region, *parts[1:3]) if len(t) >= 2]
+    tokens = [t for t in f"{region} {address}".split() if len(t) >= 2][:3]
     for token in tokens:
         stem = token.rstrip("시군구")  # '제주시' → '제주' — 본문 표기가 달라도 걸린다
         if len(stem) >= 2 and stem in text:
@@ -147,14 +146,16 @@ def mentions_region(text: str, region: str, address: str) -> bool:
 
 # 정의문이 회사·브랜드인 문서 — 지점 POI 에 붙으면 **회사 연혁·다른 지점 목록**이 그 장소 설명으로 실린다.
 # 본문 전문을 실으면서 피해가 커졌다(한 문서 40조각 — 다른 지점 절이 최고 점수로 붙을 수 있다).
-_COMPANY_WORDS = ("회사", "기업", "브랜드", "프랜차이즈", "법인", "체인")
+# **정의 서술어**로만 본다("…설립된 회사이다"·"…라이프스타일 브랜드이다"). 낱말만 보면 "재단법인 ○○재단이 운영하는
+# 미술관이다"·"주식회사가 운영하는 테마파크"까지 걸렸다(2026-10-18 실측: 환기미술관·서울랜드·문화원 16건 오기각).
+_COMPANY_DEFINITION = re.compile(r"(회사|기업|브랜드|프랜차이즈|체인점?|기업집단)(이다|이며|이자|로서|으로서)")
 
 
 def is_company_intro(text: str) -> bool:
-    """첫 문장이 회사·브랜드를 정의하나 — 그러면 그 이름의 지점 POI 를 설명하는 문서가 아니다."""
+    """첫 문장이 회사·브랜드를 **정의**하나 — 그러면 그 이름의 지점 POI 를 설명하는 문서가 아니다."""
     m = _FIRST_SENTENCE.match(text.strip())
     first = m.group(0) if m else text[:120]
-    return any(w in first for w in _COMPANY_WORDS)
+    return bool(_COMPANY_DEFINITION.search(first))
 
 
 # 본문이 아닌 꼬리 절 — 링크 목록·각주라 상황 판단 근거가 없다. 접두로 본다("각주와 참고 문헌"·"참고 자료").

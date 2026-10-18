@@ -38,6 +38,9 @@ def test_chunks_follow_sentence_boundaries_overlap_one_sentence_and_stay_under_t
 def test_a_sentence_longer_than_the_cap_is_split_on_spaces() -> None:
     chunks = c.chunk_section("가나다 " * 200)
     assert chunks and all(len(x) <= c.MAX_CHARS for x in chunks)
+    # 공백 없이 쉼표로만 이어진 목록(실측 '동물원' 절 400자)도 상한을 넘지 않는다
+    listing = c.chunk_section(",".join(["붉은여우"] * 120))
+    assert listing and all(len(x) <= c.MAX_CHARS for x in listing)
 
 
 def test_document_chunks_carry_section_heading_stable_ids_and_the_cap() -> None:
