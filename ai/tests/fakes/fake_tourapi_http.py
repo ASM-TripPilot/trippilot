@@ -67,6 +67,14 @@ def intro_item(content_id: str, kind: str, hours: str, rest: str, **extra: str) 
     return {"contentid": content_id, fields[0]: hours, fields[1]: rest, **extra}
 
 
+
+def area_of(params: Mapping[str, str]) -> str:
+    """실물은 법정동 코드(lDongRegnCd)로 부른다 — 픽스처는 옛 areaCode 로 적혀 있어 되돌려 읽는다."""
+    from trippilot.poi_curation.sourcing.tourapi import LDONG_BY_AREA
+    if "areaCode" in params:
+        return params["areaCode"]
+    return next(a for a, l in LDONG_BY_AREA.items() if l == params["lDongRegnCd"])
+
 class HttpStatusError(Exception):
     """urllib.error.HTTPError의 최소 대역 — `.code` 로 상태를 노출한다.
 
@@ -108,8 +116,7 @@ class FakeTourApiHttp:
         if isinstance(rejection, str):
             return error_envelope(rejection)
         if url.endswith("/areaBasedList2"):
-            area_key = (params["areaCode"], params["contentTypeId"],
-                        int(params["pageNo"]))
+            area_key = (area_of(params), params["contentTypeId"], int(params["pageNo"]))
             if area_key in self._pages:
                 return self._pages[area_key]
             key = (params["contentTypeId"], int(params["pageNo"]))

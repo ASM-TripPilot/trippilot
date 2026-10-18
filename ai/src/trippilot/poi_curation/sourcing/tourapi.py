@@ -55,6 +55,20 @@ _OK_CODE = "0000"
 _KEY_DEAD_CODES = frozenset({"20", "22", "30", "31"})
 _KEY_DEAD_HTTP = 403
 
+# 목록 조회 키 — 옛 areaCode → 법정동 시도 코드(lDongRegnCd). KorService2 가 지역을 법정동 코드로
+# 옮기면서 **수정된 항목의 areacode 칸이 비어** areaCode 로 거르면 일부만 온다. 실측(2026-10-18,
+# 관광지 totalCount areaCode vs lDongRegnCd): 서울 315 vs 765 · 부산 122 vs 351 · 제주 247 vs 557,
+# 음식점도 55~58%. 경복궁·해운대해수욕장·광안리해수욕장·감천문화마을·천지연폭포가 공유본에 없던 이유다
+# (전부 areacode '' · lDongRegnCd 만 채워짐). 강원·전북은 특별자치도 코드(51·52)만 살아 있고(42·45 는 0),
+# 세종은 다섯 자리 36110, 광주·전남은 통합(전남광주통합특별시 12)이다 — 5(광주)와 38(전남)이 같은 12 를
+# 가리키므로 기본 순회에서 5 를 뺀다(`pipeline.DEFAULT_AREA_CODES`). 어댑터는 그대로 부른다 — 메서드
+# 1회 = HTTP 1건이 호출 예산 계약이라 여기서 조용히 건너뛰지 않는다.
+LDONG_BY_AREA: Mapping[str, str] = {
+    "1": "11", "2": "28", "3": "30", "4": "27", "5": "12", "6": "26", "7": "31", "8": "36110",
+    "31": "41", "32": "51", "33": "43", "34": "44", "35": "47", "36": "48", "37": "52",
+    "38": "12", "39": "50",
+}
+
 # detailIntro2의 영업시간·휴무일 필드명은 contentTypeId마다 다르다 (TourAPI 4.0).
 _INTRO_FIELDS: Mapping[str, tuple[str, str]] = {
     "12": ("usetime", "restdate"),              # 관광지
@@ -193,11 +207,14 @@ class TourApiAdapter:
     def fetch_page(
         self, area_code: str, kind: str, page_no: int, rows: int
     ) -> SourcedPage:
+        # 조회는 법정동 코드로 — 사유는 `LDONG_BY_AREA`. 표에 없는 코드는 옛 areaCode 로(하위호환).
+        ldong = LDONG_BY_AREA.get(area_code, "")
+        region = {"lDongRegnCd": ldong} if ldong else {"areaCode": area_code}
         body = self._call(
             "areaBasedList2",
             {
                 **self._common_params(),
-                "areaCode": area_code,
+                **region,
                 "contentTypeId": kind,
                 "numOfRows": str(rows),
                 "pageNo": str(page_no),
