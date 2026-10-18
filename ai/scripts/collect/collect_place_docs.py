@@ -99,6 +99,46 @@ _WIKI_SKIP_SOURCES = frozenset({"LOCALDATA"})
 _CHAIN_MIN = 3
 # 본문 실패가 이 비율을 넘으면 비정상 종료 — 망가진 실행이 종료코드 0 으로 코퍼스를 줄여 놓지 않게.
 _MAX_FAIL_RATE = 0.02
+# 요청 재시도 간격(초) — 연결 끊김·리셋은 잠깐 기다리면 대개 풀린다(2026-10-18 실측: 맥 부하·망 불안정으로 2,004건 중
+# 93건이 한 번에 실패해 실행 전체가 버려질 뻔했다).
+_RETRY_SLEEPS = (2, 5, 15)
+# 받은 응답을 남겨 두는 로컬 캐시(JSONL, 리포 밖) — `WIKIFULL_CACHE` 경로를 주면 다시 돌릴 때 받은 것은 건너뛴다.
+_CACHE_ENV = "WIKIFULL_CACHE"
+
+
+class _Cache:
+    """키 → 응답 JSONL. 없으면 아무것도 안 하는 대역."""
+
+    def __init__(self) -> None:
+        import os
+
+        p = os.environ.get(_CACHE_ENV)
+        self._path = pathlib.Path(p) if p else None
+        self._data: dict = {}
+        if self._path and self._path.exists():
+            for line in self._path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    k, v = json.loads(line)
+                    self._data[k] = v
+
+    def get(self, key):
+        return self._data.get(key)
+
+    def put(self, key, value) -> None:
+        self._data[key] = value
+        if self._path:
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps([key, value], ensure_ascii=False) + "\n")
+
+
+def _retrying(fn, *args):
+    for wait in (*_RETRY_SLEEPS, None):
+        try:
+            return fn(*args)
+        except Exception:
+            if wait is None:
+                raise
+            time.sleep(wait)
 
 
 def select_wiki_titles(proposals: Sequence[dict]) -> dict[str, dict]:
@@ -149,31 +189,40 @@ def _wiki_corpus(proposals: Sequence[dict], *, sample: bool = False) -> int:
     print(f"  판정 대상 {len(by_title)}개 이름 (인허가 식당·체인 {len(proposals) - len(by_title)}건 제외)")
     titles = list(by_title)
     accepted: dict[str, str] = {}  # 조인 키 → 문서 제목 (한 장소에 문서 하나 — doc_id 가 유일하다)
+    cache = _Cache()
     for i in range(0, len(titles), _WIKI_BATCH):
         batch = titles[i : i + _WIKI_BATCH]
-        try:
-            pages = _wiki_fetch_mapped(batch)
-        except Exception as e:  # 한 묶음 실패가 전체를 죽이지 않는다
-            print(f"  ! 판정 묶음 {i // _WIKI_BATCH} 실패 — {type(e).__name__}: {e}")
-            continue
+        key = "j:" + "|".join(batch)
+        pages = cache.get(key)
+        if pages is None:
+            try:
+                pages = _retrying(_wiki_fetch_mapped, batch)
+            except Exception as e:  # 한 묶음 실패가 전체를 죽이지 않는다
+                print(f"  ! 판정 묶음 {i // _WIKI_BATCH} 실패 — {type(e).__name__}: {e}")
+                continue
+            cache.put(key, pages)
+            time.sleep(_WIKI_SLEEP)
+        pages = {k: tuple(v) for k, v in pages.items()}
         for title, ref in accept(pages, by_title):
             accepted.setdefault(ref, title)
         if (i // _WIKI_BATCH) % 25 == 0:
             print(f"  판정 {i + len(batch):6d}/{len(titles)} · 장소 문서 {len(accepted)}건")
-        time.sleep(_WIKI_SLEEP)
 
     out_path = _SAMPLE if sample else _CORPUS
     tmp = out_path.with_suffix(".tmp")
     rows, failed = 0, 0
     with gzip.open(tmp, "wt", encoding="utf-8") as out:
         for n, (ref, title) in enumerate(accepted.items(), 1):
-            try:
-                text = _wiki_full(title)
-            except Exception as e:
-                failed += 1
-                print(f"  ! 본문 {title} 실패 — {type(e).__name__}: {e}")
-                time.sleep(_WIKI_SLEEP * 5)
-                continue
+            text = cache.get("f:" + title)
+            if text is None:
+                try:
+                    text = _retrying(_wiki_full, title)
+                except Exception as e:
+                    failed += 1
+                    print(f"  ! 본문 {title} 실패 — {type(e).__name__}: {e}")
+                    continue
+                cache.put("f:" + title, text)
+                time.sleep(_WIKI_SLEEP)
             sections = _without_contacts(wiki_sections(text))
             if not sections:
                 continue
@@ -186,7 +235,6 @@ def _wiki_corpus(proposals: Sequence[dict], *, sample: bool = False) -> int:
             rows += 1
             if n % 200 == 0:
                 print(f"  본문 {n:5d}/{len(accepted)}")
-            time.sleep(_WIKI_SLEEP)
     if accepted and failed / len(accepted) > _MAX_FAIL_RATE:
         tmp.unlink()
         raise SystemExit(f"본문 실패 {failed}/{len(accepted)} — {_MAX_FAIL_RATE:.0%} 초과, 코퍼스를 바꾸지 않았다")
