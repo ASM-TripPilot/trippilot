@@ -1609,3 +1609,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8 Functional Design·NFR 사후 개정 + ai 유닛 `assistant-orchestrator` FD 신설, 승인 대기(같은 PR 머지 = 승인). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다(U8 승인 상태 유지, 국소 개정).
 
 ---
+## Functional Design 사후 개정 — U8 NFR PERF-U8-02 재개정 (assistant-orchestrator 롤아웃)
+**Timestamp**: 2026-10-18T00:00:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "싹다 진행시켜. 다 머지 하고. 다 배포시켜."
+**AI Response**: 개발·운영 롤아웃 전에 실 모델로 20턴을 쟀더니(gpt-5.6-luna, 끝난 턴 기준 분류 p90 1.9s·답변 p90 2.4s) 2.5s 상한에서 분류 1/20·답변 2/17 이 잘렸다. `nfr-requirements.md` PERF-U8-02 개정 셀 끝에 **재개정(2026-10-18)** 문장을 덧붙였다(원문·10-17 블록 보존): AI 내부 배분 분류 min(4.0s, 잔여×0.45)·답변 min(3.5s, 잔여−0.4s), 최악 합은 여전히 해석 단계 9,000ms 안. 근거·산술은 ai 유닛 FD `assistant-orchestrator` BLM §4 註.
+**Context**: CONSTRUCTION — U8 NFR 국소 개정, 승인 대기(같은 PR 머지 = 승인). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

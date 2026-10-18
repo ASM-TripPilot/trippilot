@@ -94,7 +94,7 @@ class DialogueIntentWorker:
     ) -> TypedResult:
         """성공 value 는 `IntentDraft`; 실패·null 은 폴백 TypedResult 그대로(BR-U4-09).
 
-        `timeout_sec` 는 호출측 잔여 예산(DL-4 — BLM 시한표 min(2.5s, 잔여×0.35)); None 이면 게이트웨이 기본 10s.
+        `timeout_sec` 는 호출측 잔여 예산(DL-4 — BLM 시한표 min(4.0s, 잔여×0.45) — 2026-10-18 실측 개정); None 이면 게이트웨이 기본 10s.
         """
         return self._gateway.call(
             LlmFeature.DIALOGUE_INTENT,

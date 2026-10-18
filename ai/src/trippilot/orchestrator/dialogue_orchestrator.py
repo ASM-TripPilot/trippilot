@@ -116,9 +116,11 @@ _ROLES = frozenset({"USER", "ASSISTANT"})
 
 # ── 시한·상한 (DE §2.8 · BLM §4 배분표) — 모듈 상수. 운영 조립도 테스트도 다른 값을 넣은 적이 없어 설정 묶음을 두지 않는다.
 DEFAULT_DEADLINE_MS = 9_000  # 백엔드가 deadline 을 안 보냈을 때(BR §5 미결 #5) — 경계 사영(`api/dialogue.py`)이 쓴다
-_INTENT_CAP_MS, _INTENT_SHARE = 2_500, 0.35  # 분류 LLM: min(cap, 잔여×share)
+# 분류 LLM: min(cap, 잔여×share). 실측(2026-10-18, gpt-5.6-luna·프롬프트 ≈2,000토큰 20턴): 끝난 턴 p50 1.6s·p90 1.9s·최대 2.3s,
+# 1턴은 2.5s 상한에서 잘렸다(실제 값 미상) → 범위 밖 카드(BE 거절 스트릭까지 오른다). 4.0s·0.45 로 올려도 최악 합은 9s 안(BLM §4).
+_INTENT_CAP_MS, _INTENT_SHARE = 4_000, 0.45
 _FANOUT_CAP_MS, _FANOUT_SHARE = 3_000, 0.40  # 팬아웃 예산
-_ANSWER_CAP_MS = 2_500
+_ANSWER_CAP_MS = 3_500  # 같은 실측 p50 1.6s·p90 2.4s, 2.5s 에서 17턴 중 2턴이 템플릿으로 떨어졌다
 _ANSWER_RESERVE_MS = 400  # 게이트·사영·직렬화 몫
 _ANSWER_MIN_REMAINING_MS = 1_500  # 미만이면 답변 LLM 을 부르지 않고 템플릿 (> _ANSWER_RESERVE_MS — 아니면 시한이 0 이하)
 _MEMORY_MIN_REMAINING_MS = 2_500  # 미만이면 결정론 압축

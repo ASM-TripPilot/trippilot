@@ -6,7 +6,7 @@
   [0단]  리터럴 "내가 할 수 있는 것 보기" → 결정론 ANSWER (LLM 0 · 프레임 0 · FallbackEvent 0, BR-AO-18)
   [1단]  보류 되묻기 답 읽기(`answer_pending` 재사용) → 프레임 완성(LLM 0, match_route CLARIFY_ANSWER) → 핸들러 → ANSWER;
          다른 요청이 확실하면 보류를 버리고 분류한다
-  [2단]  DIALOGUE_INTENT 1회(timeout=min(2.5s, 잔여×0.35)) → LLM_DIRECT 프레임 · null·비JSON·enum 밖 → OUT_OF_SCOPE + 거절
+  [2단]  DIALOGUE_INTENT 1회(timeout=min(4.0s, 잔여×0.45)) → LLM_DIRECT 프레임 · null·비JSON·enum 밖 → OUT_OF_SCOPE + 거절
          표지(`is_refusal`) · 인프라 실패는 표지 없음 (AO-P6)
   [2′단] 섀도 submit — `llm_calls` 는 서비스 호출만(AO-P3) · 로그 1줄에 원문·account_ref 부재 · 분류 실패 턴도 submit
   [3단]  필수 인자 비면 ARGUMENT_CLARIFY(고정 문안·스냅샷 보기, 요청당 1회)
@@ -270,8 +270,8 @@ def test_weather_turn_classifies_fans_out_and_composes_an_info_answer() -> None:
     assert out.llm_calls == 2 and b.llm.features() == ["DIALOGUE_INTENT", "DIALOGUE_ANSWER"]
     assert out.context == DialogueContext(turn_index=0) and _fallbacks(b.trace) == []
     intent_req, answer_req = b.llm.requests
-    # 시한 배분표(BLM §4): 분류 min(2.5, 9.0×0.35) · 답변 min(2.5, 9.0−0.4) — 둘 다 상한에 걸린다
-    assert intent_req.timeout_sec == pytest.approx(2.5) and answer_req.timeout_sec == pytest.approx(2.5)
+    # 시한 배분표(BLM §4): 분류 min(4.0, 9.0×0.45) · 답변 min(3.5, 9.0−0.4) — 둘 다 상한에 걸린다
+    assert intent_req.timeout_sec == pytest.approx(4.0) and answer_req.timeout_sec == pytest.approx(3.5)
     # `$trip` 한 줄(DE §6) · 좌표는 어느 프롬프트에도 없다(AO-P14) · account_ref 도 없다(SEC-U8-06)
     assert "여행 제주 2026-10-18~2026-10-19 (IN_TRIP) · 오늘 2026-10-19 · 일정 2일 5곳 · 화면 ITINERARY" in intent_req.prompt
     for req in b.llm.requests:
@@ -597,12 +597,12 @@ def test_exhausted_budget_defers_memory_without_writing_but_still_answers() -> N
     assert ("memory", "llm_dialogue_memory", "deferred") in _modes(b.trace)
 
 
-_CAPS_SEC = {"DIALOGUE_INTENT": 2.5, "DIALOGUE_ANSWER": 2.5, "DIALOGUE_MEMORY": 2.0}
+_CAPS_SEC = {"DIALOGUE_INTENT": 4.0, "DIALOGUE_ANSWER": 3.5, "DIALOGUE_MEMORY": 2.0}
 
 
 @settings(max_examples=60, deadline=None)
 @given(intent_ms=st.integers(0, 10_000), answer_ms=st.integers(0, 4_000), memory_ms=st.integers(0, 3_000),
-       deadline=st.integers(200, 9_000), turn_index=st.sampled_from([0, 10]))
+       deadline=st.one_of(st.just(9_000), st.integers(200, 12_000)), turn_index=st.sampled_from([0, 10]))
 def test_budget_is_honoured_wherever_time_goes(intent_ms: int, answer_ms: int, memory_ms: int, deadline: int,
                                                turn_index: int) -> None:
     """AO-P5 — 어느 단계가 시간을 먹어도 응답이 있고, 호출된 LLM 의 timeout 은 그 시점 잔여·단계 상한 안,
@@ -617,6 +617,11 @@ def test_budget_is_honoured_wherever_time_goes(intent_ms: int, answer_ms: int, m
         remaining_then = deadline - (at - started)
         assert 0 < req.timeout_sec <= _CAPS_SEC[req.prompt_ref.feature] + 1e-9
         assert req.timeout_sec * 1000 <= remaining_then + 1e-6
+        # 상한 합(4.0+3.0+3.5)은 9s 를 넘는다 — 9s 보장은 비율·예약 몫이 지킨다(BLM §4 註). 그 항을 직접 단언한다.
+        if req.prompt_ref.feature == "DIALOGUE_INTENT":
+            assert req.timeout_sec * 1000 <= 0.45 * remaining_then + 1
+        if req.prompt_ref.feature == "DIALOGUE_ANSWER":
+            assert req.timeout_sec * 1000 <= remaining_then - 400 + 1e-6
     after_intent = deadline - intent_ms
     if after_intent < 1_500:
         assert "DIALOGUE_ANSWER" not in feats

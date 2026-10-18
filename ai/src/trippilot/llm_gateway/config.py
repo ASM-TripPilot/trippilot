@@ -241,7 +241,7 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             # 자유 발화 → 지시 키(닫힌 목록). 미지정(기본 추론)이라 DEV 에서 시한 3.75s 를 2/2 넘겼다
             # (2026-10-14) — 같은 원문을 읽는 추출은 low 로 2/2 성공했다. 출력은 사전 키만 통과(게이트).
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",
-            # 도우미 턴 — 백엔드 해석 시한 9s 안에서 분류 ≤2.5s·답변 ≤2.5s·요약 ≤2.0s 라 사고를 낮춘다
+            # 도우미 턴 — 백엔드 해석 시한 9s 안에서 분류 ≤4.0s·답변 ≤3.5s·요약 ≤2.0s(2026-10-18 실측 개정)라 사고를 낮춘다
             # (assistant-orchestrator FD domain-entities §2.10 · BLM 시한표)
             LlmFeature.DIALOGUE_INTENT: "low",
             LlmFeature.DIALOGUE_ANSWER: "low",

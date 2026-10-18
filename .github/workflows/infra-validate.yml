@@ -9,8 +9,9 @@ on:
   pull_request:
     branches: [develop, main]
     # infra/·deploy/ 밖에서 이 스위트가 읽는 파일도 넣는다 — 계약 테스트가 워크플로 셋을,
-    # deploy/eks/tests 가 backend/scripts/ingest_pois.py 를 읽는다(runtime_pois.SCRIPT).
-    paths: ['infra/**', 'deploy/**', '.github/workflows/infra-validate.yml', '.github/workflows/aws-deploy.yml', '.github/workflows/aws-bootstrap.yml', 'backend/scripts/ingest_pois.py']
+    # deploy/eks/tests 가 backend/scripts/ingest_pois.py 를 읽는다(runtime_pois.SCRIPT). 도우미 배포 입력(2026-10-18)은
+    # ai/src/trippilot/domain/llm.py 의 LlmFeature(runtime_secrets 모듈의 FEATURE_SOURCE)와 smoke 본문 계약 ai/docs/openapi.json 을 읽는다.
+    paths: ['infra/**', 'deploy/**', '.github/workflows/infra-validate.yml', '.github/workflows/aws-deploy.yml', '.github/workflows/aws-bootstrap.yml', 'backend/scripts/ingest_pois.py', 'ai/src/trippilot/domain/llm.py', 'ai/docs/openapi.json']
   workflow_call:
     inputs:
       verify_backend_shutdown:

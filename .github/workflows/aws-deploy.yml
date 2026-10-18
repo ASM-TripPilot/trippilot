@@ -35,6 +35,15 @@ on:
         type: choice
         options: [keep, off, expo]
         default: keep
+      dialogue_orchestrator:
+        description: 도우미 오케스트레이터(AI 시크릿 TRIPPILOT_DIALOGUE_ORCHESTRATOR) — keep 은 저장값 유지, on·off 는 배포 역할이 시크릿에 써서 다음 배포에도 남는다
+        type: choice
+        options: [keep, 'on', 'off']
+        default: keep
+      llm_feature_models:
+        description: 기능별 모델 배정(TRIPPILOT_LLM_FEATURE_MODELS)에 덧씌울 항목 FEATURE=model,… — 같은 기능은 바꾸고 나머지는 그대로 시크릿에 쓴다. 이 커밋과 지금 떠 있는 AI 이미지가 둘 다 아는 이름만 받는다(새 기능은 입력 없이 한 번 배포한 다음 런에서). 비우면 유지
+        type: string
+        default: ''
       poi_close_missing:
         description: POI 공유본 적재 때 그 출처의 ACTIVE 중 공유본에 없는 것을 LOST 로 내린다 (기본 off — upsert 만). 비율 가드(409)에 걸리면 스텝이 실패하고 아무것도 닫지 않는다
         type: boolean
@@ -82,6 +91,8 @@ jobs:
       DEPLOY_APPLICATION: ${{ inputs.deploy_application }}
       EMBEDDING_ENABLED: ${{ inputs.embedding_enabled }}
       PUSH_MODE_INPUT: ${{ inputs.push_mode }}
+      DIALOGUE_ORCHESTRATOR_INPUT: ${{ inputs.dialogue_orchestrator }}
+      LLM_FEATURE_MODELS_INPUT: ${{ inputs.llm_feature_models }}
       POI_CLOSE_MISSING: ${{ inputs.poi_close_missing }}
       POI_CLOSE_MISSING_DRY_RUN: ${{ inputs.poi_close_missing_dry_run }}
       DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
@@ -230,8 +241,12 @@ jobs:
           if [ -n "$EMBEDDING_IMAGE_TAG" ]; then embedding_tag_args+=(--embedding-image-tag "$EMBEDDING_IMAGE_TAG"); fi
           push_args=()
           if [ "$EFFECTIVE_PUSH_MODE" != keep ]; then push_args+=(--push-mode "$EFFECTIVE_PUSH_MODE"); fi
+          dialogue_args=()
+          if [ "$EFFECTIVE_DIALOGUE_ORCHESTRATOR" != keep ]; then dialogue_args+=(--dialogue-orchestrator "$EFFECTIVE_DIALOGUE_ORCHESTRATOR"); fi
+          if [ -n "$EFFECTIVE_LLM_FEATURE_MODELS" ]; then dialogue_args+=(--llm-feature-models "$EFFECTIVE_LLM_FEATURE_MODELS"); fi
           python3 deploy/eks/runtime.py sync-secrets \
-            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --target "$DEPLOY_TARGET" "${embedding_args[@]}" "${push_args[@]}"
+            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --target "$DEPLOY_TARGET" "${embedding_args[@]}" "${push_args[@]}" \
+            "${dialogue_args[@]}"
           python3 deploy/eks/runtime.py render-values --target "$DEPLOY_TARGET" \
             --outputs "$RUNNER_TEMP/trippilot-outputs.json" --image-tag "$IMAGE_TAG" \
             --certificate-arn "$ACM_CERTIFICATE_ARN" --hostname "$API_HOSTNAME" \

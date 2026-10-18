@@ -414,9 +414,9 @@ ShadowRecord (frozen):
   recent_turn_chars: int = 300
   utterance_max_chars: int = 500
   # 시한 배분 (BLM §4)
-  intent_timeout_cap_ms: int = 2_500 ; intent_timeout_share: float = 0.35
+  intent_timeout_cap_ms: int = 4_000 ; intent_timeout_share: float = 0.45   # 2026-10-18 실측 개정(초판 2_500·0.35, BLM §4 註)
   fanout_cap_ms: int = 3_000 ; fanout_share: float = 0.40
-  answer_timeout_cap_ms: int = 2_500 ; answer_reserve_ms: int = 400 ; answer_min_remaining_ms: int = 1_500
+  answer_timeout_cap_ms: int = 3_500 ; answer_reserve_ms: int = 400 ; answer_min_remaining_ms: int = 1_500   # 초판 2_500
   memory_min_remaining_ms: int = 2_500 ; memory_timeout_cap_ms: int = 2_000
   # 메모리
   summary_every_turns: int = 10 ; summary_max_lines: int = 20 ; summary_line_chars: int = 120
