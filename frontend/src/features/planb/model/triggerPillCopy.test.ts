@@ -70,3 +70,83 @@ describe('triggerPillCopy — P4 INV-3 소요시간·지연 분 없음', () => {
     outputs.forEach((text) => expect(text).not.toMatch(/분|delay|duration/i));
   });
 });
+
+/**
+ * 상황 감지 FE-B · frontend-components §3.4 — 알약 `{dayLabel }{라벨}{ · 장소}{ 시}`.
+ *
+ * 무엇을 보장하나:
+ *  - 변형이 있으면 kind 라벨 대신 변형 라벨이 앞에 선다(`강풍`·`폭염`·`휴무`…).
+ *  - 날짜어(`내일`·`M월 D일`)는 맨 앞에 공백 하나로 붙는다 — 만드는 것은 호출부(`triggerDayLabel`)다.
+ *  - CLOSURE 는 그 장소 자체의 영업이라 변형이 있으면 `주변 시설` 꼬리를 뗀다. 변형이 없으면(옛 서버) 옛 꼬리 그대로.
+ *  - DELAY 꼬리(`방면`)와 날씨의 `{H}시` 는 기존 템플릿 그대로다(시는 계획 startAt 을 자를 뿐).
+ *  - options 가 없거나 둘 다 null 이면 옛 출력과 바이트까지 같다(PBT 는 `triggerLabel.property.test.ts`).
+ */
+describe('triggerPillCopy — P5 변형·날짜어 (상황 감지 FE-B)', () => {
+  it('정본 예 — CLOSURE·CLOSED_DAY·내일·국립중앙박물관 → "내일 휴무 · 국립중앙박물관"', () => {
+    expect(
+      triggerPillCopy(
+        'CLOSURE',
+        { nameKo: '국립중앙박물관', startAt: '10:00:00' },
+        { variant: 'CLOSED_DAY', dayLabel: '내일' }
+      )
+    ).toBe('내일 휴무 · 국립중앙박물관');
+  });
+
+  it('정본 예 — WEATHER·WIND·송악산 둘레길 15:00 → "강풍 · 송악산 둘레길 15시"', () => {
+    expect(
+      triggerPillCopy(
+        'WEATHER',
+        { nameKo: '송악산 둘레길', startAt: '15:00:00' },
+        { variant: 'WIND' }
+      )
+    ).toBe('강풍 · 송악산 둘레길 15시');
+  });
+
+  it('날씨는 날짜 단위 신호라 슬롯이 없으면 날짜어 + 변형 라벨만 — "10월 21일 폭염"', () => {
+    expect(
+      triggerPillCopy('WEATHER', null, {
+        variant: 'HEAT',
+        dayLabel: '10월 21일',
+      })
+    ).toBe('10월 21일 폭염');
+  });
+
+  it.each([
+    ['OUT_OF_HOURS', '영업시간 밖 · 해운대 해변'],
+    ['HOURS_MISMATCH', '영업시간 확인 · 해운대 해변'],
+    ['HOLIDAY', '공휴일 휴무 · 해운대 해변'],
+    ['PERMANENTLY_CLOSED', '폐업 · 해운대 해변'],
+  ] as const)(
+    'CLOSURE 변형 %s 이면 주변 시설 꼬리 없이 "%s"',
+    (variant, expected) => {
+      expect(triggerPillCopy('CLOSURE', HAEUNDAE, { variant })).toBe(expected);
+    }
+  );
+
+  it('CLOSURE 변형이 null·모르는 값이면 옛 "휴무 · 해운대 해변 주변 시설" 그대로다', () => {
+    expect(triggerPillCopy('CLOSURE', HAEUNDAE, { variant: null })).toBe(
+      '휴무 · 해운대 해변 주변 시설'
+    );
+    expect(
+      triggerPillCopy('CLOSURE', HAEUNDAE, {
+        variant: 'MAYBE' as unknown as 'CLOSED_DAY',
+      })
+    ).toBe('휴무 · 해운대 해변 주변 시설');
+  });
+
+  it('DELAY 는 방면 꼬리 그대로에 날짜어만 붙는다', () => {
+    expect(triggerPillCopy('DELAY', HAEUNDAE, { dayLabel: '내일' })).toBe(
+      '내일 이동 지연 · 해운대 해변 방면'
+    );
+  });
+
+  it('options 가 없거나 둘 다 null 이면 옛 출력과 같다', () => {
+    for (const kind of KINDS) {
+      const old = triggerPillCopy(kind, HAEUNDAE);
+      expect(triggerPillCopy(kind, HAEUNDAE, {})).toBe(old);
+      expect(
+        triggerPillCopy(kind, HAEUNDAE, { variant: null, dayLabel: null })
+      ).toBe(old);
+    }
+  });
+});

@@ -485,16 +485,17 @@
 - `src/features/open-assistant/ui/AssistantGlyphs.tsx`  →  SparkleGlyph
 
 ## src/features/planb/config/
-- `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL
+- `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WatchStatus · WATCH_STATUS_LABEL
 
 ## src/features/planb/
 - `src/features/planb/index.ts`  →  appliedSummaryBadges · appliedSummaryInputFromDiff · useActiveTriggers
-- `src/features/planb/index.view.ts`  →  WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL · triggerLabel · triggerPillCopy · AppliedAlertGlyph · RiskWarningGlyph
+- `src/features/planb/index.view.ts`  →  WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL · triggerDayLabel · triggerLabel · triggerPillCopy · AppliedAlertGlyph · RiskWarningGlyph
 
 ## src/features/planb/model/
 - `src/features/planb/model/appliedSummary.ts`  →  AppliedSummaryInput · appliedSummaryInputFromDiff · appliedSummaryBadges
-- `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
-- `src/features/planb/model/triggerPillCopy.ts`  →  TriggerPillSlot · triggerPillCopy
+- `src/features/planb/model/triggerDayLabel.ts`  →  triggerDayLabel
+- `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · VARIANT_LABELS · isKnownVariant · triggerLabel
+- `src/features/planb/model/triggerPillCopy.ts`  →  TriggerPillSlot · TriggerPillOptions · triggerPillCopy
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
 
 ## src/features/planb/ui/
@@ -1780,4 +1781,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1132개 파일
+합계 1133개 파일

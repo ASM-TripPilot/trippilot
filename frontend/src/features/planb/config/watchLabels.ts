@@ -13,7 +13,13 @@ export const WATCH_CATEGORY_LABEL: Record<WatchKind, string> = {
   CLOSURE: '영업',
 };
 
-export const WATCH_STATUS_LABEL: Record<'active' | 'normal', string> = {
+/**
+ * 감시 행 상태(상황 감지 FE-B §3.5) — `unknown` 은 서버 감시 상태 UNKNOWN(모름·오래됨)이다. 거짓 '정상'을 그리지 않는다(INV-SA-2).
+ */
+export type WatchStatus = 'active' | 'normal' | 'unknown';
+
+export const WATCH_STATUS_LABEL: Record<WatchStatus, string> = {
   active: '활성',
   normal: '정상',
+  unknown: '확인 불가',
 };
