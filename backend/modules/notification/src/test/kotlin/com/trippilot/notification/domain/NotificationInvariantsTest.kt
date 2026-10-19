@@ -31,6 +31,7 @@ class NotificationInvariantsTest : StringSpec({
 
     "본문은 비어 있거나 400자를 넘을 수 없다 — 경계값 400자는 들어간다" {
         shouldThrow<IllegalArgumentException> { raise("제목", "") }
+        shouldThrow<IllegalArgumentException> { raise("제목", "   ") } // 공백만 — isNotEmpty 로 약해지면 여기서 깨진다
         shouldThrow<IllegalArgumentException> { raise("제목", "가".repeat(401)) }
         raise("제목", "가".repeat(400)).body.length shouldBe 400
     }

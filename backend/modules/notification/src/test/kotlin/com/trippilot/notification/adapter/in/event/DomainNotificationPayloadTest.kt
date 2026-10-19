@@ -12,6 +12,7 @@ import com.trippilot.notification.application.testMetrics
 import com.trippilot.notification.domain.NotificationKind
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import java.time.Clock
@@ -27,6 +28,9 @@ import java.util.UUID
  * 반대로 선택 필드(숙소 이름)가 빠진 것은 실패가 아니다 — 기본값으로 적재한다.
  * 정상 payload 의 관통은 app `DomainNotificationIT` 가 본다. 적재는 실제 [NotificationRaiseService] 와
  * 인메모리 대역으로 한다 — 알림 생성 불변식(제목·본문 상한)까지 같이 지난다.
+ *
+ * 실패 케이스마다 "적재 0건"도 본다. 지금은 구독자가 raise 전에 던지므로 늘 0 이지만, 검사를 raise 뒤로 옮기는
+ * 회귀(적재하고 나서 던짐 → 재시도마다 중복 적재, 엉뚱한 계정 적재)는 예외 단정만으로는 안 보인다.
  */
 class DomainNotificationPayloadTest : StringSpec({
 
@@ -55,6 +59,7 @@ class DomainNotificationPayloadTest : StringSpec({
         val f = fixture()
         val e = envelope("{not json", "stay.StayRegistered")
         shouldThrow<IllegalStateException> { StayRegisteredSubscriber(f.raise, mapper).handle(e) }.message shouldContain e.eventId.toString()
+        f.stored.stored.shouldBeEmpty()
     }
 
     "숙소 사건에 accountId 가 없거나 null 이거나 UUID 가 아니면 예외다" {
@@ -62,6 +67,7 @@ class DomainNotificationPayloadTest : StringSpec({
         listOf(json("name" to "호텔"), json("accountId" to null), json("accountId" to "nope")).forEach { p ->
             shouldThrow<IllegalStateException> { StayRegisteredSubscriber(f.raise, mapper).handle(envelope(p, "stay.StayRegistered")) }
                 .message shouldContain "accountId"
+            f.stored.stored.shouldBeEmpty()
         }
     }
 
@@ -81,6 +87,7 @@ class DomainNotificationPayloadTest : StringSpec({
         listOf(json("tripId" to trip), json("tripId" to trip, "accountId" to null), json("tripId" to trip, "accountId" to "nope")).forEach { p ->
             shouldThrow<IllegalStateException> { PlanBTriggeredSubscriber(f.raise, mapper).handle(envelope(p, "planb.PlanBTriggered")) }
                 .message shouldContain "accountId"
+            f.stored.stored.shouldBeEmpty()
         }
     }
 
@@ -89,6 +96,7 @@ class DomainNotificationPayloadTest : StringSpec({
         shouldThrow<IllegalStateException> {
             ReflectionReadySubscriber(f.raise, mapper).handle(envelope(json("kind" to "SUMMARY"), "reflection.ReflectionReady"))
         }.message shouldContain "tripId"
+        f.stored.stored.shouldBeEmpty()
     }
 
     "여행 소유자를 못 찾으면 예외다 — 엉뚱한 계정에 적재하지 않는다" {
@@ -98,6 +106,7 @@ class DomainNotificationPayloadTest : StringSpec({
                 envelope(json("tripId" to UUID.randomUUID().toString(), "kind" to "SUMMARY"), "reflection.ReflectionReady"),
             )
         }.message shouldContain "소유자"
+        f.stored.stored.shouldBeEmpty()
     }
 
     "하루 회고에 dayDate 가 없으면 예외다 — 어느 날 회고인지 모르는 알림을 만들지 않는다" {
@@ -107,5 +116,6 @@ class DomainNotificationPayloadTest : StringSpec({
         shouldThrow<IllegalStateException> {
             ReflectionReadySubscriber(f.raise, mapper).handle(envelope(json("tripId" to trip.toString(), "kind" to "DAILY"), "reflection.ReflectionReady"))
         }.message shouldContain "dayDate"
+        f.stored.stored.shouldBeEmpty()
     }
 })

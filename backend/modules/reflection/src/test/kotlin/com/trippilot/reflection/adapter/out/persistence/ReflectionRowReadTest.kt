@@ -34,8 +34,9 @@ class ReflectionRowReadTest : StringSpec({
         draft: Map<String, Any?> = mapOf("template_id" to "backend.rule.daily.v1", "format" to "CARD", "cover" to mapOf("title" to "초안", "subtitle" to "부")),
         edited: Map<String, Any?>? = null,
         stats: Map<String, Any?> = mapOf("visitCount" to 3, "distanceKm" to 4.5, "distanceSource" to "ROUTE", "photoCount" to 2),
+        templateColumn: String = "backend.rule.daily.v1",
     ) = ReflectionEntity(
-        UUID.randomUUID(), trip, day, draft, edited, "backend.rule.daily.v1", "CARD", "RULE", stats, t0, t0,
+        UUID.randomUUID(), trip, day, draft, edited, templateColumn, "CARD", "RULE", stats, t0, t0,
     )
 
     fun read(e: ReflectionEntity): Reflection? {
@@ -56,7 +57,11 @@ class ReflectionRowReadTest : StringSpec({
     }
 
     "고친 카드의 템플릿은 컬럼(초안 값)이 아니라 고친 카드 payload 에서 온다" {
-        val r = read(entity(edited = mapOf("template_id" to "user.edit.v1", "format" to "CARD", "cover" to mapOf("title" to "내 하루"))))!!
+        // 컬럼을 두 카드 어느 쪽과도 다른 값으로 — 같으면 초안이 컬럼에서 읽어도 단정이 구분하지 못한다.
+        val r = read(entity(
+            edited = mapOf("template_id" to "user.edit.v1", "format" to "CARD", "cover" to mapOf("title" to "내 하루")),
+            templateColumn = "column.only.v0",
+        ))!!
         r.card.templateId shouldBe "user.edit.v1"
         r.card.title shouldBe "내 하루"
         r.draftCard.templateId shouldBe "backend.rule.daily.v1"
