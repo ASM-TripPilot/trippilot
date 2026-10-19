@@ -464,3 +464,76 @@ def test_방문_수는_남은_시간과_상한으로_정한다() -> None:
     assert composition.max_visits(start, start + timedelta(hours=2, minutes=30), None) == 2
     assert composition.max_visits(start, start + timedelta(hours=12), None) == composition.MAX_VISITS
     assert composition.max_visits(start, start + timedelta(hours=9), 2) == 2
+
+
+# ── ⑦ 구성 창 = 솔버 창 · 고정 표시는 최종 해에서 (2026-10-18) ────────────────
+
+from dataclasses import replace as _replace
+from datetime import time as _time
+
+from trippilot.llm_gateway.gates.replan_request_extraction import ExtractedPlace, ExtractedRequest
+
+from tests.agents.planb.test_replan_nl_request import _StubExtractor
+from tests.fakes.fake_existence import FakeExistence
+
+
+def _app(llm: _ScriptedLlm, *, pois: tuple[Poi, ...] | None = None,
+         extracted: ExtractedRequest | None = None):
+    app = build_dev_app(llm=llm, model_id="m", directives=_DIRECTIVES,
+                        poi_db=None if pois is None else StaticPoiDb(pois))
+    orch = app.state.orchestrator
+    if extracted is not None:
+        orch._request_extractor = _StubExtractor(extracted)
+        orch._existence = FakeExistence()
+    return app, orch
+
+
+def _post(app, **over: object) -> dict:
+    with TestClient(app, raise_server_exceptions=False) as c:
+        response = c.post("/ai/v1/planb/replan", json=_body(**over))
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+class _AgentSpy:
+    """ScheduleAgent 래퍼 — 받은 태스크를 적고, `first` 가 있으면 1차 결과만 그것으로 바꾼다."""
+
+    def __init__(self, inner, first=None) -> None:
+        self.inner, self.first, self.tasks = inner, first, []
+
+    def run(self, task):
+        self.tasks.append(task)
+        out = self.inner.run(task)
+        return self.first(out) if self.first is not None and len(self.tasks) == 1 else out
+
+
+def _strip_slots(out):
+    return _replace(out, solution=_replace(out.solution, days=tuple(
+        _replace(d, slots=()) for d in out.solution.days)))
+
+
+def test_다시_푼_해의_이름으로_집은_곳도_고정으로_나가지_않는다() -> None:
+    """고정 표시를 걷는 것이 다시 풀기 **앞**이던 동안, 다시 푼 해는 이름으로 집은 곳(필수 방문)을
+    is_fixed=true 로 냈다 — BE 가 잠가서 다음 다시 짜기·교체에서 못 바꾼다."""
+    wol = _CAFE
+    app, orch = _app(_ScriptedLlm([_FOOD, _MOUNTAIN]),
+                     extracted=ExtractedRequest(places=(ExtractedPlace("월정리 카페거리", "visit"),)))
+    spy = _AgentSpy(orch._schedule_agent, first=_strip_slots)  # 1차에 고른 곳이 하나도 안 놓인 것으로
+    orch._schedule_agent = spy
+    body = _post(app, free_text="월정리 카페거리 꼭")
+
+    assert len(spy.tasks) == 2, body["notes"]  # 종전 경로로 다시 풀었다
+    slot = next(s for d in body["itinerary"]["days"] for s in d["slots"] if s["poi_id"] == wol)
+    assert slot["is_fixed"] is False, body["notes"]
+
+
+def test_자유입력_끝_시각이_구성_창에도_실린다() -> None:
+    """"6시까지" — 솔버는 18시 창인데 구성은 21시까지로 보고 방문 수를 정해 몇 곳이 빠졌다."""
+    llm = _ScriptedLlm([_FOOD])
+    app, orch = _app(llm, extracted=ExtractedRequest(end_by=_time(18, 0)))
+    spy = _AgentSpy(orch._schedule_agent)
+    orch._schedule_agent = spy
+    _post(app, free_text="6시까지만 돌게")
+
+    assert spy.tasks[0].request.day_window.end.strftime("%H:%M") == "18:00"
+    assert "09:00~18:00" in llm.compose_prompt()

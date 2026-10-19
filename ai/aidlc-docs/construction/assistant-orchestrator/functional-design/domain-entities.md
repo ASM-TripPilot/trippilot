@@ -263,7 +263,7 @@ DialogueAnswer (frozen):
 
 문장의 출처(LLM·템플릿·의도된 결정론)는 타입에 두지 않는다(초판의 `text_source` 는 와이어·로그 어디에도 안 실리는 테스트 전용 메타라 2026-10-18
 리뷰로 지웠다). 구분은 트레이스로 본다 — **LLM 을 시도했거나 시도해야 했던(재료는 있는데 잔여 부족) 턴**의 템플릿에는
-`FallbackEvent(from="llm_dialogue_answer")` 짝이 있고(AO-P5), **의도된 결정론**(0단계 능력 안내 BR-AO-18 · `needTrip` BR-AO-23 ·
+`FallbackEvent(from="llm_dialogue_answer")` 짝이 있고(AO-P5), **의도된 결정론**(0단계 능력 안내 BR-AO-18 · `needTrip` BR-AO-23 · 사실 없는 `Facts` 직행 BR-AO-25(2026-10-19) ·
 `Facts.status = UNAVAILABLE` 템플릿 직행 BR-AO-25 — LLM 미시도)에는 없다. 팬아웃 실패는 작업별 `FallbackEvent(stage="fanout")` 로 보고된다(BLM §7).
 
 ### 2.4 `HandlerTask` · `Handler` — 의도별 처리 계획 (`orchestrator/dialogue_handlers.py`)
