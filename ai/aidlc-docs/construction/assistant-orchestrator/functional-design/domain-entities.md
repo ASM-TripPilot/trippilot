@@ -457,8 +457,16 @@ LLM 0회(L-5). `hours_label` 은 `on` 의 요일(없으면 `now` 의 요일)로 
 | 값 | 티어 | effort | max_tokens | fallback_modes | 게이트 | 프롬프트 |
 |---|---|---|---|---|---|---|
 | `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` v"0.2.1"(의도 정의·판단 순서·예시, 고정부 앞) — `$utterance $intents $history $memory $trip` |
-| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` v"0.2.0"(답변 순서·예시, 고정부 앞) — `$intent $facts $utterance $history $memory $trip $style` |
+| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` ~~v"0.2.0"(답변 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 친근한 말투]** v"0.3.0"(친근한 해요체 대화 — 맞장구 → 답 → 다음 한 걸음 제안·되묻기, 예시 2건 재작성·숫자 말 규칙, 고정부 앞) — `$intent $facts $utterance $history $memory $trip $style` |
 | `DIALOGUE_MEMORY` | LIGHT | low | 2048(20줄×120자 ≈ 1,000~1,500 토큰 + JSON — 1024 는 잘림 위험; 상한은 잘림 방지용, 과금은 실 출력만) | `("llm_dialogue_memory", "deterministic_compress")` | `DialogueMemoryGate`(신규 파일) | `prompts/dialogue_memory.yaml` v"0.1.0" — `$previous_summary $recent_turns $trip` |
+
+**[개정 · 2026-10-19 · 친근한 말투]** 답변 프롬프트 0.3.0 — 사용자 요청 "지금은 너무 answer 만 띄워 주는 느낌". 0.2.0 은 "짧게 답하세요"·"첫 문장에 답,
+다음 문장에 꼭 필요한 보충만"을 시켰고 예시 둘이 한두 문장 단답이었다(말투는 규칙 줄보다 예시가 정한다). 해요체 대화로 **맞장구·공감 한마디 → 답(사실은
+`$facts` 에서만) → 도우미가 이어서 할 수 있는 일(날씨·거리·다음 장소·대신 갈 곳·영업시간) 하나를 제안하거나 되묻기**로 바꾸고 예시 2건을 그 말투로 다시 썼다
+(시각은 "14:00" 표기 그대로, Figma 밴드 b 말풍선 근거). 친근함이 사실을 늘리지 않는다 — 장소의 분위기·특징도 `$facts` 에 없으면 말하지 않고, 맞장구에 발화의 시각·숫자를
+옮기지 않는다(문장 속 시각은 Facts 로만 대조한다 — 발화는 사실이 아니다, §7 INV-2). 공유 정규식
+`_TIME_EXPR`·`_NUM`(리마인드·회고 게이트와 공유 — 바꾸지 않는다)이 "두 분이"·"이 분께"·"이 시간에는"을 소요 표현으로 읽어 답 전체가 템플릿으로 떨어지므로
+규칙 줄로 피하게 하고 예시에도 쓰지 않는다. 400자·6줄·이모지 한도·평문·시각 표기·주입 방어 규칙, 게이트·티어·effort·max_tokens 는 그대로.
 
 출력 모양 — INTENT: `{"intent": str|null, "slots": {...}, "confidence": n}`(intent.yaml 과 동형) · ANSWER: `{"text": str, "footnote": str|null}` ·
 MEMORY: `{"lines": [str]}`. 게이트 규칙은 BR-AO-04(답변)·BR-AO-09(메모리). 세 feature 모두 **벤더 호출 본문에 발화·최근 턴이 실린다**
@@ -585,7 +593,7 @@ AI 메모리가 생기지 않으니 지울 것도 없다.
 | `$memory` | `dialogue_orchestrator._memory_lines(current, others)` → 워커 `_lines()` | `(없음)` 기본 |
 | `$trip` | `"여행 {regions} {start}~{end} ({phase}) · 오늘 {today} · 일정 {n}일 {m}곳 · 화면 {surface}"` 결정론 한 줄; 여행 없으면 `(여행 없음)` | 좌표·가격 없음 |
 | `$facts` | §2.5 JSON `inline()` | 좌표·poi_id 내부값 제외 |
-| `$style` | 워커 모듈 상수 — "2~4문장, 존댓말, 평문, `\n` 줄바꿈만, 마크다운·링크·연락처 금지, 소요시간·시각 추정 금지, `$facts` 에 없는 장소·수치 금지" | 설정화하지 않는다 |
+| `$style` | 워커 모듈 상수 — ~~"2~4문장, 존댓말, 평문, `\n` 줄바꿈만, 마크다운·링크·연락처 금지, 소요시간·시각 추정 금지, `$facts` 에 없는 장소·수치 금지"~~ **[개정 · 2026-10-19 · 친근한 말투]** "친근한 해요체 대화, 2~4문장(맞장구 한마디 → 답 → 다음 한 걸음 제안·되묻기), 평문, 줄바꿈만 사용, 마크다운·링크·연락처 금지, 소요시간·시각 추정 금지, 인원·시간 길이를 우리말 수(두 분·이 시간)로 쓰지 않기, 확인된 사실에 없는 장소·수치·특징 금지" — 프롬프트 0.3.0(§2.10 개정)과 같은 말투. 한 줄·단일 공백(워커가 `inline()` 으로 싣는다 — 렌더 결과에 그대로 있어야 한다) | 설정화하지 않는다 |
 | `$previous_summary` · `$recent_turns` | 메모리 요약 입력 | 각 줄 `inline()` |
 
 ---

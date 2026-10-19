@@ -383,7 +383,7 @@ class AssistantTurnServiceTest : StringSpec({
             listOf(MessageRole.USER, MessageRole.USER, MessageRole.ASSISTANT, MessageRole.ASSISTANT)
         // 다시 보내면 각자 처음 응답을 그대로 받는다 — 새 행도, 새 해석도 없다
         w.say(s, "오늘 날씨", a).messages.map { it.messageId } shouldContainExactly first.messages.map { it.messageId }
-        w.say(s, "스타일 분석해줘", b).messages.map { it.text } shouldContainExactly listOf("스타일 분석해줘", "여행 스타일은 기록에서 볼 수 있어요.")
+        w.say(s, "스타일 분석해줘", b).messages.map { it.text } shouldContainExactly listOf("스타일 분석해줘", "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼으로 바로 확인해 볼까요?")
         w.messages.rows.size shouldBe 4
         w.interpreter!!.requests.size shouldBe 2
         w.usage.turns[acc to today] shouldBe 2
