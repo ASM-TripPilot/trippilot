@@ -25,6 +25,7 @@ from trippilot.assembly_engine.config import (
     stay_for,
 )
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine import ortools_assembler
 from trippilot.assembly_engine.ortools_assembler import SPARE_RETRY_CAP_MS, OrToolsAssembler
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
@@ -212,6 +213,28 @@ def test_no_retry_when_pace_is_unset() -> None:
     asm._solve_day = always_none
     assert asm.solve(problem, remaining_ms=2000) is None
     assert calls == [None], f"불필요한 재시도: {calls}"
+
+
+def test_no_pace_retry_when_the_first_try_spent_the_budget(monkeypatch) -> None:
+    """첫 시도가 받은 예산을 다 쓰고 실패하면 무보정 재시도를 하지 않는다 — 시한 밖 재시도는 CPU 만 먹는다.
+
+    2026-10-18 개발 서버: 조립이 시한을 다 쓴 뒤에도 무보정 재시도가 또 돌아 조립 76초·생성 504(백스톱 뒤에도
+    백그라운드로 계속 돌아 같은 파드의 다음 요청까지 굶겼다). 바로 아래 몰아 재시도(TRIP-907)와 같은 원칙이다.
+    """
+    problem, index = _problem(pace=Pace.PACKED)
+    asm = OrToolsAssembler(index, _EST, _CFG)
+    now = [1000.0]
+    monkeypatch.setattr(ortools_assembler.time, "monotonic", lambda: now[0])
+    calls: list = []
+
+    def spends_all(prob, day, used, budget_ms, **kw):
+        calls.append(prob.pace)
+        now[0] += budget_ms / 1000.0  # 받은 예산을 다 쓰고 실패
+        return None
+
+    asm._solve_day = spends_all
+    assert asm.solve(problem, remaining_ms=2000) is None
+    assert calls == [Pace.PACKED], f"예산을 다 쓴 뒤에도 재시도했다: {calls}"
 
 
 # ── 안 쓴 예산을 실패한 일자에 몰아준다 (TRIP-907) ───────────────────────────

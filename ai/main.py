@@ -125,6 +125,7 @@ def _openai_llm_and_model() -> tuple[object, str]:
     import openai
 
     from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
+    from trippilot.llm_gateway.adapters.deadline_http import DeadlineTransport
 
     client = openai.OpenAI(
         api_key=api_key,
@@ -134,6 +135,8 @@ def _openai_llm_and_model() -> tuple[object, str]:
         # 왜곡한다 — 2.5s 설정이 실제 ~10s (2026-08-16 계측 실측). 재시도 판단은
         # 게이트웨이/오케스트레이터 폴백 계단 소유 — SDK가 몰래 하지 않는다.
         max_retries=0,
+        # 시한을 총시간으로 강제 — SDK timeout 은 바이트 간격 기준이라 총시간을 못 막는다
+        http_client=openai.DefaultHttpxClient(transport=DeadlineTransport()),
     )
     adapter = OpenAIAdapter(client, api=_env("OPENAI_API") or "responses")
     return adapter, _env("OPENAI_MODEL") or "gpt-5.6-terra"
@@ -154,8 +157,12 @@ def _anthropic_llm_and_model() -> tuple[object, str]:
     import anthropic
 
     from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
+    from trippilot.llm_gateway.adapters.deadline_http import DeadlineTransport
 
-    client = anthropic.Anthropic(api_key=api_key, max_retries=0)
+    client = anthropic.Anthropic(
+        api_key=api_key, max_retries=0,
+        http_client=anthropic.DefaultHttpxClient(transport=DeadlineTransport()),  # 총시간 시한
+    )
     return AnthropicAdapter(client), _env("ANTHROPIC_MODEL") or "claude-haiku-4-5"
 
 
@@ -651,11 +658,13 @@ def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
     import openai
 
     from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
+    from trippilot.llm_gateway.adapters.deadline_http import DeadlineTransport
 
     client = openai.OpenAI(
         api_key=_env("TRIPPILOT_LOCAL_LLM_API_KEY") or "local",  # 로컬 서버는 키를 안 본다
         base_url=base_url,
         max_retries=0,
+        http_client=openai.DefaultHttpxClient(transport=DeadlineTransport()),  # 총시간 시한
     )
     return {_LOCAL_PREFIX: OpenAIAdapter(client, api="chat")}
 

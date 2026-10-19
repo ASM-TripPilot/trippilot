@@ -34,3 +34,13 @@ def test_precomputed_bank_vectors_match_the_baked_revision() -> None:
     with gzip.open(_BANK_VECTORS, "rt", encoding="utf-8") as stream:
         provenance = json.load(stream).get("provenance") or {}
     assert provenance.get("model_revision") == _baked_revision(), provenance
+
+
+def test_precomputed_place_vectors_match_the_baked_revision() -> None:
+    """KB-5 장소 조각 벡터(2026-10-18 청킹)도 같다 — 배포 적재가 그 벡터를 그대로 넣고 질의는 서빙 임베딩으로 한다."""
+    path = _AI / "data" / "place_corpus_wiki.vectors.json.gz"
+    if not path.exists():
+        return
+    with gzip.open(path, "rt", encoding="utf-8") as stream:
+        provenance = json.load(stream).get("provenance") or {}
+    assert provenance.get("model_revision") == _baked_revision(), provenance
