@@ -1,7 +1,6 @@
 package com.trippilot.weathercontext.adapter.out.external
 
 import com.trippilot.placedata.api.RegionLookupFacade
-import com.trippilot.weathercontext.domain.WeatherPort
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.ConfigurationProperties
@@ -31,6 +30,11 @@ data class KmaWeatherProperties(
     val connectTimeoutMs: Long = 3_000,
     /** 감지는 배경 작업이라 길게 기다릴 이유가 없다 — 실패는 무발화로 간다(BR-U4-05). */
     val readTimeoutMs: Long = 5_000,
+    /**
+     * 격자 경로(상황 감지 단기예보) 파드당 하루 호출 상한(COST-SA-02) — 이름 경로·도우미 날씨 카드는 세지 않는다.
+     * 복제본 2 × 3,000 = 6,000 이라 키 한도(개발계정 10,000/일)의 나머지가 AI·이름 경로 몫으로 남는다. 배포 스위치로 열지 않는다.
+     */
+    val gridDailyCap: Int = 3_000,
 )
 
 @Configuration
@@ -39,7 +43,7 @@ class KmaWeatherConfiguration {
 
     @Bean
     @ConditionalOnProperty(name = ["trippilot.weather.mode"], havingValue = "kma")
-    fun kmaWeatherAdapter(regions: RegionLookupFacade, properties: KmaWeatherProperties): WeatherPort {
+    fun kmaWeatherAdapter(regions: RegionLookupFacade, properties: KmaWeatherProperties): KmaWeatherAdapter {
         // 키 없이 kma 로 켜면 **모든 조회가 403 으로 실패하고 Plan-B 가 통째로 무발화**가 된다.
         // 조용히 그렇게 도는 것보다 기동을 막는 편이 낫다(RegionGeocodeModeAnnouncer 선례).
         check(properties.serviceKey.isNotBlank()) {
