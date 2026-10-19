@@ -13,6 +13,7 @@ import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.util.UUID
@@ -37,6 +38,7 @@ class AssistantFeedbackService(
      * 평가를 남긴다 — 이미 있으면 **통째로** 바꾼다(이유·의견도 이번 값으로, 빠진 것은 지운다). 저장한 값을 돌려준다.
      * 남기면 로그 한 줄을 쓴다: 평가를 상대 로그와 잇는 추적 번호와 분류 칸, 이유와 의견 **유무**뿐이고
      * 발화·답 문장·의견 본문·계정은 싣지 않는다(SEC-U8-06 — 의견은 사용자가 쓴 글이라 발화 원문과 같다).
+     * 확인과 쓰기 사이에 대화가 지워졌으면 404 다(이력 지우기·여행 삭제 등과 겹친 경합 — 턴의 응답 남기기와 같은 규율).
      */
     fun rate(
         accountId: UUID,
@@ -48,7 +50,16 @@ class AssistantFeedbackService(
     ): MessageFeedback {
         val feedback = feedbackOf(rating, reason, comment)
         val target = target(accountId, sessionId, messageId)
-        messages.upsertFeedback(messageId, accountId, feedback, clock.instant())
+        try {
+            messages.upsertFeedback(messageId, accountId, feedback, clock.instant())
+        } catch (e: DataIntegrityViolationException) {
+            // 확인과 쓰기 사이에 대화가 지워진 찰나의 경합(메시지 FK 위반)만 "그 대화는 없다"다 — `AssistantTurnService.send` 선례.
+            // 대화가 그대로 있으면 진짜 결함이다(본문 규칙이 CHECK 와 어긋남 등) — 404 로 가리지 않고 올린다.
+            // 원 예외는 로그에 붙이지 않는다 — 제약 위반 문구는 행 값(의견 본문)을 담을 수 있다.
+            if (sessions.findOwned(accountId, sessionId, clock.instant()) != null) throw e
+            log.warn("평가를 남기려는데 대화가 사라졌습니다. sessionId={} type={}", sessionId, e.javaClass.simpleName)
+            throw ResourceNotFound()
+        }
         val line = linkedMapOf<String, Any?>(
             "message_id" to messageId.toString(), "trace_id" to target.traceId, "intent" to target.intent,
             "kind" to target.kind.name, "rating" to feedback.rating.name,
@@ -58,7 +69,10 @@ class AssistantFeedbackService(
         return feedback
     }
 
-    /** 평가를 지운다(취소). **멱등하다** — 남긴 평가가 없어도 조용히 끝난다. 대상 검사는 남기기와 같다. */
+    /**
+     * 평가를 지운다(취소). **멱등하다** — 남긴 평가가 없어도 조용히 끝난다. 대상 검사는 남기기와 같다.
+     * 확인 뒤 대화가 지워져도 204 다 — 지우기는 FK 를 어길 수 없고 지울 행이 이미 없을 뿐이라, 남기기의 경합 처리가 여기는 없다.
+     */
     fun unrate(accountId: UUID, sessionId: UUID, messageId: UUID) {
         target(accountId, sessionId, messageId)
         messages.deleteFeedback(messageId)
@@ -100,7 +114,7 @@ class AssistantFeedbackService(
     private companion object {
         private val log = LoggerFactory.getLogger(AssistantFeedbackService::class.java)
 
-        /** 의견 상한(문자 수) — V2.74 의 `char_length(comment) <= 300` 과 같은 값이다. */
+        /** 의견 상한(문자 수) — 평가 테이블(`assistant_message_feedback`) 마이그레이션의 `char_length(comment) <= 300` 과 같은 값이다. */
         private const val COMMENT_MAX = 300
     }
 }

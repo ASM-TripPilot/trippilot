@@ -115,7 +115,10 @@ data class FeedbackRequest(val rating: String? = null, val reason: String? = nul
 }
 
 /** [reason]·[comment] 는 저장한 값이다 — 의견은 앞뒤 공백을 지운 값이고, 없으면(좋아요 포함) null 이다. */
-data class FeedbackResponse(val messageId: UUID, val rating: String, val reason: String?, val comment: String?)
+data class FeedbackResponse(val messageId: UUID, val rating: String, val reason: String?, val comment: String?) {
+    /** 요청과 같다 — 응답 본문 DEBUG 로그("Writing [...]")가 이 값을 찍는다. 의견 본문 대신 있는지만 보인다(SEC-U8-06). */
+    override fun toString() = "FeedbackResponse(messageId=$messageId, rating=$rating, reason=$reason, hasComment=${comment != null})"
+}
 
 /** [messages] 는 무엇을 했는지의 기록이다(`ACTION_LOG`) — 저장에 실패했으면 그 안내가 온다(그때 `status` 는 `FAILED`). */
 data class ApplyProposalResponse(val proposal: ProposalStatusResponse, val messages: List<MessageResponse>)

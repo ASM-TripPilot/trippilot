@@ -6,7 +6,9 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.assistant.adapter.`in`.web.FeedbackRequest
+import com.trippilot.assistant.adapter.`in`.web.FeedbackResponse
 import com.trippilot.assistant.domain.AssistantMessage
+import com.trippilot.assistant.domain.AssistantMessageRepository
 import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.FeedbackRating
 import com.trippilot.assistant.domain.FeedbackReason
@@ -23,6 +25,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -40,7 +43,7 @@ class AssistantFeedbackServiceTest : StringSpec({
     val json = ObjectMapper()
 
     class World(val sessions: FakeSessions = FakeSessions(), val messages: FakeMessages = FakeMessages()) {
-        fun service() = AssistantFeedbackService(sessions, messages, json, clock)
+        fun service(store: AssistantMessageRepository = messages) = AssistantFeedbackService(sessions, store, json, clock)
 
         fun session(tripId: UUID? = null, expiresAt: Instant = now.plusSeconds(3600)): AssistantSession =
             AssistantSession(UUID.randomUUID(), acc, tripId, now, now, expiresAt).also { sessions.rows += it }
@@ -132,6 +135,48 @@ class AssistantFeedbackServiceTest : StringSpec({
             shouldThrow<ResourceNotFound> { w.service().unrate(account, session, message) }
         }
         w.messages.feedback shouldBe emptyMap()
+    }
+
+    /**
+     * 확인과 쓰기 사이에 대화가 지워졌다(이력 지우기·여행 삭제·계정 삭제·보존 청소 — 세션 → 메시지 → 평가로 연쇄한다). 쓰기는 메시지 FK 에
+     * 걸리는데, 그것은 "그 대화는 없다"(404)이지 500 이 아니다 — 턴의 응답 남기기(`AssistantTurnService.send`)와 같은 규율이다.
+     */
+    "평가를 남기는 사이 대화가 지워지면 404 다 — 의견 본문은 예외 문구에도 로그에도 없다" {
+        val w = World()
+        val s = w.session()
+        val reply = w.message(s)
+        val secret = "지워진 대화에 남기려던 의견"
+        val racing = object : AssistantMessageRepository by w.messages {
+            override fun upsertFeedback(messageId: UUID, accountId: UUID, feedback: MessageFeedback, at: Instant) {
+                w.sessions.rows.clear() // 이력 지우기가 끼어들었다 — 실 DB 는 세션 → 메시지를 연쇄로 지운다
+                w.messages.rows.clear()
+                // 원 예외를 되비추면 새는지 보려고 문구에 의견을 넣는다 — 제약 위반 문구("Failing row contains …")는 행 값을 담을 수 있다
+                throw DataIntegrityViolationException("fk_assistant_message_feedback_message_id $secret")
+            }
+        }
+
+        val (error, events) = listening {
+            shouldThrow<ResourceNotFound> {
+                w.service(store = racing).rate(acc, s.sessionId, reply.messageId, FeedbackRating.DOWN, FeedbackReason.WRONG, secret)
+            }
+        }
+
+        error.message.orEmpty() shouldNotContain secret
+        // "있음"을 먼저 센다 — 경합을 알리는 한 줄이 잡혀야 "본문이 없다"가 뜻을 갖는다. 남지 않은 평가의 평가 로그는 없다
+        events.map { it.level } shouldContainExactly listOf(Level.WARN)
+        listOfNotNull(events.single().formattedMessage, events.single().throwableProxy?.message).forEach { it shouldNotContain secret }
+
+        // 대조군 — 대화가 그대로인데 쓰기가 제약에 걸렸다면 우리 결함이다(본문 규칙이 CHECK 와 어긋났다 등). 404 로 가리지 않는다
+        val alive = World()
+        val kept = alive.session()
+        val broken = object : AssistantMessageRepository by alive.messages {
+            override fun upsertFeedback(messageId: UUID, accountId: UUID, feedback: MessageFeedback, at: Instant) {
+                throw DataIntegrityViolationException("ck_assistant_message_feedback_down_only")
+            }
+        }
+        shouldThrow<DataIntegrityViolationException> {
+            alive.service(store = broken).rate(acc, kept.sessionId, alive.message(kept).messageId, FeedbackRating.UP)
+        }
     }
 
     /**
@@ -246,12 +291,13 @@ class AssistantFeedbackServiceTest : StringSpec({
         w.service().rate(acc, s.sessionId, reply.messageId, FeedbackRating.UP, comment = "  ") shouldBe MessageFeedback(FeedbackRating.UP)
     }
 
-    /** 의견을 든 값이 어디선가 문자열로 찍혀도(요청 본문 DEBUG 로그·예외 문구·단언 실패 문구) 본문이 새지 않는다(SEC-U8-06). */
-    "의견을 드는 값의 문자열에는 의견 본문이 없다 — 요청 본문·평가 값·메시지" {
+    /** 의견을 든 값이 어디선가 문자열로 찍혀도(요청·응답 본문 DEBUG 로그·예외 문구·단언 실패 문구) 본문이 새지 않는다(SEC-U8-06). */
+    "의견을 드는 값의 문자열에는 의견 본문이 없다 — 요청 본문·응답 본문·평가 값·메시지" {
         val secret = "아무도 보면 안 되는 의견"
         val feedback = MessageFeedback(FeedbackRating.DOWN, FeedbackReason.WRONG, secret)
         listOf(
             FeedbackRequest("DOWN", "WRONG", secret).toString(),
+            FeedbackResponse(UUID.randomUUID(), "DOWN", "WRONG", secret).toString(),
             feedback.toString(),
             AssistantMessage(UUID.randomUUID(), 1, MessageRole.ASSISTANT, MessageKind.TEXT, "맑아요.", null, emptyList(), null, null, now, feedback = feedback)
                 .toString(),

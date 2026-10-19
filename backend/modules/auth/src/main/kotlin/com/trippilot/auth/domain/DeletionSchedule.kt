@@ -76,7 +76,7 @@ data class CascadeSummary(
                 "AFFILIATE_CLICK",
                 // U8 — 도우미 대화(메시지는 세션 연쇄)·변경 제안·일 사용량(V2.64). 발화는 개인정보다
                 "ASSISTANT_SESSION", "ASSISTANT_MESSAGE", "ASSISTANT_PROPOSAL", "ASSISTANT_USAGE_DAILY",
-                // U8 — 답변 평가(V2.74, 메시지 연쇄). 계정에 묶인 사용자 반응이다
+                // U8 — 답변 평가(`assistant_message_feedback`, 메시지 연쇄). 계정에 묶인 사용자 반응이다
                 "ASSISTANT_MESSAGE_FEEDBACK",
             ),
             // 법정 보존(INV-D3) — 동의 증적·위치 법정 로그는 파기하지 않는다.

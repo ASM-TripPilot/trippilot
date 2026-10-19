@@ -7,11 +7,18 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.app.event.OutboxRelay
 import com.trippilot.app.export.AccountExportService
+import com.trippilot.assistant.application.AssistantFeedbackService
 import com.trippilot.assistant.application.AssistantRetention
+import com.trippilot.assistant.domain.AssistantMessageRepository
+import com.trippilot.assistant.domain.AssistantSessionRepository
+import com.trippilot.assistant.domain.FeedbackRating
+import com.trippilot.assistant.domain.FeedbackReason
+import com.trippilot.assistant.domain.MessageFeedback
 import com.trippilot.auth.api.event.AccountDeletionRequested
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
 import com.trippilot.security.AccessTokenIssuer
@@ -34,6 +41,7 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.client.RestClient
 import org.yaml.snakeyaml.Yaml
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -59,6 +67,9 @@ class AssistantFeedbackIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var relay: OutboxRelay
     @Autowired private lateinit var retention: AssistantRetention
     @Autowired private lateinit var export: AccountExportService
+    @Autowired private lateinit var sessionStore: AssistantSessionRepository
+    @Autowired private lateinit var messageStore: AssistantMessageRepository
+    @Autowired private lateinit var clock: Clock
 
     @Autowired
     @Qualifier("assistantAccountDeletionSubscriber")
@@ -247,6 +258,30 @@ class AssistantFeedbackIT : AbstractPostgresIntegrationTest() {
         rate(owner, session, reply, """{"rating":"DOWN"}""").first shouldBe 404
         unrate(owner, session, reply).first shouldBe 404
         jdbc.queryForObject("SELECT rating FROM assistant_message_feedback WHERE message_id = ?::uuid", String::class.java, reply) shouldBe "UP"
+    }
+
+    /**
+     * 확인과 쓰기 사이에 대화가 지워지는 경합(이력 지우기·여행 삭제 등이 평가 PUT 과 겹친다) — 쓰기 직전에 대화를 지워 순서를 고정한다
+     * (스레드 경합에 기대지 않는다). 실 DB 의 메시지 FK 위반이 정말 `DataIntegrityViolationException` 으로 올라오는지 — 단위 테스트
+     * 대역의 전제 — 를 여기서 본다. 계약은 없는 대화(404)다 — 500 이 아니다.
+     */
+    @Test
+    fun `평가를 쓰기 직전에 대화가 지워지면 실 DB 의 FK 위반이 없는 대화(404)가 된다`() {
+        val (owner, token) = newAccount()
+        val session = open(token)["session"]["id"].asText()
+        val reply = answer(token, session)
+        val racing = object : AssistantMessageRepository by messageStore {
+            override fun upsertFeedback(messageId: UUID, accountId: UUID, feedback: MessageFeedback, at: Instant) {
+                jdbc.update("DELETE FROM assistant_session WHERE session_id = ?::uuid", session) shouldBe 1 // 세션 → 메시지 연쇄
+                messageStore.upsertFeedback(messageId, accountId, feedback, at)
+            }
+        }
+
+        shouldThrow<ResourceNotFound> {
+            AssistantFeedbackService(sessionStore, racing, json, clock)
+                .rate(owner, UUID.fromString(session), UUID.fromString(reply), FeedbackRating.DOWN, FeedbackReason.WRONG, "지워진 대화의 의견")
+        }
+        feedbackRows(reply) shouldBe 0
     }
 
     /** BR-U8-24 의 분당 20턴은 사용자 턴을 센다. 평가가 턴으로 세지면 답을 몇 번 평가한 사람이 말을 못 하게 된다. */
