@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.core.event.EventEnvelope
 import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.common.errors.RecordTooLargeException
 import org.apache.kafka.common.errors.SerializationException
 import org.slf4j.LoggerFactory
@@ -41,7 +42,9 @@ import java.util.concurrent.TimeUnit
 class KafkaOutboxConfig {
 
     @Bean
-    fun outboxTopic(): NewTopic = TopicBuilder.name(TOPIC).partitions(PARTITIONS).replicas(1).build()
+    // 보존 무기한 — 행은 송신 때 발행 표시라 미소비 이벤트의 유일한 사본이 토픽이다. 기본 7일이면 오래 내려 둔 사이 지워진다.
+    fun outboxTopic(): NewTopic = TopicBuilder.name(TOPIC).partitions(PARTITIONS).replicas(1)
+        .config(TopicConfig.RETENTION_MS_CONFIG, "-1").build()
 
     /**
      * 소비 실패 재시도 — 횟수는 폴링 모드와 같은 **10회**, 2초부터 두 배씩. **재시도 창은 폴링보다 짧다**(약 3분 vs 13분).

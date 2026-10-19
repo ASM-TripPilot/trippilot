@@ -173,6 +173,16 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `토픽은 보존 무기한이다 — 미소비 이벤트의 유일한 사본이 시간이 지나 지워지지 않는다`() {
+        org.apache.kafka.clients.admin.AdminClient.create(mapOf("bootstrap.servers" to kafka.bootstrapServers)).use { admin ->
+            val resource = org.apache.kafka.common.config.ConfigResource(
+                org.apache.kafka.common.config.ConfigResource.Type.TOPIC, KafkaOutboxConfig.TOPIC,
+            )
+            admin.describeConfigs(listOf(resource)).all().get()[resource]!!.get("retention.ms").value() shouldBe "-1"
+        }
+    }
+
+    @Test
     fun `소비가 한 번 실패해도 재시도로 배달된다`() {
         subscriber.failNext = true
         tx.execute { publisher.publish(Probe("재시도")) }
