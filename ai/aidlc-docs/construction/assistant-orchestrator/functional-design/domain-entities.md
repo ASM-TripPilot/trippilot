@@ -456,7 +456,7 @@ LLM 0회(L-5). `hours_label` 은 `on` 의 요일(없으면 `now` 의 요일)로 
 
 | 값 | 티어 | effort | max_tokens | fallback_modes | 게이트 | 프롬프트 |
 |---|---|---|---|---|---|---|
-| `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` v"0.2.1"(의도 정의·판단 순서·예시, 고정부 앞) — `$utterance $intents $history $memory $trip` |
+| `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` ~~v"0.2.1"(의도 정의·판단 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 짧은 수락]** v"0.2.2"(의도 정의·판단 순서·예시 + 짧은 수락을 마지막 도우미 제안으로 푸는 규칙 한 줄·예시 2건, 고정부 앞) — `$utterance $intents $history $memory $trip` |
 | `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` ~~v"0.2.0"(답변 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 친근한 말투]** v"0.3.0"(친근한 해요체 대화 — 맞장구 → 답 → 다음 한 걸음 제안·되묻기, 예시 2건 재작성·숫자 말 규칙, 고정부 앞) — `$intent $facts $utterance $history $memory $trip $style` |
 | `DIALOGUE_MEMORY` | LIGHT | low | 2048(20줄×120자 ≈ 1,000~1,500 토큰 + JSON — 1024 는 잘림 위험; 상한은 잘림 방지용, 과금은 실 출력만) | `("llm_dialogue_memory", "deterministic_compress")` | `DialogueMemoryGate`(신규 파일) | `prompts/dialogue_memory.yaml` v"0.1.0" — `$previous_summary $recent_turns $trip` |
 
@@ -467,6 +467,15 @@ LLM 0회(L-5). `hours_label` 은 `on` 의 요일(없으면 `now` 의 요일)로 
 옮기지 않는다(문장 속 시각은 Facts 로만 대조한다 — 발화는 사실이 아니다, §7 INV-2). 공유 정규식
 `_TIME_EXPR`·`_NUM`(리마인드·회고 게이트와 공유 — 바꾸지 않는다)이 "두 분이"·"이 분께"·"이 시간에는"을 소요 표현으로 읽어 답 전체가 템플릿으로 떨어지므로
 규칙 줄로 피하게 하고 예시에도 쓰지 않는다. 400자·6줄·이모지 한도·평문·시각 표기·주입 방어 규칙, 게이트·티어·effort·max_tokens 는 그대로.
+
+**[개정 · 2026-10-19 · 짧은 수락]** 분류 프롬프트 0.2.2 — 위 답변 0.3.0 이 답을 제안·되묻기("…날씨도 확인해 드릴까요?")로 끝내므로 "응"·"좋아"·"그래"·"네 알려줘"
+같은 짧은 수락 턴이 는다. 0.2.1 에는 그 수락을 `$history` 의 마지막 도우미 제안으로 풀어 읽는 규칙·예시가 없어 `{"intent": null}`(→ OUT_OF_SCOPE)로 떨어질 수 있었다.
+규칙 한 줄 — 마지막 도우미 말이 제안·되묻기로 끝났고 현재 발화가 짧은 수락이면 **그 제안의 의도**로 고르고, 제안에 나온 장소·날짜를 **그 의도의 parameters 에 있는
+이름으로만** 담는다. 짧은 사양("아니"·"괜찮아")은 할 일이 없어 그대로 `{"intent": null}`(범위 밖)이지만 규칙을 바꾸려는 요청과는 다르다 — 지시 주입은 발화 전체가
+null 이고, 사양 뒤에 붙은 요청은 그 요청으로 고른다. 판단 순서 1·5 에 같은 뜻의 괄호를 달았다("응"을 홀로 보고 null 로 닫거나 "발화에 나온 값만"으로 제안의 값을 비우지 않게).
+예시 2건(GET_WEATHER `date` · SUGGEST_ALTERNATIVE `target`)은 평가셋(`data/intent_eval_set.yaml`)·측정 스크립트 문장이 아니다(leak 금지). GET_WEATHER 는 묻는 인자가
+`date`·`period` 뿐이라(`region` 은 `lands_in=None` — 묻지 않는다) 제안의 장소를 담지 않는다 — 표 밖 키는 `IntentGate` ⑤가 그 키만 버리고 `GateDropEvent` 로 센다.
+게이트는 그대로다 — 슬롯의 모양·키만 보고 값이 발화에 있는지는 보지 않는다(지시어 풀이와 같은 선례). 티어·effort·max_tokens·출력 모양·`$intents` 무변.
 
 출력 모양 — INTENT: `{"intent": str|null, "slots": {...}, "confidence": n}`(intent.yaml 과 동형) · ANSWER: `{"text": str, "footnote": str|null}` ·
 MEMORY: `{"lines": [str]}`. 게이트 규칙은 BR-AO-04(답변)·BR-AO-09(메모리). 세 feature 모두 **벤더 호출 본문에 발화·최근 턴이 실린다**
