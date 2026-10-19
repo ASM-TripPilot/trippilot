@@ -1,5 +1,9 @@
 package com.trippilot.planbdetection.application
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.planbdetection.domain.Opportunity
 import com.trippilot.planbdetection.domain.OpportunityKind
@@ -12,6 +16,8 @@ import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -169,21 +175,31 @@ class OpportunityServiceTest : StringSpec({
         planned.none { p -> all.first { it.poiId == p }.date == start } shouldBe true
     }
 
-    "AI 가 실패하면 빈 목록이다 — 카드는 선택 사항이라 허브를 막지 않는다" {
+    /** 응답은 '기회 없음'과 같은 200 빈 목록이라 실패를 드러내는 것은 WARN 한 줄뿐이다(RES-SA-09 · INV-4 — 운영 관측 원천은 로그). */
+    "AI 가 실패하면 빈 목록 + 사유를 담은 WARN 1줄이다 — 카드는 선택 사항이라 허브를 막지 않는다" {
         val port = RecordingOpportunityPort { error("상대 503") }
 
-        service(port).list(owner, tripId, today).shouldBeEmpty()
+        val warns = serviceWarns { service(port).list(owner, tripId, today).shouldBeEmpty() }
 
         port.queries shouldHaveSize 1
+        warns shouldHaveSize 1
+        warns.single() shouldContain "기회 조회 실패"
+        warns.single() shouldContain "상대 503"
+        warns.single() shouldContain "$tripId"
     }
 
-    "AI 답이 게이트에 걸리면 통째로 버린다 — 일부만 그리면 순위·날짜당 1장이 상대 판정과 달라진다" {
+    "AI 답이 게이트에 걸리면 통째로 버리고 사유를 담은 WARN 1줄이다 — 일부만 그리면 순위·날짜당 1장이 상대 판정과 달라진다" {
         val port = RecordingOpportunityPort { q ->
             val near = q.slots.first().slotKey
             OpportunityReply(listOf(trending(near), trending(near, poi = q.plannedPoiIds.first())), emptyList())
         }
 
-        service(port).list(owner, tripId, today).shouldBeEmpty()
+        val warns = serviceWarns { service(port).list(owner, tripId, today).shouldBeEmpty() }
+
+        warns shouldHaveSize 1
+        warns.single() shouldContain "계약에 어긋나"
+        warns.single() shouldContain "이미 일정에 있는 장소"
+        warns.single() shouldContain "$tripId"
     }
 
     "통과한 답은 받은 순서 그대로 낸다 — notes 는 막지 않는다" {
@@ -212,3 +228,16 @@ class OpportunityServiceTest : StringSpec({
         after.queries shouldHaveSize 1 // KST 10-21 00:00 — 첫날이다
     }
 })
+
+/** [block] 동안 기회 조회가 남긴 WARN 문장. */
+private fun serviceWarns(block: () -> Unit): List<String> {
+    val logger = LoggerFactory.getLogger(OpportunityService::class.java) as Logger
+    val appender = ListAppender<ILoggingEvent>().also { it.start() }
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+}
