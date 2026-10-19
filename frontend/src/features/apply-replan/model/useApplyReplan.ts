@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import {
   getGetTripsTripIdItineraryQueryKey,
+  getGetTripsTripIdTriggersQueryKey,
   usePostTripsTripIdReplanSessionsSessionIdApply,
 } from '@/shared/api/index.hooks';
 
@@ -30,6 +31,10 @@ export function useApplyReplan(): ReturnType<
       onSuccess: (_data, variables) => {
         queryClient.invalidateQueries({
           queryKey: getGetTripsTripIdItineraryQueryKey(variables.tripId),
+        });
+        // 적용이 트리거를 소비한다(BR-SA-14) — 소비된 트리거가 알약에 남지 않게 다시 받는다(상황 감지 FE-A).
+        queryClient.invalidateQueries({
+          queryKey: getGetTripsTripIdTriggersQueryKey(variables.tripId),
         });
       },
     },
