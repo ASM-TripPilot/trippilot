@@ -8,6 +8,8 @@ import {
 import { assistantPort } from '../api/assistantClient';
 import type {
   AssistantMessage,
+  FeedbackRating,
+  FeedbackRequest,
   MessagesPage,
   ProposalStatus,
   SendTurnRequest,
@@ -195,6 +197,75 @@ export function useClearSession(tripId: string | null) {
       void queryClient.invalidateQueries({
         queryKey: assistantKeys.sessions(),
       });
+    },
+  });
+}
+
+function feedbackOf(
+  queryClient: QueryClient,
+  sessionId: string,
+  messageId: string
+): FeedbackRating | null {
+  return (
+    queryClient
+      .getQueryData<MessagesPage>(assistantKeys.messages(sessionId))
+      ?.messages.find((message) => message.id === messageId)?.feedback ?? null
+  );
+}
+
+function patchFeedback(
+  queryClient: QueryClient,
+  sessionId: string,
+  messageId: string,
+  feedback: FeedbackRating | null
+): void {
+  queryClient.setQueryData<MessagesPage>(
+    assistantKeys.messages(sessionId),
+    (page) =>
+      page && {
+        ...page,
+        messages: page.messages.map((message) =>
+          message.id === messageId ? { ...message, feedback } : message
+        ),
+      }
+  );
+}
+
+export interface FeedbackVariables {
+  messageId: string;
+  /** null 이면 평가 취소(DELETE). */
+  request: FeedbackRequest | null;
+}
+
+/**
+ * 답 평가 남기기·바꾸기·취소(US-ASSIST-09). 메시지 캐시의 `feedback` 을 **응답 전에** 고치고(낙관), 실패하면
+ * 누르기 전 값으로 되돌린다 — 안내는 부르는 쪽 몫(침묵 실패 금지). 성공 응답의 rating 은 보낸 값과 같아 다시
+ * 고치지 않고, 이유·의견은 캐시에 싣지 않는다(메시지 응답에 없는 칸).
+ * 같은 메시지에 요청이 겹치면 되돌릴 값이 꼬인다 — 부르는 쪽이 메시지마다 하나씩만 보낸다(`useAnswerFeedback`).
+ */
+export function useMessageFeedback(sessionId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      messageId,
+      request,
+    }: FeedbackVariables): Promise<void> => {
+      if (request === null) {
+        await assistantPort().deleteFeedback(sessionId ?? '', messageId);
+      } else {
+        await assistantPort().putFeedback(sessionId ?? '', messageId, request);
+      }
+    },
+    onMutate: ({ messageId, request }: FeedbackVariables) => {
+      if (!sessionId) return undefined;
+      const previous = feedbackOf(queryClient, sessionId, messageId);
+      patchFeedback(queryClient, sessionId, messageId, request?.rating ?? null);
+      return { previous };
+    },
+    onError: (_error, { messageId }, context) => {
+      if (sessionId && context) {
+        patchFeedback(queryClient, sessionId, messageId, context.previous);
+      }
     },
   });
 }

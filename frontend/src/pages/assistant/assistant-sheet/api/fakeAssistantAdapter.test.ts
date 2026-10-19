@@ -1,6 +1,15 @@
 import { AssistantApiError } from './assistantPort';
-import type { AssistantMessage, SendTurnRequest } from './assistantContract';
-import { FakeAssistantAdapter, routeUtterance } from './fakeAssistantAdapter';
+import type {
+  AssistantMessage,
+  FeedbackReason,
+  FeedbackRequest,
+  SendTurnRequest,
+} from './assistantContract';
+import {
+  FakeAssistantAdapter,
+  fakeWithHistory,
+  routeUtterance,
+} from './fakeAssistantAdapter';
 
 /** TRIP-1319 — 가짜 서버가 §6 계약과 서버 규칙(멱등·위조 차단·제안 상태기계·실패 응답)을 흉내 내는가. */
 
@@ -174,5 +183,163 @@ describe('FakeAssistantAdapter (TRIP-1319)', () => {
   it('DEC-U8-10 · 숙소 발화는 숙소 검색으로 보낸다(숙소 결과 카드 없음)', () => {
     expect(routeUtterance('더 조용한 숙소로 찾아줘', true)).toBe('stay');
     expect(routeUtterance('일정 짜줘', false)).toBe('no-context');
+  });
+});
+
+/**
+ * US-ASSIST-09 답 평가 — 가짜 서버가 평가 계약과 실패 응답을 흉내 내는가. 실패는 실 어댑터가 접는 모양 그대로
+ * `SERVER` 코드다(404·400 은 화면이 따로 가르지 않는다) — 어느 갈래인지는 message 로 남긴다.
+ */
+describe('FakeAssistantAdapter · 답 평가 (US-ASSIST-09)', () => {
+  const UP: FeedbackRequest = { rating: 'UP', reason: null, comment: null };
+
+  async function opened() {
+    const fake = new FakeAssistantAdapter();
+    const { session, messages } = await fake.openSession({ tripId: 'trip-1' });
+    return { fake, sessionId: session.id, answerId: messages[0].id };
+  }
+
+  async function storedFeedback(
+    fake: FakeAssistantAdapter,
+    sessionId: string,
+    messageId: string
+  ) {
+    const page = await fake.getMessages(sessionId);
+    return page.messages.find((message) => message.id === messageId)?.feedback;
+  }
+
+  it('PUT 은 덮어쓰기 — 정규화한 값을 돌려주고, 조회·다시 열기에는 rating 만 실린다', async () => {
+    const { fake, sessionId, answerId } = await opened();
+
+    await expect(fake.putFeedback(sessionId, answerId, UP)).resolves.toEqual({
+      messageId: answerId,
+      rating: 'UP',
+      reason: null,
+      comment: null,
+    });
+    const saved = await fake.putFeedback(sessionId, answerId, {
+      rating: 'DOWN',
+      reason: 'WRONG',
+      comment: '  동선이 너무 길어요  ',
+    });
+
+    expect(saved).toEqual({
+      messageId: answerId,
+      rating: 'DOWN',
+      reason: 'WRONG',
+      comment: '동선이 너무 길어요',
+    });
+    expect(await storedFeedback(fake, sessionId, answerId)).toBe('DOWN');
+    const again = await fake.openSession({ tripId: 'trip-1' });
+    const message = again.messages.find((item) => item.id === answerId);
+    expect(message?.feedback).toBe('DOWN');
+    expect(message).not.toHaveProperty('reason');
+    expect(message).not.toHaveProperty('comment');
+  });
+
+  it('공백뿐인 의견은 null 로 저장하고, 300자까지는 받는다', async () => {
+    const { fake, sessionId, answerId } = await opened();
+    const blank = await fake.putFeedback(sessionId, answerId, {
+      rating: 'DOWN',
+      reason: null,
+      comment: '   ',
+    });
+    const full = await fake.putFeedback(sessionId, answerId, {
+      rating: 'DOWN',
+      reason: null,
+      comment: '가'.repeat(300),
+    });
+    expect(blank.comment).toBeNull();
+    expect(full.comment).toBe('가'.repeat(300));
+  });
+
+  it('DELETE 는 멱등 — 평가가 없어도 끝나고, 있으면 지운다', async () => {
+    const { fake, sessionId, answerId } = await opened();
+    await expect(
+      fake.deleteFeedback(sessionId, answerId)
+    ).resolves.toBeUndefined();
+    await fake.putFeedback(sessionId, answerId, UP);
+
+    await fake.deleteFeedback(sessionId, answerId);
+
+    expect(await storedFeedback(fake, sessionId, answerId)).toBeNull();
+  });
+
+  it('실패 응답 · 없는 대화·그 대화에 없는 메시지는 404 (SERVER · NOT_FOUND)', async () => {
+    const { fake, sessionId } = await opened();
+    const calls: (() => Promise<unknown>)[] = [
+      () => fake.putFeedback('session-nope', 'm-1', UP),
+      () => fake.putFeedback(sessionId, 'm-nope', UP),
+      () => fake.deleteFeedback(sessionId, 'm-nope'),
+    ];
+    for (const call of calls) {
+      const error = await rejection(call());
+      expect([error.code, error.message]).toEqual(['SERVER', 'NOT_FOUND']);
+    }
+  });
+
+  it('실패 응답 · 사용자 말·적용 기록·이상한 값·좋아요에 이유/의견·300자 넘는 의견은 400 (SERVER · BAD_REQUEST)', async () => {
+    const fake = fakeWithHistory();
+    const { session } = await fake.openSession({ tripId: 'trip-1' });
+    const turn = await fake.sendTurn(session.id, textTurn('t-fb', '날씨'));
+    const [user, answer] = turn.messages;
+    const calls: (() => Promise<unknown>)[] = [
+      () => fake.putFeedback(session.id, user.id, UP),
+      () => fake.putFeedback(session.id, 'log-1', UP),
+      () => fake.deleteFeedback(session.id, 'log-1'),
+      () =>
+        fake.putFeedback(session.id, answer.id, {
+          rating: 'MEH',
+        } as unknown as FeedbackRequest),
+      () =>
+        fake.putFeedback(session.id, answer.id, {
+          rating: 'UP',
+          reason: 'WRONG',
+          comment: null,
+        }),
+      () =>
+        fake.putFeedback(session.id, answer.id, {
+          rating: 'UP',
+          reason: null,
+          comment: '좋아요',
+        }),
+      () =>
+        fake.putFeedback(session.id, answer.id, {
+          rating: 'DOWN',
+          reason: 'BORING' as FeedbackReason,
+          comment: null,
+        }),
+      () =>
+        fake.putFeedback(session.id, answer.id, {
+          rating: 'DOWN',
+          reason: null,
+          comment: '가'.repeat(301),
+        }),
+    ];
+    for (const call of calls) {
+      const error = await rejection(call());
+      expect([error.code, error.message]).toEqual(['SERVER', 'BAD_REQUEST']);
+    }
+    expect(
+      (await storedFeedback(fake, session.id, answer.id)) ?? null
+    ).toBeNull();
+  });
+
+  it('feedback: SERVER_ERROR 면 PUT·DELETE 가 5xx(SERVER)이고 저장된 평가는 그대로다', async () => {
+    const { fake, sessionId, answerId } = await opened();
+    await fake.putFeedback(sessionId, answerId, UP);
+    fake.configure({ feedback: 'SERVER_ERROR' });
+
+    const put = await rejection(
+      fake.putFeedback(sessionId, answerId, {
+        rating: 'DOWN',
+        reason: null,
+        comment: null,
+      })
+    );
+    const del = await rejection(fake.deleteFeedback(sessionId, answerId));
+
+    expect([put.code, del.code]).toEqual(['SERVER', 'SERVER']);
+    expect(await storedFeedback(fake, sessionId, answerId)).toBe('UP');
   });
 });

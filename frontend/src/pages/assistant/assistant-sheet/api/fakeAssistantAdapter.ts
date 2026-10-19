@@ -1,11 +1,16 @@
-import type {
-  AssistantMessage,
-  AssistantSessionSummary,
-  OpenSessionResponse,
-  ProposalStatus,
-  QuickReply,
-  SendTurnRequest,
-  SendTurnResponse,
+import {
+  FEEDBACK_COMMENT_LIMIT,
+  FEEDBACK_REASONS,
+  type AssistantMessage,
+  type AssistantSessionSummary,
+  type FeedbackRating,
+  type FeedbackRequest,
+  type FeedbackResponse,
+  type OpenSessionResponse,
+  type ProposalStatus,
+  type QuickReply,
+  type SendTurnRequest,
+  type SendTurnResponse,
 } from './assistantContract';
 import { AssistantApiError, type AssistantPort } from './assistantPort';
 import {
@@ -25,7 +30,11 @@ import {
  * - 턴 멱등: 같은 `(sessionId, clientTurnId)` 는 처음 응답을 그대로 돌려준다(INV-U8-05).
  * - ACTION 턴은 서버가 발급한 quick reply id 만 받는다(위조 차단 — 모르는 id 는 SERVER 오류).
  * - 제안 적용은 PROPOSED 에서만, 위반 있는 제안은 NOT_APPLICABLE, 한 번 적용된 제안은 다시 안 된다(INV-U8-08).
- * - 실패 응답부터 흉내 낸다(anti-patterns 「목을 성공 응답만으로 채우지 말 것」): 열기 실패·401·429·409·저장 실패.
+ * - 답 평가(US-ASSIST-09)는 덮어쓰기·멱등 취소이고 도우미의 답에만 붙는다 — 메시지 응답에는 rating 만 실린다.
+ *   없는 대화·그 대화에 없는 메시지는 404, 사용자 말·적용 기록·이상한 값·`UP` 에 이유/의견·300자 넘는 의견은
+ *   400 — 둘 다 실 어댑터가 접는 대로 `SERVER`(갈래는 message `NOT_FOUND`·`BAD_REQUEST`).
+ * - 실패 응답부터 흉내 낸다(anti-patterns 「목을 성공 응답만으로 채우지 말 것」): 열기 실패·401·429·409·저장 실패·
+ *   평가 404·400·5xx.
  *
  * 발화 라우팅은 키워드 표(`routeUtterance`)다 — 진짜 해석은 ai 가 하므로 여기 정확도는 의미가 없고,
  * 시트의 각 상태에 사람이 손으로 닿게 하는 것이 목적이다.
@@ -40,6 +49,8 @@ export interface FakeAssistantOptions {
   rateLimitSeconds?: number | null;
   /** 값이 있으면 다음 턴이 429 TURN_IN_PROGRESS + Retry-After(초) — 이미 기록돼 처리 중(같은 id 로 다시). */
   turnInProgressSeconds?: number | null;
+  /** 답 평가(PUT·DELETE)를 5xx 로 만든다 — 낙관 갱신 롤백·안내 시연(US-ASSIST-09). */
+  feedback?: 'OK' | 'SERVER_ERROR';
   /** 응답 지연(ms). 0 이면 즉시. 앱 기본값은 체감용 약간의 지연. */
   latencyMs?: number;
   /** 세션을 열 때 이미 있는 대화(이어 열기 시연). */
@@ -117,6 +128,8 @@ export class FakeAssistantAdapter implements AssistantPort {
     applyProposal: 0,
     dismissProposal: 0,
     clearSession: 0,
+    putFeedback: 0,
+    deleteFeedback: 0,
   };
 
   constructor(options: FakeAssistantOptions = {}) {
@@ -364,6 +377,68 @@ export class FakeAssistantAdapter implements AssistantPort {
     this.calls.clearSession += 1;
     await delay(this.options.latencyMs ?? 0);
     this.sessions.delete(sessionId);
+  }
+
+  /** 평가 대상 — 내 대화의 메시지여야 하고(아니면 404), 도우미의 답이어야 한다(아니면 400). */
+  private ratable(sessionId: string, messageId: string): SessionState {
+    const state = this.session(sessionId);
+    const message = state.messages.find((item) => item.id === messageId);
+    if (!message) {
+      throw new AssistantApiError('SERVER', { message: 'NOT_FOUND' });
+    }
+    if (message.role !== 'ASSISTANT' || message.kind === 'ACTION_LOG') {
+      throw new AssistantApiError('SERVER', { message: 'BAD_REQUEST' });
+    }
+    return state;
+  }
+
+  private setFeedback(
+    state: SessionState,
+    messageId: string,
+    feedback: FeedbackRating | null
+  ): void {
+    state.messages = state.messages.map((message) =>
+      message.id === messageId ? { ...message, feedback } : message
+    );
+  }
+
+  async putFeedback(
+    sessionId: string,
+    messageId: string,
+    req: FeedbackRequest
+  ): Promise<FeedbackResponse> {
+    this.calls.putFeedback += 1;
+    await delay(this.options.latencyMs ?? 0);
+    const comment = req.comment?.trim() || null;
+    const invalid =
+      (req.rating !== 'UP' && req.rating !== 'DOWN') ||
+      (req.reason != null && !FEEDBACK_REASONS.includes(req.reason)) ||
+      (req.rating === 'UP' && (req.reason != null || req.comment != null)) ||
+      (comment !== null && comment.length > FEEDBACK_COMMENT_LIMIT);
+    if (invalid) {
+      throw new AssistantApiError('SERVER', { message: 'BAD_REQUEST' });
+    }
+    const state = this.ratable(sessionId, messageId);
+    if (this.options.feedback === 'SERVER_ERROR') {
+      throw new AssistantApiError('SERVER');
+    }
+    this.setFeedback(state, messageId, req.rating);
+    return {
+      messageId,
+      rating: req.rating,
+      reason: req.reason ?? null,
+      comment,
+    };
+  }
+
+  async deleteFeedback(sessionId: string, messageId: string): Promise<void> {
+    this.calls.deleteFeedback += 1;
+    await delay(this.options.latencyMs ?? 0);
+    const state = this.ratable(sessionId, messageId);
+    if (this.options.feedback === 'SERVER_ERROR') {
+      throw new AssistantApiError('SERVER');
+    }
+    this.setFeedback(state, messageId, null);
   }
 }
 

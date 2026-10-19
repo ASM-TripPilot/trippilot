@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 /**
  * 도우미 시트 전용 글리프(TRIP-1322) — SVG raw hex 는 `*Glyphs.tsx` 리포 관례(className 을 못 받는다).
@@ -109,6 +109,48 @@ export function CheckGlyph({ size = 18 }: { size?: number }): ReactElement {
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * 답 평가 엄지(US-ASSIST-09) — 평소 muted 선, 고르면 ink 로 채운다. Figma 없음(사용자 결정: 엄지 둘로 먼저 그리고
+ * Figma 를 나중에 맞춘다). `DOWN` 은 `UP` 을 위아래로 뒤집은 같은 그림이다.
+ */
+export function ThumbGlyph({
+  rating,
+  selected = false,
+  size = 20,
+}: {
+  rating: 'UP' | 'DOWN';
+  selected?: boolean;
+  size?: number;
+}): ReactElement {
+  const color = selected ? '#222222' : '#6A6A6A';
+  const fill = selected ? '#222222' : 'none';
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect
+        x={2.2}
+        y={rating === 'DOWN' ? 4 : 10}
+        width={2.6}
+        height={10}
+        rx={1}
+        stroke={color}
+        strokeWidth={1.7}
+        fill={fill}
+      />
+      <Path
+        d={
+          rating === 'DOWN'
+            ? 'M7.6 14l3.1 6.2a1.6 1.6 0 0 0 2.9-1.3L12.9 15H18a2 2 0 0 0 2-2.3l-1.2-7A2 2 0 0 0 16.8 4H7.6v10Z'
+            : 'M7.6 10l3.1-6.2a1.6 1.6 0 0 1 2.9 1.3L12.9 9H18a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 16.8 20H7.6V10Z'
+        }
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+        fill={fill}
       />
     </Svg>
   );

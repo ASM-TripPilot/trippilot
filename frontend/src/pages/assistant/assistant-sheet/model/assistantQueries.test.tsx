@@ -3,12 +3,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { setAssistantPort } from '../api/assistantClient';
-import type { AssistantPort } from '../api/assistantPort';
-import { sampleTranscript, userMessage } from '../api/assistantSamples';
+import type { MessagesPage } from '../api/assistantContract';
+import { AssistantApiError, type AssistantPort } from '../api/assistantPort';
+import {
+  assistantSample,
+  sampleTranscript,
+  userMessage,
+} from '../api/assistantSamples';
 import {
   appendMessages,
   assistantKeys,
   useAssistantSession,
+  useMessageFeedback,
   useSendTurn,
 } from './assistantQueries';
 
@@ -27,6 +33,8 @@ function stubPort(overrides: Partial<AssistantPort> = {}): AssistantPort {
     applyProposal: jest.fn(reject),
     dismissProposal: jest.fn(reject),
     clearSession: jest.fn(reject),
+    putFeedback: jest.fn(reject),
+    deleteFeedback: jest.fn(reject),
     ...overrides,
   };
 }
@@ -131,5 +139,86 @@ describe('도우미 훅 (TRIP-1319)', () => {
     const a = userMessage('a', '1');
     const b = userMessage('b', '2');
     expect(appendMessages([a], [a, b]).map((m) => m.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('답 평가 훅 (US-ASSIST-09)', () => {
+  function feedbackIn(client: QueryClient, messageId: string) {
+    return client
+      .getQueryData<MessagesPage>(assistantKeys.messages('s1'))
+      ?.messages.find((message) => message.id === messageId)?.feedback;
+  }
+
+  it('응답 전에 메시지 캐시를 먼저 고치고(낙관), 실패하면 이전 값으로 되돌린다', async () => {
+    // Arrange — 응답을 붙잡아 두는 PUT
+    let fail: (error: unknown) => void = () => undefined;
+    const port = stubPort({
+      putFeedback: jest.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            fail = reject;
+          })
+      ),
+    });
+    restore = setAssistantPort(port);
+    const client = newClient();
+    client.setQueryData<MessagesPage>(assistantKeys.messages('s1'), {
+      messages: [
+        { ...assistantSample('greeting', { id: 'a1' }), feedback: null },
+      ],
+    });
+    const { result } = renderHook(() => useMessageFeedback('s1'), {
+      wrapper: wrapperWith(client),
+    });
+
+    // Act — 좋아요
+    act(() => {
+      result.current.mutate({
+        messageId: 'a1',
+        request: { rating: 'UP', reason: null, comment: null },
+      });
+    });
+
+    // Assert — 응답 전인데 이미 UP, 서버에는 본문 그대로
+    await waitFor(() =>
+      expect(port.putFeedback).toHaveBeenCalledWith('s1', 'a1', {
+        rating: 'UP',
+        reason: null,
+        comment: null,
+      })
+    );
+    expect(feedbackIn(client, 'a1')).toBe('UP');
+
+    // Act — 실패 응답
+    await act(async () => {
+      fail(new AssistantApiError('SERVER'));
+    });
+
+    // Assert — 되돌림
+    await waitFor(() => expect(feedbackIn(client, 'a1')).toBeNull());
+  });
+
+  it('취소(request null)는 DELETE 를 부르고 캐시의 평가를 지운다', async () => {
+    const port = stubPort({
+      deleteFeedback: jest.fn(() => Promise.resolve()),
+    });
+    restore = setAssistantPort(port);
+    const client = newClient();
+    client.setQueryData<MessagesPage>(assistantKeys.messages('s1'), {
+      messages: [
+        { ...assistantSample('greeting', { id: 'a1' }), feedback: 'DOWN' },
+      ],
+    });
+    const { result } = renderHook(() => useMessageFeedback('s1'), {
+      wrapper: wrapperWith(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ messageId: 'a1', request: null });
+    });
+
+    expect(port.deleteFeedback).toHaveBeenCalledWith('s1', 'a1');
+    expect(port.putFeedback).not.toHaveBeenCalled();
+    expect(feedbackIn(client, 'a1')).toBeNull();
   });
 });

@@ -596,7 +596,7 @@
 
 ## src/pages/assistant/assistant-sheet/api/
 - `src/pages/assistant/assistant-sheet/api/assistantClient.ts`  →  assistantPort · setAssistantPort
-- `src/pages/assistant/assistant-sheet/api/assistantContract.ts`  →  ASSISTANT_SURFACES · MessageRole · MessageKind · NEXT_ACTION_TYPES · NextActionType · NextAction · QuickReplyAction · QuickReply · ProposalStatus · ProposalChange · ProposalSlotFace · ProposalDiffItem · Proposal · LabeledValue · ReviewProblem · ReviewPayload · CandidateItem · CandidatesPayload · InfoKind · InfoPayload · ScopePayload · RefusalPayload · FallbackCause · FallbackPayload · ActionLogTag · ActionLogPayload · ClarifyPayload · MessagePayload · AssistantMessage · AssistantSession · OpenSessionResponse · AssistantSessionSummary · MessagesPage · TurnInput · SendTurnRequest · SendTurnResponse · ApplyProposalResponse · DismissProposalResponse
+- `src/pages/assistant/assistant-sheet/api/assistantContract.ts`  →  ASSISTANT_SURFACES · MessageRole · MessageKind · NEXT_ACTION_TYPES · NextActionType · NextAction · QuickReplyAction · QuickReply · ProposalStatus · ProposalChange · ProposalSlotFace · ProposalDiffItem · Proposal · LabeledValue · ReviewProblem · ReviewPayload · CandidateItem · CandidatesPayload · InfoKind · InfoPayload · ScopePayload · RefusalPayload · FallbackCause · FallbackPayload · ActionLogTag · ActionLogPayload · ClarifyPayload · MessagePayload · AssistantMessage · FeedbackRating · FEEDBACK_REASONS · FeedbackReason · FEEDBACK_COMMENT_LIMIT · FeedbackRequest · FeedbackResponse · AssistantSession · OpenSessionResponse · AssistantSessionSummary · MessagesPage · TurnInput · SendTurnRequest · SendTurnResponse · ApplyProposalResponse · DismissProposalResponse
 - `src/pages/assistant/assistant-sheet/api/assistantPort.ts`  →  AssistantPort · AssistantErrorCode · AssistantApiError · isAssistantApiError
 - `src/pages/assistant/assistant-sheet/api/assistantSamples.ts`  →  AssistantScenario · SAMPLE_TRIP_ID · SAMPLE_TRIP_CHIP · SAMPLE_CREATED_AT · startQuickReplies · sampleSession · userMessage · assistantSample · SCENARIO_UTTERANCE · sampleTranscript · sampleActionLogs
 - `src/pages/assistant/assistant-sheet/api/fakeAssistantAdapter.ts`  →  FakeAssistantOptions · routeUtterance · FakeAssistantAdapter · fakeWithHistory
@@ -607,7 +607,8 @@
 - `src/pages/assistant/assistant-sheet/index.view.ts`  →  sampleActionLogs · sampleTranscript · type AssistantScenario · AssistantSheetView · type AssistantSheetViewProps · MessageCard · TurnStatusRow · HistoryView · displayMessage · currentQuickReplies · needsCapabilitiesChip
 
 ## src/pages/assistant/assistant-sheet/model/
-- `src/pages/assistant/assistant-sheet/model/assistantQueries.ts`  →  assistantKeys · appendMessages · useAssistantSession · useAssistantMessages · useAssistantSessions · SendTurnVariables · useSendTurn · useApplyProposal · useDismissProposal · useMarkProposal · useClearSession
+- `src/pages/assistant/assistant-sheet/model/answerFeedback.ts`  →  toggleRating · normalizeComment · canSubmitComment · FeedbackPanel
+- `src/pages/assistant/assistant-sheet/model/assistantQueries.ts`  →  assistantKeys · appendMessages · useAssistantSession · useAssistantMessages · useAssistantSessions · SendTurnVariables · useSendTurn · useApplyProposal · useDismissProposal · useMarkProposal · useClearSession · FeedbackVariables · useMessageFeedback
 - `src/pages/assistant/assistant-sheet/model/cardModel.ts`  →  slotFaceLine
 - `src/pages/assistant/assistant-sheet/model/clientTurnId.ts`  →  newClientTurnId
 - `src/pages/assistant/assistant-sheet/model/composerLimit.ts`  →  COMPOSER_LIMIT
@@ -616,12 +617,14 @@
 - `src/pages/assistant/assistant-sheet/model/resolveSheetState.ts`  →  SheetState · SheetSessionQuery · resolveSheetState
 - `src/pages/assistant/assistant-sheet/model/sheetModel.ts`  →  currentQuickReplies · needsCapabilitiesChip · isSendableText
 - `src/pages/assistant/assistant-sheet/model/turnTiming.ts`  →  SLOW_TURN_MS · isSlowTurn · secondsLeft
+- `src/pages/assistant/assistant-sheet/model/useAnswerFeedback.ts`  →  AnswerFeedbackFlow · useAnswerFeedback
 - `src/pages/assistant/assistant-sheet/model/useTurnFlow.ts`  →  PendingTurn · TurnFlow · useTurnFlow
 
 ## src/pages/assistant/assistant-sheet/ui/
+- `src/pages/assistant/assistant-sheet/ui/AnswerFeedback.tsx`  →  AnswerFeedbackProps · AnswerFeedback
 - `src/pages/assistant/assistant-sheet/ui/AssistantCards.tsx`  →  MessageCardHandlers · ReviewCard · CandidateCard · InfoCard · ScopeCard · RefusalNotice · FallbackNotice · ActionLogRow · cardConsumes · MessageCard
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetChrome.tsx`  →  AssistantSheetHeader · ContextChip · QuickReplyBar · Composer · TurnStatusRow
-- `src/pages/assistant/assistant-sheet/ui/AssistantSheetGlyphs.tsx`  →  CloseGlyph · SendArrowGlyph · ChevronRightGlyph · WarningGlyph · InfoGlyph · RetryGlyph · CheckGlyph
+- `src/pages/assistant/assistant-sheet/ui/AssistantSheetGlyphs.tsx`  →  CloseGlyph · SendArrowGlyph · ChevronRightGlyph · WarningGlyph · InfoGlyph · RetryGlyph · CheckGlyph · ThumbGlyph
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.tsx`  →  AssistantSheetPageProps · AssistantSheetPage
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetView.tsx`  →  AssistantSheetViewProps · AssistantSheetView
 - `src/pages/assistant/assistant-sheet/ui/HistoryView.tsx`  →  HistoryViewProps · HistoryView
@@ -1762,4 +1765,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1114개 파일
+합계 1117개 파일

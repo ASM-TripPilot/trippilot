@@ -214,6 +214,45 @@ export interface AssistantMessage {
   /** 카드 아래 회색 각주(Figma `* …`) — 서버 템플릿. */
   footnote?: string | null;
   createdAt: string;
+  /**
+   * 이 답에 남긴 평가(US-ASSIST-09) — 이유·의견은 싣지 않는다. 사용자 말·적용 기록(`ACTION_LOG`)은 늘 null.
+   * 서버는 늘 싣지만 이 칸이 생기기 전 응답·샘플에는 없을 수 있어 선택 칸이다(없음 = null).
+   */
+  feedback?: FeedbackRating | null;
+}
+
+/** 답 평가(US-ASSIST-09) — 좋아요·싫어요. */
+export type FeedbackRating = 'UP' | 'DOWN';
+
+/** 싫어요 이유 closed-set — 앱 칩 순서이기도 하다(문구는 뷰가 가진다). */
+export const FEEDBACK_REASONS = [
+  'WRONG',
+  'NOT_HELPFUL',
+  'NOT_WHAT_I_WANTED',
+] as const;
+
+export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
+
+/** 싫어요 의견 상한 — 서버는 앞뒤 공백을 뗀 뒤 넘으면 400. 입력창 `maxLength` 는 이 값의 UX 사본. */
+export const FEEDBACK_COMMENT_LIMIT = 300;
+
+/**
+ * `PUT /assistant/sessions/{sessionId}/messages/{messageId}/feedback` 본문 — 덮어쓰기(upsert).
+ * `reason`·`comment` 는 `DOWN` 일 때만 값을 싣는다(`UP` 에 실리면 400). 취소는 같은 경로 DELETE(204, 멱등).
+ */
+export interface FeedbackRequest {
+  rating: FeedbackRating;
+  reason: FeedbackReason | null;
+  /** 서버가 앞뒤 공백을 떼고, 비면 null 로 저장한다. */
+  comment: string | null;
+}
+
+/** PUT 200 응답 — 서버가 정규화해 저장한 값. */
+export interface FeedbackResponse {
+  messageId: string;
+  rating: FeedbackRating;
+  reason: FeedbackReason | null;
+  comment: string | null;
 }
 
 export interface AssistantSession {
