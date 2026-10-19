@@ -21,7 +21,7 @@ import math
 import re
 from datetime import date, timedelta
 
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from trippilot.assembly_engine.travel import haversine_km
@@ -356,9 +356,10 @@ def _eligible(p: Poi, slots, planned) -> bool:
 
 
 def _shown_event(e: EventInfo) -> bool:
+    """행사명은 장소 이름(_BAD_NAMES 포함)으로도 만들어진다 — 표시 게이트(2~60자·링크·전화번호)를 따로 다시 적는다."""
     return (e.event_type is not EventType.OTHER and e.coord is not None
             and e.event_id.startswith(("tourapi-", "popup-")) and e.start <= _DAY <= e.end
-            and "www." not in e.name)
+            and 2 <= len(e.name.strip()) <= 60 and not any(mark in e.name for mark in ("www.", "010-")))
 
 
 def _venue_ok(e: EventInfo, p: Poi) -> bool:
@@ -440,8 +441,18 @@ def test_PBT_제외_규칙과_표시_게이트(scene) -> None:
             assert "www." not in card.event.name and 2 <= len(card.event.name.strip()) <= 60
 
 
+# 오라클 거짓 실패의 반례(검토 2026-10-19) — 표시 게이트에 걸리는 행사명(61자 초과·연락처 꼴)이 행사장 가까이에
+# 맞는 장소를 가졌을 때. 구현은 숨기는데 오라클이 '보이는 행사'로 세어 무작위 시드로 실행당 몇 % 깨졌다.
+_HIDDEN_EVENT_SCENES = tuple(
+    ((("s0", _BASE),), (EventInfo("tourapi-0", name, EventType.FESTIVAL, _DAY, _DAY, _BASE, None),),
+     (_poi("p0", "시립미술관", 0, category=PoiCategory.CULTURE),), frozenset())
+    for name in ("가" * 61 + " 축제", "문의 010-1234-5678 축제"))
+
+
 @settings(max_examples=300, deadline=None)
 @given(_scenes())
+@example(_HIDDEN_EVENT_SCENES[0])
+@example(_HIDDEN_EVENT_SCENES[1])
 def test_PBT_3장이_안_찼으면_자격_있는_요즘_인기와_행사를_빠뜨리지_않는다(scene) -> None:
     """빈 결과는 위 성질을 전부 만족한다 — 그래서 '있어야 할 카드가 있다'를 따로 본다."""
     slots, events, pois, planned = scene
