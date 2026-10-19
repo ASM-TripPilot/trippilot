@@ -31,6 +31,7 @@ from trippilot.domain.llm import LlmFeature, ModelTier
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like
 from trippilot.llm_gateway.gates.dialogue_answer import (
+    _DURATION_EN,
     _MAX_FOOTNOTE,
     _MAX_LENGTH,
     _MAX_LINES,
@@ -233,12 +234,17 @@ def test_pbt_gate_never_raises_and_survivors_inside_constraints(raw: str) -> Non
 
 
 def _safe(max_len: int):
-    """게이트 규칙을 만족하는 문장 — 연락처 꼴도 거른다(넛지 PBT 2026-10-05 저장 반례)."""
+    """게이트 규칙을 만족하는 문장 — 연락처 꼴도 거른다(넛지 PBT 2026-10-05 저장 반례).
+
+    영문 소요 단위(`_DURATION_EN`)도 거른다 — 2026-10-18 게이트에 ③′ 가 더해진 뒤 전략이 따라오지 않아
+    "0H" 가 "게이트 규칙을 만족하는 문장"으로 뽑혀 드롭됐다(2026-10-19 저장 반례).
+    """
     return st.text(max_size=max_len).filter(
         lambda s: s.strip()
         and len(s.strip()) <= max_len
         and len(s.strip().splitlines()) <= _MAX_LINES
         and not _TIME_EXPR.search(s.strip())
+        and not _DURATION_EN.search(s.strip())
         and not has_contact_like(s.strip())
     )
 
