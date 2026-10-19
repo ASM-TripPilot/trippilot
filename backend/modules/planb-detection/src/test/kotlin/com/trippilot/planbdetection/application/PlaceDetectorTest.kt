@@ -77,8 +77,7 @@ class PlaceDetectorTest : StringSpec({
     fun target(date: LocalDate, now: Instant, phase: SweepPhase, active: List<PlanBTrigger> = emptyList()) =
         SweepTarget(tripId, accountId, date, phase, round = now, now = now, slots = listOf(planned(date, poiA, "10:00")), active = active)
 
-    fun detector(days: ItineraryDayCheckFacade, status: PoiStatusFacade = FakeStatus(), mode: String = "http") =
-        PlaceDetector(days, status, mode)
+    fun detector(days: ItineraryDayCheckFacade, status: PoiStatusFacade = FakeStatus()) = PlaceDetector(days, status)
 
     "출처는 place · 종류는 CLOSURE 다 — 해제 자격 이름과 감시 상태 묶음(closure)이 이 이름이다" {
         val d = detector(FakeDays(null))
@@ -92,11 +91,8 @@ class PlaceDetectorTest : StringSpec({
         wanted shouldContainExactly listOf(SweepPhase.MORNING to 0, SweepPhase.EVENING to 1)
     }
 
-    "AI 스케줄 모드가 http 일 때만 산다 — 대소문자 무시, 가짜·빈 값은 모름" {
-        detector(FakeDays(null), mode = "http").isLive() shouldBe true
-        detector(FakeDays(null), mode = "HTTP").isLive() shouldBe true
-        detector(FakeDays(null), mode = "fake").isLive() shouldBe false
-        detector(FakeDays(null), mode = "").isLive() shouldBe false
+    "늘 산다 — AI 스케줄 모드가 http 가 아니어도 폐업은 본다(영업시간 모름은 하루 점검이 낸다 · tech-stack 델타 6 · BLM §6.2)" {
+        detector(FakeDays(null)).isLive() shouldBe true
     }
 
     "하루 점검이 null(비소유·일정 없음·그 날 없음)이면 모름이다 — 상태도 묻지 않는다" {

@@ -262,7 +262,7 @@ class SituationSweepIT : AbstractPostgresIntegrationTest() {
     fun `스윕 빈이 감시 출처를 알리고, 스케줄러 풀은 4다 — 회차가 릴레이·폴러를 막지 않게`() {
         val anyone = UUID.randomUUID() // 허용목록이 비어 전원이 대상이다
         watching.isWatching(SweepSource.KMA_FORECAST, anyone) shouldBe true // on ∧ 목록 안 ∧ 관찰 전용 아님 ∧ 감지기 살아 있음
-        watching.isWatching(SweepSource.PLACE, anyone) shouldBe false // 장소 감지기는 AI 스케줄 모드가 http 일 때만 산다(여기는 fake)
+        watching.isWatching(SweepSource.PLACE, anyone) shouldBe true // 장소 감지기는 늘 산다 — AI 모드가 fake 여도 폐업은 본다(영업시간만 모름)
         watching.isWatching(SweepSource.KMA_WARNING, anyone) shouldBe false // 관찰 전용
         scheduler.scheduledThreadPoolExecutor.corePoolSize shouldBe 4
     }
