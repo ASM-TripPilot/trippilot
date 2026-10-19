@@ -21,6 +21,7 @@ from trippilot.agents.reflect.fallback import (
 from trippilot.domain.common import TraceId
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.reflection import (
+    POI_PLACEHOLDER_PATTERN,
     PhotoSlot,
     ReflectionRequest,
     ReflectionTemplate,
@@ -56,6 +57,8 @@ def safe_caption(layout: SceneLayout, ref_index: int | None = None) -> str:
 
 _DETAIL_TOKEN = re.compile(r"\{([^{}]*)\}")  # detail 말미의 {토큰} — 게이트 포맷 고정
 _HASHTAG_INDEX = re.compile(r"hashtags\[(\d+)\]")  # 게이트 라벨 인덱스형과 페어
+_PLACEHOLDER = re.compile(r"\{([^{}]*)\}")  # 게이트 `_PLACEHOLDER` 와 같은 토큰 경계
+_POI_TOKEN = re.compile(POI_PLACEHOLDER_PATTERN)  # 게이트와 같은 상수 — fullmatch(공백 불허)
 
 
 def rank_key(candidate: TemplateCandidate) -> tuple[int, int, int, int]:
@@ -244,6 +247,47 @@ def apply_hard_replacements(
     return replace(template, cover=cover, scenes=tuple(scenes), hashtags=hashtags)
 
 
+def bind_poi_names(
+    template: ReflectionTemplate, poi_names: tuple[str, ...]
+) -> ReflectionTemplate:
+    """`{poi:i.name}` 을 i 번째 방문의 **실제 이름**으로 바꿔 내보낸다.
+
+    i 는 요청 `visits` 배열의 인덱스라 **그 순서를 정확히 아는 곳이 여기뿐**이다 —
+    FE·BE 가 순서를 재구성해 치환하면 다른 장소 이름이 들어갈 수 있다. 그래서 이 토큰만은
+    응답 전에 우리가 채운다(나머지 어휘 `{region}`·날짜·개수·거리는 렌더러가 자기 형식으로
+    채운다 — FE `fillTemplate`). LLM 이 이름을 지어내지 못하게 하는 자리표시자 설계는 그대로다:
+    LLM 은 인덱스만 고르고, 이름은 결정론 코드가 방문 기록에서 꺼낸다.
+
+    부수 효과로 BE 환각 대조(`HallucinationGate` — 건너뛴 장소 이름이 payload 에 있으면 강등)가
+    처음으로 장면 캡션 속 장소를 볼 수 있게 된다. 토큰 상태로는 무엇을 가리키는지 못 읽었다.
+
+    - 해시태그는 공백을 담을 수 없어 이름의 공백을 지운다(`#해운대 해수욕장` → `#해운대해수욕장`)
+    - 범위 밖 인덱스·빈 이름은 손대지 않는다 — 하드 교체가 이미 범위 밖 토큰을 지웠으므로 방어선이다
+    """
+
+    def bind(text: str, *, tag: bool = False) -> str:
+        def sub(m: re.Match) -> str:
+            poi_m = _POI_TOKEN.fullmatch(m.group(1))
+            if poi_m is None:
+                return m.group(0)
+            i = int(poi_m.group(1))
+            if i >= len(poi_names) or not poi_names[i].strip():
+                return m.group(0)
+            name = poi_names[i].strip()
+            return name.replace(" ", "") if tag else name
+
+        return _PLACEHOLDER.sub(sub, text)
+
+    cover = replace(
+        template.cover,
+        title=bind(template.cover.title),
+        subtitle=bind(template.cover.subtitle),
+    )
+    scenes = tuple(replace(sc, caption=bind(sc.caption)) for sc in template.scenes)
+    hashtags = tuple(bind(t, tag=True) for t in template.hashtags)
+    return replace(template, cover=cover, scenes=scenes, hashtags=hashtags)
+
+
 def finalize(
     candidates: list[TemplateCandidate],
     request: ReflectionRequest,
@@ -264,9 +308,11 @@ def finalize(
         ))
         return build_fallback_template(request.kind, trace_id, now)
     best = min(candidates, key=rank_key)
-    return apply_hard_replacements(
+    replaced = apply_hard_replacements(
         best,
         tuple(v.ref for v in request.visits),
         frozenset(e.kind for e in request.events),
         request.photoless_refs(),
     )
+    # 교체가 만든 안전 문구(`{poi:k.name}에서의 기억`)까지 채우려면 교체 **뒤**여야 한다
+    return bind_poi_names(replaced, tuple(v.poi_name for v in request.visits))

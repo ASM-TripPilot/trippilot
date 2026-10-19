@@ -22,12 +22,14 @@ from trippilot.llm_gateway.gates.base import GateOutcome, strip_code_fence
 class ExtractedPlace:
     name: str
     want: str  # "visit" | "avoid"
+    at: time | None = None  # "성심당은 5시에" → 17:00. 갈 곳에만 뜻이 있다
 
 
 @dataclass(frozen=True, slots=True)
 class ExtractedCategory:
     category: str  # 경계 카테고리 코드 8종 중 하나 (`_CATEGORIES`)
     count: int | None = None  # "두 군데" → 2. 수를 말하지 않았으면 None
+    at: time | None = None  # "3시에 카페" → 15:00 — 하루 시작(start_after)이 아니라 그 종류의 방문 시각
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,8 +68,8 @@ def _hhmm(value: object) -> time | None:
 
 
 class ReplanRequestExtractionGate:
-    """`{"places": [{"name", "want"}], "start_after", "end_by", "weather",
-    "categories": [{"category", "count"}], "only"}` 강제."""
+    """`{"places": [{"name", "want", "at"}], "start_after", "end_by", "weather",
+    "categories": [{"category", "count", "at"}], "only"}` 강제."""
 
     def apply(
         self,
@@ -93,7 +95,8 @@ class ReplanRequestExtractionGate:
             name, want = item.get("name"), item.get("want")
             if (isinstance(name, str) and name.strip() and len(name.strip()) <= _MAX_NAME
                     and want in ("visit", "avoid")):
-                places.append(ExtractedPlace(name=name.strip(), want=want))
+                places.append(ExtractedPlace(name=name.strip(), want=want,
+                                             at=_hhmm(item.get("at")) if want == "visit" else None))
         weather = data.get("weather") if data.get("weather") in ("rain", "clear") else None
         cats: dict[str, ExtractedCategory] = {}  # 같은 종류가 두 번 오면 앞의 것
         raw_cats = data.get("categories", [])
@@ -103,7 +106,8 @@ class ReplanRequestExtractionGate:
             count = item.get("count")
             if count is not None and not (type(count) is int and 1 <= count <= _MAX_COUNT):
                 continue  # 수가 이상하면 그 항목만 버린다 — 수 없이 살리면 "두 곳만"이 "무제한"이 된다
-            cats.setdefault(item["category"], ExtractedCategory(item["category"], count))
+            cats.setdefault(item["category"],
+                            ExtractedCategory(item["category"], count, _hhmm(item.get("at"))))
         return GateOutcome(
             value=ExtractedRequest(
                 places=tuple(places),

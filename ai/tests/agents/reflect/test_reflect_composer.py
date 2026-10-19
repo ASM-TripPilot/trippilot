@@ -35,6 +35,8 @@ from trippilot.agents.reflect.composer import (
     SAFE_CAPTION_BY_LAYOUT,
     safe_caption,
     apply_hard_replacements,
+    bind_poi_names,
+    finalize,
     rank_key,
 )
 from trippilot.agents.reflect.fallback import (
@@ -759,3 +761,84 @@ def test_total_elapsed_never_exceeds_budget(latency: float, budget: float, clean
     # 재시도의 timeout 은 그 시점 잔여를 넘지 않고, 최소치 밑으로 내려가지 않는다
     for timeout, remaining in list(zip(llm.timeouts, llm.remaining_at_call))[1:]:
         assert MIN_ATTEMPT_SEC <= timeout <= remaining
+
+
+# ── {poi:i.name} 바인딩 — i 는 요청 visits 순서라 그 순서를 아는 우리가 채운다 ─────
+
+
+def test_finalize_binds_poi_names_in_title_captions_and_hashtags() -> None:
+    """장소 토큰은 실제 이름으로, 나머지 어휘({region}·날짜·개수·거리)는 렌더러 몫이라 그대로.
+
+    FE fillTemplate 는 region·날짜 3종만 알고 모르는 토큰을 빈칸으로 지운다 — 장소 토큰을
+    남겨 보내면 "{poi:1.name}에서 보낸 저녁" 이 "에서 보낸 저녁" 으로 깨진다."""
+    request = replace(_REQUEST, visits=(
+        _visit(_REF1, "광안리 해수욕장", photos=2), _visit(_REF2, "해운대 해수욕장", photos=3)))
+    body = {
+        "cover": {"title": "{poi:0.name}에서 시작한 이틀",
+                  "subtitle": "{region} · {start_date}~{end_date}"},
+        "scenes": [
+            {"layout": "PHOTO_CAPTION",
+             "photo_slot": {"visit_ref": {"date": "2026-08-02", "poi_id": "poi-2"}},
+             "caption": "{poi:1.name}에서 보낸 저녁"},
+            *_CLEAN_BODY["scenes"][1:],
+        ],
+        "hashtags": ["#{poi:1.name}", "#부산여행"],
+    }
+    worker, trace = _compose_env(ScriptedLlm(_raw(body)))
+    template = ReflectAgent(worker, trace).run(ReflectTask(request, _TID, _NOW))
+
+    assert template.cover.title == "광안리 해수욕장에서 시작한 이틀"
+    assert template.cover.subtitle == "{region} · {start_date}~{end_date}"  # 렌더러 몫
+    assert template.scenes[0].caption == "해운대 해수욕장에서 보낸 저녁"
+    assert template.scenes[1].caption == "{visit_count}곳 · {distance_km}km"  # 렌더러 몫
+    assert "#해운대해수욕장" in template.hashtags  # 태그는 공백을 못 담는다
+    assert "{poi:" not in json.dumps(template.to_dict(), ensure_ascii=False)
+
+
+def test_finalize_binds_the_safe_caption_that_replacement_wrote() -> None:
+    """교체가 만든 안전 문구(`{poi:k.name}에서의 기억`)까지 채운다 — 바인딩이 교체보다
+    **먼저** 돌면 이 토큰이 그대로 나간다. 채운 이름은 사진 자리의 방문과 같아야 한다."""
+    request = replace(_REQUEST, visits=(
+        _visit(_REF1, "감천문화마을", photos=0), _visit(_REF2, "해운대 해수욕장", photos=4)))
+    body = {
+        "cover": {"title": "이틀의 기록", "subtitle": "{region} · {start_date}~{end_date}"},
+        "scenes": [
+            {"layout": "PHOTO_CAPTION",
+             "photo_slot": {"visit_ref": {"date": "2026-08-01", "poi_id": "ghost-1"}},
+             "caption": "환각 장면"},
+            *_CLEAN_BODY["scenes"][1:],
+        ],
+        "hashtags": ["#부산여행"],
+    }
+    worker, trace = _compose_env(ScriptedLlm(_raw(body)))
+    template = ReflectAgent(worker, trace).run(ReflectTask(request, _TID, _NOW))
+
+    assert template.scenes[0].photo_slot.visit_ref == _REF2  # 사진 있는 방문으로 교체
+    assert template.scenes[0].caption == "해운대 해수욕장에서의 기억"
+
+
+def test_bind_poi_names_leaves_what_it_cannot_resolve() -> None:
+    """범위 밖 인덱스·공백 섞인 토큰(게이트도 장소 토큰으로 안 본다)·빈 이름·다른 어휘는 그대로."""
+    base = build_fallback_template(_REQUEST.kind, _TID, _NOW)
+    t = replace(
+        base,
+        cover=replace(base.cover,
+                      title="{poi:9.name} {poi: 0.name} {poi:1.name} {poi:0.name} {region}"),
+        hashtags=("#{poi:0.name}", "#{poi:7.name}"),
+    )
+    out = bind_poi_names(t, ("광안리 해수욕장", "  "))
+
+    assert out.cover.title == "{poi:9.name} {poi: 0.name} {poi:1.name} 광안리 해수욕장 {region}"
+    assert out.hashtags == ("#광안리해수욕장", "#{poi:7.name}")
+    assert out.scenes == base.scenes  # 토큰 없는 문구는 손대지 않는다
+
+
+@given(case=polluted_reflection_cases())
+@settings(max_examples=120, deadline=None)
+def test_finalize_output_never_carries_a_poi_token(case) -> None:
+    """오염된 후보(범위 밖 토큰·환각 참조·사진 0장 슬롯 섞임)를 어떻게 넣어도, finalize 를
+    지난 카드에는 장소 토큰이 하나도 없다 — 범위 밖은 교체가 지우고, 범위 안은 바인딩이 채운다."""
+    request, bodies = case
+    candidate = _gate(request, bodies[0][0], photos=True).value
+    final = finalize([candidate], request, _TID, _NOW, InMemoryTrace())
+    assert re.search(r"\{poi:\d+\.name\}", json.dumps(final.to_dict(), ensure_ascii=False)) is None

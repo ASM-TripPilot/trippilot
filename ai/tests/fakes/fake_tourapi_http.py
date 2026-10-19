@@ -55,6 +55,11 @@ def list_item(
     }
 
 
+def common_item(content_id: str, overview: str) -> dict:
+    """detailCommon2 항목 — 개요(`overview`)는 `<br>`·HTML 엔티티가 섞인 원문으로 온다."""
+    return {"contentid": content_id, "overview": overview}
+
+
 def intro_item(content_id: str, kind: str, hours: str, rest: str, **extra: str) -> dict:
     """detailIntro2 항목 — 영업시간 필드명은 contentTypeId마다 다르다.
 
@@ -106,9 +111,11 @@ class FakeTourApiHttp:
         pages: Mapping[tuple[str, int] | tuple[str, str, int], dict] | None = None,
         intros: Mapping[str, dict] | None = None,
         dead_keys: Mapping[str, int | str] | None = None,
+        commons: Mapping[str, dict] | None = None,
     ) -> None:
         self._pages = dict(pages or {})
         self._intros = dict(intros or {})
+        self._commons = dict(commons or {})  # content_id → detailCommon2 봉투
         self._dead_keys = dict(dead_keys or {})
         self.calls: list[tuple[str, dict]] = []
 
@@ -127,4 +134,6 @@ class FakeTourApiHttp:
             return self._pages.get(key, envelope([], 0))
         if url.endswith("/detailIntro2"):
             return self._intros.get(params["contentId"], envelope([], 0))
+        if url.endswith("/detailCommon2"):
+            return self._commons.get(params["contentId"], envelope([], 0))
         raise AssertionError(f"예상 밖 URL: {url}")

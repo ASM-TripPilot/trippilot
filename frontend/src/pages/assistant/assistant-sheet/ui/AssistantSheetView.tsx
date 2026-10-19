@@ -53,6 +53,8 @@ export interface AssistantSheetViewProps {
   repliesDisabled?: boolean;
   /** 메시지 kind 별 카드(TRIP-1323). */
   renderCard?: (message: AssistantMessage) => ReactNode;
+  /** 답 평가 줄(US-ASSIST-09) — 도우미의 답 아래에만 그린다(적용 기록 제외는 목록이 가른다). */
+  renderFeedback?: (message: AssistantMessage) => ReactNode;
   /** 입력창 바로 위 줄(진행 표시·대기 취소·429 안내, TRIP-1326). */
   statusRow?: ReactNode;
   /** 보내기 버튼 testID(진행 중 `assistant-send-pending`, TRIP-1326). */
@@ -109,6 +111,7 @@ export function AssistantSheetView({
   onRetryOpen,
   repliesDisabled = false,
   renderCard,
+  renderFeedback,
   statusRow,
   sendTestID,
   headerTrailing,
@@ -165,6 +168,7 @@ export function AssistantSheetView({
                       messages={messages}
                       onPressAction={onPressAction}
                       renderCard={renderCard}
+                      renderFeedback={renderFeedback}
                     />
                   </View>
                   {statusRow}

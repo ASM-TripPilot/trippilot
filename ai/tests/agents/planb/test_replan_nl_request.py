@@ -24,6 +24,7 @@ from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.llm import LlmFeature, TypedResult
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.gates.replan_request_extraction import (
+    ExtractedCategory,
     ExtractedPlace,
     ExtractedRequest,
     ReplanRequestExtractionGate,
@@ -591,3 +592,99 @@ def test_surroundings_lookup_failure_keeps_the_named_place_and_says_so() -> None
     body = r.json()
     assert f"nl_nearby_unavailable: {_WOLJEONG} TimeoutError" in body["notes"]
     assert _WOLJEONG in _placed(body), body["notes"]
+
+
+# ── ⑦ 시각 붙은 방문 — "3시에 카페" ─────────────────────────────────────
+# 로컬 실측(2026-10-19, 서울 실 일정 2개 × 2시각): 모델이 "3시에"를 start_after 로 옮겨 하루가 15시에
+# 시작했다 — 오전이 통째로 빠지고 카페는 18시 넘어 들어가거나 아예 없었다.
+
+_HALLA = "e0000000-0000-4000-8000-000000000004"  # 한라산 — 앵커 8.3km, 풀 안 유일한 NATURE
+_HEUKDWAEJI = "e0000000-0000-4000-8000-000000000002"  # 흑돼지거리 — 풀 안 유일한 FOOD
+
+
+def _start_of(body, pid: str) -> str:
+    return next(s["start_at"] for d in body["itinerary"]["days"] for s in d["slots"] if s["poi_id"] == pid)
+
+
+def test_gate_reads_a_visit_time_on_places_and_kinds() -> None:
+    out = _gate('{"places": [{"name": "성심당", "want": "visit", "at": "15:00"},'
+                ' {"name": "한빛탑", "want": "avoid", "at": "16:00"}],'
+                ' "categories": [{"category": "CAFE", "count": null, "at": "오후 3시"},'
+                ' {"category": "FOOD", "count": null, "at": "12:30"}]}')
+    assert out.value.places == (ExtractedPlace("성심당", "visit", time(15, 0)),
+                                ExtractedPlace("한빛탑", "avoid"))  # 피할 곳의 시각은 뜻이 없다
+    assert [c.at for c in out.value.categories] == [None, time(12, 30)]  # HH:MM 아님 → 그 필드만
+
+
+def _verify(ext: ExtractedRequest, **kw) -> v.VerifiedRequest:
+    args = dict(on=DAY, anchor=_A, window_start=_WS, window_end=_WE, not_before=None, tz=KST,
+                registered=lambda: _REG, existence=FakeExistence(), existence_deadline_ms=1000,
+                rain_by_date={}, rain_threshold=60, available=frozenset({PoiCategory.CAFE}))
+    return v.verify(ext, **{**args, **kw})
+
+
+def test_a_visit_time_is_not_where_the_day_starts() -> None:
+    r = _verify(ExtractedRequest(start_after=time(15, 0),
+                                 categories=(ExtractedCategory("CAFE", None, time(15, 0)),)))
+    assert r.window_start is None
+    assert r.category_at == ((PoiCategory.CAFE, datetime(2026, 9, 21, 15, 0, tzinfo=KST)),)
+    assert "nl_time_dropped: start_after_is_visit_time" in r.notes
+
+
+def test_a_named_place_keeps_its_time() -> None:
+    r = _verify(ExtractedRequest(places=(ExtractedPlace("성심당 본점", "visit", time(16, 30)),)))
+    assert r.visit_at == ((PoiId("p1"), datetime(2026, 9, 21, 16, 30, tzinfo=KST)),)
+
+
+@pytest.mark.parametrize("at,now_h", [(time(22, 0), None), (time(8, 0), None), (time(10, 0), 12)])
+def test_a_visit_time_outside_what_is_left_is_rejected(at, now_h) -> None:
+    nb = datetime(2026, 9, 21, now_h, 0, tzinfo=KST) if now_h else None
+    r = _verify(ExtractedRequest(categories=(ExtractedCategory("CAFE", None, at),)), not_before=nb)
+    assert r.category_at == ()
+    assert "nl_at_rejected: CAFE outside_window" in r.notes
+
+
+def test_a_kind_at_a_time_is_placed_then_and_the_morning_stays() -> None:
+    body, _ = _replan(ExtractedRequest(start_after=time(15, 0),
+                                       categories=(ExtractedCategory("NATURE", None, time(15, 0)),)))
+    assert _start_of(body, _HALLA).startswith("15:00"), body["notes"]
+    assert any(s["start_at"] < "15:00" for d in body["itinerary"]["days"] for s in d["slots"]), body
+    assert f"nl_at_locked: {_HALLA} 15:00" in body["notes"]
+    # 이번 다시 짜기의 잠금이다 — 고정으로 내면 BE 가 잠가 다음 다시 짜기에서 못 옮긴다("저녁은 그대로"와 같다)
+    assert not any(s["is_fixed"] for d in body["itinerary"]["days"] for s in d["slots"]), body
+
+
+def test_a_named_place_at_a_time_is_placed_then() -> None:
+    body, _ = _replan(ExtractedRequest(places=(ExtractedPlace("월정리 카페거리", "visit", time(16, 0)),)),
+                      existence=FakeExistence())
+    assert _start_of(body, _WOLJEONG).startswith("16:00"), body["notes"]
+
+
+def test_a_kind_at_a_time_absent_from_the_pool_is_said_not_forced() -> None:
+    body, _ = _replan(ExtractedRequest(categories=(ExtractedCategory("SHOPPING", None, time(15, 0)),)))
+    assert body["empty_reason"] is None and _placed(body)
+    assert "nl_category_rejected: SHOPPING no_candidates" in body["notes"]
+    assert not any(n.startswith("nl_at_locked") for n in body["notes"]), body["notes"]
+
+
+def test_a_kind_locked_at_a_time_is_not_added_again() -> None:
+    """"3시에 카페 가고 싶어"는 한 곳 추가(ADD_CAFE)로도 읽힌다 — 잠근 카페 말고 하나 더 필수로 들어가
+    카페가 둘이었다(로컬 실측 2026-10-19). 잠근 종류는 솔버의 한 곳 추가에서 빠진다."""
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(
+        ExtractedRequest(categories=(ExtractedCategory("FOOD", None, time(12, 0)),)))
+    seen = []
+    inner = orch._schedule_agent
+
+    class _Spy:
+        def run(self, task):
+            seen.append(task.request.add_one_categories)
+            return inner.run(task)
+
+    orch._schedule_agent = _Spy()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        body = client.post("/ai/v1/planb/replan", json=_body(
+            free_text="12시에 밥", directives=["ADD_FOOD"], reasons=[])).json()
+    assert f"nl_at_locked: {_HEUKDWAEJI} 12:00" in body["notes"], body["notes"]
+    assert seen and all(PoiCategory.FOOD not in s for s in seen), seen
