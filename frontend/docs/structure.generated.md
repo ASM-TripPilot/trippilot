@@ -1747,7 +1747,7 @@
 - `src/widgets/map-sheet-shell/ui/GenerationProgressCard.tsx`  →  GenerationProgressCell · GenerationProgressCardProps · GenerationProgressCard
 - `src/widgets/map-sheet-shell/ui/IndeterminateBar.tsx`  →  IndeterminateBar
 - `src/widgets/map-sheet-shell/ui/MapFallbackBar.tsx`  →  MapFallbackBar
-- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  FullAiGlyph · MapPinOffGlyph · RetryGlyph · BackChevronGlyph · CheckGlyph · WalkGlyph · CarGlyph
+- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  FullAiGlyph · TransitGlyph · MapPinOffGlyph · RetryGlyph · BackChevronGlyph · CheckGlyph · WalkGlyph · CarGlyph
 - `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetListSlot · MapSheetShellProps · MapSheetShell
 - `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
 - `src/widgets/map-sheet-shell/ui/SlotDropZone.tsx`  →  SlotDropZoneProps · SlotDropZone
