@@ -292,11 +292,12 @@ class ItineraryDayCheckServiceTest : StringSpec({
                 slot(poiC, 2, "13:00", flagged = true, reason = "앞 장소에서 이동할 시간이 빠듯해요"),
                 slot(UUID.randomUUID(), 3, "15:00", flagged = true, reason = PriorViolations.STALE_REASON),
                 slot(UUID.randomUUID(), 4, "17:00", flagged = false, reason = ViolationText.OPENING_HOURS_PHRASE),
+                slot(UUID.randomUUID(), 5, "19:00", flagged = true, reason = "영업시간 밖: 543~618"), // 09-28 이전 저장 꼴
             ),
         )
         val (svc) = service(stored = itinerary(day1))
 
         svc.checkDay(acc, tripId, d1).shouldNotBeNull().slots.map { it.hoursWarnedBefore } shouldContainExactly
-            listOf(true, true, false, false, false)
+            listOf(true, true, false, false, false, true)
     }
 })

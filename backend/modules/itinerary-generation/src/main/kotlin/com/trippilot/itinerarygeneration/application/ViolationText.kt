@@ -36,8 +36,18 @@ object ViolationText {
     /**
      * 저장된 위반 사유가 영업시간 문구를 담는가(BR-SA-17 ②) — 여러 문구가 ` · ` 로 합쳐진 사유도 읽는다.
      * 보류 중 중립 문구([PriorViolations.STALE_REASON])·이동 문구는 거짓이다. 문구의 주인이 여기 하나라 번역을 바꾸면 판정도 따라간다.
+     * 2026-09-28(TRIP-1030) 이전 저장분의 HC1 꼴([LEGACY_OPENING_HOURS_MARKERS])도 참이다.
      */
-    fun mentionsOpeningHours(reason: String?): Boolean = reason?.contains(OPENING_HOURS_PHRASE) == true
+    fun mentionsOpeningHours(reason: String?): Boolean =
+        reason != null && (OPENING_HOURS_PHRASE in reason || LEGACY_OPENING_HOURS_MARKERS.any { it in reason })
+
+    /**
+     * TRIP-1030 이전에는 AI 의 HC1 detail(`영업시간 밖: 543~618` · `0요일 휴무`)을 그대로 사유로 저장했고, 보류 중 사유 승계
+     * ([PriorViolations.reasonOf])로 그 꼴이 지금도 남아 있을 수 있다 — 사용자는 그 꼴로 영업시간 경고를 봤다. 영업시간을
+     * 해석하는 것이 아니라(BR-SA-17 ⑥) 그때 화면에 나간 문구의 표지를 알아보는 것이다. 다른 위반의 옛 detail(이동·고정·하루 창)과
+     * 겹치지 않는다.
+     */
+    private val LEGACY_OPENING_HOURS_MARKERS = listOf("영업시간 밖", "요일 휴무")
 
     /** 영업시간 위반(HC1) 타입인가 — [phraseOf] 와 같은 어휘(AI 코드·상징 이름)다. */
     fun isOpeningHours(type: String): Boolean = type.uppercase() in OPENING_HOURS_TYPES

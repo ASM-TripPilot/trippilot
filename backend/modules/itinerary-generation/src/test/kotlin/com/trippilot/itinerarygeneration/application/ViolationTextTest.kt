@@ -71,4 +71,17 @@ class ViolationTextTest : StringSpec({
         ViolationText.mentionsOpeningHours(PriorViolations.STALE_REASON) shouldBe false
         ViolationText.mentionsOpeningHours(null) shouldBe false
     }
+
+    /**
+     * 2026-09-28(TRIP-1030) 이전에는 AI detail 이 그대로 사유로 저장됐다 — 보류 중 사유 승계로 그 꼴이 지금도 남아 있을 수 있다.
+     * 그때 사용자가 본 HC1 경고(원시 꼴)도 '이미 본 경고'다(BR-SA-17 ②). 다른 위반의 옛 detail 은 거짓이다.
+     */
+    "옛 형식(원시 detail) 영업시간 사유도 이미 본 경고로 읽는다 — 이동·고정·하루 창의 옛 detail 은 거짓" {
+        ViolationText.mentionsOpeningHours("영업시간 밖: 543~618") shouldBe true
+        ViolationText.mentionsOpeningHours("0요일 휴무") shouldBe true
+        ViolationText.mentionsOpeningHours("이동 54분 필요, 간격 -60분 · 6요일 휴무") shouldBe true
+        ViolationText.mentionsOpeningHours("이동 54분 필요, 간격 -60분") shouldBe false
+        ViolationText.mentionsOpeningHours("2026-08-20 고정 블록 미준수") shouldBe false
+        ViolationText.mentionsOpeningHours("day window(540~1260) 밖: 1270~1330") shouldBe false
+    }
 })
