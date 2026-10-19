@@ -150,4 +150,4 @@ def test_retrieved_has_no_schedule_key() -> None:
     """0 을 싣는 것도 거짓이다 — "찾았는데 없었다"와 "찾지 않는다"는 다른 사실이다."""
     result, _, _ = _run(slot_ids=("p1",))
     assert KbKind.SCHEDULE.value not in result.retrieved
-    assert set(result.retrieved) == {KbKind.PERSONA.value, KbKind.SITUATION.value}
+    assert set(result.retrieved) == {KbKind.PERSONA.value, KbKind.SITUATION.value, KbKind.POI_DESC.value}

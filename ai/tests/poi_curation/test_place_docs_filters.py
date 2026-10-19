@@ -125,3 +125,33 @@ def test_위키_묶음이_TextExtracts_상한을_넘지_않는다() -> None:
         f"_WIKI_BATCH={module._WIKI_BATCH} 가 TextExtracts 상한 20 을 넘는다 — "
         "초과분은 경고 없이 버려진다"
     )
+
+
+# ── 2026-10-18 본문 전문 청킹 리뷰에서 나온 오매칭 ──────────────────────────────
+
+def test_회사를_정의하는_문서는_거르고_법인이_운영하는_장소는_남긴다() -> None:
+    """천호동 '현대백화점' POI ← "주식회사 현대백화점은 … 설립된 회사이다"(광역 주소만으로 지역 판정 통과).
+    반대로 "재단법인 ○○이 운영하는 미술관"은 장소 정의다 — 낱말만 보던 첫 판이 16건을 오기각했다."""
+    from trippilot.poi_curation.place_docs import is_company_intro
+
+    assert is_company_intro("주식회사 현대백화점은 1968년에 설립된 회사이다. 본사는 서울특별시 강남구에 있다.")
+    assert is_company_intro("아트박스는 1984년 설립된 대한민국의 라이프스타일 브랜드이다.")
+    assert not is_company_intro("환기미술관은 서울특별시 종로구에 있는, 재단법인 환기재단이 운영하는 미술관이다.")
+    assert not is_company_intro("서울랜드는 경기도 과천시에 있는 테마파크로, 주식회사 서울랜드가 운영한다.")
+    assert not is_company_intro("성산일출봉은 제주특별자치도 서귀포시 성산읍에 있는 화산이다.")
+
+
+def test_광역만_적은_장소_문서도_통과한다() -> None:
+    """뚝섬한강공원 — 백과 도입부가 시군구 없이 광역만 적는 일이 흔하다(시군구만 보게 좁혔더니 92건이 떨어졌다)."""
+    assert mentions_region("뚝섬한강공원은 서울특별시 한강변에 있는 공원이다.", "광진구", "서울특별시 광진구 자양동")
+
+
+def test_꼬리_절은_하위_절까지_버리고_다음_같은_단계에서_풀린다() -> None:
+    from trippilot.poi_curation.place_docs import wiki_sections
+
+    text = ("도입부 설명이 여기에 있다.\n== 역사 ==\n오래된 역사가 있는 곳이다.\n"
+            "== 참고 문헌 ==\n누군가 (2001), 책 제목.\n=== 단행본 ===\n또 다른 책 목록 항목.\n"
+            "== 교통 ==\n버스 정류장에서 가깝다고 한다.\n== 각주와 참고 자료 ==\n각주 1.")
+    got = [(s["heading"], s["text"]) for s in wiki_sections(text)]
+    assert got == [("개요", "도입부 설명이 여기에 있다."), ("역사", "오래된 역사가 있는 곳이다."),
+                   ("교통", "버스 정류장에서 가깝다고 한다.")]

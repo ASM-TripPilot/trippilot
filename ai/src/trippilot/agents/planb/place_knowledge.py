@@ -35,7 +35,8 @@ from collections.abc import Mapping, Sequence
 from trippilot.agents.planb.kb_retrieval import retrieve
 from trippilot.domain.kb import KbKind
 from trippilot.domain.poi import Poi
-from trippilot.poi_curation.place_docs import SOURCES
+from trippilot.poi_curation.chunking import chunk_ids, split_sentences
+from trippilot.poi_curation.place_docs import SOURCE_WIKI, SOURCES
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 
@@ -44,7 +45,18 @@ _logger = logging.getLogger("trippilot.planb.place_knowledge")
 # 후보 한 건에 붙일 문서 길이 상한. 원천이 긴 산문을 주기도 해서(위키백과 실측 최대
 # 433자, TourAPI overview 는 그보다 길다) 자르지 않으면 후보 30개에서 프롬프트가 터진다.
 # 앞부분을 남기는 이유: 도입부가 "무엇인가"를 말하고 뒤로 갈수록 연혁·부가정보다.
-MAX_DOC_CHARS = 160
+# 160 → 300 (2026-10-18 청킹): 이제 붙는 것은 문서 앞부분이 아니라 **질의에 맞은 조각 하나**다.
+# 조각은 절 제목 + 최대 280자(`chunking.MAX_CHARS`)라 자르지 않고 통째로 들어가게 잡는다 —
+# 맞은 조각을 다시 자르면 검색이 고른 근거가 잘려 나간다.
+MAX_DOC_CHARS = 300
+# 맞은 조각이 본문 뒤쪽이면 도입부 첫 문장을 이만큼까지 앞에 붙인다 — 조각만으로는 "이곳이 무엇인지"가 빠진다.
+# 실측(2026-10-19, 장소 120 × Plan-B 상황 질의 6 = 720판, LLM 판정·순서 섞음, `measure_kb5_chunking.py`):
+#     맞은 조각만        vs 도입부 앞 160자   53.9% : 40.3% (같음 5.8%)
+#     첫 문장 + 조각     vs 맞은 조각만       66.0% : 24.0% (같음 10.0%)
+#     첫 문장 + 조각     vs 도입부 앞 300자   59.9% : 31.7% (같음 8.5%) ← 같은 글자 예산(길이 편향 통제)
+INTRO_HEAD_CHARS = 100
+# 조각으로 적재되는 출처 — 이 출처는 통문서 id 대신 조각 id 범위로 펼쳐 찾는다.
+CHUNKED_SOURCES = frozenset({SOURCE_WIKI})
 
 # 문서를 받는 **장소** 수 상한 — 예산 방어. 40 × 160자 ≈ 6,400자가 프롬프트 증가분이다.
 #
@@ -90,18 +102,24 @@ def fetch_place_knowledge(
     # 스토어의 `item_id` 는 `doc_id`(`{출처}:{source_ref}`)다 — 한 장소에 출처가 여럿
     # 공존하기 때문이다. 그래서 조인 키만으로는 못 거르고 **출처 × 조인키**로 편다.
     # SOURCES 가 닫힌 목록(넷)이라 추측이 아니라 전개다.
-    doc_ids = frozenset(f"{source}:{ref}" for source in SOURCES for ref in refs)
+    # 청킹된 출처는 **조각 id 범위**로 편다(`{출처}:{ref}#0..`) — 장소마다 조각 수가 달라 미리 모르므로
+    # 적재 상한(`MAX_CHUNKS_PER_DOC`)까지 펼친다. 없는 id 는 그냥 안 맞는다. **청킹 전 통문서 id 도 같이 둔다** —
+    # 조각이 아직 안 들어온 장소(배포 롤아웃 직후·적재 예산에 밀린 문서·코퍼스에 없는 옛 문서)는 그 통문서가
+    # 대신 붙는다. 조각이 다 들어간 문서의 통문서는 적재가 지우므로(`load_kb`) 둘이 오래 겹치지 않고,
+    # 겹쳐도 아래 장소별 중복 제거가 점수 높은 하나만 남긴다(리뷰: 빼면 KB-5 가 배포 창 동안 통째로 빈다).
+    doc_ids = frozenset(
+        i for source in SOURCES for ref in refs
+        for i in ((f"{source}:{ref}", *chunk_ids(f"{source}:{ref}")) if source in CHUNKED_SOURCES
+                  else (f"{source}:{ref}",)))
     try:
         hits = retrieve(
             KbKind.POI_DESC,
             query,
             embedding,
             store,
-            # 장소당 문서가 최대 `len(SOURCES)` 건이므로, 서로 다른 장소 MAX_DOCS 개를
-            # 확보하려면 문서는 그 배수까지 받아야 한다(최악: 한 장소가 넷을 다 가짐).
-            # 장소 수 상한은 여기가 아니라 아래 dedupe 루프가 건다 — top_k 만으로는
-            # "문서 몇 건"이 걸릴 뿐 "장소 몇 곳"은 안 걸린다.
-            top_k=min(len(doc_ids), MAX_DOCS * len(SOURCES)),
+            # 장소 수 상한은 여기가 아니라 아래 dedupe 루프가 건다. 장소마다 **가장 맞는 조각 하나**를 골라야 하므로 후보 장소의 조각 전부를 점수순으로
+            # 받는다(필터가 검색 전에 걸려 행 수는 후보 장소의 조각 수뿐이다).
+            top_k=len(doc_ids),
             item_ids=doc_ids,
             vector=vector,  # 상황 질의와 같은 문자열이라 호출측이 이미 임베딩했다
         )
@@ -111,10 +129,11 @@ def fetch_place_knowledge(
 
     # 키는 `poi_ref`(= source_ref)다. `doc_id` 는 출처별 접두사가 붙어 있어 후보와
     # 직접 안 맞는다 — 한 장소에 여러 출처의 문서가 생길 수 있기 때문이다.
+    intro = {h.poi_ref: h for h in hits if h.poi_ref and h.metadata.get("chunk") == 0}
     out: dict[str, str] = {}
     for hit in hits:
         ref = hit.poi_ref
-        text = _clip(hit.text)
+        text = _clip(_with_intro(hit, intro.get(ref)))
         if not ref or not text or ref in out:
             continue  # 같은 장소에 문서가 여럿이면 점수 높은 쪽만 (스토어가 정렬해 준다)
         if len(out) >= MAX_DOCS:
@@ -144,6 +163,21 @@ def _pool_refs(pois: Sequence[Poi]) -> frozenset[str]:
     24시간) 전량이 비는 구간이 있다 — 그때도 조용히 빈 결과일 뿐 실패가 아니다.
     """
     return frozenset(p.source_ref for p in pois if p.source_ref)
+
+
+def _with_intro(hit, intro) -> str:
+    """맞은 조각이 도입부(#0)가 아니면 도입부 첫 문장 + " … " + 조각 본문. 통문서(조각 번호 없음)·도입부 조각 자체·
+    도입부를 못 찾은 장소는 그대로 — 실측 형식(`measure_kb5_chunking.py combo300`)과 같다."""
+    if not hit.metadata.get("chunk") or intro is None:
+        return hit.text
+    head = split_sentences(_body(intro))[0][:INTRO_HEAD_CHARS]
+    return f"{head} … {_body(hit)}"
+
+
+def _body(hit) -> str:
+    """조각 글은 `"{절 제목}: {본문}"`(`chunking.chunk_document`) — 절 제목을 뗀다."""
+    section = hit.metadata.get("section") or ""
+    return hit.text[len(section) + 2:] if section and hit.text.startswith(f"{section}: ") else hit.text
 
 
 def _clip(text: str) -> str:

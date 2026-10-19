@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from trippilot.llm_gateway.gates.base import has_contact_like
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.prompts import inline
-from trippilot.llm_gateway.workers.dialogue_intent import history_lines
+from trippilot.llm_gateway.workers.dialogue_intent import ROLE_LABELS, history_lines
 from trippilot.ports.memory_store_port import (
     SUMMARY_LINE_CHARS,
     SUMMARY_MAX_LINES,
@@ -49,6 +49,12 @@ def expires_at_for(updated_at: datetime, *, ttl_days: int = MEMORY_TTL_DAYS) -> 
 def due(turn_index: int, summarized_turn_index: int, every: int = SUMMARY_EVERY_TURNS) -> bool:
     """요약할 차례인가 — 마지막 요약이 덮은 턴 뒤로 `every` 턴이 쌓였을 때. 기억이 없으면 summarized 는 0."""
     return turn_index - summarized_turn_index >= every
+
+
+def is_turn_fragment(line: str) -> bool:
+    """`compress_fallback` 이 남긴 대화 원문 조각 줄인가 — `history_lines` 와 같은 꼴(`- 사용자: …`/`- 도우미: …`).
+    LLM 요약이 비운 배열을 내면 이 줄들만 지운다(BR-AO-09 "원문 목록을 저장하지 않는다")."""
+    return any(line.startswith(f"- {label}: ") for label in ROLE_LABELS.values())
 
 
 def compress_fallback(
