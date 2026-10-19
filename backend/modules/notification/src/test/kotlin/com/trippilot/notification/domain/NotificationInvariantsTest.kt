@@ -68,6 +68,7 @@ class NotificationInvariantsTest : StringSpec({
         listOf(
             base.copy(title = "AI 제목", body = " "),
             base.copy(title = "", body = "AI 본문"),
+            base.copy(title = "  ", body = "AI 본문"),
             base.copy(title = null, body = "AI 본문"),
         ).forEach { s ->
             val n = s.toNotification(at)

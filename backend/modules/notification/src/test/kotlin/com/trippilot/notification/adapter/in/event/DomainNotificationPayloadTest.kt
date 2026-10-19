@@ -71,7 +71,8 @@ class DomainNotificationPayloadTest : StringSpec({
         }
     }
 
-    "숙소 이름이 없으면 본문은 '숙소' 다 — 빈 본문으로 실패시키지 않는다" {
+    // 이름 키가 **없는** 경우만이다. 빈 문자열("")은 `?: "숙소"` 를 타지 않아 본문이 비고 적재가 실패한다 — TRIP-1476(A).
+    "숙소 이름 키가 없으면 본문은 '숙소' 다 — 빈 본문으로 실패시키지 않는다" {
         val f = fixture()
         val acc = UUID.randomUUID()
         StayRegisteredSubscriber(f.raise, mapper).handle(envelope(json("accountId" to acc.toString()), "stay.StayRegistered"))
