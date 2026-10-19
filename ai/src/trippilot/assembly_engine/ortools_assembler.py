@@ -205,8 +205,9 @@ class OrToolsAssembler:
         started = time.monotonic()
         for day in problem.days:
             slots = self._solve_day(problem, day, used, per_day_ms)
-            # 무보정 재시도는 **한 번 더 풀 시간이 있을 때만**(첫 시도 상한의 절반 이상 남았을 때) — 아래 몰아 재시도와
-            # 같은 원칙이다. 2026-10-18 개발 서버: 첫 시도가 잔여를 다 쓴 뒤에도 재시도가 또 돌아 조립 76초·생성 504
+            # 무보정 재시도는 **한 번 더 풀 시간이 있을 때만**(남은 예산이 첫 시도 상한의 절반 이상 — 재시도는 대개
+            # 결정론 한도로 상한보다 일찍 끝난다). 아래 몰아 재시도의 문턱(상한 ×2)과 같은 발상이고, 그쪽은 ×5 한도로
+            # 더 오래 돌아 문턱이 높다. 2026-10-18 개발 서버: 첫 시도가 잔여를 다 쓴 뒤에도 재시도가 또 돌아 조립 76초·생성 504
             # (백스톱 뒤에도 백그라운드로 계속 돌아 같은 파드의 다음 요청까지 CPU 를 굶겼다).
             pace_spare_ms = remaining_ms - int((time.monotonic() - started) * 1000)
             pace_retry_fits = pace_spare_ms * 2 >= min(self._cfg.or_tools_limit_ms, per_day_ms)
