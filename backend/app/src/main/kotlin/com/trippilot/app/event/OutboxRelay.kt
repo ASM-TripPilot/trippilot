@@ -139,8 +139,9 @@ class OutboxRelay(
             // 같은 이벤트의 다른 처리를 막는다(여행 삭제: 도우미 AI 기억 파기가 실패하면 알림 예약 정리가 영영 안 돌아
             // 지운 여행의 알림이 울린다 — #1348 검수). 하나라도 실패하면 이벤트째 재시도한다(성공한 쪽도 다시 돈다 —
             // at-least-once·멱등 계약 안이다).
+            var sent = false
             runCatching {
-                if (broker != null) broker.send(envelope) else deliver(envelope, targets)
+                if (broker != null) broker.send(envelope).also { sent = true } else deliver(envelope, targets)
                 markPublished(envelope.eventId)
             }
                 .onSuccess { published ->
@@ -160,7 +161,9 @@ class OutboxRelay(
                     // 브로커에 닿지 못한 것(시한 초과·연결 실패·중단)은 배치를 멈추고 **시도 횟수를 쓰지 않는다** — 쓰면 브로커가
                     // 13분 넘게 죽어 있을 때 멀쩡한 이벤트가 전부 포기로 떨어진다(이벤트·구독자 탓이 아니다). 그 레코드만의 영구
                     // 실패(크기 초과·직렬화)는 그 행만 백오프시키고 뒤는 보낸다 — 아니면 한 행이 시도마다 뒤 99건을 통째로 민다.
-                    if (broker != null && !KafkaOutboxBroker.recordOnly(e)) {
+                    // 송신은 됐는데 발행 표시(DB)가 실패한 경우는 브로커 탓이 아니다 — 폴링 모드처럼 시도 횟수를 올려, 같은 행이
+                    // 매 폴링 맨 앞에서 재송신되며 뒤를 영영 막지 않게 한다.
+                    if (broker != null && !sent && !KafkaOutboxBroker.recordOnly(e)) {
                         if (e is InterruptedException) Thread.currentThread().interrupt() // 종료 신호를 삼키지 않는다
                         brokerDown = true
                         // 스택은 남기지 않는다 — 브로커가 죽어 있는 동안 폴링마다 쌓여 로그를 덮는다. 원인 한 줄이면 된다.

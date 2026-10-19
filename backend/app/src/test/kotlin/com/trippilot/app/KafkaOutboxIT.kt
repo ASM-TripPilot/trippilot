@@ -60,8 +60,14 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         val latencies = java.util.concurrent.ConcurrentHashMap<String, Duration>()
         @Volatile var failNext = false
         @Volatile var failAlways = false
+        /** 구독자 안에서 JSON 파싱 계열 예외가 한 번 난다(외부 응답 본문이 잘린 경우) — 재시도 대상이어야 한다. */
+        @Volatile var failNextWithParse = false
         override fun handle(envelope: EventEnvelope) {
             if (failAlways) error("의도된 계속 실패")
+            if (failNextWithParse) {
+                failNextWithParse = false
+                throw IllegalStateException("의도된 응답 파싱 실패", com.fasterxml.jackson.core.JsonParseException(null, "잘린 본문"))
+            }
             if (failNext) { failNext = false; error("의도된 소비 실패") }
             received += envelope
             latencies[envelope.aggregateId] = Duration.between(envelope.occurredAt, Instant.now())
@@ -97,6 +103,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         subscriber.latencies.clear()
         subscriber.failNext = false
         subscriber.failAlways = false
+        subscriber.failNextWithParse = false
     }
 
     private fun unpublished(note: String) = jdbc.queryForObject(
@@ -275,6 +282,31 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         relayUntilPublished("빈값")
 
         awaitReceived("빈값", Duration.ofSeconds(8))
+    }
+
+    @Test
+    fun `구독자 안의 파싱 계열 예외는 봉투 문제가 아니다 — 포기하지 않고 재시도해 배달한다`() {
+        subscriber.failNextWithParse = true
+        tx.execute { publisher.publish(Probe("응답파싱")) }
+        relayUntilPublished("응답파싱")
+
+        awaitReceived("응답파싱")
+        unpublished("응답파싱") shouldBe 0 // 포기(미발행·상한)로 떨어지지 않았다
+    }
+
+    @Test
+    fun `송신 뒤 발행 표시가 실패하면 브로커 장애가 아니다 — 시도 횟수를 올려 맨 앞에서 영영 막지 않는다`() {
+        repeat(20) { relay.relay() }
+        tx.execute { publisher.publish(Probe("표시실패")) }
+        val markFails = object : JdbcTemplate(jdbc.dataSource!!) {
+            override fun update(sql: String, vararg args: Any?): Int =
+                if (sql.contains("SET published_at = now()")) throw org.springframework.dao.DataAccessResourceFailureException("의도된 표시 실패")
+                else super.update(sql, *args)
+        }
+        val ok = mockk<KafkaOutboxBroker>(relaxed = true)
+        OutboxRelay(markFails, SimpleMeterRegistry(), allSubscribers, Clock.systemUTC(), ok).relay()
+
+        jdbc.queryForObject("SELECT attempts FROM outbox_event WHERE aggregate_id = ?", Int::class.java, "표시실패") shouldBe 1
     }
 
     @Test

@@ -17,6 +17,9 @@ import org.springframework.kafka.config.TopicBuilder
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.listener.DefaultErrorHandler
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries
+import org.springframework.core.convert.ConversionException
+import org.springframework.messaging.converter.MessageConversionException
+import org.springframework.messaging.handler.invocation.MethodArgumentResolutionException
 import org.springframework.stereotype.Component
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -73,7 +76,20 @@ class KafkaOutboxConfig {
             multiplier = 2.0
             maxInterval = maxMs
         },
-    ).apply { addNotRetryableExceptions(JsonProcessingException::class.java) }
+    ).apply {
+        // 분류표를 **통째로 바꾼다.** 기본표(ClassCastException 등)와 원인 사슬 검사는 구독자 안에서 난 예외에도 걸려,
+        // 폴링 모드라면 10번 재시도했을 일시 오류(응답 본문 파싱 실패 등)를 첫 실패에서 포기시킨다. 즉시 포기는 봉투를
+        // 못 읽은 경우([UnreadableEnvelope])와 스프링이 인자를 못 만든 경우(값 없는 레코드 등 — 리스너 본문 전)뿐이다.
+        setClassifications(
+            mapOf(
+                UnreadableEnvelope::class.java to false,
+                MethodArgumentResolutionException::class.java to false,
+                MessageConversionException::class.java to false,
+                ConversionException::class.java to false,
+            ),
+            true,
+        )
+    }
 
     companion object {
         const val TOPIC = "trippilot.outbox"
@@ -131,5 +147,11 @@ class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: Ka
     @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox")
     // 값 없는 레코드(tombstone)는 여기까지 오지 않는다 — 스프링이 인자 변환에서 비재시도 실패로 분류해 회수기로 바로 보낸다
     // (실측: "eventId 도 못 읽은 … value=null" 한 줄, 재시도 0). KafkaOutboxIT 가 그 동작을 지킨다.
-    fun onMessage(value: String) = relay.consume(broker.read(value))
+    fun onMessage(value: String) {
+        val envelope = runCatching { broker.read(value) }.getOrElse { throw UnreadableEnvelope(it) }
+        relay.consume(envelope)
+    }
 }
+
+/** 봉투를 못 읽었다 — 재시도해도 같으므로 바로 포기한다. 구독자 안에서 난 예외와 구분하려고 따로 둔다. */
+class UnreadableEnvelope(cause: Throwable) : RuntimeException("Kafka 메시지의 봉투를 읽지 못했습니다", cause)
