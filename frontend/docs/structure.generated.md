@@ -194,6 +194,7 @@
 
 ## src/app/model/
 - `src/app/model/useAccountBoundaryReset.ts`  →  useAccountBoundaryReset
+- `src/app/model/usePushRouting.ts`  →  usePushRouting
 
 ## src/app/routing/
 - `src/app/routing/SplashGate.tsx`  →  SPLASH_MIN_VISIBLE_MS · PUSH_REGISTER_DELAY_MS · SplashGate
@@ -1111,7 +1112,7 @@
 - `src/pages/settings/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 
 ## src/pages/settings/notification-inbox/
-- `src/pages/settings/notification-inbox/index.ts`  →  NotificationInboxPage
+- `src/pages/settings/notification-inbox/index.ts`  →  NotificationInboxPage · notificationAction
 
 ## src/pages/settings/notification-inbox/model/
 - `src/pages/settings/notification-inbox/model/groupByDay.ts`  →  NotificationGroups · groupByDay
@@ -1763,4 +1764,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1115개 파일
+합계 1116개 파일
