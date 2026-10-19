@@ -512,3 +512,12 @@
 - **입력**: 같은 날 코드·문서 감사가 짚은 어긋남 — 하나씩 코드로 확인한 것만 고쳤다.
 - **무엇을 했나**: ① BLM §1 개정 블록(루프·예산은 `agent.py`, `composer.py` 는 순수 단계, 공개 API 는 `run(ReflectTask)`) ② BLM §2·BR-U6R-14·계약 §5 개정 블록 — "deadline 없음·백그라운드 전제"는 실제와 다르다(BE 동기 POST·마감 15초, AI 가 남은 시간 분배) · 대화형 REFLECT 는 화면 이동 핸드오프(`OPEN_REFLECTION`)라 생성 코어에 수렴하지 않는다 ③ DE 개정 블록 — 프롬프트 정본 참조(§2.8 은 다른 기능), `vision` 은 `ReflectTask` 에, `PhotoRef.image_ref` 는 없다 ④ BR §4 DoD 5칸 체크 — 각 칸의 테스트·산출물 실재 확인 후 ⑤ 코드 주석 6곳(없는 함수 `compose` 참조·"composer, 후속"·"잠정값"·Phase 2 위치) ⑥ 경계 테스트 1건 — `/reflection/generate` 의 `deadline_ms` 가 첫 LLM 호출 시한까지 간다(공유 카드 경계와 대칭, 관통을 끊는 변이로 빨강 확인).
 - **지키는 것**: 원문은 지우지 않고 개정 블록으로 · 동작 변경 0 · `wiring.py` 무변.
+
+## 2026-10-19 — 도우미 장소 탐색 의도 EXPLORE_PLACES (BR-AO-27 · 분류 프롬프트 0.2.3)
+**Timestamp**: 2026-10-19 · 브랜치 `feat/ai-explore-places`(develop b1fb3b737 위) · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: 사용자 요청 — 도우미가 "서울에서 요즘 핫한 곳 알려줘"에 "도와드리기 어려워요"로 끝난다. "다룰 수 있는 카테고리를 늘려라 — 지금은 POI DB 를 제공하는 쪽으로."
+- **원인**: 분류 프롬프트 0.2.2 의 의도 정의 13줄에 장소 탐색이 없어 분류가 `{"intent": null}` → BE SCOPE 카드. SUGGEST_ALTERNATIVE 는 "특정 한 곳 대신"이라 맞지 않는다.
+- **무엇을 했나**: ① 도우미 전용 의도 EXPLORE_PLACES — `DIALOGUE_INTENTS = ROUTABLE_INTENTS(13) + 탐색`, 3단 라우터·뱅크·intent.yaml·재생 픽스처 무변(BR-AO-14) ② 인자 region·category·theme(전부 선택), 앵커 region → 지역 표(`domain/region_centers.py`) / 일정 슬롯 좌표 / 여행 목적지, 셋 다 없으면 지역 되묻기(조건부 필수 인자 `Handler.ask`, 요청당 1회) ③ 등록 POI 반경 풀 → 결정론 정렬 → 후보 ≤5 CANDIDATES(PICK 없음 — 후보마다 OPEN_PLACE), 모양 검사 "고르기 버튼은 전부 있거나 전부 없다" + 대안은 Facts 가 후보마다 하나를 다시 조인다 ④ 후보 답·탐색 답 문장의 Facts 밖 장소 이름 꼴 → 템플릿(`place_not_in_facts`) ⑤ 보류 중 요청 꼴 발화는 삼키지 않고 분류, 탐색 턴은 섀도에 넘기지 않는다 ⑥ 분류 프롬프트 0.2.3 ⑦ BE enum·디스패처·`OPEN_PLACE` 정본 대조 ⑧ FD BR-AO-27 신설, BR-AO-16·20·23·AO-P1·P8·P10·P17·DE §2.3·§2.10·BLM §5·§13 개정 표지, spec FR-001 개정·FR-018 신설·plan·tasks T033.
+- **지키는 것**: INV-1(후보·문장 장소는 풀 안) · INV-2(theme 등 발화 원문을 Facts 에 싣지 않는다 — 셀프 리뷰가 "22:00 이후 야경"으로 재현한 구멍) · INV-3(거리 문자열만) · INV-4(풀·좌표 실패 → 결정론 템플릿 + 팬아웃 FallbackEvent) · `tool_specs_json()` 기본 출력 sha 무변.
+- **실측**(Azure 게이트웨이 경유 gpt-5.6-luna, `measure_prompt_ab.py intent` ×2, develop 0.2.2 와 나란히 각 214회): 탐색 6사례 16.7% → 100%, 평가셋 98.3% → 97.1%(판단 오답 같은 1문장 ×2, 0.2.3 은 모양 드롭 1·시한 1 더), 지시어 100% → 91.7%(시한 1), 짧은 수락 100% → 93.8%, p90 2.75/2.66s → 2.52/2.62s, 4.0s 시한 1 → 3건, 입력 3,522 → 3,876토큰.
+- **남긴 것**: 지역 표는 손 상수 52곳(도 이름 없음 — 표 밖 지역은 "아직 못 찾는다"). 문장 검사는 접미 없는 고유명을 못 본다(카드는 BE 정본 대조). 배포는 BE 먼저 또는 같이(BLM §13 개정).

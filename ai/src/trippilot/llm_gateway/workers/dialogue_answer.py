@@ -59,6 +59,7 @@ _ANSWER_TEXT: dict[Intent, str] = {
     Intent.GENERATE_REFLECTION: "회고는 기록 화면에서 만들 수 있어요. 아래 버튼을 누르면 기록이 열려요.",
     Intent.TRIP_SUMMARY: "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.",
     Intent.STYLE_ANALYSIS: "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.",
+    Intent.EXPLORE_PLACES: "가 볼 만한 곳을 찾아봤어요.",
     Intent.OUT_OF_SCOPE: "그건 제가 도와드리기 어려워요.",
 }
 
@@ -71,7 +72,10 @@ _EMPTY_TEXT: dict[Intent, str] = {
     Intent.GET_DISTANCE: "구간 거리는 일정에서 확인할 수 있어요.",
     Intent.GET_POI_INFO: "장소 정보는 일정에서 장소를 눌러 볼 수 있어요.",
     Intent.SUGGEST_ALTERNATIVE: "근처에서 대신할 곳을 찾지 못했어요.",
+    Intent.EXPLORE_PLACES: "그 조건에 맞는 곳을 아직 찾지 못했어요.",
 }
+# EXPLORE_PLACES 의 앵커(지역·일정·여행 목적지)가 하나도 없을 때 — 지역 되묻기 문안(요청당 1회, BR-AO-27)이자 이미 물은 뒤의 결정론 답
+EXPLORE_ASK_REGION_TEXT = "어느 지역에서 찾아 드릴까요? '부산'이나 '제주 애월'처럼 알려 주세요."
 # status UNAVAILABLE — 출처 불통 (BE FallbackCause.SOURCE_UNAVAILABLE 문구)
 _UNAVAILABLE_TEXT = "지금 일부 정보를 확인할 수 없어요."
 

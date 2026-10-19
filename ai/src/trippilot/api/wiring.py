@@ -121,7 +121,7 @@ from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.scorer import build_rule_score
-from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
+from trippilot.assembly_engine.travel import WALKED_SOURCE, TravelEstimator, haversine_km
 from trippilot.domain.common import (
     BUDGET_TOKENS,
     PACE_TOKENS,
@@ -862,10 +862,13 @@ def _render_distance(estimate: TravelEstimate, mode: TransportMode) -> str:
 
     거리는 범위 상한(도로 추정 = 직선 × 우회계수)을 쓴다 — 하한(직선)은 체감보다
     짧게 읽힌다. `internal_minutes`는 어떤 경로로도 렌더하지 않는다(INV-3).
+    수단은 **그 구간에 실제로 쓴 것**이다 — 대중교통 여행의 짧은 구간은 추정기가 걷기로 잰다(700m 이하·도보가
+    빠른 구간). 여행 수단을 그대로 적으면 걸어가는 500m 가 "대중교통"으로 보였다(2026-10-19 사용자 지적).
     """
     _, road_km = estimate.distance_km_range
     suffix = " 추정" if estimate.is_estimated else ""
-    return f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[mode]}{suffix}"
+    shown = TransportMode.WALK if estimate.source == WALKED_SOURCE else mode
+    return f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[shown]}{suffix}"
 
 
 def _distance_ranges(

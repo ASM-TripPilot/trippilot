@@ -89,3 +89,45 @@ def test_stats_projects_chunk_count_and_vector_size() -> None:
     rows = [m.row_of("a", "가", "짧은 개요다."), m.row_of("b", "나", None)]
     line = m.stats(rows, 20_940)
     assert "개요 있음 1 (50.0%)" in line and "전량 20940곳 환산" in line
+
+
+def test_targets_put_sights_before_food_so_a_partial_corpus_covers_attractions_first() -> None:
+    """다 모이기 전에 먼저 올릴 수 있게 볼거리부터(10-19 단축) — 같은 종류 안에서는 해시 순 그대로."""
+    m = _mod()
+    def p(cid, cat):
+        return {"source": "TOURAPI", "poi": {"name": cid, "category": cat}, "provenance": {"content_id": cid}}
+    got = [cid for cid, _ in m.targets([p("f1", "FOOD"), p("s1", "SIGHT"), p("c1", "CAFE"), p("u1", "CULTURE")])]
+    assert got == ["s1", "u1", "c1", "f1"]
+
+
+def test_main_moves_to_the_next_key_when_one_key_hits_its_daily_quota(tmp_path, monkeypatch) -> None:
+    """같은 날 앞선 실행이 1번 키를 다 썼어도 2번 키로 끝까지 받는다(429 는 키 퇴출이 아니라 연속 실패로 보인다)."""
+    import json
+    import trippilot.poi_curation.sourcing.tourapi as tourapi
+    m = _mod()
+    pois = tmp_path / "pois.json"
+    pois.write_text(json.dumps({"proposals": [
+        {"source": "TOURAPI", "poi": {"name": f"곳{i}", "category": "SIGHT"}, "provenance": {"content_id": str(i)}}
+        for i in range(30)]}), encoding="utf-8")
+    monkeypatch.setattr(m, "_POIS", pois)
+    used: dict[str, int] = {}
+
+    class _KeyAdapter:
+        def __init__(self, http, key, **_):
+            self.key = key
+
+        def fetch_overview(self, cid):
+            used[self.key] = used.get(self.key, 0) + 1
+            if self.key == "K1":
+                raise RuntimeError("HTTP 429")
+            return f"{cid} 개요다."
+
+    monkeypatch.setattr(tourapi, "TourApiAdapter", _KeyAdapter)
+    monkeypatch.setattr(tourapi, "UrllibHttpClient", lambda: None)
+    monkeypatch.setenv("TOUR_API_KEY", "K1")
+    monkeypatch.setenv("TOUR_API_KEY2", "K2")
+    monkeypatch.delenv("TOUR_API_KEY3", raising=False)
+    out = tmp_path / "corpus.jsonl.gz"
+    assert m.main(["--max-calls", "100", "--out", str(out)]) == 0  # 한도 소진 연속 실패는 실패율에 안 센다
+    assert used == {"K1": m._STOP_AFTER_FAILS, "K2": 30}
+    assert len(m._load(out)) == 30

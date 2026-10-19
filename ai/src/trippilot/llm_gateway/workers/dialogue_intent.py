@@ -21,6 +21,7 @@ from datetime import datetime
 
 from trippilot.domain.common import TraceId
 from trippilot.domain.dialogue import tool_specs_json
+from trippilot.domain.intent import DIALOGUE_INTENTS
 from trippilot.domain.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
@@ -31,8 +32,8 @@ NONE = "(없음)"
 NO_TRIP = "(여행 없음)"
 # 역할 라벨 — 백엔드 RecentTurn.role 두 값. 밖의 값은 그대로 적는다(입력 검증은 TurnInput 몫 — 여기서 죽지 않는다).
 ROLE_LABELS = {"USER": "사용자", "ASSISTANT": "도우미"}
-# 인자표 파생 의도별 스키마 — intent.yaml·IntentRouter 와 **같은 함수**(한 표, 드리프트 차단)
-_INTENTS = tool_specs_json()
+# 인자표 파생 의도별 스키마 — intent.yaml·IntentRouter 와 **같은 함수**(한 표, 드리프트 차단). 도우미는 13종 + 장소 탐색
+_INTENTS = tool_specs_json(DIALOGUE_INTENTS)
 
 
 def history_lines(recent_turns: Iterable) -> list[str]:
