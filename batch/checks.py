@@ -48,7 +48,7 @@ def check_pois(doc: dict, sidos: set[str], min_count: int) -> list[str]:
     if unresolved:
         samples = ", ".join(f"{(p.get('poi') or {}).get('name')}({(p.get('provenance') or {}).get('address')})"
                             for p in unresolved[:3])
-        failures.append(f"시도를 정할 수 없는 주소 {len(unresolved)}건 — 백엔드 적재에서 지역 미판정이 된다: {samples}")
+        failures.append(f"시도를 정할 수 없는 주소 {len(unresolved)}건 — 백엔드가 이 주소로는 시도를 못 읽는다: {samples}")
     nameless = sum(1 for p in proposals if not (p.get("poi") or {}).get("name"))
     if nameless:
         failures.append(f"이름 없는 제안 {nameless}건")

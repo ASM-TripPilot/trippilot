@@ -1,8 +1,8 @@
 """DAG 구조와 실행 — Airflow 가 설치된 환경에서만 돈다(없으면 건너뛴다).
 
     pip install "apache-airflow==3.3.2" --constraint <constraints-3.3.2/constraints-3.12.txt>
-    AIRFLOW_HOME=$(mktemp -d) airflow db migrate          # 실행 테스트가 메타 DB 를 쓴다
-    python3 -m unittest discover -s batch/tests
+    export AIRFLOW_HOME=$(mktemp -d)       # 마이그레이션과 테스트가 같은 메타 DB 를 봐야 한다(한 줄에만 붙이면 테스트는 ~/airflow 를 본다)
+    airflow db migrate && python3 -m unittest discover -s batch/tests
 
 DAG 는 실제 API 를 부르지 않는다(POI 는 합성 문서, 행사는 리포 사본) — CI 실 호출 0건 규칙 안에서 돈다.
 """
