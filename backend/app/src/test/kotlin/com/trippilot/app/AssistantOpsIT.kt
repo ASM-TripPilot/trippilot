@@ -143,6 +143,9 @@ class AssistantOpsIT : AbstractPostgresIntegrationTest() {
         val mine = newAccount()
         val session = conversation(mine, "내가 한 말")
         messages.appendUser(session, mine, UUID.randomUUID(), NewMessage(MessageRole.USER, MessageKind.TEXT, text = null, redacted = true, outcome = "VIOLATION"), now)
+        // 도우미 답에 남긴 평가(US-ASSIST-09)는 그 줄의 칸으로 함께 나간다 — 몫을 따로 두지 않는다
+        val reply = jdbc.queryForObject("SELECT message_id::text FROM assistant_message WHERE session_id = ? AND role = 'ASSISTANT'", String::class.java, session)
+        jdbc.update("INSERT INTO assistant_message_feedback (message_id, account_id, rating) VALUES (?::uuid, ?, 'UP')", reply, mine)
         conversation(newAccount(), "남이 한 말")
         // 보존 기간이 지난 대화는 이미 없는 것이다 — 청소가 아직 안 돌았어도 내보내지 않는다
         val old = newAccount()
@@ -150,11 +153,15 @@ class AssistantOpsIT : AbstractPostgresIntegrationTest() {
 
         val items = export.export(mine).sections.single { it.section == "assistantMessages" }.items
 
-        items.map { listOf(it["role"], it["text"], it["redacted"]) } shouldContainExactly listOf(
-            listOf("USER", "내가 한 말", false),
-            listOf("ASSISTANT", AssistantTemplates.capabilities(hasTrip = false).text, false),
-            listOf("USER", null, true),
+        items.map { listOf(it["role"], it["text"], it["redacted"], it["feedback"]) } shouldContainExactly listOf(
+            listOf("USER", "내가 한 말", false, null),
+            listOf("ASSISTANT", AssistantTemplates.capabilities(hasTrip = false).text, false, "UP"),
+            listOf("USER", null, true, null),
         )
+        // 한 줄의 칸은 이것이 전부다 — 늘거나 빠지면 계약 문서(`/me/export` 설명)도 같이 고친다
+        items.forEach {
+            it.keys shouldBe setOf("sessionId", "tripId", "role", "kind", "text", "redacted", "createdAt", "feedback", "feedbackReason", "feedbackComment")
+        }
         items.all { it["sessionId"] == session.toString() } shouldBe true
         export.export(old).sections.single { it.section == "assistantMessages" }.items shouldBe emptyList()
 

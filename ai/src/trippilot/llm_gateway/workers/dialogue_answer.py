@@ -28,9 +28,13 @@ from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.workers.dialogue_intent import NO_TRIP, NONE, render_history
 
 # `$style` — 워커 모듈 상수, 설정화하지 않는다 (FD DE §6). 게이트 규칙을 말로 풀어 모델에 준다.
+# 한 줄·단일 공백으로 둔다 — 워커가 `inline()` 으로 눌러 싣으므로 그래야 렌더 결과에 이 문자열이 그대로 있다.
+# 2026-10-19 친근한 대화체(prompts/dialogue_answer.yaml 0.3.0): 숫자 말("두 분이"·"이 시간에는")은 공유 정규식
+# `_TIME_EXPR` 가 소요 표현으로 읽는 오탐 자리라 여기서도 피하게 한다.
 ANSWER_STYLE = (
-    "2~4문장, 존댓말, 평문, 줄바꿈만 사용, 마크다운·링크·연락처 금지, "
-    "소요시간·시각 추정 금지, 확인된 사실에 없는 장소·수치 금지"
+    "친근한 해요체 대화, 2~4문장(맞장구 한마디 → 답 → 다음 한 걸음 제안·되묻기), 평문, 줄바꿈만 사용, "
+    "마크다운·링크·연락처 금지, 소요시간·시각 추정 금지, 인원·시간 길이를 우리말 수(두 분·이 시간)로 쓰지 않기, "
+    "확인된 사실에 없는 장소·수치·특징 금지"
 )
 
 # 여행이 없는데 여행이 필요한 의도 — BE AssistantTemplates.needTrip 과 같은 문구 (BR-U8-05)
@@ -39,6 +43,8 @@ NEED_TRIP_TEXT = "먼저 여행을 만들거나 숙소를 등록하면 일정을
 # 의도별 결정론 문장 — BE 화면 문장 이식(IntentDispatcher handoff·QueryCards info·AssistantTemplates);
 # SHOW_SCHEDULE 의 OK 문구만 BE 에 없어 이 FD 가 신설(BLM §5 ★). 정본은 이 파일이다.
 # SUGGEST_ALTERNATIVE 는 대상 이름이 들어가 함수에서 만든다 (ProposalCards.alternatives 문구).
+# 넘기기 6의도(GENERATE_SCHEDULE·REGENERATE·REPLAN·회고 3종)는 사실이 없어 LLM 없이 이 문장이 그대로 나간다(BR-AO-25) —
+# 안내 한 문장 + 아래 버튼으로 이끄는 제안(2026-10-19 친근한 말투). BE IntentDispatcher 원문도 같은 문장이다(한 벌).
 _ANSWER_TEXT: dict[Intent, str] = {
     Intent.GET_NEXT_SLOT: "다음 장소예요.",
     Intent.GET_WEATHER: "오늘 예보예요.",
@@ -47,12 +53,12 @@ _ANSWER_TEXT: dict[Intent, str] = {
     # TEXT 종류라 카드가 없다 — 요약 문장 없이 "정리했어요"라 할 수 없어 일정 화면 넘기기로 (QueryCards 넘기기 꼴)
     Intent.SHOW_SCHEDULE: "일정은 일정 화면에서 확인할 수 있어요.",
     Intent.EDIT_SCHEDULE: "일정은 편집 화면에서 바꿀 수 있어요.",
-    Intent.GENERATE_SCHEDULE: "일정 만들기 화면으로 안내할게요.",
-    Intent.REGENERATE: "일정은 만들기 화면에서 다시 만들 수 있어요.",
-    Intent.REPLAN: "남은 일정은 다시 짜기에서 바꿀 수 있어요.",
-    Intent.GENERATE_REFLECTION: "회고는 기록 화면에서 만들 수 있어요.",
-    Intent.TRIP_SUMMARY: "여행 요약은 기록 화면에 있어요.",
-    Intent.STYLE_ANALYSIS: "여행 스타일은 기록에서 볼 수 있어요.",
+    Intent.GENERATE_SCHEDULE: "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 누르면 바로 시작해요.",
+    Intent.REGENERATE: "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요.",
+    Intent.REPLAN: "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 누르면 바로 시작해요.",
+    Intent.GENERATE_REFLECTION: "회고는 기록 화면에서 만들 수 있어요. 아래 버튼을 누르면 기록이 열려요.",
+    Intent.TRIP_SUMMARY: "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.",
+    Intent.STYLE_ANALYSIS: "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.",
     Intent.OUT_OF_SCOPE: "그건 제가 도와드리기 어려워요.",
 }
 

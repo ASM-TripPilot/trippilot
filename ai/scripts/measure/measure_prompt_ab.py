@@ -10,7 +10,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
     uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py intent prompts 2
 
 종류:
-- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건. OUT_OF_SCOPE 의
+- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건. OUT_OF_SCOPE 의
   정답은 거절({"intent": null})이다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
@@ -149,11 +149,37 @@ CONTEXT_CASES = [
 ]
 
 
+# 짧은 수락 — 직전 도우미 말이 제안·되묻기로 끝났으면 그 제안의 의도다(dialogue_intent 0.2.2). 같은 "응"도
+# 제안이 없으면 null 이 정답이고, 거절("아니 괜찮아")도 null 이다. 평가셋은 대화 맥락을 못 실어서 여기 둔다.
+# 프롬프트 예시와 다른 장소·문장이다.
+def _offer(user: str, assistant: str) -> list:
+    return [_turn("USER", user), _turn("ASSISTANT", assistant)]
+
+
+_WEATHER_OFFER = _offer("다음 일정 뭐야?", "다음은 15:30 국립경주박물관이에요. 가시기 전에 그쪽 날씨도 확인해 볼까요?")
+ACCEPT_CASES = [
+    ("GET_WEATHER", "좋아", _WEATHER_OFFER),
+    ("SUGGEST_ALTERNATIVE", "그래 찾아줘",
+     _offer("점심 어디서 먹기로 했지?", "점심은 교리김밥인데 오늘 쉬는 날일 수 있어요. 근처 다른 식당을 찾아봐 드릴까요?")),
+    ("GET_DISTANCE", "네",
+     _offer("다음 일정 뭐야?", "다음은 국립경주박물관이에요. 지금 계신 곳에서 얼마나 떨어져 있는지도 알려 드릴까요?")),
+    ("GET_POI_INFO", "응 알려줘",
+     _offer("박물관 오늘 열어?", "국립경주박물관은 오늘 문을 열어요. 입장료도 알아봐 드릴까요?")),
+    ("REPLAN", "그래 그렇게 해줘",
+     _offer("오늘 날씨 어때?", "오후에 비 소식이 있어요. 남은 일정을 실내 위주로 다시 짜 볼까요?")),
+    ("GET_NEXT_SLOT", "응",
+     _offer("지금 뭐 하는 시간이야?", "지금은 동궁과월지를 둘러보는 일정이에요. 그다음 일정도 알려 드릴까요?")),
+    ("OUT_OF_SCOPE", "응", _HISTORY),
+    ("OUT_OF_SCOPE", "아니 괜찮아", _WEATHER_OFFER),
+]
+
+
 def run_intent(prompts: Path, repeat: int) -> None:
     worker = DialogueIntentWorker(_gateway(prompts, LlmFeature.DIALOGUE_INTENT, IntentGate()))
     data = yaml.safe_load((_AI_ROOT / "data/intent_eval_set.yaml").read_text(encoding="utf-8"))
     cases = [(c["intent"], u, [], "eval") for c in data["cases"] for u in c["utterances"]]
     cases += [(label, u, _HISTORY, "context") for label, u in CONTEXT_CASES]
+    cases += [(label, u, h, "accept") for label, u, h in ACCEPT_CASES]
 
     def one(item):
         i, (label, utt, history, kind) = item
@@ -173,12 +199,12 @@ def run_intent(prompts: Path, repeat: int) -> None:
         return round(sum(r["ok"] for r in sel) / len(sel), 4)
 
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows), eval_acc=acc("eval"),
-                          context_acc=acc("context"), **_timing(rows)), ensure_ascii=False))
+                          context_acc=acc("context"), accept_acc=acc("accept"), **_timing(rows)), ensure_ascii=False))
     for r in rows:
         if not r["ok"]:
             print(f"  ✗ {r['label']:<20} got={r['got']!s:<20} {r['utt']}  ({r['err'] or ''})")
     for r in rows[: len(cases)]:
-        if r["kind"] == "context":
+        if r["kind"] in ("context", "accept"):
             print(f"  · {r['utt']} → {r['got']} {r['slots']}")
 
 
