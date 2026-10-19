@@ -58,6 +58,8 @@ services:
     container_name: trippilot-kafka
     # 토픽 로그를 남긴다 — Kafka 모드는 송신 때 아웃박스 행을 발행 표시하므로, 미소비 이벤트의 유일한 사본이 여기다.
     # 컨테이너를 다시 만들 때 지워지면 흔적 없이 사라진다. 초기화는 `down -v`.
+    # 오래(7일 넘게) 내려 두었다 다시 띄우면 소비 그룹 오프셋이 만료돼 남은 토픽을 처음부터 다시 배달한다(구독자 멱등이라
+    # 결과는 같지만 요약 생성 같은 작업이 다시 돈다). 오래 쉬었다면 `down -v` 로 비우고 띄운다.
     volumes:
       - trippilot-kafkadata:/var/lib/kafka/data
     ports:

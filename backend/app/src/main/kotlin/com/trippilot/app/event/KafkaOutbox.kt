@@ -151,7 +151,9 @@ class KafkaOutboxBroker(
 @ConditionalOnProperty(name = ["trippilot.outbox.broker"], havingValue = "kafka")
 class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: KafkaOutboxBroker) {
     // 파티션 수만큼 소비 스레드를 둔다 — 하나면 백오프가 그 스레드를 재워 실패한 이벤트 하나가 세 파티션 전부를 멈춘다.
-    // 구독자는 종전에도 eventId 멱등·무상태 계약이라 동시에 불려도 된다(폴링 모드도 다중 인스턴스에서 동시에 돈다).
+    // ⚠ 폴링 모드에 없던 동시성이다 — 폴링은 ShedLock 으로 한 번에 한 릴레이만 차례로 배달한다. 여기서는 키(aggregateId)가
+    // 다른 이벤트가 동시에 구독자를 탄다(같은 여행의 ItineraryGenerated·TripDeleted 등). 지금 구독자는 행 잠금·상태 확인·
+    // 재시도로 견디지만(예: NotificationScheduleService.reload 의 lockTrip), 새 구독자는 동시 호출을 전제로 써야 한다.
     @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox", concurrency = KafkaOutboxConfig.CONSUMERS)
     // 값 없는 레코드(tombstone)는 여기까지 오지 않는다 — 스프링이 인자 변환에서 비재시도 실패로 분류해 회수기로 바로 보낸다
     // (실측: "eventId 도 못 읽은 … value=null" 한 줄, 재시도 0). KafkaOutboxIT 가 그 동작을 지킨다.

@@ -207,8 +207,13 @@ class OutboxRelay(
      * 구독자가 `eventId` 로 멱등이라 무해하다 — 거짓 포기 한 건이 유실보다 낫다.
      */
     fun abandon(eventId: UUID, eventType: String?, cause: Throwable) {
-        jdbc.update("UPDATE outbox_event SET published_at = NULL, attempts = ? WHERE event_id = ?", MAX_ATTEMPTS, eventId)
-        log.error("이벤트 배달을 포기합니다 — eventId={} type={} (Kafka 소비)", eventId, eventType, cause)
+        val rows = jdbc.update("UPDATE outbox_event SET published_at = NULL, attempts = ? WHERE event_id = ?", MAX_ATTEMPTS, eventId)
+        if (rows == 0) {
+            // 행이 없다(DB 를 초기화했는데 브로커 볼륨은 남은 경우 등) — 포기 조회로는 못 찾는다. 이 로그가 유일한 흔적이다.
+            log.error("이벤트 배달을 포기합니다 — 아웃박스 행이 없어 이 로그로만 남습니다. eventId={} type={}", eventId, eventType, cause)
+        } else {
+            log.error("이벤트 배달을 포기합니다 — eventId={} type={} (Kafka 소비)", eventId, eventType, cause)
+        }
     }
 
     private fun deliver(envelope: EventEnvelope, targets: List<OutboxSubscriber>) {
