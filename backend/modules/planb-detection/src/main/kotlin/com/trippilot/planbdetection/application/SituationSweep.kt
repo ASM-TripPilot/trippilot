@@ -76,9 +76,12 @@ class SituationSweep(
         require(doubled.isEmpty()) { "같은 출처의 감지기가 둘 이상입니다: $doubled — 어느 쪽이 해제 자격인지 갈린다." }
     }
 
-    /** 감시 중 = on ∧ 출처 목록 안 ∧ 관찰 전용 아님 ∧ 그 출처 감지기가 살아 있음(규칙 14 · BR-SA-13). */
-    override fun isWatching(source: String): Boolean =
-        props.mode == SweepMode.ON && writes(source) && detectors.any { it.source == source && it.isLive() }
+    /**
+     * 감시 중 = on ∧ 출처 목록 안 ∧ 관찰 전용 아님 ∧ 그 출처 감지기가 살아 있음 ∧ 그 계정이 스윕 대상(규칙 14 · BR-SA-13).
+     * 허용목록(운영 카나리) 밖 계정은 스윕이 보지 않으므로 '꺼짐'이다 — '확인 불가'로 그리지 않고, 그 계정의 스윕 트리거는 숨긴다.
+     */
+    override fun isWatching(source: String, accountId: UUID): Boolean =
+        props.mode == SweepMode.ON && writes(source) && covers(accountId) && detectors.any { it.source == source && it.isLive() }
 
     /**
      * 매시 :15(07~20시, KST). **cron 인 이유** — KST 정렬과 밤 제외(INV-SA-5)는 cron 만 표현한다(`fixedDelay` 는 기동 시각에 끌려간다).
@@ -123,8 +126,7 @@ class SituationSweep(
         if (props.mode == SweepMode.OFF) return SweepSummary(props.mode, null)
         val scope = scopeAt(now, props.horizon) ?: return SweepSummary(props.mode, null)
         val round = Round(scope, now, clock.instant(), detectors.filter { it.source in props.sources && it.isLive() })
-        val order = roundOrder(trips, scope.today, scope.queryTo, pivotFor(now), PAGE_SIZE)
-            .filter { props.accountIds.isEmpty() || it.accountId in props.accountIds }
+        val order = roundOrder(trips, scope.today, scope.queryTo, pivotFor(now), PAGE_SIZE).filter { covers(it.accountId) }
         val seq = AtomicInteger()
         val pool = Executors.newFixedThreadPool(props.parallelism) { r ->
             Thread(r, "planb-sweep-${seq.incrementAndGet()}").apply { isDaemon = true }
@@ -238,6 +240,9 @@ class SituationSweep(
     }
 
     private fun writes(source: String) = source in props.sources && source !in props.observeOnly
+
+    /** 스윕 대상 계정인가 — 허용목록(운영 카나리)이 비면 전원. 회차 대상과 감시 판정이 같은 답을 내도록 한 곳에 둔다. */
+    private fun covers(accountId: UUID) = props.accountIds.isEmpty() || accountId in props.accountIds
 
     /** 회차 하나의 상태 — 여행 단위 병렬이라 모두 스레드 안전하다. 회차가 끝나면 버린다(저장 없음). */
     private inner class Round(

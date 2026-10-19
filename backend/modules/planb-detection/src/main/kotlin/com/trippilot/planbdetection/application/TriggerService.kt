@@ -239,7 +239,7 @@ class TriggerService(
         val sources = watching.getIfAvailable { NOTHING_WATCHED }
         val rows = watches.findByTrip(tripId).associateBy { it.source }
         fun of(source: String, fresh: Duration): WatchView {
-            if (!sources.isWatching(source)) return WatchView(WatchView.Status.OFF, null)
+            if (!sources.isWatching(source, accountId)) return WatchView(WatchView.Status.OFF, null)
             val row = rows[source] ?: return WatchView(WatchView.Status.UNKNOWN, null)
             if (row.status != WatchStatus.CHECKED) return WatchView(WatchView.Status.UNKNOWN, null)
             val recent = !row.checkedAt.isBefore(now.minus(fresh))
@@ -377,7 +377,7 @@ class TriggerService(
         if (s.poiIds.isNotEmpty()) put(PlanBTrigger.PAYLOAD_POI_IDS, s.poiIds.map(UUID::toString))
     }
 
-    /** 화면에 보일 자격(규칙 14) — 영향 날짜 ≥ 오늘 ∧ (날짜 전체 ∨ 지금 일정에 있는 슬롯) ∧ (스윕 출처면 그 출처를 지금 감시 중). */
+    /** 화면에 보일 자격(규칙 14) — 영향 날짜 ≥ 오늘 ∧ (날짜 전체 ∨ 지금 일정에 있는 슬롯) ∧ (스윕 출처면 그 계정의 그 출처를 지금 감시 중). */
     private fun visibility(accountId: UUID, tripId: UUID): (PlanBTrigger) -> Boolean {
         val today = LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE)
         val planned = itineraries.findCurrent(accountId, tripId)?.slotKeys.orEmpty().toSet()
@@ -385,7 +385,7 @@ class TriggerService(
         return { t ->
             t.affectedDate >= today &&
                 (t.slotKey == null || t.slotKey in planned) &&
-                (t.detector?.let(sources::isWatching) ?: true)
+                (t.detector?.let { sources.isWatching(it, accountId) } ?: true)
         }
     }
 
@@ -411,6 +411,6 @@ class TriggerService(
         private val PLACE_FRESH: Duration = Duration.ofHours(14)
 
         /** 스윕 빈이 없을 때 — 아무 출처도 감시하지 않는다. */
-        private val NOTHING_WATCHED = WatchingSources { false }
+        private val NOTHING_WATCHED = WatchingSources { _, _ -> false }
     }
 }

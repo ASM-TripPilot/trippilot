@@ -19,6 +19,7 @@ import com.trippilot.planbdetection.domain.TriggerState
 import com.trippilot.planbdetection.domain.TriggerVariant
 import com.trippilot.planbdetection.domain.WatchStatus
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripPeriod
 import com.trippilot.trip.api.WatchedTrip
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -200,6 +201,20 @@ private class World(failSaves: Int = 0) {
         override fun findPeriod(accountId: UUID, tripId: UUID) = error("reconcile 은 여행을 다시 묻지 않습니다.")
         override fun findGenerationContext(accountId: UUID, tripId: UUID) = error("쓰지 않습니다.")
     }
+
+    /** 조회 쪽 판정 서비스 — 감시 출처는 [watching](스윕 빈)이 말한다. 여행 소유·구간은 감시 대상 목록 그대로다. */
+    fun reader(watching: WatchingSources, clock: Clock) = TriggerService(
+        object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) =
+                watched.trips.firstOrNull { it.tripId == tripId && it.accountId == accountId }?.let { TripPeriod(it.startDate, it.endDate) }
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = error("쓰지 않습니다.")
+        },
+        itineraryFacade, triggers, InMemorySuppressions(), FixedSensitivity(Sensitivity.NORMAL), events, clock, watches,
+        object : ObjectProvider<WatchingSources> {
+            override fun getObject(): WatchingSources = watching
+            override fun getIfAvailable(): WatchingSources = watching
+        },
+    )
 
     fun sweep(props: SituationSweepProperties, detectors: List<SituationDetector>, clock: Clock): SituationSweep {
         val service = TriggerService(
@@ -680,7 +695,7 @@ class SituationSweepTest : StringSpec({
             "announced=3 pushed=3 quiet=0 expired=0 elapsedMs=600 detectorMs={kma-forecast:200/300,kma-warning:0/0}"
     }
 
-    "감시 중인 출처(WatchingSources) — on ∧ 출처 목록 안 ∧ 관찰 전용 아님 ∧ 감지기가 살아 있을 때만" {
+    "감시 중인 출처(WatchingSources) — on ∧ 출처 목록 안 ∧ 관찰 전용 아님 ∧ 감지기가 살아 있음 ∧ 그 계정이 대상일 때만" {
         val world = World()
         val detectors = listOf(
             FakeDetector(SweepSource.KMA_FORECAST),
@@ -688,14 +703,35 @@ class SituationSweepTest : StringSpec({
             FakeDetector(SweepSource.AIRKOREA),
         )
         val clock = StepClock(at("12:15"))
+        val acc = world.acc
         val on = world.sweep(props(), detectors, clock)
-        on.isWatching(SweepSource.KMA_FORECAST) shouldBe true
-        on.isWatching(SweepSource.PLACE) shouldBe false // live 아님
-        on.isWatching(SweepSource.AIRKOREA) shouldBe false // 관찰 전용
-        on.isWatching(SweepSource.KMA_WARNING) shouldBe false // 감지기 없음
-        world.sweep(props(sources = listOf(SweepSource.PLACE)), detectors, clock).isWatching(SweepSource.KMA_FORECAST) shouldBe false
-        world.sweep(props(mode = SweepMode.DRY_RUN), detectors, clock).isWatching(SweepSource.KMA_FORECAST) shouldBe false
-        world.sweep(props(mode = SweepMode.OFF), detectors, clock).isWatching(SweepSource.KMA_FORECAST) shouldBe false
+        on.isWatching(SweepSource.KMA_FORECAST, acc) shouldBe true
+        on.isWatching(SweepSource.PLACE, acc) shouldBe false // live 아님
+        on.isWatching(SweepSource.AIRKOREA, acc) shouldBe false // 관찰 전용
+        on.isWatching(SweepSource.KMA_WARNING, acc) shouldBe false // 감지기 없음
+        world.sweep(props(sources = listOf(SweepSource.PLACE)), detectors, clock).isWatching(SweepSource.KMA_FORECAST, acc) shouldBe false
+        world.sweep(props(mode = SweepMode.DRY_RUN), detectors, clock).isWatching(SweepSource.KMA_FORECAST, acc) shouldBe false
+        world.sweep(props(mode = SweepMode.OFF), detectors, clock).isWatching(SweepSource.KMA_FORECAST, acc) shouldBe false
+        // 운영 카나리 — 허용목록이 있으면 그 계정만 감시 중이다. 목록 밖 계정은 스윕이 보지 않으니 '꺼짐'이다.
+        val canary = world.sweep(props(accountIds = setOf(acc)), detectors, clock)
+        canary.isWatching(SweepSource.KMA_FORECAST, acc) shouldBe true
+        canary.isWatching(SweepSource.KMA_FORECAST, UUID.randomUUID()) shouldBe false
+    }
+
+    "카나리 밖 계정 — 감시 상태는 꺼짐(숨김)이고 스윕 출처 트리거도 회수된다, 목록 안 계정은 그대로다" {
+        val world = World()
+        val insider = world.trip()
+        val outsiderAcc = UUID.randomUUID()
+        val outsider = world.trip(account = outsiderAcc)
+        world.plant(outsider, DAY) // 목록이 좁혀지기 전에 스윕이 띄운 트리거
+        val clock = StepClock(at("12:15"))
+        val canary = world.sweep(props(accountIds = setOf(world.acc)), listOf(FakeDetector(SweepSource.KMA_FORECAST)), clock)
+        val reader = world.reader(canary, clock)
+
+        // 스윕이 보지 않는 여행에 '확인 불가'를 그리면 카나리 기간 내내 전 사용자 허브에 날씨 확인 불가가 뜬다.
+        reader.watch(outsiderAcc, outsider).weather.status shouldBe WatchView.Status.OFF
+        reader.listActive(outsiderAcc, outsider).shouldBeEmpty() // 더는 해제·만료 판정을 받지 않는 배너는 숨긴다
+        reader.watch(world.acc, insider).weather.status shouldBe WatchView.Status.UNKNOWN // 대상인데 아직 확인 기록이 없다
     }
 
     "기동 안내 줄 — 모드·지평·살아 있는 감지기·관찰 전용(쓰기 없음)" {
