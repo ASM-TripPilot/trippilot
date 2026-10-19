@@ -47,7 +47,7 @@ from datetime import date, datetime, tzinfo
 from trippilot.agents.schedule.agent import Clock
 from trippilot.domain.common import TraceId
 from trippilot.domain.context import PermissionDeniedError
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
+from trippilot.domain.intent import DIALOGUE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
 from trippilot.domain.observability import FallbackEvent
 from trippilot.llm_gateway.gates.base import has_injection_like
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
@@ -430,6 +430,27 @@ def _out_of_order(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
     return False
 
 
+# INV-1 — 후보 목록 답(CANDIDATES)의 문장이 Facts 밖 장소 이름을 꺼내면 템플릿으로. 장소 이름 사전이 없어 **이름 꼴**로 본다:
+# 한글 낱말의 앞부분이 "이름 + 장소 접미(시장·공원·박물관…)" 꼴인데(뒤의 조사는 그래서 상관없다) 아는 이름 어디에도 겹치지 않으면 밖이다.
+# '거리'는 접미에서 뺐다 — "볼거리가 많아요"가 걸린다.
+# ponytail: 접미 없는 고유명("서울숲"·"성심당")과 동네 이름("성수동")은 못 본다 — 막으려면 등록 POI 이름 사전 대조가 필요하다.
+_PLACE_LIKE = re.compile(r"[가-힣]{1,20}?(?:시장|공원|타워|해수욕장|박물관|미술관|전망대|폭포|오름|성당|궁|해변|마을|카페|호텔|랜드|파크|브루어리)")
+
+
+def _known_names(facts: Facts, snapshot: TurnSnapshot) -> tuple[str, ...]:
+    names = [p.name for p in facts.places] + [s.name for _, s in snapshot.slots() if s.name]
+    names += [v for v in (facts.detail.get("target"), facts.detail.get("anchor")) if isinstance(v, str)]
+    return tuple(normalize(n).replace(" ", "") for n in names if n)
+
+
+def _foreign_place(text: str, known: Sequence[str]) -> bool:
+    for word in re.findall(r"[가-힣]+", text):
+        m = _PLACE_LIKE.match(word)
+        if m and not any(word.startswith(k) or m.group(0) in k for k in known):
+            return True
+    return False
+
+
 def _refusal_reason(error: str) -> str:
     """분류 폴백 사유 — `intent_eval.is_refusal` 이 "판단해서 거절"과 인프라 실패를 가를 수 있게.
 
@@ -597,7 +618,7 @@ class DialogueOrchestrator:
                 draft = result.value
                 if result.is_fallback or not isinstance(draft, IntentDraft):
                     reason = _refusal_reason(result.error or "intent_bad_shape")
-                elif draft.intent not in ROUTABLE_INTENTS:  # OUT_OF_SCOPE 라벨 = 위임 불가 (IntentRouter 와 같은 분담)
+                elif draft.intent not in DIALOGUE_INTENTS:  # OUT_OF_SCOPE 라벨 = 위임 불가 (IntentRouter 와 같은 분담)
                     reason = f"intent_not_routable({draft.intent.value})"
                 else:
                     confidence = draft.confidence if draft.confidence is not None else 0.5
@@ -726,6 +747,12 @@ class DialogueOrchestrator:
             bad = bad or unverifiable or not times <= allowed or _misplaced_time(part, pairs)
         if bad:
             self._fallback(inp, "llm", *_ANSWER_MODES, "time_not_in_facts")
+            return DialogueAnswer.from_facts(facts)
+        # INV-1 — 후보 답(대안·탐색)과 탐색의 빈 결과 답이 목록 밖 장소를 권했다. 탐색 EMPTY 는 장소가 없어 "대신 ○○해변은
+        # 어떠세요?"를 지어낼 자리가 가장 큰 답이다
+        closed = facts.kind is AnswerKind.CANDIDATES or intent is Intent.EXPLORE_PLACES
+        if closed and any(_foreign_place(part, _known_names(facts, inp.snapshot)) for part in parts):
+            self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)
         try:
             return DialogueAnswer.from_facts(facts, text=draft.text, footnote=draft.footnote)

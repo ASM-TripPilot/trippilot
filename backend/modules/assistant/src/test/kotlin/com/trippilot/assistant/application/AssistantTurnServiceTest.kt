@@ -978,6 +978,34 @@ class AssistantTurnServiceTest : StringSpec({
         w.messages.rows.last().saved.llmCalls shouldBe 1
     }
 
+    /** 장소 탐색(EXPLORE_PLACES) — 바꿀 슬롯이 없어 고르기 버튼 없이 후보 카드 + 장소 보기 버튼. 거절이 아니라 스트릭은 0 이다. */
+    "장소 탐색 답은 고르기 버튼 없이 정본 후보만 싣고 거절 스트릭을 올리지 않는다" {
+        val w = world()
+        val s = w.session()
+        val real = UUID.randomUUID()
+        w.data.surfaces = mapOf(real to surface(real, "감천문화마을"))
+        val place = NextAction("OPEN_PLACE", "감천문화마을", mapOf("poiId" to real.toString()))
+        w.interpreter!!.answer = { r ->
+            Interpretation(
+                InterpretOutcome.ANSWER, listOf(IntentFrame(Intent.EXPLORE_PLACES, mapOf("region" to "부산"), "LLM_DIRECT")), null, r.dialogueContext, 2,
+                InterpretedAnswer(
+                    AnswerKind.CANDIDATES, "가 볼 만한 곳을 찾아봤어요.",
+                    mapOf("candidates" to listOf(mapOf("poiId" to real.toString(), "name" to "감천문화마을", "distanceRange" to null, "reason" to "요즘 인기"))),
+                    listOf(place), emptyList(), null,
+                ),
+            )
+        }
+
+        val result = w.say(s, "부산 요즘 핫한 곳 알려줘")
+
+        val card = result.messages[1]
+        card.kind shouldBe MessageKind.CANDIDATES
+        card.nextActions shouldContainExactly listOf(place)
+        result.quickReplies shouldBe emptyList()
+        w.row(2).saved.intent shouldBe "EXPLORE_PLACES"
+        w.sessions.rows.single().refusalStreak shouldBe 0
+    }
+
     "ANSWER 인데 답이 없으면 계약이 어긋난 것이다 — 지어내지 않고 폴백하되 쓴 LLM 은 센다" {
         val w = world(interpreter = Interpreter { r -> Interpretation(InterpretOutcome.ANSWER, listOf(IntentFrame(Intent.GET_WEATHER, emptyMap(), "LLM_DIRECT")), null, r.dialogueContext, 1) })
         val s = w.session()

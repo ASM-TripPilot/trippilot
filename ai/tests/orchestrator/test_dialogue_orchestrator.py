@@ -43,7 +43,7 @@ from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemory
 from trippilot.domain.common import GeoPoint, TraceId
 from trippilot.domain.dialogue import CLARIFY_QUESTIONS
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
+from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
 from trippilot.domain.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.prompt import PromptRef
@@ -296,7 +296,7 @@ def test_next_slot_answer_carries_the_alternative_quick_reply_and_live_action() 
     assert wire["quick_replies"][0]["action"] == "SEND_TEXT"
 
 
-@pytest.mark.parametrize("intent", sorted(ROUTABLE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i: i.value))
+@pytest.mark.parametrize("intent", sorted(DIALOGUE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i: i.value))
 def test_every_answer_intent_yields_a_valid_answer_with_one_frame(intent: Intent) -> None:
     b = _build(_canned(intent, target="우도", destination="해녀의집", place="우도"))
     out = b.orch.turn(_input("아무 말"))
@@ -1139,3 +1139,58 @@ def test_handoff_intents_answer_with_guidance_without_the_answer_llm(intent) -> 
     assert not [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
     assert not [e for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_answer"]  # 의도된 결정론 — 폴백 아님
 
+
+
+# ── EXPLORE_PLACES — 후보 답의 문장도 닫힌 목록 안 (INV-1) ─────────────────────────────────────────
+
+
+class _ExplorePool:
+    """CandidatePoolBuilder 대역 — 등록 POI 두 곳."""
+
+    def build(self, request, now):
+        from trippilot.domain.common import PoiId
+        from trippilot.domain.llm import CandidatePool
+        from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+
+        pois = tuple(Poi(poi_id=PoiId(str(uuid.uuid5(uuid.NAMESPACE_DNS, n))), name=n, category=c, coord=request.anchor,
+                         open_hours=(), avg_cost=None, rating=None, quality=DataQuality.FULL, source=PoiSource.SEED,
+                         confidence=None, tags=t)
+                     for n, c, t in (("감천문화마을", PoiCategory.SIGHT, ("요즘 인기",)), ("흰여울 카페", PoiCategory.CAFE, ())))
+        return CandidatePool(poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=now)
+
+
+def _explore_turn(text: str) -> tuple[object, SimpleNamespace]:
+    answer = json.dumps({"text": text, "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="부산", theme="요즘 핫한"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    return b.orch.turn(_input("부산 요즘 핫한 곳 알려줘", snapshot=_NO_TRIP)), b
+
+
+def test_explore_turn_answers_with_registered_places_without_a_trip() -> None:
+    out, b = _explore_turn("부산에서 요즘 인기 있는 감천문화마을과 흰여울 카페를 추천해요.")
+    assert out.outcome == "ANSWER" and out.frames[0].intent is Intent.EXPLORE_PLACES
+    a = out.answer
+    assert a.kind is AnswerKind.CANDIDATES and [c["name"] for c in a.payload["candidates"]] == ["감천문화마을", "흰여울 카페"]
+    assert a.text.startswith("부산에서") and a.quick_replies == ()
+    assert {x.type for x in a.next_actions} == {"OPEN_PLACE"} and _fallbacks(b.trace) == []
+
+
+@pytest.mark.parametrize("text", [
+    "부산이라면 해동용궁사 말고 송도해수욕장도 좋아요.",  # 풀 밖 장소 — 접미 '해수욕장'
+    "감천문화마을과 함께 국제시장에도 들러 보세요.",  # 하나는 풀, 하나는 밖 — 조사 '에도' 앞의 '국제시장'
+])
+def test_explore_answer_naming_a_place_outside_the_pool_falls_back_to_the_template(text: str) -> None:
+    out, b = _explore_turn(text)
+    assert out.answer.text == "가 볼 만한 곳을 찾아봤어요." and out.answer.kind is AnswerKind.CANDIDATES  # 카드는 그대로
+    assert ("llm", "llm_dialogue_answer", "template_text") in _modes(b.trace)
+    assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
+
+
+def test_explore_empty_answer_cannot_invent_a_place_either() -> None:
+    """빈 결과(말한 지역이 표에 없다)의 문장이 지어낸 장소를 권하면 템플릿 — 장소가 없는 답이 지어낼 자리가 가장 크다."""
+    answer = json.dumps({"text": "강원도라면 대신 경포해변은 어떠세요?", "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="강원도"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input("강원도 가볼 만한 곳", snapshot=_NO_TRIP))
+    assert out.answer.text == "그 조건에 맞는 곳을 아직 찾지 못했어요." and out.answer.kind is AnswerKind.TEXT
+    assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))

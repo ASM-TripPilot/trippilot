@@ -9,13 +9,14 @@ import java.util.UUID
 enum class AssistantSurface { HOME, STAY_SEARCH, ITINERARY, LIVE, STAY_DETAIL }
 
 /**
- * 해석된 의도(closed-set, PBT-U8-9). 상대(ai) 라우터의 어휘 13종 + 범위 밖 —
+ * 해석된 의도(closed-set, PBT-U8-9). 상대(ai) 라우터의 어휘 13종 + 장소 탐색(도우미 직접 분류 전용, 2026-10-19) + 범위 밖 —
  * 표 밖 값은 만들 수 없다(역직렬화가 거부한다). 의도마다 처리기는 정확히 하나다.
  */
 enum class Intent {
     EDIT_SCHEDULE, SUGGEST_ALTERNATIVE, REPLAN, REGENERATE, GENERATE_SCHEDULE,
     SHOW_SCHEDULE, GET_NEXT_SLOT, GET_DISTANCE, GET_POI_INFO, GET_WEATHER,
     GENERATE_REFLECTION, TRIP_SUMMARY, STYLE_ANALYSIS,
+    EXPLORE_PLACES,
     OUT_OF_SCOPE,
 }
 

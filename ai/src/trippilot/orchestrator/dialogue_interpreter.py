@@ -40,7 +40,7 @@ from trippilot.domain.dialogue import (
     missing_arguments,
     specs_of,
 )
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
+from trippilot.domain.intent import DIALOGUE_INTENTS, Intent, IntentMatch, MatchRoute
 from trippilot.orchestrator.arguments import extract_argument
 from trippilot.orchestrator.intent_router import IntentRouter, normalize
 from trippilot.orchestrator.question_bank import BankEntry, BankLoadError, BankVectors, index_bank
@@ -115,7 +115,7 @@ class PendingFrame:
     @classmethod
     def from_dict(cls, d: Mapping) -> "PendingFrame":
         intent = Intent(d["intent"])
-        if intent not in ROUTABLE_INTENTS:
+        if intent not in DIALOGUE_INTENTS:
             raise ValueError(f"보류 프레임 의도가 위임 대상이 아니다: {intent.value}")
         # 타입은 여기서 막는다 — `.items()` 의 AttributeError 는 `DialogueContext.from_dict` 의
         # 복구 except 를 빠져나가 500 이 된다. `str()` 은 무엇이든 받아 줘서 리스트가 질문 이름이 됐다.
@@ -370,7 +370,7 @@ def answer_pending(
 
 def from_match(match: IntentMatch, context: DialogueContext, trip: TripView) -> Interpretation:
     """매칭 결과 → 해석 — 필수 인자가 비면 요청당 1회 되묻는다(DEC-U8-11)."""
-    if match.match_route is MatchRoute.FALLBACK or match.intent not in ROUTABLE_INTENTS:
+    if match.match_route is MatchRoute.FALLBACK or match.intent not in DIALOGUE_INTENTS:
         return Interpretation(
             outcome="OUT_OF_SCOPE",
             frames=(Frame(Intent.OUT_OF_SCOPE, {}, (), 0.0, MatchRoute.FALLBACK.value),),

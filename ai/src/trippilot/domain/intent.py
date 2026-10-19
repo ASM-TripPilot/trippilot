@@ -34,6 +34,7 @@ class Intent(Enum):
     GET_WEATHER = "GET_WEATHER"
     GET_DISTANCE = "GET_DISTANCE"
     GET_POI_INFO = "GET_POI_INFO"
+    EXPLORE_PLACES = "EXPLORE_PLACES"  # 도우미 직접 분류 전용 — 3단 라우터·질문뱅크 대상이 아니다(아래 DIALOGUE_INTENTS)
     OUT_OF_SCOPE = "OUT_OF_SCOPE"  # 폴백 전용 — 위임 대상 아님
 
 
@@ -94,11 +95,18 @@ ROUTING_TABLE: dict[Intent, RoutingEntry] = {
     Intent.GET_WEATHER: RoutingEntry(None, RoutingMode.FAST_PATH),  # WeatherProvider
     Intent.GET_DISTANCE: RoutingEntry(None, RoutingMode.FAST_PATH),  # TransitProvider, 거리만 (INV-3)
     Intent.GET_POI_INFO: RoutingEntry(None, RoutingMode.FAST_PATH),  # PlaceProvider
+    Intent.EXPLORE_PLACES: RoutingEntry(None, RoutingMode.FAST_PATH),  # 등록 POI 반경 풀 (도우미 전용)
     Intent.OUT_OF_SCOPE: RoutingEntry(None, RoutingMode.FALLBACK),
 }
 
 # 위임·Fast Path 대상 13종 (폴백 라벨 제외) — 질문뱅크가 커버해야 하는 집합.
-ROUTABLE_INTENTS: frozenset[Intent] = frozenset(ROUTING_TABLE) - {Intent.OUT_OF_SCOPE}
+# EXPLORE_PLACES 는 빠진다: 3단 라우터(섀도 측정 전용)는 현행 그대로여야 한다 — 뱅크·벡터·intent.yaml·재생 픽스처
+# 무변경(assistant-orchestrator BR-AO-14). 이 집합을 넓히면 intent.yaml 의 `$intents` 가 바뀌어 재생 기록 61건이 전건 미스다.
+ROUTABLE_INTENTS: frozenset[Intent] = frozenset(ROUTING_TABLE) - {Intent.OUT_OF_SCOPE, Intent.EXPLORE_PLACES}
+
+# 도우미 직접 분류(DIALOGUE_INTENT)가 고를 수 있는 집합 = 13종 + 장소 탐색(2026-10-19 사용자 결정 — "다룰 수 있는 카테고리를
+# 늘려라"). 핸들러 표(`dialogue_handlers.HANDLERS`)·도우미 프롬프트의 `$intents` 가 이 집합을 본다.
+DIALOGUE_INTENTS: frozenset[Intent] = ROUTABLE_INTENTS | {Intent.EXPLORE_PLACES}
 
 
 def route_for(intent: Intent) -> RoutingEntry:
@@ -158,7 +166,7 @@ class IntentMatch:
                 raise ValueError("폴백은 사유 필수 — 침묵 실패 금지 (INV-4)")
             if self.confidence != 0.0:
                 raise ValueError("폴백의 confidence는 0.0")
-        elif self.intent not in ROUTABLE_INTENTS:  # 방어 — enum 확장 시 자동 검출
+        elif self.intent not in DIALOGUE_INTENTS:  # 방어 — enum 확장 시 자동 검출
             raise ValueError(f"위임 불가 라벨: {self.intent.value}")
 
     @property

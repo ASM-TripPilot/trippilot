@@ -72,13 +72,17 @@ class IntentDispatcher(private val cards: QueryCards, private val proposals: Pro
                 AssistantTemplates.handoff("여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.", NextAction("OPEN_TRIP_SUMMARY", "여행 요약 보기"))
             Intent.STYLE_ANALYSIS ->
                 AssistantTemplates.handoff("여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.", NextAction("OPEN_STYLE", "내 여행 스타일"))
+            // 장소 탐색은 상대 오케스트레이터가 등록 장소 풀에서 답까지 만든다(ANSWER — 여기로 오지 않는다). 여기는 상대가 꺼진 대역 모드뿐이라
+            // 찾지 못한다고 정직하게 말하고 할 수 있는 것으로 잇는다.
+            Intent.EXPLORE_PLACES ->
+                AssistantTemplates.handoff("가 볼 만한 곳 찾기는 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요.", AssistantTemplates.CAPABILITIES_ACTION)
             Intent.OUT_OF_SCOPE ->
                 AssistantTemplates.outOfScope(nearStay = context.surface == AssistantSurface.STAY_SEARCH || context.surface == AssistantSurface.STAY_DETAIL)
         }
     }
 
     private companion object {
-        /** 여행이 있어야 넘길 화면이 있는 의도. 스타일 분석과 범위 밖은 여행 없이도 답한다. */
-        val NEEDS_TRIP = Intent.entries.toSet() - setOf(Intent.STYLE_ANALYSIS, Intent.OUT_OF_SCOPE)
+        /** 여행이 있어야 넘길 화면이 있는 의도. 스타일 분석·장소 탐색·범위 밖은 여행 없이도 답한다. */
+        val NEEDS_TRIP = Intent.entries.toSet() - setOf(Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.OUT_OF_SCOPE)
     }
 }
