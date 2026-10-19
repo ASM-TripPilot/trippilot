@@ -1012,3 +1012,37 @@ def test_empty_summary_keeps_previous_lines_and_stores_no_fragments(previous, ke
                 if r.getMessage().startswith("dialogue_memory_empty ")]
     assert event == {"event": "dialogue_memory_empty", "trace_id": _TID, "kept_lines": len(kept),
                      "dropped_lines": len(previous) - len(kept)}
+
+
+# ── 2026-10-19 챗봇 E2E 반영(실 LLM·실 Provider 검증 세션이 재현) ─────────────────────
+
+
+class _ClosedPoiInfo(_PoiInfo):
+    """그 요일 휴무가 증명된 행 — `providers.poi_info.hours_label` 이 None 을 싣는다(E2E: 제주문학관 월요일)."""
+
+    def fetch(self, params: dict) -> InfoPacket:
+        packet = super().fetch(params)
+        pois = [{**p, "hours_label": None} for p in packet.data["pois"]]
+        return InfoPacket(packet.provider, packet.status, {"pois": pois, "misses": []}, packet.freshness)
+
+
+def test_closed_weekday_reads_maybe_closed_not_unknown() -> None:
+    """hours_label None 은 "그 요일이 휴무로 읽혔다"이고 정보 없음은 따로 "영업시간 정보 없음" 문구다 — "미확인"으로 뭉개면
+    "오늘 영업 여부는 확인할 수 없어요"가 된다. 단정("휴무")은 않는다: 월 단위 휴무가 매주로 넓혀 읽힌다(셀프 리뷰)."""
+    b = _build(_canned(Intent.GET_POI_INFO, place="우도"), ports=HandlerPorts(poi_info=_ClosedPoiInfo()))
+    out = b.orch.turn(_input("우도 오늘 문 열어?"))
+    rows = {r["label"]: r["value"] for r in out.answer.payload["rows"]}
+    assert rows["영업시간"] == "휴무일 수 있음"
+
+
+@pytest.mark.parametrize("intent", [Intent.GENERATE_SCHEDULE, Intent.REGENERATE, Intent.REPLAN,
+                                    Intent.GENERATE_REFLECTION, Intent.TRIP_SUMMARY, Intent.STYLE_ANALYSIS])
+def test_handoff_intents_answer_with_guidance_without_the_answer_llm(intent) -> None:
+    """넘기기 의도는 사실이 비어 있다(다음 행동 버튼뿐). 빈 재료로 LLM 을 부르면 "확인된 정보가 없어 … 할 수 없어요"처럼
+    실패로 들린다(E2E 18 중 12~14) — BR-AO-25 "빈 재료로 LLM 을 부르지 않는다". 안내 문구로 바로 답한다."""
+    b = _build(_canned(intent))
+    out = b.orch.turn(_input("아무 말"))
+    assert out.outcome == "ANSWER" and out.answer.text and out.answer.text != _ANSWER_TEXT
+    assert not [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
+    assert not [e for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_answer"]  # 의도된 결정론 — 폴백 아님
+

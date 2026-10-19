@@ -15,8 +15,9 @@ OR 의 재정렬(B 단계, TRIP-1178)에 해당하는 '집합 고정 최근접 �
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 from datetime import datetime, timedelta
-from typing import Mapping, Sequence
+from typing import Iterable, Mapping, Sequence
 
 from trippilot.assembly_engine.config import (
     END_NEAR_WEIGHT,
@@ -84,6 +85,65 @@ def placed_fixed_blocks(
                 poi_id=rv.poi_id, window=TimeWindow(slot.start_at, slot.end_at),
                 reason="required_visit"))
     return pinned + tuple(required)
+
+
+def explain_unplaced(
+    problem: ItineraryProblem,
+    solution: ItinerarySolution,
+    index: Mapping[PoiId, Poi],
+    estimator,
+    cfg: AssemblyConfig,
+    probe: Iterable[PoiId] = (),
+) -> tuple[dict[PoiId, str], dict[PoiId, datetime]]:
+    """solve 뒤 — 못 놓인 필수 방문의 까닭과, 지금 해의 빈 틈에 그대로 들어가는 후보 (다시 짜기 1회 수리).
+
+    까닭(`why`): ``closed``(그날 휴무) · ``hours``(빈 하루에도 하한·영업시간·창 안에 체류가 안 들어감) ·
+    ``far``(앵커 이동만 빼면 들어감 — 지금 위치에서 멀다) · ``full``(빈 하루엔 되는데 지금 해의 틈엔 안 됨) ·
+    ``fits``(지금 해의 틈에 그대로 들어간다 — 솔버가 탐색 한도에서 멈춘 것이라 LLM 에 되물을 일이 아니다).
+    판정은 ①′ 의 `_required_start` **하나**다(`open_hours_ok` 독스트링과 같은 이유 — 규칙이 둘이면 서로
+    거짓말한다). OR 의 모델 전 제외(그날 휴무·영업창 ∩ 하한+앵커 이동 ∩ 창)와 같은 식이라 두 어셈블러에
+    다 맞다: OR 은 첫 방문에 `ws + 앵커` 를 걸고 하한이 있으면 그것이 `ws` 보다 크므로 max 가 같다.
+    하루·카테고리 상한은 까닭이 아니다 — 필수 방문에는 소프트 항(2000)이라 지배 항(1M)을 못 이긴다.
+
+    `fits`: `probe` 의 후보 → 지금 해 슬롯 사이 틈에서 가장 이른 시작(내부 전용 — 시각은 LLM 에 안 준다).
+    probe 는 하루(재계획)를 전제한다 — 여러 날이면 뒤 날이 덮는다.
+    """
+    rule = RuleFallbackAssembler(index, estimator, cfg)
+    bare = replace(problem, anchor=None)  # anchor_minutes → 0
+    nb = not_before_floor(problem)
+    win = (cfg.lunch_window_min, cfg.dinner_window_min)
+    why: dict[PoiId, str] = {}
+    fits: dict[PoiId, datetime] = {}
+    probe = tuple(probe)
+    for d in solution.days:
+        slots = sorted(d.slots, key=lambda s: s.start_at)
+        placed = {s.poi_id for s in slots}
+        for rv in problem.required_visits:
+            if rv.day != d.date or rv.poi_id in placed:
+                continue
+            poi = index.get(rv.poi_id)
+            if poi is None:
+                continue  # 좌표 미상 — 판정할 수 없다(⓪ 가 이미 강등으로 남겼다)
+            stay = rv.dwell_min if rv.dwell_min is not None else stay_for(poi.category, problem.pace)
+
+            def fit(p: ItineraryProblem, around: list[VisitSlot]) -> datetime | None:
+                return rule._required_start(p, d.date, poi, stay, around, nb, win)
+
+            if poi.open_hours and all(h.day_of_week != d.date.weekday() for h in poi.open_hours):
+                why[rv.poi_id] = "closed"
+            elif fit(problem, []) is None:
+                why[rv.poi_id] = "far" if fit(bare, []) is not None else "hours"
+            else:
+                why[rv.poi_id] = "full" if fit(problem, slots) is None else "fits"
+        for pid in probe:
+            poi = index.get(pid)
+            if poi is None or pid in placed:
+                continue
+            t = rule._required_start(problem, d.date, poi, stay_for(poi.category, problem.pace),
+                                     slots, nb, win)
+            if t is not None:
+                fits[pid] = t
+    return why, fits
 
 
 def _open_ok(poi: Poi, start: datetime, end: datetime) -> bool:
@@ -422,9 +482,12 @@ class RuleFallbackAssembler:
             prev_poi = self._pois.get(prev.poi_id) if prev is not None else None
             nxt_poi = self._pois.get(nxt.poi_id) if nxt is not None else None
             if (prev is None or prev_poi is not None) and (nxt is None or nxt_poi is not None):
-                lb = (ws + anchor_minutes(problem, poi, self._est) if prev_poi is None
-                      else mins(prev.end_at) + travel(prev_poi, poi))
-                ub = we if nxt_poi is None else mins(nxt.start_at) - travel(poi, nxt_poi)
+                # 틈은 하루 창 안으로 자른다 — 고정이 창 밖이면("6시까지" + 19시 잠금) 틈이 창을 넘고,
+                # 식당은 식사창 범위가 창으로 안 잘려 창 밖에 놓였다(HC4 위반 → 체인 전 단계 실패).
+                # OR 은 필수 방문 정의역을 창으로 자르므로 이제 두 어셈블러가 같다(PBT P1 이 찾았다).
+                lb = max(ws, ws + anchor_minutes(problem, poi, self._est) if prev_poi is None
+                         else mins(prev.end_at) + travel(prev_poi, poi))
+                ub = min(we, we if nxt_poi is None else mins(nxt.start_at) - travel(poi, nxt_poi))
                 gaps.append((max(lb, floor) if floor is not None else lb, ub))
             prev = nxt
 
