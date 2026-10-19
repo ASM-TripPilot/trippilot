@@ -194,11 +194,22 @@ def expand_sido_abbrev(proposals: list[dict], abbrev: dict[str, str] | None = No
     """
     abbrev = abbrev if abbrev is not None else sido_abbreviations(
         load_regions(_MIGRATION / "R__seed_region_catalog.sql"))
+    full_names = set(abbrev.values())
     n = 0
     for p in proposals:
         prov = p.get("provenance") or {}
         addr = prov.get("address")
-        if addr and (full := expand_sido(addr, abbrev)) != addr:
+        if not addr:
+            continue
+        full = expand_sido(addr, abbrev)
+        head, _, rest = full.partition(" ")
+        if head not in full_names:
+            # 원본이 시도 이름 **중간에서 잘린** 꼴 — `부산광역 사하구 …`·`제주특별자치 서귀포시 …`
+            # (#1427, 백엔드 IT 2건 실패). 앞부분이 정확히 한 시도 이름에만 맞을 때만 편다.
+            hits = [f for f in full_names if len(head) >= 2 and f.startswith(head)]
+            if len(hits) == 1:
+                full = f"{hits[0]} {rest}".strip()
+        if full != addr:
             prov["address"] = full
             n += 1
     return n

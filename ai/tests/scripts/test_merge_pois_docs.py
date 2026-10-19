@@ -511,6 +511,18 @@ def test_시도_약칭만_정식_이름으로_편다() -> None:
     assert M.expand_sido_abbrev(props, abbrev) == 0                         # 멱등
 
 
+def test_중간에서_잘린_시도_이름은_하나로만_맞을_때_편다() -> None:
+    """TourAPI 원본이 `부산광역 사하구 …`·`제주특별자치 서귀포시 …` 처럼 잘려 온다(#1427 백엔드 IT 2건)."""
+    abbrev = {"부산": "부산광역시", "제주": "제주특별자치도", "경남": "경상남도", "경북": "경상북도"}
+    props = [{"provenance": {"address": "부산광역 사하구 하단동 1195"}},
+             {"provenance": {"address": "제주특별자치 서귀포시 색달동"}},
+             {"provenance": {"address": "경상 어딘가"}}]                  # 경상남도·경상북도 둘 다 — 안 편다
+    assert M.expand_sido_abbrev(props, abbrev) == 2
+    assert props[0]["provenance"]["address"] == "부산광역시 사하구 하단동 1195"
+    assert props[1]["provenance"]["address"] == "제주특별자치도 서귀포시 색달동"
+    assert props[2]["provenance"]["address"] == "경상 어딘가"
+
+
 def test_공유본의_모든_주소는_백엔드가_시도를_정한다() -> None:
     """**백엔드 실문서 IT(`regionUnresolved == 0`)의 거울.** 주소 첫 낱말이 카탈로그 시도 이름이 아니면
     백엔드가 지역 코드를 못 붙여 커버리지 집계에서 빠진다 — #1352 가 약칭 3건으로 백엔드 CI 를 깼다.
