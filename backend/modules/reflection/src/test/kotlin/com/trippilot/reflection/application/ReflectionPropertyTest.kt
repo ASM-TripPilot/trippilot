@@ -14,6 +14,7 @@ import com.trippilot.reflection.adapter.`in`.web.ReflectionResponse
 import com.trippilot.reflection.domain.Reflection
 import com.trippilot.reflection.domain.ReflectionRepository
 import com.trippilot.reflection.domain.ReflectionSource
+import com.trippilot.testsupport.declaredFieldNames
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
@@ -34,7 +35,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
-import com.trippilot.testsupport.declaredFieldNames
 
 /**
  * 회고 생성의 **블로킹 게이트**(PBT-U5-1 · PBT-U5-5).

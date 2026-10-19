@@ -16,6 +16,7 @@ import com.trippilot.reflection.domain.StyleAnalysis
 import com.trippilot.reflection.domain.StyleAnalysisRepository
 import com.trippilot.reflection.domain.StyleOutcome
 import com.trippilot.reflection.domain.TraitGauges
+import com.trippilot.testsupport.declaredFieldNames
 import com.trippilot.trip.api.TripListFacade
 import com.trippilot.trip.api.TripSummaryView
 import io.kotest.core.spec.style.StringSpec
@@ -36,7 +37,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
-import com.trippilot.testsupport.declaredFieldNames
 
 /**
  * 스타일 분석의 **블로킹 게이트**(PBT-U5-4 · PBT-U5-5).

@@ -17,6 +17,7 @@ import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.savedaccommodation.api.DayBaseStayView
 import com.trippilot.savedaccommodation.api.TripBaseStayFacade
+import com.trippilot.testsupport.declaredFieldNames
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
@@ -27,7 +28,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
-import com.trippilot.testsupport.declaredFieldNames
 
 /**
  * 3종 비교(BR-U5-01·08·25·26·27·28).

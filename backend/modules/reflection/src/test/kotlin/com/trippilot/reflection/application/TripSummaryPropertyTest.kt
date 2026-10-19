@@ -14,6 +14,7 @@ import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.reflection.domain.TripSummary
 import com.trippilot.reflection.domain.TripSummaryRepository
 import com.trippilot.reflection.domain.TripSummaryStats
+import com.trippilot.testsupport.declaredFieldNames
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.core.spec.style.StringSpec
@@ -33,7 +34,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
-import com.trippilot.testsupport.declaredFieldNames
 
 /**
  * 여행 요약의 **블로킹 게이트**(PBT-U5-1 · PBT-U5-5).

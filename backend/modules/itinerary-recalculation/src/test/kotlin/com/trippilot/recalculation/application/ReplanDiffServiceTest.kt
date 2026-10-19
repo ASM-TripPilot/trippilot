@@ -16,6 +16,7 @@ import com.trippilot.recalculation.domain.OriginKind
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
+import com.trippilot.testsupport.declaredFieldNames
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.boolean
@@ -33,7 +34,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
-import com.trippilot.testsupport.declaredFieldNames
 
 /**
  * 확정 전 전후 비교(US-PLANB-08 · BR-U4-25·29 · TRIP-559).

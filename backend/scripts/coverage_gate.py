@@ -1,9 +1,14 @@
 """커버리지 하한선 게이트 — `:app:testCodeCoverageReport` 의 합산 XML 을 읽어 판정한다.
 
-    ./gradlew :app:coverageGate        # 리포트를 만든 직후 이 스크립트를 부른다(옛 XML 로 판정하지 않게)
+    ./gradlew :app:coverageGate        # 리포트를 만든 직후, 그 리포트 경로를 넘겨 이 스크립트를 부른다
+
+경로 인자는 **필수**다 — 기본 경로를 두면 옛 빌드가 남긴 XML 로 조용히 판정할 수 있다(지금 코드가 하한
+아래인데 통과로 보인다). 경로는 Gradle 이 리포트 태스크의 실제 출력 위치에서 넘긴다.
 
 - 전체 라인·분기가 TOTAL_FLOORS 아래거나, 어느 모듈이든 MODULE_FLOORS 아래면 exit 1(머지 차단).
-- 모듈(패키지 `com.trippilot.<모듈>`)별 표와 실패 사유를 stdout 에, CI 면 `$GITHUB_STEP_SUMMARY` 에도 쓴다.
+- Gradle 모듈별 표와 실패 사유를 stdout 에, CI 면 `$GITHUB_STEP_SUMMARY` 에도 쓴다. 모듈은 패키지 이름이
+  아니라 **그 패키지 디렉터리를 가진 소스 폴더**로 정한다 — 새 모듈이 기존 모듈과 같은 패키지 아래에 클래스를
+  두면 이름으로는 큰 모듈에 섞여 모듈 바닥이 0% 를 못 본다(모듈↔패키지 일치를 강제하는 아키텍처 규칙은 없다).
 
 하한선은 **래칫**이다 — 오르면 상수를 올리는 PR 을 내고, 내리지 않는다. 처음부터 목표치(80% 같은)를
 걸면 첫날부터 빨갛거나 아무도 못 지키는 숫자가 되어 결국 게이트를 끄게 된다. 측정한 기준선에서 시작한다.
@@ -15,6 +20,7 @@ Gradle 내장 `JacocoCoverageVerification` 을 안 쓰는 이유: 합산 리포�
 """
 
 import os
+import pathlib
 import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
@@ -33,7 +39,7 @@ TOTAL_FLOORS = {"LINE": 94.0, "BRANCH": 83.0}
 # 51.9%)보다 넉넉히 아래로 잡았다 — 최저 모듈의 평범한 수정(널 안전 연산자 몇 개)으로는 안 걸리게.
 MODULE_FLOORS = {"LINE": 70.0, "BRANCH": 40.0}
 
-DEFAULT_XML = "app/build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml"
+BACKEND = pathlib.Path(__file__).resolve().parent.parent
 
 
 def counter(element, kind):
@@ -55,23 +61,36 @@ def fmt(value, floor):
     return f"{value:.1f}%" + (" ❌" if value < floor else "")
 
 
-def module_of(package_name):
-    parts = package_name.split("/")
-    return parts[2] if len(parts) > 2 and parts[:2] == ["com", "trippilot"] else package_name
+def package_owners(backend=BACKEND):
+    """패키지 디렉터리(`com/trippilot/...`) → 그것을 가진 Gradle 모듈들. 둘 이상이면 리포트에서 합쳐진 것이다."""
+    owners = defaultdict(set)
+    for src in backend.glob("**/src/main/kotlin"):
+        if "build" in src.relative_to(backend).parts:
+            continue
+        module = src.parent.parent.parent.relative_to(backend).as_posix()
+        for d in src.rglob("*"):
+            if d.is_dir() and any(f.suffix in (".kt", ".java") for f in d.iterdir()):
+                owners[d.relative_to(src).as_posix()].add(module)
+    return owners
 
 
-def evaluate(root):
-    """(전체 비율, 모듈별 비율, 실패 사유 목록)."""
+def evaluate(root, owners):
+    """(전체 비율, 모듈별 비율, 실패 사유 목록). 전체 비율이 None 이면 측정 대상이 없는 것이다."""
     sums = defaultdict(lambda: {k: [0, 0] for k in KINDS})
     for package in root.iter("package"):
+        name = package.get("name")
+        module = "+".join(sorted(owners.get(name, ()))) or name
         for kind in KINDS:
             covered, missed = counter(package, kind)
-            sums[module_of(package.get("name"))][kind][0] += covered
-            sums[module_of(package.get("name"))][kind][1] += missed
+            sums[module][kind][0] += covered
+            sums[module][kind][1] += missed
 
-    totals = {k: pct(*counter(root, k)) or 0.0 for k in KINDS}
+    totals = {k: pct(*counter(root, k)) for k in KINDS}
     modules = {m: {k: pct(*c[k]) for k in KINDS} for m, c in sums.items()}
-    failures = [f"전체 {k} {totals[k]:.1f}% < 하한 {TOTAL_FLOORS[k]:g}%" for k in KINDS if totals[k] < TOTAL_FLOORS[k]]
+    # 측정 대상이 없는 것을 0% 로 바꾸면 "커버리지 하락"으로 보고된다 — 원인(합산 대상·계측 범위)이 따로 있다.
+    failures = [f"전체 {k} 측정 대상이 없다(합산 대상·계측 범위 설정을 본다)" for k in KINDS if totals[k] is None]
+    failures += [f"전체 {k} {totals[k]:.1f}% < 하한 {TOTAL_FLOORS[k]:g}%" for k in KINDS
+                 if totals[k] is not None and totals[k] < TOTAL_FLOORS[k]]
     failures += [
         f"{m} {k} {p[k]:.1f}% < 모듈 바닥 {MODULE_FLOORS[k]:g}%"
         for m, p in sorted(modules.items()) for k in KINDS
@@ -83,7 +102,7 @@ def evaluate(root):
 def render(totals, modules, failures):
     rows = sorted(modules.items(), key=lambda kv: (kv[1]["BRANCH"] is None, kv[1]["BRANCH"] or 0.0))
     lines = [
-        "### 백엔드 커버리지 — " + " · ".join(f"{k} {totals[k]:.1f}% (하한 {TOTAL_FLOORS[k]:g}%)" for k in KINDS),
+        "### 백엔드 커버리지 — " + " · ".join(f"{k} {fmt(totals[k], TOTAL_FLOORS[k])} (하한 {TOTAL_FLOORS[k]:g}%)" for k in KINDS),
         "모듈 바닥: " + " · ".join(f"{k} {MODULE_FLOORS[k]:g}%" for k in KINDS),
         "",
     ]
@@ -97,20 +116,25 @@ def render(totals, modules, failures):
     return "\n".join(lines)
 
 
-def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_XML
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if len(argv) != 1:
+        print("리포트 경로가 필요하다 — `./gradlew :app:coverageGate` 로 부른다(리포트를 만들고 그 경로를 넘긴다).",
+              file=sys.stderr)
+        return 2
+    path = argv[0]
     if not os.path.exists(path):
-        print(f"리포트가 없다: {path}\n`./gradlew :app:coverageGate` 로 부른다(리포트를 먼저 만든다).", file=sys.stderr)
+        print(f"리포트가 없다: {path}\n`./gradlew :app:coverageGate` 로 부른다.", file=sys.stderr)
         return 2
 
-    totals, modules, failures = evaluate(ET.parse(path).getroot())
+    totals, modules, failures = evaluate(ET.parse(path).getroot(), package_owners())
     report = render(totals, modules, failures)
     print(report)
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a", encoding="utf-8") as f:
             f.write(report + "\n")
     for k in KINDS:
-        if totals[k] >= TOTAL_FLOORS[k] + 2:
+        if totals[k] is not None and totals[k] >= TOTAL_FLOORS[k] + 2:
             print(f"\n{k} 하한선을 {int(totals[k]) - 1}% 로 올릴 수 있다(TOTAL_FLOORS — 버림에서 1p 여유).")
     return 1 if failures else 0
 
