@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import checks  # noqa: E402
 
-SIDOS = checks.Sidos.load()   # 실제 백엔드 시드에서 — 목록을 여기 따로 적지 않는다
+SIDOS = checks.sido_names()   # 실제 백엔드 시드에서 — 목록을 여기 따로 적지 않는다
 
 
 def proposal(name, address):
@@ -21,26 +21,25 @@ def pois(*addresses, extra=0):
     return {"proposals": items}
 
 
-class SidoRuleTest(unittest.TestCase):
-    """백엔드 RegionResolver.sidoOf 와 같은 규칙 — 정식 이름 → 별칭 → 유일 접두."""
+class BackendReadsTest(unittest.TestCase):
+    """백엔드 RegionResolver 와 같은 판정 — 첫 낱말이 시도 정식 이름과 정확히 같아야 한다(약칭은 수집 병합이 편다)."""
 
-    def test_시드에서_시도와_별칭을_읽는다(self):
-        self.assertEqual(len(SIDOS.names), 16)
-        self.assertEqual(SIDOS.names["서울특별시"], "11")
-        self.assertEqual(SIDOS.aliases["강원도"], "51")
+    def test_시드에서_시도_16곳을_읽는다(self):
+        self.assertEqual(len(SIDOS), 16)
+        self.assertIn("제주특별자치도", SIDOS)
 
-    def test_정식_이름_별칭_잘린_이름을_읽는다(self):
-        self.assertEqual(SIDOS.code_of("서울특별시 양천구"), "11")
-        self.assertEqual(SIDOS.code_of("강원도 춘천시"), "51")                 # 옛 이름(별칭)
-        self.assertEqual(SIDOS.code_of("부산광역 사하구 하단동 1195"), "26")   # 잘린 이름(#1427 실측)
-        self.assertEqual(SIDOS.code_of("제주특별자치 서귀포시 색달동 3039-41"), "50")
+    def test_정식_이름만_읽는다(self):
+        self.assertTrue(checks.backend_reads("서울특별시 양천구 신정동 1", SIDOS))
+        self.assertFalse(checks.backend_reads("부산광역 사하구 하단동 1195", SIDOS))   # #1427 의 잘린 이름 — 병합이 펴야 한다
+        self.assertFalse(checks.backend_reads("강원도 춘천시", SIDOS))
+        self.assertFalse(checks.backend_reads("", SIDOS))
+        self.assertFalse(checks.backend_reads(None, SIDOS))
 
-    def test_모호하거나_한_글자거나_모르는_이름은_정하지_않는다(self):
-        self.assertIsNone(SIDOS.code_of("경상 어딘가"))   # 경상북도·경상남도
-        self.assertIsNone(SIDOS.code_of("부 사하구"))
-        self.assertIsNone(SIDOS.code_of("Tokyo, Japan"))
-        self.assertIsNone(SIDOS.code_of(""))
-        self.assertIsNone(SIDOS.code_of(None))
+    def test_공백은_백엔드처럼_ASCII_공백으로만_자른다(self):
+        # 백엔드 Regex("\\s+") 는 NBSP·전각 공백으로 자르지 않아 첫 토큰이 통째가 된다 — 게이트도 같은 판정이어야 한다.
+        self.assertFalse(checks.backend_reads("서울특별시\u00a0양천구", SIDOS))
+        self.assertFalse(checks.backend_reads("서울특별시\u3000양천구", SIDOS))
+        self.assertTrue(checks.backend_reads("  서울특별시\t양천구", SIDOS))
 
 
 class CheckPoisTest(unittest.TestCase):
@@ -48,7 +47,7 @@ class CheckPoisTest(unittest.TestCase):
         self.assertEqual(checks.check_pois(pois(extra=10), SIDOS, 10), [])
 
     def test_시도를_못_정하는_주소가_섞이면_게시를_막는다(self):
-        failures = checks.check_pois(pois("Tokyo, Japan", "경상 어딘가", extra=10), SIDOS, 10)
+        failures = checks.check_pois(pois("부산광역 사하구 하단동 1195", "Tokyo, Japan", extra=10), SIDOS, 10)
         self.assertEqual(len(failures), 1)
         self.assertIn("시도를 정할 수 없는 주소 2건", failures[0])
 
@@ -85,6 +84,16 @@ class CheckEventsTest(unittest.TestCase):
 
     def test_문서_모양이_바뀌면_막는다(self):
         self.assertEqual(checks.check_events({}, self.DAY, 0), ["events 목록이 없다 — 문서 모양이 바뀌었다"])
+
+
+class LastCollectedTest(unittest.TestCase):
+    def test_지역별_마지막_수집의_최댓값을_시각으로_비교한다(self):
+        doc = {"coverage": {"서울": "2026-10-19T06:46:38+09:00", "부산": "2026-10-18T23:00:00+00:00"}}
+        # 문자열로는 "2026-10-19…" 가 크지만 시각으로는 부산(KST 10-19 08:00)이 늦다.
+        self.assertEqual(checks.last_collected(doc), "2026-10-18T23:00:00+00:00")
+
+    def test_coverage_가_없으면_None(self):
+        self.assertIsNone(checks.last_collected({}))
 
 
 class CheckFreshnessTest(unittest.TestCase):

@@ -18,43 +18,24 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 REGION_SEED = REPO / "backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql"
 
-# 시도명 앞부분만 와도 받는 최소 길이 — 백엔드 RegionResolver.MIN_PREFIX 와 같다.
-MIN_PREFIX = 2
+
+def sido_names(seed: Path = REGION_SEED) -> set[str]:
+    """시도 정식 이름 — 백엔드 지역 카탈로그 시드가 정본이다(여기에 목록을 따로 적으면 갈라진다)."""
+    names = set(re.findall(r"\('\d+',\s*'([^']+)',\s*'\d+',\s*'[^']+',\s*'SIDO'", seed.read_text(encoding="utf-8")))
+    if not names:
+        raise ValueError(f"시도 목록을 읽지 못했다: {seed}")
+    return names
 
 
-class Sidos:
-    """시도 이름과 시도 층 별칭 — 백엔드 지역 카탈로그 시드가 정본이다(여기에 목록을 따로 적으면 갈라진다)."""
-
-    def __init__(self, names: dict[str, str], aliases: dict[str, str]):
-        self.names, self.aliases = names, aliases   # 이름 → 시도 코드
-
-    @classmethod
-    def load(cls, seed: Path = REGION_SEED) -> "Sidos":
-        text = seed.read_text(encoding="utf-8")
-        names = {name: code for code, name in re.findall(r"\('(\d+)',\s*'([^']+)',\s*'\d+',\s*'[^']+',\s*'SIDO'", text)}
-        if not names:
-            raise ValueError(f"시도 목록을 읽지 못했다: {seed}")
-        aliases = dict(re.findall(r"\('([^']+)',\s*'(\d{2})'\)", text))   # 시도 코드는 두 자리
-        return cls(names, aliases)
-
-    def code_of(self, address: str | None) -> str | None:
-        """주소 첫 토큰 → 시도 코드. 백엔드 RegionResolver.sidoOf 와 같은 규칙이다(정본은 백엔드):
-        정식 이름 → 별칭 → 그 토큰으로 시작하는 정식 이름이 **딱 하나**일 때."""
-        tokens = (address or "").split()
-        if not tokens:
-            return None
-        token = tokens[0]
-        if token in self.names:
-            return self.names[token]
-        if token in self.aliases:
-            return self.aliases[token]
-        if len(token) < MIN_PREFIX:
-            return None
-        matches = [code for name, code in self.names.items() if name.startswith(token)]
-        return matches[0] if len(matches) == 1 else None
+def backend_reads(address: str | None, sidos: set[str]) -> bool:
+    """백엔드 RegionResolver 가 이 주소의 시도를 정할 수 있는가 — 첫 낱말이 시도 정식 이름과 **정확히** 같아야 한다.
+    약칭·잘린 이름은 수집 병합 단계(ai `expand_sido_abbrev`)가 펴서 보내는 것이 정본 설계다 — 여기서 받아 주면
+    펴지 못한 문서가 게이트를 지나 백엔드에서 깨진다(#1427 이 그 모양이었다). 백엔드처럼 ASCII 공백으로만 자른다."""
+    tokens = re.split(r"[ \t\n\r\f\v]+", (address or "").strip())
+    return bool(tokens and tokens[0] in sidos)
 
 
-def check_pois(doc: dict, sidos: Sidos, min_count: int) -> list[str]:
+def check_pois(doc: dict, sidos: set[str], min_count: int) -> list[str]:
     """POI 등록 제안 문서. 반환 = 실패 사유(빈 목록이면 게시해도 된다)."""
     proposals = doc.get("proposals")
     if not isinstance(proposals, list):
@@ -62,7 +43,7 @@ def check_pois(doc: dict, sidos: Sidos, min_count: int) -> list[str]:
     failures = []
     if len(proposals) < min_count:
         failures.append(f"제안 {len(proposals):,}건 < 하한 {min_count:,}건 — 수집이 잘렸거나 키가 막혔다")
-    unresolved = [p for p in proposals if sidos.code_of((p.get("provenance") or {}).get("address")) is None]
+    unresolved = [p for p in proposals if not backend_reads((p.get("provenance") or {}).get("address"), sidos)]
     if unresolved:
         samples = ", ".join(f"{(p.get('poi') or {}).get('name')}({(p.get('provenance') or {}).get('address')})"
                             for p in unresolved[:3])
@@ -89,6 +70,14 @@ def check_events(doc: dict, day: date, min_valid: int) -> list[str]:
     if valid < min_valid:
         return [f"{day} 에 유효한 행사 {valid}건 < 하한 {min_valid}건 (전체 {len(events)}건) — 낡은 사본일 수 있다"]
     return []
+
+
+def last_collected(events_doc: dict) -> str | None:
+    """행사 저장소의 마지막 수집 시각 — 지역별 마지막 수집(`coverage`)의 최댓값.
+    행사별 `collected_at` 은 **새 행사가 들어올 때만** 찍혀, 매일 돌아도 신규가 없는 날이면 늙어 보인다(실측 간격 2일).
+    문자열 최댓값이 아니라 시각으로 비교한다 — 오프셋이 섞이면 문자열 순서가 틀린다."""
+    stamps = [v for v in (events_doc.get("coverage") or {}).values() if isinstance(v, str)]
+    return max(stamps, key=datetime.fromisoformat, default=None)
 
 
 def check_freshness(collected_at: str | None, now: datetime, max_age: timedelta) -> list[str]:

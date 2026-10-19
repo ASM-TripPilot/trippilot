@@ -4,15 +4,17 @@
 그때 배포에 넣은 두 가드("깨지면 멈춤 · 늙으면 경고")를 여기서는 태스크로 둔다 — 검증(validate)이 깨진 문서의
 게시를 막고, 신선도 DAG(event_freshness)가 수집이 조용히 멈춘 것을 알린다.
 
-- dry_run=True(기본): 리포의 행사 저장소(`ai/data/collected_events.json`)를 수집 결과로 쓴다. 검증의 "오늘"은
-  실행의 논리 날짜(logical date)라, 과거 날짜로 백필하면 그날 기준으로 판정한다.
-- dry_run=False: 게시본(없으면 리포 사본)을 저장소로 삼아 `collect_events.py`·`collect_tourapi_festivals.py` 를
-  부른다 — 네이버·카카오·Azure OpenAI·TourAPI 키가 환경에 있어야 한다.
+- dry_run=True(기본): 리포의 행사 저장소(`ai/data/collected_events.json`)를 수집 결과로 쓴다(게시본이 있어도 리포 사본).
+  검증의 "그날"은 실행의 논리 날짜다 — 과거 날짜로 돌리면 그날 기준으로 판정한다.
+- dry_run=False: 게시본(없으면 리포 사본)을 저장소로 삼아 운영 워크플로(`ai-event-collect.yml`)와 같은 세 단계를 부른다 —
+  검색·LLM 추출(`collect_events.py`), 팝업 큐레이션, TourAPI 축제. 뒤의 둘은 운영처럼 실패해도 앞 수집분을 살린다.
+  네이버·카카오·Azure OpenAI·TourAPI 키가 환경에 있어야 한다.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -24,21 +26,14 @@ from zoneinfo import ZoneInfo
 from airflow.sdk import Param, dag, get_current_context, task
 from airflow.sdk.exceptions import AirflowFailException
 
-BATCH = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BATCH))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import checks  # noqa: E402
+import pipeline  # noqa: E402
 
-REPO = BATCH.parent
-OUT = Path(os.environ.get("BATCH_OUTPUT", BATCH / ".out"))
-FIXTURE = REPO / "ai/data/collected_events.json"
-PUBLISHED = OUT / "published/collected_events.json"
+FIXTURE = pipeline.REPO / "ai/data/collected_events.json"
+PUBLISHED = pipeline.OUT / "published/collected_events.json"
 SEOUL = ZoneInfo("Asia/Seoul")
-
-
-def run_dir() -> Path:
-    path = OUT / "runs" / "event_collect" / get_current_context()["run_id"].replace(":", "_")
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+log = logging.getLogger(__name__)
 
 
 @dag(
@@ -53,21 +48,27 @@ def run_dir() -> Path:
     tags=["collect", "trippilot"],
 )
 def event_collect():
-    @task(retries=2)
+    @task
     def collect() -> str:
-        candidate = run_dir() / "collected_events.json"
+        # 재시도하지 않는다 — 실제 모드의 재시도는 검색·LLM 호출 한도를 그만큼 더 쓴다.
+        context = get_current_context()
+        candidate = pipeline.run_dir("event_collect", context["run_id"]) / "collected_events.json"
+        if context["params"]["dry_run"]:
+            shutil.copyfile(FIXTURE, candidate)
+            return str(candidate)
         shutil.copyfile(PUBLISHED if PUBLISHED.exists() else FIXTURE, candidate)
-        if not get_current_context()["params"]["dry_run"]:
-            env = {**os.environ, "EVENTS_STORE": str(candidate)}
-            for script in (["scripts/collect/collect_events.py"],
-                           ["scripts/collect/collect_tourapi_festivals.py", "--store", str(candidate)]):
-                subprocess.run(["uv", "run", "python", *script], cwd=REPO / "ai", check=True, env=env)
+        ai, env = pipeline.REPO / "ai", {**os.environ, "EVENTS_STORE": str(candidate)}
+        subprocess.run(["uv", "run", "python", "scripts/collect/collect_events.py"], cwd=ai, check=True, env=env)
+        for optional in (["scripts/collect/collect_curated_popups.py", "--store", str(candidate)],
+                         ["scripts/collect/collect_tourapi_festivals.py", "--store", str(candidate)]):
+            if subprocess.run(["uv", "run", "python", *optional], cwd=ai, env=env).returncode != 0:
+                log.warning("%s 실패 — 앞 수집분은 살린다(운영 워크플로의 continue-on-error 와 같다)", optional[0])
         return str(candidate)
 
     @task
     def validate(candidate: str) -> str:
         context = get_current_context()
-        day = context["logical_date"].astimezone(SEOUL).date()
+        day = pipeline.run_day(context, SEOUL).date()
         doc = json.loads(Path(candidate).read_text(encoding="utf-8"))
         failures = checks.check_events(doc, day, context["params"]["min_valid_today"])
         if failures:
@@ -76,11 +77,7 @@ def event_collect():
 
     @task
     def publish(candidate: str) -> str:
-        PUBLISHED.parent.mkdir(parents=True, exist_ok=True)
-        staging = PUBLISHED.with_suffix(".json.tmp")
-        shutil.copyfile(candidate, staging)
-        staging.replace(PUBLISHED)
-        return str(PUBLISHED)
+        return str(pipeline.publish(Path(candidate), PUBLISHED))
 
     publish(validate(collect()))
 
@@ -98,10 +95,10 @@ def event_freshness():
     def check() -> None:
         if not PUBLISHED.exists():
             raise AirflowFailException(f"게시된 행사 저장소가 없다: {PUBLISHED}")
-        events = json.loads(PUBLISHED.read_text(encoding="utf-8")).get("events") or []
-        latest = max((e.get("collected_at") for e in events if e.get("collected_at")), default=None)
+        doc = json.loads(PUBLISHED.read_text(encoding="utf-8"))
         failures = checks.check_freshness(
-            latest, datetime.now(SEOUL), timedelta(hours=get_current_context()["params"]["max_age_hours"]),
+            checks.last_collected(doc), datetime.now(SEOUL),
+            timedelta(hours=get_current_context()["params"]["max_age_hours"]),
         )
         if failures:
             raise AirflowFailException(" / ".join(failures))

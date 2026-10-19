@@ -407,7 +407,7 @@ services:
       retries: 10
       start_period: 10s
 
-  # ── Frontend (Expo Web 자리 · nginx 정적+프록시 스텁) ──────────
+  # ── 수집 파이프라인 (Airflow, 로컬 전용) ──────────
   # 수집 파이프라인(로컬 전용, TRIP-1468) — 수집 → 검증 → 게시 → 신선도. 운영 배치는 GitHub Actions(ai-*-collect.yml).
   # `docker compose --profile batch up -d airflow` → http://localhost:8090 (계정·비밀번호는 컨테이너 로그에 찍힌다).
   # DAG 는 기본이 드라이런(리포 수집본 사용, 실 API 0) — 설명은 batch/README.md.
@@ -427,6 +427,7 @@ services:
     ports:
       - "8090:8080"
 
+  # ── Frontend (Expo Web 자리 · nginx 정적+프록시 스텁) ──────────
   frontend:
     profiles: ["full"]
     image: ghcr.io/asm-trippilot/trippilot-frontend:${TAG:-develop}

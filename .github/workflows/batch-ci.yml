@@ -2,14 +2,15 @@ name: batch-ci
 
 # 로컬 수집 파이프라인(batch/, TRIP-1468)의 검증 로직과 DAG 구조·드라이런.
 # 실 API 호출 0건 — 드라이런은 리포의 수집본(ai/data)을 수집 결과로 쓴다.
-# 경로: 검증 규칙이 백엔드 지역 시드(시도·별칭)와 수집본을 읽으므로 그 둘이 바뀌어도 돈다.
+# 경로: 검증 규칙이 백엔드 지역 시드와 판정 규칙(RegionResolver — 거울로 따른다), 수집본을 읽으므로 그것들이 바뀌어도 돈다.
+# 수집본 PR(예: #1427 공유본 병합)에서 이 게이트가 빨갛게 되는 것이 의도다 — 백엔드가 못 읽는 주소를 머지 전에 잡는다.
 on:
   push:
     branches: [develop]
-    paths: ['batch/**', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_pois.json', 'ai/data/collected_events.json']
+    paths: ['batch/**', 'backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/RegionResolver.kt', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_pois.json', 'ai/data/collected_events.json']
   pull_request:
     branches: [develop, main]
-    paths: ['batch/**', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_pois.json', 'ai/data/collected_events.json']
+    paths: ['batch/**', 'backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/RegionResolver.kt', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_pois.json', 'ai/data/collected_events.json']
   workflow_dispatch:
 
 jobs:
