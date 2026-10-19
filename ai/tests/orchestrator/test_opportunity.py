@@ -3,7 +3,7 @@
 증명하는 것:
   [예시 — 손으로 거리를 잡은 고정 입력]
   ① EVENT_VENUE: 기간이 겹치는 행사 좌표 1km 안 + 행사 주소·이름에 POI 이름
-  ② EVENT_NEARBY: 이름이 안 맞을 때 행사 좌표 0.3km 안 + 카테고리 적합(event_affinity 취향 사상)
+  ② EVENT_NEARBY: 이름이 안 맞을 때 행사 좌표 0.3km 안 + 카테고리 적합(D6 표 — 팝업·모르는 유형은 이름 대조만)
   ③ 행사 원천: 공식(`tourapi-`)·수동 큐레이션(`popup-`)만 — 네이버 추출(`evx-`)은 카드가 되지 않는다(O-SA-12)
   ④ OTHER·기간 밖·좌표 없는 행사는 카드가 되지 않는다
   ⑤ TRENDING: 태그 '요즘 인기' — 한 POI 는 한 장(행사가 이긴다)
@@ -116,7 +116,7 @@ def test_슬롯에서_1km_넘게_떨어진_행사도_행사장이_슬롯_1km_안
 
 def test_두_글자_이름은_주소에_있어도_행사장으로_보지_않는다() -> None:
     namsan = _poi("p-namsan", "남산", 100, category=PoiCategory.NATURE)
-    fest = _event("tourapi-120", "가을 숲길 축제", 150, address="서울 중구 남산 일원")
+    fest = _event("tourapi-120", "가을 숲길 축제", 600, address="서울 중구 남산 일원")  # 500m — 행사장 가까이(0.3km)도 아니다
 
     assert _find([fest], [namsan]) == ()
 
@@ -144,15 +144,25 @@ def test_행사_좌표에서_0_3km_밖이면_행사장_가까이가_아니다() 
     assert _find([fest], [far_museum]) == ()
 
 
-def test_팝업은_조견표대로_쇼핑_장소와_맞는다() -> None:
-    """event_affinity 가 POPUP 을 쇼핑·도시·문화로 안다 — '모르는 유형'이 아니다."""
-    shop = _poi("p-shop", "뚝섬 편집숍", 500, category=PoiCategory.SHOPPING)       # 100m
-    park = _poi("p-park", "뚝섬한강공원", 450, category=PoiCategory.NATURE)         # 50m — 팝업과 안 맞는 종류
+def test_축제는_명소_가까이도_행사장_가까이_카드다() -> None:
+    """D6 실측 예 — 진주남강유등축제 → 촉석루(명소). 공유본의 축제 근처 장소는 명소·자연이 많다."""
+    pavilion = _poi("p-pavilion", "촉석루", 700, category=PoiCategory.SIGHT)  # 행사에서 100m
+    fest = _event("tourapi-220", "진주남강유등축제", 600, address="경남 진주시 남강로 626")
+
+    (card,) = _find([fest], [pavilion])
+
+    assert card.kind is OpportunityKind.EVENT_NEARBY and card.poi == pavilion
+
+
+def test_팝업은_행사장_이름이_맞을_때만_카드다() -> None:
+    """팝업은 근처 종류 표에 없다(설계 §4.6 — 이름 대조만): 옆 가게는 카드가 아니고, 주소에 이름이 있으면 행사장이다."""
+    shop = _poi("p-shop", "뚝섬 편집숍", 500, category=PoiCategory.SHOPPING)  # 행사에서 100m
     popup = _event("popup-abc", "클리오 풍년다방 팝업", 400, etype=EventType.POPUP, address="서울 성동구 뚝섬로 273")
+    hosted = _event("popup-def", "클리오 풍년다방 팝업", 400, etype=EventType.POPUP, address="서울 성동구 뚝섬 편집숍 2층")
 
-    (card,) = _find([popup], [shop, park])
-
-    assert card.kind is OpportunityKind.EVENT_NEARBY and card.poi == shop
+    assert _find([popup], [shop]) == ()
+    (card,) = _find([hosted], [shop])
+    assert card.kind is OpportunityKind.EVENT_VENUE and card.poi == shop
 
 
 def test_조견표에_없는_유형은_이름_대조만_한다() -> None:
@@ -292,12 +302,12 @@ def test_표시_게이트를_못_넘는_이름은_장소도_행사도_카드가_
 _GOOD_NAMES = ("서울숲", "남산공원", "시립미술관", "광장시장", "하늘공원", "북촌한옥마을", "성수 베이커리", "남산")
 _BAD_NAMES = ("가", "가" * 61, "문의 010-1234-5678", "www.cafe.com 카페")
 _HOURS = ((), (OpenHour(_DAY.weekday(), 540, 1260),), (OpenHour((_DAY.weekday() + 1) % 7, 540, 1260),))
-# 행사 유형 ↔ 맞는 장소 종류 — event_affinity 조견표(유형 → 취향)와 취향 → 경계 카테고리를 손으로 이은 것
+# 행사 유형 ↔ '행사장 가까이'로 인정하는 장소 종류 — 설계 D6 원안 표를 손으로 다시 적은 것(팝업·그 밖은 이름 대조만)
 _FIT = {
-    EventType.FESTIVAL: {PoiCategory.ACTIVITY, PoiCategory.CULTURE},
-    EventType.PERFORMANCE: {PoiCategory.CULTURE},
-    EventType.EXHIBITION: {PoiCategory.CULTURE},
-    EventType.POPUP: {PoiCategory.SHOPPING, PoiCategory.SIGHT, PoiCategory.CULTURE},
+    EventType.FESTIVAL: {PoiCategory.SIGHT, PoiCategory.NATURE, PoiCategory.NIGHT_VIEW, PoiCategory.ACTIVITY,
+                         PoiCategory.CULTURE},
+    EventType.PERFORMANCE: {PoiCategory.CULTURE, PoiCategory.SIGHT},
+    EventType.EXHIBITION: {PoiCategory.CULTURE, PoiCategory.SIGHT},
 }
 _KIND_RANK = {OpportunityKind.EVENT_VENUE: 0, OpportunityKind.EVENT_NEARBY: 1, OpportunityKind.TRENDING: 2}
 

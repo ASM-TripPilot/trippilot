@@ -5,8 +5,8 @@
 사상될 때만 카드가 된다.
 
 - `EVENT_VENUE`  : 기간이 겹치는 행사 좌표 1km 안 + 행사 주소·이름에 POI 이름이 들어 있다
-- `EVENT_NEARBY` : (행사장이 없을 때) 행사 좌표 0.3km 안 + 카테고리 적합 — event_affinity 의 유형 → 취향 표와
-  취향 → 경계 카테고리 표를 잇는다. 조견표에 없는 유형은 이름 대조만 한다
+- `EVENT_NEARBY` : (행사장이 없을 때) 행사 좌표 0.3km 안 + 카테고리 적합 — 아래 `_NEARBY_FIT`(설계 D6 원안).
+  표에 없는 유형(팝업 등)은 이름 대조만 한다
 - `TRENDING`     : POI 태그 '요즘 인기'
 
 행사 원천은 공식(TourAPI `tourapi-`)과 수동 큐레이션(`popup-`)만 보인다 — 네이버 검색 → LLM 추출(`evx-`)은
@@ -16,22 +16,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
 
-# 아래 셋은 기존 판정을 그대로 쓴다 — 사본을 만들지 않는다: '그날 휴무 증명'(배선·자연어 재계획과 같은 판정) ·
-# 등록 이름 대조의 정규화 · 취향 → 경계 카테고리(코드베이스의 유일한 사상)
+# 아래 둘은 기존 판정을 그대로 쓴다 — 사본을 만들지 않는다: '그날 휴무 증명'(배선·자연어 재계획과 같은 판정) ·
+# 등록 이름 대조의 정규화
 from trippilot.agents.planb.composition import hours_label
 from trippilot.agents.planb.request_verification import normalize
-from trippilot.agents.schedule.outcome import _TASTE_CATEGORIES
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.event import EventInfo, EventType
 from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory
 from trippilot.llm_gateway.gates.base import has_contact_like
-from trippilot.orchestrator.event_affinity import ATTACH_RADIUS_KM, event_affinity
+from trippilot.orchestrator.event_affinity import ATTACH_RADIUS_KM
 
 NEAR_KM = 1.0             # 남은 슬롯 ↔ 카드 장소 — 경계가 슬롯마다 이 반경으로 등록 POI 를 묻는다
 NEARBY_KM = 0.3           # 행사 좌표 ↔ '행사장 가까이' 장소 (이름이 안 맞을 때)
@@ -39,6 +38,14 @@ MAX_OPPORTUNITIES = 3
 _SHOWN_EVENT_SOURCES = ("tourapi-", "popup-")  # 공식 축제 · 수동 큐레이션 팝업 (O-SA-12)
 _VENUE_NAME_MIN = 3       # 행사장 이름 대조 최소 길이 — '공원' 같은 두 글자가 아무 주소에나 붙지 않게
 _NAME_MIN, _NAME_MAX = 2, 60  # 표시 게이트 — 실측 행사명 최대 61자
+# '행사장 가까이'로 인정하는 장소 종류(설계 D6 원안 — 실측 행사의 40%가 이 판정으로만 짝을 찾는다). 생성 점수의
+# 취향표(event_affinity)와 따로 둔다: 그쪽은 '이 여행자가 좋아할까', 여기는 '행사장 곁에 둘 만한 곳인가'다
+_NEARBY_FIT: Mapping[EventType, frozenset[PoiCategory]] = {
+    EventType.FESTIVAL: frozenset({PoiCategory.SIGHT, PoiCategory.NATURE, PoiCategory.NIGHT_VIEW,
+                                   PoiCategory.ACTIVITY, PoiCategory.CULTURE}),
+    EventType.PERFORMANCE: frozenset({PoiCategory.CULTURE, PoiCategory.SIGHT}),
+    EventType.EXHIBITION: frozenset({PoiCategory.CULTURE, PoiCategory.SIGHT}),
+}
 
 
 class OpportunityKind(Enum):
@@ -123,7 +130,7 @@ def _event_card(event: EventInfo, places: Iterable[tuple[Poi, str, float]]) -> O
         name = normalize(poi.name)
         if to_event <= ATTACH_RADIUS_KM and len(name) >= _VENUE_NAME_MIN and name in venue_text:
             venue.append((-len(name), to_event, str(poi.poi_id), poi, slot, km))
-        elif to_event <= NEARBY_KM and _fits(event.event_type, poi.category):
+        elif to_event <= NEARBY_KM and poi.category in _NEARBY_FIT.get(event.event_type, ()):
             nearby.append((to_event, str(poi.poi_id), poi, slot, km))
     if venue:
         *_, poi, slot, km = min(venue)
@@ -132,15 +139,6 @@ def _event_card(event: EventInfo, places: Iterable[tuple[Poi, str, float]]) -> O
         *_, poi, slot, km = min(nearby)
         return Opportunity(f"event:{event.event_id}", OpportunityKind.EVENT_NEARBY, poi, slot, km, event)
     return None
-
-
-def _fits(event_type: EventType, category: PoiCategory) -> bool:
-    """행사 유형 ↔ 장소 종류 — event_affinity 조견표(유형 → 취향)를 취향 → 경계 카테고리 표로 잇는다."""
-    tastes = tuple(t for t, c in _TASTE_CATEGORIES.items() if c is category)
-    try:
-        return event_affinity(event_type, tastes) > 0.0
-    except KeyError:  # 조견표에 없는 유형 — 무엇과 맞는지 모른다, 이름 대조만 한다
-        return False
 
 
 def _rank(card: Opportunity) -> tuple:
