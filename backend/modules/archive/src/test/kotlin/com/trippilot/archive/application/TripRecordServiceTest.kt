@@ -196,7 +196,7 @@ class TripRecordServiceTest : StringSpec({
         val visit = svc.compare(acc, tripId).days.single().actual.single()
 
         // 필드 자체가 없어야 한다 — 값이 0/null 인 것과 다르다.
-        ActualVisitRecord::class.java.declaredFields.map { it.name }
+        ActualVisitRecord::class.java.declaredFields.filterNot { f -> f.isSynthetic }.map { it.name }
             .none { it.contains("dwell", ignoreCase = true) } shouldBe true
         visit.completedAt shouldBe Instant.parse("2026-08-11T05:00:00Z")
     }

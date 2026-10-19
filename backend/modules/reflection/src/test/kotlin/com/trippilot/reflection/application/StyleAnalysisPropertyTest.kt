@@ -216,7 +216,7 @@ class StyleAnalysisPropertyTest : StringSpec({
     "PBT-U5-5 소요시간 필드는 avgDwellMinutes 하나뿐이다(BR-U5-08a)" {
         val forbidden = listOf("duration", "minutes", "eta", "travelTime", "dwell")
         val fields = listOf(StyleAnalysisBody::class, TraitGaugesResponse::class, CategoryShareResponse::class)
-            .flatMap { it.java.declaredFields.map { f -> f.name } }
+            .flatMap { it.java.declaredFields.filterNot { f -> f.isSynthetic }.map { f -> f.name } }
 
         val hits = fields.filter { f -> forbidden.any { f.contains(it, ignoreCase = true) } }
 

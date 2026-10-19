@@ -363,7 +363,7 @@ class ReplanDiffServiceTest : StringSpec({
         val fields = listOf(
             ReplanDiffResponse::class, ReplanDiffSlotResponse::class,
             ReplanDiffEntryResponse::class, ReplanImpactResponse::class,
-        ).flatMap { it.java.declaredFields.map { f -> f.name } }
+        ).flatMap { it.java.declaredFields.filterNot { f -> f.isSynthetic }.map { f -> f.name } }
 
         val hits = fields.filter { f -> forbidden.any { f.contains(it, ignoreCase = true) } }
 
