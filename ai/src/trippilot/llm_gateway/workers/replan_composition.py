@@ -29,7 +29,7 @@ class ScheduleLine:
     time: str  # "09:19~10:34" (시각 미정이면 "시간 미정")
     category: str
     name: str
-    status: str  # 다녀옴(유지) · 고정(유지) · 진행 중(유지) · 남은 일정 · 제외 요청 · 요청과 안 맞음(교체)
+    status: str  # 다녀옴(유지) · 고정(유지) · 진행 중(유지) · 남은 일정 · 제외 요청 · 요청과 안 맞음(교체) · 확정(유지)(1회 수리)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +49,10 @@ class ComposeDayInput:
     hours: Mapping[PoiId, str] = field(default_factory=dict)  # 그날 영업시간 문구
     # 이 날짜의 최근 변경(TRIP-975) — "같은 제안 반복 방지". 비면 "(없음)".
     recent_changes: tuple[str, ...] = ()
+    # 1회 수리(배선 `_repair_day`)만 채운다 — 못 넣은 곳("상호명 | 카테고리 | 까닭")과 빈 시간 줄.
+    # 비면 `$repair` 가 빈 문자열이라 1차 프롬프트는 0.5.0 과 바이트 동일하다.
+    unplaced: tuple[str, ...] = ()
+    gaps: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.max_visits < 1:
@@ -63,7 +67,7 @@ def build_compose_vars(pool: CandidatePool, inp: ComposeDayInput) -> dict[str, s
     """값 전부 str·결정론(후보는 poi_id 정렬). 후보 목록 = 게이트 대조 집합(같은 `pool`)."""
     candidates = "\n".join(
         f"- {p.poi_id} | {_category_label(p)} | {inline(p.name)}"
-        f" | {_km(inp.distance_km.get(p.poi_id))} | {inp.hours.get(p.poi_id, '정보 없음')}"
+        f" | {_km(inp.distance_km.get(p.poi_id))} | {inline(inp.hours.get(p.poi_id, '정보 없음'))}"
         for p in sorted(pool.pois, key=lambda p: str(p.poi_id))
     )
     schedule = "\n".join(
@@ -83,6 +87,13 @@ def build_compose_vars(pool: CandidatePool, inp: ComposeDayInput) -> dict[str, s
         "max_visits": str(inp.max_visits),
         "change_rule": inp.change_rule,
         "recent_changes": _bullets(inp.recent_changes, "(없음)"),
+        # 늘 싣는다 — `Template.substitute` 는 없는 변수에 죽는다(1차 전부가 `llm_compose_error`).
+        "repair": "" if not inp.unplaced else (
+            "[못 넣은 곳] (방금 고른 곳 중 동선·영업시간 검증에서 빠진 곳과 까닭 — 후보에서 뺐습니다)\n"
+            + _bullets(inp.unplaced, "(없음)") + "\n\n"
+            "[빈 시간] (지금 일정에서 비어 있는 때 — 빈 시간 하나에 한 곳만. 아래 후보 거리는 그 후보가 들어갈"
+            " 빈 시간의 앞 장소(맨 앞 빈 시간이면 뒤 장소)에서 잰 값)\n"
+            + _bullets(inp.gaps, "(없음)") + "\n\n"),
     }
 
 
@@ -103,7 +114,11 @@ class ReplanCompositionWorker:
         *,
         timeout_sec: float | None = None,
     ) -> TypedResult:
-        """`timeout_sec` 는 호출측이 재계획 시한에서 떼어 넘긴다(TRIP-376 관통)."""
+        """`timeout_sec` 는 호출측이 재계획 시한에서 떼어 넘긴다(TRIP-376 관통).
+
+        1회 수리(`inp.unplaced`)가 실패하면 실제로 일어나는 일은 "1차 일정 그대로"다 — 설정 매핑의
+        "점수 경로로"(`scored_assembly`)를 실으면 지어낸 폴백 실체다(TRIP-260 #4).
+        """
         return self._gateway.call(
             LlmFeature.REPLAN_COMPOSITION,
             build_compose_vars(pool, inp),
@@ -111,4 +126,5 @@ class ReplanCompositionWorker:
             trace_id,
             now,
             timeout_sec=timeout_sec,
+            fallback_modes=("llm_compose_repair", "llm_compose_day") if inp.unplaced else None,
         )

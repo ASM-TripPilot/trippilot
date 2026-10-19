@@ -159,7 +159,7 @@ class _Case:
 def _verify(agent: ScheduleAgent, case: _Case, *, total_ms: int = 20_000, t0: int = 0):
     """에이전트 ②′ 를 단독으로 — 점수·어셈블리를 거치지 않아 임의 점수 분포를 넣을 수 있다."""
     steps: list[Degradation] = []
-    out = agent._verify_on_map(  # noqa: SLF001 — ②′ 단계 계약을 직접 본다
+    out, _ = agent._verify_on_map(  # noqa: SLF001 — ②′ 단계 계약을 직접 본다(판정은 1회 수리 재료)
         case.request, case.pool, case.candidates,
         allocate(total_ms, _DEFAULT), t0, steps, _TRACE_ID, _NOW,
     )

@@ -1333,6 +1333,9 @@ _TRANSLATE_TIMEOUT_SEC = 4.0
 # 대체지 선택 LLM 을 안 부르므로(`use_llm`) 잔여가 ≈19s 라 바닥(어셈블리 5s)을 침범하지 않는다.
 _COMPOSE_MIN_MS = 5_000
 _COMPOSE_MAX_MS = 18_000
+# 1회 수리 2차 구성의 후보 수 — 빈 틈에 그대로 드는 곳 중 그 틈 앞 장소에서 가까운 순. 고를 것은 틈 수(1~3)뿐이라
+# 1차(40곳)만큼 줄 이유가 없고, 짧을수록 2차 호출이 빨라 시한(25s) 안에 든다.
+_REPAIR_SHORTLIST = 20
 
 
 def _persona_line(persona: PersonaSummary | None) -> str:
@@ -2422,6 +2425,7 @@ class WiredItineraryOrchestrator:
         # 시각·순서는 어셈블리가 정한다(INV-2). 실패·시한 부족이면 () 라 종전 경로 그대로(INV-4).
         # 사용자 지시(2026-10-14)로 재계획에 한해 "솔버 LLM 2차는 실패 시에만"(2026-08-23)을 개정한다.
         active = tuple(b for b in blocks if b not in past)
+        compose_ctx: list = []  # 1차 구성의 (입력, 제외) — 1회 수리가 쓴다
         try:
             # 상황 추천 = PlanB 순서. 선택 LLM 을 안 불렀으면 규칙 랭킹(우천·저장 장소·거리)이 참고로 간다.
             composed = tuple(v.poi_id for v in earlier) if earlier is not None else self._compose_day(
@@ -2430,8 +2434,8 @@ class WiredItineraryOrchestrator:
                 prefer, avoid, avoided, active, past, not_before, visit_cap, budget_level, notes,
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
-                window_end=day_end if night else None,
-                rules=_category_rule_lines(nl),
+                window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
+                rules=_category_rule_lines(nl), ctx_out=compose_ctx,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -2549,7 +2553,8 @@ class WiredItineraryOrchestrator:
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
             required_in_order=earlier is not None,  # 시간만 당기기 — 원 일정 순서 그대로
         )
-        outcome = self._schedule_agent.run(core.ScheduleTask(
+        composed_r1 = composed  # 아래 다시 풀기가 composed 를 비운다 — 고정 표시를 걷을 때 1차 목록도 본다
+        task = core.ScheduleTask(
             request=domain_request,
             pool=pool,
             persona=persona,
@@ -2566,18 +2571,8 @@ class WiredItineraryOrchestrator:
             now=now,
             planb_rank=planb_rank,
             llm_composed=bool(composed),
-        ))
-        if (composed or in_progress or nl_ids or night) and outcome.solution is not None:
-            # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
-            # 구성 LLM 이 고른 곳·진행 중이라 둔 곳은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가
-            # 잠가서 다음 다시 짜기·교체에서 못 바꾼다. 그 표시만 걷는다(시각·순서는 그대로).
-            picked = set(composed) | set(nl_ids) | set(night)  # 이름으로 집은 곳·클럽도 잠근 곳은 아니다
-            outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
-                replace(d, fixed_blocks=tuple(
-                    fb for fb in d.fixed_blocks
-                    if not ((fb.reason == "required_visit" and fb.poi_id in picked)
-                            or fb.reason == "in_progress")))
-                for d in outcome.solution.days)))
+        )
+        outcome = self._schedule_agent.run(task)
         if composed:
             placed = {s.poi_id for d in (outcome.solution.days if outcome.solution else ())
                       for s in d.slots}
@@ -2611,6 +2606,20 @@ class WiredItineraryOrchestrator:
                         budget=budget, started_ms=t0, trace_id=trace_id, now=now,
                         planb_rank=planb_rank,
                     ))
+            elif missed and earlier is None:
+                # 일부만 빠졌다 — 까닭을 붙여 구성 LLM 에 **한 번** 되묻는다(사용자 승인 2026-10-18, 반복 금지).
+                hints = outcome.repair_hints
+                if hints is not None:
+                    notes.append("llm_composed_why: " + ",".join(
+                        f"{p}={hints.why[p]}" for p in missed if p in hints.why))
+                try:
+                    outcome, composed = self._repair_day(
+                        request, outcome, composed, missed, task, compose_ctx[0] if compose_ctx else None,
+                        nl, nl_ids, night, add_one, cat_of, notes, t0=t0, budget=budget,
+                        trace_id=trace_id, now=now, past=past)
+                except Exception as e:  # 수리는 덤이다 — 실패해도 1차 해 그대로(INV-4: 밝힌다)
+                    notes.append(f"llm_repair_error: {type(e).__name__}")
+                    self._repair_event(meta, f"error: {type(e).__name__}: {e}")
         if nl_ids and earlier is None:
             # 검증을 통과했는데 일정에 못 들어간 곳 — **조용히 빠지지 않는다**(INV-4). 지금까지는 구성이 고른
             # 곳만 `llm_composed_unplaced` 로 셌고, 이름으로 집은 곳은 아무 표시 없이 사라졌다.
@@ -2626,12 +2635,18 @@ class WiredItineraryOrchestrator:
             for cat, n in nl.counts:
                 if got.count(cat) < n:
                     notes.append(f"nl_category_unplaced: {cat.value} {got.count(cat)}/{n}")
-        if outcome.solution is not None and any(b.reason == "keep_dinner" for b in blocks):
-            # "저녁은 그대로" 잠금은 이번 재계획 한정이다 — 고정으로 내면 BE 가 영구히 잠근다. 다시 풀었어도
-            # (위 재실행) 같은 블록이 실리므로 최종 해에서 걷는다(시각·순서는 그대로).
+        if outcome.solution is not None:
+            # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
+            # 구성 LLM 이 고른 곳·이름으로 집은 곳·클럽·진행 중이라 둔 곳·"저녁은 그대로" 잠금(이번 재계획
+            # 한정)은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가 잠가서 다음 다시 짜기·교체에서 못
+            # 바꾼다. 그 표시만 걷는다(시각·순서는 그대로). **최종 해에서 한 번** — 다시 풀기(위) 앞에서 걷던
+            # 동안 다시 푼 해는 같은 블록이 다시 실려 이름으로 집은 곳·클럽·진행 중이 고정으로 나갔다.
+            picked = set(composed_r1) | set(composed) | set(nl_ids) | set(night)
             outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
                 replace(d, fixed_blocks=tuple(
-                    fb for fb in d.fixed_blocks if fb.reason != "keep_dinner"))
+                    fb for fb in d.fixed_blocks
+                    if not ((fb.reason == "required_visit" and fb.poi_id in picked)
+                            or fb.reason in ("in_progress", "keep_dinner"))))
                 for d in outcome.solution.days)))
         return self._replan_projection(
             request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
@@ -2721,6 +2736,148 @@ class WiredItineraryOrchestrator:
         notes.extend(verified.notes)
         return verified
 
+    def _repair_day(
+        self, request, outcome, composed, missed, task, ctx, nl, nl_ids, night, add_one, cat_of, notes,
+        *, t0: int, budget, trace_id: TraceId, now: datetime, past: tuple[FixedBlock, ...] = (),
+    ):
+        """다시 짜기 1회 수리 — 솔버가 뺀 곳의 까닭을 붙여 구성 LLM 에 **한 번** 되묻고, 지금 해의 빈 틈에 그대로
+        들어가는 후보에서만 고르게 해 다시 푼다. (최종 결과, 최종 구성 목록) — 의심스러우면 1차 그대로.
+
+        채택 조건(엄격): 1차에 놓인 곳을 하나도 잃지 않고, 하나 이상 더 놓고, OR 해를 규칙 해로 낮추지 않는다.
+        시간 몫: 1차와 **같은 원점(t0)** — 구성 바닥(`_COMPOSE_MIN_MS`)과 어셈블리 바닥(`c2_reserved_ms`)이 남을
+        때만 부른다(재계획 시한 25s, 백스톱 +5s). 시각·순서는 여전히 어셈블리만 정한다(INV-2).
+        """
+        meta = request.request_meta
+        hints = outcome.repair_hints
+        own = [p for p in missed if p not in nl_ids and p not in night]
+        if not own:  # 이름으로 집은 곳·밤 일정 지시로 넣은 곳만 빠졌다 — 다른 곳을 골라도 그 요청은 안 채워진다
+            notes.append("llm_repair_skipped: not_actionable")
+            return outcome, composed
+        if hints is None or ctx is None or self._composer is None:
+            notes.append("llm_repair_skipped: no_hints")
+            return outcome, composed
+        # 솔버 밖에서 되실릴 잠금(미등록·영업시간 밖·겹침 — 사영의 `locked_block_echoed`)이 있는 날은 되묻지 않는다.
+        # 사영(`_echo_locks`)이 그와 겹치는 새 방문을 빼므로, 솔버 해로 잰 빈 틈·채택 판정이 사용자가 보는 일정과
+        # 달라진다(리뷰 10-19 재현: 2차를 채택했는데 1차에 놓인 곳이 사라졌고, 되실린 잠금 안의 "빈 시간"을 LLM 에 줬다).
+        seen = _with_past_blocks(outcome.solution, past, request.target_date)
+        at = {(s.poi_id, s.start_at) for d in seen.days for s in d.slots}
+        if any((b.poi_id, b.window.start) not in at for b in _replan_fixed_blocks(request, self._tz)
+               if b.window.start.date() == request.target_date):
+            notes.append("llm_repair_skipped: echoed_locks")
+            return outcome, composed
+        inp, excluded = ctx
+        drop = [p for p in own if hints.why.get(p) in composition.REPAIR_LABELS]
+        if not drop:  # 틈은 있는데 솔버가 멈춘 것(fits)은 다른 곳을 골라도 안 낫다
+            notes.append("llm_repair_skipped: not_actionable")
+            return outcome, composed
+        rem = budget.total_ms - (self._clock.monotonic_ms() - t0) - budget.c2_reserved_ms
+        if rem < _COMPOSE_MIN_MS:
+            notes.append(f"llm_repair_skipped: deadline remaining={rem}ms")
+            self._repair_event(meta, f"deadline: remaining={rem}ms")
+            return outcome, composed
+
+        day = outcome.solution.days[0]
+        slots = sorted(day.slots, key=lambda s: s.start_at)
+        index = {p.poi_id: p for p in hints.pool.pois} | dict(hints.fixed_pois)
+        dreq = task.request
+        start = dreq.day_window.start if dreq.not_before is None else max(dreq.day_window.start, dreq.not_before)
+        anchor = GeoPoint(request.anchor.lat, request.anchor.lng)
+        taken = set(excluded) | set(composed) | {s.poi_id for s in slots}
+        fit_pois = tuple(p for p in hints.pool.pois if p.poi_id in hints.fits and p.poi_id not in taken
+                         and p.category not in add_one)
+        gap_of, gap_labels, near = composition.repair_gaps(
+            slots, start, dreq.day_window.end,
+            {p.poi_id: hints.fits[p.poi_id] for p in fit_pois}, index, anchor)
+        cands = composition.shortlist(
+            CandidatePool(poi_ids=frozenset(p.poi_id for p in fit_pois), pois=fit_pois,
+                          generated_at=hints.pool.generated_at, anchor=hints.pool.anchor,
+                          radius_km=hints.pool.radius_km),
+            keep=(), excluded=(), weekday=request.target_date.weekday(),
+            score=lambda p: -near.get(p.poi_id, 0.0), cap=_REPAIR_SHORTLIST)
+        if not cands.pois:
+            notes.append("llm_repair_skipped: no_fit")
+            return outcome, composed
+        gaps_used = sorted({gap_of[p.poi_id] for p in cands.pois})
+        k = min(len(drop), len(gaps_used))
+        pinned = {b.poi_id for b in dreq.fixed_blocks}
+        visited = tuple(line for line in inp.schedule if line.status == "다녀옴(유지)")
+        weekday = request.target_date.weekday()
+        rinp = replace(
+            inp,
+            schedule=visited + tuple(
+                ScheduleLine(time=f"{s.start_at:%H:%M}~{s.end_at:%H:%M}",
+                             category=index[s.poi_id].category.value if s.poi_id in index else "",
+                             name=index[s.poi_id].name if s.poi_id in index else str(s.poi_id),
+                             status="고정(유지)" if s.poi_id in pinned else "확정(유지)")
+                for s in slots),
+            max_visits=k,
+            change_rule=composition.CHANGE_REPAIR,
+            distance_km=near,
+            hours={p.poi_id: f"{composition.hours_label(p, weekday) or '영업시간 정보 없음'} · 빈 시간 "
+                             f"{gap_labels[gap_of[p.poi_id]]}" for p in cands.pois},
+            unplaced=tuple(
+                f"{index[p].name} | {index[p].category.value} | {composition.REPAIR_LABELS[hints.why[p]]}"
+                + ("" if index[p].open_hours else " (영업시간 추정)")
+                for p in drop if p in index),
+            gaps=tuple(gap_labels[g] for g in gaps_used),
+        )
+        result = self._composer.compose(
+            cands, rinp, trace_id, now, timeout_sec=min(rem, _COMPOSE_MAX_MS) / 1000.0)
+        if result.is_fallback:  # 게이트웨이가 llm_compose_repair→llm_compose_day 이벤트를 이미 남겼다
+            notes.append(f"llm_repair_fallback: {result.error}")
+            return outcome, composed
+        subs: list[PoiId] = []
+        seen_gaps: set[int] = set()
+        for pick in dict.fromkeys(pick.poi_id for pick in result.value):
+            if pick in cands.poi_ids and gap_of[pick] not in seen_gaps and len(subs) < k:
+                subs.append(pick)
+                seen_gaps.add(gap_of[pick])
+        kept = tuple(p for p in composed if p not in drop)
+        if nl.only or nl.counts:  # 종류 조건은 여기서도 코드가 지킨다(채우지는 않는다 — 덜기만)
+            ok_set, _ = nl_verify.apply_counts((*kept, *subs), only=nl.only, counts=nl.counts,
+                                               category_of=cat_of, fill=(), keep=nl_ids)
+            subs = [p for p in subs if p in ok_set]
+        notes.append(f"llm_repair: picked={len(subs)}/{len(result.value)} pool={len(cands.pois)} "
+                     f"gaps={len(gaps_used)} drop={len(drop)}")
+        if not subs:
+            return outcome, composed
+        left = budget.total_ms - (self._clock.monotonic_ms() - t0)
+        if left < budget.c2_reserved_ms:
+            notes.append(f"llm_repair_skipped: deadline_after_compose left={left}ms")
+            self._repair_event(meta, f"deadline_after_compose: left={left}ms")
+            return outcome, composed
+        counted = dict(nl.counts)
+        req2 = replace(
+            dreq,
+            required_visits=tuple(v for v in dreq.required_visits if v.poi_id not in drop) + tuple(
+                RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None, reason="llm_compose",
+                              priority=cat_of.get(p) in counted) for p in subs),
+            # 뺀 곳은 핀이 아니고 자유 몫은 0 이라 상한 증감이 정확히 맞는다
+            max_visits_per_day=(None if dreq.max_visits_per_day is None
+                                else dreq.max_visits_per_day - len(drop) + len(subs)),
+        )
+        retry = self._schedule_agent.run(replace(task, request=req2, pool=hints.pool, reuse=hints))
+        p1 = {s.poi_id for d in outcome.solution.days for s in d.slots}
+        p2 = {s.poi_id for d in (retry.solution.days if retry.solution else ()) for s in d.slots}
+        why_not = ("failed" if retry.solution is None else "lost" if not p1 <= p2
+                   else "not_better" if len(p2) <= len(p1)
+                   else "downgrade" if retry.solution.is_fallback and not outcome.solution.is_fallback
+                   else "")
+        notes.append(f"llm_repair_result: placed {len(p1)}->{len(p2)} kept="
+                     + (f"first rejected={why_not}" if why_not else "second"))
+        if why_not:
+            return outcome, composed
+        return retry, (*kept, *subs)
+
+    def _repair_event(self, meta: schemas.RequestMetaSchema, reason: str) -> None:
+        """1회 수리를 못 했다 — 실제 폴백은 "1차 일정 그대로"다(점수 경로 아님, TRIP-260 #4)."""
+        self._trace.emit(FallbackEvent(
+            trace_id=TraceId(meta.request_id),
+            occurred_at=_tz_aware(meta.requested_at, self._tz),
+            component="api.wiring", stage="llm",
+            from_mode="llm_compose_repair", to_mode="llm_compose_day", reason=reason,
+        ))
+
     def _compose_day(
         self,
         request: schemas.ReplanRequest,
@@ -2745,8 +2902,10 @@ class WiredItineraryOrchestrator:
         budget: core.DeadlineBudget,
         nearby: tuple[PoiId, ...] = (),
         origins: tuple[GeoPoint, ...] = (),
+        window_start: datetime | None = None,
         window_end: datetime | None = None,
         rules: tuple[str, ...] = (),
+        ctx_out: list | None = None,
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -2763,7 +2922,9 @@ class WiredItineraryOrchestrator:
             self._compose_event(request.request_meta, f"deadline: remaining={remaining}ms")
             return ()
         day, window = request.target_date, request.time_window
-        start = datetime.combine(window.date, window.start, tzinfo=self._tz)
+        # 창은 솔버와 같아야 한다 — 자유입력 시각("6시까지")을 솔버만 읽던 동안 구성은 21시까지로 보고
+        # 방문 수를 정해, 솔버의 18시 창에 다 안 들어가 몇 곳이 빠졌다.
+        start = window_start or datetime.combine(window.date, window.start, tzinfo=self._tz)
         if not_before is not None:
             start = max(start, not_before)
         end = window_end or datetime.combine(window.date, window.end, tzinfo=self._tz)
@@ -2848,6 +3009,8 @@ class WiredItineraryOrchestrator:
             hours={p.poi_id: composition.hours_label(p, day.weekday()) or ""
                    for p in shortlist.pois},
         )
+        if ctx_out is not None:  # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`)
+            ctx_out.append((inp, frozenset(excluded)))
         result = self._composer.compose(
             shortlist, inp, trace_id, now,
             timeout_sec=min(remaining, _COMPOSE_MAX_MS) / 1000.0)
@@ -3863,6 +4026,8 @@ def build_orchestrator(
         fees=fees,
         # 풀 밖 고정 블록 POI 조회 (TRIP-1177) — 없으면 이동을 0분으로 놓은 해가 나갔다.
         poi_db=poi_db,
+        # 다시 짜기 1회 수리의 틈 판정 — 위 체인(`provider`)과 같은 설정이라야 판정이 솔버와 맞는다.
+        assembly_config=acfg,
     )
     # 수집기는 하나를 공유한다 — 코디네이터(generate)와 경계(replan·edit)가 같은
     # 요구표·같은 Provider 를 쓴다. 경로마다 따로 만들면 표가 갈라진다.
