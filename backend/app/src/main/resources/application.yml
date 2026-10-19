@@ -28,11 +28,27 @@ spring:
     scheduling:
       pool:
         size: 4
+  # 아웃박스 → Kafka(TRIP-1469). 아래 trippilot.outbox.broker=kafka 일 때만 연결한다 — 기본(none)은 이 값을 읽지 않는다.
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      properties:
+        # 브로커가 없을 때 송신 한 건이 기본 60초·120초를 붙잡지 않게 — 릴레이는 첫 실패에서 배치를 멈추고 다음 폴링에 다시 간다.
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      # 소비 그룹이 처음 뜰 때 이미 토픽에 있던 이벤트를 건너뛰지 않게(기본 latest 면 그 사이 것은 유실이다).
+      auto-offset-reset: earliest
 
 # 소셜 로그인 제공자(SECURITY-12: 평문 시크릿 0). client-id/secret 은 env 로만 주입 —
 # dev=application-local.yml(gitignore), prod=Secrets Manager→env. token/user-info-uri 는 비밀 아님(제공자 고정값).
 # 값 미주입 시 빈 문자열 → 해당 제공자 로그인 시도 시에만 실패(기동엔 영향 없음).
 trippilot:
+  # 아웃박스 배달 경로(TRIP-1469). none = 폴링이 구독자에게 직접 배달(종전·운영 기본). kafka = 폴링은 브로커로 넘기고
+  # 소비자가 배달한다(로컬 `docker compose --profile kafka` 전용 — 배포에는 브로커가 없다).
+  outbox:
+    broker: ${EVENT_BROKER:none}
   social:
     google:
       client-id: ${GOOGLE_CLIENT_ID:}

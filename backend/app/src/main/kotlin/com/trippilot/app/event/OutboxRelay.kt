@@ -33,6 +33,12 @@ import java.util.UUID
  * 배달 후 `published_at` 을 찍기 전에 프로세스가 죽으면 다음 폴링이 **다시 배달**한다.
  * 그래서 구독자가 `eventId` 로 멱등을 보장해야 한다([OutboxSubscriber] 계약).
  * 순서를 바꾸면(먼저 표시 → 배달) 이번엔 **한 번도 안 가는** 경우가 생긴다 — 중복이 유실보다 낫다.
+ *
+ * ## Kafka 모드(`EVENT_BROKER=kafka`, TRIP-1469)
+ *
+ * [broker] 가 있으면 폴링은 구독자를 부르지 않고 **브로커로 넘기기만** 한다 — 브로커가 받았다고 답한 뒤에야
+ * 발행으로 표시한다(위와 같은 이유: 중복이 유실보다 낫다). 구독자 배달은 [KafkaOutboxListener] 가 [consume] 으로 한다.
+ * 기본(none)은 종전 그대로다.
  */
 @Component
 class OutboxRelay(
@@ -49,6 +55,8 @@ class OutboxRelay(
      * 의 의미(도메인 사건 발생 시각)를 바꾸지 않으려면 컬럼 추가가 된다 — 지금 값이 안 된다.
      */
     private val clock: Clock,
+    /** Kafka 모드일 때만 있다([KafkaOutboxBroker]). 없으면 폴링이 구독자에게 직접 배달한다. */
+    private val broker: KafkaOutboxBroker? = null,
 ) {
     /**
      * 릴레이 지연(OBS-U6-01) — **분위수를 내보내도록 등록한다.**
@@ -109,7 +117,11 @@ class OutboxRelay(
         if (batch.isEmpty()) return
 
         var dropped = 0
+        var brokerDown = false
         batch.forEach { envelope ->
+            // 브로커가 한 번 실패하면 이 배치의 나머지는 다음 폴링으로 미룬다 — 행마다 송신 시한을 기다리면
+            // 배치 하나가 락 시한(5분)을 넘겨 다른 인스턴스가 같은 행을 집는다.
+            if (brokerDown) return@forEach
             val targets = byType[envelope.eventType]
             if (targets == null) {
                 // 아무도 안 듣는 이벤트다. 남겨 두면 배치가 그것으로 채워져 뒤가 밀리고,
@@ -124,8 +136,7 @@ class OutboxRelay(
             // 지운 여행의 알림이 울린다 — #1348 검수). 하나라도 실패하면 이벤트째 재시도한다(성공한 쪽도 다시 돈다 —
             // at-least-once·멱등 계약 안이다).
             runCatching {
-                val failures = targets.mapNotNull { target -> runCatching { target.handle(envelope) }.exceptionOrNull() }
-                failures.firstOrNull()?.let { first -> failures.drop(1).forEach(first::addSuppressed); throw first }
+                if (broker != null) broker.send(envelope) else deliver(envelope, targets)
                 markPublished(envelope.eventId)
             }
                 .onSuccess { published ->
@@ -138,9 +149,11 @@ class OutboxRelay(
                     // 수십 ms 만 어긋나도(컨테이너·다른 호스트에서는 흔하다) 값이 음수가 되고,
                     // Micrometer 는 음수 기록을 **조용히 버린다** — 지표는 0 인데 배달은 되고 있어
                     // "계측이 아예 안 붙었다"처럼 보인다(실측: 로컬 −8~−29ms, CI 는 통과).
-                    if (published) recordLatency(envelope)
+                    // Kafka 모드에서는 여기가 배달이 아니다 — 지연은 소비 쪽([consume])이 잰다.
+                    if (published && broker == null) recordLatency(envelope)
                 }
                 .onFailure { e ->
+                    if (broker != null) brokerDown = true
                     val attempts = bumpAttempts(envelope.eventId)
                     // 상한에 닿으면 조용히 사라지지 않게 올린다 — dead-letter 테이블 없이 조회로 찾는다.
                     if (attempts >= MAX_ATTEMPTS) {
@@ -152,6 +165,21 @@ class OutboxRelay(
         }
         // 조용히 버리지 않는다 — 구독자를 붙였는데 안 오는 상황의 첫 단서가 이 줄이다(INV-4).
         if (dropped > 0) log.info("구독자 없는 이벤트 {}건을 닫았습니다.", dropped)
+    }
+
+    /**
+     * Kafka 에서 받은 이벤트를 구독자에게 배달한다(TRIP-1469). 실패하면 던진다 — 재시도는 소비자 오류 처리기가 한다.
+     * 지연은 폴링 모드와 같은 지표·같은 정의(적재 → 배달 완료)로 잰다 — 두 모드를 같은 p95 로 비교하려고.
+     */
+    fun consume(envelope: EventEnvelope) {
+        val targets = byType[envelope.eventType] ?: return
+        deliver(envelope, targets)
+        recordLatency(envelope)
+    }
+
+    private fun deliver(envelope: EventEnvelope, targets: List<OutboxSubscriber>) {
+        val failures = targets.mapNotNull { target -> runCatching { target.handle(envelope) }.exceptionOrNull() }
+        failures.firstOrNull()?.let { first -> failures.drop(1).forEach(first::addSuppressed); throw first }
     }
 
     /**

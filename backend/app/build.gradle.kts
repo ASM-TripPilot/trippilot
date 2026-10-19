@@ -32,6 +32,7 @@ dependencies {
     // 아웃박스 릴레이 분산 락(TRIP-539) — 다중 인스턴스에서 같은 이벤트를 두 번 배달하지 않게.
     implementation(libs.shedlock.spring)
     implementation(libs.shedlock.jdbc)
+    implementation(libs.spring.boot.starter.kafka)      // 아웃박스 → Kafka(TRIP-1469) — EVENT_BROKER=kafka 일 때만 연결한다
     implementation(libs.spring.boot.starter.oauth2.resource.server) // 보안 필터체인(R6) — Bearer JWT 검증
     implementation(libs.spring.boot.starter.data.jpa)   // @EnableJpaRepositories·JPA autoconfig (jdbc 포함)
     implementation(libs.jackson.module.kotlin)
@@ -62,6 +63,7 @@ dependencies {
     testImplementation(libs.spring.boot.testcontainers)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit.jupiter)
+    testImplementation(libs.testcontainers.kafka)
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(libs.archunit.junit5)   // 아키텍처 경계 게이트(R1·R4·R5)
