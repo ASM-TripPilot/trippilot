@@ -119,11 +119,12 @@ class KasiHolidayCalendarAdapter:
             before, self._healthy = self._healthy, healthy
         if before is healthy:
             return
+        # `공휴일 휴무` 는 배포 smoke 의 `ai-wiring:` 표식이다 — 키가 30 이어도 기동 줄만 보면 '켜졌다'로 읽힌다
         if not healthy:
-            _log.warning("특일정보(공휴일 달력) 조회 실패 %s — 날짜 명시형 휴일 규칙만 쓴다"
+            _log.warning("공휴일 휴무 — 특일정보(공휴일 달력) 조회 실패 %s — 날짜 명시형 휴일 규칙만 쓴다"
                          "(PUBLIC_DATA_API_KEY·WEATHER_API 활용신청·키 종류 확인). 같은 상태는 다시 알리지 않는다", why)
         elif before is False:
-            _log.info("특일정보(공휴일 달력) 조회 회복 — 공휴일 휴일 규칙을 다시 쓴다")
+            _log.info("공휴일 휴무 — 특일정보(공휴일 달력) 조회 회복 — 공휴일 휴일 규칙을 다시 쓴다")
 
 
 def _months_covering(lo: date, hi: date) -> list[tuple[int, int]]:

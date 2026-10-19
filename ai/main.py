@@ -460,10 +460,11 @@ def _dialogue_orchestrator_enabled() -> bool:
 def _holiday_source():
     """`HOLIDAY_CLOSURE_MODE` — off|on, 미설정(빈 값 포함) = off (상황 감지 H1). 그 밖은 **기동 실패**.
 
-    on 이면 공공데이터포털 특일정보(`getRestDeInfo`) 달력을 조립한다 — 키는 `PUBLIC_DATA_API_KEY`, 비었으면
-    `WEATHER_API`(같은 포털 디코딩 키, O-SA-1). 키가 없으면 WARN 한 줄 + 달력 없음 = 날짜 명시형 휴일 규칙만
-    (정기 규칙 판정은 그대로). 어느 모드든 `공휴일 휴무` 줄 하나를 남긴다 — 배포 smoke 의 `ai-wiring:` 이
-    끌어올린다(`deploy/eks/runtime_smoke.py` 표식). 키 값은 남기지 않는다.
+    on 이면 공공데이터포털 특일정보(`getRestDeInfo`) 달력을 조립한다 — 키는 `PUBLIC_DATA_API_KEY`(특일 활용신청
+    계정), 비었으면 `WEATHER_API` 대체(같은 포털 키 종류지만 그 계정에 특일 활용신청이 없으면 30 — O-SA-1, 단기예보
+    계정은 2026-10-19 실측 30). 키가 없으면 WARN 한 줄 + 달력 없음 = 날짜 명시형 휴일 규칙만(정기 규칙 판정은
+    그대로). 어느 모드든 `공휴일 휴무` 줄 하나를 남긴다 — 배포 smoke 의 `ai-wiring:` 이 끌어올린다
+    (`deploy/eks/runtime_smoke.py` 표식). on 줄에는 키를 읽은 env 이름을 싣는다 — 값은 남기지 않는다.
     """
     from trippilot.ports.holiday_calendar_port import HolidaySource
 
@@ -477,7 +478,9 @@ def _holiday_source():
             f"HOLIDAY_CLOSURE_MODE 미지원 값: {raw!r} — on|off (미설정 = off). "
             "오타가 조용히 off 로 떨어지지 않게 기동 실패."
         )
-    key = _env("PUBLIC_DATA_API_KEY") or _env("WEATHER_API")
+    key, origin = _env("PUBLIC_DATA_API_KEY"), "PUBLIC_DATA_API_KEY"
+    if key is None:
+        key, origin = _env("WEATHER_API"), "WEATHER_API(PUBLIC_DATA_API_KEY 비어 대체)"
     if key is None:
         log.warning("공휴일 휴무 = on 인데 특일 키 미설정(PUBLIC_DATA_API_KEY·WEATHER_API) — "
                     "날짜 명시형 휴일 규칙만 쓴다")
@@ -486,8 +489,10 @@ def _holiday_source():
         KasiHolidayCalendarAdapter, UrllibTextClient,
     )
 
-    log.info("공휴일 휴무 = on · 특일 달력 = 공공데이터포털 특일정보(getRestDeInfo)")
-    # 소켓 작업당 2s — 요청당 1회(성공한 달은 24시간 기억)라 생성 시한을 크게 먹지 않는다. 실패는 빈 달력.
+    log.info("공휴일 휴무 = on · 특일 달력 = 공공데이터포털 특일정보(getRestDeInfo) · 키 = %s", origin)
+    # 소켓 작업당 2s — 요청당 1회(성공한 달은 24시간 기억), 조회 시간은 진입점 시한 안이다. 실패는 빈 달력.
+    # ⚠️ 2s 는 실측 전 값이다 — 켜기 전에 실키로 다른 시각에 두 번 이상 잰다(같은 게이트웨이의 기상청은 정상 응답이
+    # 2.89s 까지 나와 2s 가 잘랐다, #1135). 정상 최댓값보다 넉넉하지 않으면 올린다.
     return HolidaySource(enabled=True,
                          calendar=KasiHolidayCalendarAdapter(UrllibTextClient(timeout_sec=2.0), key))
 

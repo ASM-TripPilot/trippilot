@@ -214,12 +214,16 @@ def test_holiday_mode_off_values(monkeypatch, raw):
     assert _dev_app_kwargs(monkeypatch, HOLIDAY_CLOSURE_MODE=raw)["holidays"].enabled is False
 
 
-@pytest.mark.parametrize("env", [
-    {"PUBLIC_DATA_API_KEY": "portal-key+/="},
-    {"WEATHER_API": "portal-key+/="},                                # 같은 포털 디코딩 키(O-SA-1)
-    {"PUBLIC_DATA_API_KEY": "", "WEATHER_API": "portal-key+/="},     # compose 가 넘기는 빈 값은 미설정
+@pytest.mark.parametrize(("env", "origin"), [
+    ({"PUBLIC_DATA_API_KEY": "portal-key+/="}, "키 = PUBLIC_DATA_API_KEY"),
+    # 대체 — 특일정보 활용신청이 그 계정에 있을 때만 통한다(O-SA-1, 단기예보 계정은 30)
+    ({"WEATHER_API": "portal-key+/="}, "키 = WEATHER_API(PUBLIC_DATA_API_KEY 비어 대체"),
+    ({"PUBLIC_DATA_API_KEY": "", "WEATHER_API": "portal-key+/="},     # compose 가 넘기는 빈 값은 미설정
+     "키 = WEATHER_API(PUBLIC_DATA_API_KEY 비어 대체"),
 ])
-def test_holiday_mode_on_builds_calendar_from_portal_key(monkeypatch, caplog, env):
+def test_holiday_mode_on_builds_calendar_from_portal_key(monkeypatch, caplog, env, origin):
+    """배포 smoke 의 `ai-wiring:` 줄로 어느 env 의 키가 붙었는지 보인다 — 켜기 조건 '특일 키 확인'(BLM §7)을
+    파드 로그 없이 본다. 값은 싣지 않는다."""
     from trippilot.poi_curation.adapters.kasi_holiday_calendar import KasiHolidayCalendarAdapter
 
     with caplog.at_level(logging.INFO, logger="trippilot"):
@@ -227,7 +231,8 @@ def test_holiday_mode_on_builds_calendar_from_portal_key(monkeypatch, caplog, en
     source = kwargs["holidays"]
     assert source.enabled is True and isinstance(source.calendar, KasiHolidayCalendarAdapter)
     [line] = _holiday_lines(caplog)
-    assert "on" in line and "portal-key" not in caplog.text  # 키 값은 어디에도 안 남긴다
+    assert "on" in line and origin in line
+    assert "portal-key" not in caplog.text  # 키 값은 어디에도 안 남긴다
 
 
 def test_holiday_mode_on_without_key_warns_and_keeps_dated_rules_only(monkeypatch, caplog):

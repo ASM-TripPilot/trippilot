@@ -1034,7 +1034,11 @@ class RuntimeIntegrationTests(unittest.TestCase):
         logs = ("INFO trippilot.poi_curation.adapters.kma_weather 기상청 단기예보 = "
                 "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0 (키 파라미터 serviceKey)\n"
                 "INFO trippilot.api.middleware GET /health 200\n"
-                "WARNING trippilot.main 임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — 규칙 랭킹으로 강등된다\n")
+                "WARNING trippilot.main 임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — 규칙 랭킹으로 강등된다\n"
+                "INFO trippilot.main 공휴일 휴무 = on · 특일 달력 = 공공데이터포털 특일정보(getRestDeInfo) · "
+                "키 = PUBLIC_DATA_API_KEY\n"
+                "WARNING trippilot.poi_curation.adapters.kasi_holiday_calendar 공휴일 휴무 — 특일정보(공휴일 달력) "
+                "조회 실패 JSON 아님(returnReasonCode=30 SERVICE_KEY_IS_NOT_REGISTERED_ERROR)\n")
         shell = Mock(side_effect=["", "", "Complete", "", "", "", logs])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
@@ -1042,6 +1046,9 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertIn("apis.data.go.kr", printed)  # 날씨가 붙은 증거
         self.assertIn("serviceKey", printed)  # 주소와 키 파라미터의 짝까지
         self.assertIn("임베딩 미배선", printed)
+        # 공휴일 휴무(상황 감지 H1) — 모드·키 출처 줄과 특일 키 미등록(30) 실패 줄이 같이 올라온다
+        self.assertIn("키 = PUBLIC_DATA_API_KEY", printed)
+        self.assertIn("returnReasonCode=30", printed)
         self.assertNotIn("/health 200", printed)  # 요청 로그는 끌어오지 않는다
         logs_call = shell.call_args.args[0]
         self.assertEqual(logs_call[:2], ["kubectl", "logs"])

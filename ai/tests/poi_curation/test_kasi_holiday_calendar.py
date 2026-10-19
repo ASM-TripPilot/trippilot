@@ -193,6 +193,9 @@ def test_XML_오류는_원인_코드를_남긴다(caplog) -> None:
     with caplog.at_level(logging.WARNING):
         _adapter(http).holidays_between(date(2026, 10, 1), date(2026, 10, 31))
     assert "30" in caplog.text and "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" in caplog.text
+    # 배포 smoke `ai-wiring:` 표식(`deploy/eks/runtime_smoke._WIRING_MARKERS` 의 `공휴일 휴무`)에 걸린다 —
+    # 키가 30 이면 기동 줄만으론 '켜졌다'로 보인다(기상청 실패 WARN 이 `기상청 단기예보` 를 싣는 것과 같다)
+    assert "공휴일 휴무" in caplog.text
 
 
 def test_WARN_은_상태가_바뀔_때_한_번(caplog) -> None:
