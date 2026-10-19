@@ -3765,7 +3765,7 @@ class WiredItineraryOrchestrator:
                 schemas.ViolationSchema(
                     code=v.code,
                     slot_ref=str(v.slot_ref) if v.slot_ref is not None else None,
-                    detail=v.detail, day_index=None, slot_index=None,
+                    detail=v.detail, day_index=None, slot_index=None, reason_code=v.reason_code,
                 )
                 for v in outcome.violations
             ],

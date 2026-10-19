@@ -519,6 +519,11 @@ data class Violation(
      * 파생값이라, 검증한 일정과 수리를 요청하는 일정이 조금이라도 다르면 엉뚱한 슬롯을 가리킨다.
      */
     val slotRef: String? = null,
+    /**
+     * HC1 하위 코드(상황 감지 BR-SA-17) — `CLOSED_DAY`·`OUT_OF_HOURS`·`HOLIDAY`. 상대가 싣지 않으면(옛 AI·다른 HC) null —
+     * 장소 감지는 그때 `HOURS_MISMATCH` 로 읽는다. 백엔드는 [detail] 을 파싱하지 않는다.
+     */
+    val reasonCode: String? = null,
 )
 
 /**

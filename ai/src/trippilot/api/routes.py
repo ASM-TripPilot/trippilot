@@ -211,6 +211,7 @@ def to_violation(
         detail=violation.detail,
         day_index=day_index,
         slot_index=slot_index,
+        reason_code=violation.reason_code,
     )
 
 

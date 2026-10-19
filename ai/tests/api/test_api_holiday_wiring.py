@@ -121,7 +121,7 @@ def test_validate_는_같은_휴일_규칙으로_HC1() -> None:
         body = client.post("/ai/v1/itinerary/validate",
                            json={"itinerary": _payload(_D1, "museum"), "request_meta": _META}).json()
     [v] = body["violations"]
-    assert (v["code"], v["slot_ref"], v["detail"]) == ("HC1", "museum", "공휴일 휴무")
+    assert (v["code"], v["slot_ref"], v["detail"], v["reason_code"]) == ("HC1", "museum", "공휴일 휴무", "HOLIDAY")
     assert spy.calls == [(_D1, _D1)]
     with TestClient(create_app(_orchestrator(None))) as client:
         body = client.post("/ai/v1/itinerary/validate",

@@ -3029,7 +3029,7 @@
       },
       "ViolationSchema": {
         "additionalProperties": false,
-        "description": "하드 제약 위반 1건 — AI 도메인 표현(`code`/`slot_ref`) + 위치 인덱스 **수퍼셋**.\n\n백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다. AI 도메인 타입에는 위치\n인덱스가 없지만, **직렬화 시점에 일정(days)을 스캔해 계산**해서 함께 실어 보낸다\n(routes.locate_slot) — 백엔드 어댑터는 code→type 매핑만 하면 된다.\n`slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)\n인덱스는 null이다. 지어내지 않는다.",
+        "description": "하드 제약 위반 1건 — AI 도메인 표현(`code`/`slot_ref`) + 위치 인덱스 **수퍼셋**.\n\n백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다. AI 도메인 타입에는 위치\n인덱스가 없지만, **직렬화 시점에 일정(days)을 스캔해 계산**해서 함께 실어 보낸다\n(routes.locate_slot) — 백엔드 어댑터는 code→type 매핑만 하면 된다.\n`slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)\n인덱스는 null이다. 지어내지 않는다.\n\n`reason_code`(선택, 상황 감지 H1 · BR-SA-17): HC1 하위 코드 — `CLOSED_DAY`(정기 휴무) ·\n`OUT_OF_HOURS`(그 날 열지만 영업창 밖) · `HOLIDAY`(공휴일·명절·날짜 휴무 — `HOLIDAY_CLOSURE_MODE=on`\n일 때만). 다른 HC 는 null 이다. 백엔드 장소 감지가 알림 변형으로 쓴다 — `detail` 은 파싱하지 않는다.",
         "properties": {
           "code": {
             "title": "Code",
@@ -3050,6 +3050,22 @@
             "default": "",
             "title": "Detail",
             "type": "string"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CLOSED_DAY",
+                  "OUT_OF_HOURS",
+                  "HOLIDAY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
           },
           "slot_index": {
             "anyOf": [
