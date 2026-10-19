@@ -356,11 +356,11 @@ class TourApiAdapter:
             address=cls._opt_str(item.get("addr1")),
             lat=cls._opt_coord(item.get("mapy")),   # mapy = 위도
             lng=cls._opt_coord(item.get("mapx")),   # mapx = 경도
+            # 옛 cat1~3 + 새 lclsSystm1~3 — 수정된 항목은 cat 이 비고 lcls 만 온다(`mapping._LCLS1`)
             category_codes=tuple(
                 c for c in (
-                    cls._opt_str(item.get("cat1")),
-                    cls._opt_str(item.get("cat2")),
-                    cls._opt_str(item.get("cat3")),
+                    cls._opt_str(item.get(k))
+                    for k in ("cat1", "cat2", "cat3", "lclsSystm1", "lclsSystm2", "lclsSystm3")
                 ) if c
             ),
             image_url=cls._https(cls._opt_str(item.get("firstimage"))),
