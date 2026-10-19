@@ -61,6 +61,8 @@ class ReplanSessionEntity(
 }
 
 interface ReplanSessionJpaRepository : JpaRepository<ReplanSessionEntity, UUID> {
+    /** 열린 세션 행 잠금 조회 — 닫는 쪽과 확정·산출 기록의 경합을 직렬화한다(`SELECT … FOR UPDATE`). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     fun findFirstByTripIdAndStatusIn(tripId: UUID, statuses: Collection<String>): ReplanSessionEntity?
 
     fun findFirstByTriggerIdAndInitiatedBy(triggerId: UUID, initiatedBy: String): ReplanSessionEntity?
@@ -116,7 +118,7 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
     override fun findByIdForUpdate(sessionId: UUID): ReplanSession? =
         jpa.findForUpdate(sessionId)?.toDomain()
 
-    override fun findOpenByTrip(tripId: UUID): ReplanSession? =
+    override fun findOpenByTripForUpdate(tripId: UUID): ReplanSession? =
         jpa.findFirstByTripIdAndStatusIn(tripId, OPEN_STATUSES)?.toDomain()
 
     override fun findSystemByTrigger(triggerId: UUID): ReplanSession? =

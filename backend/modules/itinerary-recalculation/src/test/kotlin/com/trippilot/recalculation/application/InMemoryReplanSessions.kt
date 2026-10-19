@@ -45,7 +45,7 @@ internal class InMemoryReplanSessions : ReplanSessionRepository {
 
     override fun findById(sessionId: UUID) = stored[sessionId]
     override fun findByIdForUpdate(sessionId: UUID) = stored[sessionId]
-    override fun findOpenByTrip(tripId: UUID) = stored.values.firstOrNull { it.tripId == tripId && it.isOpen }
+    override fun findOpenByTripForUpdate(tripId: UUID) = stored.values.firstOrNull { it.tripId == tripId && it.isOpen }
     override fun findSystemByTrigger(triggerId: UUID) = stored.values.systemByTrigger(triggerId)
     override fun findLatestSystem(tripId: UUID, targetDate: LocalDate) = stored.values.latestSystem(tripId, targetDate)
     override fun countSystemSince(tripId: UUID?, since: Instant) = stored.values.countSystemSince(tripId, since)

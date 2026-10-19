@@ -22,6 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -44,8 +46,13 @@ class ReplanSessionPersistenceIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var transactions: PlatformTransactionManager
 
     private val now = Instant.parse("2026-08-11T00:00:00Z")
+
+    /** 열린 세션 조회는 행 잠금이라 트랜잭션 안에서만 돈다 — 쓰는 쪽(시작·선계산)도 늘 트랜잭션 안이다. */
+    private fun openOf(tripId: UUID): ReplanSession? =
+        TransactionTemplate(transactions).execute { sessions.findOpenByTripForUpdate(tripId) }
 
     private fun newTrip(): UUID = trips.save(
         Trip.create(
@@ -106,13 +113,13 @@ class ReplanSessionPersistenceIT : AbstractPostgresIntegrationTest() {
     fun `열린 세션은 하나뿐 — 도메인·영속·DB 인덱스가 같은 집합이다`() {
         val tripId = newTrip()
         val collecting = sessions.save(start(tripId))
-        sessions.findOpenByTrip(tripId)?.sessionId shouldBe collecting.sessionId
+        openOf(tripId)?.sessionId shouldBe collecting.sessionId
 
         // SOLVING·DRAFT 도 여전히 열려 있다 — 어느 하나라도 빠지면 아래 INSERT 가 500 이 된다
         val solving = sessions.save(collecting.solving())
-        sessions.findOpenByTrip(tripId)?.sessionId shouldBe solving.sessionId
+        openOf(tripId)?.sessionId shouldBe solving.sessionId
         val draft = sessions.save(solving.drafted(mapOf("a" to 1)))
-        sessions.findOpenByTrip(tripId)?.sessionId shouldBe draft.sessionId
+        openOf(tripId)?.sessionId shouldBe draft.sessionId
 
         shouldThrow<DataIntegrityViolationException> { sessions.save(start(tripId)) }
     }
@@ -123,9 +130,9 @@ class ReplanSessionPersistenceIT : AbstractPostgresIntegrationTest() {
         val first = sessions.save(start(tripId))
         sessions.save(first.canceled(now))
 
-        sessions.findOpenByTrip(tripId) shouldBe null
+        openOf(tripId) shouldBe null
         val second = sessions.save(start(tripId))
-        sessions.findOpenByTrip(tripId)?.sessionId shouldBe second.sessionId
+        openOf(tripId)?.sessionId shouldBe second.sessionId
         sessions.findById(first.sessionId)!!.status shouldBe ReplanStatus.CANCELED
     }
 

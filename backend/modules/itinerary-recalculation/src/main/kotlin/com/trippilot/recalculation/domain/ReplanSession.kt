@@ -237,8 +237,13 @@ interface ReplanSessionRepository {
 
     fun findById(sessionId: UUID): ReplanSession?
 
-    /** 열린 세션(COLLECTING·SOLVING·DRAFT). INV-U4-06 판정 입력. */
-    fun findOpenByTrip(tripId: UUID): ReplanSession?
+    /**
+     * 열린 세션(COLLECTING·SOLVING·DRAFT)을 **행 잠금**으로 읽는다 — INV-U4-06 판정 입력이자 그 세션을 닫는 쪽(시작·선계산)의 읽기.
+     * 잠금 없이 읽어 두었다가 닫으면 그 사이 사용자가 적용한 세션을 CANCELED 로 덮는다(행 통째 UPDATE). 잠그면 상대의 커밋을
+     * 기다린 뒤 다시 보고, 이미 닫혔으면 없는 것으로 답한다. 트랜잭션 안에서, 그 세션을 처음 읽는 자리에서 부른다
+     * (먼저 읽어 둔 행은 잠가도 영속성 컨텍스트의 옛 값이 돌아온다).
+     */
+    fun findOpenByTripForUpdate(tripId: UUID): ReplanSession?
 
     /**
      * **행 잠금**으로 읽는다 — 산출(비동기)과 취소·재진입이 같은 세션을 두고 경합한다.

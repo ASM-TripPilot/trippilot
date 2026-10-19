@@ -32,6 +32,16 @@ import com.trippilot.planbdetection.domain.TriggerKind
 import com.trippilot.planbdetection.domain.TriggerScope
 import com.trippilot.planbdetection.domain.TriggerState
 import com.trippilot.planbdetection.domain.TriggerVariant
+import com.trippilot.core.error.ConflictDetected
+import com.trippilot.recalculation.application.PrepareReplan
+import com.trippilot.recalculation.application.Prepared
+import com.trippilot.recalculation.application.ReplanSessionService
+import com.trippilot.recalculation.domain.OriginKind
+import com.trippilot.recalculation.domain.ReplanInitiator
+import com.trippilot.recalculation.domain.ReplanOrigin
+import com.trippilot.recalculation.domain.ReplanScope
+import com.trippilot.recalculation.domain.ReplanSession
+import com.trippilot.recalculation.domain.ReplanSessionRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import com.trippilot.trip.api.TripPeriod
@@ -39,6 +49,7 @@ import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -52,6 +63,8 @@ import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.http.HttpMethod
 import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.client.RestClient
 import java.time.Clock
 import java.time.Instant
@@ -60,6 +73,11 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -127,6 +145,9 @@ class PreparedReplanIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var tokens: AccessTokenIssuer
     @Autowired private lateinit var jdbc: JdbcTemplate
     @Autowired private lateinit var clock: Clock
+    @Autowired private lateinit var sessions: ReplanSessionRepository
+    @Autowired private lateinit var replanSessions: ReplanSessionService
+    @Autowired private lateinit var transactions: PlatformTransactionManager
 
     private val json = ObjectMapper()
     private val kst = ZoneId.of("Asia/Seoul")
@@ -332,6 +353,116 @@ class PreparedReplanIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.GET, "/trips/${f.tripId}/replan-sessions/prepared?date=$tomorrow", stranger).first shouldBe 404
         call(HttpMethod.GET, "/trips/${f.tripId}/replan-sessions/prepared", f.token).first shouldBe 400
         call(HttpMethod.GET, "/trips/${f.tripId}/replan-sessions/prepared?date=tomorrow", f.token).first shouldBe 400
+    }
+
+    // ── 열린 세션을 닫는 선계산과 사용자 적용이 겹칠 때(BR-SA-18 ② · INV-U4-05) ─────────────────────────────
+    // 잠금 없이 읽어 두었다가 나중에 쓰면 나중에 쓴 쪽이 이긴다 — 적용된 세션이 CANCELED 로 덮이거나, 선계산이 닫은 세션이
+    // APPLIED 로 되살아나 반영 전 일정으로 짤 새 선계산과 함께 남는다. 두 트랜잭션을 실제로 겹친다(단위 대역은 한 스레드라 못 본다).
+
+    /** 31분 전에 연 사용자 초안(내일 하루 전체) — 선계산이 '방치'로 보고 닫는 대상이다. */
+    private fun idleUserDraft(f: Fixture, tomorrow: LocalDate): ReplanSession = sessions.save(
+        ReplanSession.start(
+            f.tripId, f.itineraryId, null, ReplanScope.FULL_DAY, tomorrow, clock.instant(),
+            ReplanOrigin(OriginKind.STAY_ANCHOR, null, null), listOf("WEATHER"), emptyList(), null, emptyList(),
+            at = clock.instant().minus(java.time.Duration.ofMinutes(31)),
+        ).solving().drafted(replans.drafts.getValue(f.tripId).toMap()),
+    )
+
+    /** 내일 비 트리거만 남긴다 — 사건은 지워 배달이 끼어들지 않게 한다(선계산은 테스트가 직접 부른다). */
+    private fun triggerTomorrow(f: Fixture): UUID {
+        rainTomorrow(f)
+        jdbc.update("DELETE FROM outbox_event WHERE payload->>'tripId' = ?", f.tripId.toString())
+        return triggers.findActiveByTrip(f.tripId).single().triggerId
+    }
+
+    private fun prepareOf(f: Fixture, triggerId: UUID) =
+        PrepareReplan(f.accountId, f.tripId, triggerId, listOf("WEATHER"), emptyList(), emptyList())
+
+    private fun statusOf(sessionId: UUID): String =
+        jdbc.queryForObject("SELECT status FROM replan_session WHERE session_id = ?", String::class.java, sessionId)!!
+
+    /** 다른 트랜잭션의 행 잠금을 기다리는 쿼리가 생길 때까지 — 고정 sleep 금지. 상대가 먼저 끝나면 기다리지 않은 것이다. */
+    private fun awaitLockWait(waiter: Future<*>) {
+        val deadline = System.nanoTime() + java.time.Duration.ofSeconds(10).toNanos()
+        while (System.nanoTime() < deadline && !waiter.isDone) {
+            val waiting = jdbc.queryForObject(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' " +
+                    "AND query ILIKE '%replan_session%'",
+                Int::class.java,
+            )!!
+            if (waiting > 0) return
+            Thread.sleep(20)
+        }
+        error("재계획 세션 행 잠금 대기가 생기지 않았습니다(상대 끝남=${waiter.isDone})")
+    }
+
+    /** [holder] 를 한 트랜잭션 안에서 돌리고 커밋을 [release] 까지 미룬다 — 그 사이 [contender] 가 같은 세션에 닿는다. */
+    private fun <T> overlap(holder: () -> Unit, contender: () -> T): T {
+        val pool = Executors.newFixedThreadPool(2)
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        try {
+            val first = pool.submit {
+                TransactionTemplate(transactions).executeWithoutResult {
+                    holder()
+                    held.countDown()
+                    release.await(15, TimeUnit.SECONDS)
+                }
+            }
+            held.await(15, TimeUnit.SECONDS) shouldBe true
+            val second = pool.submit<T> { contender() }
+            awaitLockWait(second)
+            release.countDown()
+            first.get(15, TimeUnit.SECONDS)
+            return try {
+                second.get(15, TimeUnit.SECONDS)
+            } catch (e: ExecutionException) {
+                throw e.cause ?: e
+            }
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `선계산이 닫으려던 세션을 그 사이 사용자가 적용했으면 APPLIED 그대로다 — CANCELED 로 덮지 않는다`() {
+        val f = tripWithItinerary()
+        val tomorrow = LocalDate.ofInstant(clock.instant(), kst).plusDays(1)
+        val triggerId = triggerTomorrow(f)
+        val user = idleUserDraft(f, tomorrow)
+
+        val prepared = overlap(
+            holder = { replanSessions.apply(f.accountId, f.tripId, user.sessionId) }, // 적용이 먼저 그 행을 쥐었다
+            contender = { replanSessions.prepare(prepareOf(f, triggerId)) },
+        )
+
+        statusOf(user.sessionId) shouldBe "APPLIED"
+        planFacade.findPlanSlots(f.accountId, f.tripId).filter { it.date == tomorrow }.map { it.startAt } shouldBe listOf(LocalTime.of(13, 0))
+        (prepared as Prepared.Opened).session.initiatedBy shouldBe ReplanInitiator.SYSTEM // 닫을 것이 없어졌으니 그냥 연다
+    }
+
+    @Test
+    fun `선계산이 먼저 닫은 세션의 적용은 409 이고 일정은 그대로다 — 닫힌 세션이 APPLIED 로 되살아나지 않는다`() {
+        val f = tripWithItinerary()
+        val tomorrow = LocalDate.ofInstant(clock.instant(), kst).plusDays(1)
+        val triggerId = triggerTomorrow(f)
+        val user = idleUserDraft(f, tomorrow)
+
+        val refused = runCatching {
+            overlap(
+                holder = { replanSessions.prepare(prepareOf(f, triggerId)).shouldBeInstanceOf<Prepared.Opened>() }, // 선계산이 먼저 닫았다
+                contender = { replanSessions.apply(f.accountId, f.tripId, user.sessionId) },
+            )
+        }.exceptionOrNull()
+
+        refused.shouldBeInstanceOf<ConflictDetected>()
+        statusOf(user.sessionId) shouldBe "CANCELED"
+        planFacade.findPlanSlots(f.accountId, f.tripId).filter { it.date == tomorrow }.map { it.startAt } shouldBe listOf(LocalTime.of(10, 0))
+        jdbc.queryForObject(
+            "SELECT count(*) FROM replan_session WHERE trip_id = ? AND status IN ('COLLECTING','SOLVING','DRAFT') AND initiated_by = 'SYSTEM'",
+            Int::class.java, f.tripId,
+        ) shouldBe 1
     }
 
     private companion object {

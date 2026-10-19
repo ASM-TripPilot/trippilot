@@ -135,8 +135,8 @@ class ReplanSessionService(
         }
 
         // INV-U4-06 — 기존 열린 세션은 **닫고 시작한다**(선계산 포함 — 사용자가 고른 것이 이긴다).
-        // 이전 시도의 draft 는 그 세션에 남아 이력이 된다.
-        sessions.findOpenByTrip(tripId)?.let {
+        // 이전 시도의 draft 는 그 세션에 남아 이력이 된다. 잠가 읽는다 — 그 사이 적용된 세션을 CANCELED 로 덮지 않게.
+        sessions.findOpenByTripForUpdate(tripId)?.let {
             log.info("이전 재계획 세션을 닫고 새로 시작합니다 — tripId={} previous={}", tripId, it.sessionId)
             sessions.save(it.canceled(now))
         }
@@ -203,7 +203,8 @@ class ReplanSessionService(
             log.info("선계산 진입 검증 실패 — tripId={} triggerId={} 사유={}", request.tripId, request.triggerId, e.message)
             return Prepared.Skipped(PrepareSkip.INVALID)
         }
-        val open = sessions.findOpenByTrip(request.tripId)
+        // 잠가 읽는다 — 정책 판정과 닫기가 같은 행을 본다. 잠금 없이 읽어 두면 그 사이 사용자가 적용한 세션을 CANCELED 로 덮는다.
+        val open = sessions.findOpenByTripForUpdate(request.tripId)
         open?.let { blockerOf(request.accountId, it, entry.targetDate, now) }?.let { return Prepared.Skipped(it) }
 
         // 하루는 여행지 기준이다(KST) — 서버 UTC 로 자르면 아침 9시에 상한이 풀린다.
@@ -414,7 +415,7 @@ class ReplanSessionService(
      */
     @Transactional
     fun apply(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession {
-        val session = get(accountId, tripId, sessionId)
+        val session = owned(accountId, tripId, sessionId, sessions::findByIdForUpdate)
         val now = clock.instant()
         stalenessOf(accountId, session, now)?.let { staleness ->
             log.info("replan.prepared outcome=REFUSED staleness={} tripId={} session={}", staleness, tripId, sessionId)
@@ -472,17 +473,24 @@ class ReplanSessionService(
     }
 
     @Transactional(readOnly = true)
-    fun get(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession {
+    fun get(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession = owned(accountId, tripId, sessionId, sessions::findById)
+
+    /**
+     * 내 여행의 세션. 상태를 바꾸는 쪽(확정·취소)은 [ReplanSessionRepository.findByIdForUpdate] 로 **잠가 읽는다** — 선계산·재진입이
+     * 같은 세션을 닫는 것과 직렬화한다. 잠금 없이 읽으면 나중에 쓴 쪽이 이겨, 닫힌 세션이 APPLIED 로 되살아나고 일정이 반영된다
+     * (그 옆에는 반영 전 일정으로 짠 새 선계산이 열려 있다).
+     */
+    private fun owned(accountId: UUID, tripId: UUID, sessionId: UUID, read: (UUID) -> ReplanSession?): ReplanSession {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         // 세션을 **여행 범위로 좁혀** 찾는다 — id 만으로 찾으면 남의 여행 세션을 들여다볼 수 있다.
-        return sessions.findById(sessionId)?.takeIf { it.tripId == tripId }
+        return read(sessionId)?.takeIf { it.tripId == tripId }
             ?: throw ResourceNotFound("재계획 세션을 찾을 수 없습니다.")
     }
 
     /** `i18` [취소] — 세션만 닫는다. 원 일정은 건드리지 않는다(INV-U4-05). */
     @Transactional
     fun cancel(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession {
-        val session = get(accountId, tripId, sessionId)
+        val session = owned(accountId, tripId, sessionId, sessions::findByIdForUpdate)
         if (!session.isOpen) throw ConflictDetected(message = "이미 끝난 재계획입니다.")
         return sessions.save(session.canceled(clock.instant()))
     }
