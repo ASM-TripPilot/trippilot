@@ -161,12 +161,17 @@ object WeatherAlerts {
     /**
      * 그 날 머무는 목적지 — 박수로 펼친다(FE `dayRegion.ts` · itinerary-generation `RegionAnchors.destinationOn` 과 같은 규칙: 박수 합을
      * 넘는 날·체크아웃일은 마지막 목적지). 옮기는 날(전날과 목적지가 다름)은 전날 목적지도 넣는다 — 아침 일정이 아직 전 목적지에 있다.
+     * 0박 목적지는 그 규칙으로는 어느 날에도 오지 않으므로(마지막이 아니면) 지나가는 날 — 앞 목적지 박수 합 + 1일째 — 에 넣는다(당일치기
+     * 포항·경주의 포항, 서울 1박 → 대전 0박 → 부산의 둘째 날 대전). 넓히기만 한다 — 그 날을 소유하는 목적지(위 규칙)는 그대로다.
      * 다목적지 여행에서 다른 날의 목적지 특보로 오늘 일정을 경보하지 않게 한다. 목적지가 없으면 빈 목록.
      */
     fun destinationsOn(refs: List<TripDestinationRef>, startDate: LocalDate, date: LocalDate): List<TripDestinationRef> {
         val today = destinationOn(refs, startDate, date) ?: return emptyList()
         val before = if (date > startDate) destinationOn(refs, startDate, date.minusDays(1)) else null
-        return listOfNotNull(today, before).distinct()
+        val day = ChronoUnit.DAYS.between(startDate, date) + 1
+        var nightsBefore = 0L
+        val passing = refs.filter { ref -> (ref.nights == 0 && nightsBefore + 1 == day).also { nightsBefore += ref.nights } }
+        return (listOfNotNull(today, before) + passing).distinct()
     }
 
     /** 에어코리아 등급 순위 — 문자열 그대로 읽는다(좋음 0 · 보통 1 · 나쁨 2 · 매우나쁨 3). 모르는 등급은 null(모름). */

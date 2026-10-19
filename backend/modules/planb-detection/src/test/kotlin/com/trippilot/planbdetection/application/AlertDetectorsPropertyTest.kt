@@ -208,7 +208,8 @@ private val slots: Arb<List<PlannedSlotView>> = arbitrary {
 }
 
 private val trip: Arb<Pair<java.time.LocalDate, List<TripDestinationRef>>> = arbitrary {
-    val refs = Arb.list(Arb.element(DESTINATIONS), 1..3).bind().map { it.copy(nights = Arb.int(1..2).bind()) }
+    // 0박 목적지(당일치기 · 경유지)도 섞는다 — 지나가는 날에 든다(destinationsOn)
+    val refs = Arb.list(Arb.element(DESTINATIONS), 1..3).bind().map { it.copy(nights = Arb.int(0..2).bind()) }
     DAY.minusDays(Arb.int(0..2).bind().toLong()) to refs
 }
 

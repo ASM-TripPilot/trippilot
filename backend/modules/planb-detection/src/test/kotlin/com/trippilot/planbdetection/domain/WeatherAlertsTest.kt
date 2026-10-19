@@ -208,6 +208,22 @@ class WeatherAlertsTest : StringSpec({
         WeatherAlerts.destinationsOn(refs, start, start.plusDays(4)) shouldBe listOf(busan) // 체크아웃일 — 마지막 목적지
     }
 
+    /** 0박 목적지는 박수로 펼치면 어느 날에도 오지 않는다(마지막이 아니면) — 지나가는 날의 일정이 그곳에 있어도 그 특보를 못 본다. */
+    "0박 목적지는 지나가는 날(앞 목적지 박수 합 + 1일째)에 든다 — 당일치기 둘 · 옮기는 날의 경유지" {
+        val day = LocalDate.parse("2026-10-19")
+        val pohang = TripDestinationRef("포항시", "47110", 0)
+        val gyeongju = TripDestinationRef("경주시", "47130", 0)
+        WeatherAlerts.destinationsOn(listOf(pohang, gyeongju), day, day) shouldBe listOf(gyeongju, pohang)
+
+        val seoul = TripDestinationRef("서울특별시", "11", 1)
+        val daejeon = TripDestinationRef("대전광역시", "30", 0)
+        val busan = TripDestinationRef("부산광역시", "26", 1)
+        val refs = listOf(seoul, daejeon, busan)
+        WeatherAlerts.destinationsOn(refs, day, day) shouldBe listOf(seoul)
+        WeatherAlerts.destinationsOn(refs, day, day.plusDays(1)) shouldBe listOf(busan, seoul, daejeon)
+        WeatherAlerts.destinationsOn(refs, day, day.plusDays(2)) shouldBe listOf(busan)
+    }
+
     "당일치기(0박)·목적지 없음" {
         val jeju = TripDestinationRef("제주", "50", 0)
         val day = LocalDate.parse("2026-10-19")

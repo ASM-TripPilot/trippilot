@@ -210,6 +210,15 @@ class KmaWarningDetectorTest : StringSpec({
             "기상청이 포항에 강풍주의보를 발표했어요. 호미곶 일정이 영향을 받을 수 있어요."
     }
 
+    /** 당일치기 [포항 0박 · 경주 0박] — 박수로 펼치면 그 날의 목적지가 경주뿐이라 포항 특보를 '특보 없음'으로 확인하던 것. */
+    "0박 목적지도 그 날의 목적지다 — 당일치기 포항·경주의 포항 호우경보" {
+        val trips = FakeTripDestinations().put(tripId, DAY, DAY, TripDestinationRef("포항시", "47110", 0), TripDestinationRef("경주시", "47130", 0))
+        val alerts = warned(ActiveWarning("호우", "경보", listOf(WarningArea("경상북도", listOf("포항")))))
+
+        (KmaWarningDetector(alerts, trips).detect(target(tripId, slot("호미곶", "자연", "14:00", "15:00"))) as Detection.Checked).signals.single().reason shouldBe
+            "기상청이 포항에 호우경보를 발표했어요. 호미곶 일정이 영향을 받을 수 있어요."
+    }
+
     "광역 목적지는 광역 이름으로 말한다 — 제주에 대설경보" {
         val trips = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), JEJU)
         val alerts = warned(ActiveWarning("대설", "경보", listOf(WarningArea("제주도", listOf("제주도산지")))))
