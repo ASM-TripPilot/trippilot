@@ -118,7 +118,11 @@ class OutboxRelay(
 
         var dropped = 0
         var brokerDown = false
+        val startedAt = System.nanoTime()
         batch.forEach { envelope ->
+            // 느리지만 답은 하는 브로커도 막는다 — 성공만 이어져도 건당 수 초면 배치가 락 시한(5분)을 넘겨 다른 인스턴스가
+            // 아직 표시 안 된 같은 행을 다시 보낸다. 남은 행은 다음 폴링이 집는다.
+            if (broker != null && System.nanoTime() - startedAt > BROKER_BATCH_BUDGET.toNanos()) brokerDown = true
             // 브로커가 한 번 실패하면 이 배치의 나머지는 다음 폴링으로 미룬다 — 행마다 송신 시한을 기다리면
             // 배치 하나가 락 시한(5분)을 넘겨 다른 인스턴스가 같은 행을 집는다.
             if (brokerDown) return@forEach
@@ -156,10 +160,11 @@ class OutboxRelay(
                     // 브로커에 닿지 못한 것(시한 초과·연결 실패·중단)은 배치를 멈추고 **시도 횟수를 쓰지 않는다** — 쓰면 브로커가
                     // 13분 넘게 죽어 있을 때 멀쩡한 이벤트가 전부 포기로 떨어진다(이벤트·구독자 탓이 아니다). 그 레코드만의 영구
                     // 실패(크기 초과·직렬화)는 그 행만 백오프시키고 뒤는 보낸다 — 아니면 한 행이 시도마다 뒤 99건을 통째로 민다.
-                    if (broker != null && KafkaOutboxBroker.unreachable(e)) {
+                    if (broker != null && !KafkaOutboxBroker.recordOnly(e)) {
                         if (e is InterruptedException) Thread.currentThread().interrupt() // 종료 신호를 삼키지 않는다
                         brokerDown = true
-                        log.warn("브로커에 닿지 못해 이번 배치를 멈춥니다 — 다음 폴링에 다시 보냅니다. eventId={}", envelope.eventId, e)
+                        // 스택은 남기지 않는다 — 브로커가 죽어 있는 동안 폴링마다 쌓여 로그를 덮는다. 원인 한 줄이면 된다.
+                        log.warn("브로커에 보내지 못해 이번 배치를 멈춥니다 — 다음 폴링에 다시 보냅니다. eventId={} cause={}", envelope.eventId, e.toString())
                         return@onFailure
                     }
                     val attempts = bumpAttempts(envelope.eventId)
@@ -183,7 +188,7 @@ class OutboxRelay(
         val targets = byType[envelope.eventType] ?: run {
             // 송신한 인스턴스에는 구독자가 있었는데 이 인스턴스에는 없다(롤링 배포 중 새 타입). 오프셋은 넘어가므로
             // 조용히 버리지 않고 포기와 같은 모양으로 남긴다 — 같은 조회로 찾아 다시 보낼 수 있다(INV-4).
-            abandon(envelope, IllegalStateException("이 인스턴스에 구독자가 없는 이벤트 타입 — ${envelope.eventType}"))
+            abandon(envelope.eventId, envelope.eventType, IllegalStateException("이 인스턴스에 구독자가 없는 이벤트 타입 — ${envelope.eventType}"))
             return
         }
         deliver(envelope, targets)
@@ -198,9 +203,9 @@ class OutboxRelay(
      * 같은 이벤트의 다른 사본이 이미 배달됐을 수도 있다(송신 뒤 표시 전에 죽어 두 번 들어간 경우). 그때 다시 보내도
      * 구독자가 `eventId` 로 멱등이라 무해하다 — 거짓 포기 한 건이 유실보다 낫다.
      */
-    fun abandon(envelope: EventEnvelope, cause: Throwable) {
-        jdbc.update("UPDATE outbox_event SET published_at = NULL, attempts = ? WHERE event_id = ?", MAX_ATTEMPTS, envelope.eventId)
-        log.error("이벤트 배달을 포기합니다 — eventId={} type={} (Kafka 소비 재시도 소진)", envelope.eventId, envelope.eventType, cause)
+    fun abandon(eventId: UUID, eventType: String?, cause: Throwable) {
+        jdbc.update("UPDATE outbox_event SET published_at = NULL, attempts = ? WHERE event_id = ?", MAX_ATTEMPTS, eventId)
+        log.error("이벤트 배달을 포기합니다 — eventId={} type={} (Kafka 소비)", eventId, eventType, cause)
     }
 
     private fun deliver(envelope: EventEnvelope, targets: List<OutboxSubscriber>) {
@@ -242,8 +247,10 @@ class OutboxRelay(
      * 새 쪽이 맞다 — 여기 오기 전에 구독자는 이미 다 돌았으므로, 없는 행에 시도 횟수를 올려 봐야
      * 다음 폴링이 집을 대상도 없다. 실제로 그 경로는 이 리포에 없다(아웃박스는 지우지 않는다).
      */
+    // `attempts < 상한` — Kafka 소비자가 송신 직후(표시 전) 이미 [abandon] 했으면 그 포기를 덮지 않는다. 덮으면 배달 0회인데
+    // 발행으로 남아 포기 조회에 안 잡힌다. 폴링 모드에서 집는 행은 늘 상한 아래라 무변경이다.
     private fun markPublished(eventId: UUID): Boolean =
-        jdbc.update("UPDATE outbox_event SET published_at = now() WHERE event_id = ?", eventId) > 0
+        jdbc.update("UPDATE outbox_event SET published_at = now() WHERE event_id = ? AND attempts < ?", eventId, MAX_ATTEMPTS) > 0
 
     /**
      * 시도 횟수를 올리고 **다음 시도 시각을 뒤로 민다**(REL-U6-01 지수 백오프). 증가된 값을 돌려준다 —
@@ -279,14 +286,18 @@ class OutboxRelay(
         payload = getString("payload"),
     )
 
-    private companion object {
+    companion object {
         private val log = LoggerFactory.getLogger(OutboxRelay::class.java)
 
         /** 한 번에 집는 양. 크게 잡으면 락을 오래 쥐고, 작으면 밀린 이벤트가 안 빠진다. */
         private const val BATCH_SIZE = 100
 
         /** 이 횟수를 넘기면 포기한다. 조회로 찾는다 — `WHERE published_at IS NULL AND attempts >= 10`. */
-        private const val MAX_ATTEMPTS = 10
+        /** Kafka 소비 재시도 횟수도 이 값을 쓴다 — 포기 조회(`attempts >= 10`)와 어긋나지 않게 한 곳에 둔다. */
+        const val MAX_ATTEMPTS = 10
+
+        /** Kafka 모드 한 배치의 송신 시간 예산 — 락 시한(lockAtMostFor 5분)보다 짧게. */
+        private val BROKER_BATCH_BUDGET: Duration = Duration.ofMinutes(4)
 
         /**
          * 첫 재시도까지의 지연(초). 폴링 주기(2초)와 같은 값이라 **첫 실패는 종전과 같은 속도로** 다시 간다 —

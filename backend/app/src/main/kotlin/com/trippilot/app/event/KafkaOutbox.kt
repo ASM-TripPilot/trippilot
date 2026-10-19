@@ -3,11 +3,10 @@ package com.trippilot.app.event
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import com.fasterxml.jackson.module.kotlin.kotlinModule
 import com.trippilot.core.event.EventEnvelope
 import org.apache.kafka.clients.admin.NewTopic
-import org.apache.kafka.common.errors.RetriableException
+import org.apache.kafka.common.errors.RecordTooLargeException
+import org.apache.kafka.common.errors.SerializationException
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.beans.factory.annotation.Value
@@ -19,6 +18,7 @@ import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.listener.DefaultErrorHandler
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries
 import org.springframework.stereotype.Component
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
@@ -53,16 +53,19 @@ class KafkaOutboxConfig {
     @Bean
     fun outboxConsumerErrorHandler(
         relay: OutboxRelay,
+        broker: KafkaOutboxBroker,
         @Value("\${trippilot.outbox.kafka.retry-initial-ms:2000}") initialMs: Long,
         @Value("\${trippilot.outbox.kafka.retry-max-ms:30000}") maxMs: Long,
     ): DefaultErrorHandler = DefaultErrorHandler(
         { record, e ->
-            val envelope = runCatching { readEnvelope(record.value() as String) }.getOrNull()
-            if (envelope != null) relay.abandon(envelope, e)
-            else log.error("봉투를 읽지 못한 Kafka 메시지를 버립니다 — key={} offset={} value={}",
-                record.key(), record.offset(), (record.value() as? String)?.take(500), e)
+            // 봉투 전체를 못 읽어도 eventId 만 읽히면 그 행을 포기로 남긴다 — 행은 송신 때 이미 발행 표시라 버리면 흔적이 없다.
+            val value = record.value() as? String
+            val eventId = value?.let(broker::eventIdOf)
+            if (eventId != null) relay.abandon(eventId, value.let(broker::eventTypeOf), e)
+            else log.error("eventId 도 못 읽은 Kafka 메시지를 버립니다 — key={} offset={} value={}",
+                record.key(), record.offset(), value?.take(500), e)
         },
-        ExponentialBackOffWithMaxRetries(MAX_ATTEMPTS - 1).apply {
+        ExponentialBackOffWithMaxRetries(OutboxRelay.MAX_ATTEMPTS - 1).apply {
             initialInterval = initialMs
             multiplier = 2.0
             maxInterval = maxMs
@@ -72,17 +75,7 @@ class KafkaOutboxConfig {
     companion object {
         const val TOPIC = "trippilot.outbox"
         private const val PARTITIONS = 3
-        private const val MAX_ATTEMPTS = 10
         private val log = LoggerFactory.getLogger(KafkaOutboxConfig::class.java)
-
-        /**
-         * 봉투 읽기. 모르는 필드는 건너뛴다 — 롤링 배포 중 새 인스턴스가 봉투에 필드를 더해 보내도 옛 인스턴스가 읽는다.
-         * 봉투는 UUID·Instant·문자열뿐이라 앱 매퍼의 설정이 필요 없다(Kotlin·java.time 모듈만).
-         */
-        private val envelopeReader = ObjectMapper().registerModule(kotlinModule()).registerModule(JavaTimeModule())
-            .readerFor(EventEnvelope::class.java).without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-
-        fun readEnvelope(value: String): EventEnvelope = envelopeReader.readValue(value)
     }
 }
 
@@ -92,7 +85,19 @@ class KafkaOutboxBroker(
     private val kafka: KafkaTemplate<String, String>,
     private val mapper: ObjectMapper,
 ) {
-    /** 브로커가 받았다고 답할 때까지 기다린다 — 답이 없으면 던지고, 릴레이가 그 행을 백오프 재시도한다. */
+    /**
+     * 봉투 읽기 — 쓰는 쪽과 **같은 매퍼**로 읽는다(설정이 바뀌어도 둘이 어긋나지 않게). 모르는 필드는 건너뛴다 —
+     * 롤링 배포 중 새 인스턴스가 봉투에 필드를 더해 보내도 옛 인스턴스가 읽는다.
+     */
+    private val reader = mapper.readerFor(EventEnvelope::class.java).without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+
+    fun read(value: String): EventEnvelope = reader.readValue(value)
+
+    fun eventIdOf(value: String): UUID? = runCatching { UUID.fromString(mapper.readTree(value).get("eventId").asText()) }.getOrNull()
+
+    fun eventTypeOf(value: String): String? = runCatching { mapper.readTree(value).get("eventType")?.asText() }.getOrNull()
+
+    /** 브로커가 받았다고 답할 때까지 기다린다 — 답이 없으면 던지고, 릴레이가 배치를 멈추거나 그 행을 백오프시킨다. */
     fun send(envelope: EventEnvelope) {
         kafka.send(KafkaOutboxConfig.TOPIC, envelope.aggregateId, mapper.writeValueAsString(envelope))
             .get(SEND_TIMEOUT_SEC, TimeUnit.SECONDS)
@@ -105,15 +110,21 @@ class KafkaOutboxBroker(
          */
         private const val SEND_TIMEOUT_SEC = 20L
 
-        /** 브로커에 닿지 못한 실패인가 — 그렇다면 같은 배치의 다음 송신도 같은 시한을 기다릴 뿐이다. */
-        fun unreachable(e: Throwable): Boolean = generateSequence(e) { it.cause }
-            .any { it is RetriableException || it is java.util.concurrent.TimeoutException || it is InterruptedException }
+        /**
+         * 그 레코드만의 영구 실패인가(크기 초과·직렬화) — 그 행만 백오프시키고 배치는 계속한다. 그 밖은(시한·연결·인증·권한·
+         * 닫힌 프로듀서·중단) 모든 송신에 똑같이 걸리므로 배치를 멈추고 시도 횟수를 쓰지 않는다. 반대로 나열하면(브로커 탓만 나열)
+         * 빠진 예외 계열 하나가 멀쩡한 이벤트 전부를 13분 만에 포기로 떨어뜨린다.
+         */
+        fun recordOnly(e: Throwable): Boolean = generateSequence(e) { it.cause }
+            .any { it is RecordTooLargeException || it is SerializationException || it is com.fasterxml.jackson.core.JsonProcessingException }
     }
 }
 
 @Component
 @ConditionalOnProperty(name = ["trippilot.outbox.broker"], havingValue = "kafka")
-class KafkaOutboxListener(private val relay: OutboxRelay) {
+class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: KafkaOutboxBroker) {
     @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox")
-    fun onMessage(value: String) = relay.consume(KafkaOutboxConfig.readEnvelope(value))
+    // 값 없는 레코드(tombstone)는 여기까지 오지 않는다 — 스프링이 인자 변환에서 비재시도 실패로 분류해 회수기로 바로 보낸다
+    // (실측: "eventId 도 못 읽은 … value=null" 한 줄, 재시도 0). KafkaOutboxIT 가 그 동작을 지킨다.
+    fun onMessage(value: String) = relay.consume(broker.read(value))
 }

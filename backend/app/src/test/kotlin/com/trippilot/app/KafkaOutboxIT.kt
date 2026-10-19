@@ -149,7 +149,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
             val deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos()
             var key: String? = null
             while (key == null && System.nanoTime() < deadline) {
-                key = consumer.poll(Duration.ofMillis(500)).firstOrNull { it.value().contains(eventId.toString()) }?.key()
+                key = consumer.poll(Duration.ofMillis(500)).firstOrNull { it.value()?.contains(eventId.toString()) == true }?.key()
             }
             key shouldBe "키-확인"
         }
@@ -233,6 +233,48 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
             "SELECT count(*) FROM outbox_event WHERE event_id = ? AND published_at IS NULL AND attempts >= 10",
             Int::class.java, sent.eventId,
         ) shouldBe 1
+    }
+
+    @Test
+    fun `소비자가 표시 전에 포기했으면 릴레이의 발행 표시가 그 포기를 덮지 않는다`() {
+        repeat(20) { relay.relay() }
+        tx.execute { publisher.publish(Probe("경합")) }
+        // 송신이 돌아오기 전에 소비자가 이미 포기한 상황 — 송신 안에서 abandon 을 불러 순서를 고정한다.
+        val racing = mockk<KafkaOutboxBroker>()
+        every { racing.send(any()) } answers {
+            val sent = firstArg<EventEnvelope>()
+            relay.abandon(sent.eventId, sent.eventType, IllegalStateException("의도된 선행 포기"))
+        }
+        OutboxRelay(jdbc, SimpleMeterRegistry(), allSubscribers, Clock.systemUTC(), racing).relay()
+
+        jdbc.queryForObject(
+            "SELECT count(*) FROM outbox_event WHERE aggregate_id = ? AND published_at IS NULL AND attempts >= 10",
+            Int::class.java, "경합",
+        ) shouldBe 1
+    }
+
+    @Test
+    fun `봉투 모양이 틀려도 eventId 가 읽히면 그 행을 포기로 남긴다`() {
+        tx.execute { publisher.publish(Probe("모양")) }
+        relayUntilPublished("모양")
+        val eventId = jdbc.queryForObject("SELECT event_id FROM outbox_event WHERE aggregate_id = ?", UUID::class.java, "모양")!!
+
+        kafkaTemplate.send(KafkaOutboxConfig.TOPIC, "모양", """{"eventId":"$eventId","occurredAt":"시각 아님"}""").get()
+
+        val abandoned = "SELECT count(*) FROM outbox_event WHERE event_id = ? AND published_at IS NULL AND attempts >= 10"
+        val deadline = System.nanoTime() + Duration.ofSeconds(8).toNanos() // 재시도 없이 바로 — 재시도면 17초
+        while (jdbc.queryForObject(abandoned, Int::class.java, eventId) == 0 && System.nanoTime() < deadline) Thread.sleep(100)
+        jdbc.queryForObject(abandoned, Int::class.java, eventId) shouldBe 1
+    }
+
+    @Test
+    fun `값 없는 레코드는 건너뛰어 같은 파티션의 뒤 이벤트를 막지 않는다`() {
+        // 스프링의 인자 변환 실패(비재시도 기본 분류)에 기대는 동작이다 — 재시도로 바뀌면 17초 막혀 여기서 깨진다.
+        kafkaTemplate.send(KafkaOutboxConfig.TOPIC, "빈값", null).get()
+        tx.execute { publisher.publish(Probe("빈값")) }
+        relayUntilPublished("빈값")
+
+        awaitReceived("빈값", Duration.ofSeconds(8))
     }
 
     @Test
