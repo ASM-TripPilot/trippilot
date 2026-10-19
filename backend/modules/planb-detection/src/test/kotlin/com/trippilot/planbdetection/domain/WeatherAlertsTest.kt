@@ -51,6 +51,8 @@ class WeatherAlertsTest : StringSpec({
         val goseongGangwon = WeatherAlerts.placeOf("51820", "고성군")!!
         val gwangjuDong = WeatherAlerts.placeOf("12210", "동구")!!
         val mokpo = WeatherAlerts.placeOf("12110", "목포시")!!
+        val donghae = WeatherAlerts.placeOf("51170", "동해시")!!
+        val namhae = WeatherAlerts.placeOf("48840", "남해군")!!
 
         val gyeongbuk = WarningArea("경상북도", listOf("영덕", "포항", "울진평지", "울진산지", "경주동부"))
         listOf(
@@ -73,6 +75,10 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("동해중부안쪽먼바다"), gangneung, false), // 바다
             Triple(WarningArea("제주도남쪽먼바다"), jeju, false),
             Triple(WarningArea("남해서부해상"), mokpo, false), // 해상
+            // 바다 구역 이름이 시군 어간으로 시작해도 바다다 — 동해 앞바다 풍랑이 동해시 육지 일정에 걸리면 안 된다
+            Triple(WarningArea("동해중부안쪽먼바다"), donghae, false),
+            Triple(WarningArea("남해동부앞바다"), namhae, false),
+            Triple(WarningArea("강원도", listOf("동해시평지")), donghae, true),
             Triple(WarningArea("제주도", listOf("제주도앞바다")), jeju, false), // 바다 구역뿐
             Triple(WarningArea("강원도", listOf("강릉시평지", "강원북부산지")), gangneung, true), // 별칭 강원도
             Triple(WarningArea("강원특별자치도", listOf("강릉시평지")), gangneung, true),

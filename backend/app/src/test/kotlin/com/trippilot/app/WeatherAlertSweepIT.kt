@@ -208,14 +208,15 @@ class WeatherAlertSweepIT : AbstractPostgresIntegrationTest() {
         triggers.findById(active.triggerId)!!.state shouldBe TriggerState.EXPIRED
     }
 
-    /** 출처별 감지기(CD17) — 특보가 키 미등록(30)으로 종일 모름이어도 대기질의 발화는 그대로 돈다. */
+    /** 출처별 감지기(CD17) — 특보가 키 미등록(30)으로 종일 모름이어도 대기질의 발화·해제는 그대로 돈다. */
     @Test
-    fun `특보가 모름이어도 대기질은 발화한다 — 오늘 나쁨은 주의`() {
+    fun `특보가 모름이어도 대기질은 발화하고 해제된다 — 오늘 나쁨은 주의`() {
         val tripId = jejuTrip()
         alerts.warnings = AlertRead.Unknown("gateway:30")
         alerts.air[day] = AlertRead.Ok(mapOf(AirRegion.JEJU to AirGrade(pm10 = "나쁨", pm25 = "보통")))
+        val live = sweep(emptySet())
 
-        sweep(emptySet()).sweep(at("13:15"))
+        live.sweep(at("13:15"))
 
         val active = triggers.findActiveByTrip(tripId).single()
         active.severity shouldBe TriggerSeverity.CAUTION
@@ -224,6 +225,10 @@ class WeatherAlertSweepIT : AbstractPostgresIntegrationTest() {
         active.dataSource shouldBe DataSource.AIRKOREA
         active.reason shouldBe "제주 미세먼지 예보가 '나쁨'이에요. 성산일출봉 일정이 영향을 받을 수 있어요."
         active.payload["pm10"] shouldBe "나쁨"
+
+        alerts.air[day] = AlertRead.Ok(mapOf(AirRegion.JEJU to AirGrade(pm10 = "보통", pm25 = "좋음"))) // 특보는 여전히 모름
+        live.sweep(at("14:15"))
+        triggers.findById(active.triggerId)!!.state shouldBe TriggerState.EXPIRED
     }
 
     @Test
