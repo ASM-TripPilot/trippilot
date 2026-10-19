@@ -27,6 +27,9 @@ export function canSubmitComment(draft: {
   return draft.reason !== null || normalizeComment(draft.comment) !== null;
 }
 
+/** 의견을 보낸 뒤 남기는 안내 — 화면 글자와 스크린리더 알림(`useAnswerFeedback`)이 같은 문구를 쓴다. */
+export const FEEDBACK_THANKS = '의견 고마워요';
+
 /**
  * 싫어요 뒤 그 답 아래에 펴는 칸(화면 로컬 — 서버가 모르는 UI 상태). 없으면(null) 접힘.
  * - `REASONS`: 이유 칩 셋 + "직접 적기" — 칩을 누르면 그 이유로 바로 보낸다.

@@ -31,8 +31,10 @@ import {
  * - ACTION 턴은 서버가 발급한 quick reply id 만 받는다(위조 차단 — 모르는 id 는 SERVER 오류).
  * - 제안 적용은 PROPOSED 에서만, 위반 있는 제안은 NOT_APPLICABLE, 한 번 적용된 제안은 다시 안 된다(INV-U8-08).
  * - 답 평가(US-ASSIST-09)는 덮어쓰기·멱등 취소이고 도우미의 답에만 붙는다 — 메시지 응답에는 rating 만 실린다.
- *   없는 대화·그 대화에 없는 메시지는 404, 사용자 말·적용 기록·이상한 값·`UP` 에 이유/의견·300자 넘는 의견은
- *   400 — 둘 다 실 어댑터가 접는 대로 `SERVER`(갈래는 message `NOT_FOUND`·`BAD_REQUEST`).
+ *   없는 대화·그 대화에 없는 메시지는 404, 사용자 말·적용 기록·이상한 값·`UP` 에 이유/의견은 400 — 둘 다 실
+ *   어댑터가 접는 대로 `SERVER`(갈래는 message `NOT_FOUND`·`BAD_REQUEST`). 의견은 서버(`AssistantFeedbackService`)
+ *   처럼 앞뒤 공백을 지운 **뒤에** 잰다 — 공백뿐이면 없는 것(좋아요에 실려도 400 아님), 300자는 코드 포인트로
+ *   세고(이모지 하나 = 1자) 넘거나 NUL 이 들면 400.
  * - 실패 응답부터 흉내 낸다(anti-patterns 「목을 성공 응답만으로 채우지 말 것」): 열기 실패·401·429·409·저장 실패·
  *   평가 404·400·5xx.
  *
@@ -413,8 +415,10 @@ export class FakeAssistantAdapter implements AssistantPort {
     const invalid =
       (req.rating !== 'UP' && req.rating !== 'DOWN') ||
       (req.reason != null && !FEEDBACK_REASONS.includes(req.reason)) ||
-      (req.rating === 'UP' && (req.reason != null || req.comment != null)) ||
-      (comment !== null && comment.length > FEEDBACK_COMMENT_LIMIT);
+      (req.rating === 'UP' && (req.reason != null || comment !== null)) ||
+      (comment !== null &&
+        ([...comment].length > FEEDBACK_COMMENT_LIMIT ||
+          comment.includes('\u0000')));
     if (invalid) {
       throw new AssistantApiError('SERVER', { message: 'BAD_REQUEST' });
     }

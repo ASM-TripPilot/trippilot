@@ -233,17 +233,25 @@ export const FEEDBACK_REASONS = [
 
 export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
 
-/** 싫어요 의견 상한 — 서버는 앞뒤 공백을 뗀 뒤 넘으면 400. 입력창 `maxLength` 는 이 값의 UX 사본. */
+/**
+ * 싫어요 의견 상한 — 서버는 앞뒤 공백을 지운 뒤 **코드 포인트**로 세어(이모지 하나 = 1자) 넘으면 400.
+ * 입력창 `maxLength` 도 이 값이지만 RN 은 UTF-16 단위로 센다(이모지 = 2) — 서버보다 엄격할 뿐이라(이모지만 쓰면
+ * 150자에서 멈춘다) 서버 400 에 닿지 않는다.
+ */
 export const FEEDBACK_COMMENT_LIMIT = 300;
 
 /**
  * `PUT /assistant/sessions/{sessionId}/messages/{messageId}/feedback` 본문 — 덮어쓰기(upsert).
- * `reason`·`comment` 는 `DOWN` 일 때만 값을 싣는다(`UP` 에 실리면 400). 취소는 같은 경로 DELETE(204, 멱등).
+ * `reason`·`comment` 는 `DOWN` 일 때만 값을 싣는다 — `UP` 에 이유나 (공백을 지우고도 남는) 의견이 실리면 400.
+ * 취소는 같은 경로 DELETE(204, 멱등).
  */
 export interface FeedbackRequest {
   rating: FeedbackRating;
   reason: FeedbackReason | null;
-  /** 서버가 앞뒤 공백을 떼고, 비면 null 로 저장한다. */
+  /**
+   * 서버가 앞뒤 공백을 지운 **뒤에** 잰다 — 공백뿐이면 없는 것(null 저장, 좋아요에 실려도 400 아님), 지운 뒤
+   * 300자(코드 포인트)를 넘거나 NUL 문자가 있으면 400.
+   */
   comment: string | null;
 }
 

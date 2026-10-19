@@ -192,6 +192,8 @@ describe('FakeAssistantAdapter (TRIP-1319)', () => {
  */
 describe('FakeAssistantAdapter · 답 평가 (US-ASSIST-09)', () => {
   const UP: FeedbackRequest = { rating: 'UP', reason: null, comment: null };
+  /** 코드 포인트 1개 = UTF-16 2단위(`'😀'.length === 2`). */
+  const EMOJI = '\u{1F600}';
 
   async function opened() {
     const fake = new FakeAssistantAdapter();
@@ -253,6 +255,31 @@ describe('FakeAssistantAdapter · 답 평가 (US-ASSIST-09)', () => {
     expect(full.comment).toBe('가'.repeat(300));
   });
 
+  // 서버(AssistantFeedbackService)와 같은 잣대 — 앞뒤 공백을 지운 **뒤에** 재고, 길이는 코드 포인트로 센다.
+  it('의견은 공백을 지운 뒤 잰다 — 공백뿐인 의견은 좋아요에 실려도 받고, 300자는 코드 포인트로 센다(이모지 = 1자)', async () => {
+    const { fake, sessionId, answerId } = await opened();
+    const emoji300 = EMOJI.repeat(300);
+
+    const up = await fake.putFeedback(sessionId, answerId, {
+      rating: 'UP',
+      reason: null,
+      comment: ' \n ',
+    });
+    const down = await fake.putFeedback(sessionId, answerId, {
+      rating: 'DOWN',
+      reason: null,
+      comment: emoji300,
+    });
+
+    expect(up).toEqual({
+      messageId: answerId,
+      rating: 'UP',
+      reason: null,
+      comment: null,
+    });
+    expect(down.comment).toBe(emoji300);
+  });
+
   it('DELETE 는 멱등 — 평가가 없어도 끝나고, 있으면 지운다', async () => {
     const { fake, sessionId, answerId } = await opened();
     await expect(
@@ -278,7 +305,7 @@ describe('FakeAssistantAdapter · 답 평가 (US-ASSIST-09)', () => {
     }
   });
 
-  it('실패 응답 · 사용자 말·적용 기록·이상한 값·좋아요에 이유/의견·300자 넘는 의견은 400 (SERVER · BAD_REQUEST)', async () => {
+  it('실패 응답 · 사용자 말·적용 기록·이상한 값·좋아요에 이유/의견·300자(코드 포인트) 넘거나 NUL 이 든 의견은 400 (SERVER · BAD_REQUEST)', async () => {
     const fake = fakeWithHistory();
     const { session } = await fake.openSession({ tripId: 'trip-1' });
     const turn = await fake.sendTurn(session.id, textTurn('t-fb', '날씨'));
@@ -314,6 +341,18 @@ describe('FakeAssistantAdapter · 답 평가 (US-ASSIST-09)', () => {
           rating: 'DOWN',
           reason: null,
           comment: '가'.repeat(301),
+        }),
+      () =>
+        fake.putFeedback(session.id, answer.id, {
+          rating: 'DOWN',
+          reason: null,
+          comment: EMOJI.repeat(301),
+        }),
+      () =>
+        fake.putFeedback(session.id, answer.id, {
+          rating: 'DOWN',
+          reason: null,
+          comment: '멀어요\u0000',
         }),
     ];
     for (const call of calls) {

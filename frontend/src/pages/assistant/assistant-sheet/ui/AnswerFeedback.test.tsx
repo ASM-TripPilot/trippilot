@@ -140,6 +140,18 @@ describe('AnswerFeedback (US-ASSIST-09)', () => {
     );
   });
 
+  // 입력창 [보내기](Composer — 접근성 이름 "보내기")와 스크린리더에서 이름이 겹치지 않아야 어느 쪽인지 안다.
+  it('의견 [보내기]는 "의견 보내기"라는 이름의 버튼이다', () => {
+    renderRow({
+      rating: 'DOWN',
+      panel: { step: 'WRITING', reason: 'WRONG', comment: '' },
+    });
+    expect(screen.getByRole('button', { name: '의견 보내기' })).toHaveProp(
+      'testID',
+      'assistant-feedback-comment-send-m1'
+    );
+  });
+
   it('보낸 뒤(THANKS) — 고마워요 안내만 남고 칩·입력창은 접힌다', () => {
     renderRow({ rating: 'DOWN', panel: { step: 'THANKS' } });
     expect(
@@ -175,7 +187,14 @@ describe('AnswerFeedback (US-ASSIST-09)', () => {
     expect(props.onPressThumb).not.toHaveBeenCalled();
     expect(props.onPickReason).not.toHaveBeenCalled();
     expect(props.onOpenComment).not.toHaveBeenCalled();
+    // 잠금은 스크린리더에도 보인다 — 엄지·이유 칩·"직접 적기" 모두 disabled 로 읽힌다.
     expect(stateOf('assistant-feedback-up-m1')).toEqual(
+      expect.objectContaining({ disabled: true })
+    );
+    expect(stateOf('assistant-feedback-reason-WRONG-m1')).toEqual(
+      expect.objectContaining({ disabled: true })
+    );
+    expect(stateOf('assistant-feedback-comment-m1')).toEqual(
       expect.objectContaining({ disabled: true })
     );
   });

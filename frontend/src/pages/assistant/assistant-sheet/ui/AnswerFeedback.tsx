@@ -7,7 +7,11 @@ import {
   type FeedbackRating,
   type FeedbackReason,
 } from '../api/assistantContract';
-import { canSubmitComment, type FeedbackPanel } from '../model/answerFeedback';
+import {
+  canSubmitComment,
+  FEEDBACK_THANKS,
+  type FeedbackPanel,
+} from '../model/answerFeedback';
 import { ThumbGlyph } from './AssistantSheetGlyphs';
 
 /**
@@ -22,7 +26,7 @@ export interface AnswerFeedbackProps {
   rating: FeedbackRating | null;
   /** 싫어요 뒤 펼친 칸 — null 이면 접힘. */
   panel: FeedbackPanel | null;
-  /** 이 답의 평가를 보내는 중 — 엄지·칩·보내기를 잠시 막는다. */
+  /** 이 답의 평가를 보내는 중 — 엄지·칩·보내기를 잠시 막고 흐리게 그린다. */
   busy: boolean;
   /** 실패 안내(되돌린 뒤). */
   error: string | null;
@@ -64,9 +68,16 @@ function Chip({
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
       onPress={onPress}
-      className={`rounded-button border px-md py-xs ${selected ? 'border-ink bg-surface-strong' : 'border-hairline-strong bg-canvas'}`}
+      // 터치 = 이 상자(높이 44), 알약(26)은 안쪽 View 가 그린다. hitSlop 으로 넓히면 평가 줄(부모) 밖으로 나간
+      // 부분이 안 눌린다 — 새 아키텍처는 부모가 그 점을 품어야 자식에게 묻는다. 흐림 = 지금 못 누름(보내는 중) —
+      // 고른 칸은 비활성이어도 흐리지 않는다(쓰는 중의 "직접 적기"는 모드 표시다).
+      className={`min-h-[44px] justify-center${disabled && !selected ? ' opacity-40' : ''}`}
     >
-      <Text className="font-noto text-caption text-ink">{label}</Text>
+      <View
+        className={`rounded-button border px-md py-xs ${selected ? 'border-ink bg-surface-strong' : 'border-hairline-strong bg-canvas'}`}
+      >
+        <Text className="font-noto text-caption text-ink">{label}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -86,9 +97,10 @@ export function AnswerFeedback({
   const writing = panel?.step === 'WRITING' ? panel : null;
   const sendable = writing !== null && canSubmitComment(writing) && !busy;
   return (
-    <View testID={`assistant-feedback-${messageId}`} className="gap-sm">
-      {/* 엄지 28 + hitSlop 8 = 44 터치 — 줄 간격 16 이라 이웃 엄지의 hitSlop 이 겹치지 않는다. */}
-      <View className="flex-row items-center gap-lg">
+    <View testID={`assistant-feedback-${messageId}`} className="gap-xs">
+      {/* 엄지는 44×44 상자(글리프 20 + 사방 12)로 누른다 — hitSlop 은 부모 밖에서 안 눌린다(칩 주석). 둘을 붙여
+          글리프 사이 24 는 그대로 두고, 상자가 여백을 품으니 줄 사이(gap)는 xs 로 줄였다. */}
+      <View className="flex-row items-center">
         {THUMBS.map((thumb) => (
           <Pressable
             key={thumb.rating}
@@ -100,9 +112,8 @@ export function AnswerFeedback({
               disabled: busy,
             }}
             disabled={busy}
-            hitSlop={8}
             onPress={() => onPressThumb(thumb.rating)}
-            className="p-xs"
+            className={`h-[44px] w-[44px] items-center justify-center${busy ? ' opacity-40' : ''}`}
           >
             <ThumbGlyph
               rating={thumb.rating}
@@ -113,7 +124,7 @@ export function AnswerFeedback({
       </View>
 
       {panel?.step === 'REASONS' || writing ? (
-        <View className="flex-row flex-wrap gap-sm">
+        <View className="flex-row flex-wrap gap-x-sm">
           {FEEDBACK_REASONS.map((reason) => (
             <Chip
               key={reason}
@@ -151,14 +162,19 @@ export function AnswerFeedback({
           <Pressable
             testID={`assistant-feedback-comment-send-${messageId}`}
             accessibilityRole="button"
+            // 입력창 [보내기](Composer "보내기")와 스크린리더 이름이 겹치지 않게.
+            accessibilityLabel="의견 보내기"
             accessibilityState={{ disabled: !sendable }}
             disabled={!sendable}
             onPress={onSubmitComment}
-            className={`rounded-button bg-primary px-md py-sm${sendable ? '' : ' opacity-40'}`}
+            // 터치 = 높이 44 상자, 알약(34)은 그 바닥에 붙여 입력창 아랫선과 맞춘다(hitSlop 은 부모 밖에서 안 눌린다).
+            className={`min-h-[44px] justify-end${sendable ? '' : ' opacity-40'}`}
           >
-            <Text className="font-noto-bold text-label font-bold text-on-primary">
-              보내기
-            </Text>
+            <View className="rounded-button bg-primary px-md py-sm">
+              <Text className="font-noto-bold text-label font-bold text-on-primary">
+                보내기
+              </Text>
+            </View>
           </Pressable>
         </View>
       ) : null}
@@ -168,7 +184,7 @@ export function AnswerFeedback({
           testID={`assistant-feedback-thanks-${messageId}`}
           className="font-noto text-caption text-muted"
         >
-          의견 고마워요
+          {FEEDBACK_THANKS}
         </Text>
       ) : null}
 

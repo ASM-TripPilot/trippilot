@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { AccessibilityInfo } from 'react-native';
 
 import type {
   AssistantMessage,
@@ -8,6 +9,7 @@ import type {
 } from '../api/assistantContract';
 import {
   canSubmitComment,
+  FEEDBACK_THANKS,
   normalizeComment,
   toggleRating,
   type FeedbackPanel,
@@ -22,6 +24,7 @@ import { useMessageFeedback } from './assistantQueries';
  * - 싫어요가 되면 그 답 아래 이유 칸을 편다. 칩은 그 이유로 바로 보내고, "직접 적기"는 [보내기]가 이유(골랐으면)와
  *   의견을 함께 보낸다. 보내면 칸을 접고 고마워요 안내를 남긴다(낙관).
  * - 실패하면 칸을 누르기 전 모양으로 되돌리고 안내한다(침묵 실패 금지 — 쓰던 의견도 돌아온다).
+ * - 안내(고마워요·실패)는 스크린리더에도 소리로 알린다 — 화면 글자만으로는 VoiceOver·TalkBack 이 모른다.
  * - 메시지마다 요청은 한 번에 하나 — 겹치면 캐시를 되돌릴 값이 꼬인다. 같은 틱 연타는 ref 로 막고, 보내는 동안
  *   그 답의 엄지·칩은 state(`busyOf`)로 비활성으로 그린다.
  */
@@ -88,11 +91,18 @@ export function useAnswerFeedback(
       .catch(() => {
         setPanel(messageId, restore);
         setErrors((prev) => withEntry(prev, messageId, failText));
+        AccessibilityInfo.announceForAccessibility(failText);
       })
       .finally(() => {
         busyRef.current.delete(messageId);
         setBusy((prev) => withEntry(prev, messageId, null));
       });
+  }
+
+  /** 보낸 칸을 접고 고마워요를 남긴다(낙관 — 실패하면 `send` 가 되돌린다). */
+  function thank(messageId: string): void {
+    setPanel(messageId, { step: 'THANKS' });
+    AccessibilityInfo.announceForAccessibility(FEEDBACK_THANKS);
   }
 
   function pressThumb(
@@ -123,7 +133,7 @@ export function useAnswerFeedback(
       return;
     }
     if (panel.step !== 'REASONS') return;
-    setPanel(messageId, { step: 'THANKS' });
+    thank(messageId);
     send(
       messageId,
       { rating: 'DOWN', reason, comment: null },
@@ -153,7 +163,7 @@ export function useAnswerFeedback(
     ) {
       return;
     }
-    setPanel(messageId, { step: 'THANKS' });
+    thank(messageId);
     send(
       messageId,
       {

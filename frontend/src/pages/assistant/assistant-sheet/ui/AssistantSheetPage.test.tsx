@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { AccessibilityInfo } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -727,5 +728,109 @@ describe('AssistantSheetPage · 답 평가 (US-ASSIST-09)', () => {
 
     expect(fake.calls.putFeedback).toBe(1);
     expect(fake.calls.deleteFeedback).toBe(0);
+  });
+
+  // 메시지마다 결과를 따로 받는다 — `useAnswerFeedback` 이 mutate 대신 mutateAsync 를 쓰는 이유(TanStack v5 의
+  // 호출별 콜백은 겹친 호출 중 마지막 것에만 불린다).
+  it('두 답을 잇달아 평가해도 앞 답의 엄지가 비활성으로 남지 않는다', async () => {
+    renderPage({
+      seedMessages: [
+        { ...assistantSample('greeting', { id: 'a1' }), feedback: null },
+        { ...assistantSample('greeting', { id: 'a2' }), feedback: null },
+      ],
+    });
+    await screen.findByTestId('assistant-feedback-up-a2');
+    fake.configure({ latencyMs: 30 });
+
+    // 앞 답의 요청이 끝나기 전에 뒤 답을 누른다
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-feedback-up-a1'));
+      fireEvent.press(screen.getByTestId('assistant-feedback-up-a2'));
+    });
+
+    await waitFor(() => {
+      expect(a11y('assistant-feedback-up-a1')).toEqual(
+        expect.objectContaining({ selected: true, disabled: false })
+      );
+      expect(a11y('assistant-feedback-up-a2')).toEqual(
+        expect.objectContaining({ selected: true, disabled: false })
+      );
+    });
+    expect(fake.calls.putFeedback).toBe(2);
+  });
+
+  it('의견 보내기가 실패하면 쓰던 의견과 고른 이유가 되살아나고 안내한다', async () => {
+    renderPage();
+    await screen.findByTestId(`assistant-feedback-down-${GREETING}`);
+    await pressAndSettle(`assistant-feedback-down-${GREETING}`);
+    fireEvent.press(
+      screen.getByTestId(`assistant-feedback-comment-${GREETING}`)
+    );
+    fireEvent.press(
+      screen.getByTestId(`assistant-feedback-reason-NOT_HELPFUL-${GREETING}`)
+    );
+    fireEvent.changeText(
+      screen.getByTestId(`assistant-feedback-comment-input-${GREETING}`),
+      '동선이 너무 길어요'
+    );
+    fake.configure({ feedback: 'SERVER_ERROR' });
+
+    await pressAndSettle(`assistant-feedback-comment-send-${GREETING}`);
+
+    expect(
+      await screen.findByTestId(`assistant-feedback-error-${GREETING}`)
+    ).toHaveTextContent('의견을 보내지 못했어요', { exact: false });
+    expect(
+      screen.getByTestId(`assistant-feedback-comment-input-${GREETING}`)
+    ).toHaveDisplayValue('동선이 너무 길어요');
+    expect(a11y(`assistant-feedback-reason-NOT_HELPFUL-${GREETING}`)).toEqual(
+      expect.objectContaining({ selected: true })
+    );
+    expect(
+      screen.queryByTestId(`assistant-feedback-thanks-${GREETING}`)
+    ).toBeNull();
+  });
+
+  it('이유 칸이 열린 채 엄지를 바꾸다(PUT) 실패하면 그 칸이 되살아나고 싫어요로 돌아간다', async () => {
+    renderPage();
+    await screen.findByTestId(`assistant-feedback-down-${GREETING}`);
+    await pressAndSettle(`assistant-feedback-down-${GREETING}`);
+    fake.configure({ feedback: 'SERVER_ERROR' });
+
+    await pressAndSettle(`assistant-feedback-up-${GREETING}`);
+
+    expect(
+      await screen.findByTestId(`assistant-feedback-error-${GREETING}`)
+    ).toHaveTextContent('평가를 저장하지 못했어요', { exact: false });
+    expect(
+      screen.getByTestId(`assistant-feedback-reason-WRONG-${GREETING}`)
+    ).toBeOnTheScreen();
+    expect(a11y(`assistant-feedback-down-${GREETING}`)).toEqual(
+      expect.objectContaining({ selected: true })
+    );
+    expect(a11y(`assistant-feedback-up-${GREETING}`)).toEqual(
+      expect.objectContaining({ selected: false })
+    );
+  });
+
+  // 화면 글자만으로는 스크린리더가 모른다 — 고마워요·실패 안내를 소리로도 알린다.
+  it('고마워요·실패 안내는 스크린리더에도 읽힌다(announceForAccessibility)', async () => {
+    const announce = jest.mocked(AccessibilityInfo.announceForAccessibility);
+    announce.mockClear();
+    renderPage();
+    await screen.findByTestId(`assistant-feedback-down-${GREETING}`);
+    await pressAndSettle(`assistant-feedback-down-${GREETING}`);
+
+    await pressAndSettle(`assistant-feedback-reason-WRONG-${GREETING}`);
+    expect(announce).toHaveBeenLastCalledWith('의견 고마워요');
+
+    // 👎 를 다시 누르면 취소(DELETE) — 그게 실패한다
+    fake.configure({ feedback: 'SERVER_ERROR' });
+    await pressAndSettle(`assistant-feedback-down-${GREETING}`);
+    await waitFor(() =>
+      expect(announce).toHaveBeenLastCalledWith(
+        '평가를 저장하지 못했어요. 잠시 후 다시 시도해 주세요'
+      )
+    );
   });
 });
