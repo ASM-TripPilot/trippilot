@@ -50,14 +50,24 @@ def clean_overview(raw: str) -> str:
     return " ".join(s for s in split_sentences(text) if not has_contact_like(s))
 
 
+# 먼저 받을 종류 — Plan-B 대안(날씨·휴무·피로)이 가장 자주 권하는 볼거리부터 받아 **다 모이기 전에** 먼저 올린다
+# (2026-10-19 사용자 "단축"). 카페·음식점은 태그로 안 갈려 개요 값이 크지만 수가 많아 그다음이다.
+_PRIORITY = ("SIGHT", "CULTURE", "NATURE", "NIGHT_VIEW", "CAFE", "FOOD", "ACTIVITY", "SHOPPING")
+
+
 def targets(proposals: list[dict]) -> list[tuple[str, str]]:
-    """관광공사 장소 (content_id, 이름) — 해시 순(표본이 고르게 섞인다), 중복 제거."""
-    seen: dict[str, str] = {}
+    """관광공사 장소 (content_id, 이름) — 종류 우선순위(`_PRIORITY`), 같은 종류 안에서는 해시 순(지역이 고르게
+    섞인다), 중복 제거."""
+    seen: dict[str, tuple[str, str]] = {}
     for p in proposals:
         cid = str((p.get("provenance") or {}).get("content_id") or "")
         if p.get("source") == "TOURAPI" and cid and cid not in seen:
-            seen[cid] = str((p.get("poi") or {}).get("name") or "")
-    return sorted(seen.items(), key=lambda kv: hashlib.sha1(kv[0].encode()).hexdigest())
+            poi = p.get("poi") or {}
+            seen[cid] = (str(poi.get("name") or ""), str(poi.get("category") or ""))
+    rank = {c: i for i, c in enumerate(_PRIORITY)}
+    order = sorted(seen.items(), key=lambda kv: (rank.get(kv[1][1], len(rank)),
+                                                 hashlib.sha1(kv[0].encode()).hexdigest()))
+    return [(cid, name) for cid, (name, _) in order]
 
 
 def row_of(cid: str, name: str, overview: str | None) -> dict:
@@ -130,20 +140,28 @@ def main(argv: list[str]) -> int:
     if not keys:
         print("TOUR_API_KEY 없음 — 생략")
         return 0
-    # 키당 상한 — 오퍼레이션별 일 한도 1,000 에 여유를 둔다. 429 는 키 퇴출이 아니라 일시 장애로 올라오므로(포트 계약)
-    # 한 키가 한도를 넘기면 연속 실패로 그날 수집이 멈춘다 — 넘기지 않게 여기서 자른다.
+    # 키를 **하나씩** 돈다 — 429 는 키 퇴출이 아니라 일시 장애로 올라오므로(포트 계약) 한 키의 한도가 차면 연속
+    # 실패로 그 키만 멈추고 다음 키로 넘어간다. 그래서 같은 날 앞선 실행이 1번 키를 다 썼어도 남은 키를 끝까지 쓴다.
+    # 키당 상한은 오퍼레이션별 일 한도 1,000 에 여유를 둔다.
     per_key = int(os.environ.get("OVERVIEW_CALLS_PER_KEY") or "950")
-    adapter = TourApiAdapter(UrllibHttpClient(), keys[0], extra_keys=keys[1:],
-                             calls_per_key=per_key if len(keys) > 1 else None)
     todo = targets(json.loads(_POIS.read_text(encoding="utf-8"))["proposals"])
     have = _load(args.out)
     before = len(have)
-    calls, failed = collect(adapter, todo, have, args.max_calls)
+    calls = failed = 0
+    for n, key in enumerate(keys, 1):
+        budget = min(per_key, args.max_calls - calls)
+        if budget <= 0:
+            break
+        c, f = collect(TourApiAdapter(UrllibHttpClient(), key), todo, have, budget)
+        print(f"  키 {n}: 호출 {c}·실패 {f}" + (" — 연속 실패, 그날 한도로 보고 다음 키로" if f >= _STOP_AFTER_FAILS else ""))
+        calls, failed = calls + c, failed + f
     _save(args.out, have)  # 받은 데까지는 늘 남긴다(실패율 초과여도) — 다음 실행이 이어받는다
     print(f"개요: 이번 {len(have) - before}곳 받음(호출 {calls}·실패 {failed}) · 누적 {len(have)}/{len(todo)}곳")
     print(stats(list(have.values()), len(todo)))
-    if calls and failed / calls > _MAX_FAIL_RATE:
-        print(f"실패율 {failed / calls:.1%} — {_MAX_FAIL_RATE:.0%} 초과(한도 소진이면 다음 실행이 이어받는다)")
+    # 한도 소진으로 멈춘 키의 연속 실패는 정상 종료다 — 그것을 뺀 실패만 실패율로 본다.
+    real = max(0, failed - _STOP_AFTER_FAILS * sum(1 for _ in keys))
+    if calls and real / calls > _MAX_FAIL_RATE:
+        print(f"실패율 {real / calls:.1%} — {_MAX_FAIL_RATE:.0%} 초과")
         return 1
     return 0
 
