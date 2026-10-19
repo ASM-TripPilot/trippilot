@@ -13,14 +13,19 @@ import { PlanbEntryGate, PlanbRequestPage } from '@/pages/live/planb-request';
  *
  * 상황 감지 FE-B(frontend-components §3.1) — `triggerId` 가 있으면(알림 탭 · 알림함 PLAN_B 행 · i03 [대안 보기]) 진입
  * 게이트 하나를 지난다. 게이트가 준비된 대안·트리거 상태로 i05·i06·허브·i04 를 고른다. 없으면 i04 그대로다.
+ * 트리거 없는 진입은 `prefill`(자유 입력 초기값)·`includePoiId`(넣으려던 POI — 서버엔 안 가고 i05→i06 미포함 안내까지)도
+ * 읽어 내린다 — 기회 카드 [넣어서 다시 짜기]가 싣는다(FE-C).
  */
 export default function PlanbRequestRoute() {
-  const { tripId, scope, triggerId, targetDate } = useLocalSearchParams<{
-    tripId: string;
-    scope?: string;
-    triggerId?: string;
-    targetDate?: string;
-  }>();
+  const { tripId, scope, triggerId, targetDate, prefill, includePoiId } =
+    useLocalSearchParams<{
+      tripId: string;
+      scope?: string;
+      triggerId?: string;
+      targetDate?: string;
+      prefill?: string;
+      includePoiId?: string;
+    }>();
 
   if (triggerId) {
     return (
@@ -38,6 +43,8 @@ export default function PlanbRequestRoute() {
       scope={scope}
       triggerId={triggerId}
       targetDate={targetDate}
+      prefill={prefill}
+      includePoiId={includePoiId}
     />
   );
 }

@@ -72,6 +72,23 @@ describe('🔴 RT · planb 라우트 — triggerId 가 있으면 진입 게이�
     });
   });
 
+  it('RT2b triggerId 가 없으면 prefill·includePoiId 도 읽어 i04 로 내린다(§3.1 · 기회 카드 [넣어서 다시 짜기])', () => {
+    Object.assign(mockParams, {
+      tripId: 'trip-1',
+      prefill: '하늘공원 꼭 넣어서 다시 짜 줘',
+      includePoiId: 'poi-sky',
+    });
+
+    render(<PlanbRequestRoute />);
+
+    expect(mockCaptured.gate).toBeUndefined();
+    expect(mockCaptured.request).toMatchObject({
+      tripId: 'trip-1',
+      prefill: '하늘공원 꼭 넣어서 다시 짜 줘',
+      includePoiId: 'poi-sky',
+    });
+  });
+
   it('RT3 빈 triggerId(`?triggerId=`)는 트리거가 없는 것으로 읽는다', () => {
     Object.assign(mockParams, { tripId: 'trip-1', triggerId: '' });
 
