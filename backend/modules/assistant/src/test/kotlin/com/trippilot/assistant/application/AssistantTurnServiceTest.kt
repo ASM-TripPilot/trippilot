@@ -496,6 +496,45 @@ class AssistantTurnServiceTest : StringSpec({
         w.usage.llm[acc to today] shouldBe null
     }
 
+    /**
+     * BR-U8-64 — 해석 호출마다 추적 번호를 만들어 싣고(`request_meta.request_id`), 그 턴의 도우미 행에 같은 값을 적는다.
+     * 상대는 그 값을 trace_id 로 로그(llm_cost·FallbackEvent·LlmCallRecord)에 남긴다 — 평가를 상대 로그와 잇는 열쇠다.
+     * **해석이 실패해도 적는다** — 상대 쪽 폴백 기록이 바로 그 번호로 남아 있다.
+     */
+    "해석을 부른 턴은 그 호출의 추적 번호를 도우미 행에 남긴다 — 턴마다 새 번호이고, 해석이 실패해도 남긴다" {
+        val w = world()
+        val s = w.session()
+        w.say(s, "오늘 날씨 어때")
+        w.say(s, "오늘 날씨 어때")
+
+        val sent = w.interpreter!!.requests.map { it.traceId }
+        sent.forEach { UUID.fromString(it) } // 상대 계약의 request_id — UUID 문자열
+        sent.distinct().size shouldBe 2
+        listOf(w.row(2).saved.traceId, w.row(4).saved.traceId) shouldContainExactly sent
+        w.row(1).saved.traceId shouldBe null // 사용자 행에는 없다
+
+        var failed: String? = null
+        val down = world(interpreter = Interpreter { r -> failed = r.traceId; throw DialogueInterpretFailed("timeout") })
+        down.say(down.session(), "오늘 날씨")
+        (failed != null) shouldBe true
+        down.row(2).saved.kind shouldBe MessageKind.FALLBACK
+        down.row(2).saved.traceId shouldBe failed
+    }
+
+    /** 해석을 부르지 않은 턴은 이을 상대 로그가 없다 — 빈 칸이 맞다(지어낸 번호는 어느 로그와도 이어지지 않는다). */
+    "해석을 부르지 않은 턴은 추적 번호가 없다 — 버튼·입력 거절·버튼 모드" {
+        val w = world()
+        val s = w.session()
+        w.press(s, "qr-review")
+        w.say(s, "금칙 문장")
+        val off = world(interpreter = null)
+        off.say(off.session(), "오늘 날씨")
+
+        w.interpreter!!.requests shouldBe emptyList()
+        w.messages.rows.filter { it.message.role == MessageRole.ASSISTANT }.map { it.saved.traceId } shouldBe listOf(null, null)
+        off.row(2).saved.traceId shouldBe null
+    }
+
     /** 폴백은 사용자의 거절도 정상 턴도 아니다 — 연속 거절 수를 올리지도 지우지도 않는다(BR-U8-25). */
     "폴백은 연속 거절 수를 건드리지 않는다" {
         var fail = false

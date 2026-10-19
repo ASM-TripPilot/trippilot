@@ -31,7 +31,33 @@ data class AssistantMessage(
     val createdAt: Instant,
     /** 이 메시지가 가리키는 제안 — 제안 카드(`PROPOSAL`)와 그 제안을 적용한 결과 안내(`ACTION_LOG`, 실패면 `TEXT`). 상태는 **읽은 시점의 것**이다 — 카드는 저장 당시가 아니라 지금을 그린다. */
     val proposal: ProposalView? = null,
+    /**
+     * 사용자가 이 답에 남긴 평가(US-ASSIST-09). 없으면 null — 사용자 말·적용 기록은 늘 null 이다.
+     * 이유·의견까지 들지만 **메시지 응답에는 평가만 나간다** — 이유·의견은 평가 PUT 응답과 내보내기에만 있다.
+     */
+    val feedback: MessageFeedback? = null,
 )
+
+/** 도우미 답 평가(US-ASSIST-09 · BR-U8-60). **평가·지표 용도로만** 쓴다 — 모델 학습에 쓰지 않는다(BR-U8-63). */
+enum class FeedbackRating { UP, DOWN }
+
+/** 싫어요 이유 칩(BR-U8-60). 앱 문구는 틀렸어요 · 도움이 안 돼요 · 원한 답이 아니에요. "직접 적기"는 칩이 아니라 [MessageFeedback.comment] 다. */
+enum class FeedbackReason { WRONG, NOT_HELPFUL, NOT_WHAT_I_WANTED }
+
+/**
+ * 답 하나에 남은 평가. [reason]·[comment] 는 싫어요에만 있다(DB CHECK). [comment] 는 사용자가 쓴 글이라 대화 원문과 같이 다룬다 —
+ * 로그에 싣지 않고 AI 로 보내지 않는다(SEC-U8-06).
+ */
+data class MessageFeedback(val rating: FeedbackRating, val reason: FeedbackReason? = null, val comment: String? = null) {
+    /** data class 기본 toString 은 의견 본문까지 싣는다 — 이 값이 로그·예외 문구에 한 번만 찍혀도 샌다. 있는지만 보인다. */
+    override fun toString() = "MessageFeedback(rating=$rating, reason=$reason, hasComment=${comment != null})"
+}
+
+/**
+ * 평가 대상 판정([role]·[kind])과 평가 로그([intent]·[traceId])에 쓰는 칸. 관측 칸이라 화면에 나가지 않는다 —
+ * 표시용 [AssistantMessage] 에 싣지 않고 따로 읽는다.
+ */
+data class FeedbackTarget(val role: MessageRole, val kind: MessageKind, val intent: String?, val traceId: String?)
 
 /**
  * 다음 행동(BR-U8-06). [type] 은 closed-set 이지만 **문자열로 둔다** — 저장된 옛 행에 지금은 없는 값이 있어도
@@ -84,6 +110,11 @@ data class NewMessage(
     val outcome: String? = null,
     val llmCalls: Int? = null,
     val latencyMs: Int? = null,
+    /**
+     * 이 턴의 해석 호출에 실어 보낸 추적 번호(`request_meta.request_id`) — 상대가 같은 값을 `trace_id` 로 로그에 남긴다.
+     * 평가를 상대 로그(프롬프트 판본·모델·폴백)와 잇는 열쇠다(BR-U8-64). 해석을 부르지 않은 턴은 null.
+     */
+    val traceId: String? = null,
     /** 이 메시지와 함께 만들 제안(`PROPOSAL` 카드). */
     val proposal: NewProposal? = null,
 )
@@ -128,4 +159,16 @@ interface AssistantMessageRepository {
      * [beforeSeq] 가 null 이면 맨 끝에서부터다.
      */
     fun findPage(sessionId: UUID, beforeSeq: Long?, limit: Int): List<AssistantMessage>
+
+    /** 그 대화의 메시지 [messageId] 를 평가 대상으로 읽는다. 그 대화에 없으면 null. */
+    fun findFeedbackTarget(sessionId: UUID, messageId: UUID): FeedbackTarget?
+
+    /**
+     * 평가를 남긴다 — 없으면 만들고 있으면 **통째로** 바꾼다(메시지당 하나 — 이유·의견도 [feedback] 의 값으로, 빠진 것은 지운다).
+     * 바꿀 때 처음 남긴 시각은 두고 바꾼 시각만 [at] 으로 간다.
+     */
+    fun upsertFeedback(messageId: UUID, accountId: UUID, feedback: MessageFeedback, at: Instant)
+
+    /** 평가를 지운다. 지운 행 수 — 없었으면 0 이다(오류 아님). */
+    fun deleteFeedback(messageId: UUID): Int
 }

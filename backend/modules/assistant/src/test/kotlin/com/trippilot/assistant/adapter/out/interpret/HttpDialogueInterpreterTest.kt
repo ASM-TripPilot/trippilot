@@ -83,6 +83,7 @@ class HttpDialogueInterpreterTest : StringSpec({
         sessionId = sessionId,
         accountRef = "acc-1",
         recentTurns = listOf(RecentTurn(MessageRole.USER, "오늘 날씨"), RecentTurn(MessageRole.ASSISTANT, "맑아요.")),
+        traceId = "7c9e6679-7425-40de-944b-e07fc1f90ae7",
     )
 
     fun ok(body: String) = withSuccess(body.trimIndent(), MediaType.APPLICATION_JSON)
@@ -95,6 +96,8 @@ class HttpDialogueInterpreterTest : StringSpec({
             .andExpect(jsonPath("$.context.surface").value("ITINERARY"))
             .andExpect(jsonPath("$.context.itinerary.days[0].slots[0].slot_key").value("2026-11-02#p1"))
             .andExpect(jsonPath("$.request_meta.deadline_ms").value(5000))
+            // 추적 번호는 호출자가 만든 값 그대로 — 상대가 이것을 trace_id 로 로그에 남기고, 우리는 같은 값을 도우미 행에 적는다(BR-U8-64)
+            .andExpect(jsonPath("$.request_meta.request_id").value("7c9e6679-7425-40de-944b-e07fc1f90ae7"))
             .andExpect(jsonPath("$.session_id").value(sessionId.toString()))
             .andExpect(jsonPath("$.account_ref").value("acc-1"))
             .andExpect(jsonPath("$.recent_turns[0].role").value("USER"))
