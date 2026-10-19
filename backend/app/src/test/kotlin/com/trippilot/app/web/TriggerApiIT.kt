@@ -5,6 +5,16 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.itinerarygeneration.api.ItineraryFacade
+import com.trippilot.planbdetection.domain.PlanBTrigger
+import com.trippilot.planbdetection.domain.PlanBTriggerRepository
+import com.trippilot.planbdetection.domain.PlanBWatch
+import com.trippilot.planbdetection.domain.PlanBWatchRepository
+import com.trippilot.planbdetection.domain.TriggerKind
+import com.trippilot.planbdetection.domain.TriggerScope
+import com.trippilot.planbdetection.domain.TriggerSeverity
+import com.trippilot.planbdetection.domain.WatchStatus
+import java.util.UUID
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
@@ -38,6 +48,9 @@ class TriggerApiIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
+    @Autowired private lateinit var triggers: PlanBTriggerRepository
+    @Autowired private lateinit var watches: PlanBWatchRepository
+    @Autowired private lateinit var itineraries: ItineraryFacade
 
     private val json = ObjectMapper()
 
@@ -55,12 +68,26 @@ class TriggerApiIT : AbstractPostgresIntegrationTest() {
         return res.statusCode.value() to parsed
     }
 
-    private fun newToken(): String =
-        accessTokenIssuer.issue(
-            accounts.save(
-                Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, Instant.parse("2026-07-26T00:00:00Z")),
-            ).id.value.toString(),
-        ).value
+    private fun newUser(): Pair<UUID, String> {
+        val accountId = accounts.save(
+            Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, Instant.parse("2026-07-26T00:00:00Z")),
+        ).id.value
+        return accountId to accessTokenIssuer.issue(accountId.toString()).value
+    }
+
+    private fun newToken(): String = newUser().second
+
+    /** 트리거 행을 직접 심는다 — 스윕(다음 PR) 전이라 날씨 확인 말고는 행을 만드는 경로가 없다. */
+    private fun plant(
+        tripId: String, kind: TriggerKind, date: LocalDate, slotKey: String?,
+        severity: TriggerSeverity = TriggerSeverity.RISK, payload: Map<String, Any> = emptyMap(),
+        detectedAt: Instant = Instant.now(),
+    ): PlanBTrigger = triggers.save(
+        PlanBTrigger.active(
+            UUID.fromString(tripId), UUID.randomUUID(), kind, date, slotKey, payload,
+            TriggerScope.PARTIAL_SLOTS, "사유", detectedAt, severity,
+        ),
+    )
 
     /** 서버 실 시계로 구간을 판정하므로 **오늘을 포함한** 여행을 만든다(고정 날짜는 날이 바뀌며 깨진다). */
     private val today: LocalDate get() = LocalDate.now(ZoneId.of("Asia/Seoul"))
@@ -161,5 +188,71 @@ class TriggerApiIT : AbstractPostgresIntegrationTest() {
 
         call(HttpMethod.POST, "/api/v1/trips/$tripId/triggers/weather-check", newToken()).first shouldBe 404
         call(HttpMethod.POST, "/api/v1/trips/$tripId/triggers/weather-check", null).first shouldBe 401
+    }
+
+    @Test
+    fun `목록은 지난 날·빠진 슬롯·꺼진 출처를 숨기고 위험 → 날짜 → 감지 역순으로 준다`() {
+        val (accountId, token) = newUser()
+        val tripId = tripWithItinerary(token, "제주")
+        val todaySlot = itineraries.findCurrent(accountId, UUID.fromString(tripId))!!.slotKeys.first { it.startsWith("$today#") }
+        val base = Instant.now()
+        val riskToday = plant(tripId, TriggerKind.CLOSURE, today, todaySlot, detectedAt = base.minusSeconds(300))
+        val riskTomorrow = plant(tripId, TriggerKind.WEATHER, today.plusDays(1), null, detectedAt = base.minusSeconds(60))
+        val cautionToday = plant(tripId, TriggerKind.WEATHER, today, null, TriggerSeverity.CAUTION, detectedAt = base)
+        plant(tripId, TriggerKind.WEATHER, today.minusDays(1), null) // 지난 날
+        plant(tripId, TriggerKind.CLOSURE, today, "$today#${UUID.randomUUID()}") // 지금 일정에 없는 슬롯
+        plant(tripId, TriggerKind.WEATHER, today, todaySlot, payload = mapOf("detector" to "kma-forecast")) // 감시 안 하는 스윕 출처
+
+        val listed = call(HttpMethod.GET, "/api/v1/trips/$tripId/triggers", token).second["triggers"]
+        listed.map { it["triggerId"].asText() } shouldBe listOf(riskToday, riskTomorrow, cautionToday).map { it.triggerId.toString() }
+    }
+
+    @Test
+    fun `감시 상태는 스윕이 없으면 셋 다 OFF 다 — 확인 기록이 있어도 정상으로 말하지 않는다`() {
+        val token = newToken()
+        val tripId = tripWithItinerary(token, "제주")
+        watches.upsert(PlanBWatch(UUID.fromString(tripId), "kma-forecast", WatchStatus.CHECKED, Instant.now()))
+
+        val watch = call(HttpMethod.GET, "/api/v1/trips/$tripId/triggers", token).second["watch"]
+        listOf("weather", "closure", "delay").map { watch[it]["status"].asText() } shouldBe listOf("OFF", "OFF", "OFF")
+    }
+
+    @Test
+    fun `상세는 지금 상태와 같은 대상의 현재 트리거를 준다 — 타 계정·없는 트리거는 404`() {
+        val token = newToken()
+        val tripId = tripWithItinerary(token, "제주")
+        val fired = call(HttpMethod.POST, "/api/v1/trips/$tripId/triggers/weather-check", token).second["triggerId"].asText()
+
+        call(HttpMethod.GET, "/api/v1/trips/$tripId/triggers/$fired", token).second.let {
+            it["state"].asText() shouldBe "ACTIVE"
+            it["currentTriggerId"].asText() shouldBe fired
+            it["severity"].asText() shouldBe "RISK"
+        }
+
+        call(HttpMethod.POST, "/api/v1/trips/$tripId/triggers/$fired/dismiss", token).first shouldBe 200
+        val again = plant(tripId, TriggerKind.WEATHER, today, null) // 끈 뒤 같은 대상에 다시 섰다
+        call(HttpMethod.GET, "/api/v1/trips/$tripId/triggers/$fired", token).second.let {
+            it["state"].asText() shouldBe "SUPPRESSED"
+            it["currentTriggerId"].asText() shouldBe again.triggerId.toString()
+        }
+
+        call(HttpMethod.GET, "/api/v1/trips/$tripId/triggers/$fired", newToken()).first shouldBe 404
+        call(HttpMethod.GET, "/api/v1/trips/$tripId/triggers/${UUID.randomUUID()}", token).first shouldBe 404
+    }
+
+    @Test
+    fun `응답에 심각도·변형·출처 표기가 실린다 — 모르는 변형과 표기 의무 없는 원천은 null`() {
+        val token = newToken()
+        val tripId = tripWithItinerary(token, "제주")
+        plant(tripId, TriggerKind.WEATHER, today, null, TriggerSeverity.CAUTION, payload = mapOf("variant" to "CLOUD", "dataSource" to "KMA_VILAGE"))
+        plant(tripId, TriggerKind.WEATHER, today.plusDays(1), null, payload = mapOf("variant" to "WARNING")) // 옛 어휘
+
+        val listed = call(HttpMethod.GET, "/api/v1/trips/$tripId/triggers", token).second["triggers"]
+        // 위험(내일)이 먼저, 주의(오늘)가 다음이다
+        listed[0]["variant"].isNull shouldBe true
+        listed[0]["attribution"].isNull shouldBe true
+        listed[1]["severity"].asText() shouldBe "CAUTION"
+        listed[1]["variant"].asText() shouldBe "CLOUD"
+        listed[1]["attribution"].asText() shouldBe "기상청 단기예보"
     }
 }
