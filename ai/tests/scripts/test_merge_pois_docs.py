@@ -497,3 +497,12 @@ def test_큐레이션_목록은_항목마다_근거가_있다() -> None:
     """이름은 사람이 웹에서 골랐다 — 근거 없는 항목은 '인기'라는 주장의 출처가 없다."""
     seed = json.loads((_DATA / "curated_popular_places.json").read_text(encoding="utf-8"))
     assert all(s["evidence"] in seed["evidence"] for s in seed["places"])
+
+
+# ── 공유본 직렬화 — 한 행에 한 줄 (2026-10-18) ─────────────────────────
+def test_공유본은_한_행에_한_줄이고_되읽으면_같다() -> None:
+    doc = merge([_keyed_doc("TOURAPI", "1", "2")], allow_mixed=True)
+    text = M.dumps_doc(doc)
+    assert json.loads(text) == doc
+    assert sum(ln.lstrip().startswith('{"provisional_id"') for ln in text.splitlines()) == 2
+    assert json.loads(M.dumps_doc({**doc, "proposals": []}))["proposals"] == []
