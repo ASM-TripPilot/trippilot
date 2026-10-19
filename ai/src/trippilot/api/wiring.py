@@ -1631,6 +1631,27 @@ def _past_blocks(
     return tuple(b for b in blocks if b.window.end <= not_before)
 
 
+# 밤 낱말 — 말로 온 "밤에 놀기"는 이게 있어야 남는다(`_spoken_nightlife`). "미술관"의 술·"바다"·"바로"의 바·
+# "비어 있는"의 비어는 걸리지 않게 앞뒤 한글을 막는다.
+_NIGHT_WORDS = re.compile(
+    r"클럽|나이트|칵테일|와인|펍|라운지|스피크이지|혼술|맥주|비어가든|한\s*잔|밤에\s*놀"
+    r"|(?<![가-힣])술|(?<![가-힣])바(?:에|(?![가-힣]))")
+
+
+def _spoken_nightlife(request: schemas.ReplanRequest, resolved: list[str], notes: list[str]) -> list[str]:
+    """말로 온 "밤에 놀기"는 문장에 밤 낱말이 있을 때만 남긴다. 칩으로 고른 것은 그대로.
+
+    alias "클럽 가고 싶어"·"바에 가고 싶어"가 "가고 싶어" 꼴 문장 전반에 임계(0.74)를 넘었다 — 로컬 KURE
+    실측(2026-10-19): 카페 0.814·호텔 0.800·맛집 0.769·숙소 0.757. 걸리면 클럽이 강제로 들어가고 그날 창이
+    23:59 로 늘어난다. alias 를 줄이면 옛 벡터가 남아(적재는 upsert 뿐) 낱말 확인을 코드에 둔다.
+    """
+    if ("NIGHTLIFE" not in resolved or "NIGHTLIFE" in request.directives
+            or _NIGHT_WORDS.search(request.free_text or "")):
+        return resolved
+    notes.append("nightlife_dropped: no_night_word")
+    return [k for k in resolved if k != "NIGHTLIFE"]
+
+
 def _nightlife_candidates(
     resolved: Sequence[str], pool: CandidatePool, request: schemas.ReplanRequest,
     skip: Collection[PoiId], anchor: GeoPoint, notes: list[str],
@@ -2298,6 +2319,7 @@ class WiredItineraryOrchestrator:
             request, trace_id=trace_id, now=now, remaining_ms=_deadline_budget(meta))
         resolved, unknown, prefer, avoid, near, add_one, pace = self._replan_directives(
             request, notes, trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
+        resolved = _spoken_nightlife(request, resolved, notes)
 
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
