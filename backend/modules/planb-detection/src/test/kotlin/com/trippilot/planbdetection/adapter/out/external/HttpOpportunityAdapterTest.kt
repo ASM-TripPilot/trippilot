@@ -127,6 +127,12 @@ class HttpOpportunityAdapterTest : StringSpec({
         }
     }
 
+    "200 인데 본문이 비면 예외다 — '기회 없음'으로 읽지 않는다" {
+        withServer("") { url, _ ->
+            shouldThrowAny { adapter(url).find(query) }
+        }
+    }
+
     "상대가 5xx 면 예외다 — 접는 것은 서비스 몫이다" {
         withServer(null) { url, _ ->
             shouldThrowAny { adapter(url).find(query) }
