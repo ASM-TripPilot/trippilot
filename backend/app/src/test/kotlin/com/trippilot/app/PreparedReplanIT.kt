@@ -465,6 +465,23 @@ class PreparedReplanIT : AbstractPostgresIntegrationTest() {
         ) shouldBe 1
     }
 
+    @Test
+    fun `적용과 취소가 겹치면 먼저 쓴 적용이 남는다 — 취소는 409 이고 적용된 세션을 CANCELED 로 덮지 않는다`() {
+        val f = tripWithItinerary()
+        val tomorrow = LocalDate.ofInstant(clock.instant(), kst).plusDays(1)
+        val user = idleUserDraft(f, tomorrow)
+
+        val refused = runCatching {
+            overlap(
+                holder = { replanSessions.apply(f.accountId, f.tripId, user.sessionId) },
+                contender = { replanSessions.cancel(f.accountId, f.tripId, user.sessionId) },
+            )
+        }.exceptionOrNull()
+
+        refused.shouldBeInstanceOf<ConflictDetected>()
+        statusOf(user.sessionId) shouldBe "APPLIED"
+    }
+
     private companion object {
         private const val TYPE_TRIGGERED = "planb.PlanBTriggered"
         private const val TYPE_RECALCULATED = "recalculation.ItineraryRecalculated"
