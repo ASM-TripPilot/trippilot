@@ -42,11 +42,18 @@ jest.mock('@/features/auth/model/useBootstrapGate', () => ({
   BOOTSTRAP_TIMEOUT_MS: 3000,
   useBootstrapGate: jest.fn(),
 }));
-// 계정 경계 정리·푸시 재등록은 SplashGate 의 다른 테스트가 본다 — 여기선 끈다.
+// 계정 경계 정리·푸시 재등록·푸시 탭 라우팅은 SplashGate 의 다른 테스트가 본다 — 여기선 끈다(이 트리엔 QueryClient 도 없다).
 jest.mock('@/app/model/useAccountBoundaryReset', () => ({
   useAccountBoundaryReset: jest.fn(),
 }));
-jest.mock('@/shared/push', () => ({ registerPushIfGranted: jest.fn() }));
+jest.mock('@/app/model/usePushRouting', () => ({
+  usePushRouting: jest.fn(),
+}));
+// 배럴은 실물을 먼저 펼친 뒤 덮는다(재수출이 늘어도 형제 export 가 undefined 가 되지 않게).
+jest.mock('@/shared/push', () => ({
+  ...jest.requireActual('@/shared/push'),
+  registerPushIfGranted: jest.fn(),
+}));
 
 const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
   typeof useBootstrapGate
