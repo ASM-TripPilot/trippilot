@@ -13,6 +13,7 @@ import com.trippilot.assistant.domain.DialogueMemoryPort
 import com.trippilot.assistant.domain.FeedbackRating
 import com.trippilot.assistant.domain.FeedbackTarget
 import com.trippilot.assistant.domain.MemoryItem
+import com.trippilot.assistant.domain.MessageFeedback
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.QuickReply
@@ -160,8 +161,8 @@ internal class FakeMessages(val proposals: FakeProposals = FakeProposals()) : As
     val rows = mutableListOf<Row>()
     private var seq = 0L
 
-    /** 남은 평가 — 메시지 id 마다 하나(실물의 PK). 읽을 때 메시지에 붙인다(실물의 부분 질의와 같다). */
-    val feedback = mutableMapOf<UUID, FeedbackRating>()
+    /** 남은 평가 — 메시지 id 마다 하나(실물의 PK). 읽을 때 메시지에 붙인다(실물의 부분 질의와 같다). 다시 남기면 통째로 바뀐다. */
+    val feedback = mutableMapOf<UUID, MessageFeedback>()
 
     private fun AssistantMessage.withFeedback() = copy(feedback = this@FakeMessages.feedback[messageId])
 
@@ -223,8 +224,12 @@ internal class FakeMessages(val proposals: FakeProposals = FakeProposals()) : As
         rows.firstOrNull { it.sessionId == sessionId && it.message.messageId == messageId }
             ?.let { FeedbackTarget(it.message.role, it.message.kind, it.saved.intent, it.saved.traceId) }
 
-    override fun upsertFeedback(messageId: UUID, accountId: UUID, rating: FeedbackRating, at: Instant) {
-        feedback[messageId] = rating
+    override fun upsertFeedback(messageId: UUID, accountId: UUID, feedback: MessageFeedback, at: Instant) {
+        check(feedback.rating == FeedbackRating.DOWN || (feedback.reason == null && feedback.comment == null)) {
+            "싫어요가 아닌 평가의 이유·의견 — DB 는 CHECK 로 거부한다(ck_assistant_message_feedback_down_only)"
+        }
+        check((feedback.comment?.let { it.codePointCount(0, it.length) } ?: 0) <= 300) { "300자를 넘는 의견 — DB 는 CHECK 로 거부한다" }
+        this.feedback[messageId] = feedback
     }
 
     override fun deleteFeedback(messageId: UUID): Int = if (feedback.remove(messageId) != null) 1 else 0

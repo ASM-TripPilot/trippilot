@@ -178,11 +178,22 @@ APPLIED / STALE / DISMISSED / EXPIRED / FAILED : 종결 (나가는 전이 없음
 | `rating` | varchar(8) | `UP` \| `DOWN`(CHECK) |
 | `created_at` · `updated_at` | timestamptz | 처음 남긴 시각 · 바꾼 시각. 바꿔도(upsert) `created_at` 은 그대로다 |
 
+> **[개정 · 2026-10-19 · 싫어요 이유·자유 의견]** 위 표에 두 칸과 제약 하나를 더한다 — 머지 전이라 같은 `V2.74__assistant_message_feedback.sql` 을 고쳤다(그때 develop 최신이 여전히 V2.73). 규칙은 `business-rules.md` BR-U8-60·62·63·65 개정 문장.
+>
+> | 필드 | 타입 | 비고 |
+> |---|---|---|
+> | `reason` | varchar(24)? | `WRONG` \| `NOT_HELPFUL` \| `NOT_WHAT_I_WANTED`(CHECK) — 싫어요 이유 칩(앱 문구: 틀렸어요 · 도움이 안 돼요 · 원한 답이 아니에요). "직접 적기"는 칩이 아니라 `comment` 다. 어휘는 앱·계약 enum 과 같은 집합이어야 한다 — 어긋나면 그 칩을 누른 사람만 500 을 본다 |
+> | `comment` | text? | 자유 의견, `char_length(comment) ≤ 300`(CHECK — 코드 포인트). 서버가 앞뒤 공백을 지워 넣고 비면 NULL. **사용자가 쓴 글이라 대화 원문(`assistant_message.text`)과 같이 다룬다** — 로그 금지(SEC-U8-06) · 프롬프트·AI 로 보내지 않음 · 위 CASCADE 로 대화와 함께 파기 · 내보내기 포함 · 모델 학습 금지(BR-U8-63) |
+>
+> 제약 `ck_assistant_message_feedback_down_only` — `rating = 'DOWN'` 이 아니면 `reason`·`comment` 가 모두 NULL 이다. 쓰기의 `DO UPDATE SET` 은 두 칸도 바꾼다 — PUT 이 **통째로 덮어쓴다**(빠진 칸은 NULL. 빠뜨리면 옛 이유·의견이 새 평가에 붙어 남는다 — 대역은 못 보고 실 DB IT 가 잰다).
+
 - 쓰기: 남기기·바꾸기 = `INSERT … ON CONFLICT (message_id) DO UPDATE`(notification_toggle 선례), 취소 = DELETE(없어도 오류 아님).
-- 읽기: 메시지를 읽을 때 붙인다 — 조회·열기·턴 응답의 메시지 `feedback`(`UP`|`DOWN`|null)과 내보내기 줄의 `feedback` 칸. 표시용 `AssistantMessage` 는 평가 값만 들고, 판정·로그에 쓰는 관측 칸(`intent`·`trace_id`)은 따로 읽는다.
+- 읽기: 메시지를 읽을 때 붙인다 — 조회·열기·턴 응답의 메시지 `feedback`(`UP`|`DOWN`|null)과 내보내기 줄의 ~~`feedback` 칸~~ **[개정 2026-10-19]** `feedback`·`feedbackReason`·`feedbackComment` 칸(메시지 응답에는 이유·의견을 싣지 않는다). 표시용 `AssistantMessage` 는 ~~평가 값만 들고~~ **[개정 2026-10-19]** 평가·이유·의견(`MessageFeedback`)을 들되 메시지 응답에는 평가만 내보내고, 판정·로그에 쓰는 관측 칸(`intent`·`trace_id`)은 따로 읽는다.
 - **법정 로그가 아니다** — append-only 권한 제약을 걸지 않는다(취소가 DELETE 다). 평가·지표 용도로만 쓰고 모델 학습에 쓰지 않는다(BR-U8-63).
 
 **INV-U8-10** — 평가는 **도우미의 답**(`role = ASSISTANT` 이고 `kind ≠ ACTION_LOG`)에만 붙고 메시지당 많아야 하나다(PK). 메시지가 사라지면 평가도 사라진다(FK CASCADE) — 대화보다 오래 사는 평가는 없다.
+
+> **[개정 · 2026-10-19 · 싫어요 이유·자유 의견]** INV-U8-10 에 더한다 — 이유·의견은 **싫어요에만** 있다(`ck_assistant_message_feedback_down_only`): 좋아요 행에 이유·의견이 남는 상태는 없다. 의견은 평가 행에만 있다 — 로그·AI 요청·다른 테이블에 사본이 없다(내보내기는 이 행을 읽어 낸다).
 
 ---
 

@@ -5,9 +5,12 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.assistant.adapter.`in`.web.FeedbackRequest
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.FeedbackRating
+import com.trippilot.assistant.domain.FeedbackReason
+import com.trippilot.assistant.domain.MessageFeedback
 import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
@@ -77,11 +80,11 @@ class AssistantFeedbackServiceTest : StringSpec({
         val reply = w.message(s)
 
         w.service().rate(acc, s.sessionId, reply.messageId, FeedbackRating.UP)
-        w.feedbackOf(s, reply.messageId) shouldBe FeedbackRating.UP
+        w.feedbackOf(s, reply.messageId) shouldBe MessageFeedback(FeedbackRating.UP)
         w.feedbackOf(s, said.messageId) shouldBe null
 
         w.service().rate(acc, s.sessionId, reply.messageId, FeedbackRating.DOWN)
-        w.feedbackOf(s, reply.messageId) shouldBe FeedbackRating.DOWN
+        w.feedbackOf(s, reply.messageId) shouldBe MessageFeedback(FeedbackRating.DOWN)
         w.messages.feedback.keys shouldContainExactly setOf(reply.messageId) // 메시지당 하나 — 바꿔도 늘지 않는다
 
         w.service().unrate(acc, s.sessionId, reply.messageId)
@@ -99,7 +102,7 @@ class AssistantFeedbackServiceTest : StringSpec({
                     val m = w.message(s, role, kind)
                     if (role == MessageRole.ASSISTANT && kind != MessageKind.ACTION_LOG) {
                         w.service().rate(acc, s.sessionId, m.messageId, FeedbackRating.DOWN)
-                        w.feedbackOf(s, m.messageId) shouldBe FeedbackRating.DOWN
+                        w.feedbackOf(s, m.messageId) shouldBe MessageFeedback(FeedbackRating.DOWN)
                     } else {
                         shouldThrow<ValidationFailed> { w.service().rate(acc, s.sessionId, m.messageId, FeedbackRating.UP) }
                         shouldThrow<ValidationFailed> { w.service().unrate(acc, s.sessionId, m.messageId) }
@@ -131,23 +134,28 @@ class AssistantFeedbackServiceTest : StringSpec({
         w.messages.feedback shouldBe emptyMap()
     }
 
-    /** SEC-U8-06 — 평가 로그는 AI 로그와 잇는 열쇠(추적 번호)와 분류 칸뿐이다. 발화·답 문장·계정이 실리면 보존 정책 밖에서 남는다. */
-    "평가를 남기면 로그 한 줄 — 메시지·추적 번호·의도·종류·평가만 싣고 발화·답 문장·계정은 싣지 않는다" {
+    /**
+     * SEC-U8-06 — 평가 로그는 AI 로그와 잇는 열쇠(추적 번호)와 분류 칸뿐이다. 발화·답 문장·계정이 실리면 보존 정책 밖에서 남는다.
+     * 싫어요 의견도 사용자가 쓴 글이라 같다 — 본문 대신 있는지만(`has_comment`) 싣는다.
+     */
+    "평가를 남기면 로그 한 줄 — 메시지·추적 번호·의도·종류·평가·이유·의견 유무만 싣고 발화·답 문장·의견 본문·계정은 싣지 않는다" {
         val w = World()
         val s = w.session()
         w.message(s, MessageRole.USER)
         val reply = w.message(s, kind = MessageKind.INFO, intent = "GET_WEATHER", traceId = "7c9e6679-7425-40de-944b-e07fc1f90ae7")
 
-        val (_, events) = listening { w.service().rate(acc, s.sessionId, reply.messageId, FeedbackRating.DOWN) }
+        val (_, events) = listening {
+            w.service().rate(acc, s.sessionId, reply.messageId, FeedbackRating.DOWN, FeedbackReason.NOT_WHAT_I_WANTED, "비 오는지 물었는데 기온만 알려 줬어요")
+        }
 
         val line = events.single()
         line.level shouldBe Level.INFO
         line.formattedMessage.startsWith("assistant_feedback ") shouldBe true
         val body = json.readTree(line.formattedMessage.removePrefix("assistant_feedback "))
-        body.fieldNames().asSequence().toList() shouldContainExactly listOf("message_id", "trace_id", "intent", "kind", "rating")
-        listOf(body["message_id"], body["trace_id"], body["intent"], body["kind"], body["rating"]).map { it.asText() } shouldContainExactly
-            listOf(reply.messageId.toString(), "7c9e6679-7425-40de-944b-e07fc1f90ae7", "GET_WEATHER", "INFO", "DOWN")
-        listOf("오늘 날씨 어때", "맑아요", acc.toString()).forEach { line.formattedMessage shouldNotContain it }
+        body.fieldNames().asSequence().toList() shouldContainExactly listOf("message_id", "trace_id", "intent", "kind", "rating", "reason", "has_comment")
+        listOf("message_id", "trace_id", "intent", "kind", "rating", "reason", "has_comment").map { body[it].asText() } shouldContainExactly
+            listOf(reply.messageId.toString(), "7c9e6679-7425-40de-944b-e07fc1f90ae7", "GET_WEATHER", "INFO", "DOWN", "NOT_WHAT_I_WANTED", "true")
+        listOf("오늘 날씨 어때", "맑아요", acc.toString(), "기온만").forEach { line.formattedMessage shouldNotContain it }
     }
 
     "해석을 부르지 않은 답의 평가는 추적 번호·의도가 비어 로그에 남는다 — 취소와 거부된 평가는 로그가 없다" {
@@ -167,5 +175,87 @@ class AssistantFeedbackServiceTest : StringSpec({
         body["trace_id"].isNull shouldBe true
         body["intent"].isNull shouldBe true
         body["rating"].asText() shouldBe "UP"
+        listOf(body["reason"].isNull, body["has_comment"].asBoolean()) shouldContainExactly listOf(true, false)
+    }
+
+    // ── 싫어요 이유·의견(BR-U8-60) — 서비스가 정하는 본문 규칙. 덮어쓰기의 DB 쪽(`DO UPDATE SET`)·CHECK 는 `AssistantFeedbackIT` 가 잰다 ──
+
+    "싫어요에는 이유와 의견을 함께 남긴다 — 다시 보내면 통째로 바뀌고(빠진 것은 지운다) 좋아요로 바꾸면 둘 다 지운다" {
+        val w = World()
+        val s = w.session()
+        val reply = w.message(s)
+        val rate = { rating: FeedbackRating, reason: FeedbackReason?, comment: String? ->
+            w.service().rate(acc, s.sessionId, reply.messageId, rating, reason, comment)
+        }
+
+        // 저장한 값을 돌려준다 — 응답이 저장과 같은 값이어야 앱이 다시 읽지 않고 그린다
+        rate(FeedbackRating.DOWN, FeedbackReason.WRONG, "날씨 말고 일정을 물었어요") shouldBe
+            MessageFeedback(FeedbackRating.DOWN, FeedbackReason.WRONG, "날씨 말고 일정을 물었어요")
+        w.feedbackOf(s, reply.messageId) shouldBe MessageFeedback(FeedbackRating.DOWN, FeedbackReason.WRONG, "날씨 말고 일정을 물었어요")
+
+        rate(FeedbackRating.DOWN, FeedbackReason.NOT_HELPFUL, null)
+        w.feedbackOf(s, reply.messageId) shouldBe MessageFeedback(FeedbackRating.DOWN, FeedbackReason.NOT_HELPFUL) // 앞의 의견은 남지 않는다
+
+        rate(FeedbackRating.DOWN, null, "직접 적은 말") // "직접 적기"만 — 이유 없이 의견만
+        w.feedbackOf(s, reply.messageId) shouldBe MessageFeedback(FeedbackRating.DOWN, comment = "직접 적은 말")
+
+        rate(FeedbackRating.UP, null, null)
+        w.feedbackOf(s, reply.messageId) shouldBe MessageFeedback(FeedbackRating.UP)
+        w.messages.feedback.keys shouldContainExactly setOf(reply.messageId)
+    }
+
+    /** 이유·의견은 싫어요의 부연이다. 좋아요에 실린 본문은 무엇을 말하는지 모호하다 — 고쳐 저장하지 않고 400 으로 돌려준다. */
+    "좋아요에 이유나 의견이 실리면 400 이다 — 남긴 평가는 그대로다" {
+        val w = World()
+        val s = w.session()
+        val reply = w.message(s)
+        w.service().rate(acc, s.sessionId, reply.messageId, FeedbackRating.DOWN, FeedbackReason.WRONG, "처음 남긴 의견")
+
+        listOf(
+            Triple(FeedbackReason.WRONG, null, listOf("reason")),
+            Triple(null, "좋았어요", listOf("comment")),
+            Triple(FeedbackReason.NOT_HELPFUL, "좋았어요", listOf("reason", "comment")),
+        ).forEach { (reason, comment, fields) ->
+            withClue("$reason / $comment") {
+                shouldThrow<ValidationFailed> { w.service().rate(acc, s.sessionId, reply.messageId, FeedbackRating.UP, reason, comment) }
+                    .fieldErrors.map { it.field } shouldContainExactly fields
+            }
+        }
+        w.feedbackOf(s, reply.messageId) shouldBe MessageFeedback(FeedbackRating.DOWN, FeedbackReason.WRONG, "처음 남긴 의견")
+    }
+
+    "의견은 앞뒤 공백을 지워 저장하고 공백뿐이면 없는 것이다 — 코드 포인트로 300자까지 받고 301자·NUL 은 400 이다" {
+        val w = World()
+        val s = w.session()
+        val reply = w.message(s)
+        val down = { comment: String -> w.service().rate(acc, s.sessionId, reply.messageId, FeedbackRating.DOWN, comment = comment).comment }
+
+        down(" \n\t\u3000 ") shouldBe null // 공백뿐이면(전각 공백 포함) 없는 것이다
+        w.feedbackOf(s, reply.messageId) shouldBe MessageFeedback(FeedbackRating.DOWN)
+        down("\n 줄이 바뀐\n의견 \n") shouldBe "줄이 바뀐\n의견" // 앞뒤만 지운다 — 사이의 줄바꿈은 글의 일부다
+        down("😀".repeat(300)) shouldBe "😀".repeat(300) // UTF-16 으로는 600 단위지만 300자다(DB char_length 와 같은 단위)
+        down("  " + "가".repeat(300) + "  ") shouldBe "가".repeat(300) // 지운 공백은 글자 수에 넣지 않는다
+
+        listOf("가".repeat(301), "😀".repeat(301), "글 사이\u0000NUL").forEach { comment ->
+            withClue(comment.take(8)) {
+                shouldThrow<ValidationFailed> { down(comment) }.fieldErrors.map { it.field } shouldContainExactly listOf("comment")
+            }
+        }
+        w.feedbackOf(s, reply.messageId) shouldBe MessageFeedback(FeedbackRating.DOWN, comment = "가".repeat(300))
+        // 공백뿐인 의견은 없는 것이라 좋아요에 실려도 400 이 아니다(지운 뒤에 잰다)
+        w.service().rate(acc, s.sessionId, reply.messageId, FeedbackRating.UP, comment = "  ") shouldBe MessageFeedback(FeedbackRating.UP)
+    }
+
+    /** 의견을 든 값이 어디선가 문자열로 찍혀도(요청 본문 DEBUG 로그·예외 문구·단언 실패 문구) 본문이 새지 않는다(SEC-U8-06). */
+    "의견을 드는 값의 문자열에는 의견 본문이 없다 — 요청 본문·평가 값·메시지" {
+        val secret = "아무도 보면 안 되는 의견"
+        val feedback = MessageFeedback(FeedbackRating.DOWN, FeedbackReason.WRONG, secret)
+        listOf(
+            FeedbackRequest("DOWN", "WRONG", secret).toString(),
+            feedback.toString(),
+            AssistantMessage(UUID.randomUUID(), 1, MessageRole.ASSISTANT, MessageKind.TEXT, "맑아요.", null, emptyList(), null, null, now, feedback = feedback)
+                .toString(),
+        ).forEach { it shouldNotContain secret }
+        feedback.toString() shouldBe "MessageFeedback(rating=DOWN, reason=WRONG, hasComment=true)" // 있는지는 보인다
     }
 })

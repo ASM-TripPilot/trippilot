@@ -41,8 +41,11 @@ class AssistantExportContributor(
                     "text" to m.text,
                     "redacted" to (m.role == MessageRole.USER && m.text == null),
                     "createdAt" to m.createdAt.toString(),
-                    // 그 답에 남긴 평가(US-ASSIST-09) — 대화의 부속이라 몫을 따로 두지 않고 그 줄에 싣는다(BR-U8-62)
-                    "feedback" to m.feedback?.name,
+                    // 그 답에 남긴 평가(US-ASSIST-09) — 대화의 부속이라 몫을 따로 두지 않고 그 줄에 싣는다(BR-U8-62).
+                    // 싫어요에 함께 남긴 이유·의견도 그 줄의 칸이다 — 의견은 사용자가 쓴 글이라 열람 대상이다(DATA-U8-06)
+                    "feedback" to m.feedback?.rating?.name,
+                    "feedbackReason" to m.feedback?.reason?.name,
+                    "feedbackComment" to m.feedback?.comment,
                 )
             }
         }.take(limit + 1).toList()

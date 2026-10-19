@@ -12,7 +12,9 @@ import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantUsageRepository
 import com.trippilot.assistant.domain.FeedbackRating
+import com.trippilot.assistant.domain.FeedbackReason
 import com.trippilot.assistant.domain.FeedbackTarget
+import com.trippilot.assistant.domain.MessageFeedback
 import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
@@ -209,14 +211,19 @@ class AssistantMessageRepositoryAdapter(
         sessionId, messageId,
     ).firstOrNull()
 
-    /** 메시지당 한 행(PK) — "있으면 바꾸고 없으면 만든다"를 한 문장으로(`ON CONFLICT`, notification_toggle 선례). 두 기기가 동시에 눌러도 한쪽이 실패하지 않는다. */
-    override fun upsertFeedback(messageId: UUID, accountId: UUID, rating: FeedbackRating, at: Instant) {
+    /**
+     * 메시지당 한 행(PK) — "있으면 바꾸고 없으면 만든다"를 한 문장으로(`ON CONFLICT`, notification_toggle 선례). 두 기기가 동시에 눌러도 한쪽이 실패하지 않는다.
+     * **통째로 바꾼다** — 이유·의견도 `SET` 에 있어야 한다. 빠뜨리면 옛 이유·의견이 새 평가에 붙어 남고(좋아요로 바꿨는데 의견이 남으면
+     * CHECK 위반으로 500), 대역(Map)은 늘 통째로 바꿔 이것을 못 본다(`AssistantFeedbackIT` 가 실 DB 로 잰다).
+     */
+    override fun upsertFeedback(messageId: UUID, accountId: UUID, feedback: MessageFeedback, at: Instant) {
         jdbc.update(
             """
-            INSERT INTO assistant_message_feedback (message_id, account_id, rating, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT (message_id) DO UPDATE SET rating = EXCLUDED.rating, updated_at = EXCLUDED.updated_at
+            INSERT INTO assistant_message_feedback (message_id, account_id, rating, reason, comment, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (message_id) DO UPDATE
+               SET rating = EXCLUDED.rating, reason = EXCLUDED.reason, comment = EXCLUDED.comment, updated_at = EXCLUDED.updated_at
             """.trimIndent(),
-            messageId, accountId, rating.name, Timestamp.from(at), Timestamp.from(at),
+            messageId, accountId, feedback.rating.name, feedback.reason?.name, feedback.comment, Timestamp.from(at), Timestamp.from(at),
         )
     }
 
@@ -243,16 +250,21 @@ class AssistantMessageRepositoryAdapter(
         quickReplies = getString("quick_replies")?.let { reader.forType(QUICK_REPLIES).readValue<List<QuickReply>>(it) },
         footnote = getString("footnote"),
         createdAt = getTimestamp("created_at").toInstant(),
-        feedback = getString("feedback")?.let(FeedbackRating::valueOf),
+        feedback = getString("feedback")?.let { rating ->
+            MessageFeedback(FeedbackRating.valueOf(rating), getString("feedback_reason")?.let(FeedbackReason::valueOf), getString("feedback_comment"))
+        },
     )
 
     private companion object {
+        private const val FEEDBACK_OF = "FROM assistant_message_feedback f WHERE f.message_id = assistant_message.message_id"
+
         /**
          * 평가는 **읽을 때 붙인다**(스칼라 부분 질의) — 조인으로 붙이면 `RETURNING` 과 조회가 칸 목록을 따로 가져야 한다.
-         * 막 넣은 행(`RETURNING`)에는 평가가 있을 수 없어 늘 null 이다.
+         * 막 넣은 행(`RETURNING`)에는 평가가 있을 수 없어 늘 null 이다. 칸마다 부분 질의 하나다(PK 조회 셋).
          */
         const val COLUMNS = "message_id, seq, role, kind, text, payload, next_actions, quick_replies, footnote, created_at, proposal_id, " +
-            "(SELECT f.rating FROM assistant_message_feedback f WHERE f.message_id = assistant_message.message_id) AS feedback"
+            "(SELECT f.rating $FEEDBACK_OF) AS feedback, (SELECT f.reason $FEEDBACK_OF) AS feedback_reason, " +
+            "(SELECT f.comment $FEEDBACK_OF) AS feedback_comment"
         val PAYLOAD = object : TypeReference<Map<String, Any?>>() {}
         val NEXT_ACTIONS = object : TypeReference<List<NextAction>>() {}
         val QUICK_REPLIES = object : TypeReference<List<QuickReply>>() {}

@@ -159,7 +159,9 @@ class AssistantOpsIT : AbstractPostgresIntegrationTest() {
             listOf("USER", null, true, null),
         )
         // 한 줄의 칸은 이것이 전부다 — 늘거나 빠지면 계약 문서(`/me/export` 설명)도 같이 고친다
-        items.forEach { it.keys shouldBe setOf("sessionId", "tripId", "role", "kind", "text", "redacted", "createdAt", "feedback") }
+        items.forEach {
+            it.keys shouldBe setOf("sessionId", "tripId", "role", "kind", "text", "redacted", "createdAt", "feedback", "feedbackReason", "feedbackComment")
+        }
         items.all { it["sessionId"] == session.toString() } shouldBe true
         export.export(old).sections.single { it.section == "assistantMessages" }.items shouldBe emptyList()
 

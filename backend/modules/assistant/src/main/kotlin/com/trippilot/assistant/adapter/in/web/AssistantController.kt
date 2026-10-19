@@ -12,6 +12,7 @@ import com.trippilot.assistant.application.TurnResult
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.FeedbackRating
+import com.trippilot.assistant.domain.FeedbackReason
 import com.trippilot.assistant.domain.NextAction
 import com.trippilot.assistant.domain.ProposalView
 import com.trippilot.assistant.domain.QuickReply
@@ -82,12 +83,11 @@ class AssistantController(
     fun dismissProposal(principal: Principal, @PathVariable proposalId: UUID): DismissProposalResponse =
         proposals.dismiss(principal.accountId(), proposalId).let { DismissProposalResponse(ProposalStatusResponse(it.proposalId, it.status.name)) }
 
-    /** 답 평가 남기기·바꾸기(US-ASSIST-09). 같은 값을 다시 보내도 200 이다(바꾼 시각만 간다). */
+    /** 답 평가 남기기·바꾸기(US-ASSIST-09). 본문이 통째로 덮어쓴다 — 같은 값을 다시 보내도 200 이다(바꾼 시각만 간다). 응답은 저장한 값이다. */
     @PutMapping("/sessions/{sessionId}/messages/{messageId}/feedback")
     fun rate(principal: Principal, @PathVariable sessionId: UUID, @PathVariable messageId: UUID, @RequestBody request: FeedbackRequest): FeedbackResponse {
-        val rating = request.toRating()
-        feedback.rate(principal.accountId(), sessionId, messageId, rating)
-        return FeedbackResponse(messageId, rating.name)
+        val saved = feedback.rate(principal.accountId(), sessionId, messageId, request.toRating(), request.toReason(), request.comment)
+        return FeedbackResponse(messageId, saved.rating.name, saved.reason?.name, saved.comment)
     }
 
     /** 답 평가 취소. 남긴 평가가 없어도 204 다(멱등). */
@@ -97,13 +97,25 @@ class AssistantController(
         feedback.unrate(principal.accountId(), sessionId, messageId)
 }
 
-/** [rating] 은 `UP`|`DOWN` 이다. 문자열로 받아 여기서 가른다 — 모르는 값을 본문 해석 오류가 아니라 필드 오류(400)로 돌려준다. */
-data class FeedbackRequest(val rating: String? = null) {
+/**
+ * [rating] 은 `UP`|`DOWN`, [reason] 은 `WRONG`|`NOT_HELPFUL`|`NOT_WHAT_I_WANTED`|null 이다. 문자열로 받아 여기서 가른다 — 모르는 값을
+ * 본문 해석 오류가 아니라 필드 오류(400)로 돌려준다. [comment] 의 규칙(싫어요에만·앞뒤 공백·300자)은 서비스가 본다.
+ */
+data class FeedbackRequest(val rating: String? = null, val reason: String? = null, val comment: String? = null) {
     fun toRating(): FeedbackRating = FeedbackRating.entries.firstOrNull { it.name == rating }
         ?: throw ValidationFailed(listOf(FieldError("rating", "UP 또는 DOWN 이어야 합니다.")))
+
+    fun toReason(): FeedbackReason? = reason?.let { given ->
+        FeedbackReason.entries.firstOrNull { it.name == given }
+            ?: throw ValidationFailed(listOf(FieldError("reason", "WRONG·NOT_HELPFUL·NOT_WHAT_I_WANTED 중 하나여야 합니다.")))
+    }
+
+    /** 의견은 사용자가 쓴 글이다 — 기본 toString 이 본문을 싣지 않게 있는지만 보인다(SEC-U8-06. 요청 본문 DEBUG 로그가 이 값을 찍는다). */
+    override fun toString() = "FeedbackRequest(rating=$rating, reason=$reason, hasComment=${comment != null})"
 }
 
-data class FeedbackResponse(val messageId: UUID, val rating: String)
+/** [reason]·[comment] 는 저장한 값이다 — 의견은 앞뒤 공백을 지운 값이고, 없으면(좋아요 포함) null 이다. */
+data class FeedbackResponse(val messageId: UUID, val rating: String, val reason: String?, val comment: String?)
 
 /** [messages] 는 무엇을 했는지의 기록이다(`ACTION_LOG`) — 저장에 실패했으면 그 안내가 온다(그때 `status` 는 `FAILED`). */
 data class ApplyProposalResponse(val proposal: ProposalStatusResponse, val messages: List<MessageResponse>)
@@ -198,14 +210,17 @@ data class MessageResponse(
     val proposal: ProposalView?,
     val footnote: String?,
     val createdAt: Instant,
-    /** 사용자가 이 답에 남긴 평가(`UP`|`DOWN`). 없으면 null — 사용자 말·적용 기록은 늘 null 이다(US-ASSIST-09). */
+    /**
+     * 사용자가 이 답에 남긴 평가(`UP`|`DOWN`). 없으면 null — 사용자 말·적용 기록은 늘 null 이다(US-ASSIST-09).
+     * 싫어요에 함께 남긴 이유·의견은 싣지 않는다(평가 PUT 응답과 내보내기에만 있다).
+     */
     val feedback: String?,
 ) {
     companion object {
         fun from(m: AssistantMessage) = MessageResponse(
             id = m.messageId, role = m.role.name, kind = m.kind.name, text = m.text, payload = m.payload,
             nextActions = m.nextActions, quickReplies = m.quickReplies, proposal = m.proposal, footnote = m.footnote, createdAt = m.createdAt,
-            feedback = m.feedback?.name,
+            feedback = m.feedback?.rating?.name, // 평가만 — 이유·의견은 메시지 응답에 싣지 않는다
         )
     }
 }
