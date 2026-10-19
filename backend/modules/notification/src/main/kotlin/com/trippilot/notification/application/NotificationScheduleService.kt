@@ -39,6 +39,8 @@ class NotificationScheduleService(
     /** [retryIfNoCopy] 는 재시도 폴러만 false 로 부른다 — 재시도의 재시도는 없다. */
     @Transactional
     fun reload(tripId: UUID, retryIfNoCopy: Boolean = true) {
+        // 같은 여행의 다른 적재(릴레이·재시도 폴러)와 겹치지 않게 — 겹치면 하루 리마인드가 두 벌이 된다.
+        schedules.lockTrip(tripId)
         val now = clock.instant()
         val trip = trips.findOwnedPeriod(tripId)
         if (trip == null) {
