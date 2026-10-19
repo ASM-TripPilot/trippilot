@@ -14,7 +14,7 @@ import java.util.UUID
 interface ItineraryDayCheckFacade {
     /**
      * 그 날 하루만 검증한다 — 같은 장소의 다른 날 위반이 섞이지 않게(BR-SA-17 ⑦).
-     * null = 소유 아님 · 일정 없음 · 그 날 없음. 빈 날은 AI 를 부르지 않는다.
+     * null = 소유 아님 · 일정 없음 · 그 날 없음. 빈 날·영업시간을 아는 슬롯이 없는 날은 AI 를 부르지 않는다.
      *
      * @param judgeHours false = AI 를 부르지 않는다 — 영업시간은 전부 [HoursVerdict.UNKNOWN] 이고 이름·이미 본 경고는 그대로다.
      *   장소 감지가 AI 보류가 이어진 회차의 남은 여행에 쓴다(회로 차단 — RES-SA-04). 폐업 판정은 이 값과 무관하다.
@@ -24,8 +24,8 @@ interface ItineraryDayCheckFacade {
 
 /**
  * 하루 점검 결과. [judged] = false 면 AI 판정 보류(불통·5xx·시한)다 — 영업시간은 전부 [HoursVerdict.UNKNOWN] 이다
- * (domain-entities §7.1). AI 를 부르지 않은 날(AI 모드가 http 아님 · 영업시간을 빼라고 함)은 보류가 아니다 — 그 슬롯들은
- * UNKNOWN 이다. 둘을 가르는 이유: 장소 감지의 회로는 보류만 센다. 모름을 OK 로 채우지 않는다(INV-SA-2).
+ * (domain-entities §7.1). AI 를 부르지 않은 날(AI 모드가 http 아님 · 영업시간을 빼라고 함 · 영업시간을 아는 슬롯 없음)은
+ * 보류가 아니다 — 그 슬롯들은 UNKNOWN 이다. 둘을 가르는 이유: 장소 감지의 회로는 보류만 센다. 모름을 OK 로 채우지 않는다(INV-SA-2).
  */
 data class DayCheck(val judged: Boolean, val slots: List<CheckedSlot>)
 
@@ -48,5 +48,5 @@ data class CheckedSlot(
     val hoursWarnedBefore: Boolean,
 )
 
-/** 영업시간 판정. [UNKNOWN] = AI 모드가 http 가 아님 · 판정 보류 · 영업시간 원문 없음. */
+/** 영업시간 판정. [UNKNOWN] = AI 모드가 http 가 아님 · 영업시간을 빼라고 함 · 판정 보류 · 영업시간 원문 없음. */
 enum class HoursVerdict { VIOLATED, OK, UNKNOWN }

@@ -31,6 +31,9 @@ import java.util.UUID
  * 영업시간 원문 해석은 AI 한 곳이다 — 여기는 원문도 위반 detail 도 파싱하지 않고 위반의 **타입과 위치**만 읽는다.
  * 모름은 OK 로 채우지 않는다(INV-SA-2): AI 모드가 http 가 아님(가짜 검증의 빈 목록은 판정이 아니다) · 영업시간을 빼라고
  * 함 · 보류 · 영업시간 원문 없음은 전부 [HoursVerdict.UNKNOWN] 이다. 위치 없는 위반·HC2~HC4 는 슬롯에 붙이지 않는다.
+ * **알려진 틈**: AI 는 원문이 있어도 해석하지 못하면 영업정보 없음으로 보고 HC1 을 적용하지 않는데, validate 응답은 위반만
+ * 싣고 그 사실을 싣지 않는다 — 그런 슬롯은 OK 로 읽힌다. 슬롯별 'HC1 미판정'은 하위 코드와 함께 경계를 여는 PR-H1 몫이다
+ * (이 변경은 포트·와이어를 바꾸지 않는다).
  *
  * AI 모드는 설정값으로 읽는다 — 그 설정 클래스(`ScheduleAgentProperties`)는 http 조건부라 주입받으면 fake 모드 기동이
  * 깨진다(안티패턴 로그). 어댑터를 켜는 조건(`@ConditionalOnProperty` — 대소문자 무시)과 같은 규칙으로 비교한다.
@@ -52,7 +55,9 @@ class ItineraryDayCheckService(
         val read = readTx.execute { read(accountId, tripId, date) } ?: return null
         val (itinerary, day, surface) = read
         if (day.slots.isEmpty()) return DayCheck(judged = true, slots = emptyList()) // 볼 슬롯이 없다 — AI 0회
-        val ask = judgeHours && aiMode.equals(HTTP, ignoreCase = true)
+        // 영업시간을 아는 슬롯이 없으면 부르지 않는다 — 결과가 어차피 전부 UNKNOWN 이다(validate 1회 ≈ 20초를 아낀다).
+        val ask = judgeHours && aiMode.equals(HTTP, ignoreCase = true) &&
+            day.slots.any { surface[it.sourcePoiId]?.openingHoursKnown == true }
         val verdict = if (ask) Revalidation.attempt(scheduleAgent, outputOf(itinerary, day), tripId) else null
         // 하루만 보냈으니 그 날은 0번 날이다. 위치가 없거나 영업시간이 아닌 위반은 여기서 빠진다.
         val violated = verdict?.violations().orEmpty()

@@ -245,11 +245,23 @@ class ItineraryDayCheckServiceTest : StringSpec({
     }
 
     "영업시간 원문이 없으면 UNKNOWN 이다 — 원문 없이 낸 '위반 없음'은 판정이 아니다" {
-        val (svc) = service()
+        val mixed = itinerary(ItineraryDay.of(d1, 0, listOf(slot(poiA, 0, "10:00"), slot(poiC, 1, "12:00"))))
+        val (svc, ai) = service(stored = mixed)
+
+        val day = svc.checkDay(acc, tripId, d1).shouldNotBeNull()
+
+        ai.received.size shouldBe 1
+        day.judged shouldBe true
+        day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.OK, HoursVerdict.UNKNOWN)
+    }
+
+    "영업시간을 아는 슬롯이 하나도 없는 날은 AI 를 부르지 않는다 — 결과가 어차피 전부 UNKNOWN 이다(validate 1회 ≈ 20초)" {
+        val (svc, ai) = service()
 
         val day = svc.checkDay(acc, tripId, d2).shouldNotBeNull()
 
-        day.judged shouldBe true
+        ai.received.shouldBeEmpty()
+        day.judged shouldBe true // 부르지 않았으니 보류가 아니다 — 장소 감지의 회로가 세지 않는다
         day.slots.single().hours shouldBe HoursVerdict.UNKNOWN
     }
 
