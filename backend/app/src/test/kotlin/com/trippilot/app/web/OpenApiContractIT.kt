@@ -10,6 +10,7 @@ import org.junit.jupiter.api.assertAll
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.core.MethodParameter
 import org.springframework.core.io.ClassPathResource
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RequestBody
@@ -19,9 +20,10 @@ import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
 
 /**
- * 설계-우선 계약 게이트 — docs/design/openapi.yaml(정본) 과 실제 Spring 핸들러 매핑이 정확히 일치해야 통과.
- * 문서에만 있거나(미구현) 코드에만 있으면(미문서화) 빌드 실패 → 스펙-코드 드리프트 원천 차단.
- * springdoc 없이 Spring 자체 매핑을 introspect(SB4 안전). 서비스 표면(base 하위)만 대상(헬스·문서·정적 제외).
+ * 설계-우선 계약 게이트 — docs/design/openapi.yaml(정본) 과 실제 Spring 핸들러가 일치해야 통과.
+ * 경로·메서드(문서에만 있거나 코드에만 있으면 실패), 스키마 참조·중복 키, 그리고 본문의 유무·모양·필드 이름
+ * (필드 계약)을 본다. springdoc 없이 Spring 매핑과 MVC 매퍼를 직접 introspect(SB4 안전).
+ * 서비스 표면(base 하위)만 대상(헬스·문서·정적 제외).
  */
 @SpringBootTest
 class OpenApiContractIT : AbstractPostgresIntegrationTest() {
@@ -188,10 +190,10 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             when {
                 bodyParameter == null && hasDocumentedRequest -> mismatches += "$label 요청: 문서는 본문이 있는데 코드는 @RequestBody 가 없다"
                 bodyParameter != null && !hasDocumentedRequest -> mismatches += "$label 요청: 코드는 @RequestBody 를 받는데 문서에 requestBody 가 없다"
-                bodyParameter != null && request == null ->
-                    mismatches += "$label 요청: 코드는 JSON 본문을 받는데 문서 requestBody 에 application/json 이 없다"
+                bodyParameter != null && request == null && !isLeaf(requestType(bodyParameter)) ->
+                    mismatches += "$label 요청: 코드는 JSON 객체를 받는데 문서 requestBody 에 application/json 이 없다"
                 bodyParameter != null && request != null -> compare(
-                    mapper.typeFactory.constructType(bodyParameter.genericParameterType), request, "$label 요청", false,
+                    requestType(bodyParameter), request, "$label 요청", false,
                     mismatches, mutableSetOf(),
                 )
             }
@@ -221,7 +223,8 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
     ) {
         // 재귀 바닥 — 아래 visited 키가 못 알아보는 감싸기(oneOf 갈래 등)로 자기 참조가 와도 스택이 넘치지 않게.
         if (depth > maxCompareDepth) return
-        if (isUnknown(type)) return // Any·Object — 코드가 모양을 말하지 않는다
+        // Any·Object 는 코드가 모양을 말하지 않고, JsonNode 는 손으로 읽어 이름을 모른다 — 배열·객체 어느 쪽과도 대조하지 않는다.
+        if (type.rawClass == Any::class.java || JsonNode::class.java.isAssignableFrom(type.rawClass)) return
         val resolved = resolve(schema)
         val documented = properties(resolved)
         @Suppress("UNCHECKED_CAST")
@@ -244,13 +247,14 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             // 문서가 이름 있는 속성(닫힌 객체·oneOf)을 적어도 대조하지 않는다 — 손으로 짓는 Map 의 키는
             // 정적으로 알 수 없다(AssistantMessage.payload·Notification.actionPayload). 타입 있는 DTO 로 바꿔야 잡힌다.
             if (values != null) compare(type.contentType, values, "$where{값}", serialize, out, visited, depth + 1)
-            else if (isScalarSchema(resolved)) out += "$where: 코드는 Map(객체)인데 문서는 $shape"
+            else if (isScalarSchema(resolved) || resolved["additionalProperties"] == false) {
+                out += "$where: 코드는 Map(임의 키)인데 문서는 $shape"
+            }
             return
         }
         if (isLeaf(type)) {
-            val documentedAsObject = documented != null || resolved["type"] == "object" ||
-                resolved["additionalProperties"] is Map<*, *> || resolved["additionalProperties"] == true
-            if (documentedAsObject && !JsonNode::class.java.isAssignableFrom(type.rawClass)) {
+            val documentedAsObject = documented != null || resolved["type"] == "object" || resolved.containsKey("additionalProperties")
+            if (documentedAsObject) {
                 out += "$where: 문서는 ${documented?.let { "객체(${it.keys.sorted()})" } ?: shape}인데 코드는 ${type.rawClass.simpleName}"
             }
             return
@@ -261,7 +265,9 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         }
         // 재귀 방지 키는 스키마 **이름**으로 — allOf 를 합치면 매번 새 Map 이 생겨 객체 동일성으로는 못 막는다.
         // 같은 층에 속성이 붙은 `allOf: [{ $ref: X }] + properties` 는 X 와 다른 스키마다 — 이름 키를 쓰지 않는다.
-        val key = refName(schema).takeIf { properties(schema) == null } ?: where
+        // 이름이 없으면 스키마 **내용**(Map 의 구조적 hashCode)으로 — 위치(where)로 하면 층마다 키가 달라져
+        // 이름 없는 감싸기(oneOf 갈래 둘 등)의 자기 참조를 못 알아보고 갈래 수의 거듭제곱으로 돈다.
+        val key = refName(schema).takeIf { properties(schema) == null } ?: "#${schema.hashCode()}"
         if (!visited.add("$type|$key|$serialize")) return
 
         val description = if (serialize) mapper.serializationConfig.introspect(type) else mapper.deserializationConfig.introspect(type)
@@ -288,7 +294,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
     private fun resolve(schema: Map<String, Any>): Map<String, Any> {
         val ref = schema["\$ref"] as? String
         if (ref != null) return resolve(componentSchemas().getValue(ref.substringAfterLast('/')) as Map<String, Any>)
-        val members = listOf("allOf", "oneOf", "anyOf").flatMap { schema[it] as? List<Map<String, Any>> ?: emptyList() }
+        val members = members(schema)
         if (members.isEmpty()) return schema
         val resolvedMembers = members.map(::resolve)
         // 속성을 가진 갈래가 하나도 없으면 객체로 합치지 않는다 — 합치면 빈 객체가 만들어져 열거형·배열 필드가
@@ -305,9 +311,13 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
     @Suppress("UNCHECKED_CAST")
     private fun refName(schema: Map<String, Any>): String? {
         (schema["\$ref"] as? String)?.let { return it.substringAfterLast('/') }
-        val members = listOf("allOf", "oneOf", "anyOf").flatMap { schema[it] as? List<Map<String, Any>> ?: emptyList() }
-        return members.filterNot { it["type"] == "null" }.singleOrNull()?.let(::refName)
+        return members(schema).filterNot { it["type"] == "null" }.singleOrNull()?.let(::refName)
     }
+
+    /** 구성 키워드(allOf·oneOf·anyOf)의 갈래들 — resolve 와 refName 이 같은 목록을 본다. */
+    @Suppress("UNCHECKED_CAST")
+    private fun members(schema: Map<String, Any>): List<Map<String, Any>> =
+        listOf("allOf", "oneOf", "anyOf").flatMap { schema[it] as? List<Map<String, Any>> ?: emptyList() }
 
     @Suppress("UNCHECKED_CAST")
     private fun properties(schema: Map<String, Any>): Map<String, Any>? = schema["properties"] as? Map<String, Any>
@@ -335,9 +345,10 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
     private fun isScalarSchema(schema: Map<String, Any>): Boolean =
         schema["type"] in setOf("string", "integer", "number", "boolean")
 
-    private fun isUnknown(type: JavaType): Boolean = type.rawClass == Any::class.java
-
     private val maxCompareDepth = 32
+
+    private fun requestType(parameter: MethodParameter): JavaType =
+        mapper.typeFactory.constructType(parameter.genericParameterType)
 
     private fun isNoBody(type: JavaType): Boolean =
         type.rawClass == Void.TYPE || type.rawClass == Void::class.java || type.rawClass == Unit::class.java

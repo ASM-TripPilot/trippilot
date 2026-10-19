@@ -3,6 +3,7 @@ package com.trippilot.app.web
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.Provider
+import com.trippilot.auth.domain.RefreshSession
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
@@ -11,6 +12,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotBeBlank
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
@@ -18,6 +20,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
 import org.springframework.core.io.ClassPathResource
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.client.RestClient
 import org.yaml.snakeyaml.Yaml
 import java.time.LocalDate
@@ -33,6 +36,8 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
 
     @Value("\${local.server.port}")
     private var port: Int = 0
+
+    @Autowired private lateinit var jdbc: JdbcTemplate
 
     private val json = ObjectMapper()
 
@@ -138,9 +143,9 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     )
 
     @Test
-    fun `deviceId 가 128자를 넘으면 두 로그인 경로 모두 400 — deviceId 검증 실패로, 500 이 아니다`() {
+    fun `deviceId 가 상한을 넘으면 두 로그인 경로 모두 400 — deviceId 검증 실패로, 500 이 아니다`() {
         loginBodies.forEach { (path, body) ->
-            val (status, response) = post(path, body("d".repeat(129)))
+            val (status, response) = post(path, body("d".repeat(RefreshSession.DEVICE_ID_MAX + 1)))
 
             withClue(path) {
                 status shouldBe 400
@@ -151,9 +156,19 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `deviceId 128자는 두 로그인 경로 모두 받는다 — 상한 경계`() {
+    fun `deviceId 상한이 세션 컬럼 폭과 같다 — 둘이 갈라지면 22001 → 500 이 돌아온다`() {
+        val width = jdbc.queryForObject(
+            "SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'refresh_session' AND column_name = 'device_id'",
+            Int::class.java,
+        )
+
+        width shouldBe RefreshSession.DEVICE_ID_MAX
+    }
+
+    @Test
+    fun `deviceId 상한 길이는 두 로그인 경로 모두 받는다 — 상한 경계`() {
         loginBodies.forEach { (path, body) ->
-            val (status, _) = post(path, body("d".repeat(128)))
+            val (status, _) = post(path, body("d".repeat(RefreshSession.DEVICE_ID_MAX)))
 
             withClue(path) { status shouldBe 200 }
         }

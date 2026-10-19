@@ -44,6 +44,12 @@ class RefreshSession private constructor(
         RefreshSession(id, accountId, deviceId, tokenHash, chainId, issuedAt, expiresAt, rotatedAt, revokedAt = now)
 
     companion object {
+        /**
+         * 기기 식별자 상한 — 세션 컬럼(`refresh_session.device_id varchar(128)`)과 같은 값. 요청 DTO 가 이 값으로
+         * 막는다(넘기면 저장에서 22001 → 로그인 500). 컬럼과 갈라지면 SocialLoginControllerIT 가 실패한다.
+         */
+        const val DEVICE_ID_MAX = 128
+
         /** 새 체인의 첫 세션(로그인 시 발급). */
         fun issue(accountId: AccountId, deviceId: String, tokenHash: String, now: Instant, ttl: Duration): RefreshSession =
             RefreshSession(RefreshSessionId.new(), accountId, deviceId, tokenHash, UUID.randomUUID(), now, now.plus(ttl), null, null)
