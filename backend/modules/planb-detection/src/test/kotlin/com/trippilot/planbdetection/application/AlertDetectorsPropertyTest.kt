@@ -4,6 +4,7 @@ import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.planbdetection.application.AlertFixtures.DAY
 import com.trippilot.planbdetection.domain.SituationCopy
 import com.trippilot.planbdetection.domain.TriggerSeverity
+import com.trippilot.planbdetection.domain.TriggerVariant
 import com.trippilot.planbdetection.domain.WeatherAlerts
 import com.trippilot.planbdetection.domain.WeatherHazards
 import com.trippilot.trip.api.TripDestinationRef
@@ -24,12 +25,13 @@ import io.kotest.property.arbitrary.boolean
 import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.orNull
 import io.kotest.property.checkAll
 import java.time.LocalTime
 import java.util.UUID
 
 /**
- * 특보 감지기 PBT(블로킹 게이트 — PBT-SA-02·08·09·10·11 의 이 출처 몫).
+ * 특보·대기질 감지기 PBT(블로킹 게이트 — PBT-SA-02·08·09·10·11 의 이 출처 몫).
  *
  * - **모름은 절대 확인이 아니다**(INV-SA-2 · PBT-SA-02·09 대칭): 날짜 전체 확인 ⇒ 볼 것이 없었거나(실외·미분류 슬롯 0) 원천을 읽었고
  *   그 날의 목적지를 다 알며, 걸린 특보가 없다 / 모든 목적지의 두 등급을 알고 보통 이하다. 원천 모름이면 확인이 없다.
@@ -84,6 +86,48 @@ class AlertDetectorsPropertyTest : StringSpec({
             val base = KmaWarningDetector(c.alerts(), c.trips()).detect(c.target())
             val shuffled = c.copy(slots = c.slots.reversed() + if (more && c.slots.isNotEmpty()) listOf(indoor()) else emptyList())
             KmaWarningDetector(shuffled.alerts(), shuffled.trips()).detect(shuffled.target()) shouldBe base
+        }
+    }
+
+    "대기질 — 확인이면 원천을 읽었고 그 날 모든 목적지의 두 등급을 알며 둘 다 보통 이하다" {
+        checkAll(airCases) { c ->
+            val got = AirQualityDetector(c.alerts(), c.trips()).detect(c.target())
+            if (got == CONFIRMED && c.needsLook) {
+                withClue("원천 모름인데 확인") { c.read.shouldBeInstanceOf<AlertRead.Ok<*>>() }
+                val grades = (c.read as AlertRead.Ok).value
+                for (d in WeatherAlerts.destinationsOn(c.refs, c.start, DAY)) withClue("확인인데 $d 의 등급이 보통 이하로 확인되지 않았다") {
+                    val g = d.regionCode?.let { AirRegion.of(it) }?.let { grades[it] }
+                    (g != null && listOf(g.pm10, g.pm25).all { (WeatherAlerts.airRank(it) ?: 9) <= 1 }) shouldBe true
+                }
+            }
+            if (c.read is AlertRead.Unknown && c.needsLook) withClue("원천 모름이면 모름") { got.shouldBeInstanceOf<Detection.Unknown>() }
+        }
+    }
+
+    "대기질 — 가장 나쁜 등급이 매우나쁨이면 위험, 나쁨이면 주의 · 원문 등급을 따옴표에 그대로 · 가드 통과" {
+        checkAll(airCases) { c ->
+            val got = AirQualityDetector(c.alerts(), c.trips()).detect(c.target())
+            val s = (got as? Detection.Checked)?.signals?.singleOrNull() ?: return@checkAll
+            val grades = (c.read as AlertRead.Ok).value
+            val worst = WeatherAlerts.destinationsOn(c.refs, c.start, DAY)
+                .mapNotNull { d -> d.regionCode?.let { AirRegion.of(it) }?.let { grades[it] } }
+                .flatMap { listOf(it.pm10, it.pm25) }.mapNotNull { WeatherAlerts.airRank(it) }.max()
+            s.variant shouldBe TriggerVariant.DUST
+            s.severity shouldBe if (worst == 3) TriggerSeverity.RISK else TriggerSeverity.CAUTION
+            s.reason shouldContain if (worst == 3) "'매우나쁨'" else "'나쁨'"
+            s.poiIds shouldBe c.outdoor.sortedWith(compareBy({ it.startAt }, { it.slotKey })).map { it.poiId }.distinct()
+            withClue(s.reason) {
+                SituationCopy.violation(s.reason, c.slots.mapNotNull { it.nameKo }) shouldBe null
+                s.reason.length shouldBeLessThanOrEqual SituationCopy.MAX_LENGTH
+            }
+        }
+    }
+
+    "대기질 — 슬롯 순서를 섞어도 · 실내 슬롯을 더해도 판정이 같다" {
+        checkAll(airCases, Arb.boolean()) { c, more ->
+            val base = AirQualityDetector(c.alerts(), c.trips()).detect(c.target())
+            val shuffled = c.copy(slots = c.slots.reversed() + if (more && c.slots.isNotEmpty()) listOf(indoor()) else emptyList())
+            AirQualityDetector(shuffled.alerts(), shuffled.trips()).detect(shuffled.target()) shouldBe base
         }
     }
 })
@@ -168,6 +212,17 @@ private val warningCases: Arb<Case<List<ActiveWarning>>> = arbitrary {
         0..4,
     ).bind()
     val read: AlertRead<List<ActiveWarning>> = if (Arb.int(0..9).bind() == 0) AlertRead.Unknown("gateway:30") else AlertRead.Ok(warnings)
+    Case(UUID.randomUUID(), start, refs, slots.bind(), read)
+}
+
+private val GRADES = listOf("좋음", "보통", "나쁨", "매우나쁨", "예보없음")
+
+private val airCases: Arb<Case<Map<AirRegion, AirGrade>>> = arbitrary {
+    val (start, refs) = trip.bind()
+    val grades = AirRegion.entries.filter { Arb.int(0..4).bind() > 0 }.associateWith {
+        AirGrade(Arb.element(GRADES).orNull(0.1).bind(), Arb.element(GRADES).orNull(0.1).bind())
+    }
+    val read: AlertRead<Map<AirRegion, AirGrade>> = if (Arb.int(0..9).bind() == 0) AlertRead.Unknown("unavailable") else AlertRead.Ok(grades)
     Case(UUID.randomUUID(), start, refs, slots.bind(), read)
 }
 
