@@ -103,9 +103,13 @@ tasks.withType<JacocoReport>().configureEach { reports.xml.required = true }
 // 리포트 태스크 뒤에 붙이고 **그 태스크의 실제 XML 출력 경로**를 넘긴다 — 스크립트에 경로를 박아 두면
 // 리포트 위치가 바뀐 날 옛 XML 을 읽는다.
 val coverageReport = tasks.named<JacocoReport>("testCodeCoverageReport")
+// 구성 시점에 문자열로 푼다 — 출력 위치 provider 는 구성 캐시가 직렬화하지 못한다(실측).
+val coverageXml = coverageReport.get().reports.xml.outputLocation.get().asFile
+// 옛 XML 을 먼저 지운다 — 실행 데이터가 없으면 리포트 태스크가 SKIPPED 되고 옛 XML 이 남아 그것으로 판정된다.
+val clearCoverageXml = tasks.register<Delete>("clearCoverageXml") { delete(coverageXml) }
+coverageReport.configure { mustRunAfter(clearCoverageXml) }
 tasks.register<Exec>("coverageGate") {
-    dependsOn(coverageReport)
+    dependsOn(clearCoverageXml, coverageReport)
     workingDir = rootDir
-    // 구성 시점에 문자열로 푼다 — 출력 위치 provider 는 구성 캐시가 직렬화하지 못한다(실측).
-    commandLine("python3", "scripts/coverage_gate.py", coverageReport.get().reports.xml.outputLocation.get().asFile.absolutePath)
+    commandLine("python3", "scripts/coverage_gate.py", coverageXml.absolutePath)
 }

@@ -40,14 +40,20 @@ jobs:
         working-directory: backend
         run: python3 -m unittest scripts/test_coverage_gate.py
       # 커버리지를 build 와 **같은 Gradle 호출에** 싣는다 — JVM 기동·설정 단계를 한 번만 거친다.
-      # 하한선 판정(`:app:coverageGate`, 규칙은 scripts/coverage_gate.py)은 **PR 에서만** 건다. develop push 에서
-      # 실패하면 이미 머지된 코드의 이미지 발행(image 잡)까지 막히기 때문이다 — push 는 build 만 돈다
-      # (합산 리포트를 읽을 곳이 없다). 표와 실패 사유는 잡 요약(Summary 탭)에 남는다.
+      # 하한선 판정(`:app:coverageGate`, 규칙은 scripts/coverage_gate.py)은 **PR 에서만 차단**한다. develop push 에서
+      # 막으면 이미 머지된 코드의 이미지 발행(image 잡)까지 멈춘다. 대신 push 는 아래에서 **막지 않고** 판정만 남긴다 —
+      # 각자 통과한 PR 둘이 합쳐 하한을 넘은 시점을 머지 커밋의 Summary 탭에서 보게(안 남기면 무관한 다음 PR 이
+      # 처음 빨개져 원인을 거꾸로 추적해야 한다). 표와 실패 사유는 잡 요약에 남는다.
       - name: gradle build (test 포함) + 커버리지(PR)
         working-directory: backend
         run: ./gradlew build ${{ github.event_name == 'pull_request' && ':app:coverageGate' || '' }} --no-daemon
+      - name: 커버리지 기록(develop push — 막지 않음)
+        if: github.event_name == 'push'
+        continue-on-error: true
+        working-directory: backend
+        run: ./gradlew :app:coverageGate --no-daemon
       - name: 커버리지 리포트 보관
-        if: always() && github.event_name == 'pull_request'
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}   # 실패해도 남기되, 취소된 실행은 건너뛴다
         uses: actions/upload-artifact@v4
         with:
           name: backend-coverage

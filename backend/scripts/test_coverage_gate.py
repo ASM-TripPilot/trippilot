@@ -112,9 +112,23 @@ class CoverageGateTest(unittest.TestCase):
             self.assertEqual(gate.main([os.path.join(d, "none.xml")]), 2)
 
     def test_실제_소스_트리에서_모듈_소유를_찾는다(self):
+        # 특정 패키지·모듈 이름을 박지 않는다 — 무관한 이름 변경 리팩터가 이 테스트를 깨면 안 된다.
+        # 분할 패키지(한 패키지를 두 모듈이 가짐)도 금지하지 않는다 — 판정은 "a+b" 모듈로 합쳐 계속한다.
         owners = gate.package_owners()
-        self.assertEqual(owners["com/trippilot/recalculation/application"], {"modules/itinerary-recalculation"})
-        self.assertTrue(all(len(v) == 1 for v in owners.values()), "한 패키지를 두 모듈이 나눠 갖고 있다")
+        self.assertTrue(owners, "소스 트리에서 패키지를 하나도 못 찾았다")
+        modules = {m for v in owners.values() for m in v}
+        self.assertTrue(all((gate.BACKEND / m / "build.gradle.kts").exists() for m in modules), modules)
+
+    def test_소유_모듈을_못_찾은_패키지는_조용히_흘리지_않고_실패한다(self):
+        pkg = {"com/trippilot/trip": ABOVE, "com/trippilot/orphan": ABOVE}
+        _, _, failures = gate.evaluate(report(pkg), {"com/trippilot/trip": {"modules/trip"}})
+        self.assertIn("com/trippilot/orphan: 소유 모듈을 못 찾았다(소스 디렉터리와 package 선언이 어긋났나)", failures)
+
+    def test_라인만_바닥을_어긴_모듈도_표_맨_위에_온다(self):
+        pkg = {"com/trippilot/a": counts(100, 51), "com/trippilot/b": counts(gate.MODULE_FLOORS["LINE"] - 10, 100)}
+        totals, modules, failures = gate.evaluate(report(pkg), by_segment(*pkg))
+        rows = [r for r in gate.render(totals, modules, failures).splitlines() if r.startswith("| ") and "모듈" not in r]
+        self.assertTrue(rows[0].startswith("| b"), rows)
 
 
 if __name__ == "__main__":

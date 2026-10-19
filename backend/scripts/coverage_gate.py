@@ -64,7 +64,7 @@ def fmt(value, floor):
 def package_owners(backend=BACKEND):
     """패키지 디렉터리(`com/trippilot/...`) → 그것을 가진 Gradle 모듈들. 둘 이상이면 리포트에서 합쳐진 것이다."""
     owners = defaultdict(set)
-    for src in backend.glob("**/src/main/kotlin"):
+    for src in [*backend.glob("**/src/main/kotlin"), *backend.glob("**/src/main/java")]:
         if "build" in src.relative_to(backend).parts:
             continue
         module = src.parent.parent.parent.relative_to(backend).as_posix()
@@ -79,7 +79,8 @@ def evaluate(root, owners):
     sums = defaultdict(lambda: {k: [0, 0] for k in KINDS})
     for package in root.iter("package"):
         name = package.get("name")
-        module = "+".join(sorted(owners.get(name, ()))) or name
+        # 소유를 못 찾은 패키지를 패키지 이름으로 흘리면 하위 패키지마다 '모듈'이 생겨 바닥 판정이 엉뚱해진다.
+        module = "+".join(sorted(owners.get(name, ()))) or f"?{name}"
         for kind in KINDS:
             covered, missed = counter(package, kind)
             sums[module][kind][0] += covered
@@ -91,16 +92,23 @@ def evaluate(root, owners):
     failures = [f"전체 {k} 측정 대상이 없다(합산 대상·계측 범위 설정을 본다)" for k in KINDS if totals[k] is None]
     failures += [f"전체 {k} {totals[k]:.1f}% < 하한 {TOTAL_FLOORS[k]:g}%" for k in KINDS
                  if totals[k] is not None and totals[k] < TOTAL_FLOORS[k]]
+    failures += [f"{m[1:]}: 소유 모듈을 못 찾았다(소스 디렉터리와 package 선언이 어긋났나)" for m in sorted(modules) if m.startswith("?")]
     failures += [
         f"{m} {k} {p[k]:.1f}% < 모듈 바닥 {MODULE_FLOORS[k]:g}%"
         for m, p in sorted(modules.items()) for k in KINDS
-        if p[k] is not None and p[k] < MODULE_FLOORS[k]
+        if not m.startswith("?") and p[k] is not None and p[k] < MODULE_FLOORS[k]
     ]
     return totals, modules, failures
 
 
+def margin(p):
+    """바닥 대비 가장 작은 여유 — 라인만 어긴 모듈도 분기만 어긴 모듈도 맨 위에 오게 정렬한다."""
+    gaps = [p[k] - MODULE_FLOORS[k] for k in KINDS if p[k] is not None]
+    return min(gaps) if gaps else float("inf")
+
+
 def render(totals, modules, failures):
-    rows = sorted(modules.items(), key=lambda kv: (kv[1]["BRANCH"] is None, kv[1]["BRANCH"] or 0.0))
+    rows = sorted(modules.items(), key=lambda kv: margin(kv[1]))
     lines = [
         "### 백엔드 커버리지 — " + " · ".join(f"{k} {fmt(totals[k], TOTAL_FLOORS[k])} (하한 {TOTAL_FLOORS[k]:g}%)" for k in KINDS),
         "모듈 바닥: " + " · ".join(f"{k} {MODULE_FLOORS[k]:g}%" for k in KINDS),
@@ -124,7 +132,9 @@ def main(argv=None):
         return 2
     path = argv[0]
     if not os.path.exists(path):
-        print(f"리포트가 없다: {path}\n`./gradlew :app:coverageGate` 로 부른다.", file=sys.stderr)
+        # coverageGate 는 옛 XML 을 지우고 리포트를 다시 만든다. 그래도 없으면 실행 데이터가 없어 리포트가 생략된 것이다.
+        print(f"리포트가 없다: {path}\n테스트 실행 데이터(.exec)가 없어 리포트가 생략됐을 수 있다 — "
+              "`./gradlew build :app:coverageGate` 로 테스트부터 돌린다.", file=sys.stderr)
         return 2
 
     totals, modules, failures = evaluate(ET.parse(path).getroot(), package_owners())
