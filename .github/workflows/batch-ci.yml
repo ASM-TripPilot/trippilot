@@ -1,0 +1,35 @@
+name: batch-ci
+
+# 로컬 수집 파이프라인(batch/, TRIP-1468)의 검증 로직과 DAG 구조·드라이런.
+# 실 API 호출 0건 — 드라이런은 리포의 수집본(ai/data)을 수집 결과로 쓴다.
+# 경로: 검증 규칙이 백엔드 지역 시드(시도·별칭)와 수집본을 읽으므로 그 둘이 바뀌어도 돈다.
+on:
+  push:
+    branches: [develop]
+    paths: ['batch/**', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_pois.json', 'ai/data/collected_events.json']
+  pull_request:
+    branches: [develop, main]
+    paths: ['batch/**', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_pois.json', 'ai/data/collected_events.json']
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      AIRFLOW_VERSION: '3.3.2'
+      PYTHON_VERSION: '3.12'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - name: Airflow 설치(제약 파일로 고정)
+        run: |
+          uv venv -p "$PYTHON_VERSION" .venv-batch
+          uv pip install --python .venv-batch "apache-airflow==${AIRFLOW_VERSION}" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+      - name: 검증 로직 + DAG 구조 + 드라이런
+        run: |
+          export AIRFLOW_HOME="$RUNNER_TEMP/airflow"
+          export AIRFLOW__CORE__LOAD_EXAMPLES=False
+          export AIRFLOW__CORE__DAGS_FOLDER="$PWD/batch/dags"
+          .venv-batch/bin/airflow db migrate
+          .venv-batch/bin/python -m unittest discover -s batch/tests -v

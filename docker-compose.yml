@@ -408,6 +408,25 @@ services:
       start_period: 10s
 
   # ── Frontend (Expo Web 자리 · nginx 정적+프록시 스텁) ──────────
+  # 수집 파이프라인(로컬 전용, TRIP-1468) — 수집 → 검증 → 게시 → 신선도. 운영 배치는 GitHub Actions(ai-*-collect.yml).
+  # `docker compose --profile batch up -d airflow` → http://localhost:8090 (계정·비밀번호는 컨테이너 로그에 찍힌다).
+  # DAG 는 기본이 드라이런(리포 수집본 사용, 실 API 0) — 설명은 batch/README.md.
+  airflow:
+    profiles: ["batch"]
+    image: apache/airflow:3.3.2-python3.12
+    container_name: trippilot-airflow
+    command: standalone
+    restart: "no"
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/trippilot/batch/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      BATCH_OUTPUT: /opt/trippilot/batch/.out
+    volumes:
+      # 리포 통째로 — DAG 가 batch/checks.py · 백엔드 지역 시드 · ai/data 수집본을 읽고, 게시본은 batch/.out 에 쓴다.
+      - ./:/opt/trippilot
+    ports:
+      - "8090:8080"
+
   frontend:
     profiles: ["full"]
     image: ghcr.io/asm-trippilot/trippilot-frontend:${TAG:-develop}

@@ -55,3 +55,6 @@ htmlcov/
 # (`ai/data/collected_pois.json`)이 정본이므로 리포에 둘 이유가 없다.
 # `ai/data/overture/서울.json`(39MB)이 #1233 에 딸려 들어간 사고를 막는다.
 ai/data/overture/
+
+# 로컬 Airflow 수집 파이프라인 산출물(TRIP-1468)
+batch/.out/
