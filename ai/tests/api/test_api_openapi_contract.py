@@ -75,6 +75,7 @@ def test_openapi_snapshot_covers_boundary_routes() -> None:
         # 옮겨 갈 때까지 살아 있다. ④단계에서 구 경로 두 줄을 지울 때 이 두 줄만 남는다.
         "/ai/v1/planb/replan",
         "/ai/v1/planb/alternatives",
+        "/ai/v1/planb/opportunities",      # 상황 감지 기회 카드 — 근처 행사·요즘 인기, LLM 0회 (BR-SA-22)
             "/ai/v1/reflection/generate",      # TRIP-429 — U6 Reflect (FD v1.0)
             "/ai/v1/reflection/nudge",         # TRIP-429
             "/ai/v1/reflection/share-card",    # TRIP-429 후속 — j06 공유 카드 문구
