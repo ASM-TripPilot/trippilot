@@ -227,3 +227,36 @@ def test_벡터를_안_주면_스스로_임베딩한다() -> None:
 
     assert got
     assert spy.embed_calls == 1
+
+
+# ── ⑥ 맞은 조각 + 도입부 첫 문장 (2026-10-19 청킹 실측) ─────────────────────
+
+
+def _chunked(ref: str):
+    from trippilot.poi_curation.chunking import chunk_document
+
+    return chunk_document({"doc_id": f"wiki:{ref}", "poi_ref": ref, "sections": [
+        {"heading": "개요", "text": "수원 화성은 경기도 수원시에 있는 조선 후기의 성곽이다. 정조 때 쌓았다."},
+        {"heading": "시설", "text": "화성행궁 안에 실내 전시관이 있어 비 오는 날에도 둘러볼 수 있다."},
+    ]})
+
+
+def test_본문_뒤쪽_조각이_맞으면_도입부_첫_문장을_앞에_붙인다() -> None:
+    """조각만으로는 이곳이 무엇인지가 빠진다 — 같은 300자 예산에서 "첫 문장 + 조각"이 도입부 300자를
+    59.9% : 31.7% 로 이겼다(`measure_kb5_chunking.py combo300`)."""
+    docs = _chunked("ref-in")
+    embedding, store = _wired(*docs)
+
+    got, _ = fetch_place_knowledge([_poi("p1", "수원화성", "ref-in")], docs[1].text, embedding, store)
+
+    assert got["ref-in"] == ("수원 화성은 경기도 수원시에 있는 조선 후기의 성곽이다. … "
+                             "화성행궁 안에 실내 전시관이 있어 비 오는 날에도 둘러볼 수 있다.")
+
+
+def test_도입부_조각이_맞으면_그대로다() -> None:
+    docs = _chunked("ref-in")
+    embedding, store = _wired(*docs)
+
+    got, _ = fetch_place_knowledge([_poi("p1", "수원화성", "ref-in")], docs[0].text, embedding, store)
+
+    assert got["ref-in"] == docs[0].text

@@ -35,7 +35,7 @@ from collections.abc import Mapping, Sequence
 from trippilot.agents.planb.kb_retrieval import retrieve
 from trippilot.domain.kb import KbKind
 from trippilot.domain.poi import Poi
-from trippilot.poi_curation.chunking import chunk_ids
+from trippilot.poi_curation.chunking import chunk_ids, split_sentences
 from trippilot.poi_curation.place_docs import SOURCE_WIKI, SOURCES
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
@@ -49,6 +49,12 @@ _logger = logging.getLogger("trippilot.planb.place_knowledge")
 # 조각은 절 제목 + 최대 280자(`chunking.MAX_CHARS`)라 자르지 않고 통째로 들어가게 잡는다 —
 # 맞은 조각을 다시 자르면 검색이 고른 근거가 잘려 나간다.
 MAX_DOC_CHARS = 300
+# 맞은 조각이 본문 뒤쪽이면 도입부 첫 문장을 이만큼까지 앞에 붙인다 — 조각만으로는 "이곳이 무엇인지"가 빠진다.
+# 실측(2026-10-19, 장소 120 × Plan-B 상황 질의 6 = 720판, LLM 판정·순서 섞음, `measure_kb5_chunking.py`):
+#     맞은 조각만        vs 도입부 앞 160자   53.9% : 40.3% (같음 5.8%)
+#     첫 문장 + 조각     vs 맞은 조각만       66.0% : 24.0% (같음 10.0%)
+#     첫 문장 + 조각     vs 도입부 앞 300자   59.9% : 31.7% (같음 8.5%) ← 같은 글자 예산(길이 편향 통제)
+INTRO_HEAD_CHARS = 100
 # 조각으로 적재되는 출처 — 이 출처는 통문서 id 대신 조각 id 범위로 펼쳐 찾는다.
 CHUNKED_SOURCES = frozenset({SOURCE_WIKI})
 
@@ -123,10 +129,11 @@ def fetch_place_knowledge(
 
     # 키는 `poi_ref`(= source_ref)다. `doc_id` 는 출처별 접두사가 붙어 있어 후보와
     # 직접 안 맞는다 — 한 장소에 여러 출처의 문서가 생길 수 있기 때문이다.
+    intro = {h.poi_ref: h for h in hits if h.poi_ref and h.metadata.get("chunk") == 0}
     out: dict[str, str] = {}
     for hit in hits:
         ref = hit.poi_ref
-        text = _clip(hit.text)
+        text = _clip(_with_intro(hit, intro.get(ref)))
         if not ref or not text or ref in out:
             continue  # 같은 장소에 문서가 여럿이면 점수 높은 쪽만 (스토어가 정렬해 준다)
         if len(out) >= MAX_DOCS:
@@ -156,6 +163,21 @@ def _pool_refs(pois: Sequence[Poi]) -> frozenset[str]:
     24시간) 전량이 비는 구간이 있다 — 그때도 조용히 빈 결과일 뿐 실패가 아니다.
     """
     return frozenset(p.source_ref for p in pois if p.source_ref)
+
+
+def _with_intro(hit, intro) -> str:
+    """맞은 조각이 도입부(#0)가 아니면 도입부 첫 문장 + " … " + 조각 본문. 통문서(조각 번호 없음)·도입부 조각 자체·
+    도입부를 못 찾은 장소는 그대로 — 실측 형식(`measure_kb5_chunking.py combo300`)과 같다."""
+    if not hit.metadata.get("chunk") or intro is None:
+        return hit.text
+    head = split_sentences(_body(intro))[0][:INTRO_HEAD_CHARS]
+    return f"{head} … {_body(hit)}"
+
+
+def _body(hit) -> str:
+    """조각 글은 `"{절 제목}: {본문}"`(`chunking.chunk_document`) — 절 제목을 뗀다."""
+    section = hit.metadata.get("section") or ""
+    return hit.text[len(section) + 2:] if section and hit.text.startswith(f"{section}: ") else hit.text
 
 
 def _clip(text: str) -> str:

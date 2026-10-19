@@ -6,17 +6,24 @@
 `test_committed_place_vectors_cover_the_corpus` 가 잊은 것을 CI 에서 잡는다.
 
 벡터 공간은 질문뱅크(`scripts/intent/build_bank_vectors.py`)와 같은 경로다 — 배포 임베딩 서비스(`ai/embedding/app.py`)
-처럼 KURE-v1 가중치를 fp16 으로 반올림한 뒤 fp32 로 연산, normalize. 끝에 BR-MLO-05 게이트(원본 fp32 가중치와
-조각별 코사인 ≥ 0.9999 · 질의별 top-k 동일)를 표본으로 확인하고 결과를 파일 머리에 남긴다.
+처럼 KURE-v1 가중치를 fp16 으로 반올림한 뒤 fp32 로 연산, normalize. 끝에 BR-MLO-05 게이트(조각별 코사인 ≥ 0.9999 ·
+질의별 top-k 동일)를 표본으로 확인하고 결과를 파일 머리에 남긴다.
 
-실행:
-    cd ai && uv pip install sentence-transformers && uv run python scripts/collect/build_place_vectors.py
+**게이트의 기준은 서빙 이미지다**(원본 fp32 가중치가 아니라). 운영 질의 벡터는 그 이미지가 만든다 — 조각 벡터가 같은
+공간이어야 할 상대가 그것이다. 원본 fp32 와 비교하면 서빙 이미지 자체의 fp16 반올림 몫(TRIP-518 에서 받아들인 것)을
+재게 되어, 긴 조각에서는 0.99988 까지 내려가 같은 엔진인데도 떨어진다(2026-10-19 실측: 로컬 경로 vs 서빙 컨테이너
+0.9999995 · 서빙 컨테이너 vs fp32 0.99998).
+
+실행 (로컬 스택의 임베딩 컨테이너 = 배포 이미지):
+    cd ai && uv pip install sentence-transformers && \
+        TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100 uv run python scripts/collect/build_place_vectors.py
 """
 
 from __future__ import annotations
 
 import gzip
 import json
+import os
 import random
 import sys
 from pathlib import Path
@@ -48,6 +55,12 @@ def main() -> int:
     except ImportError:
         raise SystemExit("sentence-transformers 미설치 — `uv pip install sentence-transformers`")
 
+    if not os.environ.get("TRIPPILOT_EMBEDDING_BASE_URL"):
+        raise SystemExit("게이트 기준(서빙 이미지)이 없다 — TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100")
+    from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+    from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+
+    image = http_embedding(SystemExit, lambda t: UrllibJsonClient(timeout_sec=t), timeout_sec=180.0)
     with gzip.open(_CORPUS, "rt", encoding="utf-8") as f:
         docs = chunk_corpus(json.loads(line) for line in f if line.strip())
     texts = [d.text for d in docs]
@@ -57,11 +70,12 @@ def main() -> int:
 
     # BR-MLO-05 — 다른 엔진(원본 fp32 가중치) 벡터와 같은 공간인가 (표본)
     idx = sorted(random.Random(20261018).sample(range(len(docs)), min(_GATE_SAMPLE, len(docs))))
-    reference = SentenceTransformer(_MODEL, device="cpu")
-    ref = reference.encode([texts[i] for i in idx], normalize_embeddings=True, show_progress_bar=False)
+    ref = []
+    for i in range(0, len(idx), 32):
+        ref.extend(image.embed_batch([texts[j] for j in idx[i:i + 32]]))
     sv = [vectors[i] for i in idx]
     min_cos = min(_cos(a, b) for a, b in zip(sv, ref))
-    qv = serving.encode(list(_GATE_QUERIES), normalize_embeddings=True, show_progress_bar=False)
+    qv = image.embed_batch(list(_GATE_QUERIES))  # 운영에서 질의를 임베딩하는 것도 이 이미지다
     rank_diff = sum(
         sorted(range(len(idx)), key=lambda j: -_cos(q, sv[j]))[:TOP_K]
         != sorted(range(len(idx)), key=lambda j: -_cos(q, ref[j]))[:TOP_K]
@@ -74,7 +88,7 @@ def main() -> int:
     dump_chunk_vectors(out, docs, _MODEL, [tuple(float(x) for x in v) for v in vectors], provenance={
         "engine": "sentence-transformers fp16 가중치 → fp32 연산, normalize (ai/embedding/app.py 기본 백엔드)",
         "model_revision": _hf_revision(_MODEL),
-        "gate": f"BR-MLO-05 vs fp32 가중치(표본 {len(idx)}): 코사인 최소 {min_cos:.6f}, "
+        "gate": f"BR-MLO-05 vs 서빙 이미지(표본 {len(idx)}): 코사인 최소 {min_cos:.6f}, "
                 f"top-{TOP_K} 불일치 0/{len(_GATE_QUERIES)}",
     })
     print(f"조각 {len(docs)}개 → {out.relative_to(_AI_ROOT)} ({out.stat().st_size // 1024}KB) · "

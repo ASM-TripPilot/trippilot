@@ -10,6 +10,10 @@ r"""KB-5 청킹 효과 측정 — "도입부 앞 160자"(종전) vs "질의에 �
 모델도 학습하지 않는다(팀 결정 2026-09-08).
 
 보조 지표: 청킹 쪽이 **도입부가 아닌 조각**을 고른 비율(= 종전 방식이면 볼 수 없던 근거를 보여 준 비율).
+
+세 번째 인자 `combo` 면 비교 상대를 "도입부 앞 160자" 대신 "도입부 첫 문장 + 맞은 조각"으로 바꾼다 — 조각만으로는
+이곳이 무엇인지가 빠질 수 있어서다(2026-10-19 1차 실측 조각 53.9% · 도입부 40.3% · 같음 5.8%).
+`combo300` 이면 "첫 문장 + 맞은 조각"(A 쪽) 대 "도입부 앞 300자" — **같은 글자 예산**에서 비교한다(길이 편향 통제).
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "src"))
 
-from trippilot.poi_curation.chunking import chunk_document  # noqa: E402
+from trippilot.poi_curation.chunking import chunk_document, split_sentences  # noqa: E402
 
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
 _CORPUS = _ROOT / "data" / "place_corpus_wiki.jsonl.gz"
@@ -66,6 +70,8 @@ def _judge(client, model: str, situation: str, name: str, a: str, b: str) -> str
 def main() -> None:
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 120
     model = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("JUDGE_MODEL", "gpt-5.6-luna")
+    mode = sys.argv[3] if len(sys.argv) > 3 else ""
+    combo = mode == "combo"
     rows = [json.loads(line) for line in gzip.open(_CORPUS, "rt", encoding="utf-8") if line.strip()]
     # 비교가 의미 있는 것만: 조각이 둘 이상(골라야 할 게 있는 문서)
     rows = [r for r in rows if len(chunk_document(r)) >= 2]
@@ -84,27 +90,46 @@ def main() -> None:
         for d, v in zip(batch, emb.embed_batch([d.text for d in batch])):
             vecs[d.doc_id] = v
 
+    from concurrent.futures import ThreadPoolExecutor
+
     wins = {"chunk": 0, "baseline": 0, "tie": 0}
     deeper = 0
     total = 0
     rng = random.Random(7)
+    pool = ThreadPoolExecutor(8)  # 판정은 서로 독립 — 순서는 swap 을 미리 뽑아 고정한다
     for kind, reason, said in _QUERIES:
         q = f"{kind} {reason} 상황{(' ' + said) if said else ''}"
         qv = emb.embed_batch([q])[0]
+        jobs = []
         for r in rows:
             docs = chunks[r["doc_id"]]
             best = max(docs, key=lambda d: (_cos(qv, vecs[d.doc_id]), -d.metadata["chunk"]))
             intro = next((s["text"] for s in r["sections"] if s["heading"] == "개요"), r["sections"][0]["text"])
             baseline = intro[:_BASELINE_CHARS]
+            if combo:  # 비교 상대 = 도입부 첫 문장 + 맞은 조각(같은 조각이 도입부면 조각만)
+                head = split_sentences(intro)[0][:100]
+                body = best.text.split(": ", 1)[-1]
+                baseline = body if best.metadata["chunk"] == 0 else f"{head} … {body}"
+                baseline = baseline[:300]
+            if mode == "combo300":  # 청킹 쪽 = 첫 문장 + 맞은 조각, 상대 = 도입부 앞 300자(같은 예산)
+                head = split_sentences(intro)[0][:100]
+                body = best.text.split(": ", 1)[-1]
+                best_text = (body if best.metadata["chunk"] == 0 else f"{head} … {body}")[:300]
+                baseline = intro[:300]
+            else:
+                best_text = best.text
             deeper += best.metadata["chunk"] != 0
             swap = rng.random() < 0.5
-            a, b = (best.text, baseline) if not swap else (baseline, best.text)
-            v = _judge(client, model, f"{reason}{(' — ' + said) if said else ''}", r["title"], a, b)
+            a, b = (best_text, baseline) if not swap else (baseline, best_text)
+            jobs.append((swap, pool.submit(_judge, client, model, f"{reason}{(' — ' + said) if said else ''}",
+                                           r["title"], a, b)))
+        for swap, fut in jobs:
+            v = fut.result()
             winner = "tie" if v == "=" else ("chunk" if (v == "A") != swap else "baseline")
             wins[winner] += 1
             total += 1
-        print(f"  {q:40s} 누적 청킹 {wins['chunk']} · 종전 {wins['baseline']} · 같음 {wins['tie']}")
-    print(f"\n장소 {len(rows)} × 질의 {len(_QUERIES)} = {total}판 (판정 {model})")
+        print(f"  {q:40s} 누적 청킹 {wins['chunk']} · 종전 {wins['baseline']} · 같음 {wins['tie']}", flush=True)
+    print(f"\n장소 {len(rows)} × 질의 {len(_QUERIES)} = {total}판 (판정 {model}, 상대 {'첫 문장+조각' if combo else '도입부 300자 vs 첫 문장+조각' if mode == 'combo300' else '도입부 160자'})")
     for k, v in wins.items():
         print(f"  {k:8s} {v:4d}  {v / total:.1%}")
     print(f"  도입부가 아닌 조각을 보여 준 비율: {deeper / total:.1%}")
