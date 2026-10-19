@@ -199,6 +199,8 @@ class GenerateItineraryRequest:
     required_in_order: bool = False
     # 앵커=숙소(생성) — 의미는 `ItineraryProblem.ignore_anchor_distance`. 규칙 점수의 숙소 거리 감점도 끈다.
     ignore_anchor_distance: bool = False
+    # 늦은 시각의 하루는 취향으로 고른다(생성 — `late_night_candidates`). 재계획은 지시가 정하므로 끈다.
+    late_night_by_taste: bool = False
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -286,6 +288,32 @@ class ScheduleTask:
 PRESUMED_OPEN_MIN, PRESUMED_CLOSE_MIN = 7 * 60, 23 * 60
 PRESUMED_NIGHT = (16 * 60, 26 * 60)  # 야경 16:00~익일 02:00
 PRESUMED_NIGHTLIFE = (20 * 60, 28 * 60)  # 클럽·바 20:00~익일 04:00 (tags 에 NIGHTLIFE_TAG)
+
+# 늦은 시각의 하루 — 이 시각 이후에 시작하는 오늘 창(저녁 8시 반 넘어 생성하면 BE 가 21:00 부터 연다).
+LATE_START_MIN = 21 * 60
+
+
+def _is_late_day(request: "GenerateItineraryRequest") -> bool:
+    """하루짜리 요청이고 그 날 창이 `LATE_START_MIN` 이후에 시작하는가 — 생성 1단계(오늘만)의 모양이다."""
+    if len(request.days) != 1:
+        return False
+    day = request.days[0]
+    win = (request.day_windows or {}).get(day, request.day_window)
+    return win.start.hour * 60 + win.start.minute >= LATE_START_MIN
+
+
+def late_night_candidates(pois, wanted: set[PoiCategory]) -> frozenset[PoiId]:
+    """늦은 시각에 넣을 곳 — 취향으로만 고른다(2026-10-19 사용자). 맞는 취향이 없으면 비운다.
+
+    야경·자연을 좋아하면 야경, 액티비티를 좋아하면 야경과 밤에 노는 곳(나이트라이프 태그 — 클럽·바).
+    그 밖의 취향은 아무것도 넣지 않는다("추천을 안 할 수도 있고") — 밤 9시에 박물관을 넣지 않는다.
+    """
+    night_view = wanted & {PoiCategory.NIGHT_VIEW, PoiCategory.NATURE, PoiCategory.ACTIVITY}
+    nightlife = PoiCategory.ACTIVITY in wanted
+    return frozenset(
+        p.poi_id for p in pois
+        if (night_view and p.category is PoiCategory.NIGHT_VIEW)
+        or (nightlife and NIGHTLIFE_TAG in p.tags))
 
 # 1회 수리의 틈 검사 후보 상한(점수 순) — 순수 계산(하버사인·I/O 0)이라 싸지만 풀 전체를 돌 이유가 없다.
 # 배선은 이 중 빈 틈에 드는 곳에서 20곳만 2차 후보로 싣는다(`_repair_day`).
@@ -552,6 +580,13 @@ class ScheduleAgent:
             self._degrade(steps, trace_id, now, "fixed_poi", "pin", "(dropped)",
                           f"fixed_block_closed:{len(closed)} " + ",".join(
                               f"{fb.poi_id}@{fb.window.start:%a %H:%M}" for fb in closed))
+
+        # ③′ 늦은 시각(21:00 이후 시작)의 하루는 취향으로만 고른다 — 저녁 8시 반 넘어 만든 오늘.
+        if request.late_night_by_taste and _is_late_day(request):
+            allowed = late_night_candidates(pool.pois, _wanted_categories(persona))
+            candidates = tuple(c for c in candidates if c.poi_id in allowed)
+            self._observe(trace_id, now, "taste", "late_night", "late_night",
+                          f"late_night_by_taste:{len(candidates)}")
 
         # ③ ItineraryProblem 조립 — 후보는 풀에서 나온 것만 (INV-1).
         #    날씨(TRIP-383)·행사 보너스(TRIP-421)는 오케스트레이터가 패킷을 소화해

@@ -499,6 +499,8 @@ def _domain_generate_request(
         travel_weight=_GENERATE_ROUTE_WEIGHT,
         # 앵커는 숙소 — 하루를 오가는 곳이지 붙어 있어야 할 곳이 아니다(2026-10-19 사용자). 재계획은 끈다.
         ignore_anchor_distance=True,
+        # 저녁 8시 반 넘어 만든 오늘은 취향으로만(야경·나이트라이프, 없으면 비움 — 2026-10-19 사용자). 재계획은 끈다.
+        late_night_by_taste=True,
         persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         principal=Principal(user_id=owner),
         seed=_seed_from(request.trip_id),
