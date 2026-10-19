@@ -108,6 +108,8 @@ internal fun testMetrics(notifications: NotificationRepository = FakeNotificatio
 internal class FakeSchedules : NotificationScheduleRepository {
     val stored = mutableListOf<NotificationSchedule>()
 
+    override fun lockTrip(tripId: UUID) = Unit
+
     override fun replacePending(tripId: UUID, schedules: List<NotificationSchedule>) {
         stored.removeAll { it.tripId == tripId && it.firedAt == null && it.canceledAt == null }
         stored += schedules
