@@ -111,6 +111,27 @@ class AirKoreaAdapterTest : StringSpec({
         }
     }
 
+    /**
+     * 모르는 권역 이름은 그 칸만 버려 목적지 권역이 '등급 모름'이 된다(안전 쪽) — 다만 조용하면 권역 개편·이름 변화가 안 보인다.
+     * 바뀔 때 WARN 한 번(한글 이름만 싣는다 — 본문에서 온 다른 글자는 싣지 않는다).
+     */
+    "모르는 권역 이름은 바뀔 때 WARN 한 번 — 같은 이름이 이어지면 조용하다" {
+        val odd = airBody(
+            airItem("PM10", "2026-10-19", "2026-10-19 11시 발표", "제주 : 좋음,전남광주 : 나쁨"),
+            airItem("PM25", "2026-10-19", "2026-10-19 11시 발표", "제주 : 좋음,전남광주 : 나쁨"),
+        )
+        withAirServer(mapOf("PM10" to listOf(airOk(odd)), "PM25" to listOf(airOk(odd)))) { url, _ ->
+            val adapter = airAdapter(url)
+            val warns = airLogsOf {
+                adapter.fetchAirForecast(TODAY)
+                adapter.fetchAirForecast(TODAY)
+            }.filter { "권역" in it }
+
+            warns.size shouldBe 1
+            warns.single() shouldContain "전남광주"
+        }
+    }
+
     "items 가 item 으로 한 번 더 감싸여 와도 읽는다" {
         val wrapped = """{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL_CODE"},"body":{"items":{"item":[
             ${airItem("PM10", "2026-10-19", "2026-10-19 11시 발표", "제주 : 나쁨")}]},"numOfRows":100,"pageNo":1,"totalCount":1}}}"""

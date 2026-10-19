@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 에어코리아 대기질 예보통보 실 어댑터(`ArpltnInforInqireSvc/getMinuDustFrcstDspth` · 설계서 §4.2 · BR-SA-16).
@@ -37,9 +38,13 @@ class AirKoreaAdapter(
 
     private val call = PublicDataCall(client, SOURCE, log)
 
+    /** 마지막으로 본 모르는 권역 이름 — 바뀔 때만 WARN 한다. */
+    private val unknownRegions = AtomicReference<Set<String>>(emptySet())
+
     override fun fetchAirForecast(searchDate: LocalDate): AirForecast {
         val first = rowsOf(PM10, searchDate)
         val rows = if (first.any { it.informCode() == PM25 }) first else first + rowsOf(PM25, searchDate)
+        noteUnknownRegions(rows)
         val pm10 = latestOf(rows.filter { it.informCode() == PM10 })
         val pm25 = latestOf(rows.filter { it.informCode() == PM25 })
         val byDate = (pm10.keys + pm25.keys).associateWith { date ->
@@ -69,6 +74,20 @@ class AirKoreaAdapter(
     }
 
     private fun JsonNode.informCode(): String? = this["informCode"].valueText()
+
+    /**
+     * 모르는 권역 이름(권역 개편·이름 변화) — 그 칸은 버려져 그 권역 목적지가 '등급 모름'이 된다(안전 쪽). 조용하면 원인이 안 보이므로
+     * 바뀔 때만 WARN 한 번(파드 범위). 한글 이름만 싣는다 — 본문에서 온 다른 글자(되돌려 준 질의 등)는 싣지 않는다(SEC-SA-03).
+     */
+    private fun noteUnknownRegions(rows: List<JsonNode>) {
+        val names = rows.flatMap { it["informGrade"].valueText().orEmpty().split(',') }
+            .map { it.substringBefore(':', "").trim() }
+            .filter { REGION_NAME.matches(it) && AirRegion.ofLabel(it) == null }
+            .toSortedSet()
+        if (unknownRegions.getAndSet(names) != names && names.isNotEmpty()) {
+            log.warn("{} — 모르는 예보 권역 이름 {} 이 있습니다(권역 개편·이름 변화). 그 권역의 목적지는 등급을 모름으로 둡니다 — AirRegion 표를 확인하십시오.", SOURCE, names.take(5))
+        }
+    }
 
     /** 예보 날짜마다 가장 최근 발표분. */
     private fun latestOf(items: List<JsonNode>): Map<LocalDate, Release> {
@@ -122,5 +141,8 @@ class AirKoreaAdapter(
 
         /** 발표 시각 — `2026-10-19 11시 발표`. */
         private val DATA_TIME = Regex("^(\\d{4}-\\d{2}-\\d{2})\\s*(\\d{1,2})\\s*시")
+
+        /** 로그에 실어도 되는 권역 이름 — 한글 1~10자. */
+        private val REGION_NAME = Regex("^[가-힣]{1,10}$")
     }
 }
