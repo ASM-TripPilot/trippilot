@@ -44,7 +44,13 @@ import java.util.concurrent.CopyOnWriteArrayList
  * 폴링 모드의 배달 규칙(`OutboxRelayIT`)은 그대로이고, 여기서는 **Kafka 모드에서만 달라지는 것**을 본다:
  * 브로커 확인 뒤에만 발행 표시 · 소비자가 같은 구독자에게 배달 · 키 = aggregateId · 소비 실패 재시도 · 브로커 장애 시 배치 중단.
  */
-@SpringBootTest(properties = ["trippilot.outbox.broker=kafka"])
+// 재시도 간격만 줄인다(소진 경로를 끝까지 돌리려고 — 기본 2초·30초면 3분이다). 10회·두 배는 운영과 같다:
+// 소진까지 약 17초, 재시도했다면 독 메시지 테스트가 그만큼 막힌다.
+@SpringBootTest(properties = [
+    "trippilot.outbox.broker=kafka",
+    "trippilot.outbox.kafka.retry-initial-ms=1000",
+    "trippilot.outbox.kafka.retry-max-ms=2000",
+])
 class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
 
     class Recording : OutboxSubscriber {
@@ -53,7 +59,9 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         /** 적재 → 배달 지연 표본(측정 전용) — 지표 레지스트리는 테스트에서 분위수를 못 낸다(OutboxRelayLatencyShapeTest). */
         val latencies = java.util.concurrent.ConcurrentHashMap<String, Duration>()
         @Volatile var failNext = false
+        @Volatile var failAlways = false
         override fun handle(envelope: EventEnvelope) {
+            if (failAlways) error("의도된 계속 실패")
             if (failNext) { failNext = false; error("의도된 소비 실패") }
             received += envelope
             latencies[envelope.aggregateId] = Duration.between(envelope.occurredAt, Instant.now())
@@ -88,6 +96,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         subscriber.received.clear()
         subscriber.latencies.clear()
         subscriber.failNext = false
+        subscriber.failAlways = false
     }
 
     private fun unpublished(note: String) = jdbc.queryForObject(
@@ -173,14 +182,12 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         verify(exactly = 1) { down.send(any()) } // 첫 실패에서 멈췄다 — 행마다 송신 시한을 기다리지 않는다
         unpublished("장애-1") shouldBe 1
         unpublished("장애-2") shouldBe 1
+        // 브로커 장애는 이벤트 탓이 아니다 — 시도 횟수를 쓰면 긴 장애 끝에 멀쩡한 이벤트가 전부 포기로 떨어진다.
+        jdbc.queryForObject(
+            "SELECT coalesce(sum(attempts), 0) FROM outbox_event WHERE aggregate_id IN ('장애-1', '장애-2')", Int::class.java,
+        ) shouldBe 0
     }
 
-    /**
-     * 폴링 배달 vs Kafka 배달의 적재 → 배달 지연(OBS-U6-01) — **측정 전용**, `MEASURE_OUTBOX=1` 일 때만 돈다(약 1분 40초).
-     *
-     * 두 모드 모두 운영과 같은 2초 주기로 릴레이를 돌리고, 이벤트를 무작위 간격으로 적재해 구독자가 받은 시각으로 잰다.
-     * 판정은 하지 않는다 — 수치를 출력만 한다(PR·회고에 옮긴다).
-     */
     @Test
     fun `레코드만의 실패(크기 초과 등)는 그 행만 미루고 배치의 뒤는 보낸다`() {
         repeat(20) { relay.relay() }
@@ -197,19 +204,35 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
 
     @Test
     fun `소비 재시도를 다 쓴 이벤트는 폴링 모드의 포기와 같은 조회로 찾힌다`() {
+        subscriber.failAlways = true
         tx.execute { publisher.publish(Probe("포기")) }
-        relayUntilPublished("포기")
-        awaitReceived("포기")
-        val envelope = subscriber.received.first { it.aggregateId == "포기" }
+        relayUntilPublished("포기") // 송신 = 발행 표시
 
-        relay.abandon(envelope, IllegalStateException("의도된 소진"))
+        // 오류 처리기의 재시도 소진 → 회수기 → abandon 까지 실제 배선으로 돈다(약 17초).
+        val abandoned = "SELECT count(*) FROM outbox_event WHERE aggregate_id = ? AND published_at IS NULL AND attempts >= 10"
+        val deadline = System.nanoTime() + Duration.ofSeconds(60).toNanos()
+        while (jdbc.queryForObject(abandoned, Int::class.java, "포기") == 0 && System.nanoTime() < deadline) Thread.sleep(200)
+        jdbc.queryForObject(abandoned, Int::class.java, "포기") shouldBe 1
+
+        subscriber.failAlways = false
+        relay.relay() // 시도 상한이라 다시 집히지 않는다
+        unpublished("포기") shouldBe 1
+    }
+
+    @Test
+    fun `이 인스턴스에 구독자가 없는 타입을 받으면 조용히 넘기지 않고 포기로 남긴다`() {
+        tx.execute { publisher.publish(Probe("모름")) }
+        relayUntilPublished("모름")
+        awaitReceived("모름")
+        val sent = subscriber.received.first { it.aggregateId == "모름" }
+
+        // 롤링 배포 중 옛 인스턴스가 새 타입을 받은 경우 — 같은 행, 이 인스턴스가 모르는 타입.
+        relay.consume(sent.copy(eventType = "test.UnknownHere"))
 
         jdbc.queryForObject(
             "SELECT count(*) FROM outbox_event WHERE event_id = ? AND published_at IS NULL AND attempts >= 10",
-            Int::class.java, envelope.eventId,
+            Int::class.java, sent.eventId,
         ) shouldBe 1
-        relay.relay() // 시도 상한이라 다시 집히지 않는다
-        unpublished("포기") shouldBe 1
     }
 
     @Test
@@ -221,6 +244,12 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         awaitReceived("독", Duration.ofSeconds(8)) // 재시도했다면 첫 백오프(2초)부터 쌓여 수십 초 걸린다
     }
 
+    /**
+     * 폴링 배달 vs Kafka 배달의 적재 → 배달 지연(OBS-U6-01) — **측정 전용**, `MEASURE_OUTBOX=1` 일 때만 돈다(약 1분 40초).
+     *
+     * 두 모드 모두 운영과 같은 2초 주기로 릴레이를 돌리고, 이벤트를 무작위 간격으로 적재해 구독자가 받은 시각으로 잰다.
+     * 판정은 하지 않는다 — 수치를 출력만 한다(PR·회고에 옮긴다).
+     */
     @Test
     @EnabledIfEnvironmentVariable(named = "MEASURE_OUTBOX", matches = "1")
     fun `측정 - 폴링 배달과 Kafka 배달의 지연 분포`() {

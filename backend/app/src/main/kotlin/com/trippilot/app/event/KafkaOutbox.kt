@@ -3,11 +3,14 @@ package com.trippilot.app.event
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.module.kotlin.kotlinModule
 import com.trippilot.core.event.EventEnvelope
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.common.errors.RetriableException
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.annotation.KafkaListener
@@ -39,25 +42,30 @@ class KafkaOutboxConfig {
     fun outboxTopic(): NewTopic = TopicBuilder.name(TOPIC).partitions(PARTITIONS).replicas(1).build()
 
     /**
-     * 소비 실패 재시도 — 폴링 모드와 같은 **10회**, 2초부터 두 배씩.
+     * 소비 실패 재시도 — 횟수는 폴링 모드와 같은 **10회**, 2초부터 두 배씩. **재시도 창은 폴링보다 짧다**(약 3분 vs 13분).
      *
-     * 상한을 폴링 모드의 5분이 아니라 30초로 둔다: 재시도는 소비 스레드에서 기다리므로 총 대기(약 3분)가
-     * `max.poll.interval.ms`(기본 5분)를 넘으면 브로커가 소비자를 그룹에서 빼고 재배치가 반복된다.
-     * 다 실패하면 아웃박스 행을 폴링 모드의 포기와 같은 모양으로 되돌린다([OutboxRelay.abandon]) — 같은 조회로 찾는다.
-     * 봉투를 못 읽는 메시지는 재시도해도 같으므로 바로 포기한다(파티션을 3분 막지 않게).
+     * 상한을 폴링 모드의 5분이 아니라 30초로 둔다: 재시도는 소비 스레드에서 기다리므로 총 대기가
+     * `max.poll.interval.ms`(기본 5분)를 넘으면 브로커가 소비자를 그룹에서 빼고 재배치가 반복된다. 대가로 3~13분짜리
+     * 장애는 폴링 모드라면 넘기지만 여기서는 포기된다 — 포기는 [OutboxRelay.abandon] 이 폴링 모드와 같은 조회로 찾게 남긴다.
+     * 재시도 중에는 같은 파티션의 뒤 이벤트가 기다린다(KafkaOutboxConfig 문서 참고).
+     * 봉투를 못 읽는 메시지는 재시도해도 같으므로 바로 포기한다(파티션을 막지 않게).
      */
     @Bean
-    fun outboxConsumerErrorHandler(relay: OutboxRelay, mapper: ObjectMapper): DefaultErrorHandler = DefaultErrorHandler(
+    fun outboxConsumerErrorHandler(
+        relay: OutboxRelay,
+        @Value("\${trippilot.outbox.kafka.retry-initial-ms:2000}") initialMs: Long,
+        @Value("\${trippilot.outbox.kafka.retry-max-ms:30000}") maxMs: Long,
+    ): DefaultErrorHandler = DefaultErrorHandler(
         { record, e ->
-            val envelope = runCatching { readEnvelope(mapper, record.value() as String) }.getOrNull()
+            val envelope = runCatching { readEnvelope(record.value() as String) }.getOrNull()
             if (envelope != null) relay.abandon(envelope, e)
             else log.error("봉투를 읽지 못한 Kafka 메시지를 버립니다 — key={} offset={} value={}",
                 record.key(), record.offset(), (record.value() as? String)?.take(500), e)
         },
         ExponentialBackOffWithMaxRetries(MAX_ATTEMPTS - 1).apply {
-            initialInterval = 2_000
+            initialInterval = initialMs
             multiplier = 2.0
-            maxInterval = 30_000
+            maxInterval = maxMs
         },
     ).apply { addNotRetryableExceptions(JsonProcessingException::class.java) }
 
@@ -67,9 +75,14 @@ class KafkaOutboxConfig {
         private const val MAX_ATTEMPTS = 10
         private val log = LoggerFactory.getLogger(KafkaOutboxConfig::class.java)
 
-        /** 모르는 필드는 건너뛴다 — 롤링 배포 중 새 인스턴스가 봉투에 필드를 더해 보내도 옛 인스턴스가 읽는다. */
-        fun readEnvelope(mapper: ObjectMapper, value: String): EventEnvelope =
-            mapper.readerFor(EventEnvelope::class.java).without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).readValue(value)
+        /**
+         * 봉투 읽기. 모르는 필드는 건너뛴다 — 롤링 배포 중 새 인스턴스가 봉투에 필드를 더해 보내도 옛 인스턴스가 읽는다.
+         * 봉투는 UUID·Instant·문자열뿐이라 앱 매퍼의 설정이 필요 없다(Kotlin·java.time 모듈만).
+         */
+        private val envelopeReader = ObjectMapper().registerModule(kotlinModule()).registerModule(JavaTimeModule())
+            .readerFor(EventEnvelope::class.java).without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+
+        fun readEnvelope(value: String): EventEnvelope = envelopeReader.readValue(value)
     }
 }
 
@@ -86,20 +99,21 @@ class KafkaOutboxBroker(
     }
 
     companion object {
-        private const val SEND_TIMEOUT_SEC = 10L
+        /**
+         * 프로듀서 자신의 시한(max.block 5초 + delivery.timeout 10초, application.yml)보다 길게 — 짧으면 프로듀서가 아직
+         * 보내는 중인 것을 실패로 보고 다시 보내 같은 이벤트가 두 번 들어간다.
+         */
+        private const val SEND_TIMEOUT_SEC = 20L
 
         /** 브로커에 닿지 못한 실패인가 — 그렇다면 같은 배치의 다음 송신도 같은 시한을 기다릴 뿐이다. */
         fun unreachable(e: Throwable): Boolean = generateSequence(e) { it.cause }
-            .any { it is RetriableException || it is java.util.concurrent.TimeoutException }
+            .any { it is RetriableException || it is java.util.concurrent.TimeoutException || it is InterruptedException }
     }
 }
 
 @Component
 @ConditionalOnProperty(name = ["trippilot.outbox.broker"], havingValue = "kafka")
-class KafkaOutboxListener(
-    private val relay: OutboxRelay,
-    private val mapper: ObjectMapper,
-) {
+class KafkaOutboxListener(private val relay: OutboxRelay) {
     @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox")
-    fun onMessage(value: String) = relay.consume(KafkaOutboxConfig.readEnvelope(mapper, value))
+    fun onMessage(value: String) = relay.consume(KafkaOutboxConfig.readEnvelope(value))
 }

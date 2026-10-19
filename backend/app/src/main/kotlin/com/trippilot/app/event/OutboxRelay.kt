@@ -153,9 +153,15 @@ class OutboxRelay(
                     if (published && broker == null) recordLatency(envelope)
                 }
                 .onFailure { e ->
-                    // 브로커에 닿지 못한 것(시한 초과·연결 실패)만 배치를 멈춘다. 그 레코드만의 영구 실패(크기 초과·직렬화)는
-                    // 그 행만 백오프시키고 뒤는 보낸다 — 아니면 한 행이 시도마다 뒤 99건을 통째로 민다.
-                    if (broker != null && KafkaOutboxBroker.unreachable(e)) brokerDown = true
+                    // 브로커에 닿지 못한 것(시한 초과·연결 실패·중단)은 배치를 멈추고 **시도 횟수를 쓰지 않는다** — 쓰면 브로커가
+                    // 13분 넘게 죽어 있을 때 멀쩡한 이벤트가 전부 포기로 떨어진다(이벤트·구독자 탓이 아니다). 그 레코드만의 영구
+                    // 실패(크기 초과·직렬화)는 그 행만 백오프시키고 뒤는 보낸다 — 아니면 한 행이 시도마다 뒤 99건을 통째로 민다.
+                    if (broker != null && KafkaOutboxBroker.unreachable(e)) {
+                        if (e is InterruptedException) Thread.currentThread().interrupt() // 종료 신호를 삼키지 않는다
+                        brokerDown = true
+                        log.warn("브로커에 닿지 못해 이번 배치를 멈춥니다 — 다음 폴링에 다시 보냅니다. eventId={}", envelope.eventId, e)
+                        return@onFailure
+                    }
                     val attempts = bumpAttempts(envelope.eventId)
                     // 상한에 닿으면 조용히 사라지지 않게 올린다 — dead-letter 테이블 없이 조회로 찾는다.
                     if (attempts >= MAX_ATTEMPTS) {
@@ -174,7 +180,12 @@ class OutboxRelay(
      * 지연은 폴링 모드와 같은 지표·같은 정의(적재 → 배달 완료)로 잰다 — 두 모드를 같은 p95 로 비교하려고.
      */
     fun consume(envelope: EventEnvelope) {
-        val targets = byType[envelope.eventType] ?: return
+        val targets = byType[envelope.eventType] ?: run {
+            // 송신한 인스턴스에는 구독자가 있었는데 이 인스턴스에는 없다(롤링 배포 중 새 타입). 오프셋은 넘어가므로
+            // 조용히 버리지 않고 포기와 같은 모양으로 남긴다 — 같은 조회로 찾아 다시 보낼 수 있다(INV-4).
+            abandon(envelope, IllegalStateException("이 인스턴스에 구독자가 없는 이벤트 타입 — ${envelope.eventType}"))
+            return
+        }
         deliver(envelope, targets)
         recordLatency(envelope)
     }
@@ -183,6 +194,9 @@ class OutboxRelay(
      * Kafka 소비 재시도를 다 쓴 이벤트를 **폴링 모드의 포기와 같은 모양으로** 되돌린다 — 미발행·시도 상한.
      * 행은 송신 때 이미 발행 표시라, 그대로 두면 포기 조회(`published_at IS NULL AND attempts >= 10`)에 안 잡혀
      * 조용히 사라진다(INV-4). 시도 상한이라 폴링이 다시 집지는 않는다.
+     *
+     * 같은 이벤트의 다른 사본이 이미 배달됐을 수도 있다(송신 뒤 표시 전에 죽어 두 번 들어간 경우). 그때 다시 보내도
+     * 구독자가 `eventId` 로 멱등이라 무해하다 — 거짓 포기 한 건이 유실보다 낫다.
      */
     fun abandon(envelope: EventEnvelope, cause: Throwable) {
         jdbc.update("UPDATE outbox_event SET published_at = NULL, attempts = ? WHERE event_id = ?", MAX_ATTEMPTS, envelope.eventId)
