@@ -187,7 +187,7 @@ data class ReplanSessionResponse(
     val initiatedBy: ReplanInitiator,
     /**
      * 낡은 선계산인가(BR-SA-19) — 적용하면 409 `EXPIRED`·`STALE` 가 나는 초안, 대체돼 닫힌 선계산, 2분 넘게 산출 중인 선계산.
-     * 사용자 세션은 늘 false 다. 앱은 `APPLIED` 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽고 같은 입력으로 새로 계산한다.
+     * 사용자 세션은 늘 false 다. `APPLIED` 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽는다 — 갈 곳은 BR-SA-23 판정표.
      */
     val stale: Boolean,
 ) {

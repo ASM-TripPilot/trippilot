@@ -1732,7 +1732,8 @@ paths:
       tags: [trips]
       summary: 재계획 진입 — 세션을 연다(i10)
       description: >
-        여행 **기간 안**에서만, **다시 짤 일정이 있을 때만** 연다.
+        여행 **기간 안**에서만(예외: 지평 pre-trip 의 여행 전날 — 알림으로 받은 첫날 하루 전체, BR-SA-20),
+        **다시 짤 일정이 있을 때만** 연다.
         이미 열린 세션이 있으면 **그것을 CANCELED 로 닫고 새로 시작**한다(INV-U4-06) — 막지 않는다.
         사용자가 앱을 닫았다 다시 들어오는 것이 정상 흐름이라, 거부하면 영영 못 들어간다.
         확정(APPLIED) 전에는 원 일정에 **어떤 쓰기도 발생하지 않는다**(INV-U4-05).
@@ -1757,8 +1758,8 @@ paths:
       summary: 그 날짜의 준비된 대안 — 서버가 위험 알림으로 미리 짠 재계획(situation-awareness BR-SA-18·23)
       description: >
         일정을 막는 위험이 감지되면 서버가 재계획 초안을 미리 짠다(SYSTEM 세션). 이것은 그 날짜의 **가장 최근** 선계산 세션이다 —
-        대체돼 닫힌 것(`CANCELED`)·대안 없음·실패도 그대로 준다. 앱 진입 게이트가 상태와 `stale` 로 갈 곳을 정한다
-        (`DRAFT`·`stale=false` → 비교 화면, `COLLECTING`·`SOLVING` → 계산 중, `APPLIED` → 이미 반영, 그 밖·`stale` → i04).
+        대체돼 닫힌 것(`CANCELED`)·대안 없음·실패도 그대로 준다. 갈 곳은 앱 진입 게이트가 상태·`stale`·트리거 상태로 정한다 —
+        판정표의 정본은 situation-awareness BR-SA-23 이다(여기에 옮겨 적지 않는다).
         트리거에 세션을 매달지 않고 **날짜**로 묻는다 — 해제 뒤 다시 선 트리거도 같은 대안으로 이어진다.
         일정은 여전히 사용자의 apply 로만 바뀐다(INV-SA-1).
       parameters:
@@ -3261,7 +3262,7 @@ components:
           type: boolean
           description: >
             미리 짠 대안이 낡았는가(BR-SA-19) — 적용하면 409 EXPIRED·STALE 인 초안 · 대체돼 닫힌 선계산 · 2분 넘게 산출 중인
-            선계산. 사용자 세션은 늘 false. 앱은 APPLIED 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽고 새로 계산한다
+            선계산. 사용자 세션은 늘 false. APPLIED 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽는다 — 갈 곳은 BR-SA-23
     SlotCandidatesRequest:
       type: object
       required: [slotKey]
