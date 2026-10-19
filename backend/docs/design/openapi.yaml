@@ -1702,6 +1702,27 @@ paths:
         '200': { description: 꺼짐, content: { application/json: { schema: { $ref: '#/components/schemas/Trigger' } } } }
         '404': { description: 여행 없음/타 계정/트리거 없음(다른 여행 소속 포함) }
         '409': { description: 이미 닫혔거나 지난 알림 }
+  /trips/{tripId}/opportunities:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 그 날짜의 기회 — 남은 동선 근처의 행사·요즘 인기 최대 3개(situation-awareness BR-SA-22)
+      description: >
+        허브가 보는 날짜의 **남은 동선 1km 안 등록 장소**를 AI 가 고른다(LLM 0회) — 기간이 겹치는 행사의 행사장 ·
+        행사장 가까이 · 태그 '요즘 인기'. 서버가 그 날 끝나지 않은 슬롯과 일정의 장소를 채워 묻는다(앱은 날짜만 보낸다).
+        **트리거도 알림도 아니다**(DEC-U4-4 · LEGAL-SA-01) — 상태가 없고 푸시·알림함에 오지 않는다.
+        카드의 장소는 등록 POI 뿐이고(INV-1) 시각 필드가 없으며(INV-2 — 행사 원천이 일 단위) 거리는 표시 문자열뿐이다(INV-3).
+        문장은 앱의 고정 템플릿이 만든다 — 서버는 재료만 준다.
+
+        여행 중(오늘 ≥ 시작)이고 날짜가 [오늘, 종료]일 때만 묻는다. 꺼짐 · 여행 전 · 범위 밖 · 남은 슬롯 없음 · AI 실패 ·
+        계약 위반은 전부 200 빈 목록이다 — 앱은 빈 목록이면 아무것도 그리지 않는다. 404 는 소유 아님뿐이다.
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date }, description: '허브가 보고 있는 날짜(yyyy-MM-dd)' }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/OpportunityList' } } } }
+        '400': { description: date 누락·형식 오류 }
+        '404': { description: 여행 없음/타 계정(존재 은닉) }
   /trips/{tripId}/stay-recommendations:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -3053,6 +3074,38 @@ components:
               format: uuid
               nullable: true
               description: 같은 대상(종류·날짜·슬롯)의 지금 보이는 ACTIVE — 자기 자신일 수 있다
+    OpportunityList:
+      type: object
+      required: [items]
+      description: >
+        그 날짜의 기회 — 서버 순위 그대로(행사장 → 행사장 가까이 → 요즘 인기 → 짧은 기간 → 거리) 최대 3개.
+        앱은 날짜당 1장만 그리고 같은 날짜에 날씨 위험 트리거가 ACTIVE 면 행사 카드를 뺀다(BR-SA-22 규칙 4 — 앱이 고른다).
+      properties:
+        items:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/Opportunity' }
+    Opportunity:
+      type: object
+      required: [key, kind, poiId, poiName, nearSlotKey, distanceLabel]
+      description: >
+        기회 한 건. 시각 필드가 없다(INV-2) — 행사는 일 단위 기간만 싣는다(주말만 여는 축제가 실재한다).
+        거리는 표시 문자열뿐이고 소요시간은 어떤 이유로도 없다(INV-3).
+      properties:
+        key: { type: string, description: '순위·기기 숨김의 키(event:{행사} · trending:{장소}) — 숨긴 key 는 그 날 다시 그리지 않는다' }
+        kind:
+          type: string
+          enum: [EVENT_VENUE, EVENT_NEARBY, TRENDING]
+          description: >
+            EVENT_VENUE = 기간이 겹치는 행사의 행사장 · EVENT_NEARBY = 행사장 가까이 · TRENDING = 태그 '요즘 인기'.
+            앱이 이 값으로 고정 템플릿을 고른다.
+        eventName: { type: string, nullable: true, description: '행사 이름 — 행사 카드만(TRENDING 은 null)' }
+        start: { type: string, format: date, nullable: true, description: '행사 시작일(일 단위) — 행사 카드만' }
+        end: { type: string, format: date, nullable: true, description: '행사 마지막 날(일 단위) — 행사 카드만. 앱의 "M월 d일까지"' }
+        poiId: { type: string, format: uuid, description: '등록 POI(INV-1) — 행사 자체는 후보가 아니다. 넣어서 다시 짜기가 이 장소를 넣는다' }
+        poiName: { type: string }
+        nearSlotKey: { type: string, description: '가장 가까운 남은 슬롯의 경계 키 "{date}#{poiId}"(BR-U2-04)' }
+        distanceLabel: { type: string, description: '동선(가장 가까운 남은 슬롯)에서의 직선거리 표시(예: "약 400m")' }
     StayRecommendationRequest:
       type: object
       properties:
