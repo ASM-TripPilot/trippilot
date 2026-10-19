@@ -56,6 +56,9 @@ class ReplanSessionServiceTest : StringSpec({
         // 단일 스레드 테스트라 잠금은 의미가 없다 — 경합 자체는 실 DB IT 가 검증한다.
         override fun findByIdForUpdate(sessionId: UUID) = findById(sessionId)
         override fun findOpenByTrip(tripId: UUID) = stored.firstOrNull { it.tripId == tripId && it.isOpen }
+        override fun findSystemByTrigger(triggerId: UUID) = stored.systemByTrigger(triggerId)
+        override fun findLatestSystem(tripId: UUID, targetDate: LocalDate) = stored.latestSystem(tripId, targetDate)
+        override fun countSystemSince(tripId: UUID?, since: Instant) = stored.countSystemSince(tripId, since)
         override fun purgeOrigins(tripIds: List<UUID>): Int {
             var n = 0
             stored.replaceAll { s ->

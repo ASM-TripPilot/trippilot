@@ -36,6 +36,9 @@ private class ExecSessions : ReplanSessionRepository {
     // 단일 스레드 테스트라 잠금은 의미가 없다 — 경합 자체는 실 DB IT 가 검증한다.
     override fun findByIdForUpdate(sessionId: UUID) = store[sessionId]
     override fun findOpenByTrip(tripId: UUID) = store.values.firstOrNull { it.tripId == tripId && it.isOpen }
+    override fun findSystemByTrigger(triggerId: UUID) = store.values.systemByTrigger(triggerId)
+    override fun findLatestSystem(tripId: UUID, targetDate: LocalDate) = store.values.latestSystem(tripId, targetDate)
+    override fun countSystemSince(tripId: UUID?, since: Instant) = store.values.countSystemSince(tripId, since)
     override fun purgeOrigins(tripIds: List<UUID>): Int {
         val hit = store.values.filter { it.tripId in tripIds && it.origin.kind in setOf(OriginKind.GPS, OriginKind.MANUAL) }
         hit.forEach { store[it.sessionId] = it.copy(origin = ReplanOrigin(OriginKind.PURGED, null, null)) }

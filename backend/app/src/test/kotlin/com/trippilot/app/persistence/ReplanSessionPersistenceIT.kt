@@ -4,6 +4,7 @@ import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.recalculation.domain.OriginKind
+import com.trippilot.recalculation.domain.ReplanInitiator
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.jdbc.core.JdbcTemplate
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -41,6 +43,7 @@ class ReplanSessionPersistenceIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var sessions: ReplanSessionRepository
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var accounts: AccountRepository
+    @Autowired private lateinit var jdbc: JdbcTemplate
 
     private val now = Instant.parse("2026-08-11T00:00:00Z")
 
@@ -124,6 +127,100 @@ class ReplanSessionPersistenceIT : AbstractPostgresIntegrationTest() {
         val second = sessions.save(start(tripId))
         sessions.findOpenByTrip(tripId)?.sessionId shouldBe second.sessionId
         sessions.findById(first.sessionId)!!.status shouldBe ReplanStatus.CANCELED
+    }
+
+    // ── 선계산(SYSTEM) — situation-awareness BR-SA-18 ─────────────────────────
+
+    private fun system(tripId: UUID, triggerId: UUID, date: LocalDate, at: Instant) = ReplanSession.start(
+        tripId, UUID.randomUUID(), triggerId, ReplanScope.FULL_DAY, date, at,
+        ReplanOrigin(OriginKind.STAY_ANCHOR, null, null), listOf("WEATHER"), listOf("AVOID_OUTDOOR"), null, emptyList(), at,
+        initiatedBy = ReplanInitiator.SYSTEM,
+    )
+
+    @Test
+    fun `시작 주체가 왕복한다 — 선계산은 SYSTEM, 말하지 않으면 USER`() {
+        val tripId = newTrip()
+        val user = sessions.save(start(tripId))
+        sessions.findById(user.sessionId)!!.initiatedBy shouldBe ReplanInitiator.USER
+        sessions.save(user.canceled(now))
+
+        val sys = sessions.save(system(tripId, UUID.randomUUID(), LocalDate.parse("2026-08-12"), now))
+        sessions.findById(sys.sessionId)!!.initiatedBy shouldBe ReplanInitiator.SYSTEM
+    }
+
+    @Test
+    fun `열을 모르는 옛 파드의 INSERT 는 USER 가 된다 — 상수 기본값(롤링 배포 창)`() {
+        val tripId = newTrip()
+        val id = UUID.randomUUID()
+        jdbc.update(
+            """
+            INSERT INTO replan_session (session_id, trip_id, itinerary_id, scope, target_date, from_instant, origin_kind,
+              status, created_at, closed_at)
+            VALUES (?, ?, ?, 'FULL_DAY', DATE '2026-08-11', now(), 'STAY_ANCHOR', 'CANCELED', now(), now())
+            """.trimIndent(),
+            id, tripId, UUID.randomUUID(),
+        )
+        sessions.findById(id)!!.initiatedBy shouldBe ReplanInitiator.USER
+    }
+
+    @Test
+    fun `근거 트리거 없는 SYSTEM 행은 DB 가 막는다 — 도메인 규칙과 같은 CHECK`() {
+        val tripId = newTrip()
+        val failure = shouldThrow<DataIntegrityViolationException> {
+            jdbc.update(
+                """
+                INSERT INTO replan_session (session_id, trip_id, itinerary_id, trigger_id, scope, target_date, from_instant,
+                  origin_kind, status, created_at, initiated_by)
+                VALUES (?, ?, ?, NULL, 'FULL_DAY', DATE '2026-08-11', now(), 'STAY_ANCHOR', 'COLLECTING', now(), 'SYSTEM')
+                """.trimIndent(),
+                UUID.randomUUID(), tripId, UUID.randomUUID(),
+            )
+        }
+        failure.message!!.contains("chk_replan_session_system_trigger") shouldBe true
+    }
+
+    @Test
+    fun `트리거당 선계산은 하나다 — 재배달 멱등의 마지막 방어선, 사용자 세션은 같은 트리거로 여러 번 연다`() {
+        val tripId = newTrip()
+        val triggerId = UUID.randomUUID()
+        val first = sessions.save(system(tripId, triggerId, LocalDate.parse("2026-08-12"), now))
+        sessions.save(first.canceled(now)) // 닫혀도 트리거당 1개는 그대로다
+
+        val dup = shouldThrow<DataIntegrityViolationException> {
+            sessions.save(system(tripId, triggerId, LocalDate.parse("2026-08-12"), now))
+        }
+        dup.message!!.contains("ux_replan_session_system_trigger") shouldBe true
+
+        // 사용자 진입은 알림을 다시 탭할 때마다 같은 트리거로 열린다 — 막으면 두 번째 탭이 500 이다.
+        val user = sessions.save(start(tripId).copy(triggerId = triggerId))
+        sessions.save(user.canceled(now))
+        sessions.save(start(tripId).copy(triggerId = triggerId)).triggerId shouldBe triggerId
+    }
+
+    @Test
+    fun `선계산 조회 — 트리거로 · 날짜의 가장 최근 것(닫힌 것 포함) · 하루 상한 집계`() {
+        val tripId = newTrip()
+        val other = newTrip()
+        val base = Instant.parse("2039-03-17T00:00:00Z") // 다른 IT 가 쓰지 않는 시각 — 전체 집계가 남의 행을 세지 않게
+        val day = LocalDate.parse("2039-03-17")
+        val t1 = UUID.randomUUID()
+        val t2 = UUID.randomUUID()
+
+        // 사용자 세션(닫힘) — 같은 여행·같은 창이지만 선계산 집계에 들지 않는다
+        sessions.save(start(tripId).copy(createdAt = base.plusSeconds(30)).canceled(base.plusSeconds(30)))
+        val older = sessions.save(system(tripId, t1, day, base))
+        sessions.save(older.canceled(base.plusSeconds(60)))
+        val newer = sessions.save(system(tripId, t2, day, base.plusSeconds(60)))
+        sessions.save(system(other, UUID.randomUUID(), day, base.plusSeconds(120)))
+
+        sessions.findSystemByTrigger(t1)!!.sessionId shouldBe older.sessionId
+        sessions.findSystemByTrigger(UUID.randomUUID()) shouldBe null
+        sessions.findLatestSystem(tripId, day)!!.sessionId shouldBe newer.sessionId
+        sessions.findLatestSystem(tripId, day.plusDays(1)) shouldBe null
+
+        sessions.countSystemSince(tripId, base) shouldBe 2       // 사용자 세션은 세지 않는다
+        sessions.countSystemSince(tripId, base.plusSeconds(1)) shouldBe 1
+        sessions.countSystemSince(null, base) shouldBe 3         // 전체 — 다른 여행 포함
     }
 
     @Test
