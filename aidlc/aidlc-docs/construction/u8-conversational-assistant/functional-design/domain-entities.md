@@ -23,6 +23,8 @@
 
 > **다른 모듈은 `assistant`의 `api`에만 의존할 수 있다.** 1차에는 `assistant`를 부르는 다른 모듈이 없다 — 앱만 부른다. 역방향(assistant → 각 모듈 `api`)만 있다. 동기 순환 없음.
 
+> **[개정 · 2026-10-19 · US-ASSIST-09 신설]** 위 표에 한 줄을 더한다 — `assistant_message_feedback` · **신설(V2.74)** · U8 `:modules:assistant` · 쓰기(§3.7). 다른 모듈 경계는 그대로다(평가는 앱만 부른다).
+
 ---
 
 ## 2. 재사용 (실장)
@@ -87,6 +89,8 @@
 **INV-U8-05** — 같은 `(session_id, client_turn_id)`로 두 번 들어온 턴은 **두 번째에 새 행을 만들지 않고** 처음 응답을 돌려준다.
 
 **INV-U8-06** — 메시지 `payload`·`text`에 **소요시간 필드·문자열이 없다**(INV-3). 거리만(`distanceRange` 문자열 그대로).
+
+> **[개정 · 2026-10-19 · US-ASSIST-09 신설] 관측 칸 `trace_id` 추가(V2.74, expand-only).** `trace_id varchar(64)?` — 그 턴의 해석 호출에 실어 보낸 `request_meta.request_id`(backend 가 호출마다 만든다). AI 는 같은 값을 `trace_id` 로 로그(`llm_cost`·`FallbackEvent`·`LlmCallRecord`)에 남긴다 — 답변 평가(§3.7)를 프롬프트 판본·모델·폴백과 잇는 열쇠다(BR-U8-64). 도우미 행에만 있고, 해석을 부르지 않은 턴(버튼·빠른 답·버튼 모드·입력 거절)과 사용자 행은 null. `intent`·`match_route` 와 같은 관측 칸이라 화면에 쓰지 않는다(OBS-U8-01 의 넷에 더해지는 다섯째 칸).
 
 ### 3.3 `assistant_proposal` — [적용] 전의 변경안 (DEC-U8-2)
 
@@ -163,6 +167,23 @@ APPLIED / STALE / DISMISSED / EXPIRED / FAILED : 종결 (나가는 전이 없음
 
 **INV-U8-07** — backend는 `dialogue_context`를 **해석하지 않는다** — `turn_index`를 1 올리는 것 외에 내용을 만들거나 고치지 않는다. 두 곳이 같은 규칙을 판정하면 갈라진다.
 
+### 3.7 `assistant_message_feedback` — 답변 평가 (US-ASSIST-09)
+
+> **[개정 · 2026-10-19 · US-ASSIST-09 신설] 절 신설.** 사용자 요청(도우미 답변마다 좋아요/싫어요). 규칙은 `business-rules.md` §8(BR-U8-60~65). 마이그레이션 `V2.74__assistant_message_feedback.sql`(착수 시점 최신 V2.73 + 1).
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| `message_id` | uuid PK · FK → `assistant_message` | **ON DELETE CASCADE** — 메시지당 평가 하나. 대화가 사라지는 네 길(이력 지우기·여행 삭제·계정 삭제·보존 청소)이 전부 세션 → 메시지 → 평가로 연쇄된다 |
+| `account_id` | uuid | 비정규화(`assistant_message` 와 같다). 계정 FK 는 걸지 않는다 — 계정 파기는 세션 연쇄로 이미 닿는다 |
+| `rating` | varchar(8) | `UP` \| `DOWN`(CHECK) |
+| `created_at` · `updated_at` | timestamptz | 처음 남긴 시각 · 바꾼 시각. 바꿔도(upsert) `created_at` 은 그대로다 |
+
+- 쓰기: 남기기·바꾸기 = `INSERT … ON CONFLICT (message_id) DO UPDATE`(notification_toggle 선례), 취소 = DELETE(없어도 오류 아님).
+- 읽기: 메시지를 읽을 때 붙인다 — 조회·열기·턴 응답의 메시지 `feedback`(`UP`|`DOWN`|null)과 내보내기 줄의 `feedback` 칸. 표시용 `AssistantMessage` 는 평가 값만 들고, 판정·로그에 쓰는 관측 칸(`intent`·`trace_id`)은 따로 읽는다.
+- **법정 로그가 아니다** — append-only 권한 제약을 걸지 않는다(취소가 DELETE 다). 평가·지표 용도로만 쓰고 모델 학습에 쓰지 않는다(BR-U8-63).
+
+**INV-U8-10** — 평가는 **도우미의 답**(`role = ASSISTANT` 이고 `kind ≠ ACTION_LOG`)에만 붙고 메시지당 많아야 하나다(PK). 메시지가 사라지면 평가도 사라진다(FK CASCADE) — 대화보다 오래 사는 평가는 없다.
+
 ---
 
 ## 4. 마이그레이션 제안 (번호 미정 — 착수 시 최신 + 1)
@@ -189,3 +210,5 @@ assistant_session 1 --- * assistant_proposal
 assistant_message * --- 0..1 assistant_proposal
 assistant_proposal --(적용)--> ItineraryEditFacade --> itinerary_revision / change_log_entry(ASSISTANT)
 ```
+
+> **[개정 · 2026-10-19 · US-ASSIST-09 신설]** 위 관계에 한 줄을 더한다 — `assistant_message 1 --- 0..1 assistant_message_feedback`(도우미 답만, CASCADE · §3.7).

@@ -41,6 +41,8 @@ class AssistantExportContributor(
                     "text" to m.text,
                     "redacted" to (m.role == MessageRole.USER && m.text == null),
                     "createdAt" to m.createdAt.toString(),
+                    // 그 답에 남긴 평가(US-ASSIST-09) — 대화의 부속이라 몫을 따로 두지 않고 그 줄에 싣는다(BR-U8-62)
+                    "feedback" to m.feedback?.name,
                 )
             }
         }.take(limit + 1).toList()

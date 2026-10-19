@@ -1436,8 +1436,8 @@ paths:
 
 
         도우미 대화(`assistantMessages`)는 **메시지 한 건이 한 줄**이다 — 사용자가 한 말과 도우미의 답(`sessionId`·`tripId`·
-        `role`·`kind`·`text`·`redacted`·`createdAt`). 정책 위반으로 가려진 입력은 원문이 서버에 없어 `redacted: true` 표지만
-        나간다. 보존 기간이 지난 대화는 싣지 않는다.
+        `role`·`kind`·`text`·`redacted`·`createdAt`·`feedback`). 정책 위반으로 가려진 입력은 원문이 서버에 없어 `redacted: true` 표지만
+        나간다. `feedback` 은 그 답에 남긴 평가(`UP`|`DOWN`, 없으면 null)다. 보존 기간이 지난 대화는 싣지 않는다.
 
 
         ⚠ **사진 바이너리는 없다**(INV-U5-03) — 서버가 갖고 있지 않으므로 메타(기기 자산 식별자·
@@ -2009,6 +2009,37 @@ paths:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantMessagesPage' } } } }
         '400': { $ref: '#/components/responses/ValidationError' }
         '404': { description: 없는 대화이거나 타 계정 대화 }
+  /assistant/sessions/{sessionId}/messages/{messageId}/feedback:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [assistant]
+      summary: 도우미 답 평가 남기기·바꾸기
+      description: >
+        도우미의 답 하나에 좋아요(`UP`)·싫어요(`DOWN`)를 남긴다(US-ASSIST-09). 답마다 평가는 하나다 — 이미 있으면 바꾼다
+        (같은 값을 다시 보내도 200). 취소는 같은 경로의 DELETE 다 — "같은 버튼을 다시 누르면 취소"는 앱이 고른다.
+        **턴이 아니다** — 분당 20턴 상한에 세지 않고, AI 를 부르지 않으며, 메시지를 새로 만들지 않는다.
+        평가는 대화와 함께 지워지고(이력 지우기·여행 삭제·계정 삭제·보존 만료) 내보내기의 메시지 줄에 함께 나간다.
+        평가·지표 용도로만 쓰며 모델 학습에 쓰지 않는다.
+        평가할 수 있는 것은 도우미의 답뿐이다 — 사용자 메시지와 적용 기록(`kind: ACTION_LOG`)은 400 이다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AssistantFeedbackRequest' } } }
+      responses:
+        '200': { description: 남김(바꿈 포함), content: { application/json: { schema: { $ref: '#/components/schemas/AssistantFeedbackResponse' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없는 대화·타 계정 대화·보존 기간이 지난 대화이거나 그 대화에 없는 메시지 }
+    delete:
+      tags: [assistant]
+      summary: 도우미 답 평가 취소
+      description: >
+        남긴 평가를 지운다. **멱등하다** — 남긴 평가가 없어도 204 다. 대상 검사는 PUT 과 같다
+        (평가할 수 없는 메시지는 400, 없는·남의·보존 기간이 지난 대화는 404).
+      responses:
+        '204': { description: 지워짐(평가가 없던 경우 포함) }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없는 대화·타 계정 대화·보존 기간이 지난 대화이거나 그 대화에 없는 메시지 }
   /assistant/sessions/{sessionId}/turns:
     parameters:
       - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -4345,6 +4376,13 @@ components:
         proposal: { $ref: '#/components/schemas/AssistantProposalOrNull' }
         footnote: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
+        feedback:
+          type: string
+          nullable: true
+          enum: [UP, DOWN, null]
+          description: >
+            사용자가 이 답에 남긴 평가(US-ASSIST-09). 없으면 null — 사용자 메시지와 적용 기록(`ACTION_LOG`)은 늘 null 이다.
+            서버는 늘 싣지만 required 에는 넣지 않았다 — 이 칸이 생기기 전의 앱 빌드·목이 그대로 계약을 만족한다.
     AssistantLabeledValue:
       type: object
       required: [label, value]
@@ -4479,6 +4517,17 @@ components:
       required: [proposal]
       properties:
         proposal: { $ref: '#/components/schemas/AssistantProposalStatus' }
+    AssistantFeedbackRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: string, enum: [UP, DOWN] }
+    AssistantFeedbackResponse:
+      type: object
+      required: [messageId, rating]
+      properties:
+        messageId: { type: string, format: uuid }
+        rating: { type: string, enum: [UP, DOWN] }
 
     NotificationList:
       type: object

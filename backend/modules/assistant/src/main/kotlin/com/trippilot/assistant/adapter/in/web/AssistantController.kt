@@ -1,5 +1,6 @@
 package com.trippilot.assistant.adapter.`in`.web
 
+import com.trippilot.assistant.application.AssistantFeedbackService
 import com.trippilot.assistant.application.AssistantSessionService
 import com.trippilot.assistant.application.AssistantTurnService
 import com.trippilot.assistant.application.MessagePage
@@ -10,6 +11,7 @@ import com.trippilot.assistant.application.TurnInput
 import com.trippilot.assistant.application.TurnResult
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantSurface
+import com.trippilot.assistant.domain.FeedbackRating
 import com.trippilot.assistant.domain.NextAction
 import com.trippilot.assistant.domain.ProposalView
 import com.trippilot.assistant.domain.QuickReply
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -42,6 +45,7 @@ class AssistantController(
     private val sessions: AssistantSessionService,
     private val turns: AssistantTurnService,
     private val proposals: ProposalService,
+    private val feedback: AssistantFeedbackService,
 ) {
 
     @PostMapping("/sessions")
@@ -77,7 +81,29 @@ class AssistantController(
     @PostMapping("/proposals/{proposalId}/dismiss")
     fun dismissProposal(principal: Principal, @PathVariable proposalId: UUID): DismissProposalResponse =
         proposals.dismiss(principal.accountId(), proposalId).let { DismissProposalResponse(ProposalStatusResponse(it.proposalId, it.status.name)) }
+
+    /** 답 평가 남기기·바꾸기(US-ASSIST-09). 같은 값을 다시 보내도 200 이다(바꾼 시각만 간다). */
+    @PutMapping("/sessions/{sessionId}/messages/{messageId}/feedback")
+    fun rate(principal: Principal, @PathVariable sessionId: UUID, @PathVariable messageId: UUID, @RequestBody request: FeedbackRequest): FeedbackResponse {
+        val rating = request.toRating()
+        feedback.rate(principal.accountId(), sessionId, messageId, rating)
+        return FeedbackResponse(messageId, rating.name)
+    }
+
+    /** 답 평가 취소. 남긴 평가가 없어도 204 다(멱등). */
+    @DeleteMapping("/sessions/{sessionId}/messages/{messageId}/feedback")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun unrate(principal: Principal, @PathVariable sessionId: UUID, @PathVariable messageId: UUID) =
+        feedback.unrate(principal.accountId(), sessionId, messageId)
 }
+
+/** [rating] 은 `UP`|`DOWN` 이다. 문자열로 받아 여기서 가른다 — 모르는 값을 본문 해석 오류가 아니라 필드 오류(400)로 돌려준다. */
+data class FeedbackRequest(val rating: String? = null) {
+    fun toRating(): FeedbackRating = FeedbackRating.entries.firstOrNull { it.name == rating }
+        ?: throw ValidationFailed(listOf(FieldError("rating", "UP 또는 DOWN 이어야 합니다.")))
+}
+
+data class FeedbackResponse(val messageId: UUID, val rating: String)
 
 /** [messages] 는 무엇을 했는지의 기록이다(`ACTION_LOG`) — 저장에 실패했으면 그 안내가 온다(그때 `status` 는 `FAILED`). */
 data class ApplyProposalResponse(val proposal: ProposalStatusResponse, val messages: List<MessageResponse>)
@@ -172,11 +198,14 @@ data class MessageResponse(
     val proposal: ProposalView?,
     val footnote: String?,
     val createdAt: Instant,
+    /** 사용자가 이 답에 남긴 평가(`UP`|`DOWN`). 없으면 null — 사용자 말·적용 기록은 늘 null 이다(US-ASSIST-09). */
+    val feedback: String?,
 ) {
     companion object {
         fun from(m: AssistantMessage) = MessageResponse(
             id = m.messageId, role = m.role.name, kind = m.kind.name, text = m.text, payload = m.payload,
             nextActions = m.nextActions, quickReplies = m.quickReplies, proposal = m.proposal, footnote = m.footnote, createdAt = m.createdAt,
+            feedback = m.feedback?.name,
         )
     }
 }

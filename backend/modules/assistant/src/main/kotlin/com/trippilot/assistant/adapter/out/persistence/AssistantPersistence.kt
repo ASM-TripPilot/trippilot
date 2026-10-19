@@ -11,6 +11,8 @@ import com.trippilot.assistant.domain.AssistantProposalRepository
 import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantUsageRepository
+import com.trippilot.assistant.domain.FeedbackRating
+import com.trippilot.assistant.domain.FeedbackTarget
 import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
@@ -141,13 +143,13 @@ class AssistantMessageRepositoryAdapter(
         """
         INSERT INTO assistant_message (
             message_id, session_id, account_id, client_turn_id, reply_to, role, kind, text, redacted, payload, next_actions, quick_replies,
-            footnote, intent, match_route, outcome, llm_calls, latency_ms, created_at, proposal_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?)
+            footnote, intent, match_route, outcome, llm_calls, latency_ms, trace_id, created_at, proposal_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING $COLUMNS
         """.trimIndent(),
         UUID.randomUUID(), sessionId, accountId, clientTurnId, replyTo, m.role.name, m.kind.name, m.text, m.redacted,
         m.payload?.let(mapper::writeValueAsString), mapper.writeValueAsString(m.nextActions), m.quickReplies?.let(mapper::writeValueAsString),
-        m.footnote, m.intent, m.matchRoute, m.outcome, m.llmCalls, m.latencyMs, Timestamp.from(at), proposalId,
+        m.footnote, m.intent, m.matchRoute, m.outcome, m.llmCalls, m.latencyMs, m.traceId, Timestamp.from(at), proposalId,
     ).single()
 
     /**
@@ -201,6 +203,25 @@ class AssistantMessageRepositoryAdapter(
         sessionId, beforeSeq ?: Long.MAX_VALUE, limit,
     ).asReversed()
 
+    override fun findFeedbackTarget(sessionId: UUID, messageId: UUID): FeedbackTarget? = jdbc.query(
+        "SELECT role, kind, intent, trace_id FROM assistant_message WHERE session_id = ? AND message_id = ?",
+        { rs, _ -> FeedbackTarget(MessageRole.valueOf(rs.getString("role")), MessageKind.valueOf(rs.getString("kind")), rs.getString("intent"), rs.getString("trace_id")) },
+        sessionId, messageId,
+    ).firstOrNull()
+
+    /** 메시지당 한 행(PK) — "있으면 바꾸고 없으면 만든다"를 한 문장으로(`ON CONFLICT`, notification_toggle 선례). 두 기기가 동시에 눌러도 한쪽이 실패하지 않는다. */
+    override fun upsertFeedback(messageId: UUID, accountId: UUID, rating: FeedbackRating, at: Instant) {
+        jdbc.update(
+            """
+            INSERT INTO assistant_message_feedback (message_id, account_id, rating, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (message_id) DO UPDATE SET rating = EXCLUDED.rating, updated_at = EXCLUDED.updated_at
+            """.trimIndent(),
+            messageId, accountId, rating.name, Timestamp.from(at), Timestamp.from(at),
+        )
+    }
+
+    override fun deleteFeedback(messageId: UUID): Int = jdbc.update("DELETE FROM assistant_message_feedback WHERE message_id = ?", messageId)
+
     /**
      * 메시지를 읽고, **그 조회가 끝난 뒤에** 제안을 붙인다. 행을 읽는 도중에 제안을 조회하면 연결을 하나 쥔 채 하나를 더
      * 집는다 — 트랜잭션 밖의 목록 조회가 여럿 겹치면 풀이 마른다.
@@ -222,10 +243,16 @@ class AssistantMessageRepositoryAdapter(
         quickReplies = getString("quick_replies")?.let { reader.forType(QUICK_REPLIES).readValue<List<QuickReply>>(it) },
         footnote = getString("footnote"),
         createdAt = getTimestamp("created_at").toInstant(),
+        feedback = getString("feedback")?.let(FeedbackRating::valueOf),
     )
 
     private companion object {
-        const val COLUMNS = "message_id, seq, role, kind, text, payload, next_actions, quick_replies, footnote, created_at, proposal_id"
+        /**
+         * 평가는 **읽을 때 붙인다**(스칼라 부분 질의) — 조인으로 붙이면 `RETURNING` 과 조회가 칸 목록을 따로 가져야 한다.
+         * 막 넣은 행(`RETURNING`)에는 평가가 있을 수 없어 늘 null 이다.
+         */
+        const val COLUMNS = "message_id, seq, role, kind, text, payload, next_actions, quick_replies, footnote, created_at, proposal_id, " +
+            "(SELECT f.rating FROM assistant_message_feedback f WHERE f.message_id = assistant_message.message_id) AS feedback"
         val PAYLOAD = object : TypeReference<Map<String, Any?>>() {}
         val NEXT_ACTIONS = object : TypeReference<List<NextAction>>() {}
         val QUICK_REPLIES = object : TypeReference<List<QuickReply>>() {}

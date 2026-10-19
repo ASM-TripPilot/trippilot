@@ -31,7 +31,18 @@ data class AssistantMessage(
     val createdAt: Instant,
     /** 이 메시지가 가리키는 제안 — 제안 카드(`PROPOSAL`)와 그 제안을 적용한 결과 안내(`ACTION_LOG`, 실패면 `TEXT`). 상태는 **읽은 시점의 것**이다 — 카드는 저장 당시가 아니라 지금을 그린다. */
     val proposal: ProposalView? = null,
+    /** 사용자가 이 답에 남긴 평가(US-ASSIST-09). 없으면 null — 사용자 말·적용 기록은 늘 null 이다. */
+    val feedback: FeedbackRating? = null,
 )
+
+/** 도우미 답 평가(US-ASSIST-09 · BR-U8-60). **평가·지표 용도로만** 쓴다 — 모델 학습에 쓰지 않는다(BR-U8-63). */
+enum class FeedbackRating { UP, DOWN }
+
+/**
+ * 평가 대상 판정([role]·[kind])과 평가 로그([intent]·[traceId])에 쓰는 칸. 관측 칸이라 화면에 나가지 않는다 —
+ * 표시용 [AssistantMessage] 에 싣지 않고 따로 읽는다.
+ */
+data class FeedbackTarget(val role: MessageRole, val kind: MessageKind, val intent: String?, val traceId: String?)
 
 /**
  * 다음 행동(BR-U8-06). [type] 은 closed-set 이지만 **문자열로 둔다** — 저장된 옛 행에 지금은 없는 값이 있어도
@@ -84,6 +95,11 @@ data class NewMessage(
     val outcome: String? = null,
     val llmCalls: Int? = null,
     val latencyMs: Int? = null,
+    /**
+     * 이 턴의 해석 호출에 실어 보낸 추적 번호(`request_meta.request_id`) — 상대가 같은 값을 `trace_id` 로 로그에 남긴다.
+     * 평가를 상대 로그(프롬프트 판본·모델·폴백)와 잇는 열쇠다(BR-U8-64). 해석을 부르지 않은 턴은 null.
+     */
+    val traceId: String? = null,
     /** 이 메시지와 함께 만들 제안(`PROPOSAL` 카드). */
     val proposal: NewProposal? = null,
 )
@@ -128,4 +144,13 @@ interface AssistantMessageRepository {
      * [beforeSeq] 가 null 이면 맨 끝에서부터다.
      */
     fun findPage(sessionId: UUID, beforeSeq: Long?, limit: Int): List<AssistantMessage>
+
+    /** 그 대화의 메시지 [messageId] 를 평가 대상으로 읽는다. 그 대화에 없으면 null. */
+    fun findFeedbackTarget(sessionId: UUID, messageId: UUID): FeedbackTarget?
+
+    /** 평가를 남긴다 — 없으면 만들고 있으면 바꾼다(메시지당 하나). 바꿀 때 처음 남긴 시각은 두고 바꾼 시각만 [at] 으로 간다. */
+    fun upsertFeedback(messageId: UUID, accountId: UUID, rating: FeedbackRating, at: Instant)
+
+    /** 평가를 지운다. 지운 행 수 — 없었으면 0 이다(오류 아님). */
+    fun deleteFeedback(messageId: UUID): Int
 }

@@ -377,6 +377,10 @@ class AssistantTurnService(
         val remaining = properties.turnBudgetMs - Duration.between(startedAt, clock.instant()).toMillis()
         val deadlineMs = minOf(properties.interpretStageMaxMs, remaining - properties.readMarginMs)
         if (deadlineMs <= 0) return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE), streak = Streak.KEEP)
+        // 이 해석 호출의 추적 번호(BR-U8-64) — 상대가 trace_id 로 로그(llm_cost·FallbackEvent·LlmCallRecord)에 남기는 값을 그 턴의
+        // 도우미 행에도 적어, 평가를 상대 로그(프롬프트 판본·모델·폴백)와 잇는다. 해석이 실패해도 적는다 — 상대가 요청을 받았다면
+        // 그 호출의 기록(오류·시한 초과·폴백)이 이 번호로 남아 있다. 해석을 부르지 않는 갈래(위의 반환들)는 번호가 없다.
+        val traceId = UUID.randomUUID().toString()
         val interpretation = runCatching {
             port.interpret(
                 InterpretRequest(
@@ -386,13 +390,14 @@ class AssistantTurnService(
                     requestedAt = startedAt, deadlineMs = deadlineMs,
                     sessionId = session.sessionId, accountRef = session.accountId.toString(),
                     recentTurns = recentTurns(session, beforeSeq = turn.user.seq),
+                    traceId = traceId,
                 ),
             )
         }.getOrElse { e ->
             log.warn("도우미 해석 실패 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
-            return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE), streak = Streak.KEEP)
+            return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE).copy(traceId = traceId), streak = Streak.KEEP)
         }
-        return answer(interpretation, session, surface, utterance, startedAt)
+        return answer(interpretation, session, surface, utterance, startedAt).let { it.copy(message = it.message.copy(traceId = traceId)) }
     }
 
     private fun answer(result: Interpretation, session: AssistantSession, surface: AssistantSurface, utterance: String, startedAt: Instant): Reply {

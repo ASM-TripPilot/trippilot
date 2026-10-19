@@ -88,6 +88,19 @@
 | **BR-U8-52** ★ | **토스트와 겹치지 않는다.** ✦가 있는 화면에서 토스트 바닥은 **✦ 윗변 + 12**(2단 스택 화면 = 288)로 올린다(G-U8-10). 토스트를 ✦ 뒤로 숨기거나 ✦를 토스트 동안 숨기는 방식은 쓰지 않는다 — 둘 다 터치 가능한 상태를 유지한다 |
 | **BR-U8-53** | 시트·키보드·다른 바텀시트가 열린 동안에는 ✦를 그리지 않는다(기존 FAB의 `fabHidden`·키보드 규칙과 같다 — 보이지 않는 FAB가 터치를 가로채지 않게) |
 
+## 8. 답변 평가 (US-ASSIST-09)
+
+> **[개정 · 2026-10-19 · US-ASSIST-09 신설] 절 신설 — 위 규칙은 바꾸지 않는다.** 사용자 요청(도우미 답변마다 좋아요/싫어요)으로 더한다. 이번 단계는 **백엔드 저장·API·분석용 추적 번호**이고 앱 화면은 별도다(Figma 없음 — `frontend-components.md` 는 화면 작업에서 개정). 엔티티·불변식은 `domain-entities.md` §3.7(INV-U8-10). 구현 위치: `backend/modules/assistant/src/main/kotlin/com/trippilot/assistant/application/AssistantFeedbackService.kt` · `backend/app/src/main/resources/db/migration/V2.74__assistant_message_feedback.sql` · `PUT`·`DELETE /api/v1/assistant/sessions/{sessionId}/messages/{messageId}/feedback`(`backend/docs/design/openapi.yaml`). 검증: 대상 판정은 role×kind 전수(20칸 — 표본보다 전수가 싸다), 파기 네 길은 실 DB IT 가 평가 행의 **있음**을 센다(`AssistantFeedbackIT`). 정하지 않은 것: 평가 집계(OBS-U8-02 확장)·싫어요 사유 입력 — 이번에는 행과 로그를 남기는 데까지다.
+
+| ID | 규칙 |
+|---|---|
+| **BR-U8-60** | **도우미의 답마다** 좋아요(`UP`)/싫어요(`DOWN`)를 하나 남길 수 있다 — 거절·범위 밖·폴백도 답이다. **사용자 말과 적용 기록(`ACTION_LOG`)은 대상이 아니다**(400). 서버는 두 동작만 안다 — 남기기·바꾸기(PUT, upsert)와 취소(DELETE, 남긴 것이 없어도 204). "누른 쪽을 다시 누르면 취소"는 앱이 PUT/DELETE 로 고른다 |
+| **BR-U8-61** | 평가는 **턴이 아니다** — 분당 20턴(BR-U8-24)·하루 사용량(COST-U8-01)에 세지 않고, AI 를 부르지 않으며, 도우미 메시지를 만들지 않는다. 남의 대화·보존 기간이 지난 대화·그 대화에 없는 메시지는 404 다(존재 은닉 — 본인 것만) |
+| **BR-U8-62** | 평가는 **대화의 부속**이다 — 이력 지우기(BR-U8-20)·여행 삭제·계정 삭제(DATA-U8-02)·보존 만료 청소(DATA-U8-01)가 대화를 지우면 함께 사라진다(메시지 FK CASCADE — 파기 경로를 따로 두지 않는다: 두면 그 길을 빠뜨린 파기에서 평가만 살아남는다). 내보내기(DATA-U8-06)에는 몫을 따로 두지 않고 메시지 줄의 `feedback` 칸으로 함께 나간다 |
+| **BR-U8-63** ★ | 평가는 **평가·지표 용도로만** 쓴다 — **어떤 모델의 학습 데이터로도 쓰지 않는다**(US-ASSIST-09 제약) |
+| **BR-U8-64** | 평가를 AI 로그(프롬프트 판본·모델·폴백)와 잇는 열쇠는 그 턴의 **해석 호출 추적 번호**다 — backend 가 해석 호출마다 만들어 `request_meta.request_id` 로 싣고(AI 는 같은 값을 `trace_id` 로 `llm_cost`·`FallbackEvent`·`LlmCallRecord` 에 남긴다) 그 턴의 도우미 행 `assistant_message.trace_id` 에 적는다. 해석이 실패해 폴백으로 끝난 턴도 적는다. 해석을 부르지 않은 턴(버튼·빠른 답·버튼 모드·입력 거절)은 비어 있다. 한 턴에 AI 를 두 번 부르는 편집 제안은 **해석 호출의 번호만** 남는다(편집 호출은 제 번호를 따로 만든다) |
+| **BR-U8-65** | 평가를 남기면(PUT 성공) INFO 로그 한 줄 `assistant_feedback {message_id, trace_id, intent, kind, rating}` — **발화·답 문장·계정을 싣지 않는다**(SEC-U8-06). 취소·거부된 평가는 로그가 없다 |
+
 ---
 
 ## PBT (property-based · 블로킹 게이트)

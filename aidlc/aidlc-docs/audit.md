@@ -1641,3 +1641,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness 설계 단계 종료. 다음 = 팀 개발(트리거 생명주기 PR #1372 는 머지·운영 반영 완료, 서버 감시 스윕 진행 중).
 
 ---
+## Functional Design 사후 개정 — U8 답변 평가 (US-ASSIST-09 · BR-U8-60~65 · INV-U8-10)
+**Timestamp**: 2026-10-19T06:25:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "도우미 챗봇의 답변마다 사용자가 좋아요/싫어요로 평가한다. 지금 단계는 백엔드 저장·API·분석용 추적 번호와 설계 문서다(앱 화면은 별도)." (메인 세션이 전달한 사용자 요청 원문)
+**AI Response**: 인셉션 `inception/user-stories/stories.md` 에픽 J 에 `[개정 · 2026-10-19 — 사용자 요청 · US-ASSIST-09 신설]` 블록 + **US-ASSIST-09 도우미 답변 평가**(답마다 좋아요/싫어요 · 다시 누르면 취소·바꾸기 · 대화와 함께 지워지고 내보내기에 포함 · 평가·지표 용도로만, 모델 학습 금지)를 더하고, 커버리지 표 뒤에 수 개정 블록(J 8→9 · 합계 125 · 유효 107, 원 표 보존)을 붙였다 — FD 가 근거로 쓰려면 스토리 코드가 인셉션에 있어야 한다(2026-10-12 US-ASSIST-01~08 전개 선례). U8 FD 에 원문 보존(삭제 0)으로 덧붙였다: `construction/u8-conversational-assistant/functional-design/business-rules.md` — §8 답변 평가 신설(BR-U8-60 대상·동작 · 61 턴 아님 · 62 대화의 부속(CASCADE·내보내기 칸) · 63 학습 금지 · 64 추적 번호 = 해석 요청 `request_meta.request_id` = AI 로그 `trace_id` · 65 평가 로그 한 줄, SEC-U8-06) · `domain-entities.md` — §1 경계표 한 줄 · §3.2 관측 칸 `trace_id` · §3.7 `assistant_message_feedback` 신설(INV-U8-10) · §5 관계 한 줄. 구현은 같은 브랜치에 실린다(`V2.74__assistant_message_feedback.sql` · `AssistantFeedbackService` · `PUT`·`DELETE /api/v1/assistant/sessions/{sessionId}/messages/{messageId}/feedback` · 메시지 `feedback` 선택 칸 · 내보내기 `feedback` 칸 · 삭제 고지 `ASSISTANT_MESSAGE_FEEDBACK`). 정하지 않은 것: 앱 화면(Figma 없음 — `frontend-components.md` 는 화면 작업에서 개정)·평가 집계(OBS-U8-02 확장)·싫어요 사유 입력. `business-logic-model.md` 의 스토리 대응표·NFR 문서는 이번에 건드리지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 국소 개정 + 인셉션 스토리 1건 신설, 승인 대기(같은 PR 머지 = 승인, #1071 선례). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

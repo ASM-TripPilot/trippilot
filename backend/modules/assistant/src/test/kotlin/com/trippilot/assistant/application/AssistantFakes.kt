@@ -10,6 +10,8 @@ import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantUsageRepository
 import com.trippilot.assistant.domain.DialogueMemoryPort
+import com.trippilot.assistant.domain.FeedbackRating
+import com.trippilot.assistant.domain.FeedbackTarget
 import com.trippilot.assistant.domain.MemoryItem
 import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
@@ -158,6 +160,11 @@ internal class FakeMessages(val proposals: FakeProposals = FakeProposals()) : As
     val rows = mutableListOf<Row>()
     private var seq = 0L
 
+    /** 남은 평가 — 메시지 id 마다 하나(실물의 PK). 읽을 때 메시지에 붙인다(실물의 부분 질의와 같다). */
+    val feedback = mutableMapOf<UUID, FeedbackRating>()
+
+    private fun AssistantMessage.withFeedback() = copy(feedback = this@FakeMessages.feedback[messageId])
+
     /** 읽기 테스트용 — 이미 만들어진 메시지를 그대로 심는다. */
     fun seed(sessionId: UUID, vararg messages: AssistantMessage) {
         messages.forEach { rows += Row(sessionId, UUID.randomUUID(), null, NewMessage(it.role, it.kind, it.text), it) }
@@ -193,7 +200,7 @@ internal class FakeMessages(val proposals: FakeProposals = FakeProposals()) : As
     override fun findTurn(sessionId: UUID, clientTurnId: UUID): RecordedTurn? {
         val inSession = rows.filter { it.sessionId == sessionId }.sortedBy { it.message.seq }
         val user = inSession.firstOrNull { it.clientTurnId == clientTurnId } ?: return null
-        return RecordedTurn(user.message, inSession.filter { it.replyTo == clientTurnId }.map { it.message }, user.saved.outcome)
+        return RecordedTurn(user.message.withFeedback(), inSession.filter { it.replyTo == clientTurnId }.map { it.message.withFeedback() }, user.saved.outcome)
     }
 
     override fun userTurnTimesSince(accountId: UUID, since: Instant) =
@@ -210,7 +217,17 @@ internal class FakeMessages(val proposals: FakeProposals = FakeProposals()) : As
             .maxByOrNull { it.message.seq }?.message?.text
 
     override fun findPage(sessionId: UUID, beforeSeq: Long?, limit: Int) =
-        rows.filter { it.sessionId == sessionId }.map { it.message }.filter { beforeSeq == null || it.seq < beforeSeq }.sortedBy { it.seq }.takeLast(limit)
+        rows.filter { it.sessionId == sessionId }.map { it.message.withFeedback() }.filter { beforeSeq == null || it.seq < beforeSeq }.sortedBy { it.seq }.takeLast(limit)
+
+    override fun findFeedbackTarget(sessionId: UUID, messageId: UUID): FeedbackTarget? =
+        rows.firstOrNull { it.sessionId == sessionId && it.message.messageId == messageId }
+            ?.let { FeedbackTarget(it.message.role, it.message.kind, it.saved.intent, it.saved.traceId) }
+
+    override fun upsertFeedback(messageId: UUID, accountId: UUID, rating: FeedbackRating, at: Instant) {
+        feedback[messageId] = rating
+    }
+
+    override fun deleteFeedback(messageId: UUID): Int = if (feedback.remove(messageId) != null) 1 else 0
 }
 
 internal class FakeUsage : AssistantUsageRepository {
