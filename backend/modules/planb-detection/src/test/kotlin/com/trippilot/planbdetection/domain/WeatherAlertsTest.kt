@@ -29,6 +29,26 @@ class WeatherAlertsTest : StringSpec({
         WeatherAlerts.placeOf("12110", "목포시") shouldBe Place(setOf(Province.JEONNAM), stem = "목포", wide = false, label = "목포")
     }
 
+    "시도 코드 → 특보 광역 — 17 시도 전부 · 통합특별시(12) 시도 단위는 광주·전남 둘 다 · t6 의 광역 이름(별칭 포함)" {
+        mapOf(
+            "11" to Province.SEOUL, "26" to Province.BUSAN, "27" to Province.DAEGU, "28" to Province.INCHEON, "30" to Province.DAEJEON,
+            "31" to Province.ULSAN, "36" to Province.SEJONG, "50" to Province.JEJU, "41" to Province.GYEONGGI, "51" to Province.GANGWON,
+            "43" to Province.CHUNGBUK, "44" to Province.CHUNGNAM, "52" to Province.JEONBUK, "47" to Province.GYEONGBUK, "48" to Province.GYEONGNAM,
+        ).forEach { (code, province) -> Province.ofRegionCode(code) shouldBe setOf(province) }
+        Province.ofRegionCode("12") shouldBe setOf(Province.GWANGJU, Province.JEONNAM)
+        Province.ofRegionCode("99") shouldBe null
+
+        mapOf(
+            "서울" to Province.SEOUL, "부산" to Province.BUSAN, "대구" to Province.DAEGU, "인천" to Province.INCHEON, "광주" to Province.GWANGJU,
+            "대전" to Province.DAEJEON, "울산" to Province.ULSAN, "세종" to Province.SEJONG, "제주도" to Province.JEJU, "경기도" to Province.GYEONGGI,
+            "강원도" to Province.GANGWON, "강원특별자치도" to Province.GANGWON, "충청북도" to Province.CHUNGBUK, "충청남도" to Province.CHUNGNAM,
+            "전라북도" to Province.JEONBUK, "전북특별자치도" to Province.JEONBUK, "전라남도" to Province.JEONNAM, "경상북도" to Province.GYEONGBUK,
+            "경상남도" to Province.GYEONGNAM,
+        ).forEach { (name, province) -> Province.ofKmaName(name) shouldBe province }
+        Province.ofKmaName("울릉도.독도") shouldBe null
+        Province.ofKmaName("동해중부안쪽먼바다") shouldBe null
+    }
+
     "모르는 코드는 매칭할 수 없다 — null" {
         WeatherAlerts.placeOf("99", "어딘가") shouldBe null
         WeatherAlerts.placeOf("4711", "포항") shouldBe null
