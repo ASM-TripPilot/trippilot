@@ -108,7 +108,7 @@ class SecretTests(unittest.TestCase):
     def test_situation_sweep_switches_are_allowlisted_and_validated(self):
         """Plan-B 상황 감시 스위치 4종(situation-awareness 설계서 §7)은 backend 시크릿으로만 켠다. allowlist 에 없으면 시크릿에
         넣는 순간 배포 전체가 거부되고, 값이 틀리면 백엔드가 기동에서 죽는다(모르는 모드·지평·UUID 오타 = 바인딩 실패) —
-        파드가 뜨다 죽기 전에 여기서 막는다. 운영 카나리 계정 목록은 생성 상한 예외 계정과 같은 규칙으로 읽는다."""
+        파드가 뜨다 죽기 전에 여기서 막는다. 운영 카나리 계정 목록은 생성 상한 예외 계정과 같은 규칙에 더해 공백만 든 값도 막는다."""
         base = {name: {} for name in runtime_secrets.GROUP_KEYS}
         oks = [{"PLANB_SITUATION_SWEEP": mode} for mode in ("off", "dry-run", "on")]
         oks += [{"PLANB_SITUATION_HORIZON": horizon} for horizon in ("today", "tomorrow", "pre-trip")]
@@ -122,9 +122,10 @@ class SecretTests(unittest.TestCase):
         bads += [{"PLANB_SITUATION_HORIZON": horizon} for horizon in ("d-1", "pretrip", "TOMORROW", "")]
         bads += [{"PLANB_PREPARED_REPLAN": mode} for mode in ("dry-run", "true", "")]
         # 파이썬 uuid 는 받지만 백엔드는 못 읽는 모양까지 — DB 도구에서 대시 없이 복사해 오는 것이 흔하다.
+        # 공백만 든 값은 '빈 값'이 아니다 — 백엔드 바인딩이 [null] 로 읽어 아무 계정도 안 맞는 목록이 된다(백엔드가 기동에서 거부).
         bads += [{"PLANB_SITUATION_SWEEP_ACCOUNT_IDS": ids}
                  for ids in ("not-a-uuid", "0d7f17ab5c4b4d6da7f7484ba11dda46", "{0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46}",
-                             "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,")]
+                             "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,", " ", "\t")]
         for bad in bads:
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**base, "backend": bad})

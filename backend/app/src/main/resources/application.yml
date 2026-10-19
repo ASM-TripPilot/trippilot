@@ -175,6 +175,7 @@ trippilot:
       horizon: ${PLANB_SITUATION_HORIZON:today}
       account-ids: ${PLANB_SITUATION_SWEEP_ACCOUNT_IDS:}
       # 부를 감지기와, 결과를 요약 로그에만 남길 출처. 특보·대기질은 키 등록·실응답 확인 뒤 여기서 빼는 커밋이 '켜기'다.
+      # 출처 이름은 닫힌 집합(kma-forecast·kma-warning·airkorea·place) — 오타는 기동 실패다(관찰 전용 오타가 쓰기를 켜지 않게).
       sources: kma-forecast,kma-warning,airkorea,place
       observe-only: kma-warning,airkorea
       # 여행 단위 병렬 · 회차 예산(넘으면 여행 사이에서 멈추고 다음 회차가 시작 위치를 바꿔 잇는다).

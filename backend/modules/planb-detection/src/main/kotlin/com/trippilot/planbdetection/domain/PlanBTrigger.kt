@@ -145,6 +145,9 @@ object SweepSource {
     const val KMA_WARNING = "kma-warning"
     const val AIRKOREA = "airkorea"
     const val PLACE = "place"
+
+    /** 닫힌 집합(domain-entities §6.1) — 설정의 출처·관찰 전용 목록은 이 안의 이름만 받는다. */
+    val ALL: Set<String> = setOf(KMA_FORECAST, KMA_WARNING, AIRKOREA, PLACE)
 }
 
 /**

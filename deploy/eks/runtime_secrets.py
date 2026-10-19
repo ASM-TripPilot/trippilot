@@ -254,7 +254,11 @@ def validate_groups(groups):
     if limit is not None and not (limit.isascii() and limit.isdigit() and 1 <= int(limit) <= 2**31 - 1):
         raise ValueError("ITINERARY_GENERATION_DAILY_LIMIT must be a positive integer; remove the key to use the default")
     require_uuid_list(backend, "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS")
-    # 상황 감시 운영 카나리(스윕 대상 계정). 비면 전원이다 — 인가가 아니라 대상만 좁힌다(SEC-SA-04).
+    # 상황 감시 운영 카나리(스윕 대상 계정). 비면 전원이다 — 인가가 아니라 대상만 좁힌다(SEC-SA-04). 공백만 든 값은 '빈 값'이
+    # 아니다 — 백엔드 바인딩이 [null] 로 읽어 아무 계정도 안 맞는 목록(조용히 0 여행)이 되므로 백엔드가 기동에서 거부한다.
+    canary = backend.get("PLANB_SITUATION_SWEEP_ACCOUNT_IDS", "")
+    if canary and not canary.strip():
+        raise ValueError("PLANB_SITUATION_SWEEP_ACCOUNT_IDS must be empty or comma-separated UUIDs, not whitespace only")
     require_uuid_list(backend, "PLANB_SITUATION_SWEEP_ACCOUNT_IDS")
     # 카카오 앱 ID(TRIP-1317)는 숫자다. REST API 키(32자 hex)를 잘못 넣으면 파드는 뜨는데 **카카오 로그인이
     # 전부 401** 이 된다(발급 앱과 영영 안 맞는다) — 가장 흔한 실수라 여기서 막는다. 빈 값은 "대조 안 함"이다.

@@ -67,6 +67,18 @@ class SituationSweepPropertiesTest : StringSpec({
         shouldThrow<BindException> { bind("account-ids" to "not-a-uuid") }
     }
 
+    "출처·관찰 전용 목록의 모르는 이름은 기동을 막는다 — 관찰 전용 오타가 그 출처의 쓰기·푸시를 조용히 켜지 않게" {
+        shouldThrow<BindException> { bind("observe-only" to "kma-warning,airkorae") } // airkorea 가 실측 전에 쓰기 대상이 된다
+        shouldThrow<BindException> { bind("sources" to "kma-forcast,place") }
+    }
+
+    "계정 목록의 빈 항목(공백만·끝 쉼표)은 기동을 막는다 — '아무도 안 맞는 목록'으로 조용히 0 여행을 돌지 않게" {
+        val a = UUID.randomUUID()
+        shouldThrow<BindException> { bind("account-ids" to " ") }
+        shouldThrow<BindException> { bind("account-ids" to "\t") }
+        shouldThrow<BindException> { bind("account-ids" to "$a,") }
+    }
+
     "병렬 1 미만·예산 0 이하는 기동하지 않는다 — 회차가 아무것도 못 보고 끝난다" {
         shouldThrow<BindException> { bind("parallelism" to "0") }
         shouldThrow<BindException> { bind("budget" to "PT0S") }
