@@ -17,7 +17,8 @@ import { TRIGGER_REASON_KEY } from '../config/replanChoices';
  *  7 COLLECTING · SOLVING                          → `solving` (i05)
  *  8 NO_SOLUTION · FAILED                          → `draft` (i06 대안 없음·실패 얼굴 — 얼굴은 i06 이 세션 상태로 고른다)
  *
- * `stale` 은 APPLIED 가 아니면 상태와 무관하게 '없음'으로 읽는다(NO_SOLUTION·FAILED 포함). 두 조회 중 하나라도 아직이고
+ * `stale` 은 APPLIED 가 아니면 상태와 무관하게 '없음'으로 읽는다(NO_SOLUTION·FAILED 포함). 계약 밖 상태(앱보다 새 서버가
+ * 늘린 값)도 '없음'이다 — i06 은 모르는 상태에 그릴 얼굴이 없어 빈 화면이 된다(INV-4). 두 조회 중 하나라도 아직이고
  * 3초 전이면 `wait` — 대안·허브로 가는 결정은 두 조회가 다 준비됐을 때만 나온다(PBT-SA-21).
  */
 
@@ -66,6 +67,15 @@ const EMPTY_SEED: EntrySeed = {
   directives: [],
   excludedPoiIds: [],
 };
+
+/** 준비된 대안으로 갈 수 있는 상태(행 6·7·8). 그 밖 — CANCELED·계약 밖 상태 — 는 '없음'(행 4·5)이다. */
+const READY_STATUSES: ReadonlySet<string> = new Set([
+  'DRAFT',
+  'COLLECTING',
+  'SOLVING',
+  'NO_SOLUTION',
+  'FAILED',
+]);
 
 /** 준비 세션 입력(있으면 — CANCELED·stale 포함) → 아니면 kind 사유. 주의(CAUTION)는 빈 시드다. */
 function seedOf(
@@ -126,8 +136,8 @@ export function entryRoute({
   if (session?.status === 'APPLIED') return { kind: 'hub', notice: 'applied' };
   if (
     session === null ||
-    session.status === 'CANCELED' ||
-    session.stale === true
+    session.stale === true ||
+    !READY_STATUSES.has(session.status)
   ) {
     const detail = trigger.value;
     return detail.state === 'ACTIVE' || detail.currentTriggerId
@@ -140,5 +150,6 @@ export function entryRoute({
   if (session.status === 'COLLECTING' || session.status === 'SOLVING') {
     return { kind: 'solving', sessionId: session.sessionId };
   }
+  // 행 8 — READY 중 남은 NO_SOLUTION·FAILED(얼굴은 i06 이 세션 상태로 고른다).
   return { kind: 'draft', sessionId: session.sessionId };
 }

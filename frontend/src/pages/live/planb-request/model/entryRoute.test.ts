@@ -78,6 +78,8 @@ const session = (
 
 const found = <T>(value: T): EntryLookup<T> => ({ kind: 'found', value });
 const NONE: EntryLookup<ReplanSession> = { kind: 'notFound' };
+/** 계약 밖 상태 — 앱보다 새 서버가 enum 을 늘린 경우(OTA 가 없어 옛 앱이 받는다). */
+const UNKNOWN_STATUS = 'PAUSED' as ReplanSessionStatus;
 
 function route(over: Partial<EntryRouteInput> = {}): EntryRoute {
   return entryRoute({
@@ -177,6 +179,27 @@ describe('🔴 entryRoute · 판정표 대표 행 (§3.2)', () => {
       });
     }
   );
+
+  it("R9 계약 밖 세션 상태(새 서버의 새 값)는 '없음'으로 읽는다 — i06 은 모르는 상태를 그리지 못해 빈 화면이 된다(INV-4)", () => {
+    const unknown = session(UNKNOWN_STATUS);
+
+    expect(route({ prepared: found(unknown) })).toEqual({
+      kind: 'request',
+      triggerId: 'trg-1',
+      scope: 'PARTIAL_SLOTS',
+      seed: {
+        reasons: ['WEATHER'],
+        directives: ['AVOID_OUTDOOR'],
+        excludedPoiIds: ['poi-out'],
+      },
+    });
+    expect(
+      route({
+        trigger: found(detail({ state: 'EXPIRED', currentTriggerId: null })),
+        prepared: found(unknown),
+      })
+    ).toEqual({ kind: 'hub', notice: 'inactive' });
+  });
 });
 
 describe('🔴 entryRoute · i04 시드·날짜·트리거 (§3.3 · 행 4)', () => {
@@ -262,7 +285,9 @@ describe('🔴 entryRoute · i04 시드·날짜·트리거 (§3.3 · 행 4)', ()
 
 /**
  * PBT-SA-21 — 판정표 전수(준비 상태 × 트리거 상태 × 시간 초과)에서 결과가 표의 행과 1:1, 대안으로 가는 결정은
- * 두 조회가 다 준비됐을 때만. 오라클(`expectedRow`)은 표를 위에서부터 그대로 옮긴 독립 사본이다.
+ * 두 조회가 다 준비됐을 때만. 오라클(`expectedRow`)은 구현의 if 사슬을 옮기지 않는다 — BR-SA-23 표처럼 행마다
+ * **온전한 조건**(DRAFT ∧ ¬stale 처럼)을 따로 적고 "정확히 한 행만 맞는다"를 먼저 단언한다. 구현이 행 순서를 바꾸면
+ * (예: stale 보다 DRAFT 를 먼저 보면) 순서와 무관한 이 조건과 어긋나 잡힌다. 계약 밖 상태도 섞는다('없음'으로 읽는다).
  */
 const STATES: TriggerDetailState[] = [
   'ACTIVE',
@@ -278,6 +303,7 @@ const STATUSES: ReplanSessionStatus[] = [
   'CANCELED',
   'FAILED',
   'NO_SOLUTION',
+  UNKNOWN_STATUS,
 ];
 
 const detailArb = fc
@@ -315,22 +341,55 @@ function lookupArb<T>(value: fc.Arbitrary<T>): fc.Arbitrary<EntryLookup<T>> {
   );
 }
 
-/** 표의 몇 번째 행인가(0 = 기다림). 구현과 독립으로 표를 위에서부터 옮겼다. */
+/**
+ * 표의 몇 번째 행인가(0 = 기다림). 행마다 온전한 조건(서로 배타)을 적고, 맞는 행이 정확히 하나인지부터 본다.
+ * '쓸 수 있는 준비 대안' = 아는 진행·결과 상태(DRAFT·COLLECTING·SOLVING·NO_SOLUTION·FAILED) ∧ ¬stale. APPLIED 는 stale
+ * 이어도 APPLIED 다. 그 밖(대안 없음·CANCELED·stale·계약 밖 상태)은 '없음'이다.
+ */
 function expectedRow(input: EntryRouteInput): number {
   const { trigger, prepared, timedOut } = input;
-  if (trigger.kind === 'notFound') return 1;
-  if (trigger.kind === 'failed' || prepared.kind === 'failed' || timedOut)
-    return 2;
-  if (trigger.kind === 'pending' || prepared.kind === 'pending') return 0;
+  const bothFound =
+    trigger.kind === 'found' &&
+    (prepared.kind === 'found' || prepared.kind === 'notFound');
   const s = prepared.kind === 'found' ? prepared.value : null;
-  if (s?.status === 'APPLIED') return 3;
-  if (s === null || s.status === 'CANCELED' || s.stale === true) {
-    const t = trigger.value;
-    return t.state === 'ACTIVE' || t.currentTriggerId ? 4 : 5;
-  }
-  if (s.status === 'DRAFT') return 6;
-  if (s.status === 'COLLECTING' || s.status === 'SOLVING') return 7;
-  return 8;
+  const status = s?.status;
+  const fresh = s !== null && s.stale !== true;
+  const applied = status === 'APPLIED';
+  const usable =
+    fresh &&
+    (status === 'DRAFT' ||
+      status === 'COLLECTING' ||
+      status === 'SOLVING' ||
+      status === 'NO_SOLUTION' ||
+      status === 'FAILED');
+  const none = !applied && !usable;
+  const triggerLive =
+    trigger.kind === 'found' &&
+    (trigger.value.state === 'ACTIVE' || !!trigger.value.currentTriggerId);
+  const failedOrLate =
+    trigger.kind !== 'notFound' &&
+    (trigger.kind === 'failed' || prepared.kind === 'failed' || timedOut);
+  const decided = bothFound && !timedOut;
+
+  const rows: [number, boolean][] = [
+    [1, trigger.kind === 'notFound'],
+    [2, failedOrLate],
+    [
+      0,
+      !failedOrLate &&
+        trigger.kind !== 'notFound' &&
+        (trigger.kind === 'pending' || prepared.kind === 'pending'),
+    ],
+    [3, decided && applied],
+    [4, decided && none && triggerLive],
+    [5, decided && none && !triggerLive],
+    [6, decided && usable && status === 'DRAFT'],
+    [7, decided && usable && (status === 'COLLECTING' || status === 'SOLVING')],
+    [8, decided && usable && (status === 'NO_SOLUTION' || status === 'FAILED')],
+  ];
+  const matched = rows.filter(([, holds]) => holds).map(([row]) => row);
+  expect(matched).toHaveLength(1);
+  return matched[0];
 }
 
 const ROW_KIND: Record<number, EntryRoute['kind']> = {
@@ -409,6 +468,10 @@ describe('PBT-SA-21 · 진입 판정 전수', () => {
             found(session('NO_SOLUTION', { stale: true })),
             false,
           ],
+          // stale × 갈 수 있는 상태 — 행 순서(stale 을 먼저 '없음'으로)가 어긋나면 여기서 갈린다.
+          [found(detail()), found(session('DRAFT', { stale: true })), false],
+          [found(detail()), found(session('SOLVING', { stale: true })), false],
+          [found(detail()), found(session(UNKNOWN_STATUS)), false],
           [found(detail()), { kind: 'pending' }, false],
         ],
       }
