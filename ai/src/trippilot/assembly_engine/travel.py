@@ -22,6 +22,8 @@ from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.travel import TravelEstimate
 
 _EARTH_KM = 6371.0088
+# 대중교통 요청에서 걸어가기로 한 구간의 출처 — `api.wiring._render_distance` 가 이것을 보고 "도보"라고 적는다
+WALKED_SOURCE = "haversine_x_detour(walk)"
 
 
 def haversine_km(a: GeoPoint, b: GeoPoint) -> float:
@@ -48,10 +50,10 @@ class TravelEstimator:
         if mode is TransportMode.PUBLIC:
             # 걸어갈 땐 정류장 대기·환승이 없으므로 buffer 를 빼고 잰다.
             on_foot = self._minutes(road, TransportMode.WALK)
-            # ① 600m 이하는 계산상 대중교통이 빨라도 걷는다 (config 주석 참조)
+            # ① 700m 이하는 계산상 대중교통이 빨라도 걷는다 (config 주석 참조)
             # ② 그보다 멀어도 도보가 빠르면 도보 — 사람이 하는 선택
             if straight <= self._cfg.public_walk_max_km or on_foot < minutes:
-                minutes, source = on_foot, "haversine_x_detour(walk)"
+                minutes, source = on_foot, WALKED_SOURCE
 
         return TravelEstimate(
             distance_km_range=(round(straight, 3), round(road, 3)),
