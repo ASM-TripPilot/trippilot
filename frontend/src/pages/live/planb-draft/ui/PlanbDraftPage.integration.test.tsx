@@ -92,13 +92,32 @@ jest.mock('../model/useReplanSession', () => ({
 }));
 
 const mockMutate = jest.fn();
-const mockApply = { isPending: false, isError: false };
+// 상황 감지 FE-B — 확정 실패의 오류 객체(`error`)까지 싣는다: 409 EXPIRED·STALE 를 코드로 가른다(§3.6).
+const mockApply: { isPending: boolean; isError: boolean; error: unknown } = {
+  isPending: false,
+  isError: false,
+  error: null,
+};
 jest.mock('@/features/apply-replan/model/useApplyReplan', () => ({
   useApplyReplan: () => ({
     mutate: mockMutate,
     isPending: mockApply.isPending,
     isError: mockApply.isError,
+    error: mockApply.error,
   }),
+}));
+
+// 상황 감지 FE-B — 미포함 안내의 장소 이름 seam(`GET /places/{poiId}` 는 seam 자체의 통합 테스트가 본다).
+// 기본은 아직(undefined). 페이지가 넘긴 인자(물을 POI — 없으면 null)를 기록한다.
+const mockIncludedName: {
+  value: string | null | undefined;
+  calls: (string | null)[];
+} = { value: undefined, calls: [] };
+jest.mock('../model/useIncludedPlaceName', () => ({
+  useIncludedPlaceName: (poiId: string | null) => {
+    mockIncludedName.calls.push(poiId);
+    return poiId === null ? undefined : mockIncludedName.value;
+  },
 }));
 
 // 대안 없음 → [내일 일정 다시 짜기] — 세션 시작 seam(`useStartReplan`, 허브·i04 와 같은 래퍼).
@@ -378,6 +397,9 @@ beforeEach(() => {
   mockMutate.mockClear();
   mockApply.isPending = false;
   mockApply.isError = false;
+  mockApply.error = null;
+  mockIncludedName.value = undefined;
+  mockIncludedName.calls = [];
   mockStartMutate.mockClear();
   mockStart.isPending = false;
   mockStart.isError = false;
@@ -1851,5 +1873,211 @@ describe('🔴 TRIP-1293 AC2·AC3·AC6 — 초안 오류 얼굴 [다시 시도]�
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockExits).toEqual([]);
+  });
+});
+
+/**
+ * 상황 감지 FE-B · frontend-components §3.6 — i06 최소 변경의 배선.
+ *
+ * 무엇을 보장하나:
+ *  - 세션 `initiatedBy = SYSTEM` 이면 `미리 준비한 대안` 표식(USER·필드 없음이면 없다).
+ *  - 적용이 409 + `EXPIRED`·`STALE` 이면 낡음 얼굴 — 일반 실패 문구로 접지 않고 [적용하기]를 잠근다. 코드 없는 409·5xx 는 종전 실패.
+ *  - [새 대안 보기] = 같은 입력(사유·지시·제외·범위·트리거, 날짜는 오늘이면 생략)으로 세션 시작 → 성공하면 i05 로 replace.
+ *    같은 틱 연타도 POST 1회(새 POST 는 방금 연 세션을 닫는다 — INV-U4-06).
+ *  - `includePoiId` 가 초안 after 에 없으면 그 장소 이름으로 미포함 안내, 이름 조회가 실패하면 이름 없는 문장. 있으면 안내 없음.
+ */
+const STALE_409 = (code: string) => ({
+  isAxiosError: true,
+  response: { status: 409, data: { error: { code, message: '…' } } },
+});
+
+function renderStaleDraft(
+  code = 'STALE',
+  sessionOver: Record<string, unknown> = {}
+) {
+  mockApply.isError = true;
+  mockApply.error = STALE_409(code);
+  mockItinerary = DRAFT_ITINERARY;
+  mockSession.data = session('DRAFT', {
+    initiatedBy: 'SYSTEM',
+    triggerId: 'trg-1',
+    reasons: ['TEMP_CLOSED'],
+    directives: ['AVOID_OUTDOOR'],
+    excludedPoiIds: ['poi-closed'],
+    freeText: null,
+    ...sessionOver,
+  });
+  mockDiff.data = READY_DIFF;
+}
+
+describe('🔴 상황 감지 FE-B · i06 미리 준비한 대안 표식 · 낡음 얼굴 · 미포함 안내 (§3.6)', () => {
+  it('F1 SYSTEM 세션이면 "미리 준비한 대안" 표식, USER 면 없다', () => {
+    mockItinerary = DRAFT_ITINERARY;
+    mockSession.data = session('DRAFT', { initiatedBy: 'SYSTEM' });
+    mockDiff.data = READY_DIFF;
+    const { rerender } = render(
+      <PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />
+    );
+    expect(screen.getByTestId('planb-draft-prepared')).toHaveTextContent(
+      '미리 준비한 대안'
+    );
+
+    mockSession.data = session('DRAFT', { initiatedBy: 'USER' });
+    rerender(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+    expect(screen.queryByTestId('planb-draft-prepared')).toBeNull();
+  });
+
+  it.each(['EXPIRED', 'STALE'])(
+    'F2 적용이 409 %s 면 낡음 얼굴 — 일반 실패 문구 없음 · [적용하기] 잠금',
+    (code) => {
+      renderStaleDraft(code);
+      renderPage();
+
+      expect(screen.getByTestId('planb-draft-stale')).toHaveTextContent(
+        /시간이 지나 이 대안은 지금 일정과 맞지 않아요/
+      );
+      expect(screen.queryByText('변경을 반영하지 못했어요')).toBeNull();
+      expect(screen.getByTestId('sheet-cta-button-1')).toBeDisabled();
+    }
+  );
+
+  it('F3 코드 없는 409·500 은 낡음이 아니라 종전 실패 안내다', () => {
+    for (const error of [
+      { isAxiosError: true, response: { status: 409, data: {} } },
+      { isAxiosError: true, response: { status: 500, data: {} } },
+    ]) {
+      mockApply.isError = true;
+      mockApply.error = error;
+      mockItinerary = DRAFT_ITINERARY;
+      mockSession.data = session('DRAFT');
+      mockDiff.data = READY_DIFF;
+      const { unmount } = render(
+        <PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />
+      );
+
+      expect(screen.queryByTestId('planb-draft-stale')).toBeNull();
+      expect(screen.getByTestId('planb-draft-notice-title')).toHaveTextContent(
+        '변경을 반영하지 못했어요'
+      );
+      unmount();
+    }
+  });
+
+  it('F4 [새 대안 보기] → 같은 입력으로 세션을 열고, 성공하면 i05 로 replace 한다', () => {
+    renderStaleDraft();
+    renderPage();
+
+    fireEvent.press(screen.getByTestId('planb-draft-stale-retry'));
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    const [variables, options] = mockStartMutate.mock.calls[0] as [
+      { tripId: string; data: unknown },
+      { onSuccess: (next: { sessionId: string }) => void },
+    ];
+    expect(variables).toEqual({
+      tripId: TRIP_ID,
+      data: {
+        scope: 'PARTIAL_SLOTS',
+        originKind: null,
+        reasons: ['TEMP_CLOSED'],
+        directives: ['AVOID_OUTDOOR'],
+        freeText: null,
+        excludedPoiIds: ['poi-closed'],
+        triggerId: 'trg-1',
+      },
+    });
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    act(() => options.onSuccess({ sessionId: 's10' }));
+
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb/solving',
+      params: { tripId: TRIP_ID, sessionId: 's10' },
+    });
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it('F5 [새 대안 보기]를 같은 틱에 두 번 눌러도 세션 시작은 1회다', () => {
+    renderStaleDraft();
+    renderPage();
+    const retry = screen.getByTestId('planb-draft-stale-retry');
+
+    fireEvent.press(retry);
+    fireEvent.press(retry);
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('F6 재요청이 실패하면 다시 누를 수 있다(잠금은 실패에서 풀린다)', () => {
+    renderStaleDraft();
+    renderPage();
+
+    fireEvent.press(screen.getByTestId('planb-draft-stale-retry'));
+    const [, options] = mockStartMutate.mock.calls[0] as [
+      unknown,
+      { onError: (error: unknown) => void },
+    ];
+    act(() => options.onError(new Error('500')));
+    fireEvent.press(screen.getByTestId('planb-draft-stale-retry'));
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(2);
+  });
+
+  it('F7 넣으려던 POI 가 초안에 없으면 그 장소 이름으로 미포함 안내가 뜬다', () => {
+    mockIncludedName.value = '하늘공원';
+    mockItinerary = DRAFT_ITINERARY;
+    mockSession.data = session('DRAFT');
+    mockDiff.data = READY_DIFF;
+    render(
+      <PlanbDraftPage
+        tripId={TRIP_ID}
+        sessionId={SESSION_ID}
+        includePoiId="poi-sky"
+      />
+    );
+
+    expect(screen.getByTestId('planb-draft-include-missing')).toHaveTextContent(
+      '‘하늘공원’은 이번 안에 넣지 못했어요.'
+    );
+    expect(mockIncludedName.calls).toContain('poi-sky');
+  });
+
+  it('F8 넣으려던 POI 가 초안에 있으면 안내가 없고 이름을 묻지 않는다', () => {
+    mockIncludedName.value = '해운대 시장';
+    mockItinerary = DRAFT_ITINERARY;
+    mockSession.data = session('DRAFT');
+    mockDiff.data = READY_DIFF;
+    render(
+      <PlanbDraftPage
+        tripId={TRIP_ID}
+        sessionId={SESSION_ID}
+        includePoiId="px"
+      />
+    );
+
+    expect(screen.queryByTestId('planb-draft-include-missing')).toBeNull();
+    // 앵커 — 페이지는 seam 을 부르되(훅은 늘 호출) 물을 POI 를 주지 않는다.
+    expect(mockIncludedName.calls.length).toBeGreaterThan(0);
+    expect(mockIncludedName.calls.every((poiId) => poiId === null)).toBe(true);
+    // 짝 앵커 — 초안은 그려졌다.
+    expect(textsOf(SLOT_NAMES)).toContain('해운대 시장');
+  });
+
+  it('F9 이름 조회가 실패하면(null) 이름 없는 미포함 안내다 — 조용히 넘기지 않는다', () => {
+    mockIncludedName.value = null;
+    mockItinerary = DRAFT_ITINERARY;
+    mockSession.data = session('DRAFT');
+    mockDiff.data = READY_DIFF;
+    render(
+      <PlanbDraftPage
+        tripId={TRIP_ID}
+        sessionId={SESSION_ID}
+        includePoiId="poi-sky"
+      />
+    );
+
+    expect(screen.getByTestId('planb-draft-include-missing')).toHaveTextContent(
+      '넣으려던 장소는 이번 안에 넣지 못했어요.'
+    );
   });
 });

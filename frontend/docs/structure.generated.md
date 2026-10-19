@@ -170,6 +170,7 @@
 - `src/__tests__/planbApplyStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbRequestRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/planbSessionRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardMustVisit.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardOnboardingPref.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardOnboardingPush.test.tsx`  →  (export 없음)
@@ -913,9 +914,11 @@
 - `src/pages/live/planb-draft/index.ts`  →  PlanbSolvingPage · PlanbDraftPage
 
 ## src/pages/live/planb-draft/model/
+- `src/pages/live/planb-draft/model/draftNotice.ts`  →  isStaleApplyError · staleRetryRequest · isIncludeMissing · includeMissingText
 - `src/pages/live/planb-draft/model/replanFromInstant.ts`  →  readFromInstant
 - `src/pages/live/planb-draft/model/replanPollCap.ts`  →  REPLAN_POLL_CAP_MS · replanCapDeadlineMs · isReplanPollCapped
 - `src/pages/live/planb-draft/model/replanState.ts`  →  ReplanState · resolveReplanState
+- `src/pages/live/planb-draft/model/useIncludedPlaceName.ts`  →  useIncludedPlaceName
 - `src/pages/live/planb-draft/model/useReplanDiff.ts`  →  useReplanDiff
 - `src/pages/live/planb-draft/model/useReplanSession.ts`  →  useReplanSession
 
@@ -1786,4 +1789,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1138개 파일
+합계 1141개 파일
