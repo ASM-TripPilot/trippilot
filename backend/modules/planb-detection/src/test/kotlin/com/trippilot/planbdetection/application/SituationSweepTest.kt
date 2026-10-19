@@ -346,8 +346,25 @@ class SituationSweepTest : StringSpec({
         target.date shouldBe DAY
         target.phase shouldBe SweepPhase.DAYTIME
         target.now shouldBe at("12:15")
+        target.round shouldBe at("12:15")
         target.slots.map { it.startAt } shouldBe listOf(LocalTime.of(18, 0)) // 10~11시는 끝났다
         target.active shouldBe listOf(mine)
+    }
+
+    "감지기는 회차 키를 받는다 — 시계가 흘러도 한 회차의 대상은 같은 키, 다음 회차는 다른 키(회차 범위 기억 · RES-SA-04)" {
+        // 감지기가 게이트웨이 오류·실패 격자를 '이 회차에만' 기억하는 근거다. 판정 시각(now)은 회차 안에서도 흘러 그 일을 못 한다.
+        val world = World()
+        repeat(3) { world.trip() }
+        val clock = StepClock(at("12:15"))
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST, answer = { clock.advance(Duration.ofMinutes(1)); CLEAR })
+
+        world.sweep(props(), listOf(forecast), clock).sweep(at("12:15"))
+        forecast.calls.map { it.round }.toSet() shouldBe setOf(at("12:15"))
+        forecast.calls.map { it.now }.toSet().size shouldBe 3
+
+        clock.current = at("13:15")
+        world.sweep(props(), listOf(forecast), clock).sweep(at("13:15"))
+        forecast.calls.drop(3).map { it.round }.toSet() shouldBe setOf(at("13:15"))
     }
 
     "관찰 전용 출처는 요약·표본 줄에만 — 그 출처의 신호는 쓰지 않고 감시 상태도 남기지 않는다(BR-SA-04)" {

@@ -253,7 +253,9 @@ class SituationSweep(
             for (d in round.called) {
                 if (!d.wants(round.scope.phase, offset)) continue
                 val mine = actives.filter { it.detector == d.source && it.affectedDate == date }
-                val target = SweepTarget(trip.tripId, trip.accountId, date, round.scope.phase, at, remaining, mine)
+                val target = SweepTarget(
+                    trip.tripId, trip.accountId, date, round.scope.phase, round = round.start, now = at, slots = remaining, active = mine,
+                )
                 result += Observation(d.source, d.kind, date, round.detect(d, target))
             }
         }
@@ -304,7 +306,8 @@ class SituationSweep(
     /** 회차 하나의 상태 — 여행 단위 병렬이라 모두 스레드 안전하다. 회차가 끝나면 버린다(저장 없음). */
     private inner class Round(
         val scope: SweepScope,
-        private val start: Instant,
+        /** 회차 시각 = 회차 키(감지기의 회차 범위 기억을 묶는다). */
+        val start: Instant,
         private val startedAt: Instant,
         val called: List<SituationDetector>,
     ) {
