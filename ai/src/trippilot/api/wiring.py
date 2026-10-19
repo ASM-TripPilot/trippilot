@@ -68,6 +68,7 @@ from typing import Callable, Collection, Mapping, Sequence
 from fastapi import FastAPI
 
 from trippilot.api import dialogue as dialogue_projection
+from trippilot.api import opportunities as opportunity_projection
 from trippilot.api import schemas
 from trippilot.api.errors import orchestrator_not_wired
 from trippilot.api.app import create_app
@@ -3861,6 +3862,9 @@ class WiredItineraryOrchestrator:
                 **fallback_share_card_copy(domain_request).to_dict())
         return schemas.ShareCardCopyResponse(**result.value.to_dict())
 
+    def planb_opportunities(self, request: schemas.OpportunitiesRequest) -> schemas.OpportunitiesResponse:
+        """동선 근처 기회(행사·요즘 인기, LLM 0회 · 트리거 아님) — 재료 수집·판정·사영은 `api/opportunities.py`."""
+        return opportunity_projection.find(self._info, self._poi_db, request, self._tz)
 
 # ── 조립 함수 (composition root) ─────────────────────────────────────
 

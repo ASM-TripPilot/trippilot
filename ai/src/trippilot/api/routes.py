@@ -1,5 +1,5 @@
 """경계 라우트 — `POST /ai/v1/itinerary/{generate,validate,repair,explanations,edit}`
-+ `POST /ai/v1/planb/{replan,alternatives}` (TRIP-960 — 여행 중 변수 대응은 planb 묶음)
++ `POST /ai/v1/planb/{replan,alternatives,opportunities}` (TRIP-960 — 여행 중 변수 대응은 planb 묶음)
 + `POST /ai/v1/reflection/{generate,nudge,share-card}`
 + `POST /ai/v1/notification/copies`.
 
@@ -45,6 +45,8 @@ from trippilot.api.schemas import (
     FreshnessMetaSchema,
     GenerateItineraryRequest,
     ItineraryPayload,
+    OpportunitiesRequest,
+    OpportunitiesResponse,
     ReflectionGenerateRequest,
     ReflectionGenerateResponse,
     ReflectionNudgeRequest,
@@ -420,6 +422,29 @@ planb_router.add_api_route(
 planb_router.add_api_route(
     "/alternatives", alternatives, methods=["POST"],
     response_model=AlternativesResponse, name="planb_alternatives",
+)
+
+
+def planb_opportunities(
+    request: OpportunitiesRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> OpportunitiesResponse:
+    """남은 동선 근처의 행사·요즘 인기 ≤ 3 (situation-awareness BR-SA-22 · DEC-SA-6) — LLM 0회.
+
+    트리거가 아니다(DEC-U4-4): 상태도 알림도 없는 조회형이다. 카드의 장소는 등록 POI 뿐이고(INV-1),
+    시각 필드가 없으며(INV-2 — 행사 원천이 일 단위), 거리는 문자열만 나간다(INV-3).
+    재료 실패는 200 + notes 다 — 행사 실패면 요즘 인기만, 장소 조회 실패면 빈 목록(INV-4).
+    구형 조립은 503 명시 실패.
+    """
+    handler = getattr(orchestrator, "planb_opportunities", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))
+
+
+planb_router.add_api_route(
+    "/opportunities", planb_opportunities, methods=["POST"],
+    response_model=OpportunitiesResponse, name="planb_opportunities",
 )
 
 
