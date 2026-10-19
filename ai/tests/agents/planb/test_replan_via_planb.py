@@ -352,7 +352,7 @@ def test_replan_response_carries_kb_hit_counts() -> None:
 
     # SCHEDULE 키는 없다 — 검색하지 않으므로 0 을 싣는 것도 거짓이다(TRIP-972).
     # 일정 컨텍스트는 요청 봉투(`current_slots`·`placement_reason`)가 들고 온다.
-    assert set(body["retrieved"]) == {"PERSONA", "SITUATION"}, body["retrieved"]
+    assert set(body["retrieved"]) == {"PERSONA", "SITUATION", "POI_DESC"}, body["retrieved"]
 
 
 def test_replan_runs_planb_and_says_so() -> None:

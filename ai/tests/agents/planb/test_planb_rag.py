@@ -1268,9 +1268,13 @@ def test_장소_지식은_숏리스트_후보_것만_가져온다() -> None:
     pool = _pool_with_refs(*ids)
     inside, outside = ids[0], ids[-1]  # 규칙 랭킹(풀 순서) 맨 앞 · 맨 뒤
     embedding, store = FakeEmbedding(dim=_SMALL), InMemoryVectorStore()
+    # 운영 경로 그대로 — 위키는 조각(`wiki:{ref}#k`)으로 적재된다(2026-10-18 청킹)
+    from trippilot.poi_curation.chunking import chunk_document
+
     index_documents(
-        [make_doc("wiki", f"ref-{pid}", "실내 전시실이 여럿 있는 시립 박물관으로 비 오는 날 찾기 좋다.")
-         for pid in (inside, outside)],
+        [d for pid in (inside, outside) for d in chunk_document(
+            {"doc_id": f"wiki:ref-{pid}", "poi_ref": f"ref-{pid}",
+             "sections": [{"heading": "개요", "text": "실내 전시실이 여럿 있는 시립 박물관으로 비 오는 날 찾기 좋다."}]})],
         embedding, store,
     )
     worker = _CapturingWorker()
