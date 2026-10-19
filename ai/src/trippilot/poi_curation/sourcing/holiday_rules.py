@@ -31,6 +31,7 @@
   구분자로 떨어진 여는 절(`공휴일/정상운영`)은 **원문 전체**를 모른다. 괄호만 버리면 여는 날까지 닫는다.
   요일 절의 단서(`매주 월요일 (… 공휴일인 경우 정상 개관)`)는 그 절에 휴일 규칙이 없어 잃는 것이 없다.
 - 시설 머리가 여럿(`- 전망대 (연중무휴)- 홍보관 (1월 1일 …)`) — `[A] … [B] …` 처럼 어느 시설의 휴무인지 모른다.
+  괄호·※ 단서가 한 시설을 연중무휴라 하는 원문(`※ 야외전시는 연중무휴`)도 같다 — 원문 전체를 모른다.
 """
 
 from __future__ import annotations
@@ -83,6 +84,9 @@ _FACILITY_HEAD = re.compile(r"(?:^|(?<=[\s)）]))-[ \t]*([^\s\-/,()（）:·]+)[
 _OPEN_TAIL = re.compile(r"(?:개관|개장|운영|영업)(?:함|합니다)?\s*$")
 # 여는 말뿐인 절(`공휴일/정상운영`) — 구분자 앞 어느 절을 여는지 모른다(공유본 0건).
 _OPEN_CLAUSE = re.compile(r"(?:정상[ \t]*)?(?:운영|영업|개관|개장)(?:함|합니다|중)?\.?")
+# 단서 안의 연중무휴(`※ 야외전시는 연중무휴`, 공유본 3건 전부 공원) — 시설 머리와 같은 뜻이다. 기간 예외
+# (`영화제 기간 동안은 무휴`)는 아니다 — 그 날짜를 모르고 그 밖의 날은 닫는다.
+_YEAR_ROUND = re.compile(r"연중[ \t]*무휴")
 
 
 def parse_holiday_rules(rest_raw: str | None, hours_raw: str | None = None) -> frozenset[str]:
@@ -106,6 +110,8 @@ def _text_rules(raw: str) -> set[str]:
     if (not text or len(_SECTION_HEAD.findall(text)) > 1
             or sum(_clause(h) is None for h in _FACILITY_HEAD.findall(text)) > 1):
         return set()  # 구역·시설이 여럿이면 어느 시설의 휴무인지 모른다(mapping 의 `[A] … [B]` 와 같다)
+    if any(_YEAR_ROUND.search(m.group(0)) for m in (*_REST_REMARK.finditer(text), *_REST_PAREN.finditer(text))):
+        return set()  # 단서가 한 시설을 연중무휴라 한다 — 위와 같은 뜻을 괄호·※ 로 썼다
     text = _REST_REMARK.sub("", text)  # ※ 비고는 그 줄 끝까지 버린다 — 안의 괄호도 같이
     # 괄호 단서는 걷어 내되, 여는 말로 끝나는 괄호가 붙은 절은 못 읽게 한다(NUL 은 낱말이 아니다)
     body = _REST_PAREN.sub(lambda m: "\0" if _OPEN_TAIL.search(m.group(0)[1:-1]) else " ", text)

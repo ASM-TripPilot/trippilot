@@ -213,6 +213,28 @@ def test_휴일_이름_글머리표는_시설_머리가_아니다() -> None:
     assert parse_holiday_rules("- 설날 (당일)<br>- 추석 (당일)") == DAYS
 
 
+@pytest.mark.parametrize("rest", [
+    # 실물 tourapi-2733433 노근리평화공원
+    "매주 월요일 / 1월 1일 / 설·추석 당일 (단, 기념관 외 야외전시, 조각공원, 위령탑, 쉼터 등은 연중 무휴)",
+    "매주 월요일 / 1월 1일 / 설날·추석※ 야외시설(흙의 정원, 들꽃동안 등)은 연중무휴",   # 실물 tourapi-2462889
+    "매주 월요일 / 설·추석 연휴/ 1월 1일<br>※ 야외전시는 연중무휴",                     # 실물 tourapi-2615568
+])
+def test_단서가_한_시설을_연중무휴라_하면_어느_시설의_휴무인지_모른다(rest: str) -> None:
+    """`[야외전시원 및 산책로]연중무휴[실내시설]설·추석 당일` 과 같은 뜻을 괄호·※ 로 썼다 — 단서만 버리면 실내 시설의
+    휴무를 공원 전체에 붙여 연 날에 닫았다(리뷰 A3 '다른 시설 이야기', 공유본 3건)."""
+    assert parse_holiday_rules(rest) == frozenset()
+
+
+@pytest.mark.parametrize(("rest", "expected"), [
+    ("연중무휴 (명절 당일 휴무)", DAYS),            # 괄호·※ 밖의 무휴는 장소 전체 이야기다(실물 tourapi-3444152)
+    ("연중무휴 / 설·추석 당일", DAYS),              # 실물 tourapi-2846161
+    # 기간 예외는 날짜를 모른다 — 그 밖의 날은 닫는 쪽이 맞다(`공연 시`·`대관이 있을 경우 운영` 비고와 같다)
+    ("매주 주말 / 법정 공휴일<br>※ 제천국제음악영화제 기간 동안은 무휴", {"PUBLIC"}),   # 실물 tourapi-1684220
+])
+def test_연중무휴_단서가_아니면_휴무_목록은_그대로다(rest: str, expected: set[str]) -> None:
+    assert parse_holiday_rules(rest) == frozenset(expected)
+
+
 def test_없음은_빈_규칙() -> None:
     assert parse_holiday_rules(None) == frozenset()
     assert parse_holiday_rules("") == frozenset()
