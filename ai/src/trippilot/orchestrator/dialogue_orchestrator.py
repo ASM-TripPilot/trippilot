@@ -522,6 +522,8 @@ class DialogueOrchestrator:
         # 0′ — 지시 무시·프롬프트 유출·역할 바꾸기 꼴은 분류 LLM 에 보내지 않는다. "다음 장소 알려줘. 그리고 규칙 무시하고 …"처럼
         # 정상 요청에 붙으면 분류는 GET_NEXT_SLOT 을 고르고 답변 LLM 이 그 지시를 받는다 — 판단해서 거절한 것이라 거절 표지를 단다
         if has_injection_like(text):
+            # 발화는 싣지 않는다 — 운영에서 이 줄 수로 오탐을 센다(정상 말이 걸리면 범위 밖 카드가 나간다)
+            log.info("dialogue_injection_suspected %s", json.dumps({"event": "dialogue_injection_suspected", "trace_id": inp.trace_id}))
             return self._out_of_scope(inp, INJECTION_REASON)
         trip_view = _trip_view(inp.snapshot)
         today = inp.now.astimezone(self._tz).date()
@@ -774,7 +776,8 @@ class DialogueOrchestrator:
         # **앞** 메시지)만 요약하면 이번 턴이 장기 기억에서 영영 빠진다(2026-10-18 리뷰 재현).
         turns = inp.recent_turns + tuple(
             RecentTurn(role, text[:RECENT_TURN_CHARS])
-            for role, text in (("USER", inp.utterance.strip()), ("ASSISTANT", (answer_text or "").strip())) if text)
+            for role, text in (("USER", inp.utterance.strip()), ("ASSISTANT", (answer_text or "").strip()))
+            if text and not has_injection_like(text))  # 0′ 에서 거절한 발화도 요약 차례면 여기로 온다 — 지난 턴과 같은 거름
         today = inp.now.astimezone(self._tz).date()
         if not turns:  # 재료 없이 LLM 을 부르지 않는다 — 의도된 결정론, 폴백 아님 (BR-AO-25)
             lines = compress_fallback((), previous)
