@@ -23,14 +23,15 @@ class NotificationInvariantsTest : StringSpec({
 
     "제목은 비어 있거나 120자를 넘을 수 없다 — 경계값 120자는 들어간다" {
         shouldThrow<IllegalArgumentException> { raise(" ", "본문") }
-        shouldThrow<IllegalArgumentException> { raise("가".repeat(Notification.TITLE_MAX + 1), "본문") }
-        raise("가".repeat(Notification.TITLE_MAX), "본문").title.length shouldBe Notification.TITLE_MAX
+        // 리터럴로 고정한다 — 상수와 컬럼(varchar(120))이 같이 움직여야 하므로 상수만 보면 둘이 갈려도 통과한다.
+        shouldThrow<IllegalArgumentException> { raise("가".repeat(121), "본문") }
+        raise("가".repeat(120), "본문").title.length shouldBe 120
     }
 
     "본문은 비어 있거나 400자를 넘을 수 없다 — 경계값 400자는 들어간다" {
         shouldThrow<IllegalArgumentException> { raise("제목", "") }
-        shouldThrow<IllegalArgumentException> { raise("제목", "가".repeat(Notification.BODY_MAX + 1)) }
-        raise("제목", "가".repeat(Notification.BODY_MAX)).body.length shouldBe Notification.BODY_MAX
+        shouldThrow<IllegalArgumentException> { raise("제목", "가".repeat(401)) }
+        raise("제목", "가".repeat(400)).body.length shouldBe 400
     }
 
     "시각으로 발화하지 않는 종류는 예약할 수 없다" {

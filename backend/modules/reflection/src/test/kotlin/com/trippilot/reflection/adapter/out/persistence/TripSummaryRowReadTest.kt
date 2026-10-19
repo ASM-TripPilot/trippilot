@@ -60,6 +60,7 @@ class TripSummaryRowReadTest : StringSpec({
                 ),
             ),
         ).highlights
+        h.map { it.date } shouldBe listOf(LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-02"))
         h.forEach {
             it.distanceKm shouldBe null
             it.distanceSource shouldBe null

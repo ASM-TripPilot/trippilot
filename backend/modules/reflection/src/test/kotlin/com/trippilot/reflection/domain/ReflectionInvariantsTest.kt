@@ -36,10 +36,14 @@ class ReflectionInvariantsTest : StringSpec({
     }
 
     "게이지는 세 축 모두 0~5 다" {
-        shouldThrow<IllegalArgumentException> { TraitGauges(6, 0, 0) }
-        shouldThrow<IllegalArgumentException> { TraitGauges(0, -1, 0) }
-        shouldThrow<IllegalArgumentException> { TraitGauges(0, 0, 6) }
-        TraitGauges(0, 5, 5) shouldBe TraitGauges(0, 5, 5)
+        listOf(-1, 6).forEach { bad ->
+            shouldThrow<IllegalArgumentException> { TraitGauges(bad, 0, 0) }
+            shouldThrow<IllegalArgumentException> { TraitGauges(0, bad, 0) }
+            shouldThrow<IllegalArgumentException> { TraitGauges(0, 0, bad) }
+        }
+        // 경계값 0·5 는 만들어진다 — 던지지 않는 것이 확인이다.
+        TraitGauges(0, 0, 0)
+        TraitGauges(5, 5, 5)
     }
 
     "카테고리 비율은 0~1 이다" {

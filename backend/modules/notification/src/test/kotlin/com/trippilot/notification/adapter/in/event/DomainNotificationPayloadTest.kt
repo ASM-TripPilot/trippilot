@@ -2,15 +2,23 @@ package com.trippilot.notification.adapter.`in`.event
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.core.event.EventEnvelope
+import com.trippilot.notification.application.FakeNotifications
+import com.trippilot.notification.application.FakeToggles
+import com.trippilot.notification.application.FakeTripOwner
 import com.trippilot.notification.application.NotificationRaiseService
+import com.trippilot.notification.application.NotificationToggleService
+import com.trippilot.notification.application.noPush
+import com.trippilot.notification.application.testMetrics
 import com.trippilot.notification.domain.NotificationKind
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
+import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
 
 /**
@@ -18,11 +26,23 @@ import java.util.UUID
  *
  * 릴레이가 재시도하고 상한에서 error 로 남긴다. 조용히 건너뛰면 "알림이 왜 안 오나"를 영영 못 찾는다.
  * 반대로 선택 필드(숙소 이름)가 빠진 것은 실패가 아니다 — 기본값으로 적재한다.
- * 정상 payload 의 관통은 app `DomainNotificationIT` 가 본다.
+ * 정상 payload 의 관통은 app `DomainNotificationIT` 가 본다. 적재는 실제 [NotificationRaiseService] 와
+ * 인메모리 대역으로 한다 — 알림 생성 불변식(제목·본문 상한)까지 같이 지난다.
  */
 class DomainNotificationPayloadTest : StringSpec({
 
     val mapper = ObjectMapper()
+    val clock = Clock.fixed(Instant.parse("2026-08-10T00:00:00Z"), ZoneOffset.UTC)
+
+    class Fixture(val stored: FakeNotifications, val trips: FakeTripOwner, val raise: NotificationRaiseService)
+
+    fun fixture(): Fixture {
+        val notifications = FakeNotifications()
+        val toggles = NotificationToggleService(FakeToggles(), clock)
+        val trips = FakeTripOwner()
+        val metrics = testMetrics(notifications)
+        return Fixture(notifications, trips, NotificationRaiseService(notifications, toggles, noPush(clock, notifications, toggles), trips, metrics, clock))
+    }
 
     fun envelope(payload: String, type: String) = EventEnvelope(
         eventId = UUID.randomUUID(), eventType = type, schemaVersion = 1,
@@ -33,60 +53,64 @@ class DomainNotificationPayloadTest : StringSpec({
     fun json(vararg pairs: Pair<String, Any?>) = mapper.writeValueAsString(mapOf(*pairs))
 
     "JSON 이 아닌 payload 는 eventId 를 담아 예외로 올린다 — 적재하지 않는다" {
-        val raise = mockk<NotificationRaiseService>(relaxed = true)
+        val f = fixture()
         val e = envelope("{not json", "stay.StayRegistered")
-        shouldThrow<IllegalStateException> { StayRegisteredSubscriber(raise, mapper).handle(e) }.message shouldContain e.eventId.toString()
-        verify(exactly = 0) { raise.raise(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        shouldThrow<IllegalStateException> { StayRegisteredSubscriber(f.raise, mapper).handle(e) }.message shouldContain e.eventId.toString()
+        f.stored.stored.shouldBeEmpty()
     }
 
     "숙소 사건에 accountId 가 없거나 null 이거나 UUID 가 아니면 예외다" {
-        val raise = mockk<NotificationRaiseService>(relaxed = true)
+        val f = fixture()
         listOf(json("name" to "호텔"), json("accountId" to null), json("accountId" to "nope")).forEach { p ->
-            shouldThrow<IllegalStateException> { StayRegisteredSubscriber(raise, mapper).handle(envelope(p, "stay.StayRegistered")) }
+            shouldThrow<IllegalStateException> { StayRegisteredSubscriber(f.raise, mapper).handle(envelope(p, "stay.StayRegistered")) }
                 .message shouldContain "accountId"
         }
-        verify(exactly = 0) { raise.raise(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        f.stored.stored.shouldBeEmpty()
     }
 
     "숙소 이름이 없으면 본문은 '숙소' 다 — 빈 본문으로 실패시키지 않는다" {
-        val raise = mockk<NotificationRaiseService>(relaxed = true)
+        val f = fixture()
         val acc = UUID.randomUUID()
-        StayRegisteredSubscriber(raise, mapper).handle(envelope(json("accountId" to acc.toString()), "stay.StayRegistered"))
-        verify { raise.raise(acc, NotificationKind.STAY, "숙소가 등록됐어요", "숙소", any(), any(), any(), any(), any()) }
+        StayRegisteredSubscriber(f.raise, mapper).handle(envelope(json("accountId" to acc.toString()), "stay.StayRegistered"))
+        val n = f.stored.stored.single()
+        n.accountId shouldBe acc
+        n.kind shouldBe NotificationKind.STAY
+        (n.title to n.body) shouldBe ("숙소가 등록됐어요" to "숙소")
     }
 
     "Plan-B 사건에 accountId 가 없으면 예외다" {
-        val raise = mockk<NotificationRaiseService>(relaxed = true)
+        val f = fixture()
         shouldThrow<IllegalStateException> {
-            PlanBTriggeredSubscriber(raise, mapper).handle(envelope(json("tripId" to UUID.randomUUID().toString()), "planb.PlanBTriggered"))
+            PlanBTriggeredSubscriber(f.raise, mapper).handle(envelope(json("tripId" to UUID.randomUUID().toString()), "planb.PlanBTriggered"))
         }.message shouldContain "accountId"
+        f.stored.stored.shouldBeEmpty()
     }
 
     "회고 사건에 tripId 가 없으면 예외다" {
-        val raise = mockk<NotificationRaiseService>(relaxed = true)
+        val f = fixture()
         shouldThrow<IllegalStateException> {
-            ReflectionReadySubscriber(raise, mapper).handle(envelope(json("kind" to "SUMMARY"), "reflection.ReflectionReady"))
+            ReflectionReadySubscriber(f.raise, mapper).handle(envelope(json("kind" to "SUMMARY"), "reflection.ReflectionReady"))
         }.message shouldContain "tripId"
+        f.stored.stored.shouldBeEmpty()
     }
 
     "여행 소유자를 못 찾으면 예외다 — 엉뚱한 계정에 적재하지 않는다" {
-        val raise = mockk<NotificationRaiseService>(relaxed = true)
-        every { raise.ownerOfTrip(any()) } returns null
+        val f = fixture()
         shouldThrow<IllegalStateException> {
-            ReflectionReadySubscriber(raise, mapper).handle(
+            ReflectionReadySubscriber(f.raise, mapper).handle(
                 envelope(json("tripId" to UUID.randomUUID().toString(), "kind" to "SUMMARY"), "reflection.ReflectionReady"),
             )
         }.message shouldContain "소유자"
+        f.stored.stored.shouldBeEmpty()
     }
 
     "하루 회고에 dayDate 가 없으면 예외다 — 어느 날 회고인지 모르는 알림을 만들지 않는다" {
-        val raise = mockk<NotificationRaiseService>(relaxed = true)
-        every { raise.ownerOfTrip(any()) } returns UUID.randomUUID()
+        val f = fixture()
+        val trip = UUID.randomUUID()
+        f.trips.put(trip, UUID.randomUUID(), LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12"))
         shouldThrow<IllegalStateException> {
-            ReflectionReadySubscriber(raise, mapper).handle(
-                envelope(json("tripId" to UUID.randomUUID().toString(), "kind" to "DAILY"), "reflection.ReflectionReady"),
-            )
+            ReflectionReadySubscriber(f.raise, mapper).handle(envelope(json("tripId" to trip.toString(), "kind" to "DAILY"), "reflection.ReflectionReady"))
         }.message shouldContain "dayDate"
-        verify(exactly = 0) { raise.raise(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        f.stored.stored.shouldBeEmpty()
     }
 })

@@ -11,6 +11,7 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.test.web.client.match.MockRestRequestMatchers.header
 import org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist
+import org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
 import org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess
 import org.springframework.web.client.RestClient
@@ -26,20 +27,23 @@ class ExpoPushReceiptTest : StringSpec({
     val url = "http://expo.test/--/api/v2/push/send"
     val message = PushMessage("제목", "본문", urgency = PushUrgency.ACTIVE)
 
-    fun send(tokens: List<String>, response: String?, accessToken: String = ""): Pair<List<PushReceipt>, MockRestServiceServer> {
+    /** 나가는 본문의 `to` 가 입력 토큰 순서 그대로인지도 함께 본다 — 대응의 근거가 그 순서다. */
+    fun send(tokens: List<String>, response: String?, accessToken: String = ""): List<PushReceipt> {
         val builder = RestClient.builder().baseUrl("http://expo.test")
         val server = MockRestServiceServer.bindTo(builder).build()
         val call = server.expect(requestTo(url))
+        tokens.forEachIndexed { i, t -> call.andExpect(jsonPath("$[$i].to").value(t)) }
+        call.andExpect(jsonPath("$.length()").value(tokens.size))
         if (accessToken.isBlank()) call.andExpect(headerDoesNotExist(HttpHeaders.AUTHORIZATION))
         else call.andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken"))
         call.andRespond(if (response == null) withSuccess() else withSuccess(response, MediaType.APPLICATION_JSON))
         val receipts = ExpoPushAdapter(accessToken, builder.build()).send(tokens, message)
         server.verify()
-        return receipts to server
+        return receipts
     }
 
     "입력 순서대로 티켓을 토큰에 대응시킨다 — ok 는 SENT, DeviceNotRegistered 는 무효화 대상" {
-        val (receipts, _) = send(
+        val receipts = send(
             listOf("t1", "t2", "t3", "t4", "t5"),
             """{"data":[
                 {"status":"ok"},
@@ -59,7 +63,7 @@ class ExpoPushReceiptTest : StringSpec({
     }
 
     "티켓 수가 토큰 수와 다르면 대응을 잃었으므로 전부 FAILED — 어느 토큰도 무효화하지 않는다" {
-        val (receipts, _) = send(
+        val receipts = send(
             listOf("t1", "t2"),
             """{"data":[{"status":"error","details":{"error":"DeviceNotRegistered"}}]}""",
         )
@@ -70,12 +74,12 @@ class ExpoPushReceiptTest : StringSpec({
     }
 
     "응답 본문이 비면 티켓 0개로 보고 전부 FAILED 다" {
-        val (receipts, _) = send(listOf("t1"), null)
+        val receipts = send(listOf("t1"), null)
         receipts shouldBe listOf(PushReceipt("t1", PushStatus.FAILED, "TICKET_COUNT_MISMATCH"))
     }
 
     "액세스 토큰이 있으면 Bearer 로 싣고, 비어 있으면 Authorization 헤더 자체를 보내지 않는다" {
-        send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "secret").first.single().status shouldBe PushStatus.SENT
-        send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "").first.single().status shouldBe PushStatus.SENT
+        send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "secret").single().status shouldBe PushStatus.SENT
+        send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "").single().status shouldBe PushStatus.SENT
     }
 })
