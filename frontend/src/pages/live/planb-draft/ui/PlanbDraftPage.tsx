@@ -251,6 +251,10 @@ export function PlanbDraftPage({
   const draft = diff.data?.ready === true ? diff.data : undefined;
   const sheet = draft ? buildDraftSheet(draft) : undefined;
   const stale = isStaleApplyError(apply.error);
+  const today = seoulDate(now);
+  // 지난 날의 낡은 초안(BR-SA-19 ①)은 같은 날로 다시 짤 수 없다 — 서버가 늘 409(지난 날짜는 다시 짤 수 없다)라
+  // [새 대안 보기]를 두지 않는다(누를 때마다 "잠시 후 다시 시도"로 실패하는 버튼). 낡음 문구는 그대로다.
+  const canRetryStale = !data.targetDate || data.targetDate >= today;
   const retryStale = () => {
     if (staleRetryRef.current) return;
     staleRetryRef.current = true;
@@ -346,7 +350,7 @@ export function PlanbDraftPage({
         // 초안 얼굴에만 — 대안 없음·실패 얼굴에 '미리 준비한 대안'을 달면 없는 대안을 말한다(BR-SA-23 은 DRAFT 행에만 단다).
         prepared={data.initiatedBy === 'SYSTEM' && state.kind === 'draft'}
         stale={stale}
-        onRetryStale={retryStale}
+        onRetryStale={canRetryStale ? retryStale : undefined}
         staleRetryPending={startReplan.isPending}
         staleRetryFailed={startReplan.isError}
         includeMissingText={

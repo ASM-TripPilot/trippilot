@@ -456,6 +456,16 @@ describe('🔴 상황 감지 FE-B · 미리 준비한 대안 표식 · 낡음 �
     expect(handlers.onApply).not.toHaveBeenCalled();
   });
 
+  it('F3b stale 인데 onRetryStale 이 없으면(다시 짤 수 없는 지난 날 초안) 낡음 문구만 있고 [새 대안 보기]는 없다', () => {
+    renderView({ stale: true });
+
+    expect(screen.getByTestId('planb-draft-stale')).toHaveTextContent(
+      '시간이 지나 이 대안은 지금 일정과 맞지 않아요'
+    );
+    expect(screen.queryByTestId('planb-draft-stale-retry')).toBeNull();
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeDisabled();
+  });
+
   it('F4 재요청 중엔 [새 대안 보기]가 잠기고, 재요청 실패면 실패 한 줄이 붙는다', () => {
     const onRetryStale = jest.fn();
     renderView({

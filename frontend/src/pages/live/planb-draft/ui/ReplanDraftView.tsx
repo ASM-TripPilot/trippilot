@@ -94,7 +94,7 @@ export interface ReplanDraftViewProps {
   prepared?: boolean;
   /** 적용이 409 EXPIRED·STALE 로 거절됐다 — 낡음 얼굴(안내 + [새 대안 보기]) · [적용하기] 잠금. */
   stale?: boolean;
-  /** [새 대안 보기] — 같은 입력으로 새 세션(페이지 몫). */
+  /** [새 대안 보기] — 같은 입력으로 새 세션(페이지 몫). 없으면 버튼이 없다(다시 짤 수 없는 지난 날 초안). */
   onRetryStale?: () => void;
   /** 새 세션 요청 중 — [새 대안 보기] 잠금. */
   staleRetryPending?: boolean;
@@ -214,19 +214,22 @@ export function ReplanDraftView({
                   {STALE_RETRY_FAILED}
                 </Text>
               ) : null}
-              {/* 보조 버튼 자리·모양은 [내일 일정 다시 짜기]와 같다 — CTA 바는 1~2버튼이라 안내 아래에 둔다. */}
-              <Pressable
-                testID="planb-draft-stale-retry"
-                accessibilityRole="button"
-                onPress={onRetryStale}
-                disabled={staleRetryPending}
-                accessibilityState={{ disabled: staleRetryPending === true }}
-                className="mt-xs self-start rounded-pill border border-hairline-strong bg-canvas px-lg py-sm"
-              >
-                <Text className="font-noto-bold text-label font-bold text-ink">
-                  {STALE_RETRY_LABEL}
-                </Text>
-              </Pressable>
+              {/* 보조 버튼 자리·모양은 [내일 일정 다시 짜기]와 같다 — CTA 바는 1~2버튼이라 안내 아래에 둔다.
+                  다시 짤 수 없는 초안(지난 날)이면 페이지가 onRetryStale 을 주지 않는다 — 늘 실패할 버튼을 두지 않는다. */}
+              {onRetryStale ? (
+                <Pressable
+                  testID="planb-draft-stale-retry"
+                  accessibilityRole="button"
+                  onPress={onRetryStale}
+                  disabled={staleRetryPending}
+                  accessibilityState={{ disabled: staleRetryPending === true }}
+                  className="mt-xs self-start rounded-pill border border-hairline-strong bg-canvas px-lg py-sm"
+                >
+                  <Text className="font-noto-bold text-label font-bold text-ink">
+                    {STALE_RETRY_LABEL}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : notice !== null ? (
             <View testID="planb-draft-notice" className="gap-xs px-lg pb-md">

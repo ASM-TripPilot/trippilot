@@ -2101,3 +2101,43 @@ describe('🔴 상황 감지 FE-B · i06 미리 준비한 대안 표식 · 낡�
     );
   });
 });
+
+/**
+ * 상황 감지 FE-B — 리뷰 반영: 지난 날의 낡은 초안(BR-SA-19 ① targetDate < 오늘 → EXPIRED).
+ * 같은 입력의 '같은 날짜'는 서버가 늘 409(지난 날짜는 다시 짤 수 없다 — TRIP-1182)라 [새 대안 보기]는 누를 때마다
+ * "잠시 후 다시 시도해 주세요"로 실패한다. 낡음 문구는 그대로 두고 그 버튼만 두지 않는다. 오늘·앞날은 종전대로 있다.
+ * 닿는 길: i06 을 자정 넘겨 열어 둔 채 [적용하기](게이트는 낡은 세션을 i06 으로 보내지 않는다).
+ */
+describe('🔴 상황 감지 FE-B · 지난 날 낡은 초안엔 [새 대안 보기]가 없다', () => {
+  // KST 2026-06-12 10:00 — 세션 날짜 06-11 은 어제다.
+  const NEXT_MORNING = new Date('2026-06-12T01:00:00Z');
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('F10 어제 날짜의 초안이 409 EXPIRED 면 낡음 문구만 있고 [새 대안 보기]는 없다 · 세션 시작 0', () => {
+    jest.useFakeTimers({ now: NEXT_MORNING });
+    renderStaleDraft('EXPIRED', { targetDate: '2026-06-11' });
+    renderPage();
+
+    expect(screen.getByTestId('planb-draft-stale')).toHaveTextContent(
+      '시간이 지나 이 대안은 지금 일정과 맞지 않아요'
+    );
+    expect(screen.queryByTestId('planb-draft-stale-retry')).toBeNull();
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeDisabled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+
+  it.each(['2026-06-12', '2026-06-13'])(
+    'F10b 오늘·앞날(%s) 초안이면 [새 대안 보기]가 있다(같은 날짜로 다시 짤 수 있다)',
+    (targetDate) => {
+      jest.useFakeTimers({ now: NEXT_MORNING });
+      renderStaleDraft('STALE', { targetDate });
+      renderPage();
+
+      fireEvent.press(screen.getByTestId('planb-draft-stale-retry'));
+      expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    }
+  );
+});
