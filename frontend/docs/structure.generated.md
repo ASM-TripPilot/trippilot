@@ -9,7 +9,7 @@
 - `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay · NaverMapCircleOverlay · NaverMapPolylineOverlay
 
 ## __mocks__/
-- `__mocks__/expo-notifications.ts`  →  getPermissionsAsync · requestPermissionsAsync · getExpoPushTokenAsync · setNotificationChannelAsync · AndroidImportance
+- `__mocks__/expo-notifications.ts`  →  getPermissionsAsync · requestPermissionsAsync · getExpoPushTokenAsync · setNotificationChannelAsync · setNotificationHandler · addNotificationReceivedListener · addNotificationResponseReceivedListener · getLastNotificationResponseAsync · clearLastNotificationResponseAsync · AndroidImportance
 - `__mocks__/react-native-draggable-flatlist.tsx`  →  __dragLog · ScaleDecorator · OpacityDecorator · ShadowDecorator · NestableDraggableFlatList · NestableScrollContainer
 
 ## app/(auth)/
@@ -194,6 +194,7 @@
 
 ## src/app/model/
 - `src/app/model/useAccountBoundaryReset.ts`  →  useAccountBoundaryReset
+- `src/app/model/usePushRouting.ts`  →  usePushRouting
 
 ## src/app/routing/
 - `src/app/routing/SplashGate.tsx`  →  SPLASH_MIN_VISIBLE_MS · PUSH_REGISTER_DELAY_MS · SplashGate
@@ -596,7 +597,7 @@
 
 ## src/pages/assistant/assistant-sheet/api/
 - `src/pages/assistant/assistant-sheet/api/assistantClient.ts`  →  assistantPort · setAssistantPort
-- `src/pages/assistant/assistant-sheet/api/assistantContract.ts`  →  ASSISTANT_SURFACES · MessageRole · MessageKind · NEXT_ACTION_TYPES · NextActionType · NextAction · QuickReplyAction · QuickReply · ProposalStatus · ProposalChange · ProposalSlotFace · ProposalDiffItem · Proposal · LabeledValue · ReviewProblem · ReviewPayload · CandidateItem · CandidatesPayload · InfoKind · InfoPayload · ScopePayload · RefusalPayload · FallbackCause · FallbackPayload · ActionLogTag · ActionLogPayload · ClarifyPayload · MessagePayload · AssistantMessage · AssistantSession · OpenSessionResponse · AssistantSessionSummary · MessagesPage · TurnInput · SendTurnRequest · SendTurnResponse · ApplyProposalResponse · DismissProposalResponse
+- `src/pages/assistant/assistant-sheet/api/assistantContract.ts`  →  ASSISTANT_SURFACES · MessageRole · MessageKind · NEXT_ACTION_TYPES · NextActionType · NextAction · QuickReplyAction · QuickReply · ProposalStatus · ProposalChange · ProposalSlotFace · ProposalDiffItem · Proposal · LabeledValue · ReviewProblem · ReviewPayload · CandidateItem · CandidatesPayload · InfoKind · InfoPayload · ScopePayload · RefusalPayload · FallbackCause · FallbackPayload · ActionLogTag · ActionLogPayload · ClarifyPayload · MessagePayload · AssistantMessage · FeedbackRating · FEEDBACK_REASONS · FeedbackReason · FEEDBACK_COMMENT_LIMIT · FeedbackRequest · FeedbackResponse · AssistantSession · OpenSessionResponse · AssistantSessionSummary · MessagesPage · TurnInput · SendTurnRequest · SendTurnResponse · ApplyProposalResponse · DismissProposalResponse
 - `src/pages/assistant/assistant-sheet/api/assistantPort.ts`  →  AssistantPort · AssistantErrorCode · AssistantApiError · isAssistantApiError
 - `src/pages/assistant/assistant-sheet/api/assistantSamples.ts`  →  AssistantScenario · SAMPLE_TRIP_ID · SAMPLE_TRIP_CHIP · SAMPLE_CREATED_AT · startQuickReplies · sampleSession · userMessage · assistantSample · SCENARIO_UTTERANCE · sampleTranscript · sampleActionLogs
 - `src/pages/assistant/assistant-sheet/api/fakeAssistantAdapter.ts`  →  FakeAssistantOptions · routeUtterance · FakeAssistantAdapter · fakeWithHistory
@@ -607,7 +608,8 @@
 - `src/pages/assistant/assistant-sheet/index.view.ts`  →  sampleActionLogs · sampleTranscript · type AssistantScenario · AssistantSheetView · type AssistantSheetViewProps · MessageCard · TurnStatusRow · HistoryView · displayMessage · currentQuickReplies · needsCapabilitiesChip
 
 ## src/pages/assistant/assistant-sheet/model/
-- `src/pages/assistant/assistant-sheet/model/assistantQueries.ts`  →  assistantKeys · appendMessages · useAssistantSession · useAssistantMessages · useAssistantSessions · SendTurnVariables · useSendTurn · useApplyProposal · useDismissProposal · useMarkProposal · useClearSession
+- `src/pages/assistant/assistant-sheet/model/answerFeedback.ts`  →  toggleRating · normalizeComment · canSubmitComment · FEEDBACK_THANKS · FeedbackPanel
+- `src/pages/assistant/assistant-sheet/model/assistantQueries.ts`  →  assistantKeys · appendMessages · useAssistantSession · useAssistantMessages · useAssistantSessions · SendTurnVariables · useSendTurn · useApplyProposal · useDismissProposal · useMarkProposal · useClearSession · FeedbackVariables · useMessageFeedback
 - `src/pages/assistant/assistant-sheet/model/cardModel.ts`  →  slotFaceLine
 - `src/pages/assistant/assistant-sheet/model/clientTurnId.ts`  →  newClientTurnId
 - `src/pages/assistant/assistant-sheet/model/composerLimit.ts`  →  COMPOSER_LIMIT
@@ -616,12 +618,14 @@
 - `src/pages/assistant/assistant-sheet/model/resolveSheetState.ts`  →  SheetState · SheetSessionQuery · resolveSheetState
 - `src/pages/assistant/assistant-sheet/model/sheetModel.ts`  →  currentQuickReplies · needsCapabilitiesChip · isSendableText
 - `src/pages/assistant/assistant-sheet/model/turnTiming.ts`  →  SLOW_TURN_MS · isSlowTurn · secondsLeft
+- `src/pages/assistant/assistant-sheet/model/useAnswerFeedback.ts`  →  AnswerFeedbackFlow · useAnswerFeedback
 - `src/pages/assistant/assistant-sheet/model/useTurnFlow.ts`  →  PendingTurn · TurnFlow · useTurnFlow
 
 ## src/pages/assistant/assistant-sheet/ui/
+- `src/pages/assistant/assistant-sheet/ui/AnswerFeedback.tsx`  →  AnswerFeedbackProps · AnswerFeedback
 - `src/pages/assistant/assistant-sheet/ui/AssistantCards.tsx`  →  MessageCardHandlers · ReviewCard · CandidateCard · InfoCard · ScopeCard · RefusalNotice · FallbackNotice · ActionLogRow · cardConsumes · MessageCard
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetChrome.tsx`  →  AssistantSheetHeader · ContextChip · QuickReplyBar · Composer · TurnStatusRow
-- `src/pages/assistant/assistant-sheet/ui/AssistantSheetGlyphs.tsx`  →  CloseGlyph · SendArrowGlyph · ChevronRightGlyph · WarningGlyph · InfoGlyph · RetryGlyph · CheckGlyph
+- `src/pages/assistant/assistant-sheet/ui/AssistantSheetGlyphs.tsx`  →  CloseGlyph · SendArrowGlyph · ChevronRightGlyph · WarningGlyph · InfoGlyph · RetryGlyph · CheckGlyph · ThumbGlyph
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.tsx`  →  AssistantSheetPageProps · AssistantSheetPage
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetView.tsx`  →  AssistantSheetViewProps · AssistantSheetView
 - `src/pages/assistant/assistant-sheet/ui/HistoryView.tsx`  →  HistoryViewProps · HistoryView
@@ -1111,7 +1115,7 @@
 - `src/pages/settings/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 
 ## src/pages/settings/notification-inbox/
-- `src/pages/settings/notification-inbox/index.ts`  →  NotificationInboxPage
+- `src/pages/settings/notification-inbox/index.ts`  →  NotificationInboxPage · notificationAction
 
 ## src/pages/settings/notification-inbox/model/
 - `src/pages/settings/notification-inbox/model/groupByDay.ts`  →  NotificationGroups · groupByDay
@@ -1635,10 +1639,11 @@
 ## src/shared/push/
 - `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
 - `src/shared/push/PushPreprompt.tsx`  →  PushPrepromptProps · PushPreprompt
-- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
+- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap · type PushEvent
 - `src/shared/push/index.view.ts`  →  PushPreprompt
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
 - `src/shared/push/pushColors.ts`  →  PUSH_ICON_COLORS
+- `src/shared/push/receive.ts`  →  PushEvent · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap
 - `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
 - `src/shared/push/request.ts`  →  ensureAndroidChannels · requestPushPermission
 
@@ -1717,7 +1722,7 @@
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
 - `src/test-support/preventRemoveMock.ts`  →  mockNavigation · useNavigation · usePreventRemove
-- `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken
+- `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken · fakePushNotification · fakePushResponse · lastPushTapListener · primeOsLastResponse · lastPushReceiveListener
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle
 - `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker
@@ -1762,4 +1767,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1114개 파일
+합계 1119개 파일

@@ -21,7 +21,7 @@ from typing import Protocol
 from trippilot.domain.common import TraceId
 from trippilot.domain.intent import Intent
 from trippilot.domain.llm import LlmFeature, TypedResult
-from trippilot.llm_gateway.gates.base import has_contact_like
+from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
@@ -32,7 +32,7 @@ from trippilot.llm_gateway.workers.dialogue_intent import NO_TRIP, NONE, render_
 # 2026-10-19 친근한 대화체(prompts/dialogue_answer.yaml 0.3.0): 숫자 말("두 분이"·"이 시간에는")은 공유 정규식
 # `_TIME_EXPR` 가 소요 표현으로 읽는 오탐 자리라 여기서도 피하게 한다.
 ANSWER_STYLE = (
-    "친근한 해요체 대화, 2~4문장(맞장구 한마디 → 답 → 다음 한 걸음 제안·되묻기), 평문, 줄바꿈만 사용, "
+    "친근한 해요체 대화, 2~4문장(어울릴 때만 내용에 맞는 공감 → 답 → 질문과 이어지는 제안 하나), 평문, 줄바꿈만 사용, "
     "마크다운·링크·연락처 금지, 소요시간·시각 추정 금지, 인원·시간 길이를 우리말 수(두 분·이 시간)로 쓰지 않기, "
     "확인된 사실에 없는 장소·수치·특징 금지"
 )
@@ -121,13 +121,14 @@ def build_dialogue_answer_vars(
 
 
 def _safe_target(raw: object) -> str:
-    """대상 장소 이름 — 웹 수집분이라 게이트(시간 표현·연락처·길이)를 못 넘는 이름이면 BE 와 같은 대명사로."""
+    """대상 장소 이름 — 웹 수집분이라 게이트(시간 표현·연락처·주입 꼴·길이)를 못 넘는 이름이면 BE 와 같은 대명사로."""
     name = inline(str(raw)) if raw else ""
     if (
         not name
         or len(name) > _MAX_TARGET_CHARS
         or _TIME_EXPR.search(name) is not None
         or has_contact_like(name)
+        or has_injection_like(name)  # 게이트 ⑤ — "탈옥 방탈출카페"·"[여행] 게스트하우스" 같은 이름이 템플릿을 스스로 막지 않게
     ):
         return _FALLBACK_TARGET
     return name

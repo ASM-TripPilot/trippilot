@@ -45,6 +45,10 @@ def normalize_name(name: str) -> str:
     return text
 
 
+# 네이버 검색 + LLM 추출 행사의 id 접두(`EventExtractionGate`) — 원천이 확실한 입력이 덮어쓸 대상
+_EXTRACTED_PREFIX = "evx-"
+
+
 def _dedup_key(event: EventInfo) -> tuple[str, str, str]:
     """정규화 이름+기간 — 여러 출처·표기 변형이 같은 축제를 보도해도 1건만."""
     return (normalize_name(event.name), event.start.isoformat(),
@@ -105,9 +109,15 @@ class JsonEventStore:
         return self._doc["coverage"].get(region)
 
     def upsert(
-        self, region: str, events: Iterable[EventInfo], now: datetime, *, covered: bool = True
+        self, region: str, events: Iterable[EventInfo], now: datetime, *, covered: bool = True,
+        authoritative: bool = False,
     ) -> tuple[int, int]:
-        """dedup 등록 + 좌표 백필 + 커버리지 갱신 — (신규, 좌표백필) 건수 반환.
+        """dedup 등록 + 좌표 백필 + 커버리지 갱신 — (신규, 좌표백필·출처교체) 건수 반환.
+
+        `authoritative` — 원천이 확실한 입력(TourAPI 공식 축제·웹 큐레이션 팝업). 같은 행사가 네이버 LLM
+        추출(`evx-`)로 먼저 들어와 있으면 **그 기록을 이 입력으로 바꾼다**(id·출처·기간·주소). 선입 우선만
+        두면 공식 축제가 `evx-` id 로 남아, 출처를 보고 고르는 소비처(상황 감지 기회 카드 — `evx-` 는 정본
+        O-SA-12 로 숨김)에서 빠졌다(2026-10-19 상황 감지 세션 지적). 기존 좌표는 새 입력에 좌표가 없을 때만 남긴다.
 
         "기존 레코드 우선"은 재수집이 덮어쓰지 않게 하려는 규칙인데, 그게 **새로
         얻은 좌표까지 버리고 있었다**. 2026-08-25 실측: 그날 지오코딩 57건 중 19건이
@@ -127,6 +137,14 @@ class JsonEventStore:
             key = _dedup_key(event)
             match = next((r for k, r in index.items() if _same_event(key, k)), None)
             if match is not None:
+                if authoritative and str(match.get("event_id", "")).startswith(_EXTRACTED_PREFIX):
+                    kept_coord = match.get("coord")
+                    match.clear()
+                    match.update({**event.to_dict(), "region": region, "collected_at": to_iso(now)})
+                    if match["coord"] is None:
+                        match["coord"] = kept_coord
+                    backfilled += 1
+                    continue
                 if match.get("coord") is None and event.coord is not None:
                     match["coord"] = event.to_dict()["coord"]
                     backfilled += 1

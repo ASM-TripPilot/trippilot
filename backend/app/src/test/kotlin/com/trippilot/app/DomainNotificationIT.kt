@@ -6,8 +6,12 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.notification.domain.DevicePlatform
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationRepository
+import com.trippilot.notification.domain.OsPermission
+import com.trippilot.notification.domain.PushToken
+import com.trippilot.notification.domain.PushTokenRepository
 import com.trippilot.planbdetection.api.event.DateRisk
 import com.trippilot.planbdetection.api.event.PlanBTriggered
 import com.trippilot.savedaccommodation.api.event.StayRegistered
@@ -63,6 +67,7 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var events: DomainEventPublisher
     @Autowired private lateinit var relay: OutboxRelay
     @Autowired private lateinit var notifications: NotificationRepository
+    @Autowired private lateinit var pushTokens: PushTokenRepository
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
@@ -99,6 +104,25 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
     private fun notificationsOf(accountId: UUID, kind: NotificationKind) =
         notifications.findByAccount(accountId, unreadOnly = false, limit = 50).filter { it.kind == kind }
 
+    /** 쏠 수 있는 기기 하나 — 기본 발송기(미발송 모드)도 `SENT` 를 보고해 발송 시각이 찍힌다. */
+    private fun registerDevice(accountId: UUID) {
+        pushTokens.register(
+            PushToken.register(
+                accountId, "ExponentPushToken[${UUID.randomUUID()}]", null,
+                DevicePlatform.ANDROID, OsPermission.GRANTED, Instant.now(),
+            ),
+        )
+    }
+
+    /** 감지가 지금 내는 위험 사건(대표 + 새 선택 필드). */
+    private fun risk(accountId: UUID, tripId: UUID, kind: String, reason: String, push: Boolean, others: Int = 0) =
+        PlanBTriggered(
+            UUID.randomUUID().toString(), accountId.toString(), tripId.toString(), kind,
+            "2026-08-11#${UUID.randomUUID()}", reason,
+            affectedDate = "2026-08-11", scope = "PARTIAL_SLOTS", severity = "RISK", variant = null,
+            push = push, others = others, dateRisks = emptyList(),
+        )
+
     @Test
     fun `숙소 등록 사건이 STAY 알림이 된다`() {
         val accountId = newAccount()
@@ -118,10 +142,16 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         notification.sourceEventId shouldNotBe null
     }
 
+    /**
+     * 옛 6필드 사건(새 선택 필드 없음) 회귀 — 배포 순간 아웃박스에 남아 있던 것이 이 모양이다(지금 발행처는 날씨
+     * 확인을 포함해 언제나 새 필드를 싣는다). 제목은 종전 그대로이고(BR-SA-21 ①), `push` 가 없으면 푸시 대상이다
+     * (BR-SA-21 ②) — 기기가 있으면 발송 시각이 찍힌다.
+     */
     @Test
-    fun `Plan-B 발화 사건이 PLAN_B 알림이 된다 — 사유가 실린다`() {
+    fun `Plan-B 발화 사건이 PLAN_B 알림이 된다 — 옛 6필드 사건도 사유가 실리고 푸시된다`() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
+        registerDevice(accountId)
 
         val triggerId = UUID.randomUUID().toString()
         events.publish(
@@ -133,19 +163,37 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         deliver()
 
         val notification = notificationsOf(accountId, NotificationKind.PLAN_B).single()
+        notification.title shouldBe "일정을 다시 짜는 게 좋겠어요"
         notification.body shouldBe "비 예보로 실내 대안이 필요해요"
         // 일정 화면이 아니라 **재계획 진입**이다(BR-U6-08 '대안 일정 보기'). 일정만 열면
         // 사용자가 알림을 읽고도 무엇을 하라는 것인지 다시 찾아야 한다.
         notification.actionType shouldBe "PLANB_REPLAN"
-        notification.actionPayload?.get("tripId") shouldBe tripId.toString()
-        // 어느 트리거로 열린 재계획인지 실어야 화면이 사유를 다시 묻지 않는다.
-        notification.actionPayload?.get("triggerId") shouldBe triggerId
+        // 어느 트리거로 열린 재계획인지 실어야 화면이 사유를 다시 묻지 않는다. 날짜·세션 id 는 싣지 않는다.
+        notification.actionPayload shouldBe mapOf("tripId" to tripId.toString(), "triggerId" to triggerId)
+        notification.pushSentAt shouldNotBe null
     }
 
     @Test
-    fun `새 필드를 실은 Plan-B 사건도 PLAN_B 알림이 된다 — 구독자는 모르는 키를 무시한다`() {
+    fun `위험 사건은 kind 제목과 외 N건 본문으로 적재되고 푸시된다`() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
+        registerDevice(accountId)
+
+        events.publish(risk(accountId, tripId, kind = "CLOSURE", reason = "성산일출봉은 매주 월요일 휴무예요.", push = true, others = 1))
+        deliver()
+
+        val notification = notificationsOf(accountId, NotificationKind.PLAN_B).single()
+        notification.title shouldBe "가려던 곳의 영업을 확인해 주세요"
+        notification.body shouldBe "성산일출봉은 매주 월요일 휴무예요. (외 1건)"
+        notification.pushSentAt shouldNotBe null
+    }
+
+    /** 기기가 있고 토글도 켜져 있어(행 없음 = PLAN_B 푸시 기본 ON) **사건의 push 만** 푸시를 막는다. */
+    @Test
+    fun `푸시 대상이 아닌 사건은 알림함에만 남는다 — 구독자는 모르는 키를 무시한다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        registerDevice(accountId)
         val triggerId = UUID.randomUUID().toString()
         events.publish(
             PlanBTriggered(
@@ -157,8 +205,93 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         deliver()
 
         val notification = notificationsOf(accountId, NotificationKind.PLAN_B).single()
-        notification.body shouldBe "오후에 비 소식이 있어요."
+        notification.body shouldBe "오후에 비 소식이 있어요. (외 2건)"
         notification.actionPayload?.get("triggerId") shouldBe triggerId
+        notification.pushSentAt shouldBe null
+    }
+
+    /**
+     * 같은 여행 10분 1회(BR-SA-21 ②) — 실 DB 에서 **앞 건의 발송 시각이 다음 판정에 보이는가**.
+     * 발송 시각은 JDBC 로 쓰고 판정은 JPA 로 읽는다 — 둘이 엇갈리면 두 건 다 울린다.
+     */
+    @Test
+    fun `같은 여행의 위험 두 건은 첫 건만 푸시된다 — 둘째는 알림함에만`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        registerDevice(accountId)
+
+        events.publish(risk(accountId, tripId, kind = "WEATHER", reason = "오후에 비 소식이 있어요.", push = true))
+        deliver()
+        events.publish(risk(accountId, tripId, kind = "CLOSURE", reason = "성산일출봉은 매주 월요일 휴무예요.", push = true))
+        deliver()
+
+        val rows = notificationsOf(accountId, NotificationKind.PLAN_B)
+        rows.size shouldBe 2
+        rows.single { it.title == "날씨가 일정에 영향을 줄 수 있어요" }.pushSentAt shouldNotBe null
+        rows.single { it.title == "가려던 곳의 영업을 확인해 주세요" }.pushSentAt shouldBe null
+    }
+
+    /**
+     * 그 계정의 알림을 도메인으로 읽지 못하게 하는 행을 심고 [block] 을 돈다 — 어휘 밖 kind(`NotificationKind.of` 는
+     * fail-loud)·평면이 아닌 `action_payload`(Map<String, String> 역직렬화 실패) 두 모양이다. 공유 컨테이너라
+     * 단언이 깨져도 지우도록 finally 에서 지운다.
+     */
+    private fun withUnreadableRow(accountId: UUID, kind: String, actionPayload: String?, block: () -> Unit) {
+        val id = UUID.randomUUID()
+        jdbc.update(
+            "INSERT INTO notification (notification_id, account_id, kind, title, body, action_payload, occurred_at) " +
+                "VALUES (?, ?, ?, 't', 'b', ?::jsonb, now())",
+            id, accountId, kind, actionPayload,
+        )
+        try {
+            block()
+        } finally {
+            jdbc.update("DELETE FROM notification WHERE notification_id = ?", id)
+        }
+    }
+
+    /** 이 사건으로 적재되고 실제로 푸시된 PLAN_B 행 수 — 이 계정의 목록 조회(JPA)는 심은 행에서 터지므로 JDBC 로 센다. */
+    private fun pushedPlanB(accountId: UUID, tripId: UUID): Int = jdbc.queryForObject(
+        "SELECT count(*) FROM notification WHERE account_id = ? AND dedup_key LIKE ? AND push_sent_at IS NOT NULL",
+        Int::class.java, accountId, "PLAN_B#$tripId#%",
+    )!!
+
+    /**
+     * 묶음 판정은 그 계정의 최근 알림을 도메인으로 읽는다. 읽다 터진 예외가 적재 트랜잭션을 롤백하면, 릴레이가 재시도
+     * 상한에서 포기할 때 알림함·푸시가 둘 다 사라진다 — 막는 것은 푸시뿐이어야 한다(BR-SA-21 ② · INV-U6-02).
+     * 판정을 못 하면 푸시한다(그 계정은 목록 API 도 같은 매핑에서 죽어 있어 푸시가 유일한 길이다).
+     */
+    @Test
+    fun `최근 알림에 모르는 kind 행이 섞여 있어도 위험 사건은 적재되고 푸시된다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        registerDevice(accountId)
+
+        withUnreadableRow(accountId, kind = "LEGACY_X", actionPayload = null) {
+            events.publish(risk(accountId, tripId, kind = "WEATHER", reason = "오후에 비 소식이 있어요.", push = true))
+            deliver()
+
+            pushedPlanB(accountId, tripId) shouldBe 1
+        }
+    }
+
+    /**
+     * 이 모양은 Hibernate 가 행을 읽는 **도중**(저장소 프록시 안)에 터진다 — 그 자리에 트랜잭션 속성이 생기면
+     * (예: 저장소에 `@Transactional(readOnly = true)`) 예외가 바깥 트랜잭션을 rollback-only 로 표시해, 푸시는 나가고
+     * 행은 롤백되며 재시도마다 다시 울린다. 그 회귀를 여기서 잡는다.
+     */
+    @Test
+    fun `최근 알림에 평면이 아닌 payload 행이 섞여 있어도 위험 사건은 적재되고 푸시된다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        registerDevice(accountId)
+
+        withUnreadableRow(accountId, kind = "PLAN_B", actionPayload = """{"x": {"y": 1}}""") {
+            events.publish(risk(accountId, tripId, kind = "WEATHER", reason = "오후에 비 소식이 있어요.", push = true))
+            deliver()
+
+            pushedPlanB(accountId, tripId) shouldBe 1
+        }
     }
 
     @Test

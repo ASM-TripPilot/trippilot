@@ -1,8 +1,10 @@
 # 서빙 전환 판정기 — 리마인드 학생 모델을 Bedrock 에 둘지 EKS GPU 로 옮길지 (AI-D08, TRIP-973)
 #
 # 주 1회 `ai/scripts/mlops/serving_judge.py` 를 돌려 실측(CloudWatch·Cost Explorer)을
-# `ai/docs/mlops/serving-ledger.md` 에 한 행 붙이고 PR 로 올린다. **머지가 승인이다** —
-# auto-merge 를 걸지 않는다(수집 PR 과 다르다: 그쪽은 데이터고 여기는 실서비스 경로다).
+# `ai/docs/mlops/serving-ledger.md` 에 한 행 붙이고 PR 로 올린다. **전환 PR 은 머지가 승인이다** —
+# auto-merge 를 걸지 않는다(실서비스 경로). 원장 행만 든 주간 PR 은 auto-merge 한다 — 안 하면
+# 다음 주 실행이 develop 에서 다시 분기해 force-push 하므로 안 머지된 행이 사라지고(10-06 행이
+# 실제로 그렇게 없어졌다), 2주 연속 판정도 develop 의 원장을 읽어 센다.
 #
 # **2026-10-01**: 인클러스터 서빙 매니페스트를 철회했으므로(`서빙-의사결정-기록.md` §10)
 # `reminderLlm.transport` 한 줄이 들어가는 PR 은 더 이상 나오지 않는다. EKS 쪽 측정값이
@@ -111,4 +113,8 @@ jobs:
               --body "ai-serving-judge 자동 PR. 근거는 원장 행의 비고 열. 지금은 **Bedrock 실측을 모으는 PR** 이다 — 인클러스터 서빙 철회(2026-10-01)로 전환 줄은 더 이상 들어가지 않는다. 머지 전에 빈 커밋으로 CI 를 태운다(봇 push 는 CI 를 안 깨운다). 규칙·게이트: \`ai/docs/mlops/serving-ledger.md\`, 결정: ADR AI-D08(추기 포함)."
           else
             gh pr edit chore/serving-judge --title "$TITLE"
+          fi
+          if [ "$ACTION" != "open_pr" ]; then
+            gh pr merge chore/serving-judge --squash --auto \
+              || echo "::warning::원장 행 auto-merge 실패 — 다음 주 실행 전에 손으로 머지할 것(안 하면 이 행이 사라진다)"
           fi

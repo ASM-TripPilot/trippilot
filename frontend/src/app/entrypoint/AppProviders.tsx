@@ -15,6 +15,7 @@ import {
 } from '@tanstack/react-query';
 
 import { retryUnlessNotFound } from '@/shared/api';
+import { installForegroundPresentation } from '@/shared/push';
 import { ToastHost } from '@/shared/ui/Toast';
 
 import { initSentry } from './initSentry';
@@ -60,6 +61,9 @@ SplashScreen.preventAutoHideAsync();
 
 // 크래시 수집은 번들 로드 시점에 한 번 켠다(DSN 없으면 no-op — initSentry 참고).
 initSentry();
+
+// 앱이 켜져 있어도 푸시를 배너·알림 목록에 보인다(상황 감지 FE-A) — 설치 전에 온 푸시는 안 보이므로 번들 로드 시점에 한 번.
+installForegroundPresentation();
 
 /**
  * 앱 전역 프로바이더(FSD app 층). 라우트 루트 레이아웃(`app/_layout.tsx`)이 `SplashGate` 를 감싸 조립한다.

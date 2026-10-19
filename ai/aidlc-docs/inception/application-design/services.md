@@ -19,6 +19,7 @@
 | 슬롯별 설명 조회 (포워드) | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
 | 일정 편집 (포워드) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
 | 하루 재계획 (포워드) | `POST /ai/v1/planb/replan` | **배선됨**(#744 — PlanBAgent RAG → ScheduleAgent 점수 가산 → 어셈블리). 재계획 연동 설계 A-4.<br/>**경로 이동 완료(TRIP-960, 2026-09-28)** — 백엔드 #758 상수 교체·`CALLED_PATHS` 구 경로 0건 확인 후 구 경로 삭제. |
+| 기회 카드 조회 (포워드) | `POST /ai/v1/planb/opportunities` | **배선됨** — situation-awareness BR-SA-22·DEC-SA-6. 남은 동선 1km 안의 근처 행사(공식·수동 큐레이션)·요즘 인기 ≤ 3. LLM 0회 · 트리거 아님(DEC-U4-4) · 카드의 장소는 등록 POI(INV-1) · 시각 필드 없음 |
 | POI 정본 read — 반경 (리버스) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | POI 정본 read — 배치 (리버스) | `POST /internal/pois/batch-get` (요청 필드 `poi_ids`) | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 

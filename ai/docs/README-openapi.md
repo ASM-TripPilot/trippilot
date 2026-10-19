@@ -1,7 +1,8 @@
 # `openapi.json` — AI 경계 와이어 정본
 
 `ai/docs/openapi.json`은 AI 서비스가 여는 **모든 HTTP 경로의 와이어 계약 정본**이다
-(일정 `/ai/v1/itinerary/*` — alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431 ·
+(일정 `/ai/v1/itinerary/*` — explanations=TRIP-479 · edit=TRIP-431 ·
+여행 중 `/ai/v1/planb/*` — alternatives=TRIP-428 · replan=재계획 연동 A-4 · opportunities=situation-awareness BR-SA-22(기회 카드, LLM 0회) ·
 회고 `/ai/v1/reflection/*` — TRIP-429 · 도우미 `/ai/v1/dialogue/{interpret,memory}` — assistant-orchestrator · 그리고 `/`·`/health`)
 — PR #76 결정4("openapi 단일 정본 + 양쪽 코드젠")의 AI측 절반.
 **열린 경로 목록은 이 파일 자신이다 — 여기에 개수를 다시 적지 않는다**(적으면 경로가 늘 때마다 스테일이 된다).

@@ -2,6 +2,8 @@ import type {
   ApplyProposalResponse,
   AssistantSessionSummary,
   DismissProposalResponse,
+  FeedbackRequest,
+  FeedbackResponse,
   MessagesPage,
   OpenSessionResponse,
   SendTurnRequest,
@@ -30,6 +32,17 @@ export interface AssistantPort {
   applyProposal(proposalId: string): Promise<ApplyProposalResponse>;
   dismissProposal(proposalId: string): Promise<DismissProposalResponse>;
   clearSession(sessionId: string): Promise<void>;
+  /**
+   * 답 평가 남기기·바꾸기(US-ASSIST-09). 턴이 아니다 — 턴 상한에 세지 않고 AI 를 부르지 않는다. 실패는 따로 가르지
+   * 않는다: 남의·만료·없는 메시지(404)와 평가 대상 아님(400)도 `SERVER` 로 접힌다(화면은 되돌리고 안내만 한다).
+   */
+  putFeedback(
+    sessionId: string,
+    messageId: string,
+    req: FeedbackRequest
+  ): Promise<FeedbackResponse>;
+  /** 답 평가 취소 — 남긴 평가가 없어도 성공(204, 멱등). */
+  deleteFeedback(sessionId: string, messageId: string): Promise<void>;
 }
 
 export type AssistantErrorCode =

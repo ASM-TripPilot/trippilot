@@ -32,13 +32,17 @@ data class NotificationToggle(
         val TOGGLEABLE: List<NotificationKind> = NotificationKind.entries.filter { it != NotificationKind.SYSTEM }
 
         /**
-         * 기본값(실물 `l02` 에서 읽음): `SLOT_PRE`·`PLAN_B` 는 **푸시 OFF · 인앱 ON**, 나머지 5종은 둘 다 ON.
+         * 기본값: `SLOT_PRE` 만 **푸시 OFF · 인앱 ON**, 나머지 6종은 둘 다 ON.
          *
-         * 앞의 둘만 푸시가 꺼져 있는 이유는 빈도다 — 일정마다·트리거마다 울리면 사용자가 알림 자체를
-         * 통째로 꺼 버린다. 인앱은 남겨 두어 열었을 때 볼 수 있게 한다.
+         * `SLOT_PRE` 만 푸시가 꺼져 있는 이유는 빈도다 — 일정마다 울리면 사용자가 알림 자체를 통째로
+         * 꺼 버린다. 인앱은 남겨 두어 열었을 때 볼 수 있게 한다.
+         *
+         * `PLAN_B` 는 2026-10-19 부터 푸시 ON 이다(BR-U6-18 개정 · BR-SA-21 ⑤ · DEC-SA-5) — 사건이 위험만
+         * 푸시 대상으로 싣고 같은 여행은 10분 1회로 묶이므로 빈도 근거가 사라졌고, 기본 OFF 면 위험 알림이
+         * 닿지 않는다. **행이 없는 계정에만** 적용된다 — 저장된 행은 그대로 존중한다(O-SA-14).
          */
         fun defaultFor(accountId: UUID, kind: NotificationKind, now: Instant): NotificationToggle {
-            val quietPush = kind == NotificationKind.SLOT_PRE || kind == NotificationKind.PLAN_B
+            val quietPush = kind == NotificationKind.SLOT_PRE
             return NotificationToggle(accountId, kind, pushEnabled = !quietPush, inAppEnabled = true, updatedAt = now)
         }
     }

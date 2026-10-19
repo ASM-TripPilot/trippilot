@@ -79,8 +79,8 @@ class NotificationMetrics(
      * 억제 총량 = SUPPRESSED(전부) + PUSH_DISPATCH{outcome=MUTED}
      * ```
      *
-     * `DUPLICATE`·`IN_APP_OFF` 는 발송 경로에 닿기 전에 걸러져 [PUSH_DISPATCH] 에 아예 안 나타나므로
-     * 중복이 없다. 새 사유를 넣을 때는 **발송까지 가는 사유인지**를 먼저 보고, 간다면 이 식을 고친다.
+     * `DUPLICATE`·`IN_APP_OFF`·`IN_APP_ONLY`·`COALESCED` 는 발송 경로에 닿기 전에 걸러져 [PUSH_DISPATCH] 에
+     * 아예 안 나타나므로 중복이 없다. 새 사유를 넣을 때는 **발송까지 가는 사유인지**를 먼저 보고, 간다면 이 식을 고친다.
      */
     fun suppressed(reason: SuppressReason) {
         registry.counter(SUPPRESSED, "reason", reason.name).increment()
@@ -138,4 +138,10 @@ enum class SuppressReason {
      * (COST-U6-03) — 한 번도 안 물리면 상한이 헐겁고, 계속 물리면 사용자가 알림을 늦게 받고 있다.
      */
     RATE_LIMITED,
+
+    /** 사건이 푸시 대상이 아니다 — 주의·하루 상한 초과·모르는 값(BR-SA-21 ②③). 알림함에는 있다. */
+    IN_APP_ONLY,
+
+    /** 같은 묶음(같은 여행 Plan-B)의 푸시가 창(10분) 안에 이미 나갔다(BR-SA-21 ② · BR-U6-09 개정). 알림함에는 있다. */
+    COALESCED,
 }

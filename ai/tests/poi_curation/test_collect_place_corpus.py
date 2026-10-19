@@ -66,3 +66,14 @@ def test_redirected_page_is_judged_against_the_poi_that_asked_not_the_target_tit
                 "현대백화점": _p("현대백화점", ref="r4")}
     pages = {"더현대 서울": ("현대백화점", "현대백화점 천호점은 강동구 천호동에 있는 백화점이다.")}
     assert m.accept(pages, by_title) == []
+
+
+def test_redirect_to_a_different_subject_is_rejected_even_if_the_region_matches() -> None:
+    """'가마오름' 요청이 '한라산' 문서로 리다이렉트됐다 — 소재지(제주)는 맞지만 다른 대상이라 후보 줄에 "한라산은 …" 이
+    실렸다(2026-10-19 코퍼스 28건). 같은 대상의 다른 이름('고내포구' → '고내항')은 채택한다."""
+    m = _mod()
+    by_title = {"가마오름": _p("가마오름", ref="r5", region="제주시", address="제주특별자치도 제주시 한경면 청수리"),
+                "고내포구": _p("고내포구", ref="r6", region="제주시", address="제주특별자치도 제주시 애월읍 고내리")}
+    pages = {"가마오름": ("한라산", "한라산은 제주특별자치도 제주시와 서귀포시에 걸쳐 있는 산이다."),
+             "고내포구": ("고내항 (제주시)", "고내항은 제주특별자치도 제주시 애월읍 고내리에 있는 항구이다.")}
+    assert m.accept(pages, by_title) == [("고내항 (제주시)", "r6")]

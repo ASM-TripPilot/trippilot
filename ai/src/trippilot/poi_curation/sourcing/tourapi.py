@@ -289,6 +289,16 @@ class TourApiAdapter:
             detail_raw=detail_raw,
         )
 
+    def fetch_overview(self, content_id: str) -> str | None:
+        """`detailCommon2` 의 개요(`overview`) 원문 — KB-5 장소 지식 2단계 코퍼스(`collect_place_overviews.py`).
+
+        HTTP 1건. 없으면 None. 원문 그대로 준다(`<br>`·엔티티 정리는 수집 스크립트 몫 — 어댑터는 해석하지 않는다).
+        """
+        body = self._call("detailCommon2", {**self._common_params(), "contentId": content_id})
+        items = self._items(body)
+        first = items[0] if items and isinstance(items[0], dict) else {}
+        return self._opt_str(first.get("overview"))
+
     # ── 내부 ─────────────────────────────────────────
     def _call(self, endpoint: str, params: Mapping[str, str]) -> dict:
         """HTTP 1건 + 봉투 해체 — 키가 죽으면 다음 살아있는 키로 같은 요청을 재시도.
