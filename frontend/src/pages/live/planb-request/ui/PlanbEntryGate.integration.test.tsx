@@ -558,3 +558,42 @@ describe('🔴 PlanbEntryGate · 404 얼굴 · 대기 얼굴 · 한 번만 (행 
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });
+
+describe('🔴 PlanbEntryGate · 게이트가 고른 트리거가 i04 본문까지 간다 (§3.2 — 리뷰 반영)', () => {
+  it('G13 i04 의 활성 목록이 오기 전에 제출해도 게이트가 확인한 트리거 id 가 본문에 실린다', async () => {
+    // 활성 목록만 붙잡아 둔다 — 감지 칩이 서기 전에 제출한다(목록 도착과 무관하게 같은 요청이어야 한다).
+    const listHang = createGate();
+    server.use(
+      http.get(`${BASE}/trips/:tripId/triggers`, async () => {
+        await listHang.opened;
+        return HttpResponse.json(activeList());
+      }),
+      ...baseHandlers({
+        preparedSession: () =>
+          HttpResponse.json(prepared({ status: 'CANCELED' })),
+      })
+    );
+
+    renderGate();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('planb-request-sheet')).toBeTruthy()
+    );
+    expect(screen.queryByTestId('planb-request-trigger-chip')).toBeNull();
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    // 트리거 소비(BR-SA-14)·변경 이력 근거·전날 창(BR-SA-20)이 이 id 에 달려 있다.
+    expect(postedBodies[0]).toEqual({
+      scope: 'FULL_DAY',
+      originKind: null,
+      reasons: ['WEATHER'],
+      directives: ['AVOID_OUTDOOR'],
+      freeText: null,
+      excludedPoiIds: ['poi-out'],
+      triggerId: 'trg-1',
+      targetDate: TOMORROW,
+    });
+    listHang.release();
+  });
+});

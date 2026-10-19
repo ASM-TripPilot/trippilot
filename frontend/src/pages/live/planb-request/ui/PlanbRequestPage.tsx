@@ -33,7 +33,8 @@ import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
  * - 스크림·끌어 닫기 → 뒤로. 뒤로 갈 곳이 없으면(딥링크·푸시 직행) 허브로 replace.
  * - 상황 감지 FE-B(frontend-components §3.3) 선택 props — 진입 게이트(`PlanbEntryGate`)·기회 카드가 준다.
  *   시드 props 가 오면(빈 배열 포함) kind 자동 시드 대신 그것을 진입 때 한 번 켠다(흐림 같은 주의에 날씨 사유를 넣으면
- *   AI 가 일정을 과하게 바꾼다 — 게이트가 빈 시드를 준다). 제외 POI 는 화면에 없고 body 에만 실린다. `prefill` 은 자유 입력
+ *   AI 가 일정을 과하게 바꾼다 — 게이트가 빈 시드를 준다). 시드가 왔으면 body `triggerId` 는 게이트가 상세로 확인한 그 id 다
+ *   (활성 목록 도착·포함과 무관 — §3.2). 제외 POI 는 화면에 없고 body 에만 실린다. `prefill` 은 자유 입력
  *   초기값, `includePoiId` 는 서버에 보내지 않고 solving 라우트 파라미터로만 잇는다(i06 미포함 안내 재료).
  */
 
@@ -226,8 +227,14 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
         ),
         directives: form.directives,
         freeText: form.freeText,
-        // 칩을 껐는지와 무관하게 "트리거로 들어왔다"는 사실을 싣는다(BR-U4-31).
-        triggerId: detected && trigger ? trigger.triggerId : null,
+        // 칩을 껐는지와 무관하게 "트리거로 들어왔다"는 사실을 싣는다(BR-U4-31). 진입 게이트가 상세로 확인한 트리거
+        // (시드가 왔다)는 활성 목록 도착과 무관하게 그 id 다(§3.2) — 목록 전에 누르면 빠져 소비·전날 창이 깨진다.
+        triggerId:
+          entrySeed !== null
+            ? (triggerId ?? null)
+            : detected && trigger
+              ? trigger.triggerId
+              : null,
         // 진입 시드의 제외 POI — 없으면 종전과 같은 빈 배열(§3.3).
         excludedPoiIds: entrySeed?.excludedPoiIds,
       },
