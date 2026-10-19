@@ -19,6 +19,7 @@ from trippilot.domain.itinerary import ItinerarySolution
 from trippilot.domain.llm import CandidatePool, PoiExplanation
 from trippilot.domain.persona import PersonaSummary, TasteTag
 from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.ports.place_existence_port import ExistenceVerdict
 
 
 class ScoringMode(Enum):
@@ -156,6 +157,9 @@ class RepairHints:
     - `pool`: ②⁗ 보강 **뒤**·추정 영업시간(`presume_hours`) **앞**의 풀 — 2차가 보강을 다시 사지 않는다
     - `fixed_pois`: ⓪ 가 풀 밖에서 찾은 POI — 2차가 다시 묻지 않는다(잔여 ≈0 에서 물으면 잠금이 빠진다)
     - `probed`: 틈 검사를 돌린 후보 수
+    - `pre_steps`: 1차가 풀이 **전**(⓪·②′·②⁗)에 남긴 강등 — 2차는 그 단계를 다시 안 사므로 이것을 그대로
+      잇는다. 안 이으면 2차 해를 채택한 응답에서 1차의 진짜 강등(보강 실패 등)이 사라진다(INV-4, 리뷰 10-19)
+    - `verdicts`: 1차 ②′ 지도 실재 판정 — 2차는 같은 판정으로 강등만 다시 건다(카카오 재호출 없음)
     """
 
     why: Mapping[PoiId, str]
@@ -163,6 +167,8 @@ class RepairHints:
     pool: CandidatePool
     fixed_pois: Mapping[PoiId, Poi]
     probed: int
+    pre_steps: tuple[Degradation, ...] = ()
+    verdicts: tuple[ExistenceVerdict, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

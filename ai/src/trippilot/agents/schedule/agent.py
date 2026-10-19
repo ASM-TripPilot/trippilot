@@ -369,6 +369,9 @@ class ScheduleAgent:
         request, pool, persona, budget = task.request, task.pool, task.persona, task.budget
         t0, trace_id, now = task.started_ms, task.trace_id, task.now
         steps: list[Degradation] = list(task.prior_degradations)
+        base = len(steps)
+        if task.reuse is not None:  # 1회 수리의 2차 — 1차가 풀이 전에 남긴 강등을 잇는다(그 단계를 다시 안 산다)
+            steps.extend(task.reuse.pre_steps)
 
         # ⓪ 풀 밖 고정 블록·필수 방문 POI — 점수 **앞**에서 묻는다. 어셈블리 직전이면 점수
         #    단계가 상한을 다 쓴 날 시한이 바닥나 필수방문이 시한 탓에 빠진다. 합류는 ④ 의 인덱스.
@@ -500,9 +503,16 @@ class ScheduleAgent:
         # ②′ 지도 실재 검증 (TRIP-904) — **점수가 나온 뒤**라야 배치될 후보를 검증할 수
         #    있고, 결과가 **점수**에 실려야 어셈블리에 닿는다. 풀 단계에서 순서만 바꾸던
         #    종전(TRIP-898) 방식은 이후 누구도 풀 순서를 읽지 않아 일정에 효과가 0이었다.
-        candidates = self._verify_on_map(
-            request, pool, candidates, budget, t0, steps, trace_id, now
-        )
+        if task.reuse is None:
+            candidates, verdicts = self._verify_on_map(
+                request, pool, candidates, budget, t0, steps, trace_id, now
+            )
+        else:  # 1회 수리의 2차 — 1차 판정으로 강등만 다시 건다(같은 질의를 잔여 ≈0 에서 다시 하지 않는다)
+            verdicts = task.reuse.verdicts
+            if verdicts:
+                candidates = demote_missing_on_map(
+                    candidates, verdicts,
+                    self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty)
 
         # ②⁗ 영업시간 런타임 보강 — **후보가 아니라 풀을 간다.** `ScoredPoi` 에는
         #    `Poi` 본체가 없어(poi_id·score·is_llm_score) 영업시간을 담을 자리가 없고,
@@ -513,6 +523,7 @@ class ScheduleAgent:
         else:  # 1회 수리의 2차 — 풀이 이미 1차 보강본이다(`RepairHints.pool`). 강등이 아니다.
             self._observe(trace_id, now, "hours", "enrich", "enrich", "hours_reused")
         enriched = pool  # 추정 전 — 수리 재료가 이 풀을 2차로 넘긴다
+        pre_steps = tuple(steps[base:])  # ⓪·②′·②⁗ 강등 — 2차가 잇는다(⓪′ 는 2차도 다시 판정한다)
         # 그래도 없는 곳은 새벽에 놓지 않는다 (TRIP-1397) — 사용자가 고정·필수로 고른 곳은 빼고.
         pool = presume_hours(pool, keep={fb.poi_id for fb in request.fixed_blocks}
                              | {rv.poi_id for rv in request.required_visits
@@ -608,6 +619,8 @@ class ScheduleAgent:
                         for rv in required_visits)):
             hints = self._repair_hints(problem, solution, index, enriched, fixed_pois, candidates,
                                        placed_ids, trace_id, now)
+            if hints is not None:
+                hints = replace(hints, pre_steps=pre_steps, verdicts=verdicts)
 
         # ⑤ (선택) 설명 부착 — 실패해도 일정은 그대로 나간다
         explanations = self._explain(
@@ -996,7 +1009,7 @@ class ScheduleAgent:
         steps: list[Degradation],
         trace_id: TraceId,
         now: datetime,
-    ) -> tuple[ScoredPoi, ...]:
+    ) -> tuple[tuple[ScoredPoi, ...], tuple[ExistenceVerdict, ...]]:
         """점수 상위 N 을 지도에서 확인하고 **못 찾은 것만** 점수를 깎는다 — 배제가 아니다.
 
         실측(`ai-existence-probe`, 반경 300m, 무리별 200건)이 배제를 기각했다: 영업 중의
@@ -1012,7 +1025,7 @@ class ScheduleAgent:
         HttpGetJson 포트 확장이 필요해 두었다.
         """
         if self._existence is None or not candidates:
-            return candidates  # 미주입 = 기능 부재 (강등 아님)
+            return candidates, ()  # 미주입 = 기능 부재 (강등 아님)
         index = {p.poi_id: p for p in pool.pois}
         # 사용자가 지정한 곳(고정·필수 방문)은 실재를 묻지 않는다 — 깎아도 어차피 간다
         skip = (request.excluded_poi_ids | {b.poi_id for b in request.fixed_blocks}
@@ -1022,14 +1035,14 @@ class ScheduleAgent:
             if c.poi_id not in skip and c.poi_id in index
         )[: self._cfg.existence_verify_top_n]
         if not targets:
-            return candidates
+            return candidates, ()
         available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
                      - budget.c2_reserved_ms)
         deadline = min(self._cfg.existence_deadline_ms, available)
         if deadline <= 0:
             self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
                           f"deadline:available={available}ms")
-            return candidates
+            return candidates, ()
         asked = set(targets)
         try:
             # 반환값 순회까지 try 안이다 — None·잘못된 원소·지연 예외를 내는 포트가
@@ -1045,20 +1058,20 @@ class ScheduleAgent:
         except Exception as e:
             self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
                           f"existence_error: {type(e).__name__}: {e}")
-            return candidates
+            return candidates, ()
         if not answered:
             # 물었는데 판정이 한 건도 안 왔다 — 개수 보존 계약 위반. 강등 없이, 조용히는 아니게.
             self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
                           "existence_empty_response")
-            return candidates
+            return candidates, ()
         if all(v.status is ExistenceStatus.UNVERIFIED for v in answered):
             # 한 건도 확인 못 함 = 검증 자체가 실패했다 (벤더 장애·키 오류 등)
             self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
                           f"existence_unverified: {answered[0].reason}")
-            return candidates
+            return candidates, ()
         return demote_missing_on_map(
             candidates, answered,
-            self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty)
+            self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty), tuple(answered)
 
     def _enrich_hours(
         self,
@@ -1174,11 +1187,8 @@ class ScheduleAgent:
         available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
                      - budget.c2_reserved_ms)
         if reuse is not None:
+            # 못 찾은 것은 1차가 진짜 사유로 이미 남겼고 `pre_steps` 로 이어진다 — 여기서 다시 쓰면 사유가 둘이다
             found = {k: v for k, v in reuse.fixed_pois.items() if k in want}
-            lost = sorted(want - found.keys(), key=str)
-            if lost:
-                self._degrade(steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
-                              "fixed_poi_unresolved: " + ",".join(f"{pid}(not_reused)" for pid in lost))
         elif available <= 0:
             self._degrade(steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
                           f"deadline:available={available}ms")

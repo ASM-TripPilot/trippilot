@@ -2616,7 +2616,7 @@ class WiredItineraryOrchestrator:
                     outcome, composed = self._repair_day(
                         request, outcome, composed, missed, task, compose_ctx[0] if compose_ctx else None,
                         nl, nl_ids, night, add_one, cat_of, notes, t0=t0, budget=budget,
-                        trace_id=trace_id, now=now)
+                        trace_id=trace_id, now=now, past=past)
                 except Exception as e:  # 수리는 덤이다 — 실패해도 1차 해 그대로(INV-4: 밝힌다)
                     notes.append(f"llm_repair_error: {type(e).__name__}")
                     self._repair_event(meta, f"error: {type(e).__name__}: {e}")
@@ -2738,7 +2738,7 @@ class WiredItineraryOrchestrator:
 
     def _repair_day(
         self, request, outcome, composed, missed, task, ctx, nl, nl_ids, night, add_one, cat_of, notes,
-        *, t0: int, budget, trace_id: TraceId, now: datetime,
+        *, t0: int, budget, trace_id: TraceId, now: datetime, past: tuple[FixedBlock, ...] = (),
     ):
         """다시 짜기 1회 수리 — 솔버가 뺀 곳의 까닭을 붙여 구성 LLM 에 **한 번** 되묻고, 지금 해의 빈 틈에 그대로
         들어가는 후보에서만 고르게 해 다시 푼다. (최종 결과, 최종 구성 목록) — 의심스러우면 1차 그대로.
@@ -2755,6 +2755,15 @@ class WiredItineraryOrchestrator:
             return outcome, composed
         if hints is None or ctx is None or self._composer is None:
             notes.append("llm_repair_skipped: no_hints")
+            return outcome, composed
+        # 솔버 밖에서 되실릴 잠금(미등록·영업시간 밖·겹침 — 사영의 `locked_block_echoed`)이 있는 날은 되묻지 않는다.
+        # 사영(`_echo_locks`)이 그와 겹치는 새 방문을 빼므로, 솔버 해로 잰 빈 틈·채택 판정이 사용자가 보는 일정과
+        # 달라진다(리뷰 10-19 재현: 2차를 채택했는데 1차에 놓인 곳이 사라졌고, 되실린 잠금 안의 "빈 시간"을 LLM 에 줬다).
+        seen = _with_past_blocks(outcome.solution, past, request.target_date)
+        at = {(s.poi_id, s.start_at) for d in seen.days for s in d.slots}
+        if any((b.poi_id, b.window.start) not in at for b in _replan_fixed_blocks(request, self._tz)
+               if b.window.start.date() == request.target_date):
+            notes.append("llm_repair_skipped: echoed_locks")
             return outcome, composed
         inp, excluded = ctx
         drop = [p for p in own if hints.why.get(p) in composition.REPAIR_LABELS]

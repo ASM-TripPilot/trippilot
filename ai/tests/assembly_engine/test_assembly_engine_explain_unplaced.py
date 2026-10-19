@@ -4,9 +4,12 @@
   ① 까닭 5종이 각각 그 상황에서만 나온다 — closed·hours·far·full·fits. 하루·카테고리 상한은 까닭이
      아니다(필수 방문엔 소프트 항이라 지배 항을 못 이긴다).
   ② 놓인 곳·좌표 미상은 판정하지 않는다.
+  ⑤ 규칙 조립기의 틈은 하루 창 안으로 잘린다 — 창 밖 잠금 앞 틈에 식당이 창 밖으로 놓이던 회귀(PBT P1 이 찾음).
+  ⑥ `repair_gaps` — 틈 번호·경계 문구·앞 장소 기준 거리.
   ③ PBT P1 — `fits` 의 시각에 그 후보를 끼워 넣어도 HC1~4·시작 하한·좌표 검증이 깨지지 않는다
      (거짓 "들어간다"를 LLM 후보로 싣지 않는다).
-  ④ PBT P2 — 혼자인 필수 방문은 OR·규칙 **둘 다** 까닭이 closed·hours·far 가 아닐 때만 놓는다.
+  ④ PBT P2 — 혼자인 필수 방문은 OR·규칙 **둘 다** 까닭이 closed·hours·far 가 아닐 때만 놓는다(OR 은 페이스
+     없을 때 — 페이스 해가 없으면 페이스 없이 다시 푸는 재시도가 있어서다).
      앵커를 빼면 놓이는 것 ⇔ far·fits, 휴무 ⇔ closed — 라벨이 솔버의 실제 판정과 맞는다.
 """
 
@@ -166,6 +169,46 @@ def test_하루_상한이_빠듯해도_까닭은_full_fits_뿐이다() -> None:
     assert set(why.values()) == {"full"}
 
 
+# ── ⑤ 틈은 하루 창 안 (규칙 조립기 회귀) ─────────────────────────────────
+
+
+def test_창_밖_잠금_앞_틈에서도_식당은_창_안에만_놓인다() -> None:
+    """"6시까지"(창 끝 18:00) + 19시 저녁 잠금 — 마지막 틈이 잠금까지 늘어나 식당이 식사창(창으로 안 잘림)대로
+    18시 뒤에 놓이면 HC4 위반이라 체인 전 단계가 실패한다. 틈을 창으로 자르면 창 안에 놓거나 안 놓는다."""
+    index = {PoiId("dinner"): _poi("dinner"), PoiId("food"): _poi("food", PoiCategory.FOOD)}
+    problem = _problem(required=(_rv("food"),), pins=(_pin("dinner", _at(19), _at(20)),),
+                       window=((9, 0), (18, 0)), not_before=_at(17, 10))
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+    food = [s for s in solution.days[0].slots if s.poi_id == PoiId("food")]
+    assert all(s.end_at <= _at(18) for s in food), food
+    assert not check_all(replace(solution, days=(replace(
+        solution.days[0], slots=tuple(s for s in solution.days[0].slots if s.poi_id != PoiId("dinner")),
+        fixed_blocks=()),)), replace(problem, fixed_blocks=()), index, _EST)
+
+
+# ── ⑥ repair_gaps ────────────────────────────────────────────────────────
+
+
+def test_repair_gaps_는_틈마다_번호_경계_앞_장소_거리를_낸다() -> None:
+    from trippilot.agents.planb.composition import repair_gaps
+    from trippilot.assembly_engine.travel import haversine_km
+
+    a = _poi("a", coord=_ANCHOR)
+    b = _poi("b", coord=GeoPoint(_ANCHOR.lat + 0.01, _ANCHOR.lng))
+    x = _poi("x", PoiCategory.CAFE, coord=GeoPoint(_ANCHOR.lat + 0.02, _ANCHOR.lng))
+    y = _poi("y", PoiCategory.CAFE, coord=GeoPoint(_ANCHOR.lat - 0.02, _ANCHOR.lng))
+    index = {p.poi_id: p for p in (a, b, x, y)}
+    slots = (_slot("b", _at(14), _at(15)), _slot("a", _at(10), _at(11)))  # 정렬 안 된 입력
+    fits = {PoiId("x"): _at(11, 20), PoiId("y"): _at(15, 30)}
+    gap_of, labels, near = repair_gaps(slots, _at(9), _at(21), fits, index, GeoPoint(37.0, 127.0))
+    assert gap_of == {PoiId("x"): 1, PoiId("y"): 2}
+    assert labels == {1: "11:00~14:00 · 앞: a · 뒤: b", 2: "15:00~21:00 · 앞: b"}
+    assert near[PoiId("x")] == haversine_km(a.coord, x.coord)  # 그 틈의 앞 장소에서
+    assert near[PoiId("y")] == haversine_km(b.coord, y.coord)
+    gap_of, labels, near = repair_gaps((), _at(13), _at(21), {PoiId("x"): _at(13)}, index, _ANCHOR)
+    assert labels == {0: "13:00~21:00"} and near[PoiId("x")] == haversine_km(_ANCHOR, x.coord)
+
+
 # ── ③·④ PBT ─────────────────────────────────────────────────────────────
 
 _CATS = (PoiCategory.SIGHT, PoiCategory.CAFE, PoiCategory.FOOD, PoiCategory.NATURE,
@@ -279,8 +322,18 @@ def test_P2_혼자인_필수_방문은_두_어셈블러가_까닭대로_놓는�
     code = why[PoiId("v")]
     event(code)  # 네 라벨이 다 나오는지(--hypothesis-show-statistics)
     assert code in {"closed", "hours", "far", "fits"}  # 빈 하루에 full 은 없다
-    assert _places(problem, index) == (code == "fits",) * 2, code
+    # OR 은 페이스 해가 없으면 페이스 없이(짧은 체류로) 한 번 더 푼다(`ortools_assembler` 재시도) — 혼자인
+    # 방문에선 페이스 체류가 안 들어가면 해가 없어 그 재시도가 놓는다. 까닭은 페이스 체류로 말하므로(실제
+    # 해는 대개 페이스 해에서 나온다) OR 대조는 페이스가 없을 때만이다(리뷰 10-19: 시드 6/60 에서 깨졌다).
+    # 규칙 조립기는 재시도가 없어 늘 대조한다.
+    def check(p, expected: bool) -> None:
+        by_or, by_rule = _places(p, index)
+        assert by_rule == expected, code
+        if p.pace is None:
+            assert by_or == expected, code
+
+    check(problem, code == "fits")
     # 라벨이 실제 판정과 맞는다 — 앵커만 빼면 놓인다 ⇔ far·fits, 휴무 ⇔ 그날 영업 구간 0
-    assert _places(replace(problem, anchor=None), index) == (code in {"far", "fits"},) * 2, code
+    check(replace(problem, anchor=None), code in {"far", "fits"})
     poi = index[PoiId("v")]
     assert (code == "closed") == bool(poi.open_hours and all(h.day_of_week != _WD for h in poi.open_hours))
