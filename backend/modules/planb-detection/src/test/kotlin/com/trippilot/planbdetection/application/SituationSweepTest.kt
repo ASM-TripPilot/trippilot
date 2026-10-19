@@ -813,20 +813,23 @@ class SituationSweepTest : StringSpec({
         reader.watch(world.acc, insider).weather.status shouldBe WatchView.Status.UNKNOWN // 대상인데 아직 확인 기록이 없다
     }
 
-    "기동 안내 줄 — 모드·지평·살아 있는 감지기·관찰 전용(쓰기 없음)" {
+    "기동 안내 줄 — 모드·지평·대상(카나리 계정 수)·살아 있는 감지기·관찰 전용(쓰기 없음)" {
         val world = World()
         val detectors = listOf(FakeDetector(SweepSource.KMA_FORECAST), FakeDetector(SweepSource.PLACE, live = false))
         val clock = StepClock(at("12:15"))
 
         world.sweep(props(horizon = SweepHorizon.TOMORROW), detectors, clock).announcement() shouldBe
-            "상황 감시 = 켜짐 · 지평=tomorrow · 감지기 live=[kma-forecast] · 관찰 전용=[airkorea,kma-warning]"
+            "상황 감시 = 켜짐 · 지평=tomorrow · 대상=전원 · 감지기 live=[kma-forecast] · 관찰 전용=[airkorea,kma-warning]"
         world.sweep(props(mode = SweepMode.DRY_RUN), detectors, clock).announcement() shouldBe
-            "상황 감시 = 관찰 · 지평=today · 감지기 live=[kma-forecast] · 관찰 전용=[airkorea,kma-warning]"
+            "상황 감시 = 관찰 · 지평=today · 대상=전원 · 감지기 live=[kma-forecast] · 관찰 전용=[airkorea,kma-warning]"
         world.sweep(props(mode = SweepMode.OFF, horizon = SweepHorizon.PRE_TRIP), emptyList(), clock).announcement() shouldBe
-            "상황 감시 = 꺼짐 · 지평=pre-trip · 감지기 live=[] · 관찰 전용=[airkorea,kma-warning]"
+            "상황 감시 = 꺼짐 · 지평=pre-trip · 대상=전원 · 감지기 live=[] · 관찰 전용=[airkorea,kma-warning]"
+        // 켜기 4단계(카나리 → 비움)를 로그로 확인한다 — 개수만 싣는다(계정 id 는 로그에 싣지 않는다 · SEC-SA-05).
+        val canary = world.sweep(props(accountIds = setOf(world.acc, UUID.randomUUID())), detectors, clock)
+        canary.announcement() shouldBe "상황 감시 = 켜짐 · 지평=today · 대상=계정 2개 · 감지기 live=[kma-forecast] · 관찰 전용=[airkorea,kma-warning]"
         // 살아 있어도 출처 목록 밖이면 live 가 아니다(부르지 않는다).
         val outside = world.sweep(props(sources = listOf(SweepSource.PLACE)), detectors, clock)
-        outside.announcement() shouldBe "상황 감시 = 켜짐 · 지평=today · 감지기 live=[] · 관찰 전용=[airkorea,kma-warning]"
+        outside.announcement() shouldBe "상황 감시 = 켜짐 · 지평=today · 대상=전원 · 감지기 live=[] · 관찰 전용=[airkorea,kma-warning]"
         outside.announce() // 기동 이벤트 진입점 — 로그만 남기고 아무것도 쓰지 않는다
         world.watches.all.shouldBeEmpty()
     }

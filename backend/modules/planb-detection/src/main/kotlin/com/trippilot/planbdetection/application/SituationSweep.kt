@@ -142,7 +142,10 @@ class SituationSweep(
             SweepMode.ON -> "켜짐"
         }
         val live = detectors.filter { it.source in props.sources && it.isLive() }.map { it.source }
-        return "상황 감시 = $state · 지평=${props.horizon.label} · 감지기 live=${live.listed()} · 관찰 전용=${props.observeOnly.listed()}"
+        // 대상 = 운영 카나리 적용 여부(켜기 4단계: 내부 계정 → 비움). 개수만 싣는다 — 계정 id 는 로그에 싣지 않는다(SEC-SA-05).
+        val target = if (props.accountIds.isEmpty()) "전원" else "계정 ${props.accountIds.size}개"
+        return "상황 감시 = $state · 지평=${props.horizon.label} · 대상=$target · 감지기 live=${live.listed()} · " +
+            "관찰 전용=${props.observeOnly.listed()}"
     }
 
     /**
