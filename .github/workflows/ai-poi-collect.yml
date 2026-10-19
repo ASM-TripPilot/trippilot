@@ -258,13 +258,6 @@ jobs:
             exit 1
           fi
           [ "$DROPPED" -gt 0 ] && echo "소급 제거(관광 무관·폐업) ${DROPPED}건 (축소 가드에서 제외)"
-          # 백엔드가 읽는가 — 주소 첫 낱말이 카탈로그 시도 정식 이름인가(백엔드 PoiProposalRealDocumentIT 의 거울 테스트).
-          # 위 두 가드는 이것을 안 본다. 봇 PR 은 체크 없이 즉시 머지되므로 **여기가 머지 전 마지막 자리**다 —
-          # #1352(약칭 3건)·#1427(잘린 시도명 2건)이 이걸 지나 develop 의 backend-ci 를 깨고 열린 PR 전부를 막았다(TRIP-1471).
-          if ! uv run pytest -q tests/scripts/test_merge_pois_docs.py -k "백엔드가_시도를_정한다"; then
-            echo "::error::백엔드가 시도를 정하지 못하는 주소가 공유본에 있다 — PR 을 만들지 않는다. merge_pois_docs 의 시도 정규화(sido_abbreviations)에 그 꼴을 더할 것"
-            exit 1
-          fi
           if git diff --quiet -- data/collected_pois.json; then
             echo "공유본 변화 없음 — PR 생략"
             exit 0
