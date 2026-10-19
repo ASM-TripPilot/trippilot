@@ -63,12 +63,12 @@ backend/app/src/main/resources/application.yml
 V2.NN__weather_grid_forecast.sql        (번호는 머지 직전 origin/develop 최댓값 + 1)
   grid_key    varchar PK      "nx,ny"
   base_at     timestamptz     발표 시각
-  hourly      jsonb           오늘·내일 시각별 POP·PTY·SKY·TMP·WSD
+  hourly      jsonb           오늘·내일(+ 자정 넘김 몫 모레) 시각별 POP·PTY·SKY·TMP·WSD
   daily       jsonb           날짜별 TMN·TMX
   fetched_at  timestamptz
   expires_at  timestamptz     발표 + 3시간 + 10분 · CHECK (expires_at > base_at)
 weather-context
-  api/HourlyForecastFacade { isLive(); forecastForTrigger(lat, lng, at): PointForecast? }   null = 모름
+  api/HourlyForecastFacade { isLive(); gridKeyOf(lat, lng); forecastForTrigger(lat, lng, at): PointForecast? }   null = 모름 · 고장은 HourlyForecastUnavailable
   application/HourlyForecastService      읽기-통과 캐시 · HTTP 는 트랜잭션 밖
   KmaWeatherAdapter                      GridForecastPort 도 구현 · 격자 경로 파드당 하루 3,000
 ```
