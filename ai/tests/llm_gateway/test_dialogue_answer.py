@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,7 @@ from trippilot.domain.llm import LlmFeature, ModelTier
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like
 from trippilot.llm_gateway.gates.dialogue_answer import (
+    _DURATION_EN,
     _MAX_FOOTNOTE,
     _MAX_LENGTH,
     _MAX_LINES,
@@ -233,12 +235,17 @@ def test_pbt_gate_never_raises_and_survivors_inside_constraints(raw: str) -> Non
 
 
 def _safe(max_len: int):
-    """게이트 규칙을 만족하는 문장 — 연락처 꼴도 거른다(넛지 PBT 2026-10-05 저장 반례)."""
+    """게이트 규칙을 만족하는 문장 — 연락처 꼴도 거른다(넛지 PBT 2026-10-05 저장 반례).
+
+    영문 소요 단위(`_DURATION_EN`)도 거른다 — 2026-10-18 게이트에 ③′ 가 더해진 뒤 전략이 따라오지 않아
+    "0H" 가 "게이트 규칙을 만족하는 문장"으로 뽑혀 드롭됐다(2026-10-19 저장 반례).
+    """
     return st.text(max_size=max_len).filter(
         lambda s: s.strip()
         and len(s.strip()) <= max_len
         and len(s.strip().splitlines()) <= _MAX_LINES
         and not _TIME_EXPR.search(s.strip())
+        and not _DURATION_EN.search(s.strip())
         and not has_contact_like(s.strip())
     )
 
@@ -260,7 +267,7 @@ def test_prompt_renders_deterministically_with_ref() -> None:
     p1, ref = reg.render(_FEAT, _vars())
     p2, _ = reg.render(_FEAT, _vars())
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.2.0"
+    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.0"
     assert ref.feature == "DIALOGUE_ANSWER"
     assert "GET_WEATHER" in p1 and "최대 강수확률" in p1
     assert "- 사용자: 내일 비 와?" in p1 and "- 도우미: 내일 제주 예보예요." in p1
@@ -283,6 +290,40 @@ def test_prompt_states_rules() -> None:
         "JSON 외의 텍스트는 출력하지 마세요",
     ):
         assert phrase in prompt, phrase
+
+
+def test_prompt_states_friendly_turn_rules() -> None:
+    """0.3.0 — 친근한 대화체(맞장구 → 답 → 다음 한 걸음 제안·되묻기)와 게이트 오탐을 피하는 숫자 말 규칙이 실린다.
+
+    0.2.0 의 "짧게 답하세요"는 1~2문장 단답을 시켰다("지금은 너무 answer 만 띄워 주는 느낌", 2026-10-19 사용자).
+    숫자 말은 공유 정규식(`_TIME_EXPR`·`_NUM`)이 "두 분이"·"이 시간에는"을 소요 표현으로 읽어 답 전체가 템플릿으로
+    떨어지는 자리다 — 정규식을 넓히지 않고(리마인드·회고 게이트와 공유) 프롬프트가 피하게 한다. 맞장구에 발화의 시각을
+    옮기면 오케스트레이터의 Facts 대조(발화는 사실이 아니다)에 걸려 같은 결과가 된다.
+    """
+    prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
+    assert "짧게 답하세요" not in prompt
+    for phrase in ("해요체", "길지 않게(2~4문장)", "맞장구", "되물", "두 분이", "이 시간에는", "사용자가 말한 시각"):
+        assert phrase in prompt, phrase
+
+
+# 예시 한 건 = "확인된 사실 {…}" 줄 + 다음 줄 "→ {…}" (yaml 블록이 들여쓰기를 걷어 낸 렌더 결과 기준)
+_EXAMPLE = re.compile(r"확인된 사실 (\{.*\})\n\s*→ (\{.*\})")
+
+
+def test_prompt_examples_pass_gate_and_end_with_next_step() -> None:
+    """말투는 규칙 줄보다 예시가 정한다 — 예시 답이 게이트·시각 대조를 스스로 통과하고 다음 한 걸음(제안·되묻기)으로 끝난다.
+
+    예시가 "두 분이"·"오후 2시"를 쓰면 모델이 그대로 배워 답이 템플릿으로 떨어진다. 시각은 사실의 표기("14:00") 그대로만.
+    """
+    prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
+    examples = _EXAMPLE.findall(prompt)
+    assert len(examples) == 2
+    for facts_raw, answer_raw in examples:
+        text = json.loads(answer_raw)["text"]
+        assert not _violates(text, _MAX_LENGTH), text
+        times, unverifiable = clock_times(text)
+        assert not unverifiable and times <= clock_times(facts_raw)[0], text
+        assert text.endswith("?"), text
 
 
 # ── 변수 조립 (③) ───────────────────────────────────────────
@@ -343,9 +384,14 @@ def test_fallback_text_mirrors_backend_templates() -> None:
     assert fallback_answer_text(Intent.GET_POI_INFO, {}) == "일정에 있는 장소예요."
     assert fallback_answer_text(Intent.SUGGEST_ALTERNATIVE, {"target": "성산일출봉"}) == "성산일출봉 대신 갈 만한 곳이에요."
     assert fallback_answer_text(Intent.SUGGEST_ALTERNATIVE, {}) == "그 장소 대신 갈 만한 곳이에요."
-    assert fallback_answer_text(Intent.GENERATE_SCHEDULE, {}) == "일정 만들기 화면으로 안내할게요."
-    assert fallback_answer_text(Intent.REPLAN, {}) == "남은 일정은 다시 짜기에서 바꿀 수 있어요."
-    assert fallback_answer_text(Intent.GENERATE_REFLECTION, {}) == "회고는 기록 화면에서 만들 수 있어요."
+    # 넘기기 6의도 — 안내 한 문장 + 아래 버튼 안내 (2026-10-19 친근한 말투, BE IntentDispatcher 도 같은 문장). 되묻기로 끝내지
+    # 않는다 — 분류 0.2.2 가 "…볼까요?" 뒤의 "응"을 그 의도로 읽어 같은 문장이 되풀이된다
+    assert fallback_answer_text(Intent.GENERATE_SCHEDULE, {}) == "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 누르면 바로 시작해요."
+    assert fallback_answer_text(Intent.REGENERATE, {}) == "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요."
+    assert fallback_answer_text(Intent.REPLAN, {}) == "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 누르면 바로 시작해요."
+    assert fallback_answer_text(Intent.GENERATE_REFLECTION, {}) == "회고는 기록 화면에서 만들 수 있어요. 아래 버튼을 누르면 기록이 열려요."
+    assert fallback_answer_text(Intent.TRIP_SUMMARY, {}) == "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요."
+    assert fallback_answer_text(Intent.STYLE_ANALYSIS, {}) == "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요."
     # 여행 없음 → BE needTrip 문구 (어느 의도든 같다)
     assert fallback_answer_text(Intent.GET_WEATHER, {"needs_trip": True}) == NEED_TRIP_TEXT
     assert NEED_TRIP_TEXT == "먼저 여행을 만들거나 숙소를 등록하면 일정을 함께 볼 수 있어요."
