@@ -5,6 +5,9 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.property.Arb
+import io.kotest.property.arbitrary.bind
+import io.kotest.property.arbitrary.choice
+import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.enum
 import io.kotest.property.arbitrary.long
 import io.kotest.property.checkAll
@@ -23,8 +26,13 @@ class SweepScopeTest : StringSpec({
     val day = LocalDate.parse("2026-08-11")
     fun at(hhmm: String, date: LocalDate = day): Instant = date.atTime(LocalTime.parse(hhmm)).atZone(kst).toInstant()
 
-    // 2026-01-01 ~ 2028-01-01 의 임의 시각(초 단위).
-    val instants = Arb.long(1_767_225_600L, 1_830_297_600L)
+    // 2026-01-01 ~ 2028-01-01 의 임의 시각(초 단위)에 경계 시각을 절반 섞는다. 균등 분포로는 특정 초를 1,000회에 1% 안팎으로만
+    // 치고 edgecase(양 끝)는 KST 09:00 이다 — PBT-07 은 생성기가 KST 20:58·20:59·21:00·06:59·07:00 을 반드시 포함하라고 한다.
+    val boundaries = listOf("06:59:59", "07:00", "20:57:59", "20:58", "20:58:59", "20:59", "20:59:59", "21:00").map(LocalTime::parse)
+    val edges = Arb.bind(Arb.long(0L, 729L), Arb.element(boundaries)) { days, time ->
+        LocalDate.parse("2026-01-01").plusDays(days).atTime(time).atZone(kst).toEpochSecond()
+    }
+    val instants = Arb.choice(Arb.long(1_767_225_600L, 1_830_297_600L), edges)
 
     "밤(21:00~06:59 KST)에는 회차가 없다 — 그 밖의 시각에는 있다(PBT)" {
         checkAll(instants, Arb.enum<SweepHorizon>()) { secs, horizon ->

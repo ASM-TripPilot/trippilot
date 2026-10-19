@@ -18,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import kotlin.random.Random
 
 /**
  * 감시 대상 여행 조회 실 DB 검증(설계서 T-IT-3) — Plan-B 상황 스윕이 매 회차 훑는 목록.
@@ -65,6 +66,10 @@ class TripWatchQueryIT : AbstractPostgresIntegrationTest() {
     private companion object {
         /** 키셋이 제자리를 돌면(커서 무시) 무한 반복이 된다 — 그 경우를 실패로 끊는다. */
         private const val MAX_PAGES = 10_000
+
+        /** PG 의 uuid 순서 — 16바이트를 부호 없이 앞에서부터 비교한다(`uuid_cmp` = memcmp). */
+        private val PG_UUID_ORDER: Comparator<UUID> =
+            compareBy<UUID>({ it.mostSignificantBits.toULong() }, { it.leastSignificantBits.toULong() })
     }
 
     @Test
@@ -104,6 +109,33 @@ class TripWatchQueryIT : AbstractPostgresIntegrationTest() {
         whole.map { it.tripId }.toSet() shouldBe mine
         // 페이지 사이에 행이 겹치지 않는다 — 다음 페이지는 앞 페이지 마지막 키 **다음**부터다.
         pages.flatten().map { it.tripId }.let { it.size shouldBe it.toSet().size }
+    }
+
+    @Test
+    fun `임의 피벗에서 이어 읽어도 피벗 다음 키만 PG 순서로 낸다 — 행에 없는 키·최상위 비트가 선 키(회차 시작 위치 회전)`() {
+        val acc = account()
+        // 첫 바이트로 자리를 정한다 — 0x10·0x70 은 최상위 비트가 꺼진 키, 0x90·0xF0 은 켜진 키. 자바 UUID.compareTo(부호 있는
+        // long 비교)로는 켜진 키가 음수라 맨 앞으로 가 PG(부호 없는 바이트 비교)와 순서가 뒤집힌다 — 스윕의 회전은 PG 쪽에 기댄다.
+        val mine = listOf(0x10, 0x70, 0x90, 0xF0).map(::keyLedBy)
+        mine.forEach { insertTrip(it, acc) }
+
+        // 피벗은 회차 시각에서 만든 이름 기반 키처럼 행에 없다 — 최상위 비트가 선 피벗(0x80…)과 꺼진 피벗(0x40…) 둘 다.
+        listOf(0x80, 0x40).forEach { lead ->
+            val pivot = keyLedBy(lead)
+            val found = watch.findOverlapping(today, today, pivot, 500).map { it.tripId }.filter { it in mine }
+            found shouldBe mine.filter { PG_UUID_ORDER.compare(it, pivot) > 0 }.sortedWith(PG_UUID_ORDER)
+        }
+    }
+
+    /** 첫 바이트가 [lead] 인 임의 키 — 나머지 비트는 실행마다 달라 다른 테스트의 행과 겹치지 않는다. */
+    private fun keyLedBy(lead: Int): UUID = UUID((lead.toLong() shl 56) or (Random.nextLong() ushr 8), Random.nextLong())
+
+    /** 키를 정해 넣는다 — 도메인 생성은 키를 무작위로 고른다. 나머지 열은 기본값·NULL 이다. */
+    private fun insertTrip(tripId: UUID, accountId: UUID) {
+        jdbc.update(
+            "INSERT INTO trip (trip_id, account_id, title, start_date, end_date, preference_snapshot) VALUES (?, ?, ?, ?, ?, '{}'::jsonb)",
+            tripId, accountId, "피벗 회전", today.minusDays(1), today.plusDays(1),
+        ) shouldBe 1
     }
 
     @Test
