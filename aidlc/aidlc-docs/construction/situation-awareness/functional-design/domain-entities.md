@@ -209,14 +209,14 @@ PK `(trip_id, source)`.
 |---|---|---|
 | `grid_key` | varchar PK | 기상청 격자 `"nx,ny"`(예 제주 `"53,38"`) |
 | `base_at` | timestamptz | 발표 시각 |
-| `hourly` | jsonb | 예보 시각별 `POP`·`PTY`·`SKY`·`TMP`·`WSD`(오늘·내일) |
+| `hourly` | jsonb | 예보 시각별 `POP`·`PTY`·`SKY`·`TMP`·`WSD`(오늘·내일 — 자정을 넘긴 내일 슬롯 몫으로 모레 시각까지) |
 | `daily` | jsonb | 날짜별 `TMN`·`TMX` |
 | `fetched_at` | timestamptz | |
 | `expires_at` | timestamptz · CHECK `expires_at > base_at` | 발표 + 3시간 + 10분 |
 
 - 격자당 1행(덮어쓰기). **정상 결과(코드 00)만 저장**한다 — 실패·NO_DATA 는 행을 만들지 않는다(INV-U4-09 승계).
 - 읽기-통과 캐시: 신선하면 원천을 부르지 않고, 받아 온 값도 신선해야 쓴다. HTTP 는 트랜잭션 밖. jsonb 수는 읽을 때 수로 정규화한다.
-- 공개 계약 `HourlyForecastFacade { isLive(); forecastForTrigger(lat, lng, at): PointForecast? }` — null = 모름. `PointForecast` = 그 시각의 `POP`·`PTY`·`SKY`·`TMP`·`WSD` + 그 날 `TMN`·`TMX`. `ContextFacade` 와 분리한다(구현 대역 보호).
+- 공개 계약 `HourlyForecastFacade { isLive(); gridKeyOf(lat, lng): String?; forecastForTrigger(lat, lng, at): PointForecast? }` — null = 모름(자료 없음 · 상한 · 낡음 · live 아님). 출처의 고장은 `HourlyForecastUnavailable` 로 던진다 — 원인 코드가 있으면 게이트웨이 거절(그 출처 전체), 없으면 시한·5xx·형식 깨짐(그 격자). `gridKeyOf` 는 회차 안 실패 격자 기억의 키다(RES-SA-02·04). `PointForecast` = 그 격자 발표분의 시각별 `POP`·`PTY`·`SKY`·`TMP`·`WSD` + 날짜별 `TMN`·`TMX` + 발표 시각. `ContextFacade` 와 분리한다(구현 대역 보호).
 - 파드당 하루 호출 상한(3,000)은 **이 격자 경로만** 센다 — 이름 경로·도우미 날씨 카드는 세지 않는다.
 
 ### 8.2 경보 읽기값 (저장 없음)

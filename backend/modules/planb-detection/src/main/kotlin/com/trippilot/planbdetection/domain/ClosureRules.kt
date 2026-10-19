@@ -13,7 +13,8 @@ import java.util.UUID
  *
  * 1. 오늘은 계획 시작이 지금 이후인 슬롯만 본다 — 이미 시작한 방문은 알려도 바꿀 수 없다. 미래일은 전부 본다.
  * 2. 상태 `CLOSED` → `PERMANENTLY_CLOSED` — 영업시간보다 우선하고, 편집 때 볼 수 없었던 사실이라 경고 이력과 무관하게 알린다.
- * 3. 영업시간 위반(HC1)인데 편집 때 이미 본 경고가 아니면 `HOURS_MISMATCH` — 하위 코드(`CLOSED_DAY` 등)는 PR-H1 이 붙인다.
+ * 3. 영업시간 위반(HC1)인데 편집 때 이미 본 경고가 아니면 AI 하위 코드대로 `CLOSED_DAY`·`HOLIDAY`·`OUT_OF_HOURS`, 하위 코드가
+ *    없거나 모르는 값이면 `HOURS_MISMATCH`. 같은 장소를 하루 두 번 넣었으면 더 확실한 쪽(AI 의 우선순위와 같다).
  *    단 그 슬롯에 `PERMANENTLY_CLOSED` 가 떠 있는데 이번에 폐업 여부를 모르면(조회 실패·행 없음·OTHER) 내지 않는다 — 내면
  *    판정이 떠 있는 폐업을 제자리에서 영업시간 위반으로 갈아 끼운다(모름은 트리거를 바꾸지 않는다 — INV-SA-2).
  * 4. 확인 = 상태 ACTIVE ∧ 판정 OK ∧ 그 슬롯의 ACTIVE 가 `HOLIDAY` 아님 — 공휴일 휴무는 감지기가 해제하지 않는다.
@@ -73,19 +74,31 @@ object ClosureRules {
         val (variant, source) = when {
             state == PoiLifeStatus.CLOSED -> TriggerVariant.PERMANENTLY_CLOSED to DataSource.PLACE_STATUS
             current == TriggerVariant.PERMANENTLY_CLOSED && state != PoiLifeStatus.ACTIVE -> return null // 폐업 여부를 모른다
-            group.any { it.hours == HoursVerdict.VIOLATED && !it.hoursWarnedBefore } -> TriggerVariant.HOURS_MISMATCH to DataSource.AI_VALIDATE
+            group.any { it.hours == HoursVerdict.VIOLATED && !it.hoursWarnedBefore } ->
+                hoursVariant(group.filter { it.hours == HoursVerdict.VIOLATED && !it.hoursWarnedBefore }) to DataSource.AI_VALIDATE
             else -> return null
         }
         val name = slot.nameKo?.takeIf { it.isNotBlank() }?.let(SituationCopy::shortName)
-        val sentence = if (variant == TriggerVariant.PERMANENTLY_CLOSED) {
-            "${name?.let { "‘$it’${topicOf(it)}" } ?: NAMELESS} 폐업한 곳으로 확인됐어요"
-        } else {
-            "계획한 시간엔 ${name?.let { "‘$it’" } ?: NAMELESS} 영업하지 않는 것으로 나와요"
+        val topic = name?.let { "‘$it’${topicOf(it)}" } ?: NAMELESS
+        val subject = name?.let { "‘$it’" } ?: NAMELESS
+        val sentence = when (variant) {
+            TriggerVariant.PERMANENTLY_CLOSED -> "$topic 폐업한 곳으로 확인됐어요"
+            TriggerVariant.CLOSED_DAY -> "$topic 정기 휴무일로 나와요"
+            TriggerVariant.OUT_OF_HOURS -> "계획한 시간엔 $subject 문을 열지 않는 것으로 나와요"
+            TriggerVariant.HOLIDAY -> "공휴일이라 $subject 쉬는 날로 나와요"
+            else -> "계획한 시간엔 $subject 영업하지 않는 것으로 나와요"
         }
         // 상대 날짜어는 쓰지 않는다 — 저장된 문장은 다음 날 틀린 말이 된다. 미래일은 날짜를 앞에 붙인다.
         val reason = if (date == today) sentence else "${SituationCopy.dayPrefix(date)} $sentence"
         return Finding(key, slot.poiId, variant, source, reason)
     }
+
+    /** HC1 하위 코드 — 더 확실한 것부터(AI `check_hc1` 의 우선순위와 같다). 이 밖의 값은 모르는 값이다. */
+    private val HOURS_CODES = listOf(TriggerVariant.CLOSED_DAY, TriggerVariant.HOLIDAY, TriggerVariant.OUT_OF_HOURS)
+
+    /** 새 영업시간 위반 슬롯들의 변형 — 하위 코드가 없거나 모르면 `HOURS_MISMATCH`(BR-SA-17). */
+    private fun hoursVariant(fresh: List<CheckedSlot>): TriggerVariant =
+        HOURS_CODES.firstOrNull { code -> fresh.any { it.reasonCode == code.name } } ?: TriggerVariant.HOURS_MISMATCH
 
     /** 주제 조사 — 받침이 있으면 `은`, 없으면 `는`. 한글로 끝나지 않으면 읽는 법을 몰라 둘 다 적는다. */
     private fun topicOf(name: String): String {

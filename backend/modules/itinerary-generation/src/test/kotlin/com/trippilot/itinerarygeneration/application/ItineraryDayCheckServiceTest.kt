@@ -169,7 +169,7 @@ class ItineraryDayCheckServiceTest : StringSpec({
         day.slots.map { it.slotKey } shouldContainExactly listOf("$d1#$poiA", "$d1#$poiB")
         day.slots.map { it.startAt } shouldContainExactly listOf(LocalTime.parse("10:00"), LocalTime.parse("12:00"))
         day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.OK, HoursVerdict.OK)
-        day.slots.map { it.reasonCode } shouldContainExactly listOf(null, null) // 경계에 하위 코드가 아직 없다(PR-H1)
+        day.slots.map { it.reasonCode } shouldContainExactly listOf(null, null) // 위반이 없으면 하위 코드도 없다
     }
 
     "HC1 위반은 그 슬롯만 VIOLATED — 위치 없는 HC1·보내지 않은 날을 가리키는 HC1·HC2 는 붙이지 않는다" {
@@ -190,6 +190,25 @@ class ItineraryDayCheckServiceTest : StringSpec({
         val day = svc.checkDay(acc, tripId, d1).shouldNotBeNull()
 
         day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.OK, HoursVerdict.VIOLATED)
+    }
+
+    "HC1 하위 코드는 그 슬롯에 실린다 — 감지기가 휴무·영업시간 밖·공휴일을 가른다(BR-SA-17)" {
+        val (svc) = service(
+            agent = {
+                DayValidator(
+                    it,
+                    violations = listOf(
+                        Violation("HC1", 0, 0, "1요일 휴무", reasonCode = "CLOSED_DAY"),
+                        Violation("HC1", 0, 1, "공휴일 휴무", reasonCode = "HOLIDAY"),
+                    ),
+                )
+            },
+        )
+
+        val day = svc.checkDay(acc, tripId, d1).shouldNotBeNull()
+
+        day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.VIOLATED, HoursVerdict.VIOLATED)
+        day.slots.map { it.reasonCode } shouldContainExactly listOf("CLOSED_DAY", "HOLIDAY")
     }
 
     "상징 이름(OPENING_HOURS)도 영업시간 위반이다 — 문구 번역과 같은 어휘" {

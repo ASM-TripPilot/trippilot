@@ -91,6 +91,18 @@ def test_stale_file_is_not_loaded(tmp_path: Path, change: str) -> None:
     assert not idx.indexed and not store.search(BANK_COLLECTION, (1.0, 0.0, 0.0), 1)
 
 
+def test_broken_file_falls_back_instead_of_crashing_startup() -> None:
+    """지문·모델·차원은 맞는데 벡터 개수가 모자란 파일 — 종전엔 `BankLoadError` 가 배선까지 올라가 AI 기동이
+    실패했다(Codex 리뷰). 싣지 않고 원격 색인으로 넘긴다."""
+    from trippilot.orchestrator.question_bank import BankVectors
+
+    entries = _entries("날씨", "거리")
+    broken = BankVectors(model="m", dim=3, fingerprint=bank_fingerprint(entries), vectors=((0.0, 1.0, 0.0),))
+    emb, store = _Emb(), InMemoryVectorStore()
+    idx = BankIndex(entries, emb, store, precomputed=broken)  # 예외 없이 만들어진다
+    assert not idx.indexed
+
+
 def test_committed_vectors_match_current_bank() -> None:
     """질문뱅크를 고쳤으면 `cd ai && uv run python scripts/intent/build_bank_vectors.py` 로 다시 만든다.
     잊으면 기동마다 원격 임베딩을 수 분 독점하는 원격 색인으로 돌아간다(DEV HPA 증설 때 다른 기능까지 느려짐)."""

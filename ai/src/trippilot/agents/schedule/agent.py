@@ -91,7 +91,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import NIGHTLIFE_TAG, OpenHour, Poi, PoiCategory
+from trippilot.domain.poi import NIGHTLIFE_TAG, HolidayCalendar, OpenHour, Poi, PoiCategory, open_windows_on
 from trippilot.llm_gateway.workers.alternative_explanation import (
     AlternativeExplanationWorker,
 )
@@ -197,6 +197,8 @@ class GenerateItineraryRequest:
     day_windows: Mapping[date, TimeWindow] | None = None
     # 필수 방문을 준 순서대로(재계획 "시간만 당기기") — 의미는 `ItineraryProblem.required_in_order`.
     required_in_order: bool = False
+    # 앵커=숙소(생성) — 의미는 `ItineraryProblem.ignore_anchor_distance`. 규칙 점수의 숙소 거리 감점도 끈다.
+    ignore_anchor_distance: bool = False
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -216,6 +218,10 @@ class GenerateItineraryRequest:
     # PlanB 경로의 점수는 종전과 바이트 동일하다 — 재계획은 시드를 하한 결정론에 쓰고(TRIP-1182),
     # PlanB 가산 서열을 흔들 이유가 없다.
     diversity_jitter: float = 0.0
+    # 특일 달력 (상황 감지 H1) — 배선이 요청 진입점에서 1회 조회해 싣는다(조립 루프는 I/O 를 타지 않는다).
+    # 의미는 `ItineraryProblem.holidays` — None = `HOLIDAY_CLOSURE_MODE=off`(공휴일 규칙 없음), 빈 매핑 = 달력
+    # 실패(날짜 명시형만). 에이전트의 사전 판정(⓪′ 핀·한 곳 추가·차선책)도 같은 값으로 조립과 같은 그 날 창을 본다.
+    holidays: Mapping[date, frozenset[str]] | None = None
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -464,14 +470,13 @@ class ScheduleAgent:
         #    INFEASIBLE 이 없고(TRIP-1249), 못 넣으면 아래 ④ 뒤에서 노트로 보고한다(INV-4).
         #    그날 휴무가 **증명된** 곳도 고르지 않는다 — 1위 카페가 일요일 휴무면 필수 방문이
         #    못 놓여 "카페 0곳 + 미배치 노트"가 된다(열린 2위가 있는데도). 판정은 HC1 과 같다:
-        #    영업정보 없음은 막지 않고, 항목이 있는데 그 요일이 없으면 휴무.
+        #    영업정보 없음은 막지 않고, 그 날 창이 없으면(정기·공휴일 휴무 — `open_windows_on`) 휴무.
         add_one_required: tuple[PoiId, ...] = ()
         if request.add_one_categories:
             index = {p.poi_id: p for p in pool.pois}
             # 재계획은 하루다 — add_one 은 재계획에서만 실린다(generate 는 빈 집합).
             day = request.days[0]
-            closed = {p.poi_id for p in pool.pois if p.open_hours
-                      and all(oh.day_of_week != day.weekday() for oh in p.open_hours)}
+            closed = {p.poi_id for p in pool.pois if open_windows_on(p, day, request.holidays) == ()}
             candidates, add_one_required = boost_add_one(
                 candidates, index, request.add_one_categories,
                 skip=request.excluded_poi_ids | {b.poi_id for b in fixed_blocks} | closed,
@@ -538,7 +543,7 @@ class ScheduleAgent:
         index = {**fixed_pois, **{p.poi_id: p for p in pool.pois}}
         excluded = request.excluded_poi_ids  # 2단계 생성 그대로 통과
         closed = [fb for fb in fixed_blocks if fb.poi_id in index
-                  and not open_hours_ok(index[fb.poi_id], fb.window.start, fb.window.end)]
+                  and not open_hours_ok(index[fb.poi_id], fb.window.start, fb.window.end, request.holidays)]
         if closed:
             fixed_blocks = tuple(fb for fb in fixed_blocks if fb not in closed)
             # 핀이던 POI 는 자유 후보로도 안 놓는다(핀 POI 는 원래 어느 날에도 자유 후보가 아니다 —
@@ -578,6 +583,8 @@ class ScheduleAgent:
             end_near=request.end_near,
             day_windows=request.day_windows,
             required_in_order=request.required_in_order,
+            ignore_anchor_distance=request.ignore_anchor_distance,
+            holidays=request.holidays,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
@@ -788,7 +795,8 @@ class ScheduleAgent:
             ScoredPoi(
                 poi_id=poi.poi_id,
                 score=build_rule_score(
-                    poi, request.budget, request.anchor, request.seed,
+                    poi, request.budget,
+                    None if request.ignore_anchor_distance else request.anchor, request.seed,
                     prefer=prefer,
                     avoid=avoid,
                     taste=taste,
@@ -889,7 +897,7 @@ class ScheduleAgent:
         try:
             return pick_slot_alternatives(
                 solution, candidates, pool, excluded=request.excluded_poi_ids,
-                family_anchors=family_anchors,
+                family_anchors=family_anchors, holidays=request.holidays,
             )
         except Exception as e:
             # 순수 계산이라 도달하지 않아야 하지만, 부가 정보가 생성을 깨면 안 된다(INV-4).
@@ -1402,13 +1410,15 @@ def pick_slot_alternatives(
     excluded: frozenset[PoiId] = frozenset(),
     limit: int = MAX_SLOT_ALTERNATIVES,
     family_anchors: Sequence[Poi] | None = None,
+    holidays: HolidayCalendar | None = None,
 ) -> dict[str, tuple[SlotAlternative, ...]]:
     """슬롯마다 "이 자리에 대신 넣을 만한" 후보 ≤ limit 건 — 키 `"{date}#{poi_id}"`(BR-U2-04).
 
     출처는 ②가 점수 매긴 `candidates` — 어셈블리가 뽑지 않은 차순위가 곧 차선책이다.
     풀 밖·이미 배치·제외 목록·고정 블록은 후보가 아니다(INV-1, 자기 자신도 자연히 제외).
     순위: 같은 카테고리 → 점수 내림 → 슬롯 POI 와 직선거리 오름 → poi_id (전순서 = 결정론).
-    그 요일 휴무는 뺀다(영업정보 없음 = 통과, HC1 과 같은 규칙) — 시각 단위 검증은 하지
+    그 날 휴무는 뺀다(영업정보 없음 = 통과, HC1 과 같은 `open_windows_on` — 공휴일 휴무 포함, 상황 감지 H1)
+    — 시각 단위 검증은 하지
     않으며 그래서 시각도 싣지 않는다(INV-2). 고정 블록 슬롯은 사용자 must-visit 이라
     제안 대상이 아니다. LLM 호출 0회. 차선책이 없는 슬롯은 키를 만들지 않는다.
 
@@ -1432,8 +1442,7 @@ def pick_slot_alternatives(
 
     out: dict[str, tuple[SlotAlternative, ...]] = {}
     for day in solution.days:
-        dow = day.date.weekday()
-        open_today = [p for p in spare if _open_on(p, dow)]
+        open_today = [p for p in spare if open_windows_on(p, day.date, holidays) != ()]
         for slot in day.slots:
             here = index.get(slot.poi_id)
             if here is None or slot.poi_id in fixed:
@@ -1723,11 +1732,6 @@ def alternative_pairs(
         for day in solution.days for slot in day.slots
         for a in picks.get(f"{day.date.isoformat()}#{slot.poi_id}", ())
     )
-
-
-def _open_on(poi: Poi, day_of_week: int) -> bool:
-    """영업정보 없음 = 통과 (HC1 과 같은 "정보 없음은 막지 않는다" 규칙)."""
-    return not poi.open_hours or any(oh.day_of_week == day_of_week for oh in poi.open_hours)
 
 
 def _rationale(alt: Poi, here: Poi) -> str:

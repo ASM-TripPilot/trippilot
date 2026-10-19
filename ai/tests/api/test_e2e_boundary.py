@@ -460,6 +460,8 @@ def test_generate_turns_on_route_weight_so_a_day_stays_in_one_area() -> None:
     domain = _domain_generate_request(
         schemas.GenerateItineraryRequest.model_validate(_request()), KST)
     assert domain.travel_weight == _GENERATE_ROUTE_WEIGHT > 0
+    # 숙소는 오가는 곳 — 숙소 거리는 고르는 기준이 아니다(2026-10-19). 재계획 경로는 기본 False.
+    assert domain.ignore_anchor_distance is True
 
 
 # ── ④ validate · repair 관통 ─────────────────────────────────────────

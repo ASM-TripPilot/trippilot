@@ -115,6 +115,7 @@ from trippilot.domain.reflection import (
 )
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig, stay_for
+from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
@@ -217,6 +218,7 @@ from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.ports.weather_port import WeatherPort
 from trippilot.ports.event_port import EventPort
+from trippilot.ports.holiday_calendar_port import HolidaySource
 from trippilot.providers.event import EventProvider
 from trippilot.providers.persona import PersonaProvider
 from trippilot.providers.place import PlaceProvider
@@ -467,7 +469,8 @@ def _domain_rejections(
 
 
 def _domain_generate_request(
-    request: schemas.GenerateItineraryRequest, tz: timezone, *, diversity_jitter: float = 0.0
+    request: schemas.GenerateItineraryRequest, tz: timezone, *, diversity_jitter: float = 0.0,
+    holidays: Mapping[date, frozenset[str]] | None = None,
 ) -> core.GenerateItineraryRequest:
     if not request.anchors:
         raise ValueError("anchors 최소 1개 필요 — 후보 풀 기준점(숙소 앵커) 없음")
@@ -494,6 +497,8 @@ def _domain_generate_request(
         transport=_transport_from(request),
         pace=_pace_from(request),
         travel_weight=_GENERATE_ROUTE_WEIGHT,
+        # 앵커는 숙소 — 하루를 오가는 곳이지 붙어 있어야 할 곳이 아니다(2026-10-19 사용자). 재계획은 끈다.
+        ignore_anchor_distance=True,
         persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         principal=Principal(user_id=owner),
         seed=_seed_from(request.trip_id),
@@ -508,6 +513,7 @@ def _domain_generate_request(
         persona=_inline_persona(request.preference_profile, request.trip_context.companion_type),
         family_demote=True,  # 같은 장소 계열 강등은 generate 에만 (TRIP-1181)
         diversity_jitter=diversity_jitter,  # 결정론 지터도 generate 에만 (TRIP-1180)
+        holidays=holidays,  # 공휴일 달력 — 진입점이 요청당 1회 조회(상황 감지 H1)
     )
 
 
@@ -972,8 +978,12 @@ def _solution_from_payload(
     )
 
 
-def _problem_for(solution: ItinerarySolution, tz: timezone) -> ItineraryProblem:
+def _problem_for(solution: ItinerarySolution, tz: timezone,
+                 holidays: HolidaySource | None = None) -> ItineraryProblem:
     """검증·수리용 문제 재구성. 와이어에 없는 원 컨텍스트는 **기본값**으로 채운다.
+
+    - holidays: 공휴일 달력(상황 감지 H1)은 이 진입점이 요청당 1회 조회한다 — 검증·수리·편집이 생성과 같은
+      휴일 규칙을 본다. 출처가 없거나 모드 off 면 None(공휴일 규칙 없음).
 
     - transport=PUBLIC · day_window=당일 00:00~23:59: 와이어에 원값이 없다(간극 —
       HC2·HC4 판정이 원 요청과 다를 수 있음 — repair 는 `transport_modes` 가 오면 덮어쓴다). 자정 초과 슬롯은 HC4로 표시될 수 있다
@@ -1003,6 +1013,8 @@ def _problem_for(solution: ItinerarySolution, tz: timezone) -> ItineraryProblem:
         # validate·repair 에서만 조용히 사라진다(TRIP-292 excluded_poi_ids 전례).
         # 체류 배율이 빠져도 HC 판정은 배치된 시각 그대로를 보므로 판정은 옳다.
         pace=None,
+        holidays=(holidays.between(min(d.date for d in solution.days), max(d.date for d in solution.days))
+                  if holidays is not None else None),
     )
 
 
@@ -1178,7 +1190,9 @@ def _visit_cap(request: schemas.ReplanRequest, resolved: Sequence[str],
 #   KEEP_DINNER   원 일정의 저녁 식당을 잠근다(`_dinner_blocks`)
 #   EARLIER       장소는 그대로 두고 시각만 지금부터 다시 맞춘다(`_earlier_visits`)
 #   END_NEAR_STAY 마지막 방문지를 숙소 가까이(`ItineraryProblem.end_near`)
-_LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY"})
+#   SHORTER_DAY   일찍 마무리 — 새 방문은 한 곳만, 숙소가 있으면 그 쪽에서 끝낸다
+#   END_DAY       오늘은 여기까지 — 새 방문 없이 하루를 끝낸다(`_replan_end_day`)
+_LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY", "SHORTER_DAY", "END_DAY"})
 
 # 저녁 식사창 — 조립의 식사 소프트 항과 같은 창(17~20시)이다. 창이 둘이면 "저녁"이 두 뜻이 된다.
 _DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
@@ -1187,6 +1201,7 @@ _DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
 def _timed_blocks(
     request: schemas.ReplanRequest, nl: nl_verify.VerifiedRequest, pool: CandidatePool,
     blocks: tuple[FixedBlock, ...], anchor: GeoPoint, pace: Pace | None, tz: timezone, notes: list[str],
+    holidays: Mapping[date, frozenset[str]] | None = None,
 ) -> tuple[FixedBlock, ...]:
     """"성심당은 5시에"·"3시에 카페" — 말한 시각에 그 곳을 잠근다(HC3, `_dinner_blocks` 와 같은 잠금).
 
@@ -1198,18 +1213,14 @@ def _timed_blocks(
     index = {p.poi_id: p for p in pool.pois}
     excluded = set(request.excluded_poi_ids)
     current = {s.poi_id for s in request.current_slots}
-    dow = request.target_date.weekday()
     out: list[FixedBlock] = []
 
     def block(poi: Poi, at: datetime) -> FixedBlock | None:
         end = at + timedelta(minutes=stay_for(poi.category, pace))
-        s_min = at.hour * 60 + at.minute
-        e_min = s_min + stay_for(poi.category, pace)
         if (str(poi.poi_id) in excluded
                 or any(b.poi_id == poi.poi_id or (at < b.window.end and b.window.start < end)
                        for b in (*blocks, *out))
-                or (poi.open_hours and not any(oh.day_of_week == dow and oh.open_min <= s_min
-                                               and e_min <= oh.close_min for oh in poi.open_hours))):
+                or not open_hours_ok(poi, at, end, holidays)):  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
             return None
         return FixedBlock(poi_id=poi.poi_id, window=TimeWindow(start=at, end=end), reason="nl_at")
 
@@ -1235,6 +1246,7 @@ def _timed_blocks(
 def _dinner_blocks(
     request: schemas.ReplanRequest, resolved: Sequence[str], pool: CandidatePool,
     blocks: tuple[FixedBlock, ...], tz: timezone, not_before: datetime | None, notes: list[str],
+    holidays: Mapping[date, frozenset[str]] | None = None,
 ) -> tuple[FixedBlock, ...]:
     """KEEP_DINNER("저녁은 그대로") — 원 일정에서 저녁 식사창에 걸친 식당 슬롯을 원 시각 그대로 잠근다.
 
@@ -1266,10 +1278,8 @@ def _dinner_blocks(
         end = datetime.combine(request.target_date, slot.end_at, tzinfo=tz)
         if not (s_min < hi and e_min > lo) or (slot.poi_id, start) in seen:
             continue
-        dow = request.target_date.weekday()
         if ((not_before is not None and end <= not_before)
-                or (poi.open_hours and not any(oh.day_of_week == dow and oh.open_min <= s_min
-                                               and e_min <= oh.close_min for oh in poi.open_hours))
+                or not open_hours_ok(poi, start, end, holidays)  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
                 or any(start < b.window.end and b.window.start < end for b in blocks)):
             notes.append(f"keep_dinner_skipped: {slot.poi_id}")
             continue
@@ -1328,11 +1338,12 @@ def _earlier_visits(
 
 def _end_near(request: schemas.ReplanRequest, resolved: Sequence[str],
               notes: list[str]) -> GeoPoint | None:
-    """END_NEAR_STAY("숙소 근처에서 끝내기") → 하루를 마칠 곳(그날 밤 숙소). 숙소가 없으면 None + 노트.
+    """END_NEAR_STAY("숙소 근처에서 끝내기")·SHORTER_DAY("일찍 마무리") → 하루를 마칠 곳(그날 밤 숙소).
+    숙소가 없으면 None + 노트.
 
     `anchor` 로 대신하지 않는다 — 그것은 GPS·수동·마지막 방문일 수 있어 숙소가 아니다.
     """
-    if "END_NEAR_STAY" not in resolved:
+    if "END_NEAR_STAY" not in resolved and "SHORTER_DAY" not in resolved:
         return None
     if request.stay_anchor is None:
         notes.append("end_near_stay_no_stay: 숙소 좌표가 없어 무효")
@@ -1623,6 +1634,27 @@ def _past_blocks(
     return tuple(b for b in blocks if b.window.end <= not_before)
 
 
+# 밤 낱말 — 말로 온 "밤에 놀기"는 이게 있어야 남는다(`_spoken_nightlife`). "미술관"의 술·"바다"·"바로"의 바·
+# "비어 있는"의 비어는 걸리지 않게 앞뒤 한글을 막는다.
+_NIGHT_WORDS = re.compile(
+    r"클럽|나이트|칵테일|와인|펍|라운지|스피크이지|혼술|맥주|비어가든|한\s*잔|밤에\s*놀"
+    r"|(?<![가-힣])술|(?<![가-힣])바(?:에|(?![가-힣]))")
+
+
+def _spoken_nightlife(request: schemas.ReplanRequest, resolved: list[str], notes: list[str]) -> list[str]:
+    """말로 온 "밤에 놀기"는 문장에 밤 낱말이 있을 때만 남긴다. 칩으로 고른 것은 그대로.
+
+    alias "클럽 가고 싶어"·"바에 가고 싶어"가 "가고 싶어" 꼴 문장 전반에 임계(0.74)를 넘었다 — 로컬 KURE
+    실측(2026-10-19): 카페 0.814·호텔 0.800·맛집 0.769·숙소 0.757. 걸리면 클럽이 강제로 들어가고 그날 창이
+    23:59 로 늘어난다. alias 를 줄이면 옛 벡터가 남아(적재는 upsert 뿐) 낱말 확인을 코드에 둔다.
+    """
+    if ("NIGHTLIFE" not in resolved or "NIGHTLIFE" in request.directives
+            or _NIGHT_WORDS.search(request.free_text or "")):
+        return resolved
+    notes.append("nightlife_dropped: no_night_word")
+    return [k for k in resolved if k != "NIGHTLIFE"]
+
+
 def _nightlife_candidates(
     resolved: Sequence[str], pool: CandidatePool, request: schemas.ReplanRequest,
     skip: Collection[PoiId], anchor: GeoPoint, notes: list[str],
@@ -1777,8 +1809,11 @@ class WiredItineraryOrchestrator:
         dialogue: DialogueInterpreter | None = None,
         memory_store: MemoryStorePort | None = None,
         dialogue_orchestrator: DialogueOrchestrator | None = None,
+        holidays: HolidaySource | None = None,
     ) -> None:
         self._orchestrator = orchestrator
+        # 공휴일 휴무(상황 감지 H1) — 진입점이 요청당 1회 부른다. 미주입 = off(None, 조회 0회).
+        self._holidays = holidays if holidays is not None else HolidaySource()
         # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
         self._diversity_jitter = diversity_jitter
         self._assembly_provider = assembly_provider
@@ -1837,10 +1872,16 @@ class WiredItineraryOrchestrator:
         시한은 남은 시간을 남은 날 수로 나누고, 몫이 바닥 아래면 남은 구간을 한 번에 푼다.
         """
         runs = _anchor_runs(request)
-        if len(runs) == 1:
-            return self._with_findings(request, self._generate_run(request))
         meta = request.request_meta
-        entered_ms = self._clock.monotonic_ms()
+        entered_ms = self._clock.monotonic_ms()  # 시한 원점 — 달력 조회 시간도 예산에서 빠진다(재계획과 같다)
+        # 공휴일 달력 — 요청당 1회(상황 감지 H1). 구간마다 다시 묻지 않고 모든 구간 풀이가 같은 매핑을 본다.
+        trip_days = [w.date for w in request.time_windows]
+        holidays = self._holidays.between(min(trip_days), max(trip_days)) if trip_days else None
+        if len(runs) == 1:
+            if holidays is not None and meta.deadline_ms is not None:  # 모드 off 면 종전 그대로
+                request = request.model_copy(update={"request_meta": meta.model_copy(update={
+                    "deadline_ms": max(1, meta.deadline_ms - (self._clock.monotonic_ms() - entered_ms))})})
+            return self._with_findings(request, self._generate_run(request, holidays))
         fixed = {b.poi_id for b in request.fixed_blocks}
         outs: list[WiredOutcome] = []
         placed: list[str] = []
@@ -1860,7 +1901,7 @@ class WiredItineraryOrchestrator:
                     degradations.append("generate:anchor_runs_folded")
                 run_meta = meta.model_copy(update={"deadline_ms": max(1, share)})
             outs.append(self._generate_run(
-                _run_request(request, dates, [p for p in placed if p not in fixed], run_meta)))
+                _run_request(request, dates, [p for p in placed if p not in fixed], run_meta), holidays))
             placed += [str(s.poi_id) for d in outs[-1].solution.days for s in d.slots]
         merged = _merged_outcomes(outs)
         return self._with_findings(
@@ -1889,12 +1930,13 @@ class WiredItineraryOrchestrator:
                 found.append("request:fixed_far_from_anchor")
         return replace(out, degradations=tuple(dict.fromkeys((*out.degradations, *found))))
 
-    def _generate_run(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
+    def _generate_run(self, request: schemas.GenerateItineraryRequest,
+                      holidays: Mapping[date, frozenset[str]] | None = None) -> WiredOutcome:
         meta = request.request_meta
         entered_ms = self._clock.monotonic_ms()  # 조립 뒤 거리 시한의 원점 (TRIP-1179)
         outcome = self._orchestrator.generate(
             _domain_generate_request(request, self._tz,
-                                     diversity_jitter=self._diversity_jitter),
+                                     diversity_jitter=self._diversity_jitter, holidays=holidays),
             _deadline_budget(meta),
             TraceId(meta.request_id),
             _tz_aware(meta.requested_at, self._tz),
@@ -2099,14 +2141,15 @@ class WiredItineraryOrchestrator:
 
     def _reconstruct(
         self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema,
-        *, untimed: str,
+        *, untimed: str, lookup_holidays: bool = True,
     ) -> tuple[
         ItinerarySolution, ItineraryProblem, dict[PoiId, Poi],
         tuple[WiredUnverifiedSlot, ...],
     ]:
         solution = _solution_from_payload(
             payload, ScheduleId(meta.request_id), self._tz, untimed=untimed)
-        problem = _problem_for(solution, self._tz)
+        problem = _problem_for(  # 공휴일 달력 — 요청당 1회(상황 감지 H1)
+            solution, self._tz, self._holidays if lookup_holidays else None)
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙).
         # 규칙은 그대로 두되 **무엇이 빠졌는지는 값으로 들고 나간다**(TRIP-537, INV-4) —
@@ -2279,11 +2322,14 @@ class WiredItineraryOrchestrator:
             request, trace_id=trace_id, now=now, remaining_ms=_deadline_budget(meta))
         resolved, unknown, prefer, avoid, near, add_one, pace = self._replan_directives(
             request, notes, trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
+        resolved = _spoken_nightlife(request, resolved, notes)
 
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
         anchor = GeoPoint(request.anchor.lat, request.anchor.lng)
         dates = (request.target_date,)
+        # 공휴일 달력 — 요청당 1회(상황 감지 H1). 잠금·후보·구성·조립·수리가 모두 이 매핑을 본다.
+        holidays = self._holidays.between(request.target_date, request.target_date)
         budget_level = _token_or(
             _BUDGET_TOKENS, request.preference_profile.budget_tier, BudgetLevel.MID)
         params: dict = {
@@ -2346,7 +2392,7 @@ class WiredItineraryOrchestrator:
 
         not_before = _replan_not_before(request, self._tz)
         blocks = _replan_fixed_blocks(request, self._tz)
-        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes)  # 저녁은 그대로
+        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes, holidays)  # 저녁은 그대로
         in_progress = _in_progress_blocks(request, not_before, self._tz, blocks)  # 진행 중은 그대로
         if in_progress:
             blocks += in_progress
@@ -2357,6 +2403,8 @@ class WiredItineraryOrchestrator:
         overlapped = _overlapping_locks(tuple(b for b in blocks if b not in past))
         if overlapped:
             notes.append(f"locked_overlap: {','.join(str(b.poi_id) for b in overlapped)}")
+        if "END_DAY" in resolved:
+            return self._replan_end_day(request, blocks, notes, resolved, unknown, now, t0)
         # 시간만 당기기 — 원 일정의 남은 방문이 그대로 필수 방문이다. 장소를 안 바꾸므로 구성 LLM 도,
         # 방문을 줄이는 상한도, 회피 카테고리 제외도 타지 않는다(사용자가 "시간만"이라 했다).
         earlier = _earlier_visits(request, resolved, blocks, not_before, notes,
@@ -2401,7 +2449,7 @@ class WiredItineraryOrchestrator:
             notes.append(f"nl_nearby_added: {p.poi_id} +{len(around)}")
         # "3시에 카페" — 말한 시각에 잠근다. 시간만 당기기는 장소·순서를 안 바꾼다는 요청이라 걸지 않는다.
         if earlier is None:
-            blocks += _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes)
+            blocks += _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes, holidays)
         if nl.rain_confirmed and not (RAIN_OUTDOOR <= avoid):
             avoid = avoid | RAIN_OUTDOOR  # 말이 아니라 기상청이 확인한 비다
         drop = avoid - prefer
@@ -2415,11 +2463,10 @@ class WiredItineraryOrchestrator:
             cats = ",".join(sorted(c.value for c in drop))
             # "남은 후보" = 실제로 놓일 수 있는 곳 — 숙소·그날 휴무가 증명된 곳은 세지 않는다
             # (그것만 남았는데 제외를 유지하면 잠금만 든 빈 하루가 된다).
-            weekday = request.target_date.weekday()
             usable = {p.poi_id for p in pool.pois
                       if p.poi_id not in held and p.poi_id not in set(request.excluded_poi_ids)
                       and p.category is not PoiCategory.STAY
-                      and composition.hours_label(p, weekday) is not None}
+                      and composition.hours_label(p, request.target_date, holidays) is not None}
             if usable <= avoided:
                 # 감점도 같이 푼다 — 남은 후보가 그것뿐인데 감점만 남기면 잠금만 든 빈 하루가 된다.
                 notes.append(f"avoid_relaxed: {cats} only candidates")
@@ -2461,6 +2508,11 @@ class WiredItineraryOrchestrator:
                 notes.append(f"planb_rank_trimmed: add_one dropped={dropped}")
 
         visit_cap = None if earlier is not None else _visit_cap(request, resolved, past, not_before)
+        if "SHORTER_DAY" in resolved and earlier is None:
+            # 일찍 마무리 — 진행 중·잠금은 그대로, 새 방문은 한 곳만(사용자 결정 2026-10-19). 상한은 잠금까지
+            # 세는 값이라(`free_visit_cap`) 솔버에 들어가는 잠금 수 + 1 이다.
+            visit_cap = sum(1 for b in blocks if b not in past and b not in overlapped) + 1
+            notes.append(f"shorter_day: +1 after {visit_cap - 1} kept")
         if visit_cap is not None:
             notes.append(f"planb_visit_cap: {visit_cap}")
         window = request.time_window
@@ -2487,7 +2539,7 @@ class WiredItineraryOrchestrator:
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
                 window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
-                rules=_category_rule_lines(nl), ctx_out=compose_ctx,
+                rules=_category_rule_lines(nl), ctx_out=compose_ctx, holidays=holidays,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -2510,9 +2562,8 @@ class WiredItineraryOrchestrator:
             index = {p.poi_id: p for p in pool.pois}
             gone = ({PoiId(x) for x in request.excluded_poi_ids} | avoided
                     | {b.poi_id for b in blocks})
-            weekday = request.target_date.weekday()
             ok = [p for p in pool.pois if p.poi_id not in gone and p.category is not PoiCategory.STAY
-                  and composition.hours_label(p, weekday) is not None]
+                  and composition.hours_label(p, request.target_date, holidays) is not None]
             ok_ids = {q.poi_id for q in ok}
             ranked = list(planb_rank or planb.ranked_poi_ids)
             # 반경 밖에서 집은 곳이 있으면 수를 정한 종류는 **그 둘레 후보가 먼저**다 — 구성이 기준점 근처 카페를
@@ -2607,6 +2658,7 @@ class WiredItineraryOrchestrator:
                 for p in (night[:1] if night and not composed else ())),
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
             required_in_order=earlier is not None,  # 시간만 당기기 — 원 일정 순서 그대로
+            holidays=holidays,  # 공휴일 달력 — 1회 수리(`_repair_day`)도 이 요청을 이어 쓴다
         )
         composed_r1 = composed  # 아래 다시 풀기가 composed 를 비운다 — 고정 표시를 걷을 때 1차 목록도 본다
         task = core.ScheduleTask(
@@ -2847,7 +2899,7 @@ class WiredItineraryOrchestrator:
             CandidatePool(poi_ids=frozenset(p.poi_id for p in fit_pois), pois=fit_pois,
                           generated_at=hints.pool.generated_at, anchor=hints.pool.anchor,
                           radius_km=hints.pool.radius_km),
-            keep=(), excluded=(), weekday=request.target_date.weekday(),
+            keep=(), excluded=(), day=request.target_date, holidays=dreq.holidays,
             score=lambda p: -near.get(p.poi_id, 0.0), cap=_REPAIR_SHORTLIST)
         if not cands.pois:
             notes.append("llm_repair_skipped: no_fit")
@@ -2856,7 +2908,6 @@ class WiredItineraryOrchestrator:
         k = min(len(drop), len(gaps_used))
         pinned = {b.poi_id for b in dreq.fixed_blocks}
         visited = tuple(line for line in inp.schedule if line.status == "다녀옴(유지)")
-        weekday = request.target_date.weekday()
         rinp = replace(
             inp,
             schedule=visited + tuple(
@@ -2868,7 +2919,7 @@ class WiredItineraryOrchestrator:
             max_visits=k,
             change_rule=composition.CHANGE_REPAIR,
             distance_km=near,
-            hours={p.poi_id: f"{composition.hours_label(p, weekday) or '영업시간 정보 없음'} · 빈 시간 "
+            hours={p.poi_id: f"{composition.hours_label(p, request.target_date, dreq.holidays) or '영업시간 정보 없음'} · 빈 시간 "
                              f"{gap_labels[gap_of[p.poi_id]]}" for p in cands.pois},
             unplaced=tuple(
                 f"{index[p].name} | {index[p].category.value} | {composition.REPAIR_LABELS[hints.why[p]]}"
@@ -2961,6 +3012,7 @@ class WiredItineraryOrchestrator:
         window_end: datetime | None = None,
         rules: tuple[str, ...] = (),
         ctx_out: list | None = None,
+        holidays: Mapping[date, frozenset[str]] | None = None,  # 공휴일 달력 — 진입점이 1회 조회(상황 감지 H1)
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -3005,7 +3057,7 @@ class WiredItineraryOrchestrator:
                        key=lambda s: (s.start_at is None, s.start_at or datetime.min.time()))
         keep = [PoiId(s.poi_id) for s in slots] + list(planb_rank) + list(nearby)
         shortlist = composition.shortlist(
-            pool, keep=keep, excluded=excluded, weekday=day.weekday(),
+            pool, keep=keep, excluded=excluded, day=day, holidays=holidays,
             score=lambda p: build_rule_score(p, budget_level, anchor, seed,
                                              prefer=prefer, avoid=avoid))
         if not shortlist.pois:
@@ -3061,7 +3113,7 @@ class WiredItineraryOrchestrator:
             # 기준점과 반경 밖에서 집은 곳 중 가까운 쪽 — 그 둘레 후보가 "38km"로 보이면 LLM 이 안 고른다.
             distance_km={p.poi_id: min(haversine_km(o, p.coord) for o in (anchor, *origins))
                          for p in shortlist.pois},
-            hours={p.poi_id: composition.hours_label(p, day.weekday()) or ""
+            hours={p.poi_id: composition.hours_label(p, day, holidays) or ""
                    for p in shortlist.pois},
         )
         if ctx_out is not None:  # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`)
@@ -3310,6 +3362,41 @@ class WiredItineraryOrchestrator:
             radius_km=pool.radius_km,
         )
 
+    def _replan_end_day(
+        self, request: schemas.ReplanRequest, blocks: tuple[FixedBlock, ...], notes: list[str],
+        resolved: list[str], unknown: list[str], now: datetime, started_ms: int,
+    ) -> schemas.ReplanResponse:
+        """END_DAY("전부 취소"·"오늘은 여기까지") — 새 방문 없이 하루를 끝낸다(사용자 결정 2026-10-19).
+
+        다녀온 곳·진행 중·사용자 잠금(과 "저녁은 그대로")만 **원 시각 그대로** 든 하루를 낸다 — BE 는 응답
+        하루로 원 하루를 바꾸므로 그 밖의 슬롯이 빠진다. 시각은 원 일정 값이라 INV-2 와 어긋나지 않는다.
+        솔버·LLM 은 부르지 않는다(규칙으로 정해지는 하루라 `RULE_FALLBACK` — BE 에선 "결정론", 폴백은 아니다).
+        남길 곳이 없으면(아침에 하루 전체 취소) 빈 일정으로 위장하지 않는다(IO-7) — BE 도 빈 하루를 해 없음으로 접는다.
+        """
+        kept = tuple(sorted(blocks, key=lambda b: b.window.start))
+        if not kept:
+            notes.append("end_day_nothing_kept")
+            return self._replan_empty("NO_FEASIBLE_SLOT", notes, resolved, unknown)
+        kept_ids = {b.poi_id for b in kept}
+        dropped = sum(1 for s in request.current_slots if PoiId(s.poi_id) not in kept_ids)
+        notes.append(f"end_day: kept {len(kept)} dropped {dropped}")
+        slots = tuple(VisitSlot(
+            poi_id=b.poi_id, start_at=b.window.start, end_at=b.window.end,
+            stay_min=int((b.window.end - b.window.start).total_seconds() // 60),
+            score=0.0, is_llm_score=False) for b in kept)
+        solution = ItinerarySolution(
+            schedule_id=ScheduleId(request.trip_id),
+            days=(DaySolution(date=request.target_date, slots=slots, fixed_blocks=kept),),
+            is_fallback=False, solve_mode=SolveMode.RULE_FALLBACK, assembly_run=None)
+        outcome = core.GenerationOutcome(
+            status=core.GenerationStatus.SUCCESS, solution=solution, scoring_mode=core.ScoringMode.RULE,
+            explanations=(), degradations=(), candidate_count=0,
+            budget=core.allocate(_deadline_budget(request.request_meta), core.OrchestratorConfig()),
+            candidates_summary=None, solved_at=now, slot_alternatives={}, rule_backfill_count=0,
+            repair_hints=None)
+        return self._replan_projection(
+            request, outcome, notes, resolved, unknown, started_ms=started_ms, end_day=True)
+
     def _replan_empty(
         self, code: str, notes: list[str], resolved: list[str], unknown: list[str],
         retrieved: Mapping[str, int] | None = None,
@@ -3340,6 +3427,7 @@ class WiredItineraryOrchestrator:
         started_ms: int,
         past: tuple[FixedBlock, ...] = (),
         composed: bool = False,
+        end_day: bool = False,
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
 
@@ -3385,7 +3473,8 @@ class WiredItineraryOrchestrator:
             placed = {(s.poi_id, s.start_at) for day in solution.days for s in day.slots}
         # 하한 뒤에 새 방문이 0건이면 잠금만 든 하루다 — 그걸 재계획안으로 내면 BE 가
         # 남은 슬롯을 전부 지운 하루로 읽는다. 남은 시간이 없다는 사실을 정직하게 낸다.
-        if not_before is not None and placed <= {(b.poi_id, b.window.start) for b in blocks}:
+        if (not end_day and not_before is not None
+                and placed <= {(b.poi_id, b.window.start) for b in blocks}):
             notes.append(f"no_slot_after_from_instant: {not_before:%H:%M}")
             return self._replan_empty(
                 "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
@@ -3397,7 +3486,7 @@ class WiredItineraryOrchestrator:
         # 구성 LLM 이 하루를 골랐으면 폴백이 아니다 — 점수는 부르지 않은 것이고, PlanB 랭킹은 구성
         # 프롬프트의 참고 재료라 그 강등은 노트(`planb_rank_skipped`)로만 남는다. 구성이 없을 때만
         # 아래 종전 규칙(점수든 PlanB 랭킹이든 규칙으로 내려갔으면 폴백)이다.
-        llm_ok = composed or (
+        llm_ok = composed or end_day or (
             outcome.scoring_mode is core.ScoringMode.LLM and not planb_fallback)
         # 두 순회 모두 1차 패스로 받아 적는다 — 좌표 미상 전파 규칙이 달라 구간 집합이
         # 다르다(`_total_distance_km` 은 직전 유효점을 잇는다). 한 표를 같이 쓰면 같은
@@ -3662,6 +3751,7 @@ class WiredItineraryOrchestrator:
         solution, _, poi_index, _ = self._reconstruct(
             request.itinerary, meta,
             untimed="reject",  # 편집 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
+            lookup_holidays=False,  # 이 문제는 버린다 — 달력은 에이전트 검증(`_problem_for`)이 1회 묻는다
         )
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
@@ -3746,7 +3836,7 @@ class WiredItineraryOrchestrator:
                 schemas.ViolationSchema(
                     code=v.code,
                     slot_ref=str(v.slot_ref) if v.slot_ref is not None else None,
-                    detail=v.detail, day_index=None, slot_index=None,
+                    detail=v.detail, day_index=None, slot_index=None, reason_code=v.reason_code,
                 )
                 for v in outcome.violations
             ],
@@ -3918,7 +4008,7 @@ class WiredItineraryOrchestrator:
 
     def planb_opportunities(self, request: schemas.OpportunitiesRequest) -> schemas.OpportunitiesResponse:
         """동선 근처 기회(행사·요즘 인기, LLM 0회 · 트리거 아님) — 재료 수집·판정·사영은 `api/opportunities.py`."""
-        return opportunity_projection.find(self._info, self._poi_db, request, self._tz)
+        return opportunity_projection.find(self._info, self._poi_db, request, self._tz, holidays=self._holidays)
 
 # ── 조립 함수 (composition root) ─────────────────────────────────────
 
@@ -3952,6 +4042,7 @@ def build_orchestrator(
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다(ANSWER) — env 해석은 main.py
     shadow_rate: float = 1.0,  # 3단 라우터 섀도 표본율 (DEV 1.0 · 운영 0.2)
     shadow_rng: random.Random | None = None,  # 테스트 결정론용, None 이면 SystemRandom
+    holidays: HolidaySource | None = None,  # 공휴일 휴무 모드·달력 — env 해석은 main.py, 기본 off
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
 
@@ -4024,7 +4115,7 @@ def build_orchestrator(
         ),
         provider,
         estimator,
-        lambda solution: _problem_for(solution, tz),
+        lambda solution: _problem_for(solution, tz, holidays),  # 편집 검증도 같은 휴일 규칙(요청당 1회)
         tz=tz,
     )
     # Reflect 경계 (TRIP-429) — 워커별 게이트 페어링은 위 explainer·edit와 동형
@@ -4166,6 +4257,7 @@ def build_orchestrator(
         directives=directives,
         embedding=embedding,
         vector_store=vector_store,
+        holidays=holidays,
     )
 
 
@@ -4331,6 +4423,7 @@ def build_dev_app(
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다 — env 해석은 main.py, 기본 off(종전 해석 경로)
     shadow_rate: float = 1.0,
     shadow_rng: random.Random | None = None,
+    holidays: HolidaySource | None = None,  # 공휴일 휴무(상황 감지 H1) — env 해석은 main.py, 기본 off
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -4390,5 +4483,6 @@ def build_dev_app(
         dialogue_orchestrator_enabled=dialogue_orchestrator_enabled,
         shadow_rate=shadow_rate,
         shadow_rng=shadow_rng,
+        holidays=holidays,
     )
     return create_app(orchestrator)

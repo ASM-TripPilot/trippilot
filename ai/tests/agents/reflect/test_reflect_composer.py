@@ -35,7 +35,7 @@ from trippilot.agents.reflect.composer import (
     SAFE_CAPTION_BY_LAYOUT,
     safe_caption,
     apply_hard_replacements,
-    bind_poi_names,
+    bind_placeholders,
     finalize,
     rank_key,
 )
@@ -59,6 +59,7 @@ from trippilot.domain.reflection import (
     ReflectionKind,
     ReflectionRequest,
     ReflectionTemplate,
+    Scene,
     SceneLayout,
     SourceEventKind,
     TemplateCandidate,
@@ -322,7 +323,7 @@ def test_rfl_p5_all_attempts_failed_yields_fixed_fallback_and_events() -> None:
         template = ReflectAgent(worker, trace).run(ReflectTask(_REQUEST, _TID, _NOW))
         assert template.is_fallback is True
         # 결정론 — 같은 (kind, trace_id, now)의 고정 폴백과 완전 동일
-        assert template == build_fallback_template(_REQUEST.kind, _TID, _NOW)
+        assert template == bind_placeholders(build_fallback_template(_REQUEST.kind, _TID, _NOW), _REQUEST)
         records = trace.of_type(LlmCallRecord)
         assert len(records) == MAX_ATTEMPTS
         assert all(r.success is False for r in records)  # 시도별 실패 계측 (BR-U4-03)
@@ -340,7 +341,7 @@ def test_rfl_p5_pbt_compose_never_raises_never_silent(raw: str) -> None:
     template = ReflectAgent(worker, trace).run(ReflectTask(_REQUEST, _TID, _NOW))
     assert isinstance(template, ReflectionTemplate)
     if template.is_fallback:
-        assert template == build_fallback_template(_REQUEST.kind, _TID, _NOW)
+        assert template == bind_placeholders(build_fallback_template(_REQUEST.kind, _TID, _NOW), _REQUEST)
         assert any(e.component == "agents.reflect" for e in trace.of_type(FallbackEvent))
     assert trace.of_type(LlmCallRecord)  # 성공·실패 불문 시도는 계측된다
 
@@ -763,36 +764,37 @@ def test_total_elapsed_never_exceeds_budget(latency: float, budget: float, clean
         assert MIN_ATTEMPT_SEC <= timeout <= remaining
 
 
-# ── {poi:i.name} 바인딩 — i 는 요청 visits 순서라 그 순서를 아는 우리가 채운다 ─────
+# ── 자리표시자 바인딩 — 와이어에 나가는 문구는 다 채워져 있다 ────────────────────
+# FE 는 장면 캡션을 그대로 그리고(ReflectionScenes.tsx), fillTemplate 은 부제에만 쓰며 3종만 안다.
+_TOKEN = re.compile(r'\{[^{}"]+\}')  # 직렬화된 JSON 속 자리표시자 — 따옴표 든 JSON 객체는 제외
 
 
-def test_finalize_binds_poi_names_in_title_captions_and_hashtags() -> None:
-    """장소 토큰은 실제 이름으로, 나머지 어휘({region}·날짜·개수·거리)는 렌더러 몫이라 그대로.
-
-    FE fillTemplate 는 region·날짜 3종만 알고 모르는 토큰을 빈칸으로 지운다 — 장소 토큰을
-    남겨 보내면 "{poi:1.name}에서 보낸 저녁" 이 "에서 보낸 저녁" 으로 깨진다."""
+def test_finalize_binds_every_placeholder_it_knows() -> None:
+    """장소 이름·지역·날짜·개수를 다 채운다. 렌더러가 채워 준다는 전제는 틀렸다 —
+    남겨 보내면 화면에 "{visit_count}곳" 이 중괄호째 찍힌다."""
     request = replace(_REQUEST, visits=(
         _visit(_REF1, "광안리 해수욕장", photos=2), _visit(_REF2, "해운대 해수욕장", photos=3)))
     body = {
         "cover": {"title": "{poi:0.name}에서 시작한 이틀",
-                  "subtitle": "{region} · {start_date}~{end_date}"},
+                  "subtitle": "{region} 바다를 따라 {start_date}~{end_date} 이틀을 걸었다"},
         "scenes": [
             {"layout": "PHOTO_CAPTION",
              "photo_slot": {"visit_ref": {"date": "2026-08-02", "poi_id": "poi-2"}},
              "caption": "{poi:1.name}에서 보낸 저녁"},
-            *_CLEAN_BODY["scenes"][1:],
+            {"layout": "STATS", "caption": "{visit_count}곳, 사진 {photo_count}장"},
+            {"layout": "MAP", "caption": "{region}에서 우리가 지나온 길"},
         ],
-        "hashtags": ["#{poi:1.name}", "#부산여행"],
+        "hashtags": ["#{poi:1.name}", "#{region}여행"],
     }
     worker, trace = _compose_env(ScriptedLlm(_raw(body)))
     template = ReflectAgent(worker, trace).run(ReflectTask(request, _TID, _NOW))
 
     assert template.cover.title == "광안리 해수욕장에서 시작한 이틀"
-    assert template.cover.subtitle == "{region} · {start_date}~{end_date}"  # 렌더러 몫
-    assert template.scenes[0].caption == "해운대 해수욕장에서 보낸 저녁"
-    assert template.scenes[1].caption == "{visit_count}곳 · {distance_km}km"  # 렌더러 몫
-    assert "#해운대해수욕장" in template.hashtags  # 태그는 공백을 못 담는다
-    assert "{poi:" not in json.dumps(template.to_dict(), ensure_ascii=False)
+    assert template.cover.subtitle == "부산 바다를 따라 2026-08-01~2026-08-02 이틀을 걸었다"
+    assert [s.caption for s in template.scenes] == [
+        "해운대 해수욕장에서 보낸 저녁", "2곳, 사진 5장", "부산에서 우리가 지나온 길"]
+    assert template.hashtags == ("#해운대해수욕장", "#부산여행")  # 태그는 공백을 못 담는다
+    assert _TOKEN.search(json.dumps(template.to_dict(), ensure_ascii=False)) is None
 
 
 def test_finalize_binds_the_safe_caption_that_replacement_wrote() -> None:
@@ -817,28 +819,76 @@ def test_finalize_binds_the_safe_caption_that_replacement_wrote() -> None:
     assert template.scenes[0].caption == "해운대 해수욕장에서의 기억"
 
 
-def test_bind_poi_names_leaves_what_it_cannot_resolve() -> None:
-    """범위 밖 인덱스·공백 섞인 토큰(게이트도 장소 토큰으로 안 본다)·빈 이름·다른 어휘는 그대로."""
-    base = build_fallback_template(_REQUEST.kind, _TID, _NOW)
-    t = replace(
-        base,
-        cover=replace(base.cover,
-                      title="{poi:9.name} {poi: 0.name} {poi:1.name} {poi:0.name} {region}"),
-        hashtags=("#{poi:0.name}", "#{poi:7.name}"),
+def _bound(request: ReflectionRequest, **cover_and_rest) -> ReflectionTemplate:
+    base = build_fallback_template(request.kind, _TID, _NOW)
+    cover = replace(base.cover, **{k: v for k, v in cover_and_rest.items()
+                                   if k in ("title", "subtitle")})
+    rest = {k: v for k, v in cover_and_rest.items() if k in ("scenes", "hashtags")}
+    return bind_placeholders(replace(base, cover=cover, **rest), request)
+
+
+def test_what_cannot_be_bound_is_rewritten_never_leaked() -> None:
+    """못 채우는 토큰은 지우지 않고 **문구를 바꾼다** — 지우기만 하면 "{distance_km}km" 가 "km" 로 남는다.
+
+    거리는 요청에 없고, 사진 0장이면 사진 수를 쓰지 않으며, 빈 이름·범위 밖 인덱스는 값이 없다.
+    빈 제목·빈 캡션도 같은 길이다(BE 는 빈 제목 카드를 버리고 FE 는 빈 캡션 장면을 버린다)."""
+    photoless = replace(_REQUEST, visits=(
+        _visit(_REF1, "감천문화마을", photos=0), _visit(_REF2, "  ", photos=0)))
+    out = _bound(
+        photoless,
+        title="  ",
+        scenes=(
+            Scene(layout=SceneLayout.STATS, photo_slot=None, caption="{distance_km}km를 따라"),
+            Scene(layout=SceneLayout.STATS, photo_slot=None, caption="사진 {photo_count}장의 기억"),
+            Scene(layout=SceneLayout.MAP, photo_slot=None, caption="{poi:1.name}까지 이어진 길"),
+            Scene(layout=SceneLayout.MAP, photo_slot=None, caption="{poi: 0.name} 공백 토큰"),
+            Scene(layout=SceneLayout.STATS, photo_slot=None, caption=" "),
+        ),
+        hashtags=("#{distance_km}km", "#{poi:7.name}", "#{poi:0.name}", "#"),
     )
-    out = bind_poi_names(t, ("광안리 해수욕장", "  "))
+    assert out.cover.title == "부산 여행의 기록"  # 폴백 제목
+    assert [s.caption for s in out.scenes] == [
+        "이번 여행의 발자취를 한눈에", "이번 여행의 발자취를 한눈에",
+        "부산에서 우리가 지나온 길", "부산에서 우리가 지나온 길", "이번 여행의 발자취를 한눈에"]
+    assert out.hashtags == ("#감천문화마을",)
 
-    assert out.cover.title == "{poi:9.name} {poi: 0.name} {poi:1.name} 광안리 해수욕장 {region}"
-    assert out.hashtags == ("#광안리해수욕장", "#{poi:7.name}")
-    assert out.scenes == base.scenes  # 토큰 없는 문구는 손대지 않는다
+
+def test_without_a_region_the_last_resort_text_carries_no_token() -> None:
+    """지역마저 비면 폴백 제목·MAP 안전 문구도 못 채운다 — 토큰 없는 문구까지 내려간다."""
+    out = _bound(replace(_REQUEST, region=" "),
+                 title="{region}의 하루",
+                 scenes=(Scene(layout=SceneLayout.MAP, photo_slot=None, caption="{region} 산책"),))
+    assert out.cover.title == "여행의 기록"
+    assert out.scenes[0].caption == "오래 남겨두고 싶은 장면"
 
 
-@given(case=polluted_reflection_cases())
+def test_template_only_subtitle_is_left_for_the_renderer() -> None:
+    """자리표시자뿐인 부제는 FE 가 "서술 없음"으로 읽고 통계 문장을 그린다(TRIP-1425) — 채우면
+    "부산 · 2026-08-01~2026-08-02" 가 회고 본문 자리에 앉는다. 서술 부제를 못 채우면 그 꼴로 되돌린다."""
+    assert _bound(_REQUEST).cover.subtitle == FALLBACK_COVER_SUBTITLE
+    assert _bound(_REQUEST, subtitle="{visit_count}").cover.subtitle == "{visit_count}"
+    assert _bound(_REQUEST, subtitle="{distance_km}km 를 걸었다").cover.subtitle == FALLBACK_COVER_SUBTITLE
+    assert _bound(_REQUEST, subtitle="").cover.subtitle == FALLBACK_COVER_SUBTITLE
+
+
+def test_same_day_range_folds_to_one_date() -> None:
+    """하루 회고는 시작=끝 — "2026-08-01~2026-08-01" 대신 날짜 하나(FE fillTemplate 와 같은 규칙)."""
+    day = replace(_REQUEST, kind=ReflectionKind.DAILY, end_date=_D1,
+                  visits=(_visit(_REF1, "감천문화마을", photos=1),))
+    out = _bound(day, subtitle="{start_date} ~ {end_date}, {region}의 골목을 걸었다")
+    assert out.cover.subtitle == "2026-08-01, 부산의 골목을 걸었다"
+
+
+@given(case=polluted_reflection_cases(), parsed=st.booleans())
 @settings(max_examples=120, deadline=None)
-def test_finalize_output_never_carries_a_poi_token(case) -> None:
-    """오염된 후보(범위 밖 토큰·환각 참조·사진 0장 슬롯 섞임)를 어떻게 넣어도, finalize 를
-    지난 카드에는 장소 토큰이 하나도 없다 — 범위 밖은 교체가 지우고, 범위 안은 바인딩이 채운다."""
+def test_finalize_output_never_carries_a_placeholder(case, parsed: bool) -> None:
+    """오염된 후보(범위 밖 토큰·환각 참조·사진 0장 슬롯 섞임)든 전 시도 실패 폴백이든, finalize 를
+    지난 카드에는 자리표시자가 하나도 없다 — 자리표시자뿐인 부제(FE 의 "서술 없음" 신호)만 예외."""
     request, bodies = case
-    candidate = _gate(request, bodies[0][0], photos=True).value
-    final = finalize([candidate], request, _TID, _NOW, InMemoryTrace())
-    assert re.search(r"\{poi:\d+\.name\}", json.dumps(final.to_dict(), ensure_ascii=False)) is None
+    candidates = [_gate(request, bodies[0][0], photos=True).value] if parsed else []
+    final = finalize(candidates, request, _TID, _NOW, InMemoryTrace())
+    wire = final.to_dict()
+    if final.cover.subtitle == FALLBACK_COVER_SUBTITLE or re.fullmatch(
+            r"[\s·~]*(\{[^{}]*\}[\s·~]*)+", final.cover.subtitle):
+        wire["cover"]["subtitle"] = ""
+    assert _TOKEN.search(json.dumps(wire, ensure_ascii=False)) is None

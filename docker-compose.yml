@@ -304,6 +304,9 @@ services:
       TRIPPILOT_DIALOGUE_ORCHESTRATOR: ${AI_DIALOGUE_ORCHESTRATOR:-}
       # 섀도 분류 측정(기존 IntentRouter 를 그늘에서 같이 돌려 일치율을 `intent_shadow` 로 남김) 샘플링 0~1 — 비우면 1.0.
       TRIPPILOT_DIALOGUE_SHADOW_RATE: ${AI_DIALOGUE_SHADOW_RATE:-}
+      # 공휴일 휴무(상황 감지 H1) — on|off. 특일 달력 키는 PUBLIC_DATA_API_KEY(특일 활용신청 계정), 비면
+      # WEATHER_API — 그 계정에 특일 활용신청이 없으면 30(키 미등록)이라 날짜 명시형 규칙만 돈다.
+      HOLIDAY_CLOSURE_MODE: ${HOLIDAY_CLOSURE_MODE:-off}
       # 임베딩 공급자 — openai(기본) | titan | local. **이 통로가 없어서** 컨테이너가
       # 늘 openai 로 떨어졌고, 멘토 Azure 엔드포인트에는 임베딩 배포가 없어 KB 검색
       # 3종이 전부 404(DeploymentNotFound)로 죽었다(2026-09-01 실측). 규칙 폴백이

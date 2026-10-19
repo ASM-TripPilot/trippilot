@@ -4,7 +4,7 @@
 N회 생성 → 최선 채택"이고, 시도의 실패는 **파싱 실패(스키마 불성립)뿐**이다.
 검증 가능 항목의 위반은 TemplateViolation 목록으로 동봉해 후보를 살려 반환한다
 (GateOutcome.value = TemplateCandidate — FD business-logic §3 ③). N회 루프·랭킹·
-장면 교체는 agents/reflect(composer, 후속) 소유 — 게이트는 판정만 한다.
+장면 교체는 agents/reflect/composer.py 소유 — 게이트는 판정만 한다.
 
 파싱 실패(= error, 게이트웨이가 폴백 신호로 전환)의 경계는 도메인 타입 성립 여부다:
 JSON 아님 · 최상위 {"template": …} 아님 · 필드 누락/타입 오류 · layout·source_event
@@ -22,7 +22,7 @@ enum 밖 · PHOTO_* 장면에 photo_slot 없음 · EVENT 장면에 source_event 
   소프트 — CAPTION_LEN(40자 초과) · SCENE_COUNT(3~8 밖) · DUP_VISIT_REF(장면 간 중복) ·
          HASHTAG_OUT(지역·방문지·브랜드 파생 아님 — TRIP-558로 하드에서 강등)
 해시태그도 TIME_EXPR·PLACEHOLDER_OUT 검사는 받고, 그쪽은 하드다 (BR-U6R-04).
-장면 3~8·캡션 40자는 잠정값 (FD 미결 #4 — remote config 후보).
+장면 3~8·캡션 40자는 FD 미결 #4 에서 확정 (FE 의견이 오면 상수만 조정).
 
 "error 있으면 value 비움" 불변식은 base.GateOutcome이 강제한다. 산출이 **후보 1건**
 이라 "빈 결과"라는 상태가 없다 — TemplateCandidate가 성립하거나 error다
@@ -59,7 +59,7 @@ from trippilot.domain.reflection import (
     VisitRef,
 )
 
-# 잠정값 (FD 미결 #4 — FE 렌더러 의견 시 값만 조정, 프롬프트 문구와 동일 값을 테스트가 고정)
+# FD 미결 #4 에서 확정 (FE 렌더러 의견 시 값만 조정, 프롬프트 문구와 동일 값을 테스트가 고정)
 _SCENE_MIN = 3
 _SCENE_MAX = 8
 _CAPTION_MAX = 40
@@ -92,6 +92,7 @@ _BRAND_TAGS: frozenset[str] = frozenset({"트립파일럿", "trippilot"})
 # 자리표시자 스캔 — 어휘 멤버십은 domain.reflection.PLACEHOLDER_VOCAB (closed-set)
 _PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
 _POI_PLACEHOLDER = re.compile(POI_PLACEHOLDER_PATTERN)
+_BOUND_TAG = re.compile(r"\{(?:region|" + POI_PLACEHOLDER_PATTERN + r")\}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,13 +121,34 @@ def _tag_allowed(tag: str, sources: tuple[str, ...]) -> bool:
 
     부분 포함으로 두는 이유 — "#제주여행"처럼 지역명에 접사가 붙는 합성이
     자연스럽고, 정확 일치만 보면 정당한 태그가 전부 위반이 된다.
+
+    양쪽 공백을 지우고 비교한다 — 태그는 공백을 못 담아서, 원문 그대로면 "해운대 해수욕장"
+    같은 다어절 이름(수집 POI 25.8%)에서 정당한 `#해운대해수욕장` 이 구조적으로 위반이 된다.
     """
-    body = tag.lstrip("#").strip()
+    body = "".join(tag.lstrip("#").split())
     if not body:
         return True  # 빈 태그는 파서가 이미 거부 — 여기선 판정 대상 아님
     if body.lower() in _BRAND_TAGS:
         return True
-    return any(src.strip() and src.strip() in body for src in sources)
+    return any((src := "".join(s.split())) and src in body for s in sources)
+
+
+def _rendered_len(text: str, ctx: ReflectionTemplateContext) -> int:
+    """화면에 나갈 길이 — 자리표시자는 composer 가 채울 값의 길이로 잰다.
+
+    원문 길이로 재면 계약 예시 `{visit_count}곳 · {distance_km}km · 사진 {photo_count}장`
+    이 52자로 위반이 되고, 반대로 긴 장소명은 토큰(12자)으로 숨어 40자를 넘겨 나간다.
+    """
+    def width(m: re.Match) -> str:
+        token = m.group(1)
+        poi_m = _POI_PLACEHOLDER.fullmatch(token)
+        if poi_m is not None:
+            i = int(poi_m.group(1))
+            return ctx.poi_names[i] if i < len(ctx.poi_names) else ""
+        if token == "region":
+            return ctx.region.strip()
+        return "0000-00-00" if token.endswith("_date") else "00"  # 날짜 10자 · 수 2자
+    return len(_PLACEHOLDER.sub(width, text))
 
 
 class ReflectionTemplateGate:
@@ -354,13 +376,13 @@ class ReflectionTemplateGate:
         seen_refs: set[VisitRef] = set()
         for i, scene in enumerate(template.scenes):
             check_text(scene.caption, i, f"scenes[{i}].caption")
-            if len(scene.caption) > _CAPTION_MAX:
+            if (n := _rendered_len(scene.caption, ctx)) > _CAPTION_MAX:
                 violations.append(
                     TemplateViolation(
                         grade=ViolationGrade.SOFT,
                         code=ViolationCode.CAPTION_LEN,
                         scene_index=i,
-                        detail=f"캡션 {len(scene.caption)}자 > {_CAPTION_MAX}자",
+                        detail=f"캡션 {n}자 > {_CAPTION_MAX}자",
                     )
                 )
             if scene.photo_slot is not None:
@@ -394,7 +416,8 @@ class ReflectionTemplateGate:
         )
         for i, tag in enumerate(template.hashtags):
             check_text(tag, None, f"hashtags[{i}]")
-            if sources and not _tag_allowed(tag, sources):
+            # `{region}`·`{poi:i.name}` 태그는 composer 가 지역·장소 이름으로 채운다 — 파생이 보장된다
+            if sources and not (_BOUND_TAG.search(tag) or _tag_allowed(tag, sources)):
                 violations.append(
                     TemplateViolation(
                         grade=ViolationGrade.SOFT,

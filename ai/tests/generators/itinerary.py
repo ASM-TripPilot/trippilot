@@ -90,6 +90,8 @@ def violations(draw) -> Violation:
             st.one_of(st.none(), st.builds(PoiId, st.text(min_size=1, max_size=8)))
         ),
         detail=draw(st.text(max_size=30)),
+        # HC1 하위 코드(상황 감지 H1) — 없을 수도(종전·다른 HC) 있다
+        reason_code=draw(st.one_of(st.none(), st.sampled_from(["CLOSED_DAY", "OUT_OF_HOURS", "HOLIDAY"]))),
     )
 
 
@@ -133,6 +135,10 @@ def itinerary_problems(draw) -> ItineraryProblem:
         day_window=draw(time_windows()),
         seed=draw(st.integers(min_value=0, max_value=2**31)),
         anchor=draw(st.one_of(st.none(), geo_points())),
+        # 공휴일 달력(상황 감지 H1) — None(모드 off)과 빈 매핑(달력 실패)은 뜻이 다르다, 둘 다 왕복해야 한다
+        holidays=draw(st.one_of(st.none(), st.dictionaries(
+            _dates(), st.frozensets(st.sampled_from(["PUBLIC", "SEOLLAL_DAY", "BUDDHA"]), min_size=1),
+            max_size=3))),
     )
 
 

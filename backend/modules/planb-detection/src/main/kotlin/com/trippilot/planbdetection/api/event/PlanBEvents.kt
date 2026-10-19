@@ -38,5 +38,8 @@ data class PlanBTriggered(
     override val aggregateType: String = "PlanBTrigger"
 }
 
-/** 그 날의 위험 한 건 — kind·변형·영향 POI 만 싣는다. */
-data class DateRisk(val kind: String, val variant: String?, val poiIds: List<String>)
+/**
+ * 그 날의 위험 한 건 — kind·변형·영향 POI·영향 범위만 싣는다.
+ * [coverage] 는 날씨의 영향 범위(`MOST`·`SOME`)다 — 선계산이 영향 POI 를 뺄지 가르는 재료(G-SA-11). 모르면 null(옛 구독자 무해).
+ */
+data class DateRisk(val kind: String, val variant: String?, val poiIds: List<String>, val coverage: String? = null)
