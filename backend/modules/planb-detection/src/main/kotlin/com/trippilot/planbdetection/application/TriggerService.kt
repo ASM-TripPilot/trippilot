@@ -160,6 +160,39 @@ class TriggerService(
         slots: List<PlannedSlotView>,
         observations: List<Observation>,
     ): ReconcileOutcome {
+        val (plan, dropped) = planSweep(accountId, tripId, period, now, itinerary, slots, observations)
+        write(accountId, tripId, plan)
+        return outcomeOf(plan, dropped)
+    }
+
+    /**
+     * dry-run 의 판정 — [reconcile] 과 같은 계획을 세우되 **쓰지 않는다**(행·사건·만료 0 · BR-SA-04).
+     * 켰다면 낼 알림·푸시·조용한 발화·만료 수를 돌려준다 — 운영 dry-run 이 첫 켜기 몰림 규모를 이 수로 잰다(켜기 3단계).
+     */
+    @Transactional(readOnly = true)
+    fun preview(
+        accountId: UUID,
+        tripId: UUID,
+        period: TripPeriod,
+        now: Instant,
+        itinerary: ItineraryRef?,
+        slots: List<PlannedSlotView>,
+        observations: List<Observation>,
+    ): ReconcileOutcome {
+        val (plan, dropped) = planSweep(accountId, tripId, period, now, itinerary, slots, observations)
+        return outcomeOf(plan, dropped)
+    }
+
+    /** 스윕 판정의 계획(쓰기 없음)과 가드에 걸려 버린 신호 수 — [reconcile]·[preview] 가 같이 쓴다. */
+    private fun planSweep(
+        accountId: UUID,
+        tripId: UUID,
+        period: TripPeriod,
+        now: Instant,
+        itinerary: ItineraryRef?,
+        slots: List<PlannedSlotView>,
+        observations: List<Observation>,
+    ): Pair<TriggerLifecycle.Plan, Int> {
         val today = LocalDate.ofInstant(now, TRAVEL_ZONE)
         val allowed = TriggerLifecycle.allowedDates(today, period.startDate, period.endDate, includeTomorrow = true)
         val names = slots.mapNotNull { it.nameKo }
@@ -206,15 +239,16 @@ class TriggerService(
                 sweep = true,
             ),
         )
-        write(accountId, tripId, plan)
-        return ReconcileOutcome(
-            announced = plan.announcement != null,
-            pushed = plan.announcement?.push == true,
-            quiet = plan.quiet,
-            expired = plan.expired,
-            dropped = dropped,
-        )
+        return plan to dropped
     }
+
+    private fun outcomeOf(plan: TriggerLifecycle.Plan, dropped: Int) = ReconcileOutcome(
+        announced = plan.announcement != null,
+        pushed = plan.announcement?.push == true,
+        quiet = plan.quiet,
+        expired = plan.expired,
+        dropped = dropped,
+    )
 
     /**
      * 화면에는 **발화 중이고 지금 유효한 것만** 나간다(INV-U4-01 · 규칙 14) — 지난 날·지금 일정에 없는 슬롯·꺼진 감시 출처는 숨긴다.

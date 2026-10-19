@@ -274,10 +274,10 @@ class SituationSweepTest : StringSpec({
         forecast.calls.shouldBeEmpty()
     }
 
-    "dry-run — 감지기는 부르고 요약에 남기지만 쓰기는 0이다(트리거·사건·만료·감시 상태 없음)" {
+    "dry-run — 감지·판정은 하되 쓰기는 0이다(트리거·사건·만료·감시 상태 없음), 켰다면 냈을 사건·만료 수를 요약에 센다" {
         val world = World()
         val tripId = world.trip()
-        val stale = world.plant(tripId, DAY.minusDays(1)) // reconcile 이 돌면 지난 날이라 만료될 행
+        val stale = world.plant(tripId, DAY.minusDays(1)) // 켰다면 지난 날이라 만료될 행
         val forecast = FakeDetector(SweepSource.KMA_FORECAST, answer = ::rain)
 
         val summary = world.sweep(props(mode = SweepMode.DRY_RUN), listOf(forecast), StepClock(at("12:15"))).sweep(at("12:15"))
@@ -285,9 +285,26 @@ class SituationSweepTest : StringSpec({
         forecast.calls.size shouldBe 1
         summary.trips shouldBe 1
         summary.mode shouldBe SweepMode.DRY_RUN
+        // 운영 dry-run 이 재는 것 — 첫 켜기 몰림 규모(켜기 3단계). 0 으로 찍히면 '켜도 조용하다'로 읽힌다.
+        summary.announced shouldBe 1
+        summary.pushed shouldBe 1
+        summary.expired shouldBe 1
         world.rows(tripId) shouldBe listOf(stale)
         world.events.published.shouldBeEmpty()
         world.watches.all.shouldBeEmpty()
+    }
+
+    "dry-run 의 판정은 켰을 때와 같은 출처만 본다 — 관찰 전용 출처의 신호는 세지 않는다" {
+        val world = World()
+        world.trip()
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST)
+        val warning = FakeDetector(SweepSource.KMA_WARNING, answer = ::rain)
+
+        val summary = world.sweep(props(mode = SweepMode.DRY_RUN), listOf(forecast, warning), StepClock(at("12:15"))).sweep(at("12:15"))
+
+        warning.calls.size shouldBe 1
+        summary.announced shouldBe 0
+        world.events.published.shouldBeEmpty()
     }
 
     "on — 감지 결과를 판정으로 쓰고(사건 1건) 부른 출처의 감시 상태를 남긴다" {

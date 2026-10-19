@@ -240,7 +240,7 @@ class SituationSweepIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `dry-run 은 감지만 하고 쓰기가 0이다 — 트리거·사건·감시 상태 없음`() {
+    fun `dry-run 은 감지·판정만 하고 쓰기가 0이다 — 트리거·사건·감시 상태 없음, 켰다면 냈을 사건은 센다`() {
         val tripId = confirmedTrip()
         stub.answers[tripId] = ::rainTomorrow
         val dryRun = SituationSweep(
@@ -252,6 +252,7 @@ class SituationSweepIT : AbstractPostgresIntegrationTest() {
 
         stub.seen.filter { it.first == tripId } shouldBe listOf(tripId to tomorrow)
         summary.mode shouldBe SweepMode.DRY_RUN
+        summary.announced shouldBe 1 // 실 판정이 읽기 전용 트랜잭션에서 돈다 — 첫 켜기 몰림 규모
         rowCount(tripId) shouldBe 0
         events(tripId).shouldBeEmpty()
         watches.findByTrip(tripId).shouldBeEmpty()

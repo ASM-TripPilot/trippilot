@@ -211,16 +211,19 @@ class SituationSweep(
             if (itinerary?.status != CONFIRMED) return
             val slots = plans.findPlanSlots(trip.accountId, trip.tripId)
             val observations = observe(round, trip, slots, rows.findActiveByTrip(trip.tripId), at)
-            val (written, observed) = observations.partition { props.mode == SweepMode.ON && writes(it.source) }
-            sample(trip, observed)
+            // 판정에 드는 관측 = 켰을 때 쓰는 출처(목록 안 ∧ 관찰 전용 아님). 쓰지 않는 결과(관찰 전용 · dry-run 전부)는 표본 줄로.
+            val (judged, unjudged) = observations.partition { writes(it.source) }
+            sample(trip, if (props.mode == SweepMode.ON) unjudged else observations)
+            val writeAt = round.now()
+            if (!round.scope.writable(writeAt)) { // 감지하는 사이 20:58 을 넘겼다 — 쓰지 않는다(dry-run 도 켰을 때와 같은 수를 센다)
+                round.skipped.incrementAndGet()
+                return
+            }
             if (props.mode == SweepMode.ON) {
-                val writeAt = round.now()
-                if (!round.scope.writable(writeAt)) { // 감지하는 사이 20:58 을 넘겼다 — 쓰지 않는다
-                    round.skipped.incrementAndGet()
-                    return
-                }
-                round.tally(reconcile(trip, writeAt, itinerary, slots, written))
-                record(trip, written, writeAt)
+                round.tally(reconcile(trip, writeAt, itinerary, slots, judged))
+                record(trip, judged, writeAt)
+            } else { // dry-run — 같은 판정을 쓰기 없이 돌려 켰다면 낼 사건·만료 수만 센다
+                round.tally(triggers.preview(trip.accountId, trip.tripId, trip.period, writeAt, itinerary, slots, judged))
             }
             round.trips.incrementAndGet()
         } catch (e: Exception) {
@@ -255,14 +258,11 @@ class SituationSweep(
     /** 대상 유일 키 위반이면 새 트랜잭션으로 한 번 다시 판정한다(RES-SA-05) — 다른 경로(날씨 확인 등)의 같은 대상 INSERT 와 겹친 것이다. */
     private fun reconcile(
         trip: WatchedTrip, at: Instant, itinerary: ItineraryRef, slots: List<PlannedSlotView>, observations: List<Observation>,
-    ): ReconcileOutcome {
-        val period = TripPeriod(trip.startDate, trip.endDate)
-        return try {
-            triggers.reconcile(trip.accountId, trip.tripId, period, at, itinerary, slots, observations)
-        } catch (e: DataIntegrityViolationException) {
-            log.info("상황 스윕 — 대상 유일 키 경합, 새 트랜잭션으로 한 번 다시 판정합니다. tripId={}", trip.tripId)
-            triggers.reconcile(trip.accountId, trip.tripId, period, at, itinerary, slots, observations)
-        }
+    ): ReconcileOutcome = try {
+        triggers.reconcile(trip.accountId, trip.tripId, trip.period, at, itinerary, slots, observations)
+    } catch (e: DataIntegrityViolationException) {
+        log.info("상황 스윕 — 대상 유일 키 경합, 새 트랜잭션으로 한 번 다시 판정합니다. tripId={}", trip.tripId)
+        triggers.reconcile(trip.accountId, trip.tripId, trip.period, at, itinerary, slots, observations)
     }
 
     /**
@@ -415,7 +415,8 @@ class SituationSweep(
  *
  * `trips` 본 여행 · `skipped` 예산·종료·20:58 로 못 본 여행 · `failed` 일정 조회·판정이 실패한 여행 ·
  * `live`/`observe`/`off` 쓴 출처·관찰 전용 출처·안 부른 출처 · `unknown` 출처별 모름 수 · `announced`/`pushed`/`quiet`/`expired`
- * 알림 사건·그중 푸시·조용한 발화·만료 · `elapsedMs` 회차 소요 · `detectorMs` 출처별 감지 지연 p50/p95.
+ * 알림 사건·그중 푸시·조용한 발화·만료(dry-run 은 켰다면 냈을 수 — 쓰지 않는 판정) · `elapsedMs` 회차 소요 ·
+ * `detectorMs` 출처별 감지 지연 p50/p95.
  */
 data class SweepSummary(
     val mode: SweepMode,
@@ -443,6 +444,8 @@ data class SweepSummary(
 }
 
 private fun Collection<String>.listed(): String = sorted().joinToString(",", "[", "]")
+
+private val WatchedTrip.period: TripPeriod get() = TripPeriod(startDate, endDate)
 
 /**
  * 회차 하나가 보는 범위(설계서 규칙 1 · BR-SA-01) — 단계·오늘(KST)·지평.
