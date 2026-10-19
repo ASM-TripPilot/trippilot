@@ -5,6 +5,7 @@ import {
   fakePushResponse,
   lastPushReceiveListener,
   lastPushTapListener,
+  primeOsLastResponse,
 } from '@/test-support/pushOsFake';
 
 import {
@@ -41,8 +42,12 @@ const PLAN_B_DATA = {
   triggerId: 'trigger-1',
 };
 
+/** 켜진 앱에서 누른 탭 — OS 는 리스너에 보내는 것과 별개로 그 탭을 "마지막 응답" 칸에 넣는다(`primeOsLastResponse`). */
+let osTap: ReturnType<typeof primeOsLastResponse>;
+
 beforeEach(() => {
   jest.clearAllMocks();
+  osTap = primeOsLastResponse(Notifications);
 });
 
 describe('포그라운드 표시 정책 — installForegroundPresentation', () => {
@@ -109,6 +114,34 @@ describe('수신·탭 구독 — onPushReceived · onPushTapped', () => {
     lastPushTapListener(Notifications)(fakePushResponse('n3', null));
 
     expect(tapped).toHaveBeenCalledWith({ id: 'n3', data: {} });
+  });
+
+  it('R8 넘긴 탭은 OS 의 "마지막 응답" 칸에서도 지운다 — 루트가 다시 마운트돼 takeLaunchPushTap 을 다시 불러도 같은 탭이 안 나온다', async () => {
+    // 준비 — 앱이 켜져 탭을 구독하고 있다.
+    const tapped = jest.fn();
+    onPushTapped(tapped);
+
+    // 실행 — 켜진 앱에서 누른다(OS 는 리스너에 보내면서 칸에도 넣는다).
+    osTap(fakePushResponse('n2', PLAN_B_DATA));
+
+    // 단언 — 넘겼고, 콜드 스타트 탭으로 다시 꺼내지지 않는다.
+    expect(tapped).toHaveBeenCalledWith({ id: 'n2', data: PLAN_B_DATA });
+    await expect(takeLaunchPushTap()).resolves.toBeNull();
+  });
+
+  it('R9 칸 지우기가 실패해도 탭은 그대로 넘긴다', () => {
+    // 준비 — Once 큐가 아니라 구현으로 건다(큐는 clearAllMocks 가 안 비워, 안 불리면 다음 테스트로 샌다). 다음 beforeEach 가 되돌린다.
+    clearLast.mockImplementation(async () => {
+      throw new Error('네이티브 모듈 없음');
+    });
+    const tapped = jest.fn();
+    onPushTapped(tapped);
+
+    // 실행
+    lastPushTapListener(Notifications)(fakePushResponse('n4', PLAN_B_DATA));
+
+    // 단언
+    expect(tapped).toHaveBeenCalledWith({ id: 'n4', data: PLAN_B_DATA });
   });
 });
 

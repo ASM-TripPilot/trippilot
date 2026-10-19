@@ -1719,7 +1719,7 @@
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
 - `src/test-support/preventRemoveMock.ts`  →  mockNavigation · useNavigation · usePreventRemove
-- `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken · fakePushNotification · fakePushResponse · lastPushTapListener · lastPushReceiveListener
+- `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken · fakePushNotification · fakePushResponse · lastPushTapListener · primeOsLastResponse · lastPushReceiveListener
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle
 - `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker

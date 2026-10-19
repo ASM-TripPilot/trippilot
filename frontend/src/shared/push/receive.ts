@@ -48,10 +48,17 @@ export function onPushReceived(
   return () => subscription.remove();
 }
 
-/** 사용자가 누른 푸시를 구독한다(앱이 켜져 있거나 백그라운드일 때). 돌려준 함수로 해제한다. */
+/**
+ * 사용자가 누른 푸시를 구독한다(앱이 켜져 있거나 백그라운드일 때). 돌려준 함수로 해제한다.
+ * 넘긴 탭은 OS 의 "마지막 응답" 칸에서도 지운다 — 실물은 켜진 앱의 탭도 그 칸에 남겨서, 두면 루트가 다시 마운트될 때
+ * (안드로이드 Activity 재생성 — JS 런타임은 그대로) `takeLaunchPushTap` 이 이미 처리한 탭을 또 꺼낸다. 지우기 실패는 삼킨다.
+ */
 export function onPushTapped(listener: (event: PushEvent) => void): () => void {
   const subscription = Notifications.addNotificationResponseReceivedListener(
-    (response) => listener(toPushEvent(response.notification))
+    (response) => {
+      void Notifications.clearLastNotificationResponseAsync().catch(() => {});
+      listener(toPushEvent(response.notification));
+    }
   );
   return () => subscription.remove();
 }

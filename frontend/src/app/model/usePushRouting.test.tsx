@@ -13,6 +13,7 @@ import {
   fakePushResponse,
   lastPushReceiveListener,
   lastPushTapListener,
+  primeOsLastResponse,
 } from '@/test-support/pushOsFake';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 
@@ -65,6 +66,8 @@ const TRIGGERS_TRIP_1 = getGetTripsTripIdTriggersQueryKey('trip-1');
 const TRIGGERS_TRIP_2 = getGetTripsTripIdTriggersQueryKey('trip-2');
 
 let client: QueryClient;
+/** 켜진 앱에서 누른 탭 — OS 가 리스너에 보내면서 "마지막 응답" 칸에도 넣는다(`primeOsLastResponse`). */
+let osTap: ReturnType<typeof primeOsLastResponse>;
 
 function mount(initial: GateProps) {
   return renderHook(
@@ -96,6 +99,7 @@ function isInvalidated(key: readonly unknown[]): boolean {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  osTap = primeOsLastResponse(Notifications);
   client = newTestQueryClient();
   client.setQueryData(NOTIFICATIONS_KEY, { items: [] });
   client.setQueryData(TRIGGERS_TRIP_1, []);
@@ -308,5 +312,24 @@ describe('언마운트', () => {
 
     // 단언
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('다시 마운트 — JS 런타임·네이티브 모듈은 그대로, React 트리만 새로', () => {
+  it('W1 켜진 앱에서 처리한 탭은 루트가 다시 마운트돼도(안드로이드 Activity 재생성) 다시 가지 않는다', async () => {
+    // 준비 — 켜진 앱에서 알림을 눌러 그 화면으로 갔다(OS 는 그 탭을 "마지막 응답" 칸에도 넣는다).
+    const first = mount(HOME);
+    act(() => {
+      osTap(fakePushResponse('n1', PLAN_B));
+    });
+    expect(mockPush).toHaveBeenCalledTimes(1);
+
+    // 실행 — 글꼴 크기·언어 변경 등으로 루트가 언마운트됐다가 다시 마운트되고, 콜드 스타트 탭 조회가 끝난다.
+    first.unmount();
+    mount(HOME);
+    await settleLaunchTap();
+
+    // 단언 — 이미 처리한 탭으로 또 가지 않는다.
+    expect(mockPush).toHaveBeenCalledTimes(1);
   });
 });
