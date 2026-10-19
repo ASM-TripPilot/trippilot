@@ -17,7 +17,7 @@
 
 | ID | 규칙 | 비고 |
 |---|---|---|
-| HC1 | `start ≥ open ∧ end ≤ close` | OpenHour close>1440(자정 초과) 규칙 포함 |
+| HC1 | `start ≥ open ∧ end ≤ close` | OpenHour close>1440(자정 초과) 규칙 포함. 그 날 창은 `poi.open_windows_on` 하나 — 휴일 규칙(공휴일·명절·날짜 휴무, `HOLIDAY_CLOSURE_MODE`)까지, 조립 전 경로와 공용(상황 감지 H1). 하위 코드 CLOSED_DAY(정기 휴무 우선) · HOLIDAY · OUT_OF_HOURS |
 | HC2 | `prev.end + travel(prev,next) ≤ next.start` | travel = TravelEstimator (버퍼 15분 포함) |
 | HC3 | 고정 블록 시각 불변 | RepairEngine도 못 건드림 |
 | HC4 | day window 내 · 자정 초과는 시작일 귀속 | 기본 09:00~21:00 |

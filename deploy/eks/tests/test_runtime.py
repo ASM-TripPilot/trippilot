@@ -250,6 +250,18 @@ class SecretTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**base, "ai": bad})
 
+    def test_holiday_closure_mode_is_allowlisted_and_validated(self):
+        """공휴일 휴무 스위치(상황 감지 H1)는 ai 시크릿으로만 켠다. allowlist 에 없으면 시크릿에 넣는 순간 배포
+        전체가 거부되고, 값이 틀리면 AI 가 기동에서 죽는다(main.py: on|off 외 = 기동 실패) — 여기서 먼저 막는다."""
+        self.assertIn("HOLIDAY_CLOSURE_MODE", runtime_secrets.AI_KEYS)
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ("on", "off", ""):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "ai": {"HOLIDAY_CLOSURE_MODE": ok}})
+        for bad in ("true", "ON", "yes", "1"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "ai": {"HOLIDAY_CLOSURE_MODE": bad}})
+
     def test_dialogue_memory_ddl_is_identical_in_both_canons(self):
         """`dialogue_memory` DDL 정본은 둘이다(FD DE §4) — EKS 는 bootstrap.sql(마스터 Job, 매 배포 멱등),
         로컬 compose 는 ai/docker/vector-init/02-dialogue-memory.sql(initdb 1회). 어댑터는 DML 만 하므로

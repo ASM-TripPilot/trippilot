@@ -360,6 +360,19 @@ class ChartTests(unittest.TestCase):
                                  {"name": "trippilot-ai", "key": name, "optional": True})
 
 
+    def test_ai_receives_holiday_closure_mode_from_secret(self):
+        """공휴일 휴무 스위치(상황 감지 H1)는 ai Secret 에서 와야 한다 — allowlist 에 넣어도 차트가 env 로 안 실어 주면
+        시크릿의 on 이 파드에 닿지 않아 조용히 off 로 돈다(위 도우미 스위치와 같은 구멍). optional 이라 값이 없어도
+        기동은 안 막는다(기본 off 는 main.py 가 정한다)."""
+        for environment in ("dev", "prd"):
+            documents = render(environment)
+            ai = next(item for item in documents
+                      if item["kind"] == "Deployment" and item["metadata"]["name"] == "ai")
+            env = {item["name"]: item for item in ai["spec"]["template"]["spec"]["containers"][0]["env"]}
+            self.assertEqual(env["HOLIDAY_CLOSURE_MODE"]["valueFrom"]["secretKeyRef"],
+                             {"name": "trippilot-ai", "key": "HOLIDAY_CLOSURE_MODE", "optional": True})
+
+
 class RequestSizingTests(unittest.TestCase):
     def test_requests_follow_measured_usage(self):
         """2026-10-16 실측으로 요청을 맞췄다 — CPU 요청이 커지면 Karpenter 가 다시 CPU 형 노드를 산다,

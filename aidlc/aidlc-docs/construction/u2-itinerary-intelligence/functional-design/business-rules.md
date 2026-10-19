@@ -43,6 +43,7 @@
 | `isFeasible` | `check_all` |
 
 - **근거**: HC 어휘가 이미 backend 포트 주석·AI 구현·PBT·테스트 전반에 퍼져 있다. 개명 비용이 문서 정정 비용보다 크다.
+- **HC1 하위 코드(2026-10-19, 상황 감지 BR-SA-17)**: 위반은 선택 `reason_code` ∈ {`CLOSED_DAY`, `OUT_OF_HOURS`, `HOLIDAY`} 를 싣는다 — 장소 감지가 알림 변형으로 쓴다. 공휴일 휴무 판정은 AI 단일 헬퍼(그 날 영업 창)를 생성·재계획·검증이 함께 본다.
 - **주의**: 정본 `checkMustVisitInclusion`(필수 방문지 **누락 없음**)은 HC3(고정 블록 시각 불변)과 **완전히 같지 않다** — `INCLUDE_ONLY` 필수 방문지가 아예 배치되지 않는 경우를 HC 코드가 표현하지 못한다. → **미결 O-U2-1**(§6).
 
 ### BR-U2-03 · `SolveMode` 매핑 (N2 종결)
