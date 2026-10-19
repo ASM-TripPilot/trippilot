@@ -31,7 +31,10 @@ interface SituationDetector {
      */
     fun wants(phase: SweepPhase, dayOffset: Int): Boolean = true
 
-    /** false = 부르지 않는다 = 모름(예: 날씨 모드가 가짜). 회차마다 한 번 묻는다. */
+    /**
+     * false = 부르지 않는다 = 모름(예: 날씨 모드가 가짜). 회차마다 한 번, 그리고 조회 API 가 감시 상태·회수 필터를 그릴 때마다
+     * 묻는다 — 외부를 부르지 말고 설정·빈 유무만으로 가볍게 답한다.
+     */
     fun isLive(): Boolean
 
     fun detect(target: SweepTarget): Detection

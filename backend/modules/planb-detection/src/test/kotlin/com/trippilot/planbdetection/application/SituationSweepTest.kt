@@ -37,7 +37,10 @@ import java.time.ZoneOffset
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicReference
 import java.util.stream.Stream
+import kotlin.concurrent.thread
 
 private val KST: ZoneId = ZoneId.of("Asia/Seoul")
 private val DAY: LocalDate = LocalDate.parse("2026-08-11") // 화요일
@@ -180,14 +183,14 @@ private class World(failSaves: Int = 0) {
 
     fun rows(tripId: UUID) = triggers.stored.filter { it.tripId == tripId }
 
-    private val itineraries = object : ItineraryFacade {
+    val itineraryFacade = object : ItineraryFacade {
         override fun findCurrent(accountId: UUID, tripId: UUID): ItineraryRef? {
             if (tripId in broken) throw IllegalStateException("일정 조회 실패(대역)")
             return refs[tripId]?.takeIf { owners[tripId] == accountId }
         }
     }
 
-    private val plans = object : ItineraryPlanFacade {
+    val planFacade = object : ItineraryPlanFacade {
         override fun findPlanSlots(accountId: UUID, tripId: UUID) = slotsOf[tripId].orEmpty()
         override fun findPlannedPlaces(accountId: UUID, tripId: UUID) = error("스윕은 쓰지 않습니다.")
     }
@@ -200,10 +203,10 @@ private class World(failSaves: Int = 0) {
 
     fun sweep(props: SituationSweepProperties, detectors: List<SituationDetector>, clock: Clock): SituationSweep {
         val service = TriggerService(
-            noTrips, itineraries, triggers, InMemorySuppressions(), FixedSensitivity(Sensitivity.NORMAL), events, clock,
+            noTrips, itineraryFacade, triggers, InMemorySuppressions(), FixedSensitivity(Sensitivity.NORMAL), events, clock,
             watches, watchingProvider(),
         )
-        return SituationSweep(props, watched, itineraries, plans, service, triggers, watches, providerOf(detectors), clock)
+        return SituationSweep(props, watched, itineraryFacade, planFacade, service, triggers, watches, providerOf(detectors), clock)
     }
 }
 
@@ -276,6 +279,12 @@ class SituationSweepTest : StringSpec({
         val tripId = world.trip(slots = listOf(DAY to "10:00-11:00", DAY to "18:00-19:00"))
         val mine = world.plant(tripId, DAY)
         world.plant(tripId, DAY.plusDays(1)) // 다른 날
+        world.triggers.save( // 같은 날, 다른 출처(장소)가 띄운 것
+            PlanBTrigger.active(
+                tripId, UUID.randomUUID(), TriggerKind.CLOSURE, DAY, null, mapOf(PlanBTrigger.PAYLOAD_DETECTOR to SweepSource.PLACE),
+                TriggerScope.PARTIAL_SLOTS, "‘성산일출봉’은 정기 휴무일로 나와요", at("07:15"),
+            ),
+        )
         val forecast = FakeDetector(SweepSource.KMA_FORECAST)
 
         world.sweep(props(), listOf(forecast), StepClock(at("12:15"))).sweep(at("12:15"))
@@ -379,6 +388,29 @@ class SituationSweepTest : StringSpec({
         forecast.calls.size shouldBe 1
         summary.trips shouldBe 1 // 하던 여행은 마친다
         summary.skipped shouldBe 2
+    }
+
+    "회차 스레드가 끊기면(배포 종료) 진행 중 여행은 마치고 시작 안 한 여행은 건너뛴 뒤 돌아온다 — 락을 풀 때 도는 여행이 없다" {
+        val world = World()
+        repeat(3) { world.trip() }
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST, answer = { entered.countDown(); release.await(); CLEAR })
+        val sweep = world.sweep(props(), listOf(forecast), StepClock(at("12:15")))
+        val result = AtomicReference<SweepSummary>()
+        val runner = thread { result.set(sweep.sweep(at("12:15"))) }
+
+        entered.await()
+        runner.interrupt()
+        runner.join(300)
+        val returnedEarly = !runner.isAlive // 진행 중 여행을 두고 먼저 돌아오면 락이 풀린 뒤에도 그 여행이 쓴다
+        release.countDown()
+        runner.join(5_000)
+
+        returnedEarly shouldBe false
+        result.get().trips shouldBe 1
+        result.get().skipped shouldBe 2
+        forecast.calls.size shouldBe 1
     }
 
     "20:58 이후에는 쓰지 않는다 — 회차가 흐르다 컷을 넘기면 감지한 여행도 쓰지 않고 그 뒤는 보지 않는다(INV-SA-5)" {
@@ -551,6 +583,48 @@ class SituationSweepTest : StringSpec({
         world.watches.findByTrip(tripId).map { it.checkedAt }.toSet() shouldBe setOf(at("20:15"))
     }
 
+    "감시 상태를 못 남겨도 판정은 이미 썼다 — 그 여행을 실패로 세지 않고, 다음 회차가 다시 쓴다" {
+        val world = World()
+        val tripId = world.trip()
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST, answer = ::rain)
+        val brokenWatches = object : PlanBWatchRepository {
+            override fun upsert(watch: PlanBWatch) = throw IllegalStateException("감시 상태 쓰기 실패(대역)")
+            override fun findByTrip(tripId: UUID) = emptyList<PlanBWatch>()
+        }
+        val clock = StepClock(at("12:15"))
+        val service = TriggerService(
+            object : TripFacade {
+                override fun findPeriod(accountId: UUID, tripId: UUID) = error("쓰지 않습니다.")
+                override fun findGenerationContext(accountId: UUID, tripId: UUID) = error("쓰지 않습니다.")
+            },
+            object : ItineraryFacade {
+                override fun findCurrent(accountId: UUID, tripId: UUID) = error("쓰지 않습니다.")
+            },
+            world.triggers, InMemorySuppressions(), FixedSensitivity(Sensitivity.NORMAL), world.events, clock,
+            brokenWatches, watchingProvider(),
+        )
+        val sweep = SituationSweep(
+            props(), world.watched, world.itineraryFacade, world.planFacade, service, world.triggers, brokenWatches,
+            providerOf(listOf(forecast)), clock,
+        )
+
+        val summary = sweep.sweep(at("12:15"))
+
+        world.rows(tripId).single().state shouldBe TriggerState.ACTIVE
+        summary.trips shouldBe 1
+        summary.failed shouldBe 0
+    }
+
+    "감지기는 따로 고르지 않으면 모든 단계·날짜를 원한다" {
+        val plain = object : SituationDetector {
+            override val source = SweepSource.KMA_FORECAST
+            override val kind = TriggerKind.WEATHER
+            override fun isLive() = true
+            override fun detect(target: SweepTarget) = CLEAR
+        }
+        SweepPhase.entries.all { phase -> plain.wants(phase, 0) && plain.wants(phase, 1) } shouldBe true
+    }
+
     "여행 단위 병렬 — 병렬 2 에서도 모든 여행을 정확히 한 번 보고 센 값이 맞다" {
         val world = World()
         val tripIds = List(20) { world.trip() }
@@ -619,6 +693,11 @@ class SituationSweepTest : StringSpec({
             "상황 감시 = 관찰 · 지평=today · 감지기 live=[kma-forecast] · 관찰 전용=[airkorea,kma-warning]"
         world.sweep(props(mode = SweepMode.OFF, horizon = SweepHorizon.PRE_TRIP), emptyList(), clock).announcement() shouldBe
             "상황 감시 = 꺼짐 · 지평=pre-trip · 감지기 live=[] · 관찰 전용=[airkorea,kma-warning]"
+        // 살아 있어도 출처 목록 밖이면 live 가 아니다(부르지 않는다).
+        val outside = world.sweep(props(sources = listOf(SweepSource.PLACE)), detectors, clock)
+        outside.announcement() shouldBe "상황 감시 = 켜짐 · 지평=today · 감지기 live=[] · 관찰 전용=[airkorea,kma-warning]"
+        outside.announce() // 기동 이벤트 진입점 — 로그만 남기고 아무것도 쓰지 않는다
+        world.watches.all.shouldBeEmpty()
     }
 
     "스케줄 진입점(매시·20:40 보충)은 시계의 지금으로 회차를 돈다" {

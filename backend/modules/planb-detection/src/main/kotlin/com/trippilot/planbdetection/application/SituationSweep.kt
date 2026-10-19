@@ -33,6 +33,7 @@ import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.ceil
@@ -131,9 +132,13 @@ class SituationSweep(
         try {
             order.map { trip -> pool.submit(Runnable { visit(trip, round) }) }.forEach { it.get() }
         } catch (e: InterruptedException) {
-            round.aborted.set(true) // 아직 시작하지 않은 여행은 바로 건너뛴다
+            // 배포 종료 등으로 회차 스레드가 끊겼다(RES-SA-06). 시작 안 한 여행은 건너뛰고, 진행 중 여행은 마치게 둔 뒤 돌아온다 —
+            // 먼저 돌아오면 락이 풀린 뒤에도 그 여행이 쓰고, 요약이 실제와 다른 수를 말한다.
+            round.aborted.set(true)
+            pool.shutdown()
+            runCatching { pool.awaitTermination(IN_FLIGHT_GRACE.seconds, TimeUnit.SECONDS) }
             Thread.currentThread().interrupt()
-            log.warn("상황 스윕 회차가 중단됐습니다 — 남은 여행은 다음 회차가 봅니다.")
+            log.warn("상황 스윕 회차가 끊겼습니다 — 남은 여행은 다음 회차가 봅니다.")
         } finally {
             pool.shutdown()
         }
@@ -328,14 +333,16 @@ class SituationSweep(
         /** 한 회차에서 같은 출처가 연속 몇 번 실패하면 회로를 여는가(RES-SA-04). */
         private const val CIRCUIT_THRESHOLD = 3
 
+        /** 끊긴 회차가 진행 중 여행을 기다려 주는 상한 — AI 검증 소켓 상한(62초) + 판정. graceful 종료(630초) 안이다. */
+        private val IN_FLIGHT_GRACE: Duration = Duration.ofSeconds(90)
+
         private const val CIRCUIT_OPEN = "circuit-open"
 
         /** 스윕 대상 일정 상태 — 일정 모듈이 문자열로 넘긴다(`ItineraryRef.status`). */
         private const val CONFIRMED = "CONFIRMED"
 
-        /** 근사 순위 백분위(nearest-rank). 비면 0. */
+        /** 근사 순위 백분위(nearest-rank). 목록은 부른 만큼 쌓여서 비어 있지 않다. */
         private fun percentile(values: List<Long>, p: Int): Long {
-            if (values.isEmpty()) return 0
             val sorted = values.sorted()
             return sorted[ceil(p / 100.0 * sorted.size).toInt().coerceIn(1, sorted.size) - 1]
         }

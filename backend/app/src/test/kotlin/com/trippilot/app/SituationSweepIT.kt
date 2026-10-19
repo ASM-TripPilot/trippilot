@@ -37,9 +37,12 @@ import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import org.springframework.aop.framework.Advised
+import org.springframework.aop.support.AopUtils
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -254,6 +257,12 @@ class SituationSweepIT : AbstractPostgresIntegrationTest() {
         watching.isWatching(SweepSource.PLACE) shouldBe false // 감지기 빈이 없다
         watching.isWatching(SweepSource.KMA_WARNING) shouldBe false // 관찰 전용
         scheduler.scheduledThreadPoolExecutor.corePoolSize shouldBe 4
+    }
+
+    @Test
+    fun `단일 실행 락이 실제로 가로챈다 — 애너테이션만 있고 가로채기가 없으면 두 파드가 같은 회차를 돈다`() {
+        AopUtils.isAopProxy(sweep) shouldBe true
+        (sweep as Advised).advisors.map { it.javaClass.simpleName } shouldContain "MethodProxyScheduledLockAdvisor"
     }
 
     private companion object {
