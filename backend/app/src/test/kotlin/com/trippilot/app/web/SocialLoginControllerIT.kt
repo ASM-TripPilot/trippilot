@@ -158,11 +158,22 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `deviceId 상한이 세션 컬럼 폭과 같다 — 둘이 갈라지면 22001 → 500 이 돌아온다`() {
         val width = jdbc.queryForObject(
-            "SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'refresh_session' AND column_name = 'device_id'",
+            "SELECT character_maximum_length FROM information_schema.columns " +
+                "WHERE table_schema = current_schema() AND table_name = 'refresh_session' AND column_name = 'device_id'",
             Int::class.java,
         )
 
         width shouldBe RefreshSession.DEVICE_ID_MAX
+    }
+
+    @Test
+    fun `deviceId 상한이 계약의 maxLength 와 같다 — 다르면 생성 클라이언트 검증과 서버가 갈린다`() {
+        listOf("SocialLoginRequest", "SocialTokenLoginRequest").forEach { name ->
+            @Suppress("UNCHECKED_CAST")
+            val deviceId = schemaPropertySpecs(name)["deviceId"] as Map<String, Any>
+
+            withClue(name) { deviceId["maxLength"] shouldBe RefreshSession.DEVICE_ID_MAX }
+        }
     }
 
     @Test
@@ -268,14 +279,16 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     }
 
     /** openapi 정본에서 스키마 하나의 property 이름 집합을 읽는다. */
-    private fun schemaProperties(name: String): Set<String> {
+    private fun schemaProperties(name: String): Set<String> = schemaPropertySpecs(name).keys
+
+    private fun schemaPropertySpecs(name: String): Map<String, Any> {
         @Suppress("UNCHECKED_CAST")
         val spec = Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
         @Suppress("UNCHECKED_CAST")
         val schemas = (spec["components"] as Map<String, Any>)["schemas"] as Map<String, Map<String, Any>>
         val schema = requireNotNull(schemas[name]) { "openapi.yaml 에 $name 스키마가 없다" }
         @Suppress("UNCHECKED_CAST")
-        return (schema["properties"] as Map<String, Any>).keys.toSet()
+        return schema["properties"] as Map<String, Any>
     }
 
     private fun JsonNode.keys(): Set<String> = fieldNames().asSequence().toSet()

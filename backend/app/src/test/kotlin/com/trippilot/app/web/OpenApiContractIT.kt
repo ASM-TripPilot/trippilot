@@ -180,7 +180,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
                 isNoBody(responseType) -> if (hasDocumentedBody) mismatches += "$label 응답: 문서는 본문이 있는데 코드는 본문이 없다"
                 !hasDocumentedBody ->
                     mismatches += "$label 응답: 코드는 본문(${responseType.rawClass.simpleName})을 내는데 문서 2xx 에 본문이 없다"
-                documented.isEmpty() && !isLeaf(responseType) ->
+                documented.isEmpty() && isJsonStructure(responseType) ->
                     mismatches += "$label 응답: 코드는 JSON 객체(${responseType.rawClass.simpleName})를 내는데 문서 본문에 application/json 이 없다"
                 else -> documented.forEach { compare(responseType, it, "$label 응답", true, mismatches, mutableSetOf()) }
             }
@@ -190,7 +190,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             when {
                 bodyParameter == null && hasDocumentedRequest -> mismatches += "$label 요청: 문서는 본문이 있는데 코드는 @RequestBody 가 없다"
                 bodyParameter != null && !hasDocumentedRequest -> mismatches += "$label 요청: 코드는 @RequestBody 를 받는데 문서에 requestBody 가 없다"
-                bodyParameter != null && request == null && !isLeaf(requestType(bodyParameter)) ->
+                bodyParameter != null && request == null && isJsonStructure(requestType(bodyParameter)) ->
                     mismatches += "$label 요청: 코드는 JSON 객체를 받는데 문서 requestBody 에 application/json 이 없다"
                 bodyParameter != null && request != null -> compare(
                     requestType(bodyParameter), request, "$label 요청", false,
@@ -222,7 +222,11 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         depth: Int = 0,
     ) {
         // 재귀 바닥 — 아래 visited 키가 못 알아보는 감싸기(oneOf 갈래 등)로 자기 참조가 와도 스택이 넘치지 않게.
-        if (depth > maxCompareDepth) return
+        if (depth > maxCompareDepth) {
+            // 조용히 멈추면 그 아래 불일치가 보고 없이 통과한다 — 바닥에 닿은 것 자체를 실패로 남긴다.
+            out += "$where: 대조 깊이 $maxCompareDepth 을 넘었다(순환을 못 알아봤거나 지나치게 깊다)"
+            return
+        }
         // Any·Object 는 코드가 모양을 말하지 않고, JsonNode 는 손으로 읽어 이름을 모른다 — 배열·객체 어느 쪽과도 대조하지 않는다.
         if (type.rawClass == Any::class.java || JsonNode::class.java.isAssignableFrom(type.rawClass)) return
         val resolved = resolve(schema)
@@ -386,11 +390,24 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             }
 
     @Suppress("UNCHECKED_CAST")
-    private fun requestSchema(operation: Map<String, Any>): Map<String, Any>? =
-        (operation["requestBody"] as? Map<String, Any>)?.let(::jsonSchema)
+    private fun requestSchema(operation: Map<String, Any>): Map<String, Any>? {
+        val body = operation["requestBody"] as? Map<String, Any> ?: return null
+        // 공유 본문(`$ref: '#/components/requestBodies/X'`)도 응답처럼 푼다.
+        val resolved = (body["\$ref"] as? String)
+            ?.let { components("requestBodies")[it.substringAfterLast('/')] as? Map<String, Any> } ?: body
+        return jsonSchema(resolved)
+    }
 
+    /** JSON 미디어 타입(`application/json`·`…; charset=…`·`…+json` 접미 타입)의 본문 스키마. */
     @Suppress("UNCHECKED_CAST")
     private fun jsonSchema(holder: Map<String, Any>): Map<String, Any>? =
-        ((holder["content"] as? Map<String, Any>)?.get("application/json") as? Map<String, Any>)
-            ?.get("schema") as? Map<String, Any>
+        (holder["content"] as? Map<String, Any>).orEmpty().entries
+            .firstOrNull { (mediaType, _) ->
+                val subtype = mediaType.substringBefore(';').trim().lowercase().substringAfter('/', "")
+                subtype == "json" || subtype.endsWith("+json")
+            }
+            ?.let { (it.value as? Map<String, Any>)?.get("schema") as? Map<String, Any> }
+
+    /** JSON 으로 오가는 구조(DTO·컬렉션·Map) — 스칼라 본문(String 등)은 JSON 이 아니어도 된다. */
+    private fun isJsonStructure(type: JavaType): Boolean = type.isContainerType || !isLeaf(type)
 }
