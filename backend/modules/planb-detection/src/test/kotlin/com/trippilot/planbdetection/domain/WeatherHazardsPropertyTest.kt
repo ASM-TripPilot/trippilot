@@ -30,19 +30,24 @@ import java.util.UUID
 /**
  * 단기예보 판정 PBT(블로킹 게이트 PBT-SA-09·10·11 · 설계서 T-D2-P1~P3).
  *
- * - **P09 모름은 절대 해제가 아니다** — 확인(Clear) ⇒ 남은 실외 슬롯의 판정 시각 값이 다 있고 해제 임계 아래. 확인된 상황에서
- *   필요한 칸 하나만 지워도 확인이 아니게 된다.
+ * - **P09 모름은 절대 해제가 아니다** — 확인(Clear) ⇒ 남은 실외 슬롯의 판정 시각 값이 다 있고 해제 임계 아래 · 카테고리를 모르는
+ *   슬롯이 남지 않았다. 확인된 상황에서 필요한 칸 하나만 지워도 확인이 아니게 된다.
  * - **P10 단조성·무관 입력** — POP·WSD·기온을 올려도 RAIN·WIND·HEAT 는, 기온을 내려도 COLD 는 남는다. 실내·중립 슬롯의 예보를
  *   바꿔도, 슬롯 순서를 섞어도 판정이 같다.
  * - **P11 이력 현상** — 발화와 해제 임계 사이 값은 신호도 확인도 만들지 않는다. 위험 변형이 하나라도 있으면 위험이다.
+ * - **HEAT 겹침(BR-SA-15)** — '12~17시와 겹침'은 슬롯 구간과 한낮의 겹침이다. 판정 시각(끝을 올린 정시)으로 재지 않는다.
  *
  * 오라클은 정본 표(BR-SA-15)의 수치를 그대로 적는다 — 구현의 판정 함수를 다시 부르지 않는다.
  */
 class WeatherHazardsPropertyTest : StringSpec({
 
-    "P09 확인이면 남은 실외 슬롯의 판정 시각 값이 다 있고 전부 해제 임계 아래다" {
+    "P09 확인이면 남은 실외 슬롯의 판정 시각 값이 다 있고 전부 해제 임계 아래다 · 카테고리를 모르는 슬롯이 남지 않았다" {
         checkAll(situations) { s ->
             if (WeatherHazards.judge(s.exposures, s.now) == Verdict.Clear) {
+                // 미분류 슬롯이 남았는지는 시각만으로 본다(예보 무관)
+                for (e in s.exposures.filter { it.category == null }) withClue("확인인데 카테고리를 모르는 슬롯이 남았다 $e") {
+                    WeatherHazards.judgmentHours(e.copy(forecast = null), s.now).isEmpty() shouldBe true
+                }
                 for (e in s.exposures.filter { it.category in OUTDOOR }) {
                     val hours = WeatherHazards.judgmentHours(e, s.now)
                     if (hours.isEmpty()) continue
@@ -97,6 +102,27 @@ class WeatherHazardsPropertyTest : StringSpec({
             }
             WeatherHazards.judge(repainted, s.now) shouldBe before
             WeatherHazards.judge(Arb.shuffle(s.exposures).sample(rs).value, s.now) shouldBe before
+        }
+    }
+
+    /**
+     * HEAT 의 '12~17시와 겹침'은 슬롯 구간 [시작, 끝) 과 [12:00, 18:00) 이 겹치는가다 — 판정 시각(끝을 올린 정시)으로 재지 않는다.
+     * 한낮 최고(TMX)만 뜨겁고 시간별 기온은 평온한 날이라, 겹치면 HEAT 이고 겹치지 않으면 아니다.
+     */
+    "HEAT 겹침 — 12~17시와 실제로 겹친 슬롯에만, 정오 전에 끝나거나 18시부터인 슬롯은 TMX 가 높아도 아니다" {
+        checkAll(Arb.int(12, 43), Arb.int(1, 8), Arb.double(33.0, 40.0)) { startHalf, halves, tmx ->
+            val now = DAY.atTime(6, 20).atZone(ZONE).toInstant()
+            val start = LocalTime.of(startHalf / 2, startHalf % 2 * 30)
+            val end = start.plusMinutes(30L * halves)
+            val calm = HourlyWeather(20, Precipitation.NONE, Sky.CLEAR, 20.0, 3.0)
+            val hourly = (0L..47L).map { DAY.atStartOfDay().plusHours(it) }.filter { it.atZone(ZONE).toInstant() > baseAt(now) }.associateWith { calm }
+            val f = PointForecast("53,38", baseAt(now), hourly, mapOf(DAY to DailyWeather(tmn = 15.0, tmx = tmx)))
+            val e = UUID.randomUUID().let { Exposure("$DAY#$it", it, "우도", "자연", DAY, start, end, endsNextDay = end < start, forecast = f) }
+            val overlaps = DAY.atTime(start) < DAY.atTime(18, 0) && e.slotEnd() > DAY.atTime(12, 0)
+
+            val heat = (WeatherHazards.judge(listOf(e), now) as? Verdict.Hazard)?.variants.orEmpty().contains(TriggerVariant.HEAT)
+
+            withClue("$start~$end TMX $tmx") { heat shouldBe overlaps }
         }
     }
 
@@ -250,14 +276,19 @@ private fun releasedAt(e: Exposure, h: LocalDateTime): Boolean {
     val tmp = w.tmp ?: return false
     val wsd = w.wsd ?: return false
     if (w.precipitation != Precipitation.NONE || pop >= 50 || wsd >= 12.0 || tmp <= -10.0) return false
-    if (h.hour in 12..17 && tmp >= 31.0) return false
+    // 한낮 = 12~17시 칸 가운데 슬롯이 실제로 끝나기 전 — 끝을 올린 판정 시각은 한낮과의 겹침을 만들지 않는다.
+    val noon = h.hour in 12..17 && h < e.slotEnd()
+    if (noon && tmp >= 31.0) return false
     val tmn = e.forecast.daily[h.toLocalDate()]?.tmn
     val tmx = e.forecast.daily[h.toLocalDate()]?.tmx
     if (tmn != null && tmn <= -10.0) return false
-    if (h.hour in 12..17 && tmx != null && tmx >= 31.0) return false
+    if (noon && tmx != null && tmx >= 31.0) return false
     if (e.category == WeatherHazards.NIGHT_VIEW && w.sky == null) return false
     return true
 }
+
+/** 슬롯이 실제로 끝나는 시각(자정 넘김 포함). */
+private fun Exposure.slotEnd(): LocalDateTime = (if (endsNextDay) date.plusDays(1) else date).atTime(endAt)
 
 /** 한 시각의 한 칸을 지운다("hour" 면 시각 통째로). 다른 슬롯과 나눠 쓰는 격자를 건드리지 않게 새 예보를 만든다. */
 private fun PointForecast.erase(h: LocalDateTime, field: String): PointForecast {

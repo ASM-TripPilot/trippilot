@@ -28,7 +28,10 @@ object WeatherThresholds {
     const val WIND_MS = 14.0
     const val WIND_MS_CLEAR = 12.0
 
-    /** HEAT — 12~17시와 겹친 슬롯의 TMP·TMX 최고 ≥ 33 주의 · ≥ 35 위험(O-SA-2), < 31 해제. */
+    /**
+     * HEAT — 12~17시와 겹친 슬롯의 TMP·TMX 최고 ≥ 33 주의 · ≥ 35 위험(O-SA-2), < 31 해제.
+     * 겹침은 슬롯의 **실제 끝**으로 잰다 — 정오 전에 끝나는 슬롯은 끝을 올린 판정 시각이 12시여도 한낮과 겹치지 않는다.
+     */
     const val HEAT_CAUTION_C = 33.0
     const val HEAT_RISK_C = 35.0
     const val HEAT_CLEAR_C = 31.0
@@ -46,6 +49,8 @@ object WeatherThresholds {
  * - 슬롯 하나라도 발화하면 **신호**다(그 날 하나 — 날씨는 날짜 단위). 모르는 슬롯이 섞여도 발화한다.
  * - 남은 실외 슬롯의 판정 시각 값이 **다 있고 전부** 해제 임계 아래면 **확인**이다. 남은 실외 슬롯이 0개여도 확인이다(실내로 바꾼 날).
  * - 그 밖에 모르는 칸이 있으면 **모름**, 없으면(두 임계 사이) **신호도 확인도 아님**이다.
+ * - 카테고리를 모르는 슬롯(표면 없음)이 남아 있으면 신호가 없는 한 **모름**이다 — 실외인지 모르는 슬롯을 실내로 읽어 그 날을
+ *   확인하면 모름으로 위험이 지워진다(INV-SA-2). 판정하지 않을 뿐 다른 슬롯의 발화는 막지 않는다.
  *
  * 한 시각의 판정 재료는 POP·PTY·TMP·WSD(야경이면 SKY 도)다 — 하나라도 없으면 그 시각은 확인될 수 없다(INV-SA-2).
  */
@@ -94,7 +99,8 @@ object WeatherHazards {
     sealed interface Verdict {
         /**
          * 신호 — 그 날 하나. [variant] = 심각도 → [PRECEDENCE] 로 고른 대표, [variants] = 걸린 변형 전부(우선순위 순),
-         * [affected] = 영향 슬롯(시작 순), [remaining] = 남은 실외 슬롯 수, [hours] = 대표 변형이 걸린 시각(기온 변형은 비어 있다),
+         * [affected] = 영향 슬롯(어느 변형이든 · 시작 순 — 선계산 재료·coverage), [lead] = 대표 변형으로 걸린 슬롯(시작 순 — 문구의
+         * 이름·곳 수), [remaining] = 남은 실외 슬롯 수, [hours] = 대표 변형이 걸린 시각(기온 변형은 비어 있다),
          * [baseAt] = 영향 슬롯 예보 중 가장 최근 발표.
          */
         data class Hazard(
@@ -102,6 +108,7 @@ object WeatherHazards {
             val variant: TriggerVariant,
             val variants: List<TriggerVariant>,
             val affected: List<Exposure>,
+            val lead: List<Exposure>,
             val remaining: Int,
             val hours: List<LocalDateTime>,
             val baseAt: Instant,
@@ -128,7 +135,7 @@ object WeatherHazards {
      */
     fun judgmentHours(e: Exposure, now: Instant): List<LocalDateTime> {
         val start = e.date.atTime(e.startAt).truncatedTo(ChronoUnit.HOURS)
-        val end = (if (e.endsNextDay) e.date.plusDays(1) else e.date).atTime(e.endAt).let {
+        val end = endOf(e).let {
             if (it.truncatedTo(ChronoUnit.HOURS) == it) it else it.truncatedTo(ChronoUnit.HOURS).plusHours(1)
         }
         val from = LocalDateTime.ofInstant(now, ZONE).truncatedTo(ChronoUnit.HOURS)
@@ -138,11 +145,17 @@ object WeatherHazards {
             .toList()
     }
 
+    /** 슬롯이 실제로 끝나는 시각(자정 넘김 포함) — 판정 시각은 이것을 다음 정시로 올린다. */
+    private fun endOf(e: Exposure): LocalDateTime = (if (e.endsNextDay) e.date.plusDays(1) else e.date).atTime(e.endAt)
+
     fun judge(exposures: List<Exposure>, now: Instant): Verdict {
         val looks = exposures.filter { isOutdoor(it.category) }.mapNotNull { look(it, now) }
         val hit = looks.filter { it.fired.isNotEmpty() }
+        // 미분류 슬롯이 남았는지는 시각만으로 본다 — 그 슬롯에 붙은 예보(발표 시각)는 판정 재료가 아니다.
+        val unclassified = exposures.any { it.category == null && judgmentHours(it.copy(forecast = null), now).isNotEmpty() }
         return when {
             hit.isNotEmpty() -> hazardOf(hit, looks.size)
+            unclassified -> Verdict.Unknown
             looks.all { it.clear } -> Verdict.Clear
             looks.any { it.missing } -> Verdict.Unknown
             else -> Verdict.Unsettled
@@ -178,7 +191,9 @@ object WeatherHazards {
         val windClear = at.all { w -> (w?.wsd ?: Double.MAX_VALUE) < WeatherThresholds.WIND_MS_CLEAR }
 
         // 기온 — 그 날 최고·최저(TMX·TMN)는 있으면 쓰는 보조값이다. 시간별 TMP 만으로도 판정된다.
-        val noon = hours.indices.filter { hours[it].hour in WeatherThresholds.HEAT_HOURS }
+        // 한낮 = 12~17시 칸 가운데 슬롯이 실제로 끝나기 전 — 끝을 올린 판정 시각은 한낮과의 겹침을 만들지 않는다.
+        val end = endOf(e)
+        val noon = hours.indices.filter { hours[it].hour in WeatherThresholds.HEAT_HOURS && hours[it] < end }
         val heat = (noon.mapNotNull { at[it]?.tmp } + noon.map { hours[it].toLocalDate() }.distinct().mapNotNull { f.daily[it]?.tmx }).maxOrNull()
         val heatClear = noon.all { at[it]?.tmp != null } && (heat == null || heat < WeatherThresholds.HEAT_CLEAR_C)
         val cold = (at.mapNotNull { it?.tmp } + hours.map { it.toLocalDate() }.distinct().mapNotNull { f.daily[it]?.tmn }).minOrNull()
@@ -221,11 +236,13 @@ object WeatherHazards {
         val severity = severityOf.values.maxBy { it.rank }
         val variant = PRECEDENCE.first { severityOf[it] == severity }
         fun of(v: TriggerVariant) = hit.filter { v in it.fired }
+        val bySlot = compareBy<Exposure>({ it.startAt }, { it.slotKey })
         return Verdict.Hazard(
             severity = severity,
             variant = variant,
             variants = PRECEDENCE.filter { it in severityOf },
-            affected = hit.map { it.exposure }.sortedWith(compareBy({ it.startAt }, { it.slotKey })),
+            affected = hit.map { it.exposure }.sortedWith(bySlot),
+            lead = of(variant).map { it.exposure }.sortedWith(bySlot),
             remaining = remaining,
             hours = hit.flatMap { it.firedHours[variant].orEmpty() }.distinct().sorted(),
             baseAt = hit.mapNotNull { it.exposure.forecast?.baseAt }.max(),

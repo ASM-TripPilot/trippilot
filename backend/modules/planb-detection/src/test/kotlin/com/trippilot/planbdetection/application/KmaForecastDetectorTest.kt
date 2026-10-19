@@ -1,5 +1,9 @@
 package com.trippilot.planbdetection.application
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.planbdetection.domain.DataSource
 import com.trippilot.planbdetection.domain.SituationCopy
@@ -21,12 +25,18 @@ import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.util.Collections
 import java.util.UUID
+import java.util.concurrent.Callable
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * 단기예보 감지기(SituationDetector `kma-forecast` · 설계서 §4.2 · BR-SA-15) — 슬롯 좌표의 격자 예보로 (여행, 날짜) 하나를 본다.
@@ -49,13 +59,53 @@ class KmaForecastDetectorTest : StringSpec({
         detector.isLive() shouldBe false
     }
 
-    "남은 실외 슬롯이 없으면 확인(날짜 전체)이고 예보를 부르지 않는다 — 실내·미분류만 남은 날" {
+    "남은 실외 슬롯이 없으면 확인(날짜 전체)이고 예보를 부르지 않는다 — 실내·중립만 남은 날" {
         val forecasts = FakeForecasts()
 
-        val got = KmaForecastDetector(forecasts).detect(target(slot("국립제주박물관", "문화", "14:00", "16:00", JEJU), slot("메모", null, "17:00", "18:00", JEJU)))
+        val got = KmaForecastDetector(forecasts).detect(target(slot("국립제주박물관", "문화", "14:00", "16:00", JEJU), slot("동문시장", "쇼핑", "17:00", "18:00", JEJU)))
 
         got shouldBe Detection.Checked(setOf(null), emptyList())
         forecasts.calls.shouldBeEmpty()
+    }
+
+    /** 카테고리가 없는 슬롯 = 표면이 없다(이름·좌표도 없다) — 실외인지 모르므로 그 날을 확인하지 않는다(INV-SA-2). */
+    "카테고리를 모르는 슬롯이 남으면 확인하지 않는다 — 실외가 없어도 모름, 다른 슬롯의 신호는 낸다" {
+        val forecasts = FakeForecasts().answer(JEJU, weather { _, w -> w })
+        val detector = KmaForecastDetector(forecasts)
+        val ghost = slot(null, null, "17:00", "18:00", null)
+
+        detector.detect(target(slot("국립제주박물관", "문화", "14:00", "16:00", JEJU), ghost)) shouldBe Detection.Unknown("forecast-unknown")
+        forecasts.calls.shouldBeEmpty()
+        detector.detect(target(slot("우도", "자연", "14:00", "16:00", JEJU), ghost)) shouldBe Detection.Unknown("forecast-unknown")
+
+        val rainy = KmaForecastDetector(FakeForecasts().answer(JEJU, rainAt(14..16))).detect(target(slot("우도", "자연", "14:00", "16:00", JEJU), ghost))
+        (rainy as Detection.Checked).signals.single().variant shouldBe TriggerVariant.RAIN
+    }
+
+    /**
+     * 문구의 이름·곳 수는 **대표 변형으로 걸린 슬롯**만 센다 — 13시 폭염(주의)에 걸린 성산일출봉은 비 영향이 아니다.
+     * 선계산 재료(payload slotKeys · poiIds · coverage)는 영향 슬롯 전부를 그대로 싣는다.
+     */
+    "문구의 이름·곳 수는 대표 변형으로 걸린 슬롯만 — payload·영향 POI 는 걸린 슬롯 전부" {
+        val f = weather(MORNING_BASE) { h, w ->
+            when (h.hour) {
+                13 -> w.copy(tmp = 33.5)
+                16 -> w.copy(pop = 80, precipitation = Precipitation.RAIN)
+                else -> w
+            }
+        }
+        val hot = slot("성산일출봉", "자연", "13:00", "14:00", JEJU)
+        val wet = slot("우도", "자연", "16:00", "17:00", JEJU)
+
+        val s = (KmaForecastDetector(FakeForecasts().answer(JEJU, f)).detect(target(hot, wet, now = kst("2026-10-20T07:20"))) as Detection.Checked)
+            .signals.single()
+
+        s.variant shouldBe TriggerVariant.RAIN
+        s.reason shouldBe "오후에 비 소식이 있어요. 우도 일정이 영향을 받을 수 있어요."
+        s.payload["variants"] shouldBe listOf("RAIN", "HEAT")
+        s.payload["slotKeys"] shouldBe listOf(hot.slotKey, wet.slotKey)
+        s.payload["coverage"] shouldBe "MOST"
+        s.poiIds shouldBe listOf(hot.poiId, wet.poiId)
     }
 
     /** 정본 문구 예(BR-SA-12 · 설계서 §4.2) 그대로 — 오늘은 날짜어 없이, 범위는 PARTIAL_SLOTS(CD7). */
@@ -220,6 +270,17 @@ class KmaForecastDetectorTest : StringSpec({
         forecasts.calls shouldBe listOf(JEJU, UDO)
     }
 
+    /** 거절 기억은 예보가 필요한 판정만 막는다 — 실외가 없는 날은 부를 것이 없으니 그대로 확인이다(BR-SA-15). */
+    "게이트웨이 거절을 기억한 회차에도 실외 슬롯이 없는 날은 확인이다" {
+        val forecasts = FakeForecasts().fail(JEJU, HourlyForecastUnavailable("${JEJU.first},${JEJU.second}", "22"))
+        val detector = KmaForecastDetector(forecasts)
+
+        detector.detect(target(slot("성산", "자연", "14:00", "16:00", JEJU))) shouldBe Detection.Unknown("gateway:22")
+
+        detector.detect(target(slot("국립제주박물관", "문화", "14:00", "16:00", JEJU))) shouldBe Detection.Checked(setOf(null), emptyList())
+        forecasts.calls shouldBe listOf(JEJU)
+    }
+
     /**
      * 장애(시한·5xx·형식)는 던진다 — 스윕이 그 (출처, 여행, 날짜)만 모름으로 격리하고 연속 실패를 회로 차단으로 센다.
      * 실패한 격자는 그 회차 동안 다시 부르지 않는다 — 그 슬롯은 모름이고 다른 격자의 신호는 산다.
@@ -233,6 +294,139 @@ class KmaForecastDetectorTest : StringSpec({
 
         (next as Detection.Checked).signals.single().poiIds.size shouldBe 1
         forecasts.calls shouldBe listOf(JEJU, UDO)
+    }
+
+    /**
+     * 전면 장애에서 지연 상한(PERF-SA-04 '3 × 상한')을 감지기가 지킨다 — 기억한 격자로 돌려준 모름은 예외가 아니라서 스윕의
+     * 연속 실패 수를 0 으로 되돌린다. 그래서 **서로 다른 격자**의 장애가 회차 안에서 연속 3번이면 그 회차의 남은 대상은
+     * 부르지 않고 모름이다(RES-SA-04). 기억한 격자만 걸린 여행은 장애를 세지도 되돌리지도 않는다.
+     */
+    "서로 다른 격자 장애가 연속 3번이면 그 회차의 남은 대상은 부르지 않는다 — 다음 회차에 다시 묻는다" {
+        val a = 33.10 to 126.10
+        val b = 33.20 to 126.20
+        val c = 33.30 to 126.30
+        val forecasts = FakeForecasts()
+        listOf(a, b, c, JEJU).forEach { forecasts.fail(it, HourlyForecastUnavailable("${it.first},${it.second}", null)) }
+        val detector = KmaForecastDetector(forecasts)
+        fun trip(at: Pair<Double, Double>, round: Instant = ROUND) = target(slot("성산", "자연", "14:00", "16:00", at), round = round)
+
+        shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(a)) }
+        detector.detect(trip(a)).shouldBeInstanceOf<Detection.Unknown>() // 기억한 격자 — 부르지 않는다
+        shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(b)) }
+        detector.detect(trip(b)).shouldBeInstanceOf<Detection.Unknown>()
+        shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(c)) }
+
+        detector.detect(trip(JEJU)) shouldBe Detection.Unknown("grid-circuit")
+        forecasts.calls shouldBe listOf(a, b, c)
+
+        shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(JEJU, round = NEXT_ROUND)) }
+        forecasts.calls shouldBe listOf(a, b, c, JEJU)
+    }
+
+    "격자 장애 사이에 받은 예보가 있으면 연속이 끊긴다 — 일부 격자 장애로는 출처를 닫지 않는다" {
+        val a = 33.10 to 126.10
+        val b = 33.20 to 126.20
+        val c = 33.30 to 126.30
+        val forecasts = FakeForecasts().answer(UDO, weather { _, w -> w })
+        listOf(a, b, c).forEach { forecasts.fail(it, HourlyForecastUnavailable("${it.first},${it.second}", null)) }
+        val detector = KmaForecastDetector(forecasts)
+        fun trip(at: Pair<Double, Double>) = target(slot("성산", "자연", "14:00", "16:00", at))
+
+        shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(a)) }
+        shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(b)) }
+        detector.detect(trip(UDO)) shouldBe Detection.Checked(setOf(null), emptyList())
+        shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(c)) }
+
+        detector.detect(trip(UDO)) shouldBe Detection.Checked(setOf(null), emptyList())
+        forecasts.calls shouldBe listOf(a, b, UDO, c, UDO)
+    }
+
+    /** 여행 단위 병렬이라 같은 새 격자를 두 여행이 함께 부를 수 있다 — 그 장애는 '서로 다른 격자' 하나로 센다. */
+    "같은 격자를 두 여행이 동시에 처음 불러 둘 다 실패해도 장애는 한 번만 센다" {
+        val a = 33.10 to 126.10
+        val b = 33.20 to 126.20
+        val together = CyclicBarrier(2)
+        val forecasts = object : HourlyForecastFacade {
+            val calls: MutableList<String> = Collections.synchronizedList(mutableListOf())
+            override fun isLive() = true
+            override fun gridKeyOf(lat: Double, lng: Double) = "$lat,$lng"
+            override fun forecastForTrigger(lat: Double, lng: Double, at: Instant): PointForecast? {
+                val key = "$lat,$lng"
+                calls += key
+                if (key == "${a.first},${a.second}") together.await(5, TimeUnit.SECONDS) // 두 여행이 함께 들어온 뒤에 실패한다
+                throw HourlyForecastUnavailable(key, null)
+            }
+        }
+        val detector = KmaForecastDetector(forecasts)
+        fun trip(at: Pair<Double, Double>) = target(slot("성산", "자연", "14:00", "16:00", at))
+        val pool = Executors.newFixedThreadPool(2)
+
+        val errors = try {
+            List(2) { pool.submit(Callable { runCatching { detector.detect(trip(a)) }.exceptionOrNull() }) }.map { it.get(10, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
+        }
+        errors.forEach { it.shouldBeInstanceOf<HourlyForecastUnavailable>() }
+        shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(b)) }
+
+        // a 를 한 번만 셌으면 연속 2번이라 아직 열리지 않았다 — 다음 격자를 부른다
+        shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(JEJU)) }
+        forecasts.calls.count { it == "${JEJU.first},${JEJU.second}" } shouldBe 1
+    }
+
+    /**
+     * 회로가 열리는 것은 상태 변화다 — 그 회차에 WARN 한 번(OBS-SA-03). 열린 뒤 돌려주는 모름은 다시 적지 않는다.
+     * 스윕의 회로 WARN 은 이 경우에 뜨지 않을 수 있다(기억한 격자의 모름이 스윕의 연속 실패 수를 되돌린다) — 그래서 여기서 적는다.
+     * 좌표·격자 키는 싣지 않는다(SEC-SA-05).
+     */
+    "격자 회로가 열리면 그 회차에 WARN 한 번 — 열린 뒤의 모름은 다시 적지 않고, 다음 회차에 다시 열리면 다시 적는다" {
+        val broken = listOf(33.10 to 126.10, 33.20 to 126.20, 33.30 to 126.30)
+        val forecasts = FakeForecasts()
+        broken.forEach { forecasts.fail(it, HourlyForecastUnavailable("${it.first},${it.second}", null)) }
+        val detector = KmaForecastDetector(forecasts)
+        fun trip(at: Pair<Double, Double>, round: Instant = ROUND) = target(slot("성산", "자연", "14:00", "16:00", at), round = round)
+
+        val first = detectorWarns {
+            broken.forEach { shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(it)) } }
+            repeat(2) { detector.detect(trip(JEJU)) shouldBe Detection.Unknown("grid-circuit") }
+        }
+        val next = detectorWarns { broken.forEach { shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(it, NEXT_ROUND)) } } }
+
+        first.size shouldBe 1
+        next.size shouldBe 1
+        first.single() shouldNotContain "33."
+        first.single() shouldNotContain "126."
+    }
+
+    /** 여행 단위 병렬이라 회로가 열리는 순간 이미 부르고 있던 여행의 장애가 뒤따른다 — 그것은 세어도 WARN 을 다시 남기지 않는다. */
+    "회로가 열리는 순간 함께 실패한 여행들이 있어도 WARN 은 한 번이다" {
+        val first = 33.10 to 126.10
+        val together = listOf(33.20 to 126.20, 33.30 to 126.30, 33.40 to 126.40)
+        val barrier = CyclicBarrier(together.size)
+        val forecasts = object : HourlyForecastFacade {
+            override fun isLive() = true
+            override fun gridKeyOf(lat: Double, lng: Double) = "$lat,$lng"
+            override fun forecastForTrigger(lat: Double, lng: Double, at: Instant): PointForecast? {
+                if (lat to lng in together) barrier.await(5, TimeUnit.SECONDS) // 셋이 모두 부른 뒤에 함께 실패한다
+                throw HourlyForecastUnavailable("$lat,$lng", null)
+            }
+        }
+        val detector = KmaForecastDetector(forecasts)
+        fun trip(at: Pair<Double, Double>) = target(slot("성산", "자연", "14:00", "16:00", at))
+        val pool = Executors.newFixedThreadPool(together.size)
+
+        val warns = detectorWarns {
+            shouldThrow<HourlyForecastUnavailable> { detector.detect(trip(first)) }
+            val errors = try {
+                together.map { at -> pool.submit(Callable { runCatching { detector.detect(trip(at)) }.exceptionOrNull() }) }.map { it.get(10, TimeUnit.SECONDS) }
+            } finally {
+                pool.shutdownNow()
+            }
+            errors.forEach { it.shouldBeInstanceOf<HourlyForecastUnavailable>() }
+            detector.detect(trip(JEJU)) shouldBe Detection.Unknown("grid-circuit")
+        }
+
+        warns.size shouldBe 1
     }
 
     "한 슬롯 칸만 비고 다른 신호가 없으면 모름이다" {
@@ -287,6 +481,19 @@ class KmaForecastDetectorTest : StringSpec({
             round = round, now = now, slots = slots.toList(), active = emptyList(),
         )
     }
+}
+
+/** [block] 동안 감지기가 남긴 WARN 문장. */
+private fun detectorWarns(block: () -> Unit): List<String> {
+    val logger = LoggerFactory.getLogger(KmaForecastDetector::class.java) as Logger
+    val appender = ListAppender<ILoggingEvent>().also { it.start() }
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
 }
 
 /** 격자 예보 퍼사드 대역 — 격자 키는 좌표 쌍이다. 고장은 실물처럼 예외로 낸다. 부른 격자를 [calls] 에 적는다. */

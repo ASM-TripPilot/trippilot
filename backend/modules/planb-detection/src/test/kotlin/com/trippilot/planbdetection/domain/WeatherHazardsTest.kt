@@ -45,9 +45,39 @@ class WeatherHazardsTest : StringSpec({
         WeatherHazards.OUTDOOR shouldBe setOf("자연", "야경", "액티비티")
         listOf("명소", "맛집", "카페", "쇼핑", "문화", null).forEach { WeatherHazards.isOutdoor(it) shouldBe false }
 
-        // 실내·중립·미분류 슬롯에 폭우가 와도 신호가 없다 — 남은 실외 슬롯 0개 = 확인
+        // 실내·중립 슬롯에 폭우가 와도 신호가 없다 — 남은 실외 슬롯 0개 = 확인
         val storm = forecastOf(day { it.copy(pop = 100, precipitation = Precipitation.RAIN, wsd = 20.0) })
-        judge(exposure("카페", "14:00", "15:00", storm), exposure(null, "14:00", "15:00", storm)) shouldBe Verdict.Clear
+        judge(exposure("카페", "14:00", "15:00", storm), exposure("문화", "14:00", "15:00", storm)) shouldBe Verdict.Clear
+    }
+
+    /**
+     * 카테고리가 없는 슬롯(표면이 정본·동결본 모두 없다 — 이름·좌표도 없다)은 실외인지 **모른다**. 실내로 읽어 그 날을 확인하면
+     * 모름으로 ACTIVE 가 해제된다(INV-SA-2). 판정하지 않을 뿐 발화를 막지는 않는다 — 다른 실외 슬롯의 신호는 그대로 낸다.
+     */
+    "카테고리를 모르는 슬롯이 남으면 확인이 아니다 — 모름이고, 다른 슬롯의 신호는 막지 않는다" {
+        val storm = forecastOf(day { it.copy(pop = 100, precipitation = Precipitation.RAIN, wsd = 20.0) })
+        val calm = forecastOf(calmDay())
+
+        judge(exposure(null, "14:00", "15:00", storm)) shouldBe Verdict.Unknown // 폭우라도 발화하지 않는다
+        judge(exposure("자연", "14:00", "16:00", calm), exposure(null, "17:00", "18:00", null)) shouldBe Verdict.Unknown
+        judge(exposure("자연", "14:00", "16:00", forecastOf(day { it.copy(pop = 55) })), exposure(null, "17:00", "18:00", null)) shouldBe
+            Verdict.Unknown // 사이도 확인처럼 '본 것'으로 남기지 않는다
+        judge(exposure("자연", "14:00", "16:00", storm), exposure(null, "17:00", "18:00", null)).hazard().variant shouldBe TriggerVariant.RAIN
+        // 이미 지난 미분류 슬롯은 남은 슬롯이 아니다
+        judge(exposure("자연", "14:00", "16:00", calm), exposure(null, "07:00", "08:00", null)) shouldBe Verdict.Clear
+    }
+
+    /**
+     * 미분류 슬롯이 남았는지는 **시각만으로** 본다 — 그 슬롯에 예보가 붙어 있어도 판정 재료가 아니다(P10 무관 입력).
+     * 08:20 에 07~08시 슬롯은 08시 칸이 남는다. 08시 발표분이 붙었다고 그 칸을 '발표 전'으로 잘라 확인으로 바꾸지 않는다.
+     */
+    "카테고리를 모르는 슬롯이 남았는지는 그 슬롯의 예보와 무관하다 — 발표 시각으로 자르지 않는다" {
+        val now = kst("2026-10-20T08:20")
+        val issued = forecastOf(calmDay(), base = kst("2026-10-20T08:00"))
+        val ghost = exposure(null, "07:00", "08:00", null)
+
+        judge(exposure("자연", "14:00", "15:00", issued), ghost, now = now) shouldBe Verdict.Unknown
+        judge(exposure("자연", "14:00", "15:00", issued), ghost.copy(forecast = issued), now = now) shouldBe Verdict.Unknown
     }
 
     "RAIN — PTY 없음 ∧ POP 59 는 사이, 60 은 발화, 49 는 해제" {
@@ -89,6 +119,22 @@ class WeatherHazardsTest : StringSpec({
         judgeCalmWith(start = "13:00", end = "15:00") { it.copy(tmp = 30.9) } shouldBe Verdict.Clear
         // 오전 슬롯은 한낮과 겹치지 않는다 — 더워도 HEAT 가 아니다
         judgeCalmWith(start = "09:00", end = "10:00") { it.copy(tmp = 36.0) } shouldBe Verdict.Clear
+    }
+
+    /**
+     * 겹침은 **슬롯의 실제 끝**으로 잰다. 판정 시각은 끝을 다음 정시로 올려 잡지만(그 시각 칸이 끝 무렵을 덮는다), 올린 시각이
+     * 12시라고 정오 전에 끝나는 슬롯이 한낮과 겹친 것은 아니다 — 더위를 피해 오전에만 야외를 잡은 날에 폭염을 내지 않는다.
+     */
+    "HEAT — 12~17시와의 겹침은 슬롯의 실제 끝으로 잰다 — 정오 전에 끝나는 슬롯은 한낮 최고(TMX)를 걸지 않는다" {
+        val hot = forecastOf(day { it.copy(tmp = 28.0) }, daily = mapOf(DAY to DailyWeather(tmn = 20.0, tmx = 35.0)))
+
+        judge(exposure("자연", "10:00", "11:30", hot)) shouldBe Verdict.Clear
+        judge(exposure("자연", "09:00", "12:00", hot)) shouldBe Verdict.Clear
+        judge(exposure("자연", "11:30", "12:30", hot)).hazard().let {
+            it.variant shouldBe TriggerVariant.HEAT
+            it.severity shouldBe TriggerSeverity.RISK
+            it.evidence.tempMax shouldBe 35.0
+        }
     }
 
     "HEAT — 한낮 슬롯이면 그 날 최고(TMX)도 본다" {

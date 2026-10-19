@@ -12,12 +12,15 @@ import com.trippilot.planbdetection.domain.WeatherHazards.Verdict
 import com.trippilot.weathercontext.api.HourlyForecastFacade
 import com.trippilot.weathercontext.api.HourlyForecastUnavailable
 import com.trippilot.weathercontext.api.PointForecast
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
 
@@ -29,10 +32,15 @@ import kotlin.math.roundToInt
  *
  * | 상황 | 결과 |
  * |---|---|
- * | 남은 실외 슬롯 0개 | 확인(날짜 전체) — 예보를 부르지 않는다 |
+ * | 남은 실외 슬롯 0개 | 확인(날짜 전체) — 예보를 부르지 않는다. 아래 회차 기억과 무관하다(부를 것이 없다) |
+ * | 카테고리를 모르는 슬롯이 남음 | 그 날은 확인하지 않는다(모름) — 실외인지 모른다(INV-SA-2). 다른 슬롯의 신호는 낸다 |
  * | 게이트웨이 거절(키 미등록 30 등) | 그 대상 모름 · 그 회차의 남은 대상도 부르지 않고 모름(캐시 없음 — 다음 회차에 다시 묻는다) |
- * | 시한·5xx·형식 깨짐 | 던진다(스윕이 격리·회로 차단을 센다) · 그 격자는 그 회차에 다시 부르지 않는다 |
+ * | 시한·5xx·형식 깨짐 | 던진다(스윕이 격리·회로 차단을 센다) · 그 격자는 그 회차에 다시 부르지 않는다 · **서로 다른 격자**가 연속 3번이면 그 회차의 남은 대상은 부르지 않고 모름 |
  * | 자료 없음(03 소진·상한)·좌표 없음·칸 결측 | 그 슬롯만 모름 — 다른 슬롯에 신호가 있으면 발화, 없으면 모름 |
+ *
+ * 격자 장애의 연속을 감지기가 따로 세는 이유 — 기억한 격자로 돌려준 모름은 예외가 아니라서 스윕의 연속 실패 수를 0 으로 되돌린다.
+ * 전면 장애에서 기억한 격자와 새 격자가 섞여 오면 스윕의 회로가 열리지 않아, 지연이 PERF-SA-04 의 '3 × 상한'이 아니라 '서로 다른
+ * 격자 수 × 상한'이 된다.
  *
  * 신호는 (여행, 날짜)당 하나이고 slotKey 가 없다(날씨는 날짜 단위 — [끄기]는 그 날 억제). 저장·이벤트를 하지 않는다.
  */
@@ -51,9 +59,13 @@ class KmaForecastDetector(private val forecasts: HourlyForecastFacade) : Situati
 
     override fun detect(target: SweepTarget): Detection {
         val round = memo.updateAndGet { if (it.round == target.round) it else RoundMemo(target.round) }
-        round.gateway?.let { return Detection.Unknown(GATEWAY + it) }
         val outdoor = target.slots.filter { WeatherHazards.isOutdoor(it.category) }
-        if (outdoor.isEmpty()) return CONFIRMED // 실내로 바꾼 날은 해제된다
+        // 카테고리를 모르는 슬롯은 예보 없이 넘긴다 — 판정은 그 슬롯이 남았는지만 본다(남으면 그 날을 확인하지 않는다).
+        val unclassified = target.slots.filter { it.category == null }.map { exposureOf(it, null) }
+        // 실외가 없으면 부를 것이 없다 — 거절·장애 기억과 무관하게 판정한다(실내로 바꾼 날은 해제된다).
+        if (outdoor.isEmpty()) return detectionOf(WeatherHazards.judge(unclassified, target.now), target)
+        round.gateway?.let { return Detection.Unknown(GATEWAY + it) }
+        if (round.open.get()) return Detection.Unknown(GRID_CIRCUIT)
         val grids = HashMap<String, PointForecast?>()
         val exposures = outdoor.map { slot ->
             val forecast = try {
@@ -61,22 +73,26 @@ class KmaForecastDetector(private val forecasts: HourlyForecastFacade) : Situati
             } catch (e: HourlyForecastUnavailable) {
                 val code = e.gatewayCode
                 if (code == null) {
-                    round.failed += e.gridKey
+                    round.fail(e.gridKey)
                     throw e
                 }
                 round.gateway = code
                 return Detection.Unknown(GATEWAY + code)
             }
-            WeatherHazards.Exposure(
-                slot.slotKey, slot.poiId, slot.nameKo, slot.category, slot.date, slot.startAt, slot.endAt, slot.endsNextDay, forecast,
-            )
+            exposureOf(slot, forecast)
         }
-        return when (val verdict = WeatherHazards.judge(exposures, target.now)) {
-            is Verdict.Hazard -> Detection.Checked(emptySet(), listOf(signalOf(verdict, target)))
-            Verdict.Clear -> CONFIRMED
-            Verdict.Unsettled -> Detection.Checked(emptySet(), emptyList()) // 두 임계 사이 — 신호도 확인도 아니다
-            Verdict.Unknown -> Detection.Unknown(UNKNOWN)
-        }
+        return detectionOf(WeatherHazards.judge(exposures + unclassified, target.now), target)
+    }
+
+    private fun exposureOf(slot: PlannedSlotView, forecast: PointForecast?) = WeatherHazards.Exposure(
+        slot.slotKey, slot.poiId, slot.nameKo, slot.category, slot.date, slot.startAt, slot.endAt, slot.endsNextDay, forecast,
+    )
+
+    private fun detectionOf(verdict: Verdict, target: SweepTarget): Detection = when (verdict) {
+        is Verdict.Hazard -> Detection.Checked(emptySet(), listOf(signalOf(verdict, target)))
+        Verdict.Clear -> CONFIRMED
+        Verdict.Unsettled -> Detection.Checked(emptySet(), emptyList()) // 두 임계 사이 — 신호도 확인도 아니다
+        Verdict.Unknown -> Detection.Unknown(UNKNOWN)
     }
 
     /** 슬롯의 격자 예보 — null 이면 그 슬롯은 모름이다. 한 대상 안에서 같은 격자는 한 번만 묻는다. */
@@ -88,7 +104,11 @@ class KmaForecastDetector(private val forecasts: HourlyForecastFacade) : Situati
         if (key in grids) return grids[key]
         return forecasts.forecastForTrigger(lat, lng, at).also {
             grids[key] = it
-            if (it == null) round.failed += key // 03 소진이면 격자마다 HTTP 3건이 든다 — 그 회차엔 다시 묻지 않는다
+            if (it == null) {
+                round.failed += key // 03 소진이면 격자마다 HTTP 3건이 든다 — 그 회차엔 다시 묻지 않는다
+            } else {
+                round.streak.set(0) // 예보를 받았다 — 격자 장애의 연속이 끊긴다
+            }
         }
     }
 
@@ -139,8 +159,9 @@ class KmaForecastDetector(private val forecasts: HourlyForecastFacade) : Situati
             else -> "${band}비 소식이 있어요." // RAIN — 판정이 내는 변형은 PRECEDENCE 여섯뿐이다
         }
         val noun = if (h.variant == TriggerVariant.CLOUD) "야경 일정" else "야외 일정"
-        val first = h.affected.first().name?.takeIf { withName && it.isNotBlank() }
-        val count = h.affected.size
+        // 이름·곳 수는 대표 변형으로 걸린 슬롯만 — 다른 변형(예: 폭염 주의)에 걸린 슬롯을 '비 영향'으로 부르지 않는다.
+        val first = h.lead.first().name?.takeIf { withName && it.isNotBlank() }
+        val count = h.lead.size
         val who = when {
             count == 1 && first != null -> "$first 일정이"
             count == 1 -> "$noun 한 곳이"
@@ -167,13 +188,38 @@ class KmaForecastDetector(private val forecasts: HourlyForecastFacade) : Situati
 
         /** 그 회차에 실패·자료 없음이었던 격자 — 다시 부르지 않는다. */
         val failed: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+        /** 서로 다른 격자 장애의 연속 수 — 예보를 받으면 끊긴다. 기억한 격자로 돌려준 모름은 세지도 끊지도 않는다. */
+        val streak = AtomicInteger()
+
+        /** 격자 장애가 연속 [CIRCUIT_THRESHOLD] 번이면 열린다 — 그 회차의 남은 대상은 부르지 않는다(RES-SA-04 · PERF-SA-04). */
+        val open = AtomicBoolean()
+
+        /**
+         * 장애 격자를 기억하고 센다. 같은 격자를 두 여행이 동시에 처음 불러 둘 다 실패해도 한 번만 센다.
+         * 열리는 것은 상태 변화라 그 회차에 WARN 한 번이다(OBS-SA-03) — 좌표·격자 키는 싣지 않는다(SEC-SA-05).
+         */
+        fun fail(gridKey: String) {
+            if (failed.add(gridKey) && streak.incrementAndGet() >= CIRCUIT_THRESHOLD && open.compareAndSet(false, true)) {
+                log.warn(
+                    "단기예보 감지기 격자 회로를 엽니다 — 서로 다른 격자 {}곳이 연속 실패했습니다. 이 회차의 남은 대상은 부르지 않고 모름으로 둡니다.",
+                    CIRCUIT_THRESHOLD,
+                )
+            }
+        }
     }
 
     private companion object {
+        private val log = LoggerFactory.getLogger(KmaForecastDetector::class.java)
+
         /** 해소 확인(날짜 전체). */
         private val CONFIRMED = Detection.Checked(setOf(null), emptyList())
 
+        /** 스윕의 회로 차단과 같은 수(RES-SA-04 '연속 3번'). */
+        private const val CIRCUIT_THRESHOLD = 3
+
         private const val GATEWAY = "gateway:"
+        private const val GRID_CIRCUIT = "grid-circuit"
         private const val UNKNOWN = "forecast-unknown"
 
         private const val PAYLOAD_VARIANTS = "variants"
