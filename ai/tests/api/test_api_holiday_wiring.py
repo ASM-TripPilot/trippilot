@@ -236,6 +236,25 @@ def test_저녁은_그대로는_공휴일_휴무인_식당을_잠그지_않는�
     assert any(n.startswith("keep_dinner: ") and "dinner" in n for n in off["notes"]), off["notes"]
 
 
+
+def test_시각_잠금도_공휴일_휴무인_곳은_잠그지_않는다() -> None:
+    """"6시에 밥" 같은 시각 잠금(#1396)도 저녁 잠금과 같은 HC1 판정 — 공휴일 휴무면 고르지 않고 밝힌다."""
+    from types import SimpleNamespace
+
+    from trippilot.agents.planb.request_verification import VerifiedRequest
+    from trippilot.api.wiring import _timed_blocks
+
+    at = datetime(_REPLAN_DAY.year, _REPLAN_DAY.month, _REPLAN_DAY.day, 18, 0, tzinfo=_KST)
+    request = SimpleNamespace(excluded_poi_ids=(), current_slots=())
+    nl = VerifiedRequest(category_at=((PoiCategory.FOOD, at),))
+    pool = SimpleNamespace(pois=(_RESTAURANT,))
+    on_notes: list[str] = []
+    on = _timed_blocks(request, nl, pool, (), DEMO_ANCHOR, None, _KST, on_notes,
+                       {_REPLAN_DAY: frozenset({"PUBLIC"})})
+    assert on == () and "nl_at_none: FOOD 18:00" in on_notes, on_notes
+    off = _timed_blocks(request, nl, pool, (), DEMO_ANCHOR, None, _KST, [])
+    assert [str(b.poi_id) for b in off] == ["dinner"]
+
 # ── ⑤ 편집 검증 ──────────────────────────────────────────────────────
 
 

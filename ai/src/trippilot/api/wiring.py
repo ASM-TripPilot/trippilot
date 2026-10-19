@@ -1199,6 +1199,7 @@ _DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
 def _timed_blocks(
     request: schemas.ReplanRequest, nl: nl_verify.VerifiedRequest, pool: CandidatePool,
     blocks: tuple[FixedBlock, ...], anchor: GeoPoint, pace: Pace | None, tz: timezone, notes: list[str],
+    holidays: Mapping[date, frozenset[str]] | None = None,
 ) -> tuple[FixedBlock, ...]:
     """"성심당은 5시에"·"3시에 카페" — 말한 시각에 그 곳을 잠근다(HC3, `_dinner_blocks` 와 같은 잠금).
 
@@ -1210,18 +1211,14 @@ def _timed_blocks(
     index = {p.poi_id: p for p in pool.pois}
     excluded = set(request.excluded_poi_ids)
     current = {s.poi_id for s in request.current_slots}
-    dow = request.target_date.weekday()
     out: list[FixedBlock] = []
 
     def block(poi: Poi, at: datetime) -> FixedBlock | None:
         end = at + timedelta(minutes=stay_for(poi.category, pace))
-        s_min = at.hour * 60 + at.minute
-        e_min = s_min + stay_for(poi.category, pace)
         if (str(poi.poi_id) in excluded
                 or any(b.poi_id == poi.poi_id or (at < b.window.end and b.window.start < end)
                        for b in (*blocks, *out))
-                or (poi.open_hours and not any(oh.day_of_week == dow and oh.open_min <= s_min
-                                               and e_min <= oh.close_min for oh in poi.open_hours))):
+                or not open_hours_ok(poi, at, end, holidays)):  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
             return None
         return FixedBlock(poi_id=poi.poi_id, window=TimeWindow(start=at, end=end), reason="nl_at")
 
@@ -2425,7 +2422,7 @@ class WiredItineraryOrchestrator:
             notes.append(f"nl_nearby_added: {p.poi_id} +{len(around)}")
         # "3시에 카페" — 말한 시각에 잠근다. 시간만 당기기는 장소·순서를 안 바꾼다는 요청이라 걸지 않는다.
         if earlier is None:
-            blocks += _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes)
+            blocks += _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes, holidays)
         if nl.rain_confirmed and not (RAIN_OUTDOOR <= avoid):
             avoid = avoid | RAIN_OUTDOOR  # 말이 아니라 기상청이 확인한 비다
         drop = avoid - prefer
