@@ -118,6 +118,15 @@ services:
       # 하루 생성 상한과 예외(개발자) 계정(TRIP-1314). 상한은 빈 값이 넘어가면 숫자 바인딩이 깨져 기본을 적는다.
       ITINERARY_GENERATION_DAILY_LIMIT: ${ITINERARY_GENERATION_DAILY_LIMIT:-10}
       ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS: ${ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS:-}
+      # Plan-B 상황 감시 스윕(situation-awareness). off | dry-run(판정·요약 로그만, 쓰기 0) | on.
+      # 모드·지평은 값을 보장하는 꼴이다 — 빈 값이 넘어가면 바인딩이 깨진다(모르는 값은 기동 실패).
+      PLANB_SITUATION_SWEEP: ${PLANB_SITUATION_SWEEP:-off}
+      # 지평 — today | tomorrow(저녁 회차가 진행 중 여행의 내일도 본다) | pre-trip(내일 시작 여행의 첫날까지).
+      PLANB_SITUATION_HORIZON: ${PLANB_SITUATION_HORIZON:-today}
+      # 스윕 대상 계정(쉼표 구분 UUID) — 비우면 전원. 운영 카나리용.
+      PLANB_SITUATION_SWEEP_ACCOUNT_IDS: ${PLANB_SITUATION_SWEEP_ACCOUNT_IDS:-}
+      # 위험 감지 시 재계획 초안 미리 짜기 — off | on(LLM 비용). 읽는 코드는 선계산 변경이 더한다.
+      PLANB_PREPARED_REPLAN: ${PLANB_PREPARED_REPLAN:-off}
       # Apple 은 시크릿이 없다 — id_token 서명을 JWKS 로 검증할 뿐이라 iOS 번들 ID 하나뿐이다(TRIP-858).
       # 이 값이 없으면 애플 로그인은 401 이 아니라 501(미지원)로 나간다.
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
