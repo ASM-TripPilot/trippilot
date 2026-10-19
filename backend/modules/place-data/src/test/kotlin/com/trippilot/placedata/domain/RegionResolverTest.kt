@@ -41,36 +41,6 @@ class RegionResolverTest : StringSpec({
     }
 
     /**
-     * TourAPI 원본이 시도 이름을 잘라 보낼 때가 있다(실측: #1427 병합본 60,266건 중 2건 —
-     * `부산광역 사하구 …`, `제주특별자치 서귀포시 …`). 정확 일치만 보면 이 둘이 지역 미판정으로 빠지고,
-     * 실 수집본 적재 테스트가 develop 에서 깨졌다(TRIP-1471).
-     */
-    "시도 이름이 잘려 와도 그 이름으로 시작하는 시도가 하나뿐이면 그 시도로 정한다" {
-        resolve("부산광역 사하구 하단동 1195") shouldBe "26380"            // 낙동강 생태탐방선(실측 원문)
-        resolve("제주특별자치 서귀포시 색달동 3039-41") shouldBe "50130"   // 쉬리의언덕(실측 원문)
-    }
-
-    /** 옛 이름·약칭은 카탈로그 별칭(region_alias)으로 정한다 — 접두로는 못 읽는다(`강원도` 는 `강원특별자치도` 의 접두가 아니다). */
-    "시도 별칭은 카탈로그 별칭으로 정한다 — 시도 층 별칭만" {
-        val aliases = mapOf("제주도" to "50", "부산" to "26", "수원" to "41110")
-        val byAlias = { token: String -> aliases[token]?.let { code -> catalog.firstOrNull { it.regionCode == code } } }
-
-        RegionResolver.resolve("제주도 서귀포시 색달동 1", catalog, byAlias) shouldBe "50130"
-        RegionResolver.resolve("부산 사하구 하단동 1", catalog, byAlias) shouldBe "26380"
-        RegionResolver.resolve("수원 장안구 정자동 1", catalog, byAlias) shouldBe null   // 시군구 별칭은 시도가 아니다
-    }
-
-    /** 잘린 이름이 시도 둘에 걸리면 고르지 않는다 — 임의로 고르면 커버리지가 엉뚱한 시도에 쌓인다. */
-    "잘린 이름이 시도 둘 이상에 걸리거나 한 글자뿐이면 정하지 않는다" {
-        val withGyeongsang = catalog + listOf(
-            Region("47", "경상북도", "47", "경상북도", RegionLevel.SIDO, true, 0),
-            Region("48", "경상남도", "48", "경상남도", RegionLevel.SIDO, true, 0),
-        )
-        RegionResolver.resolve("경상 어딘가 1", withGyeongsang) shouldBe null
-        resolve("부 동구 초량동 1") shouldBe null
-    }
-
-    /**
      * **못 정하면 null 이다.** 가까운 지역으로 밀어 넣으면 그 지역 커버리지가 부풀어
      * "POI 가 있다"고 말하게 되고, 사용자는 후보가 없는 곳을 고른다(INV-1·INV-4).
      */

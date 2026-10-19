@@ -59,29 +59,14 @@ def load_catalog(seed_path: Path):
         r"\('(\d+)', '([^']+)', '(\d+)', '([^']+)', '(SIDO|SIGUNGU)', (?:true|false)\)", text
     )
     sido = {name: code for code, name, _, _, level in rows if level == "SIDO"}
-    # 시도 층 별칭(옛 이름·약칭: 강원도·전라남도·서울 …) — 시도 코드는 두 자리다.
-    sido_alias = dict(re.findall(r"\('([^']+)', '(\d{2})'\)", text))
     sigungu = collections.defaultdict(dict)
     for code, name, sido_code, _, level in rows:
         if level == "SIGUNGU":
             sigungu[sido_code][name] = code
-    return sido, sido_alias, sigungu
+    return sido, sigungu
 
 
-def sido_code_of(token: str, sido: dict, sido_alias: dict):
-    """시도 판정 — POI 쪽 `RegionResolver.sidoOf` 와 같은 규칙이다(둘이 갈리면 같은 주소가 다른 코드로 저장된다):
-    정식 이름 → 별칭 → 그 토큰으로 시작하는 정식 이름이 딱 하나(잘린 이름, TRIP-1471). 한 글자는 접두로 보지 않는다."""
-    if token in sido:
-        return sido[token]
-    if token in sido_alias:
-        return sido_alias[token]
-    if len(token) < 2:
-        return None
-    matches = [code for name, code in sido.items() if name.startswith(token)]
-    return matches[0] if len(matches) == 1 else None
-
-
-def resolve(address: str, sido: dict, sido_alias: dict, sigungu: dict):
+def resolve(address: str, sido: dict, sigungu: dict):
     """주소 → (region_code, 표시용 지역명). 시군구를 못 찾으면 시도까지만 내려간다.
 
     **못 정하면 None 이다** — 지어낸 코드가 들어가면 그 지역 숙소 목록에 엉뚱한 곳이 섞인다.
@@ -89,7 +74,7 @@ def resolve(address: str, sido: dict, sido_alias: dict, sigungu: dict):
     parts = address.split()
     if not parts:
         return None, None
-    sido_code = sido_code_of(parts[0], sido, sido_alias)
+    sido_code = sido.get(parts[0])
     if sido_code is None:
         return None, None
     under = sigungu.get(sido_code, {})
@@ -195,7 +180,7 @@ def main(path: str) -> int:
         return 2
 
     root = Path(__file__).resolve().parents[1]
-    sido, sido_alias, sigungu = load_catalog(root / "app/src/main/resources/db/migration/R__seed_region_catalog.sql")
+    sido, sigungu = load_catalog(root / "app/src/main/resources/db/migration/R__seed_region_catalog.sql")
     to_wgs84 = Transformer.from_crs("EPSG:5174", "EPSG:4326", always_xy=True)
 
     rows, dropped = [], collections.Counter()
@@ -217,7 +202,7 @@ def main(path: str) -> int:
                 dropped["영역밖"] += 1
                 continue
             address = (row.get("도로명주소") or row.get("지번주소") or "").strip()
-            code, region = resolve(address, sido, sido_alias, sigungu)
+            code, region = resolve(address, sido, sigungu)
             if code is None:
                 dropped["지역미해결"] += 1
                 continue

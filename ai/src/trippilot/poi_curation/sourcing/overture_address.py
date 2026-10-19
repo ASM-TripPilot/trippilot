@@ -67,11 +67,13 @@ def sido_abbreviations(regions: Regions) -> dict[str, str]:
     """`{"부산": "부산광역시", "경남": "경상남도", "제주도": "제주특별자치도", …}`.
 
     **카탈로그에서 유도한다** — 손으로 적으면 카탈로그가 바뀔 때 갈린다(통합시 신설 등).
-    세 가지 꼴을 만든다. 모두 실데이터에서 관측한 것이다:
+    네 가지 꼴을 만든다. 모두 실데이터에서 관측한 것이다:
 
         접미어 떼기       `부산광역시`   → `부산`      (Overture `부산 중구 영주동`)
         도 이름 축약       `경상남도`     → `경남`      (`경남 김해시 진례면`)
         축약 + 도         `제주특별자치도` → `제주도`    (`제주도 서귀포시 성산읍`)
+        끝 글자 떼기       `부산광역시`   → `부산광역`  (TourAPI `부산광역 사하구 하단동 1195`,
+                          `제주특별자치 서귀포시 색달동 …` — #1427 병합본 2건, TRIP-1471)
 
     도 이름 축약은 한국어 관용(첫 글자 + 셋째 글자)이다 — `경상남도`·`전라북도`·`충청남도`
     처럼 네 글자 도 이름에만 쓴다. 다른 꼴에는 적용하지 않는다.
@@ -80,6 +82,7 @@ def sido_abbreviations(regions: Regions) -> dict[str, str]:
     for _, name, _, level, _ in regions:
         if level != "SIDO":
             continue
+        out.setdefault(name[:-1], name)                   # `부산광역시` → `부산광역` (잘려 온 원본)
         short = next((name[: -len(s)] for s in _SIDO_SUFFIX
                       if name.endswith(s) and len(name) > len(s)), None)
         if short is None:

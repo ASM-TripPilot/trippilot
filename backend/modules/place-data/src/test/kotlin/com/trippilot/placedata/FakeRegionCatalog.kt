@@ -23,7 +23,6 @@ object FakeRegionCatalog : RegionCatalogPort {
         sigungu("11470", "양천구", "서울특별시"),
         sido("26", "부산광역시", true),
         sigungu("26170", "동구", "부산광역시"),
-        sigungu("26380", "사하구", "부산광역시"),
         sido("27", "대구광역시", true),
         sigungu("27140", "동구", "대구광역시"),
         sido("36", "세종특별자치시", true),
@@ -32,7 +31,6 @@ object FakeRegionCatalog : RegionCatalogPort {
         sigungu("41111", "수원시 장안구", "경기도", selectable = false),
         sido("50", "제주특별자치도", true),
         sigungu("50110", "제주시", "제주특별자치도"),
-        sigungu("50130", "서귀포시", "제주특별자치도"),
     )
 
     override fun find(query: String?, level: RegionLevel?): List<Region> = rows

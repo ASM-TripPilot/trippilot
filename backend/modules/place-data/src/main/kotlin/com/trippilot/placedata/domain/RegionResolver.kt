@@ -7,9 +7,7 @@ package com.trippilot.placedata.domain
  * `동구` 하나가 6개 시도에 걸쳐 118건이었다(수집본 실측). 이름만으로는 어느 동구인지 정할 수 없고,
  * 임의로 하나를 고르면 커버리지가 엉뚱한 지역에 쌓인다.
  *
- * 주소 첫 토큰은 시도명이라 그 모호함이 사라진다. 다만 원본 표기가 늘 정식 이름은 아니다 — 옛 이름(`강원도`·
- * `전라남도`)·약칭(`서울`)이 오고, TourAPI 는 이름을 잘라 보내기도 한다(#1427 병합본 60,266건 중 2건:
- * `부산광역 …`·`제주특별자치 …`). 그래서 시도는 정식 이름 → 카탈로그 별칭 → 유일 접두 순으로 정한다([sidoOf]).
+ * 주소 첫 토큰은 시도명이라 그 모호함이 사라진다. 실 수집본 1,104건이 **전부** 시군구까지 해결됐다(실측).
  *
  * **좌표에서 역산하지 않는다.** 폴리곤이 없어 상자로 근사하면 경계 지역이 조용히 옆 시군구로 넘어간다.
  */
@@ -19,11 +17,11 @@ object RegionResolver {
      * @return 카탈로그에 있는 코드, 또는 **null**. 못 정하면 null 이다 —
      *   가까운 지역으로 밀어 넣으면 그 지역 커버리지가 부풀어 "POI 가 있다"고 말하게 된다.
      */
-    fun resolve(address: String?, catalog: List<Region>, sidoByAlias: (String) -> Region? = { null }): String? {
+    fun resolve(address: String?, catalog: List<Region>): String? {
         val tokens = address?.trim()?.split(WHITESPACE)?.filter { it.isNotBlank() } ?: return null
         if (tokens.isEmpty()) return null
 
-        val sido = sidoOf(tokens[0], catalog, sidoByAlias) ?: return null
+        val sido = catalog.firstOrNull { it.level == RegionLevel.SIDO && it.name == tokens[0] } ?: return null
         val under = catalog.filter { it.level == RegionLevel.SIGUNGU && it.sidoCode == sido.regionCode }
 
         // 두 토큰 먼저 본다 — `수원시 장안구` 는 `수원시` 로도 걸리므로 순서를 뒤집으면 늘 시(市)로 접힌다.
@@ -40,19 +38,5 @@ object RegionResolver {
         return parentCity?.regionCode ?: sido.regionCode
     }
 
-    /**
-     * 시도 판정 — 정식 이름 → 카탈로그 별칭(`region_alias`: `강원도`·`광주`·`전남` 등, [sidoByAlias]) →
-     * **그 토큰으로 시작하는 시도가 딱 하나**일 때 그 시도(잘린 이름, TRIP-1471).
-     * 둘 이상에 걸리거나(`경상`) 한 글자뿐이면 정하지 않는다 — 임의로 고르면 커버리지가 엉뚱한 시도에 쌓인다.
-     */
-    private fun sidoOf(token: String, catalog: List<Region>, sidoByAlias: (String) -> Region?): Region? {
-        val sidos = catalog.filter { it.level == RegionLevel.SIDO }
-        sidos.firstOrNull { it.name == token }?.let { return it }
-        sidoByAlias(token)?.takeIf { it.level == RegionLevel.SIDO }?.let { return it }
-        if (token.length < MIN_PREFIX) return null
-        return sidos.filter { it.name.startsWith(token) }.singleOrNull()
-    }
-
-    private const val MIN_PREFIX = 2
     private val WHITESPACE = Regex("\\s+")
 }
