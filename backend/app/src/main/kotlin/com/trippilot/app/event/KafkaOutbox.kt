@@ -17,7 +17,6 @@ import org.springframework.kafka.config.TopicBuilder
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.listener.DefaultErrorHandler
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries
-import org.springframework.core.convert.ConversionException
 import org.springframework.messaging.converter.MessageConversionException
 import org.springframework.messaging.handler.invocation.MethodArgumentResolutionException
 import org.springframework.stereotype.Component
@@ -81,15 +80,16 @@ class KafkaOutboxConfig {
         // 예외 종류가 바뀌어도 시도 횟수를 이어 센다 — 기본(true)이면 연결 거부·시한 초과가 번갈아 나는 구독자는 매번 0 부터
         // 다시 세어 상한에 영영 닿지 않는다(폴링 모드는 종류와 무관하게 DB 에 센다).
         setResetStateOnExceptionChange(false)
-        // 분류표를 **통째로 바꾼다.** 기본표(ClassCastException 등)와 원인 사슬 검사는 구독자 안에서 난 예외에도 걸려,
-        // 폴링 모드라면 10번 재시도했을 일시 오류(응답 본문 파싱 실패 등)를 첫 실패에서 포기시킨다. 즉시 포기는 봉투를
-        // 못 읽은 경우([UnreadableEnvelope])와 스프링이 인자를 못 만든 경우(값 없는 레코드 등 — 리스너 본문 전)뿐이다.
+        // 분류표를 **통째로 바꾼다.** 분류는 원인 사슬 전체를 본다(끌 수 없다) — 그래서 기본표의 ClassCastException 같은
+        // 범용 타입은 구독자 안에서 난 일시 오류까지 첫 실패에서 포기시킨다(폴링 모드는 10번 재시도한다). 표에는 **구독자
+        // 코드가 던질 일이 없는 타입만** 둔다: 봉투를 못 읽음([UnreadableEnvelope]), 그리고 리스너 본문 전에 스프링 메시징·
+        // Kafka 변환이 실패한 경우(값 없는 레코드 등).
         setClassifications(
             mapOf(
                 UnreadableEnvelope::class.java to false,
                 MethodArgumentResolutionException::class.java to false,
                 MessageConversionException::class.java to false,
-                ConversionException::class.java to false,
+                org.springframework.kafka.support.converter.ConversionException::class.java to false,
             ),
             true,
         )
@@ -97,7 +97,9 @@ class KafkaOutboxConfig {
 
     companion object {
         const val TOPIC = "trippilot.outbox"
-        private const val PARTITIONS = 3
+        /** 파티션마다 소비 스레드 하나 — 두 값이 따로 놀면 한 스레드가 두 파티션을 맡아 백오프가 남의 파티션을 막는다. */
+        const val CONSUMERS = "3"
+        private val PARTITIONS = CONSUMERS.toInt()
         private val log = LoggerFactory.getLogger(KafkaOutboxConfig::class.java)
     }
 }
@@ -150,7 +152,7 @@ class KafkaOutboxBroker(
 class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: KafkaOutboxBroker) {
     // 파티션 수만큼 소비 스레드를 둔다 — 하나면 백오프가 그 스레드를 재워 실패한 이벤트 하나가 세 파티션 전부를 멈춘다.
     // 구독자는 종전에도 eventId 멱등·무상태 계약이라 동시에 불려도 된다(폴링 모드도 다중 인스턴스에서 동시에 돈다).
-    @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox", concurrency = "3")
+    @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox", concurrency = KafkaOutboxConfig.CONSUMERS)
     // 값 없는 레코드(tombstone)는 여기까지 오지 않는다 — 스프링이 인자 변환에서 비재시도 실패로 분류해 회수기로 바로 보낸다
     // (실측: "eventId 도 못 읽은 … value=null" 한 줄, 재시도 0). KafkaOutboxIT 가 그 동작을 지킨다.
     fun onMessage(value: String) {

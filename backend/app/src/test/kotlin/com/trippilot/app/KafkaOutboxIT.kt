@@ -62,7 +62,10 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         @Volatile var failAlways = false
         /** 계속 실패하되 예외 종류를 번갈아 — 종류가 바뀔 때마다 재시도 횟수가 리셋되면 영영 포기되지 않는다. */
         private var flip = false
-        /** 구독자 안에서 JSON 파싱 계열 예외가 한 번 난다(외부 응답 본문이 잘린 경우) — 재시도 대상이어야 한다. */
+        /**
+         * 구독자 안에서 범용 타입이 원인인 예외가 한 번 난다 — 재시도 대상이어야 한다. 원인을 ClassCastException 으로 두는
+         * 이유: 스프링 기본 즉시 포기 표에 있는 타입이라, 분류표를 바꾸지 않았다면(또는 범용 타입을 표에 넣었다면) 여기서 포기된다.
+         */
         @Volatile var failNextWithParse = false
         /** 이 aggregateId 만 계속 실패 — 다른 이벤트는 통과. */
         @Volatile var failOnly: String? = null
@@ -71,7 +74,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
             if (failOnly != null && envelope.aggregateId == failOnly) error("의도된 특정 이벤트 실패")
             if (failNextWithParse) {
                 failNextWithParse = false
-                throw IllegalStateException("의도된 응답 파싱 실패", com.fasterxml.jackson.core.JsonParseException(null, "잘린 본문"))
+                throw IllegalStateException("의도된 일시 실패", ClassCastException("구독자 안의 범용 예외"))
             }
             if (failNext) { failNext = false; error("의도된 소비 실패") }
             received += envelope
@@ -292,7 +295,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `구독자 안의 파싱 계열 예외는 봉투 문제가 아니다 — 포기하지 않고 재시도해 배달한다`() {
+    fun `구독자 안의 범용 예외는 봉투 문제가 아니다 — 포기하지 않고 재시도해 배달한다`() {
         subscriber.failNextWithParse = true
         tx.execute { publisher.publish(Probe("응답파싱")) }
         relayUntilPublished("응답파싱")
@@ -321,13 +324,13 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         // 구조부터 — 파티션마다 소비 스레드가 따로다. 아래 행동 검증만으로는 못 잡는다: 스레드가 하나여도 poll 묶음 안에서
         // 다른 파티션 레코드가 앞에 오면 먼저 처리되어 통과할 수 있다(실측: concurrency=1 로 바꿔도 통과했다).
         val container = listeners.listenerContainers.single() as org.springframework.kafka.listener.ConcurrentMessageListenerContainer<*, *>
-        container.containers.size shouldBe 3
+        container.containers.size shouldBe KafkaOutboxConfig.CONSUMERS.toInt()
 
         // 서로 다른 파티션에 떨어지는 두 키를 고른다(프로듀서 기본 분할: murmur2(key) % 파티션 수).
         fun partition(key: String) = org.apache.kafka.common.utils.Utils.toPositive(
             org.apache.kafka.common.utils.Utils.murmur2(key.toByteArray()),
         ) % 3
-        val stuck = (0..50).map { "막힘-$it" }.first()
+        val stuck = "막힘-0"
         val free = (0..50).map { "통과-$it" }.first { partition(it) != partition(stuck) }
 
         subscriber.failAlways = true
