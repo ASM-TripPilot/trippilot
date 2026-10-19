@@ -1,6 +1,7 @@
 package com.trippilot.recalculation.adapter.out.persistence
 
 import com.trippilot.recalculation.domain.OriginKind
+import com.trippilot.recalculation.domain.ReplanInitiator
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
@@ -50,15 +51,29 @@ class ReplanSessionEntity(
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "draft") var draft: Map<String, Any>?,
     @Column(name = "created_at") var createdAt: Instant,
     @Column(name = "closed_at") var closedAt: Instant?,
+    /** USER·SYSTEM(선계산) — 마이그레이션 `replan_session_initiated_by`. */
+    @Column(name = "initiated_by") var initiatedBy: String,
 ) {
     protected constructor() : this(
         UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null, "", LocalDate.EPOCH, Instant.EPOCH, "", null, null,
-        emptyArray(), emptyArray(), null, emptyArray(), "", null, Instant.EPOCH, null,
+        emptyArray(), emptyArray(), null, emptyArray(), "", null, Instant.EPOCH, null, "",
     )
 }
 
 interface ReplanSessionJpaRepository : JpaRepository<ReplanSessionEntity, UUID> {
+    /** 열린 세션 행 잠금 조회 — 닫는 쪽과 확정·산출 기록의 경합을 직렬화한다(`SELECT … FOR UPDATE`). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     fun findFirstByTripIdAndStatusIn(tripId: UUID, statuses: Collection<String>): ReplanSessionEntity?
+
+    fun findFirstByTriggerIdAndInitiatedBy(triggerId: UUID, initiatedBy: String): ReplanSessionEntity?
+
+    fun findFirstByTripIdAndTargetDateAndInitiatedByOrderByCreatedAtDesc(
+        tripId: UUID, targetDate: LocalDate, initiatedBy: String,
+    ): ReplanSessionEntity?
+
+    fun countByTripIdAndInitiatedByAndCreatedAtGreaterThanEqual(tripId: UUID, initiatedBy: String, since: Instant): Long
+
+    fun countByInitiatedByAndCreatedAtGreaterThanEqual(initiatedBy: String, since: Instant): Long
 
     /** 행 잠금 조회 — 비동기 산출과 취소·재진입의 경합을 직렬화한다(`SELECT … FOR UPDATE`). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -93,7 +108,7 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
                 session.origin.kind.name, session.origin.lat, session.origin.lng,
                 session.reasons.toTypedArray(), session.directives.toTypedArray(), session.freeText,
                 session.excludedPoiIds.toTypedArray(),
-                session.status.name, session.draft, session.createdAt, session.closedAt,
+                session.status.name, session.draft, session.createdAt, session.closedAt, session.initiatedBy.name,
             ),
         ).toDomain()
 
@@ -103,8 +118,19 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
     override fun findByIdForUpdate(sessionId: UUID): ReplanSession? =
         jpa.findForUpdate(sessionId)?.toDomain()
 
-    override fun findOpenByTrip(tripId: UUID): ReplanSession? =
+    override fun findOpenByTripForUpdate(tripId: UUID): ReplanSession? =
         jpa.findFirstByTripIdAndStatusIn(tripId, OPEN_STATUSES)?.toDomain()
+
+    override fun findSystemByTrigger(triggerId: UUID): ReplanSession? =
+        jpa.findFirstByTriggerIdAndInitiatedBy(triggerId, SYSTEM)?.toDomain()
+
+    override fun findLatestSystem(tripId: UUID, targetDate: LocalDate): ReplanSession? =
+        jpa.findFirstByTripIdAndTargetDateAndInitiatedByOrderByCreatedAtDesc(tripId, targetDate, SYSTEM)?.toDomain()
+
+    override fun countSystemSince(tripId: UUID?, since: Instant): Int = (
+        if (tripId == null) jpa.countByInitiatedByAndCreatedAtGreaterThanEqual(SYSTEM, since)
+        else jpa.countByTripIdAndInitiatedByAndCreatedAtGreaterThanEqual(tripId, SYSTEM, since)
+        ).toInt()
 
     override fun purgeOrigins(tripIds: List<UUID>): Int =
         if (tripIds.isEmpty()) 0 else jpa.purgeOrigins(tripIds)
@@ -114,7 +140,7 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         ReplanScope.valueOf(scope), targetDate, fromInstant,
         ReplanOrigin(OriginKind.valueOf(originKind), originLat, originLng),
         reasons.toList(), directives.toList(), freeText, excludedPoiIds.toList(),
-        ReplanStatus.valueOf(status), draft, createdAt, closedAt,
+        ReplanStatus.valueOf(status), draft, createdAt, closedAt, ReplanInitiator.valueOf(initiatedBy),
     )
 
     private companion object {
@@ -125,5 +151,7 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         private val OPEN_STATUSES = listOf(
             ReplanStatus.COLLECTING.name, ReplanStatus.SOLVING.name, ReplanStatus.DRAFT.name,
         )
+
+        private val SYSTEM = ReplanInitiator.SYSTEM.name
     }
 }

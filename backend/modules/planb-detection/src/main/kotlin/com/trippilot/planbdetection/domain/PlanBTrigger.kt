@@ -43,6 +43,8 @@ data class PlanBTrigger(
         const val PAYLOAD_POI_IDS = "poiIds"
         /** 장소 신호의 대상 POI(domain-entities §3.4) — 날씨의 [PAYLOAD_POI_IDS] 와 다른 키다. */
         const val PAYLOAD_POI_ID = "poiId"
+        /** 날씨의 영향 범위(`MOST`·`SOME` — situation-awareness domain-entities §3.4). 감지기가 싣고 사건 항목이 옮긴다. */
+        const val PAYLOAD_COVERAGE = "coverage"
         /** 발화한다 — 사용자에게 배너로 보인다. */
         fun active(
             tripId: UUID, itineraryId: UUID, kind: TriggerKind, affectedDate: LocalDate, slotKey: String?,
@@ -90,6 +92,9 @@ data class PlanBTrigger(
     val poiIds: List<String>
         get() = (payload[PAYLOAD_POI_IDS] as? List<*>)?.filterIsInstance<String>()
             ?: listOfNotNull(slotKey?.substringAfter('#', "")?.takeIf { it.isNotEmpty() })
+
+    /** 날씨 영향 범위(G-SA-11) — 선계산 재료 `dateRisks.coverage`. 없으면 null. */
+    val coverage: String? get() = payload[PAYLOAD_COVERAGE] as? String
 
     /** 대상(규칙 6) — (kind, 영향 날짜, 슬롯). 대상당 ACTIVE 는 1개다(`ux_plan_b_trigger_active`). */
     val target: TriggerLifecycle.Target get() = TriggerLifecycle.Target(kind, affectedDate, slotKey)

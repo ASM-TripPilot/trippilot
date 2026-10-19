@@ -2,6 +2,7 @@ package com.trippilot.planbdetection.application
 
 import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.planbdetection.domain.DataSource
+import com.trippilot.planbdetection.domain.PlanBTrigger
 import com.trippilot.planbdetection.domain.SituationCopy
 import com.trippilot.planbdetection.domain.SweepSource
 import com.trippilot.planbdetection.domain.TriggerKind
@@ -134,7 +135,7 @@ class KmaForecastDetector(private val forecasts: HourlyForecastFacade) : Situati
     /** 선계산 재료·되짚기(domain-entities §3.4) — 직렬화 가능 원시값만, 좌표 없음. 근거값은 발화한 변형의 것만. */
     private fun payloadOf(h: Verdict.Hazard): Map<String, Any> = buildMap {
         put(PAYLOAD_VARIANTS, h.variants.map { it.name })
-        put(PAYLOAD_COVERAGE, h.coverage.name)
+        put(PlanBTrigger.PAYLOAD_COVERAGE, h.coverage.name)
         put(PAYLOAD_SLOT_KEYS, h.affected.map { it.slotKey })
         put(PAYLOAD_BASE_AT, OffsetDateTime.ofInstant(h.baseAt, TriggerLifecycle.TRAVEL_ZONE).toString())
         h.evidence.popMax?.let { put("popMax", it) }
@@ -223,7 +224,6 @@ class KmaForecastDetector(private val forecasts: HourlyForecastFacade) : Situati
         private const val UNKNOWN = "forecast-unknown"
 
         private const val PAYLOAD_VARIANTS = "variants"
-        private const val PAYLOAD_COVERAGE = "coverage"
         private const val PAYLOAD_SLOT_KEYS = "slotKeys"
         private const val PAYLOAD_BASE_AT = "baseAt"
     }
