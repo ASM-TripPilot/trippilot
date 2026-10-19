@@ -5,9 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
 import com.trippilot.notification.application.NotificationRaiseService
+import com.trippilot.notification.application.PushPolicy
 import com.trippilot.notification.domain.NotificationAction
 import com.trippilot.notification.domain.NotificationKind
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import java.time.Duration
 import java.util.UUID
 
 /**
@@ -61,6 +64,12 @@ class StayRegisteredSubscriber(
  *
  * **발화한 것만 온다**(INV-U4-01) — 억제·무영향 판정은 발행 자체가 되지 않는다. 여기서 다시
  * 거르지 않는 이유가 그것이다: 규칙이 두 곳에 흩어지면 한쪽만 고쳐도 아무도 모른다.
+ *
+ * **푸시 여부는 사건이 정한다**(BR-SA-21 ② · DEC-SA-5) — `kind`·`push`·`others` 를 트리로 읽는다.
+ * 발행처는 하나(`TriggerService.eventOf`)이고 날씨 확인(`evaluate`)도 거기를 지나 언제나 `push` 를 싣는다 — 위험
+ * 대표 ∧ 트리거 하루 푸시 상한(민감도별) 안이면 true, 아니면 false(알림함만). U10 지연은 아직 발행처가 없다 —
+ * `evaluate` 를 지나면 같은 규칙을 받는다. `push` 가 없는 것은 새 필드가 생기기 전에 발행돼 배포 순간 아웃박스에
+ * 남아 있던 옛 사건(위치 인자 6개)뿐이고, 종전처럼 푸시 대상이되 제목도 종전 그대로다(BR-SA-21 ①).
  */
 @Component
 class PlanBTriggeredSubscriber(
@@ -75,12 +84,21 @@ class PlanBTriggeredSubscriber(
         val accountId = payload.uuid("accountId")
             ?: error("PlanBTriggered payload 에서 accountId 를 읽지 못했습니다. eventId=${envelope.eventId}")
         val tripId = payload.text("tripId").orEmpty()
+        val kind = payload.text("kind")
+        val push = payload.get("push")?.takeIf { !it.isNull }
+        // 어휘 밖 값은 옛 제목으로 알림함에만 둔다(BR-SA-21 ③) — 잘못 들어온 값이 기기를 울리면 안 된다.
+        val unknown = !PlanBNotificationCopy.isKnownKind(kind) || (push != null && !push.isBoolean)
+        if (unknown) {
+            log.warn("Plan-B 사건의 kind·push 를 모릅니다 — 옛 제목으로 알림함에만 둡니다. kind={} push={} eventId={}", kind, push, envelope.eventId)
+        }
+        // 새 필드가 없는 옛 사건은 종전 제목이다(BR-SA-21 ① '그 밖·옛 사건') — kind 제목은 새 사건만 받는다.
+        val legacy = push == null
         notifications.raise(
             accountId = accountId,
             kind = NotificationKind.PLAN_B,
-            title = "일정을 다시 짜는 게 좋겠어요",
+            title = PlanBNotificationCopy.title(kind.takeUnless { unknown || legacy }),
             // 사유는 있으면 싣는다 — "왜 바꾸라는지" 없이 오는 알림은 사용자가 무시한다.
-            body = payload.text("reason") ?: "오늘 일정에 영향을 주는 상황이 감지됐어요",
+            body = PlanBNotificationCopy.body(payload.text("reason"), payload.get("others")?.intValue() ?: 0),
             sourceEventId = envelope.eventId,
             // 같은 여행·같은 슬롯의 반복 발화를 억제 판정이 볼 수 있게 한다(BR-U6-34 재료).
             dedupKey = "PLAN_B#$tripId#${payload.text("slotKey").orEmpty()}",
@@ -88,11 +106,21 @@ class PlanBTriggeredSubscriber(
             // 사용자가 알림을 읽고도 무엇을 하라는 것인지 다시 찾아야 한다.
             actionType = NotificationAction.PLANB_REPLAN,
             // 어느 트리거로 열린 재계획인지 실어야 화면이 사유를 다시 물어보지 않는다.
-            // 세션 id 는 아직 없다 — 세션은 사용자가 진입할 때 열린다.
+            // 날짜·세션 id 는 싣지 않는다 — 앱이 탭 시점에 트리거 상세와 준비된 대안을 조회한다(BR-SA-21 ④).
             actionPayload = mapOf("tripId" to tripId, "triggerId" to envelope.aggregateId),
+            push = when {
+                unknown || push?.booleanValue() == false -> PushPolicy.InAppOnly
+                // 같은 여행 Plan-B 푸시는 10분에 1번이다(BR-U6-09 개정) — dedupKey 의 여행 접두로 묶는다.
+                else -> PushPolicy.OncePer("PLAN_B#$tripId#", PUSH_WINDOW)
+            },
         )
     }
 
+    private companion object {
+        private val PUSH_WINDOW: Duration = Duration.ofMinutes(10)
+
+        private val log = LoggerFactory.getLogger(PlanBTriggeredSubscriber::class.java)
+    }
 }
 
 /**

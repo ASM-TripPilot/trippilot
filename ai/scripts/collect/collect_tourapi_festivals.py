@@ -150,7 +150,7 @@ def main(argv: list[str]) -> int:
     store = JsonEventStore(args.store)
     added = backfilled = 0
     for region, events in sorted(by_region.items()):
-        a, b = store.upsert(region, events, now, covered=False)
+        a, b = store.upsert(region, events, now, covered=False, authoritative=True)
         added, backfilled = added + a, backfilled + b
     store.save()
     kept = [e for es in by_region.values() for e in es]

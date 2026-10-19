@@ -8,6 +8,8 @@ import type {
   ApplyProposalResponse,
   AssistantSessionSummary,
   DismissProposalResponse,
+  FeedbackRequest,
+  FeedbackResponse,
   MessagesPage,
   OpenSessionResponse,
   SendTurnRequest,
@@ -135,6 +137,25 @@ export class HttpAssistantAdapter implements AssistantPort {
     await this.call({
       method: 'DELETE',
       url: `/assistant/sessions/${sessionId}`,
+    });
+  }
+
+  putFeedback(
+    sessionId: string,
+    messageId: string,
+    req: FeedbackRequest
+  ): Promise<FeedbackResponse> {
+    return this.call({
+      method: 'PUT',
+      url: `/assistant/sessions/${sessionId}/messages/${messageId}/feedback`,
+      data: req,
+    });
+  }
+
+  async deleteFeedback(sessionId: string, messageId: string): Promise<void> {
+    await this.call({
+      method: 'DELETE',
+      url: `/assistant/sessions/${sessionId}/messages/${messageId}/feedback`,
     });
   }
 }

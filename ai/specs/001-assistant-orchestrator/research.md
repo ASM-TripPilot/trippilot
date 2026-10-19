@@ -143,6 +143,7 @@ BE: `interpret-stage-max-ms` 5000→9000, 해석 read timeout = interpret + 5000
 
 BE 1차(금칙어 fail-closed·분당 20·스냅샷 화이트리스트) 유지 → AI: normalize·500자 거절 → 분류 프롬프트 규칙(목록 밖/주입/역할변경/유출/유해 → `{"intent": null}`) + IntentGate closed-set → OUT_OF_SCOPE(문장 없음, BE SCOPE 카드·거절 스트릭) → 답변 출구 게이트(길이·INV-3·연락처·줄 수) → 폴백 템플릿. 허용된 blast radius = "보이는 문장 오염"까지(메모리 노트 prompt-injection-blast-radius, 재제안 금지).
 
+**[개정 · 2026-10-19 · FD BR-AO-21]** normalize·500자 거절 뒤에 0′ 결정론 거름을 둔다 — 주입 꼴(`gates.base.has_injection_like`)이면 LLM 0회 OUT_OF_SCOPE(`not_classifiable: injection_suspected`, 운영 집계 로그 `dialogue_injection_suspected`). 같은 술어로 지난 턴·기억 줄을 다시 싣지 않고(분류·답변·요약), 답변 출구 게이트(⑤)·기억 게이트(④′)·`compress_fallback` 이 거른다.
 ## 3. BE 변경 (같은 PR, 최소)
 
 1. `Dialogue.kt`: `InterpretOutcome.ANSWER`, `Interpretation.answer: InterpretedAnswer?`(kind·text·payload·nextActions·quickReplies·footnote), `InterpretRequest` += `sessionId`, `accountRef`, `recentTurns`.

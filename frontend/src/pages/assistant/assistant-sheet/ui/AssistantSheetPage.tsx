@@ -22,6 +22,7 @@ import {
   useDismissProposal,
   useMarkProposal,
 } from '../model/assistantQueries';
+import { useAnswerFeedback } from '../model/useAnswerFeedback';
 import { useTurnFlow } from '../model/useTurnFlow';
 import { CAPABILITIES_LABEL, displayMessage } from '../model/displayActions';
 import { nextActionRoute } from '../model/nextActionRoute';
@@ -31,6 +32,7 @@ import {
   isSendableText,
   needsCapabilitiesChip,
 } from '../model/sheetModel';
+import { AnswerFeedback } from './AnswerFeedback';
 import { MessageCard } from './AssistantCards';
 import { TurnStatusRow } from './AssistantSheetChrome';
 import { AssistantSheetView } from './AssistantSheetView';
@@ -45,6 +47,8 @@ import { HistoryView } from './HistoryView';
  *   모달을 닫고 push 하는 두 걸음 대신 한 걸음(FD §4-5 와 다름, 개정 블록).
  * - "내가 할 수 있는 것 보기" 상시 칩: 서버가 그 quick reply 를 줬으면 그것을 ACTION 으로, 아니면 라벨을
  *   TEXT 턴으로 보낸다 — 클라가 quick reply id 를 지어내지 않는다(위조 차단 규칙).
+ * - 답 평가(US-ASSIST-09): 도우미 답 아래 엄지 줄. 평가 값은 메시지 캐시(낙관 갱신·실패 롤백), 펼친 이유 칸·
+ *   쓰던 의견·실패 안내는 `useAnswerFeedback` 이 쥔다.
  */
 
 export interface AssistantSheetPageProps {
@@ -67,6 +71,7 @@ export function AssistantSheetPage({
   const clearSession = useClearSession(tripKey);
   const [draft, setDraft] = useState('');
   const turn = useTurnFlow(sessionId, surface, setDraft);
+  const feedback = useAnswerFeedback(sessionId);
   // 이력 보기(b06) — 별도 라우트가 아니라 시트 안 보기 전환(깜빡임 없이, frontend-components §1).
   const [view, setView] = useState<'CHAT' | 'HISTORY'>('CHAT');
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -331,6 +336,20 @@ export function AssistantSheetPage({
             onDismiss: handleDismiss,
             onRepropose: handleRepropose,
           }}
+        />
+      )}
+      renderFeedback={(message) => (
+        <AnswerFeedback
+          messageId={message.id}
+          rating={message.feedback ?? null}
+          panel={feedback.panelOf(message.id)}
+          busy={feedback.busyOf(message.id)}
+          error={feedback.errorOf(message.id)}
+          onPressThumb={(rating) => feedback.pressThumb(message, rating)}
+          onPickReason={(reason) => feedback.pickReason(message.id, reason)}
+          onOpenComment={() => feedback.openComment(message.id)}
+          onChangeComment={(text) => feedback.changeComment(message.id, text)}
+          onSubmitComment={() => feedback.submitComment(message.id)}
         />
       )}
     />

@@ -3,6 +3,7 @@ import { InteractionManager } from 'react-native';
 import { Stack } from 'expo-router';
 
 import { useAccountBoundaryReset } from '@/app/model/useAccountBoundaryReset';
+import { usePushRouting } from '@/app/model/usePushRouting';
 import { useBootstrapGate } from '@/features/auth';
 import { SplashScreen } from '@/features/auth';
 import { registerPushIfGranted } from '@/shared/push';
@@ -62,6 +63,7 @@ export function SplashGate() {
   const drawn = phase !== 'loading' && destination !== null && floorElapsed;
   // 훅이라 조기 반환 위에서 부른다(렌더마다 훅 개수가 같아야 한다).
   useAccountBoundaryReset(drawn, destination);
+  usePushRouting(drawn, destination);
 
   if (!drawn) {
     return <SplashScreen />;

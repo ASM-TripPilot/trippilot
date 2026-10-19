@@ -39,6 +39,7 @@ from trippilot.poi_curation.place_docs import (  # noqa: E402
     is_company_intro,
     is_disambiguation,
     mentions_region,
+    same_subject,
     wiki_sections,
 )
 
@@ -176,8 +177,10 @@ def accept(pages: dict[str, tuple[str, str]], by_title: dict[str, dict]) -> list
         if not item or not intro.strip():
             continue
         prov = item.get("provenance") or {}
+        address = str(prov.get("address") or "")
         if (is_disambiguation(intro) or is_company_intro(intro)
-                or not mentions_region(intro, item.get("region") or "", str(prov.get("address") or ""))):
+                or not same_subject(str((item.get("poi") or {}).get("name") or asked), title, address)
+                or not mentions_region(intro, item.get("region") or "", address)):
             continue
         out.append((title, _ref(item)))
     return out

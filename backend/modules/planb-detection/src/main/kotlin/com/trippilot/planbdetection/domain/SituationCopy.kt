@@ -23,6 +23,9 @@ object SituationCopy {
 
     const val MAX_LENGTH = 200
 
+    /** 문구에 넣는 장소명의 최대 길이(BR-SA-12 ⑦) — 넘으면 [shortName] 으로 자른다. */
+    const val NAME_MAX = 30
+
     /** 수량 — AI `_NUM` 과 같다. */
     private const val NUM = "(?:\\d+|[일이삼사오육칠팔구십]+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|반)"
 
@@ -41,12 +44,14 @@ object SituationCopy {
 
     /**
      * 위반 이름(로그용). 통과하면 null.
-     * @param placeNames 이 문장에 넣었을 수 있는 장소명 — 그 자리를 공백으로 비우고 본다(긴 이름부터).
+     * @param placeNames 이 문장에 넣었을 수 있는 장소명 — 그 자리를 공백으로 비우고 본다(긴 이름부터). 감지기는 이름을
+     *   [shortName] 으로 잘라 넣으므로 잘린 꼴도 함께 비운다 — 판정(reconcile)이 아는 것은 일정의 전체 이름뿐이다.
      */
     fun violation(reason: String, placeNames: Collection<String>): String? {
         if (reason.isBlank()) return "blank"
         if (reason.length > MAX_LENGTH) return "too-long"
-        val masked = placeNames.filter { it.isNotBlank() }.sortedByDescending { it.length }
+        val masked = placeNames.flatMap { listOf(it, shortName(it)) }.filter { it.isNotBlank() }.distinct()
+            .sortedByDescending { it.length }
             .fold(reason) { text, name -> text.replace(name, " ") }
         return when {
             RELATIVE_DAY.containsMatchIn(masked) -> "relative-day"
@@ -58,4 +63,8 @@ object SituationCopy {
 
     /** 미래일 문장 머리 — `10월 20일(화)`. 상대 날짜어 대신 쓴다. */
     fun dayPrefix(date: LocalDate): String = date.format(DAY_PREFIX)
+
+    /** 문구에 넣을 장소명 — [NAME_MAX] 자(코드 포인트)에서 자른다. 이모지 같은 보조 평면 문자를 반으로 가르지 않는다. */
+    fun shortName(name: String): String =
+        if (name.codePointCount(0, name.length) <= NAME_MAX) name else name.substring(0, name.offsetByCodePoints(0, NAME_MAX))
 }

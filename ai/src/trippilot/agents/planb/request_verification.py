@@ -12,6 +12,7 @@
 | 〃 | 지도 실재 포트(Kakao·Google) | NOT_FOUND 가 아니다(UNVERIFIED 는 통과 — 장애를 폐업으로 읽지 않는다) |
 | 〃 | 그날 영업시간 | 휴무가 증명되지 않았다(정보 없음은 막지 않는다 — HC1 과 같은 판정) |
 | 시각 제약 | 그날 남은 시간창 | 창 안이고 지금 이후다 — 창을 **좁히기만** 한다(넓히면 백엔드 창을 어긴다) |
+| 방문 시각("3시에 카페") | 〃 | 창 안이고 지금 이후다 — 하루 시작이 아니라 그 곳·종류의 방문 시각이다 |
 | 날씨 주장 | 기상청 강수확률(수집 패킷) | 비 주장이면 임계 이상일 때만 실내 쪽으로 기운다 |
 
 웹 검색 결과를 후보로 쓰지 않는다 — 지도 포트는 **확인용**이고, 후보는 등록 POI 에서만 온다.
@@ -21,7 +22,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, tzinfo
 
 from trippilot.agents.planb.composition import hours_label
@@ -71,6 +72,9 @@ class VerifiedRequest:
     # 종류 조건 — 후보 풀에 그 종류가 있는 것만. `only` 가 비면 제한 없음, `counts` 는 그 종류를 정확히 몇 곳.
     only: frozenset[PoiCategory] = frozenset()
     counts: tuple[tuple[PoiCategory, int], ...] = ()
+    # 방문 시각 — "성심당은 5시에"(visit 의 곳)·"3시에 카페"(종류). 배선이 그 시각에 잠근다.
+    visit_at: tuple[tuple[PoiId, datetime], ...] = ()
+    category_at: tuple[tuple[PoiCategory, datetime], ...] = ()
     notes: tuple[str, ...] = field(default=())
 
 
@@ -301,6 +305,7 @@ def verify(
     notes: list[str] = []
     visit: tuple[Poi, ...] = ()
     avoid: frozenset[PoiId] = frozenset()
+    pool: Sequence[Poi] = ()
     if extracted.places:
         try:
             pool = registered()
@@ -310,6 +315,27 @@ def verify(
             visit, avoid, n = verify_places(
                 extracted.places, pool, anchor, on.weekday(), existence, existence_deadline_ms)
             notes += n
+    # "3시에 카페"를 모델이 start_after 로도 옮기면 하루가 15시에 시작해 오전이 통째로 빠졌다(로컬 실측
+    # 2026-10-19). 방문 시각과 같은 시작 시각은 그 오독으로 보고 버린다.
+    times = {p.at for p in extracted.places if p.at} | {c.at for c in extracted.categories if c.at}
+    if extracted.start_after in times:
+        extracted = replace(extracted, start_after=None)
+        notes.append("nl_time_dropped: start_after_is_visit_time")
+    floor = max(window_start, not_before) if not_before else window_start
+
+    def at_in_window(t: time, label: str) -> datetime | None:
+        at = datetime.combine(on, t, tzinfo=tz)
+        if floor <= at < window_end:
+            return at
+        notes.append(f"nl_at_rejected: {label} outside_window")
+        return None
+
+    kept = {p.poi_id for p in visit}
+    visit_at = []
+    for ep in extracted.places:
+        poi = match_place(ep.name, pool, anchor)[0] if ep.at else None
+        if poi is not None and poi.poi_id in kept and (at := at_in_window(ep.at, str(poi.poi_id))):
+            visit_at.append((poi.poi_id, at))
     start, end, n = verify_window(
         on, extracted.start_after, extracted.end_by, window_start, window_end, not_before, tz)
     notes += n
@@ -317,5 +343,10 @@ def verify(
     notes += n
     only, counts, n = verify_categories(extracted, available)
     notes += n
+    category_at = []
+    for c in extracted.categories:
+        if c.at and PoiCategory(c.category) in available and (at := at_in_window(c.at, c.category)):
+            category_at.append((PoiCategory(c.category), at))
     return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end,
-                           rain_confirmed=rain, only=only, counts=counts, notes=tuple(notes))
+                           rain_confirmed=rain, only=only, counts=counts,
+                           visit_at=tuple(visit_at), category_at=tuple(category_at), notes=tuple(notes))

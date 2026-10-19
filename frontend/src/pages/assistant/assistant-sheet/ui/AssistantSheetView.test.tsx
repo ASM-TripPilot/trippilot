@@ -1,7 +1,12 @@
+import { Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { ProposalStatus } from '../api/assistantContract';
-import { assistantSample, sampleTranscript } from '../api/assistantSamples';
+import {
+  assistantSample,
+  sampleActionLogs,
+  sampleTranscript,
+} from '../api/assistantSamples';
 import {
   AssistantSheetView,
   type AssistantSheetViewProps,
@@ -153,4 +158,20 @@ describe('제안 각주 (적용 뒤 거짓말 방지)', () => {
       expect(screen.queryByTestId('assistant-footnote-mf')).toBeNull();
     }
   );
+});
+
+describe('답 평가 줄 자리 (US-ASSIST-09)', () => {
+  it('도우미의 답마다 renderFeedback 을 그리고, 사용자 말·적용 기록(ACTION_LOG)에는 그리지 않는다', () => {
+    const transcript = sampleTranscript('review');
+    renderView({
+      messages: [...transcript.messages, ...sampleActionLogs()],
+      renderFeedback: (message) => (
+        <Text testID={`feedback-${message.id}`}>평가</Text>
+      ),
+    });
+    expect(screen.getByTestId('feedback-m-review')).toBeOnTheScreen();
+    expect(screen.queryByTestId('feedback-u-review')).toBeNull();
+    expect(screen.queryByTestId('feedback-log-1')).toBeNull();
+    expect(screen.queryByTestId('feedback-log-2')).toBeNull();
+  });
 });

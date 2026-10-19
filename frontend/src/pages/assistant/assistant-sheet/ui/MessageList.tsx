@@ -8,8 +8,8 @@ import { ChevronRightGlyph } from './AssistantSheetGlyphs';
 
 /**
  * 대화 목록(TRIP-1322) — 최신이 아래. `inverted` FlatList 라 데이터는 뒤집어 넣는다.
- * 메시지 하나 = 말풍선(사용자 검정 · 도우미 회색 + ✦) + 카드(`renderCard`, TRIP-1323) + next action + 각주.
- * 문구·시각·거리는 서버 문자열 그대로 그린다(DEC-U8-6 · INV-2·3).
+ * 메시지 하나 = 말풍선(사용자 검정 · 도우미 회색 + ✦) + 카드(`renderCard`, TRIP-1323) + next action + 각주
+ * + 답 평가 줄(`renderFeedback`, US-ASSIST-09). 문구·시각·거리는 서버 문자열 그대로 그린다(DEC-U8-6 · INV-2·3).
  */
 
 export interface MessageListProps {
@@ -17,6 +17,8 @@ export interface MessageListProps {
   onPressAction: (action: NextAction) => void;
   /** 메시지 kind 별 카드 — 없으면 말풍선·행동만 그린다. */
   renderCard?: (message: AssistantMessage) => ReactNode;
+  /** 답 평가 줄 — 도우미의 답에만 붙인다(사용자 말·적용 기록 `ACTION_LOG` 제외, INV-U8-10). */
+  renderFeedback?: (message: AssistantMessage) => ReactNode;
 }
 
 export function UserBubble({
@@ -77,10 +79,12 @@ function AssistantMessageBlock({
   message,
   onPressAction,
   renderCard,
+  renderFeedback,
 }: {
   message: AssistantMessage;
   onPressAction: (action: NextAction) => void;
   renderCard?: (message: AssistantMessage) => ReactNode;
+  renderFeedback?: (message: AssistantMessage) => ReactNode;
 }): ReactElement {
   // 카드가 스스로 그린 행동(외부 위임 링크·폴백 다시 시도/계속)은 버튼 줄에서 뺀다.
   const consumed = cardConsumes(message);
@@ -113,6 +117,8 @@ function AssistantMessageBlock({
           {message.footnote}
         </Text>
       ) : null}
+      {/* 적용 기록은 도우미가 한 일의 기록이지 답이 아니다 — 평가 대상이 아니다(서버도 400). */}
+      {message.kind !== 'ACTION_LOG' ? renderFeedback?.(message) : null}
     </View>
   );
 }
@@ -121,6 +127,7 @@ export function MessageList({
   messages,
   onPressAction,
   renderCard,
+  renderFeedback,
 }: MessageListProps): ReactElement {
   return (
     <FlatList
@@ -138,6 +145,7 @@ export function MessageList({
             message={item}
             onPressAction={onPressAction}
             renderCard={renderCard}
+            renderFeedback={renderFeedback}
           />
         )
       }
