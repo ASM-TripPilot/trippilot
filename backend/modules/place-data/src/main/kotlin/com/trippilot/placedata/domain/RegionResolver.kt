@@ -8,6 +8,7 @@ package com.trippilot.placedata.domain
  * 임의로 하나를 고르면 커버리지가 엉뚱한 지역에 쌓인다.
  *
  * 주소 첫 토큰은 시도명이라 그 모호함이 사라진다. 실 수집본 1,104건이 **전부** 시군구까지 해결됐다(실측).
+ * 시도명이 잘려 오면 그 이름으로 시작하는 시도가 하나뿐일 때만 받는다(sidoOf).
  *
  * **좌표에서 역산하지 않는다.** 폴리곤이 없어 상자로 근사하면 경계 지역이 조용히 옆 시군구로 넘어간다.
  */
@@ -21,7 +22,7 @@ object RegionResolver {
         val tokens = address?.trim()?.split(WHITESPACE)?.filter { it.isNotBlank() } ?: return null
         if (tokens.isEmpty()) return null
 
-        val sido = catalog.firstOrNull { it.level == RegionLevel.SIDO && it.name == tokens[0] } ?: return null
+        val sido = sidoOf(tokens[0], catalog) ?: return null
         val under = catalog.filter { it.level == RegionLevel.SIGUNGU && it.sidoCode == sido.regionCode }
 
         // 두 토큰 먼저 본다 — `수원시 장안구` 는 `수원시` 로도 걸리므로 순서를 뒤집으면 늘 시(市)로 접힌다.
@@ -38,5 +39,18 @@ object RegionResolver {
         return parentCity?.regionCode ?: sido.regionCode
     }
 
+    /**
+     * 정확히 일치하는 시도, 없으면 **그 토큰으로 시작하는 시도가 딱 하나**일 때 그 시도.
+     * TourAPI 원본이 시도 이름을 잘라 보낼 때가 있다(`부산광역`·`제주특별자치` — 실측 2건, TRIP-1471).
+     * 둘 이상에 걸리거나(`경상`) 한 글자뿐이면 정하지 않는다 — 임의로 고르면 커버리지가 엉뚱한 시도에 쌓인다.
+     */
+    private fun sidoOf(token: String, catalog: List<Region>): Region? {
+        val sidos = catalog.filter { it.level == RegionLevel.SIDO }
+        sidos.firstOrNull { it.name == token }?.let { return it }
+        if (token.length < MIN_PREFIX) return null
+        return sidos.filter { it.name.startsWith(token) }.singleOrNull()
+    }
+
+    private const val MIN_PREFIX = 2
     private val WHITESPACE = Regex("\\s+")
 }
