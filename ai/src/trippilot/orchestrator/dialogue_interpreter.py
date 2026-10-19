@@ -43,7 +43,7 @@ from trippilot.domain.dialogue import (
 from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
 from trippilot.orchestrator.arguments import extract_argument
 from trippilot.orchestrator.intent_router import IntentRouter, normalize
-from trippilot.orchestrator.question_bank import BankEntry, BankVectors, index_bank
+from trippilot.orchestrator.question_bank import BankEntry, BankLoadError, BankVectors, index_bank
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
 from trippilot.ports.vector_store_port import VectorStorePort
@@ -244,7 +244,11 @@ class BankIndex:
         if reason is not None:
             log.warning("미리 계산한 질문뱅크 벡터를 쓰지 않음(%s) — 원격 색인으로", reason)
             return
-        n = index_bank(self._entries, embedding, self._store, vectors=pre.vectors)
+        try:
+            n = index_bank(self._entries, embedding, self._store, vectors=pre.vectors)
+        except BankLoadError as e:  # 지문은 맞는데 개수·차원이 깨진 파일 — 기동을 막지 않고 원격 색인으로(Codex 리뷰)
+            log.warning("미리 계산한 질문뱅크 벡터가 깨졌음(%s) — 원격 색인으로", e)
+            return
         self._indexed = True
         log.info("질문뱅크 색인 완료 — %d문장 (미리 계산한 벡터)", n)
 
