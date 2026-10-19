@@ -42,6 +42,9 @@ _SUMMARY_MAX = 80
 class PlanTool:
     summary: str  # 모델에게 보일 "무엇을 돌려주나 · 못 하는 것" 한 줄 (1..80자)
     needs: tuple[str, ...] = ()  # 쓰는 `HandlerPorts` 칸 — 하나라도 미배선이면 노출하지 않는다(늘 UNAVAILABLE 로 끝날 계획을 막는다)
+    # 인자표에는 있지만 핸들러가 읽지 않는 인자 — 광고(`$tools`)에서도 게이트 허용 키에서도 뺀다. 광고하면 모델이 채우고 핸들러는
+    # 버려, 다른 질문의 답이 나간다(GET_WEATHER period: "주말에 비 오면"에 오늘 강수확률, 2026-10-19 코드 대조 실측)
+    hide: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not 1 <= len(self.summary) <= _SUMMARY_MAX or "\n" in self.summary:
@@ -51,8 +54,8 @@ class PlanTool:
 PLAN_TOOLS: Mapping[Intent, PlanTool] = {
     Intent.SHOW_SCHEDULE: PlanTool("여행 일정표 — 날짜별 장소와 계획 시각(전체·남은 것·하루)"),
     Intent.GET_NEXT_SLOT: PlanTool("지금 이후 다음 일정 한 곳과 그 계획 시각"),
-    Intent.GET_WEATHER: PlanTool("일정 장소 기준 그날 최대 강수확률 하나 — 기온·바람·미세먼지·다른 지역 날씨는 없다",
-                                 ("poi_info", "weather")),
+    Intent.GET_WEATHER: PlanTool("일정 장소 기준 날짜 하루만의 최대 강수확률 — 주말·기간은 못 본다, 기온·바람·다른 지역 날씨도 없다",
+                                 ("poi_info", "weather"), hide=("period",)),
     Intent.GET_DISTANCE: PlanTool("일정 안 한 장소까지 바로 앞 일정에서의 거리 — 소요시간은 없다", ("poi_info", "transit")),
     Intent.GET_POI_INFO: PlanTool("일정 안 장소의 분류·영업시간·입장료 — 일정 밖 장소는 못 찾는다", ("poi_info",)),
     Intent.SUGGEST_ALTERNATIVE: PlanTool("일정의 한 곳 대신 갈 근처 등록 장소 최대 5곳", ("poi_info", "pool_builder", "planb")),
@@ -69,10 +72,14 @@ def validate_plan_tools(tools: Mapping[Intent, PlanTool]) -> None:
     never = set(tools) & NEVER_TOOLS
     if never:
         raise ValueError(f"쓰기·넘기기 의도는 도구가 될 수 없다: {sorted(i.value for i in never)}")
-    for intent in tools:
+    for intent, tool in tools.items():
         for spec in asked_specs_of(intent):
             if spec.multiple or spec.kinds[0] is ArgumentKind.COUNT:
                 raise ValueError(f"도구 인자는 문자열 스칼라만: {intent.value}.{spec.name}")
+        asked = {s.name: s for s in asked_specs_of(intent)}
+        for name in tool.hide:  # 숨길 수 있는 것은 묻는 선택 인자뿐 — 필수를 숨기면 그 도구는 영영 못 부른다
+            if name not in asked or asked[name].required:
+                raise ValueError(f"숨길 인자는 묻는 선택 인자만: {intent.value}.{name}")
 
 
 validate_plan_tools(PLAN_TOOLS)
@@ -80,8 +87,19 @@ if set(PLAN_TOOLS) | NEVER_TOOLS != DIALOGUE_INTENTS | {Intent.OUT_OF_SCOPE}:  #
     raise ValueError("도우미 의도는 전부 PLAN_TOOLS 또는 NEVER_TOOLS 에 있어야 한다")
 
 
+def plan_argument_names(intent: Intent) -> frozenset[str]:
+    """계획 게이트가 받는 인자 키 — 인자표의 asked 인자에서 숨긴 인자를 뺀 것(광고하는 키와 같은 집합)."""
+    return frozenset(s.name for s in asked_specs_of(intent)) - set(PLAN_TOOLS[intent].hide)
+
+
 def plan_tool_specs_json(descriptions: Mapping[Intent, str]) -> str:
-    """`$tools` — parameters 는 분류 `$intents` 와 같은 `tool_specs`(한 표), description 만 도구 설명으로 바꿔 낀다. 결정론
-    (의도 이름순 · sort_keys). 배포마다 고정이라 프롬프트 고정부(벤더 캐시 접두)에 실린다."""
-    specs = [{**s, "description": descriptions[Intent(s["name"])]} for s in tool_specs(frozenset(descriptions))]
+    """`$tools` — parameters 는 분류 `$intents` 와 같은 `tool_specs`(한 표)에서 숨긴 인자만 빼고, description 만 도구 설명으로
+    바꿔 낀다. 결정론(의도 이름순 · sort_keys). 배포마다 고정이라 프롬프트 고정부(벤더 캐시 접두)에 실린다."""
+    specs = []
+    for spec in tool_specs(frozenset(descriptions)):
+        intent = Intent(spec["name"])
+        hidden = set(PLAN_TOOLS[intent].hide)
+        params = {**spec["parameters"],
+                  "properties": {k: v for k, v in spec["parameters"]["properties"].items() if k not in hidden}}
+        specs.append({**spec, "parameters": params, "description": descriptions[intent]})
     return json.dumps(specs, ensure_ascii=False, sort_keys=True)

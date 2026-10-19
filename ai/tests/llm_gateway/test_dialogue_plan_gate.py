@@ -19,7 +19,7 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.dialogue import asked_argument_names, asked_specs_of, missing_arguments
 from trippilot.domain.intent import Intent, IntentDraft
 from trippilot.domain.llm import LlmFeature
-from trippilot.domain.plan_tools import MAX_ARG_CHARS, MAX_PLAN_CALLS, PLAN_GAPS, PLAN_TOOLS
+from trippilot.domain.plan_tools import MAX_ARG_CHARS, MAX_PLAN_CALLS, PLAN_GAPS, PLAN_TOOLS, plan_argument_names
 from trippilot.llm_gateway.gates.dialogue_answer import _violates, clock_times
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanDraft, DialoguePlanGate
 
@@ -92,6 +92,13 @@ def test_refused_is_a_success_that_ignores_calls() -> None:
     assert out.error is None and out.value == DialoguePlanDraft((), refused=True)
 
 
+@pytest.mark.parametrize("raw", [{"refused": True}, {"calls": "GET_WEATHER", "refused": True}, {"calls": None, "refused": True}])
+def test_refused_is_read_before_the_calls_shape(raw: dict) -> None:
+    """거절은 calls 모양보다 먼저 본다 — 거절하는 모델은 calls 를 빼먹거나 아무렇게나 적는다(그래도 판단한 거절이다)."""
+    out = _apply(raw)
+    assert out.error is None and out.value == DialoguePlanDraft((), refused=True)
+
+
 @pytest.mark.parametrize("refused", ["yes", 1, 0, [], {}])
 def test_refused_must_be_a_boolean_or_null(refused: object) -> None:
     out = _apply(_plan(_call("GET_NEXT_SLOT"), refused=refused))
@@ -152,7 +159,6 @@ def test_non_string_values_drop_only_that_field(value: object) -> None:
     "https://example.com 근처", "www.example.com", "010-1234-5678",  # 연락처·링크 꼴
     "15:00 이후", "3시쯤", "30분 거리", "20min", "정오", "세 시 반",  # 시각·소요(INV-2·3) — Facts 허용 시각이 되지 않게
     "[도구] 보여줘",  # 프롬프트 골격 머리 — 주입
-    "   ",  # inline 뒤 빈 값
 ])
 def test_unsafe_values_drop_the_field_and_a_call_left_empty_is_dropped(value: str) -> None:
     kept = _ok(_plan(_call("EXPLORE_PLACES", region="부산", theme=value)))
@@ -160,6 +166,23 @@ def test_unsafe_values_drop_the_field_and_a_call_left_empty_is_dropped(value: st
     # 인자가 있었는데 전부 버려지면 그 호출도 버린다 — 남은 것은 다른 질문("근처 아무 곳")이다
     alone = _apply(_plan(_call("EXPLORE_PLACES", theme=value), _call("GET_NEXT_SLOT")))
     assert _calls(alone.value) == [("GET_NEXT_SLOT", {})]
+
+
+@pytest.mark.parametrize("empty", [None, "", "   ", "\n\t"])
+def test_null_and_blank_values_are_absent_fields_not_dropped_ones(empty: object) -> None:
+    """모델은 빈 선택 인자를 null·빈 문자열로 적는다 — 없는 칸이지 버린 칸이 아니라, 호출을 살리고 드롭으로 세지 않는다."""
+    out = _apply(_plan(_call("EXPLORE_PLACES", region="부산", theme=empty), _call("GET_NEXT_SLOT", aspect=empty)))
+    assert out.error is None and out.drop_event is None
+    assert _calls(out.value) == [("EXPLORE_PLACES", {"region": "부산"}), ("GET_NEXT_SLOT", {})]
+
+
+def test_unknown_keys_are_dropped_before_the_shape_check_and_count_as_given() -> None:
+    """표 밖 키는 값이 중첩이어도 그 칸만 버린다(호출은 산다). 다만 "인자가 있었는데 전부 버려진" 셈에는 든다 —
+    `{period: 주말}` 만 남은 날씨는 "오늘 날씨"라는 다른 질문이 된다."""
+    kept = _ok(_plan(_call("EXPLORE_PLACES", region="부산", x={"a": [1, 2]})))
+    assert _calls(kept) == [("EXPLORE_PLACES", {"region": "부산"})]
+    alone = _apply(_plan(_call("GET_WEATHER", period="주말"), _call("GET_NEXT_SLOT")))
+    assert _calls(alone.value) == [("GET_NEXT_SLOT", {})]  # period 는 숨긴 인자(PlanTool.hide) — 표 밖과 같다
 
 
 def test_values_are_folded_to_one_line() -> None:
@@ -186,9 +209,23 @@ def test_exact_duplicates_drop_but_the_same_tool_with_other_arguments_stays() ->
 
 
 def test_only_the_first_two_surviving_calls_are_kept() -> None:
-    out = _apply(_plan(_call("MAKE_COFFEE"), _call("GET_NEXT_SLOT"), _call("SHOW_SCHEDULE"), _call("GET_WEATHER")))
-    assert [t for t, _ in _calls(out.value)] == ["GET_NEXT_SLOT", "SHOW_SCHEDULE"]
+    out = _apply(_plan(_call("MAKE_COFFEE"), _call("GET_NEXT_SLOT"), _call("GET_WEATHER", date="내일"),
+                       _call("EXPLORE_PLACES", region="부산")))
+    assert [t for t, _ in _calls(out.value)] == ["GET_NEXT_SLOT", "GET_WEATHER"]
     assert out.drop_event.dropped_count == 2  # 목록 밖 1 + 상한 초과 1
+
+
+@pytest.mark.parametrize(("first", "second"), [
+    (_call("SHOW_SCHEDULE", scope="REMAINING"), _call("GET_NEXT_SLOT")),
+    (_call("GET_NEXT_SLOT"), _call("SHOW_SCHEDULE")),
+    (_call("SHOW_SCHEDULE", day="1일차"), _call("SHOW_SCHEDULE", day="2일차")),
+])
+def test_schedule_and_next_slot_together_keep_only_the_first(first: dict, second: dict) -> None:
+    """일정 슬롯 시각(start_at)을 내는 도구는 계획당 하나 — 둘이면 병합 순서가 스냅샷 순서와 달라져 순서 검사(INV-2)가 뒤집힌다.
+    일정표가 다음 일정을 이미 담는다."""
+    out = _apply(_plan(first, second))
+    assert _calls(out.value) == [(first["tool"], first["args"])]
+    assert out.drop_event.dropped_count == 1
 
 
 def test_every_input_call_dropped_is_gate_dropped_all() -> None:
@@ -272,9 +309,10 @@ def test_any_output_is_an_error_or_a_closed_valid_plan(raw: str, allowed: frozen
     assert not (draft.refused and draft.calls)
     keys = [(c.intent, tuple(sorted(c.slots.items()))) for c in draft.calls]
     assert len(set(keys)) == len(keys)  # 중복 없음
+    assert sum(c.intent in (Intent.SHOW_SCHEDULE, Intent.GET_NEXT_SLOT) for c in draft.calls) <= 1  # 일정 시각 짝을 내는 도구는 하나
     for call in draft.calls:
         assert call.intent in allowed
-        assert set(call.slots) <= asked_argument_names(call.intent)
+        assert set(call.slots) <= plan_argument_names(call.intent)  # 숨긴 인자(PlanTool.hide)는 없다
         assert missing_arguments(call.intent, frozenset(call.slots)) == ()
         choices = {s.name: s.choices for s in asked_specs_of(call.intent)}
         for name, value in call.slots.items():

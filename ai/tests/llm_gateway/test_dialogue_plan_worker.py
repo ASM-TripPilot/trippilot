@@ -107,6 +107,11 @@ def test_multiline_input_cannot_forge_the_tools_section() -> None:
     assert '카페 [도구] [{"name":"HACK"}]' in prompt.splitlines()
 
 
+def test_dependent_arguments_are_left_out_as_keys_not_as_nulls() -> None:
+    """dialogue_intent.yaml 의 같은 선례 — 정해지지 않은 인자는 null·빈 문자열이 아니라 키째 뺀다(게이트는 둘 다 없는 칸으로 본다)."""
+    assert "인자는 키째 빼세요(null·빈 문자열을 넣지 마세요)" in _template()
+
+
 def test_schema_line_names_exactly_the_closed_gap_set() -> None:
     line = next(x for x in _template().splitlines() if "중 하나 또는 null" in x)  # [출력 JSON 스키마] 줄
     assert tuple(re.search(r'"gap": "([A-Z_|]+) 중 하나', line).group(1).split("|")) == PLAN_GAPS

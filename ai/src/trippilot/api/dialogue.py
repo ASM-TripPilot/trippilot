@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import logging
 import random
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone, tzinfo
@@ -23,9 +24,11 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.freshness import ProviderKind
 from trippilot.domain.intent import Intent
 from trippilot.domain.llm import LlmFeature
+from trippilot.domain.plan_tools import PLAN_TOOLS, plan_tool_specs_json
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate
 from trippilot.llm_gateway.gates.dialogue_memory import DialogueMemoryGate
+from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
@@ -33,6 +36,7 @@ from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
+from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
 from trippilot.orchestrator.dialogue_handlers import DayView, HandlerPorts, SlotView, TripInfo, TurnSnapshot
 from trippilot.orchestrator.dialogue_interpreter import (
     Clarify,
@@ -48,6 +52,7 @@ from trippilot.orchestrator.dialogue_orchestrator import (
     RecentTurn,
     TurnInput,
 )
+from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
 from trippilot.orchestrator.question_bank import BankEntry, bank_fingerprint
 from trippilot.orchestrator.shadow_probe import ShadowCountingLlm, ShadowIntentProbe, TaggedTrace
@@ -58,6 +63,8 @@ from trippilot.ports.memory_store_port import MemoryStorePort, delete_selector
 from trippilot.ports.trace_port import TracePort
 from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.providers.base import Provider
+
+log = logging.getLogger(__name__)
 
 # 백엔드가 `deadline_ms` 를 안 보냈을 때 쓰는 `DEFAULT_DEADLINE_MS` — 종전 경로의 "시간제약 없음(600_000)" 을 그대로 쓰면
 # 분류·답변 시한 배분표(BLM §4)가 상한에 걸리지 않아 10s 기본으로 나간다. 값의 정본은 오케스트레이터 모듈 상수 한 곳
@@ -202,6 +209,7 @@ def build_dialogue_orchestrator(
     섀도 라우터는 같은 `IntentRouter` 클래스·같은 뱅크 스토어(읽기 전용)를 LLM 카운터(인스턴스, contextvar 아님)·트레이스
     표지(`c1.gateway.shadow`)만 바꿔 한 번 더 조립한다 — 서비스 `llm_calls` 에 섀도 호출이 섞이지 않는다(BR-AO-07).
     `providers`·`pool_builder`·`rag` 는 wiring 이 이미 만든 **그 인스턴스**다(새로 만들면 배선이 갈라진다).
+    계획 워커(2‴, BR-AO-28)는 `DIALOGUE_PLAN` 이 기능별 모델에 배정됐을 때만 조립한다 — 배정이 곧 켜기다(DEC-AO-18).
     """
     shadow_llm, shadow_trace, shadow_cfg = ShadowCountingLlm(llm), TaggedTrace(trace), IntentRouterConfig()
     shadow_router = IntentRouter(
@@ -210,14 +218,29 @@ def build_dialogue_orchestrator(
         paraphrase_gateway=GatewayFacade(shadow_llm, renderer, ParaphraseGate(), c1_config, shadow_trace),
         bank_ready=bank_ready,
     )
+    ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
+                         transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag)
+    tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
+    planner = None
+    if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models and tools:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)
+        planner = DialoguePlanWorker(
+            GatewayFacade(counted, renderer, DialoguePlanGate(frozenset(tools)), c1_config, trace),  # counted 공유 → llm_calls
+            plan_tool_specs_json(tools))
+    unwired = sorted(i.value for i in PLAN_TOOLS if i not in tools)
+    # 두 줄 모두 표식 `미배선` 을 담는다 — 배포 smoke 의 `ai-wiring:` 이 끌어올린다(deploy/eks/runtime_smoke.py _WIRING_MARKERS)
+    if planner is not None:
+        log.info("도우미 계획 단계 on — 도구 %d종(%s) · 미배선 도구 %d종(%s)", len(tools),
+                 ",".join(sorted(i.value for i in tools)), len(unwired), ",".join(unwired) or "-")
+    else:
+        log.info("도우미 계획 단계 off — DIALOGUE_PLAN 미배정이라 미배선(범위 밖 질문은 종전 SCOPE 카드)")
     return DialogueOrchestrator(
         # 분류는 기존 IntentGate(closed-set) 재사용 — 프롬프트만 다르다(dialogue_intent.yaml, BR-AO-14)
         intent_worker=DialogueIntentWorker(GatewayFacade(counted, renderer, IntentGate(), c1_config, trace)),
         answer_worker=DialogueAnswerWorker(GatewayFacade(counted, renderer, DialogueAnswerGate(), c1_config, trace)),
         memory_worker=DialogueMemoryWorker(GatewayFacade(counted, renderer, DialogueMemoryGate(), c1_config, trace)),
         memory_store=memory_store,
-        ports=HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
-                           transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag),
+        ports=ports,
+        planner=planner,
         clock=clock, trace=trace, tz=tz,
         shadow=ShadowIntentProbe(shadow_router, rate=shadow_rate, rng=shadow_rng, counting=shadow_llm),
         shadow_meta=shadow_meta(renderer, bank, shadow_cfg),

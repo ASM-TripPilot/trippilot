@@ -21,6 +21,7 @@ from trippilot.domain.plan_tools import (
     PLAN_GAPS,
     PLAN_TOOLS,
     PlanTool,
+    plan_argument_names,
     plan_tool_specs_json,
     validate_plan_tools,
 )
@@ -84,8 +85,28 @@ def test_tools_json_reuses_the_argument_table_parameters_and_swaps_only_the_desc
     for spec in specs:
         intent = Intent(spec["name"])
         (classified,) = tool_specs(frozenset({intent}))
-        assert spec["parameters"] == classified["parameters"]  # 분류와 같은 함수 — 한 표
+        hidden = set(PLAN_TOOLS[intent].hide)
+        expected = {**classified["parameters"],
+                    "properties": {k: v for k, v in classified["parameters"]["properties"].items() if k not in hidden}}
+        assert spec["parameters"] == expected  # 분류와 같은 함수 — 한 표(숨긴 인자만 뺀다)
         assert spec["description"] == descriptions[intent]
+
+
+def test_weather_hides_the_period_it_cannot_answer() -> None:
+    """핸들러가 date 만 읽는다 — period 를 광고하면 "주말에 비 오면"에 오늘 강수확률이 나간다(C7 실측). 숨긴 인자는 광고에서도
+    게이트 허용 키에서도 빠진다."""
+    assert PLAN_TOOLS[Intent.GET_WEATHER].hide == ("period",)
+    (weather,) = json.loads(plan_tool_specs_json({Intent.GET_WEATHER: "날씨"}))
+    assert set(weather["parameters"]["properties"]) == {"date"}
+    assert plan_argument_names(Intent.GET_WEATHER) == frozenset({"date"})
+    assert "주말·기간은 못 본다" in PLAN_TOOLS[Intent.GET_WEATHER].summary
+
+
+def test_hidden_arguments_must_be_asked_and_optional() -> None:
+    with pytest.raises(ValueError):
+        validate_plan_tools({Intent.GET_POI_INFO: PlanTool("장소", hide=("place",))})  # 필수를 숨기면 영영 못 부른다
+    with pytest.raises(ValueError):
+        validate_plan_tools({Intent.GET_WEATHER: PlanTool("날씨", hide=("region",))})  # 묻지 않는 인자 — 숨길 것이 없다
 
 
 def test_tools_json_carries_only_the_exposed_tools() -> None:
