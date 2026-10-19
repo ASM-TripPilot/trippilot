@@ -59,6 +59,10 @@
 | **BR-U10-27** | 트리거 종류는 늘리지 않는다 — 두 신호 모두 `DELAY`이고 `payload.variant`(`OVERSTAY`·`TRANSIT`)로 가른다(BR-U4-01). 억제·민감도·빈도 상한·무발화 기록은 기존 `TriggerService` 그대로 적용한다 |
 | **BR-U10-28** | 지연은 **배너·푸시 문구로만** 알린다. 슬롯 시각을 재추정하지 않고, 문구에 소요시간·지연 분을 숫자로 쓰지 않는다(DEC-U4-9 · INV-3). 이동 시간 예측도 표시하지 않는다 |
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** BR-U10-27 메모 — 상황 감시가 같은 `TriggerService` 를 바꾼다
+> ① 스윕은 `DELAY` 를 만료·해제하지 않는다(`WEATHER`·`CLOSURE` 만). ② `evaluate` 는 시그니처를 유지하되 의미가 바뀐다 — 대상 식별에 날짜가 들어가고(kind × affectedDate × slotKey), 호출 1번이 대표 1건짜리 알림 사건이며, `severity` 없는 `DELAY` 는 위험(푸시 대상)이다. ③ "억제·민감도·빈도 상한 그대로"는 개정된 판정(날짜·심각도 억제, 푸시 사건 상한)을 받는다. ④ `OVERSTAY`·`TRANSIT` 은 같은 변형 enum 에 더한다. ⑤ 야간 창은 `DELAY` 를 묶지 않는다.
+> → [BR-SA-05·07·09·10](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-3](../../situation-awareness/functional-design/business-logic-model.md) · [INV-SA-4·5](../../situation-awareness/functional-design/domain-entities.md)
+
 ## 6. 출처 · 정정 (DEC-U10-6·15)
 
 | ID | 규칙 |

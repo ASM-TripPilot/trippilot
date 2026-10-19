@@ -338,4 +338,28 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
         picked.toNotification(now).body shouldBe "해 뜨는 시간에 맞춰 가 보세요."
     }
 
+    /**
+     * **같은 여행의 적재가 겹쳐도 미발화 예약이 두 벌이 되지 않는다.** 릴레이와 문구 재시도 폴러가 한 여행을
+     * 동시에 적재하면(스케줄 풀 > 1) 뒤엣것의 DELETE 가 앞엣것이 막 넣은 행을 못 보고 자기 행을 더 넣는다 —
+     * 미발화분 유일 제약이 없어 DB 가 못 막고, 사용자는 같은 날 리마인드를 두 번 받는다. 앞 트랜잭션이 커밋 전에
+     * 머무는 동안 뒤 트랜잭션이 들어오게 해 경합을 결정적으로 만든다(잠금을 빼면 8행이 된다).
+     */
+    @Test
+    fun `같은 여행의 적재가 겹쳐도 미발화 예약은 한 벌이다 — 여행 단위 잠금`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        fun rows() = listOf(NotificationKind.TRIP_PRE, NotificationKind.TRIP_DAY, NotificationKind.TRIP_DAY, NotificationKind.TRIP_DAY)
+            .mapIndexed { i, kind -> NotificationSchedule.pending(accountId, tripId, kind, Instant.parse("2036-08-09T23:00:00Z").plusSeconds(86_400L * i)) }
+        fun load(holdMs: Long) = tx.executeWithoutResult {
+            schedules.lockTrip(tripId)
+            schedules.replacePending(tripId, rows())
+            Thread.sleep(holdMs) // 커밋 전에 머문다 — 이 사이에 다른 적재가 들어온다
+        }
+        val first = Thread { load(holdMs = 800) }.apply { start() }
+        Thread.sleep(200)
+        val second = Thread { load(holdMs = 0) }.apply { start() }
+        first.join(10_000); second.join(10_000)
+
+        schedules.findPendingByTrip(tripId).size shouldBe 4
+    }
 }

@@ -88,6 +88,21 @@
 | **BR-U8-52** ★ | **토스트와 겹치지 않는다.** ✦가 있는 화면에서 토스트 바닥은 **✦ 윗변 + 12**(2단 스택 화면 = 288)로 올린다(G-U8-10). 토스트를 ✦ 뒤로 숨기거나 ✦를 토스트 동안 숨기는 방식은 쓰지 않는다 — 둘 다 터치 가능한 상태를 유지한다 |
 | **BR-U8-53** | 시트·키보드·다른 바텀시트가 열린 동안에는 ✦를 그리지 않는다(기존 FAB의 `fabHidden`·키보드 규칙과 같다 — 보이지 않는 FAB가 터치를 가로채지 않게) |
 
+## 8. 답변 평가 (US-ASSIST-09)
+
+> **[개정 · 2026-10-19 · US-ASSIST-09 신설] 절 신설 — 위 규칙은 바꾸지 않는다.** 사용자 요청(도우미 답변마다 좋아요/싫어요)으로 더한다. 이번 단계는 **백엔드 저장·API·분석용 추적 번호**이고 앱 화면은 별도다(Figma 없음 — `frontend-components.md` 는 화면 작업에서 개정). 엔티티·불변식은 `domain-entities.md` §3.7(INV-U8-10). 구현 위치: `backend/modules/assistant/src/main/kotlin/com/trippilot/assistant/application/AssistantFeedbackService.kt` · `backend/app/src/main/resources/db/migration/V2.74__assistant_message_feedback.sql` · `PUT`·`DELETE /api/v1/assistant/sessions/{sessionId}/messages/{messageId}/feedback`(`backend/docs/design/openapi.yaml`). 검증: 대상 판정은 role×kind 전수(20칸 — 표본보다 전수가 싸다), 파기 네 길은 실 DB IT 가 평가 행의 **있음**을 센다(`AssistantFeedbackIT`). 정하지 않은 것: 평가 집계(OBS-U8-02 확장)·~~싫어요 사유 입력~~ — 이번에는 행과 로그를 남기는 데까지다.
+
+> **[개정 · 2026-10-19 · 싫어요 이유·자유 의견]** 위 머리 블록의 ~~싫어요 사유 입력~~ 을 정했다 — 싫어요에 **이유 칩 3종**(`WRONG` "틀렸어요" · `NOT_HELPFUL` "도움이 안 돼요" · `NOT_WHAT_I_WANTED` "원한 답이 아니에요")과 **자유 의견**(앱의 "직접 적기", ≤300자)을 함께 남긴다. 아래 BR-U8-60·62·63·65 에 개정 문장을 덧붙였다(바뀐 원문은 취소선으로 보존). 엔티티는 `domain-entities.md` §3.7 개정(`reason`·`comment` 칸 · `ck_assistant_message_feedback_down_only`) — 머지 전이라 같은 `V2.74__assistant_message_feedback.sql` 을 고쳤다. 구현: `AssistantFeedbackService.kt`(본문 규칙 · 로그) · `AssistantPersistence.kt`(통째로 덮어쓰는 upsert) · `AssistantExportContributor.kt`(내보내기 칸) · `openapi.yaml`(`AssistantFeedbackRequest`·`AssistantFeedbackResponse`). 검증: 본문 규칙은 `AssistantFeedbackServiceTest`, 덮어쓰기·CHECK 어휘·로그·내보내기는 실 DB `AssistantFeedbackIT`. 여전히 정하지 않은 것: 평가 집계(OBS-U8-02 확장).
+
+| ID | 규칙 |
+|---|---|
+| **BR-U8-60** | **도우미의 답마다** 좋아요(`UP`)/싫어요(`DOWN`)를 하나 남길 수 있다 — 거절·범위 밖·폴백도 답이다. **사용자 말과 적용 기록(`ACTION_LOG`)은 대상이 아니다**(400). 서버는 두 동작만 안다 — 남기기·바꾸기(PUT, upsert)와 취소(DELETE, 남긴 것이 없어도 204). "누른 쪽을 다시 누르면 취소"는 앱이 PUT/DELETE 로 고른다. **개정(2026-10-19 · 이유·의견)**: 싫어요(`DOWN`)에는 이유 칩 하나(`reason` — `WRONG`·`NOT_HELPFUL`·`NOT_WHAT_I_WANTED`, 없어도 된다)와 자유 의견(`comment` — 앱의 "직접 적기")을 함께 남길 수 있다 — **좋아요(`UP`)에 실리면 400**. 의견은 앞뒤 공백을 지운 뒤 비면 없는 것이고(그래서 공백뿐인 의견은 좋아요에 실려도 400 이 아니다), 지운 뒤 **300자**(코드 포인트 — DB `char_length` 와 같은 단위)를 넘거나 NUL 이 있으면 400 이다. 모르는 이유 값도 400. PUT 은 **통째로 덮어쓴다** — 다시 보내면 이유·의견도 보낸 값으로 바뀌고(빠진 것은 지운다), 좋아요로 바꾸면 둘 다 지워진다. 메시지 응답의 `feedback` 은 평가(`UP`|`DOWN`)만 싣는다 — 이유·의견은 PUT 응답(저장한 값)과 내보내기에만 있다 |
+| **BR-U8-61** | 평가는 **턴이 아니다** — 분당 20턴(BR-U8-24)·하루 사용량(COST-U8-01)에 세지 않고, AI 를 부르지 않으며, 도우미 메시지를 만들지 않는다. 남의 대화·보존 기간이 지난 대화·그 대화에 없는 메시지는 404 다(존재 은닉 — 본인 것만) |
+| **BR-U8-62** | 평가는 **대화의 부속**이다 — 이력 지우기(BR-U8-20)·여행 삭제·계정 삭제(DATA-U8-02)·보존 만료 청소(DATA-U8-01)가 대화를 지우면 함께 사라진다(메시지 FK CASCADE — 파기 경로를 따로 두지 않는다: 두면 그 길을 빠뜨린 파기에서 평가만 살아남는다). 내보내기(DATA-U8-06)에는 몫을 따로 두지 않고 ~~메시지 줄의 `feedback` 칸으로 함께 나간다~~ **개정(2026-10-19)**: 메시지 줄의 `feedback`·`feedbackReason`·`feedbackComment` 칸으로 함께 나간다 — 의견은 사용자가 쓴 글이라 정보주체 열람 대상이다. 이유·의견도 평가 행의 칸이라 대화와 함께(CASCADE) 지워진다 |
+| **BR-U8-63** ★ | 평가는 **평가·지표 용도로만** 쓴다 — **어떤 모델의 학습 데이터로도 쓰지 않는다**(US-ASSIST-09 제약). **개정(2026-10-19)**: 이유·의견도 같다(팀 결정 — 평가·지표 용도). 의견은 **프롬프트·AI 로 보내지 않는다** — 해석 요청의 최근 대화(`recent_turns`)는 메시지의 `role`·`text` 만 싣고, 평가·이유·의견은 상대에 가는 어느 요청에도 없다 |
+| **BR-U8-64** | 평가를 AI 로그(프롬프트 판본·모델·폴백)와 잇는 열쇠는 그 턴의 **해석 호출 추적 번호**다 — backend 가 해석 호출마다 만들어 `request_meta.request_id` 로 싣고(AI 는 같은 값을 `trace_id` 로 `llm_cost`·`FallbackEvent`·`LlmCallRecord` 에 남긴다) 그 턴의 도우미 행 `assistant_message.trace_id` 에 적는다. 해석이 실패해 폴백으로 끝난 턴도 적는다. 해석을 부르지 않은 턴(버튼·빠른 답·버튼 모드·입력 거절)은 비어 있다. 한 턴에 AI 를 두 번 부르는 편집 제안은 **해석 호출의 번호만** 남는다(편집 호출은 제 번호를 따로 만든다) |
+| **BR-U8-65** | 평가를 남기면(PUT 성공) INFO 로그 한 줄 ~~`assistant_feedback {message_id, trace_id, intent, kind, rating}`~~ `assistant_feedback {message_id, trace_id, intent, kind, rating, reason, has_comment}`(개정 2026-10-19) — **발화·답 문장·계정을 싣지 않는다**(SEC-U8-06). 취소·거부된 평가는 로그가 없다. **개정(2026-10-19 · 이유·의견)**: 의견 본문도 싣지 않는다 — 있는지만(`has_comment` true/false) 적는다. 의견은 사용자가 쓴 글이라 SEC-U8-06 의 발화 원문과 같다. 거부(400)된 요청의 오류 로그·오류 문구에도 되비추지 않고, 의견을 드는 값(요청 본문·평가 값)의 문자열 표현도 본문 대신 유무만 보인다(요청 본문 DEBUG 로그 대비) |
+
 ---
 
 ## PBT (property-based · 블로킹 게이트)

@@ -11,9 +11,13 @@ import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripOwnerFacade
 import com.trippilot.trip.api.TripPurgeScopeFacade
 import com.trippilot.trip.api.TripPeriod
+import com.trippilot.trip.api.TripWatchFacade
+import com.trippilot.trip.api.WatchedTrip
 import com.trippilot.trip.domain.MustVisitRepository
 import com.trippilot.trip.domain.TripRepository
+import com.trippilot.trip.domain.TripWatchRepository
 import org.springframework.stereotype.Service
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -26,7 +30,16 @@ import java.util.UUID
 class TripPeriodFacade(
     private val repo: TripRepository,
     private val mustVisits: MustVisitRepository,
-) : TripFacade, TripOwnerFacade, TripListFacade, TripLivenessFacade, TripPurgeScopeFacade {
+    private val watch: TripWatchRepository,
+) : TripFacade, TripOwnerFacade, TripListFacade, TripLivenessFacade, TripPurgeScopeFacade, TripWatchFacade {
+
+    /**
+     * 감시 대상(Plan-B 상황 스윕) — 계정을 가로지르는 조회라 **페이지 크기를 여기서 묶는다**:
+     * 0 이하는 빈 페이지(= 끝)로 읽혀 회차가 조용히 비고, 과대 요청은 키셋을 무의미하게 만든다.
+     */
+    override fun findOverlapping(from: LocalDate, to: LocalDate, after: UUID?, limit: Int): List<WatchedTrip> =
+        watch.findOverlapping(from, to, after, limit.coerceIn(1, MAX_WATCH_PAGE))
+
     override fun findOwnedPeriod(tripId: UUID): OwnedTripPeriod? {
         val trip = repo.findById(tripId)?.takeIf { it.deletedAt == null } ?: return null
         return OwnedTripPeriod(trip.accountId, trip.startDate, trip.endDate)
@@ -88,5 +101,10 @@ class TripPeriodFacade(
             firstDayStartAt = trip.dayWindow.firstDayStartAt,
             lastDayEndAt = trip.dayWindow.lastDayEndAt,
         )
+    }
+
+    private companion object {
+        /** 감시 조회 한 페이지의 상한 — 한 번의 질의가 회차 전체를 메모리에 올리지 않게. */
+        private const val MAX_WATCH_PAGE = 500
     }
 }

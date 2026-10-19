@@ -22,6 +22,12 @@ spring:
     open-in-view: false
     properties:
       hibernate.default_schema: app
+  # 스케줄러 풀(Boot 기본 1). @Scheduled 잡 전부가 한 스레드를 나눠 쓰는데, 상황 감시 스윕은 한 회차가 최대 20분이다 —
+  # 1이면 그동안 아웃박스 릴레이(2초)·리마인드 폴러가 통째로 멈춘다(situation-awareness PERF-SA-05). 스위치와 무관하게 늘 반영된다.
+  task:
+    scheduling:
+      pool:
+        size: 4
 
 # 소셜 로그인 제공자(SECURITY-12: 평문 시크릿 0). client-id/secret 은 env 로만 주입 —
 # dev=application-local.yml(gitignore), prod=Secrets Manager→env. token/user-info-uri 는 비밀 아님(제공자 고정값).
@@ -159,6 +165,32 @@ trippilot:
   weather:
     mode: ${WEATHER_MODE:fake}
     service-key: ${WEATHER_API:}
+  # Plan-B 상황 감시 스윕(situation-awareness · 설계서 §7). 기본 꺼짐 — 켜는 순서는 dry-run(요약 로그로 1~2일 잼) → on.
+  # mode = off | dry-run(판정·요약 로그만, 쓰기 0) | on. horizon = today | tomorrow(저녁 회차가 진행 중 여행의 내일도 본다)
+  # | pre-trip(내일 시작하는 여행의 첫날까지). account-ids = 쉼표 구분 UUID, 비면 전원(운영 카나리).
+  # 모르는 모드·지평 값과 UUID 오타는 기동 실패다 — 켰다고 믿는데 꺼진 채 도는 것보다 낫다.
+  planb:
+    situation-sweep:
+      mode: ${PLANB_SITUATION_SWEEP:off}
+      horizon: ${PLANB_SITUATION_HORIZON:today}
+      account-ids: ${PLANB_SITUATION_SWEEP_ACCOUNT_IDS:}
+      # 부를 감지기와, 결과를 요약 로그에만 남길 출처. 특보·대기질은 키 등록·실응답 확인 뒤 여기서 빼는 커밋이 '켜기'다.
+      # 출처 이름은 닫힌 집합(kma-forecast·kma-warning·airkorea·place) — 오타는 기동 실패다(관찰 전용 오타가 쓰기를 켜지 않게).
+      sources: kma-forecast,kma-warning,airkorea,place
+      observe-only: kma-warning,airkorea
+      # 여행 단위 병렬 · 회차 예산(넘으면 여행 사이에서 멈추고 다음 회차가 시작 위치를 바꿔 잇는다).
+      parallelism: 2
+      budget: PT20M
+      # 매시 :15(07~20시)와 20:40 보충 — 존(Asia/Seoul)은 코드가 박는다. 테스트 설정은 "-"(끔).
+      cron: "0 15 7-20 * * *"
+      evening-cron: "0 40 20 * * *"
+  # 재계획 쪽 스위치 — 읽는 코드는 선계산 변경이 더한다. 배포 키를 한 번에 잇느라 지금 둔다(설계서 §7).
+  # horizon 은 위 스윕과 **같은 키**다 — 저녁 점검과 전날 진입 창이 따로 켜지면 알림 탭이 막다른 길(409)이 된다.
+  # prepared.mode = off | on — 위험 감지 시 재계획 초안을 미리 짠다(LLM 비용).
+  replan:
+    horizon: ${PLANB_SITUATION_HORIZON:today}
+    prepared:
+      mode: ${PLANB_PREPARED_REPLAN:off}
   # 숙소 콘텐츠 경로. 기본 스텁은 **제주 5곳뿐**이라 다른 지역 검색이 전부 0건이 된다.
   # db 는 정본 테이블(stay, V2.26 + R__seed_stay.sql)을 읽는다 — 런타임 외부 호출 0회.
   stay:

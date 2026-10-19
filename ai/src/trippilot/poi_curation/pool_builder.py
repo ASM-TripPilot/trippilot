@@ -13,7 +13,7 @@ from datetime import datetime
 from trippilot.domain.common import TransportMode
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi_curation import CandidatePoolRequest
-from trippilot.domain.poi import DataQuality, Poi
+from trippilot.domain.poi import DataQuality, Poi, PoiCategory
 from trippilot.poi_curation.config import M7Config
 
 _ALLOWED_QUALITY = frozenset({DataQuality.FULL, DataQuality.PARTIAL})
@@ -98,7 +98,7 @@ class CandidatePoolBuilder:
         # 예외: PlanB 는 LLM 선택이 closed-set 에서 전량 드롭되면 풀 순서 그대로 대안을
         # 낸다(rag.py `kept = available`) — 그 폴백 경로의 지도 강등은 이번에 빠졌다(후속).
         pois.sort(key=self._rank_key)
-        pois = pois[: self._cfg.max_candidates]
+        pois = _fair_cut(pois, self._cfg.max_candidates)
 
         return CandidatePool(
             poi_ids=frozenset(p.poi_id for p in pois),
@@ -119,3 +119,27 @@ class CandidatePoolBuilder:
         if not poi.open_hours:
             return True  # 정보 없음 → 배제 안 함 (U2 checker와 동일 철학)
         return any(oh.day_of_week in travel_dows for oh in poi.open_hours)
+
+
+def _fair_cut(ranked: list[Poi], cap: int) -> list[Poi]:
+    """⑥ 상한 절단 — 카테고리마다 공평한 몫(작은 카테고리는 통째로, 넘치는 쪽만 자른다). 순서는 `ranked` 그대로.
+
+    U3 FD §2 ⑥ 은 "상위 max_candidates" 였다(정본 이탈, 2026-10-19). 서울 반경 10km 는 1.4만 곳 중 FOOD 가 89% 라
+    정렬 앞부분(영업시간 보유 → 저장 수)을 영업시간 있는 FOOD 가 다 차지해, 자연 132곳 중 11곳·쇼핑 251곳 중 46곳만
+    5,000 안에 들었다(공유본 실측). 그 뒤 점수·프리필터는 남은 것만 보므로 하루가 식당·명소로만 채워졌다.
+    몫은 작은 카테고리부터 `남은 자리 ÷ 남은 카테고리 수` — 몫보다 작으면 다 넣고 남은 자리를 뒤로 넘긴다.
+    카테고리 안에서는 종전 정렬의 앞부분이 남는다(영업시간 보유분 우선 생존 TRIP-326 은 카테고리 안 규칙).
+    """
+    if len(ranked) <= cap:
+        return ranked
+    groups: dict[PoiCategory, list[Poi]] = {}
+    for p in ranked:
+        groups.setdefault(p.category, []).append(p)
+    keep: set = set()
+    left = cap
+    by_size = sorted(groups.items(), key=lambda kv: (len(kv[1]), kv[0].value))
+    for i, (_, group) in enumerate(by_size):
+        take = min(len(group), left // (len(by_size) - i))
+        keep.update(p.poi_id for p in group[:take])
+        left -= take
+    return [p for p in ranked if p.poi_id in keep]

@@ -121,6 +121,10 @@
 
 > `varchar` + 애플리케이션 검증으로 둔다(DB CHECK 아님) — U7 개통 시 마이그레이션이 붙지 않게.
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §2.5 — 종류를 늘리지 않는다
+> 상황 인지는 `NotificationKind` 를 늘리지 않는다(위험·주의 모두 `PLAN_B`). 구 앱 알림함이 모르는 kind 의 메타를 구조분해하다 죽기 때문이다(`frontend/src/pages/settings/notification-inbox/ui/NotificationInboxPage.tsx:35`). 기회는 알림 종류가 아니다.
+> → [DEC-SA-5·6](../../situation-awareness/functional-design/business-logic-model.md)
+
 ---
 
 ## 3. 제휴 고지 설정 (DEC-U6-7a)

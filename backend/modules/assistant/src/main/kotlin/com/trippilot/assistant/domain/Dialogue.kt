@@ -107,6 +107,11 @@ data class InterpretRequest(
     val accountRef: String,
     /** 이번 발화 앞의 대화, 오래된 것부터 ≤20건(BR-U8-22 화이트리스트 확장). 이번 발화는 [utterance] 로 가므로 여기 없다. */
     val recentTurns: List<RecentTurn>,
+    /**
+     * 이 호출의 추적 번호 — 와이어 `request_meta.request_id` 로 가고, 상대가 같은 값을 `trace_id` 로 로그에 남긴다.
+     * **호출자가 만든다** — 그래야 호출이 실패해도 그 턴의 도우미 행에 같은 값을 적을 수 있다(BR-U8-64).
+     */
+    val traceId: String,
 )
 
 /**

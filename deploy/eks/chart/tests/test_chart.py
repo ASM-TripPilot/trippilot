@@ -335,7 +335,10 @@ class ChartTests(unittest.TestCase):
                          # 도우미 해석 스위치(U8) — 빠지면 시크릿의 off 가 파드에 안 닿아 운영이 앱 기본값(fake)으로 뜬다.
                          "ASSISTANT_INTERPRET_MODE",
                          # U10 킬 스위치 — 빠지면 시크릿에 false 를 넣어도 자동 기록이 안 꺼진다.
-                         "LOCATION_AUTOMATION_ENABLED"):
+                         "LOCATION_AUTOMATION_ENABLED",
+                         # Plan-B 상황 감시 4종(situation-awareness §7) — 빠지면 시크릿에 on 을 넣어도 스윕이 기본 off 로 돈다.
+                         "PLANB_SITUATION_SWEEP", "PLANB_SITUATION_HORIZON", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS",
+                         "PLANB_PREPARED_REPLAN"):
                 ref = env[name]["valueFrom"]["secretKeyRef"]
                 self.assertEqual(ref["name"], "trippilot-backend")
                 self.assertEqual(ref["key"], name)

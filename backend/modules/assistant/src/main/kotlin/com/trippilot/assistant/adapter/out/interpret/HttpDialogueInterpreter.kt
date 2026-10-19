@@ -192,7 +192,8 @@ internal data class WireMemoryItem(
 internal data class WireMemoryExport(val memories: List<WireMemoryItem> = emptyList())
 
 internal fun InterpretRequest.toWire(mapper: JsonMapper) = WireRequest(
-    requestMeta = WireMeta(UUID.randomUUID().toString(), requestedAt, deadlineMs),
+    // 상대가 이 값을 trace_id 로 로그에 남긴다 — 호출자가 만든 번호를 그대로 싣는다(같은 값이 그 턴의 도우미 행에 적힌다)
+    requestMeta = WireMeta(traceId, requestedAt, deadlineMs),
     utterance = utterance,
     // 첫 턴의 "{}" 도 그대로 객체로 싣는다 — 상대가 빈 상태로 읽는다.
     dialogueContext = runCatching { mapper.readTree(dialogueContext) }.getOrNull()?.takeIf { it.isObject },

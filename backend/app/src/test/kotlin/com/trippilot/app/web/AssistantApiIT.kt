@@ -104,6 +104,8 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.DELETE, "/api/v1/assistant/sessions/$id", null).first shouldBe 401
         call(HttpMethod.POST, "/api/v1/assistant/sessions/$id/turns", null, "{}").first shouldBe 401
         call(HttpMethod.POST, "/api/v1/assistant/proposals/$id/apply", null).first shouldBe 401
+        call(HttpMethod.PUT, "/api/v1/assistant/sessions/$id/messages/$id/feedback", null, """{"rating":"UP"}""").first shouldBe 401
+        call(HttpMethod.DELETE, "/api/v1/assistant/sessions/$id/messages/$id/feedback", null).first shouldBe 401
     }
 
     @Test

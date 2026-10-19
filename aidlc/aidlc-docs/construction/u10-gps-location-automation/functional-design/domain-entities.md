@@ -142,6 +142,10 @@
 
 아웃박스 경유 · at-least-once · 멱등 구독자(U0 스캐폴딩).
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §7 `planb.PlanBTriggered` — 선택 필드·사건 의미·구독자
+> 위 표의 "변경 없음"은 `DELAY` 발화가 같은 이벤트를 탄다는 뜻으로만 남는다. 이벤트 끝에 기본값 null 선택 필드(`affectedDate`·`scope`·`severity`·`variant`·`push`·`others`·`dateRisks`)가 붙고, 사건이 트리거마다 1건에서 판정 1회당 대표 1건으로 바뀌며, 구독자에 itinerary-recalculation(미리 짜 둔 대안)이 더해진다. `severity` 가 없는 `DELAY` 는 위험(푸시 대상)으로 읽힌다.
+> → [SA domain-entities §10](../../situation-awareness/functional-design/domain-entities.md) · [BR-SA-10](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-4](../../situation-awareness/functional-design/business-logic-model.md) · [INV-SA-3](../../situation-awareness/functional-design/domain-entities.md)
+
 ---
 
 ## 8. 불변식 (INV-U10-\*)
