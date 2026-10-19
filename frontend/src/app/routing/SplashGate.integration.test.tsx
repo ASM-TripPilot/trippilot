@@ -1,10 +1,15 @@
 import { useSyncExternalStore } from 'react';
 import { Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as Notifications from 'expo-notifications';
 import { router, Stack, Tabs } from 'expo-router';
 import { act, renderRouter, screen } from 'expo-router/testing-library';
 
 import { useBootstrapGate, type BootstrapDestination } from '@/features/auth';
+import {
+  fakePushResponse,
+  lastPushTapListener,
+} from '@/test-support/pushOsFake';
 
 import { SPLASH_MIN_VISIBLE_MS, SplashGate } from './SplashGate';
 
@@ -21,6 +26,9 @@ import { SPLASH_MIN_VISIBLE_MS, SplashGate } from './SplashGate';
  *
  * 범위 밖: 가드 밖 화면 위에 중첩 스택이 또 쌓인 다단(예: 여행 화면 위 위저드)은 지금도 루트에 이전 화면이 남는다 —
  * 별도 티켓 후보라 여기서 잠그지 않는다.
+ *
+ * 상황 감지 FE-A — 푸시 탭 라우팅(`usePushRouting`)도 실물 그대로 꽂혀 있다. 훅 단위 테스트는 라우터 목이라
+ * "스택이 그려진 뒤에 보낸 push 가 진짜 라우터에서 먹는가"를 못 봐서, 맨 아래 describe 가 여기서 본다.
  */
 
 jest.mock('@/features/auth/model/useBootstrapGate', () => ({
@@ -28,7 +36,11 @@ jest.mock('@/features/auth/model/useBootstrapGate', () => ({
   BOOTSTRAP_TIMEOUT_MS: 3000,
   useBootstrapGate: jest.fn(),
 }));
-jest.mock('@/shared/push', () => ({ registerPushIfGranted: jest.fn() }));
+// 배럴은 실물을 먼저 펼친 뒤 덮는다 — 수신 입구(onPushTapped 등)는 실물이 전역 expo-notifications 목 위에서 돈다.
+jest.mock('@/shared/push', () => ({
+  ...jest.requireActual('@/shared/push'),
+  registerPushIfGranted: jest.fn(),
+}));
 
 const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
   typeof useBootstrapGate
@@ -193,5 +205,59 @@ describe('정리는 걷어야 할 화면은 여전히 걷는다 (무회귀)', ()
 
     // 단언
     expectOnlyLogin(app);
+  });
+});
+
+// 상황 감지 FE-A(frontend-components §2.2) — 탭 data 는 서버가 알림함 행의 {actionType, ...actionPayload} 를 펼친 모양.
+const PLAN_B_TAP = {
+  actionType: 'PLANB_REPLAN',
+  tripId: 'trip-1',
+  triggerId: 'trigger-1',
+};
+
+describe('푸시 탭은 진짜 라우터에서 알림함과 같은 곳으로 간다 (상황 감지 FE-A)', () => {
+  it('그려진 HOME 에서 재계획 알림을 누르면 그 트리거의 재계획 진입이 열린다', () => {
+    // 준비
+    const app = openSignedIn([]);
+
+    // 실행 — 사용자가 알림을 눌렀다.
+    act(() => {
+      lastPushTapListener(Notifications)(fakePushResponse('n1', PLAN_B_TAP));
+    });
+
+    // 단언 — 알림함 행과 같은 주소(`/trips/{tripId}/planb?triggerId=`). 라우터 파라미터에는 경로 조각 tripId 도 함께 실린다.
+    expect(app.getPathname()).toBe('/trips/trip-1/planb');
+    expect(app.getSearchParams()).toEqual({
+      tripId: 'trip-1',
+      triggerId: 'trigger-1',
+    });
+  });
+
+  it('알림을 눌러 앱이 켜지면(콜드 스타트) 스플래시 동안은 기다렸다가 HOME 이 그려진 뒤 그 진입이 열린다', async () => {
+    // 준비 — OS 가 앱을 켠 탭을 들고 있다.
+    (
+      Notifications.getLastNotificationResponseAsync as jest.Mock
+    ).mockResolvedValueOnce(fakePushResponse('n-cold', PLAN_B_TAP));
+    const app = renderRouter(ROUTES, { initialUrl: '/' });
+
+    // 실행 1 — 꺼내기가 끝난다(아직 스플래시 하한 안)
+    await act(async () => {});
+
+    // 단언 1 — 스플래시 동안은 아직 그 화면이 아니다.
+    // ⚠️ jest 의 진짜 라우터는 스택을 그리기 전에 보낸 push 도 받아 두었다가 그린 뒤 반영한다(뮤테이션 실측 — drawn 대신
+    // true 를 넘겨도 이 it 은 green). "그린 뒤에만 보낸다"는 usePushRouting.test H1 이 잠그고, 실기 시점은 6-b(T-RD-3).
+    expect(app.getPathname()).not.toBe('/trips/trip-1/planb');
+
+    // 실행 2 — 하한이 지나 HOME 스택이 그려진다
+    act(() => {
+      jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS);
+    });
+
+    // 단언 2
+    expect(app.getPathname()).toBe('/trips/trip-1/planb');
+    expect(app.getSearchParams()).toEqual({
+      tripId: 'trip-1',
+      triggerId: 'trigger-1',
+    });
   });
 });

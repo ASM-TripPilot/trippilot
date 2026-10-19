@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import { act, render, screen, within } from '@testing-library/react-native';
 import { QueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
+import * as Notifications from 'expo-notifications';
 
 import {
   getObservedQueryClient,
@@ -159,5 +160,13 @@ describe('🔴 T4 · 루트 레이아웃 — 토스트 호스트 배선 (D19)', 
 
     expect(screen.getByTestId('root-probe-toast')).toBeOnTheScreen();
     expect(screen.getByTestId('query-client-probe')).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 상황 감지 FE-A · 루트 레이아웃 — 포그라운드 푸시 표시 정책 배선', () => {
+  it('번들을 불러온 시점에 표시 정책을 정확히 한 번 설치한다(렌더를 기다리지 않는다)', () => {
+    // 실행은 파일 머리의 require('@routes/_layout') 다 — 이 describe 앞의 렌더 여러 번과 무관하게 1회여야 모듈 최상위 설치다.
+    // 정책 내용(배너·목록 표시)은 shared/push/receive.test 가 본다. 실제 배너는 6-b 실기(T-RD-2).
+    expect(Notifications.setNotificationHandler).toHaveBeenCalledTimes(1);
   });
 });

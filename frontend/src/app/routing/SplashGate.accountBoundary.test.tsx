@@ -51,7 +51,10 @@ jest.mock('./bootClock', () => ({
   },
 }));
 
+// 배럴을 통째로 갈지 않는다 — 실물을 먼저 펼친다. 푸시 탭 라우팅(상황 감지 FE-A)은 실물이 돌지만 전역
+// expo-notifications 목이 탭·콜드 스타트 탭을 내지 않아 이동·무효화가 0건이다(캐시 크기 단언 그대로).
 jest.mock('@/shared/push', () => ({
+  ...jest.requireActual('@/shared/push'),
   promptAndRegisterPush: jest.fn(() => Promise.resolve()),
   registerPushIfGranted: jest.fn(() => Promise.resolve()),
   requestPushPermission: jest.fn(() => Promise.resolve('UNDETERMINED')),
