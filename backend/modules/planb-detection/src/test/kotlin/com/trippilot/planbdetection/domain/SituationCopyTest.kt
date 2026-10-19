@@ -7,6 +7,8 @@ import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.choice
 import io.kotest.property.arbitrary.element
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.map
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import java.time.LocalDate
@@ -68,6 +70,31 @@ class SituationCopyTest : StringSpec({
             if (name.isNotBlank() && name in sentence) return@checkAll
             SituationCopy.violation("‘$name’ · $sentence", listOf(name)).shouldNotBeNull()
         }
+    }
+
+    /**
+     * 감지기는 이름을 30자에서 잘라 문구에 넣지만 판정(reconcile)이 아는 것은 일정의 **전체 이름**이다. 잘린 꼴을 못 비우면
+     * '4시30분왕족발 …'처럼 긴 상호가 든 신호가 판정에서 통째로 버려진다(BR-SA-12 ③·⑦).
+     */
+    "긴 이름은 잘린 꼴로 문구에 들어가도 비운다 — 판정은 전체 이름만 안다" {
+        val long = "4시30분왕족발 제주시청점 2층 단체석 전용 예약 매장 별관"
+        val short = SituationCopy.shortName(long)
+        short.length shouldBe SituationCopy.NAME_MAX
+        SituationCopy.violation("계획한 시간엔 ‘$short’ 영업하지 않는 것으로 나와요", listOf(long)).shouldBeNull()
+        // 금지 꼴을 품은 조각으로 긴 이름을 만든다 — 자른 경계가 어디든 이름 때문에는 버리지 않는다.
+        val risky = Arb.list(Arb.element("4시30분", "365분식", "왕족발", "오늘의", "33.45678", " ", "두 시간", "카페", "내일도"), 4..14)
+            .map { it.joinToString("") }
+        checkAll(risky, Arb.element(templates)) { raw, template ->
+            SituationCopy.violation(template(SituationCopy.shortName(raw)), listOf(raw)).shouldBeNull()
+        }
+    }
+
+    "이름은 30자(코드 포인트)에서 자른다 — 짧으면 그대로, 보조 평면 문자를 반으로 가르지 않는다" {
+        SituationCopy.shortName("성산일출봉") shouldBe "성산일출봉"
+        val emoji = "😀".repeat(SituationCopy.NAME_MAX + 5)
+        val cut = SituationCopy.shortName(emoji)
+        cut.codePointCount(0, cut.length) shouldBe SituationCopy.NAME_MAX
+        cut shouldBe "😀".repeat(SituationCopy.NAME_MAX)
     }
 
     "200자를 넘으면 무엇이든 버린다 (T-D1-P8)" {

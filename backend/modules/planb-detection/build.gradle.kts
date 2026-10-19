@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":modules:trip"))                   // R1: 소유·구간 검증 — trip.api
     implementation(project(":modules:itinerary-generation"))   // R1: 남은 슬롯 판정 — itinerarygeneration.api
     implementation(project(":modules:weather-context"))        // R1: 강수확률 조회 — weathercontext.api(ContextFacade)
+    implementation(project(":modules:place-data"))             // R1: 폐업 판정 — placedata.api(PoiStatusFacade)만. place-data 는 core 에만 의존해 순환 없음
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
