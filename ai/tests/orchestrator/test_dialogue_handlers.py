@@ -32,7 +32,10 @@ from trippilot.domain.trigger import TriggerKind
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
 from trippilot.llm_gateway.workers.dialogue_answer import NEED_TRIP_TEXT, fallback_answer_text
 from trippilot.orchestrator import dialogue_handlers as dh
+from trippilot.agents.planb.rag import _REASON_KO
 from trippilot.orchestrator.dialogue_handlers import (
+    _REASON_WORDS,
+    _planb_reason,
     CANDIDATE_REASON,
     HANDLERS,
     NEXT_ACTION_TYPES,
@@ -129,7 +132,8 @@ class _PoiInfo:
                 continue
             pois.append({"poi_id": str(pid), "name": name, "category": "FOOD" if name in ("올레국수", "해녀의집", "흑돼지거리") else "SIGHT",
                          "lat": _COORD[name].lat, "lng": _COORD[name].lng,
-                         "hours_label": "09:00~18:00" if name != "우도" else None, "fee": 0 if name == "우도" else 5000,
+                         # 정보 없음은 실물(providers.poi_info.hours_label)처럼 문구로 온다 — None 은 "그 요일 휴무 증명"이다
+                         "hours_label": "09:00~18:00" if name != "우도" else "영업시간 정보 없음", "fee": 0 if name == "우도" else 5000,
                          "source_ref": None})
         status = ProviderStatus.OK if not misses else ProviderStatus.LOW
         return InfoPacket(ProviderKind.POI_INFO, status, {"pois": pois, "misses": misses}, _fresh(params["now"]))
@@ -616,10 +620,13 @@ def test_poi_info_card_rows_and_open_place_action() -> None:
     assert (place.poi_id, place.hours_label, place.fee) == (_U["해녀의집"], "09:00~18:00", 5000)
 
 
-def test_poi_info_unknown_values_say_unconfirmed_and_free_is_free() -> None:
+def test_poi_info_unknown_hours_keep_the_provider_wording_and_free_is_free() -> None:
+    """영업시간 정보가 없으면 Provider 문구("영업시간 정보 없음")를 그대로 싣는다 — 대역이 None 으로 "모름"을 흉내 내던 동안
+    실물에서 None 이 뜻하는 "그 요일 휴무"가 "미확인"으로 뭉개졌다(2026-10-19 E2E)."""
     ctx = _ctx(arguments={"place": "우도"}, ports=HandlerPorts(poi_info=_PoiInfo()))
     facts = _run(HANDLERS[Intent.GET_POI_INFO], ctx)
-    assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "미확인"}, {"label": "입장료", "value": "무료"}]
+    assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "영업시간 정보 없음"},
+                                     {"label": "입장료", "value": "무료"}]
 
 
 def test_poi_info_date_argument_sets_the_weekday_lookup() -> None:
@@ -700,7 +707,7 @@ def test_alternatives_default_reason_none_and_no_weather_port() -> None:
 
 @pytest.mark.parametrize("said,expected", [
     ("weather", "weather"), ("fully_booked", "fully_booked"), ("none", "none"),
-    ("비 와서 10분 거리로 바꿔줘", "none"),  # 모델이 슬롯에 임의 문장을 넣어도 PlanB 에는 닫힌 어휘만 간다
+    ("비 와서 10분 거리로 바꿔줘", "weather"),  # 임의 문장도 키워드로 닫힌 어휘에 사상된다 — PlanB 에는 닫힌 어휘만 간다
     ("WEATHER", "none"), ("", "none"),
 ])
 def test_alternatives_reason_slot_is_folded_to_the_planb_closed_set(said: str, expected: str) -> None:
@@ -931,3 +938,47 @@ def test_every_handler_is_deterministic_valid_and_free_of_duration(data, intent:
         assert first.needs_trip is (intent is not Intent.STYLE_ANALYSIS)
     for task in tasks:
         assert task.fn() == task.fn()  # 콜러블도 결정론 (대역이 결정론이라 그렇다 — 핸들러가 상태를 섞지 않는다)
+
+
+@pytest.mark.parametrize(("said", "reason"), [
+    ("오늘 휴관", "closed"), ("문 닫았대", "closed"), ("closed", "closed"),
+    ("비가 와서", "weather"), ("눈이 많이 와", "weather"),
+    ("늦게 일어나서", "delay"), ("차가 막혀서", "delay"),
+    ("너무 피곤해", "fatigue"),
+    ("예약이 꽉 찼대", "fully_booked"), ("예약이 취소됐어", "canceled"),
+    ("비싸서", "none"), ("그냥", "none"), (None, "none"),  # "비싸서"의 "비"를 날씨로 읽지 않는다
+    # 셀프 리뷰 오탐 실측 — weather 는 PlanB 가 야외 후보를 내리는 사유라 오탐이 순위를 바꾼다
+    ("주차비가 비싸서", "none"), ("가성비가 별로라서", "none"), ("날씨 좋으니까 야외로", "none"), ("비가 안 와서", "none"),
+    ("눈이 아파서", "none"), ("그냥 취소하고 다른 데", "none"), ("늦게까지 하는 데로", "none"), ("주차가 힘들어서", "none"),
+    ("준비가 늦어져서", "delay"), ("도로 공사로 길이 막혀서", "delay"), ("영업 마감했대", "closed"), ("날씨가 안 좋아서", "weather"),
+    ("비 와서 문 닫았대", "closed"),  # 그곳이 닫힌 것이 사유 — 휴관이 날씨보다 앞
+])
+def test_alternative_reason_maps_free_korean_to_planb_vocabulary(said, reason) -> None:
+    """SUGGEST_ALTERNATIVE 의 reason 슬롯은 한글 자유문("오늘 휴관")이다 — `_REASON_KO` 키와 같을 때만 넘기면 늘 none 이라
+    휴관 대신 찾기가 "근처의 대안"으로만 나왔다(2026-10-19 E2E). 키워드로 PlanB 어휘에 사상한다."""
+    assert _planb_reason(said) == reason
+
+
+def test_reason_words_only_name_planb_reasons() -> None:
+    assert {key for key, _ in _REASON_WORDS} <= set(_REASON_KO)
+
+
+@given(said=st.one_of(st.none(), st.integers(), st.text(max_size=80), st.lists(st.text(max_size=10), max_size=3)))
+def test_pbt_planb_reason_always_lands_in_the_closed_vocabulary(said) -> None:
+    """LLM 슬롯 출구 — 무엇이 와도 PlanB 어휘 안이고 예외가 없다(INV-1 닫힌 어휘, DL-5)."""
+    assert _planb_reason(said) in _REASON_KO
+
+
+def test_poi_info_on_another_day_names_the_day() -> None:
+    """영업시간은 그 장소가 든 날 기준이다 — 오늘이 아니면 날짜 행을 밝힌다("휴무일 수 있음"이 오늘로 읽히지 않게, 셀프 리뷰)."""
+    facts = _run(HANDLERS[Intent.GET_POI_INFO], _ctx(arguments={"place": "성산"}, ports=HandlerPorts(poi_info=_PoiInfo())))
+    assert facts.payload["rows"][0] == {"label": "날짜", "value": "10월 18일"}
+
+
+def test_next_slot_without_any_itinerary_offers_to_make_one() -> None:
+    """일정 자체가 없는데 "남은 일정이 없어요"·[일정 보기]로 답하면 틀린다 — 사실이 비어 템플릿 직행이라(BR-AO-25) LLM 이
+    고쳐 말해 주지도 않는다(셀프 리뷰). 만들기로 보낸다(BE QueryCards.noItinerary)."""
+    facts = _run(HANDLERS[Intent.GET_NEXT_SLOT], _ctx(_EMPTY_SNAP))
+    assert facts.template_text == "아직 일정에 장소가 없어요."
+    assert [a.type for a in facts.next_actions] == ["OPEN_ITINERARY_METHOD"]
+

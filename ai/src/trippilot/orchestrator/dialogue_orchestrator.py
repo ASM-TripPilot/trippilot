@@ -26,7 +26,7 @@
   내리고 잔여 ≤0 이면 부르지 않는다(DL-4, BR-AO-01).
 - **발화 원문·account_ref 를 로그에 싣지 않는다**(SEC-U8-06) — 로그는 trace_id·예외 타입까지.
 - 보이는 시각·순서·거리·장소는 `Facts` 에서만(INV-2·3), 후보는 풀 안에서만(INV-1), 폴백은 전부 결정론 + 보고(INV-4).
-  **의도된 결정론은 폴백이 아니다**(BLM §7) — 0단계·needTrip·`Facts.status=UNAVAILABLE` 직행에는 `FallbackEvent` 가 없다
+  **의도된 결정론은 폴백이 아니다**(BLM §7) — 0단계·needTrip·`Facts.status=UNAVAILABLE`·사실 없는 `Facts` 직행에는 `FallbackEvent` 가 없다
   (팬아웃 실패는 작업별 `FallbackEvent(stage="fanout")` 로 이미 보고됐다). LLM 을 시도했거나 시도해야 했던 턴의 템플릿,
   게이트웨이를 부르지 못한 분류 폴백(잔여 0·워커 예외)에는 짝이 있다 — 관측은 트레이스 이벤트 한 길이다.
 - **시한·상한은 모듈 상수**(BLM §4 배분표 — `_INTENT_CAP_MS`…) — env 로도 생성자로도 노출하지 않는다(BR-AO-13, 바뀌지 않는 값의
@@ -635,9 +635,13 @@ class DialogueOrchestrator:
         memory_lines: Sequence[str],
         trip_summary: str,
     ) -> DialogueAnswer:
-        """LLM 문장 ≤1회. 의도된 결정론(needTrip·UNAVAILABLE)은 LLM 미시도·FallbackEvent 없음(BR-AO-23·25 — 팬아웃 실패는
+        """LLM 문장 ≤1회. 의도된 결정론(needTrip·UNAVAILABLE·사실 없음)은 LLM 미시도·FallbackEvent 없음(BR-AO-23·25 — 팬아웃 실패는
         `_fanout` 이 작업별로 이미 냈다); 시도했거나 해야 했던 턴의 템플릿에는 FallbackEvent 짝(게이트웨이가 냈거나 여기서 낸다)."""
         if facts.needs_trip or facts.status is FactStatus.UNAVAILABLE:
+            return DialogueAnswer.from_facts(facts)
+        if not (facts.rows or facts.places or facts.notes or facts.detail):
+            # 넘기기 의도(다시 짜기·만들기·회고 등)·남은 일정 없음은 사실 없이 다음 행동 버튼뿐이다 — 빈 재료로 LLM 을 부르면 "확인된 정보가 없어
+            # … 할 수 없어요"처럼 실패로 들린다(2026-10-19 E2E 18 중 12~14). BR-AO-25 의 의도된 결정론 — 안내 문구로 바로 답한다
             return DialogueAnswer.from_facts(facts)
         remaining = self._remaining(inp)
         if remaining < _ANSWER_MIN_REMAINING_MS:
