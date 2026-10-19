@@ -94,18 +94,20 @@ class SituationSweep(
 
     /**
      * 매시 :15(07~20시, KST). **cron 인 이유** — KST 정렬과 밤 제외(INV-SA-5)는 cron 만 표현한다(`fixedDelay` 는 기동 시각에 끌려간다).
-     * 락: 최소 5분은 두 파드가 같은 순간 깨는 cron 의 재실행을 막고, 최대 25분은 죽은 파드의 락이 20:40 보충을 막지 않게 한다.
+     * 락: 최소 5분은 두 파드가 같은 순간 깨는 cron 의 재실행을 막고, 최대 24분은 죽은 파드의 락이 20:40 보충을 막지 않게 한다 —
+     * 예산 20분 + 진행 중 여행 마무리(감지 시한 ≤ 62초)보다 길고 간격(25분)보다 짧다. 간격과 같으면 락 만료(DB 시각)와 보충
+     * 회차의 획득 시도가 같은 순간이라 밀리초 경합이 되고, 지면 ShedLock 은 DEBUG 만 남겨 그날 내일 점검이 조용히 빠진다.
      * 이름은 U10 지연 스캔(`planb-delay-scan`)과 다르다 — 같으면 두 스윕이 서로를 막는다.
      */
     @Scheduled(cron = "\${trippilot.planb.situation-sweep.cron:0 15 7-20 * * *}", zone = "Asia/Seoul")
-    @SchedulerLock(name = LOCK_NAME, lockAtMostFor = "PT25M", lockAtLeastFor = "PT5M")
+    @SchedulerLock(name = LOCK_NAME, lockAtMostFor = "PT24M", lockAtLeastFor = "PT5M")
     fun hourly() {
         sweep(clock.instant())
     }
 
     /** 20:40 보충 — 배포·장애로 끊긴 20:15 회차의 내일 점검을 잇는다(BR-SA-01). 같은 락이다. */
     @Scheduled(cron = "\${trippilot.planb.situation-sweep.evening-cron:0 40 20 * * *}", zone = "Asia/Seoul")
-    @SchedulerLock(name = LOCK_NAME, lockAtMostFor = "PT25M", lockAtLeastFor = "PT5M")
+    @SchedulerLock(name = LOCK_NAME, lockAtMostFor = "PT24M", lockAtLeastFor = "PT5M")
     fun eveningCatchUp() {
         sweep(clock.instant())
     }

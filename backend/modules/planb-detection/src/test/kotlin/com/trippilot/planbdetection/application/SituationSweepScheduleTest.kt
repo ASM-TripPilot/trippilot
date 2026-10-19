@@ -6,6 +6,7 @@ import io.kotest.matchers.shouldNotBe
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.scheduling.support.CronExpression
+import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -46,14 +47,22 @@ class SituationSweepScheduleTest : StringSpec({
         fires shouldBe (7..20).map { LocalTime.of(it, 15) } + LocalTime.of(20, 40)
     }
 
-    "두 진입점은 같은 단일 실행 락 하나다 — 이름은 U10 지연 스캔과 다르고, 최대 25분·최소 5분 쥔다" {
+    "두 진입점은 같은 단일 실행 락 하나다 — 이름은 U10 지연 스캔과 다르고, 최대 24분·최소 5분 쥔다" {
         val locks = scheduled.map { it.getAnnotation(SchedulerLock::class.java) }
         locks.map { it.name }.toSet() shouldBe setOf("planb-situation-scan")
         locks.forEach {
             it.name shouldNotBe "planb-delay-scan"
-            // 최소 5분 — 두 파드가 같은 순간 깨는 cron 의 재실행을 막는다. 최대 25분 — 죽은 파드의 20:15 락이 20:40 보충을 막지 않게.
-            it.lockAtMostFor shouldBe "PT25M"
+            // 최소 5분 — 두 파드가 같은 순간 깨는 cron 의 재실행을 막는다. 최대 24분 — 예산 20분 + 진행 중 여행 마무리보다 길고,
+            // 20:15 → 20:40 간격보다 **짧아야** 죽은 파드의 락이 보충 회차와 밀리초 경합을 하지 않는다(같으면 동전 던지기다).
+            it.lockAtMostFor shouldBe "PT24M"
             it.lockAtLeastFor shouldBe "PT5M"
         }
+    }
+
+    "락 상한은 예산보다 길고 20:15 → 20:40 간격보다 짧다 — 끊긴 회차가 보충을 막지 않는다" {
+        val atMost = Duration.parse(scheduled.first().getAnnotation(SchedulerLock::class.java).lockAtMostFor)
+        val gap = Duration.between(LocalTime.of(20, 15), LocalTime.of(20, 40))
+        (atMost > SituationSweepProperties().budget) shouldBe true
+        (atMost < gap) shouldBe true
     }
 })
