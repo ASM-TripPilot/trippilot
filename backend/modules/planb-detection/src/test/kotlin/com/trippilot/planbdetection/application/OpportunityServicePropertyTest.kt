@@ -37,11 +37,15 @@ class OpportunityServicePropertyTest : StringSpec({
     val days = (0L..4L).map { start.plusDays(it) }
     val end = days.last()
 
-    /** 임의 하루 일정 — 시각·길이·자정 넘김·좌표 유무가 섞이고, 저장 순서는 방문 순서와 무관하다. */
+    /**
+     * 임의 일정 — 시각·길이·자정 넘김·좌표 유무가 섞이고, 저장 순서는 방문 순서와 무관하다.
+     * 슬롯을 앞 사흘에 몰아 하루 8칸을 자주 넘게 한다 — 그래야 '8개까지'가 실제로 시험된다(역검증에서 상한을 지워도 이 성질이
+     * 초록이던 것을 보고 넓혔다).
+     */
     val slotsArb: Arb<List<PlannedSlotView>> = arbitrary {
         val raw = Arb.list(
             arbitrary {
-                val date = Arb.element(days).bind()
+                val date = Arb.element(days.take(3)).bind()
                 val begin = LocalTime.of(Arb.int(0, 23).bind(), Arb.element(0, 15, 30, 45).bind())
                 val until = begin.plusMinutes(Arb.int(15, 240).bind().toLong())
                 val placed = Arb.int(0, 4).bind() != 0 // 다섯에 하나는 좌표를 모른다
@@ -51,7 +55,7 @@ class OpportunityServicePropertyTest : StringSpec({
                     endsNextDay = until < begin,
                 )
             },
-            0..20,
+            0..30,
         ).bind()
         // 날짜마다 방문 순서를 무작위 순열로 매긴다 — 저장 순서로 보내면 이 성질이 깨진다.
         val keys = raw.map { Arb.int().bind() }

@@ -19,10 +19,11 @@ class OpportunityGateTest : StringSpec({
     val p2 = UUID.fromString("e0000000-0000-4000-8000-000000000002")
     val planned = UUID.fromString("e0000000-0000-4000-8000-000000000003")
     val fresh = UUID.fromString("e0000000-0000-4000-8000-000000000009")
+    // 계획 POI 에 슬롯의 장소를 일부러 넣지 않는다 — 상대 계약처럼 슬롯의 장소도 그 자체로 '일정에 있는 곳'인지 따로 잰다.
     val query = OpportunityQuery(
         date,
         listOf(OpportunitySlot("$date#$p1", p1, 33.45, 126.94), OpportunitySlot("$date#$p2", p2, 33.51, 126.52)),
-        listOf(p1, p2, planned),
+        listOf(planned),
     )
 
     fun trending(poi: UUID = fresh, near: String = "$date#$p1", key: String = "trending:$poi") =

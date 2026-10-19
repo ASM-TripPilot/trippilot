@@ -150,12 +150,12 @@ class OpportunityServiceTest : StringSpec({
         port.queries.shouldBeEmpty()
     }
 
-    "계획 POI 가 300을 넘으면 그 날에 가까운 날의 장소부터 300개다" {
+    "계획 POI 가 300을 넘으면 그 날에 가까운 날의 장소부터 300개다 — 일정 순서대로 자르면 끝 무렵 날짜가 통째로 빠진다" {
         val port = RecordingOpportunityPort()
         val longEnd = start.plusDays(40)
         val days = (0L..40L).map { start.plusDays(it) }
         val all = days.flatMap { d -> (0..7).map { plannedSlot(d, it, LocalTime.of(9 + it, 0), LocalTime.of(9 + it, 30)) } }
-        val date = start.plusDays(30)
+        val date = longEnd // 마지막 날 — 일정 순서로 앞 300개를 자르면 37일차까지만 남는다
         val clock = kstClock(start.plusDays(1), noon)
 
         service(port, OpportunityPlans(all), clock, TripPeriod(start, longEnd)).list(owner, tripId, date)
@@ -163,9 +163,10 @@ class OpportunityServiceTest : StringSpec({
         val planned = port.queries.single().plannedPoiIds
         all.size shouldBe 328
         planned shouldHaveSize 300
-        // 그 날의 장소(끝난 칸 포함)는 반드시 실린다 — 잘리면 오늘 다녀온 곳이 카드로 되돌아올 수 있다.
-        planned shouldContainAll all.filter { it.date == date }.map { it.poiId }
-        planned shouldContainAll all.filter { it.date == date.minusDays(1) || it.date == date.plusDays(1) }.map { it.poiId }
+        // 그 날과 그 앞날의 장소는 반드시 실린다 — 잘리면 다녀온 곳·내일 갈 곳이 카드로 되돌아올 수 있다.
+        planned shouldContainAll all.filter { it.date == date || it.date == date.minusDays(1) }.map { it.poiId }
+        // 잘린 것은 가장 먼 날(첫날 쪽)이다.
+        planned.none { p -> all.first { it.poiId == p }.date == start } shouldBe true
     }
 
     "AI 가 실패하면 빈 목록이다 — 카드는 선택 사항이라 허브를 막지 않는다" {
