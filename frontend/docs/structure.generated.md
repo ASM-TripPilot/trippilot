@@ -169,6 +169,7 @@
 - `src/__tests__/photoUploadGuard.test.ts`  →  (export 없음)
 - `src/__tests__/planbApplyStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/planbRequestRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardMustVisit.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardOnboardingPref.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardOnboardingPush.test.tsx`  →  (export 없음)
@@ -931,12 +932,15 @@
 - `src/pages/live/planb-request/config/replanChoices.ts`  →  ReplanChoice · REPLAN_REASONS · REPLAN_DIRECTIVES · TRIGGER_REASON_KEY
 
 ## src/pages/live/planb-request/
-- `src/pages/live/planb-request/index.ts`  →  PlanbRequestPage
+- `src/pages/live/planb-request/index.ts`  →  PlanbEntryGate · PlanbRequestPage
 
 ## src/pages/live/planb-request/model/
+- `src/pages/live/planb-request/model/entryRoute.ts`  →  EntryLookup · EntryRouteInput · EntrySeed · EntryRoute · entryRoute
+- `src/pages/live/planb-request/model/usePlanbEntryRoute.ts`  →  ENTRY_WAIT_MS · usePlanbEntryRoute
 - `src/pages/live/planb-request/model/useReplanGpsOrigin.ts`  →  ReadReplanGpsOrigin · useReplanGpsOrigin
 
 ## src/pages/live/planb-request/ui/
+- `src/pages/live/planb-request/ui/PlanbEntryGate.tsx`  →  PlanbEntryGateProps · PlanbEntryGate
 - `src/pages/live/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
 - `src/pages/live/planb-request/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
 
@@ -1782,4 +1786,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1134개 파일
+합계 1138개 파일
