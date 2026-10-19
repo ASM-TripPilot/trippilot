@@ -46,6 +46,9 @@ from trippilot.domain.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
 
 _SCALAR = (str, int, float, bool)
+# {"intent": null} — 모델이 분류를 마치고 다룰 의도가 없다고 답했다는 표지. 깨진 출력·절단·슬롯 모양과 가른다
+# (오케스트레이터 2″ 맞장구 답이 이것만 본다, BR-AO-26).
+NULL_INTENT = "not_classifiable: 의도 분류 불가"
 
 
 def _within(value: object, choices: tuple[str, ...]) -> bool:
@@ -103,7 +106,7 @@ class IntentGate:
         label = data["intent"]
         if label is None:
             # 분류 불가를 성공으로 위장하지 않는다 — 폴백 신호 (INV-4)
-            raise ValueError("not_classifiable: 의도 분류 불가")
+            raise ValueError(NULL_INTENT)
         # ① closed-set (INV-1 동형) — enum 밖 라벨은 존재할 수 없는 의도다
         try:
             intent = Intent(label)

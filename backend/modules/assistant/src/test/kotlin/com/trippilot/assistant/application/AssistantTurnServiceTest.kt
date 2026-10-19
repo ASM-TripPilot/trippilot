@@ -383,7 +383,7 @@ class AssistantTurnServiceTest : StringSpec({
             listOf(MessageRole.USER, MessageRole.USER, MessageRole.ASSISTANT, MessageRole.ASSISTANT)
         // 다시 보내면 각자 처음 응답을 그대로 받는다 — 새 행도, 새 해석도 없다
         w.say(s, "오늘 날씨", a).messages.map { it.messageId } shouldContainExactly first.messages.map { it.messageId }
-        w.say(s, "스타일 분석해줘", b).messages.map { it.text } shouldContainExactly listOf("스타일 분석해줘", "여행 스타일은 기록에서 볼 수 있어요.")
+        w.say(s, "스타일 분석해줘", b).messages.map { it.text } shouldContainExactly listOf("스타일 분석해줘", "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.")
         w.messages.rows.size shouldBe 4
         w.interpreter!!.requests.size shouldBe 2
         w.usage.turns[acc to today] shouldBe 2
@@ -494,6 +494,45 @@ class AssistantTurnServiceTest : StringSpec({
         w.row(2).saved.outcome shouldBe "FALLBACK_AI_UNAVAILABLE"
         w.usage.turns[acc to today] shouldBe 1 // 실패한 턴도 턴이다
         w.usage.llm[acc to today] shouldBe null
+    }
+
+    /**
+     * BR-U8-64 — 해석 호출마다 추적 번호를 만들어 싣고(`request_meta.request_id`), 그 턴의 도우미 행에 같은 값을 적는다.
+     * 상대는 그 값을 trace_id 로 로그(llm_cost·FallbackEvent·LlmCallRecord)에 남긴다 — 평가를 상대 로그와 잇는 열쇠다.
+     * **해석이 실패해도 적는다** — 상대 쪽 폴백 기록이 바로 그 번호로 남아 있다.
+     */
+    "해석을 부른 턴은 그 호출의 추적 번호를 도우미 행에 남긴다 — 턴마다 새 번호이고, 해석이 실패해도 남긴다" {
+        val w = world()
+        val s = w.session()
+        w.say(s, "오늘 날씨 어때")
+        w.say(s, "오늘 날씨 어때")
+
+        val sent = w.interpreter!!.requests.map { it.traceId }
+        sent.forEach { UUID.fromString(it) } // 상대 계약의 request_id — UUID 문자열
+        sent.distinct().size shouldBe 2
+        listOf(w.row(2).saved.traceId, w.row(4).saved.traceId) shouldContainExactly sent
+        w.row(1).saved.traceId shouldBe null // 사용자 행에는 없다
+
+        var failed: String? = null
+        val down = world(interpreter = Interpreter { r -> failed = r.traceId; throw DialogueInterpretFailed("timeout") })
+        down.say(down.session(), "오늘 날씨")
+        (failed != null) shouldBe true
+        down.row(2).saved.kind shouldBe MessageKind.FALLBACK
+        down.row(2).saved.traceId shouldBe failed
+    }
+
+    /** 해석을 부르지 않은 턴은 이을 상대 로그가 없다 — 빈 칸이 맞다(지어낸 번호는 어느 로그와도 이어지지 않는다). */
+    "해석을 부르지 않은 턴은 추적 번호가 없다 — 버튼·입력 거절·버튼 모드" {
+        val w = world()
+        val s = w.session()
+        w.press(s, "qr-review")
+        w.say(s, "금칙 문장")
+        val off = world(interpreter = null)
+        off.say(off.session(), "오늘 날씨")
+
+        w.interpreter!!.requests shouldBe emptyList()
+        w.messages.rows.filter { it.message.role == MessageRole.ASSISTANT }.map { it.saved.traceId } shouldBe listOf(null, null)
+        off.row(2).saved.traceId shouldBe null
     }
 
     /** 폴백은 사용자의 거절도 정상 턴도 아니다 — 연속 거절 수를 올리지도 지우지도 않는다(BR-U8-25). */
@@ -951,7 +990,7 @@ class AssistantTurnServiceTest : StringSpec({
     }
 
     /** BR-AO-11 — 단기 기억은 백엔드가 싣는다. 가려진 입력은 원문이 없어 빠지고, 이번 발화는 `utterance` 로 가므로 겹쳐 싣지 않는다. */
-    "최근 대화는 원문이 있는 메시지만 300자로 잘라 오래된 것부터 싣는다 — 가려진 입력과 이번 발화는 빠지고 20건까지다" {
+    "최근 대화는 원문이 있는 메시지만 300자로 줄여 오래된 것부터 싣는다 — 가려진 입력과 이번 발화는 빠지고 20건까지다" {
         val w = world()
         val s = w.session()
         w.say(s, "a".repeat(400)) // 1·2
@@ -962,13 +1001,38 @@ class AssistantTurnServiceTest : StringSpec({
 
         val sent = w.interpreter!!.requests.last()
         sent.recentTurns.map { it.role } shouldContainExactly listOf(MessageRole.USER, MessageRole.ASSISTANT, MessageRole.ASSISTANT, MessageRole.USER, MessageRole.ASSISTANT)
-        sent.recentTurns.first().text shouldBe "a".repeat(300)
+        sent.recentTurns.first().text shouldBe "a".repeat(200) + "…" + "a".repeat(99) // 앞과 끝을 남긴다 — clip
         sent.recentTurns.none { "금칙" in it.text } shouldBe true
         sent.recentTurns.none { it.text == "오늘 날씨" } shouldBe true
 
         repeat(12) { w.clock.now = w.clock.now.plusSeconds(5); w.say(s, "또 날씨") }
         w.say(s, "마지막")
         w.interpreter.requests.last().recentTurns.size shouldBe 20
+    }
+
+    /** 답변 0.3.0 은 제안을 맨 끝에 둔다 — 300자를 넘는 답의 앞만 남기면 그 뒤의 "응"이 무엇을 받는지 분류가 못 본다. */
+    "긴 최근 턴은 앞 200자와 끝을 남기고 가운데를 줄인다 — 300자 안, 서로게이트 쌍을 가르지 않는다" {
+        val long = "가".repeat(300) + " 출발 전에 날씨도 확인해 드릴까요?"
+        AssistantTurnService.clip(long).let {
+            it.length shouldBe 300
+            it.startsWith("가".repeat(200) + "…") shouldBe true
+            it.endsWith(" 출발 전에 날씨도 확인해 드릴까요?") shouldBe true
+        }
+        AssistantTurnService.clip("짧은 답이에요.") shouldBe "짧은 답이에요."
+        checkAll(Arb.list(Arb.element("가", "a", " ", "😀"), 0..400).map { it.joinToString("") }) { s ->
+            val c = AssistantTurnService.clip(s)
+            c.length shouldBeLessThanOrEqual 300
+            if (s.length <= 300) {
+                c shouldBe s
+            } else {
+                s.startsWith(c.substringBefore("…")) shouldBe true
+                s.endsWith(c.substringAfter("…")) shouldBe true
+            }
+            c.indices.all { i ->
+                (!c[i].isHighSurrogate() || c.getOrNull(i + 1)?.isLowSurrogate() == true) &&
+                    (!c[i].isLowSurrogate() || c.getOrNull(i - 1)?.isHighSurrogate() == true)
+            } shouldBe true
+        }
     }
 
     /**

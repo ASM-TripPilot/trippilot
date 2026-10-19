@@ -377,6 +377,10 @@ class AssistantTurnService(
         val remaining = properties.turnBudgetMs - Duration.between(startedAt, clock.instant()).toMillis()
         val deadlineMs = minOf(properties.interpretStageMaxMs, remaining - properties.readMarginMs)
         if (deadlineMs <= 0) return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE), streak = Streak.KEEP)
+        // 이 해석 호출의 추적 번호(BR-U8-64) — 상대가 trace_id 로 로그(llm_cost·FallbackEvent·LlmCallRecord)에 남기는 값을 그 턴의
+        // 도우미 행에도 적어, 평가를 상대 로그(프롬프트 판본·모델·폴백)와 잇는다. 해석이 실패해도 적는다 — 상대가 요청을 받았다면
+        // 그 호출의 기록(오류·시한 초과·폴백)이 이 번호로 남아 있다. 해석을 부르지 않는 갈래(위의 반환들)는 번호가 없다.
+        val traceId = UUID.randomUUID().toString()
         val interpretation = runCatching {
             port.interpret(
                 InterpretRequest(
@@ -386,13 +390,14 @@ class AssistantTurnService(
                     requestedAt = startedAt, deadlineMs = deadlineMs,
                     sessionId = session.sessionId, accountRef = session.accountId.toString(),
                     recentTurns = recentTurns(session, beforeSeq = turn.user.seq),
+                    traceId = traceId,
                 ),
             )
         }.getOrElse { e ->
             log.warn("도우미 해석 실패 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
-            return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE), streak = Streak.KEEP)
+            return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE).copy(traceId = traceId), streak = Streak.KEEP)
         }
-        return answer(interpretation, session, surface, utterance, startedAt)
+        return answer(interpretation, session, surface, utterance, startedAt).let { it.copy(message = it.message.copy(traceId = traceId)) }
     }
 
     private fun answer(result: Interpretation, session: AssistantSession, surface: AssistantSurface, utterance: String, startedAt: Instant): Reply {
@@ -484,10 +489,10 @@ class AssistantTurnService(
         )
     }
 
-    /** 단기 기억(BR-AO-11) — 이번 발화 앞의 메시지 중 원문이 있는 것만(가려진 입력은 원문이 없다), 오래된 것부터, 300자까지. 상대는 저장하지 않는다. */
+    /** 단기 기억(BR-AO-11) — 이번 발화 앞의 메시지 중 원문이 있는 것만(가려진 입력은 원문이 없다), 오래된 것부터, 300자까지([clip]). 상대는 저장하지 않는다. */
     private fun recentTurns(session: AssistantSession, beforeSeq: Long): List<RecentTurn> =
         messages.findPage(session.sessionId, beforeSeq, RECENT_TURNS).mapNotNull { m ->
-            m.text?.takeIf { it.isNotBlank() }?.let { RecentTurn(m.role, it.take(RECENT_TURN_CHARS)) }
+            m.text?.takeIf { it.isNotBlank() }?.let { RecentTurn(m.role, clip(it)) }
         }
 
     private fun dispatched(
@@ -569,6 +574,20 @@ class AssistantTurnService(
         /** 상대 계약 `recent_turns` 의 상한(건·자) — 넘기면 422 다. */
         private const val RECENT_TURNS = 20
         private const val RECENT_TURN_CHARS = 300
+        private const val RECENT_TURN_HEAD = 200
+
+        /**
+         * 최근 턴 한 줄을 300자 안으로 — 넘치면 앞 200자와 끝을 남기고 가운데를 "…"로 줄인다. 앞에는 지시어가 가리키는 이름이,
+         * 끝에는 답의 제안·되묻기가 있다(AI 답변 0.3.0 은 제안을 맨 끝에 두고, 분류는 그 제안 뒤의 "응"을 수락으로 읽는다) —
+         * 앞만 남기면 긴 답 뒤의 "응"이 무엇을 받는지 사라진다. 자르는 자리에서 서로게이트 쌍을 가르지 않는다(깨진 문자 금지).
+         */
+        internal fun clip(text: String): String {
+            if (text.length <= RECENT_TURN_CHARS) return text
+            val head = if (text[RECENT_TURN_HEAD - 1].isHighSurrogate()) RECENT_TURN_HEAD - 1 else RECENT_TURN_HEAD
+            var tail = text.length - (RECENT_TURN_CHARS - RECENT_TURN_HEAD - 1)
+            if (text[tail].isLowSurrogate()) tail++
+            return text.substring(0, head) + "…" + text.substring(tail)
+        }
         private val WINDOW: Duration = Duration.ofSeconds(60)
         private const val REFUSALS_BEFORE_GUIDE = 2
         private val SERVER_ISSUED_ARGUMENTS = setOf(ProposalCards.ARG_SLOT_KEY, ProposalCards.ARG_POI_ID)
