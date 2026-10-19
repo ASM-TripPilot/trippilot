@@ -1,10 +1,10 @@
 # AI↔백엔드 경계 — 확정 계약
 
 > **상태**: 확정 · 구현 완료 (2026-08-11)
-> **범위**: `ScheduleAgent` 포워드 경계(HTTP 시맨틱) · `/internal` POI 리버스 경계 · 자정 넘김 슬롯 포맷
+> **범위**: `ScheduleAgent` 포워드 경계(HTTP 시맨틱) · `/internal` POI 리버스 경계 · 자정 넘김 슬롯 포맷 · 기회 카드 경계(④, situation-awareness)
 > **정본 참조**: `ai-backend-경계-계약-초안.md`(합의안, PR #76) · TRIP-228(DTO 동결) · PR #104 협의 스레드
 >
-> 이 문서는 **협의 요청이 아니라 결과**다. 세 항목 모두 양팀 합의 후 구현·머지됐다.
+> 이 문서는 **협의 요청이 아니라 결과**다. ①~③은 양팀 합의 후 구현·머지됐고, ④는 situation-awareness 정본(승인)이 정한 계약이다.
 > 아직 열려 있는 것은 맨 아래 "미결 항목"에만 있다 — 그 위는 전부 확정이다.
 
 ---
@@ -48,6 +48,23 @@
 
 - **와이어**: `start_at`/`end_at`(LocalTime) + `ends_next_day`. AI 가 `ends_next_day = end.date > start.date` 로 결정론 사영한다.
 - **저장**: **A안(플래그 관통)** 채택. `visit_slot.ends_next_day` 컬럼 + `CHECK` 완화(V2.8), 도메인·응답까지 3곳 관통.
+
+---
+
+## ④ 기회 카드 경계 — `POST /ai/v1/planb/opportunities` (situation-awareness BR-SA-22 · DEC-SA-6) — **확정·구현됨**
+
+정본은 `aidlc/aidlc-docs/construction/situation-awareness/`(BR-SA-22 · RES-SA-09 · PERF-SA-08 · DEC-SA-8)이고, 아래는 백엔드 쪽 구현 결정이다.
+
+| 항목 | 확정 내용 |
+|---|---|
+| **경로** | `POST /ai/v1/planb/opportunities`(LLM 0회). 백엔드 호출자는 `planb-detection` 의 `HttpOpportunityAdapter`(`OPPORTUNITY_PATHS`) — `HttpScheduleAgentAdapter.CALLED_PATHS` 가 아니다. 앱 표면은 `GET /api/v1/trips/{tripId}/opportunities?date=` |
+| **와이어** | snake_case. 요청 `date` · `slots[1..30]{slot_key, poi_id, coord{lat, lng}}` · `planned_poi_ids[≤300]` · `request_meta`, 응답 `opportunities[≤3]{key, kind, event_name?, start?, end?, poi_id, poi_name, near_slot_key, distance_label}` · `notes[]`. 시각 필드 없음(INV-2), 거리는 문자열만(INV-3). `OpportunityBoundaryOpenApiTest` 가 `ai/docs/openapi.json` 과 요청·응답 키 정확 일치·값 모양·`kind` enum·상한을 본다 |
+| **재료는 백엔드가 채운다** | 앱은 날짜만 보낸다. 슬롯 = 그 날 끝나지 않은(감시 스윕과 같은 정의) 좌표 있는 칸을 방문 순서대로 ≤ 8 — 상대가 슬롯마다 반경 조회를 하며 8회에서 끊는다. 계획 POI = 일정 전체 장소(끝난 칸 포함, 그 날에 가까운 날부터 ≤ 300) |
+| **부르지 않는 경우** | 모드 off · 여행 전(D-1 포함) · 날짜가 [오늘, 종료] 밖 · 남은 슬롯 없음(빈 재료로 묻지 않는다 — 계약 `minItems: 1`). 전부 200 빈 목록이고 404 는 소유 아님뿐이다 |
+| **에러 vs 폴백** | 상대의 재료 실패는 200 + `notes`(행사 실패면 요즘 인기만, 장소 조회 실패면 빈 목록) — 백엔드는 notes 를 INFO 로 남긴다. HTTP 오류·시간 초과·읽지 못하는 본문·모르는 `kind`·UUID 아닌 `poi_id` 는 어댑터가 예외로 올리고 서비스가 **빈 목록 + WARN** 으로 접는다(RES-SA-09). 재시도는 없다 |
+| **2차 게이트** | 상대 판정이 1차다. 백엔드는 ≤ 3 · key·장소 유일 · `near_slot_key` ∈ 보낸 슬롯 · 장소 ∉ 일정 · 행사 카드의 이름과 그 날을 덮는 기간을 다시 보고, 어긋나면 **답 전체를** 버린다(일부만 그리면 순위·날짜당 1장이 상대 판정과 달라진다). 표시 게이트(이름 길이·연락처 꼴)는 상대 한 곳에 둔다 |
+| **시한** | `request_meta.deadline_ms` = 3s(상대는 그 70% 안에서 장소 조회를 끊고 부분 결과 + note). 읽기 상한 8s ≥ 시한 + 상대 백스톱 5s(어기면 기동 실패) · 연결 1s |
+| **인증·모드** | `X-Service-Token`(`SERVICE_AUTH_TOKEN`, 다른 경계와 같은 시크릿). `trippilot.ai.opportunity.mode` = `off`(기본) · `http`, env `AI_OPPORTUNITY_MODE` — 배포는 차트 고정 env `http`(시크릿 아님). 모르는 값은 기동 실패 |
 
 ---
 
