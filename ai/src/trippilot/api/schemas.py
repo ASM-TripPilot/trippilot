@@ -1024,3 +1024,46 @@ class DialogueMemoryItemSchema(BoundaryModel):
 
 class DialogueMemoryExportResponse(BoundaryModel):
     memories: list[DialogueMemoryItemSchema]  # updated_at DESC
+
+
+# ───────── 기회 카드 (`/ai/v1/planb/opportunities` — situation-awareness BR-SA-22 · DEC-SA-6) ─────────
+# 트리거가 아니다(DEC-U4-4) — 상태·알림이 없는 조회형이고 LLM 을 부르지 않는다. 카드의 장소는 등록 POI 다(INV-1).
+# 시각 필드는 없다 — 행사 원천이 일 단위다(INV-2). 거리는 문자열만(INV-3 — 소요시간 없음).
+
+
+class OpportunitySlotSchema(BoundaryModel):
+    """그 날 **남은** 슬롯 1건 — 좌표는 계획된 장소의 좌표다(사용자 위치 아님)."""
+
+    slot_key: str = Field(min_length=1, max_length=80)
+    poi_id: str = Field(min_length=1)
+    coord: CoordSchema
+
+
+class OpportunitiesRequest(BoundaryModel):
+    """남은 동선 근처의 행사·요즘 인기. 슬롯 자격(날짜·좌표·끝나지 않음·≤ 8)은 백엔드가 정한다."""
+
+    date: dt.date
+    slots: list[OpportunitySlotSchema] = Field(min_length=1, max_length=30)
+    planned_poi_ids: list[str] = Field(default_factory=list, max_length=300)  # 일정에 이미 있는 곳 — 카드에서 뺀다
+    request_meta: RequestMetaSchema
+
+
+class OpportunitySchema(BoundaryModel):
+    """기회 1건 — 문구는 앱의 고정 템플릿 한 곳이 만든다(서버는 필드만)."""
+
+    key: str  # "event:{event_id}" | "trending:{poi_id}" — 기기 숨김의 키
+    kind: Literal["EVENT_VENUE", "EVENT_NEARBY", "TRENDING"]
+    event_name: str | None = None  # EVENT_* 만
+    start: dt.date | None = None   # EVENT_* 만 — 행사 기간(일 단위)
+    end: dt.date | None = None
+    poi_id: str                    # [넣어서 다시 짜기] 대상 — 등록 POI
+    poi_name: str
+    near_slot_key: str             # 가장 가까운 남은 슬롯(요청 키 그대로)
+    distance_label: str            # "약 400m" — 그 슬롯에서의 직선거리
+
+
+class OpportunitiesResponse(BoundaryModel):
+    """재료 실패는 오류가 아니라 notes 다 — 행사 실패면 요즘 인기만, 장소 실패면 빈 목록(INV-4)."""
+
+    opportunities: list[OpportunitySchema] = Field(default_factory=list, max_length=3)
+    notes: list[str] = Field(default_factory=list)

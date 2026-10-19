@@ -580,3 +580,28 @@ def test_잡_서머리가_폴백_지역을_정상_0건과_가른다(tmp_path, mo
     daejeon = next(line for line in lines if line.startswith("| 대전 "))
     assert "timeout" in busan and "timeout" not in daejeon
     assert busan.count("|") == daejeon.count("|") == lines[lines.index(busan) - 2].count("|")
+
+
+
+# ── 원천이 확실한 입력이 네이버 추출(evx-)을 덮는다 (2026-10-19) ───────────────
+def _ev(event_id: str, name: str, coord=None) -> EventInfo:
+    return EventInfo(event_id=event_id, name=name, event_type=EventType.FESTIVAL,
+                     start=_TODAY, end=_TODAY, coord=coord, address=None)
+
+
+def test_공식_축제는_먼저_들어온_네이버_추출_기록을_바꾸고_좌표는_비었을_때만_남긴다(tmp_path) -> None:
+    """상황 감지 기회 카드는 tourapi-·popup- 출처만 쓴다 — 선입 우선이면 공식 축제가 evx- 로 남아 빠졌다."""
+    store = JsonEventStore(tmp_path / "e.json")
+    store.upsert("부산", (_ev("evx-1", "부산불꽃축제", GeoPoint(35.15, 129.11)),), _NOW)
+    assert store.upsert("부산", (_ev("tourapi-9", "부산불꽃축제"),), _NOW, authoritative=True) == (0, 1)
+    (only,) = store.search_events(_TODAY, _TODAY)[0]
+    assert only.event_id == "tourapi-9"
+    assert only.coord == GeoPoint(35.15, 129.11)        # 새 입력에 좌표가 없으면 기존 좌표를 남긴다
+
+
+def test_권위_없는_입력은_종전대로_선입_우선이다(tmp_path) -> None:
+    store = JsonEventStore(tmp_path / "e.json")
+    store.upsert("부산", (_ev("evx-1", "부산불꽃축제"),), _NOW)
+    store.upsert("부산", (_ev("evx-2", "부산불꽃축제"),), _NOW)
+    (only,) = store.search_events(_TODAY, _TODAY)[0]
+    assert only.event_id == "evx-1"

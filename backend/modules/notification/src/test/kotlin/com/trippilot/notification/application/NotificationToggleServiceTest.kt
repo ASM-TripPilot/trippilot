@@ -3,6 +3,7 @@ package com.trippilot.notification.application
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationSchedule
+import com.trippilot.notification.domain.NotificationToggle
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
@@ -35,10 +36,11 @@ class NotificationToggleServiceTest : StringSpec({
 
         list.size shouldBe 7
         toggles.stored shouldBe emptyList() // 조회가 행을 만들지 않는다
-        // 실물 l02 에서 읽은 기본값 — 앞의 둘만 푸시가 꺼져 있다.
+        // `SLOT_PRE` 만 푸시가 꺼져 있다(BR-U6-18 개정 · BR-SA-21 ⑤) — `PLAN_B` 는 위험만 푸시라 기본 ON 이다.
         list.single { it.kind == NotificationKind.SLOT_PRE }.pushEnabled shouldBe false
         list.single { it.kind == NotificationKind.SLOT_PRE }.inAppEnabled shouldBe true
-        list.single { it.kind == NotificationKind.PLAN_B }.pushEnabled shouldBe false
+        list.single { it.kind == NotificationKind.PLAN_B }.pushEnabled shouldBe true
+        list.single { it.kind == NotificationKind.PLAN_B }.inAppEnabled shouldBe true
         list.single { it.kind == NotificationKind.STAY }.pushEnabled shouldBe true
         list.single { it.kind == NotificationKind.TRIP_DAY }.pushEnabled shouldBe true
     }
@@ -86,6 +88,24 @@ class NotificationToggleServiceTest : StringSpec({
         svc.update(acc, NotificationKind.SLOT_PRE, pushEnabled = true, inAppEnabled = null)
 
         svc.list(acc).single { it.kind == NotificationKind.SLOT_PRE }.pushEnabled shouldBe true
+    }
+
+    "설정한 적 없는 계정의 Plan-B 는 푸시까지 간다 — 위험 알림이 기본값에 막혀 닿지 않으면 안 된다" {
+        val (svc, _) = service()
+
+        svc.allowsPush(acc, NotificationKind.PLAN_B) shouldBe true
+        // 일정마다 울리는 종류는 그대로 꺼 둔다(BR-SA-21 ⑤).
+        svc.allowsPush(acc, NotificationKind.SLOT_PRE) shouldBe false
+    }
+
+    "저장된 Plan-B 행은 기본값보다 우선한다 — 굳은 푸시 OFF 도 그대로다(O-SA-14)" {
+        val toggles = FakeToggles()
+        // 옛 기본값(푸시 OFF)에서 인앱만 바꿔 저장된 행 — 사용자가 직접 끈 것과 구분되지 않으므로 손대지 않는다.
+        toggles.upsert(NotificationToggle(acc, NotificationKind.PLAN_B, pushEnabled = false, inAppEnabled = true, updatedAt = now))
+        val svc = NotificationToggleService(toggles, clock)
+
+        svc.allowsPush(acc, NotificationKind.PLAN_B) shouldBe false
+        svc.list(acc).single { it.kind == NotificationKind.PLAN_B }.pushEnabled shouldBe false
     }
 
     // ── 실제로 갈리는가 ────────────────────────────────────────────────

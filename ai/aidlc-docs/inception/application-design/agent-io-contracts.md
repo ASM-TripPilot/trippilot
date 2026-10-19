@@ -42,6 +42,7 @@
 | 포워드 | 슬롯별 설명 조회 | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
 | 포워드 | 일정 편집 (EditAgent) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
 | 포워드 | 하루 재계획 (PlanBAgent → ScheduleAgent) | `POST /ai/v1/planb/replan` | **배선됨**(#744) — PlanBAgent 가 RAG 로 순서를 내고 ScheduleAgent 점수에 가산으로 실려 어셈블리가 시각을 확정한다. `generate` 재사용을 그만둔 세 이유(RAG·재계획 의도·원 일정 후보 합류)를 셋 다 되찾았다.<br/>**경로 이동 완료(TRIP-960, 2026-09-28)** — 백엔드 #758 상수 교체·`CALLED_PATHS` 구 경로 0건 확인 후 구 경로 삭제. |
+| 포워드 | 기회 카드 (근처 행사·요즘 인기) | `POST /ai/v1/planb/opportunities` | **배선됨** — situation-awareness BR-SA-22·DEC-SA-6. 행사는 생성 요구표의 EVENT 행, 장소는 슬롯당 반경 1km 조회(≤ 8회·시한 70%). LLM 0회 · 트리거 아님(DEC-U4-4) · 카드의 장소는 등록 POI(INV-1) · 시각 필드 없음(INV-2) · 거리 문자열만(INV-3) · 재료 실패는 200 + `notes` |
 | 리버스 | POI 정본 read — 반경 (`find_by_radius`) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | 리버스 | POI 정본 read — 배치 (`find_by_ids`) | `POST /internal/pois/batch-get` · 요청 필드 `poi_ids` | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 
