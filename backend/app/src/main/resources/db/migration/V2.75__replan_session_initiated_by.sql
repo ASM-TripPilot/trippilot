@@ -4,7 +4,6 @@
 -- SYSTEM = 일정을 막는 위험 알림 사건(planb.PlanBTriggered)으로 서버가 미리 연 세션.
 -- **적용은 여전히 사용자만 한다**(INV-U4-05 · INV-SA-1) — 이 칸은 '누가 계산을 시작했나'일 뿐이다.
 --
--- 번호: origin/develop 최신이 V2.73(plan_b_situation)이다 — 머지 직전에 다시 맞춘다(설계서 CD13).
 -- 확장형이다: 상수 기본값이라 기존 행은 USER 로 채워지고(그 전엔 사용자 진입뿐이었다 — 사실과 같다), 롤링 배포 창의
 -- 옛 파드 INSERT 도 USER 가 된다(옛 파드는 사용자 진입만 만든다). V2.60 의 볼러틸 기본값 함정과 무관하다 — 상수다.
 ALTER TABLE replan_session
