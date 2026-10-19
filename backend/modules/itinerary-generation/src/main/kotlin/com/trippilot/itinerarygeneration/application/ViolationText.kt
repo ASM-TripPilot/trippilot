@@ -30,13 +30,27 @@ object ViolationText {
         )
     }
 
+    /** 영업시간 위반(HC1)의 사용자 문구 — 장소 감지가 '편집 때 이미 본 경고'를 이 문구로 가른다([mentionsOpeningHours]). */
+    const val OPENING_HOURS_PHRASE = "영업시간과 맞지 않아요"
+
+    /**
+     * 저장된 위반 사유가 영업시간 문구를 담는가(BR-SA-17 ②) — 여러 문구가 ` · ` 로 합쳐진 사유도 읽는다.
+     * 보류 중 중립 문구([PriorViolations.STALE_REASON])·이동 문구는 거짓이다. 문구의 주인이 여기 하나라 번역을 바꾸면 판정도 따라간다.
+     */
+    fun mentionsOpeningHours(reason: String?): Boolean = reason?.contains(OPENING_HOURS_PHRASE) == true
+
+    /** 영업시간 위반(HC1) 타입인가 — [phraseOf] 와 같은 어휘(AI 코드·상징 이름)다. */
+    fun isOpeningHours(type: String): Boolean = type.uppercase() in OPENING_HOURS_TYPES
+
+    private val OPENING_HOURS_TYPES = setOf("HC1", "OPENING_HOURS")
+
     /**
      * 닫힌 번역 — AI 어휘(HC1~HC4)와 상징 이름(테스트·수리 경로) 둘 다 받는다. **모르는 type 도
      * 한국어 일반 문구다** — 영문 코드가 화면에 새는 것이 침묵보다 나쁘고, 위반 자체를 숨기면
      * 거짓 음성이다(INV-4).
      */
     private fun phraseOf(type: String): String = when (type.uppercase()) {
-        "HC1", "OPENING_HOURS" -> "영업시간과 맞지 않아요"
+        in OPENING_HOURS_TYPES -> OPENING_HOURS_PHRASE
         "HC2", "TRAVEL_TIME" -> "앞 장소에서 이동할 시간이 빠듯해요"
         "HC3", "MUST_VISIT", "HC3_UNPLACED" -> "꼭 갈 곳이 일정에 들어가지 못했어요"
         "HC4", "DAY_WINDOW" -> "그 날의 일정 시간대를 벗어났어요"

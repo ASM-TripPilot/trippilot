@@ -58,4 +58,17 @@ class ViolationTextTest : StringSpec({
         ViolationText.countUnlocatable(listOf(Violation("A", null, null, "x"))) shouldBe 1
         ViolationText.countOutOfRange(listOf(Violation("A", null, null, "x")), listOf(day(2))) shouldBe 0
     }
+
+    /**
+     * 장소 감지가 '편집 때 이미 본 영업시간 경고'를 이 판정으로 가른다(BR-SA-17 ②). 문구의 주인이 여기 하나라
+     * 번역 문구를 바꾸면 판정도 같이 움직인다 — 사본 문자열을 감지 쪽에 두면 한쪽만 바뀌어 경고가 다시 푸시된다.
+     */
+    "저장된 사유가 영업시간 문구를 담는가 — 합쳐진 문구도 읽고, 다른 문구·중립 문구·null 은 거짓" {
+        val joined = ViolationText.reasonOf(listOf(Violation("HC2", 0, 0, null), Violation("HC1", 0, 0, null)))
+        ViolationText.mentionsOpeningHours(ViolationText.reasonOf(listOf(Violation("HC1", 0, 0, null)))) shouldBe true
+        ViolationText.mentionsOpeningHours(joined) shouldBe true
+        ViolationText.mentionsOpeningHours(ViolationText.reasonOf(listOf(Violation("HC2", 0, 0, null)))) shouldBe false
+        ViolationText.mentionsOpeningHours(PriorViolations.STALE_REASON) shouldBe false
+        ViolationText.mentionsOpeningHours(null) shouldBe false
+    }
 })
